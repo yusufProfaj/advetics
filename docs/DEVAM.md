@@ -6,7 +6,7 @@
 > İŞ yazılır; her oturum kapanırken, işin kendi commit'inde güncellenir.
 > 16 Ağustos'a kadarki eski devir belgesi: [`arsiv/DEVAM-2026-08.md`](arsiv/DEVAM-2026-08.md).
 
-**Son güncelleme:** 2026-10-09 · **Canlı `6b51390` (11:43, 81 sn); ondan önce 316be15 (10:30):**
+**Son güncelleme:** 2026-10-10 (AdvCampaign rehberi deploy ediliyor) · 2026-10-09: **Canlı `6b51390` (11:43, 81 sn); ondan önce 316be15 (10:30):**
 aşağıda "DEPLOY EDİLMEDİ" yazan işlerin HEPSİ artık canlıda (AdvCampaign
 sohbeti, AdvStrategy ikinci tur, YouTube Boost Aşama 0–1 + kanal bulma, Okuma
 API, Base Aşama 1, LinkedIn para birimi). Ölçüldü: `prisma migrate status`
@@ -15,6 +15,35 @@ RLS politikası var, platform sahibi yalnız hello@profaj.com.
 **Bekleyen deploy:** yok hedefleniyor — Aşama 4 (İyileştir + AI Asistan)
 bu commit'le deploy ediliyor; migration `20261009100000_iyilestir` (üç
 yeni tablo) + `db:rls`.
+
+**ADVCAMPAIGN REHBERİ (2026-10-10) — SOHBET KALKTI, TIKLAMALI REHBER.**
+Kullanıcı isteği: Meta + Google tek panelden, tıklayarak, reklam bilmeyen
+biri bile kullanabilsin. Plan/kararlar `docs/advcampaign/REHBER-PLANI.md`
+(K-1 yedi amaç baştan, K-2 yapay zekâ yalnız düğme arkasında, K-3 iki
+platform uygunsa ikisi seçili, K-4 doğrudan yayın + uyum denetçisi), panel
+turu `arastirma/A4-panel-turu.md` (Google konumu "tüm ülkeler", ağlar/AI Max
+açık; Meta sayfayı BAŞKA MÜŞTERİNİN sayfası seçti — hepsi açıkça yazılıyor),
+onaylı taslak `rehber-taslak.html`, mimari `MIMARI-REHBER.md`, devir notları
+`devir/ajan2-3-4.md`. Beş ajan: sözleşme `packages/shared/src/reklam/rehber/`,
+API `modules/reklam/rehber/` + `modules/reklam/google/`, panel
+`components/rehber/` + `/reklam`. Ajan 4 iki turda 5 bulgu buldu (uyum kapısı
+delinebiliyordu, bütçe iki yerde farklı bölünüyordu, konum eşlemesini istemci
+yazabiliyordu, Instagram sözü, panel/sunucu görünürlük kuralı ayrışması);
+hepsi düzeldi, mutasyonla doğrulandı, kapı açıldı. MIGRATION VAR:
+`20261010120000_reklam_rehberi`, `20261010130000_strateji_video_izlenme`.
+**AÇILIŞ (`REHBER_ACILIS`):** Dalga 1 = SITE (Meta + Google Arama), VIDEO
+(Google Talep Yaratma) — `deneme`: yalnız üst hesabın admin üyesi görür,
+kurulum DURAKLATILMIŞ kalır (Reklam Yöneticisi'nden Başlat). FORM Dalga 2'ye
+kaydı (Meta zinciri form kimliğini boş geçiyor, gizlilik adresi alanı yok).
+**HİÇBİRİ CANLIDA KOŞMADI — sıradaki iş canlı tur (MIMARI-REHBER § 8, Ö-1…Ö-7)**,
+Profaj hesabında: Google Arama atomik kurulum, Meta SITE, `minimum_budgets`,
+`geoTargetConstants:suggest`, Talep Yaratma video. Bilinen engel: konut
+kategorili Meta provası (`special_ad_categories ... got "2"`). Her ölçüm
+geçince ilgili açılış satırı `acik` olur (commit gövdesinde kanıt). Sonra
+Ajan 6 tasarım denetimi (giriş ekranını kullanıcı henüz görmedi).
+Açık: AdvStrategy → AdvCampaign aktarımı hâlâ sohbet tablosuna yazıyor
+(okuyan ekran yok, ürün kararı); Google yayını için geri al yok; yayına
+alınmış rehber düzenlenemiyor.
 
 **OTURUM DÜŞMESİ — REFRESH YARIŞI (2026-10-10, DEPLOY EDİLMEDİ).**
 Üretimde 2026-10-09 20:44 çok sekmeli kullanıcı "olası hırsızlık" ile

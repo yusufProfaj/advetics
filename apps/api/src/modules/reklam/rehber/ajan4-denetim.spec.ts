@@ -11,7 +11,7 @@ import {
   type RehberGuncelle,
   type TenantContext,
 } from '@advetics/shared';
-import { createHarness, seedAjans, seedTenant, IDS, type Harness } from '../../../../test/pglite-harness';
+import { AJANS_UST_HESAP, createHarness, seedAjans, seedTenant, IDS, type Harness } from '../../../../test/pglite-harness';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { AppConfig } from '../../../config/configuration';
 import { ReklamHazirlikService } from '../hazirlik.service';
@@ -54,6 +54,7 @@ const CTX = {
   clientIds: [IDS.client],
   activeClientId: IDS.client,
   isOrgAdmin: true,
+  managerAccountId: AJANS_UST_HESAP,
 } as TenantContext;
 
 beforeAll(async () => {
@@ -306,7 +307,7 @@ describe('BULGU-1 (DÜZELDİ): türetilmiş bütçe AÇIK platform kümesine gö
     expect(acik).toEqual({ meta: false, google: true });
     // Pay çubuğu (adim-butce.tsx) ve asgari kontrolü (eksikler.ts) bunu okuyor:
     expect(butceBol(500_000_000n, acik, 50, 'TRY').google).toBe(500_000_000n);
-    // Yayına giden Google girdisi ise HAM seçimi (meta: true) bölüyor:
+    // Yayına giden Google girdisi de AÇIK kümeyi bölüyor (ham seçimde meta: true kalsa da):
     const t = rehberdenGoogle(a, acik, {
       musteriId: '1234567890',
       paraBirimi: 'TRY',

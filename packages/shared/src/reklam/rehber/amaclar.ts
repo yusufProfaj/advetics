@@ -101,7 +101,8 @@ export const REHBER_AMACLARI: Record<RehberAmacKodu, RehberAmaci> = {
 
 /**
  * - `acik`: herkes görür, gerçek yayın.
- * - `deneme`: YALNIZ ajans yöneticisi görür ve kurulum DURAKLATILMIŞ kalır
+ * - `deneme`: YALNIZ ajans yöneticisi (üst hesabın admin üyesi; kural
+ *   `apps/api/src/modules/reklam/ajans-yoneticisi.ts`) görür ve kurulum DURAKLATILMIŞ kalır
  *   (açılmaz). Canlı tur bu kipte, Profaj'ın kendi hesabında yapılır.
  * - `kapali`: kimse görmez (kod yazılmadı ya da ölçüm başarısız).
  */

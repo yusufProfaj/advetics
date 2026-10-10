@@ -3,7 +3,110 @@
 > İncelenen: `bab2e2d` (Ajan 1 sözleşme) + `3eea3b4` (Ajan 2 arka plan, Ajan 3 panel).
 > Ürün koduna DOKUNULMADI; yalnız bir test dosyası eklendi. Commit EDİLMEDİ.
 
-## KAPI KARARI: **KAPALI**
+## 2. TUR — YENİDEN DENETİM (0c5e299 + çalışma ağacındaki "ajans yöneticisi" kuralı)
+
+### KAPI KARARI: **KAPALI — tek bulgu (BULGU-5), küçük.**
+
+İlk turun dört bulgusu **düzeldi ve doğrulandı**. Yeni bir para/uyum açığı yok. Kapıyı
+yalnız BULGU-5 tutuyor: deneme görünürlüğü kuralı sunucuda düzeldi ama panel hâlâ ESKİ
+kuralı okuyor. **Açılma koşulu:** `hazirlik.service.ts` sunucuyla aynı kuralı (tek yardımcı)
+kullanır, `ajan4-yeniden-denetim.spec.ts` içindeki BULGU-5a/5b ters çevrilip yeşil olur ve
+aşağıdaki terminoloji kırmızısı giderilir. Bu üç koşul sağlanınca kapı açıktır; ayrıca bir
+denetim turu gerekmez.
+
+### Düzeltmelerin denetimi
+
+| Bulgu | Düzeltme | Durum | Kanıt (mutasyon) |
+|---|---|---|---|
+| BULGU-2 | `metaYayinBaslat` çocuğu rehberden yeniden türetip `taslakKanonikIcerik` özetiyle karşılaştırıyor; eski 5 uç `rehbereBagliysaReddet` çağırıyor | **Kapandı** | Özet kontrolü kaldırılınca BULGU-2 düşüyor (N1); `oneriyi-onayla` kontrolü silinince kaynak taraması düşüyor (N6). Uç kontrolü bir kontrol-sonra-eylem; asıl koruma yayındaki özet karşılaştırması ve o yarışı da kapatıyor |
+| BULGU-1 | `rehberdenMeta/Google(a, acik, …)` | **Kapandı** | Saf testte doğru; ama servisin ona HAM seçimi verdiği mutasyon (N2) ilk turda **BOŞ** çıktı → yeni servis testi (VIDEO, ham seçim iki platform, Google çocuk sürümü 500 ₺) yazıldı, N2 artık düşüyor. Meta tarafı (N3) **bugün eşdeğer mutasyon**: `REHBER_ACILIS`'ta Meta'sı görünür Google'ı görünmez bir amaç yok; tablo değişirse test eklenmeli |
+| BULGU-4 | `googleKarsiliginiKoru` istemcinin `google` alanını atıyor, aynı (`tur`,`key`) için sunucu eşlemesini koruyor; `konumlariEsle` `yaz(…, true)` | **Kapandı** | İstemci ataması düşüyor (ilk tur testi); **koruma** (N4) ilk turda BOŞ çıktı → yeni test (eşlenmiş İzmir'e Ankara eklenince İzmir korunur, Ankara'nın istemci karşılığı atılır), N4 artık düşüyor. `konumlariEsle` istemci yolundan yazsa (N5) 7 test düşüyor. Not: panel `custom` konum üretmiyor; üretirse anahtarları tekil olmalı, yoksa `tur|key` eşlemesi iki noktayı karıştırır |
+| BULGU-3 | `kararTablosu(…, instagramVar)` | **Kapandı** | Servis hep `true` geçse (N9) BULGU-3 düşüyor |
+| Ajans kuralı (çalışma ağacı) | `ctx.platformAdmin \|\| EXISTS(manager_memberships … role='admin')`, `managerAccountId` yoksa false | **Sunucuda doğru** | `managerAccountId` yokken true (N7b) 3 test düşürüyor; `role = 'admin'` şartı kaldırılınca (N7a) ilk koşuda **BOŞ** çıktı → yeni test (üst hesabın `ad_manager` üyesi deneme görmez), N7a artık düşüyor. `managerAccountId` sunucuda çözülüyor ve üyelik listesine karşı doğrulanıyor (`tenant-context.service.ts`), istemci taşıyamaz |
+
+**Başka üst hesabın yöneticisi (ör. EMRE AJANS) kendi bağlamında deneme görür — kabul
+edilebilir.** Deneme kurulumu duraklatılmış kalır, harcama yok; kendi müşterisinin hesabına
+kurar (aitlik denetimi bağlamdaki workspace). Tek gereken: `REHBER_ACILIS` yorumundaki
+"YALNIZ ajans yöneticisi görür" cümlesi "üst hesap yöneticisi (ya da platform sahibi) görür"
+olarak güncellenmeli; yoksa sonraki okuyan kuralı yanlış anlar.
+
+### BULGU-5 · ORTA — Deneme görünürlüğü iki kaynakta, iki ayrı kuralla
+
+- **Yer:** `apps/api/src/modules/reklam/hazirlik.service.ts:208-209, 266` hâlâ
+  `isOrgAdmin && (ma.ajans_org_id IS NULL OR ma.ajans_org_id = o.id)`. Panel görünürlüğü
+  bundan okuyor (`rehber-ekrani.tsx:87` `acikPlatformlar(a, hazirlik.ajansYoneticisi)`,
+  `adim-amac-nerede.tsx:23,70,113`). Sunucunun eksik/prova/yayın kararı ise
+  `rehber.service.ts` `baglam()`'daki YENİ kuraldan.
+- **Senaryo 5a:** ajans çalışanı kardeş/müşteri şirketine geçiyor → sunucu denemeyi açık
+  sayıyor, panel amaç kartını GİZLİYOR. Ana oturumun düzeltmek istediği belirti ("ajans
+  çalışanı müşteri şirketine geçince deneme amaçları kayboluyordu") **panelde düzelmedi**.
+- **Senaryo 5b:** üst hesabı olmayan şirketin admini → panel kartı ve "Deneme açılışı"
+  düğmesini gösteriyor, sunucu "En az bir platform açık olmalı" (PLT-YOK) diyor: yanlış sebep.
+- Para yok (sunucu kapalı yöne düşüyor); ama CLAUDE.md "AYNI SÜZGECİ İKİ YERDE YAZMA"nın
+  tam örneği ve düzeltmenin hedefini boşa çıkarıyor.
+- **Kanıt:** `ajan4-yeniden-denetim.spec.ts` › BULGU-5a, BULGU-5b (bugünkü davranışı kilitler).
+  Hazırlık kuralını sunucununkine eşitleyen mutasyon (N13) ikisini de düşürüyor.
+- **Öneri:** kuralı tek yardımcıya çıkar (`ajansYoneticisiMi(tx, ctx)`), `hazirlik.service`
+  ve `rehber.service` ikisi de onu çağırsın; 5a/5b'yi ters çevir.
+
+### Ayrıca düzeltilmesi gereken (kapı koşulu)
+
+- **Terminoloji kırmızısı (çalışma ağacında, commit'lenmemiş):** `rehber.service.spec.ts`
+  sonundaki yeni test adı *"…admin üyesi müşteri şirketine geçmişken…"* panelin
+  `src/terminoloji.spec.ts`'ini düşürüyor (panel 1394/1395). Adı "workspace/şirket" diliyle
+  değiştir ya da terminoloji listesinde sınıflandır. Benim dosyamdaki iki benzer satırı düzelttim.
+
+### Düşük gözlemlerin değerlendirmesi (kapıyı kapatmıyor)
+
+| Gözlem | Önem | Gerekçe ve ne zaman |
+|---|---|---|
+| UPDATE'lerde etkilenen satır sayılmıyor (`prova_ozeti`, `cocukBagla`, Google çocuk bağı) | Düşük | Üçü de güvenli yöne düşüyor (kapı yeniden prova ister / yetim taslak). Sessiz ama para ya da yanlış yayın üretmiyor. Bir sonraki dokunuşta `RETURNING` sayılmalı |
+| `formSablonuId` aitlik denetiminde yok | Düşük **bugün**, FORM açılmadan **ZORUNLU** | FORM kapalı ve derleyici `formId: null` geçiyor. FORM'u açan commit aynı anda aitliği eklemeli; Dalga 2 ön koşulu olarak yazılmalı |
+| `GoogleDerlemeGirdisi.kategoriler` yorumu "Google'da derlenir" diyor, derleyici okumuyor | Kozmetik | Kısıtlı kategoride yaş daraltması uyum denetçisinde duruyor; yalnız yorum yanıltıcı |
+| Meta "Yalnız bu bölgede bulunanlar" ayrı alanla yazılmıyor | Ölçüm işi | Meta `location_types`'ı kaldırdı, tek seçenek kalıyor; Ö-2'de Ads Manager'da gözle doğrulanmalı. Kod bulgusu değil |
+| `baglam()` içinde yerel `acik` `ajans_mi && isOrgAdmin`, dönen `ajansYoneticisi` `platformAdmin \|\| ajans_mi` | Düşük (YENİ) | Yerel `acik` yalnız `paraBirimi` seçimine giriyor; iki para birimi farklıysa zaten PARA-BIRIMI engeli var. Yine de tek ifade olmalı (BULGU-5 düzeltmesiyle birlikte) |
+
+### 2. turun mutasyon özeti
+
+N1 ✓, N2 ✓ (yeni testle), N3 eşdeğer (bugün ulaşılamaz), N4 ✓ (yeni testle), N5 ✓, N6 ✓,
+N7a ✓ (yeni testle), N7b ✓, N9 ✓, N13 ✓ (BULGU-5 düzeltme simülasyonu). Her mutasyon
+sonrası test sayısı okundu.
+
+**Süreç notu:** mutasyon betiğim ilk koşularda geri almayı `git checkout --` ile yapıyordu ve
+bu, ana oturumun **commit'lenmemiş** `rehber.service.ts` değişikliğini bir kez geri aldı. Fark
+edildi ve değişiklik birebir geri kuruldu (dosyanın git özeti `1c4dd08`, ana oturumun bıraktığı
+hâlle aynı); etkilenen mutasyonlar yeniden koşuldu. Betik artık dosyanın kendi yedeğinden
+geri yüklüyor.
+
+### Eklenen/değişen test dosyaları (2. tur)
+
+- YENİ `apps/api/src/modules/reklam/rehber/ajan4-yeniden-denetim.spec.ts` — 6 test: BULGU-1
+  kablosu, BULGU-4 koruması, ajans bilinmiyorsa kapalı, `ad_manager` üyesi görmez, BULGU-5a, BULGU-5b.
+- `ajan4-denetim.spec.ts` — BULGU-1 testindeki bayat yorum düzeltildi (davranış değişmedi).
+
+### 2. tur tam doğrulama (çalışma ağacı: 0c5e299 + ana oturumun commit'lenmemiş değişikliği + benim testlerim)
+
+| Adım | Sonuç |
+|---|---|
+| shared build | exit 0 |
+| API typecheck | temiz |
+| Web typecheck | temiz |
+| Panel testleri | **1394 / 1395** — tek kırmızı yukarıdaki terminoloji (ana oturumun test adı) |
+| API testleri (tek başına) | **4425 / 4425** (320 dosya) |
+| API build / web build | exit 0 / exit 0 |
+
+### 2. turda ÖLÇEMEDİKLERİM
+
+- Panelde BULGU-5'in görsel etkisi (yalnız kaynak ve hazırlık ucunun dönüşü üzerinden kanıtlandı).
+- Gerçek Postgres'te `manager_memberships` RLS'inin bağlamdaki üst hesabı gösterdiği (PGlite'ta
+  RLS kapalı koşuyor; politika gözle okundu, `SET ROLE` testiyle sınanmadı).
+- İlk turun "NEYİ ÖLÇEMEDİM" listesi aynen geçerli (hiçbir platforma gidilmedi).
+
+---
+
+# 1. TUR (2026-10-10, ilk denetim — kayıt için korunuyor)
+
+## 1. tur KAPI KARARI: **KAPALI** (dört bulgu — hepsi 2. turda kapandı)
 
 Dört bulgu var; ikisi doğrudan "kapılar" ve "bütçe" maddelerine dokunuyor. Bugün bütün
 açılışlar `deneme` (kurulum duraklatılmış kalıyor) olduğu için **hiçbir bulgu bugün para

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { REHBER_DURUMLARI, type RehberGuncelle, type TenantContext } from '@advetics/shared';
-import { createHarness, seedAjans, seedTenant, IDS, type Harness } from '../../../../test/pglite-harness';
+import { AJANS_UST_HESAP, createHarness, seedAjans, seedTenant, IDS, type Harness } from '../../../../test/pglite-harness';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { AppConfig } from '../../../config/configuration';
 import { ReklamHazirlikService } from '../hazirlik.service';
@@ -36,6 +36,7 @@ const CTX = {
   clientIds: [IDS.client, KARDES_WS],
   activeClientId: IDS.client,
   isOrgAdmin: true,
+  managerAccountId: AJANS_UST_HESAP,
 } as TenantContext;
 
 const sahteGoogle = {
@@ -394,5 +395,22 @@ describe('RLS', () => {
   it('DELETE politikası YOK: silme sıfır satır (rehber arşivlenir)', async () => {
     const r = await svc.olustur(CTX, IDS.client);
     expect(await kullanici(`DELETE FROM reklam_rehberi WHERE id = '${r.id}' RETURNING id`, [IDS.client])).toHaveLength(0);
+  });
+});
+
+describe('ajans yöneticisi kuralı (deneme açılışlarının görünürlüğü)', () => {
+  it('KRİTİK: üst hesabın admin üyesi KARDEŞ şirkete geçmişken de görür; üst hesap üyeliği olmayan şirket admini görmez', async () => {
+    const r = await svc.olustur(CTX, IDS.client);
+    const k = await svc.guncelle(CTX, r.id, { surum: r.surum, degisiklikler: TAM });
+    // Ajans çalışanı: amaç SITE görünür, Google açık sayılır → G- eksikleri değil, temiz.
+    expect(k.eksikler.some((e) => e.kod === 'PLT-YOK')).toBe(false);
+    // Aynı şirketin admini ama üst hesap üyesi DEĞİL (müşteri şirketinin kendi yöneticisi).
+    const yabanci = { ...CTX, userId: '00000000-0000-4000-8000-0000000000e1' } as TenantContext;
+    // Kural yalnız üst hesap ÜYELİĞİNE bakıyor; bu kullanıcının üyeliği yok.
+    const y = await svc.oku(yabanci, r.id);
+    expect(y.eksikler.map((e) => e.kod)).toContain('PLT-YOK');
+    // Üst hesabı olmayan bağlam: ajans bilinmiyor → kapalı.
+    const ustsuz = await svc.oku({ ...CTX, managerAccountId: null } as TenantContext, r.id);
+    expect(ustsuz.eksikler.map((e) => e.kod)).toContain('PLT-YOK');
   });
 });

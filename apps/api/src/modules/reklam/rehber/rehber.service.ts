@@ -50,6 +50,7 @@ import {
   taslakKanonikIcerik,
 } from '@advetics/shared';
 import { CONFIG, type AppConfig } from '../../../config/configuration';
+import { ajansYoneticisiMi } from '../ajans-yoneticisi';
 import { CryptoService } from '../../../crypto/crypto.service';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { QuotaGuardService } from '../../../queue/quota-guard.service';
@@ -842,13 +843,9 @@ export class RehberService {
       const hesaplar = await t.$queryRaw<Array<{ id: string; platform: string; external_id: string; currency: string; timezone: string }>>(Prisma.sql`
         SELECT id::text, platform::text AS platform, external_id, currency, timezone FROM ad_accounts
          WHERE client_id = ${clientId}::uuid AND id = ANY(${[metaId, googleId].filter((x): x is string => !!x)}::uuid[])`);
-      const [aj] = await t.$queryRaw<Array<{ ajans_mi: boolean }>>(Prisma.sql`
-        -- Ajans BİLİNMİYORSA KAPALI (CLAUDE.md "havuzun iki sahibi"): yöneticisi
-        -- tanımsız bir şirketin admini deneme amaçlarını görmemeli. NULL = false.
-        SELECT COALESCE(ma.ajans_org_id = o.id, false) AS ajans_mi
-          FROM organizations o LEFT JOIN manager_accounts ma ON ma.id = o.manager_account_id
-         WHERE o.id = ${ctx.orgId}::uuid`);
-      return { m, hesaplar, aj };
+      // Hazırlık ucuyla AYNI kural, tek yardımcıdan (BULGU-5).
+      const ajans = await ajansYoneticisiMi(t, ctx);
+      return { m, hesaplar, ajans };
     });
     const meta = r.hesaplar.find((h) => h.id === metaId && h.platform === 'meta') ?? null;
     const google = r.hesaplar.find((h) => h.id === googleId && h.platform === 'google') ?? null;
@@ -874,10 +871,10 @@ export class RehberService {
       googleLogoVeAd: !!r.m?.logo,
       gizlilikAdresi: false,
     };
-    const acik = acikPlatformlar(a, r.aj?.ajans_mi === true && ctx.isOrgAdmin);
+    const acik = acikPlatformlar(a, r.ajans);
     const paraBirimi = (acik.meta && meta?.currency) || google?.currency || meta?.currency || 'TRY';
     return {
-      ajansYoneticisi: ctx.isOrgAdmin && r.aj?.ajans_mi === true,
+      ajansYoneticisi: r.ajans,
       onKosullar,
       yasalUyari: r.m?.yasal ?? null,
       asgariGunluk: {
