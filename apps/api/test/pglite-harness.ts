@@ -802,3 +802,20 @@ export async function seedTenant(
     ],
   );
 }
+
+/**
+ * Seed edilen şirketi bir üst hesabın AJANS şirketi yapar. Rehberin `deneme`
+ * açılışı yalnız ajans yöneticisine görünüyor ve "ajans bilinmiyorsa kapalı"
+ * (CLAUDE.md, havuzun iki sahibi): üst hesabı olmayan `seedTenant` şirketi
+ * ajans SAYILMAZ. Rehber testleri ajans bağlamını bu yardımcıyla açıkça kurar.
+ */
+export async function seedAjans(h: Harness): Promise<void> {
+  await h.q(
+    `INSERT INTO manager_accounts (id, name, slug, status, created_at, updated_at)
+     VALUES ('00000000-0000-4000-8000-00000000a1a5', 'Ajans', 'ajans-test', 'active', now(), now())
+     ON CONFLICT (id) DO NOTHING`,
+  );
+  // Sıra önemli: ajans şirketi AYNI üst hesaba bağlı olmak zorunda (FK).
+  await h.q(`UPDATE organizations SET manager_account_id = '00000000-0000-4000-8000-00000000a1a5' WHERE id = $1`, [IDS.org]);
+  await h.q(`UPDATE manager_accounts SET ajans_org_id = $1 WHERE id = '00000000-0000-4000-8000-00000000a1a5'`, [IDS.org]);
+}

@@ -238,7 +238,7 @@ describe('rehberEksikleri — tek "yayından önce" listesi', () => {
 
 describe('rehberdenMeta — mevcut Meta zincirine bağlanır', () => {
   it('türetilen taslak Meta şemasından geçer ve Meta eksik listesi temiz', () => {
-    const r = rehberdenMeta(tamSite(), 'TRY', Z);
+    const r = rehberdenMeta(tamSite(), acikPlatformlar(tamSite(), true), 'TRY', Z);
     expect(r.tur).toBe('tamam');
     if (r.tur !== 'tamam') return;
     expect(taslakAlanlariSchema.safeParse(r.deger).success).toBe(true);
@@ -250,7 +250,7 @@ describe('rehberdenMeta — mevcut Meta zincirine bağlanır', () => {
   });
 
   it('her görsel bir kavram; başlıklar sırayla, metin TEK', () => {
-    const r = rehberdenMeta(tamSite(), 'TRY', Z);
+    const r = rehberdenMeta(tamSite(), acikPlatformlar(tamSite(), true), 'TRY', Z);
     if (r.tur !== 'tamam') throw new Error('ret');
     const k = r.deger.kavramlar!.deger;
     expect(k.map((x) => x.baslik)).toEqual(['Özel Havuzlu Villalar', 'Kuşadası Garden Villas']);
@@ -260,8 +260,9 @@ describe('rehberdenMeta — mevcut Meta zincirine bağlanır', () => {
   });
 
   it('VIDEO amacı Meta tarafında VIDEO_IZLENME niyetine gider', () => {
+    // Meta VIDEO dalı Dalga 2'de kapalı; eşlemeyi sınamak için açık küme elle veriliyor.
     const a = { ...tamSite(), amac: al('VIDEO' as const) };
-    const r = rehberdenMeta(a, 'TRY', Z);
+    const r = rehberdenMeta(a, { meta: true, google: true }, 'TRY', Z);
     expect(r.tur === 'tamam' && r.deger.niyet?.deger).toBe('VIDEO_IZLENME');
   });
 });
@@ -270,7 +271,7 @@ describe('rehberdenGoogle — derleme girdisi', () => {
   const GB = { musteriId: '612-448-2093', paraBirimi: 'TRY', saatDilimi: 'Europe/Istanbul', donusumEtkin: false, isletmeAdi: 'Garden Villas', logoVarlikId: null, kategoriTabani: [] };
 
   it('SITE → ARAMA/site, kalan pay, tiresiz Google hesap numarası, taban negatifler', () => {
-    const r = rehberdenGoogle(tamSite(), GB);
+    const r = rehberdenGoogle(tamSite(), acikPlatformlar(tamSite(), true), GB);
     expect(r.tur).toBe('tamam');
     if (r.tur !== 'tamam') return;
     expect(r.deger.kurgu).toBe('ARAMA');
@@ -283,7 +284,7 @@ describe('rehberdenGoogle — derleme girdisi', () => {
 
   it('dönüşüm ölçülmüyorsa ya da bilinmiyorsa Maksimum tıklama', () => {
     const t = (donusumEtkin: boolean | null) => {
-      const r = rehberdenGoogle(tamSite(), { ...GB, donusumEtkin });
+      const r = rehberdenGoogle(tamSite(), acikPlatformlar(tamSite(), true), { ...GB, donusumEtkin });
       return r.tur === 'tamam' ? r.deger.teklif : null;
     };
     expect(t(false)).toBe('MAKS_TIKLAMA');
@@ -294,16 +295,16 @@ describe('rehberdenGoogle — derleme girdisi', () => {
   it('eşlenmemiş konum ya da WhatsApp amacı ret', () => {
     const a = tamSite();
     a.konumlar = al([{ tur: 'city' as const, key: '1', etiket: 'X', ulkeKodu: 'TR' }]);
-    expect(rehberdenGoogle(a, GB)).toEqual({ tur: 'ret', kodlar: ['G-KONUM'] });
+    expect(rehberdenGoogle(a, acikPlatformlar(a, true), GB)).toEqual({ tur: 'ret', kodlar: ['G-KONUM'] });
     const w = { ...tamSite(), amac: al('WHATSAPP' as const) };
-    const r = rehberdenGoogle(w, GB);
+    const r = rehberdenGoogle(w, acikPlatformlar(w, true), GB);
     expect(r.tur === 'ret' && r.kodlar).toContain('G-KARSILIK-YOK');
   });
 });
 
 describe('kararTablosu ve uyum denetçisi', () => {
   it('kapalı platformun hücresi boş; Google Arama ağ kapatmayı söyler', () => {
-    const t = kararTablosu('SITE', { meta: false, google: true }, 'MAKS_TIKLAMA');
+    const t = kararTablosu('SITE', { meta: false, google: true }, 'MAKS_TIKLAMA', true);
     expect(t.every((s) => s.meta === null)).toBe(true);
     expect(t.find((s) => s.kod === 'NEREDE')?.google?.not).toContain('Görüntülü Reklam Ağı kapalı');
   });

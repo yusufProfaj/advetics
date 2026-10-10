@@ -55,15 +55,41 @@ export function degisiklikleriUygula(
   degisiklikler: RehberGuncelle['degisiklikler'],
   kim: string,
   zaman: string,
+  secenek: { sunucuKonumEslemesi?: boolean } = {},
 ): UygulamaSonucu {
   const birlesik: Record<string, unknown> = { ...((onceki && typeof onceki === 'object' ? onceki : {}) as object) };
   for (const d of degisiklikler) {
     if (!ALAN_ADLARI.has(d.alan)) return { tur: 'ret', mesaj: `Tanınmayan alan: ${d.alan}` };
     if (ISTEMCI_YAZAMAZ.includes(d.kaynak)) return { tur: 'ret', mesaj: `${d.alan}: bu kaynak istemciden yazılamaz (${d.kaynak})` };
     if (d.sil === true) delete birlesik[d.alan];
-    else birlesik[d.alan] = { deger: d.deger, kaynak: d.kaynak, kim, zaman };
+    else birlesik[d.alan] = { deger: d.alan === 'konumlar' && !secenek.sunucuKonumEslemesi ? googleKarsiliginiKoru(birlesik.konumlar, d.deger) : d.deger, kaynak: d.kaynak, kim, zaman };
   }
   const r = rehberAlanlariSchema.safeParse(birlesik);
   if (!r.success) return { tur: 'ret', mesaj: r.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ') };
   return { tur: 'tamam', alanlar: r.data };
+}
+
+/**
+ * KONUMUN GOOGLE KARŞILIĞINI İSTEMCİ YAZAMAZ (Ajan 4, BULGU-4). Etiket "İzmir"
+ * iken karşılık olarak ABD gönderen bir PUT kabul ediliyor ve "Google'da
+ * eşlenmedi" eksiği kapanıyordu: sunucunun "yalnız tam ad eşleşmesi" kuralı
+ * hiç koşmuyordu. Karşılığı yalnız `konumlariEsle` yazar; burada istemcinin
+ * gönderdiği atılır ve AYNI konum (tür + anahtar) için daha önce sunucunun
+ * yazdığı karşılık korunur — yoksa her konum eklemesi eşlemeyi sıfırlardı.
+ */
+export function googleKarsiliginiKoru(onceki: unknown, yeni: unknown): unknown {
+  if (!Array.isArray(yeni)) return yeni;
+  const eski = (onceki as { deger?: unknown } | undefined)?.deger;
+  const harita = new Map<string, unknown>();
+  if (Array.isArray(eski)) {
+    for (const k of eski as Array<{ tur?: string; key?: string; google?: unknown }>) {
+      if (k && k.google) harita.set(`${k.tur}|${k.key}`, k.google);
+    }
+  }
+  return (yeni as Array<Record<string, unknown>>).map((k) => {
+    if (!k || typeof k !== 'object') return k;
+    const { google: _istemci, ...kalan } = k;
+    const korunan = harita.get(`${String(k.tur)}|${String(k.key)}`);
+    return korunan ? { ...kalan, google: korunan } : kalan;
+  });
 }

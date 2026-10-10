@@ -127,6 +127,22 @@ export class ReklamTaslakService {
     });
   }
 
+  /**
+   * REHBERE BAĞLI TASLAK ESKİ UÇLARDAN DEĞİŞMEZ (Ajan 4, BULGU-2). Rehberin
+   * Meta/Google çocuğu rehberden TÜRETİLİYOR; eski `taslaklar/:id/*` uçlarıyla
+   * değiştirilirse uyum denetçisinin denetlediği (rehber) ile platforma giden
+   * (çocuk) ayrışır. Yayın kapısı bunu ayrıca yakalıyor; bu ret kullanıcıya
+   * sebebi ERKEN söylüyor. Rehber servisi çocuğa `surumYaz` ile doğrudan yazar,
+   * bu yüzden kontrol servis içinde değil controller uçlarında.
+   */
+  async rehbereBagliysaReddet(ctx: TenantContext, id: string): Promise<void> {
+    const [r] = await this.prisma.withTenant(ctx, (tx) =>
+      tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        SELECT id::text FROM reklam_rehberi WHERE meta_taslak_id = ${id}::uuid OR google_taslak_id = ${id}::uuid LIMIT 1`),
+    );
+    if (r) throw new ConflictException('Bu taslak AdvCampaign rehberine bağlı; değişikliği rehberden yap.');
+  }
+
   async surumYaz(ctx: TenantContext, id: string, degisiklik: AlanDegisikligi): Promise<TaslakKaydi> {
     const zaman = new Date().toISOString();
     return this.prisma.withTenant(ctx, async (tx) => {

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { REHBER_DURUMLARI, type RehberGuncelle, type TenantContext } from '@advetics/shared';
-import { createHarness, seedTenant, IDS, type Harness } from '../../../../test/pglite-harness';
+import { createHarness, seedAjans, seedTenant, IDS, type Harness } from '../../../../test/pglite-harness';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { AppConfig } from '../../../config/configuration';
 import { ReklamHazirlikService } from '../hazirlik.service';
@@ -102,6 +102,7 @@ beforeEach(async () => {
   (svc as unknown as { yz: unknown }).yz = null;
   await h.reset();
   await seedTenant(h);
+  await seedAjans(h);
   await h.q(`INSERT INTO organizations (id, name, slug, updated_at) VALUES ($1, 'Kardeş', 'kardes', now())`, [KARDES_ORG]);
   await h.q(`INSERT INTO clients (id, org_id, name, slug, updated_at) VALUES ($1, $2, 'Kardeş WS', 'kardes-ws', now())`, [KARDES_WS, KARDES_ORG]);
   await h.q(`INSERT INTO clients (id, org_id, name, slug, updated_at) VALUES ($1, $2, 'Öteki', 'oteki', now())`, [OTEKI, IDS.org]);
@@ -120,7 +121,8 @@ const TAM = [
   g('amac', 'SITE'),
   g('platformlar', { meta: false, google: true }),
   g('googleHesabiId', GHESAP, 'workspace_profili'),
-  g('konumlar', [{ tur: 'city', key: '2347574', etiket: 'İzmir', ulkeKodu: 'TR', google: { kaynak: 'geoTargetConstants/1012782', ad: 'İzmir' } }], 'marka_merkezi'),
+  // Google karşılığı İSTEMCİDEN yazılamaz (BULGU-4); `konumlariEsle` yazar.
+  g('konumlar', [{ tur: 'city', key: '2347574', etiket: 'İzmir', ulkeKodu: 'TR' }], 'marka_merkezi'),
   g('ekKategoriler', []),
   g('hedefAdres', 'https://ornek.com.tr/'),
   g('metin', { anaMetin: 'Villa', basliklar: ['Bir Başlık', 'İki Başlık', 'Üç Başlık'], aciklamalar: ['Birinci açıklama.', 'İkinci açıklama.'] }),
@@ -131,7 +133,8 @@ const TAM = [
 
 async function tamRehber() {
   const r = await svc.olustur(CTX, IDS.client);
-  return svc.guncelle(CTX, r.id, { surum: r.surum, degisiklikler: TAM });
+  await svc.guncelle(CTX, r.id, { surum: r.surum, degisiklikler: TAM });
+  return svc.konumlariEsle(CTX, r.id);
 }
 
 describe('oluştur / oku / güncelle', () => {

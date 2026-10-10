@@ -106,17 +106,19 @@ export class ReklamController {
 
   @Put('taslaklar/:id/surum')
   @RequirePermissions('bulk.write')
-  surumYaz(
+  async surumYaz(
     @CurrentTenant() ctx: TenantContext,
     @Param('id', ParseUUIDPipe) id: string,
     @Body(zodBody(surumYazSchema)) dto: z.infer<typeof surumYazSchema>,
   ): Promise<TaslakKaydi> {
+    await this.taslak.rehbereBagliysaReddet(ctx, id);
     return this.taslak.surumYaz(ctx, id, dto.degisiklikler as AlanDegisikligi);
   }
 
   @Post('taslaklar/:id/arsivle')
   @RequirePermissions('bulk.write')
-  arsivle(@CurrentTenant() ctx: TenantContext, @Param('id', ParseUUIDPipe) id: string): Promise<TaslakKaydi> {
+  async arsivle(@CurrentTenant() ctx: TenantContext, @Param('id', ParseUUIDPipe) id: string): Promise<TaslakKaydi> {
+    await this.taslak.rehbereBagliysaReddet(ctx, id);
     return this.taslak.arsivle(ctx, id);
   }
 
@@ -177,11 +179,12 @@ export class ReklamController {
    */
   @Post('taslaklar/:id/yayinla')
   @RequirePermissions('bulk.publish')
-  yayinla(
+  async yayinla(
     @CurrentTenant() ctx: TenantContext,
     @Param('id', ParseUUIDPipe) id: string,
     @Body(zodBody(yayinlaSchema)) dto: z.infer<typeof yayinlaSchema>,
   ): Promise<YayinBaslatSonucu> {
+    await this.taslak.rehbereBagliysaReddet(ctx, id);
     return this.yayin.baslat(ctx, { taslakId: id, ...dto });
   }
 
@@ -214,7 +217,8 @@ export class ReklamController {
   /** Meta provası: nesne açmaz; yalnız eksiksiz taslakta. */
   @Post('taslaklar/:id/prova')
   @RequirePermissions('bulk.write')
-  provaIste(@CurrentTenant() ctx: TenantContext, @Param('id', ParseUUIDPipe) id: string): Promise<ProvaGorunumu> {
+  async provaIste(@CurrentTenant() ctx: TenantContext, @Param('id', ParseUUIDPipe) id: string): Promise<ProvaGorunumu> {
+    await this.taslak.rehbereBagliysaReddet(ctx, id);
     return this.yayin.provaIste(ctx, id);
   }
 
@@ -226,11 +230,12 @@ export class ReklamController {
 
   @Post('taslaklar/:id/oneriyi-onayla')
   @RequirePermissions('bulk.write')
-  oneriyiOnayla(
+  async oneriyiOnayla(
     @CurrentTenant() ctx: TenantContext,
     @Param('id', ParseUUIDPipe) id: string,
     @Body(zodBody(onaySchema)) dto: z.infer<typeof onaySchema>,
   ): Promise<TaslakKaydi> {
+    await this.taslak.rehbereBagliysaReddet(ctx, id);
     return this.ai.onayla(ctx, id, dto.icerikOzeti);
   }
 

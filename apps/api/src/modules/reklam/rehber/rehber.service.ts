@@ -47,6 +47,7 @@ import {
   type TaslakAlanlari,
   type TenantContext,
   type YayinDurumu,
+  taslakKanonikIcerik,
 } from '@advetics/shared';
 import { CONFIG, type AppConfig } from '../../../config/configuration';
 import { CryptoService } from '../../../crypto/crypto.service';
@@ -279,6 +280,15 @@ export class RehberService {
    * sessizce ezilseydi biri yazdığını kaybederdi ve fark etmezdi.
    */
   async guncelle(ctx: TenantContext, id: string, dto: RehberGuncelle): Promise<RehberKaydi> {
+    return this.yaz(ctx, id, dto, false);
+  }
+
+  /**
+   * `sunucuEslemesi`: yalnız `konumlariEsle` true geçer. İstemciden gelen
+   * konumun Google karşılığı atılıyor (BULGU-4); sunucunun kendi eşlemesi
+   * aynı yoldan yazılırken atılmamalı. Controller bu bayrağı GEÇEMEZ.
+   */
+  private async yaz(ctx: TenantContext, id: string, dto: RehberGuncelle, sunucuEslemesi: boolean): Promise<RehberKaydi> {
     const zaman = new Date().toISOString();
     const s = await this.tx(ctx)(async (t) => {
       const [r] = await t.$queryRaw<RehberSatiri[]>(Prisma.sql`SELECT ${SUTUNLAR} FROM reklam_rehberi WHERE id = ${id}::uuid FOR UPDATE`);
@@ -286,7 +296,7 @@ export class RehberService {
       erisim(ctx, r.client_id);
       if (r.durum !== 'taslak') throw new ConflictException(r.durum === 'yayinda' ? 'Yayına alınmış rehber düzenlenmez; yeni bir reklam başlat.' : 'Rehber arşivde.');
       if (r.surum !== dto.surum) throw new ConflictException('Başka bir sekmede değişti; sayfayı yenile.');
-      const u = degisiklikleriUygula(r.alanlar, dto.degisiklikler, ctx.userId, zaman);
+      const u = degisiklikleriUygula(r.alanlar, dto.degisiklikler, ctx.userId, zaman, { sunucuKonumEslemesi: sunucuEslemesi });
       if (u.tur === 'ret') throw new BadRequestException(u.mesaj);
       await aitlikDenetle(t, r.client_id, u.alanlar);
       const [g] = await t.$queryRaw<RehberSatiri[]>(Prisma.sql`
@@ -350,7 +360,7 @@ export class RehberService {
       yeni.push({ ...k, google: konumEsle(k, adaylar.map((x) => ({ key: x.key, name: x.name, countryCode: x.countryCode }))) });
     }
     // Kaynak KORUNUYOR: eşleme alanın değerini değil Google karşılığını ekliyor.
-    return this.guncelle(ctx, id, { surum: s.surum, degisiklikler: [{ alan: 'konumlar', deger: yeni, kaynak: konumlar.kaynak }] });
+    return this.yaz(ctx, id, { surum: s.surum, degisiklikler: [{ alan: 'konumlar', deger: yeni, kaynak: konumlar.kaynak }] }, true);
   }
 
   async anahtarKelimeOner(ctx: TenantContext, id: string, tohumlar: string[] | undefined): Promise<AnahtarKelimeOnerisi> {
@@ -441,9 +451,9 @@ export class RehberService {
     const acik = acikPlatformlar(a, b.ajansYoneticisi);
     const zaman = new Date().toISOString();
 
-    const meta = acik.meta ? await this.metaProva(ctx, s, a, b, zaman) : null;
+    const meta = acik.meta ? await this.metaProva(ctx, s, a, b, acik, zaman) : null;
     s = await this.satir(ctx, id);
-    const google = acik.google ? await this.googleProva(ctx, s, a, b) : null;
+    const google = acik.google ? await this.googleProva(ctx, s, a, b, acik) : null;
 
     // Prova bu İÇERİĞE yapıldı. Arada rehber değiştiyse (başka sekme) kayıt
     // eski özetle kalır ve yayın kapısı "yeniden prova et" der.
@@ -502,8 +512,8 @@ export class RehberService {
     return { satirlar, toplam: satirlar.length, dahaFazlaVar: satirlar.length >= 50, bosNeden: satirlar.length ? null : 'Kanalda yüklenmiş video yok.' };
   }
 
-  private async metaProva(ctx: TenantContext, s: RehberSatiri, a: RehberAlanlari, b: Baglam, zaman: string): Promise<PlatformProvaSonucu> {
-    const t = rehberdenMeta(a, b.meta?.currency ?? b.paraBirimi, zaman);
+  private async metaProva(ctx: TenantContext, s: RehberSatiri, a: RehberAlanlari, b: Baglam, acik: Record<RehberPlatformu, boolean>, zaman: string): Promise<PlatformProvaSonucu> {
+    const t = rehberdenMeta(a, acik, b.meta?.currency ?? b.paraBirimi, zaman);
     if (t.tur === 'ret') return { tur: 'reddetti', zaman, mesajlar: t.kodlar.map((k) => `Eksik: ${k}`) };
     try {
       let taslakId = s.meta_taslak_id;
@@ -529,10 +539,10 @@ export class RehberService {
     }
   }
 
-  private async googleProva(ctx: TenantContext, s: RehberSatiri, a: RehberAlanlari, b: Baglam): Promise<PlatformProvaSonucu> {
+  private async googleProva(ctx: TenantContext, s: RehberSatiri, a: RehberAlanlari, b: Baglam, acik: Record<RehberPlatformu, boolean>): Promise<PlatformProvaSonucu> {
     const zaman = new Date().toISOString();
     if (!b.google) return { tur: 'reddetti', zaman, mesajlar: ['Google Ads hesabı seçilmedi.'] };
-    const t = rehberdenGoogle(a, {
+    const t = rehberdenGoogle(a, acik, {
       musteriId: b.google.externalId,
       paraBirimi: b.google.currency,
       saatDilimi: b.google.timezone,
@@ -640,7 +650,7 @@ export class RehberService {
     const baslamayan: PlatformYayinOzeti[] = [];
     let baslayan = 0;
     if (acik.meta && s.meta_taslak_id) {
-      const r = await this.metaYayinBaslat(ctx, s.meta_taslak_id, { uyum: k.uyum, kapaliKalacak: !platformAcilabilirMi(amac, 'meta') });
+      const r = await this.metaYayinBaslat(ctx, s.meta_taslak_id, a, acik, b.meta?.currency ?? b.paraBirimi, { uyum: k.uyum, kapaliKalacak: !platformAcilabilirMi(amac, 'meta') });
       if (r) baslamayan.push({ platform: 'meta', taslakId: s.meta_taslak_id, yayinId: null, durum: null, sebep: r, kampanyaKimligi: null, duraklatilmisKalacak: !platformAcilabilirMi(amac, 'meta') });
       else baslayan++;
     }
@@ -692,7 +702,14 @@ export class RehberService {
   }
 
   /** Meta: mevcut tek yayın yolu (`yayinBaslat`) — rehberin uyum kararıyla. Dönen değer: başlamadıysa sebebi. */
-  private async metaYayinBaslat(ctx: TenantContext, taslakId: string, rehber: { uyum: { tur: 'gecti'; surum: string }; kapaliKalacak: boolean }): Promise<string | null> {
+  private async metaYayinBaslat(
+    ctx: TenantContext,
+    taslakId: string,
+    a: RehberAlanlari,
+    acik: Record<RehberPlatformu, boolean>,
+    paraBirimi: string,
+    rehber: { uyum: { tur: 'gecti'; surum: string }; kapaliKalacak: boolean },
+  ): Promise<string | null> {
     const [t] = await this.tx(ctx)((x) =>
       x.$queryRaw<Array<{ aktif_surum_no: number; icerik_ozeti: string | null }>>(Prisma.sql`
         SELECT t.aktif_surum_no, s.icerik_ozeti FROM reklam_taslagi t
@@ -700,6 +717,16 @@ export class RehberService {
          WHERE t.id = ${taslakId}::uuid`),
     );
     if (!t?.icerik_ozeti) return 'Meta taslağı bulunamadı; yeniden prova et.';
+    /*
+     * ÇOCUK REHBERDEN Mİ TÜREDİ (Ajan 4, BULGU-2): uyum denetçisi REHBERİ
+     * denetliyor ama Meta'ya ÇOCUĞUN aktif sürümü gidiyor. Çocuk, prova ile
+     * yayın arasında eski taslak uçlarından değiştirilmişse denetlenmemiş
+     * içerik "uyum geçti" damgasıyla yayınlanırdı. Rehberden yeniden türetip
+     * aynı özet kuralıyla karşılaştırıyoruz; uyuşmazsa yayın yok.
+     */
+    const yeniden = rehberdenMeta(a, acik, paraBirimi, new Date().toISOString());
+    const beklenen = yeniden.tur === 'tamam' ? createHash('sha256').update(taslakKanonikIcerik(yeniden.deger)).digest('hex') : null;
+    if (beklenen !== t.icerik_ozeti) return 'Meta taslağı rehberden sonra değişmiş; yeniden prova et.';
     const r = await this.yayinSvc.baslat(ctx, { taslakId, surumNo: t.aktif_surum_no, icerikOzeti: t.icerik_ozeti, testKipi: false, kaynak: 'panel', rehber });
     return r.tur === 'ret' ? r.retler.map((x) => x.mesaj).join(' ') : null;
   }
@@ -794,7 +821,7 @@ export class RehberService {
       alanlar: a,
       eksikler: rehberEksikleri(a, b),
       // Teklif kuralı `rehberdenGoogle` ile AYNI: yalnız ölçüm KESİN etkinse dönüşüm.
-      kararlar: amac ? kararTablosu(amac, acikPlatformlar(a, b.ajansYoneticisi), b.googleDonusum === true ? 'MAKS_DONUSUM' : 'MAKS_TIKLAMA') : [],
+      kararlar: amac ? kararTablosu(amac, acikPlatformlar(a, b.ajansYoneticisi), b.googleDonusum === true ? 'MAKS_DONUSUM' : 'MAKS_TIKLAMA', a.instagramId?.deger != null) : [],
       metaTaslakId: s.meta_taslak_id,
       googleTaslakId: s.google_taslak_id,
       icerikOzeti: rehberOzeti(a),
@@ -816,7 +843,9 @@ export class RehberService {
         SELECT id::text, platform::text AS platform, external_id, currency, timezone FROM ad_accounts
          WHERE client_id = ${clientId}::uuid AND id = ANY(${[metaId, googleId].filter((x): x is string => !!x)}::uuid[])`);
       const [aj] = await t.$queryRaw<Array<{ ajans_mi: boolean }>>(Prisma.sql`
-        SELECT (ma.ajans_org_id IS NULL OR ma.ajans_org_id = o.id) AS ajans_mi
+        -- Ajans BİLİNMİYORSA KAPALI (CLAUDE.md "havuzun iki sahibi"): yöneticisi
+        -- tanımsız bir şirketin admini deneme amaçlarını görmemeli. NULL = false.
+        SELECT COALESCE(ma.ajans_org_id = o.id, false) AS ajans_mi
           FROM organizations o LEFT JOIN manager_accounts ma ON ma.id = o.manager_account_id
          WHERE o.id = ${ctx.orgId}::uuid`);
       return { m, hesaplar, aj };

@@ -35,19 +35,25 @@ const turetilmis = <T>(deger: T, zaman: string): AlanDegeri<T> => ({ deger, kayn
  * girdiye farklı çıktı demek; içerik özeti `kim`/`zaman` almadığı için
  * özet yine de kararlı, ama testler saatsiz yazılabilsin).
  */
-export function rehberdenMeta(a: RehberAlanlari, paraBirimi: string, zaman: string): TuretmeSonucu<TaslakAlanlari> {
+/**
+ * `acik` = `acikPlatformlar(a, ajansYoneticisi)`: kullanıcının HAM seçimi
+ * değil, görünür olanı. Ajan 4 bulgusu (BULGU-1): ham seçimle bölmek, Meta'sı
+ * kapalı bir amaçta (VIDEO) "iki platform" seçili kalmış rehberde ekran
+ * "Google 500 ₺" derken Google'a 250 ₺ gönderiyordu. Eksik listesi ve pay
+ * çubuğu açık kümeyle bölüyor; türetme de aynısını yapmak zorunda.
+ */
+export function rehberdenMeta(a: RehberAlanlari, acik: { meta: boolean; google: boolean }, paraBirimi: string, zaman: string): TuretmeSonucu<TaslakAlanlari> {
   const kodlar: string[] = [];
   const amac = a.amac?.deger;
   const m = a.metin?.deger;
   const butce = a.butce?.deger;
-  const p = a.platformlar?.deger;
   if (!amac) kodlar.push('AMAC');
   if (!m) kodlar.push('METIN');
   if (!butce) kodlar.push('BTC-01');
-  if (!p?.meta) kodlar.push('PLT-META-KAPALI');
-  if (kodlar.length || !amac || !m || !butce || !p) return { tur: 'ret', kodlar };
+  if (!acik.meta) kodlar.push('PLT-META-KAPALI');
+  if (kodlar.length || !amac || !m || !butce) return { tur: 'ret', kodlar };
 
-  const pay = butceBol(BigInt(butce.micros), p, a.metaPayiYuzde?.deger ?? VARSAYILAN_META_PAYI, paraBirimi);
+  const pay = butceBol(BigInt(butce.micros), acik, a.metaPayiYuzde?.deger ?? VARSAYILAN_META_PAYI, paraBirimi);
   const basliklar = m.basliklar.map((s) => s.trim()).filter(Boolean).slice(0, METIN_SINIRLARI.metaBaslikSayisi);
   const aciklama = m.aciklamalar.map((s) => s.trim()).find(Boolean);
   const medya = (a.medya?.deger ?? []).slice(0, META_EN_COK_GORSEL);
@@ -140,10 +146,10 @@ export interface GoogleTuretmeBaglami {
   kategoriTabani: OzelKategori[];
 }
 
-export function rehberdenGoogle(a: RehberAlanlari, b: GoogleTuretmeBaglami): TuretmeSonucu<GoogleDerlemeGirdisi> {
+/** `acik`: `rehberdenMeta` ile aynı kural (görünür küme, ham seçim değil). */
+export function rehberdenGoogle(a: RehberAlanlari, acik: { meta: boolean; google: boolean }, b: GoogleTuretmeBaglami): TuretmeSonucu<GoogleDerlemeGirdisi> {
   const kodlar: string[] = [];
   const amac = a.amac?.deger;
-  const p = a.platformlar?.deger;
   const m = a.metin?.deger;
   const butce = a.butce?.deger;
   const takvim = a.takvim?.deger;
@@ -152,16 +158,16 @@ export function rehberdenGoogle(a: RehberAlanlari, b: GoogleTuretmeBaglami): Tur
   if (!amac) kodlar.push('AMAC');
   const tanim = amac ? REHBER_AMACLARI[amac].google : null;
   if (tanim && tanim.kurgu === null) kodlar.push('G-KARSILIK-YOK');
-  if (!p?.google) kodlar.push('PLT-GOOGLE-KAPALI');
+  if (!acik.google) kodlar.push('PLT-GOOGLE-KAPALI');
   if (!m) kodlar.push('METIN');
   if (!butce) kodlar.push('BTC-01');
   if (!takvim) kodlar.push('TKV');
   if (!adres) kodlar.push('SITE-ADRES');
   if (konumlar.length === 0) kodlar.push('KNM-01');
   if (konumlar.some((k) => !k.google)) kodlar.push('G-KONUM');
-  if (kodlar.length || !tanim || tanim.kurgu === null || !p || !m || !butce || !takvim || !adres) return { tur: 'ret', kodlar };
+  if (kodlar.length || !tanim || tanim.kurgu === null || !m || !butce || !takvim || !adres) return { tur: 'ret', kodlar };
 
-  const pay = butceBol(BigInt(butce.micros), p, a.metaPayiYuzde?.deger ?? VARSAYILAN_META_PAYI, b.paraBirimi);
+  const pay = butceBol(BigInt(butce.micros), acik, a.metaPayiYuzde?.deger ?? VARSAYILAN_META_PAYI, b.paraBirimi);
   const ek = a.ekKategoriler?.deger ?? [];
   return {
     tur: 'tamam',

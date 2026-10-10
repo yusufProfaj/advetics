@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  acikPlatformlar,
   GOOGLE_TURKCE,
   TABAN_NEGATIFLER,
   kararTablosu,
@@ -55,7 +56,8 @@ function rehber(amac: RehberAmacKodu): RehberAlanlari {
 }
 
 function girdi(amac: RehberAmacKodu, donusumEtkin: boolean | null = false): GoogleDerlemeGirdisi {
-  const r = rehberdenGoogle(rehber(amac), {
+  const rb = rehber(amac);
+  const r = rehberdenGoogle(rb, acikPlatformlar(rb, true), {
     musteriId: '123-456-7890',
     paraBirimi: 'TRY',
     saatDilimi: 'Europe/Istanbul',
@@ -89,7 +91,7 @@ const islemler = (ops: Array<Record<string, unknown>>, tur: string) =>
   (ops as Op[]).map((o) => o[tur]?.create).filter((c): c is Record<string, unknown> => !!c);
 const kampanya = (ops: Array<Record<string, unknown>>) => islemler(ops, 'campaignOperation')[0]!;
 const google = (amac: RehberAmacKodu, teklif: GoogleTeklif) =>
-  Object.fromEntries(kararTablosu(amac, { meta: false, google: true }, teklif).map((s) => [s.kod, s.google]));
+  Object.fromEntries(kararTablosu(amac, { meta: false, google: true }, teklif, true).map((s) => [s.kod, s.google]));
 
 describe('ARAMA (Siteme gelsinler) — karar tablosu ile gövde', () => {
   it('TUR: "Arama kampanyası" ↔ advertisingChannelType SEARCH', () => {
@@ -159,7 +161,7 @@ describe('ARAMA (Siteme gelsinler) — karar tablosu ile gövde', () => {
 
   it('karar tablosunun BÜTÜN Google satırları yukarıda eşlendi', () => {
     const eslenen = ['TUR', 'TEKLIF', 'NEREDE', 'KONUM', 'OTOMATIK_METIN', 'SAYFA', 'OLCUM'];
-    expect(kararTablosu('SITE', { meta: true, google: true }, 'MAKS_TIKLAMA').map((s) => s.kod)).toEqual(eslenen);
+    expect(kararTablosu('SITE', { meta: true, google: true }, 'MAKS_TIKLAMA', true).map((s) => s.kod)).toEqual(eslenen);
   });
 });
 

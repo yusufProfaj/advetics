@@ -28,7 +28,12 @@ export interface KararSatiri {
   google: KararHucresi | null;
 }
 
-export function kararTablosu(amac: RehberAmacKodu, acik: Record<RehberPlatformu, boolean>, googleTeklif: GoogleTeklif): KararSatiri[] {
+/**
+ * `instagramVar`: kullanıcı "Instagram olmadan" seçtiyse gövdede Instagram
+ * kimliği yok ve Meta reklamı Instagram'da HİÇ göstermez (derle.ts). Tablonun
+ * "Instagram ve Facebook" demesi o durumda yalan olurdu (Ajan 4, BULGU-3).
+ */
+export function kararTablosu(amac: RehberAmacKodu, acik: Record<RehberPlatformu, boolean>, googleTeklif: GoogleTeklif, instagramVar: boolean): KararSatiri[] {
   const t = REHBER_AMACLARI[amac];
   const g = acik.google && t.google.kurgu !== null ? t.google : null;
   const ty = g?.kurgu === 'TALEP_YARATMA_VIDEO' || g?.kurgu === 'TALEP_YARATMA_GORSEL';
@@ -49,7 +54,11 @@ export function kararTablosu(amac: RehberAmacKodu, acik: Record<RehberPlatformu,
     {
       kod: 'NEREDE',
       konu: 'Nerede gösterilir',
-      meta: m ? hucre('Instagram ve Facebook, otomatik yerleşim', 'Çok reklamverenli birim kapalı') : null,
+      meta: m
+        ? instagramVar
+          ? hucre('Instagram ve Facebook, otomatik yerleşim', 'Çok reklamverenli birim kapalı')
+          : hucre('Yalnız Facebook, otomatik yerleşim', "Instagram hesabı seçilmedi, Instagram'da gösterilmez · Çok reklamverenli birim kapalı")
+        : null,
       google: g ? (ty ? hucre(g.nerede) : hucre('Yalnız Google Arama', 'Arama ortakları ve Görüntülü Reklam Ağı kapalı')) : null,
     },
     {

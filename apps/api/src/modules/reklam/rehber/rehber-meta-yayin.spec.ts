@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { DERLEYICI_SURUMU, UYUM_SURUMU, gecisIzinliMi, taslakKanonikIcerik, type TaslakAlanlari, type TenantContext } from '@advetics/shared';
-import { createHarness, seedTenant, IDS, type Harness } from '../../../../test/pglite-harness';
+import { createHarness, seedAjans, seedTenant, IDS, type Harness } from '../../../../test/pglite-harness';
 import { SahteMeta } from '../../../../test/reklam-sahte-meta';
 import { yayinBaslat } from '../yayin-baslat';
 import { yayinIsiniIsle, type IsleyiciBagimliliklari } from '../yayin-isleyici';
@@ -38,6 +38,7 @@ afterAll(async () => {
 beforeEach(async () => {
   await h.reset();
   await seedTenant(h);
+  await seedAjans(h);
   await h.q('DELETE FROM ad_accounts');
   await h.q(
     `INSERT INTO ad_accounts (id, org_id, client_id, connection_id, platform, external_id, name, currency, timezone, updated_at)
