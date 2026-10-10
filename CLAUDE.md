@@ -1026,6 +1026,11 @@ okunup varsayılmadı — canlıda doğrulandı.
   seti kararı (kullanıcı): bir tasarımın boyutları TEK reklam, eksik boyutta o
   yerleşim kapanır; dört boyut tamsa Advantage+ yerleşim kalır. Doğru görselin
   doğru yerleşime gittiği HENÜZ duraklatılmış bir kurulumda gözle görülmedi.
+  **`/ads` satır içi ölçümü `adcreatives` ucunun kuralını YAKALAMADI:** gerçek
+  prova, platformları açıkça sayan varsayılan kuralı *"Boş özelleştirme
+  teknik özellikleriyle Varsayılan Varlık Özelleştirmesi Kuralı (en düşük
+  öncelikle) gereklidir"* ile reddetti. Varsayılan kural `customization_spec:
+  {}` ve EN SONDA. Ders: bir biçimi ölçerken yayında kullanılacak HER uca sor.
 
 - **GERİ OKUMADA İKİ ŞEY DAHA — ölçüldü** (2026-10-10, canlı tur 2,
   konutlu duraklatılmış ağaç): (1) `adlabels` `{id, name}` ve TERS sırada

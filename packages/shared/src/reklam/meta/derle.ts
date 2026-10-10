@@ -28,7 +28,7 @@ import { ORAN_ETIKETI, YERLESIM_GRUPLARI, YERLESIM_SIRASI, ortakPlan, setPlani, 
  * Sürüm provanın tazeliğine bağlı: eski derleyiciyle geçmiş prova yeni
  * gövdeyi kanıtlamaz.
  */
-export const DERLEYICI_SURUMU = '1.1.0';
+export const DERLEYICI_SURUMU = '1.1.1';
 export const DESTEKLENEN_META_SURUMLERI = ['v25.0', 'v26.0'] as const;
 export type MetaApiSurumu = (typeof DESTEKLENEN_META_SURUMLERI)[number];
 
@@ -517,16 +517,19 @@ function varlikAkisi(k: Kavram, kendi: SetPlani, ortak: SetPlani, cta: string, l
     if (!konum.publisher_platforms?.length) continue;
     kurallar.push(metinler({ customization_spec: konum, image_label: { name: SET_ETIKETI(oran) } }));
   }
-  // VARSAYILAN: otomatik yerleşimde kare kalan HER yerin görseli (dört
-  // platform açıkça); elle yerleşimde açık platformlar ve ilk açık grubun
-  // görseli — elle yerleşimde kalan yer yok ama boş bırakılan bir yerleşim
-  // Meta'da gösterimsiz kalır ve bunu hata olarak bildirmez.
+  // VARSAYILAN KURAL BOŞ customization_spec İLE VE EN SONDA — ölçüldü
+  // (2026-10-10, v25.0, gerçek prova, `adcreatives` ucu): dört platformu
+  // açıkça sayan varsayılan "Boş özelleştirme teknik özellikleriyle Varsayılan
+  // Varlık Özelleştirmesi Kuralı (en düşük öncelikle) gereklidir" ile
+  // REDDEDİLDİ. `/ads` ucundaki satır içi ölçüm bunu yakalamamıştı; kreatif
+  // ucu daha sıkı. Boş tanım = reklam setinin yerleşimlerinden kurallarca
+  // kapsanmayan her yer: otomatik yerleşimde kare, elle yerleşimde ilk açık
+  // grubun görseli.
   const varsayilanOran: GorselOrani = ortak.otomatik ? 'kare' : kendi.gruplar[YERLESIM_SIRASI.find((g) => ortak.gruplar[g])!]!;
-  const platformlar = ortak.otomatik ? ['audience_network', 'facebook', 'instagram', 'messenger'] : elleYerlesim(ortak, instagram).publisher_platforms!;
   // ortakPlan bunu imkânsız kılıyor (otomatik = her sette kare); yine de
   // varsayılanı olmayan bir kural seti sessizce gösterimsiz yerleşim demek.
   if (!hash.has(varsayilanOran)) throw new Error(`Setin varsayılan görseli yok: ${ORAN_ETIKETI[varsayilanOran]}`);
-  kurallar.push(metinler({ customization_spec: { publisher_platforms: platformlar }, image_label: { name: SET_ETIKETI(varsayilanOran) } }));
+  kurallar.push(metinler({ customization_spec: {}, image_label: { name: SET_ETIKETI(varsayilanOran) } }));
 
   return {
     images: k.setGorselleri!.map((x) => ({ hash: x.gorselHash, adlabels: [{ name: SET_ETIKETI(x.oran) }] })),

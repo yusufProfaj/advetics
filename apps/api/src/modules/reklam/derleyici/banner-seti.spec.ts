@@ -135,7 +135,9 @@ describe('derleMeta — banner seti', () => {
       ['adv_kare', 4],
     ]);
     expect(kurallar[2].customization_spec.instagram_positions).toEqual(['story', 'reels']);
-    expect(kurallar[3].customization_spec).toEqual({ publisher_platforms: ['audience_network', 'facebook', 'instagram', 'messenger'] });
+    // Meta varsayılanı BOŞ tanımla ve en sonda istiyor (gerçek prova reddetti, 2026-10-10).
+    expect(kurallar[3].customization_spec).toEqual({});
+    expect(kurallar.slice(0, 3).every((r) => Object.keys(r.customization_spec).length > 0)).toBe(true);
     // Her kural metni de açıkça seçer.
     for (const r of kurallar) expect([r.body_label?.name, r.title_label?.name, r.link_url_label?.name]).toEqual(['adv_metin', 'adv_baslik', 'adv_baglanti']);
     expect(afs.link_urls[0].website_url).toBe('https://gardenvillaskusadasi.com/');
@@ -149,6 +151,7 @@ describe('derleMeta — banner seti', () => {
     for (const yasak of ['story', 'reels', 'facebook_reels']) expect(tumKonumlar(t)).not.toContain(yasak);
     const kurallar = bul(gv, 'kreatif:1').asset_feed_spec.asset_customization_rules as any[];
     expect(kurallar.map((r) => r.image_label.name)).toEqual(['adv_dik45', 'adv_yatay', 'adv_dik45']);
+    expect(kurallar[2].customization_spec).toEqual({});
     expect(JSON.stringify(kurallar)).not.toContain('story');
   });
 
