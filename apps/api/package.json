@@ -24,6 +24,7 @@
     "google-check": "node dist/google-check.js",
     "meta-ilgi-kontrol": "node dist/meta-ilgi-kontrol.js",
     "meta-kategori-prova": "node dist/meta-kategori-prova.js",
+    "meta-yerlesim-prova": "node dist/meta-yerlesim-prova.js",
     "meta-sayfa-metrik-kontrol": "node dist/meta-sayfa-metrik-kontrol.js",
     "worker": "node dist/worker.js",
     "worker:dev": "tsx watch src/worker.ts",
