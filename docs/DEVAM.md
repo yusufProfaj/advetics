@@ -6,7 +6,7 @@
 > İŞ yazılır; her oturum kapanırken, işin kendi commit'inde güncellenir.
 > 16 Ağustos'a kadarki eski devir belgesi: [`arsiv/DEVAM-2026-08.md`](arsiv/DEVAM-2026-08.md).
 
-**Son güncelleme:** 2026-10-10 (AdvCampaign rehberi deploy ediliyor) · 2026-10-09: **Canlı `6b51390` (11:43, 81 sn); ondan önce 316be15 (10:30):**
+**Son güncelleme:** 2026-10-10 akşam (AdvCampaign canlı tur 2 + banner seti; canlı `55312f6`) · 2026-10-09: **Canlı `6b51390` (11:43, 81 sn); ondan önce 316be15 (10:30):**
 aşağıda "DEPLOY EDİLMEDİ" yazan işlerin HEPSİ artık canlıda (AdvCampaign
 sohbeti, AdvStrategy ikinci tur, YouTube Boost Aşama 0–1 + kanal bulma, Okuma
 API, Base Aşama 1, LinkedIn para birimi). Ölçüldü: `prisma migrate status`
@@ -35,12 +35,28 @@ hepsi düzeldi, mutasyonla doğrulandı, kapı açıldı. MIGRATION VAR:
 (Google Talep Yaratma) — `deneme`: yalnız üst hesabın admin üyesi görür,
 kurulum DURAKLATILMIŞ kalır (Reklam Yöneticisi'nden Başlat). FORM Dalga 2'ye
 kaydı (Meta zinciri form kimliğini boş geçiyor, gizlilik adresi alanı yok).
-**HİÇBİRİ CANLIDA KOŞMADI — sıradaki iş canlı tur (MIMARI-REHBER § 8, Ö-1…Ö-7)**,
-Profaj hesabında: Google Arama atomik kurulum, Meta SITE, `minimum_budgets`,
-`geoTargetConstants:suggest`, Talep Yaratma video. Bilinen engel: konut
-kategorili Meta provası (`special_ad_categories ... got "2"`). Her ölçüm
-geçince ilgili açılış satırı `acik` olur (commit gövdesinde kanıt). Sonra
-Ajan 6 tasarım denetimi (giriş ekranını kullanıcı henüz görmedi).
+**CANLI TUR (Ege Birlik Yapı, hepsi DURAKLATILMIŞ kuruldu ve ARŞİVLENDİ):**
+Ö-1 Google Arama GEÇTİ (gözle doğrulandı). Ö-7 konutlu Meta provası
+çözüldü (satır içi kampanyada kategori sınanamıyor, `KATEGORI_PROVA_NOTU`).
+Geri okumada N-07…N-15 normalleştirmeleri canlıdan öğrenildi (CLAUDE.md
+"Meta"). **BANNER SETİ (kullanıcı kararı):** bir tasarımın boyutları TEK
+reklam (`banner-seti.ts`, `asset_feed_spec` + `optimization_type:
+PLACEMENT`), eksik boyutta o yerleşim kapanır; dört boyut tamsa Advantage+.
+Dört prova reddinden sonra kuruldu (yayın 3efebf54), gerçek dönüşte kalan
+fark 0 ama uçtan uca "temiz" henüz yeni bir kurulumda GÖRÜLMEDİ.
+**Sıradaki:** (1) kullanıcı yerleşim önizlemelerini Reklam Yöneticisi'nde
+gözle kontrol ediyor (arşivdeki reklam 120252510003750700); (2) set kartı
+taslağı `docs/advcampaign/banner-seti-taslak.html` ONAY BEKLİYOR (açık:
+degrade mi düz kırmızı mı, metin setlerde ortak mı, uyarıda marka kırmızısı);
+(3) yeni bir duraklatılmış kurulumla uçtan uca "temiz"; (4) sonra
+SITE.meta'yı `acik` yapma kararı (para/ürün kararı, sorulacak); (5) Ajan 6
+tasarım denetimi. Ekran düzeltme listesi: konum "Türkiye, Türkiye" çift
+yazıyor; yenileyince soldaki adımlara tıklanamıyor; yalnız Meta'da Google
+metinleri görünüyor; amaç seçilmeden "hazır" yazıyor; seçili amaç kartına
+tekrar tıklamak platform önerisini sıfırlıyor; Meta'nın İngilizce hata
+metni prova notunda ham görünüyor; fark_var'da yalnız önemsiz farklar
+varken bile tek çıkış arşiv; rehber ekranında "geri al" düğmesi yok;
+`api.ts` açıklaması `yayinla {ozet}` diyor, gövde `icerikOzeti`.
 Açık: AdvStrategy → AdvCampaign aktarımı hâlâ sohbet tablosuna yazıyor
 (okuyan ekran yok, ürün kararı); Google yayını için geri al yok; yayına
 alınmış rehber düzenlenemiyor.
