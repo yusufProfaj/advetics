@@ -74,7 +74,7 @@ beforeEach(async () => {
   );
 });
 
-async function hazirla(o: { testKipi?: boolean; kavram?: number; video?: boolean } = {}) {
+async function hazirla(o: { testKipi?: boolean; kavram?: number; video?: boolean; kapaliKalacak?: boolean } = {}) {
   const [t] = await h.q<{ id: string }>(
     `INSERT INTO reklam_taslagi (org_id, client_id, platform, olusturan_yuz, olusturan_id)
      VALUES ($1, $2, 'meta', 'acemi', $3) RETURNING id::text`,
@@ -122,6 +122,7 @@ async function hazirla(o: { testKipi?: boolean; kavram?: number; video?: boolean
     kaynak: 'panel',
     baslatanId: IDS.user,
     testKipi: o.testKipi ?? false,
+    kapaliKalacak: o.kapaliKalacak ?? false,
   });
   return { yayinId: id, taslakId: t!.id };
 }
@@ -156,6 +157,36 @@ describe('mutlu yol', () => {
     expect([...meta.kayitlar.values()].find((k) => k.uc === 'campaigns')!.status).toBe('ARCHIVED');
     const [y] = await h.q<{ sonlandi_at: Date | null }>('SELECT sonlandi_at FROM yayin WHERE id = $1', [yayinId]);
     expect(y!.sonlandi_at).not.toBeNull();
+  });
+});
+
+describe('duraklatılmış kurulumu geri alma (canlı tur, 2026-10-10)', () => {
+  /*
+   * Rehberin `deneme` açılışı kurar, geri okur ve AÇMAZ (kapali_kuruldu).
+   * O durumdan çıkış yoktu: deneme kurulumu ancak Meta'dan elle arşivlendi ve
+   * kayıt "duraklatılmış kuruldu" kaldı — platform ile kayıt ayrıştı.
+   */
+  async function kapaliKurulmus() {
+    const meta = new SahteMeta();
+    // kapali_kalacak kayıtta DEĞİŞMEZ (trigger): kurulum anında verilir.
+    const { yayinId } = await hazirla({ kapaliKalacak: true });
+    const motor = new YayinMotoru(tx, meta, 'act_1', ACIK);
+    expect(await motor.kur(yayinId)).toBe('kapali_kuruldu');
+    return { meta, motor, yayinId };
+  }
+
+  it('KRİTİK: kapali_kuruldu → geri al: kampanya Meta’da ARŞİV, kayıt arsivlendi + geri_alindi', async () => {
+    const { meta, motor, yayinId } = await kapaliKurulmus();
+    expect([...meta.kayitlar.values()].filter((k) => k.status === 'ACTIVE')).toHaveLength(0);
+    expect(await motor.geriAl(yayinId)).toBe('arsivlendi');
+    expect([...meta.kayitlar.values()].find((k) => k.uc === 'campaigns')!.status).toBe('ARCHIVED');
+    const [y] = await h.q<{ durum: string; sonlanma_sebebi: string }>('SELECT durum, sonlanma_sebebi FROM yayin WHERE id = $1', [yayinId]);
+    expect(y).toEqual({ durum: 'arsivlendi', sonlanma_sebebi: 'geri_alindi' });
+  });
+
+  it('istisna DAR: sonlanmış kapali_kuruldu kaydı geri alma DIŞINDA bir sebeple yeniden sonlandırılamaz', async () => {
+    const { yayinId } = await kapaliKurulmus();
+    await expect(yayiniSonlandir(tx, yayinId, 'yeniden_kurulacak')).rejects.toThrow(/sonlandırılamaz/);
   });
 });
 
@@ -439,5 +470,24 @@ describe('kaynak taraması', () => {
 
   it('KRİTİK: DELETED hiçbir yolda yok (geri alma = arşiv)', () => {
     for (const f of dosyalar) expect(kaynak(f), f).not.toContain('DELETED');
+  });
+});
+
+describe('geri al ucu (kaynak taraması)', () => {
+  const yorumsuz = readFileSync(join(__dirname, 'yayin.service.ts'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
+  const govde = (() => {
+    const i = yorumsuz.indexOf('async adim(');
+    if (i < 0) throw new Error('adim() bulunamadı');
+    return yorumsuz.slice(i, yorumsuz.indexOf('async oku(', i));
+  })();
+
+  it('izin listesi shared’dan (panel ile aynı liste) ve kapali_kuruldu içinde', () => {
+    expect(yorumsuz).toMatch(/geri_al:\s*GERI_ALINABILIR_DURUMLAR/);
+  });
+  it('KRİTİK: geri al YALNIZ Meta yayınında — platform hesaptan okunuyor, Google reddediliyor', () => {
+    expect(govde).toContain("h?.platform !== 'meta'");
+    expect(govde).toContain('JOIN ad_accounts');
   });
 });

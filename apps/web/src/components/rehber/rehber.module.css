@@ -1595,6 +1595,16 @@
 .yayinda[data-hal='hata'] i {
   background: var(--t-danger);
 }
+/* Geri al satırın altına iner: üç sütunlu ızgarada tam genişlik. */
+.geriAlOnay {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--t-ink-muted);
+}
 .sonDugmeler {
   display: flex;
   gap: 8px;

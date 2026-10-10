@@ -392,7 +392,7 @@ export function RehberEkrani({
               />
             </div>
             <div className={`${s.ekran} ${ekran === 7 ? s.acik : ''}`}>
-              <SonEkran b={b} yayin={yayin} yeniReklam={() => void yeniReklam()} yeniHata={yeniHata} />
+              <SonEkran b={b} yayin={yayin} yeniReklam={() => void yeniReklam()} yeniHata={yeniHata} rehberId={kayit.id} yayinGuncelle={setYayin} />
             </div>
           </section>
 

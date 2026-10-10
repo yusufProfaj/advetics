@@ -103,8 +103,29 @@ export const YAYIN_GECISLERI: Readonly<Record<YayinDurumu, readonly YayinDurumu[
   bekletildi: ['medya', 'kuruluyor', 'aciliyor'],
   durduruldu: ['yayinda', 'arsivlendi'],
   arsivlendi: [],
-  kapali_kuruldu: [],
+  // GERİ AL (arşiv): duraklatılmış kurulan reklamdan vazgeçmenin Advetics'teki
+  // tek yolu. Geçiş yokken canlı turda (2026-10-10) deneme kurulumu ancak
+  // Meta'dan elle arşivlenebildi ve kayıt "duraklatılmış kuruldu" diye kaldı:
+  // platform ile kayıt sessizce ayrıştı.
+  kapali_kuruldu: ['arsivlendi'],
 };
+
+/**
+ * "Geri al" (Meta'da arşiv) düğmesinin anlamlı olduğu durumlar — TEK liste:
+ * API ucu bununla izin veriyor, panel düğmeyi bununla gösteriyor. İki ayrı
+ * liste doğduğunda panel düğme gösterip sunucu reddeder (ya da tersi).
+ * Yalnız META yayını: Google kurulumunun geri alma yolu yok (Google Ads'ten
+ * kaldırılır) ve iş Meta motoruna gitmemeli.
+ */
+export const GERI_ALINABILIR_DURUMLAR: readonly YayinDurumu[] = [
+  'fark_var',
+  'dogrulanamadi',
+  'kurulamadi',
+  'kismen_acik',
+  'sonuc_belirsiz',
+  'durduruldu',
+  'kapali_kuruldu',
+];
 
 export function gecisIzinliMi(nereden: YayinDurumu, nereye: YayinDurumu): boolean {
   return YAYIN_GECISLERI[nereden].includes(nereye);

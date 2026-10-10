@@ -11,6 +11,7 @@ import {
   type RehberProvaSonucu,
   type RehberYayinDurumu,
 } from '@advetics/shared';
+import { ApiRequestError, apiFetch } from '@/lib/api';
 import { baglanti } from '@/lib/baglanti';
 import { REKLAM_YONETICISI } from '@/lib/reklam-yoneticisi';
 import { AltCubuk, Soru, Uyari, type AdimBaglami } from './adim-ortak';
@@ -20,6 +21,7 @@ import {
   CTA_METNI,
   alanAdi,
   bugun,
+  geriAlinabilirMi,
   paraGoster,
   provaGosterimi,
   tarihGoster,
@@ -372,12 +374,96 @@ export function OnayPenceresi({
 // Son ekran
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function SonEkran({ b, yayin, yeniReklam, yeniHata }: { b: AdimBaglami; yayin: RehberYayinDurumu | null; yeniReklam: () => void; yeniHata: string | null }) {
+/**
+ * "VAZGEÇ VE ARŞİVLE" — duraklatılmış ya da durmuş Meta kurulumunu Advetics'ten
+ * geri almak. Canlı turda (2026-10-10) bu yol yoktu: deneme kurulumu Meta'dan
+ * elle arşivlendi ve kayıt "duraklatılmış" kaldı. Onay SATIR İÇİNDE (tek
+ * tıkla arşiv yok); sonuç sunucudan yoklanır, "gönderildi" bir sonuç değil.
+ * Hata platformun kendi cümlesiyle görünür.
+ */
+function GeriAl({ rehberId, ozet, guncelle }: { rehberId: string; ozet: PlatformYayinOzeti; guncelle: (y: RehberYayinDurumu) => void }) {
+  const [hal, setHal] = useState<'bos' | 'onay' | 'gonderiliyor' | 'hata'>('bos');
+  const [hata, setHata] = useState<string | null>(null);
+  async function arsivle() {
+    setHal('gonderiliyor');
+    setHata(null);
+    try {
+      await apiFetch(`/reklam/yayinlar/${encodeURIComponent(ozet.yayinId!)}/geri-al`, { method: 'POST' });
+      // İş kuyrukta: durum değişene kadar yokla (en çok ~45 sn).
+      for (let i = 0; i < 15; i++) {
+        await new Promise((r) => setTimeout(r, 3000));
+        const y = await apiFetch<RehberYayinDurumu>(`/reklam/rehberler/${encodeURIComponent(rehberId)}/yayin`);
+        const p = y.platformlar.find((x) => x.platform === ozet.platform);
+        if (p && (p.durum !== ozet.durum || (p.sebep ?? '') !== (ozet.sebep ?? ''))) {
+          guncelle(y);
+          if (p.durum !== 'arsivlendi') {
+            setHata(p.sebep ?? 'Arşivlenemedi; Meta’nın cevabı yok.');
+            return setHal('hata');
+          }
+          return setHal('bos');
+        }
+      }
+      setHata('Meta henüz cevap vermedi; birkaç dakika sonra sayfayı yenile.');
+      setHal('hata');
+    } catch (e) {
+      setHata(e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.');
+      setHal('hata');
+    }
+  }
+  if (hal === 'onay' || hal === 'gonderiliyor') {
+    return (
+      <div className={s.geriAlOnay} role="group" aria-label="Arşivleme onayı">
+        <span>Meta&apos;daki kampanya arşivlenecek; tekrar açılamaz.</span>
+        <button type="button" className={s.birincil} disabled={hal === 'gonderiliyor'} onClick={() => void arsivle()}>
+          {hal === 'gonderiliyor' ? 'Arşivleniyor…' : 'Arşivle'}
+        </button>
+        <button type="button" className={s.ikincil} disabled={hal === 'gonderiliyor'} onClick={() => setHal('bos')}>
+          Vazgeç
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className={s.geriAlOnay}>
+      <button type="button" className={s.ikincil} onClick={() => setHal('onay')}>
+        Vazgeç ve arşivle
+      </button>
+      {hal === 'hata' && hata && (
+        <span className={s.hataMetni} role="alert">
+          {hata}
+        </span>
+      )}
+    </div>
+  );
+}
+
+export function SonEkran({
+  b,
+  yayin,
+  yeniReklam,
+  yeniHata,
+  rehberId,
+  yayinGuncelle,
+}: {
+  b: AdimBaglami;
+  yayin: RehberYayinDurumu | null;
+  yeniReklam: () => void;
+  yeniHata: string | null;
+  rehberId: string;
+  yayinGuncelle: (y: RehberYayinDurumu) => void;
+}) {
   const amac = b.a.amac?.deger ?? null;
   const platformlar = yayin?.platformlar ?? [];
   const sonuclar = platformlar.map((p) => yayinSonucu(p));
   const uyumDurdu = yayin?.uyum?.tur === 'durdu';
-  const hal: 'tamam' | 'dur' | 'hata' = uyumDurdu || sonuclar.includes('hata') ? 'hata' : sonuclar.includes('duraklatildi') || sonuclar.includes('suruyor') ? 'dur' : 'tamam';
+  const hal: 'tamam' | 'dur' | 'hata' | 'arsiv' =
+    uyumDurdu || sonuclar.includes('hata')
+      ? 'hata'
+      : sonuclar.length > 0 && sonuclar.every((x) => x === 'arsivlendi')
+        ? 'arsiv'
+        : sonuclar.includes('duraklatildi') || sonuclar.includes('suruyor')
+          ? 'dur'
+          : 'tamam';
   const butce = b.a.butce?.deger;
   const pay =
     butce && BigInt(butce.micros) > 0n && (b.acik.meta || b.acik.google)
@@ -391,12 +477,14 @@ export function SonEkran({ b, yayin, yeniReklam, yeniHata }: { b: AdimBaglami; y
     <>
       <div className={s.kart}>
         <div className={s.kuruldu}>
-          <div className={s.buyuk} data-hal={hal}>
+          <div className={s.buyuk} data-hal={hal === 'arsiv' ? 'dur' : hal}>
             <Ikon d={hal === 'hata' ? IKON.kapat : IKON.tik} boyut={26} />
           </div>
-          <h2>{hal === 'tamam' ? 'Reklamın yayında' : hal === 'dur' ? 'Duraklatılmış kuruldu' : 'Kurulum tamamlanamadı'}</h2>
+          <h2>{hal === 'tamam' ? 'Reklamın yayında' : hal === 'dur' ? 'Duraklatılmış kuruldu' : hal === 'arsiv' ? 'Reklam arşivlendi' : 'Kurulum tamamlanamadı'}</h2>
           <p>
-            {hal === 'tamam'
+            {hal === 'arsiv'
+              ? 'Kampanya platformda arşivlendi; harcama olmaz. Aynı içerikle yeni bir reklam açabilirsin.'
+              : hal === 'tamam'
               ? `${tekPlatform ? `${tekPlatform}'da` : 'İki platformda da'} kuruldu, geri okunup kontrol edildi ve açıldı.`
               : hal === 'dur'
                 ? "Kuruldu, geri okunup kontrol edildi ve açılmadı. Reklam Yöneticisi'nden başlatabilirsin; başlatana kadar harcama olmaz."
@@ -430,8 +518,17 @@ export function SonEkran({ b, yayin, yeniReklam, yeniHata }: { b: AdimBaglami; y
               </div>
               <span className={s.yayinda} data-hal={sonuc === 'yayinda' ? undefined : sonuc === 'hata' ? 'hata' : 'dur'}>
                 <i />
-                {sonuc === 'yayinda' ? 'Yayında' : sonuc === 'duraklatildi' ? 'Duraklatılmış' : sonuc === 'suruyor' ? 'Sürüyor' : 'Kurulamadı'}
+                {sonuc === 'yayinda'
+                  ? 'Yayında'
+                  : sonuc === 'duraklatildi'
+                    ? 'Duraklatılmış'
+                    : sonuc === 'arsivlendi'
+                      ? 'Arşivlendi'
+                      : sonuc === 'suruyor'
+                        ? 'Sürüyor'
+                        : 'Kurulamadı'}
               </span>
+              {geriAlinabilirMi(p) && <GeriAl rehberId={rehberId} ozet={p} guncelle={yayinGuncelle} />}
             </div>
           );
         })}

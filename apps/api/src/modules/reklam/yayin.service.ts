@@ -1,6 +1,6 @@
 import { ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { DERLEYICI_SURUMU, kullaniciEksigiMi, type TenantContext, type YayinDurumu } from '@advetics/shared';
+import { DERLEYICI_SURUMU, GERI_ALINABILIR_DURUMLAR, kullaniciEksigiMi, type TenantContext, type YayinDurumu } from '@advetics/shared';
 import { CONFIG, type AppConfig } from '../../config/configuration';
 import { PrismaService } from '../../prisma/prisma.service';
 import { metaSurumuDogrula } from './meta-graf';
@@ -22,7 +22,7 @@ export interface YayinGorunumu {
 /** İnsanın basabileceği düğmeler ve hangi durumda anlamlı oldukları (§ 11.4). */
 const INSAN_ADIMLARI: Record<Exclude<YayinAdimi, 'kur'>, readonly YayinDurumu[]> = {
   devam: ['bekletildi'],
-  geri_al: ['fark_var', 'dogrulanamadi', 'kurulamadi', 'kismen_acik', 'sonuc_belirsiz', 'durduruldu'],
+  geri_al: GERI_ALINABILIR_DURUMLAR,
   yeniden_oku: ['dogrulanamadi'],
 };
 
@@ -62,6 +62,18 @@ export class ReklamYayinService {
     const g = await this.oku(ctx, yayinId);
     if (!INSAN_ADIMLARI[adim].includes(g.durum)) {
       throw new ConflictException(`Bu düğme "${g.durum}" durumunda kullanılamaz.`);
+    }
+    if (adim === 'geri_al') {
+      // YALNIZ META: kuyruk işi Meta motoruna gidiyor. Google yayını da bu
+      // tabloda; onun için iş açmak Google hesabına Meta token'ıyla yazmaya
+      // kalkmak demek. Platform hesabın kendisinden, istemciden değil.
+      const [h] = await this.prisma.withTenant(ctx, (t) =>
+        t.$queryRaw<Array<{ platform: string }>>(Prisma.sql`
+          SELECT a.platform::text AS platform FROM yayin y JOIN ad_accounts a ON a.id = y.ad_account_id WHERE y.id = ${yayinId}::uuid`),
+      );
+      if (h?.platform !== 'meta') {
+        throw new ConflictException("Google kurulumu Advetics'ten geri alınamıyor; Google Ads'te kampanyayı kaldır.");
+      }
     }
     await this.kuyruk.ekle(yayinId, adim);
     return g;

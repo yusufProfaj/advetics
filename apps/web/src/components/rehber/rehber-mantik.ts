@@ -19,6 +19,7 @@ import {
   REHBER_ACILIS,
   REHBER_AMACLARI,
   REHBER_AMAC_KODLARI,
+  GERI_ALINABILIR_DURUMLAR,
   YAYIN_DURUM_SINIFI,
   amacGorunurMu,
   platformGorunurMu,
@@ -505,14 +506,27 @@ export function yayinAdimlari(durum: YayinDurumu | null): [AdimHali, AdimHali, A
   }
 }
 
-export type YayinSonucu = 'suruyor' | 'yayinda' | 'duraklatildi' | 'hata';
+export type YayinSonucu = 'suruyor' | 'yayinda' | 'duraklatildi' | 'arsivlendi' | 'hata';
 
 export function yayinSonucu(p: Pick<PlatformYayinOzeti, 'durum'>): YayinSonucu {
   // Motor bu durumdan kendiliğinden ilerliyorsa iş sürüyor; null = henüz başlamadı.
   if (p.durum === null || YAYIN_DURUM_SINIFI[p.durum].motor) return 'suruyor';
   if (p.durum === 'kapali_kuruldu') return 'duraklatildi';
+  // Geri alınan reklam bir HATA değil, kullanıcının kararı: "Kurulamadı"
+  // yazmak onu olmayan bir arızayı aramaya gönderirdi.
+  if (p.durum === 'arsivlendi') return 'arsivlendi';
   if (['iletildi', 'incelemede', 'ogreniyor', 'yayinda'].includes(p.durum)) return 'yayinda';
   return 'hata';
+}
+
+/**
+ * "Vazgeç ve arşivle" düğmesi bu satırda görünür mü — sunucunun izin
+ * listesiyle AYNI sabit (`GERI_ALINABILIR_DURUMLAR`). Yalnız Meta: Google
+ * kurulumu Google Ads'ten kaldırılıyor ve sunucu onu reddediyor; reddedilecek
+ * bir düğme göstermek yanlış söz olurdu.
+ */
+export function geriAlinabilirMi(p: Pick<PlatformYayinOzeti, 'platform' | 'durum' | 'yayinId'>): boolean {
+  return p.platform === 'meta' && !!p.yayinId && p.durum !== null && GERI_ALINABILIR_DURUMLAR.includes(p.durum);
 }
 
 /** Yoklama ne zaman durur: her platform son durumda ya da uyum denetçisi durdurdu. */

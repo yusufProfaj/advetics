@@ -55,7 +55,8 @@ yazıyor; yenileyince soldaki adımlara tıklanamıyor; yalnız Meta'da Google
 metinleri görünüyor; amaç seçilmeden "hazır" yazıyor; seçili amaç kartına
 tekrar tıklamak platform önerisini sıfırlıyor; Meta'nın İngilizce hata
 metni prova notunda ham görünüyor; fark_var'da yalnız önemsiz farklar
-varken bile tek çıkış arşiv; rehber ekranında "geri al" düğmesi yok;
+varken bile tek çıkış arşiv; ~~rehber ekranında "geri al" düğmesi yok~~
+(yazıldı: "Vazgeç ve arşivle", duraklatılmış kurulumda da);
 `api.ts` açıklaması `yayinla {ozet}` diyor, gövde `icerikOzeti`.
 Açık: AdvStrategy → AdvCampaign aktarımı hâlâ sohbet tablosuna yazıyor
 (okuyan ekran yok, ürün kararı); Google yayını için geri al yok; yayına

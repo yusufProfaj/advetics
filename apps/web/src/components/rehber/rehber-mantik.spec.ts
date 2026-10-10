@@ -34,6 +34,7 @@ import {
   yayinAdimlari,
   yayinBittiMi,
   yayinSonucu,
+  geriAlinabilirMi,
   yayinlanabilirMi,
   yerelAlanlar,
   youtubeKimligi,
@@ -401,5 +402,22 @@ describe('provaYoklanmaliMi — kuyruktaki prova yoklanır', () => {
     expect(provaYoklanmaliMi(bekliyor, 'b'.repeat(64))).toBe(false);
     expect(provaYoklanmaliMi({ ...bekliyor, meta: { tur: 'gecti' as const, zaman: 'x', not: null } }, ozet)).toBe(false);
     expect(provaYoklanmaliMi(null, ozet)).toBe(false);
+  });
+});
+
+describe('geri al (Vazgeç ve arşivle) — canlı tur, 2026-10-10', () => {
+  const y = 'aaaaaaaa-0000-4000-8000-000000000001';
+  it('duraklatılmış ve durmuş META kurulumunda görünür; yayındayken ve sürerken görünmez', () => {
+    expect(geriAlinabilirMi({ platform: 'meta', durum: 'kapali_kuruldu', yayinId: y })).toBe(true);
+    expect(geriAlinabilirMi({ platform: 'meta', durum: 'fark_var', yayinId: y })).toBe(true);
+    expect(geriAlinabilirMi({ platform: 'meta', durum: 'yayinda', yayinId: y })).toBe(false);
+    expect(geriAlinabilirMi({ platform: 'meta', durum: 'kuruluyor', yayinId: y })).toBe(false);
+    expect(geriAlinabilirMi({ platform: 'meta', durum: 'arsivlendi', yayinId: y })).toBe(false);
+  });
+  it('KRİTİK: Google kurulumunda GÖRÜNMEZ (sunucu reddediyor; Google Ads’ten kaldırılır)', () => {
+    expect(geriAlinabilirMi({ platform: 'google', durum: 'kapali_kuruldu', yayinId: y })).toBe(false);
+  });
+  it('arşivlenen reklam "Kurulamadı" değil "Arşivlendi"', () => {
+    expect(yayinSonucu({ durum: 'arsivlendi' })).toBe('arsivlendi');
   });
 });

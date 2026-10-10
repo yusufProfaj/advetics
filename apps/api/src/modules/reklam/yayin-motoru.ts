@@ -535,12 +535,19 @@ export async function yayiniSonlandir(
   const kaynaklar = YAYIN_DURUMLARI.filter(
     (d) => gecisIzinliMi(d, durum) || (sebep === 'on_kontrol_reddi' && d === 'on_kontrol'),
   );
+  /*
+   * DURAKLATILMIŞ KURULUMU GERİ ALMAK: `kapali_kuruldu` yayını zaten SONLANMIŞ
+   * (sonlandi_at dolu) ve "sonlanmamış olmalı" koşulu onu hiçbir zaman
+   * arşivletmiyordu. İstisna DAR: yalnız geri alma ve yalnız o durumdan.
+   */
+  const sonlanmisGeriAl = sebep === 'geri_alindi' && kaynaklar.includes('kapali_kuruldu');
   const r = await tx((t) =>
     t.$queryRaw<Array<{ id: string }>>(Prisma.sql`
       UPDATE yayin SET durum = ${durum}, onceki_durum = durum, durum_at = now(),
                        sonlandi_at = now(), sonlanma_sebebi = ${sebep},
                        sebep = COALESCE(${aciklama}, sebep)
-       WHERE id = ${yayinId}::uuid AND sonlandi_at IS NULL AND durum IN (${Prisma.join(kaynaklar)})
+       WHERE id = ${yayinId}::uuid AND durum IN (${Prisma.join(kaynaklar)})
+         AND (sonlandi_at IS NULL OR (${sonlanmisGeriAl}::boolean AND durum = 'kapali_kuruldu'))
       RETURNING id::text`),
   );
   if (r.length !== 1) throw new Error(`Yayın ${yayinId} bu durumdan sonlandırılamaz ya da zaten sonlanmış`);
