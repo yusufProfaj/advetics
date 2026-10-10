@@ -142,6 +142,13 @@ Reklam Yöneticisi'nden Başlat ile açar (onaylı yol, geri okumalı).
 | Ö-6 | Google Talep Yaratma video (rehber yolundan) | Akıllı Boost'taki gibi PAUSED |
 | Ö-7 | Konut kategorisinde Meta provası (`special_ad_categories ... got "2"` sorunu, DEVAM.md) | çözülmeden konutlu rehber Meta'da provadan geçemez |
 
+**Canlı tur 1 sonuçları (2026-10-10, Ege Birlik Yapı, rehber "Siteme gelsinler", 500 ₺ %50/%50):**
+- Ö-1 Google Arama: **GEÇTİ** — kuruldu (PAUSED), geri okuma temiz, Google Ads'te gözle doğrulandı (CLAUDE.md).
+- Ö-2 Meta SITE: kuruldu (PAUSED, 4 görsel/1 set/4 reklam), sayfa ve çok reklamverenli birim gözle doğru; geri okuma
+  dört normalleştirme eksiği yüzünden `fark_var`da durdu → `yanki.ts` N-07…N-10. Düzeltme sonrası YENİ bir deneme
+  yayınıyla "temiz" görülmeden Meta satırı açılmaz.
+- Rehberde kategori sorusuna "Hayır" denmişti; Garden Villas konut. Gerçek yayında "Konut" seçilmeli (Ö-7 o zaman ölçülür).
+
 Her ölçüm geçince `REHBER_ACILIS` satırı güncellenir (commit gövdesinde kanıt).
 
 ## 9. Dalga planı

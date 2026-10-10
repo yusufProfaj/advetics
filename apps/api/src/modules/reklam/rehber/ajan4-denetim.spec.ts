@@ -206,8 +206,8 @@ describe('SÖZ: karar tablosu META satırları ↔ yayinla() ile kurulan gövde'
     expect(t.publisher_platforms).toBeUndefined();
   });
 
-  it('KONUM: "Yalnız bu bölgede" ↔ geo_locations yalnız seçilen şehir; ülke kovası YOK (kovalar birleşim)', () => {
-    expect(meta.KONUM).toBe('Yalnız bu bölgede bulunanlar');
+  it('KONUM: "yaşayan ya da yakın zamanda bulunan" ↔ geo_locations yalnız seçilen şehir; ülke kovası YOK (kovalar birleşim)', () => {
+    expect(meta.KONUM).toMatch(/^Bu bölgede yaşayan ya da yakın zamanda bulunanlar/);
     const t = nesne(gv, 'reklam_seti').targeting as { geo_locations: Record<string, unknown> };
     expect(t.geo_locations).toEqual({ cities: [{ key: '2347574' }] });
   });

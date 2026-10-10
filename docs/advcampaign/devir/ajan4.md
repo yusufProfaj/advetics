@@ -3,6 +3,69 @@
 > İncelenen: `bab2e2d` (Ajan 1 sözleşme) + `3eea3b4` (Ajan 2 arka plan, Ajan 3 panel).
 > Ürün koduna DOKUNULMADI; yalnız bir test dosyası eklendi. Commit EDİLMEDİ.
 
+## 3. TUR — CANLI TUR NORMALLEŞTİRMELERİ (N-07…N-10, çalışma ağacı)
+
+İncelenen: `packages/shared/src/reklam/meta/yanki.ts` (commit'siz dört normalleştirme),
+`rehber/kararlar.ts` Meta KONUM metni. Test: `apps/api/src/modules/reklam/derleyici/ajan4-canli-tur.spec.ts`
+(21 test: 15 KORUMA + 5 BULGU + ön koşul). Ürün koduna dokunulmadı.
+
+### KAPI KARARI: **AÇIK.** Dört gevşetmenin hiçbiri para açan kapıyı delmiyor.
+
+Bütçe, ülke/bölge genişlemesi, sayfa değişikliği, `true` ek anahtar, erkene/ertesi güne kayma,
+kapattığımız özelliğin OPT_IN dönmesi hâlâ `fark` + `kabulEdilemez`; alanın dönmemesi hâlâ
+`dogrulanamadi`. Aşağıdaki beş bulgu para açmıyor; 6 ve 9 ikinci canlı turdan ÖNCE kapatılmalı.
+
+| Soru | Sonuç |
+|---|---|
+| (1) N-10 başka yolu harf duyarsız yapıyor mu | Hayır: önek dışında (ör. `DAILY_BUDGET`) bulunamıyor → `donmedi` → doğrulanamadı. Küçük harfli OPT_IN `fark`. Tanımsız özellik döngüsü anahtarı zaten küçültüyordu, etkileşim yok; ama bkz. BULGU-6/7 |
+| (2) N-08 başka genişlemeyi maskeliyor mu | Hayır: `location_types` ayıklandıktan SONRA `kapsar` koşuyor; `countries` ya da ek bölge `fark`. `travel_in`, bilinmeyen tür, dizi olmayan değer `fark` |
+| (3) N-07 sayfa/true | Sayfa değişir, düşer, ek anahtar `true`/`0`/`"false"` → `fark`. Eski `esit`ten tek gevşeme false/null ek anahtar; bkz. BULGU-8 |
+| (4) N-09 saat dilimi | `+0300`, `+03:00`, `Z` çözülüyor; ertesi gün, erkene kayma (başka ofsetle de) `fark`; `end_time` etkilenmiyor. Bkz. BULGU-9/10 |
+| (5) `kabulEdilemez` / `donmedi` | Bozulmamış: dört yolda da alan silinince doğrulanamadı (M7 altı testi düşürüyor) |
+| (6) Rehber dışı yollar | `geriOkumaKarsilastir` yalnız `reklam/yayin-motoru.ts` (AdvCampaign yayını) çağırıyor; Akıllı Boost ve eski Meta motoru bu dosyayı kullanmıyor. `kararlar.ts` metni yalnız Meta hücresi; Google hücresi ve `derle-google.spec` aynı |
+
+### Bulgular
+
+- **BULGU-6 · ORTA** — `yanki.ts:406` tanımsız özellik döngüsü DEĞERİ harf duyarlı okuyor
+  (`enroll_status !== 'OPT_IN'`). `music: { enroll_status: 'opt_in' }` dönerse üretken özellik açık
+  olduğu hâlde yayın **temiz**. Önceden de vardı; N-10 Meta'nın bu yanıtta harf değiştirdiğini
+  gösterdi. Öneri: üretken/tanımsız sınıfta harf duyarsız "OPT_OUT değilse durdur".
+- **BULGU-7 · DÜŞÜK** — Aynı özellik iki biçimle dönerse (`IMAGE_ANIMATION: OPT_OUT` +
+  `image_animation: OPT_IN`) ilk döngü tam eşleşeni alıyor, ikinci döngü `kapatildi` sınıfını
+  atlıyor → **temiz**. Gözlenmedi. Öneri: ikinci döngüde `kapatildi` OPT_IN de durdursun.
+- **BULGU-8 · DÜŞÜK** — `yanki.ts:288` ek anahtarda `false` VE `null` genel kabul. Canlıda yalnız
+  `smart_pse_enabled: false` görüldü; `null` hesap varsayılanı olabilir, yeni bir `xxx_only: false`
+  daraltmayı kapatabilir. Öneri: yalnız `smart_pse_enabled` ve yalnız `false`.
+- **BULGU-9 · ORTA** — `yanki.ts:298-304` kabul "aynı gün ve dönen ≥ gönderilen"; gönderilenin
+  GEÇMİŞTE, dönenin KURULUM ANI olduğuna bakmıyor. İleri tarihli başlangıç (`10-15 00:00`) aynı
+  günün akşamına (`21:00`) kayarsa **temiz** ve ekrana yanlış sebep ("geçmişte kalmıştı") yazılıyor.
+  Para artmaz (gecikir) ama söz yanlış. Öneri: karşılaştırıcıya `simdi` geçir; gönderilen < simdi
+  ve dönen ≤ simdi + birkaç dakika şart.
+- **BULGU-10 · DÜŞÜK** — Aynı gün METİN olarak, her dizgenin kendi ofsetinde (`slice(0,10)`).
+  `2026-10-10T22:00-0300` (= hesabın 11'i 04:00) kabul. Meta bugün hesabın ofsetini döndürüyor.
+  Öneri: günü gönderilenin ofsetinde hesapla ya da ofset farklıysa kabul etme.
+
+BULGU testleri bugünkü (kusurlu) davranışı kilitliyor; düzelten ajan onları TERS ÇEVİRİR.
+
+### Mutasyon sonuçları (her biri shared yeniden derlenip, test sayısı okunarak; dosya kendi yedeğinden geri yüklendi)
+
+| Mutasyon | Sonuç |
+|---|---|
+| M1 önek kontrolü kaldır | **Eşdeğer** (kısa yolda `anahtar` boş kalıyor); yerine M1b |
+| M1b her yolda harf duyarsız `al` | ✓ 2 test düşüyor |
+| M2 konum türü beyaz listesi kalkar | ✓ 2 |
+| M3 `location_types` varsa kabul (maskeleme) | ✓ 2 (ülke + bölge KORUMA) — mevcut spec'te karşılığı YOKTU |
+| M4 ek anahtar değeri ne olursa kabul | ✓ 2 |
+| M5 aynı gün şartı kalkar | ✓ 2 |
+| M6 `d >= g` kalkar | İlk koşuda **BOŞ** (rehber 00:00 gönderiyor, aynı gün erken metinde imkânsız) → başka ofsetli erken an testi eklendi, ✓ 1 |
+| M7 `donmedi` hep bilgi | ✓ 6 |
+| M8 promoted_object'te sayfaya bakılmaz | ✓ 2 |
+| M9 `end_time` da başlangıç kuralıyla | ✓ 1 — mevcut spec'te karşılığı YOKTU |
+| F6/F8/F10 bulgu düzeltme simülasyonu | Her biri yalnız kendi BULGU testini düşürüyor (6, 8, 10) |
+
+Koşular: `npx tsc -p packages/shared/tsconfig.json` çıktısız, exit 0 · `vitest run src/modules/reklam`
+24 dosya / 383 test yeşil · `pnpm --filter @advetics/api typecheck` exit 0.
+
 ## 2. TUR — YENİDEN DENETİM (0c5e299 + çalışma ağacındaki "ajans yöneticisi" kuralı)
 
 ### KAPI KARARI: **KAPALI — tek bulgu (BULGU-5), küçük.**

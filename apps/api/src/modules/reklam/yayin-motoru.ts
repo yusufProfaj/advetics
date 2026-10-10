@@ -442,7 +442,7 @@ export class YayinMotoru {
       tx.$queryRaw<Array<{ yasal_uyari: string | null }>>(Prisma.sql`
         SELECT yasal_uyari FROM client_profiles WHERE client_id = ${y.client_id}::uuid`),
     );
-    const r = geriOkumaKarsilastir(yankilar, okunan, { yasalUyariVar: !!profil?.yasal_uyari?.trim() });
+    const r = geriOkumaKarsilastir(yankilar, okunan, { yasalUyariVar: !!profil?.yasal_uyari?.trim(), simdi: new Date() });
     await this.tx((tx) =>
       tx.$queryRaw(Prisma.sql`
         INSERT INTO geri_okuma (yayin_id, org_id, client_id, sonuc, satirlar, bilgiler, ham, api_surumu)

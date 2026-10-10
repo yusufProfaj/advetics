@@ -209,3 +209,73 @@ describe('geri okuma', () => {
     expect(karsilastir(yankilar, o).sonuc).toBe('dogrulanamadi');
   });
 });
+
+/*
+ * CANLI TUR 1 (2026-10-10, v25.0, Ege Birlik Yapı, rehber "Siteme gelsinler"):
+ * Meta duraklatılmış ağacı kurdu, geri okuma "fark" ile durdu. Aşağıdaki
+ * dönüşler O GERİ OKUMANIN HAM yanıtından birebir alındı (geri_okuma.ham).
+ */
+describe('canlı tur 1 normalleştirmeleri (N-07…N-10)', () => {
+  const gs = derle({ takvim: { baslangic: '2026-10-10T00:00:00+0300', bitis: null } });
+  const yankilar = beklenenYankilar(gs);
+  // Geri okuma anı: kurulumdan (04:02:17) hemen sonra (N-09 yalnız bununla çalışır).
+  const karsilastirSimdi = (y: Parameters<typeof geriOkumaKarsilastir>[0], o: Parameters<typeof geriOkumaKarsilastir>[1]) =>
+    geriOkumaKarsilastir(y, o, { yasalUyariVar: false, simdi: new Date('2026-10-10T04:03:00+03:00') });
+  const canli = () => {
+    const o = kopya(aynaOkuma(gs));
+    o.reklam_seti!.promoted_object = { ...o.reklam_seti!.promoted_object, smart_pse_enabled: false };
+    o.reklam_seti!.targeting.geo_locations = { ...o.reklam_seti!.targeting.geo_locations, location_types: ['frequently_in', 'home', 'recent'] };
+    o.reklam_seti!.start_time = '2026-10-10T04:02:17+0300';
+    // Meta özellikleri KÜÇÜK HARFLE ve fazlasıyla döndürüyor; gönderilen büyük harfli yedisi de içinde.
+    for (const [ad, n] of Object.entries(o)) {
+      if (!ad.startsWith('kreatif:')) continue;
+      const spec = n.degrees_of_freedom_spec.creative_features_spec as Record<string, unknown>;
+      const kucuk = Object.fromEntries(Object.keys(spec).map((k) => [k.toLowerCase(), { enroll_status: 'OPT_OUT' }]));
+      n.degrees_of_freedom_spec.creative_features_spec = { ...kucuk, text_optimizations: { enroll_status: 'OPT_OUT' }, image_touchups: { enroll_status: 'OPT_OUT' } };
+    }
+    return o;
+  };
+
+  it('KRİTİK: canlı turun gerçek dönüşü artık TEMİZ; normalleşen üç alan bilgi olarak yazılıyor', () => {
+    const r = karsilastirSimdi(yankilar, canli());
+    expect(r.sonuc).toBe('temiz');
+    const yollar = r.bilgiler.filter((b) => b.tur === 'normallesti').map((b) => b.alanYolu);
+    expect(yollar).toEqual(expect.arrayContaining(['targeting.geo_locations', 'start_time']));
+  });
+
+  it('N-10: küçük harfli özellik OPT_IN dönerse yine DURUR (harf duyarsızlık bir gevşeme değil)', () => {
+    const o = canli();
+    const anahtar = Object.keys(o['kreatif:1']!.degrees_of_freedom_spec.creative_features_spec).find((k) => k === 'image_animation')!;
+    o['kreatif:1']!.degrees_of_freedom_spec.creative_features_spec[anahtar] = { enroll_status: 'OPT_IN' };
+    expect(karsilastirSimdi(yankilar, o).sonuc).toBe('fark');
+  });
+
+  it('N-08: seyahat edenler (travel_in) ya da tanınmayan konum türü KABUL EDİLMEZ', () => {
+    const o = canli();
+    o.reklam_seti!.targeting.geo_locations.location_types = ['travel_in'];
+    expect(karsilastirSimdi(yankilar, o).sonuc).toBe('fark');
+    o.reklam_seti!.targeting.geo_locations.location_types = ['home', 'yeni_tur'];
+    expect(karsilastirSimdi(yankilar, o).sonuc).toBe('fark');
+  });
+
+  it('N-07: promoted_object’e TRUE değerli ek anahtar fark; başka sayfa fark', () => {
+    const o = canli();
+    o.reklam_seti!.promoted_object = { ...o.reklam_seti!.promoted_object, smart_pse_enabled: true };
+    expect(karsilastirSimdi(yankilar, o).sonuc).toBe('fark');
+    const p = canli();
+    p.reklam_seti!.promoted_object = { page_id: '999', smart_pse_enabled: false };
+    expect(karsilastirSimdi(yankilar, p).sonuc).toBe('fark');
+  });
+
+  it('N-09: okuma anı verilmezse başlangıç normalleşmez (güvenli yön)', () => {
+    expect(karsilastir(yankilar, canli()).sonuc).toBe('fark');
+  });
+
+  it('N-09: başlangıç ERKENE ya da BAŞKA GÜNE kayarsa fark', () => {
+    const o = canli();
+    o.reklam_seti!.start_time = '2026-10-09T23:00:00+0300';
+    expect(karsilastirSimdi(yankilar, o).sonuc).toBe('fark');
+    o.reklam_seti!.start_time = '2026-10-11T04:02:17+0300';
+    expect(karsilastirSimdi(yankilar, o).sonuc).toBe('fark');
+  });
+});

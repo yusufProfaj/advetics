@@ -64,7 +64,10 @@ export function kararTablosu(amac: RehberAmacKodu, acik: Record<RehberPlatformu,
     {
       kod: 'KONUM',
       konu: 'Konum',
-      meta: m ? hucre('Yalnız bu bölgede bulunanlar') : null,
+      // Meta konumu "yaşayan ya da yakın zamanda bulunan" (home, recent,
+      // frequently_in) olarak uyguluyor; canlı tur 1'de geri okundu (N-08).
+      // Seyahat edenler dahil değil. "Yalnız bulunanlar" demek abartı olurdu.
+      meta: m ? hucre('Bu bölgede yaşayan ya da yakın zamanda bulunanlar', 'Seyahat edenler dahil değil') : null,
       google: g ? hucre('Yalnız bu bölgede bulunanlar', '"İlgilenenler" kapalı; Google kendiliğinden tüm ülkeleri açıyordu') : null,
     },
     {

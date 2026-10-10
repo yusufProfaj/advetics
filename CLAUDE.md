@@ -998,6 +998,22 @@ okunup varsayılmadı — canlıda doğrulandı.
   TEXT_OVERLAY_TRANSLATION`. Hata mesajı kümeyi kendisi veriyor; yeni anahtar
   eklemeden önce prova ile ölç (`TANINAN_OZELLIK_ANAHTARLARI`).
 
+- **GERİ OKUMADA META DÖRT ŞEYİ DEĞİŞTİRİYOR — ölçüldü** (2026-10-10, v25.0,
+  AdvCampaign rehberi canlı tur 1, Ege Birlik Yapı, duraklatılmış ağaç):
+  (1) `creative_features_spec` anahtarları KÜÇÜK HARFLE dönüyor (biz
+  `IMAGE_ANIMATION` gönderiyoruz, `image_animation` okunuyor) ve ~90
+  özelliğin HEPSİ `OPT_OUT` — belgenin "kapatılamaz" dediği
+  `text_optimizations`, `adapt_to_placement`, `image_touchups` dahil;
+  (2) `geo_locations`a `location_types: [home, recent, frequently_in]`
+  ekleniyor ("yaşayan ya da yakın zamanda bulunan", seyahat eden YOK);
+  (3) `promoted_object`e `smart_pse_enabled: false`; (4) geçmiş
+  `start_time` kurulum anına çekiliyor. Dördü de geri okumayı "fark"la
+  durdurdu (doğru davranış: bilinmeyen farkta açılmaz). Normalleştirme
+  `meta/yanki.ts` (N-07…N-10); her biri DAR: küçük harfli OPT_IN, `travel_in`,
+  true değerli ek anahtar, başka güne kayan başlangıç hâlâ durdurur.
+  Aynı turda gözle: sayfa doğru (panel turunda Meta başka müşterinin
+  sayfasını seçmişti), "çok reklamverenli reklamlar" işaretsiz.
+
 - **CLICK-TO-WHATSAPP'TA NUMARA SORULMAZ — META ONU SAYFADAN ALIYOR.**
   Doğru kurulum: ad set'te `destination_type: WHATSAPP` + `promoted_object.
   page_id`, kreatifte SABİT bağlantı `https://api.whatsapp.com/send` ve CTA
@@ -1157,8 +1173,14 @@ okunup varsayılmadı — canlıda doğrulandı.
   bu yüzden bütçe adına zaman damgası ekleniyor.
 - **`partialFailure: false` şart.** `true` olsaydı Google geçersiz işlemleri
   atlayıp kalanları uygular ve yanıt "başarılı" görünürdü.
-- **Google yazma yolu canlıda HİÇ denenmedi.** İstek gövdeleri bilgiden
-  yazıldı. İlk gerçek çağrı en küçük bütçeyle yapılmalı.
+- **GOOGLE ARAMA ATOMİK KURULUMU CANLIDA ÇALIŞTI — ölçüldü** (2026-10-10,
+  v25, AdvCampaign rehberi, Ege Birlik Yapı 516-174-6317, kampanya
+  24337936076, duraklatılmış). Google Ads'te GÖZLE: yalnız Google Arama Ağı,
+  konum seçeneği "Varlık" (PRESENCE), AI Max kapalı, metin özelleştirme ve
+  URL genişletme devre dışı, otomatik öğeler kapalı, dil Türkçe, 5 öbek
+  eşleme kelime + kampanya düzeyi 9 geniş negatif. Geri okuma temiz çıktı.
+  Panelin "yeni kampanya" varsayılanları (tüm ülkeler, Görüntülü Reklam Ağı,
+  AI Max açık) gövdede açıkça yazıldığı için hiçbiri devreye girmedi.
 - **DEMAND GEN — `validateOnly` PROVASIYLA ÖLÇÜLDÜ (2026-10-09, v25).**
   İlk prova üç ret verdi, düzeltilince ikinci prova geçti:
   (1) **`Ad.name` ZORUNLU** — belge yalnız `businessName`/`videos`/
