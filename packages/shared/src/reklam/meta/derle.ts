@@ -28,7 +28,7 @@ import { ORAN_ETIKETI, YERLESIM_GRUPLARI, YERLESIM_SIRASI, ortakPlan, setPlani, 
  * Sürüm provanın tazeliğine bağlı: eski derleyiciyle geçmiş prova yeni
  * gövdeyi kanıtlamaz.
  */
-export const DERLEYICI_SURUMU = '1.1.2';
+export const DERLEYICI_SURUMU = '1.1.3';
 export const DESTEKLENEN_META_SURUMLERI = ['v25.0', 'v26.0'] as const;
 export type MetaApiSurumu = (typeof DESTEKLENEN_META_SURUMLERI)[number];
 
@@ -370,8 +370,7 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
     } else if (k.setGorselleri && yerlesim) {
       // `link_data` YOK: görseller ve metin `asset_feed_spec`te; sayfa ve
       // Instagram kimliği `object_story_spec`te kalıyor (aşağıda).
-      const konum = (hedef.targeting as { geo_locations: Record<string, unknown> }).geo_locations;
-      setKreatifi = varlikAkisi(k, setPlani(k.setGorselleri.map((x) => x.oran)), yerlesim, m.cta, g.hedefAdres!, !!g.instagramPlatformId, konum);
+      setKreatifi = varlikAkisi(k, setPlani(k.setGorselleri.map((x) => x.oran)), yerlesim, m.cta, g.hedefAdres!, !!g.instagramPlatformId);
     } else {
       const linkData: Record<string, unknown> = {
         image_hash: k.gorselHash,
@@ -505,7 +504,6 @@ function varlikAkisi(
   cta: string,
   link: string,
   instagram: boolean,
-  konum: Record<string, unknown>,
 ): Record<string, unknown> {
   const hash = new Map(k.setGorselleri!.map((x) => [x.oran, x.gorselHash]));
   const metinler = (kural: Record<string, unknown>) => ({
@@ -524,12 +522,7 @@ function varlikAkisi(
     // Instagram'sız "yan" dışı bir grup yalnız Facebook'a iner; Facebook da
     // yoksa kural boş kalır ve yazılmaz.
     if (!yer.publisher_platforms?.length) continue;
-    // KONUM HER VARSAYILAN DIŞI KURALDA — ölçüldü (2026-10-10, v25.0, gerçek
-    // prova): "All non-default target rules must contain geolocation
-    // customization". Reklam setinin konumunun AYNISI: kural hedeflemeyi
-    // daraltmak için değil yerleşim seçmek için var; farklı bir konum yazmak
-    // o yerleşimde başka bir kitle demek olurdu.
-    kurallar.push(metinler({ customization_spec: { ...yer, geo_locations: konum }, image_label: { name: SET_ETIKETI(oran) } }));
+    kurallar.push(metinler({ customization_spec: yer, image_label: { name: SET_ETIKETI(oran) } }));
   }
   // VARSAYILAN KURAL BOŞ customization_spec İLE VE EN SONDA — ölçüldü
   // (2026-10-10, v25.0, gerçek prova, `adcreatives` ucu): dört platformu
@@ -553,6 +546,14 @@ function varlikAkisi(
     link_urls: [{ website_url: link, adlabels: [{ name: METIN_ETIKETLERI.link_url_label }] }],
     call_to_action_types: [cta],
     ad_formats: ['SINGLE_IMAGE'],
+    /*
+     * YERLEŞİM ÖZELLEŞTİRMESİ AÇIKÇA — üç gerçek prova (2026-10-10, v25.0):
+     * bu alan yokken Meta kuralları HEDEFLEME (segment) kuralı sayıyor: önce
+     * "All non-default target rules must contain geolocation customization",
+     * kurala konum eklenince "(#2715) Segment Asset Customization API has
+     * been deprecated from v22". İkisi de yanlış yoldu; kural yerleşim seçiyor.
+     */
+    optimization_type: 'PLACEMENT',
     asset_customization_rules: kurallar.map((r, i) => ({ ...r, priority: i + 1 })),
   };
 }

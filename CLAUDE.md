@@ -1031,8 +1031,11 @@ okunup varsayılmadı — canlıda doğrulandı.
   teknik özellikleriyle Varsayılan Varlık Özelleştirmesi Kuralı (en düşük
   öncelikle) gereklidir"* ile reddetti. Varsayılan kural `customization_spec:
   {}` ve EN SONDA. İkinci prova: *"All non-default target rules must contain
-  geolocation customization"* — varsayılan dışı her kural reklam setinin
-  `geo_locations`ını AYNEN taşıyor. Ders: bir biçimi ölçerken yayında
+  geolocation customization"*; kurala konum eklenince üçüncü: *"(#2715)
+  Segment Asset Customization API has been deprecated from v22"*. Sebep
+  ikisinde de aynı: `asset_feed_spec.optimization_type: 'PLACEMENT'` yoktu ve
+  Meta kuralları HEDEFLEME (segment) kuralı sayıyordu. Hata mesajı çözümü
+  değil yanlış yolu tarif ediyordu. Ders: bir biçimi ölçerken yayında
   kullanılacak HER uca sor.
 
 - **GERİ OKUMADA İKİ ŞEY DAHA — ölçüldü** (2026-10-10, canlı tur 2,

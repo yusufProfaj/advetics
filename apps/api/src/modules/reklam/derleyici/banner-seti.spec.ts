@@ -138,9 +138,10 @@ describe('derleMeta — banner seti', () => {
     // Meta varsayılanı BOŞ tanımla ve en sonda istiyor (gerçek prova reddetti, 2026-10-10).
     expect(kurallar[3].customization_spec).toEqual({});
     expect(kurallar.slice(0, 3).every((r) => Object.keys(r.customization_spec).length > 0)).toBe(true);
-    // Varsayılan dışı her kural reklam setinin konumunu AYNEN taşır (Meta şartı, gerçek prova).
-    const geo = bul(gv, 'reklam_seti').targeting.geo_locations;
-    for (const r of kurallar.slice(0, 3)) expect(r.customization_spec.geo_locations).toEqual(geo);
+    // Yerleşim özelleştirmesi AÇIKÇA; yoksa Meta kuralları segment kuralı sayıp
+    // konum istiyor, konum yazınca "v22'den beri kaldırıldı" diyor (üç gerçek prova).
+    expect(afs.optimization_type).toBe('PLACEMENT');
+    for (const r of kurallar) expect(r.customization_spec.geo_locations).toBeUndefined();
     // Her kural metni de açıkça seçer.
     for (const r of kurallar) expect([r.body_label?.name, r.title_label?.name, r.link_url_label?.name]).toEqual(['adv_metin', 'adv_baslik', 'adv_baglanti']);
     expect(afs.link_urls[0].website_url).toBe('https://gardenvillaskusadasi.com/');
@@ -213,7 +214,6 @@ describe('geri okuma — yerleşime göre görsel (N-13) ve elle yerleşim', () 
     const afs = o['kreatif:1']!.asset_feed_spec;
     afs.images = afs.images.map((i: any) => ({ ...i, adlabels: i.adlabels.map((l: any) => ({ id: '77', ...l })) })).reverse();
     afs.asset_customization_rules = [...afs.asset_customization_rules].reverse().map((r: any) => ({ ...r, image_label: { id: '5', ...r.image_label } }));
-    afs.optimization_type = 'PLACEMENT';
     return o;
   };
   const karsilastir = (o: Record<string, Record<string, unknown>>) => geriOkumaKarsilastir(yankilar, o, { yasalUyariVar: false });
@@ -225,6 +225,11 @@ describe('geri okuma — yerleşime göre görsel (N-13) ve elle yerleşim', () 
   it('görsel hash farklı dönerse DURUR', () => {
     const o = meta();
     o['kreatif:1']!.asset_feed_spec.images[0].hash = 'baska';
+    expect(karsilastir(o).sonuc).toBe('fark');
+  });
+  it('özelleştirme türü PLACEMENT dışında dönerse DURUR', () => {
+    const o = meta();
+    o['kreatif:1']!.asset_feed_spec.optimization_type = 'REGULAR';
     expect(karsilastir(o).sonuc).toBe('fark');
   });
   it('kuralların ÖNCELİĞİ değişirse DURUR (ilk eşleşen kazanıyor)', () => {

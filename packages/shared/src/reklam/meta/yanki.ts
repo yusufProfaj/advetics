@@ -395,6 +395,8 @@ function varlikAkisiAyni(gonderilen: unknown, donen: unknown): boolean {
     if (!(alan in g)) continue;
     if (!ayniKume(kume(g[alan], oge(anahtar)), kume(d[alan], oge(anahtar)))) return false;
   }
+  // Yerleşim özelleştirmesi türü: başka bir türe dönerse kurallar başka anlam taşır.
+  if ('optimization_type' in g && String(d.optimization_type ?? '') !== String(g.optimization_type)) return false;
   for (const alan of ['call_to_action_types', 'ad_formats']) {
     if (!(alan in g)) continue;
     if (!ayniKume(kume(g[alan], String), kume(d[alan], String))) return false;
