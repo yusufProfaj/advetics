@@ -15,6 +15,7 @@
  */
 import type { MetaGovdesi, NesneTuru } from './derle';
 import { BILINEN_KAPATILAMAYAN_OZELLIKLER, YASAL_UYARIDA_DURDURAN_OZELLIK, ozellikSinifi } from './derle';
+import { YAYIN_ETIKETI_ONEKI } from './adlandirma';
 
 export type KarsilastirmaTuru =
   | 'esit'
@@ -318,6 +319,38 @@ function kumeAyni(a: unknown, b: unknown): boolean {
   return x.length === y.length && x.every((v, i) => v === y[i]);
 }
 
+/**
+ * ETİKETLER ADLA KARŞILAŞTIRILIR (N-11) — ölçüldü (2026-10-10, canlı tur 2).
+ * Biz `{name}` gönderiyoruz; Meta `{id, name}` döndürüyor ve sırayı
+ * değiştiriyor. Öğeyi bütün olarak kıyaslamak doğru etiketleri on satır
+ * "fark" yapıp geri okumayı durdurdu. Kimlik bizim bilmediğimiz, Meta'nın
+ * verdiği bir değer; anlamı taşıyan ad.
+ */
+function etiketAdlari(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  return v.map((x) => (typeof x === 'string' ? x : String((x as { name?: unknown } | null)?.name ?? ''))).filter(Boolean);
+}
+
+/**
+ * META AYNI İÇERİKLİ KREATİFİ YENİDEN KULLANIYOR (N-12) — ölçüldü
+ * (2026-10-10, canlı tur 2): ilk denemeyle bire bir aynı görsel ve metin
+ * gönderildi, Meta dört kreatifin her birinde ilk denemenin kreatifini
+ * döndürdü — ad "50A4 · Fikir 1 ..." ve etiket `adv-yayin-50a4...`. İçerik
+ * alanları (bağlantı, metin, görsel, sayfa) birebir aynıydı.
+ *
+ * DAR: yalnız `kreatif:*` gövdesinde, yalnız `name` ve `adlabels` için ve
+ * yalnız Meta'nın döndürdüğü etiketlerde BAŞKA bir Advetics yayınının
+ * etiketi varsa. İçerik alanları her zamanki gibi kıyaslanıyor: biri farklı
+ * dönerse geri okuma durur. Kampanya, reklam seti ve reklamda bu kabul yok —
+ * onlar her yayında yeni açılıyor ve başka bir yayının etiketi orada gerçek
+ * bir karışıklık demek.
+ */
+function baskaYayinKreatifi(yankilar: BeklenenYanki[], govde: string, nesne: Record<string, unknown> | undefined): boolean {
+  if (!govde.startsWith('kreatif:') || !nesne) return false;
+  const gonderilen = new Set(etiketAdlari(yankilar.find((y) => y.govde === govde && y.alanYolu === 'adlabels')?.gonderilen));
+  return etiketAdlari(nesne.adlabels).some((ad) => ad.startsWith(YAYIN_ETIKETI_ONEKI) && !gonderilen.has(ad));
+}
+
 /** `ic`in her öğesi `dis`ta var mı (kovalar ve öğeler kanonik). */
 function kapsar(dis: unknown, ic: unknown): boolean {
   if (Array.isArray(dis) && Array.isArray(ic)) {
@@ -377,6 +410,11 @@ export function geriOkumaKarsilastir(
         ayni = kumeAyni(y.gonderilen, donen);
         break;
       case 'alt_kume': {
+        if (y.alanYolu === 'adlabels') {
+          const d = new Set(etiketAdlari(donen));
+          ayni = etiketAdlari(y.gonderilen).every((ad) => d.has(ad));
+          break;
+        }
         const k = y.alanYolu === 'targeting.geo_locations' ? konumTurleriniAyir(donen) : { kalan: donen, turler: null };
         ayni =
           y.altKumeYonu === 'donen_icinde_gonderilen' ? kapsar(k.kalan, y.gonderilen) : kapsar(y.gonderilen, k.kalan);
@@ -402,6 +440,10 @@ export function geriOkumaKarsilastir(
     if (ayni) continue;
     if (y.karsilastirma === 'normallestir' && y.normallestirme?.kabul.some((k) => kanonik(k) === kanonik(donen))) {
       bilgiler.push(satir('normallesti', y.normallestirme.bilgi));
+      continue;
+    }
+    if ((y.alanYolu === 'name' || y.alanYolu === 'adlabels') && baskaYayinKreatifi(yankilar, y.govde, nesne)) {
+      bilgiler.push(satir('normallesti', 'Meta aynı içerikli görseli daha önceki bir kurulumdan yeniden kullandı; görselin adı o kurulumdan kaldı.'));
       continue;
     }
     satirlar.push(satir('fark'));

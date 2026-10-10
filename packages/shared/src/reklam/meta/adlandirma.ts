@@ -63,6 +63,9 @@ export function formAdi(workspaceKisaAdi: string, sablonSurumu: number): string 
  * açmadan önce tekillik kapısı ve "bunu biz mi kurduk" ayrımı bunlara
  * dayanıyor. Etiket yoksa Meta onu yaratıp bağlıyor, ayrı çağrı gerekmez.
  */
+/** Yayın etiketinin öneki: geri okuma başka bir Advetics kurulumunu bununla tanıyor. */
+export const YAYIN_ETIKETI_ONEKI = 'adv-yayin-';
+
 export function adlabels(yayinKimligi: string): Array<{ name: string }> {
-  return [{ name: 'advetics' }, { name: `adv-yayin-${yayinKimligi}` }];
+  return [{ name: 'advetics' }, { name: `${YAYIN_ETIKETI_ONEKI}${yayinKimligi}` }];
 }

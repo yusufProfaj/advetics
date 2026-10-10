@@ -1014,6 +1014,20 @@ okunup varsayılmadı — canlıda doğrulandı.
   Aynı turda gözle: sayfa doğru (panel turunda Meta başka müşterinin
   sayfasını seçmişti), "çok reklamverenli reklamlar" işaretsiz.
 
+- **GERİ OKUMADA İKİ ŞEY DAHA — ölçüldü** (2026-10-10, canlı tur 2,
+  konutlu duraklatılmış ağaç): (1) `adlabels` `{id, name}` ve TERS sırada
+  dönüyor; öğeyi bütün kıyaslamak doğru etiketi "fark" yapıyordu — adla
+  kıyaslanıyor (N-11). (2) **Meta aynı içerikli kreatifi YENİDEN
+  KULLANIYOR**: ilk denemeyle aynı görsel ve metin gönderildi, dört
+  kreatifin hepsi ilk denemenin adını ve `adv-yayin-` etiketini taşıyarak
+  döndü. Yalnız kreatifte, yalnız ad ve etiket için ve yalnız BAŞKA bir
+  Advetics yayınının etiketi varsa bilgi sayılıyor (N-12); içerik alanları
+  her zamanki gibi kıyaslanıyor. Sonuç: aynı kreatif birden çok yayına ait
+  olabilir — kreatif üzerinden "bu yayının nesnesi" sorgusu yapma.
+  Ayrıca tur 1'in "temiz" testi ayna okumayla kurulmuştu ve etiketlere
+  kimlik eklemediği için (1)'i hiç göremedi: ayna, Meta'nın değiştirdiği
+  her şeyi taklit etmedikçe "temiz" iddiası canlıda doğrulanmış sayılmaz.
+
 - **ÖZEL KATEGORİ SATIR İÇİ `campaign_spec`TE SINANAMIYOR — ölçüldü**
   (2026-10-10, v25.0, `meta-kategori-prova`, Ege Birlik Yapı). Konutlu
   provada kampanya kendi ucunda GEÇTİ; reklam seti ve reklamlar (satır içi

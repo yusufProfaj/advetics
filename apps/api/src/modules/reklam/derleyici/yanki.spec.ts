@@ -279,3 +279,65 @@ describe('canlı tur 1 normalleştirmeleri (N-07…N-10)', () => {
     expect(karsilastirSimdi(yankilar, o).sonuc).toBe('fark');
   });
 });
+
+describe('canlı tur 2 normalleştirmeleri (N-11, N-12)', () => {
+  const gs = derle({ kavramlar: [{ gorselHash: 'h1', baslik: 'B1', metin: 'M1' }, { gorselHash: 'h2', baslik: 'B2', metin: 'M2' }] });
+  const yankilar = beklenenYankilar(gs);
+  const BIZIM = `adv-yayin-${temel.yayinKimligi}`;
+  const ESKI = 'adv-yayin-50a4b2db-70e3-4ebf-8f3d-312ac3050345';
+
+  /** Meta etiketleri `{id, name}` ve TERS sırada döndürüyor (ölçüldü). */
+  const metaEtiketleri = (adlar: string[]) => adlar.map((name, i) => ({ id: String(120252503955320700 + i), name })).reverse();
+  const canli = () => {
+    const o = kopya(aynaOkuma(gs));
+    for (const n of Object.values(o)) if (n.adlabels) n.adlabels = metaEtiketleri(['advetics', BIZIM]);
+    return o;
+  };
+  /** Meta ilk denemenin kreatifini yeniden kullandı: ad ve etiket ESKİ yayının. */
+  const yenidenKullanilmis = () => {
+    const o = canli();
+    o['kreatif:1']!.name = '[Advetics: açılmadı] Ege Birlik Yapı · Siteme gelsinler · 2026-10-10 · 50A4 · Fikir 1 2026-10-09-12697a75';
+    o['kreatif:1']!.adlabels = metaEtiketleri(['advetics', ESKI]);
+    return o;
+  };
+
+  it('KRİTİK: kimlikli ve ters sıralı etiketler TEMİZ (N-11)', () => {
+    expect(karsilastir(yankilar, canli()).sonuc).toBe('temiz');
+  });
+
+  it('N-11: bizim yayın etiketi eksikse kampanyada DURUR (ad karşılaştırması gevşeme değil)', () => {
+    const o = canli();
+    o.kampanya!.adlabels = metaEtiketleri(['advetics']);
+    const r = karsilastir(yankilar, o);
+    expect(r.sonuc).toBe('fark');
+    if (r.sonuc !== 'temiz') expect(r.satirlar.map((s) => `${s.govde}|${s.alanYolu}`)).toEqual(['kampanya|adlabels']);
+  });
+
+  it('KRİTİK: Meta başka bir Advetics yayınının kreatifini döndürdüyse ad ve etiket bilgi olur (N-12)', () => {
+    const r = karsilastir(yankilar, yenidenKullanilmis());
+    expect(r.sonuc).toBe('temiz');
+    const n = r.bilgiler.filter((b) => b.tur === 'normallesti' && b.govde === 'kreatif:1').map((b) => b.alanYolu).sort();
+    expect(n).toEqual(['adlabels', 'name']);
+  });
+
+  it('N-12: yeniden kullanılan kreatifin İÇERİĞİ farklıysa yine DURUR', () => {
+    const o = yenidenKullanilmis();
+    o['kreatif:1']!.object_story_spec.link_data.message = 'Başka metin';
+    expect(karsilastir(yankilar, o).sonuc).toBe('fark');
+  });
+
+  it('N-12: başka yayının etiketi YOKSA farklı kreatif adı DURUR', () => {
+    const o = canli();
+    o['kreatif:1']!.name = 'Elle değiştirilmiş ad';
+    expect(karsilastir(yankilar, o).sonuc).toBe('fark');
+  });
+
+  it('N-12 yalnız kreatifte: reklam başka yayının etiketini taşırsa DURUR', () => {
+    const o = canli();
+    o['reklam:1']!.adlabels = metaEtiketleri(['advetics', ESKI]);
+    o['reklam:1']!.name = 'Başka yayının reklamı';
+    const r = karsilastir(yankilar, o);
+    expect(r.sonuc).toBe('fark');
+    if (r.sonuc !== 'temiz') expect(r.satirlar.every((s) => s.govde === 'reklam:1')).toBe(true);
+  });
+});
