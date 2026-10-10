@@ -28,7 +28,7 @@ import { ORAN_ETIKETI, YERLESIM_GRUPLARI, YERLESIM_SIRASI, ortakPlan, setPlani, 
  * Sürüm provanın tazeliğine bağlı: eski derleyiciyle geçmiş prova yeni
  * gövdeyi kanıtlamaz.
  */
-export const DERLEYICI_SURUMU = '1.1.1';
+export const DERLEYICI_SURUMU = '1.1.2';
 export const DESTEKLENEN_META_SURUMLERI = ['v25.0', 'v26.0'] as const;
 export type MetaApiSurumu = (typeof DESTEKLENEN_META_SURUMLERI)[number];
 
@@ -370,7 +370,8 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
     } else if (k.setGorselleri && yerlesim) {
       // `link_data` YOK: görseller ve metin `asset_feed_spec`te; sayfa ve
       // Instagram kimliği `object_story_spec`te kalıyor (aşağıda).
-      setKreatifi = varlikAkisi(k, setPlani(k.setGorselleri.map((x) => x.oran)), yerlesim, m.cta, g.hedefAdres!, !!g.instagramPlatformId);
+      const konum = (hedef.targeting as { geo_locations: Record<string, unknown> }).geo_locations;
+      setKreatifi = varlikAkisi(k, setPlani(k.setGorselleri.map((x) => x.oran)), yerlesim, m.cta, g.hedefAdres!, !!g.instagramPlatformId, konum);
     } else {
       const linkData: Record<string, unknown> = {
         image_hash: k.gorselHash,
@@ -497,7 +498,15 @@ const METIN_ETIKETLERI = { body_label: 'adv_metin', title_label: 'adv_baslik', l
  * ilk eşleşen kazanıyor). Metinler de etiketli: kuralın her varlık türünü
  * açıkça seçmesi, seçimi Meta'nın yorumuna bırakmıyor.
  */
-function varlikAkisi(k: Kavram, kendi: SetPlani, ortak: SetPlani, cta: string, link: string, instagram: boolean): Record<string, unknown> {
+function varlikAkisi(
+  k: Kavram,
+  kendi: SetPlani,
+  ortak: SetPlani,
+  cta: string,
+  link: string,
+  instagram: boolean,
+  konum: Record<string, unknown>,
+): Record<string, unknown> {
   const hash = new Map(k.setGorselleri!.map((x) => [x.oran, x.gorselHash]));
   const metinler = (kural: Record<string, unknown>) => ({
     ...kural,
@@ -511,11 +520,16 @@ function varlikAkisi(k: Kavram, kendi: SetPlani, ortak: SetPlani, cta: string, l
     if (!ortak.gruplar[g]) continue;
     // Ortak planda açık grup, her sette dolu (ortakPlan); oran SETE göre.
     const oran = kendi.gruplar[g]!;
-    const konum = grupKonumlari(g, instagram);
+    const yer = grupKonumlari(g, instagram);
     // Instagram'sız "yan" dışı bir grup yalnız Facebook'a iner; Facebook da
     // yoksa kural boş kalır ve yazılmaz.
-    if (!konum.publisher_platforms?.length) continue;
-    kurallar.push(metinler({ customization_spec: konum, image_label: { name: SET_ETIKETI(oran) } }));
+    if (!yer.publisher_platforms?.length) continue;
+    // KONUM HER VARSAYILAN DIŞI KURALDA — ölçüldü (2026-10-10, v25.0, gerçek
+    // prova): "All non-default target rules must contain geolocation
+    // customization". Reklam setinin konumunun AYNISI: kural hedeflemeyi
+    // daraltmak için değil yerleşim seçmek için var; farklı bir konum yazmak
+    // o yerleşimde başka bir kitle demek olurdu.
+    kurallar.push(metinler({ customization_spec: { ...yer, geo_locations: konum }, image_label: { name: SET_ETIKETI(oran) } }));
   }
   // VARSAYILAN KURAL BOŞ customization_spec İLE VE EN SONDA — ölçüldü
   // (2026-10-10, v25.0, gerçek prova, `adcreatives` ucu): dört platformu

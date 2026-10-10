@@ -1030,7 +1030,10 @@ okunup varsayılmadı — canlıda doğrulandı.
   prova, platformları açıkça sayan varsayılan kuralı *"Boş özelleştirme
   teknik özellikleriyle Varsayılan Varlık Özelleştirmesi Kuralı (en düşük
   öncelikle) gereklidir"* ile reddetti. Varsayılan kural `customization_spec:
-  {}` ve EN SONDA. Ders: bir biçimi ölçerken yayında kullanılacak HER uca sor.
+  {}` ve EN SONDA. İkinci prova: *"All non-default target rules must contain
+  geolocation customization"* — varsayılan dışı her kural reklam setinin
+  `geo_locations`ını AYNEN taşıyor. Ders: bir biçimi ölçerken yayında
+  kullanılacak HER uca sor.
 
 - **GERİ OKUMADA İKİ ŞEY DAHA — ölçüldü** (2026-10-10, canlı tur 2,
   konutlu duraklatılmış ağaç): (1) `adlabels` `{id, name}` ve TERS sırada

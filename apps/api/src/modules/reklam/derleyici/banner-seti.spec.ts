@@ -138,6 +138,9 @@ describe('derleMeta — banner seti', () => {
     // Meta varsayılanı BOŞ tanımla ve en sonda istiyor (gerçek prova reddetti, 2026-10-10).
     expect(kurallar[3].customization_spec).toEqual({});
     expect(kurallar.slice(0, 3).every((r) => Object.keys(r.customization_spec).length > 0)).toBe(true);
+    // Varsayılan dışı her kural reklam setinin konumunu AYNEN taşır (Meta şartı, gerçek prova).
+    const geo = bul(gv, 'reklam_seti').targeting.geo_locations;
+    for (const r of kurallar.slice(0, 3)) expect(r.customization_spec.geo_locations).toEqual(geo);
     // Her kural metni de açıkça seçer.
     for (const r of kurallar) expect([r.body_label?.name, r.title_label?.name, r.link_url_label?.name]).toEqual(['adv_metin', 'adv_baslik', 'adv_baglanti']);
     expect(afs.link_urls[0].website_url).toBe('https://gardenvillaskusadasi.com/');
