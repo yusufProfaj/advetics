@@ -21,8 +21,14 @@ import { NIYET_KATALOGU, type NiyetKodu } from './niyetler';
 import { microsToMinor } from '../para';
 import type { Butce } from '../butce';
 import { ATIF_STANDARTLARI } from '../taslak';
+import { ORAN_ETIKETI, YERLESIM_GRUPLARI, YERLESIM_SIRASI, ortakPlan, setPlani, type GorselOrani, type SetPlani, type YerlesimGrubu } from '../banner-seti';
 
-export const DERLEYICI_SURUMU = '1.0.0';
+/**
+ * 1.1.0: banner seti (yerleşime göre görsel) ve eksik boyutta elle yerleşim.
+ * Sürüm provanın tazeliğine bağlı: eski derleyiciyle geçmiş prova yeni
+ * gövdeyi kanıtlamaz.
+ */
+export const DERLEYICI_SURUMU = '1.1.0';
 export const DESTEKLENEN_META_SURUMLERI = ['v25.0', 'v26.0'] as const;
 export type MetaApiSurumu = (typeof DESTEKLENEN_META_SURUMLERI)[number];
 
@@ -142,6 +148,18 @@ export interface Kavram {
   baslik: string;
   metin: string;
   aciklama?: string;
+  /**
+   * Tek görselin oranı (`banner-seti.ts`). Yerleşim kararı buna bağlı: her
+   * görsel fikrinde verilirse eksik boyutun yerleşimi kapanır. Verilmeyen
+   * (video, ölçüsü olmayan) bir fikir varsa yerleşim eskisi gibi otomatik
+   * kalır — bilinmeyen oranla yerleşim kapatmak tahmin olurdu.
+   */
+  oran?: GorselOrani;
+  /**
+   * BANNER SETİ: fikrin boyutları (en az iki). Varsa kreatif yerleşime göre
+   * görsel taşır (`asset_feed_spec`); `gorselHash` setin varsayılan görseli.
+   */
+  setGorselleri?: Array<{ oran: GorselOrani; gorselHash: string }>;
 }
 
 export interface DerlemeGirdisi {
@@ -230,6 +248,25 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
     if (!k.baslik.trim() || !k.metin.trim()) {
       retler.push({ kod: 'KRT-METIN', mesaj: `Fikir ${i + 1}: başlık ya da metin boş.` });
     }
+    if (k.setGorselleri) {
+      const oranlar = k.setGorselleri.map((x) => x.oran);
+      if (k.videoId) retler.push({ kod: 'KRT-SET', mesaj: `Fikir ${i + 1}: banner seti yalnız görsellerden oluşur.` });
+      if (new Set(oranlar).size !== oranlar.length) retler.push({ kod: 'KRT-SET', mesaj: `Fikir ${i + 1}: sette aynı boyuttan iki görsel var.` });
+      if (k.setGorselleri.length < 2) retler.push({ kod: 'KRT-SET', mesaj: `Fikir ${i + 1}: set en az iki boyut taşır.` });
+      // Yerleşime göre görsel bugün yalnız site reklamında ÖLÇÜLDÜ
+      // (`meta-yerlesim-prova`, 2026-10-10); form reklamında CTA'nın formu
+      // nasıl taşıdığı ölçülmedi. Tahmin etmektense kısıtla.
+      if (g.niyet !== 'SITE') retler.push({ kod: 'KRT-SET', mesaj: `Fikir ${i + 1}: banner seti şimdilik yalnız "Siteme gelsinler" amacında.` });
+    }
+  }
+  const yerlesim = yerlesimPlani(g.kavramlar);
+  if (!yerlesim && g.kavramlar.some((k) => k.setGorselleri)) {
+    // Bir fikir videoysa yerleşim otomatik kalır ve set tek görsele inerdi:
+    // kullanıcının yüklediği boyutlar sessizce kaybolurdu.
+    retler.push({ kod: 'KRT-SET', mesaj: 'Banner seti ve video aynı reklamda birlikte kullanılamaz.' });
+  }
+  if (yerlesim && Object.keys(yerlesim.gruplar).length === 0) {
+    retler.push({ kod: 'KRT-ORAN', mesaj: 'Görsellerin hiçbiri bir yerleşime uymuyor; 4:5, 1:1, 9:16 ya da 1.91:1 boyut ekle.' });
   }
   if (g.niyet === 'SITE' && !(g.hedefAdres && /^https:\/\/[^\s/]+\.[^\s]+/.test(g.hedefAdres))) {
     retler.push({ kod: 'SITE-ADRES', mesaj: 'Site adresi https:// ile başlayan geçerli bir adres olmalı.' });
@@ -292,7 +329,10 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
     billing_event: 'IMPRESSIONS',
     optimization_goal: m.optimizationGoal,
     promoted_object: { page_id: g.sayfaPlatformId },
-    targeting: hedef.targeting,
+    // ELLE YERLEŞİM yalnız bir boyut eksikse: eksik boyutun yerleşimi kapanır
+    // (kullanıcı kararı). Dört boyut tamsa ya da oran bilinmiyorsa alanlar
+    // yazılmaz ve Advantage+ yerleşim kalır.
+    targeting: yerlesim && !yerlesim.otomatik ? { ...hedef.targeting, ...elleYerlesim(yerlesim, !!g.instagramPlatformId) } : hedef.targeting,
     attribution_spec: atifSpec(m.optimizationGoal, g.atif!),
     start_time: g.takvim.baslangic,
     adlabels: etiketler,
@@ -313,6 +353,7 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
         ? { type: m.cta, value: { lead_gen_form_id: g.formId } }
         : { type: m.cta, value: { link: g.hedefAdres } };
     const oss: Record<string, unknown> = { page_id: g.sayfaPlatformId };
+    let setKreatifi: Record<string, unknown> | null = null;
     if (k.videoId) {
       // VİDEO: `video_data` — başlık `title`, kapak `image_hash`, CTA aynı
       // biçim. `link_data` ile video karıştırılmaz: link_data'ya video
@@ -326,6 +367,10 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
       };
       if (k.aciklama) videoData.link_description = k.aciklama;
       oss.video_data = videoData;
+    } else if (k.setGorselleri && yerlesim) {
+      // `link_data` YOK: görseller ve metin `asset_feed_spec`te; sayfa ve
+      // Instagram kimliği `object_story_spec`te kalıyor (aşağıda).
+      setKreatifi = varlikAkisi(k, setPlani(k.setGorselleri.map((x) => x.oran)), yerlesim, m.cta, g.hedefAdres!, !!g.instagramPlatformId);
     } else {
       const linkData: Record<string, unknown> = {
         image_hash: k.gorselHash,
@@ -345,6 +390,7 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
     const kreatif: Record<string, unknown> = {
       name: ACILMADI_ONEKI + reklamAdi(adG, n),
       object_story_spec: oss,
+      ...(setKreatifi ? { asset_feed_spec: setKreatifi } : {}),
       degrees_of_freedom_spec: {
         creative_features_spec: Object.fromEntries(
           TANINAN_OZELLIK_ANAHTARLARI.map((a) => [a, { enroll_status: 'OPT_OUT' }]),
@@ -371,7 +417,7 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
   });
 
   const acikcaYazilanAlanlar = govdeler.flatMap((gv) => alanYollari(gv.nesne, gv.alanlar)).filter(tekil);
-  manifestoDogrula(govdeler, { kategoriVar: kategoriler.length > 0, instagram: !!g.instagramPlatformId });
+  manifestoDogrula(govdeler, { kategoriVar: kategoriler.length > 0, instagram: !!g.instagramPlatformId, elleYerlesim: !!yerlesim && !yerlesim.otomatik });
 
   return {
     tur: 'govde',
@@ -380,6 +426,9 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
     // "yapabilir" diye yazılıyor; geri okumada açık dönerse onay kartı söyler.
     kapattiklarimiz: [
       ...hedef.kapatilanlar,
+      ...(yerlesim?.kapanan.length
+        ? [`Görseli olmadığı için kapalı yerleşimler: ${yerlesim.kapanan.map((x) => YERLESIM_GRUPLARI[x].etiket).join(', ')}.`]
+        : []),
       'Başka markaların reklamlarıyla yan yana gösterim kapalı.',
       `Kapattığımız otomatik özellikler: ${Object.values(KAPATILAN_OZELLIK_ADLARI).join(', ')}.`,
     ],
@@ -387,6 +436,107 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
     acikcaYazilanAlanlar,
     apiSurumu: g.apiSurumu,
     derleyiciSurumu: DERLEYICI_SURUMU,
+  };
+}
+
+/**
+ * Bütün fikirlerin ortak yerleşim planı; bir fikrin oranı bilinmiyorsa
+ * (video, ölçüsüz eski kayıt) `null` = eski davranış (Advantage+ yerleşim).
+ */
+export function yerlesimPlani(kavramlar: readonly Kavram[]): SetPlani | null {
+  // Fikir yoksa plan da yok: KRT-SAYI zaten söylüyor, "hiçbir yerleşime
+  // uymuyor" demek yanlış sebep olurdu.
+  if (kavramlar.length === 0) return null;
+  const setler: GorselOrani[][] = [];
+  for (const k of kavramlar) {
+    if (k.videoId) return null;
+    if (k.setGorselleri) setler.push(k.setGorselleri.map((x) => x.oran));
+    else if (k.oran) setler.push([k.oran]);
+    else return null;
+  }
+  return ortakPlan(setler);
+}
+
+/**
+ * Grubun Meta konumları; Instagram hesabı yoksa Instagram DÜŞER. Karar
+ * tablosu o hâlde "Instagram'da gösterilmez" diyor; elle yerleşime Instagram
+ * yazmak sözü bozardı (Meta sayfayı Instagram kimliği yerine kullanabiliyor).
+ */
+function grupKonumlari(g: YerlesimGrubu, instagram: boolean): Record<string, string[]> {
+  const m = YERLESIM_GRUPLARI[g].meta as Record<string, readonly string[]>;
+  const out: Record<string, string[]> = {};
+  for (const [alan, degerler] of Object.entries(m)) {
+    if (!instagram && alan === 'instagram_positions') continue;
+    out[alan] = alan === 'publisher_platforms' && !instagram ? degerler.filter((x) => x !== 'instagram') : [...degerler];
+  }
+  return out;
+}
+
+/** Açık grupların Meta konumları birleşimi (elle yerleşim). */
+function elleYerlesim(p: SetPlani, instagram: boolean): Record<string, string[]> {
+  const birlesim: Record<string, Set<string>> = {};
+  for (const g of YERLESIM_SIRASI) {
+    if (!p.gruplar[g]) continue;
+    for (const [alan, degerler] of Object.entries(grupKonumlari(g, instagram))) {
+      for (const v of degerler) (birlesim[alan] ??= new Set()).add(v);
+    }
+  }
+  return Object.fromEntries(Object.entries(birlesim).map(([k, v]) => [k, [...v].sort()]));
+}
+
+/** Etiket: görsel `adv_<oran>`, metin alanları sabit. Kurallar etiketle eşleşir. */
+const SET_ETIKETI = (o: GorselOrani) => `adv_${o}`;
+const METIN_ETIKETLERI = { body_label: 'adv_metin', title_label: 'adv_baslik', link_url_label: 'adv_baglanti', description_label: 'adv_aciklama' } as const;
+
+/**
+ * YERLEŞİME GÖRE GÖRSEL — `meta-yerlesim-prova` ile ölçüldü (2026-10-10,
+ * v25.0): bu biçim validate_only'den geçiyor. AMA kapsamayan kural setini de
+ * geçiriyor (negatif kontrol), yani Meta kuralların eksiksizliğini
+ * DENETLEMİYOR: eksiksizliği bu fonksiyon garanti eder. Her açık grup bir
+ * kural, SONDA bir varsayılan kural (Meta kuralları sırayla değerlendiriyor,
+ * ilk eşleşen kazanıyor). Metinler de etiketli: kuralın her varlık türünü
+ * açıkça seçmesi, seçimi Meta'nın yorumuna bırakmıyor.
+ */
+function varlikAkisi(k: Kavram, kendi: SetPlani, ortak: SetPlani, cta: string, link: string, instagram: boolean): Record<string, unknown> {
+  const hash = new Map(k.setGorselleri!.map((x) => [x.oran, x.gorselHash]));
+  const metinler = (kural: Record<string, unknown>) => ({
+    ...kural,
+    body_label: { name: METIN_ETIKETLERI.body_label },
+    title_label: { name: METIN_ETIKETLERI.title_label },
+    link_url_label: { name: METIN_ETIKETLERI.link_url_label },
+    ...(k.aciklama ? { description_label: { name: METIN_ETIKETLERI.description_label } } : {}),
+  });
+  const kurallar: Array<Record<string, unknown>> = [];
+  for (const g of YERLESIM_SIRASI) {
+    if (!ortak.gruplar[g]) continue;
+    // Ortak planda açık grup, her sette dolu (ortakPlan); oran SETE göre.
+    const oran = kendi.gruplar[g]!;
+    const konum = grupKonumlari(g, instagram);
+    // Instagram'sız "yan" dışı bir grup yalnız Facebook'a iner; Facebook da
+    // yoksa kural boş kalır ve yazılmaz.
+    if (!konum.publisher_platforms?.length) continue;
+    kurallar.push(metinler({ customization_spec: konum, image_label: { name: SET_ETIKETI(oran) } }));
+  }
+  // VARSAYILAN: otomatik yerleşimde kare kalan HER yerin görseli (dört
+  // platform açıkça); elle yerleşimde açık platformlar ve ilk açık grubun
+  // görseli — elle yerleşimde kalan yer yok ama boş bırakılan bir yerleşim
+  // Meta'da gösterimsiz kalır ve bunu hata olarak bildirmez.
+  const varsayilanOran: GorselOrani = ortak.otomatik ? 'kare' : kendi.gruplar[YERLESIM_SIRASI.find((g) => ortak.gruplar[g])!]!;
+  const platformlar = ortak.otomatik ? ['audience_network', 'facebook', 'instagram', 'messenger'] : elleYerlesim(ortak, instagram).publisher_platforms!;
+  // ortakPlan bunu imkânsız kılıyor (otomatik = her sette kare); yine de
+  // varsayılanı olmayan bir kural seti sessizce gösterimsiz yerleşim demek.
+  if (!hash.has(varsayilanOran)) throw new Error(`Setin varsayılan görseli yok: ${ORAN_ETIKETI[varsayilanOran]}`);
+  kurallar.push(metinler({ customization_spec: { publisher_platforms: platformlar }, image_label: { name: SET_ETIKETI(varsayilanOran) } }));
+
+  return {
+    images: k.setGorselleri!.map((x) => ({ hash: x.gorselHash, adlabels: [{ name: SET_ETIKETI(x.oran) }] })),
+    bodies: [{ text: k.metin, adlabels: [{ name: METIN_ETIKETLERI.body_label }] }],
+    titles: [{ text: k.baslik, adlabels: [{ name: METIN_ETIKETLERI.title_label }] }],
+    ...(k.aciklama ? { descriptions: [{ text: k.aciklama, adlabels: [{ name: METIN_ETIKETLERI.description_label }] }] } : {}),
+    link_urls: [{ website_url: link, adlabels: [{ name: METIN_ETIKETLERI.link_url_label }] }],
+    call_to_action_types: [cta],
+    ad_formats: ['SINGLE_IMAGE'],
+    asset_customization_rules: kurallar.map((r, i) => ({ ...r, priority: i + 1 })),
   };
 }
 
@@ -428,7 +578,7 @@ export const MANIFESTO: ReadonlyArray<{ kod: string; nesne: NesneTuru; yol: stri
   { kod: 'M-18', nesne: 'reklam_seti', yol: 'targeting.geo_locations' },
   { kod: 'M-21', nesne: 'reklam_seti', yol: 'attribution_spec' },
   { kod: 'M-24', nesne: 'kreatif', yol: 'object_story_spec.instagram_user_id', kosul: 'instagram' },
-  { kod: 'M-25', nesne: 'kreatif', yol: ['object_story_spec.link_data.call_to_action', 'object_story_spec.video_data.call_to_action'] },
+  { kod: 'M-25', nesne: 'kreatif', yol: ['object_story_spec.link_data.call_to_action', 'object_story_spec.video_data.call_to_action', 'asset_feed_spec.call_to_action_types'] },
   // M-26/M-27: belgedeki adapt_to_placement ve pac_relaxation canlıda
   // reddedildi (yukarıdaki not); manifesto ölçülen kümeden iki satır taşıyor,
   // derle.spec bütün kümeyi ayrıca tarıyor.
@@ -450,7 +600,7 @@ function deger(o: Record<string, unknown>, yol: string): unknown {
   return yol.split('.').reduce<unknown>((a, k) => (a && typeof a === 'object' ? (a as Record<string, unknown>)[k] : undefined), o);
 }
 
-function manifestoDogrula(govdeler: MetaGovdesi[], d: { kategoriVar: boolean; instagram: boolean }): void {
+function manifestoDogrula(govdeler: MetaGovdesi[], d: { kategoriVar: boolean; instagram: boolean; elleYerlesim: boolean }): void {
   for (const satir of MANIFESTO) {
     if (satir.kosul === 'kategori' && !d.kategoriVar) continue;
     if (satir.kosul === 'instagram' && !d.instagram) continue;
@@ -464,8 +614,14 @@ function manifestoDogrula(govdeler: MetaGovdesi[], d: { kategoriVar: boolean; in
   }
   for (const gv of govdeler.filter((x) => x.nesne === 'reklam_seti')) {
     const t = (gv.alanlar.targeting ?? {}) as Record<string, unknown>;
-    for (const y of YASAK_YERLESIM) {
-      if (y in t) throw new Error(`Yerleşim alanı yazıldı (${y}); Advantage+ yerleşim kapanır`);
+    if (!d.elleYerlesim) {
+      for (const y of YASAK_YERLESIM) {
+        if (y in t) throw new Error(`Yerleşim alanı yazıldı (${y}); Advantage+ yerleşim kapanır`);
+      }
+    } else if (!('publisher_platforms' in t)) {
+      // Eksik boyut kararı verildi ama yerleşim yazılmadı: Meta kare görseli
+      // Hikâye'ye kırparak götürürdü — kararın tam tersi, sessizce.
+      throw new Error('Eksik boyut için elle yerleşim kararı verildi ama yerleşim yazılmadı');
     }
     if ('age_max' in t) throw new Error('age_max yazıldı; Advantage+ açıkken gönderilmez');
   }

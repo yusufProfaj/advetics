@@ -1014,6 +1014,19 @@ okunup varsayılmadı — canlıda doğrulandı.
   Aynı turda gözle: sayfa doğru (panel turunda Meta başka müşterinin
   sayfasını seçmişti), "çok reklamverenli reklamlar" işaretsiz.
 
+- **YERLEŞİME GÖRE GÖRSEL: PROVA KURALLARIN EKSİKSİZLİĞİNİ DENETLEMİYOR —
+  ölçüldü** (2026-10-10, v25.0, `meta-yerlesim-prova`, Ege Birlik Yapı).
+  `asset_feed_spec` + `asset_customization_rules` (dört boyut, Advantage+
+  yerleşim; 9:16 eksik + elle yerleşim) `/ads` validate_only'den geçti — ama
+  yerleşimlerin çoğunu kapsamayan TEK kurallı negatif kontrol de geçti.
+  Eksiksizlik derleyicide garanti ediliyor (her açık grup bir kural, SONDA
+  varsayılan; `banner-seti.ts`, `banner-seti.spec.ts`). Ayrıca prova reklam
+  parçasında `synchronous_ad_review`ı çıkarınca satır içi kampanya
+  "Satın Alma Türü eksik" (1815223) ile düşüyor; seçenekle geçiyor. Banner
+  seti kararı (kullanıcı): bir tasarımın boyutları TEK reklam, eksik boyutta o
+  yerleşim kapanır; dört boyut tamsa Advantage+ yerleşim kalır. Doğru görselin
+  doğru yerleşime gittiği HENÜZ duraklatılmış bir kurulumda gözle görülmedi.
+
 - **GERİ OKUMADA İKİ ŞEY DAHA — ölçüldü** (2026-10-10, canlı tur 2,
   konutlu duraklatılmış ağaç): (1) `adlabels` `{id, name}` ve TERS sırada
   dönüyor; öğeyi bütün kıyaslamak doğru etiketi "fark" yapıyordu — adla

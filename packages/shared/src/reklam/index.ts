@@ -12,5 +12,6 @@ export * from './taslak-alanlari';
 export * from './yayin';
 export * from './meta/prova';
 export * from './medya';
+export * from './banner-seti';
 export * from './sohbet';
 export * from './rehber';

@@ -18,16 +18,19 @@ import {
   acikPlatformlar,
   kanonikJson,
   kararTablosu,
+  oranBul,
   platformAcilabilirMi,
   provaNotu,
   rehberAlanlariSchema,
   rehberEksikleri,
   rehberdenGoogle,
   rehberdenMeta,
+  rehberYerlesimPlani,
   taslakAlanlariSchema,
   uyumDenetle,
   type AnahtarKelimeOnerisi,
   type GoogleDerlemeGirdisi,
+  type GorselOrani,
   type MetinOnerisi,
   type OzelKategori,
   type PlatformProvaSonucu,
@@ -518,7 +521,7 @@ export class RehberService {
   }
 
   private async metaProva(ctx: TenantContext, s: RehberSatiri, a: RehberAlanlari, b: Baglam, acik: Record<RehberPlatformu, boolean>, zaman: string): Promise<PlatformProvaSonucu> {
-    const t = rehberdenMeta(a, acik, b.meta?.currency ?? b.paraBirimi, zaman);
+    const t = rehberdenMeta(a, acik, b.meta?.currency ?? b.paraBirimi, zaman, b.medyaOranlari ?? new Map());
     if (t.tur === 'ret') return { tur: 'reddetti', zaman, mesajlar: t.kodlar.map((k) => `Eksik: ${k}`) };
     try {
       let taslakId = s.meta_taslak_id;
@@ -655,7 +658,7 @@ export class RehberService {
     const baslamayan: PlatformYayinOzeti[] = [];
     let baslayan = 0;
     if (acik.meta && s.meta_taslak_id) {
-      const r = await this.metaYayinBaslat(ctx, s.meta_taslak_id, a, acik, b.meta?.currency ?? b.paraBirimi, { uyum: k.uyum, kapaliKalacak: !platformAcilabilirMi(amac, 'meta') });
+      const r = await this.metaYayinBaslat(ctx, s.meta_taslak_id, a, acik, b.meta?.currency ?? b.paraBirimi, { uyum: k.uyum, kapaliKalacak: !platformAcilabilirMi(amac, 'meta') }, b.medyaOranlari ?? new Map());
       if (r) baslamayan.push({ platform: 'meta', taslakId: s.meta_taslak_id, yayinId: null, durum: null, sebep: r, kampanyaKimligi: null, duraklatilmisKalacak: !platformAcilabilirMi(amac, 'meta') });
       else baslayan++;
     }
@@ -714,6 +717,7 @@ export class RehberService {
     acik: Record<RehberPlatformu, boolean>,
     paraBirimi: string,
     rehber: { uyum: { tur: 'gecti'; surum: string }; kapaliKalacak: boolean },
+    oranlar: ReadonlyMap<string, GorselOrani | null>,
   ): Promise<string | null> {
     const [t] = await this.tx(ctx)((x) =>
       x.$queryRaw<Array<{ aktif_surum_no: number; icerik_ozeti: string | null }>>(Prisma.sql`
@@ -729,7 +733,7 @@ export class RehberService {
      * içerik "uyum geçti" damgasıyla yayınlanırdı. Rehberden yeniden türetip
      * aynı özet kuralıyla karşılaştırıyoruz; uyuşmazsa yayın yok.
      */
-    const yeniden = rehberdenMeta(a, acik, paraBirimi, new Date().toISOString());
+    const yeniden = rehberdenMeta(a, acik, paraBirimi, new Date().toISOString(), oranlar);
     const beklenen = yeniden.tur === 'tamam' ? createHash('sha256').update(taslakKanonikIcerik(yeniden.deger)).digest('hex') : null;
     if (beklenen !== t.icerik_ozeti) return 'Meta taslağı rehberden sonra değişmiş; yeniden prova et.';
     const r = await this.yayinSvc.baslat(ctx, { taslakId, surumNo: t.aktif_surum_no, icerikOzeti: t.icerik_ozeti, testKipi: false, kaynak: 'panel', rehber });
@@ -826,7 +830,9 @@ export class RehberService {
       alanlar: a,
       eksikler: rehberEksikleri(a, b),
       // Teklif kuralı `rehberdenGoogle` ile AYNI: yalnız ölçüm KESİN etkinse dönüşüm.
-      kararlar: amac ? kararTablosu(amac, acikPlatformlar(a, b.ajansYoneticisi), b.googleDonusum === true ? 'MAKS_DONUSUM' : 'MAKS_TIKLAMA', a.instagramId?.deger != null) : [],
+      kararlar: amac
+        ? kararTablosu(amac, acikPlatformlar(a, b.ajansYoneticisi), b.googleDonusum === true ? 'MAKS_DONUSUM' : 'MAKS_TIKLAMA', a.instagramId?.deger != null, rehberYerlesimPlani(a, b.medyaOranlari ?? new Map()))
+        : [],
       metaTaslakId: s.meta_taslak_id,
       googleTaslakId: s.google_taslak_id,
       icerikOzeti: rehberOzeti(a),
@@ -849,7 +855,14 @@ export class RehberService {
          WHERE client_id = ${clientId}::uuid AND id = ANY(${[metaId, googleId].filter((x): x is string => !!x)}::uuid[])`);
       // Hazırlık ucuyla AYNI kural, tek yardımcıdan (BULGU-5).
       const ajans = await ajansYoneticisiMi(t, ctx);
-      return { m, hesaplar, ajans };
+      // BANNER SETİ: oran varlığın ÖLÇÜSÜNDEN (istemci söylemez). Workspace'in
+      // arşivinde olmayan varlık listede yok, yani oranı `null` — türetme durur.
+      const medyaIdleri = (a.medya?.deger ?? []).map((x) => x.varlikId);
+      const olculer = medyaIdleri.length
+        ? await t.$queryRaw<Array<{ id: string; kind: string; width: number | null; height: number | null }>>(Prisma.sql`
+            SELECT id::text, kind, width, height FROM assets WHERE client_id = ${clientId}::uuid AND id = ANY(${medyaIdleri}::uuid[])`)
+        : [];
+      return { m, hesaplar, ajans, olculer };
     });
     const meta = r.hesaplar.find((h) => h.id === metaId && h.platform === 'meta') ?? null;
     const google = r.hesaplar.find((h) => h.id === googleId && h.platform === 'google') ?? null;
@@ -894,6 +907,12 @@ export class RehberService {
       meta: meta ? { id: meta.id, currency: meta.currency, timezone: meta.timezone } : null,
       google: google ? { id: google.id, externalId: google.external_id, currency: google.currency, timezone: google.timezone } : null,
       workspaceAdi: r.m?.ad ?? 'Workspace',
+      medyaOranlari: new Map(
+        (a.medya?.deger ?? []).map((x) => {
+          const v = r.olculer.find((o) => o.id === x.varlikId);
+          return [x.varlikId, v && v.kind === 'image' ? oranBul(v.width, v.height) : null] as const;
+        }),
+      ),
     };
   }
 

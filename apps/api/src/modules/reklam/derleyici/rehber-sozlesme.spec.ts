@@ -20,6 +20,7 @@ import {
   taslakEksikleri,
   uyumDenetle,
   yayinaEngelVarMi,
+  type GorselOrani,
   type RehberAlanlari,
   type RehberEksikBaglami,
 } from '@advetics/shared';
@@ -236,9 +237,15 @@ describe('rehberEksikleri — tek "yayından önce" listesi', () => {
   });
 });
 
+/** tamSite'nin iki görseli de KARE: aynı boyutta iki görsel = iki tasarım = iki fikir (banner-seti.ts). */
+const ORANLAR = new Map<string, GorselOrani | null>([
+  [U(10), 'kare'],
+  [U(11), 'kare'],
+]);
+
 describe('rehberdenMeta — mevcut Meta zincirine bağlanır', () => {
   it('türetilen taslak Meta şemasından geçer ve Meta eksik listesi temiz', () => {
-    const r = rehberdenMeta(tamSite(), acikPlatformlar(tamSite(), true), 'TRY', Z);
+    const r = rehberdenMeta(tamSite(), acikPlatformlar(tamSite(), true), 'TRY', Z, ORANLAR);
     expect(r.tur).toBe('tamam');
     if (r.tur !== 'tamam') return;
     expect(taslakAlanlariSchema.safeParse(r.deger).success).toBe(true);
@@ -249,8 +256,8 @@ describe('rehberdenMeta — mevcut Meta zincirine bağlanır', () => {
     expect(taslakEksikleri(r.deger)).toEqual([]);
   });
 
-  it('her görsel bir kavram; başlıklar sırayla, metin TEK', () => {
-    const r = rehberdenMeta(tamSite(), acikPlatformlar(tamSite(), true), 'TRY', Z);
+  it('aynı boyuttan iki görsel iki fikir; başlıklar sırayla, metin TEK', () => {
+    const r = rehberdenMeta(tamSite(), acikPlatformlar(tamSite(), true), 'TRY', Z, ORANLAR);
     if (r.tur !== 'tamam') throw new Error('ret');
     const k = r.deger.kavramlar!.deger;
     expect(k.map((x) => x.baslik)).toEqual(['Özel Havuzlu Villalar', 'Kuşadası Garden Villas']);
@@ -262,7 +269,7 @@ describe('rehberdenMeta — mevcut Meta zincirine bağlanır', () => {
   it('VIDEO amacı Meta tarafında VIDEO_IZLENME niyetine gider', () => {
     // Meta VIDEO dalı Dalga 2'de kapalı; eşlemeyi sınamak için açık küme elle veriliyor.
     const a = { ...tamSite(), amac: al('VIDEO' as const) };
-    const r = rehberdenMeta(a, { meta: true, google: true }, 'TRY', Z);
+    const r = rehberdenMeta(a, { meta: true, google: true }, 'TRY', Z, ORANLAR);
     expect(r.tur === 'tamam' && r.deger.niyet?.deger).toBe('VIDEO_IZLENME');
   });
 });

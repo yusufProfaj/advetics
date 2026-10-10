@@ -197,13 +197,24 @@ describe('SÖZ: karar tablosu META satırları ↔ yayinla() ile kurulan gövde'
     }
   });
 
-  it('NEREDE: "Çok reklamverenli birim kapalı" ↔ HER kreatifte contextual_multi_ads OPT_OUT; yerleşim otomatik (publisher_platforms yok)', () => {
+  it('NEREDE: "Çok reklamverenli birim kapalı" ↔ HER kreatifte contextual_multi_ads OPT_OUT', () => {
     expect(meta.NEREDE).toContain('Çok reklamverenli birim kapalı');
     const kreatifler = gv.filter((v) => v.nesne === 'kreatif');
     expect(kreatifler.length).toBeGreaterThan(0);
     for (const kr of kreatifler) expect(kr.alanlar.contextual_multi_ads).toEqual({ enroll_status: 'OPT_OUT' });
-    const t = nesne(gv, 'reklam_seti').targeting as Record<string, unknown>;
-    expect(t.publisher_platforms).toBeUndefined();
+  });
+
+  it('NEREDE (banner seti): tek KARE görsel → "Hikâye ve Reels kapalı" ↔ elle yerleşimde story/reels YOK, akış ve sağ sütun VAR', () => {
+    // Fikstürün tek görseli 1080×1080: 9:16 yok, kullanıcı kararıyla Hikâye ve
+    // Reels kapanır ve Advantage+ yerleşim kalkar. Söz ile gövde aynı plandan.
+    expect(meta.NEREDE).toContain('görsel boyutlarına göre seçilen yerleşimler');
+    expect(meta.NEREDE).toContain('Görseli olmadığı için kapalı: Hikâye ve Reels');
+    const t = nesne(gv, 'reklam_seti').targeting as Record<string, string[] | undefined>;
+    expect(t.publisher_platforms).toBeDefined();
+    expect(t.facebook_positions).toEqual(expect.arrayContaining(['feed', 'right_hand_column']));
+    expect([...(t.facebook_positions ?? []), ...(t.instagram_positions ?? [])]).not.toEqual(expect.arrayContaining(['story']));
+    expect(t.instagram_positions ?? []).not.toContain('reels');
+    expect(t.facebook_positions ?? []).not.toContain('facebook_reels');
   });
 
   it('KONUM: "yaşayan ya da yakın zamanda bulunan" ↔ geo_locations yalnız seçilen şehir; ülke kovası YOK (kovalar birleşim)', () => {

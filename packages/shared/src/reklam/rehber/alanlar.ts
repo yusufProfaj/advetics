@@ -55,6 +55,13 @@ export const rehberMedyasiSchema = z.object({
   varlikId: z.string().uuid(),
   /** Video ise kapak karesi (tarayıcıda alınır; sunucuda video işlenmez). */
   kapakVarlikId: z.string().uuid().optional(),
+  /**
+   * BANNER SETİ: aynı numaralı görseller tek reklamın boyutları
+   * (`banner-seti.ts`). Verilmezse görseller orana göre sırayla gruplanır;
+   * kullanıcı bir görseli başka sete taşıyınca yazılır. İsteğe bağlı ve
+   * varsayılansız: varsayılan değer kayıtlı rehberlerin özetini değiştirirdi.
+   */
+  setNo: z.number().int().min(1).max(5).optional(),
 });
 
 export const anahtarKelimeSchema = z.object({

@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="tr">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Banner Seti Taslağı</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&family=Open+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* AdvCampaign rehberi adım 4 ("Reklamda ne görünsün?") banner seti taslağı.
+   Kabuk, ray, özet ve token'lar onaylı rehber taslağından (rehber-taslak.html)
+   ve apps/web/src/app/globals.css'ten. Kılavuz dışı renk yok: marka kırmızısı,
+   gri, siyah, beyaz ve panelin kenarlık/zemin grileri. Yeşil yalnız durum noktası.
+   Gradyan yok: onaylı taslaktaki degrade düğme ve karo burada düz renkle. */
+:root{
+  --brand:#ff2400; --brand-soft:rgba(255,36,0,.08); --brand-strong:#c41c00;
+  --surface:#ffffff; --muted:#f6f5f4; --sunken:#efedeb; --line:#e7e4e2;
+  --ink:#302e2d; --ink-muted:#6f6a67; --ok:#16a34a;
+  --yer:#e2dfdc; /* yer tutucu görsel: #302e2d'nin açık tonu */
+  --shadow-card:0 1px 2px rgb(16 24 40 / .04),0 2px 10px -3px rgb(16 24 40 / .07);
+  --shadow-pop:0 4px 8px -2px rgb(16 24 40 / .08),0 20px 44px -12px rgb(16 24 40 / .22);
+  --ease:cubic-bezier(.16,1,.3,1);
+  --baslik:"Montserrat",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --govde:"Open Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--surface:#13151c;--muted:#0b0d12;--sunken:#1b1e27;--line:#262a35;--ink:#ece9e7;--ink-muted:#a39d99;--brand-soft:rgba(255,36,0,.16);--brand-strong:#ff6a4d;--yer:#2a2e3a;color-scheme:dark}}
+:root[data-theme="dark"]{--surface:#13151c;--muted:#0b0d12;--sunken:#1b1e27;--line:#262a35;--ink:#ece9e7;--ink-muted:#a39d99;--brand-soft:rgba(255,36,0,.16);--brand-strong:#ff6a4d;--yer:#2a2e3a;color-scheme:dark}
+*{box-sizing:border-box}
+html,body{min-height:100%}
+body{margin:0;background:var(--muted);color:var(--ink);font-family:var(--govde);font-size:14px}
+button,input{font:inherit;color:inherit}
+button{background:none;border:0;cursor:pointer;padding:0}
+:focus-visible{outline:2px solid var(--brand);outline-offset:2px;border-radius:6px}
+.num{font-variant-numeric:tabular-nums}
+.birincil{display:inline-flex;align-items:center;gap:6px;color:#fff;font-weight:600;font-size:13px;padding:9px 18px;border-radius:999px;background:var(--brand);transition:transform .2s var(--ease)}
+.birincil:hover{transform:translateY(-1px)}
+.ikincil{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:8px 15px;font-size:13px;font-weight:600;transition:border-color .2s var(--ease)}
+.ikincil:hover{border-color:var(--ink-muted)}
+.ikincil[disabled]{opacity:.45;cursor:not-allowed}
+.metinDugme{font-size:12.5px;font-weight:600;color:var(--brand-strong)}
+.metinDugme:hover{text-decoration:underline}
+.metinDugme[disabled]{color:var(--ink-muted);text-decoration:none;cursor:not-allowed}
+.kart{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-card);min-width:0}
+
+/* Taslak denetimi: hâl seçici. Gerçek ekranda YOK. */
+.taslakCubuk{max-width:1360px;margin:12px auto 0;padding:0 16px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px}
+.taslakCubuk .etiket{font-size:12px;font-weight:700;color:var(--ink-muted)}
+.seg{display:inline-flex;flex-wrap:wrap;background:var(--sunken);border-radius:999px;padding:3px;gap:2px}
+.seg button{padding:5px 12px;border-radius:999px;font-size:12px;font-weight:600;color:var(--ink-muted);transition:background .25s var(--ease),color .25s var(--ease)}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow-card)}
+.secKutu{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-muted)}
+.secKutu input{accent-color:var(--brand)}
+.taslakNot{flex-basis:100%;margin:0;font-size:12px;color:var(--ink-muted);line-height:1.5}
+
+/* Kabuk (onaylı rehber taslağıyla aynı) */
+.ustCubuk{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--line)}
+.kapat{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;color:var(--ink-muted)}
+.kapat:hover{background:var(--sunken)}
+.ustCubuk h1{margin:0;font-family:var(--baslik);font-weight:700;font-size:17px}
+.kirinti{font-size:12.5px;color:var(--ink-muted);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kirinti b{color:var(--ink);font-weight:600}
+.kayit{margin-left:auto;font-size:12px;color:var(--ink-muted);display:flex;align-items:center;gap:6px;white-space:nowrap}
+.kayit i{width:7px;height:7px;border-radius:50%;background:var(--ok)}
+.govde{display:grid;grid-template-columns:232px minmax(0,1fr) 300px;gap:20px;max-width:1360px;margin:0 auto;padding:16px 16px 48px;align-items:start}
+.ray{position:sticky;top:76px;display:flex;flex-direction:column;gap:2px}
+.adim{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;font-size:13.5px;color:var(--ink-muted)}
+.adim .no{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;border:2px solid var(--line);font-size:11.5px;font-weight:700;flex:none;background:var(--surface)}
+.adim.bitti .no{border-color:var(--ok);background:var(--ok);color:#fff}
+.adim[aria-current="step"]{color:var(--ink);font-weight:700;background:var(--surface);box-shadow:var(--shadow-card)}
+.adim[aria-current="step"] .no{border-color:var(--brand);color:var(--brand-strong)}
+.adim .alt{display:block;font-size:11.5px;font-weight:400;color:var(--ink-muted);margin-top:1px}
+.ray .cizgi{width:2px;height:10px;background:var(--line);margin-left:21px}
+.orta{min-width:0;display:flex;flex-direction:column;gap:16px}
+.soru h2{margin:0;font-family:var(--baslik);font-weight:700;font-size:22px;letter-spacing:-.01em}
+.soru p{margin:6px 0 0;color:var(--ink-muted);font-size:13.5px;line-height:1.5}
+.blok{padding:16px}
+.blok+.blok{border-top:1px solid var(--line)}
+.blokBaslik{display:flex;align-items:center;gap:8px;margin:0 0 10px;font-size:14px;font-weight:700;flex-wrap:wrap}
+.blokBaslik .ops{font-weight:400;font-size:12px;color:var(--ink-muted)}
+.blokBaslik .sag{margin-left:auto}
+.ipucu{font-size:12.5px;color:var(--ink-muted);line-height:1.5;margin:6px 0 0}
+.altCubuk{display:flex;align-items:center;gap:10px}
+.altCubuk .bosluk{flex:1}
+
+/* Bırakma alanı */
+.birak{border:1.5px dashed var(--line);border-radius:12px;padding:16px;display:flex;align-items:center;gap:14px;transition:border-color .2s var(--ease),background .2s var(--ease)}
+.birak:hover,.birak.uzerinde{border-color:var(--ink-muted);background:var(--muted)}
+.birak b{display:block;font-size:13.5px}
+.birak span{font-size:12px;color:var(--ink-muted);line-height:1.5}
+.karo{width:40px;height:40px;border-radius:11px;display:grid;place-items:center;color:#fff;flex:none;background:var(--brand)}
+.karo svg{width:20px;height:20px}
+.oranlar{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.oranlar em{font-style:normal;font-size:11px;font-weight:700;border-radius:6px;padding:2px 7px;background:var(--sunken);color:var(--ink)}
+
+/* Desteklenmeyen oran: bırakıldığı anda */
+.hata{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;margin-top:12px;padding:10px 12px;border:1px solid var(--brand);border-left-width:4px;border-radius:10px;background:var(--brand-soft);opacity:1;visibility:visible;transition:opacity .25s var(--ease),visibility .25s}
+.hata[hidden]{display:grid;opacity:0;visibility:hidden;height:0;padding:0;margin:0;border:0;overflow:hidden}
+.hata .kucukYer{width:54px;height:36px;border-radius:6px;background:var(--yer);display:grid;place-items:center;font-size:10.5px;font-weight:700;color:var(--ink-muted)}
+.hata b{display:block;font-size:12.5px;color:var(--brand-strong)}
+.hata small{display:block;font-size:12px;color:var(--ink);line-height:1.5;margin-top:2px}
+
+/* Set listesi */
+.setler{display:flex;flex-direction:column;gap:12px;margin-top:14px}
+.set{border:1px solid var(--line);border-radius:12px;background:var(--surface);transition:border-color .2s var(--ease),box-shadow .2s var(--ease)}
+.set.uzerinde{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-soft)}
+.setUst{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.setUst h3{margin:0;font-family:var(--baslik);font-size:14.5px;font-weight:700}
+.setUst .rozet{font-size:11px;font-weight:700;border-radius:6px;padding:2px 8px;background:var(--sunken)}
+.setUst .sag{margin-left:auto;display:flex;gap:14px}
+.yuvalar{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;padding:14px}
+.yuva{display:flex;flex-direction:column;gap:8px;min-width:0}
+.cerceve{position:relative;height:150px;border-radius:10px;border:1px solid var(--line);background:var(--muted);display:grid;place-items:center;transition:border-color .2s var(--ease)}
+.yuva.dolu .cerceve{cursor:grab}
+.yuva.dolu .cerceve:active{cursor:grabbing}
+.yuva.bos .cerceve{border:1.5px dashed var(--ink-muted);background:transparent;cursor:pointer}
+.yuva.bos .cerceve:hover{border-color:var(--brand);background:var(--brand-soft)}
+.yuva.bos.kapali .cerceve{border-color:var(--brand)}
+.gorsel{background:var(--yer);border-radius:4px;display:grid;place-items:center;font-size:12px;font-weight:700;color:var(--ink-muted);font-family:var(--baslik)}
+/* Genişlik + oran: dar kutuda (mobil, iki sütun) taşmadan küçülsün. */
+.gorsel{max-width:88%}
+.o-916{width:72px;aspect-ratio:9/16}
+.o-45{width:102px;aspect-ratio:4/5}
+.o-11{width:116px;aspect-ratio:1/1}
+.o-191{width:150px;aspect-ratio:1.91/1}
+.gorsel.solgun{opacity:.45}
+.ekle{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:12.5px;font-weight:700;color:var(--brand-strong);text-align:center;padding:8px}
+.ekle span{font-size:11px;font-weight:400;color:var(--ink-muted)}
+.menuDugme{position:absolute;top:6px;right:6px;width:28px;height:28px;border-radius:8px;display:grid;place-items:center;background:var(--surface);border:1px solid var(--line);color:var(--ink)}
+.menuDugme:hover{border-color:var(--ink-muted)}
+.menu{position:absolute;top:38px;right:6px;z-index:30;min-width:190px;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-pop);padding:6px 0;opacity:0;visibility:hidden;transform:translateY(-4px);transition:opacity .2s var(--ease),transform .2s var(--ease),visibility .2s}
+.menu.acik{opacity:1;visibility:visible;transform:none}
+.menu .mBaslik{padding:4px 12px;font-size:11px;font-weight:700;color:var(--ink-muted)}
+.menu button{display:block;width:100%;text-align:left;padding:7px 12px;font-size:12.5px}
+.menu button:hover:not([disabled]){background:var(--muted)}
+.menu button[disabled]{color:var(--ink-muted);cursor:not-allowed}
+.menu button small{display:block;font-size:11px;color:var(--ink-muted)}
+.menu hr{border:0;border-top:1px solid var(--line);margin:6px 0}
+.yuvaAlt b{display:block;font-size:12.5px}
+.yuvaAlt .yer{display:block;font-size:12px;color:var(--ink);line-height:1.4;margin-top:1px}
+.yuvaAlt small{display:block;font-size:11px;color:var(--ink-muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.yuvaAlt .kapaliYazi{color:var(--brand-strong);font-weight:600}
+.yuvaAlt .kullanilmiyor{color:var(--ink-muted);font-style:italic}
+.setAlt{display:flex;align-items:flex-start;gap:10px;padding:10px 14px;border-top:1px solid var(--line);font-size:12.5px;line-height:1.5}
+.nokta{width:8px;height:8px;border-radius:50%;flex:none;margin-top:6px;background:var(--ok)}
+.nokta.eksik{background:var(--brand)}
+.setAlt b{font-weight:700}
+.setAlt .acik{color:var(--ink-muted)}
+.setAlt .sag{margin-left:auto;white-space:nowrap}
+.googleNot{display:flex;align-items:flex-start;gap:8px;padding:9px 14px;border-top:1px solid var(--line);font-size:12px;color:var(--ink-muted);line-height:1.5}
+.googleNot svg{width:15px;height:15px;flex:none;margin-top:1px}
+body:not([data-google="1"]) .googleNot{display:none}
+
+/* Setler arası ortak uyarı */
+.ortak{display:flex;gap:10px;align-items:flex-start;margin-top:12px;padding:11px 14px;border-radius:10px;border:1px solid var(--brand);background:var(--brand-soft);font-size:12.5px;line-height:1.5}
+.ortak svg{width:17px;height:17px;flex:none;color:var(--brand-strong);margin-top:1px}
+.ortak b{color:var(--brand-strong)}
+.ortak[hidden]{display:none}
+.yeniSet{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:12px;padding:12px;border:1.5px dashed var(--line);border-radius:12px;font-size:12.5px;font-weight:600;color:var(--ink-muted);width:100%;transition:border-color .2s var(--ease),color .2s var(--ease)}
+.yeniSet:hover:not([disabled]),.yeniSet.uzerinde{border-color:var(--brand);color:var(--brand-strong)}
+.yeniSet[disabled]{cursor:not-allowed;opacity:.6}
+
+/* Metin bloğu (kısaltılmış, bağlam için) */
+.alan{display:flex;flex-direction:column;gap:5px;margin-top:10px}
+.alan label{font-size:12.5px;font-weight:600}
+.girdi{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:10px;padding:9px 12px;background:var(--surface)}
+.girdi input{flex:1;min-width:0;border:0;outline:0;background:transparent;font-size:13.5px}
+.girdi .sayac{font-size:11.5px;color:var(--ink-muted)}
+
+/* Sağ özet */
+.ozet{position:sticky;top:76px;display:flex;flex-direction:column;gap:12px}
+.ozetKart h3{margin:0;padding:12px 16px;font-size:13.5px;font-weight:700;border-bottom:1px solid var(--line)}
+.ozetSatir{display:flex;justify-content:space-between;gap:12px;padding:9px 16px;font-size:12.5px;border-bottom:1px solid var(--line)}
+.ozetSatir:last-child{border-bottom:0}
+.ozetSatir span{color:var(--ink-muted);flex:none}
+.ozetSatir b{text-align:right;font-weight:600;min-width:0}
+.ozetSatir b.uyar{color:var(--brand-strong)}
+.eksikler{list-style:none;margin:0;padding:6px 0}
+.eksikler li button{width:100%;display:flex;align-items:center;gap:8px;padding:7px 16px;font-size:12.5px;text-align:left}
+.eksikler li button:hover{background:var(--muted)}
+.eksikler li i{width:7px;height:7px;border-radius:50%;background:var(--brand);flex:none}
+.eksikler li.tamam i{background:var(--ok)}
+.eksikler li.tamam{color:var(--ink-muted)}
+
+.mobilIlerleme{display:none}
+@media (max-width:1100px){
+  .govde{grid-template-columns:200px minmax(0,1fr)}
+  .ozet{grid-column:1/-1;position:static;display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:760px){
+  .govde{grid-template-columns:minmax(0,1fr);gap:14px}
+  .ray{display:none}
+  .mobilIlerleme{display:flex;flex-direction:column;gap:8px}
+  .mobilIlerleme .ust{display:flex;justify-content:space-between;font-size:12.5px;color:var(--ink-muted)}
+  .mobilIlerleme .ust b{color:var(--ink)}
+  .mobilIlerleme .cubuk{height:4px;border-radius:999px;background:var(--line);overflow:hidden}
+  .mobilIlerleme .cubuk i{display:block;height:100%;width:66%;background:var(--brand)}
+  .ozet{grid-template-columns:minmax(0,1fr)}
+  .kirinti{display:none}
+  .soru h2{font-size:19px}
+  .yuvalar{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .setAlt{flex-wrap:wrap}
+  .setAlt .sag{margin-left:18px}
+  .birak{align-items:flex-start}
+  .altCubuk{position:sticky;bottom:0;background:var(--muted);margin:0 -16px;padding:10px 16px;border-top:1px solid var(--line)}
+}
+@media (prefers-reduced-motion: reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+</style>
+
+<body data-google="1">
+<header class="ustCubuk">
+  <button class="kapat" aria-label="Rehberi kapat"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  <h1>AdvCampaign</h1>
+  <div class="kirinti">Ege Birlik Yapı › <b>Garden Villas Kuşadası</b></div>
+  <div class="kayit"><i></i>Taslak kaydedildi</div>
+</header>
+
+<div class="taslakCubuk" aria-label="Taslak hâlleri">
+  <span class="etiket">Taslak hâli:</span>
+  <div class="seg" id="haller">
+    <button data-hal="tam" aria-pressed="true">1 · Tam set</button>
+    <button data-hal="eksik">2 · Eksik set</button>
+    <button data-hal="iki">3 · İki set</button>
+    <button data-hal="hata">4 · Desteklenmeyen oran</button>
+  </div>
+  <label class="secKutu"><input type="checkbox" id="googleAcik" checked> Google açık (amaç: Siteme gelsinler)</label>
+  <p class="taslakNot">Bu çubuk gerçek ekranda yok. Görseller yer tutucu. Görseli sürükleyip başka sete bırakabilir ya da her görseldeki <b>⋯</b> menüsünden taşıyabilirsin; özet ve uyarılar anında güncellenir.</p>
+</div>
+
+<main class="govde">
+  <nav class="ray" aria-label="Adımlar">
+    <div class="adim bitti"><span class="no">✓</span><span>Amaç<span class="alt">Siteme gelsinler</span></span></div><div class="cizgi"></div>
+    <div class="adim bitti"><span class="no">✓</span><span>Nerede<span class="alt">Meta, Google</span></span></div><div class="cizgi"></div>
+    <div class="adim bitti"><span class="no">✓</span><span>Kime<span class="alt">İzmir, İstanbul, Ankara</span></span></div><div class="cizgi"></div>
+    <div class="adim" aria-current="step"><span class="no">4</span><span>Reklam<span class="alt">Görsel, metin</span></span></div><div class="cizgi"></div>
+    <div class="adim"><span class="no">5</span><span>Bütçe<span class="alt">Tutar, süre</span></span></div><div class="cizgi"></div>
+    <div class="adim"><span class="no">6</span><span>Kontrol<span class="alt">Önizleme, prova</span></span></div>
+  </nav>
+
+  <section class="orta">
+    <div class="mobilIlerleme" aria-hidden="true">
+      <div class="ust"><span>Adım <b>4</b> / 6</span><b>Reklam</b></div>
+      <div class="cubuk"><i></i></div>
+    </div>
+
+    <div class="soru">
+      <h2>Reklamda ne görünsün?</h2>
+      <p>Aynı tasarımın farklı boyutlarını bir set olarak yükle. Her boyut kendi yerinde gösterilir.</p>
+    </div>
+
+    <div class="kart">
+      <div class="blok">
+        <div class="blokBaslik">Görseller <span class="ops" id="setSayaci">1 / 5 set</span></div>
+        <div class="birak" id="birak" role="button" tabindex="0">
+          <div class="karo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3"/></svg></div>
+          <div>
+            <b>Sürükle bırak ya da seç</b>
+            <span>Bıraktığın anda boyutu tanınır ve sete yerleşir. Aynı orandan ikinci görsel yeni bir set açar.</span>
+            <div class="oranlar"><em>9:16</em><em>4:5</em><em>1:1</em><em>1.91:1</em></div>
+          </div>
+        </div>
+        <div class="hata" id="hata" role="alert" hidden>
+          <div class="kucukYer">3:2</div>
+          <div>
+            <b>villa-yatay.jpg kullanılamıyor · 1500 × 1000 · 3:2</b>
+            <small>Kabul edilen oranlar: 9:16 (1080 × 1920), 4:5 (1080 × 1350), 1:1 (1200 × 1200), 1.91:1 (1200 × 628). Görseli bu oranlardan birine kırpıp tekrar bırak.</small>
+          </div>
+          <button class="metinDugme" id="hataKapat">Kapat</button>
+        </div>
+
+        <div class="setler" id="setler"></div>
+        <div class="ortak" id="ortak" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg>
+          <span id="ortakMetin"></span>
+        </div>
+        <button class="yeniSet" id="yeniSet">+ Yeni set (başka bir fikir)</button>
+        <p class="ipucu">Her set ayrı bir reklamdır. Birden çok set eklersen Meta hepsini dener ve hangisi daha iyi çalışıyor raporda görürsün.</p>
+      </div>
+
+      <div class="blok">
+        <div class="blokBaslik">Metin <span class="ops">Bütün setlerde aynı</span><button class="metinDugme sag">✦ Metin öner</button></div>
+        <div class="alan"><label>Ana metin</label><div class="girdi"><input value="Kuşadası'nda denize 5 dakika, özel havuzlu villalar. Yerinde görün." aria-label="Ana metin"><span class="sayac num">68 / 125</span></div></div>
+        <div class="alan"><label>Başlık</label><div class="girdi"><input value="Özel Havuzlu Villalar" aria-label="Başlık"><span class="sayac num">21 / 30</span></div></div>
+        <p class="ipucu">Setler yalnız görselle ayrışır; böylece hangi görselin iyi çalıştığı net okunur.</p>
+      </div>
+    </div>
+
+    <div class="altCubuk"><button class="ikincil">Geri</button><span class="bosluk"></span><button class="birincil">Devam</button></div>
+  </section>
+
+  <aside class="ozet">
+    <div class="kart ozetKart">
+      <h3>Özet</h3>
+      <div class="ozetSatir"><span>Amaç</span><b>Siteme gelsinler</b></div>
+      <div class="ozetSatir"><span>Nerede</span><b id="oPlt">Meta + Google</b></div>
+      <div class="ozetSatir"><span>Konum</span><b>İzmir, İstanbul, Ankara</b></div>
+      <div class="ozetSatir"><span>Reklam</span><b id="oReklam">1 set · 1 reklam</b></div>
+      <div class="ozetSatir"><span>Yerleşim</span><b id="oYer">Otomatik</b></div>
+    </div>
+    <div class="kart ozetKart">
+      <h3>Yayından önce</h3>
+      <ul class="eksikler" id="eksikler"></ul>
+    </div>
+  </aside>
+</main>
+
+<script>
+// Boyut sırası sabit: dikeyden yataya. Kullanıcı hangi kutunun boş olduğunu
+// her sette aynı yerde görür.
+const ORANLAR = [
+  {k:'9:16', sinif:'o-916', olcu:'1080 × 1920', yer:'Hikâye ve Reels'},
+  {k:'4:5', sinif:'o-45', olcu:'1080 × 1350', yer:'Facebook ve Instagram akışı'},
+  {k:'1:1', sinif:'o-11', olcu:'1200 × 1200', yer:'Kalan her yer'},
+  {k:'1.91:1', sinif:'o-191', olcu:'1200 × 628', yer:'Sağ sütun ve arama sonuçları'}
+];
+const EN_COK_SET = 5;
+const g = (ad, k) => ({ad, k});
+const HALLER = {
+  tam:  {sets:[{ '9:16':g('villa-dikey.jpg','9:16'), '4:5':g('villa-akis.jpg','4:5'), '1:1':g('villa-kare.jpg','1:1'), '1.91:1':g('villa-yatay.jpg','1.91:1') }], hata:false},
+  eksik:{sets:[{ '9:16':null, '4:5':g('villa-akis.jpg','4:5'), '1:1':g('villa-kare.jpg','1:1'), '1.91:1':g('villa-yatay.jpg','1.91:1') }], hata:false},
+  iki:  {sets:[{ '9:16':g('villa-dikey.jpg','9:16'), '4:5':g('villa-akis.jpg','4:5'), '1:1':g('villa-kare.jpg','1:1'), '1.91:1':g('villa-yatay.jpg','1.91:1') },
+               { '9:16':null, '4:5':g('havuz-akis.jpg','4:5'), '1:1':g('havuz-kare.jpg','1:1'), '1.91:1':null }], hata:false},
+  hata: {sets:[{ '9:16':null, '4:5':g('villa-akis.jpg','4:5'), '1:1':g('villa-kare.jpg','1:1'), '1.91:1':g('villa-yatay.jpg','1.91:1') }], hata:true}
+};
+let durum = klon(HALLER.tam);
+function klon(o){ return JSON.parse(JSON.stringify(o)); }
+
+// Bir setin hangi yerleşimleri kapattığı. Kural kullanıcı kararından:
+// 9:16 yoksa Hikâye/Reels kapanır; 4:5 ve 1.91:1 eksikse 1:1 onların yerine
+// geçer; 1:1 de yoksa onların düştüğü yer kapanır.
+function kapananlar(s){
+  const k = [];
+  if (!s['9:16']) k.push('Hikâye ve Reels');
+  if (!s['4:5'] && !s['1:1']) k.push('Akış');
+  if (!s['1.91:1'] && !s['1:1']) k.push('Sağ sütun ve arama sonuçları');
+  if (!s['1:1']) k.push('Kalan yerler');
+  return k;
+}
+// Yerleşim reklam seti düzeyinde: bir sette kapalı olan yer hepsinde kapalı.
+function ortakKapananlar(){
+  const t = new Set();
+  durum.sets.forEach(s => kapananlar(s).forEach(x => t.add(x)));
+  return [...t];
+}
+function yerMetni(s, o){
+  if (o.k === '1:1'){
+    const ek = [];
+    if (!s['4:5']) ek.push('akış');
+    if (!s['1.91:1']) ek.push('sağ sütun, arama');
+    return ek.length ? 'Kalan her yer + ' + ek.join(', ') : o.yer;
+  }
+  return o.yer;
+}
+function boyutSayisi(s){ return ORANLAR.filter(o => s[o.k]).length; }
+
+const $ = id => document.getElementById(id);
+
+function ciz(){
+  const kapaliOrtak = ortakKapananlar();
+  const coklu = durum.sets.length > 1;
+  $('setler').innerHTML = durum.sets.map((s, i) => setHtml(s, i, kapaliOrtak, coklu)).join('');
+  $('setSayaci').textContent = `${durum.sets.length} / ${EN_COK_SET} set`;
+  $('yeniSet').disabled = durum.sets.length >= EN_COK_SET;
+  $('yeniSet').textContent = durum.sets.length >= EN_COK_SET ? 'En çok 5 set eklenebilir' : '+ Yeni set (başka bir fikir)';
+  $('hata').hidden = !durum.hata;
+
+  // Ortak uyarı yalnız birden çok sette ve sebep başka bir setteyse anlamlı:
+  // tek sette aynı bilgi zaten set kartının altında yazıyor.
+  const sebepSet = durum.sets.map((s, i) => kapananlar(s).length ? i + 1 : null).filter(Boolean);
+  if (coklu && kapaliOrtak.length){
+    const eksikBoyut = kapaliOrtak.includes('Hikâye ve Reels') ? '9:16' : 'bir boyut';
+    $('ortakMetin').innerHTML = `<b>Setlerden birinde ${eksikBoyut} yok; reklam setinde ${kapaliOrtak.join(', ')} kapalı.</b> Yerleşim bütün setlerde ortak olduğu için en az boyutu olan set belirler. Açmak için Set ${sebepSet.join(', ')} içine eksik boyutu ekle.`;
+    $('ortak').hidden = false;
+  } else $('ortak').hidden = true;
+
+  // Özet
+  const n = durum.sets.length;
+  $('oReklam').textContent = `${n} set · ${n} reklam`;
+  const oYer = $('oYer');
+  if (kapaliOrtak.length){ oYer.textContent = kapaliOrtak.join(', ') + ' kapalı'; oYer.className = 'uyar'; }
+  else if (durum.sets.every(s => boyutSayisi(s) === 4)){ oYer.textContent = 'Otomatik'; oYer.className = ''; }
+  else { oYer.textContent = 'Hepsi açık'; oYer.className = ''; }
+  $('oPlt').textContent = document.body.dataset.google === '1' ? 'Meta + Google' : 'Meta';
+
+  const liste = [];
+  liste.push(['tamam', `Görseller: ${n} set`]);
+  if (kapaliOrtak.length) liste.push(['eksik', `${kapaliOrtak.join(', ')} kapalı · boyut ekle`]);
+  if (durum.hata) liste.push(['eksik', '1 görsel kullanılamadı (3:2)']);
+  liste.push(['tamam', 'Metin']);
+  liste.push(['eksik', 'Bütçe']);
+  $('eksikler').innerHTML = liste.map(([d, m]) => `<li class="${d}"><button><i></i>${m}</button></li>`).join('');
+}
+
+function setHtml(s, i, kapaliOrtak, coklu){
+  const kendi = kapananlar(s);
+  const tam = boyutSayisi(s) === 4;
+  const yuvalar = ORANLAR.map(o => {
+    const gv = s[o.k];
+    if (!gv){
+      // Boşluk bir yerleşimi kapatıyor mu: 9:16 ve 1:1 her zaman; 4:5 ve
+      // 1.91:1 yalnız onların yerine geçecek 1:1 de yoksa.
+      const kapaliMi = o.k === '9:16' || o.k === '1:1' || !s['1:1'];
+      const kapaliAd = {'9:16':'Hikâye ve Reels', '4:5':'Akış', '1:1':'Kalan yerler', '1.91:1':'Sağ sütun ve arama'}[o.k];
+      const altYazi = kapaliMi
+        ? `<span class="yer kapaliYazi">${kapaliAd} kapalı kalacak</span>`
+        : `<span class="yer">${o.k === '4:5' ? 'Akışta 1:1 kullanılır' : 'Bu yerlerde 1:1 kullanılır'}</span>`;
+      return `<div class="yuva bos ${kapaliMi ? 'kapali' : ''}" data-set="${i}">
+        <button class="cerceve" aria-label="Set ${i+1} için ${o.k} ekle"><span class="ekle">+ ${o.k} ekle<span>${o.olcu}</span></span></button>
+        <div class="yuvaAlt"><b>${o.k}</b>${altYazi}</div></div>`;
+    }
+    // Bu set tam olsa bile ortak kapanış onun görselini kullanılmaz yapabilir;
+    // sessizce durmasın, söylensin.
+    const kullanilmiyor = coklu && o.k === '9:16' && kapaliOrtak.includes('Hikâye ve Reels');
+    const digerSetler = durum.sets.map((_, j) => j).filter(j => j !== i);
+    const menu = `
+      <div class="menu" role="menu" data-menu>
+        <div class="mBaslik">Sete taşı</div>
+        ${digerSetler.map(j => `<button role="menuitem" data-tasi="${i}|${o.k}|${j}">Set ${j+1}${durum.sets[j][o.k] ? `<small>${o.k} var, yer değiştirirler</small>` : ''}</button>`).join('')}
+        <button role="menuitem" data-tasi="${i}|${o.k}|yeni" ${durum.sets.length >= EN_COK_SET ? 'disabled' : ''}>Yeni set${durum.sets.length >= EN_COK_SET ? '<small>En çok 5 set</small>' : ''}</button>
+        <hr><button role="menuitem" data-kaldir="${i}|${o.k}">Kaldır</button>
+      </div>`;
+    return `<div class="yuva dolu" data-set="${i}">
+      <div class="cerceve" draggable="true" data-surukle="${i}|${o.k}" aria-label="${gv.ad}, ${o.k}">
+        <div class="gorsel ${o.sinif} ${kullanilmiyor ? 'solgun' : ''}">${o.k}</div>
+        <button class="menuDugme" aria-label="${gv.ad} için seçenekler" aria-haspopup="menu" aria-expanded="false" data-menu-ac>⋯</button>
+        ${menu}
+      </div>
+      <div class="yuvaAlt"><b>${o.k}</b>
+        ${kullanilmiyor ? '<span class="yer kullanilmiyor">Şimdilik kullanılmıyor</span>' : `<span class="yer">${yerMetni(s, o)}</span>`}
+        <small>${gv.ad} · ${o.olcu}</small></div>
+    </div>`;
+  }).join('');
+
+  let alt;
+  if (tam) alt = `<span class="nokta"></span><span><b>4 boyut tam · yerleşimler otomatik</b><br><span class="acik">Meta yerleşimleri kendisi seçer (otomatik yerleşim).</span></span>`;
+  else if (kendi.length) alt = `<span class="nokta eksik"></span><span><b>${boyutSayisi(s)} / 4 boyut · ${kendi.join(', ')} kapalı</b><br><span class="acik">${kendi.includes('Hikâye ve Reels') ? '9:16 eklersen Hikâye ve Reels açılır.' : 'Eksik boyutu eklersen açılır.'}</span></span>${kendi.includes('Hikâye ve Reels') ? `<button class="metinDugme sag">+ 9:16 ekle</button>` : ''}`;
+  else alt = `<span class="nokta"></span><span><b>${boyutSayisi(s)} / 4 boyut · bütün yerler açık</b><br><span class="acik">Eksik boyutun yerinde 1:1 gösterilir.</span></span>`;
+
+  return `<div class="set" data-set-kart="${i}">
+    <div class="setUst"><h3>Set ${i+1}</h3><span class="rozet">1 reklam</span>
+      <div class="sag">${durum.sets.length > 1 ? `<button class="metinDugme" data-set-sil="${i}">Seti sil</button>` : ''}</div></div>
+    <div class="yuvalar">${yuvalar}</div>
+    <div class="setAlt">${alt}</div>
+    <div class="googleNot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>Google Arama reklamı metinle gösterilir; görseller yalnız Meta'da kullanılır.</div>
+  </div>`;
+}
+
+// ── Taşıma: hedef sette aynı oran varsa yer değiştirir; boşalan set silinir.
+function tasi(kaynak, oran, hedef){
+  const gv = durum.sets[kaynak][oran];
+  if (hedef === 'yeni'){
+    if (durum.sets.length >= EN_COK_SET) return;
+    durum.sets.push({'9:16':null,'4:5':null,'1:1':null,'1.91:1':null});
+    hedef = durum.sets.length - 1;
+  }
+  hedef = Number(hedef);
+  if (hedef === kaynak) return;
+  const eski = durum.sets[hedef][oran];
+  durum.sets[hedef][oran] = gv;
+  durum.sets[kaynak][oran] = eski;
+  temizle();
+}
+function temizle(){ durum.sets = durum.sets.filter(s => boyutSayisi(s) > 0); if (!durum.sets.length) durum.sets = [{'9:16':null,'4:5':null,'1:1':null,'1.91:1':null}]; ciz(); }
+
+function menuleriKapat(){ document.querySelectorAll('[data-menu].acik').forEach(m => { m.classList.remove('acik'); m.parentElement.querySelector('[data-menu-ac]').setAttribute('aria-expanded','false'); }); }
+
+document.addEventListener('click', e => {
+  const ac = e.target.closest('[data-menu-ac]');
+  if (ac){
+    const m = ac.parentElement.querySelector('[data-menu]');
+    const aciktiMi = m.classList.contains('acik');
+    menuleriKapat();
+    if (!aciktiMi){ m.classList.add('acik'); ac.setAttribute('aria-expanded','true'); m.querySelector('button:not([disabled])')?.focus(); }
+    return;
+  }
+  const t = e.target.closest('[data-tasi]');
+  if (t){ const [k, o, h] = t.dataset.tasi.split('|'); tasi(Number(k), o, h); return; }
+  const kd = e.target.closest('[data-kaldir]');
+  if (kd){ const [k, o] = kd.dataset.kaldir.split('|'); durum.sets[k][o] = null; temizle(); return; }
+  const sil = e.target.closest('[data-set-sil]');
+  if (sil){ durum.sets.splice(Number(sil.dataset.setSil), 1); temizle(); return; }
+  if (!e.target.closest('[data-menu]')) menuleriKapat();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') menuleriKapat(); });
+
+// ── Sürükle bırak (HTML5). Klavye yolu "⋯ > Sete taşı" menüsü.
+let suruklenen = null;
+document.addEventListener('dragstart', e => {
+  const c = e.target.closest('[data-surukle]');
+  if (!c) return;
+  suruklenen = c.dataset.surukle;
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', suruklenen);
+});
+function hedefBul(el){ return el.closest('[data-set-kart]') || el.closest('#yeniSet'); }
+document.addEventListener('dragover', e => {
+  if (!suruklenen) return;
+  const h = hedefBul(e.target);
+  document.querySelectorAll('.uzerinde').forEach(x => x !== h && x.classList.remove('uzerinde'));
+  if (h && !(h.id === 'yeniSet' && h.disabled)){ e.preventDefault(); h.classList.add('uzerinde'); }
+});
+document.addEventListener('drop', e => {
+  if (!suruklenen) return;
+  const h = hedefBul(e.target);
+  e.preventDefault();
+  const [k, o] = suruklenen.split('|');
+  if (h) tasi(Number(k), o, h.id === 'yeniSet' ? 'yeni' : h.dataset.setKart);
+  suruklenen = null;
+  document.querySelectorAll('.uzerinde').forEach(x => x.classList.remove('uzerinde'));
+});
+document.addEventListener('dragend', () => { suruklenen = null; document.querySelectorAll('.uzerinde').forEach(x => x.classList.remove('uzerinde')); });
+
+$('yeniSet').addEventListener('click', () => {
+  if (durum.sets.length >= EN_COK_SET) return;
+  // Gerçek ekranda dosya seçici açılır; taslakta boş set eklenir.
+  durum.sets.push({'9:16':null,'4:5':null,'1:1':null,'1.91:1':null});
+  ciz();
+});
+$('hataKapat').addEventListener('click', () => { durum.hata = false; ciz(); });
+$('haller').addEventListener('click', e => {
+  const b = e.target.closest('[data-hal]');
+  if (!b) return;
+  document.querySelectorAll('#haller button').forEach(x => x.setAttribute('aria-pressed', x === b ? 'true' : 'false'));
+  durum = klon(HALLER[b.dataset.hal]);
+  ciz();
+});
+$('googleAcik').addEventListener('change', e => { document.body.dataset.google = e.target.checked ? '1' : '0'; ciz(); });
+
+ciz();
+</script>
+</body>
+</html>

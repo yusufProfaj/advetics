@@ -26,7 +26,9 @@ export type KarsilastirmaTuru =
   /** Meta'nın eklediği DEĞERİ false/null olan ek anahtarlar kabul (canlı tur 1, N-07). */
   | 'ek_false_kabul'
   /** Geçmiş saat gönderildiyse Meta kurulum anını yazıyor (N-09). */
-  | 'baslangic';
+  | 'baslangic'
+  /** Banner seti: yerleşime göre görsel gövdesi (N-13, anlamca kıyas). */
+  | 'varlik_akisi';
 export type AltKumeYonu = 'donen_icinde_gonderilen' | 'gonderilen_icinde_donen';
 
 export interface BeklenenYanki {
@@ -63,6 +65,14 @@ const KABUL_EDILEMEZ: ReadonlyArray<[string, string]> = [
   ['targeting.genders', 'Cinsiyet'],
   ['targeting.excluded_', 'Hariç tutulanlar'],
   ['targeting.targeting_automation', 'Otomatik kitle'],
+  // Elle yerleşim yalnız eksik boyutta: başka bir yerleşimin açık dönmesi,
+  // görseli olmayan yerde (kırpılarak) gösterim demek.
+  ['targeting.publisher_platforms', 'Yerleşim'],
+  ['targeting.facebook_positions', 'Yerleşim'],
+  ['targeting.instagram_positions', 'Yerleşim'],
+  ['targeting.messenger_positions', 'Yerleşim'],
+  ['targeting.audience_network_positions', 'Yerleşim'],
+  ['asset_feed_spec', 'Görseller ve yerleşim kuralları'],
   ['attribution_spec', 'Sonuç sayma kuralı'],
   ['status', 'Reklamın durumu'],
   ['degrees_of_freedom_spec', "Meta'nın otomatik kreatif özelliği"],
@@ -122,6 +132,7 @@ const BUTUN_ALANLAR = new Set([
   'questions',
   'custom_disclaimer',
   'privacy_policy',
+  'asset_feed_spec',
 ]);
 
 const YER_TUTUCU = /^\{[a-z_]+(?::\d+)?\}$/;
@@ -167,8 +178,10 @@ export function beklenenYankilar(govdeler: MetaGovdesi[]): BeklenenYanki[] {
           y.karsilastirma = 'ek_false_kabul';
         } else if (yol === 'start_time') {
           y.karsilastirma = 'baslangic';
-        } else if (yol === 'special_ad_categories' || yol === 'special_ad_category_country') {
+        } else if (yol === 'special_ad_categories' || yol === 'special_ad_category_country' || YERLESIM_YOLLARI.has(yol)) {
           y.karsilastirma = 'esit_kume';
+        } else if (yol === 'asset_feed_spec') {
+          y.karsilastirma = 'varlik_akisi';
         } else if (yol === 'targeting.targeting_automation.advantage_audience' && kisitli && v === 1) {
           y.karsilastirma = 'normallestir';
           y.normallestirme = {
@@ -351,6 +364,54 @@ function baskaYayinKreatifi(yankilar: BeklenenYanki[], govde: string, nesne: Rec
   return etiketAdlari(nesne.adlabels).some((ad) => ad.startsWith(YAYIN_ETIKETI_ONEKI) && !gonderilen.has(ad));
 }
 
+/** Elle yerleşim listeleri: Meta sırayı değiştirebilir, küme olarak kıyaslanır. */
+const YERLESIM_YOLLARI = new Set([
+  'targeting.publisher_platforms',
+  'targeting.facebook_positions',
+  'targeting.instagram_positions',
+  'targeting.messenger_positions',
+  'targeting.audience_network_positions',
+]);
+
+/**
+ * YERLEŞİME GÖRE GÖRSEL ANLAMCA KIYASLANIR (N-13). Canlıda geri okunması
+ * HENÜZ ÖLÇÜLMEDİ; kural bilinenden kuruldu ve GÜVENLİ YÖNDE: gönderdiğimiz
+ * her anlamlı parça aynı dönmeli, fazlası (Meta'nın eklediği anahtar)
+ * görmezden geliniyor. Etiketler ADLA (N-11: Meta kimlik ekliyor), diziler
+ * sırasız. Kural seti öncelik sırasıyla: ilk eşleşen kazandığı için kuralların
+ * yer değiştirmesi gösterimi değiştirir ve fark sayılır.
+ */
+function varlikAkisiAyni(gonderilen: unknown, donen: unknown): boolean {
+  if (!gonderilen || !donen || typeof gonderilen !== 'object' || typeof donen !== 'object') return false;
+  const g = gonderilen as Record<string, unknown>;
+  const d = donen as Record<string, unknown>;
+  const ad = (v: unknown) => String((v as { name?: unknown } | null)?.name ?? '');
+  const etiketler = (v: unknown) => etiketAdlari((v as { adlabels?: unknown } | null)?.adlabels).sort().join(',');
+  const oge = (anahtar: string) => (v: unknown) => `${String((v as Record<string, unknown>)?.[anahtar] ?? '')}|${etiketler(v)}`;
+  const kume = (v: unknown, f: (x: unknown) => string) => (Array.isArray(v) ? v.map(f).sort() : []);
+  const ayniKume = (a: string[], b: string[]) => a.length === b.length && a.every((x, i) => x === b[i]);
+  const ogeAlanlari: Record<string, string> = { images: 'hash', bodies: 'text', titles: 'text', descriptions: 'text', link_urls: 'website_url' };
+  for (const [alan, anahtar] of Object.entries(ogeAlanlari)) {
+    if (!(alan in g)) continue;
+    if (!ayniKume(kume(g[alan], oge(anahtar)), kume(d[alan], oge(anahtar)))) return false;
+  }
+  for (const alan of ['call_to_action_types', 'ad_formats']) {
+    if (!(alan in g)) continue;
+    if (!ayniKume(kume(g[alan], String), kume(d[alan], String))) return false;
+  }
+  const kural = (r: unknown) => {
+    const o = (r ?? {}) as Record<string, unknown>;
+    const spec = Object.fromEntries(
+      Object.entries((o.customization_spec ?? {}) as Record<string, unknown>).map(([k, v]) => [k, Array.isArray(v) ? [...v].map(String).sort() : v]),
+    );
+    const etiketAlanlari = ['image_label', 'body_label', 'title_label', 'link_url_label', 'description_label'].filter((k) => k in o);
+    return kanonik({ spec, ...Object.fromEntries(etiketAlanlari.map((k) => [k, ad(o[k])])) });
+  };
+  const sirali = (v: unknown) =>
+    (Array.isArray(v) ? [...v] : []).sort((a, b) => Number((a as { priority?: number }).priority ?? 0) - Number((b as { priority?: number }).priority ?? 0)).map(kural);
+  return ayniKume(sirali(g.asset_customization_rules), sirali(d.asset_customization_rules));
+}
+
 /** `ic`in her öğesi `dis`ta var mı (kovalar ve öğeler kanonik). */
 function kapsar(dis: unknown, ic: unknown): boolean {
   if (Array.isArray(dis) && Array.isArray(ic)) {
@@ -408,6 +469,9 @@ export function geriOkumaKarsilastir(
         break;
       case 'esit_kume':
         ayni = kumeAyni(y.gonderilen, donen);
+        break;
+      case 'varlik_akisi':
+        ayni = varlikAkisiAyni(y.gonderilen, donen);
         break;
       case 'alt_kume': {
         if (y.alanYolu === 'adlabels') {

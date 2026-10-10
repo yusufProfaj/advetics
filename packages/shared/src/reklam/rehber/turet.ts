@@ -22,9 +22,17 @@ import { REHBER_AMACLARI, type GoogleKurgu, type GoogleUlasma } from './amaclar'
 import { VARSAYILAN_META_PAYI, type RehberAlanlari } from './alanlar';
 import { butceBol } from './butce';
 import { METIN_SINIRLARI } from './metin';
+import { ortakPlan, setlereAyir, type GorselOrani, type SetPlani } from '../banner-seti';
 
-/** Meta taslak şeması en çok 5 kavram (görsel × metin) taşıyor. */
+/**
+ * Meta taslak şeması en çok 5 kavram taşıyor. Kavram artık bir BANNER SETİ
+ * (aynı tasarımın boyutları, `banner-seti.ts`) ya da bir video; yani sınır
+ * görsel değil FİKİR sayısı.
+ */
 export const META_EN_COK_GORSEL = 5;
+
+/** Setin varsayılan görseli (kalan yerleşimler): kare en geniş oturan oran. */
+const VARSAYILAN_SIRASI: readonly GorselOrani[] = ['kare', 'dik45', 'yatay', 'dikey'];
 
 export type TuretmeSonucu<T> = { tur: 'tamam'; deger: T } | { tur: 'ret'; kodlar: string[] };
 
@@ -42,7 +50,33 @@ const turetilmis = <T>(deger: T, zaman: string): AlanDegeri<T> => ({ deger, kayn
  * "Google 500 ₺" derken Google'a 250 ₺ gönderiyordu. Eksik listesi ve pay
  * çubuğu açık kümeyle bölüyor; türetme de aynısını yapmak zorunda.
  */
-export function rehberdenMeta(a: RehberAlanlari, acik: { meta: boolean; google: boolean }, paraBirimi: string, zaman: string): TuretmeSonucu<TaslakAlanlari> {
+/**
+ * Rehberin ORTAK yerleşim planı — derleyicinin `yerlesimPlani`yle aynı
+ * kararın rehber girdisinden okunuşu (karar tablosu ve ekran bunu gösterir).
+ * `null`: video var, görsel yok ya da bir görselin oranı bilinmiyor
+ * (derleyici o hâlde yerleşimi otomatik bırakır ya da durur).
+ */
+export function rehberYerlesimPlani(a: RehberAlanlari, oranlar: ReadonlyMap<string, GorselOrani | null>): SetPlani | null {
+  const medya = a.medya?.deger ?? [];
+  if (medya.length === 0 || medya.some((x) => x.kapakVarlikId)) return null;
+  const ayrim = setlereAyir(medya, oranlar);
+  if (ayrim.taninmayan.length || ayrim.cakisan.length) return null;
+  return ortakPlan(ayrim.setler.map((s) => s.map((x) => x.oran)));
+}
+
+/**
+ * `oranlar`: medyadaki görsellerin oranı, SUNUCUDA varlığın ölçüsünden
+ * (`oranBul`). Görseller sete ayrılıyor; oran bilinmeyen görsel sete girmez
+ * ve türetme RET verir — sessizce atılan görsel, kullanıcının "yükledim"
+ * dediği boyutun reklamda olmaması demek.
+ */
+export function rehberdenMeta(
+  a: RehberAlanlari,
+  acik: { meta: boolean; google: boolean },
+  paraBirimi: string,
+  zaman: string,
+  oranlar: ReadonlyMap<string, GorselOrani | null>,
+): TuretmeSonucu<TaslakAlanlari> {
   const kodlar: string[] = [];
   const amac = a.amac?.deger;
   const m = a.metin?.deger;
@@ -56,16 +90,32 @@ export function rehberdenMeta(a: RehberAlanlari, acik: { meta: boolean; google: 
   const pay = butceBol(BigInt(butce.micros), acik, a.metaPayiYuzde?.deger ?? VARSAYILAN_META_PAYI, paraBirimi);
   const basliklar = m.basliklar.map((s) => s.trim()).filter(Boolean).slice(0, METIN_SINIRLARI.metaBaslikSayisi);
   const aciklama = m.aciklamalar.map((s) => s.trim()).find(Boolean);
-  const medya = (a.medya?.deger ?? []).slice(0, META_EN_COK_GORSEL);
-  // Her görsel bir kavram; başlık sırayla dağıtılır. Aynı başlığı her görsele
-  // yazmak Meta'nın kreatif çeşitliliğini boşa harcar, metin ise TEK (marka
-  // sesi ve yasal uyarı her kavramda aynı kalmalı).
-  const kavramlar = medya.map((x, i) => ({
-    varlikId: x.varlikId,
+  const medya = a.medya?.deger ?? [];
+  // VİDEO kendi başına bir fikir; görseller SETE ayrılır (bir set = bir reklam).
+  const videolar = medya.filter((x) => x.kapakVarlikId);
+  const ayrim = setlereAyir(medya.filter((x) => !x.kapakVarlikId), oranlar);
+  if (ayrim.taninmayan.length) return { tur: 'ret', kodlar: ['GORSEL-ORAN'] };
+  if (ayrim.cakisan.length) return { tur: 'ret', kodlar: ['GORSEL-SET-CAKISMA'] };
+  const fikirler = [
+    ...ayrim.setler.map((set) => {
+      const varsayilan = VARSAYILAN_SIRASI.map((o) => set.find((x) => x.oran === o)).find(Boolean)!;
+      return {
+        varlikId: varsayilan.varlikId,
+        ...(set.length > 1 ? { setGorselleri: set.map((x) => ({ varlikId: x.varlikId, oran: x.oran })) } : {}),
+      };
+    }),
+    ...videolar.map((x) => ({ varlikId: x.varlikId, kapakVarlikId: x.kapakVarlikId })),
+  ];
+  // SESSİZ KESME YOK: altıncı fikri atmak yerine ret; ekran sayıyı söylüyor.
+  if (fikirler.length > META_EN_COK_GORSEL) return { tur: 'ret', kodlar: ['GORSEL-SET-SAYI'] };
+  // Başlık fikirler arasında sırayla dağıtılır. Aynı başlığı her fikre yazmak
+  // Meta'nın kreatif çeşitliliğini boşa harcar, metin ise TEK (marka sesi ve
+  // yasal uyarı her fikirde aynı kalmalı).
+  const kavramlar = fikirler.map((f, i) => ({
+    ...f,
     baslik: basliklar.length ? (basliklar[i % basliklar.length] as string) : '',
     metin: m.anaMetin,
     ...(aciklama ? { aciklama } : {}),
-    ...(x.kapakVarlikId ? { kapakVarlikId: x.kapakVarlikId } : {}),
   }));
 
   const t: TaslakAlanlari = {

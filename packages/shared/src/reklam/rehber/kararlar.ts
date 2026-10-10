@@ -12,6 +12,7 @@
  * "Görüntülü Reklam Ağı kapalı" deyip gövde `targetContentNetwork: true`
  * gönderirse ekran yalan söyler — bu depoda en pahalı hata türü.
  */
+import { YERLESIM_GRUPLARI, type SetPlani } from '../banner-seti';
 import { REHBER_AMACLARI, type RehberAmacKodu, type RehberPlatformu } from './amaclar';
 import type { GoogleTeklif } from './turet';
 
@@ -33,7 +34,25 @@ export interface KararSatiri {
  * kimliği yok ve Meta reklamı Instagram'da HİÇ göstermez (derle.ts). Tablonun
  * "Instagram ve Facebook" demesi o durumda yalan olurdu (Ajan 4, BULGU-3).
  */
-export function kararTablosu(amac: RehberAmacKodu, acik: Record<RehberPlatformu, boolean>, googleTeklif: GoogleTeklif, instagramVar: boolean): KararSatiri[] {
+/**
+ * `yerlesim`: rehberin ortak yerleşim planı (`rehberYerlesimPlani`), yani
+ * derleyicinin kuracağı gövdeyle AYNI karar. `null` = otomatik yerleşim
+ * (video var ya da oran bilinmiyor). Tablo "otomatik" derken gövde yerleşim
+ * yazarsa söz yalan olur; `ajan4-denetim.spec` ikisini karşılaştırıyor.
+ */
+export function kararTablosu(
+  amac: RehberAmacKodu,
+  acik: Record<RehberPlatformu, boolean>,
+  googleTeklif: GoogleTeklif,
+  instagramVar: boolean,
+  yerlesim: SetPlani | null = null,
+): KararSatiri[] {
+  const otomatik = !yerlesim || yerlesim.otomatik;
+  const yerlesimMetni = otomatik ? 'otomatik yerleşim' : 'görsel boyutlarına göre seçilen yerleşimler';
+  const kapaliNotu =
+    !otomatik && yerlesim!.kapanan.length
+      ? `Görseli olmadığı için kapalı: ${yerlesim!.kapanan.map((x) => YERLESIM_GRUPLARI[x].etiket).join(', ')} · `
+      : '';
   const t = REHBER_AMACLARI[amac];
   const g = acik.google && t.google.kurgu !== null ? t.google : null;
   const ty = g?.kurgu === 'TALEP_YARATMA_VIDEO' || g?.kurgu === 'TALEP_YARATMA_GORSEL';
@@ -56,8 +75,8 @@ export function kararTablosu(amac: RehberAmacKodu, acik: Record<RehberPlatformu,
       konu: 'Nerede gösterilir',
       meta: m
         ? instagramVar
-          ? hucre('Instagram ve Facebook, otomatik yerleşim', 'Çok reklamverenli birim kapalı')
-          : hucre('Yalnız Facebook, otomatik yerleşim', "Instagram hesabı seçilmedi, Instagram'da gösterilmez · Çok reklamverenli birim kapalı")
+          ? hucre(`Instagram ve Facebook, ${yerlesimMetni}`, `${kapaliNotu}Çok reklamverenli birim kapalı`)
+          : hucre(`Yalnız Facebook, ${yerlesimMetni}`, `Instagram hesabı seçilmedi, Instagram'da gösterilmez · ${kapaliNotu}Çok reklamverenli birim kapalı`)
         : null,
       google: g ? (ty ? hucre(g.nerede) : hucre('Yalnız Google Arama', 'Arama ortakları ve Görüntülü Reklam Ağı kapalı')) : null,
     },

@@ -4,6 +4,8 @@ import {
   DERLEYICI_SURUMU,
   PROVA_TAZELIK_MS,
   OZEL_KATEGORILER,
+  ORAN_ETIKETI,
+  oranBul,
   beklenenYankilar,
   derleMeta,
   taslakEksikleri,
@@ -257,21 +259,33 @@ export async function taslakDerle(
   const kavramlar = alanlar.kavramlar!.deger;
   // VARLIK TÜRLERİ veritabanından: görsel yerine video ya da kapak yerine
   // video gelirse Meta ya reddeder ya da kapaksız reklam kurar.
-  const kimlikler = [...new Set(kavramlar.flatMap((k) => (k.kapakVarlikId ? [k.varlikId, k.kapakVarlikId] : [k.varlikId])))];
-  const turler = new Map(
-    (
-      await tx((x) =>
-        x.$queryRaw<Array<{ id: string; kind: string }>>(Prisma.sql`
-          SELECT id::text, kind FROM assets WHERE client_id = ${t.client_id}::uuid AND id = ANY(${kimlikler}::uuid[])`),
-      )
-    ).map((r) => [r.id, r.kind]),
+  const kimlikler = [
+    ...new Set(
+      kavramlar.flatMap((k) => [k.varlikId, ...(k.kapakVarlikId ? [k.kapakVarlikId] : []), ...(k.setGorselleri ?? []).map((x) => x.varlikId)]),
+    ),
+  ];
+  const varliklar = await tx((x) =>
+    x.$queryRaw<Array<{ id: string; kind: string; width: number | null; height: number | null }>>(Prisma.sql`
+      SELECT id::text, kind, width, height FROM assets WHERE client_id = ${t.client_id}::uuid AND id = ANY(${kimlikler}::uuid[])`),
   );
+  const turler = new Map(varliklar.map((r) => [r.id, r.kind]));
+  // ORAN SUNUCUDA, ÖLÇÜDEN: taslaktaki oran istemciden ya da eski bir
+  // türetmeden gelmiş olabilir. Yerleşim kararı (eksik boyutu kapatmak) buna
+  // dayanıyor; yanlış oran 9:16 görseli akışa, 1.91:1'i Reels'e götürür.
+  const oranlar = new Map(varliklar.map((r) => [r.id, r.kind === 'image' ? oranBul(r.width, r.height) : null]));
   for (const [i, k] of kavramlar.entries()) {
     const tur = turler.get(k.varlikId);
     if (!tur) retler.push({ kod: 'KRT-GORSEL', mesaj: `Fikir ${i + 1}: medya bu workspace’in arşivinde değil.` });
     else if (k.kapakVarlikId && tur !== 'video') retler.push({ kod: 'KRT-VIDEO', mesaj: `Fikir ${i + 1}: kapak verilmiş ama medya video değil.` });
     else if (!k.kapakVarlikId && tur === 'video') retler.push({ kod: 'KRT-VIDEO', mesaj: `Fikir ${i + 1}: video için kapak görseli gerekli.` });
     if (k.kapakVarlikId && turler.get(k.kapakVarlikId) !== 'image') retler.push({ kod: 'KRT-VIDEO', mesaj: `Fikir ${i + 1}: kapak bir görsel olmalı.` });
+    for (const sg of k.setGorselleri ?? []) {
+      const gercek = oranlar.get(sg.varlikId) ?? null;
+      if (turler.get(sg.varlikId) !== 'image') retler.push({ kod: 'KRT-SET', mesaj: `Fikir ${i + 1}: setteki bir görsel bu workspace’in arşivinde değil.` });
+      else if (gercek !== sg.oran) {
+        retler.push({ kod: 'KRT-ORAN', mesaj: `Fikir ${i + 1}: setteki bir görselin boyutu ${gercek ? ORAN_ETIKETI[gercek] : 'tanınmayan bir oran'}, ${ORAN_ETIKETI[sg.oran]} değil.` });
+      }
+    }
   }
   if (retler.length > 0) return { tur: 'ret', retler };
   const takvim = alanlar.takvim!.deger;
@@ -298,11 +312,20 @@ export async function taslakDerle(
     },
     atif: a!.atif,
     // Görsel hash'i yayın sırasında yüklenip yerine konur.
-    kavramlar: kavramlar.map((k) =>
-      k.kapakVarlikId
-        ? { gorselHash: `{medya:${k.kapakVarlikId}}`, videoId: `{video:${k.varlikId}}`, baslik: k.baslik, metin: k.metin, aciklama: k.aciklama }
-        : { gorselHash: `{medya:${k.varlikId}}`, baslik: k.baslik, metin: k.metin, aciklama: k.aciklama },
-    ),
+    kavramlar: kavramlar.map((k) => {
+      if (k.kapakVarlikId) {
+        return { gorselHash: `{medya:${k.kapakVarlikId}}`, videoId: `{video:${k.varlikId}}`, baslik: k.baslik, metin: k.metin, aciklama: k.aciklama };
+      }
+      const oran = oranlar.get(k.varlikId) ?? undefined;
+      return {
+        gorselHash: `{medya:${k.varlikId}}`,
+        baslik: k.baslik,
+        metin: k.metin,
+        aciklama: k.aciklama,
+        ...(oran ? { oran } : {}),
+        ...(k.setGorselleri ? { setGorselleri: k.setGorselleri.map((x) => ({ oran: x.oran, gorselHash: `{medya:${x.varlikId}}` })) } : {}),
+      };
+    }),
     hedefAdres: alanlar.hedefAdres?.deger ?? null,
     formId: null,
     urlEtiketleri: null,
@@ -315,7 +338,7 @@ export async function taslakDerle(
     derleme,
     hesapId: hesapId!,
     atif: a!.atif as AtifStandardi,
-    medya: [...new Set(kavramlar.map((k) => k.kapakVarlikId ?? k.varlikId))],
+    medya: [...new Set(kavramlar.flatMap((k) => [k.kapakVarlikId ?? k.varlikId, ...(k.setGorselleri ?? []).map((x) => x.varlikId)]))],
     videolar: [...new Set(kavramlar.filter((k) => k.kapakVarlikId).map((k) => k.varlikId))],
   };
 }

@@ -22,6 +22,7 @@ import { METIN_SINIRLARI, karakterSayisi } from './metin';
 import { META_EN_COK_GORSEL } from './turet';
 import { butceBol, gunlukEsdeger } from './butce';
 import type { RehberOnKosullari } from './hazirlik';
+import { ORAN_ETIKETI, YERLESIM_GRUPLARI, ortakPlan, setlereAyir, type GorselOrani } from '../banner-seti';
 
 export type RehberAdimi = 1 | 2 | 3 | 4 | 5 | 6;
 
@@ -54,6 +55,12 @@ export interface RehberEksikBaglami {
   paraBirimi: string;
   /** İki platform hesabının para birimi aynı mı; değilse tek tutar bölünemez. */
   paraBirimleriAyni: boolean;
+  /**
+   * Medyadaki görsellerin oranı (sunucuda, varlığın ölçüsünden). Verilmezse
+   * set kontrolleri koşmaz — "bilinmiyor" bir uyarı üretmez; türetme yine de
+   * oranı bilinmeyen görselde durur.
+   */
+  medyaOranlari?: ReadonlyMap<string, GorselOrani | null> | null;
 }
 
 const ADIM: Record<RehberAlanAdi, RehberAdimi> = {
@@ -164,8 +171,25 @@ export function rehberEksikleri(a: RehberAlanlari, b: RehberEksikBaglami): Rehbe
   const medya = a.medya?.deger ?? [];
   const gorselGerekli = acik.meta || (acik.google && tanim.google.kurgu === 'TALEP_YARATMA_GORSEL');
   if (gorselGerekli && medya.length === 0) ekle('medya', null, 'MEDYA', amac === 'VIDEO' ? 'Video ekle' : 'En az bir görsel ekle');
-  if (acik.meta && medya.length > META_EN_COK_GORSEL) {
-    ekle('medya', 'meta', 'M-MEDYA-FAZLA', `Meta ilk ${META_EN_COK_GORSEL} görseli kullanır, kalanlar yalnız Google'da`, 'uyari');
+  if (acik.meta && b.medyaOranlari) {
+    // BANNER SETİ (`banner-seti.ts`): doğrulama yükleme anında. Türetmedeki
+    // retler (GORSEL-ORAN, -CAKISMA, -SAYI) burada kullanıcının diliyle.
+    const ayrim = setlereAyir(medya.filter((x) => !x.kapakVarlikId), b.medyaOranlari);
+    if (ayrim.taninmayan.length) {
+      ekle('medya', 'meta', 'M-GORSEL-ORAN', `${ayrim.taninmayan.length} görselin boyutu kullanılamıyor; 9:16, 4:5, 1:1 ya da 1.91:1 olmalı`);
+    }
+    if (ayrim.cakisan.length) ekle('medya', 'meta', 'M-SET-CAKISMA', 'Aynı sette aynı boyuttan iki görsel var; birini başka sete taşı');
+    const fikir = ayrim.setler.length + medya.filter((x) => x.kapakVarlikId).length;
+    if (fikir > META_EN_COK_GORSEL) ekle('medya', 'meta', 'M-SET-SAYI', `Meta'da en çok ${META_EN_COK_GORSEL} fikir olur; şu an ${fikir}`);
+    // Video varken yerleşim otomatik kalıyor (derleyici); kapanan yerleşim
+    // yalnız görsel setlerinde söylenir.
+    if (ayrim.setler.length && !medya.some((x) => x.kapakVarlikId)) {
+      const plan = ortakPlan(ayrim.setler.map((st) => st.map((x) => x.oran)));
+      for (const g of plan.kapanan) {
+        const t = YERLESIM_GRUPLARI[g];
+        ekle('medya', 'meta', 'M-YERLESIM-KAPALI', `${t.etiket} kapalı kalacak: ${t.oranlar.map((o) => ORAN_ETIKETI[o]).join(' ya da ')} görsel yok`, 'uyari');
+      }
+    }
   }
   if (acik.google && tanim.google.kurgu === 'TALEP_YARATMA_VIDEO' && !a.youtubeVideo?.deger) {
     ekle('youtubeVideo', 'google', 'G-VIDEO', "YouTube'dan video seç");

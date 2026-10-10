@@ -14,6 +14,7 @@ import { z } from 'zod';
 import { ALAN_KAYNAKLARI, type AlanKaynagi } from './taslak';
 import { niyetKoduSchema } from './meta/niyetler';
 import { OZEL_KATEGORILER } from './meta/hedefleme';
+import { GORSEL_ORANLARI } from './banner-seti';
 
 const alan = <T extends z.ZodTypeAny>(deger: T) =>
   z.object({
@@ -47,6 +48,18 @@ export const kavramGirdisiSchema = z.object({
    * taslakların içerik özetini değiştirir ve yayında "sürüm bozuk" üretirdi.
    */
   kapakVarlikId: z.string().uuid().optional(),
+  /**
+   * BANNER SETİ (`banner-seti.ts`): bu fikrin BOYUTLARI. Varsa kreatif tek
+   * görsel değil, yerleşime göre görsel taşır ve `varlikId` setin varsayılan
+   * görselidir (kare varsa kare). Oran sunucuda varlığın ölçüsünden okunur ve
+   * derlemede yeniden doğrulanır; istemcinin söylediği orana güvenilmez.
+   * İsteğe bağlı: tek görselli fikir bugünkü gibi kalır.
+   */
+  setGorselleri: z
+    .array(z.object({ varlikId: z.string().uuid(), oran: z.enum(GORSEL_ORANLARI) }))
+    .min(2)
+    .max(4)
+    .optional(),
 });
 
 /**

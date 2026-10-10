@@ -149,6 +149,16 @@ Reklam Yöneticisi'nden Başlat ile açar (onaylı yol, geri okumalı).
   yayınıyla "temiz" görülmeden Meta satırı açılmaz.
 - Rehberde kategori sorusuna "Hayır" denmişti; Garden Villas konut. Gerçek yayında "Konut" seçilmeli (Ö-7 o zaman ölçülür).
 
+**Banner seti (2026-10-10, kullanıcı kararı):** görseller orana göre SETE
+ayrılıyor (`banner-seti.ts`); bir set = bir fikir = bir reklam, boyutlar
+`asset_feed_spec` + yerleşim kurallarıyla tek kreatifte. Eksik boyutta o
+yerleşim kapanır ve reklam seti elle yerleşime geçer (ortak plan: bir grup
+ancak her set onu dolduruyorsa açık). Oran sunucuda varlığın ölçüsünden;
+taslak derlemesi yeniden doğruluyor. Ölçülen: validate_only (biçim). ÖLÇÜLMEDİ:
+gerçek kurulumda geri okumanın `asset_feed_spec`i nasıl döndürdüğü (N-13
+güvenli yönde kuruldu) ve Reklam Yöneticisi'nde yerleşim önizlemeleri.
+Panel set kartı taslakta: `banner-seti-taslak.html`.
+
 Her ölçüm geçince `REHBER_ACILIS` satırı güncellenir (commit gövdesinde kanıt).
 
 ## 9. Dalga planı
