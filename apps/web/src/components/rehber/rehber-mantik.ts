@@ -40,6 +40,7 @@ import {
   type RehberAlanlari,
   type RehberAmacKodu,
   type RehberEksigi,
+  type RehberFormListesi,
   type RehberHazirligi,
   type RehberPlatformu,
   type RehberProvaSonucu,
@@ -163,19 +164,17 @@ export function videoListesiHali(r: YoutubeVideoListesi): OneriHali<YoutubeVideo
 }
 
 /**
- * Form şablonu seçicisinin hâli. `null` = sayfanın formları OKUNAMADI;
- * boş dizi = okundu, kayıtlı form yok. İkisini aynı boş seçiciye çevirmek
- * kullanıcıyı ya olmayan bir izin sorununu ya da olmayan bir formu aramaya
- * gönderir.
+ * Form seçicisinin hâli (Dalga 2): liste SEÇİLİ sayfanın Meta'daki yayında
+ * formları, ayrı uçtan (`/reklam/rehber/form-sablonlari`). Dört hâl ayrı:
+ * sayfa seçilmedi (`istenmedi`) / okunuyor / boş (sunucunun NEDENİ) / çağrı
+ * düştü (Meta'nın mesajı, `oneriHatasi`). "Okunamadı" ile "form yok"u aynı
+ * boş seçiciye çevirmek kullanıcıyı ya olmayan bir izin sorununu ya da
+ * olmayan bir formu aramaya gönderir. Eski seçici hazırlıktaki listeyi
+ * okuyordu ve sunucu orada hiç `null` dönmediği için "okunamadı" dalı ölüydü.
  */
-export type FormSecimi =
-  | { tur: 'okunamadi' }
-  | { tur: 'yok' }
-  | { tur: 'liste'; formlar: ReadonlyArray<{ id: string; ad: string }> };
-
-export function formSecimi(formlar: ReadonlyArray<{ id: string; ad: string }> | null | undefined): FormSecimi {
-  if (formlar === null || formlar === undefined) return { tur: 'okunamadi' };
-  return formlar.length === 0 ? { tur: 'yok' } : { tur: 'liste', formlar };
+export function formListesiHali(r: RehberFormListesi): OneriHali<RehberFormListesi> {
+  if (r.satirlar.length > 0) return { tur: 'geldi', deger: r };
+  return { tur: 'bos', neden: r.bosNeden ?? 'Bu sayfada yayında anlık form yok.' };
 }
 
 export interface KelimeSatiri {

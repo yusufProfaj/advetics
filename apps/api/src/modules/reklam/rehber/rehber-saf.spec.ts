@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { UYUM_SURUMU, type RehberEksigi, type UyumSonucu } from '@advetics/shared';
 import { degisiklikleriUygula, rehberOzeti } from './rehber-kayit';
 import { GOOGLE_TURKIYE, kelimeOnerisiHazirla, kelimeTohumlari, konumEsle, metinOnerisiTemizle } from './oneriler';
-import { formKosuluCoz, metaAsgariCoz } from './platform-okuma';
+import { FORM_SAYFA_SINIRI, formKosuluCoz, metaAsgariCoz, metaFormlariCoz, metaSayfaFormlariOku, seciliFormHali, whatsappHali } from './platform-okuma';
 import { rehberYayinKapilari, type KapiOkuyuculari } from './yayin-kapilari';
 
 const KIM = '11111111-1111-4111-8111-111111111111';
@@ -214,5 +214,66 @@ describe('yayın kapıları — sıra ve tembellik', () => {
     const c = okuyucu();
     expect(await rehberYayinKapilari(girdi({ acik: { meta: false, google: true } }), c.r)).toEqual({ tur: 'gecti', uyum: GECTI });
     expect(c.cagri).toEqual(['prova:google', 'yazma:google', 'uyum']);
+  });
+});
+
+describe('Meta form listesi ve WhatsApp hattı — çözümleyiciler (Dalga 2)', () => {
+  it('KRİTİK: yalnız ACTIVE; durumu gelmeyen DIŞARIDA; gizlilik adresi yalnız http(s); adsız form kimliğiyle', () => {
+    const r = metaFormlariCoz({
+      data: [
+        { id: '1', name: 'A', status: 'ACTIVE', privacy_policy_url: 'https://o.com/kvkk' },
+        { id: '2', name: '  ', status: 'ACTIVE', privacy_policy_url: 'javascript:alert(1)' },
+        { id: '3', name: 'C', status: 'ARCHIVED' },
+        { id: '4', name: 'D', status: 'DRAFT' },
+        { id: '5', name: 'E', status: 'DELETED' },
+        { id: '6', name: 'F' },
+        { id: 'x7', name: 'G', status: 'ACTIVE' },
+      ],
+    });
+    expect(r).toEqual({
+      satirlar: [
+        { id: '1', ad: 'A', gizlilikAdresi: 'https://o.com/kvkk' },
+        { id: '2', ad: 'Form 2', gizlilikAdresi: null },
+      ],
+      sonraki: null,
+    });
+    expect(metaFormlariCoz(null)).toEqual({ satirlar: [], sonraki: null });
+  });
+
+  it('sayfalama imleçle sürer; sınırda KESİLDİ der (sessiz kesme yok)', async () => {
+    const adresler: string[] = [];
+    const sahte = (sonsuz: boolean) =>
+      (async (u: string) => {
+        adresler.push(String(u));
+        const n = adresler.length;
+        const paging = sonsuz || n < 2 ? { cursors: { after: `c${n}` }, next: 'https://graph.facebook.com/x' } : {};
+        return new Response(JSON.stringify({ data: [{ id: String(n), name: 'F', status: 'ACTIVE' }], paging }), { status: 200 });
+      }) as unknown as typeof fetch;
+    const a = await metaSayfaFormlariOku('v25.0', '9001', 'T', sahte(false));
+    expect(a).toEqual({ satirlar: [expect.objectContaining({ id: '1' }), expect.objectContaining({ id: '2' })], kesildi: false });
+    expect(adresler[1]).toContain('after=c1');
+    adresler.length = 0;
+    const b = await metaSayfaFormlariOku('v25.0', '9001', 'T', sahte(true));
+    expect(b.kesildi).toBe(true);
+    expect(adresler).toHaveLength(FORM_SAYFA_SINIRI);
+    await expect(metaSayfaFormlariOku('v25.0', '9001/../x', 'T', sahte(false))).rejects.toThrow(/geçersiz/);
+  });
+
+  it('KRİTİK: WhatsApp — numara okunduysa true; boş ya da hata NULL, ASLA false', () => {
+    expect(whatsappHali({ number: '+905550000000', hata: null })).toBe(true);
+    expect(whatsappHali({ number: '  ', hata: null })).toBeNull();
+    expect(whatsappHali({ number: null, hata: null })).toBeNull();
+    expect(whatsappHali({ number: null, hata: '(#100) x' })).toBeNull();
+  });
+
+  it('seçili form: liste yoksa bilinmiyor; listede yoksa yayında değil; adres yoksa gizlilik false', () => {
+    const l = [{ id: '1', ad: 'A', gizlilikAdresi: 'https://o.com' }, { id: '2', ad: 'B', gizlilikAdresi: null }];
+    expect(seciliFormHali('1', '1', null)).toBeNull();
+    expect(seciliFormHali(null, null, l)).toBeNull();
+    expect(seciliFormHali('1', '1', l)).toEqual({ ad: 'A', sayfadaYayinda: true, gizlilikAdresi: true });
+    expect(seciliFormHali('2', '2', l)).toEqual({ ad: 'B', sayfadaYayinda: true, gizlilikAdresi: false });
+    expect(seciliFormHali('9', '9', l)).toEqual({ ad: null, sayfadaYayinda: false, gizlilikAdresi: false });
+    // Çevrilemeyen eski UUID (kimlik null): yayında sayılmaz.
+    expect(seciliFormHali('77777777-0000-4000-8000-000000000001', null, l)).toMatchObject({ sayfadaYayinda: false });
   });
 });

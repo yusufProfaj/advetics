@@ -16,6 +16,22 @@ import { niyetKoduSchema } from './meta/niyetler';
 import { OZEL_KATEGORILER } from './meta/hedefleme';
 import { GORSEL_ORANLARI } from './banner-seti';
 
+/**
+ * Meta anlık form kimliği — İKİ BİÇİM (AdvCampaign Dalga 2, Ç-2).
+ *
+ * Form listesi artık seçili sayfanın Meta'daki YAYINDA formlarından geliyor
+ * ve formların çoğu Reklam Yöneticisi'nde kurulmuş: Advetics'te `lead_forms`
+ * satırı yok, yani bir UUID'leri de yok. Yeni seçim Meta'nın sayısal form
+ * kimliğini taşıyor (derleyiciye giden de o: `lead_gen_form_id`).
+ *
+ * UUID HÂLÂ GEÇERLİ: Dalga 2'den önce kaydedilmiş rehber/taslaklar
+ * `lead_forms.id` taşıyor. Şemadan atmak o kayıtları okunamaz yapardı
+ * (`alanlariOku` 409 verir ve kullanıcının yarım işi açılmaz). Sunucu UUID'yi
+ * yayın anında `lead_forms.external_form_id`ye çeviriyor; yayınlanmamışsa
+ * reddediyor (`yayin-baslat.ts#formKimligiCoz`).
+ */
+export const formKimligiSchema = z.union([z.string().uuid(), z.string().regex(/^\d{1,30}$/)]);
+
 const alan = <T extends z.ZodTypeAny>(deger: T) =>
   z.object({
     deger,
@@ -93,7 +109,7 @@ export const taslakAlanlariSchema = z
     takvim: alan(z.object({ baslangic: tarih, bitis: tarih.nullable() })),
     kavramlar: alan(z.array(kavramGirdisiSchema).max(5)),
     hedefAdres: alan(z.string().max(2000).nullable()),
-    formSablonuId: alan(z.string().uuid().nullable()),
+    formSablonuId: alan(formKimligiSchema.nullable()),
     /**
      * TELEFON niyeti: aranacak numara (E.164). İsteğe bağlı ve varsayılansız:
      * içerik özeti yalnız VAR olan alanları kapsıyor, yani bu alanın eklenmesi

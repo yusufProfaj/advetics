@@ -79,7 +79,7 @@ const B: RehberEksikBaglami = {
     googleSatisOlcumu: true,
     googleDonusumEtkin: false,
     googleLogoVeAd: true,
-    gizlilikAdresi: true,
+    seciliForm: { ad: 'Teklif Formu', sayfadaYayinda: true, gizlilikAdresi: true },
   },
   yasalUyari: null,
   asgariGunluk: { meta: 49_340_000n, googleTalepYaratma: TL(250) },
@@ -217,6 +217,57 @@ describe('rehberEksikleri — tek "yayından önce" listesi', () => {
       expect(bilinmiyor.find((x) => x.kod === 'M-FORM-KOSUL-BILINMIYOR')?.seviye).toBe('uyari');
     } finally {
       (REHBER_ACILIS.FORM as Record<string, string>).meta = eski;
+    }
+  });
+
+  /*
+   * SEÇİLİ FORM (Dalga 2, Ç-3). Gizlilik adresi FORMUN KENDİSİNDE; burada
+   * bir süre "Marka Merkezi'nde gizlilik adresi" aranıyordu ve üretimde
+   * değer sabit `false` olduğu için Form amacı her zaman engeldeydi. Bu
+   * dosyanın fixture'ı `true` verdiği için sabit hiç görülmedi; servis
+   * tarafındaki karşılığı rehber.service.spec "seçili form" testinde.
+   */
+  it('seçili form: gizlilik adresi yoksa ENGEL ve formun ADIYLA; sayfada yayında değilse ENGEL; bilinmiyorsa UYARI', () => {
+    const eski = REHBER_ACILIS.FORM.meta;
+    (REHBER_ACILIS.FORM as Record<string, string>).meta = 'deneme';
+    try {
+      const a = { ...tamSite(), amac: al('FORM' as const), formSablonuId: al('1234567890') };
+      const ok = (seciliForm: NonNullable<RehberEksikBaglami['onKosullar']>['seciliForm']) => rehberEksikleri(a, { ...B, onKosullar: { ...B.onKosullar!, seciliForm } });
+      expect(ok({ ad: 'Teklif Formu', sayfadaYayinda: true, gizlilikAdresi: true }).filter((e) => e.kod.startsWith('FORM-'))).toEqual([]);
+      const g = ok({ ad: 'Teklif Formu', sayfadaYayinda: true, gizlilikAdresi: false }).find((e) => e.kod === 'FORM-GIZLILIK');
+      expect(g).toMatchObject({ seviye: 'engel', platform: 'meta' });
+      expect(g!.metin).toContain('"Teklif Formu"');
+      expect(g!.metin).not.toContain('—');
+      expect(ok({ ad: null, sayfadaYayinda: false, gizlilikAdresi: false }).find((e) => e.kod === 'FORM-SAYFA')?.seviye).toBe('engel');
+      const b = ok(null);
+      expect(b.find((e) => e.kod === 'FORM-BILINMIYOR')?.seviye).toBe('uyari');
+      expect(b.some((e) => e.kod === 'FORM-GIZLILIK' || e.kod === 'FORM-SAYFA')).toBe(false);
+    } finally {
+      (REHBER_ACILIS.FORM as Record<string, string>).meta = eski;
+    }
+  });
+
+  it('FORM-GIZLILIK yalnız Meta: Google formu bu dalgada kapalı ve kontrol oraya taşmaz', () => {
+    const eskiM = REHBER_ACILIS.FORM.meta;
+    const eskiG = REHBER_ACILIS.FORM.google;
+    (REHBER_ACILIS.FORM as Record<string, string>).google = 'deneme';
+    (REHBER_ACILIS.FORM as Record<string, string>).meta = 'kapali';
+    try {
+      const a = { ...tamSite(), amac: al('FORM' as const), formSablonuId: al('1234567890') };
+      const e = rehberEksikleri(a, { ...B, onKosullar: { ...B.onKosullar!, seciliForm: { ad: 'F', sayfadaYayinda: true, gizlilikAdresi: false } } });
+      expect(e.some((x) => x.kod.startsWith('FORM-'))).toBe(false);
+    } finally {
+      (REHBER_ACILIS.FORM as Record<string, string>).meta = eskiM;
+      (REHBER_ACILIS.FORM as Record<string, string>).google = eskiG;
+    }
+  });
+
+  it('form kimliği: Meta sayısal kimliği ve eski UUID ikisi de şemadan geçer, başka biçim geçmez', () => {
+    for (const s of [rehberAlanlariSchema, taslakAlanlariSchema]) {
+      expect(s.safeParse({ formSablonuId: al('1234567890') }).success).toBe(true);
+      expect(s.safeParse({ formSablonuId: al(U(20)) }).success).toBe(true);
+      expect(s.safeParse({ formSablonuId: al('act_123') }).success).toBe(false);
+      expect(s.safeParse({ formSablonuId: al('12 34') }).success).toBe(false);
     }
   });
 

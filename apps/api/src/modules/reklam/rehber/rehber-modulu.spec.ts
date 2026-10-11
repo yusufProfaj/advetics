@@ -85,6 +85,10 @@ describe('uçlar ↔ sözleşme (api.ts)', () => {
     expect(uclar.length).toBe(sozlesme.length);
   });
 
+  it('Dalga 2: seçili sayfanın form listesi ucu kayıtlı (yalnız okuma izniyle)', () => {
+    expect(uclar).toContain('GET /reklam/rehber/form-sablonlari bulk.read');
+  });
+
   it('KRİTİK: her uç (yöntem, yol, izin) sözleşmeyle BİREBİR aynı', () => {
     expect([...uclar].sort()).toEqual([...sozlesme].sort());
   });

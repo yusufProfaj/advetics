@@ -165,7 +165,19 @@ export function rehberEksikleri(a: RehberAlanlari, b: RehberEksikBaglami): Rehbe
     if (!(tel && TELEFON_E164.test(tel))) ekle('telefon', null, 'TELEFON', 'Telefon numarası +90 ile başlamalı');
   }
   if (amac === 'FORM' && acik.meta && !a.formSablonuId?.deger) ekle('formSablonuId', 'meta', 'FORM-YOK', 'Form seçilmedi');
-  if (amac === 'FORM' && ok && !ok.gizlilikAdresi) ekle('formSablonuId', null, 'FORM-GIZLILIK', "Marka Merkezi'nde gizlilik metni adresi yok");
+  if (amac === 'FORM' && acik.meta && a.formSablonuId?.deger) {
+    /*
+     * SEÇİLİ FORM META'DA KONTROL EDİLİYOR (Ç-2, Ç-3). Yalnız Meta: Google
+     * formu bu dalgada kapalı (`G-KURGU-KAPALI`) ve kendi içeriğini isteyecek.
+     * Bilinmeyen hâl UYARI: liste henüz okunmadıysa formu "yok" saymak sağlam
+     * bir kurulumu kilitler. Sunucu provadan önce listeyi TAZE okuyor, yani
+     * provaya giden hâl bilinen hâl.
+     */
+    const f = ok?.seciliForm ?? null;
+    if (!f) ekle('formSablonuId', 'meta', 'FORM-BILINMIYOR', "Seçilen form Meta'da kontrol edilemedi", 'uyari');
+    else if (!f.sayfadaYayinda) ekle('formSablonuId', 'meta', 'FORM-SAYFA', 'Seçilen form bu sayfada yayında değil; listeden yeniden seç');
+    else if (!f.gizlilikAdresi) ekle('formSablonuId', 'meta', 'FORM-GIZLILIK', `"${f.ad ?? 'Seçilen'}" formunda gizlilik politikası adresi yok; başka bir form seç`);
+  }
 
   const medya = a.medya?.deger ?? [];
   const gorselGerekli = acik.meta || (acik.google && tanim.google.kurgu === 'TALEP_YARATMA_GORSEL');

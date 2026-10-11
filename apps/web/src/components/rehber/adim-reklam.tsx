@@ -14,6 +14,7 @@ import {
   type GorselOrani,
   type MetinOnerisi,
   type RehberAlanlari,
+  type RehberFormListesi,
   type YoutubeVideoListesi,
 } from '@advetics/shared';
 import { apiFetch, onizlemeAdresi } from '@/lib/api';
@@ -24,7 +25,7 @@ import { SetKartlari } from './set-kartlari';
 import {
   adresGirdisi,
   adresKaydi,
-  formSecimi,
+  formListesiHali,
   googleGorselUygunMu,
   kelimeDegistir,
   kelimeOnerisiHali,
@@ -104,7 +105,7 @@ export function AdimReklam({
           <div className={s.blokBaslik}>
             {amac === 'FORM' ? 'Form' : amac === 'TELEFON' ? 'Aranacak numara' : amac === 'WHATSAPP' ? 'WhatsApp hattı' : 'Gidecekleri sayfa'}
           </div>
-          {amac === 'FORM' && <FormSecici b={b} eksikMetni={eksik('FORM-YOK')?.metin ?? null} gizlilik={eksik('FORM-GIZLILIK')?.metin ?? null} />}
+          {amac === 'FORM' && <FormSecici b={b} eksikMetni={eksik('FORM-YOK')?.metin ?? null} formUyarisi={(eksik('FORM-GIZLILIK') ?? eksik('FORM-SAYFA') ?? eksik('FORM-BILINMIYOR'))?.metin ?? null} />}
           {amac === 'TELEFON' && (
             <>
               <div className={s.girdi}>
@@ -450,42 +451,73 @@ function MedyaBlogu({
 // Form şablonu (Meta FORM amacı)
 // ─────────────────────────────────────────────────────────────────────────────
 
-function FormSecici({ b, eksikMetni, gizlilik }: { b: AdimBaglami; eksikMetni: string | null; gizlilik: string | null }) {
-  const durum = formSecimi(b.h.formSablonlari);
+function FormSecici({ b, eksikMetni, formUyarisi }: { b: AdimBaglami; eksikMetni: string | null; formUyarisi: string | null }) {
+  const sayfaId = b.a.sayfaId?.deger ?? null;
   const secili = b.a.formSablonuId?.deger ?? null;
-  const sayfa = b.h.sayfalar.find((x) => x.id === b.a.sayfaId?.deger)?.ad ?? null;
+  const sayfa = b.h.sayfalar.find((x) => x.id === sayfaId)?.ad ?? null;
+  const [hal, setHal] = useState<OneriHali<RehberFormListesi>>({ tur: 'istenmedi' });
+  const [tur, setTur] = useState(0);
+
+  /*
+   * Liste SEÇİLİ sayfanın Meta'daki yayında formları; sayfa değişince ya da
+   * "Listeyi yenile"ye basılınca yeniden okunur (Meta'da yeni form kuran
+   * kullanıcı sayfayı yenilemek zorunda kalmasın). Dört hâl ayrı: sayfa yok /
+   * okunuyor / boş (sunucunun nedeni) / düştü (Meta'nın mesajı).
+   */
+  useEffect(() => {
+    if (!sayfaId) return setHal({ tur: 'istenmedi' });
+    let iptal = false;
+    setHal({ tur: 'isteniyor' });
+    apiFetch<RehberFormListesi>(`/reklam/rehber/form-sablonlari?clientId=${encodeURIComponent(b.clientId)}&sayfaId=${encodeURIComponent(sayfaId)}`)
+      .then((r) => !iptal && setHal(formListesiHali(r)))
+      .catch((e: unknown) => !iptal && setHal(oneriHatasi(e)));
+    return () => {
+      iptal = true;
+    };
+  }, [sayfaId, b.clientId, tur]);
+
   return (
     <>
-      {durum.tur === 'okunamadi' && (
+      {hal.tur === 'istenmedi' && <p className={s.ipucu} style={{ margin: 0 }}>Önce Nerede adımında Facebook sayfasını seç; formlar o sayfadan listelenir.</p>}
+      {hal.tur === 'isteniyor' && <p className={s.ipucu} style={{ margin: 0 }}>Sayfanın formları Meta&apos;dan okunuyor…</p>}
+      {hal.tur === 'dustu' && (
         <div className={s.uyari} role="alert">
           <Ikon d={IKON.ucgen} />
-          <span>Sayfanın anlık formları okunamadı. Sayfayı yenile; düzelmezse sayfa bağlantısını Marka Merkezi &gt; Bağlantılar&apos;da kontrol et.</span>
+          <span>{hal.mesaj}</span>
         </div>
       )}
-      {durum.tur === 'yok' && (
+      {hal.tur === 'bos' && (
         <div className={s.uyari}>
           <Ikon d={IKON.ucgen} />
           <span>
-            {sayfa ? <b>{sayfa}</b> : 'Seçili'} sayfasında kayıtlı anlık form yok. Formu bir kez Meta&apos;da (Reklam Yöneticisi &gt; Anlık formlar)
-            oluştur, sonra bu sayfayı yenile; burada seçilebilir olur.
+            {sayfa ? <b>{sayfa}</b> : 'Seçili sayfa'}: {hal.neden}
           </span>
         </div>
       )}
-      {durum.tur === 'liste' && (
-        <div className={s.secim}>
-          {durum.formlar.map((f) => (
-            <button key={f.id} type="button" aria-pressed={secili === f.id} onClick={() => yaz(b, 'formSablonuId', f.id)}>
-              {f.ad}
-            </button>
-          ))}
-        </div>
+      {hal.tur === 'geldi' && (
+        <>
+          <div className={s.secim}>
+            {hal.deger.satirlar.map((f) => (
+              <button key={f.id} type="button" aria-pressed={secili === f.id} onClick={() => yaz(b, 'formSablonuId', f.id)}>
+                {f.ad}
+                {!f.gizlilikAdresi && <span className={s.ops}> gizlilik adresi yok</span>}
+              </button>
+            ))}
+          </div>
+          {hal.deger.kesildi && <p className={s.ipucu}>İlk {hal.deger.toplam} form gösteriliyor.</p>}
+        </>
       )}
-      <p className={eksikMetni && durum.tur === 'liste' ? s.hataMetni : s.ipucu}>
-        {durum.tur === 'liste' && eksikMetni
+      {(hal.tur === 'geldi' || hal.tur === 'bos' || hal.tur === 'dustu') && (
+        <button type="button" className={`${s.metinDugme} ${s.ustBosluk}`} onClick={() => setTur((x) => x + 1)}>
+          Listeyi yenile
+        </button>
+      )}
+      <p className={eksikMetni && hal.tur === 'geldi' ? s.hataMetni : s.ipucu}>
+        {hal.tur === 'geldi' && eksikMetni
           ? eksikMetni
           : `Formlar ${sayfa ? `${sayfa} ` : 'seçtiğin '}Facebook sayfasına gelir (Meta'nın kendi seçtiği sayfa değil).`}
       </p>
-      {gizlilik && <p className={s.hataMetni}>{gizlilik}</p>}
+      {formUyarisi && <p className={s.hataMetni}>{formUyarisi}</p>}
     </>
   );
 }

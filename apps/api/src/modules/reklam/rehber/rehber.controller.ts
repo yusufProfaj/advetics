@@ -6,6 +6,7 @@ import {
   rehberYayinlaSchema,
   type AnahtarKelimeOnerisi,
   type MetinOnerisi,
+  type RehberFormListesi,
   type RehberGuncelle,
   type RehberHazirligi,
   type RehberKaydi,
@@ -46,6 +47,17 @@ export class RehberController {
     @Query('kanalId', ParseUUIDPipe) kanalId: string,
   ): Promise<YoutubeVideoListesi> {
     return this.rehber.youtubeVideolari(ctx, clientId, kanalId);
+  }
+
+  /** Seçili sayfanın Meta'daki yayında anlık formları (Ç-2). Okunamazsa 503 + Meta'nın mesajı. */
+  @Get('rehber/form-sablonlari')
+  @RequirePermissions('bulk.read')
+  formSablonlari(
+    @CurrentTenant() ctx: TenantContext,
+    @Query('clientId', ParseUUIDPipe) clientId: string,
+    @Query('sayfaId', ParseUUIDPipe) sayfaId: string,
+  ): Promise<RehberFormListesi> {
+    return this.rehber.formSablonlari(ctx, clientId, sayfaId);
   }
 
   @Get('rehberler')
