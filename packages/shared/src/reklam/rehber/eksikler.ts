@@ -22,6 +22,7 @@ import { METIN_SINIRLARI, karakterSayisi } from './metin';
 import { META_EN_COK_GORSEL } from './turet';
 import { butceBol, gunlukEsdeger } from './butce';
 import type { RehberOnKosullari } from './hazirlik';
+import { googleGorselBulgulari, googleGorselKurgusuMu, googleMetinBulgulari, type GorselOlcusu } from './google-gorsel';
 import { ORAN_ETIKETI, YERLESIM_GRUPLARI, bannerSetiDestekleniyor, ortakPlan, setlereAyir, type GorselOrani } from '../banner-seti';
 
 export type RehberAdimi = 1 | 2 | 3 | 4 | 5 | 6;
@@ -61,6 +62,12 @@ export interface RehberEksikBaglami {
    * oranı bilinmeyen görselde durur.
    */
   medyaOranlari?: ReadonlyMap<string, GorselOrani | null> | null;
+  /**
+   * GOOGLE (Dalga 3): görsellerin piksel ölçüsü ve dosya boyutu. Google'ın
+   * oran payı ±%1 (Meta'nınki %3) ve en az boyutu var; ölçü verilirse
+   * uymayan görsel GİRİŞ ANINDA söylenir, verilmezse derleyici söyler.
+   */
+  googleGorselOlculeri?: ReadonlyMap<string, GorselOlcusu | null> | null;
 }
 
 const ADIM: Record<RehberAlanAdi, RehberAdimi> = {
@@ -121,7 +128,9 @@ export function rehberEksikleri(a: RehberAlanlari, b: RehberEksikBaglami): Rehbe
   if (acik.google) {
     if (!a.googleHesabiId) ekle('googleHesabiId', 'google', 'G-HESAP', 'Google Ads hesabı seçilmedi');
     if (amac === 'SATIS') onKosul(ok?.googleSatisOlcumu, 'google', 'G-DONUSUM', "Google Ads'te satın alma dönüşümü etkin değil");
-    if (tanim.google.kurgu === 'TALEP_YARATMA_VIDEO' || tanim.google.kurgu === 'TALEP_YARATMA_GORSEL') {
+    // Maks. Performans da logo ve işletme adı istiyor (marka kuralları açık:
+    // kampanya düzeyinde, `google-pmax.ts`).
+    if (tanim.google.kurgu === 'TALEP_YARATMA_VIDEO' || googleGorselKurgusuMu(tanim.google.kurgu)) {
       if (ok && !ok.googleLogoVeAd) ekle('googleHesabiId', 'google', 'G-LOGO', "Marka Merkezi'nde logo ve işletme adı yok");
     }
     if (tanim.google.kurgu === 'TALEP_YARATMA_VIDEO' && !a.youtubeKanaliId?.deger) {
@@ -180,7 +189,7 @@ export function rehberEksikleri(a: RehberAlanlari, b: RehberEksikBaglami): Rehbe
   }
 
   const medya = a.medya?.deger ?? [];
-  const gorselGerekli = acik.meta || (acik.google && tanim.google.kurgu === 'TALEP_YARATMA_GORSEL');
+  const gorselGerekli = acik.meta || (acik.google && googleGorselKurgusuMu(tanim.google.kurgu));
   if (gorselGerekli && medya.length === 0) ekle('medya', null, 'MEDYA', amac === 'VIDEO' ? 'Video ekle' : 'En az bir görsel ekle');
   if (acik.meta && b.medyaOranlari) {
     // BANNER SETİ (`banner-seti.ts`): doğrulama yükleme anında. Türetmedeki
@@ -201,6 +210,19 @@ export function rehberEksikleri(a: RehberAlanlari, b: RehberEksikBaglami): Rehbe
         ekle('medya', 'meta', 'M-YERLESIM-KAPALI', `${t.etiket} kapalı kalacak: ${t.oranlar.map((o) => ORAN_ETIKETI[o]).join(' ya da ')} görsel yok`, 'uyari');
       }
     }
+  }
+  // ── Google görsel kurguları (Dalga 3, `google-gorsel.ts`): kural orada,
+  // burada yalnız kullanıcının listesine taşınıyor. Medya boşken MEDYA
+  // engeli zaten yukarıda; tekrarlanmasın.
+  const gGorselKurgu = acik.google && googleGorselKurgusuMu(tanim.google.kurgu) ? tanim.google.kurgu : null;
+  if (gGorselKurgu && medya.length > 0 && b.medyaOranlari) {
+    for (const x of googleGorselBulgulari(gGorselKurgu, medya, b.medyaOranlari, b.googleGorselOlculeri)) ekle('medya', 'google', x.kod, x.metin, x.seviye);
+  }
+  if (gGorselKurgu === 'MAKS_PERFORMANS' && (a.enDusukYas?.deger ?? 18) !== 18) {
+    // Maks. Performans gövdesi yaş ölçütü TAŞIMIYOR (yaş dışlamasının bu
+    // kurguda API'den kabulü ÖLÇÜLMEDİ): "21 ve üstü" sözünü tutamayacağımız
+    // bir kampanyayı kurmak yerine söylüyoruz.
+    ekle('enDusukYas', 'google', 'G-PMAX-YAS', "Maks. Performans'ta yaş sınırı kurulmuyor; en düşük yaşı 18 yap ya da Google'ı kapat");
   }
   if (acik.google && tanim.google.kurgu === 'TALEP_YARATMA_VIDEO' && !a.youtubeVideo?.deger) {
     ekle('youtubeVideo', 'google', 'G-VIDEO', "YouTube'dan video seç");
@@ -224,6 +246,9 @@ export function rehberEksikleri(a: RehberAlanlari, b: RehberEksikBaglami): Rehbe
     aciklamalar.forEach((s, i) => {
       if (karakterSayisi(s) > METIN_SINIRLARI.aciklama) ekle('metin', null, 'METIN-ACIKLAMA-UZUN', `Açıklama ${i + 1}: en çok ${METIN_SINIRLARI.aciklama} karakter`);
     });
+    if (gGorselKurgu) {
+      for (const x of googleMetinBulgulari(gGorselKurgu, m)) ekle('metin', 'google', x.kod, x.metin, x.seviye);
+    }
     if (googleArama) {
       if (basliklar.length < METIN_SINIRLARI.basliklarEnAz) ekle('metin', 'google', 'G-BASLIK-SAYI', `Google için en az ${METIN_SINIRLARI.basliklarEnAz} başlık gerekiyor`);
       if (aciklamalar.length < METIN_SINIRLARI.aciklamalarEnAz) ekle('metin', 'google', 'G-ACIKLAMA-SAYI', `Google için en az ${METIN_SINIRLARI.aciklamalarEnAz} açıklama gerekiyor`);

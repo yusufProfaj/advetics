@@ -23,6 +23,7 @@ import { VARSAYILAN_META_PAYI, type RehberAlanlari } from './alanlar';
 import { butceBol } from './butce';
 import { METIN_SINIRLARI } from './metin';
 import { ortakPlan, setlereAyir, type GorselOrani, type SetPlani } from '../banner-seti';
+import { googleGorselKurgusuMu, pmaxUzunBaslik } from './google-gorsel';
 
 /**
  * Meta taslak şeması en çok 5 kavram taşıyor. Kavram artık bir BANNER SETİ
@@ -164,6 +165,28 @@ export const GOOGLE_TURKCE = 'languageConstants/1037';
  */
 export type GoogleTeklif = 'MAKS_TIKLAMA' | 'MAKS_DONUSUM';
 
+/**
+ * ═══ GOOGLE TEKLİFİ — TEK KURAL (Dalga 3) ═══
+ *
+ * Türetme, karar tablosu ve servis bunu okuyor. Önceden tablo "ölçüm
+ * etkinse En çok dönüşüm" diyordu ve bu VIDEO'da da yazıyordu; Talep
+ * Yaratma gövdesi ise her zaman `targetSpend` gönderiyordu (ekran yalan).
+ *
+ * - ARAMA: dönüşüm ölçümü KESİN etkinse dönüşüm, değilse tıklama.
+ * - TALEP YARATMA (video ve görsel): her zaman tıklama. Erişim amacı
+ *   ("bölgemde çok kişi görsün") dönüşüm değil; Talep Yaratma'nın erişim
+ *   (gösterim başına) teklifi API'de ÖLÇÜLMEDİ, en yakın öngörülebilir
+ *   strateji Maksimum tıklama. Dönüşüm teklifi bu amaçta para harcayıp
+ *   kullanıcının istemediği şeyi öğrenirdi.
+ * - MAKS. PERFORMANS: yalnız dönüşüm (Google başka strateji kabul etmiyor);
+ *   ölçüm yoksa kurgu HİÇ kurulmuyor (`rehberdenGoogle` → `G-DONUSUM`).
+ */
+export function googleTeklifi(kurgu: GoogleKurgu, donusumEtkin: boolean | null): GoogleTeklif {
+  if (kurgu === 'MAKS_PERFORMANS') return 'MAKS_DONUSUM';
+  if (kurgu === 'ARAMA') return donusumEtkin === true ? 'MAKS_DONUSUM' : 'MAKS_TIKLAMA';
+  return 'MAKS_TIKLAMA';
+}
+
 export interface GoogleDerlemeGirdisi {
   kurgu: GoogleKurgu;
   ulasma: GoogleUlasma | null;
@@ -187,6 +210,16 @@ export interface GoogleDerlemeGirdisi {
   anahtarKelimeler: string[];
   negatifler: string[];
   gorselVarlikIdleri: string[];
+  /**
+   * GÖRSEL KURGULARI (Talep Yaratma görsel, Maks. Performans): görseller
+   * ORANLARIYLA (sunucunun ölçüsünden). Yalnız o iki kurguda yazılır:
+   * Arama/video girdisine eklemek o taslakların içerik özetini değiştirip
+   * kayıtlı provaları sebepsiz bayatlatırdı. Videolar burada YOK (Google
+   * videoyu YouTube'dan istiyor; eksik listesi uyarıyor).
+   */
+  gorseller?: Array<{ varlikId: string; oran: GorselOrani }>;
+  /** Maks. Performans uzun başlığı (`pmaxUzunBaslik`); varsa açıklamalar ondan arındırılmış gelir. */
+  uzunBasliklar?: string[];
   youtubeVideoId: string | null;
   isletmeAdi: string | null;
   logoVarlikId: string | null;
@@ -199,6 +232,10 @@ export interface GoogleTuretmeBaglami {
   paraBirimi: string;
   saatDilimi: string;
   donusumEtkin: boolean | null;
+  /** Birincil SATIN ALMA dönüşümü etkin mi; Maks. Performans yalnız `true` ile kurulur. */
+  satisOlcumu: boolean | null;
+  /** Medyadaki görsellerin oranı (sunucuda, varlığın ölçüsünden); görsel kurgularında zorunlu. */
+  medyaOranlari?: ReadonlyMap<string, GorselOrani | null>;
   isletmeAdi: string | null;
   logoVarlikId: string | null;
   /** Müşteri kartındaki kategori tabanı (taslakta düşürülemez). */
@@ -224,7 +261,28 @@ export function rehberdenGoogle(a: RehberAlanlari, acik: { meta: boolean; google
   if (!adres) kodlar.push('SITE-ADRES');
   if (konumlar.length === 0) kodlar.push('KNM-01');
   if (konumlar.some((k) => !k.google)) kodlar.push('G-KONUM');
+  if (tanim && tanim.kurgu === 'MAKS_PERFORMANS' && b.satisOlcumu !== true) kodlar.push('G-DONUSUM');
   if (kodlar.length || !tanim || tanim.kurgu === null || !m || !butce || !takvim || !adres) return { tur: 'ret', kodlar };
+
+  // GÖRSEL KURGULARI: görsel oranıyla; oranı bilinmeyen görsel türetmeyi
+  // DURDURUR (sessizce atılan görsel = kullanıcının "yükledim" dediğinin
+  // reklamda olmaması). Görselin Google'a gidip gidemeyeceği (±%1, en az
+  // boyut) derleyicide, ölçüyle.
+  let gorsel: Pick<GoogleDerlemeGirdisi, 'gorseller' | 'uzunBasliklar'> = {};
+  if (googleGorselKurgusuMu(tanim.kurgu)) {
+    const gorseller: Array<{ varlikId: string; oran: GorselOrani }> = [];
+    for (const x of (a.medya?.deger ?? []).filter((x) => !x.kapakVarlikId)) {
+      const oran = b.medyaOranlari?.get(x.varlikId) ?? null;
+      if (oran === null) return { tur: 'ret', kodlar: ['G-GORSEL-ORAN'] };
+      gorseller.push({ varlikId: x.varlikId, oran });
+    }
+    gorsel = { gorseller };
+    if (tanim.kurgu === 'MAKS_PERFORMANS') {
+      const p = pmaxUzunBaslik(m.anaMetin, m.aciklamalar);
+      if (!p) return { tur: 'ret', kodlar: ['G-UZUN-BASLIK'] };
+      gorsel.uzunBasliklar = p.uzunBasliklar;
+    }
+  }
 
   const pay = butceBol(BigInt(butce.micros), acik, a.metaPayiYuzde?.deger ?? VARSAYILAN_META_PAYI, b.paraBirimi);
   const ek = a.ekKategoriler?.deger ?? [];
@@ -233,7 +291,7 @@ export function rehberdenGoogle(a: RehberAlanlari, acik: { meta: boolean; google
     deger: {
       kurgu: tanim.kurgu,
       ulasma: tanim.ulasma,
-      teklif: tanim.kurgu === 'MAKS_PERFORMANS' || b.donusumEtkin === true ? 'MAKS_DONUSUM' : 'MAKS_TIKLAMA',
+      teklif: googleTeklifi(tanim.kurgu, b.donusumEtkin),
       musteriId: b.musteriId.replace(/-/g, ''),
       paraBirimi: b.paraBirimi,
       saatDilimi: b.saatDilimi,
@@ -245,7 +303,13 @@ export function rehberdenGoogle(a: RehberAlanlari, acik: { meta: boolean; google
       hedefAdres: adres,
       telefon: a.telefon?.deger ?? null,
       basliklar: m.basliklar.map((s) => s.trim()).filter(Boolean).slice(0, METIN_SINIRLARI.basliklarEnCok),
-      aciklamalar: m.aciklamalar.map((s) => s.trim()).filter(Boolean).slice(0, METIN_SINIRLARI.aciklamalarEnCok),
+      // Maks. Performans'ta uzun başlık olan açıklama açıklamalardan çıkar
+      // (aynı metin iki alana ayrı Asset olarak bağlanmasın; `pmaxUzunBaslik`).
+      aciklamalar: m.aciklamalar
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .filter((s) => !gorsel.uzunBasliklar?.includes(s))
+        .slice(0, METIN_SINIRLARI.aciklamalarEnCok),
       anahtarKelimeler: (a.anahtarKelimeler?.deger ?? []).map((k) => k.metin.trim()),
       negatifler: [...TABAN_NEGATIFLER],
       gorselVarlikIdleri: (a.medya?.deger ?? []).map((x) => x.varlikId),
@@ -253,6 +317,7 @@ export function rehberdenGoogle(a: RehberAlanlari, acik: { meta: boolean; google
       isletmeAdi: b.isletmeAdi,
       logoVarlikId: b.logoVarlikId,
       kategoriler: [...new Set([...b.kategoriTabani, ...ek])],
+      ...gorsel,
     },
   };
 }

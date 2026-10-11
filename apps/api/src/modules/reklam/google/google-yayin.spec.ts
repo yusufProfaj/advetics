@@ -3,7 +3,7 @@ import { TABAN_NEGATIFLER, UYUM_SURUMU, gecisIzinliMi, type GoogleDerlemeGirdisi
 import { createHarness, seedTenant, IDS, type Harness } from '../../../../test/pglite-harness';
 import { PlatformApiError, type FetchContext } from '../../connections/provider.types';
 import type { TxRunner } from '../yayin-motoru';
-import { derleGoogle, GOOGLE_ATIF, GOOGLE_DERLEYICI_SURUMU } from './derle-google';
+import { derleGoogle, GOOGLE_ATIF, GOOGLE_DERLEYICI_SURUMU, type GoogleDerlemeBaglami } from './derle-google';
 import { googleGeriOkumaKarsilastir, googleYayinIsle, googleYayinKaydiOlustur, ulusalNumara, type GoogleOkunan, type GoogleYayinPortu } from './google-yayin';
 
 /**
@@ -57,6 +57,9 @@ class SahteGoogle implements GoogleYayinPortu {
   ogeBozucu: ((satirlar: Array<Record<string, unknown>>) => Array<Record<string, unknown>>) | null = null;
   kampanyaAdi: string | null = null;
   durum = 'PAUSED';
+  /** Dalga 3 geri okumasını bozar: `tur` sorgunun kaynağı (`ad_group`, `asset_group_asset`, `pmax_kampanya` …). */
+  dalga3Bozucu: ((tur: string, satirlar: Array<Record<string, unknown>>) => Array<Record<string, unknown>>) | null = null;
+  sorgular: string[] = [];
   private govde: Array<Record<string, unknown>> = [];
 
   async tokenAl() {
@@ -69,7 +72,7 @@ class SahteGoogle implements GoogleYayinPortu {
       throw this.mutateHatasi;
     }
     this.kur(g.mutateOperations);
-    return g.mutateOperations.map((op) => {
+    return g.mutateOperations.map((op, i) => {
       const tur = Object.keys(op)[0]!;
       const sonuc = tur.replace('Operation', 'Result');
       const id =
@@ -79,7 +82,11 @@ class SahteGoogle implements GoogleYayinPortu {
             ? `customers/${MUSTERI}/adGroups/666`
             : tur === 'adGroupAdOperation'
               ? `customers/${MUSTERI}/adGroupAds/666~777`
-              : `customers/${MUSTERI}/x/1`;
+              : tur === 'assetGroupOperation'
+                ? `customers/${MUSTERI}/assetGroups/888`
+                : tur === 'assetOperation'
+                  ? `customers/${MUSTERI}/assets/${900 + i}`
+                  : `customers/${MUSTERI}/x/1`;
       return { [sonuc]: { resourceName: id } };
     });
   }
@@ -89,8 +96,38 @@ class SahteGoogle implements GoogleYayinPortu {
     this.kampanyaAdi = k.create.name;
   }
   async ara<T>(_c: FetchContext, sorgu: string): Promise<T[]> {
+    this.sorgular.push(sorgu);
+    gaqlKurali(sorgu);
     if (!this.kampanyaAdi) return [];
     const c = (tur: string) => this.govde.filter((o) => o[tur]).map((o) => (o[tur] as { create: Record<string, unknown> }).create);
+    const boz = (tur: string, satirlar: Array<Record<string, unknown>>) => (this.dalga3Bozucu ? this.dalga3Bozucu(tur, satirlar) : satirlar) as T[];
+    // ── Dalga 3: Talep Yaratma görsel ──
+    if (/FROM ad_group\s/.test(sorgu)) {
+      return boz('ad_group', c('adGroupOperation').map((g) => ({ adGroup: { status: g.status, demandGenAdGroupSettings: g.demandGenAdGroupSettings } })));
+    }
+    if (sorgu.includes('FROM ad_group_ad') && sorgu.includes('demand_gen_multi_asset_ad')) {
+      return boz(
+        'ad_group_ad',
+        c('adGroupAdOperation').map((a) => {
+          const ad = a.ad as { demandGenMultiAssetAd?: Record<string, unknown[]> };
+          return { adGroupAd: { status: a.status, ad: { type: 'DEMAND_GEN_MULTI_ASSET_AD', demandGenMultiAssetAd: ad.demandGenMultiAssetAd }, adGroupAdAssetAutomationSettings: a.adGroupAdAssetAutomationSettings } };
+        }),
+      );
+    }
+    // ── Dalga 3: Maks. Performans ──
+    if (sorgu.includes('brand_guidelines_enabled')) {
+      const k = c('campaignOperation')[0]!;
+      return boz('pmax_kampanya', [{ campaign: { brandGuidelinesEnabled: k.brandGuidelinesEnabled, assetAutomationSettings: k.assetAutomationSettings } }]);
+    }
+    if (sorgu.includes('FROM asset_group_asset')) {
+      return boz('asset_group_asset', c('assetGroupAssetOperation').map((b) => ({ assetGroupAsset: { fieldType: b.fieldType, status: 'ENABLED', source: 'ADVERTISER' } })));
+    }
+    if (/FROM asset_group\s/.test(sorgu)) {
+      if (sorgu.includes('LIKE')) {
+        return [{ campaign: { resourceName: `customers/${MUSTERI}/campaigns/555` }, assetGroup: { resourceName: `customers/${MUSTERI}/assetGroups/888` } }] as T[];
+      }
+      return boz('asset_group', c('assetGroupOperation').map((g) => ({ assetGroup: { resourceName: `customers/${MUSTERI}/assetGroups/888`, status: g.status, finalUrls: g.finalUrls } })));
+    }
     if (sorgu.includes('FROM ad_group_ad')) {
       return [{ campaign: { resourceName: `customers/${MUSTERI}/campaigns/555` }, adGroup: { resourceName: `customers/${MUSTERI}/adGroups/666` }, adGroupAd: { resourceName: `customers/${MUSTERI}/adGroupAds/666~777` } }] as T[];
     }
@@ -122,6 +159,7 @@ class SahteGoogle implements GoogleYayinPortu {
         name: k.name,
         status: this.durum,
         advertisingChannelType: k.advertisingChannelType,
+        biddingStrategyType: k.targetSpend ? 'TARGET_SPEND' : k.maximizeConversions ? 'MAXIMIZE_CONVERSIONS' : 'MANUAL_CPC',
         networkSettings: k.networkSettings,
         geoTargetTypeSetting: { positiveGeoTargetType: (k.geoTargetTypeSetting as { positiveGeoTargetType: string }).positiveGeoTargetType },
       },
@@ -133,6 +171,25 @@ class SahteGoogle implements GoogleYayinPortu {
   async kampanyaAc(_c: FetchContext, kaynak: string) {
     this.acilan.push(kaynak);
     this.durum = 'ENABLED';
+  }
+}
+
+/**
+ * GOOGLE'IN GAQL KURALI TAKLİTTE, BÜTÜN SORGULARDA: WHERE'de geçen ve FROM
+ * kaynağına ait OLMAYAN (iliştirilmiş kaynağın) her alan SELECT'te de
+ * olmalı. Canlıda `campaign_asset` + `campaign.id` ile ölçüldü (2026-10-11).
+ * FROM kaynağının kendi alanı (ör. `FROM campaign WHERE campaign.id`)
+ * seçilmeden canlıda geçti; o yüzden kural ona uygulanmıyor.
+ */
+function gaqlKurali(sorgu: string): void {
+  const m = /SELECT([\s\S]*?)FROM\s+(\w+)([\s\S]*)$/.exec(sorgu);
+  if (!m) throw new Error(`GAQL çözümlenemedi: ${sorgu.slice(0, 80)}`);
+  const secilen = new Set(m[1]!.split(',').map((x) => x.trim()));
+  const kaynak = m[2]!;
+  const nerede = /WHERE([\s\S]*?)(?:LIMIT|ORDER BY|$)/.exec(m[3]!)?.[1] ?? '';
+  for (const [alan] of nerede.replace(/'[^']*'/g, "''").matchAll(/\b[a-z_]+(?:\.[a-z_]+)+\b/g)) {
+    if (alan.startsWith(`${kaynak}.`)) continue;
+    if (!secilen.has(alan)) throw new PlatformApiError('google', 'permanent', `EXPECTED_REFERENCED_FIELD_IN_SELECT_CLAUSE: '${alan}'`);
   }
 }
 
@@ -374,5 +431,210 @@ describe('geri okuma karşılaştırması', () => {
       // Öneki yalnız TR'de ve yalnız doğru uzunlukta atıyoruz: başka ülkede dokunulmaz.
       expect(ulusalNumara({ countryCode: 'US', phoneNumber: '02325551234' }).phoneNumber).toBe('02325551234');
     });
+  });
+});
+
+// ===========================================================================
+// DALGA 3 — Talep Yaratma GÖRSEL ve Maks. Performans yayını
+// ===========================================================================
+
+const G_YATAY = '00000000-0000-4000-8000-0000000000b1';
+const G_KARE = '00000000-0000-4000-8000-0000000000b2';
+const G_GORSEL: GoogleDerlemeGirdisi = {
+  ...GIRDI,
+  kurgu: 'TALEP_YARATMA_GORSEL',
+  ulasma: null,
+  anahtarKelimeler: [],
+  gorseller: [
+    { varlikId: G_YATAY, oran: 'yatay' },
+    { varlikId: G_KARE, oran: 'kare' },
+  ],
+};
+const G_PMAX: GoogleDerlemeGirdisi = {
+  ...G_GORSEL,
+  kurgu: 'MAKS_PERFORMANS',
+  teklif: 'MAKS_DONUSUM',
+  uzunBasliklar: ['Kuşadası’nda bahçeli villalar.'],
+  aciklamalar: ['Kısa açıklama.', 'İkinci açıklama.'],
+};
+const G_BAGLAM: Partial<GoogleDerlemeBaglami> = {
+  logo: { resource: `customers/${MUSTERI}/assets/77` },
+  gorselKaynaklari: new Map([
+    [G_YATAY, { kaynak: { yeniGorsel: { name: 'yatay', bytes: Buffer.from('y') } }, olcu: { genislik: 1200, yukseklik: 628, bayt: 1000 } }],
+    [G_KARE, { kaynak: { yeniGorsel: { name: 'kare', bytes: Buffer.from('k') } }, olcu: { genislik: 1200, yukseklik: 1200, bayt: 1000 } }],
+  ]),
+};
+
+async function dalga3Kur(girdi: GoogleDerlemeGirdisi) {
+  for (const [id, w, hh] of [
+    [G_YATAY, 1200, 628],
+    [G_KARE, 1200, 1200],
+  ] as const) {
+    await h.q(
+      `INSERT INTO assets (id, org_id, client_id, kind, name, file_name, mime_type, byte_size, width, height, storage_key, content_hash, updated_at)
+       VALUES ($1, $2, $3, 'image', 'g', 'g.png', 'image/png', 1000, $4, $5, 'k', $6, now())`,
+      [id, IDS.org, IDS.client, w, hh, id],
+    );
+  }
+  const d = derleGoogle(girdi, {
+    kimlik: YAYIN,
+    workspaceKisaAdi: 'WS',
+    amacEkranAdi: 'Bölgemde çok kişi görsün',
+    simdi: new Date('2026-10-10T09:00:00+03:00'),
+    validateOnly: false,
+    youtubeVideoBasligi: null,
+    logo: null,
+    ...G_BAGLAM,
+  });
+  if (d.tur !== 'govde') throw new Error(JSON.stringify(d));
+  await googleYayinKaydiOlustur(tx, {
+    id: YAYIN,
+    orgId: IDS.org,
+    clientId: IDS.client,
+    taslakId: TASLAK,
+    taslakSurumNo: 1,
+    icerikOzeti: 'e'.repeat(64),
+    adAccountId: HESAP,
+    govde: { platform: 'google', kurgu: d.kurgu, govde: d.govde, sira: d.sira, logoVarlikId: null },
+    beklenen: d.beklenen,
+    apiSurumu: 'v25',
+    derleyiciSurumu: GOOGLE_DERLEYICI_SURUMU,
+    atifStandardi: GOOGLE_ATIF,
+    baslatanId: IDS.user,
+    kapaliKalacak: false,
+    uyum: { surum: UYUM_SURUMU, tur: 'gecti' },
+  });
+  return d;
+}
+
+type Satirlar = Array<Record<string, unknown>>;
+const kanaliBoz = (degistir: (k: Record<string, boolean>) => Record<string, boolean>) => (tur: string, s: Satirlar): Satirlar =>
+  tur === 'ad_group'
+    ? s.map((x) => {
+        const a = x.adGroup as { demandGenAdGroupSettings: { channelControls: { selectedChannels: Record<string, boolean> } } };
+        return { adGroup: { ...a, demandGenAdGroupSettings: { channelControls: { selectedChannels: degistir(a.demandGenAdGroupSettings.channelControls.selectedChannels) } } } };
+      })
+    : s;
+
+describe('Dalga 3 — Talep Yaratma GÖRSEL yayını', () => {
+  it('KRİTİK: kur → geri oku (kanallar + görsel sayısı + otomasyon) → aç; yeni görseller önbelleğe yazılıyor', async () => {
+    const d = await dalga3Kur(G_GORSEL);
+    const g = new SahteGoogle();
+    expect(await isle(g)).toEqual({ tur: 'bitti', durum: 'iletildi' });
+    const [o] = await h.q<{ sonuc: string; satirlar: unknown[] }>('SELECT sonuc, satirlar FROM geri_okuma');
+    expect(o).toEqual({ sonuc: 'temiz', satirlar: [] });
+    expect((await nesneler()).map((n) => n.ad)).toEqual(['kampanya', 'reklam_grubu', 'reklam']);
+    // Önbellek: yanıttaki kaynak adı, işlem sırasından, kendi varlığına.
+    const refs = await h.q<{ asset_id: string; external_ref: string }>('SELECT asset_id::text, external_ref FROM asset_platform_refs ORDER BY asset_id');
+    expect(refs).toHaveLength(2);
+    expect(refs).toEqual(
+      [...d.sira.gorseller!].sort((a, b) => a.varlikId.localeCompare(b.varlikId)).map((x) => ({ asset_id: x.varlikId, external_ref: `customers/${MUSTERI}/assets/${900 + x.sira}` })),
+    );
+    // Kurguya özgü sorgular gerçekten soruldu.
+    expect(g.sorgular.some((s) => s.includes('selected_channels.display'))).toBe(true);
+  });
+
+  it('KRİTİK: Görüntülü Reklam Ağı açık döndü → fark_var (alan gorselReklam), AÇILMAZ', async () => {
+    await dalga3Kur(G_GORSEL);
+    const g = new SahteGoogle();
+    g.dalga3Bozucu = kanaliBoz((k) => ({ ...k, display: true }));
+    expect(await isle(g)).toEqual({ tur: 'bitti', durum: 'fark_var' });
+    expect(g.acilan).toEqual([]);
+    const [r] = await h.q<{ satirlar: Array<{ alan: string }> }>('SELECT satirlar FROM geri_okuma');
+    expect(r!.satirlar.map((x) => x.alan)).toEqual(['gorselReklam']);
+  });
+
+  it('Google false kanalı HİÇ göndermese de (proto3 JSON) temiz: eksik bayrak kapalı sayılıyor', async () => {
+    await dalga3Kur(G_GORSEL);
+    const g = new SahteGoogle();
+    g.dalga3Bozucu = kanaliBoz((k) => Object.fromEntries(Object.entries(k).filter(([, v]) => v)));
+    expect(await isle(g)).toEqual({ tur: 'bitti', durum: 'iletildi' });
+  });
+
+  it('otomasyon ayarı geri okunamadıysa (Google yankılamadı) FARK — bilinmeyen doğru sayılmaz', async () => {
+    await dalga3Kur(G_GORSEL);
+    const g = new SahteGoogle();
+    g.dalga3Bozucu = (tur, s) => (tur === 'ad_group_ad' ? s.map((x) => ({ adGroupAd: { ...(x.adGroupAd as object), adGroupAdAssetAutomationSettings: [] } })) : s);
+    expect(await isle(g)).toEqual({ tur: 'bitti', durum: 'fark_var' });
+  });
+});
+
+describe('Dalga 3 — Maks. Performans yayını', () => {
+  it('KRİTİK: kur → geri oku (varlık grubu, marka, otomasyon, teklif) → aç; nesneler kampanya + varlık grubu (reklam YOK)', async () => {
+    await dalga3Kur(G_PMAX);
+    const g = new SahteGoogle();
+    expect(await isle(g)).toEqual({ tur: 'bitti', durum: 'iletildi' });
+    expect((await nesneler()).map((n) => [n.ad, n.durum, n.meta_id])).toEqual([
+      ['kampanya', 'acildi', `customers/${MUSTERI}/campaigns/555`],
+      ['varlik_grubu', 'kuruldu', `customers/${MUSTERI}/assetGroups/888`],
+    ]);
+    const [o] = await h.q<{ sonuc: string; satirlar: unknown[] }>('SELECT sonuc, satirlar FROM geri_okuma');
+    expect(o).toEqual({ sonuc: 'temiz', satirlar: [] });
+    // Tekillik kapısı ad_group_ad'den DEĞİL varlık grubundan aradı.
+    // Ad araması TEK (tekillik kapısı): yanıttaki kaynak adları yetti, reklam
+    // nesnesi olmadığı için "belirsiz" sayılıp uzlaştırmaya düşülmedi.
+    expect(g.sorgular.filter((s) => /FROM asset_group\s[\s\S]*LIKE/.test(s))).toHaveLength(1);
+    expect(g.sorgular.some((s) => /FROM ad_group_ad[\s\S]*LIKE/.test(s))).toBe(false);
+  });
+
+  it('KRİTİK: URL genişletme Google’da AÇIK okunursa fark_var (alan varlikGrubu), kampanya AÇILMAZ', async () => {
+    await dalga3Kur(G_PMAX);
+    const g = new SahteGoogle();
+    g.dalga3Bozucu = (tur, s) =>
+      tur === 'pmax_kampanya'
+        ? s.map((x) => {
+            const c = x.campaign as { assetAutomationSettings: Array<{ assetAutomationType: string; assetAutomationStatus: string }> };
+            return {
+              campaign: {
+                ...c,
+                assetAutomationSettings: c.assetAutomationSettings.map((a) =>
+                  a.assetAutomationType === 'FINAL_URL_EXPANSION_TEXT_ASSET_AUTOMATION' ? { ...a, assetAutomationStatus: 'OPTED_IN' } : a,
+                ),
+              },
+            };
+          })
+        : s;
+    expect(await isle(g)).toEqual({ tur: 'bitti', durum: 'fark_var' });
+    expect(g.acilan).toEqual([]);
+    const [r] = await h.q<{ satirlar: Array<{ alan: string }> }>('SELECT satirlar FROM geri_okuma');
+    expect(r!.satirlar.map((x) => x.alan)).toEqual(['varlikGrubu']);
+  });
+
+  it('Google’ın KENDİ ürettiği varlık (AUTOMATICALLY_CREATED video) fark sayılmaz', async () => {
+    await dalga3Kur(G_PMAX);
+    const g = new SahteGoogle();
+    g.dalga3Bozucu = (tur, s) =>
+      tur === 'asset_group_asset' ? [...s, { assetGroupAsset: { fieldType: 'YOUTUBE_VIDEO', status: 'ENABLED', source: 'AUTOMATICALLY_CREATED' } }] : s;
+    expect(await isle(g)).toEqual({ tur: 'bitti', durum: 'iletildi' });
+  });
+
+  it('bizim bağladığımız bir başlık eksik okunursa fark', async () => {
+    await dalga3Kur(G_PMAX);
+    const g = new SahteGoogle();
+    g.dalga3Bozucu = (tur, s) => {
+      if (tur !== 'asset_group_asset') return s;
+      const i = s.findIndex((x) => (x.assetGroupAsset as { fieldType: string }).fieldType === 'HEADLINE');
+      return s.filter((_, j) => j !== i);
+    };
+    expect(await isle(g)).toEqual({ tur: 'bitti', durum: 'fark_var' });
+  });
+
+  it('KRİTİK: zaman aşımı → YENİDEN POST YOK; varlık grubundan uzlaştırılıp devam eder', async () => {
+    await dalga3Kur(G_PMAX);
+    const g = new SahteGoogle();
+    g.mutateHatasi = new PlatformApiError('google', 'transient', 'zaman aşımı');
+    g.yineDeKur = true;
+    expect(await isle(g)).toEqual({ tur: 'bitti', durum: 'iletildi' });
+    expect(g.mutateSayisi).toBe(1);
+    expect((await nesneler()).map((n) => n.meta_id)).toEqual([`customers/${MUSTERI}/campaigns/555`, `customers/${MUSTERI}/assetGroups/888`]);
+  });
+
+  it('teklif Google’da başka okunursa (ör. tıklama) fark', async () => {
+    await dalga3Kur(G_PMAX);
+    const g = new SahteGoogle();
+    g.bozucu = (o) => {
+      (o.campaign as { biddingStrategyType: string }).biddingStrategyType = 'TARGET_SPEND';
+    };
+    expect(await isle(g)).toEqual({ tur: 'bitti', durum: 'fark_var' });
   });
 });

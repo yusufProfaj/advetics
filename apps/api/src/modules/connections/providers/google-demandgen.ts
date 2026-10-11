@@ -613,6 +613,263 @@ export function demandGenAtomikIstek(p: AtomikVideoIstegi): { govde: AtomikGovde
   };
 }
 
+// ---------------------------------------------------------------------------
+// TALEP YARATMA GÖRSEL REKLAMI (Dalga 3, rehberin "Bölgemde çok kişi görsün")
+// ---------------------------------------------------------------------------
+
+/**
+ * GÖRSEL REKLAMININ KANALLARI — video grubundan FARKLI ve açıkça.
+ *
+ * Video grubundaki blok (yalnız YouTube) burada kullanılamaz: görsel reklam
+ * YouTube video arasında (in-stream) GÖSTERİLMEZ ve yalnız o kanallar açık
+ * bir grup görsel reklam için hiç envanter bulamazdı — hata yok, gösterim
+ * yok. Bloğu hiç göndermemek ise varsayılan `ALL_CHANNELS` demek ve
+ * Görüntülü Reklam Ağı ile Haritalar'ı da açardı (karar tablosu "kapalı"
+ * diyor).
+ *
+ * SEÇİM: YouTube akışı + Shorts, Gmail, Keşfet — rehberin "Bölgemde çok kişi
+ * görsün" sözünün (`REHBER_AMACLARI.ERISIM.google.nerede`) ta kendisi.
+ * Görüntülü Reklam Ağı KAPALI: erişim ucuzlar ama tıklamanın kalitesi en
+ * düşük envanter orası ve kullanıcıya söz verilmedi. Haritalar KAPALI
+ * (v25'te alan `maps`; görsel reklamın orada nasıl göründüğü ölçülmedi).
+ * Alan adları v25 `DemandGenSelectedChannels` referansından; yedisi de
+ * açıkça yazılıyor (yazılmayan alan bugün false; yarın bir varsayılan
+ * değişirse sessizce kayardı).
+ */
+export const DEMAND_GEN_GORSEL_KANALLARI = {
+  youtubeInStream: false,
+  youtubeInFeed: true,
+  youtubeShorts: true,
+  discover: true,
+  gmail: true,
+  display: false,
+  maps: false,
+} as const;
+
+/**
+ * Görsel reklamının OTOMASYONLARI — reklam (AdGroupAd) düzeyinde, açıkça.
+ *
+ * Google'ın enum belgesi üçünün de `DemandGenMultiAssetAd` için VARSAYILAN
+ * AÇIK olduğunu söylüyor: görsellerden video üretme, metni görselin içine
+ * gömüp yeni oranlar tasarlama, hareketli görsel üretme. Üçü de kullanıcının
+ * GÖRMEDİĞİ yaratıcı içerik: yasal uyarılı sektörde görselin üstüne
+ * Google'ın yazdığı metin, onaylanmamış bir reklam demek. Kapalı (kullanıcının
+ * sözü: kendi görselleri yayınlansın). Alanın reklam düzeyinde kabul
+ * edildiği ÖLÇÜLMEDİ — reddederse validateOnly YÜKSEK SESLE söyler.
+ */
+export const DEMAND_GEN_GORSEL_OTOMASYONU = [
+  { assetAutomationType: 'GENERATE_VIDEOS_FROM_OTHER_ASSETS', assetAutomationStatus: 'OPTED_OUT' },
+  { assetAutomationType: 'GENERATE_DESIGN_VERSIONS_FOR_IMAGES', assetAutomationStatus: 'OPTED_OUT' },
+  { assetAutomationType: 'GENERATE_ANIMATED_IMAGES_FROM_OTHER_ASSETS', assetAutomationStatus: 'OPTED_OUT' },
+] as const;
+
+/** Görsel reklam grubu: tipsiz (video grubuyla aynı gerekçe), kanallar yukarıda. */
+export function demandGenGorselAdGroupBody(params: { name: string; campaignResource: string; kitleGrubu?: boolean }): GoogleMutateBody {
+  return body([
+    {
+      create: {
+        name: params.name,
+        campaign: params.campaignResource,
+        status: 'ENABLED',
+        ...(params.kitleGrubu ? { audienceSetting: { useAudienceGrouped: true } } : {}),
+        demandGenAdGroupSettings: { channelControls: { selectedChannels: { ...DEMAND_GEN_GORSEL_KANALLARI } } },
+      },
+    },
+  ]);
+}
+
+/**
+ * Talep Yaratma ÇOKLU VARLIK (görsel) reklamı — v25 `DemandGenMultiAssetAdInfo`.
+ *
+ * VİDEO REKLAMINDAN ÜÇ FARK (referanstan, 2026-10-11):
+ * 1. `businessName` DÜZ DİZGE — video reklamında `AdTextAsset` sarmalı;
+ *    yanlış biçim "geçersiz değer" ile reddedilir.
+ * 2. Başlık en çok 30 karakter ve 5 adet (video'da 40); rehber başlığı zaten
+ *    ≤ 30. Uzun başlık alanı YOK.
+ * 3. Görseller oranına göre ÜÇ ayrı alan: `marketingImages` (1.91:1),
+ *    `squareMarketingImages` (1:1), `portraitMarketingImages` (4:5);
+ *    yatay ya da kareden biri zorunlu. 9:16 (`tallPortraitMarketingImages`)
+ *    GÖNDERİLMİYOR: ölçülmedi (`google-gorsel.ts`).
+ *
+ * EYLEM ÇAĞRISI (`callToActionText`) GÖNDERİLMİYOR: alan serbest metin ve
+ * rehberde bir kaynağı yok; Google otomatik seçiyor. Uydurmuyoruz.
+ * Reklamın adı zorunlu (video reklamında canlıda öğrenildi; aynı `Ad`).
+ */
+export function demandGenMultiAssetAdBody(params: {
+  adGroupResource: string;
+  name: string;
+  finalUrl: string;
+  businessName: string;
+  logoAssetResource: string;
+  yatay: string[];
+  kare: string[];
+  dik45: string[];
+  headlines: string[];
+  descriptions: string[];
+}): GoogleMutateBody {
+  const metin = (t: string): { text: string } => ({ text: t });
+  const gorsel = (asset: string): { asset: string } => ({ asset });
+  return body([
+    {
+      create: {
+        adGroup: params.adGroupResource,
+        status: 'ENABLED',
+        adGroupAdAssetAutomationSettings: DEMAND_GEN_GORSEL_OTOMASYONU.map((x) => ({ ...x })),
+        ad: {
+          name: params.name.slice(0, 255),
+          finalUrls: [params.finalUrl],
+          demandGenMultiAssetAd: {
+            businessName: params.businessName,
+            logoImages: [gorsel(params.logoAssetResource)],
+            // Boş dizi GÖNDERİLMİYOR: "alan var ama boş" ile "alan yok"un
+            // Google'da aynı okunduğu ölçülmedi.
+            ...(params.yatay.length ? { marketingImages: params.yatay.map(gorsel) } : {}),
+            ...(params.kare.length ? { squareMarketingImages: params.kare.map(gorsel) } : {}),
+            ...(params.dik45.length ? { portraitMarketingImages: params.dik45.map(gorsel) } : {}),
+            headlines: params.headlines.map(metin),
+            descriptions: params.descriptions.map(metin),
+          },
+        },
+      },
+    },
+  ]);
+}
+
+/** Atomik isteğe girecek bir görsel: hesapta kayıtlı kaynak adı ya da bu istekte yüklenecek bayt. */
+export type GoogleGorselKaynagi = { resource: string } | { yeniGorsel: { name: string; bytes: Buffer } };
+
+export interface AtomikGorselIstegi {
+  customerId: string;
+  name: string;
+  stamp: string;
+  dailyBudgetMicros: bigint;
+  endDate: string | null;
+  startDate?: string;
+  acilis: KampanyaAcilisi;
+  konumlar: string[];
+  yaslar: readonly string[];
+  logo: GoogleGorselKaynagi;
+  /** Oranına göre ayrılmış görseller; `varlikId` önbellek (asset_platform_refs) için. */
+  gorseller: Array<{ varlikId: string; oran: 'yatay' | 'kare' | 'dik45'; kaynak: GoogleGorselKaynagi }>;
+  businessName: string;
+  finalUrl: string;
+  headlines: string[];
+  descriptions: string[];
+  validateOnly: boolean;
+}
+
+export interface AtomikGorselSirasi {
+  kampanya: number;
+  reklamGrubu: number;
+  reklam: number;
+  logo: number | null;
+  /** Bu istekte YENİ yüklenen görsellerin işlem sırası (önbelleğe yazılacak). */
+  gorseller: Array<{ varlikId: string; sira: number }>;
+}
+
+/**
+ * Görsel varlığının adı: zaman damgalı ve varlık kimliğiyle. Aynı hesapta
+ * aynı adla ikinci görsel `DUPLICATE_ASSET_NAME` riski ve tek ret bütün
+ * atomik isteği düşürür. Google'ın notu: aynı İÇERİKLİ görsel farklı adla
+ * gelirse yeni ad sessizce düşüyor ve var olan varlık dönüyor — zararsız,
+ * kaynak adı yanıttan okunuyor.
+ */
+export function googleGorselVarligi(g: { varlikId: string; ad: string; bytes: Buffer }, stamp: string): Record<string, unknown> {
+  return ilkCreate(googleImageAssetBody({ name: `${g.ad.slice(0, 60)} ${g.varlikId.slice(-8)} ${stamp}`, bytes: g.bytes }));
+}
+
+/**
+ * TEK ATOMİK İSTEK — Talep Yaratma GÖRSEL. Video isteğinin
+ * (`demandGenAtomikIstek`) iskeleti: bütçe → kampanya (aynı gövde, PAUSED,
+ * PRESENCE, `targetSpend`) → grup (GÖRSEL kanalları) → konum → [yaş kitlesi]
+ * → görseller → logo → reklam. Video fonksiyonu Akıllı Boost'un canlıda
+ * doğrulanmış gövdesini üretiyor; ona dal eklemek o gövdeyi riske atardı,
+ * bu yüzden ayrı fonksiyon ve ORTAK alt üreticiler.
+ */
+export function demandGenGorselAtomikIstek(p: AtomikGorselIstegi): { govde: AtomikGovde; sira: AtomikGorselSirasi } {
+  const kok = `customers/${p.customerId}`;
+  const BUTCE = `${kok}/campaignBudgets/-1`;
+  const KAMPANYA = `${kok}/campaigns/-2`;
+  const GRUP = `${kok}/adGroups/-3`;
+  const KITLE = `${kok}/audiences/-4`;
+  let gecici = -5;
+  const yeniKaynak = () => `${kok}/assets/${gecici--}`;
+
+  const ops: Array<Record<string, unknown>> = [];
+  const ekle = (op: Record<string, unknown>): number => ops.push(op) - 1;
+  ekle({
+    campaignBudgetOperation: {
+      create: { ...ilkCreate(campaignBudgetBody({ name: p.name, amountMicros: p.dailyBudgetMicros.toString(), stamp: p.stamp })), resourceName: BUTCE },
+    },
+  });
+  const kampanyaGovdesi = ilkCreate(
+    demandGenCampaignBody({
+      name: p.name,
+      budgetResource: BUTCE,
+      stamp: p.stamp,
+      ...(p.startDate ? { startDate: p.startDate } : {}),
+      ...(p.endDate ? { endDate: p.endDate } : {}),
+      yalnizBulunanlar: true,
+    }),
+  );
+  const kampanya = ekle({ campaignOperation: { create: { ...kampanyaGovdesi, status: p.acilis, resourceName: KAMPANYA } } });
+  const segmentler = yasSegmentleri(p.yaslar);
+  const reklamGrubu = ekle({
+    adGroupOperation: {
+      create: { ...ilkCreate(demandGenGorselAdGroupBody({ name: p.name, campaignResource: KAMPANYA, kitleGrubu: segmentler.length > 0 })), resourceName: GRUP },
+    },
+  });
+  // KONUM GRUPTAN HEMEN SONRA: geçici kimlik (-3) ancak grup sırada önceyse çözülüyor.
+  for (const o of demandGenKonumBody({ adGroupResource: GRUP, konumlar: p.konumlar }).operations) {
+    ekle({ adGroupCriterionOperation: { create: o.create } });
+  }
+  if (segmentler.length > 0) {
+    ekle({ audienceOperation: { create: { ...ilkCreate(demandGenYasKitlesiBody({ name: p.name, stamp: p.stamp, segmentler })), resourceName: KITLE } } });
+    ekle({ adGroupCriterionOperation: { create: ilkCreate(demandGenKitleBaglaBody({ adGroupResource: GRUP, audienceResource: KITLE })) } });
+  }
+  const yeniGorseller: Array<{ varlikId: string; sira: number }> = [];
+  const kaynaklar = { yatay: [] as string[], kare: [] as string[], dik45: [] as string[] };
+  for (const g of p.gorseller) {
+    if ('resource' in g.kaynak) {
+      kaynaklar[g.oran].push(g.kaynak.resource);
+      continue;
+    }
+    const r = yeniKaynak();
+    const sira = ekle({
+      assetOperation: { create: { ...googleGorselVarligi({ varlikId: g.varlikId, ad: g.kaynak.yeniGorsel.name, bytes: g.kaynak.yeniGorsel.bytes }, p.stamp), resourceName: r } },
+    });
+    yeniGorseller.push({ varlikId: g.varlikId, sira });
+    kaynaklar[g.oran].push(r);
+  }
+  let logoSira: number | null = null;
+  let logoKaynagi: string;
+  if ('resource' in p.logo) logoKaynagi = p.logo.resource;
+  else {
+    logoKaynagi = yeniKaynak();
+    logoSira = ekle({ assetOperation: { create: { ...ilkCreate(googleImageAssetBody(p.logo.yeniGorsel)), resourceName: logoKaynagi } } });
+  }
+  const reklam = ekle({
+    adGroupAdOperation: {
+      create: ilkCreate(
+        demandGenMultiAssetAdBody({
+          adGroupResource: GRUP,
+          name: `${p.name} — reklam ${p.stamp}`,
+          finalUrl: p.finalUrl,
+          businessName: p.businessName,
+          logoAssetResource: logoKaynagi,
+          ...kaynaklar,
+          headlines: p.headlines,
+          descriptions: p.descriptions,
+        }),
+      ),
+    },
+  });
+  return {
+    govde: { mutateOperations: ops, partialFailure: false, validateOnly: p.validateOnly },
+    sira: { kampanya, reklamGrubu, reklam, logo: logoSira, gorseller: yeniGorseller },
+  };
+}
+
 /**
  * ═══ GOOGLE HATALARININ TAMAMI — ALAN YOLUYLA ═══
  *

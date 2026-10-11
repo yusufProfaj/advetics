@@ -8,3 +8,4 @@ export * from './turet';
 export * from './kararlar';
 export * from './uyum';
 export * from './api';
+export * from './google-gorsel';

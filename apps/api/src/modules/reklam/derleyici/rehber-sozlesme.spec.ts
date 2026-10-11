@@ -327,7 +327,7 @@ describe('rehberdenMeta — mevcut Meta zincirine bağlanır', () => {
 });
 
 describe('rehberdenGoogle — derleme girdisi', () => {
-  const GB = { musteriId: '612-448-2093', paraBirimi: 'TRY', saatDilimi: 'Europe/Istanbul', donusumEtkin: false, isletmeAdi: 'Garden Villas', logoVarlikId: null, kategoriTabani: [] };
+  const GB = { musteriId: '612-448-2093', paraBirimi: 'TRY', saatDilimi: 'Europe/Istanbul', donusumEtkin: false, satisOlcumu: null, isletmeAdi: 'Garden Villas', logoVarlikId: null, kategoriTabani: [] };
 
   it('SITE → ARAMA/site, kalan pay, tiresiz Google hesap numarası, taban negatifler', () => {
     const r = rehberdenGoogle(tamSite(), acikPlatformlar(tamSite(), true), GB);
