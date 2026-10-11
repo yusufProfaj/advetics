@@ -15,10 +15,22 @@ CLAUDE.md'deki beş ajan düzeniyle yürür; aşama başlarken kendi
 Orphex bir **analiz katmanı**: kreatif performans ve yorgunluk, bütçe
 dağıtımı önerisi, tempo bazlı KPI takibi, kitle içgörüsü, görsel öğe
 etiketleyen Creative AI, MCP (Claude/ChatGPT/Gemini), Slack uyarıları,
-ajans için otomatik rapor. **Reklam kurmuyor ve değiştirmiyor**: ne
-yapılacağını söylüyor, yapmayı kullanıcıya bırakıyor.
+ajans için otomatik rapor. Ana paneli ve Orpheus asistanı büyük ölçüde
+ne yapılacağını söylüyor, yapmayı kullanıcıya bırakıyor.
 
-Advetics'in farkı tek cümle: **"Orphex söyler, Advetics yapar."**
+**GÜNCELLEME 2026-10-12 — yukarıdaki "reklam kurmuyor ve değiştirmiyor"
+yargısı artık YANLIŞ.** 2026'da çıkan Orphex MCP, Claude/ChatGPT/Copilot
+üzerinden onaylı yazıyor: Google/Meta/TikTok'ta durum, bütçe, teklif,
+kampanya/set/reklam kurulumu (önizleme, prova, süreli onay, duraklatılmış
+başlangıç, %50 bütçe sınırı). Ayrıntı ve boşluk listesi:
+[`rakip-analizi/ORPHEX-BOSLUK.md`](rakip-analizi/ORPHEX-BOSLUK.md). Farkımız
+"yazıyor muyuz" değil, KİM İÇİN ve NEREDE yazdığımız: reklam bilmeyen
+kullanıcıya uçtan uca kurulum (AdvCampaign), beyaz etiket + müşterinin
+panelde onayı, uzman ajanın sohbet penceresinde değil panelin içinde
+"Uygula".
+
+Advetics'in farkı tek cümle (2026-10-09 hâli; yukarıdaki güncellemeyle
+okunmalı): **"Orphex söyler, Advetics yapar."**
 
 - Her içgörünün yanında onaylı bir **"Uygula"** var. Altyapı zaten duruyor:
   `campaign-actions` (`pause`, `resume`, `set_budget`, `copy`), Kurallar,
