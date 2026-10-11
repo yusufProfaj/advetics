@@ -51,6 +51,7 @@ import {
   geriAlinabilirMi,
   yenidenOkunabilirMi,
   videoBilgisiKapaktan,
+  oneriyiSigdir,
   yayinSonucuEtiketi,
   geriAlMetinleri,
   yayinlanabilirMi,
@@ -804,5 +805,23 @@ describe('kaynak: rehber ekranı video bilgisini kapaktan tamamlıyor', () => {
     const e = readFileSync(join(__dirname, 'rehber-ekrani.tsx'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
     expect(e).toContain('videoBilgisiKapaktan(medyaBilgisi');
     expect(e).not.toMatch(/medyaBilgisi=\{medyaBilgisi\}/);
+  });
+});
+
+describe('metin önerisi sınıra sığar (canlı, 2026-10-11: 9 başlık, sınır 5)', () => {
+  it('KRİTİK: video/erişimde ilk 5 başlık; dışarıda kalan sayılıyor', () => {
+    const o = { anaMetin: 'm', basliklar: ['1', '2', '3', '4', '5', '6', '7', '8', '9'], aciklamalar: ['a', 'b', 'c', 'd'], notlar: [] };
+    const k = metinKurali({ meta: true, google: true }, 'TALEP_YARATMA_VIDEO');
+    const r = oneriyiSigdir(o, k);
+    expect(r.basliklar).toEqual(['1', '2', '3', '4', '5']);
+    expect(r.disarida).toBe(4 + (4 - r.aciklamalar.length));
+    // Arama 15 başlığa kadar: hiçbiri atılmıyor.
+    expect(oneriyiSigdir(o, metinKurali({ meta: true, google: true }, 'ARAMA')).disarida).toBe(0);
+  });
+  it('KRİTİK: "Kullan" sığdırılmış metni yazıyor', () => {
+    const r = yorumsuz('adim-reklam.tsx');
+    const govde = r.slice(r.indexOf('function kullan('), r.indexOf('function kullan(') + 300);
+    expect(govde).toContain('oneriyiSigdir(o, kural)');
+    expect(govde).toContain('basliklar: sig.basliklar');
   });
 });

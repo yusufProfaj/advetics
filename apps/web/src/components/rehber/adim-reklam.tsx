@@ -37,6 +37,7 @@ import {
   kelimeSatirlari,
   metinKurali,
   metinKutusu,
+  oneriyiSigdir,
   metinOnerisiHali,
   oneriHatasi,
   setGorunumu,
@@ -684,10 +685,12 @@ function MetinBlogu({ b, kaydet }: { b: AdimBaglami; kaydet: () => Promise<boole
   }
 
   function kullan(o: MetinOnerisi) {
-    metinYaz(metinKutusu({ anaMetin: o.anaMetin, basliklar: o.basliklar, aciklamalar: o.aciklamalar }, kural));
+    const sig = oneriyiSigdir(o, kural);
+    metinYaz(metinKutusu({ anaMetin: sig.anaMetin, basliklar: sig.basliklar, aciklamalar: sig.aciklamalar }, kural));
     setOneri({ tur: 'istenmedi' });
   }
 
+  const oneriSig = oneri.tur === 'geldi' ? oneriyiSigdir(oneri.deger, kural) : null;
   return (
     <div className={s.blok}>
       <div className={s.blokBaslik}>
@@ -697,31 +700,32 @@ function MetinBlogu({ b, kaydet }: { b: AdimBaglami; kaydet: () => Promise<boole
         </button>
       </div>
       <div className={s.metinler}>
-        {oneri.tur === 'geldi' && (
+        {oneriSig && (
           <div className={s.oneriKart}>
             <b>Önerilen metin</b>
-            {oneri.deger.anaMetin && <span>{oneri.deger.anaMetin}</span>}
-            {oneri.deger.basliklar.length > 0 && (
+            {oneriSig.anaMetin && <span>{oneriSig.anaMetin}</span>}
+            {oneriSig.basliklar.length > 0 && (
               <ul>
-                {oneri.deger.basliklar.map((x, i) => (
+                {oneriSig.basliklar.map((x, i) => (
                   <li key={`b${i}`}>{x}</li>
                 ))}
               </ul>
             )}
-            {oneri.deger.aciklamalar.length > 0 && (
+            {oneriSig.aciklamalar.length > 0 && (
               <ul>
-                {oneri.deger.aciklamalar.map((x, i) => (
+                {oneriSig.aciklamalar.map((x, i) => (
                   <li key={`a${i}`}>{x}</li>
                 ))}
               </ul>
             )}
-            {oneri.deger.notlar.map((n, i) => (
+            {oneriSig.disarida > 0 && <span className={s.ops}>Bu reklamda kullanılmayacak {oneriSig.disarida} satır gösterilmedi.</span>}
+            {oneriSig.notlar.map((n, i) => (
               <span key={`n${i}`} className={s.ops}>
                 {n}
               </span>
             ))}
             <span style={{ display: 'flex', gap: 8 }}>
-              <button type="button" className={s.ikincil} onClick={() => kullan(oneri.deger)}>
+              <button type="button" className={s.ikincil} onClick={() => kullan(oneriSig)}>
                 Kullan
               </button>
               <button type="button" className={s.metinDugme} onClick={() => setOneri({ tur: 'istenmedi' })}>

@@ -1063,6 +1063,22 @@ export function metinKutusu(m: MetinSeti | undefined, k: Pick<MetinKurali, 'basl
   };
 }
 
+/**
+ * METİN ÖNERİSİ SINIRA SIĞAR. Öneri servisi Google Arama'nın sayısıyla (9
+ * başlık, 4 açıklama) dönüyor; Video/Erişim gibi amaçlarda sınır 5 başlık ve
+ * "Kullan" dokuzunu da yazıyordu. Derleyici ilk 5'i kullanıp kalanını
+ * SESSİZCE atıyordu (canlı, 2026-10-11). Kartta ve yazılan metinde aynı
+ * kesim; dışarıda kalanın sayısı kartta söyleniyor.
+ */
+export function oneriyiSigdir<T extends { basliklar: string[]; aciklamalar: string[] }>(
+  o: T,
+  k: Pick<MetinKurali, 'baslikEnCok' | 'aciklamaEnCok'>,
+): T & { disarida: number } {
+  const basliklar = o.basliklar.slice(0, k.baslikEnCok);
+  const aciklamalar = o.aciklamalar.slice(0, k.aciklamaEnCok);
+  return { ...o, basliklar, aciklamalar, disarida: o.basliklar.length - basliklar.length + (o.aciklamalar.length - aciklamalar.length) };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Onay penceresi ve son ekran
 // ─────────────────────────────────────────────────────────────────────────────
