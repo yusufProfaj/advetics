@@ -187,7 +187,7 @@ describe('satışta Google ön koşulu (canlı, 2026-10-11: "ikisi de hazır" ya
     hesaplar: [{ id: 'm', ad: 'M', paraBirimi: 'TRY', saatDilimi: 'Europe/Istanbul' }],
     googleHesaplari: [{ id: 'g', ad: 'G', musteriNo: '1-2-3', paraBirimi: 'TRY', saatDilimi: 'Europe/Istanbul' }],
   };
-  const ok = (v: boolean | null) => ({ onKosullar: { googleSatisOlcumu: v } }) as never;
+  const ok = (v: boolean | null) => ({ onKosullar: { googleSatisOlcumu: v } }) as unknown as Required<Pick<Parameters<typeof platformNedeni>[1], 'onKosullar'>>;
   it('KRİTİK: dönüşüm KESİN yoksa Google varsayılan kapalı ve cümle sebebi söylüyor; bilinmiyorsa kapatılmıyor', () => {
     const eski = { ...REHBER_ACILIS.SATIS };
     try {
