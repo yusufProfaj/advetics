@@ -102,8 +102,9 @@ export const NIYET_KATALOGU: Record<NiyetKodu, NiyetSatiri> = {
     tur: 1,
     kanit: 'belge',
     // Amaç LEADS: Advantage+ lead kampanya durumu ve mesajlaşmadan lead'e
-    // geçiş yalnız bu amaçta var. Numara SORULMAZ, Meta sayfadan alıyor
-    // (CLAUDE.md CTWA); bağlantı sabit.
+    // geçiş yalnız bu amaçta var. Bağlantı sabit; numara Dalga 3'ten beri
+    // SORULUYOR ve `promoted_object.whatsapp_phone_number` ile gidiyor
+    // (derle.ts WhatsApp notu, CLAUDE.md CTWA güncellemesi).
     meta: {
       objective: 'OUTCOME_LEADS',
       optimizationGoal: 'CONVERSATIONS',
@@ -137,7 +138,8 @@ export const NIYET_KATALOGU: Record<NiyetKodu, NiyetSatiri> = {
     tur: 1,
     kanit: 'belge',
     // objective olaya göre değişiyor (satış → SALES, kayıt → LEADS); burada
-    // satış dalı duruyor, kayıt dalını derleyici custom_event_type'tan seçer.
+    // satış dalı duruyor. Kayıt dalı DERLENMİYOR: derleyici olayı sabit
+    // PURCHASE yazıyor (derle.ts SATIS_OLAYI), rehber kaydı sormuyor.
     meta: {
       objective: 'OUTCOME_SALES',
       optimizationGoal: 'OFFSITE_CONVERSIONS',

@@ -6,6 +6,7 @@ import {
   METIN_SINIRLARI,
   REHBER_AMACLARI,
   TABAN_NEGATIFLER,
+  adresAlani,
   karakterSayisi,
   bannerSetiDestekleniyor,
   oranBul,
@@ -22,6 +23,8 @@ import { medyaOlc, medyaYukle } from '@/reklam/medya';
 import { AltCubuk, Soru, sil, yaz, type AdimBaglami } from './adim-ortak';
 import { IKON, Ikon } from './ikonlar';
 import { SetKartlari } from './set-kartlari';
+import { WhatsappNumarasi } from './meta-dalga3';
+import { medyaKabulu } from './meta-dalga3-mantik';
 import {
   adresGirdisi,
   adresKaydi,
@@ -87,7 +90,9 @@ export function AdimReklam({
   const googleGorsel = b.acik.google && kurgu === 'TALEP_YARATMA_GORSEL';
   const googleVideo = b.acik.google && kurgu === 'TALEP_YARATMA_VIDEO';
   const gorselGerekli = b.acik.meta || googleGorsel;
-  const adresGerekli = ['SITE', 'SATIS', 'VIDEO', 'ERISIM'].includes(amac) || b.acik.google;
+  // Kural shared'da (`adresAlani`): eksik listesi de aynı fonksiyonu okuyor.
+  const adresHali = adresAlani(amac, b.acik);
+  const adresGerekli = adresHali !== null;
   const eksik = (kod: string) => b.kayit.eksikler.find((e) => e.kod === kod) ?? null;
 
   return (
@@ -119,16 +124,17 @@ export function AdimReklam({
               </p>
             </>
           )}
-          {amac === 'WHATSAPP' && (
-            <p className={s.ipucu} style={{ margin: 0 }}>
-              Numara sorulmaz: Meta onu Facebook sayfana bağlı WhatsApp Business hattından alır.
-            </p>
-          )}
+          {amac === 'WHATSAPP' && <WhatsappNumarasi b={b} />}
           {adresGerekli && (
             <div className={amac === 'FORM' || amac === 'TELEFON' ? s.ustBosluk : undefined}>
               {(amac === 'FORM' || amac === 'TELEFON') && (
                 <p className={s.ipucu} style={{ margin: '0 0 6px' }}>
                   Google reklamı bir site adresine bağlanır:
+                </p>
+              )}
+              {adresHali === 'istege_bagli' && (
+                <p className={s.ipucu} style={{ margin: '0 0 6px' }}>
+                  İsteğe bağlı. Boş bırakırsan düğme Facebook sayfana gider.
                 </p>
               )}
               <div className={s.girdi}>
@@ -306,7 +312,7 @@ function MedyaBlogu({
             ref={dosyaRef}
             type="file"
             multiple
-            accept="image/jpeg,image/png,video/mp4,video/quicktime"
+            accept={medyaKabulu(video)}
             hidden
             onChange={(e) => {
               const hedef = hedefRef.current;
@@ -315,10 +321,17 @@ function MedyaBlogu({
               e.target.value = '';
             }}
           />
-          <button type="button" className={`${s.metinDugme} ${s.ustBosluk}`} aria-expanded={varliklarAcik} onClick={() => setVarliklarAcik((v) => !v)}>
-            {varliklarAcik ? 'Varlıkları gizle' : "Marka Merkezi'nden seç"}
-          </button>
-          <div className={s.gizlenir} data-acik={varliklarAcik}>
+          {/* Meta VİDEO amacında arşivden seçim YOK: arşiv listesi yalnız
+              görselleri taşıyor ve videonun kapağı orada bilinmiyor; kapaksız
+              video reklamı derleyici reddeder. Söyleniyor, gizlice kapanmıyor. */}
+          {video ? (
+            <p className={s.ipucu}>Videoyu buraya yükle. Marka Merkezi&apos;ndeki videolar kapakları bilinmediği için buradan seçilemiyor.</p>
+          ) : (
+            <button type="button" className={`${s.metinDugme} ${s.ustBosluk}`} aria-expanded={varliklarAcik} onClick={() => setVarliklarAcik((v) => !v)}>
+              {varliklarAcik ? 'Varlıkları gizle' : "Marka Merkezi'nden seç"}
+            </button>
+          )}
+          <div className={s.gizlenir} data-acik={varliklarAcik && !video}>
             <div>
               {gorseller.satirlar.length === 0 ? (
                 <p className={s.ipucu}>Marka Merkezi &gt; Varlıklar&apos;da görsel yok.</p>

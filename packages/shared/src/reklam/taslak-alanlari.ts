@@ -123,6 +123,15 @@ export const taslakAlanlariSchema = z
      * amacında taşıyor (`rehberdenMeta`).
      */
     telefon: alan(z.string().max(20).nullable()),
+    /**
+     * WHATSAPP niyeti: mesajın düşeceği hat (E.164). Dalga 3'te eklendi;
+     * `telefon` gibi isteğe bağlı ve varsayılansız, yani kayıtlı taslakların
+     * içerik özeti değişmiyor. `telefon`dan AYRI: arama hattı ile WhatsApp
+     * hattı farklı numaralar olabiliyor ve tek alan birini sessizce ezerdi.
+     */
+    whatsappNumarasi: alan(z.string().max(20).nullable()),
+    /** SATIS niyeti: Meta piksel kimliği (sayısal). İsteğe bağlı, varsayılansız. */
+    pikselId: alan(z.string().regex(/^\d{1,30}$/).nullable()),
   })
   .partial()
   .strict();
@@ -141,6 +150,10 @@ const IZINLI: Partial<Record<keyof TaslakAlanlari, readonly AlanKaynagi[]>> = {
   // Yanlış numara = aramalar başka birine gider ve hata düşmez: önerilen bir
   // numara (`ai_onerisi`) karar değil.
   telefon: ['kullanici', 'marka_merkezi'],
+  whatsappNumarasi: ['kullanici', 'marka_merkezi'],
+  // Tek piksel varsa rehber onu önerir (`derleyici`); yanlış piksel = satış
+  // hiç sayılmaz, o yüzden asistan önerisi karar değil.
+  pikselId: ['kullanici', 'derleyici'],
 };
 
 export interface TaslakEksigi {
@@ -171,7 +184,7 @@ export function kullaniciEksigiMi(e: Pick<TaslakEksigi, 'kod'>): boolean {
 const ALAN_ADIMI: Record<keyof TaslakAlanlari, TaslakEksigi['adim']> = {
   niyet: 0, reklamHesabiId: 0, sayfaId: 0, instagramId: 0, konumlar: 0,
   enDusukYas: 0, ipucuYas: 0, ipucuCinsiyet: 0, ekKategoriler: 0,
-  kavramlar: 1, hedefAdres: 0, formSablonuId: 0, telefon: 0,
+  kavramlar: 1, hedefAdres: 0, formSablonuId: 0, telefon: 0, whatsappNumarasi: 0, pikselId: 0,
   butce: 3, takvim: 4,
 };
 
@@ -239,6 +252,13 @@ export function taslakEksikleri(a: TaslakAlanlari, baglam: EksikBaglami = {}): T
   if (niyet === 'FORM' && !a.formSablonuId?.deger) ekle('formSablonuId', 'FORM-YOK', 'Form seçilmedi');
   if (niyet === 'TELEFON' && !(a.telefon?.deger && TELEFON_E164.test(a.telefon.deger))) {
     ekle('telefon', 'TELEFON', 'Telefon numarası +90 ile başlamalı');
+  }
+  if (niyet === 'WHATSAPP' && !(a.whatsappNumarasi?.deger && TELEFON_E164.test(a.whatsappNumarasi.deger))) {
+    ekle('whatsappNumarasi', 'WA-NUMARA', 'WhatsApp numarası +90 ile başlamalı');
+  }
+  if (niyet === 'SATIS' && !a.pikselId?.deger) ekle('pikselId', 'PIKSEL-YOK', 'Meta pikseli seçilmedi');
+  if (niyet === 'SATIS' && !(a.hedefAdres?.deger && /^https:\/\/[^\s/]+\.[^\s]+/.test(a.hedefAdres.deger))) {
+    ekle('hedefAdres', 'SITE-ADRES', 'Site adresi https:// ile başlamalı');
   }
 
   const b = a.butce?.deger;

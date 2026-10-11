@@ -6,6 +6,7 @@ import { REHBER_AMACLARI, type RehberAmacKodu, type RehberPlatformu } from '@adv
 import { baglanti } from '@/lib/baglanti';
 import { AltCubuk, Soru, sil, yaz, type AdimBaglami } from './adim-ortak';
 import { AMAC_IKONU, IKON, Ikon } from './ikonlar';
+import { PikselSecici } from './meta-dalga3';
 import { amacDegisimi, gorunurAmaclar, platformAnahtari, platformDurumu, platformNedeni, type EkranNo } from './rehber-mantik';
 import s from './rehber.module.css';
 
@@ -245,6 +246,8 @@ export function AdimNerede({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => vo
           )}
         </div>
       )}
+      {/* Satış amacı: piksel hesaba bağlı, o yüzden hesap seçiminin hemen altında. */}
+      {b.acik.meta && amac === 'SATIS' && <PikselSecici b={b} />}
       <AltCubuk git={git} adim={2} />
     </>
   );

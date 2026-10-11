@@ -79,7 +79,12 @@ const KABUL_EDILEMEZ: ReadonlyArray<[string, string]> = [
   ['contextual_multi_ads', 'Başka reklamlarla yan yana gösterim'],
   ['object_story_spec.instagram_user_id', 'Instagram hesabı'],
   ['object_story_spec.page_id', 'Facebook sayfası'],
-  ['promoted_object', 'Facebook sayfası'],
+  // Sayfa, piksel + olay ya da WhatsApp hattı (Dalga 3): üçü de reklamın
+  // NEYE bağlandığı; ad yalnız "Facebook sayfası" derken piksel farkı
+  // ekranda yanlış adla görünürdü.
+  ['promoted_object', 'Reklamın bağlandığı sayfa, piksel ya da WhatsApp hattı'],
+  // Erişimde "haftada en çok 2" sözü (derle.ts ERISIM_SIKLIK_SINIRI).
+  ['frequency_control_specs', 'Sıklık sınırı'],
   ['object_story_spec.link_data.call_to_action', 'Düğme ve hedef'],
   ['object_story_spec.link_data.image_hash', 'Görsel'],
   ['object_story_spec.video_data.call_to_action', 'Düğme ve hedef'],
@@ -178,7 +183,7 @@ export function beklenenYankilar(govdeler: MetaGovdesi[]): BeklenenYanki[] {
           y.karsilastirma = 'ek_false_kabul';
         } else if (yol === 'start_time') {
           y.karsilastirma = 'baslangic';
-        } else if (yol === 'special_ad_categories' || yol === 'special_ad_category_country' || YERLESIM_YOLLARI.has(yol)) {
+        } else if (yol === 'special_ad_categories' || yol === 'special_ad_category_country' || yol === 'frequency_control_specs' || YERLESIM_YOLLARI.has(yol)) {
           y.karsilastirma = 'esit_kume';
         } else if (yol === 'asset_feed_spec') {
           y.karsilastirma = 'varlik_akisi';
@@ -322,10 +327,20 @@ function konumTurleriniAyir(donen: unknown): { kalan: unknown; turler: string[] 
  * taşıyan ek anahtar ise gerçek fark (Meta bir özelliği açmış olur).
  */
 const EK_FALSE_KABUL = new Set(['smart_pse_enabled']);
+/**
+ * N-17 — WHATSAPP NUMARASI RAKAMLA KIYASLANIR (ÖLÇÜLMEDİ, Dalga 3). `+90...`
+ * gönderiyoruz; Meta `90...` döndürebilir. Yalnız `+` ve boşluk düşer:
+ * rakamlar birebir aynı olmalı, başka bir numara HER ZAMAN fark.
+ */
+const rakamlar = (v: unknown) => (typeof v === 'string' ? v.replace(/[+\s]/g, '') : v);
 function ekFalseHaricAyni(gonderilen: unknown, donen: unknown): boolean {
   if (!gonderilen || !donen || typeof gonderilen !== 'object' || typeof donen !== 'object') return kanonik(gonderilen) === kanonik(donen);
-  const g = gonderilen as Record<string, unknown>;
+  const g = { ...(gonderilen as Record<string, unknown>) };
   const d = { ...(donen as Record<string, unknown>) };
+  if ('whatsapp_phone_number' in g) {
+    g.whatsapp_phone_number = rakamlar(g.whatsapp_phone_number);
+    if ('whatsapp_phone_number' in d) d.whatsapp_phone_number = rakamlar(d.whatsapp_phone_number);
+  }
   // YALNIZ ölçülen anahtar ve YALNIZ false (Ajan 4, BULGU-8): `null` "hesabın
   // varsayılanı" demek olabilir, tanımadığımız `xxx_only: false` bir
   // daraltmayı kapatıp genişletebilir.

@@ -45,6 +45,12 @@ export interface RehberPlatformOkuyucu {
    * sayfalarda hiç gelmiyor: yokluğu "hat yok" kanıtı değil).
    */
   metaWhatsapp(sayfaId: string, clientId: string): Promise<boolean | null>;
+  /**
+   * Hesabın pikselleri satın alma ölçüyor mu (Dalga 3, `hazirlikSatisOlcumu`):
+   * kullanılabilir piksel yoksa `false`, tekse onun 7 günlük satın alma
+   * sinyali, birden çoksa `null` (seçime bağlı).
+   */
+  metaSatisOlcumu(adAccountId: string, clientId: string): Promise<boolean | null>;
   /** Google Ads'te etkin birincil dönüşüm işlemi var mı. */
   googleDonusumEtkin(adAccountId: string): Promise<boolean | null>;
 }
@@ -187,9 +193,10 @@ export class ReklamHazirlikService {
    * seçmedi, panel ilk hesabı/sayfayı önden seçiyor ve okuma ONA yapılıyor.
    * Birden çok hesap varsa öbürlerinin değeri farklı olabilir (devir notu).
    *
-   * Okunmayan ön koşul (satış ölçümü) Dalga 3'ün; bugün `null` = "kontrol
-   * etmedik". WhatsApp hattı Dalga 2'de okunuyor (Ç-5). Eksik listesi `null`ı UYARI gösteriyor
-   * ve o amaçlar açılış tablosunda zaten kapalı.
+   * Satış ölçümü Dalga 3'ten beri ilk Meta hesabının piksellerinden okunuyor
+   * (`metaSatisOlcumu`); rehberde asıl kontrol SEÇİLİ pikselde. Google satış
+   * ölçümü hâlâ `null` = "kontrol etmedik". WhatsApp hattı Dalga 2'de
+   * okunuyor (Ç-5). Eksik listesi `null`ı UYARI gösteriyor.
    */
   async rehberOku(
     ctx: TenantContext,
@@ -231,10 +238,11 @@ export class ReklamHazirlikService {
     const metaHesap = seciliYoksaIlk(temel.hesaplar, secim?.metaHesapId);
     const sayfa = seciliYoksaIlk(temel.sayfalar, secim?.sayfaId);
     const googleHesap = seciliYoksaIlk(ek.googleHesaplari, secim?.googleHesapId);
-    const [metaAsgari, metaForm, metaWhatsapp, googleDonusum] = await Promise.all([
+    const [metaAsgari, metaForm, metaWhatsapp, metaSatis, googleDonusum] = await Promise.all([
       uc('Meta asgari bütçe', metaHesap && okuyucu ? () => okuyucu.metaAsgariGunluk(metaHesap.id, clientId) : null),
       uc('Meta form koşulları', sayfa && okuyucu ? () => okuyucu.metaFormKosullari(sayfa.id, clientId) : null),
       uc('Meta WhatsApp hattı', sayfa && okuyucu ? () => okuyucu.metaWhatsapp(sayfa.id, clientId) : null),
+      uc('Meta piksel', metaHesap && okuyucu ? () => okuyucu.metaSatisOlcumu(metaHesap.id, clientId) : null),
       uc('Google dönüşüm işlemi', googleHesap && okuyucu ? () => okuyucu.googleDonusumEtkin(googleHesap.id) : null),
     ]);
     const yok: UcHal = null;
@@ -252,7 +260,7 @@ export class ReklamHazirlikService {
       onKosullar: {
         metaFormKosullari: metaForm,
         metaWhatsapp,
-        metaSatisOlcumu: yok,
+        metaSatisOlcumu: metaSatis,
         googleSatisOlcumu: yok,
         googleDonusumEtkin: googleDonusum,
         // İşletme adı her zaman var (yoksa workspace adı); belirleyici logo.

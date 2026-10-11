@@ -352,7 +352,7 @@ describe('rehber → banner seti', () => {
       amaclar.forEach((a, i) => (REHBER_ACILIS[a].meta = eski[i]!));
     }
     for (const niyet of ['TELEFON', 'WHATSAPP'] as const) {
-      expect(retKodlari({ niyet, telefon: '+905321234567', kavramlar: [kavram({ oran: 'kare', setGorselleri: set('kare', 'dik45') })] }), niyet).toEqual(['KRT-SET']);
+      expect(retKodlari({ niyet, telefon: '+905321234567', whatsappNumarasi: '+905321234567', kavramlar: [kavram({ oran: 'kare', setGorselleri: set('kare', 'dik45') })] }), niyet).toEqual(['KRT-SET']);
     }
   });
 

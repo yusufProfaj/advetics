@@ -1,4 +1,4 @@
-import { paraOndaligi, type SeciliFormHali } from '@advetics/shared';
+import { paraOndaligi, type SeciliFormHali, type SeciliPikselHali } from '@advetics/shared';
 import { hataSiniflandir, metaSurumuDogrula } from '../meta-graf';
 
 /**
@@ -179,4 +179,52 @@ export function seciliFormHali(deger: string | null, kimlik: string | null, list
   const f = kimlik ? liste.find((x) => x.id === kimlik) : undefined;
   if (!f) return { ad: null, sayfadaYayinda: false, gizlilikAdresi: false };
   return { ad: f.ad, sayfadaYayinda: true, gizlilikAdresi: f.gizlilikAdresi !== null };
+}
+
+/** Rehberin piksel okuması (`MetaProvider.fetchAdPixels` satırı, ISO tarihli). */
+export interface PikselSatiri {
+  id: string;
+  ad: string;
+  sonCalisma: string | null;
+  kullanilamaz: boolean;
+  satinAlma7Gun: boolean | null;
+}
+
+const YEDI_GUN_MS = 7 * 86_400_000;
+
+/**
+ * Seçili pikselin hâli (SATIS). `liste` = seçili HESABIN son BAŞARILI okunan
+ * pikselleri; `null` = okunmadı → `null` (bilinmiyor, uyarı; platforma
+ * giderken engel). Piksel seçilmemişse de `null`: `M-PIKSEL-SEC` söylüyor.
+ *
+ * `son7GundeCalisti` OKUMA ANINA göre (`simdi`): tarih çözülemezse `false`
+ * değil, yalnız uyarı üreten "son 7 günde değil" sayılıyor. Hiç çalışmamış
+ * olmakla karışmıyor; o `sonCalisma === null`.
+ */
+export function seciliPikselHali(pikselId: string | null, liste: readonly PikselSatiri[] | null, simdi: Date): SeciliPikselHali | null {
+  if (!pikselId || !liste) return null;
+  const p = liste.find((x) => x.id === pikselId);
+  if (!p) return { ad: null, hesaptaVar: false, kullanilamaz: false, hicCalismadi: false, son7GundeCalisti: false, satinAlma7Gun: null };
+  const t = p.sonCalisma ? Date.parse(p.sonCalisma) : NaN;
+  return {
+    ad: p.ad,
+    hesaptaVar: true,
+    kullanilamaz: p.kullanilamaz,
+    hicCalismadi: p.sonCalisma === null,
+    son7GundeCalisti: !Number.isNaN(t) && simdi.getTime() - t <= YEDI_GUN_MS,
+    satinAlma7Gun: p.satinAlma7Gun,
+  };
+}
+
+/**
+ * Hazırlıktaki `metaSatisOlcumu` (piksel henüz SEÇİLMEDİ): hesapta hiç
+ * kullanılabilir piksel yoksa `false`, TEK kullanılabilir piksel varsa onun
+ * satın alma sinyali, birden çoksa `null` (cevap seçime bağlı; birini seçip
+ * "ölçülüyor" demek tahmin olurdu).
+ */
+export function hazirlikSatisOlcumu(liste: readonly PikselSatiri[] | null): boolean | null {
+  if (!liste) return null;
+  const kullanilir = liste.filter((p) => !p.kullanilamaz);
+  if (kullanilir.length === 0) return false;
+  return kullanilir.length === 1 ? (kullanilir[0] as PikselSatiri).satinAlma7Gun : null;
 }

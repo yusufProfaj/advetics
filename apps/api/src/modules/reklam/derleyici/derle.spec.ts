@@ -5,7 +5,11 @@ import {
   DERLENEN_NIYETLER,
   DERLEYICI_NIYETLERI,
   DERLEYICI_SURUMU,
+  ERISIM_SIKLIK_SINIRI,
   MANIFESTO,
+  NIYET_KATALOGU,
+  manifestoSatiriGecerli,
+  tanitilanTuru,
   TANINAN_OZELLIK_ANAHTARLARI,
   WHATSAPP_BAGLANTISI,
   derleMeta,
@@ -146,8 +150,9 @@ describe('manifesto', () => {
     it(`${ad}: her manifesto satırı açıkça yazılı`, () => {
       const r = govde(g);
       const kategori = (g.kategoriler?.taban.length ?? 0) > 0;
+      const niyet = g.niyet ?? temel.niyet;
       for (const s of MANIFESTO) {
-        if (s.kosul === 'kategori' && !kategori) continue;
+        if (!manifestoSatiriGecerli(s.kosul, { kategoriVar: kategori, instagram: true, tanitilan: tanitilanTuru(niyet), erisim: NIYET_KATALOGU[niyet].meta?.optimizationGoal === 'REACH' })) continue;
         for (const gv of r.govdeler.filter((x) => x.nesne === s.nesne)) {
           const yollar = typeof s.yol === 'string' ? [s.yol] : s.yol;
           expect(yollar.some((y) => r.acikcaYazilanAlanlar.includes(`${s.nesne}:${y}`)), `${s.kod} ${gv.ad}`).toBe(true);
@@ -232,7 +237,8 @@ describe('sıfır çağrılı retler', () => {
  */
 const TEL = '+905321234567';
 const telefonGirdisi: Partial<DerlemeGirdisi> = { niyet: 'TELEFON', telefon: TEL, hedefAdres: null };
-const waGirdisi: Partial<DerlemeGirdisi> = { niyet: 'WHATSAPP', hedefAdres: null };
+const WA = '+905559876543';
+const waGirdisi: Partial<DerlemeGirdisi> = { niyet: 'WHATSAPP', hedefAdres: null, whatsappNumarasi: WA };
 
 describe('TELEFON (arama düğmeli reklam)', () => {
   it('KRİTİK: altın kreatif — numara CTA’da tel: ile, link sayfanın adresi', () => {
@@ -284,7 +290,7 @@ describe('TELEFON (arama düğmeli reklam)', () => {
 });
 
 describe('WHATSAPP (Click-to-WhatsApp)', () => {
-  it('KRİTİK: altın kreatif — sabit bağlantı, CTA app_destination, numara YOK', () => {
+  it('KRİTİK: altın kreatif — sabit bağlantı, CTA app_destination, numara kreatifte YOK (reklam setinde)', () => {
     const oss = bul(govde(waGirdisi).govdeler, 'kreatif:1').object_story_spec;
     expect(oss).toEqual({
       page_id: '111',
@@ -307,15 +313,17 @@ describe('WHATSAPP (Click-to-WhatsApp)', () => {
     expect(JSON.stringify(r.govdeler)).not.toContain('ornek.com.tr');
   });
 
-  it('numara girdisi WhatsApp gövdesine HİÇ girmez', () => {
+  it('ARAMA numarası (`telefon`) WhatsApp gövdesine HİÇ girmez; yalnız WhatsApp hattı', () => {
     expect(JSON.stringify(govde({ ...waGirdisi, telefon: TEL }).govdeler)).not.toContain('905321234567');
   });
 
-  it('KRİTİK: reklam seti CONVERSATIONS + WHATSAPP + sayfa; atıf 1 gün tıklama', () => {
+  it('KRİTİK: reklam seti CONVERSATIONS + WHATSAPP + sayfa + AÇIK numara; atıf 1 gün tıklama', () => {
     const rs = bul(govde({ ...waGirdisi, atif: 'tik7_gor1' }).govdeler, 'reklam_seti');
     expect(rs.optimization_goal).toBe('CONVERSATIONS');
     expect(rs.destination_type).toBe('WHATSAPP');
-    expect(rs.promoted_object).toEqual({ page_id: '111' });
+    // Dalga 3: hat açıkça; Meta sayfaya bağlı olmayan numarayı reddetmeli
+    // (sessizce başka hatta düşmek yerine açık hata). Biçim ÖLÇÜLMEDİ.
+    expect(rs.promoted_object).toEqual({ page_id: '111', whatsapp_phone_number: WA });
     expect(rs.attribution_spec).toEqual([{ event_type: 'CLICK_THROUGH', window_days: 1 }]);
   });
 
@@ -338,13 +346,13 @@ describe('WHATSAPP (Click-to-WhatsApp)', () => {
 
 describe('Dalga 2 sürüm ve açılış', () => {
   it('derleyici sürümü yükseldi: eski provalar yeni gövdeyi kanıtlamaz', () => {
-    // 1.2.1: formun atıf penceresi 1 gün tıklama ve kısıtlı kategoride
-    // yarıçapsız şehre taban yarıçap (ikisi de canlı tur ölçümü, aynı deploy).
-    expect(DERLEYICI_SURUMU).toBe('1.2.1');
+    // 1.3.0: video izlenme, erişim ve satış derleniyor; WhatsApp numarası
+    // reklam setinde; erişimde sıklık sınırı (Dalga 3).
+    expect(DERLEYICI_SURUMU).toBe('1.3.0');
   });
 
   it('KRİTİK: TELEFON/WHATSAPP derleniyor ama üründe AÇIK DEĞİL (canlı tur bekliyor)', () => {
-    expect([...DERLEYICI_NIYETLERI]).toEqual(['FORM', 'SITE', 'TELEFON', 'WHATSAPP']);
+    expect([...DERLEYICI_NIYETLERI]).toEqual(['FORM', 'SITE', 'TELEFON', 'WHATSAPP', 'VIDEO_IZLENME', 'ERISIM', 'SATIS']);
     // AI taslağı ve AdvStrategy aktarımı bu listeyi okuyor; canlı provadan
     // önce genişlerse arama/WhatsApp reklamı sohbetten kurulabilir hâle gelir.
     expect([...DERLENEN_NIYETLER]).toEqual(['FORM', 'SITE']);
@@ -353,7 +361,7 @@ describe('Dalga 2 sürüm ve açılış', () => {
   it('manifesto TELEFON ve WHATSAPP gövdelerinde de eksiksiz', () => {
     for (const g of [telefonGirdisi, waGirdisi]) {
       const r = govde(g);
-      for (const s of MANIFESTO.filter((x) => !x.kosul)) {
+      for (const s of MANIFESTO.filter((x) => !x.kosul || x.kosul === tanitilanTuru(g.niyet!))) {
         for (const gv of r.govdeler.filter((x) => x.nesne === s.nesne)) {
           const yollar = typeof s.yol === 'string' ? [s.yol] : s.yol;
           expect(yollar.some((y) => r.acikcaYazilanAlanlar.includes(`${s.nesne}:${y}`)), `${s.kod} ${gv.ad}`).toBe(true);

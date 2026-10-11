@@ -369,6 +369,12 @@ export async function taslakDerle(
     hedefAdres: alanlar.hedefAdres?.deger ?? null,
     formId: formKimligi,
     telefon: alanlar.telefon?.deger ?? null,
+    // Dalga 3: hat ve piksel taslaktan; boşsa derleyici reddeder
+    // (WA-NUMARA, PIKSEL-YOK), varsayılana bırakılmaz. Pikselin bu hesaba
+    // ait olduğunu rehber provadan önce TAZE listeyle denetliyor; yanlış
+    // pikseli Meta da kurulumda reddediyor.
+    whatsappNumarasi: alanlar.whatsappNumarasi?.deger ?? null,
+    pikselId: alanlar.pikselId?.deger ?? null,
     urlEtiketleri: null,
   });
   if (derleme.tur === 'ret') return { tur: 'ret', retler: derleme.retler };

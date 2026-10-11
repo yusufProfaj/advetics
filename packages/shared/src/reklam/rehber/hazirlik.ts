@@ -50,7 +50,12 @@ export interface RehberOnKosullari {
   metaFormKosullari: UcHal;
   /** Sayfaya bağlı WhatsApp Business hattı var mı. */
   metaWhatsapp: UcHal;
-  /** Meta pikseli son 7 günde satın alma olayı göndermiş mi. */
+  /**
+   * Meta pikseli son 7 günde satın alma saydı mı. Rehberde SEÇİLİ pikselin
+   * değeri (`seciliPiksel.satinAlma7Gun`); hazırlıkta piksel seçili değil ve
+   * yalnız hesapta TEK kullanılabilir piksel varsa onunki, piksel hiç yoksa
+   * `false`, birden çoksa `null` (seçime bağlı).
+   */
   metaSatisOlcumu: UcHal;
   /** Google Ads'te birincil satın alma dönüşüm işlemi etkin mi. */
   googleSatisOlcumu: UcHal;
@@ -69,6 +74,51 @@ export interface RehberOnKosullari {
    * `false` yazılıydı ve Form amacı HER ZAMAN engelde kalıyordu.
    */
   seciliForm: SeciliFormHali | null;
+  /**
+   * SEÇİLİ pikselin Meta'daki hâli (SATIS, Dalga 3). `null` = bilinmiyor:
+   * piksel seçilmedi ya da seçili hesabın pikselleri okunmadı/okunamadı.
+   * İsteğe bağlı: eski istemciler alanı tanımıyor.
+   */
+  seciliPiksel?: SeciliPikselHali | null;
+}
+
+export interface SeciliPikselHali {
+  /** Meta'daki adı; piksel hesabın listesinde yoksa `null`. */
+  ad: string | null;
+  /** Piksel SEÇİLİ reklam hesabının piksellerinden biri mi. */
+  hesaptaVar: boolean;
+  /** Meta pikseli kullanılamaz işaretlemiş mi (`is_unavailable`). */
+  kullanilamaz: boolean;
+  /** `last_fired_time` hiç yok: piksel siteye kurulmamış ya da hiç olay almamış. */
+  hicCalismadi: boolean;
+  /** Son olay okuma anından önceki 7 gün içinde mi. */
+  son7GundeCalisti: boolean;
+  /** Son 7 günde satın alma sayıldı mı; okunamadıysa `null`. */
+  satinAlma7Gun: UcHal;
+}
+
+/**
+ * Seçili Meta reklam hesabının pikselleri
+ * (`GET /reklam/rehber/pikseller?clientId=&adAccountId=`, Dalga 3).
+ * DÖRT HÂL: okunamadı = uç hata döner (Meta'nın mesajıyla); boş =
+ * `satirlar` boş ve `bosNeden` dolu; liste = `satirlar`. "Okunuyor" panelin.
+ */
+export interface RehberPikselListesi {
+  satirlar: RehberPikseli[];
+  toplam: number;
+  /** Meta listesi sayfa sınırında kesildiyse: ekranda "ilk N piksel" yazılır. */
+  kesildi: boolean;
+  bosNeden: string | null;
+}
+
+export interface RehberPikseli {
+  id: string;
+  ad: string;
+  /** Son olay anı (ISO 8601); hiç olay yoksa `null`. */
+  sonCalisma: string | null;
+  kullanilamaz: boolean;
+  /** Son 7 günde satın alma sayıldı mı (`/{piksel}/stats`); okunamadıysa `null`. */
+  satinAlma7Gun: UcHal;
 }
 
 export interface SeciliFormHali {

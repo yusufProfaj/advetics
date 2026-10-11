@@ -53,6 +53,7 @@ import {
   type YoutubeVideoListesi,
 } from '@advetics/shared';
 import { ApiRequestError } from '@/lib/api';
+import { whatsappOnerisi } from './meta-dalga3-mantik';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Değişiklik kuyruğu
@@ -881,6 +882,10 @@ export function onDoldurma(a: RehberAlanlari, h: RehberHazirligi): Degisiklik[] 
   ekle('konumlar', konumlar.length ? konumlar : null, 'marka_merkezi');
   ekle('hedefAdres', h.iletisim.siteAdresi, 'marka_merkezi');
   ekle('telefon', h.iletisim.telefon, 'marka_merkezi');
+  // WhatsApp hattı Dalga 3'ten beri soruluyor; Marka Merkezi'nde ayrı bir
+  // WhatsApp alanı yok, telefon ÖNERİ olarak gelir ve ekranda kaynağı yazar.
+  // Çözülemeyen biçim önerilmez (`whatsappOnerisi`).
+  ekle('whatsappNumarasi', whatsappOnerisi(h.iletisim.telefon), 'marka_merkezi');
   return d;
 }
 
