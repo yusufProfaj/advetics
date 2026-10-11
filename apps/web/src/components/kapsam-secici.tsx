@@ -377,7 +377,7 @@ export function KapsamSecici({
       {open && (
         <div
           role="tree"
-          className="absolute left-0 top-full z-30 mt-1.5 flex w-[21rem] flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-lg"
+          className="absolute left-0 top-full z-30 mt-1.5 flex w-[min(21rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-lg"
         >
           <div className="border-b border-line p-2">
             <input

@@ -34,8 +34,11 @@ import { KenarIcerigi, type KenarVerisi } from '@/components/kenar-cubugu';
 export function MobilMenu({
   veri,
   stil,
+  ust,
 }: {
   veri: KenarVerisi;
+  /** Çekmecede menünün başı (workspace seçici), masaüstüyle aynı yer. */
+  ust?: React.ReactNode;
   /** Marka renkleri. Portal layout'un dışına çıktığı için elden geçiyor. */
   stil?: React.CSSProperties;
 }) {
@@ -123,6 +126,7 @@ export function MobilMenu({
             >
               <KenarIcerigi
                 veri={veri}
+                ust={ust}
                 /*
                  * KAPATMA `nav`ın ÜSTÜNDE, her bağlantıda DEĞİL. Her satıra
                  * ayrı bir kapatma bağlamak, menüye yeni bir satır

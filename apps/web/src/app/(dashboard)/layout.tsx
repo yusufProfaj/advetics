@@ -160,8 +160,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         MASAÜSTÜ: GENİŞ MENÜ, SEÇİCİ BAŞINDA (kullanıcı kararı 2026-10-11).
         2026-10-09'da dar bir ikon rayına geçilmişti; kullanıcı geniş menüye
         geri döndürdü ve workspace seçiciyi üst bardan menünün en üstüne,
-        logonun altına aldı. Telefonda seçici üst barda kalıyor (çekmece
-        kapalıyken "neredeyim" görünmeli).
+        logonun altına aldı. Telefonda da aynı yer: çekmecenin başı.
         `z-30`: `backdrop-blur` kenar çubuğunu kendi katmanı yapıyor; z
         verilmezse seçicinin açılır listesi (menüden geniş) içeriğin
         yapışkan üst barının ALTINDA kalırdı.
@@ -200,10 +199,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
           */}
           <div className="flex min-w-0 items-center gap-2">
           {/* MENÜ DÜĞMESİ YALNIZCA MOBİLDE: masaüstünde kenar çubuğu zaten açık. */}
-          <MobilMenu veri={kenarVerisi} stil={themeStyle} />
-          <div className="lg:hidden">
-            <KapsamSecici {...kapsam} />
-          </div>
+          {/*
+            TELEFONDA DA SEÇİCİ MENÜNÜN BAŞINDA (çekmece). Üst barda dururken
+            asgari genişliği (15rem) zili örtüyordu; "neredeyim" sayfa
+            başındaki kırıntıda zaten yazıyor.
+          */}
+          <MobilMenu veri={kenarVerisi} stil={themeStyle} ust={<KapsamSecici {...kapsam} tamGenislik />} />
           </div>
           <div className="flex items-center gap-3">
             <div className="hidden text-right sm:block">

@@ -52,12 +52,13 @@ describe('mobil gezinme', () => {
     expect(KENAR).toContain('kenarBolumleri(veri.bolumler)');
   });
 
-  it('KRİTİK: workspace seçici masaüstünde menünün başında, telefonda üst barda', () => {
+  it('KRİTİK: workspace seçici menünün başında: masaüstünde kenar çubuğu, telefonda çekmece', () => {
     // Kullanıcı kararı (2026-10-11). Seçici iki yerde ama props tek nesneden
     // (`kapsam`): biri güncellenip öbürü unutulursa telefonda başka bir
-    // kapsam görünürdü.
-    expect(LAYOUT).toContain('ust={<KapsamSecici {...kapsam} tamGenislik />}');
-    expect(LAYOUT).toMatch(/<div className="lg:hidden">\s*<KapsamSecici \{\.\.\.kapsam\} \/>/);
+    // kapsam görünürdü. Üst barda dururken telefonda zili örtüyordu.
+    expect(LAYOUT.match(/ust=\{<KapsamSecici \{\.\.\.kapsam\} tamGenislik \/>\}/g)).toHaveLength(2);
+    expect(LAYOUT).toContain('<MobilMenu veri={kenarVerisi} stil={themeStyle} ust={<KapsamSecici');
+    expect(MOBIL).toContain('ust={ust}');
     expect(KENAR.indexOf('{ust &&')).toBeGreaterThan(KENAR.indexOf('AdveticsLogo />'));
     expect(KENAR.indexOf('{ust &&')).toBeLessThan(KENAR.indexOf('<nav'));
   });
