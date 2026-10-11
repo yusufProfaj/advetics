@@ -26,8 +26,10 @@ import { AdimKontrol, OnayPenceresi, SonEkran, type ProvaHali } from './adim-kon
 import { IKON, Ikon } from './ikonlar';
 import { RehberKaydedici, type KayitHali } from './rehber-kaydedici';
 import {
+  adimAltMetni,
   adimBittiMi,
   gunFarki,
+  hazirAdimlar,
   hesapBaglami,
   konumEslemeImzasi,
   onDoldurma,
@@ -329,7 +331,7 @@ export function RehberEkrani({
         <main className={s.govde}>
           <nav className={s.ray} aria-label="Adımlar">
             {REHBER_ADIMLARI.map((x, i) => {
-              const bitti = adimBittiMi(kayit.eksikler, x.no, ekran);
+              const bitti = adimBittiMi(kayit.eksikler, x.no, ekran, amac !== null);
               return (
                 <div key={x.no} style={{ display: 'contents' }}>
                   {i > 0 && <span className={s.cizgi} />}
@@ -342,7 +344,7 @@ export function RehberEkrani({
                     <span className={s.no}>{bitti ? '✓' : x.no}</span>
                     <span>
                       {x.ad}
-                      <span className={s.alt}>{x.alt}</span>
+                      <span className={s.alt}>{adimAltMetni(x.no, x.alt, amac, acik)}</span>
                     </span>
                   </button>
                 </div>
@@ -424,7 +426,7 @@ export function RehberEkrani({
             {ekran !== 7 && (
               <div className={`${s.kart} ${s.ozetKart}`}>
                 <h3>Yayından önce</h3>
-                <YayindanOnce kayit={kayit} acik={acik} prova={prova} git={git} />
+                <YayindanOnce kayit={kayit} acik={acik} prova={prova} git={git} amacSecili={amac !== null} />
               </div>
             )}
           </aside>
@@ -457,15 +459,17 @@ function YayindanOnce({
   acik,
   prova,
   git,
+  amacSecili,
 }: {
   kayit: RehberKaydi;
   acik: Record<RehberPlatformu, boolean>;
   prova: ProvaHali;
   git: (n: EkranNo) => void;
+  amacSecili: boolean;
 }) {
   const provaGecti = yayinlanabilirMi([], acik, prova.sonuc, kayit.icerikOzeti);
   const adimAdi = (n: number) => REHBER_ADIMLARI[n - 1]!.ad;
-  const hazirAdimlar = REHBER_ADIMLARI.filter((x) => x.no < 6 && !kayit.eksikler.some((e) => e.adim === x.no));
+  const hazir = hazirAdimlar(kayit.eksikler, amacSecili).map((n) => REHBER_ADIMLARI[n - 1]!);
   return (
     <ul className={s.eksikler}>
       {kayit.eksikler.map((e, i) => (
@@ -477,7 +481,7 @@ function YayindanOnce({
           </button>
         </li>
       ))}
-      {hazirAdimlar.map((x) => (
+      {hazir.map((x) => (
         <li key={`hazir-${x.no}`} className={s.tamam}>
           <button type="button" onClick={() => git(x.no)}>
             <i />

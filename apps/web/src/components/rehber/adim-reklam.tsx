@@ -30,6 +30,8 @@ import {
   kelimeDegistir,
   kelimeOnerisiHali,
   kelimeSatirlari,
+  metinKurali,
+  metinKutusu,
   metinOnerisiHali,
   oneriHatasi,
   setGorunumu,
@@ -49,16 +51,6 @@ import {
 import s from './rehber.module.css';
 
 type Metin = NonNullable<RehberAlanlari['metin']>['deger'];
-
-/** Ekranda gösterilen boş metin: Google'ın asgarisi kadar satır (3 başlık, 2 açıklama). */
-function metinKutusu(m: Metin | undefined): Metin {
-  const pad = (a: string[], n: number) => (a.length >= n ? a : [...a, ...Array<string>(n - a.length).fill('')]);
-  return {
-    anaMetin: m?.anaMetin ?? '',
-    basliklar: pad(m?.basliklar ?? [], METIN_SINIRLARI.basliklarEnAz),
-    aciklamalar: pad(m?.aciklamalar ?? [], METIN_SINIRLARI.aciklamalarEnAz),
-  };
-}
 
 export interface MedyaBilgisi {
   ad: string;
@@ -100,7 +92,7 @@ export function AdimReklam({
 
   return (
     <>
-      <Soru baslik="Reklamda ne görünsün?">Görselleri ve metni bir kez ver; iki platformun kalıbına biz bölüyoruz.</Soru>
+      <Soru baslik="Reklamda ne görünsün?">{metinKurali(b.acik, kurgu).soru}</Soru>
       <div className={s.kart}>
         <div className={s.blok}>
           <div className={s.blokBaslik}>
@@ -636,7 +628,9 @@ function VideoSecici({ b, eksikMetni }: { b: AdimBaglami; eksikMetni: string | n
 // ─────────────────────────────────────────────────────────────────────────────
 
 function MetinBlogu({ b, kaydet }: { b: AdimBaglami; kaydet: () => Promise<boolean> }) {
-  const m = metinKutusu(b.a.metin?.deger);
+  const amac = b.a.amac?.deger ?? null;
+  const kural = metinKurali(b.acik, amac ? REHBER_AMACLARI[amac].google.kurgu : null);
+  const m = metinKutusu(b.a.metin?.deger, kural);
   const [oneri, setOneri] = useState<OneriHali<MetinOnerisi>>({ tur: 'istenmedi' });
   const guc = reklamGucu(m);
   const yuzde = { zayif: 30, orta: 60, iyi: 100 }[guc.gucu];
@@ -664,7 +658,7 @@ function MetinBlogu({ b, kaydet }: { b: AdimBaglami; kaydet: () => Promise<boole
   }
 
   function kullan(o: MetinOnerisi) {
-    metinYaz(metinKutusu({ anaMetin: o.anaMetin, basliklar: o.basliklar, aciklamalar: o.aciklamalar }));
+    metinYaz(metinKutusu({ anaMetin: o.anaMetin, basliklar: o.basliklar, aciklamalar: o.aciklamalar }, kural));
     setOneri({ tur: 'istenmedi' });
   }
 
@@ -739,9 +733,7 @@ function MetinBlogu({ b, kaydet }: { b: AdimBaglami; kaydet: () => Promise<boole
         <div className={s.alan}>
           <span className={s.alanEtiket}>
             Başlıklar{' '}
-            <span className={s.ops}>
-              {METIN_SINIRLARI.basliklarEnAz} ile {METIN_SINIRLARI.basliklarEnCok} arası · Google hepsini dener, Meta ilk {METIN_SINIRLARI.metaBaslikSayisi}&apos;ini
-            </span>
+            <span className={s.ops}>{kural.baslikNotu}</span>
           </span>
           {m.basliklar.map((x, i) => (
             <SayacliGirdi
@@ -752,7 +744,7 @@ function MetinBlogu({ b, kaydet }: { b: AdimBaglami; kaydet: () => Promise<boole
               degisti={(v) => metinYaz({ ...m, basliklar: m.basliklar.map((y, j) => (j === i ? v : y)) })}
             />
           ))}
-          {m.basliklar.length < METIN_SINIRLARI.basliklarEnCok && (
+          {m.basliklar.length < kural.baslikEnCok && (
             <button type="button" className={s.metinDugme} style={{ alignSelf: 'flex-start' }} onClick={() => metinYaz({ ...m, basliklar: [...m.basliklar, ''] })}>
               + Başlık ekle
             </button>
@@ -760,7 +752,7 @@ function MetinBlogu({ b, kaydet }: { b: AdimBaglami; kaydet: () => Promise<boole
         </div>
         <div className={s.alan}>
           <span className={s.alanEtiket}>
-            Açıklama <span className={s.ops}>En az {METIN_SINIRLARI.aciklamalarEnAz}</span>
+            Açıklama <span className={s.ops}>{kural.aciklamaNotu}</span>
           </span>
           {m.aciklamalar.map((x, i) => (
             <SayacliGirdi
@@ -771,20 +763,22 @@ function MetinBlogu({ b, kaydet }: { b: AdimBaglami; kaydet: () => Promise<boole
               degisti={(v) => metinYaz({ ...m, aciklamalar: m.aciklamalar.map((y, j) => (j === i ? v : y)) })}
             />
           ))}
-          {m.aciklamalar.length < METIN_SINIRLARI.aciklamalarEnCok && (
+          {m.aciklamalar.length < kural.aciklamaEnCok && (
             <button type="button" className={s.metinDugme} style={{ alignSelf: 'flex-start' }} onClick={() => metinYaz({ ...m, aciklamalar: [...m.aciklamalar, ''] })}>
               + Açıklama ekle
             </button>
           )}
         </div>
-        <div className={s.guc}>
-          <span>Reklam gücü</span>
-          <div className={s.gucCubuk}>
-            <i style={{ width: `${yuzde}%` }} />
+        {kural.gucGoster && (
+          <div className={s.guc}>
+            <span>Reklam gücü</span>
+            <div className={s.gucCubuk}>
+              <i style={{ width: `${yuzde}%` }} />
+            </div>
+            <b>{{ zayif: 'Zayıf', orta: 'Orta', iyi: 'İyi' }[guc.gucu]}</b>
+            {guc.ipucu && <span className={s.ops}>{guc.ipucu}</span>}
           </div>
-          <b>{{ zayif: 'Zayıf', orta: 'Orta', iyi: 'İyi' }[guc.gucu]}</b>
-          {guc.ipucu && <span className={s.ops}>{guc.ipucu}</span>}
-        </div>
+        )}
         {b.kayit.eksikler
           .filter((e) => e.alan === 'metin' && e.kod !== 'KAYNAK')
           .map((e, i) => (

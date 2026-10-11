@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { REHBER_ACILIS, REHBER_AMAC_KODLARI, platformGorunurMu, type GorselOrani, type RehberEksigi, type RehberHazirligi, type RehberProvaSonucu } from '@advetics/shared';
+import { REHBER_ACILIS, REHBER_AMACLARI, REHBER_AMAC_KODLARI, platformGorunurMu, type GorselOrani, type RehberEksigi, type RehberHazirligi, type RehberProvaSonucu } from '@advetics/shared';
 import { ApiRequestError } from '@/lib/api';
 import {
   setGorunumu,
@@ -9,7 +9,16 @@ import {
   setTasi,
   yuvayaEkle,
   type MedyaOgesi,
+  adimAltMetni,
   adimBittiMi,
+  amacDegisimi,
+  hazirAdimlar,
+  kurulumAdimlari,
+  listeDurumu,
+  metinKurali,
+  metinKutusu,
+  platformAnahtari,
+  sonEkranOzeti,
   provaYoklanmaliMi,
   bitisSecenegi,
   bugun,
@@ -164,10 +173,185 @@ describe('görünürlük süzgeci: tek karar platformGorunurMu', () => {
 describe('ray ve eksikler', () => {
   const e = (adim: 1 | 2 | 3 | 4 | 5 | 6, seviye: 'engel' | 'uyari'): RehberEksigi => ({ adim, alan: null, platform: null, kod: 'X', seviye, metin: 'x' });
   it('KRİTİK: geçilmiş ama engeli kalan adım "bitti" GÖSTERİLMEZ; uyarı engel sayılmaz', () => {
-    expect(adimBittiMi([e(2, 'engel')], 2, 4)).toBe(false);
-    expect(adimBittiMi([e(2, 'uyari')], 2, 4)).toBe(true);
-    expect(adimBittiMi([], 4, 4)).toBe(false); // şu anki adım
-    expect(adimBittiMi([e(2, 'engel')], 2, 7)).toBe(true); // son ekran
+    expect(adimBittiMi([e(2, 'engel')], 2, 4, true)).toBe(false);
+    expect(adimBittiMi([e(2, 'uyari')], 2, 4, true)).toBe(true);
+    expect(adimBittiMi([], 4, 4, true)).toBe(false); // şu anki adım
+    expect(adimBittiMi([e(2, 'engel')], 2, 7, true)).toBe(true); // son ekran
+  });
+
+  it('KRİTİK: amaç seçilmeden 2-6 için tik ve "hazır" YOK', () => {
+    // Sunucu amaçsız rehberde yalnız AMAC eksiğini döndürüyor; 2-5 engelsiz
+    // görünüyor ve ekran beş "hazır" yazıyordu.
+    const amacYok: RehberEksigi = { adim: 1, alan: 'amac', platform: null, kod: 'AMAC', seviye: 'engel', metin: 'Amaç seçilmedi' };
+    for (const n of [2, 3, 4, 5] as const) {
+      expect(adimBittiMi([amacYok], n, 6, false), `adım ${n}`).toBe(false);
+      // Ekranda seçildi ama sunucu cevabı henüz gelmedi: yine tik yok.
+      expect(adimBittiMi([amacYok], n, 6, true), `adım ${n} bekleyen`).toBe(false);
+      expect(adimBittiMi([], n, 6, false), `adım ${n} yerel amaç yok`).toBe(false);
+    }
+    expect(hazirAdimlar([amacYok], false)).toEqual([]);
+    expect(hazirAdimlar([amacYok], true)).toEqual([]);
+    expect(hazirAdimlar([], false)).toEqual([]);
+    expect(hazirAdimlar([e(3, 'engel'), e(4, 'uyari')], true)).toEqual([1, 2, 5]);
+  });
+
+  it('raydaki alt satır seçimi söylüyor', () => {
+    const yok = { meta: false, google: false };
+    expect(adimAltMetni(2, 'Meta, Google', null, yok)).toBe('Meta, Google');
+    expect(adimAltMetni(2, 'Meta, Google', 'SITE', { meta: true, google: false })).toBe('Meta');
+    expect(adimAltMetni(2, 'Meta, Google', 'SITE', { meta: true, google: true })).toBe('Meta + Google');
+    expect(adimAltMetni(2, 'Meta, Google', 'SITE', yok)).toBe('Platform seçilmedi');
+    expect(adimAltMetni(1, 'Ne bekliyorsun', 'SITE', yok)).toBe(REHBER_AMACLARI.SITE.ekranAdi);
+    expect(adimAltMetni(1, 'Ne bekliyorsun', null, yok)).toBe('Ne bekliyorsun');
+    expect(adimAltMetni(3, 'Konum, yaş', 'SITE', yok)).toBe('Konum, yaş');
+  });
+});
+
+describe('amaç değişimi ve platform anahtarı', () => {
+  const h = {
+    ajansYoneticisi: true,
+    hesaplar: [{ id: 'm', ad: 'M', paraBirimi: 'TRY', saatDilimi: 'Europe/Istanbul' }],
+    googleHesaplari: [{ id: 'g', ad: 'G', musteriNo: '1-2-3', paraBirimi: 'TRY', saatDilimi: 'Europe/Istanbul' }],
+  };
+  const gorunur = (p: 'meta' | 'google') => REHBER_AMAC_KODLARI.filter((k) => platformGorunurMu(k, p, true));
+  const metaAmaclari = gorunur('meta');
+  const googlesuz = REHBER_AMAC_KODLARI.filter((k) => !platformGorunurMu(k, 'google', true) && platformGorunurMu(k, 'meta', true));
+
+  it('BOŞA DÜŞME BEKÇİSİ: tablo testin aradığı amaçları içeriyor', () => {
+    expect(metaAmaclari.length).toBeGreaterThanOrEqual(2);
+    expect(googlesuz.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('KRİTİK: kullanıcının kurulabilir seçimi korunuyor (A → B → A seçimi kaybetmiyor)', () => {
+    const [a, b] = metaAmaclari as [typeof metaAmaclari[0], typeof metaAmaclari[0]];
+    const secim = alan({ meta: true, google: false });
+    const ab = amacDegisimi(b, secim, h);
+    expect(ab).toEqual([{ alan: 'amac', deger: b, kaynak: 'kullanici' }]);
+    expect(amacDegisimi(a, secim, h)).toEqual([{ alan: 'amac', deger: a, kaynak: 'kullanici' }]);
+  });
+
+  it('KRİTİK: seçim yeni amaçta kurulamıyorsa ya da öneriyse öneri yazılıyor', () => {
+    const g = googlesuz[0]!;
+    const yalnizGoogle = amacDegisimi(g, alan({ meta: false, google: true }), h);
+    expect(yalnizGoogle[1]).toEqual({ alan: 'platformlar', deger: { meta: true, google: false }, kaynak: 'derleyici' });
+    // İkisi açıkken Google'sız amaca geçiş: Google kurulamıyor, öneri.
+    expect(amacDegisimi(g, alan({ meta: true, google: true }), h)).toHaveLength(2);
+    // Hiçbiri açık değilse "seçim" yok sayılır.
+    expect(amacDegisimi(metaAmaclari[0]!, alan({ meta: false, google: false }), h)).toHaveLength(2);
+    // Öneriden gelen (derleyici) seçim her zaman yenilenir.
+    expect(amacDegisimi(metaAmaclari[0]!, alan({ meta: true, google: false }, 'derleyici'), h)).toHaveLength(2);
+    expect(amacDegisimi(metaAmaclari[0]!, undefined, h)).toHaveLength(2);
+  });
+
+  it('KRİTİK: anahtar ekrandaki kümeden yazıyor, kayıttaki görünmeyen platformdan değil', () => {
+    // Ekranda yalnız Meta açık (kayıtta Google true ama görünmüyor): Meta'yı
+    // kapatmak Google'ı geri açmamalı.
+    expect(platformAnahtari({ meta: true, google: false }, 'meta')).toEqual({ meta: false, google: false });
+    expect(platformAnahtari({ meta: true, google: false }, 'google')).toEqual({ meta: true, google: true });
+    expect(platformAnahtari({ meta: true, google: true }, 'google')).toEqual({ meta: true, google: false });
+  });
+});
+
+describe('metin kuralı açık platforma göre', () => {
+  it('KRİTİK: yalnız Meta açıkken Google kuralı yok (3 başlık, 2 açıklama, reklam gücü)', () => {
+    const k = metinKurali({ meta: true, google: false }, 'ARAMA');
+    expect(k.gucGoster).toBe(false);
+    expect(k.baslikKutu).toBe(1);
+    expect(k.aciklamaKutu).toBe(1);
+    expect(k.baslikEnCok).toBe(5);
+    expect(k.aciklamaEnCok).toBe(1);
+    expect(k.baslikNotu).not.toContain('Google');
+    expect(k.aciklamaNotu).toContain('İsteğe bağlı');
+    const m = metinKutusu(undefined, k);
+    expect(k.soru).not.toContain('iki platform');
+    expect(m).toEqual({ anaMetin: '', basliklar: [''], aciklamalar: [''] });
+  });
+
+  it('Google Arama açıkken Google kuralı ve reklam gücü', () => {
+    const k = metinKurali({ meta: true, google: true }, 'ARAMA');
+    expect(k.gucGoster).toBe(true);
+    expect(k).toMatchObject({ baslikKutu: 3, baslikEnCok: 15, aciklamaKutu: 2, aciklamaEnCok: 4 });
+    expect(k.baslikNotu).toContain("Meta ilk 5'ini");
+    expect(metinKurali({ meta: false, google: true }, 'ARAMA').baslikNotu).not.toContain('Meta');
+    // Kayıttaki fazlası gizlenmiyor.
+    expect(metinKutusu({ anaMetin: 'a', basliklar: ['1', '2', '3', '4'], aciklamalar: [] }, k).basliklar).toHaveLength(4);
+  });
+
+  it('KRİTİK: SİMETRİ: her ipucu yalnız açık platform(lar)ı anlatır', () => {
+    // Canlı tur: yalnız Google açıkken "Meta ilk 5'ini" ve "iki platformun
+    // kalıbına bölüyoruz" görünüyordu.
+    const kurgular = ['ARAMA', 'TALEP_YARATMA_GORSEL', 'TALEP_YARATMA_VIDEO', 'MAKS_PERFORMANS'] as const;
+    for (const kurgu of kurgular) {
+      const g = metinKurali({ meta: false, google: true }, kurgu);
+      for (const t of [g.soru, g.baslikNotu, g.aciklamaNotu]) expect(t, `${kurgu}: ${t}`).not.toMatch(/Meta|iki platform/);
+      const m = metinKurali({ meta: true, google: false }, kurgu);
+      for (const t of [m.soru, m.baslikNotu, m.aciklamaNotu]) expect(t, `${kurgu}: ${t}`).not.toMatch(/Google|iki platform/);
+      expect(m.gucGoster).toBe(false);
+      expect(metinKurali({ meta: true, google: true }, kurgu).soru).toContain('iki platform');
+    }
+    expect(metinKurali({ meta: false, google: true }, 'ARAMA').soru).toBe("Metni ver; Google'ın kalıbına biz yerleştiriyoruz.");
+    expect(metinKurali({ meta: true, google: false }, null).soru).toContain("Meta'nın");
+  });
+
+  it('Google arama dışı kurguda reklam gücü yok, açıklama en az 1', () => {
+    const k = metinKurali({ meta: false, google: true }, 'TALEP_YARATMA_GORSEL');
+    expect(k.gucGoster).toBe(false);
+    expect(k.aciklamaNotu).toBe('En az 1');
+    expect(k.baslikNotu).toBe('En çok 5 · Google hepsini dener');
+  });
+});
+
+describe('onay penceresi ve son ekran', () => {
+  it('Google adım metni kurguya göre ("kelimeler" yalnız Arama)', () => {
+    expect(kurulumAdimlari('google', 'ARAMA')[0]).toContain('kelimeler');
+    expect(kurulumAdimlari('google', 'TALEP_YARATMA_VIDEO')[0]).toBe('Duraklatılmış kur (kampanya, grup, reklam)');
+    expect(kurulumAdimlari('google', 'TALEP_YARATMA_GORSEL')[0]).not.toContain('kelimeler');
+    expect(kurulumAdimlari('google', 'MAKS_PERFORMANS')[0]).toBe('Duraklatılmış kur (kampanya, öğe grubu)');
+    expect(kurulumAdimlari('meta', 'ARAMA')[0]).toBe('Duraklatılmış kur (kampanya, set, reklam)');
+  });
+
+  it('KRİTİK: arşivlenen platform başlıkta; "Duraklatılmış kuruldu" kalmıyor', () => {
+    // Canlı tur: Meta arşivlendi, Google duraklatılmış; başlık eskiden değişmiyordu.
+    const karisik = sonEkranOzeti(
+      [
+        { platform: 'meta', sonuc: 'arsivlendi' },
+        { platform: 'google', sonuc: 'duraklatildi' },
+      ],
+      false,
+    );
+    expect(karisik.baslik).toBe("Meta'daki reklam arşivlendi");
+    expect(karisik.metin).toContain("Google'da duraklatılmış");
+    expect(sonEkranOzeti([{ platform: 'meta', sonuc: 'arsivlendi' }], false)).toMatchObject({ hal: 'arsiv', baslik: 'Reklam arşivlendi' });
+    expect(sonEkranOzeti([{ platform: 'meta', sonuc: 'arsivlendi' }, { platform: 'google', sonuc: 'yayinda' }], false).metin).toBe("Google'da yayında.");
+  });
+
+  it('diğer hâller eskisi gibi', () => {
+    expect(sonEkranOzeti([{ platform: 'meta', sonuc: 'duraklatildi' }], false).baslik).toBe('Duraklatılmış kuruldu');
+    expect(sonEkranOzeti([{ platform: 'meta', sonuc: 'yayinda' }], false).metin).toContain("Meta'da kuruldu");
+    expect(sonEkranOzeti([{ platform: 'meta', sonuc: 'yayinda' }, { platform: 'google', sonuc: 'yayinda' }], false).metin).toContain('İki platformda da');
+    expect(sonEkranOzeti([{ platform: 'meta', sonuc: 'hata' }, { platform: 'google', sonuc: 'arsivlendi' }], false).hal).toBe('hata');
+    expect(sonEkranOzeti([{ platform: 'meta', sonuc: 'yayinda' }], true).metin).toContain('hiçbir şey gönderilmeden');
+  });
+});
+
+describe('giriş listesi durumu', () => {
+  const r = { durum: 'yayinda' as const, platformlar: { meta: true, google: true } };
+  it('KRİTİK: arşivlenen reklam "Yayında" görünmüyor', () => {
+    expect(listeDurumu({ ...r, platformlar: { meta: true, google: false }, yayinlar: [{ platform: 'meta', durum: 'arsivlendi' }] })).toBe('Arşivlendi · Meta');
+    expect(
+      listeDurumu({
+        ...r,
+        yayinlar: [
+          { platform: 'meta', durum: 'arsivlendi' },
+          { platform: 'google', durum: 'kapali_kuruldu' },
+        ],
+      }),
+    ).toBe('Meta: Arşivlendi · Google: Duraklatılmış');
+  });
+  it('taslak ve yayın bilgisi olmayan satır', () => {
+    expect(listeDurumu({ ...r, durum: 'taslak', yayinlar: [] })).toBe('Taslak · Meta + Google');
+    expect(listeDurumu({ ...r, yayinlar: [] })).toBe('Yayında · Meta + Google');
+    expect(listeDurumu({ ...r, yayinlar: [{ platform: 'meta', durum: 'yayinda' }, { platform: 'google', durum: 'ogreniyor' }] })).toBe('Yayında · Meta + Google');
   });
 });
 
@@ -373,6 +557,27 @@ describe('kaynak: sözleşmeye bağlılık', () => {
     for (const f of [r, bt, n]) expect(f).not.toMatch(/yaz\(b, '(telefon|hedefAdres|youtubeVideo|butce|takvim)', null\)/);
     expect(n).toContain("degisti={(v) => yaz(b, 'instagramId', v)}");
     expect(n).toContain("v === null ? sil(b, 'metaHesabiId')");
+  });
+
+  it('KRİTİK: Dalga 3 kararları bileşende ÇAĞRILIYOR (saf fonksiyonun testi tek başına yetmez)', () => {
+    const e = yorumsuz('rehber-ekrani.tsx');
+    expect(e).toContain('adimBittiMi(kayit.eksikler, x.no, ekran, amac !== null)');
+    expect(e).toContain('adimAltMetni(x.no, x.alt, amac, acik)');
+    expect(e).toContain('hazirAdimlar(kayit.eksikler, amacSecili)');
+    expect(e).not.toMatch(/\{x\.alt\}/);
+    const n = yorumsuz('adim-amac-nerede.tsx');
+    expect(n).toContain('b.degistir(amacDegisimi(kod, b.a.platformlar, b.h))');
+    expect(n).toContain("yaz(b, 'platformlar', platformAnahtari(b.acik, p))");
+    const r = yorumsuz('adim-reklam.tsx');
+    expect(r).toContain('{metinKurali(b.acik, kurgu).soru}');
+    expect(r).toContain('{kural.gucGoster && (');
+    expect(r).toContain('{kural.baslikNotu}');
+    expect(r).not.toContain('Google hepsini dener');
+    const k = yorumsuz('adim-kontrol.tsx');
+    expect(k).toContain('kurulumAdimlari(p, ');
+    expect(k).toContain('sonEkranOzeti(');
+    expect(k).toContain('<h2>{ozet.baslik}</h2>');
+    expect(yorumsuz('rehber-girisi.tsx')).toContain('{listeDurumu(r)}');
   });
 
   it('KRİTİK: metin önerisi kendiliğinden yazılmıyor; "Kullan" kullanici kaynağıyla yazıyor', () => {

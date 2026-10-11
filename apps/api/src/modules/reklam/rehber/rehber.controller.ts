@@ -35,8 +35,13 @@ export class RehberController {
 
   @Get('rehber/hazirlik')
   @RequirePermissions('bulk.read')
-  hazirlik(@CurrentTenant() ctx: TenantContext, @Query('clientId', ParseUUIDPipe) clientId: string): Promise<RehberHazirligi> {
-    return this.rehber.hazirlik(ctx, clientId);
+  hazirlik(
+    @CurrentTenant() ctx: TenantContext,
+    @Query('clientId', ParseUUIDPipe) clientId: string,
+    // Açılan rehber: ön koşullar onun SEÇİLİ sayfasından okunur.
+    @Query('rehberId', new ParseUUIDPipe({ optional: true })) rehberId?: string,
+  ): Promise<RehberHazirligi> {
+    return this.rehber.hazirlik(ctx, clientId, rehberId);
   }
 
   @Get('rehber/youtube-videolari')

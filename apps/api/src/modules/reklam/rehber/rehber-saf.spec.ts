@@ -92,6 +92,24 @@ describe('konum eşleme — yalnız TAM ad', () => {
     expect(konumEsle({ tur: 'city', etiket: 'İzmir' }, [{ ...izmir, name: 'İzmir Province' }])).toBeNull();
     expect(konumEsle({ tur: 'city', etiket: 'İzmir' }, [{ ...izmir, countryCode: 'US' }])).toBeNull();
   });
+  it('KRİTİK: İL (Meta region) Google Province ile eşleniyor; aynı adlı şehir karışmıyor', () => {
+    // Canlı tur: "İzmir, Türkiye" (il) "Google'da eşlenmedi"; aynı adlı şehir
+    // ve il iki aday bırakıyordu.
+    const sehir = { key: 'geoTargetConstants/1012782', name: 'Izmir', countryCode: 'TR', type: 'city' };
+    const il = { key: 'geoTargetConstants/9047174', name: 'Izmir', countryCode: 'TR', type: 'province' };
+    expect(konumEsle({ tur: 'region', etiket: 'İzmir, Türkiye' }, [sehir, il])).toEqual({ kaynak: il.key, ad: 'Izmir' });
+    expect(konumEsle({ tur: 'region', etiket: 'İzmir, Türkiye' }, [sehir, { ...il, name: 'İzmir Province' }])).toEqual({ kaynak: il.key, ad: 'İzmir Province' });
+    // Şehir aynı iki adaydan ŞEHRİ alıyor.
+    expect(konumEsle({ tur: 'city', etiket: 'İzmir, İzmir Province' }, [sehir, il])).toEqual({ kaynak: sehir.key, ad: 'Izmir' });
+    // İl için türsüz aday seçilmez (ili mi şehri mi bilinmez), şehir il olmaz.
+    expect(konumEsle({ tur: 'region', etiket: 'İzmir, Türkiye' }, [{ ...il, type: undefined }])).toBeNull();
+    expect(konumEsle({ tur: 'region', etiket: 'İzmir, Türkiye' }, [sehir])).toBeNull();
+    // Başka ülkenin ili ya da yakın ad yine null.
+    expect(konumEsle({ tur: 'region', etiket: 'İzmir, Türkiye' }, [{ ...il, countryCode: 'US' }])).toBeNull();
+    expect(konumEsle({ tur: 'region', etiket: 'İzmir, Türkiye' }, [{ ...il, name: 'Izmit' }])).toBeNull();
+    // İki il adayı: en yakını seçilmez.
+    expect(konumEsle({ tur: 'region', etiket: 'İzmir, Türkiye' }, [il, { ...il, key: 'geoTargetConstants/9' }])).toBeNull();
+  });
   it('Türkiye ülke kimliği sabit; başka ülke null', () => {
     expect(konumEsle({ tur: 'country', etiket: 'Türkiye', ulkeKodu: 'TR' }, [])).toEqual({ kaynak: GOOGLE_TURKIYE, ad: 'Türkiye' });
     expect(konumEsle({ tur: 'country', etiket: 'Almanya', ulkeKodu: 'DE' }, [])).toBeNull();

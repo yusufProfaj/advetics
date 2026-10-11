@@ -58,6 +58,18 @@ describe('mapGeoLocation', () => {
     expect(o.type).toBe('country');
   });
 
+  it('KRİTİK: Meta ülke satırına country_name koysa da ülke iki kez yazılmıyor', () => {
+    // Canlı tur: özet kartında "Türkiye, Türkiye". Meta ülke satırında da
+    // `country_name` döndürüyor; yukarıdaki test o alanı vermediği için
+    // hatayı hiç görmedi.
+    const ulke = { key: 'TR', name: 'Türkiye', type: 'country', country_code: 'TR', country_name: 'Türkiye' };
+    expect(mapGeoLocation(ulke)!.label).toBe('Türkiye');
+    // Tip bilinmese de adı ülkeyle aynı satır tekrar etmiyor.
+    expect(mapGeoLocation({ ...ulke, type: undefined })!.label).toBe('Türkiye');
+    // Bölge satırı ülkesini taşımaya devam ediyor.
+    expect(mapGeoLocation({ key: '3843', name: 'İzmir', type: 'region', country_code: 'TR', country_name: 'Türkiye' })!.label).toBe('İzmir, Türkiye');
+  });
+
   it('bilinmeyen tip `unknown` oluyor, satır atılmıyor', () => {
     // Tip yalnızca ekranda etiketleme için; eksikliği satırı kullanılamaz
     // yapmıyor ve atmak kullanıcıdan geçerli bir seçeneği saklamak olurdu.

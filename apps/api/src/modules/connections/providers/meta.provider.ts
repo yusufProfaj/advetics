@@ -3638,7 +3638,10 @@ export function mapGeoLocation(row: Record<string, unknown>): GeoLocationOption 
   if (typeof row.region === 'string' && row.region && row.region !== name) {
     parcalar.push(row.region);
   }
-  if (typeof row.country_name === 'string' && row.country_name) {
+  // Ülke satırında (ya da adı ülkeyle aynı satırda) ülke ikinci kez
+  // eklenmez: Meta ülke satırına da `country_name` koyuyor ve özet kartında
+  // "Türkiye, Türkiye" görünüyordu.
+  if (typeof row.country_name === 'string' && row.country_name && row.type !== 'country' && row.country_name !== name) {
     parcalar.push(row.country_name);
   }
 

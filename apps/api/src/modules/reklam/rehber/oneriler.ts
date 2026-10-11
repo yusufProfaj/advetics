@@ -84,6 +84,26 @@ export interface GoogleKonumAdayi {
   key: string;
   name: string;
   countryCode: string | null;
+  /** Google `targetType`, küçük harf ("city", "province"...). Bilinmiyorsa boş. */
+  type?: string;
+}
+
+/**
+ * Meta konum türünün Google karşılığı. Meta "region" Türkiye'de İL demek;
+ * Google onu "Province" olarak veriyor. İkisinde de aynı adı taşıyan bir
+ * şehir ve bir il var ("İzmir"); tür olmadan iki aday kalıyor ve kural
+ * gereği hiçbiri seçilmiyordu (canlı tur: il "Google'da eşlenmedi").
+ */
+const GOOGLE_TURU = { region: 'province' } as const;
+
+/**
+ * İL ADI SONEKİ yalnız il eşlemesinde atılıyor: Google "İzmir Province" ya
+ * da "İzmir İli" yazabiliyor, Meta "İzmir". Şehir eşlemesinde atılmaz: orada
+ * "İzmir Province" bir şehir değil ve şehri ile karıştırmak reklamı bütün
+ * ile yayardı.
+ */
+function ilAdi(ad: string): string {
+  return sadelestir(ad).replace(/\s+(province|ili|il)$/u, '').trim();
 }
 
 /** Türkiye ülke ölçütü: 2000 + ISO 3166 sayısal kodu (792). Sabit, tahmin değil. */
@@ -102,9 +122,18 @@ export function konumEsle(
   adaylar: readonly GoogleKonumAdayi[],
 ): { kaynak: string; ad: string } | null {
   if (konum.tur === 'country') return konum.ulkeKodu === 'TR' ? { kaynak: GOOGLE_TURKIYE, ad: 'Türkiye' } : null;
-  const hedef = sadelestir(konum.etiket.split(',')[0] ?? '');
+  const il = konum.tur === 'region';
+  const ad = il ? ilAdi : sadelestir;
+  const hedef = ad(konum.etiket.split(',')[0] ?? '');
   if (!hedef) return null;
-  const tam = adaylar.filter((a) => a.countryCode === 'TR' && sadelestir(a.name) === hedef && /^geoTargetConstants\/\d+$/.test(a.key));
+  let tam = adaylar.filter((a) => a.countryCode === 'TR' && ad(a.name) === hedef && /^geoTargetConstants\/\d+$/.test(a.key));
+  // TÜR DARALTMASI. İl için tür ŞART: soneki atılmış ad şehirle de eşleşir
+  // ve türsüz bir aday ili mi şehri mi gösteriyor bilinemez (tahmin etmektense
+  // eşleme yok). Şehirde yalnız İL adayı atılır, tür "city"ye kısılmaz:
+  // Meta'nın "city" dediği ilçeyi Google başka bir türle (ilçe, belde)
+  // verebilir ve bugün çalışan eşleme bozulurdu.
+  if (il) tam = tam.filter((a) => a.type === GOOGLE_TURU.region);
+  else if (tam.length > 1) tam = tam.filter((a) => a.type !== GOOGLE_TURU.region);
   return tam.length === 1 ? { kaynak: tam[0]!.key, ad: tam[0]!.name } : null;
 }
 

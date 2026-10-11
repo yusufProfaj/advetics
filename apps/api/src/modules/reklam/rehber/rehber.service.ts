@@ -68,7 +68,7 @@ import type { GoogleProvider } from '../../connections/providers/google.provider
 import { googleAlanHatalari, googleYalinKimlik } from '../../connections/providers/google-demandgen';
 import { TokenVaultService } from '../../connections/token-vault.service';
 import { YouTubeApiService } from '../../autoboost/youtube-api.service';
-import { ReklamHazirlikService, type RehberPlatformOkuyucu } from '../hazirlik.service';
+import { ReklamHazirlikService, seciliYoksaIlk, type RehberHazirlikSecimi, type RehberPlatformOkuyucu } from '../hazirlik.service';
 import { gorselOkuyucu, hesapErisimi, sayfaTokenOkuyucu } from '../meta-erisim';
 import { ReklamKuyrugu } from '../reklam-kuyrugu';
 import { ReklamTaslakService, type AlanDegisikligi } from '../taslak.service';
@@ -222,18 +222,31 @@ export class RehberService {
   // HAZIRLIK
   // ===========================================================================
 
-  async hazirlik(ctx: TenantContext, clientId: string): Promise<RehberHazirligi> {
-    const h = await this.hazirlikSvc.rehberOku(ctx, clientId, this.platformOkuyucu(ctx));
+  /**
+   * `rehberId` verilirse ön koşullar o rehberin SEÇİLİ hesap ve sayfasından
+   * okunur (yoksa ilkinden; yeni rehberde panel ilkini önden seçiyor).
+   * Önbellek okunan kimliklerle yazılıyor; `baglam` yalnız seçili kimlik
+   * önbellektekiyle aynıysa onu kullanıyor, yani yanlış sayfanın cevabı
+   * eksik listesine sızamaz.
+   */
+  async hazirlik(ctx: TenantContext, clientId: string, rehberId?: string): Promise<RehberHazirligi> {
+    let secim: RehberHazirlikSecimi | undefined;
+    if (rehberId) {
+      const s = await this.satir(ctx, rehberId);
+      if (s.client_id !== clientId) throw new BadRequestException('Bu reklam başka bir workspace’e ait.');
+      const a = alanlariOku(s);
+      secim = { metaHesapId: a.metaHesabiId?.deger, sayfaId: a.sayfaId?.deger, googleHesapId: a.googleHesabiId?.deger };
+    }
+    const h = await this.hazirlikSvc.rehberOku(ctx, clientId, this.platformOkuyucu(ctx), secim);
     this.onbellek.set(clientId, {
       zaman: Date.now(),
-      metaHesapId: h.hesaplar[0]?.id ?? null,
-      googleHesapId: h.googleHesaplari[0]?.id ?? null,
+      metaHesapId: seciliYoksaIlk(h.hesaplar, secim?.metaHesapId)?.id ?? null,
+      googleHesapId: seciliYoksaIlk(h.googleHesaplari, secim?.googleHesapId)?.id ?? null,
       metaAsgari: h.asgariGunluk.meta,
       googleDonusum: h.onKosullar.googleDonusumEtkin,
     });
-    // Hazırlık İLK sayfayı okudu (panel onu önden seçiyor): o sayfanın kaydı.
-    const ilk = h.sayfalar[0]?.id;
-    if (ilk) this.sayfaYaz(clientId, ilk, { formKosullari: h.onKosullar.metaFormKosullari, whatsapp: h.onKosullar.metaWhatsapp });
+    const okunan = seciliYoksaIlk(h.sayfalar, secim?.sayfaId)?.id;
+    if (okunan) this.sayfaYaz(clientId, okunan, { formKosullari: h.onKosullar.metaFormKosullari, whatsapp: h.onKosullar.metaWhatsapp });
     return h;
   }
 
@@ -387,12 +400,17 @@ export class RehberService {
     for (const s of satirlar) {
       const a = alanlariOku(s);
       const b = await this.baglam(ctx, s.client_id, a);
+      // Yayınlanmış satırda platformların GERÇEK hâli: "Vazgeç ve arşivle"
+      // rehberin durumunu değiştirmiyor, liste yalnız onu okuyunca
+      // arşivlenen reklam "Yayında" görünüyordu.
+      const yayinlar = s.durum === 'yayinda' ? (await this.yayinDurumu(ctx, s.id)).platformlar.map((p) => ({ platform: p.platform, durum: p.durum })) : [];
       sonuc.push({
         id: s.id,
         amac: a.amac?.deger ?? null,
         durum: s.durum,
         platformlar: a.platformlar?.deger ?? { meta: false, google: false },
         eksikSayisi: rehberEksikleri(a, b).filter((e) => e.seviye === 'engel').length,
+        yayinlar,
         updatedAt: new Date(s.updated_at).toISOString(),
       });
     }
@@ -502,7 +520,7 @@ export class RehberService {
       }
       await this.kotaKapisi(hesapId!);
       const adaylar = await this.google.searchGeoLocations(fctx!, k.etiket);
-      yeni.push({ ...k, google: konumEsle(k, adaylar.map((x) => ({ key: x.key, name: x.name, countryCode: x.countryCode }))) });
+      yeni.push({ ...k, google: konumEsle(k, adaylar.map((x) => ({ key: x.key, name: x.name, countryCode: x.countryCode, type: x.type }))) });
     }
     // Kaynak KORUNUYOR: eşleme alanın değerini değil Google karşılığını ekliyor.
     return this.yaz(ctx, id, { surum: s.surum, degisiklikler: [{ alan: 'konumlar', deger: yeni, kaynak: konumlar.kaynak }] }, true);
