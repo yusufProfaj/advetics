@@ -438,7 +438,7 @@ export function KurulumSihirbazi({
       baslik: 'Hangi hesaplar bu workspace’e ait?',
       alt: 'Seçtiğin hesapların verisi hemen çekilmeye başlar.',
       eksik: boost.durum === 'secilmeli' ? 'Boost hesabını seç' : null,
-      dugme: 'Kurulumu tamamla',
+      dugme: 'Açılışı tamamla',
       eylem: () => void workspaceKur(),
       govde: (
         <div className="space-y-4">
@@ -470,7 +470,7 @@ export function KurulumSihirbazi({
       ),
     },
     bitti: {
-      baslik: sonuc ? `${sonuc.name} hazır` : 'Kurulum tamamlandı',
+      baslik: sonuc ? `${sonuc.name} hazır` : 'Açılış tamamlandı',
       alt: 'Son olarak bilgi bankasını doldur. Reklam metinleri buradan beslenir.',
       eksik: null,
       dugme: 'Workspace’e geç',

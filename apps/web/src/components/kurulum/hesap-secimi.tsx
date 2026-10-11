@@ -28,7 +28,7 @@ export function HesapSecimi({
 }) {
   /*
    * İLK DOLU KANAL AÇIK BAŞLIYOR. Hepsi kapalı başlasaydı kullanıcı listeyi
-   * açması gerektiğini bilmeden "Kurulumu tamamla"ya basıp hesapsız bir
+   * açması gerektiğini bilmeden "Açılışı tamamla"ya basıp hesapsız bir
    * workspace kurardı.
    */
   const [acikKanal, setAcikKanal] = useState<ChannelKind | null>(
