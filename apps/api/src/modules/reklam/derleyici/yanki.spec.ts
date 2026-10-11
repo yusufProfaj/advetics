@@ -259,6 +259,22 @@ describe('canlı tur 1 normalleştirmeleri (N-07…N-10)', () => {
     expect(karsilastirSimdi(yankilar, o).sonuc).toBe('fark');
   });
 
+  it('KRİTİK N-16: konum kaydına Meta’nın eklediği ad/ülke etiketi fark DEĞİL; yarıçap ya da başka anahtar fark (Dalga 2 canlı tur)', () => {
+    // Canlı dönüş: regions [{key}] → [{key, name: "İzmir Province", country: "TR"}].
+    const etiketli = (geo: Record<string, unknown>, ek: Record<string, unknown>) =>
+      Object.fromEntries(Object.entries(geo).map(([k, v]) => [k, Array.isArray(v) ? v.map((x) => (x && typeof x === 'object' && 'key' in x ? { ...x, ...ek } : x)) : v]));
+    const o = canli();
+    const geo = o.reklam_seti!.targeting.geo_locations as Record<string, unknown>;
+    const kovalar = Object.values(geo).filter((v) => Array.isArray(v) && v.some((x) => x && typeof x === 'object' && 'key' in x));
+    expect(kovalar.length, 'fixture anahtarlı bir konum kovası taşımalı (bekçi)').toBeGreaterThan(0);
+    o.reklam_seti!.targeting.geo_locations = etiketli(geo, { name: 'İzmir Province', country: 'TR' });
+    expect(karsilastirSimdi(yankilar, o).sonuc).toBe('temiz');
+    // Etiket dışında bir alan (yarıçap) eklenirse hedef değişmiş demektir: fark.
+    const r = canli();
+    r.reklam_seti!.targeting.geo_locations = etiketli(r.reklam_seti!.targeting.geo_locations as Record<string, unknown>, { name: 'X', radius: 80 });
+    expect(karsilastirSimdi(yankilar, r).sonuc).toBe('fark');
+  });
+
   it('N-07: promoted_object’e TRUE değerli ek anahtar fark; başka sayfa fark', () => {
     const o = canli();
     o.reklam_seti!.promoted_object = { ...o.reklam_seti!.promoted_object, smart_pse_enabled: true };

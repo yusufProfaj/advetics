@@ -16,6 +16,27 @@ RLS politikası var, platform sahibi yalnız hello@profaj.com.
 bu commit'le deploy ediliyor; migration `20261009100000_iyilestir` (üç
 yeni tablo) + `db:rls`.
 
+**DALGA 2 CANLI TUR 1 (2026-10-11, Ege Birlik Yapı, hepsi duraklatılmış,
+konut kategorisi).** `deneme` kipinde canlıda (`7598dee`). Sonuçlar:
+FORM · Meta: form listesi Meta'dan geldi (`privacy_policy_url` kabul), seçili
+form kontrolü temiz, prova geçti; kurulumda set **atıf (1, 0)** ile reddedildi
+→ form artık 1 gün tıklama (`e738ae5`). TELEFON: iki prova da geçti (Google
+CallAsset alanları doğru); Meta set **konutlu şehirde 17 km yarıçap**
+(#2909052) ile düştü → kısıtlı kategoride yarıçapsız şehre taban yazılıyor;
+Google kampanyası **24347958127 KURULDU (PAUSED, Google Ads'te duruyor, geri
+alma yolu yok)** ama arama öğesi geri okuması `campaign.id` SELECT'te yok diye
+reddedildi → düzeltildi (`aa75cda`). WHATSAPP: ağacın tamamı kuruldu, tek
+fark konum etiketi (Meta ile `name`/`country` ekliyor) → N-16. Arşivlenen
+Meta kampanyaları: 120252521557960700, 120252521610050700, 120252521633420700.
+**DÜZELTMELER DEPLOY EDİLMEDİ.** Sıradaki: deploy → tur 2 (üç amaç yeniden,
+"temiz" görülene kadar) → Google'da arama öğesi ve numara doğrulamasını gözle.
+**Prova boşluğu:** satır içi `/adsets` 5xx yüzünden set alanları (atıf,
+yarıçap) provada HİÇ sınanmıyor; üç ret de yalnız kurulumda göründü.
+Ekran notları: "İzmir, Türkiye" (Meta ili) Google'da eşlenmiyor; WhatsApp ön
+koşul metni "Kontrol edilemedi: ... yok" çelişkili; Nerede rayı alt yazısı
+tek platformda da "Meta, Google"; amaç kartı listesinde arşivlenenler
+"Yayında" görünüyor.
+
 **ADVCAMPAIGN DALGA 2 + BANNER SETİ KARTI (2026-10-11, DEPLOY EDİLMEDİ,
 migration YOK).** Kullanıcı: *"kampanya modülünde diğer amaçları da yazmaya
 başlayalım sonra konudan sapma"*. Plan + çelişki tablosu

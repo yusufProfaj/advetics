@@ -280,14 +280,40 @@ function ozellikDuyarsizAl(o: unknown, yol: string): unknown {
  * EDİLMEZ: reklam bölgeyle ilgisi olmayan kişilere kayardı.
  */
 const KABUL_KONUM_TURLERI = new Set(['home', 'recent', 'frequently_in']);
+
+/**
+ * N-16 — KONUM KAYDINA ETİKET EKLENİYOR, ölçüldü (2026-10-11, v25.0, Dalga 2
+ * canlı turu, "WhatsApp'tan yazsınlar", İzmir ili): `regions: [{key: 3684}]`
+ * gönderildi, `[{key: 3684, name: "İzmir Province", country: "TR"}]` döndü.
+ * Ad ve ülke ETİKET: hedefi değiştirmiyor, yalnız okunabilirlik. Kaldırılan
+ * alanlar DAR bir liste; `radius`, `distance_unit` ya da tanımadığımız bir
+ * alan KALIR ve kıyasa girer (yarıçap genişlerse gerçek fark). Tur 1'de il
+ * değil şehir seçildiği için görülmemişti.
+ */
+const KONUM_ETIKET_ALANLARI = new Set(['name', 'country', 'country_code', 'region', 'region_id']);
+function konumEtiketleriniAt(geo: unknown): unknown {
+  if (!geo || typeof geo !== 'object' || Array.isArray(geo)) return geo;
+  const out: Record<string, unknown> = {};
+  for (const [kova, v] of Object.entries(geo as Record<string, unknown>)) {
+    out[kova] = Array.isArray(v)
+      ? v.map((x) =>
+          x && typeof x === 'object' && !Array.isArray(x) && 'key' in x
+            ? Object.fromEntries(Object.entries(x as Record<string, unknown>).filter(([k]) => !KONUM_ETIKET_ALANLARI.has(k)))
+            : x,
+        )
+      : v;
+  }
+  return out;
+}
+
 function konumTurleriniAyir(donen: unknown): { kalan: unknown; turler: string[] | null } {
   if (!donen || typeof donen !== 'object' || Array.isArray(donen)) return { kalan: donen, turler: null };
   const { location_types: turler, ...kalan } = donen as Record<string, unknown>;
-  if (turler === undefined) return { kalan: donen, turler: null };
+  if (turler === undefined) return { kalan: konumEtiketleriniAt(donen), turler: null };
   if (!Array.isArray(turler) || !turler.every((t) => typeof t === 'string' && KABUL_KONUM_TURLERI.has(t))) {
-    return { kalan: donen, turler: null };
+    return { kalan: konumEtiketleriniAt(donen), turler: null };
   }
-  return { kalan, turler: turler as string[] };
+  return { kalan: konumEtiketleriniAt(kalan), turler: turler as string[] };
 }
 
 /**
