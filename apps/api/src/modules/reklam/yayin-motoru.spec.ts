@@ -470,7 +470,18 @@ describe('kaynak taraması', () => {
   });
 
   it('KRİTİK: DELETED hiçbir yolda yok (geri alma = arşiv)', () => {
-    for (const f of dosyalar) expect(kaynak(f), f).not.toContain('DELETED');
+    /*
+     * TEK İSTİSNA, DAR (2026-10-11): provanın açıp hemen sildiği SETSİZ
+     * geçici kampanya (`setiGeciciKampanyaylaDogrula`). Yalnız o çağrı ve
+     * portun tip birleşimi çıkarılıyor; başka bir yolda DELETED görünürse
+     * (bir yayının nesnesi silinirse) test düşer.
+     */
+    const istisna = (f: string, k: string) =>
+      f === 'prova-isleyici.ts'
+        ? k.replace("await port.durumYaz(geciciId, { status: 'DELETED' })", '')
+        : k.replace("status: 'ACTIVE' | 'ARCHIVED' | 'DELETED'", '');
+    for (const f of dosyalar) expect(istisna(f, kaynak(f)), f).not.toContain('DELETED');
+    expect(kaynak('prova-isleyici.ts')).toContain("await port.durumYaz(geciciId, { status: 'DELETED' })");
   });
 });
 

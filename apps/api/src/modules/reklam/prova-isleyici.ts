@@ -54,6 +54,51 @@ export function kapsamaUygula(sonuclar: GovdeSonucu[]): GovdeSonucu[] {
   );
 }
 
+/**
+ * REKLAM SETİ GEÇİCİ BİR KAMPANYAYA KARŞI DOĞRULANIR — ölçüldü (2026-10-11,
+ * v25.0, `meta-set-prova-kesif`, Ege Birlik Yapı, konutlu anlık form):
+ * satır içi `campaign_spec`li `/adsets` provası hangi alan çıkarılırsa
+ * çıkarılsın 5xx döndü (bütün alanlar tek tek denendi). Kapsama kuralı onu
+ * "reklamın içinde geçti" diye kapatıyordu ama reklamın satır içi
+ * `adset_spec`i set alanlarının hepsini DENETLEMİYOR: aynı gün atıf (1, 0)
+ * ve konutlu şehir yarıçapı (#2909052) provada "geçti", kurulumda RET aldı.
+ * Ölçülen yol: duraklatılmış, SETSİZ, `adv-prova` etiketli bir kampanya
+ * aç, seti ona karşı `validate_only` ile sor, kampanyayı SİL. Bu yol aynı
+ * iki reddi yakaladı ve gerçek gövdeyi geçirdi. Setsiz kampanya teslimat
+ * yapamaz, para harcamaz. Silme düşerse sonuç değişmez ama ekranda söylenir:
+ * Reklam Yöneticisi'nde "silinecek" adlı boş bir kampanya kalmış olur.
+ */
+export async function setiGeciciKampanyaylaDogrula(
+  port: Pick<MetaYazmaPortu, 'olustur' | 'dogrula' | 'durumYaz'>,
+  hesap: string,
+  govdeler: ReadonlyArray<{ ad: string; alanlar: Record<string, unknown> }>,
+): Promise<GovdeSonucu> {
+  const kampanya = govdeler.find((g) => g.ad === 'kampanya')?.alanlar;
+  const set = govdeler.find((g) => g.ad === 'reklam_seti')?.alanlar;
+  if (!kampanya || !set) return { ad: 'reklam_seti', sonuc: 'dogrulanamadi', mesaj: 'Kampanya ya da reklam seti gövdesi yok' };
+  let geciciId: string;
+  try {
+    geciciId = (await port.olustur(hesap, 'campaigns', { ...kampanya, name: '[Advetics prova] silinecek', status: 'PAUSED', adlabels: [{ name: 'adv-prova' }] })).id;
+  } catch (e) {
+    return { ad: 'reklam_seti', sonuc: 'dogrulanamadi', mesaj: `Prova kampanyası açılamadı: ${(e as Error).message}` };
+  }
+  let sonuc: GovdeSonucu;
+  try {
+    const { adlabels: _a, ...alanlar } = set;
+    await port.dogrula(hesap, 'adsets', { ...alanlar, campaign_id: geciciId, execution_options: ['validate_only'] });
+    sonuc = { ad: 'reklam_seti', sonuc: 'gecti' };
+  } catch (e) {
+    if (e instanceof MetaKesinHata) sonuc = { ad: 'reklam_seti', sonuc: 'reddedildi', mesaj: e.message, kod: e.kod, altKod: e.altKod };
+    else sonuc = { ad: 'reklam_seti', sonuc: 'dogrulanamadi', mesaj: e instanceof Error ? e.message : String(e) };
+  }
+  try {
+    await port.durumYaz(geciciId, { status: 'DELETED' });
+  } catch (e) {
+    sonuc = { ...sonuc, not: `Prova için açılan boş kampanya (${geciciId}) silinemedi; Reklam Yöneticisi'nden silinebilir. ${(e as Error).message}` };
+  }
+  return sonuc;
+}
+
 export async function provaKos(
   tx: TxRunner,
   provaId: string,
@@ -154,6 +199,11 @@ export async function provaKos(
       else sonuclar.push({ ad: g.ad, sonuc: 'dogrulanamadi', mesaj: e instanceof MetaBelirsizHata ? e.message : String(e) });
     }
   }
+  // Satır içi set provası belirsizse (bilinen 5xx) set GERÇEK bir geçici
+  // kampanyaya karşı yeniden sorulur; kapsama kuralı yalnız bu da belirsiz
+  // kalırsa devreye girer.
+  const i = sonuclar.findIndex((x) => x.ad === 'reklam_seti' && x.sonuc === 'dogrulanamadi');
+  if (i !== -1) sonuclar[i] = await setiGeciciKampanyaylaDogrula(port, hesap, d.derleme.govdeler);
   sonuclar = kapsamaUygula(sonuclar);
   const red = sonuclar.filter((x) => x.sonuc === 'reddedildi');
   // Aynı mesaj her kavramda tekrar ediyor (bir kreatif hatası bütün

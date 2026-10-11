@@ -219,7 +219,7 @@ export class MetaGrafIstemcisi implements MetaYazmaPortu {
     );
   }
 
-  async durumYaz(metaId: string, alanlar: { status: 'ACTIVE' | 'ARCHIVED'; name?: string }): Promise<void> {
+  async durumYaz(metaId: string, alanlar: { status: 'ACTIVE' | 'ARCHIVED' | 'DELETED'; name?: string }): Promise<void> {
     const sayfa = this.formSayfasi.get(metaId);
     const token = sayfa ? await this.a.sayfaTokeni(sayfa) : this.a.kullaniciToken;
     const r = await this.cagri<{ success?: boolean }>('POST', metaId, token, formGovdesi(alanlar));

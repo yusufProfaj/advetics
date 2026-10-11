@@ -61,7 +61,8 @@ export interface MetaYazmaPortu {
   oku(metaId: string, alanlar: string[]): Promise<Record<string, unknown>>;
   /** `GET /act_X/{tür}bylabels` — yalnız kampanya, reklam seti, reklam. */
   etiketleAra(hesap: string, tur: 'campaigns' | 'adsets' | 'ads', etiket: string): Promise<Array<{ id: string; name: string }>>;
-  durumYaz(metaId: string, alanlar: { status: 'ACTIVE' | 'ARCHIVED'; name?: string }): Promise<void>;
+  /** `DELETED` yalnız provanın geçici, setsiz kampanyası için (`setiGeciciKampanyaylaDogrula`). */
+  durumYaz(metaId: string, alanlar: { status: 'ACTIVE' | 'ARCHIVED' | 'DELETED'; name?: string }): Promise<void>;
   /** Videoyu reklam hesabına yükler, video kimliği döner (önbellekli). */
   videoYukle(hesap: string, varlikId: string): Promise<string>;
   /** Meta videoyu işledi mi: `status.video_status`. */
