@@ -228,7 +228,9 @@ describe('ARAMA — tablonun söylemediği ama gövdenin tutması gereken kurall
       negatifSayisi: TABAN_NEGATIFLER.length,
     });
     expect(d.beklenen.kampanyaAdi).toBe(kampanya(ops).name);
-    expect(d.beklenen.kampanyaAdi).toContain('adv-abcdef12');
+    // Meta ile aynı üretici; kampanya adında zaman damgası YOK (kod benzersiz).
+    expect(d.beklenen.kampanyaAdi).toMatch(/^ADV · \d{2}\.\d{2}\.\d{4} · .+ · ABCD$/);
+    expect(d.beklenen.kampanyaAdi).not.toContain('—');
   });
 
   it('FORM (form uzantısı) Dalga 2: sessizce site reklamı KURULMAZ, açık ret ve SEBEBİ söylenir', () => {

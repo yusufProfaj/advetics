@@ -53,6 +53,7 @@ import {
   videoBilgisiKapaktan,
   oneriyiSigdir,
   OLCUM_ENGEL_KODLARI,
+  otomatikProvaGerekli,
   yayinSonucuEtiketi,
   geriAlMetinleri,
   yayinlanabilirMi,
@@ -867,5 +868,35 @@ describe('ölçüm engeli Ölçüm bölümüne bağlanıyor', () => {
     expect(e).toContain("OLCUM_ENGEL_KODLARI.includes(e.kod) && <Link href={baglanti('/marka-merkezi', { bolum: 'olcum', musteri: b.clientId })}>");
     const eksik = readFileSync(join(__dirname, '../../../../../packages/shared/src/reklam/rehber/eksikler.ts'), 'utf8');
     for (const kod of OLCUM_ENGEL_KODLARI) expect(eksik, kod).toContain(`'${kod}'`);
+  });
+});
+
+describe('otomatik prova (kullanıcı kararı, 2026-10-12)', () => {
+  const temel = {
+    ekran: 6 as const,
+    durum: 'taslak',
+    bekleyen: 0,
+    eksikler: [] as RehberEksigi[],
+    acik: { meta: true, google: false },
+    prova: { sonuc: null, suruyor: false, hata: null },
+    icerikOzeti: 'a'.repeat(64),
+  };
+  it('KRİTİK: Kontrol adımında engel yoksa ve bu içerikle prova yoksa başlar', () => {
+    expect(otomatikProvaGerekli(temel)).toBe(true);
+    expect(otomatikProvaGerekli({ ...temel, prova: { ...temel.prova, sonuc: { icerikOzeti: 'b'.repeat(64) } as never } })).toBe(true);
+  });
+  it('KRİTİK: başka adımda, engelde, kaydedilmemiş değişiklikte, düşmüş provada ve aynı içerikte BAŞLAMAZ', () => {
+    expect(otomatikProvaGerekli({ ...temel, ekran: 5 })).toBe(false);
+    expect(otomatikProvaGerekli({ ...temel, eksikler: [{ adim: 4, alan: null, platform: null, kod: 'X', seviye: 'engel', metin: 'x' }] })).toBe(false);
+    expect(otomatikProvaGerekli({ ...temel, bekleyen: 1 })).toBe(false);
+    expect(otomatikProvaGerekli({ ...temel, prova: { ...temel.prova, hata: 'düştü' } })).toBe(false);
+    expect(otomatikProvaGerekli({ ...temel, prova: { ...temel.prova, suruyor: true } })).toBe(false);
+    expect(otomatikProvaGerekli({ ...temel, prova: { ...temel.prova, sonuc: { icerikOzeti: temel.icerikOzeti } as never } })).toBe(false);
+    expect(otomatikProvaGerekli({ ...temel, durum: 'yayinda' })).toBe(false);
+  });
+  it('ekran kararı bu fonksiyondan ve aynı içerikte bir kez', () => {
+    const e = yorumsuz('rehber-ekrani.tsx');
+    expect(e).toContain('if (!provaGerekli || otoProva.current === kayit.icerikOzeti) return;');
+    expect(e).toContain('otoProva.current = kayit.icerikOzeti;');
   });
 });

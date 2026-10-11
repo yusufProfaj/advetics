@@ -128,6 +128,12 @@ export function campaignBody(params: {
   name: string;
   budgetResource: string;
   stamp: string;
+  /**
+   * Kampanya adına zaman damgası EKLENMEZ (rehber, 2026-10-12): adı
+   * `advKampanyaAdi` kuruyor ve benzersizliği yayın kodu sağlıyor. Akıllı
+   * Boost'un canlıda doğrulanmış gövdesi değişmesin diye isteğe bağlı.
+   */
+  damgasiz?: boolean;
   /** `YYYY-MM-DD` — Date'e çevirmek saat dilimi kayması üretiyor. */
   startDate?: string;
   endDate?: string;
@@ -135,7 +141,7 @@ export function campaignBody(params: {
   teklif?: AramaTeklifi;
 }): GoogleMutateBody {
   const create: Record<string, unknown> = {
-    name: `${params.name} — ${params.stamp}`,
+    name: params.damgasiz ? params.name : `${params.name} — ${params.stamp}`,
     status: 'PAUSED',
     advertisingChannelType: 'SEARCH',
     campaignBudget: params.budgetResource,
@@ -475,6 +481,8 @@ export const ARAMA_DONUSUM_AYARI = 'USE_ACCOUNT_LEVEL_CALL_CONVERSION_ACTION';
  * (MIMARI-REHBER § 8, Ö-1).
  */
 export interface AtomikAramaIstegi {
+  /** Kampanya adına damga eklenmez (rehber; `advKampanyaAdi`). */
+  damgasiz?: boolean;
   customerId: string;
   name: string;
   stamp: string;
@@ -553,6 +561,7 @@ export function aramaAtomikIstek(p: AtomikAramaIstegi): { govde: AtomikAramaGovd
             name: p.name,
             budgetResource: BUTCE,
             stamp: p.stamp,
+            damgasiz: p.damgasiz,
             ...(p.startDate ? { startDate: p.startDate } : {}),
             ...(p.endDate ? { endDate: p.endDate } : {}),
             teklif: p.teklif,

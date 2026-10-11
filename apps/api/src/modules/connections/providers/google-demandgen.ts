@@ -118,6 +118,12 @@ export function demandGenCampaignBody(params: {
   name: string;
   budgetResource: string;
   stamp: string;
+  /**
+   * Kampanya adına zaman damgası EKLENMEZ (rehber, 2026-10-12): adı
+   * `advKampanyaAdi` kuruyor ve benzersizliği yayın kodu sağlıyor. Akıllı
+   * Boost'un canlıda doğrulanmış gövdesi değişmesin diye isteğe bağlı.
+   */
+  damgasiz?: boolean;
   startDate?: string;
   endDate?: string;
   /**
@@ -130,7 +136,7 @@ export function demandGenCampaignBody(params: {
   yalnizBulunanlar?: boolean;
 }): GoogleMutateBody {
   const create: Record<string, unknown> = {
-    name: `${params.name} — ${params.stamp}`,
+    name: params.damgasiz ? params.name : `${params.name} — ${params.stamp}`,
     status: 'PAUSED',
     advertisingChannelType: 'DEMAND_GEN',
     campaignBudget: params.budgetResource,
@@ -457,6 +463,8 @@ export function demandGenKitleBaglaBody(params: {
 export type KampanyaAcilisi = 'ENABLED' | 'PAUSED';
 
 export interface AtomikVideoIstegi {
+  /** Kampanya adına damga eklenmez (rehber; `advKampanyaAdi`). */
+  damgasiz?: boolean;
   customerId: string;
   name: string;
   stamp: string;
@@ -529,6 +537,7 @@ export function demandGenAtomikIstek(p: AtomikVideoIstegi): { govde: AtomikGovde
   });
   const kampanyaGovdesi = ilkCreate(
     demandGenCampaignBody({
+      damgasiz: p.damgasiz,
       name: p.name,
       budgetResource: BUTCE,
       stamp: p.stamp,
@@ -739,6 +748,8 @@ export function demandGenMultiAssetAdBody(params: {
 export type GoogleGorselKaynagi = { resource: string } | { yeniGorsel: { name: string; bytes: Buffer } };
 
 export interface AtomikGorselIstegi {
+  /** Kampanya adına damga eklenmez (rehber; `advKampanyaAdi`). */
+  damgasiz?: boolean;
   customerId: string;
   name: string;
   stamp: string;
@@ -804,6 +815,7 @@ export function demandGenGorselAtomikIstek(p: AtomikGorselIstegi): { govde: Atom
   });
   const kampanyaGovdesi = ilkCreate(
     demandGenCampaignBody({
+      damgasiz: p.damgasiz,
       name: p.name,
       budgetResource: BUTCE,
       stamp: p.stamp,

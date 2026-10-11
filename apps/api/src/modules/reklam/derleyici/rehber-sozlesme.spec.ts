@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import {
   REHBER_ACILIS,
   REHBER_AMACLARI,
@@ -24,6 +24,20 @@ import {
   type RehberAlanlari,
   type RehberEksikBaglami,
 } from '@advetics/shared';
+
+/*
+ * TABLODAN BAĞIMSIZ: bu dosyanın testleri "Siteme gelsinler"i DENEME açılışı
+ * örneği olarak kullanıyor. SITE 2026-10-12'de `acik` oldu; testler süresince
+ * deneme yapılıp geri alınıyor (açılış tablosu kodda DEĞİŞMİYOR).
+ */
+const SITE_ACILIS = { ...REHBER_ACILIS.SITE };
+beforeEach(() => {
+  REHBER_ACILIS.SITE.meta = 'deneme';
+  REHBER_ACILIS.SITE.google = 'deneme';
+});
+afterEach(() => {
+  Object.assign(REHBER_ACILIS.SITE, SITE_ACILIS);
+});
 
 const TL = (n: number) => BigInt(n) * 1_000_000n;
 const Z = '2026-10-10T09:00:00.000+03:00';

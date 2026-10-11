@@ -1199,3 +1199,27 @@ export function videoBilgisiKapaktan<T extends { ad: string; onizleme: string; e
  * söylemiyordu; Ölçüm bölümü durumu nedeniyle gösterip kurulumu öneriyor.
  */
 export const OLCUM_ENGEL_KODLARI: readonly string[] = ['G-DONUSUM', 'M-PIKSEL', 'M-PIKSEL-CALISMADI', 'M-PIKSEL-SESSIZ'];
+
+/**
+ * OTOMATİK PROVA (kullanıcı kararı, 2026-10-12): "kreatifi attığımızda
+ * simülasyon tamamlansın". Kontrol adımına gelindiğinde engel yoksa ve bu
+ * içerikle prova yapılmadıysa prova kendiliğinden başlar; kullanıcının işi
+ * yalnız "Yayınla → Onayla". Düşen bir prova (`hata`) kendini TEKRAR
+ * başlatmaz: döngüde platforma istek yağdırmak yerine sebep ekranda kalır ve
+ * düğme durur. İçerik değişince yeni içerik için bir kez daha başlar.
+ */
+export function otomatikProvaGerekli(g: {
+  ekran: EkranNo;
+  durum: string;
+  bekleyen: number;
+  eksikler: readonly RehberEksigi[];
+  acik: Record<RehberPlatformu, boolean>;
+  prova: { sonuc: RehberProvaSonucu | null; suruyor: boolean; hata: string | null };
+  icerikOzeti: string;
+}): boolean {
+  if (g.ekran !== 6 || g.durum !== 'taslak' || g.bekleyen > 0) return false;
+  if (g.prova.suruyor || g.prova.hata) return false;
+  if (!g.acik.meta && !g.acik.google) return false;
+  if (g.eksikler.some((e) => e.seviye === 'engel')) return false;
+  return !g.prova.sonuc || g.prova.sonuc.icerikOzeti !== g.icerikOzeti;
+}

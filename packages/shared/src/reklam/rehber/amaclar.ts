@@ -114,7 +114,11 @@ export type AcilisDurumu = 'acik' | 'deneme' | 'kapali';
  * Başlangıç: ilk dalga `deneme` (REHBER-PLANI § 3), gerisi `kapali`.
  */
 export const REHBER_ACILIS: Record<RehberAmacKodu, Record<RehberPlatformu, AcilisDurumu>> = {
-  SITE: { meta: 'deneme', google: 'deneme' },
+  // AÇILDI (2026-10-12, kullanıcı kararı "tek tık onayla yayına"): Meta +
+  // Google duraklatılmış kurulum ve geri okuma canlıda temiz (tur 2 ve
+  // Dalga 3 turu, Ege Birlik Yapı). Açma yolu bu satırla ileri tarihli
+  // başlangıçla canlıda sınanıyor; diğer satırlar ondan sonra.
+  SITE: { meta: 'acik', google: 'acik' },
   // DALGA 2 CANLI TURU (2026-10-11, docs/advcampaign/DALGA-2.md): kod yazıldı
   // ve Ajan 4 kapısından geçti; `deneme` = yalnız ajans yöneticisi görür,
   // kurulum DURAKLATILMIŞ kalır. Canlı tur bu kipte yapılır (Dalga 1 gibi);

@@ -3,6 +3,7 @@ import {
   GOOGLE_KISA_ACIKLAMA,
   googleGorselOraniMi,
   googleGorselSorunu,
+  advKampanyaAdi,
   gunlukEsdeger,
   karakterSayisi,
   paraOndaligi,
@@ -198,8 +199,12 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
   if (g.konumlar.length === 0) retler.push({ kod: 'KNM-01', mesaj: 'Konum yok: kampanya bütün ülkelere açılırdı.' });
   if (g.basliklar.length === 0) retler.push({ kod: 'METIN-BASLIK', mesaj: 'Başlık yok.' });
 
-  const kisa = b.kimlik.replace(/-/g, '').slice(0, 8);
-  const ad = `${b.workspaceKisaAdi.slice(0, 40)} · ${b.amacEkranAdi} · adv-${kisa}`;
+  // AD BİÇİMİ META İLE AYNI ÜRETİCİDEN (`advKampanyaAdi`, kullanıcı kararı
+  // 2026-10-12): "ADV · 12.10.2026 · Siteme gelsinler · 4F2A". Tarih hesabın
+  // saat diliminde. Kampanya adı DAMGASIZ (`damgasiz`): benzersizliği kod
+  // sağlıyor; aynı yayının yeniden denemesinde DUPLICATE_NAME ikinci bir
+  // kampanyanın açılmasını da engelliyor.
+  const ad = advKampanyaAdi(bu, b.amacEkranAdi, b.kimlik);
   const stamp = nameStamp(b.simdi);
 
   if (g.kurgu === 'ARAMA') {
@@ -241,6 +246,7 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
       customerId: g.musteriId,
       name: ad,
       stamp,
+      damgasiz: true,
       gunlukButceMicros: gunlukMicros,
       ...(startDate ? { startDate } : {}),
       endDate: g.takvim.bitis,
@@ -296,6 +302,7 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
       customerId: g.musteriId,
       name: ad,
       stamp,
+      damgasiz: true,
       dailyBudgetMicros: gunlukMicros,
       endDate: g.takvim.bitis,
       ...(startDate ? { startDate } : {}),
@@ -361,6 +368,7 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
         customerId: g.musteriId,
         name: ad,
         stamp,
+        damgasiz: true,
         dailyBudgetMicros: gunlukMicros,
         endDate: g.takvim.bitis,
         ...(startDate ? { startDate } : {}),
@@ -436,6 +444,7 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
       customerId: g.musteriId,
       name: ad,
       stamp,
+      damgasiz: true,
       dailyBudgetMicros: gunlukMicros,
       endDate: g.takvim.bitis,
       ...(startDate ? { startDate } : {}),

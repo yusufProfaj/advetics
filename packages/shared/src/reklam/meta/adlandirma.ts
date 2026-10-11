@@ -32,16 +32,32 @@ export interface AdGirdisi {
   /** `YYYY-MM-DD`, hesabın saat diliminde. Date DEĞİL (saat dilimi kayması). */
   tarih: string;
   yayinKimligi: string;
+  /**
+   * Adda görünen AMAÇ. Rehberden gelen yayında kullanıcının seçtiği söz
+   * ("Siteme gelsinler"); verilmezse niyet kataloğunun adı.
+   */
+  amacAdi?: string;
+}
+
+/** Advetics'in kısaltması: Ads Manager'da ve Google Ads'te bizim kurduğumuz kampanyayı ayırır. */
+export const ADV_ONEKI = 'ADV';
+
+/**
+ * KAMPANYA ADI — kullanıcı kararı (2026-10-12): "ADV · 12.10.2026 · Siteme
+ * gelsinler · 4F2A". Workspace adı artık adda YOK (kullanıcı seçti); kod
+ * yayın kimliğinden ve benzersizliği o sağlıyor: Google aynı adlı ikinci
+ * kampanyayı `DUPLICATE_NAME` ile reddediyor ve aynı gün aynı amaçla iki
+ * kampanya olağan. Meta ve Google AYNI üreticiden: iki yerde yazılan ad
+ * biçimi doğduğu anda ayrışır.
+ */
+export function advKampanyaAdi(tarih: string, amacAdi: string, yayinKimligi: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(tarih)) throw new Error(`Tarih YYYY-MM-DD değil: "${tarih}"`);
+  const [y, m, d] = tarih.split('-');
+  return [ADV_ONEKI, `${d}.${m}.${y}`, amacAdi.trim(), kisaKimlik(yayinKimligi)].join(' · ');
 }
 
 export function kampanyaAdi(g: AdGirdisi): string {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(g.tarih)) throw new Error(`Tarih YYYY-MM-DD değil: "${g.tarih}"`);
-  return [
-    g.workspaceKisaAdi.trim(),
-    NIYET_KATALOGU[g.niyet].ekranAdi,
-    g.tarih,
-    kisaKimlik(g.yayinKimligi),
-  ].join(' · ');
+  return advKampanyaAdi(g.tarih, g.amacAdi ?? NIYET_KATALOGU[g.niyet].ekranAdi, g.yayinKimligi);
 }
 
 export function reklamSetiAdi(g: AdGirdisi, projeEtiketi?: string): string {
@@ -69,12 +85,13 @@ export function kreatifAdi(g: AdGirdisi, n: number, onek: string): string {
   const tam = onek + reklamAdi(g, n);
   const tasan = [...tam].length - META_KREATIF_AD_SINIRI;
   if (tasan <= 0) return tam;
-  const ekranAdi = [...NIYET_KATALOGU[g.niyet].ekranAdi];
+  const amac = g.amacAdi ?? NIYET_KATALOGU[g.niyet].ekranAdi;
+  const ekranAdi = [...amac];
   // Amaç adı tek başına taşmayı karşılayamıyorsa (çok uzun workspace adı)
   // sondan kesilir: ad yine sınırda kalır, "Fikir N" kaybolabilir.
   if (ekranAdi.length - tasan - 1 < 1) return [...tam].slice(0, META_KREATIF_AD_SINIRI).join('');
   const kisa = ekranAdi.slice(0, ekranAdi.length - tasan - 1).join('').trimEnd() + '…';
-  const sonuc = onek + reklamAdi({ ...g }, n).replace(NIYET_KATALOGU[g.niyet].ekranAdi, kisa);
+  const sonuc = onek + reklamAdi({ ...g }, n).replace(amac, kisa);
   return [...sonuc].length <= META_KREATIF_AD_SINIRI ? sonuc : [...sonuc].slice(0, META_KREATIF_AD_SINIRI).join('');
 }
 

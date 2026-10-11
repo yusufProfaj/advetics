@@ -31,10 +31,11 @@ import { ORAN_ETIKETI, YERLESIM_GRUPLARI, YERLESIM_SIRASI, bannerSetiDestekleniy
  *        `promoted_object`te; erişimde sıklık sınırı (Dalga 3).
  * 1.3.1: banner seti yokken yerleşim planı BİRLEŞİM (`reklamSetiPlani`).
  * 1.3.2: kreatif adı 100 karaktere sığdırılıyor (`kreatifAdi`).
+ * 1.4.0: ad biçimi "ADV · GG.AA.YYYY · amaç · KOD" (kullanıcı kararı, 2026-10-12).
  * Sürüm provanın tazeliğine bağlı: eski derleyiciyle geçmiş prova yeni
  * gövdeyi kanıtlamaz.
  */
-export const DERLEYICI_SURUMU = '1.3.2';
+export const DERLEYICI_SURUMU = '1.4.0';
 
 /**
  * CLICK-TO-WHATSAPP SABİTLERİ (CLAUDE.md "CLICK-TO-WHATSAPP"). Bağlantı
@@ -258,6 +259,8 @@ export interface DerlemeGirdisi {
   /** Hesabın saat diliminde `YYYY-MM-DD`; adlarda kullanılıyor. */
   tarih: string;
   workspaceKisaAdi: string;
+  /** Adda görünen amaç (rehberin sözü); verilmezse niyet kataloğu (`adlandirma.ts`). */
+  amacAdi?: string;
   niyet: NiyetKodu;
   hesap: { platformId: string; paraBirimi: string };
   sayfaPlatformId: string;
@@ -446,6 +449,7 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
     niyet: g.niyet,
     tarih: g.tarih,
     yayinKimligi: g.yayinKimligi,
+    ...(g.amacAdi ? { amacAdi: g.amacAdi } : {}),
   };
   const etiketler = adlabels(g.yayinKimligi);
 

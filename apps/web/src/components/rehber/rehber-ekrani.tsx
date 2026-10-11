@@ -35,6 +35,7 @@ import {
   onDoldurma,
   paraGoster,
   yayinBittiMi,
+  otomatikProvaGerekli,
   provaYoklanmaliMi,
   yayinlanabilirMi,
   videoBilgisiKapaktan,
@@ -253,6 +254,25 @@ export function RehberEkrani({
       iptal = true;
     };
   }, [ilkKayit.id]);
+
+  // OTOMATİK PROVA (`otomatikProvaGerekli`): aynı içerik için bir kez.
+  const otoProva = useRef<string | null>(null);
+  const provaGerekli = otomatikProvaGerekli({
+    ekran,
+    durum: kayit.durum,
+    bekleyen: durum.bekleyen.length,
+    eksikler: kayit.eksikler,
+    acik,
+    prova,
+    icerikOzeti: kayit.icerikOzeti,
+  });
+  useEffect(() => {
+    if (!provaGerekli || otoProva.current === kayit.icerikOzeti) return;
+    otoProva.current = kayit.icerikOzeti;
+    void provaEt();
+    // `provaEt` her çizimde yeni; bağımlılık içerik kimliği ve karar.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [provaGerekli, kayit.icerikOzeti]);
 
   // Kuyruktaki prova bitene kadar 3 sn'de bir son provayı oku. Düşen okuma
   // yoklamayı durdurmaz ama sebebi yazar (sessiz "hiçbir şey olmuyor" yok).

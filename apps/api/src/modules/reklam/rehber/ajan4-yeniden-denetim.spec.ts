@@ -9,6 +9,20 @@ import { ReklamYayinService } from '../yayin.service';
 import type { ReklamKuyrugu } from '../reklam-kuyrugu';
 import { RehberService } from './rehber.service';
 
+/*
+ * TABLODAN BAĞIMSIZ: bu dosyanın testleri "Siteme gelsinler"i DENEME açılışı
+ * örneği olarak kullanıyor. SITE 2026-10-12'de `acik` oldu; testler süresince
+ * deneme yapılıp geri alınıyor (açılış tablosu kodda DEĞİŞMİYOR).
+ */
+const SITE_ACILIS = { ...REHBER_ACILIS.SITE };
+beforeEach(() => {
+  REHBER_ACILIS.SITE.meta = 'deneme';
+  REHBER_ACILIS.SITE.google = 'deneme';
+});
+afterEach(() => {
+  Object.assign(REHBER_ACILIS.SITE, SITE_ACILIS);
+});
+
 /**
  * AJAN 4 · YENİDEN DENETİM (0c5e299 düzeltmeleri, 2026-10-10).
  *

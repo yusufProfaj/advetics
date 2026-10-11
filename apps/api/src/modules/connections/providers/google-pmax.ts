@@ -76,6 +76,8 @@ export type PmaxAlani =
 const ORAN_ALANI = { yatay: 'MARKETING_IMAGE', kare: 'SQUARE_MARKETING_IMAGE', dik45: 'PORTRAIT_MARKETING_IMAGE' } as const;
 
 export interface AtomikPmaxIstegi {
+  /** Kampanya adına damga eklenmez (rehber; `advKampanyaAdi`). */
+  damgasiz?: boolean;
   customerId: string;
   name: string;
   stamp: string;
@@ -144,7 +146,7 @@ export function pmaxAtomikIstek(p: AtomikPmaxIstegi): { govde: AtomikGovde; sira
     campaignOperation: {
       create: {
         resourceName: KAMPANYA,
-        name: `${p.name} — ${p.stamp}`,
+        name: p.damgasiz ? p.name : `${p.name} — ${p.stamp}`,
         status: p.acilis,
         // Alt tip VERİLMİYOR (Google: "No AdvertisingChannelSubType should be set").
         advertisingChannelType: 'PERFORMANCE_MAX',

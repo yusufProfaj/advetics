@@ -102,7 +102,9 @@ describe('adlandırma', () => {
   };
 
   it('kampanya adı tasarımdaki biçimde', () => {
-    expect(kampanyaAdi(g)).toBe('Örnek Yapı · Form doldursunlar · 2026-10-07 · 7Q2K');
+    // Kullanıcı kararı (2026-10-12): ADV · GG.AA.YYYY · amaç · kod; workspace adı yok.
+    expect(kampanyaAdi(g)).toBe('ADV · 07.10.2026 · Form doldursunlar · 7Q2K');
+    expect(kampanyaAdi({ ...g, amacAdi: 'Siteme gelsinler' })).toBe('ADV · 07.10.2026 · Siteme gelsinler · 7Q2K');
   });
 
   it('reklam seti ve reklam kampanya adından türer', () => {
@@ -126,5 +128,15 @@ describe('adlandırma', () => {
 
   it('açılmadı öneki sonda boşlukla', () => {
     expect(ACILMADI_ONEKI).toBe('[Advetics: açılmadı] ');
+  });
+});
+
+describe('rehber yayınında adda kullanıcının amaç sözü (2026-10-12)', () => {
+  it('KRİTİK: yayinBaslat rehberden gelen yayına REHBER_AMACLARI ekran adını veriyor', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const k = readFileSync(join(__dirname, '../yayin-baslat.ts'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    expect(k).toContain('REHBER_AMAC_KODLARI.find((x) => REHBER_AMACLARI[x].meta.niyet === niyet)');
+    expect(k).toContain('...(rehberAmacAdi ? { amacAdi: rehberAmacAdi } : {}),');
   });
 });

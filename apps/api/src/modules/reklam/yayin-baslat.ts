@@ -273,6 +273,8 @@ export async function taslakDerle(
       SELECT id::text FROM reklam_rehberi WHERE meta_taslak_id = ${t.id}::uuid AND client_id = ${t.client_id}::uuid LIMIT 1`),
   );
   const rehberden = rehberBagi !== undefined;
+  const rehberAmacKodu = rehberden && niyet ? REHBER_AMAC_KODLARI.find((x) => REHBER_AMACLARI[x].meta.niyet === niyet) : undefined;
+  const rehberAmacAdi = rehberAmacKodu ? REHBER_AMACLARI[rehberAmacKodu].ekranAdi : null;
   if (niyet) {
     const acik = rehberden
       ? REHBER_AMAC_KODLARI.some((a) => REHBER_AMACLARI[a].meta.niyet === niyet && REHBER_ACILIS[a].meta !== 'kapali')
@@ -334,6 +336,9 @@ export async function taslakDerle(
     yayinKimligi: yayinId,
     tarih: yerelTarih(b.simdi, h.timezone),
     workspaceKisaAdi: (musteri?.ad ?? 'Workspace').slice(0, 40),
+    // Rehberden gelen yayında adda kullanıcının seçtiği amaç sözü görünür
+    // ("Siteme gelsinler"); eski yollarda niyet kataloğunun adı.
+    ...(rehberAmacAdi ? { amacAdi: rehberAmacAdi } : {}),
     niyet: alanlar.niyet!.deger,
     hesap: { platformId: h.external_id.startsWith('act_') ? h.external_id : `act_${h.external_id}`, paraBirimi: h.currency },
     sayfaPlatformId: sayfa.external_id,

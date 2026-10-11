@@ -350,7 +350,8 @@ describe('Dalga 2 sürüm ve açılış', () => {
     // reklam setinde; erişimde sıklık sınırı (Dalga 3).
     // 1.3.1: banner seti yokken yerleşim planı birleşim.
     // 1.3.2: kreatif adı 100 karaktere sığdırılıyor.
-    expect(DERLEYICI_SURUMU).toBe('1.3.2');
+    // 1.4.0: ad biçimi ADV · tarih · amaç · kod.
+    expect(DERLEYICI_SURUMU).toBe('1.4.0');
   });
 
   it('KRİTİK: TELEFON/WHATSAPP derleniyor ama üründe AÇIK DEĞİL (canlı tur bekliyor)', () => {
@@ -376,14 +377,16 @@ describe('Dalga 2 sürüm ve açılış', () => {
 describe('kreatif adı 100 karakter (satış canlı turu, 2026-10-11)', () => {
   it('KRİTİK: uzun amaç adında kreatif adı 100 karaktere sığar; Fikir N ve kısa kimlik korunur', async () => {
     const { kreatifAdi, reklamAdi, ACILMADI_ONEKI, META_KREATIF_AD_SINIRI } = await import('@advetics/shared');
-    const g = { workspaceKisaAdi: 'Ege Birlik Yapı', niyet: 'SATIS' as const, tarih: '2026-10-11', yayinKimligi: '49cb0000-0000-4000-8000-000000000000' };
+    // Bugünkü ad kısa; sınır uzun bir amaç sözüyle sınanıyor (kural kalıcı).
+    const g = { workspaceKisaAdi: 'Ege Birlik Yapı', niyet: 'SATIS' as const, tarih: '2026-10-11', yayinKimligi: '49cb0000-0000-4000-8000-000000000000', amacAdi: 'Sitemden satış ya da kayıt gelsin, kampanya dönemi boyunca en yüksek dönüşüm için' };
     expect([...(ACILMADI_ONEKI + reklamAdi(g, 1))].length).toBeGreaterThan(META_KREATIF_AD_SINIRI);
     const ad = kreatifAdi(g, 1, ACILMADI_ONEKI);
     expect([...ad].length).toBeLessThanOrEqual(META_KREATIF_AD_SINIRI);
-    expect(ad.endsWith('· 2026-10-11 · 49CB · Fikir 1')).toBe(true);
+    expect(ad.endsWith('· 49CB · Fikir 1')).toBe(true);
+    expect(ad.startsWith(ACILMADI_ONEKI + 'ADV · 11.10.2026 · ')).toBe(true);
     expect(ad).toContain('…');
     // Sığan ad dokunulmadan kalır.
-    const kisa = { ...g, niyet: 'SITE' as const };
+    const kisa = { ...g, niyet: 'SITE' as const, amacAdi: 'Siteme gelsinler' };
     expect(kreatifAdi(kisa, 2, ACILMADI_ONEKI)).toBe(ACILMADI_ONEKI + reklamAdi(kisa, 2));
   });
   it('derleyici kreatif gövdesinde bu adı kullanıyor', () => {
