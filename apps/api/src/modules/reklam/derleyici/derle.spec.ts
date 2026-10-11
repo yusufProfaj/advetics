@@ -169,10 +169,14 @@ describe('manifesto', () => {
     }
   });
 
-  it('KRİTİK: atıf NİYET BAŞINA — form ajans standardı, site ziyareti 1 gün tıklama (S-07)', () => {
-    expect(bul(govde({ atif: 'tik7', niyet: 'FORM', formId: '{form}', hedefAdres: null }).govdeler, 'reklam_seti').attribution_spec).toEqual([
-      { event_type: 'CLICK_THROUGH', window_days: 7 },
-    ]);
+  it('KRİTİK: atıf NİYET BAŞINA — form ve site ziyareti 1 gün tıklama (S-07)', () => {
+    // FORM ÖLÇÜLDÜ (2026-10-11, canlı tur): anlık formlu reklam seti 7 gün
+    // tıklamayı "(1, 0)" ile REDDETTİ. Ajans standardı form için geçerli değil.
+    for (const atif of ['tik7', 'tik7_gor1'] as const) {
+      expect(bul(govde({ atif, niyet: 'FORM', formId: '{form}', hedefAdres: null }).govdeler, 'reklam_seti').attribution_spec).toEqual([
+        { event_type: 'CLICK_THROUGH', window_days: 1 },
+      ]);
+    }
     // Site ziyaretinde ajans standardı Meta'da geçerli değil: yazılsa ya
     // reddedilir ya sessizce değişirdi.
     expect(bul(govde({ atif: 'tik7_gor1', niyet: 'SITE' }).govdeler, 'reklam_seti').attribution_spec).toEqual([
@@ -334,7 +338,8 @@ describe('WHATSAPP (Click-to-WhatsApp)', () => {
 
 describe('Dalga 2 sürüm ve açılış', () => {
   it('derleyici sürümü yükseldi: eski provalar yeni gövdeyi kanıtlamaz', () => {
-    expect(DERLEYICI_SURUMU).toBe('1.2.0');
+    // 1.2.1: formun atıf penceresi 1 gün tıklama (canlı tur ölçümü).
+    expect(DERLEYICI_SURUMU).toBe('1.2.1');
   });
 
   it('KRİTİK: TELEFON/WHATSAPP derleniyor ama üründe AÇIK DEĞİL (canlı tur bekliyor)', () => {

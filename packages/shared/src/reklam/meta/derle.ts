@@ -30,7 +30,7 @@ import { ORAN_ETIKETI, YERLESIM_GRUPLARI, YERLESIM_SIRASI, bannerSetiDestekleniy
  * Sürüm provanın tazeliğine bağlı: eski derleyiciyle geçmiş prova yeni
  * gövdeyi kanıtlamaz.
  */
-export const DERLEYICI_SURUMU = '1.2.0';
+export const DERLEYICI_SURUMU = '1.2.1';
 
 /**
  * CLICK-TO-WHATSAPP SABİTLERİ (CLAUDE.md "CLICK-TO-WHATSAPP"). Bağlantı
@@ -158,14 +158,22 @@ const ATIF_SPEC: Record<AtifStandardi, Array<{ event_type: string; window_days: 
 };
 
 /**
- * ATIF NİYET BAŞINA (SENTEZ S-07, A3 §2.3). Meta'nın referans tablosu ajans
- * standardını (7 gün tıklama ± 1 gün görüntüleme) yalnız dönüşüm ve form
- * optimizasyonunda tanıyor; site ziyareti, sohbet, arama ve erişimde yalnız
- * 1 gün tıklama geçerli. Her niyete aynı pencereyi yazmak ya reddedilir ya da
- * Meta onu SESSİZCE değiştirir ve raporun "7 gün" dediği sayı yalan olur.
- * 1 gün tıklama ajansın seçebileceği bir standart değil, kuralın sonucu.
+ * ATIF NİYET BAŞINA (SENTEZ S-07, A3 §2.3). Ajans standardı (7 gün tıklama
+ * ± 1 gün görüntüleme) yalnız dönüşüm optimizasyonunda geçerli; site
+ * ziyareti, form, sohbet, arama ve erişimde yalnız 1 gün tıklama. Her niyete
+ * aynı pencereyi yazmak ya reddedilir ya da Meta onu SESSİZCE değiştirir ve
+ * raporun "7 gün" dediği sayı yalan olur. 1 gün tıklama ajansın seçebileceği
+ * bir standart değil, kuralın sonucu.
+ *
+ * FORM BURADAYDI VE YANLIŞTI — ölçüldü (2026-10-11, v25.0, Dalga 2 canlı
+ * turu, Ege Birlik Yapı, anlık form): referans tablosu formu "ajans
+ * standardı geçerli" sayıyordu; gerçek kurulumda reklam seti *"desteklenen
+ * tıklama ve görüntüleme ilişkilendirme aralığı değerleri şunlardır: (1, 0)"*
+ * ile reddedildi. Prova bunu YAKALAMADI: satır içi kampanyalı `/adsets`
+ * provası bilinen 5xx ile düştüğü için set tek başına sınanamıyor ve kitle ile
+ * bütçe reklam parçasında kontrol ediliyor; atıf orada yok.
  */
-export const AJANS_STANDARDI_HEDEFLERI: readonly string[] = ['LEAD_GENERATION', 'OFFSITE_CONVERSIONS'];
+export const AJANS_STANDARDI_HEDEFLERI: readonly string[] = ['OFFSITE_CONVERSIONS'];
 
 export function atifSpec(optimizationGoal: string, standart: AtifStandardi): Array<{ event_type: string; window_days: number }> {
   return AJANS_STANDARDI_HEDEFLERI.includes(optimizationGoal) ? ATIF_SPEC[standart] : [{ event_type: 'CLICK_THROUGH', window_days: 1 }];
