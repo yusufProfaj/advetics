@@ -219,7 +219,7 @@ export class ReklamHazirlikService {
   ): Promise<RehberHazirligi> {
     const temel = await this.oku(ctx, clientId);
     const ek = await this.prisma.withTenant(ctx, async (tx) => {
-      const [googleHesaplari, kanallar, [musteri], ajansYoneticisi] = await Promise.all([
+      const [googleHesaplari, kanallar, [musteri], ajansYoneticisi, hazirlama] = await Promise.all([
         tx.$queryRaw<Array<{ id: string; name: string; external_id: string; currency: string; timezone: string }>>(Prisma.sql`
           SELECT id::text, name, external_id, currency, timezone
             FROM ad_accounts
@@ -236,10 +236,12 @@ export class ReklamHazirlikService {
            WHERE c.id = ${clientId}::uuid`),
         // Rehber servisiyle AYNI kural, tek yardımcıdan (BULGU-5).
         ajansYoneticisiMi(tx, ctx),
+        tx.$queryRaw<Array<{ piksel_id: string | null; gunluk_butce_micros: bigint | null; gunluk_butce_para_birimi: string | null; kategori_cevaplandi: boolean }>>(Prisma.sql`
+          SELECT piksel_id, gunluk_butce_micros, gunluk_butce_para_birimi, kategori_cevaplandi FROM workspace_hazirlama WHERE client_id = ${clientId}::uuid`),
       ]);
       // Form listesi burada okunmuyor: seçili sayfaya bağlı ve Meta'dan
       // geliyor (`RehberService.formSablonlari`, Dalga 2 Ç-2).
-      return { googleHesaplari, kanallar, musteri, ajansYoneticisi };
+      return { googleHesaplari, kanallar, musteri, ajansYoneticisi, hazirlama: hazirlama[0] ?? null };
     });
 
     const metaHesap = seciliYoksaIlk(temel.hesaplar, secim?.metaHesapId);
@@ -283,6 +285,14 @@ export class ReklamHazirlikService {
       },
       iletisim: { telefon: ek.musteri?.telefon ?? null, siteAdresi: ek.musteri?.site ?? null },
       ajansYoneticisi: ek.ajansYoneticisi,
+      hazirlama: ek.hazirlama
+        ? {
+            pikselId: ek.hazirlama.piksel_id,
+            gunlukButceMicros: ek.hazirlama.gunluk_butce_micros?.toString() ?? null,
+            gunlukButceParaBirimi: ek.hazirlama.gunluk_butce_para_birimi?.trim() ?? null,
+            kategoriCevaplandi: ek.hazirlama.kategori_cevaplandi,
+          }
+        : null,
     };
   }
 }

@@ -942,6 +942,16 @@ karar gerekiyorsa yardımcı sınıfla yaz, katman onu ezmiyor. Sayfa başlığ�
   kolon: kod bir süre ajansı "en eski şirket" sayıyordu ve o artık RLS'in
   sınırı olamazdı. `musteri-sirketi-izolasyon.spec.ts`,
   `hesap-sahipligi.spec.ts`.
+- **OKUMADA TETİKLENEN ARKA PLAN İŞİ: KİLİDİ SATIRDAN ÖNCE OKU, DÜŞERSE DE
+  SATIR YAZ.** Hazır workspace işi okumada imzaya bakıp kendini başlatıyor
+  ve bellek içi bir kilit (`calisan`) taşıyor. İki tuzak testte yakalandı:
+  (1) iş satırı yazıp SONRA kilidi bırakıyor; yoklama önce satırı sonra
+  kilidi okursa eski satırı ve boş kilidi görüp işi İKİNCİ KEZ başlatıyor
+  (site taraması + AI çağrısı). (2) İş tamamen düşüp satır yazmazsa imza
+  hiç eşleşmiyor ve panelin HER yoklaması işi yeniden başlatıyor — sebep
+  ekranda yok. Düşen iş de imzasıyla `eksik` satırı yazıyor (`dustu`).
+  Ayrıca işin KENDİ yazdığı alan (site adresi) imzaya giriyorsa saklanan
+  imza iş sonunda yeniden hesaplanmalı. `hazirlama.spec.ts`.
 - **`ad_accounts`, `platform_connections` ve `social_profiles` içinde
   `client_id` NULLABLE.** NULL = ajansın havuzunda, müşteriye atanmamış.
   Sahiplik `org_id`'de. Bu satırlar için senkronizasyon kuyruğa GİRMEMELİ —

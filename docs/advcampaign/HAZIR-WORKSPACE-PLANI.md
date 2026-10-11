@@ -88,3 +88,24 @@ kararı: workspace taşınırsa satır onunla gider (workspace'in kendi ayarı).
 başlangıç, kategori cevabı, piksel). Amaç seçilince engeli olmayan
 Nerede/Kime/Bütçe adımları atlanır, Reklam adımında özet satırı ("hazırlıktan
 dolu · değiştir") görünür.
+
+## Dalga 3 — uygulamada verilen kararlar (Ajan 2/3, 2026-10-12)
+
+- **Kaynak izinleri genişledi** (`REHBER_IZINLI_KAYNAKLAR`): `butce`,
+  `pikselId`, `ekKategoriler` → `workspace_profili`; `takvim` →
+  `derleyici`. Para ve hukuk alanı eskiden yalnız `kullanici`ydı; harcama
+  kararı artık onay penceresinde (bütçe ve başlangıç açıkça yazıyor).
+- **Kategori "yok" yalnız SORULUP cevaplandıysa** önden dolar
+  (`kategori_cevaplandi`); sorulmamış beyanı boş saymak konut reklamını
+  kategorisiz açardı.
+- **Başlangıç yarın, bitiş 30 gün sonra**, gün HESABIN saat diliminde.
+- **Kısa akış** (`amactanSonraki`): hazırlık var + Nerede/Kime/Bütçe'de
+  engel yok → Reklam adımı. Sunucu listesi bayatsa uzun yol.
+- **Tetik**: okumada imza (hesap/sayfa/site). Rehber açılışı da okuyor;
+  Şirketler ekranından atayıp doğrudan AdvCampaign'e gelen kullanıcıda
+  hazırlık başka türlü hiç başlamıyordu.
+- **İş düşerse satır yine yazılır** (`dustu`, imzayla): yazılmasaydı her
+  yoklama işi yeniden başlatırdı. Kilit satırdan ÖNCE okunuyor (biten işin
+  yoklaması eski satırı görüp işi ikinci kez başlatıyordu; test yakaladı).
+- Sayfa olarak değil, **Bağlantılar bölümünde kart**: hazırlık hesap
+  atamasıyla başlıyor, sonucu atamanın olduğu yerde.

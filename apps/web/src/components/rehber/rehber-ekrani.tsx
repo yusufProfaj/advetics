@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import {
+  type HazirlamaYaniti,
   REHBER_ACILIS,
   REHBER_ADIMLARI,
   REHBER_AMACLARI,
@@ -17,7 +18,8 @@ import {
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch, onizlemeAdresi } from '@/lib/api';
 import { baglanti } from '@/lib/baglanti';
-import type { AdimBaglami } from './adim-ortak';
+import { Uyari, type AdimBaglami } from './adim-ortak';
+import { mmAdresi } from '@/components/marka-merkezi/bolumler';
 import { AdimAmac, AdimNerede } from './adim-amac-nerede';
 import { AdimKime, type KonumEslemeHali } from './adim-kime';
 import { AdimReklam, type MedyaBilgisi } from './adim-reklam';
@@ -129,6 +131,25 @@ export function RehberEkrani({
   // Merkezi'nden doldur (karar saf fonksiyonda, `onDoldurma`).
   useEffect(() => {
     kaydedici.degistir(onDoldurma(ilkKayit.alanlar, hazirlik));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /*
+   * HAZIRLIK HİÇ KOŞMADIYSA BURADAN BAŞLAT. Tetik hazırlığın OKUNMASINDA
+   * (sunucu imzaya bakıyor) ve okuma yalnız Marka Merkezi'ndeydi: hesabı
+   * Şirketler ekranından atayıp doğrudan buraya gelen kullanıcının hazırlığı
+   * hiç başlamıyordu. Okuma bir kez yapılır; sonucu bu açılışta kullanılmaz
+   * (iş dakikalar sürebilir), kullanıcıya nerede izleyeceği söylenir.
+   * Çağrı düşerse sebebi ekranda yazar, yutulmaz.
+   */
+  const [hazirlamaTetik, setHazirlamaTetik] = useState<{ tur: 'yok' } | { tur: 'basladi' } | { tur: 'hata'; mesaj: string }>({ tur: 'yok' });
+  useEffect(() => {
+    if (hazirlik.hazirlama !== null) return;
+    apiFetch<HazirlamaYaniti>(`/clients/${encodeURIComponent(kayit.clientId)}/hazirlama`).then(
+      // Hesap atanmamışsa iş başlamaz (`bekliyor`); "hazırlanıyor" demek yalan olurdu.
+      (y) => setHazirlamaTetik(y.durum === 'calisiyor' ? { tur: 'basladi' } : { tur: 'yok' }),
+      (e: unknown) => setHazirlamaTetik({ tur: 'hata', mesaj: e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.' }),
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -388,6 +409,18 @@ export function RehberEkrani({
               </div>
             </div>
             <div className={`${s.ekran} ${ekran === 1 ? s.acik : ''}`}>
+              {hazirlamaTetik.tur !== 'yok' && (
+                <Uyari>
+                  {hazirlamaTetik.tur === 'basladi' ? (
+                    <>
+                      Bu workspace reklama hazırlanıyor (site, marka bilgileri, piksel). Bu reklamda eksikleri sen seçersin; sonraki reklamlarda önden dolu
+                      gelir. <Link href={mmAdresi(kayit.clientId, 'baglantilar')}>Hazırlığı gör</Link>
+                    </>
+                  ) : (
+                    <>Workspace hazırlığı başlatılamadı: {hazirlamaTetik.mesaj}</>
+                  )}
+                </Uyari>
+              )}
               <AdimAmac b={b} git={git} />
             </div>
             <div className={`${s.ekran} ${ekran === 2 ? s.acik : ''}`}>

@@ -35,6 +35,8 @@ import {
   konumEslemeImzasi,
   metinOnerisiHali,
   onDoldurma,
+  amactanSonraki,
+  hazirOzeti,
   oneriHatasi,
   paraGoster,
   platformDurumu,
@@ -540,6 +542,82 @@ describe('açılışta önden doldurma', () => {
 
   it('dolu alana dokunulmaz', () => {
     expect(onDoldurma({ metaHesabiId: alan('m9'), konumlar: alan([]), hedefAdres: alan(null) }, h)).toEqual([]);
+  });
+
+  describe('hazır workspace varsayılanları', () => {
+    // 2026-10-12 21:30 UTC = İstanbul'da 13 Ekim 00:30: "yarın" hesabın
+    // gününe göre 14 Ekim olmalı, UTC'ye göre 13 değil.
+    const an = new Date('2026-10-12T21:30:00Z');
+    const hz = (x: Partial<NonNullable<RehberHazirligi['hazirlama']>>) =>
+      ({ ...h, hazirlama: { pikselId: '123', gunlukButceMicros: '500000000', gunlukButceParaBirimi: 'TRY', kategoriCevaplandi: true, ...x } }) as RehberHazirligi;
+
+    it('KRİTİK: piksel, günlük bütçe, kategori beyanı ve yarın başlayan 30 günlük takvim dolar', () => {
+      const d = onDoldurma({}, hz({}), an);
+      const bul = (a: string) => d.find((x) => x.alan === a);
+      expect(bul('pikselId')).toMatchObject({ deger: '123', kaynak: 'workspace_profili' });
+      expect(bul('butce')).toMatchObject({ deger: { tip: 'gunluk', micros: '500000000' }, kaynak: 'workspace_profili' });
+      expect(bul('ekKategoriler')).toMatchObject({ deger: [], kaynak: 'workspace_profili' });
+      expect(bul('takvim')).toMatchObject({ deger: { baslangic: '2026-10-14', bitis: '2026-11-13' }, kaynak: 'derleyici' });
+    });
+
+    it('KRİTİK: bütçe başka para birimiyle saklandıysa doldurulmaz (500 ₺ → 500 USD olmasın)', () => {
+      expect(onDoldurma({}, hz({ gunlukButceParaBirimi: 'USD' }), an).some((x) => x.alan === 'butce')).toBe(false);
+    });
+
+    it('KRİTİK: geçmişte kalan ÖNERİLEN başlangıç yenilenir; kullanıcının seçtiği tarihe dokunulmaz', () => {
+      const eski = { ...alan({ baslangic: '2026-10-01', bitis: '2026-10-31' }), kaynak: 'derleyici' as const };
+      expect(onDoldurma({ takvim: eski }, hz({}), an).find((x) => x.alan === 'takvim')?.deger).toEqual({ baslangic: '2026-10-14', bitis: '2026-11-13' });
+      const kullanici = { ...alan({ baslangic: '2026-10-01', bitis: null }), kaynak: 'kullanici' as const };
+      expect(onDoldurma({ takvim: kullanici }, hz({}), an).some((x) => x.alan === 'takvim')).toBe(false);
+      const taze = { ...alan({ baslangic: '2026-10-14', bitis: '2026-11-13' }), kaynak: 'derleyici' as const };
+      expect(onDoldurma({ takvim: taze }, hz({}), an).some((x) => x.alan === 'takvim')).toBe(false);
+    });
+
+    it('KRİTİK: sorulmamış kategori "yok" sayılmaz', () => {
+      expect(onDoldurma({}, hz({ kategoriCevaplandi: false }), an).some((x) => x.alan === 'ekKategoriler')).toBe(false);
+    });
+
+    it('hazırlık yoksa ya da değer boşsa yazılmaz; dolu bütçeye dokunulmaz', () => {
+      expect(onDoldurma({}, { ...h, hazirlama: null } as RehberHazirligi, an).some((x) => ['butce', 'takvim', 'pikselId'].includes(x.alan))).toBe(false);
+      const d = onDoldurma({ butce: alan({ tip: 'toplam', micros: '1' }) }, hz({ pikselId: null }), an);
+      expect(d.some((x) => x.alan === 'butce' || x.alan === 'pikselId')).toBe(false);
+    });
+  });
+});
+
+describe('kısa akış (hazır workspace)', () => {
+  const e = (adim: 1 | 2 | 3 | 4 | 5 | 6, seviye: 'engel' | 'uyari' = 'engel', kod = 'X') => ({ adim, alan: null, platform: null, kod, seviye, metin: 'm' });
+
+  it('KRİTİK: hazırlık var, 2/3/5 engelsiz → doğrudan Reklam', () => {
+    expect(amactanSonraki([e(4), e(3, 'uyari')], true, true)).toBe(4);
+  });
+  it('KRİTİK: atlanacak adımda engel varsa uzun yol', () => {
+    for (const n of [2, 3, 5] as const) expect(amactanSonraki([e(n)], true, true)).toBe(2);
+  });
+  it('hazırlık yoksa, amaç seçilmediyse ya da sunucu listesi bayatsa uzun yol', () => {
+    expect(amactanSonraki([], true, false)).toBe(2);
+    expect(amactanSonraki([], false, true)).toBe(2);
+    expect(amactanSonraki([e(1, 'engel', 'AMAC')], true, true)).toBe(2);
+  });
+
+  it('özet üç adımı yazar, boşu gizlemez, konumu kısaltırken kaç yer kaldığını söyler', () => {
+    const k = (x: string) => ({ tur: 'city' as const, key: x, etiket: x, ulkeKodu: 'TR' });
+    const o = hazirOzeti(
+      { konumlar: alan([k('A'), k('B'), k('C'), k('D')]), butce: alan({ tip: 'gunluk', micros: '500000000' }), takvim: alan({ baslangic: '2026-10-14', bitis: '2026-11-13' }) },
+      { meta: true, google: true },
+      'TRY',
+    );
+    expect(o.map((x) => x.adim)).toEqual([2, 3, 3, 5]);
+    expect(o[0]!.deger).toBe('Meta ve Google');
+    expect(o[1]!.deger).toBe('A, B, C ve 1 yer daha');
+    expect(o[2]!.deger).toBe('Sorulmadı');
+    expect(o[3]!.deger).toContain('/ gün');
+    expect(o[3]!.deger).toContain('30 gün');
+    const bos = hazirOzeti({}, { meta: false, google: false }, 'TRY');
+    expect(bos.map((x) => x.deger)).toEqual(['Seçilmedi', 'Seçilmedi', 'Sorulmadı', 'Girilmedi']);
+    // Kısa akış Kime'yi atlıyor: ek kategori özette görünmek zorunda.
+    expect(hazirOzeti({ ekKategoriler: alan(['EMPLOYMENT']) }, { meta: true, google: false }, 'TRY')[2]!.deger).toBe('İş ilanı');
+    expect(hazirOzeti({ ekKategoriler: alan([]) }, { meta: true, google: false }, 'TRY')[2]!.deger).toContain('Yok');
   });
 });
 

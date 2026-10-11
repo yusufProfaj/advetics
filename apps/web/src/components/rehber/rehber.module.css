@@ -2204,3 +2204,14 @@
 
 /* Otomatik üretilen boyut: marka kırmızısıyla küçük etiket (durum değil, kaynak bilgisi). */
 .uretildi { font-weight: 600; color: var(--t-brand-strong); font-size: 11px; }
+
+/* Kısa akış: atlanan Nerede/Kime/Bütçe adımlarının özeti, Reklam adımının üstünde. */
+.hazirOzet {
+  margin-bottom: 14px;
+}
+.hazirOzet .ozetSatir {
+  align-items: center;
+}
+.hazirOzet .ozetSatir b {
+  flex: 1;
+}

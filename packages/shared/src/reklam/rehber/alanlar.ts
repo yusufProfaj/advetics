@@ -138,8 +138,15 @@ export type RehberAlanAdi = keyof RehberAlanlari;
  * öneri (platform seçimi, pay, yaş); ekranda "Önerilen" rozetiyle görünür ve
  * kullanıcı ona bakmadan geçebilir — bu bir karar olarak kabul ediliyor,
  * çünkü öneri platformun değil Advetics'in kuralından geliyor ve sebebi
- * ekranda yazıyor. Para ve hukuk alanlarında (`butce`, `takvim`,
- * `ekKategoriler`) yalnız kullanıcı.
+ * ekranda yazıyor.
+ *
+ * PARA VE HUKUK ALANLARI (`butce`, `takvim`, `ekKategoriler`) bir süre
+ * yalnız `kullanici` kabul ediyordu. Hazır workspace kararıyla (kullanıcı,
+ * 2026-10-12: "kreatifi atsın, prova bitince reklam oluşsun") workspace
+ * hazırlığının değerleri de geçiyor: bütçe workspace varsayılanı, kategori
+ * hazırlıkta kullanıcının VERDİĞİ beyan, başlangıç yarın. Harcama yine
+ * kullanıcının kararı: onay penceresi bütçeyi ve başlangıcı açıkça yazıyor
+ * ve "Onayla" basılmadan hiçbir şey açılmıyor.
  */
 export const REHBER_IZINLI_KAYNAKLAR: Partial<Record<RehberAlanAdi, readonly AlanKaynagi[]>> = {
   amac: ['kullanici'],
@@ -151,19 +158,19 @@ export const REHBER_IZINLI_KAYNAKLAR: Partial<Record<RehberAlanAdi, readonly Ala
   youtubeKanaliId: ['kullanici', 'workspace_profili'],
   konumlar: ['kullanici', 'marka_merkezi'],
   enDusukYas: ['kullanici', 'derleyici'],
-  ekKategoriler: ['kullanici'],
+  ekKategoriler: ['kullanici', 'workspace_profili'],
   hedefAdres: ['kullanici', 'marka_merkezi', 'workspace_profili'],
   telefon: ['kullanici', 'marka_merkezi'],
   // Marka Merkezi'ndeki telefon önden doluyor; WhatsApp hattıyla aynı
   // olmayabilir, ekranda kaynağı yazıyor.
   whatsappNumarasi: ['kullanici', 'marka_merkezi'],
   // Hesapta TEK piksel varsa panel onu önerir (`derleyici`, "Önerilen").
-  pikselId: ['kullanici', 'derleyici'],
+  pikselId: ['kullanici', 'derleyici', 'workspace_profili'],
   metin: ['kullanici', 'marka_merkezi'],
   anahtarKelimeler: ['kullanici'],
-  butce: ['kullanici'],
+  butce: ['kullanici', 'workspace_profili'],
   metaPayiYuzde: ['kullanici', 'derleyici'],
-  takvim: ['kullanici'],
+  takvim: ['kullanici', 'derleyici'],
 };
 
 /** Varsayılan Meta payı: ilk iki hafta eşit (REHBER-PLANI § 2, adım 5). */

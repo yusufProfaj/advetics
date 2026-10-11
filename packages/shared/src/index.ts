@@ -58,3 +58,4 @@ export * from './reklam';
 export * from './okuma-api';
 export * from './schemas/youtube-kanal.schema';
 export * from './olcum';
+export * from './hazirlama';

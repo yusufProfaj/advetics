@@ -26,7 +26,9 @@ import {
   yayinSonucuEtiketi,
   kurulumAdimlari,
   geriAlMetinleri,
+  kategoriOzeti,
   paraGoster,
+  REHBER_PLATFORM_ADI,
   sonEkranOzeti,
   provaGosterimi,
   tarihGoster,
@@ -43,7 +45,7 @@ export interface ProvaHali {
   hata: string | null;
 }
 
-const PLATFORM_ADI: Record<RehberPlatformu, string> = { meta: 'Meta', google: 'Google' };
+const PLATFORM_ADI = REHBER_PLATFORM_ADI;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 6 · Kontrol
@@ -313,7 +315,9 @@ export function OnayPenceresi({
   }, [acik, suruyor, kapat]);
 
   const ne = butce ? `${butce.tip === 'gunluk' ? 'günlük' : 'toplam'} ${paraGoster(butce.micros, b.paraBirimi)}` : '';
-  const ne_zaman = !baslangic || baslangic === bugun(b.saatDilimi) ? 'bugün' : `${tarihGoster(baslangic)} tarihinde`;
+  // Geçmiş başlangıç "hemen": Meta onu kurulum anına çekiyor (N-09); geçmiş
+  // bir günü yazmak harcamanın ne zaman başladığı konusunda yalan söylerdi.
+  const ne_zaman = !baslangic || baslangic <= bugun(b.saatDilimi) ? 'hemen' : `${tarihGoster(baslangic)} tarihinde`;
 
   return (
     <div className={`${s.perde} ${acik ? s.acik : ''}`} aria-hidden={!acik}>
@@ -339,6 +343,9 @@ export function OnayPenceresi({
             Yayın durduruldu: {yayin.uyum.bulgular.map((x) => x.metin).join(' ')}
           </Uyari>
         )}
+        <p>
+          Özel reklam kategorisi (bu reklam): <b>{kategoriOzeti(b.a)}</b>
+        </p>
         {hata && <Uyari>{hata}</Uyari>}
         {acikPlatformlar.map((p) => {
           const ozet: PlatformYayinOzeti | undefined = yayin?.platformlar.find((x) => x.platform === p);

@@ -16,6 +16,7 @@
  *   yazılırsa derleyiciyle karşılaştıran test ekranı yakalayamaz.
  */
 import {
+  OZEL_KATEGORI_ETIKETLERI,
   META_EN_COK_GORSEL,
   GORSEL_ORANLARI,
   bannerSetiDestekleniyor,
@@ -353,6 +354,58 @@ export function adimBittiMi(eksikler: readonly RehberEksigi[], adim: RehberAdimi
 export function hazirAdimlar(eksikler: readonly RehberEksigi[], amacSecili: boolean): RehberAdimi[] {
   if (!amacTamam(eksikler, amacSecili)) return [];
   return ([1, 2, 3, 4, 5] as const).filter((n) => !eksikler.some((e) => e.adim === n));
+}
+
+/**
+ * KISA AKIŞ (hazır workspace, Dalga 3). Hazırlığı yapılmış bir workspace'te
+ * Nerede/Kime/Bütçe zaten dolu geliyor; kullanıcıyı üç dolu ekrandan geçirmek
+ * "kreatifi at, reklam çıksın" sözünü bozuyordu. Amaçtan sonra bu üç adımda
+ * ENGEL yoksa doğrudan Reklam'a gidilir. Atlanan adımlar rayda durur ve
+ * Reklam adımının üstündeki özet satırından açılır (`hazirOzeti`).
+ *
+ * Sunucunun listesi bayatsa (amaç henüz yazılmadı, `AMAC` hâlâ listede)
+ * kısa yola girilmez: bilinmeyen durumda uzun yol güvenli olan.
+ */
+export function amactanSonraki(eksikler: readonly RehberEksigi[], amacSecili: boolean, hazirlamaVar: boolean): EkranNo {
+  if (!hazirlamaVar || !amacTamam(eksikler, amacSecili)) return 2;
+  return ([2, 3, 5] as const).every((n) => adimEngelleri(eksikler, n).length === 0) ? 4 : 2;
+}
+
+export const REHBER_PLATFORM_ADI: Readonly<Record<RehberPlatformu, string>> = { meta: 'Meta', google: 'Google' };
+
+export interface HazirOzetSatiri {
+  adim: 2 | 3 | 5;
+  etiket: string;
+  deger: string;
+}
+
+/** Atlanan üç adımın TEK satırlık özeti; boş alan "Seçilmedi" yazar, gizlenmez. */
+export function hazirOzeti(a: RehberAlanlari, acik: Record<RehberPlatformu, boolean>, paraBirimi: string): HazirOzetSatiri[] {
+  const platformlar = (Object.keys(REHBER_PLATFORM_ADI) as RehberPlatformu[]).filter((p) => acik[p]).map((p) => REHBER_PLATFORM_ADI[p]);
+  const konumlar = a.konumlar?.deger ?? [];
+  const GOSTER = 3;
+  const konum = konumlar.length
+    ? konumlar.slice(0, GOSTER).map((k) => k.etiket).join(', ') + (konumlar.length > GOSTER ? ` ve ${konumlar.length - GOSTER} yer daha` : '')
+    : 'Seçilmedi';
+  const b = a.butce?.deger;
+  const t = a.takvim?.deger;
+  const butce = b ? `${paraGoster(b.micros, paraBirimi)}${b.tip === 'gunluk' ? ' / gün' : ' toplam'}` : 'Girilmedi';
+  const sure = t ? ` · ${tarihGoster(t.baslangic)} başlar${t.bitis ? `, ${gunFarki(t.baslangic, t.bitis)} gün` : ''}` : '';
+  return [
+    { adim: 2, etiket: 'Nerede', deger: platformlar.length ? platformlar.join(' ve ') : 'Seçilmedi' },
+    { adim: 3, etiket: 'Kime', deger: konum },
+    // Kısa akış Kime'yi atlıyor; ek kategori ("eleman arıyoruz" = istihdam)
+    // hiç görünmeden boş kalmasın (Ajan 4, Ö7).
+    { adim: 3, etiket: 'Özel kategori', deger: kategoriOzeti(a) },
+    { adim: 5, etiket: 'Bütçe', deger: butce + sure },
+  ];
+}
+
+/** Bu reklamın EK kategorisi; workspace beyanı yayında ayrıca eklenir. */
+export function kategoriOzeti(a: RehberAlanlari): string {
+  const ek = a.ekKategoriler?.deger;
+  if (ek === undefined) return 'Sorulmadı';
+  return ek.length ? ek.map((k) => OZEL_KATEGORI_ETIKETLERI[k]).join(', ') : 'Yok (workspace beyanı geçerli)';
 }
 
 /**
@@ -961,7 +1014,7 @@ export function konumEslemeImzasi(a: RehberAlanlari, googleAcik: boolean, denene
  * seçer: panel turunda Meta sayfayı kendiliğinden BAŞKA bir müşterinin
  * sayfası seçti (A4 § 4.1); "listenin ilki" aynı hatanın bizdeki adı olurdu.
  */
-export function onDoldurma(a: RehberAlanlari, h: RehberHazirligi): Degisiklik[] {
+export function onDoldurma(a: RehberAlanlari, h: RehberHazirligi, an: Date = new Date()): Degisiklik[] {
   const d: Degisiklik[] = [];
   const tek = <T extends { id: string }>(liste: readonly T[]) => (liste.length === 1 ? (liste[0] as T).id : null);
   const ekle = (alan: RehberAlanAdi, deger: unknown, kaynak: AlanKaynagi) => {
@@ -979,6 +1032,40 @@ export function onDoldurma(a: RehberAlanlari, h: RehberHazirligi): Degisiklik[] 
   // WhatsApp numarası önden YAZILMAZ (Ajan 4, Dalga 3 F5): Marka Merkezi
   // telefonu WhatsApp hattı olmayabilir; ekran onu bir ÖNERİ düğmesi olarak
   // gösteriyor ve kullanıcı seçince `kullanici` kaynağıyla yazılıyor.
+
+  // HAZIR WORKSPACE (Dalga 3): hazırlığın kararları. Kullanıcı yalnız amacı
+  // ve kreatifi verip geçebilsin diye piksel, bütçe, başlangıç ve kategori
+  // beyanı da dolu gelir; onay penceresi bütçeyi ve tarihi açıkça yazıyor.
+  const hz = h.hazirlama;
+  if (hz) {
+    const metaId = a.metaHesabiId?.deger ?? tek(h.hesaplar);
+    const googleId = a.googleHesabiId?.deger ?? tek(h.googleHesaplari);
+    const m = h.hesaplar.find((x) => x.id === metaId);
+    const g = h.googleHesaplari.find((x) => x.id === googleId);
+    const saatDilimi = m?.saatDilimi ?? g?.saatDilimi ?? 'Europe/Istanbul';
+    const paraBirimi = m?.paraBirimi ?? g?.paraBirimi ?? 'TRY';
+    ekle('pikselId', hz.pikselId, 'workspace_profili');
+    // BİRİM AYNIYSA (Ajan 4, Ö3): micros birimsiz bir sayı; TRY için
+    // önerilen 500, USD hesabında günde 500 dolar olurdu.
+    const birimTutar = hz.gunlukButceMicros && hz.gunlukButceParaBirimi === paraBirimi;
+    ekle('butce', birimTutar ? { tip: 'gunluk', micros: hz.gunlukButceMicros } : null, 'workspace_profili');
+    // Kategori beyanı workspace'te (`clients.special_ad_categories`); burada
+    // "ek kategori yok" yalnız hazırlıkta SORULUP cevaplandıysa yazılır —
+    // sorulmamış beyanı boş saymak konut/istihdam reklamını kategorisiz açardı.
+    if (hz.kategoriCevaplandi) ekle('ekKategoriler', [], 'workspace_profili');
+    // Başlangıç YARIN: inceleme ve geri okuma için bir gün pay, bitiş 30 gün
+    // sonra (günlük bütçe açık uçlu kalmasın). Gün HESABIN saat diliminde.
+    const bugunu = bugun(saatDilimi, an);
+    const yarin = gunEkle(bugunu, 1);
+    const takvim = { baslangic: yarin, bitis: gunEkle(yarin, 30) };
+    // BAYAT ÖNERİ YENİLENİR (Ajan 4, Ö4): taslağa günler sonra dönülürse
+    // önerilen "yarın" geçmişte kalıyor, Meta geçmiş başlangıcı kurulum
+    // anına çekiyor (N-09) ve pencere yanlış gün söylüyordu. Yalnız
+    // DERLEYİCİNİN önerisi; kullanıcının seçtiği tarihe dokunulmaz.
+    const t = a.takvim;
+    if (t?.kaynak === 'derleyici' && t.deger.baslangic < bugunu) d.push({ alan: 'takvim', deger: takvim, kaynak: 'derleyici' });
+    else ekle('takvim', takvim, 'derleyici');
+  }
   return d;
 }
 

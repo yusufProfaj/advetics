@@ -6,7 +6,7 @@
 > İŞ yazılır; her oturum kapanırken, işin kendi commit'inde güncellenir.
 > 16 Ağustos'a kadarki eski devir belgesi: [`arsiv/DEVAM-2026-08.md`](arsiv/DEVAM-2026-08.md).
 
-**Son güncelleme:** 2026-10-11 gece (Dalga 3 canlı tur) · 2026-10-11 (Dalga 2 + set kartı) · 2026-10-10 akşam (AdvCampaign canlı tur 2 + banner seti; canlı `55312f6`) · 2026-10-09: **Canlı `6b51390` (11:43, 81 sn); ondan önce 316be15 (10:30):**
+**Son güncelleme:** 2026-10-12 (hazır workspace Dalga 3) · 2026-10-11 gece (Dalga 3 canlı tur) · 2026-10-11 (Dalga 2 + set kartı) · 2026-10-10 akşam (AdvCampaign canlı tur 2 + banner seti; canlı `55312f6`) · 2026-10-09: **Canlı `6b51390` (11:43, 81 sn); ondan önce 316be15 (10:30):**
 aşağıda "DEPLOY EDİLMEDİ" yazan işlerin HEPSİ artık canlıda (AdvCampaign
 sohbeti, AdvStrategy ikinci tur, YouTube Boost Aşama 0–1 + kanal bulma, Okuma
 API, Base Aşama 1, LinkedIn para birimi). Ölçüldü: `prisma migrate status`
@@ -15,6 +15,37 @@ RLS politikası var, platform sahibi yalnız hello@profaj.com.
 **Bekleyen deploy:** yok hedefleniyor — Aşama 4 (İyileştir + AI Asistan)
 bu commit'le deploy ediliyor; migration `20261009100000_iyilestir` (üç
 yeni tablo) + `db:rls`.
+
+**HAZIR WORKSPACE + AD + BOYUT (2026-10-12, plan `docs/advcampaign/HAZIR-WORKSPACE-PLANI.md`).**
+Kullanıcı: workspace kurulup hesap atanınca her şey hazır olsun, kullanıcı
+yalnız kreatifi atsın, prova bitince reklam oluşsun; ad "ADV · tarih · amaç
+· kod". Canlıda: **Dalga 1** (`e8d6ae4`) ad biçimi Meta + Google, otomatik
+prova, "Siteme gelsinler" `acik` (tek tık onayla yayına; diğer amaçlar
+`deneme`); banner seti beş amaçta + eksik boyutların tarayıcıda otomatik
+üretimi (`a47bb7f`). **Dalga 3** (bu commit): `workspace_hazirlama` tablosu
+(migration `20261012100000_workspace_hazirlama` + `db:rls`), hazırlık servisi
+(site Facebook sayfasından, marka bilgileri siteden AI ile YALNIZ boş
+alanlara, ölçüm, piksel eşleme, kategori/konum soruları, varsayılan bütçe),
+Marka Merkezi › Bağlantılar'da "Reklam hazırlığı" kartı, rehberde ön doldurma
+(piksel, bütçe, yarın + 30 gün, kategori beyanı) ve KISA AKIŞ (amaçtan sonra
+engel yoksa doğrudan Reklam adımı, üstte "Değiştir"li özet). Tetik okumada
+(imza), rehber açılışı da tetikliyor.
+**Ajan 4** iki bulguyla kapıyı kapattı, düzeldi: B1 okuma yetkisi işi
+tetikliyordu (artık yalnız `client.write`), B2 kategori kararının ana yolu
+testsizdi (uçtan uca `calistir` testleri, 8 mutasyon yakalandı). Ö3 bütçe
+para birimiyle saklanıyor, Ö4 bayat "yarın" yenileniyor ve geçmiş tarih
+"hemen" yazıyor, Ö5 site yazılamazsa kayıttaki adres, Ö6 kategori cevabı
+yalnız soru bekliyorsa ve denetim kaydıyla, Ö7 kategori özette ve onay
+penceresinde. Açık notlar: konum cevabı iki işlem (N9), okuma/iş bitişi
+kalıntı yarışı (N10, tek süreçte ucuz), amaç değişiminde bayat eksik
+listesiyle kısa yol (N13, yayın sunucuda yine durur).
+**Ölçülmedi:** hazırlığın canlı hesapta koşması (AI taslağı, Facebook sayfa
+`website`), "aç" yolunun canlı sonucu, yeni banner setlerinin (FORM/WA/
+TELEFON/SATIŞ/ERİŞİM) `call_to_actions` geri okuması.
+**Sıradaki:** canlıda bir workspace'te hazırlık + kısa akış turu (giriş
+kullanıcıdan) → Dalga 2 (görsele özel metin, Gemini görsel girdisi) →
+diğer temiz satırlar `acik` → Ajan 6 (Marka Merkezi kartı + kısa akış,
+masaüstü + mobil).
 
 **ÖLÇÜM KURULUMU — Faz 1 (2026-10-11 gece, `docs/olcum/`).** Marka Merkezi ›
 Ölçüm: dört ölçüm (site formu, satın alma, arama, reklam içi form/WhatsApp)

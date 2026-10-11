@@ -31,6 +31,7 @@ import {
   adresGirdisi,
   adresKaydi,
   formListesiHali,
+  hazirOzeti,
   googleGorselRozeti,
   googleGorselIpucu,
   kelimeDegistir,
@@ -108,6 +109,19 @@ export function AdimReklam({
   return (
     <>
       <Soru baslik="Reklamda ne görünsün?">{metinKurali(b.acik, kurgu).soru}</Soru>
+      {b.h.hazirlama && (
+        <div className={`${s.kart} ${s.hazirOzet}`} aria-label="Hazırlıktan gelen ayarlar">
+          {hazirOzeti(b.a, b.acik, b.paraBirimi).map((x) => (
+            <div key={x.etiket} className={s.ozetSatir}>
+              <span>{x.etiket}</span>
+              <b>{x.deger}</b>
+              <button type="button" className={s.metinDugme} onClick={() => git(x.adim)}>
+                Değiştir
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
       <div className={s.kart}>
         <div className={s.blok}>
           <div className={s.blokBaslik}>

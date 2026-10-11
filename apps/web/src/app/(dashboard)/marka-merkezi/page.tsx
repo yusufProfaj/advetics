@@ -13,6 +13,7 @@ import { HazirlikListesi } from '@/components/marka-merkezi/hazirlik-listesi';
 import { BagliKanallar } from '@/components/tenancy/bagli-kanallar';
 import { KitlelerBolumu } from '@/components/marka-merkezi/kitleler-bolumu';
 import { OlcumBolumu } from '@/components/marka-merkezi/olcum-bolumu';
+import { HazirlamaKarti } from '@/components/marka-merkezi/hazirlama-karti';
 import { IcMenu, type BolumRozetleri } from '@/components/marka-merkezi/ic-menu';
 import {
   MM_BOLUMLERI,
@@ -178,6 +179,8 @@ export default async function MarkaMerkeziPage({
                   baslik="Bağlantılar"
                   aciklama="Bu workspace’in reklam hesapları, sayfaları ve kanalları. Eklediğin an izleme açılır ve son 90 günün verisi çekilmeye başlar."
                 />
+                {/* Hazırlık hesap atamasıyla başlıyor; sonucu atamanın olduğu yerde. */}
+                <HazirlamaKarti clientId={clientId} yazabilir={yaz('client.write')} />
                 {!kanallar.ok ? (
                   <Uyari ton="tehlike" baslik="Bağlantılar alınamadı.">
                     {kanallar.hata}

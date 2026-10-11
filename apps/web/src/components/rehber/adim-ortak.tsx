@@ -41,10 +41,13 @@ export function Soru({ baslik, children }: { baslik: string; children: React.Rea
 export function AltCubuk({
   git,
   adim,
+  ileri,
   children,
 }: {
   git: (n: EkranNo) => void;
   adim: number;
+  /** Devam'ın hedefi; verilmezse bir sonraki adım (kısa akış: `amactanSonraki`). */
+  ileri?: EkranNo;
   children?: React.ReactNode;
 }) {
   return (
@@ -56,7 +59,7 @@ export function AltCubuk({
       )}
       <span className={s.bosluk} />
       {children ?? (
-        <button type="button" className={s.birincil} onClick={() => git(Math.min(6, adim + 1) as EkranNo)}>
+        <button type="button" className={s.birincil} onClick={() => git(ileri ?? (Math.min(6, adim + 1) as EkranNo))}>
           Devam
         </button>
       )}

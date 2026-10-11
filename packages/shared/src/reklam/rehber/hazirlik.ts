@@ -177,6 +177,11 @@ export interface RehberHazirligi extends ReklamHazirligi {
    */
   /** Kullanıcı ajans yöneticisi mi: `deneme` açılışlı amaçları yalnız o görür. */
   ajansYoneticisi: boolean;
+  /**
+   * HAZIR WORKSPACE varsayılanları (Dalga 3): rehber açılınca piksel, bütçe
+   * ve kategori cevabı bunlardan önden dolar. Hazırlık hiç koşmadıysa `null`.
+   */
+  hazirlama: { pikselId: string | null; gunlukButceMicros: string | null; gunlukButceParaBirimi: string | null; kategoriCevaplandi: boolean } | null;
 }
 
 /**

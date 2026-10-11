@@ -15,5 +15,7 @@ import { OlcumService } from './olcum.service';
   imports: [ConnectionsModule],
   controllers: [OlcumController],
   providers: [OlcumService],
+  // Hazır workspace hazırlığı ölçümü buradan okuyor.
+  exports: [OlcumService],
 })
 export class OlcumModule {}

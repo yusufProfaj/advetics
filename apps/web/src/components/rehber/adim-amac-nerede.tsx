@@ -7,7 +7,7 @@ import { baglanti } from '@/lib/baglanti';
 import { AltCubuk, Soru, sil, yaz, type AdimBaglami } from './adim-ortak';
 import { AMAC_IKONU, IKON, Ikon } from './ikonlar';
 import { PikselSecici } from './meta-dalga3';
-import { OLCUM_ENGEL_KODLARI, amacDegisimi, gorunurAmaclar, platformAnahtari, platformDurumu, platformNedeni, type EkranNo } from './rehber-mantik';
+import { OLCUM_ENGEL_KODLARI, amacDegisimi, amactanSonraki, gorunurAmaclar, platformAnahtari, platformDurumu, platformNedeni, type EkranNo } from './rehber-mantik';
 import s from './rehber.module.css';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -73,7 +73,7 @@ export function AdimAmac({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => void
           })}
         </div>
       )}
-      <AltCubuk git={git} adim={1} />
+      <AltCubuk git={git} adim={1} ileri={amactanSonraki(b.kayit.eksikler, secili !== null, b.h.hazirlama !== null)} />
     </>
   );
 }

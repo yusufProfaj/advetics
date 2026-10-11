@@ -40,6 +40,6 @@ import { OrganizationsController } from './organizations.controller';
     KitleSablonuService,
     BilgiBankasiAiService,
   ],
-  exports: [ClientsService, BrandingService, ClientProfileService, KitleSablonuService],
+  exports: [ClientsService, BrandingService, ClientProfileService, KitleSablonuService, BilgiBankasiAiService],
 })
 export class TenancyModule {}

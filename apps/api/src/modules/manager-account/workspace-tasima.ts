@@ -85,6 +85,10 @@ export const WORKSPACE_TABLOLARI: ReadonlyArray<{ tablo: string; etiket: string 
   // (reklam_taslagi) zaten taşınıyor; rehberi geride bırakmak, yeni şirkette
   // ebeveynsiz taslaklar, eskide hiçbir hesaba bağlanamayan bir rehber demekti.
   { tablo: 'reklam_rehberi', etiket: 'AdvCampaign rehberi' },
+  // Hazırlık workspace'in KENDİ ayarı (piksel, bütçe önerisi, kategori
+  // cevabı); geride kalsa yeni şirkette workspace "hazırlanmamış" görünür ve
+  // kullanıcıya aynı sorular yeniden sorulurdu.
+  { tablo: 'workspace_hazirlama', etiket: 'Reklama hazırlık' },
   // AdvStrategy planı workspace'in KENDİ kararı ve dayandığı kitle şablonları
   // ile varlıklar zaten taşınıyor; planı geride bırakmak, yeni şirkette
   // kitlesi olup planı olmayan bir workspace ve eski şirkette sahipsiz bir
