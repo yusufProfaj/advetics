@@ -46,6 +46,7 @@ import {
   type RehberListesi,
   type RehberOnKosullari,
   type RehberOzeti,
+  type RehberPikselListesi,
   type RehberPlatformu,
   type RehberProvaSonucu,
   type RehberYayinDurumu,
@@ -90,7 +91,17 @@ import {
   metinOneriIstemi,
   metinOnerisiTemizle,
 } from './oneriler';
-import { metaAsgariOku, metaFormKosuluOku, metaSayfaFormlariOku, seciliFormHali, whatsappHali, type MetaFormSatiri } from './platform-okuma';
+import {
+  hazirlikSatisOlcumu,
+  metaAsgariOku,
+  metaFormKosuluOku,
+  metaSayfaFormlariOku,
+  seciliFormHali,
+  seciliPikselHali,
+  whatsappHali,
+  type MetaFormSatiri,
+  type PikselSatiri,
+} from './platform-okuma';
 import type { MetaProvider } from '../../connections/providers/meta.provider';
 import { rehberYayinKapilari, type PlatformProvaHali } from './yayin-kapilari';
 
@@ -148,6 +159,16 @@ interface SayfaKaydi {
   formlar?: MetaFormSatiri[];
 }
 
+/**
+ * HESAP BAŞINA piksel listesi (Dalga 3). Anahtar `clientId:adAccountId`.
+ * Yalnız BAŞARILI okuma yazılır: okunamayan liste "piksel yok" olarak
+ * önbelleğe girerse seçili piksel haksız yere "hesapta yok" görünürdü.
+ */
+interface PikselKaydi {
+  zaman: number;
+  satirlar: PikselSatiri[];
+}
+
 /** Bir rehberin eksik/karar bağlamı: yalnız veritabanı + önbellek. */
 interface Baglam extends RehberEksikBaglami {
   googleDonusum: boolean | null;
@@ -182,7 +203,11 @@ export function platformaGiderken(eksikler: RehberEksigi[]): RehberEksigi[] {
   return eksikler.map((e) =>
     e.kod === 'FORM-BILINMIYOR'
       ? { ...e, seviye: 'engel', metin: "Seçilen form Meta'dan okunamadı. Listeyi yenile; düzelmezse sayfa bağlantısını kontrol et" }
-      : e,
+      : // Aynı ders piksel için (Dalga 3): okunamayan liste "hesapta yok",
+        // "kullanılamaz" ve "hiç çalışmadı" kapılarını denetlenmemiş bırakır.
+        e.kod === 'M-PIKSEL-BILINMIYOR'
+        ? { ...e, seviye: 'engel', metin: "Seçilen piksel Meta'dan okunamadı. Listeyi yenile; düzelmezse Meta bağlantısını kontrol et" }
+        : e,
   );
 }
 
@@ -190,6 +215,7 @@ export function platformaGiderken(eksikler: RehberEksigi[]): RehberEksigi[] {
 export class RehberService {
   private readonly onbellek = new Map<string, OnKosulKaydi>();
   private readonly sayfaOnbellek = new Map<string, SayfaKaydi>();
+  private readonly pikselOnbellek = new Map<string, PikselKaydi>();
   private readonly metaSurumu: string;
   private sonKelimeIstegi = 0;
 
@@ -279,6 +305,47 @@ export class RehberService {
     };
   }
 
+  /**
+   * Seçili Meta reklam hesabının pikselleri (Dalga 3). Okunamazsa 503 +
+   * Meta'nın mesajı: "piksel yok" ile "okuyamadık" ayrı iş. Platform çağrısı
+   * transaction DIŞINDA (token kendi kısa transaction'ında okunur).
+   */
+  async pikseller(ctx: TenantContext, clientId: string, adAccountId: string): Promise<RehberPikselListesi> {
+    erisim(ctx, clientId);
+    let okunan: { satirlar: PikselSatiri[]; kesildi: boolean };
+    try {
+      okunan = await this.pikselOku(ctx, clientId, adAccountId);
+    } catch (e) {
+      const m = e instanceof Error ? e.message : String(e);
+      logger.warn(`Piksel listesi okunamadı (hesap ${adAccountId}): ${m}`);
+      throw new ServiceUnavailableException(`Meta pikselleri okunamadı: ${m}`);
+    }
+    return {
+      satirlar: okunan.satirlar,
+      toplam: okunan.satirlar.length,
+      kesildi: okunan.kesildi,
+      bosNeden: okunan.satirlar.length
+        ? null
+        : "Bu reklam hesabında Meta pikseli yok. Pikseli Meta'da (Etkinlik Yöneticisi) oluşturup sitene kur, sonra listeyi yenile.",
+    };
+  }
+
+  /** Piksel okuması + önbellek. Hata FIRLATIR (önbelleğe yazılmaz). */
+  private async pikselOku(ctx: TenantContext, clientId: string, adAccountId: string): Promise<{ satirlar: PikselSatiri[]; kesildi: boolean }> {
+    const e = await hesapErisimi(this.tx(ctx), this.crypto, adAccountId, clientId);
+    const p = this.saglayicilar.get('meta') as unknown as Partial<Pick<MetaProvider, 'fetchAdPixels'>>;
+    if (typeof p.fetchAdPixels !== 'function') throw new Error('Meta sağlayıcısı piksel okumayı desteklemiyor');
+    const r = await p.fetchAdPixels({ adAccountPath: e.hesap, accessToken: e.kullaniciToken });
+    this.pikselOnbellek.set(`${clientId}:${adAccountId}`, { zaman: Date.now(), satirlar: r.satirlar });
+    return r;
+  }
+
+  private pikselKaydi(clientId: string, adAccountId: string | null | undefined): PikselSatiri[] | null {
+    if (!adAccountId) return null;
+    const k = this.pikselOnbellek.get(`${clientId}:${adAccountId}`);
+    return k && Date.now() - k.zaman < ONBELLEK_MS ? k.satirlar : null;
+  }
+
   private sayfaYaz(clientId: string, sayfaId: string, d: Omit<SayfaKaydi, 'zaman'>): void {
     const k = `${clientId}:${sayfaId}`;
     const eski = this.sayfaOnbellek.get(k);
@@ -305,16 +372,24 @@ export class RehberService {
   private async sayfaTazele(ctx: TenantContext, clientId: string, a: RehberAlanlari): Promise<void> {
     const sayfaId = a.sayfaId?.deger;
     const amac = a.amac?.deger;
-    if (!sayfaId || !a.platformlar?.deger.meta || (amac !== 'FORM' && amac !== 'WHATSAPP')) return;
-    const okuyucu = this.platformOkuyucu(ctx);
     const guvenli = async <T>(ad: string, fn: () => Promise<T>): Promise<T | null> => {
       try {
         return await fn();
       } catch (e) {
-        logger.warn(`Prova öncesi ${ad} okunamadı (sayfa ${sayfaId}): ${(e as Error).message}`);
+        logger.warn(`Prova öncesi ${ad} okunamadı (sayfa ${sayfaId ?? '-'}): ${(e as Error).message}`);
         return null;
       }
     };
+    // SATIŞ: seçili hesabın pikselleri TAZE okunur (hesap başına, sayfadan
+    // bağımsız). Düşerse önbellek yazılmaz ve piksel "bilinmiyor" kalır;
+    // `platformaGiderken` onu engele çevirir.
+    const hesapId = a.metaHesabiId?.deger;
+    if (amac === 'SATIS' && a.platformlar?.deger.meta && hesapId) {
+      await guvenli('piksel listesi', () => this.pikselOku(ctx, clientId, hesapId));
+      return;
+    }
+    if (!sayfaId || !a.platformlar?.deger.meta || (amac !== 'FORM' && amac !== 'WHATSAPP')) return;
+    const okuyucu = this.platformOkuyucu(ctx);
     if (amac === 'WHATSAPP') {
       this.sayfaYaz(clientId, sayfaId, { whatsapp: await guvenli('WhatsApp hattı', () => okuyucu.metaWhatsapp(sayfaId, clientId)) });
       return;
@@ -357,6 +432,7 @@ export class RehberService {
         if (r.hata) logger.warn(`Sayfanın WhatsApp hattı okunamadı (${sayfaId}): ${r.hata}`);
         return whatsappHali(r);
       },
+      metaSatisOlcumu: async (adAccountId, clientId) => hazirlikSatisOlcumu((await this.pikselOku(ctx, clientId, adAccountId)).satirlar),
       googleDonusumEtkin: async (adAccountId) => {
         const { fctx } = await this.googleBaglami(ctx, adAccountId, null);
         await this.kotaKapisi(adAccountId);
@@ -1027,10 +1103,14 @@ export class RehberService {
       const c = k === 'CREDIT' ? 'FINANCIAL_PRODUCTS_SERVICES' : k;
       if ((OZEL_KATEGORILER as readonly string[]).includes(c)) taban.push(c as OzelKategori);
     }
+    // Piksel listesi SEÇİLİ Meta hesabının; başka hesabın listesiyle
+    // karşılaştırmak "hesapta yok" yalanı üretirdi.
+    const seciliPiksel = seciliPikselHali(a.pikselId?.deger ?? null, this.pikselKaydi(clientId, meta?.id), new Date());
     const onKosullar: RehberOnKosullari = {
       metaFormKosullari: sayfa?.formKosullari ?? null,
       metaWhatsapp: sayfa?.whatsapp ?? null,
-      metaSatisOlcumu: null,
+      metaSatisOlcumu: seciliPiksel?.satinAlma7Gun ?? null,
+      seciliPiksel,
       googleSatisOlcumu: null,
       googleDonusumEtkin: googleDonusum,
       googleLogoVeAd: !!r.m?.logo,

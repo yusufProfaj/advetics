@@ -27,17 +27,27 @@ import { ORAN_ETIKETI, YERLESIM_GRUPLARI, YERLESIM_SIRASI, bannerSetiDestekleniy
 /**
  * 1.1.0: banner seti (yerleşime göre görsel) ve eksik boyutta elle yerleşim.
  * 1.2.0: TELEFON ve WHATSAPP derleniyor (Dalga 2).
+ * 1.3.0: VIDEO_IZLENME, ERISIM ve SATIS derleniyor; WhatsApp numarası
+ *        `promoted_object`te; erişimde sıklık sınırı (Dalga 3).
  * Sürüm provanın tazeliğine bağlı: eski derleyiciyle geçmiş prova yeni
  * gövdeyi kanıtlamaz.
  */
-export const DERLEYICI_SURUMU = '1.2.1';
+export const DERLEYICI_SURUMU = '1.3.0';
 
 /**
  * CLICK-TO-WHATSAPP SABİTLERİ (CLAUDE.md "CLICK-TO-WHATSAPP"). Bağlantı
- * Meta'nın belgelediği SABİT adres; numarayı Meta, ad set'teki
+ * Meta'nın belgelediği SABİT adres.
+ *
+ * NUMARA ARTIK SORULUYOR (Dalga 3, 2026-10-11): önceden Meta numarayı
  * `destination_type: WHATSAPP` + `promoted_object.page_id` ikilisiyle
- * sayfaya BAĞLI hattan alıyor. Numara sorulmaz: yazılan numara ile sayfanın
- * hattı ayrıştığında reklam başka bir hatta düşer, hata vermeden.
+ * sayfaya bağlı hattan alıyordu ve numara sorulmuyordu. Kullanıcı numaranın
+ * SEÇİLEBİLİR olmasını istedi (birden çok hattı olan işletme) ve ölçümde
+ * sayfanın `whatsapp_number` alanı boş döndü, WABA `phone_numbers` ise
+ * elimizde olmayan bir izin istiyor (#200): hangi hattın kullanılacağını
+ * okuyamıyoruz. Numara `promoted_object.whatsapp_phone_number` ile AÇIKÇA
+ * gidiyor; sayfaya bağlı olmayan bir numarayı Meta'nın REDDETMESİ bekleniyor
+ * ve bu, sessizce yanlış hatta düşmeyi açık bir hataya çeviriyor (canlı turda
+ * ölçülecek, `whatsappNumarasiBicimi`).
  *
  * CTA değeri `{ app_destination }`; `{ link }` belgelenen biçim DEĞİL ve Meta
  * onu kabul edip düğmeyi tarayıcıya yönlendirebiliyor (tıklayan WhatsApp
@@ -50,6 +60,34 @@ export const DERLEYICI_SURUMU = '1.2.1';
  */
 export const WHATSAPP_BAGLANTISI = 'https://api.whatsapp.com/send';
 export const WHATSAPP_CTA_DEGERI = { app_destination: 'WHATSAPP' } as const;
+
+/**
+ * `promoted_object.whatsapp_phone_number` BİÇİMİ — ÖLÇÜLMEDİ. E.164 başında
+ * `+` ile gönderiliyor (`+905321234567`); Meta'nın `+`sız mı istediği ve
+ * geri okumada nasıl döndürdüğü canlı turda görülecek. Geri okuma yalnız
+ * rakamları kıyaslıyor (yanki.ts N-17): `+` farkı aynı numara.
+ */
+export function whatsappNumarasiBicimi(e164: string): string {
+  return e164;
+}
+
+/**
+ * SATIŞTA OPTİMİZE EDİLEN OLAY. Niyet kataloğu "satış ya da kayıt" diyor ama
+ * rehber yalnız satın almayı soruyor ("Sitemden satış gelsin"); kayıt dalı
+ * ayrı bir soru ve ayrı bir ölçüm ister. Olay sabit yazılıyor: verilmezse
+ * Meta pikselin başka bir olayına düşebilir ve reklam satış değil ziyaret
+ * için optimize olur, hata vermeden.
+ */
+export const SATIS_OLAYI = 'PURCHASE';
+
+/**
+ * ERİŞİMDE SIKLIK SINIRI. Rehberin amaç kartı "haftada en çok 2 kez" diyor;
+ * gönderilmezse Meta erişim hedefinde kendi sıklığını seçiyor ve küçük bir
+ * bölgede aynı kişiye günde birkaç kez gösterebiliyor: söz yalan olur.
+ * Alan reklam setinde (`frequency_control_specs`); geri okumada nasıl
+ * döndüğü ÖLÇÜLMEDİ, fark çıkarsa yayın durur (kabul edilemez sınıf).
+ */
+export const ERISIM_SIKLIK_SINIRI = [{ event: 'IMPRESSIONS', interval_days: 7, max_frequency: 2 }] as const;
 
 /**
  * ARAMA REKLAMINDA `link_data.link` — ÖLÇÜLMEDİ. Meta'nın Call Ads belgesi
@@ -173,6 +211,13 @@ const ATIF_SPEC: Record<AtifStandardi, Array<{ event_type: string; window_days: 
  * provası bilinen 5xx ile düştüğü için set tek başına sınanamıyor ve kitle ile
  * bütçe reklam parçasında kontrol ediliyor; atıf orada yok.
  */
+/*
+ * THRUPLAY VE REACH 1 GÜN TIKLAMA ALIYOR — ÖLÇÜLMEDİ (Dalga 3). Video
+ * izlenme ve erişimde tıklama zaten sonuç değil; Meta'nın bu hedeflerde
+ * hangi pencereyi kabul ettiği canlı turda görülecek. Form dersi aynen
+ * geçerli: ret ancak gerçek kurulumda çıkabilir (prova seti tek başına
+ * sınamıyor).
+ */
 export const AJANS_STANDARDI_HEDEFLERI: readonly string[] = ['OFFSITE_CONVERSIONS'];
 
 export function atifSpec(optimizationGoal: string, standart: AtifStandardi): Array<{ event_type: string; window_days: number }> {
@@ -228,6 +273,14 @@ export interface DerlemeGirdisi {
   formId: string | null;
   /** TELEFON: aranacak numara, E.164 (`+905321234567`). Diğer niyetlerde okunmaz. */
   telefon: string | null;
+  /**
+   * WHATSAPP: mesajın düşeceği hat, E.164. İsteğe bağlı alan çünkü eski
+   * çağıranlar (ölçüm betikleri) WhatsApp derlemiyor; WHATSAPP niyetinde
+   * yoksa RET (`WA-NUMARA`), varsayılana bırakılmaz.
+   */
+  whatsappNumarasi?: string | null;
+  /** SATIS: Meta piksel kimliği (sayısal). Yoksa RET (`PIKSEL-YOK`). */
+  pikselId?: string | null;
   urlEtiketleri: string | null;
 }
 
@@ -264,7 +317,16 @@ export type DerlemeSonucu =
  * DERLEYİCİNİN GÖVDE ÜRETTİĞİ niyetler. Diğerleri tahmin yerine retle
  * duruyor (`NYT-OLCULMEDI`).
  */
-export const DERLEYICI_NIYETLERI = ['FORM', 'SITE', 'TELEFON', 'WHATSAPP'] as const satisfies readonly NiyetKodu[];
+export const DERLEYICI_NIYETLERI = ['FORM', 'SITE', 'TELEFON', 'WHATSAPP', 'VIDEO_IZLENME', 'ERISIM', 'SATIS'] as const satisfies readonly NiyetKodu[];
+
+/**
+ * Bağlantısı İSTEĞE BAĞLI niyetler: tıklama sonuç değil (izlenme, erişim).
+ * Site adresi varsa düğme oraya, yoksa Facebook sayfasına gider. Adres
+ * zorunlu tutulsaydı sitesi olmayan işletme video reklamı veremezdi; boş
+ * bırakılsaydı `link: null` giderdi ve Meta ya reddeder ya da düğmeyi
+ * kendi seçtiği bir yere bağlardı.
+ */
+export const BAGLANTISI_ISTEGE_BAGLI_NIYETLER: readonly NiyetKodu[] = ['VIDEO_IZLENME', 'ERISIM'];
 
 /**
  * ÜRÜNDE AÇIK niyetler: AI taslağının seçebileceği (`AI_NIYETLERI`), AdvStrategy
@@ -304,6 +366,10 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
     retler.push({ kod: 'KRT-SAYI', mesaj: 'Bir reklamda 1 ile 5 arasında fikir olur.' });
   }
   for (const [i, k] of g.kavramlar.entries()) {
+    // VİDEO İZLENME: her fikir video olmalı. Görsel fikri THRUPLAY ile
+    // kurulursa Meta "video izlenmesi" için optimize edecek bir şey bulamaz;
+    // ya reddeder ya da harcar ve sonuç sıfır görünür.
+    if (g.niyet === 'VIDEO_IZLENME' && !k.videoId) retler.push({ kod: 'KRT-VIDEO-ZORUNLU', mesaj: `Fikir ${i + 1}: bu amaçta yalnız video kullanılır.` });
     if (!k.gorselHash) retler.push({ kod: 'KRT-GORSEL', mesaj: `Fikir ${i + 1}: görsel bu hesaba yüklenmemiş.` });
     if (!k.baslik.trim() || !k.metin.trim()) {
       retler.push({ kod: 'KRT-METIN', mesaj: `Fikir ${i + 1}: başlık ya da metin boş.` });
@@ -327,8 +393,19 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
   if (yerlesim && Object.keys(yerlesim.gruplar).length === 0) {
     retler.push({ kod: 'KRT-ORAN', mesaj: 'Görsellerin hiçbiri bir yerleşime uymuyor; 4:5, 1:1, 9:16 ya da 1.91:1 boyut ekle.' });
   }
-  if (g.niyet === 'SITE' && !(g.hedefAdres && /^https:\/\/[^\s/]+\.[^\s]+/.test(g.hedefAdres))) {
+  const adresGecerli = !!g.hedefAdres && /^https:\/\/[^\s/]+\.[^\s]+/.test(g.hedefAdres);
+  // SATIS da siteye gönderiyor: adressiz satış reklamı `link: null` kurardı.
+  // İsteğe bağlı niyetlerde VERİLEN adres yine geçerli olmalı.
+  const adresZorunlu = g.niyet === 'SITE' || g.niyet === 'SATIS';
+  const adresIstegeBagli = BAGLANTISI_ISTEGE_BAGLI_NIYETLER.includes(g.niyet);
+  if ((adresZorunlu && !adresGecerli) || (adresIstegeBagli && g.hedefAdres && !adresGecerli)) {
     retler.push({ kod: 'SITE-ADRES', mesaj: 'Site adresi https:// ile başlayan geçerli bir adres olmalı.' });
+  }
+  if (g.niyet === 'WHATSAPP' && !(g.whatsappNumarasi && TELEFON_E164.test(g.whatsappNumarasi))) {
+    retler.push({ kod: 'WA-NUMARA', mesaj: 'WhatsApp numarası +90 ile başlamalı.' });
+  }
+  if (g.niyet === 'SATIS' && !(g.pikselId && /^\d{1,30}$/.test(g.pikselId))) {
+    retler.push({ kod: 'PIKSEL-YOK', mesaj: 'Meta pikseli seçilmedi.' });
   }
   if (g.niyet === 'FORM' && !g.formId) {
     retler.push({ kod: 'FORM-YOK', mesaj: 'Form seçilmedi.' });
@@ -392,7 +469,7 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
     status: 'PAUSED',
     billing_event: 'IMPRESSIONS',
     optimization_goal: m.optimizationGoal,
-    promoted_object: { page_id: g.sayfaPlatformId },
+    promoted_object: tanitilanNesne(g),
     // ELLE YERLEŞİM yalnız bir boyut eksikse: eksik boyutun yerleşimi kapanır
     // (kullanıcı kararı). Dört boyut tamsa ya da oran bilinmiyorsa alanlar
     // yazılmaz ve Advantage+ yerleşim kalır.
@@ -402,6 +479,7 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
     adlabels: etiketler,
   };
   if (m.destinationType) reklamSeti.destination_type = m.destinationType;
+  if (m.optimizationGoal === 'REACH') reklamSeti.frequency_control_specs = ERISIM_SIKLIK_SINIRI.map((x) => ({ ...x }));
   if (g.takvim.bitis) reklamSeti.end_time = g.takvim.bitis;
 
   const govdeler: MetaGovdesi[] = [
@@ -431,7 +509,7 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
     } else if (k.setGorselleri && yerlesim) {
       // `link_data` YOK: görseller ve metin `asset_feed_spec`te; sayfa ve
       // Instagram kimliği `object_story_spec`te kalıyor (aşağıda).
-      setKreatifi = varlikAkisi(k, setPlani(k.setGorselleri.map((x) => x.oran)), yerlesim, m.cta, g.hedefAdres!, !!g.instagramPlatformId);
+      setKreatifi = varlikAkisi(k, setPlani(k.setGorselleri.map((x) => x.oran)), yerlesim, m.cta, kreatifBaglantisi(g)!, !!g.instagramPlatformId);
     } else {
       const linkData: Record<string, unknown> = {
         image_hash: k.gorselHash,
@@ -476,7 +554,13 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
   });
 
   const acikcaYazilanAlanlar = govdeler.flatMap((gv) => alanYollari(gv.nesne, gv.alanlar)).filter(tekil);
-  manifestoDogrula(govdeler, { kategoriVar: kategoriler.length > 0, instagram: !!g.instagramPlatformId, elleYerlesim: !!yerlesim && !yerlesim.otomatik });
+  manifestoDogrula(govdeler, {
+    kategoriVar: kategoriler.length > 0,
+    instagram: !!g.instagramPlatformId,
+    elleYerlesim: !!yerlesim && !yerlesim.otomatik,
+    tanitilan: tanitilanTuru(g.niyet),
+    erisim: m.optimizationGoal === 'REACH',
+  });
 
   return {
     tur: 'govde',
@@ -617,6 +701,31 @@ function varlikAkisi(
   };
 }
 
+/** Reklam setinin `promoted_object` türü (manifesto ve gövde aynı kuralı okur). */
+export function tanitilanTuru(niyet: NiyetKodu): 'sayfa' | 'piksel' | 'whatsapp' {
+  if (NIYET_KATALOGU[niyet].meta?.promotedObject === 'pixel_id+custom_event_type') return 'piksel';
+  return niyet === 'WHATSAPP' ? 'whatsapp' : 'sayfa';
+}
+
+/**
+ * Reklam setinin `promoted_object`i. Niyet kataloğunun `promotedObject`
+ * sütunu KARARI veriyor; burada yalnız değerler dolduruluyor.
+ * - SATIS: piksel + olay. Sayfa kimliği YOK: satış optimizasyonunu taşıyan
+ *   piksel; sayfa reklamın kimliği olarak kreatifte zaten var.
+ * - WHATSAPP: sayfa + numara (numara notu: `whatsappNumarasiBicimi`).
+ * - diğerleri: sayfa.
+ */
+function tanitilanNesne(g: DerlemeGirdisi): Record<string, unknown> {
+  switch (tanitilanTuru(g.niyet)) {
+    case 'piksel':
+      return { pixel_id: g.pikselId, custom_event_type: SATIS_OLAYI };
+    case 'whatsapp':
+      return { page_id: g.sayfaPlatformId, whatsapp_phone_number: whatsappNumarasiBicimi(g.whatsappNumarasi!) };
+    default:
+      return { page_id: g.sayfaPlatformId };
+  }
+}
+
 /**
  * Niyete göre CTA. Bağlantıyı TAŞIMAYAN üç dal ayrı ayrı yazılı: SITE dışı
  * bir niyete `{ link: hedefAdres }` düşmesi, WhatsApp ya da arama düğmesini
@@ -632,7 +741,9 @@ function ctaDegeri(g: DerlemeGirdisi, tip: string): Record<string, unknown> {
       // Meta Call Ads belgesi: numara `tel:` ve ülke koduyla, CTA değerinde.
       return { type: tip, value: { link: `tel:${g.telefon}` } };
     default:
-      return { type: tip, value: { link: g.hedefAdres } };
+      // İsteğe bağlı bağlantıda (izlenme, erişim) adres yoksa sayfa:
+      // `kreatifBaglantisi` ile AYNI değer, düğme ve bağlantı ayrışmasın.
+      return { type: tip, value: { link: kreatifBaglantisi(g) } };
   }
 }
 
@@ -647,6 +758,11 @@ function kreatifBaglantisi(g: DerlemeGirdisi): string | null {
     // ÖLÇÜLMEDİ, `sayfaAdresi` notu.
     case 'TELEFON':
       return sayfaAdresi(g.sayfaPlatformId);
+    // ÖLÇÜLMEDİ: sayfa adresinin video/erişim reklamında bağlantı olarak
+    // kabul edildiği, TELEFON'daki gibi canlı provada görülecek.
+    case 'VIDEO_IZLENME':
+    case 'ERISIM':
+      return g.hedefAdres ?? sayfaAdresi(g.sayfaPlatformId);
     default:
       return g.hedefAdres;
   }
@@ -672,7 +788,12 @@ function alanYollari(nesne: string, o: Record<string, unknown>, onek = ''): stri
  * müşteride farklı davranır, hata dönmeden.
  */
 /** `yol` dizi ise alternatiflerden BİRİ yazılmış olmalı (görsel ya da video kreatifi). */
-export const MANIFESTO: ReadonlyArray<{ kod: string; nesne: NesneTuru; yol: string | readonly string[]; kosul?: 'kategori' | 'instagram' }> = [
+/**
+ * `kosul`: satır yalnız o hâlde zorunlu. M-10 dallara ayrıldı (Dalga 3):
+ * sayfa kimliği SATIŞTA yok (piksel taşıyor), WhatsApp'ta numara da var.
+ */
+export type ManifestoKosulu = 'kategori' | 'instagram' | 'sayfa' | 'piksel' | 'whatsapp' | 'erisim';
+export const MANIFESTO: ReadonlyArray<{ kod: string; nesne: NesneTuru; yol: string | readonly string[]; kosul?: ManifestoKosulu }> = [
   { kod: 'M-01', nesne: 'kampanya', yol: 'status' },
   { kod: 'M-01', nesne: 'reklam_seti', yol: 'status' },
   { kod: 'M-01', nesne: 'reklam', yol: 'status' },
@@ -682,7 +803,12 @@ export const MANIFESTO: ReadonlyArray<{ kod: string; nesne: NesneTuru; yol: stri
   { kod: 'M-06', nesne: 'kampanya', yol: 'bid_strategy' },
   { kod: 'M-07', nesne: 'reklam_seti', yol: 'billing_event' },
   { kod: 'M-08', nesne: 'reklam_seti', yol: 'optimization_goal' },
-  { kod: 'M-10', nesne: 'reklam_seti', yol: 'promoted_object.page_id' },
+  { kod: 'M-10', nesne: 'reklam_seti', yol: 'promoted_object.page_id', kosul: 'sayfa' },
+  { kod: 'M-10', nesne: 'reklam_seti', yol: 'promoted_object.page_id', kosul: 'whatsapp' },
+  { kod: 'M-10P', nesne: 'reklam_seti', yol: 'promoted_object.pixel_id', kosul: 'piksel' },
+  { kod: 'M-10P', nesne: 'reklam_seti', yol: 'promoted_object.custom_event_type', kosul: 'piksel' },
+  { kod: 'M-10W', nesne: 'reklam_seti', yol: 'promoted_object.whatsapp_phone_number', kosul: 'whatsapp' },
+  { kod: 'M-11F', nesne: 'reklam_seti', yol: 'frequency_control_specs', kosul: 'erisim' },
   { kod: 'M-12', nesne: 'reklam_seti', yol: 'start_time' },
   { kod: 'M-13', nesne: 'reklam_seti', yol: 'targeting.targeting_automation.advantage_audience' },
   { kod: 'M-14', nesne: 'reklam_seti', yol: 'targeting.age_min' },
@@ -712,10 +838,33 @@ function deger(o: Record<string, unknown>, yol: string): unknown {
   return yol.split('.').reduce<unknown>((a, k) => (a && typeof a === 'object' ? (a as Record<string, unknown>)[k] : undefined), o);
 }
 
-function manifestoDogrula(govdeler: MetaGovdesi[], d: { kategoriVar: boolean; instagram: boolean; elleYerlesim: boolean }): void {
+export interface ManifestoHali {
+  kategoriVar: boolean;
+  instagram: boolean;
+  elleYerlesim: boolean;
+  tanitilan: 'sayfa' | 'piksel' | 'whatsapp';
+  erisim: boolean;
+}
+
+/** Bu hâlde satır zorunlu mu (testler de AYNI kuralı okuyor). */
+export function manifestoSatiriGecerli(kosul: ManifestoKosulu | undefined, d: Omit<ManifestoHali, 'elleYerlesim'>): boolean {
+  switch (kosul) {
+    case undefined:
+      return true;
+    case 'kategori':
+      return d.kategoriVar;
+    case 'instagram':
+      return d.instagram;
+    case 'erisim':
+      return d.erisim;
+    default:
+      return d.tanitilan === kosul;
+  }
+}
+
+function manifestoDogrula(govdeler: MetaGovdesi[], d: ManifestoHali): void {
   for (const satir of MANIFESTO) {
-    if (satir.kosul === 'kategori' && !d.kategoriVar) continue;
-    if (satir.kosul === 'instagram' && !d.instagram) continue;
+    if (!manifestoSatiriGecerli(satir.kosul, d)) continue;
     for (const gv of govdeler.filter((x) => x.nesne === satir.nesne)) {
       const yollar = typeof satir.yol === 'string' ? [satir.yol] : satir.yol;
       const v = yollar.map((y) => deger(gv.alanlar, y)).find((x) => x !== undefined && x !== null);

@@ -11,6 +11,7 @@ import {
   type RehberHazirligi,
   type RehberKaydi,
   type RehberListesi,
+  type RehberPikselListesi,
   type RehberProvaSonucu,
   type RehberYayinDurumu,
   type TenantContext,
@@ -58,6 +59,21 @@ export class RehberController {
     @Query('sayfaId', ParseUUIDPipe) sayfaId: string,
   ): Promise<RehberFormListesi> {
     return this.rehber.formSablonlari(ctx, clientId, sayfaId);
+  }
+
+  /**
+   * Seçili Meta reklam hesabının pikselleri (Dalga 3, satış amacı). Okunamazsa
+   * 503 + Meta'nın mesajı; hesap bu workspace'e atanmış değilse de 503 ve
+   * sebebi (`hesapErisimi`).
+   */
+  @Get('rehber/pikseller')
+  @RequirePermissions('bulk.read')
+  pikseller(
+    @CurrentTenant() ctx: TenantContext,
+    @Query('clientId', ParseUUIDPipe) clientId: string,
+    @Query('adAccountId', ParseUUIDPipe) adAccountId: string,
+  ): Promise<RehberPikselListesi> {
+    return this.rehber.pikseller(ctx, clientId, adAccountId);
   }
 
   @Get('rehberler')

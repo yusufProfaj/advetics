@@ -1082,6 +1082,19 @@ okunup varsayılmadı — canlıda doğrulandı.
   CTA değerinde `{ link }` göndermek de belgelenen biçim değil: Meta kabul
   edip butonu tarayıcıya yönlendirebiliyor, yani reklam yayınlanır ve
   tıklayan kişi WhatsApp yerine bir web sayfası görür.
+  **GÜNCELLEME 2026-10-11 (Dalga 3) — NUMARA ARTIK SORULUYOR.** Kullanıcı
+  numaranın SEÇİLEBİLİR olmasını istedi (birden çok hattı olan işletme) ve
+  "Meta sayfadan alır" varsayımı ölçülemiyordu: sayfanın `whatsapp_number`
+  alanı canlıda BOŞ döndü, WABA `phone_numbers` ise elimizde olmayan bir izin
+  istiyor (`#200`). Yani hangi hattın kullanılacağını okuyamıyoruz ve
+  "numara sorulmaz" kuralı kullanıcıya hattı göstermeden bir hatta bağlamak
+  demekti. Bugün rehber numarayı açıkça soruyor (E.164 `+90`, Marka
+  Merkezi telefonu önden dolar ve kaynağı yazar) ve derleyici onu
+  `promoted_object.whatsapp_phone_number` ile gönderiyor; sayfaya bağlı
+  OLMAYAN bir numarayı Meta'nın reddetmesi bekleniyor, yani sessizce yanlış
+  hatta düşmek açık bir hataya dönüşüyor. Biçim (`+` ile mi) ve Meta'nın
+  reddettiği CANLIDA ÖLÇÜLMEDİ; geri okuma yalnız rakamları kıyaslıyor
+  (yanki.ts N-17). Bağlantı ve CTA kuralları yukarıdaki gibi.
 
 - **İLGİ ALANI ARAMASI (`/search?type=adinterest`) KISA TERİMLE EŞLEŞİYOR.**
   Ölçüldü (2026-09-29, `meta-ilgi-kontrol`): "lüks otomobil" 0 satır,

@@ -93,6 +93,14 @@ export const rehberAlanlariSchema = z
     hedefAdres: alan(z.string().max(2000).nullable()),
     /** E.164 (`+905551234567`). */
     telefon: alan(z.string().max(20).nullable()),
+    /**
+     * WhatsApp hattı, E.164 (Dalga 3). Arama numarasından AYRI: işletmenin
+     * WhatsApp hattı başka bir numara olabiliyor. Sayfadan okunamıyor
+     * (`whatsapp_number` boş, WABA izni yok), o yüzden açıkça soruluyor.
+     */
+    whatsappNumarasi: alan(z.string().max(20).nullable()),
+    /** Satış amacı: Meta piksel kimliği (sayısal), seçili reklam hesabının pikselleri arasından. */
+    pikselId: alan(z.string().regex(/^\d{1,30}$/).nullable()),
     /** Meta form kimliği (sayısal) ya da eski kayıtlarda `lead_forms.id` (`formKimligiSchema`). */
     formSablonuId: alan(formKimligiSchema.nullable()),
     medya: alan(z.array(rehberMedyasiSchema).max(10)),
@@ -138,6 +146,11 @@ export const REHBER_IZINLI_KAYNAKLAR: Partial<Record<RehberAlanAdi, readonly Ala
   ekKategoriler: ['kullanici'],
   hedefAdres: ['kullanici', 'marka_merkezi', 'workspace_profili'],
   telefon: ['kullanici', 'marka_merkezi'],
+  // Marka Merkezi'ndeki telefon önden doluyor; WhatsApp hattıyla aynı
+  // olmayabilir, ekranda kaynağı yazıyor.
+  whatsappNumarasi: ['kullanici', 'marka_merkezi'],
+  // Hesapta TEK piksel varsa panel onu önerir (`derleyici`, "Önerilen").
+  pikselId: ['kullanici', 'derleyici'],
   metin: ['kullanici', 'marka_merkezi'],
   anahtarKelimeler: ['kullanici'],
   butce: ['kullanici'],

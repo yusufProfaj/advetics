@@ -23,7 +23,7 @@ export interface KararHucresi {
 
 export interface KararSatiri {
   /** Testin derleyiciyle eşleştirdiği sabit kod. */
-  kod: 'TUR' | 'TEKLIF' | 'NEREDE' | 'KONUM' | 'OTOMATIK_METIN' | 'SAYFA' | 'OLCUM';
+  kod: 'TUR' | 'TEKLIF' | 'NEREDE' | 'KONUM' | 'OTOMATIK_METIN' | 'SAYFA' | 'OLCUM' | 'SIKLIK';
   konu: string;
   meta: KararHucresi | null;
   google: KararHucresi | null;
@@ -105,8 +105,17 @@ export function kararTablosu(
     {
       kod: 'OLCUM',
       konu: 'Ölçüm',
-      meta: m ? hucre("Meta'nın saydığı") : null,
+      // SATIŞTA reklam pikselin satın alma olayıyla optimize oluyor
+      // (derle.ts SATIS_OLAYI); "Meta'nın saydığı" demek hangi olayın
+      // sayıldığını gizlerdi.
+      meta: m ? (amac === 'SATIS' ? hucre('Seçtiğin pikselin saydığı satın almalar', 'Reklam satın alma için optimize edilir') : hucre("Meta'nın saydığı")) : null,
       google: g ? hucre("Google'ın saydığı") : null,
     },
+    // ERİŞİM sözü gövdede `frequency_control_specs` (ERISIM_SIKLIK_SINIRI);
+    // yalnız erişim amacında ve Meta açıkken. Başka amaçta satır yok:
+    // "sıklık sınırı yok" yazmak gereksiz bir soru doğururdu.
+    ...(m && amac === 'ERISIM'
+      ? [{ kod: 'SIKLIK' as const, konu: 'Sıklık', meta: hucre('Bir kişiye haftada en çok 2 kez', 'Aynı kişiye tekrar tekrar gösterilmez'), google: null }]
+      : []),
   ];
 }

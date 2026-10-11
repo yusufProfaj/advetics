@@ -16,7 +16,7 @@
  */
 import { TELEFON_E164, metinUyariIceriyor } from '../taslak-alanlari';
 import type { AlanKaynagi } from '../taslak';
-import { REHBER_AMACLARI, platformGorunurMu, type RehberPlatformu } from './amaclar';
+import { REHBER_AMACLARI, platformGorunurMu, type RehberAmacKodu, type RehberPlatformu } from './amaclar';
 import { REHBER_IZINLI_KAYNAKLAR, VARSAYILAN_META_PAYI, type RehberAlanAdi, type RehberAlanlari } from './alanlar';
 import { METIN_SINIRLARI, karakterSayisi } from './metin';
 import { META_EN_COK_GORSEL } from './turet';
@@ -65,13 +65,36 @@ export interface RehberEksikBaglami {
 
 const ADIM: Record<RehberAlanAdi, RehberAdimi> = {
   amac: 1,
-  platformlar: 2, metaHesabiId: 2, googleHesabiId: 2, sayfaId: 2, instagramId: 2, youtubeKanaliId: 2,
+  platformlar: 2, metaHesabiId: 2, googleHesabiId: 2, sayfaId: 2, instagramId: 2, youtubeKanaliId: 2, pikselId: 2,
   konumlar: 3, enDusukYas: 3, yasAraligi: 3, ekKategoriler: 3,
-  hedefAdres: 4, telefon: 4, formSablonuId: 4, medya: 4, youtubeVideo: 4, metin: 4, anahtarKelimeler: 4,
+  hedefAdres: 4, telefon: 4, whatsappNumarasi: 4, formSablonuId: 4, medya: 4, youtubeVideo: 4, metin: 4, anahtarKelimeler: 4,
   butce: 5, metaPayiYuzde: 5, takvim: 5,
 };
 
 const HTTPS = /^https:\/\/[^\s/]+\.[^\s]+/;
+
+/**
+ * SİTE ADRESİ ALANI — TEK KURAL (panel ve eksik listesi okuyor). Panel bir
+ * süre kendi listesini yazıyordu (`SITE, SATIS, VIDEO, ERISIM`) ve eksik
+ * listesi başka bir kural okuyordu: Meta'da video amacında alan "gerekli"
+ * görünüyor, boş geçince hiçbir eksik çıkmıyordu.
+ *
+ * - `zorunlu`: siteye gönderen Meta amaçları (SITE, SATIS) ya da Google açık
+ *   (Google'ın her kurgusu nihai adres istiyor).
+ * - `istege_bagli`: Meta'da tıklamanın sonuç OLMADIĞI amaçlar (video
+ *   izlenme, erişim): adres varsa düğme oraya, yoksa Facebook sayfasına gider
+ *   (derle.ts `BAGLANTISI_ISTEGE_BAGLI_NIYETLER`).
+ * - `null`: alan sorulmaz (form, arama, WhatsApp yalnız Meta'da).
+ */
+export type AdresAlani = 'zorunlu' | 'istege_bagli' | null;
+export function adresAlani(amac: RehberAmacKodu, acik: Record<RehberPlatformu, boolean>): AdresAlani {
+  if (acik.google || (acik.meta && (amac === 'SITE' || amac === 'SATIS'))) return 'zorunlu';
+  if (acik.meta && (amac === 'VIDEO' || amac === 'ERISIM')) return 'istege_bagli';
+  return null;
+}
+export function adresGerekliMi(amac: RehberAmacKodu, acik: Record<RehberPlatformu, boolean>): boolean {
+  return adresAlani(amac, acik) === 'zorunlu';
+}
 
 /** Rehberin AÇIK platformları: kullanıcı seçimi ∩ görünürlük. */
 export function acikPlatformlar(a: RehberAlanlari, ajansYoneticisi: boolean): Record<RehberPlatformu, boolean> {
@@ -114,13 +137,28 @@ export function rehberEksikleri(a: RehberAlanlari, b: RehberEksikBaglami): Rehbe
     // Sayfa ASLA platform varsayılanına bırakılmaz: panel turunda Meta başka
     // bir müşterinin sayfasını kendiliğinden seçti (A4 § 4.1).
     if (!a.sayfaId) ekle('sayfaId', 'meta', 'M-SAYFA', 'Facebook sayfası seçilmedi');
-    if (amac === 'FORM') onKosul(ok?.metaFormKosullari, 'meta', 'M-FORM-KOSUL', 'Sayfada potansiyel müşteri koşulları kabul edilmemiş');
-    if (amac === 'WHATSAPP') onKosul(ok?.metaWhatsapp, 'meta', 'M-WHATSAPP', 'Sayfaya bağlı WhatsApp Business hattı yok');
-    if (amac === 'SATIS') onKosul(ok?.metaSatisOlcumu, 'meta', 'M-PIKSEL', 'Sitende Meta pikseli satış saymıyor');
+    if (amac === 'FORM') {
+      onKosul(ok?.metaFormKosullari, 'meta', 'M-FORM-KOSUL', 'Sayfada potansiyel müşteri koşulları kabul edilmemiş', 'Sayfanın potansiyel müşteri koşulları kontrol edilemedi');
+    }
+    if (amac === 'WHATSAPP') {
+      /*
+       * HAT ARTIK SORULUYOR (Dalga 3): sayfanın `whatsapp_number` alanı
+       * ölçümde boş döndü, yani "okunamadı" çoğu sayfada normal hâl. Numara
+       * yazıldıysa uyarı GÖSTERİLMEZ: hattı Meta provada doğruluyor ve her
+       * rehberde duran bir uyarı okunmaz hâle gelir. `false` bugün hiç
+       * üretilmiyor (`whatsappHali`); üretilirse engel.
+       */
+      const n = a.whatsappNumarasi?.deger ?? null;
+      if (ok?.metaWhatsapp === false) ekle('platformlar', 'meta', 'M-WHATSAPP', 'Sayfaya bağlı WhatsApp Business hattı yok', 'engel', 2);
+      else if (ok?.metaWhatsapp !== true && !(n && TELEFON_E164.test(n))) {
+        ekle('platformlar', 'meta', 'M-WHATSAPP-BILINMIYOR', "Sayfaya bağlı WhatsApp hattı Meta'dan okunamadı; numarayı kendin yaz", 'uyari', 2);
+      }
+    }
+    if (amac === 'SATIS') pikselEksikleri();
   }
   if (acik.google) {
     if (!a.googleHesabiId) ekle('googleHesabiId', 'google', 'G-HESAP', 'Google Ads hesabı seçilmedi');
-    if (amac === 'SATIS') onKosul(ok?.googleSatisOlcumu, 'google', 'G-DONUSUM', "Google Ads'te satın alma dönüşümü etkin değil");
+    if (amac === 'SATIS') onKosul(ok?.googleSatisOlcumu, 'google', 'G-DONUSUM', "Google Ads'te satın alma dönüşümü etkin değil", "Google Ads'teki satın alma dönüşümü kontrol edilemedi");
     if (tanim.google.kurgu === 'TALEP_YARATMA_VIDEO' || tanim.google.kurgu === 'TALEP_YARATMA_GORSEL') {
       if (ok && !ok.googleLogoVeAd) ekle('googleHesabiId', 'google', 'G-LOGO', "Marka Merkezi'nde logo ve işletme adı yok");
     }
@@ -155,11 +193,17 @@ export function rehberEksikleri(a: RehberAlanlari, b: RehberEksikBaglami): Rehbe
 
   // ── 4 Reklam ──
   const googleArama = acik.google && tanim.google.kurgu === 'ARAMA';
-  // Google'ın her kurgusu nihai adres istiyor (form ve telefon uzantısı da
-  // bir Arama reklamına bağlı); Meta'da yalnız siteye gönderen amaçlar.
-  const siteGerekli = amac === 'SITE' || amac === 'SATIS' || acik.google;
+  // Kural tek yerde (`adresAlani`): panel aynı fonksiyonu okuyor. İsteğe
+  // bağlı alanda yazılmış adres yine geçerli olmalı (derleyici de reddeder).
+  const adresHali = adresAlani(amac, acik);
   const adres = a.hedefAdres?.deger ?? null;
-  if (siteGerekli && !(adres && HTTPS.test(adres))) ekle('hedefAdres', null, 'SITE-ADRES', 'Site adresi https:// ile başlamalı');
+  if ((adresHali === 'zorunlu' && !(adres && HTTPS.test(adres))) || (adresHali === 'istege_bagli' && adres && !HTTPS.test(adres))) {
+    ekle('hedefAdres', null, 'SITE-ADRES', 'Site adresi https:// ile başlamalı');
+  }
+  if (amac === 'WHATSAPP' && acik.meta) {
+    const n = a.whatsappNumarasi?.deger ?? null;
+    if (!(n && TELEFON_E164.test(n))) ekle('whatsappNumarasi', 'meta', 'WHATSAPP-NUMARA', 'WhatsApp numarası +90 ile başlamalı');
+  }
   if (amac === 'TELEFON') {
     const tel = a.telefon?.deger ?? null;
     if (!(tel && TELEFON_E164.test(tel))) ekle('telefon', null, 'TELEFON', 'Telefon numarası +90 ile başlamalı');
@@ -182,6 +226,12 @@ export function rehberEksikleri(a: RehberAlanlari, b: RehberEksikBaglami): Rehbe
   const medya = a.medya?.deger ?? [];
   const gorselGerekli = acik.meta || (acik.google && tanim.google.kurgu === 'TALEP_YARATMA_GORSEL');
   if (gorselGerekli && medya.length === 0) ekle('medya', null, 'MEDYA', amac === 'VIDEO' ? 'Video ekle' : 'En az bir görsel ekle');
+  // VİDEO İZLENME yalnız video ile: görsel fikri derleyicide KRT-VIDEO-ZORUNLU
+  // ile durur; burada BIRAKILDIĞI adımda söyleniyor.
+  const gorselSayisi = medya.filter((x) => !x.kapakVarlikId).length;
+  if (acik.meta && amac === 'VIDEO' && gorselSayisi > 0) {
+    ekle('medya', 'meta', 'M-VIDEO-YALNIZ', `Bu amaçta yalnız video kullanılır; ${gorselSayisi} görseli kaldır`);
+  }
   if (acik.meta && b.medyaOranlari) {
     // BANNER SETİ (`banner-seti.ts`): doğrulama yükleme anında. Türetmedeki
     // retler (GORSEL-ORAN, -CAKISMA, -SAYI) burada kullanıcının diliyle.
@@ -271,9 +321,33 @@ export function rehberEksikleri(a: RehberAlanlari, b: RehberEksikBaglami): Rehbe
 
   return e;
 
-  function onKosul(hal: boolean | null | undefined, platform: RehberPlatformu, kod: string, metin: string) {
+  /*
+   * Bilinmeyen hâlin KENDİ CÜMLESİ var: "Kontrol edilemedi: sayfaya bağlı
+   * hat yok" hem "yok" hem "bilmiyoruz" diyordu ve kullanıcıyı sağlam bir
+   * kurulumu düzeltmeye gönderiyordu.
+   */
+  function onKosul(hal: boolean | null | undefined, platform: RehberPlatformu, kod: string, metin: string, bilinmiyorMetni: string) {
     if (hal === false) ekle('platformlar', platform, kod, metin, 'engel', 2);
-    else if (hal === null || hal === undefined) ekle('platformlar', platform, `${kod}-BILINMIYOR`, `Kontrol edilemedi: ${metin.charAt(0).toLocaleLowerCase('tr-TR')}${metin.slice(1)}`, 'uyari', 2);
+    else if (hal === null || hal === undefined) ekle('platformlar', platform, `${kod}-BILINMIYOR`, bilinmiyorMetni, 'uyari', 2);
+  }
+
+  /*
+   * SATIŞ ÖLÇÜMÜ (Dalga 3). Engel yalnız KESİN bilgide: piksel seçilmedi,
+   * hesapta yok, Meta kullanılamaz demiş ya da hiç çalışmamış (satın alma
+   * için optimize edecek veri yok, Meta reklamı öğrenemez). Son 7 günde
+   * satın alma sayılmaması UYARI: yeni açılmış bir mağazada satış henüz
+   * olmayabilir ve onu kilitlemek sağlam bir kurulumu durdurur.
+   */
+  function pikselEksikleri() {
+    if (!a.pikselId?.deger) return ekle('pikselId', 'meta', 'M-PIKSEL-SEC', 'Meta pikseli seçilmedi');
+    const p = ok?.seciliPiksel ?? null;
+    if (!p) return ekle('pikselId', 'meta', 'M-PIKSEL-BILINMIYOR', "Seçilen piksel Meta'da kontrol edilemedi", 'uyari');
+    if (!p.hesaptaVar) return ekle('pikselId', 'meta', 'M-PIKSEL-HESAP', 'Seçilen piksel bu reklam hesabında yok; listeden yeniden seç');
+    if (p.kullanilamaz) return ekle('pikselId', 'meta', 'M-PIKSEL-KULLANILAMAZ', "Bu piksel Meta'da kullanılamıyor; başka bir piksel seç");
+    if (p.hicCalismadi) return ekle('pikselId', 'meta', 'M-PIKSEL-CALISMADI', 'Piksel sitende hiç çalışmamış; önce pikseli sitene kur');
+    if (!p.son7GundeCalisti) ekle('pikselId', 'meta', 'M-PIKSEL-SESSIZ', 'Piksel son 7 günde sitenden hiç veri almadı', 'uyari');
+    if (p.satinAlma7Gun === false) ekle('pikselId', 'meta', 'M-PIKSEL', 'Piksel son 7 günde satın alma saymadı; satışlar ölçülmüyor olabilir', 'uyari');
+    else if (p.satinAlma7Gun === null) ekle('pikselId', 'meta', 'M-PIKSEL-SATIS-BILINMIYOR', 'Son 7 günün satın almaları kontrol edilemedi', 'uyari');
   }
 }
 

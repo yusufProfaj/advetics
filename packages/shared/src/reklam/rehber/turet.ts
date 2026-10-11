@@ -143,6 +143,11 @@ export function rehberdenMeta(
     // taslağın içerik özetini değiştirip kayıtlı provaları sebepsiz
     // bayatlatırdı (yayında "Meta taslağı rehberden sonra değişmiş").
     ...(a.telefon && REHBER_AMACLARI[amac].meta.niyet === 'TELEFON' ? { telefon: a.telefon } : {}),
+    // Aynı kural (Dalga 3): WhatsApp hattı ve piksel yalnız kendi amacında.
+    // Marka Merkezi telefonu WhatsApp alanına da önden doluyor; onu her
+    // taslağa yazmak kayıtlı provaları sebepsiz bayatlatırdı.
+    ...(a.whatsappNumarasi && REHBER_AMACLARI[amac].meta.niyet === 'WHATSAPP' ? { whatsappNumarasi: a.whatsappNumarasi } : {}),
+    ...(a.pikselId && REHBER_AMACLARI[amac].meta.niyet === 'SATIS' ? { pikselId: a.pikselId } : {}),
   };
   return { tur: 'tamam', deger: t };
 }

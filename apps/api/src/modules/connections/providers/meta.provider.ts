@@ -1700,6 +1700,79 @@ export class MetaProvider implements IAdPlatformProvider {
     }
   }
 
+  /**
+   * Reklam hesabının Meta PİKSELLERİ (AdvCampaign "Sitemden satış gelsin",
+   * Dalga 3) — salt okunur, para harcamaz.
+   *
+   * `GET /act_X/adspixels?fields=id,name,last_fired_time,is_unavailable`.
+   * Liste HATAYLA düşer (çağıran Meta'nın mesajını ekrana taşır): "piksel
+   * yok" ile "okuyamadık" ayrı iş. Sessiz kesme yok: sayfa sınırına
+   * takılırsa `kesildi`.
+   *
+   * SATIN ALMA SİNYALİ piksel başına ayrı çağrı (`/{piksel}/stats`) ve
+   * ÖLÇÜLMEDİ: yanıt biçimi Graph belgesinden (`AdsPixelStatsResult`).
+   * Okunamazsa ya da biçim tanınmazsa `null` = bilinmiyor; `false` YALNIZ
+   * yanıt tam okunup satın alma satırı bulunmadıysa. En çok
+   * `PIKSEL_SINYAL_SINIRI` pikselde sorulur; kalanlar `null` (çoğu hesapta
+   * bir-iki piksel var, onlarca istatistik çağrısı rehberi yavaşlatırdı).
+   */
+  async fetchAdPixels(params: { adAccountPath: string; accessToken: string; simdi?: Date }): Promise<{ satirlar: MetaPikselSatiri[]; kesildi: boolean }> {
+    if (!/^act_\d+$/.test(params.adAccountPath)) throw new PlatformApiError('meta', 'permanent', 'Reklam hesabı act_ önekli olmalı');
+    const simdi = params.simdi ?? new Date();
+    const auth = { headers: { Authorization: `Bearer ${params.accessToken}` } };
+    const satirlar: MetaPikselSatiri[] = [];
+    const ilk = new URL(`${this.graph}/${params.adAccountPath}/adspixels`);
+    ilk.searchParams.set('fields', 'id,name,last_fired_time,is_unavailable');
+    ilk.searchParams.set('limit', '100');
+    let url: string | null = ilk.toString();
+    let sayfa = 0;
+    while (url && sayfa < PIKSEL_SAYFA_SINIRI) {
+      const res: PlatformResponse<GraphPage> = await platformFetch<GraphPage>('meta', url, auth, parseMetaRateLimit);
+      for (const ham of res.data.data ?? []) {
+        const p = mapAdPixel(ham as Record<string, unknown>);
+        if (p) satirlar.push(p);
+      }
+      sayfa++;
+      url = res.data.paging?.next ?? null;
+    }
+    const kesildi = !!url;
+    if (kesildi) this.logger.warn(`${params.adAccountPath}: piksel listesi ${PIKSEL_SAYFA_SINIRI} sayfada kesildi`);
+
+    const baslangic = Math.floor((simdi.getTime() - 7 * 86_400_000) / 1000);
+    for (const p of satirlar.slice(0, PIKSEL_SINYAL_SINIRI)) {
+      // Hiç çalışmamış ya da kullanılamaz pikselde satın alma sorulmaz: cevap
+      // bellidir (yok) ve çağrı boşa gider. `false` değil `null` bırakılmıyor:
+      // hiç olay almamış piksel satın alma da saymamıştır.
+      if (p.kullanilamaz || !p.sonCalisma) {
+        p.satinAlma7Gun = p.sonCalisma ? null : false;
+        continue;
+      }
+      p.satinAlma7Gun = await this.pikselSatinAlma(p.id, baslangic, auth);
+    }
+    return { satirlar, kesildi };
+  }
+
+  private async pikselSatinAlma(pikselId: string, baslangic: number, auth: RequestInit): Promise<boolean | null> {
+    const ilk = new URL(`${this.graph}/${pikselId}/stats`);
+    ilk.searchParams.set('aggregation', 'event');
+    ilk.searchParams.set('event', 'Purchase');
+    ilk.searchParams.set('start_time', String(baslangic));
+    let url: string | null = ilk.toString();
+    try {
+      for (let i = 0; i < PIKSEL_SAYFA_SINIRI && url; i++) {
+        const res: PlatformResponse<unknown> = await platformFetch<unknown>('meta', url, auth, parseMetaRateLimit);
+        const c = pikselSatinAlmaCoz(res.data);
+        if (c.bulundu !== false) return c.bulundu;
+        url = c.sonraki;
+      }
+      // Sayfalar bitmeden durduysak "yok" diyemeyiz.
+      return url ? null : false;
+    } catch (err) {
+      this.logger.warn(`Piksel ${pikselId}: satın alma sinyali okunamadı: ${err instanceof Error ? err.message : String(err)}`);
+      return null;
+    }
+  }
+
   async fetchOrganicPosts(params: {
     pageAccessToken: string;
     profileExternalId: string;
@@ -3595,6 +3668,69 @@ function pickActionValue(value: unknown, types: readonly string[]): string {
  * eklemek `<page>_<page>_<post>` üretir ve Meta bunu "gönderi bulunamadı" diye
  * reddeder — mesajı da hangi kimliğin yanlış olduğunu söylemez.
  */
+/** Piksel listesi en çok bu kadar Graph sayfası gezilir (100'er). */
+export const PIKSEL_SAYFA_SINIRI = 5;
+/** Satın alma sinyali en çok bu kadar piksel için sorulur. */
+export const PIKSEL_SINYAL_SINIRI = 5;
+
+export interface MetaPikselSatiri {
+  id: string;
+  ad: string;
+  /** `last_fired_time` (ISO 8601); hiç olay almadıysa `null`. */
+  sonCalisma: string | null;
+  kullanilamaz: boolean;
+  satinAlma7Gun: boolean | null;
+}
+
+/**
+ * Tek piksel satırı. Kimliği sayısal olmayan satır atlanır. `is_unavailable`
+ * yalnız `true` ise kullanılamaz: alan gelmediyse Meta onu işaretlememiş
+ * demektir (bilinmeyeni "kullanılamaz" saymak sağlam pikseli kilitlerdi).
+ * Tarih Meta biçiminde (`2026-10-10T09:12:44+0000`) gelebilir ve ISO'ya
+ * çevrilir. Çözülemeyen tarih HAM dizge olarak kalır, `null` yapılmaz: `null`
+ * "hiç çalışmadı" demek ve engel üretir; ham dizgede ise "son 7 gün"
+ * hesaplanamaz ve yalnız uyarı çıkar.
+ */
+export function mapAdPixel(row: Record<string, unknown>): MetaPikselSatiri | null {
+  const id = typeof row.id === 'string' ? row.id : typeof row.id === 'number' ? String(row.id) : null;
+  if (!id || !/^\d{1,30}$/.test(id)) return null;
+  const ad = typeof row.name === 'string' && row.name.trim() ? row.name.trim() : `Piksel ${id}`;
+  const ham = typeof row.last_fired_time === 'string' && row.last_fired_time.trim() ? row.last_fired_time.trim() : null;
+  const t = ham ? Date.parse(ham.replace(/([+-]\d{2})(\d{2})$/, '$1:$2')) : NaN;
+  return {
+    id,
+    ad,
+    sonCalisma: ham ? (Number.isNaN(t) ? ham : new Date(t).toISOString()) : null,
+    kullanilamaz: row.is_unavailable === true,
+    satinAlma7Gun: null,
+  };
+}
+
+/**
+ * `/{piksel}/stats?aggregation=event` sayfası → satın alma görüldü mü.
+ * Beklenen biçim (Graph `AdsPixelStatsResult`, ÖLÇÜLMEDİ):
+ * `{ data: [{ start_time, aggregation, data: [{ value: 'Purchase', count }] }], paging }`.
+ * - `true`: sayısı sıfırdan büyük bir `Purchase` satırı var.
+ * - `false`: biçim TANINDI ve bu sayfada satın alma yok (sonraki sayfa varsa
+ *   çağıran devam eder; sayfa bitince "yok").
+ * - `null`: biçim tanınmadı. Tanınmayan yanıtı "satış yok" saymak sağlam
+ *   bir mağazaya yanlış uyarı göstermek olurdu.
+ */
+export function pikselSatinAlmaCoz(govde: unknown): { bulundu: boolean | null; sonraki: string | null } {
+  const g = govde as { data?: unknown; paging?: { next?: unknown } } | null;
+  if (!g || !Array.isArray(g.data)) return { bulundu: null, sonraki: null };
+  const sonraki = typeof g.paging?.next === 'string' ? g.paging.next : null;
+  for (const kova of g.data) {
+    const ic = (kova as { data?: unknown } | null)?.data;
+    if (!Array.isArray(ic)) return { bulundu: null, sonraki: null };
+    for (const s of ic) {
+      const o = s as { value?: unknown; count?: unknown } | null;
+      if (typeof o?.value === 'string' && o.value.toLowerCase() === 'purchase' && Number(o.count) > 0) return { bulundu: true, sonraki: null };
+    }
+  }
+  return { bulundu: false, sonraki };
+}
+
 export function stripPagePrefix(postId: string, pageId: string): string {
   return postId.startsWith(`${pageId}_`) ? postId.slice(pageId.length + 1) : postId;
 }
