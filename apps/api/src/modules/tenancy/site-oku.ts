@@ -259,7 +259,13 @@ export function ozelAdres(ip: string): boolean {
  */
 export type HtmlSonucu = { ok: true; html: string; adres: string } | { ok: false; sebep: string };
 
-export async function sayfaHtmlGetir(rawUrl: string, maxYonlendirme = 3): Promise<HtmlSonucu> {
+/**
+ * `javascript: true`: Tag Manager dosyası (`gtm.js`) `application/javascript`
+ * dönüyor (ölçüldü, 2026-10-11) ve HTML süzgeci onu reddediyordu; Ölçüm
+ * taraması bu yüzden üretimde hiçbir kapsayıcıyı okuyamıyordu (Ajan 4, B1).
+ * Varsayılan değişmiyor: diğer çağıranlar yalnız HTML/metin bekliyor.
+ */
+export async function sayfaHtmlGetir(rawUrl: string, maxYonlendirme = 3, secenek: { javascript?: boolean } = {}): Promise<HtmlSonucu> {
   let url: URL;
   try {
     url = new URL(rawUrl.trim());
@@ -279,7 +285,7 @@ export async function sayfaHtmlGetir(rawUrl: string, maxYonlendirme = 3): Promis
         signal: kontrol.signal,
         headers: {
           'User-Agent': 'Advetics/1.0 (+youtube-kanal-bul)',
-          Accept: 'text/html,application/xhtml+xml',
+          Accept: secenek.javascript ? 'application/javascript,text/javascript,*/*;q=0.5' : 'text/html,application/xhtml+xml',
         },
       });
       if (res.status >= 300 && res.status < 400) {
@@ -290,7 +296,8 @@ export async function sayfaHtmlGetir(rawUrl: string, maxYonlendirme = 3): Promis
       }
       if (!res.ok) return { ok: false, sebep: `Site ${res.status} döndürdü.` };
       const tur = res.headers.get('content-type') ?? '';
-      if (!tur.includes('html') && !tur.includes('text')) {
+      const jsKabul = secenek.javascript === true && /javascript|ecmascript/i.test(tur);
+      if (!jsKabul && !tur.includes('html') && !tur.includes('text')) {
         return { ok: false, sebep: `Site HTML döndürmedi (${tur || 'tür bilinmiyor'}).` };
       }
       return { ok: true, html: await govdeyiOku(res), adres: url.toString() };

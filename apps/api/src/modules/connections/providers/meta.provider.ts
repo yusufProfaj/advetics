@@ -1716,7 +1716,8 @@ export class MetaProvider implements IAdPlatformProvider {
    * `PIKSEL_SINYAL_SINIRI` pikselde sorulur; kalanlar `null` (çoğu hesapta
    * bir-iki piksel var, onlarca istatistik çağrısı rehberi yavaşlatırdı).
    */
-  async fetchAdPixels(params: { adAccountPath: string; accessToken: string; simdi?: Date }): Promise<{ satirlar: MetaPikselSatiri[]; kesildi: boolean }> {
+  /** `satinAlmaSor: false`: Ölçüm olay sayılarını kendisi soruyor; ikinci istek yok. */
+  async fetchAdPixels(params: { adAccountPath: string; accessToken: string; simdi?: Date; satinAlmaSor?: boolean }): Promise<{ satirlar: MetaPikselSatiri[]; kesildi: boolean }> {
     if (!/^act_\d+$/.test(params.adAccountPath)) throw new PlatformApiError('meta', 'permanent', 'Reklam hesabı act_ önekli olmalı');
     const simdi = params.simdi ?? new Date();
     const auth = { headers: { Authorization: `Bearer ${params.accessToken}` } };
@@ -1739,6 +1740,7 @@ export class MetaProvider implements IAdPlatformProvider {
     if (kesildi) this.logger.warn(`${params.adAccountPath}: piksel listesi ${PIKSEL_SAYFA_SINIRI} sayfada kesildi`);
 
     const baslangic = Math.floor((simdi.getTime() - 7 * 86_400_000) / 1000);
+    if (params.satinAlmaSor === false) return { satirlar, kesildi };
     for (const p of satirlar.slice(0, PIKSEL_SINYAL_SINIRI)) {
       // Hiç çalışmamış ya da kullanılamaz pikselde satın alma sorulmaz: cevap
       // bellidir (yok) ve çağrı boşa gider. `false` değil `null` bırakılmıyor:
@@ -1765,7 +1767,7 @@ export class MetaProvider implements IAdPlatformProvider {
     let url: string | null = ilk.toString();
     const toplam: Record<string, number> = {};
     try {
-      for (let i = 0; i < PIKSEL_SAYFA_SINIRI && url; i++) {
+      for (let i = 0; i < PIKSEL_ISTATISTIK_SAYFA_SINIRI && url; i++) {
         const res: PlatformResponse<unknown> = await platformFetch<unknown>('meta', url, auth, parseMetaRateLimit);
         const c = pikselOlayToplamlariCoz(res.data);
         if (!c) return null;
@@ -3697,6 +3699,13 @@ function pickActionValue(value: unknown, types: readonly string[]): string {
  */
 /** Piksel listesi en çok bu kadar Graph sayfası gezilir (100'er). */
 export const PIKSEL_SAYFA_SINIRI = 5;
+/**
+ * Olay istatistiği sayfa sınırı — ÖLÇÜLDÜ (2026-10-11): sayfa başına en çok
+ * ~50 saatlik kova ve sonda BOŞ bir sayfa. 7 gün × 24 saat = 168 kova = 4
+ * dolu + 1 boş sayfa; 5'lik liste sınırı yoğun bir sitede tam kıyıda kalır
+ * ve aşılırsa sonuç `null` ("okunamadı") olur.
+ */
+export const PIKSEL_ISTATISTIK_SAYFA_SINIRI = 12;
 /** Satın alma sinyali en çok bu kadar piksel için sorulur. */
 export const PIKSEL_SINYAL_SINIRI = 5;
 

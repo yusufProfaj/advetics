@@ -32,6 +32,8 @@ type Hal = { tur: 'okunuyor' } | { tur: 'hata'; mesaj: string } | { tur: 'geldi'
 /** Sözlük, dallanma değil: yeni bir kaynak eklenince derleme kırılsın. */
 const KAYNAK_ADI: Record<OlcumOkumaHatasi['kaynak'], string> = { site: 'Site', google: 'Google Ads', meta: 'Meta' };
 
+const HESAP_PLATFORMU: Record<OlcumDurumuYaniti['ekHesaplar'][number]['platform'], string> = { google: 'Google Ads', meta: 'Meta' };
+
 const hataMetni = (e: unknown) => (e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.');
 
 export function OlcumBolumu({ clientId, yazabilir }: { clientId: string; yazabilir: boolean }) {
@@ -95,12 +97,31 @@ export function OlcumBolumu({ clientId, yazabilir }: { clientId: string; yazabil
         </Uyari>
       )}
 
+      {v.ekHesaplar.length > 0 && (
+        <Uyari ton="bilgi" baslik={`Bu workspace'te ${v.ekHesaplar.length} hesap daha var; yalnız ilki okundu.`}>
+          {v.ekHesaplar.map((h) => `${HESAP_PLATFORMU[h.platform]} · ${h.ad}`).join(', ')}
+        </Uyari>
+      )}
+
       <Ozet v={v} />
       <Oneri clientId={clientId} oneri={v.oneri} yazabilir={yazabilir} guncelle={(y) => setHal({ tur: 'geldi', veri: y })} />
       <Tablo v={v} />
       <GoogleIslemleri v={v} />
     </div>
   );
+}
+
+/**
+ * Adres GÜVENLE: sunucu ayrıştırılamayan adresi `null` döndürüyor, ama panel
+ * bir yanıt alanına güvenip bölümün tamamını düşürmemeli (Ajan 4, B3).
+ */
+export function alanAdi(adres: string | null): string {
+  if (!adres) return '—';
+  try {
+    return new URL(adres).hostname;
+  } catch {
+    return adres;
+  }
 }
 
 function zamanGoster(iso: string): string {
@@ -131,7 +152,7 @@ function Ozet({ v }: { v: OlcumDurumuYaniti }) {
   const olcululebilir = v.satirlar.flatMap((r) => [r.meta, r.google]).filter((h) => h.durum !== 'platformda_yok').length;
   return (
     <section className="grid overflow-hidden rounded-xl border border-line bg-surface sm:grid-cols-2 xl:grid-cols-4" aria-label="Ölçüm özeti">
-      <Kutu baslik="Site" deger={s.adres ? new URL(s.adres).hostname : '—'} alt={siteAlt} kucukDeger />
+      <Kutu baslik="Site" deger={alanAdi(s.adres)} alt={siteAlt} kucukDeger />
       <Kutu
         baslik="Google Ads dönüşümü"
         deger={v.googleHesabi === null ? 'Hesap yok' : kaydeden === null ? 'Okunamadı' : `${kaydeden} kaydediliyor`}
@@ -139,7 +160,7 @@ function Ozet({ v }: { v: OlcumDurumuYaniti }) {
           v.googleHesabi === null
             ? "Bu workspace'e Google Ads hesabı atanmamış"
             : gIslem
-              ? `${gIslem.toplam} işlem tanımlı${v.analyticsBagli ? ' · Analytics bağlı' : ''}`
+              ? `${gIslem.satirlar.filter((i) => i.durum !== 'REMOVED').length} işlem tanımlı${v.analyticsBagli ? ' · Analytics bağlı' : ''}`
               : 'Dönüşüm listesi okunamadı'
         }
       />

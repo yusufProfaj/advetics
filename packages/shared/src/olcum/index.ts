@@ -121,7 +121,7 @@ export interface SiteTaramasi {
   tagManagerOkunamayan: string[];
 }
 
-export type OlcumOneriKodu = 'HESAP_ATA' | 'BIRINCIL_YAP' | 'SITE_ADRESI' | 'GOOGLE_KURULUM' | 'META_OLAY' | 'HEPSI_HAZIR';
+export type OlcumOneriKodu = 'HESAP_ATA' | 'BIRINCIL_YAP' | 'SITE_ADRESI' | 'GOOGLE_KURULUM' | 'META_OLAY' | 'OKUNAMADI' | 'HEPSI_HAZIR';
 
 export interface OlcumOneriAdimi {
   metin: string;
@@ -156,6 +156,11 @@ export interface OlcumDurumuYaniti {
   /** Atanmış hesaplar; yoksa null (HESAP_ATA). */
   googleHesabi: { id: string; ad: string; musteriNo: string; donusumKimligi: string | null } | null;
   metaHesabi: { id: string; ad: string } | null;
+  /**
+   * Workspace'e atanmış AMA okunmayan diğer hesaplar (ilki okunuyor). Sessiz
+   * kesme yok: ekran "N hesap daha var" der (Ajan 4, K1).
+   */
+  ekHesaplar: Array<{ platform: 'meta' | 'google'; ad: string }>;
   satirlar: OlcumSatiri[];
   /** İçe aktarılmış Analytics işlemi var mı (Google Ads ↔ Analytics bağlı). null: okunamadı. */
   analyticsBagli: boolean | null;
@@ -260,13 +265,21 @@ export function googleHucresi(tur: OlcumTuru, islemler: readonly GoogleDonusumIs
 }
 
 /** Meta hücresi: site olayları pikselden, reklam içi sonuçlar platformdan. */
-export function metaHucresi(tur: OlcumTuru, pikseller: readonly MetaPikselOlcumu[] | null, hata: string | null, hesapVar: boolean): OlcumHucresi {
+export function metaHucresi(
+  tur: OlcumTuru,
+  pikseller: readonly MetaPikselOlcumu[] | null,
+  hata: string | null,
+  hesapVar: boolean,
+  /** Piksel listesi sayfa sınırında kesildiyse "yok" kesin değildir (Ajan 4, Ö3). */
+  kesildi = false,
+): OlcumHucresi {
   if (!hesapVar) return hucre('hesap_yok', "Bu workspace'e Meta reklam hesabı atanmamış");
   if (tur === 'mesaj_ve_form') return hucre('platform_sayiyor', 'Meta formu ve WhatsApp sohbetini kendisi sayıyor; sitede kod gerekmez');
   if (tur === 'arama') return hucre('platform_sayiyor', 'Meta arama reklamındaki aramaları kendisi sayıyor');
   if (pikseller === null) return hucre('bilinmiyor', hata ?? 'Meta pikselleri okunamadı');
   const calisan = pikseller.filter((p) => !p.kullanilamaz && p.sonCalisma);
   if (calisan.length === 0) {
+    if (kesildi) return hucre('bilinmiyor', 'Piksel listesi kesildi; bütün pikseller sorulamadı');
     return hucre('tanim_yok', pikseller.length === 0 ? 'Reklam hesabında piksel yok' : 'Piksel var ama hiç çalışmamış');
   }
   let toplam = 0;
@@ -286,6 +299,7 @@ export function metaHucresi(tur: OlcumTuru, pikseller: readonly MetaPikselOlcumu
   }
   if (toplam > 0) return hucre('kaydediliyor', `Son 7 günde ${binlik(toplam)} olay (${[...adlar].sort().join(', ')})`, toplam);
   if (okunamayan === calisan.length) return hucre('bilinmiyor', 'Piksel istatistikleri okunamadı');
+  if (kesildi) return hucre('bilinmiyor', 'Piksel listesi kesildi; olay bulunamadı ama bütün pikseller sorulamadı');
   const beklenen = tur === 'satin_alma' ? 'Purchase' : 'Lead';
   return hucre('sinyal_yok', `Piksel çalışıyor ama son 7 günde ${beklenen} olayı gelmedi${okunamayan ? ` (${okunamayan} pikselin istatistiği okunamadı)` : ''}`, 0);
 }
@@ -297,13 +311,15 @@ export interface OlcumGirdisi {
   googleHata: string | null;
   metaPikselleri: readonly MetaPikselOlcumu[] | null;
   metaHata: string | null;
+  /** Piksel listesi sayfa sınırında kesildi mi. */
+  metaKesildi?: boolean;
   site: SiteTaramasi;
 }
 
 export function olcumSatirlari(g: OlcumGirdisi): OlcumSatiri[] {
   return OLCUM_TURLERI.map((tur) => ({
     tur,
-    meta: metaHucresi(tur, g.metaPikselleri, g.metaHata, g.metaHesapVar),
+    meta: metaHucresi(tur, g.metaPikselleri, g.metaHata, g.metaHesapVar, g.metaKesildi === true),
     google: googleHucresi(tur, g.googleIslemleri, g.googleHata, g.googleHesapVar),
     amaclar: OLCUM_TURU_AMACLARI[tur],
   }));
@@ -406,6 +422,23 @@ export function enUygunOneri(g: OlcumGirdisi, satirlar: readonly OlcumSatiri[]):
       adimlar: [{ metin: 'Pikselde form gönderiminde "Lead" olayını tetikle', ayrinti: g.site.tagManager[0] ? `Tag Manager (${g.site.tagManager[0]}) üzerinden` : 'Sitenin form koduna', yer: g.site.tagManager[0] ? 'tag_manager' : 'site' }],
       eylem: null,
       kisit: TAG_MANAGER_KISITI,
+    };
+  }
+
+  // BİLİNMEYEN VERİ ÜSTÜNE OLUMLU HÜKÜM YOK (Ajan 4, B2): bir hücre okunamadıysa
+  // "hepsi hazır" demek, okuyamadığımız şeyi çalışıyor saymak olurdu.
+  const okunamayan = satirlar.flatMap((r) => [
+    ...(r.meta.durum === 'bilinmiyor' ? [`Meta · ${OLCUM_TURU_ADLARI[r.tur].ad}: ${r.meta.neden}`] : []),
+    ...(r.google.durum === 'bilinmiyor' ? [`Google · ${OLCUM_TURU_ADLARI[r.tur].ad}: ${r.google.neden}`] : []),
+  ]);
+  if (okunamayan.length) {
+    return {
+      kod: 'OKUNAMADI',
+      baslik: 'Ölçümlerin bir kısmı okunamadı',
+      metin: 'Okuyabildiklerimizde eksik yok; okuyamadıklarımız için bir şey söyleyemiyoruz. Biraz sonra yeniden tara.',
+      adimlar: okunamayan.map((m) => ({ metin: m, ayrinti: null, yer: 'advetics' as const })),
+      eylem: null,
+      kisit: null,
     };
   }
 

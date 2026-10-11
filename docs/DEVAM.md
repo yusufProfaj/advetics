@@ -16,6 +16,20 @@ RLS politikası var, platform sahibi yalnız hello@profaj.com.
 bu commit'le deploy ediliyor; migration `20261009100000_iyilestir` (üç
 yeni tablo) + `db:rls`.
 
+**ÖLÇÜM KURULUMU — Faz 1 (2026-10-11 gece, `docs/olcum/`).** Marka Merkezi ›
+Ölçüm: dört ölçüm (site formu, satın alma, arama, reklam içi form/WhatsApp)
+Meta ve Google için gerçek durumuyla + tek en uygun öneri; tek yazma
+"birincil yap" (Google Ads, geri okumalı, denetim kayıtlı, yalnız aktif
+workspace'te). Ajan 4 kapıyı kapattı (B1 gtm.js içerik türü, B2 okunamayan
+veride "hepsi hazır", B3 bozuk site adresi panel çökmesi, Ö1–Ö5); hepsi
+düzeldi, kanıt testleri yeşil. **Faz 2 (bekliyor, kullanıcı kararı):** Tag
+Manager'a otomatik etiket ve Analytics bağlama; Google Cloud OAuth onay
+ekranına `tagmanager.edit.containers`, `tagmanager.publish`,
+`analytics.edit` izinleri ve uygulama doğrulaması gerekiyor. Canlıda henüz
+GÖZLE doğrulanmadı: "birincil yap" yazması.
+**Bekleyen karar:** AdvCampaign satırlarını `acik` yapmak (izin sistemi
+"özellik bayrağı" diye engelledi; kullanıcı onayı gerekiyor).
+
 **DALGA 3 CANLI TUR (2026-10-11 gece, hepsi duraklatılmış, Ege Birlik Yapı).**
 TEMİZ görülenler (kurulum + geri okuma): WhatsApp Meta (N-18 sonrası,
 "Yeniden kontrol et" ile), Google Talep Yaratma GÖRSEL (erişim), VİDEO Meta

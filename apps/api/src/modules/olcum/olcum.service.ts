@@ -1,8 +1,9 @@
-import { BadRequestException, ConflictException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
   analyticsBagliMi,
   altyapiBul,
+  GOOGLE_KATEGORI_TURU,
   enUygunOneri,
   olcumSatirlari,
   siteKimlikleri,
@@ -34,7 +35,8 @@ const META_GUN = 7;
 /** Tag Manager dosyası en çok bu kadar kapsayıcı için okunur (bir sitede genelde bir). */
 const GTM_SINIRI = 3;
 
-export type SiteOkuyucu = (adres: string) => Promise<{ ok: true; html: string } | { ok: false; sebep: string }>;
+/** `javascript`: Tag Manager dosyası `application/javascript` dönüyor (Ajan 4, B1). */
+export type SiteOkuyucu = (adres: string, secenek?: { javascript?: boolean }) => Promise<{ ok: true; html: string } | { ok: false; sebep: string }>;
 
 /**
  * Sitenin ana sayfası + bulunan Tag Manager kapsayıcıları. Tag Manager dosyası
@@ -47,13 +49,21 @@ export async function siteTara(adres: string | null, oku: SiteOkuyucu): Promise<
   const bos = { tagManager: [], analytics: [], googleAds: [], metaPiksel: [], altyapi: null, tagManagerOkunamayan: [] };
   if (!adres || !adres.trim()) return { durum: 'adres_yok', adres: null, hata: null, ...bos };
   const tam = /^https?:\/\//i.test(adres.trim()) ? adres.trim() : `https://${adres.trim()}`;
+  // AYRIŞTIRILAMAYAN ADRES DÖNMEZ (Ajan 4, B3): `clients.website` serbest
+  // dizge; "ege birlik.com" panelde `new URL()` ile bölümü düşürüyordu.
+  // `http://` bilerek https'e YÜKSELTİLMİYOR: okuyucu onu sebebiyle reddeder.
+  try {
+    new URL(tam);
+  } catch {
+    return { durum: 'ulasilamadi', adres: null, hata: `Site adresi geçerli değil: "${adres.trim()}". Workspace ayarları'ndan düzelt.`, ...bos };
+  }
   const ana = await oku(tam);
   if (!ana.ok) return { durum: 'ulasilamadi', adres: tam, hata: ana.sebep, ...bos };
   const k = siteKimlikleri(ana.html);
   const okunamayan: string[] = [];
   const birlesik = { analytics: new Set(k.analytics), googleAds: new Set(k.googleAds), metaPiksel: new Set(k.metaPiksel) };
   for (const gtm of k.tagManager.slice(0, GTM_SINIRI)) {
-    const r = await oku(`https://www.googletagmanager.com/gtm.js?id=${encodeURIComponent(gtm)}`);
+    const r = await oku(`https://www.googletagmanager.com/gtm.js?id=${encodeURIComponent(gtm)}`, { javascript: true });
     if (!r.ok) {
       okunamayan.push(gtm);
       continue;
@@ -82,6 +92,7 @@ const mesaj = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 interface Hesaplar {
   site: string | null;
+  ek: Array<{ platform: 'meta' | 'google'; ad: string }>;
   google: { id: string; ad: string; external_id: string; connection_id: string; manager_external_id: string | null } | null;
   meta: { id: string; ad: string; external_id: string } | null;
 }
@@ -106,8 +117,21 @@ export class OlcumService {
     return this.saglayicilar.get('meta') as unknown as MetaProvider;
   }
 
-  private erisim(ctx: TenantContext, clientId: string): void {
-    if (!ctx.clientIds.includes(clientId)) throw new BadRequestException('Bu workspace’e erişimin yok.');
+  /**
+   * ERİŞİM + AKTİF WORKSPACE (Ajan 4, Ö4/Ö5). Aktif workspace A iken B'nin
+   * atanmış hesaplarını RLS gizliyor ve sıfır satır "hesap atanmamış" diye
+   * yazılıyordu (görünmeyen satırı "yok" saymak). Yazmada daha sıkı: aktif
+   * seçim yokken yetki EN GENİŞ rolden hesaplanıyor, yani B'de yalnız
+   * izleyici olan biri B'ye yazabilirdi. Yazma yalnız o workspace seçiliyken.
+   */
+  private erisim(ctx: TenantContext, clientId: string, yazma = false): void {
+    if (!ctx.clientIds.includes(clientId)) throw new ForbiddenException('Bu workspace’e erişimin yok.');
+    if (ctx.activeClientId && ctx.activeClientId !== clientId) {
+      throw new ConflictException('Bu sayfa seçili workspace’ten farklı bir workspace için açık; üstten bu workspace’i seç.');
+    }
+    if (yazma && ctx.activeClientId !== clientId) {
+      throw new ConflictException('Değişiklik için önce üstten bu workspace’i seç.');
+    }
   }
 
   /**
@@ -126,6 +150,7 @@ export class OlcumService {
       const m = satirlar.find((s) => s.platform === 'meta') ?? null;
       return {
         site: c?.website ?? null,
+        ek: satirlar.filter((s) => s !== g && s !== m).map((s) => ({ platform: s.platform as 'meta' | 'google', ad: s.ad })),
         google: g ? { id: g.id, ad: g.ad, external_id: g.external_id, connection_id: g.connection_id, manager_external_id: g.manager_external_id } : null,
         meta: m ? { id: m.id, ad: m.ad, external_id: m.external_id } : null,
       };
@@ -150,15 +175,15 @@ export class OlcumService {
     }
   }
 
-  private async metaTokeni(ctx: TenantContext, adAccountId: string): Promise<string> {
+  private async metaTokeni(ctx: TenantContext, adAccountId: string, simdi: Date): Promise<string> {
     const [r] = await this.prisma.withTenant(ctx, (t) =>
-      t.$queryRaw<Array<{ token: Buffer | Uint8Array; durum: string }>>(Prisma.sql`
-        SELECT c.access_token_enc AS token, c.status::text AS durum
+      t.$queryRaw<Array<{ token: Buffer | Uint8Array; durum: string; bitis: Date | null }>>(Prisma.sql`
+        SELECT c.access_token_enc AS token, c.status::text AS durum, c.token_expires_at AS bitis
           FROM ad_accounts a JOIN platform_connections c ON c.id = a.connection_id
          WHERE a.id = ${adAccountId}::uuid`),
     );
     if (!r) throw new Error('Meta bağlantısı bulunamadı');
-    if (r.durum !== 'active') throw new Error('Meta bağlantısı yeniden yetkilendirilmeli');
+    if (r.durum !== 'active' || (r.bitis && r.bitis.getTime() <= simdi.getTime())) throw new Error('Meta bağlantısı yeniden yetkilendirilmeli');
     return this.crypto.decrypt(Buffer.from(r.token));
   }
 
@@ -173,8 +198,8 @@ export class OlcumService {
     // ÜÇ OKUMA BAĞIMSIZ: biri düşerse diğerleri gösterilir, düşenin mesajı
     // ekranda kalır ("okunamadı" ile "yok" ayrı iş).
     const [site, google, meta] = await Promise.all([
-      siteTara(h.site, async (adres) => {
-        const r = await sayfaHtmlGetir(adres);
+      siteTara(h.site, async (adres, secenek) => {
+        const r = await sayfaHtmlGetir(adres, 3, secenek);
         return r.ok ? { ok: true as const, html: r.html } : { ok: false as const, sebep: r.sebep };
       }).catch((e: unknown): SiteTaramasi => ({ durum: 'ulasilamadi', adres: h.site, hata: mesaj(e), tagManager: [], analytics: [], googleAds: [], metaPiksel: [], altyapi: null, tagManagerOkunamayan: [] })),
       (async () => {
@@ -188,11 +213,13 @@ export class OlcumService {
         }
       })(),
       (async () => {
-        if (!h.meta) return { pikseller: null, toplam: 0, hata: null };
+        if (!h.meta) return { pikseller: null, toplam: 0, kesildi: false, hata: null };
         try {
-          const token = await this.metaTokeni(ctx, h.meta.id);
+          const token = await this.metaTokeni(ctx, h.meta.id, simdi);
           const hesap = h.meta.external_id.startsWith('act_') ? h.meta.external_id : `act_${h.meta.external_id}`;
-          const liste = await this.meta.fetchAdPixels({ adAccountPath: hesap, accessToken: token, simdi });
+          // satinAlmaSor: false — olay sayıları aşağıda tek çağrıda; satın alma
+          // sinyalini ayrıca sormak her piksele ikinci istek demekti (Ajan 4, K2).
+          const liste = await this.meta.fetchAdPixels({ adAccountPath: hesap, accessToken: token, simdi, satinAlmaSor: false });
           const baslangic = Math.floor((simdi.getTime() - META_GUN * 86_400_000) / 1000);
           const pikseller: MetaPikselOlcumu[] = [];
           for (const p of liste.satirlar) {
@@ -201,9 +228,9 @@ export class OlcumService {
             const olaylar = p.kullanilamaz || !p.sonCalisma ? {} : await this.meta.fetchPixelEventCounts({ pikselId: p.id, accessToken: token, baslangic });
             pikseller.push({ id: p.id, ad: p.ad, sonCalisma: p.sonCalisma, kullanilamaz: p.kullanilamaz, olaylar });
           }
-          return { pikseller, toplam: liste.satirlar.length, hata: liste.kesildi ? 'Piksel listesi sayfa sınırında kesildi' : null };
+          return { pikseller, toplam: liste.satirlar.length, kesildi: liste.kesildi, hata: liste.kesildi ? 'Piksel listesi sayfa sınırında kesildi' : null };
         } catch (e) {
-          return { pikseller: null, toplam: 0, hata: mesaj(e) };
+          return { pikseller: null, toplam: 0, kesildi: false, hata: mesaj(e) };
         }
       })(),
     ]);
@@ -219,6 +246,7 @@ export class OlcumService {
       googleHata: google.hata,
       metaPikselleri: meta.pikseller,
       metaHata: meta.hata,
+      metaKesildi: meta.kesildi,
       site,
     };
     const satirlar = olcumSatirlari(girdi);
@@ -227,6 +255,7 @@ export class OlcumService {
       site,
       googleHesabi: h.google ? { id: h.google.id, ad: h.google.ad, musteriNo: h.google.external_id, donusumKimligi: google.kimlik } : null,
       metaHesabi: h.meta ? { id: h.meta.id, ad: h.meta.ad } : null,
+      ekHesaplar: h.ek,
       satirlar,
       analyticsBagli: analyticsBagliMi(google.islemler),
       googleIslemleri: google.islemler ? { satirlar: google.islemler, toplam: google.islemler.length } : null,
@@ -246,7 +275,7 @@ export class OlcumService {
    * Yazmadan sonra GERİ OKUNUR: 200 döndü doğrulama değil.
    */
   async birincilYap(ctx: TenantContext, clientId: string, donusumId: string): Promise<OlcumDurumuYaniti> {
-    this.erisim(ctx, clientId);
+    this.erisim(ctx, clientId, true);
     const h = await this.hesaplar(ctx, clientId);
     if (!h.google) throw new BadRequestException("Bu workspace'e Google Ads hesabı atanmamış.");
     await this.kotaKapisi(h.google.id).catch((e: unknown) => {
@@ -257,11 +286,17 @@ export class OlcumService {
     const i = islemler.find((x) => x.id === donusumId);
     if (!i) throw new BadRequestException('Bu dönüşüm işlemi Google Ads hesabında bulunamadı.');
     if (i.durum !== 'ENABLED') throw new ConflictException('Yalnız etkin bir dönüşüm işlemi birincil yapılabilir.');
+    // KATEGORİ DE ÖNERİNİN KOŞULU (Ajan 4, Ö1): CONTACT kategorili bir tıklama
+    // (Ege Birlik'te 30 günde 15.756) birincil olursa Google teklifi tıklamaya
+    // göre çalışır ve para harcar. Yalnız ölçüm türü olan kategoriler.
+    if (!GOOGLE_KATEGORI_TURU[i.kategori]) throw new ConflictException('Bu dönüşüm bir form, satış ya da arama değil; birincil yapılmıyor.');
     if (i.sayim30Gun <= 0) throw new ConflictException('Son 30 günde sayım almayan işlem birincil yapılmıyor; önce kurulumun çalıştığı görülmeli.');
     if (!i.birincil) {
       await this.google.donusumBirincilYap(fctx, donusumId);
-      const dogru = await this.google.donusumBirincilMi(fctx, donusumId);
-      if (dogru !== true) throw new ConflictException('Google değişikliği kabul etti ama geri okumada işlem hâlâ birincil görünmüyor; Google Ads\'te kontrol et.');
+      const dogru = await this.google.donusumBirincilMi(fctx, donusumId).catch(() => null);
+      // DENETİM KAYDI DOĞRULAMADAN ÖNCE (Ajan 4, Ö2): yazma Google'a gitti;
+      // geri okuma doğrulamasa bile platformda değişiklik olmuş olabilir ve
+      // "kim, ne zaman" izi kalmalı. Sonuç kayda yazılıyor.
       await this.prisma.withTenant(ctx, (t) =>
         this.audit.record(t as never, ctx, {
           clientId,
@@ -269,9 +304,13 @@ export class OlcumService {
           targetType: 'google_conversion_action',
           targetId: donusumId,
           before: { birincil: false },
-          after: { birincil: true, ad: i.ad, hesap: h.google!.external_id },
+          after: { birincil: true, ad: i.ad, hesap: h.google!.external_id, geriOkuma: dogru === true ? 'dogrulandi' : dogru === false ? 'birincil_degil' : 'okunamadi' },
         }),
       );
+      if (dogru !== true) {
+        this.onbellek.delete(clientId);
+        throw new ConflictException('Google değişikliği kabul etti ama geri okumada işlem birincil görünmüyor; Google Ads\'te kontrol et.');
+      }
     }
     this.onbellek.delete(clientId);
     return this.durum(ctx, clientId, true);
