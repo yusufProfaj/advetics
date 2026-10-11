@@ -37,6 +37,7 @@ import {
   setTasi,
   setleriSabitle,
   yuvayaEkle,
+  yuklemeHedefi,
   telefonGirdisi,
   tarihGoster,
   telefonKaydi,
@@ -236,6 +237,8 @@ function MedyaBlogu({
   async function yukle(dosyalar: File[], hedef: number | null | undefined = undefined) {
     let simdiki = [...medya];
     const yerelOran = new Map(oranlar);
+    // Hedef set BİR KEZ (`yuklemeHedefi`): aynı anda bırakılan boyutlar aynı sete.
+    const sira = yuklemeHedefi(medya, oranlar, hedef);
     const yeniHatalar: Array<{ ad: string; mesaj: string }> = [];
     for (const d of dosyalar) {
       if (simdiki.length >= EN_COK) {
@@ -248,8 +251,6 @@ function MedyaBlogu({
         medyaBilgisiEkle(y.id, { ad: y.ad, onizleme: onizlemeAdresi(y.onizlemeAdresi), en: olcu.en, boy: olcu.boy });
         const oge = { varlikId: y.id, ...(y.kapakId ? { kapakVarlikId: y.kapakId } : {}) };
         if (olcu.en && olcu.boy) yerelOran.set(y.id, oranBul(olcu.en, olcu.boy));
-        // "Yeni set" hedefi = mevcut set sayısı (0'dan): yuvayaEkle oraya numara verir.
-        const sira = hedef === null ? setGorunumu(simdiki, yerelOran).setler.length : hedef;
         simdiki = y.kapakId || sira === undefined ? [...simdiki, oge] : yuvayaEkle(simdiki, yerelOran, oge, sira);
         yaz(b, 'medya', simdiki);
         if (y.uyari) yeniHatalar.push({ ad: d.name, mesaj: y.uyari });

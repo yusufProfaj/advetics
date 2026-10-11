@@ -1,6 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import {
+  DERLENEN_NIYETLER,
+  REHBER_ACILIS,
+  REHBER_AMACLARI,
+  REHBER_AMAC_KODLARI,
   DERLEYICI_SURUMU,
   PROVA_TAZELIK_MS,
   OZEL_KATEGORILER,
@@ -252,8 +256,36 @@ export async function taslakDerle(
 
   // FORM KİMLİĞİ (Dalga 2): burada bir süre `formId: null` sabit yazılıydı
   // ve derleyici Form amacını HER ZAMAN `FORM-YOK` ile reddediyordu.
+  /*
+   * AÇILIŞ KAPISI BURADA DA (Ajan 4, Dalga 2 B1). Derleyici TELEFON ve
+   * WHATSAPP'ı derlemeye başlayınca eski taslak yolu (`PUT .../surum` ile
+   * niyet serbest, `POST .../prova`, test kipi) açılış tablosunu hiç
+   * okumadığı için kapalı amaçları Meta'ya taşıyabiliyordu; Dalga 2'den önce
+   * onları derleyicinin kendisi reddediyordu. Kural:
+   * - rehberden doğan taslak: niyetin rehber amacı Meta'da `kapali` değilse,
+   * - eski yoldan gelen taslak: yalnız `DERLENEN_NIYETLER` (ürün açılışı).
+   * Rehber bağı veritabanından okunuyor; istemcinin bir bayrakla "ben
+   * rehberim" demesi kapıyı açmamalı.
+   */
+  const niyet = alanlar.niyet?.deger ?? null;
+  const [rehberBagi] = await tx((x) =>
+    x.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT id::text FROM reklam_rehberi WHERE meta_taslak_id = ${t.id}::uuid AND client_id = ${t.client_id}::uuid LIMIT 1`),
+  );
+  const rehberden = rehberBagi !== undefined;
+  if (niyet) {
+    const acik = rehberden
+      ? REHBER_AMAC_KODLARI.some((a) => REHBER_AMACLARI[a].meta.niyet === niyet && REHBER_ACILIS[a].meta !== 'kapali')
+      : (DERLENEN_NIYETLER as readonly string[]).includes(niyet);
+    if (!acik) retler.push({ kod: 'NYT-KAPALI', mesaj: 'Bu reklam amacı henüz açılmadı.' });
+  }
+
   const formDegeri = alanlar.formSablonuId?.deger ?? null;
-  const formKimligi = formDegeri && sayfaId ? await tx((x) => formKimligiCoz(x, t.client_id, sayfaId, formDegeri)) : null;
+  // SAYISAL META KİMLİĞİ YALNIZ REHBERDEN: sayfaya aidiyeti rehberin taze
+  // form listesi (`FORM-SAYFA`) doğruluyor; eski yolda o kontrol yok ve
+  // başka bir sayfanın formu doğrulanmadan derleyiciye giderdi.
+  const formKimligi =
+    formDegeri && sayfaId && (rehberden || !/^\d+$/.test(formDegeri)) ? await tx((x) => formKimligiCoz(x, t.client_id, sayfaId, formDegeri)) : null;
   if (formDegeri && !formKimligi) {
     retler.push({ kod: 'FORM-KIMLIK', mesaj: 'Seçilen form bu sayfada Meta’ya yayınlanmış değil; formu yeniden seç.' });
   }

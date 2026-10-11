@@ -46,8 +46,14 @@ const alan = <T extends z.ZodTypeAny>(deger: T) =>
  * kitleyle AYNI ülkeden olmasını istiyor (Call Ads belgesi); ülke kodu
  * olmayan bir numara Türkiye'de mi başka yerde mi, tahmin edilemez. Rehberin
  * eksik listesi, taslağın eksik listesi ve derleyici AYNI kalıbı okuyor.
+ *
+ * YALNIZ +90 (Ajan 4, Dalga 2 B4): kalıp önce her ülke kodunu kabul ediyor,
+ * mesaj "+90 ile başlamalı" diyordu. +44 numara Meta'da TR hedeflemesiyle
+ * sessizce derleniyor, Google ise onu ancak provada reddediyordu
+ * (`aramaOgesiTelefonu`): kullanıcı o ana kadar "hazır" görüyordu. Başka
+ * ülkenin numarası, hedef ülkeyle eşleşme kuralı yazılınca açılır.
  */
-export const TELEFON_E164 = /^\+[1-9]\d{7,14}$/;
+export const TELEFON_E164 = /^\+90\d{10}$/;
 
 const tarih = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Tarih YYYY-MM-DD olmalı');
 

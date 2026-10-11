@@ -367,6 +367,16 @@ describe('rehber → banner seti', () => {
     expect(arama.deger.niyet?.deger).toBe('TELEFON');
   });
 
+  it('KRİTİK: form kimliği taslağa YALNIZ form amacında taşınır (B5)', () => {
+    const form = al('123456789012345');
+    const site = rehberdenMeta({ ...rehber([{ varlikId: U(13) }]), formSablonuId: form }, { meta: true, google: false }, 'TRY', 'z', ORAN);
+    if (site.tur !== 'tamam') throw new Error(site.kodlar.join());
+    expect(site.deger).not.toHaveProperty('formSablonuId');
+    const f = rehberdenMeta({ ...rehber([{ varlikId: U(13) }]), amac: al('FORM' as const), formSablonuId: form }, { meta: true, google: false }, 'TRY', 'z', ORAN);
+    if (f.tur !== 'tamam') throw new Error(f.kodlar.join());
+    expect(f.deger.formSablonuId).toEqual(form);
+  });
+
   it('karar tablosunun planı derleyicinin planıyla aynı kaynaktan (rehberYerlesimPlani)', () => {
     expect(rehberYerlesimPlani(rehber(DORT), ORAN)?.otomatik).toBe(true);
     expect(rehberYerlesimPlani(rehber([{ varlikId: U(13) }]), ORAN)?.kapanan).toEqual(['hikaye']);

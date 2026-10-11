@@ -134,7 +134,10 @@ export function rehberdenMeta(
     ...(a.takvim ? { takvim: a.takvim } : {}),
     kavramlar: turetilmis(kavramlar, zaman),
     ...(a.hedefAdres ? { hedefAdres: a.hedefAdres } : {}),
-    ...(a.formSablonuId ? { formSablonuId: a.formSablonuId } : {}),
+    // Form YALNIZ form amacında taşınır (Ajan 4, Dalga 2 B5): Form'dan
+    // Site'ye dönen bir rehberde kalan eski kimlik, site provasını eksik
+    // listesinde hiç görünmeyen bir FORM-KIMLIK reddiyle düşürüyordu.
+    ...(a.formSablonuId && REHBER_AMACLARI[amac].meta.niyet === 'FORM' ? { formSablonuId: a.formSablonuId } : {}),
     // Numara YALNIZ arama reklamında taşınır. Marka Merkezi telefonu her
     // rehberde önden doluyor; onu site reklamının taslağına da yazmak, o
     // taslağın içerik özetini değiştirip kayıtlı provaları sebepsiz

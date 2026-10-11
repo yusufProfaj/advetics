@@ -203,6 +203,10 @@ describe('sıfır çağrılı retler', () => {
     expect(retler({ niyet: 'TELEFON', telefon: null })).toEqual(['TEL-YOK']);
     expect(retler({ niyet: 'TELEFON', telefon: '05321234567' })).toEqual(['TEL-YOK']);
     expect(retler({ niyet: 'TELEFON', telefon: '+90 532 123 45 67' })).toEqual(['TEL-YOK']);
+    // B4: yalnız +90 ve 10 hane. Başka ülke kodu TR hedeflemesiyle sessizce
+    // derleniyordu; mesaj zaten "+90 ile başlamalı" diyor.
+    expect(retler({ niyet: 'TELEFON', telefon: '+442071234567' })).toEqual(['TEL-YOK']);
+    expect(retler({ niyet: 'TELEFON', telefon: '+9053212345' })).toEqual(['TEL-YOK']);
   });
   it('numara yalnız TELEFON’da okunur: SITE numarasız derlenir', () => {
     expect(retler({ telefon: null })).toEqual([]);

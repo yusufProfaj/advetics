@@ -675,6 +675,25 @@ export function setSil(medya: readonly MedyaOgesi[], oranlar: ReadonlyMap<string
 }
 
 /**
+ * Yüklemenin hedef seti, YÜKLEME BAŞINA BİR KEZ. `null` = "Yeni set":
+ * bugünkü set sayısı (0'dan sıra). Dosya başına yeniden hesaplanırsa ilk
+ * dosya yeni seti açtıktan sonra ikincisi BİR SONRAKİ sete gider: aynı
+ * tasarımın iki boyutu iki ayrı reklam olur ve dört set varken ikinci
+ * dosya 6 numarayı alıp kaydı düşürür (Ajan 4, B3).
+ * `undefined` = üstteki bırakma alanı: numara verilmez, sırayla dağıtılır.
+ */
+export function yuklemeHedefi(
+  medya: readonly MedyaOgesi[],
+  oranlar: ReadonlyMap<string, GorselOrani | null>,
+  hedef: number | null | undefined,
+): number | undefined {
+  if (hedef === undefined) return undefined;
+  if (hedef !== null) return hedef;
+  const n = setGorunumu(medya, oranlar).setler.length;
+  return n < EKRAN_EN_COK_SET ? n : undefined;
+}
+
+/**
  * Boş bir yuvaya yüklenen görselin numarası. Görsel BAŞKA bir boyutta
  * çıkabilir (kullanıcı 9:16 yuvasına kare bıraktı): o boyut sette boşsa
  * yine o sete girer; doluysa numarasız kalır ve sırayla yeni sete düşer —
@@ -689,7 +708,10 @@ export function yuvayaEkle(
 ): MedyaOgesi[] {
   const sabit = setleriSabitle(medya, oranlar);
   const oran = oranlar.get(oge.varlikId) ?? null;
-  if (hedefSira === null || !oran) return [...sabit, oge];
+  // Sınırın ötesine numara verilmez: şema en çok 5 alıyor ve 6 yazılırsa
+  // kayıt BÜTÜNÜYLE reddedilir (Ajan 4, B3). Numarasız görsel sırayla
+  // dağıtılır ve eksik listesi "en çok 5" der.
+  if (hedefSira === null || hedefSira >= EKRAN_EN_COK_SET || !oran) return [...sabit, oge];
   const dolu = sabit.some((x) => x.setNo === hedefSira + 1 && oranlar.get(x.varlikId) === oran);
   return [...sabit, dolu ? oge : { ...oge, setNo: hedefSira + 1 }];
 }

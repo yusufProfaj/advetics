@@ -9,7 +9,7 @@ import { ReklamHazirlikService } from '../hazirlik.service';
 import { ReklamTaslakService } from '../taslak.service';
 import { ReklamYayinService } from '../yayin.service';
 import type { ReklamKuyrugu } from '../reklam-kuyrugu';
-import { RehberService } from './rehber.service';
+import { RehberService, platformaGiderken } from './rehber.service';
 
 /**
  * REHBER SERVİSİ — gerçek şema (PGlite), sahte Google ve sahte kuyruk.
@@ -571,15 +571,13 @@ describe('Meta form listesi ve sayfa ön koşulları (Dalga 2)', () => {
   });
 
   /*
-   * AJAN 4 (Dalga 2) BULGUSU — FORM KONTROLÜ OKUMA DÜŞÜNCE AÇIK KALIYOR.
-   * Prova öncesi tazeleme listeyi okuyamazsa (`guvenli` → null) seçili form
-   * BİLİNMİYOR olur ve FORM-BILINMIYOR yalnız UYARI: sayfa aidiyeti
-   * (FORM-SAYFA) ve gizlilik adresi (FORM-GIZLILIK) denetlenmeden prova ve
-   * yayın kapısı geçiyor. `taslakDerle` sayısal kimliği DOĞRULAMADAN
-   * derleyiciye veriyor (yayin-baslat.ts#formKimligiCoz). Burada kanıt
-   * olarak BUGÜNKÜ davranış kilitli; düzeltme gelince bu test değişmeli.
+   * AJAN 4 (Dalga 2) B2 — OKUMA DÜŞÜNCE FORM KONTROLÜ KAPALI KALIR.
+   * Prova öncesi tazeleme listeyi okuyamazsa seçili form BİLİNMİYOR olur.
+   * Düzenlemede bu uyarı; prova ve yayında ENGEL (`platformaGiderken`):
+   * yoksa sayfa aidiyeti (FORM-SAYFA) ve gizlilik adresi (FORM-GIZLILIK)
+   * denetlenmeden geçerdi.
    */
-  it('BULGU (kanıt): liste okunamazsa başka sayfanın form kimliği yalnız UYARI üretir, engel yok', async () => {
+  it('KRİTİK: liste okunamazsa prova FORM-BILINMIYOR ENGELİYLE durur (düzenlemede uyarı kalır)', async () => {
     const eski = REHBER_ACILIS.FORM.meta;
     (REHBER_ACILIS.FORM as Record<string, string>).meta = 'deneme';
     try {
@@ -590,9 +588,15 @@ describe('Meta form listesi ve sayfa ön koşulları (Dalga 2)', () => {
       // Okunamayan liste (izin, alan reddi, ağ): aynı kimlik yalnız uyarı.
       (svc as unknown as { sayfaOnbellek: Map<string, unknown> }).sayfaOnbellek.clear();
       formCevabi = () => new Response(JSON.stringify({ error: { message: '(#100) Tried accessing nonexisting field (privacy_policy_url)', code: 100 } }), { status: 400 });
-      await svc.prova(CTX, r.id).catch(() => undefined);
+      const hata = await svc.prova(CTX, r.id).then(
+        () => null,
+        (e: unknown) => e as { getResponse(): { eksikler: Array<{ kod: string; seviye: string }> } },
+      );
+      expect(hata?.getResponse().eksikler.map((e) => [e.kod, e.seviye])).toContainEqual(['FORM-BILINMIYOR', 'engel']);
       const form = (await svc.oku(CTX, r.id)).eksikler.filter((e) => e.kod.startsWith('FORM-'));
       expect(form.map((e) => [e.kod, e.seviye])).toEqual([['FORM-BILINMIYOR', 'uyari']]);
+      // Yayın kapısı da aynı: önce taze okur, bilinmeyen hâlde engel.
+      expect(platformaGiderken(form as never).map((e) => e.seviye)).toEqual(['engel']);
     } finally {
       (REHBER_ACILIS.FORM as Record<string, string>).meta = eski;
     }

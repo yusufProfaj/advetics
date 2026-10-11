@@ -37,6 +37,7 @@ import {
   type PlatformYayinOzeti,
   type RehberAlanlari,
   type RehberDurumu,
+  type RehberEksigi,
   type RehberEksikBaglami,
   type RehberFormListesi,
   type RehberGuncelle,
@@ -169,6 +170,22 @@ interface Baglam extends RehberEksikBaglami {
  * PLATFORM ÇAĞRISI TRANSACTION'IN İÇİNDE DEĞİL: her `withTenant` kısa ve
  * yalnız veritabanı; Meta/Google çağrısı ikisinin arasında.
  */
+/**
+ * PLATFORMA GİDERKEN BİLİNMEYEN FORM ENGELDİR (Ajan 4, Dalga 2 B2).
+ * Düzenleme sırasında `FORM-BILINMIYOR` uyarı: liste henüz okunmadıysa
+ * formu "yok" saymak sağlam bir kurulumu kilitler. Ama prova ve yayında
+ * sayfa listesi taze okunmuş olmalı; okunamadıysa `FORM-SAYFA` (başka
+ * sayfanın ya da müşterinin form kimliği) ve `FORM-GIZLILIK` HİÇ
+ * denetlenmemiş demektir ve uyarıyla geçmek o iki kapıyı sessizce açardı.
+ */
+export function platformaGiderken(eksikler: RehberEksigi[]): RehberEksigi[] {
+  return eksikler.map((e) =>
+    e.kod === 'FORM-BILINMIYOR'
+      ? { ...e, seviye: 'engel', metin: "Seçilen form Meta'dan okunamadı. Listeyi yenile; düzelmezse sayfa bağlantısını kontrol et" }
+      : e,
+  );
+}
+
 @Injectable()
 export class RehberService {
   private readonly onbellek = new Map<string, OnKosulKaydi>();
@@ -574,7 +591,7 @@ export class RehberService {
     const a = alanlariOku(s);
     await this.sayfaTazele(ctx, s.client_id, a);
     const b = await this.baglam(ctx, s.client_id, a);
-    const engeller = rehberEksikleri(a, b).filter((e) => e.seviye === 'engel');
+    const engeller = platformaGiderken(rehberEksikleri(a, b)).filter((e) => e.seviye === 'engel');
     if (engeller.length) throw new BadRequestException({ message: 'Önce eksikleri tamamla.', eksikler: engeller });
     const ozet = rehberOzeti(a);
     const acik = acikPlatformlar(a, b.ajansYoneticisi);
@@ -748,8 +765,11 @@ export class RehberService {
     const s = await this.satir(ctx, id);
     if (s.durum !== 'taslak') throw new ConflictException('Bu rehber zaten yayına alındı ya da arşivde.');
     const a = alanlariOku(s);
+    // Yayın da TAZE okur: prova ile yayın arasında önbellek (15 dk) dolmuş
+    // olabilir ve bilinmeyen form hâli aşağıda engele çevriliyor.
+    await this.sayfaTazele(ctx, s.client_id, a);
     const b = await this.baglam(ctx, s.client_id, a);
-    const eksikler = rehberEksikleri(a, b);
+    const eksikler = platformaGiderken(rehberEksikleri(a, b));
     const acik = acikPlatformlar(a, b.ajansYoneticisi);
     const tx = this.tx(ctx);
     const k = await rehberYayinKapilari(

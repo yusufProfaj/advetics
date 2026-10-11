@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { taslakKanonikIcerik, type TaslakAlanlari, type TenantContext } from '@advetics/shared';
+import { REHBER_ACILIS, taslakKanonikIcerik, type TaslakAlanlari, type TenantContext } from '@advetics/shared';
 import { createHarness, seedTenant, IDS, type Harness } from '../../../test/pglite-harness';
 import { SahteMeta } from '../../../test/reklam-sahte-meta';
 import { taslakDerle, yayinBaslat, zamanDamgasi } from './yayin-baslat';
@@ -321,7 +321,10 @@ describe('Meta provası', () => {
  */
 describe('form kimliği taslaktan derleyiciye', () => {
   const FORM: TaslakAlanlari = { ...DOLU, niyet: k('FORM' as const), hedefAdres: k(null) };
-  const derle = (a: TaslakAlanlari) => taslakDerle(tx, { id: 'x', org_id: IDS.org, client_id: IDS.client }, a, 'kimlik', { apiSurumu: 'v25.0', simdi: SIMDI });
+  // Taslak kimliği gerçek bir UUID olmalı: açılış kapısı rehber bağını
+  // `reklam_rehberi.meta_taslak_id` ile soruyor (B1).
+  const derle = (a: TaslakAlanlari, id = '77777777-0000-4000-8000-0000000000f0') =>
+    taslakDerle(tx, { id, org_id: IDS.org, client_id: IDS.client }, a, 'kimlik', { apiSurumu: 'v25.0', simdi: SIMDI });
   const formKimlikleri = (d: Awaited<ReturnType<typeof derle>>) =>
     d.tur === 'govde' ? [...JSON.stringify(d.derleme.govdeler).matchAll(/lead_gen_form_id\\?":\\?"(\d+)/g)].map((m) => m[1]) : [];
   const leadForm = async (id: string, durum: 'published' | 'draft', kimlik: string | null, sayfa = SAYFA) =>
@@ -332,9 +335,19 @@ describe('form kimliği taslaktan derleyiciye', () => {
     );
 
   it('KRİTİK: Meta form kimliği derleyiciye ulaşır (lead_gen_form_id), FORM-YOK düşmez', async () => {
-    const d = await derle({ ...FORM, formSablonuId: k('987654321') });
-    if (d.tur === 'ret') throw new Error(d.retler.map((r) => r.kod).join(','));
-    expect(formKimlikleri(d)).toEqual(['987654321']);
+    // Sayısal Meta kimliği yalnız REHBERDEN doğan taslakta kabul (B1).
+    const t = await taslak({ ...FORM, formSablonuId: k('987654321') });
+    await h.q(`INSERT INTO reklam_rehberi (org_id, client_id, olusturan_id, meta_taslak_id) VALUES ($1, $2, $3, $4)`, [IDS.org, IDS.client, IDS.user, t.taslakId]);
+    // Form · Meta tabloda `kapali`: açılış günündeki hâl sınansın diye test süresince `deneme`.
+    const eski = REHBER_ACILIS.FORM.meta;
+    REHBER_ACILIS.FORM.meta = 'deneme';
+    try {
+      const d = await derle({ ...FORM, formSablonuId: k('987654321') }, t.taslakId);
+      if (d.tur === 'ret') throw new Error(d.retler.map((r) => r.kod).join(','));
+      expect(formKimlikleri(d)).toEqual(['987654321']);
+    } finally {
+      REHBER_ACILIS.FORM.meta = eski;
+    }
   });
 
   it('form seçilmediyse derleyici FORM-YOK der (sessiz boş kimlik yok)', async () => {
@@ -364,42 +377,41 @@ describe('form kimliği taslaktan derleyiciye', () => {
     }
   });
 });
-
 /*
- * AJAN 4 (Dalga 2) BULGUSU — ESKİ TASLAK YOLU AÇILIŞ TABLOSUNA BAKMIYOR.
- * Derleyici artık TELEFON/WHATSAPP derliyor (`DERLEYICI_NIYETLERI`) ve
- * ürün açılışı yalnız AI taslağında ve AdvStrategy aktarımında
- * (`DERLENEN_NIYETLER`) tutuluyor. `PUT /reklam/taslaklar/:id/surum` niyeti
- * serbest yazdırıyor, `POST .../prova` (bulk.write) ve test kipi
- * (`yayinBaslat`, ajans yöneticisi) `taslakDerle`den geçiyor ve orada ne
- * `REHBER_ACILIS` ne `DERLENEN_NIYETLER` okunuyor. Dalga 2'den önce bu
- * niyetler `NYT-OLCULMEDI` (TELEFON/WHATSAPP) ya da `FORM-YOK` (FORM, sabit
- * `formId: null`) ile düşüyordu. Kanıt: BUGÜNKÜ davranış kilitli; düzeltme
- * gelince bu testler retle değişmeli.
+ * AJAN 4 (Dalga 2) B1 — ESKİ TASLAK YOLU AÇILIŞ TABLOSUNA BAKIYOR.
+ * Derleyici TELEFON/WHATSAPP derlemeye başlayınca `PUT .../surum` ile niyeti
+ * serbest yazılan bir taslak, `POST .../prova` ve test kipi üzerinden kapalı
+ * amaçları Meta'ya taşıyabiliyordu. `taslakDerle` artık: rehberden doğan
+ * taslakta `REHBER_ACILIS`, eski yolda `DERLENEN_NIYETLER`.
  */
-describe('BULGU (kanıt): kapalı niyetler eski taslak yolundan derleniyor', () => {
-  it('TELEFON (REHBER_ACILIS kapali, DERLENEN_NIYETLER dışı) test kipinde KURULUMA başlıyor', async () => {
+describe('B1: kapalı niyetler eski taslak yolundan derlenmiyor', () => {
+  async function rehbereBagla(taslakId: string) {
+    await h.q(`INSERT INTO reklam_rehberi (org_id, client_id, olusturan_id, meta_taslak_id) VALUES ($1, $2, $3, $4)`, [IDS.org, IDS.client, IDS.user, taslakId]);
+  }
+
+  it('KRİTİK: TELEFON ve WHATSAPP eski yolda NYT-KAPALI', async () => {
+    for (const ek of [{ niyet: k('TELEFON' as const), telefon: k('+905321234567') }, { niyet: k('WHATSAPP' as const) }]) {
+      const t = await taslak({ ...DOLU, hedefAdres: k(null), ...ek });
+      const r = await baslat({ taslakId: t.taslakId, ozet0: t.ozet, testKipi: true });
+      expect(kodlar(r), ek.niyet.deger).toContain('NYT-KAPALI');
+    }
+  });
+
+  it('KRİTİK: rehberden doğan TELEFON taslağı tablo kapalıyken reddedilir, deneme olunca derlenir', async () => {
     const t = await taslak({ ...DOLU, niyet: k('TELEFON' as const), hedefAdres: k(null), telefon: k('+905321234567') });
-    const r = await baslat({ taslakId: t.taslakId, ozet0: t.ozet, testKipi: true });
-    expect(kodlar(r)).toEqual([]);
-    expect(r.tur).toBe('basladi');
+    await rehbereBagla(t.taslakId);
+    expect(kodlar(await baslat({ taslakId: t.taslakId, ozet0: t.ozet, testKipi: true }))).toContain('NYT-KAPALI');
+    const eski = REHBER_ACILIS.TELEFON.meta;
+    try {
+      REHBER_ACILIS.TELEFON.meta = 'deneme';
+      expect(kodlar(await baslat({ taslakId: t.taslakId, ozet0: t.ozet, testKipi: true }))).toEqual([]);
+    } finally {
+      REHBER_ACILIS.TELEFON.meta = eski;
+    }
   });
 
-  it('WHATSAPP de aynı', async () => {
-    const t = await taslak({ ...DOLU, niyet: k('WHATSAPP' as const), hedefAdres: k(null) });
-    const r = await baslat({ taslakId: t.taslakId, ozet0: t.ozet, testKipi: true });
-    expect(kodlar(r)).toEqual([]);
-  });
-
-  it('TELEFON: +90 dışı numara (+44) da derleniyor; Meta numaranın hedef kitleyle aynı ülkeden olmasını istiyor', async () => {
-    const t = await taslak({ ...DOLU, niyet: k('TELEFON' as const), hedefAdres: k(null), telefon: k('+442071234567') });
-    const r = await baslat({ taslakId: t.taslakId, ozet0: t.ozet, testKipi: true });
-    expect(kodlar(r)).toEqual([]);
-  });
-
-  it('FORM: sayfaya ait olduğu hiç doğrulanmamış SAYISAL kimlik test kipinde kuruluma gidiyor', async () => {
+  it('KRİTİK: eski yolda SAYISAL form kimliği FORM-KIMLIK (sayfa aidiyeti orada doğrulanmıyor)', async () => {
     const t = await taslak({ ...DOLU, niyet: k('FORM' as const), hedefAdres: k(null), formSablonuId: k('123456789012345') });
-    const r = await baslat({ taslakId: t.taslakId, ozet0: t.ozet, testKipi: true });
-    expect(kodlar(r)).toEqual([]);
+    expect(kodlar(await baslat({ taslakId: t.taslakId, ozet0: t.ozet, testKipi: true }))).toContain('FORM-KIMLIK');
   });
 });
