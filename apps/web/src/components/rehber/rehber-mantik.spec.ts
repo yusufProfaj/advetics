@@ -1,9 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { REHBER_ACILIS, REHBER_AMAC_KODLARI, platformGorunurMu, type RehberEksigi, type RehberHazirligi, type RehberProvaSonucu } from '@advetics/shared';
+import { REHBER_ACILIS, REHBER_AMAC_KODLARI, platformGorunurMu, type GorselOrani, type RehberEksigi, type RehberHazirligi, type RehberProvaSonucu } from '@advetics/shared';
 import { ApiRequestError } from '@/lib/api';
 import {
+  setGorunumu,
+  setSil,
+  setTasi,
+  yuvayaEkle,
+  type MedyaOgesi,
   adimBittiMi,
   provaYoklanmaliMi,
   bitisSecenegi,
@@ -419,5 +424,75 @@ describe('geri al (Vazgeç ve arşivle) — canlı tur, 2026-10-10', () => {
   });
   it('arşivlenen reklam "Kurulamadı" değil "Arşivlendi"', () => {
     expect(yayinSonucu({ durum: 'arsivlendi' })).toBe('arsivlendi');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Banner seti: taşıma, silme, yuvaya ekleme
+// ─────────────────────────────────────────────────────────────────────────────
+describe('banner seti (panel)', () => {
+  // UUID şeması panelde denetlenmiyor; okunur kimlikler yeterli.
+  const O = new Map<string, GorselOrani | null>([
+    ['d1', 'dikey'], ['a1', 'dik45'], ['k1', 'kare'], ['y1', 'yatay'],
+    ['a2', 'dik45'], ['k2', 'kare'], ['x', null],
+  ]);
+  const m = (...idler: string[]) => idler.map((varlikId) => ({ varlikId }));
+  const setIdleri = (medya: readonly MedyaOgesi[]) =>
+    setGorunumu(medya, O).setler.map((st) => Object.values(st).map((x) => x!.varlikId).sort());
+
+  it('aynı boyutun ikinci görseli yeni set açar; ayrım sunucununkiyle aynı', () => {
+    expect(setIdleri(m('d1', 'a1', 'k1', 'y1', 'a2'))).toEqual([['a1', 'd1', 'k1', 'y1'], ['a2']]);
+  });
+
+  it('kullanılamaz ve bilinmeyen boyut AYRI döner', () => {
+    const g = setGorunumu(m('k1', 'x', 'bilinmiyor'), O);
+    expect(g.kullanilamaz.map((x) => x.varlikId)).toEqual(['x']);
+    expect(g.bilinmeyen.map((x) => x.varlikId)).toEqual(['bilinmiyor']);
+  });
+
+  it('taşıma: hedefte aynı boyut varsa yer değiştirir, hiçbir görsel kaybolmaz', () => {
+    const t = setTasi(m('d1', 'a1', 'k1', 'y1', 'a2', 'k2'), O, 'a2', 0);
+    expect(setIdleri(t)).toEqual([['a2', 'd1', 'k1', 'y1'], ['a1', 'k2']]);
+    expect(t).toHaveLength(6);
+  });
+
+  it('taşıma SABİTLEYEREK yapılır: numarasız komşu yerinden oynamaz', () => {
+    // a2 tek başına 2. sette; k1'i oraya taşımak 1. setin kalanını bozmamalı.
+    const t = setTasi(m('d1', 'a1', 'k1', 'a2'), O, 'k1', 1);
+    expect(setIdleri(t)).toEqual([['a1', 'd1'], ['a2', 'k1']]);
+  });
+
+  it('yeni sete taşıma; boşalan set kaybolur ve numaralar sıkışır', () => {
+    const t = setTasi(m('d1', 'a2', 'k2'), O, 'd1', 'yeni');
+    expect(setIdleri(t)).toEqual([['a2', 'k2'], ['d1']]);
+    const geri = setTasi(t, O, 'd1', 0);
+    expect(setIdleri(geri)).toEqual([['a2', 'd1', 'k2']]);
+    expect(geri.every((x) => x.setNo === 1)).toBe(true);
+  });
+
+  it('sınırda yeni set açılmaz, aynı sete taşıma değişiklik üretmez', () => {
+    const bes = m('k1', 'k2', 'a1', 'a2').map((x, i) => ({ ...x, setNo: i + 1 }));
+    const tam = [...bes, { varlikId: 'y1', setNo: 5 }];
+    expect(setTasi(tam, O, 'k1', 'yeni')).toBe(tam);
+    expect(setTasi(tam, O, 'k1', 0)).toBe(tam);
+  });
+
+  it('set silme yalnız o setin görsellerini çıkarır', () => {
+    // k2 sırayla 1. sete düşer (kare orada boş): 1. set d1 + a1 + k2, 2. set a2.
+    const t = setSil(m('d1', 'a1', 'a2', 'k2', 'y1'), O, 1);
+    expect(setIdleri(t)).toEqual([['a1', 'd1', 'k2', 'y1']]);
+    expect(setIdleri(setSil(m('d1', 'a1', 'a2', 'k2'), O, 0))).toEqual([['a2']]);
+  });
+
+  it('yuvaya ekleme: boyut sette boşsa o sete, doluysa yeni sete', () => {
+    const once = m('d1', 'a1', 'a2');
+    const bos = yuvayaEkle(once, O, { varlikId: 'k2' }, 1);
+    expect(setIdleri(bos)).toEqual([['a1', 'd1'], ['a2', 'k2']]);
+    const dolu = yuvayaEkle(once, O, { varlikId: 'a2x' }, 0);
+    // a2x'in oranı bilinmiyor: numarasız eklenir, sessizce bir sete itilmez.
+    expect(dolu.find((x) => x.varlikId === 'a2x')?.setNo).toBeUndefined();
+    const O2 = new Map(O).set('a3', 'dik45');
+    const carp = yuvayaEkle(once, O2, { varlikId: 'a3' }, 0);
+    expect(carp.find((x) => x.varlikId === 'a3')?.setNo).toBeUndefined();
   });
 });

@@ -16,6 +16,9 @@
  *   yazılırsa derleyiciyle karşılaştıran test ekranı yakalayamaz.
  */
 import {
+  META_EN_COK_GORSEL,
+  setlereAyir,
+  type GorselOrani,
   REHBER_ACILIS,
   REHBER_AMACLARI,
   REHBER_AMAC_KODLARI,
@@ -539,25 +542,149 @@ export function yayinBittiMi(platformlar: ReadonlyArray<Pick<PlatformYayinOzeti,
 // Reklam adımı yardımcıları
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type OranSinifi = '1:1' | '4:5' | '9:16' | '1.91:1' | 'diger';
-
-export function oranSinifi(en: number, boy: number): OranSinifi {
-  const r = en / boy;
-  const yakin = (h: number) => Math.abs(r - h) / h < 0.03;
-  if (yakin(1)) return '1:1';
-  if (yakin(4 / 5)) return '4:5';
-  if (yakin(9 / 16)) return '9:16';
-  if (yakin(1.91)) return '1.91:1';
-  return 'diger';
-}
+/*
+ * ORAN TANIMA SHARED'DA (`oranBul`, `banner-seti.ts`). Burada bir süre ayrı
+ * bir `oranSinifi` duruyordu: aynı %3 payı ikinci kez yazıyordu ve sunucunun
+ * set ayrımıyla ekranın set ayrımı ancak ikisi aynı kaldıkça örtüşürdü.
+ */
 
 /**
  * Google'ın görsel reklamı (Talep Yaratma) yatay, kare ve 4:5 kabul ediyor;
  * dikey (9:16) görsel orada kullanılmıyor. Arama reklamında görsel yok,
  * o yüzden rozet yalnız görsel kullanan kurguda gösterilir.
  */
-export function googleGorselUygunMu(oran: OranSinifi): boolean {
-  return oran === '1:1' || oran === '1.91:1' || oran === '4:5';
+export function googleGorselUygunMu(oran: GorselOrani): boolean {
+  return oran === 'kare' || oran === 'yatay' || oran === 'dik45';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Banner seti (adım 4)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type MedyaOgesi = NonNullable<RehberAlanlari['medya']>['deger'][number];
+export type SetYuvalari = Partial<Record<GorselOrani, MedyaOgesi>>;
+
+/** Panelin set sınırı sunucununkiyle aynı sabit: biri büyürse ekran yalan söyler. */
+export const EKRAN_EN_COK_SET = META_EN_COK_GORSEL;
+
+/**
+ * Ekranda görünen set listesi. Ayrım SUNUCUNUN fonksiyonuyla (`setlereAyir`)
+ * yapılıyor; panel kendi gruplamasını kurarsa "Set 2"de gördüğü görsel
+ * Meta'da başka bir reklamın parçası olur.
+ *
+ * Boyutu BİLİNMEYEN görsel (ölçü henüz gelmedi ya da arşivin ilk sayfasında
+ * değil) ile boyutu KULLANILAMAYAN görsel ayrı dönüyor: ikincisi kullanıcının
+ * işi (kırp, tekrar bırak), birincisi değil.
+ */
+export function setGorunumu(
+  medya: readonly MedyaOgesi[],
+  oranlar: ReadonlyMap<string, GorselOrani | null>,
+): {
+  setler: SetYuvalari[];
+  kullanilamaz: MedyaOgesi[];
+  bilinmeyen: MedyaOgesi[];
+  cakisan: MedyaOgesi[];
+  videolar: MedyaOgesi[];
+} {
+  const videolar = medya.filter((x) => x.kapakVarlikId);
+  const ayrim = setlereAyir(
+    medya.filter((x) => !x.kapakVarlikId),
+    oranlar,
+  );
+  const setler = ayrim.setler.map((st) => Object.fromEntries(st.map(({ oran, ...m }) => [oran, m as MedyaOgesi])) as SetYuvalari);
+  return {
+    setler,
+    kullanilamaz: ayrim.taninmayan.filter((x) => oranlar.has(x.varlikId)),
+    bilinmeyen: ayrim.taninmayan.filter((x) => !oranlar.has(x.varlikId)),
+    cakisan: ayrim.cakisan,
+    videolar,
+  };
+}
+
+/**
+ * Bütün görsel setlerine ekranda göründükleri sırayla numara verir.
+ * Taşımadan ÖNCE çalışmak zorunda: numarasız görseller sunucuda "sırayla
+ * doldurulur" ve bir görsele numara vermek, numarasız komşularının hangi
+ * sete düşeceğini DEĞİŞTİRİR. Hepsi sabitlenince taşınan tek görsel taşınır.
+ * Sınırın ötesindeki setler (6.) numarasız kalır; şema 5'ten büyüğünü almıyor
+ * ve eksik listesi onları zaten "en çok 5" diye söylüyor.
+ */
+export function setleriSabitle(medya: readonly MedyaOgesi[], oranlar: ReadonlyMap<string, GorselOrani | null>): MedyaOgesi[] {
+  const { setler } = setGorunumu(medya, oranlar);
+  const no = new Map<string, number>();
+  setler.slice(0, EKRAN_EN_COK_SET).forEach((st, i) => {
+    for (const m of Object.values(st)) if (m) no.set(m.varlikId, i + 1);
+  });
+  return medya.map((m) => {
+    const n = no.get(m.varlikId);
+    if (n !== undefined) return { ...m, setNo: n };
+    const { setNo: _s, ...gerisi } = m;
+    return gerisi;
+  });
+}
+
+/**
+ * Görseli başka sete taşır. Hedefte aynı boyut varsa İKİSİ YER DEĞİŞTİRİR:
+ * aynı sette aynı boyuttan iki görsel olamaz ve hangisinin atılacağını
+ * tahmin etmek yerine yer değiştirmek hiçbir görseli kaybetmiyor.
+ * `hedef` ekrandaki sıra (0'dan) ya da 'yeni'. Değişiklik yoksa AYNI dizi
+ * döner (çağıran kaydı atlayabilsin).
+ */
+export function setTasi(
+  medya: readonly MedyaOgesi[],
+  oranlar: ReadonlyMap<string, GorselOrani | null>,
+  varlikId: string,
+  hedef: number | 'yeni',
+): readonly MedyaOgesi[] {
+  const sabit = setleriSabitle(medya, oranlar);
+  const oge = sabit.find((x) => x.varlikId === varlikId);
+  const oran = oranlar.get(varlikId) ?? null;
+  if (!oge || oge.setNo === undefined || !oran) return medya;
+  const setSayisi = new Set(sabit.map((x) => x.setNo).filter((n) => n !== undefined)).size;
+  let h: number;
+  if (hedef === 'yeni') {
+    if (setSayisi >= EKRAN_EN_COK_SET) return medya;
+    h = setSayisi + 1;
+  } else {
+    h = hedef + 1;
+    if (h === oge.setNo || h > setSayisi) return medya;
+  }
+  const kaynak = oge.setNo;
+  const yeni = sabit.map((x) => {
+    if (x.varlikId === varlikId) return { ...x, setNo: h };
+    if (x.setNo === h && oranlar.get(x.varlikId) === oran) return { ...x, setNo: kaynak };
+    return x;
+  });
+  return setleriSabitle(yeni, oranlar);
+}
+
+/** Bir setin bütün görsellerini çıkarır (videolara ve öbür setlere dokunmaz). */
+export function setSil(medya: readonly MedyaOgesi[], oranlar: ReadonlyMap<string, GorselOrani | null>, sira: number): MedyaOgesi[] {
+  const sabit = setleriSabitle(medya, oranlar);
+  return setleriSabitle(
+    sabit.filter((x) => x.setNo !== sira + 1),
+    oranlar,
+  );
+}
+
+/**
+ * Boş bir yuvaya yüklenen görselin numarası. Görsel BAŞKA bir boyutta
+ * çıkabilir (kullanıcı 9:16 yuvasına kare bıraktı): o boyut sette boşsa
+ * yine o sete girer; doluysa numarasız kalır ve sırayla yeni sete düşer —
+ * aynı sete koyup çakışma engeli üretmek, kullanıcıyı kendi bırakmadığı
+ * bir sorunu çözmeye gönderirdi.
+ */
+export function yuvayaEkle(
+  medya: readonly MedyaOgesi[],
+  oranlar: ReadonlyMap<string, GorselOrani | null>,
+  oge: MedyaOgesi,
+  hedefSira: number | null,
+): MedyaOgesi[] {
+  const sabit = setleriSabitle(medya, oranlar);
+  const oran = oranlar.get(oge.varlikId) ?? null;
+  if (hedefSira === null || !oran) return [...sabit, oge];
+  const dolu = sabit.some((x) => x.setNo === hedefSira + 1 && oranlar.get(x.varlikId) === oran);
+  return [...sabit, dolu ? oge : { ...oge, setNo: hedefSira + 1 }];
 }
 
 /** YouTube bağlantısından ya da çıplak kimlikten video kimliği; tanınmazsa `null`. */

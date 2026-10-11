@@ -2,12 +2,15 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import {
+  ORAN_ETIKETI,
   METIN_SINIRLARI,
   REHBER_AMACLARI,
   TABAN_NEGATIFLER,
   karakterSayisi,
+  oranBul,
   reklamGucu,
   type AnahtarKelimeOnerisi,
+  type GorselOrani,
   type MetinOnerisi,
   type RehberAlanlari,
   type YoutubeVideoListesi,
@@ -16,6 +19,7 @@ import { apiFetch, onizlemeAdresi } from '@/lib/api';
 import { medyaOlc, medyaYukle } from '@/reklam/medya';
 import { AltCubuk, Soru, sil, yaz, type AdimBaglami } from './adim-ortak';
 import { IKON, Ikon } from './ikonlar';
+import { SetKartlari } from './set-kartlari';
 import {
   adresGirdisi,
   adresKaydi,
@@ -26,7 +30,11 @@ import {
   kelimeSatirlari,
   metinOnerisiHali,
   oneriHatasi,
-  oranSinifi,
+  setGorunumu,
+  setSil,
+  setTasi,
+  setleriSabitle,
+  yuvayaEkle,
   telefonGirdisi,
   tarihGoster,
   telefonKaydi,
@@ -34,7 +42,6 @@ import {
   youtubeKimligi,
   type EkranNo,
   type OneriHali,
-  type OranSinifi,
 } from './rehber-mantik';
 import s from './rehber.module.css';
 
@@ -156,6 +163,7 @@ export function AdimReklam({
             googleGorsel={googleGorsel}
             googleVideo={googleVideo}
             video={amac === 'VIDEO'}
+            googleArama={googleArama}
             medyaBilgisi={medyaBilgisi}
             medyaBilgisiEkle={medyaBilgisiEkle}
           />
@@ -174,7 +182,12 @@ export function AdimReklam({
 // Medya
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ORAN_ADI: Record<OranSinifi, string> = { '1:1': '1:1', '4:5': '4:5', '9:16': '9:16', '1.91:1': '1.91:1', diger: 'farklı oran' };
+/** Ekrandaki oran haritası: yalnız ölçüsü BİLİNEN görseller (bilinmeyen = anahtar yok). */
+function oranHaritasi(medyaBilgisi: ReadonlyMap<string, MedyaBilgisi>): Map<string, GorselOrani | null> {
+  const m = new Map<string, GorselOrani | null>();
+  for (const [id, b] of medyaBilgisi) if (b.en && b.boy) m.set(id, oranBul(b.en, b.boy));
+  return m;
+}
 
 function MedyaBlogu({
   b,
@@ -182,6 +195,7 @@ function MedyaBlogu({
   googleGorsel,
   googleVideo,
   video,
+  googleArama,
   medyaBilgisi,
   medyaBilgisiEkle,
 }: {
@@ -190,6 +204,7 @@ function MedyaBlogu({
   googleGorsel: boolean;
   googleVideo: boolean;
   video: boolean;
+  googleArama: boolean;
   medyaBilgisi: ReadonlyMap<string, MedyaBilgisi>;
   medyaBilgisiEkle: (id: string, m: MedyaBilgisi) => void;
 }) {
@@ -208,8 +223,17 @@ function MedyaBlogu({
    * listede kalıyor. Sıra korunuyor: dosyalar birer birer yükleniyor ve
    * her biri bitince eklenmiş listenin SONUNA giriyor.
    */
-  async function yukle(dosyalar: File[]) {
+  const oranlar = oranHaritasi(medyaBilgisi);
+  /*
+   * Boş yuvaya (ya da "Yeni set"e) tıklanınca dosya seçici açılıyor; seçilen
+   * dosyanın hangi sete gideceği bu ref'te bekliyor. `undefined` = üstteki
+   * bırakma alanı (sırayla dağıt), `null` = yeni set.
+   */
+  const hedefRef = useRef<number | null | undefined>(undefined);
+
+  async function yukle(dosyalar: File[], hedef: number | null | undefined = undefined) {
     let simdiki = [...medya];
+    const yerelOran = new Map(oranlar);
     const yeniHatalar: Array<{ ad: string; mesaj: string }> = [];
     for (const d of dosyalar) {
       if (simdiki.length >= EN_COK) {
@@ -220,7 +244,11 @@ function MedyaBlogu({
       try {
         const [olcu, y] = await Promise.all([medyaOlc(d), medyaYukle(b.clientId, d)]);
         medyaBilgisiEkle(y.id, { ad: y.ad, onizleme: onizlemeAdresi(y.onizlemeAdresi), en: olcu.en, boy: olcu.boy });
-        simdiki = [...simdiki, { varlikId: y.id, ...(y.kapakId ? { kapakVarlikId: y.kapakId } : {}) }];
+        const oge = { varlikId: y.id, ...(y.kapakId ? { kapakVarlikId: y.kapakId } : {}) };
+        if (olcu.en && olcu.boy) yerelOran.set(y.id, oranBul(olcu.en, olcu.boy));
+        // "Yeni set" hedefi = mevcut set sayısı (0'dan): yuvayaEkle oraya numara verir.
+        const sira = hedef === null ? setGorunumu(simdiki, yerelOran).setler.length : hedef;
+        simdiki = y.kapakId || sira === undefined ? [...simdiki, oge] : yuvayaEkle(simdiki, yerelOran, oge, sira);
         yaz(b, 'medya', simdiki);
         if (y.uyari) yeniHatalar.push({ ad: d.name, mesaj: y.uyari });
       } catch (e) {
@@ -230,6 +258,10 @@ function MedyaBlogu({
       }
     }
     setHatalar(yeniHatalar);
+  }
+
+  function medyaYaz(yeni: readonly (typeof medya)[number][]) {
+    if (yeni !== medya) yaz(b, 'medya', yeni);
   }
 
   function varlikDegistir(id: string) {
@@ -252,7 +284,10 @@ function MedyaBlogu({
             type="button"
             className={s.birak}
             data-ustunde={ustunde}
-            onClick={() => dosyaRef.current?.click()}
+            onClick={() => {
+              hedefRef.current = undefined;
+              dosyaRef.current?.click();
+            }}
             onDragOver={(e) => {
               e.preventDefault();
               setUstunde(true);
@@ -279,7 +314,9 @@ function MedyaBlogu({
             accept="image/jpeg,image/png,video/mp4,video/quicktime"
             hidden
             onChange={(e) => {
-              void yukle([...(e.target.files ?? [])]);
+              const hedef = hedefRef.current;
+              hedefRef.current = undefined;
+              void yukle([...(e.target.files ?? [])], hedef);
               e.target.value = '';
             }}
           />
@@ -317,35 +354,66 @@ function MedyaBlogu({
               )}
             </div>
           </div>
-          {medya.length > 0 && (
-            <div className={s.dosyalar}>
-              {medya.map((x) => {
-                const bilgi = medyaBilgisi.get(x.varlikId);
-                const oran = bilgi?.en && bilgi.boy ? oranSinifi(bilgi.en, bilgi.boy) : null;
-                return (
-                  <div key={x.varlikId} className={s.dosya}>
-                    {bilgi ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={bilgi.onizleme} alt="" className={`${s.kucuk} ${oran === '9:16' ? s.dikey : ''}`} />
-                    ) : (
-                      <div className={s.kucuk} />
-                    )}
-                    <div>
-                      <b>{bilgi?.ad ?? 'Varlık'}</b>
-                      <small>{bilgi?.en && bilgi.boy ? `${bilgi.en} × ${bilgi.boy} · ${ORAN_ADI[oran!]}` : 'Boyut bilinmiyor'}</small>
-                    </div>
-                    <div className={s.uygun}>
-                      {oran && b.acik.meta && <span className={s.e}>Meta ✓{oran === '9:16' ? ' Hikâye' : ''}</span>}
-                      {oran && googleGorsel && (googleGorselUygunMu(oran) ? <span className={s.e}>Google ✓</span> : <span className={s.h}>Google ✕ oran</span>)}
-                      <button type="button" className={s.metinDugme} aria-label={`${bilgi?.ad ?? 'Varlığı'} kaldır`} onClick={() => yaz(b, 'medya', medya.filter((y) => y.varlikId !== x.varlikId))}>
-                        Kaldır
-                      </button>
-                    </div>
+          {(() => {
+            const g = setGorunumu(medya, oranlar);
+            const satir = (x: (typeof medya)[number], hata: string | null) => {
+              const bilgi = medyaBilgisi.get(x.varlikId);
+              const oran = oranlar.get(x.varlikId) ?? null;
+              return (
+                <div key={x.varlikId} className={s.dosya}>
+                  {bilgi ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={bilgi.onizleme} alt="" className={`${s.kucuk} ${oran === 'dikey' ? s.dikey : ''}`} />
+                  ) : (
+                    <div className={s.kucuk} />
+                  )}
+                  <div>
+                    <b>{bilgi?.ad ?? 'Varlık'}</b>
+                    <small className={hata ? s.kapaliYazi : undefined}>
+                      {hata ?? (bilgi?.en && bilgi.boy ? `${bilgi.en} × ${bilgi.boy}${oran ? ` · ${ORAN_ETIKETI[oran]}` : ''}` : 'Boyut bilinmiyor')}
+                    </small>
                   </div>
-                );
-              })}
-            </div>
-          )}
+                  <div className={s.uygun}>
+                    {oran && googleGorsel && (googleGorselUygunMu(oran) ? <span className={s.e}>Google ✓</span> : <span className={s.h}>Google ✕ oran</span>)}
+                    <button type="button" className={s.metinDugme} aria-label={`${bilgi?.ad ?? 'Varlığı'} kaldır`} onClick={() => medyaYaz(setleriSabitle(medya.filter((y) => y.varlikId !== x.varlikId), oranlar))}>
+                      Kaldır
+                    </button>
+                  </div>
+                </div>
+              );
+            };
+            const sorunlu = [...g.kullanilamaz, ...g.cakisan, ...g.bilinmeyen];
+            return (
+              <>
+                {/* Doğrulama BIRAKILDIĞI ANDA: kullanılamayan görsel set dışında,
+                    sebebiyle ve marka kırmızısıyla duruyor; sessizce atılmıyor. */}
+                {sorunlu.length > 0 && (
+                  <div className={s.dosyalar}>
+                    {g.kullanilamaz.map((x) => satir(x, 'Bu boyut kullanılamıyor. 9:16, 4:5, 1:1 ya da 1.91:1 olacak şekilde kırpıp tekrar bırak.'))}
+                    {g.cakisan.map((x) => satir(x, 'Aynı sette bu boyuttan bir görsel daha var; ⋯ menüsünden başka sete taşı ya da kaldır.'))}
+                    {g.bilinmeyen.map((x) => satir(x, null))}
+                  </div>
+                )}
+                {b.acik.meta && !video && (g.setler.length > 0 || medya.length === 0) && (
+                  <SetKartlari
+                    setler={g.setler.length ? g.setler : [{}]}
+                    medyaBilgisi={medyaBilgisi}
+                    googleArama={googleArama}
+                    tasi={(id, hedef) => medyaYaz(setTasi(medya, oranlar, id, hedef))}
+                    kaldir={(id) => medyaYaz(setleriSabitle(medya.filter((y) => y.varlikId !== id), oranlar))}
+                    setiSil={(i) => medyaYaz(setSil(medya, oranlar, i))}
+                    yuvayaYukle={(dosyalar, hedef) => {
+                      if (dosyalar) return void yukle(dosyalar, hedef);
+                      hedefRef.current = hedef;
+                      dosyaRef.current?.click();
+                    }}
+                  />
+                )}
+                {(!b.acik.meta || video) && g.setler.flatMap((st) => Object.values(st)).map((x) => x && satir(x, null))}
+                {g.videolar.length > 0 && <div className={s.dosyalar}>{g.videolar.map((x) => satir(x, null))}</div>}
+              </>
+            );
+          })()}
           {hatalar.map((h, i) => (
             <p key={`${h.ad}-${i}`} className={s.hataMetni} role="alert">
               {h.ad}: {h.mesaj}
