@@ -1071,6 +1071,12 @@ okunup varsayılmadı — canlıda doğrulandı.
   düğmesi yoktu ve API yolu durum makinesinde hiç çalışmamıştı
   (`dogrulanamadi` → yalnız `geri_okuma`).
 
+- **ERİŞİM CANLI TURU — ölçüldü** (2026-10-11, v25.0): Meta sıklık
+  sınırını `type: "CAP"` ekleyerek döndürüyor (N-19, dar: başka tür fark).
+  Ayrıca yerleşim planı ayrı reklamlarda KESİŞİMDİ: 1:1 + 1.91:1 + 4:5
+  verilince akış kapanıyordu. Banner seti yoksa birleşim
+  (`reklamSetiPlani`); kesişim yalnız iki+ boyutlu set varken.
+
 - **ÖZEL KATEGORİ SATIR İÇİ `campaign_spec`TE SINANAMIYOR — ölçüldü**
   (2026-10-10, v25.0, `meta-kategori-prova`, Ege Birlik Yapı). Konutlu
   provada kampanya kendi ucunda GEÇTİ; reklam seti ve reklamlar (satır içi

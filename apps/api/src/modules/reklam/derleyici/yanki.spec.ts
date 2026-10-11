@@ -165,6 +165,21 @@ describe('geri okuma', () => {
     expect(karsilastir(yankilar, n).sonuc).toBe('fark');
   });
 
+  it('N-19 (erişim canlı turu): sıklık sınırına Meta type CAP ekliyor → temiz; başka tür fark', () => {
+    const k = derle({ niyet: 'ERISIM' });
+    const y = beklenenYankilar(k);
+    expect(y.some((x) => x.alanYolu === 'frequency_control_specs')).toBe(true);
+    const o = kopya(aynaOkuma(k));
+    o.reklam_seti!.frequency_control_specs = [{ type: 'CAP', event: 'IMPRESSIONS', interval_days: 7, max_frequency: 2 }];
+    expect(karsilastir(y, o).sonuc).toBe('temiz');
+    const h = kopya(aynaOkuma(k));
+    h.reklam_seti!.frequency_control_specs = [{ type: 'TARGET', event: 'IMPRESSIONS', interval_days: 7, max_frequency: 2 }];
+    expect(karsilastir(y, h).sonuc).toBe('fark');
+    const b = kopya(aynaOkuma(k));
+    b.reklam_seti!.frequency_control_specs = [{ type: 'CAP', event: 'IMPRESSIONS', interval_days: 7, max_frequency: 3 }];
+    expect(karsilastir(y, b).sonuc).toBe('fark');
+  });
+
   it('N-18 (WhatsApp canlı turu 2): özellik kümesi yalnız şemsiye OPT_OUT dönerse temiz; şemsiye açıksa ya da başka anahtar varsa değil', () => {
     const o = kopya(aynaOkuma(gs));
     o['kreatif:1']!.degrees_of_freedom_spec.creative_features_spec = { advantage_plus_creative: { enroll_status: 'OPT_OUT' } };

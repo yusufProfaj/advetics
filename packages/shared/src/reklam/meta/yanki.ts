@@ -388,6 +388,23 @@ function baslangicKurulumAnina(gonderilen: unknown, donen: unknown, simdi: Date 
   return g < s && d >= g && d <= s + BASLANGIC_PAYI_MS;
 }
 
+/**
+ * N-19 — SIKLIK SINIRINA `type: "CAP"` EKLENİYOR, ölçüldü (2026-10-11,
+ * v25.0, erişim canlı turu, Ege Birlik Yapı). `{event, interval_days,
+ * max_frequency}` gönderdik, Meta aynısını `type: "CAP"` ile döndürdü ve
+ * yayın "fark" ile durdu. CAP = üst sınır, gönderdiğimiz şeyin ta kendisi.
+ * DAR: yalnız bu anahtar ve yalnız bu değer düşer; başka bir tür (ör. hedef
+ * sıklık) gerçek fark.
+ */
+function siklikTuruAt(v: unknown): unknown {
+  if (!Array.isArray(v)) return v;
+  return v.map((x) => {
+    if (!x || typeof x !== 'object' || (x as Record<string, unknown>).type !== 'CAP') return x;
+    const { type: _t, ...kalan } = x as Record<string, unknown>;
+    return kalan;
+  });
+}
+
 function kumeAyni(a: unknown, b: unknown): boolean {
   if (!Array.isArray(a) || !Array.isArray(b)) return false;
   const x = a.map(kanonik).sort();
@@ -563,7 +580,7 @@ export function geriOkumaKarsilastir(
         ayni = donen !== null && donen !== '';
         break;
       case 'esit_kume':
-        ayni = kumeAyni(y.gonderilen, donen);
+        ayni = kumeAyni(y.gonderilen, y.alanYolu === 'frequency_control_specs' ? siklikTuruAt(donen) : donen);
         break;
       case 'varlik_akisi':
         ayni = varlikAkisiAyni(y.gonderilen, donen);
