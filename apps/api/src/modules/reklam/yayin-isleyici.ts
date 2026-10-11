@@ -8,7 +8,7 @@ import { provaKos } from './prova-isleyici';
 import { metaSurumuDogrula } from './meta-graf';
 import { MetaKesinHata, YayinMotoru, yayiniSonlandir, type MetaYazmaPortu, type TxRunner } from './yayin-motoru';
 import { metaYazmaAcikMi } from './yazma-kapisi';
-import { googleYayinIsle, type GoogleYayinPortu } from './google/google-yayin';
+import { googleGeriAlIsle, googleYayinIsle, type GoogleYayinPortu } from './google/google-yayin';
 
 /**
  * Worker'da bir yayın işini koşturur (TASARIM.md § 11.5 d, § 11.12).
@@ -51,6 +51,10 @@ export async function reklamIsiniIsle(d: IsleyiciBagimliliklari, is: ReklamIsi, 
   if (is.adim === 'google_kur') {
     if (!d.google) throw new Error('Google yayın erişimi worker’da kurulu değil');
     return googleYayinIsle({ tx: d.tx, google: d.google, kilit: d.kilit, kilitOneki: d.kilitOneki }, is.yayinId, sahip);
+  }
+  if (is.adim === 'google_geri_al') {
+    if (!d.google) throw new Error('Google yayın erişimi worker’da kurulu değil');
+    return googleGeriAlIsle({ tx: d.tx, google: d.google, kilit: d.kilit, kilitOneki: d.kilitOneki }, is.yayinId, sahip);
   }
   return yayinIsiniIsle(d, is, sahip);
 }

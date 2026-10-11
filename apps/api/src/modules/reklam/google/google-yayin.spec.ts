@@ -1,10 +1,11 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { TABAN_NEGATIFLER, UYUM_SURUMU, gecisIzinliMi, type GoogleDerlemeGirdisi } from '@advetics/shared';
+import { GERI_ALINABILIR_DURUMLAR, TABAN_NEGATIFLER, UYUM_SURUMU, gecisIzinliMi, type GoogleDerlemeGirdisi } from '@advetics/shared';
 import { createHarness, seedTenant, IDS, type Harness } from '../../../../test/pglite-harness';
 import { PlatformApiError, type FetchContext } from '../../connections/provider.types';
 import type { TxRunner } from '../yayin-motoru';
+import { reklamIsiniIsle } from '../yayin-isleyici';
 import { derleGoogle, GOOGLE_ATIF, GOOGLE_DERLEYICI_SURUMU } from './derle-google';
-import { googleGeriOkumaKarsilastir, googleYayinIsle, googleYayinKaydiOlustur, ulusalNumara, type GoogleOkunan, type GoogleYayinPortu } from './google-yayin';
+import { googleGeriAlIsle, googleGeriOkumaKarsilastir, googleKaldirmaGovdesi, googleYayinIsle, googleYayinKaydiOlustur, ulusalNumara, type GoogleOkunan, type GoogleYayinPortu } from './google-yayin';
 
 /**
  * GOOGLE YAYIN İŞLEYİCİSİ — gerçek şema (PGlite), sahte Google.
@@ -58,12 +59,36 @@ class SahteGoogle implements GoogleYayinPortu {
   kampanyaAdi: string | null = null;
   durum = 'PAUSED';
   private govde: Array<Record<string, unknown>> = [];
+  // ── Geri al (kaldırma) ──
+  tokenSayisi = 0;
+  kaldirmaGovdeleri: Array<{ mutateOperations: Array<Record<string, unknown>>; partialFailure: boolean; validateOnly: boolean }> = [];
+  kaldirilan = new Set<string>();
+  /** 200 döner AMA kaldırmaz (kabul edip görmezden gelme). */
+  kaldirmayiYutar = false;
+  kaldirmaHatasi: Error | null = null;
+  /** Hata atar AMA kaldırır (cevap kaybolmuş). */
+  yineDeKaldir = false;
+  /** Adında bu yayının izi olan, kaydımızda olmayan ek kopyalar. */
+  ekKopyalar: string[] = [];
+  aramaHatasi: Error | null = null;
+  durumOkumaHatasi: Error | null = null;
 
   async tokenAl() {
+    this.tokenSayisi++;
     return 'TOKEN';
   }
-  async mutate(_c: FetchContext, g: { mutateOperations: Array<Record<string, unknown>> }) {
+  async mutate(_c: FetchContext, g: { mutateOperations: Array<Record<string, unknown>>; partialFailure: boolean; validateOnly: boolean }) {
     this.mutateSayisi++;
+    const kaldir = g.mutateOperations.map((o) => (o.campaignOperation as { remove?: string } | undefined)?.remove).filter((x): x is string => !!x);
+    if (kaldir.length > 0) {
+      this.kaldirmaGovdeleri.push(g);
+      if (this.kaldirmaHatasi) {
+        if (this.yineDeKaldir) kaldir.forEach((k) => this.kaldirilan.add(k));
+        throw this.kaldirmaHatasi;
+      }
+      if (!this.kaldirmayiYutar) kaldir.forEach((k) => this.kaldirilan.add(k));
+      return kaldir.map((k) => ({ campaignResult: { resourceName: k } }));
+    }
     if (this.mutateHatasi) {
       if (this.yineDeKur) this.kur(g.mutateOperations);
       throw this.mutateHatasi;
@@ -88,7 +113,24 @@ class SahteGoogle implements GoogleYayinPortu {
     const k = ops.find((o) => o.campaignOperation)!.campaignOperation as { create: { name: string } };
     this.kampanyaAdi = k.create.name;
   }
+  private kampanyalar(): string[] {
+    return [...(this.kampanyaAdi ? [`customers/${MUSTERI}/campaigns/555`] : []), ...this.ekKopyalar];
+  }
   async ara<T>(_c: FetchContext, sorgu: string): Promise<T[]> {
+    if (sorgu.includes('campaign.resource_name, campaign.status FROM campaign')) {
+      if (this.durumOkumaHatasi) throw this.durumOkumaHatasi;
+      const idler = /IN \(([^)]*)\)/.exec(sorgu)![1]!.split(',').map((x) => x.trim());
+      return this.kampanyalar()
+        .filter((k) => idler.includes(k.slice(k.lastIndexOf('/') + 1)))
+        .map((k) => ({ campaign: { resourceName: k, status: this.kaldirilan.has(k) ? 'REMOVED' : this.durum } })) as T[];
+    }
+    if (sorgu.includes('FROM ad_group_ad') && sorgu.includes("campaign.status != 'REMOVED'")) {
+      if (this.aramaHatasi) throw this.aramaHatasi;
+      // Kaldırılmamış kopyalar (gerçek sorgunun süzgeci).
+      return this.kampanyalar()
+        .filter((k) => !this.kaldirilan.has(k))
+        .map((k) => ({ campaign: { resourceName: k }, adGroup: { resourceName: `customers/${MUSTERI}/adGroups/666` }, adGroupAd: { resourceName: `customers/${MUSTERI}/adGroupAds/666~777` } })) as T[];
+    }
     if (!this.kampanyaAdi) return [];
     const c = (tur: string) => this.govde.filter((o) => o[tur]).map((o) => (o[tur] as { create: Record<string, unknown> }).create);
     if (sorgu.includes('FROM ad_group_ad')) {
@@ -374,5 +416,183 @@ describe('geri okuma karşılaştırması', () => {
       // Öneki yalnız TR'de ve yalnız doğru uzunlukta atıyoruz: başka ülkede dokunulmaz.
       expect(ulusalNumara({ countryCode: 'US', phoneNumber: '02325551234' }).phoneNumber).toBe('02325551234');
     });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GERİ AL ("Vazgeç ve kaldır") — 2026-10-11: duraklatılmış deneme kampanyaları
+// müşterinin Google Ads hesabında birikiyordu ve Advetics'ten geri alınamıyordu.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('Google geri al (kaldır)', () => {
+  const K555 = `customers/${MUSTERI}/campaigns/555`;
+  const geriAl = (g: SahteGoogle, kilit = true) =>
+    googleGeriAlIsle({ tx, google: g, kilit: { al: async () => kilit, birak: async () => undefined }, kilitOneki: 'adv' }, YAYIN, 'is-2');
+  /** Duraklatılmış kurulmuş yayın: geri almanın en sık hâli. */
+  async function kapaliKurulmus(): Promise<SahteGoogle> {
+    await yayinKur(true);
+    const g = new SahteGoogle();
+    expect((await isle(g)).tur).toBe('bitti');
+    expect((await yayin()).durum).toBe('kapali_kuruldu');
+    g.mutateSayisi = 0;
+    g.tokenSayisi = 0;
+    return g;
+  }
+
+  it('durum makinesi: geri alınabilir HER durumdan arsivlendi geçişi var (tek son durum, Meta ile ortak)', () => {
+    for (const d of GERI_ALINABILIR_DURUMLAR) expect(gecisIzinliMi(d, 'arsivlendi'), d).toBe(true);
+  });
+
+  it('gövde: campaignOperation.remove, partialFailure false, validateOnly false; geçersiz kaynak reddedilir', () => {
+    expect(googleKaldirmaGovdesi([K555])).toEqual({
+      mutateOperations: [{ campaignOperation: { remove: K555 } }],
+      partialFailure: false,
+      validateOnly: false,
+    });
+    expect(() => googleKaldirmaGovdesi([])).toThrow(/Kaldırılacak/);
+    expect(() => googleKaldirmaGovdesi(['customers/1/adGroups/2'])).toThrow(/Geçersiz/);
+    expect(() => googleKaldirmaGovdesi(["customers/1/campaigns/2' OR 1=1"])).toThrow(/Geçersiz/);
+  });
+
+  it('KRİTİK: kapali_kuruldu → kampanya Google’da KALDIRILIR, geri okunur, yayın arsivlendi + geri_alindi, taslak serbest', async () => {
+    const g = await kapaliKurulmus();
+    expect(await geriAl(g)).toEqual({ tur: 'bitti', durum: 'arsivlendi' });
+    expect(g.kaldirmaGovdeleri).toEqual([{ mutateOperations: [{ campaignOperation: { remove: K555 } }], partialFailure: false, validateOnly: false }]);
+    expect(g.kaldirilan.has(K555)).toBe(true);
+    expect(await yayin()).toMatchObject({ durum: 'arsivlendi', sonlanma_sebebi: 'geri_alindi' });
+    expect((await nesneler()).find((n) => n.ad === 'kampanya')!.durum).toBe('arsivlendi');
+    const [t] = await h.q<{ durum: string }>('SELECT durum FROM reklam_taslagi');
+    expect(t!.durum).toBe('taslak');
+  });
+
+  it('KRİTİK: "200 döndü" kaldırıldı DEĞİL — geri okumada REMOVED yoksa yayın yerinde kalır, sebep yazılır', async () => {
+    const g = await kapaliKurulmus();
+    g.kaldirmayiYutar = true;
+    expect(await geriAl(g)).toEqual({ tur: 'bitti', durum: 'kapali_kuruldu' });
+    const y = await yayin();
+    expect(y.durum).toBe('kapali_kuruldu');
+    expect(y.sebep).toMatch(/Kaldırılamadı: 555 \(PAUSED\)/);
+  });
+
+  it('KRİTİK: geri okumada kampanya HİÇ görünmezse de kaldırılmış sayılmaz', async () => {
+    const g = await kapaliKurulmus();
+    g.kaldirmayiYutar = true;
+    g.kampanyaAdi = null; // okuma satır döndürmüyor (yanlış hesap/yetki)
+    expect(await geriAl(g)).toEqual({ tur: 'bitti', durum: 'kapali_kuruldu' });
+    expect((await yayin()).sebep).toMatch(/555 \(okunamadı\)/);
+  });
+
+  it('kaldırma hata verdi AMA uygulandı (cevap kayboldu) → karar geri okumadan: arsivlendi', async () => {
+    const g = await kapaliKurulmus();
+    g.kaldirmaHatasi = new PlatformApiError('google', 'transient', 'zaman aşımı');
+    g.yineDeKaldir = true;
+    expect(await geriAl(g)).toEqual({ tur: 'bitti', durum: 'arsivlendi' });
+  });
+
+  it('kaldırma reddedildi → yerinde kalır, Google’ın cümlesi ekranda', async () => {
+    const g = await kapaliKurulmus();
+    g.kaldirmaHatasi = new PlatformApiError('google', 'permanent', 'OPERATION_NOT_PERMITTED_FOR_REMOVED_RESOURCE');
+    expect(await geriAl(g)).toEqual({ tur: 'bitti', durum: 'kapali_kuruldu' });
+    expect((await yayin()).sebep).toMatch(/Kaldırılamadı: 555.*OPERATION_NOT_PERMITTED/);
+  });
+
+  it('KRİTİK: yazma kesicisi kapalıyken Google’a TEK yazma gitmez; yayın yerinde, sebep yazılı', async () => {
+    const g = await kapaliKurulmus();
+    await h.q(`INSERT INTO ajans_ayari (org_id, google_yazma_durduruldu, google_durdurma_at, google_durdurma_sebebi) VALUES ($1, true, now(), 'olay')`, [IDS.org]);
+    expect(await geriAl(g)).toEqual({ tur: 'bitti', durum: 'kapali_kuruldu' });
+    expect(g.mutateSayisi).toBe(0);
+    expect((await yayin()).sebep).toMatch(/durduruldu: olay/);
+  });
+
+  it('KRİTİK: adında bu yayının izi olan EK KOPYA da aynı atomik istekte kaldırılır', async () => {
+    const g = await kapaliKurulmus();
+    const K999 = `customers/${MUSTERI}/campaigns/999`;
+    g.ekKopyalar = [K999];
+    expect(await geriAl(g)).toEqual({ tur: 'bitti', durum: 'arsivlendi' });
+    expect(g.kaldirmaGovdeleri).toHaveLength(1);
+    expect(g.kaldirmaGovdeleri[0]!.mutateOperations).toEqual([{ campaignOperation: { remove: K555 } }, { campaignOperation: { remove: K999 } }]);
+  });
+
+  it('arama düşerse kaldırma YAPILMAZ (eksik hedefle "geri alındı" denmez)', async () => {
+    const g = await kapaliKurulmus();
+    g.aramaHatasi = new Error('INTERNAL');
+    expect(await geriAl(g)).toEqual({ tur: 'bitti', durum: 'kapali_kuruldu' });
+    expect(g.mutateSayisi).toBe(0);
+    expect((await yayin()).sebep).toMatch(/aranamadı: INTERNAL/);
+  });
+
+  it('kaldırma sonrası durum okunamazsa yerinde kalır', async () => {
+    const g = await kapaliKurulmus();
+    g.durumOkumaHatasi = new Error('okuma düştü');
+    expect(await geriAl(g)).toEqual({ tur: 'bitti', durum: 'kapali_kuruldu' });
+    expect((await yayin()).sebep).toMatch(/gönderildi ama sonuç okunamadı: okuma düştü/);
+  });
+
+  it('KRİTİK: kurulamadi (Google kesin reddetti, kimlik yok) → SIFIR Google çağrısıyla kapanır', async () => {
+    await yayinKur(false);
+    const g = new SahteGoogle();
+    g.mutateHatasi = new PlatformApiError('google', 'permanent', 'INVALID_ARGUMENT');
+    expect(await isle(g)).toEqual({ tur: 'bitti', durum: 'kurulamadi' });
+    g.mutateSayisi = 0;
+    g.tokenSayisi = 0;
+    expect(await geriAl(g)).toEqual({ tur: 'bitti', durum: 'arsivlendi' });
+    expect(g.mutateSayisi).toBe(0);
+    expect(g.tokenSayisi).toBe(0);
+    expect(await yayin()).toMatchObject({ sonlanma_sebebi: 'geri_alindi' });
+  });
+
+  it('sonuc_belirsiz (kimlik yok) → ad araması karar verir: kopya yoksa kaldırma olmadan kapanır', async () => {
+    await yayinKur(false);
+    const g = new SahteGoogle();
+    g.mutateHatasi = new PlatformApiError('google', 'transient', 'zaman aşımı');
+    expect(await isle(g)).toEqual({ tur: 'bitti', durum: 'sonuc_belirsiz' });
+    g.mutateSayisi = 0;
+    expect(await geriAl(g)).toEqual({ tur: 'bitti', durum: 'arsivlendi' });
+    expect(g.mutateSayisi).toBe(0);
+    expect((await yayin()).sebep).toMatch(/kampanya bulunmadı/);
+  });
+
+  it('sonuc_belirsiz ama Google’da kurulmuş → bulunan kampanya kaldırılır', async () => {
+    await yayinKur(false);
+    const g = new SahteGoogle();
+    g.mutateHatasi = new PlatformApiError('google', 'transient', 'zaman aşımı');
+    expect(await isle(g)).toEqual({ tur: 'bitti', durum: 'sonuc_belirsiz' });
+    g.ekKopyalar = [`customers/${MUSTERI}/campaigns/321`, `customers/${MUSTERI}/campaigns/322`];
+    g.mutateHatasi = null;
+    expect(await geriAl(g)).toEqual({ tur: 'bitti', durum: 'arsivlendi' });
+    expect(g.kaldirmaGovdeleri[0]!.mutateOperations).toHaveLength(2);
+  });
+
+  it('geri alınamaz durumda (açık yayın) hiçbir şey yapmaz; çift tıklamada ikinci iş boşa döner', async () => {
+    await yayinKur(false);
+    const g = new SahteGoogle();
+    expect(await isle(g)).toEqual({ tur: 'bitti', durum: 'iletildi' });
+    g.mutateSayisi = 0;
+    expect(await geriAl(g)).toEqual({ tur: 'bitti', durum: 'iletildi' });
+    expect(g.mutateSayisi).toBe(0);
+  });
+
+  it('ikinci geri al (zaten arşivde) Google’a gitmez', async () => {
+    const g = await kapaliKurulmus();
+    await geriAl(g);
+    g.mutateSayisi = 0;
+    expect(await geriAl(g)).toEqual({ tur: 'bitti', durum: 'arsivlendi' });
+    expect(g.mutateSayisi).toBe(0);
+  });
+
+  it('KRİTİK: worker `google_geri_al` işini Google işleyicisine yönlendiriyor (Meta motoruna DEĞİL)', async () => {
+    // Yanlış dal sessiz olurdu: iş Meta motorunun son dalına (geri oku)
+    // düşer ve Google hesabına Meta token'ıyla gider.
+    const g = await kapaliKurulmus();
+    const d = { tx, google: g, kilit: { al: async () => true, birak: async () => undefined }, kilitOneki: 'adv' } as unknown as Parameters<typeof reklamIsiniIsle>[0];
+    expect(await reklamIsiniIsle(d, { yayinId: YAYIN, adim: 'google_geri_al' }, 'is-3')).toEqual({ tur: 'bitti', durum: 'arsivlendi' });
+    expect(g.kaldirilan.has(K555)).toBe(true);
+    const bos = { ...d, google: undefined } as Parameters<typeof reklamIsiniIsle>[0];
+    await expect(reklamIsiniIsle(bos, { yayinId: YAYIN, adim: 'google_geri_al' }, 'is-4')).rejects.toThrow(/Google yayın erişimi/);
+  });
+
+  it('kilit doluysa ertelenir, Google’a istek yok', async () => {
+    const g = await kapaliKurulmus();
+    expect((await geriAl(g, false)).tur).toBe('ertele');
+    expect(g.mutateSayisi).toBe(0);
   });
 });

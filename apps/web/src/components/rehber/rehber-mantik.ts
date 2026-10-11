@@ -523,13 +523,56 @@ export function yayinSonucu(p: Pick<PlatformYayinOzeti, 'durum'>): YayinSonucu {
 }
 
 /**
- * "Vazgeç ve arşivle" düğmesi bu satırda görünür mü — sunucunun izin
- * listesiyle AYNI sabit (`GERI_ALINABILIR_DURUMLAR`). Yalnız Meta: Google
- * kurulumu Google Ads'ten kaldırılıyor ve sunucu onu reddediyor; reddedilecek
- * bir düğme göstermek yanlış söz olurdu.
+ * "Vazgeç ve arşivle / kaldır" düğmesi bu satırda görünür mü — sunucunun izin
+ * listesiyle AYNI sabit (`GERI_ALINABILIR_DURUMLAR`). İki platformda da:
+ * Google satırında düğme yokken duraklatılmış deneme kampanyaları müşterinin
+ * Google Ads hesabında birikiyordu (2026-10-11, üç PAUSED kampanya) ve
+ * Advetics'ten geri almanın yolu yoktu. Bilinmeyen bir platform DIŞARIDA
+ * kalır: sunucunun işleyicisi olmayan bir düğme yanlış söz olurdu.
  */
 export function geriAlinabilirMi(p: Pick<PlatformYayinOzeti, 'platform' | 'durum' | 'yayinId'>): boolean {
-  return p.platform === 'meta' && !!p.yayinId && p.durum !== null && GERI_ALINABILIR_DURUMLAR.includes(p.durum);
+  return Object.hasOwn(GERI_AL_METINLERI, p.platform) && !!p.yayinId && p.durum !== null && GERI_ALINABILIR_DURUMLAR.includes(p.durum);
+}
+
+/** Geri alma düğmesinin platforma göre sözü (`geriAlMetinleri`). */
+export interface GeriAlMetinleri {
+  dugme: string;
+  onay: string;
+  eylem: string;
+  suruyor: string;
+  basarisiz: string;
+  cevapYok: string;
+}
+
+/*
+ * Meta'da ARŞİV, Google'da KALDIRMA (REMOVED); ikisi de geri dönüşsüz ve
+ * onay metni bunu söylemek zorunda. Google satırına "arşivle" yazmak,
+ * Google Ads'te "arşiv" diye bir şey arayan kullanıcıyı yanlış yere
+ * gönderirdi. `Record<RehberPlatformu, …>`: rehbere üçüncü bir platform
+ * eklenirse derleme burada kırılır; "google değilse Meta" üçlüsü o
+ * platforma sessizce Meta'nın sözünü verirdi (`linkedin-kayit.spec.ts`).
+ */
+const GERI_AL_METINLERI: Readonly<Record<RehberPlatformu, GeriAlMetinleri>> = {
+  meta: {
+    dugme: 'Vazgeç ve arşivle',
+    onay: 'Meta’daki kampanya arşivlenecek; tekrar açılamaz.',
+    eylem: 'Arşivle',
+    suruyor: 'Arşivleniyor…',
+    basarisiz: 'Arşivlenemedi; Meta’nın cevabı yok.',
+    cevapYok: 'Meta henüz cevap vermedi; birkaç dakika sonra sayfayı yenile.',
+  },
+  google: {
+    dugme: 'Vazgeç ve kaldır',
+    onay: 'Google’daki kampanya kaldırılacak; tekrar açılamaz.',
+    eylem: 'Kaldır',
+    suruyor: 'Kaldırılıyor…',
+    basarisiz: 'Kaldırılamadı; Google’ın cevabı yok.',
+    cevapYok: 'Google henüz cevap vermedi; birkaç dakika sonra sayfayı yenile.',
+  },
+};
+
+export function geriAlMetinleri(platform: RehberPlatformu): GeriAlMetinleri {
+  return GERI_AL_METINLERI[platform];
 }
 
 /** Yoklama ne zaman durur: her platform son durumda ya da uyum denetçisi durdurdu. */

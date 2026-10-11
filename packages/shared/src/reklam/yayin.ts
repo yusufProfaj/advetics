@@ -111,11 +111,12 @@ export const YAYIN_GECISLERI: Readonly<Record<YayinDurumu, readonly YayinDurumu[
 };
 
 /**
- * "Geri al" (Meta'da arşiv) düğmesinin anlamlı olduğu durumlar — TEK liste:
- * API ucu bununla izin veriyor, panel düğmeyi bununla gösteriyor. İki ayrı
- * liste doğduğunda panel düğme gösterip sunucu reddeder (ya da tersi).
- * Yalnız META yayını: Google kurulumunun geri alma yolu yok (Google Ads'ten
- * kaldırılır) ve iş Meta motoruna gitmemeli.
+ * "Geri al" düğmesinin anlamlı olduğu durumlar — TEK liste: API ucu bununla
+ * izin veriyor, panel düğmeyi bununla gösteriyor. İki ayrı liste doğduğunda
+ * panel düğme gösterip sunucu reddeder (ya da tersi). İki platformda da
+ * aynı liste ve aynı son durum (`arsivlendi`, sebep `geri_alindi`): Meta'da
+ * kampanya ARŞİVLENİR (Meta motoru), Google'da KALDIRILIR (REMOVED,
+ * `google/google-yayin.ts#googleGeriAlIsle`, 2026-10-11).
  */
 export const GERI_ALINABILIR_DURUMLAR: readonly YayinDurumu[] = [
   'fark_var',

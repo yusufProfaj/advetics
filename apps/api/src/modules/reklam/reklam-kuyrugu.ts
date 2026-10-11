@@ -27,14 +27,25 @@ export interface ProvaIsi {
 /**
  * Google yayını (AdvCampaign rehberi): kur → geri oku → aç. Meta adımlarından
  * AYRI bir tür, çünkü işleyicisi ayrı (`google/google-yayin.ts`) ve Meta
- * motorunun insan düğmeleri (devam, geri al) bu yayına uygulanmıyor.
+ * motorunun insan düğmeleri (devam, yeniden oku) bu yayına uygulanmıyor;
+ * geri alma kendi türüyle (`GoogleGeriAlIsi`).
  * Aynı kuyruk: hesap başına yazıcı kilidi ve deneme kuralı (1) aynı.
  */
 export interface GoogleYayinIsi {
   yayinId: string;
   adim: 'google_kur';
 }
-export type ReklamIsi = YayinIsi | ProvaIsi | GoogleYayinIsi;
+/**
+ * Google yayınını geri al ("Vazgeç ve kaldır"): kampanyayı Google'da
+ * KALDIRIR (`google/google-yayin.ts#googleGeriAlIsle`). Meta'nın `geri_al`
+ * adımından ayrı tür, çünkü o adım Meta motoruna gidiyor ve Google hesabına
+ * Meta token'ıyla yazmaya kalkardı.
+ */
+export interface GoogleGeriAlIsi {
+  yayinId: string;
+  adim: 'google_geri_al';
+}
+export type ReklamIsi = YayinIsi | ProvaIsi | GoogleYayinIsi | GoogleGeriAlIsi;
 
 /** İş kimliği: ayırıcı `__` (BullMQ `:`'yı reddediyor). Aynı adım iki kez kuyruğa giremez. */
 export function yayinIsKimligi(yayinId: string, adim: YayinAdimi): string {
@@ -69,6 +80,19 @@ export class ReklamKuyrugu implements OnModuleDestroy {
   async ekleGoogle(yayinId: string): Promise<void> {
     if (!this.kuyruk) throw new Error('Yayın kuyruğu kurulu değil (REDIS_URL yok)');
     await this.kuyruk.add('google_kur', { yayinId, adim: 'google_kur' }, { jobId: `yayin__${yayinId}__google_kur` });
+  }
+
+  /**
+   * İŞ KİMLİĞİ ZAMAN DAMGALI: sabit kimlikle, ilk deneme kotaya ya da
+   * kapalı yazma anahtarına takılıp tamamlanmış (removeOnComplete 500 iş
+   * tutuyor) bir iş, kullanıcının sonraki "Vazgeç ve kaldır"ını SESSİZCE
+   * yutardı (MÜKERRER ENGELİ KALICI KİLİT ÜRETEBİLİYOR). Çift tıklama iki iş
+   * açabilir; zararsız: hesap kilidi sıraya koyuyor ve ikinci iş yayını
+   * artık geri alınabilir durumda bulmadığı için hiçbir şey yapmıyor.
+   */
+  async ekleGoogleGeriAl(yayinId: string): Promise<void> {
+    if (!this.kuyruk) throw new Error('Yayın kuyruğu kurulu değil (REDIS_URL yok)');
+    await this.kuyruk.add('google_geri_al', { yayinId, adim: 'google_geri_al' }, { jobId: `yayin__${yayinId}__google_geri_al__${Date.now()}` });
   }
 
   async ekleProva(provaId: string): Promise<void> {
