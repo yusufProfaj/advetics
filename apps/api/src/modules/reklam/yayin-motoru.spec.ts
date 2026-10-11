@@ -295,8 +295,26 @@ describe('geri okuma ve açma', () => {
       return eski(id, a);
     };
     const { yayinId } = await hazirla();
-    expect(await new YayinMotoru(tx, meta, 'act_1', ACIK).kur(yayinId)).toBe('dogrulanamadi');
+    expect(await new YayinMotoru(tx, meta, 'act_1', ACIK, async () => undefined).kur(yayinId)).toBe('dogrulanamadi');
     expect([...meta.kayitlar.values()].filter((k) => k.status === 'ACTIVE')).toHaveLength(0);
+    // Meta'nın mesajı yutulmuyor: ham içinde nesne adıyla duruyor.
+    const [g] = await h.q<{ ham: { okuma_hatalari?: Record<string, string> } }>('SELECT ham FROM geri_okuma WHERE yayin_id = $1', [yayinId]);
+    expect(g!.ham.okuma_hatalari?.reklam_seti).toMatch(/okunamadı \(deneme 3\)/);
+  });
+
+  it('KRİTİK: yeni nesne bir kez okunamazsa beklenip tekrar sorulur; ikinci okuma geçerse yayın düşmez', async () => {
+    const meta = new SahteMeta();
+    const eski = meta.oku.bind(meta);
+    let dustu = 0;
+    meta.oku = async (id, a) => {
+      if (meta.kayitlar.get(id)?.uc === 'adsets' && dustu++ === 0) throw new MetaBelirsizHata('henüz görünmüyor');
+      return eski(id, a);
+    };
+    const beklemeler: number[] = [];
+    const { yayinId } = await hazirla();
+    expect(await new YayinMotoru(tx, meta, 'act_1', ACIK, async (ms) => void beklemeler.push(ms)).kur(yayinId)).not.toBe('dogrulanamadi');
+    expect(dustu).toBe(2);
+    expect(beklemeler).toContain(3_000);
   });
 
   it('KRİTİK: tekillik kapısı aynı etiketli İKİZ kampanya görürse açmaz', async () => {

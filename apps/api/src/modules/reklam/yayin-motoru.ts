@@ -101,6 +101,8 @@ export type SonlanmaSebebi = 'on_kontrol_reddi' | 'geri_alindi' | 'yeniden_kurul
 
 const YER_TUTUCU = /^\{([a-z_]+(?::[0-9a-z-]+)?)\}$/;
 const VIDEO_BEKLEME_MS = 15 * 60_000;
+/** Geri okumada bir nesne düşerse: hemen, 3 sn ve 10 sn sonra (yeni nesnenin görünür olma gecikmesi). */
+const OKUMA_BEKLEMELERI = [0, 3_000, 10_000] as const;
 const ETIKET_UCU: Partial<Record<NesneTuru, 'campaigns' | 'adsets' | 'ads'>> = {
   kampanya: 'campaigns',
   reklam_seti: 'adsets',
@@ -430,11 +432,25 @@ export class YayinMotoru {
       .filter((b) => adlar.has(b.govde))
       .map((b) => ({ ...b, gonderilen: yerlestir(b.gonderilen, kimlikler) }));
     const okunan: Record<string, Record<string, unknown> | undefined> = {};
+    // OKUMA HATASI YUTULMUYOR. WhatsApp canlı turunda (2026-10-11) yeni
+    // açılan reklam seti geri okumada düştü, aynı alanlarla birkaç dakika
+    // sonra 200 döndü; hata `catch {}` ile atıldığı için ekranda yalnız
+    // "okunamadı" kaldı ve sebep teşhis edilemedi. Meta yeni nesneyi kısa
+    // bir süre okunamaz gösterebiliyor: iki kez beklenip tekrar soruluyor,
+    // yine düşerse Meta'nın mesajı `ham` içinde nesne adıyla saklanıyor.
+    const hatalar: Record<string, string> = {};
     for (const n of nesneler) {
-      try {
-        okunan[n.ad] = await this.meta.oku(n.meta_id!, okumaAlanlari(yankilar, n.ad));
-      } catch {
-        okunan[n.ad] = undefined;
+      const alanlar = okumaAlanlari(yankilar, n.ad);
+      for (const [deneme, ara] of OKUMA_BEKLEMELERI.entries()) {
+        if (ara > 0) await this.bekle(ara);
+        try {
+          okunan[n.ad] = await this.meta.oku(n.meta_id!, alanlar);
+          delete hatalar[n.ad];
+          break;
+        } catch (e) {
+          okunan[n.ad] = undefined;
+          hatalar[n.ad] = `${e instanceof Error ? e.message : String(e)} (deneme ${deneme + 1})`;
+        }
       }
     }
     // Zorunlu yasal uyarı TAZE okunuyor: Meta'nın metin varyasyonu açık
@@ -449,7 +465,7 @@ export class YayinMotoru {
         INSERT INTO geri_okuma (yayin_id, org_id, client_id, sonuc, satirlar, bilgiler, ham, api_surumu)
         VALUES (${y.id}::uuid, ${y.org_id}::uuid, ${y.client_id}::uuid, ${r.sonuc},
                 ${JSON.stringify('satirlar' in r ? r.satirlar : [])}::jsonb, ${JSON.stringify(r.bilgiler)}::jsonb,
-                ${JSON.stringify(okunan)}::jsonb, ${y.api_surumu})
+                ${JSON.stringify(Object.keys(hatalar).length ? { ...okunan, okuma_hatalari: hatalar } : okunan)}::jsonb, ${y.api_surumu})
         RETURNING id`),
     );
     return r.sonuc;

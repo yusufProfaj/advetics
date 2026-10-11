@@ -16,6 +16,31 @@ RLS politikası var, platform sahibi yalnız hello@profaj.com.
 bu commit'le deploy ediliyor; migration `20261009100000_iyilestir` (üç
 yeni tablo) + `db:rls`.
 
+**ADVCAMPAIGN DALGA 3 + CANLI TUR 2 (2026-10-11 akşam, canlı `b679e13`).**
+Kullanıcı: kampanya kurma tarafı Meta + Google'da tamamen çalışsın, karar
+bende, sormadan. Bugün canlıda TEMİZ (duraklatılmış kurulum + geri okuma)
+görülenler: SITE Meta (4 boyutlu banner seti, konut, şehir) + Google Arama;
+FORM Meta (1 gün atıf, 17 km); TELEFON Meta + Google (arama öğesi);
+VIDEO Google (rehber yolu). Dalga 3 kodu (canlıda, `deneme`): Meta video
+(ThruPlay), erişim (haftada 2 sıklık), satış (piksel seçici, PURCHASE),
+WhatsApp numarası (sayfadan okunamıyor → soruluyor, kullanıcı onayı şart);
+Google Talep Yaratma GÖRSEL (`demandGenMultiAssetAd`), Maks. Performans
+(`google-pmax.ts`, satın alma dönüşümü kapısı); Google "Vazgeç ve kaldır"
+(`campaignOperation.remove` + REMOVED geri okuma); prova reklam setini
+GEÇİCİ kampanyaya karşı doğruluyor (`setiGeciciKampanyaylaDogrula`,
+ölçüldü: satır içi set provası her biçimde 5xx); panel ekran hataları
+(12 madde). Ajan 4 iki turda 6 bulgu (F1–F6) buldu, hepsi düzeldi.
+**Sıradaki:** Dalga 3 canlı turu (WA numara, Meta video/erişim/satış,
+Google görsel/PMax, Google kaldır) → temiz olanlar `acik` → "aç" yolunun
+gelecek tarihli canlı denemesi → Ajan 6 tasarım denetimi.
+Google'da duran deneme kampanyaları (PAUSED): 24347958127, 24348033727,
+24348046693, 24336868059 — yeni kaldır yoluyla temizlenecek.
+WhatsApp turu 2: prova GEÇTİ (geçici kampanyayla gerçek set denetimi),
+kurulum geri okumada "okunamadı" ile durdu (Meta kampanya 120252522495370700,
+duraklatılmış). Aynı alanlar dakikalar sonra 200 döndü → yeni setin görünür
+olma gecikmesi; hata `catch {}` ile yutuluyordu. Artık 0/3/10 sn yeniden
+deneniyor ve Meta'nın mesajı `geri_okuma.ham.okuma_hatalari`nda.
+
 **DALGA 2 CANLI TUR 1 (2026-10-11, Ege Birlik Yapı, hepsi duraklatılmış,
 konut kategorisi).** `deneme` kipinde canlıda (`7598dee`). Sonuçlar:
 FORM · Meta: form listesi Meta'dan geldi (`privacy_policy_url` kabul), seçili
