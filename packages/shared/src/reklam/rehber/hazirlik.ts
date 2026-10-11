@@ -181,16 +181,26 @@ export interface RehberHazirligi extends ReklamHazirligi {
 
 /**
  * İki platform da uygunsa ikisi seçili gelir (kullanıcı kararı K-3).
- * Uygunluk = görünür + hesabı atanmış. Saf: panel önerinin SEBEBİNİ
- * yazarken de bunu okur.
+ * Uygunluk = görünür + hesabı atanmış + bilinen bir ön koşulu EKSİK değil.
+ * Saf: panel önerinin SEBEBİNİ yazarken de bunu okur.
+ *
+ * SATIŞTA GOOGLE, satın alma dönüşümü KESİN yoksa (`false`) açılmaz: Maks.
+ * Performans o hâlde kurulamıyor (G-DONUSUM engeli) ve canlı turda
+ * (2026-10-11) ekran "ikisi de hazır" deyip kullanıcıyı Google'ı elle
+ * kapatmaya bırakıyordu. `null` (okunamadı) kapatmaz: bilinmeyen bir şey
+ * yüzünden platform saklanmaz, engel ekranda söylenir.
  */
+export function googleOnKosulEksik(amac: RehberAmacKodu, h: Partial<Pick<RehberHazirligi, 'onKosullar'>>): boolean {
+  return amac === 'SATIS' && h.onKosullar?.googleSatisOlcumu === false;
+}
+
 export function onerilenPlatformlar(
   amac: RehberAmacKodu,
-  h: Pick<RehberHazirligi, 'hesaplar' | 'googleHesaplari' | 'ajansYoneticisi'>,
+  h: Pick<RehberHazirligi, 'hesaplar' | 'googleHesaplari' | 'ajansYoneticisi'> & Partial<Pick<RehberHazirligi, 'onKosullar'>>,
   gorunurMu: (amac: RehberAmacKodu, p: RehberPlatformu, ajansYoneticisi: boolean) => boolean,
 ): Record<RehberPlatformu, boolean> {
   return {
     meta: gorunurMu(amac, 'meta', h.ajansYoneticisi) && h.hesaplar.length > 0,
-    google: gorunurMu(amac, 'google', h.ajansYoneticisi) && h.googleHesaplari.length > 0,
+    google: gorunurMu(amac, 'google', h.ajansYoneticisi) && h.googleHesaplari.length > 0 && !googleOnKosulEksik(amac, h),
   };
 }

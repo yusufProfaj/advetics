@@ -18,6 +18,7 @@
 import {
   META_EN_COK_GORSEL,
   METIN_SINIRLARI,
+  googleOnKosulEksik,
   onerilenPlatformlar,
   type GoogleKurgu,
   type MetinSeti,
@@ -255,7 +256,10 @@ export function platformDurumu(amac: RehberAmacKodu, platform: RehberPlatformu, 
  * "Reklam nerede çıksın?" adımındaki öneri cümlesi. Sayı UYDURMAZ: taslaktaki
  * "ayda yaklaşık 6.000 arama" bir örnekti, gerçek hacim burada bilinmiyor.
  */
-export function platformNedeni(amac: RehberAmacKodu, h: Pick<RehberHazirligi, 'ajansYoneticisi' | 'hesaplar' | 'googleHesaplari'>): string {
+export function platformNedeni(
+  amac: RehberAmacKodu,
+  h: Pick<RehberHazirligi, 'ajansYoneticisi' | 'hesaplar' | 'googleHesaplari'> & Partial<Pick<RehberHazirligi, 'onKosullar'>>,
+): string {
   const m = platformDurumu(amac, 'meta', h.ajansYoneticisi);
   const g = platformDurumu(amac, 'google', h.ajansYoneticisi);
   if (m.gorunur && !g.gorunur) return `${g.sebep}; reklam yalnız Instagram ve Facebook'ta açılacak.`;
@@ -263,6 +267,9 @@ export function platformNedeni(amac: RehberAmacKodu, h: Pick<RehberHazirligi, 'a
   if (m.gorunur && g.gorunur) {
     if (h.hesaplar.length === 0) return "Bu workspace'e Meta reklam hesabı atanmamış; şimdilik yalnız Google'ı açtık.";
     if (h.googleHesaplari.length === 0) return "Bu workspace'e Google Ads hesabı atanmamış; şimdilik yalnız Meta'yı açtık.";
+    if (googleOnKosulEksik(amac, h)) {
+      return "Google Ads'te satın alma dönüşümü yok; reklamı yalnız Meta'da açtık. Dönüşüm kurulunca Google'ı da açabilirsin.";
+    }
     if (amac === 'SITE') {
       return 'İkisini birden öneriyoruz: Google, seni zaten arayan kişiyi yakalar; Meta, henüz aramayan ama ilgilenebilecek kişiye gösterir.';
     }
@@ -286,7 +293,7 @@ type PlatformAlani = { deger: Record<RehberPlatformu, boolean>; kaynak: AlanKayn
 export function amacDegisimi(
   yeni: RehberAmacKodu,
   mevcut: PlatformAlani,
-  h: Pick<RehberHazirligi, 'ajansYoneticisi' | 'hesaplar' | 'googleHesaplari'>,
+  h: Pick<RehberHazirligi, 'ajansYoneticisi' | 'hesaplar' | 'googleHesaplari'> & Partial<Pick<RehberHazirligi, 'onKosullar'>>,
 ): Degisiklik[] {
   const amac: Degisiklik = { alan: 'amac', deger: yeni, kaynak: 'kullanici' };
   if (mevcut?.kaynak === 'kullanici') {

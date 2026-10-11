@@ -181,6 +181,31 @@ describe('görünürlük süzgeci: tek karar platformGorunurMu', () => {
   });
 });
 
+describe('satışta Google ön koşulu (canlı, 2026-10-11: "ikisi de hazır" yalanı)', () => {
+  const h = {
+    ajansYoneticisi: true,
+    hesaplar: [{ id: 'm', ad: 'M', paraBirimi: 'TRY', saatDilimi: 'Europe/Istanbul' }],
+    googleHesaplari: [{ id: 'g', ad: 'G', musteriNo: '1-2-3', paraBirimi: 'TRY', saatDilimi: 'Europe/Istanbul' }],
+  };
+  const ok = (v: boolean | null) => ({ onKosullar: { googleSatisOlcumu: v } }) as never;
+  it('KRİTİK: dönüşüm KESİN yoksa Google varsayılan kapalı ve cümle sebebi söylüyor; bilinmiyorsa kapatılmıyor', () => {
+    const eski = { ...REHBER_ACILIS.SATIS };
+    try {
+      REHBER_ACILIS.SATIS.meta = 'deneme';
+      REHBER_ACILIS.SATIS.google = 'deneme';
+      const yok = amacDegisimi('SATIS', undefined, { ...h, ...ok(false) });
+      expect(yok.find((d) => d.alan === 'platformlar')?.deger).toEqual({ meta: true, google: false });
+      expect(platformNedeni('SATIS', { ...h, ...ok(false) })).toContain('satın alma dönüşümü yok');
+      const bilinmiyor = amacDegisimi('SATIS', undefined, { ...h, ...ok(null) });
+      expect(bilinmiyor.find((d) => d.alan === 'platformlar')?.deger).toEqual({ meta: true, google: true });
+      // Başka amaçta aynı alan hiçbir şeyi kapatmıyor.
+      expect(amacDegisimi('SITE', undefined, { ...h, ...ok(false) }).find((d) => d.alan === 'platformlar')?.deger).toMatchObject({ google: REHBER_ACILIS.SITE.google !== 'kapali' });
+    } finally {
+      Object.assign(REHBER_ACILIS.SATIS, eski);
+    }
+  });
+});
+
 describe('ray ve eksikler', () => {
   const e = (adim: 1 | 2 | 3 | 4 | 5 | 6, seviye: 'engel' | 'uyari'): RehberEksigi => ({ adim, alan: null, platform: null, kod: 'X', seviye, metin: 'x' });
   it('KRİTİK: geçilmiş ama engeli kalan adım "bitti" GÖSTERİLMEZ; uyarı engel sayılmaz', () => {
