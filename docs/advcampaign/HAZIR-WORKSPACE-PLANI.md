@@ -54,3 +54,37 @@ Google'da kampanya adı: Advetics kısaltması + tarih + amaç.
 - Açma yolunun canlı sonucu (Dalga 1 adım 2).
 - Gemini'nin Türkçe görsel okumasının kalitesi ve maliyeti (Dalga 2).
 - Tag Manager'a otomatik etiket Faz 2'ye bağlı (Google izinleri).
+
+## Dalga 3 — mimari (Ajan 1, 2026-10-12)
+
+**Tetik:** reklam hesabı workspace'e atandığında (`assignAdAccount`, işlem
+bittikten SONRA, atamayı bozmadan) ve Marka Merkezi'nde "Yeniden hazırla".
+Ayrıca soruların cevabı geldiğinde ilgili adım yeniden koşar.
+
+**Adımlar** (her biri bağımsız; biri düşerse diğerleri sürer, düşenin
+platform mesajı adımda kalır):
+
+| Kod | İş | Yazdığı yer | Kural |
+|---|---|---|---|
+| `site` | Site adresi boşsa Facebook sayfasının `website` alanından | `clients.website` | Dolu adrese dokunulmaz |
+| `marka` | Marka bilgileri siteden AI ile (`BilgiBankasiAiService.taslak`) | `client_profiles` | YALNIZ boş alanlar yazılır |
+| `olcum` | Site taraması + Google/Meta ölçüm durumu (Ölçüm modülü) | önbellek | Okuma |
+| `piksel` | Hesabın pikselleri ∩ sitede görülen piksel; tek eşleşme ya da tek çalışan piksel | `workspace_hazirlama.piksel_id` | İki aday → soru |
+| `sayfa` | Workspace'in tek sayfası/Instagram'ı | (rehber zaten tek seçeneği seçiyor) | İki sayfa → soru |
+| `kategori` | Özel reklam kategorisi bir kez sorulur | `clients.special_ad_categories` + `kategori_cevaplandi` | Cevapsız → soru |
+| `konum` | Varsayılan kitle yoksa konum sorulur; seçilince "Varsayılan" kitle şablonu | `audience_templates` + `client_profiles.varsayilan_kitle_id` | Tahmin yok |
+| `butce` | Varsayılan günlük bütçe: Meta asgarisinin ve Google Talep Yaratma asgarisinin üstünde, TRY'de 500 ₺ | `workspace_hazirlama.gunluk_butce_micros` | Kullanıcı değiştirebilir |
+
+**Tablo** `workspace_hazirlama` (client_id PK, org_id, durum, adimlar jsonb,
+sorular jsonb, piksel_id, gunluk_butce_micros, kategori_cevaplandi,
+son_calisma). RLS (`02_rls.sql`), TRUNCATE listesi, `WORKSPACE_TABLOLARI`
+kararı: workspace taşınırsa satır onunla gider (workspace'in kendi ayarı).
+
+**Uçlar:** `GET /clients/:id/hazirlama`, `POST /clients/:id/hazirlama`
+(yeniden), `POST /clients/:id/hazirlama/cevap` {soru, cevap}. Okuma
+`client.read`, yazma `client.write`.
+
+**Rehber:** hazırlık varsayılanları ön doldurmaya girer (bütçe, yarın
+başlangıç, kategori cevabı, piksel). Amaç seçilince engeli olmayan
+Nerede/Kime/Bütçe adımları atlanır, Reklam adımında özet satırı ("hazırlıktan
+dolu · değiştir") görünür.
