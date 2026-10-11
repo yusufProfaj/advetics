@@ -23,7 +23,7 @@ import { META_EN_COK_GORSEL } from './turet';
 import { butceBol, gunlukEsdeger } from './butce';
 import type { RehberOnKosullari } from './hazirlik';
 import { googleGorselBulgulari, googleGorselKurgusuMu, googleMetinBulgulari, type GorselOlcusu } from './google-gorsel';
-import { ORAN_ETIKETI, YERLESIM_GRUPLARI, bannerSetiDestekleniyor, ortakPlan, setlereAyir, type GorselOrani } from '../banner-seti';
+import { ORAN_ETIKETI, YERLESIM_GRUPLARI, bannerSetiDestekleniyor, reklamSetiPlani, setlereAyir, type GorselOrani } from '../banner-seti';
 
 export type RehberAdimi = 1 | 2 | 3 | 4 | 5 | 6;
 
@@ -262,7 +262,7 @@ export function rehberEksikleri(a: RehberAlanlari, b: RehberEksikBaglami): Rehbe
     // Video varken yerleşim otomatik kalıyor (derleyici); kapanan yerleşim
     // yalnız görsel setlerinde söylenir.
     if (ayrim.setler.length && !medya.some((x) => x.kapakVarlikId)) {
-      const plan = ortakPlan(ayrim.setler.map((st) => st.map((x) => x.oran)));
+      const plan = reklamSetiPlani(ayrim.setler.map((st) => st.map((x) => x.oran)));
       for (const g of plan.kapanan) {
         const t = YERLESIM_GRUPLARI[g];
         ekle('medya', 'meta', 'M-YERLESIM-KAPALI', `${t.etiket} kapalı kalacak: ${t.oranlar.map((o) => ORAN_ETIKETI[o]).join(' ya da ')} görsel yok`, 'uyari');

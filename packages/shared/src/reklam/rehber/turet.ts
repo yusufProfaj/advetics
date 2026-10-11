@@ -22,7 +22,7 @@ import { REHBER_AMACLARI, type GoogleKurgu, type GoogleUlasma } from './amaclar'
 import { VARSAYILAN_META_PAYI, type RehberAlanlari } from './alanlar';
 import { butceBol } from './butce';
 import { METIN_SINIRLARI } from './metin';
-import { ortakPlan, setlereAyir, type GorselOrani, type SetPlani } from '../banner-seti';
+import { reklamSetiPlani, setlereAyir, type GorselOrani, type SetPlani } from '../banner-seti';
 import { googleGorselKurgusuMu, pmaxUzunBaslik } from './google-gorsel';
 
 /**
@@ -63,7 +63,7 @@ export function rehberYerlesimPlani(a: RehberAlanlari, oranlar: ReadonlyMap<stri
   if (!amac || medya.length === 0 || medya.some((x) => x.kapakVarlikId)) return null;
   const ayrim = setlereAyir(medya, oranlar, REHBER_AMACLARI[amac].meta.niyet);
   if (ayrim.taninmayan.length || ayrim.cakisan.length) return null;
-  return ortakPlan(ayrim.setler.map((s) => s.map((x) => x.oran)));
+  return reklamSetiPlani(ayrim.setler.map((s) => s.map((x) => x.oran)));
 }
 
 /**

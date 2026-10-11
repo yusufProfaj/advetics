@@ -7,7 +7,7 @@
  * metin bütün setlerde ortak, uyarılar marka kırmızısıyla.
  *
  * Yerleşim kuralları BURADA YAZILMIYOR: hangi grubun hangi oranı kullandığı
- * ve neyin kapandığı `setPlani`/`ortakPlan`dan (shared) okunuyor. Ekran
+ * ve neyin kapandığı `setPlani`/`reklamSetiPlani`nden (shared) okunuyor. Ekran
  * ikinci bir eşleme kurarsa "açık" dediği yerleşimi derleyici kapatır.
  */
 import { useEffect, useState } from 'react';
@@ -16,7 +16,7 @@ import {
   ORAN_ETIKETI,
   YERLESIM_GRUPLARI,
   YERLESIM_SIRASI,
-  ortakPlan,
+  reklamSetiPlani,
   setPlani,
   type GorselOrani,
   type SetPlani,
@@ -83,7 +83,8 @@ export function SetKartlari({
 
   const oranListeleri = setler.map((st) => GORSEL_ORANLARI.filter((o) => st[o]));
   const planlar = oranListeleri.map(setPlani);
-  const ortak = ortakPlan(oranListeleri);
+  // Derleyiciyle AYNI karar: banner seti varsa kesişim, yoksa birleşim.
+  const ortak = reklamSetiPlani(oranListeleri);
   const coklu = setler.length > 1;
   const sinirda = setler.length >= EKRAN_EN_COK_SET;
   // Ortak kapanışın sebebi olan setler: açmak için kullanıcının gideceği yer.

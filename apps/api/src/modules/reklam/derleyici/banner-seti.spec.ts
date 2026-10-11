@@ -6,6 +6,7 @@ import {
   REHBER_ACILIS,
   oranBul,
   ortakPlan,
+  reklamSetiPlani,
   rehberEksikleri,
   rehberYerlesimPlani,
   rehberdenMeta,
@@ -118,6 +119,28 @@ describe('setPlani / ortakPlan', () => {
     const p = ortakPlan([['dikey', 'dik45', 'kare', 'yatay'], ['kare', 'dik45']]);
     expect(p.otomatik).toBe(false);
     expect(p.kapanan).toEqual(['hikaye']);
+  });
+});
+
+describe('ayrı reklamlar: yerleşim BİRLEŞİM (erişim canlı turu, 2026-10-11)', () => {
+  it('KRİTİK: 1:1 + 1.91:1 + 4:5 üç ayrı reklam → akış, sağ sütun, Marketplace AÇIK; yalnız Hikâye kapalı', () => {
+    const p = reklamSetiPlani([['kare'], ['yatay'], ['dik45']]);
+    expect(p.kapanan).toEqual(['hikaye']);
+    expect(p.otomatik).toBe(false);
+    // Kesişim aynı girdide neredeyse her yeri kapatıyordu.
+    expect(ortakPlan([['kare'], ['yatay'], ['dik45']]).kapanan).toEqual(['akis', 'yan', 'pazar', 'hikaye']);
+  });
+  it('dört oran ayrı reklamlarda → Advantage+ yerleşim; banner seti varsa KESİŞİM kalır', () => {
+    expect(reklamSetiPlani([['kare'], ['yatay'], ['dik45'], ['dikey']]).otomatik).toBe(true);
+    expect(reklamSetiPlani([['dikey', 'dik45', 'kare', 'yatay'], ['kare']]).kapanan).toEqual(['hikaye']);
+    expect(reklamSetiPlani([['kare', 'yatay'], ['dik45']]).kapanan).toEqual(ortakPlan([['kare', 'yatay'], ['dik45']]).kapanan);
+  });
+  it('KRİTİK: derleyici ayrı reklamlarda akışı kapatmıyor (reklam setinin yerleşimi)', () => {
+    const gv = derle({ kavramlar: [kavram({ oran: 'kare' }), kavram({ oran: 'yatay' }), kavram({ oran: 'dik45' })] });
+    const t = bul(gv, 'reklam_seti').targeting;
+    expect(t.facebook_positions).toContain('feed');
+    expect(t.facebook_positions).toContain('marketplace');
+    expect(t.instagram_positions ?? []).not.toContain('story');
   });
 });
 

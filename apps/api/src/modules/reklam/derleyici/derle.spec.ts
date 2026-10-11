@@ -348,7 +348,8 @@ describe('Dalga 2 sürüm ve açılış', () => {
   it('derleyici sürümü yükseldi: eski provalar yeni gövdeyi kanıtlamaz', () => {
     // 1.3.0: video izlenme, erişim ve satış derleniyor; WhatsApp numarası
     // reklam setinde; erişimde sıklık sınırı (Dalga 3).
-    expect(DERLEYICI_SURUMU).toBe('1.3.0');
+    // 1.3.1: banner seti yokken yerleşim planı birleşim.
+    expect(DERLEYICI_SURUMU).toBe('1.3.1');
   });
 
   it('KRİTİK: TELEFON/WHATSAPP derleniyor ama üründe AÇIK DEĞİL (canlı tur bekliyor)', () => {

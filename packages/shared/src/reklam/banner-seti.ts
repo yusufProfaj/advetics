@@ -157,6 +157,26 @@ export function ortakPlan(setler: ReadonlyArray<readonly GorselOrani[]>): SetPla
 }
 
 /**
+ * AYRI REKLAMLARIN PLANI (banner seti yok): grup, onu dolduran EN AZ BİR
+ * görsel varsa açık. Erişim canlı turunda (2026-10-11) 1:1 + 1.91:1 + 4:5
+ * üç ayrı reklam olarak verildi ve kesişim (`ortakPlan`) akışı, sağ sütunu
+ * ve Marketplace'i KAPATTI: 1.91:1'lik reklam akışa "uymuyor" sayıldı.
+ * Kesişim banner setinde zorunlu (yerleşim kuralları her setin her açık
+ * grubu doldurmasını istiyor); ayrı reklamlarda ise yerleşim reklam setinin
+ * alanı ve gruba uyan reklam zaten var. Uymayan reklam o yerleşime de
+ * gidebilir (Meta kırpar); bunun bedeli, bütün bir yerleşimi kapatmaktan
+ * küçük. Dört oranın hepsi varsa Advantage+ yerleşim.
+ */
+export function birlesikPlan(setler: ReadonlyArray<readonly GorselOrani[]>): SetPlani {
+  return setPlani(setler.flat());
+}
+
+/** Reklam seti planı: banner seti (iki+ boyutlu set) varsa kesişim, yoksa birleşim. */
+export function reklamSetiPlani(setler: ReadonlyArray<readonly GorselOrani[]>): SetPlani {
+  return setler.some((s) => s.length > 1) ? ortakPlan(setler) : birlesikPlan(setler);
+}
+
+/**
  * Görselleri sete ayırır. `setNo` verilmişse ona uyulur; verilmemişse sırayla
  * doldurulur: aynı oranın İKİNCİ görseli yeni bir sete düşer (aynı oranda iki
  * görsel = iki farklı tasarım). Oranı tanınmayan görsel hiçbir sete girmez ve

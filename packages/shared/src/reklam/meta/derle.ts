@@ -22,17 +22,18 @@ import { microsToMinor } from '../para';
 import type { Butce } from '../butce';
 import { ATIF_STANDARTLARI } from '../taslak';
 import { TELEFON_E164 } from '../taslak-alanlari';
-import { ORAN_ETIKETI, YERLESIM_GRUPLARI, YERLESIM_SIRASI, bannerSetiDestekleniyor, ortakPlan, setPlani, type GorselOrani, type SetPlani, type YerlesimGrubu } from '../banner-seti';
+import { ORAN_ETIKETI, YERLESIM_GRUPLARI, YERLESIM_SIRASI, bannerSetiDestekleniyor, reklamSetiPlani, setPlani, type GorselOrani, type SetPlani, type YerlesimGrubu } from '../banner-seti';
 
 /**
  * 1.1.0: banner seti (yerleşime göre görsel) ve eksik boyutta elle yerleşim.
  * 1.2.0: TELEFON ve WHATSAPP derleniyor (Dalga 2).
  * 1.3.0: VIDEO_IZLENME, ERISIM ve SATIS derleniyor; WhatsApp numarası
  *        `promoted_object`te; erişimde sıklık sınırı (Dalga 3).
+ * 1.3.1: banner seti yokken yerleşim planı BİRLEŞİM (`reklamSetiPlani`).
  * Sürüm provanın tazeliğine bağlı: eski derleyiciyle geçmiş prova yeni
  * gövdeyi kanıtlamaz.
  */
-export const DERLEYICI_SURUMU = '1.3.0';
+export const DERLEYICI_SURUMU = '1.3.1';
 
 /**
  * CLICK-TO-WHATSAPP SABİTLERİ (CLAUDE.md "CLICK-TO-WHATSAPP"). Bağlantı
@@ -597,7 +598,8 @@ export function yerlesimPlani(kavramlar: readonly Kavram[]): SetPlani | null {
     else if (k.oran) setler.push([k.oran]);
     else return null;
   }
-  return ortakPlan(setler);
+  // Banner seti varsa kesişim, yoksa birleşim (`reklamSetiPlani`).
+  return reklamSetiPlani(setler);
 }
 
 /**
