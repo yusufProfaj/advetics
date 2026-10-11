@@ -1,0 +1,430 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ölçüm Kurulumu Taslağı</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --brand:#ff2400; --brand-accent:#d21d00; --brand-soft:rgba(255,36,0,.08); --brand-strong:#c41c00;
+  --surface:#ffffff; --muted:#f6f5f4; --sunken:#efedeb; --line:#e7e4e2;
+  --ink:#302e2d; --ink-muted:#6f6a67; --ok:#16a34a; --warn-strong:#b45309; --warn-soft:#fffbeb; --danger:#dc2626;
+  --shadow-card:0 1px 2px rgb(16 24 40 / .04),0 2px 10px -3px rgb(16 24 40 / .07);
+  --shadow-pop:0 4px 8px -2px rgb(16 24 40 / .08),0 20px 44px -12px rgb(16 24 40 / .22);
+  --ease:cubic-bezier(.16,1,.3,1);
+  --baslik:"Montserrat",system-ui,sans-serif; --govde:"Open Sans",system-ui,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--surface:#13151c;--muted:#0b0d12;--sunken:#1b1e27;--line:#262a35;--ink:#ece9e7;--ink-muted:#a39d99;--brand-soft:rgba(255,36,0,.16);--brand-strong:#ff6a4d;--warn-soft:#2b2008;--warn-strong:#fbbf24;color-scheme:dark}}
+:root[data-theme="dark"]{--surface:#13151c;--muted:#0b0d12;--sunken:#1b1e27;--line:#262a35;--ink:#ece9e7;--ink-muted:#a39d99;--brand-soft:rgba(255,36,0,.16);--brand-strong:#ff6a4d;--warn-soft:#2b2008;--warn-strong:#fbbf24;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--muted);color:var(--ink);font-family:var(--govde);font-size:14px}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+:focus-visible{outline:2px solid var(--brand);outline-offset:2px;border-radius:6px}
+.num{font-variant-numeric:tabular-nums}
+
+/* Kabuk: geniş menü (kenar-cubugu.tsx) */
+.kabuk{display:grid;grid-template-columns:232px minmax(0,1fr);min-height:100vh}
+.menu{background:var(--surface);border-right:1px solid var(--line);padding:16px 12px;display:flex;flex-direction:column;gap:4px}
+.logo{font-family:var(--baslik);font-weight:800;font-size:18px;padding:4px 8px 10px}
+.logo span{color:var(--brand)}
+.ws{border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:12.5px;margin-bottom:10px}
+.ws small{display:block;color:var(--ink-muted);font-size:11px}
+.grup{font-size:11px;font-weight:700;color:var(--ink-muted);text-transform:uppercase;letter-spacing:.06em;padding:12px 8px 4px}
+.oge{padding:7px 10px;border-radius:999px;font-size:13px;font-weight:600;color:var(--ink-muted)}
+.oge.secili{background:var(--brand-soft);color:var(--brand-strong)}
+
+.sayfa{padding:20px 24px 56px;display:flex;flex-direction:column;gap:16px;min-width:0}
+.not{background:var(--surface);border:1px dashed var(--line);border-radius:12px;padding:10px 14px;font-size:12.5px;color:var(--ink-muted);line-height:1.55}
+.not b{color:var(--ink)}
+.kirinti{font-size:12.5px;color:var(--ink-muted)}
+.kirinti b{color:var(--ink)}
+.ust{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px 16px}
+.ust h1{font-family:var(--baslik);font-weight:700;font-size:24px;margin:0;letter-spacing:-.01em}
+.alt{font-size:13px;color:var(--ink-muted);margin-top:2px;max-width:620px;line-height:1.5}
+.sag{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.zaman{font-size:12px;color:var(--ink-muted)}
+
+.icgovde{display:grid;grid-template-columns:200px minmax(0,1fr);gap:16px;align-items:start}
+.icmenu{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:6px;display:flex;flex-direction:column;gap:2px;box-shadow:var(--shadow-card)}
+.icmenu div{padding:8px 10px;border-radius:8px;font-size:13px;font-weight:600;color:var(--ink-muted);display:flex;align-items:center;gap:6px}
+.icmenu div.secili{background:var(--brand-soft);color:var(--brand-strong)}
+.yeni{font-size:10px;font-weight:700;border-radius:999px;padding:0 6px;background:var(--brand);color:#fff}
+.icerik{display:flex;flex-direction:column;gap:16px;min-width:0}
+
+.birincil{display:inline-flex;align-items:center;gap:6px;color:#fff;font-weight:600;font-size:12.5px;padding:8px 14px;border-radius:999px;background-image:linear-gradient(135deg,var(--brand),color-mix(in srgb,var(--brand) 72%,var(--brand-accent)));box-shadow:0 1px 2px rgb(16 24 40/.1),0 4px 14px -4px rgba(255,36,0,.45);transition:transform .2s var(--ease),opacity .2s}
+.birincil:hover{transform:translateY(-1px)}
+.ikincil{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 13px;font-size:12.5px;font-weight:600;transition:border-color .2s var(--ease)}
+.ikincil:hover{border-color:var(--ink-muted)}
+.metinD{font-size:12.5px;font-weight:600;color:var(--ink-muted)}
+.metinD:hover{color:var(--ink);text-decoration:underline}
+
+.kart{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-card);overflow:hidden;min-width:0}
+.kartUst{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.kartUst h2{margin:0;font-size:13.5px;font-weight:700}
+.kartUst .say{font-size:12px;color:var(--ink-muted)}
+.karo{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;color:#fff;background-image:linear-gradient(135deg,var(--brand),var(--brand-accent));flex:none}
+.karo svg{width:16px;height:16px}
+.karo.gri{background:var(--ink)}
+
+/* Özet şeridi */
+.ozet{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
+.ozet>div{padding:14px 16px;border-right:1px solid var(--line);min-width:0}
+.ozet>div:last-child{border-right:0}
+.ozet small{display:block;font-size:12px;font-weight:600;color:var(--ink-muted)}
+.ozet b{display:block;font-family:var(--baslik);font-size:20px;margin-top:2px;overflow-wrap:anywhere}
+.ozet b.siteAd{font-size:15px;font-family:var(--govde);font-weight:700;padding-top:4px}
+.ozet em{font-style:normal;font-size:12px;color:var(--ink-muted);display:block;margin-top:2px}
+
+/* Durum: şekil + metin, yeşil yalnız durumda */
+.d{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;white-space:nowrap}
+.d i{width:8px;height:8px;border-radius:50%;flex:none}
+.d.ok i{background:var(--ok)} .d.ok{color:var(--ok)}
+.d.yok i{background:transparent;border:2px solid var(--danger);border-radius:2px;transform:rotate(45deg);width:7px;height:7px}
+.d.yok{color:var(--danger)}
+.d.bekle i{background:transparent;border:2px solid var(--ink-muted)}
+.d.bekle{color:var(--ink-muted)}
+.d.uyari i{background:var(--warn-strong)} .d.uyari{color:var(--warn-strong)}
+.d.suruyor i{border:2px solid var(--brand);border-top-color:transparent;animation:don .8s linear infinite}
+.d.suruyor{color:var(--brand-strong)}
+@keyframes don{to{transform:rotate(360deg)}}
+
+/* Tablo */
+.tablo{width:100%;border-collapse:collapse;font-size:13px}
+.tablo th{text-align:left;font-size:11.5px;font-weight:700;color:var(--ink-muted);padding:9px 16px;border-bottom:1px solid var(--line);background:var(--muted);white-space:nowrap}
+.tablo td{padding:11px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+.tablo tr:last-child td{border-bottom:0}
+.tablo td small{display:block;color:var(--ink-muted);font-size:12px;margin-top:2px;line-height:1.45}
+.tablo .ad{font-weight:700}
+.amaclar{display:flex;flex-wrap:wrap;gap:4px}
+.cip{font-size:11px;font-weight:700;border-radius:6px;padding:2px 7px;background:var(--sunken);color:var(--ink)}
+.tabloKap{overflow-x:auto}
+.altSatir{padding:9px 16px;font-size:12px;color:var(--ink-muted);border-top:1px solid var(--line);background:var(--muted)}
+
+/* En uygun öneri */
+.oneri{display:grid;grid-template-columns:minmax(0,1fr) 300px}
+.oneri .sol{padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.oneri h3{margin:0;font-size:16px;font-weight:700;line-height:1.35;font-family:var(--baslik)}
+.oneri p{margin:0;font-size:13px;line-height:1.55;color:var(--ink-muted)}
+.oneri p b{color:var(--ink)}
+.adimlar{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;counter-reset:a}
+.adimlar li{display:grid;grid-template-columns:24px minmax(0,1fr) auto;gap:10px;align-items:start;font-size:13px;line-height:1.45}
+.adimlar li::before{counter-increment:a;content:counter(a);width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:11.5px;font-weight:700;background:var(--sunken)}
+.adimlar li small{display:block;color:var(--ink-muted);font-size:12px}
+.adimlar code{font-size:12px;background:var(--sunken);border-radius:5px;padding:0 5px}
+.yer{font-size:11px;font-weight:700;border-radius:6px;padding:2px 7px;white-space:nowrap}
+.yer.biz{background:var(--sunken);color:var(--ink)}
+.yer.site{background:var(--brand-soft);color:var(--brand-strong)}
+.oneri .sagK{border-left:1px solid var(--line);padding:16px;background:var(--muted);display:flex;flex-direction:column;gap:10px}
+.oneri .sagK h4{margin:0;font-size:12.5px}
+.secenek{display:flex;gap:8px;align-items:flex-start;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:9px 10px;font-size:12.5px;line-height:1.4;transition:border-color .2s var(--ease)}
+.secenek[aria-pressed="true"]{border-color:var(--brand)}
+.secenek i{width:14px;height:14px;border-radius:50%;border:2px solid var(--line);flex:none;margin-top:2px;transition:all .2s var(--ease)}
+.secenek[aria-pressed="true"] i{border:4px solid var(--brand)}
+.secenek small{display:block;color:var(--ink-muted)}
+.eylem{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding-top:4px}
+
+/* Doğrulama zaman çizelgesi */
+.cizelge{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0}
+.cizelge>div{padding:14px 16px;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:6px;min-width:0}
+.cizelge>div:last-child{border-right:0}
+.cizelge b{font-size:13px}
+.cizelge small{font-size:12px;color:var(--ink-muted);line-height:1.45}
+
+/* Bağlantılar */
+.baglar{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
+.baglar>div{padding:14px 16px;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:6px}
+.baglar>div:last-child{border-right:0}
+.baglar b{font-size:13px}
+.baglar small{font-size:12px;color:var(--ink-muted);line-height:1.45}
+
+/* Taslak durum seçici */
+.taslakSec{display:inline-flex;background:var(--sunken);border-radius:999px;padding:3px;gap:2px;flex-wrap:wrap}
+.taslakSec button{padding:6px 12px;border-radius:999px;font-size:12px;font-weight:600;color:var(--ink-muted);transition:background .25s var(--ease),color .25s var(--ease)}
+.taslakSec button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow-card)}
+
+.hal{display:none}
+.hal.acik{display:contents}
+
+/* Onay penceresi */
+.perde{position:fixed;inset:0;background:rgb(16 24 40/.35);display:grid;place-items:center;padding:16px;opacity:0;visibility:hidden;transition:opacity .25s var(--ease),visibility .25s;z-index:50}
+.perde.acik{opacity:1;visibility:visible}
+.pencere{width:min(560px,100%);background:var(--surface);border-radius:14px;box-shadow:var(--shadow-pop);transform:translateY(10px) scale(.98);transition:transform .35s var(--ease);max-height:calc(100vh - 32px);overflow:auto}
+.perde.acik .pencere{transform:none}
+.pencere h3{margin:0;padding:16px 18px 4px;font-size:16px;font-family:var(--baslik)}
+.pencere>p{margin:0 18px;font-size:13px;color:var(--ink-muted);line-height:1.5}
+.degisiklik{margin:14px 18px;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.degisiklik div{display:flex;justify-content:space-between;gap:12px;padding:9px 12px;font-size:12.5px;border-bottom:1px solid var(--line)}
+.degisiklik div:last-child{border-bottom:0}
+.degisiklik span{color:var(--ink-muted)}
+.uyariK{margin:0 18px 12px;padding:10px 12px;border-radius:10px;background:var(--warn-soft);color:var(--warn-strong);font-size:12.5px;line-height:1.5}
+.pencereAlt{display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--line)}
+
+@media (max-width:1100px){.oneri{grid-template-columns:1fr}.oneri .sagK{border-left:0;border-top:1px solid var(--line)}}
+@media (max-width:900px){
+  .kabuk{grid-template-columns:1fr}.menu{display:none}
+  .icgovde{grid-template-columns:1fr}
+  .icmenu{flex-direction:row;overflow-x:auto}
+  .icmenu div{white-space:nowrap}
+  .ozet,.cizelge,.baglar{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ozet>div:nth-child(2n),.cizelge>div:nth-child(2n),.baglar>div:nth-child(2n){border-right:0}
+  .ozet>div,.cizelge>div,.baglar>div{border-bottom:1px solid var(--line)}
+}
+@media (max-width:560px){
+  .sayfa{padding:16px 16px 48px}
+  .ozet,.cizelge,.baglar{grid-template-columns:1fr}
+  .ozet>div,.cizelge>div,.baglar>div{border-right:0}
+  .sag{margin-left:0}
+}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div class="kabuk">
+  <nav class="menu" aria-label="Ana menü">
+    <div class="logo">adv<span>etics</span></div>
+    <div class="ws"><small>Workspace</small><b>Ege Birlik Yapı</b></div>
+    <div class="oge">Genel Bakış</div>
+    <div class="grup">Planla</div><div class="oge">AdvStrategy</div><div class="oge">Aylık Bütçe</div>
+    <div class="grup">Oluştur</div><div class="oge">Akıllı Boost</div><div class="oge">AdvCampaign</div>
+    <div class="grup">Yönet</div><div class="oge">Reklam Yöneticisi</div><div class="oge">Potansiyel Müşteriler</div>
+    <div class="grup">İyileştir</div><div class="oge">Kurallar</div>
+    <div class="grup">Raporlar</div><div class="oge">Raporlar</div>
+    <div class="grup">Base</div><div class="oge secili">Marka Merkezi</div>
+  </nav>
+
+  <main class="sayfa">
+    <div class="not">
+      <b>TASLAK · Ölçüm Kurulumu.</b> Yer: <b>Base › Marka Merkezi › Ölçüm</b> (yeni iç menü bölümü; yeni workspace kurulum ekranları ayrı sayfa açmıyor). Mantık Google Ads'in <b>Hedefler › Dönüşümler</b> ekranı: önce tablo (neyi ölçüyoruz, durumu ne), sonra <b>tek en uygun öneri</b> ve tek düğme. Sayılar ve site adresi örnek; GTM kimliği uydurma.
+      Aşağıdaki seçiciyle dört hâli görebilirsin:
+      <div class="taslakSec" role="group" aria-label="Taslak hâli" style="margin-top:8px">
+        <button type="button" data-hal="baglanti" aria-pressed="false">1 · İzin yok</button>
+        <button type="button" data-hal="eksik" aria-pressed="true">2 · Tarandı, eksik var</button>
+        <button type="button" data-hal="dogrula" aria-pressed="false">3 · Kuruldu, test bekleniyor</button>
+        <button type="button" data-hal="tamam" aria-pressed="false">4 · Kaydediliyor</button>
+      </div>
+    </div>
+
+    <div class="kirinti">Base › Marka Merkezi › <b>Ölçüm</b></div>
+    <div class="ust">
+      <div>
+        <h1>Ölçüm</h1>
+        <div class="alt">Sitenden form, arama ya da satış geldiğinde Meta ve Google'a haber veren kurulum. Reklamlar bu sinyalle kendini iyileştiriyor; ölçüm yoksa "satış" amaçlı reklam açılamaz.</div>
+      </div>
+      <div class="sag">
+        <span class="zaman" id="taramaZamani">Son tarama: 3 dakika önce</span>
+        <button type="button" class="ikincil" id="tara">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>
+          Siteyi yeniden tara
+        </button>
+      </div>
+    </div>
+
+    <div class="icgovde">
+      <div class="icmenu" aria-label="Marka Merkezi bölümleri">
+        <div>Bağlantılar</div><div>Marka</div><div>Kitleler</div><div>Varlıklar</div>
+        <div class="secili">Ölçüm <span class="yeni">Yeni</span></div>
+        <div>Workspace ayarları</div>
+      </div>
+
+      <div class="icerik">
+
+        <!-- ÖZET: dört kutu, Google Ads metrik kutuları gibi -->
+        <section class="kart">
+          <div class="ozet">
+            <div><small>Site</small><b class="siteAd">egebirlikseasight.com</b><em id="ozSite">Tag Manager bulundu · GTM-ÖRNEK1</em></div>
+            <div><small>Google Ads dönüşümü</small><b class="num" id="ozG">0 kaydediliyor</b><em id="ozGa">Hesapta 2 tanım var, ikisi de son 30 günde sinyal almadı</em></div>
+            <div><small>Meta pikseli</small><b class="num" id="ozM">1 / 2 etkin</b><em id="ozMa">Ege Birlik Pixel · son 7 günde 412 sayfa görüntüleme</em></div>
+            <div><small>Reklam amaçları</small><b class="num" id="ozA">4 / 7 hazır</b><em id="ozAa">Form ve Satış Google'da ölçülmüyor</em></div>
+          </div>
+        </section>
+
+        <!-- HÂL 1: izin yok -->
+        <div class="hal" data-hal="baglanti">
+          <section class="kart">
+            <div class="kartUst"><span class="karo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg></span><h2>Siteni kontrol edebilmemiz için iki izin gerekiyor</h2></div>
+            <div class="baglar">
+              <div><span class="d yok"><i></i>Bağlı değil</span><b>Google Tag Manager</b><small>Sitedeki etiketleri okumak ve senin onayınla dönüşüm etiketi eklemek için. Onay vermeden sitende hiçbir şey değişmez.</small><span><button type="button" class="birincil">Google ile bağla</button></span></div>
+              <div><span class="d yok"><i></i>Bağlı değil</span><b>Google Analytics</b><small>Sitede satış ya da form zaten ölçülüyorsa en temiz yol onu Google Ads'e bağlamak. Etiket eklemeye gerek kalmaz.</small><span><button type="button" class="ikincil">Google ile bağla</button></span></div>
+              <div><span class="d ok"><i></i>Bağlı</span><b>Google Ads · Meta</b><small>Zaten bağlı (reklam hesapları). Dönüşüm tanımları ve piksel buradan okunuyor.</small><span><button type="button" class="metinD">Bağlantılar'da gör</button></span></div>
+            </div>
+            <div class="altSatir">Sitenin kaynağına izin olmadan da bakıyoruz: aşağıdaki tablo yalnız <b>herkese açık sayfadan</b> görülebilenleri gösteriyor.</div>
+          </section>
+        </div>
+
+        <!-- TABLO: neyi ölçüyoruz (her hâlde) -->
+        <section class="kart">
+          <div class="kartUst"><span class="karo gri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg></span><h2>Neyi ölçüyoruz</h2><span class="say">4 ölçüm · 4'ü gösteriliyor</span></div>
+          <div class="tabloKap">
+          <table class="tablo">
+            <thead><tr><th>Ölçüm</th><th>Meta</th><th>Google Ads</th><th>Kullanan reklam amaçları</th></tr></thead>
+            <tbody id="tabloGovde">
+              <tr>
+                <td><span class="ad">Form gönderimi</span><small>Teşekkür sayfası bulundu: <code>/tesekkurler</code></small></td>
+                <td><span class="d ok"><i></i>Kaydediliyor</span><small>Lead · son olay 2 sa önce</small></td>
+                <td class="hG1"><span class="d yok"><i></i>Ölçülmüyor</span><small>Hesapta bu dönüşüm yok</small></td>
+                <td><div class="amaclar"><span class="cip">Form doldursunlar</span><span class="cip">Siteme gelsinler</span></div></td>
+              </tr>
+              <tr>
+                <td><span class="ad">Satın alma</span><small>Sitede ödeme sayfası bulunamadı</small></td>
+                <td><span class="d bekle"><i></i>Olay yok</span><small>Son 7 günde Purchase gelmedi</small></td>
+                <td><span class="d bekle"><i></i>Uygulanamaz</span><small>Sitede satış akışı yok; emlak sitesi için "Form gönderimi" ölçülür</small></td>
+                <td><div class="amaclar"><span class="cip">Sitemden satış gelsin</span></div></td>
+              </tr>
+              <tr>
+                <td><span class="ad">Telefon araması</span><small>Reklamdaki arama düğmesi</small></td>
+                <td><span class="d ok"><i></i>Platform sayıyor</span><small>Kurulum gerekmez</small></td>
+                <td><span class="d ok"><i></i>Platform sayıyor</span><small>Arama öğesinden gelen aramalar</small></td>
+                <td><div class="amaclar"><span class="cip">Beni arasınlar</span></div></td>
+              </tr>
+              <tr>
+                <td><span class="ad">WhatsApp sohbeti</span><small>Reklamdan başlayan sohbet</small></td>
+                <td><span class="d ok"><i></i>Platform sayıyor</span><small>Kurulum gerekmez</small></td>
+                <td><span class="d bekle"><i></i>Google'da yok</span><small>Google'da WhatsApp reklamı yok</small></td>
+                <td><div class="amaclar"><span class="cip">WhatsApp'tan yazsınlar</span></div></td>
+              </tr>
+            </tbody>
+          </table>
+          </div>
+          <div class="altSatir">"Platform sayıyor": Meta ve Google bu sonucu kendi uygulamasında görüyor, sitende kod gerekmiyor. Durum her zaman nedeniyle yazılır.</div>
+        </section>
+
+        <!-- HÂL 2: tek en uygun öneri -->
+        <div class="hal acik" data-hal="eksik">
+          <section class="kart oneri">
+            <div class="sol">
+              <span class="d uyari"><i></i>Sizin için en uygun öneri</span>
+              <h3>Google Ads form gönderimlerini görmüyor. Sitendeki Tag Manager'a bir etiket ekleyelim.</h3>
+              <p>Meta formları sayıyor, Google saymıyor: Google reklamları <b>kimin form doldurduğunu bilmeden</b> optimize ediliyor. Sitende Tag Manager (<b>GTM-ÖRNEK1</b>) ve teşekkür sayfası (<b>/tesekkurler</b>) bulundu; kurulum üç adım.</p>
+              <ol class="adimlar">
+                <li><span>Google Ads'te <b>"Form gönderimi"</b> dönüşümünü aç<small>Sayım: tıklama başına bir, pencere 30 gün</small></span><span class="yer biz">Google Ads</span></li>
+                <li><span>Tag Manager'a dönüşüm etiketi ekle<small>Tetikleyici: sayfa adresi <code>/tesekkurler</code> içeriyor · çerez izni varsa çalışır</small></span><span class="yer biz">Tag Manager taslağı</span></li>
+                <li><span>Değişikliği yayınla<small>Sitende görünür bir şey değişmez; yayın Tag Manager'da geri alınabilir</small></span><span class="yer site">Sitende değişiklik</span></li>
+              </ol>
+              <div class="eylem">
+                <button type="button" class="birincil" id="onayAc">Kurulumu gözden geçir</button>
+                <button type="button" class="metinD">Şimdi değil</button>
+              </div>
+            </div>
+            <div class="sagK">
+              <h4>Formun ne zaman "gönderildi" sayılacağı</h4>
+              <button type="button" class="secenek" aria-pressed="true"><i></i><span>Teşekkür sayfası açılınca<small>/tesekkurler · tarama bu sayfayı formdan sonra buldu</small></span></button>
+              <button type="button" class="secenek" aria-pressed="false"><i></i><span>Sitenin gönderdiği olay<small>dataLayer'da <code>generate_lead</code> bulunamadı</small></span></button>
+              <button type="button" class="secenek" aria-pressed="false"><i></i><span>Analytics'teki "form_submit"i içe aktar<small>Analytics bağlı değil · bağlarsan etiket gerekmez</small></span></button>
+              <p style="font-size:12px;color:var(--ink-muted);margin:0;line-height:1.45">Emin olamadığımızı seçmiyoruz: teşekkür sayfası formdan sonra açılmıyorsa sayım hiç gelmez, yalnız sayfayı ziyaret edenleri saymak ise yanlış sayıdır.</p>
+            </div>
+          </section>
+        </div>
+
+        <!-- HÂL 3: doğrulama -->
+        <div class="hal" data-hal="dogrula">
+          <section class="kart">
+            <div class="kartUst"><span class="karo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg></span><h2>Form gönderimi · Google Ads</h2><span class="say">"Kaydediliyor" görülmeden bitmiş sayılmaz</span></div>
+            <div class="cizelge">
+              <div><span class="d ok"><i></i>Bitti</span><b>Dönüşüm açıldı</b><small>Google Ads · "Form gönderimi (Advetics)"</small></div>
+              <div><span class="d ok"><i></i>Bitti</span><b>Etiket eklendi</b><small>Tag Manager sürüm 14 · "Advetics: Google Ads form"</small></div>
+              <div><span class="d ok"><i></i>Bitti</span><b>Yayınlandı</b><small>Bugün 14:32 · sitede etiket görüldü</small></div>
+              <div><span class="d suruyor"><i></i>Bekleniyor</span><b>İlk sayım</b><small>Sitende bir form doldur ya da gerçek bir başvuru gelsin. Google'a ulaşması 3 saati bulabilir.</small></div>
+            </div>
+            <div class="altSatir" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <span>24 saat içinde sayım gelmezse kurulumu "sorunlu" diye işaretleyip sebebini buraya yazıyoruz.</span>
+              <span style="margin-left:auto;display:flex;gap:8px"><button type="button" class="ikincil">Form doldurdum, kontrol et</button><button type="button" class="metinD">Kurulumu geri al</button></span>
+            </div>
+          </section>
+        </div>
+
+        <!-- HÂL 4: tamam -->
+        <div class="hal" data-hal="tamam">
+          <section class="kart">
+            <div class="kartUst"><span class="karo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg></span><h2>Bütün kullanılabilir ölçümler hazır</h2></div>
+            <div style="padding:14px 16px;font-size:13px;line-height:1.55;color:var(--ink-muted)">
+              Google Ads son 24 saatte <b style="color:var(--ink)">3 form gönderimi</b> kaydetti. "Form doldursunlar" ve "Siteme gelsinler" artık Google'da da dönüşüme göre optimize edilebilir. <b style="color:var(--ink)">Satın alma</b> bu sitede uygulanamaz (satış akışı yok); bu bir eksik sayılmıyor.
+              <div style="margin-top:10px"><button type="button" class="birincil">AdvCampaign'de reklam kur</button></div>
+            </div>
+          </section>
+        </div>
+
+        <!-- Rehberle bağ -->
+        <section class="kart">
+          <div class="kartUst"><span class="karo gri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></span><h2>AdvCampaign'de nasıl görünecek</h2></div>
+          <div style="padding:12px 16px;display:flex;flex-direction:column;gap:8px;font-size:13px">
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;border:1px solid var(--line);border-radius:10px;padding:10px 12px">
+              <span class="d yok"><i></i>Engel</span>
+              <span>Google Ads'te satın alma dönüşümü etkin değil</span>
+              <button type="button" class="metinD" style="margin-left:auto">Ölçüm'de kur →</button>
+            </div>
+            <span style="color:var(--ink-muted);font-size:12px">Bugün bu engel yalnız "etkin değil" diyor ve kullanıcıyı Google Ads'e yolluyor. Bağlantı doğrudan bu ekrandaki öneriye iner; kurulum bitince engel kendiliğinden kalkar.</span>
+          </div>
+        </section>
+
+        <div class="not">
+          <b>Verdiğim kararlar (kullanım kolaylığı + reklam verimliliği):</b>
+          (1) <b>Ayrı ekran değil, Marka Merkezi bölümü</b>: ölçüm bir workspace kurulumu; Bağlantılar'ın yanında duruyor.
+          (2) <b>Tek öneri, tek düğme</b>: sistem en temiz yolu seçiyor (Analytics içe aktarma → Tag Manager etiketi → altyapının kendi entegrasyonu). Seçenekler yanda görünür ama emin olmadığı yolu varsayılan yapmıyor.
+          (3) <b>Sitende değişiklik = açık onay</b>: Tag Manager'da yayından önce ne ekleneceği satır satır gösteriliyor; geri alma düğmesi var.
+          (4) <b>"Kaydediliyor" görülmeden bitmedi</b>: 200 döndü doğrulama değil.
+          (5) <b>Uygulanamaz ≠ eksik</b>: satış akışı olmayan sitede "Satın alma" kırmızı yanmıyor.
+          <br><b>Açık noktalar:</b> Google'ın Tag Manager/Analytics yazma izinleri uygulama doğrulaması isteyebilir (haftalar); doğrulama gelene kadar yalnız tarama ve Analytics içe aktarma çalışır. Meta tarafında ilk sürüm yalnız piksel okur, kurmaz (pikselin olayları sitedeki koda bağlı).
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Onay penceresi -->
+<div class="perde" id="perde" aria-hidden="true">
+  <div class="pencere" role="dialog" aria-modal="true" aria-labelledby="pb">
+    <h3 id="pb">Sitende yayınlanacak değişiklik</h3>
+    <p>Tag Manager kapsayıcın <b>GTM-ÖRNEK1</b>'e aşağıdakiler eklenip yayınlanacak. Sitenin görünüşü değişmez.</p>
+    <div class="degisiklik">
+      <div><span>Google Ads dönüşümü</span><b>Form gönderimi (Advetics)</b></div>
+      <div><span>Yeni etiket</span><b>Advetics: Google Ads form</b></div>
+      <div><span>Tetikleyici</span><b>Sayfa adresi /tesekkurler içeriyor</b></div>
+      <div><span>Çerez izni</span><b>"ad_storage" izni varsa çalışır</b></div>
+      <div><span>Mevcut etiketler</span><b>Dokunulmuyor (17 etiket)</b></div>
+    </div>
+    <div class="uyariK">Yayından sonra Tag Manager'da önceki sürüme dönülebilir; "Kurulumu geri al" bunu senin yerine yapar.</div>
+    <div class="pencereAlt">
+      <button type="button" class="ikincil" id="onayKapat">Vazgeç</button>
+      <button type="button" class="birincil" id="onayla">Onayla ve yayınla</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const dugmeler=[...document.querySelectorAll('.taslakSec button')];
+  const haller=[...document.querySelectorAll('.hal')];
+  const ozet={
+    baglanti:{site:'Tag Manager var gibi görünüyor (sayfa kaynağı) · izin yok',g:'0 kaydediliyor',ga:'Dönüşüm tanımları okundu (Google Ads bağlı)',a:'4 / 7 hazır',aa:'Form ve Satış Google\'da ölçülmüyor'},
+    eksik:{site:'Tag Manager bulundu · GTM-ÖRNEK1',g:'0 kaydediliyor',ga:'Hesapta 2 tanım var, ikisi de son 30 günde sinyal almadı',a:'4 / 7 hazır',aa:'Form ve Satış Google\'da ölçülmüyor'},
+    dogrula:{site:'Tag Manager · sürüm 14 yayında',g:'1 bekleniyor',ga:'Form gönderimi (Advetics) · ilk sayım bekleniyor',a:'4 / 7 hazır',aa:'Form, ilk sayım gelince hazır'},
+    tamam:{site:'Tag Manager · sürüm 14 yayında',g:'1 kaydediliyor',ga:'Form gönderimi · son 24 saatte 3',a:'6 / 7 hazır',aa:'Satın alma bu sitede uygulanamaz'}
+  };
+  function goster(h){
+    dugmeler.forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.hal===h)));
+    haller.forEach(x=>x.classList.toggle('acik',x.dataset.hal===h));
+    const o=ozet[h];
+    document.getElementById('ozSite').textContent=o.site;
+    document.getElementById('ozG').textContent=o.g;
+    document.getElementById('ozGa').textContent=o.ga;
+    document.getElementById('ozA').textContent=o.a;
+    document.getElementById('ozAa').textContent=o.aa;
+    const h1=document.querySelector('.hG1');
+    h1.innerHTML = h==='tamam' ? '<span class="d ok"><i></i>Kaydediliyor</span><small>Son sayım 40 dk önce</small>'
+      : h==='dogrula' ? '<span class="d suruyor"><i></i>İlk sayım bekleniyor</span><small>Etiket yayında</small>'
+      : '<span class="d yok"><i></i>Ölçülmüyor</span><small>Hesapta bu dönüşüm yok</small>';
+  }
+  dugmeler.forEach(b=>b.addEventListener('click',()=>goster(b.dataset.hal)));
+  document.querySelectorAll('.secenek').forEach(s=>s.addEventListener('click',()=>{document.querySelectorAll('.secenek').forEach(x=>x.setAttribute('aria-pressed',String(x===s)))}));
+  const perde=document.getElementById('perde');
+  const ac=()=>{perde.classList.add('acik');perde.setAttribute('aria-hidden','false');document.getElementById('onayla').focus()};
+  const kapat=()=>{perde.classList.remove('acik');perde.setAttribute('aria-hidden','true')};
+  document.getElementById('onayAc').addEventListener('click',ac);
+  document.getElementById('onayKapat').addEventListener('click',kapat);
+  document.getElementById('onayla').addEventListener('click',()=>{kapat();goster('dogrula')});
+  perde.addEventListener('click',e=>{if(e.target===perde)kapat()});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')kapat()});
+  document.getElementById('tara').addEventListener('click',()=>{document.getElementById('taramaZamani').textContent='Taranıyor…';setTimeout(()=>document.getElementById('taramaZamani').textContent='Son tarama: az önce',900)});
+})();
+</script>
