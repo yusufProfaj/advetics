@@ -364,3 +364,42 @@ describe('form kimliği taslaktan derleyiciye', () => {
     }
   });
 });
+
+/*
+ * AJAN 4 (Dalga 2) BULGUSU — ESKİ TASLAK YOLU AÇILIŞ TABLOSUNA BAKMIYOR.
+ * Derleyici artık TELEFON/WHATSAPP derliyor (`DERLEYICI_NIYETLERI`) ve
+ * ürün açılışı yalnız AI taslağında ve AdvStrategy aktarımında
+ * (`DERLENEN_NIYETLER`) tutuluyor. `PUT /reklam/taslaklar/:id/surum` niyeti
+ * serbest yazdırıyor, `POST .../prova` (bulk.write) ve test kipi
+ * (`yayinBaslat`, ajans yöneticisi) `taslakDerle`den geçiyor ve orada ne
+ * `REHBER_ACILIS` ne `DERLENEN_NIYETLER` okunuyor. Dalga 2'den önce bu
+ * niyetler `NYT-OLCULMEDI` (TELEFON/WHATSAPP) ya da `FORM-YOK` (FORM, sabit
+ * `formId: null`) ile düşüyordu. Kanıt: BUGÜNKÜ davranış kilitli; düzeltme
+ * gelince bu testler retle değişmeli.
+ */
+describe('BULGU (kanıt): kapalı niyetler eski taslak yolundan derleniyor', () => {
+  it('TELEFON (REHBER_ACILIS kapali, DERLENEN_NIYETLER dışı) test kipinde KURULUMA başlıyor', async () => {
+    const t = await taslak({ ...DOLU, niyet: k('TELEFON' as const), hedefAdres: k(null), telefon: k('+905321234567') });
+    const r = await baslat({ taslakId: t.taslakId, ozet0: t.ozet, testKipi: true });
+    expect(kodlar(r)).toEqual([]);
+    expect(r.tur).toBe('basladi');
+  });
+
+  it('WHATSAPP de aynı', async () => {
+    const t = await taslak({ ...DOLU, niyet: k('WHATSAPP' as const), hedefAdres: k(null) });
+    const r = await baslat({ taslakId: t.taslakId, ozet0: t.ozet, testKipi: true });
+    expect(kodlar(r)).toEqual([]);
+  });
+
+  it('TELEFON: +90 dışı numara (+44) da derleniyor; Meta numaranın hedef kitleyle aynı ülkeden olmasını istiyor', async () => {
+    const t = await taslak({ ...DOLU, niyet: k('TELEFON' as const), hedefAdres: k(null), telefon: k('+442071234567') });
+    const r = await baslat({ taslakId: t.taslakId, ozet0: t.ozet, testKipi: true });
+    expect(kodlar(r)).toEqual([]);
+  });
+
+  it('FORM: sayfaya ait olduğu hiç doğrulanmamış SAYISAL kimlik test kipinde kuruluma gidiyor', async () => {
+    const t = await taslak({ ...DOLU, niyet: k('FORM' as const), hedefAdres: k(null), formSablonuId: k('123456789012345') });
+    const r = await baslat({ taslakId: t.taslakId, ozet0: t.ozet, testKipi: true });
+    expect(kodlar(r)).toEqual([]);
+  });
+});

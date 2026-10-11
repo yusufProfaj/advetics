@@ -569,4 +569,32 @@ describe('Meta form listesi ve sayfa ön koşulları (Dalga 2)', () => {
     await svc.prova(CTX, r.id).catch(() => undefined);
     expect((await baglam(k)).onKosullar.metaWhatsapp).toBeNull();
   });
+
+  /*
+   * AJAN 4 (Dalga 2) BULGUSU — FORM KONTROLÜ OKUMA DÜŞÜNCE AÇIK KALIYOR.
+   * Prova öncesi tazeleme listeyi okuyamazsa (`guvenli` → null) seçili form
+   * BİLİNMİYOR olur ve FORM-BILINMIYOR yalnız UYARI: sayfa aidiyeti
+   * (FORM-SAYFA) ve gizlilik adresi (FORM-GIZLILIK) denetlenmeden prova ve
+   * yayın kapısı geçiyor. `taslakDerle` sayısal kimliği DOĞRULAMADAN
+   * derleyiciye veriyor (yayin-baslat.ts#formKimligiCoz). Burada kanıt
+   * olarak BUGÜNKÜ davranış kilitli; düzeltme gelince bu test değişmeli.
+   */
+  it('BULGU (kanıt): liste okunamazsa başka sayfanın form kimliği yalnız UYARI üretir, engel yok', async () => {
+    const eski = REHBER_ACILIS.FORM.meta;
+    (REHBER_ACILIS.FORM as Record<string, string>).meta = 'deneme';
+    try {
+      // Okunabilen liste: başka sayfanın form kimliği (999) ENGEL.
+      const r = await formRehberi('999');
+      await svc.prova(CTX, r.id).catch(() => undefined);
+      expect((await svc.oku(CTX, r.id)).eksikler.find((e) => e.kod === 'FORM-SAYFA')?.seviye).toBe('engel');
+      // Okunamayan liste (izin, alan reddi, ağ): aynı kimlik yalnız uyarı.
+      (svc as unknown as { sayfaOnbellek: Map<string, unknown> }).sayfaOnbellek.clear();
+      formCevabi = () => new Response(JSON.stringify({ error: { message: '(#100) Tried accessing nonexisting field (privacy_policy_url)', code: 100 } }), { status: 400 });
+      await svc.prova(CTX, r.id).catch(() => undefined);
+      const form = (await svc.oku(CTX, r.id)).eksikler.filter((e) => e.kod.startsWith('FORM-'));
+      expect(form.map((e) => [e.kod, e.seviye])).toEqual([['FORM-BILINMIYOR', 'uyari']]);
+    } finally {
+      (REHBER_ACILIS.FORM as Record<string, string>).meta = eski;
+    }
+  });
 });
