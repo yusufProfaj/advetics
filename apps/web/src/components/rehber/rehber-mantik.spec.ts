@@ -613,6 +613,14 @@ describe('kaynak: sayfa', () => {
     expect(sayfa).toContain('r.value.clientId !== clientId');
     expect(sayfa).toContain('/reklam/rehber/hazirlik?clientId=');
   });
+  it('KRİTİK: kayıt hazırlıktan SONRA bir kez daha okunuyor (soğuk önbellekte yalancı "okunamadı")', () => {
+    const kod = sayfa.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    const paralel = kod.indexOf('await Promise.allSettled([');
+    const ikinci = kod.indexOf('await Promise.allSettled([kayitOku()])');
+    expect(paralel, 'paralel okuma bulunamadı').toBeGreaterThan(0);
+    expect(ikinci).toBeGreaterThan(paralel);
+    expect(kod.slice(ikinci, ikinci + 200)).toContain('r = ikinci[0]');
+  });
   it('eski adresler /reklam’a yönleniyor', () => {
     for (const d of ['yeni', 'onizleme']) {
       const k = readFileSync(join(__dirname, '..', '..', 'app', '(dashboard)', 'reklam', d, 'page.tsx'), 'utf8');

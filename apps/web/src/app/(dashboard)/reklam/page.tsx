@@ -53,11 +53,22 @@ export default async function AdvCampaignPage({ searchParams }: { searchParams: 
     return <RehberGirisi clientId={clientId} workspaceAdi={workspaceAdi} liste={liste} listeHatasi={listeHatasi} devredildi={devredildi} />;
   }
 
-  const [r, h] = await Promise.allSettled([
-    serverApiFetch<RehberKaydi>(`/reklam/rehberler/${encodeURIComponent(rehberId)}`),
+  const kayitOku = () => serverApiFetch<RehberKaydi>(`/reklam/rehberler/${encodeURIComponent(rehberId)}`);
+  let [r, h] = await Promise.allSettled([
+    kayitOku(),
     // rehberId: ön koşullar bu rehberin SEÇİLİ sayfasından okunsun (ilkinden değil).
     serverApiFetch<RehberHazirligi>(`/reklam/rehber/hazirlik?clientId=${encodeURIComponent(clientId)}&rehberId=${encodeURIComponent(rehberId)}`),
   ]);
+  // HAZIRLIKTAN SONRA KAYIT BİR KEZ DAHA: kaydın eksik listesi platform
+  // bilgisini (Meta asgari bütçesi, Google dönüşümü) hazırlığın doldurduğu
+  // önbellekten okuyor. Paralel okumada önbellek soğuksa (deploy sonrası,
+  // 15 dk sonra) kayıt önce hesaplanıyor ve "asgari bütçe okunamadı" uyarısı
+  // bir sonraki yazmaya kadar ekranda kalıyordu (canlı, 2026-10-11). Kayıt
+  // okuması yalnız veritabanı, ucuz.
+  if (r.status === 'fulfilled' && h.status === 'fulfilled') {
+    const ikinci = await Promise.allSettled([kayitOku()]);
+    if (ikinci[0].status === 'fulfilled') r = ikinci[0];
+  }
   // Okuma hataları AYRI cümleyle: rehber olmadan devam edilemez, hazırlık
   // olmadan hiçbir hesap ya da sayfa seçilemez.
   if (r.status === 'rejected') {
