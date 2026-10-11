@@ -2201,3 +2201,6 @@
     transition: none;
   }
 }
+
+/* Otomatik üretilen boyut: marka kırmızısıyla küçük etiket (durum değil, kaynak bilgisi). */
+.uretildi { font-weight: 600; color: var(--t-brand-strong); font-size: 11px; }

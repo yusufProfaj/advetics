@@ -17,6 +17,8 @@
  */
 import {
   META_EN_COK_GORSEL,
+  GORSEL_ORANLARI,
+  bannerSetiDestekleniyor,
   METIN_SINIRLARI,
   googleOnKosulEksik,
   onerilenPlatformlar,
@@ -1222,4 +1224,44 @@ export function otomatikProvaGerekli(g: {
   if (!g.acik.meta && !g.acik.google) return false;
   if (g.eksikler.some((e) => e.seviye === 'engel')) return false;
   return !g.prova.sonuc || g.prova.sonuc.icerikOzeti !== g.icerikOzeti;
+}
+
+/**
+ * OTOMATİK BOYUT PLANI (kullanıcı kararı, 2026-10-12). YALNIZ bu eylemde
+ * EKLENEN bir görselin setinde eksik boyut üretilir: kullanıcının kaldırdığı
+ * üretilmiş görsel bir sonraki eklemede geri gelmesin diye plan "şu an ne
+ * eksik" değil "şu an ne eklendi"den başlıyor. Kaynak setin EN BÜYÜK
+ * (piksel) üretilmemiş görseli: küçük olandan büyütmek bulanık görsel demek.
+ * Üst sınır (en çok `enCok` medya) aşılmaz; sığmayan boyut sayısı söylenir.
+ */
+export function uretimPlani(g: {
+  medya: readonly MedyaOgesi[];
+  oranlar: ReadonlyMap<string, GorselOrani | null>;
+  olculer: ReadonlyMap<string, { en: number | null; boy: number | null }>;
+  eklenen: ReadonlySet<string>;
+  niyet: NiyetKodu;
+  enCok: number;
+}): { isler: Array<{ setSira: number; kaynakVarlikId: string; oranlar: GorselOrani[] }>; sigmayan: number } {
+  if (!bannerSetiDestekleniyor(g.niyet)) return { isler: [], sigmayan: 0 };
+  const { setler } = setGorunumu(g.medya, g.oranlar, g.niyet);
+  let yer = g.enCok - g.medya.length;
+  let sigmayan = 0;
+  const isler: Array<{ setSira: number; kaynakVarlikId: string; oranlar: GorselOrani[] }> = [];
+  setler.slice(0, EKRAN_EN_COK_SET).forEach((st, setSira) => {
+    const ogeler = Object.values(st).filter((x): x is MedyaOgesi => !!x);
+    if (!ogeler.some((x) => g.eklenen.has(x.varlikId) && !x.uretildi)) return;
+    const alan = (x: MedyaOgesi) => {
+      const o = g.olculer.get(x.varlikId);
+      return o?.en && o.boy ? o.en * o.boy : 0;
+    };
+    const kaynak = ogeler.filter((x) => !x.uretildi && alan(x) > 0).sort((a, b) => alan(b) - alan(a))[0];
+    if (!kaynak) return;
+    const mevcut = Object.keys(st) as GorselOrani[];
+    const eksik = GORSEL_ORANLARI.filter((o) => !mevcut.includes(o));
+    const sigan = eksik.slice(0, Math.max(0, yer));
+    sigmayan += eksik.length - sigan.length;
+    yer -= sigan.length;
+    if (sigan.length) isler.push({ setSira, kaynakVarlikId: kaynak.varlikId, oranlar: sigan });
+  });
+  return { isler, sigmayan };
 }

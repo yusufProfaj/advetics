@@ -54,6 +54,7 @@ import {
   oneriyiSigdir,
   OLCUM_ENGEL_KODLARI,
   otomatikProvaGerekli,
+  uretimPlani,
   yayinSonucuEtiketi,
   geriAlMetinleri,
   yayinlanabilirMi,
@@ -898,5 +899,27 @@ describe('otomatik prova (kullanıcı kararı, 2026-10-12)', () => {
     const e = yorumsuz('rehber-ekrani.tsx');
     expect(e).toContain('if (!provaGerekli || otoProva.current === kayit.icerikOzeti) return;');
     expect(e).toContain('otoProva.current = kayit.icerikOzeti;');
+  });
+});
+
+describe('otomatik boyut üretimi (kullanıcı kararı, 2026-10-12)', () => {
+  const ID = (n: number) => `00000000-0000-4000-8000-00000000000${n}`;
+  const oranlar = new Map<string, GorselOrani | null>([[ID(1), 'kare'], [ID(2), 'dik45'], [ID(3), 'kare']]);
+  const olculer = new Map([[ID(1), { en: 1080, boy: 1080 }], [ID(2), { en: 1080, boy: 1350 }], [ID(3), { en: 600, boy: 600 }]]);
+  it('KRİTİK: yalnız eklenen görselin setinde, eksik boyutlar, en büyük kaynaktan', () => {
+    const p = uretimPlani({ medya: [{ varlikId: ID(1) }, { varlikId: ID(2) }], oranlar, olculer, eklenen: new Set([ID(1)]), niyet: 'SITE', enCok: 10 });
+    expect(p.isler).toEqual([{ setSira: 0, kaynakVarlikId: ID(2), oranlar: ['dikey', 'yatay'] }]);
+    expect(p.sigmayan).toBe(0);
+  });
+  it('KRİTİK: kullanıcının kaldırdığı üretilmiş boyut geri gelmez (eklenen yoksa plan boş); set desteklemeyen amaçta üretim yok', () => {
+    expect(uretimPlani({ medya: [{ varlikId: ID(1) }], oranlar, olculer, eklenen: new Set(), niyet: 'SITE', enCok: 10 }).isler).toEqual([]);
+    expect(uretimPlani({ medya: [{ varlikId: ID(1) }], oranlar, olculer, eklenen: new Set([ID(1)]), niyet: 'VIDEO_IZLENME', enCok: 10 }).isler).toEqual([]);
+    // Üretilmiş görselin eklenmesi zincir üretim başlatmaz.
+    expect(uretimPlani({ medya: [{ varlikId: ID(1), uretildi: true }], oranlar, olculer, eklenen: new Set([ID(1)]), niyet: 'SITE', enCok: 10 }).isler).toEqual([]);
+  });
+  it('üst sınır aşılmaz ve sığmayan sayısı söylenir', () => {
+    const p = uretimPlani({ medya: [{ varlikId: ID(1) }], oranlar, olculer, eklenen: new Set([ID(1)]), niyet: 'FORM', enCok: 3 });
+    expect(p.isler[0]!.oranlar).toEqual(['dikey', 'dik45']);
+    expect(p.sigmayan).toBe(1);
   });
 });

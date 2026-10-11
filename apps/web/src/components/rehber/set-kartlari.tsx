@@ -241,7 +241,11 @@ export function SetKartlari({
                         </div>
                       </div>
                       <div className={s.yuvaAlt}>
-                        <b>{ORAN_ETIKETI[o]}</b>
+                        <b>
+                          {ORAN_ETIKETI[o]}
+                          {/* Otomatik üretilen boyut kaynağını söylüyor; kullanıcı beğenmezse kaldırır. */}
+                          {g.uretildi && <span className={s.uretildi}> · Üretildi</span>}
+                        </b>
                         {yerler.length ? (
                           <span className={s.yer}>
                             {ortak.otomatik && o === 'kare' ? 'Kalan her yer' : etiketler(yerler)}

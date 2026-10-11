@@ -31,11 +31,12 @@ import { ORAN_ETIKETI, YERLESIM_GRUPLARI, YERLESIM_SIRASI, bannerSetiDestekleniy
  *        `promoted_object`te; erişimde sıklık sınırı (Dalga 3).
  * 1.3.1: banner seti yokken yerleşim planı BİRLEŞİM (`reklamSetiPlani`).
  * 1.3.2: kreatif adı 100 karaktere sığdırılıyor (`kreatifAdi`).
+ * 1.5.0: banner seti form, WhatsApp, arama, satış ve erişimde; değerli düğme `call_to_actions`.
  * 1.4.0: ad biçimi "ADV · GG.AA.YYYY · amaç · KOD" (kullanıcı kararı, 2026-10-12).
  * Sürüm provanın tazeliğine bağlı: eski derleyiciyle geçmiş prova yeni
  * gövdeyi kanıtlamaz.
  */
-export const DERLEYICI_SURUMU = '1.4.0';
+export const DERLEYICI_SURUMU = '1.5.0';
 
 /**
  * CLICK-TO-WHATSAPP SABİTLERİ (CLAUDE.md "CLICK-TO-WHATSAPP"). Bağlantı
@@ -515,7 +516,7 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
     } else if (k.setGorselleri && yerlesim) {
       // `link_data` YOK: görseller ve metin `asset_feed_spec`te; sayfa ve
       // Instagram kimliği `object_story_spec`te kalıyor (aşağıda).
-      setKreatifi = varlikAkisi(k, setPlani(k.setGorselleri.map((x) => x.oran)), yerlesim, m.cta, kreatifBaglantisi(g)!, !!g.instagramPlatformId);
+      setKreatifi = varlikAkisi(k, setPlani(k.setGorselleri.map((x) => x.oran)), yerlesim, cta, DEGERLI_CTA_NIYETLERI.includes(g.niyet), kreatifBaglantisi(g)!, !!g.instagramPlatformId);
     } else {
       const linkData: Record<string, unknown> = {
         image_hash: k.gorselHash,
@@ -647,11 +648,20 @@ const METIN_ETIKETLERI = { body_label: 'adv_metin', title_label: 'adv_baslik', l
  * ilk eşleşen kazanıyor). Metinler de etiketli: kuralın her varlık türünü
  * açıkça seçmesi, seçimi Meta'nın yorumuna bırakmıyor.
  */
+/**
+ * Düğmesi DEĞER taşıyan amaçlar (form kimliği, WhatsApp hedefi, `tel:`
+ * numarası). Setlerinde düğme `call_to_actions` ile gider: düz tür listesi
+ * (`call_to_action_types`) değeri taşımıyor ve Meta onu da doğrulamada
+ * KABUL EDİYOR (ölçüldü 2026-10-12) — form kimliği olmayan bir form reklamı.
+ */
+const DEGERLI_CTA_NIYETLERI: readonly NiyetKodu[] = ['FORM', 'WHATSAPP', 'TELEFON'];
+
 function varlikAkisi(
   k: Kavram,
   kendi: SetPlani,
   ortak: SetPlani,
-  cta: string,
+  cta: Record<string, unknown>,
+  ctaDegerli: boolean,
   link: string,
   instagram: boolean,
 ): Record<string, unknown> {
@@ -694,7 +704,7 @@ function varlikAkisi(
     titles: [{ text: k.baslik, adlabels: [{ name: METIN_ETIKETLERI.title_label }] }],
     ...(k.aciklama ? { descriptions: [{ text: k.aciklama, adlabels: [{ name: METIN_ETIKETLERI.description_label }] }] } : {}),
     link_urls: [{ website_url: link, adlabels: [{ name: METIN_ETIKETLERI.link_url_label }] }],
-    call_to_action_types: [cta],
+    ...(ctaDegerli ? { call_to_actions: [cta] } : { call_to_action_types: [cta.type] }),
     ad_formats: ['SINGLE_IMAGE'],
     /*
      * YERLEŞİM ÖZELLEŞTİRMESİ AÇIKÇA — üç gerçek prova (2026-10-10, v25.0):
@@ -823,7 +833,7 @@ export const MANIFESTO: ReadonlyArray<{ kod: string; nesne: NesneTuru; yol: stri
   { kod: 'M-18', nesne: 'reklam_seti', yol: 'targeting.geo_locations' },
   { kod: 'M-21', nesne: 'reklam_seti', yol: 'attribution_spec' },
   { kod: 'M-24', nesne: 'kreatif', yol: 'object_story_spec.instagram_user_id', kosul: 'instagram' },
-  { kod: 'M-25', nesne: 'kreatif', yol: ['object_story_spec.link_data.call_to_action', 'object_story_spec.video_data.call_to_action', 'asset_feed_spec.call_to_action_types'] },
+  { kod: 'M-25', nesne: 'kreatif', yol: ['object_story_spec.link_data.call_to_action', 'object_story_spec.video_data.call_to_action', 'asset_feed_spec.call_to_action_types', 'asset_feed_spec.call_to_actions'] },
   // M-26/M-27: belgedeki adapt_to_placement ve pac_relaxation canlıda
   // reddedildi (yukarıdaki not); manifesto ölçülen kümeden iki satır taşıyor,
   // derle.spec bütün kümeyi ayrıca tarıyor.

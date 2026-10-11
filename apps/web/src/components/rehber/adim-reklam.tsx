@@ -24,6 +24,7 @@ import { medyaOlc, medyaYukle } from '@/reklam/medya';
 import { AltCubuk, Soru, sil, yaz, type AdimBaglami } from './adim-ortak';
 import { IKON, Ikon } from './ikonlar';
 import { SetKartlari } from './set-kartlari';
+import { HEDEF_OLCULER, boyutUret } from './boyut-uret';
 import { WhatsappNumarasi } from './meta-dalga3';
 import { medyaKabulu } from './meta-dalga3-mantik';
 import {
@@ -51,7 +52,9 @@ import {
   telefonKaydi,
   videoListesiHali,
   youtubeKimligi,
+  uretimPlani,
   type EkranNo,
+  type MedyaOgesi,
   type OneriHali,
 } from './rehber-mantik';
 import s from './rehber.module.css';
@@ -198,6 +201,9 @@ function oranHaritasi(medyaBilgisi: ReadonlyMap<string, MedyaBilgisi>): Map<stri
   return m;
 }
 
+/** Üretilen dosyanın adındaki boyut (Marka Merkezi listesinde okunur kalsın). */
+const ORAN_DOSYA_EKI: Record<GorselOrani, string> = { dikey: '9x16', dik45: '4x5', kare: '1x1', yatay: '191x100' };
+
 function MedyaBlogu({
   b,
   gorselGerekli,
@@ -242,10 +248,70 @@ function MedyaBlogu({
    * bırakma alanı (sırayla dağıt), `null` = yeni set.
    */
   const hedefRef = useRef<number | null | undefined>(undefined);
+  const yeniBilgi = useRef(new Map<string, MedyaBilgisi>());
+
+  /**
+   * OTOMATİK BOYUT (`uretimPlani`, `boyutUret`): eklenen görselin setindeki
+   * eksik boyutlar tarayıcıda üretilip AYNI sete giriyor. Kaynak orijinal
+   * dosya (önizleme ucu orijinal baytları veriyor). Hata sessiz değil:
+   * üretilemeyen boyut dosya adıyla listede.
+   */
+  async function eksikBoyutlariUret(
+    baslangic: MedyaOgesi[],
+    yerelOran: Map<string, GorselOrani | null>,
+    olculer: Map<string, { en: number | null; boy: number | null }>,
+    eklenen: Set<string>,
+  ): Promise<{ medya: MedyaOgesi[]; hatalar: Array<{ ad: string; mesaj: string }> }> {
+    const amac = b.a.amac?.deger;
+    const niyet = amac ? REHBER_AMACLARI[amac].meta.niyet : 'SITE';
+    const hatalar: Array<{ ad: string; mesaj: string }> = [];
+    if (!b.acik.meta || video) return { medya: baslangic, hatalar };
+    const plan = uretimPlani({ medya: baslangic, oranlar: yerelOran, olculer, eklenen, niyet, enCok: EN_COK });
+    let simdiki = baslangic;
+    for (const is of plan.isler) {
+      const kaynak = medyaBilgisiOku(is.kaynakVarlikId);
+      let blob: Blob;
+      try {
+        if (!kaynak) throw new Error('Kaynak görselin önizlemesi bulunamadı.');
+        const r = await fetch(kaynak.onizleme, { credentials: 'include' });
+        if (!r.ok) throw new Error(`Kaynak görsel okunamadı (HTTP ${r.status}).`);
+        blob = await r.blob();
+      } catch (e) {
+        hatalar.push({ ad: kaynak?.ad ?? 'Görsel', mesaj: `Eksik boyutlar üretilemedi: ${e instanceof Error ? e.message : 'bilinmeyen hata'}` });
+        continue;
+      }
+      for (const oran of is.oranlar) {
+        setYukleniyor((n) => n + 1);
+        try {
+          const uretilen = await boyutUret(blob, oran);
+          const ad = `${(kaynak?.ad ?? 'gorsel').replace(/\.[a-z0-9]+$/i, '')}-${ORAN_DOSYA_EKI[oran]}-uretildi.jpg`;
+          const y = await medyaYukle(b.clientId, new File([uretilen], ad, { type: 'image/jpeg' }));
+          const [en, boy] = HEDEF_OLCULER[oran];
+          medyaBilgisiEkle(y.id, { ad: y.ad, onizleme: onizlemeAdresi(y.onizlemeAdresi), en, boy });
+          yerelOran.set(y.id, oran);
+          olculer.set(y.id, { en, boy });
+          simdiki = yuvayaEkle(simdiki, yerelOran, { varlikId: y.id, uretildi: true, kaynakVarlikId: is.kaynakVarlikId }, is.setSira);
+          yaz(b, 'medya', simdiki);
+        } catch (e) {
+          hatalar.push({ ad: `${ORAN_ETIKETI[oran]} boyutu`, mesaj: e instanceof Error ? e.message : 'Üretilemedi.' });
+        } finally {
+          setYukleniyor((n) => n - 1);
+        }
+      }
+    }
+    if (plan.sigmayan > 0) hatalar.push({ ad: 'Otomatik boyut', mesaj: `${plan.sigmayan} boyut en çok ${EN_COK} dosya sınırı yüzünden üretilmedi.` });
+    return { medya: simdiki, hatalar };
+  }
+
+  function medyaBilgisiOku(id: string) {
+    return medyaBilgisi.get(id) ?? yeniBilgi.current.get(id);
+  }
 
   async function yukle(dosyalar: File[], hedef: number | null | undefined = undefined) {
     let simdiki = [...medya];
     const yerelOran = new Map(oranlar);
+    const olculer = new Map<string, { en: number | null; boy: number | null }>([...medyaBilgisi].map(([k, v]) => [k, { en: v.en, boy: v.boy }]));
+    const eklenen = new Set<string>();
     // Hedef set BİR KEZ (`yuklemeHedefi`): aynı anda bırakılan boyutlar aynı sete.
     const sira = yuklemeHedefi(medya, oranlar, hedef);
     const yeniHatalar: Array<{ ad: string; mesaj: string }> = [];
@@ -257,7 +323,12 @@ function MedyaBlogu({
       setYukleniyor((n) => n + 1);
       try {
         const [olcu, y] = await Promise.all([medyaOlc(d), medyaYukle(b.clientId, d)]);
-        medyaBilgisiEkle(y.id, { ad: y.ad, onizleme: onizlemeAdresi(y.onizlemeAdresi), en: olcu.en, boy: olcu.boy });
+        const bilgi = { ad: y.ad, onizleme: onizlemeAdresi(y.onizlemeAdresi), en: olcu.en, boy: olcu.boy };
+        medyaBilgisiEkle(y.id, bilgi);
+        // Ekleme ile çizim arasında bilgi state'e geçmemiş olabilir; üretim aynı turda okuyor.
+        yeniBilgi.current.set(y.id, bilgi);
+        olculer.set(y.id, { en: olcu.en, boy: olcu.boy });
+        if (!y.kapakId) eklenen.add(y.id);
         const oge = { varlikId: y.id, ...(y.kapakId ? { kapakVarlikId: y.kapakId } : {}) };
         if (olcu.en && olcu.boy) yerelOran.set(y.id, oranBul(olcu.en, olcu.boy));
         simdiki = y.kapakId || sira === undefined ? [...simdiki, oge] : yuvayaEkle(simdiki, yerelOran, oge, sira);
@@ -269,7 +340,8 @@ function MedyaBlogu({
         setYukleniyor((n) => n - 1);
       }
     }
-    setHatalar(yeniHatalar);
+    const u = await eksikBoyutlariUret(simdiki, yerelOran, olculer, eklenen);
+    setHatalar([...yeniHatalar, ...u.hatalar]);
   }
 
   function medyaYaz(yeni: readonly (typeof medya)[number][]) {
@@ -279,7 +351,10 @@ function MedyaBlogu({
   function varlikDegistir(id: string) {
     if (medya.some((x) => x.varlikId === id)) return yaz(b, 'medya', medya.filter((x) => x.varlikId !== id));
     if (medya.length >= EN_COK) return setHatalar([{ ad: 'Varlık', mesaj: `En çok ${EN_COK} dosya eklenebilir.` }]);
-    yaz(b, 'medya', [...medya, { varlikId: id }]);
+    const yeni = [...medya, { varlikId: id }];
+    yaz(b, 'medya', yeni);
+    const olculer = new Map<string, { en: number | null; boy: number | null }>([...medyaBilgisi].map(([k, v]) => [k, { en: v.en, boy: v.boy }]));
+    void eksikBoyutlariUret(yeni, new Map(oranlar), olculer, new Set([id])).then((u) => u.hatalar.length && setHatalar(u.hatalar));
   }
 
   const fazla = b.kayit.eksikler.find((e) => e.kod === 'M-MEDYA-FAZLA');

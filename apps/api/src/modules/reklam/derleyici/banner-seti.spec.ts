@@ -95,8 +95,8 @@ describe('setlereAyir', () => {
     expect(r.cakisan.map((x) => x.varlikId)).toEqual(['c']);
     expect(r.setler.map((s) => s.map((x) => x.varlikId))).toEqual([['a'], ['d']]);
   });
-  it('KRİTİK: set desteklenmeyen amaçta her görsel kendi seti; kayıtlı setNo yok sayılır', () => {
-    for (const niyet of ['FORM', 'TELEFON', 'WHATSAPP'] as const) {
+  it('KRİTİK: set desteklenmeyen amaçta (video izlenme) her görsel kendi seti; kayıtlı setNo yok sayılır', () => {
+    for (const niyet of ['VIDEO_IZLENME'] as const) {
       const r = setlereAyir([{ varlikId: 'a', setNo: 1 }, { varlikId: 'b', setNo: 1 }, { varlikId: 'c' }, { varlikId: 'x' }], o, niyet);
       expect(r.setler.map((s) => s.map((x) => x.varlikId)), niyet).toEqual([['a'], ['b'], ['c']]);
       expect(r.cakisan, niyet).toEqual([]);
@@ -228,12 +228,33 @@ describe('derleMeta — banner seti', () => {
     expect(k1.map((r) => r.image_label.name)).toEqual(['adv_dik45', 'adv_yatay', 'adv_kare', 'adv_dik45']);
   });
 
-  it('retler: set + video, set + form, aynı oran iki kez', () => {
+  it('retler: set + video, set + video izlenme amacı, aynı oran iki kez', () => {
     expect(retKodlari({ kavramlar: [kavram({ oran: 'kare', setGorselleri: set('kare', 'dik45') }), kavram({ videoId: '{video:x}' })] })).toContain('KRT-SET');
-    expect(retKodlari({ niyet: 'FORM', formId: 'f', kavramlar: [kavram({ oran: 'kare', setGorselleri: set('kare', 'dik45') })] })).toContain('KRT-SET');
+    expect(retKodlari({ niyet: 'VIDEO_IZLENME', kavramlar: [kavram({ oran: 'kare', setGorselleri: set('kare', 'dik45') })] })).toContain('KRT-SET');
     expect(
       retKodlari({ kavramlar: [kavram({ oran: 'kare', setGorselleri: [{ oran: 'kare', gorselHash: 'a' }, { oran: 'kare', gorselHash: 'b' }] })] }),
     ).toContain('KRT-SET');
+  });
+});
+
+describe('değerli düğme setlerde (ölçüldü 2026-10-12)', () => {
+  it('KRİTİK: form setinde düğme form kimliğini call_to_actions ile taşır; site setinde düz tür listesi', () => {
+    const form = bul(derle({ niyet: 'FORM', formId: '1059351746583868', hedefAdres: null, kavramlar: [kavram({ oran: 'kare', setGorselleri: set('dikey', 'dik45', 'kare', 'yatay') })] }), 'kreatif:1').asset_feed_spec;
+    expect(form.call_to_actions).toEqual([{ type: expect.any(String), value: { lead_gen_form_id: '1059351746583868' } }]);
+    expect(form.call_to_action_types).toBeUndefined();
+    const tel = bul(derle({ niyet: 'TELEFON', telefon: '+905323456789', hedefAdres: null, kavramlar: [kavram({ oran: 'kare', setGorselleri: set('kare', 'dik45') })] }), 'kreatif:1').asset_feed_spec;
+    expect(tel.call_to_actions[0].value).toEqual({ link: 'tel:+905323456789' });
+    const site = bul(derle({ kavramlar: [kavram({ oran: 'kare', setGorselleri: set('kare', 'dik45') })] }), 'kreatif:1').asset_feed_spec;
+    expect(site.call_to_action_types).toHaveLength(1);
+    expect(site.call_to_actions).toBeUndefined();
+  });
+  it('KRİTİK: geri okumada form kimliği yoksa (Meta düz türe çevirdi) yayın açılmaz', () => {
+    const gv = derle({ niyet: 'FORM', formId: '1059351746583868', hedefAdres: null, kavramlar: [kavram({ oran: 'kare', setGorselleri: set('dikey', 'dik45', 'kare', 'yatay') })] });
+    const o: Record<string, Record<string, any>> = JSON.parse(JSON.stringify(Object.fromEntries(gv.map((g) => [g.ad, g.alanlar]))));
+    for (const v of Object.values(o)) for (const [k, x] of Object.entries(v)) if (typeof x === 'string' && /^\{.+\}$/.test(x)) v[k] = '1';
+    expect(geriOkumaKarsilastir(beklenenYankilar(gv), o, { yasalUyariVar: false }).sonuc).toBe('temiz');
+    o['kreatif:1']!.asset_feed_spec.call_to_actions = [{ type: 'SIGN_UP' }];
+    expect(geriOkumaKarsilastir(beklenenYankilar(gv), o, { yasalUyariVar: false }).sonuc).toBe('fark');
   });
 });
 
@@ -353,11 +374,7 @@ describe('rehber → banner seti', () => {
     expect(rehberEksikleri(rehber(DORT), { ...B, medyaOranlari: ORAN }).some((e) => e.kod === 'M-YERLESIM-KAPALI')).toBe(false);
   });
 
-  it('KRİTİK: site dışı amaçta dört boyut DÖRT AYRI fikir olur, engel yok; derleyici seti yine reddediyor', () => {
-    // Ç-4: sırayla doldurma Form/Telefon/WhatsApp'ta kullanıcının kurmadığı
-    // bir set üretiyordu. Bu amaçların Meta satırı bugün `kapali` ve kapalı
-    // platform eksik listesine/türetmeye hiç girmiyor; kural açılış günü
-    // geçerli olacağı hâlde sınansın diye tablo test süresince `deneme`.
+  it('KRİTİK (2026-10-12): form, arama ve WhatsApp\'ta da dört boyut TEK fikir (set) olur; engel yok', () => {
     const amaclar = ['FORM', 'TELEFON', 'WHATSAPP'] as const;
     const eski = amaclar.map((a) => REHBER_ACILIS[a].meta);
     try {
@@ -369,13 +386,10 @@ describe('rehber → banner seti', () => {
       const r = rehberdenMeta({ ...rehber(DORT), amac: al('WHATSAPP' as const) }, { meta: true, google: false }, 'TRY', 'z', ORAN);
       if (r.tur !== 'tamam') throw new Error(r.kodlar.join());
       const k = r.deger.kavramlar!.deger;
-      expect(k).toHaveLength(4);
-      expect(k.every((x) => !x.setGorselleri)).toBe(true);
+      expect(k).toHaveLength(1);
+      expect(k[0]!.setGorselleri).toHaveLength(4);
     } finally {
       amaclar.forEach((a, i) => (REHBER_ACILIS[a].meta = eski[i]!));
-    }
-    for (const niyet of ['TELEFON', 'WHATSAPP'] as const) {
-      expect(retKodlari({ niyet, telefon: '+905321234567', whatsappNumarasi: '+905321234567', kavramlar: [kavram({ oran: 'kare', setGorselleri: set('kare', 'dik45') })] }), niyet).toEqual(['KRT-SET']);
     }
   });
 

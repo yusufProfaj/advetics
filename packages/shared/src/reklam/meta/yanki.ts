@@ -481,6 +481,10 @@ function varlikAkisiAyni(gonderilen: unknown, donen: unknown): boolean {
     if (!(alan in g)) continue;
     if (!ayniKume(kume(g[alan], String), kume(d[alan], String))) return false;
   }
+  // DEĞERLİ DÜĞME (form kimliği, WhatsApp, tel:) BÜTÜNÜYLE kıyaslanır: Meta
+  // değeri olmayan biçimi de kabul ediyor (ölçüldü 2026-10-12); değer geri
+  // okumada yoksa form açmayan bir form reklamı demektir.
+  if ('call_to_actions' in g && !ayniKume(kume(g.call_to_actions, kanonik), kume(d.call_to_actions, kanonik))) return false;
   const kural = (r: unknown) => {
     const o = (r ?? {}) as Record<string, unknown>;
     const ham = { ...((o.customization_spec ?? {}) as Record<string, unknown>) };

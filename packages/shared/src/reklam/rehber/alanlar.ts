@@ -62,6 +62,14 @@ export const rehberMedyasiSchema = z.object({
    * varsayılansız: varsayılan değer kayıtlı rehberlerin özetini değiştirirdi.
    */
   setNo: z.number().int().min(1).max(5).optional(),
+  /**
+   * OTOMATİK BOYUT (kullanıcı kararı, 2026-10-12): bu görsel kullanıcının
+   * attığı görselden (`kaynakVarlikId`) setin eksik boyutu için üretildi.
+   * Ekranda "Üretildi" yazar; kullanıcı kaldırırsa yeniden üretilmez.
+   * Derleyici için sıradan bir görsel: yerleşim kuralları aynı.
+   */
+  uretildi: z.literal(true).optional(),
+  kaynakVarlikId: z.string().uuid().optional(),
 });
 
 export const anahtarKelimeSchema = z.object({

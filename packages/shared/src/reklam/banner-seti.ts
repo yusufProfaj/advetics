@@ -29,14 +29,17 @@ import type { NiyetKodu } from './meta/niyetler';
  * kullanıcının kurmadığı setleri üretiyordu ve engel onu kendi bırakmadığı
  * bir sorunu çözmeye gönderiyordu (DALGA-2 Ç-4).
  *
- * Yerleşime göre görsel bugün yalnız site reklamında ÖLÇÜLDÜ
- * (`meta-yerlesim-prova`, 2026-10-10). Form, arama ve WhatsApp reklamında
- * CTA'nın `asset_feed_spec` içinde nasıl taşındığı ölçülmedi; Meta'nın
- * alanı kabul edip görmezden gelme ihtimali var (form kimliği yazılmazsa
- * düğme formu açmaz, hata da düşmez). Tahmin etmektense kısıtla: niyet
- * buraya ancak canlı prova ve gözle kontrolden sonra girer.
+ * Yerleşime göre görsel site reklamında 2026-10-10'da ÖLÇÜLDÜ
+ * (`meta-yerlesim-prova`). Diğer görselli amaçlar 2026-10-12'de
+ * `adcreatives` validate_only ile soruldu (Ege Birlik, v25.0): form, WhatsApp,
+ * arama, satış ve erişim setleri KABUL EDİLDİ. AMA form amacında düğme
+ * değeri olmayan biçim de geçti — Meta form kimliği eksik kreatifi
+ * doğrulamada reddetmiyor. Bu yüzden değer taşıyan amaçlarda düğme
+ * `call_to_actions` ({type, value}) ile gidiyor ve geri okuma değeri de
+ * karşılaştırıyor (`varlikAkisiAyni`): değer yazılmadıysa yayın AÇILMAZ.
+ * Video izlenme dışarıda: video seti ölçülmedi (iki boyut video ister).
  */
-export const BANNER_SETI_NIYETLERI: readonly NiyetKodu[] = ['SITE'];
+export const BANNER_SETI_NIYETLERI: readonly NiyetKodu[] = ['SITE', 'FORM', 'WHATSAPP', 'TELEFON', 'SATIS', 'ERISIM'];
 
 export function bannerSetiDestekleniyor(niyet: NiyetKodu): boolean {
   return BANNER_SETI_NIYETLERI.includes(niyet);

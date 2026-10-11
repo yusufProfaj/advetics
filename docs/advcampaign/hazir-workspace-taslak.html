@@ -1,0 +1,187 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hazır Workspace Taslağı</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --brand:#ff2400; --brand-accent:#d21d00; --brand-soft:rgba(255,36,0,.08); --brand-strong:#c41c00;
+  --surface:#ffffff; --muted:#f6f5f4; --sunken:#efedeb; --line:#e7e4e2;
+  --ink:#302e2d; --ink-muted:#6f6a67; --ok:#16a34a; --warn-strong:#b45309; --warn-soft:#fffbeb; --danger:#dc2626;
+  --shadow-card:0 1px 2px rgb(16 24 40 / .04),0 2px 10px -3px rgb(16 24 40 / .07);
+  --ease:cubic-bezier(.16,1,.3,1);
+  --baslik:"Montserrat",system-ui,sans-serif; --govde:"Open Sans",system-ui,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--surface:#13151c;--muted:#0b0d12;--sunken:#1b1e27;--line:#262a35;--ink:#ece9e7;--ink-muted:#a39d99;--brand-soft:rgba(255,36,0,.16);--brand-strong:#ff6a4d;--warn-soft:#2b2008;--warn-strong:#fbbf24;color-scheme:dark}}
+:root[data-theme="dark"]{--surface:#13151c;--muted:#0b0d12;--sunken:#1b1e27;--line:#262a35;--ink:#ece9e7;--ink-muted:#a39d99;--brand-soft:rgba(255,36,0,.16);--brand-strong:#ff6a4d;--warn-soft:#2b2008;--warn-strong:#fbbf24;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--muted);color:var(--ink);font-family:var(--govde);font-size:14px}
+button,input,textarea{font:inherit;color:inherit}
+button{background:none;border:0;cursor:pointer}
+:focus-visible{outline:2px solid var(--brand);outline-offset:2px;border-radius:6px}
+.sayfa{max-width:1180px;margin:0 auto;padding:20px 16px 64px;display:flex;flex-direction:column;gap:18px}
+.not{background:var(--surface);border:1px dashed var(--line);border-radius:12px;padding:10px 14px;font-size:12.5px;color:var(--ink-muted);line-height:1.55}
+.not b{color:var(--ink)}
+h1{font-family:var(--baslik);font-size:22px;margin:0}
+.bolumBaslik{font-family:var(--baslik);font-size:15px;font-weight:700;margin:6px 0 0;display:flex;align-items:center;gap:8px}
+.bolumBaslik span{font-family:var(--govde);font-size:11px;font-weight:700;border-radius:999px;padding:1px 8px;background:var(--brand-soft);color:var(--brand-strong)}
+.kart{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-card);overflow:hidden;min-width:0}
+.kartUst{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.kartUst h2{margin:0;font-size:13.5px;font-weight:700}
+.kartUst small{color:var(--ink-muted);font-size:12px}
+.karo{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;color:#fff;background-image:linear-gradient(135deg,var(--brand),var(--brand-accent));flex:none}
+.karo svg{width:16px;height:16px}
+.birincil{display:inline-flex;align-items:center;gap:6px;color:#fff;font-weight:600;font-size:12.5px;padding:8px 14px;border-radius:999px;background-image:linear-gradient(135deg,var(--brand),color-mix(in srgb,var(--brand) 72%,var(--brand-accent)));box-shadow:0 4px 14px -4px rgba(255,36,0,.45)}
+.ikincil{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 13px;font-size:12.5px;font-weight:600}
+.metinD{font-size:12px;font-weight:600;color:var(--ink-muted)}
+.metinD:hover{color:var(--ink);text-decoration:underline}
+.d{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;white-space:nowrap}
+.d i{width:8px;height:8px;border-radius:50%;flex:none}
+.d.ok{color:var(--ok)} .d.ok i{background:var(--ok)}
+.d.soru{color:var(--warn-strong)} .d.soru i{background:var(--warn-strong)}
+.d.suruyor{color:var(--brand-strong)} .d.suruyor i{border:2px solid var(--brand);border-top-color:transparent;animation:don .8s linear infinite}
+@keyframes don{to{transform:rotate(360deg)}}
+
+/* A · Hazırlık listesi */
+.hazir{list-style:none;margin:0;padding:0}
+.hazir li{display:grid;grid-template-columns:150px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 16px;border-top:1px solid var(--line);font-size:13px}
+.hazir li:first-child{border-top:0}
+.hazir small{display:block;color:var(--ink-muted);font-size:12px;margin-top:2px;line-height:1.45}
+.secimler{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.sec{border:1px solid var(--line);border-radius:999px;padding:4px 10px;font-size:12px;font-weight:600;background:var(--surface)}
+.sec[aria-pressed="true"]{border-color:var(--brand);color:var(--brand-strong);background:var(--brand-soft)}
+.altSatir{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px 16px;border-top:1px solid var(--line);background:var(--muted);font-size:12.5px;color:var(--ink-muted)}
+
+/* B · Kısa akış */
+.ray{display:flex;gap:6px;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--line)}
+.adim{display:flex;align-items:center;gap:6px;border-radius:999px;padding:5px 11px;font-size:12px;font-weight:600;background:var(--sunken);color:var(--ink-muted)}
+.adim.aktif{background:var(--ink);color:var(--surface)}
+.adim.oto{background:transparent;border:1px dashed var(--line)}
+.adim b{font-weight:700}
+.ozetSatir{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
+.ozetSatir>div{padding:12px 16px;border-right:1px solid var(--line);min-width:0}
+.ozetSatir>div:last-child{border-right:0}
+.ozetSatir small{display:block;font-size:11.5px;color:var(--ink-muted);font-weight:600}
+.ozetSatir b{font-size:13px}
+.ozetSatir em{font-style:normal;font-size:11.5px;color:var(--ink-muted);display:block}
+
+/* C · Görsele özel metin */
+.birak{margin:14px 16px;border:2px dashed var(--line);border-radius:12px;padding:18px;text-align:center;font-size:13px;color:var(--ink-muted)}
+.birak b{color:var(--ink);display:block;font-size:14px}
+.fikirler{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;padding:0 16px 16px}
+.fikir{border:1px solid var(--line);border-radius:12px;overflow:hidden;display:grid;grid-template-columns:132px minmax(0,1fr);min-width:0;transition:border-color .2s var(--ease)}
+.fikir:hover{border-color:color-mix(in srgb,var(--ink-muted) 40%,var(--line))}
+.gorsel{background:linear-gradient(160deg,#5b6b4f,#c8b48a);position:relative;min-height:180px}
+.gorsel.kare{background:linear-gradient(160deg,#4f6a7a,#cfb990)}
+.gorsel span{position:absolute;left:8px;bottom:8px;font-size:11px;font-weight:700;color:#fff;background:rgb(0 0 0 / .45);border-radius:6px;padding:1px 6px}
+.fikirMetin{padding:10px 12px;display:flex;flex-direction:column;gap:7px;min-width:0}
+.fikirUst{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--ink-muted)}
+.fikirUst .kaynak{font-weight:700;color:var(--brand-strong);background:var(--brand-soft);border-radius:6px;padding:1px 6px}
+.fikirUst .kaynak.elle{color:var(--ink);background:var(--sunken)}
+.alan label{display:flex;justify-content:space-between;font-size:11px;font-weight:700;color:var(--ink-muted);margin-bottom:3px}
+.alan input,.alan textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:12.5px;background:var(--surface);resize:vertical}
+.alan textarea{min-height:56px;line-height:1.45}
+.gorduk{font-size:11.5px;color:var(--ink-muted);line-height:1.45;border-top:1px dashed var(--line);padding-top:6px}
+.gorduk b{color:var(--ink)}
+.iskelet{height:10px;border-radius:6px;background:linear-gradient(90deg,var(--sunken),var(--muted),var(--sunken));background-size:200% 100%;animation:akis 1.4s linear infinite}
+@keyframes akis{to{background-position:-200% 0}}
+.ortak{margin:0 16px 16px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:12.5px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;color:var(--ink-muted)}
+.ortak b{color:var(--ink)}
+
+@media (max-width:900px){.fikirler{grid-template-columns:1fr}.ozetSatir{grid-template-columns:repeat(2,minmax(0,1fr))}.ozetSatir>div:nth-child(2n){border-right:0}}
+@media (max-width:560px){.hazir li{grid-template-columns:1fr}.fikir{grid-template-columns:1fr}.gorsel{min-height:140px}.ozetSatir{grid-template-columns:1fr}.ozetSatir>div{border-right:0;border-bottom:1px solid var(--line)}}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<main class="sayfa">
+  <div class="not">
+    <b>TASLAK · Hazır workspace → kreatif at, reklam çıksın.</b> Senin kararların: ad "ADV · tarih · amaç · kod" (Dalga 1, yapıldı), tek tık onayla yayın, dört otomatik hazırlık, her görsele kendi metni. Üç parça var: <b>A</b> workspace'in reklama hazırlığı (hesap atanınca kendiliğinden), <b>B</b> AdvCampaign'in kısalan akışı, <b>C</b> görsel bırakılınca o görsele özel metin. Veriler Ege Birlik'in gerçek durumundan; metinler örnek.
+  </div>
+
+  <!-- A -->
+  <div class="bolumBaslik">A · Reklama hazırlık <span>Marka Merkezi › Bağlantılar'ın başında</span></div>
+  <section class="kart">
+    <div class="kartUst">
+      <span class="karo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg></span>
+      <h2>Ege Birlik Yapı reklama hazır</h2>
+      <small>Hesaplar atandığında kendiliğinden yapıldı · 12 Ekim 21:04</small>
+      <span style="margin-left:auto"><button type="button" class="metinD">Yeniden hazırla</button></span>
+    </div>
+    <ul class="hazir">
+      <li><span class="d ok"><i></i>Site tarandı</span><span>egebirlikseasight.com<small>Tag Manager GTM-WMBBT9JQ · Analytics G-YWXPLS3GT2 · Meta pikseli 1781886293257274</small></span><button class="metinD" type="button">Ölçüm'de gör</button></li>
+      <li><span class="d ok"><i></i>Meta pikseli seçildi</span><span>Egebirlik Seasight<small>Sitede görülen pikselle hesabın pikseli aynı; son 7 günde 2 form (Lead)</small></span><button class="metinD" type="button">Değiştir</button></li>
+      <li><span class="d ok"><i></i>Sayfa ve Instagram</span><span>Ege Birlik Group · @egebirlikyapi<small>Reklam hesabının kullandığı sayfa; tek seçenek olduğu için seçildi</small></span><button class="metinD" type="button">Değiştir</button></li>
+      <li><span class="d ok"><i></i>Google ölçümü</span><span>Form ve arama kaydediliyor<small>Analytics bağlı: generate_lead (30 günde 4), click_to_call (69)</small></span><button class="metinD" type="button">Ölçüm'de gör</button></li>
+      <li><span class="d ok"><i></i>Marka bilgileri</span><span>Siteden dolduruldu<small>Marka adı, logo, telefon (+90 232 …), anlatım; dolu alanlara dokunulmadı</small></span><button class="metinD" type="button">Düzenle</button></li>
+      <li><span class="d soru"><i></i>Tek soru</span><span>Varsayılan konum: hangisi?<small>Sitede iki proje adresi var; reklamlar varsayılan olarak bu bölgede gösterilir</small>
+        <div class="secimler"><button type="button" class="sec" aria-pressed="true">İzmir (il)</button><button type="button" class="sec" aria-pressed="false">Kuşadası</button><button type="button" class="sec" aria-pressed="false">İkisi de</button></div></span><span></span></li>
+      <li><span class="d ok"><i></i>Varsayılan kitle ve bütçe</span><span>18+ yaş · konut kategorisi · günlük 500 ₺<small>Bütçe Meta ve Google asgarilerinin üstünde; AdvCampaign her reklamda bunu önerir</small></span><button class="metinD" type="button">Düzenle</button></li>
+    </ul>
+    <div class="altSatir"><span>Eksik kalırsa (ör. Google'da satış ölçümü yok) satırda nedeni ve "Ölçüm'de kur" görünür; tahminle doldurulmaz.</span><span style="margin-left:auto"><button type="button" class="birincil">AdvCampaign'de reklam kur</button></span></div>
+  </section>
+
+  <!-- B -->
+  <div class="bolumBaslik">B · AdvCampaign: hazır workspace'te üç adım</div>
+  <section class="kart">
+    <div class="ray">
+      <span class="adim aktif"><b>1</b> Amaç</span>
+      <span class="adim aktif"><b>2</b> Kreatif</span>
+      <span class="adim oto">Nerede · Kime · Bütçe <em style="font-style:normal">(hazırlıktan dolu)</em></span>
+      <span class="adim aktif"><b>3</b> Kontrol ve yayın</span>
+    </div>
+    <div class="ozetSatir">
+      <div><small>Nerede</small><b>Meta + Google</b><em>Ege Birlik Group · EgeBirlikYapı(Yeni)</em></div>
+      <div><small>Kime</small><b>İzmir · 18+</b><em>Konut kategorisi</em></div>
+      <div><small>Bütçe</small><b>500 ₺ / gün</b><em>Yarın başlar · 30 gün</em></div>
+      <div><small>Kampanya adı</small><b>ADV · 13.10.2026 · Siteme gelsinler · 4F2A</b><em>Meta ve Google'da aynı</em></div>
+    </div>
+    <div class="altSatir"><span>Hazırlıktan gelen adımlar atlanır ama kapalı değildir: özetteki satıra tıklayınca açılır. Kontrol adımında prova kendiliğinden başlar, geçince tek düğme kalır: <b style="color:var(--ink)">Yayınla → Onayla</b>.</span></div>
+  </section>
+
+  <!-- C -->
+  <div class="bolumBaslik">C · Kreatif: her görsele kendi metni</div>
+  <section class="kart">
+    <div class="kartUst"><span class="karo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg></span><h2>Görsellerin ve metinleri</h2><small>3 görsel · her biri ayrı reklam</small></div>
+    <div class="birak"><b>Görselleri ya da videoyu buraya bırak</b>Bıraktığın an kontrol edilir ve her görsele kendi metni yazılır.</div>
+    <div class="fikirler">
+      <div class="fikir">
+        <div class="gorsel"><span>4:5 · Fikir 1</span></div>
+        <div class="fikirMetin">
+          <div class="fikirUst"><span class="kaynak">✦ Görselden yazıldı</span><button type="button" class="metinD" style="margin-left:auto">Yeniden yaz</button></div>
+          <div class="alan"><label>Başlık <span>27 / 40</span></label><input value="Havuzlu müstakil villalar"></div>
+          <div class="alan"><label>Ana metin <span>96 / 125</span></label><textarea>Bahçeli, özel havuzlu müstakil villalar Ege Birlik güvencesiyle yükseliyor. Yerinizi şimdi ayırtın.</textarea></div>
+          <div class="gorduk">Görselde gördüğü: <b>havuz, bahçe, müstakil villa</b>. Fiyat ve teslim tarihi görselde ve markada olmadığı için yazılmadı.</div>
+        </div>
+      </div>
+      <div class="fikir">
+        <div class="gorsel kare"><span>1:1 · Fikir 2</span></div>
+        <div class="fikirMetin">
+          <div class="fikirUst"><span class="kaynak elle">Senin metnin</span><button type="button" class="metinD" style="margin-left:auto">Görselden yaz</button></div>
+          <div class="alan"><label>Başlık <span>24 / 40</span></label><input value="Denize 5 dakika, deniz manzaralı"></div>
+          <div class="alan"><label>Ana metin <span>88 / 125</span></label><textarea>Seasight'ta deniz manzaralı 1+1 daireler. Tatil konutu ve yatırım için son daireler.</textarea></div>
+          <div class="gorduk">Bu metni sen değiştirdin; görsel değişse bile üzerine yazılmaz.</div>
+        </div>
+      </div>
+      <div class="fikir">
+        <div class="gorsel"><span>9:16 · Fikir 3</span></div>
+        <div class="fikirMetin">
+          <div class="fikirUst"><span class="d suruyor"><i></i>Görsel okunuyor…</span></div>
+          <div class="iskelet" style="width:60%"></div>
+          <div class="iskelet"></div>
+          <div class="iskelet" style="width:80%"></div>
+        </div>
+      </div>
+    </div>
+    <div class="ortak"><span><b>Google için ortak:</b> başlıklar fikirlerden toplanır (en çok 5), açıklama markadan. Google arama reklamında görsel yok; orada bütün fikirlerin başlıkları dönüşümlü gösterilir.</span><button type="button" class="metinD" style="margin-left:auto">Google metnini gör</button></div>
+  </section>
+
+  <div class="not">
+    <b>Verdiğim kararlar:</b> (1) Hazırlık ayrı sayfa değil, Marka Merkezi'nin <b>Bağlantılar</b> bölümünün başında (hesap orada atanıyor; hazırlık o anın sonucu). (2) Belirsizlikte tahmin yok, <b>tek soru</b> (ör. iki konum). (3) Hazırlıktan dolu gelen adımlar <b>gizlenmez, özetlenir</b>; tıklayınca açılır. (4) Görsel metni <b>kaynağını söyler</b> ("Görselden yazıldı" / "Senin metnin"); kullanıcının değiştirdiği metin yeniden yazılmaz. (5) Yapay zekâ görselde ve markada olmayan fiyat, tarih, vaat <b>yazmaz</b> ve bunu kartta söyler.
+  </div>
+</main>
+<script>
+document.querySelectorAll('.secimler').forEach(g=>g.addEventListener('click',e=>{const b=e.target.closest('.sec');if(!b)return;g.querySelectorAll('.sec').forEach(x=>x.setAttribute('aria-pressed',String(x===b)))}));
+</script>
