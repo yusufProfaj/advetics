@@ -18,7 +18,6 @@ const KENAR = readFileSync(
   join(DIZIN, '..', '..', 'components', 'kenar-cubugu.tsx'),
   'utf8',
 );
-const RAY = readFileSync(join(DIZIN, '..', '..', 'components', 'ikon-rayi.tsx'), 'utf8');
 
 describe('mobil gezinme', () => {
   it('BOŞA DÜŞME BEKÇİSİ: kaynaklar okundu', () => {
@@ -43,15 +42,24 @@ describe('mobil gezinme', () => {
      * menü masaüstündekinden farklı kalırdı ve bunu yalnızca telefonla
      * giren kullanıcı görürdü.
      */
-    // 2026-10-09'dan beri masaüstü ikon rayı: aynı `kenarVerisi`, aynı
-    // bölme fonksiyonu (`kenarBolumleri`). Ray listeyi ikonlara indiriyor,
-    // içeriği kendisi yazmıyor.
+    // 2026-10-09'da masaüstü ikon rayına geçilmiş, 2026-10-11'de kullanıcı
+    // kararıyla geniş menüye dönülmüştü: masaüstü ve çekmece yine AYNI
+    // `KenarIcerigi` + `kenarVerisi`.
     expect(KENAR).toContain('export function KenarIcerigi');
-    expect(LAYOUT).toContain('<IkonRayi veri={kenarVerisi} />');
+    expect(LAYOUT).toMatch(/<KenarIcerigi veri=\{kenarVerisi\}/);
     expect(LAYOUT).toContain('<MobilMenu veri={kenarVerisi}');
     expect(MOBIL).toContain('<KenarIcerigi');
-    expect(RAY).toContain('kenarBolumleri(veri.bolumler)');
     expect(KENAR).toContain('kenarBolumleri(veri.bolumler)');
+  });
+
+  it('KRİTİK: workspace seçici masaüstünde menünün başında, telefonda üst barda', () => {
+    // Kullanıcı kararı (2026-10-11). Seçici iki yerde ama props tek nesneden
+    // (`kapsam`): biri güncellenip öbürü unutulursa telefonda başka bir
+    // kapsam görünürdü.
+    expect(LAYOUT).toContain('ust={<KapsamSecici {...kapsam} tamGenislik />}');
+    expect(LAYOUT).toMatch(/<div className="lg:hidden">\s*<KapsamSecici \{\.\.\.kapsam\} \/>/);
+    expect(KENAR.indexOf('{ust &&')).toBeGreaterThan(KENAR.indexOf('AdveticsLogo />'));
+    expect(KENAR.indexOf('{ust &&')).toBeLessThan(KENAR.indexOf('<nav'));
   });
 
   it('KRİTİK: sayfa değişince çekmece kapanıyor', () => {

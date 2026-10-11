@@ -85,8 +85,8 @@ describe('TEK SEÇİCİ — ajans › şirket › workspace', () => {
     expect(LAYOUT).not.toContain('{session.managerAccount && (');
     // Ajans adı YOKSA `null` — seçici o durumda ajans satırını hiç basmıyor
     // ama kendisi basılıyor ve şirket geneline dönmeyi sağlıyor.
-    expect(LAYOUT).toContain('ajans={session.managerAccount?.name ?? null}');
-    expect(LAYOUT).toContain('sirketler={sirketler}');
+    expect(LAYOUT).toContain('ajans: session.managerAccount?.name ?? null,');
+    expect(LAYOUT).toContain('    sirketler,\n');
   });
 
   it('KRİTİK: seçici AKTİF şirketi okuyor, ev şirketini DEĞİL', () => {
@@ -96,8 +96,8 @@ describe('TEK SEÇİCİ — ajans › şirket › workspace', () => {
      * — kullanıcı başka bir şirketin verisine bakarken üst barda kendi
      * şirketini görürdü. Sızıntı değil ama sızıntıdan ayırt edilemez.
      */
-    expect(LAYOUT).toContain('aktifSirketId={session.activeOrganizationId}');
-    expect(LAYOUT).not.toContain('aktifSirketId={session.organization.id}');
+    expect(LAYOUT).toContain('aktifSirketId: session.activeOrganizationId,');
+    expect(LAYOUT).not.toContain('aktifSirketId: session.organization.id');
   });
 
   it('KRİTİK: ağaç okunamazsa panel ÇALIŞMAYA DEVAM ediyor', () => {
@@ -151,7 +151,7 @@ describe('SEÇİCİ — üst hesabı OLMAYAN kullanıcı', () => {
      * başka bir ekrana atılan bir düğme demekti.
      */
     expect(SECICI).toContain('{yonetimGorunur && (');
-    expect(LAYOUT).toContain("yonetimGorunur={hasPermission(session, 'org.write')}");
+    expect(LAYOUT).toContain("yonetimGorunur: hasPermission(session, 'org.write'),");
   });
 });
 

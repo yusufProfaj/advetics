@@ -51,15 +51,19 @@ describe('KRİTİK: üst barda TEK seçici var', () => {
 
   it('kapsam seçici üst hesap listesini oturumdan alıyor', () => {
     expect(LAYOUT).toContain('<KapsamSecici');
-    expect(LAYOUT).toContain('ustHesaplar={session.secilebilirUstHesaplar}');
-    expect(LAYOUT).toContain('aktifUstHesapId={session.managerAccount?.id ?? null}');
+    // Props tek nesnede (`kapsam`): seçici masaüstünde menüde, telefonda üst barda.
+    expect(LAYOUT).toContain('ustHesaplar: session.secilebilirUstHesaplar,');
+    expect(LAYOUT).toContain('aktifUstHesapId: session.managerAccount?.id ?? null,');
   });
 
-  it('üst barda tek açılır kutu çiziliyor', () => {
+  it('ekranda tek açılır kutu çiziliyor', () => {
     // `<Kapsam`/`<UstHesap` gibi seçici bileşenlerin sayısı: mobil menü ve
-    // bildirim zili bu iddianın dışında (ikisi de kapsam seçmiyor).
+    // bildirim zili bu iddianın dışında (ikisi de kapsam seçmiyor). İki
+    // `<KapsamSecici` var ama AYNI ANDA görünmüyor: biri masaüstü menüsünde
+    // (`lg:flex`), öbürü telefon üst barında (`lg:hidden`), props aynı nesne.
     const secidiler = LAYOUT.match(/<[A-Z][A-Za-z]*Secici/g) ?? [];
-    expect(secidiler).toEqual(['<KapsamSecici']);
+    expect(secidiler).toEqual(['<KapsamSecici', '<KapsamSecici']);
+    expect(LAYOUT.match(/<KapsamSecici \{\.\.\.kapsam\}/g)).toHaveLength(2);
   });
 });
 

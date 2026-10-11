@@ -787,7 +787,7 @@
 }
 /*
  * GÖRÜNÜRLÜK GEÇİŞİ: açılıp kapanan öğe DOM'dan çıkmıyor (panel kuralı,
- * `components/ikon-rayi.tsx`). Kapalıyken yer kaplamıyor ve odak almıyor.
+ * `set-kartlari.tsx` menüsü). Kapalıyken yer kaplamıyor ve odak almıyor.
  */
 .gizlenir {
   display: grid;

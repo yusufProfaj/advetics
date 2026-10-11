@@ -88,6 +88,7 @@ export function KapsamSecici({
   yonetimGorunur,
   ustHesaplar,
   aktifUstHesapId,
+  tamGenislik = false,
 }: {
   /** Üst hesap adı — yoksa `null` (bağımsız şirket). */
   ajans: string | null;
@@ -104,6 +105,8 @@ export function KapsamSecici({
    */
   ustHesaplar: KapsamUstHesabi[];
   aktifUstHesapId: string | null;
+  /** Kenar çubuğunda: düğme sütunu doldurur, sabit asgari genişlik taşmasın. */
+  tamGenislik?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -339,7 +342,7 @@ export function KapsamSecici({
         disabled={bekliyor}
         aria-expanded={open}
         aria-haspopup="tree"
-        className="flex min-w-[15rem] items-center gap-2.5 rounded-xl border border-line bg-surface px-3 py-2 text-left transition hover:bg-surface-muted disabled:opacity-60"
+        className={`flex ${tamGenislik ? 'w-full min-w-0' : 'min-w-[15rem]'} items-center gap-2.5 rounded-xl border border-line bg-surface px-3 py-2 text-left transition hover:bg-surface-muted disabled:opacity-60`}
       >
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-brand text-[11px] font-semibold uppercase text-white">
           {baslik.slice(0, 2)}

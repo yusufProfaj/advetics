@@ -24,7 +24,7 @@ yayında = yeşil. Başka hiçbir yerde kullanılmaz.
 
 **Animasyon:** her geçiş `prefers-reduced-motion` altında kapanır; açılıp
 kapanan öğe DOM'dan çıkmaz, görünürlüğü geçişle değişir (yarım kalan ya da
-bir karede yok olan animasyon yok). Örnek: `components/ikon-rayi.tsx`.
+bir karede yok olan animasyon yok). Örnek: `components/rehber/set-kartlari.tsx` (⋯ menüsü).
 
 ---
 
@@ -130,8 +130,8 @@ Etiket | değer satırları, tıklanınca satır açılıyor; ayrı form sayfas�
 | Yeşil "etkin" noktası | **Kapandı (K-1):** yeşil yalnız durum için serbest. Yayında = yeşil nokta, Duraklatıldı = gri duraklat ikonu, Hata = kırmızı x; şekil + metin her zaman yanında |
 | Google Sans / Roboto | Montserrat (başlık, büyük sayı) + Open Sans (gövde, etiket, tablo) |
 | Açık gri zemin `#f8f9fa`, beyaz kart | Zemin `#302e2d` %4, kart beyaz, çizgi `#302e2d` %12 |
-| Ray: Kampanyalar, Hedefler, Araçlar… | **UYGULANDI** (`components/ikon-rayi.tsx`): + Oluştur, Genel Bakış, Planla, Yönet, İyileştir, Raporlar, Base; altta Ayarlar ve hesap. Tek sayfalı bölüm doğrudan açılır, çok sayfalı panel açar; panel üzerine gelince (yalnız farede) ya da tıklayınca. Telefonda tam liste çekmecede |
-| Hesap kırıntısı + kimlik | `Şirket › Workspace ▾` (workspace seçici burada) |
+| Ray: Kampanyalar, Hedefler, Araçlar… | **GERİ ALINDI (kullanıcı, 2026-10-11):** 2026-10-09'da dar ikon rayına geçilmişti; kullanıcı geniş menüye (`components/kenar-cubugu.tsx`, bölüm başlıklı tam liste) döndürdü. Workspace seçici menünün EN ÜSTÜNDE, logonun altında. Telefonda tam liste çekmecede, seçici üst barda |
+| Hesap kırıntısı + kimlik | Workspace seçici masaüstünde menünün başında (2026-10-11), telefonda üst barda |
 | Hesap teşhisi + "Sorunu çöz" | Genel Bakış › **Bekleyen işler** (satır içi eylem düğmesi) |
 | Öneriler + "Tümünü uygula" | İyileştir (Aşama 4), Orphex'ten farkımızın ekranı |
 | Hesaplar tablosu (yönetici → alt hesap) | **Reklam Yöneticisi**: genel → şirket → workspace → hesap → mecra → kampanya → reklam seti → reklam → önizleme |

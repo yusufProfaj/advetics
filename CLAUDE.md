@@ -199,7 +199,7 @@ kullanıcının gözünden hiç geçmiyordu ve kimliğin yalnız dört değeri
   akış Google Ads'e benzer. Yeni modül de bu dilde. Yeşil yalnız durum
   göstergesi için serbest. Animasyon kalır ama HATASIZ: açılıp kapanan öğe
   DOM'dan çıkmaz, görünürlük geçişle değişir, `prefers-reduced-motion`
-  altında kapanır (`components/ikon-rayi.tsx`).
+  altında kapanır (`components/rehber/set-kartlari.tsx` menüsü).
 - **İki kaynağın dışına çıkılmaz.** Görsel kimlik:
   [`docs/marka/profaj-kurumsal-kilavuz.jpg`](docs/marka/profaj-kurumsal-kilavuz.jpg)
   — renkler YALNIZ beyaz `#ffffff`, siyah `#000000`, gri `#302e2d`,

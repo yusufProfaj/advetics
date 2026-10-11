@@ -24,7 +24,19 @@ export interface KenarVerisi {
  * zaten istemci bileşeni ve çekmeceden çağrıldığında bu dosya da istemci
  * paketine giriyor; layout'tan çağrıldığında sunucuda kalıyor.
  */
-export function KenarIcerigi({ veri, onGezinme }: { veri: KenarVerisi; onGezinme?: () => void }) {
+export function KenarIcerigi({
+  veri,
+  onGezinme,
+  ust,
+}: {
+  veri: KenarVerisi;
+  onGezinme?: () => void;
+  /**
+   * Logonun altında, menünün üstünde (masaüstünde workspace seçici,
+   * kullanıcı kararı 2026-10-11: "neredeyim" sorusu menünün başında).
+   */
+  ust?: React.ReactNode;
+}) {
   const { bolumler, ayarlar } = kenarBolumleri(veri.bolumler);
   return (
     <>
@@ -36,6 +48,8 @@ export function KenarIcerigi({ veri, onGezinme }: { veri: KenarVerisi; onGezinme
           <AdveticsLogo />
         )}
       </div>
+
+      {ust && <div className="shrink-0 px-3 pb-3">{ust}</div>}
 
       <nav className="flex-1 overflow-y-auto px-3 pb-4 [mask-image:linear-gradient(to_bottom,black_calc(100%-1.5rem),transparent)]" onClick={onGezinme}>
         {/*

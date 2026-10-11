@@ -158,8 +158,7 @@ export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = [
     /*
      * İYİLEŞTİR — TEK SATIR, TEK SAYFA (Aşama 4, 2026-10-09). Öneriler, AI
      * Asistan ve Kurallar aynı sayfanın sekmeleri (`/iyilestir?sekme=`);
-     * `/kurallar` oraya yönleniyor. Tek satırlı bölüm rayda doğrudan
-     * bağlantı oluyor (`ikon-rayi.ts`), panel açmıyor.
+     * `/kurallar` oraya yönleniyor.
      *
      * `rule.read`: sayfa kapısıyla AYNI anahtar. Müşteri hesabı bu yetkiyi
      * taşımıyor ve İyileştir'i görmüyor (MIMARI §5, dört ekran kilidi).

@@ -6,7 +6,7 @@ import { BildirimSaglayici } from '@/components/bildirim/bildirim-verisi';
 import { BildirimZili } from '@/components/bildirim/bildirim-zili';
 import { OturumTazeleyici } from '@/components/oturum-tazeleyici';
 import { visibleSections } from '@/lib/nav-sections';
-import { IkonRayi } from '@/components/ikon-rayi';
+import { KenarIcerigi } from '@/components/kenar-cubugu';
 import { MobilMenu } from '@/components/mobil-menu';
 
 import { ROL_ETIKETI, SAHIP_ETIKETI, type ManagerAccountTree } from '@advetics/shared';
@@ -136,6 +136,18 @@ export default async function DashboardLayout({ children }: { children: React.Re
     rolEtiketi: session.platformAdmin ? SAHIP_ETIKETI : ROL_ETIKETI[session.rol],
   };
 
+  /* Seçici iki yerde çiziliyor (masaüstü menü, telefonda üst bar); tek kaynak. */
+  const kapsam = {
+    ajans: session.managerAccount?.name ?? null,
+    sirketler,
+    yonetimGorunur: hasPermission(session, 'org.write'),
+    aktifSirketId: session.activeOrganizationId,
+    aktifWorkspaceId: session.activeClientId,
+    tumSirketler: session.tumSirketler,
+    ustHesaplar: session.secilebilirUstHesaplar,
+    aktifUstHesapId: session.managerAccount?.id ?? null,
+  };
+
   return (
     <div style={themeStyle} className="panel flex min-h-screen">
       {/* Kenar çubuğu */}
@@ -145,11 +157,18 @@ export default async function DashboardLayout({ children }: { children: React.Re
         telefondaki menünün masaüstünden farklı kalması demekti.
       */}
       {/*
-        MASAÜSTÜ: İKON RAYI (2026-10-09). Google Ads'in kullanım mantığı,
-        Advetics'in görünüşü: dar ray + bölüm paneli. Telefonda tam liste
-        çekmecede (`MobilMenu` → `KenarIcerigi`); ikisi de `kenarVerisi`nden.
+        MASAÜSTÜ: GENİŞ MENÜ, SEÇİCİ BAŞINDA (kullanıcı kararı 2026-10-11).
+        2026-10-09'da dar bir ikon rayına geçilmişti; kullanıcı geniş menüye
+        geri döndürdü ve workspace seçiciyi üst bardan menünün en üstüne,
+        logonun altına aldı. Telefonda seçici üst barda kalıyor (çekmece
+        kapalıyken "neredeyim" görünmeli).
+        `z-30`: `backdrop-blur` kenar çubuğunu kendi katmanı yapıyor; z
+        verilmezse seçicinin açılır listesi (menüden geniş) içeriğin
+        yapışkan üst barının ALTINDA kalırdı.
       */}
-      <IkonRayi veri={kenarVerisi} />
+      <aside className="sticky top-0 z-30 hidden h-screen w-64 shrink-0 flex-col border-r border-line bg-surface/80 backdrop-blur-xl lg:flex">
+        <KenarIcerigi veri={kenarVerisi} ust={<KapsamSecici {...kapsam} tamGenislik />} />
+      </aside>
 
       {/* İçerik */}
       {/*
@@ -182,16 +201,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
           <div className="flex min-w-0 items-center gap-2">
           {/* MENÜ DÜĞMESİ YALNIZCA MOBİLDE: masaüstünde kenar çubuğu zaten açık. */}
           <MobilMenu veri={kenarVerisi} stil={themeStyle} />
-          <KapsamSecici
-            ajans={session.managerAccount?.name ?? null}
-            sirketler={sirketler}
-            yonetimGorunur={hasPermission(session, 'org.write')}
-            aktifSirketId={session.activeOrganizationId}
-            aktifWorkspaceId={session.activeClientId}
-            tumSirketler={session.tumSirketler}
-            ustHesaplar={session.secilebilirUstHesaplar}
-            aktifUstHesapId={session.managerAccount?.id ?? null}
-          />
+          <div className="lg:hidden">
+            <KapsamSecici {...kapsam} />
+          </div>
           </div>
           <div className="flex items-center gap-3">
             <div className="hidden text-right sm:block">
