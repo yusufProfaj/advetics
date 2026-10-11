@@ -764,6 +764,17 @@ describe('Google geri al (kaldır)', () => {
     expect((await yayin()).sebep).toMatch(/durduruldu: olay/);
   });
 
+  // Ajan 4 (Dalga 3): hesap-workspace denetimi mutasyonda YAŞIYORDU
+  // (`h.client_id !== y.client_id` silindiğinde hiçbir test düşmedi).
+  it('KRİTİK: hesap artık bu workspace’e atanmış değilse Google’a TEK yazma gitmez; yayın yerinde, sebep yazılı', async () => {
+    const g = await kapaliKurulmus();
+    await h.q(`UPDATE ad_accounts SET client_id = NULL`);
+    expect(await geriAl(g)).toEqual({ tur: 'bitti', durum: 'kapali_kuruldu' });
+    expect(g.mutateSayisi).toBe(0);
+    expect(g.tokenSayisi).toBe(0);
+    expect((await yayin()).sebep).toMatch(/artık bu workspace’e atanmış değil/);
+  });
+
   it('KRİTİK: adında bu yayının izi olan EK KOPYA da aynı atomik istekte kaldırılır', async () => {
     const g = await kapaliKurulmus();
     const K999 = `customers/${MUSTERI}/campaigns/999`;
