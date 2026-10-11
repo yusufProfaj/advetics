@@ -22,6 +22,8 @@ import {
   alanAdi,
   bugun,
   geriAlinabilirMi,
+  yenidenOkunabilirMi,
+  yayinSonucuEtiketi,
   kurulumAdimlari,
   geriAlMetinleri,
   paraGoster,
@@ -438,6 +440,50 @@ function GeriAl({ rehberId, ozet, guncelle }: { rehberId: string; ozet: Platform
   );
 }
 
+/**
+ * "Yeniden kontrol et": Meta'daki kurulumu yeniden okuyup karşılaştırır
+ * (`POST /yayinlar/:id/yeniden-oku`). Temiz çıkarsa yayın kaldığı yerden
+ * ilerler; sonuç sunucudan yoklanır, düşerse sunucunun sebebi görünür.
+ */
+function YenidenKontrol({ rehberId, ozet, guncelle }: { rehberId: string; ozet: PlatformYayinOzeti; guncelle: (y: RehberYayinDurumu) => void }) {
+  const [hal, setHal] = useState<'bos' | 'suruyor' | 'hata'>('bos');
+  const [hata, setHata] = useState<string | null>(null);
+  async function kontrol() {
+    setHal('suruyor');
+    setHata(null);
+    try {
+      await apiFetch(`/reklam/yayinlar/${encodeURIComponent(ozet.yayinId!)}/yeniden-oku`, { method: 'POST' });
+      // Okuma düşerse sunucu 0/3/10 sn yeniden deniyor: en çok ~60 sn yokla.
+      for (let i = 0; i < 20; i++) {
+        await new Promise((r) => setTimeout(r, 3000));
+        const y = await apiFetch<RehberYayinDurumu>(`/reklam/rehberler/${encodeURIComponent(rehberId)}/yayin`);
+        const p = y.platformlar.find((x) => x.platform === ozet.platform);
+        if (p && p.durum !== 'dogrulanamadi' && p.durum !== 'geri_okuma' && p.durum !== 'tekillik_kapisi') {
+          guncelle(y);
+          return setHal('bos');
+        }
+      }
+      setHata('Meta ayarları yine okunamadı; birkaç dakika sonra yeniden dene.');
+      setHal('hata');
+    } catch (e) {
+      setHata(e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.');
+      setHal('hata');
+    }
+  }
+  return (
+    <div className={s.geriAlOnay}>
+      <button type="button" className={s.ikincil} disabled={hal === 'suruyor'} onClick={() => void kontrol()}>
+        {hal === 'suruyor' ? 'Kontrol ediliyor…' : 'Yeniden kontrol et'}
+      </button>
+      {hal === 'hata' && hata && (
+        <span className={s.hataMetni} role="alert">
+          {hata}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function SonEkran({
   b,
   yayin,
@@ -505,16 +551,9 @@ export function SonEkran({
               </div>
               <span className={s.yayinda} data-hal={sonuc === 'yayinda' ? undefined : sonuc === 'hata' ? 'hata' : 'dur'}>
                 <i />
-                {sonuc === 'yayinda'
-                  ? 'Yayında'
-                  : sonuc === 'duraklatildi'
-                    ? 'Duraklatılmış'
-                    : sonuc === 'arsivlendi'
-                      ? 'Arşivlendi'
-                      : sonuc === 'suruyor'
-                        ? 'Sürüyor'
-                        : 'Kurulamadı'}
+                {yayinSonucuEtiketi(p)}
               </span>
+              {yenidenOkunabilirMi(p) && <YenidenKontrol rehberId={rehberId} ozet={p} guncelle={yayinGuncelle} />}
               {geriAlinabilirMi(p) && <GeriAl rehberId={rehberId} ozet={p} guncelle={yayinGuncelle} />}
             </div>
           );

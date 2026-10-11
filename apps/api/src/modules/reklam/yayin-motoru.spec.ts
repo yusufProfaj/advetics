@@ -302,6 +302,23 @@ describe('geri okuma ve açma', () => {
     expect(g!.ham.okuma_hatalari?.reklam_seti).toMatch(/okunamadı \(deneme 3\)/);
   });
 
+  it('KRİTİK: "Yeniden kontrol et" dogrulanamadi yayını yeniden okuyup ilerletiyor', async () => {
+    const meta = new SahteMeta();
+    const eski = meta.oku.bind(meta);
+    let bozuk = true;
+    meta.oku = async (id, a) => {
+      if (bozuk && meta.kayitlar.get(id)?.uc === 'adsets') throw new MetaBelirsizHata('henüz görünmüyor');
+      return eski(id, a);
+    };
+    const { yayinId } = await hazirla();
+    const motor = new YayinMotoru(tx, meta, 'act_1', ACIK, async () => undefined);
+    expect(await motor.kur(yayinId)).toBe('dogrulanamadi');
+    bozuk = false;
+    const sonuc = await motor.geriOku(yayinId);
+    expect(sonuc).not.toBe('dogrulanamadi');
+    expect(['iletildi', 'kapali_kuruldu']).toContain(sonuc);
+  });
+
   it('KRİTİK: yeni nesne bir kez okunamazsa beklenip tekrar sorulur; ikinci okuma geçerse yayın düşmez', async () => {
     const meta = new SahteMeta();
     const eski = meta.oku.bind(meta);

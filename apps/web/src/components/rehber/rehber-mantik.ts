@@ -606,6 +606,29 @@ export function geriAlinabilirMi(p: Pick<PlatformYayinOzeti, 'platform' | 'durum
   return Object.hasOwn(GERI_AL_METINLERI, p.platform) && !!p.yayinId && p.durum !== null && GERI_ALINABILIR_DURUMLAR.includes(p.durum);
 }
 
+/**
+ * "Yeniden kontrol et": Meta kurulumu yapılmış ama geri okuma düşmüş
+ * (`dogrulanamadi`). Sunucunun izin listesi (`yayin.service.ts`
+ * INSAN_ADIMLARI.yeniden_oku) yalnız bu durumu ve yalnız Meta'yı kabul
+ * ediyor. Canlı WhatsApp turunda (2026-10-11) Meta yeni seti birkaç saniye
+ * okunamaz gösterdi; ekranda yalnız "Vazgeç ve arşivle" olduğu için Meta'da
+ * EKSİKSİZ duran bir kurulumun tek yolu silmekti.
+ */
+export function yenidenOkunabilirMi(p: Pick<PlatformYayinOzeti, 'platform' | 'durum' | 'yayinId'>): boolean {
+  return p.platform === 'meta' && !!p.yayinId && p.durum === 'dogrulanamadi';
+}
+
+/**
+ * Satırın durum sözü. `dogrulanamadi` "Kurulamadı" DEĞİL: nesneler Meta'da
+ * duruyor, yalnız okunup karşılaştırılamadı. "Kurulamadı" demek kullanıcıyı
+ * yeniden kurmaya, yani İKİNCİ bir kampanya açmaya gönderirdi.
+ */
+export function yayinSonucuEtiketi(p: Pick<PlatformYayinOzeti, 'durum'>): string {
+  if (p.durum === 'dogrulanamadi') return 'Kontrol edilemedi';
+  const e: Record<YayinSonucu, string> = { yayinda: 'Yayında', duraklatildi: 'Duraklatılmış', arsivlendi: 'Arşivlendi', suruyor: 'Sürüyor', hata: 'Kurulamadı' };
+  return e[yayinSonucu(p)];
+}
+
 /** Geri alma düğmesinin platforma göre sözü (`geriAlMetinleri`). */
 export interface GeriAlMetinleri {
   dugme: string;

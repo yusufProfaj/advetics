@@ -332,6 +332,11 @@ export class YayinMotoru {
   // ---------------------------------------------------------------------------
   async geriOku(yayinId: string): Promise<YayinDurumu> {
     let y = await this.yayin(yayinId);
+    // İnsan düğmesi ("Yeniden kontrol et") `dogrulanamadi`dan geliyor ve
+    // durum makinesi oradan YALNIZ `geri_okuma`ya izin veriyor. Bu adım
+    // yokken düğme her basışta "İzinsiz geçiş" ile düşüyordu: yol vardı,
+    // hiç çalışmamıştı (2026-10-11).
+    if (y.durum === 'dogrulanamadi') y = await this.gecis(y, 'geri_okuma', 'Yeniden kontrol');
     const s = await this.geriOkuVeYaz(y, null);
     if (s === 'fark') return (await this.gecis(y, 'fark_var', 'Meta’da duran ayar gönderilenden farklı')).durum;
     if (s === 'dogrulanamadi') return (await this.gecis(y, 'dogrulanamadi', 'Meta’daki ayarlar okunamadı')).durum;

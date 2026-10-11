@@ -49,6 +49,8 @@ import {
   yayinBittiMi,
   yayinSonucu,
   geriAlinabilirMi,
+  yenidenOkunabilirMi,
+  yayinSonucuEtiketi,
   geriAlMetinleri,
   yayinlanabilirMi,
   yerelAlanlar,
@@ -747,5 +749,17 @@ describe('Google görsel kurgusu panelde (Ajan 4 Dalga 3 F1)', () => {
     expect(googleGorselIpucu('ARAMA')).toBeNull();
     const kaynak = readFileSync(join(__dirname, 'adim-reklam.tsx'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
     expect(kaynak).toContain('const googleGorsel = b.acik.google && googleGorselKurgusuMu(kurgu);');
+  });
+});
+
+describe('okunamayan kurulum (canlı WhatsApp turu, 2026-10-11)', () => {
+  const y = '00000000-0000-4000-8000-000000000001';
+  it('KRİTİK: dogrulanamadi "Kurulamadı" denmez ve yeniden kontrol yalnız Meta\'da', () => {
+    expect(yayinSonucuEtiketi({ durum: 'dogrulanamadi' })).toBe('Kontrol edilemedi');
+    expect(yayinSonucuEtiketi({ durum: 'kurulamadi' })).toBe('Kurulamadı');
+    expect(yayinSonucuEtiketi({ durum: 'kapali_kuruldu' })).toBe('Duraklatılmış');
+    expect(yenidenOkunabilirMi({ platform: 'meta', durum: 'dogrulanamadi', yayinId: y })).toBe(true);
+    expect(yenidenOkunabilirMi({ platform: 'google', durum: 'dogrulanamadi', yayinId: y })).toBe(false);
+    expect(yenidenOkunabilirMi({ platform: 'meta', durum: 'fark_var', yayinId: y })).toBe(false);
   });
 });
