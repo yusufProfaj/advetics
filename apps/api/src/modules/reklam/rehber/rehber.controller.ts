@@ -90,7 +90,7 @@ export class RehberController {
   @Post('rehberler')
   @RequirePermissions('bulk.write')
   olustur(@CurrentTenant() ctx: TenantContext, @Body(zodBody(rehberOlusturSchema)) dto: z.infer<typeof rehberOlusturSchema>): Promise<RehberKaydi> {
-    return this.rehber.olustur(ctx, dto.clientId);
+    return this.rehber.olustur(ctx, dto.clientId, dto.kaynakRehberId);
   }
 
   @Get('rehberler/:id')

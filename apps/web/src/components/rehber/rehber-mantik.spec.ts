@@ -850,3 +850,12 @@ describe('metin önerisi sınıra sığar (canlı, 2026-10-11: 9 başlık, sın�
     expect(govde).toContain('basliklar: sig.basliklar');
   });
 });
+
+describe('kaynak: aynı içerikle yeniden kur', () => {
+  it('KRİTİK: son ekran düğmesi kaynak rehberle POST ediyor', () => {
+    const e = yorumsuz('rehber-ekrani.tsx');
+    expect(e).toContain('yenidenKur={() => void yeniReklam(true)}');
+    expect(e).toContain('kaynakRehberId: kayit.id');
+    expect(yorumsuz('adim-kontrol.tsx')).toContain('onClick={yenidenKur}');
+  });
+});

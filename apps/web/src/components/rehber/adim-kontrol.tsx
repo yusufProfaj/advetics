@@ -488,6 +488,7 @@ export function SonEkran({
   b,
   yayin,
   yeniReklam,
+  yenidenKur,
   yeniHata,
   rehberId,
   yayinGuncelle,
@@ -495,6 +496,8 @@ export function SonEkran({
   b: AdimBaglami;
   yayin: RehberYayinDurumu | null;
   yeniReklam: () => void;
+  /** Aynı içerikle yeni taslak (takvim hariç, `kopyalanacakAlanlar`). */
+  yenidenKur: () => void;
   yeniHata: string | null;
   rehberId: string;
   yayinGuncelle: (y: RehberYayinDurumu) => void;
@@ -562,6 +565,9 @@ export function SonEkran({
           <Link href={yonetici} className={s.birincil}>
             Reklam Yöneticisi&apos;nde gör
           </Link>
+          <button type="button" className={s.ikincil} onClick={yenidenKur}>
+            Aynı içerikle yeniden kur
+          </button>
           <button type="button" className={s.ikincil} onClick={yeniReklam}>
             Yeni reklam
           </button>

@@ -125,7 +125,11 @@ export interface RehberYayinDurumu {
   uyum: { tur: 'gecti' } | { tur: 'durdu'; bulgular: UyumBulgusu[] } | null;
 }
 
-export const rehberOlusturSchema = z.object({ clientId: z.string().uuid() });
+export const rehberOlusturSchema = z.object({
+  clientId: z.string().uuid(),
+  /** "Aynı içerikle yeniden kur": verilirse alanlar bu rehberden kopyalanır (`kopyalanacakAlanlar`). */
+  kaynakRehberId: z.string().uuid().optional(),
+});
 export const rehberYayinlaSchema = z.object({
   /** Kullanıcının onay penceresinde gördüğü içeriğin özeti; uyuşmazsa 409. */
   icerikOzeti: z.string().regex(/^[0-9a-f]{64}$/),

@@ -245,3 +245,22 @@ describe('başlamayan platform (canlı, rehber 37df523b, 2026-10-10)', () => {
     expect(yayinda.platformlar[0]!.sebep).toMatch(/başlamadı/);
   });
 });
+
+describe('aynı içerikle yeniden kur (canlı, 2026-10-11: "Yeni reklam" boş açıyordu)', () => {
+  it('KRİTİK: alanlar kopyalanır, takvim kopyalanmaz; başka workspace’in rehberi kopyalanamaz', async () => {
+    const kaynak = await rehber('ERISIM', [YATAY, KARE]);
+    const kopya = await svc.olustur(CTX, IDS.client, kaynak.id);
+    expect(kopya.id).not.toBe(kaynak.id);
+    expect(kopya.durum).toBe('taslak');
+    expect(kopya.alanlar.amac?.deger).toBe('ERISIM');
+    expect(kopya.alanlar.medya?.deger.map((x) => x.varlikId)).toEqual([YATAY, KARE]);
+    expect(kopya.alanlar.butce?.deger).toEqual({ tip: 'gunluk', micros: '500000000' });
+    expect(kopya.alanlar.takvim).toBeUndefined();
+    // Başka workspace'in rehberi: içerik (hesap, görsel) bu taslağa taşınmaz.
+    const OTEKI = '22222222-0000-4000-8000-0000000000c2';
+    await h.q(`INSERT INTO clients (id, org_id, name, slug, updated_at) VALUES ($1, $2, 'Öteki', 'oteki', now())`, [OTEKI, IDS.org]);
+    const [o] = await h.q<{ id: string }>(`INSERT INTO reklam_rehberi (org_id, client_id, olusturan_id, alanlar) VALUES ($1, $2, $3, '{}'::jsonb) RETURNING id::text`, [IDS.org, OTEKI, IDS.user]);
+    await expect(svc.olustur(CTX, IDS.client, o!.id)).rejects.toThrow(/bulunamadı/);
+    await expect(svc.olustur(CTX, IDS.client, '99999999-0000-4000-8000-000000000000')).rejects.toThrow(/bulunamadı/);
+  });
+});

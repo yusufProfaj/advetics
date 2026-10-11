@@ -192,3 +192,20 @@ export type RehberGuncelle = z.infer<typeof rehberGuncelleSchema>;
 
 /** İstemcinin yazamayacağı kaynaklar: platformdan okunan değer yalnız sunucudan gelir. */
 export const ISTEMCI_YAZAMAZ: readonly AlanKaynagi[] = ['meta_okumasi', 'recete'];
+
+/**
+ * "AYNI İÇERİKLE YENİDEN KUR" — geri alınan ya da durmuş bir kurulumun
+ * içeriği yeni taslağa taşınır. Son ekran bunu vaat ediyordu ("Aynı içerikle
+ * yeni bir reklam açabilirsin") ama "Yeni reklam" BOŞ taslak açıyordu (canlı,
+ * 2026-10-11) ve kullanıcı her şeyi baştan giriyordu. TAKVİM KOPYALANMAZ:
+ * eski başlangıç geçmişte kalmış olabilir ve Meta geçmiş başlangıcı kurulum
+ * anına çekiyor (N-09) — yeni tarih kullanıcıya bilerek seçtirilir. Geri
+ * kalan her alan kaynağıyla (kullanıcı / derleyici) birlikte taşınır;
+ * hesap ve varlık aitliği sunucuda yeniden denetlenir.
+ */
+export const KOPYALANMAYAN_ALANLAR = ['takvim'] as const satisfies ReadonlyArray<keyof RehberAlanlari>;
+export function kopyalanacakAlanlar(a: RehberAlanlari): RehberAlanlari {
+  const kopya: Record<string, unknown> = { ...a };
+  for (const k of KOPYALANMAYAN_ALANLAR) delete kopya[k];
+  return kopya as RehberAlanlari;
+}

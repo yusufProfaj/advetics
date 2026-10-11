@@ -280,10 +280,11 @@ export function RehberEkrani({
     router.push(listeAdresi);
   }
 
-  async function yeniReklam() {
+  async function yeniReklam(kopya = false) {
     setYeniHata(null);
     try {
-      const yeni = await apiFetch<RehberKaydi>('/reklam/rehberler', { method: 'POST', body: JSON.stringify({ clientId: kayit.clientId }) });
+      const govde = kopya ? { clientId: kayit.clientId, kaynakRehberId: kayit.id } : { clientId: kayit.clientId };
+      const yeni = await apiFetch<RehberKaydi>('/reklam/rehberler', { method: 'POST', body: JSON.stringify(govde) });
       router.push(baglanti('/reklam', { musteri: kayit.clientId, rehber: yeni.id }));
     } catch (e) {
       setYeniHata(e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.');
@@ -396,7 +397,7 @@ export function RehberEkrani({
               />
             </div>
             <div className={`${s.ekran} ${ekran === 7 ? s.acik : ''}`}>
-              <SonEkran b={b} yayin={yayin} yeniReklam={() => void yeniReklam()} yeniHata={yeniHata} rehberId={kayit.id} yayinGuncelle={setYayin} />
+              <SonEkran b={b} yayin={yayin} yeniReklam={() => void yeniReklam()} yenidenKur={() => void yeniReklam(true)} yeniHata={yeniHata} rehberId={kayit.id} yayinGuncelle={setYayin} />
             </div>
           </section>
 

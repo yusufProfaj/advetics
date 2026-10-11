@@ -23,6 +23,7 @@ import {
   oranBul,
   platformAcilabilirMi,
   provaNotu,
+  kopyalanacakAlanlar,
   rehberAlanlariSchema,
   rehberEksikleri,
   rehberdenGoogle,
@@ -556,16 +557,25 @@ export class RehberService {
     return { satirlar: sonuc, toplam: sonuc.length };
   }
 
-  async olustur(ctx: TenantContext, clientId: string): Promise<RehberKaydi> {
+  async olustur(ctx: TenantContext, clientId: string, kaynakRehberId?: string): Promise<RehberKaydi> {
     erisim(ctx, clientId);
     const s = await this.tx(ctx)(async (t) => {
       // org_id HEDEF WORKSPACE'TEN: "tüm şirketler" modunda ctx.orgId ev
       // şirketi kalıyor ve (client_id, org_id) kompozit anahtarını deler.
       const [c] = await t.$queryRaw<Array<{ org_id: string }>>(Prisma.sql`SELECT org_id::text FROM clients WHERE id = ${clientId}::uuid`);
       if (!c) throw new NotFoundException('Workspace bulunamadı');
+      let alanlar: RehberAlanlari = {};
+      if (kaynakRehberId) {
+        // Kaynak AYNI workspace'te olmalı: başka bir müşterinin hesabı ve
+        // görselleri bu workspace'in taslağına taşınmamalı (aitlik ayrıca).
+        const [k] = await t.$queryRaw<RehberSatiri[]>(Prisma.sql`SELECT ${SUTUNLAR} FROM reklam_rehberi WHERE id = ${kaynakRehberId}::uuid`);
+        if (!k || k.client_id !== clientId) throw new NotFoundException('Kopyalanacak reklam bulunamadı');
+        alanlar = kopyalanacakAlanlar(alanlariOku(k));
+        await aitlikDenetle(t, clientId, alanlar);
+      }
       const [r] = await t.$queryRaw<RehberSatiri[]>(Prisma.sql`
-        INSERT INTO reklam_rehberi (org_id, client_id, olusturan_id)
-        VALUES (${c.org_id}::uuid, ${clientId}::uuid, ${ctx.userId}::uuid)
+        INSERT INTO reklam_rehberi (org_id, client_id, olusturan_id, alanlar)
+        VALUES (${c.org_id}::uuid, ${clientId}::uuid, ${ctx.userId}::uuid, ${JSON.stringify(alanlar)}::jsonb)
         RETURNING ${SUTUNLAR}`);
       return r!;
     });
