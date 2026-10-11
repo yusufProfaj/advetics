@@ -1077,6 +1077,11 @@ okunup varsayılmadı — canlıda doğrulandı.
   verilince akış kapanıyordu. Banner seti yoksa birleşim
   (`reklamSetiPlani`); kesişim yalnız iki+ boyutlu set varken.
 
+- **KREATİF ADI 100 KARAKTERDE KESİLİYOR — ölçüldü** (2026-10-11, v25.0,
+  satış canlı turu): Meta adı 100. karakterde kesip damgasını (N-15)
+  ekliyor; 101 karakterlik ad "fark" ile durdurdu. Derleyici sığdırıyor
+  (`kreatifAdi`, amaç adı "…" ile kısalır). Reklam/set adında gözlenmedi.
+
 - **ÖZEL KATEGORİ SATIR İÇİ `campaign_spec`TE SINANAMIYOR — ölçüldü**
   (2026-10-10, v25.0, `meta-kategori-prova`, Ege Birlik Yapı). Konutlu
   provada kampanya kendi ucunda GEÇTİ; reklam seti ve reklamlar (satır içi

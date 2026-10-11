@@ -349,7 +349,8 @@ describe('Dalga 2 sürüm ve açılış', () => {
     // 1.3.0: video izlenme, erişim ve satış derleniyor; WhatsApp numarası
     // reklam setinde; erişimde sıklık sınırı (Dalga 3).
     // 1.3.1: banner seti yokken yerleşim planı birleşim.
-    expect(DERLEYICI_SURUMU).toBe('1.3.1');
+    // 1.3.2: kreatif adı 100 karaktere sığdırılıyor.
+    expect(DERLEYICI_SURUMU).toBe('1.3.2');
   });
 
   it('KRİTİK: TELEFON/WHATSAPP derleniyor ama üründe AÇIK DEĞİL (canlı tur bekliyor)', () => {
@@ -369,5 +370,26 @@ describe('Dalga 2 sürüm ve açılış', () => {
         }
       }
     }
+  });
+});
+
+describe('kreatif adı 100 karakter (satış canlı turu, 2026-10-11)', () => {
+  it('KRİTİK: uzun amaç adında kreatif adı 100 karaktere sığar; Fikir N ve kısa kimlik korunur', async () => {
+    const { kreatifAdi, reklamAdi, ACILMADI_ONEKI, META_KREATIF_AD_SINIRI } = await import('@advetics/shared');
+    const g = { workspaceKisaAdi: 'Ege Birlik Yapı', niyet: 'SATIS' as const, tarih: '2026-10-11', yayinKimligi: '49cb0000-0000-4000-8000-000000000000' };
+    expect([...(ACILMADI_ONEKI + reklamAdi(g, 1))].length).toBeGreaterThan(META_KREATIF_AD_SINIRI);
+    const ad = kreatifAdi(g, 1, ACILMADI_ONEKI);
+    expect([...ad].length).toBeLessThanOrEqual(META_KREATIF_AD_SINIRI);
+    expect(ad.endsWith('· 2026-10-11 · 49CB · Fikir 1')).toBe(true);
+    expect(ad).toContain('…');
+    // Sığan ad dokunulmadan kalır.
+    const kisa = { ...g, niyet: 'SITE' as const };
+    expect(kreatifAdi(kisa, 2, ACILMADI_ONEKI)).toBe(ACILMADI_ONEKI + reklamAdi(kisa, 2));
+  });
+  it('derleyici kreatif gövdesinde bu adı kullanıyor', () => {
+    const { readFileSync } = require('node:fs') as typeof import('node:fs');
+    const { join } = require('node:path') as typeof import('node:path');
+    const k = readFileSync(join(__dirname, '../../../../../../packages/shared/src/reklam/meta/derle.ts'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    expect(k).toContain('name: kreatifAdi(adG, n, ACILMADI_ONEKI)');
   });
 });

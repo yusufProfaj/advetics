@@ -15,7 +15,7 @@
  * Gövdeler arası bağlar yer tutucuyla (`{kampanya}`, `{reklam_seti}`,
  * `{kreatif:1}`): kimlikleri yayın motoru zincir sırasında doldurur.
  */
-import { ACILMADI_ONEKI, adlabels, kampanyaAdi, reklamAdi, reklamSetiAdi } from './adlandirma';
+import { ACILMADI_ONEKI, adlabels, kampanyaAdi, kreatifAdi, reklamAdi, reklamSetiAdi } from './adlandirma';
 import { etkinKategoriler, hedeflemeUret, type HedeflemeGirdisi, type OzelKategori } from './hedefleme';
 import { NIYET_KATALOGU, type NiyetKodu } from './niyetler';
 import { microsToMinor } from '../para';
@@ -30,10 +30,11 @@ import { ORAN_ETIKETI, YERLESIM_GRUPLARI, YERLESIM_SIRASI, bannerSetiDestekleniy
  * 1.3.0: VIDEO_IZLENME, ERISIM ve SATIS derleniyor; WhatsApp numarası
  *        `promoted_object`te; erişimde sıklık sınırı (Dalga 3).
  * 1.3.1: banner seti yokken yerleşim planı BİRLEŞİM (`reklamSetiPlani`).
+ * 1.3.2: kreatif adı 100 karaktere sığdırılıyor (`kreatifAdi`).
  * Sürüm provanın tazeliğine bağlı: eski derleyiciyle geçmiş prova yeni
  * gövdeyi kanıtlamaz.
  */
-export const DERLEYICI_SURUMU = '1.3.1';
+export const DERLEYICI_SURUMU = '1.3.2';
 
 /**
  * CLICK-TO-WHATSAPP SABİTLERİ (CLAUDE.md "CLICK-TO-WHATSAPP"). Bağlantı
@@ -526,7 +527,7 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
     if (g.instagramPlatformId) oss.instagram_user_id = g.instagramPlatformId;
 
     const kreatif: Record<string, unknown> = {
-      name: ACILMADI_ONEKI + reklamAdi(adG, n),
+      name: kreatifAdi(adG, n, ACILMADI_ONEKI),
       object_story_spec: oss,
       ...(setKreatifi ? { asset_feed_spec: setKreatifi } : {}),
       degrees_of_freedom_spec: {

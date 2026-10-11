@@ -54,6 +54,30 @@ export function reklamAdi(g: AdGirdisi, n: number): string {
   return `${kampanyaAdi(g)} · Fikir ${n}`;
 }
 
+/**
+ * KREATİF ADI EN ÇOK 100 KARAKTER — ölçüldü (2026-10-11, v25.0, satış canlı
+ * turu). Meta kreatif adını 100. karakterde KESİP sonuna kendi damgasını
+ * ekliyor (N-15): "[Advetics: açılmadı] … · Sitemden satış ya da kayıt
+ * gelsin · … · Fikir 1" (101) "… · Fiki 2026-10-11-<hex>" döndü ve geri okuma
+ * "fark" ile durdu. Ad bizde sığdırılıyor: taşan kısım AMAÇ ADINDAN "…" ile
+ * kesiliyor; kısa kimlik, tarih ve "Fikir N" (Ads Manager'da aranan yerler)
+ * korunuyor. Reklam ve set adlarında aynı kesim gözlenmedi.
+ */
+export const META_KREATIF_AD_SINIRI = 100;
+
+export function kreatifAdi(g: AdGirdisi, n: number, onek: string): string {
+  const tam = onek + reklamAdi(g, n);
+  const tasan = [...tam].length - META_KREATIF_AD_SINIRI;
+  if (tasan <= 0) return tam;
+  const ekranAdi = [...NIYET_KATALOGU[g.niyet].ekranAdi];
+  // Amaç adı tek başına taşmayı karşılayamıyorsa (çok uzun workspace adı)
+  // sondan kesilir: ad yine sınırda kalır, "Fikir N" kaybolabilir.
+  if (ekranAdi.length - tasan - 1 < 1) return [...tam].slice(0, META_KREATIF_AD_SINIRI).join('');
+  const kisa = ekranAdi.slice(0, ekranAdi.length - tasan - 1).join('').trimEnd() + '…';
+  const sonuc = onek + reklamAdi({ ...g }, n).replace(NIYET_KATALOGU[g.niyet].ekranAdi, kisa);
+  return [...sonuc].length <= META_KREATIF_AD_SINIRI ? sonuc : [...sonuc].slice(0, META_KREATIF_AD_SINIRI).join('');
+}
+
 export function formAdi(workspaceKisaAdi: string, sablonSurumu: number): string {
   return `${workspaceKisaAdi.trim()} · Form · ş${sablonSurumu}`;
 }
