@@ -47,9 +47,20 @@ export interface GoogleGeriAlIsi {
 }
 export type ReklamIsi = YayinIsi | ProvaIsi | GoogleYayinIsi | GoogleGeriAlIsi;
 
-/** İş kimliği: ayırıcı `__` (BullMQ `:`'yı reddediyor). Aynı adım iki kez kuyruğa giremez. */
-export function yayinIsKimligi(yayinId: string, adim: YayinAdimi): string {
-  return `yayin__${yayinId}__${adim}`;
+/**
+ * İş kimliği: ayırıcı `__` (BullMQ `:`'yı reddediyor).
+ *
+ * YALNIZ `kur` SABİT: aynı yayın iki kez kurulmamalı (ikinci kampanya =
+ * para harcayan mükerrerlik). İNSAN DÜĞMELERİ (devam, geri al, yeniden oku)
+ * ZAMAN DAMGALI: sabit kimlikle tamamlanmış iş Redis'te durduğu sürece
+ * (removeOnComplete 500) aynı düğmeye ikinci basış SESSİZCE yutuluyordu.
+ * Canlıda görüldü (2026-10-11): "Yeniden kontrol et" ikinci kez basıldı,
+ * uç 201 döndü, worker hiçbir şey koşmadı. Çift tıklama iki iş açabilir;
+ * zararsız: hesap kilidi sıraya koyuyor, ikinci iş durumu artık uygun
+ * bulmuyor (`gecis` izinsiz geçişte patlar, yazmaz).
+ */
+export function yayinIsKimligi(yayinId: string, adim: YayinAdimi, simdi: number = Date.now()): string {
+  return adim === 'kur' ? `yayin__${yayinId}__kur` : `yayin__${yayinId}__${adim}__${simdi}`;
 }
 
 @Injectable()
