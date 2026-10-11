@@ -400,9 +400,11 @@ describe('B1: kapalı niyetler eski taslak yolundan derlenmiyor', () => {
   it('KRİTİK: rehberden doğan TELEFON taslağı tablo kapalıyken reddedilir, deneme olunca derlenir', async () => {
     const t = await taslak({ ...DOLU, niyet: k('TELEFON' as const), hedefAdres: k(null), telefon: k('+905321234567') });
     await rehbereBagla(t.taslakId);
-    expect(kodlar(await baslat({ taslakId: t.taslakId, ozet0: t.ozet, testKipi: true }))).toContain('NYT-KAPALI');
     const eski = REHBER_ACILIS.TELEFON.meta;
     try {
+      // Tablo bugünkü değerinden bağımsız sınansın: önce kapalı, sonra deneme.
+      REHBER_ACILIS.TELEFON.meta = 'kapali';
+      expect(kodlar(await baslat({ taslakId: t.taslakId, ozet0: t.ozet, testKipi: true }))).toContain('NYT-KAPALI');
       REHBER_ACILIS.TELEFON.meta = 'deneme';
       expect(kodlar(await baslat({ taslakId: t.taslakId, ozet0: t.ozet, testKipi: true }))).toEqual([]);
     } finally {

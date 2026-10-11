@@ -17,7 +17,7 @@ kaynaktan çıkarıldı (dosya:satır referansları ajan devir notlarında).
 | Form · Google | **sonraya** | Google form öğesi (LeadFormAsset) kendi içeriğini ister (başlık, alanlar, gizlilik adresi); kaynağı yok. Ayrı karar |
 | WhatsApp · Google | yok | Google'da WhatsApp reklamı yok (`amaclar.ts`) |
 
-Bitince açılış `REHBER_ACILIS`te `kapali` → `deneme` (yalnız ajans yöneticisi
+Canlı tur için açılış `REHBER_ACILIS`te `kapali` → `deneme` (2026-10-11; yalnız ajans yöneticisi
 görür, kurulum DURAKLATILMIŞ). Her satır KENDİ commit'inde ve canlı turun
 kanıtıyla açılır; bu dalganın kod commit'leri tabloyu değiştirmez.
 

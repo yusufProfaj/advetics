@@ -115,12 +115,14 @@ export type AcilisDurumu = 'acik' | 'deneme' | 'kapali';
  */
 export const REHBER_ACILIS: Record<RehberAmacKodu, Record<RehberPlatformu, AcilisDurumu>> = {
   SITE: { meta: 'deneme', google: 'deneme' },
-  // FORM Dalga 2'ye kaydı (Ajan 2 bulgusu, 2026-10-10): mevcut Meta zinciri
-  // form kimliğini boş geçiyor ve gizlilik adresinin Marka Merkezi'nde alanı
-  // yok; açık bırakmak "her seferinde engelde duran" bir kart göstermek olurdu.
-  FORM: { meta: 'kapali', google: 'kapali' },
-  WHATSAPP: { meta: 'kapali', google: 'kapali' },
-  TELEFON: { meta: 'kapali', google: 'kapali' },
+  // DALGA 2 CANLI TURU (2026-10-11, docs/advcampaign/DALGA-2.md): kod yazıldı
+  // ve Ajan 4 kapısından geçti; `deneme` = yalnız ajans yöneticisi görür,
+  // kurulum DURAKLATILMIŞ kalır. Canlı tur bu kipte yapılır (Dalga 1 gibi);
+  // `acik` ancak turun kanıtıyla, satır satır. Google Form içerik kaynağı
+  // olmadığı için kapalı (`G-KURGU-KAPALI`).
+  FORM: { meta: 'deneme', google: 'kapali' },
+  WHATSAPP: { meta: 'deneme', google: 'kapali' },
+  TELEFON: { meta: 'deneme', google: 'deneme' },
   VIDEO: { meta: 'kapali', google: 'deneme' },
   ERISIM: { meta: 'kapali', google: 'kapali' },
   SATIS: { meta: 'kapali', google: 'kapali' },

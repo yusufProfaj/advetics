@@ -109,7 +109,8 @@ describe('amaç kataloğu ve açılış tablosu', () => {
     expect(platformGorunurMu('SITE', 'meta', true)).toBe(true);
     expect(platformGorunurMu('SITE', 'meta', false)).toBe(false);
     expect(platformAcilabilirMi('SITE', 'meta')).toBe(false);
-    expect(amacGorunurMu('WHATSAPP', true)).toBe(false);
+    // Kapalı amaç ajans yöneticisine de görünmez (ERISIM Dalga 3).
+    expect(amacGorunurMu('ERISIM', true)).toBe(false);
   });
 });
 
