@@ -17,6 +17,11 @@
  */
 import {
   META_EN_COK_GORSEL,
+  METIN_SINIRLARI,
+  onerilenPlatformlar,
+  type GoogleKurgu,
+  type MetinSeti,
+  type RehberOzeti,
   setlereAyir,
   type GorselOrani,
   type NiyetKodu,
@@ -265,6 +270,40 @@ export function platformNedeni(amac: RehberAmacKodu, h: Pick<RehberHazirligi, 'a
   return 'Bu amaç için şu an açık bir platform yok.';
 }
 
+type PlatformAlani = { deger: Record<RehberPlatformu, boolean>; kaynak: AlanKaynagi } | undefined;
+
+/**
+ * AMAÇ DEĞİŞİNCE PLATFORM SEÇİMİ. Eskiden her amaç değişikliği öneriyi
+ * yeniden yazıyordu: kullanıcı Google'ı kapatıp başka amaca bakıp geri
+ * dönünce Google yeniden açılmış oluyordu ve bunu ancak Kontrol adımında
+ * fark ediyordu. Kural sade: KULLANICININ seçimi yeni amaçta da kurulabiliyorsa
+ * (açtığı her platform görünür ve en az biri açık) dokunulmaz; kurulamıyorsa
+ * öneri yazılır (WhatsApp'ta Google yok, kullanıcının "yalnız Google"u orada
+ * anlamsız). Öneri ya da derleyicinin yazdığı seçim her zaman yenilenir.
+ */
+export function amacDegisimi(
+  yeni: RehberAmacKodu,
+  mevcut: PlatformAlani,
+  h: Pick<RehberHazirligi, 'ajansYoneticisi' | 'hesaplar' | 'googleHesaplari'>,
+): Degisiklik[] {
+  const amac: Degisiklik = { alan: 'amac', deger: yeni, kaynak: 'kullanici' };
+  if (mevcut?.kaynak === 'kullanici') {
+    const acilan = (['meta', 'google'] as const).filter((p) => mevcut.deger[p]);
+    if (acilan.length > 0 && acilan.every((p) => platformGorunurMu(yeni, p, h.ajansYoneticisi))) return [amac];
+  }
+  return [amac, { alan: 'platformlar', deger: onerilenPlatformlar(yeni, h, platformGorunurMu), kaynak: 'derleyici' }];
+}
+
+/**
+ * Platform anahtarı EKRANDA GÖRÜNEN kümeden yazar. Ham seçimden yazmak,
+ * görünmeyen ama kayıtta `true` kalan bir platformu (önceki amaçtan) bu
+ * tıklamayla birlikte kalıcı yapıyordu: ekran "yalnız Meta" derken kayıt
+ * iki platform taşıyordu.
+ */
+export function platformAnahtari(acik: Record<RehberPlatformu, boolean>, p: RehberPlatformu): Record<RehberPlatformu, boolean> {
+  return { meta: acik.meta, google: acik.google, [p]: !acik[p] };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Adım rayı ve eksik listesi (liste SUNUCUDAN; burada yalnız gruplama)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -277,12 +316,43 @@ export function adimEngelleri(eksikler: readonly RehberEksigi[], adim: RehberAdi
 }
 
 /**
+ * Amaç seçilmiş mi: hem ekrandaki (henüz yazılmamış olabilir) değer hem
+ * sunucunun listesi. Sunucu amaçsız rehberde YALNIZ "Amaç seçilmedi"
+ * döndürüyor (`rehberEksikleri` erken dönüyor), yani 2-6 için engel yok
+ * görünüyor; bunu "hazır" okumak, hiçbir şey seçilmemiş ekranda beş yeşil
+ * tik demekti. İkisine birden bakılıyor: amaç seçildi ama cevap henüz
+ * gelmediyse eski liste aynı yanlışı yapardı.
+ */
+function amacTamam(eksikler: readonly RehberEksigi[], amacSecili: boolean): boolean {
+  return amacSecili && !eksikler.some((e) => e.kod === 'AMAC');
+}
+
+/**
  * Raydaki işaret: geçilmiş VE engeli kalmamış adım "bitti". Yalnız
  * "geçildi" diye işaretlemek, eksik bırakılmış bir adımı yeşil gösterirdi.
+ * Amaç yokken 2-6 hiçbir zaman bitmiş değil (`amacTamam`).
  */
-export function adimBittiMi(eksikler: readonly RehberEksigi[], adim: RehberAdimi, simdiki: EkranNo): boolean {
+export function adimBittiMi(eksikler: readonly RehberEksigi[], adim: RehberAdimi, simdiki: EkranNo, amacSecili: boolean): boolean {
+  if (adim > 1 && !amacTamam(eksikler, amacSecili)) return false;
   if (simdiki === 7) return true;
   return adim < simdiki && adimEngelleri(eksikler, adim).length === 0;
+}
+
+/** "Yayından önce" kartındaki "X hazır" satırları: 1-5, engeli olmayan, yalnız amaç seçilmişse. */
+export function hazirAdimlar(eksikler: readonly RehberEksigi[], amacSecili: boolean): RehberAdimi[] {
+  if (!amacTamam(eksikler, amacSecili)) return [];
+  return ([1, 2, 3, 4, 5] as const).filter((n) => !eksikler.some((e) => e.adim === n));
+}
+
+/**
+ * Raydaki alt satır SEÇİME göre. Sabit "Meta, Google" yalnız Meta açıkken
+ * de iki platform yazıyordu ve kullanıcı Google'ın da kurulacağını
+ * sanıyordu. Seçim yoksa adımın kendi açıklaması kalır.
+ */
+export function adimAltMetni(no: RehberAdimi, varsayilan: string, amac: RehberAmacKodu | null, acik: Record<RehberPlatformu, boolean>): string {
+  if (no === 1 && amac) return REHBER_AMACLARI[amac].ekranAdi;
+  if (no === 2 && amac) return [acik.meta && 'Meta', acik.google && 'Google'].filter(Boolean).join(' + ') || 'Platform seçilmedi';
+  return varsayilan;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -822,4 +892,171 @@ export function hesapBaglami(a: RehberAlanlari, h: RehberHazirligi): { paraBirim
     paraBirimi: m?.paraBirimi ?? g?.paraBirimi ?? 'TRY',
     saatDilimi: m?.saatDilimi ?? g?.saatDilimi ?? 'Europe/Istanbul',
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Metin kutusu: hangi platformun kuralı
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface MetinKurali {
+  /** Reklam adımının üst cümlesi (yalnız açık platform(lar)ı anlatır). */
+  soru: string;
+  /** Boş ekranda gösterilen kutu sayısı (asgari). */
+  baslikKutu: number;
+  baslikEnCok: number;
+  baslikNotu: string;
+  aciklamaKutu: number;
+  aciklamaEnCok: number;
+  aciklamaNotu: string;
+  /** "Reklam gücü" çubuğu: Google duyarlı arama reklamının kavramı. */
+  gucGoster: boolean;
+}
+
+/**
+ * METİN KUTUSU AÇIK PLATFORMA GÖRE. Eskiden hep Google arama reklamının
+ * kuralı görünüyordu (3 başlık, 2 açıklama, "Google hepsini dener", reklam
+ * gücü) ve yalnız Meta açıkken kullanıcı Meta'nın hiç kullanmadığı
+ * kutuları doldurmak zorunda sanıyordu. Sayılar derleyicinin kullandığı
+ * kadar: Meta ilk 5 başlığı ve ilk açıklamayı (`turet.ts`), Google Talep
+ * Yaratma / Maks. Performans ilk 5 başlığı (`derle-google.ts`), Google Arama
+ * 3 ile 15 başlık ve en az 2 açıklama (`G-BASLIK-SAYI`, `G-ACIKLAMA-SAYI`).
+ */
+export function metinKurali(acik: Record<RehberPlatformu, boolean>, kurgu: GoogleKurgu | null): MetinKurali {
+  const L = METIN_SINIRLARI;
+  const soru = reklamSorusu(acik, kurgu);
+  if (acik.google && kurgu === 'ARAMA') {
+    return {
+      soru,
+      baslikKutu: L.basliklarEnAz,
+      baslikEnCok: L.basliklarEnCok,
+      baslikNotu: `${L.basliklarEnAz} ile ${L.basliklarEnCok} arası · Google hepsini dener${acik.meta ? `, Meta ilk ${L.metaBaslikSayisi}'ini` : ''}`,
+      aciklamaKutu: L.aciklamalarEnAz,
+      aciklamaEnCok: L.aciklamalarEnCok,
+      aciklamaNotu: `En az ${L.aciklamalarEnAz}`,
+      gucGoster: true,
+    };
+  }
+  const kim = [acik.meta && 'Meta', acik.google && 'Google'].filter(Boolean).join(' ve ') || 'Platform';
+  return {
+    soru,
+    baslikKutu: 1,
+    baslikEnCok: L.metaBaslikSayisi,
+    baslikNotu: `En çok ${L.metaBaslikSayisi} · ${kim} hepsini dener`,
+    aciklamaKutu: 1,
+    aciklamaEnCok: acik.google ? L.aciklamalarEnCok : 1,
+    aciklamaNotu: acik.google ? 'En az 1' : 'İsteğe bağlı · başlığın altında görünür',
+    gucGoster: false,
+  };
+}
+
+/**
+ * Reklam adımının üst cümlesi. SİMETRİK: yalnız Google açıkken "iki
+ * platformun kalıbına bölüyoruz" demek (canlı tur), yalnız Meta açıkken
+ * Google kuralı göstermekle aynı hata. Google Arama'da görsel istenmiyor.
+ */
+function reklamSorusu(acik: Record<RehberPlatformu, boolean>, kurgu: GoogleKurgu | null): string {
+  if (acik.meta && acik.google) return 'Görselleri ve metni bir kez ver; iki platformun kalıbına biz bölüyoruz.';
+  if (acik.meta) return "Görselleri ve metni ver; Meta'nın kalıbına biz yerleştiriyoruz.";
+  if (acik.google) {
+    const ne = kurgu === 'ARAMA' ? 'Metni' : kurgu === 'TALEP_YARATMA_VIDEO' ? 'Videoyu ve metni' : 'Görselleri ve metni';
+    return `${ne} ver; Google'ın kalıbına biz yerleştiriyoruz.`;
+  }
+  return 'Görselleri ve metni ver.';
+}
+
+/** Ekrandaki metin: boş kutular kuralın asgarisi kadar (kayıttaki fazlası gizlenmez). */
+export function metinKutusu(m: MetinSeti | undefined, k: Pick<MetinKurali, 'baslikKutu' | 'aciklamaKutu'>): MetinSeti {
+  const pad = (a: string[], n: number) => (a.length >= n ? a : [...a, ...Array<string>(n - a.length).fill('')]);
+  return {
+    anaMetin: m?.anaMetin ?? '',
+    basliklar: pad(m?.basliklar ?? [], k.baslikKutu),
+    aciklamalar: pad(m?.aciklamalar ?? [], k.aciklamaKutu),
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Onay penceresi ve son ekran
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Onay penceresindeki ilk adımın metni KURGUYA göre. "kelimeler" yalnız
+ * Google Arama'da var; Talep Yaratma ve Maks. Performans'ta da yazması,
+ * kurulmayacak bir şeyi vaat ediyordu.
+ */
+export function kurulumAdimlari(platform: RehberPlatformu, kurgu: GoogleKurgu | null): [string, string, string] {
+  if (platform === 'meta') return ['Duraklatılmış kur (kampanya, set, reklam)', "Meta'dan geri oku ve karşılaştır", 'Yayına al'];
+  const parca = kurgu === 'MAKS_PERFORMANS' ? 'kampanya, öğe grubu' : kurgu === 'ARAMA' ? 'kampanya, grup, reklam, kelimeler' : 'kampanya, grup, reklam';
+  return [`Duraklatılmış kur (${parca})`, "Google'dan geri oku ve karşılaştır", 'Yayına al'];
+}
+
+const PLATFORM_ADLARI: Record<RehberPlatformu, string> = { meta: 'Meta', google: 'Google' };
+
+export interface SonEkranOzeti {
+  hal: 'tamam' | 'dur' | 'hata' | 'arsiv';
+  baslik: string;
+  metin: string;
+}
+
+/**
+ * Son ekranın başlığı ve cümlesi. ARŞİVLENEN PLATFORM BAŞLIKTA YER ALIR:
+ * canlı turda Meta "Vazgeç ve arşivle" ile arşivlendi, satır "Arşivlendi"
+ * dedi, başlık "Duraklatılmış kuruldu" demeye devam etti (Google duraklatılmış
+ * durduğu için). Kalan platformların hâli ayrıca söylenir; arşiv bir hata değil.
+ */
+export function sonEkranOzeti(platformlar: ReadonlyArray<{ platform: RehberPlatformu; sonuc: YayinSonucu }>, uyumDurdu: boolean): SonEkranOzeti {
+  if (uyumDurdu) return { hal: 'hata', baslik: 'Kurulum tamamlanamadı', metin: 'Yayın, platforma hiçbir şey gönderilmeden durduruldu.' };
+  if (platformlar.some((p) => p.sonuc === 'hata')) {
+    return { hal: 'hata', baslik: 'Kurulum tamamlanamadı', metin: 'Aşağıda hangi platformda neyin durduğu yazıyor; diğer platform bundan etkilenmedi.' };
+  }
+  const arsiv = platformlar.filter((p) => p.sonuc === 'arsivlendi');
+  const kalan = platformlar.filter((p) => p.sonuc !== 'arsivlendi');
+  if (platformlar.length > 0 && kalan.length === 0) {
+    return { hal: 'arsiv', baslik: 'Reklam arşivlendi', metin: 'Kampanya platformda arşivlendi; harcama olmaz. Aynı içerikle yeni bir reklam açabilirsin.' };
+  }
+  const adlar = (xs: typeof platformlar) => xs.map((p) => PLATFORM_ADLARI[p.platform]).join(' ve ');
+  const kalanDur = kalan.some((p) => p.sonuc === 'duraklatildi' || p.sonuc === 'suruyor');
+  if (arsiv.length > 0) {
+    return {
+      hal: kalanDur ? 'dur' : 'tamam',
+      baslik: `${adlar(arsiv)}'daki reklam arşivlendi`,
+      metin: kalanDur ? `${adlar(kalan)}'da duraklatılmış duruyor; başlatana kadar harcama olmaz.` : `${adlar(kalan)}'da yayında.`,
+    };
+  }
+  if (kalanDur) {
+    return {
+      hal: 'dur',
+      baslik: 'Duraklatılmış kuruldu',
+      metin: "Kuruldu, geri okunup kontrol edildi ve açılmadı. Reklam Yöneticisi'nden başlatabilirsin; başlatana kadar harcama olmaz.",
+    };
+  }
+  const tek = platformlar.length === 1 ? PLATFORM_ADLARI[platformlar[0]!.platform] : null;
+  return { hal: 'tamam', baslik: 'Reklamın yayında', metin: `${tek ? `${tek}'da` : 'İki platformda da'} kuruldu, geri okunup kontrol edildi ve açıldı.` };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Giriş listesi
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SONUC_ADI: Record<YayinSonucu, string> = {
+  suruyor: 'Kuruluyor',
+  yayinda: 'Yayında',
+  duraklatildi: 'Duraklatılmış',
+  arsivlendi: 'Arşivlendi',
+  hata: 'Kurulamadı',
+};
+
+/**
+ * Listedeki durum yazısı. Rehberin kendi durumu dar (`taslak`/`yayinda`)
+ * ve "Vazgeç ve arşivle" onu değiştirmiyor: arşivlenen reklam listede
+ * "Yayında · Meta" görünüyordu. Yayınlanmış satırda platformların GERÇEK
+ * hâli yazılır; hepsi aynıysa tek kelime.
+ */
+export function listeDurumu(r: Pick<RehberOzeti, 'durum' | 'platformlar' | 'yayinlar'>): string {
+  const plt = [r.platformlar.meta && 'Meta', r.platformlar.google && 'Google'].filter(Boolean).join(' + ') || 'Platform seçilmedi';
+  if (r.durum === 'taslak') return `Taslak · ${plt}`;
+  if (r.durum === 'arsivlendi') return `Arşivlendi · ${plt}`;
+  if (r.yayinlar.length === 0) return `Yayında · ${plt}`;
+  const adlar = r.yayinlar.map((y) => ({ ad: PLATFORM_ADLARI[y.platform], sonuc: SONUC_ADI[yayinSonucu(y)] }));
+  if (adlar.every((x) => x.sonuc === adlar[0]!.sonuc)) return `${adlar[0]!.sonuc} · ${adlar.map((x) => x.ad).join(' + ')}`;
+  return adlar.map((x) => `${x.ad}: ${x.sonuc}`).join(' · ');
 }

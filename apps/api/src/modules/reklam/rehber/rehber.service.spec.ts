@@ -244,6 +244,14 @@ describe('prova ve yayın', () => {
     expect(y!.derlenmis_govde.govde.validateOnly).toBe(false);
     expect((await svc.oku(CTX, r.id)).durum).toBe('yayinda');
     await expect(svc.guncelle(CTX, r.id, { surum: 1, degisiklikler: [g('amac', 'FORM')] })).rejects.toMatchObject({ status: 409 });
+    // Dalga 3: liste platformun GERÇEK hâlini taşıyor; arşivlenen yayın
+    // "Yayında" diye okunmasın (rehberin kendi durumu yayinda kalıyor).
+    const satir = async () => (await svc.listele(CTX, IDS.client)).satirlar.find((x) => x.id === r.id)!;
+    expect((await satir()).yayinlar).toEqual([{ platform: 'google', durum: 'on_kontrol' }]);
+    await h.q(`UPDATE yayin SET durum = 'arsivlendi'`);
+    expect((await satir()).yayinlar).toEqual([{ platform: 'google', durum: 'arsivlendi' }]);
+    const taslak = await svc.olustur(CTX, IDS.client);
+    expect((await svc.listele(CTX, IDS.client)).satirlar.find((x) => x.id === taslak.id)!.yayinlar).toEqual([]);
   });
 
   it('KRİTİK: prova sonrası alan değişti → yayın PROVA kapısında durur (özet bağı)', async () => {
@@ -568,6 +576,21 @@ describe('Meta form listesi ve sayfa ön koşulları (Dalga 2)', () => {
     whatsappCevabi = { number: null, hata: '(#100) bir hata' };
     await svc.prova(CTX, r.id).catch(() => undefined);
     expect((await baglam(k)).onKosullar.metaWhatsapp).toBeNull();
+  });
+
+  it('KRİTİK: rehberle açılan hazırlık SEÇİLİ sayfayı okur (ilkini değil); başka workspace’in rehberi reddedilir', async () => {
+    // Dalga 3: hazırlık hep ilk sayfayı okuyordu; ikinci sayfayı seçen
+    // kullanıcının WhatsApp/form koşulu prova anına kadar "bilinmiyor"du.
+    whatsappCevabi = { number: '+905550000000', hata: null };
+    const r = await svc.olustur(CTX, IDS.client);
+    const k = await svc.guncelle(CTX, r.id, { surum: r.surum, degisiklikler: [g('amac', 'WHATSAPP'), g('platformlar', { meta: true, google: false }), g('sayfaId', S2, 'workspace_profili')] });
+    cagrilar.length = 0;
+    const hz = await svc.hazirlik(CTX, IDS.client, r.id);
+    expect(cagrilar).toContain('wa:9002');
+    expect(cagrilar).not.toContain('wa:9001');
+    expect(hz.onKosullar.metaWhatsapp).toBe(true);
+    expect((await baglam(k)).onKosullar.metaWhatsapp).toBe(true);
+    await expect(svc.hazirlik(CTX, '33333333-0000-4000-8000-0000000000ff', r.id)).rejects.toThrow();
   });
 
   /*

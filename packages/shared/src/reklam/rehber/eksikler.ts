@@ -265,7 +265,7 @@ export function rehberEksikleri(a: RehberAlanlari, b: RehberEksikBaglami): Rehbe
     const ty = tanim.google.kurgu === 'TALEP_YARATMA_VIDEO' || tanim.google.kurgu === 'TALEP_YARATMA_GORSEL';
     if (acik.google && ty && b.asgariGunluk.googleTalepYaratma !== null) {
       const g = gunluk(pay.google);
-      if (g !== null && g < b.asgariGunluk.googleTalepYaratma) ekle('butce', 'google', 'G-ASGARI', `YouTube reklamı için Google'ın günlük asgarisinin altında.${sonEk}`);
+      if (g !== null && g < b.asgariGunluk.googleTalepYaratma) ekle('butce', 'google', 'G-ASGARI', `Google Talep Yaratma reklamı için Google'ın günlük asgarisinin altında.${sonEk}`);
     }
   }
 

@@ -22,7 +22,9 @@ import {
   alanAdi,
   bugun,
   geriAlinabilirMi,
+  kurulumAdimlari,
   paraGoster,
+  sonEkranOzeti,
   provaGosterimi,
   tarihGoster,
   yayinAdimlari,
@@ -266,11 +268,6 @@ function ProvaSatiri({ ad, g }: { ad: string; g: ProvaGosterimi }) {
 // Onay penceresi (İyileştir'deki desen): DOM'dan çıkmaz, görünürlük geçişle
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ADIM_METNI: Record<RehberPlatformu, [string, string, string]> = {
-  meta: ['Duraklatılmış kur (kampanya, set, reklam)', "Meta'dan geri oku ve karşılaştır", 'Yayına al'],
-  google: ['Duraklatılmış kur (kampanya, grup, reklam, kelimeler)', "Google'dan geri oku ve karşılaştır", 'Yayına al'],
-};
-
 export function OnayPenceresi({
   acik,
   b,
@@ -296,6 +293,7 @@ export function OnayPenceresi({
   const butce = b.a.butce?.deger;
   const baslangic = b.a.takvim?.deger.baslangic;
   const acikPlatformlar = (['meta', 'google'] as const).filter((p) => b.acik[p]);
+  const amacKodu = b.a.amac?.deger ?? null;
   const hepsiDeneme = acikPlatformlar.length > 0 && acikPlatformlar.every((p) => denemePlatformlari.includes(p));
 
   useEffect(() => {
@@ -346,7 +344,7 @@ export function OnayPenceresi({
             <div key={p} className={s.pltAdim}>
               <h4>{PLATFORM_ADI[p]}</h4>
               <ul className={s.adimlar}>
-                {ADIM_METNI[p].map((t, i) => (
+                {kurulumAdimlari(p, amacKodu ? REHBER_AMACLARI[amacKodu].google.kurgu : null).map((t, i) => (
                   <li key={t} data-hal={haller[i]}>
                     <i />
                     {i === 2 && haller[2] === 'atlandi' ? 'Duraklatılmış bırakıldı (açılmadı)' : t}
@@ -456,20 +454,16 @@ export function SonEkran({
   const platformlar = yayin?.platformlar ?? [];
   const sonuclar = platformlar.map((p) => yayinSonucu(p));
   const uyumDurdu = yayin?.uyum?.tur === 'durdu';
-  const hal: 'tamam' | 'dur' | 'hata' | 'arsiv' =
-    uyumDurdu || sonuclar.includes('hata')
-      ? 'hata'
-      : sonuclar.length > 0 && sonuclar.every((x) => x === 'arsivlendi')
-        ? 'arsiv'
-        : sonuclar.includes('duraklatildi') || sonuclar.includes('suruyor')
-          ? 'dur'
-          : 'tamam';
+  const ozet = sonEkranOzeti(
+    platformlar.map((p, i) => ({ platform: p.platform, sonuc: sonuclar[i]! })),
+    uyumDurdu,
+  );
+  const hal = ozet.hal;
   const butce = b.a.butce?.deger;
   const pay =
     butce && BigInt(butce.micros) > 0n && (b.acik.meta || b.acik.google)
       ? butceBol(BigInt(butce.micros), b.acik, b.a.metaPayiYuzde?.deger ?? VARSAYILAN_META_PAYI, b.paraBirimi)
       : null;
-  const tekPlatform = platformlar.length === 1 ? PLATFORM_ADI[platformlar[0]!.platform] : null;
   const ok = b.h.onKosullar;
   const yonetici = baglanti(REKLAM_YONETICISI, { musteri: b.clientId });
 
@@ -480,18 +474,8 @@ export function SonEkran({
           <div className={s.buyuk} data-hal={hal === 'arsiv' ? 'dur' : hal}>
             <Ikon d={hal === 'hata' ? IKON.kapat : IKON.tik} boyut={26} />
           </div>
-          <h2>{hal === 'tamam' ? 'Reklamın yayında' : hal === 'dur' ? 'Duraklatılmış kuruldu' : hal === 'arsiv' ? 'Reklam arşivlendi' : 'Kurulum tamamlanamadı'}</h2>
-          <p>
-            {hal === 'arsiv'
-              ? 'Kampanya platformda arşivlendi; harcama olmaz. Aynı içerikle yeni bir reklam açabilirsin.'
-              : hal === 'tamam'
-              ? `${tekPlatform ? `${tekPlatform}'da` : 'İki platformda da'} kuruldu, geri okunup kontrol edildi ve açıldı.`
-              : hal === 'dur'
-                ? "Kuruldu, geri okunup kontrol edildi ve açılmadı. Reklam Yöneticisi'nden başlatabilirsin; başlatana kadar harcama olmaz."
-                : uyumDurdu
-                  ? 'Yayın, platforma hiçbir şey gönderilmeden durduruldu.'
-                  : 'Aşağıda hangi platformda neyin durduğu yazıyor; diğer platform bundan etkilenmedi.'}
-          </p>
+          <h2>{ozet.baslik}</h2>
+          <p>{ozet.metin}</p>
         </div>
         {uyumDurdu && yayin?.uyum?.tur === 'durdu' && (
           <div style={{ padding: '0 16px 12px' }}>

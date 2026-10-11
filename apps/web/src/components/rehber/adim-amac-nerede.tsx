@@ -2,17 +2,11 @@
 
 import Link from 'next/link';
 import { useId } from 'react';
-import {
-  REHBER_AMACLARI,
-  onerilenPlatformlar,
-  platformGorunurMu,
-  type RehberAmacKodu,
-  type RehberPlatformu,
-} from '@advetics/shared';
+import { REHBER_AMACLARI, type RehberAmacKodu, type RehberPlatformu } from '@advetics/shared';
 import { baglanti } from '@/lib/baglanti';
 import { AltCubuk, Soru, sil, yaz, type AdimBaglami } from './adim-ortak';
 import { AMAC_IKONU, IKON, Ikon } from './ikonlar';
-import { gorunurAmaclar, platformDurumu, platformNedeni, type EkranNo } from './rehber-mantik';
+import { amacDegisimi, gorunurAmaclar, platformAnahtari, platformDurumu, platformNedeni, type EkranNo } from './rehber-mantik';
 import s from './rehber.module.css';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -24,17 +18,14 @@ export function AdimAmac({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => void
   const secili = b.a.amac?.deger ?? null;
 
   /*
-   * AMAÇ DEĞİŞİNCE PLATFORM ÖNERİSİ YENİDEN KURULUR (taslakta da öyle):
-   * önceki amacın seçimi yeni amaçta anlamsız olabilir (WhatsApp'ta Google
-   * yok). Öneri `derleyici` kaynağıyla yazılıyor; ekranda "önerilen" ve
-   * sebebi görünüyor, kullanıcı kapatabiliyor.
+   * AMAÇ DEĞİŞİNCE PLATFORM: kullanıcının kendi seçimi yeni amaçta da
+   * kurulabiliyorsa korunur, kurulamıyorsa öneri yazılır (`amacDegisimi`).
+   * Her değişiklikte öneriyi yeniden yazmak, kapatılan Google'ı başka amaca
+   * bakıp dönünce sessizce yeniden açıyordu.
    */
   function sec(kod: RehberAmacKodu) {
     if (kod === secili) return;
-    b.degistir([
-      { alan: 'amac', deger: kod, kaynak: 'kullanici' },
-      { alan: 'platformlar', deger: onerilenPlatformlar(kod, b.h, platformGorunurMu), kaynak: 'derleyici' },
-    ]);
+    b.degistir(amacDegisimi(kod, b.a.platformlar, b.h));
   }
 
   return (
@@ -101,12 +92,11 @@ export function AdimNerede({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => vo
     );
   }
   const t = REHBER_AMACLARI[amac];
-  const secim = b.a.platformlar?.deger ?? { meta: false, google: false };
   const baglantilar = baglanti('/marka-merkezi', { bolum: 'baglantilar', musteri: b.clientId });
   const videoKurgusu = t.google.kurgu === 'TALEP_YARATMA_VIDEO';
 
   function anahtar(p: RehberPlatformu) {
-    yaz(b, 'platformlar', { ...secim, [p]: !secim[p] });
+    yaz(b, 'platformlar', platformAnahtari(b.acik, p));
   }
 
   const kart = (p: RehberPlatformu) => {

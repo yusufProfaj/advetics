@@ -191,7 +191,18 @@ export class ReklamHazirlikService {
    * etmedik". WhatsApp hattı Dalga 2'de okunuyor (Ç-5). Eksik listesi `null`ı UYARI gösteriyor
    * ve o amaçlar açılış tablosunda zaten kapalı.
    */
-  async rehberOku(ctx: TenantContext, clientId: string, okuyucu: RehberPlatformOkuyucu | null): Promise<RehberHazirligi> {
+  async rehberOku(
+    ctx: TenantContext,
+    clientId: string,
+    okuyucu: RehberPlatformOkuyucu | null,
+    /**
+     * Açılan rehberin SEÇİLİ hesap/sayfası. Verilmezse (ya da workspace'te
+     * yoksa) ilki: yeni rehberde panel ilkini önden seçiyor. Seçimi yok
+     * sayıp hep ilk sayfayı okumak, ikinci sayfayı seçen kullanıcının
+     * WhatsApp/form koşulunu başka bir sayfadan cevaplıyordu.
+     */
+    secim?: RehberHazirlikSecimi,
+  ): Promise<RehberHazirligi> {
     const temel = await this.oku(ctx, clientId);
     const ek = await this.prisma.withTenant(ctx, async (tx) => {
       const [googleHesaplari, kanallar, [musteri], ajansYoneticisi] = await Promise.all([
@@ -217,9 +228,9 @@ export class ReklamHazirlikService {
       return { googleHesaplari, kanallar, musteri, ajansYoneticisi };
     });
 
-    const metaHesap = temel.hesaplar[0] ?? null;
-    const sayfa = temel.sayfalar[0] ?? null;
-    const googleHesap = ek.googleHesaplari[0] ?? null;
+    const metaHesap = seciliYoksaIlk(temel.hesaplar, secim?.metaHesapId);
+    const sayfa = seciliYoksaIlk(temel.sayfalar, secim?.sayfaId);
+    const googleHesap = seciliYoksaIlk(ek.googleHesaplari, secim?.googleHesapId);
     const [metaAsgari, metaForm, metaWhatsapp, googleDonusum] = await Promise.all([
       uc('Meta asgari bütçe', metaHesap && okuyucu ? () => okuyucu.metaAsgariGunluk(metaHesap.id, clientId) : null),
       uc('Meta form koşulları', sayfa && okuyucu ? () => okuyucu.metaFormKosullari(sayfa.id, clientId) : null),
@@ -258,6 +269,17 @@ export class ReklamHazirlikService {
       ajansYoneticisi: ek.ajansYoneticisi,
     };
   }
+}
+
+export interface RehberHazirlikSecimi {
+  metaHesapId?: string | null;
+  sayfaId?: string | null;
+  googleHesapId?: string | null;
+}
+
+/** Seçili satır listede varsa o, yoksa ilki. Önbelleği yazan taraf da AYNI kuralı okusun diye dışa açık. */
+export function seciliYoksaIlk<T extends { id: string }>(liste: readonly T[], id: string | null | undefined): T | null {
+  return (id ? liste.find((x) => x.id === id) : undefined) ?? liste[0] ?? null;
 }
 
 /** `1234567890` → `123-456-7890` (ekranda gösterilen biçim). */

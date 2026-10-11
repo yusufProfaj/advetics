@@ -3,13 +3,12 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { REHBER_AMACLARI, REHBER_AMAC_KODLARI, type RehberAmacKodu, type RehberKaydi, type RehberListesi, type RehberOzeti } from '@advetics/shared';
+import { REHBER_AMACLARI, REHBER_AMAC_KODLARI, type RehberAmacKodu, type RehberKaydi, type RehberListesi } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { baglanti } from '@/lib/baglanti';
 import { formatRelative } from '@/lib/format';
+import { listeDurumu } from './rehber-mantik';
 import s from './rehber.module.css';
-
-const DURUM_ADI: Record<RehberOzeti['durum'], string> = { taslak: 'Taslak', yayinda: 'Yayında', arsivlendi: 'Arşivlendi' };
 
 const amacAdi = (amac: string | null) =>
   amac && (REHBER_AMAC_KODLARI as readonly string[]).includes(amac) ? REHBER_AMACLARI[amac as RehberAmacKodu].ekranAdi : 'Amaç seçilmedi';
@@ -90,13 +89,12 @@ export function RehberGirisi({
         ) : (
           <ul className={s.liste}>
             {acik.map((r) => {
-              const platformlar = [r.platformlar.meta && 'Meta', r.platformlar.google && 'Google'].filter(Boolean).join(' + ') || 'Platform seçilmedi';
               return (
                 <li key={r.id} className={s.listeSatir}>
                   <div>
                     <b>{amacAdi(r.amac)}</b>
                     <small>
-                      {DURUM_ADI[r.durum]} · {platformlar}
+                      {listeDurumu(r)}
                       {r.durum === 'taslak' && ` · ${r.eksikSayisi === 0 ? 'eksik yok' : `${r.eksikSayisi} eksik`}`}
                     </small>
                   </div>

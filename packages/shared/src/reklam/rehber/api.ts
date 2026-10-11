@@ -60,6 +60,12 @@ export interface RehberOzeti {
   durum: RehberDurumu;
   platformlar: Record<RehberPlatformu, boolean>;
   eksikSayisi: number;
+  /**
+   * Yayınlanmış rehberde her platformun SON yayın durumu (taslakta boş).
+   * Rehberin kendi `durum`u "Vazgeç ve arşivle"den sonra da `yayinda`
+   * kalıyor; liste yalnız onu okuyunca arşivlenen reklam "Yayında" görünüyordu.
+   */
+  yayinlar: Array<{ platform: RehberPlatformu; durum: YayinDurumu | null }>;
   updatedAt: string;
 }
 

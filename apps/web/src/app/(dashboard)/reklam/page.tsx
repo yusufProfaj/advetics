@@ -55,7 +55,8 @@ export default async function AdvCampaignPage({ searchParams }: { searchParams: 
 
   const [r, h] = await Promise.allSettled([
     serverApiFetch<RehberKaydi>(`/reklam/rehberler/${encodeURIComponent(rehberId)}`),
-    serverApiFetch<RehberHazirligi>(`/reklam/rehber/hazirlik?clientId=${encodeURIComponent(clientId)}`),
+    // rehberId: ön koşullar bu rehberin SEÇİLİ sayfasından okunsun (ilkinden değil).
+    serverApiFetch<RehberHazirligi>(`/reklam/rehber/hazirlik?clientId=${encodeURIComponent(clientId)}&rehberId=${encodeURIComponent(rehberId)}`),
   ]);
   // Okuma hataları AYRI cümleyle: rehber olmadan devam edilemez, hazırlık
   // olmadan hiçbir hesap ya da sayfa seçilemez.
