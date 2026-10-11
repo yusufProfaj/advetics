@@ -6,7 +6,7 @@
 > İŞ yazılır; her oturum kapanırken, işin kendi commit'inde güncellenir.
 > 16 Ağustos'a kadarki eski devir belgesi: [`arsiv/DEVAM-2026-08.md`](arsiv/DEVAM-2026-08.md).
 
-**Son güncelleme:** 2026-10-10 akşam (AdvCampaign canlı tur 2 + banner seti; canlı `55312f6`) · 2026-10-09: **Canlı `6b51390` (11:43, 81 sn); ondan önce 316be15 (10:30):**
+**Son güncelleme:** 2026-10-11 (Dalga 2 + set kartı, deploy edilmedi) · 2026-10-10 akşam (AdvCampaign canlı tur 2 + banner seti; canlı `55312f6`) · 2026-10-09: **Canlı `6b51390` (11:43, 81 sn); ondan önce 316be15 (10:30):**
 aşağıda "DEPLOY EDİLMEDİ" yazan işlerin HEPSİ artık canlıda (AdvCampaign
 sohbeti, AdvStrategy ikinci tur, YouTube Boost Aşama 0–1 + kanal bulma, Okuma
 API, Base Aşama 1, LinkedIn para birimi). Ölçüldü: `prisma migrate status`
@@ -15,6 +15,34 @@ RLS politikası var, platform sahibi yalnız hello@profaj.com.
 **Bekleyen deploy:** yok hedefleniyor — Aşama 4 (İyileştir + AI Asistan)
 bu commit'le deploy ediliyor; migration `20261009100000_iyilestir` (üç
 yeni tablo) + `db:rls`.
+
+**ADVCAMPAIGN DALGA 2 + BANNER SETİ KARTI (2026-10-11, DEPLOY EDİLMEDİ,
+migration YOK).** Kullanıcı: *"kampanya modülünde diğer amaçları da yazmaya
+başlayalım sonra konudan sapma"*. Plan + çelişki tablosu
+`docs/advcampaign/DALGA-2.md`, devir notları `devir/dalga2-*.md`.
+(1) **Set kartı** (taslak onaylı; kararlar: düğmeler degradeli, metin bütün
+setlerde ortak, uyarı marka kırmızısı) `components/rehber/set-kartlari.tsx`:
+yuvalı setler, sürükle/⋯ ile taşıma, ayrım shared `setlereAyir`dan. Set
+yalnız SITE'de (`BANNER_SETI_NIYETLERI`); Form/Telefon/WhatsApp'ta her görsel
+kendi reklamı. (2) **Meta Telefon + WhatsApp derleniyor** (CALL_NOW `tel:`,
+WHATSAPP_MESSAGE `app_destination`), numara taslağa taşınıyor, yalnız +90.
+(3) **Meta Form**: form kimliği artık derleyiciye ulaşıyor; liste SEÇİLİ
+sayfanın Meta'daki ACTIVE formları (`GET reklam/rehber/form-sablonlari`);
+gizlilik formun kendi adresinden. (4) **Google Telefon**: Arama
+kampanyasına CallAsset aynı atomik istekte, geri okuma kıyaslıyor. Google
+Form sonraya (içerik kaynağı yok). Ajan 4 beş bulgu buldu (eski taslak yolu
+açılış tablosuna bakmıyordu, bilinmeyen form provada uyarıydı, yeni sete
+çok dosya, telefon kalıbı, amaç değişince form) — hepsi düzeldi, altı
+mutasyon düştü. **`REHBER_ACILIS` DEĞİŞMEDİ:** üçü de `kapali`.
+`DERLEYICI_SURUMU` 1.2.0: deploy sonrası SITE rehberlerinde "Prova et" bir
+kez yeniden gerekiyor. **Sıradaki:** deploy → Profaj hesabında canlı tur
+(prova + duraklatılmış kurulum + gözle): ölçülecekler Meta form
+`privacy_policy_url` alanı, Telefon `link_data.link` ve kampanya amacı,
+WhatsApp amacı, Google numara doğrulamasının davranışı (ret mi, inceleme
+mi) → geçen satır KENDİ commit'inde `deneme` → Ajan 6 tasarım denetimi
+(set kartı ekranı henüz tarayıcıda görülmedi). Açık: sohbet/AdvStrategy
+aktarımında numara sorusu yok (`DERLENEN_NIYETLER` bilerek dar), Google
+arama öğesinin onay durumu panelde görünmüyor, açık saat kaynağı yok.
 
 **ADVCAMPAIGN REHBERİ (2026-10-10) — SOHBET KALKTI, TIKLAMALI REHBER.**
 Kullanıcı isteği: Meta + Google tek panelden, tıklayarak, reklam bilmeyen
@@ -45,9 +73,7 @@ PLACEMENT`), eksik boyutta o yerleşim kapanır; dört boyut tamsa Advantage+.
 Dört prova reddinden sonra kuruldu (yayın 3efebf54), gerçek dönüşte kalan
 fark 0 ama uçtan uca "temiz" henüz yeni bir kurulumda GÖRÜLMEDİ.
 **Sıradaki:** (1) kullanıcı yerleşim önizlemelerini Reklam Yöneticisi'nde
-gözle kontrol ediyor (arşivdeki reklam 120252510003750700); (2) set kartı
-taslağı `docs/advcampaign/banner-seti-taslak.html` ONAY BEKLİYOR (açık:
-degrade mi düz kırmızı mı, metin setlerde ortak mı, uyarıda marka kırmızısı);
+gözle kontrol ediyor (arşivdeki reklam 120252510003750700); (2) ~~set kartı taslağı onay bekliyor~~ (onaylandı ve yazıldı, 2026-10-11);
 (3) yeni bir duraklatılmış kurulumla uçtan uca "temiz"; (4) sonra
 SITE.meta'yı `acik` yapma kararı (para/ürün kararı, sorulacak); (5) Ajan 6
 tasarım denetimi. Ekran düzeltme listesi: konum "Türkiye, Türkiye" çift
