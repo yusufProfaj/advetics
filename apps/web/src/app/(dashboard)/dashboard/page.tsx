@@ -31,7 +31,7 @@ import {
   microsOf,
 } from '@/lib/format';
 import { ayAnahtari } from '@/components/butce/butce-icerik';
-import { butceAdresi } from '@/lib/butce-adresi';
+import { butceAdresi, butceKapsami } from '@/lib/butce-adresi';
 import { HiyerarsiYolu, type YolBasamagi } from '@/components/hiyerarsi-yolu';
 import { bekleyenIslerYolu, boostRozeti, type BekleyenIslerSonucu } from '@/lib/bekleyen-isler';
 import { hizliErisim } from '@/lib/hizli-erisim';
@@ -189,9 +189,12 @@ export default async function DashboardPage({
     !ajansGorunumu && session.activeClientId === null && session.availableClients.length > 1;
   const workspaceGorunumu = !ajansGorunumu && !mcc;
 
-  /* BU AYIN BÜTÇESİ — yalnızca tek workspace seçiliyken ve okuma yetkisi varsa. */
-  const butceGorunur =
-    !mcc && !ajansGorunumu && session.activeClientId !== null && session.permissions.includes('budget.read');
+  /* BU AYIN BÜTÇESİ — hangi workspace'in, `butceKapsami` karar veriyor. */
+  const butceK = session.permissions.includes('budget.read')
+    ? butceKapsami({ ajansGorunumu, activeClientId: session.activeClientId, workspaceler: session.availableClients })
+    : ({ tur: 'yok' } as const);
+  const butceGorunur = butceK.tur !== 'yok';
+  const butceWorkspaceId = butceK.tur === 'workspace' ? butceK.id : null;
   let butceHatasi: string | null = null;
 
   const [summary, series, musteriler, sirketler, kampanyalar, hesaplar, donusum, butce] =
@@ -223,9 +226,9 @@ export default async function DashboardPage({
             () => null,
           )
         : Promise.resolve(null),
-      butceGorunur
+      butceWorkspaceId
         ? serverApiFetch<ClientPacing>(
-            `/budgets/pacing?${new URLSearchParams({ clientId: session.activeClientId!, month: ayAnahtari() })}`,
+            `/budgets/pacing?${new URLSearchParams({ clientId: butceWorkspaceId, month: ayAnahtari() })}`,
           ).catch((e: unknown) => {
             butceHatasi = hataMetni(e);
             return null;
@@ -426,7 +429,8 @@ export default async function DashboardPage({
             <ButceKarti
               veri={butce}
               hata={butceHatasi}
-              href={butceAdresi(session.activeClientId)}
+              secimGerekli={butceK.tur === 'secimGerekli'}
+              href={butceAdresi(butceWorkspaceId)}
               ayAdi={buAyAdi()}
             />
           )}

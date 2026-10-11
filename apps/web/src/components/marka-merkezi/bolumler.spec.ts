@@ -103,7 +103,8 @@ describe('Aylık Bütçe Planla’da (2026-10-09)', () => {
     const g = await oku('../../app/(dashboard)/dashboard/page.tsx');
     expect(g).toContain('month: ayAnahtari()');
     expect(g).toContain('butceHatasi = hataMetni(e);');
-    expect(g).toContain('href={butceAdresi(session.activeClientId)}');
+    // Kartın workspace'i `butceKapsami`ndan (şirket geneli + tek workspace).
+    expect(g).toContain('href={butceAdresi(butceWorkspaceId)}');
     const h = await oku('hazirlik-listesi.tsx');
     expect(h).toContain("href: butceAdresi(id)");
     expect(h).not.toContain("'butce'");

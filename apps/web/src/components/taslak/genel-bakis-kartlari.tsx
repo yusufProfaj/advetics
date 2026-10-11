@@ -157,9 +157,12 @@ export function ButceKarti({
   hata,
   href,
   ayAdi,
+  secimGerekli = false,
 }: {
   veri: ClientPacing | null;
   hata: string | null;
+  /** Şirket geneli + birden çok workspace: bütçe workspace başına (`butceKapsami`). */
+  secimGerekli?: boolean;
   href: string;
   ayAdi: string;
 }) {
@@ -180,6 +183,15 @@ export function ButceKarti({
     </div>
   );
 
+  if (secimGerekli) {
+    return (
+      <section className={`${s.kart} ${s.gir}`}>
+        {ust()}
+        <p className={s.bosMetin}>Bütçe workspace başına tutuluyor. Görmek için üstten bir workspace seç.</p>
+        {alt('Bütçelere git')}
+      </section>
+    );
+  }
   if (veri === null) {
     return (
       <section className={`${s.kart} ${s.gir}`}>
