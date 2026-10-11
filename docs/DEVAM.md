@@ -6,7 +6,7 @@
 > İŞ yazılır; her oturum kapanırken, işin kendi commit'inde güncellenir.
 > 16 Ağustos'a kadarki eski devir belgesi: [`arsiv/DEVAM-2026-08.md`](arsiv/DEVAM-2026-08.md).
 
-**Son güncelleme:** 2026-10-11 (Dalga 2 + set kartı, deploy edilmedi) · 2026-10-10 akşam (AdvCampaign canlı tur 2 + banner seti; canlı `55312f6`) · 2026-10-09: **Canlı `6b51390` (11:43, 81 sn); ondan önce 316be15 (10:30):**
+**Son güncelleme:** 2026-10-11 gece (Dalga 3 canlı tur) · 2026-10-11 (Dalga 2 + set kartı) · 2026-10-10 akşam (AdvCampaign canlı tur 2 + banner seti; canlı `55312f6`) · 2026-10-09: **Canlı `6b51390` (11:43, 81 sn); ondan önce 316be15 (10:30):**
 aşağıda "DEPLOY EDİLMEDİ" yazan işlerin HEPSİ artık canlıda (AdvCampaign
 sohbeti, AdvStrategy ikinci tur, YouTube Boost Aşama 0–1 + kanal bulma, Okuma
 API, Base Aşama 1, LinkedIn para birimi). Ölçüldü: `prisma migrate status`
@@ -15,6 +15,26 @@ RLS politikası var, platform sahibi yalnız hello@profaj.com.
 **Bekleyen deploy:** yok hedefleniyor — Aşama 4 (İyileştir + AI Asistan)
 bu commit'le deploy ediliyor; migration `20261009100000_iyilestir` (üç
 yeni tablo) + `db:rls`.
+
+**DALGA 3 CANLI TUR (2026-10-11 gece, hepsi duraklatılmış, Ege Birlik Yapı).**
+TEMİZ görülenler (kurulum + geri okuma): WhatsApp Meta (N-18 sonrası,
+"Yeniden kontrol et" ile), Google Talep Yaratma GÖRSEL (erişim), VİDEO Meta
+(ThruPlay, video yükleme + işleme) + Google (YouTube). Google "Vazgeç ve
+kaldır" canlıda çalıştı; eski 5 deneme kampanyası KALDIRILDI. Turda bulunan
+ve düzelen hatalar: geri okuma hatası yutuluyordu; "Yeniden kontrol et" hiç
+çalışmamıştı (durum makinesi) ve ekranda yoktu; insan düğmelerinin iş
+kimliği sabit olduğu için ikinci basış sessizce yutuluyordu; Meta şemsiye
+özellik (N-18), sıklık sınırında `type: CAP` (N-19), kreatif adı 100
+karakterde kesiliyor (`kreatifAdi`); ayrı reklamlarda yerleşim kesişimi
+akışı kapatıyordu (`reklamSetiPlani`); metin önerisi 9 başlık yazıp 5'i
+kullanılıyordu; satışta dönüşümsüz Google "hazır" sayılıyordu; başlamayan
+platform sonsuza kadar "Kuruluyor"; liste/son ekran sözleri; soğuk
+önbellekte yalancı "asgari bütçe okunamadı"; yenilemede video bilgisi.
+**Sıradaki:** ERİŞİM Meta ve SATIŞ Meta yeniden tur (N-19 ve kreatif adı
+deploy'dan sonra) → temiz satırlar `acik` → "aç" yolu → Ajan 6.
+Google SATIŞ (Maks. Performans) bu hesapta kurulamaz: satın alma dönüşümü
+yok (doğru davranış, engel). Meta video turu için video sunucuda
+`gorselKaydet` ile yüklendi (tarayıcı CSP'si yerel dosyayı engelledi).
 
 **ADVCAMPAIGN DALGA 3 + CANLI TUR 2 (2026-10-11 akşam, canlı `b679e13`).**
 Kullanıcı: kampanya kurma tarafı Meta + Google'da tamamen çalışsın, karar
