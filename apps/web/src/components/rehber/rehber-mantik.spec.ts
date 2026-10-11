@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { REHBER_ACILIS, REHBER_AMACLARI, REHBER_AMAC_KODLARI, platformGorunurMu, type GorselOrani, type RehberEksigi, type RehberHazirligi, type RehberProvaSonucu } from '@advetics/shared';
+import { GERI_ALINABILIR_DURUMLAR, REHBER_ACILIS, REHBER_AMACLARI, REHBER_AMAC_KODLARI, platformGorunurMu, type GorselOrani, type RehberEksigi, type RehberHazirligi, type RehberProvaSonucu } from '@advetics/shared';
 import { ApiRequestError } from '@/lib/api';
 import {
   setGorunumu,
@@ -49,6 +49,7 @@ import {
   yayinBittiMi,
   yayinSonucu,
   geriAlinabilirMi,
+  geriAlMetinleri,
   yayinlanabilirMi,
   yerelAlanlar,
   youtubeKimligi,
@@ -630,8 +631,26 @@ describe('geri al (Vazgeç ve arşivle) — canlı tur, 2026-10-10', () => {
     expect(geriAlinabilirMi({ platform: 'meta', durum: 'kuruluyor', yayinId: y })).toBe(false);
     expect(geriAlinabilirMi({ platform: 'meta', durum: 'arsivlendi', yayinId: y })).toBe(false);
   });
-  it('KRİTİK: Google kurulumunda GÖRÜNMEZ (sunucu reddediyor; Google Ads’ten kaldırılır)', () => {
-    expect(geriAlinabilirMi({ platform: 'google', durum: 'kapali_kuruldu', yayinId: y })).toBe(false);
+  it('KRİTİK: Google kurulumunda da görünür (Vazgeç ve kaldır), aynı izin listesiyle', () => {
+    // 2026-10-11: düğme yokken deneme kampanyaları müşterinin Google Ads
+    // hesabında PAUSED birikiyordu.
+    for (const durum of GERI_ALINABILIR_DURUMLAR) {
+      expect(geriAlinabilirMi({ platform: 'google', durum, yayinId: y }), durum).toBe(true);
+    }
+    expect(geriAlinabilirMi({ platform: 'google', durum: 'yayinda', yayinId: y })).toBe(false);
+    expect(geriAlinabilirMi({ platform: 'google', durum: 'arsivlendi', yayinId: y })).toBe(false);
+    expect(geriAlinabilirMi({ platform: 'google', durum: 'kuruluyor', yayinId: y })).toBe(false);
+    expect(geriAlinabilirMi({ platform: 'google', durum: 'kapali_kuruldu', yayinId: null })).toBe(false);
+  });
+  it('Google satırının sözü KALDIRMA ve geri dönüşsüz; Meta’nınki ARŞİV', () => {
+    const g = geriAlMetinleri('google');
+    expect(g.dugme).toBe('Vazgeç ve kaldır');
+    expect(g.onay).toBe('Google’daki kampanya kaldırılacak; tekrar açılamaz.');
+    expect(JSON.stringify(g)).not.toMatch(/Meta|arşiv/i);
+    const m = geriAlMetinleri('meta');
+    expect(m.dugme).toBe('Vazgeç ve arşivle');
+    expect(m.onay).toMatch(/tekrar açılamaz/);
+    expect(JSON.stringify(m)).not.toMatch(/Google|kaldır/i);
   });
   it('arşivlenen reklam "Kurulamadı" değil "Arşivlendi"', () => {
     expect(yayinSonucu({ durum: 'arsivlendi' })).toBe('arsivlendi');

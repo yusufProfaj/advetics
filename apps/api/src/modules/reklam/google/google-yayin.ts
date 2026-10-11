@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { YAYIN_DURUMLARI, YAYIN_DURUM_SINIFI, gecisIzinliMi, type YayinDurumu } from '@advetics/shared';
+import { GERI_ALINABILIR_DURUMLAR, YAYIN_DURUMLARI, YAYIN_DURUM_SINIFI, gecisIzinliMi, type YayinDurumu } from '@advetics/shared';
 import { PlatformApiError, type FetchContext } from '../../connections/provider.types';
 import { googleYalinKimlik } from '../../connections/providers/google-demandgen';
 import { kapaliBirak, yayiniSonlandir, type TxRunner } from '../yayin-motoru';
@@ -689,6 +689,170 @@ export async function googleYayinIsle(d: GoogleIsleyiciBagimliliklari, yayinId: 
   async function sonlandir(sebep: string): Promise<GoogleIsSonucu> {
     // Google'a hiçbir şey gitmedi: ön kontrolde kalan yayın sebebiyle kapanır.
     return { tur: 'bitti', durum: await yayiniSonlandir(d.tx, yayinId, 'on_kontrol_reddi', sebep) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// GERİ AL ("Vazgeç ve kaldır")
+// ---------------------------------------------------------------------------
+
+/**
+ * Kampanyayı Google'da KALDIRAN atomik gövde. Google'da Meta'nın ARŞİV'inin
+ * karşılığı REMOVED ve kaldırılan kampanya bir daha ENABLED/PAUSED yapılamaz
+ * (panel onay metni bunu söylüyor).
+ *
+ * `update` + `status: REMOVED` DEĞİL, `remove` İŞLEMİ: Google Ads API durum
+ * alanına REMOVED yazmayı kabul etmiyor (REMOVED yalnız okunan bir değer;
+ * kaldırmanın belgelenmiş yolu `CampaignOperation.remove`). Yanlış biçim bir
+ * ret üretir ve kullanıcı yalnız "kaldırılamadı" görür. Kabul edilip
+ * görmezden gelinme ihtimaline karşı sonuç her hâlükârda GERİ OKUNUYOR.
+ * CANLIDA ÖLÇÜLMEDİ (2026-10-11).
+ *
+ * `partialFailure: false`: birden çok kopya kaldırılırken biri düşerse
+ * HİÇBİRİ uygulanmasın; yarım kaldırma "kaldırıldı" görünüp birini hesapta
+ * bırakabilirdi. Kampanya kaldırılınca reklam grubu ve reklam onu miras
+ * alıyor (Meta'daki arşiv gibi); bütçe ayrı kaynak ve tek başına harcamaz.
+ */
+export function googleKaldirmaGovdesi(kampanyaKaynaklari: readonly string[]): {
+  mutateOperations: Array<Record<string, unknown>>;
+  partialFailure: false;
+  validateOnly: false;
+} {
+  if (kampanyaKaynaklari.length === 0) throw new Error('Kaldırılacak kampanya yok');
+  for (const k of kampanyaKaynaklari) {
+    if (!/^customers\/\d+\/campaigns\/\d+$/.test(k)) throw new Error(`Geçersiz kampanya kaynağı: ${k.slice(0, 80)}`);
+  }
+  return {
+    mutateOperations: kampanyaKaynaklari.map((k) => ({ campaignOperation: { remove: k } })),
+    partialFailure: false,
+    validateOnly: false,
+  };
+}
+
+/** Geri almada kampanyaların Google'daki durumu, kaynak adına göre. Satırı gelmeyen kampanyanın anahtarı yok. */
+async function kampanyaDurumlari(port: GoogleYayinPortu, ctx: FetchContext, kaynaklar: readonly string[]): Promise<Map<string, string>> {
+  const idler = kaynaklar.map((k) => googleYalinKimlik(k));
+  for (const id of idler) if (!/^\d+$/.test(id)) throw new Error(`Geçersiz kampanya kimliği: ${id.slice(0, 40)}`);
+  // `campaign.id` SELECT'te de: WHERE'de süzülen alan SELECT'te yoksa Google
+  // bazı kaynaklarda sorguyu reddediyor (canlı tur, 2026-10-11).
+  const satirlar = await port.ara<{ campaign?: { resourceName?: string; status?: string } }>(
+    ctx,
+    `SELECT campaign.id, campaign.resource_name, campaign.status FROM campaign WHERE campaign.id IN (${idler.join(', ')})`,
+  );
+  const m = new Map<string, string>();
+  for (const s of satirlar) if (s.campaign?.resourceName && s.campaign.status) m.set(s.campaign.resourceName, s.campaign.status);
+  return m;
+}
+
+/**
+ * Google yayınını GERİ AL: kampanya(lar)ı kaldır, GERİ OKU, yayını Meta'nın
+ * geri almasıyla AYNI son duruma (`arsivlendi` + `geri_alindi`) taşı. Tek
+ * durum makinesi: panel ve sayaçlar ikinci bir "kaldırıldı" durumu tanımıyor
+ * ve tanımaları gerekirse her sayan yer aynı commit'te değişmek zorunda kalırdı.
+ *
+ * Hiçbir yolda sessiz değil: kaldırılamayan ya da geri okumada REMOVED
+ * görünmeyen kampanya varsa yayın OLDUĞU YERDE kalır ve sebebi yazılır
+ * (kullanıcı tekrar basabilir; kaldırma tekrarlanabilir bir işlem).
+ * "200 döndü" kaldırıldı demek değil: karar geri okumadan.
+ */
+export async function googleGeriAlIsle(d: GoogleIsleyiciBagimliliklari, yayinId: string, sahip: string): Promise<GoogleIsSonucu> {
+  const y = await yayinOku(d.tx, yayinId);
+  // Aynı iş iki kez geldiyse (çift tıklama) ikincisi hiçbir şey yapmaz.
+  if (!GERI_ALINABILIR_DURUMLAR.includes(y.durum)) return { tur: 'bitti', durum: y.durum };
+
+  const kayitli = await d.tx((t) =>
+    t.$queryRaw<Array<{ meta_id: string }>>(Prisma.sql`
+      SELECT meta_id FROM yayin_nesnesi WHERE yayin_id = ${yayinId}::uuid AND ad = 'kampanya' AND meta_id IS NOT NULL`),
+  );
+  // Google atomik isteği KESİN reddettiyse hiçbir şey kurulmadı (`kurulamadi`
+  // ve kampanya kimliği yok): kaldıracak bir şey yok, SIFIR çağrıyla kapanır.
+  // Kimliği bilinmeyen öbür hâllerde (`sonuc_belirsiz`) kurulmuş olabilir:
+  // orada aşağıdaki ad araması karar veriyor.
+  if (kayitli.length === 0 && y.durum === 'kurulamadi') {
+    return { tur: 'bitti', durum: await yayiniSonlandir(d.tx, yayinId, 'geri_alindi', "Google'da kurulan bir şey yoktu; kayıt kapatıldı.") };
+  }
+  if (!y.ad_account_id) return yerindeKal('Google Ads hesabı artık yok; kampanyayı Google Ads’ten kaldır.');
+
+  const anahtar = `${d.kilitOneki}:yazici:${y.ad_account_id}`;
+  if (!(await d.kilit.al(anahtar, sahip, KILIT_MS))) return { tur: 'ertele', sebep: 'Bu hesapta başka bir işlem sürüyor; sıradasın.' };
+  try {
+    const [h] = await d.tx((t) =>
+      t.$queryRaw<Array<{ external_id: string; manager_external_id: string | null; connection_id: string; client_id: string | null; platform: string }>>(Prisma.sql`
+        SELECT external_id, manager_external_id, connection_id::text, client_id::text, platform::text AS platform
+          FROM ad_accounts WHERE id = ${y.ad_account_id}::uuid`),
+    );
+    if (!h || h.client_id !== y.client_id) return yerindeKal('Bu Google Ads hesabı artık bu workspace’e atanmış değil; kampanyayı Google Ads’ten kaldır.');
+    if (h.platform !== 'google') return yerindeKal('Bu hesap bir Google Ads hesabı değil');
+    const kapi = await googleYazmaAcikMi(d.tx, y.client_id);
+    if (!kapi.acik) return yerindeKal(kapi.sebep);
+    let token: string;
+    try {
+      token = await d.google.tokenAl(h.connection_id);
+    } catch (e) {
+      return yerindeKal(`Google bağlantısı kullanılamıyor: ${(e as Error).message}`);
+    }
+    const ctx: FetchContext = {
+      accessToken: token,
+      accountExternalId: h.external_id.replace(/-/g, ''),
+      loginCustomerId: h.manager_external_id ?? undefined,
+    };
+
+    // Hedef: kayıtlı kampanya + adında bu yayının izi olan, kaldırılmamış
+    // HER kopya. Tekillik kapısının bulduğu ikinci kopya (fark_var) ya da
+    // uzlaştırmanın sayamadığı kopyalar (sonuc_belirsiz) da bu yayının
+    // ürünü; yalnız kaydı kaldırmak onları hesapta sessizce bırakırdı.
+    // Arama düşerse kaldırma YAPILMAZ: eksik hedefle "geri alındı" demek
+    // yalan olurdu.
+    let bulunan: string[];
+    try {
+      // Kurgu derlenmiş gövdeden: Maks. Performans'ta reklam nesnesi yok ve
+      // arama varlık grubundan yapılıyor; yanlış kaynaktan aramak hiçbir
+      // kopyayı bulamaz ve "kaldırıldı" eksik hedefle söylenmiş olurdu.
+      bulunan = (await kurulumuAra(d.google, ctx, yayinId, y.derlenmis_govde.kurgu)).kampanyalar;
+    } catch (e) {
+      return yerindeKal(`Google'da bu reklamın kampanyaları aranamadı: ${(e as Error).message}`);
+    }
+    const hedef = [...new Set([...kayitli.map((k) => k.meta_id), ...bulunan])];
+
+    if (hedef.length > 0) {
+      let yazmaHatasi: string | null = null;
+      try {
+        await d.google.mutate(ctx, googleKaldirmaGovdesi(hedef));
+      } catch (e) {
+        // Cevap kaybolmuş olabilir: karar yine geri okumada.
+        yazmaHatasi = (e as Error).message;
+      }
+      let durumlar: Map<string, string>;
+      try {
+        durumlar = await kampanyaDurumlari(d.google, ctx, hedef);
+      } catch (e) {
+        return yerindeKal(`Kaldırma ${yazmaHatasi ? `düştü (${yazmaHatasi}) ve` : 'gönderildi ama'} sonuç okunamadı: ${(e as Error).message}`);
+      }
+      // Okumada HİÇ görünmeyen kampanya da kaldırılmış SAYILMIYOR: satırın
+      // yokluğu "kaldırıldı" kanıtı değil (yanlış hesap, yetki, kimlik).
+      const kalan = hedef.filter((k) => durumlar.get(k) !== 'REMOVED');
+      if (kalan.length > 0) {
+        const ayrinti = kalan.map((k) => `${googleYalinKimlik(k)} (${durumlar.get(k) ?? 'okunamadı'})`).join(', ');
+        return yerindeKal(`Kaldırılamadı: ${ayrinti}${yazmaHatasi ? ` · Google: ${yazmaHatasi}` : ''}`);
+      }
+      await d.tx((t) =>
+        t.$queryRaw(Prisma.sql`
+          UPDATE yayin_nesnesi SET durum = 'arsivlendi', updated_at = now()
+           WHERE yayin_id = ${yayinId}::uuid AND ad = 'kampanya' AND meta_id IS NOT NULL
+          RETURNING id`),
+      );
+    }
+    const not = hedef.length === 0 ? "Google'da bu reklama ait kampanya bulunmadı; kayıt kapatıldı." : null;
+    return { tur: 'bitti', durum: await yayiniSonlandir(d.tx, yayinId, 'geri_alindi', not) };
+  } finally {
+    await d.kilit.birak(anahtar, sahip);
+  }
+
+  async function yerindeKal(sebep: string): Promise<GoogleIsSonucu> {
+    // Meta'daki "Arşivlenemedi" ile aynı davranış: durum değişmez, sebep
+    // ekranda. Panel yoklaması sebep değişimini sonuç sayıyor.
+    await d.tx((t) => t.$queryRaw(Prisma.sql`UPDATE yayin SET sebep = ${sebep.slice(0, 2000)} WHERE id = ${yayinId}::uuid RETURNING id`));
+    return { tur: 'bitti', durum: y.durum };
   }
 }
 

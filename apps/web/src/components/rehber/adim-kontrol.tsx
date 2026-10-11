@@ -23,6 +23,7 @@ import {
   bugun,
   geriAlinabilirMi,
   kurulumAdimlari,
+  geriAlMetinleri,
   paraGoster,
   sonEkranOzeti,
   provaGosterimi,
@@ -373,8 +374,9 @@ export function OnayPenceresi({
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * "VAZGEÇ VE ARŞİVLE" — duraklatılmış ya da durmuş Meta kurulumunu Advetics'ten
- * geri almak. Canlı turda (2026-10-10) bu yol yoktu: deneme kurulumu Meta'dan
+ * "VAZGEÇ VE ARŞİVLE / KALDIR" — duraklatılmış ya da durmuş kurulumu
+ * Advetics'ten geri almak: Meta'da arşiv, Google'da kaldırma (metinler
+ * `geriAlMetinleri`). Canlı turda (2026-10-10) bu yol yoktu: deneme kurulumu Meta'dan
  * elle arşivlendi ve kayıt "duraklatılmış" kaldı. Onay SATIR İÇİNDE (tek
  * tıkla arşiv yok); sonuç sunucudan yoklanır, "gönderildi" bir sonuç değil.
  * Hata platformun kendi cümlesiyle görünür.
@@ -382,6 +384,7 @@ export function OnayPenceresi({
 function GeriAl({ rehberId, ozet, guncelle }: { rehberId: string; ozet: PlatformYayinOzeti; guncelle: (y: RehberYayinDurumu) => void }) {
   const [hal, setHal] = useState<'bos' | 'onay' | 'gonderiliyor' | 'hata'>('bos');
   const [hata, setHata] = useState<string | null>(null);
+  const m = geriAlMetinleri(ozet.platform);
   async function arsivle() {
     setHal('gonderiliyor');
     setHata(null);
@@ -395,13 +398,13 @@ function GeriAl({ rehberId, ozet, guncelle }: { rehberId: string; ozet: Platform
         if (p && (p.durum !== ozet.durum || (p.sebep ?? '') !== (ozet.sebep ?? ''))) {
           guncelle(y);
           if (p.durum !== 'arsivlendi') {
-            setHata(p.sebep ?? 'Arşivlenemedi; Meta’nın cevabı yok.');
+            setHata(p.sebep ?? m.basarisiz);
             return setHal('hata');
           }
           return setHal('bos');
         }
       }
-      setHata('Meta henüz cevap vermedi; birkaç dakika sonra sayfayı yenile.');
+      setHata(m.cevapYok);
       setHal('hata');
     } catch (e) {
       setHata(e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.');
@@ -410,10 +413,10 @@ function GeriAl({ rehberId, ozet, guncelle }: { rehberId: string; ozet: Platform
   }
   if (hal === 'onay' || hal === 'gonderiliyor') {
     return (
-      <div className={s.geriAlOnay} role="group" aria-label="Arşivleme onayı">
-        <span>Meta&apos;daki kampanya arşivlenecek; tekrar açılamaz.</span>
+      <div className={s.geriAlOnay} role="group" aria-label="Geri alma onayı">
+        <span>{m.onay}</span>
         <button type="button" className={s.birincil} disabled={hal === 'gonderiliyor'} onClick={() => void arsivle()}>
-          {hal === 'gonderiliyor' ? 'Arşivleniyor…' : 'Arşivle'}
+          {hal === 'gonderiliyor' ? m.suruyor : m.eylem}
         </button>
         <button type="button" className={s.ikincil} disabled={hal === 'gonderiliyor'} onClick={() => setHal('bos')}>
           Vazgeç
@@ -424,7 +427,7 @@ function GeriAl({ rehberId, ozet, guncelle }: { rehberId: string; ozet: Platform
   return (
     <div className={s.geriAlOnay}>
       <button type="button" className={s.ikincil} onClick={() => setHal('onay')}>
-        Vazgeç ve arşivle
+        {m.dugme}
       </button>
       {hal === 'hata' && hata && (
         <span className={s.hataMetni} role="alert">

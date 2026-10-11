@@ -63,17 +63,23 @@ export class ReklamYayinService {
     if (!INSAN_ADIMLARI[adim].includes(g.durum)) {
       throw new ConflictException(`Bu düğme "${g.durum}" durumunda kullanılamaz.`);
     }
-    if (adim === 'geri_al') {
-      // YALNIZ META: kuyruk işi Meta motoruna gidiyor. Google yayını da bu
-      // tabloda; onun için iş açmak Google hesabına Meta token'ıyla yazmaya
-      // kalkmak demek. Platform hesabın kendisinden, istemciden değil.
-      const [h] = await this.prisma.withTenant(ctx, (t) =>
-        t.$queryRaw<Array<{ platform: string }>>(Prisma.sql`
-          SELECT a.platform::text AS platform FROM yayin y JOIN ad_accounts a ON a.id = y.ad_account_id WHERE y.id = ${yayinId}::uuid`),
-      );
-      if (h?.platform !== 'meta') {
-        throw new ConflictException("Google kurulumu Advetics'ten geri alınamıyor; Google Ads'te kampanyayı kaldır.");
-      }
+    // PLATFORM HESABIN KENDİSİNDEN, istemciden değil. Meta motorunun işi
+    // Google yayınına gitmemeli: Google hesabına Meta token'ıyla yazmaya
+    // kalkmak demek. Google'ın geri alması kendi işleyicisine
+    // (`googleGeriAlIsle`, kampanyayı KALDIRIR); devam / yeniden oku Google'da
+    // yok ve reddediliyor. Hesabı silinmiş yayın (LEFT JOIN → null) da Meta
+    // motoruna gitmiyor: platformu bilinmeyen bir yazma yapılmaz.
+    const [h] = await this.prisma.withTenant(ctx, (t) =>
+      t.$queryRaw<Array<{ platform: string | null }>>(Prisma.sql`
+        SELECT a.platform::text AS platform FROM yayin y LEFT JOIN ad_accounts a ON a.id = y.ad_account_id WHERE y.id = ${yayinId}::uuid`),
+    );
+    if (h?.platform === 'google') {
+      if (adim !== 'geri_al') throw new ConflictException('Bu düğme Google kurulumunda kullanılamaz.');
+      await this.kuyruk.ekleGoogleGeriAl(yayinId);
+      return g;
+    }
+    if (h?.platform !== 'meta') {
+      throw new ConflictException('Yayının reklam hesabı bulunamadı; kampanyayı platformun kendi panelinden kaldır.');
     }
     await this.kuyruk.ekle(yayinId, adim);
     return g;

@@ -498,8 +498,17 @@ describe('geri al ucu (kaynak taraması)', () => {
   it('izin listesi shared’dan (panel ile aynı liste) ve kapali_kuruldu içinde', () => {
     expect(yorumsuz).toMatch(/geri_al:\s*GERI_ALINABILIR_DURUMLAR/);
   });
-  it('KRİTİK: geri al YALNIZ Meta yayınında — platform hesaptan okunuyor, Google reddediliyor', () => {
+  it('KRİTİK: Meta motoruna YALNIZ Meta yayını gider; Google geri alması kendi işine — platform hesaptan okunuyor', () => {
     expect(govde).toContain("h?.platform !== 'meta'");
     expect(govde).toContain('JOIN ad_accounts');
+    // Google dalı Meta kuyruğuna (`ekle`) ulaşmadan dönüyor ve yalnız geri al.
+    const g = govde.indexOf("h?.platform === 'google'");
+    const gEkle = govde.indexOf('this.kuyruk.ekleGoogleGeriAl(yayinId)');
+    const metaEkle = govde.indexOf('this.kuyruk.ekle(yayinId, adim)');
+    expect(g).toBeGreaterThan(-1);
+    expect(gEkle).toBeGreaterThan(g);
+    expect(metaEkle).toBeGreaterThan(gEkle);
+    expect(govde.slice(g, gEkle)).toContain("adim !== 'geri_al'");
+    expect(govde.slice(gEkle, metaEkle)).toContain('return g;');
   });
 });
