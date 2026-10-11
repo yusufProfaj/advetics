@@ -39,6 +39,16 @@ describe('taslakEksikleri', () => {
     expect(taslakEksikleri({ ...dolu, hedefAdres: k('http://x.com') }).map((x) => x.kod)).toEqual(['SITE-ADRES']);
     expect(taslakEksikleri({ ...dolu, niyet: k('FORM' as const) }).map((x) => x.kod)).toEqual(['FORM-YOK']);
   });
+
+  it('KRİTİK: TELEFON ülke kodlu numara ister; önerilen numara karar değil', () => {
+    const tel = { ...dolu, niyet: k('TELEFON' as const), hedefAdres: undefined };
+    expect(taslakEksikleri(tel).map((x) => x.kod)).toEqual(['TELEFON']);
+    expect(taslakEksikleri({ ...tel, telefon: k('05321234567') }).map((x) => x.kod)).toEqual(['TELEFON']);
+    expect(taslakEksikleri({ ...tel, telefon: k('+905321234567', 'marka_merkezi') })).toEqual([]);
+    expect(taslakEksikleri({ ...tel, telefon: k('+905321234567', 'ai_onerisi') }).map((x) => x.kod)).toEqual(['KAYNAK']);
+    // Numara yalnız arama reklamında sorulur.
+    expect(taslakEksikleri({ ...dolu, telefon: k(null) })).toEqual([]);
+  });
 });
 
 describe('özel kategori sorusu', () => {

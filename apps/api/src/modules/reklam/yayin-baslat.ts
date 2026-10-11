@@ -328,6 +328,7 @@ export async function taslakDerle(
     }),
     hedefAdres: alanlar.hedefAdres?.deger ?? null,
     formId: null,
+    telefon: alanlar.telefon?.deger ?? null,
     urlEtiketleri: null,
   });
   if (derleme.tur === 'ret') return { tur: 'ret', retler: derleme.retler };

@@ -100,6 +100,7 @@ async function hazirla(o: { testKipi?: boolean; kavram?: number; video?: boolean
     ),
     hedefAdres: 'https://ornek.com.tr',
     formId: null,
+    telefon: null,
     urlEtiketleri: null,
   };
   const r = derleMeta(g);

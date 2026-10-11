@@ -1,5 +1,17 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { MANIFESTO, TANINAN_OZELLIK_ANAHTARLARI, derleMeta, type DerlemeGirdisi, type MetaGovdesi } from '@advetics/shared';
+import {
+  DERLENEN_NIYETLER,
+  DERLEYICI_NIYETLERI,
+  DERLEYICI_SURUMU,
+  MANIFESTO,
+  TANINAN_OZELLIK_ANAHTARLARI,
+  WHATSAPP_BAGLANTISI,
+  derleMeta,
+  type DerlemeGirdisi,
+  type MetaGovdesi,
+} from '@advetics/shared';
 
 const TL = (n: number) => BigInt(n) * 1_000_000n;
 const temel: DerlemeGirdisi = {
@@ -27,6 +39,7 @@ const temel: DerlemeGirdisi = {
   ],
   hedefAdres: 'https://ornek.com.tr/kampanya',
   formId: null,
+  telefon: null,
   urlEtiketleri: 'utm_source=meta',
 };
 
@@ -183,8 +196,16 @@ describe('sıfır çağrılı retler', () => {
     expect(retler({ hedefleme: { ...temel.hedefleme, konumlar: [] } })).toEqual(['KNM-01']);
   });
   it('ölçülmemiş niyet tahminle derlenmez; yönlendirme niyeti hiç derlenmez', () => {
-    expect(retler({ niyet: 'WHATSAPP' })).toEqual(['NYT-OLCULMEDI']);
+    expect(retler({ niyet: 'IG_MESAJ' })).toEqual(['NYT-OLCULMEDI']);
     expect(retler({ niyet: 'ONE_CIKAR' })).toEqual(['NYT-YONLENDIRME']);
+  });
+  it('KRİTİK: TELEFON numarasız ya da ülke kodsuz derlenmez (TEL-YOK)', () => {
+    expect(retler({ niyet: 'TELEFON', telefon: null })).toEqual(['TEL-YOK']);
+    expect(retler({ niyet: 'TELEFON', telefon: '05321234567' })).toEqual(['TEL-YOK']);
+    expect(retler({ niyet: 'TELEFON', telefon: '+90 532 123 45 67' })).toEqual(['TEL-YOK']);
+  });
+  it('numara yalnız TELEFON’da okunur: SITE numarasız derlenir', () => {
+    expect(retler({ telefon: null })).toEqual([]);
   });
   it('site adresi https değilse, toplam bütçede bitiş yoksa, fikir sayısı yanlışsa', () => {
     expect(retler({ hedefAdres: 'http://ornek.com' })).toEqual(['SITE-ADRES']);
@@ -193,5 +214,141 @@ describe('sıfır çağrılı retler', () => {
   });
   it('kuruşu tam olmayan bütçe kırpılmaz, reddedilir', () => {
     expect(retler({ butce: { tip: 'gunluk', micros: 500_001n, seviye: 'kampanya' } })).toEqual(['BTC-01']);
+  });
+});
+
+/*
+ * DALGA 2: ARAMA VE WHATSAPP REKLAMI. Altın gövdeler: kreatifin
+ * `object_story_spec`i ve reklam setinin niyete bağlı alanları TAM olarak
+ * karşılaştırılıyor; bir alanın eklenmesi ya da düşmesi testi kırmalı.
+ */
+const TEL = '+905321234567';
+const telefonGirdisi: Partial<DerlemeGirdisi> = { niyet: 'TELEFON', telefon: TEL, hedefAdres: null };
+const waGirdisi: Partial<DerlemeGirdisi> = { niyet: 'WHATSAPP', hedefAdres: null };
+
+describe('TELEFON (arama düğmeli reklam)', () => {
+  it('KRİTİK: altın kreatif — numara CTA’da tel: ile, link sayfanın adresi', () => {
+    const oss = bul(govde(telefonGirdisi).govdeler, 'kreatif:1').object_story_spec;
+    expect(oss).toEqual({
+      page_id: '111',
+      instagram_user_id: '222',
+      link_data: {
+        image_hash: 'h1',
+        name: 'B1',
+        message: 'M1',
+        call_to_action: { type: 'CALL_NOW', value: { link: `tel:${TEL}` } },
+        // ÖLÇÜLMEDİ (derle.ts `sayfaAdresi`): Meta belgesindeki "işletme
+        // sayfası adresi". Canlı provada doğrulanacak.
+        link: 'https://facebook.com/111',
+      },
+    });
+  });
+
+  it('KRİTİK: site adresi verilse bile link sayfa adresi (gövde taslağa göre değişmez)', () => {
+    const oss = bul(govde({ ...telefonGirdisi, hedefAdres: 'https://ornek.com.tr' }).govdeler, 'kreatif:1').object_story_spec;
+    expect(oss.link_data.link).toBe('https://facebook.com/111');
+    expect(oss.link_data.call_to_action.value).toEqual({ link: `tel:${TEL}` });
+  });
+
+  it('KRİTİK: reklam seti QUALITY_CALL + PHONE_CALL, kampanya OUTCOME_LEADS, atıf 1 gün tıklama', () => {
+    const gs = govde({ ...telefonGirdisi, atif: 'tik7_gor1' }).govdeler;
+    const rs = bul(gs, 'reklam_seti');
+    expect(rs.optimization_goal).toBe('QUALITY_CALL');
+    expect(rs.destination_type).toBe('PHONE_CALL');
+    expect(rs.promoted_object).toEqual({ page_id: '111' });
+    // Ajans standardı (7 gün) arama hedefinde Meta'da geçerli değil (S-07).
+    expect(rs.attribution_spec).toEqual([{ event_type: 'CLICK_THROUGH', window_days: 1 }]);
+    expect(bul(gs, 'kampanya').objective).toBe('OUTCOME_LEADS');
+  });
+
+  it('CTA ikinci kavramda da aynı', () => {
+    expect(bul(govde(telefonGirdisi).govdeler, 'kreatif:2').object_story_spec.link_data.call_to_action).toEqual({
+      type: 'CALL_NOW', value: { link: `tel:${TEL}` },
+    });
+  });
+
+  it('video fikrinde CTA aynı numarayı taşıyor', () => {
+    const r = govde({ ...telefonGirdisi, kavramlar: [{ gorselHash: 'K', videoId: 'V', baslik: 'B', metin: 'M' }] });
+    expect(bul(r.govdeler, 'kreatif:1').object_story_spec.video_data.call_to_action).toEqual({
+      type: 'CALL_NOW', value: { link: `tel:${TEL}` },
+    });
+  });
+});
+
+describe('WHATSAPP (Click-to-WhatsApp)', () => {
+  it('KRİTİK: altın kreatif — sabit bağlantı, CTA app_destination, numara YOK', () => {
+    const oss = bul(govde(waGirdisi).govdeler, 'kreatif:1').object_story_spec;
+    expect(oss).toEqual({
+      page_id: '111',
+      instagram_user_id: '222',
+      link_data: {
+        image_hash: 'h1',
+        name: 'B1',
+        message: 'M1',
+        call_to_action: { type: 'WHATSAPP_MESSAGE', value: { app_destination: 'WHATSAPP' } },
+        link: 'https://api.whatsapp.com/send',
+      },
+    });
+  });
+
+  it('KRİTİK: site adresi taslakta dursa bile CTA’ya { link } düşmez (düğme web sayfasına dönerdi)', () => {
+    const r = govde({ ...waGirdisi, hedefAdres: 'https://ornek.com.tr' });
+    const ld = bul(r.govdeler, 'kreatif:1').object_story_spec.link_data;
+    expect(ld.call_to_action.value).toEqual({ app_destination: 'WHATSAPP' });
+    expect(ld.link).toBe('https://api.whatsapp.com/send');
+    expect(JSON.stringify(r.govdeler)).not.toContain('ornek.com.tr');
+  });
+
+  it('numara girdisi WhatsApp gövdesine HİÇ girmez', () => {
+    expect(JSON.stringify(govde({ ...waGirdisi, telefon: TEL }).govdeler)).not.toContain('905321234567');
+  });
+
+  it('KRİTİK: reklam seti CONVERSATIONS + WHATSAPP + sayfa; atıf 1 gün tıklama', () => {
+    const rs = bul(govde({ ...waGirdisi, atif: 'tik7_gor1' }).govdeler, 'reklam_seti');
+    expect(rs.optimization_goal).toBe('CONVERSATIONS');
+    expect(rs.destination_type).toBe('WHATSAPP');
+    expect(rs.promoted_object).toEqual({ page_id: '111' });
+    expect(rs.attribution_spec).toEqual([{ event_type: 'CLICK_THROUGH', window_days: 1 }]);
+  });
+
+  it('video fikrinde de app_destination', () => {
+    const r = govde({ ...waGirdisi, kavramlar: [{ gorselHash: 'K', videoId: 'V', baslik: 'B', metin: 'M' }] });
+    expect(bul(r.govdeler, 'kreatif:1').object_story_spec.video_data.call_to_action).toEqual({
+      type: 'WHATSAPP_MESSAGE', value: { app_destination: 'WHATSAPP' },
+    });
+  });
+
+  it('KRİTİK: eski kurucu (meta.provider.ts) AYNI sabit bağlantıyı ve CTA değerini yazıyor', () => {
+    // İki kurucu aynı reklamı üretiyor; biri değişip diğeri kalırsa Akıllı
+    // Boost ile AdvCampaign aynı sayfa için farklı WhatsApp reklamı kurar.
+    const eski = readFileSync(join(__dirname, '../../connections/providers/meta.provider.ts'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(eski).toContain('function buildCreativeSpec(');
+    expect(eski).toContain(`'${WHATSAPP_BAGLANTISI}'`);
+    expect(eski).toContain("{ app_destination: 'WHATSAPP' }");
+  });
+});
+
+describe('Dalga 2 sürüm ve açılış', () => {
+  it('derleyici sürümü yükseldi: eski provalar yeni gövdeyi kanıtlamaz', () => {
+    expect(DERLEYICI_SURUMU).toBe('1.2.0');
+  });
+
+  it('KRİTİK: TELEFON/WHATSAPP derleniyor ama üründe AÇIK DEĞİL (canlı tur bekliyor)', () => {
+    expect([...DERLEYICI_NIYETLERI]).toEqual(['FORM', 'SITE', 'TELEFON', 'WHATSAPP']);
+    // AI taslağı ve AdvStrategy aktarımı bu listeyi okuyor; canlı provadan
+    // önce genişlerse arama/WhatsApp reklamı sohbetten kurulabilir hâle gelir.
+    expect([...DERLENEN_NIYETLER]).toEqual(['FORM', 'SITE']);
+  });
+
+  it('manifesto TELEFON ve WHATSAPP gövdelerinde de eksiksiz', () => {
+    for (const g of [telefonGirdisi, waGirdisi]) {
+      const r = govde(g);
+      for (const s of MANIFESTO.filter((x) => !x.kosul)) {
+        for (const gv of r.govdeler.filter((x) => x.nesne === s.nesne)) {
+          const yollar = typeof s.yol === 'string' ? [s.yol] : s.yol;
+          expect(yollar.some((y) => r.acikcaYazilanAlanlar.includes(`${s.nesne}:${y}`)), `${s.kod} ${gv.ad}`).toBe(true);
+        }
+      }
+    }
   });
 });

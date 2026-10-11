@@ -134,6 +134,11 @@ export function rehberdenMeta(
     kavramlar: turetilmis(kavramlar, zaman),
     ...(a.hedefAdres ? { hedefAdres: a.hedefAdres } : {}),
     ...(a.formSablonuId ? { formSablonuId: a.formSablonuId } : {}),
+    // Numara YALNIZ arama reklamında taşınır. Marka Merkezi telefonu her
+    // rehberde önden doluyor; onu site reklamının taslağına da yazmak, o
+    // taslağın içerik özetini değiştirip kayıtlı provaları sebepsiz
+    // bayatlatırdı (yayında "Meta taslağı rehberden sonra değişmiş").
+    ...(a.telefon && REHBER_AMACLARI[amac].meta.niyet === 'TELEFON' ? { telefon: a.telefon } : {}),
   };
   return { tur: 'tamam', deger: t };
 }
