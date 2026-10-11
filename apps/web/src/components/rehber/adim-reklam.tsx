@@ -17,6 +17,7 @@ import {
   type RehberAlanlari,
   type RehberFormListesi,
   type YoutubeVideoListesi,
+  googleGorselKurgusuMu,
 } from '@advetics/shared';
 import { apiFetch, onizlemeAdresi } from '@/lib/api';
 import { medyaOlc, medyaYukle } from '@/reklam/medya';
@@ -30,6 +31,7 @@ import {
   adresKaydi,
   formListesiHali,
   googleGorselRozeti,
+  googleGorselIpucu,
   kelimeDegistir,
   kelimeOnerisiHali,
   kelimeSatirlari,
@@ -87,7 +89,11 @@ export function AdimReklam({
   }
   const kurgu = REHBER_AMACLARI[amac].google.kurgu;
   const googleArama = b.acik.google && kurgu === 'ARAMA';
-  const googleGorsel = b.acik.google && kurgu === 'TALEP_YARATMA_GORSEL';
+  // Görselle kurulan İKİ Google kurgusu var (Talep Yaratma görsel ve Maks.
+  // Performans); kural shared'da. Yalnız birini saymak, yalnız Google
+  // seçili satış amacında görsel alanını HİÇ göstermiyordu ve sunucu görsel
+  // istediği için adım bitirilemiyordu (Ajan 4, Dalga 3 F1).
+  const googleGorsel = b.acik.google && googleGorselKurgusuMu(kurgu);
   const googleVideo = b.acik.google && kurgu === 'TALEP_YARATMA_VIDEO';
   const gorselGerekli = b.acik.meta || googleGorsel;
   // Kural shared'da (`adresAlani`): eksik listesi de aynı fonksiyonu okuyor.
@@ -162,6 +168,7 @@ export function AdimReklam({
             b={b}
             gorselGerekli={gorselGerekli}
             googleGorsel={googleGorsel}
+            googleIpucu={googleGorsel ? googleGorselIpucu(kurgu) : null}
             googleVideo={googleVideo}
             video={amac === 'VIDEO'}
             googleArama={googleArama}
@@ -194,6 +201,7 @@ function MedyaBlogu({
   b,
   gorselGerekli,
   googleGorsel,
+  googleIpucu,
   googleVideo,
   video,
   googleArama,
@@ -203,6 +211,8 @@ function MedyaBlogu({
   b: AdimBaglami;
   gorselGerekli: boolean;
   googleGorsel: boolean;
+  /** Görselle kurulan Google kurgusunun oran kuralı (`googleGorselIpucu`). */
+  googleIpucu: string | null;
   googleVideo: boolean;
   video: boolean;
   googleArama: boolean;
@@ -444,7 +454,7 @@ function MedyaBlogu({
             </p>
           ))}
           {fazla && <p className={s.ipucu}>{fazla.metin}</p>}
-          {googleGorsel && <p className={s.ipucu}>Google&apos;ın görsel reklamı yatay (1.91:1) bir görsel de istiyor. Eklemezsen yalnız eklediğin oranlarla kurulur.</p>}
+          {googleIpucu && <p className={s.ipucu}>{googleIpucu}</p>}
         </>
       )}
       {googleVideo && (

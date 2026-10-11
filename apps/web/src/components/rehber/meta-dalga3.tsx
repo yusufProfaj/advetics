@@ -5,7 +5,7 @@ import type { RehberPikselListesi } from '@advetics/shared';
 import { apiFetch } from '@/lib/api';
 import { sil, yaz, type AdimBaglami } from './adim-ortak';
 import { IKON, Ikon } from './ikonlar';
-import { pikselDurumu, pikselListesiHali, tekPikselOnerisi } from './meta-dalga3-mantik';
+import { pikselDurumu, pikselListesiHali, tekPikselOnerisi, whatsappOnerisi } from './meta-dalga3-mantik';
 import { oneriHatasi, telefonGirdisi, telefonKaydi, type OneriHali } from './rehber-mantik';
 import s from './rehber.module.css';
 
@@ -97,7 +97,12 @@ export function PikselSecici({ b }: { b: AdimBaglami }) {
  * önden doluyor ve KAYNAĞI yazıyor: WhatsApp hattı başka numara olabilir.
  */
 export function WhatsappNumarasi({ b }: { b: AdimBaglami }) {
-  const eksik = b.kayit.eksikler.find((e) => e.kod === 'WHATSAPP-NUMARA') ?? null;
+  const eksik = b.kayit.eksikler.find((e) => e.kod === 'WHATSAPP-NUMARA' || e.kod === 'WHATSAPP-ONAY') ?? null;
+  const oneri = whatsappOnerisi(b.h.iletisim.telefon);
+  const mevcut = b.a.whatsappNumarasi?.deger ?? null;
+  // Önden gelmiş (onaysız) numara ya da Marka Merkezi önerisi: tek tıkla
+  // kullanıcı kaynağıyla yazılır, böylece onay açık bir eylem oluyor.
+  const onaylanacak = mevcut && b.a.whatsappNumarasi?.kaynak !== 'kullanici' ? mevcut : !mevcut ? oneri : null;
   return (
     <>
       <div className={s.girdi}>
@@ -115,10 +120,13 @@ export function WhatsappNumarasi({ b }: { b: AdimBaglami }) {
       </div>
       <p className={eksik ? s.hataMetni : s.ipucu}>
         {eksik?.metin ??
-          (b.a.whatsappNumarasi?.kaynak === 'marka_merkezi'
-            ? "Numara Marka Merkezi'nden geldi; WhatsApp hattın farklıysa değiştir."
-            : 'Mesajlar bu numaraya gelir. Facebook sayfana bağlı olmalı; değilse Meta reklamı kabul etmez.')}
+          'Mesajlar bu numaraya gelir. Facebook sayfana bağlı olmalı; değilse Meta reklamı kabul etmez.'}
       </p>
+      {onaylanacak && (
+        <button type="button" className={s.metinDugme} onClick={() => yaz(b, 'whatsappNumarasi', onaylanacak)}>
+          {mevcut ? 'Bu numara WhatsApp hattım, onayla' : `Marka Merkezi'ndeki numarayı kullan (${telefonGirdisi(onaylanacak)})`}
+        </button>
+      )}
     </>
   );
 }

@@ -736,3 +736,16 @@ describe('Google görsel rozeti sunucunun kuralıyla', () => {
     expect(googleGorselRozeti('kare', 1200, 1200)).toBeNull();
   });
 });
+
+describe('Google görsel kurgusu panelde (Ajan 4 Dalga 3 F1)', () => {
+  it('KRİTİK: Maks. Performans da görsel alanını açıyor; ipucu kurguya göre', async () => {
+    const { googleGorselIpucu } = await import('./rehber-mantik');
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    expect(googleGorselIpucu('MAKS_PERFORMANS')).toMatch(/ikisini de/);
+    expect(googleGorselIpucu('TALEP_YARATMA_GORSEL')).toMatch(/ya da kare/);
+    expect(googleGorselIpucu('ARAMA')).toBeNull();
+    const kaynak = readFileSync(join(__dirname, 'adim-reklam.tsx'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    expect(kaynak).toContain('const googleGorsel = b.acik.google && googleGorselKurgusuMu(kurgu);');
+  });
+});

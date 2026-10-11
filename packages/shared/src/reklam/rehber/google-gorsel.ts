@@ -47,6 +47,13 @@ export const GOOGLE_ORAN_PAYI = 0.01;
 export const GOOGLE_GORSEL_EN_COK_BAYT = 5_120_000;
 /** Bir reklamda / varlık grubunda bütün pazarlama görselleri birlikte. */
 export const GOOGLE_GORSEL_EN_COK = 20;
+/**
+ * TOPLAM bayt sınırı (Ajan 4, Dalga 3 F4): görseller base64 olarak atomik
+ * istekte ve `yayin.derlenmis_govde`de taşınıyor. 20 × 5 MB ≈ 130 MB'lık bir
+ * satır her işte yeniden okunur ve tek istek Google'ın gövde sınırına
+ * dayanır. 15 MB bir reklam için bol; aşarsa giriş anında söylenir.
+ */
+export const GOOGLE_GORSEL_TOPLAM_BAYT = 15_000_000;
 /** İşletme adı: iki kurguda da en çok 25 karakter. */
 export const GOOGLE_ISLETME_ADI_EN_COK = 25;
 /** Maks. Performans: en az bir açıklama 60 karakteri geçmemeli (`SHORT_DESCRIPTION_REQUIRED`). */
@@ -132,6 +139,13 @@ export function googleGorselBulgulari(
   } else {
     if (say.yatay === 0) b.push({ kod: 'G-GORSEL-YATAY', seviye: 'engel', metin: "Maks. Performans için en az bir yatay (1.91:1) görsel ekle" });
     if (say.kare === 0) b.push({ kod: 'G-GORSEL-KARE', seviye: 'engel', metin: 'Maks. Performans için en az bir kare (1:1) görsel ekle' });
+  }
+  let toplam = 0;
+  for (const g of gorseller) {
+    if (googleGorselOraniMi(oranlar.get(g.varlikId) ?? null)) toplam += olculer?.get(g.varlikId)?.bayt ?? 0;
+  }
+  if (toplam > GOOGLE_GORSEL_TOPLAM_BAYT) {
+    b.push({ kod: 'G-GORSEL-TOPLAM', seviye: 'engel', metin: `Google görsellerinin toplamı en çok 15 MB olabilir; şu an ${Math.ceil(toplam / 1_000_000)} MB. Görsel sayısını azalt ya da küçült` });
   }
   if (say.yatay + say.kare + say.dik45 > GOOGLE_GORSEL_EN_COK) {
     b.push({ kod: 'G-GORSEL-SAYI', seviye: 'engel', metin: `Google'da en çok ${GOOGLE_GORSEL_EN_COK} görsel olur` });

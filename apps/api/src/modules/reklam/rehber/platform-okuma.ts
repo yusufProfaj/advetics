@@ -201,9 +201,12 @@ const YEDI_GUN_MS = 7 * 86_400_000;
  * değil, yalnız uyarı üreten "son 7 günde değil" sayılıyor. Hiç çalışmamış
  * olmakla karışmıyor; o `sonCalisma === null`.
  */
-export function seciliPikselHali(pikselId: string | null, liste: readonly PikselSatiri[] | null, simdi: Date): SeciliPikselHali | null {
+export function seciliPikselHali(pikselId: string | null, liste: readonly PikselSatiri[] | null, simdi: Date, kesildi = false): SeciliPikselHali | null {
   if (!pikselId || !liste) return null;
   const p = liste.find((x) => x.id === pikselId);
+  // Liste sayfa sınırında KESİLDİYSE bulunamamak "hesapta yok" demek değil
+  // (Ajan 4, Dalga 3 F6): bilinmiyor say, yanlış engel üretme.
+  if (!p && kesildi) return null;
   if (!p) return { ad: null, hesaptaVar: false, kullanilamaz: false, hicCalismadi: false, son7GundeCalisti: false, satinAlma7Gun: null };
   const t = p.sonCalisma ? Date.parse(p.sonCalisma) : NaN;
   return {

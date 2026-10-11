@@ -478,7 +478,11 @@ describe('kaynak taraması', () => {
      */
     const istisna = (f: string, k: string) =>
       f === 'prova-isleyici.ts'
-        ? k.replace("await port.durumYaz(geciciId, { status: 'DELETED' })", '')
+        ? k
+            .replace("await port.durumYaz(geciciId, { status: 'DELETED' })", '')
+            // Belirsiz açılışta etiketle bulunan PROVA kampanyalarının silinmesi
+            // (yalnız `GECICI_KAMPANYA_ADI` adlıları, F3a).
+            .replace("await port.durumYaz(k.id, { status: 'DELETED' })", '')
         : k.replace("status: 'ACTIVE' | 'ARCHIVED' | 'DELETED'", '');
     for (const f of dosyalar) expect(istisna(f, kaynak(f)), f).not.toContain('DELETED');
     expect(kaynak('prova-isleyici.ts')).toContain("await port.durumYaz(geciciId, { status: 'DELETED' })");

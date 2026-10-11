@@ -203,9 +203,11 @@ describe('WHATSAPP numarası', () => {
     expect(kodlar(wa({ whatsappNumarasi: al('05559876543') }))).toContain('WHATSAPP-NUMARA');
   });
 
-  it('Marka Merkezi numarası önerilebilir; numara yalnız WhatsApp taslağına taşınır', () => {
-    const a = wa({ whatsappNumarasi: al('+905559876543', 'marka_merkezi') });
-    expect(rehberAlanlariSchema.safeParse(a).success).toBe(true);
+  it('KRİTİK (F5): Marka Merkezi numarası ONAYLANMADAN yayına gitmez; onaylanınca yalnız WhatsApp taslağına taşınır', () => {
+    const oneri = wa({ whatsappNumarasi: al('+905559876543', 'marka_merkezi') });
+    expect(rehberAlanlariSchema.safeParse(oneri).success).toBe(true);
+    expect(kodlar(oneri)).toEqual(['WHATSAPP-ONAY']);
+    const a = wa({ whatsappNumarasi: al('+905559876543') });
     expect(kodlar(a)).toEqual([]);
     const r = rehberdenMeta(a, { meta: true, google: false }, 'TRY', Z, ORAN);
     if (r.tur !== 'tamam') throw new Error(r.kodlar.join());
@@ -312,6 +314,8 @@ describe('piksel okuması — saf çözümleyiciler', () => {
     expect(seciliPikselHali(null, [satir({})], simdi)).toBeNull();
     expect(seciliPikselHali(PIKSEL, null, simdi)).toBeNull();
     expect(seciliPikselHali('999', [satir({})], simdi)?.hesaptaVar).toBe(false);
+    // F6: liste kesildiyse bulunamayan piksel BİLİNMİYOR, "hesapta yok" değil.
+    expect(seciliPikselHali('999', [satir({})], simdi, true)).toBeNull();
     expect(seciliPikselHali(PIKSEL, [satir({ sonCalisma: null })], simdi)).toMatchObject({ hicCalismadi: true, son7GundeCalisti: false });
     expect(seciliPikselHali(PIKSEL, [satir({ sonCalisma: '2026-09-01T00:00:00.000Z' })], simdi)).toMatchObject({ hicCalismadi: false, son7GundeCalisti: false });
     expect(seciliPikselHali(PIKSEL, [satir({})], simdi)).toMatchObject({ hesaptaVar: true, son7GundeCalisti: true, satinAlma7Gun: true });
@@ -392,7 +396,9 @@ describe('uç kaydı (kaynak taraması)', () => {
     expect(t.length).toBeGreaterThan(100);
     expect(t).toContain("amac === 'SATIS'");
     expect(t).toContain('this.pikselOku(ctx, clientId, hesapId)');
-    expect(s).toContain('seciliPikselHali(a.pikselId?.deger ?? null, this.pikselKaydi(clientId, meta?.id), new Date())');
+    // Kesilmiş liste bayrağı da geçiyor (Ajan 4 F6): kesik listede bulunamamak "hesapta yok" değil.
+    expect(s).toContain('const pk = this.pikselKaydi(clientId, meta?.id);');
+    expect(s).toContain('seciliPikselHali(a.pikselId?.deger ?? null, pk?.satirlar ?? null, new Date(), pk?.kesildi ?? false)');
   });
 
   it('KRİTİK: yayın derlemesi hattı ve pikseli taslaktan geçiriyor', () => {

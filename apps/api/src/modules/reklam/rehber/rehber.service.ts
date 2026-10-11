@@ -172,6 +172,7 @@ interface SayfaKaydi {
 interface PikselKaydi {
   zaman: number;
   satirlar: PikselSatiri[];
+  kesildi: boolean;
 }
 
 /** Bir rehberin eksik/karar bağlamı: yalnız veritabanı + önbellek. */
@@ -364,14 +365,14 @@ export class RehberService {
     const p = this.saglayicilar.get('meta') as unknown as Partial<Pick<MetaProvider, 'fetchAdPixels'>>;
     if (typeof p.fetchAdPixels !== 'function') throw new Error('Meta sağlayıcısı piksel okumayı desteklemiyor');
     const r = await p.fetchAdPixels({ adAccountPath: e.hesap, accessToken: e.kullaniciToken });
-    this.pikselOnbellek.set(`${clientId}:${adAccountId}`, { zaman: Date.now(), satirlar: r.satirlar });
+    this.pikselOnbellek.set(`${clientId}:${adAccountId}`, { zaman: Date.now(), satirlar: r.satirlar, kesildi: r.kesildi });
     return r;
   }
 
-  private pikselKaydi(clientId: string, adAccountId: string | null | undefined): PikselSatiri[] | null {
+  private pikselKaydi(clientId: string, adAccountId: string | null | undefined): { satirlar: PikselSatiri[]; kesildi: boolean } | null {
     if (!adAccountId) return null;
     const k = this.pikselOnbellek.get(`${clientId}:${adAccountId}`);
-    return k && Date.now() - k.zaman < ONBELLEK_MS ? k.satirlar : null;
+    return k && Date.now() - k.zaman < ONBELLEK_MS ? { satirlar: k.satirlar, kesildi: k.kesildi } : null;
   }
 
   private sayfaYaz(clientId: string, sayfaId: string, d: Omit<SayfaKaydi, 'zaman'>): void {
@@ -1197,7 +1198,8 @@ export class RehberService {
     }
     // Piksel listesi SEÇİLİ Meta hesabının; başka hesabın listesiyle
     // karşılaştırmak "hesapta yok" yalanı üretirdi.
-    const seciliPiksel = seciliPikselHali(a.pikselId?.deger ?? null, this.pikselKaydi(clientId, meta?.id), new Date());
+    const pk = this.pikselKaydi(clientId, meta?.id);
+    const seciliPiksel = seciliPikselHali(a.pikselId?.deger ?? null, pk?.satirlar ?? null, new Date(), pk?.kesildi ?? false);
     const onKosullar: RehberOnKosullari = {
       metaFormKosullari: sayfa?.formKosullari ?? null,
       metaWhatsapp: sayfa?.whatsapp ?? null,

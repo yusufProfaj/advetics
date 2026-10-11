@@ -212,6 +212,14 @@ export function rehberEksikleri(a: RehberAlanlari, b: RehberEksikBaglami): Rehbe
   if (amac === 'WHATSAPP' && acik.meta) {
     const n = a.whatsappNumarasi?.deger ?? null;
     if (!(n && TELEFON_E164.test(n))) ekle('whatsappNumarasi', 'meta', 'WHATSAPP-NUMARA', 'WhatsApp numarası +90 ile başlamalı');
+    /*
+     * NUMARA KULLANICI ONAYIYLA (Ajan 4, Dalga 3 F5). Marka Merkezi'ndeki
+     * telefon WhatsApp hattı olmayabilir ve Meta'nın sayfaya bağlı olmayan
+     * numarayı reddettiği HENÜZ ölçülmedi: kabul ederse reklam yanlış hatta
+     * gider, hata vermeden. Başka kaynaktan gelen numara onaylanana kadar
+     * engel; ekran tek tıkla onaylatıyor.
+     */
+    else if (a.whatsappNumarasi?.kaynak !== 'kullanici') ekle('whatsappNumarasi', 'meta', 'WHATSAPP-ONAY', 'WhatsApp numarasını onayla: mesajlar bu numaraya gelecek');
   }
   if (amac === 'TELEFON') {
     const tel = a.telefon?.deger ?? null;

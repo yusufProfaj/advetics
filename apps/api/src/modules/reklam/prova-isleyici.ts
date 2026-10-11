@@ -49,7 +49,16 @@ export function kapsamaUygula(sonuclar: GovdeSonucu[]): GovdeSonucu[] {
   if (!set || set.sonuc !== 'dogrulanamadi' || reklamlar.length === 0 || !reklamlar.every((r) => r.sonuc === 'gecti')) return sonuclar;
   return sonuclar.map((x) =>
     x === set
-      ? { ad: x.ad, sonuc: 'gecti' as const, not: `Meta bu parçayı tek başına kontrol edemedi (${x.mesaj ?? 'sebep yok'}); aynı kitle ve bütçe her reklamın içinde kontrol edildi ve geçti.` }
+      ? {
+          ad: x.ad,
+          sonuc: 'gecti' as const,
+          // Var olan not KORUNUR: geçici prova kampanyası silinemediyse bunu
+          // söyleyen not burada atılırsa Meta'da boş bir kampanya kalır ve
+          // ekranda tek kelime görünmez (Ajan 4, Dalga 3 F2).
+          not: [`Meta bu parçayı tek başına kontrol edemedi (${x.mesaj ?? 'sebep yok'}); aynı kitle ve bütçe her reklamın içinde kontrol edildi ve geçti.`, x.not]
+            .filter(Boolean)
+            .join(' '),
+        }
       : x,
   );
 }
@@ -68,8 +77,10 @@ export function kapsamaUygula(sonuclar: GovdeSonucu[]): GovdeSonucu[] {
  * yapamaz, para harcamaz. Silme düşerse sonuç değişmez ama ekranda söylenir:
  * Reklam Yöneticisi'nde "silinecek" adlı boş bir kampanya kalmış olur.
  */
+const GECICI_KAMPANYA_ADI = '[Advetics prova] silinecek';
+
 export async function setiGeciciKampanyaylaDogrula(
-  port: Pick<MetaYazmaPortu, 'olustur' | 'dogrula' | 'durumYaz'>,
+  port: Pick<MetaYazmaPortu, 'olustur' | 'dogrula' | 'durumYaz' | 'etiketleAra'>,
   hesap: string,
   govdeler: ReadonlyArray<{ ad: string; alanlar: Record<string, unknown> }>,
 ): Promise<GovdeSonucu> {
@@ -78,9 +89,29 @@ export async function setiGeciciKampanyaylaDogrula(
   if (!kampanya || !set) return { ad: 'reklam_seti', sonuc: 'dogrulanamadi', mesaj: 'Kampanya ya da reklam seti gövdesi yok' };
   let geciciId: string;
   try {
-    geciciId = (await port.olustur(hesap, 'campaigns', { ...kampanya, name: '[Advetics prova] silinecek', status: 'PAUSED', adlabels: [{ name: 'adv-prova' }] })).id;
+    geciciId = (await port.olustur(hesap, 'campaigns', { ...kampanya, name: GECICI_KAMPANYA_ADI, status: 'PAUSED', adlabels: [{ name: 'adv-prova' }] })).id;
   } catch (e) {
-    return { ad: 'reklam_seti', sonuc: 'dogrulanamadi', mesaj: `Prova kampanyası açılamadı: ${(e as Error).message}` };
+    if (e instanceof MetaKesinHata) return { ad: 'reklam_seti', sonuc: 'dogrulanamadi', mesaj: `Prova kampanyası açılamadı: ${e.message}` };
+    /*
+     * BELİRSİZ AÇILIŞ (zaman aşımı, 5xx): Meta kampanyayı açmış olabilir
+     * (Ajan 4, Dalga 3 F3a). "Açılamadı" demek yalan olurdu ve boş kampanya
+     * sessizce kalırdı. Etiketle aranır, bulunan prova kampanyaları silinir;
+     * silinemeyen ya da aranamayan durum ekranda söylenir.
+     */
+    const mesaj = `Prova kampanyası açılıp açılmadığı bilinmiyor (${(e as Error).message})`;
+    try {
+      const bulunan = (await port.etiketleAra(hesap, 'campaigns', 'adv-prova')).filter((k) => k.name === GECICI_KAMPANYA_ADI);
+      const kalan: string[] = [];
+      for (const k of bulunan) await port.durumYaz(k.id, { status: 'DELETED' }).catch(() => kalan.push(k.id));
+      return {
+        ad: 'reklam_seti',
+        sonuc: 'dogrulanamadi',
+        mesaj,
+        ...(kalan.length ? { not: `Prova için açılan boş kampanya (${kalan.join(', ')}) silinemedi; Reklam Yöneticisi'nden silinebilir.` } : {}),
+      };
+    } catch {
+      return { ad: 'reklam_seti', sonuc: 'dogrulanamadi', mesaj, not: `Meta'da "${GECICI_KAMPANYA_ADI}" adlı boş bir kampanya kalmış olabilir; Reklam Yöneticisi'nden silinebilir.` };
+    }
   }
   let sonuc: GovdeSonucu;
   try {
@@ -203,13 +234,23 @@ export async function provaKos(
   // kampanyaya karşı yeniden sorulur; kapsama kuralı yalnız bu da belirsiz
   // kalırsa devreye girer.
   const i = sonuclar.findIndex((x) => x.ad === 'reklam_seti' && x.sonuc === 'dogrulanamadi');
-  if (i !== -1) sonuclar[i] = await setiGeciciKampanyaylaDogrula(port, hesap, d.derleme.govdeler);
+  if (i !== -1) {
+    // Yazma şalteri YENİDEN: ilk kontrolden bu yana görsel yüklemesi ve en
+    // çok 3 dakikalık video beklemesi geçmiş olabilir; geçici kampanya bir
+    // yazma ve kapalı şalteri delmemeli (Ajan 4, Dalga 3 F3b).
+    const kapi2 = await yazmaKapisi();
+    sonuclar[i] = kapi2.acik ? await setiGeciciKampanyaylaDogrula(port, hesap, d.derleme.govdeler) : { ...sonuclar[i]!, mesaj: kapi2.sebep };
+  }
   sonuclar = kapsamaUygula(sonuclar);
+  // Sızıntı notu sonuçtan BAĞIMSIZ söylenir: ekran notları yalnız "geçti"de
+  // gösteriyor, reddedilen provada boş kampanya sessizce kalırdı (F2).
+  const sizinti = sonuclar.map((x) => x.not).find((n) => n?.includes('silinemedi') || n?.includes('kalmış olabilir'));
+  const ek = (s: string) => (sizinti ? `${s} · ${sizinti}` : s);
   const red = sonuclar.filter((x) => x.sonuc === 'reddedildi');
   // Aynı mesaj her kavramda tekrar ediyor (bir kreatif hatası bütün
   // fikirlerde aynı): özet satırında bir kez yazılır, parça listesi ayrıntıyı taşır.
   const mesajlar = [...new Set(red.map((r) => r.mesaj))];
-  if (red.length > 0) return bitir('reddedildi', sonuclar, `Meta ${red.length} parçayı kabul etmedi: ${mesajlar.join(' · ')}`);
-  if (sonuclar.some((x) => x.sonuc === 'dogrulanamadi')) return bitir('dogrulanamadi', sonuclar, 'Meta’nın kontrolü bir parçada tamamlanamadı');
+  if (red.length > 0) return bitir('reddedildi', sonuclar, ek(`Meta ${red.length} parçayı kabul etmedi: ${mesajlar.join(' · ')}`));
+  if (sonuclar.some((x) => x.sonuc === 'dogrulanamadi')) return bitir('dogrulanamadi', sonuclar, ek('Meta’nın kontrolü bir parçada tamamlanamadı'));
   return bitir('gecti', sonuclar, null);
 }

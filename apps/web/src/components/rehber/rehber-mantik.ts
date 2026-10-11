@@ -55,7 +55,6 @@ import {
   type YoutubeVideoListesi,
 } from '@advetics/shared';
 import { ApiRequestError } from '@/lib/api';
-import { whatsappOnerisi } from './meta-dalga3-mantik';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Değişiklik kuyruğu
@@ -671,6 +670,16 @@ export function yayinBittiMi(platformlar: ReadonlyArray<Pick<PlatformYayinOzeti,
  * reddedilirdi. Bayt panelde bilinmiyor (0); büyüklük sınırını sunucunun
  * eksik listesi söylüyor. `null` = uygun, metin = sebep.
  */
+/**
+ * Görselle kurulan Google kurgusunun oran kuralı, kullanıcının diliyle.
+ * Sunucunun engelleriyle aynı şeyi söylemeli (`googleGorselBulgulari`).
+ */
+export function googleGorselIpucu(kurgu: string | null): string | null {
+  if (kurgu === 'MAKS_PERFORMANS') return "Google Maks. Performans yatay (1.91:1) ve kare (1:1) görselin ikisini de istiyor; 4:5 de kullanılır, 9:16 gönderilmez.";
+  if (kurgu === 'TALEP_YARATMA_GORSEL') return "Google en az bir yatay (1.91:1) ya da kare (1:1) görsel istiyor; 4:5 de kullanılır, 9:16 gönderilmez.";
+  return null;
+}
+
 export function googleGorselRozeti(oran: GorselOrani, en: number, boy: number): string | null {
   if (!googleGorselOraniMi(oran)) return "9:16 görsel Google'da kullanılmıyor";
   return googleGorselSorunu(oran, { genislik: en, yukseklik: boy, bayt: 0 });
@@ -930,10 +939,9 @@ export function onDoldurma(a: RehberAlanlari, h: RehberHazirligi): Degisiklik[] 
   ekle('konumlar', konumlar.length ? konumlar : null, 'marka_merkezi');
   ekle('hedefAdres', h.iletisim.siteAdresi, 'marka_merkezi');
   ekle('telefon', h.iletisim.telefon, 'marka_merkezi');
-  // WhatsApp hattı Dalga 3'ten beri soruluyor; Marka Merkezi'nde ayrı bir
-  // WhatsApp alanı yok, telefon ÖNERİ olarak gelir ve ekranda kaynağı yazar.
-  // Çözülemeyen biçim önerilmez (`whatsappOnerisi`).
-  ekle('whatsappNumarasi', whatsappOnerisi(h.iletisim.telefon), 'marka_merkezi');
+  // WhatsApp numarası önden YAZILMAZ (Ajan 4, Dalga 3 F5): Marka Merkezi
+  // telefonu WhatsApp hattı olmayabilir; ekran onu bir ÖNERİ düğmesi olarak
+  // gösteriyor ve kullanıcı seçince `kullanici` kaynağıyla yazılıyor.
   return d;
 }
 

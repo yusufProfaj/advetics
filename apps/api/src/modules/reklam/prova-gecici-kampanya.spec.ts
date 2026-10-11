@@ -13,7 +13,7 @@ const GOVDELER = [
   { ad: 'reklam_seti', alanlar: { name: 'Set', campaign_id: '{kampanya}', attribution_spec: [{ event_type: 'CLICK_THROUGH', window_days: 1 }], adlabels: [{ name: 'adv-yayin-x' }] } },
 ];
 
-function sahtePort(o: { dogrula?: () => Promise<void>; sil?: () => Promise<void>; olustur?: () => Promise<{ id: string }> } = {}) {
+function sahtePort(o: { dogrula?: () => Promise<void>; sil?: () => Promise<void>; olustur?: () => Promise<{ id: string }>; etiket?: () => Promise<Array<{ id: string; name: string }>> } = {}) {
   const cagrilar: Array<[string, unknown]> = [];
   return {
     cagrilar,
@@ -29,6 +29,10 @@ function sahtePort(o: { dogrula?: () => Promise<void>; sil?: () => Promise<void>
       durumYaz: async (id: string, alanlar: { status: string }) => {
         cagrilar.push([`durum:${id}`, alanlar]);
         if (o.sil) await o.sil();
+      },
+      etiketleAra: async (_h: string, tur: string, etiket: string) => {
+        cagrilar.push([`ara:${tur}`, etiket]);
+        return o.etiket ? o.etiket() : [];
       },
     },
   };
@@ -117,7 +121,7 @@ describe('Ajan 4 · provaKos yazma kapısı', () => {
  * kaldırılmalı.
  */
 describe('Ajan 4 · BULGU: kapsama kuralı sızıntı notunu atıyor', () => {
-  it.fails('geçici kampanya silinemediyse not, kapsama kuralından sonra da kalmalı', async () => {
+  it('KRİTİK (F2 düzeldi): geçici kampanya silinemediyse not, kapsama kuralından sonra da kalmalı', async () => {
     const { kapsamaUygula } = await import('./prova-isleyici');
     const set = await setiGeciciKampanyaylaDogrula(
       sahtePort({ dogrula: async () => { throw new MetaBelirsizHata('5xx'); }, sil: async () => { throw new MetaBelirsizHata('ağ'); } }).port,
@@ -138,5 +142,28 @@ describe('Ajan 4 · BULGU: kapsama kuralı sızıntı notunu atıyor', () => {
       GOVDELER,
     );
     expect(set).toMatchObject({ sonuc: 'dogrulanamadi', not: expect.stringMatching(/silinemedi/) });
+  });
+});
+
+describe('belirsiz açılış (F3a)', () => {
+  it('KRİTİK: zaman aşımında kampanya açılmış olabilir: etiketle aranıp SİLİNİR, "açılamadı" denmez', async () => {
+    const { port, cagrilar } = sahtePort({
+      olustur: async () => { throw new MetaBelirsizHata('zaman aşımı'); },
+      etiket: async () => [{ id: 'SIZAN', name: '[Advetics prova] silinecek' }, { id: 'BASKA', name: 'gerçek kampanya' }],
+    });
+    const r = await setiGeciciKampanyaylaDogrula(port, 'act_1', GOVDELER);
+    expect(r.sonuc).toBe('dogrulanamadi');
+    expect(r.mesaj).toMatch(/bilinmiyor/);
+    expect(cagrilar).toContainEqual(['durum:SIZAN', { status: 'DELETED' }]);
+    // Adı eşleşmeyen (gerçek) kampanyaya DOKUNULMAZ.
+    expect(cagrilar.some(([k]) => k === 'durum:BASKA')).toBe(false);
+  });
+  it('arama da düşerse ekranda söylenir', async () => {
+    const r = await setiGeciciKampanyaylaDogrula(
+      sahtePort({ olustur: async () => { throw new MetaBelirsizHata('x'); }, etiket: async () => { throw new MetaBelirsizHata('y'); } }).port,
+      'act_1',
+      GOVDELER,
+    );
+    expect(r.not).toMatch(/kalmış olabilir/);
   });
 });
