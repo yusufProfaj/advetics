@@ -95,6 +95,12 @@ class SahteGoogle implements GoogleYayinPortu {
       return [{ campaign: { resourceName: `customers/${MUSTERI}/campaigns/555` }, adGroup: { resourceName: `customers/${MUSTERI}/adGroups/666` }, adGroupAd: { resourceName: `customers/${MUSTERI}/adGroupAds/666~777` } }] as T[];
     }
     if (sorgu.includes('FROM campaign_asset')) {
+      // GOOGLE'IN KURALI TAKLİTTE DE (canlı turda ölçüldü, 2026-10-11): WHERE'de
+      // süzülen `campaign.id` SELECT'te yoksa sorgu reddediliyor. Taklit bunu
+      // yapmadığı için geri okuma burada yeşildi, canlıda "kurulamadı" dedi.
+      if (/WHERE[\s\S]*campaign\.id/.test(sorgu) && !/SELECT[\s\S]*campaign\.id[\s\S]*FROM/.test(sorgu)) {
+        throw new Error("EXPECTED_REFERENCED_FIELD_IN_SELECT_CLAUSE: 'campaign.id'");
+      }
       // Atomik isteğin bağı ve öğesi: bağ, geçici öğe kimliğiyle eşleşiyor.
       const ogeler = c('assetOperation');
       const satirlar = c('campaignAssetOperation').map((bag) => {

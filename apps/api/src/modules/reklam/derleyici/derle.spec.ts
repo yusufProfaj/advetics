@@ -338,7 +338,8 @@ describe('WHATSAPP (Click-to-WhatsApp)', () => {
 
 describe('Dalga 2 sürüm ve açılış', () => {
   it('derleyici sürümü yükseldi: eski provalar yeni gövdeyi kanıtlamaz', () => {
-    // 1.2.1: formun atıf penceresi 1 gün tıklama (canlı tur ölçümü).
+    // 1.2.1: formun atıf penceresi 1 gün tıklama ve kısıtlı kategoride
+    // yarıçapsız şehre taban yarıçap (ikisi de canlı tur ölçümü, aynı deploy).
     expect(DERLEYICI_SURUMU).toBe('1.2.1');
   });
 

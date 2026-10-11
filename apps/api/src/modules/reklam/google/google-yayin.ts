@@ -251,9 +251,14 @@ export async function googleGeriOku(port: GoogleYayinPortu, ctx: FetchContext, k
     `SELECT ad_group_criterion.type, ad_group_criterion.negative FROM ad_group_criterion WHERE campaign.id = ${kampanyaId}`,
   );
   // Arama öğesi: her kurguda soruluyor (beklenmiyorsa da): bkz. karşılaştırma.
+  // `campaign.id` SELECT'TE OLMAK ZORUNDA — ölçüldü (2026-10-11, canlı tur):
+  // WHERE'de süzülen alan seçilmezse Google sorguyu
+  // EXPECTED_REFERENCED_FIELD_IN_SELECT_CLAUSE ile reddediyor ve kurulmuş,
+  // sağlam bir kampanya ekranda "kurulamadı" görünüyordu. Sahte port sorguyu
+  // çalıştırmadığı için hiçbir test bunu görmedi.
   const cagriOgeleri = await port.ara<CagriOgesiSatiri>(
     ctx,
-    `SELECT campaign_asset.field_type, campaign_asset.status, asset.call_asset.country_code, asset.call_asset.phone_number
+    `SELECT campaign.id, campaign_asset.field_type, campaign_asset.status, asset.call_asset.country_code, asset.call_asset.phone_number
        FROM campaign_asset
       WHERE campaign.id = ${kampanyaId} AND campaign_asset.field_type = 'CALL' AND campaign_asset.status != 'REMOVED'`,
   );

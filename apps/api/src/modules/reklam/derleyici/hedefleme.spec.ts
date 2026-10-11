@@ -118,6 +118,15 @@ describe('özel kategoriler', () => {
     expect(retKodlari({ konumlar: [nokta(5)] })).toEqual([]);
   });
 
+  it('KRİTİK: kısıtlı kategoride YARIÇAPSIZ şehre taban yarıçap açıkça yazılır (#2909052, canlı tur)', () => {
+    const sehir = { tur: 'city' as const, key: '2343722', etiket: 'İzmir', ulkeKodu: 'TR' };
+    const geo = (g: Partial<HedeflemeGirdisi>) => (tamam(g).targeting as { geo_locations: { cities: unknown[] } }).geo_locations.cities;
+    expect(geo({ kategoriler: ['HOUSING'], konumlar: [sehir] })).toEqual([{ key: '2343722', radius: 17, distance_unit: 'kilometer' }]);
+    expect(geo({ kategoriler: ['HOUSING'], konumlar: [{ ...sehir, ulkeKodu: 'US' }] })).toEqual([{ key: '2343722', radius: 25, distance_unit: 'kilometer' }]);
+    // Kategorisiz reklamda şehir yarıçapsız kalır (Meta'nın şehir sınırı).
+    expect(geo({ konumlar: [sehir] })).toEqual([{ key: '2343722' }]);
+  });
+
   it('özel kategoride ülkesi okunamayan nokta ENGEL', () => {
     const n = { tur: 'custom' as const, key: '', etiket: 'N', ulkeKodu: null, enlem: 1, boylam: 1, yaricapKm: 20 };
     expect(retKodlari({ kategoriler: ['HOUSING'], konumlar: [n] })).toEqual(['OZK-04']);

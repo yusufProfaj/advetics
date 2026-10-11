@@ -133,11 +133,11 @@ export function hedeflemeUret(g: HedeflemeGirdisi): HedeflemeSonucu {
   }
   const ulkeler = [...ulkeKumesi].sort();
 
+  const taban = Math.max(
+    VARSAYILAN_YARICAP_TABANI_KM,
+    ...ulkeler.map((u) => KONUT_YARICAP_TABANI_KM[u] ?? VARSAYILAN_YARICAP_TABANI_KM),
+  );
   if (kisitli) {
-    const taban = Math.max(
-      VARSAYILAN_YARICAP_TABANI_KM,
-      ...ulkeler.map((u) => KONUT_YARICAP_TABANI_KM[u] ?? VARSAYILAN_YARICAP_TABANI_KM),
-    );
     for (const k of g.konumlar) {
       if ((k.tur === 'city' || k.tur === 'custom') && k.yaricapKm !== undefined && k.yaricapKm < taban) {
         retler.push({
@@ -163,10 +163,18 @@ export function hedeflemeUret(g: HedeflemeGirdisi): HedeflemeSonucu {
     // regions/cities kovasına `{ key }` NESNESİ: düz string canlıda reddediliyor.
     else if (k.tur === 'region') ekle('regions', { key: k.key });
     else if (k.tur === 'city') {
-      ekle(
-        'cities',
-        k.yaricapKm !== undefined ? { key: k.key, radius: k.yaricapKm, distance_unit: 'kilometer' } : { key: k.key },
-      );
+      /*
+       * KISITLI KATEGORİDE YARIÇAPSIZ ŞEHİR REDDEDİLİYOR — ölçüldü
+       * (2026-10-11, v25.0, Dalga 2 canlı turu, konutlu "Beni arasınlar",
+       * İzmir şehri): reklam seti *"Seçtiğiniz şehir, adres veya eklenen
+       * iğnenin çevresinde en az 17 kilometre (veya 10 mil) genişliğinde bir
+       * yarıçap eklemeniz gerekir. (#2909052)"* ile düştü. OZK-06 yalnız
+       * VERİLMİŞ yarıçapı denetliyordu; rehber şehri yarıçapsız ekliyor ve
+       * Meta'ya hiç yarıçap gitmiyordu. Platformun varsayılanına bırakmıyoruz:
+       * taban açıkça yazılıyor. Prova bunu da yakalayamadı (satır içi set 5xx).
+       */
+      const yaricap = k.yaricapKm ?? (kisitli ? taban : undefined);
+      ekle('cities', yaricap !== undefined ? { key: k.key, radius: yaricap, distance_unit: 'kilometer' } : { key: k.key });
     } else {
       // distance_unit HER ZAMAN açıkça: varsayılan mil, 1,6 kat büyük alan.
       ekle('custom_locations', {
