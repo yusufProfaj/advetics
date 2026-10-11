@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
+  REHBER_ACILIS,
   TANINAN_OZELLIK_ANAHTARLARI,
   acikPlatformlar,
   butceBol,
@@ -296,6 +297,16 @@ describe('BULGU-2 (DÜZELDİ): Meta çocuk taslağı rehberden bağımsız deği
 // BULGU-1 — bütçe bölmesi: eksik listesi/ekran AÇIK platformla, türetme HAM seçimle
 // =============================================================================
 describe('BULGU-1 (DÜZELDİ): türetilmiş bütçe AÇIK platform kümesine göre bölünüyor', () => {
+  // "Meta VIDEO kapalı" hâli tablodan bağımsız kuruluyor (Dalga 3'te
+  // Meta video `deneme`ye geçti; test kapalı platformun bütçesini sınıyor).
+  let eskiVideoMeta: typeof REHBER_ACILIS.VIDEO.meta;
+  beforeEach(() => {
+    eskiVideoMeta = REHBER_ACILIS.VIDEO.meta;
+    REHBER_ACILIS.VIDEO.meta = 'kapali';
+  });
+  afterEach(() => {
+    REHBER_ACILIS.VIDEO.meta = eskiVideoMeta;
+  });
   const Z = '2026-10-10T09:00:00.000Z';
   const al = <T>(deger: T, kaynak: 'kullanici' | 'derleyici' | 'marka_merkezi' | 'workspace_profili' = 'kullanici') => ({ deger, kaynak, kim: IDS.user, zaman: Z });
   // VIDEO: Meta "kapali", Google "deneme" (REHBER_ACILIS). Kullanıcı seçimi iki platform.

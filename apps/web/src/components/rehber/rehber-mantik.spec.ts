@@ -165,8 +165,14 @@ describe('görünürlük süzgeci: tek karar platformGorunurMu', () => {
     expect(platformNedeni('SITE', h)).toContain('Google Ads hesabı atanmamış');
     const tam = { ...h, googleHesaplari: [{ id: 'g', ad: 'G', musteriNo: '1-2-3', paraBirimi: 'TRY', saatDilimi: 'Europe/Istanbul' }] };
     expect(platformNedeni('SITE', tam)).not.toMatch(/\d/);
-    // Dalga 1'de tek platformlu açık amaç VIDEO (Meta dalı Dalga 2'de).
-    expect(platformNedeni('VIDEO', tam)).toContain("yalnız Google'da");
+    // Tek platformlu amaç: Meta dalı kapalıyken (tablodan bağımsız kuruluyor).
+    const eski = REHBER_ACILIS.VIDEO.meta;
+    try {
+      REHBER_ACILIS.VIDEO.meta = 'kapali';
+      expect(platformNedeni('VIDEO', tam)).toContain("yalnız Google'da");
+    } finally {
+      REHBER_ACILIS.VIDEO.meta = eski;
+    }
   });
 });
 

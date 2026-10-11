@@ -109,8 +109,16 @@ describe('amaç kataloğu ve açılış tablosu', () => {
     expect(platformGorunurMu('SITE', 'meta', true)).toBe(true);
     expect(platformGorunurMu('SITE', 'meta', false)).toBe(false);
     expect(platformAcilabilirMi('SITE', 'meta')).toBe(false);
-    // Kapalı amaç ajans yöneticisine de görünmez (ERISIM Dalga 3).
-    expect(amacGorunurMu('ERISIM', true)).toBe(false);
+    // Kapalı amaç ajans yöneticisine de görünmez. Tablonun bugünkü
+    // değerinden bağımsız: kapalı hâl test içinde kuruluyor.
+    const eski = { ...REHBER_ACILIS.ERISIM };
+    try {
+      REHBER_ACILIS.ERISIM.meta = 'kapali';
+      REHBER_ACILIS.ERISIM.google = 'kapali';
+      expect(amacGorunurMu('ERISIM', true)).toBe(false);
+    } finally {
+      Object.assign(REHBER_ACILIS.ERISIM, eski);
+    }
   });
 });
 

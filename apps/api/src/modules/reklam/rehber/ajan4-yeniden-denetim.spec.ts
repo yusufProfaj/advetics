@@ -1,5 +1,5 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { type RehberGuncelle, type TenantContext } from '@advetics/shared';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { REHBER_ACILIS, type RehberGuncelle, type TenantContext } from '@advetics/shared';
 import { AJANS_UST_HESAP, createHarness, seedAjans, seedTenant, IDS, type Harness } from '../../../../test/pglite-harness';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { AppConfig } from '../../../config/configuration';
@@ -123,6 +123,16 @@ beforeEach(async () => {
 const g = (alan: string, deger: unknown, kaynak: RehberGuncelle['degisiklikler'][number]['kaynak'] = 'kullanici') => ({ alan, deger, kaynak });
 
 describe('BULGU-1 kablosu: servis türetmeye AÇIK kümeyi veriyor', () => {
+  // "Meta VIDEO kapalı" hâli tablodan bağımsız kuruluyor (Dalga 3'te
+  // Meta video `deneme`ye geçti; test kapalı platformun bütçesini sınıyor).
+  let eskiVideoMeta: typeof REHBER_ACILIS.VIDEO.meta;
+  beforeEach(() => {
+    eskiVideoMeta = REHBER_ACILIS.VIDEO.meta;
+    REHBER_ACILIS.VIDEO.meta = 'kapali';
+  });
+  afterEach(() => {
+    REHBER_ACILIS.VIDEO.meta = eskiVideoMeta;
+  });
   it('KRİTİK: VIDEO (Meta kapalı) + ham seçim iki platform → Google çocuk sürümüne ve provaya TAM tutar (500 ₺) gidiyor', async () => {
     await seedAjans(h);
     const r = await svc.olustur(AJANS, IDS.client);
