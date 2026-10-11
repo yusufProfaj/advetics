@@ -38,6 +38,7 @@ import {
   type RehberAlanlari,
   type RehberDurumu,
   type RehberEksikBaglami,
+  type RehberFormListesi,
   type RehberGuncelle,
   type RehberHazirligi,
   type RehberKaydi,
@@ -70,7 +71,7 @@ import { ReklamHazirlikService, type RehberPlatformOkuyucu } from '../hazirlik.s
 import { gorselOkuyucu, hesapErisimi, sayfaTokenOkuyucu } from '../meta-erisim';
 import { ReklamKuyrugu } from '../reklam-kuyrugu';
 import { ReklamTaslakService, type AlanDegisikligi } from '../taslak.service';
-import { provaDurumu } from '../yayin-baslat';
+import { formKimligiCoz, provaDurumu } from '../yayin-baslat';
 import { yayiniSonlandir, type TxRunner } from '../yayin-motoru';
 import { ReklamYayinService } from '../yayin.service';
 import { googleYazmaAcikMi, metaYazmaAcikMi } from '../yazma-kapisi';
@@ -88,7 +89,8 @@ import {
   metinOneriIstemi,
   metinOnerisiTemizle,
 } from './oneriler';
-import { metaAsgariOku, metaFormKosuluOku } from './platform-okuma';
+import { metaAsgariOku, metaFormKosuluOku, metaSayfaFormlariOku, seciliFormHali, whatsappHali, type MetaFormSatiri } from './platform-okuma';
+import type { MetaProvider } from '../../connections/providers/meta.provider';
 import { rehberYayinKapilari, type PlatformProvaHali } from './yayin-kapilari';
 
 const logger = new Logger('Rehber');
@@ -122,13 +124,28 @@ const SUTUNLAR = Prisma.sql`id::text, org_id::text, client_id::text, durum, suru
 interface OnKosulKaydi {
   zaman: number;
   metaHesapId: string | null;
-  sayfaId: string | null;
   googleHesapId: string | null;
   metaAsgari: string | null;
-  metaForm: boolean | null;
   googleDonusum: boolean | null;
 }
 const ONBELLEK_MS = 15 * 60_000;
+
+/**
+ * SAYFA BAŞINA ön koşullar (Lead Ads koşulları, WhatsApp hattı) ve yayında
+ * form listesi. Anahtar `clientId:sayfaId`. Burada bir süre TEK kayıt vardı
+ * ve hep İLK sayfa okunuyordu: ikinci sayfayı seçen kullanıcı, ilk sayfanın
+ * cevabıyla uyarılıyor ya da ilk sayfanın formlarını görüyordu. Okuma artık
+ * SEÇİLİ sayfaya yapılıyor (form listesi ucu ve prova öncesi tazeleme).
+ *
+ * Form listesi YALNIZ başarılı okumada yazılır: okunamayan liste "form yok"
+ * olarak önbelleğe girerse seçili form haksız yere "yayında değil" görünürdü.
+ */
+interface SayfaKaydi {
+  zaman: number;
+  formKosullari?: boolean | null;
+  whatsapp?: boolean | null;
+  formlar?: MetaFormSatiri[];
+}
 
 /** Bir rehberin eksik/karar bağlamı: yalnız veritabanı + önbellek. */
 interface Baglam extends RehberEksikBaglami {
@@ -155,6 +172,7 @@ interface Baglam extends RehberEksikBaglami {
 @Injectable()
 export class RehberService {
   private readonly onbellek = new Map<string, OnKosulKaydi>();
+  private readonly sayfaOnbellek = new Map<string, SayfaKaydi>();
   private readonly metaSurumu: string;
   private sonKelimeIstegi = 0;
 
@@ -192,13 +210,102 @@ export class RehberService {
     this.onbellek.set(clientId, {
       zaman: Date.now(),
       metaHesapId: h.hesaplar[0]?.id ?? null,
-      sayfaId: h.sayfalar[0]?.id ?? null,
       googleHesapId: h.googleHesaplari[0]?.id ?? null,
       metaAsgari: h.asgariGunluk.meta,
-      metaForm: h.onKosullar.metaFormKosullari,
       googleDonusum: h.onKosullar.googleDonusumEtkin,
     });
+    // Hazırlık İLK sayfayı okudu (panel onu önden seçiyor): o sayfanın kaydı.
+    const ilk = h.sayfalar[0]?.id;
+    if (ilk) this.sayfaYaz(clientId, ilk, { formKosullari: h.onKosullar.metaFormKosullari, whatsapp: h.onKosullar.metaWhatsapp });
     return h;
+  }
+
+  /**
+   * Seçili sayfanın Meta'daki YAYINDA anlık formları (Ç-2). Okunamazsa 503 +
+   * Meta'nın mesajı: "form yok" ile "okuyamadık" ayrı iş (CLAUDE.md).
+   * Başarılı okuma önbelleğe girer; seçili formun eksik kontrolü onu okur.
+   */
+  async formSablonlari(ctx: TenantContext, clientId: string, sayfaId: string): Promise<RehberFormListesi> {
+    erisim(ctx, clientId);
+    const tx = this.tx(ctx);
+    const [s] = await tx((t) =>
+      t.$queryRaw<Array<{ external_id: string }>>(Prisma.sql`
+        SELECT external_id FROM social_profiles WHERE id = ${sayfaId}::uuid AND client_id = ${clientId}::uuid AND profile_type = 'facebook_page'`),
+    );
+    if (!s) throw new BadRequestException('Facebook sayfası bu workspace’te değil.');
+    let okunan: { satirlar: MetaFormSatiri[]; kesildi: boolean };
+    try {
+      // Platform çağrısı transaction DIŞINDA: token kendi kısa transaction'ında okunur.
+      const token = await sayfaTokenOkuyucu(tx, this.crypto, clientId)(s.external_id);
+      okunan = await metaSayfaFormlariOku(this.metaSurumu, s.external_id, token);
+    } catch (e) {
+      const m = e instanceof Error ? e.message : String(e);
+      logger.warn(`Form listesi okunamadı (sayfa ${sayfaId}): ${m}`);
+      throw new ServiceUnavailableException(`Meta formları okunamadı: ${m}`);
+    }
+    // Advetics'te yayınlanmış formun adı Advetics'teki ad (lead senkronizasyonu
+    // ile aynı kural); liste yine Meta'nın: orada yayında olmayan form girmez.
+    const bizim = await tx((t) =>
+      t.$queryRaw<Array<{ external_form_id: string; name: string }>>(Prisma.sql`
+        SELECT DISTINCT ON (external_form_id) external_form_id, name FROM lead_forms
+         WHERE client_id = ${clientId}::uuid AND social_profile_id = ${sayfaId}::uuid AND external_form_id IS NOT NULL
+         ORDER BY external_form_id, created_at DESC`),
+    );
+    const adlar = new Map(bizim.map((b) => [b.external_form_id, b.name]));
+    const satirlar = okunan.satirlar.map((f) => ({ ...f, ad: adlar.get(f.id) ?? f.ad }));
+    this.sayfaYaz(clientId, sayfaId, { formlar: satirlar });
+    return {
+      satirlar,
+      toplam: satirlar.length,
+      kesildi: okunan.kesildi,
+      bosNeden: satirlar.length ? null : "Bu sayfada yayında anlık form yok. Formu Meta'da (Reklam Yöneticisi > Anlık formlar) oluşturup yayınla, sonra listeyi yenile.",
+    };
+  }
+
+  private sayfaYaz(clientId: string, sayfaId: string, d: Omit<SayfaKaydi, 'zaman'>): void {
+    const k = `${clientId}:${sayfaId}`;
+    const eski = this.sayfaOnbellek.get(k);
+    // Alanlar ayrı ayrı tazeleniyor ama zaman tek: bayat bir alanı yeni bir
+    // zamanla taze göstermemek için bayat kayıt baştan kuruluyor.
+    const taban = eski && Date.now() - eski.zaman < ONBELLEK_MS ? eski : { zaman: 0 };
+    this.sayfaOnbellek.set(k, { ...taban, ...d, zaman: Date.now() });
+  }
+
+  private sayfaOku(clientId: string, sayfaId: string | null | undefined): SayfaKaydi | null {
+    if (!sayfaId) return null;
+    const k = this.sayfaOnbellek.get(`${clientId}:${sayfaId}`);
+    return k && Date.now() - k.zaman < ONBELLEK_MS ? k : null;
+  }
+
+  /**
+   * PROVA ÖNCESİ TAZELEME: seçili sayfanın ön koşulları ve (Form amacında)
+   * form listesi TAZE okunur, sonra eksik listesi hesaplanır. Eksik listesi
+   * önbellekten çalışıyor (PUT her tuşta Meta'ya gitmesin) ve önbellek ilk
+   * sayfa için doluyordu; provaya giden hâl ise BİLİNEN hâl olmalı. Okuma
+   * düşerse değer `null` kalır ve uyarı olarak görünür (sessiz değil, log).
+   * Platform çağrıları transaction DIŞINDA.
+   */
+  private async sayfaTazele(ctx: TenantContext, clientId: string, a: RehberAlanlari): Promise<void> {
+    const sayfaId = a.sayfaId?.deger;
+    const amac = a.amac?.deger;
+    if (!sayfaId || !a.platformlar?.deger.meta || (amac !== 'FORM' && amac !== 'WHATSAPP')) return;
+    const okuyucu = this.platformOkuyucu(ctx);
+    const guvenli = async <T>(ad: string, fn: () => Promise<T>): Promise<T | null> => {
+      try {
+        return await fn();
+      } catch (e) {
+        logger.warn(`Prova öncesi ${ad} okunamadı (sayfa ${sayfaId}): ${(e as Error).message}`);
+        return null;
+      }
+    };
+    if (amac === 'WHATSAPP') {
+      this.sayfaYaz(clientId, sayfaId, { whatsapp: await guvenli('WhatsApp hattı', () => okuyucu.metaWhatsapp(sayfaId, clientId)) });
+      return;
+    }
+    this.sayfaYaz(clientId, sayfaId, { formKosullari: await guvenli('form koşulları', () => okuyucu.metaFormKosullari(sayfaId, clientId)) });
+    // Liste düşerse `formSablonlari` YAZMADAN fırlatır: eski başarılı liste
+    // süresi dolana kadar kalır, yoksa seçili form "bilinmiyor" uyarısı olur.
+    await guvenli('form listesi', () => this.formSablonlari(ctx, clientId, sayfaId));
   }
 
   private platformOkuyucu(ctx: TenantContext): RehberPlatformOkuyucu {
@@ -216,6 +323,22 @@ export class RehberService {
         if (!s) return null;
         const token = await sayfaTokenOkuyucu(tx, this.crypto, clientId)(s.external_id);
         return metaFormKosuluOku(this.metaSurumu, s.external_id, token);
+      },
+      metaWhatsapp: async (sayfaId, clientId) => {
+        const [s] = await tx((t) =>
+          t.$queryRaw<Array<{ external_id: string }>>(Prisma.sql`
+            SELECT external_id FROM social_profiles WHERE id = ${sayfaId}::uuid AND client_id = ${clientId}::uuid AND profile_type = 'facebook_page'`),
+        );
+        if (!s) return null;
+        const token = await sayfaTokenOkuyucu(tx, this.crypto, clientId)(s.external_id);
+        // VAR OLAN OKUYUCU (`MetaProvider.fetchPageWhatsapp`, bağlantılar
+        // ekranının teyit kutusu): ikinci bir okuyucu yazmak, biri alanı
+        // değiştirdiğinde öbürünün sessizce eski kalması demekti.
+        const p = this.saglayicilar.get('meta') as unknown as Partial<Pick<MetaProvider, 'fetchPageWhatsapp'>>;
+        if (typeof p.fetchPageWhatsapp !== 'function') return null;
+        const r = await p.fetchPageWhatsapp({ pageExternalId: s.external_id, pageAccessToken: token });
+        if (r.hata) logger.warn(`Sayfanın WhatsApp hattı okunamadı (${sayfaId}): ${r.hata}`);
+        return whatsappHali(r);
       },
       googleDonusumEtkin: async (adAccountId) => {
         const { fctx } = await this.googleBaglami(ctx, adAccountId, null);
@@ -449,6 +572,7 @@ export class RehberService {
     let s = await this.satir(ctx, id);
     if (s.durum !== 'taslak') throw new ConflictException('Bu rehber için prova yapılmaz.');
     const a = alanlariOku(s);
+    await this.sayfaTazele(ctx, s.client_id, a);
     const b = await this.baglam(ctx, s.client_id, a);
     const engeller = rehberEksikleri(a, b).filter((e) => e.seviye === 'engel');
     if (engeller.length) throw new BadRequestException({ message: 'Önce eksikleri tamamla.', eksikler: engeller });
@@ -862,7 +986,11 @@ export class RehberService {
         ? await t.$queryRaw<Array<{ id: string; kind: string; width: number | null; height: number | null }>>(Prisma.sql`
             SELECT id::text, kind, width, height FROM assets WHERE client_id = ${clientId}::uuid AND id = ANY(${medyaIdleri}::uuid[])`)
         : [];
-      return { m, hesaplar, ajans, olculer };
+      // ESKİ KAYIT: Dalga 2'den önce seçilen form `lead_forms.id` (UUID)
+      // taşıyor; Meta listesiyle karşılaştırmak için Meta kimliğine çevrilir.
+      const formDegeri = a.formSablonuId?.deger ?? null;
+      const formKimligi = formDegeri ? await formKimligiCoz(t, clientId, a.sayfaId?.deger ?? null, formDegeri) : null;
+      return { m, hesaplar, ajans, olculer, formKimligi };
     });
     const meta = r.hesaplar.find((h) => h.id === metaId && h.platform === 'meta') ?? null;
     const google = r.hesaplar.find((h) => h.id === googleId && h.platform === 'google') ?? null;
@@ -870,7 +998,7 @@ export class RehberService {
     const taze = o && Date.now() - o.zaman < ONBELLEK_MS ? o : null;
     // Önbellek yalnız OKUNAN hesap/sayfa seçiliyse geçerli.
     const metaAsgari = taze && meta && taze.metaHesapId === meta.id ? taze.metaAsgari : null;
-    const metaForm = taze && a.sayfaId && taze.sayfaId === a.sayfaId.deger ? taze.metaForm : null;
+    const sayfa = this.sayfaOku(clientId, a.sayfaId?.deger);
     const googleDonusum = taze && google && taze.googleHesapId === google.id ? taze.googleDonusum : null;
     const taban: OzelKategori[] = [];
     for (const k of r.m?.kategoriler ?? []) {
@@ -880,13 +1008,13 @@ export class RehberService {
       if ((OZEL_KATEGORILER as readonly string[]).includes(c)) taban.push(c as OzelKategori);
     }
     const onKosullar: RehberOnKosullari = {
-      metaFormKosullari: metaForm,
-      metaWhatsapp: null,
+      metaFormKosullari: sayfa?.formKosullari ?? null,
+      metaWhatsapp: sayfa?.whatsapp ?? null,
       metaSatisOlcumu: null,
       googleSatisOlcumu: null,
       googleDonusumEtkin: googleDonusum,
       googleLogoVeAd: !!r.m?.logo,
-      gizlilikAdresi: false,
+      seciliForm: seciliFormHali(a.formSablonuId?.deger ?? null, r.formKimligi, sayfa?.formlar ?? null),
     };
     const acik = acikPlatformlar(a, r.ajans);
     const paraBirimi = (acik.meta && meta?.currency) || google?.currency || meta?.currency || 'TRY';
@@ -1092,3 +1220,4 @@ function hal2sonuc(h: { tur: string; metin: string }): PlatformProvaSonucu {
   if (h.tur === 'bekliyor') return { tur: 'bekliyor', zaman: new Date().toISOString() };
   return { tur: 'yapilmadi', sebep: h.metin };
 }
+

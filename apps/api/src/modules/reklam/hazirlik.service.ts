@@ -39,6 +39,12 @@ export interface RehberPlatformOkuyucu {
   metaAsgariGunluk(adAccountId: string, clientId: string): Promise<string | null>;
   /** Sayfada Lead Ads koşulları kabul edilmiş mi (`leadgen_tos_accepted`). */
   metaFormKosullari(sayfaId: string, clientId: string): Promise<boolean | null>;
+  /**
+   * Sayfaya bağlı WhatsApp hattı var mı (`whatsapp_number`). `true` yalnız
+   * numara OKUNDUYSA; okunamayan/boş alan `null` (belgelenmemiş alan, bazı
+   * sayfalarda hiç gelmiyor: yokluğu "hat yok" kanıtı değil).
+   */
+  metaWhatsapp(sayfaId: string, clientId: string): Promise<boolean | null>;
   /** Google Ads'te etkin birincil dönüşüm işlemi var mı. */
   googleDonusumEtkin(adAccountId: string): Promise<boolean | null>;
 }
@@ -181,8 +187,8 @@ export class ReklamHazirlikService {
    * seçmedi, panel ilk hesabı/sayfayı önden seçiyor ve okuma ONA yapılıyor.
    * Birden çok hesap varsa öbürlerinin değeri farklı olabilir (devir notu).
    *
-   * Okunmayan ön koşullar (WhatsApp hattı, satış ölçümü) Dalga 2-3'ün;
-   * bugün `null` = "kontrol etmedik". Eksik listesi `null`ı UYARI gösteriyor
+   * Okunmayan ön koşul (satış ölçümü) Dalga 3'ün; bugün `null` = "kontrol
+   * etmedik". WhatsApp hattı Dalga 2'de okunuyor (Ç-5). Eksik listesi `null`ı UYARI gösteriyor
    * ve o amaçlar açılış tablosunda zaten kapalı.
    */
   async rehberOku(ctx: TenantContext, clientId: string, okuyucu: RehberPlatformOkuyucu | null): Promise<RehberHazirligi> {
@@ -206,27 +212,18 @@ export class ReklamHazirlikService {
         // Rehber servisiyle AYNI kural, tek yardımcıdan (BULGU-5).
         ajansYoneticisiMi(tx, ctx),
       ]);
-      /*
-       * FORM ŞABLONLARI: ilk sayfanın kayıtlı anlık formları (`lead_forms`,
-       * Potansiyel Müşteriler modülünün tablosu; servisine bağlanılmıyor,
-       * modül sınırı). Her formun YALNIZ son sürümü. Sayfa yoksa boş liste.
-       */
-      const sayfaId = temel.sayfalar[0]?.id ?? null;
-      const formlar = sayfaId
-        ? await tx.$queryRaw<Array<{ id: string; ad: string }>>(Prisma.sql`
-            SELECT id::text, name AS ad FROM lead_forms
-             WHERE client_id = ${clientId}::uuid AND social_profile_id = ${sayfaId}::uuid AND superseded_by_id IS NULL
-             ORDER BY updated_at DESC, id`)
-        : [];
-      return { googleHesaplari, kanallar, musteri, ajansYoneticisi, formlar };
+      // Form listesi burada okunmuyor: seçili sayfaya bağlı ve Meta'dan
+      // geliyor (`RehberService.formSablonlari`, Dalga 2 Ç-2).
+      return { googleHesaplari, kanallar, musteri, ajansYoneticisi };
     });
 
     const metaHesap = temel.hesaplar[0] ?? null;
     const sayfa = temel.sayfalar[0] ?? null;
     const googleHesap = ek.googleHesaplari[0] ?? null;
-    const [metaAsgari, metaForm, googleDonusum] = await Promise.all([
+    const [metaAsgari, metaForm, metaWhatsapp, googleDonusum] = await Promise.all([
       uc('Meta asgari bütçe', metaHesap && okuyucu ? () => okuyucu.metaAsgariGunluk(metaHesap.id, clientId) : null),
       uc('Meta form koşulları', sayfa && okuyucu ? () => okuyucu.metaFormKosullari(sayfa.id, clientId) : null),
+      uc('Meta WhatsApp hattı', sayfa && okuyucu ? () => okuyucu.metaWhatsapp(sayfa.id, clientId) : null),
       uc('Google dönüşüm işlemi', googleHesap && okuyucu ? () => okuyucu.googleDonusumEtkin(googleHesap.id) : null),
     ]);
     const yok: UcHal = null;
@@ -243,22 +240,21 @@ export class ReklamHazirlikService {
       youtubeKanallari: ek.kanallar.map((k) => ({ id: k.id, ad: k.name })),
       onKosullar: {
         metaFormKosullari: metaForm,
-        metaWhatsapp: yok,
+        metaWhatsapp,
         metaSatisOlcumu: yok,
         googleSatisOlcumu: yok,
         googleDonusumEtkin: googleDonusum,
         // İşletme adı her zaman var (yoksa workspace adı); belirleyici logo.
         googleLogoVeAd: !!ek.musteri?.logo,
-        // Marka Merkezi'nde aydınlatma/gizlilik adresi alanı YOK (devir notu,
-        // "Ajan 1'e"). Var saymak form reklamını yayında patlatırdı.
-        gizlilikAdresi: false,
+        // Hazırlıkta form seçili değil: seçili formun hâli rehberin kendi
+        // bağlamında (form listesi okununca) dolar. `null` = bilinmiyor.
+        seciliForm: null,
       },
       asgariGunluk: {
         meta: metaAsgari,
         googleTalepYaratma: googleHesap?.currency === 'TRY' ? GOOGLE_TY_ASGARI_TRY_MICROS.toString() : null,
       },
       iletisim: { telefon: ek.musteri?.telefon ?? null, siteAdresi: ek.musteri?.site ?? null },
-      formSablonlari: ek.formlar,
       ajansYoneticisi: ek.ajansYoneticisi,
     };
   }

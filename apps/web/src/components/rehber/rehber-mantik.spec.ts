@@ -14,7 +14,7 @@ import {
   bitisSecenegi,
   bugun,
   degisiklikBirlestir,
-  formSecimi,
+  formListesiHali,
   silme,
   videoListesiHali,
   gorunurAmaclar,
@@ -112,10 +112,10 @@ describe('öneri: DÖRT HÂL ayrı', () => {
     expect(videoListesiHali(r)).toEqual({ tur: 'geldi', deger: r });
   });
 
-  it('KRİTİK: form şablonu: null "okunamadı", boş dizi "yok" — ikisi ayrı', () => {
-    expect(formSecimi(null)).toEqual({ tur: 'okunamadi' });
-    expect(formSecimi([])).toEqual({ tur: 'yok' });
-    expect(formSecimi([{ id: 'f', ad: 'Form' }]).tur).toBe('liste');
+  it('KRİTİK: form listesi: boşsa sunucunun NEDENİYLE "bos", doluysa "geldi"; düşen çağrı ayrı hâl (oneriHatasi)', () => {
+    expect(formListesiHali({ satirlar: [], toplam: 0, kesildi: false, bosNeden: 'Yayında form yok' })).toEqual({ tur: 'bos', neden: 'Yayında form yok' });
+    const r = { satirlar: [{ id: '123', ad: 'Teklif', gizlilikAdresi: 'https://o.com/kvkk' }], toplam: 1, kesildi: false, bosNeden: null };
+    expect(formListesiHali(r)).toEqual({ tur: 'geldi', deger: r });
   });
 
   it('kelime satırları: seçililer önce ve hepsi, öneriden gelen tekrar Türkçe küçük harfle elenir', () => {

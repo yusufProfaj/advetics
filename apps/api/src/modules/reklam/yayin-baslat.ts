@@ -250,6 +250,14 @@ export async function taslakDerle(
     else retler.push({ kod: 'OZK-TABAN', mesaj: `Workspace kaydında tanınmayan reklam kategorisi: ${k}` });
   }
 
+  // FORM KİMLİĞİ (Dalga 2): burada bir süre `formId: null` sabit yazılıydı
+  // ve derleyici Form amacını HER ZAMAN `FORM-YOK` ile reddediyordu.
+  const formDegeri = alanlar.formSablonuId?.deger ?? null;
+  const formKimligi = formDegeri && sayfaId ? await tx((x) => formKimligiCoz(x, t.client_id, sayfaId, formDegeri)) : null;
+  if (formDegeri && !formKimligi) {
+    retler.push({ kod: 'FORM-KIMLIK', mesaj: 'Seçilen form bu sayfada Meta’ya yayınlanmış değil; formu yeniden seç.' });
+  }
+
   if (retler.length > 0 || !h || !sayfa) {
     return { tur: 'ret', retler: retler.length ? retler : [{ kod: 'SAYFA', mesaj: 'Sayfa bu workspace’te değil.' }] };
   }
@@ -327,7 +335,7 @@ export async function taslakDerle(
       };
     }),
     hedefAdres: alanlar.hedefAdres?.deger ?? null,
-    formId: null,
+    formId: formKimligi,
     urlEtiketleri: null,
   });
   if (derleme.tur === 'ret') return { tur: 'ret', retler: derleme.retler };
@@ -341,6 +349,37 @@ export async function taslakDerle(
     medya: [...new Set(kavramlar.flatMap((k) => [k.kapakVarlikId ?? k.varlikId, ...(k.setGorselleri ?? []).map((x) => x.varlikId)]))],
     videolar: [...new Set(kavramlar.filter((k) => k.kapakVarlikId).map((k) => k.varlikId))],
   };
+}
+
+/**
+ * Taslaktaki form değeri → Meta `lead_gen_form_id`. TEK KURAL: rehberin
+ * eksik kontrolü (`rehber.service.ts#baglam`) ve yayın/prova derlemesi bunu
+ * okuyor; ikinci bir çevirici ikisini ayrıştırırdı.
+ *
+ * - Sayısal değer (Dalga 2'den beri seçici bunu yazıyor) OLDUĞU GİBİ: Meta
+ *   form kimliği. Sayfaya ait ve yayında olduğu BURADA doğrulanamıyor (bu
+ *   dosya platform çağırmıyor); rehber provadan önce seçili sayfanın yayında
+ *   formlarını TAZE okuyup eksik listesinde `FORM-SAYFA` ile durduruyor.
+ * - UUID (eski kayıt, `lead_forms.id`): YALNIZ seçili sayfanın Advetics'te
+ *   yayınlanmış (`published`) formuysa onun Meta kimliği. Taslak formun Meta
+ *   kimliği yok; başka sayfanın formu reklamı yanlış sayfaya bağlardı.
+ *
+ * Çevrilemezse `null`: çağıran reddeder, derleyiciye boş kimlik GİTMEZ.
+ */
+export async function formKimligiCoz(
+  t: { $queryRaw<T = unknown>(q: Prisma.Sql): Promise<T> },
+  clientId: string,
+  sayfaId: string | null,
+  deger: string,
+): Promise<string | null> {
+  if (/^\d{1,30}$/.test(deger)) return deger;
+  if (!sayfaId || !/^[0-9a-f-]{36}$/i.test(deger)) return null;
+  const [r] = await t.$queryRaw<Array<{ external_form_id: string | null }>>(Prisma.sql`
+    SELECT external_form_id FROM lead_forms
+     WHERE id = ${deger}::uuid AND client_id = ${clientId}::uuid AND social_profile_id = ${sayfaId}::uuid
+       AND status = 'published' AND external_form_id IS NOT NULL`);
+  const k = r?.external_form_id ?? null;
+  return k && /^\d{1,30}$/.test(k) ? k : null;
 }
 
 /** Hesabın saat diliminde `YYYY-MM-DD` (adlardaki tarih). */

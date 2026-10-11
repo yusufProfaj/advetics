@@ -17,7 +17,7 @@
  */
 import { z } from 'zod';
 import { ALAN_KAYNAKLARI, type AlanKaynagi } from '../taslak';
-import { hedefKonumSchema } from '../taslak-alanlari';
+import { formKimligiSchema, hedefKonumSchema } from '../taslak-alanlari';
 import { OZEL_KATEGORILER } from '../meta/hedefleme';
 import { REHBER_AMAC_KODLARI } from './amaclar';
 
@@ -93,7 +93,8 @@ export const rehberAlanlariSchema = z
     hedefAdres: alan(z.string().max(2000).nullable()),
     /** E.164 (`+905551234567`). */
     telefon: alan(z.string().max(20).nullable()),
-    formSablonuId: alan(z.string().uuid().nullable()),
+    /** Meta form kimliği (sayısal) ya da eski kayıtlarda `lead_forms.id` (`formKimligiSchema`). */
+    formSablonuId: alan(formKimligiSchema.nullable()),
     medya: alan(z.array(rehberMedyasiSchema).max(10)),
     /** Google video reklamı YouTube'daki bir video ister (bağlı kanaldan seçilir). */
     youtubeVideo: alan(z.object({ videoId: z.string().max(20), baslik: z.string().max(200) }).nullable()),

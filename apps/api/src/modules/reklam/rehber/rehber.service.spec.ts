@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { REHBER_DURUMLARI, type RehberGuncelle, type TenantContext } from '@advetics/shared';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { REHBER_ACILIS, REHBER_DURUMLARI, type RehberGuncelle, type TenantContext } from '@advetics/shared';
 import { AJANS_UST_HESAP, createHarness, seedAjans, seedTenant, IDS, type Harness } from '../../../../test/pglite-harness';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { AppConfig } from '../../../config/configuration';
@@ -61,6 +61,14 @@ const sahteGoogle = {
   },
 };
 
+let whatsappCevabi: { number: string | null; hata: string | null };
+const sahteMeta = {
+  fetchPageWhatsapp: async (p: { pageExternalId: string }) => {
+    cagrilar.push(`wa:${p.pageExternalId}`);
+    return whatsappCevabi;
+  },
+};
+
 beforeAll(async () => {
   h = await createHarness();
   const prisma = { withTenant: <T>(_c: TenantContext, fn: (tx: unknown) => Promise<T>) => fn(h.db) } as unknown as PrismaService;
@@ -81,7 +89,7 @@ beforeAll(async () => {
     new ReklamYayinService(prisma, kuyruk, config),
     kuyruk,
     { getAccessToken: async () => (cagrilar.push('token'), 'TOKEN') } as never,
-    { get: () => sahteGoogle } as never,
+    { get: (p: string) => (p === 'meta' ? sahteMeta : sahteGoogle) } as never,
     { isEnabled: false } as never,
     { decrypt: () => 'T' } as never,
     config,
@@ -99,6 +107,10 @@ beforeEach(async () => {
   cagrilar = [];
   kuyrukIsleri = [];
   yz = null;
+  whatsappCevabi = { number: null, hata: null };
+  // Süreç içi önbellek servis örneğinde yaşıyor: test sızıntısı olmasın.
+  (svc as unknown as { onbellek: Map<string, unknown>; sayfaOnbellek: Map<string, unknown> }).onbellek.clear();
+  (svc as unknown as { sayfaOnbellek: Map<string, unknown> }).sayfaOnbellek.clear();
   // Yapay zekâ istemcisi testten testlere değişiyor (yok / sahte).
   (svc as unknown as { yz: unknown }).yz = null;
   await h.reset();
@@ -254,27 +266,12 @@ describe('prova ve yayın', () => {
 });
 
 describe('hazırlık, son prova, YouTube videoları', () => {
-  it('hazırlık: Google hesabı hesap numarasıyla, form şablonları son sürüm, havuz hesabı YOK', async () => {
-    const SAYFA = '55555555-0000-4000-8000-0000000000f1';
-    await h.q(
-      `INSERT INTO social_profiles (id, org_id, client_id, connection_id, profile_type, external_id, name, updated_at)
-       VALUES ($1, $2, $3, $4, 'facebook_page', 'p1', 'Sayfa', now())`,
-      [SAYFA, IDS.org, IDS.client, IDS.connection],
-    );
-    const F1 = '77777777-0000-4000-8000-0000000000f1';
-    const F2 = '77777777-0000-4000-8000-0000000000f2';
-    await h.q(
-      `INSERT INTO lead_forms (id, org_id, client_id, social_profile_id, name, prefill_questions, privacy_policy_url, root_id, version, updated_at)
-       VALUES ($1, $3, $4, $5, 'Eski', '["EMAIL"]', 'https://o.com/kvkk', $1, 1, now()),
-              ($2, $3, $4, $5, 'Yeni', '["EMAIL"]', 'https://o.com/kvkk', $1, 2, now())`,
-      [F1, F2, IDS.org, IDS.client, SAYFA],
-    );
-    await h.q("UPDATE lead_forms SET superseded_by_id = $1, status = 'superseded' WHERE id = $2", [F2, F1]);
+  it('hazırlık: Google hesabı hesap numarasıyla, havuz hesabı YOK; form listesi hazırlıkta değil, seçili form bilinmiyor', async () => {
     const hz = await svc.hazirlik(CTX, IDS.client);
     expect(hz.googleHesaplari).toEqual([expect.objectContaining({ id: GHESAP, musteriNo: '123-456-7890' })]);
-    expect(hz.formSablonlari).toEqual([{ id: F2, ad: 'Yeni' }]);
+    expect(hz).not.toHaveProperty('formSablonlari');
     expect(hz.asgariGunluk.googleTalepYaratma).toBe('250000000');
-    expect(hz.onKosullar.gizlilikAdresi).toBe(false);
+    expect(hz.onKosullar.seciliForm).toBeNull();
     expect(hz.ajansYoneticisi).toBe(true);
   });
 
@@ -412,5 +409,164 @@ describe('ajans yöneticisi kuralı (deneme açılışlarının görünürlüğ�
     // Üst hesabı olmayan bağlam: ajans bilinmiyor → kapalı.
     const ustsuz = await svc.oku({ ...CTX, managerAccountId: null } as TenantContext, r.id);
     expect(ustsuz.eksikler.map((e) => e.kod)).toContain('PLT-YOK');
+  });
+});
+
+/**
+ * DALGA 2 — Meta form listesi, seçili formun hâli ve WhatsApp hattı.
+ *
+ * Bu dosyanın fixture'larında ön koşullar hiç doluydu; üretimdeki iki sabit
+ * (`gizlilikAdresi: false`, `metaWhatsapp: null`) bu yüzden görülmedi. Buradaki
+ * testler değerleri servisin KENDİ bağlamından okuyor.
+ */
+describe('Meta form listesi ve sayfa ön koşulları (Dalga 2)', () => {
+  const S1 = '55555555-0000-4000-8000-0000000000b1';
+  const S2 = '55555555-0000-4000-8000-0000000000b2';
+  const MHESAP = '44444444-0000-4000-8000-0000000000b3';
+  let istekler: string[];
+  let formCevabi: () => Response;
+
+  beforeEach(async () => {
+    istekler = [];
+    formCevabi = () =>
+      new Response(
+        JSON.stringify({
+          data: [
+            { id: '111', name: 'Teklif Formu', status: 'ACTIVE', privacy_policy_url: 'https://ornek.com.tr/kvkk' },
+            { id: '222', name: 'Adressiz', status: 'ACTIVE' },
+            { id: '333', name: 'Arşiv', status: 'ARCHIVED', privacy_policy_url: 'https://ornek.com.tr/kvkk' },
+            { id: '444', name: 'Taslak', status: 'DRAFT', privacy_policy_url: 'https://ornek.com.tr/kvkk' },
+            { id: '555', name: 'Bizde', status: 'ACTIVE', privacy_policy_url: 'https://ornek.com.tr/kvkk' },
+          ],
+        }),
+        { status: 200 },
+      );
+    vi.stubGlobal('fetch', async (adres: string) => {
+      istekler.push(String(adres));
+      if (String(adres).includes('/leadgen_forms')) return formCevabi();
+      if (String(adres).includes('leadgen_tos_accepted')) return new Response(JSON.stringify({ leadgen_tos_accepted: true }), { status: 200 });
+      return new Response('{}', { status: 404 });
+    });
+    await h.q(
+      `INSERT INTO social_profiles (id, org_id, client_id, connection_id, profile_type, external_id, name, page_access_token_enc, updated_at)
+       VALUES ($1, $3, $4, $5, 'facebook_page', '9001', 'Birinci', '\\x00', now()),
+              ($2, $3, $4, $5, 'facebook_page', '9002', 'İkinci', '\\x00', now())`,
+      [S1, S2, IDS.org, IDS.client, IDS.connection],
+    );
+    await h.q(
+      `INSERT INTO ad_accounts (id, org_id, client_id, connection_id, platform, external_id, name, currency, timezone, updated_at)
+       VALUES ($1, $2, $3, $4, 'meta', 'act_77', 'M', 'TRY', 'Europe/Istanbul', now())`,
+      [MHESAP, IDS.org, IDS.client, IDS.connection],
+    );
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  /** Rehberin bağlamı (eksik listesinin girdisi) — servisin kendi yolu, platform çağrısı yok. */
+  const baglam = (r: { alanlar: unknown }) =>
+    (svc as unknown as { baglam: (c: TenantContext, id: string, a: unknown) => Promise<{ onKosullar: Record<string, unknown> }> }).baglam(CTX, IDS.client, r.alanlar);
+
+  async function formRehberi(form: string, sayfa = S2) {
+    const r = await svc.olustur(CTX, IDS.client);
+    return svc.guncelle(CTX, r.id, {
+      surum: r.surum,
+      degisiklikler: [g('amac', 'FORM'), g('platformlar', { meta: true, google: false }), g('metaHesabiId', MHESAP, 'workspace_profili'), g('sayfaId', sayfa, 'workspace_profili'), g('formSablonuId', form)],
+    });
+  }
+
+  it('KRİTİK: liste SEÇİLİ sayfanın Meta formlarından, yalnız ACTIVE; Advetics adı öncelikli; sayfa token’ıyla', async () => {
+    await h.q(
+      `INSERT INTO lead_forms (id, org_id, client_id, social_profile_id, name, prefill_questions, privacy_policy_url, root_id, status, external_form_id, published_at, updated_at)
+       VALUES ($1, $2, $3, $4, 'Panelde kurulan', '["EMAIL"]', 'https://o.com/kvkk', $1, 'published', '555', now(), now())`,
+      ['77777777-0000-4000-8000-0000000000c5', IDS.org, IDS.client, S2],
+    );
+    const l = await svc.formSablonlari(CTX, IDS.client, S2);
+    expect(istekler).toHaveLength(1);
+    expect(istekler[0]).toContain('/9002/leadgen_forms');
+    expect(istekler[0]).toContain('privacy_policy_url');
+    expect(l).toEqual({
+      satirlar: [
+        { id: '111', ad: 'Teklif Formu', gizlilikAdresi: 'https://ornek.com.tr/kvkk' },
+        { id: '222', ad: 'Adressiz', gizlilikAdresi: null },
+        { id: '555', ad: 'Panelde kurulan', gizlilikAdresi: 'https://ornek.com.tr/kvkk' },
+      ],
+      toplam: 3,
+      kesildi: false,
+      bosNeden: null,
+    });
+  });
+
+  it('boş liste NEDENİYLE; okunamayan liste 503 + Meta’nın mesajı (boş listeye çevrilmiyor)', async () => {
+    formCevabi = () => new Response(JSON.stringify({ data: [{ id: '9', name: 'x', status: 'ARCHIVED' }] }), { status: 200 });
+    expect(await svc.formSablonlari(CTX, IDS.client, S1)).toMatchObject({ satirlar: [], toplam: 0, bosNeden: expect.stringMatching(/yayında anlık form yok/) });
+    formCevabi = () => new Response(JSON.stringify({ error: { message: '(#200) Requires pages_manage_ads', code: 200 } }), { status: 403 });
+    await expect(svc.formSablonlari(CTX, IDS.client, S1)).rejects.toMatchObject({ status: 503 });
+  });
+
+  it('başka workspace’in sayfası platforma gitmeden reddedilir', async () => {
+    await expect(svc.formSablonlari(CTX, IDS.client, '55555555-0000-4000-8000-0000000000ff')).rejects.toMatchObject({ status: 400 });
+    expect(istekler).toEqual([]);
+  });
+
+  it('KRİTİK: seçili form — liste okunmadan BİLİNMİYOR; adresli form temiz; adressiz form adıyla; listede olmayan "yayında değil"', async () => {
+    const r = await formRehberi('111');
+    expect((await baglam(r)).onKosullar.seciliForm).toBeNull();
+    await svc.formSablonlari(CTX, IDS.client, S2);
+    // Üretimde burada sabit `gizlilikAdresi: false` vardı ve Form amacı HER ZAMAN engeldeydi.
+    expect((await baglam(r)).onKosullar.seciliForm).toEqual({ ad: 'Teklif Formu', sayfadaYayinda: true, gizlilikAdresi: true });
+    expect((await baglam(await formRehberi('222'))).onKosullar.seciliForm).toEqual({ ad: 'Adressiz', sayfadaYayinda: true, gizlilikAdresi: false });
+    expect((await baglam(await formRehberi('333'))).onKosullar.seciliForm).toEqual({ ad: null, sayfadaYayinda: false, gizlilikAdresi: false });
+    // Liste S2'nin: S1 seçili rehberde aynı form bilinmiyor (başka sayfanın listesi kullanılmaz).
+    expect((await baglam(await formRehberi('111', S1))).onKosullar.seciliForm).toBeNull();
+  });
+
+  it('KRİTİK: eksik listesi (FORM açılışı geçici açık) — adresli formda FORM- engeli YOK', async () => {
+    const eski = REHBER_ACILIS.FORM.meta;
+    (REHBER_ACILIS.FORM as Record<string, string>).meta = 'deneme';
+    try {
+      await svc.formSablonlari(CTX, IDS.client, S2);
+      const iyi = await svc.oku(CTX, (await formRehberi('111')).id);
+      expect(iyi.eksikler.filter((e) => e.kod.startsWith('FORM-'))).toEqual([]);
+      const kotu = await svc.oku(CTX, (await formRehberi('222')).id);
+      expect(kotu.eksikler.find((e) => e.kod === 'FORM-GIZLILIK')?.metin).toContain('"Adressiz"');
+    } finally {
+      (REHBER_ACILIS.FORM as Record<string, string>).meta = eski;
+    }
+  });
+
+  it('eski kayıt: UUID form yalnız SEÇİLİ sayfada YAYINLANMIŞSA Meta kimliğine çevrilir', async () => {
+    const F_YAYIN = '77777777-0000-4000-8000-0000000000d1';
+    const F_TASLAK = '77777777-0000-4000-8000-0000000000d2';
+    await h.q(
+      `INSERT INTO lead_forms (id, org_id, client_id, social_profile_id, name, prefill_questions, privacy_policy_url, root_id, status, external_form_id, published_at, updated_at)
+       VALUES ($1, $3, $4, $5, 'Yayında', '["EMAIL"]', 'https://o.com/kvkk', $1, 'published', '111', now(), now()),
+              ($2, $3, $4, $5, 'Taslak', '["EMAIL"]', 'https://o.com/kvkk', $2, 'draft', NULL, NULL, now())`,
+      [F_YAYIN, F_TASLAK, IDS.org, IDS.client, S2],
+    );
+    await svc.formSablonlari(CTX, IDS.client, S2);
+    expect((await baglam(await formRehberi(F_YAYIN))).onKosullar.seciliForm).toMatchObject({ sayfadaYayinda: true, gizlilikAdresi: true });
+    expect((await baglam(await formRehberi(F_TASLAK))).onKosullar.seciliForm).toMatchObject({ sayfadaYayinda: false });
+  });
+
+  it('KRİTİK: WhatsApp hattı — numara okununca true; boş/okunamayan NULL (asla false); SEÇİLİ sayfa', async () => {
+    whatsappCevabi = { number: '+90 555 000 00 00', hata: null };
+    const hz = await svc.hazirlik(CTX, IDS.client);
+    // Hazırlık ilk sayfayı okur (ad sırasıyla "Birinci").
+    expect(hz.onKosullar.metaWhatsapp).toBe(true);
+    expect(cagrilar).toContain('wa:9001');
+    whatsappCevabi = { number: null, hata: null };
+    const r = await svc.olustur(CTX, IDS.client);
+    const k = await svc.guncelle(CTX, r.id, { surum: r.surum, degisiklikler: [g('amac', 'WHATSAPP'), g('platformlar', { meta: true, google: false }), g('sayfaId', S2, 'workspace_profili')] });
+    // İkinci sayfa okunmadı: ilk sayfanın `true`su ona TAŞINMIYOR.
+    expect((await baglam(k)).onKosullar.metaWhatsapp).toBeNull();
+    // Prova seçili sayfayı tazeler (engeller yüzünden 400 dönse de okuma yapılır).
+    await svc.prova(CTX, r.id).catch(() => undefined);
+    expect(cagrilar).toContain('wa:9002');
+    expect((await baglam(k)).onKosullar.metaWhatsapp).toBeNull();
+    whatsappCevabi = { number: '+905550000000', hata: null };
+    await svc.prova(CTX, r.id).catch(() => undefined);
+    expect((await baglam(k)).onKosullar.metaWhatsapp).toBe(true);
+    whatsappCevabi = { number: null, hata: '(#100) bir hata' };
+    await svc.prova(CTX, r.id).catch(() => undefined);
+    expect((await baglam(k)).onKosullar.metaWhatsapp).toBeNull();
   });
 });

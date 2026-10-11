@@ -6,7 +6,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { taslakKanonikIcerik, type TaslakAlanlari, type TenantContext } from '@advetics/shared';
 import { createHarness, seedTenant, IDS, type Harness } from '../../../test/pglite-harness';
 import { SahteMeta } from '../../../test/reklam-sahte-meta';
-import { yayinBaslat, zamanDamgasi } from './yayin-baslat';
+import { taslakDerle, yayinBaslat, zamanDamgasi } from './yayin-baslat';
 import { reklamIsiniIsle, yayinIsiniIsle, type IsleyiciBagimliliklari } from './yayin-isleyici';
 import { MetaBelirsizHata, MetaKesinHata } from './yayin-motoru';
 import { DERLEYICI_SURUMU, derleMeta, provaGovdeleri } from '@advetics/shared';
@@ -311,5 +311,56 @@ describe('Meta provası', () => {
     expect(JSON.stringify(p)).toContain('HASH');
     expect(JSON.stringify(p)).not.toMatch(/\{(kampanya|reklam_seti|kreatif|medya)/);
     for (const g of p) expect(g.alanlar.execution_options).toContain('validate_only');
+  });
+});
+
+/**
+ * FORM KİMLİĞİ (Dalga 2). `taslakDerle` bir süre `formId: null` sabit
+ * geçiyordu: Form amacı derleyicide HER ZAMAN FORM-YOK ile düşüyordu ve bunu
+ * gören tek test yoktu (bütün fixture'lar SITE).
+ */
+describe('form kimliği taslaktan derleyiciye', () => {
+  const FORM: TaslakAlanlari = { ...DOLU, niyet: k('FORM' as const), hedefAdres: k(null) };
+  const derle = (a: TaslakAlanlari) => taslakDerle(tx, { id: 'x', org_id: IDS.org, client_id: IDS.client }, a, 'kimlik', { apiSurumu: 'v25.0', simdi: SIMDI });
+  const formKimlikleri = (d: Awaited<ReturnType<typeof derle>>) =>
+    d.tur === 'govde' ? [...JSON.stringify(d.derleme.govdeler).matchAll(/lead_gen_form_id\\?":\\?"(\d+)/g)].map((m) => m[1]) : [];
+  const leadForm = async (id: string, durum: 'published' | 'draft', kimlik: string | null, sayfa = SAYFA) =>
+    h.q(
+      `INSERT INTO lead_forms (id, org_id, client_id, social_profile_id, name, prefill_questions, privacy_policy_url, root_id, status, external_form_id, published_at, updated_at)
+       VALUES ($1, $2, $3, $4, 'F', '["EMAIL"]', 'https://o.com/kvkk', $1, $5, $6, $7, now())`,
+      [id, IDS.org, IDS.client, sayfa, durum, kimlik, durum === 'published' ? new Date() : null],
+    );
+
+  it('KRİTİK: Meta form kimliği derleyiciye ulaşır (lead_gen_form_id), FORM-YOK düşmez', async () => {
+    const d = await derle({ ...FORM, formSablonuId: k('987654321') });
+    if (d.tur === 'ret') throw new Error(d.retler.map((r) => r.kod).join(','));
+    expect(formKimlikleri(d)).toEqual(['987654321']);
+  });
+
+  it('form seçilmediyse derleyici FORM-YOK der (sessiz boş kimlik yok)', async () => {
+    const d = await derle(FORM);
+    expect(d.tur === 'ret' ? d.retler.map((r) => r.kod) : []).toContain('FORM-YOK');
+  });
+
+  it('eski kayıt: yayınlanmış Advetics formunun UUID’si Meta kimliğine çevrilir; taslak ya da başka sayfanın formu FORM-KIMLIK', async () => {
+    const YAYIN = '77777777-0000-4000-8000-0000000000e1';
+    const TASLAK = '77777777-0000-4000-8000-0000000000e2';
+    const BASKA = '77777777-0000-4000-8000-0000000000e3';
+    const S2 = '55555555-0000-4000-8000-000000000002';
+    await h.q(
+      `INSERT INTO social_profiles (id, org_id, client_id, connection_id, profile_type, external_id, name, updated_at)
+       VALUES ($1, $2, $3, $4, 'facebook_page', '222', 'Başka', now())`,
+      [S2, IDS.org, IDS.client, IDS.connection],
+    );
+    await leadForm(YAYIN, 'published', '5550001');
+    await leadForm(TASLAK, 'draft', null);
+    await leadForm(BASKA, 'published', '5550003', S2);
+    const d = await derle({ ...FORM, formSablonuId: k(YAYIN) });
+    if (d.tur === 'ret') throw new Error(d.retler.map((r) => r.kod).join(','));
+    expect(formKimlikleri(d)).toEqual(['5550001']);
+    for (const id of [TASLAK, BASKA]) {
+      const r = await derle({ ...FORM, formSablonuId: k(id) });
+      expect(r.tur === 'ret' ? r.retler.map((x) => x.kod) : []).toContain('FORM-KIMLIK');
+    }
   });
 });

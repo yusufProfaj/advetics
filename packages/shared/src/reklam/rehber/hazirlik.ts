@@ -58,8 +58,49 @@ export interface RehberOnKosullari {
   googleDonusumEtkin: UcHal;
   /** Marka Merkezi'nde logo ve işletme adı (Talep Yaratma zorunlu tutuyor). */
   googleLogoVeAd: boolean;
-  /** Form reklamı için KVKK/gizlilik adresi Marka Merkezi'nde. */
+  /**
+   * SEÇİLİ formun Meta'daki hâli (FORM amacı, Ç-3). `null` = bilinmiyor:
+   * form seçilmedi ya da seçili sayfanın formları henüz okunmadı/okunamadı.
+   *
+   * Gizlilik adresi FORMUN KENDİSİNDE: Meta anlık formu gizlilik politikası
+   * bağlantısı olmadan kabul etmiyor, yani var olan bir formun adresi
+   * Meta'da duruyor. Burada bir süre "Marka Merkezi'nde gizlilik adresi"
+   * aranıyordu ve o alan Marka Merkezi'nde hiç yoktu: değer iki yerde sabit
+   * `false` yazılıydı ve Form amacı HER ZAMAN engelde kalıyordu.
+   */
+  seciliForm: SeciliFormHali | null;
+}
+
+export interface SeciliFormHali {
+  /** Meta'daki adı; form sayfanın yayında listesinde yoksa `null`. */
+  ad: string | null;
+  /** Form SEÇİLİ sayfanın yayında (ACTIVE) formlarından biri mi. */
+  sayfadaYayinda: boolean;
+  /** Formun Meta'da gizlilik politikası adresi var mı. */
   gizlilikAdresi: boolean;
+}
+
+/**
+ * Seçili sayfanın Meta'daki YAYINDA anlık formları
+ * (`GET /reklam/rehber/form-sablonlari?clientId=&sayfaId=`, Ç-2).
+ *
+ * Kaynak Meta (`/{sayfa}/leadgen_forms`), Advetics'in `lead_forms` tablosu
+ * DEĞİL: formların çoğu Reklam Yöneticisi'nde kuruluyor ve bizde satırı
+ * yok; eski liste onları hiç göstermiyordu. Advetics'te yayınlanmış formlar
+ * aynı Meta kimliğiyle zaten listede; adları Advetics'teki adla yazılır.
+ * Taslak, arşivlenmiş ve silinmiş formlar listede YOK: seçilseler reklam
+ * Meta'da reddedilirdi.
+ *
+ * DÖRT HÂL: okunamadı = uç hata döner (platformun mesajıyla); boş = `satirlar`
+ * boş ve `bosNeden` dolu; liste = `satirlar`. "Okunuyor" panelin kendi hâli.
+ */
+export interface RehberFormListesi {
+  satirlar: Array<{ id: string; ad: string; gizlilikAdresi: string | null }>;
+  /** Yayında form sayısı (dönen satır sayısı; kesme yok). */
+  toplam: number;
+  /** Meta listesi sayfa sınırında kesildiyse: ekranda "ilk N form" yazılır. */
+  kesildi: boolean;
+  bosNeden: string | null;
 }
 
 export interface RehberHazirligi extends ReklamHazirligi {
@@ -79,12 +120,11 @@ export interface RehberHazirligi extends ReklamHazirligi {
   };
   /** Marka Merkezi'ndeki telefon ve site adresi (adım 4 önden dolar). */
   iletisim: { telefon: string | null; siteAdresi: string | null };
-  /**
-   * Seçili sayfanın kayıtlı anlık form şablonları (FORM amacı). Boş liste ile
-   * okunamayan liste ayrı: `null` = okunamadı. Ajan 3 bulgusu: liste olmadan
-   * FORM amacı panelden tamamlanamıyordu.
+  /*
+   * Form listesi burada DEĞİL (Dalga 2): liste SEÇİLİ sayfaya bağlı ve
+   * Meta'dan okunuyor; hazırlık ilk sayfanın Advetics kayıtlarını okuyordu ve
+   * Meta'da kurulan form listeye hiç düşmüyordu. Ayrı uç: `RehberFormListesi`.
    */
-  formSablonlari: Array<{ id: string; ad: string }> | null;
   /** Kullanıcı ajans yöneticisi mi: `deneme` açılışlı amaçları yalnız o görür. */
   ajansYoneticisi: boolean;
 }

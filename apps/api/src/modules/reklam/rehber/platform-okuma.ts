@@ -1,4 +1,4 @@
-import { paraOndaligi } from '@advetics/shared';
+import { paraOndaligi, type SeciliFormHali } from '@advetics/shared';
 import { hataSiniflandir, metaSurumuDogrula } from '../meta-graf';
 
 /**
@@ -78,4 +78,105 @@ export function formKosuluCoz(govde: unknown): boolean | null {
 export async function metaFormKosuluOku(apiSurumu: string, sayfaPlatformId: string, sayfaTokeni: string, fetchFn?: typeof fetch): Promise<boolean | null> {
   if (!/^\d+$/.test(sayfaPlatformId)) throw new Error('Sayfa kimliği geçersiz');
   return formKosuluCoz(await grafGet(apiSurumu, `${sayfaPlatformId}?fields=leadgen_tos_accepted`, sayfaTokeni, fetchFn));
+}
+
+/** Seçili sayfanın yayında bir anlık formu (rehberin form seçicisi). */
+export interface MetaFormSatiri {
+  id: string;
+  ad: string;
+  gizlilikAdresi: string | null;
+}
+
+/**
+ * Form listesi en çok bu kadar Meta sayfası gezilir (100'er form). Sınıra
+ * takılırsa `kesildi`: kullanıcıya "ilk N form" yazılır, sessizce kesilmez.
+ */
+export const FORM_SAYFA_SINIRI = 5;
+
+/**
+ * `GET /{sayfa}/leadgen_forms` sayfası → YAYINDA formlar.
+ *
+ * YALNIZ `ACTIVE`: Meta taslak (`DRAFT`), arşivlenmiş ve silinmiş formu da
+ * listeliyor. Lead senkronizasyonu arşivlenmiş formu BİLEREK tarıyor
+ * (geçmiş kayıtları için); reklam için seçmek ise Meta'nın reddedeceği bir
+ * kurulum demek. Durumu gelmeyen form da DIŞARIDA: bilinmeyeni "yayında"
+ * saymak reddi yayına erteler.
+ *
+ * GİZLİLİK ADRESİ: alan `privacy_policy_url` (LeadgenForm düğümü; oluşturma
+ * parametresi `privacy_policy{url}` ama okunan alan bu). ÖLÇÜLMEDİ, Graph
+ * belgesinden — canlı turda bakılacak. Alan reddedilirse liste HATAYLA
+ * düşer (panel Meta'nın mesajını gösterir), sessizce boş gelmez.
+ */
+export function metaFormlariCoz(govde: unknown): { satirlar: MetaFormSatiri[]; sonraki: string | null } {
+  const g = govde as { data?: unknown[]; paging?: { cursors?: { after?: unknown }; next?: unknown } } | null;
+  const satirlar: MetaFormSatiri[] = [];
+  for (const ham of Array.isArray(g?.data) ? g!.data : []) {
+    const f = ham as { id?: unknown; name?: unknown; status?: unknown; privacy_policy_url?: unknown };
+    if (typeof f.id !== 'string' || !/^\d+$/.test(f.id)) continue;
+    if (f.status !== 'ACTIVE') continue;
+    const ad = typeof f.name === 'string' && f.name.trim() ? f.name.trim() : `Form ${f.id}`;
+    const adres = typeof f.privacy_policy_url === 'string' && /^https?:\/\/\S+$/i.test(f.privacy_policy_url.trim()) ? f.privacy_policy_url.trim() : null;
+    satirlar.push({ id: f.id, ad, gizlilikAdresi: adres });
+  }
+  // `next` yoksa son sayfa; imleç `next` olmadan da gelebiliyor ve onu
+  // izlemek boş bir sayfa için fazladan çağrı olurdu.
+  const imlec = g?.paging?.cursors?.after;
+  const sonraki = typeof g?.paging?.next === 'string' && typeof imlec === 'string' && imlec ? imlec : null;
+  return { satirlar, sonraki };
+}
+
+/**
+ * Sayfanın yayında anlık formları. SAYFA TOKEN'I ZORUNLU: `leadgen_forms`
+ * sayfanın altında yaşıyor; kullanıcı token'ıyla "(#200)" dönüyor
+ * (`MetaProvider.listPageLeadForms` ile aynı ders).
+ *
+ * `MetaProvider.listPageLeadForms` kullanılmıyor: o yalnız `id,name,status`
+ * istiyor ve lead senkronizasyonunu besliyor. Ona ölçülmemiş bir alan
+ * eklemek, alan reddedildiğinde BÜTÜN potansiyel müşteri taramasını
+ * düşürürdü; burada düşerse yalnız form seçici "okunamadı" der.
+ */
+export async function metaSayfaFormlariOku(
+  apiSurumu: string,
+  sayfaPlatformId: string,
+  sayfaTokeni: string,
+  fetchFn?: typeof fetch,
+): Promise<{ satirlar: MetaFormSatiri[]; kesildi: boolean }> {
+  if (!/^\d+$/.test(sayfaPlatformId)) throw new Error('Sayfa kimliği geçersiz');
+  const satirlar: MetaFormSatiri[] = [];
+  let imlec: string | null = null;
+  for (let i = 0; i < FORM_SAYFA_SINIRI; i++) {
+    const yol = `${sayfaPlatformId}/leadgen_forms?fields=id,name,status,privacy_policy_url&limit=100${imlec ? `&after=${encodeURIComponent(imlec)}` : ''}`;
+    const s = metaFormlariCoz(await grafGet(apiSurumu, yol, sayfaTokeni, fetchFn));
+    satirlar.push(...s.satirlar);
+    imlec = s.sonraki;
+    if (!imlec) return { satirlar, kesildi: false };
+  }
+  return { satirlar, kesildi: true };
+}
+
+/**
+ * `fetchPageWhatsapp` → üç hâl. `true` yalnız numara OKUNDUYSA. Boş alan da
+ * `null`: `whatsapp_number` belgelenmemiş bir alan ve Meta onu bazı
+ * sayfalarda hiç sunmuyor; yokluğunu "hat yok" saymak çalışan bir WhatsApp
+ * kurulumunu engellerdi (CLAUDE.md "GÖRÜNMEYEN SATIRI YOK SAYMAK"). Bu yüzden
+ * `false` hiç üretilmiyor; hattın gerçekten yokluğunu Meta'nın provası söyler.
+ */
+export function whatsappHali(r: { number: string | null; hata: string | null }): boolean | null {
+  if (r.number && r.number.trim()) return true;
+  return null;
+}
+
+/**
+ * Seçili formun hâli. `liste` = seçili sayfanın son BAŞARILI okunan yayında
+ * formları; `null` = okunmadı → `null` (bilinmiyor, uyarı). Form seçilmemişse
+ * de `null`: FORM-YOK zaten söylüyor.
+ *
+ * `kimlik` Meta form kimliği; eski bir UUID çevrilemediyse (`null`) form bu
+ * sayfada yayında sayılmaz: Advetics'te yayınlanmamış ya da başka sayfanın.
+ */
+export function seciliFormHali(deger: string | null, kimlik: string | null, liste: readonly MetaFormSatiri[] | null): SeciliFormHali | null {
+  if (!deger || !liste) return null;
+  const f = kimlik ? liste.find((x) => x.id === kimlik) : undefined;
+  if (!f) return { ad: null, sayfadaYayinda: false, gizlilikAdresi: false };
+  return { ad: f.ad, sayfadaYayinda: true, gizlilikAdresi: f.gizlilikAdresi !== null };
 }
