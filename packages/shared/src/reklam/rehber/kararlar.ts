@@ -56,6 +56,10 @@ export function kararTablosu(
   const t = REHBER_AMACLARI[amac];
   const g = acik.google && t.google.kurgu !== null ? t.google : null;
   const ty = g?.kurgu === 'TALEP_YARATMA_VIDEO' || g?.kurgu === 'TALEP_YARATMA_GORSEL';
+  // Dalga 3: Maks. Performans ve Talep Yaratma görselinin SÖZLERİ. Her biri
+  // derlenmiş gövdeyle `derle-google.spec.ts`te eşleniyor.
+  const pmax = g?.kurgu === 'MAKS_PERFORMANS';
+  const tyGorsel = g?.kurgu === 'TALEP_YARATMA_GORSEL';
   const m = acik.meta;
   const hucre = (deger: string, not?: string): KararHucresi => (not ? { deger, not } : { deger });
   return [
@@ -65,9 +69,13 @@ export function kararTablosu(
       konu: 'Teklif',
       meta: m ? hucre('En çok sonuç', 'Sonuç başına ücret hedefi yok') : null,
       google: g
-        ? googleTeklif === 'MAKS_DONUSUM'
-          ? hucre('En çok dönüşüm', 'Dönüşüm ölçümü etkin')
-          : hucre('En çok tıklama', 'Dönüşüm ölçümü kurulunca değiştirmeyi öneririz')
+        ? pmax
+          ? hucre('En çok dönüşüm', 'Satın alma ölçümü etkin; Google hesaptaki bütün birincil dönüşümlerden öğrenir')
+          : googleTeklif === 'MAKS_DONUSUM'
+            ? hucre('En çok dönüşüm', 'Dönüşüm ölçümü etkin')
+            : ty
+              ? hucre('En çok tıklama', 'Talep Yaratma\'da dönüşüm teklifi kurulmuyor')
+              : hucre('En çok tıklama', 'Dönüşüm ölçümü kurulunca değiştirmeyi öneririz')
         : null,
     },
     {
@@ -78,7 +86,15 @@ export function kararTablosu(
           ? hucre(`Instagram ve Facebook, ${yerlesimMetni}`, `${kapaliNotu}Çok reklamverenli birim kapalı`)
           : hucre(`Yalnız Facebook, ${yerlesimMetni}`, `Instagram hesabı seçilmedi, Instagram'da gösterilmez · ${kapaliNotu}Çok reklamverenli birim kapalı`)
         : null,
-      google: g ? (ty ? hucre(g.nerede) : hucre('Yalnız Google Arama', 'Arama ortakları ve Görüntülü Reklam Ağı kapalı')) : null,
+      google: g
+        ? pmax
+          ? hucre('Bütün Google: Arama, YouTube, Gmail, Keşfet, Haritalar, Görüntülü Reklam Ağı', 'Yeri Google seçer; Maks. Performans bunu kapatmaya izin vermiyor')
+          : tyGorsel
+            ? hucre('YouTube akışı ve Shorts, Gmail, Keşfet', 'YouTube video arası, Haritalar ve Görüntülü Reklam Ağı kapalı')
+            : ty
+              ? hucre(g.nerede)
+              : hucre('Yalnız Google Arama', 'Arama ortakları ve Görüntülü Reklam Ağı kapalı')
+        : null,
     },
     {
       kod: 'KONUM',
@@ -96,9 +112,13 @@ export function kararTablosu(
       // Talep Yaratma'da otomatik metni kapatan alan API'de DOĞRULANMADI
       // (Ajan 2 bulgusu); doğrulanmamış bir "kapalı" sözü vermiyoruz.
       google: g
-        ? ty
-          ? hucre('Google başlık ve açıklamaları farklı sıralarda dener', 'Talep Yaratma bunu kapatmaya izin vermiyor olabilir')
-          : hucre('AI Max ve otomatik metin kapalı', 'Yazdığın metin değişmeden çıkar')
+        ? pmax
+          ? hucre('Otomatik metin ve sayfa genişletme kapalı', 'Reklam yalnız verdiğin adrese gider · Sitendeki görseller çekilmez · Video yüklemezsen Google görsellerinden video üretebilir')
+          : tyGorsel
+            ? hucre('Görsellerinden video ve yeni tasarım üretme kapalı', 'Google başlık ve açıklamaları farklı sıralarda dener')
+            : ty
+              ? hucre('Google başlık ve açıklamaları farklı sıralarda dener', 'Talep Yaratma bunu kapatmaya izin vermiyor olabilir')
+              : hucre('AI Max ve otomatik metin kapalı', 'Yazdığın metin değişmeden çıkar')
         : null,
     },
     { kod: 'SAYFA', konu: 'Sayfa', meta: m ? hucre('Seçtiğin Facebook sayfası, açıkça') : null, google: null },

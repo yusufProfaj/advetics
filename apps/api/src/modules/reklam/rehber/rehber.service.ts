@@ -16,6 +16,8 @@ import {
   PROVA_TAZELIK_MS,
   REHBER_AMACLARI,
   acikPlatformlar,
+  googleGorselKurgusuMu,
+  googleTeklifi,
   kanonikJson,
   kararTablosu,
   oranBul,
@@ -30,6 +32,7 @@ import {
   uyumDenetle,
   type AnahtarKelimeOnerisi,
   type GoogleDerlemeGirdisi,
+  type GorselOlcusu,
   type GorselOrani,
   type MetinOnerisi,
   type OzelKategori,
@@ -66,7 +69,7 @@ import { metinIste, YapayZekaHatasi, type GeminiIstemcisi } from '../../../yapay
 import { PlatformApiError, type FetchContext } from '../../connections/provider.types';
 import { ProviderRegistry } from '../../connections/provider.registry';
 import type { GoogleProvider } from '../../connections/providers/google.provider';
-import { googleAlanHatalari, googleYalinKimlik } from '../../connections/providers/google-demandgen';
+import { googleAlanHatalari, googleYalinKimlik, type GoogleGorselKaynagi } from '../../connections/providers/google-demandgen';
 import { TokenVaultService } from '../../connections/token-vault.service';
 import { YouTubeApiService } from '../../autoboost/youtube-api.service';
 import { ReklamHazirlikService, seciliYoksaIlk, type RehberHazirlikSecimi, type RehberPlatformOkuyucu } from '../hazirlik.service';
@@ -139,6 +142,8 @@ interface OnKosulKaydi {
   googleHesapId: string | null;
   metaAsgari: string | null;
   googleDonusum: boolean | null;
+  /** Birincil SATIN ALMA dönüşümü (Maks. Performans ön koşulu, Dalga 3). */
+  googleSatis: boolean | null;
 }
 const ONBELLEK_MS = 15 * 60_000;
 
@@ -207,6 +212,15 @@ export function platformaGiderken(eksikler: RehberEksigi[]): RehberEksigi[] {
         // "kullanılamaz" ve "hiç çalışmadı" kapılarını denetlenmemiş bırakır.
         e.kod === 'M-PIKSEL-BILINMIYOR'
         ? { ...e, seviye: 'engel', metin: "Seçilen piksel Meta'dan okunamadı. Listeyi yenile; düzelmezse Meta bağlantısını kontrol et" }
+      : e.kod === 'G-DONUSUM-BILINMIYOR'
+        ? /*
+           * MAKS. PERFORMANS ÖLÇÜMSÜZ KURULMAZ (Dalga 3). Düzenlemede uyarı
+           * (okunmadıysa sağlam kurulumu kilitlemesin); platforma giderken
+           * engel: prova/yayın satış ölçümünü TAZE okuyor
+           * (`googleSatisTazele`), yine de bilinmiyorsa öğrenmeyen bir
+           * kampanyaya para gönderilmez.
+           */
+          { ...e, seviye: 'engel', metin: "Google Ads'teki satın alma dönüşümü okunamadı; Google bağlantısını kontrol edip yeniden dene" }
         : e,
   );
 }
@@ -270,6 +284,7 @@ export class RehberService {
       googleHesapId: seciliYoksaIlk(h.googleHesaplari, secim?.googleHesapId)?.id ?? null,
       metaAsgari: h.asgariGunluk.meta,
       googleDonusum: h.onKosullar.googleDonusumEtkin,
+      googleSatis: h.onKosullar.googleSatisOlcumu,
     });
     const okunan = seciliYoksaIlk(h.sayfalar, secim?.sayfaId)?.id;
     if (okunan) this.sayfaYaz(clientId, okunan, { formKosullari: h.onKosullar.metaFormKosullari, whatsapp: h.onKosullar.metaWhatsapp });
@@ -413,6 +428,35 @@ export class RehberService {
     await guvenli('form listesi', () => this.formSablonlari(ctx, clientId, sayfaId));
   }
 
+  /**
+   * SATIŞ amacında Google'ın satın alma ölçümünü prova/yayından önce TAZE
+   * okur (`sayfaTazele`nin Google karşılığı). Hazırlık önbelleği 15 dk ve
+   * yalnız hazırlık ucunda doluyordu; prova onu bulamazsa Maks. Performans
+   * "bilinmiyor" engeline düşerdi. Okuma düşerse `null` yazılır (log), engel
+   * sebebini söyler.
+   */
+  private async googleSatisTazele(ctx: TenantContext, clientId: string, a: RehberAlanlari): Promise<void> {
+    const hesap = a.googleHesabiId?.deger;
+    if (!hesap || a.amac?.deger !== 'SATIS' || !a.platformlar?.deger.google) return;
+    let satis: boolean | null = null;
+    try {
+      satis = await this.platformOkuyucu(ctx).googleSatisOlcumu(hesap);
+    } catch (e) {
+      logger.warn(`Prova öncesi Google satış ölçümü okunamadı (hesap ${hesap}): ${(e as Error).message}`);
+    }
+    const o = this.onbellek.get(clientId);
+    const taze = o && Date.now() - o.zaman < ONBELLEK_MS ? o : null;
+    this.onbellek.set(clientId, {
+      zaman: taze?.zaman ?? Date.now(),
+      metaHesapId: taze?.metaHesapId ?? null,
+      googleHesapId: hesap,
+      metaAsgari: taze?.metaAsgari ?? null,
+      // Hesap değiştiyse eski hesabın dönüşüm hâli taşınmaz.
+      googleDonusum: taze && taze.googleHesapId === hesap ? taze.googleDonusum : null,
+      googleSatis: satis,
+    });
+  }
+
   private platformOkuyucu(ctx: TenantContext): RehberPlatformOkuyucu {
     const tx = this.tx(ctx);
     return {
@@ -453,6 +497,21 @@ export class RehberService {
           fctx,
           `SELECT conversion_action.id FROM conversion_action
             WHERE conversion_action.status = 'ENABLED' AND conversion_action.primary_for_goal = TRUE LIMIT 1`,
+        );
+        return r.length > 0;
+      },
+      googleSatisOlcumu: async (adAccountId) => {
+        const { fctx } = await this.googleBaglami(ctx, adAccountId, null);
+        await this.kotaKapisi(adAccountId);
+        // WHERE'deki HER alan SELECT'te (GAQL kuralı, canlıda `campaign_asset`
+        // ile öğrenildi). Kategori PURCHASE = "Satın alma"; birincil olmayan
+        // işlem teklifi beslemiyor, sayılmaz.
+        const r = await this.google.rehberAra<{ conversionAction?: { id?: string } }>(
+          fctx,
+          `SELECT conversion_action.id, conversion_action.status, conversion_action.primary_for_goal, conversion_action.category
+             FROM conversion_action
+            WHERE conversion_action.status = 'ENABLED' AND conversion_action.primary_for_goal = TRUE
+              AND conversion_action.category = 'PURCHASE' LIMIT 1`,
         );
         return r.length > 0;
       },
@@ -684,6 +743,7 @@ export class RehberService {
     if (s.durum !== 'taslak') throw new ConflictException('Bu rehber için prova yapılmaz.');
     const a = alanlariOku(s);
     await this.sayfaTazele(ctx, s.client_id, a);
+    await this.googleSatisTazele(ctx, s.client_id, a);
     const b = await this.baglam(ctx, s.client_id, a);
     const engeller = platformaGiderken(rehberEksikleri(a, b)).filter((e) => e.seviye === 'engel');
     if (engeller.length) throw new BadRequestException({ message: 'Önce eksikleri tamamla.', eksikler: engeller });
@@ -790,6 +850,8 @@ export class RehberService {
       paraBirimi: b.google.currency,
       saatDilimi: b.google.timezone,
       donusumEtkin: b.googleDonusum,
+      satisOlcumu: b.onKosullar?.googleSatisOlcumu ?? null,
+      medyaOranlari: b.medyaOranlari ?? new Map(),
       isletmeAdi: b.isletmeAdi,
       logoVarlikId: b.logoVarlikId,
       kategoriTabani: b.kategoriTabani,
@@ -806,6 +868,7 @@ export class RehberService {
       validateOnly: true,
       logo,
       youtubeVideoBasligi: a.youtubeVideo?.deger?.baslik ?? null,
+      gorselKaynaklari: await this.googleGorselKaynaklari(ctx, s.client_id, t.deger, b.google.id),
     });
     const tx = this.tx(ctx);
     const [p] = await tx((x) =>
@@ -862,6 +925,7 @@ export class RehberService {
     // Yayın da TAZE okur: prova ile yayın arasında önbellek (15 dk) dolmuş
     // olabilir ve bilinmeyen form hâli aşağıda engele çevriliyor.
     await this.sayfaTazele(ctx, s.client_id, a);
+    await this.googleSatisTazele(ctx, s.client_id, a);
     const b = await this.baglam(ctx, s.client_id, a);
     const eksikler = platformaGiderken(rehberEksikleri(a, b));
     const acik = acikPlatformlar(a, b.ajansYoneticisi);
@@ -1008,6 +1072,7 @@ export class RehberService {
       validateOnly: false,
       logo: await this.googleLogo(ctx, s.client_id, girdi, b.google.id),
       youtubeVideoBasligi: a.youtubeVideo?.deger?.baslik ?? null,
+      gorselKaynaklari: await this.googleGorselKaynaklari(ctx, s.client_id, girdi, b.google.id),
     });
     if (d.tur === 'ret') return d.retler.map((r) => r.mesaj).join(' ');
     const govde: GoogleYayinGovdesi = { platform: 'google', kurgu: d.kurgu, govde: d.govde, sira: d.sira, logoVarlikId: d.sira.logo !== null ? girdi.logoVarlikId : null };
@@ -1067,9 +1132,17 @@ export class RehberService {
       surum: s.surum,
       alanlar: a,
       eksikler: rehberEksikleri(a, b),
-      // Teklif kuralı `rehberdenGoogle` ile AYNI: yalnız ölçüm KESİN etkinse dönüşüm.
+      // Teklif kuralı `rehberdenGoogle` ile AYNI fonksiyondan (`googleTeklifi`):
+      // önceden burada ayrı yazılıydı ve Talep Yaratma'da gövdenin tutmadığı
+      // "En çok dönüşüm"ü söylüyordu.
       kararlar: amac
-        ? kararTablosu(amac, acikPlatformlar(a, b.ajansYoneticisi), b.googleDonusum === true ? 'MAKS_DONUSUM' : 'MAKS_TIKLAMA', a.instagramId?.deger != null, rehberYerlesimPlani(a, b.medyaOranlari ?? new Map()))
+        ? kararTablosu(
+            amac,
+            acikPlatformlar(a, b.ajansYoneticisi),
+            REHBER_AMACLARI[amac].google.kurgu ? googleTeklifi(REHBER_AMACLARI[amac].google.kurgu, b.googleDonusum) : 'MAKS_TIKLAMA',
+            a.instagramId?.deger != null,
+            rehberYerlesimPlani(a, b.medyaOranlari ?? new Map()),
+          )
         : [],
       metaTaslakId: s.meta_taslak_id,
       googleTaslakId: s.google_taslak_id,
@@ -1097,8 +1170,8 @@ export class RehberService {
       // arşivinde olmayan varlık listede yok, yani oranı `null` — türetme durur.
       const medyaIdleri = (a.medya?.deger ?? []).map((x) => x.varlikId);
       const olculer = medyaIdleri.length
-        ? await t.$queryRaw<Array<{ id: string; kind: string; width: number | null; height: number | null }>>(Prisma.sql`
-            SELECT id::text, kind, width, height FROM assets WHERE client_id = ${clientId}::uuid AND id = ANY(${medyaIdleri}::uuid[])`)
+        ? await t.$queryRaw<Array<{ id: string; kind: string; width: number | null; height: number | null; byte_size: number | null }>>(Prisma.sql`
+            SELECT id::text, kind, width, height, byte_size FROM assets WHERE client_id = ${clientId}::uuid AND id = ANY(${medyaIdleri}::uuid[])`)
         : [];
       // ESKİ KAYIT: Dalga 2'den önce seçilen form `lead_forms.id` (UUID)
       // taşıyor; Meta listesiyle karşılaştırmak için Meta kimliğine çevrilir.
@@ -1114,6 +1187,7 @@ export class RehberService {
     const metaAsgari = taze && meta && taze.metaHesapId === meta.id ? taze.metaAsgari : null;
     const sayfa = this.sayfaOku(clientId, a.sayfaId?.deger);
     const googleDonusum = taze && google && taze.googleHesapId === google.id ? taze.googleDonusum : null;
+    const googleSatis = taze && google && taze.googleHesapId === google.id ? taze.googleSatis : null;
     const taban: OzelKategori[] = [];
     for (const k of r.m?.kategoriler ?? []) {
       // Meta CREDIT'i FINANCIAL_PRODUCTS_SERVICES ile değiştirdi; tanınmayan
@@ -1129,7 +1203,7 @@ export class RehberService {
       metaWhatsapp: sayfa?.whatsapp ?? null,
       metaSatisOlcumu: seciliPiksel?.satinAlma7Gun ?? null,
       seciliPiksel,
-      googleSatisOlcumu: null,
+      googleSatisOlcumu: googleSatis,
       googleDonusumEtkin: googleDonusum,
       googleLogoVeAd: !!r.m?.logo,
       seciliForm: seciliFormHali(a.formSablonuId?.deger ?? null, r.formKimligi, sayfa?.formlar ?? null),
@@ -1157,6 +1231,14 @@ export class RehberService {
         (a.medya?.deger ?? []).map((x) => {
           const v = r.olculer.find((o) => o.id === x.varlikId);
           return [x.varlikId, v && v.kind === 'image' ? oranBul(v.width, v.height) : null] as const;
+        }),
+      ),
+      // Google'ın ±%1 ve en az boyut kuralı GİRİŞ ANINDA (`googleGorselBulgulari`).
+      googleGorselOlculeri: new Map(
+        (a.medya?.deger ?? []).map((x) => {
+          const v = r.olculer.find((o) => o.id === x.varlikId);
+          const olcu: GorselOlcusu | null = v && v.kind === 'image' && v.width && v.height ? { genislik: v.width, yukseklik: v.height, bayt: v.byte_size ?? 0 } : null;
+          return [x.varlikId, olcu] as const;
         }),
       ),
     };
@@ -1208,9 +1290,44 @@ export class RehberService {
     });
   }
 
-  /** Talep Yaratma logosu: hesapta kayıtlıysa kaynak adı, değilse arşivden bayt. */
+  /**
+   * GÖRSEL KURGULARININ görselleri (Dalga 3): her biri için hesapta kayıtlı
+   * Google kaynak adı (`asset_platform_refs`, logo ile aynı önbellek) ya da
+   * arşivden bayt, ve ÖLÇÜSÜ (derleyici Google'ın ±%1 kuralını onunla
+   * uyguluyor). Arşivde olmayan görsel haritaya GİRMEZ; derleyici onu
+   * `G-GORSEL-KAYNAK` ile reddeder (sessizce eksik görselle kurmak yok).
+   * 9:16 (Google'a gitmiyor) için bayt okunmuyor.
+   */
+  private async googleGorselKaynaklari(
+    ctx: TenantContext,
+    clientId: string,
+    g: GoogleDerlemeGirdisi,
+    hesapId: string,
+  ): Promise<Map<string, { kaynak: GoogleGorselKaynagi; olcu: GorselOlcusu }>> {
+    const sonuc = new Map<string, { kaynak: GoogleGorselKaynagi; olcu: GorselOlcusu }>();
+    if (!googleGorselKurgusuMu(g.kurgu)) return sonuc;
+    const idler = (g.gorseller ?? []).filter((x) => x.oran !== 'dikey').map((x) => x.varlikId);
+    if (idler.length === 0) return sonuc;
+    const tx = this.tx(ctx);
+    const satirlar = await tx((t) =>
+      t.$queryRaw<Array<{ id: string; name: string; width: number; height: number; byte_size: number; ref: string | null }>>(Prisma.sql`
+        SELECT a.id::text, a.name, a.width, a.height, a.byte_size, r.external_ref AS ref
+          FROM assets a
+          LEFT JOIN asset_platform_refs r ON r.asset_id = a.id AND r.ad_account_id = ${hesapId}::uuid
+         WHERE a.client_id = ${clientId}::uuid AND a.kind = 'image' AND a.id = ANY(${idler}::uuid[])`),
+    );
+    const oku = gorselOkuyucu(tx, this.config.uploads.dir, clientId);
+    for (const v of satirlar) {
+      const olcu = { genislik: v.width, yukseklik: v.height, bayt: v.byte_size };
+      const kaynak: GoogleGorselKaynagi = v.ref ? { resource: v.ref } : { yeniGorsel: { name: v.name, bytes: await oku(v.id) } };
+      sonuc.set(v.id, { kaynak, olcu });
+    }
+    return sonuc;
+  }
+
+  /** Talep Yaratma ve Maks. Performans logosu: hesapta kayıtlı kaynak adı, değilse arşivden bayt. */
   private async googleLogo(ctx: TenantContext, clientId: string, g: GoogleDerlemeGirdisi, hesapId: string): Promise<GoogleLogo | null> {
-    if (g.kurgu !== 'TALEP_YARATMA_VIDEO' && g.kurgu !== 'TALEP_YARATMA_GORSEL') return null;
+    if (g.kurgu !== 'TALEP_YARATMA_VIDEO' && !googleGorselKurgusuMu(g.kurgu)) return null;
     if (!g.logoVarlikId) return null;
     const tx = this.tx(ctx);
     const [ref] = await tx((t) =>

@@ -142,7 +142,7 @@ describe('reklam hazırlığı', () => {
 describe('reklam modülü sınırı', () => {
   const YASAK = ['ad-builder', 'draft-tree', '/bulk/', 'campaign-actions', 'ai-assistant', '/connections/', '/assets/'];
   /*
-   * BAĞLANTI MODÜLÜNDEN İZİNLİ ÜÇ DOSYA (AdvCampaign rehberi, 2026-10-10):
+   * BAĞLANTI MODÜLÜNDEN İZİNLİ DOSYALAR (AdvCampaign rehberi, 2026-10-10):
    * Google gövde KURUCULARI (`google-write`, `google-demandgen`) saf
    * fonksiyon ve MIMARI-REHBER § 4 "yeni kurucu yazma, bunları kullan"
    * diyor; `provider.types` hata sınıfı ve tipler. Üçü de Nest sağlayıcısı
@@ -150,7 +150,8 @@ describe('reklam modülü sınırı', () => {
    * SERVİSLERİ (kasa, kayıt) yasak kalıyor; onlara ihtiyaç duyan rehber AYRI
    * modül (`rehber/`) ve kendi sınır testi var (`rehber-modulu.spec.ts`).
    */
-  const IZINLI = ['connections/providers/google-write', 'connections/providers/google-demandgen', 'connections/provider.types'];
+  // Dalga 3: `google-pmax` aynı türden saf gövde kurucusu (Maks. Performans).
+  const IZINLI = ['connections/providers/google-write', 'connections/providers/google-demandgen', 'connections/providers/google-pmax', 'connections/provider.types'];
   // ALT KLASÖRLER DAHİL: ilk sürüm yalnız üst klasörü okuyordu ve alt
   // klasördeki servisler hem içe aktarma yasağının hem providers kontrolünün
   // tamamen dışındaydı. `rehber/` AYRI bir Nest modülü: kendi testinde.

@@ -123,11 +123,11 @@ export const REHBER_ACILIS: Record<RehberAmacKodu, Record<RehberPlatformu, Acili
   FORM: { meta: 'deneme', google: 'kapali' },
   WHATSAPP: { meta: 'deneme', google: 'kapali' },
   TELEFON: { meta: 'deneme', google: 'deneme' },
-  // DALGA 3 (2026-10-11): Meta video, erişim ve satış derleniyor; canlı
-  // tur `deneme`de. Google görsel ve Maks. Performans ayrı dalda.
+  // DALGA 3 (2026-10-11): Meta video, erişim, satış; Google Talep Yaratma
+  // görsel ve Maks. Performans derleniyor. Canlı tur `deneme`de.
   VIDEO: { meta: 'deneme', google: 'deneme' },
-  ERISIM: { meta: 'deneme', google: 'kapali' },
-  SATIS: { meta: 'deneme', google: 'kapali' },
+  ERISIM: { meta: 'deneme', google: 'deneme' },
+  SATIS: { meta: 'deneme', google: 'deneme' },
 };
 
 /**

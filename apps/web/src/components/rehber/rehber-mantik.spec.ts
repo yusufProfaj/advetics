@@ -707,3 +707,13 @@ describe('banner seti (panel)', () => {
     expect(carp.find((x) => x.varlikId === 'a3')?.setNo).toBeUndefined();
   });
 });
+
+describe('Google görsel rozeti sunucunun kuralıyla', () => {
+  it('KRİTİK: 1200×640 Meta’da yatay ama Google’da DEĞİL (±%1); 9:16 Google’da yok', async () => {
+    const { googleGorselRozeti } = await import('./rehber-mantik');
+    expect(googleGorselRozeti('yatay', 1200, 628)).toBeNull();
+    expect(googleGorselRozeti('yatay', 1200, 640)).toMatch(/tam/);
+    expect(googleGorselRozeti('dikey', 1080, 1920)).toMatch(/9:16/);
+    expect(googleGorselRozeti('kare', 1200, 1200)).toBeNull();
+  });
+});

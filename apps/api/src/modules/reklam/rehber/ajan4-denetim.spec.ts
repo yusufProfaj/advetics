@@ -335,6 +335,7 @@ describe('BULGU-1 (DÜZELDİ): türetilmiş bütçe AÇIK platform kümesine gö
       paraBirimi: 'TRY',
       saatDilimi: 'Europe/Istanbul',
       donusumEtkin: false,
+      satisOlcumu: null,
       isletmeAdi: 'X',
       logoVarlikId: null,
       kategoriTabani: [],

@@ -53,6 +53,13 @@ export interface RehberPlatformOkuyucu {
   metaSatisOlcumu(adAccountId: string, clientId: string): Promise<boolean | null>;
   /** Google Ads'te etkin birincil dönüşüm işlemi var mı. */
   googleDonusumEtkin(adAccountId: string): Promise<boolean | null>;
+  /**
+   * Google Ads'te etkin, BİRİNCİL ve kategorisi SATIN ALMA olan dönüşüm
+   * işlemi var mı (Maks. Performans ön koşulu, Dalga 3). İşlemin son
+   * günlerde gerçekten dönüşüm saydığı bu soruda YOK (ÖLÇÜLMEDİ): etkin ama
+   * hiç tetiklenmeyen bir etiket "var" görünür.
+   */
+  googleSatisOlcumu(adAccountId: string): Promise<boolean | null>;
 }
 
 /**
@@ -238,12 +245,13 @@ export class ReklamHazirlikService {
     const metaHesap = seciliYoksaIlk(temel.hesaplar, secim?.metaHesapId);
     const sayfa = seciliYoksaIlk(temel.sayfalar, secim?.sayfaId);
     const googleHesap = seciliYoksaIlk(ek.googleHesaplari, secim?.googleHesapId);
-    const [metaAsgari, metaForm, metaWhatsapp, metaSatis, googleDonusum] = await Promise.all([
+    const [metaAsgari, metaForm, metaWhatsapp, metaSatis, googleDonusum, googleSatis] = await Promise.all([
       uc('Meta asgari bütçe', metaHesap && okuyucu ? () => okuyucu.metaAsgariGunluk(metaHesap.id, clientId) : null),
       uc('Meta form koşulları', sayfa && okuyucu ? () => okuyucu.metaFormKosullari(sayfa.id, clientId) : null),
       uc('Meta WhatsApp hattı', sayfa && okuyucu ? () => okuyucu.metaWhatsapp(sayfa.id, clientId) : null),
       uc('Meta piksel', metaHesap && okuyucu ? () => okuyucu.metaSatisOlcumu(metaHesap.id, clientId) : null),
       uc('Google dönüşüm işlemi', googleHesap && okuyucu ? () => okuyucu.googleDonusumEtkin(googleHesap.id) : null),
+      uc('Google satış ölçümü', googleHesap && okuyucu ? () => okuyucu.googleSatisOlcumu(googleHesap.id) : null),
     ]);
     const yok: UcHal = null;
 
@@ -261,7 +269,7 @@ export class ReklamHazirlikService {
         metaFormKosullari: metaForm,
         metaWhatsapp,
         metaSatisOlcumu: metaSatis,
-        googleSatisOlcumu: yok,
+        googleSatisOlcumu: googleSatis,
         googleDonusumEtkin: googleDonusum,
         // İşletme adı her zaman var (yoksa workspace adı); belirleyici logo.
         googleLogoVeAd: !!ek.musteri?.logo,

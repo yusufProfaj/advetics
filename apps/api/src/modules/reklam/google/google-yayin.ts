@@ -5,7 +5,9 @@ import { PlatformApiError, type FetchContext } from '../../connections/provider.
 import { googleYalinKimlik } from '../../connections/providers/google-demandgen';
 import { kapaliBirak, yayiniSonlandir, type TxRunner } from '../yayin-motoru';
 import { googleYazmaAcikMi } from '../yazma-kapisi';
-import type { GoogleBeklenen, GoogleDerleme } from './derle-google';
+import { DEMAND_GEN_GORSEL_OTOMASYONU } from '../../connections/providers/google-demandgen';
+import { PMAX_OTOMASYONU, type PmaxAlani } from '../../connections/providers/google-pmax';
+import type { GoogleBeklenen, GoogleDerleme, GoogleGorselReklamBeklentisi, GoogleVarlikGrubuBeklentisi } from './derle-google';
 
 const logger = new Logger('GoogleYayin');
 
@@ -67,6 +69,24 @@ export const GOOGLE_NESNELERI = [
   { ad: 'reklam', tur: 'reklam', sira: 'reklam' },
 ] as const;
 
+/**
+ * MAKS. PERFORMANS'IN NESNELERİ — reklam YOK. Google reklamları varlık
+ * grubundan kendisi kuruyor; `ad_group_ad` satırı yok ve beklenseydi her
+ * Maks. Performans yayını "kaynak adı yok" diye belirsiz kalırdı. Varlık
+ * grubu reklam seti yuvasında (hedef sayfa ve varlıklar onda).
+ */
+export const GOOGLE_PMAX_NESNELERI = [
+  { ad: 'kampanya', tur: 'kampanya', sira: 'kampanya' },
+  { ad: 'varlik_grubu', tur: 'reklam_seti', sira: 'reklamGrubu' },
+] as const;
+
+type GoogleNesnesi = (typeof GOOGLE_NESNELERI)[number] | (typeof GOOGLE_PMAX_NESNELERI)[number];
+type NesneKimlikleri = { kampanya: string; reklamGrubu: string; reklam?: string };
+
+export function googleNesneleri(kurgu: string): readonly GoogleNesnesi[] {
+  return kurgu === 'MAKS_PERFORMANS' ? GOOGLE_PMAX_NESNELERI : GOOGLE_NESNELERI;
+}
+
 const KILIT_MS = 30 * 60_000;
 
 interface YayinSatiri {
@@ -115,7 +135,7 @@ export async function googleYayinKaydiOlustur(tx: TxRunner, g: GoogleYayinKaydi)
               ${g.apiSurumu}, ${g.derleyiciSurumu}, ${g.atifStandardi}, 'panel', false, ${g.baslatanId}::uuid,
               ${g.kapaliKalacak}, ${g.uyum.surum}, ${JSON.stringify(g.uyum)}::jsonb)
       RETURNING id`);
-    for (const [i, n] of GOOGLE_NESNELERI.entries()) {
+    for (const [i, n] of googleNesneleri(g.govde.kurgu).entries()) {
       await t.$queryRaw(Prisma.sql`
         INSERT INTO yayin_nesnesi (yayin_id, org_id, client_id, tur, ad, sira)
         VALUES (${g.id}::uuid, ${g.orgId}::uuid, ${g.clientId}::uuid, ${n.tur}, ${n.ad}, ${i})
@@ -151,6 +171,10 @@ export interface GoogleOkunan {
    * reklamını "fark var"da durdururdu.
    */
   aramaOgeleri: Array<{ countryCode: string | null; phoneNumber: string | null }>;
+  /** Dalga 3 — yalnız beklenen taşıyorsa okunur ve kıyaslanır. */
+  teklif?: string | null;
+  gorselReklam?: GoogleGorselReklamBeklentisi | null;
+  varlikGrubu?: GoogleVarlikGrubuBeklentisi | null;
 }
 
 export interface GeriOkumaSatiri {
@@ -167,8 +191,10 @@ export interface GeriOkumaSatiri {
  */
 export function googleGeriOkumaKarsilastir(b: GoogleBeklenen, o: GoogleOkunan): { sonuc: 'temiz' | 'fark'; satirlar: GeriOkumaSatiri[] } {
   const satirlar: GeriOkumaSatiri[] = [];
+  // ANAHTAR SIRASINDAN BAĞIMSIZ: okunan nesneler Google'ın yanıt sırasıyla
+  // kuruluyor; `{a,b}` ile `{b,a}`yı fark saymak doğru kampanyayı durdururdu.
   const kiyasla = (alan: string, beklenen: unknown, okunan: unknown) => {
-    if (JSON.stringify(beklenen) !== JSON.stringify(okunan)) satirlar.push({ alan, beklenen, okunan });
+    if (kararliJson(beklenen) !== kararliJson(okunan)) satirlar.push({ alan, beklenen, okunan });
   };
   kiyasla('kampanya.durum', b.durum, o.durum);
   kiyasla('kampanya.kanal', b.kanal, o.kanal);
@@ -186,7 +212,19 @@ export function googleGeriOkumaKarsilastir(b: GoogleBeklenen, o: GoogleOkunan): 
   // satırlarında alan yok (undefined) = null.
   const beklenenOge = b.aramaOgesi ?? null;
   kiyasla('aramaOgesi', beklenenOge ? [beklenenOge] : [], o.aramaOgeleri.map(ulusalNumara));
+  // Dalga 3: eski yayın satırlarında bu alanlar YOK (undefined) = bakılmaz.
+  // Beklenip okunamayan (`null`/`undefined`) FARK: bilinmeyeni doğru saymıyoruz.
+  if (b.teklif) kiyasla('kampanya.teklif', b.teklif, o.teklif ?? null);
+  if (b.gorselReklam) kiyasla('gorselReklam', b.gorselReklam, o.gorselReklam ?? null);
+  if (b.varlikGrubu) kiyasla('varlikGrubu', b.varlikGrubu, o.varlikGrubu ?? null);
   return { sonuc: satirlar.length ? 'fark' : 'temiz', satirlar };
+}
+
+/** Anahtarları sıralı JSON — kıyas için; diziler sırasını korur. */
+function kararliJson(x: unknown): string {
+  return JSON.stringify(x, (_k, v: unknown) =>
+    v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : v,
+  );
 }
 
 interface KampanyaSatiri {
@@ -197,6 +235,7 @@ interface KampanyaSatiri {
     advertisingChannelType?: string;
     networkSettings?: { targetGoogleSearch?: boolean; targetSearchNetwork?: boolean; targetContentNetwork?: boolean; targetPartnerSearchNetwork?: boolean };
     geoTargetTypeSetting?: { positiveGeoTargetType?: string };
+    biddingStrategyType?: string;
   };
   campaignBudget?: { amountMicros?: string };
 }
@@ -232,23 +271,31 @@ interface KriterSatiri {
  * GAQL ile okur. Kimlik yalnız RAKAM (GAQL'de bağlı parametre yok; kimlik
  * sorgu metnine gömülüyor). Alan adları v25 referansından, ÖLÇÜLMEDİ.
  */
-export async function googleGeriOku(port: GoogleYayinPortu, ctx: FetchContext, kampanyaId: string): Promise<GoogleOkunan> {
+/**
+ * `b` (beklenen) verilirse kurguya özgü EK sorgular da koşar (Talep Yaratma
+ * görsel reklamı, Maks. Performans varlık grubu). Verilmezse eski davranış:
+ * açma hatasından sonra yalnız DURUM tekrar okunurken ek sorgu boşa kota.
+ */
+export async function googleGeriOku(port: GoogleYayinPortu, ctx: FetchContext, kampanyaId: string, b?: GoogleBeklenen): Promise<GoogleOkunan> {
   if (!/^\d+$/.test(kampanyaId)) throw new Error(`Geçersiz kampanya kimliği: ${kampanyaId.slice(0, 40)}`);
   const [k] = await port.ara<KampanyaSatiri>(
     ctx,
     `SELECT campaign.resource_name, campaign.name, campaign.status, campaign.advertising_channel_type,
             campaign.network_settings.target_google_search, campaign.network_settings.target_search_network,
             campaign.network_settings.target_content_network, campaign.network_settings.target_partner_search_network,
-            campaign.geo_target_type_setting.positive_geo_target_type, campaign_budget.amount_micros
+            campaign.geo_target_type_setting.positive_geo_target_type, campaign.bidding_strategy_type, campaign_budget.amount_micros
        FROM campaign WHERE campaign.id = ${kampanyaId}`,
   );
+  // `campaign.id` SELECT'te: canlı tur bu iki sorguyu seçmeden de geçti, ama
+  // aynı kural `campaign_asset`te patladı (aşağıda); seçmek zararsız,
+  // seçmemek bir sürüm değişikliğinde "kurulamadı" demek.
   const kampanyaKriteri = await port.ara<KriterSatiri>(
     ctx,
-    `SELECT campaign_criterion.type, campaign_criterion.negative FROM campaign_criterion WHERE campaign.id = ${kampanyaId}`,
+    `SELECT campaign.id, campaign_criterion.type, campaign_criterion.negative FROM campaign_criterion WHERE campaign.id = ${kampanyaId}`,
   );
   const grupKriteri = await port.ara<KriterSatiri>(
     ctx,
-    `SELECT ad_group_criterion.type, ad_group_criterion.negative FROM ad_group_criterion WHERE campaign.id = ${kampanyaId}`,
+    `SELECT campaign.id, ad_group_criterion.type, ad_group_criterion.negative FROM ad_group_criterion WHERE campaign.id = ${kampanyaId}`,
   );
   // Arama öğesi: her kurguda soruluyor (beklenmiyorsa da): bkz. karşılaştırma.
   // `campaign.id` SELECT'TE OLMAK ZORUNDA — ölçüldü (2026-10-11, canlı tur):
@@ -288,6 +335,175 @@ export async function googleGeriOku(port: GoogleYayinPortu, ctx: FetchContext, k
     aramaOgeleri: cagriOgeleri
       .filter((x) => x.campaignAsset?.fieldType === 'CALL' && x.campaignAsset?.status !== 'REMOVED')
       .map((x) => ({ countryCode: x.asset?.callAsset?.countryCode ?? null, phoneNumber: x.asset?.callAsset?.phoneNumber ?? null })),
+    teklif: c?.biddingStrategyType ?? null,
+    ...(b?.gorselReklam ? { gorselReklam: await gorselReklamOku(port, ctx, kampanyaId) } : {}),
+    ...(b?.varlikGrubu ? { varlikGrubu: await varlikGrubuOku(port, ctx, kampanyaId) } : {}),
+  };
+}
+
+/*
+ * ═══ DALGA 3 GERİ OKUMA SORGULARI ═══
+ *
+ * GAQL KURALI (canlıda ölçüldü, 2026-10-11 — `campaign_asset` dersi): WHERE'de
+ * süzülen alan SELECT'te YOKSA Google sorguyu
+ * EXPECTED_REFERENCED_FIELD_IN_SELECT_CLAUSE ile reddediyor. Kuralın hangi
+ * alanlara uygulandığı tam bilinmiyor; bu yüzden aşağıdaki HER sorgu WHERE'de
+ * kullandığı HER alanı seçiyor. Sahte port (`google-yayin.spec.ts`) bunu
+ * bütün sorgular için dayatıyor.
+ *
+ * Proto3 JSON'da `false` boolean ALANI HİÇ GELMEYEBİLİR: kanal bayrakları
+ * `=== true` ile okunuyor (eksik = kapalı). Bu, "kapalı beklenen" kanallarda
+ * okunamayanı kapalı saymak demek; açık beklenenler ise yalnız `true` gelince
+ * tutuyor, yani hata yönü güvenli (fark → açılmaz).
+ */
+
+interface GorselGrupSatiri {
+  adGroup?: {
+    status?: string;
+    demandGenAdGroupSettings?: { channelControls?: { selectedChannels?: Record<string, boolean | undefined> } };
+  };
+}
+interface GorselReklamSatiri {
+  adGroupAd?: {
+    status?: string;
+    ad?: {
+      type?: string;
+      demandGenMultiAssetAd?: {
+        marketingImages?: unknown[];
+        squareMarketingImages?: unknown[];
+        portraitMarketingImages?: unknown[];
+        logoImages?: unknown[];
+      };
+    };
+    adGroupAdAssetAutomationSettings?: Array<{ assetAutomationType?: string; assetAutomationStatus?: string }>;
+  };
+}
+
+async function gorselReklamOku(port: GoogleYayinPortu, ctx: FetchContext, kampanyaId: string): Promise<GoogleGorselReklamBeklentisi | null> {
+  const gruplar = await port.ara<GorselGrupSatiri>(
+    ctx,
+    `SELECT campaign.id, ad_group.id, ad_group.status,
+            ad_group.demand_gen_ad_group_settings.channel_controls.selected_channels.youtube_in_stream,
+            ad_group.demand_gen_ad_group_settings.channel_controls.selected_channels.youtube_in_feed,
+            ad_group.demand_gen_ad_group_settings.channel_controls.selected_channels.youtube_shorts,
+            ad_group.demand_gen_ad_group_settings.channel_controls.selected_channels.discover,
+            ad_group.demand_gen_ad_group_settings.channel_controls.selected_channels.gmail,
+            ad_group.demand_gen_ad_group_settings.channel_controls.selected_channels.display,
+            ad_group.demand_gen_ad_group_settings.channel_controls.selected_channels.maps
+       FROM ad_group
+      WHERE campaign.id = ${kampanyaId} AND ad_group.status != 'REMOVED'`,
+  );
+  const reklamlar = await port.ara<GorselReklamSatiri>(
+    ctx,
+    `SELECT campaign.id, ad_group_ad.status, ad_group_ad.ad.type,
+            ad_group_ad.ad.demand_gen_multi_asset_ad.marketing_images,
+            ad_group_ad.ad.demand_gen_multi_asset_ad.square_marketing_images,
+            ad_group_ad.ad.demand_gen_multi_asset_ad.portrait_marketing_images,
+            ad_group_ad.ad.demand_gen_multi_asset_ad.logo_images,
+            ad_group_ad.ad_group_ad_asset_automation_settings
+       FROM ad_group_ad
+      WHERE campaign.id = ${kampanyaId} AND ad_group_ad.status != 'REMOVED'`,
+  );
+  // Hiçbir şey okunamadıysa `null` (bilinmeyen = fark). Tek grup, tek reklam
+  // beklenir; SAYILAR kıyaslanıyor, ayrıntı ilk satırdan okunuyor.
+  if (gruplar.length === 0 && reklamlar.length === 0) return null;
+  return gorselOzet(gruplar[0], reklamlar, gruplar.length);
+}
+
+function gorselOzet(grup: GorselGrupSatiri | undefined, reklamlar: GorselReklamSatiri[], grupSayisi: number): GoogleGorselReklamBeklentisi {
+  const k = grup?.adGroup?.demandGenAdGroupSettings?.channelControls?.selectedChannels ?? {};
+  const r = reklamlar[0]?.adGroupAd;
+  const m = r?.ad?.demandGenMultiAssetAd;
+  return {
+    // Grup sayısı 1 değilse reklam sayısı bilerek bozulur: iki grup = söz dışı.
+    reklamSayisi: grupSayisi === 1 ? reklamlar.length : -grupSayisi,
+    yatay: m?.marketingImages?.length ?? 0,
+    kare: m?.squareMarketingImages?.length ?? 0,
+    dik45: m?.portraitMarketingImages?.length ?? 0,
+    logo: m?.logoImages?.length ?? 0,
+    kanallar: {
+      youtubeInStream: k.youtubeInStream === true,
+      youtubeInFeed: k.youtubeInFeed === true,
+      youtubeShorts: k.youtubeShorts === true,
+      discover: k.discover === true,
+      gmail: k.gmail === true,
+      display: k.display === true,
+      maps: k.maps === true,
+    },
+    otomasyon: Object.fromEntries(
+      (r?.adGroupAdAssetAutomationSettings ?? [])
+        .filter((x) => x.assetAutomationType && GORSEL_OTOMASYON_TURLERI.has(x.assetAutomationType))
+        .map((x) => [x.assetAutomationType!, x.assetAutomationStatus ?? 'BILINMIYOR']),
+    ),
+  };
+}
+
+/** Yalnız BİZİM yazdığımız türler kıyaslanır: Google başka türleri de dönebilir (ÖLÇÜLMEDİ). */
+const GORSEL_OTOMASYON_TURLERI = new Set<string>(DEMAND_GEN_GORSEL_OTOMASYONU.map((x) => x.assetAutomationType));
+const PMAX_OTOMASYON_TURLERI = new Set<string>(PMAX_OTOMASYONU.map((x) => x.assetAutomationType));
+
+interface PmaxKampanyaSatiri {
+  campaign?: { brandGuidelinesEnabled?: boolean; assetAutomationSettings?: Array<{ assetAutomationType?: string; assetAutomationStatus?: string }> };
+}
+interface VarlikGrubuSatiri {
+  assetGroup?: { resourceName?: string; status?: string; finalUrls?: string[] };
+}
+interface VarlikBagiSatiri {
+  assetGroupAsset?: { fieldType?: string; status?: string; source?: string };
+}
+interface MarkaBagiSatiri {
+  campaignAsset?: { fieldType?: string; status?: string };
+}
+
+async function varlikGrubuOku(port: GoogleYayinPortu, ctx: FetchContext, kampanyaId: string): Promise<GoogleVarlikGrubuBeklentisi | null> {
+  const [k] = await port.ara<PmaxKampanyaSatiri>(
+    ctx,
+    `SELECT campaign.id, campaign.brand_guidelines_enabled, campaign.asset_automation_settings FROM campaign WHERE campaign.id = ${kampanyaId}`,
+  );
+  const gruplar = await port.ara<VarlikGrubuSatiri>(
+    ctx,
+    `SELECT campaign.id, asset_group.resource_name, asset_group.status, asset_group.final_urls
+       FROM asset_group
+      WHERE campaign.id = ${kampanyaId} AND asset_group.status != 'REMOVED'`,
+  );
+  const baglar = await port.ara<VarlikBagiSatiri>(
+    ctx,
+    `SELECT campaign.id, asset_group_asset.field_type, asset_group_asset.status, asset_group_asset.source
+       FROM asset_group_asset
+      WHERE campaign.id = ${kampanyaId} AND asset_group_asset.status != 'REMOVED'`,
+  );
+  const marka = await port.ara<MarkaBagiSatiri>(
+    ctx,
+    `SELECT campaign.id, campaign_asset.field_type, campaign_asset.status
+       FROM campaign_asset
+      WHERE campaign.id = ${kampanyaId} AND campaign_asset.field_type IN ('BUSINESS_NAME', 'LOGO') AND campaign_asset.status != 'REMOVED'`,
+  );
+  if (!k?.campaign) return null;
+  const alan = (t: PmaxAlani) =>
+    // Google'ın KENDİ ürettiği varlıklar (kaynak AUTOMATICALLY_CREATED)
+    // sayılmıyor: onları biz göndermedik; sayıya katmak her otomatik video
+    // ekleyen kampanyayı "fark"ta durdururdu. Kaynağı okunamayan bizim sayılır.
+    baglar.filter((x) => x.assetGroupAsset?.fieldType === t && x.assetGroupAsset?.source !== 'AUTOMATICALLY_CREATED').length;
+  const markaSay = (t: string) => marka.filter((x) => x.campaignAsset?.fieldType === t).length;
+  return {
+    grupSayisi: gruplar.length,
+    adresler: gruplar[0]?.assetGroup?.finalUrls ?? [],
+    alanlar: {
+      HEADLINE: alan('HEADLINE'),
+      LONG_HEADLINE: alan('LONG_HEADLINE'),
+      DESCRIPTION: alan('DESCRIPTION'),
+      MARKETING_IMAGE: alan('MARKETING_IMAGE'),
+      SQUARE_MARKETING_IMAGE: alan('SQUARE_MARKETING_IMAGE'),
+      PORTRAIT_MARKETING_IMAGE: alan('PORTRAIT_MARKETING_IMAGE'),
+      YOUTUBE_VIDEO: alan('YOUTUBE_VIDEO'),
+    },
+    marka: { BUSINESS_NAME: markaSay('BUSINESS_NAME'), LOGO: markaSay('LOGO') },
+    markaKurallari: k.campaign.brandGuidelinesEnabled === true,
+    otomasyon: Object.fromEntries(
+      (k.campaign.assetAutomationSettings ?? [])
+        .filter((x) => x.assetAutomationType && PMAX_OTOMASYON_TURLERI.has(x.assetAutomationType))
+        .map((x) => [x.assetAutomationType!, x.assetAutomationStatus ?? 'BILINMIYOR']),
+    ),
   };
 }
 
@@ -349,8 +565,11 @@ export async function googleYayinIsle(d: GoogleIsleyiciBagimliliklari, yayinId: 
 
     const g = y.derlenmis_govde;
     if (g.govde.validateOnly !== false) throw new Error('Yayın gövdesi prova bayrağı taşıyor; kurulum yapılmaz.');
-    let kimlikler: Record<'kampanya' | 'reklamGrubu' | 'reklam', string> | null = null;
+    // Maks. Performans'ta reklam nesnesi yok (`sira.reklam === null`).
+    const reklamVar = g.sira.reklam !== null;
+    let kimlikler: NesneKimlikleri | null = null;
     let logoKaynagi: string | null = null;
+    let gorselKaynaklari: Array<{ varlikId: string; kaynak: string }> = [];
     try {
       const yanit = await d.google.mutate(ctx, g.govde);
       const kaynak = (i: number | null): string | null => (i === null ? null : (Object.values(yanit[i] ?? {})[0]?.resourceName ?? null));
@@ -358,8 +577,12 @@ export async function googleYayinIsle(d: GoogleIsleyiciBagimliliklari, yayinId: 
       const r = kaynak(g.sira.reklamGrubu);
       const a = kaynak(g.sira.reklam);
       logoKaynagi = kaynak(g.sira.logo);
+      gorselKaynaklari = (g.sira.gorseller ?? []).flatMap((x) => {
+        const kk = kaynak(x.sira);
+        return kk ? [{ varlikId: x.varlikId, kaynak: kk }] : [];
+      });
       // 200 AMA KAYNAK ADI YOK: başarı sayılmıyor, ne kurulduğunu bilmiyoruz.
-      kimlikler = k && r && a ? { kampanya: k, reklamGrubu: r, reklam: a } : null;
+      kimlikler = k && r && (a || !reklamVar) ? { kampanya: k, reklamGrubu: r, ...(a ? { reklam: a } : {}) } : null;
     } catch (e) {
       if (googleHataKesinMi(e)) {
         await nesnelerYaz(d.tx, yayinId, 'reddedildi', null, 'gonderiliyor', { mesaj: (e as Error).message });
@@ -372,9 +595,9 @@ export async function googleYayinIsle(d: GoogleIsleyiciBagimliliklari, yayinId: 
       // ── Uzlaştırma: YALNIZ OKUMA ───────────────────────────────────────
       await nesnelerYaz(d.tx, yayinId, 'belirsiz', null, 'gonderiliyor');
       durum = await gec(d.tx, yayinId, durum, 'uzlastirma', 'Google kurulumunun sonucu bilinmiyor; aranıyor');
-      const bulunan = await kurulumuAra(d.google, ctx, yayinId).catch((e: unknown) => ({ hata: (e as Error).message }));
+      const bulunan = await kurulumuAra(d.google, ctx, yayinId, g.kurgu).catch((e: unknown) => ({ hata: (e as Error).message }));
       if ('hata' in bulunan) return { tur: 'bitti', durum: await gec(d.tx, yayinId, durum, 'kayit_belirsiz', `Google'da arama da düştü (${bulunan.hata})`) };
-      if (bulunan.kampanyalar.length !== 1 || !bulunan.grup || !bulunan.reklam) {
+      if (bulunan.kampanyalar.length !== 1 || !bulunan.grup || (reklamVar && !bulunan.reklam)) {
         return {
           tur: 'bitti',
           durum: await gec(
@@ -388,13 +611,13 @@ export async function googleYayinIsle(d: GoogleIsleyiciBagimliliklari, yayinId: 
           ),
         };
       }
-      kimlikler = { kampanya: bulunan.kampanyalar[0]!, reklamGrubu: bulunan.grup, reklam: bulunan.reklam };
+      kimlikler = { kampanya: bulunan.kampanyalar[0]!, reklamGrubu: bulunan.grup, ...(bulunan.reklam ? { reklam: bulunan.reklam } : {}) };
       durum = await gec(d.tx, yayinId, durum, 'kuruluyor', 'Uzlaştırıldı');
-      if (!(await nesneKimlikleri(d.tx, yayinId, kimlikler, 'belirsiz', durum))) return { tur: 'bitti', durum: 'kayit_belirsiz' };
+      if (!(await nesneKimlikleri(d.tx, yayinId, g.kurgu, kimlikler, 'belirsiz', durum))) return { tur: 'bitti', durum: 'kayit_belirsiz' };
     } else {
       // SONUÇ: yazılamazsa nesneler 'gonderiliyor'da kalır, yayın
       // kayit_belirsiz olur — 'reddedildi' yazmak yeniden denemeyi açardı.
-      const yazildi = await nesneKimlikleri(d.tx, yayinId, kimlikler, 'gonderiliyor', durum);
+      const yazildi = await nesneKimlikleri(d.tx, yayinId, g.kurgu, kimlikler, 'gonderiliyor', durum);
       if (!yazildi) return { tur: 'bitti', durum: 'kayit_belirsiz' };
     }
     if (logoKaynagi && g.logoVarlikId) {
@@ -407,13 +630,24 @@ export async function googleYayinIsle(d: GoogleIsleyiciBagimliliklari, yayinId: 
           ON CONFLICT (asset_id, ad_account_id) DO NOTHING RETURNING id`),
       ).catch((e: unknown) => logger.warn(`Logo kaynak adı önbelleğe yazılamadı: ${(e as Error).message}`));
     }
+    // Reklam görselleri de aynı önbelleğe (Dalga 3): bir sonraki yayın aynı
+    // baytları yeniden yüklemesin. Uzlaştırma yolunda kaynak adı yanıttan
+    // gelmediği için liste boş: bir sonraki yayın yeniden yükler (zararsız).
+    for (const x of gorselKaynaklari) {
+      await d.tx((t) =>
+        t.$queryRaw(Prisma.sql`
+          INSERT INTO asset_platform_refs (id, org_id, asset_id, platform, ad_account_id, external_ref)
+          VALUES (gen_random_uuid(), ${y.org_id}::uuid, ${x.varlikId}::uuid, 'google'::"Platform", ${y.ad_account_id}::uuid, ${x.kaynak})
+          ON CONFLICT (asset_id, ad_account_id) DO NOTHING RETURNING id`),
+      ).catch((e: unknown) => logger.warn(`Görsel kaynak adı önbelleğe yazılamadı (${x.varlikId}): ${(e as Error).message}`));
+    }
 
     // ── Geri oku ────────────────────────────────────────────────────────
     durum = await gec(d.tx, yayinId, durum, 'geri_okuma', null);
     const kampanyaId = googleYalinKimlik(kimlikler.kampanya);
     let okunan: GoogleOkunan;
     try {
-      okunan = await googleGeriOku(d.google, ctx, kampanyaId);
+      okunan = await googleGeriOku(d.google, ctx, kampanyaId, y.beklenen_yanki);
     } catch (e) {
       await geriOkumaYaz(d.tx, y, 'dogrulanamadi', [], { hata: (e as Error).message });
       return { tur: 'bitti', durum: await gec(d.tx, yayinId, durum, 'dogrulanamadi', `Google'daki ayarlar okunamadı: ${(e as Error).message}`.slice(0, 2000)) };
@@ -427,7 +661,7 @@ export async function googleYayinIsle(d: GoogleIsleyiciBagimliliklari, yayinId: 
 
     // ── Tekillik ────────────────────────────────────────────────────────
     durum = await gec(d.tx, yayinId, durum, 'tekillik_kapisi', null);
-    const tekil = await kurulumuAra(d.google, ctx, yayinId).catch(() => null);
+    const tekil = await kurulumuAra(d.google, ctx, yayinId, g.kurgu).catch(() => null);
     if (!tekil) return { tur: 'bitti', durum: await gec(d.tx, yayinId, durum, 'dogrulanamadi', 'Tekillik araması yapılamadı') };
     const fazla = tekil.kampanyalar.filter((x) => x !== kimlikler!.kampanya);
     if (fazla.length > 0) return { tur: 'bitti', durum: await gec(d.tx, yayinId, durum, 'fark_var', `Google'da bu reklamın ikinci bir kopyası var: ${fazla.join(', ')}`) };
@@ -466,12 +700,32 @@ async function kurulumuAra(
   port: GoogleYayinPortu,
   ctx: FetchContext,
   yayinId: string,
+  kurgu: string,
 ): Promise<{ kampanyalar: string[]; grup: string | null; reklam: string | null }> {
   const kisa = yayinId.replace(/-/g, '').slice(0, 8);
   if (!/^[0-9a-f]{8}$/.test(kisa)) throw new Error('Geçersiz yayın kimliği');
+  if (kurgu === 'MAKS_PERFORMANS') {
+    /*
+     * Maks. Performans'ta `ad_group_ad` YOK: o kaynaktan arayan tekillik
+     * kapısı kendi kurduğu kampanyayı hiç bulamaz ve her yayını "aramada
+     * görünmedi" diye durdururdu. Varlık grubundan aranıyor; WHERE'deki iki
+     * kampanya alanı SELECT'te (GAQL kuralı, yukarıya bkz.).
+     */
+    const satirlar = await port.ara<{ campaign?: { resourceName?: string }; assetGroup?: { resourceName?: string } }>(
+      ctx,
+      `SELECT campaign.resource_name, campaign.name, campaign.status, asset_group.resource_name
+         FROM asset_group
+        WHERE campaign.name LIKE '%adv-${kisa}%' AND campaign.status != 'REMOVED'`,
+    );
+    return {
+      kampanyalar: [...new Set(satirlar.map((s) => s.campaign?.resourceName).filter((x): x is string => !!x))],
+      grup: satirlar[0]?.assetGroup?.resourceName ?? null,
+      reklam: null,
+    };
+  }
   const satirlar = await port.ara<{ campaign?: { resourceName?: string }; adGroup?: { resourceName?: string }; adGroupAd?: { resourceName?: string } }>(
     ctx,
-    `SELECT campaign.resource_name, ad_group.resource_name, ad_group_ad.resource_name
+    `SELECT campaign.resource_name, campaign.name, campaign.status, ad_group.resource_name, ad_group_ad.resource_name
        FROM ad_group_ad
       WHERE campaign.name LIKE '%adv-${kisa}%' AND campaign.status != 'REMOVED'`,
   );
@@ -534,16 +788,22 @@ async function nesneYaz(tx: TxRunner, yayinId: string, ad: string, durum: string
   if (r.length !== 1) throw new Error(`yayin_nesnesi ${ad} ${durum} yazılamadı`);
 }
 
-/** Üç nesnenin Google kaynak adını yazar; yazılamazsa yayın kayit_belirsiz. */
+/** Nesnelerin Google kaynak adını yazar; yazılamazsa yayın kayit_belirsiz. */
 async function nesneKimlikleri(
   tx: TxRunner,
   yayinId: string,
-  k: Record<'kampanya' | 'reklamGrubu' | 'reklam', string>,
+  kurgu: string,
+  k: NesneKimlikleri,
   beklenen: string,
   durum: YayinDurumu,
 ): Promise<boolean> {
   try {
-    for (const n of GOOGLE_NESNELERI) await nesneYaz(tx, yayinId, n.ad, 'kuruldu', beklenen, k[n.sira]);
+    for (const n of googleNesneleri(kurgu)) {
+      const kimlik = k[n.sira];
+      // Beklenen nesnenin kimliği yoksa SESSİZ geçilmez: yazılamadı sayılır.
+      if (!kimlik) throw new Error(`${n.ad} için Google kaynak adı yok`);
+      await nesneYaz(tx, yayinId, n.ad, 'kuruldu', beklenen, kimlik);
+    }
     return true;
   } catch (e) {
     logger.error(`KAYIT BELİRSİZ yayin=${yayinId} google kampanya=${k.kampanya}: ${(e as Error).message}`);

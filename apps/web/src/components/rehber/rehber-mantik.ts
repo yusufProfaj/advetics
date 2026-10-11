@@ -25,6 +25,8 @@ import {
   setlereAyir,
   type GorselOrani,
   type NiyetKodu,
+  googleGorselOraniMi,
+  googleGorselSorunu,
   REHBER_ACILIS,
   REHBER_AMACLARI,
   REHBER_AMAC_KODLARI,
@@ -620,12 +622,15 @@ export function yayinBittiMi(platformlar: ReadonlyArray<Pick<PlatformYayinOzeti,
  */
 
 /**
- * Google'ın görsel reklamı (Talep Yaratma) yatay, kare ve 4:5 kabul ediyor;
- * dikey (9:16) görsel orada kullanılmıyor. Arama reklamında görsel yok,
- * o yüzden rozet yalnız görsel kullanan kurguda gösterilir.
+ * Google görsel rozeti: SUNUCUNUN kuralıyla (`googleGorselSorunu`, ±%1 oran,
+ * en az boyut). Burada bir süre ayrı bir oran listesi duruyordu ve Meta'nın
+ * %3 payını kullanıyordu: 1200×640 ekranda "Google ✓" görünüp kurulumda
+ * reddedilirdi. Bayt panelde bilinmiyor (0); büyüklük sınırını sunucunun
+ * eksik listesi söylüyor. `null` = uygun, metin = sebep.
  */
-export function googleGorselUygunMu(oran: GorselOrani): boolean {
-  return oran === 'kare' || oran === 'yatay' || oran === 'dik45';
+export function googleGorselRozeti(oran: GorselOrani, en: number, boy: number): string | null {
+  if (!googleGorselOraniMi(oran)) return "9:16 görsel Google'da kullanılmıyor";
+  return googleGorselSorunu(oran, { genislik: en, yukseklik: boy, bayt: 0 });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

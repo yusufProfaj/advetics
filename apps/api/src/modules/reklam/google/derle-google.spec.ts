@@ -64,6 +64,7 @@ function girdi(amac: RehberAmacKodu, donusumEtkin: boolean | null = false): Goog
     paraBirimi: 'TRY',
     saatDilimi: 'Europe/Istanbul',
     donusumEtkin,
+    satisOlcumu: null,
     isletmeAdi: 'Garden Villas',
     logoVarlikId: U(9),
     kategoriTabani: [],

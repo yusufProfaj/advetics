@@ -29,7 +29,7 @@ import {
   adresGirdisi,
   adresKaydi,
   formListesiHali,
-  googleGorselUygunMu,
+  googleGorselRozeti,
   kelimeDegistir,
   kelimeOnerisiHali,
   kelimeSatirlari,
@@ -385,7 +385,10 @@ function MedyaBlogu({
                     </small>
                   </div>
                   <div className={s.uygun}>
-                    {oran && googleGorsel && (googleGorselUygunMu(oran) ? <span className={s.e}>Google ✓</span> : <span className={s.h}>Google ✕ oran</span>)}
+                    {oran && googleGorsel && bilgi?.en && bilgi.boy && (() => {
+                      const sorun = googleGorselRozeti(oran, bilgi.en, bilgi.boy);
+                      return sorun ? <span className={s.h} title={sorun}>Google ✕</span> : <span className={s.e}>Google ✓</span>;
+                    })()}
                     <button type="button" className={s.metinDugme} aria-label={`${bilgi?.ad ?? 'Varlığı'} kaldır`} onClick={() => {
                         const kalan = medya.filter((y) => y.varlikId !== x.varlikId);
                         medyaYaz(setli ? setleriSabitle(kalan, oranlar) : kalan);
