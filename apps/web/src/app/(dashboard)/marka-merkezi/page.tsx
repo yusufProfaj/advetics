@@ -14,6 +14,7 @@ import { BagliKanallar } from '@/components/tenancy/bagli-kanallar';
 import { KitlelerBolumu } from '@/components/marka-merkezi/kitleler-bolumu';
 import { OlcumBolumu } from '@/components/marka-merkezi/olcum-bolumu';
 import { HazirlamaKarti } from '@/components/marka-merkezi/hazirlama-karti';
+import { KurulumBolumu } from '@/components/marka-merkezi/kurulum-bolumu';
 import { IcMenu, type BolumRozetleri } from '@/components/marka-merkezi/ic-menu';
 import {
   MM_BOLUMLERI,
@@ -238,6 +239,17 @@ export default async function MarkaMerkeziPage({
               </section>
             )}
 
+
+            {bolum === 'kurulum' && (
+              <section aria-labelledby="kurulum-baslik" className="space-y-3">
+                <BolumBasligi
+                  id="kurulum-baslik"
+                  baslik="Kurulum"
+                  aciklama="Bu projenin reklam hesapları, dönüşüm ölçümü ve marka bilgileri tek listede. Sistem yapabileceği her şeyi tek tuşla tamamlar; size kalanı nedeniyle yazar."
+                />
+                <KurulumBolumu clientId={clientId} yazabilir={yaz('client.write')} />
+              </section>
+            )}
 
             {bolum === 'olcum' && (
               <section aria-labelledby="olcum-baslik" className="space-y-3">

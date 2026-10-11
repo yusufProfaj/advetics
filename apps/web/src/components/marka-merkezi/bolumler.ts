@@ -21,6 +21,12 @@ import { butceAdresi } from '@/lib/butce-adresi';
  * (ya da yalnızca sayfaya) tıklanınca boş açılan bir satır demekti.
  */
 export const MM_BOLUMLERI = [
+  /*
+   * KURULUM İLK (2026-10-12, kullanıcı: "workspace'e girdiğimizde
+   * eksiklikleri görebilip tek tuşla tamamlayabilmemiz lazım"). Hesaplar,
+   * ölçüm ve marka tek listede; diğer bölümler o listenin ayrıntısı.
+   */
+  { kod: 'kurulum', ad: 'Kurulum', izin: 'client.read' },
   { kod: 'baglantilar', ad: 'Bağlantılar', izin: 'client.write' },
   { kod: 'marka', ad: 'Marka', izin: 'client.read' },
   /*

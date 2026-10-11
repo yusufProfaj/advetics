@@ -1531,6 +1531,16 @@ Detay: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md),
   şikâyetinin sebebiydi. Marka profili (`branding_profiles`) CSS'i ezer:
   renk/yazı tipi varsayılanı değişirse eski varsayılanı taşıyan satırlar
   migration'la güncellenmeli, seçilmiş değerlere dokunulmamalı.
+- **HER PROJENİN KENDİ HESAPLARI; KURULUM MARKA MERKEZİ'NİN İLK BÖLÜMÜ**
+  (kullanıcı kararı, 2026-10-12). Bir şirketin birden çok projesi varsa
+  her projenin ayrı Meta reklam hesabı, Google Ads hesabı, Tag Manager ve
+  Analytics'i olur. Tag Manager ve Analytics API'si HESAP açamıyor: ayrım
+  proje başına KONTEYNER ve GA4 MÜLKÜ ile (aynı hesap altında). Hesaplar
+  ajansın BM/MCC'si ya da şirketin kendi bağlantısı altında açılabiliyor;
+  ödeme yöntemini hiçbir API eklemiyor. Rehber gerçek hesap açan adımları
+  "Eksikleri tamamla"ya ASLA koymuyor; başkasının yayınlanmamış Tag Manager
+  sürümünü yayınlamıyor; aynı kategoride birincil Google Ads dönüşümü
+  varsa yenisini açmıyor (çift sayım). `docs/kurulum/MIMARI.md`.
 - **AKILLI BOOST YALNIZCA INSTAGRAM (+ YOUTUBE) KARTI ÜRETİR — Facebook
   sayfası DEĞİL** (kullanıcı kararı, 2026-09-30). Müşteriler paylaşımı iki
   platforma birden yapıyor (crosspost); Facebook sayfa gönderileri çekilmeye

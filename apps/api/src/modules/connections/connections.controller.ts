@@ -220,11 +220,16 @@ export class ConnectionsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Query('platform') platformParam: string,
     @Req() req: AuthedRequest,
+    @Query('kapsam') kapsam?: string,
+    @Query('donus') donus?: string,
   ) {
     const platform = this.assertPlatform(platformParam);
+    // DÖNÜŞ YALNIZ GÖRELİ YOL: `//evil.com` açık yönlendirme olurdu.
+    const redirectTo = donus && /^\/(?!\/)[A-Za-z0-9\-._~!$&'()*+,;=:@%/?]*$/.test(donus) ? donus : undefined;
+    const ek = { ...(kapsam === 'olcum' ? { kapsam: 'olcum' as const } : {}), ...(redirectTo ? { redirectTo } : {}) };
     // `id` SERVİSE GEÇİYOR: bağlantının hangi workspace’e ait olduğu orada
     // yazılı ve yeniden yetkilendirme sahipliği KORUMAK zorunda.
-    return this.connections.reauthorize(ctx, id, platform, this.meta(req));
+    return this.connections.reauthorize(ctx, id, platform, this.meta(req), ek);
   }
 
   @Post(':id/verify')

@@ -167,6 +167,14 @@ const GOOGLE_BREAKDOWN: Partial<
   },
 };
 
+export const GOOGLE_OLCUM_SCOPES = [
+  'https://www.googleapis.com/auth/tagmanager.edit.containers',
+  'https://www.googleapis.com/auth/tagmanager.edit.containerversions',
+  'https://www.googleapis.com/auth/tagmanager.publish',
+  'https://www.googleapis.com/auth/analytics.edit',
+  'https://www.googleapis.com/auth/analytics.readonly',
+] as const;
+
 @Injectable()
 export class GoogleProvider implements IAdPlatformProvider {
   readonly platform: Platform = 'google';
@@ -175,8 +183,15 @@ export class GoogleProvider implements IAdPlatformProvider {
   /** Google Ads API için tek scope yeterli. */
   readonly requiredScopes = ['https://www.googleapis.com/auth/adwords'] as const;
 
-  /** Google'da özellik bazlı ek scope yok — tek scope her şeyi kapsıyor. */
-  readonly optionalScopes = [] as const;
+  /**
+   * ÖLÇÜM İZİNLERİ — kurulum rehberi (docs/kurulum/MIMARI.md). `adwords`
+   * Tag Manager'a ve Analytics'e dokunamıyor; konteyner açmak, etiket yazıp
+   * yayınlamak, GA4 mülkü açmak ve anlık raporla doğrulamak bu beşini
+   * istiyor. ZORUNLU DEĞİL: hassas izinler Google'ın onay ekranında ayrıca
+   * tanımlanmalı ve tanımlanmadan istemek bütün bağlantıyı düşürürdü;
+   * yalnız "Ölçüm izinlerini ver" düğmesiyle isteniyor.
+   */
+  readonly optionalScopes = GOOGLE_OLCUM_SCOPES;
 
   constructor(@Inject(CONFIG) private readonly config: AppConfig) {}
 
@@ -208,13 +223,13 @@ export class GoogleProvider implements IAdPlatformProvider {
     return { clientId, clientSecret, developerToken };
   }
 
-  buildAuthorizeUrl({ state, redirectUri, forceReconsent }: AuthorizeUrlParams): string {
+  buildAuthorizeUrl({ state, redirectUri, forceReconsent, ekScopes }: AuthorizeUrlParams): string {
     const { clientId } = this.assertConfigured();
     const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
     url.searchParams.set('client_id', clientId);
     url.searchParams.set('redirect_uri', redirectUri);
     url.searchParams.set('response_type', 'code');
-    url.searchParams.set('scope', this.requiredScopes.join(' '));
+    url.searchParams.set('scope', [...this.requiredScopes, ...(ekScopes ?? [])].join(' '));
     url.searchParams.set('state', state);
     // access_type=offline: refresh token'ın ÖN KOŞULU. Olmadan access token
     // bir saatte dolar ve bağlantı kurtarılamaz.

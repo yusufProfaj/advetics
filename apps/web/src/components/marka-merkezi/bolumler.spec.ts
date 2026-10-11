@@ -15,16 +15,17 @@ describe('bolumCoz', () => {
   const yonetici = ROLE_PERMISSIONS.admin;
   it('tanınan bölüm seçiliyor, bilinmeyen ilk görünür bölüme düşüyor', () => {
     expect(bolumCoz('kitleler', yonetici)).toBe('kitleler');
-    expect(bolumCoz('yok-boyle', yonetici)).toBe('baglantilar');
-    expect(bolumCoz(undefined, yonetici)).toBe('baglantilar');
+    // KURULUM İLK (2026-10-12): workspace'e giren eksikleri ilk görür.
+    expect(bolumCoz('yok-boyle', yonetici)).toBe('kurulum');
+    expect(bolumCoz(undefined, yonetici)).toBe('kurulum');
   });
 
   it('KRİTİK: yetkisi olmayan bölüm açılmıyor — paylaşılan bağlantı boş sayfa vermesin', () => {
     // Bağlantılar connection gerektirmez ama `client.write` ister; yalnız
-    // okuyabilen bir izin kümesinde ilk görünür bölüm Marka.
+    // okuyabilen bir izin kümesinde ilk görünür bölüm Kurulum (salt okunur).
     const okur = ['client.read'] as const;
-    expect(bolumCoz('baglantilar', [...okur])).toBe('marka');
-    expect(bolumCoz('varliklar', [...okur])).toBe('marka');
+    expect(bolumCoz('baglantilar', [...okur])).toBe('kurulum');
+    expect(bolumCoz('varliklar', [...okur])).toBe('kurulum');
     expect(bolumCoz('marka', [])).toBeNull();
   });
 });
@@ -75,7 +76,7 @@ describe('Aylık Bütçe Planla’da (2026-10-09)', () => {
     expect(MM_BOLUMLERI.map((b) => b.kod)).not.toContain('butce');
     // Bilinmeyen bölüm gibi ilk görünür bölüme düşüyor; ama sayfa ondan
     // ÖNCE yönlendiriyor (aşağıda).
-    expect(bolumCoz('butce', ROLE_PERMISSIONS.ad_manager)).toBe('baglantilar');
+    expect(bolumCoz('butce', ROLE_PERMISSIONS.ad_manager)).toBe('kurulum');
   });
 
   it('KRİTİK: eski ?bolum=butce adresi /butce’ye yönleniyor, ay taşınıyor; /butce gerçek sayfa', async () => {

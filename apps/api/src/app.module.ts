@@ -38,6 +38,7 @@ import { ReklamModule } from './modules/reklam/reklam.module';
 import { RehberModule } from './modules/reklam/rehber/rehber.module';
 import { OlcumModule } from './modules/olcum/olcum.module';
 import { HazirlamaModule } from './modules/hazirlama/hazirlama.module';
+import { KurulumModule } from './modules/kurulum/kurulum.module';
 import { StratejiModule } from './modules/strateji/strateji.module';
 import { OkumaApiModule } from './modules/okuma-api/okuma-api.module';
 import { IyilestirModule } from './modules/iyilestir/iyilestir.module';
@@ -82,6 +83,7 @@ import { GenelBakisModule } from './modules/genel-bakis/genel-bakis.module';
     RehberModule,
     OlcumModule,
     HazirlamaModule,
+    KurulumModule,
     StratejiModule,
     OkumaApiModule,
     IyilestirModule,

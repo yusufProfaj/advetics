@@ -128,6 +128,12 @@ export interface AuthorizeUrlParams {
   redirectUri: string;
   /** Kullanıcıyı hesap seçim ekranına zorla (yeniden yetkilendirmede gerekli). */
   forceReconsent?: boolean;
+  /**
+   * Bu onayda İSTENEN ek izinler (Google ölçüm izinleri). Verilmezse yalnız
+   * zorunlu izinler istenir; `include_granted_scopes` daha önce verilenleri
+   * korur, yani token yenileme ekranı ölçüm iznini düşürmez.
+   */
+  ekScopes?: readonly string[];
 }
 
 export interface OAuthTokens {

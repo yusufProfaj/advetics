@@ -6,7 +6,7 @@
 > İŞ yazılır; her oturum kapanırken, işin kendi commit'inde güncellenir.
 > 16 Ağustos'a kadarki eski devir belgesi: [`arsiv/DEVAM-2026-08.md`](arsiv/DEVAM-2026-08.md).
 
-**Son güncelleme:** 2026-10-12 (hazır workspace Dalga 3) · 2026-10-11 gece (Dalga 3 canlı tur) · 2026-10-11 (Dalga 2 + set kartı) · 2026-10-10 akşam (AdvCampaign canlı tur 2 + banner seti; canlı `55312f6`) · 2026-10-09: **Canlı `6b51390` (11:43, 81 sn); ondan önce 316be15 (10:30):**
+**Son güncelleme:** 2026-10-12 (kurulum rehberi) · 2026-10-12 (hazır workspace Dalga 3) · 2026-10-11 gece (Dalga 3 canlı tur) · 2026-10-11 (Dalga 2 + set kartı) · 2026-10-10 akşam (AdvCampaign canlı tur 2 + banner seti; canlı `55312f6`) · 2026-10-09: **Canlı `6b51390` (11:43, 81 sn); ondan önce 316be15 (10:30):**
 aşağıda "DEPLOY EDİLMEDİ" yazan işlerin HEPSİ artık canlıda (AdvCampaign
 sohbeti, AdvStrategy ikinci tur, YouTube Boost Aşama 0–1 + kanal bulma, Okuma
 API, Base Aşama 1, LinkedIn para birimi). Ölçüldü: `prisma migrate status`
@@ -15,6 +15,21 @@ RLS politikası var, platform sahibi yalnız hello@profaj.com.
 **Bekleyen deploy:** yok hedefleniyor — Aşama 4 (İyileştir + AI Asistan)
 bu commit'le deploy ediliyor; migration `20261009100000_iyilestir` (üç
 yeni tablo) + `db:rls`.
+
+**KURULUM REHBERİ (2026-10-12, `docs/kurulum/MIMARI.md`, `BAGLANTI.md`).**
+Kullanıcı: her projenin ayrı Meta, Google Ads, Tag Manager ve Analytics'i;
+ajans atamıyorsa rehber hesapları açar, dönüşümleri kurar ve verinin doğru
+geldiğini doğrular; ajans atadıysa eksikler tek tuşla tamamlanır. Kararlar
+(kullanıcı): hesaplar ajans ya da şirket adına seçilebilir; GTM/GA4'te
+proje başına konteyner + mülk (API hesap açamıyor); site kodu gösterilir +
+geliştiriciye e-posta + taramayla doğrulama; deneme için Ege Birlik Yapı
+SİLİNMEZ, yeni workspace açılır. Marka Merkezi'nin İLK bölümü "Kurulum".
+**Kullanıcıda (koddan yapılamaz):** Google Cloud'da Tag Manager API, Analytics
+Admin API, Analytics Data API'yi aç + onay ekranına beş izni ekle
+(`BAGLANTI.md` §1); sonra Kurulum'da "Ölçüm izinlerini ver".
+**Ölçülmedi:** hiçbir yazma yolu canlıda koşmadı (Meta hesap/piksel açma,
+Google Ads hesap/dönüşüm, GTM etiket + yayın, GA4 mülk/akış/bağlantı).
+İlk kullanımda platform arayüzünde gözle kontrol.
 
 **HAZIR WORKSPACE + AD + BOYUT (2026-10-12, plan `docs/advcampaign/HAZIR-WORKSPACE-PLANI.md`).**
 Kullanıcı: workspace kurulup hesap atanınca her şey hazır olsun, kullanıcı

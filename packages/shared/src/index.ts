@@ -59,3 +59,4 @@ export * from './okuma-api';
 export * from './schemas/youtube-kanal.schema';
 export * from './olcum';
 export * from './hazirlama';
+export * from './kurulum';

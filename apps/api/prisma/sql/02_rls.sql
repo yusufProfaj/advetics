@@ -416,6 +416,7 @@ DECLARE
     'reklam_rehberi',
     -- Hazır workspace (docs/advcampaign/HAZIR-WORKSPACE-PLANI.md § Dalga 3)
     'workspace_hazirlama',
+    'workspace_kurulum',
     -- AdvStrategy aylık medya planı (docs/advstrategy/MIMARI.md § 1)
     'strateji_planlari', 'strateji_dagilimlari', 'strateji_matrisi', 'strateji_kelimeleri',
     'ozel_gunler'
@@ -2381,6 +2382,21 @@ CREATE POLICY adv_workspace_hazirlama_select ON workspace_hazirlama
 CREATE POLICY adv_workspace_hazirlama_insert ON workspace_hazirlama
   FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 CREATE POLICY adv_workspace_hazirlama_update ON workspace_hazirlama
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+  WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+
+
+-- ============================================================================
+-- KURULUM REHBERİ — workspace_kurulum (docs/kurulum/MIMARI.md)
+-- ============================================================================
+--
+-- MÜŞTERİ KAPSAMLI; SELECT, INSERT, UPDATE. DELETE YOK: satır workspace'le
+-- CASCADE ile gider.
+CREATE POLICY adv_workspace_kurulum_select ON workspace_kurulum
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_workspace_kurulum_insert ON workspace_kurulum
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_workspace_kurulum_update ON workspace_kurulum
   FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
   WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 

@@ -89,6 +89,7 @@ export const WORKSPACE_TABLOLARI: ReadonlyArray<{ tablo: string; etiket: string 
   // cevabı); geride kalsa yeni şirkette workspace "hazırlanmamış" görünür ve
   // kullanıcıya aynı sorular yeniden sorulurdu.
   { tablo: 'workspace_hazirlama', etiket: 'Reklama hazırlık' },
+  { tablo: 'workspace_kurulum', etiket: 'Kurulum rehberi' },
   // AdvStrategy planı workspace'in KENDİ kararı ve dayandığı kitle şablonları
   // ile varlıklar zaten taşınıyor; planı geride bırakmak, yeni şirkette
   // kitlesi olup planı olmayan bir workspace ve eski şirkette sahipsiz bir

@@ -4047,3 +4047,36 @@ model IyilestirAsistanMesaj {
   @@index([orgId], map: "iyilestir_asistan_mesaj_org_id_idx")
   @@map("iyilestir_asistan_mesaj")
 }
+
+/// WORKSPACE KURULUM REHBERİ — rehberin açtığı/seçtiği varlıkların kimlikleri
+/// (docs/kurulum/MIMARI.md). Durum saklanmıyor, bu kimliklerden türetiliyor.
+/// FK'ler migration SQL'inde (reklam_rehberi deseni).
+model WorkspaceKurulum {
+  clientId             String    @id @map("client_id") @db.Uuid
+  orgId                String    @map("org_id") @db.Uuid
+  hesapSahibi          String?   @map("hesap_sahibi") @db.VarChar(8)
+  metaBusinessId       String?   @map("meta_business_id") @db.VarChar(30)
+  googleMccId          String?   @map("google_mcc_id") @db.VarChar(10)
+  metaAcilanHesap      String?   @map("meta_acilan_hesap") @db.VarChar(30)
+  googleAcilanHesap    String?   @map("google_acilan_hesap") @db.VarChar(12)
+  gtmHesapId           String?   @map("gtm_hesap_id") @db.VarChar(20)
+  gtmKonteynerYolu     String?   @unique(map: "workspace_kurulum_gtm_konteyner_uniq") @map("gtm_konteyner_yolu") @db.VarChar(80)
+  gtmKimligi           String?   @map("gtm_kimligi") @db.VarChar(20)
+  gtmCalismaAlaniYolu  String?   @map("gtm_calisma_alani_yolu") @db.VarChar(120)
+  gtmYayin             Json?     @map("gtm_yayin") @db.JsonB
+  ga4HesapId           String?   @map("ga4_hesap_id") @db.VarChar(20)
+  ga4MulkId            String?   @map("ga4_mulk_id") @db.VarChar(20)
+  ga4AkisYolu          String?   @map("ga4_akis_yolu") @db.VarChar(80)
+  ga4OlcumKimligi      String?   @map("ga4_olcum_kimligi") @db.VarChar(20)
+  ga4AdsBagli          Boolean   @default(false) @map("ga4_ads_bagli")
+  adsDonusumleri       Json      @default("{}") @map("ads_donusumleri") @db.JsonB
+  donusumTetigi        Json?     @map("donusum_tetigi") @db.JsonB
+  adimNotlari          Json      @default("{}") @map("adim_notlari") @db.JsonB
+  sonDogrulama         Json?     @map("son_dogrulama") @db.JsonB
+  siteKodu             Json?     @map("site_kodu") @db.JsonB
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([orgId], map: "workspace_kurulum_org_id_idx")
+  @@map("workspace_kurulum")
+}

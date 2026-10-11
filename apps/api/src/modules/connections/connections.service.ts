@@ -523,10 +523,13 @@ export class ConnectionsService {
   async startOAuth(
     ctx: TenantContext,
     platform: Platform,
-    opts: { redirectTo?: string; forceReconsent?: boolean; clientId?: string },
+    opts: { redirectTo?: string; forceReconsent?: boolean; clientId?: string; kapsam?: 'olcum' },
     meta: Meta,
   ): Promise<{ authorizeUrl: string }> {
     const provider = this.provider(platform);
+    // ÖLÇÜM İZNİ YALNIZ GOOGLE'DA ek istek: Meta zaten bütün izinlerini
+    // (`allScopes`) her onayda istiyor.
+    const ekScopes = opts.kapsam === 'olcum' && platform === 'google' ? [...provider.optionalScopes] : [];
     if (!provider.isConfigured()) {
       const missing = this.availability().find((a) => a.platform === platform)?.missingConfig ?? [];
       throw new BadRequestException(
@@ -561,7 +564,7 @@ export class ConnectionsService {
           platform: platform as PrismaPlatform,
           tokenHash: this.hash(rawState),
           redirectTo: opts.redirectTo ?? null,
-          requestedScopes: [...provider.requiredScopes],
+          requestedScopes: [...provider.requiredScopes, ...ekScopes],
           createdByUserId: ctx.userId,
           expiresAt: new Date(Date.now() + STATE_TTL_MS),
           ip: meta.ip ?? null,
@@ -574,6 +577,7 @@ export class ConnectionsService {
         state: rawState,
         redirectUri: this.redirectUri(platform),
         forceReconsent: opts.forceReconsent,
+        ekScopes,
       }),
     };
   }
@@ -602,6 +606,7 @@ export class ConnectionsService {
     connectionId: string,
     platform: Platform,
     meta: Meta,
+    ek: { kapsam?: 'olcum'; redirectTo?: string } = {},
   ): Promise<{ authorizeUrl: string }> {
     const conn = await this.prisma.withTenant({ ...ctx, activeClientId: null }, (tx) =>
       tx.platformConnection.findFirst({
@@ -625,7 +630,12 @@ export class ConnectionsService {
       platform,
       // SAHİPLİK OLDUĞU GİBİ TAŞINIYOR: havuz bağlantısı havuz kalıyor,
       // workspace bağlantısı kendi workspace’inde kalıyor.
-      { forceReconsent: true, redirectTo: '/ayarlar/baglantilar', clientId: conn.clientId ?? undefined },
+      {
+        forceReconsent: true,
+        redirectTo: ek.redirectTo ?? '/ayarlar/baglantilar',
+        clientId: conn.clientId ?? undefined,
+        ...(ek.kapsam ? { kapsam: ek.kapsam } : {}),
+      },
       meta,
     );
   }
