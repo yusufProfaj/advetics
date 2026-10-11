@@ -165,6 +165,26 @@ describe('geri okuma', () => {
     expect(karsilastir(yankilar, n).sonuc).toBe('fark');
   });
 
+  it('N-18 (WhatsApp canlı turu 2): özellik kümesi yalnız şemsiye OPT_OUT dönerse temiz; şemsiye açıksa ya da başka anahtar varsa değil', () => {
+    const o = kopya(aynaOkuma(gs));
+    o['kreatif:1']!.degrees_of_freedom_spec.creative_features_spec = { advantage_plus_creative: { enroll_status: 'OPT_OUT' } };
+    const r = karsilastir(yankilar, o);
+    expect(r.sonuc).toBe('temiz');
+    expect(r.bilgiler.some((b) => b.tur === 'normallesti' && /tek ayar/.test(b.bilgi ?? ''))).toBe(true);
+
+    const acik = kopya(aynaOkuma(gs));
+    acik['kreatif:1']!.degrees_of_freedom_spec.creative_features_spec = { advantage_plus_creative: { enroll_status: 'OPT_IN' } };
+    expect(karsilastir(yankilar, acik).sonuc).toBe('fark');
+
+    // Şemsiyenin YANINDA başka bir anahtar varsa eksik anahtar gerçekten eksik.
+    const karisik = kopya(aynaOkuma(gs));
+    karisik['kreatif:1']!.degrees_of_freedom_spec.creative_features_spec = {
+      advantage_plus_creative: { enroll_status: 'OPT_OUT' },
+      image_touchups: { enroll_status: 'OPT_OUT' },
+    };
+    expect(karsilastir(yankilar, karisik).sonuc).toBe('dogrulanamadi');
+  });
+
   it('kreatif özelliği: tanınan OPT_IN fark; tanınmayan VAR olması sorun değil, OPT_IN dönmesi durdurur', () => {
     const o = kopya(aynaOkuma(gs));
     o['kreatif:1']!.degrees_of_freedom_spec.creative_features_spec.IMAGE_ANIMATION = { enroll_status: 'OPT_IN' };

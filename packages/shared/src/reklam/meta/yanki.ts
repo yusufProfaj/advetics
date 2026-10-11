@@ -349,6 +349,28 @@ function ekFalseHaricAyni(gonderilen: unknown, donen: unknown): boolean {
 }
 
 /**
+ * N-18 — ŞEMSİYE ÖZELLİK, ölçüldü (2026-10-11, v25.0, WhatsApp canlı turu
+ * 2, Ege Birlik Yapı). Meta aynı içerikli kreatifi yeniden kullandı (N-12)
+ * ve `creative_features_spec` içinde gönderdiğimiz yedi anahtarın HİÇBİRİNİ
+ * döndürmedi; yalnız `advantage_plus_creative: {enroll_status: OPT_OUT}`.
+ * Yedi satır "dönmedi" olunca yayın "okunamadı" sayılıp durdu: kurulum Meta'da
+ * eksiksizdi. DAR: özellik kümesinde şemsiyeden başka anahtar YOKSA ve
+ * gönderilen OPT_OUT ise bilgi; şemsiye OPT_OUT dışında bir şeyse fark
+ * (kapattığımız özellikler toptan açılmış olabilir). Başka anahtar da
+ * dönüyorsa kural uygulanmaz: o zaman eksik anahtar gerçekten eksiktir.
+ */
+const SEMSIYE_OZELLIK = 'advantage_plus_creative';
+function semsiyeOzellik(nesne: Record<string, unknown>, alanYolu: string): string | null {
+  const onek = 'degrees_of_freedom_spec.creative_features_spec.';
+  if (!alanYolu.startsWith(onek) || !alanYolu.endsWith('.enroll_status')) return null;
+  const spec = al(nesne, 'degrees_of_freedom_spec.creative_features_spec');
+  if (!spec || typeof spec !== 'object') return null;
+  const anahtarlar = Object.keys(spec as Record<string, unknown>);
+  if (anahtarlar.length !== 1 || anahtarlar[0]!.toLowerCase() !== SEMSIYE_OZELLIK) return null;
+  return String(al((spec as Record<string, unknown>)[anahtarlar[0]!], 'enroll_status') ?? '').toUpperCase();
+}
+
+/**
  * N-09: geçmiş bir başlangıç gönderilince Meta kurulum anını yazıyor
  * (gönderilen 00:00, dönen 04:02). Kabul koşulu AN ÜZERİNDEN (Ajan 4,
  * BULGU-9/10): gönderilen GEÇMİŞTE (okuma anından önce) VE dönen
@@ -522,6 +544,15 @@ export function geriOkumaKarsilastir(
     });
 
     if (donen === undefined) {
+      const semsiye = nesne === undefined ? null : semsiyeOzellik(nesne, y.alanYolu);
+      if (semsiye === 'OPT_OUT' && kanonik(y.gonderilen) === kanonik('OPT_OUT')) {
+        bilgiler.push(satir('normallesti', "Meta Advantage+ kreatif özelliklerini tek ayar olarak kapalı döndürdü."));
+        continue;
+      }
+      if (semsiye !== null && semsiye !== 'OPT_OUT') {
+        satirlar.push(satir('fark'));
+        continue;
+      }
       // Kabul edilemez alan dönmediyse yayın açılamaz; diğerleri kayıt.
       (y.kabulEdilemez ? satirlar : bilgiler).push(satir('donmedi'));
       continue;

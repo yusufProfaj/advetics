@@ -1061,6 +1061,16 @@ okunup varsayılmadı — canlıda doğrulandı.
   kimlik eklemediği için (1)'i hiç göremedi: ayna, Meta'nın değiştirdiği
   her şeyi taklit etmedikçe "temiz" iddiası canlıda doğrulanmış sayılmaz.
 
+- **ŞEMSİYE ÖZELLİK VE YENİ NESNE GECİKMESİ — ölçüldü** (2026-10-11,
+  v25.0, WhatsApp canlı turu 2): yeniden kullanılan (N-12) kreatifte Meta
+  yedi özellik anahtarının HİÇBİRİNİ döndürmedi, yalnız
+  `advantage_plus_creative: OPT_OUT`; yedi "dönmedi" satırı yayını
+  "okunamadı"da durdurdu (N-18, dar). Ayrıca geri okuma hatası `catch {}`
+  ile yutuluyordu: okuma artık 0/3/10 sn yeniden deneniyor ve mesaj
+  `geri_okuma.ham.okuma_hatalari`nda. Rehberin "Yeniden kontrol et"
+  düğmesi yoktu ve API yolu durum makinesinde hiç çalışmamıştı
+  (`dogrulanamadi` → yalnız `geri_okuma`).
+
 - **ÖZEL KATEGORİ SATIR İÇİ `campaign_spec`TE SINANAMIYOR — ölçüldü**
   (2026-10-10, v25.0, `meta-kategori-prova`, Ege Birlik Yapı). Konutlu
   provada kampanya kendi ucunda GEÇTİ; reklam seti ve reklamlar (satır içi
