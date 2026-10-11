@@ -66,7 +66,8 @@ export interface RehberOzeti {
    * Rehberin kendi `durum`u "Vazgeç ve arşivle"den sonra da `yayinda`
    * kalıyor; liste yalnız onu okuyunca arşivlenen reklam "Yayında" görünüyordu.
    */
-  yayinlar: Array<{ platform: RehberPlatformu; durum: YayinDurumu | null }>;
+  /** `sebep`: kaydı olmayan platformun başlamama sebebi (yoksa null). */
+  yayinlar: Array<{ platform: RehberPlatformu; durum: YayinDurumu | null; sebep: string | null }>;
   updatedAt: string;
 }
 

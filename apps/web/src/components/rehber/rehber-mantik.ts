@@ -583,7 +583,10 @@ export function yayinAdimlari(durum: YayinDurumu | null): [AdimHali, AdimHali, A
 
 export type YayinSonucu = 'suruyor' | 'yayinda' | 'duraklatildi' | 'arsivlendi' | 'hata';
 
-export function yayinSonucu(p: Pick<PlatformYayinOzeti, 'durum'>): YayinSonucu {
+export function yayinSonucu(p: Pick<PlatformYayinOzeti, 'durum'> & Partial<Pick<PlatformYayinOzeti, 'sebep'>>): YayinSonucu {
+  // Kaydı yok AMA sebebi var: platform hiç başlamadı (sunucu yazar). Bunu
+  // "sürüyor" saymak ekranı sonsuza kadar "Kuruluyor"da bırakıyordu.
+  if (p.durum === null && p.sebep) return 'hata';
   // Motor bu durumdan kendiliğinden ilerliyorsa iş sürüyor; null = henüz başlamadı.
   if (p.durum === null || YAYIN_DURUM_SINIFI[p.durum].motor) return 'suruyor';
   if (p.durum === 'kapali_kuruldu') return 'duraklatildi';
@@ -623,7 +626,7 @@ export function yenidenOkunabilirMi(p: Pick<PlatformYayinOzeti, 'platform' | 'du
  * duruyor, yalnız okunup karşılaştırılamadı. "Kurulamadı" demek kullanıcıyı
  * yeniden kurmaya, yani İKİNCİ bir kampanya açmaya gönderirdi.
  */
-export function yayinSonucuEtiketi(p: Pick<PlatformYayinOzeti, 'durum'> & Partial<Pick<PlatformYayinOzeti, 'platform'>>): string {
+export function yayinSonucuEtiketi(p: Pick<PlatformYayinOzeti, 'durum'> & Partial<Pick<PlatformYayinOzeti, 'platform' | 'sebep'>>): string {
   if (p.durum === 'dogrulanamadi') return 'Kontrol edilemedi';
   // Google'da geri alma KALDIRIR (`geriAlMetinleri`); "Arşivlendi" Meta'nın sözü.
   if (p.durum === 'arsivlendi' && p.platform === 'google') return 'Kaldırıldı';
@@ -1124,14 +1127,6 @@ export function sonEkranOzeti(platformlar: ReadonlyArray<{ platform: RehberPlatf
 // Giriş listesi
 // ─────────────────────────────────────────────────────────────────────────────
 
-const SONUC_ADI: Record<YayinSonucu, string> = {
-  suruyor: 'Kuruluyor',
-  yayinda: 'Yayında',
-  duraklatildi: 'Duraklatılmış',
-  arsivlendi: 'Arşivlendi',
-  hata: 'Kurulamadı',
-};
-
 /**
  * Listedeki durum yazısı. Rehberin kendi durumu dar (`taslak`/`yayinda`)
  * ve "Vazgeç ve arşivle" onu değiştirmiyor: arşivlenen reklam listede
@@ -1143,7 +1138,10 @@ export function listeDurumu(r: Pick<RehberOzeti, 'durum' | 'platformlar' | 'yayi
   if (r.durum === 'taslak') return `Taslak · ${plt}`;
   if (r.durum === 'arsivlendi') return `Arşivlendi · ${plt}`;
   if (r.yayinlar.length === 0) return `Yayında · ${plt}`;
-  const adlar = r.yayinlar.map((y) => ({ ad: PLATFORM_ADLARI[y.platform], sonuc: SONUC_ADI[yayinSonucu(y)] }));
+  // Söz son ekrandakiyle AYNI üreticiden (`yayinSonucuEtiketi`): liste
+  // ayrı bir sözlük taşırken okunamayan kurulumu "Kurulamadı", Google'da
+  // kaldırılanı "Arşivlendi" diyordu ve son ekran düzelince ayrıştı.
+  const adlar = r.yayinlar.map((y) => ({ ad: PLATFORM_ADLARI[y.platform], sonuc: yayinSonucuEtiketi(y) }));
   if (adlar.every((x) => x.sonuc === adlar[0]!.sonuc)) return `${adlar[0]!.sonuc} · ${adlar.map((x) => x.ad).join(' + ')}`;
   return adlar.map((x) => `${x.ad}: ${x.sonuc}`).join(' · ');
 }

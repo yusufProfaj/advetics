@@ -247,9 +247,9 @@ describe('prova ve yayın', () => {
     // Dalga 3: liste platformun GERÇEK hâlini taşıyor; arşivlenen yayın
     // "Yayında" diye okunmasın (rehberin kendi durumu yayinda kalıyor).
     const satir = async () => (await svc.listele(CTX, IDS.client)).satirlar.find((x) => x.id === r.id)!;
-    expect((await satir()).yayinlar).toEqual([{ platform: 'google', durum: 'on_kontrol' }]);
+    expect((await satir()).yayinlar).toEqual([{ platform: 'google', durum: 'on_kontrol', sebep: null }]);
     await h.q(`UPDATE yayin SET durum = 'arsivlendi'`);
-    expect((await satir()).yayinlar).toEqual([{ platform: 'google', durum: 'arsivlendi' }]);
+    expect((await satir()).yayinlar).toEqual([{ platform: 'google', durum: 'arsivlendi', sebep: null }]);
     const taslak = await svc.olustur(CTX, IDS.client);
     expect((await svc.listele(CTX, IDS.client)).satirlar.find((x) => x.id === taslak.id)!.yayinlar).toEqual([]);
   });

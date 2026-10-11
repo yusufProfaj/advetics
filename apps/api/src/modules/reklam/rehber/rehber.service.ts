@@ -226,6 +226,9 @@ export function platformaGiderken(eksikler: RehberEksigi[]): RehberEksigi[] {
   );
 }
 
+/** Yayına alınmış rehberde hiç yayın kaydı açılmamış platformun sözü. */
+export const BASLAMAYAN_PLATFORM_SEBEBI = 'Bu platformda kurulum başlamadı; Yeni reklam ile yeniden deneyebilirsin.';
+
 @Injectable()
 export class RehberService {
   private readonly onbellek = new Map<string, OnKosulKaydi>();
@@ -539,7 +542,7 @@ export class RehberService {
       // Yayınlanmış satırda platformların GERÇEK hâli: "Vazgeç ve arşivle"
       // rehberin durumunu değiştirmiyor, liste yalnız onu okuyunca
       // arşivlenen reklam "Yayında" görünüyordu.
-      const yayinlar = s.durum === 'yayinda' ? (await this.yayinDurumu(ctx, s.id)).platformlar.map((p) => ({ platform: p.platform, durum: p.durum })) : [];
+      const yayinlar = s.durum === 'yayinda' ? (await this.yayinDurumu(ctx, s.id)).platformlar.map((p) => ({ platform: p.platform, durum: p.durum, sebep: p.durum === null ? p.sebep : null })) : [];
       sonuc.push({
         id: s.id,
         amac: a.amac?.deger ?? null,
@@ -1003,7 +1006,12 @@ export class RehberService {
         taslakId,
         yayinId: y?.id ?? null,
         durum: y?.durum ?? null,
-        sebep: y?.sebep ?? null,
+        // YAYINA ALINMIŞ REHBERDE KAYDI OLMAYAN PLATFORM BAŞLAMAMIŞTIR. Sebep
+        // yalnız yayınlama yanıtında dönüyordu; sonraki her okumada durum
+        // null'dı ve panel onu "Kuruluyor" diye sonsuza kadar gösterdi
+        // (canlı, rehber 37df523b, 2026-10-10). Kayıt yokken sebep yazılır;
+        // panel sebepli null'u hata sayar (`yayinSonucu`).
+        sebep: y ? y.sebep : s.durum !== 'taslak' ? BASLAMAYAN_PLATFORM_SEBEBI : null,
         // Google'da kaynak adı saklanıyor; Reklam Yöneticisi yalın kimlik arıyor.
         kampanyaKimligi: y?.kampanya ? (platform === 'google' ? googleYalinKimlik(y.kampanya) : y.kampanya) : null,
         duraklatilmisKalacak: y?.kapali_kalacak ?? false,

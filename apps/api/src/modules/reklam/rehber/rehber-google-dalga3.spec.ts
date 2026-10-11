@@ -227,3 +227,21 @@ describe('Talep Yaratma görsel — giriş anında Google kuralları', () => {
     expect(r.kararlar.find((x) => x.kod === 'NEREDE')?.google?.deger).toBe('YouTube akışı ve Shorts, Gmail, Keşfet');
   });
 });
+
+describe('başlamayan platform (canlı, rehber 37df523b, 2026-10-10)', () => {
+  it('KRİTİK: yayına alınmış rehberde kaydı olmayan platform sebepli döner; taslakta sebep yok', async () => {
+    const r = await svc.olustur(CTX, IDS.client);
+    const [t] = await h.q<{ id: string }>(
+      `INSERT INTO reklam_taslagi (org_id, client_id, platform, olusturan_yuz, olusturan_id, aktif_surum_no, ad_account_id)
+       VALUES ($1, $2, 'google', 'acemi', $3, 1, $4) RETURNING id::text`,
+      [IDS.org, IDS.client, IDS.user, GHESAP],
+    );
+    await h.q(`UPDATE reklam_rehberi SET google_taslak_id = $1 WHERE id = $2`, [t!.id, r.id]);
+    const taslakta = await svc.yayinDurumu(CTX, r.id);
+    expect(taslakta.platformlar).toEqual([expect.objectContaining({ platform: 'google', durum: null, sebep: null })]);
+    await h.q(`UPDATE reklam_rehberi SET durum = 'yayinda' WHERE id = $1`, [r.id]);
+    const yayinda = await svc.yayinDurumu(CTX, r.id);
+    expect(yayinda.platformlar[0]).toMatchObject({ platform: 'google', yayinId: null, durum: null });
+    expect(yayinda.platformlar[0]!.sebep).toMatch(/başlamadı/);
+  });
+});
