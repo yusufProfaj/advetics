@@ -26,6 +26,7 @@
     "meta-kategori-prova": "node dist/meta-kategori-prova.js",
     "meta-yerlesim-prova": "node dist/meta-yerlesim-prova.js",
     "meta-sayfa-metrik-kontrol": "node dist/meta-sayfa-metrik-kontrol.js",
+    "meta-whatsapp-kontrol": "node dist/meta-whatsapp-kontrol.js",
     "worker": "node dist/worker.js",
     "worker:dev": "tsx watch src/worker.ts",
     "youtube-check": "tsx prisma/youtube-check.ts",
