@@ -42,6 +42,12 @@ export interface HazirlikGirdisi {
    * şey değil; ikincisi `bilinmiyor` olarak dönüyor.
    */
   buAyButceVar: boolean | null;
+  /**
+   * Hazır workspace işinin sonucu (`workspace_hazirlama`); satır yoksa
+   * `null` = hazırlık hiç koşmadı. Bu madde olmadan şerit "6/6 hazır"
+   * derken hemen altındaki kart soru bekliyordu (canlı, 2026-10-12).
+   */
+  hazirlama: { durum: string; soruSayisi: number } | null;
 }
 
 const bos = (s: string | null | undefined): boolean => !s || s.trim().length === 0;
@@ -227,6 +233,26 @@ export function hazirlikMaddeleri(g: HazirlikGirdisi): HazirlikMaddesi[] {
           durum: 'eksik',
           aciklama:
             'Facebook sayfası, Instagram hesabı ya da YouTube kanalı bağlı değil. Akıllı Boost öne çıkaracağı gönderileri buradan alıyor.',
+        },
+  );
+
+  // ─── 7. Reklam hazırlığı ───────────────────────────────────────────────
+  // Önerilen, zorunlu değil: sorular reklamı durdurmuyor, rehberde elle
+  // seçiliyor; ama cevaplanınca her reklamda önden doluyor.
+  const hz = g.hazirlama;
+  maddeler.push(
+    hz?.durum === 'hazir'
+      ? { kod: 'reklam_hazirligi', zorunlu: false, durum: 'tamam', aciklama: 'Site, piksel, kategori, bölge ve bütçe hazır; reklamda önden dolu gelir.' }
+      : {
+          kod: 'reklam_hazirligi',
+          zorunlu: false,
+          durum: 'eksik',
+          aciklama:
+            hz === null
+              ? 'Hazırlık henüz koşmadı. Reklam hesabı atanınca ya da Bağlantılar açılınca kendiliğinden başlar.'
+              : hz.soruSayisi > 0
+                ? `${hz.soruSayisi} soru cevabını bekliyor; cevaplanınca her reklamda önden dolu gelir.`
+                : 'Bazı adımlar tamamlanamadı; nedeni Bağlantılar’daki hazırlık kartında yazıyor.',
         },
   );
 

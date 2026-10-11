@@ -25,6 +25,7 @@ export function HedeflemeSecici({
   kitleId,
   setKitleId,
   kayitliKitle = true,
+  bosMetni = 'Şehir seçilmezse hedefleme Türkiye geneli olur.',
 }: {
   clientId: string;
   lokasyonlar: GeoLocationOption[];
@@ -38,6 +39,11 @@ export function HedeflemeSecici({
    * iki kopyası demekti.
    */
   kayitliKitle?: boolean;
+  /**
+   * Seçim boşken yazan cümle. Boost'ta boş = Türkiye geneli; hazırlık
+   * sorusunda boş seçim KAYDEDİLEMİYOR ve aynı cümle yalan olurdu.
+   */
+  bosMetni?: string;
 }) {
   const [kitleler, setKitleler] = useState<SavedAudienceList | null>(null);
   const [kitleHata, setKitleHata] = useState<string | null>(null);
@@ -249,7 +255,7 @@ export function HedeflemeSecici({
 
           <p className="text-[11px] text-ink-muted">
             {lokasyonlar.length === 0
-              ? 'Şehir seçilmezse hedefleme Türkiye geneli olur.'
+              ? bosMetni
               : 'Seçilen yerler BİRLEŞİM olarak uygulanıyor; ülke geneli ayrıca gönderilmiyor.'}
           </p>
         </>

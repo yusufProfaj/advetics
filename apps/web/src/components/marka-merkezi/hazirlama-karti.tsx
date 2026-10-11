@@ -154,10 +154,11 @@ export function HazirlamaKarti({ clientId, yazabilir }: { clientId: string; yaza
 
       <ul className="divide-y divide-line">
         {v.adimlar.map((a) => (
-          <li key={a.kod} className="flex items-start gap-3 px-5 py-2.5 text-sm">
+          <li key={a.kod} className="flex flex-wrap items-start gap-x-3 gap-y-0.5 px-5 py-2.5 text-sm">
             <span aria-hidden className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${TON_SINIFI[ADIM_DURUM_TONU[a.durum]]}`} />
-            <span className="w-36 shrink-0 text-ink-muted">{ADIM_ADI[a.kod]}</span>
-            <span className="min-w-0 flex-1">
+            {/* Mobilde etiket üstte: sabit genişlikli sütun site adresini taşırıyordu. */}
+            <span className="min-w-0 flex-1 text-ink-muted sm:w-36 sm:flex-none">{ADIM_ADI[a.kod]}</span>
+            <span className="min-w-0 basis-full break-words pl-5 sm:basis-0 sm:flex-1 sm:pl-0 [overflow-wrap:anywhere]">
               <span className="font-medium text-ink">{a.baslik}</span>
               <span className="block text-xs text-ink-muted">{a.neden}</span>
             </span>
@@ -247,6 +248,7 @@ function Soru({ clientId, soru, guncelle }: { clientId: string; soru: HazirlamaS
             kitleId={null}
             setKitleId={() => undefined}
             kayitliKitle={false}
+            bosMetni="Hizmet verdiğin şehir ya da bölgeleri seç; tüm Türkiye için Türkiye'yi seç."
           />
           <Dugme
             boyut="kucuk"

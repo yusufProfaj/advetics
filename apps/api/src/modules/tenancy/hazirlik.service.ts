@@ -95,6 +95,10 @@ export class HazirlikService {
           FROM client_profiles WHERE client_id = ${clientId}::uuid
       `);
 
+      const [hazirlama] = await tx.$queryRaw<Array<{ durum: string; soru_sayisi: number }>>(Prisma.sql`
+        SELECT durum, jsonb_array_length(sorular)::int AS soru_sayisi FROM workspace_hazirlama WHERE client_id = ${clientId}::uuid
+      `);
+
       let buAyButceVar: boolean | null = null;
       if (butceOkunur) {
         const [b] = await tx.$queryRaw<Array<{ n: number }>>(Prisma.sql`
@@ -130,6 +134,7 @@ export class HazirlikService {
             }
           : null,
         buAyButceVar,
+        hazirlama: hazirlama ? { durum: hazirlama.durum, soruSayisi: hazirlama.soru_sayisi } : null,
       });
 
       return {

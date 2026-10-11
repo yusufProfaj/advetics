@@ -23,6 +23,7 @@ export const HAZIRLIK_KODLARI = [
   'logo',
   'aylik_butce',
   'sosyal_kanal',
+  'reklam_hazirligi',
 ] as const;
 export type HazirlikKodu = (typeof HAZIRLIK_KODLARI)[number];
 

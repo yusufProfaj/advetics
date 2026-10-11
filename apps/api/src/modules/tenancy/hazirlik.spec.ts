@@ -43,6 +43,7 @@ const TAM: HazirlikGirdisi = {
     sayfaSayisi: 0,
   },
   buAyButceVar: true,
+  hazirlama: { durum: 'hazir', soruSayisi: 0 },
 };
 
 const madde = (g: HazirlikGirdisi, kod: string) => hazirlikMaddeleri(g).find((m) => m.kod === kod)!;
@@ -60,10 +61,18 @@ describe('karar', () => {
       sosyalKanalSayisi: 0,
       profil: null,
       buAyButceVar: null,
+      hazirlama: null,
     };
     for (const g of [TAM, bosGirdi]) {
       for (const m of hazirlikMaddeleri(g)) expect(m.aciklama.length, m.kod).toBeGreaterThan(8);
     }
+  });
+
+  it('KRİTİK: hazırlık soru bekliyorsa madde eksik ve kaç soru olduğunu söylüyor (şerit "hepsi tamam" demesin)', () => {
+    expect(madde({ ...TAM, hazirlama: { durum: 'soru', soruSayisi: 2 } }, 'reklam_hazirligi')).toMatchObject({ durum: 'eksik', zorunlu: false });
+    expect(madde({ ...TAM, hazirlama: { durum: 'soru', soruSayisi: 2 } }, 'reklam_hazirligi').aciklama).toContain('2 soru');
+    expect(madde({ ...TAM, hazirlama: null }, 'reklam_hazirligi').durum).toBe('eksik');
+    expect(madde(TAM, 'reklam_hazirligi').durum).toBe('tamam');
   });
 
   it('yalnızca hesap ve veri akışı zorunlu', () => {
@@ -223,6 +232,7 @@ describe('servis', () => {
        VALUES (gen_random_uuid(), $1, $2, $3, 'facebook_page', 'p1', 'Sayfa', now())`,
       [IDS.org, IDS.client, IDS.connection],
     );
+    await h.q(`INSERT INTO workspace_hazirlama (client_id, org_id, durum) VALUES ($1, $2, 'hazir')`, [IDS.client, IDS.org]);
 
     const r = await svc.get(CTX(['client.read', 'budget.read']), IDS.client, SIMDI);
     for (const m of r.maddeler) expect(m.durum, `${m.kod}: ${m.aciklama}`).toBe('tamam');

@@ -69,6 +69,11 @@ export const HAZIRLIK_MADDE_TANIMI: Record<
     kisa: 'Sayfa ya da kanal',
     eylem: (id) => ({ etiket: 'Kanal bağla', href: mmAdresi(id, 'baglantilar') }),
   },
+  reklam_hazirligi: {
+    baslik: 'Reklam hazırlığı tamam',
+    kisa: 'Reklam hazırlığı',
+    eylem: (id) => ({ etiket: 'Soruları cevapla', href: mmAdresi(id, 'baglantilar') }),
+  },
 };
 
 /*
