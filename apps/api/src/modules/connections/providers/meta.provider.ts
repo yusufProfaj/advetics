@@ -1752,6 +1752,33 @@ export class MetaProvider implements IAdPlatformProvider {
     return { satirlar, kesildi };
   }
 
+  /**
+   * Pikselin son günlerdeki olay sayıları (Ölçüm). Sayfalar bitmeden durursa
+   * `null`: eksik toplamı "bu kadar" diye göstermek yanlış sayıdır.
+   */
+  async fetchPixelEventCounts(params: { pikselId: string; accessToken: string; baslangic: number }): Promise<Record<string, number> | null> {
+    if (!/^\d{1,30}$/.test(params.pikselId)) throw new PlatformApiError('meta', 'permanent', 'Piksel kimliği sayısal olmalı');
+    const auth = { headers: { Authorization: `Bearer ${params.accessToken}` } };
+    const ilk = new URL(`${this.graph}/${params.pikselId}/stats`);
+    ilk.searchParams.set('aggregation', 'event');
+    ilk.searchParams.set('start_time', String(params.baslangic));
+    let url: string | null = ilk.toString();
+    const toplam: Record<string, number> = {};
+    try {
+      for (let i = 0; i < PIKSEL_SAYFA_SINIRI && url; i++) {
+        const res: PlatformResponse<unknown> = await platformFetch<unknown>('meta', url, auth, parseMetaRateLimit);
+        const c = pikselOlayToplamlariCoz(res.data);
+        if (!c) return null;
+        for (const [k, n] of Object.entries(c.toplamlar)) toplam[k] = (toplam[k] ?? 0) + n;
+        url = c.sonraki;
+      }
+      return url ? null : toplam;
+    } catch (err) {
+      this.logger.warn(`Piksel ${params.pikselId}: olay sayıları okunamadı: ${err instanceof Error ? err.message : String(err)}`);
+      return null;
+    }
+  }
+
   private async pikselSatinAlma(pikselId: string, baslangic: number, auth: RequestInit): Promise<boolean | null> {
     const ilk = new URL(`${this.graph}/${pikselId}/stats`);
     ilk.searchParams.set('aggregation', 'event');
@@ -3729,6 +3756,30 @@ export function pikselSatinAlmaCoz(govde: unknown): { bulundu: boolean | null; s
     }
   }
   return { bulundu: false, sonraki };
+}
+
+/**
+ * Piksel istatistiğinden OLAY → SAYIM toplamları (Ölçüm, 2026-10-11).
+ * ÖLÇÜLDÜ: `/{piksel}/stats?aggregation=event` saatlik kovalar döndürüyor,
+ * her kovada `data[] = {value, count}`; olay adları eklenti adlarını da
+ * taşıyabiliyor ("Click to Chat by HoliThemes"). Biçim tanınmazsa `null`:
+ * "olay yok" ile "okuyamadık" ayrı iş.
+ */
+export function pikselOlayToplamlariCoz(govde: unknown): { toplamlar: Record<string, number>; sonraki: string | null } | null {
+  const g = govde as { data?: unknown; paging?: { next?: unknown } } | null;
+  if (!g || !Array.isArray(g.data)) return null;
+  const toplamlar: Record<string, number> = {};
+  for (const kova of g.data) {
+    const ic = (kova as { data?: unknown } | null)?.data;
+    if (!Array.isArray(ic)) return null;
+    for (const x of ic) {
+      const o = x as { value?: unknown; count?: unknown } | null;
+      const n = Number(o?.count);
+      if (typeof o?.value !== 'string' || !Number.isFinite(n)) continue;
+      toplamlar[o.value] = (toplamlar[o.value] ?? 0) + n;
+    }
+  }
+  return { toplamlar, sonraki: typeof g.paging?.next === 'string' ? g.paging.next : null };
 }
 
 export function stripPagePrefix(postId: string, pageId: string): string {

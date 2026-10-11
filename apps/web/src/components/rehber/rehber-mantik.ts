@@ -1192,3 +1192,10 @@ export function videoBilgisiKapaktan<T extends { ad: string; onizleme: string; e
   }
   return sonuc ?? bilgi;
 }
+
+/**
+ * ÖLÇÜM ENGELLERİ → Marka Merkezi › Ölçüm (2026-10-11). "Satın alma dönüşümü
+ * etkin değil" kullanıcıyı Google Ads'e yolluyordu ve neyin eksik olduğunu
+ * söylemiyordu; Ölçüm bölümü durumu nedeniyle gösterip kurulumu öneriyor.
+ */
+export const OLCUM_ENGEL_KODLARI: readonly string[] = ['G-DONUSUM', 'M-PIKSEL', 'M-PIKSEL-CALISMADI', 'M-PIKSEL-SESSIZ'];

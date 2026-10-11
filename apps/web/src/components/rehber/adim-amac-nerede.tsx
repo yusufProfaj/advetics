@@ -7,7 +7,7 @@ import { baglanti } from '@/lib/baglanti';
 import { AltCubuk, Soru, sil, yaz, type AdimBaglami } from './adim-ortak';
 import { AMAC_IKONU, IKON, Ikon } from './ikonlar';
 import { PikselSecici } from './meta-dalga3';
-import { amacDegisimi, gorunurAmaclar, platformAnahtari, platformDurumu, platformNedeni, type EkranNo } from './rehber-mantik';
+import { OLCUM_ENGEL_KODLARI, amacDegisimi, gorunurAmaclar, platformAnahtari, platformDurumu, platformNedeni, type EkranNo } from './rehber-mantik';
 import s from './rehber.module.css';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -167,6 +167,7 @@ export function AdimNerede({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => vo
                   {e.kod === 'G-LOGO' ? 'Marka' : 'Bağlantılar'}
                 </Link>
               )}
+              {OLCUM_ENGEL_KODLARI.includes(e.kod) && <Link href={baglanti('/marka-merkezi', { bolum: 'olcum', musteri: b.clientId })}>Ölçüm&apos;de kur</Link>}
             </li>
           ))}
         </ul>

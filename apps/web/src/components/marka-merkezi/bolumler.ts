@@ -33,6 +33,12 @@ export const MM_BOLUMLERI = [
   { kod: 'kitleler', ad: 'Kitleler', izin: 'client.read' },
   { kod: 'varliklar', ad: 'Varlıklar', izin: 'bulk.read' },
   /*
+   * ÖLÇÜM (2026-10-11, docs/olcum/MIMARI.md): reklamların neyi saydığı.
+   * Bağlantılar'dan sonra çünkü hesaplardan okunuyor; AdvCampaign'in
+   * "dönüşüm yok" engeli buraya bağlanıyor.
+   */
+  { kod: 'olcum', ad: 'Ölçüm', izin: 'client.read' },
+  /*
    * WORKSPACE AYARLARI (2026-10-06, kullanıcının isteği). İletişim/firma
    * bilgileri, özel reklam kategorisi ve ekip yalnızca Şirketler ekranındaki
    * pencerede vardı; workspace'e geçen kullanıcı oraya Marka Merkezi'nden

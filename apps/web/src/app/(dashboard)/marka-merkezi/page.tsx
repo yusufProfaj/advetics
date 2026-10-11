@@ -12,6 +12,7 @@ import { Uyari } from '@/components/ui/uyari';
 import { HazirlikListesi } from '@/components/marka-merkezi/hazirlik-listesi';
 import { BagliKanallar } from '@/components/tenancy/bagli-kanallar';
 import { KitlelerBolumu } from '@/components/marka-merkezi/kitleler-bolumu';
+import { OlcumBolumu } from '@/components/marka-merkezi/olcum-bolumu';
 import { IcMenu, type BolumRozetleri } from '@/components/marka-merkezi/ic-menu';
 import {
   MM_BOLUMLERI,
@@ -234,6 +235,17 @@ export default async function MarkaMerkeziPage({
               </section>
             )}
 
+
+            {bolum === 'olcum' && (
+              <section aria-labelledby="olcum-baslik" className="space-y-3">
+                <BolumBasligi
+                  id="olcum-baslik"
+                  baslik="Ölçüm"
+                  aciklama="Sitenden form, arama ya da satış geldiğinde Meta ve Google'a haber veren kurulum. Reklamlar bu sinyalle kendini iyileştiriyor."
+                />
+                <OlcumBolumu clientId={clientId} yazabilir={yaz('client.write')} />
+              </section>
+            )}
 
             {bolum === 'ayarlar' && <WorkspaceAyarlari clientId={clientId} session={session} />}
 

@@ -2270,6 +2270,89 @@ export class GoogleProvider implements IAdPlatformProvider {
     return this.searchGaql<T>(ctx.accessToken, ctx.accountExternalId, sorgu, ctx.loginCustomerId);
   }
 
+  /**
+   * ÖLÇÜM: dönüşüm işlemleri + son 30 gün sayımı. İKİ SORGU, ölçüldü
+   * (2026-10-11): `conversion_action` kaynağında `metrics.conversions`
+   * SEÇİLEMİYOR (PROHIBITED_METRIC_IN_SELECT_OR_WHERE_CLAUSE), yalnız
+   * `all_conversions`; ve tarih segmentli sorgu sayımsız işlemi döndürmeyebilir,
+   * liste o yüzden segmentsiz ayrı sorgudan.
+   */
+  async donusumIslemleriOku(ctx: FetchContext): Promise<{
+    islemler: Array<{ id: string; ad: string; durum: string; kategori: string; tur: string; birincil: boolean; sayim30Gun: number }>;
+    donusumKimligi: string | null;
+  }> {
+    const liste = await this.searchGaql<{ conversionAction?: { id?: string; name?: string; status?: string; category?: string; type?: string; primaryForGoal?: boolean } }>(
+      ctx.accessToken,
+      ctx.accountExternalId,
+      `SELECT conversion_action.id, conversion_action.name, conversion_action.status, conversion_action.category,
+              conversion_action.type, conversion_action.primary_for_goal
+         FROM conversion_action`,
+      ctx.loginCustomerId,
+    );
+    const metrik = await this.searchGaql<{ conversionAction?: { id?: string }; metrics?: { allConversions?: number | string } }>(
+      ctx.accessToken,
+      ctx.accountExternalId,
+      `SELECT conversion_action.id, metrics.all_conversions FROM conversion_action WHERE segments.date DURING LAST_30_DAYS`,
+      ctx.loginCustomerId,
+    );
+    const sayim = new Map<string, number>();
+    for (const r of metrik) {
+      const id = r.conversionAction?.id;
+      if (id) sayim.set(id, (sayim.get(id) ?? 0) + Number(r.metrics?.allConversions ?? 0));
+    }
+    const [m] = await this.searchGaql<{ customer?: { conversionTrackingSetting?: { conversionTrackingId?: string | number } } }>(
+      ctx.accessToken,
+      ctx.accountExternalId,
+      'SELECT customer.conversion_tracking_setting.conversion_tracking_id FROM customer',
+      ctx.loginCustomerId,
+    );
+    const kimlik = m?.customer?.conversionTrackingSetting?.conversionTrackingId;
+    return {
+      islemler: liste
+        .map((r) => r.conversionAction)
+        .filter((c): c is NonNullable<typeof c> & { id: string } => !!c?.id)
+        .map((c) => ({
+          id: c.id,
+          ad: c.name ?? '',
+          durum: c.status ?? 'UNKNOWN',
+          kategori: c.category ?? 'UNKNOWN',
+          tur: c.type ?? 'UNKNOWN',
+          birincil: c.primaryForGoal === true,
+          sayim30Gun: sayim.get(c.id) ?? 0,
+        })),
+      donusumKimligi: kimlik ? `AW-${kimlik}` : null,
+    };
+  }
+
+  /**
+   * ÖLÇÜM: dönüşüm işlemini BİRİNCİL yap (yalnız `primary_for_goal`).
+   * Geri okuma çağıranda: 200 döndü doğrulama değil.
+   */
+  async donusumBirincilYap(ctx: FetchContext, donusumId: string): Promise<void> {
+    if (!/^\d{1,20}$/.test(donusumId)) throw new PlatformApiError('google', 'permanent', 'Dönüşüm kimliği sayısal olmalı');
+    await this.guncelle(ctx, 'conversionActions', {
+      operations: [
+        {
+          update: { resourceName: `customers/${ctx.accountExternalId}/conversionActions/${donusumId}`, primaryForGoal: true },
+          updateMask: 'primary_for_goal',
+        },
+      ],
+      partialFailure: false,
+    });
+  }
+
+  /** Tek işlemin `primary_for_goal`u (birincil yapma sonrası geri okuma). */
+  async donusumBirincilMi(ctx: FetchContext, donusumId: string): Promise<boolean | null> {
+    if (!/^\d{1,20}$/.test(donusumId)) return null;
+    const [r] = await this.searchGaql<{ conversionAction?: { primaryForGoal?: boolean } }>(
+      ctx.accessToken,
+      ctx.accountExternalId,
+      `SELECT conversion_action.id, conversion_action.primary_for_goal FROM conversion_action WHERE conversion_action.id = ${donusumId}`,
+      ctx.loginCustomerId,
+    );
+    return r?.conversionAction ? r.conversionAction.primaryForGoal === true : null;
+  }
+
   /** Geri okuması temiz kurulumu açar: YALNIZ kampanya durumu (`updateMask: status`). */
   async rehberKampanyaAc(ctx: FetchContext, kampanyaKaynagi: string): Promise<void> {
     await this.guncelle(ctx, 'campaigns', kampanyayiYayinaAlBody(kampanyaKaynagi));
