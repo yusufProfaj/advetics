@@ -1145,3 +1145,27 @@ export function listeDurumu(r: Pick<RehberOzeti, 'durum' | 'platformlar' | 'yayi
   if (adlar.every((x) => x.sonuc === adlar[0]!.sonuc)) return `${adlar[0]!.sonuc} · ${adlar.map((x) => x.ad).join(' + ')}`;
   return adlar.map((x) => `${x.ad}: ${x.sonuc}`).join(' · ');
 }
+
+/**
+ * VİDEONUN EKRAN BİLGİSİ KAPAĞINDAN. Hazırlık yalnız görselleri listeliyor;
+ * yüklenen videonun adı, önizlemesi ve ölçüsü yalnız yükleme anında bellekte
+ * duruyordu. Sayfa yenilenince video "Varlık · Boyut bilinmiyor" görünüyor ve
+ * oranı bilinmediği için yerleşim kararları da onsuz veriliyordu (canlı,
+ * 2026-10-11). Kapak karesi videonun TAM çözünürlüğünde alınıyor
+ * (`kapakKaresi`), yani ölçü ve önizleme kapaktan güvenle türetilir; ad,
+ * kapağın adından `-kapak.jpg` atılarak. Bilgisi zaten olan videoya dokunulmaz.
+ */
+export function videoBilgisiKapaktan<T extends { ad: string; onizleme: string; en: number | null; boy: number | null }>(
+  bilgi: ReadonlyMap<string, T>,
+  medya: ReadonlyArray<{ varlikId: string; kapakVarlikId?: string }>,
+): ReadonlyMap<string, T> {
+  let sonuc: Map<string, T> | null = null;
+  for (const m of medya) {
+    if (!m.kapakVarlikId || bilgi.has(m.varlikId)) continue;
+    const kapak = bilgi.get(m.kapakVarlikId);
+    if (!kapak) continue;
+    sonuc ??= new Map(bilgi);
+    sonuc.set(m.varlikId, { ...kapak, ad: kapak.ad.replace(/-kapak\.jpg$/i, '') });
+  }
+  return sonuc ?? bilgi;
+}

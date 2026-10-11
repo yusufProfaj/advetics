@@ -37,6 +37,7 @@ import {
   yayinBittiMi,
   provaYoklanmaliMi,
   yayinlanabilirMi,
+  videoBilgisiKapaktan,
   yerelAlanlar,
   type Degisiklik,
   type EkranNo,
@@ -107,6 +108,7 @@ export function RehberEkrani({
       ),
   );
   const medyaBilgisiEkle = useCallback((id: string, m: MedyaBilgisi) => setMedyaBilgisi((x) => new Map(x).set(id, m)), []);
+  const medyaGorunumu = useMemo(() => videoBilgisiKapaktan(medyaBilgisi, a.medya?.deger ?? []), [medyaBilgisi, a.medya]);
 
   const degistir = useCallback((d: Degisiklik[]) => kaydedici.degistir(d), [kaydedici]);
   const b: AdimBaglami = { a, kayit, h: hazirlik, acik, degistir, paraBirimi, saatDilimi, clientId: kayit.clientId };
@@ -374,7 +376,7 @@ export function RehberEkrani({
               <AdimKime b={b} git={git} esleme={esleme} yenidenEsle={() => void konumEsle()} />
             </div>
             <div className={`${s.ekran} ${ekran === 4 ? s.acik : ''}`}>
-              <AdimReklam b={b} git={git} kaydet={() => kaydedici.simdi()} medyaBilgisi={medyaBilgisi} medyaBilgisiEkle={medyaBilgisiEkle} />
+              <AdimReklam b={b} git={git} kaydet={() => kaydedici.simdi()} medyaBilgisi={medyaGorunumu} medyaBilgisiEkle={medyaBilgisiEkle} />
             </div>
             <div className={`${s.ekran} ${ekran === 5 ? s.acik : ''}`}>
               <AdimButce b={b} git={git} />
@@ -390,7 +392,7 @@ export function RehberEkrani({
                   setYayinHatasi(null);
                   setOnayAcik(true);
                 }}
-                medyaBilgisi={medyaBilgisi}
+                medyaBilgisi={medyaGorunumu}
               />
             </div>
             <div className={`${s.ekran} ${ekran === 7 ? s.acik : ''}`}>

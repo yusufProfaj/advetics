@@ -50,6 +50,7 @@ import {
   yayinSonucu,
   geriAlinabilirMi,
   yenidenOkunabilirMi,
+  videoBilgisiKapaktan,
   yayinSonucuEtiketi,
   geriAlMetinleri,
   yayinlanabilirMi,
@@ -779,5 +780,29 @@ describe('okunamayan kurulum (canlı WhatsApp turu, 2026-10-11)', () => {
     expect(yenidenOkunabilirMi({ platform: 'meta', durum: 'dogrulanamadi', yayinId: y })).toBe(true);
     expect(yenidenOkunabilirMi({ platform: 'google', durum: 'dogrulanamadi', yayinId: y })).toBe(false);
     expect(yenidenOkunabilirMi({ platform: 'meta', durum: 'fark_var', yayinId: y })).toBe(false);
+  });
+});
+
+describe('video bilgisi kapaktan (canlı, 2026-10-11: yenilemede "Boyut bilinmiyor")', () => {
+  it('KRİTİK: bilgisi olmayan video, kapağının ölçüsünü ve önizlemesini alır; ad kapaktan', () => {
+    const bilgi = new Map([['K', { ad: 'tanitim.mp4-kapak.jpg', onizleme: '/k.jpg', en: 720, boy: 1280 }]]);
+    const r = videoBilgisiKapaktan(bilgi, [{ varlikId: 'V', kapakVarlikId: 'K' }]);
+    expect(r.get('V')).toEqual({ ad: 'tanitim.mp4', onizleme: '/k.jpg', en: 720, boy: 1280 });
+  });
+  it('bilgisi olan video ve kapaksız görsel değişmez; kapak bilinmiyorsa uydurulmaz', () => {
+    const bilgi = new Map([
+      ['V', { ad: 'v.mp4', onizleme: '/v.jpg', en: 1080, boy: 1920 }],
+      ['K', { ad: 'k', onizleme: '/k.jpg', en: 1, boy: 1 }],
+    ]);
+    expect(videoBilgisiKapaktan(bilgi, [{ varlikId: 'V', kapakVarlikId: 'K' }])).toBe(bilgi);
+    expect(videoBilgisiKapaktan(bilgi, [{ varlikId: 'X', kapakVarlikId: 'YOK' }]).has('X')).toBe(false);
+  });
+});
+
+describe('kaynak: rehber ekranı video bilgisini kapaktan tamamlıyor', () => {
+  it('KRİTİK: iki adım da tamamlanmış haritayı alıyor', () => {
+    const e = readFileSync(join(__dirname, 'rehber-ekrani.tsx'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    expect(e).toContain('videoBilgisiKapaktan(medyaBilgisi');
+    expect(e).not.toMatch(/medyaBilgisi=\{medyaBilgisi\}/);
   });
 });
