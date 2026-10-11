@@ -328,9 +328,9 @@ describe('onay penceresi ve son ekran', () => {
       ],
       false,
     );
-    expect(karisik.baslik).toBe("Meta'daki reklam arşivlendi");
+    expect(karisik.baslik).toBe("Meta'daki reklam geri alındı");
     expect(karisik.metin).toContain("Google'da duraklatılmış");
-    expect(sonEkranOzeti([{ platform: 'meta', sonuc: 'arsivlendi' }], false)).toMatchObject({ hal: 'arsiv', baslik: 'Reklam arşivlendi' });
+    expect(sonEkranOzeti([{ platform: 'meta', sonuc: 'arsivlendi' }], false)).toMatchObject({ hal: 'arsiv', baslik: 'Reklam geri alındı' });
     expect(sonEkranOzeti([{ platform: 'meta', sonuc: 'arsivlendi' }, { platform: 'google', sonuc: 'yayinda' }], false).metin).toBe("Google'da yayında.");
   });
 
@@ -758,6 +758,8 @@ describe('okunamayan kurulum (canlı WhatsApp turu, 2026-10-11)', () => {
     expect(yayinSonucuEtiketi({ durum: 'dogrulanamadi' })).toBe('Kontrol edilemedi');
     expect(yayinSonucuEtiketi({ durum: 'kurulamadi' })).toBe('Kurulamadı');
     expect(yayinSonucuEtiketi({ durum: 'kapali_kuruldu' })).toBe('Duraklatılmış');
+    expect(yayinSonucuEtiketi({ durum: 'arsivlendi', platform: 'google' })).toBe('Kaldırıldı');
+    expect(yayinSonucuEtiketi({ durum: 'arsivlendi', platform: 'meta' })).toBe('Arşivlendi');
     expect(yenidenOkunabilirMi({ platform: 'meta', durum: 'dogrulanamadi', yayinId: y })).toBe(true);
     expect(yenidenOkunabilirMi({ platform: 'google', durum: 'dogrulanamadi', yayinId: y })).toBe(false);
     expect(yenidenOkunabilirMi({ platform: 'meta', durum: 'fark_var', yayinId: y })).toBe(false);

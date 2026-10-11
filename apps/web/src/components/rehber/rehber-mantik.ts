@@ -623,8 +623,10 @@ export function yenidenOkunabilirMi(p: Pick<PlatformYayinOzeti, 'platform' | 'du
  * duruyor, yalnız okunup karşılaştırılamadı. "Kurulamadı" demek kullanıcıyı
  * yeniden kurmaya, yani İKİNCİ bir kampanya açmaya gönderirdi.
  */
-export function yayinSonucuEtiketi(p: Pick<PlatformYayinOzeti, 'durum'>): string {
+export function yayinSonucuEtiketi(p: Pick<PlatformYayinOzeti, 'durum'> & Partial<Pick<PlatformYayinOzeti, 'platform'>>): string {
   if (p.durum === 'dogrulanamadi') return 'Kontrol edilemedi';
+  // Google'da geri alma KALDIRIR (`geriAlMetinleri`); "Arşivlendi" Meta'nın sözü.
+  if (p.durum === 'arsivlendi' && p.platform === 'google') return 'Kaldırıldı';
   const e: Record<YayinSonucu, string> = { yayinda: 'Yayında', duraklatildi: 'Duraklatılmış', arsivlendi: 'Arşivlendi', suruyor: 'Sürüyor', hata: 'Kurulamadı' };
   return e[yayinSonucu(p)];
 }
@@ -1095,14 +1097,15 @@ export function sonEkranOzeti(platformlar: ReadonlyArray<{ platform: RehberPlatf
   const arsiv = platformlar.filter((p) => p.sonuc === 'arsivlendi');
   const kalan = platformlar.filter((p) => p.sonuc !== 'arsivlendi');
   if (platformlar.length > 0 && kalan.length === 0) {
-    return { hal: 'arsiv', baslik: 'Reklam arşivlendi', metin: 'Kampanya platformda arşivlendi; harcama olmaz. Aynı içerikle yeni bir reklam açabilirsin.' };
+    // "Arşivlendi" yalnız Meta'nın sözü; Google'da geri alma KALDIRIR.
+    return { hal: 'arsiv', baslik: 'Reklam geri alındı', metin: 'Kampanya platformda kapatıldı; harcama olmaz. Aynı içerikle yeni bir reklam açabilirsin.' };
   }
   const adlar = (xs: typeof platformlar) => xs.map((p) => PLATFORM_ADLARI[p.platform]).join(' ve ');
   const kalanDur = kalan.some((p) => p.sonuc === 'duraklatildi' || p.sonuc === 'suruyor');
   if (arsiv.length > 0) {
     return {
       hal: kalanDur ? 'dur' : 'tamam',
-      baslik: `${adlar(arsiv)}'daki reklam arşivlendi`,
+      baslik: `${adlar(arsiv)}'daki reklam geri alındı`,
       metin: kalanDur ? `${adlar(kalan)}'da duraklatılmış duruyor; başlatana kadar harcama olmaz.` : `${adlar(kalan)}'da yayında.`,
     };
   }
