@@ -3,6 +3,7 @@ import {
   beklenenYankilar,
   derleMeta,
   geriOkumaKarsilastir,
+  REHBER_ACILIS,
   oranBul,
   ortakPlan,
   rehberEksikleri,
@@ -45,6 +46,7 @@ const temel: DerlemeGirdisi = {
   kavramlar: [],
   hedefAdres: 'https://gardenvillaskusadasi.com/',
   formId: null,
+  telefon: null,
   urlEtiketleri: null,
 };
 const kavram = (k: Partial<Kavram>): Kavram => ({ gorselHash: H.kare, baslik: 'Başlık', metin: 'Metin', ...k });
@@ -318,6 +320,43 @@ describe('rehber → banner seti', () => {
     const bozuk = rehberEksikleri(rehber([...DORT, { varlikId: U(14) }]), { ...B, medyaOranlari: ORAN });
     expect(bozuk.find((e) => e.kod === 'M-GORSEL-ORAN')).toMatchObject({ seviye: 'engel' });
     expect(rehberEksikleri(rehber(DORT), { ...B, medyaOranlari: ORAN }).some((e) => e.kod === 'M-YERLESIM-KAPALI')).toBe(false);
+  });
+
+  it('KRİTİK: site dışı amaçta çok boyutlu set ENGEL (M-SET-AMAC); derleyici de aynı kuralla reddediyor', () => {
+    // Ç-4: eksik listesi söylemediğinde kullanıcı "hazır" görüyordu ve ret
+    // ancak provada geliyordu. Kural tek sabitte (`BANNER_SETI_NIYETLERI`).
+    // Bu amaçların Meta satırı bugün `kapali` (açılış canlı turun işi) ve
+    // kapalı platform eksik listesine hiç girmiyor. Kural, açılış günü
+    // geçerli olacağı hâlde sınansın diye tablo test süresince `deneme`.
+    const amaclar = ['FORM', 'TELEFON', 'WHATSAPP'] as const;
+    const eski = amaclar.map((a) => REHBER_ACILIS[a].meta);
+    try {
+      for (const a of amaclar) REHBER_ACILIS[a].meta = 'deneme';
+      for (const amac of amaclar) {
+        const e = rehberEksikleri({ ...rehber(DORT), amac: al(amac) }, { ...B, medyaOranlari: ORAN });
+        expect(e.find((x) => x.kod === 'M-SET-AMAC'), amac).toMatchObject({ seviye: 'engel', platform: 'meta', adim: 4 });
+      }
+      // Her sette tek görsel: engel yok (ayrı ayrı numaralanmış dört fikir).
+      const tekli = DORT.map((x, i) => ({ ...x, setNo: i + 1 }));
+      expect(rehberEksikleri({ ...rehber(tekli), amac: al('TELEFON' as const) }, { ...B, medyaOranlari: ORAN }).some((x) => x.kod === 'M-SET-AMAC')).toBe(false);
+    } finally {
+      amaclar.forEach((a, i) => (REHBER_ACILIS[a].meta = eski[i]!));
+    }
+    expect(rehberEksikleri(rehber(DORT), { ...B, medyaOranlari: ORAN }).some((x) => x.kod === 'M-SET-AMAC')).toBe(false);
+    for (const niyet of ['TELEFON', 'WHATSAPP'] as const) {
+      expect(retKodlari({ niyet, telefon: '+905321234567', kavramlar: [kavram({ oran: 'kare', setGorselleri: set('kare', 'dik45') })] }), niyet).toEqual(['KRT-SET']);
+    }
+  });
+
+  it('KRİTİK: telefon taslağa YALNIZ arama reklamında taşınır (site taslağının özeti değişmez)', () => {
+    const tel = al('+905321234567');
+    const site = rehberdenMeta({ ...rehber([{ varlikId: U(13) }]), telefon: tel }, { meta: true, google: false }, 'TRY', 'z', ORAN);
+    if (site.tur !== 'tamam') throw new Error(site.kodlar.join());
+    expect(site.deger).not.toHaveProperty('telefon');
+    const arama = rehberdenMeta({ ...rehber([{ varlikId: U(13) }]), amac: al('TELEFON' as const), telefon: tel }, { meta: true, google: false }, 'TRY', 'z', ORAN);
+    if (arama.tur !== 'tamam') throw new Error(arama.kodlar.join());
+    expect(arama.deger.telefon).toEqual(tel);
+    expect(arama.deger.niyet?.deger).toBe('TELEFON');
   });
 
   it('karar tablosunun planı derleyicinin planıyla aynı kaynaktan (rehberYerlesimPlani)', () => {

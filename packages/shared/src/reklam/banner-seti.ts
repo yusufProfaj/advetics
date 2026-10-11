@@ -19,6 +19,27 @@
  * gider ve banner metni kesilir.
  */
 
+import type { NiyetKodu } from './meta/niyetler';
+
+/**
+ * BANNER SETİ (birden çok boyutlu fikir) HANGİ META AMACINDA KURULABİLİR —
+ * TEK KAYNAK: derleyici (`KRT-SET` reddi) ve rehberin eksik listesi
+ * (`M-SET-AMAC` engeli) bunu okuyor. İkisi ayrı yazıldığında liste "hazır"
+ * diyordu ve ret ancak provada geliyordu (DALGA-2 Ç-4).
+ *
+ * Yerleşime göre görsel bugün yalnız site reklamında ÖLÇÜLDÜ
+ * (`meta-yerlesim-prova`, 2026-10-10). Form, arama ve WhatsApp reklamında
+ * CTA'nın `asset_feed_spec` içinde nasıl taşındığı ölçülmedi; Meta'nın
+ * alanı kabul edip görmezden gelme ihtimali var (form kimliği yazılmazsa
+ * düğme formu açmaz, hata da düşmez). Tahmin etmektense kısıtla: niyet
+ * buraya ancak canlı prova ve gözle kontrolden sonra girer.
+ */
+export const BANNER_SETI_NIYETLERI: readonly NiyetKodu[] = ['SITE'];
+
+export function bannerSetiDestekleniyor(niyet: NiyetKodu): boolean {
+  return BANNER_SETI_NIYETLERI.includes(niyet);
+}
+
 export const GORSEL_ORANLARI = ['dikey', 'dik45', 'kare', 'yatay'] as const;
 export type GorselOrani = (typeof GORSEL_ORANLARI)[number];
 

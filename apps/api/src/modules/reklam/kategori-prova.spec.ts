@@ -25,7 +25,7 @@ function govdeler(kategori: OzelKategori[]) {
       { gorselHash: `{medya:${VARLIK}}`, baslik: 'B1', metin: 'M1' },
       { gorselHash: `{medya:${VARLIK}}`, baslik: 'B2', metin: 'M2' },
     ],
-    hedefAdres: 'https://ornek.com.tr', formId: null, urlEtiketleri: null,
+    hedefAdres: 'https://ornek.com.tr', formId: null, telefon: null, urlEtiketleri: null,
   });
   if (r.tur !== 'govde') throw new Error(`derlenemedi: ${JSON.stringify(r)}`);
   return provaGovdeleri(r.govdeler, new Map([[VARLIK, 'HASH']]));

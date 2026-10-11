@@ -298,7 +298,7 @@ describe('Meta provası', () => {
       hedefleme: { konumlar: [{ tur: 'country', key: 'TR', etiket: 'TR', ulkeKodu: 'TR' }], enDusukYas: 18, ipucuYas: null, ipucuCinsiyet: null },
       kategoriler: { taban: [], ek: [] }, butce: { tip: 'gunluk', micros: 100_000_000n, seviye: 'kampanya' },
       takvim: { baslangic: '2026-10-08T00:00:00+0300', bitis: null }, atif: 'tik7',
-      kavramlar: [{ gorselHash: `{medya:${VARLIK}}`, baslik: 'B', metin: 'M' }], hedefAdres: 'https://ornek.com.tr', formId: null, urlEtiketleri: null,
+      kavramlar: [{ gorselHash: `{medya:${VARLIK}}`, baslik: 'B', metin: 'M' }], hedefAdres: 'https://ornek.com.tr', formId: null, telefon: null, urlEtiketleri: null,
     });
     if (r.tur !== 'govde') throw new Error();
     const p = provaGovdeleri(r.govdeler, new Map([[VARLIK, 'HASH']]));

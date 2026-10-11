@@ -34,6 +34,7 @@ const temel: DerlemeGirdisi = {
   kavramlar: [{ gorselHash: 'h1', baslik: 'B1', metin: 'M1' }],
   hedefAdres: 'https://ornek.com.tr',
   formId: null,
+  telefon: null,
   urlEtiketleri: null,
 };
 

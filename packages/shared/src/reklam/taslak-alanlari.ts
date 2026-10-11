@@ -24,6 +24,15 @@ const alan = <T extends z.ZodTypeAny>(deger: T) =>
     zaman: z.string().datetime({ offset: true }),
   });
 
+/**
+ * Telefon numarası ülke koduyla (E.164, `+905321234567`). Meta arama
+ * reklamında numara CTA'ya `tel:` ile yazılıyor ve Meta numaranın hedef
+ * kitleyle AYNI ülkeden olmasını istiyor (Call Ads belgesi); ülke kodu
+ * olmayan bir numara Türkiye'de mi başka yerde mi, tahmin edilemez. Rehberin
+ * eksik listesi, taslağın eksik listesi ve derleyici AYNI kalıbı okuyor.
+ */
+export const TELEFON_E164 = /^\+[1-9]\d{7,14}$/;
+
 const tarih = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Tarih YYYY-MM-DD olmalı');
 
 export const hedefKonumSchema = z.object({
@@ -85,6 +94,13 @@ export const taslakAlanlariSchema = z
     kavramlar: alan(z.array(kavramGirdisiSchema).max(5)),
     hedefAdres: alan(z.string().max(2000).nullable()),
     formSablonuId: alan(z.string().uuid().nullable()),
+    /**
+     * TELEFON niyeti: aranacak numara (E.164). İsteğe bağlı ve varsayılansız:
+     * içerik özeti yalnız VAR olan alanları kapsıyor, yani bu alanın eklenmesi
+     * kayıtlı taslakların özetini değiştirmiyor. Rehber onu yalnız TELEFON
+     * amacında taşıyor (`rehberdenMeta`).
+     */
+    telefon: alan(z.string().max(20).nullable()),
   })
   .partial()
   .strict();
@@ -100,6 +116,9 @@ const IZINLI: Partial<Record<keyof TaslakAlanlari, readonly AlanKaynagi[]>> = {
   ekKategoriler: ['kullanici'],
   butce: ['kullanici'],
   takvim: ['kullanici'],
+  // Yanlış numara = aramalar başka birine gider ve hata düşmez: önerilen bir
+  // numara (`ai_onerisi`) karar değil.
+  telefon: ['kullanici', 'marka_merkezi'],
 };
 
 export interface TaslakEksigi {
@@ -130,7 +149,7 @@ export function kullaniciEksigiMi(e: Pick<TaslakEksigi, 'kod'>): boolean {
 const ALAN_ADIMI: Record<keyof TaslakAlanlari, TaslakEksigi['adim']> = {
   niyet: 0, reklamHesabiId: 0, sayfaId: 0, instagramId: 0, konumlar: 0,
   enDusukYas: 0, ipucuYas: 0, ipucuCinsiyet: 0, ekKategoriler: 0,
-  kavramlar: 1, hedefAdres: 0, formSablonuId: 0,
+  kavramlar: 1, hedefAdres: 0, formSablonuId: 0, telefon: 0,
   butce: 3, takvim: 4,
 };
 
@@ -196,6 +215,9 @@ export function taslakEksikleri(a: TaslakAlanlari, baglam: EksikBaglami = {}): T
     ekle('hedefAdres', 'SITE-ADRES', 'Site adresi https:// ile başlamalı');
   }
   if (niyet === 'FORM' && !a.formSablonuId?.deger) ekle('formSablonuId', 'FORM-YOK', 'Form seçilmedi');
+  if (niyet === 'TELEFON' && !(a.telefon?.deger && TELEFON_E164.test(a.telefon.deger))) {
+    ekle('telefon', 'TELEFON', 'Telefon numarası +90 ile başlamalı');
+  }
 
   const b = a.butce?.deger;
   if (!b || BigInt(b.micros) === 0n) ekle('butce', 'BTC-01', 'Bütçe seçilmedi');

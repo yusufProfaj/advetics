@@ -14,7 +14,7 @@
  * kaydından geliyor ve kullanıcının hiçbir cevabı onu kapatmıyor
  * (`SISTEM_EKSIK_KODLARI` dersi). Sunucu yayın kapısında ayrıca bakar.
  */
-import { metinUyariIceriyor } from '../taslak-alanlari';
+import { TELEFON_E164, metinUyariIceriyor } from '../taslak-alanlari';
 import type { AlanKaynagi } from '../taslak';
 import { REHBER_AMACLARI, platformGorunurMu, type RehberPlatformu } from './amaclar';
 import { REHBER_IZINLI_KAYNAKLAR, VARSAYILAN_META_PAYI, type RehberAlanAdi, type RehberAlanlari } from './alanlar';
@@ -22,7 +22,7 @@ import { METIN_SINIRLARI, karakterSayisi } from './metin';
 import { META_EN_COK_GORSEL } from './turet';
 import { butceBol, gunlukEsdeger } from './butce';
 import type { RehberOnKosullari } from './hazirlik';
-import { ORAN_ETIKETI, YERLESIM_GRUPLARI, ortakPlan, setlereAyir, type GorselOrani } from '../banner-seti';
+import { ORAN_ETIKETI, YERLESIM_GRUPLARI, bannerSetiDestekleniyor, ortakPlan, setlereAyir, type GorselOrani } from '../banner-seti';
 
 export type RehberAdimi = 1 | 2 | 3 | 4 | 5 | 6;
 
@@ -72,7 +72,6 @@ const ADIM: Record<RehberAlanAdi, RehberAdimi> = {
 };
 
 const HTTPS = /^https:\/\/[^\s/]+\.[^\s]+/;
-const E164 = /^\+[1-9]\d{7,14}$/;
 
 /** Rehberin AÇIK platformları: kullanıcı seçimi ∩ görünürlük. */
 export function acikPlatformlar(a: RehberAlanlari, ajansYoneticisi: boolean): Record<RehberPlatformu, boolean> {
@@ -163,7 +162,7 @@ export function rehberEksikleri(a: RehberAlanlari, b: RehberEksikBaglami): Rehbe
   if (siteGerekli && !(adres && HTTPS.test(adres))) ekle('hedefAdres', null, 'SITE-ADRES', 'Site adresi https:// ile başlamalı');
   if (amac === 'TELEFON') {
     const tel = a.telefon?.deger ?? null;
-    if (!(tel && E164.test(tel))) ekle('telefon', null, 'TELEFON', 'Telefon numarası +90 ile başlamalı');
+    if (!(tel && TELEFON_E164.test(tel))) ekle('telefon', null, 'TELEFON', 'Telefon numarası +90 ile başlamalı');
   }
   if (amac === 'FORM' && acik.meta && !a.formSablonuId?.deger) ekle('formSablonuId', 'meta', 'FORM-YOK', 'Form seçilmedi');
   if (amac === 'FORM' && ok && !ok.gizlilikAdresi) ekle('formSablonuId', null, 'FORM-GIZLILIK', "Marka Merkezi'nde gizlilik metni adresi yok");
@@ -181,6 +180,11 @@ export function rehberEksikleri(a: RehberAlanlari, b: RehberEksikBaglami): Rehbe
     if (ayrim.cakisan.length) ekle('medya', 'meta', 'M-SET-CAKISMA', 'Aynı sette aynı boyuttan iki görsel var; birini başka sete taşı');
     const fikir = ayrim.setler.length + medya.filter((x) => x.kapakVarlikId).length;
     if (fikir > META_EN_COK_GORSEL) ekle('medya', 'meta', 'M-SET-SAYI', `Meta'da en çok ${META_EN_COK_GORSEL} fikir olur; şu an ${fikir}`);
+    // Derleyicinin KRT-SET reddiyle AYNI kural (`bannerSetiDestekleniyor`):
+    // burada söylenmezse kullanıcı "hazır" görür ve ret ancak provada gelir.
+    if (!bannerSetiDestekleniyor(tanim.meta.niyet) && ayrim.setler.some((st) => st.length > 1)) {
+      ekle('medya', 'meta', 'M-SET-AMAC', "Bu amaçta Meta'da her reklam tek boyutla kurulur. Her sette tek görsel bırak");
+    }
     // Video varken yerleşim otomatik kalıyor (derleyici); kapanan yerleşim
     // yalnız görsel setlerinde söylenir.
     if (ayrim.setler.length && !medya.some((x) => x.kapakVarlikId)) {

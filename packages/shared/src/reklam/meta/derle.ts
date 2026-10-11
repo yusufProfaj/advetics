@@ -21,14 +21,49 @@ import { NIYET_KATALOGU, type NiyetKodu } from './niyetler';
 import { microsToMinor } from '../para';
 import type { Butce } from '../butce';
 import { ATIF_STANDARTLARI } from '../taslak';
-import { ORAN_ETIKETI, YERLESIM_GRUPLARI, YERLESIM_SIRASI, ortakPlan, setPlani, type GorselOrani, type SetPlani, type YerlesimGrubu } from '../banner-seti';
+import { TELEFON_E164 } from '../taslak-alanlari';
+import { ORAN_ETIKETI, YERLESIM_GRUPLARI, YERLESIM_SIRASI, bannerSetiDestekleniyor, ortakPlan, setPlani, type GorselOrani, type SetPlani, type YerlesimGrubu } from '../banner-seti';
 
 /**
  * 1.1.0: banner seti (yerleşime göre görsel) ve eksik boyutta elle yerleşim.
+ * 1.2.0: TELEFON ve WHATSAPP derleniyor (Dalga 2).
  * Sürüm provanın tazeliğine bağlı: eski derleyiciyle geçmiş prova yeni
  * gövdeyi kanıtlamaz.
  */
-export const DERLEYICI_SURUMU = '1.1.4';
+export const DERLEYICI_SURUMU = '1.2.0';
+
+/**
+ * CLICK-TO-WHATSAPP SABİTLERİ (CLAUDE.md "CLICK-TO-WHATSAPP"). Bağlantı
+ * Meta'nın belgelediği SABİT adres; numarayı Meta, ad set'teki
+ * `destination_type: WHATSAPP` + `promoted_object.page_id` ikilisiyle
+ * sayfaya BAĞLI hattan alıyor. Numara sorulmaz: yazılan numara ile sayfanın
+ * hattı ayrıştığında reklam başka bir hatta düşer, hata vermeden.
+ *
+ * CTA değeri `{ app_destination }`; `{ link }` belgelenen biçim DEĞİL ve Meta
+ * onu kabul edip düğmeyi tarayıcıya yönlendirebiliyor (tıklayan WhatsApp
+ * yerine bir web sayfası görür).
+ *
+ * Eski kurucu (`meta.provider.ts#buildCreativeSpec`, Akıllı Boost/eski
+ * yayın) aynı iki değeri kendi içinde yazıyor; API paketi shared'ı okuyabilir
+ * ama tersi olamaz. Ayrışmayı `derle.spec.ts` iki kaynağı karşılaştırarak
+ * yakalıyor.
+ */
+export const WHATSAPP_BAGLANTISI = 'https://api.whatsapp.com/send';
+export const WHATSAPP_CTA_DEGERI = { app_destination: 'WHATSAPP' } as const;
+
+/**
+ * ARAMA REKLAMINDA `link_data.link` — ÖLÇÜLMEDİ. Meta'nın Call Ads belgesi
+ * örnekte bu alana "işletme SAYFASININ adresi" yazıyor, numara yalnız CTA'da
+ * (`tel:+90...`). `tel:` adresini `link`e koymanın reddedildiği üçüncü taraf
+ * bir kaynakta yazıyor, Meta'da doğrulanmadı. Sayfa adresi taslaktan
+ * bağımsız ve her zaman var (site adresi isteğe bağlı olsaydı aynı amaç iki
+ * taslakta iki farklı gövde üretirdi). Eski kurucunun yedeği de bu biçim.
+ * Canlı provada Meta'nın kabul edip etmediği ve reklamda nasıl göründüğü
+ * gözle doğrulanmalı.
+ */
+export function sayfaAdresi(sayfaPlatformId: string): string {
+  return `https://facebook.com/${sayfaPlatformId}`;
+}
 export const DESTEKLENEN_META_SURUMLERI = ['v25.0', 'v26.0'] as const;
 export type MetaApiSurumu = (typeof DESTEKLENEN_META_SURUMLERI)[number];
 
@@ -183,6 +218,8 @@ export interface DerlemeGirdisi {
   hedefAdres: string | null;
   /** FORM: zincirde ilk kurulup geri okunan formun kimliği ya da `{form}`. */
   formId: string | null;
+  /** TELEFON: aranacak numara, E.164 (`+905321234567`). Diğer niyetlerde okunmaz. */
+  telefon: string | null;
   urlEtiketleri: string | null;
 }
 
@@ -215,8 +252,23 @@ export type DerlemeSonucu =
     }
   | { tur: 'ret'; retler: SifirCagriRet[] };
 
-/** Bu turda derlenen niyetler. Diğerleri tahmin yerine retle duruyor. */
-export const DERLENEN_NIYETLER = ['FORM', 'SITE'] as const satisfies readonly NiyetKodu[];
+/**
+ * DERLEYİCİNİN GÖVDE ÜRETTİĞİ niyetler. Diğerleri tahmin yerine retle
+ * duruyor (`NYT-OLCULMEDI`).
+ */
+export const DERLEYICI_NIYETLERI = ['FORM', 'SITE', 'TELEFON', 'WHATSAPP'] as const satisfies readonly NiyetKodu[];
+
+/**
+ * ÜRÜNDE AÇIK niyetler: AI taslağının seçebileceği (`AI_NIYETLERI`), AdvStrategy
+ * aktarımının (`aktarimEngeli`) ve matrisin "kurulabilir" dediği küme.
+ * Derleyicinin gövde üretmesi ile o gövdenin CANLIDA doğrulanması ayrı iş
+ * (DALGA-2: "her satır kendi commit'inde ve canlı turun kanıtıyla açılır").
+ * TELEFON ve WHATSAPP Dalga 2'de derleniyor ama canlı prova ve gözle kontrol
+ * yapılmadı; bu listeye girmeleri, rehberin `REHBER_ACILIS` satırıyla
+ * birlikte canlı turun commit'inde olur. Ayrı tutulmasaydı derleyiciye
+ * eklenen niyet AI sohbetinde ve plan aktarımında kendiliğinden açılırdı.
+ */
+export const DERLENEN_NIYETLER = ['FORM', 'SITE'] as const satisfies readonly (typeof DERLEYICI_NIYETLERI)[number][];
 
 export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
   const retler: SifirCagriRet[] = [];
@@ -228,7 +280,7 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
   if (!niyet.meta) {
     return { tur: 'ret', retler: [{ kod: 'NYT-YONLENDIRME', mesaj: `${niyet.ekranAdi} Akıllı Boost'ta yapılır.` }] };
   }
-  if (!(DERLENEN_NIYETLER as readonly NiyetKodu[]).includes(g.niyet)) {
+  if (!(DERLEYICI_NIYETLERI as readonly NiyetKodu[]).includes(g.niyet)) {
     retler.push({
       kod: 'NYT-OLCULMEDI',
       mesaj: `"${niyet.ekranAdi}" henüz yayınlanamıyor: Meta'daki kurulumu canlıda doğrulanmadı.`,
@@ -253,10 +305,9 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
       if (k.videoId) retler.push({ kod: 'KRT-SET', mesaj: `Fikir ${i + 1}: banner seti yalnız görsellerden oluşur.` });
       if (new Set(oranlar).size !== oranlar.length) retler.push({ kod: 'KRT-SET', mesaj: `Fikir ${i + 1}: sette aynı boyuttan iki görsel var.` });
       if (k.setGorselleri.length < 2) retler.push({ kod: 'KRT-SET', mesaj: `Fikir ${i + 1}: set en az iki boyut taşır.` });
-      // Yerleşime göre görsel bugün yalnız site reklamında ÖLÇÜLDÜ
-      // (`meta-yerlesim-prova`, 2026-10-10); form reklamında CTA'nın formu
-      // nasıl taşıdığı ölçülmedi. Tahmin etmektense kısıtla.
-      if (g.niyet !== 'SITE') retler.push({ kod: 'KRT-SET', mesaj: `Fikir ${i + 1}: banner seti şimdilik yalnız "Siteme gelsinler" amacında.` });
+      // Kural tek yerde (`BANNER_SETI_NIYETLERI`); rehberin eksik listesi
+      // aynı kuralı `M-SET-AMAC` engeli olarak söylüyor.
+      if (!bannerSetiDestekleniyor(g.niyet)) retler.push({ kod: 'KRT-SET', mesaj: `Fikir ${i + 1}: banner seti şimdilik yalnız "Siteme gelsinler" amacında.` });
     }
   }
   const yerlesim = yerlesimPlani(g.kavramlar);
@@ -273,6 +324,11 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
   }
   if (g.niyet === 'FORM' && !g.formId) {
     retler.push({ kod: 'FORM-YOK', mesaj: 'Form seçilmedi.' });
+  }
+  if (g.niyet === 'TELEFON' && !(g.telefon && TELEFON_E164.test(g.telefon))) {
+    // Numarasız ya da ülke kodsuz bir arama reklamı kurulmaz: `tel:` boş
+    // gider ya da Meta numarayı başka bir ülkeninki sayar.
+    retler.push({ kod: 'TEL-YOK', mesaj: 'Telefon numarası +90 gibi ülke koduyla yazılmalı.' });
   }
   if (g.butce.seviye !== 'kampanya') {
     // ABO yalnız Gelişmiş'te ve paylaşım alanı kuralıyla; bu turda yok.
@@ -348,10 +404,7 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
   g.kavramlar.forEach((k, i) => {
     const n = i + 1;
     // CTA HER kavramda aynı biçim: eski kodda 2.+ reklam CTA'sız kuruluyordu.
-    const cta: Record<string, unknown> =
-      g.niyet === 'FORM'
-        ? { type: m.cta, value: { lead_gen_form_id: g.formId } }
-        : { type: m.cta, value: { link: g.hedefAdres } };
+    const cta = ctaDegeri(g, m.cta);
     const oss: Record<string, unknown> = { page_id: g.sayfaPlatformId };
     let setKreatifi: Record<string, unknown> | null = null;
     if (k.videoId) {
@@ -377,9 +430,7 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
         name: k.baslik,
         message: k.metin,
         call_to_action: cta,
-        // FORM'da bağlantı yine zorunlu ama tıklama formu açıyor; Meta'nın
-        // belgelediği sabit bağlantı.
-        link: g.niyet === 'FORM' ? 'http://fb.me/' : g.hedefAdres,
+        link: kreatifBaglantisi(g),
       };
       if (k.aciklama) linkData.description = k.aciklama;
       oss.link_data = linkData;
@@ -556,6 +607,41 @@ function varlikAkisi(
     optimization_type: 'PLACEMENT',
     asset_customization_rules: kurallar.map((r, i) => ({ ...r, priority: i + 1 })),
   };
+}
+
+/**
+ * Niyete göre CTA. Bağlantıyı TAŞIMAYAN üç dal ayrı ayrı yazılı: SITE dışı
+ * bir niyete `{ link: hedefAdres }` düşmesi, WhatsApp ya da arama düğmesini
+ * sessizce bir web sayfasına çevirir.
+ */
+function ctaDegeri(g: DerlemeGirdisi, tip: string): Record<string, unknown> {
+  switch (g.niyet) {
+    case 'FORM':
+      return { type: tip, value: { lead_gen_form_id: g.formId } };
+    case 'WHATSAPP':
+      return { type: tip, value: { ...WHATSAPP_CTA_DEGERI } };
+    case 'TELEFON':
+      // Meta Call Ads belgesi: numara `tel:` ve ülke koduyla, CTA değerinde.
+      return { type: tip, value: { link: `tel:${g.telefon}` } };
+    default:
+      return { type: tip, value: { link: g.hedefAdres } };
+  }
+}
+
+/** `link_data.link`: tıklamanın düştüğü yer CTA'da; bu alan yine zorunlu. */
+function kreatifBaglantisi(g: DerlemeGirdisi): string | null {
+  switch (g.niyet) {
+    // Tıklama formu açıyor; Meta'nın belgelediği sabit bağlantı.
+    case 'FORM':
+      return 'http://fb.me/';
+    case 'WHATSAPP':
+      return WHATSAPP_BAGLANTISI;
+    // ÖLÇÜLMEDİ, `sayfaAdresi` notu.
+    case 'TELEFON':
+      return sayfaAdresi(g.sayfaPlatformId);
+    default:
+      return g.hedefAdres;
+  }
 }
 
 function tekil<T>(v: T, i: number, a: T[]): boolean {

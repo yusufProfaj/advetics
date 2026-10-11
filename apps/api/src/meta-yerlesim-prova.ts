@@ -87,7 +87,7 @@ async function main(): Promise<void> {
       kategoriler: { taban: [], ek: [] }, butce: { tip: 'gunluk', micros: 250_000_000n, seviye: 'kampanya' },
       takvim: { baslangic: `${yarin}T09:00:00+0300`, bitis: null }, atif: 'tik7',
       kavramlar: [{ gorselHash: hashler.kare!, baslik: 'Ölçüm başlığı', metin: 'Ölçüm metni' }],
-      hedefAdres: adres, formId: null, urlEtiketleri: null,
+      hedefAdres: adres, formId: null, telefon: null, urlEtiketleri: null,
     });
     if (d.tur !== 'govde') throw new Error(`Derlenemedi: ${JSON.stringify(d)}`);
     const reklam = provaGovdeleri(d.govdeler, new Map()).find((g) => g.nesne === 'reklam')!;
