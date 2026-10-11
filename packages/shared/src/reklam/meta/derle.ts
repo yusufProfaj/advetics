@@ -305,8 +305,8 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
       if (k.videoId) retler.push({ kod: 'KRT-SET', mesaj: `Fikir ${i + 1}: banner seti yalnız görsellerden oluşur.` });
       if (new Set(oranlar).size !== oranlar.length) retler.push({ kod: 'KRT-SET', mesaj: `Fikir ${i + 1}: sette aynı boyuttan iki görsel var.` });
       if (k.setGorselleri.length < 2) retler.push({ kod: 'KRT-SET', mesaj: `Fikir ${i + 1}: set en az iki boyut taşır.` });
-      // Kural tek yerde (`BANNER_SETI_NIYETLERI`); rehberin eksik listesi
-      // aynı kuralı `M-SET-AMAC` engeli olarak söylüyor.
+      // Kural tek yerde (`BANNER_SETI_NIYETLERI`); rehber bu amaçlarda
+      // görselleri zaten gruplamıyor (`setlereAyir`), ret ikinci kapı.
       if (!bannerSetiDestekleniyor(g.niyet)) retler.push({ kod: 'KRT-SET', mesaj: `Fikir ${i + 1}: banner seti şimdilik yalnız "Siteme gelsinler" amacında.` });
     }
   }

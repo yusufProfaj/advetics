@@ -58,8 +58,9 @@ const turetilmis = <T>(deger: T, zaman: string): AlanDegeri<T> => ({ deger, kayn
  */
 export function rehberYerlesimPlani(a: RehberAlanlari, oranlar: ReadonlyMap<string, GorselOrani | null>): SetPlani | null {
   const medya = a.medya?.deger ?? [];
-  if (medya.length === 0 || medya.some((x) => x.kapakVarlikId)) return null;
-  const ayrim = setlereAyir(medya, oranlar);
+  const amac = a.amac?.deger;
+  if (!amac || medya.length === 0 || medya.some((x) => x.kapakVarlikId)) return null;
+  const ayrim = setlereAyir(medya, oranlar, REHBER_AMACLARI[amac].meta.niyet);
   if (ayrim.taninmayan.length || ayrim.cakisan.length) return null;
   return ortakPlan(ayrim.setler.map((s) => s.map((x) => x.oran)));
 }
@@ -93,7 +94,7 @@ export function rehberdenMeta(
   const medya = a.medya?.deger ?? [];
   // VİDEO kendi başına bir fikir; görseller SETE ayrılır (bir set = bir reklam).
   const videolar = medya.filter((x) => x.kapakVarlikId);
-  const ayrim = setlereAyir(medya.filter((x) => !x.kapakVarlikId), oranlar);
+  const ayrim = setlereAyir(medya.filter((x) => !x.kapakVarlikId), oranlar, REHBER_AMACLARI[amac].meta.niyet);
   if (ayrim.taninmayan.length) return { tur: 'ret', kodlar: ['GORSEL-ORAN'] };
   if (ayrim.cakisan.length) return { tur: 'ret', kodlar: ['GORSEL-SET-CAKISMA'] };
   const fikirler = [

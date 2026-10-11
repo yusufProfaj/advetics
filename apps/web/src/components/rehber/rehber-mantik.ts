@@ -19,6 +19,7 @@ import {
   META_EN_COK_GORSEL,
   setlereAyir,
   type GorselOrani,
+  type NiyetKodu,
   REHBER_ACILIS,
   REHBER_AMACLARI,
   REHBER_AMAC_KODLARI,
@@ -579,6 +580,12 @@ export const EKRAN_EN_COK_SET = META_EN_COK_GORSEL;
 export function setGorunumu(
   medya: readonly MedyaOgesi[],
   oranlar: ReadonlyMap<string, GorselOrani | null>,
+  /**
+   * Set desteklenmeyen amaçta (Form, Telefon, WhatsApp) her görsel kendi
+   * seti döner (`setlereAyir`). Taşıma yardımcıları yalnız set ekranında
+   * çağrıldığı için varsayılanla çalışıyor.
+   */
+  niyet: NiyetKodu = 'SITE',
 ): {
   setler: SetYuvalari[];
   kullanilamaz: MedyaOgesi[];
@@ -590,6 +597,7 @@ export function setGorunumu(
   const ayrim = setlereAyir(
     medya.filter((x) => !x.kapakVarlikId),
     oranlar,
+    niyet,
   );
   const setler = ayrim.setler.map((st) => Object.fromEntries(st.map(({ oran, ...m }) => [oran, m as MedyaOgesi])) as SetYuvalari);
   return {

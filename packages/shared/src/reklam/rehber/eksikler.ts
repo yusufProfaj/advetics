@@ -173,18 +173,13 @@ export function rehberEksikleri(a: RehberAlanlari, b: RehberEksikBaglami): Rehbe
   if (acik.meta && b.medyaOranlari) {
     // BANNER SETİ (`banner-seti.ts`): doğrulama yükleme anında. Türetmedeki
     // retler (GORSEL-ORAN, -CAKISMA, -SAYI) burada kullanıcının diliyle.
-    const ayrim = setlereAyir(medya.filter((x) => !x.kapakVarlikId), b.medyaOranlari);
+    const ayrim = setlereAyir(medya.filter((x) => !x.kapakVarlikId), b.medyaOranlari, tanim.meta.niyet);
     if (ayrim.taninmayan.length) {
       ekle('medya', 'meta', 'M-GORSEL-ORAN', `${ayrim.taninmayan.length} görselin boyutu kullanılamıyor; 9:16, 4:5, 1:1 ya da 1.91:1 olmalı`);
     }
     if (ayrim.cakisan.length) ekle('medya', 'meta', 'M-SET-CAKISMA', 'Aynı sette aynı boyuttan iki görsel var; birini başka sete taşı');
     const fikir = ayrim.setler.length + medya.filter((x) => x.kapakVarlikId).length;
     if (fikir > META_EN_COK_GORSEL) ekle('medya', 'meta', 'M-SET-SAYI', `Meta'da en çok ${META_EN_COK_GORSEL} fikir olur; şu an ${fikir}`);
-    // Derleyicinin KRT-SET reddiyle AYNI kural (`bannerSetiDestekleniyor`):
-    // burada söylenmezse kullanıcı "hazır" görür ve ret ancak provada gelir.
-    if (!bannerSetiDestekleniyor(tanim.meta.niyet) && ayrim.setler.some((st) => st.length > 1)) {
-      ekle('medya', 'meta', 'M-SET-AMAC', "Bu amaçta Meta'da her reklam tek boyutla kurulur. Her sette tek görsel bırak");
-    }
     // Video varken yerleşim otomatik kalıyor (derleyici); kapanan yerleşim
     // yalnız görsel setlerinde söylenir.
     if (ayrim.setler.length && !medya.some((x) => x.kapakVarlikId)) {

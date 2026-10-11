@@ -85,14 +85,22 @@ describe('setlereAyir', () => {
     ['x', null],
   ]);
   it('aynı oranın ikinci görseli YENİ sete düşer; tanınmayan ayrı döner', () => {
-    const r = setlereAyir([{ varlikId: 'a' }, { varlikId: 'b' }, { varlikId: 'c' }, { varlikId: 'x' }], o);
+    const r = setlereAyir([{ varlikId: 'a' }, { varlikId: 'b' }, { varlikId: 'c' }, { varlikId: 'x' }], o, 'SITE');
     expect(r.setler.map((s) => s.map((x) => x.varlikId))).toEqual([['a', 'b'], ['c']]);
     expect(r.taninmayan.map((x) => x.varlikId)).toEqual(['x']);
   });
   it('elle set numarası uyulur; aynı sette aynı oran ÇAKIŞMA, otomatik görsel elle sete karışmaz', () => {
-    const r = setlereAyir([{ varlikId: 'a', setNo: 2 }, { varlikId: 'c', setNo: 2 }, { varlikId: 'd' }], o);
+    const r = setlereAyir([{ varlikId: 'a', setNo: 2 }, { varlikId: 'c', setNo: 2 }, { varlikId: 'd' }], o, 'SITE');
     expect(r.cakisan.map((x) => x.varlikId)).toEqual(['c']);
     expect(r.setler.map((s) => s.map((x) => x.varlikId))).toEqual([['a'], ['d']]);
+  });
+  it('KRİTİK: set desteklenmeyen amaçta her görsel kendi seti; kayıtlı setNo yok sayılır', () => {
+    for (const niyet of ['FORM', 'TELEFON', 'WHATSAPP'] as const) {
+      const r = setlereAyir([{ varlikId: 'a', setNo: 1 }, { varlikId: 'b', setNo: 1 }, { varlikId: 'c' }, { varlikId: 'x' }], o, niyet);
+      expect(r.setler.map((s) => s.map((x) => x.varlikId)), niyet).toEqual([['a'], ['b'], ['c']]);
+      expect(r.cakisan, niyet).toEqual([]);
+      expect(r.taninmayan.map((x) => x.varlikId), niyet).toEqual(['x']);
+    }
   });
 });
 
@@ -322,11 +330,10 @@ describe('rehber → banner seti', () => {
     expect(rehberEksikleri(rehber(DORT), { ...B, medyaOranlari: ORAN }).some((e) => e.kod === 'M-YERLESIM-KAPALI')).toBe(false);
   });
 
-  it('KRİTİK: site dışı amaçta çok boyutlu set ENGEL (M-SET-AMAC); derleyici de aynı kuralla reddediyor', () => {
-    // Ç-4: eksik listesi söylemediğinde kullanıcı "hazır" görüyordu ve ret
-    // ancak provada geliyordu. Kural tek sabitte (`BANNER_SETI_NIYETLERI`).
-    // Bu amaçların Meta satırı bugün `kapali` (açılış canlı turun işi) ve
-    // kapalı platform eksik listesine hiç girmiyor. Kural, açılış günü
+  it('KRİTİK: site dışı amaçta dört boyut DÖRT AYRI fikir olur, engel yok; derleyici seti yine reddediyor', () => {
+    // Ç-4: sırayla doldurma Form/Telefon/WhatsApp'ta kullanıcının kurmadığı
+    // bir set üretiyordu. Bu amaçların Meta satırı bugün `kapali` ve kapalı
+    // platform eksik listesine/türetmeye hiç girmiyor; kural açılış günü
     // geçerli olacağı hâlde sınansın diye tablo test süresince `deneme`.
     const amaclar = ['FORM', 'TELEFON', 'WHATSAPP'] as const;
     const eski = amaclar.map((a) => REHBER_ACILIS[a].meta);
@@ -334,15 +341,16 @@ describe('rehber → banner seti', () => {
       for (const a of amaclar) REHBER_ACILIS[a].meta = 'deneme';
       for (const amac of amaclar) {
         const e = rehberEksikleri({ ...rehber(DORT), amac: al(amac) }, { ...B, medyaOranlari: ORAN });
-        expect(e.find((x) => x.kod === 'M-SET-AMAC'), amac).toMatchObject({ seviye: 'engel', platform: 'meta', adim: 4 });
+        expect(e.some((x) => x.kod.startsWith('M-SET')), amac).toBe(false);
       }
-      // Her sette tek görsel: engel yok (ayrı ayrı numaralanmış dört fikir).
-      const tekli = DORT.map((x, i) => ({ ...x, setNo: i + 1 }));
-      expect(rehberEksikleri({ ...rehber(tekli), amac: al('TELEFON' as const) }, { ...B, medyaOranlari: ORAN }).some((x) => x.kod === 'M-SET-AMAC')).toBe(false);
+      const r = rehberdenMeta({ ...rehber(DORT), amac: al('WHATSAPP' as const) }, { meta: true, google: false }, 'TRY', 'z', ORAN);
+      if (r.tur !== 'tamam') throw new Error(r.kodlar.join());
+      const k = r.deger.kavramlar!.deger;
+      expect(k).toHaveLength(4);
+      expect(k.every((x) => !x.setGorselleri)).toBe(true);
     } finally {
       amaclar.forEach((a, i) => (REHBER_ACILIS[a].meta = eski[i]!));
     }
-    expect(rehberEksikleri(rehber(DORT), { ...B, medyaOranlari: ORAN }).some((x) => x.kod === 'M-SET-AMAC')).toBe(false);
     for (const niyet of ['TELEFON', 'WHATSAPP'] as const) {
       expect(retKodlari({ niyet, telefon: '+905321234567', kavramlar: [kavram({ oran: 'kare', setGorselleri: set('kare', 'dik45') })] }), niyet).toEqual(['KRT-SET']);
     }

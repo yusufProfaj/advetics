@@ -7,6 +7,7 @@ import {
   REHBER_AMACLARI,
   TABAN_NEGATIFLER,
   karakterSayisi,
+  bannerSetiDestekleniyor,
   oranBul,
   reklamGucu,
   type AnahtarKelimeOnerisi,
@@ -355,7 +356,10 @@ function MedyaBlogu({
             </div>
           </div>
           {(() => {
-            const g = setGorunumu(medya, oranlar);
+            const amac = b.a.amac?.deger;
+            const niyet = amac ? REHBER_AMACLARI[amac].meta.niyet : 'SITE';
+            const setli = b.acik.meta && !video && bannerSetiDestekleniyor(niyet);
+            const g = setGorunumu(medya, oranlar, niyet);
             const satir = (x: (typeof medya)[number], hata: string | null) => {
               const bilgi = medyaBilgisi.get(x.varlikId);
               const oran = oranlar.get(x.varlikId) ?? null;
@@ -375,7 +379,10 @@ function MedyaBlogu({
                   </div>
                   <div className={s.uygun}>
                     {oran && googleGorsel && (googleGorselUygunMu(oran) ? <span className={s.e}>Google ✓</span> : <span className={s.h}>Google ✕ oran</span>)}
-                    <button type="button" className={s.metinDugme} aria-label={`${bilgi?.ad ?? 'Varlığı'} kaldır`} onClick={() => medyaYaz(setleriSabitle(medya.filter((y) => y.varlikId !== x.varlikId), oranlar))}>
+                    <button type="button" className={s.metinDugme} aria-label={`${bilgi?.ad ?? 'Varlığı'} kaldır`} onClick={() => {
+                        const kalan = medya.filter((y) => y.varlikId !== x.varlikId);
+                        medyaYaz(setli ? setleriSabitle(kalan, oranlar) : kalan);
+                      }}>
                       Kaldır
                     </button>
                   </div>
@@ -394,7 +401,7 @@ function MedyaBlogu({
                     {g.bilinmeyen.map((x) => satir(x, null))}
                   </div>
                 )}
-                {b.acik.meta && !video && (g.setler.length > 0 || medya.length === 0) && (
+                {setli && (g.setler.length > 0 || medya.length === 0) && (
                   <SetKartlari
                     setler={g.setler.length ? g.setler : [{}]}
                     medyaBilgisi={medyaBilgisi}
@@ -409,7 +416,14 @@ function MedyaBlogu({
                     }}
                   />
                 )}
-                {(!b.acik.meta || video) && g.setler.flatMap((st) => Object.values(st)).map((x) => x && satir(x, null))}
+                {!setli && g.setler.length > 0 && (
+                  <div className={s.dosyalar}>{g.setler.flatMap((st) => Object.values(st)).map((x) => x && satir(x, null))}</div>
+                )}
+                {/* Set yalnız "Siteme gelsinler"de ölçüldü (`BANNER_SETI_NIYETLERI`):
+                    bu amaçta her görsel ayrı reklam ve bunu ekran söylüyor. */}
+                {!setli && b.acik.meta && !video && g.setler.length > 1 && (
+                  <p className={s.ipucu}>Bu amaçta her görsel ayrı bir reklamdır; Meta hepsini dener.</p>
+                )}
                 {g.videolar.length > 0 && <div className={s.dosyalar}>{g.videolar.map((x) => satir(x, null))}</div>}
               </>
             );

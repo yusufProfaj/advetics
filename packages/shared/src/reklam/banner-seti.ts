@@ -23,9 +23,11 @@ import type { NiyetKodu } from './meta/niyetler';
 
 /**
  * BANNER SETİ (birden çok boyutlu fikir) HANGİ META AMACINDA KURULABİLİR —
- * TEK KAYNAK: derleyici (`KRT-SET` reddi) ve rehberin eksik listesi
- * (`M-SET-AMAC` engeli) bunu okuyor. İkisi ayrı yazıldığında liste "hazır"
- * diyordu ve ret ancak provada geliyordu (DALGA-2 Ç-4).
+ * TEK KAYNAK: derleyici (`KRT-SET` reddi) ve `setlereAyir` bunu okuyor.
+ * Set desteklenmeyen amaçta rehber görselleri hiç gruplamıyor (her görsel
+ * kendi reklamı); önce bir `M-SET-AMAC` engeli vardı ama sırayla doldurma
+ * kullanıcının kurmadığı setleri üretiyordu ve engel onu kendi bırakmadığı
+ * bir sorunu çözmeye gönderiyordu (DALGA-2 Ç-4).
  *
  * Yerleşime göre görsel bugün yalnız site reklamında ÖLÇÜLDÜ
  * (`meta-yerlesim-prova`, 2026-10-10). Form, arama ve WhatsApp reklamında
@@ -163,9 +165,25 @@ export function ortakPlan(setler: ReadonlyArray<readonly GorselOrani[]>): SetPla
 export function setlereAyir<T extends { varlikId: string; setNo?: number }>(
   medya: readonly T[],
   oranlar: ReadonlyMap<string, GorselOrani | null>,
+  niyet: NiyetKodu,
 ): { setler: Array<Array<T & { oran: GorselOrani }>>; taninmayan: T[]; cakisan: T[] } {
   const setler: Array<Array<T & { oran: GorselOrani }>> = [];
   const taninmayan: T[] = [];
+  /*
+   * SETİ OLMAYAN AMAÇTA HER GÖRSEL KENDİ REKLAMI. Sırayla doldurma burada da
+   * çalışsaydı Form amacında yüklenen 4:5 ve 1:1 (iki AYRI tasarım) tek sete
+   * düşer ve kullanıcı hiç kurmadığı bir seti dağıtmak zorunda kalırdı. Kayıtlı `setNo` da yok sayılıyor: "Siteme gelsinler"de
+   * gruplanıp amacı değiştirilen rehber, ekranında set göremeyeceği bir
+   * engelde kalırdı.
+   */
+  if (!bannerSetiDestekleniyor(niyet)) {
+    for (const m of medya) {
+      const oran = oranlar.get(m.varlikId) ?? null;
+      if (oran) setler.push([{ ...m, oran }]);
+      else taninmayan.push(m);
+    }
+    return { setler, taninmayan, cakisan: [] };
+  }
   // Elle aynı sete konmuş AYNI oranlı ikinci görsel: hangisinin kullanılacağını
   // tahmin etmek yerine ekranda sorulur (engel), sessizce biri atılmaz.
   const cakisan: T[] = [];
