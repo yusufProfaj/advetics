@@ -391,6 +391,49 @@ export function kampanyaNegatifleriBody(params: { campaignResource: string; keli
 }
 
 /**
+ * ═══ ARAMA ÖĞESİ (CallAsset) — telefon numarası ═══
+ *
+ * E.164 numaradan (`+905321234567`) Google'ın istediği iki alanı türetir:
+ * `countryCode` (iki harf) ve `phoneNumber` (ulusal biçim). Alan adları v25
+ * referansından (`CallAsset`: ikisi de "Required").
+ *
+ * YALNIZ +90. Ülke kodu numaranın önekinden TAHMİN EDİLMİYOR: +1 ABD de
+ * Kanada da, +7 Rusya da Kazakistan da; yanlış ülke kodu numarayı başka bir
+ * hatta çevirir ve Google bunu geçerli sayabilir (aramalar başka yere düşer,
+ * hata yok). Rehber zaten yalnız +90 istiyor (`eksikler.ts` "Telefon numarası
+ * +90 ile başlamalı"); E.164 deseni orada daha geniş olduğu için buradaki
+ * kontrol İKİNCİ kapı ve bilinmeyen önekte AÇIKÇA patlıyor.
+ *
+ * Ulusal biçim: Türkiye'de ulusal anlamlı numara 10 hane (5xx/2xx/3xx/4xx…),
+ * başına santral öneki `0` KONMUYOR. Google'ın örneği ABD için
+ * `1234567890` (ülke kodu ve santral öneki yok); aynı kural. Hane sayısı
+ * tutmuyorsa numara eksik ya da fazla yazılmış demektir ve bu da reddediliyor:
+ * Google eksik numarayı da kaydedip "doğrulanmamış" diye bekletebilir.
+ */
+export function aramaOgesiTelefonu(e164: string): { countryCode: 'TR'; phoneNumber: string } {
+  const t = e164.trim();
+  const m = /^\+90(\d{10})$/.exec(t);
+  if (m) return { countryCode: 'TR', phoneNumber: m[1]! };
+  if (t.startsWith('+90')) throw new Error(`Türkiye numarası +90'dan sonra 10 hane olmalı: ${t.slice(0, 20)}`);
+  throw new Error(`Arama öğesi yalnız +90 (Türkiye) numarasıyla kuruluyor; ülke kodu tahmin edilmiyor: ${t.slice(0, 20)}`);
+}
+
+/**
+ * Arama öğesinin dönüşüm ayarı. AÇIKÇA yazılıyor (CLAUDE.md "platformun
+ * varsayılanına güvenme"). Üç seçenek var (v25 `CallConversionReportingState`):
+ * - `DISABLED`: reklamdan gelen arama dönüşüm sayılmaz. Telefon amacında bu,
+ *   "En çok dönüşüm" teklifini kör bırakmak ve raporda aramanın hiç
+ *   görünmemesi demek.
+ * - `USE_RESOURCE_LEVEL_CALL_CONVERSION_ACTION`: öğeye özel dönüşüm işlemi
+ *   ister (`callConversionAction`); elimizde böyle bir kimlik yok, uydurmuyoruz.
+ * - `USE_ACCOUNT_LEVEL_CALL_CONVERSION_ACTION`: hesabın "reklamdan arama"
+ *   dönüşüm ayarını kullanır. SEÇİLEN bu. Bedeli: hesapta arama dönüşümü
+ *   tanımlı değilse arama yine sayılmaz — ama o bir HESAP KURULUMU kararı ve
+ *   ölçüm kurulumunun işi; burada hesaptaki kararı ezmiyoruz.
+ */
+export const ARAMA_DONUSUM_AYARI = 'USE_ACCOUNT_LEVEL_CALL_CONVERSION_ACTION';
+
+/**
  * ═══ ARAMA KAMPANYASI — TEK ATOMİK İSTEK (AdvCampaign rehberi) ═══
  *
  * `demandGenAtomikIstek`in Arama karşılığı: bütün işlemler tek
@@ -402,7 +445,31 @@ export function kampanyaNegatifleriBody(params: { campaignResource: string; keli
  * orada, testli); burada yalnız geçici kimlik ve işlem türü ekleniyor.
  *
  * SIRA ÖNEMLİ: geçici kimlik ancak onu kuran işlem sırada önce geliyorsa
- * çözülüyor (bütçe → kampanya → kampanya ölçütleri → grup → kelimeler → reklam).
+ * çözülüyor (bütçe → kampanya → kampanya ölçütleri → grup → kelimeler → reklam
+ * → [arama öğesi → kampanya-öğe bağı]).
+ *
+ * ARAMA ÖĞESİ (`telefon` verilirse): `Asset` (callAsset) + `CampaignAsset`
+ * (fieldType CALL) AYNI istekte. Ayrı bir ikinci istek, kampanya kurulup öğe
+ * düştüğünde "telefon reklamı" diye açılan ama telefonu olmayan bir kampanya
+ * bırakırdı: kullanıcı aramayı bekler, site tıklaması gelir, hata yok.
+ * Öğe kampanyaya bağlanıyor, reklam grubuna değil: grubun tek RSA'sı var ve
+ * kampanya düzeyi bağ, ileride eklenecek grupları da kapsıyor.
+ *
+ * NUMARA DOĞRULAMASI: Google, reklamdaki numaranın doğrulanmış olmasını
+ * istiyor (Google Ads politika yardımı "Unverified phone number" / "Phone
+ * number verification for call and location assets": numara reklamın
+ * sitesinde METİN olarak görünmeli ya da alan adı sahipliği kanıtlanmalı;
+ * algılama 3 güne kadar sürebiliyor). Bu bir POLİTİKA İNCELEMESİ, mutate
+ * reddi değil (API'de ÖLÇÜLMEDİ): öğe kurulur, onaylanana kadar
+ * `campaign_asset.primary_status` gösterilmeyen/beklemede kalır. Geri okuma
+ * bu yüzden onay durumunu değil öğenin VARLIĞINI ve numarasını kıyaslıyor;
+ * onay durumunu fark saymak, her yeni telefon reklamını "fark var"da
+ * durdururdu.
+ *
+ * `adScheduleTargets` GÖNDERİLMİYOR: telefonun açık olduğu saatler Marka
+ * Merkezi'nde yok ve saat uydurulmuyor. Alan boşken öğe reklamın gösterildiği
+ * her saatte çıkar (hesap ayarına bağlı bir varsayılan değil, "kısıt yok");
+ * kullanıcıya not olarak söyleniyor (`derle-google.ts`).
  *
  * CANLIDA HİÇ KOŞMADI (2026-10-10). İlk gerçek çağrı validateOnly provası
  * (MIMARI-REHBER § 8, Ö-1).
@@ -423,6 +490,8 @@ export interface AtomikAramaIstegi {
   finalUrl: string;
   basliklar: string[];
   aciklamalar: string[];
+  /** E.164 (+90…). Verilirse arama öğesi kurulur ve kampanyaya bağlanır. */
+  telefon?: string | null;
   validateOnly: boolean;
 }
 
@@ -436,6 +505,8 @@ export interface AtomikAramaSirasi {
   kampanya: number;
   reklamGrubu: number;
   reklam: number;
+  /** Arama öğesinin kampanya bağı (CampaignAsset); telefon yoksa null. */
+  aramaOgesi: number | null;
 }
 
 function ilkOlustur(b: GoogleMutateBody): Record<string, unknown> {
@@ -458,6 +529,10 @@ export function aramaAtomikIstek(p: AtomikAramaIstegi): { govde: AtomikAramaGovd
   const BUTCE = `${kok}/campaignBudgets/-1`;
   const KAMPANYA = `${kok}/campaigns/-2`;
   const GRUP = `${kok}/adGroups/-3`;
+  const ARAMA_OGESI = `${kok}/assets/-4`;
+  // Numara İSTEK KURULMADAN çözülüyor: bilinmeyen önekte hiçbir işlem
+  // üretilmeden patlasın, yarım bir gövde kimsenin eline geçmesin.
+  const tel = p.telefon ? aramaOgesiTelefonu(p.telefon) : null;
 
   const ops: Array<Record<string, unknown>> = [];
   const ekle = (op: Record<string, unknown>): number => ops.push(op) - 1;
@@ -515,7 +590,22 @@ export function aramaAtomikIstek(p: AtomikAramaIstegi): { govde: AtomikAramaGovd
       ),
     },
   });
-  return { govde: { mutateOperations: ops, partialFailure: false, validateOnly: p.validateOnly }, sira: { kampanya, reklamGrubu, reklam } };
+  let aramaOgesi: number | null = null;
+  if (tel) {
+    ekle({
+      assetOperation: {
+        create: {
+          resourceName: ARAMA_OGESI,
+          callAsset: { countryCode: tel.countryCode, phoneNumber: tel.phoneNumber, callConversionReportingState: ARAMA_DONUSUM_AYARI },
+        },
+      },
+    });
+    aramaOgesi = ekle({ campaignAssetOperation: { create: { campaign: KAMPANYA, asset: ARAMA_OGESI, fieldType: 'CALL' } } });
+  }
+  return {
+    govde: { mutateOperations: ops, partialFailure: false, validateOnly: p.validateOnly },
+    sira: { kampanya, reklamGrubu, reklam, aramaOgesi },
+  };
 }
 
 // ---------------------------------------------------------------------------

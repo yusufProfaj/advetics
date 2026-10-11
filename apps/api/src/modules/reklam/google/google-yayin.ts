@@ -144,6 +144,13 @@ export interface GoogleOkunan {
   konumSayisi: number;
   anahtarKelimeSayisi: number;
   negatifSayisi: number;
+  /**
+   * Kampanyaya CALL olarak bağlı, kaldırılmamış öğeler (numara ulusal haneler).
+   * Onay durumu (`primary_status`) BİLEREK yok: numara doğrulaması günler
+   * sürebilen bir politika incelemesi ve onu fark saymak her yeni telefon
+   * reklamını "fark var"da durdururdu.
+   */
+  aramaOgeleri: Array<{ countryCode: string | null; phoneNumber: string | null }>;
 }
 
 export interface GeriOkumaSatiri {
@@ -172,6 +179,13 @@ export function googleGeriOkumaKarsilastir(b: GoogleBeklenen, o: GoogleOkunan): 
   kiyasla('konum.sayisi', b.konumSayisi, o.konumSayisi);
   if (b.anahtarKelimeSayisi !== null) kiyasla('anahtarKelime.sayisi', b.anahtarKelimeSayisi, o.anahtarKelimeSayisi);
   if (b.negatifSayisi !== null) kiyasla('negatif.sayisi', b.negatifSayisi, o.negatifSayisi);
+  // Arama öğesi: beklenen varsa TAM OLARAK o tek öğe; beklenmiyorsa HİÇ öğe.
+  // "Beklenmiyorsa bakma" demek, site reklamına hesap düzeyinde bir şeyin
+  // telefon iliştirmesini görmezden gelmek olurdu; kampanyanın kendi bağına
+  // bakıyoruz (hesap düzeyi öğeler campaign_asset'te görünmüyor). Eski yayın
+  // satırlarında alan yok (undefined) = null.
+  const beklenenOge = b.aramaOgesi ?? null;
+  kiyasla('aramaOgesi', beklenenOge ? [beklenenOge] : [], o.aramaOgeleri.map(ulusalNumara));
   return { sonuc: satirlar.length ? 'fark' : 'temiz', satirlar };
 }
 
@@ -186,6 +200,29 @@ interface KampanyaSatiri {
   };
   campaignBudget?: { amountMicros?: string };
 }
+interface CagriOgesiSatiri {
+  campaignAsset?: { fieldType?: string; status?: string };
+  asset?: { callAsset?: { countryCode?: string; phoneNumber?: string } };
+}
+
+/**
+ * Google'ın geri döndürdüğü numarayı gönderdiğimiz biçime indirger: yalnız
+ * rakamlar ve TR'de baştaki santral öneki `0` ya da ülke kodu `90` atılır.
+ * Google numarayı biçimlendirip (boşluk, parantez) dönebilir — ÖLÇÜLMEDİ;
+ * biçim farkını "fark" saymak doğru kampanyayı açılmadan durdururdu. Rakam
+ * farkı ise fark olarak kalıyor: başka bir numara başka bir hat demek.
+ */
+export function ulusalNumara(o: { countryCode: string | null; phoneNumber: string | null }): { countryCode: string | null; phoneNumber: string | null } {
+  const ulke = o.countryCode?.toUpperCase() ?? null;
+  if (o.phoneNumber === null) return { countryCode: ulke, phoneNumber: null };
+  let rakam = o.phoneNumber.replace(/\D/g, '');
+  if (ulke === 'TR') {
+    if (rakam.length === 12 && rakam.startsWith('90')) rakam = rakam.slice(2);
+    else if (rakam.length === 11 && rakam.startsWith('0')) rakam = rakam.slice(1);
+  }
+  return { countryCode: ulke, phoneNumber: rakam };
+}
+
 interface KriterSatiri {
   campaignCriterion?: { type?: string; negative?: boolean };
   adGroupCriterion?: { type?: string; negative?: boolean };
@@ -213,6 +250,13 @@ export async function googleGeriOku(port: GoogleYayinPortu, ctx: FetchContext, k
     ctx,
     `SELECT ad_group_criterion.type, ad_group_criterion.negative FROM ad_group_criterion WHERE campaign.id = ${kampanyaId}`,
   );
+  // Arama öğesi: her kurguda soruluyor (beklenmiyorsa da): bkz. karşılaştırma.
+  const cagriOgeleri = await port.ara<CagriOgesiSatiri>(
+    ctx,
+    `SELECT campaign_asset.field_type, campaign_asset.status, asset.call_asset.country_code, asset.call_asset.phone_number
+       FROM campaign_asset
+      WHERE campaign.id = ${kampanyaId} AND campaign_asset.field_type = 'CALL' AND campaign_asset.status != 'REMOVED'`,
+  );
   const c = k?.campaign;
   const n = c?.networkSettings;
   const say = (r: KriterSatiri[], alan: 'campaignCriterion' | 'adGroupCriterion', tur: string, negatif: boolean) =>
@@ -236,6 +280,9 @@ export async function googleGeriOku(port: GoogleYayinPortu, ctx: FetchContext, k
     konumSayisi: say(kampanyaKriteri, 'campaignCriterion', 'LOCATION', false) + say(grupKriteri, 'adGroupCriterion', 'LOCATION', false),
     anahtarKelimeSayisi: say(grupKriteri, 'adGroupCriterion', 'KEYWORD', false),
     negatifSayisi: say(kampanyaKriteri, 'campaignCriterion', 'KEYWORD', true),
+    aramaOgeleri: cagriOgeleri
+      .filter((x) => x.campaignAsset?.fieldType === 'CALL' && x.campaignAsset?.status !== 'REMOVED')
+      .map((x) => ({ countryCode: x.asset?.callAsset?.countryCode ?? null, phoneNumber: x.asset?.callAsset?.phoneNumber ?? null })),
   };
 }
 

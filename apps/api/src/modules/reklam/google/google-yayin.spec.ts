@@ -4,7 +4,7 @@ import { createHarness, seedTenant, IDS, type Harness } from '../../../../test/p
 import { PlatformApiError, type FetchContext } from '../../connections/provider.types';
 import type { TxRunner } from '../yayin-motoru';
 import { derleGoogle, GOOGLE_ATIF, GOOGLE_DERLEYICI_SURUMU } from './derle-google';
-import { googleGeriOkumaKarsilastir, googleYayinIsle, googleYayinKaydiOlustur, type GoogleOkunan, type GoogleYayinPortu } from './google-yayin';
+import { googleGeriOkumaKarsilastir, googleYayinIsle, googleYayinKaydiOlustur, ulusalNumara, type GoogleOkunan, type GoogleYayinPortu } from './google-yayin';
 
 /**
  * GOOGLE YAYIN İŞLEYİCİSİ — gerçek şema (PGlite), sahte Google.
@@ -53,6 +53,8 @@ class SahteGoogle implements GoogleYayinPortu {
   /** Hata atar AMA kurar (zaman aşımı sonrası istek uygulanmış). */
   yineDeKur = false;
   bozucu: ((o: Record<string, unknown>) => void) | null = null;
+  /** Arama öğesi satırlarını geri okumada değiştirir (kayıp öğe, başka numara, biçimli numara). */
+  ogeBozucu: ((satirlar: Array<Record<string, unknown>>) => Array<Record<string, unknown>>) | null = null;
   kampanyaAdi: string | null = null;
   durum = 'PAUSED';
   private govde: Array<Record<string, unknown>> = [];
@@ -91,6 +93,15 @@ class SahteGoogle implements GoogleYayinPortu {
     const c = (tur: string) => this.govde.filter((o) => o[tur]).map((o) => (o[tur] as { create: Record<string, unknown> }).create);
     if (sorgu.includes('FROM ad_group_ad')) {
       return [{ campaign: { resourceName: `customers/${MUSTERI}/campaigns/555` }, adGroup: { resourceName: `customers/${MUSTERI}/adGroups/666` }, adGroupAd: { resourceName: `customers/${MUSTERI}/adGroupAds/666~777` } }] as T[];
+    }
+    if (sorgu.includes('FROM campaign_asset')) {
+      // Atomik isteğin bağı ve öğesi: bağ, geçici öğe kimliğiyle eşleşiyor.
+      const ogeler = c('assetOperation');
+      const satirlar = c('campaignAssetOperation').map((bag) => {
+        const oge = ogeler.find((o) => o.resourceName === bag.asset) as { callAsset?: { countryCode: string; phoneNumber: string } } | undefined;
+        return { campaignAsset: { fieldType: bag.fieldType, status: 'ENABLED' }, asset: { callAsset: oge?.callAsset ? { countryCode: oge.callAsset.countryCode, phoneNumber: oge.callAsset.phoneNumber } : undefined } };
+      });
+      return (this.ogeBozucu ? this.ogeBozucu(satirlar) : satirlar) as T[];
     }
     if (sorgu.includes('FROM campaign_criterion')) {
       return c('campaignCriterionOperation').map((x) => ({ campaignCriterion: { type: x.location ? 'LOCATION' : x.language ? 'LANGUAGE' : 'KEYWORD', negative: x.negative === true } })) as T[];
@@ -145,8 +156,8 @@ beforeEach(async () => {
   );
 });
 
-async function yayinKur(kapaliKalacak = false) {
-  const d = derleGoogle(GIRDI, {
+async function yayinKur(kapaliKalacak = false, girdi: GoogleDerlemeGirdisi = GIRDI) {
+  const d = derleGoogle(girdi, {
     kimlik: YAYIN,
     workspaceKisaAdi: 'WS',
     amacEkranAdi: 'Siteme gelsinler',
@@ -235,6 +246,26 @@ describe('açmayan yollar', () => {
     expect(r!.satirlar.map((s) => s.alan)).toEqual(['kampanya.aglar']);
   });
 
+  it('KRİTİK: TELEFON — arama öğesi geri okumada YOKSA fark_var, kampanya AÇILMAZ (numarasız telefon reklamı)', async () => {
+    const TEL: GoogleDerlemeGirdisi = { ...GIRDI, ulasma: 'telefon', telefon: '+902325551234' };
+    await yayinKur(false, TEL);
+    const g = new SahteGoogle();
+    g.ogeBozucu = () => [];
+    expect(await isle(g)).toEqual({ tur: 'bitti', durum: 'fark_var' });
+    expect(g.acilan).toEqual([]);
+    const [r] = await h.q<{ satirlar: Array<{ alan: string }> }>('SELECT satirlar FROM geri_okuma');
+    expect(r!.satirlar.map((s) => s.alan)).toEqual(['aramaOgesi']);
+  });
+
+  it('TELEFON: öğe doğru numarayla (Google biçimlendirse bile) okunursa açılır; gövde öğeyi taşıyor', async () => {
+    const TEL: GoogleDerlemeGirdisi = { ...GIRDI, ulasma: 'telefon', telefon: '+902325551234' };
+    await yayinKur(false, TEL);
+    const g = new SahteGoogle();
+    g.ogeBozucu = (x) => x.map((s) => ({ ...s, asset: { callAsset: { countryCode: 'TR', phoneNumber: '0232 555 12 34' } } }));
+    expect(await isle(g)).toEqual({ tur: 'bitti', durum: 'iletildi' });
+    expect(g.mutateSayisi).toBe(1);
+  });
+
   it('KRİTİK: Google kesin reddettiyse (atomik: hiçbir şey kurulmadı) kurulamadi + nesneler reddedildi', async () => {
     await yayinKur(false);
     const g = new SahteGoogle();
@@ -292,11 +323,50 @@ describe('geri okuma karşılaştırması', () => {
     konumSayisi: 1,
     anahtarKelimeSayisi: 2,
     negatifSayisi: TABAN_NEGATIFLER.length,
+    aramaOgeleri: [],
   };
   it('temiz okuma temiz; okunamayan alan (null) FARK sayılır; eksik negatif fark', () => {
     expect(googleGeriOkumaKarsilastir(b.beklenen, temiz)).toEqual({ sonuc: 'temiz', satirlar: [] });
     expect(googleGeriOkumaKarsilastir(b.beklenen, { ...temiz, konumTuru: null }).sonuc).toBe('fark');
     expect(googleGeriOkumaKarsilastir(b.beklenen, { ...temiz, negatifSayisi: 3 }).satirlar.map((s) => s.alan)).toEqual(['negatif.sayisi']);
     expect(googleGeriOkumaKarsilastir(b.beklenen, { ...temiz, konumTuru: 'PRESENCE_OR_INTEREST' }).sonuc).toBe('fark');
+  });
+
+  it('site reklamına kampanya düzeyinde arama öğesi İLİŞMİŞSE fark (beklenmeyen öğe de söz dışı)', () => {
+    const o = { ...temiz, aramaOgeleri: [{ countryCode: 'TR', phoneNumber: '2325551234' }] };
+    expect(googleGeriOkumaKarsilastir(b.beklenen, o).satirlar.map((s) => s.alan)).toEqual(['aramaOgesi']);
+  });
+
+  it('eski yayın satırı (beklenen_yanki’de aramaOgesi alanı HİÇ yok) öğesiz okumada temiz', () => {
+    // JSON'a hiç yazılmamış alan: `aramaOgesi` opsiyonel, cast gerekmiyor.
+    const { aramaOgesi: _yok, ...eski } = b.beklenen;
+    expect('aramaOgesi' in eski).toBe(false);
+    expect(googleGeriOkumaKarsilastir(eski, temiz).sonuc).toBe('temiz');
+  });
+
+  describe('telefon', () => {
+    const t = derleGoogle({ ...GIRDI, ulasma: 'telefon', telefon: '+902325551234' }, { kimlik: YAYIN, workspaceKisaAdi: 'WS', amacEkranAdi: 'S', simdi: new Date('2026-10-10T09:00:00+03:00'), validateOnly: false, logo: null, youtubeVideoBasligi: null });
+    if (t.tur !== 'govde') throw new Error('derleme');
+    const okunan = (aramaOgeleri: GoogleOkunan['aramaOgeleri']): GoogleOkunan => ({ ...temiz, kampanyaAdi: t.beklenen.kampanyaAdi, aramaOgeleri });
+
+    it('tek öğe doğru numarayla temiz; öğe yoksa, başka numaraysa ya da iki öğe varsa fark', () => {
+      expect(googleGeriOkumaKarsilastir(t.beklenen, okunan([{ countryCode: 'TR', phoneNumber: '2325551234' }])).sonuc).toBe('temiz');
+      expect(googleGeriOkumaKarsilastir(t.beklenen, okunan([])).satirlar.map((s) => s.alan)).toEqual(['aramaOgesi']);
+      expect(googleGeriOkumaKarsilastir(t.beklenen, okunan([{ countryCode: 'TR', phoneNumber: '2325559999' }])).sonuc).toBe('fark');
+      expect(googleGeriOkumaKarsilastir(t.beklenen, okunan([{ countryCode: 'US', phoneNumber: '2325551234' }])).sonuc).toBe('fark');
+      const iki = [{ countryCode: 'TR', phoneNumber: '2325551234' }, { countryCode: 'TR', phoneNumber: '2325551234' }];
+      expect(googleGeriOkumaKarsilastir(t.beklenen, okunan(iki)).sonuc).toBe('fark');
+      // Okunamayan numara (null) bilinmeyendir, doğru varsayılmaz.
+      expect(googleGeriOkumaKarsilastir(t.beklenen, okunan([{ countryCode: 'TR', phoneNumber: null }])).sonuc).toBe('fark');
+    });
+
+    it('biçim farkı fark DEĞİL (boşluk, 0 öneki, +90), rakam farkı fark', () => {
+      for (const n of ['0232 555 12 34', '+90 (232) 555-1234', '902325551234', '(232) 555 12 34', '2325551234']) {
+        expect(ulusalNumara({ countryCode: 'tr', phoneNumber: n })).toEqual({ countryCode: 'TR', phoneNumber: '2325551234' });
+      }
+      expect(ulusalNumara({ countryCode: 'TR', phoneNumber: '0232 555 12 35' }).phoneNumber).toBe('2325551235');
+      // Öneki yalnız TR'de ve yalnız doğru uzunlukta atıyoruz: başka ülkede dokunulmaz.
+      expect(ulusalNumara({ countryCode: 'US', phoneNumber: '02325551234' }).phoneNumber).toBe('02325551234');
+    });
   });
 });

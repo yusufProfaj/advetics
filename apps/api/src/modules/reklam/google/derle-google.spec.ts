@@ -4,6 +4,7 @@ import {
   GOOGLE_TURKCE,
   TABAN_NEGATIFLER,
   kararTablosu,
+  REHBER_AMACLARI,
   rehberdenGoogle,
   type GoogleDerlemeGirdisi,
   type GoogleTeklif,
@@ -39,6 +40,7 @@ function rehber(amac: RehberAmacKodu): RehberAlanlari {
     ),
     ekKategoriler: al([]),
     hedefAdres: al('https://gardenvillaskusadasi.com/', 'marka_merkezi'),
+    telefon: al('+902325551234', 'marka_merkezi'),
     youtubeVideo: al({ videoId: 'dQw4w9WgXcQ', baslik: 'Tanıtım' }),
     metin: al({
       anaMetin: 'Denize 5 dakika.',
@@ -228,10 +230,89 @@ describe('ARAMA — tablonun söylemediği ama gövdenin tutması gereken kurall
     expect(d.beklenen.kampanyaAdi).toContain('adv-abcdef12');
   });
 
-  it('FORM (form uzantısı) Dalga 2: sessizce site reklamı KURULMAZ, açık ret', () => {
+  it('FORM (form uzantısı) Dalga 2: sessizce site reklamı KURULMAZ, açık ret ve SEBEBİ söylenir', () => {
     const r = derleGoogle({ ...girdi('SITE'), ulasma: 'form' }, B);
     expect(r.tur).toBe('ret');
     expect(r.tur === 'ret' && r.retler[0]!.kod).toBe('G-KURGU-KAPALI');
+    // "Henüz kurulamıyor" tek başına kullanıcıyı sebebi kendi kurulumunda
+    // aramaya gönderir; sebep (form içeriğinin kaynağı yok) mesajda.
+    expect(r.tur === 'ret' && r.retler[0]!.mesaj).toMatch(/içeriği.*kaynak yok/);
+  });
+
+  it('site reklamında arama öğesi YOK (telefon alanı dolu olsa bile)', () => {
+    expect(islemler(ops, 'assetOperation')).toHaveLength(0);
+    expect(islemler(ops, 'campaignAssetOperation')).toHaveLength(0);
+    expect(d.sira.aramaOgesi).toBeNull();
+    expect(d.beklenen.aramaOgesi).toBeNull();
+  });
+});
+
+describe('ARAMA + TELEFON (Beni arasınlar) — arama öğesi', () => {
+  // REHBER_ACILIS.TELEFON.google bu dalgada hâlâ 'kapali' (açılış Ajan 5'in
+  // kararı), yani türetme TELEFON+Google'ı reddediyor. Girdi, türetmenin
+  // açılınca üreteceği şekle elle getiriliyor: amaç tanımı (amaclar.ts)
+  // TELEFON için `ulasma: 'telefon'` diyor ve telefon `rehberdenGoogle`da
+  // alandan aynen taşınıyor (aşağıdaki ilk test o tanımı kilitliyor).
+  const telGirdi = (b: Partial<GoogleDerlemeGirdisi> = {}): GoogleDerlemeGirdisi => ({ ...girdi('SITE'), ulasma: 'telefon', telefon: '+902325551234', ...b });
+  const telDerle = (b: Partial<GoogleDerlemeBaglami> = {}) => {
+    const x = derleGoogle(telGirdi(), { ...B, ...b });
+    if (x.tur !== 'govde') throw new Error(`derleme reddetti: ${JSON.stringify(x.retler)}`);
+    return x;
+  };
+  const d = telDerle();
+  const ops = d.govde.mutateOperations;
+
+  it('ALTIN GÖVDE: callAsset (TR, ulusal 10 hane, dönüşüm ayarı açıkça) + kampanyaya CALL bağı, geçici kimlikle', () => {
+    expect(REHBER_AMACLARI.TELEFON.google).toMatchObject({ kurgu: 'ARAMA', ulasma: 'telefon' });
+    const oge = islemler(ops, 'assetOperation');
+    expect(oge).toEqual([
+      {
+        resourceName: 'customers/1234567890/assets/-4',
+        callAsset: { countryCode: 'TR', phoneNumber: '2325551234', callConversionReportingState: 'USE_ACCOUNT_LEVEL_CALL_CONVERSION_ACTION' },
+      },
+    ]);
+    expect(islemler(ops, 'campaignAssetOperation')).toEqual([
+      { campaign: kampanya(ops).resourceName, asset: 'customers/1234567890/assets/-4', fieldType: 'CALL' },
+    ]);
+    expect(kampanya(ops).resourceName).toBe('customers/1234567890/campaigns/-2');
+  });
+
+  it('AYNI atomik istekte: öğe kampanyadan, bağ öğeden SONRA (geçici kimlik çözülsün); kısmi başarı kapalı', () => {
+    const tur = (i: number) => Object.keys(ops[i]!)[0];
+    const ogeSira = ops.findIndex((o) => o.assetOperation);
+    expect(ogeSira).toBeGreaterThan(d.sira.kampanya);
+    expect(d.sira.aramaOgesi).toBe(ops.length - 1);
+    expect(tur(d.sira.aramaOgesi!)).toBe('campaignAssetOperation');
+    expect(d.sira.aramaOgesi!).toBeGreaterThan(ogeSira);
+    expect(d.govde.partialFailure).toBe(false);
+  });
+
+  it('PROVA aynı gövdeyi taşıyor: validateOnly provada da öğe işlemleri VAR', () => {
+    const prova = telDerle({ validateOnly: true });
+    const yayin = telDerle({ validateOnly: false });
+    expect(prova.govde.validateOnly).toBe(true);
+    expect(prova.govde.mutateOperations).toEqual(yayin.govde.mutateOperations);
+    expect(islemler(prova.govde.mutateOperations, 'campaignAssetOperation')).toHaveLength(1);
+  });
+
+  it('RSA nihai adresi TELEFONDA DA var (arama öğesi bir Arama reklamına bağlı)', () => {
+    const rsa = islemler(ops, 'adGroupAdOperation')[0]!.ad as { finalUrls: string[] };
+    expect(rsa.finalUrls).toEqual(['https://gardenvillaskusadasi.com/']);
+  });
+
+  it('beklenen geri okuma öğeyi taşıyor; doğrulama ve saat kısıtı NOT olarak söyleniyor', () => {
+    expect(d.beklenen.aramaOgesi).toEqual({ countryCode: 'TR', phoneNumber: '2325551234' });
+    expect(d.notlar.join(' ')).toMatch(/doğrulan/);
+    expect(d.notlar.join(' ')).toMatch(/her saatte/);
+  });
+
+  it('numara yoksa ya da +90 değilse ret (G-TELEFON) — numarasız ya da tahminî ülkeyle kurulmaz', () => {
+    const yok = derleGoogle(telGirdi({ telefon: null }), B);
+    expect(yok.tur === 'ret' && yok.retler.map((x) => x.kod)).toEqual(['G-TELEFON']);
+    const abd = derleGoogle(telGirdi({ telefon: '+12025550123' }), B);
+    expect(abd.tur === 'ret' && abd.retler[0]).toMatchObject({ kod: 'G-TELEFON', mesaj: expect.stringMatching(/tahmin edilmiyor/) });
+    const kisa = derleGoogle(telGirdi({ telefon: '+90232555123' }), B);
+    expect(kisa.tur === 'ret' && kisa.retler[0]!.kod).toBe('G-TELEFON');
   });
 });
 

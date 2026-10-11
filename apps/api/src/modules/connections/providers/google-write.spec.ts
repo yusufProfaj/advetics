@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ARAMA_DONUSUM_AYARI,
   adGroupBody,
+  aramaAtomikIstek,
+  aramaOgesiTelefonu,
   campaignBody,
   campaignBudgetBody,
   googleDate,
@@ -202,5 +205,79 @@ describe('yardımcılar', () => {
 
   it('nameStamp dakika hassasiyetinde', () => {
     expect(nameStamp(new Date('2026-08-16T12:34:56.000Z'))).toBe('2026-08-16 12:34');
+  });
+});
+
+describe('arama öğesi telefonu (E.164 → countryCode + ulusal numara)', () => {
+  it('+90: TR ve santral öneki 0 OLMADAN 10 hane', () => {
+    expect(aramaOgesiTelefonu('+905321234567')).toEqual({ countryCode: 'TR', phoneNumber: '5321234567' });
+    expect(aramaOgesiTelefonu(' +902325551234 ')).toEqual({ countryCode: 'TR', phoneNumber: '2325551234' });
+  });
+
+  it('bilinmeyen önek TAHMİN EDİLMİYOR, açıkça patlıyor (+1 ABD de Kanada da)', () => {
+    expect(() => aramaOgesiTelefonu('+12025550123')).toThrow(/tahmin edilmiyor/);
+    expect(() => aramaOgesiTelefonu('+4930123456')).toThrow(/yalnız \+90/);
+    // E.164 olmayan yazım da aynı kapıda.
+    expect(() => aramaOgesiTelefonu('05321234567')).toThrow(/yalnız \+90/);
+  });
+
+  it('+90 ama hane sayısı yanlış: eksik/fazla numara reddediliyor', () => {
+    expect(() => aramaOgesiTelefonu('+90532123456')).toThrow(/10 hane/);
+    expect(() => aramaOgesiTelefonu('+9053212345678')).toThrow(/10 hane/);
+    expect(() => aramaOgesiTelefonu('+90 532 123 45 67')).toThrow(/10 hane/);
+  });
+});
+
+describe('atomik arama isteği — arama öğesi', () => {
+  const temel = {
+    customerId: '1234567890',
+    name: 'WS · Beni arasınlar · adv-abcdef12',
+    stamp: '20261010-0900',
+    gunlukButceMicros: 250_000_000n,
+    endDate: null,
+    teklif: 'targetSpend' as const,
+    konumlar: ['geoTargetConstants/1012782'],
+    dil: 'languageConstants/1037',
+    negatifler: ['ücretsiz'],
+    anahtarKelimeler: ['kuşadası villa'],
+    finalUrl: 'https://ornek.com.tr/',
+    basliklar: ['Bir', 'İki', 'Üç'],
+    aciklamalar: ['Birinci.', 'İkinci.'],
+    validateOnly: true,
+  };
+  const turler = (ops: Array<Record<string, unknown>>) => ops.map((o) => Object.keys(o)[0]);
+
+  it('telefon yoksa öğe işlemi YOK, sira.aramaOgesi null', () => {
+    const { govde, sira } = aramaAtomikIstek(temel);
+    expect(turler(govde.mutateOperations)).not.toContain('assetOperation');
+    expect(turler(govde.mutateOperations)).not.toContain('campaignAssetOperation');
+    expect(sira.aramaOgesi).toBeNull();
+  });
+
+  it('telefon varsa: öğe + CALL bağı SONDA, aynı istekte, geçici kimlikle; dönüşüm ayarı AÇIKÇA', () => {
+    const { govde, sira } = aramaAtomikIstek({ ...temel, telefon: '+905321234567' });
+    const ops = govde.mutateOperations;
+    expect(turler(ops).slice(-2)).toEqual(['assetOperation', 'campaignAssetOperation']);
+    expect(sira.aramaOgesi).toBe(ops.length - 1);
+    expect((ops.at(-2) as { assetOperation: { create: unknown } }).assetOperation.create).toEqual({
+      resourceName: 'customers/1234567890/assets/-4',
+      callAsset: { countryCode: 'TR', phoneNumber: '5321234567', callConversionReportingState: ARAMA_DONUSUM_AYARI },
+    });
+    expect(ARAMA_DONUSUM_AYARI).toBe('USE_ACCOUNT_LEVEL_CALL_CONVERSION_ACTION');
+    expect((ops.at(-1) as { campaignAssetOperation: { create: unknown } }).campaignAssetOperation.create).toEqual({
+      campaign: 'customers/1234567890/campaigns/-2',
+      asset: 'customers/1234567890/assets/-4',
+      fieldType: 'CALL',
+    });
+    // Saat kısıtı uydurulmuyor: alan hiç yok.
+    expect(JSON.stringify(ops)).not.toContain('adScheduleTargets');
+    expect(govde.partialFailure).toBe(false);
+    // Geçici kimlikler çakışmıyor (bütçe -1, kampanya -2, grup -3, öğe -4).
+    const kimlikler = JSON.stringify(ops).match(/\/-\d+/g) ?? [];
+    expect(new Set(kimlikler)).toEqual(new Set(['/-1', '/-2', '/-3', '/-4']));
+  });
+
+  it('bilinmeyen önekte HİÇBİR gövde üretilmeden patlıyor', () => {
+    expect(() => aramaAtomikIstek({ ...temel, telefon: '+12025550123' })).toThrow(/tahmin edilmiyor/);
   });
 });

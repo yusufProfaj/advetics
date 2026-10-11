@@ -1,5 +1,5 @@
 import { gunlukEsdeger, paraOndaligi, type GoogleDerlemeGirdisi } from '@advetics/shared';
-import { aramaAtomikIstek, nameStamp } from '../../connections/providers/google-write';
+import { aramaAtomikIstek, aramaOgesiTelefonu, nameStamp } from '../../connections/providers/google-write';
 import { demandGenAtomikIstek } from '../../connections/providers/google-demandgen';
 
 /**
@@ -21,6 +21,10 @@ import { demandGenAtomikIstek } from '../../connections/providers/google-demandg
  */
 
 /** Derlenmiş gövdenin sürümü; prova ve yayın buna bağlanıyor (`prova.derleyici_surumu`). */
+// Telefon ulaşması (CallAsset) eklendiğinde sürüm ARTIRILMADI: site
+// gövdesi bayt bayt aynı kaldı ve telefon gövdesi daha önce hiç 'gecti'
+// provası alamazdı (derleyici yerelde reddediyordu). Artırmak bekleyen bütün
+// site provalarını boşuna geçersiz kılardı.
 export const GOOGLE_DERLEYICI_SURUMU = 'g-1.0.0';
 
 /**
@@ -58,6 +62,12 @@ export interface GoogleBeklenen {
   /** Arama: öbek eşleme kelime sayısı; Talep Yaratma: null. */
   anahtarKelimeSayisi: number | null;
   negatifSayisi: number | null;
+  /**
+   * Arama öğesi (telefon ulaşması): kampanyaya CALL olarak bağlı TEK öğe ve
+   * numarası. Yoksa null. Eski yayın satırlarının `beklenen_yanki` JSON'unda
+   * bu alan HİÇ yok (undefined); okuyan taraf onu null sayıyor.
+   */
+  aramaOgesi?: { countryCode: string; phoneNumber: string } | null;
 }
 
 export type GoogleDerleme =
@@ -65,7 +75,7 @@ export type GoogleDerleme =
       tur: 'govde';
       kurgu: GoogleDerlemeGirdisi['kurgu'];
       govde: { mutateOperations: Array<Record<string, unknown>>; partialFailure: false; validateOnly: boolean };
-      sira: { kampanya: number; reklamGrubu: number; reklam: number; logo: number | null };
+      sira: { kampanya: number; reklamGrubu: number; reklam: number; logo: number | null; aramaOgesi: number | null };
       beklenen: GoogleBeklenen;
       atif: typeof GOOGLE_ATIF;
       /** Kullanıcıya söylenecek kısıt (sessiz değişiklik yok): ör. yaş kovası yuvarlandı. */
@@ -127,11 +137,35 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
   const stamp = nameStamp(b.simdi);
 
   if (g.kurgu === 'ARAMA') {
-    if (g.ulasma !== 'site') {
-      // Form uzantısı (LeadFormAsset) ve arama uzantısı (CallAsset) Dalga 2:
-      // kurucuları yazılmadı. Sessizce yalnız site reklamı kurmak, kullanıcının
-      // istediği "form doldursunlar"ı hiç kurmamak demekti.
-      retler.push({ kod: 'G-KURGU-KAPALI', mesaj: `Google'da ${g.ulasma === 'form' ? 'form' : 'arama'} uzantılı reklam henüz kurulamıyor.` });
+    if (g.ulasma === 'form') {
+      // Form öğesi (LeadFormAsset) KENDİ İÇERİĞİNİ istiyor: form başlığı,
+      // işletme adı, sorulacak alanlar, gizlilik politikası adresi, gönderim
+      // sonrası metin. Rehberde bunların Google için bir kaynağı yok (Meta
+      // formu Meta'da duruyor, Google'a taşınmıyor). Sessizce yalnız site
+      // reklamı kurmak, kullanıcının istediği "form doldursunlar"ı hiç
+      // kurmamak demekti; içeriği uydurmak ise müşteri adına söz vermek.
+      retler.push({
+        kod: 'G-KURGU-KAPALI',
+        mesaj: "Google'da form reklamı henüz kurulamıyor: Google formunun içeriği (sorular, gizlilik adresi) için bir kaynak yok.",
+      });
+    } else if (g.ulasma !== 'site' && g.ulasma !== 'telefon') {
+      // Arama kurgusunda ulaşma null ya da bilinmeyen bir değer: tür
+      // sisteminin dışından gelmiş bir girdi. Tahminle site reklamı KURULMAZ.
+      retler.push({ kod: 'G-KURGU-KAPALI', mesaj: `Google Arama'da bu ulaşma türü kurulamıyor: ${String(g.ulasma)}` });
+    }
+    let tel: ReturnType<typeof aramaOgesiTelefonu> | null = null;
+    if (g.ulasma === 'telefon') {
+      // Numara derleyicide bir kez daha çözülüyor: eksikler +90 diyor ama
+      // E.164 deseni daha geniş; bilinmeyen önek burada ret oluyor (kurucu
+      // da patlardı, ama ret kullanıcıya CÜMLE olarak dönüyor, istisna değil).
+      if (!g.telefon) retler.push({ kod: 'G-TELEFON', mesaj: 'Telefon numarası yok: arama reklamı numarasız kurulamaz.' });
+      else {
+        try {
+          tel = aramaOgesiTelefonu(g.telefon);
+        } catch (e) {
+          retler.push({ kod: 'G-TELEFON', mesaj: (e as Error).message });
+        }
+      }
     }
     if (g.anahtarKelimeler.length === 0) retler.push({ kod: 'G-KELIME', mesaj: 'Anahtar kelime yok: arama kampanyası hiç gösterilmezdi.' });
     if (g.aciklamalar.length < 2) retler.push({ kod: 'G-ACIKLAMA-SAYI', mesaj: 'Google için en az 2 açıklama gerekiyor.' });
@@ -152,8 +186,16 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
       finalUrl: g.hedefAdres,
       basliklar: g.basliklar,
       aciklamalar: g.aciklamalar,
+      telefon: tel ? g.telefon : null,
       validateOnly: b.validateOnly,
     });
+    if (tel) {
+      // Sessiz kalmasın: iki kısıt da kullanıcının göreceği yerde.
+      notlar.push(
+        "Google arama öğesini numara doğrulanınca gösterir: numara sitende yazı olarak (görsel değil) görünmeli; Google'ın algılaması 3 güne kadar sürebilir.",
+      );
+      notlar.push('Telefon her saatte görünür: açık olduğun saatler henüz sorulmuyor.');
+    }
     return {
       tur: 'govde',
       kurgu: g.kurgu,
@@ -169,6 +211,7 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
         konumSayisi: g.konumlar.length,
         anahtarKelimeSayisi: g.anahtarKelimeler.length,
         negatifSayisi: g.negatifler.length,
+        aramaOgesi: tel ? { countryCode: tel.countryCode, phoneNumber: tel.phoneNumber } : null,
       },
       atif: GOOGLE_ATIF,
       notlar,
@@ -214,7 +257,7 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
       tur: 'govde',
       kurgu: g.kurgu,
       govde,
-      sira,
+      sira: { ...sira, aramaOgesi: null },
       beklenen: {
         kanal: 'DEMAND_GEN',
         kampanyaAdi: kampanyaAdi(govde.mutateOperations[sira.kampanya]),
@@ -225,6 +268,7 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
         konumSayisi: g.konumlar.length,
         anahtarKelimeSayisi: null,
         negatifSayisi: null,
+        aramaOgesi: null,
       },
       atif: GOOGLE_ATIF,
       notlar,
