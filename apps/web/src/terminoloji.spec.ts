@@ -95,6 +95,26 @@ const IZINLI: Array<{ neden: string; desen: RegExp }> = [
   { neden: 'KİŞİ — beyaz etiket tanıtımı: paneli GÖREN kişi', desen: /Müşteriniz|Müşterileriniz|müşterilerinize/ },
   { neden: 'KİŞİ — gizlilik metninde veri sahibi', desen: /müşterilerin veya reklam izleyicilerinin|müşteriye görünmez/ },
   { neden: 'KİŞİ — “sistem bozulmuş” diye okuyan insan', desen: /müşteriye “sistem/ },
+  /*
+   * LEAD'İN SATIŞ AŞAMASI (Paket E, geri besleme): "müşteri oldu" lead'in
+   * kendisinin satışa dönmesi; workspace değil. Desen aşama adına çapalı.
+   */
+  { neden: 'LEAD — satışa dönen aday (geri besleme aşaması)', desen: /[Mm]üşteri oldu/ },
+  /*
+   * HAFTALIK ÖZETİN İKİ GÖRÜNÜMÜ (Paket B): ajansa giden ve müşteriye (rapor
+   * alıcısı İNSAN) giden mail. "Müşteri görünümü / özet planı / mailine"
+   * hep o alıcıyı anlatıyor.
+   */
+  {
+    neden: 'KİŞİ — haftalık özetin müşteri (alıcı) görünümü',
+    desen: /[Mm]üşteriye giden|[Mm]üşteri görünüm|[Mm]üşteri özet planı|ajansının müşterisine giden|müşteriye \{\{x\}\} gitmez/,
+  },
+  /*
+   * MAĞAZANIN SATICISI (Paket F3): Shopify'da "müşteri mağazası" ajansın
+   * müşterisinin MAĞAZASI = workspace'in dış sistemi; panel metni değil,
+   * dağıtım kısıtının açıklaması.
+   */
+  { neden: 'KİŞİ — Shopify dağıtım kısıtında ajansın müşterisinin mağazası', desen: /müşteri mağazası için App Store/ },
   {
     /*
      * GOOGLE'IN ÜRÜN ADI. MCC'nin Türkçe arayüzdeki karşılığı "Müşteri
