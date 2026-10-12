@@ -259,11 +259,25 @@ export async function yazmalar(db: TxLike, hesap: HesapSatiri, sinir: YazmaSinir
   const denetimZamani =
     'basZaman' in sinir
       ? Prisma.sql`l.created_at >= ${sinir.basZaman}::timestamptz`
-      : Prisma.sql`(l.created_at AT TIME ZONE ${hesap.timezone})::date BETWEEN ${sinir.basGun}::date AND ${sinir.sonGun}::date`;
+      : Prisma.sql`l.created_at >= (${sinir.basGun}::date - 1)::timestamptz
+          AND l.created_at < (${sinir.sonGun}::date + 2)::timestamptz
+          AND (l.created_at AT TIME ZONE ${hesap.timezone})::date BETWEEN ${sinir.basGun}::date AND ${sinir.sonGun}::date`;
   const kuralZamani =
     'basZaman' in sinir
       ? Prisma.sql`x.created_at >= ${sinir.basZaman}::timestamptz`
-      : Prisma.sql`(x.created_at AT TIME ZONE ${hesap.timezone})::date BETWEEN ${sinir.basGun}::date AND ${sinir.sonGun}::date`;
+      : Prisma.sql`x.created_at >= (${sinir.basGun}::date - 1)::timestamptz
+          AND x.created_at < (${sinir.sonGun}::date + 2)::timestamptz
+          AND (x.created_at AT TIME ZONE ${hesap.timezone})::date BETWEEN ${sinir.basGun}::date AND ${sinir.sonGun}::date`;
+
+  /*
+   * İNDEKSLİ ARALIK + KESİN GÜN (Ajan 4, Ö-3). Gün koşulu saat dilimine
+   * çevrilmiş bir ifade üzerinde ve created_at indeksini kullanamıyor; tek
+   * başına kalınca her açık satır için BÜTÜN şirketlerin denetim kayıtları
+   * taranıyordu. Önündeki çıplak aralık iki yanında birer gün pay bırakıyor
+   * (en uç saat dilimi farkı 14 saat) ve indeksi daraltıyor; kesin gün
+   * kararı yine hesabın saat diliminde, arkadaki koşulda. Canlıda EXPLAIN
+   * ile ölçülecek (Ajan 5).
+   */
 
   /*
    * KAYNAK 1 — kampanya eylemi (audit_logs). Kural motorunun denetim
