@@ -6,7 +6,7 @@
 > İŞ yazılır; her oturum kapanırken, işin kendi commit'inde güncellenir.
 > 16 Ağustos'a kadarki eski devir belgesi: [`arsiv/DEVAM-2026-08.md`](arsiv/DEVAM-2026-08.md).
 
-**Son güncelleme:** 2026-10-12 (kurulum rehberi) · 2026-10-12 (hazır workspace Dalga 3) · 2026-10-11 gece (Dalga 3 canlı tur) · 2026-10-11 (Dalga 2 + set kartı) · 2026-10-10 akşam (AdvCampaign canlı tur 2 + banner seti; canlı `55312f6`) · 2026-10-09: **Canlı `6b51390` (11:43, 81 sn); ondan önce 316be15 (10:30):**
+**Son güncelleme:** 2026-10-13 (Orphex uyarlaması, A-F + 2FA + site) · 2026-10-12 (kurulum rehberi) · 2026-10-12 (hazır workspace Dalga 3) · 2026-10-11 gece (Dalga 3 canlı tur) · 2026-10-11 (Dalga 2 + set kartı) · 2026-10-10 akşam (AdvCampaign canlı tur 2 + banner seti; canlı `55312f6`) · 2026-10-09: **Canlı `6b51390` (11:43, 81 sn); ondan önce 316be15 (10:30):**
 aşağıda "DEPLOY EDİLMEDİ" yazan işlerin HEPSİ artık canlıda (AdvCampaign
 sohbeti, AdvStrategy ikinci tur, YouTube Boost Aşama 0–1 + kanal bulma, Okuma
 API, Base Aşama 1, LinkedIn para birimi). Ölçüldü: `prisma migrate status`
@@ -18,26 +18,51 @@ yeni tablo) + `db:rls`.
 
 **ORPHEX UYARLAMASI (2026-10-12 → 13, dal `yusuf/rea-reverse-engineering-opensource-31ce9a`, PUSH EDİLMEDİ, DEPLOY EDİLMEDİ).**
 Kullanıcı: Orphex'i (orphex.co) incele, eksiklerimizi Advetics'e uyarla,
-advetics.com'u reklam bilmeyen kişiye anlatan bir ürün sitesine çevir;
-karar yetkisi oturum yöneticisinde. Boşluk analizi ve karar kaydı:
-`docs/rakip-analizi/ORPHEX-BOSLUK.md` (Ç-O1…Ç-O9). Durum:
-- **Paket A — sinyaller** (anomali + sağlık + e-posta/Slack/Teams bildirimi,
-  `docs/sinyal/`): YAZILDI, Ajan 4 kapısı AÇIK. Migration
-  `20261013100000_sinyal` + `20261013100100_sinyal_is_turleri` + `db:rls`.
-  İlk deploy'da `SINYAL_SESSIZ_KOSUM=1` (14 gün yalnız yönetici görür).
-  **Aynı işte bulunan CANLI hata:** 22 tablo (AdvCampaign, rehber, strateji,
-  kurulum, hazırlama, iyilestir) şirket taşımasını kırıyordu; düzeldi.
-- **2FA** (`docs/guvenlik/2FA.md`): YAZILDI, kapı AÇIK (paralel kaba kuvvet
-  açığı bulundu ve kapandı). Migration `20261013200000_iki_adimli_dogrulama`.
-  Yeni bağımlılık `qrcode-generator@1.4.4` (deploy `pnpm install` ister).
-- **Tanıtım sitesi** (`apps/web/src/app/(site)`): 17 sayfa, YAZILDI.
-- **B haftalık özet, C değişiklik etkisi, D kreatif zekâsı, E lead geri
-  besleme, F veri kaynakları (GA4 / Search Console / e-ticaret)**: mimari +
-  sözleşme YAZILDI (`docs/<modül>/MIMARI.md`); uygulama sürüyor (aşağıda
-  güncellenir). Sıra A → C → B.
-**Deploy edilmeden önce:** öbür geliştiriciye haber; `git log origin/main..`
-ile neyin gittiğine bak; kanal/Slack/Teams gerçek gönderimi, eşikler, 2FA'nın
-gerçek telefonla QR okutulması canlıda ÖLÇÜLMEDİ (her MIMARI.md "ölçüm listesi").
+advetics.com'u reklam bilmeyen kişiye anlatan ürün sitesine çevir; karar
+yetkisi oturum yöneticisinde. Analiz ve karar kaydı:
+`docs/rakip-analizi/ORPHEX-BOSLUK.md` (Ç-O1…Ç-O9). Her paket beş ajan
+düzeninden geçti; **her Ajan 4 kapısı en az bir kez KAPANDI ve düzeltildi**.
+Son durum: API 5737/5737, panel 1597/1597, iki derleme temiz, Nest grafiği
+açılış testi temiz.
+
+| Paket | Belge | Durum |
+|---|---|---|
+| A sinyaller (anomali, sağlık, e-posta/Slack/Teams) | `docs/sinyal/` | kapı AÇIK |
+| 2FA | `docs/guvenlik/2FA.md` | kapı AÇIK (paralel kaba kuvvet açığı bulundu, kapandı) |
+| C değişiklik etkisi | `docs/etki/` | kapı AÇIK |
+| F1 GA4 okuma | `docs/veri-kaynagi/` | kapı AÇIK; F2 Search Console + F3 e-ticaret yalnız mimari |
+| E lead → Meta CRM olayı | `docs/geri-besleme/` | iki tur düzeltme; Google kapalı (offline import yeni geliştiriciye 2026-06-15'ten beri kapalı) |
+| D kreatif zekâsı (Gemini görü) | `docs/kreatif-zeka/` | kapı AÇIK |
+| B haftalık özet | `docs/haftalik-ozet/` | Ö-1 (rakam yasağının iki kopyası) yönetici tarafından kapatıldı |
+| Tanıtım sitesi | `apps/web/src/app/(site)` | 17 sayfa; uydurma müşteri/sayı/fiyat YOK |
+
+**BU İŞTE BULUNAN ESKİ, CANLI HATALAR (deploy'la düzelir):**
+(1) 22 tablo şirket taşımasını kırıyordu: AdvCampaign/strateji/kurulum
+verisi olan workspace başka şirkete TAŞINAMIYORDU (CLAUDE.md'ye ders).
+(2) `buildJobId` workspace'i ayırıcı yapmıyordu: `leads_reconcile` ve
+`boosts_evaluate` süpürmeleri her turda TEK workspace işliyordu, onaylı
+Akıllı Boost kartları diğer workspace'lerde kurulmuyordu.
+
+**Deploy (tek seferde, öbür geliştiriciye haber verip):** 12 migration
+(`20261013100000_sinyal` … `20261014500000_haftalik_ozet`) + `db:rls`;
+`pnpm install` (yeni bağımlılık `qrcode-generator@1.4.4`); `.env`'e
+`SINYAL_SESSIZ_KOSUM=1` (14 gün yalnız yönetici görür, kanala gitmez) ve
+`META_UTM_ETIKETI=0` (Meta geri okumada url_tags ölçülene kadar KAPALI,
+açılırsa yayın "fark"ta durabilir). Sunucuda `git log --oneline
+HEAD..origin/main` ile neyin gittiğine bak.
+
+**Canlıda ÖLÇÜLMEDİ (her MIMARI.md'nin "ölçüm listesi"):** Slack/Teams'e
+gerçek gönderim (Teams'in iki adres ailesi); anomali eşikleri (14 gün
+sessiz koşum); 2FA'nın gerçek telefonla QR okutulması; Meta CRM olayları
+M-1…M-7 (ajans token'ıyla müşteri pikseline POST, `lead_id` biçimi,
+tekilleştirme) — ilk tur Lead Ads Testing Tool ile; GA4 Data API'nin Google
+Cloud'da açık olması ve kota biçimi; Gemini görü maliyeti
+(`apps/api/scripts/olcum-kreatif-goru.ts`); etki ve sinyal sorgularının
+`EXPLAIN` süreleri; mail HTML'inin Gmail/Outlook/iOS görünüşü.
+**Ajan 6 (tasarım denetimi) HİÇBİR pakette yapılmadı**: ekranlar tarayıcıda
+açılmadı (yerelde `.env`/API yok). Deploy sonrası masaüstü + mobil.
+**Sıradaki:** deploy kararı (kullanıcı) → canlı ölçümler → Ajan 6 →
+F2/F3 uygulaması.
 
 **KURULUM REHBERİ (2026-10-12, `docs/kurulum/MIMARI.md`, `BAGLANTI.md`).**
 Kullanıcı: her projenin ayrı Meta, Google Ads, Tag Manager ve Analytics'i;
