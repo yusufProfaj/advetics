@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lead Geri Besleme Taslağı</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600;700&display=swap">
+<style>
+/*
+ * Paket E taslağı (docs/geri-besleme/MIMARI.md § 9). KESİN KURAL: renkler
+ * yalnız #ffffff, #000000, #302e2d, #ff2400; zemin ve çizgi için yalnız
+ * grinin saydam tonları. Yeşil yalnız durum noktası. Gradyan, pastel, buğu yok.
+ */
+:root{
+  --beyaz:#ffffff; --siyah:#000000; --gri:#302e2d; --kirmizi:#ff2400;
+  --zemin:rgba(48,46,45,.04); --cizgi:rgba(48,46,45,.12); --ikincil:rgba(48,46,45,.62); --cok-acik:rgba(48,46,45,.07);
+  --yesil:#16a34a; /* yalnız durum noktası */
+  --baslik:"Montserrat",system-ui,sans-serif; --govde:"Open Sans",system-ui,sans-serif;
+  --gecis:cubic-bezier(.16,1,.3,1);
+}
+*{box-sizing:border-box}
+html{background:var(--beyaz)}
+body{margin:0;background:var(--zemin);color:var(--gri);font-family:var(--govde);font-size:14px;line-height:1.45}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+select{font:inherit;color:var(--gri)}
+a{color:var(--siyah);text-decoration:none}
+a:hover{color:var(--kirmizi);text-decoration:underline}
+:focus-visible{outline:2px solid var(--kirmizi);outline-offset:2px;border-radius:6px}
+.num{font-variant-numeric:tabular-nums}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important}}
+
+.sayfa{max-width:1080px;margin:0 auto;padding:16px 16px 64px;display:flex;flex-direction:column;gap:16px}
+.not{background:var(--beyaz);border:1px dashed var(--cizgi);border-radius:10px;padding:10px 14px;font-size:12.5px;color:var(--ikincil)}
+.not b{color:var(--gri)}
+.gezinti{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.gezinti span{font-size:12px;font-weight:700;color:var(--ikincil);margin-right:4px}
+.gezinti button{border:1px solid var(--cizgi);background:var(--beyaz);border-radius:999px;padding:6px 12px;font-size:12.5px;font-weight:600}
+.gezinti button[aria-pressed="true"]{background:var(--gri);color:var(--beyaz);border-color:var(--gri)}
+
+h1{font-family:var(--baslik);font-weight:700;font-size:24px;margin:0;color:var(--siyah)}
+h2{font-size:14px;font-weight:700;margin:0;color:var(--siyah)}
+.alt{font-size:13px;color:var(--ikincil);margin-top:2px}
+
+.sekmeler{display:flex;gap:4px;border-bottom:1px solid var(--cizgi);overflow-x:auto}
+.sekmeler button{padding:10px 14px;font-weight:600;font-size:13.5px;color:var(--ikincil);border-bottom:3px solid transparent;white-space:nowrap;display:flex;gap:6px;align-items:center;transition:color .2s var(--gecis),border-color .2s var(--gecis)}
+.sekmeler button[aria-selected="true"]{color:var(--siyah);border-bottom-color:var(--kirmizi)}
+.say{font-size:11px;font-weight:700;border-radius:999px;padding:0 7px;background:var(--cok-acik);color:var(--gri)}
+.say.kirmizi{background:var(--kirmizi);color:var(--beyaz)}
+
+.kart{background:var(--beyaz);border:1px solid var(--cizgi);border-radius:12px;min-width:0;overflow:hidden}
+.birincil{display:inline-flex;align-items:center;gap:6px;background:var(--kirmizi);color:var(--beyaz);font-weight:600;font-size:12.5px;padding:7px 14px;border-radius:999px;transition:opacity .2s}
+.birincil:hover{opacity:.88}
+.birincil[disabled]{opacity:.35;cursor:not-allowed}
+.ikincil{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--cizgi);background:var(--beyaz);border-radius:999px;padding:6px 13px;font-size:12.5px;font-weight:600;transition:border-color .2s}
+.ikincil:hover{border-color:var(--gri)}
+.metinD{font-size:12.5px;font-weight:600;color:var(--ikincil);text-decoration:underline}
+.metinD:hover{color:var(--siyah)}
+
+/* Ayar şeridi */
+.serit{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:12px 16px}
+.serit .ad{font-weight:700;color:var(--siyah)}
+.serit .ayrinti{font-size:12.5px;color:var(--ikincil)}
+.serit .sag{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+.nokta{width:8px;height:8px;border-radius:50%;flex:none;display:inline-block}
+.nokta.yesil{background:var(--yesil)}
+.nokta.gri{border:2px solid var(--gri);width:9px;height:9px}
+.nokta.kirmizi{background:var(--kirmizi)}
+.uyari{border-top:1px solid var(--cizgi);padding:10px 16px;font-size:12.5px;display:flex;gap:8px;align-items:flex-start}
+.uyari b{color:var(--kirmizi)}
+
+/* Durum hattı */
+.hat{display:flex;gap:6px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--cizgi)}
+.cip{border:1px solid var(--cizgi);border-radius:999px;padding:5px 11px;font-size:12.5px;font-weight:600;background:var(--beyaz);transition:border-color .2s,background .2s,color .2s}
+.cip[aria-pressed="true"]{border-color:var(--gri);background:var(--gri);color:var(--beyaz)}
+
+/* Lead satırı */
+.lead{border-bottom:1px solid var(--cizgi)}
+.lead:last-child{border-bottom:0}
+.leadUst{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:4px 14px;align-items:center;padding:12px 16px;width:100%;text-align:left}
+.leadUst:hover{background:var(--zemin)}
+.kim{font-weight:700;color:var(--siyah)}
+.kim small{display:block;font-weight:400;font-size:12px;color:var(--ikincil)}
+.durumE{font-size:11.5px;font-weight:700;border:1px solid var(--cizgi);border-radius:4px;padding:1px 7px;white-space:nowrap}
+.durumE.iyi{border-color:var(--gri);background:var(--gri);color:var(--beyaz)}
+.rozet{font-size:11.5px;display:inline-flex;align-items:center;gap:5px;color:var(--ikincil);white-space:nowrap}
+.rozet.sorun{color:var(--kirmizi);font-weight:700}
+
+/* Açılan kart: açılır kapanır, DOM'dan çıkmaz */
+.leadAlt{display:grid;grid-template-rows:0fr;transition:grid-template-rows .3s var(--gecis)}
+.lead.acik .leadAlt{grid-template-rows:1fr}
+.leadAlt>div{overflow:hidden;visibility:hidden;transition:visibility .3s}
+.lead.acik .leadAlt>div{visibility:visible}
+.icerik{padding:4px 16px 16px;display:flex;flex-direction:column;gap:12px}
+.soru{font-family:var(--baslik);font-weight:700;font-size:15px;color:var(--siyah)}
+.secenekler{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.secenek{border:1px solid var(--cizgi);border-radius:10px;padding:10px 12px;text-align:left;background:var(--beyaz);transition:border-color .2s,background .2s,color .2s}
+.secenek b{display:block;font-size:13px;color:var(--siyah)}
+.secenek small{display:block;font-size:11.5px;color:var(--ikincil);margin-top:2px}
+.secenek:hover{border-color:var(--gri)}
+.secenek[aria-pressed="true"]{background:var(--gri);border-color:var(--gri)}
+.secenek[aria-pressed="true"] b,.secenek[aria-pressed="true"] small{color:var(--beyaz)}
+.bilgi{font-size:12.5px;color:var(--ikincil);display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.alanlar{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px 16px;font-size:12.5px}
+.alanlar small{display:block;color:var(--ikincil)}
+.asamalar{display:flex;flex-direction:column;gap:4px;font-size:12.5px}
+.asamalar div{display:flex;gap:8px;align-items:center}
+.asamalar em{font-style:normal;color:var(--ikincil);margin-left:auto}
+
+/* Gönderimler tablosu */
+.tabloSar{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{font-size:12px;color:var(--ikincil);text-align:left;font-weight:600;padding:9px 16px;border-bottom:1px solid var(--cizgi);white-space:nowrap}
+td{padding:10px 16px;border-bottom:1px solid var(--cizgi);vertical-align:top}
+tr:last-child td{border-bottom:0}
+td .hataM{font-size:12px;color:var(--ikincil);margin-top:2px}
+.bos{padding:28px 16px;text-align:center;color:var(--ikincil);font-size:13px}
+.bos b{display:block;color:var(--siyah);font-size:14px;margin-bottom:4px}
+.sayilar{display:flex;gap:6px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--cizgi);align-items:center}
+.sayilar .sag{margin-left:auto}
+.alt-bilgi{padding:10px 16px;font-size:12px;color:var(--ikincil);border-top:1px solid var(--cizgi)}
+
+/* Pencere: görünürlük geçişle değişir */
+.perde{position:fixed;inset:0;background:rgba(0,0,0,.4);display:grid;place-items:center;padding:16px;opacity:0;visibility:hidden;transition:opacity .25s var(--gecis),visibility .25s}
+.perde.acik{opacity:1;visibility:visible}
+.pencere{background:var(--beyaz);border-radius:14px;max-width:520px;width:100%;max-height:calc(100vh - 32px);overflow:auto;transform:translateY(8px);transition:transform .25s var(--gecis)}
+.perde.acik .pencere{transform:none}
+.pBas{padding:16px 18px;border-bottom:1px solid var(--cizgi)}
+.pBas h3{font-family:var(--baslik);font-size:17px;margin:0;color:var(--siyah)}
+.pGov{padding:16px 18px;display:flex;flex-direction:column;gap:14px;font-size:13px}
+.pAlt{padding:12px 18px;border-top:1px solid var(--cizgi);display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+label.alan{display:flex;flex-direction:column;gap:5px;font-weight:600;font-size:12.5px}
+label.alan select{border:1px solid var(--cizgi);border-radius:8px;padding:8px 10px;background:var(--beyaz)}
+.yardim{font-size:12px;color:var(--ikincil);font-weight:400}
+.onay{display:flex;gap:8px;align-items:flex-start;font-size:12.5px}
+.onay input{margin-top:3px;accent-color:var(--gri)}
+.liste{margin:0;padding-left:18px;font-size:12.5px;color:var(--gri)}
+.liste li{margin:3px 0}
+.kutu{border:1px solid var(--cizgi);border-radius:10px;padding:10px 12px;font-size:12.5px}
+.kutu b{color:var(--siyah)}
+
+.gizli{display:none}
+
+@media (max-width:720px){
+  .secenekler{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .alanlar{grid-template-columns:1fr 1fr}
+  .leadUst{grid-template-columns:minmax(0,1fr) auto}
+  .leadUst .rozet{grid-column:1 / -1}
+  .serit .sag{margin-left:0}
+  th:nth-child(3),td:nth-child(3){display:none}
+}
+</style>
+</head>
+<body>
+<div class="sayfa">
+
+  <div class="not"><b>Taslak · Paket E.</b> Potansiyel Müşteriler ekranı. Kalite işareti var olan durum hattının yerine geçer (yeni alan yok). Sayılar örnek. Mimari: <code>docs/geri-besleme/MIMARI.md</code>.</div>
+
+  <div class="gezinti" role="group" aria-label="Taslak hâlleri">
+    <span>Ayar hâli:</span>
+    <button type="button" data-hal="calisiyor" aria-pressed="true">Çalışıyor</button>
+    <button type="button" data-hal="kapali" aria-pressed="false">Kapalı</button>
+    <button type="button" data-hal="hata" aria-pressed="false">Gönderilemiyor</button>
+  </div>
+
+  <div>
+    <h1>Potansiyel Müşteriler</h1>
+    <div class="alt">Ege Birlik Yapı · formu dolduran kişiler</div>
+  </div>
+
+  <!-- Ayar şeridi: üç hâl -->
+  <section class="kart" aria-label="Meta'ya bildirim">
+    <div class="serit" data-serit="calisiyor">
+      <span class="nokta yesil" aria-hidden="true"></span>
+      <span class="ad">Sonuçlar Meta’ya bildiriliyor</span>
+      <span class="ayrinti">Ege Birlik Yapı pikseli · son gönderim 4 dk önce</span>
+      <span class="sag"><button type="button" class="ikincil" data-pencere-ac>Ayarlar</button></span>
+    </div>
+    <div class="serit gizli" data-serit="kapali">
+      <span class="nokta gri" aria-hidden="true"></span>
+      <span class="ad">Sonuçlar Meta’ya bildirilmiyor</span>
+      <span class="ayrinti">Hangi kişinin müşteri olduğunu Meta’ya söylersen reklam benzer kişilere gösterilir.</span>
+      <span class="sag"><button type="button" class="birincil" data-pencere-ac>Aç</button></span>
+    </div>
+    <div class="gizli" data-serit="hata">
+      <div class="serit">
+        <span class="nokta kirmizi" aria-hidden="true"></span>
+        <span class="ad">Sonuçlar Meta’ya gitmiyor</span>
+        <span class="ayrinti">12 sonuç bekliyor · 3 saattir</span>
+        <span class="sag"><button type="button" class="ikincil" data-pencere-ac>Ayarlar</button></span>
+      </div>
+      <div class="uyari"><span><b>Meta:</b> “(#200) Requires ads_management permission to manage the object”. Bağlantıyı Platform Bağlantıları ekranında yeniden yetkilendir; bekleyen sonuçlar kendiliğinden gönderilir.</span></div>
+    </div>
+  </section>
+
+  <div class="sekmeler" role="tablist">
+    <button type="button" role="tab" aria-selected="true" data-sekme="kayitlar">Kayıtlar <span class="say num">48</span></button>
+    <button type="button" role="tab" aria-selected="false" data-sekme="gonderimler">Meta’ya gönderimler <span class="say kirmizi num" data-sorun-sayi>1</span></button>
+  </div>
+
+  <!-- KAYITLAR -->
+  <section class="kart" data-panel="kayitlar">
+    <div class="hat" role="group" aria-label="Durum">
+      <button type="button" class="cip" aria-pressed="true">Tümü 48</button>
+      <button type="button" class="cip" aria-pressed="false">Yeni 21</button>
+      <button type="button" class="cip" aria-pressed="false">Görüştük 12</button>
+      <button type="button" class="cip" aria-pressed="false">İlgileniyor 7</button>
+      <button type="button" class="cip" aria-pressed="false">Müşteri oldu 3</button>
+      <button type="button" class="cip" aria-pressed="false">Uygun değil 5</button>
+    </div>
+
+    <div class="lead acik" data-lead>
+      <button type="button" class="leadUst" aria-expanded="true">
+        <span class="kim">Ayşe Kaya<small>12 Ekim 10:42 · Konut kampanyası</small></span>
+        <span class="durumE" data-durum-etiket>Yeni</span>
+        <span class="rozet" data-rozet><span class="nokta yesil" aria-hidden="true"></span>Form Meta’ya iletildi</span>
+      </button>
+      <div class="leadAlt"><div><div class="icerik">
+        <div class="soru">Bu kişi müşteri oldu mu?</div>
+        <div class="secenekler" role="group" aria-label="Sonuç">
+          <button type="button" class="secenek" aria-pressed="false" data-sec="Uygun değil"><b>Ulaşamadım / uygun değil</b><small>Yanlış numara, ilgisiz</small></button>
+          <button type="button" class="secenek" aria-pressed="false" data-sec="Görüştük"><b>Görüştük</b><small>Ulaşıldı, sonuç belli değil</small></button>
+          <button type="button" class="secenek" aria-pressed="false" data-sec="İlgileniyor"><b>İlgileniyor</b><small>Gerçekten ilgili</small></button>
+          <button type="button" class="secenek" aria-pressed="false" data-sec="Müşteri oldu"><b>Müşteri oldu</b><small>Satışa döndü</small></button>
+        </div>
+        <div class="bilgi" data-bilgi>Seçtiğin sonuç Meta’ya bildirilir; Meta reklamı buna benzeyen kişilere göstermeyi öğrenir.</div>
+        <div class="alanlar">
+          <div><small>Telefon</small>0532 *** ** 67</div>
+          <div><small>E-posta</small>ayse@ornek.com</div>
+          <div><small>Form</small>Konut bilgi formu</div>
+        </div>
+        <div class="asamalar" aria-label="Meta'ya bildirilenler" data-asamalar>
+          <div><span class="nokta yesil" aria-hidden="true"></span>Form dolduruldu <em>iletildi · 10:43</em></div>
+        </div>
+      </div></div></div>
+    </div>
+
+    <div class="lead" data-lead>
+      <button type="button" class="leadUst" aria-expanded="false">
+        <span class="kim">Mehmet Demir<small>11 Ekim 16:05 · Konut kampanyası</small></span>
+        <span class="durumE iyi">Müşteri oldu</span>
+        <span class="rozet sorun"><span class="nokta kirmizi" aria-hidden="true"></span>Müşteri oldu bilgisi gönderilemedi</span>
+      </button>
+      <div class="leadAlt"><div><div class="icerik">
+        <div class="asamalar">
+          <div><span class="nokta yesil" aria-hidden="true"></span>Form dolduruldu <em>iletildi</em></div>
+          <div><span class="nokta yesil" aria-hidden="true"></span>Ulaşıldı <em>iletildi</em></div>
+          <div><span class="nokta yesil" aria-hidden="true"></span>İlgili <em>iletildi</em></div>
+          <div><span class="nokta kirmizi" aria-hidden="true"></span>Müşteri oldu <em>5 denemede gönderilemedi · Meta: “Service temporarily unavailable”</em></div>
+        </div>
+        <div><button type="button" class="ikincil">Tekrar dene</button></div>
+      </div></div></div>
+    </div>
+
+    <div class="lead" data-lead>
+      <button type="button" class="leadUst" aria-expanded="false">
+        <span class="kim">Can Yıldız<small>2 Ekim 09:12 · Konut kampanyası</small></span>
+        <span class="durumE">Görüştük</span>
+        <span class="rozet"><span class="nokta gri" aria-hidden="true"></span>7 günü geçtiği için bildirilemedi</span>
+      </button>
+      <div class="leadAlt"><div><div class="icerik">
+        <div class="bilgi">Meta yalnız son 7 günün sonuçlarını kabul ediyor. Bu kayıt gönderim açılmadan önce geldi.</div>
+      </div></div></div>
+    </div>
+
+    <div class="alt-bilgi">48 kayıttan 3’ü gösteriliyor · sayfa 1 / 16</div>
+  </section>
+
+  <!-- GÖNDERİMLER -->
+  <section class="kart gizli" data-panel="gonderimler">
+    <div class="sayilar" role="group" aria-label="Gönderim durumu">
+      <button type="button" class="cip" aria-pressed="true">Tümü 61</button>
+      <button type="button" class="cip" aria-pressed="false">İletildi 57</button>
+      <button type="button" class="cip" aria-pressed="false">Gönderilecek 2</button>
+      <button type="button" class="cip" aria-pressed="false">Gönderilemedi 1</button>
+      <button type="button" class="cip" aria-pressed="false">Süresi geçti 1</button>
+      <span class="sag"><button type="button" class="ikincil">Gönderilemeyenleri tekrar dene</button></span>
+    </div>
+    <div class="tabloSar">
+      <table>
+        <thead><tr><th>Kişi</th><th>Sonuç</th><th>Zaman</th><th>Durum</th></tr></thead>
+        <tbody>
+          <tr><td>Mehmet Demir</td><td>Müşteri oldu</td><td class="num">11 Eki 16:40</td><td><span class="rozet sorun"><span class="nokta kirmizi" aria-hidden="true"></span>Gönderilemedi</span><div class="hataM">5 deneme · Meta: “Service temporarily unavailable”</div></td></tr>
+          <tr><td>Ayşe Kaya</td><td>Görüştük</td><td class="num">12 Eki 11:02</td><td><span class="rozet"><span class="nokta gri" aria-hidden="true"></span>Gönderilecek</span><div class="hataM">11:17’de, geri alınabilir</div></td></tr>
+          <tr><td>Selin Ak</td><td>İlgili</td><td class="num">12 Eki 09:30</td><td><span class="rozet"><span class="nokta yesil" aria-hidden="true"></span>İletildi</span></td></tr>
+          <tr><td>Can Yıldız</td><td>Form dolduruldu</td><td class="num">2 Eki 09:12</td><td><span class="rozet"><span class="nokta gri" aria-hidden="true"></span>Süresi geçti</span><div class="hataM">Meta 7 günden eski sonucu kabul etmiyor</div></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="alt-bilgi">61 gönderimden 4’ü gösteriliyor</div>
+  </section>
+
+  <section class="kart gizli" data-panel="gonderimler-bos">
+    <div class="bos"><b>Henüz gönderim yok</b>Lead sonuçlarını Meta’ya bildirme bu workspace’te kapalı.</div>
+  </section>
+
+</div>
+
+<!-- Ayar penceresi -->
+<div class="perde" data-perde role="dialog" aria-modal="true" aria-labelledby="pBaslik">
+  <div class="pencere">
+    <div class="pBas"><h3 id="pBaslik">Sonuçları Meta’ya bildir</h3><div class="alt">İşaretlediğin sonuçlar Meta’ya gider. Kişinin adı, telefonu ve e-postası gitmez; yalnız Meta’nın kendi form kimliği gider.</div></div>
+    <div class="pGov">
+      <label class="alan">Veri kümesi (piksel)
+        <select>
+          <option>Ege Birlik Yapı pikseli · 1234567890 (kurulumda seçilen)</option>
+          <option>Ege Birlik Yapı eski piksel · 9876543210</option>
+        </select>
+        <span class="yardim">Sonradan değiştirirsen Meta öğrenmeye baştan başlar.</span>
+      </label>
+      <div class="kutu"><b>Meta’da bir adım senin işin:</b> Events Manager’da bu veri kümesinin ayarlarında “Conversion Leads” bölümü kapalı görünüyor. Açılmadan da gönderim yapılır, ama Meta reklamı bu sonuçlara göre optimize edemez. <a href="#">Nasıl açılır</a></div>
+      <div>
+        <h2 style="font-size:13px">Meta’nın optimize edebilmesi için eksikler</h2>
+        <ul class="liste">
+          <li>Son 30 günde 48 form dolduruldu; Meta ayda en az 200 istiyor.</li>
+          <li>Formların %60’ından azının sonucu işaretlendi.</li>
+        </ul>
+        <div class="yardim" style="margin-top:4px">Eksikler göndermeye engel değil. Sonuçlar yine Meta’ya gider ve raporlarda görünür.</div>
+      </div>
+      <div class="kutu">Açınca son 7 günün <b class="num">31</b> kaydı gönderilir. <b class="num">17</b> kayıt 7 günden eski olduğu için gönderilemez (Meta kuralı).</div>
+      <label class="onay"><input type="checkbox" data-onay> <span>Formdaki aydınlatma metni, sonuç bilgisinin Meta’ya iletilmesini kapsıyor.</span></label>
+    </div>
+    <div class="pAlt">
+      <button type="button" class="ikincil" data-pencere-kapat>Vazgeç</button>
+      <button type="button" class="birincil" data-kaydet disabled>Aç ve gönder</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  // Taslak gezintisi: ayar hâli
+  var hal='calisiyor';
+  document.querySelectorAll('[data-hal]').forEach(function(b){
+    b.addEventListener('click',function(){
+      hal=b.getAttribute('data-hal');
+      document.querySelectorAll('[data-hal]').forEach(function(x){x.setAttribute('aria-pressed',String(x===b));});
+      document.querySelectorAll('[data-serit]').forEach(function(s){s.classList.toggle('gizli',s.getAttribute('data-serit')!==hal);});
+      sekmeGoster(aktifSekme);
+    });
+  });
+  // Sekmeler
+  var aktifSekme='kayitlar';
+  function sekmeGoster(ad){
+    aktifSekme=ad;
+    document.querySelectorAll('[data-sekme]').forEach(function(t){t.setAttribute('aria-selected',String(t.getAttribute('data-sekme')===ad));});
+    document.querySelector('[data-panel="kayitlar"]').classList.toggle('gizli',ad!=='kayitlar');
+    document.querySelector('[data-panel="gonderimler"]').classList.toggle('gizli',!(ad==='gonderimler'&&hal!=='kapali'));
+    document.querySelector('[data-panel="gonderimler-bos"]').classList.toggle('gizli',!(ad==='gonderimler'&&hal==='kapali'));
+  }
+  document.querySelectorAll('[data-sekme]').forEach(function(t){t.addEventListener('click',function(){sekmeGoster(t.getAttribute('data-sekme'));});});
+  // Lead aç/kapa: DOM'dan çıkmaz
+  document.querySelectorAll('[data-lead] .leadUst').forEach(function(u){
+    u.addEventListener('click',function(){
+      var l=u.closest('[data-lead]');var acik=!l.classList.contains('acik');
+      l.classList.toggle('acik',acik);u.setAttribute('aria-expanded',String(acik));
+    });
+  });
+  // Kalite seçimi: tek tık, 15 dk geri alma
+  var ilk=document.querySelector('[data-lead]');
+  var bilgi=ilk.querySelector('[data-bilgi]');var etiket=ilk.querySelector('[data-durum-etiket]');
+  var rozet=ilk.querySelector('[data-rozet]');var asamalar=ilk.querySelector('[data-asamalar]');
+  var ASAMA={'Uygun değil':['Uygun değil'],'Görüştük':['Ulaşıldı'],'İlgileniyor':['Ulaşıldı','İlgili'],'Müşteri oldu':['Ulaşıldı','İlgili','Müşteri oldu']};
+  function ciz(sec){
+    ilk.querySelectorAll('.secenek').forEach(function(x){x.setAttribute('aria-pressed',String(x.getAttribute('data-sec')===sec));});
+    etiket.textContent=sec||'Yeni';
+    etiket.classList.toggle('iyi',sec==='Müşteri oldu');
+    var satir='<div><span class="nokta yesil" aria-hidden="true"></span>Form dolduruldu <em>iletildi · 10:43</em></div>';
+    if(sec){(ASAMA[sec]||[]).forEach(function(a){satir+='<div><span class="nokta gri" aria-hidden="true"></span>'+a+' <em>15 dk içinde gönderilecek</em></div>';});}
+    asamalar.innerHTML=satir;
+    if(sec){
+      bilgi.innerHTML='“'+sec+'” 15 dakika içinde Meta’ya bildirilecek. <button type="button" class="metinD" data-geri>Geri al</button>';
+      rozet.innerHTML='<span class="nokta gri" aria-hidden="true"></span>Meta’ya bildirilecek';
+      bilgi.querySelector('[data-geri]').addEventListener('click',function(){ciz(null);});
+    } else {
+      bilgi.textContent='Seçtiğin sonuç Meta’ya bildirilir; Meta reklamı buna benzeyen kişilere göstermeyi öğrenir.';
+      rozet.innerHTML='<span class="nokta yesil" aria-hidden="true"></span>Form Meta’ya iletildi';
+    }
+  }
+  ilk.querySelectorAll('.secenek').forEach(function(b){b.addEventListener('click',function(){ciz(b.getAttribute('data-sec'));});});
+  // Pencere
+  var perde=document.querySelector('[data-perde]');
+  function pencere(ac){perde.classList.toggle('acik',ac);}
+  document.querySelectorAll('[data-pencere-ac]').forEach(function(b){b.addEventListener('click',function(){pencere(true);});});
+  document.querySelector('[data-pencere-kapat]').addEventListener('click',function(){pencere(false);});
+  perde.addEventListener('click',function(e){if(e.target===perde)pencere(false);});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')pencere(false);});
+  var onay=document.querySelector('[data-onay]');var kaydet=document.querySelector('[data-kaydet]');
+  onay.addEventListener('change',function(){kaydet.disabled=!onay.checked;});
+  kaydet.addEventListener('click',function(){pencere(false);});
+})();
+</script>
+</body>
+</html>

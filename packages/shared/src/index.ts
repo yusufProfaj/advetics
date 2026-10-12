@@ -9,6 +9,7 @@ export * from './strateji';
 export * from './genel-bakis';
 export * from './iyilestir';
 export * from './sinyal';
+export * from './geri-besleme';
 export * from './boost-hedefleme';
 export * from './linkedin-saklama';
 export * from './constants/boost-naming';
