@@ -16,7 +16,10 @@ import type {
 import { tesekkurDugmesiTuru } from '@advetics/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { TxLike } from '../rules/rules.service';
-import { planEdit, publishBlockers, publishWarnings } from './form-versioning';
+import { FORM_YAYIN_BELIRSIZ, planEdit, publishBlockers, publishWarnings } from './form-versioning';
+
+/** Kimlik yazıldı, geri okuma sonucu henüz kayda geçmedi (ya da geçemedi). */
+export const GERI_OKUMA_BEKLIYOR = "Form Meta'da açıldı; geri okuma tamamlanmadı, KVKK kutuları doğrulanmadı.";
 
 /**
  * Formlar kütüphanesi — veri katmanı.
@@ -162,6 +165,9 @@ export class FormsService {
    */
   async update(ctx: TenantContext, id: string, input: LeadFormInput): Promise<LeadFormRecord> {
     const current = await this.get(ctx, id);
+    // Yayını belirsiz satır düzenlenemez: Meta'da form açılmış olabilir ve
+    // içeriği değiştirmek kayıt ile Meta'daki formu ayrıştırırdı.
+    if (current.status === 'publishing') throw new BadRequestException(FORM_YAYIN_BELIRSIZ);
     const plan = planEdit(current, toInput(current), input);
 
     const nextId = await this.prisma.withTenant(ctx, async (tx) => {
@@ -237,7 +243,7 @@ export class FormsService {
         WHERE id = ${id}::uuid AND org_id = ${ctx.orgId}::uuid
       `);
       if (!row) throw new NotFoundException('Form bulunamadı');
-      if (row.status === 'published' || row.status === 'superseded') {
+      if (row.status === 'published' || row.status === 'superseded' || row.status === 'publishing') {
         throw new BadRequestException(
           "Yayınlanmış form silinemiyor — Meta'da yaşamaya devam ediyor ve " +
             'topladığı bilgilerin kaynağı bu kayıt.',
@@ -277,13 +283,56 @@ export class FormsService {
     });
   }
 
+  /**
+   * YALNIZ META FORM AÇMADIYSA. Kimliği yazılmış satır `failed`a ASLA
+   * düşmüyor (`external_form_id IS NULL`): `failed` yeniden denenebilir
+   * demek ve Meta'da ikinci form açardı.
+   */
   async markFailed(ctx: TenantContext, id: string, message: string): Promise<void> {
     await this.prisma.withTenant(ctx, async (tx) => {
       await tx.$executeRaw(Prisma.sql`
         UPDATE lead_forms
         SET status = 'failed', error = ${message.slice(0, 2000)}, updated_at = now()
-        WHERE id = ${id}::uuid AND org_id = ${ctx.orgId}::uuid
+        WHERE id = ${id}::uuid AND org_id = ${ctx.orgId}::uuid AND external_form_id IS NULL
       `);
+    });
+  }
+
+  /**
+   * YAYINI SAHİPLEN — koşullu UPDATE. Aynı satır için ikinci yayın isteği
+   * (iki sekme, çift tık) burada SIFIR satır alır ve Meta'ya hiç gitmez.
+   * `publishBlockers` okuması tek başına yetmiyor: iki istek de "taslak"
+   * görüp ikisi de form açardı.
+   */
+  async yayinSahiplen(ctx: TenantContext, id: string): Promise<boolean> {
+    return this.prisma.withTenant(ctx, async (tx) => {
+      const rows = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        UPDATE lead_forms
+        SET status = 'publishing', error = NULL, updated_at = now()
+        WHERE id = ${id}::uuid AND org_id = ${ctx.orgId}::uuid
+          AND status IN ('draft', 'failed') AND external_form_id IS NULL
+        RETURNING id
+      `);
+      return rows.length === 1;
+    });
+  }
+
+  /**
+   * META FORM KİMLİĞİ — `createLeadForm` döner dönmez, AYRI ve KISA bir
+   * yazımla. Geri okuma, karşılaştırma ve uyarının kaydı SONRAKİ adımlar;
+   * onlar düşerse satır kimliğiyle `published` kalır ve geri okuma
+   * uyarısı "tamamlanmadı" der. Bu yazım da düşerse satır `publishing`
+   * kalır ve yeniden yayın engellenir (`publishBlockers`).
+   */
+  async kimlikYaz(ctx: TenantContext, id: string, externalFormId: string): Promise<void> {
+    await this.prisma.withTenant(ctx, async (tx) => {
+      const n = await tx.$executeRaw(Prisma.sql`
+        UPDATE lead_forms
+        SET status = 'published', external_form_id = ${externalFormId}, published_at = now(),
+            readback_warning = ${GERI_OKUMA_BEKLIYOR}, error = NULL, updated_at = now()
+        WHERE id = ${id}::uuid AND org_id = ${ctx.orgId}::uuid AND status = 'publishing'
+      `);
+      if (n !== 1) throw new Error(`Form kimliği yazılamadı (etkilenen satır ${n})`);
     });
   }
 

@@ -166,7 +166,7 @@ describe('yayın: geri okuma uyuşmazlığı SESSİZ değil', () => {
   function kur(okuma: () => Promise<Record<string, unknown>>) {
     const markPublished = vi.fn(async () => undefined);
     const markFailed = vi.fn(async () => undefined);
-    const forms = { get: vi.fn(async () => KAYIT), markPublished, markFailed };
+    const forms = { get: vi.fn(async () => KAYIT), markPublished, markFailed, yayinSahiplen: vi.fn(async () => true), kimlikYaz: vi.fn(async () => undefined) };
     const prov = {
       canWrite: () => ({ ok: true, missing: [] }),
       createLeadForm: vi.fn(async () => '777'),
@@ -209,7 +209,16 @@ describe('yayın: geri okuma uyuşmazlığı SESSİZ değil', () => {
     const r = kutuphaneFormuGovdesi(KAYIT, '111');
     if (r.tur !== 'govde') throw new Error('ret');
     const a = r.govde.alanlar as Record<string, unknown>;
-    const { svc, markPublished } = kur(async () => ({ id: '777', locale: 'TR_TR', is_optimized_for_quality: false, block_display_for_non_targeted_viewer: true, legal_content: { custom_disclaimer: a.custom_disclaimer } }));
+    const { svc, markPublished } = kur(async () => ({
+      id: '777',
+      locale: 'TR_TR',
+      is_optimized_for_quality: false,
+      block_display_for_non_targeted_viewer: true,
+      legal_content: { custom_disclaimer: a.custom_disclaimer },
+      privacy_policy_url: 'https://ege.com.tr/kvkk',
+      questions: a.questions,
+      thank_you_page: { button_type: 'CALL_BUSINESS', business_phone_number: '+90 232 123 45 67' },
+    }));
     await svc.publish(ctx, 'f1');
     expect((markPublished.mock.calls[0] as unknown[])[3]).toBeNull();
   });

@@ -127,10 +127,19 @@ export function planEdit(
  * silinebiliyor ama topladığı lead'lerle birlikte). Engelleyiciler bu yüzden
  * yayın anında değil, formu yazarken gösteriliyor.
  */
+export const FORM_YAYIN_BELIRSIZ =
+  'Bu formun yayını yarım kaldı: Meta’da form açılmış olabilir. Formlar’dan ya da Meta’dan kontrol et; yeniden yayın kapalı.';
+
 export function publishBlockers(form: LeadFormRecord): string[] {
   const blockers: string[] = [];
 
   if (form.status === 'published') blockers.push('Bu form zaten yayında.');
+  // META'DA FORM AÇILMIŞ OLABİLİR: yeniden yayın İKİNCİ form açar (Meta'da
+  // form silinemiyor). Belirsiz satır ve kimliği olan satır yayınlanmaz.
+  if (form.status === 'publishing') blockers.push(FORM_YAYIN_BELIRSIZ);
+  else if (form.externalFormId && form.status !== 'published') {
+    blockers.push('Bu formun Meta’da zaten bir kimliği var; yeniden yayın ikinci form açardı.');
+  }
   if (form.status === 'superseded') {
     blockers.push('Bu formun daha yeni bir sürümü var; onu yayınla.');
   }

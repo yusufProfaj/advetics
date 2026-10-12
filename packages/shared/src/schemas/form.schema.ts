@@ -256,11 +256,20 @@ export function tesekkurDugmesiTuru(v: { thankYouCtaType?: TesekkurDugmeTuru | n
 // Kayıt
 // -----------------------------------------------------------------------------
 
-export const LEAD_FORM_STATUSES = ['draft', 'published', 'superseded', 'failed'] as const;
+/**
+ * `publishing` = YAYIN SAHİPLENİLDİ, Meta'nın cevabı kayda geçmedi. İki iş
+ * görüyor: (1) aynı satır için ikinci yayın isteğini (iki sekme) koşullu
+ * UPDATE ile reddediyor; (2) Meta form açtıktan sonra kimlik YAZILAMAZSA
+ * satır burada KALIYOR ve yeniden yayın engelleniyor. `failed`a düşmek
+ * satırı yeniden denenebilir yapardı ve Meta'da İKİNCİ form açılırdı (form
+ * silinemiyor). Bu hâlden çıkış elle: Formlar'da Meta'daki formla eşleştir.
+ */
+export const LEAD_FORM_STATUSES = ['draft', 'publishing', 'published', 'superseded', 'failed'] as const;
 export type LeadFormStatus = (typeof LEAD_FORM_STATUSES)[number];
 
 export const LEAD_FORM_STATUS_LABELS: Record<LeadFormStatus, string> = {
   draft: 'Taslak',
+  publishing: 'Yayın belirsiz',
   published: 'Yayında',
   // "Eski sürüm" DEĞİL "değiştirildi": form hâlâ çalışıyor ve lead topluyor
   // olabilir; yalnızca daha yeni bir sürümü var.

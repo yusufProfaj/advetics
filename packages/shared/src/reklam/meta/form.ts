@@ -301,10 +301,13 @@ interface FormOnayKutusu {
  * Yayından sonra okunacak alanlar. Onay kutuları OKUMADA `legal_content`
  * altında bekleniyor (oluşturma parametresi üst seviye `custom_disclaimer`,
  * okunan düğüm alanı farklı adı taşıyor); hangisinin döndüğü CANLIDA
- * ÖLÇÜLMEDİ, karşılaştırıcı ikisini de arıyor. Alan reddedilirse okuma
- * hatası "doğrulanamadı" olarak yazılır, "temiz" sayılmaz.
+ * ÖLÇÜLMEDİ, karşılaştırıcı ikisini de arıyor. Teşekkür ekranı, sorular ve
+ * gizlilik adresi de isteniyor: Graph bunlardan birini reddederse çağıran
+ * TEMEL alanlarla yeniden okur (`FORM_GERI_OKUMA_TEMEL_ALANLARI`) ve dönmeyen
+ * kısım "okunamadı" yazılır, "temiz" sayılmaz.
  */
-export const FORM_GERI_OKUMA_ALANLARI = 'id,locale,status,is_optimized_for_quality,block_display_for_non_targeted_viewer,legal_content{custom_disclaimer}';
+export const FORM_GERI_OKUMA_TEMEL_ALANLARI = 'id,locale,status,is_optimized_for_quality,block_display_for_non_targeted_viewer';
+export const FORM_GERI_OKUMA_ALANLARI = `${FORM_GERI_OKUMA_TEMEL_ALANLARI},legal_content{custom_disclaimer},privacy_policy_url,questions,thank_you_page`;
 
 export type FormGeriOkumaSonucu =
   | { sonuc: 'temiz' }
@@ -313,25 +316,54 @@ export type FormGeriOkumaSonucu =
   /** Okuma yapılamadı ya da alan dönmedi: bilinmiyor, "temiz" DEĞİL. */
   | { sonuc: 'dogrulanamadi'; satirlar: string[] };
 
-function okunanKutular(okunan: Record<string, unknown>): FormOnayKutusu[] | null {
-  const ust = okunan.custom_disclaimer as { checkboxes?: unknown } | undefined;
-  const yasal = (okunan.legal_content as { custom_disclaimer?: { checkboxes?: unknown } } | undefined)?.custom_disclaimer;
-  const kutular = ust?.checkboxes ?? yasal?.checkboxes;
-  if (kutular === undefined) return null;
-  // Graph liste alanlarını `{ data: [...] }` sarmalıyla da döndürebiliyor.
-  const dizi = Array.isArray(kutular) ? kutular : Array.isArray((kutular as { data?: unknown }).data) ? (kutular as { data: unknown[] }).data : null;
-  return dizi as FormOnayKutusu[] | null;
+type Nesne = Record<string, unknown>;
+const nesneMi = (v: unknown): v is Nesne => !!v && typeof v === 'object' && !Array.isArray(v);
+/** Graph liste alanları düz dizi ya da `{ data: [...] }` olabiliyor; başka biçim `null`. */
+function liste(v: unknown): unknown[] | null {
+  if (Array.isArray(v)) return v;
+  if (nesneMi(v) && Array.isArray(v.data)) return v.data;
+  return null;
+}
+const metin = (v: unknown): string | null => (typeof v === 'string' ? v.trim() : null);
+const rakamlar = (v: unknown): string | null => (typeof v === 'string' || typeof v === 'number' ? String(v).replace(/\D/g, '') : null);
+
+/**
+ * Okunan onay kutuları. SAVUNMALI: Graph'in beklenmedik biçimi (null eleman,
+ * dizge olmayan metin) TypeError ATMAMALI — atarsa yayın yolu çöker ve form
+ * Meta'da açıkken kayıt yarım kalırdı. Biçimsiz eleman sayılır ve ayrıca
+ * söylenir.
+ */
+function okunanKutular(okunan: Nesne): { kutular: Array<{ key: string | null; text: string | null; is_required: unknown }>; bicimsiz: number } | null {
+  const ust = nesneMi(okunan.custom_disclaimer) ? okunan.custom_disclaimer : undefined;
+  const yasal = nesneMi(okunan.legal_content) && nesneMi(okunan.legal_content.custom_disclaimer) ? okunan.legal_content.custom_disclaimer : undefined;
+  const ham = ust?.checkboxes ?? yasal?.checkboxes;
+  if (ham === undefined) return null;
+  const dizi = liste(ham);
+  if (!dizi) return { kutular: [], bicimsiz: 1 };
+  const kutular: Array<{ key: string | null; text: string | null; is_required: unknown }> = [];
+  let bicimsiz = 0;
+  for (const x of dizi) {
+    if (!nesneMi(x) || metin(x.text) === null) {
+      bicimsiz++;
+      continue;
+    }
+    kutular.push({ key: metin(x.key), text: metin(x.text), is_required: x.is_required });
+  }
+  return { kutular, bicimsiz };
 }
 
 /**
  * Gönderilen form gövdesini Meta'nın sakladığıyla karşılaştırır. "200
  * döndü" doğrulama değil: Meta tanımadığı alanı kabul edip yok sayabiliyor
  * ve bunun KVKK kutusundaki karşılığı izinsiz toplanan veri ya da hiç
- * toplanmayan rıza. Bakılanlar: dil, kalite adımı, hedef dışına kapalılık
- * ve onay kutularının her biri (anahtar, metin, zorunluluk).
+ * toplanmayan rıza. Bakılanlar: dil, kalite adımı, hedef dışına kapalılık,
+ * her onay kutusu (anahtar, metin, zorunluluk), gizlilik adresi, soruların
+ * türü ve sayısı, teşekkür ekranının düğmesi (tür, numara, adres).
+ * Gönderilip OKUNMAYAN her alan "okunamadı" satırıdır; sonuç o zaman temiz
+ * değil "doğrulanamadı".
  */
 export function formGeriOkumaDenetimi(gonderilen: Record<string, unknown>, okunan: Record<string, unknown> | null, okumaHatasi: string | null = null): FormGeriOkumaSonucu {
-  if (!okunan) return { sonuc: 'dogrulanamadi', satirlar: [`Form Meta'dan geri okunamadı${okumaHatasi ? `: ${okumaHatasi}` : ''}.`] };
+  if (!nesneMi(okunan)) return { sonuc: 'dogrulanamadi', satirlar: [`Form Meta'dan geri okunamadı${okumaHatasi ? `: ${okumaHatasi}` : ''}.`] };
   const fark: string[] = [];
   const bilinmiyor: string[] = [];
   const tekil = (alan: string, etiket: string) => {
@@ -344,18 +376,65 @@ export function formGeriOkumaDenetimi(gonderilen: Record<string, unknown>, okuna
   tekil('is_optimized_for_quality', 'Daha yüksek niyet adımı');
   tekil('block_display_for_non_targeted_viewer', 'Formu yalnız hedef kitle görür');
 
-  const gidenKutular = (gonderilen.custom_disclaimer as { checkboxes?: FormOnayKutusu[] } | undefined)?.checkboxes ?? [];
-  if (gidenKutular.length > 0) {
-    const donen = okunanKutular(okunan);
-    if (donen === null) bilinmiyor.push("Onay kutuları Meta'dan okunamadı; KVKK kutularının formda durduğu doğrulanamadı.");
+  // ── Gizlilik adresi (okunan alan `privacy_policy_url`; nesne biçimi de kabul).
+  const gidenGizlilik = nesneMi(gonderilen.privacy_policy) ? metin(gonderilen.privacy_policy.url) : null;
+  if (gidenGizlilik) {
+    const donen = metin(okunan.privacy_policy_url) ?? (nesneMi(okunan.privacy_policy) ? metin(okunan.privacy_policy.url) : null);
+    if (donen === null) bilinmiyor.push("Gizlilik adresi Meta'dan okunamadı.");
+    else if (donen !== gidenGizlilik) fark.push(`Gizlilik adresi farklı: gönderilen ${gidenGizlilik}, Meta'da ${donen}.`);
+  }
+
+  // ── Sorular: sayı ve sıra sıra tür.
+  const gidenSorular = liste(gonderilen.questions);
+  if (gidenSorular) {
+    const donen = liste(okunan.questions);
+    if (donen === null) bilinmiyor.push("Form soruları Meta'dan okunamadı.");
     else {
+      const tur = (q: unknown) => (nesneMi(q) ? metin(q.type) : null);
+      if (donen.length !== gidenSorular.length) fark.push(`Soru sayısı farklı: gönderilen ${gidenSorular.length}, Meta'da ${donen.length}.`);
+      else if (gidenSorular.some((q, i) => tur(q) !== tur(donen[i]))) fark.push('Soruların türü ya da sırası Meta’da farklı.');
+    }
+  }
+
+  // ── Teşekkür ekranı: düğmenin türü ve hedefi (numara rakamlarıyla, adres aynen).
+  const gidenTy = nesneMi(gonderilen.thank_you_page) ? gonderilen.thank_you_page : null;
+  if (gidenTy) {
+    const donen = nesneMi(okunan.thank_you_page) ? okunan.thank_you_page : null;
+    if (!donen) bilinmiyor.push("Teşekkür ekranı Meta'dan okunamadı; düğmenin numarası ya da adresi doğrulanmadı.");
+    else {
+      const gTur = metin(gidenTy.button_type);
+      const dTur = metin(donen.button_type);
+      if (dTur === null) bilinmiyor.push("Teşekkür düğmesinin türü Meta'dan okunamadı.");
+      else if (dTur !== gTur) fark.push(`Teşekkür düğmesi farklı: gönderilen ${gTur}, Meta'da ${dTur}.`);
+      if (gTur === 'CALL_BUSINESS') {
+        const d = rakamlar(donen.business_phone_number);
+        if (d === null) bilinmiyor.push("Teşekkür ekranındaki telefon Meta'dan okunamadı.");
+        // Biçim (`+` ile mi) ÖLÇÜLMEDİ: rakamlar kıyaslanıyor (yanki N-17 ile aynı kural).
+        else if (d !== rakamlar(gidenTy.business_phone_number)) fark.push(`Teşekkür ekranındaki telefon farklı: Meta'da ${String(donen.business_phone_number)}.`);
+      }
+      if (gTur === 'VIEW_WEBSITE') {
+        const d = metin(donen.website_url);
+        if (d === null) bilinmiyor.push("Teşekkür ekranındaki site adresi Meta'dan okunamadı.");
+        else if (d !== metin(gidenTy.website_url)) fark.push(`Teşekkür ekranındaki site adresi farklı: Meta'da ${d}.`);
+      }
+    }
+  }
+
+  // ── Onay kutuları (KVKK).
+  const gidenKutular = (nesneMi(gonderilen.custom_disclaimer) ? liste(gonderilen.custom_disclaimer.checkboxes) : null) as FormOnayKutusu[] | null;
+  if (gidenKutular && gidenKutular.length > 0) {
+    const okuma = okunanKutular(okunan);
+    if (okuma === null) bilinmiyor.push("Onay kutuları Meta'dan okunamadı; KVKK kutularının formda durduğu doğrulanamadı.");
+    else {
+      const donen = okuma.kutular;
+      if (okuma.bicimsiz > 0) bilinmiyor.push(`Meta'daki ${okuma.bicimsiz} onay kutusu tanınmayan biçimde döndü; KVKK kutuları tam doğrulanamadı.`);
       for (const k of gidenKutular) {
-        const d = donen.find((x) => x.key === k.key) ?? donen.find((x) => x.text?.trim() === k.text);
+        const d = donen.find((x) => x.key === k.key) ?? donen.find((x) => x.text === k.text);
         if (!d) fark.push(`Onay kutusu formda YOK: "${k.text}".`);
         else {
-          if (d.text?.trim() !== k.text) fark.push(`Onay kutusunun metni farklı: "${k.text}".`);
+          if (d.text !== k.text) fark.push(`Onay kutusunun metni farklı: "${k.text}".`);
           // Zorunluluk dönmediyse bilinmiyor; döndüyse birebir aynı olmalı.
-          if (d.is_required === undefined) bilinmiyor.push(`"${k.text}" kutusunun zorunlu olup olmadığı okunamadı.`);
+          if (d.is_required === undefined || d.is_required === null) bilinmiyor.push(`"${k.text}" kutusunun zorunlu olup olmadığı okunamadı.`);
           else if (String(d.is_required) !== String(k.is_required)) {
             fark.push(`"${k.text}" kutusu ${k.is_required ? 'zorunlu' : 'isteğe bağlı'} gönderildi, Meta'da ${String(d.is_required) === 'true' ? 'zorunlu' : 'isteğe bağlı'}.`);
           }

@@ -1,7 +1,8 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { LeadFormRecord, TenantContext } from '@advetics/shared';
-import { FORM_GERI_OKUMA_ALANLARI, formGeriOkumaDenetimi, formGeriOkumaUyarisi } from '@advetics/shared';
+import { FORM_GERI_OKUMA_ALANLARI, FORM_GERI_OKUMA_TEMEL_ALANLARI, formGeriOkumaDenetimi, formGeriOkumaUyarisi } from '@advetics/shared';
+import { alanReddiMi } from '../reklam/rehber/platform-okuma';
 import { PlatformApiError } from '../connections/provider.types';
 import { ProviderRegistry } from '../connections/provider.registry';
 import { CryptoService } from '../../crypto/crypto.service';
@@ -75,60 +76,102 @@ export class FormPublisherService {
       );
     }
 
+    /*
+     * SAHİPLENME — Meta'ya gitmeden ÖNCE ve koşullu. İki sekme aynı formu
+     * yayınlarsa ikincisi burada durur; `publishBlockers` okuması tek başına
+     * yetmiyordu (ikisi de "taslak" görüp ikisi de form açardı).
+     */
+    if (!(await this.forms.yayinSahiplen(ctx, formId))) {
+      throw new ConflictException('Bu form şu an yayınlanıyor ya da yayını yarım kaldı; Formlar’dan kontrol et.');
+    }
+
+    const fetchCtx = {
+      // Kullanıcı token'ı yalnızca kota geri bildirimi için taşınıyor;
+      // isteğin kendisi sayfa token'ıyla gidiyor.
+      accessToken: auth.pageAccessToken,
+      accountExternalId: auth.pageExternalId,
+      onRateLimit: (snapshot: Parameters<NonNullable<Parameters<typeof provider.createLeadForm>[0]['onRateLimit']>>[0]) =>
+        this.quota.record({ platform: 'meta', adAccountId: form.socialProfileId, endpoint: 'forms:publish', snapshot }),
+    };
+
+    // 1) META. Yalnız BU adımın hatası satırı `failed` yapar: form açılmadı.
+    let externalId: string;
     try {
-      const externalId = await provider.createLeadForm(
-        {
-          // Kullanıcı token'ı yalnızca kota geri bildirimi için taşınıyor;
-          // isteğin kendisi sayfa token'ıyla gidiyor (aşağıda).
-          accessToken: auth.pageAccessToken,
-          accountExternalId: auth.pageExternalId,
-          onRateLimit: (snapshot) =>
-            this.quota.record({
-              platform: 'meta',
-              adAccountId: form.socialProfileId,
-              endpoint: 'forms:publish',
-              snapshot,
-            }),
-        },
-        { pageExternalId: auth.pageExternalId, pageAccessToken: auth.pageAccessToken, alanlar },
-      );
-
-      // GERİ OKUMA — "200 döndü" doğrulama değil. Meta tanımadığı alanı kabul
-      // edip yok sayabiliyor; KVKK kutusundaki karşılığı izinsiz toplanan
-      // veri. Form zaten açıldı: okuma düşerse yayın GERİ ALINMIYOR (Meta'da
-      // form silinemiyor), uyarı kayda yazılıyor ve ekranda kırmızı görünüyor.
-      let okunan: Record<string, unknown> | null = null;
-      let okumaHatasi: string | null = null;
-      if (provider.readLeadForm) {
-        try {
-          okunan = await provider.readLeadForm(
-            { accessToken: auth.pageAccessToken, accountExternalId: auth.pageExternalId },
-            { pageAccessToken: auth.pageAccessToken, formId: externalId, fields: FORM_GERI_OKUMA_ALANLARI },
-          );
-        } catch (e) {
-          okumaHatasi = e instanceof Error ? e.message : String(e);
-          this.logger.warn(`Form geri okunamadı (${formId} → ${externalId}): ${okumaHatasi}`);
-        }
-      } else {
-        okumaHatasi = 'bu platformda form geri okunamıyor';
-      }
-      const uyari = formGeriOkumaUyarisi(formGeriOkumaDenetimi(alanlar, okunan, okumaHatasi));
-      if (uyari) this.logger.warn(`Form geri okuma (${formId}): ${uyari}`);
-
-      await this.forms.markPublished(ctx, formId, externalId, uyari);
+      externalId = await provider.createLeadForm(fetchCtx, { pageExternalId: auth.pageExternalId, pageAccessToken: auth.pageAccessToken, alanlar });
     } catch (err) {
-      const message =
-        err instanceof PlatformApiError
-          ? `${err.kind}: ${err.message}`
-          : err instanceof Error
-            ? err.message
-            : String(err);
+      const message = err instanceof PlatformApiError ? `${err.kind}: ${err.message}` : err instanceof Error ? err.message : String(err);
       await this.forms.markFailed(ctx, formId, message);
       this.logger.error(`Form yayınlanamadı (${formId}): ${message}`);
       throw new BadRequestException(message);
     }
 
+    /*
+     * 2) KİMLİK — HEMEN, AYRI VE KISA. Meta formu açtı; bundan sonraki hiçbir
+     * hata satırı `failed` YAPMAZ ("Kayıt yazılamazsa satır failed DEĞİL",
+     * CLAUDE.md): `failed` yeniden denenebilir demek ve Meta'da form
+     * silinemiyor. Bu yazım düşerse satır `publishing` kalır, yeniden yayın
+     * kapalıdır ve kimlik log'da durur.
+     */
+    try {
+      await this.forms.kimlikYaz(ctx, formId, externalId);
+    } catch (e) {
+      const m = e instanceof Error ? e.message : String(e);
+      this.logger.error(`Meta formu açıldı (${externalId}) ama kimlik kayda yazılamadı (${formId}): ${m}`);
+      throw new BadRequestException(
+        `Meta'da form açılmış olabilir (kimlik ${externalId}) ama kayda yazılamadı. Formlar'dan kontrol et; yeniden yayın kapalı.`,
+      );
+    }
+
+    // 3) GERİ OKUMA. "200 döndü" doğrulama değil: Meta tanımadığı alanı kabul
+    // edip yok sayabiliyor. Okuma da karşılaştırma da düşebilir; ikisi de
+    // uyarıya çevrilir, satır yayında kalır.
+    let uyari: string | null;
+    try {
+      const { okunan, okumaHatasi } = await this.geriOku(provider, fetchCtx, auth.pageAccessToken, externalId, formId);
+      uyari = formGeriOkumaUyarisi(formGeriOkumaDenetimi(alanlar, okunan, okumaHatasi));
+    } catch (e) {
+      uyari = `Form yayınlandı ama Meta'da doğrulanamadı: geri okuma karşılaştırılamadı (${e instanceof Error ? e.message : String(e)}).`;
+    }
+    if (uyari) this.logger.warn(`Form geri okuma (${formId}): ${uyari}`);
+
+    // 4) SONUCUN KAYDI. Düşerse satır yayında ve "geri okuma tamamlanmadı"
+    // uyarısıyla kalır (kimlik yazımı onu koymuştu); hata kullanıcıya gider.
+    try {
+      await this.forms.markPublished(ctx, formId, externalId, uyari);
+    } catch (e) {
+      const m = e instanceof Error ? e.message : String(e);
+      this.logger.error(`Form geri okuma sonucu kaydedilemedi (${formId} → ${externalId}): ${m}`);
+      throw new BadRequestException(`Form Meta'da yayında (kimlik ${externalId}) ama geri okuma sonucu kaydedilemedi: ${m}`);
+    }
+
     return this.forms.get(ctx, formId);
+  }
+
+  /**
+   * Geri okuma. Önce bütün alanlar; Graph ALAN reddederse (#100 "nonexisting
+   * field") temel alanlarla yeniden: reddedilen kısım okunmamış olur ve
+   * denetim onu "okunamadı" yazar (temiz DEĞİL). Başka hata: okunamadı.
+   */
+  private async geriOku(
+    provider: ReturnType<ProviderRegistry['get']>,
+    fetchCtx: { accessToken: string; accountExternalId: string },
+    pageAccessToken: string,
+    formId: string,
+    kayitId: string,
+  ): Promise<{ okunan: Record<string, unknown> | null; okumaHatasi: string | null }> {
+    if (!provider.readLeadForm) return { okunan: null, okumaHatasi: 'bu platformda form geri okunamıyor' };
+    try {
+      return { okunan: await provider.readLeadForm(fetchCtx, { pageAccessToken, formId, fields: FORM_GERI_OKUMA_ALANLARI }), okumaHatasi: null };
+    } catch (e) {
+      const m = e instanceof Error ? e.message : String(e);
+      this.logger.warn(`Form geri okunamadı (${kayitId} → ${formId}): ${m}`);
+      if (!alanReddiMi(e)) return { okunan: null, okumaHatasi: m };
+      try {
+        return { okunan: await provider.readLeadForm(fetchCtx, { pageAccessToken, formId, fields: FORM_GERI_OKUMA_TEMEL_ALANLARI }), okumaHatasi: null };
+      } catch (e2) {
+        return { okunan: null, okumaHatasi: e2 instanceof Error ? e2.message : String(e2) };
+      }
+    }
   }
 
   /**

@@ -113,7 +113,8 @@ export function FormBuilder({
   const [error, setError] = useState<string | null>(null);
 
   const published = status === 'published';
-  const locked = published || status === 'superseded';
+  // Yayını belirsiz form da kilitli: Meta'da açılmış olabilir (sunucu da reddediyor).
+  const locked = published || status === 'superseded' || status === 'publishing';
 
   function body() {
     return {
@@ -696,7 +697,7 @@ export function FormBuilder({
               {busy === 'save' || busy === 'plan' ? 'Kaydediliyor…' : 'Kaydet'}
             </button>
 
-            {formId && !published && canPublish && (
+            {formId && !locked && canPublish && (
               <button
                 type="button"
                 onClick={() => void publish()}
@@ -707,7 +708,7 @@ export function FormBuilder({
               </button>
             )}
 
-            {formId && !published && canPublish && (
+            {formId && !locked && canPublish && (
               // YAYININ GERİ DÖNÜŞÜ OLMADIĞI BUTONUN YANINDA YAZIYOR.
               <span className="text-[11px] text-ink-muted">
                 Yayınlandıktan sonra içeriği değiştirilemez.

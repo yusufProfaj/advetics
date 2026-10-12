@@ -121,6 +121,8 @@ describe('form geri okuma', () => {
     is_optimized_for_quality: true,
     block_display_for_non_targeted_viewer: true,
     legal_content: { custom_disclaimer: structuredClone(g.custom_disclaimer) },
+    privacy_policy_url: g.privacy_policy.url,
+    questions: structuredClone(g.questions),
     ...ek,
   });
 

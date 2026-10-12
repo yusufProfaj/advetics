@@ -29,11 +29,12 @@ import {
   type RehberFormListesi,
   type YoutubeVideoListesi,
   googleGorselKurgusuMu,
+  trTelefonOnerisi,
 } from '@advetics/shared';
 import { apiFetch, onizlemeAdresi } from '@/lib/api';
 import { FormBuilder } from '@/components/forms/form-builder';
 import { FormOnizleme } from '@/components/forms/form-onizleme';
-import { formOlusturmaDurumu, gizlilikOnerisi, kayittanOnizleme, sayfaTaslaklari, yayinSonrasiSecim } from '@/lib/form-onizleme';
+import { formOlusturmaDurumu, gizlilikOnerisi, kayittanOnizleme, sayfaTaslaklari, yayinSonrasiSecim, yenidenYayinlanabilir } from '@/lib/form-onizleme';
 import { medyaOlc, medyaYukle } from '@/reklam/medya';
 import { AltCubuk, Soru, sil, yaz, type AdimBaglami } from './adim-ortak';
 import { IKON, Ikon } from './ikonlar';
@@ -704,6 +705,12 @@ function FormSecici({ b, eksikMetni, formUyarisi }: { b: AdimBaglami; eksikMetni
   const [onizleme, setOnizleme] = useState<OnizlemeKonusu | null>(null);
   const [olustur, setOlustur] = useState<{ acik: boolean; anahtar: number; kayit: LeadFormRecord | null }>({ acik: false, anahtar: 0, kayit: null });
   const [bildirim, setBildirim] = useState<string | null>(null);
+  // Geri okuma uyarılı yayın: form SEÇİLMEDİ, kullanıcının kararı bekleniyor.
+  const [bekleyen, setBekleyen] = useState<{ formId: string; ad: string; uyari: string } | null>(null);
+  // Advetics'te yayınlanmış formlar: seçicideki kartın geri okuma rozeti
+  // (Meta kimliğiyle eşlenir). Meta'da kurulan formun bizde kaydı yok, rozeti de yok.
+  const [kayitlar, setKayitlar] = useState<readonly LeadFormRecord[]>([]);
+  const geriOkumaUyarisi = (metaId: string) => kayitlar.find((k) => k.externalFormId === metaId)?.readbackWarning ?? null;
   const olusturma = formOlusturmaDurumu({ sayfaId, yayinIzni: b.formYayinIzni });
 
   /*
@@ -737,6 +744,7 @@ function FormSecici({ b, eksikMetni, formUyarisi }: { b: AdimBaglami; eksikMetni
       .then((r) => {
         if (iptal) return;
         const t = sayfaTaslaklari(r, sayfaId);
+        setKayitlar(r);
         setTaslaklar(t.length ? { tur: 'geldi', deger: t } : { tur: 'bos', neden: 'Yarım kalan form yok.' });
       })
       .catch((e: unknown) => !iptal && setTaslaklar(oneriHatasi(e)));
@@ -748,6 +756,7 @@ function FormSecici({ b, eksikMetni, formUyarisi }: { b: AdimBaglami; eksikMetni
   const oneri = hal.tur === 'geldi' ? gizlilikOnerisi(hal.deger.satirlar) : null;
   const olusturAc = (kayit: LeadFormRecord | null) => {
     setBildirim(null);
+    setBekleyen(null);
     setOnizleme(null);
     setOlustur((x) => ({ acik: true, anahtar: x.anahtar + 1, kayit }));
   };
@@ -757,6 +766,9 @@ function FormSecici({ b, eksikMetni, formUyarisi }: { b: AdimBaglami; eksikMetni
       yaz(b, 'formSablonuId', k.formId);
       setBildirim(`"${r.name}" Meta'da yayınlandı ve bu reklam için seçildi.`);
       setOlustur((x) => ({ ...x, acik: false }));
+    } else if (k.tur === 'uyari') {
+      // Pencere AÇIK kalır ve uyarı orada; seçim "Yine de kullan" ile.
+      setBekleyen({ formId: k.formId, ad: r.name, uyari: k.uyari });
     } else {
       setBildirim(k.sebep);
     }
@@ -801,6 +813,11 @@ function FormSecici({ b, eksikMetni, formUyarisi }: { b: AdimBaglami; eksikMetni
                 <button type="button" aria-pressed={secili === f.id} onClick={() => yaz(b, 'formSablonuId', f.id)}>
                   {f.ad}
                   {!f.gizlilikAdresi && <small>gizlilik adresi yok</small>}
+                  {geriOkumaUyarisi(f.id) && (
+                    <small className={s.hataMetni} title={geriOkumaUyarisi(f.id) ?? undefined}>
+                      {geriOkumaUyarisi(f.id)}
+                    </small>
+                  )}
                 </button>
                 <button type="button" className={s.metinDugme} onClick={() => setOnizleme({ tur: 'meta', formId: f.id, ad: f.ad })}>
                   Önizle
@@ -823,12 +840,18 @@ function FormSecici({ b, eksikMetni, formUyarisi }: { b: AdimBaglami; eksikMetni
               <div key={t.id} className={s.formSatiri}>
                 <span className={s.formTaslakAdi}>
                   {t.name}
-                  <small>{t.status === 'failed' ? `Yayınlanamadı${t.error ? `: ${t.error}` : ''}` : 'Taslak'}</small>
+                  <small>
+                    {t.status === 'publishing'
+                      ? "Yayın yarım kaldı: Meta'da form açılmış olabilir, Formlar'dan kontrol et"
+                      : t.status === 'failed'
+                        ? `Yayınlanamadı${t.error ? `: ${t.error}` : ''}`
+                        : 'Taslak'}
+                  </small>
                 </span>
                 <button type="button" className={s.metinDugme} onClick={() => setOnizleme({ tur: 'taslak', kayit: t })}>
                   Önizle
                 </button>
-                {olusturma.goster && (
+                {olusturma.goster && yenidenYayinlanabilir(t) && (
                   <button type="button" className={s.metinDugme} onClick={() => olusturAc(t)}>
                     Aç ve yayınla
                   </button>
@@ -871,6 +894,15 @@ function FormSecici({ b, eksikMetni, formUyarisi }: { b: AdimBaglami; eksikMetni
         clientId={b.clientId}
         sayfa={sayfaId ? { id: sayfaId, name: sayfa ?? 'Facebook sayfası' } : null}
         oneri={oneri}
+        telefon={b.h.iletisim.telefon}
+        bekleyen={bekleyen}
+        yineDeKullan={() => {
+          if (!bekleyen) return;
+          yaz(b, 'formSablonuId', bekleyen.formId);
+          setBildirim(`"${bekleyen.ad}" Meta'da doğrulanamayan haliyle bu reklam için seçildi.`);
+          setBekleyen(null);
+          setOlustur((x) => ({ ...x, acik: false }));
+        }}
         yayinlandi={yayinlandi}
         kapat={() => {
           setOlustur((x) => ({ ...x, acik: false }));
@@ -999,6 +1031,9 @@ function FormOlusturPenceresi({
   clientId,
   sayfa,
   oneri,
+  telefon,
+  bekleyen,
+  yineDeKullan,
   yayinlandi,
   kapat,
 }: {
@@ -1008,6 +1043,11 @@ function FormOlusturPenceresi({
   clientId: string;
   sayfa: { id: string; name: string } | null;
   oneri: { adres: string; kaynak: string } | null;
+  /** Marka Merkezi telefonu (ham); "Bizi ara" önerisi `trTelefonOnerisi` ile. */
+  telefon: string | null | undefined;
+  /** Geri okuma uyarılı yayın: form seçilmedi, karar bekliyor. */
+  bekleyen: { formId: string; ad: string; uyari: string } | null;
+  yineDeKullan: () => void;
   yayinlandi: (r: LeadFormRecord) => void;
   kapat: () => void;
 }) {
@@ -1031,9 +1071,21 @@ function FormOlusturPenceresi({
               existing={kayit ?? undefined}
               canPublish
               gomulu={{ varsayilanGizlilik: oneri, onYayinlandi: yayinlandi }}
+              telefonOnerisi={trTelefonOnerisi(telefon)}
             />
           )}
         </div>
+        {bekleyen && (
+          <div className={s.uyari} role="alert">
+            <Ikon d={IKON.ucgen} />
+            <span>
+              <b>&quot;{bekleyen.ad}&quot; yayınlandı ama reklama seçilmedi.</b> {bekleyen.uyari}{' '}
+              <button type="button" className={s.metinDugme} onClick={yineDeKullan}>
+                Yine de kullan
+              </button>
+            </span>
+          </div>
+        )}
         <div className={s.pencereAlt}>
           <button ref={kapatRef} type="button" className={s.ikincil} onClick={kapat}>
             Kapat

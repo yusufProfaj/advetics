@@ -162,8 +162,16 @@ export function gizlilikOnerisi(satirlar: RehberFormListesi['satirlar']): { adre
  * kayıt seçilir. Yayın düştüyse SEÇİM YAPILMAZ ve sebep Meta'nın cümlesi
  * (`error`); form taslak olarak durur, kaybolmaz.
  */
-export function yayinSonrasiSecim(r: Pick<LeadFormRecord, 'status' | 'externalFormId' | 'error'>): { tur: 'sec'; formId: string } | { tur: 'secilmedi'; sebep: string } {
-  if (r.status === 'published' && r.externalFormId && /^\d{1,30}$/.test(r.externalFormId)) return { tur: 'sec', formId: r.externalFormId };
+export function yayinSonrasiSecim(
+  r: Pick<LeadFormRecord, 'status' | 'externalFormId' | 'error'> & { readbackWarning?: string | null },
+): { tur: 'sec'; formId: string } | { tur: 'uyari'; formId: string; uyari: string } | { tur: 'secilmedi'; sebep: string } {
+  if (r.status === 'published' && r.externalFormId && /^\d{1,30}$/.test(r.externalFormId)) {
+    // GERİ OKUMA UYARISI VARSA OTOMATİK SEÇİLMEZ: KVKK kutusu düşmüş (ya da
+    // doğrulanamamış) bir form sessizce reklama bağlanırdı. Ekran uyarıyı
+    // gösterir; seçim kullanıcının bilinçli "Yine de kullan"ıyla.
+    if (r.readbackWarning) return { tur: 'uyari', formId: r.externalFormId, uyari: r.readbackWarning };
+    return { tur: 'sec', formId: r.externalFormId };
+  }
   return { tur: 'secilmedi', sebep: r.error ?? "Form Meta'da yayınlanmadı; taslak olarak duruyor." };
 }
 
@@ -187,6 +195,17 @@ export function formOlusturmaDurumu(p: { sayfaId: string | null; yayinIzni: bool
 export function sayfaTaslaklari(kayitlar: readonly LeadFormRecord[], sayfaId: string | null): LeadFormRecord[] {
   if (!sayfaId) return [];
   return kayitlar
-    .filter((k) => k.socialProfileId === sayfaId && (k.status === 'draft' || k.status === 'failed'))
+    .filter((k) => k.socialProfileId === sayfaId && (k.status === 'draft' || k.status === 'failed' || k.status === 'publishing'))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
+
+/**
+ * Yarım kalan form YENİDEN yayınlanabilir mi. Yayını belirsiz (`publishing`)
+ * ya da Meta kimliği olan satır HAYIR: Meta'da form açılmış olabilir ve
+ * yeniden yayın ikinci form açar (form silinemiyor). Sunucu da reddediyor
+ * (`publishBlockers`); düğme yine de gösterilmez.
+ */
+export function yenidenYayinlanabilir(k: Pick<LeadFormRecord, 'status' | 'externalFormId'>): boolean {
+  return (k.status === 'draft' || k.status === 'failed') && !k.externalFormId;
+}
+

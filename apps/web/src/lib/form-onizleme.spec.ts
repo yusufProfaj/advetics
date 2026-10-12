@@ -9,6 +9,7 @@ import {
   onizlemeEkranlari,
   sayfaTaslaklari,
   yayinSonrasiSecim,
+  yenidenYayinlanabilir,
   type FormTaslagi,
 } from './form-onizleme';
 
@@ -150,6 +151,26 @@ describe('rehber form akışı', () => {
     ];
     expect(sayfaTaslaklari(l, 'S').map((k) => k.id)).toEqual(['c', 'a']);
     expect(sayfaTaslaklari(l, null)).toEqual([]);
+  });
+
+  it('KRİTİK (B-1): yayını belirsiz ya da Meta kimliği olan satır listede görünür ama YENİDEN YAYINLANMAZ', () => {
+    const belirsiz = kayit({ id: 'p', socialProfileId: 'S', status: 'publishing', createdAt: '2026-10-05' });
+    expect(sayfaTaslaklari([belirsiz], 'S').map((k) => k.id)).toEqual(['p']);
+    expect(yenidenYayinlanabilir(belirsiz)).toBe(false);
+    expect(yenidenYayinlanabilir(kayit({ status: 'failed', externalFormId: '777' }))).toBe(false);
+    expect(yenidenYayinlanabilir(kayit({ status: 'failed' }))).toBe(true);
+    expect(yenidenYayinlanabilir(kayit({ status: 'draft' }))).toBe(true);
+  });
+
+  it('KRİTİK (B-2): geri okuma uyarılı yayın OTOMATİK SEÇİLMEZ; seçim yalnız "Yine de kullan"la', () => {
+    const r = yayinSonrasiSecim({ ...kayit({ status: 'published', externalFormId: '777' }), readbackWarning: 'KVKK kutusu yok' } as LeadFormRecord);
+    expect(r).toEqual({ tur: 'uyari', formId: '777', uyari: 'KVKK kutusu yok' });
+    const SECICI = govde(yorumsuz('components/rehber/adim-reklam.tsx'), 'function FormSecici(');
+    const k = SECICI.slice(SECICI.indexOf('const yayinlandi'), SECICI.indexOf('const olusturDugmesi'));
+    const uyariDali = k.slice(k.indexOf("k.tur === 'uyari'"));
+    expect(uyariDali.length).toBeGreaterThan(20);
+    expect(uyariDali.slice(0, uyariDali.indexOf('} else'))).not.toContain("yaz(b, 'formSablonuId'");
+    expect(SECICI).toMatch(/yineDeKullan=\{\(\) => \{[\s\S]*?yaz\(b, 'formSablonuId', bekleyen\.formId\)/);
   });
 });
 
