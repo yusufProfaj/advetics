@@ -4,13 +4,15 @@
  * BANNER SETİ KARTLARI (adım 4). Onaylı taslak:
  * `docs/advcampaign/banner-seti-taslak.html`. Kullanıcı kararları
  * (2026-10-11): düğmeler panelin degradesiyle (`.birincil`, `.karo`),
- * metin bütün setlerde ortak, uyarılar marka kırmızısıyla.
+ * uyarılar marka kırmızısıyla. Metin önce bütün setlerde ortaktı; Dalga 2'den
+ * (2026-10-12) beri her set kendi metnini taşıyabilir (`setAlti`), taşımayana
+ * ortak metin gider.
  *
  * Yerleşim kuralları BURADA YAZILMIYOR: hangi grubun hangi oranı kullandığı
  * ve neyin kapandığı `setPlani`/`reklamSetiPlani`nden (shared) okunuyor. Ekran
  * ikinci bir eşleme kurarsa "açık" dediği yerleşimi derleyici kapatır.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   GORSEL_ORANLARI,
   ORAN_ETIKETI,
@@ -54,6 +56,7 @@ export function SetKartlari({
   kaldir,
   setiSil,
   yuvayaYukle,
+  setAlti,
 }: {
   setler: readonly SetYuvalari[];
   medyaBilgisi: ReadonlyMap<string, MedyaBilgisi>;
@@ -63,6 +66,8 @@ export function SetKartlari({
   setiSil: (sira: number) => void;
   /** `hedef` null = yeni set; dosya seçici ya da sürüklenen dosyalar. */
   yuvayaYukle: (dosyalar: File[] | null, hedef: number | null) => void;
+  /** Setin altına konan içerik: görsele özel metin kutusu (Dalga 2). */
+  setAlti?: (st: SetYuvalari, sira: number) => ReactNode;
 }) {
   const [menu, setMenu] = useState<string | null>(null);
   const [ustunde, setUstunde] = useState<number | 'yeni' | null>(null);
@@ -301,6 +306,7 @@ export function SetKartlari({
                   Google Arama reklamı metinle gösterilir; görseller yalnız Meta&apos;da kullanılır.
                 </div>
               )}
+              {n > 0 && setAlti?.(st, i)}
             </div>
           );
         })}

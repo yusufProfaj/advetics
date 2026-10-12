@@ -42,8 +42,11 @@ import {
   type AlanKaynagi,
   type AnahtarKelime,
   type AnahtarKelimeOnerisi,
+  type MedyaMetni,
   type MetinOnerisi,
   type OzelKategori,
+  fikirMetni,
+  setMetinSahibi,
   type PlatformProvaSonucu,
   type PlatformYayinOzeti,
   type RehberAdimi,
@@ -1156,7 +1159,89 @@ export function metinKutusu(m: MetinSeti | undefined, k: Pick<MetinKurali, 'basl
     anaMetin: m?.anaMetin ?? '',
     basliklar: pad(m?.basliklar ?? [], k.baslikKutu),
     aciklamalar: pad(m?.aciklamalar ?? [], k.aciklamaKutu),
+    // GÖRÜNEN YOL KORUNUR: kutu her yazımda bu fonksiyondan geçiyor; alanı
+    // burada düşürmek, kullanıcı bir başlığa dokunduğu anda yolu silerdi.
+    ...(m?.gorunenYol ? { gorunenYol: m.gorunenYol } : {}),
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Görsele özel metin (Dalga 2)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Set yuvaları → oranlı liste (shared `fikirMetni`/`setMetinSahibi` bunu okuyor). */
+export function setOgeleri(st: SetYuvalari): Array<MedyaOgesi & { oran: GorselOrani }> {
+  return (Object.entries(st) as Array<[GorselOrani, MedyaOgesi | undefined]>).filter((e): e is [GorselOrani, MedyaOgesi] => !!e[1]).map(([oran, m]) => ({ ...m, oran }));
+}
+
+/**
+ * Bir fikrin (set ya da video) metin durumu: metni HANGİ görselde (sahip),
+ * metin ne, ve öneri hangi görselle istenir. Derleyiciyle AYNI kural
+ * (`fikirMetni`, `setMetinSahibi`, shared): ekranın "bu setin metni" dediği
+ * metni derleyici başka görselden okumasın.
+ */
+export function fikirMetinDurumu(ogeler: ReadonlyArray<MedyaOgesi & { oran?: GorselOrani }>): { sahipId: string | null; metin: MedyaMetni | null; idler: string[] } {
+  const metin = fikirMetni(ogeler);
+  const sahip = ogeler.find((x) => x.metin) ?? setMetinSahibi(ogeler);
+  return { sahipId: sahip?.varlikId ?? null, metin, idler: ogeler.map((x) => x.varlikId) };
+}
+
+/**
+ * Fikrin metnini yazar: sahipte TEK kopya, setin öbür görsellerinden silinir
+ * (iki kopya ayrışırsa derleyici hangisini okuduğunu ekran bilemez).
+ * `metin: null` = ortak metne dön.
+ */
+export function fikirMetniYaz(medya: readonly MedyaOgesi[], idler: readonly string[], sahipId: string, metin: MedyaMetni | null): MedyaOgesi[] {
+  return medya.map((x) => {
+    if (x.varlikId === sahipId) {
+      if (metin) return { ...x, metin };
+      const { metin: _m, ...geri } = x;
+      return geri;
+    }
+    if (idler.includes(x.varlikId) && x.metin) {
+      const { metin: _m, ...geri } = x;
+      return geri;
+    }
+    return x;
+  });
+}
+
+/** Öneri → görselin metni (`derleyici` kaynağıyla; sınıra sığdırılmış). */
+export function oneridenFikirMetni(o: MetinOnerisi, k: Pick<MetinKurali, 'baslikEnCok' | 'aciklamaEnCok'>): MedyaMetni {
+  const sig = oneriyiSigdir(o, k);
+  return { anaMetin: sig.anaMetin, basliklar: sig.basliklar, aciklamalar: sig.aciklamalar, kaynak: 'derleyici' };
+}
+
+/**
+ * GÖRSEL BIRAKILINCA OTOMATİK METİN: yeni eklenen bir görseli taşıyan ve
+ * henüz metni olmayan HER FİKİR için TEK istek (setin metin sahibiyle).
+ * Bir setin dört boyutu için dört istek atmak aynı tasarıma dört kez para
+ * ödemek olurdu. Metni olan fikre dokunulmaz: kullanıcının düzelttiği
+ * metin, yeni bir boyut eklendi diye ezilmesin.
+ */
+export function otomatikMetinHedefleri(
+  fikirler: ReadonlyArray<ReadonlyArray<MedyaOgesi & { oran?: GorselOrani }>>,
+  eklenen: ReadonlySet<string>,
+): string[] {
+  const out: string[] = [];
+  for (const f of fikirler) {
+    if (!f.some((x) => eklenen.has(x.varlikId))) continue;
+    const d = fikirMetinDurumu(f);
+    if (d.metin || !d.sahipId) continue;
+    out.push(d.sahipId);
+  }
+  return out;
+}
+
+/** "Tekrar etme" listesi: ekrandaki önceki önerinin ana metni ve başlıkları. */
+export function tekrarEtmeListesi(o: Pick<MetinOnerisi, 'anaMetin' | 'basliklar'> | null | undefined): string[] {
+  if (!o) return [];
+  return [o.anaMetin, ...o.basliklar].map((x) => x.trim()).filter(Boolean).slice(0, 30);
+}
+
+/** Ortak metin boş mu (otomatik metin yalnız boş ortak metni doldurur). */
+export function ortakMetinBos(m: MetinSeti | undefined): boolean {
+  return !m || (!m.anaMetin.trim() && !m.basliklar.some((x) => x.trim()) && !m.aciklamalar.some((x) => x.trim()));
 }
 
 /**

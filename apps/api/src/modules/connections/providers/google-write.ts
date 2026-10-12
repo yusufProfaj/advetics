@@ -256,6 +256,12 @@ export function responsiveSearchAdBody(params: {
   headlines: string[];
   descriptions: string[];
   /**
+   * GÖRÜNEN YOL (`path1`, `path2`; parça başına en çok 15 karakter). Boşsa
+   * alan HİÇ yazılmaz: boş dize göndermek ile göndermemek Google'da aynı
+   * değil ve geri okumada "fark" üretirdi. `path2` tek başına olamaz.
+   */
+  gorunenYol?: string[];
+  /**
    * Rehber yolunda `ENABLED`: yayın kararı TEK yerde, kampanya seviyesinde.
    * Reklam da duraklatılmış kalsaydı kampanya açıldığında hiçbir şey
    * yayınlanmazdı — hata yok, gösterim yok (Demand Gen dersiyle aynı).
@@ -272,6 +278,8 @@ export function responsiveSearchAdBody(params: {
           responsiveSearchAd: {
             headlines: params.headlines.map((text) => ({ text })),
             descriptions: params.descriptions.map((text) => ({ text })),
+            ...(params.gorunenYol?.[0] ? { path1: params.gorunenYol[0] } : {}),
+            ...(params.gorunenYol?.[0] && params.gorunenYol[1] ? { path2: params.gorunenYol[1] } : {}),
           },
         },
       },
@@ -498,6 +506,8 @@ export interface AtomikAramaIstegi {
   finalUrl: string;
   basliklar: string[];
   aciklamalar: string[];
+  /** Görünen yol (`path1`, `path2`); boşsa gönderilmez. */
+  gorunenYol?: string[];
   /** E.164 (+90…). Verilirse arama öğesi kurulur ve kampanyaya bağlanır. */
   telefon?: string | null;
   validateOnly: boolean;
@@ -594,6 +604,7 @@ export function aramaAtomikIstek(p: AtomikAramaIstegi): { govde: AtomikAramaGovd
           finalUrl: p.finalUrl,
           headlines: p.basliklar,
           descriptions: p.aciklamalar,
+          ...(p.gorunenYol?.length ? { gorunenYol: p.gorunenYol } : {}),
           durum: 'ENABLED',
         }),
       ),

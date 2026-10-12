@@ -99,6 +99,7 @@ beforeAll(async () => {
     config,
     null,
     {} as never,
+    {} as never,
   );
 });
 afterAll(async () => h.close());

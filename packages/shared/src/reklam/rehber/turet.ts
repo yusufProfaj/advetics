@@ -19,9 +19,9 @@ import type { TaslakAlanlari } from '../taslak-alanlari';
 import type { AlanDegeri } from '../taslak';
 import type { OzelKategori } from '../meta/hedefleme';
 import { REHBER_AMACLARI, type GoogleKurgu, type GoogleUlasma } from './amaclar';
-import { VARSAYILAN_META_PAYI, type RehberAlanlari } from './alanlar';
+import { VARSAYILAN_META_PAYI, type MedyaMetni, type RehberAlanlari } from './alanlar';
 import { butceBol } from './butce';
-import { METIN_SINIRLARI } from './metin';
+import { METIN_SINIRLARI, karakterSayisi } from './metin';
 import { reklamSetiPlani, setlereAyir, type GorselOrani, type SetPlani } from '../banner-seti';
 import { googleGorselKurgusuMu, pmaxUzunBaslik } from './google-gorsel';
 
@@ -34,6 +34,68 @@ export const META_EN_COK_GORSEL = 5;
 
 /** Setin varsayılan görseli (kalan yerleşimler): kare en geniş oturan oran. */
 const VARSAYILAN_SIRASI: readonly GorselOrani[] = ['kare', 'dik45', 'yatay', 'dikey'];
+
+/**
+ * BİR FİKRİN KENDİ METNİ (Dalga 2). Set birden çok görsel taşıyor; metin
+ * setin VARSAYILAN görselinde aranır (panel oraya yazar), yoksa setteki ilk
+ * metinli görselde. Panel ile derleyici AYNI fonksiyonu okuyor: ekran "bu
+ * setin metni" dediği metni derleyici başka bir görselden almasın.
+ */
+export function fikirMetni<T extends { oran?: GorselOrani; metin?: MedyaMetni }>(set: readonly T[]): MedyaMetni | null {
+  return setSirasi(set).find((x) => x.metin)?.metin ?? null;
+}
+
+function setSirasi<T extends { oran?: GorselOrani }>(set: readonly T[]): T[] {
+  return [...set].sort((a, b) => VARSAYILAN_SIRASI.indexOf(a.oran ?? 'kare') - VARSAYILAN_SIRASI.indexOf(b.oran ?? 'kare'));
+}
+
+/**
+ * Setin metni HANGİ görselde durur ve görsele özel öneri HANGİ görselle
+ * istenir: setin varsayılan sırasında kullanıcının kendi yüklediği ilk
+ * görsel (üretilen boyut, aynı tasarımın kırpılmışı; kenarındaki yazıyı
+ * kaybetmiş olabilir). Hepsi üretilmişse varsayılan görsel.
+ */
+export function setMetinSahibi<T extends { oran?: GorselOrani; uretildi?: true }>(set: readonly T[]): T | null {
+  const s = setSirasi(set);
+  return s.find((x) => !x.uretildi) ?? s[0] ?? null;
+}
+
+/** Boşları at, kırp, büyük/küçük harften bağımsız tekilleştir; sırayı koru. */
+function tekilDolu(xs: readonly string[]): string[] {
+  const gorulen = new Set<string>();
+  const out: string[] = [];
+  for (const x of xs) {
+    const t = x.trim();
+    const k = t.toLocaleLowerCase('tr-TR');
+    if (!t || gorulen.has(k)) continue;
+    gorulen.add(k);
+    out.push(t);
+  }
+  return out;
+}
+
+/**
+ * GOOGLE GÖRSEL KURGULARINDA BAŞLIKLAR FİKİRLERDEN TOPLANIR (Dalga 2).
+ * Google tek bir reklama (Talep Yaratma) ya da tek öğe grubuna (Maks.
+ * Performans) bütün görselleri ve bütün metinleri veriyor; görsele özel
+ * metin orada bir HAVUZA girer. Ortak metin ÖNCE: yasal uyarılı açıklama
+ * ortakta duruyor ve havuz kesilirken o düşmemeli. Sınırı aşan satır
+ * ATILIR (kırpılmaz; yarıda kesilmiş başlık anlamı değiştirir), sayı
+ * sınırı `METIN_SINIRLARI`ndan. Eksik listesi uzun satırı zaten engel
+ * sayıyor; burada atılması yalnız savunma.
+ */
+export function googleMetinHavuzu(
+  ortak: { basliklar: string[]; aciklamalar: string[] },
+  fikirler: ReadonlyArray<MedyaMetni | null>,
+): { basliklar: string[]; aciklamalar: string[] } {
+  const basliklar = tekilDolu([...ortak.basliklar, ...fikirler.flatMap((f) => f?.basliklar ?? [])])
+    .filter((x) => karakterSayisi(x) <= METIN_SINIRLARI.baslik)
+    .slice(0, METIN_SINIRLARI.basliklarEnCok);
+  const aciklamalar = tekilDolu([...ortak.aciklamalar, ...fikirler.flatMap((f) => f?.aciklamalar ?? [])])
+    .filter((x) => karakterSayisi(x) <= METIN_SINIRLARI.aciklama)
+    .slice(0, METIN_SINIRLARI.aciklamalarEnCok);
+  return { basliklar, aciklamalar };
+}
 
 export type TuretmeSonucu<T> = { tur: 'tamam'; deger: T } | { tur: 'ret'; kodlar: string[] };
 
@@ -104,21 +166,33 @@ export function rehberdenMeta(
       return {
         varlikId: varsayilan.varlikId,
         ...(set.length > 1 ? { setGorselleri: set.map((x) => ({ varlikId: x.varlikId, oran: x.oran })) } : {}),
+        kendiMetni: fikirMetni(set),
       };
     }),
-    ...videolar.map((x) => ({ varlikId: x.varlikId, kapakVarlikId: x.kapakVarlikId })),
+    ...videolar.map((x) => ({ varlikId: x.varlikId, kapakVarlikId: x.kapakVarlikId, kendiMetni: x.metin ?? null })),
   ];
   // SESSİZ KESME YOK: altıncı fikri atmak yerine ret; ekran sayıyı söylüyor.
   if (fikirler.length > META_EN_COK_GORSEL) return { tur: 'ret', kodlar: ['GORSEL-SET-SAYI'] };
   // Başlık fikirler arasında sırayla dağıtılır. Aynı başlığı her fikre yazmak
   // Meta'nın kreatif çeşitliliğini boşa harcar, metin ise TEK (marka sesi ve
   // yasal uyarı her fikirde aynı kalmalı).
-  const kavramlar = fikirler.map((f, i) => ({
-    ...f,
-    baslik: basliklar.length ? (basliklar[i % basliklar.length] as string) : '',
-    metin: m.anaMetin,
-    ...(aciklama ? { aciklama } : {}),
-  }));
+  //
+  // GÖRSELE ÖZEL METİN (Dalga 2): fikrin kendi metni varsa ONUN başlığı,
+  // ana metni ve açıklaması; boş bıraktığı parça ortaktan gelir. Kendi
+  // metni olmayan fikirlerde davranış ve içerik özeti ESKİSİYLE AYNI
+  // (kayıtlı provalar sebepsiz bayatlamasın).
+  const kavramlar = fikirler.map(({ kendiMetni: k, ...f }, i) => {
+    const kendiBaslik = (k?.basliklar ?? []).map((x) => x.trim()).find(Boolean);
+    const kendiAna = k?.anaMetin?.trim() ? k.anaMetin : null;
+    const kendiAciklama = (k?.aciklamalar ?? []).map((x) => x.trim()).find(Boolean);
+    const ac = kendiAciklama ?? aciklama;
+    return {
+      ...f,
+      baslik: kendiBaslik ?? (basliklar.length ? (basliklar[i % basliklar.length] as string) : ''),
+      metin: kendiAna ?? m.anaMetin,
+      ...(ac ? { aciklama: ac } : {}),
+    };
+  });
 
   const t: TaslakAlanlari = {
     niyet: { ...a.amac!, deger: REHBER_AMACLARI[amac].meta.niyet },
@@ -230,6 +304,16 @@ export interface GoogleDerlemeGirdisi {
   logoVarlikId: string | null;
   /** Kısıtlı kategori; Google'da kendi kural paketiyle derlenir. */
   kategoriler: OzelKategori[];
+  /** Arama reklamının görünen yolu (`path1`, `path2`); yalnız doluysa yazılır. */
+  gorunenYol?: string[];
+}
+
+/**
+ * Görünen yol parçaları: boşlar atılır, en çok iki. `path2` tek başına
+ * olamaz (Google `path1` istiyor): ilk dolu parça `path1` olur.
+ */
+export function gorunenYolu(xs: readonly string[] | undefined): string[] {
+  return (xs ?? []).map((x) => x.trim()).filter(Boolean).slice(0, 2);
 }
 
 export interface GoogleTuretmeBaglami {
@@ -274,6 +358,11 @@ export function rehberdenGoogle(a: RehberAlanlari, acik: { meta: boolean; google
   // reklamda olmaması). Görselin Google'a gidip gidemeyeceği (±%1, en az
   // boyut) derleyicide, ölçüyle.
   let gorsel: Pick<GoogleDerlemeGirdisi, 'gorseller' | 'uzunBasliklar'> = {};
+  // GÖRSEL KURGULARINDA METİN HAVUZU (Dalga 2): görsele özel metinler
+  // ortak metne eklenir. Hiçbir görselin kendi metni yoksa havuz ortak
+  // metnin AYNISI ve içerik özeti değişmez.
+  const fikirMetinleri = googleGorselKurgusuMu(tanim.kurgu) ? (a.medya?.deger ?? []).map((x) => x.metin ?? null) : [];
+  const havuz = fikirMetinleri.some(Boolean) ? googleMetinHavuzu(m, fikirMetinleri) : { basliklar: m.basliklar, aciklamalar: m.aciklamalar };
   if (googleGorselKurgusuMu(tanim.kurgu)) {
     const gorseller: Array<{ varlikId: string; oran: GorselOrani }> = [];
     for (const x of (a.medya?.deger ?? []).filter((x) => !x.kapakVarlikId)) {
@@ -283,7 +372,7 @@ export function rehberdenGoogle(a: RehberAlanlari, acik: { meta: boolean; google
     }
     gorsel = { gorseller };
     if (tanim.kurgu === 'MAKS_PERFORMANS') {
-      const p = pmaxUzunBaslik(m.anaMetin, m.aciklamalar);
+      const p = pmaxUzunBaslik(m.anaMetin, havuz.aciklamalar);
       if (!p) return { tur: 'ret', kodlar: ['G-UZUN-BASLIK'] };
       gorsel.uzunBasliklar = p.uzunBasliklar;
     }
@@ -307,10 +396,10 @@ export function rehberdenGoogle(a: RehberAlanlari, acik: { meta: boolean; google
       takvim,
       hedefAdres: adres,
       telefon: a.telefon?.deger ?? null,
-      basliklar: m.basliklar.map((s) => s.trim()).filter(Boolean).slice(0, METIN_SINIRLARI.basliklarEnCok),
+      basliklar: havuz.basliklar.map((s) => s.trim()).filter(Boolean).slice(0, METIN_SINIRLARI.basliklarEnCok),
       // Maks. Performans'ta uzun başlık olan açıklama açıklamalardan çıkar
       // (aynı metin iki alana ayrı Asset olarak bağlanmasın; `pmaxUzunBaslik`).
-      aciklamalar: m.aciklamalar
+      aciklamalar: havuz.aciklamalar
         .map((s) => s.trim())
         .filter(Boolean)
         .filter((s) => !gorsel.uzunBasliklar?.includes(s))
@@ -323,6 +412,9 @@ export function rehberdenGoogle(a: RehberAlanlari, acik: { meta: boolean; google
       logoVarlikId: b.logoVarlikId,
       kategoriler: [...new Set([...b.kategoriTabani, ...ek])],
       ...gorsel,
+      // GÖRÜNEN YOL yalnız Arama'da ve DOLUYSA: boş anahtar göndermemek
+      // eski rehberlerin içerik özetini korur, Google'a boş yol gitmez.
+      ...(tanim.kurgu === 'ARAMA' && gorunenYolu(m.gorunenYol).length ? { gorunenYol: gorunenYolu(m.gorunenYol) } : {}),
     },
   };
 }

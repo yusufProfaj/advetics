@@ -230,6 +230,10 @@ export const CASCADE_ILE_TASINANLAR = [
   // hesaplar workspace'le gidiyor; geride kalsa yeni şirkette geçmiş haftalar
   // YENİDEN üretilir ve gönderilenden farklı sayı gösterirdi (Ç-B11).
   'haftalik_ozetler',
+  // ADVCAMPAIGN DALGA 2 görsel metni önbelleği TAŞINIYOR: içerik özeti
+  // workspace'in kendi görselinin ve rehberler workspace'le gidiyor; geride
+  // kalsa yeni şirkette aynı görsel için Gemini'ye yeniden para ödenirdi.
+  'rehber_gorsel_metni',
 ] as const;
 
 export interface WorkspaceTasimaSonucu {

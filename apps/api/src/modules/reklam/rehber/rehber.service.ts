@@ -12,6 +12,7 @@ import {
 import { Prisma } from '@prisma/client';
 import {
   GOOGLE_TURKCE,
+  GORU_AYARI,
   OZEL_KATEGORILER,
   PROVA_TAZELIK_MS,
   REHBER_AMACLARI,
@@ -35,6 +36,7 @@ import {
   type GoogleDerlemeGirdisi,
   type GorselOlcusu,
   type GorselOrani,
+  type MetinOnerIstegi,
   type MetinOnerisi,
   type OzelKategori,
   type PlatformProvaSonucu,
@@ -66,7 +68,8 @@ import { CryptoService } from '../../../crypto/crypto.service';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { QuotaGuardService } from '../../../queue/quota-guard.service';
 import { YAPAY_ZEKA } from '../../../yapay-zeka/yapay-zeka.module';
-import { metinIste, YapayZekaHatasi, type GeminiIstemcisi } from '../../../yapay-zeka/gemini';
+import { metinIsteOlcumlu, YapayZekaHatasi, type GeminiIstemcisi } from '../../../yapay-zeka/gemini';
+import { AssetStorageService } from '../../ad-builder/asset-storage.service';
 import { PlatformApiError, type FetchContext } from '../../connections/provider.types';
 import { ProviderRegistry } from '../../connections/provider.registry';
 import type { GoogleProvider } from '../../connections/providers/google.provider';
@@ -89,6 +92,7 @@ import { degisiklikleriUygula, rehberOzeti } from './rehber-kayit';
 import {
   GOOGLE_TURKIYE,
   METIN_ONERI_SEMASI,
+  METIN_ONERI_SICAKLIGI,
   kelimeOnerisiHazirla,
   kelimeTohumlari,
   konumEsle,
@@ -227,6 +231,15 @@ export function platformaGiderken(eksikler: RehberEksigi[]): RehberEksigi[] {
   );
 }
 
+/**
+ * Ortak metin önerisinde modele giden en çok görsel. Her görsel girdi
+ * token'ı demek; üç fikir bir markanın tonunu yakalamaya yetiyor.
+ */
+export const METIN_ONERI_GORSEL_SINIRI = 3;
+
+/** Gemini'nin `inlineData` olarak kabul ettiği görsel biçimleri (varlık arşivinin biçimleri). */
+const METIN_GORSEL_BICIMLERI = ['image/jpeg', 'image/png', 'image/webp'];
+
 /** Yayına alınmış rehberde hiç yayın kaydı açılmamış platformun sözü. */
 export const BASLAMAYAN_PLATFORM_SEBEBI = 'Bu platformda kurulum başlamadı; Yeni reklam ile yeniden deneyebilirsin.';
 
@@ -251,6 +264,7 @@ export class RehberService {
     @Inject(CONFIG) private readonly config: AppConfig,
     @Inject(YAPAY_ZEKA) private readonly yz: GeminiIstemcisi | null,
     private readonly youtube: YouTubeApiService,
+    private readonly depo: AssetStorageService,
   ) {
     this.metaSurumu = metaSurumuDogrula(config.platforms.meta.apiVersion);
   }
@@ -699,10 +713,69 @@ export class RehberService {
     return kelimeOnerisiHazirla(ham, (a.anahtarKelimeler?.deger ?? []).map((k) => k.metin));
   }
 
-  async metinOner(ctx: TenantContext, id: string): Promise<MetinOnerisi> {
+  /**
+   * METİN ÖNERİSİ (Dalga 2 — görsele özel metin).
+   *
+   * Teşhis (2026-10-12): model görseli HİÇ görmüyordu, site ADRESİNİ
+   * okuyordu, "Kullan"dan sonra kullanıcının metni bir sonraki isteme
+   * "Kullanıcının yazdığı metin" olarak girip modeli o metne çapalıyordu ve
+   * sıcaklık gönderilmediği için "Yeniden yaz" aynı metni veriyordu.
+   *
+   * - Görsel(ler) metinden ÖNCE gider (orta çözünürlük, açıkça). 4 MB üstü,
+   *   desteklenmeyen biçim ya da okunamayan görsel ATLANIR ve sebebi
+   *   `notlar`da; sessizce görselsiz yazmak "görsele göre yazdı" sanılırdı.
+   * - Varlık `client_id` süzgeciyle okunur (`AssetsService.bytes` `ctx.orgId`
+   *   süzüyor ve "tüm şirketler" modunda kardeş şirketin görselinde sessiz
+   *   NotFound veriyordu).
+   * - Kullanıcının metni isteme YALNIZ `buna_gore` ile girer.
+   * - Görsele özel sonuç içerik özeti + amaçla saklanır; `yeni` modda önbellek
+   *   varsa yapay zekâya gidilmez (görsel başına tek çağrı).
+   *
+   * REHBERE YAZMAZ: öneri bir karar değil (panel kaydeder, kaynağıyla).
+   */
+  async metinOner(ctx: TenantContext, id: string, istek: MetinOnerIstegi = {}): Promise<MetinOnerisi> {
     if (!this.yz) throw new ServiceUnavailableException('Yapay zekâ bağlı değil; metni kendin yaz.');
+    const yz = this.yz;
+    const mod = istek.mod ?? 'yeni';
     const s = await this.satir(ctx, id);
     const a = alanlariOku(s);
+    const medya = a.medya?.deger ?? [];
+    const amacKodu = a.amac?.deger ?? null;
+    const onbellekAmaci = amacKodu ?? 'YOK';
+
+    // ── Hangi görsel(ler) ─────────────────────────────────────────────────
+    let hedef: (typeof medya)[number] | null = null;
+    if (istek.varlikId) {
+      hedef = medya.find((x) => x.varlikId === istek.varlikId || x.kapakVarlikId === istek.varlikId) ?? null;
+      if (!hedef) throw new BadRequestException('Bu görsel reklamda yok; önce reklama ekle.');
+    }
+    const notlar: string[] = [];
+    // Video için KAPAK gider (sunucuda video işlenmez). Üretilen boyutlar aynı
+    // tasarımın kırpılmış hâli: ortak öneride onları göndermek aynı görsele
+    // birkaç kez para ödemek olurdu.
+    const adaylar = hedef
+      ? [hedef.kapakVarlikId ?? hedef.varlikId]
+      : [...new Set(medya.filter((x) => !x.uretildi).map((x) => x.kapakVarlikId ?? x.varlikId))];
+    const secilen = adaylar.slice(0, METIN_ONERI_GORSEL_SINIRI);
+    if (adaylar.length > secilen.length) {
+      notlar.push(`İlk ${secilen.length} görsel yapay zekâya gönderildi; ${adaylar.length - secilen.length} görsel gönderilmedi.`);
+    }
+    const gorselOku = await this.metinGorselleri(ctx, s.client_id, secilen);
+    notlar.push(...gorselOku.notlar);
+    const hedefOzeti = hedef && gorselOku.gorseller.length === 1 ? gorselOku.gorseller[0]!.ozet : null;
+
+    // ── Önbellek (yalnız görsele özel) ────────────────────────────────────
+    let onceki: MetinOnerisi | null = null;
+    if (hedefOzeti) {
+      const [o] = await this.tx(ctx)((t) =>
+        t.$queryRaw<Array<{ sonuc: MetinOnerisi }>>(Prisma.sql`
+          SELECT sonuc FROM rehber_gorsel_metni
+           WHERE client_id = ${s.client_id}::uuid AND icerik_ozeti = ${hedefOzeti} AND amac = ${onbellekAmaci}`),
+      );
+      onceki = o?.sonuc ?? null;
+      if (onceki && mod === 'yeni') return { ...onceki, onbellekten: true, gorselSayisi: 1 };
+    }
+
     const [p] = await this.tx(ctx)((t) =>
       t.$queryRaw<Array<{ marka: string | null; sektor: string | null; bilgi: string | null; vaatler: string[] | null; uslup: string | null; kategoriler: string[] | null; yasal: string | null; ad: string }>>(Prisma.sql`
         SELECT p.marka_adi AS marka, p.sektor, p.marka_bilgileri AS bilgi, p.vaatler, p.uslup,
@@ -710,8 +783,11 @@ export class RehberService {
           FROM clients c LEFT JOIN client_profiles p ON p.client_id = c.id
          WHERE c.id = ${s.client_id}::uuid`),
     );
-    const amac = a.amac?.deger ? REHBER_AMACLARI[a.amac.deger].ekranAdi : 'belirtilmedi';
-    const mevcut = a.metin?.deger;
+    const amac = amacKodu ? REHBER_AMACLARI[amacKodu].ekranAdi : 'belirtilmedi';
+    const kelimeler = (a.anahtarKelimeler?.deger ?? []).map((k) => k.metin);
+    // ÇAPA YALNIZ "buna göre yeniden yaz"da: görsele özel istekte o görselin
+    // metni, ortak istekte ortak metin.
+    const mevcut = mod === 'buna_gore' ? (hedef ? hedef.metin : a.metin?.deger) : undefined;
     const satirlar = [
       `Amaç: ${amac}`,
       `İşletme: ${p?.marka ?? p?.ad ?? ''}`,
@@ -720,27 +796,123 @@ export class RehberService {
       p?.bilgi ? `Marka bilgisi: ${p.bilgi}` : null,
       p?.vaatler?.length ? `Vaatler: ${p.vaatler.join('; ')}` : null,
       p?.uslup ? `Üslup: ${p.uslup}` : null,
-      a.hedefAdres?.deger ? `Site: ${a.hedefAdres.deger}` : null,
+      // SİTE METNİ ELİMİZDE YOK: Ölçüm taraması piksel arıyor, metni
+      // saklamıyor. Canlı okumak her öneriyi siteye bağımlı ve yavaş yapardı;
+      // site bilgisi Marka Merkezi'ne hazırlıkta zaten süzülüyor.
+      a.hedefAdres?.deger ? `Site adresi: ${a.hedefAdres.deger} (sitenin metni okunmadı)` : null,
+      kelimeler.length ? `Anahtar kelimeler: ${kelimeler.join(', ')}` : null,
       p?.yasal ? `Zorunlu yasal uyarı: ${p.yasal}` : null,
       mevcut?.anaMetin ? `Kullanıcının yazdığı metin: ${mevcut.anaMetin}` : null,
-      mevcut?.basliklar.length ? `Kullanıcının başlıkları: ${mevcut.basliklar.join(' | ')}` : null,
+      mevcut?.basliklar?.length ? `Kullanıcının başlıkları: ${mevcut.basliklar.join(' | ')}` : null,
     ].filter((x): x is string => !!x);
     const girdi = satirlar.join('\n');
+    // "Tekrar etme" listesi isteme girer ama UYDURMA TARAMASININ kaynağına
+    // girmez: önceki öneri bir bilgi kaynağı değil.
+    const tekrar = [...(istek.tekrarEtme ?? []), ...(onceki ? [onceki.anaMetin, ...onceki.basliklar] : [])]
+      .map((x) => x.trim())
+      .filter(Boolean)
+      .slice(0, 30);
+    const istem = tekrar.length ? `${girdi}\n\nTekrar etme (önceki öneri):\n${tekrar.map((x) => `- ${x}`).join('\n')}` : girdi;
     let r;
     try {
-      r = await metinIste(this.yz, { sistem: metinOneriIstemi(), metin: girdi, enCokCikti: 2_000, jsonSemasi: METIN_ONERI_SEMASI as unknown as Record<string, unknown> });
+      r = await metinIsteOlcumlu(yz, {
+        sistem: metinOneriIstemi(gorselOku.gorseller.length > 0),
+        metin: istem,
+        enCokCikti: 2_500,
+        jsonSemasi: METIN_ONERI_SEMASI as unknown as Record<string, unknown>,
+        sicaklik: METIN_ONERI_SICAKLIGI,
+        ...(gorselOku.gorseller.length > 0 && {
+          gorseller: gorselOku.gorseller.map((g) => ({ mimeType: g.mimeType, data: g.data })),
+          mediaResolution: GORU_AYARI.mediaResolution,
+        }),
+      });
     } catch (e) {
       if (e instanceof YapayZekaHatasi) throw new ServiceUnavailableException(`Yapay zekâ cevap vermedi: ${e.message}`);
       throw e;
     }
-    if (r.tur !== 'tamam') throw new ServiceUnavailableException(r.mesaj);
+    // Maliyet ölçümü (ölçüm listesi): görsel başına tek çağrının bedeli.
+    logger.log(`metin-oner rehber=${id} gorsel=${gorselOku.gorseller.length} girdi=${r.girdiToken} cikti=${r.ciktiToken} sure=${r.sureMs}ms`);
+    if (r.sonuc.tur !== 'tamam') throw new ServiceUnavailableException(r.sonuc.mesaj);
     let ham: unknown;
     try {
-      ham = JSON.parse(r.metin);
+      ham = JSON.parse(r.sonuc.metin);
     } catch {
       throw new ServiceUnavailableException('Yapay zekânın cevabı okunamadı; yeniden dene.');
     }
-    return metinOnerisiTemizle(ham as object, { kaynakMetin: girdi, yasalUyari: p?.yasal ?? null });
+    const temiz = metinOnerisiTemizle(ham as object, {
+      kaynakMetin: girdi,
+      yasalUyari: p?.yasal ?? null,
+      yolKaynagi: [a.hedefAdres?.deger ?? '', ...kelimeler].join(' '),
+    });
+    const sonuc: MetinOnerisi = { ...temiz, notlar: [...notlar, ...temiz.notlar], gorselSayisi: gorselOku.gorseller.length };
+    if (hedefOzeti) {
+      try {
+        await this.tx(ctx)((t) =>
+          t.$queryRaw(Prisma.sql`
+            INSERT INTO rehber_gorsel_metni (org_id, client_id, icerik_ozeti, amac, sonuc, model, girdi_token, cikti_token)
+            VALUES (${s.org_id}::uuid, ${s.client_id}::uuid, ${hedefOzeti}, ${onbellekAmaci}, ${JSON.stringify(sonuc)}::jsonb,
+                    ${yz.model.slice(0, 60)}, ${r.girdiToken}::int, ${r.ciktiToken}::int)
+            ON CONFLICT (client_id, icerik_ozeti, amac) DO UPDATE
+              SET sonuc = EXCLUDED.sonuc, model = EXCLUDED.model, girdi_token = EXCLUDED.girdi_token,
+                  cikti_token = EXCLUDED.cikti_token, updated_at = now()
+            RETURNING client_id`),
+        );
+      } catch (e) {
+        // Öneri yine döner (bedeli ödendi); saklanamadığı SÖYLENİR.
+        logger.warn(`görsel metni saklanamadı: ${e instanceof Error ? e.message : String(e)}`);
+        sonuc.notlar.push('Bu metin saklanamadı; görsel yeniden bırakılırsa yeniden yazılır.');
+      }
+    }
+    return sonuc;
+  }
+
+  /**
+   * Metin önerisine gidecek görseller — `client_id` süzgeciyle, sırayla.
+   * Atlanan her görselin sebebi `notlar`a girer (boyut, biçim, okuma).
+   */
+  private async metinGorselleri(
+    ctx: TenantContext,
+    clientId: string,
+    idler: string[],
+  ): Promise<{ gorseller: Array<{ id: string; mimeType: string; data: string; ozet: string }>; notlar: string[] }> {
+    const notlar: string[] = [];
+    const gorseller: Array<{ id: string; mimeType: string; data: string; ozet: string }> = [];
+    if (idler.length === 0) return { gorseller, notlar };
+    const satirlar = await this.tx(ctx)((t) =>
+      t.$queryRaw<Array<{ id: string; name: string; mime_type: string; byte_size: number; storage_key: string; content_hash: string }>>(Prisma.sql`
+        SELECT id::text, name, mime_type, byte_size, storage_key, content_hash
+          FROM assets WHERE client_id = ${clientId}::uuid AND id = ANY(${idler}::uuid[])`),
+    );
+    const mb = Math.round(GORU_AYARI.maxBayt / (1024 * 1024));
+    for (const id of idler) {
+      const v = satirlar.find((x) => x.id === id);
+      if (!v) {
+        notlar.push('Bir görsel bu workspace’in varlıklarında bulunamadı; o görsel olmadan yazıldı.');
+        continue;
+      }
+      if (v.byte_size > GORU_AYARI.maxBayt) {
+        notlar.push(`"${v.name}" ${mb} MB’tan büyük olduğu için yapay zekâya gönderilmedi.`);
+        continue;
+      }
+      if (!METIN_GORSEL_BICIMLERI.includes(v.mime_type)) {
+        notlar.push(`"${v.name}" biçimi (${v.mime_type}) yapay zekâya gönderilemiyor.`);
+        continue;
+      }
+      let bayt: Buffer;
+      try {
+        bayt = await this.depo.read(v.storage_key);
+      } catch (e) {
+        notlar.push(`"${v.name}" okunamadı (${e instanceof Error ? e.message : 'bilinmeyen hata'}); o görsel olmadan yazıldı.`);
+        continue;
+      }
+      // Kayıttaki boyut yalan söyleyebilir (eski satır): sınır baytta da uygulanır.
+      if (bayt.length > GORU_AYARI.maxBayt) {
+        notlar.push(`"${v.name}" ${mb} MB’tan büyük olduğu için yapay zekâya gönderilmedi.`);
+        continue;
+      }
+      gorseller.push({ id, mimeType: v.mime_type, data: bayt.toString('base64'), ozet: v.content_hash.trim() });
+    }
+    return { gorseller, notlar };
   }
 
   // ===========================================================================
@@ -955,6 +1127,8 @@ export class RehberService {
             kategoriler: [...new Set([...b.kategoriTabani, ...(a.ekKategoriler?.deger ?? [])])],
             yasalUyari: b.yasalUyari,
             metaAnaMetin: a.metin?.deger.anaMetin ?? '',
+            // Görsele özel ana metin o fikirde ortak metnin YERİNE gidiyor.
+            metaEkAnaMetinler: (a.medya?.deger ?? []).map((x) => x.metin?.anaMetin ?? '').filter((x) => x.trim()),
             googleAciklamalar: a.metin?.deger.aciklamalar ?? [],
             enDusukYas: a.enDusukYas?.deger ?? 18,
             yasAraligi: a.yasAraligi?.deger ?? null,
@@ -986,6 +1160,7 @@ export class RehberService {
     if (baslayan > 0) {
       await tx((t) => t.$queryRaw(Prisma.sql`UPDATE reklam_rehberi SET durum = 'yayinda', updated_at = now() WHERE id = ${id}::uuid AND durum = 'taslak' RETURNING id`));
     }
+    await this.sebepleriYaz(ctx, s, acik, baslamayan);
     const d = await this.yayinDurumu(ctx, id);
     // Başlamayan platformun bu denemede yayın kaydı yok: satırı SEBEBİYLE
     // değiştirilir (eski bir yayın kaydını göstermek "başladı" sanılırdı).
@@ -994,8 +1169,50 @@ export class RehberService {
     return { ...d, platformlar: [...d.platformlar.map(yerine), ...eksikler2] };
   }
 
+  /**
+   * BAŞLAMAYAN PLATFORMUN SEBEBİ KALICI (sessiz hata, 2026-10-12). Sebep
+   * yalnız yayınlama yanıtında dönüyordu: sayfa yenilenince genel cümle
+   * ("kurulum başlamadı") görünüyor, gerçek sebep ("Meta taslağı rehberden
+   * sonra değişmiş", derleyicinin reddi) kayboluyordu. Bu denemede açık olan
+   * her platform yazılır: başlayanın eski sebebi SİLİNİR (yeni yayın
+   * kaydının yanında eski bir hata görünmesin). Denetim kaydı da yazılır:
+   * kim, ne zaman, hangi sebeple yayın başlatamadı.
+   *
+   * `org_id` REHBERDEN okunur, `ctx.orgId`den değil: "tüm şirketler"
+   * modunda ctx ev şirketi kalıyor (CLAUDE.md).
+   */
+  private async sebepleriYaz(ctx: TenantContext, s: RehberSatiri, acik: Record<RehberPlatformu, boolean>, baslamayan: PlatformYayinOzeti[]): Promise<void> {
+    const zaman = new Date().toISOString();
+    const yaz: Record<string, { sebep: string; zaman: string }> = {};
+    const sil: string[] = [];
+    for (const p of ['meta', 'google'] as const) {
+      if (!acik[p]) continue;
+      const b = baslamayan.find((x) => x.platform === p);
+      if (b?.sebep) yaz[p] = { sebep: b.sebep.slice(0, 2000), zaman };
+      else sil.push(p);
+    }
+    await this.tx(ctx)(async (t) => {
+      await t.$queryRaw(Prisma.sql`
+        UPDATE reklam_rehberi SET platform_sebepleri = (platform_sebepleri - ${sil}::text[]) || ${JSON.stringify(yaz)}::jsonb
+         WHERE id = ${s.id}::uuid RETURNING id`);
+      if (Object.keys(yaz).length) {
+        // audit_logs.id BIGSERIAL: id verilmiyor.
+        await t.$queryRaw(Prisma.sql`
+          INSERT INTO audit_logs (org_id, client_id, actor_type, actor_id, action, target_type, target_id, after)
+          VALUES (${s.org_id}::uuid, ${s.client_id}::uuid, 'user'::"ActorType", ${ctx.userId}::uuid,
+                  'reklam.rehber.baslamadi', 'reklam_rehberi', ${s.id}, ${JSON.stringify(yaz)}::jsonb)
+          RETURNING id`);
+      }
+    });
+  }
+
   async yayinDurumu(ctx: TenantContext, id: string): Promise<RehberYayinDurumu> {
     const s = await this.satir(ctx, id);
+    const [ps] = await this.tx(ctx)((t) =>
+      t.$queryRaw<Array<{ platform_sebepleri: Partial<Record<RehberPlatformu, { sebep: string; zaman: string }>> | null }>>(Prisma.sql`
+        SELECT platform_sebepleri FROM reklam_rehberi WHERE id = ${id}::uuid`),
+    );
+    const kayitliSebep = (p: RehberPlatformu) => ps?.platform_sebepleri?.[p]?.sebep ?? null;
     const platformlar: PlatformYayinOzeti[] = [];
     let uyum: RehberYayinDurumu['uyum'] = null;
     for (const [platform, taslakId] of [
@@ -1021,7 +1238,11 @@ export class RehberService {
         // null'dı ve panel onu "Kuruluyor" diye sonsuza kadar gösterdi
         // (canlı, rehber 37df523b, 2026-10-10). Kayıt yokken sebep yazılır;
         // panel sebepli null'u hata sayar (`yayinSonucu`).
-        sebep: y ? y.sebep : s.durum !== 'taslak' ? BASLAMAYAN_PLATFORM_SEBEBI : null,
+        // Kayıt yokken önce KAYITLI GERÇEK sebep (`sebepleriYaz`); o da yoksa
+        // genel cümle. Taslakta kalan rehberde de gerçek sebep görünür: iki
+        // platform da başlamadıysa rehber taslak kalıyor ve eskiden hiçbir
+        // sebep okunmuyordu.
+        sebep: y ? y.sebep : (kayitliSebep(platform) ?? (s.durum !== 'taslak' ? BASLAMAYAN_PLATFORM_SEBEBI : null)),
         // Google'da kaynak adı saklanıyor; Reklam Yöneticisi yalın kimlik arıyor.
         kampanyaKimligi: y?.kampanya ? (platform === 'google' ? googleYalinKimlik(y.kampanya) : y.kampanya) : null,
         duraklatilmisKalacak: y?.kapali_kalacak ?? false,

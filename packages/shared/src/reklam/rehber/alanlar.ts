@@ -50,6 +50,27 @@ export const rehberKonumuSchema = hedefKonumSchema.extend({
 });
 export type RehberKonumu = z.infer<typeof rehberKonumuSchema>;
 
+/**
+ * GÖRSELE ÖZEL METİN (Dalga 2, yönetici kararı 2026-10-12). Bir fikir (set ya
+ * da video) kendi başlığını ve ana metnini taşıyabilir; taşımıyorsa ortak
+ * metin kullanılır (`turet.ts`). Sözleşmedeki EN DAR değişiklik: medya
+ * öğesine isteğe bağlı alan. Ayrı bir rehber alanı açmak, medya silinince
+ * metnin sahipsiz kalması ve iki listenin ayrışması demekti.
+ *
+ * `kaynak` ZORUNLU: kart "yapay zekâ yazdı" ile "sen yazdın"ı ayırt edebilsin.
+ * `derleyici` = görsel bırakıldığında yapay zekânın yazdığı (izinli kaynak,
+ * kullanıcı düzeltebilir); kullanıcı dokununca `kullanici`.
+ *
+ * Şema gevşek (ortak metinle aynı neden): sınır `rehberEksikleri`nde.
+ */
+export const medyaMetniSchema = z.object({
+  anaMetin: z.string().max(5000).optional(),
+  basliklar: z.array(z.string().max(200)).max(15).optional(),
+  aciklamalar: z.array(z.string().max(300)).max(4).optional(),
+  kaynak: z.enum(['derleyici', 'kullanici']),
+});
+export type MedyaMetni = z.infer<typeof medyaMetniSchema>;
+
 export const rehberMedyasiSchema = z.object({
   /** Görsel arşivindeki varlık (Marka Merkezi › Varlıklar ya da bu rehberde yüklenen). */
   varlikId: z.string().uuid(),
@@ -70,6 +91,7 @@ export const rehberMedyasiSchema = z.object({
    */
   uretildi: z.literal(true).optional(),
   kaynakVarlikId: z.string().uuid().optional(),
+  metin: medyaMetniSchema.optional(),
 });
 
 export const anahtarKelimeSchema = z.object({
@@ -119,6 +141,12 @@ export const rehberAlanlariSchema = z
         anaMetin: z.string().max(5000),
         basliklar: z.array(z.string().max(200)).max(15),
         aciklamalar: z.array(z.string().max(300)).max(4),
+        /**
+         * Google Arama GÖRÜNEN YOLU (`path1`/`path2`, parça başına en çok 15
+         * karakter). İsteğe bağlı ve varsayılansız: boşsa Google'a HİÇ
+         * gönderilmez ve kayıtlı rehberlerin özeti değişmez.
+         */
+        gorunenYol: z.array(z.string().max(40)).max(2).optional(),
       }),
     ),
     anahtarKelimeler: alan(z.array(anahtarKelimeSchema).max(50)),
@@ -166,7 +194,11 @@ export const REHBER_IZINLI_KAYNAKLAR: Partial<Record<RehberAlanAdi, readonly Ala
   whatsappNumarasi: ['kullanici', 'marka_merkezi'],
   // Hesapta TEK piksel varsa panel onu önerir (`derleyici`, "Önerilen").
   pikselId: ['kullanici', 'derleyici', 'workspace_profili'],
-  metin: ['kullanici', 'marka_merkezi'],
+  // `derleyici`: görsel bırakıldığında yapay zekânın yazdığı metin ortak
+  // metin boşken oraya da yazılıyor (Dalga 2). "Metin öner" düğmesinin
+  // sonucu hâlâ `ai_onerisi` ve onay istiyor: kullanıcı onu İSTEDİ ama
+  // okumadan "Kullan"a basmadı.
+  metin: ['kullanici', 'marka_merkezi', 'derleyici'],
   anahtarKelimeler: ['kullanici'],
   butce: ['kullanici', 'workspace_profili'],
   metaPayiYuzde: ['kullanici', 'derleyici'],

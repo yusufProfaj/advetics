@@ -2140,6 +2140,28 @@
   flex: none;
   margin-top: 1px;
 }
+/* GÖRSELE ÖZEL METİN (Dalga 2): set kartının altında ve tek görsel
+   satırında aynı kutu. Kalıbın çizgisi ve yazı ölçüsü; yeni renk yok. */
+.fikirMetni {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--t-line);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.fikirMetniUst {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.fikirDugmeler {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
 .ortakUyari {
   display: flex;
   gap: 10px;

@@ -14,7 +14,7 @@
  *   PUT  /reklam/rehberler/:id                    → RehberKaydi         bulk.write (409 = sürüm eski)
  *   POST /reklam/rehberler/:id/konum-esle         → RehberKaydi         bulk.write (Google karşılığı)
  *   POST /reklam/rehberler/:id/anahtar-kelime-oner → AnahtarKelimeOnerisi bulk.write
- *   POST /reklam/rehberler/:id/metin-oner         → MetinOnerisi        bulk.write (KAYDA YAZMAZ, sürüm artmaz)
+ *   POST /reklam/rehberler/:id/metin-oner {MetinOnerIstegi} → MetinOnerisi bulk.write (REHBERE YAZMAZ, sürüm artmaz; görsele özel sonuç önbelleğe)
  *   POST /reklam/rehberler/:id/prova              → RehberProvaSonucu   bulk.write
  *   GET  /reklam/rehberler/:id/prova              → RehberProvaSonucu | null bulk.read (son prova; sayfa yenilenince kaybolmasın)
  *   POST /reklam/rehberler/:id/yayinla {ozet}     → RehberYayinDurumu   bulk.publish
@@ -90,9 +90,39 @@ export interface MetinOnerisi {
   anaMetin: string;
   basliklar: string[];
   aciklamalar: string[];
-  /** Model ne bilmiyordu (örn. "fiyat verilmedi, fiyat yazmadım"). */
+  /** Google Arama görünen yolu (en çok 2 parça, 15 karakter); doğrulanamayan parça atılır, boşsa gönderilmez. */
+  gorunenYol: string[];
+  /** Model ne bilmiyordu (örn. "fiyat verilmedi, fiyat yazmadım"), atılan görsel ve satırlar. */
   notlar: string[];
+  /** Görsele özel istek: sonuç bu görsel + amaç için daha önce yazılmıştı, yapay zekâya gidilmedi. */
+  onbellekten: boolean;
+  /** Modele giden görsel sayısı (atlananlar notlarda). */
+  gorselSayisi: number;
 }
+
+/**
+ * Metin önerisi isteği (Dalga 2).
+ *
+ * `varlikId` verilirse öneri O GÖRSEL için (rehber medyasındaki varlık;
+ * video için kapağı gider) ve sonuç görselin içerik özeti + amaçla saklanır.
+ * Verilmezse ortak metin: rehberin ilk üç görseli gider, önbellek yok.
+ *
+ * `mod`:
+ * - `yeni`: görsele özel istekte önbellek varsa ONU döndürür (görsel
+ *   bırakıldığında otomatik istek; aynı görsel ikinci kez para harcamasın).
+ * - `yeniden_yaz`: önbelleği atlar, öncekinden FARKLI bir varyant ister.
+ * - `buna_gore`: kullanıcının yazdığı metin isteme girer ("buna göre yeniden
+ *   yaz"). ÇAPA YALNIZ BURADA: normal öneride kullanıcının metnini isteme
+ *   koymak, modeli her seferinde aynı metne bağlıyordu (teşhis 2026-10-12).
+ *
+ * `tekrarEtme`: ekrandaki önceki öneri; model bunları TEKRAR ETMEMELİ.
+ */
+export const metinOnerIstegiSchema = z.object({
+  varlikId: z.string().uuid().optional(),
+  mod: z.enum(['yeni', 'yeniden_yaz', 'buna_gore']).default('yeni'),
+  tekrarEtme: z.array(z.string().max(2200)).max(30).optional(),
+});
+export type MetinOnerIstegi = z.input<typeof metinOnerIstegiSchema>;
 
 export type PlatformProvaSonucu =
   | { tur: 'gecti'; zaman: string; not: string | null }

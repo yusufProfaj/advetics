@@ -3686,6 +3686,9 @@ model ReklamRehberi {
   createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
   arsivlendiAt   DateTime? @map("arsivlendi_at") @db.Timestamptz(6)
+  /// Başlamayan platformun GERÇEK sebebi, platform başına { sebep, zaman }.
+  /// Yalnız yayınlama yanıtında dönseydi sonraki okumada kaybolurdu.
+  platformSebepleri Json  @default("{}") @map("platform_sebepleri") @db.JsonB
 
   @@index([clientId, durum, updatedAt(sort: Desc)], map: "reklam_rehberi_client_durum_idx")
   @@index([orgId], map: "reklam_rehberi_org_id_idx")
@@ -4549,4 +4552,23 @@ model HaftalikOzet {
   @@unique([clientId, hafta], map: "haftalik_ozetler_client_hafta_key")
   @@index([orgId], map: "haftalik_ozetler_org_id_idx")
   @@map("haftalik_ozetler")
+}
+
+/// AdvCampaign Dalga 2 — görsele özel metin önbelleği. Anahtar İÇERİK özeti
+/// + amaç: aynı görsel aynı amaçla yeniden bırakılınca yapay zekâya gidilmez.
+model RehberGorselMetni {
+  orgId       String   @map("org_id") @db.Uuid
+  clientId    String   @map("client_id") @db.Uuid
+  icerikOzeti String   @map("icerik_ozeti") @db.Char(64)
+  amac        String   @db.VarChar(20)
+  sonuc       Json     @db.JsonB
+  model       String   @db.VarChar(60)
+  girdiToken  Int      @default(0) @map("girdi_token")
+  ciktiToken  Int      @default(0) @map("cikti_token")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@id([clientId, icerikOzeti, amac], map: "rehber_gorsel_metni_pkey")
+  @@index([orgId], map: "rehber_gorsel_metni_org_id_idx")
+  @@map("rehber_gorsel_metni")
 }

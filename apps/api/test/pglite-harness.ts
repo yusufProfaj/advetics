@@ -602,7 +602,7 @@ export async function createHarness(): Promise<Harness> {
       TRUNCATE TABLE
         okuma_api_anahtarlari,
         kreatif_briefleri, kreatif_etiket_sayaci, kreatif_etiketleri, kreatif_icerikleri,
-        haftalik_ozetler,
+        haftalik_ozetler, rehber_gorsel_metni,
         degisiklik_etkileri,
         ga4_anahtar_etkinlik_gunluk, ga4_gunluk, veri_kaynaklari,
         bildirim_gonderimleri, bildirim_kanallari, sinyaller,
