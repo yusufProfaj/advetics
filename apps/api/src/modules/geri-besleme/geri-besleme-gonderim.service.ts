@@ -86,7 +86,15 @@ interface Gonderim {
 
 /** İki ret AYNI hata mı: Meta kodu/alt kodu, yoksa HTTP durumu. */
 function ayniHata(a: MetaGonderimSonucu, b: MetaGonderimSonucu): boolean {
-  const k = (y: MetaGonderimSonucu) => `${y.hataKodu ?? ''}/${y.hataAltKodu ?? ''}/${y.hataKodu == null ? y.http : ''}`;
+  /*
+   * KOD TEK BAŞINA YETMİYOR (Ajan 4 Ö-4): 100 Meta'nın genel "geçersiz
+   * parametre" kodu; farklı olayların farklı sebepleri aynı kodla dönüyor.
+   * Kod + alt kod + MESAJ birlikte; mesajdaki `fbtrace=` her istekte
+   * değiştiği için atılıyor (yoksa hiçbir iki ret "aynı" olmazdı).
+   */
+  const mesaj = (y: MetaGonderimSonucu) => (y.mesaj ?? '').replace(/\s*·\s*fbtrace=\S+/g, '').trim();
+  const k = (y: MetaGonderimSonucu) =>
+    `${y.hataKodu ?? ''}/${y.hataAltKodu ?? ''}/${y.hataKodu == null ? y.http : ''}/${mesaj(y)}`;
   return k(a) === k(b);
 }
 
@@ -125,6 +133,7 @@ export class GeriBeslemeGonderimService {
       SELECT DISTINCT o.client_id::text AS client_id
         FROM geri_besleme_olaylari o
         JOIN geri_besleme_ayarlari a ON a.client_id = o.client_id AND a.platform = o.platform AND a.etkin
+             AND NOT a.gonderim_durduruldu
        WHERE o.durum IN ('bekliyor', 'basarisiz') AND o.sonraki_deneme <= ${simdi}::timestamptz
     `);
     return r.map((x) => x.client_id);
@@ -141,10 +150,26 @@ export class GeriBeslemeGonderimService {
    */
   async yasliSahiplenmeleriIsaretle(simdi = new Date()): Promise<number> {
     const esik = new Date(simdi.getTime() - SAHIPLENME_ZAMAN_ASIMI_MS);
+    /*
+     * ═══ HİÇ GİTMEYEN SAHİPLENME GERİ DÖNÜYOR (Ajan 4 N-6) ═══
+     *
+     * Worker sahiplendikten sonra ama isteği atmadan ölürse `gonderim_basladi`
+     * boş kalıyor: olay Meta'ya HİÇ gitmedi ve yeniden göndermek güvenli.
+     * Onu da "bilinmiyor" saymak gönderilmemiş bir olayı kalıcı olarak
+     * kaybetmekti. Yalnız istek başlamışsa sonuç bilinmiyor.
+     */
+    await this.db.$executeRaw(Prisma.sql`
+      UPDATE geri_besleme_olaylari
+         SET durum = 'bekliyor', sahiplenme_zamani = NULL,
+             sonraki_deneme = COALESCE(sonraki_deneme, now()), updated_at = now()
+       WHERE durum = 'gonderiliyor' AND sahiplenme_zamani < ${esik}::timestamptz
+         AND gonderim_basladi IS NULL
+    `);
     return this.db.$executeRaw(Prisma.sql`
       UPDATE geri_besleme_olaylari
          SET hata = ${SONUC_BILINMIYOR_METNI}, hata_kodu = ${SONUC_BILINMIYOR}, updated_at = now()
        WHERE durum = 'gonderiliyor' AND sahiplenme_zamani < ${esik}::timestamptz
+         AND gonderim_basladi IS NOT NULL
          AND hata_kodu IS DISTINCT FROM ${SONUC_BILINMIYOR}
     `);
   }
@@ -158,10 +183,11 @@ export class GeriBeslemeGonderimService {
         baglanti_id: string | null;
         baglanti_durumu: string | null;
         son_ayar_hatasi: string | null;
+        gonderim_durduruldu: boolean;
       }>
     >(Prisma.sql`
       SELECT a.etkin, a.dataset_id, a.baglanti_id::text AS baglanti_id, pc.status::text AS baglanti_durumu,
-             a.son_ayar_hatasi
+             a.son_ayar_hatasi, a.gonderim_durduruldu
         FROM geri_besleme_ayarlari a
         LEFT JOIN platform_connections pc ON pc.id = a.baglanti_id
        WHERE a.client_id = ${clientId}::uuid AND a.platform = ${GB_PLATFORM}
@@ -174,6 +200,10 @@ export class GeriBeslemeGonderimService {
         apiCalls: 0,
         note: `gönderilmedi: ${ayar.son_ayar_hatasi ?? 'Meta bağlantısı yok (ayarı yeniden kaydet)'}`,
       };
+    }
+    if (ayar.gonderim_durduruldu) {
+      // Sistematik ret sonrası (Ö-4): ayar yeniden kaydedilene kadar çağrı yok.
+      return { rows: 0, apiCalls: 0, note: `gönderilmedi: durduruldu, ayar yeniden kaydedilmeli (${ayar.son_ayar_hatasi ?? 'sistematik ret'})` };
     }
     if (ayar.baglanti_durumu !== 'active') {
       return { rows: 0, apiCalls: 0, note: `gönderilmedi: Meta bağlantısı yeniden yetki istiyor (${ayar.baglanti_durumu})` };
@@ -258,7 +288,7 @@ export class GeriBeslemeGonderimService {
       if (birakilacak.length > 0) {
         await this.db.$executeRaw(Prisma.sql`
           UPDATE geri_besleme_olaylari
-             SET durum = 'bekliyor', sahiplenme_zamani = NULL,
+             SET durum = 'bekliyor', sahiplenme_zamani = NULL, gonderim_basladi = NULL,
                  sonraki_deneme = COALESCE(sonraki_deneme, now()), updated_at = now()
            WHERE id = ANY(${birakilacak}::uuid[]) AND durum = 'gonderiliyor'
         `);
@@ -344,6 +374,12 @@ export class GeriBeslemeGonderimService {
         }),
       ),
     );
+    // İSTEĞİN HEMEN ÖNCESİ (N-6): bundan sonra ölen worker'ın olayı Meta'ya
+    // gitmiş olabilir; bundan önce ölenin olayı kesin gitmedi.
+    await this.db.$executeRaw(Prisma.sql`
+      UPDATE geri_besleme_olaylari SET gonderim_basladi = now()
+       WHERE id = ANY(${parti.map((s) => s.id)}::uuid[]) AND durum = 'gonderiliyor' AND gonderim_basladi IS NULL
+    `);
     kosu.cagri++;
     const yanit = await this.istemci.olayGonder(kosu.datasetId, kosu.token, govde);
     if (yanit.rateLimit) {
@@ -402,12 +438,32 @@ export class GeriBeslemeGonderimService {
         }
         const r2 = await this.gonder(kosu, yarilar[1]);
         if (r2 === null) return false;
-        if (r2.sinif === 'olay_hatasi' && ayniHata(r2.yanit, yanit)) {
+        if (r2.sinif !== 'olay_hatasi' || !ayniHata(r2.yanit, yanit)) {
+          if (!(await this.isle(kosu, yarilar[0], r1, false))) return false;
+          return this.isle(kosu, yarilar[1], r2, false);
+        }
+        /*
+         * ═══ TEK OLAY SINAMASI (Ajan 4 Ö-4) ═══
+         *
+         * İki yarı da aynı hatayla düştü: ya biçim hatası (hepsi kötü) ya da
+         * iki yarıya düşmüş İKİ kötü olay. İkincisini sistematik saymak 50
+         * satırın 50'sini `bekliyor`da bırakıp workspace'in geri beslemesini
+         * 7 gün donduruyordu. Ayırmak için TEK bir olay tek başına gönderiliyor
+         * (ilk yarının sonundaki: yarılamanın ilk bakacağı uçlardan uzak);
+         * o da AYNI hatayla düşerse sistematik, değilse yarılama sürüyor ve
+         * kötüler tek tek ayıklanıyor.
+         */
+        const sinanan = yarilar[0][yarilar[0].length - 1]!;
+        const rs = await this.gonder(kosu, [sinanan]);
+        if (rs === null) return false;
+        if (rs.sinif === 'olay_hatasi' && ayniHata(rs.yanit, yanit)) {
           const mesaj = `Meta gönderilen bütün sonuçları aynı hatayla reddetti (biçim ya da veri kümesi ayarı): ${yanit.mesaj ?? `HTTP ${yanit.http}`}`;
-          await this.ayarHatasiYaz(kosu.clientId, mesaj);
+          await this.ayarHatasiYaz(kosu.clientId, mesaj, true);
           throw new AyarHatasi(mesaj);
         }
-        if (!(await this.isle(kosu, yarilar[0], r1, false))) return false;
+        if (!(await this.isle(kosu, [sinanan], rs, false))) return false;
+        const kalan = yarilar[0].slice(0, -1);
+        if (kalan.length > 0 && !(await this.parti(kosu, kalan, false))) return false;
         return this.isle(kosu, yarilar[1], r2, false);
       }
     }
@@ -423,6 +479,7 @@ export class GeriBeslemeGonderimService {
       UPDATE geri_besleme_olaylari
          SET durum = 'iletildi', gonderildi = ${kosu.simdi}::timestamptz, gonderilen_hedef = ${kosu.datasetId},
              http_durum = ${yanit.http}::int, deneme = deneme + 1, sonraki_deneme = NULL, sahiplenme_zamani = NULL,
+             gonderim_basladi = NULL,
              hata = NULL, hata_kodu = NULL, platform_yaniti = ${yanitJson}::jsonb, updated_at = now()
        WHERE id = ANY(${parti.map((s) => s.id)}::uuid[]) AND durum = 'gonderiliyor'
     `);
@@ -460,16 +517,25 @@ export class GeriBeslemeGonderimService {
              sonraki_deneme = ${sonraki === null ? null : new Date(sonraki)}::timestamptz,
              hata = ${ek.hata}, hata_kodu = ${kod}, http_durum = ${ek.yanit?.http ?? null}::int,
              platform_yaniti = COALESCE(${yanitJson}::jsonb, platform_yaniti), sahiplenme_zamani = NULL,
+             gonderim_basladi = NULL,
              updated_at = now()
        WHERE id = ${s.id}::uuid AND durum = 'gonderiliyor'
     `);
     if (n > 0) kosu.dagilim[yeni] = (kosu.dagilim[yeni] ?? 0) + 1;
   }
 
-  private async ayarHatasiYaz(clientId: string, mesaj: string): Promise<void> {
+  /**
+   * `durdur`: SİSTEMATİK RET (Ö-3/Ö-4). Token ya da izin hatası bağlantı
+   * düzelince kendiliğinden geçer ve gönderim sürmeli; biçim/veri kümesi
+   * hatası ise her 5 dakikada aynı istekleri harcar ve kendiliğinden
+   * DÜZELMEZ. O hâlde süpürme workspace'i ayar yeniden kaydedilene kadar
+   * almıyor (`gonderim_durduruldu`).
+   */
+  private async ayarHatasiYaz(clientId: string, mesaj: string, durdur = false): Promise<void> {
     await this.db.$executeRaw(Prisma.sql`
       UPDATE geri_besleme_ayarlari
-         SET son_ayar_hatasi = ${mesaj.slice(0, 2000)}, son_ayar_hatasi_zamani = now(), updated_at = now()
+         SET son_ayar_hatasi = ${mesaj.slice(0, 2000)}, son_ayar_hatasi_zamani = now(),
+             gonderim_durduruldu = gonderim_durduruldu OR ${durdur}, updated_at = now()
        WHERE client_id = ${clientId}::uuid AND platform = ${GB_PLATFORM}
     `);
   }

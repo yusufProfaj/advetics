@@ -4310,6 +4310,7 @@ model GeriBeslemeAyari {
   sonAyarHatasi       String?   @map("son_ayar_hatasi")
   sonAyarHatasiZamani DateTime? @map("son_ayar_hatasi_zamani") @db.Timestamptz(6)
   sonBasariliGonderim DateTime? @map("son_basarili_gonderim") @db.Timestamptz(6)
+  gonderimDurduruldu  Boolean   @default(false) @map("gonderim_durduruldu")
   createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt           DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
 
@@ -4334,6 +4335,7 @@ model GeriBeslemeOlayi {
   deneme          Int       @default(0) @db.SmallInt
   sonrakiDeneme   DateTime? @map("sonraki_deneme") @db.Timestamptz(6)
   sahiplenmeZamani DateTime? @map("sahiplenme_zamani") @db.Timestamptz(6)
+  gonderimBasladi DateTime? @map("gonderim_basladi") @db.Timestamptz(6)
   gonderilenHedef String?   @map("gonderilen_hedef") @db.VarChar(20)
   gonderildi      DateTime? @db.Timestamptz(6)
   httpDurum       Int?      @map("http_durum")

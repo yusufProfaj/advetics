@@ -63,11 +63,11 @@ describe('Ö-1 · sahiplenme', () => {
   it('KRİTİK: yaşlanan "gönderiliyor" satırı "sonucu bilinmiyor" işaretleniyor, YENİDEN GÖNDERİLMİYOR, uyarıda ve rozette görünüyor', async () => {
     await ayarAc(h);
     const id = await olay(h, { leadId: L1, asama: 'ham_lead', olayZamani: saatOnce(3) });
-    await h.q(`UPDATE geri_besleme_olaylari SET durum = 'gonderiliyor', sahiplenme_zamani = $2, updated_at = $3 WHERE id = $1`, [
-      id,
-      new Date(SIMDI.getTime() - 31 * 60_000).toISOString(),
-      SIMDI.toISOString(),
-    ]);
+    // İstek BAŞLAMIŞ (gonderim_basladi dolu): olay Meta'ya gitmiş olabilir.
+    await h.q(
+      `UPDATE geri_besleme_olaylari SET durum = 'gonderiliyor', sahiplenme_zamani = $2, gonderim_basladi = $2, updated_at = $3 WHERE id = $1`,
+      [id, new Date(SIMDI.getTime() - 31 * 60_000).toISOString(), SIMDI.toISOString()],
+    );
     const s = kur();
     expect(await s.yasliSahiplenmeleriIsaretle(SIMDI)).toBe(1);
     // İkinci tur aynı satırı tekrar işaretlemiyor (sayı şişmesin).
@@ -79,6 +79,43 @@ describe('Ö-1 · sahiplenme', () => {
     expect(u).toMatchObject({ sorunlu: 1, ornek_hata: expect.stringContaining('Sonucu bilinmiyor') });
     const r = await leadRozetleri(h.db, [{ id: L1, clientId: IDS.client }]);
     expect(r.get(L1)?.metin).toBe('Meta’ya gönderildi, sonucu bilinmiyor');
+  });
+
+  it('KRİTİK: istek HİÇ BAŞLAMADAN ölen sahiplenme (gonderim_basladi boş) bekliyor’a dönüyor ve sonraki turda GİDİYOR (N-6)', async () => {
+    await ayarAc(h);
+    const id = await olay(h, { leadId: L1, asama: 'ham_lead', olayZamani: saatOnce(3) });
+    await h.q(`UPDATE geri_besleme_olaylari SET durum = 'gonderiliyor', sahiplenme_zamani = $2 WHERE id = $1`, [
+      id,
+      new Date(SIMDI.getTime() - 31 * 60_000).toISOString(),
+    ]);
+    const s = kur();
+    expect(await s.yasliSahiplenmeleriIsaretle(SIMDI)).toBe(0);
+    expect((await olaylar(h))[0]).toMatchObject({ durum: 'bekliyor', hata: null });
+    await s.calistir(IDS.client, SIMDI);
+    expect(cagri).toBe(1);
+    expect((await olaylar(h))[0]).toMatchObject({ durum: 'iletildi' });
+  });
+
+  it('KRİTİK: gönderim isteğinden ÖNCE gonderim_basladi yazılıyor; kabul yazımı düşerse dolu kalıyor (N-6)', async () => {
+    await ayarAc(h);
+    await olay(h, { leadId: L1, asama: 'ham_lead', olayZamani: saatOnce(3) });
+    const db = {
+      ...h.db,
+      $executeRaw: async (q: Parameters<typeof h.db.$executeRaw>[0]) => {
+        if (q.sql.includes("durum = 'iletildi'")) throw new Error('bağlantı koptu');
+        return h.db.$executeRaw(q);
+      },
+    };
+    const s = new GeriBeslemeGonderimService(
+      db as unknown as PrismaAdminService,
+      { getAccessToken: vi.fn(async () => 'T') } as unknown as TokenVaultService,
+      { get: () => ({}) } as unknown as ProviderRegistry,
+      { acquire: vi.fn(async () => ({ allowed: true })), record: vi.fn(async () => undefined) } as unknown as QuotaGuardService,
+    );
+    await expect(s.calistir(IDS.client, SIMDI)).rejects.toThrow('bağlantı koptu');
+    const [o] = await h.q<{ durum: string; gonderim_basladi: Date | null }>('SELECT durum, gonderim_basladi FROM geri_besleme_olaylari');
+    expect(o!.durum).toBe('gonderiliyor');
+    expect(o!.gonderim_basladi).not.toBeNull();
   });
 
   it('taze sahiplenme işaretlenmiyor (istek hâlâ yolda olabilir)', async () => {
@@ -130,11 +167,28 @@ describe('Ö-3 · sistematik ret', () => {
     }
     cevap = () => ({ status: 400, body: { error: { code: 100, error_subcode: 2804050, message: 'Invalid parameter: lead_id' } } });
     const r = await kur().calistir(IDS.client, SIMDI);
-    expect(cagri).toBe(3);
+    // Parti + iki yarı + tek olay sınaması (Ö-4).
+    expect(cagri).toBe(4);
     expect(r.note).toContain('ayar hatası');
     for (const o of await olaylar(h)) expect(o).toMatchObject({ durum: 'bekliyor', deneme: 0 });
-    const [a] = await h.q<{ son_ayar_hatasi: string }>('SELECT son_ayar_hatasi FROM geri_besleme_ayarlari');
+    const [a] = await h.q<{ son_ayar_hatasi: string; gonderim_durduruldu: boolean }>(
+      'SELECT son_ayar_hatasi, gonderim_durduruldu FROM geri_besleme_ayarlari',
+    );
     expect(a!.son_ayar_hatasi).toContain('Invalid parameter: lead_id');
+    // SONSUZ TEKRAR YOK (Ö-4): süpürme bu workspace'i almıyor, iş de çağrı yapmıyor.
+    expect(a!.gonderim_durduruldu).toBe(true);
+    expect(await kur().bekleyenWorkspaceler(SIMDI)).toEqual([]);
+    const r2 = await kur().calistir(IDS.client, SIMDI);
+    expect(cagri).toBe(4);
+    expect(r2.note).toContain('durduruldu');
+  });
+
+  it('token/izin hatası süpürmeyi DURDURMUYOR (bağlantı düzelince kendiliğinden geçer)', async () => {
+    await ayarAc(h);
+    await olay(h, { leadId: L1, asama: 'ham_lead', olayZamani: saatOnce(3) });
+    cevap = () => ({ status: 403, body: { error: { code: 200, message: '(#200) Permissions error' } } });
+    await kur().calistir(IDS.client, SIMDI);
+    expect(await kur().bekleyenWorkspaceler(SIMDI)).toEqual([IDS.client]);
   });
 
   it('KRİTİK: iki yarı FARKLI hata koduyla düşerse sistematik SAYILMIYOR, yarılama sürüyor', async () => {
@@ -156,6 +210,42 @@ describe('Ö-3 · sistematik ret', () => {
     expect(cagri).toBe(7);
     const d = (await olaylar(h)).map((o) => o.durum).sort();
     expect(d).toEqual(['iletildi', 'iletildi', 'iletildi', 'reddedildi']);
+  });
+
+  const dortOlay = async (onEk: string) => {
+    await ayarAc(h);
+    for (let i = 0; i < 4; i++) {
+      const id = `ffffffff-0000-4000-8000-${String(i).padStart(12, '0')}`;
+      await lead(h, { id, externalId: `${onEk}${String(i).padStart(14, '0')}`, submittedAt: saatOnce(3) });
+      await olay(h, { leadId: id, asama: 'ham_lead', olayZamani: saatOnce(3) });
+    }
+  };
+
+  it('KRİTİK: aynı kod + alt kod ama FARKLI mesaj sistematik sayılmıyor, tek olay sınaması bile yapılmıyor (Ö-4)', async () => {
+    await dortOlay('7');
+    let n = 0;
+    cevap = () => {
+      n++;
+      if (n <= 2) return { status: 400, body: { error: { code: 100, error_subcode: 1, message: 'Mesaj A' } } };
+      if (n === 3) return { status: 400, body: { error: { code: 100, error_subcode: 1, message: 'Mesaj B' } } };
+      if (n === 4) return { status: 400, body: { error: { code: 100, error_subcode: 1, message: 'Tekil kötü' } } };
+      return { status: 200, body: { events_received: 1 } };
+    };
+    await kur().calistir(IDS.client, SIMDI);
+    expect(cagri).toBe(7);
+    expect((await olaylar(h)).map((o) => o.durum).sort()).toEqual(['iletildi', 'iletildi', 'iletildi', 'reddedildi']);
+  });
+
+  it('KRİTİK: yalnız fbtrace’i farklı retler AYNI hata sayılıyor (her istekte değişiyor)', async () => {
+    await dortOlay('8');
+    let n = 0;
+    cevap = () => {
+      n++;
+      return { status: 400, body: { error: { code: 100, error_subcode: 2804050, message: 'Invalid parameter', fbtrace_id: `iz${n}` } } };
+    };
+    await kur().calistir(IDS.client, SIMDI);
+    expect(cagri).toBe(4);
+    for (const o of await olaylar(h)) expect(o).toMatchObject({ durum: 'bekliyor', deneme: 0 });
   });
 
   it('yarılardan biri FARKLI sonuç verirse tek kötü olay yarılamayla bulunuyor (sistematik sayılmıyor)', async () => {

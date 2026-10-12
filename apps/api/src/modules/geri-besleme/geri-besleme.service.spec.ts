@@ -117,6 +117,17 @@ describe('ayar yazma', () => {
     expect(record).toHaveBeenLastCalledWith(expect.anything(), CTX, expect.objectContaining({ action: 'geri_besleme.kapatildi' }));
   });
 
+  it('KRİTİK: yeniden kayıt sistematik ret durdurmasını kaldırıyor (Ö-4)', async () => {
+    const svc = kur();
+    await svc.ayarYaz(CTX, ac());
+    await h.q(`UPDATE geri_besleme_ayarlari SET gonderim_durduruldu = true, son_ayar_hatasi = 'aynı hata'`);
+    await svc.ayarYaz(CTX, ac());
+    const [a] = await h.q<{ gonderim_durduruldu: boolean; son_ayar_hatasi: string | null }>(
+      'SELECT gonderim_durduruldu, son_ayar_hatasi FROM geri_besleme_ayarlari',
+    );
+    expect(a).toEqual({ gonderim_durduruldu: false, son_ayar_hatasi: null });
+  });
+
   it('açıkken yeniden kaydetmek geri doldurmayı tekrarlamıyor', async () => {
     const svc = kur();
     await svc.ayarYaz(CTX, ac());

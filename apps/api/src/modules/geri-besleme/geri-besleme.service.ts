@@ -346,6 +346,8 @@ export class GeriBeslemeService {
             -- ayar hatası (ör. "hesap kalmadı", Ö-2) bu kayıtla geçersiz.
             -- Token/izin hatası sürüyorsa ilk gönderim onu yeniden yazar.
             son_ayar_hatasi = NULL,
+            -- Sistematik ret durdurması (Ö-4) yalnız yeniden KAYITLA kalkar.
+            gonderim_durduruldu = false,
             son_basarili_gonderim = CASE WHEN geri_besleme_ayarlari.dataset_id IS DISTINCT FROM EXCLUDED.dataset_id THEN NULL ELSE geri_besleme_ayarlari.son_basarili_gonderim END,
             updated_at = now()
         `);

@@ -77,6 +77,10 @@ CREATE TABLE "geri_besleme_ayarlari" (
   "son_ayar_hatasi"        TEXT,
   "son_ayar_hatasi_zamani" TIMESTAMPTZ(6),
   "son_basarili_gonderim"  TIMESTAMPTZ(6),
+  -- SİSTEMATİK RET (Ajan 4 Ö-3/Ö-4): Meta bütün olayları aynı hatayla
+  -- reddetti. Kendiliğinden düzelmez; süpürme bu workspace'i ayar yeniden
+  -- kaydedilene kadar almaz (her 5 dakikada aynı istekler harcanmasın).
+  "gonderim_durduruldu"    BOOLEAN        NOT NULL DEFAULT false,
   "created_at"             TIMESTAMPTZ(6) NOT NULL DEFAULT now(),
   "updated_at"             TIMESTAMPTZ(6) NOT NULL DEFAULT now(),
 
@@ -125,6 +129,9 @@ CREATE TABLE "geri_besleme_olaylari" (
   -- Gönderim işinin satırı sahiplendiği an (durum = 'gonderiliyor'). Yaşlanan
   -- sahiplenme "sonucu bilinmiyor" diye işaretlenir, yeniden gönderilmez.
   "sahiplenme_zamani" TIMESTAMPTZ(6),
+  -- Platform isteğinin başladığı an (Ajan 4 N-6). Boş + yaşlı sahiplenme =
+  -- istek hiç gitmedi, güvenle geri bırakılır; dolu = sonucu bilinmiyor.
+  "gonderim_basladi"  TIMESTAMPTZ(6),
   -- Gönderildiği andaki dataset: ayar sonradan değişebilir ve "bu olay hangi
   -- modeli eğitti" sorusunun cevabı ayarın BUGÜNKÜ değeri değil.
   "gonderilen_hedef" VARCHAR(20),
@@ -149,6 +156,9 @@ CREATE TABLE "geri_besleme_olaylari" (
   -- sonsuza kadar "gönderiliyor" görünürdü.
   CONSTRAINT "geri_besleme_olaylari_sahiplenme_chk" CHECK (
     ("durum" = 'gonderiliyor') = ("sahiplenme_zamani" IS NOT NULL)
+  ),
+  CONSTRAINT "geri_besleme_olaylari_gonderim_basladi_chk" CHECK (
+    "durum" = 'gonderiliyor' OR "gonderim_basladi" IS NULL
   ),
   CONSTRAINT "geri_besleme_olaylari_deneme_chk" CHECK ("deneme" >= 0),
   -- GÖNDERİLEBİLİR SATIRIN ZAMANI OLMAK ZORUNDA: zamansız bir `bekliyor`
