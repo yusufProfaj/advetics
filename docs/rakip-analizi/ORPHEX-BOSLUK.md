@@ -189,3 +189,5 @@ zaten yapıyor (geri okuma).
 | Ç-O5 | Rakip takibi (B-10) | **KAPANDI (2026-10-12): kapsam DIŞI** (resmî API Türkiye ticari reklamını vermiyor; kazıma riski) |
 | Ç-O6 | 2FA (B-15) | **KAPANDI (2026-10-12): listeye eklendi**, Paket A'dan bağımsız küçük güvenlik işi |
 | Ç-O7 | Paket A nasıl başlasın (devam eden işler canlıda doğrulanmadı) | **KAPANDI (2026-10-12): Ajan 1 (mimari + sözleşme) ve tarayıcı taslağı şimdi; Ajan 2-3 devam eden işler canlıda doğrulanınca** — sıra kuralı korunuyor |
+| Ç-O8 | Kullanıcı karar yetkisini oturum yöneticisine devretti (2026-10-12): "alt ajanlardan gelen yanıtların hepsini sen cevaplayabilirsin … kesintisiz devam" | Paket B/C/D/E/F mimarilerindeki "öneri" satırları KABUL edildi (her MIMARI.md §0). F Ç-6 koşullu: var olan `utm_` parametresi ezilmez. Sıra A → C → B (B, C'nin etkilerini okuyor) |
+| Ç-O9 | Paket E Google tarafı | Google offline dönüşüm yükleme 2026-06-15'ten beri daha önce yüklememiş geliştirici token'ına KAPALI; yerine Data Manager API (`datamanager` scope). v1 yalnız Meta |
