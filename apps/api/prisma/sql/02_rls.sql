@@ -2647,6 +2647,9 @@ CREATE POLICY adv_bildirim_gonderimleri_update ON bildirim_gonderimleri
 -- hesabıyla CASCADE gidiyor.
 CREATE POLICY adv_degisiklik_etkileri_select ON degisiklik_etkileri
   FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+
+
+-- ============================================================================
 -- LEAD GERİ BESLEME — lead_durum_gecmisi, geri_besleme_ayarlari,
 -- geri_besleme_olaylari (docs/geri-besleme/MIMARI.md § 2)
 -- ============================================================================
@@ -2686,6 +2689,11 @@ CREATE POLICY adv_geri_besleme_olaylari_select ON geri_besleme_olaylari
 CREATE POLICY adv_geri_besleme_olaylari_insert ON geri_besleme_olaylari
   FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 CREATE POLICY adv_geri_besleme_olaylari_update ON geri_besleme_olaylari
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+  WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+
+
+-- ============================================================================
 -- VERİ KAYNAKLARI F1 — veri_kaynaklari, ga4_gunluk, ga4_anahtar_etkinlik_gunluk
 -- (docs/veri-kaynagi/MIMARI.md § 2.2, § 3.1)
 -- ============================================================================

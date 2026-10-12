@@ -248,6 +248,15 @@ const envSchema = z.object({
    * okunması, ölçüm döneminde müşterinin kanalına sinyal düşürmek olurdu.
    */
   SINYAL_SESSIZ_KOSUM: bosIseYok(z.enum(['0', '1']).default('0')),
+  /**
+   * AdvCampaign Meta reklamına `utm_campaign={{campaign.id}}` yazılsın mı
+   * (Paket F Ç-6, `reklam/utm-etiketi.ts`). VARSAYILAN KAPALI: yayın geri
+   * okuması her alanı kıyaslıyor ve Meta'nın `url_tags`i makrosuyla aynen
+   * döndürdüğü ÖLÇÜLMEDİ. Dönmezse bugün çalışan HER yayın "fark"ta durur.
+   * Bir duraklatılmış provada ölçülüp yanki.ts'e gerekirse normalleştirme
+   * yazıldıktan sonra "1". Yalnız `0` ya da `1`.
+   */
+  META_UTM_ETIKETI: bosIseYok(z.enum(['0', '1']).default('0')),
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -25,7 +25,23 @@ export const ADV_UTM_ETIKETI = 'utm_source=facebook&utm_medium=paid_social&utm_c
 
 const SITE_DISI_NIYETLER: ReadonlySet<string> = new Set(['FORM', 'WHATSAPP', 'TELEFON']);
 
-export function advUtmEtiketi(niyet: string, hedefAdres: string | null | undefined): string | null {
+/**
+ * AÇIK MI — `META_UTM_ETIKETI=1` (configuration.ts doğruluyor). Varsayılan
+ * KAPALI; nedeni yukarıdaki "ÖLÇÜLMEDİ" maddesi: ölçülmemiş bir alanı canlı
+ * yayın yoluna sokmak, bugün çalışan her yayını "fark"ta durdurabilir.
+ * Ortamdan okunuyor çünkü taslak derleyicisi saf bir fonksiyon ve servis
+ * bağlamı taşımıyor; kapatmak için yeniden derleme gerekmesin.
+ */
+export function utmEtiketiAcik(ortam: NodeJS.ProcessEnv = process.env): boolean {
+  return ortam.META_UTM_ETIKETI === '1';
+}
+
+export function advUtmEtiketi(
+  niyet: string,
+  hedefAdres: string | null | undefined,
+  acik: boolean = utmEtiketiAcik(),
+): string | null {
+  if (!acik) return null;
   if (SITE_DISI_NIYETLER.has(niyet)) return null;
   if (!hedefAdres || !/^https?:\/\//i.test(hedefAdres)) return null;
   // Sorgu VE parça (#) içinde ara: bazı siteler etiketi parçaya koyuyor ve

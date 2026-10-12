@@ -41,8 +41,24 @@ describe('iş kimliği', () => {
     expect(a).not.toBe(b);
   });
 
-  it('başka türlerin kimliği DEĞİŞMEDİ (kuyruktaki işlerin mükerrer engeli deploy’da bozulmasın)', () => {
-    expect(buildJobId({ jobType: 'leads_reconcile', clientId: 'a' })).toBe('leads_reconcile__na__all');
+  /*
+   * Burada önce "başka türlerin kimliği DEĞİŞMEDİ" yazıyordu ve
+   * `leads_reconcile__na__all`ı kilitliyordu — yani HATAYI: o türde de bütün
+   * workspace'ler tek kimliğe düşüyor, süpürmede ilkinden sonrakiler sessizce
+   * atılıyordu. Workspace artık BÜTÜN türler için son ayırıcı (queues.ts).
+   */
+  it('KRİTİK: yalnız workspace taşıyan HER tür workspace başına ayrı kimlik alıyor', () => {
+    for (const jobType of ['leads_reconcile', 'boosts_evaluate', 'lead_feedback_send'] as const) {
+      const a = buildJobId({ jobType, clientId: 'a' });
+      const b = buildJobId({ jobType, clientId: 'b' });
+      expect(a).not.toBe(b);
+    }
+  });
+
+  it('hesap/profil/kural taşıyan türlerde workspace kimliği DEĞİŞTİRMİYOR (eski kimlikler korunuyor)', () => {
+    expect(buildJobId({ jobType: 'structure', adAccountId: 'h', clientId: 'a' })).toBe(
+      buildJobId({ jobType: 'structure', adAccountId: 'h', clientId: 'b' }),
+    );
   });
 
   it('katman: çekirdek metriklerin arkasında', () => {
