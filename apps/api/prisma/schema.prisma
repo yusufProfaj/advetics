@@ -1175,6 +1175,9 @@ enum SyncJobType {
   /// Paket A — bekleyen bildirimleri kanallara gönderen küresel süpürme
   /// ve 09:00 İstanbul sinyal özeti. Müşteri başına dağılmıyor.
   notifications_send
+  /// Paket E — workspace başına, vadesi gelmiş lead aşamalarını Meta'ya
+  /// (Conversions API, CRM olayı) gönderir. 5 dakikalık süpürme açıyor.
+  lead_feedback_send
 }
 
 enum SyncJobStatus {
@@ -4203,4 +4206,82 @@ model BildirimGonderimi {
   @@index([clientId, createdAt(sort: Desc)], map: "bildirim_gonderimleri_client_idx")
   @@index([orgId], map: "bildirim_gonderimleri_org_id_idx")
   @@map("bildirim_gonderimleri")
+}
+
+// ═══ LEAD GERİ BESLEME (Paket E, docs/geri-besleme/MIMARI.md § 2) ═══
+// CHECK kısıtları, kısmi indeks ve FK'ler migration'da; RLS 02_rls.sql'de.
+// Servisler ham SQL kullanıyor (PGlite testleri gerçek sorguyu koşsun).
+
+/// Lead durum hattındaki her değişim. Aşamanın Meta'ya giden zamanı buradan.
+model LeadDurumGecmisi {
+  id               String   @id @default(uuid()) @db.Uuid
+  orgId            String   @map("org_id") @db.Uuid
+  clientId         String   @map("client_id") @db.Uuid
+  leadId           String   @map("lead_id") @db.Uuid
+  oncekiDurum      String?  @map("onceki_durum") @db.VarChar(16)
+  yeniDurum        String   @map("yeni_durum") @db.VarChar(16)
+  degistirenUserId String?  @map("degistiren_user_id") @db.Uuid
+  kaynak           String   @db.VarChar(8)
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([leadId, createdAt], map: "lead_durum_gecmisi_lead_idx")
+  @@index([clientId, createdAt], map: "lead_durum_gecmisi_client_idx")
+  @@index([orgId], map: "lead_durum_gecmisi_org_id_idx")
+  @@map("lead_durum_gecmisi")
+}
+
+/// Workspace başına platform başına geri besleme ayarı. Durum TÜRETİLİR.
+model GeriBeslemeAyari {
+  clientId            String    @map("client_id") @db.Uuid
+  platform            String    @db.VarChar(10)
+  orgId               String    @map("org_id") @db.Uuid
+  etkin               Boolean   @default(false)
+  datasetId           String?   @map("dataset_id") @db.VarChar(20)
+  datasetAdi          String?   @map("dataset_adi") @db.VarChar(200)
+  baglantiId          String?   @map("baglanti_id") @db.Uuid
+  datasetCrm          Boolean?  @map("dataset_crm")
+  sonKontrol          DateTime? @map("son_kontrol") @db.Timestamptz(6)
+  aydinlatmaOnaylayan String?   @map("aydinlatma_onaylayan") @db.Uuid
+  aydinlatmaZamani    DateTime? @map("aydinlatma_zamani") @db.Timestamptz(6)
+  etkinlestiren       String?   @db.Uuid
+  etkinlestirmeZamani DateTime? @map("etkinlestirme_zamani") @db.Timestamptz(6)
+  sonAyarHatasi       String?   @map("son_ayar_hatasi")
+  sonAyarHatasiZamani DateTime? @map("son_ayar_hatasi_zamani") @db.Timestamptz(6)
+  sonBasariliGonderim DateTime? @map("son_basarili_gonderim") @db.Timestamptz(6)
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@id([clientId, platform])
+  @@index([orgId], map: "geri_besleme_ayarlari_org_id_idx")
+  @@map("geri_besleme_ayarlari")
+}
+
+/// Gönderim kuyruğu (niyet kaydı). Tekil `(lead_id, platform, asama)` =
+/// idempotens. Bekleyen indeksi `geri_besleme_olaylari_bekleyen_idx` KISMİ,
+/// yalnız migration'da.
+model GeriBeslemeOlayi {
+  id              String    @id @default(uuid()) @db.Uuid
+  orgId           String    @map("org_id") @db.Uuid
+  clientId        String    @map("client_id") @db.Uuid
+  leadId          String    @map("lead_id") @db.Uuid
+  platform        String    @db.VarChar(10)
+  asama           String    @db.VarChar(16)
+  olayKimligi     String    @map("olay_kimligi") @db.VarChar(64)
+  olayZamani      DateTime  @map("olay_zamani") @db.Timestamptz(6)
+  durum           String    @default("bekliyor") @db.VarChar(16)
+  deneme          Int       @default(0) @db.SmallInt
+  sonrakiDeneme   DateTime? @map("sonraki_deneme") @db.Timestamptz(6)
+  gonderilenHedef String?   @map("gonderilen_hedef") @db.VarChar(20)
+  gonderildi      DateTime? @db.Timestamptz(6)
+  httpDurum       Int?      @map("http_durum")
+  hataKodu        String?   @map("hata_kodu") @db.VarChar(40)
+  hata            String?
+  platformYaniti  Json?     @map("platform_yaniti") @db.JsonB
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([leadId, platform, asama], map: "geri_besleme_olaylari_lead_asama_key")
+  @@index([clientId, durum, updatedAt(sort: Desc)], map: "geri_besleme_olaylari_client_idx")
+  @@index([orgId], map: "geri_besleme_olaylari_org_id_idx")
+  @@map("geri_besleme_olaylari")
 }

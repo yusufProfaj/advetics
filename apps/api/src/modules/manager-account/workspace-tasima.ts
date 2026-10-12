@@ -194,6 +194,15 @@ export const CASCADE_ILE_TASINANLAR = [
   'sinyaller',
   'bildirim_kanallari',
   'bildirim_gonderimleri',
+  // LEAD GERİ BESLEME (docs/geri-besleme/MIMARI.md § 2) TAŞINIYOR: geçmiş ve
+  // gönderim kayıtları lead'lerle (WORKSPACE_TABLOLARI) aynı yere gidiyor.
+  // AMA AYAR KAPANIYOR ve bekleyen gönderimler İPTAL EDİLİYOR
+  // (`geriBeslemeyiKapat`, aşağıda): ayar eski şirketin bağlantısına ve
+  // pikseline bakıyor, yeni şirkette o token'la gönderim yapmak başka bir
+  // şirketin kimliğiyle veri aktarmak olurdu.
+  'lead_durum_gecmisi',
+  'geri_besleme_ayarlari',
+  'geri_besleme_olaylari',
 ] as const;
 
 export interface WorkspaceTasimaSonucu {
@@ -277,6 +286,41 @@ export async function workspaceTasi(
       tasinan[etiket] = n;
       toplam += n;
     }
+  }
+
+  /*
+   * GERİ BESLEME KAPANIR, TAŞINMAZ (Paket E). Satırlar Postgres'in cascade'i
+   * ile gidiyor ama ayar AÇIK kalırsa gönderim işi bir sonraki turda eski
+   * şirketin bağlantısıyla (baglanti_id) yeni şirketin lead'lerini Meta'ya
+   * gönderirdi; hata vermeden. Yeni şirkette biri ayarı yeniden açar, bağlantı
+   * o anda yeniden seçilir ve aydınlatma onayı yeniden alınır. Sayısı taşıma
+   * raporunda: "taşıdım, Meta'ya bildirim durdu" sessiz kalmasın.
+   */
+  const kapanan = await tx.$executeRaw(
+    Prisma.sql`
+      UPDATE geri_besleme_ayarlari
+         SET etkin = false, baglanti_id = NULL, updated_at = now()
+       WHERE client_id = ${clientId}::uuid
+         AND etkin
+         AND org_id IS DISTINCT FROM ${hedefOrgId}::uuid
+    `,
+  );
+  if (kapanan > 0) {
+    tasinan['Meta geri beslemesi kapatıldı (yeni şirkette yeniden açılmalı)'] = kapanan;
+    toplam += kapanan;
+  }
+  const iptal = await tx.$executeRaw(
+    Prisma.sql`
+      UPDATE geri_besleme_olaylari
+         SET durum = 'iptal', hata = 'Workspace başka şirkete taşındı', updated_at = now()
+       WHERE client_id = ${clientId}::uuid
+         AND durum IN ('bekliyor', 'basarisiz')
+         AND org_id IS DISTINCT FROM ${hedefOrgId}::uuid
+    `,
+  );
+  if (iptal > 0) {
+    tasinan['bekleyen Meta bildirimi iptal edildi'] = iptal;
+    toplam += iptal;
   }
 
   const workspaceSatiri = await tx.$executeRaw(

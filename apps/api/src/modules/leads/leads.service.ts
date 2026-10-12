@@ -13,6 +13,8 @@ import {
 } from '@advetics/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { durumDegisti } from '../geri-besleme/lead-asama';
+import { leadRozetleri } from '../geri-besleme/lead-rozet';
 
 /** `withTenant` yürütücüsünün bu serviste kullanılan yüzeyi. */
 type TxLike = { $queryRaw: <T>(q: Prisma.Sql) => Promise<T> };
@@ -120,8 +122,11 @@ export class LeadsService {
 
       const total = Number(countRow?.total ?? 0);
 
+      // META'YA GİTTİ Mİ (Paket E): sayfanın lead'leri için TEK ek sorgu.
+      const rozetler = await leadRozetleri(tx, rows.map((r) => ({ id: r.id, clientId: r.client_id })));
+
       return {
-        rows: rows.map(toRecord),
+        rows: rows.map((r) => ({ ...toRecord(r), geriBesleme: rozetler.get(r.id) })),
         total,
         byStatus,
         reconciledRatio: ratioRow?.ratio ?? 0,
@@ -197,12 +202,37 @@ export class LeadsService {
         WHERE l.id = ${id}::uuid AND l.org_id = ${ctx.orgId}::uuid
       `);
       if (!row) throw new NotFoundException('Kayıt bulunamadı');
-      return toRecord(row);
+      // Durum değişikliğinden sonra dönen kayıt rozetini de taşıyor: panel
+      // "15 dk içinde iletilecek" bilgisini ayrı bir istek atmadan gösteriyor.
+      const rozet = await leadRozetleri(tx, [{ id: row.id, clientId: row.client_id }]);
+      return { ...toRecord(row), geriBesleme: rozet.get(row.id) };
     });
   }
 
+  /**
+   * ═══ DURUM = KALİTE İŞARETİ (Paket E, MIMARI § 3) ═══
+   *
+   * Durum değişince AYNI TRANSACTION'da: geçmiş satırı ve Meta'ya gidecek
+   * aşama satırları (`durumDegisti` → `asamaPlani`). Ayrı bir "kalite
+   * işaretle" ucu YOK: aynı kararın iki yoldan yazılması ve birinin geçmişi
+   * atlaması olurdu. Platform çağrısı YOK; gönderim worker'da, 15 dakikalık
+   * geri alma penceresinden sonra.
+   *
+   * Satır `FOR UPDATE` ile okunuyor: aynı lead'e iki hızlı tık (Görüştük →
+   * Müşteri oldu) aynı "önceki durum"u görüp geçmişi ve planı ikiye
+   * bölmesin.
+   */
   async update(ctx: TenantContext, id: string, input: LeadUpdateInput): Promise<LeadRecord> {
     await this.prisma.withTenant(ctx, async (tx) => {
+      const [once] = await tx.$queryRaw<
+        Array<{ status: LeadStatus; client_id: string; org_id: string; submitted_at: Date }>
+      >(Prisma.sql`
+        SELECT status, client_id::text AS client_id, org_id::text AS org_id, submitted_at
+          FROM leads WHERE id = ${id}::uuid AND org_id = ${ctx.orgId}::uuid
+         FOR UPDATE
+      `);
+      if (!once) throw new NotFoundException('Kayıt bulunamadı');
+
       const n = await tx.$executeRaw(Prisma.sql`
         UPDATE leads SET
           status = ${input.status},
@@ -215,6 +245,18 @@ export class LeadsService {
         WHERE id = ${id}::uuid AND org_id = ${ctx.orgId}::uuid
       `);
       if (n === 0) throw new NotFoundException('Kayıt bulunamadı');
+
+      await durumDegisti(tx, {
+        leadId: id,
+        clientId: once.client_id,
+        orgId: once.org_id,
+        onceki: once.status,
+        yeni: input.status,
+        submittedAt: new Date(once.submitted_at),
+        userId: ctx.userId,
+        kaynak: 'panel',
+        simdi: new Date(),
+      });
     });
     return this.get(ctx, id);
   }

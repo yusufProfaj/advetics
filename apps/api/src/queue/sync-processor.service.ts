@@ -26,6 +26,7 @@ import { SUPURME_HESAP_KOSULU } from './supurme-kapsami';
 import { SinyalHesapService } from '../modules/sinyal/sinyal-hesap.service';
 import { BildirimTeslimService } from '../modules/sinyal/bildirim-teslim.service';
 import { izlenmeyenSinyalleriKapat } from '../modules/sinyal/hesap-sinyalleri';
+import { GeriBeslemeGonderimService } from '../modules/geri-besleme/geri-besleme-gonderim.service';
 import type { TxLike } from '../modules/sinyal/sinyal-hesap';
 import { isYapilabilir } from './platform-isleri';
 import { cekilmisGunler, gunlukAnahtar } from './gunluk-tekrar';
@@ -82,6 +83,7 @@ export class SyncProcessorService {
     private readonly raporPlani: RaporPlaniService,
     private readonly sinyalHesap: SinyalHesapService,
     private readonly teslim: BildirimTeslimService,
+    private readonly geriBesleme: GeriBeslemeGonderimService,
   ) {}
 
   async process(payload: SyncJobPayload): Promise<{ rows: number; note?: string }> {
@@ -91,6 +93,10 @@ export class SyncProcessorService {
     // (hesap işinin yolu kota alırdı ve kotası dolmuş hesapta sinyal de
     // gecikirdi). Önce bu dal.
     if (payload.jobType === 'signals_evaluate') return this.processSinyalJob(payload);
+    // GERİ BESLEME İŞİ (Paket E) workspace başına ve hesap kimliği taşımıyor;
+    // kota isteği işin İÇİNDE, her platform çağrısından önce (yarılama birden
+    // çok çağrı yapıyor, iş seviyesinde tek bir izin yetmezdi).
+    if (payload.jobType === 'lead_feedback_send') return this.processGeriBeslemeJob(payload);
     // KURAL İŞİ hesap işinden AYRI yol izliyor: bir kural birden fazla
     // hesaba dokunabiliyor, dolayısıyla iş seviyesinde tek bir hesabın
     // kotasına bakmak yanlış olurdu. Kota kontrolü aksiyon başına,
@@ -154,6 +160,12 @@ export class SyncProcessorService {
      */
     if (payload.jobType === 'notifications_send') return this.teslim.supur();
     if (payload.jobType === 'signals_evaluate') return this.sinyalSupurmesi();
+    /*
+     * GERİ BESLEME SÜPÜRMESİ (Paket E): hesap döngüsüne girmiyor, vadesi
+     * gelmiş satırı olan workspace'ler tek sorguyla. Tarih istemiyor
+     * (`datesForJob` dalı yok ve olmamalı, `report_schedule` ile aynı).
+     */
+    if (payload.jobType === 'lead_feedback_send') return this.geriBeslemeSupurmesi();
 
     const accounts = await this.db.adAccount.findMany({
       // Süzgeç TEK YERDE: teşhis ekranı da aynı sabiti okuyor. Ayrı
@@ -1153,6 +1165,49 @@ export class SyncProcessorService {
     try {
       const r = await this.sinyalHesap.calistir(payload.adAccountId, payload.dateFrom);
       await this.markSucceeded(payload.syncJobId, r.rows, 0, { note: r.note });
+      return { rows: r.rows, note: r.note };
+    } catch (err) {
+      await this.recordFailure(syncJobId, err);
+      throw err;
+    }
+  }
+
+  /**
+   * Geri besleme süpürmesi: vadesi gelmiş satırı olan her workspace için
+   * bir `lead_feedback_send`. Kimlik workspace'e bağlı (`buildJobId`), yani
+   * koşmakta olan bir iş varken ikincisi açılmıyor ve kaç tanesinin atlandığı
+   * notta.
+   */
+  private async geriBeslemeSupurmesi(): Promise<{ rows: number; note: string }> {
+    const musteriler = await this.geriBesleme.bekleyenWorkspaceler();
+    let acilan = 0;
+    let atlanan = 0;
+    for (const clientId of musteriler) {
+      const r = await this.queue.enqueue({ clientId, platform: 'meta', jobType: 'lead_feedback_send' });
+      if (r.enqueued) acilan++;
+      else atlanan++;
+    }
+    return {
+      rows: acilan,
+      note: `geri besleme: ${musteriler.length} workspace’te gönderilecek sonuç var · ${acilan} iş açıldı · ${atlanan} zaten kuyrukta`,
+    };
+  }
+
+  /**
+   * Tek workspace'in gönderimi. Ön koşul reddi (ayar kapalı, bağlantı
+   * yeniden yetki istiyor) BAŞARILI biter ve tekrar denenmez: satırlar
+   * `bekliyor` kalıyor ve bir sonraki süpürme koşul düzelince alıyor. Not her
+   * zaman dolu (succeeded + rows=0 notsuz olamaz).
+   */
+  private async processGeriBeslemeJob(payload: SyncJobPayload): Promise<{ rows: number; note: string }> {
+    const syncJobId = BigInt(payload.syncJobId);
+    await this.db.syncJob.update({
+      where: { id: syncJobId },
+      data: { status: 'running', startedAt: new Date(), attempts: { increment: 1 } },
+    });
+    try {
+      const r = await this.geriBesleme.calistir(payload.clientId);
+      await this.markSucceeded(payload.syncJobId, r.rows, r.apiCalls, { note: r.note });
       return { rows: r.rows, note: r.note };
     } catch (err) {
       await this.recordFailure(syncJobId, err);

@@ -16,6 +16,7 @@ import { QuotaGuardService } from './quota-guard.service';
 import { StructureSyncService } from './structure-sync.service';
 import { SyncQueueService } from './sync-queue.service';
 import { SyncProcessorService } from './sync-processor.service';
+import { GeriBeslemeGonderimService } from '../modules/geri-besleme/geri-besleme-gonderim.service';
 
 /**
  * Kuyruk ve kota altyapısı.
@@ -42,6 +43,13 @@ import { SyncProcessorService } from './sync-processor.service';
     KeywordSyncService,
     SearchTermSyncService,
     KirilimSyncService,
+    /*
+     * Paket E gönderim işi BURADA, kendi modülünde değil: kota bekçisine
+     * (bu modül) ve bağlantı kasasına (ConnectionsModule, zaten içe alınmış)
+     * bağımlı; ayrı bir modül olup buraya içe alınsaydı kota bekçisini bu
+     * modülden istemek döngü kurardı (LeadSyncService ile aynı yer).
+     */
+    GeriBeslemeGonderimService,
   ],
   exports: [
     QuotaGuardService,

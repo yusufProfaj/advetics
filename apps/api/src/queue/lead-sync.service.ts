@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
+import { hamLeadOlayi } from '../modules/geri-besleme/lead-asama';
 import { assertAssigned } from '../common/utils/ad-account-assignment';
 import type { DiscoveredLead } from '../modules/connections/provider.types';
 import { PlatformApiError } from '../modules/connections/provider.types';
@@ -80,13 +82,15 @@ export class LeadSyncService {
         }),
     });
 
-    const written = await this.persist(profile, [lead], 'webhook');
+    const { yazilan: written, eskiOlay } = await this.persist(profile, [lead], 'webhook');
     return {
       rows: written,
       // "0 satır" BAŞARISIZLIK DEĞİL: kayıt zaten mutabakat taramasıyla
       // gelmiş olabilir. Notun bunu söylemesi, iş listesinde sıfırı görenin
       // arıza aramasını engelliyor.
-      note: written === 0 ? 'kayıt zaten vardı' : '1 kayıt eklendi',
+      note:
+        (written === 0 ? 'kayıt zaten vardı' : '1 kayıt eklendi') +
+        (eskiOlay > 0 ? ' · form 7 günden eski, Meta’ya bildirilmedi' : ''),
     };
   }
 
@@ -145,6 +149,8 @@ export class LeadSyncService {
     let total = 0;
     let basarisiz = 0;
     const notlar: string[] = [];
+    // Paket E: 7 günden eski olduğu için Meta'ya ham lead olarak gitmeyenler.
+    const sayac = { eskiOlay: 0 };
 
     for (const profile of profiles) {
       if (!profile.token_var) {
@@ -157,7 +163,7 @@ export class LeadSyncService {
       }
 
       try {
-        const sonuc = await this.sayfayiTara(clientId, profile, opts.gecmis === true);
+        const sonuc = await this.sayfayiTara(clientId, profile, opts.gecmis === true, sayac);
         total += sonuc.rows;
         notlar.push(`${profile.name}: ${sonuc.not}`);
       } catch (err) {
@@ -185,7 +191,10 @@ export class LeadSyncService {
 
     return {
       rows: total,
-      note: `${profiles.length - basarisiz}/${profiles.length} sayfa tarandı, ${total} yeni kayıt`,
+      note:
+        `${profiles.length - basarisiz}/${profiles.length} sayfa tarandı, ${total} yeni kayıt` +
+        // SESSİZ DEĞİL: geç gelen eski kayıt Meta'ya bildirilmiyor (Ç-13).
+        (sayac.eskiOlay > 0 ? `, ${sayac.eskiOlay} kayıt 7 günden eski olduğu için Meta’ya bildirilmedi` : ''),
       notlar,
     };
   }
@@ -201,6 +210,7 @@ export class LeadSyncService {
     clientId: string,
     profile: { id: string; name: string; external_id: string },
     gecmis: boolean,
+    sayac: { eskiOlay: number },
   ): Promise<{ rows: number; not: string }> {
     const yuklenen = await this.loadProfile(profile.id);
     const provider = this.providers.get('meta');
@@ -242,7 +252,7 @@ export class LeadSyncService {
 
     for (const [externalFormId, ad] of adlar) {
       try {
-        rows += await this.reconcileForm(clientId, profile.id, externalFormId, ad, gecmis);
+        rows += await this.reconcileForm(clientId, profile.id, externalFormId, ad, gecmis, sayac);
       } catch (err) {
         basarisiz++;
         const mesaj = err instanceof Error ? err.message : String(err);
@@ -269,6 +279,7 @@ export class LeadSyncService {
     externalFormId: string,
     formAdi: string,
     gecmis: boolean,
+    sayac: { eskiOlay: number },
   ): Promise<number> {
     const profile = await this.loadProfile(socialProfileId);
     const provider = this.providers.get('meta');
@@ -306,7 +317,8 @@ export class LeadSyncService {
         }),
     });
 
-    const written = await this.persist(profile, leads, 'reconcile', formAdi);
+    const { yazilan: written, eskiOlay } = await this.persist(profile, leads, 'reconcile', formAdi);
+    sayac.eskiOlay += eskiOlay;
 
     /**
      * İMLEÇ EN YENİ KAYDA GÖRE, "şimdi"ye göre DEĞİL.
@@ -375,8 +387,9 @@ export class LeadSyncService {
      * kayıt var, nereden geldiği yok.
      */
     formAdiYedegi?: string | null,
-  ): Promise<number> {
+  ): Promise<{ yazilan: number; eskiOlay: number }> {
     let written = 0;
+    let eskiOlay = 0;
     /*
      * FORM ADI ÖNBELLEĞİ — TUR BAŞINA.
      *
@@ -431,30 +444,72 @@ export class LeadSyncService {
         formAdi = await this.metaFormAdi(profile, lead.externalFormId, metaAdlari);
       }
 
-      const n = await this.db.$executeRaw(Prisma.sql`
-        INSERT INTO leads (
-          id, org_id, client_id, external_lead_id, lead_form_id, social_profile_id,
-          external_ad_id, campaign_name, lead_form_name,
-          full_name, email, phone, fields, source, submitted_at, updated_at
-        ) VALUES (
-          gen_random_uuid(), ${profile.orgId}::uuid, ${profile.clientId}::uuid,
-          ${lead.externalLeadId},
-          ${formName?.id ?? null}::uuid, ${profile.id}::uuid,
-          ${lead.externalAdId}, ${campaignName}, ${formAdi},
-          ${contact.fullName}, ${contact.email}, ${contact.phone},
-          ${JSON.stringify(lead.fields)}::jsonb, ${source}, ${lead.submittedAt}, now()
+      /*
+       * ═══ LEAD + GEÇMİŞ + HAM LEAD OLAYI TEK DEYİMDE (Paket E, MIMARI § 5.1) ═══
+       *
+       * Kimlik burada üretiliyor (veritabanında değil) çünkü olay kimliği
+       * (`adv-<lead>-ham_lead`) ondan türüyor ve deyim ÇALIŞMADAN önce
+       * bilinmesi gerekiyor. Geçmiş ve olay satırı YALNIZCA gerçekten yeni
+       * satırda doğuyor: `yeni` CTE'si `ON CONFLICT DO NOTHING ... RETURNING`
+       * ve mükerrerde boş. Üçü tek deyim, yani yarım kalamaz: lead yazılıp
+       * olayı yazılmamış bir kayıt Meta'ya hiç gitmezdi ve hiçbir yerde
+       * görünmezdi.
+       *
+       * Olay yalnız ayar AÇIKSA ve form 7 gün içinde doldurulduysa: mutabakatla
+       * geç gelen eski lead'in olayı partinin tamamını düşürürdü (Ç-13). Kaç
+       * tanesinin bu yüzden atlandığı iş notunda.
+       */
+      const leadId = randomUUID();
+      const ham = hamLeadOlayi(leadId, lead.submittedAt, new Date());
+      const [r] = await this.db.$queryRaw<Array<{ yeni: number; ayar_etkin: boolean | null; olay: number }>>(Prisma.sql`
+        WITH yeni AS (
+          INSERT INTO leads (
+            id, org_id, client_id, external_lead_id, lead_form_id, social_profile_id,
+            external_ad_id, campaign_name, lead_form_name,
+            full_name, email, phone, fields, source, submitted_at, updated_at
+          ) VALUES (
+            ${leadId}::uuid, ${profile.orgId}::uuid, ${profile.clientId}::uuid,
+            ${lead.externalLeadId},
+            ${formName?.id ?? null}::uuid, ${profile.id}::uuid,
+            ${lead.externalAdId}, ${campaignName}, ${formAdi},
+            ${contact.fullName}, ${contact.email}, ${contact.phone},
+            ${JSON.stringify(lead.fields)}::jsonb, ${source}, ${lead.submittedAt}, now()
+          )
+          -- MÜKERRER SESSİZCE DÜŞÜYOR ve bu TASARIM.
+          --
+          -- Webhook ile tarama aynı kaydı görüyor. Çakışmayı hata saymak, her
+          -- mutabakat turunu kırmızı yapardı; güncelleme yapmak ise ajansın
+          -- girdiği durumu ve notu ezerdi.
+          ON CONFLICT (external_lead_id) DO NOTHING
+          RETURNING id, org_id, client_id
+        ),
+        gecmis AS (
+          INSERT INTO lead_durum_gecmisi (org_id, client_id, lead_id, onceki_durum, yeni_durum, kaynak)
+          SELECT org_id, client_id, id, NULL, 'new', 'sistem' FROM yeni
+          RETURNING 1
+        ),
+        olay AS (
+          INSERT INTO geri_besleme_olaylari
+            (org_id, client_id, lead_id, platform, asama, olay_kimligi, olay_zamani, durum, sonraki_deneme)
+          SELECT y.org_id, y.client_id, y.id, a.platform, 'ham_lead', ${ham.olayKimligi},
+                 ${ham.olayZamani}::timestamptz, 'bekliyor', now()
+            FROM yeni y
+            JOIN geri_besleme_ayarlari a ON a.client_id = y.client_id AND a.platform = 'meta' AND a.etkin
+           WHERE ${ham.pencerede}
+          ON CONFLICT (lead_id, platform, asama) DO NOTHING
+          RETURNING 1
         )
-        -- MÜKERRER SESSİZCE DÜŞÜYOR ve bu TASARIM.
-        --
-        -- Webhook ile tarama aynı kaydı görüyor. Çakışmayı hata saymak, her
-        -- mutabakat turunu kırmızı yapardı; güncelleme yapmak ise ajansın
-        -- girdiği durumu ve notu ezerdi.
-        ON CONFLICT (external_lead_id) DO NOTHING
+        SELECT (SELECT count(*) FROM yeni)::int AS yeni,
+               (SELECT count(*) FROM gecmis)::int AS gecmis_sayisi,
+               (SELECT etkin FROM geri_besleme_ayarlari WHERE client_id = ${profile.clientId}::uuid AND platform = 'meta') AS ayar_etkin,
+               (SELECT count(*) FROM olay)::int AS olay
       `);
-      written += n;
+      const yeni = Number(r?.yeni ?? 0);
+      written += yeni;
+      if (yeni > 0 && r?.ayar_etkin === true && !ham.pencerede) eskiOlay++;
     }
 
-    return written;
+    return { yazilan: written, eskiOlay };
   }
 
   /**

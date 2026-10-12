@@ -381,7 +381,7 @@ describe('müşteri hesabı (client_viewer)', () => {
     const y = await svc.bekleyenler(MUSTERI, {}, SIMDI);
     expect(y.hatalar).toEqual([]);
     expect(ozet(y.isler)).toBe(`strateji_onay|${AD_OF[WS_EV]}|1`);
-    expect([...y.sorulmayan].sort()).toEqual(['boost_onay', 'butce_yok', 'sinyal_acik', 'strateji_aktar']);
+    expect([...y.sorulmayan].sort()).toEqual(['boost_onay', 'butce_yok', 'geri_besleme_sorunu', 'sinyal_acik', 'strateji_aktar']);
     // "Sorulmadı" SÖZ değil: gönderilen SQL'de üç tablonun hiçbiri yok.
     const govde = sorgular.join('\n');
     expect(govde).toContain('strateji_planlari');

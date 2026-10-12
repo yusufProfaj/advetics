@@ -444,6 +444,15 @@ export class SyncQueueService implements OnModuleDestroy {
        * dakikalarından kaçınıyor.
        */
       { name: 'sweep:notifications', pattern: '2-59/5 * * * *', jobType: 'notifications_send' },
+      /*
+       * Paket E — LEAD GERİ BESLEME: 5 dakikada bir (dakika 4, 9, 14...).
+       * Vadesi gelmiş aşama satırı olan workspace'ler için `lead_feedback_send`
+       * açar. Meta "en az günde bir, tercihen gerçek zamanlıya yakın" diyor;
+       * kullanıcı işareti zaten 15 dakika bekliyor (geri alma penceresi),
+       * yani 5 dakika en kötü 20 dakikalık gecikme. Bildirim süpürmesinden
+       * (2, 7, 12...) iki dakika sonra.
+       */
+      { name: 'sweep:lead-feedback', pattern: '4-59/5 * * * *', jobType: 'lead_feedback_send' },
     ];
 
     for (const s of schedules) {

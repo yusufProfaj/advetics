@@ -424,6 +424,11 @@ DECLARE
     'sinyaller',
     'bildirim_kanallari',
     'bildirim_gonderimleri',
+    -- Lead geri besleme (docs/geri-besleme/MIMARI.md § 2). Her tablo KENDİ
+    -- satırında (test/sonraki-tablolar.ts satır satır çıkarıyor).
+    'lead_durum_gecmisi',
+    'geri_besleme_ayarlari',
+    'geri_besleme_olaylari',
     -- AdvStrategy aylık medya planı (docs/advstrategy/MIMARI.md § 1)
     'strateji_planlari', 'strateji_dagilimlari', 'strateji_matrisi', 'strateji_kelimeleri',
     'ozel_gunler'
@@ -2616,5 +2621,49 @@ CREATE POLICY adv_bildirim_gonderimleri_select ON bildirim_gonderimleri
 CREATE POLICY adv_bildirim_gonderimleri_insert ON bildirim_gonderimleri
   FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 CREATE POLICY adv_bildirim_gonderimleri_update ON bildirim_gonderimleri
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+  WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+
+
+-- ============================================================================
+-- LEAD GERİ BESLEME — lead_durum_gecmisi, geri_besleme_ayarlari,
+-- geri_besleme_olaylari (docs/geri-besleme/MIMARI.md § 2)
+-- ============================================================================
+--
+-- lead_durum_gecmisi: workspace kapsamlı; SELECT + INSERT + UPDATE. Satırı
+-- panelde lead durumunu değiştiren istek (kullanıcı bağlamı) ve webhook /
+-- tarama (worker, BYPASSRLS) yazıyor. Uygulamada güncelleyen yol YOK; UPDATE
+-- politikası yalnız taşıma içindir (workspace şirket değiştirirken kompozit
+-- anahtarın ON UPDATE CASCADE'i). DELETE YOK: geçmiş lead'le birlikte
+-- (ON DELETE CASCADE) gider, tek başına silinmez.
+CREATE POLICY adv_lead_durum_gecmisi_select ON lead_durum_gecmisi
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_lead_durum_gecmisi_insert ON lead_durum_gecmisi
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_lead_durum_gecmisi_update ON lead_durum_gecmisi
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+  WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+
+-- geri_besleme_ayarlari: workspace kapsamlı; SELECT + INSERT + UPDATE. Kimin
+-- yazabileceği (connection.manage) servis katmanında. DELETE YOK: kapatmak
+-- bir UPDATE (etkin = false); aydınlatma onayının kim/ne zaman izi kalıyor.
+CREATE POLICY adv_geri_besleme_ayarlari_select ON geri_besleme_ayarlari
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_geri_besleme_ayarlari_insert ON geri_besleme_ayarlari
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_geri_besleme_ayarlari_update ON geri_besleme_ayarlari
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+  WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+
+-- geri_besleme_olaylari: workspace kapsamlı; SELECT + INSERT + UPDATE.
+-- Panel lead durumunu değiştirirken aşama satırı açıyor / iptal ediyor ve
+-- "tekrar dene" ile yeniden sıraya koyuyor; gönderim sonucunu worker yazıyor
+-- (BYPASSRLS). DELETE YOK: gönderim geçmişi "Meta'ya ne gitti" sorusunun
+-- cevabı; satır lead'le birlikte (ON DELETE CASCADE) gidiyor.
+CREATE POLICY adv_geri_besleme_olaylari_select ON geri_besleme_olaylari
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_geri_besleme_olaylari_insert ON geri_besleme_olaylari
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_geri_besleme_olaylari_update ON geri_besleme_olaylari
   FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
   WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));

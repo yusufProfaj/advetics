@@ -1,4 +1,7 @@
 import { z } from 'zod';
+// YALNIZ TİP: geri-besleme/asama.ts bu dosyadan `LeadStatus` okuyor; değer
+// içe aktarmak iki modülü döngüsel yüklemeye sokardı.
+import type { LeadGeriBeslemeRozeti } from '../geri-besleme/ayar';
 
 /**
  * Potansiyel müşteriler (Lead CRM).
@@ -98,6 +101,13 @@ export interface LeadRecord {
   /** Meta'da formun doldurulduğu an. `createdAt` bizim aldığımız an. */
   submittedAt: string;
   createdAt: string;
+
+  /**
+   * Sonucun Meta'ya bildirimi (Paket E, `geri-besleme/ayar.ts`). İSTEĞE
+   * BAĞLI: liste ve tek kayıt okuması dolduruyor; CSV dışa aktarma gibi
+   * tüketiciler okumuyor. Ayar kapalı ve hiç gönderim yoksa `tur: 'kapali'`.
+   */
+  geriBesleme?: LeadGeriBeslemeRozeti;
 }
 
 // -----------------------------------------------------------------------------
