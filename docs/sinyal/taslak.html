@@ -1,0 +1,694 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sinyaller Taslağı</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600;700&display=swap">
+<style>
+/*
+ * Paket A taslağı (docs/sinyal/MIMARI.md § 9). KESİN KURAL: renkler yalnız
+ * #ffffff, #000000, #302e2d, #ff2400; zemin ve çizgi için yalnız grinin
+ * saydam tonları (TASARIM-DILI § 1). Yeşil yalnız durum noktası. Gradyan,
+ * pastel, buğu yok.
+ */
+:root{
+  --beyaz:#ffffff; --siyah:#000000; --gri:#302e2d; --kirmizi:#ff2400;
+  --zemin:rgba(48,46,45,.04); --cizgi:rgba(48,46,45,.12); --ikincil:rgba(48,46,45,.62); --cok-acik:rgba(48,46,45,.07);
+  --yesil:#16a34a; /* yalnız durum noktası */
+  --baslik:"Montserrat",system-ui,sans-serif; --govde:"Open Sans",system-ui,sans-serif;
+  --gecis:cubic-bezier(.16,1,.3,1);
+}
+*{box-sizing:border-box}
+html{background:var(--beyaz)}
+body{margin:0;background:var(--zemin);color:var(--gri);font-family:var(--govde);font-size:14px;line-height:1.45}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+input,select,textarea{font:inherit;color:var(--gri)}
+a{color:var(--siyah);text-decoration:none}
+a:hover{color:var(--kirmizi);text-decoration:underline}
+:focus-visible{outline:2px solid var(--kirmizi);outline-offset:2px;border-radius:6px}
+.num{font-variant-numeric:tabular-nums}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important}}
+
+.sayfa{max-width:1180px;margin:0 auto;padding:16px 16px 64px;display:flex;flex-direction:column;gap:16px}
+.not{background:var(--beyaz);border:1px dashed var(--cizgi);border-radius:10px;padding:10px 14px;font-size:12.5px;color:var(--ikincil)}
+.not b{color:var(--gri)}
+
+/* Taslak gezintisi (ürünün parçası değil) */
+.gezinti{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.gezinti span{font-size:12px;font-weight:700;color:var(--ikincil);margin-right:4px}
+.gezinti button{border:1px solid var(--cizgi);background:var(--beyaz);border-radius:999px;padding:6px 12px;font-size:12.5px;font-weight:600}
+.gezinti button[aria-pressed="true"]{background:var(--gri);color:var(--beyaz);border-color:var(--gri)}
+.ekran{display:none;flex-direction:column;gap:16px}
+.ekran.acik{display:flex}
+
+h1{font-family:var(--baslik);font-weight:700;font-size:24px;margin:0;color:var(--siyah)}
+h2{font-family:var(--govde);font-size:14px;font-weight:700;margin:0;color:var(--siyah)}
+.ust{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px 16px}
+.alt{font-size:13px;color:var(--ikincil);margin-top:2px}
+.sag{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.tarih{border:1px solid var(--cizgi);background:var(--beyaz);border-radius:8px;padding:7px 12px;font-size:13px}
+.tarih small{color:var(--ikincil)}
+
+/* Sekmeler (Google Ads: altı çizili sekme) */
+.sekmeler{display:flex;gap:4px;border-bottom:1px solid var(--cizgi);overflow-x:auto}
+.sekmeler button{padding:10px 14px;font-weight:600;font-size:13.5px;color:var(--ikincil);border-bottom:3px solid transparent;white-space:nowrap;display:flex;gap:6px;align-items:center;transition:color .2s var(--gecis),border-color .2s var(--gecis)}
+.sekmeler button[aria-selected="true"]{color:var(--siyah);border-bottom-color:var(--kirmizi)}
+.say{font-size:11px;font-weight:700;border-radius:999px;padding:0 7px;background:var(--cok-acik);color:var(--gri)}
+.say.kirmizi{background:var(--kirmizi);color:var(--beyaz)}
+
+.kart{background:var(--beyaz);border:1px solid var(--cizgi);border-radius:12px;min-width:0;overflow:hidden}
+.kartUst{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--cizgi);flex-wrap:wrap}
+.kartUst .sag{font-size:12.5px}
+
+.birincil{display:inline-flex;align-items:center;gap:6px;background:var(--kirmizi);color:var(--beyaz);font-weight:600;font-size:12.5px;padding:7px 14px;border-radius:999px;transition:opacity .2s}
+.birincil:hover{opacity:.88}
+.birincil[disabled]{opacity:.35;cursor:not-allowed}
+.ikincil{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--cizgi);background:var(--beyaz);border-radius:999px;padding:6px 13px;font-size:12.5px;font-weight:600;transition:border-color .2s}
+.ikincil:hover{border-color:var(--gri)}
+.metinD{font-size:12.5px;font-weight:600;color:var(--ikincil);padding:6px 4px}
+.metinD:hover{color:var(--siyah);text-decoration:underline}
+
+/* Özet şeridi: gerçek sayılar, uydurma puan yok */
+.ozet{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
+.ozet>div{padding:12px 16px;border-right:1px solid var(--cizgi);min-width:0}
+.ozet>div:last-child{border-right:0}
+.ozet small{display:block;font-size:12px;font-weight:600;color:var(--ikincil)}
+.ozet b{display:block;font-family:var(--baslik);font-size:22px;color:var(--siyah);margin-top:2px}
+.ozet em{font-style:normal;font-size:12px;color:var(--ikincil)}
+.ozet .vurgu b{color:var(--kirmizi)}
+
+/* Süzgeç çipleri */
+.arac{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--cizgi)}
+.arac .etk{font-size:12px;color:var(--ikincil);font-weight:600}
+.cip{border:1px solid var(--cizgi);border-radius:999px;padding:5px 11px;font-size:12.5px;font-weight:600;background:var(--beyaz);transition:border-color .2s,background .2s,color .2s}
+.cip[aria-pressed="true"]{border-color:var(--gri);background:var(--gri);color:var(--beyaz)}
+
+/* Sinyal satırı */
+.satir{display:grid;grid-template-columns:28px minmax(0,1fr) 180px auto;gap:12px 16px;padding:14px 16px;border-bottom:1px solid var(--cizgi);align-items:center;transition:opacity .3s var(--gecis)}
+.satir:last-child{border-bottom:0}
+.satir.gidiyor{opacity:0}
+.ikon{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:13px;font-family:var(--baslik)}
+.ikon.yuksek{background:var(--kirmizi);color:var(--beyaz)}
+.ikon.orta{border:2px solid var(--gri);color:var(--gri)}
+.ikon.saglik{background:var(--gri);color:var(--beyaz)}
+.baslikS{font-weight:700;color:var(--siyah);font-size:14px}
+.rozetler{display:inline-flex;gap:6px;margin-left:6px;vertical-align:1px}
+.rozet{font-size:10.5px;font-weight:700;border-radius:4px;padding:1px 6px;border:1px solid var(--cizgi);color:var(--ikincil)}
+.rozet.kirmizi{border-color:var(--kirmizi);color:var(--kirmizi)}
+.yol{font-size:12px;color:var(--ikincil);margin-top:2px}
+.yol a{color:var(--ikincil)}
+.kanit{font-size:13px;margin-top:6px}
+.kanit b{color:var(--siyah)}
+.neden{font-size:12.5px;color:var(--ikincil);margin-top:4px}
+.kisit{font-size:12px;color:var(--gri);margin-top:4px;font-style:italic}
+.mini{width:180px;height:56px;display:block}
+.lejant{font-size:10.5px;color:var(--ikincil);display:flex;gap:12px;margin-top:2px}
+.lejant i{display:inline-block;width:10px;height:6px;vertical-align:1px;margin-right:4px}
+.eylemler{display:flex;flex-direction:column;gap:6px;align-items:flex-end}
+.eylemler .yan{display:flex;gap:4px}
+
+.hesaplar{display:flex;flex-direction:column}
+.hesap{display:flex;gap:10px;align-items:center;padding:9px 16px;border-top:1px solid var(--cizgi);font-size:12.5px;flex-wrap:wrap}
+.hesap:first-child{border-top:0}
+.nokta{width:8px;height:8px;border-radius:50%;flex:none;display:inline-block}
+.nokta.yesil{background:var(--yesil)}
+.nokta.gri{border:2px solid var(--gri);width:9px;height:9px}
+.nokta.kirmizi{background:var(--kirmizi)}
+.hesap .ad{font-weight:600;color:var(--siyah)}
+.hesap .ne{color:var(--ikincil)}
+.disarida{padding:10px 16px;font-size:12.5px;color:var(--ikincil);border-top:1px solid var(--cizgi)}
+.disarida summary{cursor:pointer;font-weight:600;color:var(--gri)}
+.disarida ul{margin:8px 0 0;padding-left:18px}
+.disarida li{margin:4px 0}
+
+.bos{padding:36px 16px;text-align:center}
+.bos b{display:block;font-size:15px;color:var(--siyah);margin-bottom:4px}
+.bos p{margin:0 auto 12px;max-width:520px;color:var(--ikincil);font-size:13px}
+.hata{padding:14px 16px;border-left:3px solid var(--kirmizi);font-size:13px}
+.hata b{color:var(--siyah)}
+.yukleniyor{padding:16px;display:flex;flex-direction:column;gap:10px}
+.yukleniyor i{height:14px;border-radius:6px;background:var(--cok-acik);display:block}
+.bant{padding:10px 16px;font-size:12.5px;border-bottom:1px solid var(--cizgi);display:flex;gap:8px;align-items:center}
+.bant b{color:var(--siyah)}
+.sayfalama{display:flex;justify-content:flex-end;gap:12px;padding:10px 16px;font-size:12.5px;color:var(--ikincil);border-top:1px solid var(--cizgi)}
+
+/* Pencere */
+.perde{position:fixed;inset:0;background:rgba(0,0,0,.32);display:grid;place-items:center;padding:16px;opacity:0;visibility:hidden;transition:opacity .25s var(--gecis),visibility .25s;z-index:20}
+.perde.acik{opacity:1;visibility:visible}
+.pencere{width:min(500px,100%);background:var(--beyaz);border-radius:12px;transform:translateY(8px);transition:transform .3s var(--gecis)}
+.perde.acik .pencere{transform:none}
+.pencere h3{margin:0;padding:16px 18px 4px;font-family:var(--baslik);font-size:16px;color:var(--siyah)}
+.pencere p{margin:0 18px 10px;font-size:13px;color:var(--ikincil)}
+.degisim{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:center;margin:6px 18px 12px;padding:12px;border:1px solid var(--cizgi);border-radius:10px}
+.degisim small{display:block;font-size:11.5px;color:var(--ikincil)}
+.degisim b{color:var(--siyah)}
+.adimlar{list-style:none;margin:0 18px 14px;padding:0;display:flex;flex-direction:column;gap:6px;font-size:12.5px}
+.adimlar li{display:flex;gap:8px;align-items:center;color:var(--ikincil)}
+.adimlar li i{width:14px;height:14px;border-radius:50%;border:2px solid var(--cizgi);flex:none;transition:all .25s}
+.adimlar li.bitti{color:var(--gri)}
+.adimlar li.bitti i{border-color:var(--yesil);background:var(--yesil)}
+.adimlar li.suruyor i{border-color:var(--kirmizi);border-top-color:transparent;animation:don .8s linear infinite}
+@keyframes don{to{transform:rotate(360deg)}}
+.pencereAlt{display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--cizgi)}
+textarea.notA{display:block;width:calc(100% - 36px);margin:0 18px 12px;border:1px solid var(--cizgi);border-radius:8px;padding:8px 10px;min-height:60px;resize:vertical}
+
+/* Genel Bakış bekleyen işler */
+.isler{display:flex;flex-direction:column}
+.is{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:10px;align-items:center;padding:11px 16px;border-top:1px solid var(--cizgi)}
+.is:first-child{border-top:0}
+.harf{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;font-weight:800;font-family:var(--baslik);font-size:12px;background:var(--cok-acik);color:var(--gri)}
+.harf.kirmizi{background:var(--kirmizi);color:var(--beyaz)}
+.is .c{font-weight:600;color:var(--siyah)}
+.is .k{font-size:12px;color:var(--ikincil)}
+.yeni{border:1px solid var(--kirmizi);border-radius:4px;color:var(--kirmizi);font-size:10px;font-weight:700;padding:0 5px;margin-left:6px}
+
+/* Marka Merkezi */
+.mm{display:grid;grid-template-columns:220px minmax(0,1fr);gap:16px;align-items:start}
+.icmenu{background:var(--beyaz);border:1px solid var(--cizgi);border-radius:12px;padding:6px;display:flex;flex-direction:column}
+.icmenu a{padding:8px 12px;border-radius:8px;font-size:13px;font-weight:600;color:var(--gri)}
+.icmenu a:hover{text-decoration:none;background:var(--zemin);color:var(--siyah)}
+.icmenu a.secili{background:var(--gri);color:var(--beyaz)}
+.icmenu .alt2{padding-left:24px;font-weight:600}
+.ayar{display:grid;grid-template-columns:200px minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 16px;border-top:1px solid var(--cizgi)}
+.ayar:first-child{border-top:0}
+.ayar .e{font-size:12.5px;color:var(--ikincil);font-weight:600}
+.ayar .d{font-size:13.5px;color:var(--siyah);font-weight:600}
+.ayar .d small{display:block;font-weight:400;color:var(--ikincil);font-size:12px}
+.durumK{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600}
+.turlar{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;padding:14px 16px}
+.tur{border:1px solid var(--cizgi);border-radius:10px;padding:12px;text-align:left;display:flex;flex-direction:column;gap:4px;transition:border-color .2s}
+.tur b{color:var(--siyah);font-size:13.5px}
+.tur small{color:var(--ikincil);font-size:12px}
+.tur[aria-pressed="true"]{border:2px solid var(--kirmizi);padding:11px}
+.tur[disabled]{opacity:.5;cursor:not-allowed}
+.form{padding:0 16px 16px;display:flex;flex-direction:column;gap:12px}
+.alan label{display:block;font-size:12.5px;font-weight:700;color:var(--siyah);margin-bottom:4px}
+.alan input[type=text],.alan input[type=url],.alan textarea{width:100%;border:1px solid var(--cizgi);border-radius:8px;padding:9px 11px;background:var(--beyaz);transition:border-color .2s}
+.alan input:focus,.alan textarea:focus{outline:none;border-color:var(--gri)}
+.alan input.yanlis{border-color:var(--kirmizi)}
+.alan .ip{font-size:12px;color:var(--ikincil);margin-top:4px}
+.alan .ret{font-size:12px;color:var(--kirmizi);margin-top:4px;font-weight:600;min-height:0}
+.kutu{display:flex;gap:8px;align-items:flex-start;font-size:13px;margin:4px 0}
+.kutu small{display:block;color:var(--ikincil);font-size:12px}
+.soru{border:1px solid var(--gri);border-radius:10px;padding:12px 14px;display:none;gap:10px;align-items:center;flex-wrap:wrap}
+.soru.acik{display:flex}
+.soru b{color:var(--siyah)}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{text-align:left;font-weight:700;color:var(--ikincil);padding:9px 16px;border-bottom:1px solid var(--cizgi);white-space:nowrap}
+td{padding:9px 16px;border-bottom:1px solid var(--cizgi);vertical-align:top}
+tr:last-child td{border-bottom:0}
+.tablo{overflow-x:auto}
+
+/* Kural sihirbazı */
+.sihirbaz{max-width:760px;margin:0 auto;width:100%}
+.sihirbazUst{display:flex;align-items:center;gap:10px}
+.kapatX{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;font-size:18px}
+.kapatX:hover{background:var(--cok-acik)}
+.adimCubugu{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 4px}
+.adimCubugu span{font-size:12px;font-weight:600;color:var(--ikincil);display:flex;gap:6px;align-items:center}
+.adimCubugu span i{font-style:normal;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;border:1px solid var(--cizgi);font-size:11px}
+.adimCubugu span.bitti i{background:var(--gri);color:var(--beyaz);border-color:var(--gri)}
+.adimCubugu span.simdi{color:var(--siyah)}
+.adimCubugu span.simdi i{background:var(--kirmizi);color:var(--beyaz);border-color:var(--kirmizi)}
+.adimCubugu .ara{color:var(--cizgi)}
+.soruB{font-family:var(--baslik);font-size:20px;color:var(--siyah);margin:10px 0 4px}
+.kanalSec{display:flex;flex-direction:column}
+.kanalSec label{display:flex;gap:10px;align-items:center;padding:12px 16px;border-top:1px solid var(--cizgi);cursor:pointer}
+.kanalSec label:first-child{border-top:0}
+.kanalSec .k{flex:1;min-width:0}
+.kanalSec .k b{color:var(--siyah)}
+.kanalSec .k small{display:block;color:var(--ikincil);font-size:12px}
+.uyari{padding:12px 16px;border-left:3px solid var(--gri);font-size:13px;background:var(--zemin)}
+.sihirbazAlt{display:flex;justify-content:flex-end;gap:8px}
+.onizleme{padding:12px 16px;font-size:13px}
+.onizleme .slack{border-left:4px solid var(--gri);padding:8px 12px;background:var(--zemin);border-radius:4px;font-size:12.5px}
+
+@media (max-width:860px){
+  .satir{grid-template-columns:28px minmax(0,1fr)}
+  .satir figure,.satir .eylemler{grid-column:2}
+  .eylemler{align-items:flex-start;flex-direction:row;flex-wrap:wrap}
+  .mm{grid-template-columns:1fr}
+  .icmenu{flex-direction:row;overflow-x:auto}
+  .icmenu a{white-space:nowrap}
+  .icmenu .alt2{padding-left:12px}
+  .ayar{grid-template-columns:1fr;gap:4px}
+  .turlar{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:560px){
+  .ozet{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ozet>div:nth-child(2){border-right:0}
+  .ozet>div:nth-child(-n+2){border-bottom:1px solid var(--cizgi)}
+  h1{font-size:20px}
+  .sag{margin-left:0}
+}
+</style>
+</head>
+<body>
+<div class="sayfa">
+
+  <div class="not"><b>Taslak · Paket A (Sinyaller ve bildirimler).</b> Gerçekçi örnek veri; gerçek değil. Mimari: <code>docs/sinyal/MIMARI.md</code>. Dört ekran aşağıdaki düğmelerle değişir. Renkler yalnız kılavuzun dördü; yeşil yalnız "çalışıyor/yayında" noktasında.</div>
+
+  <div class="gezinti" role="group" aria-label="Taslak ekranları">
+    <span>Ekran:</span>
+    <button data-ekran="sinyaller" aria-pressed="true">1 · İyileştir › Sinyaller</button>
+    <button data-ekran="genel" aria-pressed="false">2 · Genel Bakış › Bekleyen işler</button>
+    <button data-ekran="bildirim" aria-pressed="false">3 · Marka Merkezi › Bildirimler</button>
+    <button data-ekran="kural" aria-pressed="false">4 · Kural › Bildirim adımı</button>
+  </div>
+
+  <!-- ═══════════════ 1. İYİLEŞTİR › SİNYALLER ═══════════════ -->
+  <section class="ekran acik" id="ekran-sinyaller">
+    <div class="ust">
+      <div>
+        <h1>İyileştir</h1>
+        <div class="alt">Ege Birlik Yapı · Meta ve Google</div>
+      </div>
+      <div class="sag"><div class="tarih">Son değerlendirme <b>bugün 07:40</b> <small>· dünün verisiyle</small></div></div>
+    </div>
+
+    <div class="sekmeler" role="tablist">
+      <button role="tab" aria-selected="false">Öneriler <span class="say">4</span></button>
+      <button role="tab" aria-selected="true">Sinyaller <span class="say kirmizi" id="sayAcik">4</span></button>
+      <button role="tab" aria-selected="false">AI Asistan</button>
+      <button role="tab" aria-selected="false">Kurallar</button>
+    </div>
+
+    <div class="not"><b>Hâl seçici (taslak):</b>
+      <button class="metinD" data-hal="dolu">Dolu</button> ·
+      <button class="metinD" data-hal="bos-yok">Boş: sinyal yok</button> ·
+      <button class="metinD" data-hal="bos-hesaplanmadi">Boş: hesaplanmadı</button> ·
+      <button class="metinD" data-hal="bos-gecmis">Boş: geçmiş yetersiz</button> ·
+      <button class="metinD" data-hal="sessiz">Ölçüm dönemi</button> ·
+      <button class="metinD" data-hal="yukleniyor">Yükleniyor</button> ·
+      <button class="metinD" data-hal="hata">Hata</button>
+    </div>
+
+    <div class="kart">
+      <div class="ozet">
+        <div class="vurgu"><small>Açık sinyal</small><b class="num" id="ozAcik">4</b><em>2 yüksek önemli</em></div>
+        <div><small>Bu hafta açılan</small><b class="num">6</b><em>1 tanesi yeniden açıldı</em></div>
+        <div><small>Bu hafta kapanan</small><b class="num" id="ozKapanan">3</b><em>2 kendiliğinden</em></div>
+        <div><small>Açık sinyallerin harcaması</small><b class="num">7.940 ₺</b><em>dün</em></div>
+      </div>
+    </div>
+
+    <div class="kart" id="listeKart">
+      <div class="kartUst">
+        <h2>Bir şey ters gidince</h2>
+        <div class="sag">
+          <button class="cip" aria-pressed="true" data-dkip="acik">Açık</button>
+          <button class="cip" aria-pressed="false" data-dkip="kapali">Kapalı</button>
+        </div>
+      </div>
+      <div class="arac">
+        <span class="etk">Süzgeç</span>
+        <button class="cip" aria-pressed="true" data-suz="hepsi">Tümü</button>
+        <button class="cip" aria-pressed="false" data-suz="anomali">Performans</button>
+        <button class="cip" aria-pressed="false" data-suz="saglik">Sağlık</button>
+        <span class="etk" style="margin-left:8px">Platform</span>
+        <button class="cip" aria-pressed="true">Hepsi</button>
+        <button class="cip" aria-pressed="false">Meta</button>
+        <button class="cip" aria-pressed="false">Google</button>
+      </div>
+
+      <div id="govde"><!-- JS doldurur --></div>
+
+      <div class="sayfalama" id="sayfalama"><span>Gösterilen <b class="num" id="gosterilen">4</b> / <b class="num" id="toplamS">4</b></span></div>
+    </div>
+
+    <div class="kart">
+      <div class="kartUst"><h2>Hesaplar</h2><div class="sag" style="color:var(--ikincil)">Sinyaller her gece, hesabın günü kapanınca hesaplanır</div></div>
+      <div class="hesaplar">
+        <div class="hesap"><span class="nokta yesil" aria-hidden="true"></span><span class="ad">Ege Birlik Yapı · Meta</span><span class="ne">Hesaplandı bugün 07:12 · 6 haftalık geçmiş</span></div>
+        <div class="hesap"><span class="nokta yesil" aria-hidden="true"></span><span class="ad">Ege Birlik Yapı · Google Ads</span><span class="ne">Hesaplandı bugün 07:40 · 6 haftalık geçmiş</span></div>
+        <div class="hesap"><span class="nokta gri" aria-hidden="true"></span><span class="ad">Ege Birlik Konut · Meta</span><span class="ne">Geçmiş yetersiz: 2 hafta var, performans karşılaştırması için en az 4 hafta gerekiyor. Sağlık kontrolleri çalışıyor.</span></div>
+      </div>
+      <details class="disarida">
+        <summary>Kontrol edilmeyenler (4)</summary>
+        <ul>
+          <li><b>Meta özel kitlesi 1.000 kişinin altında:</b> kitle listesi saklanmıyor, yalnız Meta'dan anlık okunuyor.</li>
+          <li><b>Analytics'te anahtar etkinlik yok:</b> anahtar etkinlik listesi saklanmıyor.</li>
+          <li><b>Google dönüşüm işlemi pasif:</b> Ölçüm ekranında anlık okunuyor. Yerine "dönüşümler kesildi" kontrolü çalışıyor.</li>
+          <li><b>Performance Max öğe eksik:</b> öğe grupları senkronize edilmiyor.</li>
+        </ul>
+      </details>
+    </div>
+
+    <div class="not"><b>Kararlar:</b> Satır düzeni Google Ads "hesap teşhisi"nden: önem ikonu, tek cümle başlık, nerede olduğu (workspace › hesap › kampanya), kanıt (gözlenen ve beklenen aralık), tek birincil düğme. Durdur yalnız para yakan yönde çıkar; bütçe değişikliği burada YOK (İyileştir Öneriler'de, aylık bütçe ve %20 sınırıyla). Kapatılan sinyal aynı olayda kapalı kalır, kötüleşirse "Yeniden açıldı" rozetiyle döner. Dönüşüm sinyalleri 3 gün geriden: kartta yazıyor.</div>
+  </section>
+
+  <!-- ═══════════════ 2. GENEL BAKIŞ › BEKLEYEN İŞLER ═══════════════ -->
+  <section class="ekran" id="ekran-genel">
+    <div class="ust"><div><h1>Genel Bakış</h1><div class="alt">Tüm workspace'ler</div></div></div>
+    <div class="kart">
+      <div class="kartUst"><h2>Bekleyen işler</h2><div class="sag" style="color:var(--ikincil)">5 iş</div></div>
+      <div class="isler">
+        <div class="is"><span class="harf">B</span><div><div class="c">15 Akıllı Boost kartı onay bekliyor</div><div class="k">Ege Birlik Yapı · 2 gündür</div></div><a class="ikincil" href="#">Aç</a></div>
+        <div class="is"><span class="harf kirmizi">S</span><div><div class="c">4 sinyal açık, 2 tanesi yüksek önemli<span class="yeni">YENİ</span></div><div class="k">Ege Birlik Yapı · en eskisi 3 gündür</div></div><a class="birincil" href="#" data-git="sinyaller">İncele</a></div>
+        <div class="is"><span class="harf kirmizi">S</span><div><div class="c">1 sinyal açık<span class="yeni">YENİ</span></div><div class="k">Atahan Kız Öğrenci Yurdu · bugün</div></div><a class="ikincil" href="#" data-git="sinyaller">İncele</a></div>
+        <div class="is"><span class="harf">P</span><div><div class="c">Medya planı onayını bekliyor</div><div class="k">Polimek · 5 gündür</div></div><a class="ikincil" href="#">Aç</a></div>
+        <div class="is"><span class="harf">₺</span><div><div class="c">Bu ay harcama var, bütçe tanımlı değil</div><div class="k">Fenbay</div></div><a class="ikincil" href="#">Tanımla</a></div>
+      </div>
+    </div>
+    <div class="not"><b>Kararlar:</b> Sinyal satırı Akıllı Boost'tan sonra, plan onayından önce (para yakan bir sapma, bekleyen onaydan acil). Satır workspace başına tek: sayı ve en eski açık sinyalin yaşı. Bağlantı/ödeme uyarıları bu kutuda değil, kendi "Uyarılar" kutusunda kalır (aynı olay iki kutuda olmaz).</div>
+  </section>
+
+  <!-- ═══════════════ 3. MARKA MERKEZİ › BİLDİRİMLER ═══════════════ -->
+  <section class="ekran" id="ekran-bildirim">
+    <div class="ust"><div><h1>Marka Merkezi</h1><div class="alt">Ege Birlik Yapı</div></div></div>
+    <div class="mm">
+      <nav class="icmenu" aria-label="Marka Merkezi">
+        <a href="#">Kurulum</a>
+        <a href="#">Bağlantılar</a>
+        <a href="#">Marka</a>
+        <a href="#">Kitleler</a>
+        <a href="#">Varlıklar</a>
+        <a href="#">Ölçüm</a>
+        <a href="#">Workspace ayarları</a>
+        <a href="#" class="alt2 secili" aria-current="page">Bildirimler</a>
+      </nav>
+
+      <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+        <div class="kart">
+          <div class="kartUst"><h2>Bildirim kanalları</h2><div class="sag"><button class="birincil" id="kanalEkleAc">+ Kanal ekle</button></div></div>
+          <div id="kanallar">
+            <div class="ayar">
+              <div class="e">E-posta</div>
+              <div class="d">Ajans ekibi<small>3 alıcı · Sinyaller (her sabah 09:00 özet), Kural bildirimleri</small></div>
+              <div><span class="durumK"><span class="nokta yesil" aria-hidden="true"></span>Çalışıyor</span></div>
+            </div>
+            <div class="ayar">
+              <div class="e">Slack</div>
+              <div class="d">#reklam-uyarilari<small>hooks.slack.com … X9kQ · Sinyaller</small></div>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="durumK"><span class="nokta gri" aria-hidden="true"></span>Doğrulanmadı</span><button class="ikincil" data-dene>Deneme mesajı gönder</button></div>
+            </div>
+            <div class="ayar">
+              <div class="e">Microsoft Teams</div>
+              <div class="d">Pazarlama kanalı<small>profaj.webhook.office.com … a1F3 · Kural bildirimleri</small></div>
+              <div><span class="durumK" style="color:var(--kirmizi)"><span class="nokta kirmizi" aria-hidden="true"></span>Gönderilemiyor</span></div>
+            </div>
+            <div class="hata" style="margin:0 16px 14px"><b>Teams son gönderimi düştü (dün 09:00):</b> "410 Gone · Bu bağlayıcı artık desteklenmiyor". Teams kanalında Workflows ile yeni bir adres oluşturup kanalı güncelleyin.</div>
+          </div>
+          <div class="soru" id="soruDene" style="margin:0 16px 14px">
+            <span><b>Deneme mesajı Slack'e gönderildi.</b> #reklam-uyarilari kanalında göründü mü?</span>
+            <span class="sag"><button class="birincil" data-geldi="evet">Evet, geldi</button><button class="ikincil" data-geldi="hayir">Hayır</button></span>
+          </div>
+        </div>
+
+        <div class="kart" id="kanalEkle" hidden>
+          <div class="kartUst"><h2>Kanal ekle</h2></div>
+          <div class="turlar" role="group" aria-label="Kanal türü">
+            <button class="tur" aria-pressed="true" data-tur="slack"><b>Slack</b><small>Bir kanala mesaj</small></button>
+            <button class="tur" aria-pressed="false" data-tur="teams"><b>Microsoft Teams</b><small>Bir kanala mesaj</small></button>
+            <button class="tur" aria-pressed="false" data-tur="eposta"><b>E-posta</b><small>Bir ya da daha çok kişiye</small></button>
+            <button class="tur" disabled title="İlk sürümde yok"><b>WhatsApp</b><small>İlk sürümde yok: Meta'nın ayrı onayı ve mesaj başı ücret gerekiyor</small></button>
+          </div>
+          <div class="form">
+            <div class="alan"><label for="kAd">Kanal adı</label><input type="text" id="kAd" value="#reklam-uyarilari" maxlength="80"></div>
+            <div class="alan" id="alanAdres">
+              <label for="kAdres">Webhook adresi</label>
+              <input type="url" id="kAdres" placeholder="https://hooks.slack.com/services/…" autocomplete="off" spellcheck="false">
+              <div class="ret" id="adresRet" role="status"></div>
+              <div class="ip" id="adresIp">Slack'te "Incoming Webhooks" uygulamasını kanala ekleyin ve verdiği adresi buraya yapıştırın. Adres şifreli saklanır; kaydettikten sonra yalnız son dört karakteri görünür.</div>
+            </div>
+            <div class="alan" id="alanAlici" hidden>
+              <label for="kAlici">Alıcılar</label>
+              <textarea id="kAlici" rows="2" placeholder="ad@ajans.com, ikinci@ajans.com"></textarea>
+              <div class="ip">Virgülle ayırın, en çok 20. Gönderen: yusuf@profaj.com (yönetici e-posta kimliği). Sinyaller ajansın iç bilgisidir; müşteri adresi yazarsanız uyarırız.</div>
+            </div>
+            <div class="alan">
+              <label>Neler gelsin</label>
+              <div class="kutu"><input type="checkbox" id="oSinyal" checked><label for="oSinyal" style="font-weight:600;margin:0">Sinyaller<small>Her sabah 09:00'da yeni açılanların özeti. Yeni sinyal yoksa mesaj gitmez.</small></label></div>
+              <div class="kutu"><input type="checkbox" id="oKural"><label for="oKural" style="font-weight:600;margin:0">Kural bildirimleri<small>"Yalnızca bildir" kuralı eşleşince ya da bir kural platformda uygulanamayınca, anında.</small></label></div>
+            </div>
+            <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+              <button class="ikincil" id="kanalVazgec">Vazgeç</button>
+              <button class="birincil" id="kanalKaydet" disabled>Kaydet ve deneme mesajı gönder</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="kart">
+          <div class="kartUst"><h2>Son gönderimler</h2><div class="sag" style="color:var(--ikincil)">Gösterilen 5 / 38</div></div>
+          <div class="tablo">
+            <table>
+              <thead><tr><th>Zaman</th><th>Kanal</th><th>İçerik</th><th>Durum</th></tr></thead>
+              <tbody>
+                <tr><td class="num">Bugün 09:00</td><td>E-posta · Ajans ekibi</td><td>4 yeni sinyal</td><td><span class="durumK"><span class="nokta yesil" aria-hidden="true"></span>Gönderildi</span></td></tr>
+                <tr><td class="num">Bugün 09:00</td><td>Slack · #reklam-uyarilari</td><td>4 yeni sinyal</td><td><span class="durumK"><span class="nokta yesil" aria-hidden="true"></span>Gönderildi</span></td></tr>
+                <tr><td class="num">Dün 14:13</td><td>E-posta · Ajans ekibi</td><td>Kural: Yüksek maliyet uyarısı, 2 kampanya</td><td><span class="durumK"><span class="nokta yesil" aria-hidden="true"></span>Gönderildi</span><div style="color:var(--ikincil);font-size:12px">1 alıcı reddetti: eski@ajans.com</div></td></tr>
+                <tr><td class="num">Dün 09:00</td><td>Teams · Pazarlama kanalı</td><td>2 yeni sinyal</td><td><span class="durumK" style="color:var(--kirmizi)"><span class="nokta kirmizi" aria-hidden="true"></span>Vazgeçildi</span><div style="color:var(--ikincil);font-size:12px">410 Gone · 1 deneme (kalıcı hata)</div></td></tr>
+                <tr><td class="num">10 Eki 09:00</td><td>Slack · #reklam-uyarilari</td><td>3 yeni sinyal</td><td><span class="durumK"><span class="nokta gri" aria-hidden="true"></span>Tekrar denenecek</span><div style="color:var(--ikincil);font-size:12px">503 · 2. deneme 09:30'da</div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="not"><b>Kararlar:</b> Ayrı sayfa değil, Marka Merkezi iç menüsünde bölüm (kullanıcının "nereye nereden girdiğimi unutuyorum" şikâyeti). Adres alan bırakılınca doğrulanır, kayıtta sunucu aynı kuralı uygular. "200 döndü" doğrulama sayılmaz: kanal "Evet, geldi" denene kadar "Doğrulanmadı". Her gönderim tabloda; düşen gönderim platformun cümlesiyle görünür.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════ 4. KURAL SİHİRBAZI › BİLDİRİM ═══════════════ -->
+  <section class="ekran" id="ekran-kural">
+    <div class="sihirbaz" style="display:flex;flex-direction:column;gap:14px">
+      <div class="sihirbazUst"><button class="kapatX" aria-label="Kapat">×</button><b style="color:var(--siyah)">Yeni kural</b></div>
+      <div class="adimCubugu" aria-label="Adımlar">
+        <span class="bitti"><i>✓</i>Ne izlensin</span><span class="ara">›</span>
+        <span class="bitti"><i>✓</i>Koşul</span><span class="ara">›</span>
+        <span class="bitti"><i>✓</i>Ne yapılsın</span><span class="ara">›</span>
+        <span class="simdi"><i>4</i>Bildirim</span><span class="ara">›</span>
+        <span><i>5</i>Gözden geçir</span>
+      </div>
+      <div>
+        <div class="soruB">Bildirim nereye gitsin?</div>
+        <div class="alt">Kural: <b>Kampanyanın dönüşüm başı maliyeti 3 gün üst üste 400 ₺'yi geçerse</b> · Ne yapılsın: <b>Yalnızca bildir</b></div>
+      </div>
+
+      <div class="not"><b>Hâl seçici (taslak):</b> <button class="metinD" data-khal="var">Kanallar var</button> · <button class="metinD" data-khal="yok">Kanal yok</button></div>
+
+      <div class="kart" id="kanalVar">
+        <div class="kanalSec">
+          <label><input type="checkbox" checked><span class="k"><b>E-posta · Ajans ekibi</b><small>3 alıcı · anında</small></span><span class="durumK"><span class="nokta yesil" aria-hidden="true"></span>Çalışıyor</span></label>
+          <label><input type="checkbox" checked><span class="k"><b>Slack · #reklam-uyarilari</b><small>Bu kanal kural bildirimlerini almıyor; seçersen açılır</small></span><span class="durumK"><span class="nokta gri" aria-hidden="true"></span>Doğrulanmadı</span></label>
+          <label><input type="checkbox" disabled><span class="k"><b>Teams · Pazarlama kanalı</b><small>Son gönderim düştü (410). Önce kanalı Marka Merkezi'nde düzeltin.</small></span><span class="durumK" style="color:var(--kirmizi)"><span class="nokta kirmizi" aria-hidden="true"></span>Gönderilemiyor</span></label>
+        </div>
+        <div class="onizleme">
+          <div style="font-weight:700;color:var(--siyah);margin-bottom:6px">Önizleme</div>
+          <div class="slack"><b>Advetics · Kural: Yüksek dönüşüm maliyeti</b><br>Ege Birlik Yapı · 2 kampanya koşulu sağladı<br>• Konut Lansman · 3 günlük dönüşüm başı maliyet 468 ₺<br>• Arsa Satış · 412 ₺<br><u>Panelde aç</u></div>
+        </div>
+      </div>
+
+      <div class="kart" id="kanalYok" hidden>
+        <div class="uyari"><b>Bu workspace'te bildirim kanalı yok.</b> Kural çalışır ve eşleşmeleri kural geçmişine yazar, ama kimseye haber gitmez.</div>
+        <div style="padding:12px 16px;display:flex;gap:8px;flex-wrap:wrap"><a class="birincil" href="#" data-git="bildirim">Kanal ekle</a><button class="ikincil">Kanalsız devam et</button></div>
+      </div>
+
+      <div class="sihirbazAlt"><button class="ikincil">Geri</button><button class="birincil">Devam</button></div>
+      <div class="not"><b>Kararlar:</b> Odaklı kip (Google Ads oluşturma akışı): ray yok, sol üstte kapat, tek soru, sağ altta Geri/Devam. Önizleme gerçek bir eşleşmeden üretilir; sayı uydurulmaz. Bozuk kanal seçilemez, nedeni satırda.</div>
+    </div>
+  </section>
+</div>
+
+<!-- Uygula penceresi -->
+<div class="perde" id="perde" role="dialog" aria-modal="true" aria-labelledby="pBaslik">
+  <div class="pencere">
+    <h3 id="pBaslik">Kampanyayı durdur</h3>
+    <p id="pAlt">Konut Lansman · Ege Birlik Yapı · Meta</p>
+    <div class="degisim"><div><small>Şimdi</small><b><span class="nokta yesil" aria-hidden="true"></span> Yayında</b></div><div aria-hidden="true">→</div><div><small>Sonra</small><b>Duraklatıldı</b></div></div>
+    <ol class="adimlar" id="pAdimlar">
+      <li><i></i>Meta'ya gönder</li>
+      <li><i></i>Meta'dan geri oku</li>
+      <li><i></i>Kaydet ve sinyali kapat</li>
+    </ol>
+    <div class="pencereAlt"><button class="ikincil" data-kapat>Vazgeç</button><button class="birincil" id="pOnay">Durdur</button></div>
+  </div>
+</div>
+
+<!-- Kapat penceresi -->
+<div class="perde" id="perdeKapat" role="dialog" aria-modal="true" aria-labelledby="kBaslik">
+  <div class="pencere">
+    <h3 id="kBaslik">Sinyali kapat</h3>
+    <p>Bu olay sürdükçe tekrar açılmaz. Daha kötüye giderse yeniden açılır ve haber verilir.</p>
+    <textarea class="notA" placeholder="Not (isteğe bağlı): ör. kampanya bilerek yavaşlatıldı" maxlength="300"></textarea>
+    <div class="pencereAlt"><button class="ikincil" data-kapat>Vazgeç</button><button class="birincil" id="kOnay">Kapat</button></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const $ = (s, k=document) => k.querySelector(s);
+  const $$ = (s, k=document) => [...k.querySelectorAll(s)];
+
+  // ─── Ekran gezintisi ───
+  function ekranAc(ad){
+    $$('.gezinti button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.ekran === ad)));
+    $$('.ekran').forEach(e => e.classList.toggle('acik', e.id === 'ekran-' + ad));
+    window.scrollTo({top:0});
+  }
+  $$('.gezinti button').forEach(b => b.addEventListener('click', () => ekranAc(b.dataset.ekran)));
+  $$('[data-git]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); ekranAc(a.dataset.git); }));
+
+  // ─── Örnek sinyaller ───
+  // Mini grafik: aynı gün son 6 hafta + gözlenen; gri bant beklenen aralık.
+  const sinyaller = [
+    { id:1, tur:'anomali', onem:'yuksek', baslik:'Maliyet beklenenin 2,4 katı', rozet:[],
+      yol:['Ege Birlik Yapı','Meta','Konut Lansman'], kanit:'Dün (pazartesi) <b>4.820 ₺</b> · beklenen <b>1.650 ₺ ile 2.380 ₺</b> arası (son 6 pazartesi)',
+      neden:'Bütçe ya da teklif değişmiş olabilir. Dönüşüm aynı kalırken maliyet arttıysa durdurup inceleyin.',
+      seri:[1900,2100,1980,2050,1870,2010,4820], bant:[1650,2380], eylem:'durdur' },
+    { id:2, tur:'anomali', onem:'yuksek', baslik:'Gösterimler durdu', rozet:['Yeniden açıldı'],
+      yol:['Ege Birlik Yapı','Google Ads','Arama · Marka'], kanit:'Dün <b>0</b> gösterim · beklenen <b>14.200 ile 22.600</b> arası',
+      neden:'Kampanya yayında görünüyor ama hiç gösterilmedi. Bütçe, ödeme ya da reklam onayını kontrol edin. 9 Ekim\'de kapatılmıştı, bu kez daha büyük bir düşüş.',
+      seri:[18100,19400,17600,18800,18300,18900,0], bant:[14200,22600], eylem:'incele' },
+    { id:3, tur:'anomali', onem:'orta', baslik:'Dönüşüm başı maliyet %64 arttı', rozet:['3 gün önceki veri'],
+      yol:['Ege Birlik Yapı','Meta','Arsa Satış'], kanit:'9 Ekim <b>412 ₺</b> · beklenen <b>190 ₺ ile 285 ₺</b> arası',
+      neden:'Dönüşüm sayıları geç kesinleştiği için 3 gün geriden bakılıyor.',
+      seri:[240,251,229,262,238,247,412], bant:[190,285], eylem:'durdur' },
+    { id:4, tur:'saglik', onem:'orta', baslik:'Reklam reddedildi', rozet:['Sağlık'],
+      yol:['Ege Birlik Yapı','Meta','Konut Lansman','Kreatif 3'], kanit:'Meta\'nın nedeni: <b>"Konut reklamlarında yaş hedeflemesi kullanılamaz"</b>',
+      neden:'Reklam yayında değil. Reklam Yöneticisi\'nde ayrıntıyı açıp düzeltin.',
+      seri:null, eylem:'incele' },
+  ];
+  const kapalilar = [
+    { id:9, tur:'anomali', onem:'orta', baslik:'Tıklama oranı %41 düştü', rozet:['Kendiliğinden kapandı'], yol:['Ege Birlik Yapı','Meta','Hesap geneli'], kanit:'3 Ekim · 7 gün tekrar görülmedi', neden:'', seri:null, eylem:null },
+    { id:8, tur:'saglik', onem:'orta', baslik:'Etkin ama 7 gündür hiç gösterilmiyor', rozet:['Kapatıldı · Yusuf Algan'], yol:['Ege Birlik Yapı','Google Ads','Display · Yeniden pazarlama'], kanit:'Not: "Kitle küçük, bilerek bekletiliyor"', neden:'', seri:null, eylem:null },
+  ];
+
+  function mini(s){
+    if(!s.seri) return '<figure class="mini" style="margin:0"></figure>';
+    const w=180,h=44,max=Math.max(...s.seri,s.bant[1])*1.1,n=s.seri.length;
+    const x=i=>4+i*(w-8)/(n-1), y=v=>h-2-(v/max)*(h-6);
+    const yol=s.seri.slice(0,-1).map((v,i)=>(i?'L':'M')+x(i).toFixed(1)+' '+y(v).toFixed(1)).join(' ');
+    const son=s.seri[n-1];
+    return `<figure style="margin:0"><svg class="mini" viewBox="0 0 ${w} ${h+4}" role="img" aria-label="Son 6 hafta ve dün">
+      <rect x="0" y="${y(s.bant[1]).toFixed(1)}" width="${w}" height="${(y(s.bant[0])-y(s.bant[1])).toFixed(1)}" fill="rgba(48,46,45,.10)"/>
+      <path d="${yol} L${x(n-1).toFixed(1)} ${y(son).toFixed(1)}" fill="none" stroke="#302e2d" stroke-width="1.6" stroke-dasharray="0" />
+      <circle cx="${x(n-1).toFixed(1)}" cy="${y(son).toFixed(1)}" r="3.5" fill="#ff2400"/></svg>
+      <figcaption class="lejant"><span><i style="background:rgba(48,46,45,.18)"></i>beklenen</span><span><i style="background:#ff2400;border-radius:50%;width:6px"></i>dün</span></figcaption></figure>`;
+  }
+
+  function satir(s, kapali){
+    const ik = s.tur==='saglik' ? '<span class="ikon saglik" aria-label="Sağlık">+</span>' : `<span class="ikon ${s.onem}" aria-label="${s.onem==='yuksek'?'Yüksek önem':'Orta önem'}">!</span>`;
+    const rz = s.rozet.map(r=>`<span class="rozet ${r==='Yeniden açıldı'?'kirmizi':''}">${r}</span>`).join('');
+    const yol = s.yol.map((p,i)=> i===s.yol.length-1 ? `<a href="#">${p}</a>` : p).join(' › ');
+    let eylem = '';
+    if(kapali){ eylem = `<button class="metinD" data-geriac="${s.id}">Geri aç</button>`; }
+    else {
+      const bir = s.eylem==='durdur' ? `<button class="birincil" data-uygula="${s.id}">Durdur</button>`
+                : `<a class="ikincil" href="#">Reklam Yöneticisi'nde aç</a>`;
+      eylem = `${bir}<div class="yan">${s.eylem==='durdur'?'<a class="metinD" href="#">İncele</a>':''}<button class="metinD" data-kapat-sinyal="${s.id}">Kapat</button></div>`;
+    }
+    return `<div class="satir" data-id="${s.id}" data-tur="${s.tur}">
+      ${ik}
+      <div><div><span class="baslikS">${s.baslik}</span><span class="rozetler">${rz}</span></div>
+        <div class="yol">${yol}</div>
+        <div class="kanit">${s.kanit}</div>
+        ${s.neden?`<div class="neden">${s.neden}</div>`:''}</div>
+      ${mini(s)}
+      <div class="eylemler">${eylem}</div></div>`;
+  }
+
+  let gorunum='acik', suz='hepsi', hal='dolu';
+  function ciz(){
+    const g=$('#govde'), sf=$('#sayfalama');
+    sf.hidden=false;
+    if(hal==='yukleniyor'){ g.innerHTML='<div class="yukleniyor" aria-busy="true"><i style="width:60%"></i><i style="width:80%"></i><i style="width:45%"></i></div>'; sf.hidden=true; return; }
+    if(hal==='hata'){ g.innerHTML='<div class="hata"><b>Sinyaller alınamadı.</b> Sunucunun cevabı: "Zaman aşımı (10 sn)". Sayfayı yenileyin; sürerse senkronizasyon ekranına bakın. <button class="metinD">Yeniden dene</button></div>'; sf.hidden=true; return; }
+    const bosMetin = {
+      'bos-yok':['Açık sinyal yok','3 hesap dün gece değerlendirildi. Maliyet, gösterim, tıklama ve dönüşüm beklenen aralıkta; sağlık kontrollerinde sorun yok.'],
+      'bos-hesaplanmadi':['Henüz değerlendirilmedi','Hesaplar dün atandı. İlk değerlendirme, dünün verisi geldikten sonra bu gece yapılacak.'],
+      'bos-gecmis':['Performans karşılaştırması için geçmiş yetersiz','Hesapların 2 haftalık verisi var; beklenen aralık için en az 4 hafta gerekiyor (24 Ekim). Sağlık kontrolleri çalışıyor ve sorun bulmadı.'],
+      'sessiz':['Ölçüm döneminde','Sinyaller 26 Ekim\'e kadar arka planda hesaplanıyor ve yanlış alarm oranı ölçülüyor. Bu sürede gösterilmiyor ve bildirim gönderilmiyor.'],
+    }[hal];
+    if(bosMetin){ g.innerHTML=`<div class="bos"><b>${bosMetin[0]}</b><p>${bosMetin[1]}</p></div>`; $('#gosterilen').textContent='0'; $('#toplamS').textContent='0'; return; }
+    const kaynak = gorunum==='acik' ? sinyaller : kapalilar;
+    const liste = kaynak.filter(s=> suz==='hepsi' || s.tur===suz);
+    if(!liste.length){
+      g.innerHTML = gorunum==='acik' && suz==='hepsi'
+        ? '<div class="bos"><b>Açık sinyal kalmadı</b><p>Hepsi kapatıldı. Kapalı sekmesinde görebilirsiniz.</p></div>'
+        : '<div class="bos"><b>Bu süzgeçte sinyal yok</b><p>Süzgeci "Tümü" yapın.</p></div>';
+    } else g.innerHTML = liste.map(s=>satir(s, gorunum==='kapali')).join('');
+    $('#gosterilen').textContent=liste.length; $('#toplamS').textContent=liste.length;
+    $('#sayAcik').textContent=sinyaller.length; $('#ozAcik').textContent=sinyaller.length;
+  }
+  $$('[data-dkip]').forEach(b=>b.addEventListener('click',()=>{ gorunum=b.dataset.dkip; $$('[data-dkip]').forEach(x=>x.setAttribute('aria-pressed',String(x===b))); ciz(); }));
+  $$('[data-suz]').forEach(b=>b.addEventListener('click',()=>{ suz=b.dataset.suz; $$('[data-suz]').forEach(x=>x.setAttribute('aria-pressed',String(x===b))); ciz(); }));
+  $$('[data-hal]').forEach(b=>b.addEventListener('click',()=>{ hal=b.dataset.hal; ciz(); }));
+
+  // ─── Uygula / Kapat ───
+  let secili=null;
+  function perdeAc(id){ $('#'+id).classList.add('acik'); }
+  function perdeKapat(){ $$('.perde').forEach(p=>p.classList.remove('acik')); }
+  $$('[data-kapat]').forEach(b=>b.addEventListener('click',perdeKapat));
+  $$('.perde').forEach(p=>p.addEventListener('click',e=>{ if(e.target===p) perdeKapat(); }));
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape') perdeKapat(); });
+
+  function cikar(id, kayit){
+    const el=$(`.satir[data-id="${id}"]`); if(el) el.classList.add('gidiyor');
+    setTimeout(()=>{ const i=sinyaller.findIndex(s=>s.id===id); if(i>=0){ const s=sinyaller.splice(i,1)[0]; s.rozet=[kayit]; s.eylem=null; kapalilar.unshift(s);} $('#ozKapanan').textContent=String(Number($('#ozKapanan').textContent)+1); ciz(); },300);
+  }
+  document.addEventListener('click',e=>{
+    const u=e.target.closest('[data-uygula]'); if(u){ secili=Number(u.dataset.uygula); const s=sinyaller.find(x=>x.id===secili); $('#pAlt').textContent=s.yol.slice(2).join(' › ')+' · '+s.yol[0]+' · '+s.yol[1]; $$('#pAdimlar li').forEach(l=>l.className=''); $('#pOnay').disabled=false; perdeAc('perde'); }
+    const k=e.target.closest('[data-kapat-sinyal]'); if(k){ secili=Number(k.dataset.kapatSinyal); perdeAc('perdeKapat'); }
+    const g=e.target.closest('[data-geriac]'); if(g){ const id=Number(g.dataset.geriac); const i=kapalilar.findIndex(s=>s.id===id); const s=kapalilar.splice(i,1)[0]; s.rozet=[]; s.eylem='incele'; sinyaller.push(s); ciz(); }
+  });
+  $('#pOnay').addEventListener('click',()=>{
+    const li=$$('#pAdimlar li'); $('#pOnay').disabled=true; let i=0;
+    (function adim(){ if(i>0) li[i-1].className='bitti'; if(i<li.length){ li[i].className='suruyor'; i++; setTimeout(adim,650);} else setTimeout(()=>{ perdeKapat(); cikar(secili,'Durduruldu · Meta\'da doğrulandı'); },350); })();
+  });
+  $('#kOnay').addEventListener('click',()=>{ perdeKapat(); cikar(secili,'Kapatıldı · Yusuf Algan'); });
+
+  // ─── Kanal ekleme: alan BIRAKILINCA doğrulama (shared webhookDenetle ile aynı kural) ───
+  let tur='slack';
+  function denetle(t, ham){
+    const d=ham.trim(); if(!d) return 'Adres boş.';
+    let u; try{ u=new URL(d); }catch{ return 'Bu bir web adresi değil. Adresi kanal ayarlarından yeniden kopyalayın.'; }
+    if(u.protocol!=='https:') return 'Adres https:// ile başlamalı.';
+    if(u.username||u.password) return 'Adreste kullanıcı adı ya da parola olamaz.';
+    if(u.port && u.port!=='443') return 'Adreste özel bir bağlantı noktası olamaz.';
+    const h=u.hostname.toLowerCase();
+    if(/^\d{1,3}(\.\d{1,3}){3}$/.test(h)||h.startsWith('[')) return 'Adres bir IP olamaz.';
+    const ok = t==='slack' ? h==='hooks.slack.com' : (h.endsWith('.webhook.office.com')||h.endsWith('.logic.azure.com'));
+    if(!ok) return t==='slack' ? 'Slack adresi hooks.slack.com ile başlamalı. Slack\'te "Incoming Webhooks" uygulamasından kopyalayın.' : 'Teams adresi webhook.office.com ya da logic.azure.com üzerinde olmalı. Teams kanalında "Workflows" ile oluşturun.';
+    if(t==='slack' && !u.pathname.startsWith('/services/')) return 'Adres eksik kopyalanmış görünüyor.';
+    return '';
+  }
+  function kaydetDurumu(){
+    const olay=$('#oSinyal').checked||$('#oKural').checked;
+    let ok=olay && $('#kAd').value.trim();
+    if(tur==='eposta') ok = ok && /@/.test($('#kAlici').value);
+    else ok = ok && !denetle(tur,$('#kAdres').value);
+    $('#kanalKaydet').disabled=!ok;
+  }
+  $('#kAdres').addEventListener('blur',()=>{ const r=$('#kAdres').value?denetle(tur,$('#kAdres').value):''; $('#adresRet').textContent=r; $('#kAdres').classList.toggle('yanlis',!!r); kaydetDurumu(); });
+  $('#kAdres').addEventListener('input',()=>{ if($('#kAdres').classList.contains('yanlis')){ const r=denetle(tur,$('#kAdres').value); if(!r){ $('#adresRet').textContent=''; $('#kAdres').classList.remove('yanlis'); } } kaydetDurumu(); });
+  ['#kAd','#kAlici','#oSinyal','#oKural'].forEach(s=>$(s).addEventListener('input',kaydetDurumu));
+  $$('.tur[data-tur]').forEach(b=>b.addEventListener('click',()=>{
+    tur=b.dataset.tur; $$('.tur[data-tur]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));
+    $('#alanAdres').hidden = tur==='eposta'; $('#alanAlici').hidden = tur!=='eposta';
+    $('#kAdres').placeholder = tur==='slack' ? 'https://hooks.slack.com/services/…' : 'https://…logic.azure.com/workflows/…';
+    $('#adresIp').textContent = tur==='slack' ? 'Slack\'te "Incoming Webhooks" uygulamasını kanala ekleyin ve verdiği adresi buraya yapıştırın. Adres şifreli saklanır; kaydettikten sonra yalnız son dört karakteri görünür.' : 'Teams kanalında "Workflows" ile "Bir web kancası isteği alındığında kanala gönder" akışını oluşturun ve adresi yapıştırın. Adres şifreli saklanır.';
+    $('#adresRet').textContent=''; $('#kAdres').classList.remove('yanlis'); kaydetDurumu();
+  }));
+  $('#kanalEkleAc').addEventListener('click',()=>{ $('#kanalEkle').hidden=false; $('#kanalEkle').scrollIntoView({behavior:'smooth',block:'start'}); });
+  $('#kanalVazgec').addEventListener('click',()=>{ $('#kanalEkle').hidden=true; });
+  $('#kanalKaydet').addEventListener('click',()=>{ $('#kanalEkle').hidden=true; $('#soruDene').classList.add('acik'); });
+  $$('[data-dene]').forEach(b=>b.addEventListener('click',()=>$('#soruDene').classList.add('acik')));
+  $$('[data-geldi]').forEach(b=>b.addEventListener('click',()=>{
+    const s=$('#soruDene');
+    s.innerHTML = b.dataset.geldi==='evet'
+      ? '<span><span class="nokta yesil" aria-hidden="true"></span> <b>Kanal doğrulandı.</b> Yarın 09:00 özeti buraya gelecek.</span>'
+      : '<span><b>Mesaj görünmediyse</b> adres başka bir kanala ait olabilir. Slack\'te webhook\'un bağlı olduğu kanalı kontrol edip adresi yeniden yapıştırın.</span>';
+  }));
+
+  // ─── Kural sihirbazı hâli ───
+  $$('[data-khal]').forEach(b=>b.addEventListener('click',()=>{ const yok=b.dataset.khal==='yok'; $('#kanalVar').hidden=yok; $('#kanalYok').hidden=!yok; }));
+
+  ciz();
+})();
+</script>
+</body>
+</html>

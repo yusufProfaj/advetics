@@ -202,7 +202,17 @@ export const ruleActionSchema = z.discriminatedUnion('type', [
     maxBudget: z.number().positive().optional(),
     minBudget: z.number().positive().optional(),
   }),
-  z.object({ type: z.literal('notify') }),
+  z.object({
+    type: z.literal('notify'),
+    /**
+     * Bildirimin gideceği kanallar (Paket A, `sinyal/bildirim.ts`). İSTEĞE
+     * BAĞLI ve varsayılansız: eski kurallar `{ type: 'notify' }` olarak
+     * saklı ve o hâl "yalnız kural geçmişine yazılır" demek; ekran bunu
+     * açıkça söyler. Varsayılan `[]` verilseydi çıktı tipi zorunlu alana
+     * dönerdi ve bugün `{ type: 'notify' }` kuran her kod derlemede kırılırdı.
+     */
+    kanalIdleri: z.array(z.string().uuid()).max(10).optional(),
+  }),
 ]);
 export type RuleAction = z.infer<typeof ruleActionSchema>;
 
