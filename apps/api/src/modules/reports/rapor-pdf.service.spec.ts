@@ -119,6 +119,7 @@ const VERI: ReportData = {
   topAds: [],
   topAdsMissingPlatforms: [],
   unknownCallActions: [],
+  callClicksErrors: [],
   conversionDetail: {
     rows: [
       { platform: 'google' as const, name: 'WhatsApp tıklaması', count: 42, valueMicros: '0' },
@@ -1329,5 +1330,9 @@ describe('arama sütunu ve tanınmayan arama sonucu', () => {
   it('KRİTİK: tanınmayan arama eylemi Meta tablosunun üstünde yazılıyor', async () => {
     const m = metinler(await svc.uret({ ...aramali(0), unknownCallActions: ['click_to_call_yeni_tur'] }));
     expect(m.some((s) => s.includes('click_to_call_yeni_tur'))).toBe(true);
+  });
+  it('KRİTİK (Ö-2): Google arama tıklaması hatası Google tablosunun üstünde yazılıyor', async () => {
+    const m = metinler(await svc.uret({ ...VERI, sections: ['google_campaigns'], googleCampaigns: VERI.metaCampaigns, callClicksErrors: ['UNRECOGNIZED_FIELD_xyz'] }));
+    expect(m.some((s) => s.includes('UNRECOGNIZED_FIELD_xyz'))).toBe(true);
   });
 });

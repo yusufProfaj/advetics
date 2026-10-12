@@ -613,3 +613,48 @@ describe('frekans', () => {
     expect((await svc.evaluateRule(CTX, rule.id, NOW)).matchedCount).toBe(1);
   });
 });
+
+/**
+ * ARAMA KAMPANYASI (Ö-4, 2026-10-13): Meta arama reklamının sonucu
+ * `conversions`a yazılmıyor; o kampanyada dönüşüm 0 bir ölçüm değil. "Dönüşüm
+ * 0 → durdur" kuralı çalışan bir arama reklamını DURDURMAMALI ve sebep kural
+ * geçmişinde görünmeli. Bilgi yapı senkronundan: reklam setinin hedefi.
+ */
+describe('arama kampanyasında dönüşüm koşulu', () => {
+  const NOW_A = new Date('2026-08-07T09:00:00Z');
+  const FORM_K = '5a5a5a5a-5555-4555-8555-555555555555';
+  async function setEkle(campaignId: string, hedef: string | null, raw: Record<string, unknown> = {}): Promise<void> {
+    await h.q(
+      `INSERT INTO ad_groups (id, campaign_id, ad_account_id, client_id, platform, external_id, name, status, budget_mode, optimization_goal, raw, updated_at)
+       VALUES (gen_random_uuid(), $1, $2, $3, 'meta', $4, 'Set', 'active', 'none', $5, $6::jsonb, now())`,
+      [campaignId, IDS.adAccount, IDS.client, `set-${campaignId.slice(-4)}-${Math.random()}`, hedef, JSON.stringify(raw)],
+    );
+  }
+  const kural = () => ruleInput({ name: 'Dönüşüm yoksa durdur', conditions: [{ metric: 'conversions', operator: 'lte', value: 0, window: 'last_7d' }] });
+
+  it('KRİTİK: "dönüşüm 0 → durdur" arama kampanyasını DURDURMAZ; normal kampanyayı durdurur', async () => {
+    await seedCampaign(CAMPAIGN, 'Arama');
+    await seedCampaign(FORM_K, 'Form');
+    await setEkle(CAMPAIGN, 'QUALITY_CALL');
+    await setEkle(FORM_K, 'LEAD_GENERATION');
+    await seedInsight({ entityId: CAMPAIGN, date: '2026-08-05', conversions: 0 });
+    await seedInsight({ entityId: FORM_K, date: '2026-08-05', conversions: 0 });
+    const rule = await svc.create(CTX, kural());
+    const out = await svc.evaluateRule(CTX, rule.id, NOW_A);
+    const arama = out.actions.find((a) => a.entityId === CAMPAIGN)!;
+    const form = out.actions.find((a) => a.entityId === FORM_K)!;
+    expect(arama.outcome).toBe('skipped_no_conversion_signal');
+    expect(arama.reason).toContain('arama kampanyasında dönüşüm sayılmıyor');
+    expect(form.outcome).toBe('eligible');
+  });
+
+  it('hedefi bilinmeyen ama ham gövdesi PHONE_CALL olan set de arama sayılır; dönüşümsüz koşul etkilenmez', async () => {
+    await seedCampaign(CAMPAIGN, 'Arama');
+    await setEkle(CAMPAIGN, null, { destination_type: 'PHONE_CALL' });
+    await seedInsight({ entityId: CAMPAIGN, date: '2026-08-05', spendMicros: '3000000000' });
+    const r1 = await svc.create(CTX, kural());
+    expect((await svc.evaluateRule(CTX, r1.id, NOW_A)).actions[0]?.outcome).toBe('skipped_no_conversion_signal');
+    const r2 = await svc.create(CTX, ruleInput({ name: 'Harcama', conditions: [{ metric: 'spend', operator: 'gt', value: 100, window: 'last_7d' }] }));
+    expect((await svc.evaluateRule(CTX, r2.id, NOW_A)).actions[0]?.outcome).toBe('eligible');
+  });
+});

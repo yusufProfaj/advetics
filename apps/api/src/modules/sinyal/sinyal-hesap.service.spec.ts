@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { Prisma } from '@prisma/client';
 import { createHarness, IDS, seedTenant, type Harness } from '../../../test/pglite-harness';
 import { degerlendir } from './sinyal-hesap.service';
-import { ON_KOSUL_NOTU, gunEkle, type TxLike } from './sinyal-hesap';
+import { ON_KOSUL_NOTU, donusumPencereleri, gunEkle, type TxLike } from './sinyal-hesap';
 
 /**
  * SİNYAL HESAPLAMA İŞİ — gerçek Postgres (PGlite), servisin GERÇEK sorgusu.
@@ -188,5 +188,50 @@ describe('yazma ve durum makinesi', () => {
     await h.q(`UPDATE ad_accounts SET last_insights_sync_at = '2026-10-01T00:00:00Z'`);
     const r = await degerlendir(db(), IDS.adAccount, GUN, SIMDI);
     expect(r.note).toContain('veri bayat');
+  });
+});
+
+/**
+ * ARAMA KAMPANYASI (Ö-4, 2026-10-13): aramalar `conversions`a yazılmıyor.
+ * Form kampanyasından arama kampanyasına geçen hesapta "dönüşüm kesildi"
+ * her sabah yanlış alarm olurdu; arama kampanyasının satırları sayıma girmiyor.
+ */
+describe('arama kampanyası ve dönüşüm sinyalleri', () => {
+  async function gunD(gun: string, donusum: number) {
+    await h.q(
+      `INSERT INTO insights_daily (client_id, ad_account_id, platform, entity_level, entity_id, entity_external_id, date, breakdown_key,
+         impressions, clicks, reach, spend_micros, conversions, conversion_value_micros, currency)
+       VALUES ($1, $2, 'meta', 'campaign', $3, 'c-1', $4, '', 10000, 200, 0, 100000000, $5, 0, 'TRY')
+       ON CONFLICT (date, entity_level, entity_id, breakdown_key) DO UPDATE SET conversions = EXCLUDED.conversions`,
+      [IDS.client, IDS.adAccount, KAMPANYA, gun, donusum],
+    );
+  }
+  async function kur(hedef: string) {
+    await h.q(
+      `INSERT INTO ad_groups (id, campaign_id, ad_account_id, client_id, platform, external_id, name, status, budget_mode, optimization_goal, updated_at)
+       VALUES (gen_random_uuid(), $1, $2, $3, 'meta', 'set-1', 'Set', 'active', 'none', $4, now())`,
+      [KAMPANYA, IDS.adAccount, IDS.client, hedef],
+    );
+    const p = donusumPencereleri(GUN);
+    for (let d = p.onceki.bas; d <= p.onceki.son; d = gunEkle(d, 1)) await gunD(d, 20);
+    for (let d = p.pencere.bas; d <= p.pencere.son; d = gunEkle(d, 1)) await gunD(d, 0);
+    for (let d = gunEkle(p.pencere.son, 1); d <= GUN; d = gunEkle(d, 1)) await gunD(d, 0);
+    await metrikIsi(GUN);
+  }
+  const kesildi = async () => (await h.q(`SELECT 1 FROM sinyaller WHERE kod = 'donusum_kesildi'`)).length;
+  const donusumAnomalisi = async () => (await h.q(`SELECT 1 FROM sinyaller WHERE kod IN ('donusum', 'donusum_basi_maliyet')`)).length;
+
+  it('KRİTİK: form kampanyasında dönüşüm kesilince sinyal VAR (kıyas)', async () => {
+    await kur('LEAD_GENERATION');
+    await degerlendir(db(), IDS.adAccount, GUN, SIMDI);
+    expect(await kesildi()).toBe(1);
+  });
+
+  it('KRİTİK: arama kampanyasında "dönüşüm kesildi" ve dönüşüm anomalisi YOK; sebep sayılıyor', async () => {
+    await kur('QUALITY_CALL');
+    const r = await degerlendir(db(), IDS.adAccount, GUN, SIMDI);
+    expect(await kesildi()).toBe(0);
+    expect(await donusumAnomalisi()).toBe(0);
+    expect(r.note).toContain('donusum_sayilmiyor');
   });
 });

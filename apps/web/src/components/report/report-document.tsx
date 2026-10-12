@@ -21,7 +21,7 @@ import {
 } from '@advetics/shared';
 import { kitleBolumuKarari } from '@advetics/shared';
 import { SITE_DONUSUM_SUTUNLARI, siteDonusumuBosSebebi, siteDonusumuCizilir, siteDonusumuDipnotlari } from '@advetics/shared';
-import { donusumBosSebebi, PLATFORM_KISA_ADLARI, platformKisaAdi, taninmayanAramaCumlesi } from '@advetics/shared';
+import { donusumBosSebebi, PLATFORM_KISA_ADLARI, platformKisaAdi, tabloNotlari } from '@advetics/shared';
 import type { ReactNode } from 'react';
 import { formatDayLong, formatMoney, formatNumber, formatPercent, microsOf } from '@/lib/format';
 import { KitleOzetiIcerik } from './kitle-ozeti';
@@ -121,7 +121,7 @@ export function ReportDocument({ data }: { data: ReportData }) {
                   to={data.to}
                   secim={data.options.meta_campaigns?.metrics}
                   varsayilan={DEFAULT_COLUMNS.meta_campaigns}
-                  uyarilar={(data.unknownCallActions ?? []).map(taninmayanAramaCumlesi)}
+                  uyarilar={tabloNotlari(data, 'meta_campaigns')}
                 />
               );
             case 'google_campaigns':
@@ -135,6 +135,7 @@ export function ReportDocument({ data }: { data: ReportData }) {
                   rangeDays={data.rangeDays}
                   secim={data.options.google_campaigns?.metrics}
                   varsayilan={DEFAULT_COLUMNS.google_campaigns}
+                  uyarilar={tabloNotlari(data, 'google_campaigns')}
                 />
               );
             case 'google_keywords':

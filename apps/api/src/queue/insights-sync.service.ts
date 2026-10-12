@@ -421,7 +421,17 @@ export class InsightsSyncService {
             engagements = EXCLUDED.engagements,
             reach = EXCLUDED.reach,
             frequency = EXCLUDED.frequency,
-            raw_metrics = EXCLUDED.raw_metrics,
+            -- ARAMA DUGMESI TIKLAMASI EZILMEZ (Google, 2026-10-13): yan sorgu
+            -- duserse yeni govde sayi yerine hata tasiyor. Daha once dogru
+            -- yazilmis sayi varsa o korunuyor; hata yalniz sayisi hic olmayan
+            -- gunde kalir ve raporda not olarak gorunur.
+            raw_metrics = CASE
+              WHEN EXCLUDED.raw_metrics -> 'callClicksError' IS NOT NULL
+               AND jsonb_typeof(insights_daily.raw_metrics -> 'callClicks') = 'number'
+              THEN (EXCLUDED.raw_metrics - 'callClicksError')
+                   || jsonb_build_object('callClicks', insights_daily.raw_metrics -> 'callClicks')
+              ELSE EXCLUDED.raw_metrics
+            END,
             currency = EXCLUDED.currency,
             -- Atıf penceresi yüzünden aynı gün günler sonra değişiyor; bu satırın
             -- ne zaman son kez doğrulandığını bilmek raporda "bayat veri"

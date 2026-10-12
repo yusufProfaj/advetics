@@ -241,6 +241,12 @@ export interface ButceGirdisi {
   ilkVeriGunu: string | null;
   /** Google bütçesi başka kampanyalarla paylaşılıyorsa yazılamaz (MIMARI § 2). */
   paylasimliButce: boolean;
+  /**
+   * Arama kampanyası (`aramaVarligiSql`): dönüşüm her gün 0 ve ölçüm değil.
+   * ARTIRMA kararı dönüşüm maliyetine dayandığı için verilmiyor; düşürme
+   * (kullanım) etkilenmiyor. Verilmezse `false`.
+   */
+  donusumSayilmiyor?: boolean;
 }
 
 /**
@@ -323,8 +329,8 @@ export function butceOnerisi(g: ButceGirdisi, b: ButceBaglami): Oneri | null {
     yon,
   });
 
-  // ── ARTIR ──
-  if (harcamaYuzle >= yuzde(BUTCE_ESIKLERI.artirKullanimEnAz) && donusum >= BUTCE_ESIKLERI.artirDonusumEnAz) {
+  // ── ARTIR ── (arama kampanyasında dönüşüme dayalı karar YOK, Ö-4)
+  if (!g.donusumSayilmiyor && harcamaYuzle >= yuzde(BUTCE_ESIKLERI.artirKullanimEnAz) && donusum >= BUTCE_ESIKLERI.artirDonusumEnAz) {
     const ort = b.ortalamaCpa.get(g.paraBirimi);
     const cpa = (harcama * 10_000n) / BigInt(Math.round(donusum * 10_000));
     if (!ort || ort <= 0n) return null;

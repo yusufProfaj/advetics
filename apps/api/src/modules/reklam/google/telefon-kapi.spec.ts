@@ -61,14 +61,20 @@ describe('AJAN4-BULGU Ö-1: telefon amacında dönüşüm teklifi YALNIZ arama d
    * kendi kurduğu sitedeki tel: tıklaması (WEBPAGE, PHONE_CALL_LEAD) ve form
    * gönderimi dahil. Yani kapı doğru, öğrenilen sinyal yanlış: commit'in
    * "sitedeki tel: tıklaması sayılmıyor" sözü yalnız eşik için doğru.
-   * Beklenen: atomik istekte kampanya düzeyi dönüşüm hedefi
-   * (CampaignConversionGoal, PHONE_CALL_LEAD / CALL_FROM_ADS) ya da teklif
-   * kararının bu kısıtı açıkça söylemesi. validateOnly ile ölçülmeli.
+   * KARAR (yönetici, Ö-1, 2026-10-13): `CampaignConversionGoal` validateOnly
+   * ile ölçülene kadar TELEFON'da teklif HER ZAMAN tıklama. İddianın özü
+   * "yanlış hedefe optimize etmemeli"; tıklama teklifi dönüşüm işlemlerinin
+   * hiçbirine optimize etmiyor. Girdi MAKS_DONUSUM taşısa bile (eski taslak)
+   * derleyici dönüşüm teklifi KURMAZ.
    */
-  it('MAKS_DONUSUM telefon gövdesi kampanya dönüşüm hedefini sınırlıyor', () => {
+  it('MAKS_DONUSUM taşıyan telefon girdisi bile dönüşüm teklifi kurmuyor (tıklama + sebep notu)', () => {
     const d = derleGoogle(GIRDI, BAGLAM);
     if (d.tur !== 'govde') throw new Error(JSON.stringify(d.retler));
-    expect(JSON.stringify(d.govde.mutateOperations)).toMatch(/campaignConversionGoal/i);
+    const govde = JSON.stringify(d.govde.mutateOperations);
+    expect(govde).not.toMatch(/maximizeConversions/);
+    expect(govde).toMatch(/targetSpend/);
+    expect(d.beklenen.teklif).toBe('TARGET_SPEND');
+    expect(d.notlar.join(' ')).toContain('henüz doğrulanmadı');
   });
 });
 

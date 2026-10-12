@@ -19,7 +19,7 @@ import {
 } from '@advetics/shared';
 import { kitleBolumuKarari } from '@advetics/shared';
 import { SITE_DONUSUM_SUTUNLARI, siteDonusumuBosSebebi, siteDonusumuCizilir, siteDonusumuDipnotlari } from '@advetics/shared';
-import { donusumBosSebebi, PLATFORM_KISA_ADLARI, platformKisaAdi, taninmayanAramaCumlesi } from '@advetics/shared';
+import { donusumBosSebebi, PLATFORM_KISA_ADLARI, platformKisaAdi, tabloNotlari } from '@advetics/shared';
 import { logoOku, yaziTipiOku } from './pdf-yazi-tipi';
 import { gorselleriIndir, type GorselSonucu } from './kreatif-gorseli';
 import {
@@ -473,19 +473,18 @@ export class RaporPdfService {
      * raporun iki farklı sütun setiyle çıkması demek olurdu.
      */
     /*
-     * TANINMAYAN ARAMA SONUCU TABLONUN ÜSTÜNDE (panelle aynı cümle,
-     * `taninmayanAramaCumlesi`). Meta arama eyleminin adı kovada yoksa Arama
-     * sütunu 0 yazar; okuyan bunu "arama gelmedi" sanmasın.
+     * ARAMA NOTLARI TABLONUN ÜSTÜNDE (panelle aynı cümleler, `tabloNotlari`):
+     * Meta'da tanınmayan arama eylemi, Google'da alınamayan arama tıklaması.
+     * İkisinde de sütun eksik sayar; okuyan bunu "arama gelmedi" sanmasın.
      */
-    if (bolum === 'meta_campaigns') {
-      for (const tur of ctx.data.unknownCallActions ?? []) {
-        for (const satir of sar(taninmayanAramaCumlesi(tur), ctx.normal, 8, EN - 2 * KENAR)) {
-          s.drawText(satir, { x: KENAR, y, size: 8, font: ctx.normal, color: GRI });
-          y -= 11;
-        }
+    const notlar = tabloNotlari(ctx.data, bolum);
+    for (const not of notlar) {
+      for (const satir of sar(not, ctx.normal, 8, EN - 2 * KENAR)) {
+        s.drawText(satir, { x: KENAR, y, size: 8, font: ctx.normal, color: GRI });
+        y -= 11;
       }
-      if ((ctx.data.unknownCallActions ?? []).length) y -= 6;
     }
+    if (notlar.length) y -= 6;
     const sutunlar = resolveColumns(ctx.data.options[bolum]?.metrics, DEFAULT_COLUMNS[bolum], satirlar);
     const t = sumRows(satirlar);
 

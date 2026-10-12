@@ -156,6 +156,11 @@ describe('bütçe artır', () => {
   // 90 TRY × 7 = 630 → kullanım tam %90; 9 dönüşüm → CPA 70 = ortalamanın tam %70'i.
   const SINIR = () => varlik(yedi(90n * M, 9));
 
+  it('KRİTİK (Ö-4): arama kampanyasında dönüşüme dayalı artırma önerisi YOK', () => {
+    expect(butceOnerisi(SINIR(), BAGLAM())?.tur).toBe('butce_artir');
+    expect(butceOnerisi({ ...SINIR(), donusumSayilmiyor: true }, BAGLAM())).toBeNull();
+  });
+
   it('KRİTİK: kullanım %90 VE CPA ortalamanın %70\'i (iki sınır birden) → öneri', () => {
     const o = butceOnerisi(SINIR(), BAGLAM());
     expect(o?.tur).toBe('butce_artir');

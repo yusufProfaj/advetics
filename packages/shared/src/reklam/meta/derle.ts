@@ -77,6 +77,7 @@ export const DERLEYICI_SURUMU = '1.9.0';
  * yakalıyor.
  */
 export const WHATSAPP_BAGLANTISI = 'https://api.whatsapp.com/send';
+export const WHATSAPP_CTA_DEGERI = { app_destination: 'WHATSAPP' } as const;
 
 /** TELEFON: reklam setinin cihaz listesi (Meta `device_platforms`). */
 export const TELEFON_CIHAZLARI = ['mobile'] as const;
@@ -100,7 +101,6 @@ export function telefonUlkesiDisindakiKonumlar<T extends { ulkeKodu: string | nu
 export function telefonUlkeMesaji(konumlar: ReadonlyArray<{ etiket: string }>): string {
   return `Numara +90 (Türkiye) ama reklam Türkiye dışında da gösterilecek (${konumlar.map((k) => k.etiket).join(', ')}); o konumları çıkar.`;
 }
-export const WHATSAPP_CTA_DEGERI = { app_destination: 'WHATSAPP' } as const;
 
 /**
  * `promoted_object.whatsapp_phone_number` BİÇİMİ — ÖLÇÜLMEDİ. E.164 başında

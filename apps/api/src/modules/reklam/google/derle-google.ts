@@ -12,6 +12,7 @@ import {
   SITE_BAGLANTISI_YOK_CUMLESI,
   GOOGLE_OGE_ADLARI,
   calismaSaatleriOzeti,
+  GOOGLE_TELEFON_TEKLIF_CUMLESI,
   googleAramaSaatleri,
   type GoogleSaatPlani,
   type GoogleAramaOgeleri,
@@ -346,6 +347,14 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
       }
     }
     if (retler.length) return { tur: 'ret', retler };
+    /*
+     * TELEFON'DA DÖNÜŞÜM TEKLİFİ YOK (Ö-1, 2026-10-13): türetme zaten tıklama
+     * veriyor; burada İKİNCİ kapı. Eski bir taslak MAKS_DONUSUM taşısa bile
+     * Google hesabın bütün birincil işlemlerine (sitedeki tel: tıklaması,
+     * form) optimize etmesin.
+     */
+    const donusumTeklifi = g.teklif === 'MAKS_DONUSUM' && g.ulasma !== 'telefon';
+    if (g.teklif === 'MAKS_DONUSUM' && !donusumTeklifi) notlar.push(GOOGLE_TELEFON_TEKLIF_CUMLESI + '.');
     const { govde, sira } = aramaAtomikIstek({
       customerId: g.musteriId,
       name: ad,
@@ -354,7 +363,7 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
       gunlukButceMicros: gunlukMicros,
       ...(startDate ? { startDate } : {}),
       endDate: g.takvim.bitis,
-      teklif: g.teklif === 'MAKS_DONUSUM' ? 'maximizeConversions' : 'targetSpend',
+      teklif: donusumTeklifi ? 'maximizeConversions' : 'targetSpend',
       konumlar: g.konumlar,
       dil: g.dil,
       negatifler: g.negatifler,
@@ -436,7 +445,7 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
           : {}),
         // Teklif Arama'da da geri okunuyor (g-1.1.0): eşik kararı gövdeye
         // gerçekten yansıdı mı, kampanyanın kendisinden.
-        teklif: g.teklif === 'MAKS_DONUSUM' ? 'MAXIMIZE_CONVERSIONS' : 'TARGET_SPEND',
+        teklif: donusumTeklifi ? 'MAXIMIZE_CONVERSIONS' : 'TARGET_SPEND',
         ...(g.siteBaglantilari !== undefined || g.aciklamaMetinleri !== undefined
           ? {
               uzantilar: {

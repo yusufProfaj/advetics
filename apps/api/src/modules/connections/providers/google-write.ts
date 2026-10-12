@@ -1,4 +1,3 @@
-import type { GoogleSaatPlani } from '@advetics/shared';
 /**
  * Google Ads yazma istekleri — SAF FONKSİYONLAR.
  *
@@ -21,6 +20,7 @@ import type { GoogleSaatPlani } from '@advetics/shared';
  * ARAMA REKLAMI METİNSEL: görsel yüklemeye gerek yok. `uploadAdImage`
  * uygulanmamış kalıyor ve bu bilinçli — PMax geldiğinde gerekecek.
  */
+import type { GoogleSaatPlani } from '@advetics/shared';
 
 export interface GoogleMutateOperation {
   create?: Record<string, unknown>;

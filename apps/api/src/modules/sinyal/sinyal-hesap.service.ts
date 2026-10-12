@@ -1,3 +1,4 @@
+import { aramaVarligiSql } from '../metrics/arama-kampanyasi';
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
@@ -130,9 +131,9 @@ export async function degerlendir(db: TxLike, adAccountId: string, gun: string, 
        AND date = ANY(${gunler}::date[])`);
 
   const kampanyaSatirlari = await db.$queryRaw<
-    Array<{ id: string; name: string; etkin: boolean; kayit_gunu: string; set_var: boolean; etkin_set_var: boolean }>
+    Array<{ id: string; name: string; etkin: boolean; kayit_gunu: string; set_var: boolean; etkin_set_var: boolean; arama: boolean }>
   >(Prisma.sql`
-    SELECT c.id::text AS id, c.name,
+    SELECT c.id::text AS id, c.name, ${aramaVarligiSql('campaign', 'c')} AS arama,
            (c.status = 'active'::"EntityStatus" AND c.deleted_at IS NULL) AS etkin,
            c.created_at::date::text AS kayit_gunu,
            EXISTS (SELECT 1 FROM ad_groups g WHERE g.campaign_id = c.id AND g.deleted_at IS NULL) AS set_var,
@@ -168,7 +169,7 @@ export async function degerlendir(db: TxLike, adAccountId: string, gun: string, 
     if (!bilgi) continue;
     let s = seriler.get(r.varlik_id);
     if (!s) {
-      s = { seviye: 'campaign', varlikId: r.varlik_id, varlikAdi: bilgi.name, ustAdi: hesap.name, gunler: new Map(), degerlendir: false };
+      s = { seviye: 'campaign', varlikId: r.varlik_id, varlikAdi: bilgi.name, ustAdi: hesap.name, gunler: new Map(), degerlendir: false, donusumSayilmiyor: bilgi.arama };
       seriler.set(r.varlik_id, s);
     }
     s.gunler.set(r.gun, sayilar);
@@ -182,6 +183,13 @@ export async function degerlendir(db: TxLike, adAccountId: string, gun: string, 
     ekler.push('hesap seviyesi kampanya toplamından');
   }
   hesapSerisi.degerlendir = kampanyaSatirlari.some((k) => k.etkin) || hesapSerisi.gunler.has(gun);
+  /*
+   * HESAPTA ARAMA KAMPANYASI VARSA hesap seviyesi dönüşüm anomalisi de
+   * atlanıyor: hesap satırı kampanyalara ayrışmıyor ve arama kampanyasının
+   * gösterimi dönüşümsüz sayılıp "dönüşüm düştü" üretirdi. Tahmin etmektense
+   * kısıtla: kampanya düzeyindeki diğer kampanyalar yine değerlendiriliyor.
+   */
+  hesapSerisi.donusumSayilmiyor = kampanyaSatirlari.some((k) => k.arama);
 
   const nedenler = bosNedenSayaci();
   const bulgular: Bulgu[] = [
@@ -221,6 +229,9 @@ export async function degerlendir(db: TxLike, adAccountId: string, gun: string, 
     kosan.add('sifir_gosterim');
 
     const p = donusumPencereleri(gun);
+    // ARAMA KAMPANYALARI DIŞARIDA: gösterimleri dönüşümsüz sayılıp "dönüşüm
+    // kesildi" üretirdi (form kampanyasından arama kampanyasına geçen hesap).
+    const aramaKampanyalari = kampanyaSatirlari.filter((k) => k.arama).map((k) => k.id);
     const [d] = await db.$queryRaw<Array<{ pg: number; pd: number; od: number }>>(Prisma.sql`
       SELECT coalesce(sum(impressions) FILTER (WHERE date BETWEEN ${p.pencere.bas}::date AND ${p.pencere.son}::date), 0)::float8 AS pg,
              coalesce(sum(conversions) FILTER (WHERE date BETWEEN ${p.pencere.bas}::date AND ${p.pencere.son}::date), 0)::float8 AS pd,
@@ -228,7 +239,8 @@ export async function degerlendir(db: TxLike, adAccountId: string, gun: string, 
         FROM insights_daily
        WHERE client_id = ${clientId}::uuid AND ad_account_id = ${adAccountId}::uuid
          AND breakdown_key = '' AND entity_level = 'campaign'::"EntityLevel"
-         AND date BETWEEN ${p.onceki.bas}::date AND ${p.pencere.son}::date`);
+         AND date BETWEEN ${p.onceki.bas}::date AND ${p.pencere.son}::date
+         AND NOT (entity_id = ANY(${aramaKampanyalari}::uuid[]))`);
     const dk = donusumKesildiBulgusu(
       {
         hesapId: adAccountId,

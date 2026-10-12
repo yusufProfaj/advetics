@@ -1,3 +1,4 @@
+import { aramaVarligiSql } from '../metrics/arama-kampanyasi';
 import {
   BadRequestException,
   ConflictException,
@@ -484,11 +485,13 @@ export class IyilestirService {
           butce_kaynagi: string | null;
           ilk: string | null;
           gunler: Array<{ d: string; s: string; v: number }> | null;
+          arama: boolean;
         }>
       >(Prisma.sql`
         WITH varliklar AS (
           SELECT 'campaign'::text AS seviye, c.id, c.name, NULL::text AS ust_ad, c.platform,
-                 c.ad_account_id, c.budget_amount_micros, c.raw -> 'campaignBudget' ->> 'resourceName' AS butce_kaynagi
+                 c.ad_account_id, c.budget_amount_micros, c.raw -> 'campaignBudget' ->> 'resourceName' AS butce_kaynagi,
+                 ${aramaVarligiSql('campaign', 'c')} AS arama
             FROM campaigns c
            WHERE c.client_id = ${clientId}::uuid AND c.deleted_at IS NULL
              AND c.status = 'active'::"EntityStatus"
@@ -497,7 +500,8 @@ export class IyilestirService {
              AND c.ad_account_id = ANY(${hesapIdleri}::uuid[])
           UNION ALL
           SELECT 'ad_group'::text, g.id, g.name, c.name, g.platform,
-                 g.ad_account_id, g.budget_amount_micros, NULL::text
+                 g.ad_account_id, g.budget_amount_micros, NULL::text,
+                 ${aramaVarligiSql('ad_group', 'g')}
             FROM ad_groups g
             JOIN campaigns c ON c.id = g.campaign_id
            WHERE g.client_id = ${clientId}::uuid AND g.deleted_at IS NULL
@@ -509,7 +513,7 @@ export class IyilestirService {
         )
         SELECT v.seviye, v.id::text AS id, v.name, v.ust_ad, v.platform::text AS platform,
                v.ad_account_id::text AS ad_account_id, v.budget_amount_micros::text AS butce,
-               v.butce_kaynagi,
+               v.butce_kaynagi, v.arama,
                (SELECT min(i.date)::text FROM insights_daily i
                  WHERE i.client_id = ${clientId}::uuid AND i.entity_id = v.id AND i.breakdown_key = ''
                    AND i.entity_level = v.seviye::"EntityLevel" AND i.date >= ${otuz}::date) AS ilk,
@@ -546,6 +550,10 @@ export class IyilestirService {
          WHERE client_id = ${clientId}::uuid AND entity_level = 'campaign'::"EntityLevel" AND breakdown_key = ''
            AND ad_account_id = ANY(${hesapIdleri}::uuid[])
            AND date BETWEEN ${p.buBas}::date AND ${p.buSon}::date
+           -- Arama kampanyalari disarida: harcamalari donusumsuz sayilip
+           -- ortalama maliyeti sisirir ve diger kampanyalarin artirma
+           -- karari bozulurdu (O-4).
+           AND entity_id NOT IN (SELECT c.id FROM campaigns c WHERE c.client_id = ${clientId}::uuid AND ${aramaVarligiSql('campaign', 'c')})
          GROUP BY currency`);
       const ortalamaCpa = new Map<string, bigint>();
       for (const r of ort) {
@@ -566,6 +574,7 @@ export class IyilestirService {
         gunler: (r.gunler ?? []).map((g) => ({ gun: g.d, harcamaMikros: BigInt(g.s), donusum: g.v })),
         ilkVeriGunu: r.ilk,
         paylasimliButce: r.butce_kaynagi !== null && paylasimliKaynaklar.has(r.butce_kaynagi),
+        donusumSayilmiyor: r.arama === true,
       }));
       return { girdiler, ortalamaCpa };
     });

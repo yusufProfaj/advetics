@@ -276,11 +276,13 @@ export function rehberEksikleri(a: RehberAlanlari, b: RehberEksikBaglami): Rehbe
      * bilinmeyen nokta engel değil UYARI: Türkiye'deki bir harita noktasını
      * kilitlemek sağlam bir kurulumu bozardı.
      */
-    if (acik.meta && tel && TELEFON_E164.test(tel)) {
+    // Platform AYRIMI YOK: Google arama öğesi de aynı numarayı gösteriyor ve
+    // yalnız Google açıkken de yurt dışındaki kişi uluslararası aramaya düşer.
+    if ((acik.meta || acik.google) && tel && TELEFON_E164.test(tel)) {
       const yabanci = telefonUlkesiDisindakiKonumlar(tel, konumlar);
-      if (yabanci.length) ekle('konumlar', 'meta', 'TEL-ULKE', telefonUlkeMesaji(yabanci));
+      if (yabanci.length) ekle('konumlar', null, 'TEL-ULKE', telefonUlkeMesaji(yabanci));
       else if (tel.startsWith('+90') && konumlar.some((k) => k.tur !== 'country' && !k.ulkeKodu)) {
-        ekle('konumlar', 'meta', 'TEL-ULKE-BILINMIYOR', 'Bazı konumların ülkesi okunamadı; Türkiye dışındaysa reklam aranamayan bir yerde gösterilir', 'uyari');
+        ekle('konumlar', null, 'TEL-ULKE-BILINMIYOR', 'Bazı konumların ülkesi okunamadı; Türkiye dışındaysa reklam aranamayan bir yerde gösterilir', 'uyari');
       }
     }
   }

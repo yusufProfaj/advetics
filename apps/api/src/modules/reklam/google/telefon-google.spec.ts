@@ -6,8 +6,8 @@ import {
   TABAN_NEGATIFLER,
   calismaSaatleriSchema,
   googleAramaSaatleri,
+  GOOGLE_TELEFON_TEKLIF_CUMLESI,
   googleTeklifKarari,
-  googleTelefonDonusumuMu,
   rehberdenGoogle,
   type RehberAlanlari,
   type CalismaSaatleri,
@@ -17,13 +17,12 @@ import { aramaAtomikIstek } from '../../connections/providers/google-write';
 import { GoogleProvider, aramaTiklamaSorgusu } from '../../connections/providers/google.provider';
 import { derleGoogle } from './derle-google';
 import { googleGeriOkumaKarsilastir, type GoogleOkunan } from './google-yayin';
-import { GOOGLE_TELEFON_DONUSUM_SORGUSU, GOOGLE_TELEFON_ISLEMLERI_SORGUSU, telefonDonusumToplami } from '../rehber/rehber.service';
 
 /**
  * ═══ "BENİ TELEFONLA ARASINLAR" — GOOGLE TARAFI (yönetici kararları, 2026-10-12) ═══
  *
- * 1. Dönüşüm teklifi YALNIZ reklamdan arama (AD_CALL) dönüşümüyle; sitedeki
- *    tel: tıklaması (WEBPAGE, Advetics'in kendi kurduğu işlem) sayılmaz.
+ * 1. Teklif HER ZAMAN tıklama (Ö-1): kampanyayı yalnız aramaya bağlayan
+ *    ayar ölçülene kadar dönüşüm teklifi yanlış hedefe optimize ederdi.
  * 2. Arama düğmesi tıklaması AYRI sorguda; ana metrik sorgusuna segment
  *    girmiyor; sorgu düşerse ana çekim sürüyor ve hata ham gövdede.
  * 3. Çalışma saatleri arama öğesinin `adScheduleTargets`i; boşsa gönderilmez.
@@ -69,56 +68,25 @@ function derle(g: Partial<GoogleDerlemeGirdisi>) {
 const cagriOgesi = (ops: Array<Record<string, unknown>>) =>
   ops.map((o) => (o.assetOperation as { create?: Record<string, any> } | undefined)?.create).find((c) => c?.callAsset)?.callAsset as Record<string, any>;
 
-describe('teklif: yalnız reklamdan arama dönüşümü', () => {
-  it('KRİTİK: sitedeki tel: tıklaması (WEBPAGE) sayılmaz; AD_CALL, birincil ve etkinse sayılır', () => {
-    const t = { kategori: 'PHONE_CALL_LEAD', tur: 'AD_CALL', birincil: true, durum: 'ENABLED' };
-    expect(googleTelefonDonusumuMu(t)).toBe(true);
-    expect(googleTelefonDonusumuMu({ ...t, tur: 'WEBPAGE' })).toBe(false);
-    expect(googleTelefonDonusumuMu({ ...t, tur: 'WEBSITE_CALL' })).toBe(false);
-    expect(googleTelefonDonusumuMu({ ...t, birincil: false })).toBe(false);
-    expect(googleTelefonDonusumuMu({ ...t, durum: 'PAUSED' })).toBe(false);
-    expect(googleTelefonDonusumuMu({ ...t, kategori: 'SUBMIT_LEAD_FORM' })).toBe(false);
+describe('teklif: telefon amacında her zaman tıklama (Ö-1)', () => {
+  it('KRİTİK: ölçüm ve sayı ne olursa olsun tıklama; sebep ayarın doğrulanmadığını söylüyor', () => {
+    for (const [e, n] of [[true, 500], [true, 0], [false, null], [null, null]] as const) {
+      expect(googleTeklifKarari('ARAMA', e, n, 'telefon')).toEqual({ teklif: 'MAKS_TIKLAMA', sebep: GOOGLE_TELEFON_TEKLIF_CUMLESI });
+    }
+    // Site ulaşmasında eşik kuralı aynen.
+    expect(googleTeklifKarari('ARAMA', true, GOOGLE_DONUSUM_TEKLIF_ESIGI, 'site').teklif).toBe('MAKS_DONUSUM');
   });
 
-  it('KRİTİK: eşik 15; altı ve bilinmeyen tıklama; cümleler arama dönüşümünü anlatıyor', () => {
-    expect(googleTeklifKarari('ARAMA', true, GOOGLE_DONUSUM_TEKLIF_ESIGI, 'telefon').teklif).toBe('MAKS_DONUSUM');
-    expect(googleTeklifKarari('ARAMA', true, 14, 'telefon')).toEqual({ teklif: 'MAKS_TIKLAMA', sebep: 'Son 30 günde reklamdan 14 arama dönüşümü var; dönüşüm teklifi için en az 15 gerekiyor' });
-    expect(googleTeklifKarari('ARAMA', false, null, 'telefon').sebep).toContain('sitedeki telefon tıklaması sayılmaz');
-    expect(googleTeklifKarari('ARAMA', null, null, 'telefon').teklif).toBe('MAKS_TIKLAMA');
-    expect(googleTeklifKarari('ARAMA', true, null, 'telefon').teklif).toBe('MAKS_TIKLAMA');
-    // Site ulaşmasında eski cümleler aynen.
-    expect(googleTeklifKarari('ARAMA', true, 15, 'site').sebep).toBe('Dönüşüm ölçümü etkin ve son 30 günde 15 dönüşüm var');
-  });
-
-  it('KRİTİK: toplam yalnız sayılan işlemlerden (WEBPAGE işleminin 40 dönüşümü girmez)', () => {
-    const sayilan = new Set(['customers/1/conversionActions/7']);
-    const satirlar = [
-      { segments: { conversionAction: 'customers/1/conversionActions/7' }, metrics: { conversions: 9 } },
-      { segments: { conversionAction: 'customers/1/conversionActions/7' }, metrics: { conversions: '3' } },
-      { segments: { conversionAction: 'customers/1/conversionActions/8' }, metrics: { conversions: 40 } },
-      { segments: { conversionAction: 'customers/1/conversionActions/7' }, metrics: {} },
-    ];
-    expect(telefonDonusumToplami(satirlar, sayilan)).toBe(12);
-    expect(() => telefonDonusumToplami([{ segments: { conversionAction: 'customers/1/conversionActions/7' }, metrics: { conversions: 'x' } }], sayilan)).toThrow();
-  });
-
-  it('sorgular: tür SEÇİMDE (süzgeç saf fonksiyonda); segmentli sayımda yalnız dönüşüm, WHERE alanı SELECT\'te', () => {
-    expect(GOOGLE_TELEFON_ISLEMLERI_SORGUSU).toContain('conversion_action.type');
-    expect(GOOGLE_TELEFON_ISLEMLERI_SORGUSU).not.toMatch(/WHERE[\s\S]*conversion_action\.type/);
-    expect(GOOGLE_TELEFON_DONUSUM_SORGUSU).toMatch(/SELECT segments\.conversion_action, segments\.conversion_action_category, metrics\.conversions\s+FROM/);
-    expect(GOOGLE_TELEFON_DONUSUM_SORGUSU).not.toMatch(/metrics\.(clicks|impressions|cost_micros)/);
-  });
-
-  it('KRİTİK: servis TELEFON\'da GENEL ölçüyü kullanmıyor (önbellekte ölçü türü ayrı)', () => {
+  it('KRİTİK: servis TELEFON\'da dönüşüm okumuyor (kota): tazeleme telefon amacında hemen dönüyor', () => {
     const k = readFileSync(join(__dirname, '../rehber/rehber.service.ts'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     const bas = k.indexOf('private async googleDonusumTazele(');
-    const son = k.indexOf('private async googleTelefonDonusumu(');
+    const son = k.indexOf('private async googleDonusumSayisi(');
     expect(bas).toBeGreaterThan(-1);
     expect(son).toBeGreaterThan(bas);
     const govde = k.slice(bas, son);
-    expect(govde).toContain('this.googleTelefonDonusumu(ctx, hesap)');
-    expect(govde).toContain("googleDonusumOlcusu: telefon ? 'telefon' : 'genel'");
-    expect(k).toContain('(taze.googleDonusumOlcusu ?? \'genel\') === istenenOlcu');
+    const erken = govde.indexOf("google.ulasma === 'telefon') return;");
+    expect(erken).toBeGreaterThan(-1);
+    expect(erken).toBeLessThan(govde.indexOf('googleDonusumEtkin(hesap)'));
   });
 });
 
@@ -275,8 +243,8 @@ describe('türetme: saat yalnız Arama + telefonda', () => {
     if (t.tur !== 'tamam' || s.tur !== 'tamam') throw new Error('türetme');
     expect(t.deger.aramaSaatleri).toEqual(SAATLER);
     expect(s.deger).not.toHaveProperty('aramaSaatleri');
-    // Teklif de telefon kuralından: 20 arama dönüşümü ≥ 15.
-    expect(t.deger.teklif).toBe('MAKS_DONUSUM');
+    // Teklif telefon kuralından: 20 dönüşüm olsa da tıklama (Ö-1).
+    expect(t.deger.teklif).toBe('MAKS_TIKLAMA');
     const bos = rehberdenGoogle(rehber('TELEFON'), { meta: false, google: true }, { ...baglam, calismaSaatleri: null });
     if (bos.tur !== 'tamam') throw new Error('türetme');
     expect(bos.deger).not.toHaveProperty('aramaSaatleri');

@@ -2881,19 +2881,12 @@ export class GoogleProvider implements IAdPlatformProvider {
 
 }
 
-/**
- * Seviye → GAQL kaynağı ve kimlik alanı.
- *
- * Google'da hesap seviyesi metrikleri `customer` kaynağından geliyor; alt
- * seviyeler kendi kaynaklarından. Kimlik alanı da her seviyede farklı adlanıyor,
- * bu yüzden okuma fonksiyonu haritada tutuluyor.
- */
 /** Arama düğmesi tıklamasının sorulduğu seviyeler (bkz. `aramaDugmesiTiklamalari`). */
 export const ARAMA_TIKLAMA_SEVIYELERI: readonly InsightsLevel[] = ['account', 'campaign'];
 
 /**
  * Arama düğmesi tıklaması sorgusu. Ayrı fonksiyon çünkü kaynak taraması
- * (`google-arama-tiklamasi.spec.ts`) iki şeyi kilitliyor: bu sorgu YALNIZ
+ * (`telefon-google.spec.ts`) iki şeyi kilitliyor: bu sorgu YALNIZ
  * tıklama seçiyor ve ana metrik sorgusu `click_type` TAŞIMIYOR. WHERE'deki
  * her alan SELECT'te (GAQL kuralı).
  */
@@ -2903,6 +2896,13 @@ export function aramaTiklamaSorgusu(view: { idField: string; resource: string },
      WHERE segments.date BETWEEN '${from}' AND '${to}' AND segments.click_type = 'CALLS'`;
 }
 
+/**
+ * Seviye → GAQL kaynağı ve kimlik alanı.
+ *
+ * Google'da hesap seviyesi metrikleri `customer` kaynağından geliyor; alt
+ * seviyeler kendi kaynaklarından. Kimlik alanı da her seviyede farklı adlanıyor,
+ * bu yüzden okuma fonksiyonu haritada tutuluyor.
+ */
 const GOOGLE_VIEW: Record<
   InsightsLevel,
   {

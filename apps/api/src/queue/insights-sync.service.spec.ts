@@ -759,3 +759,32 @@ describe('lastInsightsSyncAt damgası', () => {
     expect(await damga()).not.toBeNull();
   });
 });
+
+/**
+ * ARAMA DÜĞMESİ TIKLAMASI EZİLMİYOR (Ajan 4 Ö-2, 2026-10-13). Google'ın yan
+ * sorgusu düşen bir senkron, daha önce doğru yazılmış sayıyı hata gövdesiyle
+ * eziyordu: rapor o günü "bilinmiyor" sayıyordu, oysa sayı vardı.
+ */
+describe('callClicks korunur', () => {
+  const params = { adAccountId: IDS.adAccount, jobType: 'insights_daily' as const, dateFrom: '2026-08-05', dateTo: '2026-08-05' };
+  const ham = async () => (await h.q<{ raw_metrics: Record<string, unknown> }>('SELECT raw_metrics FROM insights_daily'))[0]!.raw_metrics;
+
+  it('KRİTİK: önce sayı, sonra hata → sayı kalır, öbür alanlar yenilenir', async () => {
+    provider.rowsByLevel = { campaign: [row({ raw: { spend: '1', callClicks: 4 } })] };
+    await svc.syncAccount(params);
+    provider.rowsByLevel = { campaign: [row({ raw: { spend: '2', callClicksError: 'UNRECOGNIZED_FIELD' } })] };
+    await svc.syncAccount(params);
+    expect(await ham()).toEqual({ spend: '2', callClicks: 4 });
+  });
+
+  it('daha önce sayı yoksa hata yazılır (raporda not olarak görünsün); yeni sayı eskisini ezer', async () => {
+    provider.rowsByLevel = { campaign: [row({ raw: { spend: '1', callClicksError: 'x' } })] };
+    await svc.syncAccount(params);
+    expect(await ham()).toMatchObject({ callClicksError: 'x' });
+    provider.rowsByLevel = { campaign: [row({ raw: { spend: '1', callClicks: 2 } })] };
+    await svc.syncAccount(params);
+    provider.rowsByLevel = { campaign: [row({ raw: { spend: '1', callClicks: 7 } })] };
+    await svc.syncAccount(params);
+    expect(await ham()).toEqual({ spend: '1', callClicks: 7 });
+  });
+});

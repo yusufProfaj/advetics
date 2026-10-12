@@ -295,6 +295,7 @@ interface KampanyaSatiri {
   };
   campaignBudget?: { amountMicros?: string };
 }
+
 /** Saat planını gün ve saate göre sıralar (karşılaştırma sırasız). */
 export function saatPlaniSirala(xs: readonly GoogleSaatPlani[]): GoogleSaatPlani[] {
   const anahtar = (x: GoogleSaatPlani) => `${x.dayOfWeek}|${String(x.startHour).padStart(2, '0')}|${x.startMinute}|${String(x.endHour).padStart(2, '0')}|${x.endMinute}`;

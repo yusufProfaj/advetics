@@ -6,6 +6,7 @@ import {
   type RuleMetric,
   type RuleWindow,
 } from '@advetics/shared';
+import { ARAMA_DONUSUM_CUMLESI } from '../metrics/arama-kampanyasi';
 
 /**
  * Kural değerlendirme — SAF fonksiyonlar, veritabanı ve platform çağrısı yok.
@@ -51,7 +52,15 @@ export interface EntitySnapshot {
   newestDataAt: Date | null;
   /** Bu kuralın bu varlığa en son ne zaman DOKUNDUĞU (atlananlar hariç). */
   lastActionAt: Date | null;
+  /**
+   * Arama kampanyası (`aramaVarligiSql`): `conversions` her gün 0 ve o 0
+   * ölçüm değil. Dönüşüme dayalı koşul DEĞERLENDİRİLMEZ. Verilmezse `false`.
+   */
+  donusumSayilmiyor?: boolean;
 }
+
+/** Dönüşüm sayısına dayanan metrikler: arama kampanyasında hesaplanamaz. */
+export const DONUSUM_METRIKLERI: ReadonlySet<RuleMetric> = new Set<RuleMetric>(['conversions', 'cpa', 'roas']);
 
 export interface EvaluationContext {
   conditions: RuleCondition[];
@@ -207,8 +216,19 @@ export function evaluate(snapshot: EntitySnapshot, ctx: EvaluationContext): Eval
   const reasons: string[] = [];
   const results: boolean[] = [];
   let unavailable: RuleMetric | null = null;
+  let donusumAtlandi: RuleMetric | null = null;
 
   for (const c of ctx.conditions) {
+    /*
+     * ARAMA KAMPANYASI: "dönüşüm 0 → durdur" kuralı çalışan bir arama
+     * reklamını durdururdu (aramalar `conversions`a yazılmıyor). Koşul
+     * SAĞLANMADI sayılıyor ve eşleşme olmazsa sebep ayrıca kaydediliyor.
+     */
+    if (snapshot.donusumSayilmiyor && DONUSUM_METRIKLERI.has(c.metric)) {
+      donusumAtlandi = c.metric;
+      results.push(false);
+      continue;
+    }
     const totals = snapshot.windows[c.window];
     if (!totals) {
       // Pencerenin verisi hiç çekilmemiş — bu bir programlama hatası değil,
@@ -239,6 +259,13 @@ export function evaluate(snapshot: EntitySnapshot, ctx: EvaluationContext): Eval
     ctx.combinator === 'and' ? results.every(Boolean) : results.some(Boolean);
 
   if (!matched) {
+    if (donusumAtlandi) {
+      return {
+        matched: false,
+        outcome: 'skipped_no_conversion_signal',
+        reason: `${ARAMA_DONUSUM_CUMLESI} (${METRIC_TEXT[donusumAtlandi]} koşulu).`,
+      };
+    }
     /**
      * `budget_spent_ratio` hesaplanamadığı için eşleşmediyse bunu AYRICA
      * bildiriyoruz.

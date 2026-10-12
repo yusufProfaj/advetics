@@ -359,34 +359,6 @@ export function googleTeklifi(kurgu: GoogleKurgu, donusumEtkin: boolean | null, 
   return googleTeklifKarari(kurgu, donusumEtkin, son30GunDonusum, ulasma).teklif;
 }
 
-/**
- * ═══ TELEFON AMACINDA HANGİ DÖNÜŞÜM SAYILIR (yönetici kararı, 2026-10-12) ═══
- *
- * Yalnız BİRİNCİL, ETKİN, kategorisi `PHONE_CALL_LEAD` ve türü REKLAMDAN
- * ARAMA olan işlem. Sitedeki `tel:` tıklaması da `PHONE_CALL_LEAD`
- * kategorisinde olabilir (Advetics'in kendi kurduğu "Telefon tıklaması"
- * işlemi tam olarak bu: tür `WEBPAGE`, `ads-kurulum.ts`) ama o, arama
- * reklamının sonucu DEĞİL: reklam siteye hiç göndermiyor. Onu saymak,
- * teklifi kimsenin tıklamadığı bir sayfa olayıyla öğrenmeye bırakmak olurdu.
- *
- * `AD_CALL`: Google'ın tanımıyla "arama öğesinden yapılan arama". Yalnız o;
- * `CLICK_TO_CALL` (mobil numara tıklaması) ve `WEBSITE_CALL` (sitedeki
- * yönlendirme numarası) dışarıda: ilki görüşme değil, ikincisi siteden gelir.
- * Türkiye'de yönlendirme numarası olmadığı için AD_CALL ölçülemeyebilir;
- * o zaman cevap tıklama teklifi ve karar tablosu bunu söylüyor.
- */
-export const GOOGLE_TELEFON_DONUSUM_TURLERI: readonly string[] = ['AD_CALL'];
-
-export interface GoogleTelefonIslemi {
-  kategori: string;
-  tur: string;
-  birincil: boolean;
-  durum: string;
-}
-
-export function googleTelefonDonusumuMu(x: GoogleTelefonIslemi): boolean {
-  return x.durum === 'ENABLED' && x.birincil && x.kategori === 'PHONE_CALL_LEAD' && GOOGLE_TELEFON_DONUSUM_TURLERI.includes(x.tur);
-}
 
 /**
  * DÖNÜŞÜM TEKLİFİNİN VERİ EŞİĞİ — ÖLÇÜLECEK (yönetici kararı, 2026-10-12).
@@ -398,6 +370,9 @@ export function googleTelefonDonusumuMu(x: GoogleTelefonIslemi): boolean {
  * sonucuyla güncellenecek.
  */
 export const GOOGLE_DONUSUM_TEKLIF_ESIGI = 15;
+
+/** TELEFON teklifinin ekrandaki sebebi (karar tablosu ve türetme aynı cümle). */
+export const GOOGLE_TELEFON_TEKLIF_CUMLESI = "Google'ı yalnız aramalara optimize edecek ayar henüz doğrulanmadı; reklam tıklamaya göre çalışır";
 
 /**
  * Teklif ve SEBEBİ (ekranda tek cümle). Arama'da dönüşüm teklifi yalnız
@@ -413,23 +388,15 @@ export function googleTeklifKarari(
   if (kurgu === 'MAKS_PERFORMANS') return { teklif: 'MAKS_DONUSUM', sebep: 'Satın alma ölçümü etkin; Google hesaptaki bütün birincil dönüşümlerden öğrenir' };
   if (kurgu !== 'ARAMA') return { teklif: 'MAKS_TIKLAMA', sebep: "Talep Yaratma'da dönüşüm teklifi kurulmuyor" };
   /*
-   * TELEFON: girdiler (etkin, sayı) yalnız reklamdan arama işlemlerinden
-   * (`googleTelefonDonusumuMu`) okunmuş olmalı; servis bunu ayrı sorguyla
-   * yapıyor. Cümleler de o işlemi anlatıyor: "dönüşüm ölçümü etkin" demek,
-   * sitedeki telefon tıklamasını sayan bir hesapta yalan olurdu.
+   * TELEFON: HER ZAMAN tıklama (yönetici kararı Ö-1, 2026-10-13). "En çok
+   * dönüşüm" kurulunca Google hesabın BÜTÜN birincil işlemlerine optimize
+   * ediyor: Advetics'in kendi kurduğu sitedeki tel: tıklaması (WEBPAGE) ve
+   * form gönderimi dahil. Yani eşik doğru olsa bile öğrenilen sinyal yanlış
+   * (Ajan 4 bulgusu). Kampanyayı yalnız aramaya bağlayan
+   * `CampaignConversionGoal` validateOnly ile ÖLÇÜLENE kadar tıklama: yanlış
+   * hedefe optimize etmekten öngörülebilir.
    */
-  if (ulasma === 'telefon') {
-    if (donusumEtkin === null) return { teklif: 'MAKS_TIKLAMA', sebep: "Google Ads'teki arama dönüşümü okunamadı; ölçülemeyen teklife para gönderilmez" };
-    if (donusumEtkin === false) {
-      return { teklif: 'MAKS_TIKLAMA', sebep: 'Reklamdan gelen arama için birincil dönüşüm yok (sitedeki telefon tıklaması sayılmaz); tıklamayla başlıyoruz' };
-    }
-    if (son30GunDonusum === null) return { teklif: 'MAKS_TIKLAMA', sebep: 'Son 30 günün arama dönüşümü okunamadı; tıklamayla başlıyoruz' };
-    const n = Math.floor(son30GunDonusum);
-    if (son30GunDonusum < GOOGLE_DONUSUM_TEKLIF_ESIGI) {
-      return { teklif: 'MAKS_TIKLAMA', sebep: `Son 30 günde reklamdan ${n} arama dönüşümü var; dönüşüm teklifi için en az ${GOOGLE_DONUSUM_TEKLIF_ESIGI} gerekiyor` };
-    }
-    return { teklif: 'MAKS_DONUSUM', sebep: `Reklamdan gelen arama ölçülüyor ve son 30 günde ${n} arama dönüşümü var` };
-  }
+  if (ulasma === 'telefon') return { teklif: 'MAKS_TIKLAMA', sebep: GOOGLE_TELEFON_TEKLIF_CUMLESI };
   if (donusumEtkin === null) return { teklif: 'MAKS_TIKLAMA', sebep: "Google Ads'teki dönüşüm ölçümü okunamadı; ölçülemeyen teklife para gönderilmez" };
   if (donusumEtkin === false) return { teklif: 'MAKS_TIKLAMA', sebep: 'Dönüşüm ölçümü kurulunca değiştirmeyi öneririz' };
   if (son30GunDonusum === null) return { teklif: 'MAKS_TIKLAMA', sebep: 'Son 30 günün dönüşüm sayısı okunamadı; tıklamayla başlıyoruz' };

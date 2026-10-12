@@ -284,6 +284,7 @@ const OUTCOME_TONE: Record<ActionOutcome, string> = {
   skipped_no_budget: 'bg-warn-soft text-warn-strong ring-warn/30',
   skipped_capped: 'bg-warn-soft text-warn-strong ring-warn/30',
   skipped_noop: 'bg-surface-sunken text-ink-muted ring-line',
+  skipped_no_conversion_signal: 'bg-warn-soft text-warn-strong ring-warn/30',
 };
 
 function OutcomeChip({ outcome }: { outcome: ActionOutcome }) {

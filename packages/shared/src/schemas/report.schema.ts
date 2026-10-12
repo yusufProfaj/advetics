@@ -291,6 +291,24 @@ export function taninmayanAramaEylemleri(actionTypes: Iterable<string>): string[
   return [...out].sort();
 }
 
+/** Google arama tıklaması alınamadığında Google tablosunun üstündeki not (panel ve PDF). */
+export function aramaTiklamasiHataCumlesi(mesaj: string): string {
+  return `Google arama düğmesi tıklaması bazı günler için alınamadı; o günler sayılmadı. Google'ın mesajı: ${mesaj.slice(0, 200)}`;
+}
+
+/**
+ * Kampanya tablosunun ÜSTÜNDEKİ notlar: panel ve PDF AYNI listeyi okuyor
+ * (ikinci bir kopya doğduğu anda biri unutulur). Eski veride alan yoksa boş.
+ */
+export function tabloNotlari(
+  data: Pick<ReportData, 'unknownCallActions' | 'callClicksErrors'>,
+  bolum: 'meta_campaigns' | 'google_campaigns',
+): string[] {
+  return bolum === 'meta_campaigns'
+    ? (data.unknownCallActions ?? []).map(taninmayanAramaCumlesi)
+    : (data.callClicksErrors ?? []).map(aramaTiklamasiHataCumlesi);
+}
+
 /** Uyarının ekrandaki ve PDF'teki cümlesi (tek yer). */
 export function taninmayanAramaCumlesi(tur: string): string {
   return `Meta'dan tanınmayan arama sonucu: ${tur}. Arama sütununa eklenmesi gerekiyor.`;
@@ -700,6 +718,12 @@ export interface ReportData {
    * görünmezdi; bu liste Meta kampanya tablosunun ÜSTÜNDE yazılıyor.
    */
   unknownCallActions: string[];
+  /**
+   * Google arama düğmesi tıklaması sorgusunun hata mesajları (ham gövdedeki
+   * `callClicksError`, ayrık). Boş = hata yok. Dolu iken sütun o günler için
+   * 0 değil BİLİNMİYOR; not Google kampanya tablosunun ÜSTÜNDE yazılıyor.
+   */
+  callClicksErrors: string[];
   /**
    * Anahtar kelime performansı.
    *

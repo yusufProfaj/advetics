@@ -181,6 +181,8 @@ export const ANOMALI_DEGIL_NEDENLERI = [
   'aralik_icinde',
   'iyi_yon',
   'goreli_sapma_kucuk',
+  /** Arama kampanyası: dönüşüm metriği o varlıkta ölçüm değil (Ö-4). */
+  'donusum_sayilmiyor',
 ] as const;
 export type AnomaliDegilNedeni = (typeof ANOMALI_DEGIL_NEDENLERI)[number];
 

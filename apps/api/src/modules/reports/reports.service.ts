@@ -88,12 +88,15 @@ const KOVA_TOPLAMI = Prisma.raw(AKSIYON_KOVALARI.map((k) => `SUM("${k}") AS "${k
 /**
  * Ham sayaç toplamı (base CTE'sine). Değer `raw_metrics` anahtarından; sayı
  * olmayan değer (hata gövdesi) 0 değil NULL sayılır ve SUM onu atlar.
+ * YALNIZ GOOGLE SATIRLARINDA açılıyor (Ö-3): sayaç Google'ın; dış CASE, Meta
+ * satırlarının büyük `raw_metrics` gövdesinin her raporda açılmasını önlüyor.
  */
 function hamSayacToplami(alias: string): Prisma.Sql {
   const on = alias ? `${alias}.` : '';
   return Prisma.raw(
     HAM_SAYAC_KOVALARI.map(
-      (k) => `SUM(CASE WHEN jsonb_typeof(${on}raw_metrics -> '${CONVERSION_BUCKETS[k].hamAlan}') = 'number' THEN (${on}raw_metrics ->> '${CONVERSION_BUCKETS[k].hamAlan}')::numeric END) AS "h_${k}"`,
+      (k) =>
+        `SUM(CASE WHEN ${on}platform = 'google' THEN CASE WHEN jsonb_typeof(${on}raw_metrics -> '${CONVERSION_BUCKETS[k].hamAlan}') = 'number' THEN (${on}raw_metrics ->> '${CONVERSION_BUCKETS[k].hamAlan}')::numeric END END) AS "h_${k}"`,
     ).join(', '),
   );
 }
@@ -374,13 +377,14 @@ export class ReportsService {
         izlenen,
       };
 
-      const [platformBlocks, campaigns, daily, topAds, topAdsMissingPlatforms, unknownCallActions] = await Promise.all([
+      const [platformBlocks, campaigns, daily, topAds, topAdsMissingPlatforms, unknownCallActions, callClicksErrors] = await Promise.all([
         this.platformBlocks(tx, sorgu),
         this.campaignRows(tx, sorgu),
         this.dailySeries(tx, sorgu),
         this.topAds(tx, sorgu),
         this.topAdsMissingPlatforms(tx, sorgu),
         this.unknownCallActions(tx, sorgu),
+        this.callClicksErrors(tx, sorgu),
       ]);
 
       // Para birimi: tek ise toplam anlamlı, birden fazlaysa null.
@@ -441,6 +445,7 @@ export class ReportsService {
         topAds,
         topAdsMissingPlatforms,
         unknownCallActions,
+        callClicksErrors,
         // `null` HÂLÂ "bu yetenek yok" demek — ama artık yalnızca Google
         // bağlantısı olmayan müşteriler için. Meta-only bir müşteride boş dizi
         // döndürmek "anahtar kelimen yok" demek olurdu; oysa o platformda
@@ -1108,10 +1113,34 @@ export class ReportsService {
           AND i.platform = 'meta'::"Platform"
           AND i.date BETWEEN ${params.from}::date AND ${params.to}::date
           AND i.entity_level = ${LEVEL}
+          AND i.raw_metrics::text LIKE '%call%'
           AND act->>'action_type' ILIKE '%call%'
       `,
     );
     return taninmayanAramaEylemleri(rows.map((r) => r.tur).filter((x): x is string => !!x));
+  }
+
+  /**
+   * GOOGLE ARAMA TIKLAMASI HATALARI (Ajan 4 Ö-2). Senkron yan sorgu
+   * düştüğünde ham gövdeye hatayı yazıyor; okuyan olmazsa iz yalnız worker
+   * log'unda kalırdı ve sütun sessizce eksik sayardı. Ayrık mesajlar, ilk 5
+   * (aynı mesaj her gün tekrar ediyor; toplam ayrık sayı da söyleniyor).
+   */
+  private async callClicksErrors(tx: TxLike, params: RaporSorgusu): Promise<string[]> {
+    if (params.platform === 'meta') return [];
+    const rows = await tx.$queryRaw<Array<{ mesaj: string | null }>>(
+      Prisma.sql`
+        SELECT DISTINCT i.raw_metrics ->> 'callClicksError' AS mesaj
+        FROM insights_daily i
+        WHERE i.client_id = ${params.clientId}::uuid ${trackedAccounts(params.izlenen, 'i')}
+          AND i.platform = 'google'::"Platform"
+          AND i.date BETWEEN ${params.from}::date AND ${params.to}::date
+          AND i.entity_level = ${LEVEL}
+          AND i.raw_metrics -> 'callClicksError' IS NOT NULL
+      `,
+    );
+    const hepsi = rows.map((r) => r.mesaj).filter((x): x is string => !!x).sort();
+    return hepsi.length > 5 ? [...hepsi.slice(0, 5), `ve ${hepsi.length - 5} farklı hata daha`] : hepsi;
   }
 
   private async topAdsMissingPlatforms(

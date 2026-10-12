@@ -91,6 +91,18 @@ export interface KararEki {
   whatsappKarsilama?: { kayit: WhatsappKarsilama | null; setler: { setli: number; toplam: number } | null } | null;
   /** TELEFON: Marka Merkezi çalışma saatleri (Google arama öğesine giden AYNI değer). */
   calismaSaatleri?: CalismaSaatleri | null;
+  /**
+   * Google hesabının saat dilimi. Saat planı HESABIN saat diliminde
+   * uygulanıyor; Türkiye dışındaysa "09:00" başka bir saate denk gelir.
+   */
+  googleSaatDilimi?: string | null;
+}
+
+/** Saat planının uygulandığı yer Türkiye saati değilse not (tek yer). */
+export function saatDilimiNotu(saatDilimi: string | null | undefined): string | null {
+  return saatDilimi && saatDilimi !== 'Europe/Istanbul'
+    ? `Saatler Google hesabının saat diliminde (${saatDilimi}) uygulanır, Türkiye saatinde değil`
+    : null;
 }
 
 /*
@@ -295,7 +307,10 @@ export function kararTablosu(
             google:
               g?.kurgu === 'ARAMA' && g.ulasma === 'telefon'
                 ? calismaSaatleriOzeti(ek.calismaSaatleri)
-                  ? hucre('Arama düğmesi yalnız çalışma saatlerinde', calismaSaatleriOzeti(ek.calismaSaatleri)!)
+                  ? hucre(
+                      'Arama düğmesi yalnız çalışma saatlerinde',
+                      [calismaSaatleriOzeti(ek.calismaSaatleri)!, saatDilimiNotu(ek.googleSaatDilimi)].filter(Boolean).join(' · '),
+                    )
                   : hucre('Her saatte', "Marka Merkezi'nde çalışma saatleri girilmedi")
                 : null,
           },

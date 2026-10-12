@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import type { ReportData, TenantContext } from '@advetics/shared';
+import { tabloNotlari, type ReportData, type TenantContext } from '@advetics/shared';
 import { createHarness, seedTenant, IDS, type Harness } from '../../../test/pglite-harness';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { KreatifAdresiService } from './kreatif-adresi.service';
@@ -977,5 +977,21 @@ describe('ReportsService — arama kovaları', () => {
     expect(g.conversionCounts.callClicks).toBe(4);
     expect(g.impressions).toBe(100);
     expect(data.platforms.find((p) => p.platform === 'google')!.conversionCounts.callClicks).toBe(4);
+  });
+
+  it('KRİTİK (Ö-2): Google arama tıklaması hatası rapora taşınıyor; Meta\'nın call geçen gövdesi Google sayacını etkilemiyor', async () => {
+    await googleSatir('2026-08-02', { callClicksError: 'UNRECOGNIZED_FIELD' });
+    // Meta satırında aynı anahtar olsa bile sayaç yalnız Google'dan (Ö-3).
+    await h.q(
+      `INSERT INTO insights_daily (client_id, ad_account_id, platform, entity_level, entity_id, entity_external_id, date, breakdown_key,
+         impressions, clicks, spend_micros, conversions, conversion_value_micros, currency, reach, raw_metrics)
+       VALUES ($1, $2, 'meta', 'campaign', $3, 'ext', '2026-08-01', '', 1, 1, 1000000, 0, 0, 'TRY', 0, '{"callClicks": 99, "actions": []}'::jsonb)`,
+      [IDS.client, IDS.adAccount, CAMP_A],
+    );
+    const data = await svc.build(CTX, RANGE);
+    expect(data.callClicksErrors).toEqual(['UNRECOGNIZED_FIELD']);
+    expect(data.metaCampaigns.find((c) => c.id === CAMP_A)!.conversionCounts.callClicks).toBe(0);
+    expect(tabloNotlari(data, 'google_campaigns')[0]).toContain('UNRECOGNIZED_FIELD');
+    expect(tabloNotlari(data, 'meta_campaigns')).toEqual([]);
   });
 });

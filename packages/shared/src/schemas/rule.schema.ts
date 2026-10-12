@@ -344,6 +344,11 @@ export const ACTION_OUTCOMES = [
   'skipped_capped',
   /** Varlık zaten istenen durumda (duraklatılmışı duraklatmak). */
   'skipped_noop',
+  /**
+   * Arama kampanyasında dönüşüme dayalı koşul (dönüşüm, EBM, ROAS)
+   * değerlendirilemedi: o kampanyada dönüşüm SAYILMIYOR, 0 bir ölçüm değil.
+   */
+  'skipped_no_conversion_signal',
 ] as const;
 export type ActionOutcome = (typeof ACTION_OUTCOMES)[number];
 
@@ -357,6 +362,7 @@ export const OUTCOME_LABELS: Record<ActionOutcome, string> = {
   skipped_no_budget: 'Bütçe tanımsız',
   skipped_capped: 'Sınıra takıldı',
   skipped_noop: 'Zaten bu durumda',
+  skipped_no_conversion_signal: 'Dönüşüm sayılmıyor',
 };
 
 export interface RuleActionRecord {

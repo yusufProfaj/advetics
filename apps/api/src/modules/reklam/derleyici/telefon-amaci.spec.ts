@@ -166,6 +166,11 @@ describe('geri arama isteği', () => {
     expect(satirlar.find((s) => s.kod === 'SAAT')?.meta?.not).toBe(META_SAAT_CUMLESI);
     expect(satirlar.find((s) => s.kod === 'GORSEL')?.meta?.not).toBe(TELEFON_BANNER_CUMLESI);
     expect(satirlar.find((s) => s.kod === 'OLCUM')?.google?.not).toBe(GOOGLE_ARAMA_OLCUM_CUMLESI);
+    // Google saat planı hesabın saat diliminde: TR dışındaysa söylenir.
+    const saatli = (tz: string) =>
+      kararTablosu('TELEFON', { meta: false, google: true }, 'MAKS_TIKLAMA', true, null, { calismaSaatleri: [{ gun: 'MONDAY', acilis: '09:00', kapanis: '18:00' }], googleSaatDilimi: tz }).find((s) => s.kod === 'SAAT')!.google!.not!;
+    expect(saatli('America/New_York')).toContain('America/New_York');
+    expect(saatli('Europe/Istanbul')).not.toContain('saat diliminde');
     // Başka amaçta bu satırlar yok (gereksiz soru doğurmasın).
     expect(kararTablosu('SITE', { meta: true, google: true }, 'MAKS_TIKLAMA', true).some((s) => s.kod === 'GERI_ARAMA' || s.kod === 'SAAT')).toBe(false);
   });
@@ -200,6 +205,11 @@ describe('ülke kuralı (+90)', () => {
   it('KRİTİK: Türkiye dışı ülke ya da şehir GİRİŞTE engel', () => {
     expect(kod(rehber([{ tur: 'country', key: 'DE', etiket: 'Almanya', ulkeKodu: 'DE' }]))).toMatchObject([{ kod: 'TEL-ULKE', seviye: 'engel' }]);
     expect(kod(rehber([{ tur: 'city', key: '1', etiket: 'Atina', ulkeKodu: 'GR' }, { tur: 'city', key: '2', etiket: 'İzmir', ulkeKodu: 'TR' }]))[0]!.metin).toContain('Atina');
+  });
+
+  it('KRİTİK: yalnız Google açıkken de engel (arama öğesi aynı numarayı gösteriyor)', () => {
+    const r = { ...rehber([{ tur: 'country', key: 'DE', etiket: 'Almanya', ulkeKodu: 'DE' }]), platformlar: al({ meta: false, google: true }) } as RehberAlanlari;
+    expect(kod(r)).toMatchObject([{ kod: 'TEL-ULKE', seviye: 'engel' }]);
   });
 
   it('Türkiye içi konum geçer; ülkesi bilinmeyen nokta UYARI', () => {
