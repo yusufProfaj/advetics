@@ -108,7 +108,9 @@ describe('açılır önizleme', () => {
     const sutun = (thead.match(/<th>|<Baslik /g) ?? []).length - kosullu;
     expect(sutun).toBeGreaterThan(5);
     expect(kosullu).toBe(1);
-    expect(TABLO).toContain(`const sutunSayisi = eylemSutunu ? ${sutun + 1} : ${sutun};`);
+    // 2026-10-14 (Paket F1): "Sitede" sütunu da KOŞULLU (yalnız GA4 bağlıysa).
+    expect((thead.match(/\{siteSutunu && <th /g) ?? []).length).toBe(1);
+    expect(TABLO).toContain(`const sutunSayisi = ${sutun} + (eylemSutunu ? 1 : 0) + (siteSutunu ? 1 : 0);`);
     const satir = TABLO.slice(TABLO.indexOf('className={`${s.onizlemeSatir}'));
     expect(satir.slice(0, 200)).toContain('<td colSpan={sutunSayisi}>');
   });

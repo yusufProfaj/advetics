@@ -18,6 +18,7 @@ import {
   type ReportData,
 } from '@advetics/shared';
 import { kitleBolumuKarari } from '@advetics/shared';
+import { SITE_DONUSUM_SUTUNLARI, siteDonusumuBosSebebi, siteDonusumuCizilir, siteDonusumuDipnotlari } from '@advetics/shared';
 import { donusumBosSebebi, PLATFORM_KISA_ADLARI, platformKisaAdi } from '@advetics/shared';
 import { logoOku, yaziTipiOku } from './pdf-yazi-tipi';
 import { gorselleriIndir, type GorselSonucu } from './kreatif-gorseli';
@@ -172,6 +173,14 @@ export class RaporPdfService {
           break;
         case 'conversion_detail':
           this.donusumDetayi(ctx);
+          break;
+        /*
+         * SİTE VE DÖNÜŞÜM (Paket F1). GA4 bir platform DEĞİL, PLATFORM_SIRASI
+         * onu gezmez: bölüm kendi koduyla burada. GA4 bağlı değilse SAYFA HİÇ
+         * AÇILMIYOR (karar çizimden önce, kitle bölümüyle aynı gerekçe).
+         */
+        case 'site_conversion':
+          if (siteDonusumuCizilir(ctx.data.siteConversion)) this.siteDonusumu(ctx);
           break;
         /*
          * KİTLE BÖLÜMLERİ — platform sunmuyorsa SAYFA HİÇ AÇILMIYOR.
@@ -977,6 +986,41 @@ export class RaporPdfService {
     });
 
     this.sigmayanlar(ctx, s, son, cizilen, rows.length, 'dönüşüm');
+  }
+
+  /**
+   * SİTE VE DÖNÜŞÜM — panelle AYNI sütunlar, aynı boş cümle, aynı dipnotlar
+   * (shared veri-kaynagi/rapor.ts). Tablo `tablo()` çiziciden (üç tablo dersi).
+   */
+  private siteDonusumu(ctx: Ctx): void {
+    const v = ctx.data.siteConversion!;
+    const s = ctx.doc.addPage([EN, BOY]);
+    let y = this.baslik(ctx, s, SECTION_LABELS.site_conversion, 'Platform dönüşümü ve Analytics');
+    if (v.satirlar.length === 0) {
+      this.bosKutu(ctx, s, y, siteDonusumuBosSebebi(v));
+      return;
+    }
+    const { y: son, cizilen } = tablo(s, {
+      sutunlar: SITE_DONUSUM_SUTUNLARI.map((c) => ({ baslik: c.baslik, pay: c.pay, sag: c.sag, deger: c.deger })),
+      satirlar: v.satirlar,
+      x: KENAR,
+      y,
+      genislik: EN - 2 * KENAR,
+      altSinir: KENAR + 90,
+      normal: ctx.normal,
+      kalin: ctx.kalin,
+      toplam: { etiket: 'Toplam', degerler: SITE_DONUSUM_SUTUNLARI.slice(1).map((c) => (c.toplam ? c.toplam(v.satirlar) : null)) },
+    });
+    this.sigmayanlar(ctx, s, son, cizilen, v.satirlar.length, 'kampanya');
+    y = son - 24;
+    for (const dipnot of siteDonusumuDipnotlari(v)) {
+      for (const satir of sar(dipnot, ctx.normal, 8, EN - 2 * KENAR)) {
+        if (y < KENAR) return;
+        s.drawText(satir, { x: KENAR, y, size: 8, font: ctx.normal, color: SLATE.s500 });
+        y -= 11;
+      }
+      y -= 3;
+    }
   }
 
   private aramaTerimleri(ctx: Ctx): void {

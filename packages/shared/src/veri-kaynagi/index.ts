@@ -15,3 +15,5 @@ export * from './saglik';
 export * from './search-console';
 export * from './eticaret';
 export * from './uclar';
+export * from './yanitlar';
+export * from './rapor';

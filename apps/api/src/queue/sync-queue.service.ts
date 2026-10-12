@@ -102,6 +102,8 @@ export class SyncQueueService implements OnModuleDestroy {
     jobType: SyncJobType;
     adAccountId?: string;
     socialProfileId?: string;
+    /** Paket F — veri kaynağı işi. Bkz. SyncJobPayload.veriKaynagiId */
+    veriKaynagiId?: string;
     /** Modül 5 — kural işi. Bkz. SyncJobPayload.ruleId */
     ruleId?: string;
     /**
@@ -203,6 +205,7 @@ export class SyncQueueService implements OnModuleDestroy {
         clientId: params.clientId,
         adAccountId: params.adAccountId ?? null,
         socialProfileId: params.socialProfileId ?? null,
+        veriKaynagiId: params.veriKaynagiId ?? null,
         jobType: params.jobType,
         entityLevel: params.entityLevel ?? null,
         // TOPLU TAZELEME PARTİSİ. `null` = tek başına açılmış iş; ilerleme
@@ -226,6 +229,7 @@ export class SyncQueueService implements OnModuleDestroy {
       jobType: params.jobType,
       adAccountId: params.adAccountId,
       socialProfileId: params.socialProfileId,
+      veriKaynagiId: params.veriKaynagiId,
       ruleId: params.ruleId,
       externalLeadId: params.externalLeadId,
       externalFormId: params.externalFormId,
@@ -461,6 +465,16 @@ export class SyncQueueService implements OnModuleDestroy {
        * (2, 7, 12...) iki dakika sonra.
        */
       { name: 'sweep:lead-feedback', pattern: '4-59/5 * * * *', jobType: 'lead_feedback_send' },
+      /*
+       * Paket F — VERİ KAYNAKLARI (shared `KAYNAK_SUPURMELERI`, desenler oradan
+       * AYNEN; `veri-kaynagi-kayit.spec.ts` ikisini karşılaştırıyor). Yapı
+       * 02:41, günlük 06:19 UTC. Sıra BARİYER DEĞİL: günlük iş yapının son
+       * 36 saatte koştuğunu kendisi kontrol ediyor, koşmadıysa platforma
+       * gitmeden bitiyor ve yapı bitince zincirle yeniden kuyruğa giriyor.
+       * `sweep:urun-performansi` F3'te (işleyicisi yok, şimdi kurulmuyor).
+       */
+      { name: 'sweep:kaynak-yapi', pattern: '41 2 * * *', jobType: 'kaynak_yapi' },
+      { name: 'sweep:kaynak-gunluk', pattern: '19 6 * * *', jobType: 'kaynak_gunluk' },
     ];
 
     for (const s of schedules) {

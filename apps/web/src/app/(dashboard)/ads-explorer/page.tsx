@@ -8,7 +8,7 @@ import type {
   MetricsAccountRow,
   MetricsSummary,
 } from '@advetics/shared';
-import { PLATFORMS, PLATFORM_KISA_ADLARI } from '@advetics/shared';
+import { PLATFORMS, PLATFORM_KISA_ADLARI, type TakipAcigiYaniti } from '@advetics/shared';
 import { requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
 import { enEskiGunGerekli, rangeParams, resolveRange } from '@/lib/date-range';
@@ -35,6 +35,7 @@ import { kirilimSirala, siralamaCoz } from '@/lib/kirilim-siralama';
 import { first, hataMetni, resolvePlatform } from '@/lib/sayfa-yardimcilari';
 import { REKLAM_YONETICISI } from '@/lib/reklam-yoneticisi';
 import { eylemHedefiCoz } from '@/lib/varlik-eylemi';
+import { siteSutunuKarari, sitedeHaritasi } from '@/lib/veri-kaynagi';
 
 export const metadata = { title: 'Reklam Yöneticisi · Advetics' };
 
@@ -418,6 +419,21 @@ export default async function DashboardPage({
    * satırlar değişiyor. Eski ekranda dört ayrı bileşen (şirket, workspace,
    * hesap, kırılım tablosu) dört ayrı görünüş çiziyordu.
    */
+  /*
+   * "SİTEDE" SÜTUNU (Paket F1, MIMARI § 3.4): yalnız KAMPANYA düzeyinde ve
+   * tek workspace seçiliyken. GA4 bağlı değilse sütun hiç açılmıyor
+   * (`siteSutunuKarari`). Hata YUTULMUYOR: sütun açık kalıyor ve platformun
+   * cümlesi tablonun altında yazıyor (`.catch(() => [])` yasağı).
+   */
+  const siteYaniti =
+    varlik === 'campaign' && !mcc && !ajansGorunumu && session.activeClientId
+      ? await serverApiFetch<TakipAcigiYaniti>(
+          `/veri-kaynaklari/takip-acigi?${new URLSearchParams({ clientId: session.activeClientId, from: range.from, to: range.to })}`,
+        ).catch((e: unknown) => ({ hata: hataMetni(e) }))
+      : null;
+  const site = siteYaniti === null ? null : siteSutunuKarari(siteYaniti);
+  const sitede = siteYaniti && !('hata' in siteYaniti) ? sitedeHaritasi(siteYaniti) : null;
+
   const duzey: YmDuzey = ajansGorunumu ? 'sirket' : mcc ? 'workspace' : varlik === null ? 'hesap' : varlik;
   const satirlar: YmSatir[] | null = ajansGorunumu
     ? sirketler && sirketler.map(sirketSatiri)
@@ -425,7 +441,11 @@ export default async function DashboardPage({
       ? musteriler && musteriler.map(workspaceSatiri)
       : varlik === null
         ? hesaplar && hesaplar.accounts.map((a) => hesapSatiri(a, tasinan))
-        : breakdown && kirilimSirala(breakdown, siralama).map((b) => varlikSatiri(b, varlik, tasinan));
+        : breakdown &&
+          kirilimSirala(breakdown, siralama).map((b) => ({
+            ...varlikSatiri(b, varlik, tasinan),
+            ...(site ? { sitede: sitede?.get(b.entityId) ?? null } : {}),
+          }));
   const yuklenemedi = ajansGorunumu
     ? 'Şirket dağılımı alınamadı.'
     : mcc
@@ -537,6 +557,7 @@ export default async function DashboardPage({
           aralik={{ from: range.from, to: range.to }}
           galeriHref={`${REKLAM_YONETICISI}/galeri`}
           yazabilir={session.permissions.includes('budget.write')}
+          site={site}
         />
       )}
 

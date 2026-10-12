@@ -19,6 +19,7 @@ import {
   PLATFORM_LABELS,
 } from '@advetics/shared';
 import { kitleBolumuKarari } from '@advetics/shared';
+import { SITE_DONUSUM_SUTUNLARI, siteDonusumuBosSebebi, siteDonusumuCizilir, siteDonusumuDipnotlari } from '@advetics/shared';
 import { donusumBosSebebi, PLATFORM_KISA_ADLARI, platformKisaAdi } from '@advetics/shared';
 import type { ReactNode } from 'react';
 import { formatDayLong, formatMoney, formatNumber, formatPercent, microsOf } from '@/lib/format';
@@ -140,6 +141,13 @@ export function ReportDocument({ data }: { data: ReportData }) {
               return <SearchTerms key={section} data={data} />;
             case 'conversion_detail':
               return <DonusumDetayi key={section} data={data} />;
+            /*
+              SİTE VE DÖNÜŞÜM (Paket F1) — GA4 bağlı değilse BÖLÜM ÜRETİLMİYOR.
+              Karar, sütunlar ve dipnotlar shared'da (veri-kaynagi/rapor.ts);
+              PDF çizici AYNISINI çağırıyor.
+            */
+            case 'site_conversion':
+              return siteDonusumuCizilir(data.siteConversion) ? <SiteDonusumu key={section} data={data} /> : null;
             /*
               KİTLE BÖLÜMLERİ — platform sunmuyorsa BÖLÜM HİÇ ÜRETİLMİYOR.
               Karar `packages/shared`ta ve PDF çizici AYNISINI çağırıyor;
@@ -1117,6 +1125,65 @@ function KitleOzeti({ data, not }: { data: ReportData; not: string | null }) {
           bağlandıysa ilk veri ertesi gün oluşuyor.
         </p>
       )}
+    </section>
+  );
+}
+
+/**
+ * SİTE VE DÖNÜŞÜM — platformun saydığı dönüşüm ile sitenin (Analytics)
+ * gördüğü yan yana. Etiket yalnız fark büyükse ve hacim yeterliyse basılıyor
+ * (shared takipAcigi); dipnotlar eşlenemeyen payı ve nedenlerini SAYIYLA
+ * söylüyor (sessiz kesme yok).
+ */
+function SiteDonusumu({ data }: { data: ReportData }) {
+  const v = data.siteConversion!;
+  return (
+    <section className="rpt-page pt-10">
+      <PageHead title="Site ve Dönüşüm" subtitle="Platform dönüşümü ve Analytics" />
+      {v.satirlar.length === 0 ? (
+        <Empty>{siteDonusumuBosSebebi(v)}</Empty>
+      ) : (
+        <div className="mt-6 overflow-x-auto">
+          <table className="w-full min-w-[620px] border-collapse text-sm">
+            <thead>
+              <tr className="border-b-2 border-slate-300 text-left text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                {SITE_DONUSUM_SUTUNLARI.map((c) => (
+                  <th key={c.baslik} className={c.sag ? 'px-2 py-2 text-right' : 'py-2 pr-3'}>
+                    {c.baslik}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {v.satirlar.map((r) => (
+                <tr key={r.kampanyaId} className="border-b border-slate-100">
+                  {SITE_DONUSUM_SUTUNLARI.map((c) => (
+                    <td key={c.baslik} className={c.sag ? 'px-2 py-2.5 text-right tabular-nums' : 'max-w-[260px] py-2.5 pr-3'}>
+                      <span className="block truncate" title={c.deger(r)}>
+                        {c.deger(r)}
+                      </span>
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t-2 border-slate-300 font-bold">
+                {SITE_DONUSUM_SUTUNLARI.map((c) => (
+                  <td key={c.baslik} className={c.sag ? 'px-2 py-2.5 text-right tabular-nums' : 'py-2.5 pr-3'}>
+                    {c.toplam ? c.toplam(v.satirlar) : ''}
+                  </td>
+                ))}
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+      <ul className="mt-4 space-y-1 text-xs text-slate-500">
+        {siteDonusumuDipnotlari(v).map((d) => (
+          <li key={d}>{d}</li>
+        ))}
+      </ul>
     </section>
   );
 }

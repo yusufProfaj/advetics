@@ -19,13 +19,15 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CONFIG, type AppConfig } from '../../config/configuration';
 import { ConnectionsService } from '../connections/connections.service';
 import { TokenVaultService } from '../connections/token-vault.service';
+import { baglantiSec } from '../connections/baglanti-sec';
 import { ProviderRegistry } from '../connections/provider.registry';
 import { GOOGLE_OLCUM_SCOPES } from '../connections/providers/google.provider';
 import type { MetaProvider } from '../connections/providers/meta.provider';
 import { OlcumService } from '../olcum/olcum.service';
 import { AuditService } from '../audit/audit.service';
+import { VeriKaynagiService } from '../veri-kaynagi/veri-kaynagi.service';
 import { AdsKurulumIstemcisi, DONUSUM_ADI, DONUSUM_KATEGORISI, type DonusumTuru } from './ads-kurulum';
-import { Ga4Istemcisi } from './ga4';
+import { Ga4Istemcisi } from '../connections/providers/ga4';
 import { GtmIstemcisi, ON_EK, SURUM_ADI, TUM_SAYFALAR_TETIGI, gtmPlani, konteynerdeYuklu } from './gtm';
 import { MetaKurulumIstemcisi } from './meta-kurulum';
 import {
@@ -118,6 +120,7 @@ export class KurulumService {
     private readonly olcum: OlcumService,
     private readonly audit: AuditService,
     @Inject(CONFIG) private readonly config: AppConfig,
+    private readonly veriKaynagi: VeriKaynagiService,
   ) {}
 
   /**
@@ -216,25 +219,9 @@ export class KurulumService {
    * o yüzden yalnız karar verilmemişse ikisinden biri.
    */
   private baglantiSec(b: Pick<Baglam, 'meta' | 'google' | 'baglantilar' | 'sahip' | 'orgId' | 'ajansOrgId'>, platform: 'meta' | 'google'): Baglanti | null {
-    const hesap = platform === 'meta' ? b.meta : b.google;
-    const adaylar = b.baglantilar.filter((x) => x.platform === platform);
-    if (hesap) {
-      const h = adaylar.find((x) => x.id === hesap.connectionId);
-      if (h) return h;
-    }
-    /*
-     * İKİ HAVUZ, İKİSİ DE `client_id IS NULL` (Ajan 4, Ö6): ajansın havuzu
-     * ajans şirketinde, şirketin kendi havuzu kendi şirketinde. Ayırmadan
-     * "en eski NULL bağlantı" almak, ajans kararıyla şirketin kendi Meta'sında
-     * hesap açmak demekti. Ajans bilinmiyorsa (üst hesap yok) havuz şirketin.
-     */
-    const ajansOrg = b.ajansOrgId ?? b.orgId;
-    const ajansHavuzu = adaylar.find((x) => x.clientId === null && x.orgId === ajansOrg) ?? null;
-    const sirketin =
-      adaylar.find((x) => x.clientId !== null) ?? adaylar.find((x) => x.clientId === null && x.orgId === b.orgId && b.orgId !== ajansOrg) ?? null;
-    if (b.sahip === 'sirket') return sirketin;
-    if (b.sahip === 'ajans') return ajansHavuzu;
-    return sirketin ?? ajansHavuzu;
+    // Kural ortak yerde (connections/baglanti-sec.ts): veri kaynakları da
+    // AYNI fonksiyonu çağırıyor, ikinci bir seçici yazılmadı (MIMARI Ç-3).
+    return baglantiSec(b, platform);
   }
 
   async oku(ctx: TenantContext, clientId: string): Promise<KurulumYaniti> {
@@ -695,7 +682,15 @@ export class KurulumService {
     const akislar = await ga.webAkislari(mulkId);
     const akis = akislar[0] ?? (await ga.webAkisiAc(mulkId, b.ad, b.site));
     await this.yaz(ctx, clientId, { ga4_mulk_id: mulkId, ga4_akis_yolu: akis.yol, ga4_olcum_kimligi: akis.olcumKimligi, ga4_ads_bagli: false });
-    return akislar.length > 1 ? `Mülk ${mulkId}: ${akislar.length} web akışından ilki (${akis.olcumKimligi}) kullanılıyor.` : `Mülk ${mulkId}, ölçüm kimliği ${akis.olcumKimligi}.`;
+    /*
+     * KURULAN MÜLK OKUNMAYA DA BAŞLASIN (docs/veri-kaynagi/MIMARI.md Ç-5):
+     * kurulum "kurduğumuz", veri kaynağı "okuduğumuz" mülk; ikisi ayrı kayıt
+     * ama kullanıcı ikinci kez seçmek zorunda kalmamalı. Bağlama hatası
+     * ADIMI DÜŞÜRMEZ (mülk kuruldu); sebebi adımın sonucuna ekleniyor.
+     */
+    const okuma = await this.veriKaynagi.kurulumdanBagla(ctx, clientId, mulkId);
+    const sonuc = akislar.length > 1 ? `Mülk ${mulkId}: ${akislar.length} web akışından ilki (${akis.olcumKimligi}) kullanılıyor.` : `Mülk ${mulkId}, ölçüm kimliği ${akis.olcumKimligi}.`;
+    return okuma ? `${sonuc} ${okuma}` : sonuc;
   }
 
   /**

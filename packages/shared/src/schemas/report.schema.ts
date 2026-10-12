@@ -3,6 +3,7 @@ import { ALICI_UST_SINIRI } from '../alici-listesi';
 import type { MetricTotals } from './metrics.schema';
 import { PLATFORMS, type Platform } from '../constants/platforms';
 import { formatMoney, formatNumber, formatPercent } from '../format';
+import type { TakipAcigiYaniti } from '../veri-kaynagi/takip-acigi';
 
 /**
  * Modül 6 — White-label raporlama sözleşmeleri.
@@ -72,6 +73,15 @@ export const REPORT_SECTIONS = [
    */
   'conversion_detail',
   /*
+   * ═══ SİTE VE DÖNÜŞÜM (Paket F1, docs/veri-kaynagi/MIMARI.md § 3.5) ═══
+   *
+   * Platformun saydığı dönüşüm ile sitenin (Analytics) gördüğü yan yana.
+   * GA4 bir REKLAM PLATFORMU DEĞİL: `PLATFORM_SIRASI` döngüsü onu gezmez,
+   * bölüm burada kendi koduyla duruyor ve PDF bölüm döngüsünde çiziliyor.
+   * GA4 bağlı olmayan workspace'te bölüm HİÇ ÇİZİLMİYOR (`siteDonusumuCizilir`).
+   */
+  'site_conversion',
+  /*
    * ═══ KİTLE KIRILIMLARI ═══
    *
    * Beş ayrı bölüm, tek bir "kitle" bölümü DEĞİL. Sebebi şablon: müşteri
@@ -114,6 +124,7 @@ export const SECTION_LABELS: Record<ReportSection, string> = {
   google_keywords: 'Anahtar Kelime Performansı',
   google_search_terms: 'Arama Terimleri',
   conversion_detail: 'Dönüşüm Detayı',
+  site_conversion: 'Site ve Dönüşüm',
   audience_overview: 'Kitle Özeti',
   audience_age: 'Yaş Dağılımı',
   audience_gender: 'Cinsiyet Dağılımı',
@@ -656,6 +667,12 @@ export interface ReportData {
      */
     totalConversions: number;
   };
+  /**
+   * SİTE VE DÖNÜŞÜM (Paket F1). `null` = bölüm şablonda seçili değil (sorgu
+   * koşmadı). Seçiliyse panel ucuyla AYNI üreticiden
+   * (`takip-hesap.ts#takipAcigiYaniti`): ekran ile PDF ayrışmasın.
+   */
+  siteConversion: TakipAcigiYaniti | null;
   generatedAt: string;
 }
 
@@ -844,6 +861,7 @@ export const VARSAYILAN_SABLONLAR = [
       'google_keywords',
       'google_search_terms',
       'conversion_detail',
+      'site_conversion',
       'top_ads',
       'closing',
     ],

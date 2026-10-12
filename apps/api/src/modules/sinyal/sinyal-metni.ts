@@ -137,6 +137,28 @@ export function sinyalNedeni(s: SinyalCumleGirdisi): string {
       ? `Platformun gerekçesi: ${konular.slice(0, 3).join(', ')}. Reklamı düzeltip yeniden incelemeye gönder.`
       : 'Platform reklamı reddetti ya da kısıtladı. Reklamı düzeltip yeniden incelemeye gönder.';
   }
+  // ── Paket F1 (veri-kaynagi-saglik.ts) ──
+  if (s.kod === 'ga4_anahtar_etkinlik_yok') {
+    return 'Analytics mülkünde hiç anahtar etkinlik tanımlı değil; site dönüşümleri sayılamıyor. Form gönderimi, arama gibi olayları anahtar etkinlik yap.';
+  }
+  if (s.kod === 'ga4_veri_gelmiyor') {
+    const t = Number(s.kanit.tiklama ?? 0);
+    return `Son ${SAGLIK.ga4SessizGun} günde reklamlar ${sayiBicim.format(t)} tıklama aldı ama Analytics hiç oturum kaydetmedi. Sitedeki Analytics etiketi kaldırılmış ya da kırık olabilir.`;
+  }
+  if (s.kod === 'takip_acigi') {
+    const pd = Number(s.kanit.platformDonusum ?? 0);
+    const sd = Number(s.kanit.siteDonusum ?? 0);
+    const etiket = String(s.kanit.etiket ?? '');
+    const ek =
+      etiket === 'site_fazla'
+        ? 'Platform dönüşümü eksik sayıyor; piksel ya da dönüşüm işlemi eksik olabilir.'
+        : 'Site bu kampanyadan geleni eksik görüyor; Analytics etiketi ya da reklam bağlantısındaki etiket düşüyor olabilir.';
+    return `Son ${SAGLIK.kaynakPencereGun} günde platform ${sayiBicim.format(pd)}, site ${sayiBicim.format(sd)} dönüşüm saydı. ${ek}`;
+  }
+  if (s.kod === 'utm_eksik') {
+    const pay = Number(s.kanit.pay ?? 0);
+    return `Son ${SAGLIK.kaynakPencereGun} günde bu platformdan gelen ücretli oturumların %${Math.round(pay * 100)}'inde kampanya etiketi (utm_campaign) yok; site dönüşümleri kampanyaya bağlanamıyor. Reklam bağlantılarına kampanya etiketi ekle.`;
+  }
   const p = s.kanit.pencere as { gosterim?: number } | undefined;
   const o = s.kanit.onceki as { donusum?: number } | undefined;
   return (

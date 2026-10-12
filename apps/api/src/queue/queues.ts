@@ -36,6 +36,14 @@ export const JOB_PRIORITY = {
   lead_fetch: 3,
   insights_breakdown: 8,
   initial_backfill: 10,
+  /*
+   * VERİ KAYNAKLARI (Paket F). Reklam metriklerinin ARKASINDA: site verisi
+   * bir gün gecikebilir, reklam kararı veremeyen bir panel gecikemez. Kota
+   * ayrı (mülkün kotası), yani öncelik yalnız worker slotu sırası.
+   */
+  kaynak_yapi: 6,
+  kaynak_gunluk: 7,
+  kaynak_gecmis: 10,
 } as const;
 
 /**
@@ -52,6 +60,12 @@ export interface SyncJobPayload {
   jobType: SyncJobType;
   adAccountId?: string;
   socialProfileId?: string;
+  /**
+   * Paket F — veri kaynağı işi (`kaynak_*`). Dolu olması işin bir REKLAM
+   * HESABI işi OLMADIĞINI söylüyor: hesap kota bekçisinden ve hesap
+   * döngüsünden geçmez (veri-kaynagi-is.service.ts).
+   */
+  veriKaynagiId?: string;
   entityLevel?: EntityLevel;
   /**
    * Tarihler STRING olarak taşınıyor (YYYY-MM-DD), Date olarak DEĞİL.
@@ -131,6 +145,12 @@ export function layerForJob(payload: SyncJobPayload): keyof typeof JOB_PRIORITY 
       // gecikme zararsız. Çekirdek metriklerin arkasında; işin içindeki kota
       // isteği de aynı katmanı kullanıyor (geri-besleme-gonderim.service.ts).
       return 'insights_backfill';
+    case 'kaynak_yapi':
+      return 'kaynak_yapi';
+    case 'kaynak_gunluk':
+      return 'kaynak_gunluk';
+    case 'kaynak_gecmis':
+      return 'kaynak_gecmis';
     default:
       return 'insights_daily';
   }
@@ -147,6 +167,7 @@ export function buildJobId(p: {
   jobType: SyncJobType;
   adAccountId?: string;
   socialProfileId?: string;
+  veriKaynagiId?: string;
   ruleId?: string;
   externalLeadId?: string;
   externalFormId?: string;
@@ -175,16 +196,24 @@ export function buildJobId(p: {
       p.externalFormId ??
       p.adAccountId ??
       p.socialProfileId ??
+      p.veriKaynagiId ??
       p.ruleId ??
       /*
-       * GERİ BESLEME İŞİ WORKSPACE BAŞINA ve taşıdığı tek kimlik müşteri.
-       * Bu dal olmasaydı bütün workspace'lerin işi `lead_feedback_send__na`
-       * kimliğine düşer ve BullMQ'nun mükerrer engeli ilkinden sonrakileri
-       * SESSİZCE atardı: bir workspace'in sonuçları gider, diğerlerininki
-       * hiç gitmez. Yalnız bu türe açık: başka türlerin kimliğini değiştirmek
-       * kuyruktaki işlerin mükerrer engelini deploy anında bozardı.
+       * WORKSPACE SON AYIRICI — BÜTÜN TÜRLER İÇİN (2026-10-13).
+       *
+       * Yalnız `clientId` taşıyan işler (`leads_reconcile`,
+       * `boosts_evaluate`, `lead_feedback_send`, …) bu dal olmadan hepsi
+       * `<tür>__na__all…` kimliğine düşüyordu. Süpürme workspace'leri art
+       * arda kuyruğa koyarken ilki `waiting`teyken gelen ikincisi "zaten
+       * kuyrukta" sayılıp SESSİZCE atılıyordu: her turda tek workspace
+       * işleniyor, Akıllı Boost'un onaylı kartları diğer workspace'lerde
+       * kurulmuyor, lead mutabakatı yalnız bir workspace'te koşuyordu.
+       * Hata yok, log yok; süpürme notu "N workspace · 1 kuyruğa alındı"
+       * diyordu. Paket E ajanı kendi türü için fark etti; burada geneli
+       * kapanıyor. Deploy anında kuyrukta eski kimlikli bir iş varsa o tür
+       * en fazla bir kez iki kez koşar (işler upsert / tekil indeksli).
        */
-      (p.jobType === 'lead_feedback_send' ? p.clientId : undefined) ??
+      p.clientId ??
       'na',
     p.entityLevel ?? 'all',
     p.dateFrom ?? '',

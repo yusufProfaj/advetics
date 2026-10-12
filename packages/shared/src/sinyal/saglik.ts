@@ -14,7 +14,24 @@
  * (`kontrol(veri) → bulgu | null`, Ajan 2); liste ve anlamı burada.
  */
 
-export const SAGLIK_KONTROLLERI = ['sifir_gosterim', 'reklam_onaysiz', 'donusum_kesildi'] as const;
+/*
+ * PAKET F1 KONTROLLERİ SONDA (veri-kaynagi/saglik.ts#KAYNAK_SAGLIK_TANIMI):
+ * verisi artık depoda (veri_kaynaklari.yapi, ga4_gunluk,
+ * ga4_anahtar_etkinlik_gunluk). `ga4_anahtar_etkinlik_yok` SAGLIK_DISARIDA'dan
+ * buraya TAŞINDI; iki listede birden dursaydı ekran onu hem "kontrol
+ * ediliyor" hem "kontrol edilmiyor" diye yazardı. GA4 bağlı olmayan
+ * workspace'te dördü de SUSAR (bilinmeyen = yok değil). F2/F3 kodları
+ * (`search_console_yok`, `urun_onaysiz`) o dalgalar gelince eklenir.
+ */
+export const SAGLIK_KONTROLLERI = [
+  'sifir_gosterim',
+  'reklam_onaysiz',
+  'donusum_kesildi',
+  'ga4_anahtar_etkinlik_yok',
+  'ga4_veri_gelmiyor',
+  'takip_acigi',
+  'utm_eksik',
+] as const;
 export type SaglikKontrolu = (typeof SAGLIK_KONTROLLERI)[number];
 
 export interface SaglikKontrolTanimi {
@@ -56,6 +73,44 @@ export const SAGLIK_KONTROL_TANIMI: Record<SaglikKontrolu, SaglikKontrolTanimi> 
       'Son SAGLIK.donusumPencereGun günde (dönüşüm gecikmesi kadar geriden) gösterim eşiği geçilmiş ama dönüşüm 0; önceki SAGLIK.donusumOncekiGun günde en az SAGLIK.donusumOncekiEnAz dönüşüm vardı. Yani "hiç dönüşüm yok" DEĞİL, "vardı, kesildi": farkındalık kampanyası hiç dönüşüm saymaz ve onu uyarmak yanlış alarm.',
     tazelik: 'günlük metrik + gece geri düzeltme',
   },
+  /*
+   * Paket F1. Workspace kapsamlı iki kontrol (`ga4_anahtar_etkinlik_yok`,
+   * `ga4_veri_gelmiyor`) HESAP seviyesinde yazılıyor: sinyal satırı bir reklam
+   * hesabına bağlı (`sinyaller.ad_account_id NOT NULL`) ve sözleşmeyi
+   * genişletmek yerine kontrol yalnız TIKLAMA ALAN hesapta açılıyor (boşta
+   * duran hesap aynı uyarıyı ikinci kez basmasın).
+   */
+  ga4_anahtar_etkinlik_yok: {
+    ad: 'Analytics\'te anahtar etkinlik yok',
+    seviye: 'account',
+    kaynak: 'veri_kaynaklari.yapi.anahtarEtkinlikler (kaynak_yapi işi, Admin API keyEvents) + insights_daily (hesabın son 7 gün tıklaması)',
+    kosul:
+      'Workspace\'te etkin GA4 kaynağı var, yapı işi son 36 saatte koştu ve anahtar etkinlik listesi BOŞ; hesap son 7 günde tıklama aldı. Yapı koşmadıysa SUSAR.',
+    tazelik: 'kaynak yapısı günde bir',
+  },
+  ga4_veri_gelmiyor: {
+    ad: 'Analytics veri almıyor',
+    seviye: 'account',
+    kaynak: 'ga4_gunluk (oturum) + insights_daily (tıklama) + veri_kaynaklari.son_basarili_cekim',
+    kosul:
+      'Son 3 tam günde (Analytics işlenme gecikmesi dışında) hesabın reklam tıklaması TAKIP_ACIGI.enAzTiklama ve üstü ama workspace\'in GA4 oturumu 0; GA4 günlük çekimi son 36 saatte başarılı. Çekim koşmadıysa SUSAR (boş tablo "sitede kimse yok" demek değil).',
+    tazelik: 'kaynak günlük çekimi günde bir',
+  },
+  takip_acigi: {
+    ad: 'Platform ile site dönüşümleri tutmuyor',
+    seviye: 'campaign',
+    kaynak: 'ga4_anahtar_etkinlik_gunluk + insights_daily (eşleme sorgu anında, veri-kaynagi/esleme.ts)',
+    kosul: 'Son 14 günde (son 2 gün hariç) takipAcigi() etiketi platform_fazla, site_fazla ya da site_hic_gormuyor. veri_yetersiz SİNYAL ÜRETMEZ.',
+    tazelik: 'kaynak günlük çekimi günde bir',
+  },
+  utm_eksik: {
+    ad: 'Reklam bağlantılarında kampanya etiketi yok',
+    seviye: 'account',
+    kaynak: 'ga4_gunluk (ücretli Meta/LinkedIn trafiği, kampanya "(not set)")',
+    kosul:
+      'Son 14 günde hesabın platformundan gelen ücretli oturumların %30\'undan fazlasında kampanya etiketi yok. Google otomatik etiketlemeyle eşlendiği için Google hesapları bu kontrole girmez.',
+    tazelik: 'kaynak günlük çekimi günde bir',
+  },
 };
 
 /**
@@ -71,6 +126,14 @@ export const SAGLIK = {
   donusumOncekiEnAz: 10,
   /** Pencerede bu kadar gösterim yoksa "dönüşüm 0" bir bilgi değil. */
   donusumPencereEnAzGosterim: 5000,
+  /** F1: `takip_acigi` ve `utm_eksik` penceresi (son N gün, işlenme gecikmesi hariç). */
+  kaynakPencereGun: 14,
+  /** F1: `ga4_veri_gelmiyor` penceresi (tam gün). */
+  ga4SessizGun: 3,
+  /** F1: ücretli oturumların bu payından fazlası etiketsizse `utm_eksik`. */
+  utmEksikPay: 0.3,
+  /** F1: `utm_eksik` bu kadar ücretli oturum yoksa susar (küçük hacimde pay anlamsız). */
+  utmEksikEnAzOturum: 50,
 } as const;
 
 /**
@@ -85,12 +148,8 @@ export const SAGLIK_DISARIDA = [
     neden:
       'Kitle listesi depoda saklanmıyor; yalnız istek anında Meta\'dan okunuyor (connections.service#listCustomAudiences). Kontrol için her gün her hesaba bir Meta çağrısı gerekir.',
   },
-  {
-    kod: 'ga4_anahtar_etkinlik_yok',
-    ad: 'Analytics\'te anahtar etkinlik yok',
-    neden:
-      'Anahtar etkinlik listesi saklanmıyor (kurulum/ga4.ts canlı okuyor). workspace_kurulum.son_dogrulama.ga4 ANLIK olay sayısı, anahtar etkinlik değil, ve yalnız rehberde "Doğrula" basılınca yazılıyor.',
-  },
+  // `ga4_anahtar_etkinlik_yok` buradan SAGLIK_KONTROLLERI'ne taşındı (Paket
+  // F1: liste artık veri_kaynaklari.yapi'de saklanıyor).
   {
     kod: 'donusum_islemi_pasif',
     ad: 'Google dönüşüm işlemi yok ya da pasif',

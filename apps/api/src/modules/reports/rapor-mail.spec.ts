@@ -39,6 +39,7 @@ const VERI: ReportData = {
   breakdowns: [],
   topAdsMissingPlatforms: [],
   conversionDetail: { rows: [], errors: [], totalConversions: 0 },
+  siteConversion: null,
   client: { id: 'c1', name: 'Sabancı İnşaat' },
   branding: {} as ReportData['branding'],
   title: 'Dijital Pazarlama Raporu',

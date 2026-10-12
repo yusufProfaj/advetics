@@ -209,6 +209,13 @@ export const CASCADE_ILE_TASINANLAR = [
   'lead_durum_gecmisi',
   'geri_besleme_ayarlari',
   'geri_besleme_olaylari',
+  // VERİ KAYNAKLARI (docs/veri-kaynagi/MIMARI.md § 2.2, `KAYNAK_TABLOLARI`)
+  // TAŞINIYOR. Kaynak workspace'in sitesinin verisi ve bağlandığı mülk
+  // workspace'le gidiyor; geride kalsa yeni şirkette "Analytics bağlı değil"
+  // görünür, eskide hiçbir workspace'e ait olmayan site trafiği kalırdı.
+  'veri_kaynaklari',
+  'ga4_gunluk',
+  'ga4_anahtar_etkinlik_gunluk',
 ] as const;
 
 export interface WorkspaceTasimaSonucu {

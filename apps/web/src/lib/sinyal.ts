@@ -226,7 +226,6 @@ export function hesapDurumu(h: HesapSinyalOzeti, zaman: (iso: string) => string)
  */
 export const KONTROL_EDILMEYEN_METNI: Record<SaglikDisaridaKodu, string> = {
   meta_kitle_kucuk: 'kitle listesi saklanmıyor, yalnız Meta’dan anlık okunuyor.',
-  ga4_anahtar_etkinlik_yok: 'anahtar etkinlik listesi saklanmıyor.',
   donusum_islemi_pasif: 'Ölçüm ekranında anlık okunuyor. Yerine "dönüşümler kesildi" kontrolü çalışıyor.',
   pmax_varlik_eksik: 'öğe grupları senkronize edilmiyor.',
 };

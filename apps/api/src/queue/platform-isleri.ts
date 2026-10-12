@@ -54,7 +54,9 @@ export const PLATFORM_METRIK_SEVIYELERI: Record<Platform, readonly InsightsLevel
 const PLATFORMUN_YAPAMADIGI_ISLER: Record<Platform, readonly SyncJobType[]> = {
   meta: [],
   google: [],
-  linkedin: ['insights_breakdowns'],
+  // `urun_performansi` (Paket F3): LinkedIn'de ürün kırılımı yok
+  // (shared veri-kaynagi/tablolar.ts#KAYNAK_IS_TURLERI notu).
+  linkedin: ['insights_breakdowns', 'urun_performansi'],
 };
 
 /** İş bu platformda kuyruğa girebilir mi? */

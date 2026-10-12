@@ -431,6 +431,11 @@ DECLARE
     'lead_durum_gecmisi',
     'geri_besleme_ayarlari',
     'geri_besleme_olaylari',
+    -- Veri kaynakları F1 (docs/veri-kaynagi/MIMARI.md § 2.2, § 3.1). Her
+    -- tablo KENDİ satırında (sonraki-tablolar.ts deseni).
+    'veri_kaynaklari',
+    'ga4_gunluk',
+    'ga4_anahtar_etkinlik_gunluk',
     -- AdvStrategy aylık medya planı (docs/advstrategy/MIMARI.md § 1)
     'strateji_planlari', 'strateji_dagilimlari', 'strateji_matrisi', 'strateji_kelimeleri',
     'ozel_gunler'
@@ -2681,5 +2686,36 @@ CREATE POLICY adv_geri_besleme_olaylari_select ON geri_besleme_olaylari
 CREATE POLICY adv_geri_besleme_olaylari_insert ON geri_besleme_olaylari
   FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 CREATE POLICY adv_geri_besleme_olaylari_update ON geri_besleme_olaylari
+-- VERİ KAYNAKLARI F1 — veri_kaynaklari, ga4_gunluk, ga4_anahtar_etkinlik_gunluk
+-- (docs/veri-kaynagi/MIMARI.md § 2.2, § 3.1)
+-- ============================================================================
+--
+-- ÜÇÜ DE workspace kapsamlı; SELECT + INSERT + UPDATE. DELETE YOK:
+-- veri_kaynaklari satırı kaldırılınca SİLİNMEZ (durum = kaldirildi, geçmiş
+-- veri raporda kalır, aynı mülk yeniden bağlanınca aynı satır canlanır).
+-- GA4 satırlarını YAZAN ve günlük pencereyi silip yeniden yazan worker
+-- (BYPASSRLS); panelin UPDATE yolu yalnız kaynak durumu ve workspace
+-- taşıması. Havuz YOK (client_id NOT NULL), yani havuz politikası da yok.
+CREATE POLICY adv_veri_kaynaklari_select ON veri_kaynaklari
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_veri_kaynaklari_insert ON veri_kaynaklari
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_veri_kaynaklari_update ON veri_kaynaklari
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+  WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+
+CREATE POLICY adv_ga4_gunluk_select ON ga4_gunluk
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_ga4_gunluk_insert ON ga4_gunluk
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_ga4_gunluk_update ON ga4_gunluk
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+  WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+
+CREATE POLICY adv_ga4_anahtar_etkinlik_gunluk_select ON ga4_anahtar_etkinlik_gunluk
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_ga4_anahtar_etkinlik_gunluk_insert ON ga4_anahtar_etkinlik_gunluk
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_ga4_anahtar_etkinlik_gunluk_update ON ga4_anahtar_etkinlik_gunluk
   FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
   WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));

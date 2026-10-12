@@ -29,6 +29,7 @@ import {
   type TxLike,
   type VarlikSerisi,
 } from './sinyal-hesap';
+import { kaynakSaglikBulgulari } from '../veri-kaynagi/kaynak-saglik';
 
 /**
  * ═══ SİNYAL HESAPLAMA İŞİ (`signals_evaluate`, MIMARI § 5) ═══
@@ -280,6 +281,24 @@ export async function degerlendir(db: TxLike, adAccountId: string, gun: string, 
     ),
   );
   kosan.add('reklam_onaysiz');
+
+  /*
+   * PAKET F1 — veri kaynağı kontrolleri (veri-kaynagi/kaynak-saglik.ts).
+   * Reklam metriği tazeliğinden BAĞIMSIZ: kendi tazelik koşulları
+   * (yapı/çekim son 36 saat) içeride; koşmayan kontrol `kosan`a girmiyor ve
+   * açık sinyali kendiliğinden kapanmıyor.
+   */
+  const ks = await kaynakSaglikBulgulari(db, {
+    clientId,
+    adAccountId,
+    platform: hesap.platform,
+    hesapAdi: hesap.name,
+    gun,
+    simdi,
+  });
+  bulgular.push(...ks.bulgular);
+  for (const k of ks.kosan) kosan.add(k);
+  if (ks.not) ekler.push(ks.not);
 
   // ── Yazma + durum makinesi ──
   const mevcutlar = await db.$queryRaw<MevcutSinyal[]>(Prisma.sql`

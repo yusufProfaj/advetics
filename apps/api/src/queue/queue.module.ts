@@ -18,6 +18,7 @@ import { StructureSyncService } from './structure-sync.service';
 import { SyncQueueService } from './sync-queue.service';
 import { SyncProcessorService } from './sync-processor.service';
 import { GeriBeslemeGonderimService } from '../modules/geri-besleme/geri-besleme-gonderim.service';
+import { VeriKaynagiIsService } from '../modules/veri-kaynagi/veri-kaynagi-is.service';
 
 /**
  * Kuyruk ve kota altyapısı.
@@ -51,6 +52,14 @@ import { GeriBeslemeGonderimService } from '../modules/geri-besleme/geri-besleme
      * modülden istemek döngü kurardı (LeadSyncService ile aynı yer).
      */
     GeriBeslemeGonderimService,
+    /*
+     * Paket F — veri kaynağı işleri. BURADA, ayrı bir modülde değil: kuyruk
+     * ve kota bekçisine bağlı ve QueueModule'ü içe alan bir modül döngüsel
+     * kayıt olurdu (SinyalIsModule notu). Bağımlılıkları (TokenVault,
+     * ProviderRegistry) ConnectionsModule'den geliyor. Nest kaydı AÇILIŞTA
+     * patlar: `veri-kaynagi-kayit.spec.ts` kaynak taramasıyla kilitliyor.
+     */
+    VeriKaynagiIsService,
   ],
   exports: [
     QuotaGuardService,

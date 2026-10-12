@@ -103,7 +103,8 @@ describe('liste', () => {
     const sonra = await svc.liste(CTX, sorgu(), SIMDI);
     // Geçmişi yetmeyen hesap: anomali aranamadı, "her şey yolunda" değil.
     expect(sonra.emptyReason).toBe('gecmis_yetersiz');
-    expect(sonra.kontrolEdilmeyen).toHaveLength(4);
+    // 3: ga4_anahtar_etkinlik_yok Paket F1 ile kontrole taşındı.
+    expect(sonra.kontrolEdilmeyen).toHaveLength(3);
   });
 
   it('dolu liste: cümle, eylem ve özet sözleşme biçiminde', async () => {
