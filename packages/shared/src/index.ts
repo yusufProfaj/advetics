@@ -10,6 +10,8 @@ export * from './genel-bakis';
 export * from './iyilestir';
 export * from './sinyal';
 export * from './geri-besleme';
+export * from './etki';
+export * from './haftalik-ozet';
 export * from './boost-hedefleme';
 export * from './linkedin-saklama';
 export * from './constants/boost-naming';
