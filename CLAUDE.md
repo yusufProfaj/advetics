@@ -618,6 +618,14 @@ karar gerekiyorsa yardımcı sınıfla yaz, katman onu ezmiyor. Sayfa başlığ�
   KURAL: shared'a dokunan her değişiklikten sonra derlemeyi ÇIKTISIYLA
   birlikte koş; bir komutun çıktısını yutmak, bu depoda hata gizlemenin en
   hızlı yolu.
+- **SAYFA TAŞIMAK DEPLOY'U DÜŞÜRÜYORDU — CANLI `.next/types`.** Panel
+  `.next-derleme`ye derleniyor ama `tsconfig.json` `.next/types/**`u da
+  içeriyor ve Next tip denetiminde CANLI klasörün eski tiplerini okuyor.
+  Tanıtım sitesi `src/app/page.tsx`ten `(site)/`ye taşınınca (2026-10-13)
+  üretim derlemesi `Cannot find module '../../../src/app/page.js'` ile düştü;
+  yerelde de aynısı vardı ve yalnızca yerel `.next/types` silinip geçilmişti
+  — ders üretime taşınmadı. `deploy.sh` artık derlemeden önce `.next/types`ı
+  siliyor (çalışan süreç onu okumuyor). Yerelde aynı hata görülürse sebep bu.
 - **AYNI EKRANIN MENÜDE VE SAYFADA İKİ AYRI ADI OLUYOR.** Kenar çubuğu
   "Akıllı Boost" derken sayfa "Auto-Boost", "Reklam Oluştur" derken sayfa
   "Reklamlar" başlığıyla açılıyordu; kullanıcı yanlış sayfaya düştüğünü

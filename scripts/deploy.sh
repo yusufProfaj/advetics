@@ -254,6 +254,15 @@ dusuk "api" pnpm --filter @advetics/api build
 # Next eski dosyaların üstüne yazar ama silinmiş sayfaların çıktısını bırakır.
 WEB_DIR="apps/web"
 rm -rf "$WEB_DIR/.next-derleme"
+# CANLI DERLEMENİN TİP DOSYALARI YENİ DERLEMEYİ DÜŞÜRÜYOR. `tsconfig.json`
+# `.next/types/**` (ve `**/*.ts`) içeriyor; Next tip denetiminde CANLI
+# klasördeki o dosyaları da okuyor. Onlar ESKİ sürümün sayfalarına atıf
+# yapıyor: bir sayfa taşınınca ya da silinince ("Cannot find module
+# '../../../src/app/page.js'") derleme düşüyor ve sebebi yeni kodda değil.
+# 2026-10-13'te tanıtım sitesi `(site)/` altına taşınınca tam böyle oldu.
+# Silmek güvenli: çalışan süreç `.next/types`ı okumuyor, yalnız tip denetimi
+# kullanıyor; yeni derleme kendi tiplerini `.next-derleme/types`a yazıyor.
+rm -rf "$WEB_DIR/.next/types"
 NEXT_DIST_DIR=.next-derleme dusuk "web" pnpm --filter @advetics/web build
 # Next derleme sırasında `tsconfig.json`a ve `next-env.d.ts`e KENDİ klasör
 # adını yazıyor (`.next-derleme/types`). İkisi de depoda izleniyor: geri
