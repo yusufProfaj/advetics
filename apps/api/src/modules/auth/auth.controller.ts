@@ -43,6 +43,7 @@ import {
   setActiveManagerCookie,
   setActiveOrgCookie,
   setAuthCookies,
+  setIkiAdimCookie,
 } from './cookies';
 
 @Controller('auth')
@@ -92,6 +93,12 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const result = await this.auth.login(dto, this.meta(req));
+    if ('araToken' in result) {
+      // OTURUM ÇEREZİ YAZILMIYOR — yalnızca ara çerez. Panel `ikiAdim`
+      // alanını görüp kod adımına geçiyor (`GirisYaniti`).
+      setIkiAdimCookie(res, this.config, result.araToken);
+      return { ikiAdim: result.ikiAdim };
+    }
     setAuthCookies(res, this.config, result.tokens);
     return result.session;
   }

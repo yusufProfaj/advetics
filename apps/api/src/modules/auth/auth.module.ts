@@ -7,6 +7,8 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { OkumaAnahtariDogrulayici } from './okuma-anahtari-dogrulayici.service';
 import { TenantContextService } from './tenant-context.service';
 import { TokenService } from './token.service';
+import { IkiAdimController } from './iki-adim/iki-adim.controller';
+import { IkiAdimService } from './iki-adim/iki-adim.service';
 
 /**
  * Global çünkü JwtAuthGuard uygulama genelinde APP_GUARD olarak bağlıdır ve
@@ -15,8 +17,16 @@ import { TokenService } from './token.service';
 @Global()
 @Module({
   imports: [JwtModule.register({}), AuditModule],
-  controllers: [AuthController],
-  providers: [AuthService, TokenService, TenantContextService, JwtAuthGuard, OkumaAnahtariDogrulayici],
+  controllers: [AuthController, IkiAdimController],
+  providers: [
+    AuthService,
+    TokenService,
+    TenantContextService,
+    JwtAuthGuard,
+    OkumaAnahtariDogrulayici,
+    // İki adımlı doğrulama — `CryptoService` global modülden geliyor.
+    IkiAdimService,
+  ],
   exports: [AuthService, TokenService, TenantContextService, JwtAuthGuard, OkumaAnahtariDogrulayici],
 })
 export class AuthModule {}

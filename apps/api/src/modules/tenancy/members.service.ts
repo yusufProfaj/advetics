@@ -113,6 +113,15 @@ export class MembersService {
           status: true,
           lastLoginAt: true,
           createdAt: true,
+          /*
+           * İKİ ADIMLI DOĞRULAMA AÇIK MI — yalnızca bayrak. Anahtar,
+           * kurtarma kodu özetleri ve deneme sayacı select'e GİRMİYOR:
+           * yönetici ekranı "açık mı, sıfırlanabilir mi" sorusundan
+           * fazlasına ihtiyaç duymuyor (`connections-select.spec.ts`
+           * dersinin aynısı: `include`/geniş select şifreli alanı belleğe
+           * alıyor).
+           */
+          mfaEnabled: true,
           memberships: {
             select: {
               id: true,

@@ -1,9 +1,10 @@
 import Link from 'next/link';
-import type { ManagerAccountTree, UstHesapUyesi } from '@advetics/shared';
+import type { IkiAdimDurumu, ManagerAccountTree, UstHesapUyesi } from '@advetics/shared';
 import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import { requireSession } from '@/lib/session';
 import type { MemberRow } from '@/components/tenancy/team-manager';
 import { TeamScreen } from '@/components/tenancy/team-screen';
+import { IkiAdimSirketAyari } from '@/components/tenancy/iki-adim-sirket-ayari';
 
 export const metadata = { title: 'Ekip & Yetkiler · Advetics' };
 
@@ -48,7 +49,7 @@ export default async function TeamPage() {
    * Sebep artık ekranda yazıyor ve sayfa yine açılıyor: listeler boş
    * gelse de diğer bölümler çalışmaya devam ediyor.
    */
-  const [uyeSonuc, workspaceSonuc, agacSonuc, ustEkipSonuc] = await Promise.allSettled([
+  const [uyeSonuc, workspaceSonuc, agacSonuc, ustEkipSonuc, ikiAdimSonuc] = await Promise.allSettled([
     serverApiFetch<MemberRow[]>('/members'),
     serverApiFetch<ClientRow[]>('/clients'),
     /*
@@ -66,6 +67,13 @@ export default async function TeamPage() {
     session.managerAccount
       ? serverApiFetch<UstHesapUyesi[]>('/manager-account/members').then((x) => x ?? [])
       : Promise.resolve<UstHesapUyesi[]>([]),
+    /*
+     * ŞİRKET 2FA AYARI — yalnızca yöneticide çekiliyor (bölümü yalnızca o
+     * görüyor). Düşerse hata satırına yazılıyor, bölüm sessizce kaybolmuyor.
+     */
+    session.isOrgAdmin
+      ? serverApiFetch<IkiAdimDurumu>('/auth/2fa')
+      : Promise.resolve<IkiAdimDurumu | null>(null),
   ]);
 
   const members = uyeSonuc.status === 'fulfilled' ? (uyeSonuc.value ?? []) : [];
@@ -101,6 +109,9 @@ export default async function TeamPage() {
       ? `Workspace listesi: ${hataMetni(workspaceSonuc.reason)}`
       : null,
     agacSonuc.status === 'rejected' ? `Şirket listesi: ${hataMetni(agacSonuc.reason)}` : null,
+    ikiAdimSonuc.status === 'rejected'
+      ? `İki adımlı doğrulama ayarı: ${hataMetni(ikiAdimSonuc.reason)}`
+      : null,
   ].filter((x): x is string => x !== null);
 
   return (
@@ -142,6 +153,10 @@ export default async function TeamPage() {
         ("bu workspace’e kim erişiyor") ise hiç cevaplanmıyordu — kullanıcılar
         tek tek kart olarak basılıyordu.
       */}
+      {ikiAdimSonuc.status === 'fulfilled' && ikiAdimSonuc.value && (
+        <IkiAdimSirketAyari durum={ikiAdimSonuc.value} />
+      )}
+
       <TeamScreen
         members={members}
         clients={clients}

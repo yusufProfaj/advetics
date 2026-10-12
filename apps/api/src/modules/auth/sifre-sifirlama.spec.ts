@@ -14,6 +14,7 @@ import { sifirlamaBaglantisi, sifirlamaMailiOlustur } from './sifre-sifirlama-ma
  * fark yalnızca typecheck'te görünen türden.
  */
 import { AuthService } from './auth.service';
+import type { IkiAdimService } from './iki-adim/iki-adim.service';
 
 /*
  * SMTP GÖNDERİMİ TAKLİT EDİLİYOR — gerçek bir mail sunucusuna bağlanmak
@@ -140,6 +141,7 @@ function servis(opts: {
     {} as unknown as TenantContextService,
     audit,
     config,
+    {} as unknown as IkiAdimService,
   );
 
   return { auth, aranmisEmailler, denetimKayitlari };
