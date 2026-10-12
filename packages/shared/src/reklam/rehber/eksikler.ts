@@ -82,7 +82,7 @@ const ADIM: Record<RehberAlanAdi, RehberAdimi> = {
   amac: 1,
   platformlar: 2, metaHesabiId: 2, googleHesabiId: 2, sayfaId: 2, instagramId: 2, youtubeKanaliId: 2, pikselId: 2,
   konumlar: 3, enDusukYas: 3, yasAraligi: 3, ekKategoriler: 3,
-  hedefAdres: 4, telefon: 4, whatsappNumarasi: 4, formSablonuId: 4, medya: 4, youtubeVideo: 4, metin: 4, anahtarKelimeler: 4,
+  hedefAdres: 4, telefon: 4, whatsappNumarasi: 4, whatsappKarsilama: 4, formSablonuId: 4, medya: 4, youtubeVideo: 4, metin: 4, anahtarKelimeler: 4,
   butce: 5, metaPayiYuzde: 5, takvim: 5,
   googlePromosyon: 4, googleFiyatListesi: 4,
 };
@@ -108,6 +108,7 @@ export const REHBER_ALAN_ETIKETI: Record<RehberAlanAdi, string> = {
   hedefAdres: 'Site adresi',
   telefon: 'Telefon numarası',
   whatsappNumarasi: 'WhatsApp numarası',
+  whatsappKarsilama: 'WhatsApp karşılama mesajı',
   formSablonuId: 'Form',
   medya: 'Görseller',
   youtubeVideo: 'YouTube videosu',

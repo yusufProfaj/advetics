@@ -138,14 +138,33 @@ export interface NiyetYerlesimKisiti {
   aciklama: string;
 }
 
-const FORM_YERLESIM_KISITI: NiyetYerlesimKisiti = {
-  gruplar: ['akis', 'hikaye'],
-  cikarilanKonumlar: { instagram_positions: ['explore'] },
-  aciklama: 'Form reklamı yalnız akış, hikâye ve Reels’te gösterilir; sağ sütun, arama, Marketplace ve Keşfet kapalı.',
+/**
+ * WHATSAPP AYNI KÜMEYİ KULLANIYOR (yönetici kararı, 2026-10-12, SENTEZ
+ * D-M6). Sohbet düğmesinin sağ sütun, Facebook araması, Marketplace ve
+ * Keşfet'te WhatsApp'ı açıp açmadığı ÖLÇÜLMEDİ; formdaki gerekçenin aynısı
+ * (kabul edip sohbet açamazsa harcama olur, mesaj gelmez, hata yok). Küme
+ * TEK: iki niyet ayrı listeler taşısaydı biri güncellenip öteki unutulurdu.
+ * Yalnız ekran cümlesi niyete göre.
+ */
+const DAR_YERLESIM_GRUPLARI: readonly YerlesimGrubu[] = ['akis', 'hikaye'];
+const DAR_YERLESIM_CIKARILAN: Readonly<Record<string, readonly string[]>> = { instagram_positions: ['explore'] };
+const DAR_YERLESIM_KAPALI = 'sağ sütun, arama, Marketplace ve Keşfet kapalı.';
+
+const DAR_YERLESIM_KISITLARI: Partial<Record<NiyetKodu, NiyetYerlesimKisiti>> = {
+  FORM: {
+    gruplar: DAR_YERLESIM_GRUPLARI,
+    cikarilanKonumlar: DAR_YERLESIM_CIKARILAN,
+    aciklama: `Form reklamı yalnız akış, hikâye ve Reels’te gösterilir; ${DAR_YERLESIM_KAPALI}`,
+  },
+  WHATSAPP: {
+    gruplar: DAR_YERLESIM_GRUPLARI,
+    cikarilanKonumlar: DAR_YERLESIM_CIKARILAN,
+    aciklama: `WhatsApp reklamı yalnız akış, hikâye ve Reels’te gösterilir; ${DAR_YERLESIM_KAPALI}`,
+  },
 };
 
 export function niyetYerlesimKisiti(niyet: NiyetKodu | null | undefined): NiyetYerlesimKisiti | null {
-  return niyet === 'FORM' ? FORM_YERLESIM_KISITI : null;
+  return (niyet && DAR_YERLESIM_KISITLARI[niyet]) || null;
 }
 
 /**

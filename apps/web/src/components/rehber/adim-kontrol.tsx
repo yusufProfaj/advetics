@@ -616,6 +616,12 @@ export function SonEkran({
                   {[p.kampanyaKimligi ? `Kampanya ${p.kampanyaKimligi}` : null, tutar].filter(Boolean).join(' · ') || ' '}
                   {sonuc === 'hata' && p.sebep ? ` · ${p.sebep}` : ''}
                 </small>
+                {/* Durdurmayan geri okuma notları: karşılama mesajı farkı (uyarı) ve Advantage+ durumu (bilgi). */}
+                {(p.geriOkumaNotlari ?? []).map((n) => (
+                  <small key={n.metin} className={n.tur === 'uyari' ? s.hataMetni : undefined}>
+                    {n.metin}
+                  </small>
+                ))}
               </div>
               <span className={s.yayinda} data-hal={sonuc === 'yayinda' ? undefined : sonuc === 'hata' ? 'hata' : 'dur'}>
                 <i />

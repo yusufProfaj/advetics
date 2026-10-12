@@ -15,6 +15,7 @@ import { ALAN_KAYNAKLARI, type AlanKaynagi } from './taslak';
 import { niyetKoduSchema, SITE_PIKSEL_HALLERI } from './meta/niyetler';
 import { OZEL_KATEGORILER } from './meta/hedefleme';
 import { GORSEL_ORANLARI } from './banner-seti';
+import { whatsappKarsilamaSchema } from './meta/karsilama';
 
 /**
  * Meta anlık form kimliği — İKİ BİÇİM (AdvCampaign Dalga 2, Ç-2).
@@ -145,6 +146,12 @@ export const taslakAlanlariSchema = z
      * hattı farklı numaralar olabiliyor ve tek alan birini sessizce ezerdi.
      */
     whatsappNumarasi: alan(z.string().max(20).nullable()),
+    /**
+     * WHATSAPP niyeti: karşılama mesajı ve hızlı sorular (`karsilama.ts`).
+     * İsteğe bağlı ve varsayılansız: yoksa derleyici Türkçe varsayılanı
+     * gönderir, kayıtlı taslakların içerik özeti değişmez.
+     */
+    whatsappKarsilama: alan(whatsappKarsilamaSchema),
     /** SATIS niyeti: Meta piksel kimliği (sayısal). İsteğe bağlı, varsayılansız. */
     pikselId: alan(z.string().regex(/^\d{1,30}$/).nullable()),
     /**
@@ -214,6 +221,7 @@ export const TASLAK_ALAN_ETIKETI: Record<keyof TaslakAlanlari, string> = {
   formSablonuId: 'Form',
   telefon: 'Telefon numarası',
   whatsappNumarasi: 'WhatsApp numarası',
+  whatsappKarsilama: 'WhatsApp karşılama mesajı',
   pikselId: 'Meta pikseli',
   sitePikseli: 'Piksel durumu',
 };
@@ -246,7 +254,7 @@ export function kullaniciEksigiMi(e: Pick<TaslakEksigi, 'kod'>): boolean {
 const ALAN_ADIMI: Record<keyof TaslakAlanlari, TaslakEksigi['adim']> = {
   niyet: 0, reklamHesabiId: 0, sayfaId: 0, instagramId: 0, konumlar: 0,
   enDusukYas: 0, ipucuYas: 0, ipucuCinsiyet: 0, ekKategoriler: 0,
-  kavramlar: 1, hedefAdres: 0, formSablonuId: 0, telefon: 0, whatsappNumarasi: 0, pikselId: 0, sitePikseli: 0,
+  kavramlar: 1, hedefAdres: 0, formSablonuId: 0, telefon: 0, whatsappNumarasi: 0, whatsappKarsilama: 2, pikselId: 0, sitePikseli: 0,
   butce: 3, takvim: 4,
 };
 

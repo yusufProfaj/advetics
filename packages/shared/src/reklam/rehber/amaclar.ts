@@ -67,7 +67,10 @@ export const REHBER_AMACLARI: Record<RehberAmacKodu, RehberAmaci> = {
     ekranAdi: "WhatsApp'tan yazsınlar",
     neAlacaksin: "Sana WhatsApp'tan mesaj atanlar.",
     meta: { niyet: 'WHATSAPP', kurulacak: 'Potansiyel müşteri · WhatsApp sohbeti' },
-    google: { kurgu: null, sebep: "Google'da WhatsApp reklamı yok" },
+    // "Google'da WhatsApp reklamı yok" YANLIŞTI (SENTEZ S-15): Google'ın
+    // `BusinessMessageAsset`i var ama izin listesi arkasında. Cümle sebebi
+    // doğru söylemeli; `wa.me` son URL'li Arama reklamı yine kurulmaz.
+    google: { kurgu: null, sebep: "Google'da WhatsApp'a yönlendiren öğe izin listesine bağlı; bu hesapta açık değil" },
   },
   TELEFON: {
     kod: 'TELEFON',

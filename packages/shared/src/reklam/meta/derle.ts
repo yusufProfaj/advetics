@@ -18,6 +18,7 @@
 import { ACILMADI_ONEKI, adlabels, kampanyaAdi, kreatifAdi, reklamAdi, reklamSetiAdi } from './adlandirma';
 import { etkinKategoriler, hedeflemeUret, type HedeflemeGirdisi, type OzelKategori } from './hedefleme';
 import { NIYET_KATALOGU, formCtaTuru, metaOptimizasyonHedefi, type NiyetKodu, type SitePikselHali } from './niyetler';
+import { KARSILAMA_SETTE_YOK_CUMLESI, karsilamaCoz, sayfaKarsilamaMesaji, type WhatsappKarsilama } from './karsilama';
 import { microsToMinor } from '../para';
 import type { Butce } from '../butce';
 import { ATIF_STANDARTLARI } from '../taslak';
@@ -38,10 +39,14 @@ import { ORAN_ETIKETI, YERLESIM_GRUPLARI, YERLESIM_SIRASI, bannerSetiDestekleniy
  * 1.7.0: FORM'da elle yerleşim yalnız akış, hikâye ve Reels
  *        (`niyetYerlesimKisiti`); form düğmesi SIGN_UP değil LEARN_MORE,
  *        inşaat/emlak/hizmet sektöründe GET_QUOTE (`formCtaTuru`).
+ * 1.8.0: WHATSAPP'ta Türkçe karşılama mesajı (`page_welcome_message`,
+ *        `karsilama.ts`) tek görsel ve video kreatifinde; banner setinde
+ *        gönderilmiyor. Elle yerleşimde WhatsApp da yalnız akış, hikâye ve
+ *        Reels (`niyetYerlesimKisiti`, FORM'la aynı küme).
  * Sürüm provanın tazeliğine bağlı: eski derleyiciyle geçmiş prova yeni
  * gövdeyi kanıtlamaz.
  */
-export const DERLEYICI_SURUMU = '1.7.0';
+export const DERLEYICI_SURUMU = '1.8.0';
 
 /**
  * CLICK-TO-WHATSAPP SABİTLERİ (CLAUDE.md "CLICK-TO-WHATSAPP"). Bağlantı
@@ -303,6 +308,12 @@ export interface DerlemeGirdisi {
   /** SATIS: Meta piksel kimliği (sayısal). Yoksa RET (`PIKSEL-YOK`). */
   pikselId?: string | null;
   /**
+   * WHATSAPP: karşılama mesajı ve hızlı sorular (`karsilama.ts`). Yoksa ya
+   * da mesaj boşsa Türkçe VARSAYILAN gider; hiç göndermemek Meta'nın
+   * İngilizce cümlesine düşmek demek. Diğer niyetlerde okunmaz.
+   */
+  whatsappKarsilama?: WhatsappKarsilama | null;
+  /**
    * SITE: hesabın piksel hâli (`sitePikselHali`). Hedefi o seçiyor
    * (`metaOptimizasyonHedefi`); verilmezse `bilinmiyor` = tıklama. Diğer
    * niyetlerde okunmaz.
@@ -427,7 +438,7 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
     // kullanıcıyı formun gösterilmeyeceği bir yer için görsele gönderirdi.
     retler.push(
       yerlesim.niyetKapanan.length
-        ? { kod: 'KRT-ORAN', mesaj: 'Form reklamı yalnız akış, hikâye ve Reels’te gösterilir; 4:5, 1:1 ya da 9:16 görsel ekle.' }
+        ? { kod: 'KRT-ORAN', mesaj: `${g.niyet === 'WHATSAPP' ? 'WhatsApp' : 'Form'} reklamı yalnız akış, hikâye ve Reels’te gösterilir; 4:5, 1:1 ya da 9:16 görsel ekle.` }
         : { kod: 'KRT-ORAN', mesaj: 'Görsellerin hiçbiri bir yerleşime uymuyor; 4:5, 1:1, 9:16 ya da 1.91:1 boyut ekle.' },
     );
   }
@@ -487,6 +498,9 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
     ...(g.amacAdi ? { amacAdi: g.amacAdi } : {}),
   };
   const etiketler = adlabels(g.yayinKimligi);
+  // KARŞILAMA yalnız WhatsApp'ta; tek görsel ve video kreatifinde aynı gövde.
+  const karsilama = g.niyet === 'WHATSAPP' ? sayfaKarsilamaMesaji(karsilamaCoz(g.whatsappKarsilama)) : null;
+  let karsilamaSetteGitmedi = false;
 
   const kampanya: Record<string, unknown> = {
     name: ACILMADI_ONEKI + kampanyaAdi(adG),
@@ -546,11 +560,18 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
         call_to_action: g.niyet === 'FORM' ? { ...cta, value: { lead_gen_form_id: g.formId, link: 'http://fb.me/' } } : cta,
       };
       if (k.aciklama) videoData.link_description = k.aciklama;
+      // VİDEODA KONUM ÖLÇÜLMEDİ: belge video örneği vermiyor; `link_data`
+      // ile aynı düzeyde yazılıyor (yönetici kararı), geri okuma kökte de arar.
+      if (karsilama) videoData.page_welcome_message = karsilama;
       oss.video_data = videoData;
     } else if (k.setGorselleri && yerlesim) {
       // `link_data` YOK: görseller ve metin `asset_feed_spec`te; sayfa ve
       // Instagram kimliği `object_story_spec`te kalıyor (aşağıda).
       setKreatifi = varlikAkisi(k, setPlani(k.setGorselleri.map((x) => x.oran)), yerlesim, cta, DEGERLI_CTA_NIYETLERI.includes(g.niyet), kreatifBaglantisi(g)!, !!g.instagramPlatformId, g.niyet);
+      // Varlık akışında karşılamanın yeri belgede YOK: tahminle bir anahtar
+      // yazmak Meta'nın onu kabul edip yok sayması demek olabilirdi. Gitmiyor
+      // ve onay kartı bunu söylüyor (`KARSILAMA_SETTE_YOK_CUMLESI`).
+      if (karsilama) karsilamaSetteGitmedi = true;
     } else {
       const linkData: Record<string, unknown> = {
         image_hash: k.gorselHash,
@@ -560,6 +581,8 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
         link: kreatifBaglantisi(g),
       };
       if (k.aciklama) linkData.description = k.aciklama;
+      // Resmî belgenin oluşturma örneğindeki konum (`link_data` içi).
+      if (karsilama) linkData.page_welcome_message = karsilama;
       oss.link_data = linkData;
     }
     // IG seçiliyse daima: yoksa Instagram'da HİÇ yayın olmaz, hata da yok.
@@ -601,6 +624,7 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
     elleYerlesim: !!yerlesim && !yerlesim.otomatik,
     tanitilan: tanitilanTuru(g.niyet),
     erisim: optimizasyon === 'REACH',
+    karsilama: !!karsilama,
   });
 
   return {
@@ -617,7 +641,7 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
       'Başka markaların reklamlarıyla yan yana gösterim kapalı.',
       `Kapattığımız otomatik özellikler: ${Object.values(KAPATILAN_OZELLIK_ADLARI).join(', ')}.`,
     ],
-    metaOtomatikYapabilir: Object.values(BILINEN_KAPATILAMAYAN_OZELLIKLER),
+    metaOtomatikYapabilir: [...Object.values(BILINEN_KAPATILAMAYAN_OZELLIKLER), ...(karsilamaSetteGitmedi ? [KARSILAMA_SETTE_YOK_CUMLESI] : [])],
     acikcaYazilanAlanlar,
     apiSurumu: g.apiSurumu,
     derleyiciSurumu: DERLEYICI_SURUMU,
@@ -899,10 +923,12 @@ export interface ManifestoHali {
   elleYerlesim: boolean;
   tanitilan: 'sayfa' | 'piksel' | 'whatsapp';
   erisim: boolean;
+  /** WHATSAPP: banner seti DIŞINDAKİ her kreatif karşılama taşımalı. */
+  karsilama?: boolean;
 }
 
 /** Bu hâlde satır zorunlu mu (testler de AYNI kuralı okuyor). */
-export function manifestoSatiriGecerli(kosul: ManifestoKosulu | undefined, d: Omit<ManifestoHali, 'elleYerlesim'>): boolean {
+export function manifestoSatiriGecerli(kosul: ManifestoKosulu | undefined, d: Omit<ManifestoHali, 'elleYerlesim' | 'karsilama'>): boolean {
   switch (kosul) {
     case undefined:
       return true;
@@ -926,6 +952,16 @@ function manifestoDogrula(govdeler: MetaGovdesi[], d: ManifestoHali): void {
       if (v === undefined || v === null) {
         throw new Error(`Manifesto ${satir.kod}: ${gv.ad} içinde ${satir.yol} yazılmadı`);
       }
+    }
+  }
+  // M-29W: karşılama MANİFESTO TABLOSUNDA DEĞİL çünkü kural kreatife göre
+  // değişiyor: banner setli kreatifte yeri belgede yok ve gönderilmiyor.
+  // Tabloya koşulsuz yazılsaydı setli WhatsApp reklamı derlenemezdi; hiç
+  // yazılmasaydı karşılamasız tek görsel reklam sessizce İngilizce açılırdı.
+  if (d.karsilama) {
+    for (const gv of govdeler.filter((x) => x.nesne === 'kreatif' && !x.alanlar.asset_feed_spec)) {
+      const v = deger(gv.alanlar, 'object_story_spec.link_data.page_welcome_message') ?? deger(gv.alanlar, 'object_story_spec.video_data.page_welcome_message');
+      if (!v) throw new Error(`Manifesto M-29W: ${gv.ad} içinde page_welcome_message yazılmadı`);
     }
   }
   for (const gv of govdeler.filter((x) => x.nesne === 'reklam_seti')) {

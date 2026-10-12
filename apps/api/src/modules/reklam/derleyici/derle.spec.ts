@@ -301,6 +301,17 @@ describe('WHATSAPP (Click-to-WhatsApp)', () => {
         message: 'M1',
         call_to_action: { type: 'WHATSAPP_MESSAGE', value: { app_destination: 'WHATSAPP' } },
         link: 'https://api.whatsapp.com/send',
+        // 1.8.0: Türkçe karşılama (karsilama.spec.ts ayrıntılı).
+        page_welcome_message: {
+          type: 'VISUAL_EDITOR',
+          version: 2,
+          landing_screen_type: 'welcome_message',
+          media_type: 'text',
+          text_format: {
+            customer_action_type: 'autofill_message',
+            message: { autofill_message: { content: 'Merhaba, reklamınızı gördüm, bilgi almak istiyorum.' }, text: 'Merhaba, reklamınızı gördüm, bilgi almak istiyorum.' },
+          },
+        },
       },
     });
   });
@@ -353,7 +364,9 @@ describe('Dalga 2 sürüm ve açılış', () => {
     // 1.4.0: ad biçimi ADV · tarih · amaç · kod.
     // 1.5.0: banner seti beş amaçta.
     // 1.6.0: "Siteme gelsinler" hedefi piksel hâline bağlı (LINK_CLICKS dalı).
-    expect(DERLEYICI_SURUMU).toBe('1.7.0');
+    // 1.7.0: FORM yerleşim kısıtı ve düğme.
+    // 1.8.0: WhatsApp karşılama mesajı ve yerleşim kısıtı.
+    expect(DERLEYICI_SURUMU).toBe('1.8.0');
   });
 
   it('KRİTİK: TELEFON/WHATSAPP derleniyor ama üründe AÇIK DEĞİL (canlı tur bekliyor)', () => {
