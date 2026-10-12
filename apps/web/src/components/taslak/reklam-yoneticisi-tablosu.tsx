@@ -52,6 +52,11 @@ export interface YmSatir {
     | null;
   /** Satır içi durdur/başlat; `null` = düğme yok (platform yazamıyor ya da durum belirsiz). */
   eylemHedefi: VarlikEylemHedefi | null;
+  /**
+   * Paket F1 "Sitede" sütunu: Analytics'in bu kampanyaya bağladığı anahtar
+   * etkinlik ve takip etiketi. `null` = bu satır eşlenmedi (0 değil, "—").
+   */
+  sitede?: { anahtarEtkinlik: number; etiket: string | null } | null;
 }
 
 export interface YmSekme {
@@ -131,6 +136,7 @@ export function ReklamYoneticisiTablosu({
   aralik,
   galeriHref,
   yazabilir,
+  site,
 }: {
   duzey: YmDuzey;
   sekmeler: YmSekme[];
@@ -143,6 +149,12 @@ export function ReklamYoneticisiTablosu({
   galeriHref: string;
   /** `budget.write`: satır içi durdur/başlat (İyileştir'in Uygula'sıyla aynı yetki). */
   yazabilir: boolean;
+  /**
+   * Paket F1: GA4 bağlıysa "Sitede" sütunu açılır. `hata` = Analytics
+   * okunamadı (platformun cümlesi); sütun yine açık, satırlar "—" ve
+   * neden tablonun altında yazar (boş ile "alınamadı" ayrı).
+   */
+  site?: { hata: string | null; not: string | null } | null;
 }) {
   const router = useRouter();
   const yol = usePathname() ?? '/ads-explorer';
@@ -260,7 +272,9 @@ export function ReklamYoneticisiTablosu({
    * "burada bir şey yapılabilirdi" izlenimi bırakırdı.
    */
   const eylemSutunu = yazabilir && satirlar.some((r) => r.eylemHedefi !== null);
-  const sutunSayisi = eylemSutunu ? 9 : 8;
+  // "Sitede" sütunu YALNIZ GA4 bağlıysa (MIMARI § 3.4): bağlı değilse sütun yok, boş sütun değil.
+  const siteSutunu = site !== undefined && site !== null;
+  const sutunSayisi = 8 + (eylemSutunu ? 1 : 0) + (siteSutunu ? 1 : 0);
   const [eylemHedefi, setEylemHedefi] = useState<VarlikEylemHedefi | null>(null);
   const gorunen = useMemo(() => {
     const q = ara.trim().toLocaleLowerCase('tr-TR');
@@ -461,6 +475,7 @@ export function ReklamYoneticisiTablosu({
                 <Baslik k="to" ad="Tıklama oranı" />
                 <Baslik k="donusum" ad="Dönüşüm" />
                 <Baslik k="dbm" ad="Dönüşüm başı maliyet" />
+                {siteSutunu && <th title="Analytics'in bu kampanyaya bağladığı anahtar etkinlik">Sitede</th>}
                 {eylemSutunu && <th>Eylem</th>}
               </tr>
             </thead>
@@ -543,6 +558,12 @@ export function ReklamYoneticisiTablosu({
                       <td className={s.num}>{r.impressions > 0 ? formatPercent((r.clicks / r.impressions) * 100) : '—'}</td>
                       <td className={s.num}>{formatNumber(r.conversions)}</td>
                       <td className={s.num}>{dbm(BigInt(r.spendMicros), r.conversions, r.paraBirimi)}</td>
+                      {siteSutunu && (
+                        <td className={s.num}>
+                          {r.sitede ? formatNumber(r.sitede.anahtarEtkinlik) : '—'}
+                          {r.sitede?.etiket && <span className={s.siteEtiketi}>{r.sitede.etiket}</span>}
+                        </td>
+                      )}
                       {eylemSutunu && (
                         <td>
                           {r.eylemHedefi && (
@@ -591,12 +612,19 @@ export function ReklamYoneticisiTablosu({
                   <td className={s.num}>{T.g > 0 ? formatPercent((T.t / T.g) * 100) : '—'}</td>
                   <td className={s.num}>{formatNumber(T.d)}</td>
                   <td className={s.num}>{dbm(T.h, T.d, tekBirim)}</td>
+                  {siteSutunu && <td className={s.num}>{formatNumber(gorunen.reduce((a, r) => a + (r.sitede?.anahtarEtkinlik ?? 0), 0))}</td>}
                   {eylemSutunu && <td />}
                 </tr>
               </tfoot>
             )}
           </table>
         </div>
+      )}
+
+      {siteSutunu && (site.hata || site.not) && (
+        <p className={site.hata ? s.hataMetin : s.notKucuk} role={site.hata ? 'alert' : undefined}>
+          {site.hata ? `Sitede sütunu alınamadı: ${site.hata}` : site.not}
+        </p>
       )}
 
       <VarlikEylemPenceresi hedef={eylemHedefi} onKapat={() => setEylemHedefi(null)} />

@@ -9,6 +9,7 @@ import {
   type EslenemediNedeni,
   type Platform,
   type TakipAcigiSatiri,
+  type TakipAcigiYaniti,
 } from '@advetics/shared';
 import { gunEkle, type TxLike } from '../sinyal/sinyal-hesap';
 
@@ -170,4 +171,92 @@ export async function platformKampanyalari(
     donusum: Number(r.d ?? 0),
     tiklama: Number(r.t ?? 0),
   }));
+}
+
+// ─── Yanıt: panel ucu VE rapor belgesi (tek üretici) ───────────────────────
+
+interface Ga4KaynakSatiri {
+  id: string;
+  durum: string;
+  saat_dilimi: string | null;
+  para_birimi: string | null;
+  yapi: Record<string, unknown> | null;
+  son_basarili_cekim: Date | string | null;
+}
+
+/** Kaynağın saat diliminde bugün (kaynak bilinmiyorsa İstanbul). */
+function bugunDilimde(saatDilimi: string | null, simdi: Date): string {
+  const bicim = (tz: string) => new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(simdi);
+  try {
+    return bicim(saatDilimi ?? 'Europe/Istanbul');
+  } catch {
+    return bicim('Europe/Istanbul');
+  }
+}
+
+/**
+ * `TakipAcigiYaniti` — Raporlar ekranının ucu (`GET /veri-kaynaklari/takip-acigi`)
+ * ve rapor belgesinin "Site ve Dönüşüm" bölümü (reports.service) BURADAN.
+ * İki ayrı yazılsaydı ekran ile müşteriye giden PDF farklı sayı gösterirdi
+ * (CLAUDE.md "AYNI BELGEYİ İSTEYEN HER YOL AYNI SORGUYU KURMALI").
+ * `t` çağıranın kapsamı: panelde withTenant (RLS), raporda rapor transaction'ı.
+ */
+export async function takipAcigiYaniti(t: TxLike, q: { clientId: string; from: string; to: string }, simdi: Date): Promise<TakipAcigiYaniti> {
+  const [k] = await t.$queryRaw<Ga4KaynakSatiri[]>(Prisma.sql`
+    SELECT id::text AS id, durum, saat_dilimi, para_birimi, yapi, son_basarili_cekim
+      FROM veri_kaynaklari
+     WHERE client_id = ${q.clientId}::uuid AND tur = 'ga4' AND durum <> 'kaldirildi'
+     ORDER BY created_at LIMIT 1`);
+  const kiyasBitis = kiyasBitisi(q.to, bugunDilimde(k?.saat_dilimi ?? null, simdi));
+  const emptyReason: TakipAcigiYaniti['emptyReason'] = !k
+    ? 'kaynak_yok'
+    : k.son_basarili_cekim === null
+      ? k.durum === 'izin_eksik' || k.durum === 'erisim_yok'
+        ? 'izin_eksik'
+        : 'cekim_kosmadi'
+      : null;
+  const bos: TakipAcigiYaniti = {
+    donem: { from: q.from, to: q.to },
+    kiyasBitis,
+    emptyReason,
+    satirlar: [],
+    toplamSatir: 0,
+    eslenemeyen: { pay: null, anahtarEtkinlik: 0, nedenler: {} },
+    uyarilar: [],
+    kalite: { digerSatiri: false, esiklendi: false, ornekleme: false },
+  };
+  if (!k || emptyReason) return bos;
+  if (kiyasBitis < q.from) {
+    return { ...bos, emptyReason: 'veri_yok', uyarilar: [`Seçilen dönem Analytics’te hâlâ işleniyor; son ${TAKIP_ACIGI.isleniyorGun} gün ve bugün kıyasa girmez.`] };
+  }
+  const site = await siteSatirlari(t, q.clientId, q.from, kiyasBitis);
+  if (site.length === 0) return { ...bos, emptyReason: 'veri_yok' };
+  const kampanyalar = await platformKampanyalari(t, q.clientId, q.from, kiyasBitis);
+  const h = takipHesapla(kampanyalar, site);
+
+  const uyarilar: string[] = [];
+  if (kiyasBitis < q.to) uyarilar.push(`${kiyasBitis} sonrası kıyasa girmedi (Analytics verisi işleniyor).`);
+  const hesaplar = await t.$queryRaw<Array<{ timezone: string; currency: string }>>(Prisma.sql`
+    SELECT DISTINCT timezone, currency FROM ad_accounts WHERE client_id = ${q.clientId}::uuid AND sync_enabled`);
+  const farkliDilim = [...new Set(hesaplar.map((a) => a.timezone).filter((z) => k.saat_dilimi && z !== k.saat_dilimi))];
+  if (farkliDilim.length > 0) {
+    uyarilar.push(`Reklam hesabının saat dilimi (${farkliDilim.join(', ')}) Analytics mülkününkinden (${k.saat_dilimi}) farklı: günlük kıyas kayabilir, dönem toplamı geçerli.`);
+  }
+  const farkliPara = [...new Set(hesaplar.map((a) => a.currency).filter((c) => k.para_birimi && c !== k.para_birimi))];
+  if (farkliPara.length > 0) {
+    uyarilar.push(`Para birimleri farklı (${k.para_birimi} / ${farkliPara.join(', ')}): gelir kıyası yapılmaz, kur tahmini kullanılmaz.`);
+  }
+  const sk = (k.yapi?.sonKalite ?? {}) as { digerSatiri?: boolean; esiklendi?: boolean; ornekleme?: number | null };
+  return {
+    ...bos,
+    satirlar: h.satirlar,
+    toplamSatir: h.satirlar.length,
+    eslenemeyen: h.eslenemeyen,
+    uyarilar,
+    kalite: {
+      digerSatiri: sk.digerSatiri === true || site.some((s) => s.kampanyaAdi?.trim() === '(other)'),
+      esiklendi: sk.esiklendi === true,
+      ornekleme: typeof sk.ornekleme === 'number',
+    },
+  };
 }

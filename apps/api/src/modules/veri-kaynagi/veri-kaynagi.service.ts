@@ -33,7 +33,7 @@ import { Ga4Istemcisi } from '../connections/providers/ga4';
 import { SyncQueueService } from '../../queue/sync-queue.service';
 import type { TxLike } from '../sinyal/sinyal-hesap';
 import { kaynakBugun } from './veri-kaynagi-is';
-import { kiyasBitisi, platformKampanyalari, siteSatirlari, takipHesapla } from './takip-hesap';
+import { platformKampanyalari, takipAcigiYaniti } from './takip-hesap';
 
 const logger = new Logger('VeriKaynagiService');
 
@@ -562,54 +562,7 @@ export class VeriKaynagiService {
 
   async takipAcigi(ctx: TenantContext, q: KaynakDonemSorgusu): Promise<TakipAcigiYaniti> {
     this.erisim(ctx, q.clientId);
-    return this.prisma.withTenant(ctx, async (tx) => {
-      const t = tx as unknown as TxLike;
-      const k = await this.ga4Kaynagi(t, q.clientId);
-      const kiyasBitis = kiyasBitisi(q.to, kaynakBugun(k?.saat_dilimi ?? null, new Date()));
-      const bos: TakipAcigiYaniti = {
-        donem: { from: q.from, to: q.to },
-        kiyasBitis,
-        emptyReason: this.bosNedeni(k),
-        satirlar: [],
-        toplamSatir: 0,
-        eslenemeyen: { pay: null, anahtarEtkinlik: 0, nedenler: {} },
-        uyarilar: [],
-        kalite: { digerSatiri: false, esiklendi: false, ornekleme: false },
-      };
-      if (!k || bos.emptyReason) return bos;
-      if (kiyasBitis < q.from) {
-        return { ...bos, emptyReason: 'veri_yok', uyarilar: [`Seçilen dönem Analytics’te hâlâ işleniyor; son ${TAKIP_ACIGI.isleniyorGun} gün ve bugün kıyasa girmez.`] };
-      }
-      const site = await siteSatirlari(t, q.clientId, q.from, kiyasBitis);
-      if (site.length === 0) return { ...bos, emptyReason: 'veri_yok' };
-      const kampanyalar = await platformKampanyalari(t, q.clientId, q.from, kiyasBitis);
-      const h = takipHesapla(kampanyalar, site);
-
-      const uyarilar: string[] = [];
-      if (kiyasBitis < q.to) uyarilar.push(`${kiyasBitis} sonrası kıyasa girmedi (Analytics verisi işleniyor).`);
-      const hesaplar = await t.$queryRaw<Array<{ timezone: string; currency: string }>>(Prisma.sql`
-        SELECT DISTINCT timezone, currency FROM ad_accounts WHERE client_id = ${q.clientId}::uuid AND sync_enabled`);
-      const farkliDilim = hesaplar.map((a) => a.timezone).filter((z) => k.saat_dilimi && z !== k.saat_dilimi);
-      if (farkliDilim.length > 0) {
-        uyarilar.push(`Reklam hesabının saat dilimi (${[...new Set(farkliDilim)].join(', ')}) Analytics mülkününkinden (${k.saat_dilimi}) farklı: günlük kıyas kayabilir, dönem toplamı geçerli.`);
-      }
-      const farkliPara = hesaplar.map((a) => a.currency).filter((c) => k.para_birimi && c !== k.para_birimi);
-      if (farkliPara.length > 0) {
-        uyarilar.push(`Para birimleri farklı (${k.para_birimi} / ${[...new Set(farkliPara)].join(', ')}): gelir kıyası yapılmaz, kur tahmini kullanılmaz.`);
-      }
-      const sk = (k.yapi?.sonKalite ?? {}) as { digerSatiri?: boolean; esiklendi?: boolean; ornekleme?: number | null };
-      return {
-        ...bos,
-        satirlar: h.satirlar,
-        toplamSatir: h.satirlar.length,
-        eslenemeyen: h.eslenemeyen,
-        uyarilar,
-        kalite: {
-          digerSatiri: sk.digerSatiri === true || site.some((s) => s.kampanyaAdi?.trim() === '(other)'),
-          esiklendi: sk.esiklendi === true,
-          ornekleme: typeof sk.ornekleme === 'number',
-        },
-      };
-    });
+    // Hesap TEK yerde (takip-hesap.ts#takipAcigiYaniti): rapor belgesi de aynı fonksiyonu çağırıyor.
+    return this.prisma.withTenant(ctx, (tx) => takipAcigiYaniti(tx as unknown as TxLike, q, new Date()));
   }
 }

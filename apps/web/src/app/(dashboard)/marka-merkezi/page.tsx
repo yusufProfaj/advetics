@@ -28,6 +28,7 @@ import { KreatiflerIcerik } from '@/components/marka-merkezi/varliklar/kreatifle
 import { FormlarIcerik } from '@/components/marka-merkezi/varliklar/formlar';
 import { WorkspaceAyarlari } from '@/components/marka-merkezi/workspace-ayarlari';
 import { BildirimlerBolumu } from '@/components/marka-merkezi/bildirimler-bolumu';
+import { VeriKaynaklari } from '@/components/marka-merkezi/veri-kaynaklari';
 import { AiDoldur } from '@/components/bilgi-bankasi/ai-doldur';
 import { MarkaSekmesi } from '@/components/bilgi-bankasi/marka-sekmesi';
 import { MetinSekmesi } from '@/components/bilgi-bankasi/metin-sekmesi';
@@ -192,6 +193,8 @@ export default async function MarkaMerkeziPage({
                 ) : (
                   <SaltOkunurKanallar data={kanallar.v} />
                 )}
+                {/* Paket F1: reklam dışı veri kaynakları, AYNI bölümün içinde (ayrı bölüm değil). */}
+                <VeriKaynaklari clientId={clientId} yonetebilir={yaz('connection.manage')} yazabilir={yaz('connection.write')} />
               </section>
             )}
 

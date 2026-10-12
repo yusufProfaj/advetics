@@ -1,3 +1,4 @@
+import { takipAcigiYaniti } from '../veri-kaynagi/takip-hesap';
 import { deriveRoas, donusumToplami } from '@advetics/shared';
 import type { Platform } from '@advetics/shared';
 import { Injectable, NotFoundException } from '@nestjs/common';
@@ -378,6 +379,15 @@ export class ReportsService {
        */
       const breakdowns = await this.breakdownBlocks(tx, sorgu, bolumler);
 
+      /*
+       * SİTE VE DÖNÜŞÜM (Paket F1) YALNIZ ŞABLONDA SEÇİLİYSE. Panel ucuyla
+       * AYNI üretici (takipAcigiYaniti): ekran ile müşteriye giden PDF
+       * farklı sayı göstermesin. Aynı transaction, aynı RLS bağlamı.
+       */
+      const siteConversion = bolumler.includes('site_conversion')
+        ? await takipAcigiYaniti(tx as unknown as Parameters<typeof takipAcigiYaniti>[0], { clientId: params.clientId, from: params.from, to: params.to }, new Date())
+        : null;
+
       return {
         client,
         branding,
@@ -404,6 +414,7 @@ export class ReportsService {
         keywords,
         searchTerms,
         conversionDetail,
+        siteConversion,
         generatedAt: new Date().toISOString(),
       };
     }, { timeoutMs: RAPOR_OKUMA_SURESI_MS });

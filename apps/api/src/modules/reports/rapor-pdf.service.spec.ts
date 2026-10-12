@@ -127,6 +127,20 @@ const VERI: ReportData = {
     errors: [],
     totalConversions: 68,
   },
+  // Paket F1: dolu bir "Site ve Dönüşüm" (fixture'da eksik zorunlu alan,
+  // eksik kapsamın kendisidir: CLAUDE.md).
+  siteConversion: {
+    donem: { from: '2026-07-01', to: '2026-07-31' },
+    kiyasBitis: '2026-07-31',
+    emptyReason: null,
+    satirlar: [
+      { platform: 'meta' as const, kampanyaId: 'k1', kampanyaAdi: 'Bornova Lansman Form', platformDonusum: 142, siteDonusum: 61, platformTiklama: 3388, siteOturum: 3000, etiket: 'platform_fazla' as const, oran: 0.43 },
+    ],
+    toplamSatir: 1,
+    eslenemeyen: { pay: 0.14, anahtarEtkinlik: 49, nedenler: { utm_yok: 31, kampanya_bulunamadi: 18 } },
+    uyarilar: [],
+    kalite: { digerSatiri: false, esiklendi: true, ornekleme: false },
+  },
   keywords: [
     { keyword: 'urla satılık villa', spendMicros: '3037000000', impressions: 6250, clicks: 302, ctr: 4.83, cpc: 10.05 },
   ],
@@ -1262,5 +1276,31 @@ describe('DÖNÜŞÜM DETAYI bölümü', () => {
     const t = metinler(await svc.uret(bolum({ rows: [], errors: ['kota doldu'] }))).join(' ');
     expect(t).toContain('kota doldu');
     expect(t).toContain('Detay gelmediği için');
+  });
+});
+
+describe('RaporPdfService — Site ve Dönüşüm (Paket F1)', () => {
+  const svc = new RaporPdfService();
+  const boyut = async (d: ReportData) => (await svc.uret(d)).byteLength;
+
+  it('KRİTİK: bölüm kodu PDF döngüsünde ÇİZİLİYOR (PLATFORM_SIRASI tuzağı: GA4 bir platform değil)', async () => {
+    const m = metinler(await svc.uret({ ...VERI, sections: ['site_conversion'] })).join(' ');
+    expect(m).toContain('SİTE VE DÖNÜŞÜM');
+    expect(m).toContain('Bornova Lansman Form');
+    expect(m).toContain('Site daha az görüyor');
+    expect(m).toContain('SİTEDE GÖRÜLEN');
+    expect(m).toContain('TOPLAM');
+  });
+
+  it('GA4 bağlı değilse ya da bölüm seçili değilse (null) sayfa HİÇ açılmaz', async () => {
+    const kapak = await boyut({ ...VERI, sections: ['cover'] });
+    const yok = { ...VERI.siteConversion!, emptyReason: 'kaynak_yok' as const, satirlar: [] };
+    expect(await boyut({ ...VERI, sections: ['cover', 'site_conversion'], siteConversion: yok })).toBe(kapak);
+    expect(await boyut({ ...VERI, sections: ['cover', 'site_conversion'], siteConversion: null })).toBe(kapak);
+  });
+
+  it('boş tablo NEDENİNİ yazıyor', async () => {
+    const bos = { ...VERI.siteConversion!, emptyReason: 'cekim_kosmadi' as const, satirlar: [] };
+    expect(metinler(await svc.uret({ ...VERI, sections: ['site_conversion'], siteConversion: bos })).join(' ')).toContain('Analytics verisi henüz çekilmedi.');
   });
 });
