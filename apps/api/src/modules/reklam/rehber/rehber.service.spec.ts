@@ -1677,6 +1677,17 @@ describe('form önizlemesi (form-ayrintisi)', () => {
     expect(o.tesekkur).toBeNull();
   });
 
+  it('KRİTİK (Ajan 4): A’nın önbelleği B’ye SIZMAZ — önbellek okuması sayfa kapısından SONRA', async () => {
+    await svc.formAyrintisi(CTX, IDS.client, S1, '777');
+    expect(istekler).toHaveLength(1);
+    // Önbellek dolu; OTEKI workspace'i (yalnız ona erişimi olan kullanıcı) S1'i istiyor.
+    const oteki = { ...CTX, clientIds: [OTEKI] } as TenantContext;
+    await expect(svc.formAyrintisi(oteki, OTEKI, S1, '777')).rejects.toMatchObject({ status: 400 });
+    // Erişimi kalkan kullanıcı da önbellekten okuyamaz.
+    await expect(svc.formAyrintisi({ ...CTX, clientIds: [] } as TenantContext, IDS.client, S1, '777')).rejects.toMatchObject({ status: 403 });
+    expect(istekler).toHaveLength(1);
+  });
+
   it('kota doluysa Meta’ya çıkılmaz (503 + sebep)', async () => {
     const kota = (svc as unknown as { kota: unknown }).kota;
     (svc as unknown as { kota: unknown }).kota = { isEnabled: true, acquire: async () => ({ allowed: false, reason: 'yüzde 92', retryAfterMs: 120_000 }) };
