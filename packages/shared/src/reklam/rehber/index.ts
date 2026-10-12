@@ -10,3 +10,4 @@ export * from './uyum';
 export * from './api';
 export * from './google-gorsel';
 export * from './google-uzanti';
+export * from './google-ogeler';

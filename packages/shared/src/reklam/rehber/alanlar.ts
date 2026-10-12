@@ -20,6 +20,7 @@ import { ALAN_KAYNAKLARI, type AlanKaynagi } from '../taslak';
 import { formKimligiSchema, hedefKonumSchema } from '../taslak-alanlari';
 import { OZEL_KATEGORILER } from '../meta/hedefleme';
 import { REHBER_AMAC_KODLARI } from './amaclar';
+import { rehberFiyatListesiSchema, rehberPromosyonSchema } from './google-ogeler';
 
 const alan = <T extends z.ZodTypeAny>(deger: T) =>
   z.object({
@@ -147,6 +148,13 @@ export const rehberAlanlariSchema = z
          * gönderilmez ve kayıtlı rehberlerin özeti değişmez.
          */
         gorunenYol: z.array(z.string().max(40)).max(2).optional(),
+        /**
+         * Google Arama AÇIKLAMA METİNLERİ (CalloutAsset, ≤ 25, en çok 4).
+         * Marka Merkezi'nde vaat yoksa yapay zekâ önerir, kullanıcı burada
+         * görüp düzeltir. İsteğe bağlı: alan yokken eski rehberlerin özeti
+         * değişmez. Kaynak önceliği `aciklamaMetniSec`.
+         */
+        aciklamaMetinleri: z.array(z.string().max(100)).max(4).optional(),
       }),
     ),
     anahtarKelimeler: alan(z.array(anahtarKelimeSchema).max(50)),
@@ -155,6 +163,14 @@ export const rehberAlanlariSchema = z
     /** İki platform açıkken Meta'nın payı (yüzde); Google kalanı alır. */
     metaPayiYuzde: alan(z.number().int().min(10).max(90)),
     takvim: alan(z.object({ baslangic: tarih, bitis: tarih.nullable() })),
+    /**
+     * İSTEĞE BAĞLI Google Arama öğeleri (`google-ogeler.ts`): promosyon ve
+     * fiyat listesi UYDURULAMAZ, yalnız kullanıcı yazarsa kurulur. Alan yok =
+     * öğe yok; doluysa ve hatalıysa engel (kullanıcının yazdığını sessizce
+     * atmak, "kampanyayı ekledim" diyeni yanıltırdı).
+     */
+    googlePromosyon: alan(rehberPromosyonSchema),
+    googleFiyatListesi: alan(rehberFiyatListesiSchema),
   })
   .partial()
   .strict();
@@ -203,6 +219,9 @@ export const REHBER_IZINLI_KAYNAKLAR: Partial<Record<RehberAlanAdi, readonly Ala
   butce: ['kullanici', 'workspace_profili'],
   metaPayiYuzde: ['kullanici', 'derleyici'],
   takvim: ['kullanici', 'derleyici'],
+  // Para sözü: yalnız kullanıcı (müşteri adına indirim/fiyat vaadi).
+  googlePromosyon: ['kullanici'],
+  googleFiyatListesi: ['kullanici'],
 };
 
 /** Varsayılan Meta payı: ilk iki hafta eşit (REHBER-PLANI § 2, adım 5). */

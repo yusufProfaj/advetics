@@ -103,6 +103,8 @@ beforeAll(async () => {
   );
   // Ağa çıkılmaz: site bağlantısı okuması sahte (okunamadı).
   svc.siteHtmlOku = async () => ({ ok: false, sebep: "test: ağ yok" });
+  // Site haritası da ağa çıkmaz (ikinci kaynak, g-1.2.0).
+  svc.siteHaritasiGetir = async () => ({ ok: false, sebep: 'test: ağ yok' });
 });
 afterAll(async () => h.close());
 beforeEach(async () => {

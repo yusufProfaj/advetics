@@ -151,7 +151,7 @@ describe('reklam modülü sınırı', () => {
    * modül (`rehber/`) ve kendi sınır testi var (`rehber-modulu.spec.ts`).
    */
   // Dalga 3: `google-pmax` aynı türden saf gövde kurucusu (Maks. Performans).
-  const IZINLI = ['connections/providers/google-write', 'connections/providers/google-demandgen', 'connections/providers/google-pmax', 'connections/provider.types'];
+  const IZINLI = ['connections/providers/google-write', 'connections/providers/google-demandgen', 'connections/providers/google-pmax', 'connections/providers/google-arama-ogeleri', 'connections/provider.types'];
   // ALT KLASÖRLER DAHİL: ilk sürüm yalnız üst klasörü okuyordu ve alt
   // klasördeki servisler hem içe aktarma yasağının hem providers kontrolünün
   // tamamen dışındaydı. `rehber/` AYRI bir Nest modülü: kendi testinde.

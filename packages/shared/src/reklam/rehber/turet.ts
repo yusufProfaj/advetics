@@ -25,6 +25,7 @@ import { METIN_SINIRLARI, karakterSayisi } from './metin';
 import { reklamSetiPlani, setlereAyir, type GorselOrani, type SetPlani } from '../banner-seti';
 import { googleGorselKurgusuMu, pmaxUzunBaslik } from './google-gorsel';
 import type { GoogleUzantiKaynagi, SiteBaglantisi } from './google-uzanti';
+import { googleAramaOgeleri, type GoogleAramaOgeleri, type GoogleOgeDurumu, type GoogleOgeKaynagi } from './google-ogeler';
 import type { SitePikselHali } from '../meta/niyetler';
 
 /**
@@ -406,6 +407,21 @@ export interface GoogleDerlemeGirdisi {
   aciklamaMetinleri?: string[];
   /** Arama reklamının görünen yolu (`path1`, `path2`); yalnız doluysa yazılır. */
   gorunenYol?: string[];
+  /**
+   * ARAMA ÖĞELERİ (g-1.2.0, `google-ogeler.ts`): yalnız Arama kurgusunda ve
+   * kaynak verildiyse yazılır. `ogeDurumlari` her öğenin "eklendi / eklenmedi:
+   * sebep" satırı; girdiyle SAKLANIYOR ki prova sonrası ekran (ve yayın)
+   * sebebi bellek önbelleği dolduktan sonra da söyleyebilsin.
+   */
+  ogeler?: GoogleAramaOgeleri;
+  ogeDurumlari?: GoogleOgeDurumu[];
+  /** Site bağlantısı çıkmadıysa SEBEBİ (site okuması); kalıcı, aynı gerekçe. */
+  siteSebebi?: string | null;
+  /**
+   * Google öğeleri REDDETTİ ve bu girdi öğesiz yeniden prova için türetildi.
+   * Derleyici "sitende ayrı sayfa bulunamadı" demesin: bulundu, reddedildi.
+   */
+  ogeReddi?: true;
 }
 
 /**
@@ -425,6 +441,8 @@ export interface GoogleTuretmeBaglami {
   son30GunDonusum: number | null;
   /** Arama + site: site bağlantısı ve açıklama metni kaynağı (servis önbelleği). */
   uzantilar: GoogleUzantiKaynagi | null;
+  /** Arama: öğe kaynakları (telefon, marka adı, logo, snippet, promosyon, fiyat). Yoksa öğe yazılmaz. */
+  ogeKaynagi?: GoogleOgeKaynagi | null;
   /** Birincil SATIN ALMA dönüşümü etkin mi; Maks. Performans yalnız `true` ile kurulur. */
   satisOlcumu: boolean | null;
   /** Medyadaki görsellerin oranı (sunucuda, varlığın ölçüsünden); görsel kurgularında zorunlu. */
@@ -520,8 +538,17 @@ export function rehberdenGoogle(a: RehberAlanlari, acik: { meta: boolean; google
       // koşuyor ve okunmamış bir site "bağlantı yok" ile aynı gövdeyi kurar;
       // ekran sebebi ayrıca söylüyor (karar tablosu UZANTI satırı).
       ...(tanim.kurgu === 'ARAMA' && tanim.ulasma === 'site'
-        ? { siteBaglantilari: b.uzantilar?.siteBaglantilari ?? [], aciklamaMetinleri: b.uzantilar?.aciklamaMetinleri ?? [] }
+        ? {
+            siteBaglantilari: b.uzantilar?.siteBaglantilari ?? [],
+            aciklamaMetinleri: b.uzantilar?.aciklamaMetinleri ?? [],
+            siteSebebi: (b.uzantilar?.siteBaglantilari?.length ?? 0) > 0 ? null : (b.uzantilar?.siteSebebi ?? null),
+          }
         : {}),
+      ...(tanim.kurgu === 'ARAMA' && (b.uzantilar?.googleReddi || b.ogeKaynagi?.googleReddi) ? { ogeReddi: true as const } : {}),
+      ...(tanim.kurgu === 'ARAMA' && b.ogeKaynagi ? (() => {
+        const o = googleAramaOgeleri(b.ogeKaynagi);
+        return { ogeler: o.ogeler, ogeDurumlari: o.durumlar };
+      })() : {}),
       // GÖRÜNEN YOL yalnız Arama'da ve DOLUYSA: boş anahtar göndermemek
       // eski rehberlerin içerik özetini korur, Google'a boş yol gitmez.
       ...(tanim.kurgu === 'ARAMA' && gorunenYolu(m.gorunenYol).length ? { gorunenYol: gorunenYolu(m.gorunenYol) } : {}),

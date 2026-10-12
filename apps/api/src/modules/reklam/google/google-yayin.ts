@@ -7,7 +7,7 @@ import { kapaliBirak, yayiniSonlandir, type TxRunner } from '../yayin-motoru';
 import { googleYazmaAcikMi } from '../yazma-kapisi';
 import { DEMAND_GEN_GORSEL_OTOMASYONU } from '../../connections/providers/google-demandgen';
 import { PMAX_OTOMASYONU, type PmaxAlani } from '../../connections/providers/google-pmax';
-import type { GoogleBeklenen, GoogleDerleme, GoogleGorselReklamBeklentisi, GoogleUzantiBeklentisi, GoogleVarlikGrubuBeklentisi } from './derle-google';
+import type { GoogleBeklenen, GoogleDerleme, GoogleGorselReklamBeklentisi, GoogleOgeBeklentisi, GoogleUzantiBeklentisi, GoogleVarlikGrubuBeklentisi } from './derle-google';
 
 const logger = new Logger('GoogleYayin');
 
@@ -184,6 +184,8 @@ export interface GoogleOkunan {
    * site reklamını açılmadan durdururdu (arama öğesi dersiyle aynı).
    */
   uzantilar?: GoogleUzantiBeklentisi | null;
+  /** Arama öğeleri (g-1.2.0), İÇERİKLE; onay durumu yine okunmuyor. */
+  ogeler?: GoogleOgeBeklentisi | null;
 }
 
 export interface GeriOkumaSatiri {
@@ -230,6 +232,14 @@ export function googleGeriOkumaKarsilastir(b: GoogleBeklenen, o: GoogleOkunan): 
   // Uzantılar KÜME olarak: Google'ın satır sırası garanti değil. Beklenen
   // boşsa da kıyaslanır (bağlı öğe varsa fark: söz verilmemiş metin).
   if (b.uzantilar) kiyasla('uzantilar', uzantiKumesi(b.uzantilar), o.uzantilar ? uzantiKumesi(o.uzantilar) : null);
+  // Arama öğeleri ALAN ALAN: hangi öğenin ayrıştığı satırda görünsün.
+  // Beklenmeyen ama bağlı öğe (beklenen null, okunan dolu) de fark.
+  if (b.ogeler) {
+    const ok = o.ogeler ?? null;
+    for (const alan of ['isletmeAdi', 'logo', 'snippet', 'promosyon', 'fiyat'] as const) {
+      kiyasla(`oge.${alan}`, b.ogeler[alan], ok ? ok[alan] : null);
+    }
+  }
   return { sonuc: satirlar.length ? 'fark' : 'temiz', satirlar };
 }
 
@@ -274,7 +284,7 @@ interface KampanyaSatiri {
   campaignBudget?: { amountMicros?: string };
 }
 interface CagriOgesiSatiri {
-  campaignAsset?: { fieldType?: string; status?: string };
+  campaignAsset?: { fieldType?: string; status?: string; source?: string };
   asset?: { callAsset?: { countryCode?: string; phoneNumber?: string } };
 }
 
@@ -337,6 +347,77 @@ async function uzantilariOku(port: GoogleYayinPortu, ctx: FetchContext, kampanya
   };
 }
 
+interface OgeSatiri {
+  campaignAsset?: { fieldType?: string; status?: string; source?: string };
+  asset?: {
+    textAsset?: { text?: string };
+    structuredSnippetAsset?: { header?: string; values?: string[] };
+    promotionAsset?: {
+      promotionTarget?: string;
+      percentOff?: string | number;
+      moneyAmountOff?: { amountMicros?: string | number };
+      startDate?: string;
+      endDate?: string;
+    };
+    priceAsset?: {
+      type?: string;
+      priceOfferings?: Array<{ header?: string; description?: string; price?: { amountMicros?: string | number } }>;
+    };
+  };
+}
+
+/**
+ * Kampanyaya bağlı Arama öğeleri (işletme adı, logo, snippet, promosyon,
+ * fiyat). WHERE'deki her alan SELECT'te (`campaign_asset` dersi). Google'ın
+ * KENDİ ürettiği öğe (`source = AUTOMATICALLY_CREATED`, örn. siteden çektiği
+ * işletme adı) sayılmıyor: bizim sözümüz değil ve hesap ayarına bağlı.
+ * int64 alanlar (percent_off, amount_micros) JSON'da DİZGE geliyor; ikisi de
+ * dizgeye indirgenip kıyaslanıyor. Alan adları v25 başvurusundan, ÖLÇÜLMEDİ.
+ */
+async function ogeleriOku(port: GoogleYayinPortu, ctx: FetchContext, kampanyaId: string): Promise<GoogleOgeBeklentisi> {
+  const satirlar = await port.ara<OgeSatiri>(
+    ctx,
+    `SELECT campaign.id, campaign_asset.field_type, campaign_asset.status, campaign_asset.source,
+            asset.text_asset.text, asset.structured_snippet_asset.header, asset.structured_snippet_asset.values,
+            asset.promotion_asset.promotion_target, asset.promotion_asset.percent_off, asset.promotion_asset.money_amount_off.amount_micros,
+            asset.promotion_asset.start_date, asset.promotion_asset.end_date,
+            asset.price_asset.type, asset.price_asset.price_offerings
+       FROM campaign_asset
+      WHERE campaign.id = ${kampanyaId}
+        AND campaign_asset.field_type IN ('BUSINESS_NAME', 'BUSINESS_LOGO', 'STRUCTURED_SNIPPET', 'PROMOTION', 'PRICE')
+        AND campaign_asset.status != 'REMOVED'`,
+  );
+  const canli = satirlar.filter((x) => x.campaignAsset?.status !== 'REMOVED' && x.campaignAsset?.source !== 'AUTOMATICALLY_CREATED');
+  const tur = (t: string) => canli.filter((x) => x.campaignAsset?.fieldType === t);
+  const dizge = (v: string | number | undefined) => (v === undefined || v === null ? null : String(v));
+  // Bir türden BİRDEN ÇOK öğe beklenmiyor: iki işletme adı bağlıysa hangisinin
+  // gösterildiği belirsiz; dizi olarak döner ve tekil beklentiyle FARK verir.
+  const tek = <T>(xs: T[]): T | T[] | null => (xs.length === 0 ? null : xs.length === 1 ? xs[0]! : xs);
+  const ad = tur('BUSINESS_NAME').map((x) => x.asset?.textAsset?.text ?? '');
+  const sn = tur('STRUCTURED_SNIPPET').map((x) => ({ baslik: x.asset?.structuredSnippetAsset?.header ?? '', degerler: x.asset?.structuredSnippetAsset?.values ?? [] }));
+  const pr = tur('PROMOTION').map((x) => {
+    const p = x.asset?.promotionAsset;
+    return {
+      hedef: p?.promotionTarget ?? '',
+      yuzdeMicros: dizge(p?.percentOff),
+      tutarMicros: dizge(p?.moneyAmountOff?.amountMicros),
+      baslangic: p?.startDate ?? null,
+      bitis: p?.endDate ?? '',
+    };
+  });
+  const fy = tur('PRICE').map((x) => ({
+    tur: x.asset?.priceAsset?.type ?? '',
+    kalemler: (x.asset?.priceAsset?.priceOfferings ?? []).map((k) => ({ baslik: k.header ?? '', aciklama: k.description ?? '', micros: dizge(k.price?.amountMicros) ?? '' })),
+  }));
+  return {
+    isletmeAdi: tek(ad) as string | null,
+    logo: tur('BUSINESS_LOGO').length,
+    snippet: tek(sn) as GoogleOgeBeklentisi['snippet'],
+    promosyon: tek(pr) as GoogleOgeBeklentisi['promosyon'],
+    fiyat: tek(fy) as GoogleOgeBeklentisi['fiyat'],
+  };
+}
+
 interface KriterSatiri {
   campaignCriterion?: { type?: string; negative?: boolean };
   adGroupCriterion?: { type?: string; negative?: boolean };
@@ -380,7 +461,7 @@ export async function googleGeriOku(port: GoogleYayinPortu, ctx: FetchContext, k
   // çalıştırmadığı için hiçbir test bunu görmedi.
   const cagriOgeleri = await port.ara<CagriOgesiSatiri>(
     ctx,
-    `SELECT campaign.id, campaign_asset.field_type, campaign_asset.status, asset.call_asset.country_code, asset.call_asset.phone_number
+    `SELECT campaign.id, campaign_asset.field_type, campaign_asset.status, campaign_asset.source, asset.call_asset.country_code, asset.call_asset.phone_number
        FROM campaign_asset
       WHERE campaign.id = ${kampanyaId} AND campaign_asset.field_type = 'CALL' AND campaign_asset.status != 'REMOVED'`,
   );
@@ -408,13 +489,15 @@ export async function googleGeriOku(port: GoogleYayinPortu, ctx: FetchContext, k
     anahtarKelimeSayisi: say(grupKriteri, 'adGroupCriterion', 'KEYWORD', false),
     negatifSayisi: say(kampanyaKriteri, 'campaignCriterion', 'KEYWORD', true),
     aramaOgeleri: cagriOgeleri
-      .filter((x) => x.campaignAsset?.fieldType === 'CALL' && x.campaignAsset?.status !== 'REMOVED')
+      // Google'ın kendi ürettiği arama öğesi bizim sözümüz değil (öğe dersi).
+      .filter((x) => x.campaignAsset?.fieldType === 'CALL' && x.campaignAsset?.status !== 'REMOVED' && x.campaignAsset?.source !== 'AUTOMATICALLY_CREATED')
       .map((x) => ({ countryCode: x.asset?.callAsset?.countryCode ?? null, phoneNumber: x.asset?.callAsset?.phoneNumber ?? null })),
     teklif: c?.biddingStrategyType ?? null,
     ...(b?.gorunenYol ? { gorunenYol: await gorunenYolOku(port, ctx, kampanyaId) } : {}),
     ...(b?.gorselReklam ? { gorselReklam: await gorselReklamOku(port, ctx, kampanyaId) } : {}),
     ...(b?.varlikGrubu ? { varlikGrubu: await varlikGrubuOku(port, ctx, kampanyaId) } : {}),
     ...(b?.uzantilar ? { uzantilar: await uzantilariOku(port, ctx, kampanyaId) } : {}),
+    ...(b?.ogeler ? { ogeler: await ogeleriOku(port, ctx, kampanyaId) } : {}),
   };
 }
 

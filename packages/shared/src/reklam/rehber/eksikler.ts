@@ -23,6 +23,8 @@ import { META_EN_COK_GORSEL } from './turet';
 import { butceBol, gunlukEsdeger } from './butce';
 import type { RehberOnKosullari } from './hazirlik';
 import { googleGorselBulgulari, googleGorselKurgusuMu, googleMetinBulgulari, type GorselOlcusu } from './google-gorsel';
+import { fiyatSorunu, promosyonSorunu } from './google-ogeler';
+import { ACIKLAMA_METNI_SINIRI } from './google-uzanti';
 import { ORAN_ETIKETI, YERLESIM_GRUPLARI, bannerSetiDestekleniyor, reklamSetiPlani, setlereAyir, type GorselOrani } from '../banner-seti';
 
 export type RehberAdimi = 1 | 2 | 3 | 4 | 5 | 6;
@@ -76,6 +78,7 @@ const ADIM: Record<RehberAlanAdi, RehberAdimi> = {
   konumlar: 3, enDusukYas: 3, yasAraligi: 3, ekKategoriler: 3,
   hedefAdres: 4, telefon: 4, whatsappNumarasi: 4, formSablonuId: 4, medya: 4, youtubeVideo: 4, metin: 4, anahtarKelimeler: 4,
   butce: 5, metaPayiYuzde: 5, takvim: 5,
+  googlePromosyon: 4, googleFiyatListesi: 4,
 };
 
 /**
@@ -343,6 +346,17 @@ export function rehberEksikleri(a: RehberAlanlari, b: RehberEksikBaglami): Rehbe
       if (basliklar.length < METIN_SINIRLARI.basliklarEnAz) ekle('metin', 'google', 'G-BASLIK-SAYI', `Google için en az ${METIN_SINIRLARI.basliklarEnAz} başlık gerekiyor`);
       if (aciklamalar.length < METIN_SINIRLARI.aciklamalarEnAz) ekle('metin', 'google', 'G-ACIKLAMA-SAYI', `Google için en az ${METIN_SINIRLARI.aciklamalarEnAz} açıklama gerekiyor`);
     }
+    // Açıklama metni (CalloutAsset): sınırı aşan ya da sayı/fiyat taşıyan
+    // metin derleyicide ATILIR (`aciklamaMetniSec`); burada GİRİŞ ANINDA
+    // söyleniyor, yoksa kullanıcı yazdığının reklamda olmadığını görmezdi.
+    if (googleArama) {
+      (m.aciklamaMetinleri ?? []).forEach((s, i) => {
+        const t = s.trim();
+        if (!t) return;
+        if (karakterSayisi(t) > ACIKLAMA_METNI_SINIRI) ekle('metin', 'google', 'G-ACIKLAMA-METNI-UZUN', `Açıklama metni ${i + 1}: en çok ${ACIKLAMA_METNI_SINIRI} karakter`);
+        else if (/\d/.test(t)) ekle('metin', 'google', 'G-ACIKLAMA-METNI-SAYI', `Açıklama metni ${i + 1}: sayı içeren metin eklenmez (süresiz durur, bayatlar)`, 'uyari');
+      });
+    }
     // Görünen yol (Google Arama): parça başına sınır KESİN; boşsa gönderilmiyor.
     (m.gorunenYol ?? []).forEach((s, i) => {
       if (karakterSayisi(s.trim()) > METIN_SINIRLARI.gorunenYol) {
@@ -383,6 +397,18 @@ export function rehberEksikleri(a: RehberAlanlari, b: RehberEksikBaglami): Rehbe
     // Anahtar kelimesiz Arama kampanyası hiç harcamaz ve hata vermez (SENTEZ S-03).
     if (kelimeler.length === 0) ekle('anahtarKelimeler', 'google', 'G-KELIME', 'En az bir anahtar kelime seç');
     else if (kelimeler.length < 5) ekle('anahtarKelimeler', 'google', 'G-KELIME-AZ', '5 ile 20 arası kelime en iyi sonucu verir', 'uyari');
+  }
+
+  // İSTEĞE BAĞLI ÖĞELER (`google-ogeler.ts`): kural öğe seçimiyle AYNI
+  // fonksiyondan. Yazılmış ama hatalı promosyon ENGEL: derleyici onu atar ve
+  // kullanıcı "kampanyamı ekledim" sanırdı.
+  if (googleArama) {
+    const p = a.googlePromosyon?.deger;
+    const ps = p ? promosyonSorunu(p) : null;
+    if (ps) ekle('googlePromosyon', 'google', 'G-PROMOSYON', ps);
+    const f = a.googleFiyatListesi?.deger;
+    const fs = f ? fiyatSorunu(f) : null;
+    if (fs) ekle('googleFiyatListesi', 'google', 'G-FIYAT', fs);
   }
 
   // ── 5 Bütçe ──
