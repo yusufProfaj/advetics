@@ -16,7 +16,12 @@ RLS politikası var, platform sahibi yalnız hello@profaj.com.
 bu commit'le deploy ediliyor; migration `20261009100000_iyilestir` (üç
 yeni tablo) + `db:rls`.
 
-**ORPHEX UYARLAMASI (2026-10-12 → 13, dal `yusuf/rea-reverse-engineering-opensource-31ce9a`, PUSH EDİLMEDİ, DEPLOY EDİLMEDİ).**
+**ORPHEX UYARLAMASI (2026-10-12 → 13) — CANLIDA `46b78d0` (2026-10-12 09:29 sunucu saati, 102 sn).**
+İlk deploy denemesi panel derlemesinde düştü (canlı `.next/types` eski
+sayfaya atıf yapıyordu; canlıya ve veritabanına dokunulmadan) — `deploy.sh`
+düzeltildi, ikinci deneme temiz: 12 migration + `db:rls` uygulandı,
+`prisma migrate status` temiz, üç süreç ayakta, `.env`'e
+`SINYAL_SESSIZ_KOSUM="1"` ve `META_UTM_ETIKETI="0"` eklendi.
 Kullanıcı: Orphex'i (orphex.co) incele, eksiklerimizi Advetics'e uyarla,
 advetics.com'u reklam bilmeyen kişiye anlatan ürün sitesine çevir; karar
 yetkisi oturum yöneticisinde. Analiz ve karar kaydı:
@@ -43,7 +48,7 @@ verisi olan workspace başka şirkete TAŞINAMIYORDU (CLAUDE.md'ye ders).
 `boosts_evaluate` süpürmeleri her turda TEK workspace işliyordu, onaylı
 Akıllı Boost kartları diğer workspace'lerde kurulmuyordu.
 
-**Deploy (tek seferde, öbür geliştiriciye haber verip):** 12 migration
+**Deploy (YAPILDI, kayıt için):** 12 migration
 (`20261013100000_sinyal` … `20261014500000_haftalik_ozet`) + `db:rls`;
 `pnpm install` (yeni bağımlılık `qrcode-generator@1.4.4`); `.env`'e
 `SINYAL_SESSIZ_KOSUM=1` (14 gün yalnız yönetici görür, kanala gitmez) ve
@@ -61,7 +66,7 @@ Cloud'da açık olması ve kota biçimi; Gemini görü maliyeti
 `EXPLAIN` süreleri; mail HTML'inin Gmail/Outlook/iOS görünüşü.
 **Ajan 6 (tasarım denetimi) HİÇBİR pakette yapılmadı**: ekranlar tarayıcıda
 açılmadı (yerelde `.env`/API yok). Deploy sonrası masaüstü + mobil.
-**Sıradaki:** deploy kararı (kullanıcı) → canlı ölçümler → Ajan 6 →
+**Sıradaki:** canlı ölçümler → Ajan 6 (tasarım denetimi) →
 F2/F3 uygulaması.
 
 **KURULUM REHBERİ (2026-10-12, `docs/kurulum/MIMARI.md`, `BAGLANTI.md`).**
