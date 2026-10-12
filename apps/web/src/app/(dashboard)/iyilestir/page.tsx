@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { YORGUNLUK } from '@advetics/shared';
-import type { AsistanOturumu, EtkiListesi, OneriListesi, RuleRecord, SinyalListesi } from '@advetics/shared';
+import type { AsistanOturumu, EtkiListesi, KreatifZekaYaniti, OneriListesi, RuleRecord, SinyalListesi } from '@advetics/shared';
 import { hasPermission, requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
 import { sayfaWorkspaceId, workspaceSecimVerisi } from '@/lib/sayfa-workspace';
@@ -10,12 +10,14 @@ import { baglanti } from '@/lib/baglanti';
 import { SEKMELER, SEKME_ETIKETI, ozetSayilari, sekmeCoz } from '@/lib/iyilestir';
 import { sinyalListeYolu, type SinyalSonucu } from '@/lib/sinyal';
 import { etkiListeYolu, type EtkiSonucu } from '@/lib/etki';
+import { kreatifZekaYolu, rozetSayisi, type KreatifSonucu } from '@/lib/kreatif-zeka';
 import { WorkspaceGerekli } from '@/components/workspace-gerekli';
 import { Uyari } from '@/components/ui/uyari';
 import { OnerilerSekmesi, type OneriSonucu } from '@/components/iyilestir/oneriler-sekmesi';
 import { AsistanSekmesi, type OturumSonucu } from '@/components/iyilestir/asistan-sekmesi';
 import { SinyallerSekmesi } from '@/components/iyilestir/sinyaller-sekmesi';
 import { EtkiSekmesi } from '@/components/iyilestir/etki-sekmesi';
+import { KreatiflerSekmesi } from '@/components/iyilestir/kreatifler-sekmesi';
 import { KurallarIcerik, type KurallarSonucu } from '@/components/rules/kurallar-icerik';
 import s from '@/components/taslak/taslak.module.css';
 import i from '@/components/taslak/iyilestir.module.css';
@@ -104,7 +106,7 @@ export default async function IyilestirPage({
   };
 
   const oturumParam = first(params.oturum);
-  const [oneriSonucu, kuralSonucu, sinyalSonucu, oturumSonucu, etkiSonucu] = await Promise.all([
+  const [oneriSonucu, kuralSonucu, sinyalSonucu, oturumSonucu, etkiSonucu, kreatifSonucu] = await Promise.all([
     serverApiFetch<OneriListesi>(
       `/iyilestir/oneriler?${new URLSearchParams({ clientId })}`,
     ).then(
@@ -150,11 +152,21 @@ export default async function IyilestirPage({
           (e: unknown): EtkiSonucu => ({ durum: 'hata', mesaj: hataMetni(e) }),
         )
       : Promise.resolve<EtkiSonucu | null>(null),
+    /*
+     * KREATİFLER (Paket D) HER SEKMEDE: rozet "Dikkat" kovasındaki yeni
+     * kreatif sayısı ve Kreatifler sekmesinin ilk yanıtı AYNI çağrı (iki
+     * çağrı iki sayı söyleyebilirdi). Düşerse rozet çizilmiyor; "0" yalanı yok.
+     */
+    serverApiFetch<KreatifZekaYaniti>(kreatifZekaYolu({ clientId, kume: null, gorunum: 'yeni', kova: null, sayfa: 1 })).then(
+      (yanit): KreatifSonucu => ({ durum: 'tamam', yanit }),
+      (e: unknown): KreatifSonucu => ({ durum: 'hata', mesaj: hataMetni(e) }),
+    ),
   ]);
 
   const rozet: Record<(typeof SEKMELER)[number], number | null> = {
     oneriler: oneriSonucu.durum === 'tamam' ? ozetSayilari(oneriSonucu.liste).acik : null,
     sinyaller: sinyalSonucu.durum === 'tamam' ? sinyalSonucu.liste.sayilar.acik : null,
+    kreatifler: rozetSayisi(kreatifSonucu),
     // Rozet yok: etki bir "yapılacak iş" değil, sonuç listesi. Sayı koymak
     // kullanıcıyı açılacak bir şey varmış gibi çağırırdı.
     etki: null,
@@ -167,6 +179,8 @@ export default async function IyilestirPage({
       ? `${clientAdi} · Son 7 gün · ${formatDayLong(range.from)} - ${formatDayLong(range.to)}`
       : sekme === 'sinyaller'
         ? `${clientAdi} · her gece, dünün verisi beklenen aralıkla karşılaştırılıyor`
+        : sekme === 'kreatifler'
+          ? `${clientAdi} · son 90 gün · aynı amaçtaki kreatifler birbiriyle karşılaştırılıyor`
         : sekme === 'etki'
           ? `${clientAdi} · Advetics’ten yapılan durdurma ve bütçe değişiklikleri, değişmeyenlerle kıyaslanarak`
         : sekme === 'kurallar'
@@ -201,6 +215,13 @@ export default async function IyilestirPage({
       <section key={sekme} className={i.sekme}>
         {sekme === 'oneriler' && <OnerilerSekmesi sonuc={oneriSonucu} yazabilir={yazabilir} etki={etkiSonucu} />}
         {sekme === 'etki' && etkiSonucu && <EtkiSekmesi clientId={clientId} ilk={etkiSonucu} />}
+        {sekme === 'kreatifler' && (
+          <KreatiflerSekmesi
+            clientId={clientId}
+            ilk={kreatifSonucu}
+            yetki={{ yaz: hasPermission(session, 'rule.write'), aktar: hasPermission(session, 'bulk.write') }}
+          />
+        )}
         {sekme === 'sinyaller' && (
           <SinyallerSekmesi
             clientId={clientId}

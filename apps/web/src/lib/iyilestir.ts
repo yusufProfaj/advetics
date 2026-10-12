@@ -34,12 +34,21 @@ import { ASISTAN_ARACLARI, ONERI_TURU_ETIKETI, PLATFORM_KISA_ADLARI, formatMoney
  * `etki` (Paket C) Sinyaller'den SONRA: üçü aynı sıranın adımları
  * (öneri ne diyor, ters giden ne, uyguladığımız işe yaradı mı).
  */
-export const SEKMELER = ['oneriler', 'sinyaller', 'etki', 'asistan', 'kurallar'] as const;
+/**
+ * `kreatifler` (Paket D, MIMARI Ç-7) Öneriler ve Sinyaller'den SONRA, Etkisi'nin
+ * ardında: ilk üç sekme aynı sıranın adımları (öneri, ters giden, işe
+ * yaradı mı) ve araya girmek o sırayı bölerdi. Kreatifler İyileştir'de
+ * çünkü puan, kova ve brief bir EYLEM üretiyor (yeni görsel yaptır) ve
+ * yorgunluk önerisiyle aynı ekranda olması iki dilin çakışmasını tek yerde
+ * çözüyor.
+ */
+export const SEKMELER = ['oneriler', 'sinyaller', 'etki', 'kreatifler', 'asistan', 'kurallar'] as const;
 export type Sekme = (typeof SEKMELER)[number];
 
 export const SEKME_ETIKETI: Record<Sekme, string> = {
   oneriler: 'Öneriler',
   sinyaller: 'Sinyaller',
+  kreatifler: 'Kreatifler',
   etki: 'Etkisi',
   asistan: 'AI Asistan',
   kurallar: 'Kurallar',
