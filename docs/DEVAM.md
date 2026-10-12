@@ -16,6 +16,23 @@ RLS politikası var, platform sahibi yalnız hello@profaj.com.
 bu commit'le deploy ediliyor; migration `20261009100000_iyilestir` (üç
 yeni tablo) + `db:rls`.
 
+**ADVCAMPAIGN "WHATSAPP'TAN YAZSINLAR" TURU (2026-10-13).** Türkçe karşılama
+mesajı (`page_welcome_message`, `meta/karsilama.ts`; autofill YA DA hızlı
+sorular — belge ikisini birlikte göstermiyor; tek görsel `link_data`, video
+`video_data`; banner setinde belgede konum yok → gönderilmiyor, karar
+tablosunda "İlk mesaj" satırı). Geri okuma N-20: karşılama uyuşmazlığı
+UYARI, yayını durdurmaz (konum ölçülmedi). N-21 `advantage_state_info`
+AYRI isteğe bağlı okumada (ana okumaya girince Meta reddederse bütün
+yayın dogrulanamadi'da kalırdı — Ajan 4). Elle yerleşim WHATSAPP'ta da
+akış/hikâye/Reels. Google cümlesi: öğe izin listesinde. FORM yarım yayın:
+`meta_request_started_at` + `uncertain`; zaman aşımı/ağ hatası artık
+`uncertain` (Meta'da form açılmış olabilir), yalnız kesin ret `failed`.
+Migration `20261015300000_form_yayin_basladi`. DERLEYICI 1.8.0.
+**Ertelenen:** İşletme Mesajlaşması Dönüşüm API'si (`ctwa_clid`, WABA izni),
+`user_age_unknown`/WhatsApp Durum, numara `+` biçimi. **Canlıda ölç:**
+karşılama mesajı konumu/geri okuması, sınırlar (300/80/3 Messenger'dan),
+`advantage_state_info` değeri.
+
 **ADVCAMPAIGN "FORM DOLDURSUNLAR" TURU (2026-10-12/13).** Kullanıcı: formun
 önizlemesi ve rehberde "Form oluştur". Yapılanlar: rehberde form önizlemesi
 (`GET /reklam/rehber/form-ayrintisi`, tek bileşen `forms/form-onizleme.tsx`),
