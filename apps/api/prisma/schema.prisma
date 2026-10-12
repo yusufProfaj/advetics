@@ -2639,6 +2639,14 @@ model LeadForm {
   thankYouBody     String  @default("") @map("thank_you_body") @db.VarChar(300)
   thankYouCtaText  String  @default("") @map("thank_you_cta_text") @db.VarChar(40)
   thankYouCtaUrl   String? @map("thank_you_cta_url") @db.VarChar(2048)
+  /// VIEW_WEBSITE | CALL_BUSINESS | NONE. NULL = eski satır; okuma adresten
+  /// türetir (`tesekkurDugmesiTuru`).
+  thankYouCtaType  String? @map("thank_you_cta_type") @db.VarChar(16)
+  /// CALL_BUSINESS numarası, E.164.
+  thankYouPhone    String? @map("thank_you_phone") @db.VarChar(20)
+  /// Yayın sonrası geri okuma uyarısı; form Meta'da açık ama farklı ya da
+  /// doğrulanamadı. `error`dan AYRI: o "yayınlanamadı" demek.
+  readbackWarning  String? @map("readback_warning") @db.VarChar(2000)
 
   /// draft | published | superseded | failed
   status         String  @default("draft") @db.VarChar(16)

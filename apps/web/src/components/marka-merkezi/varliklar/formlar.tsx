@@ -2,6 +2,7 @@ import Link from 'next/link';
 import {
   FORM_TYPE_META,
   LEAD_FORM_STATUS_LABELS,
+  trTelefonOnerisi,
   type LeadFormRecord,
 } from '@advetics/shared';
 import { hasPermission, requireSession } from '@/lib/session';
@@ -40,11 +41,17 @@ export async function FormlarIcerik({
   const canWrite = hasPermission(session, 'bulk.write');
   const canPublish = hasPermission(session, 'bulk.publish');
 
-  const [connections, forms] = await Promise.all([
+  const [connections, forms, telefon] = await Promise.all([
     serverApiFetch<
       Array<{ socialProfiles: Array<{ id: string; name: string; profileType: string }> }>
     >(`/connections?clientId=${clientId}`).catch(() => []),
     serverApiFetch<LeadFormRecord[]>(`/lead-forms?clientId=${clientId}`).catch(() => []),
+    // Yalnız ÖNERİ: okunamazsa "Bizi ara" numarası boş gelir ve kullanıcı
+    // yazar; form ekranı bundan bağımsız çalışmalı. Boş liste değil, boş öneri.
+    serverApiFetch<{ contactPhone: string | null }>(`/clients/${clientId}`).then(
+      (c) => trTelefonOnerisi(c.contactPhone),
+      () => null,
+    ),
   ]);
 
   // FORM SAYFAYA AİT. Meta'da `leadgen_forms` sayfanın altında yaşıyor;
@@ -80,6 +87,7 @@ export async function FormlarIcerik({
           pages={pages}
           existing={editing}
           canPublish={canPublish}
+          telefonOnerisi={telefon}
         />
       ) : (
         <div className="rounded-xl bg-warn-soft px-4 py-3 text-sm text-warn-strong ring-1 ring-inset ring-warn/30">
@@ -115,6 +123,10 @@ export async function FormlarIcerik({
                     {LEAD_FORM_STATUS_LABELS[f.status]} · {f.prefillQuestions.length} soru ·{' '}
                     {formatRelative(f.createdAt)}
                     {f.error && <span className="text-danger-strong"> · {f.error}</span>}
+                    {/* GERİ OKUMA: form Meta'da açık ama gönderilenden farklı
+                        ya da doğrulanamadı. "Yayında" yazısının yanında
+                        KIRMIZI: KVKK kutusunun düşmüş olması sessiz kalmamalı. */}
+                    {f.readbackWarning && <span className="text-danger-strong"> · {f.readbackWarning}</span>}
                   </p>
                 </div>
                 {canWrite && (

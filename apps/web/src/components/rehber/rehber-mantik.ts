@@ -31,6 +31,7 @@ import {
   googleGorselOraniMi,
   googleGorselSorunu,
   REHBER_ACILIS,
+  REHBER_KAPALI_SEBEBI,
   REHBER_AMACLARI,
   REHBER_AMAC_KODLARI,
   GERI_ALINABILIR_DURUMLAR,
@@ -254,6 +255,10 @@ export function platformDurumu(amac: RehberAmacKodu, platform: RehberPlatformu, 
   const deneme = gorunur && REHBER_ACILIS[amac][platform] === 'deneme';
   if (gorunur) return { gorunur, sebep: null, deneme };
   if (platform === 'google' && tanim.google.kurgu === null) return { gorunur, sebep: tanim.google.sebep, deneme };
+  // Kapalılığın SEBEBİ biliniyorsa onu söyle (`REHBER_KAPALI_SEBEBI`);
+  // "henüz açık değil" kullanıcıya neyin eksik olduğunu söylemiyor.
+  const kapali = REHBER_ACILIS[amac][platform] === 'kapali' ? REHBER_KAPALI_SEBEBI[amac]?.[platform] : undefined;
+  if (kapali) return { gorunur, sebep: kapali, deneme };
   return { gorunur, sebep: `Bu amaçta ${platform === 'meta' ? 'Meta' : 'Google'} henüz açık değil`, deneme };
 }
 

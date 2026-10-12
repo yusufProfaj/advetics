@@ -47,7 +47,7 @@ describe('Nest kaydı', () => {
   it('KRİTİK: modül app.module içinde ve bağımlılıkları içe aktarıyor', () => {
     expect(APP).toMatch(/import \{ IyilestirModule \} from '\.\/modules\/iyilestir\/iyilestir\.module'/);
     expect(APP).toMatch(/\bIyilestirModule,/);
-    for (const m of ['CampaignActionsModule', 'BudgetsModule', 'MetricsModule']) {
+    for (const m of ['CampaignActionsModule', 'BudgetsModule', 'MetricsModule', 'GeriBeslemeModule']) {
       expect(MODUL, m).toMatch(new RegExp(`imports:\\s*\\[[^\\]]*\\b${m}\\b`));
     }
     expect(MODUL).toMatch(/providers:\s*\[IyilestirService, AsistanService\]/);
@@ -58,6 +58,8 @@ describe('Nest kaydı', () => {
       ['../campaign-actions/campaign-actions.module.ts', 'CampaignActionsService'],
       ['../budgets/budgets.module.ts', 'BudgetsService'],
       ['../metrics/metrics.module.ts', 'MetricsService'],
+      // Form optimizasyonu kartı geri beslemenin durumunu okuyor.
+      ['../geri-besleme/geri-besleme.module.ts', 'GeriBeslemeService'],
     ] as const) {
       expect(oku(d), d).toMatch(new RegExp(`exports:\\s*\\[[^\\]]*\\b${s}\\b`));
     }

@@ -244,8 +244,10 @@ export async function taslakDerle(
       )
     : [];
   const [musteri] = await tx((x) =>
-    x.$queryRaw<Array<{ ad: string; kategoriler: string[] }>>(Prisma.sql`
-      SELECT name AS ad, special_ad_categories AS kategoriler FROM clients WHERE id = ${t.client_id}::uuid`),
+    x.$queryRaw<Array<{ ad: string; kategoriler: string[]; sektor: string | null; urun_kategorileri: string[] | null }>>(Prisma.sql`
+      SELECT c.name AS ad, c.special_ad_categories AS kategoriler, p.sektor, p.urun_kategorileri
+        FROM clients c LEFT JOIN client_profiles p ON p.client_id = c.id
+       WHERE c.id = ${t.client_id}::uuid`),
   );
   const taban: OzelKategori[] = [];
   for (const k of musteri?.kategoriler ?? []) {
@@ -384,6 +386,9 @@ export async function taslakDerle(
     // SITE: hedefi seçen piksel hâli taslakta (rehberin okuması); yoksa
     // derleyici `bilinmiyor` sayar ve tıklamaya optimize eder.
     sitePikseli: alanlar.sitePikseli?.deger ?? null,
+    // FORM düğmesi Marka Merkezi sektöründen (`formCtaTuru`); profil yoksa
+    // LEARN_MORE. Profil LEFT JOIN: profilsiz workspace yayından düşmesin.
+    sektor: { sektor: musteri?.sektor ?? null, kategoriler: musteri?.urun_kategorileri ?? [] },
     // Ç-6 (utm-etiketi.ts): GA4 trafiği kampanya KİMLİĞİYLE eşlensin;
     // bağlantıda zaten utm_ varsa müşterinin etiketine dokunulmaz (null).
     urlEtiketleri: advUtmEtiketi(alanlar.niyet!.deger, alanlar.hedefAdres?.deger ?? null),

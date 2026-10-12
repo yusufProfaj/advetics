@@ -17,12 +17,12 @@
  */
 import { ACILMADI_ONEKI, adlabels, kampanyaAdi, kreatifAdi, reklamAdi, reklamSetiAdi } from './adlandirma';
 import { etkinKategoriler, hedeflemeUret, type HedeflemeGirdisi, type OzelKategori } from './hedefleme';
-import { NIYET_KATALOGU, metaOptimizasyonHedefi, type NiyetKodu, type SitePikselHali } from './niyetler';
+import { NIYET_KATALOGU, formCtaTuru, metaOptimizasyonHedefi, type NiyetKodu, type SitePikselHali } from './niyetler';
 import { microsToMinor } from '../para';
 import type { Butce } from '../butce';
 import { ATIF_STANDARTLARI } from '../taslak';
 import { TELEFON_E164 } from '../taslak-alanlari';
-import { ORAN_ETIKETI, YERLESIM_GRUPLARI, YERLESIM_SIRASI, bannerSetiDestekleniyor, reklamSetiPlani, setPlani, type GorselOrani, type SetPlani, type YerlesimGrubu } from '../banner-seti';
+import { ORAN_ETIKETI, YERLESIM_GRUPLARI, YERLESIM_SIRASI, bannerSetiDestekleniyor, grupMetaKonumlari, niyetYerlesimKisiti, reklamSetiPlani, setPlani, type GorselOrani, type SetPlani, type YerlesimGrubu } from '../banner-seti';
 
 /**
  * 1.1.0: banner seti (yerleşime göre görsel) ve eksik boyutta elle yerleşim.
@@ -35,10 +35,13 @@ import { ORAN_ETIKETI, YERLESIM_GRUPLARI, YERLESIM_SIRASI, bannerSetiDestekleniy
  * 1.4.0: ad biçimi "ADV · GG.AA.YYYY · amaç · KOD" (kullanıcı kararı, 2026-10-12).
  * 1.6.0: SITE'de hedef pikselin hâline göre (`metaOptimizasyonHedefi`):
  *        aktif piksel yoksa LINK_CLICKS. Eski provalar LPV gövdesini kanıtlıyordu.
+ * 1.7.0: FORM'da elle yerleşim yalnız akış, hikâye ve Reels
+ *        (`niyetYerlesimKisiti`); form düğmesi SIGN_UP değil LEARN_MORE,
+ *        inşaat/emlak/hizmet sektöründe GET_QUOTE (`formCtaTuru`).
  * Sürüm provanın tazeliğine bağlı: eski derleyiciyle geçmiş prova yeni
  * gövdeyi kanıtlamaz.
  */
-export const DERLEYICI_SURUMU = '1.6.0';
+export const DERLEYICI_SURUMU = '1.7.0';
 
 /**
  * CLICK-TO-WHATSAPP SABİTLERİ (CLAUDE.md "CLICK-TO-WHATSAPP"). Bağlantı
@@ -305,6 +308,11 @@ export interface DerlemeGirdisi {
    * niyetlerde okunmaz.
    */
   sitePikseli?: SitePikselHali | null;
+  /**
+   * FORM: workspace'in sektörü (`client_profiles.sektor`, serbest metin) ve
+   * ürün kategorileri. Düğmeyi seçer (`formCtaTuru`); verilmezse LEARN_MORE.
+   */
+  sektor?: { sektor: string | null; kategoriler: readonly string[] } | null;
   urlEtiketleri: string | null;
 }
 
@@ -408,14 +416,20 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
       if (!bannerSetiDestekleniyor(g.niyet)) retler.push({ kod: 'KRT-SET', mesaj: `Fikir ${i + 1}: banner seti şimdilik yalnız "Siteme gelsinler" amacında.` });
     }
   }
-  const yerlesim = yerlesimPlani(g.kavramlar);
+  const yerlesim = yerlesimPlani(g.kavramlar, g.niyet);
   if (!yerlesim && g.kavramlar.some((k) => k.setGorselleri)) {
     // Bir fikir videoysa yerleşim otomatik kalır ve set tek görsele inerdi:
     // kullanıcının yüklediği boyutlar sessizce kaybolurdu.
     retler.push({ kod: 'KRT-SET', mesaj: 'Banner seti ve video aynı reklamda birlikte kullanılamaz.' });
   }
   if (yerlesim && Object.keys(yerlesim.gruplar).length === 0) {
-    retler.push({ kod: 'KRT-ORAN', mesaj: 'Görsellerin hiçbiri bir yerleşime uymuyor; 4:5, 1:1, 9:16 ya da 1.91:1 boyut ekle.' });
+    // Niyet kısıtı yüzünden boş kaldıysa sebep o: "1.91:1 ekle" demek
+    // kullanıcıyı formun gösterilmeyeceği bir yer için görsele gönderirdi.
+    retler.push(
+      yerlesim.niyetKapanan.length
+        ? { kod: 'KRT-ORAN', mesaj: 'Form reklamı yalnız akış, hikâye ve Reels’te gösterilir; 4:5, 1:1 ya da 9:16 görsel ekle.' }
+        : { kod: 'KRT-ORAN', mesaj: 'Görsellerin hiçbiri bir yerleşime uymuyor; 4:5, 1:1, 9:16 ya da 1.91:1 boyut ekle.' },
+    );
   }
   const adresGecerli = !!g.hedefAdres && /^https:\/\/[^\s/]+\.[^\s]+/.test(g.hedefAdres);
   // SATIS da siteye gönderiyor: adressiz satış reklamı `link: null` kurardı.
@@ -500,7 +514,7 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
     // ELLE YERLEŞİM yalnız bir boyut eksikse: eksik boyutun yerleşimi kapanır
     // (kullanıcı kararı). Dört boyut tamsa ya da oran bilinmiyorsa alanlar
     // yazılmaz ve Advantage+ yerleşim kalır.
-    targeting: yerlesim && !yerlesim.otomatik ? { ...hedef.targeting, ...elleYerlesim(yerlesim, !!g.instagramPlatformId) } : hedef.targeting,
+    targeting: yerlesim && !yerlesim.otomatik ? { ...hedef.targeting, ...elleYerlesim(yerlesim, !!g.instagramPlatformId, g.niyet) } : hedef.targeting,
     attribution_spec: atifSpec(optimizasyon, g.atif!),
     start_time: g.takvim.baslangic,
     adlabels: etiketler,
@@ -517,7 +531,7 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
   g.kavramlar.forEach((k, i) => {
     const n = i + 1;
     // CTA HER kavramda aynı biçim: eski kodda 2.+ reklam CTA'sız kuruluyordu.
-    const cta = ctaDegeri(g, m.cta);
+    const cta = ctaDegeri(g, g.niyet === 'FORM' ? formCtaTuru(g.sektor) : m.cta);
     const oss: Record<string, unknown> = { page_id: g.sayfaPlatformId };
     let setKreatifi: Record<string, unknown> | null = null;
     if (k.videoId) {
@@ -536,7 +550,7 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
     } else if (k.setGorselleri && yerlesim) {
       // `link_data` YOK: görseller ve metin `asset_feed_spec`te; sayfa ve
       // Instagram kimliği `object_story_spec`te kalıyor (aşağıda).
-      setKreatifi = varlikAkisi(k, setPlani(k.setGorselleri.map((x) => x.oran)), yerlesim, cta, DEGERLI_CTA_NIYETLERI.includes(g.niyet), kreatifBaglantisi(g)!, !!g.instagramPlatformId);
+      setKreatifi = varlikAkisi(k, setPlani(k.setGorselleri.map((x) => x.oran)), yerlesim, cta, DEGERLI_CTA_NIYETLERI.includes(g.niyet), kreatifBaglantisi(g)!, !!g.instagramPlatformId, g.niyet);
     } else {
       const linkData: Record<string, unknown> = {
         image_hash: k.gorselHash,
@@ -599,6 +613,7 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
       ...(yerlesim?.kapanan.length
         ? [`Görseli olmadığı için kapalı yerleşimler: ${yerlesim.kapanan.map((x) => YERLESIM_GRUPLARI[x].etiket).join(', ')}.`]
         : []),
+      ...(yerlesim?.niyetKapanan.length ? [niyetYerlesimKisiti(g.niyet)!.aciklama] : []),
       'Başka markaların reklamlarıyla yan yana gösterim kapalı.',
       `Kapattığımız otomatik özellikler: ${Object.values(KAPATILAN_OZELLIK_ADLARI).join(', ')}.`,
     ],
@@ -613,7 +628,7 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
  * Bütün fikirlerin ortak yerleşim planı; bir fikrin oranı bilinmiyorsa
  * (video, ölçüsüz eski kayıt) `null` = eski davranış (Advantage+ yerleşim).
  */
-export function yerlesimPlani(kavramlar: readonly Kavram[]): SetPlani | null {
+export function yerlesimPlani(kavramlar: readonly Kavram[], niyet?: NiyetKodu | null): SetPlani | null {
   // Fikir yoksa plan da yok: KRT-SAYI zaten söylüyor, "hiçbir yerleşime
   // uymuyor" demek yanlış sebep olurdu.
   if (kavramlar.length === 0) return null;
@@ -625,7 +640,7 @@ export function yerlesimPlani(kavramlar: readonly Kavram[]): SetPlani | null {
     else return null;
   }
   // Banner seti varsa kesişim, yoksa birleşim (`reklamSetiPlani`).
-  return reklamSetiPlani(setler);
+  return reklamSetiPlani(setler, niyet);
 }
 
 /**
@@ -633,8 +648,10 @@ export function yerlesimPlani(kavramlar: readonly Kavram[]): SetPlani | null {
  * tablosu o hâlde "Instagram'da gösterilmez" diyor; elle yerleşime Instagram
  * yazmak sözü bozardı (Meta sayfayı Instagram kimliği yerine kullanabiliyor).
  */
-function grupKonumlari(g: YerlesimGrubu, instagram: boolean): Record<string, string[]> {
-  const m = YERLESIM_GRUPLARI[g].meta as Record<string, readonly string[]>;
+function grupKonumlari(g: YerlesimGrubu, instagram: boolean, niyet: NiyetKodu): Record<string, string[]> {
+  // Niyetin çıkardığı konumlar (FORM'da Keşfet) TEK YERDEN: reklam seti
+  // yerleşimi ile banner setinin yerleşim kuralları aynı listeyi görmeli.
+  const m = grupMetaKonumlari(g, niyet);
   const out: Record<string, string[]> = {};
   for (const [alan, degerler] of Object.entries(m)) {
     if (!instagram && alan === 'instagram_positions') continue;
@@ -644,11 +661,11 @@ function grupKonumlari(g: YerlesimGrubu, instagram: boolean): Record<string, str
 }
 
 /** Açık grupların Meta konumları birleşimi (elle yerleşim). */
-function elleYerlesim(p: SetPlani, instagram: boolean): Record<string, string[]> {
+function elleYerlesim(p: SetPlani, instagram: boolean, niyet: NiyetKodu): Record<string, string[]> {
   const birlesim: Record<string, Set<string>> = {};
   for (const g of YERLESIM_SIRASI) {
     if (!p.gruplar[g]) continue;
-    for (const [alan, degerler] of Object.entries(grupKonumlari(g, instagram))) {
+    for (const [alan, degerler] of Object.entries(grupKonumlari(g, instagram, niyet))) {
       for (const v of degerler) (birlesim[alan] ??= new Set()).add(v);
     }
   }
@@ -684,6 +701,7 @@ function varlikAkisi(
   ctaDegerli: boolean,
   link: string,
   instagram: boolean,
+  niyet: NiyetKodu,
 ): Record<string, unknown> {
   const hash = new Map(k.setGorselleri!.map((x) => [x.oran, x.gorselHash]));
   const metinler = (kural: Record<string, unknown>) => ({
@@ -698,7 +716,7 @@ function varlikAkisi(
     if (!ortak.gruplar[g]) continue;
     // Ortak planda açık grup, her sette dolu (ortakPlan); oran SETE göre.
     const oran = kendi.gruplar[g]!;
-    const yer = grupKonumlari(g, instagram);
+    const yer = grupKonumlari(g, instagram, niyet);
     // Instagram'sız "yan" dışı bir grup yalnız Facebook'a iner; Facebook da
     // yoksa kural boş kalır ve yazılmaz.
     if (!yer.publisher_platforms?.length) continue;

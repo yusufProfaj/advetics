@@ -12,7 +12,9 @@
  * "Görüntülü Reklam Ağı kapalı" deyip gövde `targetContentNetwork: true`
  * gönderirse ekran yalan söyler — bu depoda en pahalı hata türü.
  */
-import { YERLESIM_GRUPLARI, type SetPlani } from '../banner-seti';
+import { YERLESIM_GRUPLARI, niyetYerlesimKisiti, type SetPlani } from '../banner-seti';
+import { UZUN_FORM_SORU_SAYISI } from '../../schemas/form.schema';
+import type { SeciliFormHali } from './hazirlik';
 import { REHBER_AMACLARI, type RehberAmacKodu, type RehberPlatformu } from './amaclar';
 import type { GoogleTeklif } from './turet';
 import { metaOptimizasyonHedefi, type SitePikselHali } from '../meta/niyetler';
@@ -26,7 +28,7 @@ export interface KararHucresi {
 
 export interface KararSatiri {
   /** Testin derleyiciyle eşleştirdiği sabit kod. */
-  kod: 'TUR' | 'TEKLIF' | 'NEREDE' | 'KONUM' | 'OTOMATIK_METIN' | 'SAYFA' | 'OLCUM' | 'SIKLIK' | 'UZANTI' | 'OGE';
+  kod: 'TUR' | 'TEKLIF' | 'NEREDE' | 'KONUM' | 'OTOMATIK_METIN' | 'SAYFA' | 'OLCUM' | 'SIKLIK' | 'UZANTI' | 'OGE' | 'FORM';
   konu: string;
   meta: KararHucresi | null;
   google: KararHucresi | null;
@@ -59,6 +61,27 @@ export interface KararEki {
    * AYNI çıktı). Her öğe ayrı satır: "eklendi" ya da "eklenmedi: sebep".
    */
   ogeler?: readonly GoogleOgeDurumu[] | null;
+  /**
+   * FORM: seçili formun Meta'daki hâli (tür ve soru sayısı). `null` ya da
+   * alan yoksa hücre "okunamadı" der; türü tahmin etmez.
+   */
+  form?: SeciliFormHali | null;
+}
+
+/**
+ * Formun onay ekranındaki satırı. Uzun form uyarısı YAZMAYI engellemez:
+ * kullanıcının bilerek uzun form kurması meşru (örn. teklif için ölçü).
+ */
+export function formKararHucresi(f: SeciliFormHali | null | undefined): KararHucresi {
+  if (!f || !f.sayfadaYayinda) return { deger: 'Form seçilmedi ya da okunamadı' };
+  const ad = f.ad ? `"${f.ad}"` : 'Seçilen form';
+  const tur = f.tur === 'higher_intent' ? 'daha yüksek niyet' : f.tur === 'more_volume' ? 'daha fazla hacim' : 'türü okunamadı';
+  const soru = typeof f.soruSayisi === 'number' ? `${f.soruSayisi} soru` : 'soru sayısı okunamadı';
+  const uzun = typeof f.soruSayisi === 'number' && f.soruSayisi >= UZUN_FORM_SORU_SAYISI;
+  return {
+    deger: `${ad} · ${tur} · ${soru}`,
+    ...(uzun ? { not: 'Uzun form daha az doldurulur' } : f.tur === 'more_volume' ? { not: 'Daha çok kişi doldurur; bir kısmı aranınca ilgisiz çıkabilir' } : {}),
+  };
 }
 
 /** "Siteme gelsinler" Meta hedefinin ekrandaki cümlesi (tek yer). */
@@ -80,9 +103,11 @@ export function kararTablosu(
   const otomatik = !yerlesim || yerlesim.otomatik;
   const yerlesimMetni = otomatik ? 'otomatik yerleşim' : 'görsel boyutlarına göre seçilen yerleşimler';
   const kapaliNotu =
-    !otomatik && yerlesim!.kapanan.length
+    (!otomatik && yerlesim!.kapanan.length
       ? `Görseli olmadığı için kapalı: ${yerlesim!.kapanan.map((x) => YERLESIM_GRUPLARI[x].etiket).join(', ')} · `
-      : '';
+      : '') +
+    // Niyetin kapattıkları AYRI cümleyle (derleyicinin "kapattıklarımız"ıyla aynı metin).
+    (!otomatik && yerlesim!.niyetKapanan.length ? `${niyetYerlesimKisiti(REHBER_AMACLARI[amac].meta.niyet)?.aciklama ?? ''} · ` : '');
   const t = REHBER_AMACLARI[amac];
   const g = acik.google && t.google.kurgu !== null ? t.google : null;
   const ty = g?.kurgu === 'TALEP_YARATMA_VIDEO' || g?.kurgu === 'TALEP_YARATMA_GORSEL';
@@ -165,6 +190,8 @@ export function kararTablosu(
         : null,
     },
     { kod: 'SAYFA', konu: 'Sayfa', meta: m ? hucre('Seçtiğin Facebook sayfası, açıkça') : null, google: null },
+    // FORM: seçili formun türü ve soru sayısı Meta'dan okunan hâliyle.
+    ...(m && amac === 'FORM' ? [{ kod: 'FORM' as const, konu: 'Form', meta: formKararHucresi(ek.form), google: null }] : []),
     {
       kod: 'OLCUM',
       konu: 'Ölçüm',

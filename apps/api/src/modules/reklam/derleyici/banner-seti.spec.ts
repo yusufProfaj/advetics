@@ -107,13 +107,13 @@ describe('setlereAyir', () => {
 
 describe('setPlani / ortakPlan', () => {
   it('dört boyut → otomatik, hiçbir yer kapalı değil', () => {
-    expect(setPlani(['dikey', 'dik45', 'kare', 'yatay'])).toEqual({ otomatik: true, gruplar: { akis: 'dik45', yan: 'yatay', pazar: 'kare', hikaye: 'dikey' }, kapanan: [] });
+    expect(setPlani(['dikey', 'dik45', 'kare', 'yatay'])).toEqual({ otomatik: true, gruplar: { akis: 'dik45', yan: 'yatay', pazar: 'kare', hikaye: 'dikey' }, kapanan: [], niyetKapanan: [] });
   });
   it('9:16 yok → Hikâye ve Reels kapalı; kare akışa ve sağ sütuna YEDEK (kırpılmadan oturur)', () => {
-    expect(setPlani(['kare'])).toEqual({ otomatik: false, gruplar: { akis: 'kare', yan: 'kare', pazar: 'kare' }, kapanan: ['hikaye'] });
+    expect(setPlani(['kare'])).toEqual({ otomatik: false, gruplar: { akis: 'kare', yan: 'kare', pazar: 'kare' }, kapanan: ['hikaye'], niyetKapanan: [] });
   });
   it('kare yoksa 4:5 akışa, 1.91:1 sağ sütuna; Marketplace ve Hikâye yedeksiz kapanır', () => {
-    expect(setPlani(['dik45', 'yatay'])).toEqual({ otomatik: false, gruplar: { akis: 'dik45', yan: 'yatay' }, kapanan: ['pazar', 'hikaye'] });
+    expect(setPlani(['dik45', 'yatay'])).toEqual({ otomatik: false, gruplar: { akis: 'dik45', yan: 'yatay' }, kapanan: ['pazar', 'hikaye'], niyetKapanan: [] });
   });
   it('ORTAK: bir sette 9:16 yoksa reklam setinde Hikâye kapalı, otomatik değil', () => {
     const p = ortakPlan([['dikey', 'dik45', 'kare', 'yatay'], ['kare', 'dik45']]);

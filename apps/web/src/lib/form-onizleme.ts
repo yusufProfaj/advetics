@@ -1,5 +1,7 @@
 import {
   PREFILL_LABELS,
+  TESEKKUR_DUGME_ETIKETI,
+  tesekkurDugmesiTuru,
   type FormOnizlemesi,
   type LeadFormRecord,
   type RehberFormListesi,
@@ -90,7 +92,12 @@ export type FormTaslagi = Pick<
   | 'thankYouBody'
   | 'thankYouCtaText'
   | 'thankYouCtaUrl'
-> & { status?: LeadFormRecord['status'] | null };
+> & {
+  status?: LeadFormRecord['status'] | null;
+  /** Verilmezse eski kural (adres varsa site düğmesi): `tesekkurDugmesiTuru`. */
+  thankYouCtaType?: LeadFormRecord['thankYouCtaType'] | null;
+  thankYouPhone?: string | null;
+};
 
 const dolu = (v: string | null | undefined): string | null => (v && v.trim() ? v.trim() : null);
 
@@ -98,7 +105,8 @@ const dolu = (v: string | null | undefined): string | null => (v && v.trim() ? v
  * Advetics taslağı → ortak önizleme biçimi. META'YA GİDECEK HÂLİN AYNASI:
  * eşleme `MetaProvider.createLeadForm` ile aynı kuralları izliyor. Giriş
  * kartı yalnız başlık ya da açıklama varsa gönderiliyor (başlık yoksa form
- * adı, düğme "Devam"); teşekkür düğmesi yalnız adres varsa. Burada başka bir
+ * adı, düğme "Devam"); teşekkür düğmesi türüne göre (`tesekkurDugmesiTuru`):
+ * site düğmesi adresiyle, "Bizi ara" numarasıyla, "Düğme yok"ta hiç. Burada başka bir
  * kural yazmak, önizlemenin yayınlanacak formdan farklı bir şey göstermesi
  * demek.
  */
@@ -106,8 +114,14 @@ export function kayittanOnizleme(f: FormTaslagi): FormOnizlemesi {
   const baslik = dolu(f.headline);
   const aciklama = dolu(f.intro);
   const adres = dolu(f.privacyPolicyUrl);
-  const tyAdres = dolu(f.thankYouCtaUrl);
-  const tesekkur = { baslik: dolu(f.thankYouHeadline), metin: dolu(f.thankYouBody), dugme: tyAdres ? dolu(f.thankYouCtaText) : null, adres: tyAdres };
+  const tyTur = tesekkurDugmesiTuru({ thankYouCtaType: f.thankYouCtaType ?? null, thankYouCtaUrl: f.thankYouCtaUrl });
+  const tyAdres = tyTur === 'VIEW_WEBSITE' ? dolu(f.thankYouCtaUrl) : tyTur === 'CALL_BUSINESS' ? dolu(f.thankYouPhone) : null;
+  const tesekkur = {
+    baslik: dolu(f.thankYouHeadline),
+    metin: dolu(f.thankYouBody),
+    dugme: tyTur === 'NONE' ? null : (dolu(f.thankYouCtaText) ?? TESEKKUR_DUGME_ETIKETI[tyTur]),
+    adres: tyAdres,
+  };
   return {
     kaynak: 'advetics',
     ad: dolu(f.name) ?? 'Adsız form',

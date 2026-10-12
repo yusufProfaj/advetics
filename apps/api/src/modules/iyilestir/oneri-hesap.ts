@@ -14,6 +14,8 @@ import {
   type OneriSeviyesi,
   type OneriTuru,
   type Platform,
+  type GeriBeslemeAyarDurumu,
+  type MetaUygunlukEksigi,
 } from '@advetics/shared';
 
 /**
@@ -429,4 +431,81 @@ function tamGunler(satirlar: Array<{ gun: string; harcamaMikros: bigint }>, bas:
   const out: bigint[] = [];
   for (let d = bas; d <= son; d = gunEkle(d, 1)) out.push(h.get(d) ?? 0n);
   return out;
+}
+
+// ─── Form optimizasyonu (Meta Conversion Leads) ─────────────────────────────
+
+/**
+ * Lead geri beslemesinin hâli — `GeriBeslemeService.ayar`ın İLGİLİ İKİ
+ * ALANI. Koşul orada hesaplanıyor (`metaUygunlukEksikleri`); burada yeniden
+ * yazılmıyor: ikinci bir eşik doğduğu anda kart Meta'nın şartı sağlanmadan
+ * açılırdı.
+ */
+export interface GeriBeslemeHali {
+  durum: GeriBeslemeAyarDurumu;
+  uygunlukEksikleri: readonly MetaUygunlukEksigi[];
+}
+
+export interface DonusumGirdisi {
+  clientId: string;
+  clientAdi: string;
+  adGroupId: string;
+  adGroupAdi: string;
+  kampanyaAdi: string | null;
+  platform: Platform;
+  /** Reklam setinin Meta'daki optimizasyon hedefi (`ad_groups.optimization_goal`). */
+  optimizasyonHedefi: string | null;
+  paraBirimi: string;
+  /** Son 7 günün harcaması (reklam seti seviyesi; yoksa 0). */
+  harcamaMikros: bigint;
+}
+
+/**
+ * Kartın KAPISI: geri besleme ÇALIŞIYOR (olaylar Meta'ya ulaşıyor) ve
+ * Meta'nın Conversion Leads şartlarının HİÇBİRİ eksik değil. `bekliyor`
+ * (açık ama ilk gönderim yok) yetmiyor: Meta henüz tek sonuç görmedi.
+ */
+export function donusumOptimizasyonuKapisi(g: GeriBeslemeHali | null): boolean {
+  return !!g && g.durum === 'calisiyor' && g.uygunlukEksikleri.length === 0;
+}
+
+/**
+ * "Bu formun reklamını satışa dönüşenlere göre optimize et" — YALNIZ
+ * BİLGİ. Uygulama bu turda YOK (`eylem: null`): hedef değişikliği reklam
+ * setinin öğrenmesini SIFIRLIYOR ve geri alınınca bir kez daha sıfırlıyor;
+ * tek tıkla yapılacak bir iş değil (ileride ayrı karar). Yalnız form hedefli
+ * (`LEAD_GENERATION`) Meta reklam setleri; zaten dönüşüme göre optimize
+ * edilen setin hedefi farklı olduğu için girmez.
+ */
+export function donusumOptimizasyonuOnerisi(g: DonusumGirdisi, gb: GeriBeslemeHali | null, bugun: string): Oneri | null {
+  if (g.platform !== 'meta') return null;
+  if (g.optimizasyonHedefi !== 'LEAD_GENERATION') return null;
+  if (!donusumOptimizasyonuKapisi(gb)) return null;
+  const hedef = { platform: g.platform, seviye: 'ad_group' as const, id: g.adGroupId };
+  return {
+    anahtar: oneriAnahtari('donusum_optimizasyonu', 'ad_group', g.adGroupId, isoHafta(bugun)),
+    tur: 'donusum_optimizasyonu',
+    platform: g.platform,
+    clientId: g.clientId,
+    clientAdi: g.clientAdi,
+    varlik: { seviye: 'ad_group', id: g.adGroupId, ad: g.adGroupAdi, ustAd: g.kampanyaAdi },
+    // "Müşteri" kelimesi bu panelde workspace demek (terminoloji.spec): sonuç "satış".
+    baslik: 'Bu formun reklamını satışa dönüşenlere göre optimize et',
+    neden:
+      'Satış ekibinin işaretlediği sonuçlar Meta’ya ulaşıyor ve Meta’nın şartları sağlandı. Reklam seti “form” yerine ' +
+      '“satışa dönüşen form” hedefine geçerse Meta bütçeyi satın alma ihtimali yüksek kişilere yönlendirir. ' +
+      'Dikkat: hedef değişince reklam setinin öğrenmesi sıfırlanır, ilk günlerde sonuçlar dalgalanır.',
+    kanitlar: [
+      { etiket: 'Sonuç bildirimi', once: null, simdi: 'Çalışıyor', yon: 'iyi' },
+      { etiket: 'Son 7 gün harcama', once: null, simdi: formatMoney(g.harcamaMikros.toString(), g.paraBirimi), yon: 'notr' },
+    ],
+    seri: null,
+    harcamaMikros: g.harcamaMikros.toString(),
+    paraBirimi: g.paraBirimi,
+    eylem: null,
+    kisit: 'Panelden uygulanmıyor: hedefi Meta Reklam Yöneticisi’nde reklam setinin ayarlarından değiştir.',
+    durum: 'acik',
+    uygulama: null,
+    ozet: oneriOzeti(null, hedef),
+  };
 }

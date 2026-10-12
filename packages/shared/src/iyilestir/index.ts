@@ -16,13 +16,14 @@ import type { Platform } from '../constants/platforms';
  * etiket tablosu (`ONERI_TURU_ETIKETI`) `Record` olduğu için derleme seni
  * oraya götürür.
  */
-export const ONERI_TURLERI = ['kreatif_yorgunlugu', 'butce_artir', 'butce_azalt'] as const;
+export const ONERI_TURLERI = ['kreatif_yorgunlugu', 'butce_artir', 'butce_azalt', 'donusum_optimizasyonu'] as const;
 export type OneriTuru = (typeof ONERI_TURLERI)[number];
 
 export const ONERI_TURU_ETIKETI: Record<OneriTuru, string> = {
   kreatif_yorgunlugu: 'Kreatif yorgunluğu',
   butce_artir: 'Bütçe',
   butce_azalt: 'Bütçe',
+  donusum_optimizasyonu: 'Form optimizasyonu',
 };
 
 /** Önerinin dokunduğu varlık seviyesi; bütçe öneri bütçenin GERÇEKTEN durduğu seviyede. */

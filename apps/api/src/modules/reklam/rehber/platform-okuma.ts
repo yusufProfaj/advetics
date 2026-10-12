@@ -85,6 +85,26 @@ export interface MetaFormSatiri {
   id: string;
   ad: string;
   gizlilikAdresi: string | null;
+  /** `is_optimized_for_quality` okunduysa tür; okunmadıysa `null` (tahmin yok). */
+  tur?: 'more_volume' | 'higher_intent' | null;
+  /** `questions` okunduysa soru sayısı; okunmadıysa `null`. */
+  soruSayisi?: number | null;
+}
+
+/**
+ * Form listesinde istenen alanlar. Tür ve soru sayısı onay ekranında yazılır
+ * (karar tablosu "Form" satırı). Bu iki alanın liste ucunda dönüşü CANLIDA
+ * ÖLÇÜLMEDİ: Graph tek geçersiz alanda isteğin TAMAMINI düşürüyor ve o
+ * zaman form seçici boş kalırdı. Ret görülürse liste ESKİ alanlarla yeniden
+ * istenir (`alanReddiMi`); tür ve soru sayısı o zaman "okunamadı" olur.
+ */
+export const FORM_LISTE_ALANLARI = 'id,name,status,privacy_policy_url,is_optimized_for_quality,questions';
+export const FORM_LISTE_TEMEL_ALANLARI = 'id,name,status,privacy_policy_url';
+
+/** Graph'in "bu düğümde böyle alan yok" reddi (#100). */
+export function alanReddiMi(err: unknown): boolean {
+  const m = err instanceof Error ? err.message : String(err);
+  return /nonexisting field|unknown field/i.test(m);
 }
 
 /**
@@ -111,12 +131,19 @@ export function metaFormlariCoz(govde: unknown): { satirlar: MetaFormSatiri[]; s
   const g = govde as { data?: unknown[]; paging?: { cursors?: { after?: unknown }; next?: unknown } } | null;
   const satirlar: MetaFormSatiri[] = [];
   for (const ham of Array.isArray(g?.data) ? g!.data : []) {
-    const f = ham as { id?: unknown; name?: unknown; status?: unknown; privacy_policy_url?: unknown };
+    const f = ham as { id?: unknown; name?: unknown; status?: unknown; privacy_policy_url?: unknown; is_optimized_for_quality?: unknown; questions?: unknown };
     if (typeof f.id !== 'string' || !/^\d+$/.test(f.id)) continue;
     if (f.status !== 'ACTIVE') continue;
     const ad = typeof f.name === 'string' && f.name.trim() ? f.name.trim() : `Form ${f.id}`;
     const adres = typeof f.privacy_policy_url === 'string' && /^https?:\/\/\S+$/i.test(f.privacy_policy_url.trim()) ? f.privacy_policy_url.trim() : null;
-    satirlar.push({ id: f.id, ad, gizlilikAdresi: adres });
+    // Tür YALNIZ alan döndüyse: dönmeyen alan "daha fazla hacim" DEĞİL, bilinmiyor.
+    const tur = f.is_optimized_for_quality === true || f.is_optimized_for_quality === 'true'
+      ? 'higher_intent'
+      : f.is_optimized_for_quality === false || f.is_optimized_for_quality === 'false'
+        ? 'more_volume'
+        : null;
+    const sorular = Array.isArray(f.questions) ? f.questions : Array.isArray((f.questions as { data?: unknown } | undefined)?.data) ? (f.questions as { data: unknown[] }).data : null;
+    satirlar.push({ id: f.id, ad, gizlilikAdresi: adres, tur, soruSayisi: sorular ? sorular.length : null });
   }
   // `next` yoksa son sayfa; imleç `next` olmadan da gelebiliyor ve onu
   // izlemek boş bir sayfa için fazladan çağrı olurdu.
@@ -144,9 +171,19 @@ export async function metaSayfaFormlariOku(
   if (!/^\d+$/.test(sayfaPlatformId)) throw new Error('Sayfa kimliği geçersiz');
   const satirlar: MetaFormSatiri[] = [];
   let imlec: string | null = null;
+  let alanlar = FORM_LISTE_ALANLARI;
   for (let i = 0; i < FORM_SAYFA_SINIRI; i++) {
-    const yol = `${sayfaPlatformId}/leadgen_forms?fields=id,name,status,privacy_policy_url&limit=100${imlec ? `&after=${encodeURIComponent(imlec)}` : ''}`;
-    const s = metaFormlariCoz(await grafGet(apiSurumu, yol, sayfaTokeni, fetchFn));
+    const yol = (f: string) => `${sayfaPlatformId}/leadgen_forms?fields=${f}&limit=100${imlec ? `&after=${encodeURIComponent(imlec)}` : ''}`;
+    let govde: unknown;
+    try {
+      govde = await grafGet(apiSurumu, yol(alanlar), sayfaTokeni, fetchFn);
+    } catch (e) {
+      // Ek alanlar reddedildiyse liste yine gelsin; başka her hata yukarı.
+      if (alanlar === FORM_LISTE_TEMEL_ALANLARI || !alanReddiMi(e)) throw e;
+      alanlar = FORM_LISTE_TEMEL_ALANLARI;
+      govde = await grafGet(apiSurumu, yol(alanlar), sayfaTokeni, fetchFn);
+    }
+    const s = metaFormlariCoz(govde);
     satirlar.push(...s.satirlar);
     imlec = s.sonraki;
     if (!imlec) return { satirlar, kesildi: false };
@@ -276,7 +313,7 @@ export function seciliFormHali(deger: string | null, kimlik: string | null, list
   if (!deger || !liste) return null;
   const f = kimlik ? liste.find((x) => x.id === kimlik) : undefined;
   if (!f) return { ad: null, sayfadaYayinda: false, gizlilikAdresi: false };
-  return { ad: f.ad, sayfadaYayinda: true, gizlilikAdresi: f.gizlilikAdresi !== null };
+  return { ad: f.ad, sayfadaYayinda: true, gizlilikAdresi: f.gizlilikAdresi !== null, tur: f.tur ?? null, soruSayisi: f.soruSayisi ?? null };
 }
 
 /** Rehberin piksel okuması (`MetaProvider.fetchAdPixels` satırı, ISO tarihli). */

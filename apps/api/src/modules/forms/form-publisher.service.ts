@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { LeadFormRecord, TenantContext } from '@advetics/shared';
+import { FORM_GERI_OKUMA_ALANLARI, formGeriOkumaDenetimi, formGeriOkumaUyarisi } from '@advetics/shared';
 import { PlatformApiError } from '../connections/provider.types';
 import { ProviderRegistry } from '../connections/provider.registry';
 import { CryptoService } from '../../crypto/crypto.service';
@@ -8,6 +9,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { QuotaGuardService } from '../../queue/quota-guard.service';
 import { FormsService } from './forms.service';
 import { publishBlockers } from './form-versioning';
+import { kutuphaneFormuGovdesi } from './form-govdesi';
 
 /**
  * Formu Meta'da yayınlar.
@@ -45,6 +47,13 @@ export class FormPublisherService {
 
     const auth = await this.resolvePage(ctx, form);
 
+    // GÖVDE TEK ÜRETİCİDEN (`derleForm`): KVKK kutularının biçimi, dil ve
+    // niyet adımı orada. Ret Meta'ya HİÇ gitmeden: geri alınamayan bir
+    // adımın önünde, derleyicinin kendi cümleleriyle.
+    const derleme = kutuphaneFormuGovdesi(form, auth.pageExternalId);
+    if (derleme.tur === 'ret') throw new BadRequestException(derleme.retler.map((r) => r.mesaj).join(' '));
+    const alanlar = derleme.govde.alanlar;
+
     const provider = this.providers.get('meta');
     const can = provider.canWrite(auth.grantedScopes);
     if (!can.ok) {
@@ -81,32 +90,32 @@ export class FormPublisherService {
               snapshot,
             }),
         },
-        {
-          pageExternalId: auth.pageExternalId,
-          pageAccessToken: auth.pageAccessToken,
-          name: form.name,
-          formType: form.formType,
-          headline: form.headline ?? undefined,
-          intro: form.intro ?? undefined,
-          questions: [
-            ...form.prefillQuestions.map((t) => ({ type: t })),
-            ...form.customQuestions.map((q) => ({
-              type: 'CUSTOM' as const,
-              label: q.label,
-              options: q.type === 'multiple_choice' ? q.options : undefined,
-            })),
-          ],
-          privacyPolicyUrl: form.privacyPolicyUrl,
-          privacyPolicyLinkText: form.privacyPolicyLinkText,
-          consentBoxes: form.consentBoxes,
-          thankYouHeadline: form.thankYouHeadline,
-          thankYouBody: form.thankYouBody,
-          thankYouCtaText: form.thankYouCtaText,
-          thankYouCtaUrl: form.thankYouCtaUrl ?? undefined,
-        },
+        { pageExternalId: auth.pageExternalId, pageAccessToken: auth.pageAccessToken, alanlar },
       );
 
-      await this.forms.markPublished(ctx, formId, externalId);
+      // GERİ OKUMA — "200 döndü" doğrulama değil. Meta tanımadığı alanı kabul
+      // edip yok sayabiliyor; KVKK kutusundaki karşılığı izinsiz toplanan
+      // veri. Form zaten açıldı: okuma düşerse yayın GERİ ALINMIYOR (Meta'da
+      // form silinemiyor), uyarı kayda yazılıyor ve ekranda kırmızı görünüyor.
+      let okunan: Record<string, unknown> | null = null;
+      let okumaHatasi: string | null = null;
+      if (provider.readLeadForm) {
+        try {
+          okunan = await provider.readLeadForm(
+            { accessToken: auth.pageAccessToken, accountExternalId: auth.pageExternalId },
+            { pageAccessToken: auth.pageAccessToken, formId: externalId, fields: FORM_GERI_OKUMA_ALANLARI },
+          );
+        } catch (e) {
+          okumaHatasi = e instanceof Error ? e.message : String(e);
+          this.logger.warn(`Form geri okunamadı (${formId} → ${externalId}): ${okumaHatasi}`);
+        }
+      } else {
+        okumaHatasi = 'bu platformda form geri okunamıyor';
+      }
+      const uyari = formGeriOkumaUyarisi(formGeriOkumaDenetimi(alanlar, okunan, okumaHatasi));
+      if (uyari) this.logger.warn(`Form geri okuma (${formId}): ${uyari}`);
+
+      await this.forms.markPublished(ctx, formId, externalId, uyari);
     } catch (err) {
       const message =
         err instanceof PlatformApiError

@@ -629,6 +629,7 @@ function MedyaBlogu({
                     setler={g.setler.length ? g.setler : [{}]}
                     medyaBilgisi={medyaBilgisi}
                     googleArama={googleArama}
+                    niyet={niyet}
                     tasi={(id, hedef) => medyaYaz(setTasi(medya, oranlar, id, hedef))}
                     kaldir={(id) => medyaYaz(setleriSabitle(medya.filter((y) => y.varlikId !== id), oranlar))}
                     setiSil={(i) => medyaYaz(setSil(medya, oranlar, i))}

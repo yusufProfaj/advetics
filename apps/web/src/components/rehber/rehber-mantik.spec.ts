@@ -165,9 +165,9 @@ describe('görünürlük süzgeci: tek karar platformGorunurMu', () => {
     expect(gorunurAmaclar(false).length > 0).toBe(acikVarMi);
   });
 
-  it('karşılığı olmayan Google sebebini amaç tanımından yazıyor; açılışı kapalı olan "henüz açık değil"', () => {
+  it('karşılığı olmayan Google sebebini amaç tanımından yazıyor; kapalı satır kendi sebebini (REHBER_KAPALI_SEBEBI)', () => {
     expect(platformDurumu('WHATSAPP', 'google', true)).toEqual({ gorunur: false, sebep: "Google'da WhatsApp reklamı yok", deneme: false });
-    expect(platformDurumu('FORM', 'google', true)).toEqual({ gorunur: false, sebep: 'Bu amaçta Google henüz açık değil', deneme: false });
+    expect(platformDurumu('FORM', 'google', true).sebep).toBe("Google'da form henüz yok: gelen kişileri panele çekecek yol yazılınca açılacak");
     expect(platformDurumu('SITE', 'meta', true).deneme).toBe(REHBER_ACILIS.SITE.meta === 'deneme');
     expect(platformDurumu('SITE', 'meta', false).gorunur).toBe(platformGorunurMu('SITE', 'meta', false));
   });
@@ -993,5 +993,18 @@ describe('otomatik boyut üretimi (kullanıcı kararı, 2026-10-12)', () => {
     const p = uretimPlani({ medya: [{ varlikId: ID(1) }], oranlar, olculer, eklenen: new Set([ID(1)]), niyet: 'FORM', enCok: 3 });
     expect(p.isler[0]!.oranlar).toEqual(['dikey', 'dik45']);
     expect(p.sigmayan).toBe(1);
+  });
+});
+
+describe('kapalı platformun SEBEBİ', () => {
+  it('Google formu kapalı ve cümle neyin eksik olduğunu söylüyor', async () => {
+    const { platformDurumu } = await import('./rehber-mantik');
+    expect(platformDurumu('FORM', 'google', true)).toEqual({
+      gorunur: false,
+      sebep: "Google'da form henüz yok: gelen kişileri panele çekecek yol yazılınca açılacak",
+      deneme: false,
+    });
+    // Sebebi yazılmamış kapalı satır genel cümleye düşer.
+    expect(platformDurumu('WHATSAPP', 'google', true).sebep).not.toContain('form');
   });
 });

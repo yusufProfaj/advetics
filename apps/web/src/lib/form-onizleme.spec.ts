@@ -81,6 +81,15 @@ describe('onizlemeEkranlari', () => {
 });
 
 describe('kayittanOnizleme (Meta’ya gidecek hâlin aynası)', () => {
+  it('KRİTİK: "Bizi ara" düğmesi numarasıyla görünür; "Düğme yok"ta adres olsa bile düğme yok', () => {
+    const ara = kayittanOnizleme({ ...TASLAK, thankYouCtaType: 'CALL_BUSINESS', thankYouCtaText: '', thankYouPhone: '+902321234567' }).tesekkur;
+    expect(ara).toMatchObject({ dugme: 'Bizi ara', adres: '+902321234567' });
+    const yok = kayittanOnizleme({ ...TASLAK, thankYouCtaType: 'NONE', thankYouCtaUrl: 'https://o.com' }).tesekkur;
+    expect(yok).toMatchObject({ dugme: null, adres: null });
+    // Tür verilmeyen eski kayıt: adres varsa site düğmesi (eski kural).
+    expect(kayittanOnizleme({ ...TASLAK, thankYouCtaUrl: 'https://o.com' }).tesekkur).toMatchObject({ dugme: 'Siteyi ziyaret et', adres: 'https://o.com' });
+  });
+
   it('KRİTİK: başlık ve açıklama yoksa giriş ekranı YOK (createLeadForm context_card göndermiyor)', () => {
     expect(kayittanOnizleme(TASLAK).giris).toBeNull();
     expect(kayittanOnizleme({ ...TASLAK, intro: 'Açıklama' }).giris).toEqual({ baslik: 'Yaz formu', maddeler: ['Açıklama'], dugme: 'Devam' });

@@ -846,18 +846,20 @@ export interface CreateLeadFormRequest {
    * olduğunu söylemiyor.
    */
   pageAccessToken: string;
-  name: string;
-  formType: string;
-  headline?: string;
-  intro?: string;
-  questions: Array<{ type: string } | { type: 'CUSTOM'; label: string; options?: string[] }>;
-  privacyPolicyUrl: string;
-  privacyPolicyLinkText: string;
-  consentBoxes: Array<{ text: string; required: boolean }>;
-  thankYouHeadline: string;
-  thankYouBody: string;
-  thankYouCtaText: string;
-  thankYouCtaUrl?: string;
+  /**
+   * HAZIR GÖVDE — `derleForm` (shared) çıktısının alanları. Sağlayıcı gövde
+   * KURMAZ, yalnız gönderir: önceden burada ikinci bir form üreticisi vardı
+   * ve onay kutularını Graph'te olmayan bir sarmalayıcıyla gönderiyordu
+   * (`form-uretici-tek.spec.ts`).
+   */
+  alanlar: Record<string, unknown>;
+}
+
+/** Yayınlanmış formun Meta'daki hâli (geri okuma); alan listesi `FORM_GERI_OKUMA_ALANLARI`. */
+export interface ReadLeadFormRequest {
+  pageAccessToken: string;
+  formId: string;
+  fields: string;
 }
 
 export interface PublishDraftRequest {
@@ -1360,6 +1362,13 @@ export interface IAdPlatformProvider {
    * kullanıcıya söylemeden yayınlamamalı.
    */
   createLeadForm(ctx: FetchContext, request: CreateLeadFormRequest): Promise<string>;
+
+  /**
+   * Yayınlanmış formu GERİ OKUR ("200 döndü" doğrulama değil). İSTEĞE BAĞLI:
+   * yalnız Meta'da anlık form var; uygulamayan sağlayıcıda çağıran sonucu
+   * "doğrulanamadı" yazar, "temiz" saymaz.
+   */
+  readLeadForm?(ctx: FetchContext, request: ReadLeadFormRequest): Promise<Record<string, unknown>>;
 
   /**
    * Tek bir potansiyel müşteri kaydını çeker.

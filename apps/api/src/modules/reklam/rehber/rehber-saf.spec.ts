@@ -250,8 +250,8 @@ describe('Meta form listesi ve WhatsApp hattı — çözümleyiciler (Dalga 2)',
     });
     expect(r).toEqual({
       satirlar: [
-        { id: '1', ad: 'A', gizlilikAdresi: 'https://o.com/kvkk' },
-        { id: '2', ad: 'Form 2', gizlilikAdresi: null },
+        { id: '1', ad: 'A', gizlilikAdresi: 'https://o.com/kvkk', tur: null, soruSayisi: null },
+        { id: '2', ad: 'Form 2', gizlilikAdresi: null, tur: null, soruSayisi: null },
       ],
       sonraki: null,
     });
@@ -288,8 +288,8 @@ describe('Meta form listesi ve WhatsApp hattı — çözümleyiciler (Dalga 2)',
     const l = [{ id: '1', ad: 'A', gizlilikAdresi: 'https://o.com' }, { id: '2', ad: 'B', gizlilikAdresi: null }];
     expect(seciliFormHali('1', '1', null)).toBeNull();
     expect(seciliFormHali(null, null, l)).toBeNull();
-    expect(seciliFormHali('1', '1', l)).toEqual({ ad: 'A', sayfadaYayinda: true, gizlilikAdresi: true });
-    expect(seciliFormHali('2', '2', l)).toEqual({ ad: 'B', sayfadaYayinda: true, gizlilikAdresi: false });
+    expect(seciliFormHali('1', '1', l)).toEqual({ ad: 'A', sayfadaYayinda: true, gizlilikAdresi: true, tur: null, soruSayisi: null });
+    expect(seciliFormHali('2', '2', l)).toEqual({ ad: 'B', sayfadaYayinda: true, gizlilikAdresi: false, tur: null, soruSayisi: null });
     expect(seciliFormHali('9', '9', l)).toEqual({ ad: null, sayfadaYayinda: false, gizlilikAdresi: false });
     // Çevrilemeyen eski UUID (kimlik null): yayında sayılmaz.
     expect(seciliFormHali('77777777-0000-4000-8000-000000000001', null, l)).toMatchObject({ sayfadaYayinda: false });

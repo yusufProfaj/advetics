@@ -16,15 +16,19 @@ import type {
 import { PrismaService } from '../../prisma/prisma.service';
 import { BudgetsService } from '../budgets/budgets.service';
 import { CampaignActionsService, type UygulamaEylemi } from '../campaign-actions/campaign-actions.service';
+import { GeriBeslemeService } from '../geri-besleme/geri-besleme.service';
 import {
   adimSinirIcinde,
   butceOnerisi,
+  donusumOptimizasyonuKapisi,
+  donusumOptimizasyonuOnerisi,
   gunEkle,
   isoHafta,
   pencereler,
   yorgunlukOnerisi,
   type AylikButceKapisi,
   type ButceGirdisi,
+  type DonusumGirdisi,
   type YorgunlukGirdisi,
 } from './oneri-hesap';
 
@@ -51,7 +55,7 @@ export const HESAP_BASINA_ONERI = 10;
  */
 export const BAYAT_VERI_GUN = 2;
 
-const ANAHTAR_DESENI = /^(kreatif_yorgunlugu|butce_artir|butce_azalt):(campaign|ad_group|ad):[0-9a-f-]{36}:\d{4}-W\d{2}$/;
+const ANAHTAR_DESENI = /^(kreatif_yorgunlugu|butce_artir|butce_azalt|donusum_optimizasyonu):(campaign|ad_group|ad):[0-9a-f-]{36}:\d{4}-W\d{2}$/;
 
 interface HesaplananOneri {
   oneri: Oneri;
@@ -80,6 +84,7 @@ export class IyilestirService {
     private readonly prisma: PrismaService,
     private readonly budgets: BudgetsService,
     private readonly actions: CampaignActionsService,
+    private readonly geriBesleme: GeriBeslemeService,
   ) {}
 
   /** Bugün (UTC) — testte sabitlenebilsin diye ayrı. */
@@ -210,6 +215,21 @@ export class IyilestirService {
       hatalar.push(`Bütçe önerileri hesaplanamadı: ${mesaj(e)}`);
     }
 
+    // ── Form optimizasyonu (Conversion Leads) — yalnız bilgi kartı ──
+    // Geri besleme koşulu `GeriBeslemeService.ayar`dan (Meta'ya gitmiyor):
+    // eşikler orada TEK yerde. Kapı kapalıysa set sorgusu hiç koşmuyor.
+    try {
+      const gb = await this.geriBesleme.ayar(scoped, clientId);
+      if (donusumOptimizasyonuKapisi(gb)) {
+        for (const g of await this.donusumGirdileri(scoped, clientId, temel.clientAdi, hesapIdleri, paraBirimi, bugun)) {
+          const o = donusumOptimizasyonuOnerisi(g.girdi, gb, bugun);
+          if (o) sonuc.push({ oneri: o, adAccountId: g.adAccountId });
+        }
+      }
+    } catch (e) {
+      hatalar.push(`Form optimizasyonu önerisi hesaplanamadı: ${mesaj(e)}`);
+    }
+
     return { oneriler: sonuc, hatalar };
   }
 
@@ -338,6 +358,47 @@ export class IyilestirService {
   }
 
   // ── Kaynak sorguları ────────────────────────────────────────────────────
+
+  /** Yayındaki form hedefli Meta reklam setleri ve son 7 gün harcamaları. */
+  private async donusumGirdileri(
+    ctx: TenantContext,
+    clientId: string,
+    clientAdi: string,
+    hesapIdleri: string[],
+    paraBirimi: Map<string, string>,
+    bugun: string,
+  ): Promise<Array<{ girdi: DonusumGirdisi; adAccountId: string }>> {
+    const p = pencereler(bugun);
+    const satirlar = await this.prisma.withTenant(ctx, (tx) =>
+      tx.$queryRaw<Array<{ id: string; name: string; kampanya: string | null; ad_account_id: string; hedef: string | null; harcama: string }>>(Prisma.sql`
+        SELECT ag.id::text AS id, ag.name, c.name AS kampanya, ag.ad_account_id::text AS ad_account_id,
+               ag.optimization_goal AS hedef,
+               COALESCE((SELECT sum(i.spend_micros) FROM insights_daily i
+                  WHERE i.entity_id = ag.id AND i.entity_level = 'ad_group'::"EntityLevel" AND i.breakdown_key = ''
+                    AND i.client_id = ${clientId}::uuid
+                    AND i.date BETWEEN ${p.buBas}::date AND ${p.buSon}::date), 0)::text AS harcama
+          FROM ad_groups ag
+          LEFT JOIN campaigns c ON c.id = ag.campaign_id
+         WHERE ag.client_id = ${clientId}::uuid AND ag.platform = 'meta'::"Platform"
+           AND ag.status = 'active'::"EntityStatus" AND ag.deleted_at IS NULL
+           AND ag.optimization_goal = 'LEAD_GENERATION'
+           AND ag.ad_account_id = ANY(${hesapIdleri}::uuid[])`),
+    );
+    return satirlar.map((r) => ({
+      adAccountId: r.ad_account_id,
+      girdi: {
+        clientId,
+        clientAdi,
+        adGroupId: r.id,
+        adGroupAdi: r.name,
+        kampanyaAdi: r.kampanya,
+        platform: 'meta' as const,
+        optimizasyonHedefi: r.hedef,
+        paraBirimi: paraBirimi.get(r.ad_account_id) ?? '',
+        harcamaMikros: BigInt(r.harcama),
+      },
+    }));
+  }
 
   private async yorgunlukGirdileri(
     ctx: TenantContext,

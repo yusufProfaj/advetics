@@ -128,6 +128,15 @@ export interface SeciliFormHali {
   sayfadaYayinda: boolean;
   /** Formun Meta'da gizlilik politikası adresi var mı. */
   gizlilikAdresi: boolean;
+  /**
+   * Formun türü Meta'dan (`is_optimized_for_quality`): `higher_intent` =
+   * daha yüksek niyet, `more_volume` = daha fazla hacim. `null` = okunamadı
+   * (alan dönmedi): onay ekranı "bilinmiyor" der, tahmin etmez. İsteğe
+   * bağlı: eski önbellek satırı alanı taşımıyor.
+   */
+  tur?: 'more_volume' | 'higher_intent' | null;
+  /** Formdaki soru sayısı (`questions`); `null` = okunamadı. */
+  soruSayisi?: number | null;
 }
 
 /**

@@ -38,6 +38,7 @@ import {
   type DurumOkumaIstegi,
   type PlatformVarlikDurumu,
   type CreateLeadFormRequest,
+  type ReadLeadFormRequest,
   type DiscoveredLead,
   type DiscoveredLeadForm,
   type PublishDraftRequest,
@@ -2972,12 +2973,21 @@ export class MetaProvider implements IAdPlatformProvider {
        * kopyasını bırakmak ve gelen bilgilerin hangi forma ait olduğunu
        * karıştırmak demek olurdu.
        */
-      let leadFormId: string | undefined = req.leadFormExternalId;
+      const leadFormId: string | undefined = req.leadFormExternalId;
+      /*
+       * GÖMÜLÜ FORM ARTIK ÜRETİLMİYOR (2026-10-12). Bu yol formu kütüphaneden
+       * seçilmemiş form reklamında kendi formunu açıyordu: sabit üç soru,
+       * müşterinin sitesi yoksa ADVETICS'İN gizlilik sayfası (rıza metni
+       * yanlış veri sorumlusunu gösteriyordu, FRM-01) ve Türkçe olmayan,
+       * hedef dışına açık bir form. Meta'da form açan tek üretici `derleForm`
+       * (shared). Kampanya açılmadan ÖNCE duruyor: yarım ağaç bırakmasın.
+       */
       if (!leadFormId && req.spec.destinationType === 'ON_AD') {
-        leadFormId = await this.createEmbeddedLeadForm(ctx, req);
-        // Form SAYFAYA ait, reklam hesabına değil; geri alma listesine
-        // eklenmiyor çünkü silinmesi sayfa token'ı gerektiriyor ve boş bir
-        // form zararsız.
+        throw new PlatformApiError(
+          'meta',
+          'permanent',
+          'Form reklamı için önce bir form seç: Marka Merkezi › Varlıklar › Formlar’da oluşturup yayınla.',
+        );
       }
 
       const campaign = await this.graphPost<{ id: string }>(ctx, `${act}/campaigns`, {
@@ -3106,42 +3116,6 @@ export class MetaProvider implements IAdPlatformProvider {
     }
   }
 
-  /**
-   * Anlık form oluşturur.
-   *
-   * ALANLAR SABİT: ad, e-posta, telefon. Form alanlarını kullanıcıya
-   * seçtirmek ayrı bir ekran demek ve bu üründe hedef kitle formu
-   * tasarlamak istemiyor — iletişim bilgisi topluyor.
-   *
-   * Form SAYFAYA ait olduğu için sayfa üzerinden oluşturuluyor.
-   */
-  private async createEmbeddedLeadForm(
-    ctx: FetchContext,
-    req: PublishDraftRequest,
-  ): Promise<string> {
-    const form = await this.graphPost<{ id: string }>(
-      ctx,
-      `${req.pageExternalId}/leadgen_forms`,
-      {
-        name: `${req.name} — form`,
-        // Gizlilik politikası ZORUNLU ve Meta bunu doğruluyor. Müşterinin
-        // sitesi yoksa kendi gizlilik sayfamız kullanılıyor.
-        privacy_policy: JSON.stringify({
-          url: req.linkUrl ?? 'https://advetics.com/gizlilik',
-          link_text: 'Gizlilik Politikası',
-        }),
-        questions: JSON.stringify([
-          { type: 'FULL_NAME' },
-          { type: 'EMAIL' },
-          { type: 'PHONE' },
-        ]),
-        follow_up_action_url: req.linkUrl ?? 'https://advetics.com',
-      },
-    );
-    return form.id;
-  }
-
-
   // ---------------------------------------------------------------------------
   // FORMLAR KÜTÜPHANESİ
   // ---------------------------------------------------------------------------
@@ -3159,86 +3133,14 @@ export class MetaProvider implements IAdPlatformProvider {
    * form demek. Çağıran bunu kullanıcıya söylemeden yayınlamamalı.
    */
   async createLeadForm(ctx: FetchContext, req: CreateLeadFormRequest): Promise<string> {
-    const fields: Record<string, string> = {
-      name: req.name,
-      // Gizlilik politikası ZORUNLU — Meta formu onsuz kabul etmiyor.
-      privacy_policy: JSON.stringify({
-        url: req.privacyPolicyUrl,
-        link_text: req.privacyPolicyLinkText,
-      }),
-      questions: JSON.stringify(
-        req.questions.map((q) =>
-          q.type === 'CUSTOM'
-            ? {
-                type: 'CUSTOM',
-                label: (q as { label: string }).label,
-                ...((q as { options?: string[] }).options?.length
-                  ? {
-                      options: (q as { options: string[] }).options.map((o) => ({
-                        value: o,
-                        key: o,
-                      })),
-                    }
-                  : {}),
-              }
-            : { type: q.type },
-        ),
-      ),
-    };
-
-    /**
-     * `higher_intent` AYRI BİR ALAN DEĞİL.
-     *
-     * Meta'nın arayüzündeki "daha nitelikli" seçeneği API'de
-     * `is_optimized_for_quality` bayrağına karşılık geliyor; form tipi diye
-     * bir alan yok. Kendi enum'umuzu tutup burada çeviriyoruz.
-     */
-    if (req.formType === 'higher_intent') {
-      fields.is_optimized_for_quality = 'true';
+    // YALNIZ GÖNDERİM: gövde `derleForm`dan geliyor. Nesne alanlar JSON
+    // dizgesine çevriliyor (Graph form-urlencoded gövdede iç içe nesneyi
+    // böyle bekliyor); boolean'lar da dizge ("true"/"false"), AÇIKÇA.
+    const fields: Record<string, string> = {};
+    for (const [k, v] of Object.entries(req.alanlar)) {
+      if (v === undefined || v === null) continue;
+      fields[k] = typeof v === 'string' ? v : JSON.stringify(v);
     }
-
-    if (req.headline || req.intro) {
-      fields.context_card = JSON.stringify({
-        title: req.headline ?? req.name,
-        content: req.intro ? [req.intro] : [],
-        style: req.formType === 'rich_form' ? 'PARAGRAPH_STYLE' : 'LIST_STYLE',
-        button_text: 'Devam',
-      });
-    }
-
-    /**
-     * KVKK onay kutuları `custom_disclaimer` altında gidiyor.
-     *
-     * `checkbox: true` olan her satır kullanıcıya ayrı bir onay kutusu
-     * gösteriyor; `is_required` işaretlenmişse form o kutu olmadan
-     * gönderilemiyor. Türkiye'de açık rıza bunu gerektiriyor — gizlilik
-     * politikası linki tek başına yeterli sayılmıyor.
-     */
-    if (req.consentBoxes.length > 0) {
-      fields.legal_content = JSON.stringify({
-        custom_disclaimer: {
-          title: 'Onaylar',
-          body: {
-            text: '',
-            url_entities: [],
-          },
-          checkboxes: req.consentBoxes.map((c, i) => ({
-            key: `onay_${i + 1}`,
-            text: c.text,
-            is_required: c.required,
-          })),
-        },
-      });
-    }
-
-    fields.thank_you_page = JSON.stringify({
-      title: req.thankYouHeadline,
-      body: req.thankYouBody,
-      button_type: req.thankYouCtaUrl ? 'VIEW_WEBSITE' : 'NONE',
-      ...(req.thankYouCtaUrl
-        ? { website_url: req.thankYouCtaUrl, button_text: req.thankYouCtaText }
-        : {}),
-    });
 
     // Form SAYFA TOKEN'IYLA oluşturuluyor.
     //
@@ -3260,6 +3162,21 @@ export class MetaProvider implements IAdPlatformProvider {
     );
     if (res.rateLimit) await ctx.onRateLimit?.(res.rateLimit);
     return res.data.id;
+  }
+
+  /** Formun Meta'daki hâli; sayfa token'ıyla (oluşturmayla aynı sebep). */
+  async readLeadForm(ctx: FetchContext, req: ReadLeadFormRequest): Promise<Record<string, unknown>> {
+    if (!/^\d+$/.test(req.formId)) throw new Error('Form kimliği geçersiz');
+    const url = new URL(`${this.graph}/${req.formId}`);
+    url.searchParams.set('fields', req.fields);
+    const res = await platformFetch<Record<string, unknown>>(
+      'meta',
+      url.toString(),
+      { method: 'GET', headers: { Authorization: `Bearer ${req.pageAccessToken}` } },
+      parseMetaRateLimit,
+    );
+    if (res.rateLimit) await ctx.onRateLimit?.(res.rateLimit);
+    return res.data;
   }
 
   // ---------------------------------------------------------------------------

@@ -135,6 +135,18 @@ export const REHBER_ACILIS: Record<RehberAmacKodu, Record<RehberPlatformu, Acili
 };
 
 /**
+ * KAPALI bir amaç × platformun kullanıcıya söylenen SEBEBİ. Yazılmayan
+ * satırda ekran genel cümleye düşer ("henüz açık değil"); o cümle neyin
+ * eksik olduğunu söylemiyor ve kullanıcı sorunu kendi hesabında arıyor.
+ * Google formu: Lead Form öğesi kurulabilir ama gelen kişileri panele
+ * çeken yol (webhook ya da çekim) yazılmadı; form kurulsa kişiler
+ * Potansiyel Müşteriler'e düşmezdi.
+ */
+export const REHBER_KAPALI_SEBEBI: Partial<Record<RehberAmacKodu, Partial<Record<RehberPlatformu, string>>>> = {
+  FORM: { google: "Google'da form henüz yok: gelen kişileri panele çekecek yol yazılınca açılacak" },
+};
+
+/**
  * Bu kullanıcı bu amaç × platformu görebilir mi. Google karşılığı olmayan
  * amaçta tablo ne derse desin `false`: tablo yanlışlıkla açılsa bile
  * derleyicisi olmayan bir dala yol açılmasın.

@@ -79,6 +79,26 @@ export interface NiyetSatiri {
   canliOlculecek?: string[];
 }
 
+/**
+ * FORM REKLAMININ DÜĞMESİ — TEK KARAR (derleyici ve beklenen yankı bunu
+ * okur; yankı gövdeden türediği için ikisi ayrışamaz).
+ *
+ * Varsayılan LEARN_MORE ("Daha fazla bilgi"). İnşaat, emlak, konut, tadilat
+ * ve hizmet sektörlerinde GET_QUOTE ("Teklif al"): o işlerde form zaten bir
+ * teklif isteği ve düğmenin bunu söylemesi formu dolduranı doğru beklentiyle
+ * getiriyor. Sektör serbest metin (`client_profiles.sektor`) ve ürün
+ * kategorileri: eşleşme küçük harfe indirilmiş metinde KÖK aramasıyla;
+ * tanınmayan sektör varsayılana düşer (tahmin yok). Sektör boşsa da
+ * varsayılan.
+ */
+export const FORM_TEKLIF_SEKTOR_KOKLERI = ['inşaat', 'insaat', 'emlak', 'gayrimenkul', 'konut', 'yapı', 'yapi', 'müteahhit', 'tadilat', 'dekorasyon', 'mimar', 'hizmet'] as const;
+
+export function formCtaTuru(s: { sektor: string | null; kategoriler: readonly string[] } | null | undefined): 'LEARN_MORE' | 'GET_QUOTE' {
+  if (!s) return 'LEARN_MORE';
+  const metin = [s.sektor ?? '', ...s.kategoriler].join(' ').toLocaleLowerCase('tr-TR');
+  return FORM_TEKLIF_SEKTOR_KOKLERI.some((k) => metin.includes(k)) ? 'GET_QUOTE' : 'LEARN_MORE';
+}
+
 export const NIYET_KATALOGU: Record<NiyetKodu, NiyetSatiri> = {
   FORM: {
     kod: 'FORM',
@@ -93,7 +113,10 @@ export const NIYET_KATALOGU: Record<NiyetKodu, NiyetSatiri> = {
       optimizationGoal: 'LEAD_GENERATION',
       destinationType: 'ON_AD',
       promotedObject: 'page_id',
-      cta: 'SIGN_UP',
+      // Katalog değeri; gövdeye giden düğme `formCtaTuru` kararı (sektöre
+      // göre GET_QUOTE). SIGN_UP ("Kaydol") bir abonelik vaadi gibi
+      // okunuyordu; form "bilgi al / teklif al" işi.
+      cta: 'LEARN_MORE',
     },
   },
   WHATSAPP: {

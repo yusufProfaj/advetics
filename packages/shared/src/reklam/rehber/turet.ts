@@ -181,7 +181,9 @@ export function rehberYerlesimPlani(a: RehberAlanlari, oranlar: ReadonlyMap<stri
   if (!amac || medya.length === 0 || medya.some((x) => x.kapakVarlikId)) return null;
   const ayrim = setlereAyir(medya, oranlar, REHBER_AMACLARI[amac].meta.niyet);
   if (ayrim.taninmayan.length || ayrim.cakisan.length) return null;
-  return reklamSetiPlani(ayrim.setler.map((s) => s.map((x) => x.oran)));
+  // Niyet AYNI: derleyici FORM'da elle yerleşimi daraltıyor; tablo
+  // daraltmasız plan gösterirse "sağ sütun açık" der, gövde kapatır.
+  return reklamSetiPlani(ayrim.setler.map((s) => s.map((x) => x.oran)), REHBER_AMACLARI[amac].meta.niyet);
 }
 
 /**

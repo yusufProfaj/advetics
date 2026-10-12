@@ -11,7 +11,9 @@ import type {
   LeadFormStatus,
   PrefillQuestion,
   TenantContext,
+  TesekkurDugmeTuru,
 } from '@advetics/shared';
+import { tesekkurDugmesiTuru } from '@advetics/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { TxLike } from '../rules/rules.service';
 import { planEdit, publishBlockers, publishWarnings } from './form-versioning';
@@ -47,6 +49,9 @@ interface FormRow {
   thank_you_body: string;
   thank_you_cta_text: string;
   thank_you_cta_url: string | null;
+  thank_you_cta_type: TesekkurDugmeTuru | null;
+  thank_you_phone: string | null;
+  readback_warning: string | null;
   status: LeadFormStatus;
   external_form_id: string | null;
   version: number;
@@ -188,6 +193,8 @@ export class FormsService {
                     thank_you_body = ${input.thankYouBody},
                     thank_you_cta_text = ${input.thankYouCtaText},
                     thank_you_cta_url = ${input.thankYouCtaUrl || null},
+                    thank_you_cta_type = ${tesekkurDugmesiTuru(input)},
+                    thank_you_phone = ${input.thankYouPhone || null},
                   `
             }
             updated_at = now()
@@ -246,15 +253,24 @@ export class FormsService {
   // Yayın sonucunun kaydı
   // ---------------------------------------------------------------------------
 
+  /**
+   * `geriOkumaUyarisi`: yayından sonraki geri okumanın sonucu
+   * (`formGeriOkumaUyarisi`). `error` kolonuna YAZILMIYOR: form Meta'da
+   * açık ve kayıt `published`; "yayınlanamadı" hatasıyla aynı kolonda
+   * durması iki ayrı işi (yeniden dene / Meta'da formu düzelt) tek cümleye
+   * çevirirdi.
+   */
   async markPublished(
     ctx: TenantContext,
     id: string,
     externalFormId: string,
+    geriOkumaUyarisi: string | null = null,
   ): Promise<void> {
     await this.prisma.withTenant(ctx, async (tx) => {
       await tx.$executeRaw(Prisma.sql`
         UPDATE lead_forms
         SET status = 'published', external_form_id = ${externalFormId},
+            readback_warning = ${geriOkumaUyarisi === null ? null : geriOkumaUyarisi.slice(0, 2000)},
             published_at = now(), error = NULL, updated_at = now()
         WHERE id = ${id}::uuid AND org_id = ${ctx.orgId}::uuid
       `);
@@ -296,7 +312,7 @@ export class FormsService {
         id, org_id, client_id, social_profile_id, name, form_type, headline, intro,
         prefill_questions, custom_questions, privacy_policy_url, privacy_policy_link_text,
         consent_boxes, thank_you_headline, thank_you_body, thank_you_cta_text,
-        thank_you_cta_url, version, root_id, created_by, updated_at
+        thank_you_cta_url, thank_you_cta_type, thank_you_phone, version, root_id, created_by, updated_at
       ) VALUES (
         ${id}::uuid, ${ctx.orgId}::uuid, ${input.clientId}::uuid,
         ${input.socialProfileId}::uuid, ${input.name}, ${input.formType},
@@ -306,7 +322,8 @@ export class FormsService {
         ${input.privacyPolicyUrl}, ${input.privacyPolicyLinkText},
         ${JSON.stringify(input.consentBoxes)}::jsonb,
         ${input.thankYouHeadline}, ${input.thankYouBody}, ${input.thankYouCtaText},
-        ${input.thankYouCtaUrl || null}, ${opts.version},
+        ${input.thankYouCtaUrl || null}, ${tesekkurDugmesiTuru(input)}, ${input.thankYouPhone || null},
+        ${opts.version},
         ${opts.rootId ?? id}::uuid,
         ${ctx.userId}::uuid, now()
       )
@@ -365,6 +382,7 @@ export class FormsService {
         f.prefill_questions, f.custom_questions,
         f.privacy_policy_url, f.privacy_policy_link_text, f.consent_boxes,
         f.thank_you_headline, f.thank_you_body, f.thank_you_cta_text, f.thank_you_cta_url,
+        f.thank_you_cta_type, f.thank_you_phone, f.readback_warning,
         f.status, f.external_form_id, f.version, f.root_id, f.superseded_by_id,
         f.error, f.published_at, f.created_at
       FROM lead_forms f
@@ -394,6 +412,10 @@ function toRecord(row: FormRow): LeadFormRecord {
     thankYouBody: row.thank_you_body,
     thankYouCtaText: row.thank_you_cta_text,
     thankYouCtaUrl: row.thank_you_cta_url,
+    // Eski satırda kolon boş: tür eski kuraldan (adres varsa site) türetilir.
+    thankYouCtaType: tesekkurDugmesiTuru({ thankYouCtaType: row.thank_you_cta_type, thankYouCtaUrl: row.thank_you_cta_url }),
+    thankYouPhone: row.thank_you_phone,
+    readbackWarning: row.readback_warning,
     status: row.status,
     externalFormId: row.external_form_id,
     version: row.version,
@@ -423,5 +445,7 @@ export function toInput(record: LeadFormRecord): LeadFormInput {
     thankYouBody: record.thankYouBody,
     thankYouCtaText: record.thankYouCtaText,
     thankYouCtaUrl: record.thankYouCtaUrl ?? undefined,
+    thankYouCtaType: record.thankYouCtaType,
+    thankYouPhone: record.thankYouPhone ?? undefined,
   };
 }

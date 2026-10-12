@@ -55,6 +55,21 @@ const alan = <T extends z.ZodTypeAny>(deger: T) =>
  */
 export const TELEFON_E164 = /^\+90\d{10}$/;
 
+/**
+ * Marka Merkezi telefonundan (`clients.contact_phone`, serbest metin: "0532
+ * 123 45 67", "+90 232 ...") E.164 ÖNERİSİ. Çözülemeyen biçim ÖNERİLMEZ:
+ * yanlış bir numarayı önden doldurmak, aramaların başka birine gitmesi.
+ * TEK YER: WhatsApp hattı ve form teşekkür ekranının "Ara" düğmesi bunu
+ * okuyor; iki ayrı ayrıştırıcı aynı numarayı iki ayrı biçime çevirirdi.
+ */
+export function trTelefonOnerisi(ham: string | null | undefined): string | null {
+  if (!ham) return null;
+  const rakam = ham.replace(/\D/g, '');
+  if (/^90\d{10}$/.test(rakam)) return `+${rakam}`;
+  if (/^0?\d{10}$/.test(rakam)) return `+90${rakam.slice(-10)}`;
+  return null;
+}
+
 const tarih = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Tarih YYYY-MM-DD olmalı');
 
 export const hedefKonumSchema = z.object({

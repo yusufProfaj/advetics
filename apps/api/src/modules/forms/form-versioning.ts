@@ -1,4 +1,5 @@
 import type { EditPlan, LeadFormInput, LeadFormRecord, LeadFormStatus } from '@advetics/shared';
+import { tesekkurDugmesiTuru } from '@advetics/shared';
 
 /**
  * Form sürümleme — SAF fonksiyonlar.
@@ -31,6 +32,11 @@ export function contentFields(input: LeadFormInput): Record<string, unknown> {
     if (LOCAL_ONLY_FIELDS.has(key as keyof LeadFormInput)) continue;
     out[key] = value;
   }
+  // DÜĞME TÜRÜ KARŞILAŞTIRMADAN ÖNCE TÜRETİLİR: kayıt türü her zaman açık
+  // taşıyor, alanı tanımayan eski bir istemci taşımıyor. Türetmeden
+  // karşılaştırmak, hiçbir şey değişmemişken yayınlanmış formda YENİ SÜRÜM
+  // (Meta'da ikinci form) açardı.
+  out.thankYouCtaType = tesekkurDugmesiTuru(input);
   return out;
 }
 

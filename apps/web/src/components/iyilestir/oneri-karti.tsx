@@ -1,6 +1,8 @@
 'use client';
 
 import Link from 'next/link';
+import { baglanti } from '@/lib/baglanti';
+import { REKLAM_YONETICISI } from '@/lib/reklam-yoneticisi';
 import type { Oneri } from '@advetics/shared';
 import { ONERI_TURU_ETIKETI, PLATFORM_KISA_ADLARI } from '@advetics/shared';
 import { formatRelative } from '@/lib/format';
@@ -47,7 +49,8 @@ export function OneriKarti({
 }) {
   const hal = kartHali(oneri, yazabilir);
   const metin = eylemMetni(oneri);
-  const butce = oneri.tur !== 'kreatif_yorgunlugu';
+  // Rozet rengi yalnız bütçe kartlarında; form optimizasyonu bütçe değil.
+  const butce = oneri.tur === 'butce_artir' || oneri.tur === 'butce_azalt';
   const yol = oneri.varlik.ustAd ? `${oneri.varlik.ustAd} › ${oneri.varlik.ad}` : oneri.varlik.ad;
 
   return (
@@ -105,6 +108,13 @@ export function OneriKarti({
             {oneri.tur === 'kreatif_yorgunlugu' && (
               <Link className={i.ikincil} href={`/reklam?musteri=${encodeURIComponent(oneri.clientId)}`}>
                 Yeni kreatif için AdvCampaign’e geç
+              </Link>
+            )}
+            {oneri.tur === 'donusum_optimizasyonu' && (
+              // YAZMA YOK (bu tur): kart yalnız bilgi; reklam setini görmek
+              // için Reklam Yöneticisi'ne bağlanıyor.
+              <Link className={i.ikincil} href={baglanti(REKLAM_YONETICISI, {}, { seviye: 'ad_group' })}>
+                Reklam Yöneticisi’nde gör
               </Link>
             )}
             {yazabilir && (

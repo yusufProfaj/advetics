@@ -115,6 +115,53 @@ export const YERLESIM_GRUPLARI = {
 export type YerlesimGrubu = keyof typeof YERLESIM_GRUPLARI;
 export const YERLESIM_SIRASI: readonly YerlesimGrubu[] = ['akis', 'yan', 'pazar', 'hikaye'];
 
+/**
+ * NİYETE GÖRE YERLEŞİM KISITI — TEK YER (derleyici, rehberin eksik listesi,
+ * karar tablosu ve set kartları bunu okur).
+ *
+ * FORM: elle yerleşimde (eksik boyut) YALNIZ anlık formun kesin çalıştığı
+ * yerler: Facebook/Instagram akışı, hikâye ve Reels. Sağ sütun, Facebook
+ * araması, Marketplace ve Instagram Keşfet DIŞARIDA (Audience Network elle
+ * yerleşimde zaten yok). Gerekçe: anlık formun bu yerleşimlerde açılıp
+ * açılmadığı ÖLÇÜLMEDİ (canlı ölçüm listesi: "diğer yerleşimlerde anlık form
+ * kabulü"); Meta kabul edip formu açamazsa harcama olur, form gelmez, hata
+ * yok. Dört boyut tamsa (Advantage+ yerleşim) kısıt UYGULANMIYOR: yerleşimi
+ * Meta seçiyor ve form amacında kendi uygun yerlerini biliyor; elle
+ * yerleşimde ise seçimi biz yapıyoruz.
+ */
+export interface NiyetYerlesimKisiti {
+  /** Açık kalabilecek gruplar. */
+  gruplar: readonly YerlesimGrubu[];
+  /** Açık grupların içinden çıkarılan Meta konumları (`instagram_positions`: Keşfet). */
+  cikarilanKonumlar: Readonly<Record<string, readonly string[]>>;
+  /** Ekranda ve derleyicinin "kapattıklarımız" satırında. */
+  aciklama: string;
+}
+
+const FORM_YERLESIM_KISITI: NiyetYerlesimKisiti = {
+  gruplar: ['akis', 'hikaye'],
+  cikarilanKonumlar: { instagram_positions: ['explore'] },
+  aciklama: 'Form reklamı yalnız akış, hikâye ve Reels’te gösterilir; sağ sütun, arama, Marketplace ve Keşfet kapalı.',
+};
+
+export function niyetYerlesimKisiti(niyet: NiyetKodu | null | undefined): NiyetYerlesimKisiti | null {
+  return niyet === 'FORM' ? FORM_YERLESIM_KISITI : null;
+}
+
+/**
+ * Grubun Meta konumları, niyet kısıtıyla. Instagram süzgeci derleyicide
+ * (hesap yoksa); burada yalnız niyetin çıkardıkları.
+ */
+export function grupMetaKonumlari(g: YerlesimGrubu, niyet?: NiyetKodu | null): Record<string, string[]> {
+  const kisit = niyetYerlesimKisiti(niyet);
+  const out: Record<string, string[]> = {};
+  for (const [alan, degerler] of Object.entries(YERLESIM_GRUPLARI[g].meta as Record<string, readonly string[]>)) {
+    const cikan = kisit?.cikarilanKonumlar[alan] ?? [];
+    out[alan] = degerler.filter((x) => !cikan.includes(x));
+  }
+  return out;
+}
+
 export interface SetPlani {
   /**
    * Dört boyut da var: yerleşim alanı GÖNDERİLMEZ (Advantage+ yerleşim,
@@ -125,10 +172,26 @@ export interface SetPlani {
   gruplar: Partial<Record<YerlesimGrubu, GorselOrani>>;
   /** Hiçbir oranı olmadığı için kapanan gruplar (ekranda söylenir). */
   kapanan: YerlesimGrubu[];
+  /**
+   * NİYET yüzünden kapanan gruplar (`niyetYerlesimKisiti`). `kapanan`dan
+   * AYRI: "1.91:1 görsel yok" demek, kullanıcıyı formun zaten
+   * gösterilmeyeceği bir yerleşim için görsel yüklemeye gönderirdi.
+   */
+  niyetKapanan: YerlesimGrubu[];
+}
+
+/** Elle yerleşimde niyetin kapattığı grupları ayırır; otomatik planda dokunmaz. */
+function niyetKisitiUygula(p: Omit<SetPlani, 'niyetKapanan'>, niyet?: NiyetKodu | null): SetPlani {
+  const kisit = niyetYerlesimKisiti(niyet);
+  if (!kisit || p.otomatik) return { ...p, niyetKapanan: [] };
+  const niyetKapanan = YERLESIM_SIRASI.filter((g) => !kisit.gruplar.includes(g));
+  const gruplar: Partial<Record<YerlesimGrubu, GorselOrani>> = {};
+  for (const g of YERLESIM_SIRASI) if (p.gruplar[g] && kisit.gruplar.includes(g)) gruplar[g] = p.gruplar[g];
+  return { otomatik: false, gruplar, kapanan: p.kapanan.filter((g) => kisit.gruplar.includes(g)), niyetKapanan };
 }
 
 /** Tek setin planı. Oran listesi tekrarsız sayılır. */
-export function setPlani(oranlar: readonly GorselOrani[]): SetPlani {
+export function setPlani(oranlar: readonly GorselOrani[], niyet?: NiyetKodu | null): SetPlani {
   const var_ = new Set(oranlar);
   const otomatik = GORSEL_ORANLARI.every((o) => var_.has(o));
   const gruplar: Partial<Record<YerlesimGrubu, GorselOrani>> = {};
@@ -138,7 +201,7 @@ export function setPlani(oranlar: readonly GorselOrani[]): SetPlani {
     if (o) gruplar[g] = o;
     else kapanan.push(g);
   }
-  return { otomatik, gruplar, kapanan };
+  return niyetKisitiUygula({ otomatik, gruplar, kapanan }, niyet);
 }
 
 /**
@@ -147,16 +210,18 @@ export function setPlani(oranlar: readonly GorselOrani[]): SetPlani {
  * Aksi, o seti o yerleşimde kırpılmış ya da hiç görselsiz bırakırdı.
  * Otomatik yerleşim de ancak her set dört boyutu taşıyorsa.
  */
-export function ortakPlan(setler: ReadonlyArray<readonly GorselOrani[]>): SetPlani {
-  if (setler.length === 0) return { otomatik: false, gruplar: {}, kapanan: [...YERLESIM_SIRASI] };
-  const planlar = setler.map(setPlani);
+export function ortakPlan(setler: ReadonlyArray<readonly GorselOrani[]>, niyet?: NiyetKodu | null): SetPlani {
+  if (setler.length === 0) return niyetKisitiUygula({ otomatik: false, gruplar: {}, kapanan: [...YERLESIM_SIRASI] }, niyet);
+  // Set planları KISITSIZ: bir set otomatikken öteki değilse ortak plan
+  // elle yerleşime düşer ve kısıt ancak ORTAK planda doğru uygulanır.
+  const planlar = setler.map((s) => setPlani(s));
   const otomatik = planlar.every((p) => p.otomatik);
   const kapanan = YERLESIM_SIRASI.filter((g) => planlar.some((p) => p.kapanan.includes(g)));
   // Ortak planın `gruplar`ı yalnız açıklık bilgisi: hangi oranın kullanılacağı
   // SETE göre değişir (birinde 4:5, ötekinde kare) ve set planından okunur.
   const gruplar: Partial<Record<YerlesimGrubu, GorselOrani>> = {};
   for (const g of YERLESIM_SIRASI) if (!kapanan.includes(g)) gruplar[g] = planlar[0]!.gruplar[g]!;
-  return { otomatik, gruplar, kapanan };
+  return niyetKisitiUygula({ otomatik, gruplar, kapanan }, niyet);
 }
 
 /**
@@ -170,13 +235,17 @@ export function ortakPlan(setler: ReadonlyArray<readonly GorselOrani[]>): SetPla
  * gidebilir (Meta kırpar); bunun bedeli, bütün bir yerleşimi kapatmaktan
  * küçük. Dört oranın hepsi varsa Advantage+ yerleşim.
  */
-export function birlesikPlan(setler: ReadonlyArray<readonly GorselOrani[]>): SetPlani {
-  return setPlani(setler.flat());
+export function birlesikPlan(setler: ReadonlyArray<readonly GorselOrani[]>, niyet?: NiyetKodu | null): SetPlani {
+  return setPlani(setler.flat(), niyet);
 }
 
-/** Reklam seti planı: banner seti (iki+ boyutlu set) varsa kesişim, yoksa birleşim. */
-export function reklamSetiPlani(setler: ReadonlyArray<readonly GorselOrani[]>): SetPlani {
-  return setler.some((s) => s.length > 1) ? ortakPlan(setler) : birlesikPlan(setler);
+/**
+ * Reklam seti planı: banner seti (iki+ boyutlu set) varsa kesişim, yoksa
+ * birleşim. `niyet` verilirse elle yerleşimde niyet kısıtı uygulanır
+ * (`niyetYerlesimKisiti`); derleyici, rehber ve ekran AYNI niyeti geçirmeli.
+ */
+export function reklamSetiPlani(setler: ReadonlyArray<readonly GorselOrani[]>, niyet?: NiyetKodu | null): SetPlani {
+  return setler.some((s) => s.length > 1) ? ortakPlan(setler, niyet) : birlesikPlan(setler, niyet);
 }
 
 /**

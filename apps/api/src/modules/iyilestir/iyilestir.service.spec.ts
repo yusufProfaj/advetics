@@ -6,7 +6,8 @@ import type { PrismaService } from '../../prisma/prisma.service';
 import type { BudgetsService } from '../budgets/budgets.service';
 import type { CampaignActionsService, SeviyeliUygulamaSonucu } from '../campaign-actions/campaign-actions.service';
 import { IyilestirService } from './iyilestir.service';
-import { gunEkle, oneriOzeti, pencereler } from './oneri-hesap';
+import type { GeriBeslemeService } from '../geri-besleme/geri-besleme.service';
+import { gunEkle, oneriOzeti, pencereler, type GeriBeslemeHali } from './oneri-hesap';
 
 /**
  * İYİLEŞTİR SERVİSİ — gerçek Postgres (PGlite), sahte platform.
@@ -70,8 +71,11 @@ function kur() {
   const prisma = { withTenant: vi.fn(async (_c: TenantContext, fn: (tx: unknown) => Promise<unknown>) => fn(h.db)) } as unknown as PrismaService;
   const pacing = vi.fn(async () => BOS_PACING());
   const uygula = vi.fn(async () => sonuc());
-  const svc = new SabitGunluServis(prisma, { pacing } as unknown as BudgetsService, { uygula } as unknown as CampaignActionsService);
-  return { svc, pacing, uygula };
+  // Geri besleme varsayılanı KAPALI: form optimizasyonu kartı bu dosyanın
+  // diğer testlerine karışmasın; kendi testi `geriBesleme` hâlini değiştiriyor.
+  const ayar = vi.fn(async (): Promise<GeriBeslemeHali> => ({ durum: 'kapali', uygunlukEksikleri: [] }));
+  const svc = new SabitGunluServis(prisma, { pacing } as unknown as BudgetsService, { uygula } as unknown as CampaignActionsService, { ayar } as unknown as GeriBeslemeService);
+  return { svc, pacing, uygula, ayar };
 }
 
 async function gunluk(level: string, id: string, ext: string, gun: string, v: { g: number; t: number; e: number; s: bigint; d?: number }) {
@@ -140,6 +144,36 @@ describe('liste', () => {
     pacing.mockRejectedValue(new Error('bağlantı yok'));
     const l = await svc.liste(CTX, IDS.client);
     expect(l.hatalar.join(' ')).toMatch(/Aylık bütçe okunamadı.*bağlantı yok/);
+    expect(l.oneriler.some((x) => x.tur === 'kreatif_yorgunlugu')).toBe(true);
+  });
+
+  it('KRİTİK: form optimizasyonu kartı — yalnız geri besleme ÇALIŞIYOR + eksiksizken ve yalnız LEAD_GENERATION setinde, eylemsiz', async () => {
+    await h.q(`UPDATE ad_groups SET optimization_goal = 'LEAD_GENERATION' WHERE id = $1`, [SET]);
+    await gunluk('ad_group', SET, 'g-1', P.buSon, { g: 10, t: 1, e: 10, s: 40_000_000n });
+    const { svc, ayar } = kur();
+    // Kapalıyken kart YOK.
+    expect((await svc.liste(CTX, IDS.client)).oneriler.some((x) => x.tur === 'donusum_optimizasyonu')).toBe(false);
+    // Çalışıyor ama Meta şartı eksik: kart YOK.
+    ayar.mockResolvedValue({ durum: 'calisiyor', uygunlukEksikleri: ['az_lead'] });
+    expect((await svc.liste(CTX, IDS.client)).oneriler.some((x) => x.tur === 'donusum_optimizasyonu')).toBe(false);
+    ayar.mockResolvedValue({ durum: 'calisiyor', uygunlukEksikleri: [] });
+    const l = await svc.liste(CTX, IDS.client);
+    const o = l.oneriler.find((x) => x.tur === 'donusum_optimizasyonu');
+    expect(o?.varlik).toEqual({ seviye: 'ad_group', id: SET, ad: 'Set', ustAd: 'Kampanya' });
+    expect(o!.eylem).toBeNull();
+    expect(o!.neden).toMatch(/öğrenmesi sıfırlanır/);
+    expect(o!.harcamaMikros).toBe('40000000');
+    expect(l.hatalar).toEqual([]);
+    // Form hedefli olmayan set: kart YOK.
+    await h.q(`UPDATE ad_groups SET optimization_goal = 'LINK_CLICKS' WHERE id = $1`, [SET]);
+    expect((await svc.liste(CTX, IDS.client)).oneriler.some((x) => x.tur === 'donusum_optimizasyonu')).toBe(false);
+  });
+
+  it('geri besleme okunamazsa kart üretilmez ve SÖYLENİR', async () => {
+    const { svc, ayar } = kur();
+    ayar.mockRejectedValue(new Error('veritabanı'));
+    const l = await svc.liste(CTX, IDS.client);
+    expect(l.hatalar.join(' ')).toMatch(/Form optimizasyonu önerisi hesaplanamadı: veritabanı/);
     expect(l.oneriler.some((x) => x.tur === 'kreatif_yorgunlugu')).toBe(true);
   });
 

@@ -3,7 +3,7 @@
  * yok; karar effect'in içinde kalsaydı yalnız kaynak taramasıyla
  * sınanabilirdi, CLAUDE.md "REACT EFFECT'İNİN İÇİNDEKİ KARAR").
  */
-import type { RehberPikselListesi } from '@advetics/shared';
+import { trTelefonOnerisi, type RehberPikselListesi } from '@advetics/shared';
 import type { OneriHali } from './rehber-mantik';
 
 /**
@@ -44,11 +44,9 @@ export function pikselDurumu(p: RehberPikselListesi['satirlar'][number]): string
  * ÖNERİLMEZ (yanlış bir numara önermek, mesajların başka birine gitmesi).
  */
 export function whatsappOnerisi(ham: string | null | undefined): string | null {
-  if (!ham) return null;
-  const rakam = ham.replace(/\D/g, '');
-  if (/^90\d{10}$/.test(rakam)) return `+${rakam}`;
-  if (/^0?\d{10}$/.test(rakam)) return `+90${rakam.slice(-10)}`;
-  return null;
+  // Ayrıştırıcı shared'da TEK (`trTelefonOnerisi`): form teşekkür ekranının
+  // "Ara" düğmesi de aynı numarayı önden dolduruyor.
+  return trTelefonOnerisi(ham);
 }
 
 /** Medya seçicinin kabul ettiği türler: Meta video amacında YALNIZ video. */

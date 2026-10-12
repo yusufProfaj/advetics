@@ -305,7 +305,7 @@ export function rehberEksikleri(a: RehberAlanlari, b: RehberEksikBaglami): Rehbe
     // Video varken yerleşim otomatik kalıyor (derleyici); kapanan yerleşim
     // yalnız görsel setlerinde söylenir.
     if (ayrim.setler.length && !medya.some((x) => x.kapakVarlikId)) {
-      const plan = reklamSetiPlani(ayrim.setler.map((st) => st.map((x) => x.oran)));
+      const plan = reklamSetiPlani(ayrim.setler.map((st) => st.map((x) => x.oran)), tanim.meta.niyet);
       for (const g of plan.kapanan) {
         const t = YERLESIM_GRUPLARI[g];
         ekle('medya', 'meta', 'M-YERLESIM-KAPALI', `${t.etiket} kapalı kalacak: ${t.oranlar.map((o) => ORAN_ETIKETI[o]).join(' ya da ')} görsel yok`, 'uyari');

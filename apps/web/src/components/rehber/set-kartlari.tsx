@@ -21,6 +21,7 @@ import {
   reklamSetiPlani,
   setPlani,
   type GorselOrani,
+  type NiyetKodu,
   type SetPlani,
   type YerlesimGrubu,
 } from '@advetics/shared';
@@ -45,7 +46,7 @@ const etiketler = (gruplar: readonly YerlesimGrubu[]) => gruplar.map((g) => YERL
 
 /** Bu oran bu sette hangi açık yerleşimlerde gösterilecek. */
 function kullanildigiYerler(plan: SetPlani, ortak: SetPlani, oran: GorselOrani): YerlesimGrubu[] {
-  return YERLESIM_SIRASI.filter((g) => !ortak.kapanan.includes(g) && plan.gruplar[g] === oran);
+  return YERLESIM_SIRASI.filter((g) => !ortak.kapanan.includes(g) && !ortak.niyetKapanan.includes(g) && plan.gruplar[g] === oran);
 }
 
 export function SetKartlari({
@@ -57,6 +58,7 @@ export function SetKartlari({
   setiSil,
   yuvayaYukle,
   setAlti,
+  niyet,
 }: {
   setler: readonly SetYuvalari[];
   medyaBilgisi: ReadonlyMap<string, MedyaBilgisi>;
@@ -68,6 +70,12 @@ export function SetKartlari({
   yuvayaYukle: (dosyalar: File[] | null, hedef: number | null) => void;
   /** Setin altına konan içerik: görsele özel metin kutusu (Dalga 2). */
   setAlti?: (st: SetYuvalari, sira: number) => ReactNode;
+  /**
+   * Amacın niyeti: FORM'da elle yerleşim yalnız akış, hikâye ve Reels
+   * (`niyetYerlesimKisiti`). Verilmezse kart derleyiciden GENİŞ bir plan
+   * gösterir ("sağ sütun açık" der, gövde kapatır).
+   */
+  niyet?: NiyetKodu;
 }) {
   const [menu, setMenu] = useState<string | null>(null);
   const [ustunde, setUstunde] = useState<number | 'yeni' | null>(null);
@@ -87,9 +95,9 @@ export function SetKartlari({
   }, [menu]);
 
   const oranListeleri = setler.map((st) => GORSEL_ORANLARI.filter((o) => st[o]));
-  const planlar = oranListeleri.map(setPlani);
-  // Derleyiciyle AYNI karar: banner seti varsa kesişim, yoksa birleşim.
-  const ortak = reklamSetiPlani(oranListeleri);
+  const planlar = oranListeleri.map((o) => setPlani(o, niyet));
+  // Derleyiciyle AYNI karar: banner seti varsa kesişim, yoksa birleşim; niyet kısıtı dahil.
+  const ortak = reklamSetiPlani(oranListeleri, niyet);
   const coklu = setler.length > 1;
   const sinirda = setler.length >= EKRAN_EN_COK_SET;
   // Ortak kapanışın sebebi olan setler: açmak için kullanıcının gideceği yer.

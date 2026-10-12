@@ -16,5 +16,7 @@ import { GeriBeslemeService } from './geri-besleme.service';
   imports: [ConnectionsModule],
   controllers: [GeriBeslemeController],
   providers: [GeriBeslemeService],
+  // İyileştir'in form optimizasyonu kartı geri beslemenin durumunu okuyor.
+  exports: [GeriBeslemeService],
 })
 export class GeriBeslemeModule {}

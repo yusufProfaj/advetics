@@ -94,7 +94,7 @@ describe('derleMeta — yapı', () => {
   it('FORM: form kimliği YALNIZ CTA değerinde, promoted_object’te değil', () => {
     const gs = govde({ niyet: 'FORM', formId: '{form}', hedefAdres: null }).govdeler;
     expect(bul(gs, 'kreatif:1').object_story_spec.link_data.call_to_action).toEqual({
-      type: 'SIGN_UP', value: { lead_gen_form_id: '{form}' },
+      type: 'LEARN_MORE', value: { lead_gen_form_id: '{form}' },
     });
     expect(bul(gs, 'reklam_seti').promoted_object).toEqual({ page_id: '111' });
     expect(bul(gs, 'reklam_seti').destination_type).toBe('ON_AD');
@@ -133,7 +133,7 @@ describe('video fikri', () => {
   it('FORM videosunda CTA form kimliğini taşıyor', () => {
     const r = govde({ niyet: 'FORM', formId: '{form}', hedefAdres: null, kavramlar: [{ gorselHash: 'K', videoId: 'V', baslik: 'B', metin: 'M' }] });
     expect(bul(r.govdeler, 'kreatif:1').object_story_spec.video_data.call_to_action).toEqual({
-      type: 'SIGN_UP', value: { lead_gen_form_id: '{form}', link: 'http://fb.me/' },
+      type: 'LEARN_MORE', value: { lead_gen_form_id: '{form}', link: 'http://fb.me/' },
     });
   });
 });
@@ -353,7 +353,7 @@ describe('Dalga 2 sürüm ve açılış', () => {
     // 1.4.0: ad biçimi ADV · tarih · amaç · kod.
     // 1.5.0: banner seti beş amaçta.
     // 1.6.0: "Siteme gelsinler" hedefi piksel hâline bağlı (LINK_CLICKS dalı).
-    expect(DERLEYICI_SURUMU).toBe('1.6.0');
+    expect(DERLEYICI_SURUMU).toBe('1.7.0');
   });
 
   it('KRİTİK: TELEFON/WHATSAPP derleniyor ama üründe AÇIK DEĞİL (canlı tur bekliyor)', () => {

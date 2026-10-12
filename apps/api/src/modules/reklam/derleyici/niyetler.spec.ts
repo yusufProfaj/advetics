@@ -49,13 +49,13 @@ describe('niyet kataloğu', () => {
     expect(NIYET_KATALOGU.ONE_CIKAR.meta).toBeNull();
   });
 
-  it('FORM: CTA SIGN_UP, hedef ON_AD, promoted_object yalnız page_id', () => {
+  it('FORM: katalog CTA LEARN_MORE (gövdeyi formCtaTuru seçer), hedef ON_AD, promoted_object yalnız page_id', () => {
     expect(NIYET_KATALOGU.FORM.meta).toMatchObject({
       objective: 'OUTCOME_LEADS',
       optimizationGoal: 'LEAD_GENERATION',
       destinationType: 'ON_AD',
       promotedObject: 'page_id',
-      cta: 'SIGN_UP',
+      cta: 'LEARN_MORE',
     });
   });
 

@@ -833,9 +833,9 @@ describe('Meta form listesi ve sayfa ön koşulları (Dalga 2)', () => {
     expect(istekler[0]).toContain('privacy_policy_url');
     expect(l).toEqual({
       satirlar: [
-        { id: '111', ad: 'Teklif Formu', gizlilikAdresi: 'https://ornek.com.tr/kvkk' },
-        { id: '222', ad: 'Adressiz', gizlilikAdresi: null },
-        { id: '555', ad: 'Panelde kurulan', gizlilikAdresi: 'https://ornek.com.tr/kvkk' },
+        { id: '111', ad: 'Teklif Formu', gizlilikAdresi: 'https://ornek.com.tr/kvkk', tur: null, soruSayisi: null },
+        { id: '222', ad: 'Adressiz', gizlilikAdresi: null, tur: null, soruSayisi: null },
+        { id: '555', ad: 'Panelde kurulan', gizlilikAdresi: 'https://ornek.com.tr/kvkk', tur: null, soruSayisi: null },
       ],
       toplam: 3,
       kesildi: false,
@@ -860,8 +860,8 @@ describe('Meta form listesi ve sayfa ön koşulları (Dalga 2)', () => {
     expect((await baglam(r)).onKosullar.seciliForm).toBeNull();
     await svc.formSablonlari(CTX, IDS.client, S2);
     // Üretimde burada sabit `gizlilikAdresi: false` vardı ve Form amacı HER ZAMAN engeldeydi.
-    expect((await baglam(r)).onKosullar.seciliForm).toEqual({ ad: 'Teklif Formu', sayfadaYayinda: true, gizlilikAdresi: true });
-    expect((await baglam(await formRehberi('222'))).onKosullar.seciliForm).toEqual({ ad: 'Adressiz', sayfadaYayinda: true, gizlilikAdresi: false });
+    expect((await baglam(r)).onKosullar.seciliForm).toEqual({ ad: 'Teklif Formu', sayfadaYayinda: true, gizlilikAdresi: true, tur: null, soruSayisi: null });
+    expect((await baglam(await formRehberi('222'))).onKosullar.seciliForm).toEqual({ ad: 'Adressiz', sayfadaYayinda: true, gizlilikAdresi: false, tur: null, soruSayisi: null });
     expect((await baglam(await formRehberi('333'))).onKosullar.seciliForm).toEqual({ ad: null, sayfadaYayinda: false, gizlilikAdresi: false });
     // Liste S2'nin: S1 seçili rehberde aynı form bilinmiyor (başka sayfanın listesi kullanılmaz).
     expect((await baglam(await formRehberi('111', S1))).onKosullar.seciliForm).toBeNull();

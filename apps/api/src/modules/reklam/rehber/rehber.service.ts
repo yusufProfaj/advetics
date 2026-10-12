@@ -2089,6 +2089,8 @@ export class RehberService {
         // Öğe satırları derleyicinin okuduğu AYNI fonksiyondan (`googleAramaOgeleri`).
         // Prova bu içeriğe yapıldıysa provanın (yayına gidecek) satırları.
         ogeler: provaOgeleri ?? (b.ogeKaynagi ? googleAramaOgeleri(b.ogeKaynagi).durumlar : null),
+        // Seçili formun türü ve soru sayısı: eksik listesinin okuduğu AYNI hâl.
+        form: b.onKosullar?.seciliForm ?? null,
       },
     );
   }

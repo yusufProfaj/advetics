@@ -6,8 +6,14 @@ import {
   CONSENT_PRESETS,
   FORM_TYPES,
   FORM_TYPE_META,
+  ONERILEN_ON_DOLU_SORULAR,
   PREFILL_LABELS,
   PREFILL_QUESTIONS,
+  TESEKKUR_DUGME_ETIKETI,
+  TESEKKUR_DUGME_TURLERI,
+  UZUN_FORM_SORU_SAYISI,
+  VARSAYILAN_FORM_TURU,
+  type TesekkurDugmeTuru,
   type ConsentBox,
   type CustomQuestion,
   type EditPlan,
@@ -43,11 +49,18 @@ export function FormBuilder({
   existing,
   canPublish,
   gomulu,
+  telefonOnerisi = null,
 }: {
   clientId: string;
   pages: Array<{ id: string; name: string }>;
   existing?: LeadFormRecord;
   canPublish: boolean;
+  /**
+   * Marka Merkezi telefonu, E.164'e çevrilmiş (`trTelefonOnerisi`). "Bizi
+   * ara" düğmesine önden dolar; çözülemeyen numara `null` ve alan boş kalır
+   * (yanlış numarayı önden doldurmak, aramaların başka birine gitmesi).
+   */
+  telefonOnerisi?: string | null;
   gomulu?: {
     /** Gizlilik adresi önerisi ve KAYNAĞI (ekranda yazılır); yoksa alan boş ve zorunlu. */
     varsayilanGizlilik?: { adres: string; kaynak: string } | null;
@@ -62,13 +75,20 @@ export function FormBuilder({
 
   const [pageId, setPageId] = useState(existing?.socialProfileId ?? pages[0]?.id ?? '');
   const [name, setName] = useState(existing?.name ?? '');
-  const [formType, setFormType] = useState<FormType>(existing?.formType ?? 'more_volume');
+  // VARSAYILAN "daha yüksek niyet" (shared `VARSAYILAN_FORM_TURU`); şema ile
+  // ekran aynı sabiti okuyor, yoksa yeni formun türü ekranda başka, kayıtta başka olurdu.
+  const [formType, setFormType] = useState<FormType>(existing?.formType ?? VARSAYILAN_FORM_TURU);
   const [headline, setHeadline] = useState(existing?.headline ?? '');
   const [intro, setIntro] = useState(existing?.intro ?? '');
   const [prefill, setPrefill] = useState<PrefillQuestion[]>(
-    existing?.prefillQuestions ?? ['FULL_NAME', 'PHONE'],
+    existing?.prefillQuestions ?? [...ONERILEN_ON_DOLU_SORULAR],
   );
-  const [custom, setCustom] = useState<CustomQuestion[]>(existing?.customQuestions ?? []);
+  // ÖNERİLEN SET: ad soyad + telefon ve TEK eleme sorusu. Eleme sorusu yeni
+  // formda boş bir çoktan seçmeli satır olarak hazır duruyor; kullanıcı
+  // yazmazsa forma hiç girmiyor (`body()` boş soruyu atıyor).
+  const [custom, setCustom] = useState<CustomQuestion[]>(
+    existing?.customQuestions ?? [{ type: 'multiple_choice', label: '', options: [] }],
+  );
   const [privacyUrl, setPrivacyUrl] = useState(existing?.privacyPolicyUrl ?? oneri?.adres ?? '');
   const [privacyText, setPrivacyText] = useState(
     existing?.privacyPolicyLinkText ?? 'Gizlilik Politikası',
@@ -80,6 +100,10 @@ export function FormBuilder({
   );
   const [tyCtaText, setTyCtaText] = useState(existing?.thankYouCtaText ?? 'Siteyi ziyaret et');
   const [tyCtaUrl, setTyCtaUrl] = useState(existing?.thankYouCtaUrl ?? '');
+  const [tyCtaType, setTyCtaType] = useState<TesekkurDugmeTuru>(
+    existing?.thankYouCtaType ?? (existing ? 'NONE' : telefonOnerisi ? 'CALL_BUSINESS' : 'NONE'),
+  );
+  const [tyPhone, setTyPhone] = useState(existing?.thankYouPhone ?? telefonOnerisi ?? '');
 
   const [formId, setFormId] = useState(existing?.id ?? null);
   const [status, setStatus] = useState(existing?.status ?? 'draft');
@@ -100,14 +124,17 @@ export function FormBuilder({
       headline: headline || undefined,
       intro: intro || undefined,
       prefillQuestions: prefill,
-      customQuestions: custom,
+      // Boş eleme sorusu (metin ve seçenek yok) forma girmez: "boşsa yok".
+      customQuestions: custom.filter((q) => q.label.trim() || q.options.length > 0),
       privacyPolicyUrl: privacyUrl,
       privacyPolicyLinkText: privacyText,
       consentBoxes: consents,
       thankYouHeadline: tyHeadline,
       thankYouBody: tyBody,
       thankYouCtaText: tyCtaText,
-      thankYouCtaUrl: tyCtaUrl || undefined,
+      thankYouCtaUrl: tyCtaType === 'VIEW_WEBSITE' ? tyCtaUrl || undefined : undefined,
+      thankYouCtaType: tyCtaType,
+      thankYouPhone: tyCtaType === 'CALL_BUSINESS' ? tyPhone.trim() || undefined : undefined,
     };
   }
 
@@ -196,6 +223,16 @@ export function FormBuilder({
       yenile();
       gomulu?.onYayinlandi(res);
     }
+  }
+
+  // Uzun form uyarısı yazarken, yayından önce (karar tablosuyla aynı eşik).
+  const soruSayisi = prefill.length + custom.filter((q) => q.label.trim()).length;
+
+  function dugmeTuruSec(t: TesekkurDugmeTuru): void {
+    // Düğme metni türün varsayılanıysa türle birlikte değişir; kullanıcının
+    // yazdığı metne dokunulmaz.
+    if (!tyCtaText || tyCtaText === TESEKKUR_DUGME_ETIKETI[tyCtaType]) setTyCtaText(t === 'NONE' ? tyCtaText : TESEKKUR_DUGME_ETIKETI[t]);
+    setTyCtaType(t);
   }
 
   function togglePrefill(q: PrefillQuestion): void {
@@ -355,7 +392,11 @@ export function FormBuilder({
                           )
                         }
                         disabled={locked}
-                        placeholder="Hangi bölgede arıyorsunuz?"
+                        placeholder={
+                          i === 0 && q.type === 'multiple_choice'
+                            ? 'Eleme sorusu (önerilir): Ne zaman almayı düşünüyorsunuz?'
+                            : 'Hangi bölgede arıyorsunuz?'
+                        }
                         className={`${inputCls} flex-1`}
                       />
                       <select
@@ -414,6 +455,12 @@ export function FormBuilder({
             )}
           </div>
         </Section>
+
+        {soruSayisi >= UZUN_FORM_SORU_SAYISI && (
+          <p className="rounded-xl bg-warn-soft px-4 py-3 text-xs text-warn-strong ring-1 ring-inset ring-warn/30">
+            {soruSayisi} soru var. Uzun form daha az doldurulur.
+          </p>
+        )}
 
         <Section n={4} title="Gizlilik ve onaylar">
           <Field
@@ -531,26 +578,65 @@ export function FormBuilder({
               className={inputCls}
             />
           </Field>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Buton metni">
-              <input
-                value={tyCtaText}
-                onChange={(e) => setTyCtaText(e.target.value)}
-                maxLength={40}
-                disabled={locked}
-                className={inputCls}
-              />
-            </Field>
-            <Field label="Buton adresi" hint="Boşsa buton gösterilmiyor.">
-              <input
-                value={tyCtaUrl}
-                onChange={(e) => setTyCtaUrl(e.target.value)}
-                disabled={locked}
-                placeholder="https://musteri.com"
-                className={inputCls}
-              />
-            </Field>
-          </div>
+          <Field label="Buton">
+            <div className="flex flex-wrap gap-2">
+              {TESEKKUR_DUGME_TURLERI.map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  disabled={locked}
+                  onClick={() => dugmeTuruSec(t)}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition disabled:opacity-50 ${
+                    tyCtaType === t ? 'border-brand bg-brand/5 text-ink' : 'border-line text-ink-muted hover:bg-surface-sunken'
+                  }`}
+                >
+                  {TESEKKUR_DUGME_ETIKETI[t]}
+                </button>
+              ))}
+            </div>
+          </Field>
+          {tyCtaType !== 'NONE' && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Buton metni">
+                <input
+                  value={tyCtaText}
+                  onChange={(e) => setTyCtaText(e.target.value)}
+                  maxLength={40}
+                  disabled={locked}
+                  className={inputCls}
+                />
+              </Field>
+              {tyCtaType === 'VIEW_WEBSITE' ? (
+                <Field label="Buton adresi">
+                  <input
+                    value={tyCtaUrl}
+                    onChange={(e) => setTyCtaUrl(e.target.value)}
+                    disabled={locked}
+                    placeholder="https://musteri.com"
+                    className={inputCls}
+                  />
+                </Field>
+              ) : (
+                <Field
+                  label="Aranacak numara"
+                  hint={
+                    telefonOnerisi && tyPhone === telefonOnerisi
+                      ? 'Marka Merkezi’ndeki telefondan dolduruldu.'
+                      : '+90 ile, boşluksuz: +905321234567'
+                  }
+                >
+                  <input
+                    value={tyPhone}
+                    onChange={(e) => setTyPhone(e.target.value)}
+                    disabled={locked}
+                    inputMode="tel"
+                    placeholder="+905321234567"
+                    className={inputCls}
+                  />
+                </Field>
+              )}
+            </div>
+          )}
         </Section>
 
         {plan && (
@@ -639,7 +725,7 @@ export function FormBuilder({
             headline,
             intro,
             prefillQuestions: prefill,
-            customQuestions: custom,
+            customQuestions: custom.filter((q) => q.label.trim() || q.options.length > 0),
             privacyPolicyUrl: privacyUrl,
             privacyPolicyLinkText: privacyText,
             consentBoxes: consents,
@@ -647,6 +733,8 @@ export function FormBuilder({
             thankYouBody: tyBody,
             thankYouCtaText: tyCtaText,
             thankYouCtaUrl: tyCtaUrl,
+            thankYouCtaType: tyCtaType,
+            thankYouPhone: tyPhone,
             status,
           })}
         />
