@@ -25,7 +25,6 @@ import {
   onerilenPlatformlar,
   type GoogleKurgu,
   type MetinSeti,
-  type RehberOzeti,
   setlereAyir,
   type GorselOrani,
   type NiyetKodu,
@@ -1238,25 +1237,6 @@ export function sonEkranOzeti(platformlar: ReadonlyArray<{ platform: RehberPlatf
 // ─────────────────────────────────────────────────────────────────────────────
 // Giriş listesi
 // ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Listedeki durum yazısı. Rehberin kendi durumu dar (`taslak`/`yayinda`)
- * ve "Vazgeç ve arşivle" onu değiştirmiyor: arşivlenen reklam listede
- * "Yayında · Meta" görünüyordu. Yayınlanmış satırda platformların GERÇEK
- * hâli yazılır; hepsi aynıysa tek kelime.
- */
-export function listeDurumu(r: Pick<RehberOzeti, 'durum' | 'platformlar' | 'yayinlar'>): string {
-  const plt = [r.platformlar.meta && 'Meta', r.platformlar.google && 'Google'].filter(Boolean).join(' + ') || 'Platform seçilmedi';
-  if (r.durum === 'taslak') return `Taslak · ${plt}`;
-  if (r.durum === 'arsivlendi') return `Arşivlendi · ${plt}`;
-  if (r.yayinlar.length === 0) return `Yayında · ${plt}`;
-  // Söz son ekrandakiyle AYNI üreticiden (`yayinSonucuEtiketi`): liste
-  // ayrı bir sözlük taşırken okunamayan kurulumu "Kurulamadı", Google'da
-  // kaldırılanı "Arşivlendi" diyordu ve son ekran düzelince ayrıştı.
-  const adlar = r.yayinlar.map((y) => ({ ad: PLATFORM_ADLARI[y.platform], sonuc: yayinSonucuEtiketi(y) }));
-  if (adlar.every((x) => x.sonuc === adlar[0]!.sonuc)) return `${adlar[0]!.sonuc} · ${adlar.map((x) => x.ad).join(' + ')}`;
-  return adlar.map((x) => `${x.ad}: ${x.sonuc}`).join(' · ');
-}
 
 /**
  * VİDEONUN EKRAN BİLGİSİ KAPAĞINDAN. Hazırlık yalnız görselleri listeliyor;

@@ -204,15 +204,18 @@ describe('oluştur / oku / güncelle', () => {
     expect(r.kararlar.find((k) => k.kod === 'TUR')?.meta).toBeNull();
   });
 
-  it('liste: arşiv hariç HEPSİ, engel sayısıyla', async () => {
-    await tamRehber();
-    const bos = await svc.olustur(CTX, IDS.client);
+  it('liste: ARŞİV DAHİL hepsi, arşiv EN SONDA, engel sayısıyla (giriş ekranının Arşiv sekmesi)', async () => {
+    const tam = await tamRehber();
     const ars = await svc.olustur(CTX, IDS.client);
     await svc.arsivle(CTX, ars.id);
+    const bos = await svc.olustur(CTX, IDS.client);
     const l = await svc.listele(CTX, IDS.client);
-    expect(l.toplam).toBe(2);
-    expect(l.satirlar).toHaveLength(2);
+    expect(l.toplam).toBe(3);
+    // Arşiv en yeni değişiklik olsa bile sonda: sınır keserse önce onu keser.
+    expect(l.satirlar.map((x) => x.id)).toEqual([bos.id, tam.id, ars.id]);
+    expect(l.satirlar.find((x) => x.id === ars.id)!.durum).toBe('arsivlendi');
     expect(l.satirlar.find((x) => x.id === bos.id)!.eksikSayisi).toBe(1);
+    expect(l.satirlar.find((x) => x.id === tam.id)!.eksikSayisi).toBe(0);
   });
 });
 
@@ -370,6 +373,133 @@ describe('şema', () => {
   });
 });
 
+/**
+ * GİRİŞ EKRANI LİSTESİ (2026-10-12). Kullanıcının şikâyeti: "görüntü
+ * kirliliği, hiçbir şey anlaşılmıyor ve silinmiyor". Satırı ayırt eden
+ * alanlar (görsel, bütçe, yayın adı), arşiv/geri getir ve sabit sorgu sayısı.
+ */
+describe('giriş listesi: satır alanları, arşiv ve geri getir', () => {
+  const GORSEL = '55555555-0000-4000-8000-0000000000b1';
+  const VIDEO = '55555555-0000-4000-8000-0000000000b2';
+  const KAPAK = '55555555-0000-4000-8000-0000000000b3';
+  const YABANCI = '55555555-0000-4000-8000-0000000000b4';
+
+  async function varliklar() {
+    for (const [id, kind, client] of [
+      [GORSEL, 'image', IDS.client],
+      [VIDEO, 'video', IDS.client],
+      [KAPAK, 'image', IDS.client],
+      [YABANCI, 'image', OTEKI],
+    ] as const) {
+      await h.q(
+        `INSERT INTO assets (id, org_id, client_id, kind, name, file_name, mime_type, byte_size, width, height, storage_key, content_hash, updated_at)
+         VALUES ($1, $2, $3, $4, 'v', 'v.bin', $5, 1000, 1080, 1080, 'yok', $6, now())`,
+        [id, IDS.org, client, kind, kind === 'image' ? 'image/png' : 'video/mp4', id],
+      );
+    }
+  }
+  const satiri = async (id: string) => (await svc.listele(CTX, IDS.client)).satirlar.find((x) => x.id === id)!;
+
+  it('küçük görsel: ilk görsel; video ise KAPAĞI; başka workspace’in varlığı ASLA', async () => {
+    await varliklar();
+    const a = await svc.olustur(CTX, IDS.client);
+    await svc.guncelle(CTX, a.id, { surum: 0, degisiklikler: [g('medya', [{ varlikId: GORSEL }])] });
+    const v = await svc.olustur(CTX, IDS.client);
+    await svc.guncelle(CTX, v.id, { surum: 0, degisiklikler: [g('medya', [{ varlikId: VIDEO, kapakVarlikId: KAPAK }, { varlikId: GORSEL }])] });
+    const kapaksiz = await svc.olustur(CTX, IDS.client);
+    await svc.guncelle(CTX, kapaksiz.id, { surum: 0, degisiklikler: [g('medya', [{ varlikId: VIDEO }])] });
+    // Aitlik kapısı yabancı varlığı yazdırmıyor; eski/bozuk kayıt ELLE yazılıyor.
+    const yabanci = await svc.olustur(CTX, IDS.client);
+    await h.q(`UPDATE reklam_rehberi SET alanlar = $2::jsonb WHERE id = $1`, [
+      yabanci.id,
+      JSON.stringify({ medya: { deger: [{ varlikId: YABANCI }], kaynak: 'kullanici', kim: IDS.user, zaman: '2026-10-12T00:00:00.000Z' } }),
+    ]);
+    expect((await satiri(a.id)).gorselVarlikId).toBe(GORSEL);
+    expect((await satiri(v.id)).gorselVarlikId).toBe(KAPAK);
+    // Video kendisi <img> olamaz: kapak yoksa null (panel amaç simgesine düşer).
+    expect((await satiri(kapaksiz.id)).gorselVarlikId).toBeNull();
+    expect((await satiri(yabanci.id)).gorselVarlikId).toBeNull();
+  });
+
+  it('bütçe ve para birimi seçili hesaptan; taslakta yayın adı yok', async () => {
+    const r = await tamRehber();
+    const s = await satiri(r.id);
+    expect(s.butce).toEqual({ tip: 'gunluk', micros: '250000000', paraBirimi: 'TRY' });
+    expect(s.yayinAdi).toBeNull();
+    expect(s.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect((await satiri((await svc.olustur(CTX, IDS.client)).id)).butce).toBeNull();
+  });
+
+  it('yayın adı platformdakiyle AYNI biçim ve kod yayın kimliğinden', async () => {
+    const r = await tamRehber();
+    const p = await svc.prova(CTX, r.id);
+    await svc.yayinla(CTX, r.id, p.icerikOzeti);
+    const [y] = await h.q<{ id: string }>('SELECT id::text FROM yayin');
+    const kod = y!.id.replace(/-/g, '').slice(0, 4).toUpperCase();
+    expect((await satiri(r.id)).yayinAdi).toMatch(new RegExp(`^ADV · \\d{2}\\.\\d{2}\\.\\d{4} · Siteme gelsinler · ${kod}$`));
+  });
+
+  it('KRİTİK: sorgu sayısı satır sayısından BAĞIMSIZ (N+1 yok)', async () => {
+    const db = h.db as unknown as { $queryRaw: (...a: unknown[]) => unknown };
+    const say = async () => {
+      const casus = vi.spyOn(db, '$queryRaw');
+      await svc.listele(CTX, IDS.client);
+      const n = casus.mock.calls.length;
+      casus.mockRestore();
+      return n;
+    };
+    await tamRehber();
+    await svc.olustur(CTX, IDS.client);
+    const iki = await say();
+    for (let i = 0; i < 6; i++) await tamRehber();
+    expect(await say()).toBe(iki);
+  });
+
+  it('arşivle YALNIZ listeden kaldırır: platform çağrısı ve kuyruk işi yok, yayın kaydı değişmez', async () => {
+    const r = await tamRehber();
+    const p = await svc.prova(CTX, r.id);
+    await svc.yayinla(CTX, r.id, p.icerikOzeti);
+    const once = await h.q('SELECT id, durum, sonlandi_at FROM yayin');
+    cagrilar = [];
+    kuyrukIsleri = [];
+    expect((await svc.arsivle(CTX, r.id)).durum).toBe('arsivlendi');
+    expect(cagrilar).toEqual([]);
+    expect(kuyrukIsleri).toEqual([]);
+    expect(await h.q('SELECT id, durum, sonlandi_at FROM yayin')).toEqual(once);
+    // Arşivdeki satır platformun hâlini göstermeye devam ediyor: kampanya orada duruyor.
+    expect((await satiri(r.id)).yayinlar).toEqual([{ platform: 'google', durum: 'on_kontrol', sebep: null }]);
+  });
+
+  it('KRİTİK: geri getir ÖNCEKİ duruma: yayına gitmiş olan "yayinda", gitmemiş "taslak"', async () => {
+    const yayinda = await tamRehber();
+    const p = await svc.prova(CTX, yayinda.id);
+    await svc.yayinla(CTX, yayinda.id, p.icerikOzeti);
+    // Provası yapılmış (çocuk taslağı var) ama yayına gitmemiş: taslak dönmeli.
+    const provali = await tamRehber();
+    await svc.prova(CTX, provali.id);
+    const bos = await svc.olustur(CTX, IDS.client);
+    for (const r of [yayinda, provali, bos]) await svc.arsivle(CTX, r.id);
+    expect((await svc.geriGetir(CTX, yayinda.id)).durum).toBe('yayinda');
+    expect((await svc.geriGetir(CTX, provali.id)).durum).toBe('taslak');
+    expect((await svc.geriGetir(CTX, bos.id)).durum).toBe('taslak');
+    const [k] = await h.q<{ arsivlendi_at: Date | null }>('SELECT arsivlendi_at FROM reklam_rehberi WHERE id = $1', [bos.id]);
+    expect(k!.arsivlendi_at).toBeNull();
+    // Arşivde olmayanı geri getirmek 409; geri gelen taslak yeniden düzenlenebilir.
+    await expect(svc.geriGetir(CTX, bos.id)).rejects.toMatchObject({ status: 409 });
+    expect((await svc.guncelle(CTX, bos.id, { surum: 0, degisiklikler: [g('amac', 'FORM')] })).alanlar.amac?.deger).toBe('FORM');
+    // Yayına gitmiş olan düzenlenemez kalıyor (ikinci kampanya açılmasın).
+    await expect(svc.yayinla(CTX, yayinda.id, p.icerikOzeti)).rejects.toMatchObject({ status: 409 });
+  });
+
+  it('geri getir: erişilmeyen workspace’in rehberine dokunmaz', async () => {
+    const r = await svc.olustur(CTX, IDS.client);
+    await svc.arsivle(CTX, r.id);
+    const dar = { ...CTX, clientIds: [KARDES_WS], activeClientId: KARDES_WS } as TenantContext;
+    await expect(svc.geriGetir(dar, r.id)).rejects.toMatchObject({ status: 403 });
+    expect((await satiri(r.id)).durum).toBe('arsivlendi');
+  });
+});
+
 /** RLS — gerçek politikalar, sahibi olmayan rolle; "patlamadı" yetmez, ETKİLENEN SATIR sayılır. */
 describe('RLS', () => {
   const ROL = 'advetics_rehber_test';
@@ -409,6 +539,36 @@ describe('RLS', () => {
     await expect(
       kullanici(`INSERT INTO reklam_rehberi (org_id, client_id, olusturan_id) VALUES ('${IDS.org}', '${OTEKI}', '${IDS.user}') RETURNING id`, [IDS.client]),
     ).rejects.toThrow(/row-level security/);
+  });
+
+  /** Servisin GERÇEK sorgularını rol altında koşturur (kopya sorgu düzeltilmiş hâli taşır). */
+  async function rolIle<T>(clientIds: string[], fn: () => Promise<T>): Promise<T> {
+    await h.q(`
+      SELECT set_config('app.current_org_id', '${IDS.org}', false),
+             set_config('app.current_user_id', '${IDS.user}', false),
+             set_config('app.current_client_ids', '${clientIds.join(',')}', false),
+             set_config('app.is_org_admin', 'off', false),
+             set_config('app.current_active_client_id', '', false)`);
+    await h.q(`SET ROLE ${ROL}`);
+    try {
+      return await fn();
+    } finally {
+      await h.q('RESET ROLE');
+    }
+  }
+
+  it('KRİTİK: liste, arşivle ve geri getir politikalardan GEÇİYOR (servisin kendi sorguları, rol altında)', async () => {
+    const r = await svc.olustur(CTX, IDS.client);
+    const ctx = { ...CTX, clientIds: [IDS.client] } as TenantContext;
+    expect((await rolIle([IDS.client], () => svc.arsivle(ctx, r.id))).durum).toBe('arsivlendi');
+    const l = await rolIle([IDS.client], () => svc.listele(ctx, IDS.client));
+    expect(l.satirlar.map((x) => [x.id, x.durum])).toEqual([[r.id, 'arsivlendi']]);
+    expect((await rolIle([IDS.client], () => svc.geriGetir(ctx, r.id))).durum).toBe('taslak');
+    // Başka workspace'in kapsamında satır GÖRÜNMÜYOR: UPDATE'e hiç ulaşılmıyor.
+    await svc.arsivle(CTX, r.id);
+    await expect(rolIle([OTEKI], () => svc.geriGetir({ ...CTX, clientIds: [OTEKI, IDS.client] } as TenantContext, r.id))).rejects.toMatchObject({ status: 404 });
+    const [k] = await h.q<{ durum: string }>('SELECT durum FROM reklam_rehberi WHERE id = $1', [r.id]);
+    expect(k!.durum).toBe('arsivlendi');
   });
 
   it('DELETE politikası YOK: silme sıfır satır (rehber arşivlenir)', async () => {

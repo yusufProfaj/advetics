@@ -19,7 +19,8 @@
  *   GET  /reklam/rehberler/:id/prova              → RehberProvaSonucu | null bulk.read (son prova; sayfa yenilenince kaybolmasın)
  *   POST /reklam/rehberler/:id/yayinla {ozet}     → RehberYayinDurumu   bulk.publish
  *   GET  /reklam/rehberler/:id/yayin              → RehberYayinDurumu   bulk.read
- *   POST /reklam/rehberler/:id/arsivle            → RehberKaydi         bulk.write
+ *   POST /reklam/rehberler/:id/arsivle            → RehberKaydi         bulk.write (YALNIZ listeden kaldırır; platforma dokunmaz)
+ *   POST /reklam/rehberler/:id/geri-getir         → RehberKaydi         bulk.write (arşivden önceki duruma)
  */
 import { z } from 'zod';
 import type { YayinDurumu } from '../yayin';
@@ -66,16 +67,44 @@ export interface RehberOzeti {
    * Rehberin kendi `durum`u "Vazgeç ve arşivle"den sonra da `yayinda`
    * kalıyor; liste yalnız onu okuyunca arşivlenen reklam "Yayında" görünüyordu.
    */
-  /** `sebep`: kaydı olmayan platformun başlamama sebebi (yoksa null). */
+  /**
+   * `sebep`: kaydı olmayan platformun başlamama sebebi ya da yayın kaydının
+   * son sebebi (kurulamadıysa platformun mesajı). Panel yalnız hata
+   * rozetinde ipucu olarak gösteriyor.
+   */
   yayinlar: Array<{ platform: RehberPlatformu; durum: YayinDurumu | null; sebep: string | null }>;
+  /**
+   * SATIRI AYIRT EDEN ÜÇ ALAN (2026-10-12). Giriş ekranında altı "Siteme
+   * gelsinler" satırı birbirinden ayırt edilemiyordu: görsel, bütçe ve ad
+   * yoktu. `gorselVarlikId`: ilk medyanın görseli (video ise kapağı),
+   * workspace'in varlıklarında yoksa null (panel amaç simgesine düşer).
+   */
+  gorselVarlikId: string | null;
+  /** Rehberdeki bütçe; para birimi seçili hesaptan (yoksa TRY). micros DİZGE. */
+  butce: { tip: 'gunluk' | 'toplam'; micros: string; paraBirimi: string } | null;
+  /**
+   * Yayına alınmış satırda platformdaki kampanya adı
+   * ("ADV · 12.10.2026 · Siteme gelsinler · 4F2A", `advKampanyaAdi`);
+   * Meta ve Google'ın kodu ayrı olduğundan Meta'nınki önce. Taslakta null.
+   */
+  yayinAdi: string | null;
+  createdAt: string;
   updatedAt: string;
 }
 
-/** Liste kesilirse ekranda "N / toplam" yazılabilsin (sessiz kesme yok). */
+/**
+ * Liste kesilirse ekranda "N / toplam" yazılabilsin (sessiz kesme yok).
+ * 2026-10-12'den beri ARŞİV DE listede (`durum = arsivlendi`): giriş
+ * ekranının Arşiv sekmesi ve "Geri getir" onu okuyor. Sıra: arşiv en sonda,
+ * yani sınır kesecekse önce arşivi keser.
+ */
 export interface RehberListesi {
   satirlar: RehberOzeti[];
   toplam: number;
 }
+
+/** Liste ucunun üst sınırı; aşılırsa `toplam` gerçeği söyler. */
+export const REHBER_LISTE_SINIRI = 300;
 
 export interface AnahtarKelimeOnerisi {
   satirlar: Array<{ metin: string; aylikArama: number | null; rekabet: 'dusuk' | 'orta' | 'yuksek' | null }>;

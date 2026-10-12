@@ -161,9 +161,21 @@ export class RehberController {
     return this.rehber.yayinDurumu(ctx, id);
   }
 
+  /**
+   * YALNIZ LİSTEDEN KALDIRIR: rehberin durumunu `arsivlendi` yapar,
+   * platformdaki kampanyaya dokunmaz. Durdurmak Reklam Yöneticisi'nin işi;
+   * panel onay penceresi bunu açıkça yazıyor.
+   */
   @Post('rehberler/:id/arsivle')
   @RequirePermissions('bulk.write')
   arsivle(@CurrentTenant() ctx: TenantContext, @Param('id', ParseUUIDPipe) id: string): Promise<RehberKaydi> {
     return this.rehber.arsivle(ctx, id);
+  }
+
+  /** Arşivden önceki duruma (`taslak` ya da `yayinda`); izin arşivle ile aynı. */
+  @Post('rehberler/:id/geri-getir')
+  @RequirePermissions('bulk.write')
+  geriGetir(@CurrentTenant() ctx: TenantContext, @Param('id', ParseUUIDPipe) id: string): Promise<RehberKaydi> {
+    return this.rehber.geriGetir(ctx, id);
   }
 }

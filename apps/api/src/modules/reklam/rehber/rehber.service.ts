@@ -15,7 +15,9 @@ import {
   OZEL_KATEGORILER,
   PROVA_TAZELIK_MS,
   REHBER_AMACLARI,
+  REHBER_LISTE_SINIRI,
   acikPlatformlar,
+  advKampanyaAdi,
   googleGorselKurgusuMu,
   googleTeklifi,
   kanonikJson,
@@ -77,7 +79,7 @@ import { ReklamHazirlikService, seciliYoksaIlk, type RehberHazirlikSecimi, type 
 import { gorselOkuyucu, hesapErisimi, sayfaTokenOkuyucu } from '../meta-erisim';
 import { ReklamKuyrugu } from '../reklam-kuyrugu';
 import { ReklamTaslakService, type AlanDegisikligi } from '../taslak.service';
-import { formKimligiCoz, provaDurumu } from '../yayin-baslat';
+import { formKimligiCoz, provaDurumu, yerelTarih } from '../yayin-baslat';
 import { yayiniSonlandir, type TxRunner } from '../yayin-motoru';
 import { ReklamYayinService } from '../yayin.service';
 import { googleYazmaAcikMi, metaYazmaAcikMi } from '../yazma-kapisi';
@@ -177,6 +179,15 @@ interface PikselKaydi {
 }
 
 /** Bir rehberin eksik/karar bağlamı: yalnız veritabanı + önbellek. */
+/** `baglamlar`ın tek transaction'da okuduğu ham veri; satır başına `baglamKur` birleştirir. */
+interface BaglamVerisi {
+  m: { ad: string; marka: string | null; logo: string | null; yasal: string | null; kategoriler: string[] } | undefined;
+  hesaplar: Array<{ id: string; platform: string; external_id: string; currency: string; timezone: string }>;
+  ajans: boolean;
+  olculer: Array<{ id: string; kind: string; width: number | null; height: number | null; byte_size: number | null }>;
+  formKimligi: string | null;
+}
+
 interface Baglam extends RehberEksikBaglami {
   googleDonusum: boolean | null;
   isletmeAdi: string;
@@ -527,34 +538,91 @@ export class RehberService {
   // CRUD
   // ===========================================================================
 
-  /** Workspace'in açık rehberleri — HEPSİ (kesme yok, `toplam` = satır sayısı; arşiv hariç). */
+  /**
+   * Workspace'in rehberleri — ARŞİV DAHİL (giriş ekranının Arşiv sekmesi).
+   * Sıra: arşiv en sonda, sonra son değişiklik; `REHBER_LISTE_SINIRI`
+   * aşılırsa önce arşiv kesilir ve `toplam` gerçek sayıyı söyler.
+   *
+   * SABİT SAYIDA SORGU: satırlar + sayım + yayın durumları + küçük
+   * görseller tek transaction'da, bağlam (`baglamlar`) bir transaction'da.
+   * Önceki sürüm satır başına `baglam` ve `yayinDurumu` çağırıyordu.
+   */
   async listele(ctx: TenantContext, clientId: string): Promise<RehberListesi> {
     erisim(ctx, clientId);
-    const satirlar = await this.tx(ctx)((t) =>
-      t.$queryRaw<RehberSatiri[]>(Prisma.sql`
-        SELECT ${SUTUNLAR} FROM reklam_rehberi
-         WHERE client_id = ${clientId}::uuid AND durum <> 'arsivlendi'
-         ORDER BY updated_at DESC, id`),
-    );
-    const sonuc: RehberOzeti[] = [];
-    for (const s of satirlar) {
-      const a = alanlariOku(s);
-      const b = await this.baglam(ctx, s.client_id, a);
+    const okunan = await this.tx(ctx)(async (t) => {
+      const satirlar = await t.$queryRaw<Array<RehberSatiri & { created_at: Date }>>(Prisma.sql`
+        SELECT ${SUTUNLAR}, created_at FROM reklam_rehberi
+         WHERE client_id = ${clientId}::uuid
+         ORDER BY (durum = 'arsivlendi'), updated_at DESC, id
+         LIMIT ${REHBER_LISTE_SINIRI}::int`);
+      const [sayim] = await t.$queryRaw<Array<{ n: number }>>(Prisma.sql`SELECT count(*)::int AS n FROM reklam_rehberi WHERE client_id = ${clientId}::uuid`);
+      const taslakIdleri = satirlar.flatMap((x) => [x.meta_taslak_id, x.google_taslak_id]).filter((x): x is string => !!x);
+      // Taslak başına SON yayın, `yayinDurumu` ile AYNI öncelik: süren
+      // (sonlanmamış) kayıt önce, sonra en yenisi. Hesabın saat dilimi ad
+      // tarihini üretiyor; hesap satırı RLS'te görünmezse ana satır
+      // düşmesin diye LEFT JOIN.
+      const yayinlar = taslakIdleri.length
+        ? await t.$queryRaw<Array<{ taslak_id: string; id: string; durum: YayinDurumu; sebep: string | null; created_at: Date; timezone: string | null }>>(Prisma.sql`
+            SELECT DISTINCT ON (y.taslak_id) y.taslak_id::text, y.id::text, y.durum, y.sebep, y.created_at, a.timezone
+              FROM yayin y LEFT JOIN ad_accounts a ON a.id = y.ad_account_id
+             WHERE y.taslak_id = ANY(${taslakIdleri}::uuid[])
+             ORDER BY y.taslak_id, (y.sonlandi_at IS NULL) DESC, y.created_at DESC`)
+        : [];
+      // Küçük görsel adayları: ilk medyanın kapağı (video) ve kendisi.
+      const adaylar = satirlar.map((x) => gorselAdaylari(alanlariOku(x)));
+      const adayIdleri = [...new Set(adaylar.flat())];
+      const gorseller = adayIdleri.length
+        ? await t.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+            SELECT id::text FROM assets WHERE client_id = ${clientId}::uuid AND kind = 'image' AND id = ANY(${adayIdleri}::uuid[])`)
+        : [];
+      return { satirlar, toplam: sayim?.n ?? satirlar.length, yayinlar, adaylar, gorseller: new Set(gorseller.map((g) => g.id)) };
+    });
+    const alanlar = okunan.satirlar.map((x) => alanlariOku(x));
+    const baglamlar = await this.baglamlar(ctx, clientId, alanlar);
+    const yayinOku = (taslakId: string | null) => (taslakId ? okunan.yayinlar.find((y) => y.taslak_id === taslakId) ?? null : null);
+    const satirlar = okunan.satirlar.map((s, i): RehberOzeti => {
+      const a = alanlar[i]!;
+      const b = baglamlar[i]!;
       // Yayınlanmış satırda platformların GERÇEK hâli: "Vazgeç ve arşivle"
       // rehberin durumunu değiştirmiyor, liste yalnız onu okuyunca
-      // arşivlenen reklam "Yayında" görünüyordu.
-      const yayinlar = s.durum === 'yayinda' ? (await this.yayinDurumu(ctx, s.id)).platformlar.map((p) => ({ platform: p.platform, durum: p.durum, sebep: p.durum === null ? p.sebep : null })) : [];
-      sonuc.push({
+      // arşivlenen reklam "Yayında" görünüyordu. Kaydı olmayan platform
+      // `yayinDurumu` ile aynı sebebi taşır. Arşivdeki satır da (listeden
+      // kaldırılmış yayın) platform hâlini gösterir: kampanya platformda
+      // durmaya devam ediyor.
+      const yayinVar = s.durum !== 'taslak';
+      const platformYayinlari = yayinVar
+        ? (
+            [
+              ['meta', s.meta_taslak_id],
+              ['google', s.google_taslak_id],
+            ] as Array<[RehberPlatformu, string | null]>
+          )
+            .filter(([, tid]) => !!tid)
+            .map(([platform, tid]) => {
+              const y = yayinOku(tid);
+              return { platform, durum: y?.durum ?? null, sebep: y ? y.sebep : BASLAMAYAN_PLATFORM_SEBEBI, y };
+            })
+        : [];
+      // Arşivde ama hiç yayına gitmemiş taslak: platform satırı yok.
+      const gercekYayinlar = s.durum === 'arsivlendi' && platformYayinlari.every((p) => !p.y) ? [] : platformYayinlari;
+      const adKaynagi = gercekYayinlar.find((p) => p.y)?.y ?? null;
+      const amac = a.amac?.deger ?? null;
+      const butce = a.butce?.deger;
+      return {
         id: s.id,
-        amac: a.amac?.deger ?? null,
+        amac,
         durum: s.durum,
         platformlar: a.platformlar?.deger ?? { meta: false, google: false },
         eksikSayisi: rehberEksikleri(a, b).filter((e) => e.seviye === 'engel').length,
-        yayinlar,
+        yayinlar: gercekYayinlar.map(({ platform, durum, sebep }) => ({ platform, durum, sebep })),
+        gorselVarlikId: okunan.adaylar[i]!.find((id) => okunan.gorseller.has(id)) ?? null,
+        butce: butce ? { tip: butce.tip, micros: butce.micros, paraBirimi: b.paraBirimi } : null,
+        yayinAdi: adKaynagi && amac ? advKampanyaAdi(yerelTarih(new Date(adKaynagi.created_at), adKaynagi.timezone ?? 'Europe/Istanbul'), REHBER_AMACLARI[amac].ekranAdi, adKaynagi.id) : null,
+        createdAt: new Date(s.created_at).toISOString(),
         updatedAt: new Date(s.updated_at).toISOString(),
-      });
-    }
-    return { satirlar: sonuc, toplam: sonuc.length };
+      };
+    });
+    return { satirlar, toplam: okunan.toplam };
   }
 
   async olustur(ctx: TenantContext, clientId: string, kaynakRehberId?: string): Promise<RehberKaydi> {
@@ -624,12 +692,45 @@ export class RehberService {
 
   async arsivle(ctx: TenantContext, id: string): Promise<RehberKaydi> {
     const s = await this.tx(ctx)(async (t) => {
+      // Erişim UPDATE'TEN ÖNCE (`geriGetir` ile aynı gerekçe). Panel bu ucu
+      // 2026-10-12'den beri satır menüsünden doğrudan çağırıyor.
+      const [o] = await t.$queryRaw<Array<{ client_id: string }>>(Prisma.sql`SELECT client_id::text FROM reklam_rehberi WHERE id = ${id}::uuid FOR UPDATE`);
+      if (!o) throw new NotFoundException('Rehber bulunamadı');
+      erisim(ctx, o.client_id);
       const [r] = await t.$queryRaw<RehberSatiri[]>(Prisma.sql`
         UPDATE reklam_rehberi SET durum = 'arsivlendi', arsivlendi_at = now(), updated_at = now()
          WHERE id = ${id}::uuid AND durum <> 'arsivlendi'
         RETURNING ${SUTUNLAR}`);
-      if (!r) throw new ConflictException('Rehber bulunamadı ya da zaten arşivde.');
-      erisim(ctx, r.client_id);
+      if (!r) throw new ConflictException('Bu reklam zaten arşivde.');
+      return r;
+    });
+    return this.kayit(ctx, s);
+  }
+
+  /**
+   * ARŞİVDEN GERİ GETİR — arşivden önceki duruma. Önceki durum saklanmıyor
+   * ama TÜRETİLEBİLİYOR: rehber yalnız en az bir platform yayını başladığında
+   * `yayinda` oluyor (`yayinla`), yani çocuk taslaklarından birinin yayın
+   * kaydı varsa `yayinda`, yoksa `taslak`. Yanlış yöne düşmek pahalı:
+   * yayına gitmiş bir rehberi `taslak`a döndürmek onu yeniden yayınlanabilir
+   * yapar ve platformda İKİNCİ bir kampanya açar. Arşiv yalnız listeden
+   * kaldırıyor, platforma hiç dokunmadığı için geri getirmek de dokunmuyor.
+   */
+  async geriGetir(ctx: TenantContext, id: string): Promise<RehberKaydi> {
+    const s = await this.tx(ctx)(async (t) => {
+      // Erişim UPDATE'TEN ÖNCE: sonra denetlemek, yetkisiz isteği yalnız
+      // transaction'ın geri alınmasına emanet ederdi.
+      const [o] = await t.$queryRaw<Array<{ client_id: string }>>(Prisma.sql`SELECT client_id::text FROM reklam_rehberi WHERE id = ${id}::uuid FOR UPDATE`);
+      if (!o) throw new NotFoundException('Rehber bulunamadı');
+      erisim(ctx, o.client_id);
+      const [r] = await t.$queryRaw<RehberSatiri[]>(Prisma.sql`
+        UPDATE reklam_rehberi r
+           SET durum = CASE WHEN EXISTS (SELECT 1 FROM yayin y WHERE y.taslak_id IN (r.meta_taslak_id, r.google_taslak_id)) THEN 'yayinda' ELSE 'taslak' END,
+               arsivlendi_at = NULL, updated_at = now()
+         WHERE r.id = ${id}::uuid AND r.durum = 'arsivlendi'
+        RETURNING ${SUTUNLAR}`);
+      // RLS'li UPDATE hata vermeden SIFIR satır etkileyebilir: say.
+      if (!r) throw new ConflictException('Bu reklam arşivde değil.');
       return r;
     });
     return this.kayit(ctx, s);
@@ -1172,32 +1273,58 @@ export class RehberService {
 
   /** Eksik/karar bağlamı: YALNIZ veritabanı ve önbellek — platform çağrısı yok. */
   private async baglam(ctx: TenantContext, clientId: string, a: RehberAlanlari): Promise<Baglam> {
-    const metaId = a.metaHesabiId?.deger ?? null;
-    const googleId = a.googleHesabiId?.deger ?? null;
-    const r = await this.tx(ctx)(async (t) => {
-      const [m] = await t.$queryRaw<Array<{ ad: string; marka: string | null; logo: string | null; yasal: string | null; kategoriler: string[] }>>(Prisma.sql`
+    const [b] = await this.baglamlar(ctx, clientId, [a]);
+    return b!;
+  }
+
+  /**
+   * AYNI WORKSPACE'İN BİRDEN ÇOK REHBERİ İÇİN BAĞLAM, TEK TRANSACTION'DA.
+   * Liste ucu her satır için `baglam` çağırıyordu: satır başına bir
+   * transaction ve beş sorgu, üstüne yayın durumu için iki-üç tane daha.
+   * Ege Birlik Yapı'nın 24 satırında yüzü aşkın gidiş-dönüş demekti ve
+   * satır sayısıyla doğrusal büyüyordu. Workspace, ajans yetkisi ve marka
+   * profili her satırda AYNI; hesap ve varlık ölçüleri birleşik kümeyle tek
+   * sorguda okunuyor. Kalan tek satır başı sorgu eski kayıtların form
+   * kimliği çevirisi (`formKimligiCoz`): yalnız UUID taşıyan eski form
+   * değerinde koşuyor, sayısal kimlikte sorgusuz dönüyor.
+   */
+  private async baglamlar(ctx: TenantContext, clientId: string, liste: readonly RehberAlanlari[]): Promise<Baglam[]> {
+    const hesapIdleri = [...new Set(liste.flatMap((a) => [a.metaHesabiId?.deger, a.googleHesabiId?.deger]).filter((x): x is string => !!x))];
+    // BANNER SETİ: oran varlığın ÖLÇÜSÜNDEN (istemci söylemez). Workspace'in
+    // arşivinde olmayan varlık listede yok, yani oranı `null` — türetme durur.
+    const medyaIdleri = [...new Set(liste.flatMap((a) => (a.medya?.deger ?? []).map((x) => x.varlikId)))];
+    const ortak = await this.tx(ctx)(async (t) => {
+      const [m] = await t.$queryRaw<Array<NonNullable<BaglamVerisi['m']>>>(Prisma.sql`
         SELECT c.name AS ad, p.marka_adi AS marka, p.logo_asset_id::text AS logo, p.yasal_uyari AS yasal,
                c.special_ad_categories AS kategoriler
           FROM clients c LEFT JOIN client_profiles p ON p.client_id = c.id
          WHERE c.id = ${clientId}::uuid`);
-      const hesaplar = await t.$queryRaw<Array<{ id: string; platform: string; external_id: string; currency: string; timezone: string }>>(Prisma.sql`
-        SELECT id::text, platform::text AS platform, external_id, currency, timezone FROM ad_accounts
-         WHERE client_id = ${clientId}::uuid AND id = ANY(${[metaId, googleId].filter((x): x is string => !!x)}::uuid[])`);
+      const hesaplar = hesapIdleri.length
+        ? await t.$queryRaw<BaglamVerisi['hesaplar']>(Prisma.sql`
+            SELECT id::text, platform::text AS platform, external_id, currency, timezone FROM ad_accounts
+             WHERE client_id = ${clientId}::uuid AND id = ANY(${hesapIdleri}::uuid[])`)
+        : [];
       // Hazırlık ucuyla AYNI kural, tek yardımcıdan (BULGU-5).
       const ajans = await ajansYoneticisiMi(t, ctx);
-      // BANNER SETİ: oran varlığın ÖLÇÜSÜNDEN (istemci söylemez). Workspace'in
-      // arşivinde olmayan varlık listede yok, yani oranı `null` — türetme durur.
-      const medyaIdleri = (a.medya?.deger ?? []).map((x) => x.varlikId);
       const olculer = medyaIdleri.length
-        ? await t.$queryRaw<Array<{ id: string; kind: string; width: number | null; height: number | null; byte_size: number | null }>>(Prisma.sql`
+        ? await t.$queryRaw<BaglamVerisi['olculer']>(Prisma.sql`
             SELECT id::text, kind, width, height, byte_size FROM assets WHERE client_id = ${clientId}::uuid AND id = ANY(${medyaIdleri}::uuid[])`)
         : [];
       // ESKİ KAYIT: Dalga 2'den önce seçilen form `lead_forms.id` (UUID)
       // taşıyor; Meta listesiyle karşılaştırmak için Meta kimliğine çevrilir.
-      const formDegeri = a.formSablonuId?.deger ?? null;
-      const formKimligi = formDegeri ? await formKimligiCoz(t, clientId, a.sayfaId?.deger ?? null, formDegeri) : null;
-      return { m, hesaplar, ajans, olculer, formKimligi };
+      const formKimlikleri: Array<string | null> = [];
+      for (const a of liste) {
+        const formDegeri = a.formSablonuId?.deger ?? null;
+        formKimlikleri.push(formDegeri ? await formKimligiCoz(t, clientId, a.sayfaId?.deger ?? null, formDegeri) : null);
+      }
+      return { m, hesaplar, ajans, olculer, formKimlikleri };
     });
+    return liste.map((a, i) => this.baglamKur(clientId, a, { ...ortak, formKimligi: ortak.formKimlikleri[i] ?? null }));
+  }
+
+  private baglamKur(clientId: string, a: RehberAlanlari, r: BaglamVerisi): Baglam {
+    const metaId = a.metaHesabiId?.deger ?? null;
+    const googleId = a.googleHesabiId?.deger ?? null;
     const meta = r.hesaplar.find((h) => h.id === metaId && h.platform === 'meta') ?? null;
     const google = r.hesaplar.find((h) => h.id === googleId && h.platform === 'google') ?? null;
     const o = this.onbellek.get(clientId);
@@ -1418,6 +1545,18 @@ export class RehberService {
       throw new BadRequestException(`Google Ads kotası şu an dolu (${g.reason ?? 'kota'}). Yaklaşık ${dk} dakika sonra tekrar dene.`);
     }
   }
+}
+
+/**
+ * Liste satırının küçük görsel adayları, öncelik sırasıyla: ilk medya
+ * videoysa KAPAĞI (videonun kendisi `<img>` ile gösterilemez), sonra
+ * kendisi. Sorgu yalnız `kind = 'image'` olanı seçtiği için video kimliği
+ * aday olarak kalsa da seçilmez.
+ */
+export function gorselAdaylari(a: RehberAlanlari): string[] {
+  const ilk = a.medya?.deger[0];
+  if (!ilk) return [];
+  return ilk.kapakVarlikId ? [ilk.kapakVarlikId, ilk.varlikId] : [ilk.varlikId];
 }
 
 function erisim(ctx: TenantContext, clientId: string): void {

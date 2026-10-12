@@ -16,8 +16,9 @@ export const dynamic = 'force-dynamic';
  * mimari `docs/advcampaign/MIMARI-REHBER.md`). Yapay zekâ yalnız düğme
  * arkasında ("Metin öner", "Anahtar kelime öner").
  *
- * İki hâl, tek adres: `?rehber=` yoksa giriş (açık rehberler + "Yeni
- * reklam"), varsa rehberin kendisi odaklı kipte. Rehber kimliği adreste:
+ * İki hâl, tek adres: `?rehber=` yoksa giriş (üç sekme: Yayındakiler,
+ * Taslaklar, Arşiv; sekme `?sekme=`de, `lib/reklam-girisi.ts`), varsa
+ * rehberin kendisi odaklı kipte. Rehber kimliği adreste:
  * yenileyen ya da bağlantıyı paylaşan kişi aynı rehbere döner.
  */
 export default async function AdvCampaignPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
@@ -50,7 +51,16 @@ export default async function AdvCampaignPage({ searchParams }: { searchParams: 
     } catch (e) {
       listeHatasi = hata(e);
     }
-    return <RehberGirisi clientId={clientId} workspaceAdi={workspaceAdi} liste={liste} listeHatasi={listeHatasi} devredildi={devredildi} />;
+    return (
+      <RehberGirisi
+        clientId={clientId}
+        workspaceAdi={workspaceAdi}
+        liste={liste}
+        listeHatasi={listeHatasi}
+        sekmeParam={first(params.sekme)}
+        devredildi={devredildi}
+      />
+    );
   }
 
   const kayitOku = () => serverApiFetch<RehberKaydi>(`/reklam/rehberler/${encodeURIComponent(rehberId)}`);
