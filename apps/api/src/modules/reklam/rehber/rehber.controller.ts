@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Put, Query } from '@nestjs/common';
 import {
   anahtarKelimeOnerSchema,
+  metinOnerIstegiSchema,
   rehberGuncelleSchema,
   rehberOlusturSchema,
   rehberYayinlaSchema,
@@ -128,8 +129,12 @@ export class RehberController {
 
   @Post('rehberler/:id/metin-oner')
   @RequirePermissions('bulk.write')
-  metinOner(@CurrentTenant() ctx: TenantContext, @Param('id', ParseUUIDPipe) id: string): Promise<MetinOnerisi> {
-    return this.rehber.metinOner(ctx, id);
+  metinOner(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(zodBody(metinOnerIstegiSchema)) dto: z.infer<typeof metinOnerIstegiSchema>,
+  ): Promise<MetinOnerisi> {
+    return this.rehber.metinOner(ctx, id, dto);
   }
 
   @Post('rehberler/:id/prova')

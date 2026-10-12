@@ -80,6 +80,12 @@ export interface GeminiIstegi {
    * güncellemesinde sessizce pahalılaşır. Görselsiz çağrıda gönderilmiyor.
    */
   mediaResolution?: 'MEDIA_RESOLUTION_LOW' | 'MEDIA_RESOLUTION_MEDIUM' | 'MEDIA_RESOLUTION_HIGH';
+  /**
+   * Sıcaklık (`temperature`). Verilmezse GÖNDERİLMEZ ve mevcut çağıranların
+   * gövdesi değişmez; çeşitlilik isteyen çağrı (rehber metin önerisi) bunu
+   * açıkça verir, yoksa aynı girdi her seferinde aynı metni üretir.
+   */
+  sicaklik?: number;
 }
 
 export interface GeminiAyarlari {
@@ -107,6 +113,7 @@ export class GeminiIstemcisi {
         thinkingConfig: { thinkingLevel: g.dusunme ?? 'medium' },
         ...(g.jsonSemasi && { responseMimeType: 'application/json', responseJsonSchema: g.jsonSemasi }),
         ...(g.mediaResolution && { mediaResolution: g.mediaResolution }),
+        ...(g.sicaklik !== undefined && { temperature: g.sicaklik }),
       },
     };
   }
@@ -262,6 +269,7 @@ export async function metinIsteOlcumlu(
     dusunme?: GeminiIstegi['dusunme'];
     gorseller?: Array<{ mimeType: string; data: string }>;
     mediaResolution?: GeminiIstegi['mediaResolution'];
+    sicaklik?: number;
   },
 ): Promise<OlcumluSonuc> {
   const bas = Date.now();
@@ -273,6 +281,7 @@ export async function metinIsteOlcumlu(
     jsonSemasi: g.jsonSemasi,
     dusunme: g.dusunme ?? 'low',
     ...(g.mediaResolution && { mediaResolution: g.mediaResolution }),
+    ...(g.sicaklik !== undefined && { sicaklik: g.sicaklik }),
   });
   const olcum = { girdiToken: r.girdiToken, ciktiToken: r.ciktiToken, onbellekToken: r.onbellekToken, sureMs: Date.now() - bas };
   if (r.sebep === 'ret') return { sonuc: { tur: 'ret', mesaj: r.aciklama ?? 'Yapay zekâ isteği işlemedi.' }, ...olcum };

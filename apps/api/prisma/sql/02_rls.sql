@@ -443,6 +443,8 @@ DECLARE
     'kreatif_briefleri',
     -- Haftalık özet (docs/haftalik-ozet/MIMARI.md § 2). Kendi satırında.
     'haftalik_ozetler',
+    -- AdvCampaign Dalga 2: görsele özel metin önbelleği. Kendi satırında.
+    'rehber_gorsel_metni',
     -- AdvStrategy aylık medya planı (docs/advstrategy/MIMARI.md § 1)
     'strateji_planlari', 'strateji_dagilimlari', 'strateji_matrisi', 'strateji_kelimeleri',
     'ozel_gunler'
@@ -2783,6 +2785,24 @@ CREATE POLICY adv_kreatif_briefleri_select ON kreatif_briefleri
   FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 CREATE POLICY adv_kreatif_briefleri_insert ON kreatif_briefleri
   FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+
+
+-- ============================================================================
+-- ADVCAMPAIGN DALGA 2 — rehber_gorsel_metni (görsele özel metin önbelleği)
+-- ============================================================================
+--
+-- SELECT + INSERT + UPDATE. Yazan tek yol rehberin metin önerisi, KULLANICI
+-- bağlamında ve INSERT ... ON CONFLICT DO UPDATE ile ("Yeniden yaz" aynı
+-- satırı günceller): UPDATE politikası olmasaydı ikinci yazım sıfır satır
+-- döner ve önbellek eski metni göstermeye devam ederdi (sync_jobs dersi).
+-- DELETE YOK: satır workspace ile CASCADE gidiyor.
+CREATE POLICY adv_rehber_gorsel_metni_select ON rehber_gorsel_metni
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_rehber_gorsel_metni_insert ON rehber_gorsel_metni
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_rehber_gorsel_metni_update ON rehber_gorsel_metni
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+  WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 
 -- ============================================================================

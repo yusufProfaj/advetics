@@ -120,8 +120,9 @@ describe('öneri: DÖRT HÂL ayrı', () => {
   });
 
   it('metin önerisi: tamamen boşsa notlarıyla "bos"', () => {
-    expect(metinOnerisiHali({ anaMetin: ' ', basliklar: [''], aciklamalar: [], notlar: ['Site okunamadı'] })).toEqual({ tur: 'bos', neden: 'Site okunamadı' });
-    expect(metinOnerisiHali({ anaMetin: 'Merhaba', basliklar: [], aciklamalar: [], notlar: [] }).tur).toBe('geldi');
+    const ek = { gorunenYol: [], onbellekten: false, gorselSayisi: 0 };
+    expect(metinOnerisiHali({ anaMetin: ' ', basliklar: [''], aciklamalar: [], notlar: ['Site okunamadı'], ...ek })).toEqual({ tur: 'bos', neden: 'Site okunamadı' });
+    expect(metinOnerisiHali({ anaMetin: 'Merhaba', basliklar: [], aciklamalar: [], notlar: [], ...ek }).tur).toBe('geldi');
   });
 
   it('KRİTİK: video listesi boşsa sunucunun nedeniyle "bos", doluysa "geldi"', () => {
@@ -678,7 +679,7 @@ describe('kaynak: sözleşmeye bağlılık', () => {
 
   it('KRİTİK: metin önerisi kendiliğinden yazılmıyor; "Kullan" kullanici kaynağıyla yazıyor', () => {
     const r = yorumsuz('adim-reklam.tsx');
-    const oner = r.slice(r.indexOf('async function oner()'), r.indexOf('function kullan('));
+    const oner = r.slice(r.indexOf('async function oner(mod'), r.indexOf('function kullan('));
     expect(oner).toContain('setOneri(metinOnerisiHali(r))');
     expect(oner).not.toContain("yaz(b, 'metin'");
     expect(r).toMatch(/function metinYaz\(yeni: Metin\) \{\s*yaz\(b, 'metin', yeni\);/);

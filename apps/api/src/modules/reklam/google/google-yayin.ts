@@ -173,6 +173,8 @@ export interface GoogleOkunan {
   aramaOgeleri: Array<{ countryCode: string | null; phoneNumber: string | null }>;
   /** Dalga 3 — yalnız beklenen taşıyorsa okunur ve kıyaslanır. */
   teklif?: string | null;
+  /** Yalnız beklenen taşıyorsa okunur: TEK reklamın yolu, değilse null (bilinmeyen = fark). */
+  gorunenYol?: { path1: string | null; path2: string | null } | null;
   gorselReklam?: GoogleGorselReklamBeklentisi | null;
   varlikGrubu?: GoogleVarlikGrubuBeklentisi | null;
 }
@@ -215,6 +217,7 @@ export function googleGeriOkumaKarsilastir(b: GoogleBeklenen, o: GoogleOkunan): 
   // Dalga 3: eski yayın satırlarında bu alanlar YOK (undefined) = bakılmaz.
   // Beklenip okunamayan (`null`/`undefined`) FARK: bilinmeyeni doğru saymıyoruz.
   if (b.teklif) kiyasla('kampanya.teklif', b.teklif, o.teklif ?? null);
+  if (b.gorunenYol) kiyasla('reklam.gorunenYol', b.gorunenYol, o.gorunenYol ?? null);
   if (b.gorselReklam) kiyasla('gorselReklam', b.gorselReklam, o.gorselReklam ?? null);
   if (b.varlikGrubu) kiyasla('varlikGrubu', b.varlikGrubu, o.varlikGrubu ?? null);
   return { sonuc: satirlar.length ? 'fark' : 'temiz', satirlar };
@@ -336,9 +339,29 @@ export async function googleGeriOku(port: GoogleYayinPortu, ctx: FetchContext, k
       .filter((x) => x.campaignAsset?.fieldType === 'CALL' && x.campaignAsset?.status !== 'REMOVED')
       .map((x) => ({ countryCode: x.asset?.callAsset?.countryCode ?? null, phoneNumber: x.asset?.callAsset?.phoneNumber ?? null })),
     teklif: c?.biddingStrategyType ?? null,
+    ...(b?.gorunenYol ? { gorunenYol: await gorunenYolOku(port, ctx, kampanyaId) } : {}),
     ...(b?.gorselReklam ? { gorselReklam: await gorselReklamOku(port, ctx, kampanyaId) } : {}),
     ...(b?.varlikGrubu ? { varlikGrubu: await varlikGrubuOku(port, ctx, kampanyaId) } : {}),
   };
+}
+
+/**
+ * Arama reklamının görünen yolu. Kampanyada TEK reklam beklenir; sıfır ya da
+ * birden çok satır `null` (bilinmeyen = fark). Alan adları v25 referansından,
+ * CANLIDA ÖLÇÜLMEDİ: Google `path2`yi boşken hiç döndürmeyebilir, o yüzden
+ * eksik alan `null` sayılıyor ve beklenen de yolsuz parçayı `null` yazıyor.
+ * `campaign.id` SELECT'te (WHERE'de süzülen alan seçilmezse Google reddediyor).
+ */
+async function gorunenYolOku(port: GoogleYayinPortu, ctx: FetchContext, kampanyaId: string): Promise<{ path1: string | null; path2: string | null } | null> {
+  const satirlar = await port.ara<{ adGroupAd?: { ad?: { responsiveSearchAd?: { path1?: string; path2?: string } } } }>(
+    ctx,
+    `SELECT campaign.id, ad_group_ad.ad.responsive_search_ad.path1, ad_group_ad.ad.responsive_search_ad.path2
+       FROM ad_group_ad
+      WHERE campaign.id = ${kampanyaId} AND ad_group_ad.status != 'REMOVED'`,
+  );
+  if (satirlar.length !== 1) return null;
+  const r = satirlar[0]!.adGroupAd?.ad?.responsiveSearchAd;
+  return { path1: r?.path1 || null, path2: r?.path2 || null };
 }
 
 /*

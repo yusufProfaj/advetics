@@ -30,6 +30,12 @@ export interface UyumGirdisi {
   kategoriler: OzelKategori[];
   yasalUyari: string | null;
   metaAnaMetin: string;
+  /**
+   * Görsele özel ana metinler (Dalga 2): o fikirde ortak metnin YERİNE
+   * Meta'ya gidiyorlar, yasal uyarı kuralı onlara da uygulanır. İsteğe bağlı:
+   * eski çağıranlar ortak metni denetlemeye devam eder.
+   */
+  metaEkAnaMetinler?: string[];
   googleAciklamalar: string[];
   enDusukYas: number;
   yasAraligi: { min: number; max: number } | null;
@@ -53,7 +59,8 @@ export function uyumDenetle(g: UyumGirdisi): UyumSonucu {
     b.push({ kod: 'UYUM-SIYASI', platform: null, metin: "Siyasi ve toplumsal konulu reklamlar Advetics'ten yayınlanamıyor." });
   }
   if (g.yasalUyari) {
-    if (g.platformlar.meta && !metinUyariIceriyor(g.metaAnaMetin, g.yasalUyari)) {
+    const metaMetinleri = [g.metaAnaMetin, ...(g.metaEkAnaMetinler ?? []).filter((x) => x.trim())];
+    if (g.platformlar.meta && metaMetinleri.some((x) => !metinUyariIceriyor(x, g.yasalUyari as string))) {
       b.push({ kod: 'UYUM-YASAL-META', platform: 'meta', metin: 'Zorunlu yasal uyarı Meta ana metninde yok.' });
     }
     if (g.platformlar.google && !g.googleAciklamalar.some((a) => metinUyariIceriyor(a, g.yasalUyari as string))) {

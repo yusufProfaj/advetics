@@ -5,6 +5,8 @@ import {
   googleGorselSorunu,
   advKampanyaAdi,
   gunlukEsdeger,
+  gorunenYolu,
+  METIN_SINIRLARI,
   karakterSayisi,
   paraOndaligi,
   type GoogleDerlemeGirdisi,
@@ -115,6 +117,12 @@ export interface GoogleBeklenen {
    * bu alan HİÇ yok (undefined); okuyan taraf onu null sayıyor.
    */
   aramaOgesi?: { countryCode: string; phoneNumber: string } | null;
+  /**
+   * Arama reklamının görünen yolu. YALNIZ gönderildiyse yazılır; eski yayın
+   * satırlarında ve yolsuz reklamda alan YOK = bakılmaz. Yeni bir alanı
+   * gönderip beklentiye yazmamak, Google'ın onu düşürmesini görmemek olurdu.
+   */
+  gorunenYol?: { path1: string; path2: string | null };
   /**
    * Dalga 3 (yalnız yeni kurgularda yazılır; eski satırlarda yok = bakılmaz):
    * teklif stratejisi (`campaign.bidding_strategy_type`), Talep Yaratma görsel
@@ -241,6 +249,12 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
     if (g.anahtarKelimeler.length === 0) retler.push({ kod: 'G-KELIME', mesaj: 'Anahtar kelime yok: arama kampanyası hiç gösterilmezdi.' });
     if (g.aciklamalar.length < 2) retler.push({ kod: 'G-ACIKLAMA-SAYI', mesaj: 'Google için en az 2 açıklama gerekiyor.' });
     if (g.basliklar.length < 3) retler.push({ kod: 'G-BASLIK-SAYI', mesaj: 'Google için en az 3 başlık gerekiyor.' });
+    // Görünen yol: sınırı aşan parça KIRPILMAZ, ret (yarıda kesilmiş yol
+    // başka bir sayfayı anlatabilir). Eksik listesi aynı sınırı engel sayıyor.
+    const yol = gorunenYolu(g.gorunenYol);
+    yol.forEach((x, i) => {
+      if (karakterSayisi(x) > METIN_SINIRLARI.gorunenYol) retler.push({ kod: 'G-YOL-UZUN', mesaj: `Görünen yol ${i + 1} en çok ${METIN_SINIRLARI.gorunenYol} karakter olabilir.` });
+    });
     if (retler.length) return { tur: 'ret', retler };
     const { govde, sira } = aramaAtomikIstek({
       customerId: g.musteriId,
@@ -258,6 +272,7 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
       finalUrl: g.hedefAdres,
       basliklar: g.basliklar,
       aciklamalar: g.aciklamalar,
+      ...(yol.length ? { gorunenYol: yol } : {}),
       telefon: tel ? g.telefon : null,
       validateOnly: b.validateOnly,
     });
@@ -284,6 +299,7 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
         anahtarKelimeSayisi: g.anahtarKelimeler.length,
         negatifSayisi: g.negatifler.length,
         aramaOgesi: tel ? { countryCode: tel.countryCode, phoneNumber: tel.phoneNumber } : null,
+        ...(yol.length ? { gorunenYol: { path1: yol[0]!, path2: yol[1] ?? null } } : {}),
       },
       atif: GOOGLE_ATIF,
       notlar,

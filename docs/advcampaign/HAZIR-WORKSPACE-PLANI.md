@@ -40,6 +40,44 @@ Google'da kampanya adı: Advetics kısaltması + tarih + amaç.
   Yaratma, Maks. Performans) başlıklar fikirlerden toplanır, sınırlar
   (`oneriyiSigdir`) uygulanır.
 
+#### Dalga 2 — uygulamada verilen kararlar (2026-10-12)
+- **Teşhis:** `metinOner` görseli hiç göndermiyordu, site ADRESİNİ
+  okuyordu, kullanıcının metni her istekte "Kullanıcının yazdığı metin"
+  olarak modele girip onu çapalıyordu, `temperature` gönderilmiyordu.
+- **Görsel modele gider** (metinden önce, `GORU_AYARI.mediaResolution`
+  orta). Görsele özel istekte tek görsel (video için kapak); ortak
+  öneride ilk 3 görsel (üretilen boyutlar hariç, fazlası notta). 4 MB
+  üstü, desteklenmeyen biçim ve okunamayan görsel atlanır, sebebi
+  `notlar`da. Varlık `client_id` süzgeciyle okunur ("tüm şirketler").
+- **Site metni elimizde yok** (Ölçüm taraması metni saklamıyor): isteme
+  yalnız adres girer ve "sitenin metni okunmadı" yazar. Canlı okuma
+  bilerek yapılmadı.
+- **Sözleşme:** rehber medyasına isteğe bağlı `metin {anaMetin?,
+  basliklar?, aciklamalar?, kaynak}`; ortak metne `gorunenYol?`.
+  `metin` alanının izinli kaynaklarına `derleyici` eklendi (görsel
+  bırakılınca boş ortak metin de dolar); "Metin öner" hâlâ `ai_onerisi`.
+- **Önbellek** `rehber_gorsel_metni` (client + `content_hash` + amaç):
+  `yeni` modda yapay zekâya gidilmez; "Yeniden yaz" önbelleği atlar,
+  önceki öneriyi "tekrar etme" listesiyle gönderir ve satırı günceller.
+- **Çapa** yalnız "Buna göre yeniden yaz" (`buna_gore`). Sıcaklık 0.9.
+- **Uydurma kapısı** görselde de geçerli: görseldeki fiyat kaynak
+  metinde yoksa atılır, not "görselde X yazıyor, doğrulanamadığı için
+  eklenmedi" (model okuduğu yazıyı `gorseldekiYazilar`da söylüyor).
+- **Derleyici:** Meta'da fikrin kendi başlığı/metni/açıklaması, boş
+  parça ortaktan. Google görsel kurgularında havuz: ortak önce, tekil,
+  15 başlık / 4 açıklama, sınırı aşan atılır. Görsel metni olmayan
+  rehberin içerik özeti değişmiyor. Eksik listesi ve uyum denetçisi
+  görsel metnine de yasal uyarı ve sınır uyguluyor.
+- **Google RSA:** öneri 12-15 başlık, 4 açıklama istiyor. Görünen yol
+  (path1/path2, 15 karakter) öneriye girdi; adreste ya da anahtar
+  kelimede geçmeyen parça atılır. Derleyici gövdeye ve
+  `beklenen_yanki.gorunenYol`a yazıyor; geri okuma `ad_group_ad` RSA
+  yolunu soruyor (yalnız beklenen taşıyorsa).
+- **Başlamayan platformun sebebi kalıcı:** `reklam_rehberi.platform_sebepleri`
+  (platform başına sebep + zaman), `yayinDurumu` önce onu gösterir;
+  denetim kaydı `reklam.rehber.baslamadi`. Başlayan platformun eski
+  sebebi silinir.
+
 ### Dalga 3 — Hazır workspace
 - Hesap atandığı an (ve Marka Merkezi'nde "Yeniden hazırla"): site
   taraması (Ölçüm), Meta hesabının pikselleriyle sitede görülen pikselin
@@ -53,6 +91,13 @@ Google'da kampanya adı: Advetics kısaltması + tarih + amaç.
 ## Ölçülecek / açık
 - Açma yolunun canlı sonucu (Dalga 1 adım 2).
 - Gemini'nin Türkçe görsel okumasının kalitesi ve maliyeti (Dalga 2).
+  Maliyet: görsel başına TEK çağrı (önbellek), ortak öneride en çok 3
+  görsel; token sayısı API günlüğünde `metin-oner ... girdi= cikti=`
+  satırında ve `rehber_gorsel_metni.girdi_token/cikti_token`da. Canlıda
+  ÖLÇÜLMEDİ: orta çözünürlükte görsel başına girdi token'ı, görselde
+  okunan fiyatın `gorseldekiYazilar`a gerçekten düşüp düşmediği.
+- Görünen yol: Google'ın `path1/path2`yi geri okumada nasıl döndürdüğü
+  (boş `path2` hiç gelmiyor mu) CANLIDA ÖLÇÜLMEDİ; beklenen null yazıyor.
 - Tag Manager'a otomatik etiket Faz 2'ye bağlı (Google izinleri).
 
 ## Dalga 3 — mimari (Ajan 1, 2026-10-12)
