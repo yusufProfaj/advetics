@@ -49,6 +49,7 @@ const HARCAMA_SEVIYESI = seviyeLiterali('campaign');
 const KAYNAK_HATASI: Record<BekleyenIsTuru, string> = {
   boost_onay: 'Akıllı Boost kuyruğu okunamadı',
   sinyal_acik: 'Açık sinyaller okunamadı',
+  geri_besleme_sorunu: 'Meta’ya lead sonucu gönderimleri okunamadı',
   strateji_onay: 'Onay bekleyen medya planları okunamadı',
   strateji_aktar: 'Aktarılmayı bekleyen medya planları okunamadı',
   butce_yok: 'Bütçe durumu okunamadı',
@@ -166,6 +167,8 @@ export class GenelBakisService {
         // ekran boş açılsaydı iki yer birbirini yalanlardı.
         if (this.config.sinyal.sessizKosum && !ctx.isOrgAdmin) return [];
         return this.oku(tur, ctx, this.sinyalSorgusu(kapsam));
+      case 'geri_besleme_sorunu':
+        return this.oku(tur, ctx, this.geriBeslemeSorgusu(kapsam, now));
       case 'strateji_onay':
         return this.oku(tur, ctx, this.planSorgusu(kapsam, 'onayda'));
       case 'strateji_aktar':
@@ -219,6 +222,32 @@ export class GenelBakisService {
       WHERE s.client_id = ANY(${kapsam}::uuid[])
         AND s.durum = 'acik'
       GROUP BY s.client_id, c.name
+    `;
+  }
+
+  /**
+   * Lead sonuçları Meta'ya gitmiyor (Paket E, MIMARI Ç-9). YAPILACAK İŞİ
+   * OLANLAR sayılıyor: tekrar denenebilir (reddedildi, vazgeçildi) ve hâlâ 7
+   * gün içinde olan satırlar, ayar hatadaysa da bekleyenler. Süresi geçmiş
+   * satır iş değil (gönderilemez) ve burada sayılmıyor; uyarı bandında görünüyor.
+   * Ayar hatada ama bekleyen satır yoksa bile 1 sayılıyor: hata bir iş.
+   */
+  private geriBeslemeSorgusu(kapsam: string[], now: Date): Prisma.Sql {
+    const pencere = new Date(now.getTime() - 7 * 86_400_000);
+    return Prisma.sql`
+      SELECT a.client_id::text AS client_id, c.name AS client_adi,
+             GREATEST(COUNT(o.id), CASE WHEN a.son_ayar_hatasi IS NOT NULL THEN 1 ELSE 0 END)::int AS sayi,
+             LEAST(MIN(o.updated_at), a.son_ayar_hatasi_zamani) AS en_eski
+      FROM geri_besleme_ayarlari a
+      LEFT JOIN clients c ON c.id = a.client_id
+      LEFT JOIN geri_besleme_olaylari o
+             ON o.client_id = a.client_id AND o.platform = a.platform
+            AND ((o.durum IN ('vazgecildi', 'reddedildi') AND o.olay_zamani > ${pencere}::timestamptz)
+                 OR (a.son_ayar_hatasi IS NOT NULL AND o.durum IN ('bekliyor', 'basarisiz')))
+      WHERE a.client_id = ANY(${kapsam}::uuid[])
+        AND a.etkin
+      GROUP BY a.client_id, c.name, a.son_ayar_hatasi, a.son_ayar_hatasi_zamani
+      HAVING COUNT(o.id) > 0 OR a.son_ayar_hatasi IS NOT NULL
     `;
   }
 

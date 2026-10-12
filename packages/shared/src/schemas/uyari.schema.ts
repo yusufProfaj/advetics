@@ -35,6 +35,12 @@ export const UYARI_KODLARI = [
   'veri_bayat',
   /** Senkronizasyon işi kalıcı olarak düşüyor. */
   'is_dusuyor',
+  /**
+   * Lead sonuçları Meta'ya gitmiyor (Paket E, `geri-besleme/ayar.ts`
+   * `GERI_BESLEME_UYARI_KODU`): ayar hatada ya da son 24 saatte gönderilemeyen
+   * sonuç var. Kaynağı depodaki ayar ve gönderim satırları; platform çağrısı yok.
+   */
+  'geri_besleme_dusuyor',
 ] as const;
 export type UyariKodu = (typeof UYARI_KODLARI)[number];
 

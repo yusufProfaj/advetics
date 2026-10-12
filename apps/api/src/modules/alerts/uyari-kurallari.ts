@@ -376,6 +376,9 @@ const ONCELIK: Record<string, number> = {
   veri_hic_gelmedi: 3,
   baglanti_token_suresi: 4,
   is_dusuyor: 5,
+  // Meta'ya giden sinyal duruyor: para yakmıyor ama 7 gün dolunca sonuç bir
+  // daha gönderilemiyor; bayat veriden önce.
+  geri_besleme_dusuyor: 5.5,
   veri_bayat: 6,
   hesap_risk_incelemesi: 7,
   hesap_izleme_kapali: 8,

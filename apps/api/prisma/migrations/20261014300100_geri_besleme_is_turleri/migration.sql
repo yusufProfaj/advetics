@@ -1,0 +1,11 @@
+-- GERİ BESLEME İŞ TÜRÜ (Paket E, docs/geri-besleme/MIMARI.md § 5)
+--
+-- BU MIGRATION TEK BAŞINA VE İÇİNDE BAŞKA HİÇBİR ŞEY YOK.
+-- `ALTER TYPE ... ADD VALUE` ile eklenen bir enum değeri AYNI TRANSACTION
+-- İÇİNDE KULLANILAMIYOR (CLAUDE.md §3). Tablolar bir önceki migration'da;
+-- bu değeri kullanan tek şey uygulama kodu (sync_jobs satırları).
+--
+-- lead_feedback_send: workspace başına, vadesi gelmiş lead aşamalarını
+--   Meta'ya gönderen iş. 5 dakikalık süpürme (sweep:lead-feedback) vadesi
+--   gelmiş satırı olan workspace'ler için açıyor.
+ALTER TYPE "SyncJobType" ADD VALUE IF NOT EXISTS 'lead_feedback_send';

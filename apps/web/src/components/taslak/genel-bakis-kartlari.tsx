@@ -29,6 +29,7 @@ const TUR_HARFI: Record<BekleyenIs['tur'], { harf: string; gri: boolean }> = {
   boost_onay: { harf: 'B', gri: false },
   // "!" ve S DEĞİL: S strateji onayında; sinyal bir uyarı, simgesi de öyle.
   sinyal_acik: { harf: '!', gri: false },
+  geri_besleme_sorunu: { harf: 'M', gri: false },
   strateji_onay: { harf: 'S', gri: false },
   strateji_aktar: { harf: 'A', gri: false },
   butce_yok: { harf: '₺', gri: true },

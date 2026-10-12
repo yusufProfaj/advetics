@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { BaglantiDurumu, TenantContext, Uyari, UyariYaniti } from '@advetics/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { gorunenBaglantilar } from '../connections/gorunen-baglantilar';
+import { geriBeslemeUyariSatirlari, geriBeslemeUyarisi } from '../geri-besleme/geri-besleme-uyari';
 import {
   baglantiUyarilari,
   hesapUyarilari,
@@ -155,6 +156,12 @@ export class AlertsService {
       });
       for (const m of musteriler) {
         if (!atanmisIdler.has(m.id)) uyarilar.push(hesapsizMusteriUyarisi(m));
+      }
+
+      // Paket E: lead sonuçları Meta'ya gitmiyor (ayar hatası ya da son 24
+      // saatte gönderilemeyen sonuç). Depodan, platform çağrısı yok.
+      for (const r of await geriBeslemeUyariSatirlari(tx, simdi)) {
+        uyarilar.push(geriBeslemeUyarisi(r));
       }
 
       /*

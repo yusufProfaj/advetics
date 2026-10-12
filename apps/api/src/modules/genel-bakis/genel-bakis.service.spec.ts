@@ -3,8 +3,9 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { ForbiddenException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
-import { BEKLEYEN_IS_SINIRI, resolvePermissions, type TenantContext } from '@advetics/shared';
+import { BEKLEYEN_IS_SINIRI, BEKLEYEN_IS_TURLERI, resolvePermissions, type TenantContext } from '@advetics/shared';
 import { createHarness, seedTenant, IDS, type Harness } from '../../../test/pglite-harness';
+import { ayarAc, lead, olay } from '../../../test/geri-besleme-tohum';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { GenelBakisService } from './genel-bakis.service';
 import type { AppConfig } from '../../config/configuration';
@@ -225,7 +226,7 @@ describe('yetki', () => {
     await harcama('2026-10-03', 500);
     const y = await sor(MUSTERI, IDS.client);
     expect(y.isler.map((i) => i.tur)).toEqual(['strateji_onay']);
-    expect(y.sorulmayan).toEqual(['boost_onay', 'sinyal_acik', 'strateji_aktar', 'butce_yok']);
+    expect(y.sorulmayan).toEqual(['boost_onay', 'sinyal_acik', 'geri_besleme_sorunu', 'strateji_aktar', 'butce_yok']);
     expect(y.hatalar).toEqual([]);
     expect(sorgular).toHaveLength(1);
     expect(sorgular.some((s) => s.includes('auto_boost_queue_items'))).toBe(false);
@@ -265,9 +266,11 @@ describe('kaynak arızası', () => {
 
   it('her kaynak AYRI transaction: bir arıza diğerlerinin bağlamını paylaşmıyor', async () => {
     await sor(AJANS);
-    // Beş tür, beş withTenant. Tek transaction'da biri düşerse Postgres
-    // geri kalanını "current transaction is aborted" ile düşürürdü.
-    expect(baglamlar).toHaveLength(5);
+    // Altı tür (Paket E `geri_besleme_sorunu` ile), altı withTenant. Tek
+    // transaction'da biri düşerse Postgres geri kalanını "current
+    // transaction is aborted" ile düşürürdü.
+    expect(baglamlar).toHaveLength(BEKLEYEN_IS_TURLERI.length);
+    expect(baglamlar).toHaveLength(6);
   });
 });
 
@@ -392,5 +395,34 @@ describe('sinyal_acik (Paket A)', () => {
     const svcSessiz = sessizServis(true);
     expect((await svcSessiz.bekleyenler(REKLAMCI, {})).isler.filter((i) => i.tur === 'sinyal_acik')).toEqual([]);
     expect((await svcSessiz.bekleyenler(AJANS, {})).isler.filter((i) => i.tur === 'sinyal_acik')).toHaveLength(1);
+  });
+});
+
+describe('geri_besleme_sorunu (Paket E)', () => {
+  const LEAD = 'eeeeeeee-0000-4000-8000-0000000000aa';
+  const gun = (n: number) => new Date(SIMDI.getTime() - n * 86_400_000);
+
+  it('KRİTİK: yalnız YAPILACAK İŞ sayılıyor: tekrar denenebilir ve 7 gün içinde olan; süresi geçen ve ulaşan sayılmıyor', async () => {
+    await lead(h, { id: LEAD, externalId: '123456789012345', submittedAt: gun(1) });
+    await ayarAc(h);
+    await olay(h, { leadId: LEAD, asama: 'ham_lead', durum: 'iletildi', olayZamani: gun(1) });
+    await olay(h, { leadId: LEAD, asama: 'ulasildi', durum: 'vazgecildi', olayZamani: gun(1), sonrakiDeneme: null });
+    await olay(h, { leadId: LEAD, asama: 'nitelikli', durum: 'reddedildi', olayZamani: gun(9), sonrakiDeneme: null });
+    const y = await sor(AJANS);
+    expect(y.isler.filter((i) => i.tur === 'geri_besleme_sorunu')).toEqual([
+      expect.objectContaining({ clientId: IDS.client, sayi: 1 }),
+    ]);
+  });
+
+  it('ayar hatası bekleyen satır olmasa da bir iş; kapalı ayar iş değil', async () => {
+    await ayarAc(h);
+    await h.q(`UPDATE geri_besleme_ayarlari SET son_ayar_hatasi = 'izin yok', son_ayar_hatasi_zamani = $1`, [gun(2).toISOString()]);
+    let y = await sor(AJANS);
+    expect(y.isler.filter((i) => i.tur === 'geri_besleme_sorunu')).toEqual([
+      expect.objectContaining({ sayi: 1, enEski: gun(2).toISOString() }),
+    ]);
+    await h.q(`UPDATE geri_besleme_ayarlari SET etkin = false`);
+    y = await sor(AJANS);
+    expect(y.isler.filter((i) => i.tur === 'geri_besleme_sorunu')).toEqual([]);
   });
 });

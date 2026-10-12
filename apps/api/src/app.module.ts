@@ -45,6 +45,7 @@ import { IyilestirModule } from './modules/iyilestir/iyilestir.module';
 import { GenelBakisModule } from './modules/genel-bakis/genel-bakis.module';
 import { SinyalModule } from './modules/sinyal/sinyal.module';
 import { EtkiModule } from './modules/etki/etki.module';
+import { GeriBeslemeModule } from './modules/geri-besleme/geri-besleme.module';
 
 @Module({
   imports: [
@@ -92,6 +93,7 @@ import { EtkiModule } from './modules/etki/etki.module';
     GenelBakisModule,
     SinyalModule,
     EtkiModule,
+    GeriBeslemeModule,
   ],
   controllers: [HealthController],
   providers: [

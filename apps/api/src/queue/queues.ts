@@ -126,6 +126,11 @@ export function layerForJob(payload: SyncJobPayload): keyof typeof JOB_PRIORITY 
       // Tarama bir YEDEK yol: webhook çalışıyorsa hiçbir şey bulmuyor.
       // Canlı kaydın önüne geçmemeli.
       return 'organic_posts';
+    case 'lead_feedback_send':
+      // Paket E: sonuç 7 gün içinde gönderilebiliyor, birkaç dakikalık
+      // gecikme zararsız. Çekirdek metriklerin arkasında; işin içindeki kota
+      // isteği de aynı katmanı kullanıyor (geri-besleme-gonderim.service.ts).
+      return 'insights_backfill';
     default:
       return 'insights_daily';
   }
@@ -148,6 +153,7 @@ export function buildJobId(p: {
   dateFrom?: string;
   dateTo?: string;
   entityLevel?: EntityLevel;
+  clientId?: string;
 }): string {
   // AYIRICI `:` DEĞİL.
   //
@@ -165,7 +171,21 @@ export function buildJobId(p: {
     // Aynı sayfadan saniyeler içinde on kayıt gelebiliyor. Ayırıcı sosyal
     // profil olsaydı hepsi tek iş kimliğine düşer ve BullMQ'nun mükerrer
     // engeli dokuzunu SESSİZCE atardı — dokuz kayıp müşteri, sıfır hata.
-    p.externalLeadId ?? p.externalFormId ?? p.adAccountId ?? p.socialProfileId ?? p.ruleId ?? 'na',
+    p.externalLeadId ??
+      p.externalFormId ??
+      p.adAccountId ??
+      p.socialProfileId ??
+      p.ruleId ??
+      /*
+       * GERİ BESLEME İŞİ WORKSPACE BAŞINA ve taşıdığı tek kimlik müşteri.
+       * Bu dal olmasaydı bütün workspace'lerin işi `lead_feedback_send__na`
+       * kimliğine düşer ve BullMQ'nun mükerrer engeli ilkinden sonrakileri
+       * SESSİZCE atardı: bir workspace'in sonuçları gider, diğerlerininki
+       * hiç gitmez. Yalnız bu türe açık: başka türlerin kimliğini değiştirmek
+       * kuyruktaki işlerin mükerrer engelini deploy anında bozardı.
+       */
+      (p.jobType === 'lead_feedback_send' ? p.clientId : undefined) ??
+      'na',
     p.entityLevel ?? 'all',
     p.dateFrom ?? '',
     p.dateTo ?? '',

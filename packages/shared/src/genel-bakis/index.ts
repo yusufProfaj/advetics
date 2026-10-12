@@ -26,7 +26,21 @@ import type { Permission } from '../auth/roles';
  * - `butce_yok` — bu ay harcaması olan ama aylık bütçesi tanımsız
  *   workspace (`budget.write`). Bütçesiz harcamanın temposu ölçülemiyor.
  */
-export const BEKLEYEN_IS_TURLERI = ['boost_onay', 'sinyal_acik', 'strateji_onay', 'strateji_aktar', 'butce_yok'] as const;
+export const BEKLEYEN_IS_TURLERI = [
+  'boost_onay',
+  'sinyal_acik',
+  /*
+   * `geri_besleme_sorunu` — lead sonuçları Meta'ya gitmiyor (`lead.read`,
+   * Paket E `geri-besleme/ayar.ts#GERI_BESLEME_BEKLEYEN_IS`). Sinyalden sonra:
+   * kayıp sinyal para yakmıyor ama Meta'nın öğrenmesini her gün geriye
+   * atıyor ve 7 gün dolunca sonuç bir daha GÖNDERİLEMİYOR; plan onayından
+   * acil.
+   */
+  'geri_besleme_sorunu',
+  'strateji_onay',
+  'strateji_aktar',
+  'butce_yok',
+] as const;
 export type BekleyenIsTuru = (typeof BEKLEYEN_IS_TURLERI)[number];
 
 /** Bir workspace'te bir türden bekleyen işlerin özeti — satır başına bir tür. */
@@ -70,6 +84,7 @@ export const BEKLEYEN_IS_SINIRI = 50;
 export const BEKLEYEN_IS_YETKISI = {
   boost_onay: 'boost.read',
   sinyal_acik: 'rule.read',
+  geri_besleme_sorunu: 'lead.read',
   strateji_onay: 'strategy.read',
   strateji_aktar: 'strategy.write',
   butce_yok: 'budget.write',

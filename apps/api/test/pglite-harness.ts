@@ -611,6 +611,7 @@ export async function createHarness(): Promise<Harness> {
         draft_ads, draft_ad_groups, draft_campaigns,
         ad_creative_assets, ad_creatives,
         asset_platform_refs, assets,
+        geri_besleme_olaylari, geri_besleme_ayarlari, lead_durum_gecmisi,
         leads, lead_sync_cursors, lead_forms,
         bulk_items, bulk_batches,
         auto_boost_queue_items, auto_boost_subscriptions, auto_boost_presets,
