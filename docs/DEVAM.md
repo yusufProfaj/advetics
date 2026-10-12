@@ -16,6 +16,24 @@ RLS politikası var, platform sahibi yalnız hello@profaj.com.
 bu commit'le deploy ediliyor; migration `20261009100000_iyilestir` (üç
 yeni tablo) + `db:rls`.
 
+**ADVCAMPAIGN "BENİ TELEFONLA ARASINLAR" TURU (2026-10-13).** Amaç hâlâ
+`deneme` (canlı kurulmadı). Yapılanlar: Meta arama sonucu kovası ("Arama",
+"20 sn+"; action adları ÖLÇÜLMEDİ, tanınmayan `call` eylemleri raporda
+uyarı); Meta `device_platforms: mobile` + dar elle yerleşim (FB akış,
+Marketplace, FB Reels, FB/IG hikâye, IG akış), banner seti kapalı; +90 ile
+TR dışı hedefleme engeli; Google teklifi TELEFON'da HEP en çok tıklama
+(`CampaignConversionGoal` doğrulanana kadar); Google arama düğmesi
+tıklaması ayrı sorgu (hata raporda not, eski sayı korunur); Marka
+Merkezi çalışma saatleri → Google CallAsset `adScheduleTargets`; arama
+kampanyalarında kural/sinyal/İyileştir dönüşüme dayalı karar vermiyor
+(`skipped_no_conversion_signal`, `donusum_sayilmiyor`; hesapta arama
+kampanyası varsa hesap düzeyi dönüşüm anomalisi atlanıyor). Migration
+`20261015400000_calisma_saatleri`, `20261015500000_kural_sonuc_genisligi`.
+DERLEYICI 1.9.0, Google g-1.3.0. **Ölç (validate_only):** PHONE_CALL +
+LEADS + device_platforms + dar yerleşim kabulü. **Canlıda:** TR'de
+`click_to_call_*` adları, `click_type=CALLS` kabulü, `adScheduleTargets`
+geri okuma, rapor sorgusu süresi (`olcum-rapor.ts`).
+
 **ADVCAMPAIGN "WHATSAPP'TAN YAZSINLAR" TURU (2026-10-13).** Türkçe karşılama
 mesajı (`page_welcome_message`, `meta/karsilama.ts`; autofill YA DA hızlı
 sorular — belge ikisini birlikte göstermiyor; tek görsel `link_data`, video
