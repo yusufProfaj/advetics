@@ -426,6 +426,24 @@ export class SyncQueueService implements OnModuleDestroy {
         jobType: 'report_schedule',
         tz: 'Europe/Istanbul',
       },
+      /*
+       * Paket A — SİNYAL EMNİYET SÜPÜRMESİ: günde bir, 07:40 İstanbul.
+       *
+       * Asıl tetik ZİNCİR: `insights_daily` başarıyla bitince işin SONUNDA
+       * `signals_evaluate` kuyruğa giriyor (öncelik bariyer değil). Zincir
+       * kaybolursa (worker deploy'da öldü, iş `kuyruk_vazgecti`) bu süpürme
+       * dünü çekilmiş ama sinyali hesaplanmamış hesapları alıyor: sinyal bir
+       * gün gecikebilir, hiç gelmemezlik olmaz. 09:00 özetinden önce koşuyor.
+       */
+      { name: 'sweep:signals', pattern: '40 7 * * *', jobType: 'signals_evaluate', tz: 'Europe/Istanbul' },
+      /*
+       * Paket A — BİLDİRİM TESLİMİ: 5 dakikada bir (dakika 2, 7, 12...).
+       * Bekleyen ve yeniden denenecek gönderimler + 09:00 İstanbul sinyal
+       * özeti (özetin saati süpürmenin İÇİNDE kontrol ediliyor). Platform
+       * çağrısı yok, yalnız webhook/SMTP; kotaya dokunmuyor. 0/15/30/45
+       * dakikalarından kaçınıyor.
+       */
+      { name: 'sweep:notifications', pattern: '2-59/5 * * * *', jobType: 'notifications_send' },
     ];
 
     for (const s of schedules) {

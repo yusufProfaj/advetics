@@ -8,6 +8,7 @@ import { createHarness, type Harness } from '../../test/pglite-harness';
 import { PrismaService } from './prisma.service';
 import { GenelBakisService } from '../modules/genel-bakis/genel-bakis.service';
 import { BudgetsService } from '../modules/budgets/budgets.service';
+import type { AppConfig } from '../config/configuration';
 
 /**
  * ═══ GENEL BAKIŞ BEKLEYEN İŞLER — GERÇEK POLİTİKALARLA (Ajan 4) ═══
@@ -117,7 +118,7 @@ beforeAll(async () => {
     withTenant: (ctx: TenantContext, fn: (t: unknown) => Promise<unknown>) =>
       (PrismaService.prototype.withTenant as (...a: unknown[]) => Promise<unknown>).call(sahte, ctx, fn),
   } as unknown as PrismaService;
-  svc = new GenelBakisService(prisma);
+  svc = new GenelBakisService(prisma, { sinyal: { sessizKosum: false } } as unknown as AppConfig);
   butceSvc = new BudgetsService(prisma);
 }, 60_000);
 
@@ -380,7 +381,7 @@ describe('müşteri hesabı (client_viewer)', () => {
     const y = await svc.bekleyenler(MUSTERI, {}, SIMDI);
     expect(y.hatalar).toEqual([]);
     expect(ozet(y.isler)).toBe(`strateji_onay|${AD_OF[WS_EV]}|1`);
-    expect([...y.sorulmayan].sort()).toEqual(['boost_onay', 'butce_yok', 'strateji_aktar']);
+    expect([...y.sorulmayan].sort()).toEqual(['boost_onay', 'butce_yok', 'sinyal_acik', 'strateji_aktar']);
     // "Sorulmadı" SÖZ değil: gönderilen SQL'de üç tablonun hiçbiri yok.
     const govde = sorgular.join('\n');
     expect(govde).toContain('strateji_planlari');

@@ -27,6 +27,7 @@ import { GorsellerIcerik } from '@/components/marka-merkezi/varliklar/gorseller'
 import { KreatiflerIcerik } from '@/components/marka-merkezi/varliklar/kreatifler';
 import { FormlarIcerik } from '@/components/marka-merkezi/varliklar/formlar';
 import { WorkspaceAyarlari } from '@/components/marka-merkezi/workspace-ayarlari';
+import { BildirimlerBolumu } from '@/components/marka-merkezi/bildirimler-bolumu';
 import { AiDoldur } from '@/components/bilgi-bankasi/ai-doldur';
 import { MarkaSekmesi } from '@/components/bilgi-bankasi/marka-sekmesi';
 import { MetinSekmesi } from '@/components/bilgi-bankasi/metin-sekmesi';
@@ -263,6 +264,17 @@ export default async function MarkaMerkeziPage({
             )}
 
             {bolum === 'ayarlar' && <WorkspaceAyarlari clientId={clientId} session={session} />}
+
+            {bolum === 'bildirimler' && (
+              <section aria-labelledby="bildirimler-baslik" className="space-y-3">
+                <BolumBasligi
+                  id="bildirimler-baslik"
+                  baslik="Bildirimler"
+                  aciklama="Sinyaller ve kural bildirimleri bu kanallara gider. Bir kanal, deneme mesajı geldi diye onaylanana kadar doğrulanmamış sayılır."
+                />
+                <BildirimlerBolumu clientId={clientId} yazabilir={yaz('client.write')} ajansAdresi={session.user.email} />
+              </section>
+            )}
 
             {bolum === 'kitleler' && (
               <KitlelerBolumu clientId={clientId} yazabilir={yaz('client.write')} />

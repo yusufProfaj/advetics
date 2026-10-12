@@ -70,6 +70,20 @@ export const HESABIN_KENDI_VERISI = [
    * TAŞINMIYOR.
    */
   { tablo: 'sync_jobs', etiket: 'senkronizasyon işi' },
+  /*
+   * SİNYALLER (Paket A) DE HESABIN KENDİ VERİSİ: platform aynasından
+   * türetilmiş bir gözlem, kimsenin kararı değil. Geride kalsaydı eski
+   * müşterinin İyileştir ekranında ARTIK ONA AİT OLMAYAN bir kampanyanın
+   * "maliyet sıçradı" uyarısı durur, yeni müşteri hiçbir şey görmezdi.
+   * Tekil anahtar (`sinyaller_anahtar_key`) `client_id` İÇERMİYOR, hedefte
+   * çakışma doğmaz.
+   *
+   * `org_id` DE YAZILIYOR — bu listede `org_id` taşıyan TEK tablo. Kompozit
+   * yabancı anahtar `(client_id, org_id)` `clients`a bakıyor; hesap kardeş
+   * bir şirketin workspace'ine geçerse yalnız `client_id`yi yazmak anahtarı
+   * kırar ve atamanın TAMAMI "İlişkili kayıt geçersiz" ile düşerdi.
+   */
+  { tablo: 'sinyaller', etiket: 'sinyal', orgIdIle: true },
 ] as const;
 
 /**
@@ -279,18 +293,28 @@ export async function hesapVerisiniTasi(
   let toplam = 0;
   let kalanVeri = 0;
 
-  for (const { tablo } of HESABIN_KENDI_VERISI) {
+  for (const t of HESABIN_KENDI_VERISI) {
+    const { tablo } = t;
     if (yeniClientId === null) {
       kalanVeri += await yabanciSatirSayisi(tx, tablo, adAccountId, null);
       continue;
     }
     const n = await tx.$executeRaw(
-      Prisma.sql`
-        UPDATE ${tabloAdi(tablo)}
-           SET client_id = ${yeniClientId}::uuid
-         WHERE ad_account_id = ${adAccountId}::uuid
-           AND client_id IS DISTINCT FROM ${yeniClientId}::uuid
-      `,
+      'orgIdIle' in t
+        ? Prisma.sql`
+            UPDATE ${tabloAdi(tablo)} AS x
+               SET client_id = c.id, org_id = c.org_id
+              FROM clients c
+             WHERE c.id = ${yeniClientId}::uuid
+               AND x.ad_account_id = ${adAccountId}::uuid
+               AND x.client_id IS DISTINCT FROM ${yeniClientId}::uuid
+          `
+        : Prisma.sql`
+            UPDATE ${tabloAdi(tablo)}
+               SET client_id = ${yeniClientId}::uuid
+             WHERE ad_account_id = ${adAccountId}::uuid
+               AND client_id IS DISTINCT FROM ${yeniClientId}::uuid
+          `,
     );
     tasinan[tablo] = n;
     toplam += n;

@@ -236,6 +236,18 @@ const envSchema = z.object({
   // Fiyat/performans: Gemini 3.8 Flash (kararlı, en yeni Flash). Elle
   // yönetiliyor; "en yenisi" gibi otomatik yükseltme YOK.
   GEMINI_MODEL: z.string().default('gemini-3.8-flash'),
+
+  /**
+   * SİNYAL SESSİZ KOŞUMU (docs/sinyal/MIMARI.md Ç-14, § 10): `1` iken
+   * sinyaller HESAPLANIR ama yalnız org yöneticisine görünür ve hiçbir
+   * kanala gitmez. İlk iki hafta yanlış alarm oranı ölçülürken açık;
+   * eşikler `anomali.ts`e yazılınca `0`. Ortam değişkeni çünkü kararı deploy
+   * veriyor, kod değil: kapatmak için yeniden derleme gerekmemeli.
+   *
+   * YALNIZ `0` ya da `1`. `true`/`yes` gibi bir yazımın sessizce "kapalı"
+   * okunması, ölçüm döneminde müşterinin kanalına sinyal düşürmek olurdu.
+   */
+  SINYAL_SESSIZ_KOSUM: bosIseYok(z.enum(['0', '1']).default('0')),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -330,6 +342,11 @@ export interface AppConfig {
     apiKey?: string;
     model: string;
   };
+  /** Paket A — sinyaller (docs/sinyal/MIMARI.md). */
+  sinyal: {
+    /** `SINYAL_SESSIZ_KOSUM=1`: hesaplanır, yalnız org yöneticisi görür, kanala gitmez. */
+    sessizKosum: boolean;
+  };
 }
 
 export function loadConfig(): AppConfig {
@@ -416,6 +433,9 @@ export function loadConfig(): AppConfig {
     yapayZeka: {
       apiKey: env.GEMINI_API_KEY,
       model: env.GEMINI_MODEL,
+    },
+    sinyal: {
+      sessizKosum: env.SINYAL_SESSIZ_KOSUM === '1',
     },
   };
 }

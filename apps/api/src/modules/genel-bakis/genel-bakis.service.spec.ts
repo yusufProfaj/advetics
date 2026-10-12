@@ -7,6 +7,7 @@ import { BEKLEYEN_IS_SINIRI, resolvePermissions, type TenantContext } from '@adv
 import { createHarness, seedTenant, IDS, type Harness } from '../../../test/pglite-harness';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { GenelBakisService } from './genel-bakis.service';
+import type { AppConfig } from '../../config/configuration';
 
 /**
  * Bekleyen işler — gerçek şema (PGlite), üretim migration'larından.
@@ -62,7 +63,7 @@ beforeAll(async () => {
       });
     },
   } as unknown as PrismaService;
-  svc = new GenelBakisService(prisma);
+  svc = new GenelBakisService(prisma, { sinyal: { sessizKosum: false } } as unknown as AppConfig);
 }, 60_000);
 afterAll(async () => {
   await h.close();
@@ -224,7 +225,7 @@ describe('yetki', () => {
     await harcama('2026-10-03', 500);
     const y = await sor(MUSTERI, IDS.client);
     expect(y.isler.map((i) => i.tur)).toEqual(['strateji_onay']);
-    expect(y.sorulmayan).toEqual(['boost_onay', 'strateji_aktar', 'butce_yok']);
+    expect(y.sorulmayan).toEqual(['boost_onay', 'sinyal_acik', 'strateji_aktar', 'butce_yok']);
     expect(y.hatalar).toEqual([]);
     expect(sorgular).toHaveLength(1);
     expect(sorgular.some((s) => s.includes('auto_boost_queue_items'))).toBe(false);
@@ -264,9 +265,9 @@ describe('kaynak arızası', () => {
 
   it('her kaynak AYRI transaction: bir arıza diğerlerinin bağlamını paylaşmıyor', async () => {
     await sor(AJANS);
-    // Dört tür, dört withTenant. Tek transaction'da biri düşerse Postgres
+    // Beş tür, beş withTenant. Tek transaction'da biri düşerse Postgres
     // geri kalanını "current transaction is aborted" ile düşürürdü.
-    expect(baglamlar).toHaveLength(4);
+    expect(baglamlar).toHaveLength(5);
   });
 });
 

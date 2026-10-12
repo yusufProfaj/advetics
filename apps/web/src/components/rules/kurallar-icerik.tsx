@@ -7,6 +7,8 @@ import {
   RULE_LEVEL_LABELS,
   WINDOW_LABELS,
   type ActionOutcome,
+  type BildirimKanali,
+  type BildirimKanallariYaniti,
   type RuleActionRecord,
   type RuleRecord,
   type RuleRunRecord,
@@ -14,6 +16,8 @@ import {
 import { serverApiFetch } from '@/lib/api';
 import { formatRelative } from '@/lib/format';
 import { hataMetni } from '@/lib/sayfa-yardimcilari';
+import { baglanti } from '@/lib/baglanti';
+import { kuralBildirimMetni } from '@/lib/sinyal';
 import { NewRuleButton, RuleControls } from '@/components/rules/rule-controls';
 import i from '@/components/taslak/iyilestir.module.css';
 import s from '@/components/taslak/taslak.module.css';
@@ -70,6 +74,20 @@ export async function KurallarIcerik({
   });
   const accounts = connections.flatMap((c) => c.adAccounts ?? []);
 
+  /*
+   * "YALNIZCA BİLDİR" KURALININ KANAL ADLARI. Yalnız kanal seçmiş bir kural
+   * varsa soruluyor; düşerse `null` ve satır ad UYDURMADAN "N kanala; adlar
+   * alınamadı" diyor (`kuralBildirimMetni`).
+   */
+  const kanalGerekli =
+    sonuc.durum === 'tamam' && sonuc.kurallar.some((r) => r.action.type === 'notify' && (r.action.kanalIdleri?.length ?? 0) > 0);
+  const kanallar: BildirimKanali[] | null = kanalGerekli
+    ? await serverApiFetch<BildirimKanallariYaniti>(baglanti('/bildirim/kanallar', { clientId })).then(
+        (y) => y.kanallar,
+        () => null,
+      )
+    : [];
+
   const detail = acikKural
     ? await serverApiFetch<RuleRunRecord[]>(`/rules/${acikKural}/runs`).catch(() => null)
     : null;
@@ -119,6 +137,7 @@ export async function KurallarIcerik({
               open={r.id === acikKural}
               runs={r.id === acikKural ? detail : null}
               actions={r.id === acikKural ? actions : null}
+              kanallar={kanallar}
               href={adres(r.id === acikKural ? undefined : r.id)}
             />
           ))
@@ -137,6 +156,7 @@ function RuleRow({
   open,
   runs,
   actions,
+  kanallar,
   href,
 }: {
   rule: RuleRecord;
@@ -147,6 +167,7 @@ function RuleRow({
   open: boolean;
   runs: RuleRunRecord[] | null;
   actions: RuleActionRecord[] | null;
+  kanallar: BildirimKanali[] | null;
   href: string;
 }) {
   return (
@@ -156,7 +177,7 @@ function RuleRow({
           <b>{rule.name}</b>
           {/* KURALIN NE YAPTIĞI DÜZ TÜRKÇE. JSON koşul dizisini göstermek,
               kuralı canlıya alacak kişiden onu okuyabilmesini beklemek olurdu. */}
-          <small>{describe(rule)}</small>
+          <small>{describe(rule, kanallar)}</small>
         </div>
         <ModeChip dryRun={rule.dryRun} enabled={rule.enabled} />
         <span className={i.zaman} style={{ marginLeft: 0 }}>
@@ -276,7 +297,7 @@ function OutcomeChip({ outcome }: { outcome: ActionOutcome }) {
 }
 
 /** Kuralı düz Türkçeye çevirir — satırın altındaki cümle. */
-function describe(rule: RuleRecord): string {
+function describe(rule: RuleRecord, kanallar: BildirimKanali[] | null): string {
   const parts = rule.conditions.map(
     (c) =>
       `${METRIC_META[c.metric].label} ${OPERATOR_LABELS[c.operator]} ${c.value} (${WINDOW_LABELS[c.window].toLowerCase()})`,
@@ -285,7 +306,9 @@ function describe(rule: RuleRecord): string {
   const action =
     rule.action.type === 'adjust_budget'
       ? `bütçesini %${Math.abs(rule.action.percent)} ${rule.action.percent < 0 ? 'azalt' : 'artır'}`
-      : ACTION_LABELS[rule.action.type].toLowerCase();
+      : rule.action.type === 'notify'
+        ? kuralBildirimMetni(rule.action.kanalIdleri, kanallar)
+        : ACTION_LABELS[rule.action.type].toLowerCase();
   return `${RULE_LEVEL_LABELS[rule.level]} bazında, ${joined} olanları ${action}.`;
 }
 

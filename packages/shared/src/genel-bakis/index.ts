@@ -15,6 +15,10 @@ import type { Permission } from '../auth/roles';
  *
  * - `boost_onay` — Akıllı Boost kartı onay bekliyor (`boost.read`). Yeni
  *   gönderi her gün düşüyor; bekleyen kart, kaçan erişim demek.
+ * - `sinyal_acik` — açık sinyal var (`rule.read`, Paket A `sinyal/`). Para
+ *   yakan bir anomali bekleyen bir plan onayından acil; Boost'tan sonra
+ *   çünkü Boost kartı bir gün içinde değerini yitiriyor (MIMARI Ç-13).
+ *   SESSİZ KOŞUMDA (`SINYAL_SESSIZ_KOSUM=1`) yalnız org yöneticisine sayılır.
  * - `strateji_onay` — plan `onayda` (`strategy.read`). Onay yetkisi olan
  *   (müşteri hesabı dahil) için kendi işi; olmayan için bilgi.
  * - `strateji_aktar` — plan `onaylandi` ama AdvCampaign'e aktarılmadı
@@ -22,7 +26,7 @@ import type { Permission } from '../auth/roles';
  * - `butce_yok` — bu ay harcaması olan ama aylık bütçesi tanımsız
  *   workspace (`budget.write`). Bütçesiz harcamanın temposu ölçülemiyor.
  */
-export const BEKLEYEN_IS_TURLERI = ['boost_onay', 'strateji_onay', 'strateji_aktar', 'butce_yok'] as const;
+export const BEKLEYEN_IS_TURLERI = ['boost_onay', 'sinyal_acik', 'strateji_onay', 'strateji_aktar', 'butce_yok'] as const;
 export type BekleyenIsTuru = (typeof BEKLEYEN_IS_TURLERI)[number];
 
 /** Bir workspace'te bir türden bekleyen işlerin özeti — satır başına bir tür. */
@@ -65,6 +69,7 @@ export const BEKLEYEN_IS_SINIRI = 50;
 /** Tür başına okuma yetkisi — sunucu süzgeci ve panel aynı tablodan. */
 export const BEKLEYEN_IS_YETKISI = {
   boost_onay: 'boost.read',
+  sinyal_acik: 'rule.read',
   strateji_onay: 'strategy.read',
   strateji_aktar: 'strategy.write',
   butce_yok: 'budget.write',

@@ -1,7 +1,8 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ACTION_LABELS,
   METRIC_META,
@@ -13,10 +14,15 @@ import {
   RULE_OPERATORS,
   RULE_WINDOWS,
   WINDOW_LABELS,
+  KANAL_DURUM_ADI,
+  type BildirimKanallariYaniti,
   type RuleCondition,
   type RuleRecord,
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { baglanti } from '@/lib/baglanti';
+import { kaydedilecekKanallar, kanalAdi, kanalSecimi } from '@/lib/sinyal';
+import { mmAdresi } from '@/components/marka-merkezi/bolumler';
 
 /**
  * Kural düzenleyici.
@@ -82,6 +88,31 @@ export function RuleEditor({
     String(existing?.maxActionsPerRun ?? 20),
   );
 
+  /*
+   * BİLDİRİM KANALLARI ("Yalnızca bildir", Paket A). Seçim kural kaydında
+   * `action.kanalIdleri`; kanalsız kural "yalnız kural geçmişine yazılır".
+   * Liste OKUNAMAZSA eski seçim KORUNUYOR: boş listeyle kaydetmek, düşen bir
+   * çağrı yüzünden kuralın kanallarını sessizce silmek olurdu.
+   */
+  const [kanalIdleri, setKanalIdleri] = useState<string[]>(
+    existing?.action.type === 'notify' ? (existing.action.kanalIdleri ?? []) : [],
+  );
+  const [kanallar, setKanallar] = useState<
+    { tur: 'okunmadi' } | { tur: 'okunuyor' } | { tur: 'hata'; mesaj: string } | { tur: 'geldi'; veri: BildirimKanallariYaniti }
+  >({ tur: 'okunmadi' });
+
+  useEffect(() => {
+    if (actionType !== 'notify' || kanallar.tur !== 'okunmadi') return;
+    setKanallar({ tur: 'okunuyor' });
+    apiFetch<BildirimKanallariYaniti>(baglanti('/bildirim/kanallar', { clientId })).then(
+      (veri) => setKanallar({ tur: 'geldi', veri }),
+      (e: unknown) => setKanallar({ tur: 'hata', mesaj: e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.' }),
+    );
+  }, [actionType, kanallar.tur, clientId]);
+
+  /** Kayda gidecek seçim; silinmiş kanallar çıkıyor ve sayısı SÖYLENİYOR (`kaydedilecekKanallar`). */
+  const kanalKaydi = kaydedilecekKanallar(kanalIdleri, kanallar.tur === 'geldi' ? kanallar.veri.kanallar : null);
+
   const budgetConditionAtWrongLevel =
     level !== 'campaign' && conditions.some((c) => c.metric === 'budget_spent_ratio');
 
@@ -96,7 +127,12 @@ export function RuleEditor({
               percent: Number(percent),
               ...(maxBudget.trim() ? { maxBudget: Number(maxBudget) } : {}),
             }
-          : { type: actionType };
+          : actionType === 'notify'
+            ? {
+                type: 'notify' as const,
+                kanalIdleri: kanalKaydi.idler,
+              }
+            : { type: actionType };
 
       const body = {
         name: name.trim(),
@@ -335,6 +371,68 @@ export function RuleEditor({
           </>
         )}
       </div>
+
+      {actionType === 'notify' && (
+        <div className="mt-4 rounded-lg border border-line">
+          <p className="border-b border-line px-3 py-2 text-xs font-semibold text-ink">Bildirim nereye gitsin?</p>
+          {kanallar.tur === 'okunuyor' && <p className="px-3 py-2.5 text-xs text-ink-muted">Kanallar okunuyor…</p>}
+          {kanallar.tur === 'hata' && (
+            <p role="alert" className="px-3 py-2.5 text-xs text-danger-strong">
+              Bildirim kanalları alınamadı: {kanallar.mesaj} Kuralın kayıtlı kanal seçimi ({kanalIdleri.length}) değiştirilmeden korunur.
+            </p>
+          )}
+          {kanallar.tur === 'geldi' && kanallar.veri.kanallar.length === 0 && (
+            <div className="px-3 py-2.5 text-xs">
+              <p className="text-ink">
+                <strong>Bu workspace’te bildirim kanalı yok.</strong> Kural çalışır ve eşleşmeleri kural geçmişine yazar, ama
+                kimseye haber gitmez.
+              </p>
+              <Link href={mmAdresi(clientId, 'bildirimler')} className="mt-1.5 inline-block font-semibold text-brand-strong underline">
+                Kanal ekle
+              </Link>
+            </div>
+          )}
+          {kanallar.tur === 'geldi' &&
+            kanallar.veri.kanallar.map((k) => {
+              const sec = kanalSecimi(k);
+              const secili = kanalIdleri.includes(k.id);
+              return (
+                <label
+                  key={k.id}
+                  className={`flex items-start gap-2.5 border-t border-line px-3 py-2.5 text-xs first-of-type:border-t-0 ${
+                    sec.secilebilir || secili ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={secili}
+                    // Seçilemeyen ama ZATEN seçili kanal kaldırılabiliyor; eklenemiyor.
+                    disabled={!sec.secilebilir && !secili}
+                    onChange={(e) =>
+                      setKanalIdleri((x) => (e.target.checked ? [...x, k.id] : x.filter((y) => y !== k.id)))
+                    }
+                  />
+                  <span className="min-w-0 flex-1">
+                    <b className="text-ink">{kanalAdi(k)}</b>
+                    {sec.not && <span className="block text-ink-muted">{sec.not}</span>}
+                  </span>
+                  <span className="shrink-0 text-ink-muted">{KANAL_DURUM_ADI[k.durum]}</span>
+                </label>
+              );
+            })}
+          {kanalKaydi.kayip > 0 && (
+            <p className="border-t border-line px-3 py-2 text-xs text-warn-strong">
+              {kanalKaydi.kayip} seçili kanal artık yok (silinmiş); kaydedince kuraldan çıkar.
+            </p>
+          )}
+          {kanallar.tur === 'geldi' && kanallar.veri.kanallar.length > 0 && kanalIdleri.length === 0 && (
+            <p className="border-t border-line px-3 py-2 text-xs text-ink-muted">
+              Kanal seçilmedi: eşleşmeler yalnız kural geçmişine yazılır.
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Korumalar */}
       <details className="mt-5 rounded-lg border border-line">

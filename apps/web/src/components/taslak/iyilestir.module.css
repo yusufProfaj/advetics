@@ -779,6 +779,9 @@
   .yaziyor span:nth-child(3) {
     animation-delay: 0.3s;
   }
+  .sYukleniyor i {
+    animation: nabiz 1.2s ease-in-out infinite;
+  }
 }
 @keyframes gir {
   from {
@@ -860,4 +863,300 @@
 .yeniKural:has(> div) {
   margin-left: 0;
   flex-basis: 100%;
+}
+
+/*
+ * ═══ SİNYALLER SEKMESİ (Paket A, `docs/sinyal/taslak.html`) ═══
+ *
+ * Satır düzeni Google Ads "hesap teşhisi"nden: önem ikonu, tek cümle
+ * başlık, yol, kanıt, mini grafik, tek birincil düğme. Renkler yine
+ * `--t-*` belirteçlerinden (kılavuzun dört rengi); yeşil YALNIZ
+ * "hesaplandı" noktasında. Satırın çıkışı görünürlük geçişiyle; satır
+ * DOM'dan geçiş bittikten SONRA düşüyor.
+ */
+.sArac {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--t-line);
+}
+.sEtk {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--t-ink-muted);
+}
+.sAyrac {
+  width: 8px;
+}
+.sSatir {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 180px auto;
+  gap: 12px 16px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--t-line);
+  align-items: center;
+  transition: opacity 0.3s var(--t-ease);
+}
+.sSatir:last-child {
+  border-bottom: 0;
+}
+.sGidiyor {
+  opacity: 0;
+}
+.sIkon {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 13px;
+  font-family: var(--t-baslik);
+}
+.sIkonYuksek {
+  background: var(--t-brand);
+  color: #fff;
+}
+.sIkonOrta {
+  border: 2px solid var(--t-ink);
+  color: var(--t-ink);
+}
+.sIkonSaglik {
+  background: var(--t-ink);
+  color: var(--t-surface);
+}
+.sBaslik {
+  font-weight: 700;
+  font-size: 14px;
+}
+.sRozetler {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: 6px;
+  vertical-align: 1px;
+}
+.sRozet {
+  font-size: 10.5px;
+  font-weight: 700;
+  border-radius: 4px;
+  padding: 1px 6px;
+  border: 1px solid var(--t-line);
+  color: var(--t-ink-muted);
+}
+.sRozetVurgu {
+  border-color: var(--t-brand);
+  color: var(--t-brand-strong);
+}
+.sYol {
+  font-size: 12px;
+  color: var(--t-ink-muted);
+  margin-top: 2px;
+}
+.sYol a:hover {
+  color: var(--t-ink);
+  text-decoration: underline;
+}
+.sKanit {
+  font-size: 13px;
+  margin-top: 6px;
+}
+.sKanit b {
+  color: var(--t-ink);
+}
+.sNeden {
+  font-size: 12.5px;
+  color: var(--t-ink-muted);
+  margin-top: 4px;
+}
+.sKisit {
+  font-size: 12px;
+  margin-top: 4px;
+  font-style: italic;
+}
+.sMini {
+  width: 180px;
+  height: 48px;
+  display: block;
+}
+.sMiniK {
+  margin: 0;
+}
+.sLejant {
+  font-size: 10.5px;
+  color: var(--t-ink-muted);
+  display: flex;
+  gap: 12px;
+  margin-top: 2px;
+}
+.sLejant i {
+  display: inline-block;
+  width: 10px;
+  height: 6px;
+  vertical-align: 1px;
+  margin-right: 4px;
+}
+.sEylemler {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
+}
+.sYan {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.sSatirHata {
+  font-size: 12px;
+  color: var(--t-danger);
+  margin-top: 4px;
+}
+.sHesap {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 16px;
+  border-top: 1px solid var(--t-line);
+  font-size: 12.5px;
+  flex-wrap: wrap;
+}
+.sHesap:first-child {
+  border-top: 0;
+}
+.sHesap b {
+  font-weight: 600;
+}
+.sHesap span:last-child {
+  color: var(--t-ink-muted);
+}
+.sNokta {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  display: inline-block;
+}
+.sNoktaYesil {
+  background: var(--t-ok);
+}
+.sNoktaGri {
+  border: 2px solid var(--t-ink);
+  width: 9px;
+  height: 9px;
+}
+.sNoktaKirmizi {
+  background: var(--t-brand);
+}
+.sDisarida {
+  padding: 10px 16px;
+  font-size: 12.5px;
+  color: var(--t-ink-muted);
+  border-top: 1px solid var(--t-line);
+}
+.sDisarida summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--t-ink);
+}
+.sDisarida ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  list-style: disc;
+}
+.sDisarida li {
+  margin: 4px 0;
+}
+.sDisarida li b {
+  color: var(--t-ink);
+}
+.sBos {
+  padding: 36px 16px;
+  text-align: center;
+}
+.sBos b {
+  display: block;
+  font-size: 15px;
+  margin-bottom: 4px;
+}
+.sBos p {
+  margin: 0 auto 12px;
+  max-width: 520px;
+  color: var(--t-ink-muted);
+  font-size: 13px;
+}
+.sHataKutu {
+  padding: 14px 16px;
+  border-left: 3px solid var(--t-brand);
+  font-size: 13px;
+}
+.sYukleniyor {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.sYukleniyor i {
+  height: 14px;
+  border-radius: 6px;
+  background: var(--t-sunken);
+  display: block;
+}
+.sBant {
+  padding: 10px 16px;
+  font-size: 12.5px;
+  border-bottom: 1px solid var(--t-line);
+  background: var(--t-muted);
+}
+.sSayfalama {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  font-size: 12.5px;
+  color: var(--t-ink-muted);
+  border-top: 1px solid var(--t-line);
+}
+.sSayfalama b {
+  color: var(--t-ink);
+}
+.notAlani {
+  display: block;
+  width: calc(100% - 36px);
+  margin: 10px 18px 12px;
+  border: 1px solid var(--t-line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  min-height: 64px;
+  resize: vertical;
+  font: inherit;
+  font-size: 13px;
+  background: var(--t-surface);
+  color: var(--t-ink);
+}
+.notAlani:focus {
+  outline: none;
+  border-color: var(--t-ink-muted);
+}
+@keyframes nabiz {
+  50% {
+    opacity: 0.45;
+  }
+}
+@media (max-width: 860px) {
+  .sSatir {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+  .sSatir > figure,
+  .sSatir > .sEylemler {
+    grid-column: 2;
+  }
+  .sEylemler {
+    align-items: flex-start;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
 }

@@ -1152,6 +1152,13 @@ enum SyncJobType {
   /// gördüğü an tetiği çekiyor. Aynı türde toplasaydık teşhis ekranı iki
   /// ayrı işin satırını karıştırırdı.
   payment_check
+  /// Paket A — hesap başına, gün başına sinyal hesaplaması (anomali + sağlık).
+  /// PLATFORM ÇAĞRISI YOK: girdisi insights_daily ve yapı tabloları.
+  /// `insights_daily` işinin SONUNA zincirli (öncelik bariyer değil).
+  signals_evaluate
+  /// Paket A — bekleyen bildirimleri kanallara gönderen küresel süpürme
+  /// ve 09:00 İstanbul sinyal özeti. Müşteri başına dağılmıyor.
+  notifications_send
 }
 
 enum SyncJobStatus {
@@ -4079,4 +4086,105 @@ model WorkspaceKurulum {
 
   @@index([orgId], map: "workspace_kurulum_org_id_idx")
   @@map("workspace_kurulum")
+}
+
+// ═══ SİNYALLER + BİLDİRİM KANALLARI (Paket A, docs/sinyal/MIMARI.md § 2) ═══
+// CHECK kısıtları, kısmi indeksler ve FK'ler migration'da; RLS 02_rls.sql'de.
+// Servisler ham SQL kullanıyor (PGlite testleri gerçek sorguyu koşsun).
+
+/// Saklanan gözlem. Tekil `anahtar` (client_id İÇERMEZ: hesap taşınınca satır taşınır).
+/// Açık sinyallerin özet indeksi `sinyaller_acik_ozet_idx` KISMİ, yalnız migration'da.
+model Sinyal {
+  id             String    @id @default(uuid()) @db.Uuid
+  orgId          String    @map("org_id") @db.Uuid
+  clientId       String    @map("client_id") @db.Uuid
+  adAccountId    String    @map("ad_account_id") @db.Uuid
+  platform       Platform
+  anahtar        String    @unique(map: "sinyaller_anahtar_key") @db.VarChar(200)
+  tur            String    @db.VarChar(12)
+  kod            String    @db.VarChar(40)
+  yon            String?   @db.VarChar(8)
+  seviye         EntityLevel
+  varlikId       String    @map("varlik_id") @db.Uuid
+  varlikAdi      String    @map("varlik_adi") @db.VarChar(512)
+  ustAdi         String?   @map("ust_adi") @db.VarChar(512)
+  gun            DateTime  @db.Date
+  gozlenen       Decimal?
+  beklenenAlt    Decimal?  @map("beklenen_alt")
+  beklenenOrta   Decimal?  @map("beklenen_orta")
+  beklenenUst    Decimal?  @map("beklenen_ust")
+  nokta          Int?      @db.SmallInt
+  z              Decimal?
+  onem           String    @db.VarChar(8)
+  paraBirimi     String    @map("para_birimi") @db.Char(3)
+  kanit          Json      @default("{}") @db.JsonB
+  durum          String    @default("acik") @db.VarChar(24)
+  ilkGorulme     DateTime  @default(now()) @map("ilk_gorulme") @db.Timestamptz(6)
+  sonGorulme     DateTime  @default(now()) @map("son_gorulme") @db.Timestamptz(6)
+  sonAcilma      DateTime  @default(now()) @map("son_acilma") @db.Timestamptz(6)
+  acilmaSayisi   Int       @default(1) @map("acilma_sayisi")
+  kapatmaNedeni  String?   @map("kapatma_nedeni") @db.VarChar(12)
+  kapatmaZ       Decimal?  @map("kapatma_z")
+  kapatanUserId  String?   @map("kapatan_user_id") @db.Uuid
+  kapatmaZamani  DateTime? @map("kapatma_zamani") @db.Timestamptz(6)
+  kapatmaNotu    String?   @map("kapatma_notu") @db.VarChar(300)
+  uygulama       Json?     @db.JsonB
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([clientId, durum, sonAcilma(sort: Desc)], map: "sinyaller_client_durum_idx")
+  @@index([adAccountId], map: "sinyaller_ad_account_idx")
+  @@index([orgId], map: "sinyaller_org_id_idx")
+  @@map("sinyaller")
+}
+
+/// Workspace başına bildirim kanalı. `hedefEnc` ŞİFRELİ webhook adresi; hiçbir
+/// liste sorgusu onu seçmiyor.
+model BildirimKanali {
+  id             String    @id @default(uuid()) @db.Uuid
+  orgId          String    @map("org_id") @db.Uuid
+  clientId       String    @map("client_id") @db.Uuid
+  tur            String    @db.VarChar(10)
+  ad             String    @db.VarChar(80)
+  hedefEnc       Bytes?    @map("hedef_enc")
+  hedefIpucu     String    @map("hedef_ipucu") @db.VarChar(120)
+  alicilar       String[]
+  olaylar        String[]
+  etkin          Boolean   @default(true)
+  dogrulandi     DateTime? @db.Timestamptz(6)
+  sonOzetKapsami DateTime? @map("son_ozet_kapsami") @db.Timestamptz(6)
+  createdBy      String?   @map("created_by") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([clientId, createdAt], map: "bildirim_kanallari_client_idx")
+  @@index([orgId], map: "bildirim_kanallari_org_id_idx")
+  @@map("bildirim_kanallari")
+}
+
+/// Teslim kaydı (niyet). Tekil `(kanal_id, anahtar)` = idempotent. Bekleyen
+/// indeksi `bildirim_gonderimleri_bekleyen_idx` KISMİ, yalnız migration'da.
+model BildirimGonderimi {
+  id            String    @id @default(uuid()) @db.Uuid
+  orgId         String    @map("org_id") @db.Uuid
+  clientId      String    @map("client_id") @db.Uuid
+  kanalId       String?   @map("kanal_id") @db.Uuid
+  olay          String    @db.VarChar(10)
+  anahtar       String    @db.VarChar(160)
+  ozet          String    @db.VarChar(200)
+  govde         Json      @db.JsonB
+  kaynaklar     Json      @default("[]") @db.JsonB
+  durum         String    @default("bekliyor") @db.VarChar(12)
+  deneme        Int       @default(0) @db.SmallInt
+  sonrakiDeneme DateTime  @default(now()) @map("sonraki_deneme") @db.Timestamptz(6)
+  httpDurum     Int?      @map("http_durum")
+  hata          String?
+  reddedilen    String[]
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  gonderildi    DateTime? @db.Timestamptz(6)
+
+  @@unique([kanalId, anahtar], map: "bildirim_gonderimleri_kanal_anahtar_key")
+  @@index([clientId, createdAt(sort: Desc)], map: "bildirim_gonderimleri_client_idx")
+  @@index([orgId], map: "bildirim_gonderimleri_org_id_idx")
+  @@map("bildirim_gonderimleri")
 }

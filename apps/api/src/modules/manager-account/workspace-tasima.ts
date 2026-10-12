@@ -107,6 +107,15 @@ export const WORKSPACE_TABLOLARI: ReadonlyArray<{ tablo: string; etiket: string 
   { tablo: 'iyilestir_oneri_karar', etiket: 'İyileştir kararı' },
   { tablo: 'iyilestir_asistan_oturum', etiket: 'asistan oturumu' },
   { tablo: 'iyilestir_asistan_mesaj', etiket: 'asistan mesajı' },
+  // SİNYALLER VE BİLDİRİM KANALLARI (docs/sinyal/MIMARI.md § 2) TAŞINIYOR.
+  // Sinyal, workspace'in reklam hesaplarından türetilmiş bir gözlem ve
+  // hesaplar workspace'le gidiyor; geride kalan sinyal, sahibi olmayan bir
+  // uyarı olurdu. Kanal ajansın o workspace için kurduğu teslim yolu: yeni
+  // şirkette yeniden kurdurmak, ilk sabahki özetin sessizce hiç gitmemesi
+  // demek. Gönderim geçmişi kanalla birlikte ("bu sabah ne gitti").
+  { tablo: 'sinyaller', etiket: 'sinyal' },
+  { tablo: 'bildirim_kanallari', etiket: 'bildirim kanalı' },
+  { tablo: 'bildirim_gonderimleri', etiket: 'bildirim gönderimi' },
 ] as const;
 
 /**

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { Permission } from '@advetics/shared';
 import {
+  MM_ALT_BOLUMLERI,
   MM_BOLUMLERI,
   MM_VARLIKLARI,
   mmAdresi,
@@ -79,6 +80,8 @@ export function IcMenu({
                 href={mmAdresi(clientId, b.kod)}
                 aria-current={secili ? 'page' : undefined}
                 className={`flex transition-colors items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-sm ${
+                  MM_ALT_BOLUMLERI[b.kod] ? 'lg:ml-3 lg:pl-3' : ''
+                } ${
                   secili
                     ? 'bg-brand-soft font-semibold text-brand-strong'
                     : 'font-medium text-ink hover:bg-surface-sunken/70'

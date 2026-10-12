@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { YORGUNLUK } from '@advetics/shared';
-import type { AsistanOturumu, OneriListesi, RuleRecord } from '@advetics/shared';
+import type { AsistanOturumu, OneriListesi, RuleRecord, SinyalListesi } from '@advetics/shared';
 import { hasPermission, requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
 import { sayfaWorkspaceId, workspaceSecimVerisi } from '@/lib/sayfa-workspace';
@@ -8,10 +8,12 @@ import { first, hataMetni } from '@/lib/sayfa-yardimcilari';
 import { formatDayLong } from '@/lib/format';
 import { baglanti } from '@/lib/baglanti';
 import { SEKMELER, SEKME_ETIKETI, ozetSayilari, sekmeCoz } from '@/lib/iyilestir';
+import { sinyalListeYolu, type SinyalSonucu } from '@/lib/sinyal';
 import { WorkspaceGerekli } from '@/components/workspace-gerekli';
 import { Uyari } from '@/components/ui/uyari';
 import { OnerilerSekmesi, type OneriSonucu } from '@/components/iyilestir/oneriler-sekmesi';
 import { AsistanSekmesi, type OturumSonucu } from '@/components/iyilestir/asistan-sekmesi';
+import { SinyallerSekmesi } from '@/components/iyilestir/sinyaller-sekmesi';
 import { KurallarIcerik, type KurallarSonucu } from '@/components/rules/kurallar-icerik';
 import s from '@/components/taslak/taslak.module.css';
 import i from '@/components/taslak/iyilestir.module.css';
@@ -100,7 +102,7 @@ export default async function IyilestirPage({
   };
 
   const oturumParam = first(params.oturum);
-  const [oneriSonucu, kuralSonucu, oturumSonucu] = await Promise.all([
+  const [oneriSonucu, kuralSonucu, sinyalSonucu, oturumSonucu] = await Promise.all([
     serverApiFetch<OneriListesi>(
       `/iyilestir/oneriler?${new URLSearchParams({ clientId })}`,
     ).then(
@@ -110,6 +112,15 @@ export default async function IyilestirPage({
     serverApiFetch<RuleRecord[]>(`/rules?clientId=${clientId}`).then(
       (kurallar): KurallarSonucu => ({ durum: 'tamam', kurallar }),
       (e: unknown): KurallarSonucu => ({ durum: 'hata', mesaj: hataMetni(e) }),
+    ),
+    /*
+     * SİNYALLER DE HER SEKMEDE: rozet açık sinyal sayısını gösteriyor ve
+     * Sinyaller sekmesinin ilk listesi AYNI yanıt (iki çağrı iki sayı
+     * söyleyebilirdi). Düşerse rozet çizilmiyor; "0" yalanı yok.
+     */
+    serverApiFetch<SinyalListesi>(sinyalListeYolu({ clientId, gorunum: 'acik', tur: null, platform: null, sayfa: 1 })).then(
+      (liste): SinyalSonucu => ({ durum: 'tamam', liste }),
+      (e: unknown): SinyalSonucu => ({ durum: 'hata', mesaj: hataMetni(e) }),
     ),
     sekme === 'asistan' && oturumParam
       ? serverApiFetch<AsistanOturumu>(`/iyilestir/asistan/oturumlar/${encodeURIComponent(oturumParam)}`).then(
@@ -126,6 +137,7 @@ export default async function IyilestirPage({
 
   const rozet: Record<(typeof SEKMELER)[number], number | null> = {
     oneriler: oneriSonucu.durum === 'tamam' ? ozetSayilari(oneriSonucu.liste).acik : null,
+    sinyaller: sinyalSonucu.durum === 'tamam' ? sinyalSonucu.liste.sayilar.acik : null,
     asistan: null,
     kurallar: kuralSonucu.durum === 'tamam' ? kuralSonucu.kurallar.length : null,
   };
@@ -133,7 +145,9 @@ export default async function IyilestirPage({
   const altSatir =
     sekme === 'oneriler'
       ? `${clientAdi} · Son 7 gün · ${formatDayLong(range.from)} - ${formatDayLong(range.to)}`
-      : sekme === 'kurallar'
+      : sekme === 'sinyaller'
+        ? `${clientAdi} · her gece, dünün verisi beklenen aralıkla karşılaştırılıyor`
+        : sekme === 'kurallar'
         ? `${clientAdi} · otomatik kurallar saatte bir değerlendiriliyor`
         : `${clientAdi} · okur, önerir, onayınla uygular`;
 
@@ -164,6 +178,13 @@ export default async function IyilestirPage({
 
       <section key={sekme} className={i.sekme}>
         {sekme === 'oneriler' && <OnerilerSekmesi sonuc={oneriSonucu} yazabilir={yazabilir} />}
+        {sekme === 'sinyaller' && (
+          <SinyallerSekmesi
+            clientId={clientId}
+            ilk={sinyalSonucu}
+            yetki={{ butce: yazabilir, kural: hasPermission(session, 'rule.write') }}
+          />
+        )}
         {sekme === 'asistan' && (
           <AsistanSekmesi clientId={clientId} clientAdi={clientAdi} ilk={oturumSonucu} yazabilir={yazabilir} />
         )}

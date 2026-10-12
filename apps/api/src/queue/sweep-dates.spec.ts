@@ -38,6 +38,11 @@ const TARIH_ISTEYENLER = [
    * aylarca hiç toplanmadı.
    */
   'insights_breakdowns',
+  /*
+   * SİNYAL HESABI (Paket A). 07:40 emniyet süpürmesi bu türle zamanlanıyor;
+   * dal olmasaydı iş tarihsiz gelir ve her sabah düşerdi.
+   */
+  'signals_evaluate',
 ] as const;
 
 // Servis yalnızca saf yardımcısı için kuruluyor; hiçbir bağımlılığa
@@ -79,6 +84,12 @@ describe('süpürme tarih aralıkları', () => {
     // eksik gösterirdi.
     expect(proc.datesForJob('keyword_insights', 'Europe/Istanbul')).toEqual(
       proc.datesForJob('insights_backfill', 'Europe/Istanbul'),
+    );
+  });
+
+  it('sinyal hesabı günlük metrikle AYNI günü değerlendiriyor (hesabın dünü)', () => {
+    expect(proc.datesForJob('signals_evaluate', 'Europe/Istanbul')).toEqual(
+      proc.datesForJob('insights_daily', 'Europe/Istanbul'),
     );
   });
 

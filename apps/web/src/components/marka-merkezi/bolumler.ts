@@ -51,9 +51,28 @@ export const MM_BOLUMLERI = [
    * ulaşamıyordu. SONDA: kurulumun ilk adımları (bağlantı, marka) önce.
    */
   { kod: 'ayarlar', ad: 'Workspace ayarları', izin: 'client.read' },
+  /*
+   * BİLDİRİMLER (Paket A, 2026-10-12, docs/sinyal/MIMARI.md § 9): workspace
+   * başına e-posta / Slack / Teams kanalları; sinyaller ve kural bildirimleri
+   * buraya gider. AYRI SAYFA DEĞİL, Workspace ayarlarının ALT bölümü
+   * (`MM_ALT_BOLUMLERI`): ayrı sayfa, kullanıcının "nereye nereden girdiğimi
+   * unutuyorum" şikâyetinin sebebiydi. İzin `rule.read` (kanal listesinin
+   * okuma izni, `SINYAL_UCLARI`): müşteri hesabı bu yetkiyi taşımıyor ve
+   * sinyal ajansın iç bilgisi. Kanal ekleme/silme bölümün İÇİNDE
+   * `client.write` ile açılıyor.
+   */
+  { kod: 'bildirimler', ad: 'Bildirimler', izin: 'rule.read' },
 ] as const satisfies ReadonlyArray<{ kod: string; ad: string; izin: Permission }>;
 
 export type MmBolumKodu = (typeof MM_BOLUMLERI)[number]['kod'];
+
+/**
+ * Menüde bir üst bölümün ALTINDA (girintili) çizilen bölümler. Kendi
+ * adresi ve kendi sayfa gövdesi var; yalnız menüdeki yeri üst bölüme bağlı.
+ */
+export const MM_ALT_BOLUMLERI: Partial<Record<MmBolumKodu, MmBolumKodu>> = {
+  bildirimler: 'ayarlar',
+};
 
 /**
  * Varlıklar'ın alt bölümleri. Üçü de eskiden ayrı sayfaydı ve MENÜDE

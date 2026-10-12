@@ -417,6 +417,13 @@ DECLARE
     -- Hazır workspace (docs/advcampaign/HAZIR-WORKSPACE-PLANI.md § Dalga 3)
     'workspace_hazirlama',
     'workspace_kurulum',
+    -- Sinyaller + bildirim kanalları (docs/sinyal/MIMARI.md § 2). Her tablo
+    -- KENDİ satırında (test/sonraki-tablolar.ts satır satır çıkarıyor).
+    -- AdvStrategy bloğundan ÖNCE: üretim sırası testleri o bloğun dizinin
+    -- SONUNDA olduğunu varsayıyor.
+    'sinyaller',
+    'bildirim_kanallari',
+    'bildirim_gonderimleri',
     -- AdvStrategy aylık medya planı (docs/advstrategy/MIMARI.md § 1)
     'strateji_planlari', 'strateji_dagilimlari', 'strateji_matrisi', 'strateji_kelimeleri',
     'ozel_gunler'
@@ -2563,3 +2570,51 @@ CREATE POLICY adv_iyilestir_mesaj_insert ON iyilestir_asistan_mesaj
 CREATE POLICY adv_iyilestir_mesaj_update ON iyilestir_asistan_mesaj
   FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id) AND user_id = app.current_user_id())
   WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id) AND user_id = app.current_user_id());
+
+
+-- ============================================================================
+-- SİNYALLER + BİLDİRİM KANALLARI — sinyaller, bildirim_kanallari,
+-- bildirim_gonderimleri (docs/sinyal/MIMARI.md § 2)
+-- ============================================================================
+--
+-- sinyaller: workspace kapsamlı; SELECT + INSERT + UPDATE. Satırı YAZAN
+-- worker (BYPASSRLS); panel yalnız kapat / geri aç / Uygula ile durumu
+-- değiştiriyor ve taşıma (hesap ya da workspace) client_id/org_id yazıyor.
+-- DELETE YOK: kapatılmış sinyal "neyi neden kapattık" geçmişi; satır
+-- workspace ya da reklam hesabıyla CASCADE gidiyor. Kimin kapatabileceği
+-- (rule.write) ve Uygula (budget.write) servis katmanında.
+CREATE POLICY adv_sinyaller_select ON sinyaller
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_sinyaller_insert ON sinyaller
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_sinyaller_update ON sinyaller
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+  WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+
+-- bildirim_kanallari: workspace kapsamlı; DÖRT işlem. Kanal yazma izni
+-- (client.write) servis katmanında. Webhook adresi şifreli kolonda ve
+-- politika onu ayrıca gizlemiyor: gizleme SORGUDA (liste sorgusu kolonu
+-- seçmiyor) ve kaynak taramasıyla kilitli.
+CREATE POLICY adv_bildirim_kanallari_select ON bildirim_kanallari
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_bildirim_kanallari_insert ON bildirim_kanallari
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_bildirim_kanallari_update ON bildirim_kanallari
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+  WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_bildirim_kanallari_delete ON bildirim_kanallari
+  FOR DELETE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+
+-- bildirim_gonderimleri: workspace kapsamlı; SELECT + INSERT + UPDATE.
+-- Satırı GÖNDEREN ve sonucunu yazan teslim servisi (BYPASSRLS istemcisi:
+-- deneme ucu da gönderimi onunla yapıyor, şifreli adresi o çözüyor). Panel
+-- yalnız deneme satırı EKLİYOR ve kanal silinirken bekleyenleri kapatıyor;
+-- UPDATE politikası bu ikisi ve workspace taşıması için. DELETE YOK: teslim
+-- geçmişi "bu sabah kanala ne gitti" sorusunun cevabı.
+CREATE POLICY adv_bildirim_gonderimleri_select ON bildirim_gonderimleri
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_bildirim_gonderimleri_insert ON bildirim_gonderimleri
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_bildirim_gonderimleri_update ON bildirim_gonderimleri
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+  WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));

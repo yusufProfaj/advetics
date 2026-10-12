@@ -6,6 +6,7 @@ import type {
 import { baglanti } from '@/lib/baglanti';
 import { butceAdresi } from '@/lib/butce-adresi';
 import { stratejiAdresi } from '@/components/strateji/hesap';
+import { sinyallerAdresi } from '@/lib/sinyal';
 
 /**
  * ═══ GENEL BAKIŞ › BEKLEYEN İŞLER: SAF KARARLAR ═══
@@ -81,6 +82,10 @@ export function bekleyenIsCumlesi(is: BekleyenIs, onayYetkisi: boolean): string 
   switch (is.tur) {
     case 'boost_onay':
       return `${is.sayi} Akıllı Boost kartı onay bekliyor`;
+    case 'sinyal_acik':
+      // Önem dağılımı satırda YOK (sözleşme yalnız sayıyı taşıyor); "2'si
+      // yüksek önemli" uydurulmuyor, ayrıntı Sinyaller sekmesinde.
+      return `${is.sayi} sinyal açık`;
     case 'strateji_onay':
       if (onayYetkisi) return cogul ? `${is.sayi} medya planı onayını bekliyor` : 'Medya planı onayını bekliyor';
       return cogul ? `${is.sayi} medya planı onayda` : 'Medya planı onayda';
@@ -125,6 +130,8 @@ export function bekleyenIsAdresi(is: BekleyenIs): string {
   switch (is.tur) {
     case 'boost_onay':
       return baglanti('/auto-boost', { musteri: is.clientId });
+    case 'sinyal_acik':
+      return sinyallerAdresi(is.clientId);
     case 'strateji_onay':
       return stratejiAdresi(is.clientId, { bolum: 'sunum' });
     case 'strateji_aktar':

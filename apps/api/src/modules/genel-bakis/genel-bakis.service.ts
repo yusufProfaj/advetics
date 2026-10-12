@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
   BEKLEYEN_IS_SINIRI,
@@ -12,6 +12,7 @@ import {
   type BekleyenIsTuru,
   type TenantContext,
 } from '@advetics/shared';
+import { CONFIG, type AppConfig } from '../../config/configuration';
 import { PrismaService } from '../../prisma/prisma.service';
 import { seviyeLiterali } from '../metrics/seviye-literali';
 import { monthStart, resolveThroughDate } from '../budgets/budget-pacing';
@@ -47,6 +48,7 @@ const HARCAMA_SEVIYESI = seviyeLiterali('campaign');
 /** Kaynak okunamadığında ekrana giden cümle. Ayrıntı log'da. */
 const KAYNAK_HATASI: Record<BekleyenIsTuru, string> = {
   boost_onay: 'Akıllı Boost kuyruğu okunamadı',
+  sinyal_acik: 'Açık sinyaller okunamadı',
   strateji_onay: 'Onay bekleyen medya planları okunamadı',
   strateji_aktar: 'Aktarılmayı bekleyen medya planları okunamadı',
   butce_yok: 'Bütçe durumu okunamadı',
@@ -77,7 +79,10 @@ interface IsSatiri {
 export class GenelBakisService {
   private readonly logger = new Logger(GenelBakisService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(CONFIG) private readonly config: AppConfig,
+  ) {}
 
   async bekleyenler(
     ctx: TenantContext,
@@ -155,6 +160,12 @@ export class GenelBakisService {
     switch (tur) {
       case 'boost_onay':
         return this.oku(tur, ctx, this.boostSorgusu(kapsam));
+      case 'sinyal_acik':
+        // SESSİZ KOŞUM: sinyaller yalnız org yöneticisine (MIMARI Ç-14).
+        // Sinyaller ekranı da aynı kuralı uyguluyor; kutu sayı gösterip
+        // ekran boş açılsaydı iki yer birbirini yalanlardı.
+        if (this.config.sinyal.sessizKosum && !ctx.isOrgAdmin) return [];
+        return this.oku(tur, ctx, this.sinyalSorgusu(kapsam));
       case 'strateji_onay':
         return this.oku(tur, ctx, this.planSorgusu(kapsam, 'onayda'));
       case 'strateji_aktar':
@@ -192,6 +203,22 @@ export class GenelBakisService {
       WHERE q.client_id = ANY(${kapsam}::uuid[])
         AND q.status = ${BOOST_ONAY_DURUMU}
       GROUP BY q.client_id, c.name
+    `;
+  }
+
+  /**
+   * Açık sinyaller. `enEski` en eski AÇILMA anı (`son_acilma`): yeniden
+   * açılan sinyal ilk görüldüğü güne değil, son açıldığı güne göre bekliyor.
+   */
+  private sinyalSorgusu(kapsam: string[]): Prisma.Sql {
+    return Prisma.sql`
+      SELECT s.client_id::text AS client_id, c.name AS client_adi,
+             COUNT(*)::int AS sayi, MIN(s.son_acilma) AS en_eski
+      FROM sinyaller s
+      LEFT JOIN clients c ON c.id = s.client_id
+      WHERE s.client_id = ANY(${kapsam}::uuid[])
+        AND s.durum = 'acik'
+      GROUP BY s.client_id, c.name
     `;
   }
 

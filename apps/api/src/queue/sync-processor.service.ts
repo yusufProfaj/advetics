@@ -23,6 +23,8 @@ import { YouTubeSubscribeService } from '../modules/autoboost/youtube-subscribe.
 import { AutoBoostQueueService } from '../modules/autoboost/autoboost-queue.service';
 import { BoostExecutorService } from '../modules/boosts/boost-executor.service';
 import { SUPURME_HESAP_KOSULU } from './supurme-kapsami';
+import { SinyalHesapService } from '../modules/sinyal/sinyal-hesap.service';
+import { BildirimTeslimService } from '../modules/sinyal/bildirim-teslim.service';
 import { isYapilabilir } from './platform-isleri';
 import { cekilmisGunler, gunlukAnahtar } from './gunluk-tekrar';
 import { GUN_ICI_ARALIK_DK, gunIciAtlanir, seyreltilir, sonGunIciIsler } from './gun-ici-aralik';
@@ -76,11 +78,17 @@ export class SyncProcessorService {
     private readonly hesapDurumu: HesapDurumuKontrolService,
     private readonly kirilim: KirilimSyncService,
     private readonly raporPlani: RaporPlaniService,
+    private readonly sinyalHesap: SinyalHesapService,
+    private readonly teslim: BildirimTeslimService,
   ) {}
 
   async process(payload: SyncJobPayload): Promise<{ rows: number; note?: string }> {
     // Süpürme işi: clientId boş gelir.
     if (!payload.clientId) return this.fanOut(payload);
+    // SİNYAL İŞİ platform çağrısı yapmıyor: kota kapısından GEÇMİYOR
+    // (hesap işinin yolu kota alırdı ve kotası dolmuş hesapta sinyal de
+    // gecikirdi). Önce bu dal.
+    if (payload.jobType === 'signals_evaluate') return this.processSinyalJob(payload);
     // KURAL İŞİ hesap işinden AYRI yol izliyor: bir kural birden fazla
     // hesaba dokunabiliyor, dolayısıyla iş seviyesinde tek bir hesabın
     // kotasına bakmak yanlış olurdu. Kota kontrolü aksiyon başına,
@@ -138,6 +146,12 @@ export class SyncProcessorService {
      * tersi durum, orada iş tarih BEKLİYORDU ve üretici dal yoktu.
      */
     if (payload.jobType === 'report_schedule') return this.raporPlani.calistir();
+    /*
+     * BİLDİRİM TESLİMİ KÜRESEL (Paket A): bekleyen gönderimler tek sorguyla;
+     * 09:00 özetinin saati de içeride kontrol ediliyor. Tarih istemiyor.
+     */
+    if (payload.jobType === 'notifications_send') return this.teslim.supur();
+    if (payload.jobType === 'signals_evaluate') return this.sinyalSupurmesi();
 
     const accounts = await this.db.adAccount.findMany({
       // Süzgeç TEK YERDE: teşhis ekranı da aynı sabiti okuyor. Ayrı
@@ -376,7 +390,14 @@ export class SyncProcessorService {
     switch (jobType) {
       case 'insights_realtime':
         return { from: todayInTz, to: todayInTz };
-      case 'insights_daily': {
+      case 'insights_daily':
+      /*
+       * SİNYAL: günlük metrikle AYNI gün (hesabın dünü). Emniyet süpürmesi
+       * bu dalı kullanıyor; dal olmasaydı iş tarihsiz gelir ve her sabah
+       * `[missing_dates]` ile düşerdi (`sweep:keywords` dersi,
+       * `sweep-dates.spec.ts`).
+       */
+      case 'signals_evaluate': {
         const y = this.shiftDays(todayInTz, -1);
         return { from: y, to: y };
       }
@@ -612,6 +633,19 @@ export class SyncProcessorService {
 
     const res = await this.executor.execute(this.db, ctx, rule.record);
 
+    /*
+     * KURAL BİLDİRİMİ "ANINDA": tur kanallara satır yazdıysa hemen gönder.
+     * Düşerse süpürme 5 dakika içinde yeniden dener; tur başarısız sayılmaz.
+     */
+    try {
+      await this.teslim.anahtarlaGonder(`kural:${res.runId}`);
+    } catch (err) {
+      this.logger.error(
+        `Kural ${rule.record.name} bildirimi hemen gönderilemedi (süpürme yeniden deneyecek): ` +
+          `${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
     await this.db.syncJob.update({
       where: { id: syncJobId },
       data: { status: 'succeeded', finishedAt: new Date(), rowsUpserted: res.actionCount },
@@ -719,6 +753,12 @@ export class SyncProcessorService {
           note: result.note,
           rowsSkipped: result.skipped,
         });
+        // ZİNCİR: metrik BAŞARIYLA yazıldıktan SONRA sinyal hesabı. Öncelik
+        // bariyer değil (CLAUDE.md); paralel slotta erken koşan bir sinyal işi
+        // yarım günü değerlendirirdi.
+        if (payload.jobType === 'insights_daily' || payload.jobType === 'insights_backfill') {
+          await this.sinyalZinciri(payload, payload.dateTo);
+        }
         return { rows: result.rows, note: result.note };
       } catch (err) {
         await this.recordFailure(syncJobId, err);
@@ -1067,6 +1107,105 @@ export class SyncProcessorService {
           `${err instanceof Error ? err.message : String(err)}`,
       );
     }
+  }
+
+  /**
+   * SİNYAL ZİNCİRİ — metrik işinin sonunda. Yutuluyor ama SESSİZ DEĞİL:
+   * metrik işi başarılı; bu adım düşerse onu başarısız saymak yazılmış
+   * satırları tekrar çektirirdi. Kayıp sinyal 07:40 emniyet süpürmesinde
+   * yakalanıyor ve hata log'da.
+   */
+  private async sinyalZinciri(payload: SyncJobPayload, gun: string): Promise<void> {
+    try {
+      await this.queue.enqueue({
+        clientId: payload.clientId,
+        platform: payload.platform,
+        jobType: 'signals_evaluate',
+        adAccountId: payload.adAccountId,
+        dateFrom: gun,
+        dateTo: gun,
+      });
+    } catch (err) {
+      this.logger.error(
+        `Sinyal hesabı kuyruğa alınamadı (hesap ${payload.adAccountId}, ${gun}): ` +
+          `${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  /**
+   * Tek hesabın sinyal hesabı. ÖN KOŞUL REDDİ (günlük metrik yok) başarılı
+   * biter ve TEKRAR DENENMEZ; not "hesaplanmadı:" ile başlıyor ve ekran
+   * bunu "hiç hesaplanmadı" diye okuyor (succeeded + rows=0 notsuz değil).
+   */
+  private async processSinyalJob(payload: SyncJobPayload): Promise<{ rows: number; note: string }> {
+    const syncJobId = BigInt(payload.syncJobId);
+    if (!payload.adAccountId || !payload.dateFrom) {
+      await this.markFailed(syncJobId, 'missing_dates', 'signals_evaluate hesap ya da gün olmadan geldi');
+      throw new UnrecoverableError('signals_evaluate hesap ya da gün olmadan geldi');
+    }
+    await this.db.syncJob.update({
+      where: { id: syncJobId },
+      data: { status: 'running', startedAt: new Date(), attempts: { increment: 1 } },
+    });
+    try {
+      const r = await this.sinyalHesap.calistir(payload.adAccountId, payload.dateFrom);
+      await this.markSucceeded(payload.syncJobId, r.rows, 0, { note: r.note });
+      return { rows: r.rows, note: r.note };
+    } catch (err) {
+      await this.recordFailure(syncJobId, err);
+      throw err;
+    }
+  }
+
+  /**
+   * 07:40 EMNİYET SÜPÜRMESİ: dünü çekilmiş (başarılı `insights_daily`) ama o
+   * gün için `signals_evaluate` satırı OLMAYAN hesaplar. Zincir çalıştıysa
+   * hiçbir şey açmıyor; açtığı sayı nota yazılıyor ki zincirin ne sıklıkla
+   * kaybolduğu görünsün.
+   */
+  private async sinyalSupurmesi(): Promise<{ rows: number; note: string }> {
+    const accounts = await this.db.adAccount.findMany({
+      where: SUPURME_HESAP_KOSULU,
+      select: { id: true, clientId: true, platform: true, timezone: true },
+    });
+    let acilan = 0;
+    let metrikYok = 0;
+    let zatenVar = 0;
+    for (const a of accounts) {
+      if (a.clientId === null) continue;
+      const dates = this.datesForJob('signals_evaluate', a.timezone);
+      if (!dates) continue;
+      const gun = new Date(`${dates.from}T00:00:00Z`);
+      const metrik = await this.db.syncJob.findFirst({
+        where: { adAccountId: a.id, jobType: 'insights_daily', status: 'succeeded', dateFrom: gun },
+        select: { id: true },
+      });
+      if (!metrik) {
+        metrikYok++;
+        continue;
+      }
+      const sinyal = await this.db.syncJob.findFirst({
+        where: { adAccountId: a.id, jobType: 'signals_evaluate', dateFrom: gun },
+        select: { id: true },
+      });
+      if (sinyal) {
+        zatenVar++;
+        continue;
+      }
+      const res = await this.queue.enqueue({
+        clientId: a.clientId,
+        platform: a.platform as Platform,
+        jobType: 'signals_evaluate',
+        adAccountId: a.id,
+        dateFrom: dates.from,
+        dateTo: dates.to,
+      });
+      if (res.enqueued) acilan++;
+    }
+    const note = `sinyal emniyet süpürmesi: ${acilan} hesap kuyruğa alındı (zincir kaçırmıştı), ${zatenVar} zaten hesaplanmış, ${metrikYok} hesabın dünü henüz çekilmemiş`;
+    this.logger.log(note);
+    return { rows: acilan, note };
   }
 
   async markSucceeded(

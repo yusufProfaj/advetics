@@ -27,6 +27,8 @@ import s from './taslak.module.css';
 /** Tür karosundaki harf: ad değil SİMGE; satırın cümlesi işi zaten söylüyor. */
 const TUR_HARFI: Record<BekleyenIs['tur'], { harf: string; gri: boolean }> = {
   boost_onay: { harf: 'B', gri: false },
+  // "!" ve S DEĞİL: S strateji onayında; sinyal bir uyarı, simgesi de öyle.
+  sinyal_acik: { harf: '!', gri: false },
   strateji_onay: { harf: 'S', gri: false },
   strateji_aktar: { harf: 'A', gri: false },
   butce_yok: { harf: '₺', gri: true },

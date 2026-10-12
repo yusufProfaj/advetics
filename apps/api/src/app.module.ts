@@ -43,6 +43,7 @@ import { StratejiModule } from './modules/strateji/strateji.module';
 import { OkumaApiModule } from './modules/okuma-api/okuma-api.module';
 import { IyilestirModule } from './modules/iyilestir/iyilestir.module';
 import { GenelBakisModule } from './modules/genel-bakis/genel-bakis.module';
+import { SinyalModule } from './modules/sinyal/sinyal.module';
 
 @Module({
   imports: [
@@ -88,6 +89,7 @@ import { GenelBakisModule } from './modules/genel-bakis/genel-bakis.module';
     OkumaApiModule,
     IyilestirModule,
     GenelBakisModule,
+    SinyalModule,
   ],
   controllers: [HealthController],
   providers: [

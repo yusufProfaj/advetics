@@ -5,6 +5,7 @@ import { AutoBoostModule } from '../modules/autoboost/autoboost.module';
 import { ReportsModule } from '../modules/reports/reports.module';
 import { RulesModule } from '../modules/rules/rules.module';
 import { BoostsModule } from '../modules/boosts/boosts.module';
+import { SinyalIsModule } from '../modules/sinyal/sinyal-is.module';
 import { InsightsSyncService } from './insights-sync.service';
 import { LeadSyncService } from './lead-sync.service';
 import { OrganicSyncService } from './organic-sync.service';
@@ -29,7 +30,7 @@ import { SyncProcessorService } from './sync-processor.service';
  */
 @Global()
 @Module({
-  imports: [AutoBoostModule, ConnectionsModule, RulesModule, BoostsModule, AlertsModule, ReportsModule],
+  imports: [AutoBoostModule, ConnectionsModule, RulesModule, BoostsModule, AlertsModule, ReportsModule, SinyalIsModule],
   providers: [
     QuotaGuardService,
     SyncQueueService,

@@ -7,6 +7,7 @@ import { ProviderRegistry } from '../connections/provider.registry';
 import { TokenVaultService } from '../connections/token-vault.service';
 import { QuotaGuardService } from '../../queue/quota-guard.service';
 import { RulesService, type PendingAction, type TxLike } from './rules.service';
+import { kuralBildirimiYaz } from '../sinyal/kural-bildirimi';
 
 /**
  * Kural turunu yürütür: değerlendir → uygula (ya da prova et) → kaydet.
@@ -86,6 +87,20 @@ export class RuleExecutorService {
       // yakalamıyor, tur kaydında görüyor.
       failure = err instanceof Error ? err.message : String(err);
       this.logger.error(`Kural ${rule.name} turu başarısız: ${failure}`);
+    }
+
+    /*
+     * KANAL BİLDİRİMİ (Paket A, MIMARI Ç-6): `notify` eşleşmesi ve canlı
+     * kuralın BAŞARISIZ eylemi kanala gidiyor. Satır yazılamazsa sessiz
+     * kalmıyor: tur kaydının hatasına ekleniyor (kural geçmişinde görünür).
+     * Tur başarısız sayılmıyor: kuralın kendisi çalıştı.
+     */
+    try {
+      await kuralBildirimiYaz(tx, rule, run.id);
+    } catch (err) {
+      const m = `Bildirim kuyruğa alınamadı: ${err instanceof Error ? err.message : String(err)}`;
+      failure = failure ? `${failure} · ${m}` : m;
+      this.logger.error(`Kural ${rule.name}: ${m}`);
     }
 
     await tx.$executeRaw(Prisma.sql`
