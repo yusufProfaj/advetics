@@ -1,4 +1,4 @@
-import { CONVERSION_BUCKETS, type ConversionBucket, type ConversionCounts } from '@advetics/shared';
+import { CONVERSION_BUCKETS, HAM_SAYAC_KOVALARI, type ConversionBucket, type ConversionCounts } from '@advetics/shared';
 
 /**
  * Adlandırılmış dönüşüm kovalarını `raw_metrics` içinden çıkarır.
@@ -20,7 +20,9 @@ import { CONVERSION_BUCKETS, type ConversionBucket, type ConversionCounts } from
  */
 
 export function emptyCounts(): ConversionCounts {
-  return { form: 0, message: 0, purchase: 0 };
+  // Kovalardan TÜRETİLİYOR: elle yazılan anahtar listesi yeni bir kovada
+  // (arama) eksik kalır ve o kova `undefined + n = NaN` olurdu.
+  return Object.fromEntries(Object.keys(CONVERSION_BUCKETS).map((k) => [k, 0])) as ConversionCounts;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -42,6 +44,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function bucketsFromRaw(raw: unknown): ConversionCounts {
   const counts = emptyCounts();
   if (!isRecord(raw)) return counts;
+
+  // HAM SAYAÇLAR (Google arama düğmesi tıklaması): aksiyon dizisinde değil,
+  // gövdenin kendi anahtarında. SQL yolu (`reports.service.ts`) ile AYNI kural.
+  for (const k of HAM_SAYAC_KOVALARI) {
+    const v = raw[CONVERSION_BUCKETS[k].hamAlan];
+    if (typeof v === 'number' && Number.isFinite(v)) counts[k] = v;
+  }
 
   const actions = raw.actions;
   if (!Array.isArray(actions)) return counts;
@@ -77,9 +86,7 @@ export function bucketsFromRaw(raw: unknown): ConversionCounts {
 export function sumBuckets(list: Iterable<ConversionCounts>): ConversionCounts {
   const total = emptyCounts();
   for (const c of list) {
-    total.form += c.form;
-    total.message += c.message;
-    total.purchase += c.purchase;
+    for (const k of Object.keys(total) as ConversionBucket[]) total[k] += c[k] ?? 0;
   }
   return total;
 }
@@ -93,9 +100,5 @@ export function sumBuckets(list: Iterable<ConversionCounts>): ConversionCounts {
  * hata biriktirirdi.
  */
 export function roundCounts(counts: ConversionCounts): ConversionCounts {
-  return {
-    form: Math.round(counts.form),
-    message: Math.round(counts.message),
-    purchase: Math.round(counts.purchase),
-  };
+  return Object.fromEntries(Object.entries(counts).map(([k, v]) => [k, Math.round(v)])) as ConversionCounts;
 }

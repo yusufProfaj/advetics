@@ -202,7 +202,99 @@ export const CONVERSION_BUCKETS = {
       'onsite_conversion.purchase',
     ],
   },
+  /*
+   * ARAMA KOVALARI ("Beni telefonla arasınlar", Meta arama reklamı).
+   *
+   * ADLAR META'NIN EYLEM BAŞVURUSUNDAN (Ads Action Stats, 2026-10-12'de
+   * okundu): `click_to_call_native_call_placed` "Calls Placed",
+   * `click_to_call_native_20s_call_connect` "20s Calls Placed",
+   * `click_to_call_call_confirm` "Estimated Call Confirmation Clicks".
+   * Belge ilk ikisi için "yalnız seçili ülkelerde" diyor ve TÜRKİYE'DE
+   * GELİP GELMEDİĞİ ÖLÇÜLMEDİ (`ARAMA_EYLEMLERI_OLCULMEDI`).
+   *
+   * `click_to_call_call_confirm` YEDEK: yapılan arama sayısı gelmeyen
+   * ülkede tek sinyal, "Ara" onayına basanların TAHMİNİ. İpucu bunu açıkça
+   * söylüyor; gelmiyorsa kova her raporda 0 yazıp çalışan reklamı
+   * "arama yok" diye gösterirdi.
+   *
+   * 20 SN+ AYRI SATIR, toplanmaz: aynı aramanın uzun hâli. İkisini toplamak
+   * 20 saniyeyi geçen her aramayı iki kez saymak olurdu.
+   */
+  calls: {
+    label: 'Arama',
+    hint: 'Reklamdaki Ara düğmesinden yapılan aramalar. Meta bu ülkede yapılan aramayı vermiyorsa Ara onayına basanların tahmini.',
+    actionTypes: ['click_to_call_native_call_placed', 'click_to_call_call_confirm'],
+  },
+  calls20s: {
+    label: '20 sn+ arama',
+    hint: '20 saniyeden uzun süren aramalar (Arama sütununun içinde, ayrıca sayılmaz).',
+    actionTypes: ['click_to_call_native_20s_call_connect'],
+  },
+  /*
+   * GOOGLE ARAMA DÜĞMESİ TIKLAMASI. Meta eylemi DEĞİL: Google senkronu
+   * `segments.click_type = CALLS` ile ayrı sorguda sayıp ham gövdeye
+   * `callClicks` olarak yazıyor (google.provider.ts). Ad DÜRÜST: arama değil
+   * düğmeye dokunma. Türkiye'de Google yönlendirme numarası olmadığı için
+   * "reklamdan gelen arama" dönüşümü ölçülemeyebiliyor; ölçülebilen bu.
+   * `actionTypes` BOŞ: Meta aksiyon dizisinde aranmaz.
+   */
+  callClicks: {
+    label: 'Arama düğmesi tıklaması',
+    hint: "Google reklamındaki numaraya dokunma sayısı. Görüşmenin yapıldığını göstermez; Google Türkiye'de aramayı ölçmüyor.",
+    actionTypes: [] as readonly string[],
+    hamAlan: 'callClicks',
+  },
 } as const;
+
+/** Ham gövdedeki sayaçtan (aksiyon dizisinden DEĞİL) okunan kovalar. */
+export const HAM_SAYAC_KOVALARI = ['callClicks'] as const;
+
+/**
+ * Sütunun hangi platformda dolu olabileceği; kova değilse `null`. Meta
+ * kovaları Google'da, Google sayacı Meta'da HER ZAMAN 0: şablon ekranı bunu
+ * söylüyor (0'ı "hiç gelmedi" diye okumasın).
+ */
+export function kovaPlatformu(k: string): 'meta' | 'google' | null {
+  if ((HAM_SAYAC_KOVALARI as readonly string[]).includes(k)) return 'google';
+  return k in CONVERSION_BUCKETS ? 'meta' : null;
+}
+
+/**
+ * Arama kovalarının adları belgeden; Türkiye'deki hesaplarda Meta'nın
+ * hangisini döndürdüğü canlı veride görülmedi. Yeni bir ad görülürse
+ * `taninmayanAramaEylemleri` onu raporda söylüyor.
+ */
+export const ARAMA_EYLEMLERI_OLCULMEDI = true;
+
+/**
+ * BİLİNEN AMA KOVAYA KONMAYAN arama eylemleri. 60 sn arama 20 sn'nin alt
+ * kümesi; ayrı sütun açmak tabloyu kalabalıklaştırırdı. Listede olması
+ * "tanınmayan" uyarısını susturuyor — bilerek bırakıldı.
+ */
+export const BILINEN_KOVASIZ_ARAMA_EYLEMLERI: readonly string[] = ['click_to_call_native_60s_call_connect'];
+
+/**
+ * ARAMA GİBİ GÖRÜNEN AMA HİÇBİR KOVAYA DÜŞMEYEN eylem türleri. Meta adı
+ * değiştirirse (ya da Türkiye'de başka bir ad döndürürse) kova SESSİZCE 0
+ * kalırdı; bu liste raporda "tanınmayan arama sonucu" olarak görünür.
+ * Eşleşme kaba (`call` geçen her tür): yanlış alarm, sessiz kayıptan ucuz.
+ */
+export function taninmayanAramaEylemleri(actionTypes: Iterable<string>): string[] {
+  const bilinen = new Set<string>([
+    ...Object.values(CONVERSION_BUCKETS).flatMap((k) => [...k.actionTypes] as string[]),
+    ...BILINEN_KOVASIZ_ARAMA_EYLEMLERI,
+  ]);
+  const out = new Set<string>();
+  for (const t of actionTypes) {
+    if (/call/i.test(t) && !/call_to_action/i.test(t) && !bilinen.has(t)) out.add(t);
+  }
+  return [...out].sort();
+}
+
+/** Uyarının ekrandaki ve PDF'teki cümlesi (tek yer). */
+export function taninmayanAramaCumlesi(tur: string): string {
+  return `Meta'dan tanınmayan arama sonucu: ${tur}. Arama sütununa eklenmesi gerekiyor.`;
+}
 
 export type ConversionBucket = keyof typeof CONVERSION_BUCKETS;
 export const CONVERSION_BUCKET_KEYS = Object.keys(CONVERSION_BUCKETS) as ConversionBucket[];
@@ -267,7 +359,7 @@ const METRIC_KEY_ENUM = z.enum(METRIC_KEYS as [MetricKey, ...MetricKey[]]);
  * yazmak "hiç form gelmedi" gibi okunur. Seçim ekranı bunu gizlemek yerine
  * sebebiyle söylemek zorunda.
  */
-export const BUCKET_KEYS = ['form', 'message', 'purchase'] as const;
+export const BUCKET_KEYS = ['form', 'message', 'purchase', 'calls', 'calls20s', 'callClicks'] as const;
 export type BucketKey = (typeof BUCKET_KEYS)[number];
 
 /**
@@ -602,6 +694,13 @@ export interface ReportData {
    */
   topAdsMissingPlatforms: Array<(typeof PLATFORMS)[number]>;
   /**
+   * Meta ham `actions` dizisinde arama gibi görünen ama HİÇBİR kovaya
+   * düşmeyen eylem türleri (`taninmayanAramaEylemleri`). Boş = sorun yok.
+   * Kovanın adı yanlışsa Arama sütunu 0 yazar ve sebep hiçbir yerde
+   * görünmezdi; bu liste Meta kampanya tablosunun ÜSTÜNDE yazılıyor.
+   */
+  unknownCallActions: string[];
+  /**
    * Anahtar kelime performansı.
    *
    * `null` "veri yok" DEĞİL, "bu yetenek henüz yok" demek: Google anahtar
@@ -687,12 +786,29 @@ export interface ReportData {
 export function resolveColumns(
   secim: readonly string[] | undefined,
   varsayilan: readonly string[],
+  satirlar?: readonly ReportCampaignRow[],
 ): ColumnKey[] {
   const gecerli = (secim ?? []).filter((k): k is ColumnKey =>
     (COLUMN_KEYS as readonly string[]).includes(k),
   );
-  return gecerli.length > 0 ? gecerli : [...(varsayilan as readonly ColumnKey[])];
+  if (gecerli.length > 0) return gecerli;
+  const sutunlar = [...(varsayilan as readonly ColumnKey[])];
+  // VERİYLE AÇILAN SÜTUNLAR yalnız varsayılan kullanılırken: kullanıcının
+  // kendi seçimine sütun eklemek onun kararını ezmek olurdu.
+  for (const k of VERIYLE_ACILAN_SUTUNLAR) {
+    if (!sutunlar.includes(k) && (satirlar ?? []).some((r) => (r.conversionCounts[k] ?? 0) > 0)) sutunlar.push(k);
+  }
+  return sutunlar;
 }
+
+/**
+ * ARAMA SÜTUNLARI VERİ VARSA KENDİLİĞİNDEN AÇILIR. Varsayılan Meta
+ * sütunlarına sabit eklemek, arama reklamı olmayan her müşterinin raporuna
+ * boş iki sütun koyardı; hiç eklememek ise "Beni arasınlar" kampanyasının
+ * tek sonucunu (arama) rapordan GİZLERDİ — veri `raw_metrics`te durur ama
+ * kullanılmazsa yoktur. Panel ve PDF bu listeyi AYNI fonksiyondan okuyor.
+ */
+export const VERIYLE_ACILAN_SUTUNLAR: readonly BucketKey[] = ['calls', 'calls20s', 'callClicks'];
 
 /**
  * RAPOR MAİLİ GÖNDERİMİ.
@@ -773,7 +889,7 @@ export function sumRows(rows: ReportCampaignRow[]): MetricTotals & { counts: Con
   let spend = 0n;
   let conversions = 0;
   let value = 0n;
-  const counts: ConversionCounts = { form: 0, message: 0, purchase: 0 };
+  const counts: ConversionCounts = { form: 0, message: 0, purchase: 0, calls: 0, calls20s: 0, callClicks: 0 };
 
   for (const r of rows) {
     impressions += r.impressions;
@@ -784,6 +900,9 @@ export function sumRows(rows: ReportCampaignRow[]): MetricTotals & { counts: Con
     counts.form += r.conversionCounts.form;
     counts.message += r.conversionCounts.message;
     counts.purchase += r.conversionCounts.purchase;
+    counts.calls += r.conversionCounts.calls;
+    counts.calls20s += r.conversionCounts.calls20s;
+    counts.callClicks += r.conversionCounts.callClicks;
   }
 
   const spendUnits = Number(spend) / 1_000_000;
@@ -825,6 +944,9 @@ export const COLUMN_TOTALS: Record<
   form: (t) => formatNumber(t.counts.form),
   message: (t) => formatNumber(t.counts.message),
   purchase: (t) => formatNumber(t.counts.purchase),
+  calls: (t) => formatNumber(t.counts.calls),
+  calls20s: (t) => formatNumber(t.counts.calls20s),
+  callClicks: (t) => formatNumber(t.counts.callClicks),
 };
 
 /** Ondalık birimden micros dizgesine — `formatMoney` micros bekliyor. */

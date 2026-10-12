@@ -38,8 +38,16 @@ import type { NiyetKodu } from './meta/niyetler';
  * `call_to_actions` ({type, value}) ile gidiyor ve geri okuma değeri de
  * karşılaştırıyor (`varlikAkisiAyni`): değer yazılmadıysa yayın AÇILMAZ.
  * Video izlenme dışarıda: video seti ölçülmedi (iki boyut video ister).
+ *
+ * TELEFON ÇIKARILDI (yönetici kararı, 2026-10-12). Validate_only kabulü
+ * `tel:` değerli düğmenin set kurallarında GERÇEKTEN çalıştığını
+ * göstermiyor (form dersi: Meta değersiz düğmeyi de kabul etti) ve arama
+ * reklamı artık zorunlu dar yerleşimde (`niyetYerlesimKisiti`): setin
+ * yerleşim kuralları ile reklam setinin dar listesi ilk kez birlikte
+ * kurulacaktı, hiç ölçülmeden. Gerçek bir kurulumla ölçülene kadar her
+ * görsel kendi reklamı.
  */
-export const BANNER_SETI_NIYETLERI: readonly NiyetKodu[] = ['SITE', 'FORM', 'WHATSAPP', 'TELEFON', 'SATIS', 'ERISIM'];
+export const BANNER_SETI_NIYETLERI: readonly NiyetKodu[] = ['SITE', 'FORM', 'WHATSAPP', 'SATIS', 'ERISIM'];
 
 export function bannerSetiDestekleniyor(niyet: NiyetKodu): boolean {
   return BANNER_SETI_NIYETLERI.includes(niyet);
@@ -136,6 +144,14 @@ export interface NiyetYerlesimKisiti {
   cikarilanKonumlar: Readonly<Record<string, readonly string[]>>;
   /** Ekranda ve derleyicinin "kapattıklarımız" satırında. */
   aciklama: string;
+  /**
+   * Dört boyut tamken de (ya da oran bilinmiyorken, video) elle yerleşim.
+   * FORM/WhatsApp'ta Advantage+ yerleşime güveniliyor; ARAMADA güvenilmiyor:
+   * masaüstünde "Ara" düğmesi bir telefonu çaldırmaz ve gösterim boşa gider.
+   */
+  otomatikteDe?: boolean;
+  /** Boş grup reddinin cümlesi (derleyici `KRT-ORAN`). */
+  bosMesaji: string;
 }
 
 /**
@@ -150,16 +166,39 @@ const DAR_YERLESIM_GRUPLARI: readonly YerlesimGrubu[] = ['akis', 'hikaye'];
 const DAR_YERLESIM_CIKARILAN: Readonly<Record<string, readonly string[]>> = { instagram_positions: ['explore'] };
 const DAR_YERLESIM_KAPALI = 'sağ sütun, arama, Marketplace ve Keşfet kapalı.';
 
+/*
+ * TELEFON (yönetici kararı, 2026-10-12): Facebook akışı, Marketplace,
+ * Facebook Reels, Facebook ve Instagram hikâyesi, Instagram akışı. Sağ
+ * sütun ve arama masaüstü yüzeyleri; Instagram Keşfet ve Reels'te arama
+ * düğmesinin davranışı ÖLÇÜLMEDİ; Audience Network ve Messenger elle
+ * yerleşimde zaten yazılmıyor. Kural DAR: arama reklamı kabul edilip
+ * çaldıramayacağı bir yerde gösterilirse para gider, arama gelmez, hata yok.
+ * Cihaz ayrıca `device_platforms: ['mobile']` ile kapatılıyor (derle.ts).
+ */
+const TELEFON_YERLESIM_GRUPLARI: readonly YerlesimGrubu[] = ['akis', 'pazar', 'hikaye'];
+const TELEFON_YERLESIM_CIKARILAN: Readonly<Record<string, readonly string[]>> = { instagram_positions: ['explore', 'reels'] };
+const DAR_YERLESIM_BOS = '4:5, 1:1 ya da 9:16 görsel ekle.';
+
 const DAR_YERLESIM_KISITLARI: Partial<Record<NiyetKodu, NiyetYerlesimKisiti>> = {
   FORM: {
     gruplar: DAR_YERLESIM_GRUPLARI,
     cikarilanKonumlar: DAR_YERLESIM_CIKARILAN,
     aciklama: `Form reklamı yalnız akış, hikâye ve Reels’te gösterilir; ${DAR_YERLESIM_KAPALI}`,
+    bosMesaji: `Form reklamı yalnız akış, hikâye ve Reels’te gösterilir; ${DAR_YERLESIM_BOS}`,
   },
   WHATSAPP: {
     gruplar: DAR_YERLESIM_GRUPLARI,
     cikarilanKonumlar: DAR_YERLESIM_CIKARILAN,
     aciklama: `WhatsApp reklamı yalnız akış, hikâye ve Reels’te gösterilir; ${DAR_YERLESIM_KAPALI}`,
+    bosMesaji: `WhatsApp reklamı yalnız akış, hikâye ve Reels’te gösterilir; ${DAR_YERLESIM_BOS}`,
+  },
+  TELEFON: {
+    gruplar: TELEFON_YERLESIM_GRUPLARI,
+    cikarilanKonumlar: TELEFON_YERLESIM_CIKARILAN,
+    otomatikteDe: true,
+    aciklama:
+      'Arama reklamı yalnız telefonda ve Facebook akışı, Marketplace, Facebook Reels, hikâyeler ile Instagram akışında gösterilir; sağ sütun, arama, Instagram Keşfet ve Instagram Reels kapalı.',
+    bosMesaji: `Arama reklamı yalnız akış, Marketplace, hikâye ve Facebook Reels’te gösterilir; ${DAR_YERLESIM_BOS}`,
   },
 };
 
@@ -202,7 +241,7 @@ export interface SetPlani {
 /** Elle yerleşimde niyetin kapattığı grupları ayırır; otomatik planda dokunmaz. */
 function niyetKisitiUygula(p: Omit<SetPlani, 'niyetKapanan'>, niyet?: NiyetKodu | null): SetPlani {
   const kisit = niyetYerlesimKisiti(niyet);
-  if (!kisit || p.otomatik) return { ...p, niyetKapanan: [] };
+  if (!kisit || (p.otomatik && !kisit.otomatikteDe)) return { ...p, niyetKapanan: [] };
   const niyetKapanan = YERLESIM_SIRASI.filter((g) => !kisit.gruplar.includes(g));
   const gruplar: Partial<Record<YerlesimGrubu, GorselOrani>> = {};
   for (const g of YERLESIM_SIRASI) if (p.gruplar[g] && kisit.gruplar.includes(g)) gruplar[g] = p.gruplar[g];
@@ -265,6 +304,18 @@ export function birlesikPlan(setler: ReadonlyArray<readonly GorselOrani[]>, niye
  */
 export function reklamSetiPlani(setler: ReadonlyArray<readonly GorselOrani[]>, niyet?: NiyetKodu | null): SetPlani {
   return setler.some((s) => s.length > 1) ? ortakPlan(setler, niyet) : birlesikPlan(setler, niyet);
+}
+
+/**
+ * ORAN BİLİNMEYEN PLAN (video, ölçüsüz görsel) için niyetin zorunlu elle
+ * yerleşimi. `null` = Advantage+ yerleşim; `otomatikteDe` taşıyan niyette
+ * (arama) bu, masaüstü ve sağ sütun demek. Plan bütün grupları açık sayıyor
+ * (oran değerleri yalnız açıklık bilgisi; set yok). Derleyici ve rehber AYNI
+ * fonksiyonu çağırıyor: tablo "otomatik" deyip gövde elle yazmasın.
+ */
+export function niyetZorunluPlan(plan: SetPlani | null, niyet?: NiyetKodu | null): SetPlani | null {
+  if (plan) return plan;
+  return niyetYerlesimKisiti(niyet)?.otomatikteDe ? setPlani(GORSEL_ORANLARI, niyet) : null;
 }
 
 /**

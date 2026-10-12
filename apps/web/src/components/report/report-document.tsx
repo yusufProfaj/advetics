@@ -1,4 +1,5 @@
 import type {
+  ConversionBucket,
   ConversionCounts,
   MetricTotals,
   ReportCampaignRow,
@@ -20,7 +21,7 @@ import {
 } from '@advetics/shared';
 import { kitleBolumuKarari } from '@advetics/shared';
 import { SITE_DONUSUM_SUTUNLARI, siteDonusumuBosSebebi, siteDonusumuCizilir, siteDonusumuDipnotlari } from '@advetics/shared';
-import { donusumBosSebebi, PLATFORM_KISA_ADLARI, platformKisaAdi } from '@advetics/shared';
+import { donusumBosSebebi, PLATFORM_KISA_ADLARI, platformKisaAdi, taninmayanAramaCumlesi } from '@advetics/shared';
 import type { ReactNode } from 'react';
 import { formatDayLong, formatMoney, formatNumber, formatPercent, microsOf } from '@/lib/format';
 import { KitleOzetiIcerik } from './kitle-ozeti';
@@ -120,6 +121,7 @@ export function ReportDocument({ data }: { data: ReportData }) {
                   to={data.to}
                   secim={data.options.meta_campaigns?.metrics}
                   varsayilan={DEFAULT_COLUMNS.meta_campaigns}
+                  uyarilar={(data.unknownCallActions ?? []).map(taninmayanAramaCumlesi)}
                 />
               );
             case 'google_campaigns':
@@ -362,6 +364,15 @@ const SUTUNLAR: Record<ColumnKey, Sutun> = {
   purchase: {
     hucre: (r) => formatNumber(r.conversionCounts.purchase),
   },
+  calls: {
+    hucre: (r) => formatNumber(r.conversionCounts.calls),
+  },
+  calls20s: {
+    hucre: (r) => formatNumber(r.conversionCounts.calls20s),
+  },
+  callClicks: {
+    hucre: (r) => formatNumber(r.conversionCounts.callClicks),
+  },
 };
 
 function CampaignPage({
@@ -375,6 +386,7 @@ function CampaignPage({
   to,
   secim,
   varsayilan,
+  uyarilar = [],
 }: {
   title: string;
   platform: string;
@@ -387,6 +399,8 @@ function CampaignPage({
   /** Şablondan gelen sütun seçimi; yoksa `varsayilan` kullanılıyor. */
   secim?: ColumnKey[];
   varsayilan: readonly ColumnKey[];
+  /** Tablonun ÜSTÜNDE yazılan kısıtlar (tanınmayan arama sonucu); PDF'le aynı cümle. */
+  uyarilar?: string[];
 }) {
   if (rows.length === 0) {
     return (
@@ -397,7 +411,7 @@ function CampaignPage({
     );
   }
 
-  const sutunlar = resolveColumns(secim, varsayilan);
+  const sutunlar = resolveColumns(secim, varsayilan, rows);
   const totals = sumRows(rows);
   // Karışık para biriminde `currency` null geliyor ve `formatMoney` sembol
   // basmıyor — tek bir sembol göstermek yanlış olurdu.
@@ -416,6 +430,12 @@ function CampaignPage({
   return (
     <section className="rpt-page pt-10">
       <PageHead title={title} subtitle={platform} />
+
+      {uyarilar.map((u) => (
+        <p key={u} className="mt-4 text-xs text-slate-600">
+          {u}
+        </p>
+      ))}
 
       <div className="mt-6 overflow-x-auto">
         <table className="w-full min-w-[620px] border-collapse text-sm">
@@ -500,7 +520,7 @@ function CampaignPage({
       */}
       <Footnotes
         keys={sutunlar.filter((k): k is keyof typeof METRIC_LABELS => k in METRIC_LABELS)}
-        buckets={sutunlar.some((k) => k === 'form' || k === 'message')}
+        kovalar={sutunlar.filter((k): k is ConversionBucket => k in CONVERSION_BUCKETS)}
         extra={[
           anyAverage
             ? '* Erişim tekil kişi sayısıdır ve günler arasında toplanamaz; bu sütun günlük ortalamayı gösterir.'
@@ -1288,11 +1308,12 @@ function BucketLine({ counts, dark = false }: { counts: ConversionCounts; dark?:
 function Footnotes({
   keys,
   extra,
-  buckets = false,
+  kovalar = [],
 }: {
   keys: Array<keyof typeof METRIC_LABELS>;
   extra?: string;
-  buckets?: boolean;
+  /** Tabloda görünen kovalar; her birinin ipucu dipnota (sütun listesinden türer). */
+  kovalar?: ConversionBucket[];
 }) {
   const lines = keys
     .map((k) => {
@@ -1301,10 +1322,7 @@ function Footnotes({
     })
     .filter((v): v is string => v !== null);
 
-  if (buckets) {
-    lines.push(`Form: ${CONVERSION_BUCKETS.form.hint}`);
-    lines.push(`Mesaj: ${CONVERSION_BUCKETS.message.hint}`);
-  }
+  for (const k of kovalar) lines.push(`${CONVERSION_BUCKETS[k].label}: ${CONVERSION_BUCKETS[k].hint}`);
   // `extra` birden fazla not taşıyabiliyor; satır satır ayrılıyor.
   if (extra) lines.push(...extra.split('\n').filter((l) => l.length > 0));
   if (lines.length === 0) return null;

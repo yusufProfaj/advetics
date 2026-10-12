@@ -916,3 +916,66 @@ describe('ReportsService — izlemesi kapalı hesap rapora girmiyor', () => {
     expect(data.metaCampaigns.map((c) => c.name)).toEqual(["Kampanya A"]);
   });
 });
+
+/**
+ * ARAMA KOVALARI (2026-10-12) — GERÇEK sorguyla. Kovaların SQL sütun adları
+ * kova listesinden üretiliyor ve TIRNAKLI (`callClicks` tırnaksız küçük
+ * harfe iniyordu); bu blok iki şeyi kilitliyor: arama kovaları geriye dönük
+ * ham `actions`tan doluyor ve Google ham sayacı (`callClicks`) satıra ulaşıyor.
+ */
+describe('ReportsService — arama kovaları', () => {
+  async function googleSatir(date: string, raw: Record<string, unknown>): Promise<void> {
+    await h.q(
+      `INSERT INTO insights_daily
+         (client_id, ad_account_id, platform, entity_level, entity_id, entity_external_id,
+          date, breakdown_key, impressions, clicks, spend_micros, conversions,
+          conversion_value_micros, currency, reach, raw_metrics)
+       VALUES ($1, $2, 'google', 'campaign', $3, 'g-ext', $4::date, '', 50, 5, 1000000, 0, 0, 'TRY', 0, $5::jsonb)`,
+      [IDS.client, IDS.adAccount, CAMP_B, date, JSON.stringify(raw)],
+    );
+  }
+
+  it('KRİTİK: yapılan arama öncelikli, yoksa Ara onayı; 20 sn ayrı ve toplanmıyor', async () => {
+    await seedRow({
+      entityId: CAMP_A,
+      date: '2026-08-01',
+      actions: [
+        { action_type: 'click_to_call_native_call_placed', value: '6' },
+        { action_type: 'click_to_call_call_confirm', value: '9' },
+        { action_type: 'click_to_call_native_20s_call_connect', value: '4' },
+      ],
+    });
+    await seedRow({ entityId: CAMP_A, date: '2026-08-02', actions: [{ action_type: 'click_to_call_call_confirm', value: '3' }] });
+    const data = await svc.build(CTX, RANGE);
+    const a = data.metaCampaigns.find((c) => c.id === CAMP_A)!;
+    expect(a.conversionCounts.calls).toBe(9);
+    expect(a.conversionCounts.calls20s).toBe(4);
+    expect(data.platforms[0]!.conversionCounts.calls).toBe(9);
+    expect(data.daily.map((d) => d.conversionCounts.calls)).toEqual([6, 3]);
+    expect(data.unknownCallActions).toEqual([]);
+  });
+
+  it('KRİTİK: kovaya düşmeyen arama eylemi raporda TANINMAYAN olarak dönüyor, sessizce atılmıyor', async () => {
+    await seedRow({
+      entityId: CAMP_A,
+      date: '2026-08-01',
+      actions: [
+        { action_type: 'click_to_call_native_45s_call_connect', value: '2' },
+        { action_type: 'click_to_call_native_60s_call_connect', value: '1' },
+        { action_type: 'lead', value: '5' },
+      ],
+    });
+    const data = await svc.build(CTX, RANGE);
+    expect(data.unknownCallActions).toEqual(['click_to_call_native_45s_call_connect']);
+  });
+
+  it('KRİTİK: Google arama düğmesi tıklaması ham sayaçtan; hata gövdesi 0 sayılmıyor ama satırı da düşürmüyor', async () => {
+    await googleSatir('2026-08-01', { callClicks: 4 });
+    await googleSatir('2026-08-02', { callClicksError: 'UNRECOGNIZED_FIELD' });
+    const data = await svc.build(CTX, RANGE);
+    const g = data.googleCampaigns.find((c) => c.id === CAMP_B)!;
+    expect(g.conversionCounts.callClicks).toBe(4);
+    expect(g.impressions).toBe(100);
+    expect(data.platforms.find((p) => p.platform === 'google')!.conversionCounts.callClicks).toBe(4);
+  });
+});

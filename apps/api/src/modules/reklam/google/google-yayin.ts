@@ -1,5 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import type { GoogleSaatPlani } from '@advetics/shared';
 import { GERI_ALINABILIR_DURUMLAR, YAYIN_DURUMLARI, YAYIN_DURUM_SINIFI, gecisIzinliMi, type YayinDurumu } from '@advetics/shared';
 import { PlatformApiError, type FetchContext } from '../../connections/provider.types';
 import { googleYalinKimlik } from '../../connections/providers/google-demandgen';
@@ -171,6 +172,8 @@ export interface GoogleOkunan {
    * reklamını "fark var"da durdururdu.
    */
   aramaOgeleri: Array<{ countryCode: string | null; phoneNumber: string | null }>;
+  /** Arama öğesinin saat planı — yalnız beklenen taşıyorsa okunur (bilinmeyen = fark). */
+  aramaSaatleri?: GoogleSaatPlani[] | null;
   /** Dalga 3 — yalnız beklenen taşıyorsa okunur ve kıyaslanır. */
   teklif?: string | null;
   /** Yalnız beklenen taşıyorsa okunur: TEK reklamın yolu, değilse null (bilinmeyen = fark). */
@@ -233,6 +236,8 @@ export function googleGeriOkumaKarsilastir(b: GoogleBeklenen, o: GoogleOkunan): 
   // Dalga 3: eski yayın satırlarında bu alanlar YOK (undefined) = bakılmaz.
   // Beklenip okunamayan (`null`/`undefined`) FARK: bilinmeyeni doğru saymıyoruz.
   if (b.teklif) kiyasla('kampanya.teklif', b.teklif, o.teklif ?? null);
+  // Saat planı KÜME (Google sırası garanti değil); okunamadıysa null = fark.
+  if (b.aramaSaatleri) kiyasla('aramaOgesi.saatler', saatPlaniSirala(b.aramaSaatleri), o.aramaSaatleri ? saatPlaniSirala(o.aramaSaatleri) : null);
   if (b.gorunenYol) kiyasla('reklam.gorunenYol', b.gorunenYol, o.gorunenYol ?? null);
   if (b.gorselReklam) kiyasla('gorselReklam', b.gorselReklam, o.gorselReklam ?? null);
   if (b.varlikGrubu) kiyasla('varlikGrubu', b.varlikGrubu, o.varlikGrubu ?? null);
@@ -290,6 +295,33 @@ interface KampanyaSatiri {
   };
   campaignBudget?: { amountMicros?: string };
 }
+/** Saat planını gün ve saate göre sıralar (karşılaştırma sırasız). */
+export function saatPlaniSirala(xs: readonly GoogleSaatPlani[]): GoogleSaatPlani[] {
+  const anahtar = (x: GoogleSaatPlani) => `${x.dayOfWeek}|${String(x.startHour).padStart(2, '0')}|${x.startMinute}|${String(x.endHour).padStart(2, '0')}|${x.endMinute}`;
+  return [...xs].map((x) => ({ dayOfWeek: x.dayOfWeek, startHour: x.startHour, startMinute: x.startMinute, endHour: x.endHour, endMinute: x.endMinute })).sort((a, b) => anahtar(a).localeCompare(anahtar(b)));
+}
+
+/**
+ * Google'ın döndürdüğü saat planı. Proto3 JSON'da SIFIR değerli sayı alanı
+ * HİÇ gelmeyebilir (gece yarısı `startHour: 0`): eksik saat 0 sayılıyor.
+ * Dakika enum'u (ZERO = 2) sıfır değil, gelmesi bekleniyor; gelmezse
+ * okunan değer `undefined` kalır ve fark çıkar (bilinmeyen doğru sayılmaz).
+ * Biçim CANLIDA ÖLÇÜLMEDİ.
+ */
+export function saatPlaniOku(ham: unknown): GoogleSaatPlani[] {
+  if (!Array.isArray(ham)) return [];
+  return ham.map((x) => {
+    const o = (x ?? {}) as Record<string, unknown>;
+    return {
+      dayOfWeek: o.dayOfWeek as GoogleSaatPlani['dayOfWeek'],
+      startHour: Number(o.startHour ?? 0),
+      startMinute: o.startMinute as GoogleSaatPlani['startMinute'],
+      endHour: Number(o.endHour ?? 0),
+      endMinute: o.endMinute as GoogleSaatPlani['endMinute'],
+    };
+  });
+}
+
 interface CagriOgesiSatiri {
   campaignAsset?: { fieldType?: string; status?: string; source?: string };
   asset?: { callAsset?: { countryCode?: string; phoneNumber?: string } };
@@ -525,6 +557,7 @@ export async function googleGeriOku(port: GoogleYayinPortu, ctx: FetchContext, k
       .filter((x) => x.campaignAsset?.fieldType === 'CALL' && x.campaignAsset?.status !== 'REMOVED' && x.campaignAsset?.source !== 'AUTOMATICALLY_CREATED')
       .map((x) => ({ countryCode: x.asset?.callAsset?.countryCode ?? null, phoneNumber: x.asset?.callAsset?.phoneNumber ?? null })),
     teklif: c?.biddingStrategyType ?? null,
+    ...(b?.aramaSaatleri ? { aramaSaatleri: await aramaSaatleriOku(port, ctx, kampanyaId) } : {}),
     ...(b?.gorunenYol ? { gorunenYol: await gorunenYolOku(port, ctx, kampanyaId) } : {}),
     ...(b?.gorselReklam ? { gorselReklam: await gorselReklamOku(port, ctx, kampanyaId) } : {}),
     ...(b?.varlikGrubu ? { varlikGrubu: await varlikGrubuOku(port, ctx, kampanyaId) } : {}),
@@ -551,6 +584,23 @@ async function ogeleriGuvenli(
     logger.warn(`kampanya=${kampanyaId}: Arama öğeleri ${m}`);
     return { ogeOkumaHatasi: m };
   }
+}
+
+/**
+ * Arama öğesinin saat planı — AYRI sorgu, yalnız plan gönderildiyse: arama
+ * öğesi sorgusuna alan eklemek her kurgunun geri okumasını değiştirirdi.
+ * Kampanyaya bağlı TEK öğe bekleniyor; birden çoksa ya da hiç yoksa `null`
+ * (fark, öğe sayısı satırı ayrıca söylüyor).
+ */
+async function aramaSaatleriOku(port: GoogleYayinPortu, ctx: FetchContext, kampanyaId: string): Promise<GoogleSaatPlani[] | null> {
+  const r = await port.ara<{ campaignAsset?: { source?: string }; asset?: { callAsset?: { adScheduleTargets?: unknown } } }>(
+    ctx,
+    `SELECT campaign.id, campaign_asset.field_type, campaign_asset.status, campaign_asset.source, asset.call_asset.ad_schedule_targets
+       FROM campaign_asset
+      WHERE campaign.id = ${kampanyaId} AND campaign_asset.field_type = 'CALL' AND campaign_asset.status != 'REMOVED'`,
+  );
+  const bizim = r.filter((x) => x.campaignAsset?.source !== 'AUTOMATICALLY_CREATED');
+  return bizim.length === 1 ? saatPlaniOku(bizim[0]!.asset?.callAsset?.adScheduleTargets) : null;
 }
 
 /**

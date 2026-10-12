@@ -28,7 +28,7 @@ const blok = (over: Record<string, unknown> = {}) =>
     cpc: 7.83,
     cpa: 62.78,
     roas: null,
-    conversionCounts: { form: 180, message: 213, purchase: 0 },
+    conversionCounts: { form: 180, message: 213, purchase: 0, calls: 0, calls20s: 0, callClicks: 0 },
     ...over,
   }) as unknown as ReportData['platforms'][number];
 
@@ -38,6 +38,7 @@ const VERI: ReportData = {
   // Kitle Özeti sayfasındaki halka hatası tam da o gürültünün içinde kaçtı.
   breakdowns: [],
   topAdsMissingPlatforms: [],
+  unknownCallActions: [],
   conversionDetail: { rows: [], errors: [], totalConversions: 0 },
   siteConversion: null,
   client: { id: 'c1', name: 'Sabancı İnşaat' },
@@ -68,7 +69,7 @@ const VERI: ReportData = {
       cpc: 9.68,
       cpa: 222.67,
       roas: null,
-      conversionCounts: { form: 20, message: 0, purchase: 0 },
+      conversionCounts: { form: 20, message: 0, purchase: 0, calls: 0, calls20s: 0, callClicks: 0 },
     },
   ] as unknown as ReportData['metaCampaigns'],
   googleCampaigns: [],
@@ -130,7 +131,7 @@ describe('raporMailTaslagi', () => {
       label: 'Google Ads',
       platform: 'google',
       conversions: 28,
-      conversionCounts: { form: 0, message: 0, purchase: 0 },
+      conversionCounts: { form: 0, message: 0, purchase: 0, calls: 0, calls20s: 0, callClicks: 0 },
     });
     const t = raporMailTaslagi({ ...VERI, platforms: [google] }, 'x');
     expect(t.html).not.toContain('nitelikli müşteri formu');

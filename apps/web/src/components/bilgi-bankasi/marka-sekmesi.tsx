@@ -3,7 +3,13 @@
 import { useEffect, useState } from 'react';
 import {
   CAMPAIGN_GOALS,
+  CALISMA_GUNLERI,
   GOAL_META,
+  GUN_ADI,
+  calismaAraligiSchema,
+  type CalismaAraligi,
+  type CalismaSaatleri,
+  type HaftaGunu,
   MARKA_SINIRLARI,
   sikSayfaSchema,
   upsertClientProfileSchema,
@@ -51,6 +57,8 @@ interface Form {
   metinSablonlari: string[];
   yasalUyari: string;
   markaBilgileri: string;
+  /** Boş dizi = bilinmiyor (kayıtta NULL). */
+  calismaSaatleri: CalismaSaatleri;
 }
 
 const BOS: Form = {
@@ -64,6 +72,7 @@ const BOS: Form = {
   metinSablonlari: [],
   yasalUyari: '',
   markaBilgileri: '',
+  calismaSaatleri: [],
 };
 
 const girdi =
@@ -93,6 +102,7 @@ export function MarkaSekmesi({ clientId, canWrite }: { clientId: string; canWrit
           metinSablonlari: p.metinSablonlari,
           yasalUyari: p.yasalUyari ?? '',
           markaBilgileri: p.markaBilgileri ?? '',
+          calismaSaatleri: p.calismaSaatleri ?? [],
         });
         setDurum({ tur: 'hazir' });
       })
@@ -130,6 +140,7 @@ export function MarkaSekmesi({ clientId, canWrite }: { clientId: string; canWrit
       metinSablonlari: form.metinSablonlari,
       yasalUyari: form.yasalUyari.trim() || null,
       markaBilgileri: form.markaBilgileri.trim() || null,
+      calismaSaatleri: form.calismaSaatleri.length ? form.calismaSaatleri : null,
     };
     // Sunucuyla AYNI şema: burada geçen gövde orada reddedilmez.
     const kontrol = upsertClientProfileSchema.safeParse(govde);
@@ -270,6 +281,8 @@ export function MarkaSekmesi({ clientId, canWrite }: { clientId: string; canWrit
           className={girdi}
         />
       </Alan>
+
+      <CalismaSaatleriAlani saatler={form.calismaSaatleri} kapali={kapali} degis={(v) => degis('calismaSaatleri', v)} />
 
       <Alan etiket="Ek notlar" ipucu="Kaçınılacak ifadeler, dikkat edilecek şeyler.">
         <textarea
@@ -505,6 +518,85 @@ function SayfaListesi({
         </div>
       )}
       {hata && <span className="block text-[11px] text-danger-strong">{hata}</span>}
+    </Alan>
+  );
+}
+
+/**
+ * ÇALIŞMA SAATLERİ. Gün başına tek aralık; işaretsiz gün KAPALI. Hiç gün
+ * işaretlenmezse kayıt "bilinmiyor" ve Google arama düğmesi her saatte
+ * görünür (bu ipucunda yazılı). Hata SATIRIN ALTINDA ve yazarken: dakika
+ * 15'in katı değilse kullanıcı bunu kaydederken değil girerken öğrenir.
+ * Bir güne iki aralık API'den gelmişse (ekran tek aralık yazıyor) o gün
+ * ilk aralıkla gösterilir ve değiştirilirse tek aralığa iner.
+ */
+function CalismaSaatleriAlani({
+  saatler,
+  kapali,
+  degis,
+}: {
+  saatler: CalismaSaatleri;
+  kapali: boolean;
+  degis: (v: CalismaSaatleri) => void;
+}) {
+  const gunun = (g: HaftaGunu): CalismaAraligi | undefined => saatler.find((x) => x.gun === g);
+  const yaz = (g: HaftaGunu, a: CalismaAraligi | null): void => {
+    const digerleri = saatler.filter((x) => x.gun !== g);
+    const yeni = a ? [...digerleri, a] : digerleri;
+    degis(CALISMA_GUNLERI.flatMap((gg) => yeni.filter((x) => x.gun === gg)));
+  };
+  return (
+    <Alan
+      etiket="Çalışma saatleri"
+      ipucu="Telefonla aranmak istediğin saatler. Google arama düğmesini yalnız bu saatlerde gösterir; boş bırakırsan her saatte gösterir. Meta'da saat sınırı uygulanamıyor."
+    >
+      <ul className="divide-y divide-line rounded-lg border border-line">
+        {CALISMA_GUNLERI.map((g) => {
+          const a = gunun(g);
+          const hata = a ? calismaAraligiSchema.safeParse(a) : null;
+          return (
+            <li key={g} className="flex flex-wrap items-center gap-3 px-3 py-2 text-sm">
+              <label className="flex w-32 shrink-0 items-center gap-2 text-ink">
+                <input
+                  type="checkbox"
+                  checked={!!a}
+                  disabled={kapali}
+                  onChange={(e) => yaz(g, e.target.checked ? { gun: g, acilis: '09:00', kapanis: '18:00' } : null)}
+                />
+                {GUN_ADI[g]}
+              </label>
+              {a ? (
+                <span className="flex items-center gap-2">
+                  <input
+                    type="time"
+                    step={900}
+                    value={a.acilis}
+                    disabled={kapali}
+                    onChange={(e) => yaz(g, { ...a, acilis: e.target.value })}
+                    aria-label={`${GUN_ADI[g]} açılış`}
+                    className={`${girdi} w-28`}
+                  />
+                  <span className="text-ink-muted">-</span>
+                  <input
+                    type="time"
+                    step={900}
+                    value={a.kapanis === '24:00' ? '23:59' : a.kapanis}
+                    disabled={kapali}
+                    onChange={(e) => yaz(g, { ...a, kapanis: e.target.value === '23:59' ? '24:00' : e.target.value })}
+                    aria-label={`${GUN_ADI[g]} kapanış`}
+                    className={`${girdi} w-28`}
+                  />
+                </span>
+              ) : (
+                <span className="text-xs text-ink-muted">Kapalı</span>
+              )}
+              {hata && !hata.success && (
+                <span className="basis-full text-[11px] text-danger-strong">{hata.error.issues[0]?.message}</span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
     </Alan>
   );
 }

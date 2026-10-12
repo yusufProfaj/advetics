@@ -23,7 +23,7 @@ import { microsToMinor } from '../para';
 import type { Butce } from '../butce';
 import { ATIF_STANDARTLARI } from '../taslak';
 import { TELEFON_E164 } from '../taslak-alanlari';
-import { ORAN_ETIKETI, YERLESIM_GRUPLARI, YERLESIM_SIRASI, bannerSetiDestekleniyor, grupMetaKonumlari, niyetYerlesimKisiti, reklamSetiPlani, setPlani, type GorselOrani, type SetPlani, type YerlesimGrubu } from '../banner-seti';
+import { ORAN_ETIKETI, YERLESIM_GRUPLARI, YERLESIM_SIRASI, bannerSetiDestekleniyor, grupMetaKonumlari, niyetYerlesimKisiti, niyetZorunluPlan, reklamSetiPlani, setPlani, type GorselOrani, type SetPlani, type YerlesimGrubu } from '../banner-seti';
 
 /**
  * 1.1.0: banner seti (yerleşime göre görsel) ve eksik boyutta elle yerleşim.
@@ -39,6 +39,10 @@ import { ORAN_ETIKETI, YERLESIM_GRUPLARI, YERLESIM_SIRASI, bannerSetiDestekleniy
  * 1.7.0: FORM'da elle yerleşim yalnız akış, hikâye ve Reels
  *        (`niyetYerlesimKisiti`); form düğmesi SIGN_UP değil LEARN_MORE,
  *        inşaat/emlak/hizmet sektöründe GET_QUOTE (`formCtaTuru`).
+ * 1.9.0: TELEFON'da `device_platforms: ['mobile']` ve ZORUNLU dar elle
+ *        yerleşim (dört boyut tamken ve video fikrinde de;
+ *        `niyetYerlesimKisiti`), banner seti yok, +90 numarada TR dışı
+ *        konum ret (`TEL-ULKE`).
  * 1.8.0: WHATSAPP'ta Türkçe karşılama mesajı (`page_welcome_message`,
  *        `karsilama.ts`) tek görsel ve video kreatifinde; banner setinde
  *        gönderilmiyor. Elle yerleşimde WhatsApp da yalnız akış, hikâye ve
@@ -46,7 +50,7 @@ import { ORAN_ETIKETI, YERLESIM_GRUPLARI, YERLESIM_SIRASI, bannerSetiDestekleniy
  * Sürüm provanın tazeliğine bağlı: eski derleyiciyle geçmiş prova yeni
  * gövdeyi kanıtlamaz.
  */
-export const DERLEYICI_SURUMU = '1.8.0';
+export const DERLEYICI_SURUMU = '1.9.0';
 
 /**
  * CLICK-TO-WHATSAPP SABİTLERİ (CLAUDE.md "CLICK-TO-WHATSAPP"). Bağlantı
@@ -73,6 +77,29 @@ export const DERLEYICI_SURUMU = '1.8.0';
  * yakalıyor.
  */
 export const WHATSAPP_BAGLANTISI = 'https://api.whatsapp.com/send';
+
+/** TELEFON: reklam setinin cihaz listesi (Meta `device_platforms`). */
+export const TELEFON_CIHAZLARI = ['mobile'] as const;
+
+/**
+ * ÜLKE KURALI (yönetici kararı, 2026-10-12). +90 numaralı bir arama
+ * reklamını Türkiye dışında göstermek, yurt dışındaki kişiyi uluslararası
+ * aramaya göndermek: kabul edilir, harcanır, arama gelmez. Ülkesi BİLİNEN
+ * ve TR olmayan konumlar döner; ülkesi bilinmeyen (`ulkeKodu: null`, ör.
+ * harita noktası) burada sayılmaz, rehber onu uyarı olarak söyler.
+ * Yalnız +90: başka ülke kodlu numara rehberde zaten reddediliyor.
+ */
+export function telefonUlkesiDisindakiKonumlar<T extends { ulkeKodu: string | null; etiket: string; tur: string; key: string }>(telefon: string, konumlar: readonly T[]): T[] {
+  if (!telefon.startsWith('+90')) return [];
+  return konumlar.filter((k) => {
+    const ulke = k.tur === 'country' ? k.key.toUpperCase() : k.ulkeKodu?.toUpperCase() ?? null;
+    return ulke !== null && ulke !== 'TR';
+  });
+}
+
+export function telefonUlkeMesaji(konumlar: ReadonlyArray<{ etiket: string }>): string {
+  return `Numara +90 (Türkiye) ama reklam Türkiye dışında da gösterilecek (${konumlar.map((k) => k.etiket).join(', ')}); o konumları çıkar.`;
+}
 export const WHATSAPP_CTA_DEGERI = { app_destination: 'WHATSAPP' } as const;
 
 /**
@@ -427,7 +454,7 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
       if (!bannerSetiDestekleniyor(g.niyet)) retler.push({ kod: 'KRT-SET', mesaj: `Fikir ${i + 1}: banner seti şimdilik yalnız "Siteme gelsinler" amacında.` });
     }
   }
-  const yerlesim = yerlesimPlani(g.kavramlar, g.niyet);
+  const yerlesim = derleyiciYerlesimPlani(g.kavramlar, g.niyet);
   if (!yerlesim && g.kavramlar.some((k) => k.setGorselleri)) {
     // Bir fikir videoysa yerleşim otomatik kalır ve set tek görsele inerdi:
     // kullanıcının yüklediği boyutlar sessizce kaybolurdu.
@@ -438,7 +465,7 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
     // kullanıcıyı formun gösterilmeyeceği bir yer için görsele gönderirdi.
     retler.push(
       yerlesim.niyetKapanan.length
-        ? { kod: 'KRT-ORAN', mesaj: `${g.niyet === 'WHATSAPP' ? 'WhatsApp' : 'Form'} reklamı yalnız akış, hikâye ve Reels’te gösterilir; 4:5, 1:1 ya da 9:16 görsel ekle.` }
+        ? { kod: 'KRT-ORAN', mesaj: niyetYerlesimKisiti(g.niyet)!.bosMesaji }
         : { kod: 'KRT-ORAN', mesaj: 'Görsellerin hiçbiri bir yerleşime uymuyor; 4:5, 1:1, 9:16 ya da 1.91:1 boyut ekle.' },
     );
   }
@@ -463,6 +490,11 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
     // Numarasız ya da ülke kodsuz bir arama reklamı kurulmaz: `tel:` boş
     // gider ya da Meta numarayı başka bir ülkeninki sayar.
     retler.push({ kod: 'TEL-YOK', mesaj: 'Telefon numarası +90 gibi ülke koduyla yazılmalı.' });
+  }
+  if (g.niyet === 'TELEFON' && g.telefon) {
+    // İkinci kapı (birincisi rehberin eksik listesi, giriş anında).
+    const yabanci = telefonUlkesiDisindakiKonumlar(g.telefon, g.hedefleme.konumlar);
+    if (yabanci.length) retler.push({ kod: 'TEL-ULKE', mesaj: telefonUlkeMesaji(yabanci) });
   }
   if (g.butce.seviye !== 'kampanya') {
     // ABO yalnız Gelişmiş'te ve paylaşım alanı kuralıyla; bu turda yok.
@@ -534,6 +566,15 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
     adlabels: etiketler,
   };
   if (m.destinationType) reklamSeti.destination_type = m.destinationType;
+  if (g.niyet === 'TELEFON') {
+    /*
+     * ARAMA YALNIZ TELEFONDA — AÇIKÇA. Meta'nın Call Ads örneği de
+     * `device_platforms` yazıyor; yazılmazsa cihaz kararı Meta'ya kalır ve
+     * masaüstünde gösterilen "Ara" düğmesi kimseyi aratmaz (boşa gösterim,
+     * hata yok). Yerleşim listesi de dar (`niyetYerlesimKisiti`, otomatikteDe).
+     */
+    reklamSeti.targeting = { ...(reklamSeti.targeting as Record<string, unknown>), device_platforms: [...TELEFON_CIHAZLARI] };
+  }
   if (optimizasyon === 'REACH') reklamSeti.frequency_control_specs = ERISIM_SIKLIK_SINIRI.map((x) => ({ ...x }));
   if (g.takvim.bitis) reklamSeti.end_time = g.takvim.bitis;
 
@@ -625,6 +666,7 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
     tanitilan: tanitilanTuru(g.niyet),
     erisim: optimizasyon === 'REACH',
     karsilama: !!karsilama,
+    telefon: g.niyet === 'TELEFON',
   });
 
   return {
@@ -665,6 +707,12 @@ export function yerlesimPlani(kavramlar: readonly Kavram[], niyet?: NiyetKodu | 
   }
   // Banner seti varsa kesişim, yoksa birleşim (`reklamSetiPlani`).
   return reklamSetiPlani(setler, niyet);
+}
+
+/** Derleyicinin yerleşim planı: oran bilinmese de niyetin zorunlu elle yerleşimi (`niyetZorunluPlan`). */
+export function derleyiciYerlesimPlani(kavramlar: readonly Kavram[], niyet?: NiyetKodu | null): SetPlani | null {
+  if (kavramlar.length === 0) return null;
+  return niyetZorunluPlan(yerlesimPlani(kavramlar, niyet), niyet);
 }
 
 /**
@@ -871,7 +919,7 @@ function alanYollari(nesne: string, o: Record<string, unknown>, onek = ''): stri
  * `kosul`: satır yalnız o hâlde zorunlu. M-10 dallara ayrıldı (Dalga 3):
  * sayfa kimliği SATIŞTA yok (piksel taşıyor), WhatsApp'ta numara da var.
  */
-export type ManifestoKosulu = 'kategori' | 'instagram' | 'sayfa' | 'piksel' | 'whatsapp' | 'erisim';
+export type ManifestoKosulu = 'kategori' | 'instagram' | 'sayfa' | 'piksel' | 'whatsapp' | 'erisim' | 'telefon';
 export const MANIFESTO: ReadonlyArray<{ kod: string; nesne: NesneTuru; yol: string | readonly string[]; kosul?: ManifestoKosulu }> = [
   { kod: 'M-01', nesne: 'kampanya', yol: 'status' },
   { kod: 'M-01', nesne: 'reklam_seti', yol: 'status' },
@@ -888,6 +936,8 @@ export const MANIFESTO: ReadonlyArray<{ kod: string; nesne: NesneTuru; yol: stri
   { kod: 'M-10P', nesne: 'reklam_seti', yol: 'promoted_object.custom_event_type', kosul: 'piksel' },
   { kod: 'M-10W', nesne: 'reklam_seti', yol: 'promoted_object.whatsapp_phone_number', kosul: 'whatsapp' },
   { kod: 'M-11F', nesne: 'reklam_seti', yol: 'frequency_control_specs', kosul: 'erisim' },
+  { kod: 'M-19T', nesne: 'reklam_seti', yol: 'targeting.device_platforms', kosul: 'telefon' },
+  { kod: 'M-19T', nesne: 'reklam_seti', yol: 'targeting.publisher_platforms', kosul: 'telefon' },
   { kod: 'M-12', nesne: 'reklam_seti', yol: 'start_time' },
   { kod: 'M-13', nesne: 'reklam_seti', yol: 'targeting.targeting_automation.advantage_audience' },
   { kod: 'M-14', nesne: 'reklam_seti', yol: 'targeting.age_min' },
@@ -925,6 +975,8 @@ export interface ManifestoHali {
   erisim: boolean;
   /** WHATSAPP: banner seti DIŞINDAKİ her kreatif karşılama taşımalı. */
   karsilama?: boolean;
+  /** TELEFON: cihaz ve elle yerleşim zorunlu. */
+  telefon?: boolean;
 }
 
 /** Bu hâlde satır zorunlu mu (testler de AYNI kuralı okuyor). */
@@ -932,6 +984,8 @@ export function manifestoSatiriGecerli(kosul: ManifestoKosulu | undefined, d: Om
   switch (kosul) {
     case undefined:
       return true;
+    case 'telefon':
+      return !!d.telefon;
     case 'kategori':
       return d.kategoriVar;
     case 'instagram':

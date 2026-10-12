@@ -21,6 +21,9 @@ import {
   advKampanyaAdi,
   googleGorselKurgusuMu,
   googleTeklifKarari,
+  googleTelefonDonusumuMu,
+  calismaSaatleriSchema,
+  type CalismaSaatleri,
   aciklamaMetniSec,
   altSayfaAdaylari,
   cipaBaglantiSayisi,
@@ -183,6 +186,14 @@ interface OnKosulKaydi {
    * Yalnız ölçüm etkinse okunur; okunmadı/okunamadı = `null` = tıklama.
    */
   googleDonusum30Gun: number | null;
+  /**
+   * `googleDonusum`/`googleDonusum30Gun` HANGİ ölçüyle okundu: `genel` =
+   * herhangi bir birincil dönüşüm; `telefon` = yalnız reklamdan arama
+   * (`googleTelefonDonusumuMu`). Telefon amacı GENEL ölçüyü okumamalı: sitedeki
+   * tel: tıklaması dolu bir hesapta "ölçüm etkin" deyip dönüşüm teklifi
+   * kurardı. Önbellek amaç değiştiğinde bayatlamıyordu; bu alan ayırıyor.
+   */
+  googleDonusumOlcusu: 'genel' | 'telefon' | null;
 }
 const ONBELLEK_MS = 15 * 60_000;
 /** Form önizlemesi önbelleği: formu Meta'da değiştiren kullanıcı en geç 10 dk sonra yenisini görür. */
@@ -194,6 +205,25 @@ const FORM_AYRINTI_MS = 10 * 60_000;
  * harcama sorgusuyla aynı biçim (çekirdek tarih segmenti istisnası).
  */
 export const GOOGLE_DONUSUM_SAYISI_SORGUSU = 'SELECT metrics.conversions FROM customer WHERE segments.date DURING LAST_30_DAYS';
+
+/**
+ * TELEFON AMACI: birincil PHONE_CALL_LEAD işlemleri TÜRÜYLE (karar
+ * `googleTelefonDonusumuMu`, shared). Tür WHERE'de değil seçimde: süzgeç saf
+ * fonksiyonda kalsın, sorgu ve kural iki yerde ayrışmasın. CANLIDA ÖLÇÜLMEDİ.
+ */
+export const GOOGLE_TELEFON_ISLEMLERI_SORGUSU = `SELECT conversion_action.resource_name, conversion_action.type, conversion_action.category, conversion_action.primary_for_goal, conversion_action.status
+   FROM conversion_action
+  WHERE conversion_action.status = 'ENABLED' AND conversion_action.primary_for_goal = TRUE AND conversion_action.category = 'PHONE_CALL_LEAD'`;
+
+/**
+ * TELEFON AMACI: son 30 günde işlem BAŞINA dönüşüm. Segment satırı işleme
+ * göre çoğaltıyor ve YALNIZ dönüşüm seçiliyor (CLAUDE.md "SEGMENT EKLEMEK
+ * SATIRI ÇOĞALTIYOR"). WHERE'deki kategori SELECT'te (GAQL kuralı). Toplam
+ * yalnız `googleTelefonDonusumuMu` geçen işlemlerden. CANLIDA ÖLÇÜLMEDİ.
+ */
+export const GOOGLE_TELEFON_DONUSUM_SORGUSU = `SELECT segments.conversion_action, segments.conversion_action_category, metrics.conversions
+   FROM customer
+  WHERE segments.date DURING LAST_30_DAYS AND segments.conversion_action_category = 'PHONE_CALL_LEAD'`;
 
 /**
  * SAYFA BAŞINA ön koşullar (Lead Ads koşulları, WhatsApp hattı) ve yayında
@@ -263,6 +293,8 @@ interface BaglamVerisi {
         urun_kategorileri: string[] | null;
         logo_genislik: number | null;
         logo_yukseklik: number | null;
+        /** JSONB ham hâli; `calismaSaatleriSchema` ile okunuyor. */
+        calisma_saatleri: unknown;
       }
     | undefined;
   hesaplar: Array<{ id: string; platform: string; external_id: string; currency: string; timezone: string }>;
@@ -275,6 +307,8 @@ interface BaglamVerisi {
 interface Baglam extends RehberEksikBaglami {
   googleDonusum: boolean | null;
   googleDonusum30Gun: number | null;
+  /** Marka Merkezi çalışma saatleri; yoksa ya da bozuksa `null` (bilinmiyor). */
+  calismaSaatleri: CalismaSaatleri | null;
   /** "Siteme gelsinler" Meta hedefini seçen piksel hâli (`sitePikselHali`). */
   sitePikseli: SitePikselHali;
   /** Arama + site uzantı kaynağı; amaç başkaysa `null`. */
@@ -436,6 +470,7 @@ export class RehberService {
       googleDonusum: h.onKosullar.googleDonusumEtkin,
       googleSatis: h.onKosullar.googleSatisOlcumu,
       googleDonusum30Gun: null,
+      googleDonusumOlcusu: 'genel',
     });
     const okunan = seciliYoksaIlk(h.sayfalar, secim?.sayfaId)?.id;
     // Karar tablosu prova ÖNCESİ de doğru söylesin: rehberin amacına göre
@@ -689,6 +724,7 @@ export class RehberService {
       googleDonusum: taze && taze.googleHesapId === hesap ? taze.googleDonusum : null,
       googleSatis: satis,
       googleDonusum30Gun: taze && taze.googleHesapId === hesap ? taze.googleDonusum30Gun : null,
+      googleDonusumOlcusu: taze && taze.googleHesapId === hesap ? taze.googleDonusumOlcusu : null,
     });
   }
 
@@ -726,11 +762,19 @@ export class RehberService {
     const hesap = a.googleHesabiId?.deger;
     const amac = a.amac?.deger;
     if (!hesap || !amac || !a.platformlar?.deger.google || REHBER_AMACLARI[amac].google.kurgu !== 'ARAMA') return;
-    let etkin: boolean | null = etkinBilinen ?? null;
+    const telefon = REHBER_AMACLARI[amac].google.ulasma === 'telefon';
+    // TELEFON hazırlığın GENEL okumasını kullanmaz (`googleDonusumOlcusu`).
+    let etkin: boolean | null = telefon ? null : (etkinBilinen ?? null);
     let sayi: number | null = null;
     try {
-      if (etkinBilinen === undefined) etkin = await this.platformOkuyucu(ctx).googleDonusumEtkin(hesap);
-      if (etkin === true) sayi = await this.googleDonusumSayisi(ctx, hesap);
+      if (telefon) {
+        const r = await this.googleTelefonDonusumu(ctx, hesap);
+        etkin = r.etkin;
+        sayi = r.sayi;
+      } else {
+        if (etkinBilinen === undefined) etkin = await this.platformOkuyucu(ctx).googleDonusumEtkin(hesap);
+        if (etkin === true) sayi = await this.googleDonusumSayisi(ctx, hesap);
+      }
     } catch (e) {
       logger.warn(`Google dönüşüm sayısı okunamadı (hesap ${hesap}): ${(e as Error).message}`);
     }
@@ -744,7 +788,33 @@ export class RehberService {
       googleDonusum: etkin,
       googleSatis: taze && taze.googleHesapId === hesap ? taze.googleSatis : null,
       googleDonusum30Gun: sayi,
+      googleDonusumOlcusu: telefon ? 'telefon' : 'genel',
     });
+  }
+
+  /**
+   * TELEFON AMACI: reklamdan arama dönüşümü etkin mi ve son 30 günde kaç
+   * tane (`googleTelefonDonusumuMu`). Sitedeki tel: tıklaması (WEBPAGE)
+   * sayılmaz. İşlem yoksa sayı sorulmaz (kota). Düşerse FIRLATIR: çağıran
+   * `null` (= tıklama) yazıyor; okunamayan değer sıfır sayılmaz.
+   */
+  private async googleTelefonDonusumu(ctx: TenantContext, adAccountId: string): Promise<{ etkin: boolean; sayi: number | null }> {
+    const { fctx } = await this.googleBaglami(ctx, adAccountId, null);
+    await this.kotaKapisi(adAccountId);
+    const islemler = await this.google.rehberAra<{ conversionAction?: { resourceName?: string; type?: string; category?: string; primaryForGoal?: boolean; status?: string } }>(
+      fctx,
+      GOOGLE_TELEFON_ISLEMLERI_SORGUSU,
+    );
+    const sayilan = new Set(
+      islemler
+        .map((x) => x.conversionAction ?? {})
+        .filter((x) => googleTelefonDonusumuMu({ kategori: x.category ?? '', tur: x.type ?? '', birincil: x.primaryForGoal === true, durum: x.status ?? '' }))
+        .map((x) => x.resourceName ?? ''),
+    );
+    if (sayilan.size === 0) return { etkin: false, sayi: null };
+    await this.kotaKapisi(adAccountId);
+    const r = await this.google.rehberAra<{ segments?: { conversionAction?: string }; metrics?: { conversions?: number | string } }>(fctx, GOOGLE_TELEFON_DONUSUM_SORGUSU);
+    return { etkin: true, sayi: telefonDonusumToplami(r, sayilan) };
   }
 
   /**
@@ -1579,6 +1649,7 @@ export class RehberService {
       isletmeAdi: b.isletmeAdi,
       logoVarlikId: b.logoVarlikId,
       kategoriTabani: b.kategoriTabani,
+      calismaSaatleri: b.calismaSaatleri,
     });
     if (t.tur === 'ret') return { tur: 'reddetti', zaman, mesajlar: t.kodlar.map((k) => `Eksik: ${k}`) };
     const cocuk = await this.googleCocukYaz(ctx, s, t.deger, b.google.id);
@@ -2093,7 +2164,8 @@ export class RehberService {
    */
   private kararlar(amac: NonNullable<RehberAlanlari['amac']>['deger'], a: RehberAlanlari, b: Baglam, provaOgeleri: GoogleOgeDurumu[] | null = null) {
     const kurgu = REHBER_AMACLARI[amac].google.kurgu;
-    const teklif = kurgu ? googleTeklifKarari(kurgu, b.googleDonusum, b.googleDonusum30Gun) : null;
+    const gTanim = REHBER_AMACLARI[amac].google;
+    const teklif = kurgu ? googleTeklifKarari(kurgu, b.googleDonusum, b.googleDonusum30Gun, gTanim.kurgu ? gTanim.ulasma : null) : null;
     return kararTablosu(
       amac,
       acikPlatformlar(a, b.ajansYoneticisi),
@@ -2111,6 +2183,8 @@ export class RehberService {
         form: b.onKosullar?.seciliForm ?? null,
         // WhatsApp ilk mesajı: setli fikirlerde gitmediğini tablo söylesin.
         whatsappKarsilama: { kayit: a.whatsappKarsilama?.deger ?? null, setler: rehberFikirSetleri(a, b.medyaOranlari ?? new Map()) },
+        // TELEFON: arama öğesinin saatleri (derleyicinin gönderdiği AYNI değer).
+        calismaSaatleri: b.calismaSaatleri,
       },
     );
   }
@@ -2150,7 +2224,8 @@ export class RehberService {
       const [m] = await t.$queryRaw<Array<NonNullable<BaglamVerisi['m']>>>(Prisma.sql`
         SELECT c.name AS ad, p.marka_adi AS marka, p.logo_asset_id::text AS logo, p.yasal_uyari AS yasal,
                c.special_ad_categories AS kategoriler, p.vaatler, c.contact_phone AS telefon,
-               p.urun_kategorileri, la.width AS logo_genislik, la.height AS logo_yukseklik
+               p.urun_kategorileri, la.width AS logo_genislik, la.height AS logo_yukseklik,
+               p.calisma_saatleri
           FROM clients c LEFT JOIN client_profiles p ON p.client_id = c.id
           LEFT JOIN assets la ON la.id = p.logo_asset_id AND la.client_id = c.id
          WHERE c.id = ${clientId}::uuid`);
@@ -2187,9 +2262,15 @@ export class RehberService {
     // Önbellek yalnız OKUNAN hesap/sayfa seçiliyse geçerli.
     const metaAsgari = taze && meta && taze.metaHesapId === meta.id ? taze.metaAsgari : null;
     const sayfa = this.sayfaOku(clientId, a.sayfaId?.deger);
-    const googleDonusum = taze && google && taze.googleHesapId === google.id ? taze.googleDonusum : null;
+    // Ölçü amaca UYMALI: telefon amacı genel okumayı (ya da tersi) görmez.
+    const istenenOlcu = a.amac?.deger && REHBER_AMACLARI[a.amac.deger].google.kurgu === 'ARAMA' && (REHBER_AMACLARI[a.amac.deger].google as { ulasma?: string }).ulasma === 'telefon' ? 'telefon' : 'genel';
+    const donusumTaze = taze && google && taze.googleHesapId === google.id && (taze.googleDonusumOlcusu ?? 'genel') === istenenOlcu ? taze : null;
+    const googleDonusum = donusumTaze ? donusumTaze.googleDonusum : null;
     const googleSatis = taze && google && taze.googleHesapId === google.id ? taze.googleSatis : null;
-    const googleDonusum30Gun = taze && google && taze.googleHesapId === google.id ? taze.googleDonusum30Gun : null;
+    const googleDonusum30Gun = donusumTaze ? donusumTaze.googleDonusum30Gun : null;
+    const saatlerOkunan = r.m?.calisma_saatleri == null ? null : calismaSaatleriSchema.safeParse(r.m.calisma_saatleri);
+    if (saatlerOkunan && !saatlerOkunan.success) logger.warn(`Çalışma saatleri geçersiz (${clientId}), bilinmiyor sayıldı`);
+    const calismaSaatleri = saatlerOkunan?.success && saatlerOkunan.data.length ? saatlerOkunan.data : null;
     // SİTE piksel hâli: SATIŞ'ın tam listesi de aynı hesabı anlatıyor; hangisi varsa.
     // SİTE okuması ÖNCE: SİTE amacının taze okuması o. Düştüyse (`okunamadi`)
     // satış listesine de düşülmez: hâl bilinmiyor = tıklama.
@@ -2266,6 +2347,7 @@ export class RehberService {
       bugun: new Intl.DateTimeFormat('en-CA', { timeZone: google?.timezone ?? 'Europe/Istanbul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()),
       googleDonusum,
       googleDonusum30Gun,
+      calismaSaatleri,
       sitePikseli,
       uzantilar,
       ogeKaynagi,
@@ -2546,3 +2628,24 @@ function hal2sonuc(h: { tur: string; metin: string }): PlatformProvaSonucu {
   return { tur: 'yapilmadi', sebep: h.metin };
 }
 
+
+/**
+ * Telefon dönüşüm satırlarının toplamı: YALNIZ sayılan işlemlerin
+ * (`googleTelefonDonusumuMu`) satırları. Proto3'te sıfır alan gelmeyebilir:
+ * eksik = 0. Çözülemeyen sayı FIRLATIR (sıfır saymak tıklamaya düşürmekten
+ * kötü değil ama hatayı gizler).
+ */
+export function telefonDonusumToplami(
+  satirlar: ReadonlyArray<{ segments?: { conversionAction?: string }; metrics?: { conversions?: number | string } }>,
+  sayilan: ReadonlySet<string>,
+): number {
+  let toplam = 0;
+  for (const x of satirlar) {
+    if (!sayilan.has(x.segments?.conversionAction ?? '')) continue;
+    const v = x.metrics?.conversions;
+    const n = v === undefined ? 0 : Number(v);
+    if (!Number.isFinite(n) || n < 0) throw new Error(`Arama dönüşümü sayısı çözülemedi: ${String(v)}`);
+    toplam += n;
+  }
+  return toplam;
+}

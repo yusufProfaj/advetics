@@ -2,7 +2,9 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { Prisma, type ClientProfile } from '@prisma/client';
 import {
   CAMPAIGN_GOALS,
+  calismaSaatleriSchema,
   sikSayfaSchema,
+  type CalismaSaatleri,
   type CampaignGoal,
   type ClientProfileRecord,
   type SikSayfa,
@@ -60,6 +62,7 @@ export class ClientProfileService {
       vaatler: [],
       metinSablonlari: [],
       yasalUyari: null,
+      calismaSaatleri: null,
       updatedAt: '',
     };
   }
@@ -125,6 +128,10 @@ export class ClientProfileService {
         ...(input.vaatler !== undefined ? { vaatler: input.vaatler } : {}),
         ...(input.metinSablonlari !== undefined ? { metinSablonlari: input.metinSablonlari } : {}),
         ...(input.yasalUyari !== undefined ? { yasalUyari: input.yasalUyari || null } : {}),
+        // Boş dizi = bilinmiyor; NULL olarak saklanıyor ki "girilmedi" tek hâl olsun.
+        ...(input.calismaSaatleri !== undefined
+          ? { calismaSaatleri: input.calismaSaatleri?.length ? (input.calismaSaatleri as unknown as Prisma.InputJsonValue) : Prisma.DbNull }
+          : {}),
       };
 
       const saved = existing
@@ -183,6 +190,19 @@ function sayfalar(clientId: string, ham: Prisma.JsonValue): SikSayfa[] {
   return iyi;
 }
 
+/**
+ * JSONB'den çalışma saatleri. Bozuksa NULL (bilinmiyor) + log: bozuk bir
+ * planı Google'a göndermek atomik isteği düşürür, sessizce "her saat"
+ * saymak ise kullanıcının girdiğini yok saymak; log ikisini de görünür kılar.
+ */
+function saatler(clientId: string, ham: Prisma.JsonValue | null): CalismaSaatleri | null {
+  if (ham === null || ham === undefined) return null;
+  const r = calismaSaatleriSchema.safeParse(ham);
+  if (r.success) return r.data.length ? r.data : null;
+  logger.warn(`client_profiles(${clientId}).calisma_saatleri geçersiz, bilinmiyor sayıldı: ${r.error.issues[0]?.message ?? ''}`);
+  return null;
+}
+
 const amac = (v: string | null): CampaignGoal | null =>
   v !== null && (CAMPAIGN_GOALS as readonly string[]).includes(v) ? (v as CampaignGoal) : null;
 
@@ -203,6 +223,7 @@ function toRecord(row: ClientProfile): ClientProfileRecord {
     vaatler: row.vaatler,
     metinSablonlari: row.metinSablonlari,
     yasalUyari: row.yasalUyari,
+    calismaSaatleri: saatler(row.clientId, row.calismaSaatleri),
     updatedAt: row.updatedAt.toISOString(),
   };
 }

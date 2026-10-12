@@ -14,5 +14,6 @@ export * from './yayin';
 export * from './meta/prova';
 export * from './medya';
 export * from './banner-seti';
+export * from './calisma-saatleri';
 export * from './sohbet';
 export * from './rehber';

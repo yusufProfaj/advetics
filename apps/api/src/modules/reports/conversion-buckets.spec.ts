@@ -111,7 +111,7 @@ describe('bucketsFromRaw', () => {
         { action_type: 'offsite_conversion.fb_pixel_custom', value: '1' },
       ],
     });
-    expect(counts).toEqual({ form: 40, message: 20, purchase: 0 });
+    expect(counts).toEqual({ form: 40, message: 20, purchase: 0, calls: 0, calls20s: 0, callClicks: 0 });
     // Toplam dönüşüm 60 — rapordaki 153 değil.
     expect(counts.form + counts.message + counts.purchase).toBe(60);
   });
@@ -177,10 +177,10 @@ describe('bucketsFromRaw', () => {
 describe('sumBuckets', () => {
   it('gün gün gelen sayıları toplar', () => {
     const total = sumBuckets([
-      { form: 5, message: 2, purchase: 0 },
-      { form: 3, message: 1, purchase: 1 },
+      { form: 5, message: 2, purchase: 0, calls: 0, calls20s: 0, callClicks: 0 },
+      { form: 3, message: 1, purchase: 1, calls: 0, calls20s: 0, callClicks: 0 },
     ]);
-    expect(total).toEqual({ form: 8, message: 3, purchase: 1 });
+    expect(total).toEqual({ form: 8, message: 3, purchase: 1, calls: 0, calls20s: 0, callClicks: 0 });
   });
 
   it('boş listede sıfır', () => {
@@ -192,19 +192,19 @@ describe('roundCounts', () => {
   it('kesirli toplamı TEK KEZ yuvarlar', () => {
     // Kesirli atıf 12.0000001 gibi değerler üretiyor; müşteriye
     // "12,0000001 form" göstermek anlamsız.
-    expect(roundCounts({ form: 12.4, message: 2.6, purchase: 0.5 })).toEqual({
+    expect(roundCounts({ form: 12.4, message: 2.6, purchase: 0.5, calls: 0, calls20s: 0, callClicks: 0 })).toEqual({
       form: 12,
       message: 3,
-      purchase: 1,
+      purchase: 1, calls: 0, calls20s: 0, callClicks: 0,
     });
   });
 
   it('kesirli değerler toplandıktan SONRA yuvarlanıyor', () => {
     // Üç kez 0.4 = 1.2 → 1. Her adımda yuvarlamak 0 verirdi.
     const total = sumBuckets([
-      { form: 0.4, message: 0, purchase: 0 },
-      { form: 0.4, message: 0, purchase: 0 },
-      { form: 0.4, message: 0, purchase: 0 },
+      { form: 0.4, message: 0, purchase: 0, calls: 0, calls20s: 0, callClicks: 0 },
+      { form: 0.4, message: 0, purchase: 0, calls: 0, calls20s: 0, callClicks: 0 },
+      { form: 0.4, message: 0, purchase: 0, calls: 0, calls20s: 0, callClicks: 0 },
     ]);
     expect(roundCounts(total).form).toBe(1);
   });

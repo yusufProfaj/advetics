@@ -4,6 +4,8 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import {
   COLUMN_KEYS,
+  kovaPlatformu,
+  PLATFORM_KISA_ADLARI,
   COLUMN_LABELS,
   REPORT_SECTIONS,
   SECTION_LABELS,
@@ -452,6 +454,9 @@ function Alan({ label, children }: { label: string; children: React.ReactNode })
  * gizlense kullanıcı "neden bu seçenek yok" diye sorar, sıfır gösterilse
  * "hiç form gelmedi" diye okur.
  */
+/** Kampanya bölümünün platformu (eşleme; "google değilse Meta" dallanması yok). */
+const BOLUM_PLATFORMU = { meta_campaigns: 'meta', google_campaigns: 'google' } as const;
+
 function SutunSecici({
   bolum,
   secim,
@@ -463,8 +468,13 @@ function SutunSecici({
 }) {
   const secili = secim ?? [];
   const disaridakiler = COLUMN_KEYS.filter((k) => !secili.includes(k));
-  const kovaUyarisi =
-    bolum === 'google_campaigns' && secili.some((k) => k === 'form' || k === 'message');
+  // Kova başka platformun sayacıysa bu bölümde her zaman 0 (`kovaPlatformu`).
+  const bolumPlatformu = BOLUM_PLATFORMU[bolum];
+  const yabanciKovalar = secili.filter((k) => {
+    const p = kovaPlatformu(k);
+    return p !== null && p !== bolumPlatformu;
+  });
+  const kovaUyarisi = yabanciKovalar.length > 0;
 
   function tasi(i: number, yon: -1 | 1) {
     const j = i + yon;
@@ -537,8 +547,8 @@ function SutunSecici({
 
       {kovaUyarisi && (
         <p className="mt-1.5 rounded border border-warn/40 bg-warn/5 px-2 py-1 text-[11px]">
-          Google Ads form ve mesaj dökümü <strong>vermiyor</strong>. Bu sütunlar
-          raporda her zaman 0 görünecek.
+          {PLATFORM_KISA_ADLARI[bolumPlatformu]} bu sütunları <strong>vermiyor</strong> (
+          {yabanciKovalar.map((k) => COLUMN_LABELS[k]).join(', ')}). Raporda her zaman 0 görünecek.
         </p>
       )}
     </div>

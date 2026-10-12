@@ -578,6 +578,10 @@ model ClientProfile {
   metinSablonlari   String[]          @default([]) @map("metin_sablonlari")
   /// Tanımlıysa Meta ana metninde ZORUNLU; yayın öncesi kontrol eksikse durduruyor.
   yasalUyari        String?           @map("yasal_uyari") @db.VarChar(300)
+  /// Telefonun açık olduğu saatler: `[{ gun, acilis, kapanis }]`. NULL =
+  /// bilinmiyor. Biçim `packages/shared` (`calismaSaatleriSchema`), dizi
+  /// olduğu CHECK ile. Google arama öğesinin saat planı buradan.
+  calismaSaatleri   Json?             @map("calisma_saatleri")
   /// Hızlı Reklam'ın kendiliğinden uyguladığı kitle şablonu. Silinirse NULL.
   varsayilanKitleId String?           @map("varsayilan_kitle_id") @db.Uuid
   varsayilanKitle   AudienceTemplate? @relation("VarsayilanKitle", fields: [varsayilanKitleId], references: [id], onDelete: SetNull)

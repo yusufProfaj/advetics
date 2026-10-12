@@ -146,8 +146,8 @@ describe('karşılama mesajı: derleyici gövdesi', () => {
     expect(JSON.stringify(derle({ ...k, niyet: 'FORM', formId: '123' }).govdeler)).not.toContain('page_welcome_message');
   });
 
-  it('derleyici sürümü 1.8.0 (eski provalar karşılamalı gövdeyi kanıtlamaz)', () => {
-    expect(DERLEYICI_SURUMU).toBe('1.8.0');
+  it('derleyici sürümü 1.8.0 ya da sonrası (eski provalar karşılamalı gövdeyi kanıtlamaz)', () => {
+    expect(DERLEYICI_SURUMU).toBe('1.9.0');
   });
 
   it('karışık fikirler: setsiz kare görsel karşılama taşır, setli fikir taşımaz', () => {
@@ -166,7 +166,8 @@ describe('yerleşim kısıtı: WHATSAPP de akış, hikâye, Reels', () => {
     expect(w.cikarilanKonumlar).toBe(f.cikarilanKonumlar);
     expect(w.aciklama).toContain('WhatsApp reklamı yalnız akış, hikâye ve Reels');
     expect(niyetYerlesimKisiti('SITE')).toBeNull();
-    expect(niyetYerlesimKisiti('TELEFON')).toBeNull();
+    // TELEFON'un KENDİ kümesi var (Marketplace ve FB Reels açık, IG Reels kapalı).
+    expect(niyetYerlesimKisiti('TELEFON')!.gruplar).not.toBe(f.gruplar);
   });
 
   it('KRİTİK: elle yerleşimde sağ sütun, arama, Marketplace ve Keşfet KAPALI', () => {

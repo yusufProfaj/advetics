@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { calismaSaatleriSchema, type CalismaSaatleri } from '../reklam/calisma-saatleri';
 import { CAMPAIGN_GOALS, hedefAdresiGecerli, type CampaignGoal } from './ad-builder.schema';
 
 /**
@@ -137,6 +138,11 @@ export const upsertClientProfileSchema = z.object({
   vaatler: kisaListe(MARKA_SINIRLARI.vaat, 'vaat').optional(),
   metinSablonlari: kisaListe(MARKA_SINIRLARI.sablon, 'şablon').optional(),
   yasalUyari: z.string().trim().max(MARKA_SINIRLARI.yasalUyari).nullable().optional(),
+  /**
+   * Telefonun açık olduğu saatler (`calisma-saatleri.ts`). `null` ya da boş
+   * dizi = bilinmiyor; arama reklamında Google'a saat gönderilmez.
+   */
+  calismaSaatleri: calismaSaatleriSchema.nullable().optional(),
 });
 
 export type UpsertClientProfileInput = z.infer<typeof upsertClientProfileSchema>;
@@ -183,5 +189,7 @@ export interface ClientProfileRecord {
   vaatler: string[];
   metinSablonlari: string[];
   yasalUyari: string | null;
+  /** `null` = bilinmiyor (girilmedi). */
+  calismaSaatleri: CalismaSaatleri | null;
   updatedAt: string;
 }

@@ -93,10 +93,12 @@ describe('şablon yönetimi', () => {
     expect(modalGovdesi()).toContain('sutunlar.length === 0 ? {}');
   });
 
-  it("Google'da form/mesaj seçilirse UYARI çıkıyor", () => {
+  it("başka platformun kovası seçilirse UYARI çıkıyor (Google'da form/mesaj, Meta'da arama tıklaması)", () => {
     // Google `actions` dizisi döndürmüyor; o sütunlar raporda her zaman 0
-    // görünür ve "hiç form gelmedi" diye okunur.
-    expect(KAYNAK).toContain('Google Ads form ve mesaj dökümü');
+    // görünür ve "hiç form gelmedi" diye okunur. Arama düğmesi tıklaması da
+    // yalnız Google'da (2026-10-12). Kural tek yerde: `kovaPlatformu` (shared).
+    expect(KAYNAK).toContain('kovaPlatformu(k)');
+    expect(KAYNAK).toContain('bu sütunları <strong>vermiyor</strong>');
   });
 });
 

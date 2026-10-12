@@ -98,6 +98,12 @@ const META_LEVEL: Record<InsightsLevel, string> = {
  * Tek tanım: `CONVERSION_BUCKETS` (form + mesaj + satış), her kova öncelik
  * sırasıyla çözülüp toplanıyor. Kovalar birbirini kesmiyor, dolayısıyla
  * toplamak güvenli.
+ *
+ * ARAMA KOVALARI (`calls`, `calls20s`) TOPLAMA GİRMİYOR — bilerek. Bu sayı
+ * senkron anında `conversions` kolonuna YAZILIYOR; aramayı eklemek yalnız
+ * bundan sonra çekilen günleri değiştirir ve aynı tabloda eski günler
+ * aramasız, yeniler aramalı bir CPA üretirdi (sessiz kayma). Arama raporda
+ * kendi sütununda, ham `actions`tan sorgu anında ve geriye dönük okunuyor.
  */
 
 /**

@@ -57,7 +57,7 @@ const VERI: ReportData = {
       cpc: 7.83,
       cpa: 62.78,
       roas: null,
-      conversionCounts: { form: 180, message: 213, purchase: 0 },
+      conversionCounts: { form: 180, message: 213, purchase: 0, calls: 0, calls20s: 0, callClicks: 0 },
     },
   ] as unknown as ReportData['platforms'],
   total: null,
@@ -77,7 +77,7 @@ const VERI: ReportData = {
       cpc: 12.45,
       cpa: 164.35,
       roas: null,
-      conversionCounts: { form: 5, message: 0, purchase: 0 },
+      conversionCounts: { form: 5, message: 0, purchase: 0, calls: 0, calls20s: 0, callClicks: 0 },
     },
   ] as unknown as ReportData['metaCampaigns'],
   googleCampaigns: [],
@@ -118,6 +118,7 @@ const VERI: ReportData = {
   ],
   topAds: [],
   topAdsMissingPlatforms: [],
+  unknownCallActions: [],
   conversionDetail: {
     rows: [
       { platform: 'google' as const, name: 'WhatsApp tıklaması', count: 42, valueMicros: '0' },
@@ -723,7 +724,7 @@ describe('PDF görselliği', () => {
     return Array.from({ length: n }, (_, i) => ({
       date: `2026-07-${String(i + 1).padStart(2, '0')}`,
       spendMicros: String((i + 1) * 1_000_000),
-      conversionCounts: { form: (i % 3) + 1, message: 1, purchase: 0 },
+      conversionCounts: { form: (i % 3) + 1, message: 1, purchase: 0, calls: 0, calls20s: 0, callClicks: 0 },
     }));
   }
 
@@ -1305,5 +1306,28 @@ describe('RaporPdfService — Site ve Dönüşüm (Paket F1)', () => {
   it('boş tablo NEDENİNİ yazıyor', async () => {
     const bos = { ...VERI.siteConversion!, emptyReason: 'cekim_kosmadi' as const, satirlar: [] };
     expect(metinler(await svc.uret({ ...VERI, sections: ['site_conversion'], siteConversion: bos })).join(' ')).toContain('Analytics verisi henüz çekilmedi.');
+  });
+});
+
+/**
+ * ARAMA KOVALARI ("Beni telefonla arasınlar", 2026-10-12). Panelle AYNI
+ * karar (`resolveColumns` + `VERIYLE_ACILAN_SUTUNLAR`): veri varsa sütun
+ * kendiliğinden açılıyor, yoksa açılmıyor; tanınmayan Meta arama eylemi
+ * tablonun üstünde yazılıyor.
+ */
+describe('arama sütunu ve tanınmayan arama sonucu', () => {
+  const aramali = (calls: number): ReportData => ({
+    ...VERI,
+    sections: ['meta_campaigns'],
+    metaCampaigns: VERI.metaCampaigns.map((c, i) => ({ ...c, conversionCounts: { ...c.conversionCounts, calls: i === 0 ? calls : 0 } })),
+  });
+  it('KRİTİK: aramalı kampanyada "Arama" sütunu PDF\'te; aramasızda yok', async () => {
+    // Tablo başlıkları BÜYÜK HARFLE çiziliyor.
+    expect(metinler(await svc.uret(aramali(7)))).toContain('ARAMA');
+    expect(metinler(await svc.uret(aramali(0)))).not.toContain('ARAMA');
+  });
+  it('KRİTİK: tanınmayan arama eylemi Meta tablosunun üstünde yazılıyor', async () => {
+    const m = metinler(await svc.uret({ ...aramali(0), unknownCallActions: ['click_to_call_yeni_tur'] }));
+    expect(m.some((s) => s.includes('click_to_call_yeni_tur'))).toBe(true);
   });
 });

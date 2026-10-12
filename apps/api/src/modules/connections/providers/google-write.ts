@@ -1,3 +1,4 @@
+import type { GoogleSaatPlani } from '@advetics/shared';
 /**
  * Google Ads yazma istekleri — SAF FONKSİYONLAR.
  *
@@ -481,10 +482,14 @@ export const ARAMA_DONUSUM_AYARI = 'USE_ACCOUNT_LEVEL_CALL_CONVERSION_ACTION';
  * onay durumunu fark saymak, her yeni telefon reklamını "fark var"da
  * durdururdu.
  *
- * `adScheduleTargets` GÖNDERİLMİYOR: telefonun açık olduğu saatler Marka
- * Merkezi'nde yok ve saat uydurulmuyor. Alan boşken öğe reklamın gösterildiği
- * her saatte çıkar (hesap ayarına bağlı bir varsayılan değil, "kısıt yok");
- * kullanıcıya not olarak söyleniyor (`derle-google.ts`).
+ * `adScheduleTargets` YALNIZ ÇALIŞMA SAATLERİ GİRİLMİŞSE (2026-10-12,
+ * Marka Merkezi › Marka; `googleAramaSaatleri`). Girilmemişse alan YOK ve
+ * öğe reklamın gösterildiği her saatte çıkar ("kısıt yok", hesap ayarına
+ * bağlı bir varsayılan değil); kullanıcıya not olarak söyleniyor
+ * (`derle-google.ts`). Saat uydurulmuyor. Plan ÖĞEDE, kampanyada değil:
+ * kampanya saat planı metin reklamını da kapatırdı, oysa mesai dışında
+ * reklam yine siteye gidebilir; kapanan yalnız arama düğmesi. Canlıda
+ * ÖLÇÜLMEDİ: Google'ın kabulü ve geri okumadaki biçimi.
  *
  * CANLIDA HİÇ KOŞMADI (2026-10-10). İlk gerçek çağrı validateOnly provası
  * (MIMARI-REHBER § 8, Ö-1).
@@ -511,6 +516,8 @@ export interface AtomikAramaIstegi {
   gorunenYol?: string[];
   /** E.164 (+90…). Verilirse arama öğesi kurulur ve kampanyaya bağlanır. */
   telefon?: string | null;
+  /** Arama öğesinin saat planı (`googleAramaSaatleri`); boş/yok = gönderilmez. */
+  aramaSaatleri?: readonly GoogleSaatPlani[] | null;
   /**
    * Site bağlantıları (en çok 4) ve açıklama metinleri (en çok 4): kampanya
    * düzeyinde öğe + bağ, AYNI atomik istekte (aşağıdaki not).
@@ -647,7 +654,12 @@ export function aramaAtomikIstek(p: AtomikAramaIstegi): { govde: AtomikAramaGovd
       assetOperation: {
         create: {
           resourceName: ARAMA_OGESI,
-          callAsset: { countryCode: tel.countryCode, phoneNumber: tel.phoneNumber, callConversionReportingState: ARAMA_DONUSUM_AYARI },
+          callAsset: {
+            countryCode: tel.countryCode,
+            phoneNumber: tel.phoneNumber,
+            callConversionReportingState: ARAMA_DONUSUM_AYARI,
+            ...(p.aramaSaatleri?.length ? { adScheduleTargets: p.aramaSaatleri.map((x) => ({ ...x })) } : {}),
+          },
         },
       },
     });

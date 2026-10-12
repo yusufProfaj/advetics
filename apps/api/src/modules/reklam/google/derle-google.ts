@@ -11,6 +11,9 @@ import {
   paraOndaligi,
   SITE_BAGLANTISI_YOK_CUMLESI,
   GOOGLE_OGE_ADLARI,
+  calismaSaatleriOzeti,
+  googleAramaSaatleri,
+  type GoogleSaatPlani,
   type GoogleAramaOgeleri,
   type GoogleDerlemeGirdisi,
   type GorselOlcusu,
@@ -55,7 +58,11 @@ import { PMAX_OTOMASYONU, pmaxAlanSayilari, pmaxAtomikIstek, type PmaxAlani } fr
 // g-1.2.0: Arama öğeleri (arama her ulaşmada, işletme adı, logo, snippet,
 // promosyon, fiyat; `google-ogeler.ts`). Arama gövdesi DEĞİŞTİ: g-1.1.0
 // provaları öğesiz gövdeyi kanıtlıyordu.
-export const GOOGLE_DERLEYICI_SURUMU = 'g-1.2.0';
+// g-1.3.0: Arama + telefon'da arama öğesine çalışma saatleri
+// (`adScheduleTargets`, Marka Merkezi) ve teklif yalnız reklamdan arama
+// dönüşümüyle (`googleTelefonDonusumuMu`). Telefon gövdesi DEĞİŞEBİLİR:
+// g-1.2.0 provaları saatsiz öğeyi ve genel dönüşüm eşiğini kanıtlıyordu.
+export const GOOGLE_DERLEYICI_SURUMU = 'g-1.3.0';
 
 /**
  * Google yayınında `yayin.atif_standardi`. Karar tablosunun "Ölçüm"
@@ -146,6 +153,12 @@ export interface GoogleBeklenen {
    * bu alan HİÇ yok (undefined); okuyan taraf onu null sayıyor.
    */
   aramaOgesi?: { countryCode: string; phoneNumber: string } | null;
+  /**
+   * Arama öğesinin saat planı. YALNIZ gönderildiyse yazılır (eski satırlarda
+   * ve saatsiz kurulumda YOK = bakılmaz). Gönderip beklemeye yazmamak,
+   * Google'ın planı düşürmesini görmemek olurdu.
+   */
+  aramaSaatleri?: GoogleSaatPlani[];
   /**
    * Site bağlantısı ve açıklama metni (Arama + site, g-1.1.0). Eski satırlarda
    * YOK (undefined) = bakılmaz. Boş diziler = HİÇ öğe beklenmiyor (kaynak
@@ -279,7 +292,15 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
       retler.push({ kod: 'G-KURGU-KAPALI', mesaj: `Google Arama'da bu ulaşma türü kurulamıyor: ${String(g.ulasma)}` });
     }
     let tel: ReturnType<typeof aramaOgesiTelefonu> | null = null;
+    let saatPlani: GoogleSaatPlani[] | null = null;
     if (g.ulasma === 'telefon') {
+      try {
+        saatPlani = googleAramaSaatleri(g.aramaSaatleri);
+      } catch (e) {
+        // Bozuk plan sessizce "her saat"e düşmez: kullanıcı saat girdi ve
+        // reklam o sözü tutmazdı.
+        retler.push({ kod: 'G-SAAT', mesaj: (e as Error).message });
+      }
       // Numara derleyicide bir kez daha çözülüyor: eksikler +90 diyor ama
       // E.164 deseni daha geniş; bilinmeyen önek burada ret oluyor (kurucu
       // da patlardı, ama ret kullanıcıya CÜMLE olarak dönüyor, istisna değil).
@@ -343,6 +364,9 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
       aciklamalar: g.aciklamalar,
       ...(yol.length ? { gorunenYol: yol } : {}),
       telefon: tel ? g.telefon : ogeTel ? ogeler!.telefon : null,
+      // Saat planı YALNIZ telefon ulaşmasının öğesinde: site reklamındaki
+      // isteğe bağlı arama öğesinin saati sorulmadı.
+      aramaSaatleri: tel ? saatPlani : null,
       // Uzantılar yalnız site ulaşmasında girdiye yazılıyor (`rehberdenGoogle`).
       siteBaglantilari: g.siteBaglantilari ?? [],
       aciklamaMetinleri: g.aciklamaMetinleri ?? [],
@@ -370,7 +394,11 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
       notlar.push(
         "Google arama öğesini numara doğrulanınca gösterir: numara sitende yazı olarak (görsel değil) görünmeli; Google'ın algılaması 3 güne kadar sürebilir.",
       );
-      notlar.push('Telefon her saatte görünür: açık olduğun saatler henüz sorulmuyor.');
+      notlar.push(
+        saatPlani
+          ? `Arama düğmesi yalnız çalışma saatlerinde görünür: ${calismaSaatleriOzeti(g.aramaSaatleri)}.`
+          : "Telefon her saatte görünür: Marka Merkezi'nde çalışma saatleri girilmedi.",
+      );
     }
     if (g.siteBaglantilari !== undefined && g.siteBaglantilari.length === 0 && !g.ogeReddi) {
       notlar.push(g.siteSebebi ? `${SITE_BAGLANTISI_YOK_CUMLESI}: ${g.siteSebebi}.` : `${SITE_BAGLANTISI_YOK_CUMLESI}.`);
@@ -394,6 +422,7 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
         anahtarKelimeSayisi: g.anahtarKelimeler.length,
         negatifSayisi: g.negatifler.length,
         aramaOgesi: tel ? { countryCode: tel.countryCode, phoneNumber: tel.phoneNumber } : ogeTel ? { countryCode: ogeTel.countryCode, phoneNumber: ogeTel.phoneNumber } : null,
+        ...(tel && saatPlani ? { aramaSaatleri: saatPlani.map((x) => ({ ...x })) } : {}),
         ...(ogeler
           ? {
               ogeler: {

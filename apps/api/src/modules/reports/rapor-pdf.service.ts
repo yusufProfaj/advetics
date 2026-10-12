@@ -19,7 +19,7 @@ import {
 } from '@advetics/shared';
 import { kitleBolumuKarari } from '@advetics/shared';
 import { SITE_DONUSUM_SUTUNLARI, siteDonusumuBosSebebi, siteDonusumuCizilir, siteDonusumuDipnotlari } from '@advetics/shared';
-import { donusumBosSebebi, PLATFORM_KISA_ADLARI, platformKisaAdi } from '@advetics/shared';
+import { donusumBosSebebi, PLATFORM_KISA_ADLARI, platformKisaAdi, taninmayanAramaCumlesi } from '@advetics/shared';
 import { logoOku, yaziTipiOku } from './pdf-yazi-tipi';
 import { gorselleriIndir, type GorselSonucu } from './kreatif-gorseli';
 import {
@@ -472,7 +472,21 @@ export class RaporPdfService {
      * `DEFAULT_COLUMNS` paylaşılan pakette. Ayrı bir liste tutmak, aynı
      * raporun iki farklı sütun setiyle çıkması demek olurdu.
      */
-    const sutunlar = resolveColumns(ctx.data.options[bolum]?.metrics, DEFAULT_COLUMNS[bolum]);
+    /*
+     * TANINMAYAN ARAMA SONUCU TABLONUN ÜSTÜNDE (panelle aynı cümle,
+     * `taninmayanAramaCumlesi`). Meta arama eyleminin adı kovada yoksa Arama
+     * sütunu 0 yazar; okuyan bunu "arama gelmedi" sanmasın.
+     */
+    if (bolum === 'meta_campaigns') {
+      for (const tur of ctx.data.unknownCallActions ?? []) {
+        for (const satir of sar(taninmayanAramaCumlesi(tur), ctx.normal, 8, EN - 2 * KENAR)) {
+          s.drawText(satir, { x: KENAR, y, size: 8, font: ctx.normal, color: GRI });
+          y -= 11;
+        }
+      }
+      if ((ctx.data.unknownCallActions ?? []).length) y -= 6;
+    }
+    const sutunlar = resolveColumns(ctx.data.options[bolum]?.metrics, DEFAULT_COLUMNS[bolum], satirlar);
     const t = sumRows(satirlar);
 
     /*
@@ -1707,6 +1721,12 @@ function hucre(k: ColumnKey, r: ReportCampaignRow, para: string | null): string 
       return formatNumber(r.conversionCounts.message);
     case 'purchase':
       return formatNumber(r.conversionCounts.purchase);
+    case 'calls':
+      return formatNumber(r.conversionCounts.calls);
+    case 'calls20s':
+      return formatNumber(r.conversionCounts.calls20s);
+    case 'callClicks':
+      return formatNumber(r.conversionCounts.callClicks);
     default:
       // Yeni bir sütun anahtarı eklenip burası unutulursa "—" çıkıyor ve
       // sessizce yanlış bir sayı basılmıyor.

@@ -19,10 +19,11 @@ import { TASLAK_IZINLI_KAYNAKLAR, type TaslakAlanlari } from '../taslak-alanlari
 import type { AlanDegeri } from '../taslak';
 import type { OzelKategori } from '../meta/hedefleme';
 import { REHBER_AMACLARI, type GoogleKurgu, type GoogleUlasma } from './amaclar';
+import type { CalismaSaatleri } from '../calisma-saatleri';
 import { REHBER_IZINLI_KAYNAKLAR, VARSAYILAN_META_PAYI, type MedyaMetni, type RehberAlanAdi, type RehberAlanlari } from './alanlar';
 import { butceBol } from './butce';
 import { METIN_SINIRLARI, karakterSayisi } from './metin';
-import { reklamSetiPlani, setlereAyir, type GorselOrani, type SetPlani } from '../banner-seti';
+import { niyetZorunluPlan, reklamSetiPlani, setlereAyir, type GorselOrani, type SetPlani } from '../banner-seti';
 import { googleGorselKurgusuMu, pmaxUzunBaslik } from './google-gorsel';
 import type { GoogleUzantiKaynagi, SiteBaglantisi } from './google-uzanti';
 import { googleAramaOgeleri, type GoogleAramaOgeleri, type GoogleOgeDurumu, type GoogleOgeKaynagi } from './google-ogeler';
@@ -179,12 +180,17 @@ export function rehberKaynaklariniTasi(t: TaslakAlanlari): TaslakAlanlari {
 export function rehberYerlesimPlani(a: RehberAlanlari, oranlar: ReadonlyMap<string, GorselOrani | null>): SetPlani | null {
   const medya = a.medya?.deger ?? [];
   const amac = a.amac?.deger;
-  if (!amac || medya.length === 0 || medya.some((x) => x.kapakVarlikId)) return null;
-  const ayrim = setlereAyir(medya, oranlar, REHBER_AMACLARI[amac].meta.niyet);
-  if (ayrim.taninmayan.length || ayrim.cakisan.length) return null;
+  if (!amac || medya.length === 0) return null;
+  const niyet = REHBER_AMACLARI[amac].meta.niyet;
+  // ORAN BİLİNMİYORSA da niyetin zorunlu yerleşimi (TELEFON): derleyici
+  // `derleyiciYerlesimPlani` ile AYNI kural; tablo "otomatik" deyip gövde
+  // elle yazmasın.
+  if (medya.some((x) => x.kapakVarlikId)) return niyetZorunluPlan(null, niyet);
+  const ayrim = setlereAyir(medya, oranlar, niyet);
+  if (ayrim.taninmayan.length || ayrim.cakisan.length) return niyetZorunluPlan(null, niyet);
   // Niyet AYNI: derleyici FORM'da elle yerleşimi daraltıyor; tablo
   // daraltmasız plan gösterirse "sağ sütun açık" der, gövde kapatır.
-  return reklamSetiPlani(ayrim.setler.map((s) => s.map((x) => x.oran)), REHBER_AMACLARI[amac].meta.niyet);
+  return reklamSetiPlani(ayrim.setler.map((s) => s.map((x) => x.oran)), niyet);
 }
 
 /**
@@ -349,8 +355,37 @@ export type GoogleTeklif = 'MAKS_TIKLAMA' | 'MAKS_DONUSUM';
  * - MAKS. PERFORMANS: yalnız dönüşüm (Google başka strateji kabul etmiyor);
  *   ölçüm yoksa kurgu HİÇ kurulmuyor (`rehberdenGoogle` → `G-DONUSUM`).
  */
-export function googleTeklifi(kurgu: GoogleKurgu, donusumEtkin: boolean | null, son30GunDonusum: number | null): GoogleTeklif {
-  return googleTeklifKarari(kurgu, donusumEtkin, son30GunDonusum).teklif;
+export function googleTeklifi(kurgu: GoogleKurgu, donusumEtkin: boolean | null, son30GunDonusum: number | null, ulasma: GoogleUlasma | null = null): GoogleTeklif {
+  return googleTeklifKarari(kurgu, donusumEtkin, son30GunDonusum, ulasma).teklif;
+}
+
+/**
+ * ═══ TELEFON AMACINDA HANGİ DÖNÜŞÜM SAYILIR (yönetici kararı, 2026-10-12) ═══
+ *
+ * Yalnız BİRİNCİL, ETKİN, kategorisi `PHONE_CALL_LEAD` ve türü REKLAMDAN
+ * ARAMA olan işlem. Sitedeki `tel:` tıklaması da `PHONE_CALL_LEAD`
+ * kategorisinde olabilir (Advetics'in kendi kurduğu "Telefon tıklaması"
+ * işlemi tam olarak bu: tür `WEBPAGE`, `ads-kurulum.ts`) ama o, arama
+ * reklamının sonucu DEĞİL: reklam siteye hiç göndermiyor. Onu saymak,
+ * teklifi kimsenin tıklamadığı bir sayfa olayıyla öğrenmeye bırakmak olurdu.
+ *
+ * `AD_CALL`: Google'ın tanımıyla "arama öğesinden yapılan arama". Yalnız o;
+ * `CLICK_TO_CALL` (mobil numara tıklaması) ve `WEBSITE_CALL` (sitedeki
+ * yönlendirme numarası) dışarıda: ilki görüşme değil, ikincisi siteden gelir.
+ * Türkiye'de yönlendirme numarası olmadığı için AD_CALL ölçülemeyebilir;
+ * o zaman cevap tıklama teklifi ve karar tablosu bunu söylüyor.
+ */
+export const GOOGLE_TELEFON_DONUSUM_TURLERI: readonly string[] = ['AD_CALL'];
+
+export interface GoogleTelefonIslemi {
+  kategori: string;
+  tur: string;
+  birincil: boolean;
+  durum: string;
+}
+
+export function googleTelefonDonusumuMu(x: GoogleTelefonIslemi): boolean {
+  return x.durum === 'ENABLED' && x.birincil && x.kategori === 'PHONE_CALL_LEAD' && GOOGLE_TELEFON_DONUSUM_TURLERI.includes(x.tur);
 }
 
 /**
@@ -369,9 +404,32 @@ export const GOOGLE_DONUSUM_TEKLIF_ESIGI = 15;
  * ölçüm KESİN etkinse VE son 30 günde eşik kadar dönüşüm OKUNDUYSA; sayı
  * okunamadıysa (`null`) güvenli taraf tıklama.
  */
-export function googleTeklifKarari(kurgu: GoogleKurgu, donusumEtkin: boolean | null, son30GunDonusum: number | null): { teklif: GoogleTeklif; sebep: string } {
+export function googleTeklifKarari(
+  kurgu: GoogleKurgu,
+  donusumEtkin: boolean | null,
+  son30GunDonusum: number | null,
+  ulasma: GoogleUlasma | null = null,
+): { teklif: GoogleTeklif; sebep: string } {
   if (kurgu === 'MAKS_PERFORMANS') return { teklif: 'MAKS_DONUSUM', sebep: 'Satın alma ölçümü etkin; Google hesaptaki bütün birincil dönüşümlerden öğrenir' };
   if (kurgu !== 'ARAMA') return { teklif: 'MAKS_TIKLAMA', sebep: "Talep Yaratma'da dönüşüm teklifi kurulmuyor" };
+  /*
+   * TELEFON: girdiler (etkin, sayı) yalnız reklamdan arama işlemlerinden
+   * (`googleTelefonDonusumuMu`) okunmuş olmalı; servis bunu ayrı sorguyla
+   * yapıyor. Cümleler de o işlemi anlatıyor: "dönüşüm ölçümü etkin" demek,
+   * sitedeki telefon tıklamasını sayan bir hesapta yalan olurdu.
+   */
+  if (ulasma === 'telefon') {
+    if (donusumEtkin === null) return { teklif: 'MAKS_TIKLAMA', sebep: "Google Ads'teki arama dönüşümü okunamadı; ölçülemeyen teklife para gönderilmez" };
+    if (donusumEtkin === false) {
+      return { teklif: 'MAKS_TIKLAMA', sebep: 'Reklamdan gelen arama için birincil dönüşüm yok (sitedeki telefon tıklaması sayılmaz); tıklamayla başlıyoruz' };
+    }
+    if (son30GunDonusum === null) return { teklif: 'MAKS_TIKLAMA', sebep: 'Son 30 günün arama dönüşümü okunamadı; tıklamayla başlıyoruz' };
+    const n = Math.floor(son30GunDonusum);
+    if (son30GunDonusum < GOOGLE_DONUSUM_TEKLIF_ESIGI) {
+      return { teklif: 'MAKS_TIKLAMA', sebep: `Son 30 günde reklamdan ${n} arama dönüşümü var; dönüşüm teklifi için en az ${GOOGLE_DONUSUM_TEKLIF_ESIGI} gerekiyor` };
+    }
+    return { teklif: 'MAKS_DONUSUM', sebep: `Reklamdan gelen arama ölçülüyor ve son 30 günde ${n} arama dönüşümü var` };
+  }
   if (donusumEtkin === null) return { teklif: 'MAKS_TIKLAMA', sebep: "Google Ads'teki dönüşüm ölçümü okunamadı; ölçülemeyen teklife para gönderilmez" };
   if (donusumEtkin === false) return { teklif: 'MAKS_TIKLAMA', sebep: 'Dönüşüm ölçümü kurulunca değiştirmeyi öneririz' };
   if (son30GunDonusum === null) return { teklif: 'MAKS_TIKLAMA', sebep: 'Son 30 günün dönüşüm sayısı okunamadı; tıklamayla başlıyoruz' };
@@ -440,6 +498,13 @@ export interface GoogleDerlemeGirdisi {
   /** Site bağlantısı çıkmadıysa SEBEBİ (site okuması); kalıcı, aynı gerekçe. */
   siteSebebi?: string | null;
   /**
+   * TELEFON: Marka Merkezi'ndeki çalışma saatleri (`calisma-saatleri.ts`).
+   * YALNIZ Arama + telefon ulaşmasında ve DOLUYSA yazılır: boş anahtar
+   * eklemek diğer taslakların içerik özetini değiştirip kayıtlı provaları
+   * sebepsiz bayatlatırdı. Arama öğesinin `adScheduleTargets`i olur.
+   */
+  aramaSaatleri?: CalismaSaatleri;
+  /**
    * Google öğeleri REDDETTİ ve bu girdi öğesiz yeniden prova için türetildi.
    * Derleyici "sitende ayrı sayfa bulunamadı" demesin: bulundu, reddedildi.
    */
@@ -473,6 +538,8 @@ export interface GoogleTuretmeBaglami {
   logoVarlikId: string | null;
   /** Müşteri kartındaki kategori tabanı (taslakta düşürülemez). */
   kategoriTabani: OzelKategori[];
+  /** Marka Merkezi çalışma saatleri; `null` = bilinmiyor (arama öğesine saat gitmez). */
+  calismaSaatleri?: CalismaSaatleri | null;
 }
 
 /** `acik`: `rehberdenMeta` ile aynı kural (görünür küme, ham seçim değil). */
@@ -529,7 +596,7 @@ export function rehberdenGoogle(a: RehberAlanlari, acik: { meta: boolean; google
     deger: {
       kurgu: tanim.kurgu,
       ulasma: tanim.ulasma,
-      teklif: googleTeklifi(tanim.kurgu, b.donusumEtkin, b.son30GunDonusum),
+      teklif: googleTeklifi(tanim.kurgu, b.donusumEtkin, b.son30GunDonusum, tanim.ulasma),
       musteriId: b.musteriId.replace(/-/g, ''),
       paraBirimi: b.paraBirimi,
       saatDilimi: b.saatDilimi,
@@ -574,6 +641,7 @@ export function rehberdenGoogle(a: RehberAlanlari, acik: { meta: boolean; google
       // GÖRÜNEN YOL yalnız Arama'da ve DOLUYSA: boş anahtar göndermemek
       // eski rehberlerin içerik özetini korur, Google'a boş yol gitmez.
       ...(tanim.kurgu === 'ARAMA' && gorunenYolu(m.gorunenYol).length ? { gorunenYol: gorunenYolu(m.gorunenYol) } : {}),
+      ...(tanim.kurgu === 'ARAMA' && tanim.ulasma === 'telefon' && b.calismaSaatleri?.length ? { aramaSaatleri: b.calismaSaatleri } : {}),
     },
   };
 }

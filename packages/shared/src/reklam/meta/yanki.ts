@@ -78,6 +78,9 @@ const KABUL_EDILEMEZ: ReadonlyArray<[string, string]> = [
   ['targeting.instagram_positions', 'Yerleşim'],
   ['targeting.messenger_positions', 'Yerleşim'],
   ['targeting.audience_network_positions', 'Yerleşim'],
+  // TELEFON: yalnız telefon (derle.ts TELEFON_CIHAZLARI). Masaüstü dönerse
+  // "Ara" düğmesi kimseyi aratmayan bir yerde gösterilir.
+  ['targeting.device_platforms', 'Cihaz'],
   ['asset_feed_spec', 'Görseller ve yerleşim kuralları'],
   ['attribution_spec', 'Sonuç sayma kuralı'],
   ['status', 'Reklamın durumu'],
@@ -521,8 +524,13 @@ function baskaYayinKreatifi(yankilar: BeklenenYanki[], govde: string, nesne: Rec
   return etiketAdlari(nesne.adlabels).some((ad) => ad.startsWith(YAYIN_ETIKETI_ONEKI) && !gonderilen.has(ad));
 }
 
-/** Elle yerleşim listeleri: Meta sırayı değiştirebilir, küme olarak kıyaslanır. */
+/**
+ * Elle yerleşim listeleri: Meta sırayı değiştirebilir, küme olarak kıyaslanır.
+ * `device_platforms` (TELEFON) da küme: geri okumada nasıl döndüğü ÖLÇÜLMEDİ;
+ * fazladan bir cihaz (`desktop`) fark sayılır ve yayın durur (güvenli yön).
+ */
 const YERLESIM_YOLLARI = new Set([
+  'targeting.device_platforms',
   'targeting.publisher_platforms',
   'targeting.facebook_positions',
   'targeting.instagram_positions',

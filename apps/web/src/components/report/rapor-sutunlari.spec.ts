@@ -87,7 +87,8 @@ describe('kampanya tablosu sütunları', () => {
      * çıkan bir rapor demek olurdu.
      */
     const g = kampanyaGovdesi();
-    expect(g).toContain('resolveColumns(secim, varsayilan)');
+    // Satırlar da veriliyor: arama sütunları VERİ VARSA açılıyor (PDF'le aynı karar).
+    expect(g).toContain('resolveColumns(secim, varsayilan, rows)');
     expect(KAYNAK).toContain('DEFAULT_COLUMNS.meta_campaigns');
     expect(KAYNAK).toContain('DEFAULT_COLUMNS.google_campaigns');
     // Yerel bir kopya GERİ GELMEMELİ.

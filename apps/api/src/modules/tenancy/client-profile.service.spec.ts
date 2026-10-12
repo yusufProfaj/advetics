@@ -85,6 +85,7 @@ describe('get', () => {
       vaatler: [],
       metinSablonlari: [],
       yasalUyari: null,
+      calismaSaatleri: null,
       updatedAt: '',
     });
   });

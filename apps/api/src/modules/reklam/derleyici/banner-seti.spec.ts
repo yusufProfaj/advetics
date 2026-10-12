@@ -242,8 +242,8 @@ describe('değerli düğme setlerde (ölçüldü 2026-10-12)', () => {
     const form = bul(derle({ niyet: 'FORM', formId: '1059351746583868', hedefAdres: null, kavramlar: [kavram({ oran: 'kare', setGorselleri: set('dikey', 'dik45', 'kare', 'yatay') })] }), 'kreatif:1').asset_feed_spec;
     expect(form.call_to_actions).toEqual([{ type: expect.any(String), value: { lead_gen_form_id: '1059351746583868' } }]);
     expect(form.call_to_action_types).toBeUndefined();
-    const tel = bul(derle({ niyet: 'TELEFON', telefon: '+905323456789', hedefAdres: null, kavramlar: [kavram({ oran: 'kare', setGorselleri: set('kare', 'dik45') })] }), 'kreatif:1').asset_feed_spec;
-    expect(tel.call_to_actions[0].value).toEqual({ link: 'tel:+905323456789' });
+    // TELEFON setten ÇIKTI (2026-10-12, `BANNER_SETI_NIYETLERI`): ret
+    // `telefon-amaci.spec.ts`te sınanıyor.
     const site = bul(derle({ kavramlar: [kavram({ oran: 'kare', setGorselleri: set('kare', 'dik45') })] }), 'kreatif:1').asset_feed_spec;
     expect(site.call_to_action_types).toHaveLength(1);
     expect(site.call_to_actions).toBeUndefined();
@@ -374,8 +374,9 @@ describe('rehber → banner seti', () => {
     expect(rehberEksikleri(rehber(DORT), { ...B, medyaOranlari: ORAN }).some((e) => e.kod === 'M-YERLESIM-KAPALI')).toBe(false);
   });
 
-  it('KRİTİK (2026-10-12): form, arama ve WhatsApp\'ta da dört boyut TEK fikir (set) olur; engel yok', () => {
-    const amaclar = ['FORM', 'TELEFON', 'WHATSAPP'] as const;
+  it('KRİTİK (2026-10-12): form ve WhatsApp\'ta da dört boyut TEK fikir (set) olur; engel yok', () => {
+    // TELEFON burada YOK: arama reklamında set ölçülene kadar her görsel ayrı reklam.
+    const amaclar = ['FORM', 'WHATSAPP'] as const;
     const eski = amaclar.map((a) => REHBER_ACILIS[a].meta);
     try {
       for (const a of amaclar) REHBER_ACILIS[a].meta = 'deneme';

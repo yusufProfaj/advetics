@@ -1189,6 +1189,13 @@ export class GoogleProvider implements IAdPlatformProvider {
       request,
       calls,
     );
+    // ARAMA DÜĞMESİ TIKLAMASI — üçüncü ve AYRI sorgu (aşağıdaki not).
+    const aramalar = await this.aramaDugmesiTiklamalari(
+      { accessToken, customerId, loginCustomerId },
+      view,
+      request,
+      calls,
+    );
 
     const mapped: DiscoveredInsightRow[] = [];
     for (const row of rows) {
@@ -1237,6 +1244,14 @@ export class GoogleProvider implements IAdPlatformProvider {
               // "detay alınamadı"yı ayırt edebilmeli.
               { conversionActionsError: detaylar.hata }
             : { conversionActions: detaylar.kayitlar.get(`${entityExternalId}|${date}`) ?? [] }),
+          // Yalnız sorgunun koştuğu seviyelerde (kampanya, hesap) yazılır.
+          // Sorgu düştüyse sayı YOK ve hata VAR: 0 yazmak "kimse aramadı"
+          // demek olurdu.
+          ...(aramalar === null
+            ? {}
+            : aramalar.hata !== null
+              ? { callClicksError: aramalar.hata }
+              : { callClicks: aramalar.sayilar.get(`${entityExternalId}|${date}`) ?? 0 }),
         },
       });
     }
@@ -1318,6 +1333,62 @@ export class GoogleProvider implements IAdPlatformProvider {
     }
 
     return { kayitlar, hata: null };
+  }
+
+  /**
+   * ═══ ARAMA DÜĞMESİ TIKLAMASI ("Beni telefonla arasınlar") ═══
+   *
+   * `segments.click_type = CALLS`: arama öğesindeki numaraya dokunma.
+   * AYRI SORGU ve YALNIZ TIKLAMA seçiliyor: `click_type` satırı tıklama
+   * türüne göre çoğaltıyor; ana metrik sorgusuna eklemek gösterimi ve
+   * harcamayı tür sayısı kadar katlardı (CLAUDE.md "SEGMENT EKLEMEK SATIRI
+   * ÇOĞALTIYOR").
+   *
+   * NEDEN TIKLAMA, ARAMA DEĞİL: Google'ın "reklamdan gelen arama"
+   * dönüşümü yönlendirme numarası istiyor ve Türkiye'de yönlendirme numarası
+   * yok; ölçülebilen en dürüst sayı düğmeye dokunma. Ekranda adı da bu
+   * ("Arama düğmesi tıklaması"), "arama" değil.
+   *
+   * YALNIZ KAMPANYA VE HESAP SEVİYESİ: bu segmentin grup ve reklam
+   * görünümlerinde kabulü ÖLÇÜLMEDİ; rapor kampanya seviyesinden okuyor.
+   * `null` = bu seviyede sorulmadı.
+   *
+   * HATA ANA ÇEKİMİ DÜŞÜRMÜYOR, SESSİZ DE KALMIYOR: mesaj ham gövdeye
+   * (`callClicksError`) yazılıyor. CANLIDA ÖLÇÜLMEDİ (2026-10-12).
+   */
+  private async aramaDugmesiTiklamalari(
+    kimlik: { accessToken: string; customerId: string; loginCustomerId?: string },
+    view: (typeof GOOGLE_VIEW)[InsightsLevel],
+    request: InsightsRequest,
+    calls: { n: number },
+  ): Promise<{ sayilar: Map<string, number>; hata: string | null } | null> {
+    if (!ARAMA_TIKLAMA_SEVIYELERI.includes(request.level)) return null;
+    const sayilar = new Map<string, number>();
+    let rows: Array<Record<string, unknown>>;
+    try {
+      rows = await this.searchGaqlPaged<Record<string, unknown>>(
+        kimlik.accessToken,
+        kimlik.customerId,
+        aramaTiklamaSorgusu(view, request.dateFrom, request.dateTo),
+        kimlik.loginCustomerId,
+        calls,
+      );
+    } catch (err) {
+      const mesaj = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Google arama düğmesi tıklaması alınamadı (${kimlik.customerId}): ${mesaj}`);
+      return { sayilar, hata: mesaj };
+    }
+    for (const row of rows) {
+      const segments = this.obj(row.segments);
+      const date = this.str(segments?.date);
+      // Süzgeç sorguda; yine de başka bir tür gelirse sayılmaz.
+      if (!date || this.str(segments?.clickType) !== 'CALLS') continue;
+      const entityExternalId = request.level === 'account' ? kimlik.customerId : view.readId(row, this);
+      if (!entityExternalId) continue;
+      const anahtar = `${entityExternalId}|${date}`;
+      sayilar.set(anahtar, (sayilar.get(anahtar) ?? 0) + (Number(this.obj(row.metrics)?.clicks ?? 0) || 0));
+    }
+    return { sayilar, hata: null };
   }
 
   /**
@@ -2817,6 +2888,21 @@ export class GoogleProvider implements IAdPlatformProvider {
  * seviyeler kendi kaynaklarından. Kimlik alanı da her seviyede farklı adlanıyor,
  * bu yüzden okuma fonksiyonu haritada tutuluyor.
  */
+/** Arama düğmesi tıklamasının sorulduğu seviyeler (bkz. `aramaDugmesiTiklamalari`). */
+export const ARAMA_TIKLAMA_SEVIYELERI: readonly InsightsLevel[] = ['account', 'campaign'];
+
+/**
+ * Arama düğmesi tıklaması sorgusu. Ayrı fonksiyon çünkü kaynak taraması
+ * (`google-arama-tiklamasi.spec.ts`) iki şeyi kilitliyor: bu sorgu YALNIZ
+ * tıklama seçiyor ve ana metrik sorgusu `click_type` TAŞIMIYOR. WHERE'deki
+ * her alan SELECT'te (GAQL kuralı).
+ */
+export function aramaTiklamaSorgusu(view: { idField: string; resource: string }, from: string, to: string): string {
+  return `SELECT ${view.idField}, segments.date, segments.click_type, metrics.clicks
+     FROM ${view.resource}
+     WHERE segments.date BETWEEN '${from}' AND '${to}' AND segments.click_type = 'CALLS'`;
+}
+
 const GOOGLE_VIEW: Record<
   InsightsLevel,
   {

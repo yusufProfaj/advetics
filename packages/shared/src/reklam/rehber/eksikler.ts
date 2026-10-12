@@ -15,6 +15,7 @@
  * (`SISTEM_EKSIK_KODLARI` dersi). Sunucu yayın kapısında ayrıca bakar.
  */
 import { TELEFON_E164, metinUyariIceriyor } from '../taslak-alanlari';
+import { telefonUlkeMesaji, telefonUlkesiDisindakiKonumlar } from '../meta/derle';
 import type { AlanKaynagi } from '../taslak';
 import { REHBER_AMACLARI, platformGorunurMu, type RehberAmacKodu, type RehberPlatformu } from './amaclar';
 import { REHBER_IZINLI_KAYNAKLAR, VARSAYILAN_META_PAYI, type RehberAlanAdi, type RehberAlanlari } from './alanlar';
@@ -268,6 +269,20 @@ export function rehberEksikleri(a: RehberAlanlari, b: RehberEksikBaglami): Rehbe
   if (amac === 'TELEFON') {
     const tel = a.telefon?.deger ?? null;
     if (!(tel && TELEFON_E164.test(tel))) ekle('telefon', null, 'TELEFON', 'Telefon numarası +90 ile başlamalı');
+    /*
+     * ÜLKE KURALI GİRİŞ ANINDA (yönetici kararı, 2026-10-12): +90 numaralı
+     * arama reklamı Türkiye dışına gösterilirse para gider, arama gelmez.
+     * Derleyici aynı kuralı ikinci kapı olarak tutuyor (`TEL-ULKE`). Ülkesi
+     * bilinmeyen nokta engel değil UYARI: Türkiye'deki bir harita noktasını
+     * kilitlemek sağlam bir kurulumu bozardı.
+     */
+    if (acik.meta && tel && TELEFON_E164.test(tel)) {
+      const yabanci = telefonUlkesiDisindakiKonumlar(tel, konumlar);
+      if (yabanci.length) ekle('konumlar', 'meta', 'TEL-ULKE', telefonUlkeMesaji(yabanci));
+      else if (tel.startsWith('+90') && konumlar.some((k) => k.tur !== 'country' && !k.ulkeKodu)) {
+        ekle('konumlar', 'meta', 'TEL-ULKE-BILINMIYOR', 'Bazı konumların ülkesi okunamadı; Türkiye dışındaysa reklam aranamayan bir yerde gösterilir', 'uyari');
+      }
+    }
   }
   if (amac === 'FORM' && acik.meta && !a.formSablonuId?.deger) ekle('formSablonuId', 'meta', 'FORM-YOK', 'Form seçilmedi');
   if (amac === 'FORM' && acik.meta && a.formSablonuId?.deger) {

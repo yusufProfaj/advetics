@@ -6,6 +6,8 @@ import { Prisma } from '@prisma/client';
 import {
   gorselAdresleri,
   CONVERSION_BUCKETS,
+  taninmayanAramaEylemleri,
+  HAM_SAYAC_KOVALARI,
   REPORT_SECTIONS,
   sablonPlatformu,
   varsayilanSablon,
@@ -62,11 +64,41 @@ interface RawMetricRow {
   day_count: string | number | null;
 }
 
-interface RawBucketRow {
-  entity_id: string;
-  form: string | number | null;
-  message: string | number | null;
-  purchase: string | number | null;
+type RawBucketRow = { entity_id: string } & Record<ConversionBucket, string | number | null>;
+
+/**
+ * KOVA SÜTUNLARI KOVA LİSTESİNDEN TÜRETİLİYOR. Dört sorgu her kovayı ELLE
+ * yazıyordu (`COALESCE(k.form, 0) AS form` …); arama kovası eklendiğinde
+ * birinde unutulsa o tablo sessizce 0 gösterirdi ve TypeScript susardı (ham
+ * satır tipi `$queryRaw<T>` ile denetimsiz). Anahtarlar kodda sabit, kullanıcı
+ * girdisi değil: `Prisma.raw` güvenli.
+ */
+const KOVA_ANAHTARLARI = Object.keys(CONVERSION_BUCKETS) as ConversionBucket[];
+/** Meta aksiyon dizisinden çözülen kovalar; ham sayaçlar (Google arama tıklaması) ayrı. */
+const AKSIYON_KOVALARI = KOVA_ANAHTARLARI.filter((k) => !(HAM_SAYAC_KOVALARI as readonly string[]).includes(k));
+// Adlar TIRNAKLI: "callClicks" tırnaksız yazılırsa Postgres onu küçük harfe
+// çeviriyor ve satırda alan `callclicks` adıyla gelip okunmuyordu (0).
+const KOVA_SECIMI = Prisma.raw(
+  [
+    ...AKSIYON_KOVALARI.map((k) => `COALESCE(k."${k}", 0) AS "${k}"`),
+    ...HAM_SAYAC_KOVALARI.map((k) => `COALESCE(b."h_${k}", 0) AS "${k}"`),
+  ].join(', '),
+);
+const KOVA_TOPLAMI = Prisma.raw(AKSIYON_KOVALARI.map((k) => `SUM("${k}") AS "${k}"`).join(', '));
+/**
+ * Ham sayaç toplamı (base CTE'sine). Değer `raw_metrics` anahtarından; sayı
+ * olmayan değer (hata gövdesi) 0 değil NULL sayılır ve SUM onu atlar.
+ */
+function hamSayacToplami(alias: string): Prisma.Sql {
+  const on = alias ? `${alias}.` : '';
+  return Prisma.raw(
+    HAM_SAYAC_KOVALARI.map(
+      (k) => `SUM(CASE WHEN jsonb_typeof(${on}raw_metrics -> '${CONVERSION_BUCKETS[k].hamAlan}') = 'number' THEN (${on}raw_metrics ->> '${CONVERSION_BUCKETS[k].hamAlan}')::numeric END) AS "h_${k}"`,
+    ).join(', '),
+  );
+}
+function kovaSayilari(r: Partial<Record<ConversionBucket, string | number | null>>): ConversionCounts {
+  return roundCounts(Object.fromEntries(KOVA_ANAHTARLARI.map((k) => [k, Number(r[k] ?? 0)])) as ConversionCounts);
 }
 
 
@@ -342,12 +374,13 @@ export class ReportsService {
         izlenen,
       };
 
-      const [platformBlocks, campaigns, daily, topAds, topAdsMissingPlatforms] = await Promise.all([
+      const [platformBlocks, campaigns, daily, topAds, topAdsMissingPlatforms, unknownCallActions] = await Promise.all([
         this.platformBlocks(tx, sorgu),
         this.campaignRows(tx, sorgu),
         this.dailySeries(tx, sorgu),
         this.topAds(tx, sorgu),
         this.topAdsMissingPlatforms(tx, sorgu),
+        this.unknownCallActions(tx, sorgu),
       ]);
 
       // Para birimi: tek ise toplam anlamlı, birden fazlaysa null.
@@ -407,6 +440,7 @@ export class ReportsService {
         breakdowns,
         topAds,
         topAdsMissingPlatforms,
+        unknownCallActions,
         // `null` HÂLÂ "bu yetenek yok" demek — ama artık yalnızca Google
         // bağlantısı olmayan müşteriler için. Meta-only bir müşteride boş dizi
         // döndürmek "anahtar kelimen yok" demek olurdu; oysa o platformda
@@ -895,6 +929,7 @@ export class ReportsService {
                  SUM(conversions) AS conversions,
                  SUM(conversion_value_micros) AS conversion_value_micros,
                  MAX(currency) AS currency,
+                 ${hamSayacToplami('')},
                  NULL::numeric AS reach_sum,
                  NULL::bigint AS day_count,
                  NULL::uuid AS entity_id
@@ -909,9 +944,7 @@ export class ReportsService {
         SELECT b.platform, b.impressions, b.clicks, b.spend_micros, b.conversions,
                b.conversion_value_micros, b.currency, b.reach_sum, b.day_count,
                b.entity_id,
-               COALESCE(k.form, 0) AS form,
-               COALESCE(k.message, 0) AS message,
-               COALESCE(k.purchase, 0) AS purchase
+               ${KOVA_SECIMI}
         FROM base b
         LEFT JOIN buckets k ON k.grp::text = b.platform::text
         ORDER BY b.spend_micros DESC
@@ -924,11 +957,7 @@ export class ReportsService {
         platform: r.platform,
         label: r.platform === 'meta' ? 'Meta Ads' : 'Google Ads',
         currency: r.currency,
-        conversionCounts: roundCounts({
-          form: Number(raw.form ?? 0),
-          message: Number(raw.message ?? 0),
-          purchase: Number(raw.purchase ?? 0),
-        }),
+        conversionCounts: kovaSayilari(raw),
         ...this.totals(r),
       };
     });
@@ -960,6 +989,7 @@ export class ReportsService {
                  SUM(i.conversions) AS conversions,
                  SUM(i.conversion_value_micros) AS conversion_value_micros,
                  MAX(i.currency) AS currency,
+                 ${hamSayacToplami('i')},
                  -- ERİŞİM TOPLANMIYOR, ortalaması alınıyor: aynı kişi
                  -- kampanyayı iki gün de görmüş olabilir ve toplamak
                  -- müşteriye iki kat kitle söylemek olur.
@@ -974,9 +1004,7 @@ export class ReportsService {
         ),
         buckets AS (${this.bucketSelect(params, Prisma.sql`entity_id`)})
         SELECT b.*, c.name, c.status::text AS status, c.objective,
-               COALESCE(k.form, 0) AS form,
-               COALESCE(k.message, 0) AS message,
-               COALESCE(k.purchase, 0) AS purchase
+               ${KOVA_SECIMI}
         FROM base b
         LEFT JOIN campaigns c ON c.id = b.entity_id
         LEFT JOIN buckets k ON k.grp::text = b.entity_id::text
@@ -1000,11 +1028,7 @@ export class ReportsService {
           reach: reachSum === null || days === 0 ? null : Math.round(reachSum / days),
           reachIsDailyAverage: days > 1,
           dayCount: days,
-          conversionCounts: roundCounts({
-            form: Number(r.form ?? 0),
-            message: Number(r.message ?? 0),
-            purchase: Number(r.purchase ?? 0),
-          }),
+          conversionCounts: kovaSayilari(r),
           ...this.totals(r),
         },
       };
@@ -1021,7 +1045,7 @@ export class ReportsService {
     >(
       Prisma.sql`
         WITH base AS (
-          SELECT date, SUM(spend_micros) AS spend_micros
+          SELECT date, SUM(spend_micros) AS spend_micros, ${hamSayacToplami('')}
           FROM insights_daily
           WHERE client_id = ${params.clientId}::uuid ${trackedAccounts(params.izlenen)}
             ${platformFiltresi(params.platform)}
@@ -1031,9 +1055,7 @@ export class ReportsService {
         ),
         buckets AS (${this.bucketSelect(params, Prisma.sql`date`)})
         SELECT b.date, b.spend_micros,
-               COALESCE(k.form, 0) AS form,
-               COALESCE(k.message, 0) AS message,
-               COALESCE(k.purchase, 0) AS purchase
+               ${KOVA_SECIMI}
         FROM base b
         LEFT JOIN buckets k ON k.grp::text = b.date::text
         ORDER BY b.date
@@ -1043,11 +1065,7 @@ export class ReportsService {
     return rows.map((r) => ({
       date: this.dateText(r.date),
       spendMicros: this.bigintText(r.spend_micros),
-      conversionCounts: roundCounts({
-        form: Number(r.form ?? 0),
-        message: Number(r.message ?? 0),
-        purchase: Number(r.purchase ?? 0),
-      }),
+      conversionCounts: kovaSayilari(r),
     }));
   }
 
@@ -1068,6 +1086,34 @@ export class ReportsService {
    * TEK SORGU, İKİ KÜME: harcaması olan platformlar EKSİ reklam satırı olan
    * platformlar. İki ayrı tur atmak aynı satırları ikinci kez taramak olurdu.
    */
+  /**
+   * META'DAN TANINMAYAN ARAMA SONUÇLARI. Arama kovalarının adları belgeden
+   * ve Türkiye'de ölçülmedi (`ARAMA_EYLEMLERI_OLCULMEDI`); Meta başka bir ad
+   * döndürürse Arama sütunu 0 yazar ve sebebi hiçbir yerde görünmezdi.
+   * Sorgu yalnız adayları topluyor (call geçen ayrık türler), kararı
+   * shared'daki saf fonksiyon veriyor: süzgeç tek yerde.
+   */
+  private async unknownCallActions(tx: TxLike, params: RaporSorgusu): Promise<string[]> {
+    if (params.platform === 'google') return [];
+    const rows = await tx.$queryRaw<Array<{ tur: string | null }>>(
+      Prisma.sql`
+        SELECT DISTINCT act->>'action_type' AS tur
+        FROM insights_daily i
+        CROSS JOIN LATERAL jsonb_array_elements(
+          CASE WHEN jsonb_typeof(i.raw_metrics -> 'actions') = 'array'
+               THEN i.raw_metrics -> 'actions'
+               ELSE '[]'::jsonb END
+        ) AS act
+        WHERE i.client_id = ${params.clientId}::uuid ${trackedAccounts(params.izlenen, 'i')}
+          AND i.platform = 'meta'::"Platform"
+          AND i.date BETWEEN ${params.from}::date AND ${params.to}::date
+          AND i.entity_level = ${LEVEL}
+          AND act->>'action_type' ILIKE '%call%'
+      `,
+    );
+    return taninmayanAramaEylemleri(rows.map((r) => r.tur).filter((x): x is string => !!x));
+  }
+
   private async topAdsMissingPlatforms(
     tx: TxLike,
     params: RaporSorgusu,
@@ -1285,13 +1331,11 @@ export class ReportsService {
     };
 
     return Prisma.sql`
-      SELECT grp, SUM(form) AS form, SUM(message) AS message, SUM(purchase) AS purchase
+      SELECT grp, ${KOVA_TOPLAMI}
       FROM (
         -- 1. AŞAMA: satır greninde (varlık + gün) öncelik çözümü.
         SELECT ${groupBy} AS grp,
-               ${pickFor('form')} AS form,
-               ${pickFor('message')} AS message,
-               ${pickFor('purchase')} AS purchase
+               ${Prisma.join(AKSIYON_KOVALARI.map((k) => Prisma.sql`${pickFor(k)} AS ${Prisma.raw(`"${k}"`)}`), ', ')}
         FROM insights_daily i2
         -- jsonb_array_elements boş/eksik dizide satır üretmiyor; CASE olmadan
         -- aksiyonsuz günler tamamen kayboluyor.
@@ -1377,9 +1421,7 @@ export class ReportsService {
       spendMicros += BigInt(b.spendMicros);
       conversions += b.conversions;
       valueMicros += BigInt(b.conversionValueMicros);
-      counts.form += b.conversionCounts.form;
-      counts.message += b.conversionCounts.message;
-      counts.purchase += b.conversionCounts.purchase;
+      for (const k of KOVA_ANAHTARLARI) counts[k] += b.conversionCounts[k];
     }
 
     const spend = Number(spendMicros) / 1_000_000;
