@@ -12,6 +12,7 @@ import {
   turCipleri,
   yoksayilanSayisi,
 } from '@/lib/iyilestir';
+import { kartEtkiSatiri, type EtkiSonucu } from '@/lib/etki';
 import { OneriKarti } from './oneri-karti';
 import { OnayPenceresi } from './onay-penceresi';
 import i from '@/components/taslak/iyilestir.module.css';
@@ -35,7 +36,16 @@ const CIKIS_MS = 300;
  * Sayfa yenilendiğinde sunucunun hesapladığı hâl geçerli (öneriler
  * saklanmıyor, kararlar saklanıyor — MIMARI §2).
  */
-export function OnerilerSekmesi({ sonuc, yazabilir }: { sonuc: OneriSonucu; yazabilir: boolean }) {
+export function OnerilerSekmesi({
+  sonuc,
+  yazabilir,
+  etki,
+}: {
+  sonuc: OneriSonucu;
+  yazabilir: boolean;
+  /** Uygulanmış kartların altındaki etki satırı (Paket C); `null` = istenmedi. */
+  etki: EtkiSonucu | null;
+}) {
   const [oneriler, setOneriler] = useState<Oneri[]>(sonuc.durum === 'tamam' ? sonuc.liste.oneriler : []);
   const [buAyEk, setBuAyEk] = useState(0);
   const [secili, setSecili] = useState('hepsi');
@@ -189,6 +199,7 @@ export function OnerilerSekmesi({ sonuc, yazabilir }: { sonuc: OneriSonucu; yaza
               gidiyor={gidenler.has(o.anahtar)}
               hata={kartHatalari[o.anahtar] ?? null}
               yoksayiliyor={yoksayilanlar.has(o.anahtar)}
+              etkiSatiri={o.durum === 'uygulandi' ? kartEtkiSatiri(etki, o.anahtar) : null}
               onUygula={() => setOnayda(o)}
               onYoksay={() => void yoksay(o)}
             />

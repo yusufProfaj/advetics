@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { YORGUNLUK } from '@advetics/shared';
-import type { AsistanOturumu, OneriListesi, RuleRecord, SinyalListesi } from '@advetics/shared';
+import type { AsistanOturumu, EtkiListesi, OneriListesi, RuleRecord, SinyalListesi } from '@advetics/shared';
 import { hasPermission, requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
 import { sayfaWorkspaceId, workspaceSecimVerisi } from '@/lib/sayfa-workspace';
@@ -9,11 +9,13 @@ import { formatDayLong } from '@/lib/format';
 import { baglanti } from '@/lib/baglanti';
 import { SEKMELER, SEKME_ETIKETI, ozetSayilari, sekmeCoz } from '@/lib/iyilestir';
 import { sinyalListeYolu, type SinyalSonucu } from '@/lib/sinyal';
+import { etkiListeYolu, type EtkiSonucu } from '@/lib/etki';
 import { WorkspaceGerekli } from '@/components/workspace-gerekli';
 import { Uyari } from '@/components/ui/uyari';
 import { OnerilerSekmesi, type OneriSonucu } from '@/components/iyilestir/oneriler-sekmesi';
 import { AsistanSekmesi, type OturumSonucu } from '@/components/iyilestir/asistan-sekmesi';
 import { SinyallerSekmesi } from '@/components/iyilestir/sinyaller-sekmesi';
+import { EtkiSekmesi } from '@/components/iyilestir/etki-sekmesi';
 import { KurallarIcerik, type KurallarSonucu } from '@/components/rules/kurallar-icerik';
 import s from '@/components/taslak/taslak.module.css';
 import i from '@/components/taslak/iyilestir.module.css';
@@ -102,7 +104,7 @@ export default async function IyilestirPage({
   };
 
   const oturumParam = first(params.oturum);
-  const [oneriSonucu, kuralSonucu, sinyalSonucu, oturumSonucu] = await Promise.all([
+  const [oneriSonucu, kuralSonucu, sinyalSonucu, oturumSonucu, etkiSonucu] = await Promise.all([
     serverApiFetch<OneriListesi>(
       `/iyilestir/oneriler?${new URLSearchParams({ clientId })}`,
     ).then(
@@ -133,11 +135,29 @@ export default async function IyilestirPage({
           (e: unknown): OturumSonucu => ({ durum: 'hata', mesaj: hataMetni(e) }),
         )
       : Promise.resolve<OturumSonucu>({ durum: 'yok' }),
+    /*
+     * ETKİ (Paket C) iki sekmede: Etkisi sekmesinin ilk listesi ve Öneriler
+     * sekmesinde uygulanmış kartların altındaki tek satır. Öneriler'de
+     * yalnız İyileştir yolundan gelenler istenir; kart satırı öneri
+     * anahtarıyla eşleniyor (kart başına ayrı istek yok). Düşerse kartın
+     * altı sunucunun cümlesini yazar, "ölçülmedi" demez.
+     */
+    sekme === 'etki' || sekme === 'oneriler'
+      ? serverApiFetch<EtkiListesi>(
+          etkiListeYolu({ clientId, durum: 'hepsi', yol: sekme === 'oneriler' ? 'iyilestir' : undefined, sayfa: 1 }),
+        ).then(
+          (liste): EtkiSonucu => ({ durum: 'tamam', liste }),
+          (e: unknown): EtkiSonucu => ({ durum: 'hata', mesaj: hataMetni(e) }),
+        )
+      : Promise.resolve<EtkiSonucu | null>(null),
   ]);
 
   const rozet: Record<(typeof SEKMELER)[number], number | null> = {
     oneriler: oneriSonucu.durum === 'tamam' ? ozetSayilari(oneriSonucu.liste).acik : null,
     sinyaller: sinyalSonucu.durum === 'tamam' ? sinyalSonucu.liste.sayilar.acik : null,
+    // Rozet yok: etki bir "yapılacak iş" değil, sonuç listesi. Sayı koymak
+    // kullanıcıyı açılacak bir şey varmış gibi çağırırdı.
+    etki: null,
     asistan: null,
     kurallar: kuralSonucu.durum === 'tamam' ? kuralSonucu.kurallar.length : null,
   };
@@ -147,6 +167,8 @@ export default async function IyilestirPage({
       ? `${clientAdi} · Son 7 gün · ${formatDayLong(range.from)} - ${formatDayLong(range.to)}`
       : sekme === 'sinyaller'
         ? `${clientAdi} · her gece, dünün verisi beklenen aralıkla karşılaştırılıyor`
+        : sekme === 'etki'
+          ? `${clientAdi} · Advetics’ten yapılan durdurma ve bütçe değişiklikleri, değişmeyenlerle kıyaslanarak`
         : sekme === 'kurallar'
         ? `${clientAdi} · otomatik kurallar saatte bir değerlendiriliyor`
         : `${clientAdi} · okur, önerir, onayınla uygular`;
@@ -177,7 +199,8 @@ export default async function IyilestirPage({
       </div>
 
       <section key={sekme} className={i.sekme}>
-        {sekme === 'oneriler' && <OnerilerSekmesi sonuc={oneriSonucu} yazabilir={yazabilir} />}
+        {sekme === 'oneriler' && <OnerilerSekmesi sonuc={oneriSonucu} yazabilir={yazabilir} etki={etkiSonucu} />}
+        {sekme === 'etki' && etkiSonucu && <EtkiSekmesi clientId={clientId} ilk={etkiSonucu} />}
         {sekme === 'sinyaller' && (
           <SinyallerSekmesi
             clientId={clientId}

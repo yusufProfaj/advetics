@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import {
+  ENTITY_LEVEL_LABELS,
   degisiklikMetni,
   etkiCumlesi,
   formatMoney,
@@ -152,7 +153,7 @@ export function satirdanEtki(r: EtkiSatiri): Etki {
   const kontrolSayisi = olcum.kontrol?.sayi ?? 0;
   const kontrolMetni =
     kontrolSayisi > 0
-      ? `Aynı hesaptaki ${kontrolSayisi} ${r.kapsam_seviye === 'ad_group' ? 'reklam seti' : 'kampanya'}`
+      ? `Aynı hesaptaki ${kontrolSayisi} ${ENTITY_LEVEL_LABELS[r.platform][r.kapsam_seviye].toLocaleLowerCase('tr')}`
       : null;
 
   return {

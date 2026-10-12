@@ -4,6 +4,8 @@ import Link from 'next/link';
 import type { Oneri } from '@advetics/shared';
 import { ONERI_TURU_ETIKETI, PLATFORM_KISA_ADLARI } from '@advetics/shared';
 import { formatRelative } from '@/lib/format';
+import { etkiAdresi, type KartEtkiSatiri } from '@/lib/etki';
+import { NOKTA_SINIFI } from './etki-sekmesi';
 import { eylemMetni, kartHali, miniYollar, MINI, seviyeAdi, sonucMetni } from '@/lib/iyilestir';
 import i from '@/components/taslak/iyilestir.module.css';
 import s from '@/components/taslak/taslak.module.css';
@@ -26,6 +28,7 @@ export function OneriKarti({
   yoksayiliyor,
   onUygula,
   onYoksay,
+  etkiSatiri,
 }: {
   oneri: Oneri;
   yazabilir: boolean;
@@ -35,6 +38,12 @@ export function OneriKarti({
   yoksayiliyor: boolean;
   onUygula: () => void;
   onYoksay: () => void;
+  /**
+   * Uygulanmış kartın altındaki tek satır (Paket C): "Etki 18 Ekim
+   * tarihinde ölçülecek" ya da sonuç. Kararı `kartEtkiSatiri` veriyor;
+   * `null` = kart uygulanmamış, satır yok.
+   */
+  etkiSatiri?: KartEtkiSatiri | null;
 }) {
   const hal = kartHali(oneri, yazabilir);
   const metin = eylemMetni(oneri);
@@ -111,6 +120,18 @@ export function OneriKarti({
           </>
         )}
       </div>
+
+      {etkiSatiri && (
+        <div className={i.eKartSatiri}>
+          <span className={`${i.sNokta} ${NOKTA_SINIFI[etkiSatiri.nokta]}`} aria-hidden="true" />
+          <span>{etkiSatiri.metin}</span>
+          {etkiSatiri.bagli && (
+            <Link className={i.metin} href={etkiAdresi(oneri.clientId)}>
+              Etkisi sekmesinde gör
+            </Link>
+          )}
+        </div>
+      )}
     </article>
   );
 }

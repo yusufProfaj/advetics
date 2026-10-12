@@ -30,12 +30,17 @@ import { ASISTAN_ARACLARI, ONERI_TURU_ETIKETI, PLATFORM_KISA_ADLARI, formatMoney
  * ise ayar. Sinyalin İyileştir'in sekmesi olması veri modelinin parçası
  * olduğu anlamına gelmiyor (sözleşme `sinyal/index.ts`).
  */
-export const SEKMELER = ['oneriler', 'sinyaller', 'asistan', 'kurallar'] as const;
+/**
+ * `etki` (Paket C) Sinyaller'den SONRA: üçü aynı sıranın adımları
+ * (öneri ne diyor, ters giden ne, uyguladığımız işe yaradı mı).
+ */
+export const SEKMELER = ['oneriler', 'sinyaller', 'etki', 'asistan', 'kurallar'] as const;
 export type Sekme = (typeof SEKMELER)[number];
 
 export const SEKME_ETIKETI: Record<Sekme, string> = {
   oneriler: 'Öneriler',
   sinyaller: 'Sinyaller',
+  etki: 'Etkisi',
   asistan: 'AI Asistan',
   kurallar: 'Kurallar',
 };
