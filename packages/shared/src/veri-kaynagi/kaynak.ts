@@ -260,10 +260,21 @@ export interface VeriKaynagiOzeti {
    * SÖYLENİR, sessizce biri seçilmez.
    */
   kurulumUyusmazligi: { kurulumMulkId: string } | null;
+  /**
+   * Ajan 2 eki: GA4 yapı işinin okuduğu anahtar etkinlikler (kartta yazar);
+   * yapı hiç koşmadıysa `null` (boş liste "hiç yok" demek, ikisi ayrı).
+   */
+  anahtarEtkinlikler: string[] | null;
+  /** Ajan 2 eki: izin eksikse "İzni ver" düğmesinin yeniden yetkilendireceği bağlantı. */
+  izinBaglantiId: string | null;
 }
 
 export interface VeriKaynaklariYaniti {
   kaynaklar: VeriKaynagiOzeti[];
-  /** Bağlanabilecek ama bağlanmamış türler ve neden (izin eksik, Google bağlantısı yok). */
-  baglanabilir: Array<{ tur: KaynakTuru; engel: string | null }>;
+  /**
+   * Bağlanabilecek ama bağlanmamış türler ve neden (izin eksik, Google
+   * bağlantısı yok). `izinBaglantiId` Ajan 2 eki: engel izinse düğmenin
+   * bağlantısı.
+   */
+  baglanabilir: Array<{ tur: KaynakTuru; engel: string | null; izinBaglantiId?: string | null }>;
 }

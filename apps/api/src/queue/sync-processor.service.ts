@@ -30,6 +30,9 @@ import type { TxLike } from '../modules/sinyal/sinyal-hesap';
 import { isYapilabilir } from './platform-isleri';
 import { cekilmisGunler, gunlukAnahtar } from './gunluk-tekrar';
 import { GUN_ICI_ARALIK_DK, gunIciAtlanir, seyreltilir, sonGunIciIsler } from './gun-ici-aralik';
+import { kaynakGunlukPencere } from '@advetics/shared';
+import { VeriKaynagiIsService } from '../modules/veri-kaynagi/veri-kaynagi-is.service';
+import { KaynakKotaReddi } from '../modules/veri-kaynagi/veri-kaynagi-is';
 
 /**
  * Worker'ın sentetik kiracı bağlamındaki kullanıcı kimliği.
@@ -82,6 +85,7 @@ export class SyncProcessorService {
     private readonly raporPlani: RaporPlaniService,
     private readonly sinyalHesap: SinyalHesapService,
     private readonly teslim: BildirimTeslimService,
+    private readonly kaynakIs: VeriKaynagiIsService,
   ) {}
 
   async process(payload: SyncJobPayload): Promise<{ rows: number; note?: string }> {
@@ -91,6 +95,21 @@ export class SyncProcessorService {
     // (hesap işinin yolu kota alırdı ve kotası dolmuş hesapta sinyal de
     // gecikirdi). Önce bu dal.
     if (payload.jobType === 'signals_evaluate') return this.processSinyalJob(payload);
+    /*
+     * VERİ KAYNAĞI İŞİ (Paket F) hesap işi DEĞİL: reklam hesabının kota
+     * bekçisi ve hata kaydı (`recordFailure` → Google Ads platform kesicisi)
+     * ona uygulanmıyor (veri-kaynagi-is.service.ts başı). Kaynak kotası
+     * reddi burada `QuotaThrottleError`a çevriliyor: worker onu deneme
+     * hakkı yakmadan geciktiriyor.
+     */
+    if (payload.veriKaynagiId || payload.jobType === 'kaynak_yapi' || payload.jobType === 'kaynak_gunluk' || payload.jobType === 'kaynak_gecmis') {
+      try {
+        return await this.kaynakIs.isle(payload);
+      } catch (err) {
+        if (err instanceof KaynakKotaReddi) throw new QuotaThrottleError(err.message, err.retryAfterMs);
+        throw err;
+      }
+    }
     // KURAL İŞİ hesap işinden AYRI yol izliyor: bir kural birden fazla
     // hesaba dokunabiliyor, dolayısıyla iş seviyesinde tek bir hesabın
     // kotasına bakmak yanlış olurdu. Kota kontrolü aksiyon başına,
@@ -154,6 +173,8 @@ export class SyncProcessorService {
      */
     if (payload.jobType === 'notifications_send') return this.teslim.supur();
     if (payload.jobType === 'signals_evaluate') return this.sinyalSupurmesi();
+    // VERİ KAYNAKLARI hesap değil kaynak başına dağılıyor (Paket F).
+    if (payload.jobType === 'kaynak_yapi' || payload.jobType === 'kaynak_gunluk') return this.kaynakIs.supur(payload.jobType);
 
     const accounts = await this.db.adAccount.findMany({
       // Süzgeç TEK YERDE: teşhis ekranı da aynı sabiti okuyor. Ayrı
@@ -436,6 +457,15 @@ export class SyncProcessorService {
       case 'keyword_insights':
       case 'search_terms':
         return { from: this.shiftDays(todayInTz, -7), to: this.shiftDays(todayInTz, -1) };
+      /*
+       * VERİ KAYNAĞI GÜNLÜK PENCERESİ (Paket F). `timezone` burada KAYNAĞIN
+       * (GA4 mülkünün) dilimi; süpürme onu kaynak satırından veriyor. Pencere
+       * shared `kaynakGunlukPencere`den: son 3 gün her gece yeniden (GA4
+       * sonradan düzeltiyor). Bu dal olmasaydı iş `[missing_dates]` ile her
+       * gece düşerdi (`sweep:keywords` dersi).
+       */
+      case 'kaynak_gunluk':
+        return kaynakGunlukPencere('ga4', todayInTz) ?? undefined;
       default:
         return undefined;
     }

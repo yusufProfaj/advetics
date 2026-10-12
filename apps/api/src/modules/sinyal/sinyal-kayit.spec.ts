@@ -117,12 +117,21 @@ describe('uygula yolunun sırası', () => {
 });
 
 describe('CHECK listeleri = shared listeleri', () => {
-  const sql = readFileSync(join(__dirname, '../../../prisma/migrations/20261013100000_sinyal/migration.sql'), 'utf8');
+  /*
+   * `sinyaller_kod_chk` Paket F1'de (20261014200000_veri_kaynagi) DÜŞÜRÜLÜP
+   * genişletilerek yeniden kuruldu. Kısıt EN SON hangi migration'da
+   * tanımlandıysa o okunuyor: ilk tanımı okumak, F1 kodlarını içermeyen
+   * eski listeyi "doğru" sayardı.
+   */
+  const kok = join(__dirname, '../../../prisma/migrations');
+  const ilk = readFileSync(join(kok, '20261013100000_sinyal/migration.sql'), 'utf8');
+  const f1 = readFileSync(join(kok, '20261014200000_veri_kaynagi/migration.sql'), 'utf8');
+  const sql = ilk + '\n' + f1.slice(f1.indexOf('"sinyaller_kod_chk" CHECK') - 20);
   const liste = (kisit: string): string[] => {
-    const i = sql.indexOf(`"${kisit}" CHECK`);
+    const i = sql.lastIndexOf(`"${kisit}" CHECK`);
     if (i < 0) throw new Error(`${kisit} bulunamadı`);
     const parca = sql.slice(i, sql.indexOf('\n  CONSTRAINT', i + 1) > 0 ? sql.indexOf('\n  CONSTRAINT', i + 1) : sql.indexOf(');', i));
-    return [...parca.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]!);
+    return [...parca.matchAll(/'([a-z0-9_]+)'/g)].map((m) => m[1]!);
   };
 
   it('KRİTİK: her durum/tür kısıtı shared listesiyle iki yönlü aynı', () => {

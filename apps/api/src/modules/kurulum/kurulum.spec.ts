@@ -209,7 +209,7 @@ describe('adım durumları', () => {
 describe('modül kaydı ve izinler', () => {
   it('KRİTİK: modül bağlantı ve ölçüm modüllerini içe alıyor, uygulamaya kayıtlı', () => {
     const mod = yorumsuz(readFileSync(join(__dirname, 'kurulum.module.ts'), 'utf8'));
-    expect(mod).toMatch(/imports:\s*\[\s*ConnectionsModule,\s*OlcumModule\s*\]/);
+    expect(mod).toMatch(/imports:\s*\[\s*ConnectionsModule,\s*OlcumModule,\s*VeriKaynagiModule\s*\]/);
     expect(yorumsuz(readFileSync(join(__dirname, '../../app.module.ts'), 'utf8'))).toMatch(/^\s*KurulumModule,/m);
     expect(yorumsuz(readFileSync(join(__dirname, '../connections/connections.module.ts'), 'utf8'))).toMatch(/exports:\s*\[[^\]]*ConnectionsService[^\]]*TokenVaultService[^\]]*ProviderRegistry/);
   });
@@ -237,7 +237,7 @@ describe('servis (PGlite)', () => {
     await h.reset();
     await seedTenant(h, { platform: 'meta' });
     const prisma = { withTenant: <T>(_c: TenantContext, fn: (tx: unknown) => Promise<T>) => fn(h.db) } as unknown as PrismaService;
-    svc = new KurulumService(prisma, {} as never, { getAccessToken: vi.fn() } as never, { get: vi.fn() } as never, { durum: vi.fn() } as never, { record: vi.fn() } as never, { platforms: { google: {}, meta: {} } } as never);
+    svc = new KurulumService(prisma, {} as never, { getAccessToken: vi.fn() } as never, { get: vi.fn() } as never, { durum: vi.fn() } as never, { record: vi.fn() } as never, { platforms: { google: {}, meta: {} } } as never, { kurulumdanBagla: vi.fn().mockResolvedValue(null) } as never);
   });
 
   it('kurulum satırı yokken okuma çalışır; Meta hesabı atanmış, Google bağlantısı yok', async () => {

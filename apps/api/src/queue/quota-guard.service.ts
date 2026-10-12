@@ -90,6 +90,19 @@ const LAYER_MAX_USAGE: Record<QuotaLayer, number> = {
 };
 
 /**
+ * VERİ KAYNAĞI katmanları (MIMARI § 2.3). Reklam katmanlarına KARIŞMIYOR:
+ * kaynak kotası müşterinin mülkünün kotası, hesabın kotası değil.
+ * `interactive` kullanıcının bastığı "Şimdi yenile" (GA4_KOTA: etkileşimli
+ * katman kotaya bakmadan geçer, platform reddederse reddi ekranda yazar).
+ */
+export type KaynakKotaKatmani = 'kaynak_gunluk' | 'kaynak_gecmis' | 'interactive';
+export const KAYNAK_LAYER_MAX_USAGE: Record<KaynakKotaKatmani, number> = {
+  interactive: 100,
+  kaynak_gunluk: 80,
+  kaynak_gecmis: 50,
+};
+
+/**
  * Kota durumunun Redis'te yaşama süresi.
  *
  * Aynı zamanda sistemin kendini toparlama yolu: süre dolunca yüzde bilinmiyor
@@ -424,6 +437,67 @@ export class QuotaGuardService implements OnModuleDestroy {
     const s = await this.redis.hgetall(this.platformKey(platform));
     const until = Number(s.blockedUntil ?? 0);
     return until > Date.now() ? { until, sebep: s.sebep ?? null } : null;
+  }
+
+  // ───────────────────────────────────────────────────────────────────────
+  // VERİ KAYNAĞI KOTASI (Paket F, MIMARI § 2.3, Ç-10)
+  // ───────────────────────────────────────────────────────────────────────
+
+  /**
+   * Kaynağın kotası REKLAM HESABININ kotasından AYRI anahtarda:
+   * `kaynak:<tur>:<disKimlik>`. Google Ads PLATFORM kesicisine (geliştirici
+   * token'ının ortak kovası) BAKILMIYOR: Analytics Data API ayrı bir API ve
+   * ayrı kota; Ads kovası dolduğunda GA4 çekimini durdurmak, sebebi hiçbir
+   * ekranda görünmeyen bir boşluk üretirdi (ve tersi: GA4'ün 429'u bütün
+   * Google Ads işlerini durdururdu, bkz. veri-kaynagi-is.service.ts).
+   */
+  private kaynakKey(anahtar: string): string {
+    return `${this.prefix}:kaynak:${anahtar}`;
+  }
+
+  /**
+   * Kaynak işine izin var mı. Kullanım yüzdesi en son GA4 yanıtının
+   * bildirdiği kotadan (`kaynakKotaKaydet`). Katman sınırları
+   * `KAYNAK_LAYER_MAX_USAGE`: geçmiş %50 kullanımda, günlük %80'de durur
+   * (GA4_KOTA: geçmiş için en az %50, günlük için en az %20 kalmalı).
+   */
+  async kaynakIzni(anahtar: string, layer: KaynakKotaKatmani): Promise<AcquireResult> {
+    const s = await this.redis.hgetall(this.kaynakKey(anahtar));
+    const blockedUntil = Number(s.blockedUntil ?? 0);
+    if (blockedUntil > Date.now()) {
+      return { allowed: false, retryAfterMs: blockedUntil - Date.now(), reason: 'kaynak_kotasi_dolu', usagePercent: Number(s.usagePercent ?? 0) };
+    }
+    const usagePercent = Number(s.usagePercent ?? 0);
+    const max = KAYNAK_LAYER_MAX_USAGE[layer];
+    if (usagePercent >= max) {
+      // GA4 günü Pasifik gece yarısında sıfırlanıyor; saatlik kova bir saatte.
+      // Bir saat sonra bakmak ikisini de kapsıyor.
+      return { allowed: false, retryAfterMs: 60 * 60_000, reason: `kaynak_usage_${usagePercent}pct_exceeds_${max}`, usagePercent };
+    }
+    return { allowed: true, usagePercent };
+  }
+
+  /**
+   * GA4 yanıtındaki mülk kotasını kaydeder. Kullanım = gün ve saat
+   * kovalarından YÜKSEK olan (biri dolunca ikisi de durur). TTL 2 saat:
+   * süre dolunca bilinmiyor sayılır ve bir sonraki istek yeniden öğrenir
+   * (reklam kotasındaki kurtarma mekanizmasıyla aynı gerekçe).
+   */
+  async kaynakKotaKaydet(anahtar: string, kota: { gunKalan?: number; gunToplam?: number; saatKalan?: number; saatToplam?: number } | null): Promise<void> {
+    if (!kota) return;
+    const kullanim = (k?: number, t?: number) => (k === undefined || !t ? 0 : Math.round(((t - k) / t) * 100));
+    const yuzde = Math.max(kullanim(kota.gunKalan, kota.gunToplam), kullanim(kota.saatKalan, kota.saatToplam));
+    const key = this.kaynakKey(anahtar);
+    await this.redis.hset(key, { usagePercent: String(yuzde), observedAt: new Date().toISOString() });
+    await this.redis.expire(key, 2 * 3600);
+  }
+
+  /** GA4 429 verdi: bu kaynağın işleri süre boyunca platforma gitmez. */
+  async kaynakKesici(anahtar: string, seconds: number): Promise<void> {
+    const sure = Math.min(Math.max(Math.round(seconds), 60), 25 * 3600);
+    const key = this.kaynakKey(anahtar);
+    await this.redis.hset(key, { blockedUntil: String(Date.now() + sure * 1000) });
+    await this.redis.expire(key, sure + 60);
   }
 
   /** Teşhis ve sağlık kontrolü için mevcut durum. */

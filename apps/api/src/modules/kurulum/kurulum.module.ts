@@ -1,17 +1,19 @@
 import { Module } from '@nestjs/common';
 import { ConnectionsModule } from '../connections/connections.module';
 import { OlcumModule } from '../olcum/olcum.module';
+import { VeriKaynagiModule } from '../veri-kaynagi/veri-kaynagi.module';
 import { KurulumController } from './kurulum.controller';
 import { KurulumService } from './kurulum.service';
 
 /**
  * KURULUM REHBERİ. NEST MODÜL KAYDI AÇILIŞTA PATLIYOR: bağlantı servisi,
  * token kasası ve sağlayıcılar `ConnectionsModule`den, site taraması
- * `OlcumModule`den; Prisma, Config ve Audit global. `kurulum.spec.ts`
+ * `OlcumModule`den, mülk kurulunca GA4 okumasını bağlayan servis
+ * `VeriKaynagiModule`den (MIMARI Ç-5); Prisma, Config ve Audit global. `kurulum.spec.ts`
  * listeyi kaynak taramasıyla kilitliyor.
  */
 @Module({
-  imports: [ConnectionsModule, OlcumModule],
+  imports: [ConnectionsModule, OlcumModule, VeriKaynagiModule],
   controllers: [KurulumController],
   providers: [KurulumService],
 })

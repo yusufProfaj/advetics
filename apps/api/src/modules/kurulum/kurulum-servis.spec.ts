@@ -6,7 +6,7 @@ import { createHarness, IDS, seedTenant, type Harness } from '../../../test/pgli
 import type { PrismaService } from '../../prisma/prisma.service';
 import { GOOGLE_OLCUM_SCOPES } from '../connections/providers/google.provider';
 import { AdsKurulumIstemcisi } from './ads-kurulum';
-import { Ga4Istemcisi } from './ga4';
+import { Ga4Istemcisi } from '../connections/providers/ga4';
 import { GtmIstemcisi, SURUM_ADI, gtmPlani, konteynerdeYuklu, yolRegex } from './gtm';
 import { kurulumAdimlari } from './kurulum-durum';
 import { KurulumService, silinecekEtiketler } from './kurulum.service';
@@ -71,6 +71,7 @@ beforeEach(async () => {
     { durum: olcumDurum } as never,
     { record: vi.fn() } as never,
     { platforms: { google: { developerToken: 'dev', apiVersion: 'v25' }, meta: { apiVersion: 'v25.0' } } } as never,
+    { kurulumdanBagla: vi.fn().mockResolvedValue(null) } as never,
   );
 });
 

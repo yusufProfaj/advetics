@@ -36,6 +36,14 @@ export const JOB_PRIORITY = {
   lead_fetch: 3,
   insights_breakdown: 8,
   initial_backfill: 10,
+  /*
+   * VERİ KAYNAKLARI (Paket F). Reklam metriklerinin ARKASINDA: site verisi
+   * bir gün gecikebilir, reklam kararı veremeyen bir panel gecikemez. Kota
+   * ayrı (mülkün kotası), yani öncelik yalnız worker slotu sırası.
+   */
+  kaynak_yapi: 6,
+  kaynak_gunluk: 7,
+  kaynak_gecmis: 10,
 } as const;
 
 /**
@@ -52,6 +60,12 @@ export interface SyncJobPayload {
   jobType: SyncJobType;
   adAccountId?: string;
   socialProfileId?: string;
+  /**
+   * Paket F — veri kaynağı işi (`kaynak_*`). Dolu olması işin bir REKLAM
+   * HESABI işi OLMADIĞINI söylüyor: hesap kota bekçisinden ve hesap
+   * döngüsünden geçmez (veri-kaynagi-is.service.ts).
+   */
+  veriKaynagiId?: string;
   entityLevel?: EntityLevel;
   /**
    * Tarihler STRING olarak taşınıyor (YYYY-MM-DD), Date olarak DEĞİL.
@@ -126,6 +140,12 @@ export function layerForJob(payload: SyncJobPayload): keyof typeof JOB_PRIORITY 
       // Tarama bir YEDEK yol: webhook çalışıyorsa hiçbir şey bulmuyor.
       // Canlı kaydın önüne geçmemeli.
       return 'organic_posts';
+    case 'kaynak_yapi':
+      return 'kaynak_yapi';
+    case 'kaynak_gunluk':
+      return 'kaynak_gunluk';
+    case 'kaynak_gecmis':
+      return 'kaynak_gecmis';
     default:
       return 'insights_daily';
   }
@@ -142,6 +162,7 @@ export function buildJobId(p: {
   jobType: SyncJobType;
   adAccountId?: string;
   socialProfileId?: string;
+  veriKaynagiId?: string;
   ruleId?: string;
   externalLeadId?: string;
   externalFormId?: string;
@@ -165,7 +186,7 @@ export function buildJobId(p: {
     // Aynı sayfadan saniyeler içinde on kayıt gelebiliyor. Ayırıcı sosyal
     // profil olsaydı hepsi tek iş kimliğine düşer ve BullMQ'nun mükerrer
     // engeli dokuzunu SESSİZCE atardı — dokuz kayıp müşteri, sıfır hata.
-    p.externalLeadId ?? p.externalFormId ?? p.adAccountId ?? p.socialProfileId ?? p.ruleId ?? 'na',
+    p.externalLeadId ?? p.externalFormId ?? p.adAccountId ?? p.socialProfileId ?? p.veriKaynagiId ?? p.ruleId ?? 'na',
     p.entityLevel ?? 'all',
     p.dateFrom ?? '',
     p.dateTo ?? '',

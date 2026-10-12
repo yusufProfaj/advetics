@@ -1175,6 +1175,15 @@ enum SyncJobType {
   /// Paket A — bekleyen bildirimleri kanallara gönderen küresel süpürme
   /// ve 09:00 İstanbul sinyal özeti. Müşteri başına dağılmıyor.
   notifications_send
+  /// Paket F — veri kaynağının kendisi (GA4 anahtar etkinlikleri, mülk ayarı).
+  kaynak_yapi
+  /// Paket F — kaynağın günlük penceresi. Yapı son 36 saatte koşmadıysa
+  /// platforma GİTMEDEN biter; yapı bitince zincirle yeniden kuyruğa girer.
+  kaynak_gunluk
+  /// Paket F — ilk bağlantıda 90 günlük geçmiş, parça parça yazılır.
+  kaynak_gecmis
+  /// Paket F3 — ürün bazında reklam verisi. F1'de işleyicisi YOK.
+  urun_performansi
 }
 
 enum SyncJobStatus {
@@ -2502,6 +2511,8 @@ model SyncJob {
 
   adAccountId     String? @map("ad_account_id") @db.Uuid
   socialProfileId String? @map("social_profile_id") @db.Uuid
+  /// Paket F — veri kaynağı işi (kaynak_*). FK ve indeks migration SQL'inde.
+  veriKaynagiId   String? @map("veri_kaynagi_id") @db.Uuid
 
   jobType     SyncJobType  @map("job_type")
   entityLevel EntityLevel? @map("entity_level")
@@ -4203,4 +4214,86 @@ model BildirimGonderimi {
   @@index([clientId, createdAt(sort: Desc)], map: "bildirim_gonderimleri_client_idx")
   @@index([orgId], map: "bildirim_gonderimleri_org_id_idx")
   @@map("bildirim_gonderimleri")
+}
+
+// ═══ VERİ KAYNAKLARI — F1 GA4 OKUMA (Paket F, docs/veri-kaynagi/MIMARI.md) ═══
+// CHECK kısıtları ve FK'ler migration'da; RLS 02_rls.sql'de. Rapor
+// tabloları ham SQL'le yazılıp okunuyor (PGlite testleri gerçek sorguyu koşsun).
+
+/// Workspace ↔ dış kaynak bağı. HAVUZ YOK: client_id NOT NULL. `kimlikEnc`
+/// ŞİFRELİ mağaza kimliği; hiçbir liste sorgusu onu seçmiyor
+/// (`KAYNAK_LISTE_SECIMI`, veri-kaynagi.service.ts).
+model VeriKaynagi {
+  id               String    @id @default(uuid()) @db.Uuid
+  orgId            String    @map("org_id") @db.Uuid
+  clientId         String    @map("client_id") @db.Uuid
+  tur              String    @db.VarChar(30)
+  disKimlik        String    @map("dis_kimlik") @db.VarChar(300)
+  ad               String    @db.VarChar(200)
+  connectionId     String?   @map("connection_id") @db.Uuid
+  kimlikEnc        Bytes?    @map("kimlik_enc")
+  kimlikIpucu      String?   @map("kimlik_ipucu") @db.VarChar(20)
+  saatDilimi       String?   @map("saat_dilimi") @db.VarChar(64)
+  paraBirimi       String?   @map("para_birimi") @db.Char(3)
+  durum            String    @default("etkin") @db.VarChar(20)
+  sonHata          String?   @map("son_hata")
+  yapi             Json      @default("{}") @db.JsonB
+  yapiZamani       DateTime? @map("yapi_zamani") @db.Timestamptz(6)
+  sonBasariliCekim DateTime? @map("son_basarili_cekim") @db.Timestamptz(6)
+  createdBy        String?   @map("created_by") @db.Uuid
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([orgId, tur, disKimlik], map: "veri_kaynaklari_dis_kimlik_key")
+  @@index([clientId, durum], map: "veri_kaynaklari_client_durum_idx")
+  @@index([orgId], map: "veri_kaynaklari_org_id_idx")
+  @@index([connectionId], map: "veri_kaynaklari_connection_idx")
+  @@map("veri_kaynaklari")
+}
+
+/// GA4 trafik raporu: gün × kaynak/ortam × kampanya. `kullanici` TOPLANAMAZ.
+model Ga4Gunluk {
+  gun                DateTime @db.Date
+  veriKaynagiId      String   @map("veri_kaynagi_id") @db.Uuid
+  satirHash          String   @map("satir_hash") @db.Char(64)
+  clientId           String   @map("client_id") @db.Uuid
+  orgId              String   @map("org_id") @db.Uuid
+  kaynakOrtam        String   @map("kaynak_ortam") @db.VarChar(300)
+  kampanyaAdi        String?  @map("kampanya_adi") @db.VarChar(300)
+  kampanyaKimligi    String?  @map("kampanya_kimligi") @db.VarChar(300)
+  adsKampanyaKimligi String?  @map("ads_kampanya_kimligi") @db.VarChar(300)
+  oturum             Int      @default(0)
+  etkilesimliOturum  Int      @default(0) @map("etkilesimli_oturum")
+  kullanici          Int      @default(0)
+  anahtarEtkinlik    Decimal  @default(0) @map("anahtar_etkinlik")
+  satinAlma          Decimal  @default(0) @map("satin_alma")
+  gelirMikro         BigInt   @default(0) @map("gelir_mikro")
+  paraBirimi         String?  @map("para_birimi") @db.Char(3)
+  cekildi            DateTime @default(now()) @db.Timestamptz(6)
+
+  @@id([gun, veriKaynagiId, satirHash], map: "ga4_gunluk_pkey")
+  @@index([clientId, gun(sort: Desc)], map: "ga4_gunluk_client_gun_idx")
+  @@index([orgId], map: "ga4_gunluk_org_id_idx")
+  @@map("ga4_gunluk")
+}
+
+/// Aynı kırılım + etkinlik adı; YALNIZ anahtar etkinlik. ga4_gunluk ile JOIN edilip toplanmaz.
+model Ga4AnahtarEtkinlikGunluk {
+  gun                DateTime @db.Date
+  veriKaynagiId      String   @map("veri_kaynagi_id") @db.Uuid
+  satirHash          String   @map("satir_hash") @db.Char(64)
+  etkinlik           String   @db.VarChar(100)
+  clientId           String   @map("client_id") @db.Uuid
+  orgId              String   @map("org_id") @db.Uuid
+  kaynakOrtam        String   @map("kaynak_ortam") @db.VarChar(300)
+  kampanyaAdi        String?  @map("kampanya_adi") @db.VarChar(300)
+  kampanyaKimligi    String?  @map("kampanya_kimligi") @db.VarChar(300)
+  adsKampanyaKimligi String?  @map("ads_kampanya_kimligi") @db.VarChar(300)
+  anahtarEtkinlik    Decimal  @default(0) @map("anahtar_etkinlik")
+  cekildi            DateTime @default(now()) @db.Timestamptz(6)
+
+  @@id([gun, veriKaynagiId, satirHash, etkinlik], map: "ga4_anahtar_etkinlik_gunluk_pkey")
+  @@index([clientId, gun(sort: Desc)], map: "ga4_anahtar_etkinlik_gunluk_client_gun_idx")
+  @@index([orgId], map: "ga4_anahtar_etkinlik_gunluk_org_id_idx")
+  @@map("ga4_anahtar_etkinlik_gunluk")
 }

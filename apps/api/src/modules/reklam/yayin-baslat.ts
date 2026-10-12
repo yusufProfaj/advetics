@@ -1,3 +1,4 @@
+import { advUtmEtiketi } from './utm-etiketi';
 import { createHash, randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import {
@@ -380,7 +381,9 @@ export async function taslakDerle(
     // pikseli Meta da kurulumda reddediyor.
     whatsappNumarasi: alanlar.whatsappNumarasi?.deger ?? null,
     pikselId: alanlar.pikselId?.deger ?? null,
-    urlEtiketleri: null,
+    // Ç-6 (utm-etiketi.ts): GA4 trafiği kampanya KİMLİĞİYLE eşlensin;
+    // bağlantıda zaten utm_ varsa müşterinin etiketine dokunulmaz (null).
+    urlEtiketleri: advUtmEtiketi(alanlar.niyet!.deger, alanlar.hedefAdres?.deger ?? null),
   });
   if (derleme.tur === 'ret') return { tur: 'ret', retler: derleme.retler };
 

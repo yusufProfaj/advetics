@@ -16,6 +16,7 @@ import { QuotaGuardService } from './quota-guard.service';
 import { StructureSyncService } from './structure-sync.service';
 import { SyncQueueService } from './sync-queue.service';
 import { SyncProcessorService } from './sync-processor.service';
+import { VeriKaynagiIsService } from '../modules/veri-kaynagi/veri-kaynagi-is.service';
 
 /**
  * Kuyruk ve kota altyapısı.
@@ -42,6 +43,14 @@ import { SyncProcessorService } from './sync-processor.service';
     KeywordSyncService,
     SearchTermSyncService,
     KirilimSyncService,
+    /*
+     * Paket F — veri kaynağı işleri. BURADA, ayrı bir modülde değil: kuyruk
+     * ve kota bekçisine bağlı ve QueueModule'ü içe alan bir modül döngüsel
+     * kayıt olurdu (SinyalIsModule notu). Bağımlılıkları (TokenVault,
+     * ProviderRegistry) ConnectionsModule'den geliyor. Nest kaydı AÇILIŞTA
+     * patlar: `veri-kaynagi-kayit.spec.ts` kaynak taramasıyla kilitliyor.
+     */
+    VeriKaynagiIsService,
   ],
   exports: [
     QuotaGuardService,

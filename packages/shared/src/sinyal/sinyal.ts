@@ -80,7 +80,10 @@ export type SinyalEylemi =
 
 /** Kod (+ yön) → önerilen eylem türü. `null` = yalnız bilgi. */
 export function sinyalEylemTuru(kod: SinyalKodu, yon: AnomaliYonu | null, seviye: SinyalSeviyesi): SinyalEylemi['tur'] | null {
-  if (kod === 'donusum_kesildi') return 'olcum';
+  // F1: sitede ölçüm kırık ya da eksik; çaresi Ölçüm ekranında.
+  if (kod === 'donusum_kesildi' || kod === 'ga4_anahtar_etkinlik_yok' || kod === 'ga4_veri_gelmiyor') return 'olcum';
+  // utm_eksik bir reklam BAĞLANTISI sorunu; durdurmak yanlış eylem.
+  if (kod === 'utm_eksik') return null;
   // Durdurmak yalnız para YAKAN yönde anlamlı ve hesap seviyesinde durdurma yok.
   const yakan = (kod === 'harcama' && yon === 'artis') || kod === 'donusum_basi_maliyet' || kod === 'tiklama_basi_maliyet';
   if (yakan && seviye !== 'account') return 'durdur';

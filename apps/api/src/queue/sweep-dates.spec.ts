@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { kaynakGunlukPencere } from '@advetics/shared';
 import { SyncProcessorService } from './sync-processor.service';
 
 /**
@@ -43,6 +44,8 @@ const TARIH_ISTEYENLER = [
    * dal olmasaydı iş tarihsiz gelir ve her sabah düşerdi.
    */
   'signals_evaluate',
+  // Paket F: veri kaynağı günlük penceresi (tz = kaynağın, GA4 mülkünün dilimi).
+  'kaynak_gunluk',
 ] as const;
 
 // Servis yalnızca saf yardımcısı için kuruluyor; hiçbir bağımlılığa
@@ -91,6 +94,12 @@ describe('süpürme tarih aralıkları', () => {
     expect(proc.datesForJob('signals_evaluate', 'Europe/Istanbul')).toEqual(
       proc.datesForJob('insights_daily', 'Europe/Istanbul'),
     );
+  });
+
+  it('veri kaynağı günlük penceresi shared kaynakGunlukPencere ile AYNI (son 3 gün, dün dahil)', () => {
+    const r = proc.datesForJob('kaynak_gunluk', 'Europe/Istanbul')!;
+    const bugun = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Istanbul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+    expect(r).toEqual(kaynakGunlukPencere('ga4', bugun));
   });
 
   it('yapı taraması tarih İSTEMİYOR — aralık üretmek yanıltıcı olurdu', () => {

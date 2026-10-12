@@ -44,6 +44,7 @@ import { OkumaApiModule } from './modules/okuma-api/okuma-api.module';
 import { IyilestirModule } from './modules/iyilestir/iyilestir.module';
 import { GenelBakisModule } from './modules/genel-bakis/genel-bakis.module';
 import { SinyalModule } from './modules/sinyal/sinyal.module';
+import { VeriKaynagiModule } from './modules/veri-kaynagi/veri-kaynagi.module';
 
 @Module({
   imports: [
@@ -90,6 +91,7 @@ import { SinyalModule } from './modules/sinyal/sinyal.module';
     IyilestirModule,
     GenelBakisModule,
     SinyalModule,
+    VeriKaynagiModule,
   ],
   controllers: [HealthController],
   providers: [
