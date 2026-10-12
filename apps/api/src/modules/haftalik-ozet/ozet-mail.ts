@@ -2,6 +2,8 @@ import {
   DEGISIKLIK_TURU_ADI,
   DEGISIKLIK_YOLU_ADI,
   OZET_METRIK_TANIMI,
+  // Platform adı TEK sözlükten: elle yazılan liste üçüncü platformu düşürür (CLAUDE.md).
+  PLATFORM_KISA_ADLARI,
   YORUM_DURUMU_ADI,
   aralikMetni,
   bolumGorunurMu,
@@ -171,7 +173,7 @@ export function ozetEpostasi(ham: HaftalikOzet, kitle: OzetKitlesi, panelAdresi:
       const satirlar = d.kalemler.map(
         (k) =>
           '<tr>' +
-          td(`${htmlKac(k.ad)}<br>${kucuk(k.platform === 'meta' ? 'Meta' : k.platform === 'google' ? 'Google' : 'LinkedIn')}`) +
+          td(`${htmlKac(k.ad)}<br>${kucuk(PLATFORM_KISA_ADLARI[k.platform])}`) +
           td(htmlKac(`${OZET_METRIK_TANIMI[k.metrik].ad} ${degisimMetni(k.degisim)}`)) +
           td(htmlKac(kalemDegeri(k.metrik, k.bu, para)), true) +
           td(htmlKac(kalemDegeri(k.metrik, k.onceki, para)), true) +
