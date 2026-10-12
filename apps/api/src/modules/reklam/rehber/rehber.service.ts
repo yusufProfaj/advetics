@@ -1247,19 +1247,35 @@ export class RehberService {
     // başlamayan platformun sebebi ekranda kalır.
     const amac = a.amac!.deger;
     const baslamayan: PlatformYayinOzeti[] = [];
-    let baslayan = 0;
+    /*
+     * BAŞLAYAN PLATFORM REHBERİ HEMEN "YAYINDA" YAPAR (Ajan 4, giriş ekranı
+     * kapısı Ö-1). Durum eskiden İKİ platform da denendikten sonra tek
+     * seferde yazılıyordu: Meta kurulduktan sonra Google dalı FIRLATIRSA
+     * UPDATE hiç koşmuyor, rehber "taslak" kalıyor ve giriş ekranı ona
+     * "Devam et" / "Taslağı sil" sunuyordu. Yeniden yayınlamak Meta'da
+     * İKİNCİ bir kampanya açar (para). Artık her başlayan platformdan hemen
+     * sonra yazılıyor ve bir platformun fırlatması öbürünün sonucunu ve
+     * sebebini götürmüyor: hata o platformun sebebi olur.
+     */
+    const yayindaYaz = () =>
+      tx((t) => t.$queryRaw(Prisma.sql`UPDATE reklam_rehberi SET durum = 'yayinda', updated_at = now() WHERE id = ${id}::uuid AND durum = 'taslak' RETURNING id`));
+    const dene = async (baslat: () => Promise<string | null>): Promise<string | null> => {
+      try {
+        return await baslat();
+      } catch (e) {
+        logger.error(`Rehber ${id} yayını başlatılırken hata: ${e instanceof Error ? e.message : String(e)}`);
+        return `Kurulum başlatılamadı: ${e instanceof Error ? e.message : String(e)}`;
+      }
+    };
     if (acik.meta && s.meta_taslak_id) {
-      const r = await this.metaYayinBaslat(ctx, s.meta_taslak_id, a, acik, b.meta?.currency ?? b.paraBirimi, { uyum: k.uyum, kapaliKalacak: !platformAcilabilirMi(amac, 'meta') }, b.medyaOranlari ?? new Map());
+      const r = await dene(() => this.metaYayinBaslat(ctx, s.meta_taslak_id!, a, acik, b.meta?.currency ?? b.paraBirimi, { uyum: k.uyum, kapaliKalacak: !platformAcilabilirMi(amac, 'meta') }, b.medyaOranlari ?? new Map()));
       if (r) baslamayan.push({ platform: 'meta', taslakId: s.meta_taslak_id, yayinId: null, durum: null, sebep: r, kampanyaKimligi: null, duraklatilmisKalacak: !platformAcilabilirMi(amac, 'meta') });
-      else baslayan++;
+      else await yayindaYaz();
     }
     if (acik.google && s.google_taslak_id) {
-      const r = await this.googleYayinBaslat(ctx, s, a, b, k.uyum, !platformAcilabilirMi(amac, 'google'));
+      const r = await dene(() => this.googleYayinBaslat(ctx, s, a, b, k.uyum, !platformAcilabilirMi(amac, 'google')));
       if (r) baslamayan.push({ platform: 'google', taslakId: s.google_taslak_id, yayinId: null, durum: null, sebep: r, kampanyaKimligi: null, duraklatilmisKalacak: !platformAcilabilirMi(amac, 'google') });
-      else baslayan++;
-    }
-    if (baslayan > 0) {
-      await tx((t) => t.$queryRaw(Prisma.sql`UPDATE reklam_rehberi SET durum = 'yayinda', updated_at = now() WHERE id = ${id}::uuid AND durum = 'taslak' RETURNING id`));
+      else await yayindaYaz();
     }
     await this.sebepleriYaz(ctx, s, acik, baslamayan);
     const d = await this.yayinDurumu(ctx, id);
