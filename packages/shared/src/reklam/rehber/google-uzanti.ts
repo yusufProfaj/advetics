@@ -416,6 +416,18 @@ export function abartiSozu(metin: string, kaynak = ''): string | null {
  * sayı yok, fiyat sözü yok, kaynakta geçmeyen abartı yok. Sebebi döner.
  */
 export function kisaOgeSorunu(metin: string, kaynak = ''): string | null {
+  /*
+   * MÜŞTERİNİN KENDİ BEYANI GEÇER (yönetici kararı, 2026-10-12, Ajan 4 Ö-D).
+   * Öğe Marka Merkezi vaatlerinde / marka bilgisinde / sitede AYNEN yazıyorsa
+   * ("Ücretsiz keşif", "7/24 destek") bu bir uydurma değil, müşterinin
+   * kendi sözü; Google da doğru olduğu sürece "ücretsiz"e izin veriyor.
+   * Eskiden fiyat süzgeci kaynağa bakmadan reddediyordu ve müşterinin
+   * kendi vaadi bile atılıyordu. `kaynak` yalnız KULLANICI/MÜŞTERİ kaynaklı
+   * metni taşımalı; yapay zekânın ürettiği metin buraya girerse kural her
+   * şeyi geçirir (çağıranlar bunu ayırıyor).
+   */
+  const n = (x: string) => x.replace(/\s+/g, ' ').trim().toLocaleLowerCase('tr-TR');
+  if (kaynak && n(metin) && n(kaynak).includes(n(metin))) return null;
   if (/\d/.test(metin) || FIYAT_SOZU.test(metin)) return 'sayı ya da fiyat sözü taşıyor';
   const a = abartiSozu(metin, kaynak);
   return a ? `"${a}" sözü kaynakta yok` : null;
