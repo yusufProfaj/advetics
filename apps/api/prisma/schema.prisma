@@ -3399,6 +3399,12 @@ model ReportSchedule {
   /// fonksiyonun aynısı.
   rangeKey String @map("range_key") @db.VarChar(20)
 
+  /// `rapor` | `haftalik_ozet` (Paket B, CHECK `report_schedules_tur_chk`).
+  /// Özet planı AYNI süpürmeyle gidiyor; workspace başına tek özet planı
+  /// kısmi tekil indeksle (`report_schedules_ozet_client_key`, yalnız
+  /// migration'da) garanti.
+  tur String @default("rapor") @db.VarChar(20)
+
   /// ALICI LİSTESİ. Boş dizi = `clients.contact_email`e düş.
   ///
   /// Gönderim ANINDA çözülüyor (`nihaiAlicilar()`): adres değişince planı
@@ -4206,7 +4212,7 @@ model BildirimGonderimi {
   orgId         String    @map("org_id") @db.Uuid
   clientId      String    @map("client_id") @db.Uuid
   kanalId       String?   @map("kanal_id") @db.Uuid
-  olay          String    @db.VarChar(10)
+  olay          String    @db.VarChar(20)
   anahtar       String    @db.VarChar(160)
   ozet          String    @db.VarChar(200)
   govde         Json      @db.JsonB
@@ -4525,4 +4531,22 @@ model KreatifBriefi {
   @@index([clientId, kumeAnahtari, createdAt(sort: Desc)], map: "kreatif_briefleri_kume_idx")
   @@index([orgId], map: "kreatif_briefleri_org_id_idx")
   @@map("kreatif_briefleri")
+}
+
+/// Paket B — haftalık özet (docs/haftalik-ozet/MIMARI.md § 2). Workspace ×
+/// ISO hafta başına TEK ve DEĞİŞMEZ satır; `veri` AJANS hâli. Ham SQL'le
+/// yazılıp okunuyor; CHECK ve kompozit FK migration'da, RLS 02_rls.sql'de.
+model HaftalikOzet {
+  id          String   @id @default(uuid()) @db.Uuid
+  orgId       String   @map("org_id") @db.Uuid
+  clientId    String   @map("client_id") @db.Uuid
+  hafta       String   @db.VarChar(8)
+  veri        Json     @db.JsonB
+  yorumDurumu String   @map("yorum_durumu") @db.VarChar(12)
+  model       String?  @db.VarChar(80)
+  uretildi    DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([clientId, hafta], map: "haftalik_ozetler_client_hafta_key")
+  @@index([orgId], map: "haftalik_ozetler_org_id_idx")
+  @@map("haftalik_ozetler")
 }

@@ -13,3 +13,4 @@
 export * from './hafta';
 export * from './yorum';
 export * from './ozet';
+export * from './baglanti';

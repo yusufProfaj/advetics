@@ -48,6 +48,7 @@ import { EtkiModule } from './modules/etki/etki.module';
 import { GeriBeslemeModule } from './modules/geri-besleme/geri-besleme.module';
 import { VeriKaynagiModule } from './modules/veri-kaynagi/veri-kaynagi.module';
 import { KreatifZekaModule } from './modules/kreatif-zeka/kreatif-zeka.module';
+import { HaftalikOzetModule } from './modules/haftalik-ozet/haftalik-ozet.module';
 
 @Module({
   imports: [
@@ -98,6 +99,7 @@ import { KreatifZekaModule } from './modules/kreatif-zeka/kreatif-zeka.module';
     GeriBeslemeModule,
     VeriKaynagiModule,
     KreatifZekaModule,
+    HaftalikOzetModule,
   ],
   controllers: [HealthController],
   providers: [

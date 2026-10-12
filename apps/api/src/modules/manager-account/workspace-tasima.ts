@@ -225,6 +225,11 @@ export const CASCADE_ILE_TASINANLAR = [
   'kreatif_etiketleri',
   'kreatif_etiket_sayaci',
   'kreatif_briefleri',
+  // HAFTALIK ÖZET (docs/haftalik-ozet/MIMARI.md § 2) TAŞINIYOR. Özet,
+  // workspace'in kendi geçmişi ("müşteriye hangi pazartesi ne gitti") ve
+  // hesaplar workspace'le gidiyor; geride kalsa yeni şirkette geçmiş haftalar
+  // YENİDEN üretilir ve gönderilenden farklı sayı gösterirdi (Ç-B11).
+  'haftalik_ozetler',
 ] as const;
 
 export interface WorkspaceTasimaSonucu {

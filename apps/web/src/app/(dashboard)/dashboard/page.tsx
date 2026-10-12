@@ -57,6 +57,7 @@ import {
 import s from '@/components/taslak/taslak.module.css';
 import { first, hataMetni, resolvePlatform } from '@/lib/sayfa-yardimcilari';
 import { REKLAM_YONETICISI } from '@/lib/reklam-yoneticisi';
+import { HaftalikOzetBaglantisi } from '@/components/report/haftalik-ozet-baglantisi';
 
 export const metadata = { title: 'Genel Bakış · Advetics' };
 
@@ -424,6 +425,12 @@ export default async function DashboardPage({
               onayYetkisi={session.permissions.includes('strategy.approve')}
             />
           </Suspense>
+
+          {/* Paket B: seçili workspace'in geçen haftası. Ajans görünümünde
+              (workspace seçili değil) özet workspace başına, bağlantı yok. */}
+          {session.activeClientId && session.permissions.includes('report.read') && (
+            <HaftalikOzetBaglantisi clientId={session.activeClientId} />
+          )}
 
           {butceGorunur && (
             <ButceKarti

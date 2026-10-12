@@ -21,14 +21,25 @@ import { Halka } from '@/components/yukleniyor';
  * "BAĞLANTIYI ELLE BİRLEŞTİRME — SÜZGEÇ DÜŞÜYOR" kuralı bire bir bu. Mevcut
  * arama dizesi kopyalanıp yalnızca `sekme` değiştiriliyor.
  */
+/*
+ * HAFTALIK ÖZET (Paket B) raporun yanında: aynı alıcıya giden ikinci belge
+ * ve aynı gönderen. Ayrı sayfa olsaydı "rapor planı" ile "özet planı"
+ * kullanıcı için iki ayrı yerde dururdu (CLAUDE.md "aynı işin parçası olan
+ * ekranı ayrı sayfaya koymak hata üretiyor").
+ */
 const SEKMELER = [
   { kod: 'rapor', ad: 'Rapor' },
+  { kod: 'ozet', ad: 'Haftalık özet' },
   { kod: 'faturalar', ad: 'Faturalar' },
 ] as const;
 
 export type RaporSekmesi = (typeof SEKMELER)[number]['kod'];
 
-export function RaporSekmeleri({ aktif }: { aktif: RaporSekmesi }) {
+/**
+ * `faturalar`: fatura sekmesi yalnız paylaşım yetkisiyle (müşteri hesabı
+ * raporu ve kendi haftalık özetini görür, faturayı yönetmez).
+ */
+export function RaporSekmeleri({ aktif, faturalar }: { aktif: RaporSekmesi; faturalar: boolean }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -50,7 +61,7 @@ export function RaporSekmeleri({ aktif }: { aktif: RaporSekmesi }) {
 
   return (
     <div role="tablist" className="-mb-px flex items-center gap-1">
-      {SEKMELER.map((s) => (
+      {SEKMELER.filter((s) => s.kod !== 'faturalar' || faturalar).map((s) => (
         <button
           key={s.kod}
           type="button"

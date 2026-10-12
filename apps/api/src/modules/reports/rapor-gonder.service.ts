@@ -417,6 +417,70 @@ export class RaporGonderService {
   }
 
   /**
+   * ═══ HAFTALIK ÖZET MAİLİ — AYNI SMTP YOLU, PDF'SİZ (Paket B, MIMARI Ç-B4) ═══
+   *
+   * İkinci bir gönderici YOK: gönderen kimliği, doğrulama, alıcı çözümü
+   * (`nihaiAlicilar`), imza ve kısmi ret raporu bu sınıfın diğer iki
+   * yoluyla AYNI. Gövde (`ozetEpostasi`) sunucunun kendi ürettiği ve
+   * kaçışlanmış HTML; kullanıcı yazmadığı için `imzaTemizle`den geçmiyor
+   * (geçseydi beyaz liste satır içi tablo biçimini siler, önizleme ile
+   * gönderilen ayrışırdı). İmza girişte temizlenmiş hâliyle ekleniyor.
+   *
+   * `yalnizKendine`: "Kendime gönder" (MIMARI § 3). Alıcı YALNIZ isteyen
+   * kullanıcının kendi gönderen adresi; müşteri listesine HİÇ bakılmıyor —
+   * deneme gönderiminin müşteriye kaçması geri alınamazdı.
+   */
+  async ozetGonder(
+    ctx: TenantContext,
+    p: { clientId: string; toEmails: readonly string[]; konu: string; html: string; yalnizKendine: boolean },
+  ): Promise<{ to: string[]; reddedilen: Array<{ adres: string; sebep: string }> }> {
+    const gonderen = await this.gonderen(ctx);
+    if (!gonderen) {
+      throw new BadRequestException(
+        p.yalnizKendine
+          ? 'Önce kendi e-posta ayarlarını kaydet (Ayarlar → E-posta Ayarları).'
+          : 'Planı kuran kullanıcının e-posta kimliği tanımlı değil. Ayarlar → E-posta Ayarları ekranından kurulmalı.',
+      );
+    }
+    if (gonderen.verified_at === null) {
+      // Planlı rapordaki kuralın aynısı: BAŞKA BİR GÖNDERİCİYE DÜŞÜLMÜYOR.
+      throw new BadRequestException(
+        `${gonderen.from_email} adresinin doğrulaması düşmüş. ` +
+          'Ayarlar → E-posta Ayarları ekranından kendine test maili gönder.',
+      );
+    }
+    const alicilar = p.yalnizKendine
+      ? [gonderen.from_email]
+      : nihaiAlicilar({ secilen: p.toEmails, musteriAdresleri: await this.musteriEpostalari(ctx, p.clientId) });
+    if (alicilar.length === 0) {
+      throw new BadRequestException(
+        'Alıcı yok: planda adres girilmemiş ve workspace’in kayıtlı rapor alıcısı tanımlı değil.',
+      );
+    }
+    const imza = gonderen.signature_html ? `<br /><br />${gonderen.signature_html}` : '';
+    const sonuc = await mailGonder(
+      {
+        fromName: gonderen.from_name,
+        fromEmail: gonderen.from_email,
+        host: gonderen.smtp_host,
+        port: Number(gonderen.smtp_port),
+        secure: gonderen.smtp_secure,
+        user: gonderen.smtp_user,
+        pass: this.crypto.decrypt(Buffer.from(gonderen.smtp_pass_enc)),
+      },
+      { to: alicilar, subject: p.konu, html: `${p.html}${imza}` },
+    );
+    // KISMİ RET SESSİZ BAŞARI DÖNÜYOR (mail-gonderici.ts): çağıran nota yazıyor.
+    if (sonuc.ret.length > 0) {
+      this.logger.warn(
+        `Haftalık özet kısmen gitti (${p.clientId}) — reddedilen: ` +
+          sonuc.ret.map((r) => `${r.adres} (${r.sebep})`).join(', '),
+      );
+    }
+    return { to: sonuc.kabul, reddedilen: sonuc.ret };
+  }
+
+  /**
    * Müşterinin kayıtlı rapor alıcıları.
    *
    * DİZİ DÖNÜYOR ve boş dizi "tanımlı değil" demek. Eskiden tek bir

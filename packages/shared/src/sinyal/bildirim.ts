@@ -57,12 +57,21 @@ export const KANAL_DISARIDA = [
  *   platformda BAŞARISIZ olan eylemi (anında). İkincisi sessiz hata
  *   kapısı: bugün başarısız kural eylemi yalnız kural geçmişinde duruyor.
  */
-export const BILDIRIM_OLAYLARI = ['sinyal', 'kural'] as const;
+/*
+ * - `haftalik_ozet`: Paket B haftalık özetinin AJANS görünümü (pazartesi
+ *   sabahı, `haftalik:<YYYY-Www>` anahtarıyla kanal başına tek satır).
+ *   Sözleşmesi `haftalik-ozet/ozet.ts#OZET_BILDIRIM_OLAYI`; ad ORADAKİYLE
+ *   aynı (haftalik-ozet sozlesme testi karşılaştırıyor). Değeri buraya
+ *   doğrudan yazmak, haftalik-ozet'ten DEĞER içe almamak için: o dosya
+ *   sinyal tiplerini okuyor ve çalışma anında döngü kurulurdu.
+ */
+export const BILDIRIM_OLAYLARI = ['sinyal', 'kural', 'haftalik_ozet'] as const;
 export type BildirimOlayi = (typeof BILDIRIM_OLAYLARI)[number];
 
 export const BILDIRIM_OLAYI_ADI: Record<BildirimOlayi, string> = {
   sinyal: 'Sinyaller (her sabah özet)',
   kural: 'Kural bildirimleri (anında)',
+  haftalik_ozet: 'Haftalık özet (pazartesi sabahı)',
 };
 
 /**
