@@ -21,6 +21,7 @@ import {
   farkGruplari,
   gorselYolu,
   halkaCizgisi,
+  kisaNeden,
   kismiNotu,
   kovaMetni,
   kreatifKutuHali,
@@ -287,7 +288,7 @@ function EtiketlemeSeridi({
         )}
         {d.incelenemiyor && <span>{d.incelenemiyor}</span>}
         <span className={k.sag}>
-          {d.sonIs && <span className={i.zaman}>{d.sonIs}</span>}
+          {d.sonIs && d.hesaplar.length <= 1 && <span className={i.zaman}>{d.sonIs}</span>}
           {yazabilir && (
             <button type="button" className={i.ikincil} disabled={etiketle.durum === 'gidiyor'} onClick={onEtiketle}>
               {etiketle.durum === 'gidiyor' ? 'Başlatılıyor' : 'Şimdi incele'}
@@ -304,6 +305,18 @@ function EtiketlemeSeridi({
         <div className={i.sHataKutu} role="alert">
           <b>İnceleme başlatılamadı.</b> {etiketle.mesaj}
         </div>
+      )}
+      {d.hesaplar.length > 1 && (
+        <details className={i.sDisarida} open={d.hesaplar.some((x) => x.sorunlu)}>
+          <summary>Hesap başına son inceleme</summary>
+          <ul>
+            {d.hesaplar.map((x) => (
+              <li key={x.ad}>
+                <b>{x.ad}</b> {x.cumle}
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
       {d.dokum.length > 0 && (
         <details className={i.sDisarida}>
@@ -467,6 +480,14 @@ function KreatifKarti({ satir: x, clientId }: { satir: KreatifSatiri; clientId: 
 
 function KucukGorsel({ creativeId }: { creativeId: string }) {
   const g = useGorsel(creativeId);
+  // HATA HÂLİ BOŞ KUTU DEĞİL (Ajan 4 N): nedeni kısa yazılıyor, tamamı başlıkta.
+  if (g.durum === 'hata') {
+    return (
+      <span className={k.kucukG} title={g.mesaj}>
+        <span className={k.kucukNot}>{kisaNeden(g.mesaj)}</span>
+      </span>
+    );
+  }
   return <span className={k.kucukG}>{g.durum === 'tamam' ? <img src={g.adres} alt="" /> : null}</span>;
 }
 

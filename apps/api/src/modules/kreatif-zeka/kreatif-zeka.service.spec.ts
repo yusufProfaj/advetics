@@ -206,6 +206,44 @@ describe('görsel ucu', () => {
   });
 });
 
+describe('Ajan 4 N: teşhis ve sayım', () => {
+  const ACC2 = '44444444-4444-4444-4444-4444444444b2';
+  const ACC3 = '44444444-4444-4444-4444-4444444444b3';
+  async function hesap(id: string, platform: 'meta' | 'linkedin', ad: string, izlenen = true) {
+    await h.q(
+      `INSERT INTO ad_accounts (id, org_id, client_id, connection_id, platform, external_id, name, currency, timezone, sync_enabled, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'TRY', 'Europe/Istanbul', $8, now())`,
+      [id, IDS.org, IDS.client, IDS.connection, platform, `x-${id.slice(-2)}`, ad, izlenen],
+    );
+  }
+
+  it('KRİTİK: LinkedIn hesabı "izlenmiyor" değil "desteklenmiyor" sayılıyor', async () => {
+    await hesap(ACC2, 'linkedin', 'LinkedIn hesabı');
+    await hesap(ACC3, 'meta', 'Kapalı hesap', false);
+    const r = await servis().etiketle(CTX, IDS.client);
+    expect(r).toMatchObject({ kuyruga: 1, izlenmeyen: 1, desteklenmeyen: 1 });
+    expect(r.mesaj).toContain('LinkedIn hesabında kreatif incelemesi desteklenmiyor');
+  });
+
+  it('KRİTİK: son iş HESAP BAŞINA; bir hesabın arızası ötekinin yeni başarısının arkasında kaybolmuyor', async () => {
+    await hesap(ACC2, 'meta', 'İkinci hesap');
+    await h.q(
+      `INSERT INTO sync_jobs (client_id, ad_account_id, job_type, status, error_message, created_at)
+       VALUES ($1, $2, 'creative_tags', 'failed', 'Gemini 500', now() - interval '1 hour')`,
+      [IDS.client, ACC2],
+    );
+    await h.q(
+      `INSERT INTO sync_jobs (client_id, ad_account_id, job_type, status, note, finished_at, created_at)
+       VALUES ($1, $2, 'creative_tags', 'succeeded', 'seçilen 1: 1 etiketlendi', now(), now())`,
+      [IDS.client, IDS.adAccount],
+    );
+    const r = await servis().oku(CTX, sorgu());
+    expect(r.etiketleme.sonIs?.durum).toBe('succeeded');
+    const ikinci = r.etiketleme.hesapIsleri.find((x) => x.adAccountId === ACC2);
+    expect(ikinci).toMatchObject({ hesapAdi: 'İkinci hesap', durum: 'failed', not: 'Gemini 500' });
+  });
+});
+
 describe('elle etiketleme', () => {
   it('izlenen hesaplar kuyruğa, izlenmeyen sayılıyor; bekçi doluysa cümle söylüyor', async () => {
     const kuyruk = vi.fn(async () => ({ enqueued: true }));

@@ -148,9 +148,20 @@ export function farkCumlesi(alan: EtiketAlani, deger: string, metrik: KreatifMet
   if (f.karar === 'yetersiz' || !f.aralik || f.goreliFark === null) return `${ad}: veri yetersiz (${f.yetersizNedeni ?? ''})`;
   const n = `${f.a?.kreatif ?? 0} ve ${f.b?.kreatif ?? 0} kreatif`;
   if (f.karar === 'belirsiz') return `${ad}: ${m.ad.toLocaleLowerCase('tr')} açısından belirgin fark yok (${n})`;
-  const tersle = (g: number) => (m.gosterim === 'tl_ters' ? 1 / (1 + g) - 1 : g);
-  const [x, y] = [tersle(f.aralik[0]), tersle(f.aralik[1])].sort((p, q) => Math.abs(p) - Math.abs(q));
   const iyi = f.goreliFark > 0;
   const yon = m.gosterim === 'tl_ters' ? (iyi ? 'daha düşük' : 'daha yüksek') : iyi ? 'daha yüksek' : 'daha düşük';
-  return `${ad}: ${m.ad.toLocaleLowerCase('tr')} ${yuzde(x!)} ile ${yuzde(y!)} arası ${yon} (${n})`;
+  const metrikAdi = m.ad.toLocaleLowerCase('tr');
+  /*
+   * VERİM UCU -%100 YA DA ALTINDAYSA O UÇ MALİYETE ÇEVRİLEMEZ. `1/(1+g) - 1`
+   * g = -1'de sonsuz, g < -1'de NEGATİF çıkıyor ve mutlak değere göre
+   * sıralama "%35 ile %517 arası" gibi HİÇBİR ölçümden gelmeyen bir üst
+   * sınır uyduruyordu (Ajan 4, Ö-1). O uç "sınır yok" demek: cümle tek
+   * uçlu ("en az %35"). Bu cümle brief'e ve AdvCampaign'e giden TEK sayılı
+   * metin; sonsuz ya da NaN hiçbir hâlde yazılmıyor.
+   */
+  const uclar = m.gosterim === 'tl_ters' ? f.aralik.filter((g) => g > -1).map((g) => 1 / (1 + g) - 1) : [...f.aralik];
+  const sonlu = uclar.filter((u) => Number.isFinite(u)).sort((p, q) => Math.abs(p) - Math.abs(q));
+  if (sonlu.length === 0) return `${ad}: ${metrikAdi} belirgin biçimde ${yon} (${n})`;
+  if (sonlu.length === 1) return `${ad}: ${metrikAdi} en az ${yuzde(sonlu[0]!)} ${yon} (${n})`;
+  return `${ad}: ${metrikAdi} ${yuzde(sonlu[0]!)} ile ${yuzde(sonlu[1]!)} arası ${yon} (${n})`;
 }

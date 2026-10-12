@@ -69,6 +69,14 @@ export interface EtiketlemeOzeti {
   bekci: BekciRetNedeni | null;
   /** Son `creative_tags` işi (sync_jobs), notu aynen. */
   sonIs: { durum: string; zaman: string; not: string | null } | null;
+  /**
+   * HESAP BAŞINA son `creative_tags` işi (Ajan 4 N). Workspace'in TEK son
+   * işi gösterilseydi bir hesabın arızası diğerinin yeni başarılı işinin
+   * arkasında kaybolurdu (CLAUDE.md "TEŞHİS EKRANI SON İŞ GÖSTERİYORSA
+   * ARIZAYI GİZLER"). Hiç işi olmayan izlenen hesap `durum: null` ile:
+   * "hiç koşmadı" da bir cevap.
+   */
+  hesapIsleri: Array<{ adAccountId: string; hesapAdi: string; durum: string | null; zaman: string | null; not: string | null }>;
 }
 
 export const KREATIF_BOS_NEDENLERI = [

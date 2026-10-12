@@ -57,12 +57,43 @@ export type BriefCevabi = z.infer<typeof briefCevabiSchema>;
  * yeniden denenir, ikincisinde brief "üretilemedi" der). `talimatlar`
  * bulgu alanlarıyla birebir eşleşmeli: modelin bulgu UYDURMASI da ret.
  */
+/*
+ * SAYI YAZIYLA DA GELEBİLİR (Ajan 4, Ö-2). Model "RAKAM YAZMA" talimatına
+ * harfiyen uyup "yüzde otuz" ya da tam genişlikli "３０％" yazabiliyordu ve
+ * ret yalnız ASCII `\d`'ye bakıyordu: uydurma oran brief'e ve AdvCampaign'e
+ * giderdi. Üç kural:
+ *  1. Her yazı sistemindeki rakam (`\p{Nd}`, u bayrağı) ve yüzde işareti.
+ *  2. "yüzde" kelimesi: arkasından ne gelirse gelsin bir oran.
+ *  3. Sayı kelimesi + ÇARPAN/ORAN bağlamı ("iki kat", "on kat daha",
+ *     "otuz beş oranında", "dörtte bir").
+ * DAR TUTULDU: "bir kişi", "birlikte", "ikinci el", "on plan" brief'in
+ * olağan dili; sayı kelimesini tek başına yasaklamak her brief'i
+ * reddederdi. Kelime sınırı harf sınıfıyla (`\b` Türkçe harfte çalışmıyor).
+ */
+const SAYI_KELIMESI = '(?:sıfır|bir|iki|üç|dört|beş|altı|yedi|sekiz|dokuz|on|yirmi|otuz|kırk|elli|altmış|yetmiş|seksen|doksan|yüz|bin|milyon|yarım|çeyrek)';
+const HARF_DISI_ONCE = '(?<!\\p{L})';
+const HARF_DISI_SONRA = '(?!\\p{L})';
+const SAYI_KALIPLARI: RegExp[] = [
+  /[\p{Nd}%％]/u,
+  new RegExp(`${HARF_DISI_ONCE}yüzde${HARF_DISI_SONRA}`, 'iu'),
+  new RegExp(
+    `${HARF_DISI_ONCE}${SAYI_KELIMESI}(?:\\s+${SAYI_KELIMESI})*\\s+(?:kat|katı|katına|katında|oranında|puan|puanlık)${HARF_DISI_SONRA}`,
+    'iu',
+  ),
+  new RegExp(`${HARF_DISI_ONCE}${SAYI_KELIMESI}[’']?(?:te|ta|de|da)\\s+(?:bir|biri)${HARF_DISI_SONRA}`, 'iu'),
+];
+
+/** Metin bir sayı/oran taşıyor mu (rakam, yüzde ya da yazıyla çarpan). */
+export function sayiTasiyor(metin: string): boolean {
+  return SAYI_KALIPLARI.some((r) => r.test(metin));
+}
+
 export function briefMetniDenetle(
   c: BriefCevabi,
   bulgular: readonly Pick<BriefBulgusu, 'alan'>[],
 ): { ok: true } | { ok: false; sebep: string } {
   const metinler = [c.yon, ...c.talimatlar.map((t) => t.talimat), ...c.kacin];
-  if (metinler.some((m) => /\d/.test(m))) return { ok: false, sebep: 'yapay zekâ metninde rakam var' };
+  if (metinler.some(sayiTasiyor)) return { ok: false, sebep: 'yapay zekâ metninde rakam var' };
   const beklenen = bulgular.map((b) => b.alan).join(',');
   const gelen = c.talimatlar.map((t) => t.alan).join(',');
   if (beklenen !== gelen) return { ok: false, sebep: `talimatlar bulgularla eşleşmiyor (${gelen} ≠ ${beklenen})` };

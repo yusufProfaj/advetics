@@ -351,6 +351,15 @@ export interface PlatformStructure {
    * üzerinden senkron durumu ekranında görünüyor.
    */
   notes?: string[];
+  /**
+   * TARAMAYI DÜŞÜRMEYEN ama KOTA ve YETKİ yoluna bildirilmesi gereken hatalar
+   * (Paket D, Ajan 4 N). Yan sorgu (Demand Gen görselleri) kotaya ya da
+   * geçersiz token'a çarptığında hatayı yalnız nota yazmak, kesiciyi
+   * açmamak demekti: aynı hesaba yüklenmeye devam edilir, Google'ın ortak
+   * kovası daha da dolar. Yapı servisi bunları taramayı tamamladıktan SONRA
+   * kesiciye / bağlantı durumuna iletiyor (`structure-sync.service.ts`).
+   */
+  yanHatalar?: PlatformApiError[];
 }
 
 // -----------------------------------------------------------------------------

@@ -13,8 +13,12 @@ import { ETIKET_SINIRI, type SayacDurumu } from '@advetics/shared';
  * AYLIK ve KÜRESEL toplam AYNI deyimin içinde alt sorguyla okunuyor. Onlar
  * BAŞKA satırların toplamı ve satır kilidi onları korumuyor: aynı anda
  * dört farklı workspace'in ayırması küresel sınırı en çok üç (eşzamanlılık
- * eksi bir) aşabilir. Bilinçli kabul edilen kalıntı; küresel sınır günde
- * 1.500 ve aşım üç çağrı.
+ * eksi bir) aşabilir. AYLIK SINIR DA AYNI: aylık toplam bu ayın BAŞKA
+ * günlerinin satırlarını da okuyor ve aynı workspace'in iki hesabının
+ * işi farklı günlere değil aynı güne yazdığı için çoğu zaman günlük satır
+ * kilidi korur, ama gün dönümünde (dünün satırı + bugünün satırı) paralel
+ * iki iş de en çok üç aşabilir. Bilinçli kabul edilen kalıntı; sınırlar
+ * günde 1.500 / ayda 400 ve aşım en çok üç çağrı.
  *
  * Bağlı sayılar `::int` (CLAUDE.md "bağlı sayı parametresi tipsiz gitmez").
  */

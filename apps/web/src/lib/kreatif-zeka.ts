@@ -142,6 +142,30 @@ const BEKCI_CUMLESI: Record<BekciRetNedeni, string> = {
 };
 
 /**
+ * HESAP BAŞINA son inceleme işi (Ajan 4 N): tek "son iş" bir hesabın
+ * arızasını ötekinin başarısının arkasına gizlerdi. Hiç koşmamış hesap da
+ * yazılıyor ("hiç incelenmedi" bir cevap). Sorunlu = başarısız ya da beklemede.
+ */
+export function hesapSatirlari(o: EtiketlemeOzeti): Array<{ ad: string; cumle: string; sorunlu: boolean }> {
+  return o.hesapIsleri.map((h) => {
+    if (h.durum === null) return { ad: h.hesapAdi, cumle: 'hiç incelenmedi', sorunlu: true };
+    const sorunlu = h.durum === 'failed' || h.durum === 'throttled';
+    const etiket = h.durum === 'succeeded' ? 'tamam' : h.durum === 'failed' ? 'başarısız' : h.durum === 'throttled' ? 'beklemede' : 'sürüyor';
+    return { ad: h.hesapAdi, cumle: `${etiket}${h.not ? `: ${h.not}` : ''}`, sorunlu };
+  });
+}
+
+/**
+ * Sınırın KENDİ sayısı (Ajan 4, Ö-3): aylık sınır doluyken "40 / 40" yazmak
+ * yanlış sınırı gösterirdi. Ürün geneli sınırın workspace'e ait sayısı yok.
+ */
+function bekciSayisi(o: EtiketlemeOzeti, n: BekciRetNedeni): string {
+  if (n === 'workspace_gunluk') return ` (${o.bugunKullanilan} / ${o.gunlukSinir})`;
+  if (n === 'workspace_aylik') return ` (${o.buAyKullanilan} / ${o.aylikSinir})`;
+  return '';
+}
+
+/**
  * "288 / 312 kreatif incelendi · 14 sırada (bugünkü sınır doldu) · 10
  * incelenemiyor" ve açılır döküm. SESSİZ KESME YOK: bekleyen ve
  * incelenemeyen ayrı sayılıyor, nedenleriyle.
@@ -152,11 +176,12 @@ export function etiketlemeSeridi(o: EtiketlemeOzeti): {
   incelenemiyor: string | null;
   dokum: Array<{ sayi: number; cumle: string }>;
   sonIs: string | null;
+  hesaplar: Array<{ ad: string; cumle: string; sorunlu: boolean }>;
 } {
   const bekleyen = o.sayilar.bekliyor;
   const neden =
     o.bekci !== null
-      ? `${BEKCI_CUMLESI[o.bekci]} (${o.bugunKullanilan} / ${o.gunlukSinir})`
+      ? `${BEKCI_CUMLESI[o.bekci]}${bekciSayisi(o, o.bekci)}`
       : Object.entries(o.bekleyenNedenleri)
           .filter(([, n]) => (n ?? 0) > 0)
           .map(([k, n]) => `${n} tanesinde ${GECICI_CUMLESI[k as GeciciNeden]}`)
@@ -171,6 +196,7 @@ export function etiketlemeSeridi(o: EtiketlemeOzeti): {
     incelenemiyor: o.sayilar.etiketlenemez > 0 ? `${o.sayilar.etiketlenemez} incelenemiyor` : null,
     dokum,
     sonIs: o.sonIs ? `Son inceleme: ${o.sonIs.not ?? o.sonIs.durum}` : null,
+    hesaplar: hesapSatirlari(o),
   };
 }
 
@@ -274,6 +300,15 @@ export function platformAdi(s: KreatifSatiri): string {
  * ("Görsel alınamadı: sunucu 403"); bunu kırık bir resim ikonuna çevirmek,
  * görselin neden yok olduğunu gizlerdi.
  */
+/**
+ * Küçük kutu (tablo) için kısa neden: "Görsel alınamadı: sunucu 403" →
+ * "sunucu 403". Tamamı başlıkta (title) kalıyor; boş kutu hiçbir şey söylemezdi.
+ */
+export function kisaNeden(mesaj: string): string {
+  const kisa = mesaj.replace(/^Görsel alınamadı:?\s*/i, '').trim() || 'alınamadı';
+  return kisa.length > 18 ? `${kisa.slice(0, 17)}…` : kisa;
+}
+
 export type GorselHali = { durum: 'yukleniyor' } | { durum: 'tamam'; adres: string } | { durum: 'hata'; mesaj: string };
 
 // ─── "Ne işe yarıyor" ────────────────────────────────────────────────────────
@@ -346,6 +381,7 @@ export interface EtiketleYaniti {
   kuyruga: number;
   zatenKuyrukta: number;
   izlenmeyen: number;
+  desteklenmeyen: number;
   bekci: BekciRetNedeni | null;
   mesaj: string;
 }

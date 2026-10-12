@@ -127,6 +127,10 @@ export class StructureSyncService {
       throw err;
     }
 
+    // YAN HATALAR (Paket D): tarama tamam ama yan sorgu kotaya/token'a çarptı.
+    // Yazımdan ÖNCE bildiriliyor, yazım yine yapılıyor; bildirim düşerse log.
+    await this.yanHatalariBildir(account, structure.yanHatalar ?? []);
+
     const creativeIds = await this.upsertCreatives(account, structure);
     const campaignIds = await this.upsertCampaigns(account, structure);
     const adGroupIds = await this.upsertAdGroups(account, structure, campaignIds);
@@ -166,6 +170,37 @@ export class StructureSyncService {
       .join(' · ');
 
     return { rows, apiCalls: structure.apiCalls, softDeleted, note };
+  }
+
+  /**
+   * Taramayı DÜŞÜRMEYEN yan hataları ana hatayla AYNI yoldan bildirir: kota
+   * reddinde hesap kesicisi (Google ortak kovası DEVELOPER/belirsizse
+   * platform kesicisi, `recordFailure` ile aynı kural), geçersiz token'da
+   * bağlantı `needs_reauth`. Bildirim düşerse tarama yine tamamlanıyor ve
+   * hata log'da: yan sorgu yüzünden yapı taramasını kaybetmek, ondan
+   * pahalı.
+   */
+  private async yanHatalariBildir(
+    account: { id: string; platform: Platform; connectionId: string },
+    hatalar: readonly PlatformApiError[],
+  ): Promise<void> {
+    for (const h of hatalar) {
+      try {
+        if (h.kind === 'rate_limited') {
+          const sn = h.detail?.retryAfterSeconds ?? 900;
+          await this.quota.tripBreaker(account.platform, account.id, sn);
+          if (h.platform === 'google' && h.detail?.kotaKapsami !== 'ACCOUNT') {
+            await this.quota.tripPlatformBreaker('google', sn, h.message);
+          }
+        } else if (h.kind === 'invalid_token') {
+          await this.db.$executeRaw(
+            Prisma.sql`UPDATE platform_connections SET status = 'needs_reauth'::"ConnectionStatus", updated_at = now() WHERE id = ${account.connectionId}::uuid`,
+          );
+        }
+      } catch (e) {
+        this.logger.error(`Yan hata bildirilemedi (hesap ${account.id}, ${h.kind}): ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
   }
 
   // ---------------------------------------------------------------------------

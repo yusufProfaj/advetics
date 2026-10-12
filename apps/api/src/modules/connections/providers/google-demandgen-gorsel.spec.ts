@@ -23,11 +23,12 @@ afterEach(() => {
   globalThis.fetch = orijinal;
 });
 
-function sunucu(o: { kanal: string; dgDusur?: boolean }) {
+function sunucu(o: { kanal: string; dgDusur?: boolean; dgKota?: boolean }) {
   return vi.fn(async (_u: string, init?: RequestInit) => {
     const q = String(JSON.parse(String(init?.body ?? '{}')).query ?? '');
     if (q.includes('FROM campaign')) return YANIT({ results: [{ campaign: { id: '1', name: 'K', advertisingChannelType: o.kanal, status: 'ENABLED' } }] });
     if (q.includes("ad_group_ad.ad.type = 'DEMAND_GEN_MULTI_ASSET_AD'")) {
+      if (o.dgKota) return YANIT({ error: { code: 429, status: 'RESOURCE_EXHAUSTED', message: 'Too many requests' } }, 429);
       if (o.dgDusur) return YANIT({ error: { code: 400, status: 'INVALID_ARGUMENT', message: 'Unrecognized field' } }, 400);
       return YANIT({ results: [{ adGroupAd: { ad: { id: '9', demandGenMultiAssetAd: { marketingImages: [{ asset: KAYNAK }] } } } }] });
     }
@@ -59,6 +60,16 @@ describe('Demand Gen görselleri', () => {
     const yapi = await provider().fetchStructure(CTX);
     expect(yapi.creatives).toHaveLength(1);
     expect(yapi.notes?.join(' ')).toContain('Demand Gen görselleri okunamadı');
+    // Geçersiz alan kota/token değil: kesiciye gitmiyor.
+    expect(yapi.yanHatalar).toBeUndefined();
+  });
+
+  it('KRİTİK: KOTA reddi yalnız nota yutulmuyor; yan hata olarak kesici yoluna taşınıyor, tarama tamam', async () => {
+    const f = sunucu({ kanal: 'DEMAND_GEN', dgKota: true });
+    globalThis.fetch = f as unknown as typeof fetch;
+    const yapi = await provider().fetchStructure(CTX);
+    expect(yapi.creatives).toHaveLength(1);
+    expect(yapi.yanHatalar?.map((h) => h.kind)).toEqual(['rate_limited']);
   });
 
   it('gorselKaynakAdlari üç Demand Gen listesini okuyor, yatay önce', () => {

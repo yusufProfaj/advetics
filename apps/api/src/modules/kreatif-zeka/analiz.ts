@@ -42,6 +42,8 @@ export interface IcerikBilgisi {
   /** Güncel şema sürümünün etiketi + kesin alanlar; yoksa null. */
   etiketler: KreatifEtiketleri | null;
   kismi: 'video_kapagi' | 'ilk_kart' | null;
+  /** İçerik özeti: etiket farklarında aynı görseli taşıyan kreatifler TEK örnek (Ö-4). */
+  icerikOzeti?: string | null;
 }
 
 export interface AnalizGirdisi {
@@ -138,9 +140,34 @@ export function analiz(g: AnalizGirdisi): { kumeler: KumeAnalizi[]; kumesiz: Kre
      * Etiketsiz kreatifi "insan yok" grubuna saymak karşılaştırmayı
      * bozardı (`etiketCoz` eksik alanı varsayılanla doldurmuyor, aynı ders).
      */
-    const veri = olcum
-      .map((o) => ({ ...o, et: g.icerik.get(o.s.creativeId)?.etiketler ?? null }))
-      .filter((o): o is typeof o & { et: KreatifEtiketleri; deger: number } => o.yeterli && o.deger !== null && o.et !== null);
+    /*
+     * BİRİM İÇERİK, KREATİF DEĞİL (Ajan 4, Ö-4). Meta aynı görseli onlarca
+     * kreatifte taşıyor (N-12); aynı görselli beş kreatif beş BAĞIMSIZ örnek
+     * sayılırsa "en az 5 kreatif" eşiği tek bir görselle geçilir ve fark
+     * aslında o görselin şansı olur. Etiketli kreatifler `icerik_ozeti`
+     * başına toplanıyor: gösterim, tıklama, dönüşüm ve harcama toplanıp
+     * metrik özet başına YENİDEN hesaplanıyor; eşik ve "kreatif" sayısı
+     * tekil içerikle. Özeti bilinmeyen satır kendi kimliğiyle tek başına.
+     */
+    const ozetler = new Map<string, { s: PencereSatiri; et: KreatifEtiketleri; kurEksik: boolean }>();
+    for (const { s } of olcum) {
+      const ic = g.icerik.get(s.creativeId);
+      if (!ic?.etiketler) continue;
+      const anahtar = ic.icerikOzeti ?? `kreatif:${s.creativeId}`;
+      const var_ = ozetler.get(anahtar);
+      if (!var_) {
+        ozetler.set(anahtar, { s: { ...s }, et: ic.etiketler, kurEksik: s.kurEksik });
+        continue;
+      }
+      var_.s.gosterim += s.gosterim;
+      var_.s.tiklama += s.tiklama;
+      var_.s.donusum += s.donusum;
+      var_.s.harcamaMicros += s.harcamaMicros;
+      var_.kurEksik ||= s.kurEksik;
+    }
+    const veri = [...ozetler.values()]
+      .map((o) => ({ s: o.s, et: o.et, deger: kreatifMetrikDegeri(o.s, metrik), yeterli: g.esikMicros !== null && !o.kurEksik && o.s.harcamaMicros >= g.esikMicros }))
+      .filter((o): o is typeof o & { deger: number } => o.yeterli && o.deger !== null);
     const agirlik = (liste: typeof veri): AgirlikliDeger[] => liste.map((o) => ({ deger: o.deger, harcamaMicros: o.s.harcamaMicros }));
 
     const farklar: EtiketFarkSatiri[] = [];

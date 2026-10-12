@@ -252,16 +252,15 @@ export async function kreatifEtiketIsi(d: EtiketIsiBagimliliklari, adAccountId: 
    * harcamak olurdu. Özet eşleşmesiyle bağlanacak olanlar hak yemiyor ama
    * önceden bilinmiyor; kalanlar bir sonraki koşuda.
    */
-  const hak = Math.min(
-    ETIKET_SINIRI.workspaceGunluk - durum.workspaceBugun,
-    ETIKET_SINIRI.workspaceAylik - durum.workspaceBuAy,
-    ETIKET_SINIRI.kureselGunluk - durum.kureselBugun,
-  );
+  const { hak, neden: hakNedeni } = kalanHak(durum);
   const bunKosu = kalan.slice(0, Math.max(0, hak));
   const sonraya = kalan.slice(bunKosu.length);
   if (sonraya.length > 0) {
     sayim.ertelendi += sonraya.length;
-    sayim.bekciNedeni = 'workspace_gunluk';
+    // NEDEN HAKKI GERÇEKTEN KISAN SINIRDAN (Ajan 4, Ö-3): workspace bugün 1
+    // kullanmışken "bugünkü sınır doldu (40)" demek kullanıcıyı yanlış
+    // sınırı beklemeye gönderirdi.
+    sayim.bekciNedeni = hakNedeni;
   }
 
   // ── 5. Platform kotası + adres tazeleme (Meta). Google adresleri kalıcı. ──
@@ -355,8 +354,10 @@ export async function kreatifEtiketIsi(d: EtiketIsiBagimliliklari, adAccountId: 
 
     // ── 8. Ayırma (atomik), SONRA Gemini ──
     if (!(await etiketAyir(tx, { orgId: hesap.orgId, clientId: hesap.clientId, gun }))) {
-      const k = bekciKarari(await sayacDurumu(tx, hesap.clientId, gun));
-      bekciDurdu = k.izin ? 'workspace_gunluk' : k.neden;
+      // Ayırma reddetti ama okuma "izin" diyorsa (yarışın arası) en dar sınır söylenir, sabit bir ad değil.
+      const d2 = await sayacDurumu(tx, hesap.clientId, gun);
+      const k = bekciKarari(d2);
+      bekciDurdu = k.izin ? kalanHak(d2).neden : k.neden;
       sayim.bekciNedeni = bekciDurdu;
       sayim.ertelendi++;
       continue;
@@ -393,6 +394,20 @@ export async function kreatifEtiketIsi(d: EtiketIsiBagimliliklari, adAccountId: 
   }
   const notlar = [kumesizNotu, geminiKotasi ? `Gemini kotası: ${geminiKotasi}` : undefined].filter(Boolean).join('; ');
   return bitir(notlar || undefined);
+}
+
+/**
+ * Bu koşunun hakkı ve onu KISAN sınır. Üç sınırın en darı kazanır; eşitlikte
+ * sıra `bekciKarari` ile aynı (ürün geneli, aylık, günlük): küresel sınır
+ * doluyken workspace'e "senin payın doldu" demek yanlış cümle olurdu.
+ */
+export function kalanHak(d: { workspaceBugun: number; workspaceBuAy: number; kureselBugun: number }): { hak: number; neden: BekciRetNedeni } {
+  const adaylar: Array<{ hak: number; neden: BekciRetNedeni }> = [
+    { hak: ETIKET_SINIRI.kureselGunluk - d.kureselBugun, neden: 'kuresel_gunluk' },
+    { hak: ETIKET_SINIRI.workspaceAylik - d.workspaceBuAy, neden: 'workspace_aylik' },
+    { hak: ETIKET_SINIRI.workspaceGunluk - d.workspaceBugun, neden: 'workspace_gunluk' },
+  ];
+  return adaylar.reduce((en, x) => (x.hak < en.hak ? x : en));
 }
 
 type GoruSonucu = { girdiToken: number; ciktiToken: number; sureMs: number } & (

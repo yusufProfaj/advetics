@@ -18,6 +18,7 @@ import {
   etiketlemeSeridi,
   farkGruplari,
   halkaCizgisi,
+  kisaNeden,
   kovaMetni,
   kreatifKutuHali,
   kreatifZekaYolu,
@@ -159,6 +160,7 @@ describe('etiketleme şeridi', () => {
     aylikSinir: 400,
     bekci: 'workspace_gunluk',
     sonIs: null,
+    hesapIsleri: [],
   };
 
   it('KRİTİK: bekleyen ve incelenemeyen AYRI sayılıyor, nedenleriyle; bekçi cümlesi sınırı söylüyor', () => {
@@ -167,6 +169,32 @@ describe('etiketleme şeridi', () => {
     expect(d.sirada).toBe('14 sırada · bugünkü sınır doldu, yarın devam (40 / 40)');
     expect(d.incelenemiyor).toBe('10 incelenemiyor');
     expect(d.dokum.map((x) => x.sayi)).toEqual([6, 3, 1]);
+  });
+
+  it('KRİTİK (Ö-3): aylık sınırda AYLIK sayı yazılıyor, ürün geneli sınırda workspace sayısı yazılmıyor', () => {
+    expect(etiketlemeSeridi({ ...O, bekci: 'workspace_aylik' }).sirada).toBe('14 sırada · bu ayın sınırı doldu, gelecek ay devam (120 / 400)');
+    expect(etiketlemeSeridi({ ...O, bekci: 'kuresel_gunluk' }).sirada).toBe('14 sırada · günlük toplam sınır doldu, yarın devam');
+  });
+
+  it('KRİTİK (N): hesap başına son iş; başarısız ve hiç koşmamış hesap SORUNLU görünüyor', () => {
+    const d = etiketlemeSeridi({
+      ...O,
+      hesapIsleri: [
+        { adAccountId: 'a', hesapAdi: 'Ana', durum: 'succeeded', zaman: '2026-10-12T08:00:00Z', not: 'seçilen 1: 1 etiketlendi' },
+        { adAccountId: 'b', hesapAdi: 'İkinci', durum: 'failed', zaman: '2026-10-12T07:00:00Z', not: 'Gemini 500' },
+        { adAccountId: 'c', hesapAdi: 'Yeni', durum: null, zaman: null, not: null },
+      ],
+    });
+    expect(d.hesaplar).toEqual([
+      { ad: 'Ana', cumle: 'tamam: seçilen 1: 1 etiketlendi', sorunlu: false },
+      { ad: 'İkinci', cumle: 'başarısız: Gemini 500', sorunlu: true },
+      { ad: 'Yeni', cumle: 'hiç incelenmedi', sorunlu: true },
+    ]);
+  });
+
+  it('küçük görselin hata nedeni kısa (boş kutu değil)', () => {
+    expect(kisaNeden('Görsel alınamadı: sunucu 403')).toBe('sunucu 403');
+    expect(kisaNeden('Görsel alınamadı: platform bu reklam için görsel adresi vermiyor').length).toBeLessThanOrEqual(18);
   });
 
   it('bekçi yoksa geçici nedenler sayısıyla', () => {

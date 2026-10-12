@@ -446,3 +446,29 @@ describe('StructureSyncService', () => {
     });
   });
 });
+
+describe('yan hatalar (Paket D, Ajan 4 N): tarama tamamlanıyor ama kesici/bağlantı yolu bildiriliyor', () => {
+  it('KRİTİK: Google ortak kova reddi hesap + platform kesicisini açıyor, ağaç YİNE yazılıyor', async () => {
+    const platformKesici: Array<{ platform: string; sn: number }> = [];
+    (svc as unknown as { quota: Record<string, unknown> }).quota = {
+      record: async () => undefined,
+      tripBreaker: async (platform: string, account: string, seconds: number) => void brokenBreakers.push({ platform, account, seconds }),
+      tripPlatformBreaker: async (platform: string, sn: number) => void platformKesici.push({ platform, sn }),
+    };
+    provider.next = {
+      ...fullTree(),
+      yanHatalar: [new PlatformApiError('google', 'rate_limited', 'RESOURCE_EXHAUSTED', { retryAfterSeconds: 600, kotaKapsami: 'DEVELOPER' })],
+    };
+    const r = await svc.syncAccount({ adAccountId: IDS.adAccount, full: true });
+    expect(r.rows).toBe(4);
+    expect(brokenBreakers).toEqual([{ platform: 'meta', account: IDS.adAccount, seconds: 600 }]);
+    expect(platformKesici).toEqual([{ platform: 'google', sn: 600 }]);
+  });
+
+  it('geçersiz token bağlantıyı needs_reauth yapıyor; tarama yine tamam', async () => {
+    provider.next = { ...fullTree(), yanHatalar: [new PlatformApiError('google', 'invalid_token', 'UNAUTHENTICATED')] };
+    const r = await svc.syncAccount({ adAccountId: IDS.adAccount, full: true });
+    expect(r.rows).toBe(4);
+    expect(await h.q(`SELECT status::text AS s FROM platform_connections WHERE id = $1`, [IDS.connection])).toEqual([{ s: 'needs_reauth' }]);
+  });
+});

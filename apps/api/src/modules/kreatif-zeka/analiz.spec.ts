@@ -114,6 +114,34 @@ describe('etiket farkları', () => {
     expect(insan.fark.a!.kreatif + insan.fark.b!.kreatif).toBe(10);
   });
 
+  it('KRİTİK (Ö-4): AYNI görseli taşıyan 5 kreatif TEK örnek; "en az 5" eşiğini GEÇMİYOR', () => {
+    const { p, e } = insanliKume();
+    const g = girdi(p, e);
+    // İnsanlı altı kreatiften beşi aynı görsel (Meta N-12), altıncısı ayrı.
+    const insanli = p.filter((x) => e[x.creativeId]!.insan === 'var');
+    insanli.forEach((x, i) => ((g.icerik.get(x.creativeId) as IcerikBilgisi).icerikOzeti = i < 5 ? 'a'.repeat(64) : 'b'.repeat(64)));
+    const insan = analiz(g).kumeler[0]!.farklar.find((f) => f.alan === 'insan')!;
+    expect(insan.fark.karar).toBe('yetersiz');
+    expect(insan.fark.a!.kreatif + insan.fark.b!.kreatif).toBe(2 + 6);
+    // Kontrol: özetler farklıysa aynı veri anlamlı.
+    insanli.forEach((x, i) => ((g.icerik.get(x.creativeId) as IcerikBilgisi).icerikOzeti = String(i).repeat(64)));
+    expect(analiz(g).kumeler[0]!.farklar.find((f) => f.alan === 'insan')!.fark.karar).toBe('anlamli');
+  });
+
+  it('aynı görselin harcaması ÖZET başına toplanıyor: tek başına eşik altı kreatifler birlikte eşiği geçiyor', () => {
+    const { p, e } = insanliKume();
+    // İki insansız kreatif eşiğin altında (300 ₺) ama aynı görsel: toplam 600 ₺ yine altında, 4 tanesi 1.200 ₺.
+    const insansiz = p.filter((x) => e[x.creativeId]!.insan === 'yok');
+    const g = girdi(
+      p.map((x) => (insansiz.includes(x) ? { ...x, harcamaMicros: 300_000_000n } : x)),
+      e,
+    );
+    insansiz.forEach((x, i) => ((g.icerik.get(x.creativeId) as IcerikBilgisi).icerikOzeti = i < 4 ? 'c'.repeat(64) : `${i}`.repeat(64)));
+    const insan = analiz(g).kumeler[0]!.farklar.find((f) => f.alan === 'insan')!;
+    // Dört kreatiflik görsel tek örnek ve eşiği geçiyor; tekil iki kreatif eşik altında kalıyor.
+    expect(insan.fark.b?.kreatif ?? insan.fark.a?.kreatif).toBe(1);
+  });
+
   it('üç değerli alanda her değer geri kalanların BİRLEŞİMİYLE; tek değerli kümede veri yetersiz', () => {
     const { p, e } = insanliKume();
     const yazi = analiz(girdi(p, e)).kumeler[0]!.farklar.filter((f) => f.alan === 'metin_yogunlugu');

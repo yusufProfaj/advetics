@@ -71,6 +71,8 @@ export interface EtiketleYaniti {
   kuyruga: number;
   zatenKuyrukta: number;
   izlenmeyen: number;
+  /** LinkedIn: kreatif görseli okunmuyor (Ç-13); "izlenmiyor"dan AYRI sayılıyor. */
+  desteklenmeyen: number;
   bekci: BekciRetNedeni | null;
   mesaj: string;
 }
@@ -85,6 +87,7 @@ interface Temel {
   kur: number | null;
   sayac: Awaited<ReturnType<typeof sayacDurumu>>;
   sonIs: EtiketlemeOzeti['sonIs'];
+  hesapIsleri: EtiketlemeOzeti['hesapIsleri'];
 }
 
 /**
@@ -133,9 +136,9 @@ export class KreatifZekaService {
       const ilk = await ilkGosterimler(tx, clientId, ids);
       const satirlar = ids.length
         ? await tx.$queryRaw<
-            Array<{ creative_id: string; durum: IcerikDurumu; neden: string | null; kismi: string | null; bicim: string; en_boy: string | null; etiketler: GoruEtiketleri | null }>
+            Array<{ creative_id: string; durum: IcerikDurumu; neden: string | null; kismi: string | null; bicim: string; en_boy: string | null; icerik_ozeti: string | null; etiketler: GoruEtiketleri | null }>
           >(Prisma.sql`
-            SELECT k.creative_id::text, k.durum, k.neden, k.kismi, k.bicim, k.en_boy, e.etiketler
+            SELECT k.creative_id::text, k.durum, k.neden, k.kismi, k.bicim, k.en_boy, k.icerik_ozeti, e.etiketler
               FROM kreatif_icerikleri k
               LEFT JOIN kreatif_etiketleri e
                 ON e.client_id = k.client_id AND e.icerik_ozeti = k.icerik_ozeti AND e.sema_surumu = ${GUNCEL_SEMA}::int
@@ -158,6 +161,7 @@ export class KreatifZekaService {
           neden: r.neden as EtiketlenemezNedeni | GeciciNeden | null,
           etiketler: tam,
           kismi: (r.kismi as IcerikBilgisi['kismi']) ?? null,
+          icerikOzeti: r.icerik_ozeti,
         });
       }
       const kur = await tryKuru(tx, c.para);
@@ -167,7 +171,30 @@ export class KreatifZekaService {
           FROM sync_jobs
          WHERE client_id = ${clientId}::uuid AND job_type = 'creative_tags'::"SyncJobType"
          ORDER BY created_at DESC LIMIT 1`);
+      /*
+       * HESAP BAŞINA son iş: LinkedIn dışındaki atanmış her hesap, işi hiç
+       * olmasa da (durum null = "hiç koşmadı"). Tek "son iş" bir hesabın
+       * arızasını ötekinin başarısının arkasına gizlerdi.
+       */
+      const hesapIsleri = await tx.$queryRaw<Array<{ id: string; ad: string; durum: string | null; zaman: Date | null; not: string | null }>>(Prisma.sql`
+        SELECT a.id::text AS id, a.name AS ad, j.durum, j.zaman, j.not
+          FROM ad_accounts a
+          LEFT JOIN LATERAL (
+            SELECT status::text AS durum, coalesce(finished_at, created_at) AS zaman, coalesce(note, error_message) AS not
+              FROM sync_jobs
+             WHERE client_id = ${clientId}::uuid AND ad_account_id = a.id AND job_type = 'creative_tags'::"SyncJobType"
+             ORDER BY created_at DESC LIMIT 1
+          ) j ON true
+         WHERE a.client_id = ${clientId}::uuid AND a.platform <> 'linkedin'::"Platform"
+         ORDER BY a.name, a.id`);
       return {
+        hesapIsleri: hesapIsleri.map((x) => ({
+          adAccountId: x.id,
+          hesapAdi: x.ad,
+          durum: x.durum,
+          zaman: x.zaman ? new Date(x.zaman).toISOString() : null,
+          not: x.not,
+        })),
         orgId: c.org_id,
         paraBirimi: c.para,
         hesapSayisi: c.hesap,
@@ -380,10 +407,18 @@ export class KreatifZekaService {
     let kuyruga = 0;
     let zatenKuyrukta = 0;
     let izlenmeyen = 0;
+    let desteklenmeyen = 0;
     for (const h of hesaplar) {
+      // LINKEDIN "İZLENMİYOR" DEĞİL, "DESTEKLENMİYOR" (Ajan 4 N): izlenen bir
+      // LinkedIn hesabını "izlenmiyor" diye saymak kullanıcıyı izlemeyi
+      // açmaya gönderirdi; açsa da kreatif görseli okunmuyor (Ç-13).
+      if (h.platform === 'linkedin') {
+        desteklenmeyen++;
+        continue;
+      }
       // İZLENMEYEN HESAP KUYRUĞA GİRMİYOR: metriği gelmeyen hesapta seçilecek
       // kreatif yok ve iş boşuna koşar. Sayısı cümlede söyleniyor.
-      if (!h.sync_enabled || h.platform === 'linkedin') {
+      if (!h.sync_enabled) {
         izlenmeyen++;
         continue;
       }
@@ -397,12 +432,14 @@ export class KreatifZekaService {
       kuyruga > 0 ? `${kuyruga} hesap için inceleme başlatıldı` : null,
       zatenKuyrukta > 0 ? `${zatenKuyrukta} hesapta inceleme zaten sırada` : null,
       izlenmeyen > 0 ? `${izlenmeyen} hesap izlenmiyor, atlandı` : null,
+      desteklenmeyen > 0 ? `${desteklenmeyen} LinkedIn hesabında kreatif incelemesi desteklenmiyor` : null,
       bekci ? `${BEKCI_CUMLESI[bekci]}; kalanlar sınır açılınca incelenir` : null,
     ].filter((x): x is string => x !== null);
     return {
       kuyruga,
       zatenKuyrukta,
       izlenmeyen,
+      desteklenmeyen,
       bekci,
       mesaj: parcalar.length ? `${parcalar.join('. ')}.` : 'Bu workspace’e atanmış reklam hesabı yok.',
     };
@@ -671,6 +708,7 @@ function etiketlemeOzeti(t: Temel, kumeler: KumeAnalizi[]): EtiketlemeOzeti {
     aylikSinir: ETIKET_SINIRI.workspaceAylik,
     bekci: karar.izin ? null : karar.neden,
     sonIs: t.sonIs,
+    hesapIsleri: t.hesapIsleri,
   };
 }
 

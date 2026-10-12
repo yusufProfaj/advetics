@@ -1043,6 +1043,7 @@ export class GoogleProvider implements IAdPlatformProvider {
     }
 
     const notes: string[] = [];
+    const yanHatalar: PlatformApiError[] = [];
 
     /*
      * ═══ DEMAND GEN GÖRSELLERİ AYRI SORGUDA (Paket D, MIMARI Ç-3) ═══
@@ -1088,6 +1089,9 @@ export class GoogleProvider implements IAdPlatformProvider {
         }
       } catch (err) {
         notes.push(`Demand Gen görselleri okunamadı: ${err instanceof Error ? err.message : String(err)}`);
+        // KOTA VE TOKEN HATASI YALNIZ NOTA YUTULMUYOR: yapı servisi taramayı
+        // bitirdikten sonra kesiciyi açıyor / bağlantıyı işaretliyor.
+        if (err instanceof PlatformApiError && (err.kind === 'rate_limited' || err.kind === 'invalid_token')) yanHatalar.push(err);
       }
     }
 
@@ -1109,6 +1113,7 @@ export class GoogleProvider implements IAdPlatformProvider {
       complete: true,
       apiCalls: calls.n,
       ...(notes.length > 0 ? { notes } : {}),
+      ...(yanHatalar.length > 0 ? { yanHatalar } : {}),
     };
   }
 
