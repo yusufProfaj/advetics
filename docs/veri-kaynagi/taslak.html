@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Veri Kaynakları Taslağı</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600;700&display=swap">
+<style>
+/*
+ * Paket F taslağı (docs/veri-kaynagi/MIMARI.md § 3.4). KESİN KURAL: renkler
+ * yalnız #ffffff, #000000, #302e2d, #ff2400; zemin ve çizgi için yalnız
+ * grinin saydam tonları. Yeşil yalnız durum noktası. Gradyan, pastel, buğu yok.
+ * Görünüş Advetics'in, düzen Google Ads'in (Bağlantılar kartları, sütunlu tablo).
+ */
+:root{
+  --beyaz:#ffffff; --siyah:#000000; --gri:#302e2d; --kirmizi:#ff2400;
+  --zemin:rgba(48,46,45,.04); --cizgi:rgba(48,46,45,.12); --ikincil:rgba(48,46,45,.62); --cok-acik:rgba(48,46,45,.07);
+  --yesil:#16a34a; /* yalnız durum noktası */
+  --baslik:"Montserrat",system-ui,sans-serif; --govde:"Open Sans",system-ui,sans-serif;
+  --gecis:cubic-bezier(.16,1,.3,1);
+}
+*{box-sizing:border-box}
+html{background:var(--beyaz)}
+body{margin:0;background:var(--zemin);color:var(--gri);font-family:var(--govde);font-size:14px;line-height:1.45}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+select,input{font:inherit;color:var(--gri)}
+:focus-visible{outline:2px solid var(--kirmizi);outline-offset:2px;border-radius:6px}
+.num{font-variant-numeric:tabular-nums}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important}}
+
+.sayfa{max-width:1180px;margin:0 auto;padding:16px 16px 64px;display:flex;flex-direction:column;gap:16px}
+.not{background:var(--beyaz);border:1px dashed var(--cizgi);border-radius:10px;padding:10px 14px;font-size:12.5px;color:var(--ikincil)}
+.not b{color:var(--gri)}
+.gezinti{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.gezinti span{font-size:12px;font-weight:700;color:var(--ikincil);margin-right:4px}
+.gezinti button{border:1px solid var(--cizgi);background:var(--beyaz);border-radius:999px;padding:6px 12px;font-size:12.5px;font-weight:600}
+.gezinti button[aria-pressed="true"]{background:var(--gri);color:var(--beyaz);border-color:var(--gri)}
+/* Görünürlük geçişle: ekran DOM'dan çıkmıyor (CLAUDE.md animasyon kuralı). */
+.ekran{display:flex;flex-direction:column;gap:16px;opacity:1;transition:opacity .25s var(--gecis)}
+.ekran[hidden]{display:none}
+
+h1{font-family:var(--baslik);font-weight:700;font-size:24px;margin:0;color:var(--siyah)}
+h2{font-family:var(--baslik);font-size:15px;font-weight:700;margin:0;color:var(--siyah)}
+.kirinti{font-size:12.5px;color:var(--ikincil)}
+.alt{font-size:13px;color:var(--ikincil);margin-top:2px}
+.ust{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px 16px}
+.sag{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.tarih{border:1px solid var(--cizgi);background:var(--beyaz);border-radius:8px;padding:7px 12px;font-size:13px}
+
+.duzen{display:grid;grid-template-columns:200px minmax(0,1fr);gap:16px}
+.icmenu{display:flex;flex-direction:column;gap:2px}
+.icmenu a{padding:8px 12px;border-radius:8px;font-size:13.5px;font-weight:600;color:var(--ikincil);text-decoration:none}
+.icmenu a[aria-current="page"]{background:var(--beyaz);color:var(--siyah);box-shadow:inset 3px 0 0 var(--kirmizi)}
+
+.kart{background:var(--beyaz);border:1px solid var(--cizgi);border-radius:12px;min-width:0;overflow:hidden}
+.kartUst{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--cizgi);flex-wrap:wrap}
+.izgara{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;padding:16px}
+.kaynak{border:1px solid var(--cizgi);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;background:var(--beyaz);transition:border-color .2s var(--gecis)}
+.kaynak:hover{border-color:var(--gri)}
+.kaynak.pasif{background:var(--zemin)}
+.kaynakBas{display:flex;gap:10px;align-items:center}
+.ikon{width:36px;height:36px;border-radius:9px;background:var(--gri);color:var(--beyaz);display:grid;place-items:center;font-family:var(--baslik);font-weight:800;font-size:13px;flex:none}
+.kaynak.pasif .ikon{background:var(--cok-acik);color:var(--gri)}
+.kaynakBas b{display:block;font-size:14px;color:var(--siyah)}
+.kaynakBas small{font-size:12px;color:var(--ikincil)}
+.durum{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600}
+.nokta{width:8px;height:8px;border-radius:50%;background:var(--ikincil)}
+.nokta.yesil{background:var(--yesil)}
+.nokta.kirmizi{background:var(--kirmizi)}
+.satirlar{font-size:12.5px;color:var(--ikincil);display:flex;flex-direction:column;gap:2px}
+.satirlar b{color:var(--gri);font-weight:600}
+.uyari{border-left:3px solid var(--kirmizi);background:var(--cok-acik);padding:8px 10px;border-radius:6px;font-size:12.5px}
+.eylemler{display:flex;gap:8px;flex-wrap:wrap;margin-top:auto}
+
+.birincil{display:inline-flex;align-items:center;gap:6px;background:var(--kirmizi);color:var(--beyaz);font-weight:600;font-size:12.5px;padding:7px 14px;border-radius:999px;transition:opacity .2s}
+.birincil:hover{opacity:.88}
+.ikincil{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--cizgi);background:var(--beyaz);border-radius:999px;padding:6px 13px;font-size:12.5px;font-weight:600;transition:border-color .2s}
+.ikincil:hover{border-color:var(--gri)}
+
+.ozet{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
+.ozet>div{padding:12px 16px;border-right:1px solid var(--cizgi);min-width:0}
+.ozet>div:last-child{border-right:0}
+.ozet small{display:block;font-size:12px;font-weight:600;color:var(--ikincil)}
+.ozet b{display:block;font-family:var(--baslik);font-size:22px;color:var(--siyah);margin-top:2px}
+.ozet em{font-style:normal;font-size:12px;color:var(--ikincil)}
+
+/* Tablo kartın İÇİNDE kayar; sayfa yatay kaymaz. */
+.tabloKap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px;min-width:720px}
+th{text-align:right;font-size:12px;font-weight:700;color:var(--ikincil);padding:10px 12px;border-bottom:1px solid var(--cizgi);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+td{padding:10px 12px;border-bottom:1px solid var(--cizgi);text-align:right;white-space:nowrap}
+tbody tr{transition:background .15s}
+tbody tr:hover{background:var(--zemin)}
+tfoot td{font-weight:700;color:var(--siyah);border-bottom:0}
+td small{display:block;color:var(--ikincil);font-size:11.5px}
+.rozet{display:inline-block;font-size:11.5px;font-weight:700;border-radius:999px;padding:2px 9px;border:1px solid var(--cizgi);color:var(--gri)}
+.rozet.dikkat{background:var(--kirmizi);border-color:var(--kirmizi);color:var(--beyaz)}
+.rozet.cizgili{border-style:dashed}
+.dipnot{padding:10px 16px;font-size:12.5px;color:var(--ikincil);border-top:1px solid var(--cizgi);display:flex;flex-direction:column;gap:4px}
+.dipnot b{color:var(--gri)}
+
+@media (max-width:760px){
+  .duzen{grid-template-columns:1fr}
+  .icmenu{flex-direction:row;overflow-x:auto;gap:4px}
+  .icmenu a{white-space:nowrap}
+  .ozet{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ozet>div:nth-child(2){border-right:0}
+  .ozet>div:nth-child(-n+2){border-bottom:1px solid var(--cizgi)}
+  h1{font-size:20px}
+}
+</style>
+</head>
+<body>
+<div class="sayfa">
+  <div class="not"><b>Taslak (Paket F).</b> Üç ekran: kaynak bağlama kartları, takip farkı, ürün performansı. Sayılar örnek. Üstteki düğmeler yalnız taslakta gezinmek için.</div>
+  <div class="gezinti" role="group" aria-label="Taslak ekranları">
+    <span>Ekran</span>
+    <button type="button" data-ekran="kaynaklar" aria-pressed="true">Bağlantılar › Veri kaynakları</button>
+    <button type="button" data-ekran="takip" aria-pressed="false">Raporlar › Site ve dönüşüm</button>
+    <button type="button" data-ekran="urun" aria-pressed="false">Raporlar › Ürünler</button>
+  </div>
+
+  <!-- ═══ 1. BAĞLANTILAR › VERİ KAYNAKLARI ═══ -->
+  <section class="ekran" id="kaynaklar">
+    <div class="ust">
+      <div>
+        <div class="kirinti">Base › Marka Merkezi › Bağlantılar</div>
+        <h1>Bağlantılar</h1>
+        <div class="alt">Ege Birlik Yapı · reklam hesapları ve veri kaynakları</div>
+      </div>
+    </div>
+    <div class="duzen">
+      <nav class="icmenu" aria-label="Marka Merkezi">
+        <a href="#">Kurulum</a>
+        <a href="#" aria-current="page">Bağlantılar</a>
+        <a href="#">Marka</a>
+        <a href="#">Kitleler</a>
+        <a href="#">Varlıklar</a>
+        <a href="#">Ölçüm</a>
+        <a href="#">Workspace ayarları</a>
+      </nav>
+      <div class="kart">
+        <div class="kartUst">
+          <h2>Veri kaynakları</h2>
+          <span class="alt" style="margin:0">Reklam dışı veri: site, organik arama, ürün, sipariş. Yalnız okunur.</span>
+        </div>
+        <div class="izgara">
+          <article class="kaynak">
+            <div class="kaynakBas"><div class="ikon">GA</div><div><b>Google Analytics 4</b><small>Mülk 312845771 · Ege Birlik Yapı</small></div></div>
+            <span class="durum"><span class="nokta yesil"></span>Bağlı</span>
+            <div class="satirlar">
+              <span>Son çekim <b>bugün 06:21</b> (dün dahil, son 3 gün yenilendi)</span>
+              <span>Anahtar etkinlik <b>generate_lead, click_to_call</b></span>
+              <span>Saat dilimi <b>İstanbul</b> · Para birimi <b>TRY</b></span>
+            </div>
+            <div class="eylemler"><button class="ikincil" type="button">Şimdi yenile</button><button class="ikincil" type="button">Duraklat</button></div>
+          </article>
+
+          <article class="kaynak">
+            <div class="kaynakBas"><div class="ikon">SC</div><div><b>Search Console</b><small>Organik arama ve reklam örtüşmesi</small></div></div>
+            <span class="durum"><span class="nokta kirmizi"></span>İzin gerekiyor</span>
+            <div class="uyari">Google bağlantısında Search Console okuma izni yok. İzin verildiğinde Google Ads bağlantısı kopmaz.</div>
+            <div class="eylemler"><button class="birincil" type="button">Search Console iznini ver</button></div>
+          </article>
+
+          <article class="kaynak">
+            <div class="kaynakBas"><div class="ikon">MC</div><div><b>Merchant Center</b><small>Ürün listesi ve onay durumu</small></div></div>
+            <span class="durum"><span class="nokta"></span>Bağlı değil</span>
+            <div class="satirlar"><span>Bu workspace'te alışveriş kampanyası yok. Ürün satıyorsanız bağlayın.</span></div>
+            <div class="eylemler"><button class="ikincil" type="button">Hesap seç</button></div>
+          </article>
+
+          <article class="kaynak">
+            <div class="kaynakBas"><div class="ikon">MK</div><div><b>Meta ürün kataloğu</b><small>Katalog reklamları için</small></div></div>
+            <span class="durum"><span class="nokta"></span>Bağlı değil</span>
+            <div class="satirlar"><span>Meta bağlantısında bu işletmeye ait katalog bulunamadı.</span></div>
+            <div class="eylemler"><button class="ikincil" type="button">Yeniden ara</button></div>
+          </article>
+
+          <article class="kaynak pasif">
+            <div class="kaynakBas"><div class="ikon">E</div><div><b>Mağaza</b><small>ikas, Shopify, Ticimax</small></div></div>
+            <span class="durum"><span class="nokta"></span>Henüz bağlanamıyor</span>
+            <div class="satirlar"><span>Mağaza siparişleri sonraki aşamada. Sitenizde <b>ikas</b> altyapısı tanındı; ilk desteklenecek altyapılar workspace'lerdeki dağılıma göre seçiliyor.</span></div>
+          </article>
+        </div>
+        <div class="dipnot">
+          <span><b>Kurulumdaki mülk farklıysa</b> kartta yazar; hangisinin okunacağını siz seçersiniz.</span>
+          <span>Bir mülk yalnız bir workspace'e bağlanabilir (ajans toplamında iki kez sayılmasın).</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ 2. RAPORLAR › SİTE VE DÖNÜŞÜM (TAKİP FARKI) ═══ -->
+  <section class="ekran" id="takip" hidden>
+    <div class="ust">
+      <div>
+        <div class="kirinti">Raporlar › Ege Birlik Yapı</div>
+        <h1>Site ve dönüşüm</h1>
+        <div class="alt">Reklam platformunun saydığı dönüşüm ile sitenizin (Analytics) gördüğü yan yana</div>
+      </div>
+      <div class="sag"><span class="tarih">13 Eyl - 10 Eki 2026</span></div>
+    </div>
+
+    <div class="kart">
+      <div class="ozet">
+        <div><small>Platform dönüşümü</small><b class="num">412</b><em>Meta 268 · Google 144</em></div>
+        <div><small>Sitede görülen</small><b class="num">301</b><em>Analytics anahtar etkinlik</em></div>
+        <div><small>Kampanyaya bağlanamayan</small><b class="num">%14</b><em>49 etkinlik, nedenleri aşağıda</em></div>
+        <div><small>Site oturumu (ücretli)</small><b class="num">18.240</b><em>Tüm oturum 41.905</em></div>
+      </div>
+    </div>
+
+    <div class="kart">
+      <div class="kartUst"><h2>Kampanyalar</h2><span class="sag alt" style="margin-left:auto">Gösterilen 6 / 6 kampanya</span></div>
+      <div class="tabloKap">
+        <table>
+          <thead><tr><th>Kampanya</th><th>Tıklama</th><th>Platform dönüşümü</th><th>Sitede görülen</th><th>Site / platform</th><th>Durum</th></tr></thead>
+          <tbody>
+            <tr><td>Konut Arama<small>Google · kimlikle eşlendi</small></td><td class="num">2.910</td><td class="num">96</td><td class="num">88</td><td class="num">0,92</td><td><span class="rozet">Uyumlu</span></td></tr>
+            <tr><td>Marka Arama<small>Google · kimlikle eşlendi</small></td><td class="num">1.204</td><td class="num">48</td><td class="num">51</td><td class="num">1,06</td><td><span class="rozet">Uyumlu</span></td></tr>
+            <tr><td>Bornova Lansman Form<small>Meta · etiket kimliğiyle eşlendi</small></td><td class="num">3.388</td><td class="num">142</td><td class="num">61</td><td class="num">0,43</td><td><span class="rozet dikkat">Site daha az görüyor</span></td></tr>
+            <tr><td>Yeniden Pazarlama<small>Meta · adla eşlendi</small></td><td class="num">1.017</td><td class="num">74</td><td class="num">0</td><td class="num">0</td><td><span class="rozet dikkat">Site hiç görmüyor</span></td></tr>
+            <tr><td>Video Erişim<small>Meta · adla eşlendi</small></td><td class="num">412</td><td class="num">4</td><td class="num">2</td><td class="num">0,50</td><td><span class="rozet cizgili">Veri yetersiz</span></td></tr>
+            <tr><td>Demand Gen Görsel<small>Google · kimlikle eşlendi</small></td><td class="num">688</td><td class="num">48</td><td class="num">50</td><td class="num">1,04</td><td><span class="rozet">Uyumlu</span></td></tr>
+          </tbody>
+          <tfoot><tr><td>Toplam</td><td class="num">9.619</td><td class="num">412</td><td class="num">252</td><td class="num">0,61</td><td></td></tr></tfoot>
+        </table>
+      </div>
+      <div class="dipnot">
+        <span><b>Kampanyaya bağlanamayan 49 etkinlik:</b> reklam bağlantısında kampanya etiketi yok 31 · etiketteki kampanya bu workspace'te yok 12 · aynı adlı iki kampanya 6.</span>
+        <span>Sayılar hiçbir zaman birebir tutmaz: Meta görüntüleme sonrası dönüşümü de sayar. Durum yalnız fark büyükse ve yeterli veri varsa işaretlenir.</span>
+        <span>Son 2 gün kıyasa girmedi (Analytics verisi işleniyor). Analytics bu dönemde bazı satırları gizledi (Google signals eşiği).</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ 3. RAPORLAR › ÜRÜNLER ═══ -->
+  <section class="ekran" id="urun" hidden>
+    <div class="ust">
+      <div>
+        <div class="kirinti">Raporlar › Örnek Mağaza</div>
+        <h1>Ürünler</h1>
+        <div class="alt">Ürün başına reklam harcaması ve mağazanın net geliri (iadeler düşülmüş)</div>
+      </div>
+      <div class="sag"><span class="tarih">13 Eyl - 10 Eki 2026</span></div>
+    </div>
+    <div class="kart">
+      <div class="ozet">
+        <div><small>Reklam harcaması</small><b class="num">₺84.320</b><em>Google 61.900 · Meta 22.420</em></div>
+        <div><small>Mağaza net geliri</small><b class="num">₺296.450</b><em>İade ₺18.200 düşüldü</em></div>
+        <div><small>Gelir / harcama</small><b class="num">3,52</b><em>Kâr değil, marj bilinmiyor</em></div>
+        <div><small>Eşlenemeyen harcama</small><b class="num">%6</b><em>Mağazada karşılığı yok</em></div>
+      </div>
+    </div>
+    <div class="kart">
+      <div class="kartUst"><h2>Ürünler</h2><span class="sag alt" style="margin-left:auto">Gösterilen 5 / 128 ürün · harcamaya göre</span></div>
+      <div class="tabloKap">
+        <table>
+          <thead><tr><th>Ürün</th><th>Harcama</th><th>Platformun saydığı değer</th><th>Mağaza net geliri</th><th>Gelir / harcama</th><th>Durum</th></tr></thead>
+          <tbody>
+            <tr><td>Bambu Nevresim Takımı<small>SKU NV-1042</small></td><td class="num">₺18.400</td><td class="num">₺71.900</td><td class="num">₺68.300</td><td class="num">3,71</td><td><span class="rozet">Gelir yüksek</span></td></tr>
+            <tr><td>Pamuk Pike Seti<small>SKU PK-220</small></td><td class="num">₺12.750</td><td class="num">₺44.100</td><td class="num">₺9.800</td><td class="num">0,77</td><td><span class="rozet dikkat">Takip farkı</span></td></tr>
+            <tr><td>Yastık 2'li<small>SKU YS-02</small></td><td class="num">₺9.020</td><td class="num">₺3.400</td><td class="num">₺0</td><td class="num">0</td><td><span class="rozet dikkat">Satış yok</span></td></tr>
+            <tr><td>Havlu Seti<small>SKU HV-6</small></td><td class="num">₺6.880</td><td class="num">₺5.200</td><td class="num">₺5.010</td><td class="num">0,73</td><td><span class="rozet">Gelir düşük</span></td></tr>
+            <tr><td>online:tr:TR:NV-9001<small>Mağazada bulunamadı</small></td><td class="num">₺5.110</td><td class="num">₺2.300</td><td class="num">yok</td><td class="num">yok</td><td><span class="rozet cizgili">Eşlenemedi</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="dipnot">
+        <span><b>Meta</b> ürün başına yalnız harcama ve tıklama veriyor olabilir; ürün başına satın alma gelmezse sütun "Meta vermiyor" yazar.</span>
+        <span>Para birimleri farklı olan ürünlerde kıyas yapılmaz, kur tahmini kullanılmaz.</span>
+      </div>
+    </div>
+  </section>
+</div>
+<script>
+// Yalnız taslak gezintisi. Ekran DOM'dan çıkmıyor, `hidden` ile gizleniyor.
+document.querySelectorAll('.gezinti button').forEach(function (b) {
+  b.addEventListener('click', function () {
+    document.querySelectorAll('.gezinti button').forEach(function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+    document.querySelectorAll('.ekran').forEach(function (e) { e.hidden = e.id !== b.dataset.ekran; });
+  });
+});
+</script>
+</body>
+</html>
