@@ -153,7 +153,7 @@ export async function hakAyir(
              THEN GREATEST(
                     COALESCE(mfa_kilit_bitis, ${simdi}::timestamptz),
                     ${simdi}::timestamptz + interval '1 minute' * LEAST(
-                      ${ayar.ilkKilitDk}::int * power(2, ((mfa_basarisiz_deneme + 1) / ${ayar.azami}::int) - 1),
+                      ${ayar.ilkKilitDk}::int * power(2, LEAST(((mfa_basarisiz_deneme + 1) / ${ayar.azami}::int) - 1, 10)),
                       1440))
              ELSE mfa_kilit_bitis
            END
