@@ -194,6 +194,12 @@ export const CASCADE_ILE_TASINANLAR = [
   'sinyaller',
   'bildirim_kanallari',
   'bildirim_gonderimleri',
+  // DEĞİŞİKLİK ETKİSİ (docs/etki/MIMARI.md § 2) TAŞINIYOR. Satır,
+  // workspace'in kendi kararının (İyileştir, kural, Reklam Yöneticisi)
+  // ölçülen sonucu; karar kayıtları (iyilestir_oneri_karar, kurallar)
+  // workspace'le gidiyor ve sonucu geride bırakmak, yeni şirkette "bu
+  // değişiklik işe yaradı mı" sorusunu cevapsız, eskisinde sahipsiz bırakırdı.
+  'degisiklik_etkileri',
 ] as const;
 
 export interface WorkspaceTasimaSonucu {

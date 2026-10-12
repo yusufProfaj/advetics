@@ -85,6 +85,14 @@ export const HESABIN_KENDI_VERISI = [
    * kırar ve atamanın TAMAMI "İlişkili kayıt geçersiz" ile düşerdi.
    */
   { tablo: 'sinyaller', etiket: 'sinyal', orgIdIle: true },
+  /*
+   * `degisiklik_etkileri` (Paket C) BİLEREK BURADA YOK — sinyalin tersi.
+   * Etki satırı bir KARARIN (İyileştir, kural, Reklam Yöneticisi) ölçülen
+   * sonucu ve karar eski müşterinin; satır karar kaydıyla birlikte kalır
+   * (MIMARI Ç-C10). Ölçüm penceresi içinde taşınan hesabın satırını
+   * değerlendirme işi "Ölçülemedi · hesap taşındı" diye kapatıyor: yeni
+   * müşterinin harcaması eski müşterinin değişikliğine yazılmasın.
+   */
 ] as const;
 
 /**

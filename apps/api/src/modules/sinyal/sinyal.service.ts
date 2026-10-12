@@ -251,7 +251,10 @@ export class SinyalService {
       throw new BadRequestException(s.kisit ?? 'Bu sinyalin uygulanacak bir eylemi yok.');
     }
     const scoped: TenantContext = { ...ctx, activeClientId: s.clientId };
-    const r = await this.actions.uygula(scoped, { seviye: s.eylem.seviye, id: s.eylem.varlikId }, { type: 'pause' });
+    // İZ (Paket C): etki ekranı bu durdurmayı "Sinyal" diye yazıyor.
+    const r = await this.actions.uygula(scoped, { seviye: s.eylem.seviye, id: s.eylem.varlikId }, { type: 'pause' }, {
+      iz: { yol: 'sinyal', ref: id },
+    });
     const dogrulama = r.dogrulama ?? 'uyusmadi';
     const uygulama = { dogrulama, platformDegeri: r.platformDegeri, uygulayan: kullaniciAdi, zaman: new Date().toISOString() };
 

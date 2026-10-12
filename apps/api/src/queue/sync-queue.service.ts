@@ -437,6 +437,14 @@ export class SyncQueueService implements OnModuleDestroy {
        */
       { name: 'sweep:signals', pattern: '40 7 * * *', jobType: 'signals_evaluate', tz: 'Europe/Istanbul' },
       /*
+       * Paket C — DEĞİŞİKLİK ETKİSİ: günde bir, 07:20 İstanbul. Hesap başına
+       * keşif (dünden bu yana yapılan durdurma/bütçe değişiklikleri) ve
+       * zamanı gelmiş ölçümler. Platform çağrısı yok, kotaya dokunmuyor.
+       * Sinyallerden (07:40) ve haftalık özetten (09:00) ÖNCE: özet bu
+       * sabahın sonuçlarını okuyor.
+       */
+      { name: 'sweep:impact', pattern: '20 7 * * *', jobType: 'impact_evaluate', tz: 'Europe/Istanbul' },
+      /*
        * Paket A — BİLDİRİM TESLİMİ: 5 dakikada bir (dakika 2, 7, 12...).
        * Bekleyen ve yeniden denenecek gönderimler + 09:00 İstanbul sinyal
        * özeti (özetin saati süpürmenin İÇİNDE kontrol ediliyor). Platform

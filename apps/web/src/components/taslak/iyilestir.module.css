@@ -1160,3 +1160,145 @@
     flex-wrap: wrap;
   }
 }
+
+/*
+ * ═══ ETKİSİ SEKMESİ (Paket C, `docs/etki/taslak.html`) ═══
+ *
+ * Satır: değişiklik + nereden + tek cümle, sonuç rozeti, "Ayrıntı". Ayrıntı
+ * DOM'dan ÇIKMIYOR: yükseklik `grid-template-rows` geçişiyle açılıyor ve
+ * geçiş yalnız hareket tercihi olmayanlarda (aşağıda). Renkler `--t-*`
+ * belirteçlerinden; yeşil YALNIZ "iyileşti" noktasında (`sNoktaYesil`).
+ */
+.eSatir {
+  border-bottom: 1px solid var(--t-line);
+}
+.eSatir:last-of-type {
+  border-bottom: 0;
+}
+.eUst {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 160px auto;
+  gap: 10px 16px;
+  padding: 14px 16px;
+  align-items: center;
+}
+.eNe {
+  font-weight: 700;
+  color: var(--t-ink);
+}
+.eCumle {
+  font-size: 13px;
+  margin-top: 6px;
+}
+.eSonuc {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.eNoktaBos {
+  border: 2px dashed var(--t-ink-muted);
+  width: 9px;
+  height: 9px;
+}
+.eAyrinti {
+  display: grid;
+  grid-template-rows: 0fr;
+}
+.eAyrinti[data-acik='true'] {
+  grid-template-rows: 1fr;
+}
+.eAyrinti > div {
+  overflow: hidden;
+  min-height: 0;
+}
+.eAyrintiIc {
+  padding: 0 16px 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 16px;
+}
+.eKanit {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1px solid var(--t-line);
+  border-radius: 8px;
+}
+.eKanit > div {
+  padding: 10px 12px;
+  border-right: 1px solid var(--t-line);
+  min-width: 0;
+}
+.eKanit > div:last-child {
+  border-right: 0;
+}
+.eKanit small {
+  display: block;
+  font-size: 11.5px;
+  color: var(--t-ink-muted);
+  font-weight: 600;
+}
+.eKanit b {
+  display: block;
+  color: var(--t-ink);
+  font-size: 15px;
+}
+.eKanit em {
+  display: block;
+  font-style: normal;
+  font-size: 11.5px;
+  color: var(--t-ink-muted);
+}
+.eDipnot {
+  font-size: 12px;
+  color: var(--t-ink-muted);
+  margin-top: 8px;
+}
+.eGrafik {
+  width: 100%;
+  height: 120px;
+  display: block;
+}
+.eGrafikNot {
+  font-size: 12px;
+  color: var(--t-ink-muted);
+}
+.eKartSatiri {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 12.5px;
+  padding-top: 10px;
+  margin-top: 10px;
+  border-top: 1px solid var(--t-line);
+  flex-wrap: wrap;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .eAyrinti {
+    transition: grid-template-rows 0.35s var(--t-ease);
+  }
+}
+@media (max-width: 760px) {
+  .eUst {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .eUst .eSonuc {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .eAyrintiIc {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .eKanit {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .eKanit > div {
+    border-right: 0;
+    border-bottom: 1px solid var(--t-line);
+  }
+  .eKanit > div:last-child {
+    border-bottom: 0;
+  }
+}

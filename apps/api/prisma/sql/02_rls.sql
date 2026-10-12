@@ -424,6 +424,8 @@ DECLARE
     'sinyaller',
     'bildirim_kanallari',
     'bildirim_gonderimleri',
+    -- Değişiklik etkisi (docs/etki/MIMARI.md § 2). Kendi satırında.
+    'degisiklik_etkileri',
     -- AdvStrategy aylık medya planı (docs/advstrategy/MIMARI.md § 1)
     'strateji_planlari', 'strateji_dagilimlari', 'strateji_matrisi', 'strateji_kelimeleri',
     'ozel_gunler'
@@ -2618,3 +2620,20 @@ CREATE POLICY adv_bildirim_gonderimleri_insert ON bildirim_gonderimleri
 CREATE POLICY adv_bildirim_gonderimleri_update ON bildirim_gonderimleri
   FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
   WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+
+
+-- ============================================================================
+-- DEĞİŞİKLİK ETKİSİ — degisiklik_etkileri (docs/etki/MIMARI.md § 2)
+-- ============================================================================
+--
+-- YALNIZ SELECT. Satırı yazan ve durumunu ilerleten TEK yol worker'ın
+-- impact_evaluate işi (BYPASSRLS istemcisi). Panelin yazdığı hiçbir şey yok:
+-- INSERT/UPDATE politikası açmak, bir kullanıcı isteğinin "iyileşti"
+-- sonucunu elle yazabilmesine kapı bırakmak olurdu. Hesap başka workspace'e
+-- taşınınca satır KALIYOR (karar kaydı, MIMARI Ç-C10); workspace başka
+-- şirkete taşınınca org_id'yi kompozit anahtarın ON UPDATE CASCADE'i
+-- taşıyor (referans bütünlüğü eylemi tablo sahibiyle koşuyor; satırın
+-- taşındığı etki-rls.spec.ts'te). DELETE YOK: satır workspace ya da reklam
+-- hesabıyla CASCADE gidiyor.
+CREATE POLICY adv_degisiklik_etkileri_select ON degisiklik_etkileri
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));

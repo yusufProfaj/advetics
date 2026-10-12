@@ -1175,6 +1175,9 @@ enum SyncJobType {
   /// Paket A — bekleyen bildirimleri kanallara gönderen küresel süpürme
   /// ve 09:00 İstanbul sinyal özeti. Müşteri başına dağılmıyor.
   notifications_send
+  /// Paket C — hesap başına, günde bir değişiklik etkisi keşfi + ölçümü.
+  /// PLATFORM ÇAĞRISI YOK: girdisi audit_logs, rule_action_logs, insights_daily.
+  impact_evaluate
 }
 
 enum SyncJobStatus {
@@ -4203,4 +4206,52 @@ model BildirimGonderimi {
   @@index([clientId, createdAt(sort: Desc)], map: "bildirim_gonderimleri_client_idx")
   @@index([orgId], map: "bildirim_gonderimleri_org_id_idx")
   @@map("bildirim_gonderimleri")
+}
+
+/// Paket C — Advetics'ten yapılan durdurma/bütçe değişikliğinin ölçülen etkisi
+/// (docs/etki/MIMARI.md § 2). Satırları YALNIZ worker yazıyor. Durum kolonları
+/// varchar + CHECK (liste shared'da); açık satır indeksi
+/// `degisiklik_etkileri_acik_idx` KISMİ, yalnız migration'da.
+model DegisiklikEtkisi {
+  id               String      @id @default(uuid()) @db.Uuid
+  orgId            String      @map("org_id") @db.Uuid
+  clientId         String      @map("client_id") @db.Uuid
+  adAccountId      String      @map("ad_account_id") @db.Uuid
+  platform         Platform
+  kaynak           String      @db.VarChar(20)
+  kaynakId         String      @map("kaynak_id") @db.VarChar(64)
+  yol              String      @db.VarChar(20)
+  yolRef           String?     @map("yol_ref") @db.VarChar(200)
+  kim              String?     @db.VarChar(255)
+  tur              String      @db.VarChar(16)
+  seviye           EntityLevel
+  varlikId         String      @map("varlik_id") @db.Uuid
+  varlikAdi        String      @map("varlik_adi") @db.VarChar(300)
+  ustAdi           String?     @map("ust_adi") @db.VarChar(300)
+  kapsamSeviye     EntityLevel @map("kapsam_seviye")
+  kapsamId         String      @map("kapsam_id") @db.Uuid
+  kapsamAdi        String      @map("kapsam_adi") @db.VarChar(300)
+  onceDeger        Json        @default("{}") @map("once_deger") @db.JsonB
+  sonraDeger       Json        @default("{}") @map("sonra_deger") @db.JsonB
+  degisiklikZamani DateTime    @map("degisiklik_zamani") @db.Timestamptz(6)
+  degisiklikGunu   DateTime    @map("degisiklik_gunu") @db.Date
+  birlikteOlculen  Int         @default(0) @map("birlikte_olculen") @db.SmallInt
+  durum            String      @default("bekliyor") @db.VarChar(12)
+  sonuc            String?     @db.VarChar(20)
+  neden            String?     @db.VarChar(20)
+  metrik           String?     @db.VarChar(30)
+  etkiOrani        Decimal?    @map("etki_orani")
+  noktaGun         Int?        @map("nokta_gun") @db.SmallInt
+  sonrakiOlcum     DateTime?   @map("sonraki_olcum") @db.Date
+  olcum            Json?       @db.JsonB
+  gozlem           Json?       @db.JsonB
+  createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime    @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([kaynak, kaynakId], map: "degisiklik_etkileri_kaynak_key")
+  @@index([clientId, degisiklikZamani(sort: Desc)], map: "degisiklik_etkileri_client_zaman_idx")
+  @@index([orgId], map: "degisiklik_etkileri_org_id_idx")
+  @@index([adAccountId, kapsamId, degisiklikGunu], map: "degisiklik_etkileri_kapsam_idx")
+  @@index([clientId, varlikId], map: "degisiklik_etkileri_varlik_idx")
+  @@map("degisiklik_etkileri")
 }

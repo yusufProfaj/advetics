@@ -257,6 +257,9 @@ export class IyilestirService {
 
     const r = await this.actions.uygula(ctx, { seviye: hedefSeviyesi(o), id: o.varlik.id }, eylem, {
       validateOnly: secenek.prova === true,
+      // İZ (Paket C): etki ekranı bu değişikliği "İyileştir önerisi" diye
+      // yazıyor ve kartın altındaki sonuç satırını öneri anahtarıyla eşliyor.
+      iz: { yol: 'iyilestir', ref: anahtar },
     });
     if (r.prova) return { prova: true, platformDegeri: r.platformDegeri };
 

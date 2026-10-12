@@ -10,7 +10,7 @@ import {
 import { PrismaService, type TenantClient } from '../../prisma/prisma.service';
 import { QuotaGuardService } from '../../queue/quota-guard.service';
 import { googleYazmaAcikMi, metaYazmaAcikMi } from '../reklam/yazma-kapisi';
-import { googleYazilamazMi } from '@advetics/shared';
+import { DENETIM_IZ_ANAHTARI, googleYazilamazMi, type DegisiklikIzi } from '@advetics/shared';
 import { SyncQueueService } from '../../queue/sync-queue.service';
 import { AuditService } from '../audit/audit.service';
 import { ProviderRegistry } from '../connections/provider.registry';
@@ -278,6 +278,13 @@ export class CampaignActionsService {
     ctx: TenantContext,
     campaignId: string,
     action: CampaignAction,
+    /**
+     * DEĞİŞİKLİĞİN HANGİ EKRANDAN GELDİĞİ (Paket C). Denetim kaydının
+     * `after.iz` alanına yazılıyor; etki ekranı "İyileştir önerisi" /
+     * "Reklam Yöneticisi" diye oradan okuyor. Yoksa satır "Panel" kalır:
+     * tahmin edilmez.
+     */
+    iz?: DegisiklikIzi,
   ): Promise<CampaignActionResult> {
     const row = await this.prisma.withTenant(ctx, (tx) => this.resolve(tx, campaignId));
 
@@ -344,7 +351,7 @@ export class CampaignActionsService {
         targetId: campaignId,
         clientId: row.clientId,
         before,
-        after: result.afterState as Prisma.InputJsonValue,
+        after: izli(result.afterState, iz) as Prisma.InputJsonValue,
       }),
     );
 
@@ -414,7 +421,7 @@ export class CampaignActionsService {
     ctx: TenantContext,
     hedef: { seviye: VarlikSeviyesi; id: string },
     eylem: UygulamaEylemi,
-    secenek: { validateOnly?: boolean } = {},
+    secenek: { validateOnly?: boolean; iz?: DegisiklikIzi } = {},
   ): Promise<SeviyeliUygulamaSonucu> {
     if (eylem.type === 'set_budget' && hedef.seviye === 'ad') {
       throw new BadRequestException('Reklamın kendi bütçesi yok; bütçe kampanya ya da reklam seti seviyesinde.');
@@ -509,11 +516,14 @@ export class CampaignActionsService {
         targetId: hedef.id,
         clientId: row.clientId,
         before: once,
-        after: {
-          istenen: eylem.type === 'set_budget' ? { amountMicros: eylem.amountMicros.toString(), budgetMode: eylem.budgetMode } : { type: eylem.type },
-          dogrulama,
-          platformDegeri,
-        },
+        after: izli(
+          {
+            istenen: eylem.type === 'set_budget' ? { amountMicros: eylem.amountMicros.toString(), budgetMode: eylem.budgetMode } : { type: eylem.type },
+            dogrulama,
+            platformDegeri,
+          },
+          secenek.iz,
+        ) as Prisma.InputJsonValue,
       });
       /*
        * AYNA GÜNCELLENİYOR — yalnız GERİ OKUNAN değerle. Yapı taraması altı
@@ -679,6 +689,16 @@ export class CampaignActionsService {
 }
 
 export type VarlikSeviyesi = 'campaign' | 'ad_group' | 'ad';
+
+/**
+ * Denetim kaydının `after`ına izi ekler. İz yoksa alan HİÇ yazılmıyor
+ * (`null` değil): eski satırlarla aynı biçim, keşif ikisini de "bilinmiyor"
+ * okuyor. Anahtar sözleşmeden (`DENETIM_IZ_ANAHTARI`): düz dize yazılsaydı
+ * keşfin okuduğu anahtarla ayrışabilirdi ve hiçbir şey hata vermezdi.
+ */
+export function izli(after: Record<string, unknown>, iz: DegisiklikIzi | undefined): Record<string, unknown> {
+  return iz ? { ...after, [DENETIM_IZ_ANAHTARI]: iz } : after;
+}
 
 export type UygulamaEylemi =
   | { type: 'pause' }
