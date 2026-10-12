@@ -17,7 +17,8 @@ import { TarihSecici } from '@/components/tarih-secici';
 import { ReportDocument } from '@/components/report/report-document';
 import { ShareControls } from '@/components/report/share-controls';
 import { Faturalar } from '@/components/report/faturalar';
-import { RaporSekmeleri } from '@/components/report/rapor-sekmeleri';
+import { RaporSekmeleri, type RaporSekmesi } from '@/components/report/rapor-sekmeleri';
+import { HaftalikOzetSekmesi } from '@/components/report/haftalik-ozet';
 
 export const metadata = { title: 'Raporlar · Advetics' };
 export const dynamic = 'force-dynamic';
@@ -113,7 +114,8 @@ export default async function ReportsPage({
   const from = secilen.from > dun ? dun : secilen.from;
   const to = devamEden ? dun : secilen.to;
 
-  const sekme = first(params.sekme) === 'faturalar' && canShare ? 'faturalar' : 'rapor';
+  const sekmeParam = first(params.sekme);
+  const sekme: RaporSekmesi = sekmeParam === 'faturalar' && canShare ? 'faturalar' : sekmeParam === 'ozet' ? 'ozet' : 'rapor';
 
   /*
    * ŞABLON LİSTESİ SEÇİCİYE GİDİYOR.
@@ -160,10 +162,17 @@ export default async function ReportsPage({
    */
   let report: ReportData | null = null;
   let raporHatasi: string | null = null;
-  try {
-    report = await serverApiFetch<ReportData>(`/reports/preview?${qs}`);
-  } catch (err) {
-    raporHatasi = err instanceof Error ? err.message : 'Bağlantı kurulamadı.';
+  /*
+   * HAFTALIK ÖZET SEKMESİNDE RAPOR ÜRETİLMİYOR: rapor önizlemesi panelin en
+   * ağır sorgularından biri ve özet sekmesi onu göstermiyor; kendi verisini
+   * istemcide kendi ucundan çekiyor.
+   */
+  if (sekme !== 'ozet') {
+    try {
+      report = await serverApiFetch<ReportData>(`/reports/preview?${qs}`);
+    } catch (err) {
+      raporHatasi = err instanceof Error ? err.message : 'Bağlantı kurulamadı.';
+    }
   }
 
   return (
@@ -172,7 +181,7 @@ export default async function ReportsPage({
         <div>
           <h1 className="sayfa-baslik">Raporlar</h1>
           <p className="mt-0.5 text-sm text-ink-muted">
-            {formatDayLong(from)} - {formatDayLong(to)}
+            {sekme === 'ozet' ? 'Haftalık özet' : `${formatDayLong(from)} - ${formatDayLong(to)}`}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -199,18 +208,22 @@ export default async function ReportsPage({
               duzenleyebilir={canWriteTemplate}
             />
           )}
-          <TarihSecici
-            aralik={secilen}
-            enEskiGun={kapsam?.earliestDate ?? null}
-            karsilastirmaVar={false}
-            enGecGun={dun}
-          />
+          {/* Haftalık özetin dönemi kendi hafta seçicisinde; tarih seçici orada bir şey değiştirmezdi. */}
+          {sekme !== 'ozet' && (
+            <TarihSecici
+              aralik={secilen}
+              enEskiGun={kapsam?.earliestDate ?? null}
+              karsilastirmaVar={false}
+              enGecGun={dun}
+            />
+          )}
         </div>
       </header>
 
       {/*
-        SEKMELER YALNIZCA FATURA YETKİSİ VARSA. Tek sekmelik bir sekme çubuğu
-        gösterecek bir şey değil, kullanıcıya olmayan bir seçim sunmak olurdu.
+        SEKMELER HERKESE: Haftalık özet müşteri hesabına da açık (kendi
+        özeti). Fatura sekmesi yalnız paylaşım yetkisiyle; yetkisizde çubuk
+        Rapor + Haftalık özet olarak kalıyor.
       */}
       {/*
         SEKMELER VE BELGE İŞLEMLERİ TEK SATIRDA. İşlemler (Planla, PDF,
@@ -221,7 +234,8 @@ export default async function ReportsPage({
         bir şey yok.
       */}
       <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3 border-b border-line">
-        {canShare ? <RaporSekmeleri aktif={sekme} /> : <span />}
+        {/* Haftalık özet herkese (report.read), faturalar yalnız paylaşım yetkisiyle. */}
+        <RaporSekmeleri aktif={sekme} faturalar={canShare} />
         {sekme === 'rapor' && report !== null && (
           <div className="pb-2">
             <ShareControls
@@ -252,6 +266,7 @@ export default async function ReportsPage({
         bilgi sayfanın iki ucuna dağılmıştı. Hepsi tek kutuda ve belgeden
         ÖNCE, çünkü hepsi belgeyi nasıl okuyacağını söylüyor.
       */}
+      {sekme !== 'ozet' && (
       <Uyarilar
         satirlar={[
           kapsamHatasi !== null ? (
@@ -277,8 +292,18 @@ export default async function ReportsPage({
           ) : null,
         ]}
       />
+      )}
 
-      {sekme === 'faturalar' ? (
+      {sekme === 'ozet' ? (
+        <HaftalikOzetSekmesi
+          clientId={clientId}
+          haftaParam={first(params.hafta)}
+          // Ajans görünümü (sinyaller, bekleyen işler) yalnız rule.read ile;
+          // sunucu da ayrıca reddediyor (OZET_AJANS_IZNI).
+          ajansGorur={hasPermission(session, 'rule.read')}
+          planYetkisi={canShare}
+        />
+      ) : sekme === 'faturalar' ? (
         <FaturaSekmesi clientId={clientId} clientName={musteriAdi(session, clientId)} />
       ) : report === null ? (
         <div

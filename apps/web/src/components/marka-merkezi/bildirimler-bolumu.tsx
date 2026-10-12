@@ -306,7 +306,11 @@ function DenemeSorusu({ soru, onCevap }: { soru: NonNullable<Soru>; onCevap: (ge
       <p role="status" className="mx-4 mb-3 flex items-center gap-2 rounded-lg border border-line px-3 py-2 text-sm">
         <NoktaIsareti nokta="yesil" />
         <b className="text-ink">Kanal doğrulandı.</b>
-        <span className="text-ink-muted">{k.olaylar.includes('sinyal') ? 'Sıradaki sinyal özeti buraya gelecek.' : 'Kural bildirimleri buraya gelecek.'}</span>
+        <span className="text-ink-muted">{k.olaylar.includes('sinyal')
+            ? 'Sıradaki sinyal özeti buraya gelecek.'
+            : k.olaylar.includes('kural')
+              ? 'Kural bildirimleri buraya gelecek.'
+              : 'Pazartesi sabahı haftalık özet buraya gelecek.'}</span>
       </p>
     );
   }
@@ -382,7 +386,9 @@ function KanalEkleFormu({
   const [adresHatasi, setAdresHatasi] = useState<string | null>(null);
   const [alicilar, setAlicilar] = useState('');
   const [aliciUyarisi, setAliciUyarisi] = useState<{ gecersiz: string[]; disarida: string[] }>({ gecersiz: [], disarida: [] });
-  const [olaylar, setOlaylar] = useState<BildirimOlayi[]>(['sinyal']);
+  // YENİ KANALDA haftalık özet de İŞARETLİ (Paket B Ç-B2): ajansın kendi
+  // kanalı, pazartesi sabahı tek mesaj; isteyen işareti kaldırır.
+  const [olaylar, setOlaylar] = useState<BildirimOlayi[]>(['sinyal', 'haftalik_ozet']);
   const [kaydediliyor, setKaydediliyor] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
 
