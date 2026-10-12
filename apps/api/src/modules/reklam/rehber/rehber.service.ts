@@ -69,6 +69,7 @@ import {
   type RehberDurumu,
   type RehberEksigi,
   type RehberEksikBaglami,
+  type FormOnizlemesi,
   type RehberFormListesi,
   type RehberGuncelle,
   type RehberHazirligi,
@@ -127,6 +128,7 @@ import {
   hazirlikSatisOlcumu,
   metaAsgariOku,
   metaFormKosuluOku,
+  metaFormAyrintisiOku,
   metaSayfaFormlariOku,
   seciliFormHali,
   seciliPikselHali,
@@ -181,6 +183,8 @@ interface OnKosulKaydi {
   googleDonusum30Gun: number | null;
 }
 const ONBELLEK_MS = 15 * 60_000;
+/** Form önizlemesi önbelleği: formu Meta'da değiştiren kullanıcı en geç 10 dk sonra yenisini görür. */
+const FORM_AYRINTI_MS = 10 * 60_000;
 
 /**
  * Son 30 günün dönüşüm sayısı (teklif eşiği). Kaynak taraması sorguyu bu
@@ -359,6 +363,8 @@ export const BASLAMAYAN_PLATFORM_SEBEBI = 'Bu platformda kurulum başlamadı; Ye
 export class RehberService {
   private readonly onbellek = new Map<string, OnKosulKaydi>();
   private readonly sayfaOnbellek = new Map<string, SayfaKaydi>();
+  /** Form önizlemeleri (`formAyrintisi`); yalnız başarılı okuma. Anahtar `clientId:sayfaId:formId`. */
+  private readonly formAyrintiOnbellek = new Map<string, { zaman: number; deger: FormOnizlemesi }>();
   private readonly pikselOnbellek = new Map<string, PikselKaydi>();
   /** SİTE amacının piksel listesi: satın alma istatistiği SORULMADAN (tek çağrı). */
   private readonly sitePikselOnbellek = new Map<string, PikselKaydi>();
@@ -481,6 +487,71 @@ export class RehberService {
       kesildi: okunan.kesildi,
       bosNeden: satirlar.length ? null : "Bu sayfada yayında anlık form yok. Formu Meta'da (Reklam Yöneticisi > Anlık formlar) oluşturup yayınla, sonra listeyi yenile.",
     };
+  }
+
+  /**
+   * Seçili sayfanın TEK formunun önizlemesi (form seçicinin "Önizle"si).
+   *
+   * Sınırlar platforma GİTMEDEN kontrol ediliyor: workspace erişimi, sayfanın
+   * bu workspace'te olması (başka workspace'in sayfası = 400, sıfır çağrı).
+   * Okunan formun sayfası seçili sayfa DEĞİLSE de 400: aynı ajans kimliği
+   * birçok sayfanın formunu okuyabilir ve kimliği elle değiştirilmiş bir
+   * istek başka müşterinin formunu gösterirdi. Meta `page_id`'yi döndürmezse
+   * yalnız seçili sayfanın son başarılı listesinde olan form kabul ediliyor;
+   * ikisi de yoksa ret (bilinmeyeni "bu sayfanın" saymıyoruz).
+   *
+   * Kota bekçisinden geçer (anahtar SOSYAL PROFİL: çağrı sayfa token'ıyla
+   * gidiyor, form yayınıyla aynı kural). Başarılı okuma 10 dk önbellekte:
+   * kullanıcı aynı formu açıp kapadıkça Meta'ya gitmesin. Okunamazsa 503 +
+   * Meta'nın mesajı; okunamayan önizleme önbelleğe GİRMEZ.
+   */
+  async formAyrintisi(ctx: TenantContext, clientId: string, sayfaId: string, formId: string): Promise<FormOnizlemesi> {
+    erisim(ctx, clientId);
+    if (!/^\d{1,30}$/.test(formId)) throw new BadRequestException('Form kimliği geçersiz.');
+    const tx = this.tx(ctx);
+    const [s] = await tx((t) =>
+      t.$queryRaw<Array<{ external_id: string }>>(Prisma.sql`
+        SELECT external_id FROM social_profiles WHERE id = ${sayfaId}::uuid AND client_id = ${clientId}::uuid AND profile_type = 'facebook_page'`),
+    );
+    if (!s) throw new BadRequestException('Facebook sayfası bu workspace’te değil.');
+    const anahtar = `${clientId}:${sayfaId}:${formId}`;
+    const eski = this.formAyrintiOnbellek.get(anahtar);
+    if (eski && Date.now() - eski.zaman < FORM_AYRINTI_MS) return eski.deger;
+
+    if (!this.kota.isEnabled) {
+      logger.warn('Kota bekçisi kapalı (REDIS_URL yok); form önizlemesi kota kontrolsüz gidiyor.');
+    } else {
+      const g = await this.kota.acquire({ platform: 'meta', adAccountId: sayfaId, layer: 'interactive' });
+      if (!g.allowed) {
+        const dk = Math.max(1, Math.ceil((g.retryAfterMs ?? 60_000) / 60_000));
+        throw new ServiceUnavailableException(`Meta kotası şu an dolu (${g.reason ?? 'kota'}). Yaklaşık ${dk} dakika sonra tekrar dene.`);
+      }
+    }
+
+    let okunan: Awaited<ReturnType<typeof metaFormAyrintisiOku>>;
+    try {
+      const token = await sayfaTokenOkuyucu(tx, this.crypto, clientId)(s.external_id);
+      okunan = await metaFormAyrintisiOku(this.metaSurumu, formId, token);
+    } catch (e) {
+      const m = e instanceof Error ? e.message : String(e);
+      logger.warn(`Form önizlemesi okunamadı (sayfa ${sayfaId}, form ${formId}): ${m}`);
+      throw new ServiceUnavailableException(`Form Meta'dan okunamadı: ${m}`);
+    }
+    const listede = this.sayfaOnbellek.get(`${clientId}:${sayfaId}`)?.formlar?.some((f) => f.id === formId) ?? false;
+    if (okunan.sayfaPlatformId ? okunan.sayfaPlatformId !== s.external_id : !listede) {
+      throw new BadRequestException('Bu form seçili Facebook sayfasının değil.');
+    }
+    // Advetics'te yayınlanmış formun adı Advetics'teki ad (liste ile aynı kural).
+    const [bizim] = await tx((t) =>
+      t.$queryRaw<Array<{ name: string }>>(Prisma.sql`
+        SELECT name FROM lead_forms
+         WHERE client_id = ${clientId}::uuid AND social_profile_id = ${sayfaId}::uuid AND external_form_id = ${formId}
+         ORDER BY created_at DESC LIMIT 1`),
+    );
+    const { sayfaPlatformId: _sayfa, ...onizleme } = okunan;
+    const deger: FormOnizlemesi = { ...onizleme, ad: bizim?.name ?? onizleme.ad };
+    this.formAyrintiOnbellek.set(anahtar, { zaman: Date.now(), deger });
+    return deger;
   }
 
   /**

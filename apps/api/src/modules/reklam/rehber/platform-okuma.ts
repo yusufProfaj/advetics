@@ -1,4 +1,4 @@
-import { paraOndaligi, type SeciliFormHali, type SeciliPikselHali } from '@advetics/shared';
+import { META_SORU_ETIKETLERI, paraOndaligi, type FormOnizlemeBolumu, type FormOnizlemesi, type FormOnizlemeSorusu, type SeciliFormHali, type SeciliPikselHali } from '@advetics/shared';
 import { hataSiniflandir, metaSurumuDogrula } from '../meta-graf';
 
 /**
@@ -152,6 +152,104 @@ export async function metaSayfaFormlariOku(
     if (!imlec) return { satirlar, kesildi: false };
   }
   return { satirlar, kesildi: true };
+}
+
+/**
+ * Tek formun önizleme alanları (`GET /{form-id}`). Alan adları Meta'nın
+ * resmî iş SDK'sının (Graph şemasından ÜRETİLEN `LeadgenForm`,
+ * `LeadGenQuestion`, `LeadGenContextCard`, `LeadGenThankYouPage`,
+ * `LeadGenQuestionOption`) alan listesinden doğrulandı; CANLIDA ÖLÇÜLMEDİ.
+ * İç içe tek bir alan reddedilirse istek BÜTÜNÜYLE düşer ve panel Meta'nın
+ * mesajını gösterir (sessizce eksik önizleme çizilmez).
+ *
+ * `legal_content` (onay kutuları) İSTENMİYOR: alt alanları SDK'da ayrı bir
+ * tür ve doğrulanmadı; onu tahminle istemek bütün önizlemeyi düşürebilirdi.
+ * Önizleme onay kutularını "okunmadı" diye yazıyor. `cover_photo` da yok:
+ * Meta'nın görsel adresi imzalı ve ölüyor (CLAUDE.md), önizleme için ayrıca
+ * indirmek gerekirdi.
+ */
+export const META_FORM_AYRINTI_ALANLARI =
+  'id,name,status,locale,page_id,privacy_policy_url,question_page_custom_headline,' +
+  'questions{key,label,type,options{key,value}},' +
+  'context_card{title,style,content,button_text},' +
+  'thank_you_page{title,body,button_text,button_type,website_url}';
+
+const metin = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim() : null);
+const adres = (v: unknown): string | null => {
+  const m = metin(v);
+  return m && /^https?:\/\/\S+$/i.test(m) ? m : null;
+};
+
+/**
+ * Meta form yanıtı → ortak önizleme biçimi. SAF (testte doğrudan sınanıyor).
+ *
+ * "Formda yok" ile "okunamadı" ayrı: `context_card` gelmezse form giriş
+ * ekranı OLMADAN kurulmuş demektir (Meta'da isteğe bağlı). Ama sorular,
+ * gizlilik adresi ve teşekkür ekranı Meta'da her formda VAR; gelmezlerse
+ * `okunamayanlar`a yazılır ve önizleme boş ekran çizmek yerine bunu söyler.
+ */
+export function metaFormAyrintisiCoz(govde: unknown): FormOnizlemesi & { sayfaPlatformId: string | null } {
+  const g = (govde ?? {}) as Record<string, unknown>;
+  const okunamayanlar: FormOnizlemeBolumu[] = [];
+
+  const sorular: FormOnizlemeSorusu[] = [];
+  if (Array.isArray(g.questions)) {
+    for (const ham of g.questions) {
+      const q = (ham ?? {}) as { type?: unknown; label?: unknown; options?: unknown };
+      const tur = metin(q.type) ?? 'BILINMIYOR';
+      const secenekler = Array.isArray(q.options)
+        ? q.options.map((o) => metin((o as { value?: unknown })?.value)).filter((x): x is string => x !== null)
+        : [];
+      // CUSTOM sorunun etiketi Meta'nın; standart soruda Türkçe ad önce
+      // (Meta etiketi formun diline göre İngilizce gelebiliyor).
+      const etiket = tur !== 'CUSTOM' && META_SORU_ETIKETLERI[tur] ? META_SORU_ETIKETLERI[tur] : (metin(q.label) ?? tur);
+      sorular.push({ tur, etiket, otomatikDolu: tur in META_SORU_ETIKETLERI, secenekler });
+    }
+  } else okunamayanlar.push('sorular');
+
+  const gizlilikAdresi = adres(g.privacy_policy_url);
+  if (!gizlilikAdresi) okunamayanlar.push('gizlilik');
+
+  const kart = g.context_card && typeof g.context_card === 'object' ? (g.context_card as Record<string, unknown>) : null;
+  const giris = kart
+    ? {
+        baslik: metin(kart.title),
+        maddeler: Array.isArray(kart.content) ? kart.content.map(metin).filter((x): x is string => x !== null) : [],
+        dugme: metin(kart.button_text),
+      }
+    : null;
+
+  const ty = g.thank_you_page && typeof g.thank_you_page === 'object' ? (g.thank_you_page as Record<string, unknown>) : null;
+  const tesekkur = ty
+    ? { baslik: metin(ty.title), metin: metin(ty.body), dugme: metin(ty.button_text), adres: adres(ty.website_url) }
+    : null;
+  if (!tesekkur) okunamayanlar.push('tesekkur');
+
+  return {
+    kaynak: 'meta',
+    ad: metin(g.name) ?? (metin(g.id) ? `Form ${metin(g.id)}` : 'Adsız form'),
+    durum: metin(g.status),
+    giris,
+    soruBasligi: metin(g.question_page_custom_headline),
+    sorular,
+    // Bağlantı METNİ `legal_content` altında; istenmediği için `null` (uydurulmuyor).
+    gizlilik: gizlilikAdresi ? { adres: gizlilikAdresi, metin: null } : null,
+    onaylar: null,
+    tesekkur,
+    okunamayanlar,
+    sayfaPlatformId: metin(g.page_id),
+  };
+}
+
+/** Tek formun ayrıntısı, SAYFA TOKEN'IYLA (form sayfanın altında yaşıyor). */
+export async function metaFormAyrintisiOku(
+  apiSurumu: string,
+  formPlatformId: string,
+  sayfaTokeni: string,
+  fetchFn?: typeof fetch,
+): Promise<FormOnizlemesi & { sayfaPlatformId: string | null }> {
+  if (!/^\d{1,30}$/.test(formPlatformId)) throw new Error('Form kimliği geçersiz');
+  return metaFormAyrintisiCoz(await grafGet(apiSurumu, `${formPlatformId}?fields=${META_FORM_AYRINTI_ALANLARI}`, sayfaTokeni, fetchFn));
 }
 
 /**

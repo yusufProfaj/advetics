@@ -74,11 +74,13 @@ export function RehberEkrani({
   hazirlik,
   sirketAdi,
   workspaceAdi,
+  formYayinIzni,
 }: {
   ilkKayit: RehberKaydi;
   hazirlik: RehberHazirligi;
   sirketAdi: string;
   workspaceAdi: string;
+  formYayinIzni: boolean;
 }) {
   const router = useRouter();
   const [kaydedici] = useState(
@@ -114,7 +116,7 @@ export function RehberEkrani({
   const medyaGorunumu = useMemo(() => videoBilgisiKapaktan(medyaBilgisi, a.medya?.deger ?? []), [medyaBilgisi, a.medya]);
 
   const degistir = useCallback((d: Degisiklik[]) => kaydedici.degistir(d), [kaydedici]);
-  const b: AdimBaglami = { a, kayit, h: hazirlik, acik, degistir, paraBirimi, saatDilimi, clientId: kayit.clientId };
+  const b: AdimBaglami = { a, kayit, h: hazirlik, acik, degistir, paraBirimi, saatDilimi, clientId: kayit.clientId, formYayinIzni };
 
   /*
    * PORTAL: odaklı kip `position: fixed` bir katman. Sayfa şablonunun giriş

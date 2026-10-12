@@ -11,3 +11,4 @@ export * from './api';
 export * from './google-gorsel';
 export * from './google-uzanti';
 export * from './google-ogeler';
+export * from './form-onizleme';

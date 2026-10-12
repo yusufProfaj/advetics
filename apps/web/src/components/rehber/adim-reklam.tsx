@@ -24,11 +24,16 @@ import {
   type MetinOnerIstegi,
   type MetinOnerisi,
   type RehberAlanlari,
+  type FormOnizlemesi,
+  type LeadFormRecord,
   type RehberFormListesi,
   type YoutubeVideoListesi,
   googleGorselKurgusuMu,
 } from '@advetics/shared';
 import { apiFetch, onizlemeAdresi } from '@/lib/api';
+import { FormBuilder } from '@/components/forms/form-builder';
+import { FormOnizleme } from '@/components/forms/form-onizleme';
+import { formOlusturmaDurumu, gizlilikOnerisi, kayittanOnizleme, sayfaTaslaklari, yayinSonrasiSecim } from '@/lib/form-onizleme';
 import { medyaOlc, medyaYukle } from '@/reklam/medya';
 import { AltCubuk, Soru, sil, yaz, type AdimBaglami } from './adim-ortak';
 import { IKON, Ikon } from './ikonlar';
@@ -685,12 +690,20 @@ function MedyaBlogu({
 // Form şablonu (Meta FORM amacı)
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Önizleme penceresinin konusu: Meta'daki form (kimlikle okunur) ya da Advetics taslağı (kaydın kendisi). */
+type OnizlemeKonusu = { tur: 'meta'; formId: string; ad: string } | { tur: 'taslak'; kayit: LeadFormRecord };
+
 function FormSecici({ b, eksikMetni, formUyarisi }: { b: AdimBaglami; eksikMetni: string | null; formUyarisi: string | null }) {
   const sayfaId = b.a.sayfaId?.deger ?? null;
   const secili = b.a.formSablonuId?.deger ?? null;
   const sayfa = b.h.sayfalar.find((x) => x.id === sayfaId)?.ad ?? null;
   const [hal, setHal] = useState<OneriHali<RehberFormListesi>>({ tur: 'istenmedi' });
+  const [taslaklar, setTaslaklar] = useState<OneriHali<LeadFormRecord[]>>({ tur: 'istenmedi' });
   const [tur, setTur] = useState(0);
+  const [onizleme, setOnizleme] = useState<OnizlemeKonusu | null>(null);
+  const [olustur, setOlustur] = useState<{ acik: boolean; anahtar: number; kayit: LeadFormRecord | null }>({ acik: false, anahtar: 0, kayit: null });
+  const [bildirim, setBildirim] = useState<string | null>(null);
+  const olusturma = formOlusturmaDurumu({ sayfaId, yayinIzni: b.formYayinIzni });
 
   /*
    * Liste SEÇİLİ sayfanın Meta'daki yayında formları; sayfa değişince ya da
@@ -710,6 +723,53 @@ function FormSecici({ b, eksikMetni, formUyarisi }: { b: AdimBaglami; eksikMetni
     };
   }, [sayfaId, b.clientId, tur]);
 
+  /*
+   * YARIM KALAN FORMLAR: Advetics'te yazılıp Meta'ya çıkmamış (taslak ya da
+   * yayını düşmüş) formlar. Pencere yayın hatasıyla kapatılırsa form burada
+   * kalır; kaybolmaz. Okunamazsa sebep yazılır (boş listeye çevrilmez).
+   */
+  useEffect(() => {
+    if (!sayfaId) return setTaslaklar({ tur: 'istenmedi' });
+    let iptal = false;
+    setTaslaklar({ tur: 'isteniyor' });
+    apiFetch<LeadFormRecord[]>(`/lead-forms?clientId=${encodeURIComponent(b.clientId)}`)
+      .then((r) => {
+        if (iptal) return;
+        const t = sayfaTaslaklari(r, sayfaId);
+        setTaslaklar(t.length ? { tur: 'geldi', deger: t } : { tur: 'bos', neden: 'Yarım kalan form yok.' });
+      })
+      .catch((e: unknown) => !iptal && setTaslaklar(oneriHatasi(e)));
+    return () => {
+      iptal = true;
+    };
+  }, [sayfaId, b.clientId, tur]);
+
+  const oneri = hal.tur === 'geldi' ? gizlilikOnerisi(hal.deger.satirlar) : null;
+  const olusturAc = (kayit: LeadFormRecord | null) => {
+    setBildirim(null);
+    setOnizleme(null);
+    setOlustur((x) => ({ acik: true, anahtar: x.anahtar + 1, kayit }));
+  };
+  const yayinlandi = (r: LeadFormRecord) => {
+    const k = yayinSonrasiSecim(r);
+    if (k.tur === 'sec') {
+      yaz(b, 'formSablonuId', k.formId);
+      setBildirim(`"${r.name}" Meta'da yayınlandı ve bu reklam için seçildi.`);
+      setOlustur((x) => ({ ...x, acik: false }));
+    } else {
+      setBildirim(k.sebep);
+    }
+    setTur((x) => x + 1);
+  };
+  const olusturDugmesi = (birincil: boolean) =>
+    olusturma.goster ? (
+      <button type="button" className={`${birincil ? s.birincil : s.ikincil} ${s.ustBosluk}`} onClick={() => olusturAc(null)}>
+        + Form oluştur
+      </button>
+    ) : sayfaId ? (
+      <p className={s.ipucu}>{olusturma.sebep}</p>
+    ) : null;
+
   return (
     <>
       {hal.tur === 'istenmedi' && <p className={s.ipucu} style={{ margin: 0 }}>Önce Nerede adımında Facebook sayfasını seç; formlar o sayfadan listelenir.</p>}
@@ -717,30 +777,67 @@ function FormSecici({ b, eksikMetni, formUyarisi }: { b: AdimBaglami; eksikMetni
       {hal.tur === 'dustu' && (
         <div className={s.uyari} role="alert">
           <Ikon d={IKON.ucgen} />
-          <span>{hal.mesaj}</span>
+          <span>Formlar Meta&apos;dan okunamadı: {hal.mesaj}</span>
         </div>
       )}
       {hal.tur === 'bos' && (
-        <div className={s.uyari}>
-          <Ikon d={IKON.ucgen} />
-          <span>
-            {sayfa ? <b>{sayfa}</b> : 'Seçili sayfa'}: {hal.neden}
-          </span>
-        </div>
+        <>
+          <div className={s.uyari}>
+            <Ikon d={IKON.ucgen} />
+            <span>
+              {sayfa ? <b>{sayfa}</b> : 'Seçili sayfa'}: {hal.neden}
+            </span>
+          </div>
+          {/* Boş listede ASIL EYLEM yeni form: Meta'ya gitmeden burada kurulur. */}
+          {olusturDugmesi(true)}
+        </>
       )}
       {hal.tur === 'geldi' && (
         <>
-          <div className={s.secim}>
+          <div className={s.formListesi}>
             {hal.deger.satirlar.map((f) => (
-              <button key={f.id} type="button" aria-pressed={secili === f.id} onClick={() => yaz(b, 'formSablonuId', f.id)}>
-                {f.ad}
-                {!f.gizlilikAdresi && <span className={s.ops}> gizlilik adresi yok</span>}
-              </button>
+              <div key={f.id} className={s.formSatiri} data-secili={secili === f.id}>
+                <button type="button" aria-pressed={secili === f.id} onClick={() => yaz(b, 'formSablonuId', f.id)}>
+                  {f.ad}
+                  {!f.gizlilikAdresi && <small>gizlilik adresi yok</small>}
+                </button>
+                <button type="button" className={s.metinDugme} onClick={() => setOnizleme({ tur: 'meta', formId: f.id, ad: f.ad })}>
+                  Önizle
+                </button>
+              </div>
             ))}
           </div>
           {hal.deger.kesildi && <p className={s.ipucu}>İlk {hal.deger.toplam} form gösteriliyor.</p>}
+          {olusturDugmesi(false)}
         </>
       )}
+      {hal.tur === 'dustu' && olusturDugmesi(false)}
+      {bildirim && <p className={s.ipucu} role="status">{bildirim}</p>}
+      {taslaklar.tur === 'geldi' && (
+        <div className={s.ustBosluk}>
+          <p className={s.alanEtiket}>Yarım kalan formlar</p>
+          <p className={s.ipucu} style={{ marginTop: 2 }}>Advetics&apos;te yazıldı, Meta&apos;da yayınlanmadı. Yayınlanınca seçilebilir.</p>
+          <div className={s.formListesi}>
+            {taslaklar.deger.map((t) => (
+              <div key={t.id} className={s.formSatiri}>
+                <span className={s.formTaslakAdi}>
+                  {t.name}
+                  <small>{t.status === 'failed' ? `Yayınlanamadı${t.error ? `: ${t.error}` : ''}` : 'Taslak'}</small>
+                </span>
+                <button type="button" className={s.metinDugme} onClick={() => setOnizleme({ tur: 'taslak', kayit: t })}>
+                  Önizle
+                </button>
+                {olusturma.goster && (
+                  <button type="button" className={s.metinDugme} onClick={() => olusturAc(t)}>
+                    Aç ve yayınla
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {taslaklar.tur === 'dustu' && <p className={s.hataMetni}>Yarım kalan formlar okunamadı: {taslaklar.mesaj}</p>}
       {(hal.tur === 'geldi' || hal.tur === 'bos' || hal.tur === 'dustu') && (
         <button type="button" className={`${s.metinDugme} ${s.ustBosluk}`} onClick={() => setTur((x) => x + 1)}>
           Listeyi yenile
@@ -752,7 +849,197 @@ function FormSecici({ b, eksikMetni, formUyarisi }: { b: AdimBaglami; eksikMetni
           : `Formlar ${sayfa ? `${sayfa} ` : 'seçtiğin '}Facebook sayfasına gelir (Meta'nın kendi seçtiği sayfa değil).`}
       </p>
       {formUyarisi && <p className={s.hataMetni}>{formUyarisi}</p>}
+
+      <FormOnizlemePenceresi
+        b={b}
+        sayfaId={sayfaId}
+        konu={onizleme}
+        secili={secili}
+        yayinlayabilir={olusturma.goster}
+        kapat={() => setOnizleme(null)}
+        sec={(id) => {
+          yaz(b, 'formSablonuId', id);
+          setOnizleme(null);
+        }}
+        taslagiAc={(t) => olusturAc(t)}
+      />
+      <FormOlusturPenceresi
+        acik={olustur.acik}
+        anahtar={olustur.anahtar}
+        kayit={olustur.kayit}
+        clientId={b.clientId}
+        sayfa={sayfaId ? { id: sayfaId, name: sayfa ?? 'Facebook sayfası' } : null}
+        oneri={oneri}
+        yayinlandi={yayinlandi}
+        kapat={() => {
+          setOlustur((x) => ({ ...x, acik: false }));
+          // Pencere yayın olmadan kapandıysa kaydedilen taslak "yarım kalan"da görünsün.
+          setTur((x) => x + 1);
+        }}
+      />
     </>
+  );
+}
+
+/** Pencere açıkken Escape kapatır (`kapat` verildiyse); açılınca odak kapat düğmesine (klavye kullanıcısı içeride başlasın). */
+function usePencereKlavyesi(acik: boolean, kapat: (() => void) | null, odak: React.RefObject<HTMLButtonElement | null>) {
+  // ODAK YALNIZ AÇILIŞTA: `kapat` her çizimde yeni bir fonksiyon; odağı onunla
+  // aynı effect'e koymak, oluşturucuda yazan kullanıcının imlecini her
+  // çizimde Kapat düğmesine çalardı.
+  useEffect(() => {
+    if (acik) odak.current?.focus();
+  }, [acik, odak]);
+  useEffect(() => {
+    if (!acik || !kapat) return;
+    const tus = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') kapat();
+    };
+    window.addEventListener('keydown', tus);
+    return () => window.removeEventListener('keydown', tus);
+  }, [acik, kapat, odak]);
+}
+
+/**
+ * FORM ÖNİZLEME PENCERESİ. Meta formu her açılışta sunucudan okunur (sunucu
+ * 10 dk önbellekliyor); dört hâl ayrı: okunuyor / okundu / okunamadı (Meta'nın
+ * mesajı). Taslak kendi kaydından çizilir, platforma gidilmez. Pencere DOM'dan
+ * çıkmaz; görünürlük geçişle değişir (panel kuralı).
+ */
+function FormOnizlemePenceresi({
+  b,
+  sayfaId,
+  konu,
+  secili,
+  yayinlayabilir,
+  kapat,
+  sec,
+  taslagiAc,
+}: {
+  b: AdimBaglami;
+  sayfaId: string | null;
+  konu: OnizlemeKonusu | null;
+  secili: string | null;
+  yayinlayabilir: boolean;
+  kapat: () => void;
+  sec: (formId: string) => void;
+  taslagiAc: (t: LeadFormRecord) => void;
+}) {
+  const kapatRef = useRef<HTMLButtonElement>(null);
+  const baslikId = useId();
+  const [hal, setHal] = useState<{ tur: 'isteniyor' } | { tur: 'dustu'; mesaj: string } | { tur: 'geldi'; deger: FormOnizlemesi }>({ tur: 'isteniyor' });
+  const acik = konu !== null;
+  usePencereKlavyesi(acik, kapat, kapatRef);
+
+  const metaId = konu?.tur === 'meta' ? konu.formId : null;
+  useEffect(() => {
+    if (!metaId || !sayfaId) return;
+    let iptal = false;
+    setHal({ tur: 'isteniyor' });
+    apiFetch<FormOnizlemesi>(
+      `/reklam/rehber/form-ayrintisi?clientId=${encodeURIComponent(b.clientId)}&sayfaId=${encodeURIComponent(sayfaId)}&formId=${encodeURIComponent(metaId)}`,
+    )
+      .then((r) => !iptal && setHal({ tur: 'geldi', deger: r }))
+      .catch((e: unknown) => !iptal && setHal(oneriHatasi(e)));
+    return () => {
+      iptal = true;
+    };
+  }, [metaId, sayfaId, b.clientId]);
+
+  const gorunen: typeof hal = konu?.tur === 'taslak' ? { tur: 'geldi', deger: kayittanOnizleme(konu.kayit) } : hal;
+  const ad = konu ? (konu.tur === 'meta' ? konu.ad : konu.kayit.name) : '';
+
+  return (
+    <div className={`${s.perde} ${acik ? s.acik : ''}`} aria-hidden={!acik}>
+      <div className={s.pencere} role="dialog" aria-modal="true" aria-labelledby={baslikId}>
+        <h3 id={baslikId}>Form önizlemesi: {ad}</h3>
+        <p>{konu?.tur === 'taslak' ? 'Advetics taslağı; henüz Meta’da yayında değil.' : 'Meta’daki formun kişiye görünen ekranları, sırayla.'}</p>
+        <div className={s.pencereGovde}>
+          {gorunen.tur === 'isteniyor' && <p className={s.ipucu}>Form Meta&apos;dan okunuyor…</p>}
+          {gorunen.tur === 'dustu' && (
+            <div className={s.uyari} role="alert">
+              <Ikon d={IKON.ucgen} />
+              <span>{gorunen.mesaj}</span>
+            </div>
+          )}
+          {acik && gorunen.tur === 'geldi' && <FormOnizleme onizleme={gorunen.deger} baslik="Kişinin göreceği ekranlar" />}
+        </div>
+        <div className={s.pencereAlt}>
+          <button ref={kapatRef} type="button" className={s.ikincil} onClick={kapat}>
+            Kapat
+          </button>
+          {konu?.tur === 'meta' && (
+            <button type="button" className={s.birincil} disabled={secili === konu.formId} onClick={() => sec(konu.formId)}>
+              {secili === konu.formId ? 'Bu form seçili' : 'Bu formu kullan'}
+            </button>
+          )}
+          {konu?.tur === 'taslak' && yayinlayabilir && (
+            <button type="button" className={s.birincil} onClick={() => taslagiAc(konu.kayit)}>
+              Aç ve yayınla
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * FORM OLUŞTUR PENCERESİ: rehberden ÇIKMADAN Marka Merkezi'nin oluşturucusu
+ * (`FormBuilder`, gömülü kip). İkinci bir oluşturucu YAZILMADI. Sayfa
+ * rehberin seçili sayfası; gizlilik adresi önerisi kaynağıyla. Kaydet →
+ * "Meta'da yayınla" (var olan akış); yayın düşerse Meta'nın cümlesi
+ * oluşturucunun içinde görünür ve form taslak olarak kalır. Her açılış yeni
+ * bir oluşturucu (`anahtar`): önceki yarım formun alanları sızmasın.
+ */
+function FormOlusturPenceresi({
+  acik,
+  anahtar,
+  kayit,
+  clientId,
+  sayfa,
+  oneri,
+  yayinlandi,
+  kapat,
+}: {
+  acik: boolean;
+  anahtar: number;
+  kayit: LeadFormRecord | null;
+  clientId: string;
+  sayfa: { id: string; name: string } | null;
+  oneri: { adres: string; kaynak: string } | null;
+  yayinlandi: (r: LeadFormRecord) => void;
+  kapat: () => void;
+}) {
+  const kapatRef = useRef<HTMLButtonElement>(null);
+  const baslikId = useId();
+  // ESCAPE BURADA KAPATMAZ: oluşturucuda kaydedilmemiş alanlar var ve bir
+  // sonraki açılış yeni bir oluşturucu kuruyor; yanlışlıkla basılan tuş
+  // yazılanı silerdi. Kapatmak yalnız düğmeyle.
+  usePencereKlavyesi(acik, null, kapatRef);
+  return (
+    <div className={`${s.perde} ${acik ? s.acik : ''}`} aria-hidden={!acik}>
+      <div className={`${s.pencere} ${s.pencereGenis}`} role="dialog" aria-modal="true" aria-labelledby={baslikId}>
+        <h3 id={baslikId}>{kayit ? `Formu yayınla: ${kayit.name}` : 'Yeni anlık form'}</h3>
+        <p>Kaydet, sonra Meta&apos;da yayınla. Yayınlanınca bu reklam için otomatik seçilir. Yayınlanan formun içeriği sonradan değiştirilemez.</p>
+        <div className={s.pencereGovde}>
+          {sayfa && anahtar > 0 && (
+            <FormBuilder
+              key={anahtar}
+              clientId={clientId}
+              pages={[sayfa]}
+              existing={kayit ?? undefined}
+              canPublish
+              gomulu={{ varsayilanGizlilik: oneri, onYayinlandi: yayinlandi }}
+            />
+          )}
+        </div>
+        <div className={s.pencereAlt}>
+          <button ref={kapatRef} type="button" className={s.ikincil} onClick={kapat}>
+            Kapat
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

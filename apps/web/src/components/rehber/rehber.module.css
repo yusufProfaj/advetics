@@ -2433,3 +2433,66 @@
 .hazirOzet .ozetSatir b {
   flex: 1;
 }
+
+/*
+ * FORM SEÇİCİ: seçim kartı + "Önizle". Kartın kendisi seçer (eski
+ * davranış), önizleme ayrı bir metin düğmesi: kartın tıklamasını önizlemeye
+ * çevirmek, seçmeye alışmış kullanıcıyı pencereye hapsederdi. Dar ekranda
+ * (375 px) satır alt alta kırılır, düğmeler parmakla basılacak genişlikte.
+ */
+.formListesi {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+}
+.formSatiri {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 4px 10px 4px 4px;
+  border-radius: 10px;
+  border: 1.5px solid var(--t-line);
+  background: var(--t-surface);
+  transition: border-color 0.2s var(--t-ease);
+}
+.formSatiri[data-secili='true'] {
+  border-color: var(--t-brand);
+  background: var(--t-brand-soft);
+}
+.formSatiri > button[aria-pressed] {
+  flex: 1 1 180px;
+  min-height: 40px;
+  padding: 6px 8px;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+}
+.formSatiri small,
+.formTaslakAdi small {
+  display: block;
+  font-weight: 400;
+  font-size: 11.5px;
+  color: var(--t-ink-muted);
+}
+.formTaslakAdi {
+  flex: 1 1 180px;
+  padding: 6px 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.formSatiri > .metinDugme {
+  min-height: 32px;
+}
+.pencereGenis {
+  width: min(1000px, 100%);
+}
+.pencereGovde {
+  margin: 12px 18px 0;
+}
+@media (max-width: 480px) {
+  .pencereGovde {
+    margin: 12px 12px 0;
+  }
+}

@@ -18,6 +18,12 @@ export interface AdimBaglami {
   paraBirimi: string;
   saatDilimi: string;
   clientId: string;
+  /**
+   * Form yayınlama yetkisi (`bulk.publish`). Rehberin "Form oluştur"u buna
+   * bağlı: seçilebilir form Meta'da yayında olmak zorunda, yayınlayamayan
+   * kullanıcıya düğme gösterilmez, sebebi yazılır.
+   */
+  formYayinIzni: boolean;
 }
 
 export function yaz(b: AdimBaglami, alan: Degisiklik['alan'], deger: unknown, kaynak: Degisiklik['kaynak'] = 'kullanici') {

@@ -16,6 +16,8 @@ import {
   type PrefillQuestion,
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { kayittanOnizleme } from '@/lib/form-onizleme';
+import { FormOnizleme } from './form-onizleme';
 
 /**
  * Anlık form oluşturucu.
@@ -28,19 +30,35 @@ import { ApiRequestError, apiFetch } from '@/lib/api';
  * EN ÖNEMLİ DAVRANIŞ: yayınlanmış bir formda değişiklik yapıldığında,
  * KAYDETMEDEN ÖNCE ne olacağı söyleniyor. Sunucudan `plan` isteniyor ve
  * kullanıcı yeni sürüm oluşacağını onaylamadan hiçbir şey yazılmıyor.
+ *
+ * İKİ YERDE AYNI BİLEŞEN: Marka Merkezi › Formlar ve AdvCampaign rehberinin
+ * "Form oluştur" penceresi (`gomulu`). Rehbere ikinci bir oluşturucu
+ * yazılmadı: iki oluşturucu, Meta'ya giden iki ayrı form biçimi demekti.
+ * Gömülü kipte sayfa yenilenmez (rehberin yazılmamış değişiklikleri
+ * kaybolmasın); yayın sonucu çağırana bildirilir ve rehber yeni formu seçer.
  */
 export function FormBuilder({
   clientId,
   pages,
   existing,
   canPublish,
+  gomulu,
 }: {
   clientId: string;
   pages: Array<{ id: string; name: string }>;
   existing?: LeadFormRecord;
   canPublish: boolean;
+  gomulu?: {
+    /** Gizlilik adresi önerisi ve KAYNAĞI (ekranda yazılır); yoksa alan boş ve zorunlu. */
+    varsayilanGizlilik?: { adres: string; kaynak: string } | null;
+    onYayinlandi: (kayit: LeadFormRecord) => void;
+  };
 }) {
   const router = useRouter();
+  const yenile = () => {
+    if (!gomulu) router.refresh();
+  };
+  const oneri = existing ? null : (gomulu?.varsayilanGizlilik ?? null);
 
   const [pageId, setPageId] = useState(existing?.socialProfileId ?? pages[0]?.id ?? '');
   const [name, setName] = useState(existing?.name ?? '');
@@ -51,7 +69,7 @@ export function FormBuilder({
     existing?.prefillQuestions ?? ['FULL_NAME', 'PHONE'],
   );
   const [custom, setCustom] = useState<CustomQuestion[]>(existing?.customQuestions ?? []);
-  const [privacyUrl, setPrivacyUrl] = useState(existing?.privacyPolicyUrl ?? '');
+  const [privacyUrl, setPrivacyUrl] = useState(existing?.privacyPolicyUrl ?? oneri?.adres ?? '');
   const [privacyText, setPrivacyText] = useState(
     existing?.privacyPolicyLinkText ?? 'Gizlilik Politikası',
   );
@@ -124,7 +142,7 @@ export function FormBuilder({
         setFormId(created.id);
         setStatus(created.status);
         await loadWarnings(created.id);
-        router.refresh();
+        yenile();
       }
       return;
     }
@@ -153,15 +171,19 @@ export function FormBuilder({
       setFormId(updated.id);
       setStatus(updated.status);
       await loadWarnings(updated.id);
-      router.refresh();
+      yenile();
     }
   }
 
   async function loadWarnings(id: string): Promise<void> {
-    const res = await apiFetch<{ blockers: string[]; warnings: string[] }>(
-      `/lead-forms/${id}/checks`,
-    ).catch(() => null);
-    setWarnings(res ? [...res.blockers, ...res.warnings] : []);
+    // HATA YUTULMUYOR: "kontrol yok" ile "kontroller okunamadı" ayrı şeyler;
+    // ikincisi boş listeye çevrilirse kullanıcı formu temiz sanar.
+    try {
+      const res = await apiFetch<{ blockers: string[]; warnings: string[] }>(`/lead-forms/${id}/checks`);
+      setWarnings([...res.blockers, ...res.warnings]);
+    } catch (err) {
+      setWarnings([`Yayın öncesi kontroller okunamadı: ${err instanceof ApiRequestError ? err.message : 'sunucuya ulaşılamadı'}`]);
+    }
   }
 
   async function publish(): Promise<void> {
@@ -171,7 +193,8 @@ export function FormBuilder({
     );
     if (res) {
       setStatus(res.status);
-      router.refresh();
+      yenile();
+      gomulu?.onYayinlandi(res);
     }
   }
 
@@ -395,7 +418,11 @@ export function FormBuilder({
         <Section n={4} title="Gizlilik ve onaylar">
           <Field
             label="Gizlilik politikası adresi"
-            hint="Zorunlu — Meta gizlilik politikası olmayan formu kabul etmiyor."
+            hint={
+              oneri && privacyUrl === oneri.adres
+                ? `Önden dolduruldu: ${oneri.kaynak}. Bu form için doğru değilse değiştir.`
+                : 'Zorunlu. Meta gizlilik politikası olmayan formu kabul etmiyor; adres https:// ile başlamalı.'
+            }
           >
             <input
               value={privacyUrl}
@@ -604,72 +631,25 @@ export function FormBuilder({
         )}
       </div>
 
-      {/* CANLI ÖNİZLEME — kullanıcının gördüğü şey bu. */}
+      {/* CANLI ÖNİZLEME — rehberin "Önizle" penceresiyle AYNI bileşen. */}
       <aside className="lg:sticky lg:top-4 lg:self-start">
-        <div className="rounded-xl border border-line bg-surface p-3">
-          <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-ink-muted">
-            Kişinin göreceği form
-          </p>
-          <div className="rounded-lg bg-surface-sunken p-3">
-            <p className="text-sm font-semibold text-ink">{headline || name || 'Başlık'}</p>
-            {intro && <p className="mt-1 text-xs text-ink-muted">{intro}</p>}
-
-            <ul className="mt-3 space-y-1.5">
-              {prefill.map((q) => (
-                <li key={q} className="rounded-md bg-surface px-2.5 py-2">
-                  <span className="text-[11px] text-ink-muted">{PREFILL_LABELS[q]}</span>
-                  {/* ÖN DOLU GÖRÜNÜYOR çünkü gerçekten öyle olacak. */}
-                  <p className="text-xs text-ink">otomatik dolu</p>
-                </li>
-              ))}
-              {custom.map((q, i) => (
-                <li key={i} className="rounded-md bg-surface px-2.5 py-2">
-                  <span className="text-[11px] text-ink-muted">{q.label || 'Soru'}</span>
-                  <p className="text-xs text-ink-muted italic">
-                    {q.type === 'multiple_choice'
-                      ? q.options.join(' / ') || 'seçenekler'
-                      : 'kişi yazacak'}
-                  </p>
-                </li>
-              ))}
-            </ul>
-
-            {consents.length > 0 && (
-              <ul className="mt-3 space-y-1">
-                {consents.map((c, i) => (
-                  <li key={i} className="flex gap-1.5 text-[10px] text-ink-muted">
-                    <span>☐</span>
-                    <span>
-                      {c.text || 'Onay metni'}
-                      {c.required && ' *'}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            <p className="mt-2 text-[10px] text-ink-muted underline">
-              {privacyText || 'Gizlilik Politikası'}
-            </p>
-
-            <div className="mt-3 rounded-md bg-brand px-2.5 py-1.5 text-center text-xs font-semibold text-white">
-              Gönder
-            </div>
-          </div>
-
-          <div className="mt-2 rounded-lg bg-surface-sunken p-3">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">
-              Sonrasında
-            </p>
-            <p className="mt-1 text-sm font-semibold text-ink">{tyHeadline}</p>
-            <p className="text-xs text-ink-muted">{tyBody}</p>
-            {tyCtaUrl && (
-              <div className="mt-2 rounded-md border border-line px-2.5 py-1.5 text-center text-[11px] text-ink">
-                {tyCtaText}
-              </div>
-            )}
-          </div>
-        </div>
+        <FormOnizleme
+          onizleme={kayittanOnizleme({
+            name,
+            headline,
+            intro,
+            prefillQuestions: prefill,
+            customQuestions: custom,
+            privacyPolicyUrl: privacyUrl,
+            privacyPolicyLinkText: privacyText,
+            consentBoxes: consents,
+            thankYouHeadline: tyHeadline,
+            thankYouBody: tyBody,
+            thankYouCtaText: tyCtaText,
+            thankYouCtaUrl: tyCtaUrl,
+            status,
+          })}
+        />
       </aside>
     </div>
   );

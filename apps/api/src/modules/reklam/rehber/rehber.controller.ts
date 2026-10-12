@@ -7,6 +7,7 @@ import {
   rehberYayinlaSchema,
   type AnahtarKelimeOnerisi,
   type MetinOnerisi,
+  type FormOnizlemesi,
   type RehberFormListesi,
   type RehberGuncelle,
   type RehberHazirligi,
@@ -65,6 +66,21 @@ export class RehberController {
     @Query('sayfaId', ParseUUIDPipe) sayfaId: string,
   ): Promise<RehberFormListesi> {
     return this.rehber.formSablonlari(ctx, clientId, sayfaId);
+  }
+
+  /**
+   * Seçili sayfanın tek formunun önizlemesi (giriş, sorular, gizlilik,
+   * teşekkür). Form başka sayfanınsa 400; okunamazsa 503 + Meta'nın mesajı.
+   */
+  @Get('rehber/form-ayrintisi')
+  @RequirePermissions('bulk.read')
+  formAyrintisi(
+    @CurrentTenant() ctx: TenantContext,
+    @Query('clientId', ParseUUIDPipe) clientId: string,
+    @Query('sayfaId', ParseUUIDPipe) sayfaId: string,
+    @Query('formId') formId: string,
+  ): Promise<FormOnizlemesi> {
+    return this.rehber.formAyrintisi(ctx, clientId, sayfaId, String(formId ?? ''));
   }
 
   /**

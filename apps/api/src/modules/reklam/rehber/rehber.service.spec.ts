@@ -1563,3 +1563,167 @@ describe('Siteme gelsinler (Google): öğeler ve site bağlantısı teşhisi', (
     expect(c!.alanlar.ogeler!.logoVarlikId).toBeNull();
   });
 });
+
+/**
+ * FORM ÖNİZLEMESİ (`formAyrintisi`) — sahte Graph. Kritik iddialar: (1) sayfa
+ * token'ıyla ve doğrulanmış alan listesiyle gidiliyor, (2) başka workspace'in
+ * ya da başka sayfanın formu GÖSTERİLMİYOR (biri platforma gitmeden), (3)
+ * okunamayan form 503 + Meta'nın mesajı ve önbelleğe GİRMİYOR, (4) RLS
+ * altında da başka workspace'in sayfası görünmüyor.
+ */
+describe('form önizlemesi (form-ayrintisi)', () => {
+  const S1 = '55555555-0000-4000-8000-0000000000e1';
+  const S_OTEKI = '55555555-0000-4000-8000-0000000000e2';
+  let istekler: string[];
+  let formCevabi: (adres: string) => Response;
+  const META_FORM = {
+    id: '777',
+    name: 'Keşif Formu',
+    status: 'ACTIVE',
+    page_id: '9101',
+    privacy_policy_url: 'https://ornek.com.tr/kvkk',
+    context_card: { title: 'Ücretsiz keşif', style: 'LIST_STYLE', content: ['24 saatte dönüş'], button_text: 'Devam' },
+    questions: [
+      { key: 'full_name', label: 'Full name', type: 'FULL_NAME' },
+      { key: 'butce', label: 'Bütçeniz?', type: 'CUSTOM', options: [{ key: 'a', value: '1-2 milyon' }, { key: 'b', value: '2-5 milyon' }] },
+    ],
+    thank_you_page: { title: 'Teşekkürler', body: 'Arayacağız.', button_text: 'Siteye git', button_type: 'VIEW_WEBSITE', website_url: 'https://ornek.com.tr' },
+  };
+
+  beforeEach(async () => {
+    istekler = [];
+    (svc as unknown as { formAyrintiOnbellek: Map<string, unknown> }).formAyrintiOnbellek.clear();
+    formCevabi = () => new Response(JSON.stringify(META_FORM), { status: 200 });
+    vi.stubGlobal('fetch', async (adres: string, init?: { headers?: Record<string, string> }) => {
+      istekler.push(`${String(adres)} ${init?.headers?.Authorization ?? ''}`);
+      if (String(adres).includes('/leadgen_forms')) return new Response(JSON.stringify({ data: [{ id: '888', name: 'Listede', status: 'ACTIVE' }] }), { status: 200 });
+      return formCevabi(String(adres));
+    });
+    await h.q(
+      `INSERT INTO social_profiles (id, org_id, client_id, connection_id, profile_type, external_id, name, page_access_token_enc, updated_at)
+       VALUES ($1, $3, $4, $6, 'facebook_page', '9101', 'Sayfa', '\\x00', now()),
+              ($2, $3, $5, $6, 'facebook_page', '9102', 'Ötekinin', '\\x00', now())`,
+      [S1, S_OTEKI, IDS.org, IDS.client, OTEKI, IDS.connection],
+    );
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('KRİTİK: sayfa token’ıyla, doğrulanmış alanlarla okunur; dört ekran eşlenir; ikinci açılış önbellekten', async () => {
+    const o = await svc.formAyrintisi(CTX, IDS.client, S1, '777');
+    expect(istekler).toHaveLength(1);
+    expect(istekler[0]).toContain('/v25.0/777?fields=');
+    expect(istekler[0]).toContain('questions{key,label,type,options{key,value}}');
+    expect(istekler[0]).toContain('thank_you_page{title,body,button_text,button_type,website_url}');
+    expect(istekler[0]).toContain('Bearer T');
+    expect(o).toEqual({
+      kaynak: 'meta',
+      ad: 'Keşif Formu',
+      durum: 'ACTIVE',
+      giris: { baslik: 'Ücretsiz keşif', maddeler: ['24 saatte dönüş'], dugme: 'Devam' },
+      soruBasligi: null,
+      sorular: [
+        { tur: 'FULL_NAME', etiket: 'Ad soyad', otomatikDolu: true, secenekler: [] },
+        { tur: 'CUSTOM', etiket: 'Bütçeniz?', otomatikDolu: false, secenekler: ['1-2 milyon', '2-5 milyon'] },
+      ],
+      gizlilik: { adres: 'https://ornek.com.tr/kvkk', metin: null },
+      onaylar: null,
+      tesekkur: { baslik: 'Teşekkürler', metin: 'Arayacağız.', dugme: 'Siteye git', adres: 'https://ornek.com.tr' },
+      okunamayanlar: [],
+    });
+    await svc.formAyrintisi(CTX, IDS.client, S1, '777');
+    expect(istekler).toHaveLength(1);
+  });
+
+  it('Advetics’te yayınlanmış formun adı Advetics’teki ad', async () => {
+    await h.q(
+      `INSERT INTO lead_forms (id, org_id, client_id, social_profile_id, name, prefill_questions, privacy_policy_url, root_id, status, external_form_id, published_at, updated_at)
+       VALUES ($1, $2, $3, $4, 'Panelde kurulan', '["EMAIL"]', 'https://o.com/kvkk', $1, 'published', '777', now(), now())`,
+      ['77777777-0000-4000-8000-0000000000e9', IDS.org, IDS.client, S1],
+    );
+    expect((await svc.formAyrintisi(CTX, IDS.client, S1, '777')).ad).toBe('Panelde kurulan');
+  });
+
+  it('KRİTİK: başka workspace’in sayfası ve erişilmeyen workspace platforma ÇIKMADAN reddedilir', async () => {
+    await expect(svc.formAyrintisi(CTX, IDS.client, S_OTEKI, '777')).rejects.toMatchObject({ status: 400 });
+    await expect(svc.formAyrintisi({ ...CTX, clientIds: [IDS.client] } as TenantContext, OTEKI, S_OTEKI, '777')).rejects.toMatchObject({ status: 403 });
+    await expect(svc.formAyrintisi(CTX, IDS.client, S1, '../me')).rejects.toMatchObject({ status: 400 });
+    expect(istekler).toEqual([]);
+  });
+
+  it('KRİTİK: formun sayfası seçili sayfa DEĞİLSE gösterilmez; sayfa bilgisi yoksa yalnız listedeki form', async () => {
+    formCevabi = () => new Response(JSON.stringify({ ...META_FORM, page_id: '5555' }), { status: 200 });
+    await expect(svc.formAyrintisi(CTX, IDS.client, S1, '777')).rejects.toMatchObject({ status: 400 });
+    const { page_id: _p, ...sayfasiz } = META_FORM;
+    formCevabi = () => new Response(JSON.stringify({ ...sayfasiz, id: '888' }), { status: 200 });
+    await expect(svc.formAyrintisi(CTX, IDS.client, S1, '888')).rejects.toMatchObject({ status: 400 });
+    await svc.formSablonlari(CTX, IDS.client, S1);
+    expect((await svc.formAyrintisi(CTX, IDS.client, S1, '888')).ad).toBe('Keşif Formu');
+  });
+
+  it('KRİTİK: okunamayan form 503 + Meta’nın mesajı ve önbelleğe GİRMEZ', async () => {
+    formCevabi = () => new Response(JSON.stringify({ error: { message: '(#100) Tried accessing nonexisting field', code: 100 } }), { status: 400 });
+    await expect(svc.formAyrintisi(CTX, IDS.client, S1, '777')).rejects.toMatchObject({ status: 503 });
+    await expect(svc.formAyrintisi(CTX, IDS.client, S1, '777')).rejects.toThrow(/okunamadı/);
+    expect(istekler).toHaveLength(2);
+    formCevabi = () => new Response(JSON.stringify(META_FORM), { status: 200 });
+    expect((await svc.formAyrintisi(CTX, IDS.client, S1, '777')).ad).toBe('Keşif Formu');
+  });
+
+  it('eksik gelen zorunlu bölümler "okunamadı" olarak işaretlenir, boş ekran uydurulmaz', async () => {
+    formCevabi = () => new Response(JSON.stringify({ id: '777', name: 'Yarım', page_id: '9101' }), { status: 200 });
+    const o = await svc.formAyrintisi(CTX, IDS.client, S1, '777');
+    expect(o.okunamayanlar).toEqual(['sorular', 'gizlilik', 'tesekkur']);
+    expect(o.giris).toBeNull();
+    expect(o.tesekkur).toBeNull();
+  });
+
+  it('kota doluysa Meta’ya çıkılmaz (503 + sebep)', async () => {
+    const kota = (svc as unknown as { kota: unknown }).kota;
+    (svc as unknown as { kota: unknown }).kota = { isEnabled: true, acquire: async () => ({ allowed: false, reason: 'yüzde 92', retryAfterMs: 120_000 }) };
+    try {
+      await expect(svc.formAyrintisi(CTX, IDS.client, S1, '777')).rejects.toThrow(/kotası şu an dolu.*2 dakika/);
+      expect(istekler).toEqual([]);
+    } finally {
+      (svc as unknown as { kota: unknown }).kota = kota;
+    }
+  });
+
+  describe('RLS altında', () => {
+    const ROL = 'advetics_form_onizleme_test';
+    beforeAll(async () => {
+      await h.q(`DO $$ BEGIN CREATE ROLE ${ROL} NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$`);
+      await h.q(`GRANT USAGE ON SCHEMA public, app TO ${ROL}`);
+      await h.q(`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ${ROL}`);
+      await h.q(`ALTER TABLE social_profiles ENABLE ROW LEVEL SECURITY`);
+      await h.q(`ALTER TABLE lead_forms ENABLE ROW LEVEL SECURITY`);
+    });
+    afterAll(async () => {
+      await h.q(`ALTER TABLE social_profiles DISABLE ROW LEVEL SECURITY`);
+      await h.q(`ALTER TABLE lead_forms DISABLE ROW LEVEL SECURITY`);
+    });
+    async function rolIle<T>(clientIds: string[], fn: () => Promise<T>): Promise<T> {
+      await h.q(`
+        SELECT set_config('app.current_org_id', '${IDS.org}', false),
+               set_config('app.current_user_id', '${IDS.user}', false),
+               set_config('app.current_client_ids', '${clientIds.join(',')}', false),
+               set_config('app.is_org_admin', 'off', false),
+               set_config('app.current_active_client_id', '', false)`);
+      await h.q(`SET ROLE ${ROL}`);
+      try {
+        return await fn();
+      } finally {
+        await h.q('RESET ROLE');
+      }
+    }
+
+    it('KRİTİK: servisin kendi sorgusu — kapsamdaki workspace okur, kapsam dışındaki sayfa görünmez (platforma çıkılmaz)', async () => {
+      const ctx = { ...CTX, clientIds: [IDS.client] } as TenantContext;
+      expect((await rolIle([IDS.client], () => svc.formAyrintisi(ctx, IDS.client, S1, '777'))).ad).toBe('Keşif Formu');
+      istekler = [];
+      (svc as unknown as { formAyrintiOnbellek: Map<string, unknown> }).formAyrintiOnbellek.clear();
+      // Uygulama kontrolü geçse bile (ctx kapsamı geniş) veritabanı kapsamı OTEKI: sayfa görünmüyor.
+      await expect(rolIle([OTEKI], () => svc.formAyrintisi(ctx, IDS.client, S1, '777'))).rejects.toMatchObject({ status: 400 });
+      expect(istekler).toEqual([]);
+    });
+  });
+});

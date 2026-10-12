@@ -111,6 +111,7 @@ export default async function AdvCampaignPage({ searchParams }: { searchParams: 
       hazirlik={h.value}
       sirketAdi={workspaceSecimVerisi(session).sirketAdi}
       workspaceAdi={workspaceAdi}
+      formYayinIzni={hasPermission(session, 'bulk.publish')}
     />
   );
 }
