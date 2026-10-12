@@ -81,15 +81,21 @@ export async function kuralBildirimiYaz(tx: TxLike, rule: RuleRecord, runId: str
  * "yalnız transaction bloğunda" diye reddediliyor ve buna gerek de yok:
  * autocommit'te düşen deyim başka hiçbir şeyi iptal etmiyor.
  */
-export async function kuralBildirimiGuvenli(tx: TxLike, rule: RuleRecord, runId: string): Promise<string | null> {
-  let savepoint = false;
-  try {
-    await tx.$executeRaw(Prisma.sql`SAVEPOINT kural_bildirimi`);
-    savepoint = true;
-  } catch {
-    // Transaction dışı (worker, autocommit): korunacak bir transaction yok.
-    savepoint = false;
-  }
+export async function kuralBildirimiGuvenli(
+  tx: TxLike,
+  rule: RuleRecord,
+  runId: string,
+  transactionIcinde: boolean,
+): Promise<string | null> {
+  /*
+   * ÇAĞIRAN SÖYLÜYOR, DENEYEREK ÖĞRENİLMİYOR. Eskiden SAVEPOINT her yolda
+   * gönderiliyor ve worker'da reddedilince yutuluyordu: her kural turunda
+   * Postgres'e bir hatalı komut, Prisma hata günlüğünde bir satır gürültü
+   * (Ajan 4, N1). Ayrıca boş catch, transaction İÇİNDE başka bir sebeple
+   * düşen SAVEPOINT'i de "transaction yok" sanıp korumasız devam ederdi.
+   */
+  const savepoint = transactionIcinde;
+  if (savepoint) await tx.$executeRaw(Prisma.sql`SAVEPOINT kural_bildirimi`);
   try {
     await kuralBildirimiYaz(tx, rule, runId);
     if (savepoint) await tx.$executeRaw(Prisma.sql`RELEASE SAVEPOINT kural_bildirimi`);

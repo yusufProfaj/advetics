@@ -52,6 +52,9 @@ export class RuleExecutorService {
     ctx: TenantContext,
     rule: RuleRecord,
     now = new Date(),
+    // Varsayılan KORUMALI: unutulan bir çağrı en kötü bir SAVEPOINT gürültüsü
+    // üretir; tersi API transaction'ını bildirim hatasıyla kaybettirir.
+    transactionIcinde = true,
   ): Promise<{ runId: string; actionCount: number; matchedCount: number }> {
     const [run] = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
       INSERT INTO rule_runs (id, org_id, rule_id, dry_run, started_at)
@@ -98,7 +101,7 @@ export class RuleExecutorService {
     // SAVEPOINT İÇİNDE (kural-bildirimi.ts#kuralBildirimiGuvenli): düşen
     // bildirim yazımı API transaction'ını iptal edip aşağıdaki tur kaydını
     // da götürüyordu (Ajan 4, N-d).
-    const bildirimHatasi = await kuralBildirimiGuvenli(tx, rule, run.id);
+    const bildirimHatasi = await kuralBildirimiGuvenli(tx, rule, run.id, transactionIcinde);
     if (bildirimHatasi) {
       failure = failure ? `${failure} · ${bildirimHatasi}` : bildirimHatasi;
       this.logger.error(`Kural ${rule.name}: ${bildirimHatasi}`);

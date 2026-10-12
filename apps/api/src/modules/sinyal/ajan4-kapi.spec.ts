@@ -236,3 +236,50 @@ describe('AJAN 4 — başka şirket kullanıcısı (SET ROLE + RETURNING)', () =
     }
   });
 });
+
+describe('AJAN 4 — değişmez sürüm ve yayın şirket taşımasında (N3)', () => {
+  /*
+   * `taslak_surumu` ve `yayin` BEFORE UPDATE trigger'ıyla içerik kolonlarını
+   * kilitliyor. Şirket taşıması bu satırları ELLE değil `clients.org_id`
+   * üzerinden CASCADE ile güncelliyor ve CASCADE de bir UPDATE: trigger
+   * tetikleniyor. İddia: trigger yalnız içeriği kilitliyor, org_id'nin
+   * değişmesine izin veriyor ve kilitli satırlı workspace taşınabiliyor.
+   */
+  const TASLAK = 'cccc1111-1111-1111-1111-111111111111';
+  const OZET = 'a'.repeat(64);
+
+  it('KRİTİK: kilitli sürüm ve yayın satırı olan workspace kardeş şirkete taşınıyor; içerik hâlâ kilitli', async () => {
+    await h.q(`UPDATE clients SET org_id = '${ORG_A}' WHERE id = '${WS}'`);
+    await h.q(`INSERT INTO reklam_taslagi (id, org_id, client_id, platform, durum, aktif_surum_no, olusturan_yuz, olusturan_id)
+               VALUES ('${TASLAK}', '${ORG_A}', '${WS}', 'meta', 'yayinda', 1, 'ai', '${USER}')`);
+    await h.q(`INSERT INTO taslak_surumu (taslak_id, org_id, client_id, surum_no, alanlar, icerik_ozeti, olusturan_id)
+               VALUES ('${TASLAK}', '${ORG_A}', '${WS}', 1, '{"a":1}'::jsonb, '${OZET}', '${USER}')`);
+    await h.q(`INSERT INTO yayin (org_id, client_id, taslak_id, taslak_surum_no, icerik_ozeti, durum, derlenmis_govde,
+                 beklenen_yanki, api_surumu, derleyici_surumu, atif_standardi, kaynak, baslatan_id)
+               VALUES ('${ORG_A}', '${WS}', '${TASLAK}', 1, '${OZET}', 'yayinda', '{"k":1}'::jsonb, '{}'::jsonb,
+                 'v25.0', '1', 'std', 'panel', '${USER}')`);
+
+    // Trigger gerçekten kurulu ve içerik değişimini reddediyor (test boşa düşmesin).
+    await expect(h.q(`UPDATE taslak_surumu SET alanlar = '{"a":2}'::jsonb WHERE taslak_id = '${TASLAK}'`)).rejects.toThrow(/degismez/);
+    await expect(h.q(`UPDATE yayin SET derlenmis_govde = '{"k":2}'::jsonb WHERE taslak_id = '${TASLAK}'`)).rejects.toThrow(/degismez/);
+
+    await h.q('BEGIN');
+    try {
+      await workspaceTasi({ $executeRaw: (sql: never) => h.db.$executeRaw(sql) }, WS, ORG_A, ORG_B);
+      await h.q('COMMIT');
+    } catch (e) {
+      await h.q('ROLLBACK');
+      throw e;
+    }
+    for (const t of ['reklam_taslagi', 'taslak_surumu', 'yayin']) {
+      const r = await h.q<{ org_id: string }>(`SELECT org_id::text AS org_id FROM ${t} WHERE taslak_id_or_id = '${TASLAK}'`.replace(
+        'taslak_id_or_id',
+        t === 'reklam_taslagi' ? 'id' : 'taslak_id',
+      ));
+      expect(r.map((x) => x.org_id), t).toEqual([ORG_B]);
+    }
+    // Taşımadan sonra da içerik kilitli.
+    await expect(h.q(`UPDATE yayin SET derlenmis_govde = '{"k":3}'::jsonb WHERE taslak_id = '${TASLAK}'`)).rejects.toThrow(/degismez/);
+    await h.q(`UPDATE clients SET org_id = '${ORG_A}' WHERE id = '${WS}'`);
+  });
+});

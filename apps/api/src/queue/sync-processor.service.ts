@@ -633,7 +633,7 @@ export class SyncProcessorService {
       permissions: [],
     } as unknown as TenantContext;
 
-    const res = await this.executor.execute(this.db, ctx, rule.record);
+    const res = await this.executor.execute(this.db, ctx, rule.record, new Date(), false);
 
     /*
      * KURAL BİLDİRİMİ "ANINDA": tur kanallara satır yazdıysa hemen gönder.
