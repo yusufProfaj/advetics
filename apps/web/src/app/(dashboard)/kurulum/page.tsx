@@ -14,7 +14,13 @@ import { KurulumSihirbazi } from '@/components/kurulum/kurulum-sihirbazi';
 import { SirketSec } from '@/components/kurulum/sirket-sec';
 import { ADIMLAR, adimOku, turOku, type SecimKarti } from '@/components/kurulum/kurulum-akisi';
 
-export const metadata = { title: 'Kurulum · Advetics' };
+/*
+ * ADI "AÇILIŞ" (2026-10-12, kullanıcı kararı): bu sihirbaz üst hesap, şirket
+ * ve workspace AÇIYOR. "Kurulum" artık Marka Merkezi'nde hesapları ve ölçümü
+ * kuran bölümün adı; iki ekranın aynı adı taşıması "hangi kurulum?" sorusu
+ * doğuruyordu. Adres (`/kurulum`) yer imleri ve bağlantılar kırılmasın diye aynı.
+ */
+export const metadata = { title: 'Açılış · Advetics' };
 
 function first(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v[0] : v;
@@ -133,7 +139,7 @@ export default async function KurulumPage({
 
   const baslik = (
     <header>
-      <h1 className="sayfa-baslik">{kart?.baslik ?? 'Kurulum'}</h1>
+      <h1 className="sayfa-baslik">{kart?.baslik ?? 'Açılış'}</h1>
       <p className="mt-1.5 max-w-prose text-sm text-ink-muted">
         {kart?.aciklama} Adımları sırayla tamamla; her adımda neyin gerektiği yazıyor.
       </p>

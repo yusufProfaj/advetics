@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import type {
   CreateClientInput,
   TenantContext,
@@ -260,10 +260,27 @@ export class ClientsService {
       const before = await tx.client.findUnique({ where: { id } });
       if (!before) throw new NotFoundException('Workspace bulunamadı');
 
-      const after = await tx.client.update({
+      /*
+       * KISA AD (SLUG) SESSİZCE DÜŞÜYORDU: şema kabul ediyor, uç 200 dönüyor,
+       * ama `update()` alanı hiç yazmıyordu (iletişim alanlarının yaşadığı
+       * hatanın aynısı, aşağıda). Tekillik ŞİRKET İÇİNDE (`@@unique([orgId,
+       * slug])`): çakışma önden sorulup Türkçe cümleyle söyleniyor; aynı anda
+       * iki istek gelirse yakalanan tekil ihlali de aynı cümleye çevriliyor.
+       * Kısa ad yalnız gösterim ve PDF dosya adında kullanılıyor; adres ya da
+       * bağlantı kimliği değil, değiştirmek bir bağlantıyı kırmıyor.
+       */
+      const yeniSlug = input.slug !== undefined && input.slug !== before.slug ? input.slug : undefined;
+      if (yeniSlug !== undefined) {
+        const cakisan = await tx.client.findFirst({ where: { orgId: before.orgId, slug: yeniSlug, id: { not: id } }, select: { name: true } });
+        if (cakisan) throw new ConflictException(`"${yeniSlug}" kısa adı bu şirkette "${cakisan.name}" workspace’inde kullanılıyor.`);
+      }
+
+      const after = await tx.client
+        .update({
         where: { id },
         data: {
           ...(input.name !== undefined ? { name: input.name } : {}),
+          ...(yeniSlug !== undefined ? { slug: yeniSlug } : {}),
           ...(input.timezone !== undefined ? { timezone: input.timezone } : {}),
           ...(input.reportingCurrency !== undefined
             ? { reportingCurrency: input.reportingCurrency }
@@ -310,7 +327,14 @@ export class ClientsService {
           ...(input.iban !== undefined ? { iban: input.iban } : {}),
           ...(input.notes !== undefined ? { notes: input.notes } : {}),
         },
-      });
+      })
+        .catch((e: unknown) => {
+          // Aynı anda iki istek: önden kontrol geçti, tekil indeks yakaladı.
+          if (yeniSlug !== undefined && (e as { code?: string }).code === 'P2002') {
+            throw new ConflictException(`"${yeniSlug}" kısa adı bu şirkette başka bir workspace’te kullanılıyor.`);
+          }
+          throw e;
+        });
 
       await this.audit.record(tx, ctx, {
         action: 'client.updated',
@@ -319,12 +343,14 @@ export class ClientsService {
         clientId: id,
         before: {
           name: before.name,
+          slug: before.slug,
           timezone: before.timezone,
           reportingCurrency: before.reportingCurrency,
           status: before.status,
         },
         after: {
           name: after.name,
+          slug: after.slug,
           timezone: after.timezone,
           reportingCurrency: after.reportingCurrency,
           status: after.status,
