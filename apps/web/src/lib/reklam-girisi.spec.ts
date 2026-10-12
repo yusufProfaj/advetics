@@ -229,6 +229,22 @@ describe('giriş bileşeni (kaynak bekçileri)', () => {
     expect(KAYNAK).not.toMatch(/\.catch\(\s*\(\)\s*=>/);
   });
 
+  /*
+   * AJAN 4 (mutasyon M7): `topluSonucMetni` sınanıyordu ama bileşenin onu
+   * ÇAĞIRDIĞI sınanmıyordu; çağrıyı `hatalar[0] ?? null` ile değiştirmek
+   * 23 testin hepsini yeşil bıraktı. Toplu silmede "5 / 7 işlendi" yerine
+   * yalnız ilk hata görünür ve kaç kaydın silindiği kaybolurdu.
+   */
+  it('KRİTİK: toplu işlemin hatası `topluSonucMetni`nden (kısmi başarısızlık "N / M")', () => {
+    const i = KAYNAK.indexOf('async function uygula(');
+    if (i < 0) throw new Error('uygula bulunamadı');
+    const govde = KAYNAK.slice(i, KAYNAK.indexOf('\n  function eylem(', i));
+    expect(govde.length).toBeGreaterThan(200);
+    expect(govde).toMatch(/setIslemHatasi\([^;]*topluSonucMetni\(satirlar\.length, hatalar\)\)/);
+    // Her satırın hatası toplanıyor: döngü ilk hatada durmuyor.
+    expect(govde).toMatch(/for \(const r of satirlar\) \{\s*try \{/);
+  });
+
   it('kesilen liste "N / M" ile yazılıyor (sessiz kesme yok)', () => {
     expect(KAYNAK).toMatch(/\{liste\.satirlar\.length\} \/ \{liste\.toplam\} kayıt gösteriliyor/);
   });

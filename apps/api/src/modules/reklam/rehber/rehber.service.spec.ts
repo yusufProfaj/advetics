@@ -491,6 +491,70 @@ describe('giriş listesi: satır alanları, arşiv ve geri getir', () => {
     await expect(svc.yayinla(CTX, yayinda.id, p.icerikOzeti)).rejects.toMatchObject({ status: 409 });
   });
 
+  /*
+   * AJAN 4: KISMEN BAŞLAMIŞ — yayın kaydı YALNIZ META çocuğunda. Mevcut
+   * test yalnız Google çocuğuyla koşuyor; EXISTS'teki IN listesinden
+   * `meta_taslak_id` düşse yine geçerdi ve Meta'da yayında olan reklam
+   * taslağa dönüp İKİNCİ kampanyayı açtırırdı.
+   */
+  it('KRİTİK: yalnız META çocuğunun yayın kaydı var, Google çocuğu hiç başlamamış → "yayinda"', async () => {
+    const r = await tamRehber();
+    const p = await svc.prova(CTX, r.id);
+    await svc.yayinla(CTX, r.id, p.icerikOzeti);
+    // Yayın kaydı olan çocuk Meta sütununa taşınıyor, Google sütununa
+    // kaydı OLMAYAN yeni bir taslak konuyor: "bir platform yayında, öbürü
+    // başlamamış" hâli.
+    const yeni = await svc.olustur(CTX, IDS.client);
+    await svc.guncelle(CTX, yeni.id, { surum: 0, degisiklikler: TAM });
+    await svc.konumlariEsle(CTX, yeni.id);
+    const p2 = await svc.prova(CTX, yeni.id);
+    expect(p2.google).toMatchObject({ tur: 'gecti' });
+    await h.q(
+      `UPDATE reklam_rehberi SET meta_taslak_id = google_taslak_id, google_taslak_id = (SELECT google_taslak_id FROM reklam_rehberi WHERE id = $2) WHERE id = $1`,
+      [r.id, yeni.id],
+    );
+    const [k] = await h.q<{ var: boolean }>(
+      `SELECT EXISTS (SELECT 1 FROM yayin y JOIN reklam_rehberi r ON y.taslak_id = r.google_taslak_id WHERE r.id = $1) AS var`,
+      [r.id],
+    );
+    expect(k!.var).toBe(false);
+    await svc.arsivle(CTX, r.id);
+    expect((await svc.geriGetir(CTX, r.id)).durum).toBe('yayinda');
+  });
+
+  /*
+   * AJAN 4: ARŞİVDEKİ REHBER "Gör" ile açılabiliyor (panel bağlantısı
+   * duruyor). Arşivden çıkmadan hiçbir yazma ve platforma giden hiçbir uç
+   * çalışmamalı — çalışırsa "listeden kaldırılmış" bir taslak sessizce
+   * yayına gidebilir.
+   */
+  it('KRİTİK: arşivdeki taslak düzenlenmez, prova/yayın/konum eşleme reddedilir ve platforma çağrı gitmez', async () => {
+    const r = await tamRehber();
+    const p = await svc.prova(CTX, r.id);
+    const ars = await svc.arsivle(CTX, r.id);
+    cagrilar = [];
+    kuyrukIsleri = [];
+    await expect(svc.guncelle(CTX, r.id, { surum: ars.surum, degisiklikler: [g('amac', 'FORM')] })).rejects.toMatchObject({ status: 409 });
+    await expect(svc.prova(CTX, r.id)).rejects.toMatchObject({ status: 409 });
+    await expect(svc.yayinla(CTX, r.id, p.icerikOzeti)).rejects.toMatchObject({ status: 409 });
+    await expect(svc.konumlariEsle(CTX, r.id)).rejects.toMatchObject({ status: 409 });
+    expect(cagrilar).toEqual([]);
+    expect(kuyrukIsleri).toEqual([]);
+    expect(await h.q('SELECT id FROM yayin')).toHaveLength(0);
+  });
+
+  /*
+   * AJAN 4: arşivlenin erişim denetimi hiç sınanmıyordu — `erisim` satırı
+   * silinince rehber klasörünün 145 testi de yeşil kaldı (mutasyon M5).
+   * Panel bu ucu 2026-10-12'den beri satır menüsünden çağırıyor.
+   */
+  it('KRİTİK: arşivle erişilmeyen workspace’in rehberine dokunmaz (403, durum değişmez)', async () => {
+    const r = await svc.olustur(CTX, IDS.client);
+    const dar = { ...CTX, clientIds: [KARDES_WS], activeClientId: KARDES_WS } as TenantContext;
+    await expect(svc.arsivle(dar, r.id)).rejects.toMatchObject({ status: 403 });
+    expect((await satiri(r.id)).durum).toBe('taslak');
+  });
+
   it('geri getir: erişilmeyen workspace’in rehberine dokunmaz', async () => {
     const r = await svc.olustur(CTX, IDS.client);
     await svc.arsivle(CTX, r.id);
@@ -569,6 +633,30 @@ describe('RLS', () => {
     await expect(rolIle([OTEKI], () => svc.geriGetir({ ...CTX, clientIds: [OTEKI, IDS.client] } as TenantContext, r.id))).rejects.toMatchObject({ status: 404 });
     const [k] = await h.q<{ durum: string }>('SELECT durum FROM reklam_rehberi WHERE id = $1', [r.id]);
     expect(k!.durum).toBe('arsivlendi');
+  });
+
+  /*
+   * AJAN 4 (2026-10-12, giriş ekranı kapısı): geri getirin "yayın kaydı var
+   * mı" sorusu `yayin` tablosuna RLS ALTINDA soruluyor. Yukarıdaki test
+   * `yayin`ın politikasını hiç açmadan ve yayına gitmemiş bir rehberle
+   * koşuyordu, yani EXISTS'in rol altında YANLIŞ cevap vermesi (satır var
+   * ama görünmüyor → `taslak` → ikinci kampanya) hiç sınanmamıştı.
+   */
+  it('KRİTİK: yayına gitmiş rehber rol altında da "yayinda" döner (yayin politikası AÇIK, EXISTS görünürlüğe tabi)', async () => {
+    await h.q(`ALTER TABLE yayin ENABLE ROW LEVEL SECURITY`);
+    try {
+      const r = await tamRehber();
+      const p = await svc.prova(CTX, r.id);
+      await svc.yayinla(CTX, r.id, p.icerikOzeti);
+      await svc.arsivle(CTX, r.id);
+      const ctx = { ...CTX, clientIds: [IDS.client] } as TenantContext;
+      // Kayıt rol altında GÖRÜNÜYOR olmalı; görünmeseydi aşağıdaki iddia anlamsız kalırdı.
+      expect(await kullanici(`SELECT id FROM yayin`, [IDS.client])).toHaveLength(1);
+      expect((await rolIle([IDS.client], () => svc.geriGetir(ctx, r.id))).durum).toBe('yayinda');
+      await expect(rolIle([IDS.client], () => svc.yayinla(ctx, r.id, p.icerikOzeti))).rejects.toMatchObject({ status: 409 });
+    } finally {
+      await h.q(`ALTER TABLE yayin DISABLE ROW LEVEL SECURITY`);
+    }
   });
 
   it('DELETE politikası YOK: silme sıfır satır (rehber arşivlenir)', async () => {
