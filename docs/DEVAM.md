@@ -16,6 +16,26 @@ RLS politikası var, platform sahibi yalnız hello@profaj.com.
 bu commit'le deploy ediliyor; migration `20261009100000_iyilestir` (üç
 yeni tablo) + `db:rls`.
 
+**ADVCAMPAIGN "FORM DOLDURSUNLAR" TURU (2026-10-12/13).** Kullanıcı: formun
+önizlemesi ve rehberde "Form oluştur". Yapılanlar: rehberde form önizlemesi
+(`GET /reklam/rehber/form-ayrintisi`, tek bileşen `forms/form-onizleme.tsx`),
+rehberden çıkmadan `FormBuilder` ile oluştur + otomatik seçim; TEK form
+üreticisi `derleForm` (KVKK kutuları üst seviye `custom_disclaimer` — eski
+`legal_content` belgede yoktu, kutular sessizce düşüyor olabilirdi; `locale
+TR_TR`; `block_display_for_non_targeted_viewer`; `is_optimized_for_quality`
+açık), Advetics gizlilik sayfasına düşen üçüncü üretici kaldırıldı, yayın
+sonrası form geri okuması (`lead_forms.readback_warning`), varsayılan "daha
+yüksek niyet", teşekkür ekranında "Bizi ara", FORM elle yerleşimi yalnız
+akış/hikâye/Reels, düğme LEARN_MORE / sektörde GET_QUOTE, İyileştir'de
+dönüşüm optimizasyonu bilgi kartı. Ajan 4: mükerrer Meta formu (kimlik
+artık hemen yazılıyor, yayın kilidi), uyarılı form otomatik seçilmiyor.
+Google FORM KAPALI (Google lead'lerini çeken yol yok). Migration
+`20261015200000_form_tesekkur_geri_okuma`. **Açık:** süreç Meta çağrısından
+önce ölürse form satırı `publishing`te kalıyor (güvenli yön; panelden açılmıyor —
+"gönderim başladı" damgası deseniyle kapatılacak). **Canlıda ölç:** geri
+okumada `legal_content`/`locale` biçimi, `business_phone_number` `+90`,
+akış/hikâye/Reels dışı yerleşim, GET_QUOTE/LEARN_MORE yankısı.
+
 **ADVCAMPAIGN İKİNCİ TUR (2026-10-12 akşam).** (1) META HİÇ KURULMUYORDU:
 hazır workspace (Dalga 3) rehbere bütçe/kategori/tarihi `workspace_profili` /
 `derleyici` kaynağıyla dolduruyor, Meta taslağının KAYNAK kilidi bunları
