@@ -382,6 +382,8 @@ export async function taslakDerle(
     // ait olduğunu rehber provadan önce TAZE listeyle denetliyor; yanlış
     // pikseli Meta da kurulumda reddediyor.
     whatsappNumarasi: alanlar.whatsappNumarasi?.deger ?? null,
+    // Karşılama yoksa derleyici Türkçe varsayılanı yazar (`karsilamaCoz`).
+    whatsappKarsilama: alanlar.whatsappKarsilama?.deger ?? null,
     pikselId: alanlar.pikselId?.deger ?? null,
     // SITE: hedefi seçen piksel hâli taslakta (rehberin okuması); yoksa
     // derleyici `bilinmiyor` sayar ve tıklamaya optimize eder.

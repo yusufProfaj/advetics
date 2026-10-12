@@ -120,6 +120,7 @@ const REHBERDEKI_KARSILIGI: Partial<Record<keyof TaslakAlanlari, RehberAlanAdi>>
   formSablonuId: 'formSablonuId',
   telefon: 'telefon',
   whatsappNumarasi: 'whatsappNumarasi',
+  whatsappKarsilama: 'whatsappKarsilama',
   pikselId: 'pikselId',
 };
 
@@ -184,6 +185,22 @@ export function rehberYerlesimPlani(a: RehberAlanlari, oranlar: ReadonlyMap<stri
   // Niyet AYNI: derleyici FORM'da elle yerleşimi daraltıyor; tablo
   // daraltmasız plan gösterirse "sağ sütun açık" der, gövde kapatır.
   return reklamSetiPlani(ayrim.setler.map((s) => s.map((x) => x.oran)), REHBER_AMACLARI[amac].meta.niyet);
+}
+
+/**
+ * Meta fikirlerinden kaçı BANNER SETİ (iki+ boyut, `asset_feed_spec`)?
+ * Karar tablosu WhatsApp karşılamasının o fikirlerde GİTMEDİĞİNİ söylemek
+ * için okur; ayrım `rehberdenMeta` ile AYNI fonksiyondan (`setlereAyir`).
+ * Ayrım kurulamıyorsa (oran bilinmiyor) `null`: tablo tahmin etmez.
+ */
+export function rehberFikirSetleri(a: RehberAlanlari, oranlar: ReadonlyMap<string, GorselOrani | null>): { setli: number; toplam: number } | null {
+  const medya = a.medya?.deger ?? [];
+  const amac = a.amac?.deger;
+  if (!amac) return null;
+  const videolar = medya.filter((x) => x.kapakVarlikId).length;
+  const ayrim = setlereAyir(medya.filter((x) => !x.kapakVarlikId), oranlar, REHBER_AMACLARI[amac].meta.niyet);
+  if (ayrim.taninmayan.length || ayrim.cakisan.length) return null;
+  return { setli: ayrim.setler.filter((x) => x.length > 1).length, toplam: ayrim.setler.length + videolar };
 }
 
 /**
@@ -288,6 +305,9 @@ export function rehberdenMeta(
     // Marka Merkezi telefonu WhatsApp alanına da önden doluyor; onu her
     // taslağa yazmak kayıtlı provaları sebepsiz bayatlatırdı.
     ...(a.whatsappNumarasi && REHBER_AMACLARI[amac].meta.niyet === 'WHATSAPP' ? { whatsappNumarasi: a.whatsappNumarasi } : {}),
+    // Karşılama da yalnız WhatsApp'ta: başka amaca yazmak içerik özetini
+    // değiştirip provayı sebepsiz bayatlatırdı.
+    ...(a.whatsappKarsilama && REHBER_AMACLARI[amac].meta.niyet === 'WHATSAPP' ? { whatsappKarsilama: a.whatsappKarsilama } : {}),
     ...(a.pikselId && REHBER_AMACLARI[amac].meta.niyet === 'SATIS' ? { pikselId: a.pikselId } : {}),
     // Piksel hâli YALNIZ site amacında: başka amaca yazmak o taslağın
     // içerik özetini piksel her sustuğunda değiştirip provasını bayatlatırdı.

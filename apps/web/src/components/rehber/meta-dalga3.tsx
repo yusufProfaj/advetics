@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { RehberPikselListesi } from '@advetics/shared';
+import { HIZLI_SORU_EN_COK, HIZLI_SORU_SINIRI, KARSILAMA_MESAJ_SINIRI, WHATSAPP_VARSAYILAN_MESAJ, type RehberPikselListesi, type WhatsappKarsilama } from '@advetics/shared';
 import { apiFetch } from '@/lib/api';
 import { sil, yaz, type AdimBaglami } from './adim-ortak';
 import { IKON, Ikon } from './ikonlar';
@@ -128,5 +128,56 @@ export function WhatsappNumarasi({ b }: { b: AdimBaglami }) {
         </button>
       )}
     </>
+  );
+}
+
+/**
+ * WhatsApp ilk mesajı (Reklam adımı, SENTEZ D-M6). Gönderilmezse Meta
+ * İngilizce bir hazır mesaj koyuyor; kutu Türkçe varsayılanla DOLU gelir ve
+ * kullanıcı düzeltebilir. Hızlı sorular boş gelir: Marka Merkezi'nde
+ * karşılığı yok ve uydurulmaz. Boş bırakılan mesaj varsayılana döner
+ * (`karsilamaCoz`), yani kutuyu silmek İngilizceye düşürmez.
+ */
+export function WhatsappKarsilamaAlani({ b }: { b: AdimBaglami }) {
+  const kayit = b.a.whatsappKarsilama?.deger ?? null;
+  const mesaj = kayit?.mesaj ?? WHATSAPP_VARSAYILAN_MESAJ;
+  const sorular = [...(kayit?.hizliSorular ?? [])];
+  while (sorular.length < HIZLI_SORU_EN_COK) sorular.push('');
+  // Boş mesaj da YAZILIR (silinmez): silmek kutuyu yazarken varsayılana
+  // geri doldururdu. Gönderimde boş mesaj varsayılana döner (`karsilamaCoz`).
+  const kaydet = (k: WhatsappKarsilama) => yaz(b, 'whatsappKarsilama', k);
+  const soruYaz = (i: number, v: string) => kaydet({ mesaj, hizliSorular: sorular.map((x, j) => (j === i ? v : x)) });
+  const soruVar = sorular.some((x) => x.trim());
+  return (
+    <div className={s.ustBosluk}>
+      <div className={s.blokBaslik}>
+        İlk mesaj <span className={s.ops}>WhatsApp&apos;ta kişinin karşısına çıkar</span>
+      </div>
+      <div className={s.girdi}>
+        <input
+          value={mesaj}
+          maxLength={KARSILAMA_MESAJ_SINIRI}
+          aria-label="WhatsApp ilk mesajı"
+          onChange={(e) => kaydet({ mesaj: e.target.value, hizliSorular: sorular })}
+        />
+      </div>
+      <p className={s.ipucu}>
+        {kayit?.mesaj?.trim() ? 'Senin yazdığın mesaj.' : 'Varsayılan Türkçe mesaj. Boş bırakırsan bu gider.'}
+        {soruVar ? ' Hızlı soru eklediğin için bu metin karşılama olarak görünür.' : ''}
+      </p>
+      <div className={s.alan}>
+        <label>Hızlı sorular (isteğe bağlı, en çok {HIZLI_SORU_EN_COK})</label>
+        {sorular.map((q, i) => (
+          <div key={i} className={s.girdi}>
+            <input
+              value={q}
+              maxLength={HIZLI_SORU_SINIRI}
+              aria-label={`Hızlı soru ${i + 1}`}
+              onChange={(e) => soruYaz(i, e.target.value)}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }

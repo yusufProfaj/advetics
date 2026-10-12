@@ -20,6 +20,7 @@ import type { GoogleTeklif } from './turet';
 import { metaOptimizasyonHedefi, type SitePikselHali } from '../meta/niyetler';
 import { SITE_BAGLANTISI_YOK_CUMLESI, googleUzantiReddiCumlesi, type GoogleUzantiKaynagi } from './google-uzanti';
 import { GOOGLE_OGE_ADLARI, type GoogleOgeDurumu } from './google-ogeler';
+import { KARSILAMA_SETTE_YOK_CUMLESI, karsilamaCoz, type WhatsappKarsilama } from '../meta/karsilama';
 
 export interface KararHucresi {
   deger: string;
@@ -28,7 +29,7 @@ export interface KararHucresi {
 
 export interface KararSatiri {
   /** Testin derleyiciyle eşleştirdiği sabit kod. */
-  kod: 'TUR' | 'TEKLIF' | 'NEREDE' | 'KONUM' | 'OTOMATIK_METIN' | 'SAYFA' | 'OLCUM' | 'SIKLIK' | 'UZANTI' | 'OGE' | 'FORM';
+  kod: 'TUR' | 'TEKLIF' | 'NEREDE' | 'KONUM' | 'OTOMATIK_METIN' | 'SAYFA' | 'OLCUM' | 'SIKLIK' | 'UZANTI' | 'OGE' | 'FORM' | 'KARSILAMA';
   konu: string;
   meta: KararHucresi | null;
   google: KararHucresi | null;
@@ -66,6 +67,23 @@ export interface KararEki {
    * alan yoksa hücre "okunamadı" der; türü tahmin etmez.
    */
   form?: SeciliFormHali | null;
+  /**
+   * WHATSAPP: kaydedilmiş karşılama (yoksa varsayılan) ve fikirlerin kaçının
+   * banner seti olduğu (`rehberFikirSetleri`). Setli fikirde karşılama
+   * gitmiyor (derle.ts); tablo bunu söylemezse "ilk mesaj Türkçe" sözü yalan.
+   */
+  whatsappKarsilama?: { kayit: WhatsappKarsilama | null; setler: { setli: number; toplam: number } | null } | null;
+}
+
+/** WhatsApp karşılama satırı: derleyicinin göndereceği metin, kaynağıyla. */
+export function karsilamaKararHucresi(k: KararEki['whatsappKarsilama']): KararHucresi {
+  const c = karsilamaCoz(k?.kayit);
+  const setler = k?.setler ?? null;
+  const sorular = c.hizliSorular.length ? `Hızlı sorular: ${c.hizliSorular.join(', ')}` : 'Hızlı soru yok';
+  const kaynak = c.kaynak === 'varsayilan' ? 'Varsayılan Türkçe mesaj' : 'Senin yazdığın';
+  if (setler && setler.toplam > 0 && setler.setli === setler.toplam) return { deger: "Meta'nın varsayılanı", not: KARSILAMA_SETTE_YOK_CUMLESI };
+  const setNotu = setler && setler.setli > 0 ? ` · Banner setli fikirlerde: ${KARSILAMA_SETTE_YOK_CUMLESI}` : '';
+  return { deger: `"${c.mesaj}"`, not: `${kaynak} · ${sorular}${setNotu}` };
 }
 
 /**
@@ -192,6 +210,8 @@ export function kararTablosu(
     { kod: 'SAYFA', konu: 'Sayfa', meta: m ? hucre('Seçtiğin Facebook sayfası, açıkça') : null, google: null },
     // FORM: seçili formun türü ve soru sayısı Meta'dan okunan hâliyle.
     ...(m && amac === 'FORM' ? [{ kod: 'FORM' as const, konu: 'Form', meta: formKararHucresi(ek.form), google: null }] : []),
+    // WHATSAPP: ilk mesaj (derleyicinin `page_welcome_message`ı, aynı çözüm).
+    ...(m && t.meta.niyet === 'WHATSAPP' ? [{ kod: 'KARSILAMA' as const, konu: 'İlk mesaj', meta: karsilamaKararHucresi(ek.whatsappKarsilama), google: null }] : []),
     {
       kod: 'OLCUM',
       konu: 'Ölçüm',

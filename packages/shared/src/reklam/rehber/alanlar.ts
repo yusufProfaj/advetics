@@ -19,6 +19,7 @@ import { z } from 'zod';
 import { ALAN_KAYNAKLARI, type AlanKaynagi } from '../taslak';
 import { formKimligiSchema, hedefKonumSchema } from '../taslak-alanlari';
 import { OZEL_KATEGORILER } from '../meta/hedefleme';
+import { whatsappKarsilamaSchema } from '../meta/karsilama';
 import { REHBER_AMAC_KODLARI } from './amaclar';
 import { rehberFiyatListesiSchema, rehberPromosyonSchema } from './google-ogeler';
 
@@ -130,6 +131,12 @@ export const rehberAlanlariSchema = z
      * (`whatsapp_number` boş, WABA izni yok), o yüzden açıkça soruluyor.
      */
     whatsappNumarasi: alan(z.string().max(20).nullable()),
+    /**
+     * WhatsApp karşılama mesajı ve hızlı sorular (`karsilama.ts`). Alan yok =
+     * Türkçe varsayılan gider (ekranda dolu görünür); Marka Merkezi'nde
+     * karşılığı yok, hızlı soru YALNIZ kullanıcı yazarsa.
+     */
+    whatsappKarsilama: alan(whatsappKarsilamaSchema),
     /** Satış amacı: Meta piksel kimliği (sayısal), seçili reklam hesabının pikselleri arasından. */
     pikselId: alan(z.string().regex(/^\d{1,30}$/).nullable()),
     /** Meta form kimliği (sayısal) ya da eski kayıtlarda `lead_forms.id` (`formKimligiSchema`). */

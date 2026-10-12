@@ -166,7 +166,7 @@ describe('görünürlük süzgeci: tek karar platformGorunurMu', () => {
   });
 
   it('karşılığı olmayan Google sebebini amaç tanımından yazıyor; kapalı satır kendi sebebini (REHBER_KAPALI_SEBEBI)', () => {
-    expect(platformDurumu('WHATSAPP', 'google', true)).toEqual({ gorunur: false, sebep: "Google'da WhatsApp reklamı yok", deneme: false });
+    expect(platformDurumu('WHATSAPP', 'google', true)).toEqual({ gorunur: false, sebep: "Google'da WhatsApp'a yönlendiren öğe izin listesine bağlı; bu hesapta açık değil", deneme: false });
     expect(platformDurumu('FORM', 'google', true).sebep).toBe("Google'da form henüz yok: gelen kişileri panele çekecek yol yazılınca açılacak");
     expect(platformDurumu('SITE', 'meta', true).deneme).toBe(REHBER_ACILIS.SITE.meta === 'deneme');
     expect(platformDurumu('SITE', 'meta', false).gorunur).toBe(platformGorunurMu('SITE', 'meta', false));

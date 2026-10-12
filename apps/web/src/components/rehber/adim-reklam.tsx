@@ -40,7 +40,7 @@ import { AltCubuk, Soru, sil, yaz, type AdimBaglami } from './adim-ortak';
 import { IKON, Ikon } from './ikonlar';
 import { SetKartlari } from './set-kartlari';
 import { HEDEF_OLCULER, boyutUret } from './boyut-uret';
-import { WhatsappNumarasi } from './meta-dalga3';
+import { WhatsappKarsilamaAlani, WhatsappNumarasi } from './meta-dalga3';
 import { medyaKabulu } from './meta-dalga3-mantik';
 import {
   aciklamaMetniKutulari,
@@ -179,7 +179,12 @@ export function AdimReklam({
               </p>
             </>
           )}
-          {amac === 'WHATSAPP' && <WhatsappNumarasi b={b} />}
+          {amac === 'WHATSAPP' && (
+            <>
+              <WhatsappNumarasi b={b} />
+              <WhatsappKarsilamaAlani b={b} />
+            </>
+          )}
           {adresGerekli && (
             <div className={amac === 'FORM' || amac === 'TELEFON' ? s.ustBosluk : undefined}>
               {(amac === 'FORM' || amac === 'TELEFON') && (

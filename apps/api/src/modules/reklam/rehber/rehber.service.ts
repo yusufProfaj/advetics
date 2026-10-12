@@ -48,6 +48,8 @@ import {
   rehberdenGoogle,
   rehberdenMeta,
   rehberYerlesimPlani,
+  geriOkumaNotlariniSec,
+  rehberFikirSetleri,
   taslakAlanlariSchema,
   taslakEksikleri,
   uyumDenetle,
@@ -1857,6 +1859,7 @@ export class RehberService {
            ORDER BY (y.sonlandi_at IS NULL) DESC, y.created_at DESC LIMIT 1`),
       );
       if (y?.uyum_sonucu?.tur === 'gecti') uyum = { tur: 'gecti' };
+      const notlar = y ? await this.geriOkumaNotlari(ctx, y.id) : [];
       platformlar.push({
         platform,
         taslakId,
@@ -1876,9 +1879,24 @@ export class RehberService {
         kampanyaKimligi: y?.kampanya ? (platform === 'google' ? googleYalinKimlik(y.kampanya) : y.kampanya) : null,
         duraklatilmisKalacak: y?.kapali_kalacak ?? false,
         yenidenKurulabilir: platformYenidenKurulabilirMi(kayitlar.get(taslakId) ?? []),
+        ...(notlar.length ? { geriOkumaNotlari: notlar } : {}),
       });
     }
     return { rehberId: s.id, platformlar, uyum };
+  }
+
+  /**
+   * Son geri okumanın durdurmayan notları (`uyari`, `bilgi`). Aynı cümle
+   * beş kreatifte beş kez yazılmasın diye tekilleşiyor. Diğer bilgi türleri
+   * (normalleştirmeler) bilerek burada YOK: onlar beklenen Meta davranışı
+   * ve her yayında aynı satırları göstermek asıl uyarıyı boğardı.
+   */
+  private async geriOkumaNotlari(ctx: TenantContext, yayinId: string): Promise<Array<{ tur: 'uyari' | 'bilgi'; metin: string }>> {
+    const [g] = await this.tx(ctx)((t) =>
+      t.$queryRaw<Array<{ bilgiler: unknown }>>(Prisma.sql`
+        SELECT bilgiler FROM geri_okuma WHERE yayin_id = ${yayinId}::uuid ORDER BY created_at DESC LIMIT 1`),
+    );
+    return geriOkumaNotlariniSec(g?.bilgiler);
   }
 
   /** Meta: mevcut tek yayın yolu (`yayinBaslat`) — rehberin uyum kararıyla. Dönen değer: başlamadıysa sebebi. */
@@ -2091,6 +2109,8 @@ export class RehberService {
         ogeler: provaOgeleri ?? (b.ogeKaynagi ? googleAramaOgeleri(b.ogeKaynagi).durumlar : null),
         // Seçili formun türü ve soru sayısı: eksik listesinin okuduğu AYNI hâl.
         form: b.onKosullar?.seciliForm ?? null,
+        // WhatsApp ilk mesajı: setli fikirlerde gitmediğini tablo söylesin.
+        whatsappKarsilama: { kayit: a.whatsappKarsilama?.deger ?? null, setler: rehberFikirSetleri(a, b.medyaOranlari ?? new Map()) },
       },
     );
   }

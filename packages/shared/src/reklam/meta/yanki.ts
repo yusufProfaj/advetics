@@ -16,6 +16,8 @@
 import type { MetaGovdesi, NesneTuru } from './derle';
 import { BILINEN_KAPATILAMAYAN_OZELLIKLER, YASAL_UYARIDA_DURDURAN_OZELLIK, ozellikSinifi } from './derle';
 import { YAYIN_ETIKETI_ONEKI } from './adlandirma';
+import { karsilamaOzu } from './karsilama';
+import { NIYET_KATALOGU } from './niyetler';
 
 export type KarsilastirmaTuru =
   | 'esit'
@@ -28,7 +30,11 @@ export type KarsilastirmaTuru =
   /** Geçmiş saat gönderildiyse Meta kurulum anını yazıyor (N-09). */
   | 'baslangic'
   /** Banner seti: yerleşime göre görsel gövdesi (N-13, anlamca kıyas). */
-  | 'varlik_akisi';
+  | 'varlik_akisi'
+  /** WhatsApp karşılama mesajı: uyuşmazlık UYARI, durdurmaz (N-20). */
+  | 'karsilama'
+  /** Gönderilmeyen, yalnız okunup ekranda söylenen alan (N-21, Advantage+ durumu). */
+  | 'yalniz_bilgi';
 export type AltKumeYonu = 'donen_icinde_gonderilen' | 'gonderilen_icinde_donen';
 
 export interface BeklenenYanki {
@@ -110,6 +116,9 @@ const ETIKETLER: Record<string, string> = {
   url_tags: 'İzleme etiketleri',
   adlabels: 'Advetics etiketi',
   locale: 'Form dili',
+  'object_story_spec.link_data.page_welcome_message': 'WhatsApp karşılama mesajı',
+  'object_story_spec.video_data.page_welcome_message': 'WhatsApp karşılama mesajı',
+  advantage_state_info: 'Advantage+ durumu',
 };
 
 function sinif(yol: string): { kabulEdilemez: boolean; etiket: string } {
@@ -138,7 +147,38 @@ const BUTUN_ALANLAR = new Set([
   'custom_disclaimer',
   'privacy_policy',
   'asset_feed_spec',
+  'object_story_spec.link_data.page_welcome_message',
+  'object_story_spec.video_data.page_welcome_message',
 ]);
+
+const KARSILAMA_YOLLARI = new Set(['object_story_spec.link_data.page_welcome_message', 'object_story_spec.video_data.page_welcome_message']);
+
+/**
+ * N-21 — ADVANTAGE+ DURUMU OKUNUYOR, FARK SAYILMIYOR (yönetici kararı,
+ * 2026-10-12). Meta resmî belgesi (Advantage+ campaigns, v25.0):
+ * `advantage_state_info` KAMPANYA düzeyinde, salt okunur; `advantage_state`
+ * `ADVANTAGE_PLUS_LEADS/SALES/APP` ya da `DISABLED`. Kampanya bütçesi +
+ * Advantage+ kitle + otomatik yerleşim ile kurulan bir LEADS kampanyası hiç
+ * istenmeden Advantage+ işaretlenebiliyor ve bu sessiz bir durum değişikliği
+ * (brief 04). Bunu bir hata saymak yanlış olur: ne gönderdik ne
+ * değiştirebiliriz. Yalnız ekranda söylenir.
+ *
+ * DAR: yalnız WhatsApp ve form niyetlerinde (reklam setinin
+ * `destination_type`ından tanınıyor). Okuma ALANI listeye ekleniyor ve
+ * bilinmeyen bir alan bütün kampanya okumasını düşürebilir; kapsamı
+ * istenen iki niyetle sınırlı tutmak bu riskin yüzeyi. Ölçülünce genişler.
+ */
+const ADVANTAGE_DURUMU_NIYETLERI = ['WHATSAPP', 'FORM'] as const;
+const ADVANTAGE_DURUMU_HEDEFLERI = new Set<string>(ADVANTAGE_DURUMU_NIYETLERI.map((n) => NIYET_KATALOGU[n].meta!.destinationType!));
+
+/** Kampanyanın Advantage+ durumunun ekran cümlesi (tek yer). */
+export function advantageDurumuCumlesi(donen: unknown): string {
+  if (!donen || typeof donen !== 'object') return "Meta bu kampanyanın Advantage+ durumunu döndürmedi.";
+  const durum = String((donen as Record<string, unknown>).advantage_state ?? '').toUpperCase();
+  if (!durum) return "Meta bu kampanyanın Advantage+ durumunu döndürmedi.";
+  if (durum === 'DISABLED') return 'Meta bu kampanyayı Advantage+ olarak işaretlemedi.';
+  return `Meta bu kampanyayı Advantage+ olarak işaretledi (${durum}).`;
+}
 
 const YER_TUTUCU = /^\{[a-z_]+(?::\d+)?\}$/;
 
@@ -150,6 +190,18 @@ export function beklenenYankilar(govdeler: MetaGovdesi[]): BeklenenYanki[] {
   const kategoriler = (kampanya?.alanlar.special_ad_categories as string[] | undefined) ?? [];
   const kisitli = kategoriler.some((k) => KISITLI_KATEGORILER.includes(k));
   const sonuc: BeklenenYanki[] = [];
+  const hedef = govdeler.find((g) => g.nesne === 'reklam_seti')?.alanlar.destination_type;
+  if (kampanya && typeof hedef === 'string' && ADVANTAGE_DURUMU_HEDEFLERI.has(hedef)) {
+    sonuc.push({
+      nesne: 'kampanya',
+      govde: kampanya.ad,
+      alanYolu: 'advantage_state_info',
+      gonderilen: null,
+      karsilastirma: 'yalniz_bilgi',
+      kabulEdilemez: false,
+      ekranEtiketi: ETIKETLER.advantage_state_info!,
+    });
+  }
 
   for (const gv of govdeler) {
     const gez = (o: Record<string, unknown>, onek: string) => {
@@ -187,6 +239,8 @@ export function beklenenYankilar(govdeler: MetaGovdesi[]): BeklenenYanki[] {
           y.karsilastirma = 'esit_kume';
         } else if (yol === 'asset_feed_spec') {
           y.karsilastirma = 'varlik_akisi';
+        } else if (KARSILAMA_YOLLARI.has(yol)) {
+          y.karsilastirma = 'karsilama';
         } else if (yol === 'targeting.targeting_automation.advantage_audience' && kisitli && v === 1) {
           y.karsilastirma = 'normallestir';
           y.normallestirme = {
@@ -216,7 +270,11 @@ export function okumaAlanlari(yankilar: BeklenenYanki[], govde: string): string[
   return [...set].sort();
 }
 
-export type FarkTuru = 'fark' | 'donmedi' | 'normallesti' | 'tanimsiz_ozellik' | 'meta_otomatik';
+/**
+ * `uyari`: beklenenden farklı ama yayını durdurmayan (N-20); ekranda uyarı
+ * tonunda. `bilgi`: hiç gönderilmemiş, yalnız okunan bir alanın cümlesi (N-21).
+ */
+export type FarkTuru = 'fark' | 'donmedi' | 'normallesti' | 'tanimsiz_ozellik' | 'meta_otomatik' | 'uyari' | 'bilgi';
 
 export interface FarkSatiri {
   govde: string;
@@ -564,6 +622,31 @@ export function geriOkumaKarsilastir(
       ...(bilgi ? { bilgi } : {}),
     });
 
+    if (y.karsilastirma === 'yalniz_bilgi') {
+      // Okuma düştüyse de (nesne yok) cümle söylüyor: "döndürmedi".
+      bilgiler.push(satir('bilgi', advantageDurumuCumlesi(donen)));
+      continue;
+    }
+    if (y.karsilastirma === 'karsilama') {
+      /*
+       * N-20 — KARŞILAMA MESAJI UYARIDIR, DURDURMAZ (yönetici kararı,
+       * 2026-10-12). Konum ÖLÇÜLMEDİ: belgenin oluşturma örneği `link_data`
+       * içi, okuma örneği `object_story_spec` kökü; nesne mi dizge mi döneceği
+       * de belirsiz. Kökte de aranıyor ve dizge çözülüyor. Yine de dönmez ya
+       * da farklı dönerse yayın DURMAZ: reklam doğru hatta ve doğru amaçla
+       * kurulu, risk ilk mesajın dili. Durdurmak, ölçülmemiş bir okuma
+       * biçimi yüzünden her WhatsApp yayınını kilitleyebilirdi. Sessiz de
+       * kalmıyor: `uyari` satırı ekranda Meta'nın döndürdüğüyle birlikte.
+       */
+      const bulunan = donen ?? (nesne ? al(nesne, 'object_story_spec.page_welcome_message') : undefined);
+      const beklenen = karsilamaOzu(y.gonderilen);
+      if (bulunan === undefined) {
+        bilgiler.push({ ...satir('uyari', "Meta karşılama mesajını geri okumada döndürmedi; ilk mesaj kontrol edilemedi. Reklamı WhatsApp'tan bir kez deneyerek bak."), donen: undefined });
+      } else if (karsilamaOzu(bulunan) !== beklenen) {
+        bilgiler.push({ ...satir('uyari', "Meta karşılama mesajını farklı kaydetti; ilk mesaj yazdığından farklı olabilir. Reklamı WhatsApp'tan bir kez deneyerek bak."), donen: bulunan });
+      }
+      continue;
+    }
     if (donen === undefined) {
       const semsiye = nesne === undefined ? null : semsiyeOzellik(nesne, y.alanYolu);
       if (semsiye === 'OPT_OUT' && kanonik(y.gonderilen) === kanonik('OPT_OUT')) {
@@ -696,4 +779,19 @@ export function geriOkumaKarsilastir(
   if (satirlar.length === 0) return { sonuc: 'temiz', bilgiler };
   if (satirlar.every((s) => s.tur === 'donmedi')) return { sonuc: 'dogrulanamadi', satirlar, bilgiler };
   return { sonuc: 'fark', satirlar, bilgiler };
+}
+
+/**
+ * Ekrana çıkan geri okuma notları: yalnız `uyari` ve `bilgi`, tekil, sırası
+ * korunarak. JSONB'den geldiği için tip denetimi burada; bozuk satır atlanır.
+ */
+export function geriOkumaNotlariniSec(bilgiler: unknown): Array<{ tur: 'uyari' | 'bilgi'; metin: string }> {
+  if (!Array.isArray(bilgiler)) return [];
+  const out: Array<{ tur: 'uyari' | 'bilgi'; metin: string }> = [];
+  for (const b of bilgiler as Array<Partial<FarkSatiri> | null>) {
+    if (!b || (b.tur !== 'uyari' && b.tur !== 'bilgi')) continue;
+    const metin = String(b.bilgi ?? b.ekranEtiketi ?? '').trim();
+    if (metin && !out.some((x) => x.metin === metin)) out.push({ tur: b.tur, metin });
+  }
+  return out;
 }

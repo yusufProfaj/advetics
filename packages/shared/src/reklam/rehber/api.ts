@@ -190,6 +190,14 @@ export interface PlatformYayinOzeti {
    * ya da sunucunun reddettiği bir şeyi vaat eder).
    */
   yenidenKurulabilir: boolean;
+  /**
+   * Son geri okumanın DURDURMAYAN notları (yanki.ts N-20 `uyari`, N-21
+   * `bilgi`): karşılama mesajının farklı dönmesi, Advantage+ durumu.
+   * Yayını durdurmuyorlar ama sessiz de kalmamalılar; `geri_okuma.bilgiler`
+   * tablosunda durup ekrana hiç gelmeseler kimse görmezdi. İsteğe bağlı:
+   * hiç başlamamış platformun geri okuması yok.
+   */
+  geriOkumaNotlari?: Array<{ tur: 'uyari' | 'bilgi'; metin: string }>;
 }
 
 /** Bir platform çocuğunun yayın kayıtlarından karar için gereken iki bilgi. */
