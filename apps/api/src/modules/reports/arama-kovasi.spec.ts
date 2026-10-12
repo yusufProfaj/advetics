@@ -59,6 +59,38 @@ describe('tanınmayan arama eylemi', () => {
   });
 });
 
+describe('tanınmayan arama eylemi — üretim verisi (2026-10-13)', () => {
+  /*
+   * Üretimde ÖLÇÜLEN gerçek tür listesi (Meta, TR hesapları, 365 gün):
+   * birleşik "+ 20 sn arama" sütunları her pikselli hesapta var ve arama
+   * değil. Bunlar uyarı üretseydi neredeyse her rapor "tanınmayan arama
+   * sonucu" derdi ve gerçek bir yeni ad o kalabalıkta kaybolurdu.
+   */
+  const URETIM = [
+    'offsite_content_view_add_20_s_calls',
+    'offsite_add_to_cart_add_20_s_calls',
+    'offsite_purchase_add_20_s_calls',
+    'offsite_lead_add_20_s_calls',
+    'offsite_initiate_checkout_add_20_s_calls',
+    'offsite_complete_registration_add_20_s_calls',
+    'click_to_call_native_call_placed',
+    'call_confirm_grouped',
+    'click_to_call_call_confirm',
+    'onsite_conversion.messaging_user_call_placed',
+    'click_to_call_native_20s_call_connect',
+    'offsite_search_add_20_s_calls',
+    'click_to_call_native_60s_call_connect',
+    'grouped_pixel_custom_conversions_add_20_s_calls',
+    'custom_event_actions_add_20_s_calls',
+  ];
+  it('KRİTİK: üretimdeki bilinen türlerin HİÇBİRİ uyarı üretmez', () => {
+    expect(taninmayanAramaEylemleri(URETIM)).toEqual([]);
+  });
+  it('gerçekten yeni bir ad hâlâ yakalanır', () => {
+    expect(taninmayanAramaEylemleri([...URETIM, 'click_to_call_native_45s_call_connect'])).toEqual(['click_to_call_native_45s_call_connect']);
+  });
+});
+
 describe('sütunlar', () => {
   const satir = (calls: number, callClicks = 0) => ({ conversionCounts: { ...emptyCounts(), calls, callClicks } }) as unknown as ReportCampaignRow;
   it('KRİTİK: arama verisi varsa varsayılan sütunlara eklenir, yoksa eklenmez', () => {

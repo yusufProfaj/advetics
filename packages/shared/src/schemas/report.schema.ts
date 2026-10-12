@@ -264,14 +264,35 @@ export function kovaPlatformu(k: string): 'meta' | 'google' | null {
  * hangisini döndürdüğü canlı veride görülmedi. Yeni bir ad görülürse
  * `taninmayanAramaEylemleri` onu raporda söylüyor.
  */
-export const ARAMA_EYLEMLERI_OLCULMEDI = true;
+export const ARAMA_EYLEMLERI_OLCULMEDI = false;
+/*
+ * ÖLÇÜLDÜ (2026-10-13, üretim `insights_daily`, Meta, son 365 gün, salt
+ * okunur sorgu): Türkiye hesaplarında `click_to_call_native_call_placed`
+ * (1.435 satır), `click_to_call_call_confirm` (1.344),
+ * `click_to_call_native_20s_call_connect` (893) ve
+ * `click_to_call_native_60s_call_connect` (338) GERÇEKTEN geliyor; kova
+ * adları doğru. Aynı sorgu `call` geçen ama ARAMA OLMAYAN on binlerce
+ * satır da gösterdi: `offsite_lead_add_20_s_calls` gibi Meta'nın "sonuç +
+ * 20 sn arama" BİRLEŞİK sütunları (her pikselli hesapta var). Kaba
+ * eşleşme bunları "tanınmayan arama" saydığı için neredeyse HER raporda
+ * uyarı çıkacaktı — her raporda duran uyarı okunmaz ve gerçeğini gizler.
+ */
 
 /**
  * BİLİNEN AMA KOVAYA KONMAYAN arama eylemleri. 60 sn arama 20 sn'nin alt
  * kümesi; ayrı sütun açmak tabloyu kalabalıklaştırırdı. Listede olması
  * "tanınmayan" uyarısını susturuyor — bilerek bırakıldı.
  */
-export const BILINEN_KOVASIZ_ARAMA_EYLEMLERI: readonly string[] = ['click_to_call_native_60s_call_connect'];
+export const BILINEN_KOVASIZ_ARAMA_EYLEMLERI: readonly string[] = [
+  'click_to_call_native_60s_call_connect',
+  // `click_to_call_call_confirm`ın gruplanmış ikizi (üretimde aynı satır sayısı): ikinci kez sayılmaz.
+  'call_confirm_grouped',
+  // Messenger sohbetinden yapılan arama: arama reklamının "Ara" düğmesi değil.
+  'onsite_conversion.messaging_user_call_placed',
+];
+
+/** Meta'nın "<sonuç> + 20 sn arama" birleşik sütunları: arama eylemi değil, toplam. */
+const BIRLESIK_ARAMA_SUTUNU = /_add_20_s_calls$/;
 
 /**
  * ARAMA GİBİ GÖRÜNEN AMA HİÇBİR KOVAYA DÜŞMEYEN eylem türleri. Meta adı
@@ -286,7 +307,7 @@ export function taninmayanAramaEylemleri(actionTypes: Iterable<string>): string[
   ]);
   const out = new Set<string>();
   for (const t of actionTypes) {
-    if (/call/i.test(t) && !/call_to_action/i.test(t) && !bilinen.has(t)) out.add(t);
+    if (/call/i.test(t) && !/call_to_action/i.test(t) && !BIRLESIK_ARAMA_SUTUNU.test(t) && !bilinen.has(t)) out.add(t);
   }
   return [...out].sort();
 }
