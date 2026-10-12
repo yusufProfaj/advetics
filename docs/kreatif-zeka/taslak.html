@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kreatifler Taslağı</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600;700&display=swap">
+<style>
+/*
+ * Paket D taslağı (docs/kreatif-zeka/MIMARI.md § 10). KESİN KURAL: renkler
+ * yalnız #ffffff, #000000, #302e2d, #ff2400; zemin ve çizgi için grinin
+ * saydam tonları. Yeşil yalnız durum noktası. Gradyan, pastel, buğu yok.
+ * Paket A taslağıyla (docs/sinyal/taslak.html) aynı dil.
+ */
+:root{
+  --beyaz:#ffffff; --siyah:#000000; --gri:#302e2d; --kirmizi:#ff2400;
+  --zemin:rgba(48,46,45,.04); --cizgi:rgba(48,46,45,.12); --ikincil:rgba(48,46,45,.62); --cok-acik:rgba(48,46,45,.07);
+  --yesil:#16a34a; /* yalnız durum noktası */
+  --baslik:"Montserrat",system-ui,sans-serif; --govde:"Open Sans",system-ui,sans-serif;
+  --gecis:cubic-bezier(.16,1,.3,1);
+}
+*{box-sizing:border-box}
+html{background:var(--beyaz)}
+body{margin:0;background:var(--zemin);color:var(--gri);font-family:var(--govde);font-size:14px;line-height:1.45}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+a{color:var(--siyah);text-decoration:none}
+a:hover{color:var(--kirmizi);text-decoration:underline}
+:focus-visible{outline:2px solid var(--kirmizi);outline-offset:2px;border-radius:6px}
+.num{font-variant-numeric:tabular-nums}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important}}
+
+.sayfa{max-width:1180px;margin:0 auto;padding:16px 16px 64px;display:flex;flex-direction:column;gap:16px}
+.not{background:var(--beyaz);border:1px dashed var(--cizgi);border-radius:10px;padding:10px 14px;font-size:12.5px;color:var(--ikincil)}
+.not b{color:var(--gri)}
+.gezinti{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.gezinti span{font-size:12px;font-weight:700;color:var(--ikincil);margin-right:4px}
+.gezinti button{border:1px solid var(--cizgi);background:var(--beyaz);border-radius:999px;padding:6px 12px;font-size:12.5px;font-weight:600}
+.gezinti button[aria-pressed="true"]{background:var(--gri);color:var(--beyaz);border-color:var(--gri)}
+.ekran{display:none;flex-direction:column;gap:16px}
+.ekran.acik{display:flex}
+
+h1{font-family:var(--baslik);font-weight:700;font-size:24px;margin:0;color:var(--siyah)}
+h2{font-family:var(--govde);font-size:14px;font-weight:700;margin:0;color:var(--siyah)}
+.ust{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px 16px}
+.alt{font-size:13px;color:var(--ikincil);margin-top:2px}
+.sag{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+.sekmeler{display:flex;gap:4px;border-bottom:1px solid var(--cizgi);overflow-x:auto}
+.sekmeler button{padding:10px 14px;font-weight:600;font-size:13.5px;color:var(--ikincil);border-bottom:3px solid transparent;white-space:nowrap;display:flex;gap:6px;align-items:center;transition:color .2s var(--gecis),border-color .2s var(--gecis)}
+.sekmeler button[aria-selected="true"]{color:var(--siyah);border-bottom-color:var(--kirmizi)}
+.say{font-size:11px;font-weight:700;border-radius:999px;padding:0 7px;background:var(--cok-acik);color:var(--gri)}
+.say.kirmizi{background:var(--kirmizi);color:var(--beyaz)}
+
+.kart{background:var(--beyaz);border:1px solid var(--cizgi);border-radius:12px;min-width:0;overflow:hidden}
+.kartUst{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--cizgi);flex-wrap:wrap}
+.kartUst .sag{font-size:12.5px;color:var(--ikincil)}
+
+.birincil{display:inline-flex;align-items:center;gap:6px;background:var(--kirmizi);color:var(--beyaz);font-weight:600;font-size:12.5px;padding:7px 14px;border-radius:999px;transition:opacity .2s}
+.birincil:hover{opacity:.88}
+.birincil[disabled]{opacity:.35;cursor:not-allowed}
+.ikincil{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--cizgi);background:var(--beyaz);border-radius:999px;padding:6px 13px;font-size:12.5px;font-weight:600;transition:border-color .2s}
+.ikincil:hover{border-color:var(--gri)}
+
+.arac{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--cizgi)}
+.arac .etk{font-size:12px;color:var(--ikincil);font-weight:600}
+.cip{border:1px solid var(--cizgi);border-radius:999px;padding:5px 11px;font-size:12.5px;font-weight:600;background:var(--beyaz);transition:border-color .2s,background .2s,color .2s;white-space:nowrap}
+.cip[aria-pressed="true"]{border-color:var(--gri);background:var(--gri);color:var(--beyaz)}
+.cip small{font-weight:600;opacity:.75}
+
+/* Etiketleme durumu şeridi */
+.durumS{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;padding:10px 16px;font-size:12.5px;border-bottom:1px solid var(--cizgi)}
+.durumS b{color:var(--siyah)}
+.nokta{width:8px;height:8px;border-radius:50%;flex:none;display:inline-block;vertical-align:1px}
+.nokta.yesil{background:var(--yesil)}
+.nokta.gri{border:2px solid var(--gri);width:9px;height:9px}
+.nokta.kirmizi{background:var(--kirmizi)}
+details.dokum{padding:0 16px 10px;font-size:12.5px;color:var(--ikincil)}
+details.dokum summary{cursor:pointer;font-weight:600;color:var(--gri);padding:8px 0}
+details.dokum ul{margin:0;padding-left:18px}
+details.dokum li{margin:3px 0}
+
+/* Kreatif kartları */
+.izgara{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px;padding:14px 16px}
+.kk{border:1px solid var(--cizgi);border-radius:10px;overflow:hidden;display:flex;flex-direction:column;background:var(--beyaz);transition:border-color .2s var(--gecis)}
+.kk:hover{border-color:var(--gri)}
+.gorsel{position:relative;aspect-ratio:1/1;background:var(--cok-acik);display:grid;place-items:center;overflow:hidden}
+.gorsel.dikey{aspect-ratio:4/5}
+.gorsel svg{width:100%;height:100%;display:block}
+.gorsel .kisim{position:absolute;left:8px;bottom:8px;background:var(--gri);color:var(--beyaz);font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:4px}
+.gorsel .platform{position:absolute;right:8px;top:8px;background:var(--beyaz);color:var(--gri);font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:4px;border:1px solid var(--cizgi)}
+.kkG{padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.kkUst{display:flex;gap:10px;align-items:center}
+.halka{width:44px;height:44px;flex:none;position:relative}
+.halka svg{width:44px;height:44px;transform:rotate(-90deg)}
+.halka b{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--baslik);font-size:14px;color:var(--siyah)}
+.halka.yok b{font-size:11px;color:var(--ikincil)}
+.kkAd{min-width:0}
+.kkAd b{display:block;color:var(--siyah);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kkAd small{display:block;font-size:11.5px;color:var(--ikincil);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kova{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700}
+.kova.dikkat{color:var(--kirmizi)}
+.kova.yetersiz{color:var(--ikincil)}
+.cumle{font-size:12.5px;color:var(--gri)}
+.cumle a{font-weight:600}
+.etiketler{display:flex;flex-wrap:wrap;gap:4px}
+.et{font-size:11px;font-weight:600;border:1px solid var(--cizgi);border-radius:4px;padding:1px 6px;color:var(--gri)}
+.metrikler{display:flex;gap:12px;font-size:11.5px;color:var(--ikincil);border-top:1px solid var(--cizgi);padding-top:8px}
+.metrikler b{color:var(--siyah);font-weight:700}
+.sayfalama{display:flex;justify-content:flex-end;gap:12px;padding:10px 16px;font-size:12.5px;color:var(--ikincil);border-top:1px solid var(--cizgi)}
+
+/* Ne işe yarıyor */
+.iki{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:16px;align-items:start}
+.fark{display:grid;grid-template-columns:minmax(0,1fr) 170px;gap:8px 16px;padding:12px 16px;border-top:1px solid var(--cizgi);align-items:center}
+.fark:first-of-type{border-top:0}
+.fark b{color:var(--siyah)}
+.fark small{display:block;font-size:12px;color:var(--ikincil);margin-top:2px}
+.aralik{position:relative;height:28px}
+.aralik .eksen{position:absolute;left:0;right:0;top:13px;height:1px;background:var(--cizgi)}
+.aralik .sifir{position:absolute;top:4px;width:1px;height:20px;background:var(--gri)}
+.aralik .bant{position:absolute;top:9px;height:9px;border-radius:5px;background:var(--gri)}
+.aralik .orta{position:absolute;top:6px;width:3px;height:15px;background:var(--kirmizi);border-radius:2px}
+.aralik .yazi{position:absolute;top:-2px;font-size:10px;color:var(--ikincil)}
+.uyari{padding:10px 16px;font-size:12px;color:var(--ikincil);border-top:1px solid var(--cizgi)}
+.uyari b{color:var(--gri)}
+
+/* Brief */
+.brief{padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+.brief ol{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px;font-size:13px}
+.brief .yon{font-family:var(--baslik);font-weight:700;color:var(--siyah);font-size:15px}
+.brief .kaynak{font-size:11.5px;color:var(--ikincil)}
+.brief .kacin{font-size:12.5px}
+.brief .kacin b{color:var(--siyah)}
+.bulgu{font-size:12.5px;border-left:3px solid var(--gri);padding:2px 0 2px 10px}
+.eylemS{display:flex;gap:8px;flex-wrap:wrap;padding:12px 16px;border-top:1px solid var(--cizgi)}
+.yukleniyor{padding:16px;display:flex;flex-direction:column;gap:10px}
+.yukleniyor i{height:14px;border-radius:6px;background:var(--cok-acik);display:block;animation:nabiz 1.2s ease-in-out infinite}
+@keyframes nabiz{50%{opacity:.45}}
+.gizli{display:none}
+
+/* Tablo (Tümü) */
+.tabloS{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{text-align:left;font-weight:700;color:var(--ikincil);padding:9px 16px;border-bottom:1px solid var(--cizgi);white-space:nowrap}
+td{padding:10px 16px;border-bottom:1px solid var(--cizgi);vertical-align:middle}
+td.sayi,th.sayi{text-align:right}
+.kucukG{width:40px;height:40px;border-radius:6px;background:var(--cok-acik);display:block}
+.puanH{font-family:var(--baslik);font-weight:700;color:var(--siyah)}
+tr.toplam td{font-weight:700;color:var(--siyah);border-bottom:0}
+
+/* Hâller */
+.bos{padding:36px 16px;text-align:center}
+.bos b{display:block;font-size:15px;color:var(--siyah);margin-bottom:4px}
+.bos p{margin:0 auto 12px;max-width:520px;color:var(--ikincil);font-size:13px}
+.hata{padding:14px 16px;border-left:3px solid var(--kirmizi);font-size:13px}
+.hata b{color:var(--siyah)}
+.hataller{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+
+@media (max-width:900px){
+  .iki{grid-template-columns:1fr}
+  .hataller{grid-template-columns:1fr}
+}
+@media (max-width:560px){
+  h1{font-size:20px}
+  .izgara{grid-template-columns:1fr 1fr;gap:8px;padding:10px}
+  .kkG{padding:8px}
+  .halka,.halka svg{width:36px;height:36px}
+  .halka b{font-size:12px}
+  .etiketler,.metrikler{display:none}
+  .fark{grid-template-columns:1fr}
+  .aralik{max-width:220px}
+  .sag{margin-left:0}
+}
+</style>
+</head>
+<body>
+<div class="sayfa">
+
+<div class="not">
+  <b>Taslak.</b> Paket D, İyileştir › Kreatifler sekmesi. Gezinti şeridi ürünün parçası değil. Sayılar örnek; ürün sayıları sorgudan, cümleleri şablondan (MIMARI § 6-8). Neden İyileştir: puan ve brief bir eylem üretiyor ve yorgunluk önerisi zaten burada (Ç-7, Ç-10).
+</div>
+
+<div class="gezinti" role="group" aria-label="Taslak ekranları">
+  <span>Ekran:</span>
+  <button type="button" aria-pressed="true" data-ekran="yeni">Yeni kreatifler</button>
+  <button type="button" aria-pressed="false" data-ekran="isler">Ne işe yarıyor + brief</button>
+  <button type="button" aria-pressed="false" data-ekran="tumu">Tümü (puan)</button>
+  <button type="button" aria-pressed="false" data-ekran="haller">Boş ve hata hâlleri</button>
+</div>
+
+<div class="ust">
+  <div>
+    <h1>İyileştir</h1>
+    <div class="alt">Ege Birlik Yapı · son 90 gün</div>
+  </div>
+</div>
+
+<div class="sekmeler" role="tablist">
+  <button role="tab" aria-selected="false">Öneriler <span class="say">3</span></button>
+  <button role="tab" aria-selected="false">Sinyaller <span class="say">2</span></button>
+  <button role="tab" aria-selected="true">Kreatifler <span class="say kirmizi">2</span></button>
+  <button role="tab" aria-selected="false">Asistan</button>
+  <button role="tab" aria-selected="false">Kurallar</button>
+</div>
+
+<!-- Ortak üst bölüm: küme seçici + etiketleme durumu -->
+<div class="kart" id="ortak">
+  <div class="arac" role="group" aria-label="Karşılaştırma kümesi">
+    <span class="etk">Karşılaştır:</span>
+    <button class="cip" aria-pressed="true">Meta · Satış <small>64</small></button>
+    <button class="cip" aria-pressed="false">Meta · Trafik <small>21</small></button>
+    <button class="cip" aria-pressed="false">Google · Demand Gen <small>9</small></button>
+    <span class="sag" style="font-size:12px;color:var(--ikincil)">Aynı amaçtaki kreatifler birbiriyle karşılaştırılır</span>
+  </div>
+  <div class="durumS">
+    <span><span class="nokta yesil"></span> <b class="num">288</b> / 312 kreatif incelendi</span>
+    <span><span class="nokta gri"></span> <b class="num">14</b> sırada · bugünkü sınır doldu (40 / 40), yarın devam</span>
+    <span><b class="num">10</b> incelenemiyor</span>
+    <span class="sag"><button class="ikincil" type="button">Şimdi incele</button></span>
+  </div>
+  <details class="dokum">
+    <summary>Neden incelenemiyor</summary>
+    <ul>
+      <li><b class="num">6</b> Metin reklamı, görseli yok (Google Arama)</li>
+      <li><b class="num">3</b> Platform görsel vermiyor (Performance Max henüz incelenmiyor)</li>
+      <li><b class="num">1</b> Görsel biçimi desteklenmiyor</li>
+    </ul>
+  </details>
+</div>
+
+<!-- ═══ EKRAN 1: Yeni kreatifler ═══ -->
+<section class="ekran acik" data-ekran="yeni">
+  <div class="kart">
+    <div class="kartUst">
+      <h2>Yeni kreatifler</h2>
+      <span class="sag">İlk 14 gün · karar için en az 1.000 ₺ harcama · metrik: dönüşüm başı maliyet</span>
+    </div>
+    <div class="arac" role="tablist" aria-label="Kova">
+      <button class="cip" aria-pressed="true" data-kova="hepsi">Hepsi <small>7</small></button>
+      <button class="cip" aria-pressed="false" data-kova="iyi"><span class="nokta yesil"></span> İyi gidiyor <small>3</small></button>
+      <button class="cip" aria-pressed="false" data-kova="dikkat">Dikkat <small>2</small></button>
+      <button class="cip" aria-pressed="false" data-kova="yetersiz">Veri yetersiz <small>2</small></button>
+    </div>
+    <div class="izgara" id="izgara"></div>
+    <div class="sayfalama">7 kreatiften 7'si gösteriliyor</div>
+  </div>
+</section>
+
+<!-- ═══ EKRAN 2: Ne işe yarıyor + brief ═══ -->
+<section class="ekran" data-ekran="isler">
+  <div class="iki">
+    <div class="kart">
+      <div class="kartUst">
+        <h2>Ne işe yarıyor</h2>
+        <span class="sag">Meta · Satış · 64 kreatif · dönüşüm başı maliyet</span>
+      </div>
+      <div class="fark">
+        <div><b>İnsan var:</b> dönüşüm başı maliyet %14 ile %33 arası daha düşük<small>23 ve 41 kreatif (etkin 15 ve 22)</small></div>
+        <div class="aralik" aria-hidden="true"><div class="eksen"></div><div class="sifir" style="left:30%"></div><div class="bant" style="left:44%;width:20%"></div><div class="orta" style="left:53%"></div><span class="yazi" style="left:27%">0</span></div>
+      </div>
+      <div class="fark">
+        <div><b>Az yazı:</b> dönüşüm başı maliyet %9 ile %27 arası daha düşük<small>28 ve 36 kreatif (etkin 17 ve 19)</small></div>
+        <div class="aralik" aria-hidden="true"><div class="eksen"></div><div class="sifir" style="left:30%"></div><div class="bant" style="left:39%;width:18%"></div><div class="orta" style="left:47%"></div><span class="yazi" style="left:27%">0</span></div>
+      </div>
+      <div class="fark">
+        <div><b>Fiyat ya da indirim var:</b> dönüşüm başı maliyet %6 ile %22 arası daha yüksek<small>12 ve 52 kreatif (etkin 8 ve 26)</small></div>
+        <div class="aralik" aria-hidden="true"><div class="eksen"></div><div class="sifir" style="left:30%"></div><div class="bant" style="left:8%;width:16%"></div><div class="orta" style="left:15%"></div><span class="yazi" style="left:27%">0</span></div>
+      </div>
+      <details class="dokum" style="border-top:1px solid var(--cizgi)">
+        <summary>Belirgin fark yok ya da veri yetersiz (6 özellik)</summary>
+        <ul>
+          <li>Renk: belirgin fark yok (31 ve 33 kreatif)</li>
+          <li>Logo: belirgin fark yok (40 ve 24 kreatif)</li>
+          <li>Görselde çağrı: belirgin fark yok (19 ve 45 kreatif)</li>
+          <li>Ürün: belirgin fark yok (50 ve 14 kreatif)</li>
+          <li>Görsel türü: veri yetersiz (her grupta en az 5 kreatif gerekiyor, 4 ve 60)</li>
+          <li>Biçim: veri yetersiz (harcama birkaç kreatifte toplanmış)</li>
+        </ul>
+      </details>
+      <div class="uyari"><b>Bu bir ilişki, garanti değil.</b> Aynı amaçtaki kreatiflerin geçmişinden. Yeni görselle sınayın.</div>
+    </div>
+
+    <div class="kart" id="briefKart">
+      <div class="kartUst"><h2>Üretim brief'i</h2><span class="sag">Yalnız belirgin farklardan</span></div>
+      <div id="briefBos" class="bos" style="padding:28px 16px">
+        <b>Bir sonraki görsel için brief</b>
+        <p>Yukarıdaki 3 bulgudan tasarımcıya ya da AdvCampaign'e verilecek kısa bir yönerge hazırlar. Bugün 5 hakkın var.</p>
+        <button class="birincil" type="button" id="briefHazirla">Brief hazırla</button>
+      </div>
+      <div id="briefYuk" class="yukleniyor gizli" aria-live="polite"><i style="width:70%"></i><i style="width:92%"></i><i style="width:84%"></i><i style="width:60%"></i></div>
+      <div id="briefSonuc" class="gizli">
+        <div class="brief">
+          <div class="yon">Ürünü kullanan bir kişi, sade zemin, görselde tek kısa cümle.</div>
+          <div class="kaynak">Bulgular (Advetics verisi)</div>
+          <div class="bulgu">İnsan var: dönüşüm başı maliyet %14 ile %33 arası daha düşük (23 ve 41 kreatif)</div>
+          <div class="bulgu">Az yazı: dönüşüm başı maliyet %9 ile %27 arası daha düşük (28 ve 36 kreatif)</div>
+          <div class="bulgu">Fiyat yok: dönüşüm başı maliyet %5 ile %18 arası daha düşük (52 ve 12 kreatif)</div>
+          <div class="kaynak">Yönerge (yapay zekâ)</div>
+          <ol>
+            <li>Ürünü elinde tutan ya da kullanan bir kişiyi merkeze al.</li>
+            <li>Görseldeki yazıyı tek kısa cümleye indir, ayrıntıyı reklam metnine bırak.</li>
+            <li>Fiyatı görsele yazma, teklifi metinde söyle.</li>
+          </ol>
+          <div class="kacin"><b>Kaçın:</b> görselin tamamını kaplayan yazı; indirim rozeti.</div>
+        </div>
+        <div class="eylemS">
+          <button class="birincil" type="button">Bu brief ile reklam kur</button>
+          <button class="ikincil" type="button">Kopyala</button>
+          <span style="font-size:12px;color:var(--ikincil);align-self:center">12 Ekim 10:42 · aynı bulgularla tekrar istenirse yeniden hazırlanmaz</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ EKRAN 3: Tümü ═══ -->
+<section class="ekran" data-ekran="tumu">
+  <div class="kart">
+    <div class="kartUst">
+      <h2>Bütün kreatifler</h2>
+      <span class="sag">Meta · Satış · puana göre · son 90 gün</span>
+    </div>
+    <div class="tabloS">
+      <table>
+        <thead><tr><th></th><th>Reklam</th><th class="sayi">Puan</th><th>Özellikler</th><th class="sayi">Harcama</th><th class="sayi">Dönüşüm</th><th class="sayi">Dönüşüm başı maliyet</th></tr></thead>
+        <tbody id="tablo"></tbody>
+        <tfoot><tr class="toplam"><td></td><td>Toplam (64 kreatif)</td><td></td><td></td><td class="sayi num">186.420 ₺</td><td class="sayi num">1.284</td><td class="sayi num">145 ₺</td></tr></tfoot>
+      </table>
+    </div>
+    <div class="sayfalama">64 kreatiften 1-6 gösteriliyor · <a href="#">Sonraki</a></div>
+  </div>
+</section>
+
+<!-- ═══ EKRAN 4: Hâller ═══ -->
+<section class="ekran" data-ekran="haller">
+  <div class="hataller">
+    <div class="kart">
+      <div class="kartUst"><h2>Yükleniyor</h2></div>
+      <div class="yukleniyor"><i style="width:60%"></i><i style="width:90%"></i><i style="width:75%"></i></div>
+    </div>
+    <div class="kart">
+      <div class="kartUst"><h2>Hata</h2></div>
+      <div class="hata"><b>Kreatifler okunamadı.</b> Sunucunun cevabı: "Veritabanı zaman aşımı (5 sn)". <a href="#">Tekrar dene</a></div>
+    </div>
+    <div class="kart">
+      <div class="kartUst"><h2>Boş: yalnız metin reklamı</h2></div>
+      <div class="bos"><b>Bu workspace'te incelenecek görsel yok</b><p>Son 90 günde harcaması olan 18 reklamın hepsi Google Arama metin reklamı. Görsel ya da video reklamı yayınlandığında burada görünür.</p></div>
+    </div>
+    <div class="kart">
+      <div class="kartUst"><h2>Boş: inceleme sürüyor</h2></div>
+      <div class="bos"><b>Kreatifler inceleniyor</b><p>212 kreatiften 40'ı bugün incelendi. Günlük sınır nedeniyle kalanlar sonraki 5 günde tamamlanır; en çok harcayanlar önce.</p></div>
+    </div>
+    <div class="kart">
+      <div class="kartUst"><h2>Brief yok: belirgin fark yok</h2></div>
+      <div class="bos"><b>Henüz belirgin bir fark yok</b><p>Bu kümedeki 22 kreatifte hiçbir özellik ötekinden belirgin biçimde iyi değil. Brief için en az bir belirgin fark gerekiyor.</p></div>
+    </div>
+    <div class="kart">
+      <div class="kartUst"><h2>Hesap atanmamış</h2></div>
+      <div class="bos"><b>Bu workspace'e reklam hesabı atanmamış</b><p>Hesap atandığında kreatifler kendiliğinden incelenir.</p><a class="ikincil" href="#">Marka Merkezi › Bağlantılar</a></div>
+    </div>
+  </div>
+</section>
+
+</div>
+
+<script>
+(function(){
+  // Basit görsel yer tutucu: kılavuz renklerinden düz şekiller, görsel türüne göre.
+  function svg(tur){
+    var g='#302e2d', k='#ff2400', b='#ffffff', a='rgba(48,46,45,.10)';
+    var s={
+      insan:'<rect width="100" height="100" fill="'+a+'"/><circle cx="50" cy="40" r="15" fill="'+g+'"/><rect x="28" y="58" width="44" height="42" rx="18" fill="'+g+'"/><rect x="58" y="62" width="18" height="22" rx="3" fill="'+k+'"/>',
+      urun:'<rect width="100" height="100" fill="'+a+'"/><rect x="32" y="26" width="36" height="52" rx="4" fill="'+g+'"/><rect x="40" y="34" width="20" height="8" fill="'+b+'"/>',
+      yazi:'<rect width="100" height="100" fill="'+g+'"/><rect x="14" y="18" width="72" height="10" fill="'+b+'"/><rect x="14" y="34" width="60" height="10" fill="'+b+'"/><rect x="14" y="50" width="66" height="10" fill="'+b+'"/><rect x="14" y="72" width="34" height="12" rx="6" fill="'+k+'"/>',
+      fiyat:'<rect width="100" height="100" fill="'+a+'"/><rect x="26" y="30" width="48" height="44" rx="4" fill="'+g+'"/><circle cx="74" cy="28" r="15" fill="'+k+'"/><rect x="66" y="25" width="16" height="6" fill="'+b+'"/>',
+      video:'<rect width="100" height="100" fill="'+g+'"/><circle cx="50" cy="50" r="16" fill="'+b+'"/><path d="M45 42 L59 50 L45 58 Z" fill="'+g+'"/>'
+    };
+    return '<svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice" aria-hidden="true">'+(s[tur]||s.urun)+'</svg>';
+  }
+  function halka(p){
+    if(p===null) return '<div class="halka yok" title="Puan yok"><svg viewBox="0 0 44 44"><circle cx="22" cy="22" r="19" fill="none" stroke="rgba(48,46,45,.12)" stroke-width="4"/></svg><b>yok</b></div>';
+    var c=2*Math.PI*19, d=c*p/100;
+    return '<div class="halka" title="Puan '+p+' / 100"><svg viewBox="0 0 44 44"><circle cx="22" cy="22" r="19" fill="none" stroke="rgba(48,46,45,.12)" stroke-width="4"/><circle cx="22" cy="22" r="19" fill="none" stroke="#302e2d" stroke-width="4" stroke-dasharray="'+d+' '+c+'" stroke-linecap="round"/></svg><b class="num">'+p+'</b></div>';
+  }
+  var K=[
+    {ad:'Ekim · Mutfak · Kullanım', kamp:'Satış · Ekim', tur:'insan', p:'Meta', puan:86, kova:'iyi', cumle:'23 benzerinden 20 tanesinden iyi', et:['İnsan var','Az yazı','Sıcak renkler','Dikey'], h:'2.840 ₺', d:'31', m:'92 ₺', dikey:true},
+    {ad:'Ekim · Banyo · Ürün', kamp:'Satış · Ekim', tur:'urun', p:'Meta', puan:61, kova:'iyi', cumle:'23 benzerinden 14 tanesinden iyi', et:['Ürün görünüyor','Yazı yok','Nötr renkler','Kare'], h:'1.920 ₺', d:'15', m:'128 ₺'},
+    {ad:'Reels · Showroom', kamp:'Satış · Ekim', tur:'video', p:'Meta', puan:55, kova:'iyi', cumle:'23 benzerinden 12 tanesinden iyi', et:['İnsan var','Az yazı','Dikey'], h:'1.410 ₺', d:'10', m:'141 ₺', kisim:'Yalnız video kapağı', dikey:true},
+    {ad:'Ekim · Kampanya %20', kamp:'Satış · Ekim', tur:'fiyat', p:'Meta', puan:18, kova:'dikkat', cumle:'23 benzerinden 4 tanesinden iyi', et:['Fiyat ya da indirim var','Çok yazı','Sıcak renkler','Kare'], h:'2.210 ₺', d:'9', m:'246 ₺'},
+    {ad:'Eylül · Katalog yazılı', kamp:'Satış · Eylül', tur:'yazi', p:'Meta', puan:24, kova:'dikkat', yorgun:true, cumle:'', et:['Çok yazı','Görselde çağrı var','Kare'], h:'3.050 ₺', d:'14', m:'218 ₺'},
+    {ad:'Ekim · Salon', kamp:'Satış · Ekim', tur:'urun', p:'Meta', puan:null, kova:'yetersiz', cumle:'640 ₺ harcadı, karar için 1.000 ₺ gerekiyor', et:['Ürün görünüyor','Az yazı','Yatay'], h:'640 ₺', d:'3', m:'213 ₺'},
+    {ad:'Ekim · Bahçe karusel', kamp:'Satış · Ekim', tur:'insan', p:'Meta', puan:null, kova:'yetersiz', cumle:'Etiket bekliyor: bugünkü sınır doldu', et:[], h:'1.150 ₺', d:'6', m:'192 ₺', kisim:'Yalnız ilk kart'}
+  ];
+  var KOVA={iyi:'<span class="kova"><span class="nokta yesil"></span> İyi gidiyor</span>', dikkat:'<span class="kova dikkat"><span class="nokta kirmizi"></span> Dikkat</span>', yetersiz:'<span class="kova yetersiz"><span class="nokta gri"></span> Veri yetersiz</span>'};
+  function kart(k){
+    var cumle = k.yorgun ? 'Kreatif yorgunluğu önerisi var, <a href="#">İyileştir › Öneriler</a>\'de' : k.cumle;
+    return '<article class="kk" data-kova="'+k.kova+'">'+
+      '<div class="gorsel'+(k.dikey?' dikey':'')+'">'+svg(k.tur)+'<span class="platform">'+k.p+'</span>'+(k.kisim?'<span class="kisim">'+k.kisim+'</span>':'')+'</div>'+
+      '<div class="kkG"><div class="kkUst">'+halka(k.puan)+'<div class="kkAd"><b>'+k.ad+'</b><small>'+k.kamp+'</small></div></div>'+
+      KOVA[k.kova]+'<div class="cumle">'+cumle+'</div>'+
+      (k.et.length?'<div class="etiketler">'+k.et.map(function(e){return '<span class="et">'+e+'</span>'}).join('')+'</div>':'')+
+      '<div class="metrikler num"><span>Harcama <b>'+k.h+'</b></span><span>Dönüşüm <b>'+k.d+'</b></span><span>Maliyet <b>'+k.m+'</b></span></div></div></article>';
+  }
+  var iz=document.getElementById('izgara');
+  iz.innerHTML=K.map(kart).join('');
+  document.querySelectorAll('[data-kova]').forEach(function(b){
+    if(b.tagName!=='BUTTON') return;
+    b.addEventListener('click',function(){
+      document.querySelectorAll('button[data-kova]').forEach(function(x){x.setAttribute('aria-pressed', x===b?'true':'false')});
+      var v=b.getAttribute('data-kova');
+      iz.querySelectorAll('.kk').forEach(function(c){c.style.display=(v==='hepsi'||c.getAttribute('data-kova')===v)?'':'none'});
+    });
+  });
+  var T=[
+    ['insan','Ekim · Mutfak · Kullanım',86,'İnsan var · Az yazı','2.840 ₺','31','92 ₺'],
+    ['urun','Ağustos · Mutfak ürün',79,'Ürün görünüyor · Yazı yok','8.120 ₺','71','114 ₺'],
+    ['insan','Temmuz · Aile',72,'İnsan var · Az yazı','11.400 ₺','92','124 ₺'],
+    ['urun','Ekim · Banyo · Ürün',61,'Ürün görünüyor · Yazı yok','1.920 ₺','15','128 ₺'],
+    ['yazi','Eylül · Katalog yazılı',24,'Çok yazı · Görselde çağrı var','3.050 ₺','14','218 ₺'],
+    ['fiyat','Ekim · Kampanya %20',18,'Fiyat ya da indirim var · Çok yazı','2.210 ₺','9','246 ₺']
+  ];
+  document.getElementById('tablo').innerHTML=T.map(function(r){
+    return '<tr><td><span class="kucukG">'+svg(r[0])+'</span></td><td><a href="#">'+r[1]+'</a></td><td class="sayi"><span class="puanH num">'+r[2]+'</span></td><td>'+r[3]+'</td><td class="sayi num">'+r[4]+'</td><td class="sayi num">'+r[5]+'</td><td class="sayi num">'+r[6]+'</td></tr>';
+  }).join('');
+
+  document.querySelectorAll('.gezinti button').forEach(function(b){
+    b.addEventListener('click',function(){
+      document.querySelectorAll('.gezinti button').forEach(function(x){x.setAttribute('aria-pressed', x===b?'true':'false')});
+      var e=b.getAttribute('data-ekran');
+      document.querySelectorAll('section.ekran').forEach(function(s){s.classList.toggle('acik', s.getAttribute('data-ekran')===e)});
+      document.getElementById('ortak').style.display = e==='haller' ? 'none' : '';
+    });
+  });
+  document.getElementById('briefHazirla').addEventListener('click',function(){
+    document.getElementById('briefBos').classList.add('gizli');
+    document.getElementById('briefYuk').classList.remove('gizli');
+    setTimeout(function(){
+      document.getElementById('briefYuk').classList.add('gizli');
+      document.getElementById('briefSonuc').classList.remove('gizli');
+    }, 900);
+  });
+})();
+</script>
+</body>
+</html>

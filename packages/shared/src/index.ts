@@ -66,3 +66,4 @@ export * from './hazirlama';
 export * from './kurulum';
 export * from './iki-adim';
 export * from './veri-kaynagi';
+export * from './kreatif-zeka';
