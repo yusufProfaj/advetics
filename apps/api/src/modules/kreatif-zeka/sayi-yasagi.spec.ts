@@ -78,3 +78,18 @@ describe('Ö-1 fark cümlesi sonsuz/NaN üretmiyor', () => {
     }
   });
 });
+
+describe('sayı yasağı — Türkçe büyük harf ve deyim (Ajan 4 yeniden kapı)', () => {
+  it('KRİTİK: cümle başındaki büyük "İ" yasaktan KAÇMIYOR', () => {
+    expect(sayiTasiyor('İki kat daha fazla tıklama')).toBe(true);
+    expect(sayiTasiyor('İKİ KAT DAHA FAZLA')).toBe(true);
+    expect(sayiTasiyor('Yüzde otuz daha iyi')).toBe(true);
+  });
+
+  it('"bir kat daha" deyimi oran sayılmıyor; başka sayı önündeyse sayılıyor', () => {
+    expect(sayiTasiyor('Görseli bir kat daha sade tut')).toBe(false);
+    expect(sayiTasiyor('Bir kat daha sade')).toBe(false);
+    expect(sayiTasiyor('iki kat daha sade')).toBe(true);
+    expect(sayiTasiyor('yüz bir kat daha')).toBe(true);
+  });
+});

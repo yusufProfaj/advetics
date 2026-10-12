@@ -85,7 +85,21 @@ const SAYI_KALIPLARI: RegExp[] = [
 
 /** Metin bir sayı/oran taşıyor mu (rakam, yüzde ya da yazıyla çarpan). */
 export function sayiTasiyor(metin: string): boolean {
-  return SAYI_KALIPLARI.some((r) => r.test(metin));
+  /*
+   * TÜRKÇE KÜÇÜLTME ÖNCE (Ajan 4 yeniden kapı). `i`+`u` bayraklı aramada
+   * büyük "İ" (U+0130) "i" ile eşleşmiyor: cümle başındaki "İki kat daha
+   * fazla tıklama" ve "İKİ KAT" yasaktan geçiyordu. `tr` yerel ayarıyla
+   * küçültülen metinde "İ" → "i", "I" → "ı" doğru düşüyor.
+   *
+   * "BİR KAT DAHA" DEYİM, ORAN DEĞİL: "bir kat daha sade" gibi bir cümle
+   * reddedilince brief iki denemede üretilemiyor ve günlük hak yanıyordu.
+   * Önünde başka bir sayı kelimesi yoksa ("yüz bir kat" değilse) çıkarılıyor;
+   * "iki kat daha" yine yasak.
+   */
+  const kucuk = metin
+    .toLocaleLowerCase('tr')
+    .replace(new RegExp(`(?<!${SAYI_KELIMESI}\\s+)${HARF_DISI_ONCE}bir\\s+kat\\s+daha${HARF_DISI_SONRA}`, 'gu'), ' ');
+  return SAYI_KALIPLARI.some((r) => r.test(kucuk));
 }
 
 export function briefMetniDenetle(
