@@ -33,7 +33,7 @@ import { Ga4Istemcisi } from '../connections/providers/ga4';
 import { SyncQueueService } from '../../queue/sync-queue.service';
 import type { TxLike } from '../sinyal/sinyal-hesap';
 import { kaynakBugun } from './veri-kaynagi-is';
-import { platformKampanyalari, takipAcigiYaniti } from './takip-hesap';
+import { etkinGa4Kaynagi, platformKampanyalari, takipAcigiYaniti } from './takip-hesap';
 
 const logger = new Logger('VeriKaynagiService');
 
@@ -483,11 +483,8 @@ export class VeriKaynagiService {
   // ───────────────────────────────────────────────────────────────────────
 
   private async ga4Kaynagi(t: TxLike, clientId: string): Promise<KaynakSatiri | null> {
-    const [k] = await t.$queryRaw<KaynakSatiri[]>(Prisma.sql`
-      SELECT ${KAYNAK_LISTE_SECIMI} FROM veri_kaynaklari v
-       WHERE v.client_id = ${clientId}::uuid AND v.tur = 'ga4' AND v.durum <> 'kaldirildi'
-       ORDER BY v.created_at LIMIT 1`);
-    return k ?? null;
+    // TEK SÜZGEÇ (Ö-1): takip açığı, rapor ve sinyaller aynı fonksiyonla buluyor.
+    return etkinGa4Kaynagi<KaynakSatiri>(t, clientId, KAYNAK_LISTE_SECIMI);
   }
 
   /** Boş listenin NEDENİ (emptyReason deseni): dördü farklı iş. */

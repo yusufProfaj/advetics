@@ -145,7 +145,7 @@ describe('siteSatirlari', () => {
         [KAYNAK, e, IDS.client, IDS.org],
       );
     }
-    const r = await siteSatirlari(db(), IDS.client, '2026-10-01', '2026-10-13');
+    const r = await siteSatirlari(db(), IDS.client, KAYNAK, '2026-10-01', '2026-10-13');
     expect(r).toEqual([{ kaynakOrtam: 'facebook / paid_social', kampanyaAdi: '120210000001', kampanyaKimligi: null, adsKampanyaKimligi: null, anahtarEtkinlik: 6, oturum: 100 }]);
   });
 });
@@ -188,7 +188,8 @@ describe('F1 sağlık kontrolleri (sinyal işi)', () => {
     await kaynakKur();
     await oturum('2026-10-05', 40, '120210000001', 'facebook / paid_social', 'a');
     await oturum('2026-10-05', 60, '(not set)', 'facebook / paid_social', 'b');
-    const r = await kaynakSaglikBulgulari(db(), girdi());
+    // Ö-2: Meta tarafı yalnız AdvCampaign etiketi açıkken koşuyor.
+    const r = await kaynakSaglikBulgulari(db(), { ...girdi(), metaUtmAcik: true });
     expect(r.bulgular.find((x) => x.kod === 'utm_eksik')).toMatchObject({ kanit: { pay: 0.6, ucretliOturum: 100 } });
     const g = await kaynakSaglikBulgulari(db(), { ...girdi(), platform: 'google' });
     expect(g.bulgular.find((x) => x.kod === 'utm_eksik')).toBeUndefined();

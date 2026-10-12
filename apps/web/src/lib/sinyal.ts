@@ -24,6 +24,7 @@ import {
   KANAL_TURU_ADI,
   PLATFORM_KISA_ADLARI,
   SAGLIK_DISARIDA,
+  SAGLIK_KOSULLU_DISARIDA,
   TESLIM_DURUMLARI,
   aliciAyristir,
   kanalOlusturSchema,
@@ -228,12 +229,13 @@ export const KONTROL_EDILMEYEN_METNI: Record<SaglikDisaridaKodu, string> = {
   meta_kitle_kucuk: 'kitle listesi saklanmıyor, yalnız Meta’dan anlık okunuyor.',
   donusum_islemi_pasif: 'Ölçüm ekranında anlık okunuyor. Yerine "dönüşümler kesildi" kontrolü çalışıyor.',
   pmax_varlik_eksik: 'öğe grupları senkronize edilmiyor.',
+  utm_eksik_meta: 'Meta reklamları kampanya etiketi olmadan gidiyor (ayar kapalı).',
 };
 
 export function kontrolEdilmeyenler(kodlar: readonly SaglikDisaridaKodu[]): Array<{ kod: SaglikDisaridaKodu; ad: string; neden: string }> {
   return kodlar.map((kod) => ({
     kod,
-    ad: SAGLIK_DISARIDA.find((d) => d.kod === kod)?.ad ?? kod,
+    ad: [...SAGLIK_DISARIDA, ...SAGLIK_KOSULLU_DISARIDA].find((d) => d.kod === kod)?.ad ?? kod,
     neden: KONTROL_EDILMEYEN_METNI[kod],
   }));
 }

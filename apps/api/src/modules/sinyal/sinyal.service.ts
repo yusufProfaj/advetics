@@ -1,3 +1,4 @@
+import { utmEtiketiAcik } from '../reklam/utm-etiketi';
 import {
   BadRequestException,
   ConflictException,
@@ -12,6 +13,8 @@ import {
   ANOMALI,
   SAGLIK,
   SAGLIK_DISARIDA,
+  SAGLIK_KOSULLU_DISARIDA,
+  type SaglikDisaridaKodu,
   SINYAL_DURUMLARI,
   SINYAL_KAPALI_DURUMLARI,
   SINYAL_SAYFA_BOYUTU,
@@ -103,7 +106,11 @@ export class SinyalService {
     const sessizKosum = this.config.sinyal.sessizKosum;
     const sayilar = Object.fromEntries(SINYAL_DURUMLARI.map((d) => [d, 0])) as Record<SinyalDurumu, number>;
     const hatalar: SinyalListesi['hatalar'] = [];
-    const kontrolEdilmeyen = SAGLIK_DISARIDA.map((d) => d.kod);
+    // Ö-2: Meta etiketi kapalıyken `utm_eksik` Meta'da koşmuyor; SÖYLENİR.
+    const kontrolEdilmeyen: SaglikDisaridaKodu[] = [
+      ...SAGLIK_DISARIDA.map((d) => d.kod),
+      ...(utmEtiketiAcik() ? [] : SAGLIK_KOSULLU_DISARIDA.map((d) => d.kod)),
+    ];
     const uretildi = simdi.toISOString();
 
     let hesaplar: HesapSinyalOzeti[] = [];

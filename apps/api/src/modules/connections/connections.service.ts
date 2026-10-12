@@ -653,6 +653,32 @@ export class ConnectionsService {
    * kaynağı `state` satırıdır — kim, hangi müşteri için, ne zaman başlattı.
    * Bu yüzden PrismaAdminService kullanılıyor.
    */
+/**
+   * İZİN VERİLDİ — İZİN YÜZÜNDEN DURAN VERİ KAYNAKLARI YENİDEN KUYRUĞA.
+   *
+   * Kullanıcı kartta "Analytics iznini ver"e basıp Google'dan döndüğünde
+   * kaynak `izin_eksik`/`erisim_yok`ta kalıyordu: gece süpürmesi bu durumları
+   * BİLEREK atlıyor (her gece aynı reddi almamak için) ve kullanıcının ayrıca
+   * "Şimdi yenile"yi bilmesi gerekiyordu. Belirti "izni verdim, hâlâ izin
+   * gerekiyor yazıyor". Yapı işi kendi ön koşulunu (izin var mı) zaten
+   * platforma gitmeden denetliyor; izin hâlâ eksikse çağrısız biter.
+   * Yutuluyor ama SESSİZ DEĞİL: bağlantı kuruldu, bu ek adım onu bozmamalı.
+   */
+  private async izinBekleyenKaynaklariKuyrukla(connectionId: string): Promise<number> {
+    try {
+      const kaynaklar = await this.admin.$queryRaw<Array<{ id: string; client_id: string }>>(Prisma.sql`
+        SELECT id::text AS id, client_id::text AS client_id FROM veri_kaynaklari
+         WHERE connection_id = ${connectionId}::uuid AND durum IN ('izin_eksik', 'erisim_yok')`);
+      for (const k of kaynaklar) {
+        await this.queue.enqueue({ clientId: k.client_id, platform: 'google', jobType: 'kaynak_yapi', veriKaynagiId: k.id, interactive: true });
+      }
+      return kaynaklar.length;
+    } catch (err) {
+      this.logger.error(`İzin sonrası veri kaynakları kuyruğa alınamadı (${connectionId}): ${err instanceof Error ? err.message : String(err)}`);
+      return 0;
+    }
+  }
+
   async handleCallback(
     platform: Platform,
     params: {
@@ -790,6 +816,10 @@ export class ConnectionsService {
       if (state.clientId) {
         await this.ilkVeriCekimi(connectionId, state.clientId, platform);
       }
+
+      // İZİN AKIŞININ SONU — TEK YER (Paket F1, Ajan 4 N): izin yüzünden duran
+      // veri kaynakları kendiliğinden yeniden denensin.
+      await this.izinBekleyenKaynaklariKuyrukla(connectionId);
 
       await this.audit.recordUnauthenticated(state.orgId, {
         action: 'connection.created',

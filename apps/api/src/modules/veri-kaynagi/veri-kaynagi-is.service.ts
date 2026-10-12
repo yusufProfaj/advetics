@@ -11,6 +11,7 @@ import { QuotaGuardService } from '../../queue/quota-guard.service';
 import { SyncQueueService } from '../../queue/sync-queue.service';
 import type { SyncJobPayload } from '../../queue/queues';
 import {
+  KaynakEksikVeri,
   KaynakKotaReddi,
   kaynakBugun,
   kaynakGecmis,
@@ -117,6 +118,7 @@ export class VeriKaynagiIsService {
   private async hataYaz(syncJobId: bigint, kaynakId: string, err: unknown): Promise<void> {
     const pe = err instanceof PlatformApiError ? err : undefined;
     const kota = err instanceof KaynakKotaReddi;
+    const eksik = err instanceof KaynakEksikVeri;
     if (pe?.kind === 'rate_limited') {
       // YALNIZ BU KAYNAĞIN KESİCİSİ (sınıf yorumu). Google Ads kovasına dokunulmuyor.
       const [k] = await this.db.$queryRaw<Array<{ tur: string; dis_kimlik: string }>>(Prisma.sql`
@@ -128,8 +130,10 @@ export class VeriKaynagiIsService {
       data: {
         status: kota || pe?.kind === 'rate_limited' ? 'throttled' : 'failed',
         nextRetryAt: new Date(Date.now() + (kota ? (err as KaynakKotaReddi).retryAfterMs : (pe?.detail?.retryAfterSeconds ?? 300) * 1000)),
-        errorCode: (kota ? 'kaynak_kotasi' : (pe?.kind ?? 'unknown')).slice(0, 80),
+        errorCode: (kota ? 'kaynak_kotasi' : eksik ? 'kaynak_eksik_veri' : (pe?.kind ?? 'unknown')).slice(0, 80),
         errorMessage: (err instanceof Error ? err.message : String(err)).slice(0, 1000),
+        // Ö-4: KISMİ rapor sebebi notta da (teşhis ekranı notu okuyor); pencere yazılmadı, iş tekrar denenecek.
+        ...(eksik ? { note: `pencere YAZILMADI, tekrar denenecek: ${(err as Error).message}`.slice(0, 500) } : {}),
       },
     });
     if (!kota) this.logger.error(`Kaynak işi düştü (${kaynakId}): ${err instanceof Error ? err.message : String(err)}`);

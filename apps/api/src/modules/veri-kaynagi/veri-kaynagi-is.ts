@@ -64,6 +64,18 @@ export interface IsSonucu {
   apiCalls: number;
 }
 
+/**
+ * GA4 bildirdiğinden AZ satır döndürdü (Ö-4): pencere YAZILMADI, iş geçici
+ * başarısız ve TEKRAR DENENİR (BullMQ geri çekilmesi). Kota reddinden farkı:
+ * kota yarına kadar düzelmez, eksik sayfa birkaç dakika sonra düzelir.
+ */
+export class KaynakEksikVeri extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'KaynakEksikVeri';
+  }
+}
+
 /** Kota reddi: iş tekrar denenebilir ama deneme hakkı YAKMADAN (worker → moveToDelayed). */
 export class KaynakKotaReddi extends Error {
   constructor(
@@ -254,18 +266,18 @@ async function pencereCek(
   const devam = (q: Ga4MulkKotasi | null) => ga4KotaIzni(katman, q ?? null).neden;
   const tr = await ga4.raporTamami(k.dis_kimlik, 'trafik', aralik, devam);
   await b.kota.kaydet(anahtar, tr.kota);
+  // EKSİK SATIR (Ö-4) kota değil: pencere yazılmaz ve iş TEKRAR DENENİR.
+  if (tr.eksik || (!tr.durdu && tr.satirlar.length < tr.satirSayisi)) throw new KaynakEksikVeri(`trafik raporu kısmi: ${tr.durdu ?? `${tr.satirlar.length}/${tr.satirSayisi} satır`}`);
   if (tr.durdu) return { yazildi: false, trafik: 0, etkinlik: 0, istek: tr.istek, notlar: [`trafik raporu yarıda: ${tr.durdu}`], kota: tr.kota, kalite: tr.kalite };
   // İkinci rapordan ÖNCE kota yeniden: ilk rapor kotayı eşiğin altına indirmiş olabilir.
   const once = ga4KotaIzni(katman, tr.kota);
   if (!once.izin) return { yazildi: false, trafik: 0, etkinlik: 0, istek: tr.istek, notlar: [`kota: ${once.neden}`], kota: tr.kota, kalite: tr.kalite };
   const et = await ga4.raporTamami(k.dis_kimlik, 'anahtarEtkinlik', aralik, devam);
   await b.kota.kaydet(anahtar, et.kota ?? tr.kota);
+  if (et.eksik || (!et.durdu && et.satirlar.length < et.satirSayisi)) throw new KaynakEksikVeri(`etkinlik raporu kısmi: ${et.durdu ?? `${et.satirlar.length}/${et.satirSayisi} satır`}`);
   if (et.durdu) return { yazildi: false, trafik: 0, etkinlik: 0, istek: tr.istek + et.istek, notlar: [`etkinlik raporu yarıda: ${et.durdu}`], kota: et.kota, kalite: tr.kalite };
 
   const notlar: string[] = [];
-  // SESSİZ KESME YOK: Google'ın bildirdiği satır sayısı okunanla tutmuyorsa yaz.
-  if (tr.satirlar.length < tr.satirSayisi) notlar.push(`trafik ${tr.satirlar.length}/${tr.satirSayisi} satır okundu`);
-  if (et.satirlar.length < et.satirSayisi) notlar.push(`etkinlik ${et.satirlar.length}/${et.satirSayisi} satır okundu`);
   const kalite: Ga4Kalite = {
     digerSatiri: tr.kalite.digerSatiri || et.kalite.digerSatiri,
     esiklendi: tr.kalite.esiklendi || et.kalite.esiklendi,

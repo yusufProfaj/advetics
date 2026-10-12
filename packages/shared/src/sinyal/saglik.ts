@@ -163,4 +163,21 @@ export const SAGLIK_DISARIDA = [
       'Öğe grubu içeriği yalnız AdvCampaign\'in kendi kurduğu kampanyanın geri okumasında soruluyor (reklam/google/google-yayin.ts); senkronizasyon öğe gruplarını hiç çekmiyor.',
   },
 ] as const;
-export type SaglikDisaridaKodu = (typeof SAGLIK_DISARIDA)[number]['kod'];
+/**
+ * KOŞULLU DIŞARIDA KALAN (Ajan 4, Ö-2). `utm_eksik` yalnız etiketleme BİZİM
+ * kontrolümüzdeyken koşar: Google otomatik etiketle her zaman, Meta yalnız
+ * AdvCampaign etiketi açıkken (`META_UTM_ETIKETI=1`, reklam/utm-etiketi.ts).
+ * Kapalıyken Meta tıklaması GA4'te "facebook / referral" görünür, ücretli
+ * sayılmaz ve kontrol HİÇBİR ŞEY görmeden "temiz" derdi. O yüzden kapalıyken
+ * Meta tarafı koşmamış sayılır (açık sinyali "düzeldi" diye kapatmaz) ve
+ * ekranda bu satırla SÖYLENİR.
+ */
+export const SAGLIK_KOSULLU_DISARIDA = [
+  {
+    kod: 'utm_eksik_meta',
+    ad: 'Meta reklamlarında kampanya etiketi',
+    neden: 'Meta reklamları kampanya etiketi olmadan gidiyor (ayar kapalı)',
+  },
+] as const;
+
+export type SaglikDisaridaKodu = (typeof SAGLIK_DISARIDA)[number]['kod'] | (typeof SAGLIK_KOSULLU_DISARIDA)[number]['kod'];

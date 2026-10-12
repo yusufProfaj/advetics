@@ -4,6 +4,7 @@ import { createHarness, IDS, seedTenant, type Harness } from '../../../test/pgli
 import { PlatformApiError } from '../connections/provider.types';
 import type { Ga4MulkKotasi, Ga4RaporSonucu } from '../connections/providers/ga4';
 import {
+  KaynakEksikVeri,
   KaynakKotaReddi,
   ON_KOSUL_NOTU,
   kaynakBugun,
@@ -55,6 +56,7 @@ function sonuc(satirlar: ReturnType<typeof satir>[], kota: Ga4MulkKotasi | null 
     kota,
     istek: 1,
     durdu: null,
+    eksik: false,
     ...ek,
   };
 }
@@ -245,13 +247,23 @@ describe('kaynak_gunluk', () => {
     expect(await h.q(`SELECT oturum FROM ga4_gunluk`)).toEqual([{ oturum: 9 }]);
   });
 
-  it('okunan satır Google\'ın bildirdiğinden azsa nota yazılır (sessiz kesme yok)', async () => {
+  it('KRİTİK (Ö-4): okunan satır Google\'ın bildirdiğinden azsa pencere YAZILMAZ ve iş TEKRAR DENENEBİLİR hata fırlatır', async () => {
     await yapiTaze();
+    await h.q(
+      `INSERT INTO ga4_gunluk (gun, veri_kaynagi_id, satir_hash, client_id, org_id, kaynak_ortam, oturum) VALUES ('2026-10-12', $1, repeat('c', 64), $2, $3, 'x / y', 9)`,
+      [KAYNAK, IDS.client, IDS.org],
+    );
     const { o } = okuyucu({
       trafik: () => ({ ...sonuc([satir([gun('2026-10-12'), 'a / b', 'k', 'k', '(not set)'], ['1', '1', '1', '0', '0', '0'])]), satirSayisi: 5 }),
     });
-    const r = await kaynakGunluk(bagimlilik(o).b, KAYNAK, aralik, false);
-    expect(r.note).toMatch(/trafik 1\/5 satır okundu/);
+    await expect(kaynakGunluk(bagimlilik(o).b, KAYNAK, aralik, false)).rejects.toBeInstanceOf(KaynakEksikVeri);
+    expect(await h.q(`SELECT oturum FROM ga4_gunluk`)).toEqual([{ oturum: 9 }]);
+  });
+
+  it('Ö-4: raporTamami eksik dediyse (durdu + eksik) de aynı: yazılmaz, tekrar denenir', async () => {
+    await yapiTaze();
+    const { o } = okuyucu({ trafik: () => sonuc([], null, { durdu: 'Analytics eksik satır döndürdü (2/5)', eksik: true, satirSayisi: 5 }) });
+    await expect(kaynakGunluk(bagimlilik(o).b, KAYNAK, aralik, false)).rejects.toThrow(/kısmi/);
   });
 
   it('kota bekçisi reddederse platforma gitmeden kota reddi fırlatılır (deneme yakmadan geciktirilir)', async () => {

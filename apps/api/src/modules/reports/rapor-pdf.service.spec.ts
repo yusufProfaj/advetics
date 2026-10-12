@@ -1296,6 +1296,9 @@ describe('RaporPdfService — Site ve Dönüşüm (Paket F1)', () => {
     const kapak = await boyut({ ...VERI, sections: ['cover'] });
     const yok = { ...VERI.siteConversion!, emptyReason: 'kaynak_yok' as const, satirlar: [] };
     expect(await boyut({ ...VERI, sections: ['cover', 'site_conversion'], siteConversion: yok })).toBe(kapak);
+    // Ajan 4 N: izin eksikliği ajansın işi, müşteriye giden belgede sayfa açılmaz.
+    const izin = { ...VERI.siteConversion!, emptyReason: 'izin_eksik' as const, satirlar: [] };
+    expect(await boyut({ ...VERI, sections: ['cover', 'site_conversion'], siteConversion: izin })).toBe(kapak);
     expect(await boyut({ ...VERI, sections: ['cover', 'site_conversion'], siteConversion: null })).toBe(kapak);
   });
 

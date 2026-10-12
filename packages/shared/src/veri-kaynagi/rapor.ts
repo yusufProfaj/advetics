@@ -52,7 +52,10 @@ export const SITE_DONUSUM_SUTUNLARI: readonly SiteDonusumSutunu[] = [
  * belgede bir bilgi değil, ajansın kurulum işi; o Marka Merkezi'nde yazar.
  */
 export function siteDonusumuCizilir(v: TakipAcigiYaniti | null): v is TakipAcigiYaniti {
-  return v !== null && v.emptyReason !== 'kaynak_yok';
+  // İZİN EKSİK de çizilmez (Ajan 4, N): "bağlantının izni yenilenmeli" ajansın
+  // işi, müşteriye giden belgenin cümlesi değil. Panelde (Marka Merkezi kartı,
+  // Reklam Yöneticisi "Sitede" notu) ajansa söyleniyor.
+  return v !== null && v.emptyReason !== 'kaynak_yok' && v.emptyReason !== 'izin_eksik';
 }
 
 /** Boş tablonun NEDENİ, müşteriye giden dille. */

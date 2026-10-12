@@ -2,7 +2,8 @@ import { Prisma } from '@prisma/client';
 import { SAGLIK, TAKIP_ACIGI, trafikKaynagi, type Platform, type SinyalKodu } from '@advetics/shared';
 import { gunEkle, type Bulgu, type TxLike } from '../sinyal/sinyal-hesap';
 import { YAPI_TAZELIK_SAAT } from './veri-kaynagi-is';
-import { platformKampanyalari, siteSatirlari, takipHesapla } from './takip-hesap';
+import { utmEtiketiAcik } from '../reklam/utm-etiketi';
+import { etkinGa4Kaynagi, platformKampanyalari, siteSatirlari, takipHesapla } from './takip-hesap';
 
 /**
  * ═══ PAKET F1 SAĞLIK KONTROLLERİ — SİNYAL İŞİNE BAĞ (sinyal/saglik.ts) ═══
@@ -57,27 +58,63 @@ function bulgu(p: Pick<Bulgu, 'kod' | 'seviye' | 'varlikId' | 'varlikAdi' | 'ust
   } as Bulgu;
 }
 
-export async function kaynakSaglikBulgulari(db: TxLike, g: KaynakSaglikGirdisi): Promise<{ bulgular: Bulgu[]; kosan: Set<SinyalKodu>; not: string | null }> {
+/**
+ * WORKSPACE DÜZEYİ KONTROLLERİN SAHİBİ (Ajan 4, Ö-3). `ga4_anahtar_etkinlik_yok`,
+ * `ga4_veri_gelmiyor` ve `utm_eksik` bir MÜLK/SİTE gerçeği; sinyal işi ise
+ * hesap başına koşuyor. Her hesap aynı bulguyu kendi adına bassaydı iki
+ * hesaplı workspace'te aynı uyarı iki kez görünür, biri kapatılınca öbürü
+ * açık kalırdı ("kapattım, hâlâ duruyor"). Workspace başına TEK sinyal:
+ * sahip = penceredeki tıklaması en çok olan ATANMIŞ hesap, eşitlikte kimliğe
+ * göre SABİT sıralama (her gün aynı hesap seçilsin, sinyal hesaplar arasında
+ * gidip gelmesin). Sahip olmayan hesap kontrolü KOŞMUŞ sayar ama bulgu
+ * basmaz: sahip değişirse eski hesaptaki açık sinyal `sureDolduMu` ile
+ * `kendiliginden_kapandi` olur, yenisi sahibinde açılır.
+ */
+export async function workspaceSahibi(db: TxLike, clientId: string, gun: string, platform?: Platform): Promise<string | null> {
+  const platformSuzgeci = platform ? Prisma.sql`AND a.platform = ${platform}::"Platform"` : Prisma.empty;
+  const [s] = await db.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT a.id::text AS id
+      FROM ad_accounts a
+      LEFT JOIN insights_daily d
+        ON d.ad_account_id = a.id AND d.client_id = a.client_id
+       AND d.entity_level = 'campaign'::"EntityLevel" AND d.breakdown_key = ''
+       AND d.date BETWEEN ${gunEkle(gun, -6)}::date AND ${gun}::date
+     WHERE a.client_id = ${clientId}::uuid ${platformSuzgeci}
+     GROUP BY a.id
+     ORDER BY coalesce(sum(d.clicks), 0) DESC, a.id
+     LIMIT 1`);
+  return s?.id ?? null;
+}
+
+export async function kaynakSaglikBulgulari(
+  db: TxLike,
+  g: KaynakSaglikGirdisi & { metaUtmAcik?: boolean },
+): Promise<{ bulgular: Bulgu[]; kosan: Set<SinyalKodu>; not: string | null }> {
   const kosan = new Set<SinyalKodu>();
   const bulgular: Bulgu[] = [];
-  const [k] = await db.$queryRaw<KaynakDurumu[]>(Prisma.sql`
-    SELECT id::text AS id, durum, yapi, yapi_zamani, son_basarili_cekim, saat_dilimi
-      FROM veri_kaynaklari
-     WHERE client_id = ${g.clientId}::uuid AND tur = 'ga4' AND durum <> 'kaldirildi'
-     ORDER BY created_at LIMIT 1`);
+  // TEK SÜZGEÇ (Ö-1): trafik ucu, takip açığı ve rapor aynı fonksiyonla buluyor.
+  const k = await etkinGa4Kaynagi<KaynakDurumu>(
+    db,
+    g.clientId,
+    Prisma.sql`id::text AS id, durum, yapi, yapi_zamani, son_basarili_cekim, saat_dilimi`,
+  );
   if (!k) {
     for (const kod of KAYNAK_SINYAL_KODLARI) kosan.add(kod);
     return { bulgular, kosan, not: null };
   }
   if (k.durum === 'duraklatildi') return { bulgular, kosan, not: 'GA4 kaynağı duraklatıldı: kaynak kontrolleri atlandı' };
 
+  const sahip = (await workspaceSahibi(db, g.clientId, g.gun)) === g.adAccountId;
+  const metaUtmAcik = g.metaUtmAcik ?? utmEtiketiAcik();
+
   // Pencereler sinyal gününden: son N tam gün, Analytics işlenme gecikmesi kadar geriden.
+  // Tıklama WORKSPACE geneli: kontrol bir site gerçeği, tek hesabın değil.
   const son = gunEkle(g.gun, -TAKIP_ACIGI.isleniyorGun);
   const [tik] = await db.$queryRaw<Array<{ t7: number; t3: number }>>(Prisma.sql`
     SELECT coalesce(sum(clicks) FILTER (WHERE date BETWEEN ${gunEkle(g.gun, -6)}::date AND ${g.gun}::date), 0)::float8 AS t7,
            coalesce(sum(clicks) FILTER (WHERE date BETWEEN ${gunEkle(son, -(SAGLIK.ga4SessizGun - 1))}::date AND ${son}::date), 0)::float8 AS t3
       FROM insights_daily
-     WHERE client_id = ${g.clientId}::uuid AND ad_account_id = ${g.adAccountId}::uuid
+     WHERE client_id = ${g.clientId}::uuid
        AND entity_level = 'campaign'::"EntityLevel" AND breakdown_key = ''
        AND date BETWEEN ${gunEkle(g.gun, -13)}::date AND ${g.gun}::date`);
   const tiklama7 = Number(tik?.t7 ?? 0);
@@ -86,7 +123,7 @@ export async function kaynakSaglikBulgulari(db: TxLike, g: KaynakSaglikGirdisi):
   // ── ga4_anahtar_etkinlik_yok: yapı taze ve liste BOŞ ──
   if (taze(k.yapi_zamani, g.simdi) && Array.isArray(k.yapi?.anahtarEtkinlikler)) {
     kosan.add('ga4_anahtar_etkinlik_yok');
-    if ((k.yapi!.anahtarEtkinlikler as unknown[]).length === 0 && tiklama7 > 0) {
+    if (sahip && (k.yapi!.anahtarEtkinlikler as unknown[]).length === 0 && tiklama7 > 0) {
       bulgular.push(
         bulgu({ kod: 'ga4_anahtar_etkinlik_yok', seviye: 'account', varlikId: g.adAccountId, varlikAdi: g.hesapAdi, ustAdi: null, gun: g.gun, gozlenen: 0, kanit: { kaynakId: k.id } }),
       );
@@ -97,9 +134,9 @@ export async function kaynakSaglikBulgulari(db: TxLike, g: KaynakSaglikGirdisi):
     return { bulgular, kosan, not: 'GA4 günlük çekimi son 36 saatte başarılı değil: veri, takip açığı ve etiket kontrolleri atlandı' };
   }
 
-  // ── ga4_veri_gelmiyor: tıklama var, oturum 0 ──
+  // ── ga4_veri_gelmiyor: workspace tıklama alıyor, oturum 0 ──
   kosan.add('ga4_veri_gelmiyor');
-  if (tiklama3 >= TAKIP_ACIGI.enAzTiklama) {
+  if (sahip && tiklama3 >= TAKIP_ACIGI.enAzTiklama) {
     const [o] = await db.$queryRaw<Array<{ n: number }>>(Prisma.sql`
       SELECT coalesce(sum(oturum), 0)::float8 AS n FROM ga4_gunluk
        WHERE client_id = ${g.clientId}::uuid AND veri_kaynagi_id = ${k.id}::uuid
@@ -120,9 +157,9 @@ export async function kaynakSaglikBulgulari(db: TxLike, g: KaynakSaglikGirdisi):
     }
   }
 
-  // ── takip_acigi: kampanya başına, son 14 gün ──
+  // ── takip_acigi: kampanya başına (kampanya zaten tek hesaba ait), son 14 gün ──
   const bas = gunEkle(son, -(SAGLIK.kaynakPencereGun - 1));
-  const site = await siteSatirlari(db, g.clientId, bas, son);
+  const site = await siteSatirlari(db, g.clientId, k.id, bas, son);
   // Eşleme adayları WORKSPACE'in bütün kampanyaları (aynı adlı kampanya başka
   // hesapta olabilir; yalnız bu hesaba bakmak "ad belirsiz"i kaçırırdı),
   // bulgu yalnız BU hesabın kampanyalarına yazılır.
@@ -146,22 +183,32 @@ export async function kaynakSaglikBulgulari(db: TxLike, g: KaynakSaglikGirdisi):
     );
   }
 
-  // ── utm_eksik: yalnız Meta/LinkedIn (Google otomatik etiketle eşleniyor) ──
-  // Google hesabında kontrol KOŞMUŞ sayılır ve bulgu üretmez: "koşmayan
-  // kontrol" notu her Google hesabında gürültü olurdu.
-  kosan.add('utm_eksik');
-  if (g.platform !== 'google') {
-    const hedef = g.platform === 'meta' ? 'meta_ucretli' : 'linkedin_ucretli';
+  /*
+   * ── utm_eksik (Ö-2): YALNIZ ETİKETLEMENİN BİZİM KONTROLÜMÜZDE OLDUĞU YERDE ──
+   * Google: otomatik etiket (gclid) her zaman; koşmuş sayılır, kampanya
+   * kimlikle eşlendiği için bulgu üretmez. Meta: yalnız `META_UTM_ETIKETI=1`
+   * iken; kapalıyken etiketsiz Meta tıklaması GA4'te "facebook / referral"
+   * görünür, ücretli sayılmaz ve kontrol hiçbir şey görmeden "temiz" derdi.
+   * O yüzden kapalıyken `kosan`a GİRMEZ (açık sinyali "düzeldi" diye
+   * kapatmaz) ve sinyal ekranı "kontrol edilmeyenler"de söyler
+   * (`SAGLIK_KOSULLU_DISARIDA`). LinkedIn etiketini biz yazmıyoruz: koşmaz.
+   */
+  if (g.platform === 'google') {
+    kosan.add('utm_eksik');
+  } else if (g.platform === 'meta' && metaUtmAcik) {
+    kosan.add('utm_eksik');
+    // Sahip META hesapları arasından: bulgu Meta trafiği hakkında.
+    const utmSahibi = (await workspaceSahibi(db, g.clientId, g.gun, 'meta')) === g.adAccountId;
     let toplam = 0;
     let etiketsiz = 0;
     for (const s of site) {
-      if (trafikKaynagi(s.kaynakOrtam) !== hedef) continue;
+      if (trafikKaynagi(s.kaynakOrtam) !== 'meta_ucretli') continue;
       toplam += s.oturum;
       const ad = s.kampanyaAdi?.trim() ?? '';
       if (ad === '' || ad === '(not set)') etiketsiz += s.oturum;
     }
     const pay = toplam > 0 ? etiketsiz / toplam : 0;
-    if (toplam >= SAGLIK.utmEksikEnAzOturum && pay > SAGLIK.utmEksikPay) {
+    if (utmSahibi && toplam >= SAGLIK.utmEksikEnAzOturum && pay > SAGLIK.utmEksikPay) {
       bulgular.push(
         bulgu({
           kod: 'utm_eksik',

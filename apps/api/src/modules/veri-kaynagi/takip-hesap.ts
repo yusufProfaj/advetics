@@ -104,19 +104,39 @@ export function kiyasBitisi(to: string, bugun: string): string {
 
 // ─── Veritabanı okuyucuları (worker'da admin, panelde withTenant) ──────────
 
-/** Site tarafı: iki ayrı toplama, kampanya anahtarında birleşir. */
-export async function siteSatirlari(db: TxLike, clientId: string, from: string, to: string): Promise<SiteKampanyaSatiri[]> {
+/**
+ * ═══ ETKİN GA4 KAYNAĞI — TEK SÜZGEÇ (Ajan 4, Ö-1) ═══
+ *
+ * Kaldırılmış mülkün satırları ve verisi SİLİNMİYOR ("geçmiş veri raporda
+ * kalır"). Site verisi `client_id` ile süzülürse eski mülk (P1) ile yeni
+ * mülk (P2) aynı günleri İKİ KEZ sayar: trafik tablosu 10, takip açığı ve
+ * PDF 18 derdi, hata yok. Her okuyucu (trafik ucu, takip açığı, rapor PDF'i,
+ * sinyaller) kaynağı BU fonksiyonla bulur ve GA4 satırlarını onun
+ * `veri_kaynagi_id`siyle süzer. İkinci bir yazımı yok.
+ */
+export const ETKIN_GA4_KAYNAGI = Prisma.sql`v.tur = 'ga4' AND v.durum <> 'kaldirildi'`;
+
+export async function etkinGa4Kaynagi<T extends object = { id: string }>(db: TxLike, clientId: string, kolonlar: Prisma.Sql = Prisma.sql`id::text AS id`): Promise<T | null> {
+  const [k] = await db.$queryRaw<T[]>(Prisma.sql`
+    SELECT ${kolonlar} FROM veri_kaynaklari v
+     WHERE v.client_id = ${clientId}::uuid AND ${ETKIN_GA4_KAYNAGI}
+     ORDER BY v.created_at, v.id LIMIT 1`);
+  return k ?? null;
+}
+
+/** Site tarafı: iki ayrı toplama, kampanya anahtarında birleşir. YALNIZ verilen (etkin) kaynağın satırları. */
+export async function siteSatirlari(db: TxLike, clientId: string, kaynakId: string, from: string, to: string): Promise<SiteKampanyaSatiri[]> {
   const etkinlik = await db.$queryRaw<Array<{ ko: string; ad: string | null; kim: string | null; ads: string | null; n: number }>>(Prisma.sql`
     SELECT kaynak_ortam AS ko, kampanya_adi AS ad, kampanya_kimligi AS kim, ads_kampanya_kimligi AS ads,
            sum(anahtar_etkinlik)::float8 AS n
       FROM ga4_anahtar_etkinlik_gunluk
-     WHERE client_id = ${clientId}::uuid AND gun BETWEEN ${from}::date AND ${to}::date
+     WHERE client_id = ${clientId}::uuid AND veri_kaynagi_id = ${kaynakId}::uuid AND gun BETWEEN ${from}::date AND ${to}::date
      GROUP BY 1, 2, 3, 4`);
   const oturum = await db.$queryRaw<Array<{ ko: string; ad: string | null; kim: string | null; ads: string | null; n: number }>>(Prisma.sql`
     SELECT kaynak_ortam AS ko, kampanya_adi AS ad, kampanya_kimligi AS kim, ads_kampanya_kimligi AS ads,
            sum(oturum)::float8 AS n
       FROM ga4_gunluk
-     WHERE client_id = ${clientId}::uuid AND gun BETWEEN ${from}::date AND ${to}::date
+     WHERE client_id = ${clientId}::uuid AND veri_kaynagi_id = ${kaynakId}::uuid AND gun BETWEEN ${from}::date AND ${to}::date
      GROUP BY 1, 2, 3, 4`);
   const m = new Map<string, SiteKampanyaSatiri>();
   const al = (r: { ko: string; ad: string | null; kim: string | null; ads: string | null }) => {
@@ -202,11 +222,11 @@ function bugunDilimde(saatDilimi: string | null, simdi: Date): string {
  * `t` çağıranın kapsamı: panelde withTenant (RLS), raporda rapor transaction'ı.
  */
 export async function takipAcigiYaniti(t: TxLike, q: { clientId: string; from: string; to: string }, simdi: Date): Promise<TakipAcigiYaniti> {
-  const [k] = await t.$queryRaw<Ga4KaynakSatiri[]>(Prisma.sql`
-    SELECT id::text AS id, durum, saat_dilimi, para_birimi, yapi, son_basarili_cekim
-      FROM veri_kaynaklari
-     WHERE client_id = ${q.clientId}::uuid AND tur = 'ga4' AND durum <> 'kaldirildi'
-     ORDER BY created_at LIMIT 1`);
+  const k = await etkinGa4Kaynagi<Ga4KaynakSatiri>(
+    t,
+    q.clientId,
+    Prisma.sql`id::text AS id, durum, saat_dilimi, para_birimi, yapi, son_basarili_cekim`,
+  );
   const kiyasBitis = kiyasBitisi(q.to, bugunDilimde(k?.saat_dilimi ?? null, simdi));
   const emptyReason: TakipAcigiYaniti['emptyReason'] = !k
     ? 'kaynak_yok'
@@ -229,7 +249,7 @@ export async function takipAcigiYaniti(t: TxLike, q: { clientId: string; from: s
   if (kiyasBitis < q.from) {
     return { ...bos, emptyReason: 'veri_yok', uyarilar: [`Seçilen dönem Analytics’te hâlâ işleniyor; son ${TAKIP_ACIGI.isleniyorGun} gün ve bugün kıyasa girmez.`] };
   }
-  const site = await siteSatirlari(t, q.clientId, q.from, kiyasBitis);
+  const site = await siteSatirlari(t, q.clientId, k.id, q.from, kiyasBitis);
   if (site.length === 0) return { ...bos, emptyReason: 'veri_yok' };
   const kampanyalar = await platformKampanyalari(t, q.clientId, q.from, kiyasBitis);
   const h = takipHesapla(kampanyalar, site);

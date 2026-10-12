@@ -40,8 +40,10 @@ export interface Ga4RaporSonucu {
   kota: Ga4MulkKotasi | null;
   /** Kaç sayfa (istek) gitti; jeton maliyeti ölçümü için (Ajan 5). */
   istek: number;
-  /** Sayfalama kota yüzünden YARIDA kesildiyse nedeni. Kısmi sonuç YAZILMAZ. */
+  /** Sayfalama YARIDA kesildiyse nedeni (kota, sayfa sınırı, eksik satır). Kısmi sonuç YAZILMAZ. */
   durdu: string | null;
+  /** Kesinti Google'ın EKSİK satır döndürmesinden mi (geçici: tekrar denenmeli), kotadan mı (yarına kalır). */
+  eksik: boolean;
 }
 
 interface HamRapor {
@@ -266,14 +268,24 @@ export class Ga4Istemcisi {
         ornekleme: k.ornekleme ?? kalite.ornekleme,
       };
       kota = ga4KotaOku(r.propertyQuota) ?? kota;
-      if (gelen.length === 0 || satirlar.length >= satirSayisi) {
-        return { satirlar, satirSayisi, kalite, kota, istek, durdu: null };
+      if (satirlar.length >= satirSayisi) {
+        return { satirlar, satirSayisi, kalite, kota, istek, durdu: null, eksik: false };
+      }
+      /*
+       * BOŞ SAYFA AMA OKUNAN < BİLDİRİLEN (Ajan 4, Ö-4): GA4 son günleri hâlâ
+       * işliyor ve sayfalar arasında rowCount küçülüp offset sona taşabiliyor.
+       * Bunu "tamam" saymak, pencereyi silip EKSİK veriyle yazmak demekti
+       * (tek iz notta "x/y satır"). Sonuç KISMİ: `durdu` dolu, `eksik` doğru;
+       * çağıran yazmaz ve işi tekrar denenebilir düşürür.
+       */
+      if (gelen.length === 0) {
+        return { satirlar, satirSayisi, kalite, kota, istek, durdu: `Analytics eksik satır döndürdü (${satirlar.length}/${satirSayisi})`, eksik: true };
       }
       const neden = devamEt(kota);
-      if (neden) return { satirlar, satirSayisi, kalite, kota, istek, durdu: neden };
+      if (neden) return { satirlar, satirSayisi, kalite, kota, istek, durdu: neden, eksik: false };
     }
     // Sayfa sınırına dayandı: yarım rapor, yazılmamalı (sessiz kesme yok).
-    return { satirlar, satirSayisi, kalite, kota, istek, durdu: `sayfa sınırı (${GA4_EN_FAZLA_SAYFA} sayfa, ${satirlar.length}/${satirSayisi} satır)` };
+    return { satirlar, satirSayisi, kalite, kota, istek, eksik: false, durdu: `sayfa sınırı (${GA4_EN_FAZLA_SAYFA} sayfa, ${satirlar.length}/${satirSayisi} satır)` };
   }
 
   /** Son 30 dakikanın olay sayıları (anlık rapor). Olay adı → sayım. */

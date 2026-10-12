@@ -104,7 +104,9 @@ describe('liste', () => {
     // Geçmişi yetmeyen hesap: anomali aranamadı, "her şey yolunda" değil.
     expect(sonra.emptyReason).toBe('gecmis_yetersiz');
     // 3: ga4_anahtar_etkinlik_yok Paket F1 ile kontrole taşındı.
-    expect(sonra.kontrolEdilmeyen).toHaveLength(3);
+    // Ö-2: META_UTM_ETIKETI kapalı (varsayılan) → Meta tarafı utm_eksik de "kontrol edilmeyen".
+    expect(sonra.kontrolEdilmeyen).toHaveLength(4);
+    expect(sonra.kontrolEdilmeyen).toContain('utm_eksik_meta');
   });
 
   it('dolu liste: cümle, eylem ve özet sözleşme biçiminde', async () => {
