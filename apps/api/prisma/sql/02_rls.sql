@@ -436,6 +436,8 @@ DECLARE
     'veri_kaynaklari',
     'ga4_gunluk',
     'ga4_anahtar_etkinlik_gunluk',
+    -- Haftalık özet (docs/haftalik-ozet/MIMARI.md § 2). Kendi satırında.
+    'haftalik_ozetler',
     -- AdvStrategy aylık medya planı (docs/advstrategy/MIMARI.md § 1)
     'strateji_planlari', 'strateji_dagilimlari', 'strateji_matrisi', 'strateji_kelimeleri',
     'ozel_gunler'
@@ -2727,3 +2729,26 @@ CREATE POLICY adv_ga4_anahtar_etkinlik_gunluk_insert ON ga4_anahtar_etkinlik_gun
 CREATE POLICY adv_ga4_anahtar_etkinlik_gunluk_update ON ga4_anahtar_etkinlik_gunluk
   FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
   WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+
+
+-- ============================================================================
+-- HAFTALIK ÖZET — haftalik_ozetler (docs/haftalik-ozet/MIMARI.md § 2)
+-- ============================================================================
+--
+-- SELECT + INSERT, workspace kapsamı. Satırı panel önizlemesi (kullanıcı
+-- bağlamı, o hafta henüz üretilmediyse) ve worker (BYPASSRLS; müşteri planı
+-- ve ajans kanalı) yazıyor. UPDATE YOK: satır DEĞİŞMEZ (MIMARI Ç-B11) —
+-- müşteriye giden ile ekrandaki aynı kalmalı; UPDATE politikası açmak bir
+-- isteğin gönderilmiş bir özeti sessizce yeniden yazmasına kapı bırakırdı.
+-- Workspace başka şirkete taşınınca org_id'yi kompozit anahtarın ON UPDATE
+-- CASCADE'i taşıyor (referans bütünlüğü eylemi tablo sahibiyle koşuyor,
+-- politikaya takılmıyor; haftalik-ozet-rls.spec.ts). DELETE YOK: satır
+-- workspace'le CASCADE gidiyor.
+--
+-- `veri` AJANS bilgisini (sinyaller, bekleyen işler) taşıyor ve bu politika
+-- satırı müşteri hesabına da açıyor: süzme SERVİSTE (`ozetKitleyeGore`),
+-- hiçbir yanıt ham `veri` döndürmüyor.
+CREATE POLICY adv_haftalik_ozetler_select ON haftalik_ozetler
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_haftalik_ozetler_insert ON haftalik_ozetler
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));

@@ -4,6 +4,14 @@ import type { PrismaAdminService } from '../../prisma/prisma-admin.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { RaporGonderService } from './rapor-gonder.service';
 import { RaporPlaniService } from './rapor-plani.service';
+import type { OzetService } from '../haftalik-ozet/ozet.service';
+import type { AppConfig } from '../../config/configuration';
+
+const OZET_YOK = {
+  getir: async () => {
+    throw new Error('rapor dalı özet servisini çağırdı');
+  },
+} as unknown as OzetService;
 
 /**
  * ═══ ZAMANLANMIŞ RAPOR ÇALIŞTIRICI — GERÇEK Postgres'e karşı ═══
@@ -69,6 +77,9 @@ function svcKur(): RaporPlaniService {
     {} as unknown as PrismaService,
     h.db as unknown as PrismaAdminService,
     gonderici,
+    // Rapor dalı özet servisine HİÇ dokunmamalı: çağrılırsa test patlar.
+    OZET_YOK,
+    { mail: { appUrl: 'https://panel.test' } } as unknown as AppConfig,
   );
 }
 
@@ -200,6 +211,9 @@ describe('mükerrer gönderim koruması', () => {
       {} as unknown as PrismaService,
       h.db as unknown as PrismaAdminService,
       gonderici,
+      // Rapor dalı özet servisine HİÇ dokunmamalı: çağrılırsa test patlar.
+      OZET_YOK,
+      { mail: { appUrl: 'https://panel.test' } } as unknown as AppConfig,
     );
 
     await svc.calistir();

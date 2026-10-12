@@ -10,6 +10,7 @@ import { RaporGonderService } from './rapor-gonder.service';
 import { RaporPlaniService } from './rapor-plani.service';
 import { FaturaService } from './fatura.service';
 import { AssetStorageService } from '../ad-builder/asset-storage.service';
+import { HaftalikOzetIsModule } from '../haftalik-ozet/haftalik-ozet-is.module';
 
 /** Modül 6 — White-label raporlama. */
 @Module({
@@ -18,8 +19,12 @@ import { AssetStorageService } from '../ad-builder/asset-storage.service';
    * sağlayıcı gerekiyor. Saklanan Meta CDN adresi imzalı ve ölüyor; raporun
    * görselleri onsuz gelmiyor. Ters yönde bağımlılık YOK — `ConnectionsModule`
    * raporlamayı tanımıyor, yani döngü oluşmuyor.
+   *
+   * HAFTALIK ÖZET ÇEKİRDEĞİ (Paket B): müşteri özet planı bu modülün
+   * süpürmesiyle gidiyor (`RaporPlaniService`). Çekirdek hiçbir modülü içe
+   * almıyor; döngü yok.
    */
-  imports: [ConnectionsModule],
+  imports: [ConnectionsModule, HaftalikOzetIsModule],
   controllers: [ReportsController],
   providers: [
     ReportsService,

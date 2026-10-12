@@ -1,3 +1,5 @@
+import { ozetPanelAdresi } from '@advetics/shared';
+
 /**
  * ═══ BİLDİRİM İÇERİĞİ — KANALDAN BAĞIMSIZ GÖVDE + ÜÇ BİÇİMLEYİCİ (§ 7) ═══
  *
@@ -36,14 +38,24 @@ export interface BildirimGovdesi {
  * bilmiyor ve kök değişirse bekleyen satırlar eski adrese gitmesin.
  */
 export type SaklananGovde = Omit<BildirimGovdesi, 'baglanti'> & {
-  baglanti: { metin: string; yol: 'sinyaller' | 'kurallar' } | null;
+  baglanti: { metin: string; yol: 'sinyaller' | 'kurallar' | 'haftalik_ozet'; hafta?: string } | null;
+  /**
+   * Haftalık özet (Paket B): e-posta kanalı kısa sürüm DEĞİL, özetin TAM
+   * mailini alıyor. Gövde HTML'i saklamıyor, HAFTAYI saklıyor; HTML gönderim
+   * anında saklanan (değişmez) özetten üretiliyor, böylece adres kökü de
+   * gönderim anının kökü oluyor.
+   */
+  ozetHaftasi?: string;
 };
 
 /** Saklanan gövdeyi gönderilecek gövdeye çevirir. */
 export function govdeCoz(g: SaklananGovde, appUrl: string, clientId: string): BildirimGovdesi {
+  const { ozetHaftasi: _h, ...govde } = g;
   return {
-    ...g,
-    baglanti: g.baglanti ? { metin: g.baglanti.metin, adres: panelBaglantisi(appUrl, g.baglanti.yol, clientId) } : null,
+    ...govde,
+    baglanti: g.baglanti
+      ? { metin: g.baglanti.metin, adres: panelBaglantisi(appUrl, g.baglanti.yol, clientId, g.baglanti.hafta) }
+      : null,
   };
 }
 
@@ -96,8 +108,12 @@ export function teamsKac(s: string, aile: 'baglayici' | 'workflows'): string {
   return aile === 'baglayici' ? md.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') : md;
 }
 
+/*
+ * ETİKETSİZ SATIR: haftalık özetin kısa sürümünde ("ve 2 satır daha
+ * panelde") kalın ön ek yok; boş etiket `**` olarak görünmesin.
+ */
 export function slackGovdesi(g: BildirimGovdesi): Record<string, unknown> {
-  const satirlar = g.satirlar.map((s) => `• *${slackKac(s.etiket)}* · ${slackKac(s.metin)}`);
+  const satirlar = g.satirlar.map((s) => `• ${s.etiket ? `*${slackKac(s.etiket)}* · ` : ''}${slackKac(s.metin)}`);
   const fazla = fazlaMetni(g);
   if (fazla) satirlar.push(`_${slackKac(fazla)}_`);
   const blocks: Array<Record<string, unknown>> = [
@@ -124,7 +140,7 @@ export function slackGovdesi(g: BildirimGovdesi): Record<string, unknown> {
  * doğrulayacak.
  */
 export function teamsGovdesi(g: BildirimGovdesi, aile: 'baglayici' | 'workflows'): Record<string, unknown> {
-  const satirlar = g.satirlar.map((s) => `**${teamsKac(s.etiket, aile)}** · ${teamsKac(s.metin, aile)}`);
+  const satirlar = g.satirlar.map((s) => `${s.etiket ? `**${teamsKac(s.etiket, aile)}** · ` : ''}${teamsKac(s.metin, aile)}`);
   const fazla = fazlaMetni(g);
   if (fazla) satirlar.push(`_${teamsKac(fazla, aile)}_`);
   const baslik = teamsKac(g.baslik, aile);
@@ -173,7 +189,7 @@ function htmlKac(s: string): string {
  */
 export function epostaHtml(g: BildirimGovdesi): string {
   const satirlar = g.satirlar
-    .map((s) => `<li style="margin:0 0 6px 0"><strong>${htmlKac(s.etiket)}</strong> · ${htmlKac(s.metin)}</li>`)
+    .map((s) => `<li style="margin:0 0 6px 0">${s.etiket ? `<strong>${htmlKac(s.etiket)}</strong> · ` : ''}${htmlKac(s.metin)}</li>`)
     .join('');
   const fazla = fazlaMetni(g);
   return [
@@ -190,7 +206,14 @@ export function epostaHtml(g: BildirimGovdesi): string {
 }
 
 /** Panel bağlantısı TEK YERDE (CLAUDE.md "bağlantıyı elle birleştirme"). */
-export function panelBaglantisi(appUrl: string, yol: 'sinyaller' | 'kurallar', clientId: string): string {
+export function panelBaglantisi(
+  appUrl: string,
+  yol: 'sinyaller' | 'kurallar' | 'haftalik_ozet',
+  clientId: string,
+  hafta?: string,
+): string {
+  // Haftalık özetin adresi kendi tek üreticisinden (shared, Paket B).
+  if (yol === 'haftalik_ozet') return ozetPanelAdresi(appUrl, clientId, hafta);
   const kok = appUrl.replace(/\/+$/, '');
   const q = new URLSearchParams({ musteri: clientId });
   if (yol === 'sinyaller') {

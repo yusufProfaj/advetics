@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ALICI_UST_SINIRI } from '../alici-listesi';
+import type { RaporPlaniTuru } from '../haftalik-ozet/ozet';
 
 /**
  * ═══ ZAMANLANMIŞ RAPOR GÖNDERİMİ ═══
@@ -182,6 +183,13 @@ export const PLAN_SONUC_LABELS: Record<PlanSonucu, string> = {
 
 export interface RaporPlaniOzeti {
   id: string;
+  /**
+   * Planın türü (Paket B, `report_schedules.tur`). Rapor planı listesi
+   * YALNIZ `rapor` döndürüyor; haftalık özet planı kendi kartında
+   * (`HaftalikOzetPlani`). Alan yine de taşınıyor: liste süzgeci bir gün
+   * düşerse panel özet satırını rapor planı sanıp düzenlemeye açmasın.
+   */
+  tur: RaporPlaniTuru;
   clientId: string;
   clientName: string | null;
   frequency: PlanSikligi;

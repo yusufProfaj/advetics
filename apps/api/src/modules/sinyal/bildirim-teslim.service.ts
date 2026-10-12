@@ -1,7 +1,14 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
+  OZET,
   SINYAL_OZET_SAATI,
+  gunEkle,
+  isoHaftaAraligi,
+  kisaOzet,
+  ozetGonderimAnahtari,
+  ozetHaftasi,
+  ozetPanelYolu,
   TESLIM_BEKLEME_DK,
   TESLIM_SON_DURUMLARI,
   teamsAilesi,
@@ -20,6 +27,8 @@ import { EPOSTA_GONDEREN_YOK, epostaGonderen } from './eposta-gonderen';
 import { sinyalBasligi, gunMetni } from './sinyal-metni';
 import type { TxLike } from './sinyal-hesap';
 import { webhookGonder } from './webhook-gonder';
+import { OzetService } from '../haftalik-ozet/ozet.service';
+import { ozetEpostasi } from '../haftalik-ozet/ozet-mail';
 
 /**
  * ═══ BİLDİRİM TESLİMİ — TEK GÖNDERİM YOLU (MIMARI § 5.5, § 7, § 8) ═══
@@ -51,7 +60,7 @@ interface TeslimSatiri {
   org_id: string;
   client_id: string;
   kanal_id: string | null;
-  olay: 'sinyal' | 'kural' | 'deneme';
+  olay: 'sinyal' | 'kural' | 'haftalik_ozet' | 'deneme';
   govde: SaklananGovde;
   durum: TeslimDurumu;
   deneme: number;
@@ -83,6 +92,14 @@ export class BildirimTeslimService {
     private readonly admin: PrismaAdminService,
     private readonly crypto: CryptoService,
     @Inject(CONFIG) private readonly config: AppConfig,
+    /*
+     * Paket B haftalık özeti (ajans görünümü). `@Optional`: Paket A
+     * testleri teslimi özetsiz kuruyor; üretimde `SinyalIsModule`
+     * `HaftalikOzetIsModule`ü içe alıyor ve servis HER ZAMAN var
+     * (`haftalik-ozet-kayit.spec.ts`). Yokken haftalık satır ÜRETİLMİYOR ve
+     * süpürme notu bunu söylüyor; sessiz sıfır değil.
+     */
+    @Optional() private readonly ozet?: OzetService,
   ) {}
 
   private get db(): TxLike {
@@ -152,6 +169,18 @@ export class BildirimTeslimService {
     if (r.tur === 'eposta') {
       const kimlik = await epostaGonderen(this.db, r.org_id);
       if (!kimlik) return kalici(EPOSTA_GONDEREN_YOK);
+      /*
+       * HAFTALIK ÖZETİN E-POSTASI TAM MAİL: saklanan (değişmez) özetten,
+       * AJANS görünümüyle, AYNI oluşturucudan (panel önizlemesiyle aynı).
+       * Özet okunamazsa geçici hata: yeniden deneme aynı satırı okur.
+       */
+      let html = epostaHtml(govde);
+      if (r.olay === 'haftalik_ozet') {
+        const hafta = r.govde.ozetHaftasi;
+        if (!hafta || !this.ozet) return kalici('Haftalık özet bu süreçte üretilemiyor; gönderilmedi.');
+        const { ozet } = await this.ozet.getir(r.client_id, hafta);
+        html = ozetEpostasi(ozet, 'ajans', govde.baglanti?.adres ?? '').html;
+      }
       try {
         const sonuc = await this.mail(
           {
@@ -163,7 +192,7 @@ export class BildirimTeslimService {
             user: kimlik.smtpUser,
             pass: this.crypto.decrypt(kimlik.smtpPassEnc),
           },
-          { to: r.alicilar ?? [], subject: govde.konu, html: epostaHtml(govde) },
+          { to: r.alicilar ?? [], subject: govde.konu, html },
         );
         /*
          * KISMİ RET SESSİZ BAŞARI DÖNÜYOR (mail-gonderici.ts): gönderim
@@ -209,6 +238,7 @@ export class BildirimTeslimService {
    */
   async supur(simdi = new Date()): Promise<{ rows: number; note: string }> {
     const ozet = await this.ozetleriUret(simdi);
+    const haftalik = await this.haftalikOzetleriUret(simdi);
     /*
      * SAHİPSİZ DENEME (Ajan 4, N-f): deneme mesajı yalnız ucun içinde
      * gönderiliyor ve süpürmeye girmiyor. Uç gönderimden önce düşerse
@@ -241,6 +271,7 @@ export class BildirimTeslimService {
     }
     const note = [
       ozet.not,
+      haftalik.not,
       `${Math.min(bekleyen.length, SUPURME_SINIRI)} gönderim denendi: ${sayac.gonderildi} gönderildi, ${sayac.basarisiz} yeniden denenecek, ${sayac.vazgecildi} vazgeçildi`,
       dusen > 0 ? `${dusen} satır işlenemedi` : null,
       bekleyen.length > SUPURME_SINIRI ? `sınır aşıldı, kalanı sonraki turda` : null,
@@ -348,6 +379,98 @@ export class BildirimTeslimService {
     }
     return { uretilen, not: `özet: ${uretilen} kanal için üretildi (${kanallar.length} kanal bakıldı)` };
   }
+
+  /**
+   * ═══ HAFTALIK ÖZET — AJANS KANALLARI (Paket B, MIMARI § 5, Ç-B12) ═══
+   *
+   * Pazartesi 09:00 İstanbul'dan itibaren, `haftalik_ozet` olayını seçmiş
+   * her etkin kanala `haftalik:<hafta>` satırı. Kanal başına tek satır
+   * `(kanal_id, anahtar)` tekilliğiyle garanti; süpürme her 5 dakikada
+   * koşsa da ikinci satır doğmuyor. İçerik `OzetService.getir`den: müşteri
+   * planıyla ve panel önizlemesiyle AYNI saklanan özet.
+   *
+   * GEÇ KALAN WORKER HAFTAYI KAÇIRMIYOR: koşul "pazartesi" değil "bu ISO
+   * haftanın pazartesi 09:00'ı geçti"; deploy'da düşen bir pazartesi salı
+   * telafi ediliyor. Ama HAFTA İÇİNDE AÇILAN KANAL geçen haftanın özetini
+   * almıyor (kanal pazartesi 09:00'dan sonra kurulduysa bir sonraki
+   * pazartesiyi bekliyor): perşembe kurulan kanala "geçen hafta" diye üç
+   * günlük bayat bir özet düşmesi kanalı susturmayı öğretir.
+   *
+   * BOŞ ÖZET GİTMEZ (`hacim = 'bos'`) ve SAYILIYOR. Workspace başına özet
+   * bir kez üretiliyor (aynı workspace'in iki kanalı aynı satırı okur);
+   * üretim düşerse diğer workspace'ler etkilenmiyor ve sayısı notta.
+   */
+  async haftalikOzetleriUret(simdi = new Date()): Promise<{ uretilen: number; not: string }> {
+    if (!this.ozet) return { uretilen: 0, not: 'haftalık özet: servis yok, üretilmedi' };
+    const yerel = istanbulZamani(simdi);
+    const hafta = ozetHaftasi(simdi);
+    // Özet haftasının Pazarından sonraki gün = gönderim haftasının Pazartesisi.
+    const pazartesiGun = gunEkle(isoHaftaAraligi(hafta)!.son, 1);
+    if (yerel.gun === pazartesiGun && yerel.saat * 60 + yerel.dakika < OZET.varsayilanSaat * 60) {
+      return { uretilen: 0, not: 'haftalık özet: saati gelmedi' };
+    }
+    // Pazartesi 09:00 İstanbul = 06:00 UTC (Türkiye yaz saati uygulamıyor, +03:00 sabit).
+    const esik = new Date(`${pazartesiGun}T${String(OZET.varsayilanSaat).padStart(2, '0')}:00:00+03:00`).toISOString();
+    const anahtar = ozetGonderimAnahtari(hafta);
+    const kanallar = await this.db.$queryRaw<Array<{ id: string; org_id: string; client_id: string }>>(Prisma.sql`
+      SELECT k.id::text AS id, k.org_id::text AS org_id, k.client_id::text AS client_id
+        FROM bildirim_kanallari k
+        JOIN clients c ON c.id = k.client_id AND c.status = 'active'
+       WHERE k.etkin AND 'haftalik_ozet' = ANY(k.olaylar)
+         AND k.created_at <= ${esik}::timestamptz
+         AND NOT EXISTS (SELECT 1 FROM bildirim_gonderimleri g WHERE g.kanal_id = k.id AND g.anahtar = ${anahtar})
+       ORDER BY k.client_id, k.id`);
+    const ozetler = new Map<string, Awaited<ReturnType<OzetService['getir']>>['ozet'] | null>();
+    let uretilen = 0;
+    let bos = 0;
+    let dusen = 0;
+    for (const k of kanallar) {
+      if (!ozetler.has(k.client_id)) {
+        try {
+          ozetler.set(k.client_id, (await this.ozet.getir(k.client_id, hafta, simdi)).ozet);
+        } catch (e) {
+          dusen++;
+          this.logger.error(`Haftalık özet üretilemedi (${k.client_id} ${hafta}): ${mesaj(e)}`);
+          ozetler.set(k.client_id, null);
+        }
+      }
+      const o = ozetler.get(k.client_id);
+      if (!o) continue;
+      if (o.hacim === 'bos') {
+        bos++;
+        continue;
+      }
+      const kisa = kisaOzet(o, ozetPanelYolu(k.client_id, hafta));
+      const govde: SaklananGovde = {
+        ...govdeKur({
+          baslik: kisa.baslik,
+          konu: kisa.baslik,
+          satirlar: kisa.satirlar.map(kisaSatir),
+          fazlaBirimi: 'satır',
+          baglanti: { metin: "Advetics'te aç", yol: 'haftalik_ozet', hafta },
+        }),
+        ozetHaftasi: hafta,
+      };
+      const yazilan = await this.db.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        INSERT INTO bildirim_gonderimleri (org_id, client_id, kanal_id, olay, anahtar, ozet, govde, kaynaklar, durum, sonraki_deneme)
+        VALUES (${k.org_id}::uuid, ${k.client_id}::uuid, ${k.id}::uuid, 'haftalik_ozet', ${anahtar},
+                ${`Haftalık özet · ${hafta}`}, ${JSON.stringify(govde)}::jsonb, ${JSON.stringify([hafta])}::jsonb,
+                'bekliyor', ${simdi.toISOString()}::timestamptz)
+        ON CONFLICT (kanal_id, anahtar) DO NOTHING
+        RETURNING id::text AS id`);
+      if (yazilan.length > 0) uretilen++;
+    }
+    const parcalar = [`haftalık özet ${hafta}: ${uretilen} kanal için üretildi (${kanallar.length} kanal bakıldı)`];
+    if (bos > 0) parcalar.push(`${bos} kanalın workspace'inde harcama yok, gönderilmedi`);
+    if (dusen > 0) parcalar.push(`${dusen} workspace'in özeti üretilemedi`);
+    return { uretilen, not: parcalar.join(', ') };
+  }
+}
+
+/** "Maliyet: 12.400 ₺ (%8 arttı)" → kalın ön ek + metin; iki nokta yoksa etiketsiz. */
+function kisaSatir(satir: string): { etiket: string; metin: string } {
+  const i = satir.indexOf(': ');
+  return i > 0 && i < 60 ? { etiket: satir.slice(0, i), metin: satir.slice(i + 2) } : { etiket: '', metin: satir };
 }
 
 /** Teslim geçmişi satırı (liste ve gönderim sonucu aynı biçimde). */

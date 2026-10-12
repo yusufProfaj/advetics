@@ -1,18 +1,27 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
+  OZET,
+  OZET_PENCERE_ANAHTARI,
   bugunUtc,
   nihaiAlicilar,
+  ozetHaftasi,
+  ozetPanelAdresi,
   raporPenceresi,
   siradakiCalisma,
   type PlanSikligi,
   type PlanSonucu,
   type RaporPlaniInput,
   type RaporPlaniOzeti,
+  type HaftalikOzetPlani,
+  type HaftalikOzetPlaniGirdisi,
   type TenantContext,
 } from '@advetics/shared';
+import { CONFIG, type AppConfig } from '../../config/configuration';
 import { PrismaAdminService } from '../../prisma/prisma-admin.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { OzetService } from '../haftalik-ozet/ozet.service';
+import { ozetEpostasi } from '../haftalik-ozet/ozet-mail';
 import { RaporGonderService } from './rapor-gonder.service';
 
 /**
@@ -35,6 +44,13 @@ export class RaporPlaniService {
     private readonly prisma: PrismaService,
     private readonly admin: PrismaAdminService,
     private readonly gonderici: RaporGonderService,
+    /*
+     * HAFTALIK ÖZET (Paket B) aynı tabloda, aynı süpürmede: ikinci bir
+     * zamanlayıcı yazmak, "rapor gitti ama özet gitmedi" hâlini iki ayrı
+     * claim mantığına bölmek olurdu (MIMARI Ç-B4).
+     */
+    private readonly ozet: OzetService,
+    @Inject(CONFIG) private readonly config: AppConfig,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -93,12 +109,17 @@ export class RaporPlaniService {
           LEFT JOIN users u ON u.id = s.created_by_user_id
           LEFT JOIN user_email_accounts ea ON ea.user_id = s.created_by_user_id
          WHERE s.client_id = ${clientId}::uuid
+           -- YALNIZ RAPOR PLANLARI. Haftalık özet planı aynı tabloda ama
+           -- kendi kartında; burada görünseydi "haftalık rapor" sanılıp
+           -- düzenlenir ve range_key'i bir rapor penceresine çevrilirdi.
+           AND s.tur = 'rapor'
          ORDER BY s.created_at DESC
       `),
     );
 
     return rows.map((r) => ({
       id: r.id as string,
+      tur: 'rapor' as const,
       clientId: r.client_id as string,
       clientName: (r.client_name as string) ?? null,
       frequency: r.frequency as PlanSikligi,
@@ -205,7 +226,7 @@ export class RaporPlaniService {
           -- gitti" demek olurdu. (Backtick YOK: sablonu ortasindan kapatiyor.)
           next_run_at  = ${next},
           updated_at   = now()
-        WHERE id = ${id}::uuid
+        WHERE id = ${id}::uuid AND tur = 'rapor'
         RETURNING id::text
       `),
     );
@@ -219,7 +240,7 @@ export class RaporPlaniService {
     const scoped = { ...ctx, activeClientId: clientId };
     const rows = await this.prisma.withTenant(scoped, (tx) =>
       tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-        DELETE FROM report_schedules WHERE id = ${id}::uuid RETURNING id::text
+        DELETE FROM report_schedules WHERE id = ${id}::uuid AND tur = 'rapor' RETURNING id::text
       `),
     );
     if (rows.length === 0) throw new NotFoundException('Planlama bulunamadı.');
@@ -307,12 +328,15 @@ export class RaporPlaniService {
         to_emails: string[];
         attach_pdf: boolean;
         client_name: string;
+        tur: string;
+        next_run_at: Date;
       }>
     >(Prisma.sql`
       SELECT s.id::text, s.org_id::text, s.client_id::text,
              s.created_by_user_id::text, s.template_id::text,
              s.frequency::text AS frequency, s.day_of_week, s.day_of_month,
-             s.hour, s.range_key, s.to_emails, s.attach_pdf, c.name AS client_name
+             s.hour, s.range_key, s.to_emails, s.attach_pdf, c.name AS client_name,
+             s.tur, s.next_run_at
         FROM report_schedules s
         JOIN clients c ON c.id = s.client_id
        WHERE s.enabled = true
@@ -360,6 +384,13 @@ export class RaporPlaniService {
 
       // ② GÖNDER
       try {
+        if (plan.tur === 'haftalik_ozet') {
+          const r = await this.ozetCalistir(plan);
+          if (r.durum === 'sent') gonderilen++;
+          else atlanan++;
+          notlar.push(r.not);
+          continue;
+        }
         const pencere = raporPenceresi(plan.range_key, bugunUtc());
         if (pencere === null) {
           await this.sonucYaz(plan.id, 'skipped', 'Dönem henüz başlamadı (pencere boş).', null);
@@ -452,6 +483,178 @@ export class RaporPlaniService {
     // `rows` GÖNDERİLEN sayısı: "succeeded + rows = 0" teşhis ekranında
     // "hiçbir rapor gitmedi" diye okunabilmeli.
     return { rows: gonderilen, note: ozet.slice(0, 500) };
+  }
+
+  /**
+   * ═══ HAFTALIK ÖZET DALI (Paket B, MIMARI § 5) ═══
+   *
+   * Claim ve "tekrar deneme yok" kuralı yukarıda, rapor dalıyla ORTAK.
+   * Hafta SÜPÜRMENİN koştuğu andan değil planın `next_run_at`inden:
+   * worker deploy'da geç kalıp Salı koşarsa yine aynı haftayı gönderir.
+   *
+   * Hata FIRLATIYOR (çağıranın catch'i `failed` yazıyor); boş hafta ve
+   * kısmi ret burada yazılıyor. Müşteri görünümü `ozetEpostasi`nin İÇİNDE
+   * süzülüyor (`ozetKitleyeGore`): sinyal ve bekleyen iş bu maile giremez.
+   */
+  private async ozetCalistir(plan: {
+    id: string;
+    org_id: string;
+    client_id: string;
+    created_by_user_id: string;
+    to_emails: string[];
+    client_name: string;
+    next_run_at: Date;
+  }): Promise<{ durum: 'sent' | 'skipped'; not: string }> {
+    const hafta = ozetHaftasi(new Date(plan.next_run_at));
+    const { ozet } = await this.ozet.getir(plan.client_id, hafta);
+    if (ozet.hacim === 'bos') {
+      await this.sonucYaz(plan.id, 'skipped', `${hafta}: bu hafta ve önceki hafta harcama yok; boş özet gönderilmedi.`, null);
+      return { durum: 'skipped', not: `${plan.client_name}: özet boş (${hafta})` };
+    }
+    const e = ozetEpostasi(ozet, 'musteri', ozetPanelAdresi(this.config.mail.appUrl, plan.client_id, hafta));
+    const ctx = {
+      userId: plan.created_by_user_id,
+      orgId: plan.org_id,
+      clientIds: [plan.client_id],
+      activeClientId: plan.client_id,
+      role: 'admin',
+      isOrgAdmin: true,
+      permissions: ['report.read', 'report.share'],
+    } as unknown as TenantContext;
+    const sonuc = await this.gonderici.ozetGonder(ctx, {
+      clientId: plan.client_id,
+      toEmails: plan.to_emails,
+      konu: e.konu,
+      html: e.html,
+      yalnizKendine: false,
+    });
+    /*
+     * KISMİ RET `last_error`a: durum `sent` (en az bir alıcı kabul etti) ama
+     * reddedilen adres panelde plan kartında görünmeli; ekranda bekleyen
+     * kimse yok ve tek iz bu satır.
+     */
+    const red = sonuc.reddedilen;
+    await this.sonucYaz(
+      plan.id,
+      'sent',
+      red.length > 0 ? `Reddedilen: ${red.map((x) => `${x.adres} (${x.sebep})`).join(', ')}` : null,
+      sonuc.to.join(', '),
+    );
+    return {
+      durum: 'sent',
+      not:
+        `${plan.client_name} özet ${hafta} → ${sonuc.to.join(', ')}` +
+        (red.length > 0 ? ` · REDDEDİLEN: ${red.map((x) => x.adres).join(', ')}` : ''),
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Haftalık özet planı (oturumlu) — aynı tablo, `tur = 'haftalik_ozet'`
+  // ---------------------------------------------------------------------------
+
+  async ozetPlani(ctx: TenantContext, clientId: string): Promise<HaftalikOzetPlani> {
+    const scoped = { ...ctx, activeClientId: clientId };
+    const { plan, musteri, benim } = await this.prisma.withTenant(scoped, async (tx) => {
+      const [plan] = await tx.$queryRaw<Array<Record<string, unknown>>>(Prisma.sql`
+        SELECT s.enabled, s.hour, s.to_emails, s.next_run_at, s.last_run_at, s.last_status,
+               s.last_error, s.last_sent_to, u.full_name AS ad, u.email AS eposta,
+               -- Başkasının planında cevap BİLİNMİYOR (NULL): kimlik tablosu
+               -- satırı yalnız sahibine gösteriyor (rapor listesindeki kural).
+               CASE WHEN s.created_by_user_id = app.current_user_id()
+                    THEN (ea.id IS NOT NULL AND ea.verified_at IS NOT NULL)
+                    ELSE NULL END AS sender_ready
+          FROM report_schedules s
+          LEFT JOIN users u ON u.id = s.created_by_user_id
+          LEFT JOIN user_email_accounts ea ON ea.user_id = s.created_by_user_id
+         WHERE s.client_id = ${clientId}::uuid AND s.tur = 'haftalik_ozet'`);
+      const [musteri] = await tx.$queryRaw<Array<{ contact_emails: string[] | null }>>(Prisma.sql`
+        SELECT contact_emails FROM clients WHERE id = ${clientId}::uuid`);
+      const [benim] = await tx.$queryRaw<Array<{ hazir: boolean }>>(Prisma.sql`
+        SELECT (verified_at IS NOT NULL) AS hazir FROM user_email_accounts WHERE user_id = ${ctx.userId}::uuid`);
+      return { plan, musteri, benim };
+    });
+    if (!musteri) throw new NotFoundException('Workspace bulunamadı.');
+    const toEmails = (plan?.to_emails as string[] | undefined) ?? [];
+    const cozulen = nihaiAlicilar({ secilen: toEmails, musteriAdresleri: musteri.contact_emails ?? [] });
+    if (!plan) {
+      return {
+        clientId,
+        kurulu: false,
+        etkin: false,
+        saat: OZET.varsayilanSaat,
+        toEmails: [],
+        cozulenAliciListesi: cozulen,
+        siradaki: null,
+        son: null,
+        // Kurulu değilken açan kişi gönderen olacak: SENİN kimliğin.
+        gonderen: null,
+        senderReady: benim ? benim.hazir === true : false,
+      };
+    }
+    const tarih = (x: unknown) => (x ? new Date(x as Date).toISOString() : null);
+    return {
+      clientId,
+      kurulu: true,
+      etkin: plan.enabled === true,
+      saat: Number(plan.hour),
+      toEmails,
+      cozulenAliciListesi: cozulen,
+      siradaki: plan.enabled === true ? tarih(plan.next_run_at) : null,
+      son: plan.last_run_at && plan.last_status
+        ? {
+            zaman: tarih(plan.last_run_at)!,
+            durum: plan.last_status as PlanSonucu,
+            hata: (plan.last_error as string) ?? null,
+            alici: (plan.last_sent_to as string) ?? null,
+          }
+        : null,
+      gonderen: { ad: (plan.ad as string) ?? null, eposta: (plan.eposta as string) ?? null },
+      senderReady: plan.sender_ready === null || plan.sender_ready === undefined ? null : plan.sender_ready === true,
+    };
+  }
+
+  /**
+   * Aç/kapat, saat, alıcılar. AÇARKEN kurulum anında doğrulama
+   * (`onKosullar`, rapor planıyla AYNI): SMTP kimliği doğrulanmamışsa plan
+   * açılmıyor. Açan kişi GÖNDEREN oluyor: doğrulanan kimlik onunki ve
+   * başkasının kimliğiyle gönderen bir plan, doğrulanmamış bir yoldan
+   * müşteriye mail atmak olurdu. Kapatmak ön koşulsuz.
+   *
+   * `org_id` HEDEF MÜŞTERİDEN (CLAUDE.md "tüm şirketler" dersi).
+   * Workspace başına tek satır: kısmi tekil indeks + ON CONFLICT.
+   */
+  async ozetPlaniKaydet(ctx: TenantContext, input: HaftalikOzetPlaniGirdisi): Promise<HaftalikOzetPlani> {
+    if (input.etkin) await this.onKosullar(ctx, input.clientId);
+    const next = siradakiCalisma({ frequency: 'weekly', dayOfWeek: OZET.gun, dayOfMonth: null, hour: input.saat }, new Date());
+    const scoped = { ...ctx, activeClientId: input.clientId };
+    await this.prisma.withTenant(scoped, async (tx) => {
+      const [c] = await tx.$queryRaw<Array<{ org_id: string }>>(Prisma.sql`
+        SELECT org_id::text AS org_id FROM clients WHERE id = ${input.clientId}::uuid`);
+      if (!c) throw new NotFoundException('Workspace bulunamadı.');
+      const rows = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        INSERT INTO report_schedules (
+          id, org_id, client_id, created_by_user_id, template_id, tur,
+          frequency, day_of_week, day_of_month, hour, range_key,
+          to_emails, attach_pdf, enabled, next_run_at, updated_at
+        ) VALUES (
+          gen_random_uuid(), ${c.org_id}::uuid, ${input.clientId}::uuid, ${ctx.userId}::uuid, NULL, 'haftalik_ozet',
+          'weekly'::"ReportScheduleFrequency", ${OZET.gun}::int, NULL, ${input.saat}::int, ${OZET_PENCERE_ANAHTARI},
+          ${input.toEmails}, false, ${input.etkin}, ${next}, now()
+        )
+        ON CONFLICT (client_id) WHERE tur = 'haftalik_ozet' DO UPDATE SET
+          hour        = EXCLUDED.hour,
+          to_emails   = EXCLUDED.to_emails,
+          enabled     = EXCLUDED.enabled,
+          next_run_at = EXCLUDED.next_run_at,
+          created_by_user_id = CASE WHEN EXCLUDED.enabled THEN EXCLUDED.created_by_user_id
+                                    ELSE report_schedules.created_by_user_id END,
+          updated_at  = now()
+        RETURNING id::text`);
+      // SIFIR SATIR = RLS reddetti. "Kaydedildi" deyip kapatılmamış bir
+      // planı açık bırakmak müşteriye istenmeyen mail demek.
+      if (rows.length === 0) throw new NotFoundException('Haftalık özet planı kaydedilemedi.');
+    });
+    return this.ozetPlani(ctx, input.clientId);
   }
 
   private async sonucYaz(

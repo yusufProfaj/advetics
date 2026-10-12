@@ -126,7 +126,12 @@ describe('CHECK listeleri = shared listeleri', () => {
   const kok = join(__dirname, '../../../prisma/migrations');
   const ilk = readFileSync(join(kok, '20261013100000_sinyal/migration.sql'), 'utf8');
   const f1 = readFileSync(join(kok, '20261014200000_veri_kaynagi/migration.sql'), 'utf8');
-  const sql = ilk + '\n' + f1.slice(f1.indexOf('"sinyaller_kod_chk" CHECK') - 20);
+  /*
+   * Bildirim olayı kısıtları Paket B'de (20261014500000_haftalik_ozet)
+   * `haftalik_ozet` ile genişletilerek yeniden kuruldu; en son tanım okunuyor.
+   */
+  const b = readFileSync(join(kok, '20261014500000_haftalik_ozet/migration.sql'), 'utf8');
+  const sql = ilk + '\n' + f1.slice(f1.indexOf('"sinyaller_kod_chk" CHECK') - 20) + '\n' + b.slice(b.indexOf('-- ─── bildirim olayı'));
   const liste = (kisit: string): string[] => {
     const i = sql.lastIndexOf(`"${kisit}" CHECK`);
     if (i < 0) throw new Error(`${kisit} bulunamadı`);

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import {
+  isoHaftaKodu,
   BUTCE_ADIMI_EN_FAZLA,
   YORGUNLUK,
   formatDecimal,
@@ -46,17 +47,14 @@ const MIKRO = 1_000_000n;
 
 // ─── Anahtar, özet, hafta ────────────────────────────────────────────────
 
-/** ISO-8601 hafta: `2026-W41`. Yılın ilk perşembesi kuralı. */
-export function isoHafta(gun: string): string {
-  const d = new Date(`${gun}T00:00:00Z`);
-  const haftaGunu = (d.getUTCDay() + 6) % 7; // pazartesi 0
-  d.setUTCDate(d.getUTCDate() - haftaGunu + 3); // o haftanın perşembesi
-  const yil = d.getUTCFullYear();
-  const ilkPersembe = new Date(Date.UTC(yil, 0, 4));
-  const fark = (d.getTime() - ilkPersembe.getTime()) / 86_400_000;
-  const hafta = 1 + Math.round((fark - 3 + ((ilkPersembe.getUTCDay() + 6) % 7)) / 7);
-  return `${yil}-W${String(hafta).padStart(2, '0')}`;
-}
+/**
+ * ISO-8601 hafta: `2026-W41`. TEK TANIM shared'da (`isoHaftaKodu`, Paket B):
+ * haftalık özet hem worker'da hem panelde hafta hesaplıyor ve İyileştir'in
+ * öneri anahtarı da hafta taşıyor. İki ayrı yazım doğduğu anda ayrışırdı ve
+ * "bu haftanın kararı" ile "bu haftanın özeti" farklı haftaları gösterirdi.
+ * Ad API'de korunuyor (çağıranlar değişmesin).
+ */
+export const isoHafta: (gun: string) => string = isoHaftaKodu;
 
 /** Kararlı anahtar `tur:seviye:varlıkId:ISO-hafta` (MIMARI § 2). */
 export function oneriAnahtari(tur: OneriTuru, seviye: OneriSeviyesi, id: string, hafta: string): string {
