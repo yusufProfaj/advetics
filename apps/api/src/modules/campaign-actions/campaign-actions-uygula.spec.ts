@@ -126,6 +126,17 @@ describe('uygula — reklam ve set seviyesi', () => {
     expect(log).toEqual([{ action: 'ad_group.set_budget', target_type: 'ad_group' }]);
   });
 
+  it('KRİTİK (Paket C): iz denetim kaydının after.iz alanına yazılıyor; iz yoksa alan HİÇ yok', async () => {
+    const { svc } = kur();
+    await svc.uygula(CTX, { seviye: 'ad', id: REKLAM }, { type: 'pause' }, { iz: { yol: 'iyilestir', ref: 'yorgunluk:x' } });
+    await svc.uygula(CTX, { seviye: 'ad_group', id: SET }, { type: 'pause' });
+    const log = await h.q<{ target_id: string; iz: unknown }>(`SELECT target_id, after->'iz' AS iz FROM audit_logs ORDER BY id`);
+    expect(log).toEqual([
+      { target_id: REKLAM, iz: { yol: 'iyilestir', ref: 'yorgunluk:x' } },
+      { target_id: SET, iz: null },
+    ]);
+  });
+
   it('reklamın bütçesi yok: set_budget reklam seviyesinde platforma gitmeden reddediliyor', async () => {
     const { svc, applyAction } = kur();
     await expect(svc.uygula(CTX, { seviye: 'ad', id: REKLAM }, { type: 'set_budget', amountMicros: 1n, budgetMode: 'daily' })).rejects.toThrow(/bütçesi yok/);

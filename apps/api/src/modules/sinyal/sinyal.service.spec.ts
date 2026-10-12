@@ -175,7 +175,7 @@ describe('uygula', () => {
     const id = await sinyal();
     const s = await svc.tek(CTX, id);
     const r = await svc.uygula(CTX, 'Ali', id, s.ozet);
-    expect(uygula).toHaveBeenCalledWith(expect.objectContaining({ activeClientId: IDS.client }), { seviye: 'campaign', id: KAMPANYA }, { type: 'pause' });
+    expect(uygula).toHaveBeenCalledWith(expect.objectContaining({ activeClientId: IDS.client }), { seviye: 'campaign', id: KAMPANYA }, { type: 'pause' }, { iz: { yol: 'sinyal', ref: expect.any(String) } });
     expect(r.dogrulama).toBe('dogrulandi');
     expect(r.sinyal.durum).toBe('kapatildi');
     expect(r.sinyal.kapatma?.neden).toBe('uygulandi');

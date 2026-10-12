@@ -25,6 +25,7 @@ import { BoostExecutorService } from '../modules/boosts/boost-executor.service';
 import { SUPURME_HESAP_KOSULU } from './supurme-kapsami';
 import { SinyalHesapService } from '../modules/sinyal/sinyal-hesap.service';
 import { BildirimTeslimService } from '../modules/sinyal/bildirim-teslim.service';
+import { EtkiHesapService } from '../modules/etki/etki-hesap.service';
 import { izlenmeyenSinyalleriKapat } from '../modules/sinyal/hesap-sinyalleri';
 import type { TxLike } from '../modules/sinyal/sinyal-hesap';
 import { isYapilabilir } from './platform-isleri';
@@ -82,6 +83,7 @@ export class SyncProcessorService {
     private readonly raporPlani: RaporPlaniService,
     private readonly sinyalHesap: SinyalHesapService,
     private readonly teslim: BildirimTeslimService,
+    private readonly etkiHesap: EtkiHesapService,
   ) {}
 
   async process(payload: SyncJobPayload): Promise<{ rows: number; note?: string }> {
@@ -91,6 +93,8 @@ export class SyncProcessorService {
     // (hesap işinin yolu kota alırdı ve kotası dolmuş hesapta sinyal de
     // gecikirdi). Önce bu dal.
     if (payload.jobType === 'signals_evaluate') return this.processSinyalJob(payload);
+    // ETKİ İŞİ de platforma gitmiyor (Paket C): kota kapısından geçmiyor.
+    if (payload.jobType === 'impact_evaluate') return this.processEtkiJob(payload);
     // KURAL İŞİ hesap işinden AYRI yol izliyor: bir kural birden fazla
     // hesaba dokunabiliyor, dolayısıyla iş seviyesinde tek bir hesabın
     // kotasına bakmak yanlış olurdu. Kota kontrolü aksiyon başına,
@@ -154,6 +158,7 @@ export class SyncProcessorService {
      */
     if (payload.jobType === 'notifications_send') return this.teslim.supur();
     if (payload.jobType === 'signals_evaluate') return this.sinyalSupurmesi();
+    if (payload.jobType === 'impact_evaluate') return this.etkiSupurmesi();
 
     const accounts = await this.db.adAccount.findMany({
       // Süzgeç TEK YERDE: teşhis ekranı da aynı sabiti okuyor. Ayrı
@@ -403,6 +408,15 @@ export class SyncProcessorService {
         const y = this.shiftDays(todayInTz, -1);
         return { from: y, to: y };
       }
+      /*
+       * ETKİ (Paket C): hesabın BUGÜNÜ. Değerlendirme "sonraki ölçüm günü
+       * geldi mi" sorusunu hesabın takvimiyle soruyor; UTC günü kullanmak
+       * gece yarısına yakın hesaplarda ölçümü bir gün öne ya da arkaya
+       * kaydırırdı. Dal olmasaydı iş tarihsiz gelip her sabah düşerdi
+       * (`sweep:keywords` dersi, `sweep-dates.spec.ts`).
+       */
+      case 'impact_evaluate':
+        return { from: todayInTz, to: todayInTz };
       case 'insights_backfill':
         // L4 — son 7 gün. Atıf pencereleri yüzünden dünün verisi 3 gün sonra
         // hâlâ değişiyor; bir kez çekip bırakmak ROAS'ı sistematik eksik gösterir.
@@ -1216,6 +1230,83 @@ export class SyncProcessorService {
     const note =
       `sinyal emniyet süpürmesi: ${acilan} hesap kuyruğa alındı (zincir kaçırmıştı), ${zatenVar} zaten hesaplanmış, ` +
       `${metrikYok} hesabın dünü henüz çekilmemiş, izlenmeyen hesaplarda ${kapanan} açık sinyal kapatıldı`;
+    this.logger.log(note);
+    return { rows: acilan, note };
+  }
+
+  /**
+   * Tek hesabın etki işi (keşif + değerlendirme). Platform çağrısı yok;
+   * not her koşuda yazılıyor (succeeded + rows=0 notsuz değil).
+   */
+  private async processEtkiJob(payload: SyncJobPayload): Promise<{ rows: number; note: string }> {
+    const syncJobId = BigInt(payload.syncJobId);
+    if (!payload.adAccountId || !payload.dateFrom) {
+      await this.markFailed(syncJobId, 'missing_dates', 'impact_evaluate hesap ya da gün olmadan geldi');
+      throw new UnrecoverableError('impact_evaluate hesap ya da gün olmadan geldi');
+    }
+    await this.db.syncJob.update({
+      where: { id: syncJobId },
+      data: { status: 'running', startedAt: new Date(), attempts: { increment: 1 } },
+    });
+    try {
+      const r = await this.etkiHesap.calistir(payload.adAccountId, payload.dateFrom);
+      await this.markSucceeded(payload.syncJobId, r.rows, 0, { note: r.note });
+      return { rows: r.rows, note: r.note };
+    } catch (err) {
+      await this.recordFailure(syncJobId, err);
+      throw err;
+    }
+  }
+
+  /**
+   * 07:20 ETKİ SÜPÜRMESİ (Paket C): hesap başına bir iş. Kapsam:
+   * workspace'e atanmış ve izlenen hesaplar ARTI açık etki satırı olan her
+   * hesap. İkincisi şart: izlemesi kapanan ya da havuza dönen hesabın açık
+   * satırı taranmasaydı ekranda sonsuza kadar "ölçülüyor" yazardı;
+   * değerlendirme onu "hesap taşındı" ya da "veri yok" ile kapatıyor.
+   */
+  private async etkiSupurmesi(): Promise<{ rows: number; note: string }> {
+    const hesaplar = await this.db.$queryRaw<Array<{ id: string; client_id: string | null; platform: Platform; timezone: string }>>`
+      SELECT a.id::text AS id, a.client_id::text AS client_id, a.platform::text AS platform, a.timezone
+        FROM ad_accounts a
+       WHERE (a.client_id IS NOT NULL AND a.sync_enabled)
+          OR EXISTS (SELECT 1 FROM degisiklik_etkileri e
+                      WHERE e.ad_account_id = a.id AND e.durum IN ('bekliyor', 'olcumde'))`;
+    let acilan = 0;
+    let atlanan = 0;
+    let sahipsiz = 0;
+    for (const a of hesaplar) {
+      const dates = this.datesForJob('impact_evaluate', a.timezone);
+      if (!dates) continue;
+      /*
+       * HAVUZA DÖNMÜŞ HESAP: iş satırı bir workspace'e yazılmak zorunda
+       * (client_id'si boş sync_jobs satırını RLS kimseye göstermez). Açık
+       * etki satırının workspace'i kullanılıyor; satır orada "hesap
+       * taşındı" ile kapanacak.
+       */
+      let clientId = a.client_id;
+      if (!clientId) {
+        const [e] = await this.db.$queryRaw<Array<{ c: string }>>`
+          SELECT client_id::text AS c FROM degisiklik_etkileri
+           WHERE ad_account_id = ${a.id}::uuid AND durum IN ('bekliyor', 'olcumde') LIMIT 1`;
+        clientId = e?.c ?? null;
+        sahipsiz++;
+      }
+      if (!clientId) continue;
+      const res = await this.queue.enqueue({
+        clientId,
+        platform: a.platform,
+        jobType: 'impact_evaluate',
+        adAccountId: a.id,
+        dateFrom: dates.from,
+        dateTo: dates.to,
+      });
+      if (res.enqueued) acilan++;
+      else atlanan++;
+    }
+    const note =
+      `etki süpürmesi: ${acilan} hesap kuyruğa alındı, ${atlanan} zaten kuyrukta` +
+      (sahipsiz > 0 ? `, ${sahipsiz} hesap workspace'siz ama açık ölçümü var` : '');
     this.logger.log(note);
     return { rows: acilan, note };
   }

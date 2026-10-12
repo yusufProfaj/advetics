@@ -43,6 +43,11 @@ const TARIH_ISTEYENLER = [
    * dal olmasaydı iş tarihsiz gelir ve her sabah düşerdi.
    */
   'signals_evaluate',
+  /*
+   * ETKİ (Paket C). 07:20 süpürmesi hesap başına bu türle iş açıyor; gün,
+   * "sonraki ölçüm geldi mi" sorusunun takvimi.
+   */
+  'impact_evaluate',
 ] as const;
 
 // Servis yalnızca saf yardımcısı için kuruluyor; hiçbir bağımlılığa
@@ -91,6 +96,13 @@ describe('süpürme tarih aralıkları', () => {
     expect(proc.datesForJob('signals_evaluate', 'Europe/Istanbul')).toEqual(
       proc.datesForJob('insights_daily', 'Europe/Istanbul'),
     );
+  });
+
+  it('etki işi hesabın BUGÜNÜNE bakıyor (dünü değil): ölçüm günü hesabın takviminde geliyor', () => {
+    const r = proc.datesForJob('impact_evaluate', 'Europe/Istanbul');
+    const dun = proc.datesForJob('insights_daily', 'Europe/Istanbul');
+    expect(r!.from).toBe(r!.to);
+    expect(r!.from > dun!.from).toBe(true);
   });
 
   it('yapı taraması tarih İSTEMİYOR — aralık üretmek yanıltıcı olurdu', () => {

@@ -85,7 +85,11 @@ export class CampaignActionsController {
     if (!(VARLIK_EYLEM_SEVIYELERI as readonly string[]).includes(seviye)) {
       throw new BadRequestException(`Geçersiz düzey: ${seviye}`);
     }
-    const s = await this.actions.uygula(ctx, { seviye: seviye as VarlikEylemSeviyesi, id }, { type: input.type });
+    // İZ (Paket C): bu uç yalnız Reklam Yöneticisi'nin satır içi düğmesinden
+    // çağrılıyor; etki ekranı değişikliği oradan geldi diye yazıyor.
+    const s = await this.actions.uygula(ctx, { seviye: seviye as VarlikEylemSeviyesi, id }, { type: input.type }, {
+      iz: { yol: 'reklam_yoneticisi', ref: null },
+    });
     return { dogrulama: s.dogrulama ?? 'uyusmadi', platformDegeri: s.platformDegeri, varlikAdi: s.varlikAdi };
   }
 }

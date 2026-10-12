@@ -184,7 +184,7 @@ describe('uygula', () => {
     const { svc, uygula } = kur();
     const o = await acikOneri(svc);
     const r = (await svc.uygula(CTX, 'Test Kullanıcı', IDS.client, o.anahtar, o.ozet)) as Oneri;
-    expect(uygula).toHaveBeenCalledWith(CTX, { seviye: 'ad', id: REKLAM }, { type: 'pause' }, { validateOnly: false });
+    expect(uygula).toHaveBeenCalledWith(CTX, { seviye: 'ad', id: REKLAM }, { type: 'pause' }, { validateOnly: false, iz: { yol: 'iyilestir', ref: expect.any(String) } });
     expect(r.durum).toBe('uygulandi');
     expect(r.uygulama).toMatchObject({ durum: 'dogrulandi', platformDegeri: 'Duraklatıldı', uygulayan: 'Test Kullanıcı' });
     const [k] = await h.q<{ durum: string; org_id: string; user_id: string }>(`SELECT durum, org_id::text, user_id::text FROM iyilestir_oneri_karar`);
@@ -214,7 +214,7 @@ describe('uygula', () => {
     uygula.mockResolvedValue(sonuc({ prova: true, dogrulama: null, platformDegeri: 'Prova geçti; hiçbir şey değişmedi.' }));
     const o = await acikOneri(svc);
     expect(await svc.uygula(CTX, 'Test', IDS.client, o.anahtar, o.ozet, { prova: true })).toEqual({ prova: true, platformDegeri: 'Prova geçti; hiçbir şey değişmedi.' });
-    expect(uygula).toHaveBeenCalledWith(CTX, expect.anything(), expect.anything(), { validateOnly: true });
+    expect(uygula).toHaveBeenCalledWith(CTX, expect.anything(), expect.anything(), expect.objectContaining({ validateOnly: true }));
     expect(await h.q(`SELECT 1 FROM iyilestir_oneri_karar`)).toHaveLength(0);
   });
 
