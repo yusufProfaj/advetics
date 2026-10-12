@@ -16,7 +16,7 @@ import { YERLESIM_GRUPLARI, type SetPlani } from '../banner-seti';
 import { REHBER_AMACLARI, type RehberAmacKodu, type RehberPlatformu } from './amaclar';
 import type { GoogleTeklif } from './turet';
 import { metaOptimizasyonHedefi, type SitePikselHali } from '../meta/niyetler';
-import { SITE_BAGLANTISI_YOK_CUMLESI, type GoogleUzantiKaynagi } from './google-uzanti';
+import { SITE_BAGLANTISI_YOK_CUMLESI, googleUzantiReddiCumlesi, type GoogleUzantiKaynagi } from './google-uzanti';
 
 export interface KararHucresi {
   deger: string;
@@ -186,6 +186,8 @@ export function kararTablosu(
  * düzeltmeye giderdi; oysa site henüz hiç okunmadı.
  */
 function uzantiHucresi(u: GoogleUzantiKaynagi | null): KararHucresi {
+  // Google reddi diğer bütün hâllerin önünde: kurulum uzantısız gidiyor.
+  if (u?.googleReddi) return { deger: googleUzantiReddiCumlesi(u.googleReddi), not: 'Yeniden prova edildi; reklamın kendisi etkilenmedi' };
   const site = !u || u.siteBaglantilari === null
     ? 'Site bağlantıları prova sırasında sitenden okunur'
     : u.siteBaglantilari.length === 0

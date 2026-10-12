@@ -68,6 +68,24 @@ describe('sayfaHtmlGetir', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
+  /*
+   * AJAN 4 (site optimizasyonu kapısı) BULGU — KIRMIZI BIRAKILDI.
+   * Site bağlantısı taraması ana sayfadaki bağlantıları izliyor ve
+   * `altSayfaAdaylari` yalnız ALAN ADINI kıyaslıyor; port serbest. Ajansın
+   * müşteri siteleri aynı paylaşımlı VPS'te barınabiliyor: müşterinin
+   * sayfasındaki `https://musteri.com:8443/` bağlantısı sunucunun KENDİ genel
+   * IP'sine, güvenlik duvarının dışarıya kapattığı bir yönetim portuna istek
+   * attırır (IP özel aralıkta değil, kontrolden geçiyor) ve sayfa başlığı
+   * site bağlantısı metni olarak panele döner. Öneri: varsayılan dışı port
+   * (`url.port !== ''`) her adımda reddedilsin.
+   */
+  it('KRİTİK: varsayılan dışı port reddediliyor (ilk adres ve yönlendirme)', async () => {
+    fetchMock.mockResolvedValue(yanit('<title>Panel</title>'));
+    expect(await sayfaHtmlGetir('https://ege.com:8443/')).toMatchObject({ ok: false });
+    fetchMock.mockReset().mockResolvedValueOnce(yanit('', 302, { location: 'https://ege.com:6379/' })).mockResolvedValue(yanit('<p>x</p>'));
+    expect(await sayfaHtmlGetir('https://ege.com')).toMatchObject({ ok: false });
+  });
+
   it('fetch yönlendirmeyi KENDİSİ izlemiyor (manual)', async () => {
     fetchMock.mockResolvedValue(yanit('<p>x</p>'));
     await sayfaHtmlGetir('https://ege.com');

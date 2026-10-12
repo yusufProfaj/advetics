@@ -25,6 +25,8 @@ import {
   altSayfaAdaylari,
   sayfaOzeti,
   siteBaglantilariUret,
+  googleUzantiReddiCumlesi,
+  ALT_SAYFA_ESZAMANLI,
   sitePikselHali,
   kanonikJson,
   kararTablosu,
@@ -202,6 +204,11 @@ interface PikselKaydi {
   zaman: number;
   satirlar: PikselSatiri[];
   kesildi: boolean;
+  /**
+   * Yalnız SİTE önbelleğinde: son okuma DÜŞTÜ. Önceki başarılı okumanın
+   * "aktif" hâli kullanılmaz; hâl `bilinmiyor` (`baglamKur`).
+   */
+  okunamadi?: boolean;
 }
 
 /**
@@ -213,6 +220,8 @@ interface UzantiKaydi {
   zaman: number;
   adres: string;
   siteBaglantilari: SiteBaglantisi[];
+  /** Son Google provası uzantıları reddetti: sebebi (kurulum uzantısız). */
+  googleReddi?: string | null;
   sebep: string | null;
 }
 
@@ -573,6 +582,10 @@ export class RehberService {
       await this.sitePikselOku(ctx, clientId, hesapId);
     } catch (e) {
       logger.warn(`Site amacı piksel listesi okunamadı (hesap ${hesapId}): ${(e as Error).message}`);
+      // ESKİ "AKTİF" KAYDI EZ (Ajan 4, N-1): okuma düştüğünde önbellekteki
+      // önceki okuma kalsaydı, piksel kaldırılmış olsa bile 15 dakika LPV
+      // kurulurdu. Düşen okuma = bilinmiyor = tıklama.
+      this.sitePikselOnbellek.set(`${clientId}:${hesapId}`, { zaman: Date.now(), satirlar: [], kesildi: false, okunamadi: true });
     }
   }
 
@@ -650,15 +663,24 @@ export class RehberService {
       const adaylar = altSayfaAdaylari(ana.html, ana.adres);
       if (adaylar.length === 0) return void yaz([], 'Ana sayfada alt sayfa bağlantısı bulunamadı');
       const alanAdi = (u: string) => new URL(u).hostname.toLowerCase().replace(/^www\./, '');
-      const okunan = await Promise.all(
-        adaylar.map(async (c): Promise<SiteAltSayfasi | null> => {
+      // En çok ALT_SAYFA_ESZAMANLI istek aynı anda (paylaşımlı VPS); sıra
+      // korunuyor çünkü bağlantı sırası sitedeki menü sırası.
+      const okunan: Array<SiteAltSayfasi | null> = new Array(adaylar.length).fill(null);
+      let sira = 0;
+      const isci = async () => {
+        while (sira < adaylar.length) {
+          const i = sira++;
+          const c = adaylar[i]!;
           const r = await this.siteHtmlOku(c.adres);
-          if (!r.ok || !r.adres.startsWith('https://') || alanAdi(r.adres) !== alanAdi(ana.adres)) return null;
-          return { adres: r.adres, ...sayfaOzeti(r.html), baglantiMetni: c.metin };
-        }),
-      );
+          if (!r.ok || !r.adres.startsWith('https://') || alanAdi(r.adres) !== alanAdi(ana.adres)) continue;
+          okunan[i] = { adres: r.adres, ...sayfaOzeti(r.html), baglantiMetni: c.metin };
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(ALT_SAYFA_ESZAMANLI, adaylar.length) }, isci));
       const sayfalar = okunan.filter((x): x is SiteAltSayfasi => x !== null);
-      const baglantilar = siteBaglantilariUret(sayfalar, markaAdi);
+      // Ana sayfaya (ve reklamın kendi hedefine) yönlenen sayfa bağlantı değil;
+      // tekillik SON adreste (Ajan 4, Ö-2).
+      const baglantilar = siteBaglantilariUret(sayfalar, markaAdi, [ana.adres, adres]);
       yaz(
         baglantilar,
         baglantilar.length ? null : `${adaylar.length} alt sayfadan ${sayfalar.length} tanesi açıldı; 25 karaktere sığan en az 2 farklı başlık çıkmadı`,
@@ -1055,7 +1077,6 @@ export class RehberService {
            WHERE client_id = ${s.client_id}::uuid AND icerik_ozeti = ${hedefOzeti} AND amac = ${onbellekAmaci}`),
       );
       onceki = o?.sonuc ?? null;
-      if (onceki && mod === 'yeni') return { ...onceki, onbellekten: true, gorselSayisi: 1 };
     }
 
     const [p] = await this.tx(ctx)((t) =>
@@ -1088,6 +1109,18 @@ export class RehberService {
       mevcut?.basliklar?.length ? `Kullanıcının başlıkları: ${mevcut.basliklar.join(' | ')}` : null,
     ].filter((x): x is string => !!x);
     const girdi = satirlar.join('\n');
+    const kapi = { kaynakMetin: girdi, yasalUyari: p?.yasal ?? null, yolKaynagi: [a.hedefAdres?.deger ?? '', ...kelimeler].join(' ') };
+    /*
+     * ÖNBELLEKTEN DÖNEN ÖNERİ DE KAPIDAN GEÇER (Ajan 4, Ö-3). Önbellek anahtarı
+     * (workspace, görsel, amaç) rehberi taşımıyor ama uydurma kapısının
+     * kaynağı rehbere özel: A rehberinin adresiyle doğrulanmış görünen yol ya
+     * da anahtar kelimesindeki fiyat, aynı görsel B'ye bırakılınca olduğu gibi
+     * dönerdi. Yeniden süzmek bedava: yapay zekâya ve platforma çağrı yok.
+     */
+    if (onceki && mod === 'yeni') {
+      const t = metinOnerisiTemizle(onceki as unknown as Parameters<typeof metinOnerisiTemizle>[0], kapi);
+      return { ...t, onbellekten: true, gorselSayisi: 1 };
+    }
     // "Tekrar etme" listesi isteme girer ama UYDURMA TARAMASININ kaynağına
     // girmez: önceki öneri bir bilgi kaynağı değil.
     const tekrar = [...(istek.tekrarEtme ?? []), ...(onceki ? [onceki.anaMetin, ...onceki.basliklar] : [])]
@@ -1121,11 +1154,7 @@ export class RehberService {
     } catch {
       throw new ServiceUnavailableException('Yapay zekânın cevabı okunamadı; yeniden dene.');
     }
-    const temiz = metinOnerisiTemizle(ham as object, {
-      kaynakMetin: girdi,
-      yasalUyari: p?.yasal ?? null,
-      yolKaynagi: [a.hedefAdres?.deger ?? '', ...kelimeler].join(' '),
-    });
+    const temiz = metinOnerisiTemizle(ham as object, kapi);
     const sonuc: MetinOnerisi = { ...temiz, notlar: [...notlar, ...temiz.notlar], gorselSayisi: gorselOku.gorseller.length };
     if (hedefOzeti) {
       try {
@@ -1313,8 +1342,22 @@ export class RehberService {
     }
   }
 
-  private async googleProva(ctx: TenantContext, s: RehberSatiri, a: RehberAlanlari, b: Baglam, acik: Record<RehberPlatformu, boolean>): Promise<PlatformProvaSonucu> {
+/**
+   * `uzantiReddi` verilirse UZANTISIZ ikinci deneme: ilk prova yalnız site
+   * bağlantısı / açıklama metni öğeleri yüzünden reddedildi. Uzantı bir EK;
+   * reddi kampanyanın tamamını kilitleseydi kullanıcı reklamı hiç kuramazdı.
+   * Kısıt sessiz değil: prova notu ve karar tablosu sebebi söylüyor.
+   */
+  private async googleProva(
+    ctx: TenantContext,
+    s: RehberSatiri,
+    a: RehberAlanlari,
+    bIlk: Baglam,
+    acik: Record<RehberPlatformu, boolean>,
+    uzantiReddi: string | null = null,
+  ): Promise<PlatformProvaSonucu> {
     const zaman = new Date().toISOString();
+    const b: Baglam = uzantiReddi && bIlk.uzantilar ? { ...bIlk, uzantilar: { ...bIlk.uzantilar, siteBaglantilari: [], aciklamaMetinleri: [] } } : bIlk;
     if (!b.google) return { tur: 'reddetti', zaman, mesajlar: ['Google Ads hesabı seçilmedi.'] };
     const t = rehberdenGoogle(a, acik, {
       musteriId: b.google.externalId,
@@ -1376,6 +1419,18 @@ export class RehberService {
         const alan = googleAlanHatalari(e.detail?.raw);
         const mesajlar = alan.length ? alan.map((h) => [h.mesaj, h.alan ? `(${h.alan})` : null, h.ayrinti].filter(Boolean).join(' ')) : [e.message];
         await bitir('reddedildi', mesajlar.join(' · '), alan);
+        // YALNIZ uzantı öğeleri reddedildiyse (her hata bir uzantı işleminde)
+        // uzantısız yeniden prova. Karışık retler olduğu gibi döner: başka
+        // bir sorun uzantıyı atınca kaybolmaz.
+        const uzantiIslemleri = new Set([...(d.sira.siteBaglantilari ?? []), ...(d.sira.aciklamaMetinleri ?? [])].flatMap((i) => [i - 1, i]));
+        if (!uzantiReddi && uzantiIslemleri.size > 0 && alan.length > 0 && alan.every((h) => h.islemSirasi !== null && uzantiIslemleri.has(h.islemSirasi))) {
+          const sebep = alan.map((h) => h.mesaj || h.kod).join('; ');
+          const k = this.uzantiOnbellek.get(s.client_id);
+          if (k) this.uzantiOnbellek.set(s.client_id, { ...k, googleReddi: sebep });
+          // Satır YENİDEN okunur: ilk deneme çocuk taslağı açıp rehbere bağladı;
+          // eski satırla ikinci bir Google taslağı açılır ve ilki yetim kalırdı.
+          return this.googleProva(ctx, await this.satir(ctx, s.id), a, bIlk, acik, sebep);
+        }
         return { tur: 'reddetti', zaman, mesajlar };
       }
       const m = e instanceof Error ? e.message : String(e);
@@ -1384,7 +1439,8 @@ export class RehberService {
       return { tur: 'yapilmadi', sebep: `Google'ın kontrolü tamamlanamadı: ${m}` };
     }
     await bitir('gecti', null);
-    return { tur: 'gecti', zaman, not: d.notlar.length ? d.notlar.join(' ') : null };
+    const notlar = [...(uzantiReddi ? [`${googleUzantiReddiCumlesi(uzantiReddi)}.`] : []), ...d.notlar];
+    return { tur: 'gecti', zaman, not: notlar.length ? notlar.join(' ') : null };
   }
 
   // ===========================================================================
@@ -1786,7 +1842,11 @@ export class RehberService {
     const googleSatis = taze && google && taze.googleHesapId === google.id ? taze.googleSatis : null;
     const googleDonusum30Gun = taze && google && taze.googleHesapId === google.id ? taze.googleDonusum30Gun : null;
     // SİTE piksel hâli: SATIŞ'ın tam listesi de aynı hesabı anlatıyor; hangisi varsa.
-    const sitePk = meta ? (this.pikselKaydi(clientId, meta.id) ?? this.sitePikselKaydi(clientId, meta.id)) : null;
+    // SİTE okuması ÖNCE: SİTE amacının taze okuması o. Düştüyse (`okunamadi`)
+    // satış listesine de düşülmez: hâl bilinmiyor = tıklama.
+    const siteKaydi = meta ? this.sitePikselOnbellek.get(`${clientId}:${meta.id}`) : undefined;
+    const siteTaze = siteKaydi && Date.now() - siteKaydi.zaman < ONBELLEK_MS ? siteKaydi : null;
+    const sitePk = siteTaze?.okunamadi ? null : (siteTaze ?? (meta ? this.pikselKaydi(clientId, meta.id) : null));
     const sitePikseli = sitePikselHali(sitePk?.satirlar ?? null, new Date(), sitePk?.kesildi ?? false);
     const amacG = a.amac?.deger ? REHBER_AMACLARI[a.amac.deger].google : null;
     const uk = this.uzantiOnbellek.get(clientId);
@@ -1795,6 +1855,7 @@ export class RehberService {
       amacG?.kurgu === 'ARAMA' && amacG.ulasma === 'site'
         ? {
             siteBaglantilari: ukTaze ? ukTaze.siteBaglantilari : null,
+            googleReddi: ukTaze?.googleReddi ?? null,
             siteSebebi: ukTaze?.sebep ?? null,
             aciklamaMetinleri: aciklamaMetinleriUret(r.m?.vaatler ?? []).metinler,
           }

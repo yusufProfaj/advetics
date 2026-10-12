@@ -363,6 +363,11 @@ export async function sayfaHtmlGetir(rawUrl: string, maxYonlendirme = 3, secenek
 /** Bir adımın güvenlik kontrolü — `siteOku`yla AYNI kurallar. Engel yoksa null. */
 async function adresEngeli(url: URL): Promise<string | null> {
   if (url.protocol !== 'https:') return 'Site adresi https ile başlamalı.';
+  // AÇIK PORT YOK (Ajan 4, Ö-1): her adımda, yönlendirmede de. Paylaşımlı
+  // VPS'te müşteri sitesi sunucunun kendi genel IP'sine çözülebilir ve
+  // `:8443`/`:6379` o makinenin yönetim ya da veri portu olur; iç ağ
+  // kontrolü genel IP'yi görmez. `URL` varsayılan portu (443) boş yazar.
+  if (url.port !== '') return 'Site adresi varsayılan port dışında; okunmadı.';
   if (ipLiterali(url.hostname)) return 'Site adresi alan adı olmalı, IP değil.';
   let adresler: Array<{ address: string; family: number }>;
   try {

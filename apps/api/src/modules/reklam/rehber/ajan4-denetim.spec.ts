@@ -482,6 +482,20 @@ describe('Siteme gelsinler: Meta hedefi piksel hâline bağlı', () => {
     expect(hedefYankisi(r.yanki)).toBe('LINK_CLICKS');
   });
 
+  it('KRİTİK (N-1): önce AKTİF okunan piksel, sonraki okuma DÜŞERSE eski "aktif" kullanılmaz → LINK_CLICKS', async () => {
+    const { id } = await provaliMetaRehberi();
+    // İlk prova aktif okudu (önbellekte "aktif"). Şimdi okuma düşüyor.
+    pikseller = null;
+    await svc.prova(CTX, id);
+    await provalariGecir();
+    const k = await svc.oku(CTX, id);
+    expect(k.kararlar.find((x) => x.kod === 'TUR')!.meta!.not).toContain('Meta pikseli okunamadığı için');
+    const [t] = await h.q<{ alanlar: { sitePikseli?: { deger: string } } }>(
+      `SELECT s.alanlar FROM reklam_taslagi t JOIN taslak_surumu s ON s.taslak_id = t.id AND s.surum_no = t.aktif_surum_no WHERE t.platform = 'meta'`,
+    );
+    expect(t!.alanlar.sitePikseli?.deger).toBe('bilinmiyor');
+  });
+
   it('piksel OKUNAMADI (bilinmiyor) → LINK_CLICKS, ekran okunamadığını söyler', async () => {
     pikseller = null;
     const r = await kur();

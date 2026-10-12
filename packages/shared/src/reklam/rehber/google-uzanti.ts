@@ -31,6 +31,8 @@ import { karakterSayisi } from './metin';
 interface AdresParcasi {
   protocol: string;
   hostname: string;
+  /** Varsayılan port (https'te 443) BOŞ dizge; başka her değer açık port. */
+  port: string;
   pathname: string;
   search: string;
   hash: string;
@@ -46,7 +48,14 @@ export const SITE_BAGLANTI_SATIR_SINIRI = 35;
 export const ACIKLAMA_METNI_EN_COK = 4;
 export const ACIKLAMA_METNI_SINIRI = 25;
 /** Ana sayfadan en çok bu kadar alt sayfa açılıp okunur (paylaşımlı sunucu). */
-export const ALT_SAYFA_ADAY_SINIRI = 8;
+export const ALT_SAYFA_ADAY_SINIRI = 6;
+/**
+ * Alt sayfalar en çok bu kadar EŞZAMANLI okunur. Paylaşımlı VPS'te bir
+ * provanın müşteri sitesine altı isteği birden atması hem sunucunun hem
+ * sitenin yükü; sıralı okumak ise 8 sn zaman aşımıyla provayı dakikalarca
+ * tutardı. Üç, ikisinin ortası.
+ */
+export const ALT_SAYFA_ESZAMANLI = 3;
 
 export interface SiteBaglantisi {
   metin: string;
@@ -72,12 +81,22 @@ export interface SiteAltSayfasi {
  */
 export interface GoogleUzantiKaynagi {
   siteBaglantilari: SiteBaglantisi[] | null;
+  /**
+   * Google provası uzantıları REDDETTİYSE sebebi: kurulum uzantısız gövdeyle
+   * yeniden prova edildi ve ekran bunu söylüyor (`googleUzantiReddiCumlesi`).
+   */
+  googleReddi?: string | null;
   /** Bağlantı kurulmuyorsa NEDENİ (okunamadı / yeterli sayfa yok). */
   siteSebebi: string | null;
   aciklamaMetinleri: string[];
 }
 
 export const SITE_BAGLANTISI_YOK_CUMLESI = 'Sitenden alt sayfa okunamadı, site bağlantısı eklenmedi';
+
+/** Google uzantı reddinin ekrandaki cümlesi (prova notu ve karar tablosu aynı yerden). */
+export function googleUzantiReddiCumlesi(sebep: string): string {
+  return `Site bağlantıları Google tarafından reddedildi: ${sebep}; reklam bağlantısız kuruldu`;
+}
 
 const VARLIK: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', '#39': "'" };
 
@@ -141,6 +160,11 @@ export function altSayfaAdaylari(html: string, anaAdres: string, enCok = ALT_SAY
       continue;
     }
     if (u.protocol !== 'https:' || host(u.hostname) !== host(ana.hostname)) continue;
+    // AÇIK PORT ADAY DEĞİL (Ajan 4, Ö-1): müşteri sitesi ajansın paylaşımlı
+    // VPS'indeyse `:8443` bağlantısı sunucunun KENDİ yönetim portuna istek
+    // attırır; iç ağ kontrolü bunu görmez (genel IP). Okuyucu da reddediyor
+    // (`site-oku.ts#adresEngeli`), bu ilk kapı.
+    if (u.port !== '') continue;
     if (u.search || DOSYA.test(u.pathname)) continue;
     const yol = u.pathname.replace(/\/+$/, '');
     if (yol === '' || yol === anaYol) continue;
@@ -159,6 +183,39 @@ function basligiBol(b: string): string[] {
     .split(/\s+[|–—\-·:»]\s+/)
     .map((x) => x.trim())
     .filter(Boolean);
+}
+
+/**
+ * TAMAMI BÜYÜK HARF metin Türkçe başlık düzenine: "HİZMETLERİMİZ" →
+ * "Hizmetlerimiz", "İLETİŞİM" → "İletişim". Menü başlıkları sık sık büyük
+ * harf ve Google reklamda aşırı büyük harfi politika gereği reddediyor;
+ * reddedilen bir öğe atomik isteğin tamamını düşürürdü. Dönüşüm `tr`
+ * yerel ayarıyla (I/İ, ı/i): İngilizce kural "İLETİŞİM"i "Ileti̇şim" yapar.
+ * Karışık yazılmış metne dokunulmaz (marka adı "AdTech" gibi).
+ */
+export function buyukHarfDuzelt(metin: string): string {
+  const harfler = metin.replace(/[^\p{L}]/gu, '');
+  if (!harfler || harfler !== harfler.toLocaleUpperCase('tr') || harfler === harfler.toLocaleLowerCase('tr')) return metin;
+  return metin
+    .toLocaleLowerCase('tr')
+    .split(' ')
+    .map((k) => (k ? k.charAt(0).toLocaleUpperCase('tr') + k.slice(1) : k))
+    .join(' ');
+}
+
+/**
+ * Tekillik anahtarı SON adresten: alan adı küçük harf, `www.` ve sondaki `/`
+ * atılır. Yönlendirme sonrası iki aday aynı sayfaya düşebilir; ikisi de
+ * bağlantı olsaydı Google aynı adresli bağlantıyı reddeder ya da göstermez
+ * ve ekran "2 site bağlantısı" derdi.
+ */
+function adresAnahtari(adres: string): string {
+  try {
+    const u = new URL(adres);
+    return `${u.hostname.toLowerCase().replace(/^www\./, '')}${u.pathname.replace(/\/+$/, '').toLowerCase()}${u.search}`;
+  } catch {
+    return adres;
+  }
 }
 
 /** Metni iki satıra KIRPMADAN böler; sığmıyorsa `null`. */
@@ -182,15 +239,24 @@ function ikiSatir(metin: string, sinir: number): [string, string] | null {
  * Aynı metin iki sayfada çıkarsa ikincisi atlanır (Google aynı metni iki
  * bağlantıda reddediyor). İkiden az bağlantı çıkarsa HİÇ kurulmaz.
  */
-export function siteBaglantilariUret(sayfalar: readonly SiteAltSayfasi[], markaAdi: string | null = null): SiteBaglantisi[] {
+/**
+ * `disla`: bağlantı OLAMAYAN son adresler — ana sayfa ve reklamın kendi
+ * hedef adresi. Eski bir alt sayfa ana sayfaya yönleniyorsa o bağlantı
+ * reklamın zaten gittiği yere gider: Google onu bağlantı saymaz, ekran sayar.
+ */
+export function siteBaglantilariUret(sayfalar: readonly SiteAltSayfasi[], markaAdi: string | null = null, disla: readonly string[] = []): SiteBaglantisi[] {
   const marka = markaAdi?.toLocaleLowerCase('tr-TR').trim() ?? null;
   const sonuc: SiteBaglantisi[] = [];
   const metinler = new Set<string>();
+  const adresler = new Set<string>(disla.map(adresAnahtari));
   for (const s of sayfalar) {
     if (sonuc.length >= SITE_BAGLANTISI_EN_COK) break;
-    const adaylar = [...(s.baslik ? basligiBol(s.baslik) : []).filter((p) => p.toLocaleLowerCase('tr-TR') !== marka), ...(s.baglantiMetni ? [s.baglantiMetni] : [])];
+    const adresK = adresAnahtari(s.adres);
+    if (adresler.has(adresK)) continue;
+    const adaylar = [...(s.baslik ? basligiBol(s.baslik) : []).filter((p) => p.toLocaleLowerCase('tr-TR') !== marka), ...(s.baglantiMetni ? [s.baglantiMetni] : [])].map(buyukHarfDuzelt);
     const metin = adaylar.find((x) => karakterSayisi(x) >= 2 && karakterSayisi(x) <= SITE_BAGLANTI_METNI_SINIRI);
     if (!metin) continue;
+    adresler.add(adresK);
     const anahtar = metin.toLocaleLowerCase('tr-TR');
     if (metinler.has(anahtar)) continue;
     metinler.add(anahtar);

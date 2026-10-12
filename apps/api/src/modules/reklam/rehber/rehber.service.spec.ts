@@ -11,6 +11,7 @@ import { ReklamYayinService } from '../yayin.service';
 import type { ReklamKuyrugu } from '../reklam-kuyrugu';
 import { RehberService, platformaGiderken } from './rehber.service';
 import { GeminiIstemcisi } from '../../../yapay-zeka/gemini';
+import { PlatformApiError } from '../../connections/provider.types';
 
 /*
  * TABLODAN BAĞIMSIZ: bu dosyanın testleri "Siteme gelsinler"i DENEME açılışı
@@ -57,10 +58,16 @@ const CTX = {
 /** Sahte GAQL cevabı (sorguya göre) ve son mutate gövdesi. */
 let araCevabi: (q: string) => unknown[] = () => [];
 let sonGovde: { mutateOperations: Array<Record<string, { create?: Record<string, unknown> }>> } | null = null;
+/** Verilirse mutate gövdeye bakıp bir hata fırlatabilir (Google reddi). */
+let mutateHatasi: ((g: { mutateOperations: Array<Record<string, { create?: Record<string, unknown> }>> }) => Error | null) | null = null;
+const tumGovdeler: Array<{ mutateOperations: Array<Record<string, { create?: Record<string, unknown> }>> }> = [];
 const sahteGoogle = {
   rehberMutate: async (_c: unknown, g: { validateOnly: boolean; mutateOperations: Array<Record<string, { create?: Record<string, unknown> }>> }) => {
     cagrilar.push(`mutate:${g.validateOnly}`);
     sonGovde = g;
+    tumGovdeler.push(g);
+    const h = mutateHatasi?.(g);
+    if (h) throw h;
     return [];
   },
   rehberAra: async (_c: unknown, q: string) => {
@@ -138,8 +145,12 @@ beforeEach(async () => {
   cagrilar = [];
   araCevabi = () => [];
   sonGovde = null;
+  mutateHatasi = null;
+  tumGovdeler.length = 0;
   svc.siteHtmlOku = async () => ({ ok: false, sebep: 'test: ağ yok' });
   (svc as unknown as { uzantiOnbellek: Map<string, unknown> }).uzantiOnbellek.clear();
+  // Piksel önbelleği de servis örneğinde yaşıyor (Ajan 4, N-5).
+  (svc as unknown as { sitePikselOnbellek: Map<string, unknown> }).sitePikselOnbellek.clear();
   kuyrukIsleri = [];
   yz = null;
   whatsappCevabi = { number: null, hata: null };
@@ -951,6 +962,88 @@ describe('Meta form listesi ve sayfa ön koşulları (Dalga 2)', () => {
 // SİTEME GELSİNLER — Google teklif eşiği ve uzantılar SERVİS yolundan (2026-10-12)
 // =============================================================================
 describe('Siteme gelsinler (Google): eşik ve uzantılar prova gövdesinde', () => {
+  const ALT = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+  const yediSayfa = () => {
+    const sayfalar: Record<string, string> = { 'https://ornek.com.tr/': ALT.map((x) => `<a href="/${x}">S ${x}</a>`).join('') };
+    for (const x of ALT) sayfalar[`https://ornek.com.tr/${x}`] = `<title>SAYFA ${x.toLocaleUpperCase('tr')} | Örnek</title>`;
+    return sayfalar;
+  };
+
+  it('N-2: alt sayfa en çok 6, aynı anda en çok 3 istek; tamamı büyük harf başlık Türkçe başlık düzeninde', async () => {
+    const sayfalar = yediSayfa();
+    let acik = 0;
+    let enCok = 0;
+    const istenen: string[] = [];
+    svc.siteHtmlOku = async (a) => {
+      istenen.push(a);
+      acik++;
+      enCok = Math.max(enCok, acik);
+      await new Promise((r) => setTimeout(r, 5));
+      acik--;
+      return sayfalar[a] ? { ok: true, html: sayfalar[a]!, adres: a } : { ok: false, sebep: '404' };
+    };
+    const r = await tamRehber();
+    await svc.prova(CTX, r.id);
+    expect(istenen).toHaveLength(1 + 6);
+    expect(enCok).toBeLessThanOrEqual(3);
+    expect(enCok).toBeGreaterThan(1);
+    const metinler = (sonGovde!.mutateOperations as Array<Record<string, { create?: Record<string, unknown> }>>)
+      .map((o) => (o.assetOperation?.create?.sitelinkAsset as { linkText?: string } | undefined)?.linkText)
+      .filter(Boolean);
+    expect(metinler).toEqual(['Sayfa A', 'Sayfa B', 'Sayfa C', 'Sayfa D']);
+  });
+
+  it('N-3: Google YALNIZ uzantı öğelerini reddederse uzantısız yeniden prova; ekran ve not sebebi söyler', async () => {
+    svc.siteHtmlOku = async (a) => (yediSayfa()[a] ? { ok: true, html: yediSayfa()[a]!, adres: a } : { ok: false, sebep: '404' });
+    mutateHatasi = (g) => {
+      const i = g.mutateOperations.findIndex((o) => 'assetOperation' in o);
+      if (i < 0) return null;
+      return new PlatformApiError('google', 'permanent', 'reddedildi', {
+        raw: { error: { details: [{ errors: [{ errorCode: { policyFindingError: 'POLICY_FINDING' }, message: 'Bağlantı metni politika ihlali', location: { fieldPathElements: [{ fieldName: 'mutate_operations', index: i }] } }] }] } },
+      } as never);
+    };
+    const r = await tamRehber();
+    const p = await svc.prova(CTX, r.id);
+    expect(tumGovdeler).toHaveLength(2);
+    expect(tumGovdeler[1]!.mutateOperations.some((o) => 'assetOperation' in o)).toBe(false);
+    expect(p.google).toMatchObject({ tur: 'gecti' });
+    expect((p.google as { not: string }).not).toContain('Site bağlantıları Google tarafından reddedildi: Bağlantı metni politika ihlali; reklam bağlantısız kuruldu.');
+    expect((await svc.oku(CTX, r.id)).kararlar.find((x) => x.kod === 'UZANTI')!.google!.deger).toBe(
+      'Site bağlantıları Google tarafından reddedildi: Bağlantı metni politika ihlali; reklam bağlantısız kuruldu',
+    );
+    // Yayına giden çocuk taslak da UZANTISIZ (prova ile yayın aynı gövde).
+    const [c] = await h.q<{ alanlar: { siteBaglantilari?: unknown[] } }>(
+      `SELECT s.alanlar FROM reklam_taslagi t JOIN taslak_surumu s ON s.taslak_id = t.id AND s.surum_no = t.aktif_surum_no WHERE t.platform = 'google'`,
+    );
+    expect(c!.alanlar.siteBaglantilari).toEqual([]);
+    expect(await h.q(`SELECT 1 FROM reklam_taslagi WHERE platform = 'google'`)).toHaveLength(1);
+  });
+
+  it('N-3: uzantı DIŞINDA bir hata da varsa yeniden denenmez, ret olduğu gibi döner', async () => {
+    svc.siteHtmlOku = async (a) => (yediSayfa()[a] ? { ok: true, html: yediSayfa()[a]!, adres: a } : { ok: false, sebep: '404' });
+    mutateHatasi = (g) => {
+      const i = g.mutateOperations.findIndex((o) => 'assetOperation' in o);
+      return new PlatformApiError('google', 'permanent', 'reddedildi', {
+        raw: {
+          error: {
+            details: [
+              {
+                errors: [
+                  { errorCode: { a: 'X' }, message: 'öğe', location: { fieldPathElements: [{ fieldName: 'mutate_operations', index: Math.max(i, 0) }] } },
+                  { errorCode: { b: 'Y' }, message: 'başlık çok uzun', location: { fieldPathElements: [{ fieldName: 'mutate_operations', index: 0 }] } },
+                ],
+              },
+            ],
+          },
+        },
+      } as never);
+    };
+    const r = await tamRehber();
+    const p = await svc.prova(CTX, r.id);
+    expect(tumGovdeler).toHaveLength(1);
+    expect(p.google).toMatchObject({ tur: 'reddetti' });
+  });
+
   type Op = Record<string, { create?: Record<string, unknown> }>;
   const kampanya = () => (sonGovde!.mutateOperations as Op[]).find((o) => 'campaignOperation' in o)!.campaignOperation!.create!;
   const donusum = (etkin: boolean, sayi: number | string | undefined) => (q: string) =>
@@ -1000,6 +1093,31 @@ describe('Siteme gelsinler (Google): eşik ve uzantılar prova gövdesinde', () 
     expect(istenen).not.toContain('https://baska.com/');
     const u = (await svc.oku(CTX, r.id)).kararlar.find((x) => x.kod === 'UZANTI')!.google!;
     expect(u.deger).toBe('2 site bağlantısı: Hizmetlerimiz, Projeler');
+  });
+
+  /*
+   * AJAN 4 BULGU (Ö-TEKİL-ADRES) — KIRMIZI BIRAKILDI. Alt sayfa ANA SAYFAYA
+   * yönlenirse (`/eski-sayfa` → `/`) servis onu yine "açılan alt sayfa"
+   * sayıyor ve site bağlantısı reklamın kendi adresine gidiyor; iki aday
+   * aynı sayfaya yönlenirse iki bağlantı aynı adresi taşıyor.
+   */
+  it('KRİTİK (Ajan 4): ana sayfaya ya da aynı sayfaya yönlenen alt sayfa ikinci bağlantı OLMAZ', async () => {
+    const sayfalar: Record<string, { html: string; adres: string }> = {
+      'https://ornek.com.tr/': { html: '<a href="/eski">Eski</a><a href="/hizmet">Hizmet</a><a href="/hizmetler">Hizmetler</a><a href="/projeler">Projeler</a>', adres: 'https://ornek.com.tr/' },
+      'https://ornek.com.tr/eski': { html: '<title>Anasayfa</title>', adres: 'https://ornek.com.tr/' },
+      'https://ornek.com.tr/hizmet': { html: '<title>Hizmetler</title>', adres: 'https://ornek.com.tr/hizmetler' },
+      'https://ornek.com.tr/hizmetler': { html: '<title>Hizmetlerimiz</title>', adres: 'https://ornek.com.tr/hizmetler' },
+      'https://ornek.com.tr/projeler': { html: '<title>Projeler</title>', adres: 'https://ornek.com.tr/projeler' },
+    };
+    svc.siteHtmlOku = async (a) => (sayfalar[a] ? { ok: true, ...sayfalar[a]! } : { ok: false, sebep: '404' });
+    const r = await tamRehber();
+    await svc.prova(CTX, r.id);
+    const adresler = (sonGovde!.mutateOperations as Op[])
+      .filter((o) => 'assetOperation' in o)
+      .map((o) => (o.assetOperation!.create!.finalUrls as string[] | undefined)?.[0])
+      .filter((x): x is string => !!x);
+    expect(adresler).not.toContain('https://ornek.com.tr/');
+    expect(new Set(adresler).size).toBe(adresler.length);
   });
 
   it('site okunamazsa site bağlantısı KURULMAZ ve ekran yöneticinin cümlesini yazıyor', async () => {
@@ -1149,6 +1267,55 @@ describe('metin önerisi: görsel, önbellek, çapa (Dalga 2)', () => {
     const r = await medyaliRehber([{ varlikId: V1 }]);
     await expect(svc.metinOner(CTX, r.id, { varlikId: V2 })).rejects.toMatchObject({ status: 400 });
     expect(govdeler).toHaveLength(0);
+  });
+
+  /*
+   * Önbellek anahtarı workspace'i taşıyor: aynı görsel (aynı içerik özeti)
+   * başka bir workspace'te önbellekten dönmez. RLS testlerde KAPALI, yani
+   * bu iddiayı yalnız sorgunun `client_id` süzgeci tutuyor (mutasyonla
+   * doğrulandı).
+   */
+  it('KRİTİK (Ajan 4): aynı içerik özetli görsel başka workspace’te önbellekten DÖNMEZ', async () => {
+    const ortak = 'f'.repeat(64);
+    await varlik(V1, IDS.client, IDS.org, BAYT.length, { hash: ortak });
+    await varlik(KV, KARDES_WS, KARDES_ORG, BAYT.length, { hash: ortak });
+    const r1 = await medyaliRehber([{ varlikId: V1 }]);
+    await svc.metinOner(CTX, r1.id, { varlikId: V1 });
+    const r2 = await medyaliRehber([{ varlikId: KV }], KARDES_WS);
+    const m = await svc.metinOner(CTX, r2.id, { varlikId: KV });
+    expect(m.onbellekten).toBe(false);
+    expect(govdeler).toHaveLength(2);
+  });
+
+  /*
+   * AJAN 4 BULGU (Ö-ÖNBELLEK-KAPI) — KIRMIZI BIRAKILDI. Önbellek anahtarı
+   * (workspace, içerik özeti, amaç) REHBERİ taşımıyor ama uydurma kapısının
+   * kaynağı rehbere özel (site adresi, anahtar kelimeler). A rehberinde
+   * adresten doğrulanmış görünen yol, aynı görsel B rehberine bırakılınca
+   * önbellekten OLDUĞU GİBİ dönüyor; B'nin adresinde o kelime yok. Aynı yol
+   * fiyat için de açık: A'nın anahtar kelimesindeki fiyat B'de doğrulanmadan
+   * gelir. Öneri: önbellekten dönen sonuç güncel kaynakla
+   * `metinOnerisiTemizle`den YENİDEN geçsin (çağrı yok, bedava).
+   */
+  it('KRİTİK (Ajan 4): önbellekten dönen öneri GÜNCEL rehberin kaynağıyla yeniden süzülür', async () => {
+    await varlik(V1);
+    const r1 = await svc.olustur(CTX, IDS.client);
+    await svc.guncelle(CTX, r1.id, { surum: r1.surum, degisiklikler: [...TAM.filter((x) => x.alan !== 'hedefAdres'), g('hedefAdres', 'https://ornek.com.tr/villa'), g('medya', [{ varlikId: V1 }])] });
+    cevap = { ...cevap, gorunenYol: ['villa'] };
+    expect((await svc.metinOner(CTX, r1.id, { varlikId: V1 })).gorunenYol).toEqual(['villa']);
+    const r2 = await svc.olustur(CTX, IDS.client);
+    await svc.guncelle(CTX, r2.id, {
+      surum: r2.surum,
+      degisiklikler: [
+        ...TAM.filter((x) => x.alan !== 'hedefAdres' && x.alan !== 'anahtarKelimeler'),
+        g('hedefAdres', 'https://ornek.com.tr/ofis'),
+        g('anahtarKelimeler', [{ metin: 'kiralık ofis', aylikArama: 100 }]),
+        g('medya', [{ varlikId: V1 }]),
+      ],
+    });
+    const m = await svc.metinOner(CTX, r2.id, { varlikId: V1 });
+    expect(m.onbellekten).toBe(true);
+    expect(m.gorunenYol).toEqual([]);
   });
 
   it('KRİTİK: görünen yol adreste ya da kelimede geçmiyorsa atılır, geçiyorsa kalır', async () => {

@@ -166,6 +166,9 @@ export type GoogleDerleme =
         logo: number | null;
         aramaOgesi: number | null;
         gorseller?: Array<{ varlikId: string; sira: number }>;
+        /** Arama + site: uzantı bağlarının (CampaignAsset) sıraları; öğe bir önceki işlem. */
+        siteBaglantilari?: number[];
+        aciklamaMetinleri?: number[];
       };
       beklenen: GoogleBeklenen;
       atif: typeof GOOGLE_ATIF;
