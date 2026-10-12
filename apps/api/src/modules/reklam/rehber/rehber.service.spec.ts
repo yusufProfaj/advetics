@@ -482,7 +482,11 @@ describe('giriş listesi: satır alanları, arşiv ve geri getir', () => {
     const bas = kaynak.indexOf('async yayinla(');
     const govde = kaynak.slice(bas, kaynak.indexOf('await this.sebepleriYaz(', bas));
     if (bas < 0 || !govde) throw new Error('yayinla gövdesi bulunamadı — tarama boşa düşer');
-    const meta = govde.slice(govde.indexOf('if (acik.meta'), govde.indexOf('if (acik.google'));
+    // Kurulan küme `hedef` (yeniden denemede yalnız başlamamış platform).
+    const bm = govde.indexOf('if (hedef.meta');
+    const bg = govde.indexOf('if (hedef.google');
+    if (bm < 0 || bg < 0) throw new Error('platform dalları bulunamadı — tarama boşa düşer');
+    const meta = govde.slice(bm, bg);
     expect(meta).toContain('await yayindaYaz()');
     expect(govde).not.toMatch(/if \(baslayan > 0\)/);
   });

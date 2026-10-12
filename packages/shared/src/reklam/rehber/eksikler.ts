@@ -78,6 +78,37 @@ const ADIM: Record<RehberAlanAdi, RehberAdimi> = {
   butce: 5, metaPayiYuzde: 5, takvim: 5,
 };
 
+/**
+ * Alanın ekran adı: KAYNAK eksiği hangi alan olduğunu söylemeli ("Bu alanı
+ * kendin seç" tek başına kullanıcıyı bütün adımları gezmeye gönderiyordu).
+ * Taslağın karşılığı `TASLAK_ALAN_ETIKETI`; `Record`, yeni alanda derlemeyi kırar.
+ */
+export const REHBER_ALAN_ETIKETI: Record<RehberAlanAdi, string> = {
+  amac: 'Amaç',
+  platformlar: 'Platformlar',
+  metaHesabiId: 'Meta reklam hesabı',
+  googleHesabiId: 'Google Ads hesabı',
+  sayfaId: 'Facebook sayfası',
+  instagramId: 'Instagram hesabı',
+  youtubeKanaliId: 'YouTube kanalı',
+  pikselId: 'Meta pikseli',
+  konumlar: 'Konum',
+  enDusukYas: 'En düşük yaş',
+  yasAraligi: 'Yaş aralığı',
+  ekKategoriler: 'Özel reklam kategorisi',
+  hedefAdres: 'Site adresi',
+  telefon: 'Telefon numarası',
+  whatsappNumarasi: 'WhatsApp numarası',
+  formSablonuId: 'Form',
+  medya: 'Görseller',
+  youtubeVideo: 'YouTube videosu',
+  metin: 'Reklam metni',
+  anahtarKelimeler: 'Anahtar kelimeler',
+  butce: 'Bütçe',
+  metaPayiYuzde: 'Meta payı',
+  takvim: 'Tarih',
+};
+
 const HTTPS = /^https:\/\/[^\s/]+\.[^\s]+/;
 
 /**
@@ -123,7 +154,8 @@ export function rehberEksikleri(a: RehberAlanlari, b: RehberEksikBaglami): Rehbe
   for (const [ad, izinli] of Object.entries(REHBER_IZINLI_KAYNAKLAR) as Array<[RehberAlanAdi, readonly AlanKaynagi[]]>) {
     const d = a[ad];
     if (d && !izinli.includes(d.kaynak)) {
-      ekle(ad, null, 'KAYNAK', d.kaynak === 'ai_onerisi' ? 'Önerilen metni gözden geçirip onayla' : 'Bu alanı kendin seç');
+      const etiket = REHBER_ALAN_ETIKETI[ad];
+      ekle(ad, null, 'KAYNAK', d.kaynak === 'ai_onerisi' ? `${etiket}: öneriyi gözden geçirip onayla` : `${etiket}: bu alanı kendin seç`);
     }
   }
 

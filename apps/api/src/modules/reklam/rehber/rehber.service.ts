@@ -40,6 +40,7 @@ import {
   rehberdenMeta,
   rehberYerlesimPlani,
   taslakAlanlariSchema,
+  taslakEksikleri,
   uyumDenetle,
   type AnahtarKelimeOnerisi,
   type GoogleDerlemeGirdisi,
@@ -1237,7 +1238,7 @@ export class RehberService {
    */
   async prova(ctx: TenantContext, id: string): Promise<RehberProvaSonucu> {
     let s = await this.satir(ctx, id);
-    if (s.durum !== 'taslak') throw new ConflictException('Bu rehber için prova yapılmaz.');
+    if (s.durum !== 'taslak' && s.durum !== 'yayinda') throw new ConflictException('Bu rehber için prova yapılmaz.');
     const a = alanlariOku(s);
     await this.sayfaTazele(ctx, s.client_id, a);
     await this.googleSatisTazele(ctx, s.client_id, a);
@@ -1250,10 +1251,13 @@ export class RehberService {
     const ozet = rehberOzeti(a);
     const acik = acikPlatformlar(a, b.ajansYoneticisi);
     const zaman = new Date().toISOString();
+    // Yayındaki rehberde YALNIZ başlamamış platform prova edilir: başlamış
+    // platformu yeniden prova etmek onu yeniden kurmanın ilk adımı olurdu.
+    const hedef = await this.hedefPlatformlar(ctx, s, acik);
 
-    const meta = acik.meta ? await this.metaProva(ctx, s, a, b, acik, zaman) : null;
+    const meta = hedef.meta ? await this.metaProva(ctx, s, a, b, acik, zaman) : null;
     s = await this.satir(ctx, id);
-    const google = acik.google ? await this.googleProva(ctx, s, a, b, acik) : null;
+    const google = hedef.google ? await this.googleProva(ctx, s, a, b, acik) : null;
 
     // Prova bu İÇERİĞE yapıldı. Arada rehber değiştiyse (başka sekme) kayıt
     // eski özetle kalır ve yayın kapısı "yeniden prova et" der.
@@ -1318,6 +1322,18 @@ export class RehberService {
   private async metaProva(ctx: TenantContext, s: RehberSatiri, a: RehberAlanlari, b: Baglam, acik: Record<RehberPlatformu, boolean>, zaman: string): Promise<PlatformProvaSonucu> {
     const t = rehberdenMeta(a, acik, b.meta?.currency ?? b.paraBirimi, zaman, b.medyaOranlari ?? new Map(), b.sitePikseli);
     if (t.tur === 'ret') return { tur: 'reddetti', zaman, mesajlar: t.kodlar.map((k) => `Eksik: ${k}`) };
+    /*
+     * KAYNAK KİLİDİ PROVADA DA (2026-10-12 canlı hatası). `provaIste` bu
+     * kilidi BİLEREK atlıyor (AdvCampaign sohbetinde öneri provadan sonra
+     * onaylanıyor), yayın kapısı ise uyguluyor. Rehberde ikisinin arasında
+     * kullanıcının kapatabileceği bir adım yok: prova "geçti" deyip yayında
+     * "Bu alanı kendin seç" ile durmak, Google kurulmuşken Meta'yı hiç
+     * başlatmamak demekti. Türetme kaynakları uyarlıyor
+     * (`rehberKaynaklariniTasi`); bu kontrol onun bozulduğu gün aynı hatayı
+     * YAYINDAN ÖNCE ve alan adıyla söyler.
+     */
+    const kilit = taslakEksikleri(t.deger).filter((e) => e.kod === 'KAYNAK');
+    if (kilit.length) return { tur: 'reddetti', zaman, mesajlar: kilit.map((e) => e.metin) };
     try {
       let taslakId = s.meta_taslak_id;
       if (!taslakId) {
@@ -1449,7 +1465,7 @@ export class RehberService {
 
   async yayinla(ctx: TenantContext, id: string, istenenOzet: string): Promise<RehberYayinDurumu> {
     const s = await this.satir(ctx, id);
-    if (s.durum !== 'taslak') throw new ConflictException('Bu rehber zaten yayına alındı ya da arşivde.');
+    if (s.durum !== 'taslak' && s.durum !== 'yayinda') throw new ConflictException('Bu rehber zaten yayına alındı ya da arşivde.');
     const a = alanlariOku(s);
     // Yayın da TAZE okur: prova ile yayın arasında önbellek (15 dk) dolmuş
     // olabilir ve bilinmeyen form hâli aşağıda engele çevriliyor.
@@ -1458,9 +1474,12 @@ export class RehberService {
     const b = await this.baglam(ctx, s.client_id, a);
     const eksikler = platformaGiderken(rehberEksikleri(a, b));
     const acik = acikPlatformlar(a, b.ajansYoneticisi);
+    // `acik` TÜRETME için (bütçe payı açık kümeyle bölünüyor; yeniden denemede
+    // daraltılsaydı Meta bütün bütçeyi alırdı), `hedef` KURULACAK platformlar.
+    const hedef = await this.hedefPlatformlar(ctx, s, acik);
     const tx = this.tx(ctx);
     const k = await rehberYayinKapilari(
-      { istenenOzet, guncelOzet: rehberOzeti(a), provaOzeti: s.prova_ozeti, eksikler, acik },
+      { istenenOzet, guncelOzet: rehberOzeti(a), provaOzeti: s.prova_ozeti, eksikler, acik: hedef },
       {
         prova: (p) => this.provaHali(ctx, s, p),
         yazma: (p) => (p === 'meta' ? metaYazmaAcikMi(tx, s.client_id) : googleYazmaAcikMi(tx, s.client_id)),
@@ -1509,23 +1528,48 @@ export class RehberService {
         return `Kurulum başlatılamadı: ${e instanceof Error ? e.message : String(e)}`;
       }
     };
-    if (acik.meta && s.meta_taslak_id) {
+    if (hedef.meta && s.meta_taslak_id) {
       const r = await dene(() => this.metaYayinBaslat(ctx, s.meta_taslak_id!, a, acik, b.meta?.currency ?? b.paraBirimi, { uyum: k.uyum, kapaliKalacak: !platformAcilabilirMi(amac, 'meta') }, b.medyaOranlari ?? new Map()));
       if (r) baslamayan.push({ platform: 'meta', taslakId: s.meta_taslak_id, yayinId: null, durum: null, sebep: r, kampanyaKimligi: null, duraklatilmisKalacak: !platformAcilabilirMi(amac, 'meta') });
       else await yayindaYaz();
     }
-    if (acik.google && s.google_taslak_id) {
+    if (hedef.google && s.google_taslak_id) {
       const r = await dene(() => this.googleYayinBaslat(ctx, s, a, b, k.uyum, !platformAcilabilirMi(amac, 'google')));
       if (r) baslamayan.push({ platform: 'google', taslakId: s.google_taslak_id, yayinId: null, durum: null, sebep: r, kampanyaKimligi: null, duraklatilmisKalacak: !platformAcilabilirMi(amac, 'google') });
       else await yayindaYaz();
     }
-    await this.sebepleriYaz(ctx, s, acik, baslamayan);
+    await this.sebepleriYaz(ctx, s, hedef, baslamayan);
     const d = await this.yayinDurumu(ctx, id);
     // Başlamayan platformun bu denemede yayın kaydı yok: satırı SEBEBİYLE
     // değiştirilir (eski bir yayın kaydını göstermek "başladı" sanılırdı).
     const yerine = (p: PlatformYayinOzeti) => baslamayan.find((x) => x.platform === p.platform) ?? p;
     const eksikler2 = baslamayan.filter((x) => !d.platformlar.some((p) => p.platform === x.platform));
     return { ...d, platformlar: [...d.platformlar.map(yerine), ...eksikler2] };
+  }
+
+  /**
+   * ═══ KURULACAK PLATFORMLAR — YENİDEN DENEME YALNIZ BAŞLAMAMIŞ OLANA ═══
+   *
+   * Taslaktaki rehberde açık platformların hepsi. YAYINDAKİ rehberde
+   * (bir platform başladı, öbürü başlamadı) yalnız YAYIN KAYDI OLMAYAN
+   * platform: 2026-10-12'de Google kuruldu, Meta KAYNAK kilidinde kaldı ve
+   * rehberi yeniden yayınlamanın yolu yoktu ("Aynı içerikle yeniden kur" yeni
+   * bir rehber açar ve Google'ı İKİNCİ kez kurar: para). Yayın kaydı olan
+   * platform (sonradan düşmüş olsa bile) burada ASLA hedef değil; o kaydın
+   * kendi yolları var (yeniden oku, geri al). Hiç hedef yoksa 409: aynı
+   * düğmeye iki kez basılması da buraya düşer.
+   */
+  private async hedefPlatformlar(ctx: TenantContext, s: RehberSatiri, acik: Record<RehberPlatformu, boolean>): Promise<Record<RehberPlatformu, boolean>> {
+    if (s.durum === 'taslak') return acik;
+    const kayitli = await this.tx(ctx)((t) =>
+      t.$queryRaw<Array<{ taslak_id: string }>>(Prisma.sql`
+        SELECT DISTINCT taslak_id::text FROM yayin
+         WHERE taslak_id = ANY (${[s.meta_taslak_id, s.google_taslak_id].filter((x): x is string => !!x)}::uuid[])`),
+    );
+    const basladi = (id: string | null) => !!id && kayitli.some((x) => x.taslak_id === id);
+    const hedef = { meta: acik.meta && !basladi(s.meta_taslak_id), google: acik.google && !basladi(s.google_taslak_id) };
+    if (!hedef.meta && !hedef.google) throw new ConflictException('Bu rehberin açık platformlarının hepsi yayına alındı; yeniden denenecek platform yok.');
+    return hedef;
   }
 
   /**

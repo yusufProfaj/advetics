@@ -681,6 +681,17 @@ export function geriAlinabilirMi(p: Pick<PlatformYayinOzeti, 'platform' | 'durum
  * okunamaz gösterdi; ekranda yalnız "Vazgeç ve arşivle" olduğu için Meta'da
  * EKSİKSİZ duran bir kurulumun tek yolu silmekti.
  */
+/**
+ * "Yeniden dene" düğmesi: platform HİÇ BAŞLAMADI (yayın kaydı yok, sebep
+ * var). 2026-10-12'de Google kuruldu, Meta başlamadı ve ekranda tek yol
+ * "Aynı içerikle yeniden kur"du: o YENİ bir rehber açar ve Google'ı ikinci
+ * kez kurar (para). Sunucu bu yolda yalnız yayın kaydı olmayan platformu
+ * prova edip kuruyor (`hedefPlatformlar`); kaydı olan satırda düğme yok.
+ */
+export function yenidenDenenebilirMi(p: Pick<PlatformYayinOzeti, 'durum' | 'yayinId' | 'sebep'>): boolean {
+  return p.yayinId === null && p.durum === null && !!p.sebep;
+}
+
 export function yenidenOkunabilirMi(p: Pick<PlatformYayinOzeti, 'platform' | 'durum' | 'yayinId'>): boolean {
   return p.platform === 'meta' && !!p.yayinId && p.durum === 'dogrulanamadi';
 }

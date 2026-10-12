@@ -22,6 +22,7 @@ import {
   alanAdi,
   bugun,
   geriAlinabilirMi,
+  yenidenDenenebilirMi,
   yenidenOkunabilirMi,
   yayinSonucuEtiketi,
   kurulumAdimlari,
@@ -491,6 +492,60 @@ function YenidenKontrol({ rehberId, ozet, guncelle }: { rehberId: string; ozet: 
   );
 }
 
+/**
+ * "Yeniden dene": HİÇ BAŞLAMAMIŞ platformu (yayın kaydı yok) yeniden prova
+ * edip kurar. Başlamış platforma dokunulmaz; sunucu da onu hedef almıyor.
+ * Meta provası kuyrukta: sonucu `GET /prova` ile yoklanır, geçince aynı
+ * içeriğin özetiyle yayınlanır. Prova reddederse platformun cümlesi görünür.
+ */
+function YenidenDene({ rehberId, ozet, guncelle }: { rehberId: string; ozet: PlatformYayinOzeti; guncelle: (y: RehberYayinDurumu) => void }) {
+  const [hal, setHal] = useState<'bos' | 'suruyor' | 'hata'>('bos');
+  const [hata, setHata] = useState<string | null>(null);
+  const yol = `/reklam/rehberler/${encodeURIComponent(rehberId)}`;
+  async function dene() {
+    setHal('suruyor');
+    setHata(null);
+    try {
+      let p = await apiFetch<RehberProvaSonucu>(`${yol}/prova`, { method: 'POST', body: '{}' });
+      // Meta provası kuyrukta: en çok ~2 dk yokla.
+      for (let i = 0; i < 40 && p[ozet.platform]?.tur === 'bekliyor'; i++) {
+        await new Promise((r) => setTimeout(r, 3000));
+        // Boş gövde (prova kaydı yok) = null; o turda son bilineni koru.
+        const okunan = (await apiFetch<RehberProvaSonucu | null>(`${yol}/prova`)) ?? null;
+        if (okunan) p = okunan;
+      }
+      const sonuc = p[ozet.platform];
+      if (sonuc?.tur !== 'gecti') {
+        setHata(
+          sonuc?.tur === 'reddetti'
+            ? sonuc.mesajlar.join(' ')
+            : sonuc?.tur === 'yapilmadi'
+              ? sonuc.sebep
+              : 'Kontrol bitmedi; birkaç dakika sonra yeniden dene.',
+        );
+        return setHal('hata');
+      }
+      guncelle(await apiFetch<RehberYayinDurumu>(`${yol}/yayinla`, { method: 'POST', body: JSON.stringify({ icerikOzeti: p.icerikOzeti }) }));
+      setHal('bos');
+    } catch (e) {
+      setHata(e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.');
+      setHal('hata');
+    }
+  }
+  return (
+    <div className={s.geriAlOnay}>
+      <button type="button" className={s.ikincil} disabled={hal === 'suruyor'} onClick={() => void dene()}>
+        {hal === 'suruyor' ? 'Deneniyor…' : `${REHBER_PLATFORM_ADI[ozet.platform]} için yeniden dene`}
+      </button>
+      {hal === 'hata' && hata && (
+        <span className={s.hataMetni} role="alert">
+          {hata}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function SonEkran({
   b,
   yayin,
@@ -563,6 +618,7 @@ export function SonEkran({
                 <i />
                 {yayinSonucuEtiketi(p)}
               </span>
+              {yenidenDenenebilirMi(p) && <YenidenDene rehberId={rehberId} ozet={p} guncelle={yayinGuncelle} />}
               {yenidenOkunabilirMi(p) && <YenidenKontrol rehberId={rehberId} ozet={p} guncelle={yayinGuncelle} />}
               {geriAlinabilirMi(p) && <GeriAl rehberId={rehberId} ozet={p} guncelle={yayinGuncelle} />}
             </div>

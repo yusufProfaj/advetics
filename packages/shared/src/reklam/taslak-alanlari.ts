@@ -145,8 +145,15 @@ export const taslakAlanlariSchema = z
   .strict();
 export type TaslakAlanlari = z.infer<typeof taslakAlanlariSchema>;
 
-/** Yapısal alanların İZİNLİ kaynakları (§ 02.5.2). */
-const IZINLI: Partial<Record<keyof TaslakAlanlari, readonly AlanKaynagi[]>> = {
+/**
+ * Yapısal alanların İZİNLİ kaynakları (§ 02.5.2). DIŞA AÇIK çünkü rehber
+ * türetmesi (`rehberdenMeta`) Meta çocuğunu bu listeye göre yazmak zorunda:
+ * rehberin kendi listesi (`REHBER_IZINLI_KAYNAKLAR`) 2026-10-12'de hazır
+ * workspace için genişledi, bu liste genişlemedi ve rehberin "hazır" dediği
+ * çocuk taslak yayın kapısında KAYNAK ile durdu (Siteme gelsinler, Meta hiç
+ * başlamadı). İkisinin uyumu `rehberKaynaklariniTasi` içinde.
+ */
+export const TASLAK_IZINLI_KAYNAKLAR: Partial<Record<keyof TaslakAlanlari, readonly AlanKaynagi[]>> = {
   niyet: ['kullanici'],
   reklamHesabiId: ['kullanici', 'workspace_profili'],
   sayfaId: ['kullanici', 'workspace_profili'],
@@ -165,6 +172,35 @@ const IZINLI: Partial<Record<keyof TaslakAlanlari, readonly AlanKaynagi[]>> = {
   // Elle "aktif" yazılabilseydi pikselsiz sitede LPV kurulurdu: yalnız
   // derleyicinin okuması karar.
   sitePikseli: ['derleyici'],
+};
+const IZINLI = TASLAK_IZINLI_KAYNAKLAR;
+
+/**
+ * Alanın EKRAN adı. KAYNAK eksiği önce yalnız "Bu alanı kendin seç" diyordu
+ * ve rehber yayınında Meta'nın başlamama sebebi tam olarak bu cümleydi:
+ * hangi alan olduğunu söylemeyen bir sebep, kullanıcıyı (ve teşhisi) bütün
+ * alanları tek tek denemeye gönderir. `Record`: yeni alan eklenince derleme
+ * burada kırılır, adsız bir eksik doğmaz.
+ */
+export const TASLAK_ALAN_ETIKETI: Record<keyof TaslakAlanlari, string> = {
+  niyet: 'Amaç',
+  reklamHesabiId: 'Reklam hesabı',
+  sayfaId: 'Facebook sayfası',
+  instagramId: 'Instagram hesabı',
+  konumlar: 'Konum',
+  enDusukYas: 'En düşük yaş',
+  ipucuYas: 'Yaş aralığı',
+  ipucuCinsiyet: 'Cinsiyet',
+  ekKategoriler: 'Özel reklam kategorisi',
+  butce: 'Bütçe',
+  takvim: 'Tarih',
+  kavramlar: 'Reklam fikirleri',
+  hedefAdres: 'Site adresi',
+  formSablonuId: 'Form',
+  telefon: 'Telefon numarası',
+  whatsappNumarasi: 'WhatsApp numarası',
+  pikselId: 'Meta pikseli',
+  sitePikseli: 'Piksel durumu',
 };
 
 export interface TaslakEksigi {
@@ -224,7 +260,8 @@ export function taslakEksikleri(a: TaslakAlanlari, baglam: EksikBaglami = {}): T
   for (const [ad, izinli] of Object.entries(IZINLI) as Array<[keyof TaslakAlanlari, readonly AlanKaynagi[]]>) {
     const d = a[ad];
     if (d && !izinli.includes(d.kaynak)) {
-      ekle(ad, 'KAYNAK', d.kaynak === 'ai_onerisi' ? 'Asistanın önerisini onayla' : 'Bu alanı kendin seç');
+      const etiket = TASLAK_ALAN_ETIKETI[ad];
+      ekle(ad, 'KAYNAK', d.kaynak === 'ai_onerisi' ? `${etiket}: asistanın önerisini onayla` : `${etiket}: bu alanı kendin seç`);
     }
   }
 

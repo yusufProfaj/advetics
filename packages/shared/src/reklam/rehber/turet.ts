@@ -15,11 +15,11 @@
  * prova ucundan da çağrılıyor ve sessizce boş bir alanla gövde kurmak, platformun
  * varsayılanına karar bırakmak demek.
  */
-import type { TaslakAlanlari } from '../taslak-alanlari';
+import { TASLAK_IZINLI_KAYNAKLAR, type TaslakAlanlari } from '../taslak-alanlari';
 import type { AlanDegeri } from '../taslak';
 import type { OzelKategori } from '../meta/hedefleme';
 import { REHBER_AMACLARI, type GoogleKurgu, type GoogleUlasma } from './amaclar';
-import { VARSAYILAN_META_PAYI, type MedyaMetni, type RehberAlanlari } from './alanlar';
+import { REHBER_IZINLI_KAYNAKLAR, VARSAYILAN_META_PAYI, type MedyaMetni, type RehberAlanAdi, type RehberAlanlari } from './alanlar';
 import { butceBol } from './butce';
 import { METIN_SINIRLARI, karakterSayisi } from './metin';
 import { reklamSetiPlani, setlereAyir, type GorselOrani, type SetPlani } from '../banner-seti';
@@ -102,6 +102,59 @@ export function googleMetinHavuzu(
 export type TuretmeSonucu<T> = { tur: 'tamam'; deger: T } | { tur: 'ret'; kodlar: string[] };
 
 const turetilmis = <T>(deger: T, zaman: string): AlanDegeri<T> => ({ deger, kaynak: 'derleyici', kim: null, zaman });
+
+/** Meta taslağının alanı ← rehberin hangi alanından KOPYALANIYOR (türetilenler hariç). */
+const REHBERDEKI_KARSILIGI: Partial<Record<keyof TaslakAlanlari, RehberAlanAdi>> = {
+  niyet: 'amac',
+  reklamHesabiId: 'metaHesabiId',
+  sayfaId: 'sayfaId',
+  instagramId: 'instagramId',
+  konumlar: 'konumlar',
+  enDusukYas: 'enDusukYas',
+  ipucuYas: 'yasAraligi',
+  ekKategoriler: 'ekKategoriler',
+  butce: 'butce',
+  takvim: 'takvim',
+  hedefAdres: 'hedefAdres',
+  formSablonuId: 'formSablonuId',
+  telefon: 'telefon',
+  whatsappNumarasi: 'whatsappNumarasi',
+  pikselId: 'pikselId',
+};
+
+/**
+ * ═══ REHBERİN KAYNAĞI → META TASLAĞININ KAYNAĞI ═══
+ *
+ * Canlı hata (2026-10-12, "Siteme gelsinler" Meta + Google): Google kuruldu,
+ * Meta HİÇ BAŞLAMADI ve kalıcı sebep yalnız "Bu alanı kendin seç"ti. Hazır
+ * workspace aynı gün rehberin izinli kaynaklarını genişletti: bütçe ve
+ * kategori `workspace_profili`, başlangıç `derleyici` ("yarın") ile dolu
+ * geliyor. Rehber bunları KARAR sayıyor (onay penceresi tutarı ve tarihi
+ * açıkça yazıyor, "Onayla" basılmadan hiçbir şey açılmıyor). Türetme ise
+ * alanı kaynağıyla AYNEN kopyalıyordu ve Meta taslağının listesi bu üç alanda
+ * yalnız `kullanici` kabul ediyor: çocuk taslak YAYIN KAPISINDA KAYNAK ile
+ * durdu. Prova bu kilidi bilerek atladığı için (`provaIste`) ekran "prova
+ * geçti" dedi ve hata ancak yayında görüldü.
+ *
+ * KURAL: rehberin KENDİ kapısından geçmiş bir kaynak (rehberin izinli
+ * listesinde), Meta taslağının listesinde yoksa `kullanici` olarak taşınır;
+ * `kim` ve `zaman` korunur. Kural gevşetilmiyor: rehberde izinli OLMAYAN bir
+ * kaynak (`ai_onerisi` gibi, "Kullan"a basılmamış öneri) AYNEN kalır ve Meta
+ * kilidi onu yine durdurur (çift kapı). Kaynağı zaten kabul edilen alana
+ * dokunulmaz: o rehberlerin içerik özeti değişmez, kayıtlı provaları
+ * bayatlamaz.
+ */
+export function rehberKaynaklariniTasi(t: TaslakAlanlari): TaslakAlanlari {
+  const out: Record<string, unknown> = { ...t };
+  for (const [hedef, kaynakAlan] of Object.entries(REHBERDEKI_KARSILIGI) as Array<[keyof TaslakAlanlari, RehberAlanAdi]>) {
+    const d = t[hedef];
+    const metaIzinli = TASLAK_IZINLI_KAYNAKLAR[hedef];
+    if (!d || !metaIzinli || metaIzinli.includes(d.kaynak)) continue;
+    if (!(REHBER_IZINLI_KAYNAKLAR[kaynakAlan] ?? []).includes(d.kaynak)) continue;
+    out[hedef] = { ...d, kaynak: 'kullanici' };
+  }
+  return out as TaslakAlanlari;
+}
 
 /**
  * Rehber → Meta taslağı. `zaman` dışarıdan: saf kalsın (saat okumak aynı
@@ -212,8 +265,9 @@ export function rehberdenMeta(
     ...(a.enDusukYas ? { enDusukYas: a.enDusukYas } : {}),
     ...(a.yasAraligi ? { ipucuYas: a.yasAraligi } : {}),
     ...(a.ekKategoriler ? { ekKategoriler: a.ekKategoriler } : {}),
-    // Bütçe KULLANICININ kararı; payı derleyici ayırdı ama kaynak kullanıcıda
-    // kalır (Meta'nın IZINLI listesi butce'de yalnız `kullanici` kabul ediyor).
+    // Bütçe KULLANICININ kararı; payı derleyici ayırdı ama kaynak rehberdeki
+    // gibi kalır ve Meta listesine `rehberKaynaklariniTasi` uyarlar (hazır
+    // workspace'te `workspace_profili` geliyor).
     butce: { ...a.butce!, deger: { tip: butce.tip, micros: pay.meta.toString() } },
     ...(a.takvim ? { takvim: a.takvim } : {}),
     kavramlar: turetilmis(kavramlar, zaman),
@@ -236,7 +290,7 @@ export function rehberdenMeta(
     // içerik özetini piksel her sustuğunda değiştirip provasını bayatlatırdı.
     ...(REHBER_AMACLARI[amac].meta.niyet === 'SITE' ? { sitePikseli: turetilmis(sitePikseli, zaman) } : {}),
   };
-  return { tur: 'tamam', deger: t };
+  return { tur: 'tamam', deger: rehberKaynaklariniTasi(t) };
 }
 
 /**

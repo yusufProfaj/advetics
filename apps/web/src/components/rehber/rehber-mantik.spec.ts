@@ -50,6 +50,7 @@ import {
   yayinBittiMi,
   yayinSonucu,
   geriAlinabilirMi,
+  yenidenDenenebilirMi,
   yenidenOkunabilirMi,
   videoBilgisiKapaktan,
   oneriyiSigdir,
@@ -859,6 +860,18 @@ describe('okunamayan kurulum (canlı WhatsApp turu, 2026-10-11)', () => {
     expect(yenidenOkunabilirMi({ platform: 'meta', durum: 'dogrulanamadi', yayinId: y })).toBe(true);
     expect(yenidenOkunabilirMi({ platform: 'google', durum: 'dogrulanamadi', yayinId: y })).toBe(false);
     expect(yenidenOkunabilirMi({ platform: 'meta', durum: 'fark_var', yayinId: y })).toBe(false);
+  });
+});
+
+describe('başlamamış platformu yeniden dene (canlı, 2026-10-12: Google kuruldu, Meta başlamadı)', () => {
+  const y = '00000000-0000-4000-8000-000000000001';
+  it('KRİTİK: yalnız yayın kaydı OLMAYAN ve sebebi olan satırda; başlamış platformda asla', () => {
+    expect(yenidenDenenebilirMi({ durum: null, yayinId: null, sebep: 'Tarih: bu alanı kendin seç' })).toBe(true);
+    // Başlamış (kaydı var) platform: düğme yeniden kurmanın yolu olurdu.
+    expect(yenidenDenenebilirMi({ durum: 'kurulamadi', yayinId: y, sebep: 'x' })).toBe(false);
+    expect(yenidenDenenebilirMi({ durum: 'on_kontrol', yayinId: y, sebep: null })).toBe(false);
+    // Sebepsiz null: henüz başlıyor, hata değil.
+    expect(yenidenDenenebilirMi({ durum: null, yayinId: null, sebep: null })).toBe(false);
   });
 });
 
