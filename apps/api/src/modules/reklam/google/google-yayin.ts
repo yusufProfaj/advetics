@@ -186,6 +186,13 @@ export interface GoogleOkunan {
   uzantilar?: GoogleUzantiBeklentisi | null;
   /** Arama öğeleri (g-1.2.0), İÇERİKLE; onay durumu yine okunmuyor. */
   ogeler?: GoogleOgeBeklentisi | null;
+  /**
+   * Öğe sorgusu DÜŞTÜYSE sebebi ("alan seçilemez" vb.). Ana kampanya geri
+   * okuması tamamlanıyor, öğe kıyası YAPILMIYOR ve bu alan ham kayda
+   * (`geri_okuma.ham`) giriyor: sessiz değil, ama ölçülmemiş bir GAQL alanı
+   * bütün Arama yayınlarını "okunamadı"da tutmuyor.
+   */
+  ogeOkumaHatasi?: string;
 }
 
 export interface GeriOkumaSatiri {
@@ -234,7 +241,7 @@ export function googleGeriOkumaKarsilastir(b: GoogleBeklenen, o: GoogleOkunan): 
   if (b.uzantilar) kiyasla('uzantilar', uzantiKumesi(b.uzantilar), o.uzantilar ? uzantiKumesi(o.uzantilar) : null);
   // Arama öğeleri ALAN ALAN: hangi öğenin ayrıştığı satırda görünsün.
   // Beklenmeyen ama bağlı öğe (beklenen null, okunan dolu) de fark.
-  if (b.ogeler) {
+  if (b.ogeler && !o.ogeOkumaHatasi) {
     const ok = o.ogeler ?? null;
     for (const alan of ['isletmeAdi', 'logo', 'snippet', 'promosyon', 'fiyat'] as const) {
       kiyasla(`oge.${alan}`, b.ogeler[alan], ok ? ok[alan] : null);
@@ -374,19 +381,44 @@ interface OgeSatiri {
  * int64 alanlar (percent_off, amount_micros) JSON'da DİZGE geliyor; ikisi de
  * dizgeye indirgenip kıyaslanıyor. Alan adları v25 başvurusundan, ÖLÇÜLMEDİ.
  */
-async function ogeleriOku(port: GoogleYayinPortu, ctx: FetchContext, kampanyaId: string): Promise<GoogleOgeBeklentisi> {
-  const satirlar = await port.ara<OgeSatiri>(
-    ctx,
-    `SELECT campaign.id, campaign_asset.field_type, campaign_asset.status, campaign_asset.source,
-            asset.text_asset.text, asset.structured_snippet_asset.header, asset.structured_snippet_asset.values,
-            asset.promotion_asset.promotion_target, asset.promotion_asset.percent_off, asset.promotion_asset.money_amount_off.amount_micros,
-            asset.promotion_asset.start_date, asset.promotion_asset.end_date,
-            asset.price_asset.type, asset.price_asset.price_offerings
+/*
+ * PROMOSYON VE FİYAT ALANLARI YALNIZ O ÖĞE GÖNDERİLDİYSE SORULUR (canlı
+ * risk, Ajan 4): `asset.price_asset.price_offerings` ve
+ * `money_amount_off.amount_micros` GAQL'de seçilebilirliği ÖLÇÜLMEDİ; her
+ * Arama geri okumasında sorulsaydı Google'ın tek bir "seçilemez" cevabı
+ * BÜTÜN Arama yayınlarını takardı. Beklenmeyen ama bağlı bir öğe yine
+ * görünür: tür WHERE'de, içerik seçilmese de satır gelir ve boş içerikle
+ * beklentiden ayrışır (fark).
+ */
+export function ogeSorgusu(kampanyaId: string, b: Pick<GoogleOgeBeklentisi, 'promosyon' | 'fiyat'>): string {
+  const alanlar = [
+    'campaign.id',
+    'campaign_asset.field_type',
+    'campaign_asset.status',
+    'campaign_asset.source',
+    'asset.text_asset.text',
+    'asset.structured_snippet_asset.header',
+    'asset.structured_snippet_asset.values',
+    ...(b.promosyon
+      ? [
+          'asset.promotion_asset.promotion_target',
+          'asset.promotion_asset.percent_off',
+          'asset.promotion_asset.money_amount_off.amount_micros',
+          'asset.promotion_asset.start_date',
+          'asset.promotion_asset.end_date',
+        ]
+      : []),
+    ...(b.fiyat ? ['asset.price_asset.type', 'asset.price_asset.price_offerings'] : []),
+  ];
+  return `SELECT ${alanlar.join(', ')}
        FROM campaign_asset
       WHERE campaign.id = ${kampanyaId}
         AND campaign_asset.field_type IN ('BUSINESS_NAME', 'BUSINESS_LOGO', 'STRUCTURED_SNIPPET', 'PROMOTION', 'PRICE')
-        AND campaign_asset.status != 'REMOVED'`,
-  );
+        AND campaign_asset.status != 'REMOVED'`;
+}
+
+async function ogeleriOku(port: GoogleYayinPortu, ctx: FetchContext, kampanyaId: string, b: GoogleOgeBeklentisi): Promise<GoogleOgeBeklentisi> {
+  const satirlar = await port.ara<OgeSatiri>(ctx, ogeSorgusu(kampanyaId, b));
   const canli = satirlar.filter((x) => x.campaignAsset?.status !== 'REMOVED' && x.campaignAsset?.source !== 'AUTOMATICALLY_CREATED');
   const tur = (t: string) => canli.filter((x) => x.campaignAsset?.fieldType === t);
   const dizge = (v: string | number | undefined) => (v === undefined || v === null ? null : String(v));
@@ -497,8 +529,28 @@ export async function googleGeriOku(port: GoogleYayinPortu, ctx: FetchContext, k
     ...(b?.gorselReklam ? { gorselReklam: await gorselReklamOku(port, ctx, kampanyaId) } : {}),
     ...(b?.varlikGrubu ? { varlikGrubu: await varlikGrubuOku(port, ctx, kampanyaId) } : {}),
     ...(b?.uzantilar ? { uzantilar: await uzantilariOku(port, ctx, kampanyaId) } : {}),
-    ...(b?.ogeler ? { ogeler: await ogeleriOku(port, ctx, kampanyaId) } : {}),
+    ...(b?.ogeler ? await ogeleriGuvenli(port, ctx, kampanyaId, b.ogeler) : {}),
   };
+}
+
+/**
+ * Öğe okuması ayrı bir hata sınırında: düşerse ana geri okuma tamamlanır,
+ * öğe kısmı "okunamadı: sebep" olarak kalır (kıyaslanmaz, ham kayıtta ve
+ * log'da görünür).
+ */
+async function ogeleriGuvenli(
+  port: GoogleYayinPortu,
+  ctx: FetchContext,
+  kampanyaId: string,
+  b: GoogleOgeBeklentisi,
+): Promise<{ ogeler: GoogleOgeBeklentisi } | { ogeOkumaHatasi: string }> {
+  try {
+    return { ogeler: await ogeleriOku(port, ctx, kampanyaId, b) };
+  } catch (e) {
+    const m = `okunamadı: ${e instanceof Error ? e.message : String(e)}`.slice(0, 500);
+    logger.warn(`kampanya=${kampanyaId}: Arama öğeleri ${m}`);
+    return { ogeOkumaHatasi: m };
+  }
 }
 
 /**

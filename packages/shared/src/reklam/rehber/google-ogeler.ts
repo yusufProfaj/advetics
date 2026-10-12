@@ -26,6 +26,7 @@
 import { z } from 'zod';
 import { karakterSayisi } from './metin';
 import { GOOGLE_ISLETME_ADI_EN_COK, GOOGLE_ORAN_PAYI } from './google-gorsel';
+import { kisaOgeSorunu } from './google-uzanti';
 
 const tarih = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Tarih YYYY-MM-DD olmalı');
 
@@ -97,14 +98,34 @@ export const rehberFiyatListesiSchema = z.object({
 });
 export type RehberFiyatListesi = z.infer<typeof rehberFiyatListesiSchema>;
 
-/** Promosyonun girişteki sorunu; yoksa `null`. Eksik listesi ve öğe seçimi AYNI fonksiyon. */
-export function promosyonSorunu(p: RehberPromosyon): string | null {
+/**
+ * TAKVİMDE VAR MI (Ajan 4, N-1): şema yalnız YYYY-MM-DD BİÇİMİNE bakıyor ve
+ * "2026-02-30" geçiyordu. Google onu öğe hatasıyla reddederse öğe reddi dalı
+ * BÜTÜN öğeleri atıp yeniden prova ediyor: bir yazım hatası altı öğeyi
+ * götürürdü. UTC'de kurup geri okumak saat diliminden bağımsız.
+ */
+export function gercekTarihMi(t: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(t);
+  if (!m) return false;
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  return d.getUTCFullYear() === Number(m[1]) && d.getUTCMonth() === Number(m[2]) - 1 && d.getUTCDate() === Number(m[3]);
+}
+
+/**
+ * Promosyonun girişteki sorunu; yoksa `null`. Eksik listesi, panel ve öğe
+ * seçimi AYNI fonksiyon. `bugun` (hesabın saat diliminde, YYYY-MM-DD)
+ * verilirse geçmiş bitiş de sorun: bitmiş bir indirimi reklama koymak yalan.
+ */
+export function promosyonSorunu(p: RehberPromosyon, bugun?: string): string | null {
   const h = p.hedef.trim();
   if (!h) return 'Kampanyanın neyi kapsadığını yaz';
   if (karakterSayisi(h) > PROMOSYON_HEDEF_SINIRI) return `Kampanya konusu en çok ${PROMOSYON_HEDEF_SINIRI} karakter`;
   if (p.indirim.tur === 'tutar' && BigInt(p.indirim.micros) <= 0n) return 'İndirim tutarı sıfırdan büyük olmalı';
   if (!p.bitis) return 'Kampanyanın bitiş tarihini yaz; süresiz indirim kampanya bitince de reklamda kalır';
+  if (!gercekTarihMi(p.bitis)) return `Bitiş tarihi takvimde yok (${p.bitis})`;
+  if (p.baslangic && !gercekTarihMi(p.baslangic)) return `Başlangıç tarihi takvimde yok (${p.baslangic})`;
   if (p.baslangic && p.baslangic > p.bitis) return 'Kampanya bitişi başlangıçtan önce';
+  if (bugun && p.bitis < bugun) return 'Kampanyanın bitiş tarihi geçmiş';
   return null;
 }
 
@@ -171,6 +192,11 @@ export interface GoogleOgeKaynagi {
    * edildi. Bütün isteğe bağlı öğeler "eklenmedi: Google reddetti" olur.
    */
   googleReddi?: string | null;
+  /**
+   * Logo DOSYASI okunamadıysa sebebi (Ajan 4, Ö-B: ENOENT bütün provayı
+   * düşürüyordu). Logo isteğe bağlı bir öğe: yalnız o atlanır.
+   */
+  logoSorunu?: string | null;
 }
 
 export type GoogleOgeKodu = 'ARAMA' | 'ISLETME_ADI' | 'LOGO' | 'SNIPPET' | 'PROMOSYON' | 'FIYAT';
@@ -217,10 +243,11 @@ export interface GoogleAramaOgeleri {
 
 export const BOS_ARAMA_OGELERI: GoogleAramaOgeleri = { telefon: null, isletmeAdi: null, logoVarlikId: null, snippet: null, promosyon: null, fiyat: null };
 
-function tekil(xs: readonly string[]): { degerler: string[]; uzun: number } {
+function tekil(xs: readonly string[]): { degerler: string[]; uzun: number; yasak: number } {
   const gorulen = new Set<string>();
   const degerler: string[] = [];
   let uzun = 0;
+  let yasak = 0;
   for (const ham of xs) {
     const v = ham.replace(/\s+/g, ' ').trim();
     if (!v) continue;
@@ -228,12 +255,19 @@ function tekil(xs: readonly string[]): { degerler: string[]; uzun: number } {
       uzun++;
       continue;
     }
+    // Snippet bir TÜR/HİZMET listesi; sayı, fiyat ya da abartı ("Garantili
+    // villa", "En ucuz daire") taşıyan değer liste değil vaat (Ajan 4, Ö-C).
+    // Kaynak muafiyeti YOK: liste satırında böyle bir sözün yeri yok.
+    if (kisaOgeSorunu(v)) {
+      yasak++;
+      continue;
+    }
     const k = v.toLocaleLowerCase('tr-TR');
     if (gorulen.has(k)) continue;
     gorulen.add(k);
     degerler.push(v);
   }
-  return { degerler, uzun };
+  return { degerler, uzun, yasak };
 }
 
 /**
@@ -274,6 +308,7 @@ export function googleAramaOgeleri(k: GoogleOgeKaynagi): { ogeler: GoogleAramaOg
   // ── Logo ──
   if (red) yok('LOGO', red);
   else if (!k.logo) yok('LOGO', "Marka Merkezi'nde logo yok");
+  else if (k.logoSorunu) yok('LOGO', `Logo dosyası okunamadı (${k.logoSorunu}); logoyu Marka Merkezi'nde yeniden yükle`);
   else if (!k.logo.genislik || !k.logo.yukseklik) yok('LOGO', 'Logonun boyutu okunamadı; logoyu yeniden yükle');
   else if (Math.abs(k.logo.genislik / k.logo.yukseklik - 1) > GOOGLE_ORAN_PAYI) {
     yok('LOGO', `Logo kare değil (${k.logo.genislik}×${k.logo.yukseklik}); Google Arama'da kare logo istiyor`);
@@ -298,7 +333,9 @@ export function googleAramaOgeleri(k: GoogleOgeKaynagi): { ogeler: GoogleAramaOg
       ogeler.snippet = { baslik: GOOGLE_SNIPPET_BASLIKLARI.HIZMETLER, degerler: menu.degerler.slice(0, SNIPPET_EN_COK) };
       var_('SNIPPET', `Hizmetler: ${ogeler.snippet.degerler.join(', ')} (site menüsü)`);
     } else {
-      const uzun = profil.uzun ? `; ${profil.uzun} kategori ${SNIPPET_DEGER_SINIRI} karakteri aştığı için alınmadı` : '';
+      const uzun =
+        (profil.uzun ? `; ${profil.uzun} kategori ${SNIPPET_DEGER_SINIRI} karakteri aştığı için alınmadı` : '') +
+        (profil.yasak ? `; ${profil.yasak} kategori sayı, fiyat ya da abartı sözü taşıdığı için alınmadı` : '');
       yok(
         'SNIPPET',
         `En az ${SNIPPET_EN_AZ} kalem gerekiyor: Marka Merkezi'nde ${profil.degerler.length} ürün/hizmet kategorisi var${menu ? `, site menüsünde ${menu.degerler.length} hizmet` : ''}${uzun}`,
@@ -341,6 +378,24 @@ export function googleAramaOgeleri(k: GoogleOgeKaynagi): { ogeler: GoogleAramaOg
     }
   }
   return { ogeler, durumlar };
+}
+
+/**
+ * "EKLENDİ" YALNIZ GÖVDEDE VARSA (Ajan 4, Ö-A). Satırlar provanın girdisiyle
+ * saklanıyor ama girdinin `ogeler`i gövdenin kaynağı: ikisi ayrışırsa (öğe
+ * bir yerde düşürüldüyse) ekran gövdeye uyar. Telefon ulaşmasında ARAMA
+ * reklamın çekirdeği, `ogeler.telefon` onun için hep boş.
+ */
+export function ogeDurumlariGovdeyle(durumlar: readonly GoogleOgeDurumu[], ogeler: GoogleAramaOgeleri | undefined, ulasma: string | null): GoogleOgeDurumu[] {
+  const var_: Record<GoogleOgeKodu, boolean> = {
+    ARAMA: ulasma === 'telefon' || !!ogeler?.telefon,
+    ISLETME_ADI: !!ogeler?.isletmeAdi,
+    LOGO: !!ogeler?.logoVarlikId,
+    SNIPPET: !!ogeler?.snippet,
+    PROMOSYON: !!ogeler?.promosyon,
+    FIYAT: !!ogeler?.fiyat,
+  };
+  return durumlar.map((d) => (d.eklendi && !var_[d.kod] ? { kod: d.kod, eklendi: false, metin: 'Kurulumda bu öğe yok; yeniden prova et' } : d));
 }
 
 /** Öğe satırının ekrandaki cümlesi (karar tablosu ve prova notu aynı yerden). */

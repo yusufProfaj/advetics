@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import {
   ACIKLAMA_METNI_SINIRI,
+  promosyonSorunu,
   FIYAT_EN_COK,
   FIYAT_METIN_SINIRI,
   FIYAT_TURLERI,
@@ -42,6 +43,7 @@ import {
   adresKaydi,
   bosFiyatListesi,
   bosPromosyon,
+  bugun,
   paraSimgesi,
   tutarMetni,
   tutarOku,
@@ -1253,7 +1255,15 @@ function EkOgeBlogu({ b }: { b: AdimBaglami }) {
                 <span className={s.on}>Bitiş</span>
                 <input type="date" aria-label="Kampanya bitişi" value={p.bitis ?? ''} onChange={(e) => yaz(b, 'googlePromosyon', { ...p, bitis: e.target.value || null })} />
               </div>
-              <p className={eksik('G-PROMOSYON') ? s.hataMetni : s.ipucu}>{eksik('G-PROMOSYON')?.metin ?? 'Bitiş tarihinden sonra indirim reklamdan kalkar.'}</p>
+              <div className={s.girdi}>
+                <span className={s.on}>Başlangıç</span>
+                <input type="date" aria-label="Kampanya başlangıcı" value={p.baslangic ?? ''} onChange={(e) => yaz(b, 'googlePromosyon', { ...p, baslangic: e.target.value || null })} />
+              </div>
+              {/* ANINDA HATA (Ajan 4, N-1): sunucunun eksik listesiyle AYNI fonksiyon, kayıt beklenmeden. */}
+              {(() => {
+                const hata = promosyonSorunu(p, bugun(b.saatDilimi)) ?? eksik('G-PROMOSYON')?.metin ?? null;
+                return <p className={hata ? s.hataMetni : s.ipucu}>{hata ?? 'Bitiş tarihinden sonra indirim reklamdan kalkar.'}</p>;
+              })()}
               <button type="button" className={s.metinDugme} style={{ alignSelf: 'flex-start' }} onClick={() => sil(b, 'googlePromosyon')}>
                 İndirimi kaldır
               </button>

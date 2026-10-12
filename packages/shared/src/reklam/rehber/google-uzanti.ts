@@ -106,14 +106,16 @@ export interface GoogleUzantiKaynagi {
  * Rehber boşsa Marka Merkezi vaatleri. İkisi de AYNI uydurma kapısından
  * (`aciklamaMetinleriUret`: sayı yok, fiyat sözü yok, ≤ 25).
  */
-export function aciklamaMetniSec(rehber: readonly string[] | undefined, vaatler: readonly string[]): {
+export function aciklamaMetniSec(rehber: readonly string[] | undefined, vaatler: readonly string[], kaynak = vaatler.join(' ')): {
   metinler: string[];
   kaynak: 'rehber' | 'vaatler' | null;
   atilan: Array<{ metin: string; sebep: string }>;
 } {
-  const r = aciklamaMetinleriUret(rehber ?? []);
+  // Abartı sözü yalnız müşterinin KENDİ yazdığı kaynakta (vaatler, marka
+  // bilgisi) geçiyorsa kalır; vaatlerin kendisi de o kaynağın parçası.
+  const r = aciklamaMetinleriUret(rehber ?? [], kaynak);
   if (r.metinler.length) return { metinler: r.metinler, kaynak: 'rehber', atilan: r.atilan };
-  const v = aciklamaMetinleriUret(vaatler);
+  const v = aciklamaMetinleriUret(vaatler, kaynak);
   return { metinler: v.metinler, kaynak: v.metinler.length ? 'vaatler' : null, atilan: [...r.atilan, ...v.atilan] };
 }
 
@@ -251,7 +253,11 @@ export function siteHaritasiOku(xml: string, anaAdres: string): { sayfalar: stri
   const sayfalar: string[] = [];
   const altHaritalar: string[] = [];
   for (const m of xml.matchAll(/<loc>\s*([\s\S]*?)\s*<\/loc>/gi)) {
-    const u = uygun(m[1] ?? '');
+    // CDATA SARMALI (`<loc><![CDATA[https://…]]></loc>`) bazı eklentilerin
+    // biçimi; açılmazsa adres "geçersiz" sayılıp sessizce atlanırdı. Yalnız
+    // sarmal açılıyor, içerik yine aynı SSRF kurallarından geçiyor.
+    const ham = (m[1] ?? '').replace(/^<!\[CDATA\[([\s\S]*?)\]\]>$/, '$1').trim();
+    const u = uygun(ham);
     if (!u) continue;
     if (dizin) {
       // Sayfa haritaları önce: yazı/kullanıcı haritası site bağlantısı olmaz.
@@ -388,7 +394,38 @@ export function siteBaglantilariUret(sayfalar: readonly SiteAltSayfasi[], markaA
  */
 const FIYAT_SOZU = /(%|₺|(?<![\p{L}\p{N}])tl(?![\p{L}])|(?<![\p{L}\p{N}])(indirim|fiyat|ücretsiz|bedava|taksit|peşin|hediye|kampanyal[ıi]))/iu;
 
-export function aciklamaMetinleriUret(vaatler: readonly string[]): { metinler: string[]; atilan: Array<{ metin: string; sebep: string }> } {
+/**
+ * ABARTI SÖZÜ (Ajan 4, Ö-C): "garanti", "en iyi", "1 numara", "ücretsiz".
+ * İstem "garanti yazma" diyordu ama KOD dayatmıyordu; istem bir kural değil.
+ * Sözcük kaynak metinde AYNEN geçiyorsa (müşterinin kendi vaadi) kalır,
+ * geçmiyorsa atılır: süresiz duran bir öğede verilmemiş bir söz Google'ın
+ * onaylayıp göstereceği bir yalan olur. Sınama Türkçe küçük harfle: `/i`
+ * bayrağı "İ"yi "i" saymıyor.
+ */
+const ABARTI_SOZU = /(?<![\p{L}\p{N}])(garanti\p{L}*|en iyi\p{L}*|en ucuz\p{L}*|en uygun\p{L}*|1 numara|bir numara|numara 1|ücretsiz|bedava)(?![\p{L}\p{N}])/u;
+
+/** Abartı sözü kaynakta AYNEN geçmiyorsa sözün kendisi, geçiyorsa (ya da yoksa) `null`. */
+export function abartiSozu(metin: string, kaynak = ''): string | null {
+  const m = ABARTI_SOZU.exec(metin.toLocaleLowerCase('tr-TR'));
+  if (!m) return null;
+  return kaynak.toLocaleLowerCase('tr-TR').includes(m[1]!) ? null : m[1]!;
+}
+
+/**
+ * Snippet ve açıklama metni gibi SÜRESİZ duran kısa öğelerin dar kapısı:
+ * sayı yok, fiyat sözü yok, kaynakta geçmeyen abartı yok. Sebebi döner.
+ */
+export function kisaOgeSorunu(metin: string, kaynak = ''): string | null {
+  if (/\d/.test(metin) || FIYAT_SOZU.test(metin)) return 'sayı ya da fiyat sözü taşıyor';
+  const a = abartiSozu(metin, kaynak);
+  return a ? `"${a}" sözü kaynakta yok` : null;
+}
+
+/**
+ * `kaynak`: abartı sözünün AYNEN aranacağı metin (Marka Merkezi vaatleri,
+ * marka bilgisi). Verilmezse abartı sözü her zaman atılır.
+ */
+export function aciklamaMetinleriUret(vaatler: readonly string[], kaynak = ''): { metinler: string[]; atilan: Array<{ metin: string; sebep: string }> } {
   const metinler: string[] = [];
   const atilan: Array<{ metin: string; sebep: string }> = [];
   const gorulen = new Set<string>();
@@ -403,8 +440,9 @@ export function aciklamaMetinleriUret(vaatler: readonly string[]): { metinler: s
       atilan.push({ metin: v, sebep: `${ACIKLAMA_METNI_SINIRI} karakteri aşıyor` });
       continue;
     }
-    if (/\d/.test(v) || FIYAT_SOZU.test(v)) {
-      atilan.push({ metin: v, sebep: 'sayı ya da fiyat sözü taşıyor' });
+    const sorun = kisaOgeSorunu(v, kaynak);
+    if (sorun) {
+      atilan.push({ metin: v, sebep: sorun });
       continue;
     }
     const k = v.toLocaleLowerCase('tr-TR');

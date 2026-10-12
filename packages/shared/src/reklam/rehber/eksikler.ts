@@ -70,6 +70,12 @@ export interface RehberEksikBaglami {
    * uymayan görsel GİRİŞ ANINDA söylenir, verilmezse derleyici söyler.
    */
   googleGorselOlculeri?: ReadonlyMap<string, GorselOlcusu | null> | null;
+  /**
+   * Bugün (YYYY-MM-DD, hesabın saat diliminde). Verilirse geçmiş tarihli
+   * promosyon bitişi GİRİŞTE engel (Ajan 4, N-1). Sunucu veriyor; saat
+   * shared'da okunmuyor (saf).
+   */
+  bugun?: string;
 }
 
 const ADIM: Record<RehberAlanAdi, RehberAdimi> = {
@@ -406,7 +412,7 @@ export function rehberEksikleri(a: RehberAlanlari, b: RehberEksikBaglami): Rehbe
   // kullanıcı "kampanyamı ekledim" sanırdı.
   if (googleArama) {
     const p = a.googlePromosyon?.deger;
-    const ps = p ? promosyonSorunu(p) : null;
+    const ps = p ? promosyonSorunu(p, b.bugun) : null;
     if (ps) ekle('googlePromosyon', 'google', 'G-PROMOSYON', ps);
     const f = a.googleFiyatListesi?.deger;
     const fs = f ? fiyatSorunu(f) : null;

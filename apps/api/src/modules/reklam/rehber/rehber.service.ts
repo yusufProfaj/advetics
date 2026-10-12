@@ -27,6 +27,8 @@ import {
   siteBaglantisiSebebi,
   siteHaritasiOku,
   googleAramaOgeleri,
+  ogeDurumlariGovdeyle,
+  type GoogleOgeDurumu,
   type GoogleOgeKaynagi,
   sayfaOzeti,
   siteBaglantilariUret,
@@ -1484,6 +1486,13 @@ export class RehberService {
         }
       : bIlk;
     if (!b.google) return { tur: 'reddetti', zaman, mesajlar: ['Google Ads hesabı seçilmedi.'] };
+    // LOGO DOSYASI TÜRETMEDEN ÖNCE (Ajan 4, Ö-B): okunamazsa (ENOENT vb.)
+    // yalnız logo öğesi düşer ve sebebi ekranda; prova düşmez. Türetmeden
+    // ÖNCE çünkü girdi (yayına giden) ve ekran satırı aynı kararı taşımalı.
+    if (b.ogeKaynagi?.logo && !b.ogeKaynagi.googleReddi) {
+      const sorun = await this.aramaLogoSorunu(ctx, s.client_id, b.ogeKaynagi.logo.varlikId, b.google.id);
+      if (sorun) b.ogeKaynagi = { ...b.ogeKaynagi, logoSorunu: sorun };
+    }
     const t = rehberdenGoogle(a, acik, {
       musteriId: b.google.externalId,
       paraBirimi: b.google.currency,
@@ -1926,8 +1935,20 @@ export class RehberService {
 
   private async kayit(ctx: TenantContext, s: RehberSatiri): Promise<RehberKaydi> {
     const a = alanlariOku(s);
-    const b = await this.sonProvaSitesi(ctx, s, a, await this.baglam(ctx, s.client_id, a));
+    const son = await this.sonProvaGirdisi(ctx, s);
+    const b = this.sonProvaSitesi(son, a, await this.baglam(ctx, s.client_id, a));
     const amac = a.amac?.deger;
+    /*
+     * ÖĞE SATIRLARI KALICI KAYNAKTAN (Ajan 4, Ö-A). Öğe reddi yalnız 15 dk
+     * bellek önbelleğindeydi (telefon ulaşmasında hiç yazılmıyordu): önbellek
+     * dolunca ekran "İşletme adı: Eklendi" diyor, yayına giden gövdede işletme
+     * adı yoktu. Prova bu içeriğe yapıldıysa satırlar provanın girdisinden
+     * (yayın o girdiden derleniyor) ve gövdeyle uzlaştırılarak.
+     */
+    const ogeDurumlari =
+      son && son.kurgu === 'ARAMA' && son.ogeDurumlari && s.prova_ozeti === rehberOzeti(a)
+        ? ogeDurumlariGovdeyle(son.ogeDurumlari, son.ogeler, son.ulasma)
+        : null;
     return {
       id: s.id,
       clientId: s.client_id,
@@ -1938,7 +1959,7 @@ export class RehberService {
       // Teklif kuralı `rehberdenGoogle` ile AYNI fonksiyondan (`googleTeklifi`):
       // önceden burada ayrı yazılıydı ve Talep Yaratma'da gövdenin tutmadığı
       // "En çok dönüşüm"ü söylüyordu.
-      kararlar: amac ? this.kararlar(amac, a, b) : [],
+      kararlar: amac ? this.kararlar(amac, a, b, ogeDurumlari) : [],
       metaTaslakId: s.meta_taslak_id,
       googleTaslakId: s.google_taslak_id,
       icerikOzeti: rehberOzeti(a),
@@ -1954,30 +1975,34 @@ export class RehberService {
    * Son provanın Google girdisi (çocuk taslak) bağlantıları ve sebebi
    * taşıyor: önbellek yokken ve adres aynıysa oradan okunur.
    */
-  private async sonProvaSitesi(ctx: TenantContext, s: RehberSatiri, a: RehberAlanlari, b: Baglam): Promise<Baglam> {
-    if (!b.uzantilar || b.uzantilar.siteBaglantilari !== null || !s.google_taslak_id) return b;
+  private sonProvaSitesi(g: GoogleDerlemeGirdisi | null, a: RehberAlanlari, b: Baglam): Baglam {
+    if (!g || !b.uzantilar || b.uzantilar.siteBaglantilari !== null) return b;
+    if (g.hedefAdres !== a.hedefAdres?.deger || g.siteBaglantilari === undefined) return b;
+    return { ...b, uzantilar: { ...b.uzantilar, siteBaglantilari: g.siteBaglantilari, siteSebebi: g.siteSebebi ?? null } };
+  }
+
+  /** Son provanın Google girdisi (çocuk taslağın aktif sürümü); yoksa `null`. */
+  private async sonProvaGirdisi(ctx: TenantContext, s: RehberSatiri): Promise<GoogleDerlemeGirdisi | null> {
+    if (!s.google_taslak_id) return null;
     const [c] = await this.tx(ctx)((t) =>
       t.$queryRaw<Array<{ alanlar: unknown }>>(Prisma.sql`
         SELECT v.alanlar FROM reklam_taslagi t
           JOIN taslak_surumu v ON v.taslak_id = t.id AND v.surum_no = t.aktif_surum_no
          WHERE t.id = ${s.google_taslak_id}::uuid`),
     );
-    if (!c) return b;
-    let g: GoogleDerlemeGirdisi;
+    if (!c) return null;
     try {
-      g = googleGirdisiOku(c.alanlar);
+      return googleGirdisiOku(c.alanlar);
     } catch {
-      return b;
+      return null;
     }
-    if (g.hedefAdres !== a.hedefAdres?.deger || g.siteBaglantilari === undefined) return b;
-    return { ...b, uzantilar: { ...b.uzantilar, siteBaglantilari: g.siteBaglantilari, siteSebebi: g.siteSebebi ?? null } };
   }
 
   /**
    * Karar tablosu. Teklif ve sebebi `rehberdenGoogle` ile AYNI fonksiyondan
    * (`googleTeklifKarari`), Meta hedefi derleyiciyle AYNI piksel hâlinden.
    */
-  private kararlar(amac: NonNullable<RehberAlanlari['amac']>['deger'], a: RehberAlanlari, b: Baglam) {
+  private kararlar(amac: NonNullable<RehberAlanlari['amac']>['deger'], a: RehberAlanlari, b: Baglam, provaOgeleri: GoogleOgeDurumu[] | null = null) {
     const kurgu = REHBER_AMACLARI[amac].google.kurgu;
     const teklif = kurgu ? googleTeklifKarari(kurgu, b.googleDonusum, b.googleDonusum30Gun) : null;
     return kararTablosu(
@@ -1991,7 +2016,8 @@ export class RehberService {
         ...(teklif ? { googleTeklifSebebi: teklif.sebep } : {}),
         uzantilar: b.uzantilar,
         // Öğe satırları derleyicinin okuduğu AYNI fonksiyondan (`googleAramaOgeleri`).
-        ogeler: b.ogeKaynagi ? googleAramaOgeleri(b.ogeKaynagi).durumlar : null,
+        // Prova bu içeriğe yapıldıysa provanın (yayına gidecek) satırları.
+        ogeler: provaOgeleri ?? (b.ogeKaynagi ? googleAramaOgeleri(b.ogeKaynagi).durumlar : null),
       },
     );
   }
@@ -2142,6 +2168,9 @@ export class RehberService {
       },
       paraBirimi,
       paraBirimleriAyni: !(meta && google) || meta.currency === google.currency,
+      // Geçmiş tarihli promosyon bitişi GİRİŞTE engel (Ajan 4, N-1): bugün
+      // Google hesabının saat diliminde (promosyon Google öğesi).
+      bugun: new Intl.DateTimeFormat('en-CA', { timeZone: google?.timezone ?? 'Europe/Istanbul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()),
       googleDonusum,
       googleDonusum30Gun,
       sitePikseli,
@@ -2258,7 +2287,13 @@ export class RehberService {
     // hesapta bir kez yüklenen logo yeniden yüklenmez.
     if (g.kurgu === 'ARAMA') {
       if (!g.ogeler?.logoVarlikId) return null;
-      g = { ...g, logoVarlikId: g.ogeler.logoVarlikId };
+      // Arama'da logo İSTEĞE BAĞLI: okunamazsa derleyici öğeyi düşürüp notta
+      // söylüyor (`!b.logo`); yayın düşmez (Ajan 4, Ö-B).
+      const id = g.ogeler.logoVarlikId;
+      return this.googleLogo(ctx, clientId, { ...g, kurgu: 'TALEP_YARATMA_VIDEO', logoVarlikId: id }, hesapId).catch((e: unknown) => {
+        logger.warn(`Arama logosu okunamadı (${id}): ${e instanceof Error ? e.message : String(e)}`);
+        return null;
+      });
     } else if (g.kurgu !== 'TALEP_YARATMA_VIDEO' && !googleGorselKurgusuMu(g.kurgu)) return null;
     if (!g.logoVarlikId) return null;
     const tx = this.tx(ctx);
@@ -2268,6 +2303,24 @@ export class RehberService {
     );
     if (ref) return { resource: ref.ref };
     return { yeniGorsel: { name: `${g.isletmeAdi ?? 'Logo'} logo`, bytes: await gorselOkuyucu(tx, this.config.uploads.dir, clientId)(g.logoVarlikId) } };
+  }
+
+  /** Arama logosunun okunup okunamadığı: okunamıyorsa kısa sebep, okunuyorsa `null`. */
+  private async aramaLogoSorunu(ctx: TenantContext, clientId: string, varlikId: string, hesapId: string): Promise<string | null> {
+    const tx = this.tx(ctx);
+    try {
+      const [ref] = await tx((t) =>
+        t.$queryRaw<Array<{ ref: string }>>(Prisma.sql`
+          SELECT external_ref AS ref FROM asset_platform_refs WHERE asset_id = ${varlikId}::uuid AND ad_account_id = ${hesapId}::uuid`),
+      );
+      if (ref) return null;
+      await gorselOkuyucu(tx, this.config.uploads.dir, clientId)(varlikId);
+      return null;
+    } catch (e) {
+      const m = e instanceof Error ? ((e as NodeJS.ErrnoException).code ?? e.message) : String(e);
+      logger.warn(`Arama logosu okunamadı (${varlikId}): ${m}`);
+      return m.slice(0, 120);
+    }
   }
 
   /** Platform provasının durumu — yayın kapısı ve GET prova aynı fonksiyonu okuyor. */

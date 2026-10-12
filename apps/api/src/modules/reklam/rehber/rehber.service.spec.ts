@@ -1501,4 +1501,65 @@ describe('Siteme gelsinler (Google): öğeler ve site bağlantısı teşhisi', (
     expect(tumGovdeler).toHaveLength(1);
     expect(p.google).toMatchObject({ tur: 'reddetti' });
   });
+
+  /*
+   * AJAN 4 KAPISI (g-1.2.0, 2026-10-12) — KIRMIZI BIRAKILDI, düzeltme
+   * bulguyu üreten ajanda.
+   * Ö-A: Google öğeyi reddetti, kurulum ÖĞESİZ prova edildi ve çocuk taslak
+   * öğesiz (yayına giden gövde öğesiz). Red bilgisi YALNIZ 15 dakikalık
+   * bellek önbelleğinde (ve telefon ulaşmasında hiç yazılmıyor): önbellek
+   * dolunca karar tablosu "İşletme adı: Eklendi" diyor, gövdede işletme adı
+   * yok. "Logo eklendi" diyen ekranın arkasında logosuz gövde, dosyanın
+   * kendi yasakladığı hâl.
+   */
+  it('AJAN4 Ö-A: öğe reddi sonrası önbellek dolunca karar tablosu yine "Eklenmedi" (gövde öğesiz)', async () => {
+    await profil();
+    svc.siteHtmlOku = async (a) => (a === 'https://ornek.com.tr/' ? { ok: true, html: TEK_SAYFA, adres: a } : { ok: false, sebep: '404' });
+    mutateHatasi = (g) => {
+      const i = g.mutateOperations.findIndex((o) => o.assetOperation?.create?.textAsset);
+      if (i < 0) return null;
+      return new PlatformApiError('google', 'permanent', 'reddedildi', {
+        raw: { error: { details: [{ errors: [{ errorCode: { assetError: 'X' }, message: 'İşletme adı uyuşmuyor', location: { fieldPathElements: [{ fieldName: 'mutate_operations', index: i }] } }] }] } },
+      } as never);
+    };
+    const r = await tamRehber();
+    await svc.prova(CTX, r.id);
+    expect(alanlar(tumGovdeler[1]!)).toEqual([]);
+    (svc as unknown as { uzantiOnbellek: Map<string, unknown> }).uzantiOnbellek.clear();
+    const ad = (await svc.oku(CTX, r.id)).kararlar.find((x) => x.kod === 'OGE' && x.konu === 'İşletme adı')!.google!;
+    expect(ad.deger).toBe('Eklenmedi');
+  });
+
+  /*
+   * Ö-B: İSTEĞE BAĞLI logo okunamazsa (dosya diskte yok) BÜTÜN Google
+   * provası düşüyor: `googleLogo` → `gorselOkuyucu` → readFile ENOENT
+   * fırlatıyor. Derleyicinin "logo okunamadı; logo eklenmedi" dalı
+   * (`!b.logo`) bu yüzden servis yolunda hiç çalışmıyor. Arama'da logo
+   * çekirdek değil; kampanya logosuz kurulmalı ve not söylemeli.
+   */
+  it('AJAN4 Ö-B: logo dosyası okunamazsa prova DÜŞMEZ, logo eklenmez ve not söyler', async () => {
+    await profil();
+    await h.q(`DELETE FROM asset_platform_refs WHERE asset_id = $1`, [LOGO]);
+    await h.q(`UPDATE assets SET storage_key = $2 WHERE id = $1`, [LOGO, `yok-${Date.now()}-${Math.random()}.png`]);
+    const r = await tamRehber();
+    const p = await svc.prova(CTX, r.id);
+    expect(p.google).toMatchObject({ tur: 'gecti' });
+    expect(alanlar(sonGovde!)).not.toContain('BUSINESS_LOGO');
+    expect((p.google as { not: string }).not).toContain('logo');
+  });
+
+  it('Ö-B: okunamayan logo ekranda da "Eklenmedi" ve sebebiyle; yayına giden girdide logo YOK', async () => {
+    await profil();
+    await h.q(`DELETE FROM asset_platform_refs WHERE asset_id = $1`, [LOGO]);
+    await h.q(`UPDATE assets SET storage_key = $2 WHERE id = $1`, [LOGO, `yok-${Date.now()}-${Math.random()}.png`]);
+    const r = await tamRehber();
+    await svc.prova(CTX, r.id);
+    const logo = (await svc.oku(CTX, r.id)).kararlar.find((x) => x.kod === 'OGE' && x.konu === 'İşletme logosu')!.google!;
+    expect(logo.deger).toBe('Eklenmedi');
+    expect(logo.not).toContain('Logo dosyası okunamadı');
+    const [c] = await h.q<{ alanlar: { ogeler?: { logoVarlikId: string | null } } }>(
+      `SELECT s.alanlar FROM reklam_taslagi t JOIN taslak_surumu s ON s.taslak_id = t.id AND s.surum_no = t.aktif_surum_no WHERE t.platform = 'google'`,
+    );
+    expect(c!.alanlar.ogeler!.logoVarlikId).toBeNull();
+  });
 });

@@ -298,7 +298,7 @@ export function metinOnerisiTemizle(ham: HamMetinOnerisi, g: MetinOneriGirdisi):
     if (hamAciklama.length) notlar.push("Açıklama metinleri Marka Merkezi'ndeki vaatlerden alınıyor; öneri yazmadı.");
   } else {
     const genel = ayikla(hamAciklama, ACIKLAMA_METNI_SINIRI, 'Açıklama metni', ACIKLAMA_METNI_EN_COK);
-    const dar = aciklamaMetinleriUret(genel);
+    const dar = aciklamaMetinleriUret(genel, g.kaynakMetin);
     for (const x of dar.atilan) notlar.push(`Açıklama metni "${x.metin}" atıldı: ${x.sebep}.`);
     aciklamaMetinleri = dar.metinler;
   }

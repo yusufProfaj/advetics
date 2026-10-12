@@ -8,6 +8,8 @@ import {
   cipaBaglantiSayisi,
   googleAramaOgeleri,
   kararTablosu,
+  ogeDurumlariGovdeyle,
+  promosyonSorunu,
   rehberdenGoogle,
   rehberEksikleri,
   siteBaglantisiSebebi,
@@ -21,7 +23,7 @@ import {
 import type { FetchContext } from '../../connections/provider.types';
 import { aramaOgeIslemleriEkle } from '../../connections/providers/google-arama-ogeleri';
 import { derleGoogle, GOOGLE_DERLEYICI_SURUMU, type GoogleDerlemeBaglami } from './derle-google';
-import { googleGeriOku, googleGeriOkumaKarsilastir, type GoogleOkunan, type GoogleYayinPortu } from './google-yayin';
+import { googleGeriOku, googleGeriOkumaKarsilastir, ogeSorgusu, type GoogleOkunan, type GoogleYayinPortu } from './google-yayin';
 
 /**
  * ARAMA ÖĞELERİ (g-1.2.0) — ilk canlı "Siteme gelsinler" Arama kampanyasında
@@ -178,8 +180,33 @@ describe('googleAramaOgeleri — kaynağı olan kurulur, olmayan SEBEBİYLE kuru
     expect(googleAramaOgeleri(yok).ogeler.snippet).toBeNull();
     expect(durum(yok, 'SNIPPET').metin).toContain("Marka Merkezi'nde 1 ürün/hizmet kategorisi var, site menüsünde 0 hizmet");
     // 25'i aşan değer atlanır ve sayısı söylenir; en çok 10.
-    const cok = KAYNAK({ urunKategorileri: [...Array.from({ length: 12 }, (_, i) => `Tür ${i}`), 'Bu kategori adı yirmi beş karakterden uzun'] });
+    // Rakamsız adlar: sayı taşıyan değer snippet'e girmiyor (Ö-C, aşağıda).
+    const cok = KAYNAK({ urunKategorileri: [...'ABCDEFGHIJKL'].map((h) => `Tür ${h}`).concat('Bu kategori adı yirmi beş karakterden uzun') });
     expect(googleAramaOgeleri(cok).ogeler.snippet!.degerler).toHaveLength(10);
+  });
+
+  it('Ö-C SNIPPET: sayı, fiyat ve abartı taşıyan değer KAYNAKTAN gelse de atılır ve sayısı söylenir', () => {
+    const k = KAYNAK({ urunKategorileri: ['Daire', 'Villa', 'Ofis', '3+1 Daire', 'Garantili villa', 'En ucuz arsa', 'Ücretsiz keşif'] });
+    expect(googleAramaOgeleri(k).ogeler.snippet!.degerler).toEqual(['Daire', 'Villa', 'Ofis']);
+    const az = KAYNAK({ urunKategorileri: ['Daire', '3+1 Daire', 'Garantili villa'] });
+    expect(durum(az, 'SNIPPET').metin).toContain('2 kategori sayı, fiyat ya da abartı sözü taşıdığı için alınmadı');
+  });
+
+  it('Ö-C AÇIKLAMA METNİ: abartı sözü vaatlerde AYNEN geçmiyorsa atılır; geçiyorsa kalır', () => {
+    expect(aciklamaMetniSec(['Garantili işçilik', 'Uzman ekip'], [])).toMatchObject({ metinler: ['Uzman ekip'] });
+    expect(aciklamaMetniSec(['En iyi hizmet', '1 numara firma'], ['Uzman ekip']).metinler).toEqual(['Uzman ekip']);
+    // Müşterinin kendi vaadi kaynak: "Garantili işçilik" vaatte geçiyor.
+    expect(aciklamaMetniSec([], ['Garantili işçilik']).metinler).toEqual(['Garantili işçilik']);
+  });
+
+  it('N-1 PROMOSYON: takvimde olmayan tarih, başlangıç > bitiş ve geçmiş bitiş engel', () => {
+    const p = (o: Record<string, unknown>) => KAYNAK({ promosyon: { hedef: 'Tüm daireler', indirim: { tur: 'yuzde', yuzde: 10 }, baslangic: null, bitis: '2026-12-31', ...o } });
+    expect(durum(p({ bitis: '2026-02-30' }), 'PROMOSYON').metin).toContain('takvimde yok');
+    expect(durum(p({ baslangic: '2026-13-01' }), 'PROMOSYON').metin).toContain('takvimde yok');
+    expect(durum(p({ baslangic: '2027-01-01' }), 'PROMOSYON').metin).toContain('başlangıçtan önce');
+    expect(promosyonSorunu({ hedef: 'X', indirim: { tur: 'yuzde', yuzde: 10 }, baslangic: null, bitis: '2026-10-01' }, '2026-10-12')).toContain('geçmiş');
+    expect(promosyonSorunu({ hedef: 'X', indirim: { tur: 'yuzde', yuzde: 10 }, baslangic: null, bitis: '2026-10-12' }, '2026-10-12')).toBeNull();
+    expect(durum(p({ bitis: '2028-02-29' }), 'PROMOSYON').eklendi).toBe(true);
   });
 
   it('PROMOSYON: uydurulmaz; geçerli girdi micros/yüzde ile, bitişsiz girdi eklenmez', () => {
@@ -464,5 +491,81 @@ describe('geri okuma — öğeler', () => {
     const q = sorgular.find((x) => x.includes("'BUSINESS_NAME'"))!;
     expect(q).toMatch(/SELECT campaign\.id,/);
     expect(q).toContain('campaign_asset.source');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Ajan 4 kapısı düzeltmeleri — canlı risk, CDATA, gövdeyle uzlaştırma
+// ---------------------------------------------------------------------------
+describe('CANLI RİSK: öğe geri okuma sorgusu', () => {
+  const d = derle(turet('SITE'));
+  const bos = { isletmeAdi: 'X', logo: 0, snippet: null, promosyon: null, fiyat: null };
+
+  it('promosyon/fiyat alanları YALNIZ o öğe gönderildiyse SELECT’te; tür WHERE’de hep var', () => {
+    const q = ogeSorgusu('1', bos);
+    expect(q).not.toContain('asset.promotion_asset.');
+    expect(q).not.toContain('asset.price_asset.');
+    expect(q).toContain("'PROMOTION', 'PRICE'");
+    const tam = ogeSorgusu('1', d.beklenen.ogeler!);
+    expect(tam).toContain('asset.promotion_asset.percent_off');
+    expect(tam).toContain('asset.price_asset.price_offerings');
+  });
+
+  it('öğe sorgusu "alan seçilemez" ile düşerse ana geri okuma TAMAMLANIR, öğe kısmı "okunamadı: sebep" ve kıyaslanmaz', async () => {
+    const port: GoogleYayinPortu = {
+      ara: async <T>(_c: FetchContext, q: string) => {
+        if (q.includes("'BUSINESS_NAME'")) throw new Error('PROHIBITED_FIELD_IN_SELECT_CLAUSE: asset.price_asset.price_offerings');
+        if (q.includes('FROM campaign WHERE')) return [{ campaign: { name: d.beklenen.kampanyaAdi, status: 'PAUSED', advertisingChannelType: 'SEARCH' } }] as T[];
+        return [] as T[];
+      },
+    } as unknown as GoogleYayinPortu;
+    const o = await googleGeriOku(port, {} as FetchContext, '24351543772', d.beklenen);
+    expect(o.kampanyaAdi).toBe(d.beklenen.kampanyaAdi);
+    expect(o.ogeler).toBeUndefined();
+    expect(o.ogeOkumaHatasi).toContain('okunamadı: PROHIBITED_FIELD_IN_SELECT_CLAUSE');
+    const k = googleGeriOkumaKarsilastir(d.beklenen, o);
+    expect(k.satirlar.some((x) => x.alan.startsWith('oge.'))).toBe(false);
+  });
+
+  it('beklenmeyen ama bağlı promosyon (içerik seçilmeden) yine FARK', async () => {
+    const b = { ...d.beklenen, ogeler: { ...d.beklenen.ogeler!, promosyon: null, fiyat: null } };
+    const port: GoogleYayinPortu = {
+      ara: async <T>(_c: FetchContext, q: string) =>
+        (q.includes("'BUSINESS_NAME'")
+          ? [
+              { campaignAsset: { fieldType: 'BUSINESS_NAME', status: 'ENABLED' }, asset: { textAsset: { text: 'Ege Birlik Yapı' } } },
+              { campaignAsset: { fieldType: 'PROMOTION', status: 'ENABLED' }, asset: {} },
+            ]
+          : []) as T[],
+    } as unknown as GoogleYayinPortu;
+    const o = await googleGeriOku(port, {} as FetchContext, '1', b);
+    expect(googleGeriOkumaKarsilastir(b, o).satirlar.map((x) => x.alan)).toContain('oge.promosyon');
+  });
+});
+
+describe('N: site haritasında CDATA', () => {
+  it('<loc><![CDATA[…]]></loc> okunur ve SSRF kuralları yine uygulanır', () => {
+    const xml = '<urlset><url><loc><![CDATA[https://ornek.com.tr/villa]]></loc></url><url><loc><![CDATA[https://evil.com/x]]></loc></url></urlset>';
+    expect(siteHaritasiOku(xml, 'https://ornek.com.tr/').sayfalar).toEqual(['https://ornek.com.tr/villa']);
+  });
+});
+
+describe('Ö-A: "Eklendi" yalnız gövdede varsa', () => {
+  it('girdinin öğelerinde olmayan öğe "Eklenmedi"ye çevrilir; telefon ulaşmasında ARAMA çekirdek', () => {
+    const r = googleAramaOgeleri(KAYNAK());
+    const ogeler = { ...r.ogeler, logoVarlikId: null, isletmeAdi: null };
+    const u = ogeDurumlariGovdeyle(r.durumlar, ogeler, 'site');
+    expect(u.find((x) => x.kod === 'LOGO')).toMatchObject({ eklendi: false });
+    expect(u.find((x) => x.kod === 'ISLETME_ADI')).toMatchObject({ eklendi: false });
+    expect(u.find((x) => x.kod === 'SNIPPET')).toMatchObject({ eklendi: true });
+    const t = googleAramaOgeleri(KAYNAK({ ulasma: 'telefon' }));
+    expect(ogeDurumlariGovdeyle(t.durumlar, t.ogeler, 'telefon').find((x) => x.kod === 'ARAMA')).toMatchObject({ eklendi: true });
+  });
+
+  it('Ö-B: logo dosyası okunamadıysa yalnız logo düşer ve sebep söylenir', () => {
+    const r = googleAramaOgeleri(KAYNAK({ logoSorunu: 'ENOENT' }));
+    expect(r.ogeler.logoVarlikId).toBeNull();
+    expect(r.ogeler.isletmeAdi).toBe('Ege Birlik Yapı');
+    expect(durum(KAYNAK({ logoSorunu: 'ENOENT' }), 'LOGO').metin).toContain('Logo dosyası okunamadı (ENOENT)');
   });
 });
