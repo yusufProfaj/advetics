@@ -110,6 +110,8 @@ export const REHBER_ALAN_ETIKETI: Record<RehberAlanAdi, string> = {
   butce: 'Bütçe',
   metaPayiYuzde: 'Meta payı',
   takvim: 'Tarih',
+  googlePromosyon: 'Kampanya (indirim)',
+  googleFiyatListesi: 'Fiyat listesi',
 };
 
 const HTTPS = /^https:\/\/[^\s/]+\.[^\s]+/;
