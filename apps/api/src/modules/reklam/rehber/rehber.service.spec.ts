@@ -451,6 +451,31 @@ describe('giriş listesi: satır alanları, arşiv ve geri getir', () => {
     expect((await satiri((await svc.olustur(CTX, IDS.client)).id)).butce).toBeNull();
   });
 
+  it('KRİTİK (Ajan 4 Ö-1): platform başlatıcısı FIRLATIRSA yayınla düşmüyor; sebep o platformun satırında ve kalıcı', async () => {
+    const r = await tamRehber();
+    const p = await svc.prova(CTX, r.id);
+    // Örnek üstünde sahte; SONRAKİ testlere sızmasın diye spyOn + geri al.
+    const casus = vi
+      .spyOn(svc as unknown as { googleYayinBaslat: () => Promise<string | null> }, 'googleYayinBaslat')
+      .mockRejectedValue(new Error('ağ koptu'));
+    const d = await svc.yayinla(CTX, r.id, p.icerikOzeti).finally(() => casus.mockRestore());
+    expect(d.platformlar).toEqual([expect.objectContaining({ platform: 'google', sebep: expect.stringContaining('ağ koptu') })]);
+    // Hiçbir platform başlamadı: rehber taslak kalır (yeniden denenebilir) ve sebep okumada da var.
+    expect((await svc.oku(CTX, r.id)).durum).toBe('taslak');
+    const tekrar = await svc.yayinDurumu(CTX, r.id);
+    expect(tekrar.platformlar.find((x) => x.platform === 'google')?.sebep).toContain('ağ koptu');
+  });
+
+  it('KRİTİK (Ajan 4 Ö-1): her başlayan platform rehberi HEMEN "yayında" yazar (ikinci platform düşse de)', () => {
+    const kaynak = readFileSync(join(__dirname, 'rehber.service.ts'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const bas = kaynak.indexOf('async yayinla(');
+    const govde = kaynak.slice(bas, kaynak.indexOf('await this.sebepleriYaz(', bas));
+    if (bas < 0 || !govde) throw new Error('yayinla gövdesi bulunamadı — tarama boşa düşer');
+    const meta = govde.slice(govde.indexOf('if (acik.meta'), govde.indexOf('if (acik.google'));
+    expect(meta).toContain('await yayindaYaz()');
+    expect(govde).not.toMatch(/if \(baslayan > 0\)/);
+  });
+
   it('yayın adı platformdakiyle AYNI biçim ve kod yayın kimliğinden', async () => {
     const r = await tamRehber();
     const p = await svc.prova(CTX, r.id);
