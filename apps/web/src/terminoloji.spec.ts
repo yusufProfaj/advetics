@@ -33,6 +33,14 @@ const KOK = join(__dirname, '../../..');
  * `google-check.ts`: geliştirici teşhis aracı, panelde görünmüyor.
  */
 const DISARIDA = [
+  /*
+   * TANITIM SİTESİ (2026-10-12): panel değil, panele HİÇ girmemiş ziyaretçinin
+   * dili. "Workspace" panelin iç kavramı ve sitenin okuru (reklam bilmeyen
+   * işletme sahibi, ajans) onu tanımıyor; ajansın müşterisi orada "müşteri".
+   * Panele geçen kişi "Workspace"i panelde öğreniyor.
+   */
+  'app/(site)/',
+  'components/landing/site-',
   'ai-assistant/',
   'providers/',
   'google-check.ts',

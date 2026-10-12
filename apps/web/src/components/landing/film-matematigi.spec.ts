@@ -34,7 +34,8 @@ const yorumsuz = (yol: string) =>
   readFileSync(resolve(__dirname, yol), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
 
 const BILESEN = yorumsuz('kaydirma-filmi.tsx');
-const SAYFA = yorumsuz('../../app/page.tsx');
+// Tanıtım sitesi 2026-10-12'de `(site)` grubuna taşındı; adres yine `/`.
+const SAYFA = yorumsuz('../../app/(site)/page.tsx');
 
 describe('tarama boşa düşmüyor', () => {
   it('kaynaklar okundu', () => {
@@ -328,7 +329,8 @@ describe('KRİTİK: bileşen sözleşmesi', () => {
     expect(BILESEN).toContain('children');
     expect(BILESEN).not.toContain('Demo Talep Et');
     expect(SAYFA).toContain('Demo Talep Et');
-    expect(SAYFA).toContain('Nasıl Çalışır?');
+    // İkinci düğme 2026-10-12'den beri özellikler sayfasına gidiyor.
+    expect(SAYFA).toContain('Neler Yapar?');
   });
 
   it('KRİTİK: butonlar filmin ÜSTÜNDE değil', () => {

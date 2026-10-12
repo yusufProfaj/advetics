@@ -15,10 +15,13 @@ import { ADVETICS_KIRMIZI } from './marka-isareti';
  * Metin kasıtlı olarak Türkçe'ye özgü karakter içermiyor: ImageResponse'un
  * gömülü fontu genişletilmiş Latin karakterlerini her ortamda doğru
  * çizmiyor ve eksik glif, bozuk bir önizleme demek.
+ *
+ * Renkler kılavuzun dördü ve beyazın saydam tonları (2026-10-12): eski
+ * mavi-gri zemin (#0f1116) ve gri metinler kılavuzun dışındaydı.
  */
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
-export const alt = 'Advetics - Meta and Google Ads management dashboard';
+export const alt = 'Advetics - Meta, Google and LinkedIn ads in one dashboard';
 
 export default function OpengraphImage() {
   return new ImageResponse(
@@ -31,7 +34,7 @@ export default function OpengraphImage() {
           flexDirection: 'column',
           justifyContent: 'center',
           padding: '80px',
-          background: '#0f1116',
+          background: '#000000',
           color: '#ffffff',
           fontFamily: 'sans-serif',
         }}
@@ -67,11 +70,11 @@ export default function OpengraphImage() {
             maxWidth: '900px',
           }}
         >
-          Meta and Google Ads, managed from one dashboard
+          Meta, Google and LinkedIn ads in one dashboard
         </div>
 
-        <div style={{ marginTop: '28px', fontSize: '30px', color: '#9aa1ae' }}>
-          Unified reporting - automation rules - white-label reports
+        <div style={{ marginTop: '28px', fontSize: '30px', color: 'rgba(255,255,255,0.72)' }}>
+          It tells you what to do, and does it with your approval
         </div>
 
         <div
@@ -81,7 +84,7 @@ export default function OpengraphImage() {
             alignItems: 'center',
             gap: '14px',
             fontSize: '26px',
-            color: '#6b7280',
+            color: 'rgba(255,255,255,0.6)',
           }}
         >
           <div style={{ width: '48px', height: '4px', background: ADVETICS_KIRMIZI }} />
