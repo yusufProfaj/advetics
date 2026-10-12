@@ -1178,6 +1178,10 @@ enum SyncJobType {
   /// Paket C — hesap başına, günde bir değişiklik etkisi keşfi + ölçümü.
   /// PLATFORM ÇAĞRISI YOK: girdisi audit_logs, rule_action_logs, insights_daily.
   impact_evaluate
+  /// Paket D — hesap başına kreatif etiketleme (Gemini görü). Platform çağrısı
+  /// yalnız Meta görsel adresi tazeleme, kendi kota katmanından (creative_tag).
+  /// `insights_daily` işinin SONUNA zincirli + günlük emniyet süpürmesi.
+  creative_tags
 }
 
 enum SyncJobStatus {
@@ -4254,4 +4258,94 @@ model DegisiklikEtkisi {
   @@index([adAccountId, kapsamId, degisiklikGunu], map: "degisiklik_etkileri_kapsam_idx")
   @@index([clientId, varlikId], map: "degisiklik_etkileri_varlik_idx")
   @@map("degisiklik_etkileri")
+}
+
+/// Paket D — kreatif başına BİZİM kaydımız: hangi içeriğe (SHA-256) bağlandı,
+/// neden etiketlenemedi. `creatives` platform aynası ve ona kolon eklenmiyor.
+/// Durum/neden listeleri shared'da (`kreatif-zeka/durum.ts`), CHECK ile dayatılı.
+model KreatifIcerigi {
+  creativeId     String    @id @map("creative_id") @db.Uuid
+  orgId          String    @map("org_id") @db.Uuid
+  clientId       String    @map("client_id") @db.Uuid
+  adAccountId    String    @map("ad_account_id") @db.Uuid
+  platform       Platform
+  kaynakAnahtari String?   @map("kaynak_anahtari") @db.VarChar(120)
+  icerikOzeti    String?   @map("icerik_ozeti") @db.Char(64)
+  kismi          String?   @db.VarChar(16)
+  bicim          String    @db.VarChar(10)
+  enBoy          String?   @map("en_boy") @db.VarChar(8)
+  durum          String    @default("bekliyor") @db.VarChar(16)
+  neden          String?   @db.VarChar(24)
+  deneme         Int       @default(0) @db.SmallInt
+  sonHata        String?   @map("son_hata")
+  semaSurumu     Int       @map("sema_surumu") @db.SmallInt
+  sonDeneme      DateTime? @map("son_deneme") @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([clientId, durum], map: "kreatif_icerikleri_client_durum_idx")
+  @@index([clientId, kaynakAnahtari], map: "kreatif_icerikleri_client_kaynak_idx")
+  @@index([clientId, icerikOzeti], map: "kreatif_icerikleri_client_ozet_idx")
+  @@index([adAccountId], map: "kreatif_icerikleri_ad_account_idx")
+  @@index([orgId], map: "kreatif_icerikleri_org_id_idx")
+  @@map("kreatif_icerikleri")
+}
+
+/// Paket D — İÇERİK başına etiket; tekillik workspace kapsamında.
+model KreatifEtiketi {
+  id          String   @id @default(uuid()) @db.Uuid
+  orgId       String   @map("org_id") @db.Uuid
+  clientId    String   @map("client_id") @db.Uuid
+  icerikOzeti String   @map("icerik_ozeti") @db.Char(64)
+  semaSurumu  Int      @map("sema_surumu") @db.SmallInt
+  etiketler   Json     @db.JsonB
+  model       String   @db.VarChar(60)
+  girdiToken  Int      @default(0) @map("girdi_token")
+  ciktiToken  Int      @default(0) @map("cikti_token")
+  sureMs      Int      @default(0) @map("sure_ms")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([clientId, icerikOzeti, semaSurumu], map: "kreatif_etiketleri_icerik_key")
+  @@index([orgId], map: "kreatif_etiketleri_org_id_idx")
+  @@map("kreatif_etiketleri")
+}
+
+/// Paket D — maliyet bekçisi; ayırma tek deyimle (yarış).
+model KreatifEtiketSayaci {
+  orgId       String   @map("org_id") @db.Uuid
+  clientId    String   @map("client_id") @db.Uuid
+  gun         DateTime @db.Date
+  etiketIstek Int      @default(0) @map("etiket_istek")
+  briefIstek  Int      @default(0) @map("brief_istek")
+  basarili    Int      @default(0)
+  hata        Int      @default(0)
+  girdiToken  BigInt   @default(0) @map("girdi_token")
+  ciktiToken  BigInt   @default(0) @map("cikti_token")
+  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@id([clientId, gun])
+  @@index([gun], map: "kreatif_etiket_sayaci_gun_idx")
+  @@index([orgId], map: "kreatif_etiket_sayaci_org_id_idx")
+  @@map("kreatif_etiket_sayaci")
+}
+
+/// Paket D — üretim brief'i; aynı girdi özeti ikinci kez Gemini'ye gitmez.
+model KreatifBriefi {
+  id              String   @id @default(uuid()) @db.Uuid
+  orgId           String   @map("org_id") @db.Uuid
+  clientId        String   @map("client_id") @db.Uuid
+  kumeAnahtari    String   @map("kume_anahtari") @db.VarChar(40)
+  girdiOzeti      String   @map("girdi_ozeti") @db.Char(64)
+  bulgular        Json     @db.JsonB
+  cevap           Json     @db.JsonB
+  model           String   @db.VarChar(60)
+  girdiToken      Int      @default(0) @map("girdi_token")
+  ciktiToken      Int      @default(0) @map("cikti_token")
+  olusturanUserId String?  @map("olusturan_user_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([clientId, kumeAnahtari, girdiOzeti], map: "kreatif_briefleri_girdi_key")
+  @@index([clientId, kumeAnahtari, createdAt(sort: Desc)], map: "kreatif_briefleri_kume_idx")
+  @@index([orgId], map: "kreatif_briefleri_org_id_idx")
+  @@map("kreatif_briefleri")
 }

@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { ReportData, TenantContext } from '@advetics/shared';
+import type { Platform, ReportData, TenantContext } from '@advetics/shared';
 import { PrismaService } from '../../prisma/prisma.service';
-import { QuotaGuardService } from '../../queue/quota-guard.service';
+import { QuotaGuardService, type QuotaLayer } from '../../queue/quota-guard.service';
 import { ProviderRegistry } from '../connections/provider.registry';
 import { TokenVaultService } from '../connections/token-vault.service';
 
@@ -91,7 +91,7 @@ const ISTEK_ZAMAN_ASIMI_MS = 6_000;
  */
 const ONBELLEK_TAVANI = 2_000;
 
-type Adres = { url: string } | { hata: string };
+export type Adres = { url: string } | { hata: string };
 
 @Injectable()
 export class KreatifAdresiService {
@@ -176,81 +176,9 @@ export class KreatifAdresiService {
       for (const hesap of hesaplar) {
         const idler = [...(hesapBasina.get(hesap.id) ?? [])];
         if (idler.length === 0) continue;
-
-        const provider = this.providers.get(hesap.platform);
-        /*
-         * DESTEKLEMEYEN PLATFORM HATA DEĞİL. Google'ın görsel adresleri
-         * kalıcı; "tazelenemedi" yazmak kullanıcıya olmayan bir sorun
-         * bildirmek olurdu ve her raporda duran bir uyarı okunmaz hâle gelir.
-         */
-        if (!provider.fetchCreativeImageUrls) continue;
-
-        // SÜRE BÜTÇESİ HESAPLAR ARASINDA DA KONTROL EDİLİYOR.
-        if (Date.now() >= bitis) {
-          for (const id of idler) yeniAdres.set(id, { hata: 'tazeleme süresi doldu' });
-          continue;
-        }
-
-        /*
-         * ÖNCE KOTA, SONRA ÇAĞRI. Maliyeti sıfır olan bir ret, bağımlı
-         * işlere (yapı taraması) nefes alacak yer bırakıyor — CLAUDE.md'de
-         * kayıtlı kalıcı kilit tam bu sıranın tersine çevrilmesiyle oluştu.
-         */
-        const gate = await this.quota.acquire({
-          platform: hesap.platform,
-          adAccountId: hesap.id,
-          layer: 'report_creative',
-        });
-        if (!gate.allowed) {
-          const sebep = `kota engeli (${gate.reason})`;
-          this.log.warn(`Kreatif adresi tazelenmedi (hesap ${hesap.id}): ${sebep}`);
-          for (const id of idler) yeniAdres.set(id, { hata: sebep });
-          continue;
-        }
-
-        try {
-          const token = await this.vault.getAccessToken(hesap.connectionId, provider);
-          const sonuc = await provider.fetchCreativeImageUrls(
-            {
-              accessToken: token,
-              accountExternalId: hesap.externalId,
-              loginCustomerId: hesap.managerExternalId ?? undefined,
-              /*
-               * TELEMETRİ BAĞLANIYOR. Bağlanmazsa bu çağrıların tükettiği
-               * kota `rate_limit_state`e hiç yazılmıyor ve KOTA BEKÇİSİ KENDİ
-               * ÜRETTİĞİ TRAFİĞİ GÖRMÜYOR — bekçi varmış gibi görünüp
-               * korumayan bir kurulum, hiç olmamasından kötü.
-               */
-              onRateLimit: (snapshot) =>
-                this.quota.record({
-                  platform: hesap.platform,
-                  adAccountId: hesap.id,
-                  clientId: hesap.clientId,
-                  endpoint: `${hesap.platform}:rapor_kreatif`,
-                  snapshot,
-                }),
-            },
-            idler,
-            { timeoutMs: ISTEK_ZAMAN_ASIMI_MS, butceBitisi: bitis },
-          );
-          for (const [id, deger] of sonuc) {
-            yeniAdres.set(id, deger);
-            this.onbellegeYaz(id, deger);
-          }
-        } catch (err) {
-          /*
-           * HESABIN TAMAMI DÜŞTÜ (token geçersiz, bağlantı kaldırılmış).
-           * Sebep her reklama tek tek yazılıyor: rapor "neden yok" sorusunu
-           * cevaplayabilmeli ve bir hesabın sorunu diğerlerini
-           * etkilememeli. ÖNBELLEĞE YAZILMIYOR — geçici bir arıza on dakika
-           * boyunca dondurulmamalı.
-           */
-          const sebep = err instanceof Error ? err.message : 'bağlantı hatası';
-          this.log.warn(
-            `Kreatif adresi tazelenemedi (hesap ${hesap.id}, ${idler.length} kreatif): ${sebep}`,
-          );
-          for (const id of idler) yeniAdres.set(id, { hata: sebep });
-        }
+        const r = await this.hesapAdresleri(hesap, idler, { katman: 'report_creative', bitis, etiket: 'rapor_kreatif' });
+        if (r === null) continue;
+        for (const [id, deger] of r.adresler) yeniAdres.set(id, deger);
       }
     }
 
@@ -268,6 +196,120 @@ export class KreatifAdresiService {
         return { ...a, imageUrlHatasi: taze.hata };
       }),
     };
+  }
+
+  /**
+   * ═══ TAZELEME ÇEKİRDEĞİ — tek hesap, `ReportData`'dan BAĞIMSIZ ═══
+   *
+   * Rapor (`tazele`), kreatif etiketleme işi ve İyileştir › Kreatifler'in
+   * görsel ucu (Paket D) AYNI çekirdeği çağırıyor. İkinci bir tazeleyici
+   * yazmak, kota sırası, önbellek ve yarılama korumalarından birinin
+   * yenisinde unutulması demekti (MIMARI § 1, "ikinci tazeleyici yazılmaz").
+   *
+   * Sıra DEĞİŞMEDİ: önce önbellek, sonra süre bütçesi, sonra KOTA (çağrıdan
+   * ÖNCE, maliyeti sıfır ret), sonra token + platform çağrısı. Katman
+   * çağırandan geliyor: rapor ve görsel ucu `report_creative` (%50, anonim
+   * tetiklenebilir), etiketleme işi `creative_tag`.
+   *
+   * `kotaEngeli` AYRI DÖNÜYOR: etiketleme işi kotayı geçici bir neden
+   * (`platform_kotasi`) olarak yazıyor ve bunu bir hata cümlesinin içinden
+   * ayıklamak kırılgan olurdu. `null` = sağlayıcı tazelemeyi uygulamıyor
+   * (Google: adresler kalıcı), yani "tazelenecek bir şey yok".
+   *
+   * Hesap bilgisini ÇAĞIRAN veriyor: rapor ve görsel ucu RLS'li istemciyle,
+   * iş BYPASSRLS istemciyle okuyor ve çekirdek hiçbirine bağlı değil.
+   */
+  async hesapAdresleri(
+    hesap: {
+      id: string;
+      clientId: string | null;
+      platform: Platform;
+      externalId: string;
+      connectionId: string;
+      managerExternalId: string | null;
+    },
+    idler: readonly string[],
+    opts: { katman: QuotaLayer; bitis: number; etiket: string },
+  ): Promise<{ adresler: Map<string, Adres>; kotaEngeli: string | null } | null> {
+    const provider = this.providers.get(hesap.platform);
+    /*
+     * DESTEKLEMEYEN PLATFORM HATA DEĞİL. Google'ın görsel adresleri
+     * kalıcı; "tazelenemedi" yazmak kullanıcıya olmayan bir sorun
+     * bildirmek olurdu ve her raporda duran bir uyarı okunmaz hâle gelir.
+     */
+    if (!provider.fetchCreativeImageUrls) return null;
+
+    const adresler = new Map<string, Adres>();
+    const simdi = Date.now();
+    const sorulacak: string[] = [];
+    for (const id of idler) {
+      const kayit = this.onbellek.get(id);
+      if (kayit && kayit.sonGecerlilik > simdi) adresler.set(id, kayit.deger);
+      else sorulacak.push(id);
+    }
+    if (sorulacak.length === 0) return { adresler, kotaEngeli: null };
+
+    // SÜRE BÜTÇESİ HESAPLAR ARASINDA DA KONTROL EDİLİYOR.
+    if (Date.now() >= opts.bitis) {
+      for (const id of sorulacak) adresler.set(id, { hata: 'tazeleme süresi doldu' });
+      return { adresler, kotaEngeli: null };
+    }
+
+    /*
+     * ÖNCE KOTA, SONRA ÇAĞRI. Maliyeti sıfır olan bir ret, bağımlı
+     * işlere (yapı taraması) nefes alacak yer bırakıyor — CLAUDE.md'de
+     * kayıtlı kalıcı kilit tam bu sıranın tersine çevrilmesiyle oluştu.
+     */
+    const gate = await this.quota.acquire({ platform: hesap.platform, adAccountId: hesap.id, layer: opts.katman });
+    if (!gate.allowed) {
+      const sebep = `kota engeli (${gate.reason})`;
+      this.log.warn(`Kreatif adresi tazelenmedi (hesap ${hesap.id}): ${sebep}`);
+      for (const id of sorulacak) adresler.set(id, { hata: sebep });
+      return { adresler, kotaEngeli: sebep };
+    }
+
+    try {
+      const token = await this.vault.getAccessToken(hesap.connectionId, provider);
+      const sonuc = await provider.fetchCreativeImageUrls(
+        {
+          accessToken: token,
+          accountExternalId: hesap.externalId,
+          loginCustomerId: hesap.managerExternalId ?? undefined,
+          /*
+           * TELEMETRİ BAĞLANIYOR. Bağlanmazsa bu çağrıların tükettiği
+           * kota `rate_limit_state`e hiç yazılmıyor ve KOTA BEKÇİSİ KENDİ
+           * ÜRETTİĞİ TRAFİĞİ GÖRMÜYOR — bekçi varmış gibi görünüp
+           * korumayan bir kurulum, hiç olmamasından kötü.
+           */
+          onRateLimit: (snapshot) =>
+            this.quota.record({
+              platform: hesap.platform,
+              adAccountId: hesap.id,
+              clientId: hesap.clientId,
+              endpoint: `${hesap.platform}:${opts.etiket}`,
+              snapshot,
+            }),
+        },
+        sorulacak,
+        { timeoutMs: ISTEK_ZAMAN_ASIMI_MS, butceBitisi: opts.bitis },
+      );
+      for (const [id, deger] of sonuc) {
+        adresler.set(id, deger);
+        this.onbellegeYaz(id, deger);
+      }
+    } catch (err) {
+      /*
+       * HESABIN TAMAMI DÜŞTÜ (token geçersiz, bağlantı kaldırılmış).
+       * Sebep her reklama tek tek yazılıyor: rapor "neden yok" sorusunu
+       * cevaplayabilmeli ve bir hesabın sorunu diğerlerini
+       * etkilememeli. ÖNBELLEĞE YAZILMIYOR — geçici bir arıza on dakika
+       * boyunca dondurulmamalı.
+       */
+      const sebep = err instanceof Error ? err.message : 'bağlantı hatası';
+      this.log.warn(`Kreatif adresi tazelenemedi (hesap ${hesap.id}, ${sorulacak.length} kreatif): ${sebep}`);
+      for (const id of sorulacak) adresler.set(id, { hata: sebep });
+    }
+    return { adresler, kotaEngeli: null };
   }
 
   /** Yalnızca BAŞARILI sonuç önbelleğe giriyor — hata dondurulmuyor. */

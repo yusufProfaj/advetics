@@ -31,6 +31,7 @@ const CONN = '33333333-3333-3333-3333-333333333333';
 const ACC = '44444444-4444-4444-4444-444444444444';
 const CAMP = '55555555-5555-5555-5555-555555555555';
 const GRUP = '66666666-6666-6666-6666-666666666666';
+const KREATIF = '77777777-7777-7777-7777-777777777777';
 
 const APP_ROLE = 'advetics_tasima_test';
 
@@ -123,8 +124,14 @@ beforeEach(async () => {
   );
   await h.q(
     `INSERT INTO creatives (id, ad_account_id, client_id, platform, external_id, updated_at)
-     VALUES (gen_random_uuid(), $1, $2, 'meta', 'k-1', now())`,
-    [ACC, CLIENT_A],
+     VALUES ($3, $1, $2, 'meta', 'k-1', now())`,
+    [ACC, CLIENT_A, KREATIF],
+  );
+  // Paket D: kreatifin içerik kaydı kreatifle birlikte taşınıyor.
+  await h.q(
+    `INSERT INTO kreatif_icerikleri (creative_id, org_id, client_id, ad_account_id, platform, bicim, sema_surumu)
+     VALUES ($1, $2, $3, $4, 'meta', 'gorsel', 1)`,
+    [KREATIF, ORG, CLIENT_A, ACC],
   );
   await h.q(
     `INSERT INTO keyword_insights

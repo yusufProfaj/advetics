@@ -26,6 +26,7 @@ import { SUPURME_HESAP_KOSULU } from './supurme-kapsami';
 import { SinyalHesapService } from '../modules/sinyal/sinyal-hesap.service';
 import { BildirimTeslimService } from '../modules/sinyal/bildirim-teslim.service';
 import { EtkiHesapService } from '../modules/etki/etki-hesap.service';
+import { KreatifEtiketService } from '../modules/kreatif-zeka/kreatif-etiket.service';
 import { izlenmeyenSinyalleriKapat } from '../modules/sinyal/hesap-sinyalleri';
 import type { TxLike } from '../modules/sinyal/sinyal-hesap';
 import { isYapilabilir } from './platform-isleri';
@@ -41,6 +42,13 @@ import { GUN_ICI_ARALIK_DK, gunIciAtlanir, seyreltilir, sonGunIciIsler } from '.
  * için var ve `rule_runs`/`audit_logs` içinde hiçbir yere düşmüyor.
  */
 const SYSTEM_ACTOR_ID = '00000000-0000-0000-0000-000000000002';
+
+/**
+ * Kreatif etiketlemede "hepsi geçici hatayla düştü" sonrası bekleme (Paket D).
+ * İki saat: Gemini kotası ve platform kotası dakikalar içinde açılmıyor;
+ * kısa bekleme içerik başına üç denemeyi bir saatte tüketirdi.
+ */
+const KREATIF_GECICI_BEKLEME_MS = 2 * 60 * 60 * 1000;
 
 /**
  * İş işleyicisi.
@@ -84,6 +92,7 @@ export class SyncProcessorService {
     private readonly sinyalHesap: SinyalHesapService,
     private readonly teslim: BildirimTeslimService,
     private readonly etkiHesap: EtkiHesapService,
+    private readonly kreatifEtiket: KreatifEtiketService,
   ) {}
 
   async process(payload: SyncJobPayload): Promise<{ rows: number; note?: string }> {
@@ -95,6 +104,14 @@ export class SyncProcessorService {
     if (payload.jobType === 'signals_evaluate') return this.processSinyalJob(payload);
     // ETKİ İŞİ de platforma gitmiyor (Paket C): kota kapısından geçmiyor.
     if (payload.jobType === 'impact_evaluate') return this.processEtkiJob(payload);
+    /*
+     * KREATİF ETİKETLEME (Paket D) hesap işinin kota kapısından GEÇMİYOR:
+     * platform çağrısı yalnız Meta adres tazelemesi ve onun kotası işin
+     * İÇİNDE, çağrıdan hemen önce soruluyor (`creative_tag` katmanı). Kapıda
+     * sorulsaydı Google hesabı (tazeleme yok) ve eşleşmeyle biten koşu
+     * (çağrı yok) da kotaya takılırdı.
+     */
+    if (payload.jobType === 'creative_tags') return this.processKreatifEtiketJob(payload);
     // KURAL İŞİ hesap işinden AYRI yol izliyor: bir kural birden fazla
     // hesaba dokunabiliyor, dolayısıyla iş seviyesinde tek bir hesabın
     // kotasına bakmak yanlış olurdu. Kota kontrolü aksiyon başına,
@@ -159,6 +176,7 @@ export class SyncProcessorService {
     if (payload.jobType === 'notifications_send') return this.teslim.supur();
     if (payload.jobType === 'signals_evaluate') return this.sinyalSupurmesi();
     if (payload.jobType === 'impact_evaluate') return this.etkiSupurmesi();
+    if (payload.jobType === 'creative_tags') return this.kreatifEtiketSupurmesi();
 
     const accounts = await this.db.adAccount.findMany({
       // Süzgeç TEK YERDE: teşhis ekranı da aynı sabiti okuyor. Ayrı
@@ -775,6 +793,10 @@ export class SyncProcessorService {
         if (payload.jobType === 'insights_daily' || payload.jobType === 'insights_backfill') {
           await this.sinyalZinciri(payload, payload.dateTo);
         }
+        // ZİNCİR (Paket D): dünün reklam metrikleri yazıldıktan SONRA
+        // kreatif etiketleme. İş "pencerede harcaması olan kreatif" seçiyor;
+        // metrikten önce koşsaydı dün yayına giren kreatifi bir gün geç görürdü.
+        if (payload.jobType === 'insights_daily') await this.kreatifEtiketZinciri(payload);
         return { rows: result.rows, note: result.note };
       } catch (err) {
         await this.recordFailure(syncJobId, err);
@@ -1307,6 +1329,105 @@ export class SyncProcessorService {
     const note =
       `etki süpürmesi: ${acilan} hesap kuyruğa alındı, ${atlanan} zaten kuyrukta` +
       (sahipsiz > 0 ? `, ${sahipsiz} hesap workspace'siz ama açık ölçümü var` : '');
+    this.logger.log(note);
+    return { rows: acilan, note };
+  }
+
+  /**
+   * KREATİF ETİKETLEME ZİNCİRİ (Paket D). Yutuluyor ama SESSİZ DEĞİL:
+   * metrik işi başarılı; bu adım düşerse onu başarısız saymak yazılmış
+   * satırları tekrar çektirirdi. Kayıp zincir 10:15 emniyet süpürmesinde
+   * yakalanıyor ve hata log'da. LinkedIn'de kreatif görseli okunmuyor
+   * (MIMARI Ç-13): orada iş hiç açılmıyor.
+   */
+  private async kreatifEtiketZinciri(payload: SyncJobPayload): Promise<void> {
+    if (payload.platform === 'linkedin' || !payload.adAccountId) return;
+    try {
+      await this.queue.enqueue({
+        clientId: payload.clientId,
+        platform: payload.platform,
+        jobType: 'creative_tags',
+        adAccountId: payload.adAccountId,
+      });
+    } catch (err) {
+      this.logger.error(
+        `Kreatif etiketleme kuyruğa alınamadı (hesap ${payload.adAccountId}): ` +
+          `${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  /**
+   * Tek hesabın kreatif etiketleme işi. Sonuç shared'ın `etiketIsSonucu`ndan:
+   * 0 satırda not NEDENİ söylüyor (succeeded + rows=0 notsuz değil).
+   *
+   * `tekrar_dene` (seçilen vardı, HEPSİ geçici hatayla düştü) BullMQ'nun
+   * hızlı yeniden denemesine BIRAKILMIYOR: beş saniyelik geri çekilmeyle
+   * üç deneme bir dakikada biter ve her deneme içeriğin `deneme` sayacını
+   * artırıp onu kalıcı `deneme_tukendi`ye iterdi (Gemini kotası saatler
+   * sonra açılıyor). İş GECİKMELİ tekrara alınıyor (`QuotaThrottleError`
+   * yolu, deneme sayılmıyor) ve satır `throttled` + notla kalıyor.
+   */
+  private async processKreatifEtiketJob(payload: SyncJobPayload): Promise<{ rows: number; note: string }> {
+    const syncJobId = BigInt(payload.syncJobId);
+    if (!payload.adAccountId) {
+      await this.markFailed(syncJobId, 'missing_account', 'creative_tags hesap kimliği olmadan geldi');
+      throw new UnrecoverableError('creative_tags hesap kimliği olmadan geldi');
+    }
+    await this.db.syncJob.update({
+      where: { id: syncJobId },
+      data: { status: 'running', startedAt: new Date(), attempts: { increment: 1 } },
+    });
+    let r;
+    try {
+      r = await this.kreatifEtiket.calistir(payload.adAccountId);
+    } catch (err) {
+      await this.recordFailure(syncJobId, err);
+      throw err;
+    }
+    if (r.sonuc === 'tekrar_dene') {
+      await this.db.syncJob.update({
+        where: { id: syncJobId },
+        data: {
+          status: 'throttled',
+          nextRetryAt: new Date(Date.now() + KREATIF_GECICI_BEKLEME_MS),
+          errorCode: 'gecici_hata',
+          errorMessage: r.not.slice(0, 1000),
+          note: r.not.slice(0, 500),
+        },
+      });
+      throw new QuotaThrottleError(r.not, KREATIF_GECICI_BEKLEME_MS);
+    }
+    await this.markSucceeded(payload.syncJobId, r.satir, 0, { note: r.not });
+    return { rows: r.satir, note: r.not };
+  }
+
+  /**
+   * 10:15 EMNİYET SÜPÜRMESİ (Paket D): workspace'e atanmış, izlenen Meta ve
+   * Google hesaplarının hepsi. "Yalnız bekleyen içeriği olanlar" süzgeci
+   * yetmezdi: içerik satırını İŞİN KENDİSİ açıyor ve zincir kaybolduysa
+   * yeni kreatifin satırı hiç yok. Yapacak işi olmayan koşu sıfır platform
+   * çağrısıyla biter (seçim, eşleşme ve bekçi veritabanında).
+   */
+  private async kreatifEtiketSupurmesi(): Promise<{ rows: number; note: string }> {
+    const accounts = await this.db.adAccount.findMany({
+      where: SUPURME_HESAP_KOSULU,
+      select: { id: true, clientId: true, platform: true },
+    });
+    let acilan = 0;
+    let atlanan = 0;
+    for (const a of accounts) {
+      if (a.clientId === null || a.platform === 'linkedin') continue;
+      const res = await this.queue.enqueue({
+        clientId: a.clientId,
+        platform: a.platform as Platform,
+        jobType: 'creative_tags',
+        adAccountId: a.id,
+      });
+      if (res.enqueued) acilan++;
+      else atlanan++;
+    }
+    const note = `kreatif etiketleme süpürmesi: ${acilan} hesap kuyruğa alındı, ${atlanan} zaten kuyrukta`;
     this.logger.log(note);
     return { rows: acilan, note };
   }

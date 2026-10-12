@@ -307,7 +307,10 @@ Tek kaynak `ozet.ts#KREATIF_ZEKA_UCLARI`. Davranış:
 ## 9. Ölçüm listesi (Ajan 5, canlıda; Ajan 2 betiği yazar)
 
 **9.1 Kreatif başına Gemini görü maliyeti ve süresi.** Betik
-`apps/api/scripts/olcum-kreatif-goru.ts` (yazılmadı, tarifi):
+`apps/api/scripts/olcum-kreatif-goru.ts` (Ajan 2 yazdı, KOŞULMADI; derlenmiş
+`dist/`i kullanıyor: önce `pnpm --filter @advetics/api build`, sonra
+`pnpm --filter @advetics/api olcum-kreatif-goru -- --client=<uuid> ...`.
+Tek yan etkisi Meta tazelemesinin kota telemetrisi). Tarifi:
 
 - Girdi: `--client <uuid> --adet 20 --tekrar 2 [--cozunurluk LOW|MEDIUM|HIGH]`.
   Yalnız okur; veritabanına YAZMAZ, sayaç tutmaz.

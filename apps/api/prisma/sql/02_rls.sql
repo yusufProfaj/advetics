@@ -426,6 +426,11 @@ DECLARE
     'bildirim_gonderimleri',
     -- Değişiklik etkisi (docs/etki/MIMARI.md § 2). Kendi satırında.
     'degisiklik_etkileri',
+    -- Kreatif zekâsı (docs/kreatif-zeka/MIMARI.md § 2). Her tablo kendi satırında.
+    'kreatif_icerikleri',
+    'kreatif_etiketleri',
+    'kreatif_etiket_sayaci',
+    'kreatif_briefleri',
     -- AdvStrategy aylık medya planı (docs/advstrategy/MIMARI.md § 1)
     'strateji_planlari', 'strateji_dagilimlari', 'strateji_matrisi', 'strateji_kelimeleri',
     'ozel_gunler'
@@ -2637,3 +2642,52 @@ CREATE POLICY adv_bildirim_gonderimleri_update ON bildirim_gonderimleri
 -- hesabıyla CASCADE gidiyor.
 CREATE POLICY adv_degisiklik_etkileri_select ON degisiklik_etkileri
   FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+
+
+-- ============================================================================
+-- KREATİF ZEKÂSI — kreatif_icerikleri, kreatif_etiketleri,
+-- kreatif_etiket_sayaci, kreatif_briefleri (docs/kreatif-zeka/MIMARI.md § 2)
+-- ============================================================================
+--
+-- kreatif_icerikleri: workspace kapsamlı; SELECT + INSERT + UPDATE. Satırı
+-- açan ve durumunu ilerleten worker (BYPASSRLS); kullanıcı bağlamında
+-- yazan tek yol HESAP TAŞIMA (hesap-verisi-tasima.ts, kreatifin kendisiyle
+-- birlikte taşınıyor). UPDATE politikası olmasaydı taşıma bu tabloyu
+-- SESSİZCE sıfır satırla atlardı (sync_jobs dersi). DELETE YOK: satır
+-- kreatif, hesap ya da workspace ile CASCADE gidiyor.
+CREATE POLICY adv_kreatif_icerikleri_select ON kreatif_icerikleri
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_kreatif_icerikleri_insert ON kreatif_icerikleri
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_kreatif_icerikleri_update ON kreatif_icerikleri
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+  WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+
+-- kreatif_etiketleri: SELECT + INSERT. Etiket bir kez yazılır ve değişmez;
+-- hesap taşımada TAŞINMIYOR, hedef workspace'e KOPYALANIYOR (kaynakta aynı
+-- görseli kullanan başka hesap etiketsiz kalmasın) ve kopya kullanıcı
+-- bağlamında INSERT. Workspace başka şirkete giderken org_id'yi kompozit
+-- anahtarın ON UPDATE CASCADE'i taşıyor (tablo sahibiyle koşuyor).
+CREATE POLICY adv_kreatif_etiketleri_select ON kreatif_etiketleri
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_kreatif_etiketleri_insert ON kreatif_etiketleri
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+
+-- kreatif_etiket_sayaci: SELECT + INSERT + UPDATE. Brief ayırması API'de
+-- KULLANICI bağlamında yapılıyor (INSERT ... ON CONFLICT DO UPDATE): UPDATE
+-- politikası olmasaydı ayırma sıfır satır döner ve her brief "günlük sınır
+-- doldu" derdi. Kim brief üretebilir (rule.write) servis katmanında.
+CREATE POLICY adv_kreatif_etiket_sayaci_select ON kreatif_etiket_sayaci
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_kreatif_etiket_sayaci_insert ON kreatif_etiket_sayaci
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_kreatif_etiket_sayaci_update ON kreatif_etiket_sayaci
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+  WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+
+-- kreatif_briefleri: SELECT + INSERT. Brief birinin isteğiyle üretilmiş bir
+-- kayıt; düzeltilmez, yenisi üretilir. DELETE YOK.
+CREATE POLICY adv_kreatif_briefleri_select ON kreatif_briefleri
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_kreatif_briefleri_insert ON kreatif_briefleri
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));

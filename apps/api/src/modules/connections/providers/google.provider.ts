@@ -1043,6 +1043,54 @@ export class GoogleProvider implements IAdPlatformProvider {
     }
 
     const notes: string[] = [];
+
+    /*
+     * ═══ DEMAND GEN GÖRSELLERİ AYRI SORGUDA (Paket D, MIMARI Ç-3) ═══
+     *
+     * Kreatif zekâsı Demand Gen görsellerini de etiketliyor; ana sorgu
+     * yalnız Duyarlı Görüntülü Reklam görsellerini istiyordu. Alanlar ANA
+     * SORGUYA EKLENMEDİ, bilerek: GAQL'de tek tanınmayan alan isteğin
+     * TAMAMINI düşürüyor ve bu alanlar CANLIDA ÖLÇÜLMEDİ. Ana sorguya
+     * eklemek, yanlış çıkarlarsa bütün Google hesaplarının yapı taramasını
+     * durdururdu (CLAUDE.md "TEK geçersiz ad isteğin tamamını düşürüyor").
+     *
+     * YAN ÖZELLİĞİN HATASI ANA ÇEKİMİ DÜŞÜRMÜYOR AMA SESSİZ DE DEĞİL: hata
+     * yapı işinin notuna yazılıyor ve Demand Gen kreatifleri "görsel yok"
+     * olarak etiketlenemez sayılıyor (kreatif zekâsı ekranında görünür).
+     * Bir sorgu daha demek; yalnız Demand Gen reklamı olan hesapta satır
+     * döner.
+     *
+     * YALNIZ DEMAND GEN KAMPANYASI VARSA: kampanya listesi bu fonksiyonun
+     * başında zaten okundu; olmayan hesapta bu sorgu her yapı taramasında
+     * boş bir çağrı (kota) olurdu.
+     */
+    if (campaigns.some((c) => c.objective === 'DEMAND_GEN')) {
+      try {
+        const dgRows = await this.searchGaqlPaged<{ adGroupAd?: Record<string, unknown> }>(
+          accessToken,
+          customerId,
+          `SELECT ad_group_ad.ad.id,
+                  ad_group_ad.ad.demand_gen_multi_asset_ad.marketing_images,
+                  ad_group_ad.ad.demand_gen_multi_asset_ad.square_marketing_images,
+                  ad_group_ad.ad.demand_gen_multi_asset_ad.portrait_marketing_images
+           FROM ad_group_ad
+           WHERE ad_group_ad.ad.type = 'DEMAND_GEN_MULTI_ASSET_AD'`,
+          loginCustomerId,
+          calls,
+        );
+        const girdiler = new Map(kreatifGirdileri.map((k) => [k.id, k]));
+        for (const row of dgRows) {
+          const ad = this.obj(row.adGroupAd?.ad);
+          const k = ad?.id ? girdiler.get(String(ad.id)) : undefined;
+          if (!k || !ad?.demandGenMultiAssetAd) continue;
+          k.ad = { ...k.ad, demandGenMultiAssetAd: ad.demandGenMultiAssetAd };
+          for (const kaynak of gorselKaynakAdlari(k.ad)) kaynakAdlari.add(kaynak);
+        }
+      } catch (err) {
+        notes.push(`Demand Gen görselleri okunamadı: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
     const gorselAdresleri = await this.gorselVarligiAdresleri(
       { accessToken, customerId, loginCustomerId },
       kaynakAdlari,
@@ -2874,18 +2922,27 @@ function googleSebebi(err: unknown): string {
  * zorunda.
  */
 export function gorselKaynakAdlari(ad: Record<string, unknown>): string[] {
-  const rda = ad.responsiveDisplayAd;
-  const liste =
-    rda && typeof rda === 'object' && !Array.isArray(rda)
-      ? (rda as Record<string, unknown>).marketingImages
-      : undefined;
-  if (!Array.isArray(liste)) return [];
+  const nesne = (v: unknown): Record<string, unknown> | undefined =>
+    v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : undefined;
+  const rda = nesne(ad.responsiveDisplayAd);
+  /*
+   * DEMAND GEN (Paket D): çok öğeli reklamın üç görsel listesi. Sıra
+   * BİLİNÇLİ: yatay pazarlama görseli önce (Duyarlı Görüntülü ile aynı
+   * alan adı ve kreatifin ilk görseli o kalsın), sonra kare, sonra dikey.
+   * Ayrı sorguda geliyor (`discoverStructure`), alan adları CANLIDA
+   * ÖLÇÜLMEDİ (MIMARI § 9.2).
+   */
+  const dg = nesne(ad.demandGenMultiAssetAd);
+  const listeler = [rda?.marketingImages, dg?.marketingImages, dg?.squareMarketingImages, dg?.portraitMarketingImages];
 
   const cikti: string[] = [];
-  for (const item of liste) {
-    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
-    const kaynak = (item as Record<string, unknown>).asset;
-    if (typeof kaynak === 'string' && kaynak.trim().length > 0) cikti.push(kaynak.trim());
+  for (const liste of listeler) {
+    if (!Array.isArray(liste)) continue;
+    for (const item of liste) {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+      const kaynak = (item as Record<string, unknown>).asset;
+      if (typeof kaynak === 'string' && kaynak.trim().length > 0) cikti.push(kaynak.trim());
+    }
   }
   return cikti;
 }

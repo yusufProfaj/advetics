@@ -35,7 +35,8 @@
     "olcum-google-kota": "tsx prisma/olcum-google-kota.ts",
     "olcum-rapor": "tsx prisma/olcum-rapor.ts",
     "db:platform-admin": "tsx prisma/platform-admin.ts",
-    "olcum-senkron": "tsx prisma/olcum-senkron.ts"
+    "olcum-senkron": "tsx prisma/olcum-senkron.ts",
+    "olcum-kreatif-goru": "tsx scripts/olcum-kreatif-goru.ts"
   },
   "dependencies": {
     "@advetics/shared": "workspace:*",

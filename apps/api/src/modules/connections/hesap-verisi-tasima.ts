@@ -86,6 +86,20 @@ export const HESABIN_KENDI_VERISI = [
    */
   { tablo: 'sinyaller', etiket: 'sinyal', orgIdIle: true },
   /*
+   * KREATİF İÇERİK KAYDI (Paket D) DE HESABIN KENDİ VERİSİ: kreatifin
+   * kendisi (`creatives`) taşınıyor ve bu satır onun "hangi görsele bağlı,
+   * neden etiketlenemedi" kaydı. Geride kalsaydı yeni workspace'te kreatif
+   * etiketsiz görünür ve iş onu yeniden indirip Gemini'ye yeniden para
+   * öderdi. Birincil anahtar `creative_id`, `client_id` İÇERMİYOR: hedefte
+   * çakışma doğmaz. Kompozit anahtar yüzünden `org_id` de yazılıyor.
+   *
+   * ETİKETİN KENDİSİ (`kreatif_etiketleri`) BURADA DEĞİL: hesaba değil
+   * İÇERİĞE bağlı ve aynı görseli kaynak workspace'te başka bir hesap da
+   * kullanıyor olabilir. Taşımadan önce hedefe KOPYALANIYOR
+   * (`etiketleriKopyala`).
+   */
+  { tablo: 'kreatif_icerikleri', etiket: 'kreatif içerik kaydı', orgIdIle: true },
+  /*
    * `degisiklik_etkileri` (Paket C) BİLEREK BURADA YOK — sinyalin tersi.
    * Etki satırı bir KARARIN (İyileştir, kural, Reklam Yöneticisi) ölçülen
    * sonucu ve karar eski müşterinin; satır karar kaydıyla birlikte kalır
@@ -260,6 +274,33 @@ async function yabanciSatirSayisi(
 }
 
 /**
+ * Hesabın kreatif içeriklerinin ETİKETLERİNİ hedef workspace'e kopyalar.
+ *
+ * KOPYA, TAŞIMA DEĞİL: etiket içeriğe (SHA-256) bağlı ve kaynak workspace'te
+ * aynı görseli başka bir hesap kullanıyor olabilir; taşımak onu etiketsiz
+ * bırakırdı. Kopyalamamak ise hedefte aynı görsel için Gemini'ye yeniden
+ * ödemek demekti. Hedefte aynı özet zaten etiketliyse dokunulmuyor
+ * (`ON CONFLICT DO NOTHING`, tekil anahtar workspace + özet + şema sürümü).
+ * `org_id` HEDEF MÜŞTERİDEN: kompozit anahtar çiftin `clients`ta var
+ * olmasını istiyor ve hesap kardeş şirketin workspace'ine gidebilir.
+ *
+ * Kopyalanan satır sayısını döndürür (testler sayıyor; dönüş yanıtına
+ * eklenmiyor çünkü kullanıcının kaybettiği bir şey yok).
+ */
+export async function etiketleriKopyala(tx: Yurutucu, adAccountId: string, yeniClientId: string): Promise<number> {
+  return tx.$executeRaw(Prisma.sql`
+    INSERT INTO kreatif_etiketleri (org_id, client_id, icerik_ozeti, sema_surumu, etiketler, model, girdi_token, cikti_token, sure_ms)
+    SELECT c.org_id, c.id, e.icerik_ozeti, e.sema_surumu, e.etiketler, e.model, 0, 0, 0
+      FROM kreatif_etiketleri e
+      JOIN clients c ON c.id = ${yeniClientId}::uuid
+     WHERE e.client_id <> ${yeniClientId}::uuid
+       AND (e.client_id, e.icerik_ozeti) IN (
+             SELECT k.client_id, k.icerik_ozeti FROM kreatif_icerikleri k
+              WHERE k.ad_account_id = ${adAccountId}::uuid AND k.icerik_ozeti IS NOT NULL)
+    ON CONFLICT (client_id, icerik_ozeti, sema_surumu) DO NOTHING`);
+}
+
+/**
  * Hesabın verisini yeni müşteriye taşır ve taşınmayanları sayar.
  *
  * SÜZGEÇ `ad_account_id`, `client_id` DEĞİL. Sebebi somut: panelde atama iki
@@ -309,6 +350,14 @@ export async function hesapVerisiniTasi(
    * yeni sahibin değerlendirmesi devam ediyor.
    */
   if (yeniClientId === null) await hesapSinyalleriniKapat(tx, adAccountId, HESAP_AYRILDI_NOTU);
+
+  /*
+   * KREATİF ETİKETLERİ İÇERİK KAYDI TAŞINMADAN ÖNCE KOPYALANIYOR: kopya,
+   * taşınacak satırların özetlerini kaynak workspace'te arıyor ve taşımadan
+   * sonra o satırlar artık hedefte. Sıra ters olsaydı kopya hiçbir şey
+   * bulamaz ve hedefte etiketli görünen ama etiketi olmayan satırlar kalırdı.
+   */
+  if (yeniClientId !== null) await etiketleriKopyala(tx, adAccountId, yeniClientId);
 
   for (const t of HESABIN_KENDI_VERISI) {
     const { tablo } = t;

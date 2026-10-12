@@ -7,6 +7,7 @@ import { RulesModule } from '../modules/rules/rules.module';
 import { BoostsModule } from '../modules/boosts/boosts.module';
 import { SinyalIsModule } from '../modules/sinyal/sinyal-is.module';
 import { EtkiIsModule } from '../modules/etki/etki-is.module';
+import { KreatifZekaIsModule } from '../modules/kreatif-zeka/kreatif-zeka-is.module';
 import { InsightsSyncService } from './insights-sync.service';
 import { LeadSyncService } from './lead-sync.service';
 import { OrganicSyncService } from './organic-sync.service';
@@ -31,7 +32,7 @@ import { SyncProcessorService } from './sync-processor.service';
  */
 @Global()
 @Module({
-  imports: [AutoBoostModule, ConnectionsModule, RulesModule, BoostsModule, AlertsModule, ReportsModule, SinyalIsModule, EtkiIsModule],
+  imports: [AutoBoostModule, ConnectionsModule, RulesModule, BoostsModule, AlertsModule, ReportsModule, SinyalIsModule, EtkiIsModule, KreatifZekaIsModule],
   providers: [
     QuotaGuardService,
     SyncQueueService,

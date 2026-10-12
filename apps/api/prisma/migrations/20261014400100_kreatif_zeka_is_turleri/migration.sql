@@ -1,0 +1,12 @@
+-- KREATİF ZEKÂSI İŞ TÜRÜ (Paket D, docs/kreatif-zeka/MIMARI.md § 4)
+--
+-- BU MIGRATION TEK BAŞINA VE İÇİNDE BAŞKA HİÇBİR ŞEY YOK.
+-- `ALTER TYPE ... ADD VALUE` ile eklenen bir enum değeri AYNI TRANSACTION
+-- İÇİNDE KULLANILAMIYOR (CLAUDE.md §3). Tablolar bir önceki migration'da;
+-- bu değeri kullanan tek şey uygulama kodu (sync_jobs satırları).
+--
+-- creative_tags: hesap başına kreatif etiketleme (Gemini görü). Platform
+--   çağrısı yalnız Meta görsel adresini tazelemek için ve kendi kota
+--   katmanından (creative_tag); insights_daily işinin SONUNA zincirli ve
+--   günde bir emniyet süpürmesi var.
+ALTER TYPE "SyncJobType" ADD VALUE IF NOT EXISTS 'creative_tags';

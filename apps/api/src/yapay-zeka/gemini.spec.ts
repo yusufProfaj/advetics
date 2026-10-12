@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GeminiIstemcisi, YapayZekaHatasi, metinIste, sonucCoz } from './gemini';
+import { GeminiIstemcisi, YapayZekaHatasi, metinIste, metinIsteOlcumlu, sonucCoz } from './gemini';
 
 /**
  * Gemini istemcisi: istek biçimi, akış ayrıştırma, bitiş sebepleri, token
@@ -100,6 +100,25 @@ describe('bitiş sebepleri', () => {
     expect(c({ candidates: [{ content: { parts: [{ text: '  ' }] }, finishReason: 'STOP' }] }).sebep).toBe('bos');
     expect(c({ candidates: [{ content: { parts: [{ text: 'düşünce', thought: true }] }, finishReason: 'STOP' }] }).sebep).toBe('bos');
     expect(c({ candidates: [{ content: { parts: [{ text: 'tamam' }] }, finishReason: 'STOP' }] }).sebep).toBe('bitti');
+  });
+
+  it('KRİTİK: görsel girdi inlineData ile metinden ÖNCE ve mediaResolution gövdede AÇIKÇA (Paket D, Ç-16)', async () => {
+    const f = sahteFetch(() => Response.json({ candidates: [{ content: { parts: [{ text: '{}' }] }, finishReason: 'STOP' }], usageMetadata: { promptTokenCount: 280, candidatesTokenCount: 30 } }));
+    const g = new GeminiIstemcisi({ apiKey: 'k', model: 'm', fetchFn: f.fn });
+    const r = await metinIsteOlcumlu(g, {
+      sistem: 's',
+      metin: 'etiketle',
+      enCokCikti: 300,
+      gorseller: [{ mimeType: 'image/webp', data: 'QUJD' }],
+      mediaResolution: 'MEDIA_RESOLUTION_MEDIUM',
+    });
+    const govde = f.kayitlar[0]!.govde as { contents: Array<{ parts: unknown[] }>; generationConfig: Record<string, unknown> };
+    expect(govde.contents[0]!.parts).toEqual([{ inlineData: { mimeType: 'image/webp', data: 'QUJD' } }, { text: 'etiketle' }]);
+    expect(govde.generationConfig.mediaResolution).toBe('MEDIA_RESOLUTION_MEDIUM');
+    expect(r).toMatchObject({ sonuc: { tur: 'tamam', metin: '{}' }, girdiToken: 280, ciktiToken: 30 });
+    // Görselsiz çağrıda alan HİÇ gitmiyor (metin istekleri değişmedi).
+    await g.uret({ sistem: 's', mesajlar: [{ role: 'user', parts: [{ text: 'a' }] }], enCokCikti: 1 });
+    expect((f.kayitlar[1]!.govde as { generationConfig: Record<string, unknown> }).generationConfig).not.toHaveProperty('mediaResolution');
   });
 
   it('metinIste: ret ve boş cevap ayrı mesajla döner', async () => {

@@ -45,7 +45,9 @@ describe('sinyal zinciri', () => {
   it('KRİTİK: başarılı günlük metrik işi AYNI GÜN için signals_evaluate kuyruğa alıyor', async () => {
     const { proc, kuyruk } = kur(async () => ({ rows: 10, apiCalls: 1 }));
     await proc.process(IS('insights_daily', '2026-10-11', '2026-10-11'));
-    expect(kuyruk).toEqual([
+    // Paket D aynı noktaya kreatif etiketleme zincirini ekledi
+    // (`kreatif-zinciri.spec.ts`); burada yalnız sinyal işi sayılıyor.
+    expect(kuyruk.filter((k) => k.jobType === 'signals_evaluate')).toEqual([
       expect.objectContaining({ jobType: 'signals_evaluate', adAccountId: 'a', dateFrom: '2026-10-11', dateTo: '2026-10-11' }),
     ]);
   });

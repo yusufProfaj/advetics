@@ -16,5 +16,7 @@
   // `prisma/*.ts` de dâhil: ops script'leri (set-password, sync-cli) buraya
   // kadar hiç tip kontrolünden geçmiyordu. Yalnızca üretimde, çalıştırıldıkları
   // anda patlarlardı — ve tam olarak bir şeyler ters gittiği anda çalıştırılıyorlar.
-  "include": ["src/**/*.ts", "test/**/*.ts", "prisma/*.ts", "vitest.config.ts"]
+  // `scripts/*.ts` (Paket D ölçüm betiği) da: canlıda bir kez koşan betik
+  // tip kontrolünden geçmezse ilk hatasını Ajan 5'in ekranında verir.
+  "include": ["src/**/*.ts", "test/**/*.ts", "prisma/*.ts", "scripts/*.ts", "vitest.config.ts"]
 }

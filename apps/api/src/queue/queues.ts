@@ -35,6 +35,13 @@ export const JOB_PRIORITY = {
    */
   lead_fetch: 3,
   insights_breakdown: 8,
+  /**
+   * Paket D — kreatif etiketleme. Kırılımların ARKASINDA: metrik ve yapı
+   * taraması bitmeden etiketlemenin seçeceği kreatif listesi eksik olur ve
+   * iş zaten `insights_daily`nin sonuna zincirli. Geçmiş çekiminin önünde,
+   * çünkü günde en çok 40 kreatif ve dakikalar süren bir iş değil.
+   */
+  creative_tag: 9,
   initial_backfill: 10,
 } as const;
 
@@ -122,6 +129,9 @@ export function layerForJob(payload: SyncJobPayload): keyof typeof JOB_PRIORITY 
       // doldurduğunda 15 dakikalık kontrolün arkaya düşmesi, "anında" mailin
       // yarım saat gecikmesi demekti. İş ucuz: kuyruğu tıkamıyor.
       return 'rule_action';
+    case 'creative_tags':
+      // Kendi katmanı: tazeleme `creative_tag` kotasıyla soruluyor (%50).
+      return 'creative_tag';
     case 'leads_reconcile':
       // Tarama bir YEDEK yol: webhook çalışıyorsa hiçbir şey bulmuyor.
       // Canlı kaydın önüne geçmemeli.
