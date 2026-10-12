@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Etki Taslağı</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600;700&display=swap">
+<style>
+/*
+ * Paket C taslağı (docs/etki/MIMARI.md § 7). KESİN KURAL: renkler yalnız
+ * #ffffff, #000000, #302e2d, #ff2400; zemin ve çizgi için grinin saydam
+ * tonları. Yeşil YALNIZ "iyileşti" durum noktası. Gradyan, pastel yok.
+ */
+:root{
+  --beyaz:#ffffff; --siyah:#000000; --gri:#302e2d; --kirmizi:#ff2400;
+  --zemin:rgba(48,46,45,.04); --cizgi:rgba(48,46,45,.12); --ikincil:rgba(48,46,45,.62); --cok-acik:rgba(48,46,45,.07);
+  --yesil:#16a34a;
+  --baslik:"Montserrat",system-ui,sans-serif; --govde:"Open Sans",system-ui,sans-serif;
+  --gecis:cubic-bezier(.16,1,.3,1);
+}
+*{box-sizing:border-box}
+html{background:var(--beyaz)}
+body{margin:0;background:var(--zemin);color:var(--gri);font-family:var(--govde);font-size:14px;line-height:1.45;overflow-x:hidden}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+a{color:var(--siyah);text-decoration:none}
+a:hover{color:var(--kirmizi);text-decoration:underline}
+:focus-visible{outline:2px solid var(--kirmizi);outline-offset:2px;border-radius:6px}
+.num{font-variant-numeric:tabular-nums}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important}}
+
+.sayfa{max-width:1180px;margin:0 auto;padding:16px 16px 64px;display:flex;flex-direction:column;gap:16px}
+.not{background:var(--beyaz);border:1px dashed var(--cizgi);border-radius:10px;padding:10px 14px;font-size:12.5px;color:var(--ikincil)}
+.not b{color:var(--gri)}
+.gezinti{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.gezinti span{font-size:12px;font-weight:700;color:var(--ikincil);margin-right:4px}
+.gezinti button{border:1px solid var(--cizgi);background:var(--beyaz);border-radius:999px;padding:6px 12px;font-size:12.5px;font-weight:600}
+.gezinti button[aria-pressed="true"]{background:var(--gri);color:var(--beyaz);border-color:var(--gri)}
+
+h1{font-family:var(--baslik);font-weight:700;font-size:24px;margin:0;color:var(--siyah)}
+h2{font-size:14px;font-weight:700;margin:0;color:var(--siyah)}
+.alt{font-size:13px;color:var(--ikincil);margin-top:2px}
+.sekmeler{display:flex;gap:4px;border-bottom:1px solid var(--cizgi);overflow-x:auto}
+.sekmeler button{padding:10px 14px;font-weight:600;font-size:13.5px;color:var(--ikincil);border-bottom:3px solid transparent;white-space:nowrap}
+.sekmeler button[aria-selected="true"]{color:var(--siyah);border-bottom-color:var(--kirmizi)}
+.say{font-size:11px;font-weight:700;border-radius:999px;padding:0 7px;background:var(--cok-acik);color:var(--gri);margin-left:4px}
+
+.kart{background:var(--beyaz);border:1px solid var(--cizgi);border-radius:12px;min-width:0;overflow:hidden}
+.ozet{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
+.ozet>div{padding:12px 16px;border-right:1px solid var(--cizgi);min-width:0}
+.ozet>div:last-child{border-right:0}
+.ozet small{display:block;font-size:12px;font-weight:600;color:var(--ikincil)}
+.ozet b{display:block;font-family:var(--baslik);font-size:22px;color:var(--siyah);margin-top:2px}
+.ozet em{font-style:normal;font-size:12px;color:var(--ikincil)}
+
+.arac{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--cizgi)}
+.cip{border:1px solid var(--cizgi);border-radius:999px;padding:5px 11px;font-size:12.5px;font-weight:600;background:var(--beyaz);transition:background .2s,color .2s}
+.cip[aria-pressed="true"]{border-color:var(--gri);background:var(--gri);color:var(--beyaz)}
+.arac .sag{margin-left:auto;font-size:12px;color:var(--ikincil)}
+
+.satir{border-bottom:1px solid var(--cizgi)}
+.satir:last-child{border-bottom:0}
+.satirUst{display:grid;grid-template-columns:minmax(0,1fr) 150px auto;gap:10px 16px;padding:14px 16px;align-items:center}
+.ne{font-weight:700;color:var(--siyah)}
+.yol{font-size:12px;color:var(--ikincil);margin-top:2px}
+.cumle{font-size:13px;margin-top:6px}
+.sonuc{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;white-space:nowrap}
+.nokta{width:8px;height:8px;border-radius:50%;flex:none;display:inline-block}
+.nokta.yesil{background:var(--yesil)}
+.nokta.kirmizi{background:var(--kirmizi)}
+.nokta.gri{border:2px solid var(--gri);width:9px;height:9px}
+.nokta.bos{border:2px dashed var(--ikincil);width:9px;height:9px}
+.metinD{font-size:12.5px;font-weight:600;color:var(--ikincil);padding:6px 4px}
+.metinD:hover{color:var(--siyah);text-decoration:underline}
+
+/* Ayrıntı: DOM'dan çıkmaz, yükseklik geçişle açılır */
+.ayrinti{display:grid;grid-template-rows:0fr;transition:grid-template-rows .35s var(--gecis)}
+.ayrinti.acik{grid-template-rows:1fr}
+.ayrinti>div{overflow:hidden}
+.ayrintiIc{padding:0 16px 16px;display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px}
+.kanit{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--cizgi);border-radius:8px}
+.kanit>div{padding:10px 12px;border-right:1px solid var(--cizgi);min-width:0}
+.kanit>div:last-child{border-right:0}
+.kanit small{display:block;font-size:11.5px;color:var(--ikincil);font-weight:600}
+.kanit b{display:block;color:var(--siyah);font-size:15px}
+.kanit em{display:block;font-style:normal;font-size:11.5px;color:var(--ikincil)}
+.dipnot{font-size:12px;color:var(--ikincil);margin-top:8px}
+svg.grafik{width:100%;height:120px;display:block}
+.lejant{font-size:11px;color:var(--ikincil);display:flex;gap:12px;flex-wrap:wrap}
+.lejant i{display:inline-block;width:12px;height:2px;vertical-align:3px;margin-right:4px}
+
+.disarida{padding:10px 16px;font-size:12.5px;color:var(--ikincil);border-top:1px solid var(--cizgi)}
+.disarida summary{cursor:pointer;font-weight:600;color:var(--gri)}
+.disarida ul{margin:8px 0 0;padding-left:18px}
+
+/* İyileştir kartı altı */
+.oneri{padding:14px 16px;display:flex;flex-direction:column;gap:6px}
+.oneri .b{font-weight:700;color:var(--siyah)}
+.uygulandi{font-size:12px;font-weight:700;border:1px solid var(--gri);border-radius:4px;padding:1px 6px}
+.etkiSatiri{display:flex;gap:8px;align-items:center;font-size:12.5px;padding:10px 16px;border-top:1px solid var(--cizgi);background:var(--zemin);flex-wrap:wrap}
+
+.bos{padding:36px 16px;text-align:center}
+.bos b{display:block;font-size:15px;color:var(--siyah);margin-bottom:4px}
+.bos p{margin:0 auto;max-width:520px;color:var(--ikincil);font-size:13px}
+.hata{padding:14px 16px;border-left:3px solid var(--kirmizi);font-size:13px}
+.yukleniyor{padding:16px;display:flex;flex-direction:column;gap:10px}
+.yukleniyor i{height:14px;border-radius:6px;background:var(--cok-acik);display:block}
+.gizli{display:none}
+
+@media (max-width:760px){
+  .ozet{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ozet>div:nth-child(2){border-right:0}
+  .ozet>div:nth-child(-n+2){border-bottom:1px solid var(--cizgi)}
+  .satirUst{grid-template-columns:minmax(0,1fr) auto}
+  .satirUst .sonuc{grid-column:1/-1;grid-row:2}
+  .ayrintiIc{grid-template-columns:minmax(0,1fr)}
+  .kanit{grid-template-columns:minmax(0,1fr)}
+  .kanit>div{border-right:0;border-bottom:1px solid var(--cizgi)}
+  .kanit>div:last-child{border-bottom:0}
+  h1{font-size:20px}
+}
+</style>
+</head>
+<body>
+<div class="sayfa">
+
+<div class="not"><b>Taslak · Paket C.</b> İyileştir › Etkisi sekmesi ve uygulanmış öneri kartının altı. Sayılar örnek. Hâl seçici ürünün parçası değil.</div>
+
+<div class="gezinti" role="group" aria-label="Taslak hâli">
+  <span>Hâl:</span>
+  <button type="button" data-hal="dolu" aria-pressed="true">Dolu</button>
+  <button type="button" data-hal="bos" aria-pressed="false">Değişiklik yok</button>
+  <button type="button" data-hal="yukleniyor" aria-pressed="false">Yükleniyor</button>
+  <button type="button" data-hal="hata" aria-pressed="false">Hata</button>
+</div>
+
+<div>
+  <h1>İyileştir</h1>
+  <div class="alt">Acme Mobilya</div>
+</div>
+
+<div class="sekmeler" role="tablist">
+  <button role="tab" aria-selected="false">Öneriler<span class="say">2</span></button>
+  <button role="tab" aria-selected="false">Sinyaller<span class="say">2</span></button>
+  <button role="tab" aria-selected="true">Etkisi</button>
+</div>
+
+<div class="kart" id="hal-dolu">
+  <div class="ozet num">
+    <div><small>Sonuçlanan</small><b>9</b><em>son 60 gün</em></div>
+    <div><small>İyileşen</small><b>4</b><em>dönüşüm başı maliyete göre</em></div>
+    <div><small>Kötüleşen</small><b>1</b><em>&nbsp;</em></div>
+    <div><small>Ölçülüyor</small><b>3</b><em>sıradaki 15 Ekim</em></div>
+  </div>
+  <div class="arac">
+    <button class="cip" type="button" aria-pressed="true">Hepsi</button>
+    <button class="cip" type="button" aria-pressed="false">Ölçülüyor</button>
+    <button class="cip" type="button" aria-pressed="false">Sonuçlanan</button>
+    <span class="sag">Son hesaplama bugün 07:21 · 15 değişiklikten 15'i gösteriliyor</span>
+  </div>
+
+  <div class="satir">
+    <div class="satirUst">
+      <div>
+        <div class="ne">Yeniden Pazarlama · Bütçe 800 ₺ → 640 ₺</div>
+        <div class="yol">29 Eylül · İyileştir önerisi · Ayşe Kaya · Meta</div>
+        <div class="cumle">Değişiklikten sonra dönüşüm başı maliyet, aynı hesapta değişmeyenlere göre %21 düştü.</div>
+      </div>
+      <span class="sonuc"><span class="nokta yesil" aria-hidden="true"></span>İyileşti</span>
+      <button class="metinD" type="button" data-ac="a1" aria-expanded="false">Ayrıntı</button>
+    </div>
+    <div class="ayrinti" id="a1"><div>
+      <div class="ayrintiIc">
+        <div>
+          <div class="kanit num">
+            <div><small>Önce (15-28 Eylül)</small><b>126 ₺</b><em>3.410 tık · 61 dönüşüm</em></div>
+            <div><small>Sonra (30 Eylül - 6 Ekim)</small><b>96 ₺</b><em>1.520 tık · 27 dönüşüm</em></div>
+            <div><small>Diğer 6 kampanya</small><b>%-4</b><em>aynı dönemde değişim</em></div>
+          </div>
+          <div class="dipnot">Ölçülen: dönüşüm başı maliyet · 7 günlük pencere, dönüşümler 3 gün beklendi. Hesabın olağan dalgalanması %6; eşik %15. Meta ya da Google arayüzünden aynı dönemde değişiklik yaptıysanız sonuç onu da içerir.</div>
+        </div>
+        <div>
+          <svg class="grafik" viewBox="0 0 300 120" role="img" aria-label="Günlük dönüşüm başı maliyet: kampanya ve değişmeyen kampanyalar">
+            <line x1="0" y1="110" x2="300" y2="110" stroke="rgba(48,46,45,.12)"/>
+            <line x1="200" y1="6" x2="200" y2="110" stroke="#302e2d" stroke-dasharray="3 3"/>
+            <text x="204" y="14" font-size="9" fill="rgba(48,46,45,.62)">değişiklik</text>
+            <polyline fill="none" stroke="#000000" stroke-width="2" points="0,40 14,46 28,36 42,44 56,38 70,42 84,34 98,46 112,40 126,38 140,44 154,36 168,42 182,40 214,62 228,66 242,60 256,70 270,64 284,68 298,66"/>
+            <polyline fill="none" stroke="rgba(48,46,45,.45)" stroke-width="2" points="0,58 14,60 28,56 42,62 56,58 70,60 84,56 98,62 112,58 126,60 140,56 154,62 168,58 182,60 214,62 228,60 242,64 256,60 270,62 284,60 298,62"/>
+          </svg>
+          <div class="lejant"><span><i style="background:#000"></i>Yeniden Pazarlama</span><span><i style="background:rgba(48,46,45,.45)"></i>Değişmeyen 6 kampanya</span></div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="satir">
+    <div class="satirUst">
+      <div>
+        <div class="ne">Kış Koleksiyonu · Bütçe 500 ₺ → 600 ₺</div>
+        <div class="yol">7 Ekim · İyileştir önerisi · Meta</div>
+        <div class="cumle">Etki 18 Ekim tarihinde ölçülecek.</div>
+      </div>
+      <span class="sonuc"><span class="nokta bos" aria-hidden="true"></span>Ölçüm bekleniyor</span>
+      <span></span>
+    </div>
+  </div>
+
+  <div class="satir">
+    <div class="satirUst">
+      <div>
+        <div class="ne">Marka Arama · Bütçe 300 ₺ → 360 ₺</div>
+        <div class="yol">1 Ekim · Reklam Yöneticisi · Google</div>
+        <div class="cumle">Henüz yeterli veri yok; 22 Ekim tarihinde yeniden bakılacak. Dönüşüm az olduğu için tıklama maliyetine bakılacak.</div>
+      </div>
+      <span class="sonuc"><span class="nokta gri" aria-hidden="true"></span>Henüz belli değil</span>
+      <span></span>
+    </div>
+  </div>
+
+  <div class="satir">
+    <div class="satirUst">
+      <div>
+        <div class="ne">Sonbahar görseli B · Durduruldu</div>
+        <div class="yol">8 Ekim · Kural: Yorgun kreatif · ölçülen: Sonbahar Seti (reklam seti) · 2 değişiklik birlikte ölçüldü</div>
+        <div class="cumle">Etki 19 Ekim tarihinde ölçülecek.</div>
+      </div>
+      <span class="sonuc"><span class="nokta bos" aria-hidden="true"></span>Ölçüm bekleniyor</span>
+      <span></span>
+    </div>
+  </div>
+
+  <div class="satir">
+    <div class="satirUst">
+      <div>
+        <div class="ne">Yaz Kampanyası · Durduruldu</div>
+        <div class="yol">21 Eylül · Sinyal · Meta</div>
+        <div class="cumle">Kıyaslanacak değişmemiş kampanya yok; yalnız durmadan önceki harcama gösteriliyor. Durmadan önce günde 420 ₺, sonra 0 ₺.</div>
+      </div>
+      <span class="sonuc"><span class="nokta gri" aria-hidden="true"></span>Ölçülemedi</span>
+      <span></span>
+    </div>
+  </div>
+
+  <div class="satir">
+    <div class="satirUst">
+      <div>
+        <div class="ne">Genel Arama · Bütçe 1.000 ₺ → 1.200 ₺</div>
+        <div class="yol">16 Eylül · Kural: Kârlıya bütçe · Meta</div>
+        <div class="cumle">Değişiklikten sonra dönüşüm başı maliyet, aynı hesapta değişmeyenlere göre %19 arttı.</div>
+      </div>
+      <span class="sonuc"><span class="nokta kirmizi" aria-hidden="true"></span>Kötüleşti</span>
+      <button class="metinD" type="button">Ayrıntı</button>
+    </div>
+  </div>
+
+  <details class="disarida">
+    <summary>Ölçülmeyen değişiklikler</summary>
+    <ul>
+      <li><b>Meta ya da Google arayüzünden yapılan değişiklikler.</b> İlk sürüm yalnız Advetics'ten yapılan değişiklikleri görüyor.</li>
+      <li><b>Duraklatılmış bir kampanyayı yeniden başlatmak.</b> Öncesi yok (harcama sıfırdı).</li>
+      <li><b>Yeni kampanya, kopya, Akıllı Boost.</b> Yeni açılan kampanyanın öncesi yok; performansı raporlarda.</li>
+    </ul>
+  </details>
+</div>
+
+<div class="kart gizli" id="hal-bos"><div class="bos"><b>Henüz ölçülecek değişiklik yok</b><p>Son 60 günde Advetics'ten bu workspace'te durdurma ya da bütçe değişikliği yapılmadı. İyileştir önerisi ya da kural uygulandığında etkisi burada görünür.</p></div></div>
+<div class="kart gizli" id="hal-yukleniyor"><div class="yukleniyor" aria-busy="true"><i style="width:35%"></i><i style="width:85%"></i><i style="width:70%"></i></div></div>
+<div class="kart gizli" id="hal-hata"><div class="hata"><b>Etkiler okunamadı.</b> Sunucunun cevabı: "Workspace bulunamadı." <button class="metinD" type="button">Yeniden dene</button></div></div>
+
+<h2>Öneriler sekmesinde, uygulanmış kartın altı</h2>
+<div class="kart">
+  <div class="oneri">
+    <div><span class="uygulandi">Uygulandı</span></div>
+    <div class="b">Kış Koleksiyonu · Bütçeyi %20 artır</div>
+    <div class="alt">Dönüşüm başı maliyet hesap ortalamasının altında, bütçe her gün doluyor.</div>
+  </div>
+  <div class="etkiSatiri"><span class="nokta bos" aria-hidden="true"></span><span>Etki 18 Ekim tarihinde ölçülecek.</span><a class="metinD" href="#">Etkisi sekmesinde gör</a></div>
+</div>
+
+</div>
+<script>
+(function(){
+  var hal = document.querySelectorAll('[data-hal]');
+  hal.forEach(function(b){
+    b.addEventListener('click', function(){
+      hal.forEach(function(x){ x.setAttribute('aria-pressed', String(x === b)); });
+      ['dolu','bos','yukleniyor','hata'].forEach(function(h){
+        document.getElementById('hal-' + h).classList.toggle('gizli', h !== b.dataset.hal);
+      });
+    });
+  });
+  document.querySelectorAll('[data-ac]').forEach(function(b){
+    b.addEventListener('click', function(){
+      var el = document.getElementById(b.dataset.ac);
+      var acik = !el.classList.contains('acik');
+      el.classList.toggle('acik', acik);
+      b.setAttribute('aria-expanded', String(acik));
+      b.textContent = acik ? 'Kapat' : 'Ayrıntı';
+    });
+  });
+})();
+</script>
+</body>
+</html>

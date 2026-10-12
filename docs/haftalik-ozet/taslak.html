@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Haftalık Özet Taslağı</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600;700&display=swap">
+<style>
+/*
+ * Paket B taslağı (docs/haftalik-ozet/MIMARI.md § 7). KESİN KURAL: renkler
+ * yalnız #ffffff, #000000, #302e2d, #ff2400; zemin ve çizgi için yalnız
+ * grinin saydam tonları. Yeşil YALNIZ durum noktası. Gradyan, pastel, buğu yok.
+ */
+:root{
+  --beyaz:#ffffff; --siyah:#000000; --gri:#302e2d; --kirmizi:#ff2400;
+  --zemin:rgba(48,46,45,.04); --cizgi:rgba(48,46,45,.12); --ikincil:rgba(48,46,45,.62); --cok-acik:rgba(48,46,45,.07);
+  --yesil:#16a34a; /* yalnız durum noktası */
+  --baslik:"Montserrat",system-ui,sans-serif; --govde:"Open Sans",system-ui,sans-serif;
+  --gecis:cubic-bezier(.16,1,.3,1);
+}
+*{box-sizing:border-box}
+html{background:var(--beyaz)}
+body{margin:0;background:var(--zemin);color:var(--gri);font-family:var(--govde);font-size:14px;line-height:1.45;overflow-x:hidden}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+input,select{font:inherit;color:var(--gri)}
+a{color:var(--siyah);text-decoration:none}
+a:hover{color:var(--kirmizi);text-decoration:underline}
+:focus-visible{outline:2px solid var(--kirmizi);outline-offset:2px;border-radius:6px}
+.num{font-variant-numeric:tabular-nums}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important}}
+
+.sayfa{max-width:1180px;margin:0 auto;padding:16px 16px 64px;display:flex;flex-direction:column;gap:16px}
+.not{background:var(--beyaz);border:1px dashed var(--cizgi);border-radius:10px;padding:10px 14px;font-size:12.5px;color:var(--ikincil)}
+.not b{color:var(--gri)}
+.gezinti{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.gezinti span{font-size:12px;font-weight:700;color:var(--ikincil);margin-right:4px}
+.gezinti button{border:1px solid var(--cizgi);background:var(--beyaz);border-radius:999px;padding:6px 12px;font-size:12.5px;font-weight:600}
+.gezinti button[aria-pressed="true"]{background:var(--gri);color:var(--beyaz);border-color:var(--gri)}
+
+h1{font-family:var(--baslik);font-weight:700;font-size:24px;margin:0;color:var(--siyah)}
+h2{font-size:14px;font-weight:700;margin:0;color:var(--siyah)}
+.ust{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px 16px}
+.alt{font-size:13px;color:var(--ikincil);margin-top:2px}
+.sag{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+select.hafta{border:1px solid var(--cizgi);background:var(--beyaz);border-radius:8px;padding:7px 10px;font-size:13px;max-width:100%}
+
+.sekmeler{display:flex;gap:4px;border-bottom:1px solid var(--cizgi);overflow-x:auto}
+.sekmeler button{padding:10px 14px;font-weight:600;font-size:13.5px;color:var(--ikincil);border-bottom:3px solid transparent;white-space:nowrap;transition:color .2s var(--gecis),border-color .2s var(--gecis)}
+.sekmeler button[aria-selected="true"]{color:var(--siyah);border-bottom-color:var(--kirmizi)}
+
+.izgara{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;align-items:start}
+.kart{background:var(--beyaz);border:1px solid var(--cizgi);border-radius:12px;min-width:0;overflow:hidden}
+.kartUst{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--cizgi);flex-wrap:wrap}
+.kartUst small{color:var(--ikincil);font-size:12px}
+.icerik{padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+
+.gorunum{display:inline-flex;border:1px solid var(--cizgi);border-radius:999px;padding:2px;background:var(--beyaz)}
+.gorunum button{padding:6px 12px;border-radius:999px;font-size:12.5px;font-weight:600;color:var(--ikincil);transition:background .2s var(--gecis),color .2s var(--gecis)}
+.gorunum button[aria-pressed="true"]{background:var(--gri);color:var(--beyaz)}
+
+.birincil{display:inline-flex;align-items:center;gap:6px;background:var(--kirmizi);color:var(--beyaz);font-weight:600;font-size:12.5px;padding:7px 14px;border-radius:999px;transition:opacity .2s}
+.birincil:hover{opacity:.88}
+.ikincil{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--cizgi);background:var(--beyaz);border-radius:999px;padding:6px 13px;font-size:12.5px;font-weight:600;transition:border-color .2s}
+.ikincil:hover{border-color:var(--gri)}
+
+.durumS{display:flex;gap:8px;align-items:center;font-size:12.5px;padding:10px 16px;border-bottom:1px solid var(--cizgi);flex-wrap:wrap}
+.nokta{width:8px;height:8px;border-radius:50%;flex:none;display:inline-block}
+.nokta.yesil{background:var(--yesil)}
+.nokta.gri{border:2px solid var(--gri);width:9px;height:9px}
+.nokta.kirmizi{background:var(--kirmizi)}
+
+/* Mail çerçevesi: API'nin ürettiği HTML'i temsil eder (iframe sandbox). */
+.mailKap{background:var(--cok-acik);padding:16px;display:flex;justify-content:center}
+.mail{width:100%;max-width:600px;background:var(--beyaz);border:1px solid var(--cizgi);border-radius:8px;overflow:hidden}
+.mailBas{padding:12px 16px;border-bottom:1px solid var(--cizgi);font-size:12px;color:var(--ikincil);display:flex;flex-direction:column;gap:2px}
+.mailBas b{color:var(--siyah)}
+.mailBant{padding:18px 20px 10px;display:flex;align-items:center;gap:10px;border-bottom:3px solid var(--kirmizi)}
+.logo{font-family:var(--baslik);font-weight:800;font-size:16px;color:var(--siyah);letter-spacing:.5px}
+.logo i{color:var(--kirmizi);font-style:normal}
+.mailGovde{padding:16px 20px 20px;display:flex;flex-direction:column;gap:18px}
+.mailGovde h3{font-family:var(--baslik);font-size:17px;margin:0;color:var(--siyah)}
+.mailGovde h4{font-size:13px;font-weight:700;margin:0 0 8px;color:var(--siyah);text-transform:none}
+.mailGovde p{margin:0;font-size:13.5px}
+.metrikler{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--cizgi);border-radius:8px;overflow:hidden}
+.metrikler>div{padding:10px 12px;border-right:1px solid var(--cizgi);min-width:0}
+.metrikler>div:last-child{border-right:0}
+.metrikler small{display:block;font-size:11.5px;color:var(--ikincil);font-weight:600}
+.metrikler b{display:block;font-family:var(--baslik);font-size:18px;color:var(--siyah);margin-top:2px}
+.metrikler em{display:block;font-style:normal;font-size:11.5px;color:var(--ikincil)}
+.metrikler .iyi{color:var(--gri);font-weight:700}
+.metrikler .kotu{color:var(--kirmizi);font-weight:700}
+.yildiz{color:var(--ikincil);font-size:11.5px}
+.yorum{border-left:3px solid var(--gri);padding:8px 12px;background:var(--zemin);font-size:13.5px}
+.yorum small{display:block;font-size:11px;color:var(--ikincil);margin-top:4px}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{text-align:left;font-weight:700;color:var(--ikincil);padding:7px 8px;border-bottom:1px solid var(--cizgi);white-space:nowrap}
+td{padding:8px;border-bottom:1px solid var(--cizgi);vertical-align:top}
+tr:last-child td{border-bottom:0}
+td.sag,th.sag{text-align:right}
+.tabloKap{overflow-x:auto;border:1px solid var(--cizgi);border-radius:8px}
+.liste{list-style:none;margin:0;padding:0;border:1px solid var(--cizgi);border-radius:8px}
+.liste li{padding:9px 12px;border-bottom:1px solid var(--cizgi);font-size:13px;display:flex;gap:8px;align-items:flex-start}
+.liste li:last-child{border-bottom:0}
+.liste small{color:var(--ikincil);font-size:12px}
+.rozet{font-size:10.5px;font-weight:700;border-radius:4px;padding:1px 6px;border:1px solid var(--cizgi);color:var(--ikincil);white-space:nowrap}
+.rozet.kirmizi{border-color:var(--kirmizi);color:var(--kirmizi)}
+.ajansBolum{border:1px dashed var(--gri);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:10px}
+.ajansBolum .et{font-size:10.5px;font-weight:700;color:var(--gri);letter-spacing:.4px}
+.mailAlt{font-size:11.5px;color:var(--ikincil);border-top:1px solid var(--cizgi);padding-top:12px}
+
+/* Slack kısa sürüm */
+.slack{border:1px solid var(--cizgi);border-radius:8px;padding:12px 14px;font-size:13px;display:flex;flex-direction:column;gap:4px}
+.slack b{color:var(--siyah)}
+.slack .bag{color:var(--siyah);text-decoration:underline;margin-top:4px}
+
+/* Sağ kartlar */
+.satir2{display:flex;justify-content:space-between;gap:8px;font-size:13px;align-items:center;flex-wrap:wrap}
+.satir2 .e{color:var(--ikincil);font-size:12.5px}
+.anahtar{position:relative;width:40px;height:22px;border-radius:999px;background:var(--cok-acik);border:1px solid var(--cizgi);transition:background .2s var(--gecis)}
+.anahtar::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--beyaz);border:1px solid var(--cizgi);transition:transform .25s var(--gecis)}
+.anahtar[aria-checked="true"]{background:var(--gri)}
+.anahtar[aria-checked="true"]::after{transform:translateX(18px)}
+.ayarlar{display:flex;flex-direction:column;gap:12px;transition:opacity .25s var(--gecis)}
+.ayarlar.kapali{opacity:.4;pointer-events:none}
+.alan label{display:block;font-size:12.5px;font-weight:700;color:var(--siyah);margin-bottom:4px}
+.alan select,.alan input{width:100%;border:1px solid var(--cizgi);border-radius:8px;padding:8px 10px;background:var(--beyaz)}
+.alan .ip{font-size:12px;color:var(--ikincil);margin-top:4px}
+.uyari{font-size:12.5px;border-left:3px solid var(--kirmizi);padding:6px 10px}
+
+.bos{padding:36px 16px;text-align:center}
+.bos b{display:block;font-size:15px;color:var(--siyah);margin-bottom:4px}
+.bos p{margin:0 auto;max-width:460px;color:var(--ikincil);font-size:13px}
+.hata{padding:14px 16px;border-left:3px solid var(--kirmizi);font-size:13px}
+.yukleniyor{padding:16px;display:flex;flex-direction:column;gap:10px}
+.yukleniyor i{height:14px;border-radius:6px;background:var(--cok-acik);display:block}
+
+.gizli{display:none}
+
+@media (max-width:900px){.izgara{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:560px){
+  .metrikler{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .metrikler>div:nth-child(2){border-right:0}
+  .metrikler>div:nth-child(-n+2){border-bottom:1px solid var(--cizgi)}
+  .mailKap{padding:8px}
+  .mailGovde{padding:14px}
+  h1{font-size:20px}
+}
+</style>
+</head>
+<body>
+<div class="sayfa">
+
+<div class="not"><b>Taslak · Paket B.</b> Raporlar › Haftalık özet sekmesi. Sayılar örnek. Mail kutusu, API'nin ürettiği HTML'i temsil eder (panel ikinci bir şablon yazmaz). Kesikli çerçeveli bölümler yalnız ajans görünümünde. Hâl seçici ürünün parçası değil.</div>
+
+<div class="gezinti" role="group" aria-label="Taslak hâli">
+  <span>Hâl:</span>
+  <button type="button" data-hal="dolu" aria-pressed="true">Dolu</button>
+  <button type="button" data-hal="bos" aria-pressed="false">Harcama yok</button>
+  <button type="button" data-hal="yukleniyor" aria-pressed="false">Yükleniyor</button>
+  <button type="button" data-hal="hata" aria-pressed="false">Hata</button>
+</div>
+
+<div class="ust">
+  <div>
+    <h1>Raporlar</h1>
+    <div class="alt">Acme Mobilya · Haftalık özet</div>
+  </div>
+  <div class="sag">
+    <select class="hafta" aria-label="Hafta">
+      <option>5-11 Ekim (geçen hafta)</option>
+      <option>28 Eylül - 4 Ekim</option>
+      <option>21-27 Eylül</option>
+    </select>
+  </div>
+</div>
+
+<div class="sekmeler" role="tablist">
+  <button role="tab" aria-selected="false">Rapor</button>
+  <button role="tab" aria-selected="true">Haftalık özet</button>
+  <button role="tab" aria-selected="false">Faturalar</button>
+</div>
+
+<div class="izgara">
+  <div class="kart">
+    <div class="kartUst">
+      <div class="gorunum" role="group" aria-label="Görünüm">
+        <button type="button" data-kitle="musteri" aria-pressed="true">Müşteriye giden</button>
+        <button type="button" data-kitle="ajans" aria-pressed="false">Ajans görünümü</button>
+      </div>
+      <small class="sag">Pazartesi 09:00'da üretildi · gönderilenle aynı</small>
+    </div>
+
+    <div id="hal-dolu">
+      <div class="mailKap">
+        <div class="mail">
+          <div class="mailBas">
+            <span>Konu: <b>Haftalık özet · Acme Mobilya · 5-11 Ekim</b></span>
+            <span id="mailKime">Kime: satin@acme.com.tr, ali@acme.com.tr · Gönderen: Ayşe Kaya</span>
+          </div>
+          <div class="mailBant"><span class="logo">ADVETICS<i>.</i></span></div>
+          <div class="mailGovde">
+            <div>
+              <h3>Geçen hafta</h3>
+              <p class="alt">5-11 Ekim, bir önceki haftaya göre</p>
+            </div>
+
+            <div class="metrikler num">
+              <div><small>Maliyet</small><b>12.400 ₺</b><em>11.500 ₺ · %8 arttı</em></div>
+              <div><small>Tıklama</small><b>3.120</b><em>2.840 · <span class="iyi">%10 arttı</span></em></div>
+              <div><small>Dönüşüm*</small><b>84</b><em>96 · <span class="kotu">%9 düştü</span></em></div>
+              <div><small>Dönüşüm başı maliyet*</small><b>148 ₺</b><em>120 ₺ · <span class="kotu">%18 arttı</span></em></div>
+            </div>
+            <div class="yildiz">* Haftanın son günlerinin dönüşümleri henüz kesinleşmedi. Değişim iki haftanın Pazartesi-Perşembe günleri üzerinden.</div>
+
+            <div class="yorum">Maliyet %8 arttı; artışın çoğu Kış Koleksiyonu kampanyasından geldi. Dönüşüm başı maliyetteki yükseliş bu kampanyanın yeni bütçesiyle aynı haftaya denk geliyor.<small>Yapay zekâ yorumu · sayılar yukarıdaki tablodan</small></div>
+
+            <div>
+              <h4>En çok değişenler</h4>
+              <div class="tabloKap">
+                <table class="num">
+                  <thead><tr><th>Kampanya</th><th>Ne değişti</th><th class="sag">Geçen hafta</th><th class="sag">Önceki</th></tr></thead>
+                  <tbody>
+                    <tr><td>Kış Koleksiyonu<br><small class="yildiz">Meta</small></td><td>Maliyet %42 arttı</td><td class="sag">5.100 ₺</td><td class="sag">3.590 ₺</td></tr>
+                    <tr><td>Marka Arama<br><small class="yildiz">Google</small></td><td>Dönüşüm %31 düştü</td><td class="sag">22</td><td class="sag">32</td></tr>
+                    <tr><td>Yeniden Pazarlama<br><small class="yildiz">Meta</small></td><td>Dönüşüm başı maliyet %24 düştü</td><td class="sag">96 ₺</td><td class="sag">126 ₺</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="yildiz" style="margin-top:6px">9 küçük değişiklik listeye alınmadı (az gösterim ya da küçük pay).</div>
+            </div>
+
+            <div>
+              <h4>Bu hafta yaptıklarımız</h4>
+              <ul class="liste">
+                <li><span class="rozet">Bütçe</span><span>Kış Koleksiyonu: bütçe 500 ₺ → 600 ₺<br><small>7 Ekim · İyileştir önerisi</small></span></li>
+                <li><span class="rozet">Durdurma</span><span>Sonbahar görseli B reklamı durduruldu<br><small>8 Ekim · Kural: Yorgun kreatif</small></span></li>
+              </ul>
+            </div>
+
+            <div>
+              <h4>Ölçülen etkiler</h4>
+              <ul class="liste">
+                <li><span class="nokta yesil" style="margin-top:6px" aria-hidden="true"></span><span><b>Yeniden Pazarlama</b> · Bütçe azaltıldı, 29 Eylül<br><small>Değişiklikten sonra dönüşüm başı maliyet, aynı hesapta değişmeyenlere göre %21 düştü.</small></span></li>
+                <li><span class="nokta gri" style="margin-top:6px" aria-hidden="true"></span><span><b>Marka Arama</b> · Bütçe artırıldı, 1 Ekim<br><small>Henüz yeterli veri yok; 22 Ekim tarihinde yeniden bakılacak.</small></span></li>
+              </ul>
+            </div>
+
+            <div class="ajansBolum gizli" data-ajans>
+              <span class="et">YALNIZ AJANS</span>
+              <div>
+                <h4>Açık sinyaller (2)</h4>
+                <ul class="liste">
+                  <li><span class="rozet kirmizi">Yüksek</span><span>Kış Koleksiyonu: maliyet beklenenin 2,1 katı<br><small>10 Ekim · Performans</small></span></li>
+                  <li><span class="rozet">Sağlık</span><span>Marka Arama: 1 reklam reddedildi<br><small>Sağlık</small></span></li>
+                </ul>
+              </div>
+              <div>
+                <h4>Bekleyen işler</h4>
+                <ul class="liste"><li>İyileştir'de onay bekleyen 2 öneri · 1 Akıllı Boost kartı</li></ul>
+              </div>
+              <div>
+                <h4>Öneri</h4>
+                <p>Kış Koleksiyonu: maliyet beklenenin 2,1 katı. Sinyaller ekranından inceleyip durdurabilirsiniz.</p>
+              </div>
+            </div>
+
+            <div><a class="birincil" href="#">Panelde aç</a></div>
+            <div class="mailAlt">Bu mail Advetics tarafından, Acme Mobilya için haftalık olarak gönderilir. Göndermeyi durdurmak için ajansınıza yazın.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="icerik gizli" data-ajans>
+        <h2>Slack ve Teams'e giden kısa sürüm</h2>
+        <div class="slack num">
+          <b>Haftalık özet · Acme Mobilya · 5-11 Ekim</b>
+          <span>Maliyet: 12.400 ₺ (%8 arttı)</span>
+          <span>Tıklama: 3.120 (%10 arttı)</span>
+          <span>Dönüşüm: 84 (%9 düştü)</span>
+          <span>Dönüşüm başı maliyet: 148 ₺ (%18 arttı)</span>
+          <span>En çok değişen: Kış Koleksiyonu, maliyet %42 arttı</span>
+          <span>ve 2 satır daha panelde</span>
+          <a class="bag" href="#">Panelde aç</a>
+        </div>
+        <div class="durumS" style="border:0;padding:0"><span class="nokta yesil" aria-hidden="true"></span>#acme-reklam (Slack) · 12 Ekim 09:02 gönderildi</div>
+        <div class="durumS" style="border:0;padding:0"><span class="nokta kirmizi" aria-hidden="true"></span>Ajans e-posta · gönderilemedi: "550 alıcı reddedildi: eski@profaj.com"</div>
+        <div class="yildiz">Yorum durumu: Yazıldı. Yorum yazılamasa mail yorumsuz gider ve nedeni burada yazar (örneğin "Yorum sayı içerdiği için kullanılmadı").</div>
+      </div>
+    </div>
+
+    <div id="hal-bos" class="gizli">
+      <div class="bos"><b>Bu hafta harcama yok</b><p>5-11 Ekim ve önceki hafta reklam harcaması kaydedilmedi. Boş özet gönderilmez; müşteri planı bu hafta "Atlandı" yazar.</p></div>
+    </div>
+    <div id="hal-yukleniyor" class="gizli">
+      <div class="yukleniyor" aria-busy="true"><i style="width:40%"></i><i style="width:90%"></i><i style="width:75%"></i><i style="width:60%"></i></div>
+    </div>
+    <div id="hal-hata" class="gizli">
+      <div class="hata"><b>Özet hazırlanamadı.</b> Sunucunun cevabı: "Workspace bulunamadı." <button class="ikincil" type="button">Yeniden dene</button></div>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+    <div class="kart">
+      <div class="kartUst"><h2>Müşteri özeti</h2><button class="anahtar sag" role="switch" aria-checked="false" aria-label="Müşteri özeti" id="anahtar"></button></div>
+      <div class="durumS" id="planDurum"><span class="nokta gri" aria-hidden="true"></span>Kapalı. Açınca her pazartesi müşteriye gider.</div>
+      <div class="icerik ayarlar kapali" id="ayarlar">
+        <div class="alan">
+          <label for="saat">Saat (pazartesi)</label>
+          <select id="saat"><option>08:00</option><option selected>09:00</option><option>10:00</option></select>
+        </div>
+        <div class="alan">
+          <label for="alici">Alıcılar</label>
+          <input id="alici" type="text" placeholder="Boş bırakılırsa rapor alıcıları">
+          <div class="ip">Şu an gidecek: satin@acme.com.tr, ali@acme.com.tr</div>
+        </div>
+        <div class="satir2"><span class="e">Gönderen</span><span>Ayşe Kaya · ayse@profaj.com</span></div>
+        <div class="satir2"><span class="e">Son gönderim</span><span>Henüz yok</span></div>
+        <div class="satir2"><span class="e">Sıradaki</span><span>19 Ekim Pazartesi 09:00</span></div>
+        <button class="ikincil" type="button">Kendime gönder</button>
+      </div>
+    </div>
+
+    <div class="kart">
+      <div class="kartUst"><h2>Ajans kanalları</h2></div>
+      <div class="icerik">
+        <div class="satir2"><span><span class="nokta yesil" aria-hidden="true"></span> #acme-reklam</span><span class="e">Slack</span></div>
+        <div class="satir2"><span><span class="nokta kirmizi" aria-hidden="true"></span> Ajans e-posta</span><span class="e">Gönderilemiyor</span></div>
+        <a class="ikincil" href="#">Kanalları düzenle</a>
+        <div class="yildiz">Kanallar Marka Merkezi › Bildirimler'de. "Haftalık özet" seçili kanallara her pazartesi 09:00'da gider.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+<script>
+(function(){
+  var halDugmeleri = document.querySelectorAll('[data-hal]');
+  halDugmeleri.forEach(function(b){
+    b.addEventListener('click', function(){
+      halDugmeleri.forEach(function(x){ x.setAttribute('aria-pressed', String(x === b)); });
+      ['dolu','bos','yukleniyor','hata'].forEach(function(h){
+        document.getElementById('hal-' + h).classList.toggle('gizli', h !== b.dataset.hal);
+      });
+    });
+  });
+  var kitleDugmeleri = document.querySelectorAll('[data-kitle]');
+  kitleDugmeleri.forEach(function(b){
+    b.addEventListener('click', function(){
+      kitleDugmeleri.forEach(function(x){ x.setAttribute('aria-pressed', String(x === b)); });
+      var ajans = b.dataset.kitle === 'ajans';
+      document.querySelectorAll('[data-ajans]').forEach(function(el){ el.classList.toggle('gizli', !ajans); });
+      document.getElementById('mailKime').textContent = ajans
+        ? 'Kime: Ajans kanalları (#acme-reklam, ajans@profaj.com)'
+        : 'Kime: satin@acme.com.tr, ali@acme.com.tr · Gönderen: Ayşe Kaya';
+    });
+  });
+  var anahtar = document.getElementById('anahtar');
+  anahtar.addEventListener('click', function(){
+    var acik = anahtar.getAttribute('aria-checked') !== 'true';
+    anahtar.setAttribute('aria-checked', String(acik));
+    document.getElementById('ayarlar').classList.toggle('kapali', !acik);
+    document.getElementById('planDurum').innerHTML = acik
+      ? '<span class="nokta yesil" aria-hidden="true"></span>Açık. Sıradaki: 19 Ekim Pazartesi 09:00.'
+      : '<span class="nokta gri" aria-hidden="true"></span>Kapalı. Açınca her pazartesi müşteriye gider.';
+  });
+})();
+</script>
+</body>
+</html>
