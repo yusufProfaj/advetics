@@ -1793,7 +1793,7 @@ model RuleActionLog {
   entityExternalId String      @map("entity_external_id") @db.VarChar(128)
 
   actionType String @map("action_type") @db.VarChar(20)
-  outcome    String @db.VarChar(24)
+  outcome    String @db.VarChar(40)
   /// İnsan okunur gerekçe: "EBM 312,40 > 250 (son 7 gün)".
   reason     String @db.VarChar(500)
 

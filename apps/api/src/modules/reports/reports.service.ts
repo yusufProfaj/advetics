@@ -1113,7 +1113,7 @@ export class ReportsService {
           AND i.platform = 'meta'::"Platform"
           AND i.date BETWEEN ${params.from}::date AND ${params.to}::date
           AND i.entity_level = ${LEVEL}
-          AND i.raw_metrics::text LIKE '%call%'
+          AND i.raw_metrics::text ILIKE '%call%'
           AND act->>'action_type' ILIKE '%call%'
       `,
     );
