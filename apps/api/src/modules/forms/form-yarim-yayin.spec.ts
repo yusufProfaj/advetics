@@ -111,6 +111,21 @@ describe('damga Meta isteğinden HEMEN önce', () => {
   });
 });
 
+describe('Meta hatası: kesin ret mi, belirsiz mi', () => {
+  it('KRİTİK: sınıflanmamış hata (ağ kopması) failed DEĞİL uncertain — istek gitmiş olabilir', async () => {
+    const f = await forms.create(CTX, GIRDI);
+    const { svc, prov } = kur();
+    prov.createLeadForm.mockRejectedValueOnce(new TypeError('fetch failed'));
+    await expect(svc.publish(CTX, f.id)).rejects.toThrow(/form açılmış olabilir/);
+    const r = await forms.get(CTX, f.id);
+    expect(r.status).toBe('uncertain');
+    expect(r.error).toContain('fetch failed');
+    // Onaysız yeniden yayın Meta'ya gitmiyor.
+    await expect(svc.publish(CTX, f.id)).rejects.toThrow(/Yeniden dene/);
+    expect(prov.createLeadForm).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('yarım kalan yayın okuma anında ayrılıyor', () => {
   it('KRİTİK: damgasız yaşlı publishing → failed + not, yeniden yayınlanabilir', async () => {
     const f = await forms.create(CTX, GIRDI);

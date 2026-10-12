@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type {
   ConsentBox,
@@ -67,6 +67,8 @@ interface FormRow {
 
 @Injectable()
 export class FormsService {
+  private readonly logger = new Logger(FormsService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   // ---------------------------------------------------------------------------
@@ -81,8 +83,8 @@ export class FormsService {
    * geçmişi değil; geçmiş formun detayında duruyor.
    */
   async list(ctx: TenantContext, clientId: string): Promise<LeadFormRecord[]> {
+    await this.yarimKalanlariAyirGuvenli(ctx, Prisma.sql`org_id = ${ctx.orgId}::uuid AND client_id = ${clientId}::uuid`);
     return this.prisma.withTenant(ctx, async (tx) => {
-      await this.yarimKalanYayinlariAyir(tx, Prisma.sql`org_id = ${ctx.orgId}::uuid AND client_id = ${clientId}::uuid`);
       const rows = await this.select(
         tx,
         Prisma.sql`f.org_id = ${ctx.orgId}::uuid AND f.client_id = ${clientId}::uuid
@@ -93,8 +95,8 @@ export class FormsService {
   }
 
   async get(ctx: TenantContext, id: string): Promise<LeadFormRecord> {
+    await this.yarimKalanlariAyirGuvenli(ctx, Prisma.sql`id = ${id}::uuid AND org_id = ${ctx.orgId}::uuid`);
     return this.prisma.withTenant(ctx, async (tx) => {
-      await this.yarimKalanYayinlariAyir(tx, Prisma.sql`id = ${id}::uuid AND org_id = ${ctx.orgId}::uuid`);
       const [row] = await this.select(
         tx,
         Prisma.sql`f.id = ${id}::uuid AND f.org_id = ${ctx.orgId}::uuid`,
@@ -301,6 +303,24 @@ export class FormsService {
   }
 
   /**
+   * META CEVABI BELİRSİZ (zaman aşımı, ağ, 5xx): istek ulaşmış ve form
+   * açılmış olabilir. `failed` DEĞİL `uncertain`: yeniden yayın yalnız
+   * bilinçli onayla. Kimliği yazılmış satıra dokunmuyor.
+   */
+  async markBelirsiz(ctx: TenantContext, id: string, message: string): Promise<void> {
+    await this.prisma.withTenant(ctx, async (tx) => {
+      await tx.$executeRaw(Prisma.sql`
+        UPDATE lead_forms
+        SET status = 'uncertain',
+            error = ${`${FORM_YAYIN_BELIRSIZ_NOTU} Meta hatası: ${message}`.slice(0, 2000)},
+            updated_at = now()
+        WHERE id = ${id}::uuid AND org_id = ${ctx.orgId}::uuid
+          AND status = 'publishing' AND external_form_id IS NULL
+      `);
+    });
+  }
+
+  /**
    * YAYINI SAHİPLEN — koşullu UPDATE. Aynı satır için ikinci yayın isteği
    * (iki sekme, çift tık) burada SIFIR satır alır ve Meta'ya hiç gitmez.
    * `publishBlockers` okuması tek başına yetmiyor: iki istek de "taslak"
@@ -358,6 +378,22 @@ export class FormsService {
    * dokunulmaz. Kimliği yazılmış satır zaten `published`; koşul yine de
    * `external_form_id IS NULL` taşıyor.
    */
+  /**
+   * AYIRMA OKUMAYI DÜŞÜREMEZ. UPDATE bir politika (RLS WITH CHECK, ileride
+   * daraltılmış bir UPDATE politikası) tarafından reddedilirse liste ve
+   * detay yine dönmeli: "formlarım açılmıyor" ayırmadan çok daha kötü.
+   * Bu yüzden AYRI bir işlemde koşuyor (aynı işlemde düşen deyim Postgres'te
+   * işlemin kalanını da öldürürdü) ve hata YUTULMUYOR, loglanıyor; satır o
+   * zaman `publishing` görünür ve yeniden yayın kapalı kalır (güvenli taraf).
+   */
+  private async yarimKalanlariAyirGuvenli(ctx: TenantContext, kapsam: Prisma.Sql): Promise<void> {
+    try {
+      await this.prisma.withTenant(ctx, (tx) => this.yarimKalanYayinlariAyir(tx, kapsam));
+    } catch (e) {
+      this.logger.warn(`Yarım kalan form yayını ayrılamadı (okuma sürüyor): ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
   private async yarimKalanYayinlariAyir(tx: TxLike, kapsam: Prisma.Sql): Promise<void> {
     await tx.$executeRaw(Prisma.sql`
       UPDATE lead_forms
