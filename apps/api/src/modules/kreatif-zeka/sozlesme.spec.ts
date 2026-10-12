@@ -34,7 +34,7 @@ import {
   KREATIF_ZEKA_UCLARI,
   kreatifKovasi,
   kreatifPuani,
-  metrikDegeri,
+  kreatifMetrikDegeri,
   ONERI_TURU_ETIKETI,
   PERMISSIONS,
   resolvePermissions,
@@ -204,8 +204,8 @@ describe('iş sonucu', () => {
 describe('metrik ve küme', () => {
   it('harcamasız kreatif maliyet metriğine girmez', () => {
     const o = { creativeId: 'x', gosterim: 1000, tiklama: 10, donusum: 0, harcamaMicros: 0n };
-    expect(metrikDegeri(o, 'donusum_verimi')).toBeNull();
-    expect(metrikDegeri(o, 'tiklama_orani')).toBeCloseTo(0.01);
+    expect(kreatifMetrikDegeri(o, 'donusum_verimi')).toBeNull();
+    expect(kreatifMetrikDegeri(o, 'tiklama_orani')).toBeCloseTo(0.01);
   });
 
   it('KRİTİK: dönüşüm veriminin harcama ağırlıklı ortalaması toplamların oranına EŞİT', () => {
@@ -214,7 +214,7 @@ describe('metrik ve küme', () => {
       { creativeId: 'b', gosterim: 0, tiklama: 0, donusum: 0, harcamaMicros: TL(3000) },
       { creativeId: 'c', gosterim: 0, tiklama: 0, donusum: 30, harcamaMicros: TL(2000) },
     ];
-    const oz = grupOzeti(k.map((x) => ({ deger: metrikDegeri(x, 'donusum_verimi')!, harcamaMicros: x.harcamaMicros })))!;
+    const oz = grupOzeti(k.map((x) => ({ deger: kreatifMetrikDegeri(x, 'donusum_verimi')!, harcamaMicros: x.harcamaMicros })))!;
     expect(oz.ortalama).toBeCloseTo(40 / 6000, 10);
   });
 
@@ -291,7 +291,7 @@ describe('puan', () => {
   it('KRİTİK: maliyet metriğinde UCUZ olan yüksek puan alır (verim ölçeği)', () => {
     const ucuz = { creativeId: 'u', gosterim: 0, tiklama: 0, donusum: 20, harcamaMicros: TL(1000) }; // 50 ₺/dönüşüm
     const pahali = [100, 120, 150, 200, 300].map((cpa, i) => ({ creativeId: `p${i}`, gosterim: 0, tiklama: 0, donusum: 10, harcamaMicros: TL(cpa * 10) }));
-    const p = kreatifPuani(metrikDegeri(ucuz, 'donusum_verimi'), true, pahali.map((x) => metrikDegeri(x, 'donusum_verimi')!));
+    const p = kreatifPuani(kreatifMetrikDegeri(ucuz, 'donusum_verimi'), true, pahali.map((x) => kreatifMetrikDegeri(x, 'donusum_verimi')!));
     expect(p.puan).toBe(100);
   });
 

@@ -58,7 +58,7 @@ export const PENCERE_GUN = 90;
  * Kreatifin verim değeri. Harcaması sıfır olan kreatif hiçbir maliyet
  * metriğine giremez (`null`), tıklama oranına gösterimi varsa girer.
  */
-export function metrikDegeri(o: KreatifOlcusu, m: KreatifMetrigi): number | null {
+export function kreatifMetrikDegeri(o: KreatifOlcusu, m: KreatifMetrigi): number | null {
   const tl = Number(o.harcamaMicros) / 1e6;
   switch (m) {
     case 'tiklama_orani':

@@ -49,7 +49,7 @@ export type PuanSonucu =
   | { puan: null; neden: 'harcama_az' | 'benzer_az' | 'metrik_yok'; benzer: number };
 
 /**
- * `deger` ve `benzerler` VERİM ölçeğinde (yüksek daha iyi, `metrikDegeri`).
+ * `deger` ve `benzerler` VERİM ölçeğinde (yüksek daha iyi, `kreatifMetrikDegeri`).
  * `benzerler` çağıranda süzülmüş olmalı: aynı küme, yeterli harcama,
  * kendisi HARİÇ. Kendisini dahil etmek her puanı yukarı çeker.
  */
