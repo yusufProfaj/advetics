@@ -54,9 +54,10 @@ export function gunEkle(gun: string, n: number): string {
 }
 
 /**
- * Ölçülen denetim eylemleri. Liste AÇIK yazılı ve düzenli ifade değil:
- * `resume` ve `copy` ölçülmüyor (OLCULMEYEN_DEGISIKLIKLER) ve bir desen
- * onları da yakalayıp keşifte boşa satır okuturdu.
+ * ÖLÇÜLEN denetim eylemleri (satır açabilenler). Liste AÇIK yazılı ve
+ * düzenli ifade değil: bir desen `copy` gibi durum/bütçe değiştirmeyen
+ * eylemleri de yakalardı. `resume` ölçülmüyor ama okunuyor: karışıklık
+ * onu görmek zorunda (`YAZMA_DENETIM_EYLEMLERI`).
  */
 export const OLCULEN_DENETIM_EYLEMLERI = [
   'campaign.pause',
@@ -206,6 +207,177 @@ function nesne(v: unknown): Record<string, unknown> {
   return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 }
 
+// ─── BİZİM YAZMALARIMIZ (keşif ve karışıklığın TEK kaynağı) ─────────────────
+
+/**
+ * Advetics'in bu hesaba yaptığı HER durum/bütçe yazması: ölçülenler
+ * (durdur, bütçe) ve ölçülmeyenler (yeniden başlatma, aynı değeri yeniden
+ * yazma, zaten durmuş varlığı durdurma). İki tüketicisi var ve İKİSİ DE
+ * BURADAN okuyor:
+ *
+ * - keşif: ölçülenlerden satır açıyor,
+ * - karışıklık ve kontrol grubu: ölçülmeyenler de dahil HEPSİNE bakıyor.
+ *
+ * Neden tek fonksiyon (Ajan 4, Ö-2): karışıklık bir süre yalnız
+ * `degisiklik_etkileri` tablosuna bakıyordu ve satır açmayan bir yeniden
+ * başlatmayı HİÇ görmüyordu; aynı setteki ikinci reklamın açılması ölçülen
+ * durdurmanın "sonrası"na karışıyor, ekranda yanlış bir "İyileşti" yazıyordu.
+ * İkinci bir sorgu yazmak, bir eylem birine eklenip diğerine eklenmediğinde
+ * aynı hatayı geri getirirdi.
+ */
+export const YAZMA_DENETIM_EYLEMLERI = [
+  ...OLCULEN_DENETIM_EYLEMLERI,
+  'campaign.resume',
+  'ad_group.resume',
+  'ad.resume',
+] as const;
+export const YAZMA_KURAL_EYLEMLERI = [...OLCULEN_KURAL_EYLEMLERI, 'resume'] as const;
+
+export interface Yazma {
+  kaynak: 'kampanya_eylemi' | 'kural';
+  kaynakId: string;
+  clientId: string;
+  /** Ham eylem: `pause`, `resume`, `set_budget`, `adjust_budget`. */
+  eylem: string;
+  seviye: DegisiklikSeviyesi;
+  varlikId: string;
+  once: Record<string, unknown>;
+  sonra: Record<string, unknown>;
+  zaman: Date;
+  /** Hesabın saat diliminde gün. */
+  gun: string;
+  /** Kural kaynağında kural adı, denetimde uygulayan kişinin adı (kopya). */
+  kim: string | null;
+  kuralId: string | null;
+  /** Varlığın kampanyası: karışıklık "aynı kampanya" sorusunu buna soruyor. */
+  kampanyaId: string | null;
+}
+
+type YazmaSiniri = { basZaman: Date } | { basGun: string; sonGun: string };
+
+export async function yazmalar(db: TxLike, hesap: HesapSatiri, sinir: YazmaSiniri): Promise<Yazma[]> {
+  const denetimZamani =
+    'basZaman' in sinir
+      ? Prisma.sql`l.created_at >= ${sinir.basZaman}::timestamptz`
+      : Prisma.sql`(l.created_at AT TIME ZONE ${hesap.timezone})::date BETWEEN ${sinir.basGun}::date AND ${sinir.sonGun}::date`;
+  const kuralZamani =
+    'basZaman' in sinir
+      ? Prisma.sql`x.created_at >= ${sinir.basZaman}::timestamptz`
+      : Prisma.sql`(x.created_at AT TIME ZONE ${hesap.timezone})::date BETWEEN ${sinir.basGun}::date AND ${sinir.sonGun}::date`;
+
+  /*
+   * KAYNAK 1 — kampanya eylemi (audit_logs). Kural motorunun denetim
+   * satırları BURADA OKUNMUYOR: onların eylemi `rule.<tip>` biçiminde ve
+   * hedefleri platform kimliği, yani eylem listesi onları zaten dışarıda
+   * bırakıyor. `actor_type <> 'rule'` süzgeci bir SAVUNMA: kural kaynaklı
+   * bir satır bir gün kampanya eylemi adıyla ve bizim kimliğimizle yazılırsa
+   * kural değişikliği iki kez ölçülürdü (etki-hesap.spec.ts o hâli kurup
+   * sınıyor). Kural değişiklikleri aşağıda rule_action_logs'tan.
+   */
+  const denetim = await db.$queryRaw<
+    Array<{ id: string; client_id: string; action: string; target_id: string; before: unknown; after: unknown; zaman: Date; gun: string; kim: string | null; kampanya_id: string | null }>
+  >(Prisma.sql`
+    SELECT l.id::text AS id, l.client_id::text AS client_id, l.action, l.target_id,
+           l.before, l.after, l.created_at AS zaman,
+           (l.created_at AT TIME ZONE ${hesap.timezone})::date::text AS gun,
+           u.full_name AS kim,
+           CASE split_part(l.action, '.', 1)
+             WHEN 'campaign' THEN l.target_id
+             WHEN 'ad_group' THEN (SELECT g.campaign_id::text FROM ad_groups g WHERE g.id = l.target_id::uuid)
+             WHEN 'ad' THEN (SELECT g.campaign_id::text FROM ads x JOIN ad_groups g ON g.id = x.ad_group_id WHERE x.id = l.target_id::uuid)
+           END AS kampanya_id
+      FROM audit_logs l
+      LEFT JOIN users u ON u.id = l.actor_id
+     WHERE ${denetimZamani}
+       AND l.actor_type <> 'rule'::"ActorType"
+       AND l.action = ANY(${[...YAZMA_DENETIM_EYLEMLERI]}::text[])
+       AND l.client_id IS NOT NULL
+       AND l.target_id IN (${hesabinVarliklari(hesap.id)})
+     ORDER BY l.created_at, l.id`);
+
+  /* KAYNAK 2 — kural (rule_action_logs, yalnız `applied`). Kural adı KOPYALANIYOR. */
+  const kurallar = await db.$queryRaw<
+    Array<{ id: string; client_id: string; rule_id: string; kural_adi: string; action_type: string; seviye: string; varlik_id: string; before_state: unknown; after_state: unknown; zaman: Date; gun: string; kampanya_id: string | null }>
+  >(Prisma.sql`
+    SELECT x.id::text AS id, r.client_id::text AS client_id, r.id::text AS rule_id, r.name AS kural_adi,
+           x.action_type, x.entity_level::text AS seviye, x.entity_id::text AS varlik_id,
+           x.before_state, x.after_state, x.created_at AS zaman,
+           (x.created_at AT TIME ZONE ${hesap.timezone})::date::text AS gun,
+           CASE x.entity_level
+             WHEN 'campaign'::"EntityLevel" THEN x.entity_id::text
+             WHEN 'ad_group'::"EntityLevel" THEN (SELECT g.campaign_id::text FROM ad_groups g WHERE g.id = x.entity_id)
+             WHEN 'ad'::"EntityLevel" THEN (SELECT g.campaign_id::text FROM ads a JOIN ad_groups g ON g.id = a.ad_group_id WHERE a.id = x.entity_id)
+           END AS kampanya_id
+      FROM rule_action_logs x
+      JOIN rules r ON r.id = x.rule_id
+     WHERE ${kuralZamani}
+       AND x.outcome = 'applied'
+       AND x.action_type = ANY(${[...YAZMA_KURAL_EYLEMLERI]}::text[])
+       AND x.entity_level IN ('campaign'::"EntityLevel", 'ad_group'::"EntityLevel", 'ad'::"EntityLevel")
+       AND x.entity_id::text IN (${hesabinVarliklari(hesap.id)})
+     ORDER BY x.created_at, x.id`);
+
+  const r: Yazma[] = [];
+  for (const l of denetim) {
+    const e = denetimEylemi(l.action);
+    if (!e) continue;
+    r.push({
+      kaynak: 'kampanya_eylemi',
+      kaynakId: l.id,
+      clientId: l.client_id,
+      eylem: e.eylem,
+      seviye: e.seviye,
+      varlikId: l.target_id,
+      once: nesne(l.before),
+      sonra: nesne(l.after),
+      zaman: new Date(l.zaman),
+      gun: l.gun,
+      kim: l.kim,
+      kuralId: null,
+      kampanyaId: l.kampanya_id,
+    });
+  }
+  for (const k of kurallar) {
+    r.push({
+      kaynak: 'kural',
+      kaynakId: k.id,
+      clientId: k.client_id,
+      eylem: k.action_type,
+      seviye: k.seviye as DegisiklikSeviyesi,
+      varlikId: k.varlik_id,
+      once: nesne(k.before_state),
+      sonra: nesne(k.after_state),
+      zaman: new Date(k.zaman),
+      gun: k.gun,
+      kim: k.kural_adi,
+      kuralId: k.rule_id,
+      kampanyaId: k.kampanya_id,
+    });
+  }
+  return r;
+}
+
+/** Yazmanın SONRA bütçesi: geri okumalı yol `istenen.amountMicros`, diğerleri `budgetAmountMicros`. */
+function sonraButce(y: Pick<Yazma, 'sonra'>): string | null {
+  return metin(nesne(y.sonra.istenen).amountMicros) ?? metin(y.sonra.budgetAmountMicros);
+}
+
+/**
+ * Yazma ölçülebilir bir değişiklik mi; değilse `null`. SAF.
+ *
+ * ZATEN DURMUŞ VARLIĞI DURDURMAK DEĞİŞİKLİK DEĞİL (Ajan 4, Ö-1): aynı
+ * bütçeyi yeniden yazmanın eşi. Ayna "active" gösterirken platformda
+ * çoktan durmuş bir varlığa durdur gönderilebiliyor; denetim kaydının
+ * `before.status`u bunu söylüyor. Ölçülse değişmemiş bir şeyin "etkisi"
+ * ekrana yazılırdı. Önceki durum BİLİNMİYORSA (alan yok) ölçülüyor: eski
+ * kayıtların hepsini düşürmek, gerçek durdurmaları sessizce ölçümsüz bırakırdı.
+ * Yeniden başlatma hiç ölçülmüyor (OLCULMEYEN_DEGISIKLIKLER, "baslat").
+ */
+export function yazmaTuru(y: Pick<Yazma, 'eylem' | 'once' | 'sonra'>): DegisiklikTuru | null {
+  if (y.eylem === 'pause' && y.once.status === 'paused') return null;
+  return degisiklikTuru(y.eylem, metin(y.once.budgetAmountMicros), sonraButce(y));
+}
+
 // ─── KEŞİF ───────────────────────────────────────────────────────────────────
 
 /**
@@ -225,143 +397,64 @@ export async function kesfet(db: TxLike, hesap: HesapSatiri, simdi: Date): Promi
   const bas = sonKosu ? new Date(Math.max(sonKosu.getTime() - 86_400_000, ilkSinir.getTime())) : ilkSinir;
   const sonuc: KesifSonucu = { yeni: 0, olculmez: 0, dogrulanmadi: 0, varlikYok: 0 };
 
-  /*
-   * KAYNAK 1 — kampanya eylemi (audit_logs). `actor_type = 'rule'` satırları
-   * DIŞARIDA: kural motoru da denetim kaydı yazıyor ama `target_id`ye
-   * platform kimliğini koyuyor; kural değişikliği aşağıda rule_action_logs
-   * üzerinden okunuyor. Bu süzgeç silinirse kural değişiklikleri hedefi
-   * bizim UUID'imizle eşleşmediği için çoğu zaman düşer ama eşleşen bir
-   * kimlikte İKİ KEZ ölçülürdü (etki-hesap.spec.ts, mutasyonla).
-   */
-  const denetim = await db.$queryRaw<
-    Array<{ id: string; client_id: string; action: string; target_id: string; before: unknown; after: unknown; zaman: Date; gun: string; kim: string | null }>
-  >(Prisma.sql`
-    SELECT l.id::text AS id, l.client_id::text AS client_id, l.action, l.target_id,
-           l.before, l.after, l.created_at AS zaman,
-           (l.created_at AT TIME ZONE ${hesap.timezone})::date::text AS gun,
-           u.full_name AS kim
-      FROM audit_logs l
-      LEFT JOIN users u ON u.id = l.actor_id
-     WHERE l.created_at >= ${bas}::timestamptz
-       AND l.actor_type <> 'rule'::"ActorType"
-       AND l.action = ANY(${[...OLCULEN_DENETIM_EYLEMLERI]}::text[])
-       AND l.client_id IS NOT NULL
-       AND l.target_id IN (${hesabinVarliklari(hesap.id)})
-     ORDER BY l.created_at, l.id`);
-
   const adaylar: Aday[] = [];
-  for (const l of denetim) {
-    const e = denetimEylemi(l.action);
-    if (!e) continue;
-    const once = nesne(l.before);
-    const sonra = nesne(l.after);
-    const istenen = nesne(sonra.istenen);
-    const tur = degisiklikTuru(
-      e.eylem,
-      metin(once.budgetAmountMicros),
-      metin(istenen.amountMicros) ?? metin(sonra.budgetAmountMicros),
-    );
+  for (const y of await yazmalar(db, hesap, { basZaman: bas })) {
+    // Yeniden başlatma bilinen bir ölçülmeyen kategori ("baslat", ekranda
+    // listeli); "ölçülmez" sayacı ölçülebilir türde ama değişmeyen yazma için.
+    if (y.eylem === 'resume') continue;
+    const tur = yazmaTuru(y);
     if (!tur) {
       sonuc.olculmez++;
       continue;
     }
-    // Anahtar sözleşmeden: yazan (CampaignActionsService.izli) ile okuyan AYNI sabiti kullanıyor.
-    const iz = degisiklikIziSchema.safeParse(sonra[DENETIM_IZ_ANAHTARI]);
-    let yol: DegisiklikYolu = iz.success ? iz.data.yol : 'bilinmiyor';
-    let yolRef: string | null = iz.success ? iz.data.ref : null;
-    if (!iz.success) {
-      const eski = await eskiIyilestirEslemesi(db, l.client_id, l.target_id, l.zaman);
-      if (eski) {
-        yol = 'iyilestir';
-        yolRef = eski;
+    const istenen = nesne(y.sonra.istenen);
+    let yol: DegisiklikYolu = 'kural';
+    let yolRef: string | null = y.kuralId;
+    if (y.kaynak === 'kampanya_eylemi') {
+      // Anahtar sözleşmeden: yazan (CampaignActionsService.izli) ile okuyan AYNI sabiti kullanıyor.
+      const iz = degisiklikIziSchema.safeParse(y.sonra[DENETIM_IZ_ANAHTARI]);
+      yol = iz.success ? iz.data.yol : 'bilinmiyor';
+      yolRef = iz.success ? iz.data.ref : null;
+      if (!iz.success) {
+        const eski = await eskiIyilestirEslemesi(db, y.clientId, y.varlikId, y.zaman);
+        if (eski) {
+          yol = 'iyilestir';
+          yolRef = eski;
+        }
       }
     }
     adaylar.push({
-      kaynak: 'kampanya_eylemi',
-      kaynakId: l.id,
-      clientId: l.client_id,
+      kaynak: y.kaynak,
+      kaynakId: y.kaynakId,
+      clientId: y.clientId,
       yol,
       yolRef,
-      kim: l.kim,
+      kim: y.kim,
       tur,
-      seviye: e.seviye,
-      varlikId: l.target_id,
+      seviye: y.seviye,
+      varlikId: y.varlikId,
       once: {
-        status: once.status ?? null,
-        budgetMode: once.budgetMode ?? null,
-        budgetAmountMicros: metin(once.budgetAmountMicros),
+        status: y.once.status ?? null,
+        budgetMode: y.once.budgetMode ?? null,
+        budgetAmountMicros: metin(y.once.budgetAmountMicros),
         paraBirimi: hesap.currency,
       },
       sonra: {
-        status: tur === 'durdur' ? 'paused' : (once.status ?? null),
-        budgetMode: istenen.budgetMode ?? sonra.budgetMode ?? once.budgetMode ?? null,
-        budgetAmountMicros: metin(istenen.amountMicros) ?? metin(sonra.budgetAmountMicros),
-        dogrulama: typeof sonra.dogrulama === 'string' ? sonra.dogrulama : null,
+        status: tur === 'durdur' ? 'paused' : (y.once.status ?? null),
+        budgetMode: istenen.budgetMode ?? y.sonra.budgetMode ?? y.once.budgetMode ?? null,
+        budgetAmountMicros: sonraButce(y),
+        dogrulama: typeof y.sonra.dogrulama === 'string' ? y.sonra.dogrulama : null,
       },
-      zaman: new Date(l.zaman),
-      gun: l.gun,
+      zaman: y.zaman,
+      gun: y.gun,
       /*
        * DOĞRULAMA: geri okumalı yol (`uygula`) `dogrulama` yazıyor ve
        * `uyusmadi` ise değişiklik olmamış olabilir. Geri okumasız yol
-       * (`applyAction`) platformun döndürdüğü `afterState`i yazıyor; o yol
-       * hata fırlatmadan döndüyse yazma kabul edilmiş sayılıyor (MIMARI Ç-C12).
+       * (`applyAction`, kural motoru) platformun döndürdüğü `afterState`i
+       * yazıyor; hata fırlatmadan döndüyse yazma kabul edilmiş sayılıyor
+       * (MIMARI Ç-C12).
        */
-      dogrulandi: sonra.dogrulama !== 'uyusmadi',
-    });
-  }
-
-  /*
-   * KAYNAK 2 — kural (rule_action_logs, yalnız `applied`). `entity_id`
-   * bizim UUID'imiz; `client_id` kuraldan. Kural adı KOPYALANIYOR.
-   */
-  const kurallar = await db.$queryRaw<
-    Array<{ id: string; client_id: string; rule_id: string; kural_adi: string; action_type: string; seviye: string; varlik_id: string; before_state: unknown; after_state: unknown; zaman: Date; gun: string }>
-  >(Prisma.sql`
-    SELECT x.id::text AS id, r.client_id::text AS client_id, r.id::text AS rule_id, r.name AS kural_adi,
-           x.action_type, x.entity_level::text AS seviye, x.entity_id::text AS varlik_id,
-           x.before_state, x.after_state, x.created_at AS zaman,
-           (x.created_at AT TIME ZONE ${hesap.timezone})::date::text AS gun
-      FROM rule_action_logs x
-      JOIN rules r ON r.id = x.rule_id
-     WHERE x.created_at >= ${bas}::timestamptz
-       AND x.outcome = 'applied'
-       AND x.action_type = ANY(${[...OLCULEN_KURAL_EYLEMLERI]}::text[])
-       AND x.entity_level IN ('campaign'::"EntityLevel", 'ad_group'::"EntityLevel", 'ad'::"EntityLevel")
-       AND x.entity_id::text IN (${hesabinVarliklari(hesap.id)})
-     ORDER BY x.created_at, x.id`);
-  for (const k of kurallar) {
-    const once = nesne(k.before_state);
-    const sonra = nesne(k.after_state);
-    const tur = degisiklikTuru(k.action_type, metin(once.budgetAmountMicros), metin(sonra.budgetAmountMicros));
-    if (!tur) {
-      sonuc.olculmez++;
-      continue;
-    }
-    adaylar.push({
-      kaynak: 'kural',
-      kaynakId: k.id,
-      clientId: k.client_id,
-      yol: 'kural',
-      yolRef: k.rule_id,
-      kim: k.kural_adi,
-      tur,
-      seviye: k.seviye as DegisiklikSeviyesi,
-      varlikId: k.varlik_id,
-      once: {
-        status: once.status ?? null,
-        budgetMode: once.budgetMode ?? null,
-        budgetAmountMicros: metin(once.budgetAmountMicros),
-        paraBirimi: hesap.currency,
-      },
-      sonra: {
-        status: tur === 'durdur' ? 'paused' : (once.status ?? null),
-        budgetMode: sonra.budgetMode ?? once.budgetMode ?? null,
-        budgetAmountMicros: metin(sonra.budgetAmountMicros),
-        dogrulama: null,
-      },
-      zaman: new Date(k.zaman),
-      gun: k.gun,
-      dogrulandi: true,
+      dogrulandi: y.sonra.dogrulama !== 'uyusmadi',
     });
   }
 
@@ -474,6 +567,9 @@ interface AcikSatir {
   kapsam_seviye: KapsamSeviyesi;
   kapsam_id: string;
   kampanya_id: string | null;
+  kaynak: 'kampanya_eylemi' | 'kural';
+  kaynak_id: string;
+  zaman: Date;
   gun: string;
   nokta_gun: number | null;
   sonra_deger: unknown;
@@ -492,6 +588,36 @@ const KAMPANYA_ID = Prisma.sql`
     WHEN 'ad'::"EntityLevel" THEN (SELECT g.campaign_id FROM ads x JOIN ad_groups g ON g.id = x.ad_group_id WHERE x.id = e.varlik_id)
   END`;
 
+/** Hesabın workspace'ini değiştiren denetim eylemleri (connections.service.ts). */
+export const HESAP_TASIMA_EYLEMLERI = ['ad_account.assigned', 'ad_account.unassigned', 'ad_account.unassigned_by_client'] as const;
+
+/**
+ * HESAP, ÖLÇÜM PENCERESİ İÇİNDE Mİ TAŞINDI? (Ajan 4, N-1)
+ *
+ * Bugünkü sahibin satırın sahibinden farklı olması tek başına yetmiyor:
+ * hesap pencere KAPANDIKTAN SONRA taşındıysa pencerenin bütün günleri eski
+ * workspace'in döneminde ve ölçüm geçerli. Taşıma günü değişiklikten
+ * sonraki İLK atama/kaldırma denetim kaydından (hesabın saat diliminde)
+ * okunuyor; o gün pencerenin sonundan SONRAYSA taşınmamış sayılıyor.
+ *
+ * TAŞIMA KAYDI BULUNAMAZSA bugünkü davranış: "taşındı". Kayıt yoksa
+ * taşımanın ne zaman olduğu bilinmiyor; yeni sahibin günlerini eski
+ * sahibin değişikliğine yazma ihtimali, ölçümü kaybetmekten pahalı.
+ */
+async function hesapTasindiMi(db: TxLike, hesap: HesapSatiri, s: Pick<AcikSatir, 'client_id' | 'zaman'>, pencereSonu: string): Promise<boolean> {
+  if (hesap.client_id === s.client_id) return false;
+  const [t] = await db.$queryRaw<Array<{ gun: string }>>(Prisma.sql`
+    SELECT (l.created_at AT TIME ZONE ${hesap.timezone})::date::text AS gun
+      FROM audit_logs l
+     WHERE l.target_id = ${hesap.id}
+       AND l.action = ANY(${[...HESAP_TASIMA_EYLEMLERI]}::text[])
+       AND l.created_at > ${s.zaman}::timestamptz
+     ORDER BY l.created_at
+     LIMIT 1`);
+  if (!t) return true;
+  return t.gun <= pencereSonu;
+}
+
 export async function degerlendir(db: TxLike, hesap: HesapSatiri, bugun: string, simdi: Date): Promise<DegerlendirmeSonucu> {
   const sonuc: DegerlendirmeSonucu = { bakilan: 0, sonuclandi: 0, henuz: 0, olculemedi: {} };
   /*
@@ -502,7 +628,7 @@ export async function degerlendir(db: TxLike, hesap: HesapSatiri, bugun: string,
   const satirlar = await db.$queryRaw<AcikSatir[]>(Prisma.sql`
     SELECT e.id::text AS id, e.client_id::text AS client_id, e.durum, e.tur, e.seviye::text AS seviye,
            e.varlik_id::text AS varlik_id, e.kapsam_seviye::text AS kapsam_seviye, e.kapsam_id::text AS kapsam_id,
-           (${KAMPANYA_ID})::text AS kampanya_id,
+           (${KAMPANYA_ID})::text AS kampanya_id, e.kaynak, e.kaynak_id, e.degisiklik_zamani AS zaman,
            e.degisiklik_gunu::text AS gun, e.nokta_gun::int AS nokta_gun, e.sonra_deger
       FROM degisiklik_etkileri e
      WHERE e.ad_account_id = ${hesap.id}::uuid
@@ -517,17 +643,26 @@ export async function degerlendir(db: TxLike, hesap: HesapSatiri, bugun: string,
 
     // ── Ön koşullar (hüküm hesaplanmadan, ucuzdan pahalıya) ──
     const dogrulandi = nesne(s.sonra_deger).dogrulama !== 'uyusmadi';
-    const hesapTasindi = hesap.client_id !== s.client_id;
+    const hesapTasindi = await hesapTasindiMi(db, hesap, s, p.sonra.son);
     const kapsamToplami = await toplamlar(db, hesap.id, s.kapsam_seviye, s.kapsam_seviye === 'account' ? null : [s.kapsam_id], p);
-    const digerleri = await digerDegisiklikler(db, hesap.id, s, p);
+    // Penceredeki BÜTÜN yazmalarımız (ölçülmeyenler dahil), kendisi hariç: karışıklık ve kontrol AYNI listeden.
+    const penceredekiler = (await yazmalar(db, hesap, { basGun: p.plasebo.bas, sonGun: p.sonra.son })).filter(
+      (y) => !(y.kaynak === s.kaynak && y.kaynakId === s.kaynak_id),
+    );
+    const digerleri = digerDegisiklikler(s, penceredekiler);
     const bu = { gun: s.gun, tur: s.tur };
     const onKosul = onKosulNedeni({
       dogrulandi,
       hesapTasindi,
       veriYok: kapsamToplami.sonraSatir === 0,
-      karisik: karisikMi(bu, digerleri, noktaGun),
+      // Ölçülmeyen yazmanın türü yok (null): hiçbir türle "aynı gün aynı tür" istisnasına girmiyor, karıştırıyor.
+      karisik: karisikMi(bu, digerleri as Array<{ gun: string; tur: DegisiklikTuru }>, noktaGun),
     });
-    const birlikte = birlikteOlculenler(bu, digerleri);
+    // Birlikte ölçülen = aynı gün aynı ÖLÇÜLEN tür; ölçülmeyen yazma (tur null) kardeş sayılmaz.
+    const birlikte = birlikteOlculenler(
+      bu,
+      digerleri.filter((d): d is { gun: string; tur: DegisiklikTuru } => d.tur !== null),
+    );
 
     let hukum: EtkiHukmu | null = null;
     let kontrolIds: string[] = [];
@@ -536,7 +671,8 @@ export async function degerlendir(db: TxLike, hesap: HesapSatiri, bugun: string,
     if (!onKosul) {
       const kapsam = olcumKapsami(s.tur, s.seviye);
       if (kapsam.kontrol) {
-        kontrolIds = await kontrolGrubu(db, hesap.id, s, p, kapsam.kontroldenCikar === 'ayni_kampanyanin_setleri');
+        const disari = [...new Set(penceredekiler.map((y) => y.kampanyaId).filter((k): k is string => k !== null))];
+        kontrolIds = await kontrolGrubu(db, hesap.id, s, p, kapsam.kontroldenCikar === 'ayni_kampanyanin_setleri', disari);
         kontrolToplami = kontrolIds.length > 0 ? await toplamlar(db, hesap.id, s.kapsam_seviye, kontrolIds, p) : null;
       }
       hukum = etkiHukmu({
@@ -655,26 +791,16 @@ async function toplamlar(
  * birbirinin ölçümünü bozuyor (CBO'da bütçe kardeşlere akıyor). Hesap
  * kapsamında (kampanya durdurma) hesabın HER değişikliği.
  */
-async function digerDegisiklikler(
-  db: TxLike,
-  adAccountId: string,
-  s: AcikSatir,
-  p: { plasebo: GunAraligi; sonra: GunAraligi },
-): Promise<Array<{ gun: string; tur: DegisiklikTuru }>> {
-  const kampanyaKosulu =
-    s.kapsam_seviye === 'account' ? Prisma.empty : Prisma.sql`AND (${KAMPANYA_ID}) = ${s.kampanya_id}::uuid`;
+function digerDegisiklikler(s: AcikSatir, penceredekiler: readonly Yazma[]): Array<{ gun: string; tur: DegisiklikTuru | null }> {
   /*
-   * DOĞRULANMAMIŞ değişiklikler de SAYILIYOR: geri okuma uyuşmadı diye
-   * değişikliğin OLMADIĞI bilinmiyor; olmuşsa bu ölçümü bozuyor. Karışık
-   * demek, yanlış bir sayı göstermekten ucuz.
+   * DOĞRULANMAMIŞ ve ÖLÇÜLMEYEN yazmalar da SAYILIYOR: geri okuma uyuşmadı
+   * diye değişikliğin OLMADIĞI bilinmiyor, yeniden başlatma ise ölçülmese
+   * de aynı kampanyanın harcamasını değiştiriyor. Karışık demek, yanlış bir
+   * sayı göstermekten ucuz.
    */
-  return db.$queryRaw<Array<{ gun: string; tur: DegisiklikTuru }>>(Prisma.sql`
-    SELECT e.degisiklik_gunu::text AS gun, e.tur
-      FROM degisiklik_etkileri e
-     WHERE e.ad_account_id = ${adAccountId}::uuid
-       AND e.id <> ${s.id}::uuid
-       AND e.degisiklik_gunu BETWEEN ${p.plasebo.bas}::date AND ${p.sonra.son}::date
-       ${kampanyaKosulu}`);
+  return penceredekiler
+    .filter((y) => s.kapsam_seviye === 'account' || (y.kampanyaId !== null && y.kampanyaId === s.kampanya_id))
+    .map((y) => ({ gun: y.gun, tur: y.eylem === 'resume' ? null : yazmaTuru(y) }));
 }
 
 /**
@@ -696,14 +822,9 @@ async function kontrolGrubu(
   s: AcikSatir,
   p: { plasebo: GunAraligi; once: GunAraligi; sonra: GunAraligi },
   ayniKampanyaCikar: boolean,
+  /** Pencerede başka bir yazmamızın dokunduğu kampanyalar (`yazmalar`, kendisi hariç). */
+  disari: string[],
 ): Promise<string[]> {
-  const dokunulan = await db.$queryRaw<Array<{ k: string | null }>>(Prisma.sql`
-    SELECT DISTINCT (${KAMPANYA_ID})::text AS k
-      FROM degisiklik_etkileri e
-     WHERE e.ad_account_id = ${adAccountId}::uuid
-       AND e.id <> ${s.id}::uuid
-       AND e.degisiklik_gunu BETWEEN ${p.plasebo.bas}::date AND ${p.sonra.son}::date`);
-  const disari = dokunulan.map((d) => d.k).filter((k): k is string => k !== null);
   const seviye = s.kapsam_seviye === 'ad_group' ? 'ad_group' : 'campaign';
   const kampanyaKolonu = seviye === 'ad_group' ? Prisma.sql`g.campaign_id` : Prisma.sql`a.entity_id`;
   const setJoin = seviye === 'ad_group' ? Prisma.sql`JOIN ad_groups g ON g.id = a.entity_id` : Prisma.empty;

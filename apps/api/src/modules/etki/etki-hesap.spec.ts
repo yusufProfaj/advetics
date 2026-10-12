@@ -414,7 +414,7 @@ describe('değerlendirme — fark içinde fark', () => {
     expect(String(r!.gozlem!.sonraGunlukHarcama)).toMatch(/^0/);
   });
 
-  it('KRİTİK: hesap ölçüm sırasında başka workspace’e taşındıysa "hesap taşındı" (yeni müşterinin harcaması eskisine yazılmıyor)', async () => {
+  it('KRİTİK: hesap ölçüm sırasında başka workspace’e taşındıysa "hesap taşındı" (yeni workspace’in harcaması eskisine yazılmıyor)', async () => {
     await standartMetrik({ harcamaTl: 1000, tik: 100, donusum: 14 });
     await denetim({ action: 'campaign.set_budget', target: K1, after: butceSonrasi('1200000000') });
     await etkiIsi(db(), IDS.adAccount, '2026-09-02', simdi('2026-09-02'));
@@ -506,6 +506,109 @@ describe('Ajan 4 kapı — ölçülmeyen ama ölçümü bozan değişiklikler', 
     await etkiIsi(db(), IDS.adAccount, ILK_OLCUM, simdi(ILK_OLCUM));
     const r = (await satirlar()).find((x) => x.varlik_id === R1)!;
     expect(r).toMatchObject({ durum: 'olculemedi', neden: 'karisik' });
+  });
+});
+
+describe('Ajan 2 düzeltmeleri — Ö-1, Ö-2, N-1', () => {
+  async function kural() {
+    await h.q(
+      `INSERT INTO rules (id, org_id, client_id, ad_account_id, name, level, conditions, action, guard, updated_at)
+       VALUES ($1, $2, $3, $4, 'Gece başlat', 'ad', '[{"metric":"cpa","op":"gt","value":100}]'::jsonb, '{"type":"resume"}'::jsonb, '{}'::jsonb, now())`,
+      [RULE, IDS.org, IDS.client, IDS.adAccount],
+    );
+    await h.q(`INSERT INTO rule_runs (id, org_id, rule_id, dry_run, started_at) VALUES ($1, $2, $3, false, $4::timestamptz)`, [RUN, IDS.org, RULE, DEGISIKLIK]);
+  }
+  async function kuralEylemi(eylem: string, varlik: string, zaman: string, once: unknown, sonra: unknown) {
+    await h.q(
+      `INSERT INTO rule_action_logs (id, org_id, rule_id, run_id, entity_level, entity_id, entity_name, entity_external_id,
+         action_type, outcome, reason, before_state, after_state, created_at)
+       VALUES (gen_random_uuid(), $1, $2, $3, 'ad', $4, 'x', 'x', $5, 'applied', 'x', $6::jsonb, $7::jsonb, $8::timestamptz)`,
+      [IDS.org, RULE, RUN, varlik, eylem, JSON.stringify(once), JSON.stringify(sonra), zaman],
+    );
+  }
+  async function setMetrigi() {
+    await metrik('ad_group', S1A, '2026-08-04', '2026-08-31', OLAGAN);
+    await metrik('ad_group', S1A, '2026-09-01', '2026-09-30', { harcamaTl: 1000, tik: 100, donusum: 14 });
+    for (const s of [S2, S3]) await metrik('ad_group', s, '2026-08-04', '2026-09-30', KONTROL);
+  }
+  const durdurR1 = () =>
+    denetim({ action: 'ad.pause', target: R1, after: { istenen: { type: 'pause' }, dogrulama: 'dogrulandi', platformDegeri: 'x' } });
+
+  it('Ö-1 (kural kaynağı): kural zaten durmuş varlığı "durdurduysa" satır açılmıyor', async () => {
+    await kural();
+    await kuralEylemi('pause', R1, DEGISIKLIK, { status: 'paused' }, { status: 'paused' });
+    const s = await etkiIsi(db(), IDS.adAccount, '2026-09-02', simdi('2026-09-02'));
+    expect(await satirlar()).toHaveLength(0);
+    expect(s.note).toContain('1 ölçülmez');
+  });
+
+  it('Ö-1 sınırı: önceki durumu BİLİNMEYEN durdurma ölçülüyor (eski kayıtlar sessizce ölçümsüz kalmasın)', async () => {
+    await denetim({ action: 'ad.pause', target: R1, before: {}, after: { status: 'paused' } });
+    await etkiIsi(db(), IDS.adAccount, '2026-09-02', simdi('2026-09-02'));
+    expect(await satirlar()).toEqual([expect.objectContaining({ tur: 'durdur', durum: 'bekliyor' })]);
+  });
+
+  it('Ö-2: kuralın YENİDEN BAŞLATMASI (rule_action_logs) da ölçümü karışık yapıyor', async () => {
+    await setMetrigi();
+    await kural();
+    await durdurR1();
+    await kuralEylemi('resume', R2, '2026-09-03T09:00:00Z', { status: 'paused' }, { status: 'active' });
+    await etkiIsi(db(), IDS.adAccount, ILK_OLCUM, simdi(ILK_OLCUM));
+    expect((await satirlar()).find((x) => x.varlik_id === R1)).toMatchObject({ durum: 'olculemedi', neden: 'karisik' });
+  });
+
+  it('Ö-2: aynı kampanyada pencere içinde AYNI DEĞERİ yeniden yazan bütçe de karışık', async () => {
+    await setMetrigi();
+    await durdurR1();
+    await denetim({
+      action: 'ad_group.set_budget',
+      target: S1B,
+      zaman: '2026-09-04T09:00:00Z',
+      before: { status: 'active', budgetMode: 'daily', budgetAmountMicros: '500000000' },
+      after: butceSonrasi('500000000'),
+    });
+    await etkiIsi(db(), IDS.adAccount, ILK_OLCUM, simdi(ILK_OLCUM));
+    const r = await satirlar();
+    expect(r).toHaveLength(1);
+    expect(r[0]).toMatchObject({ durum: 'olculemedi', neden: 'karisik' });
+  });
+
+  it('Ö-2 sınırı: BAŞKA kampanyadaki başlatma karışık yapmıyor ama o kampanya kontrolden çıkıyor', async () => {
+    await setMetrigi();
+    await durdurR1();
+    await denetim({ action: 'campaign.resume', target: K2, zaman: '2026-09-03T09:00:00Z', before: { status: 'paused' }, after: { status: 'active' } });
+    await etkiIsi(db(), IDS.adAccount, ILK_OLCUM, simdi(ILK_OLCUM));
+    const [r] = await satirlar();
+    expect(r).toMatchObject({ durum: 'sonuclandi', birlikte: 0 });
+    expect(r!.olcum?.kontrol?.varliklar).toEqual([S3]);
+  });
+
+  async function tasi(zaman: string) {
+    await h.q(`INSERT INTO clients (id, org_id, name, slug, updated_at) VALUES ($1, $2, 'B', 'b', now())`, [CLIENT_B, IDS.org]);
+    await h.q(`UPDATE ad_accounts SET client_id = $1 WHERE id = $2`, [CLIENT_B, IDS.adAccount]);
+    await h.q(
+      `INSERT INTO audit_logs (org_id, client_id, actor_type, actor_id, action, target_type, target_id, created_at)
+       VALUES ($1, $2, 'user', $3, 'ad_account.assigned', 'ad_account', $4, $5::timestamptz)`,
+      [IDS.org, CLIENT_B, IDS.user, IDS.adAccount, zaman],
+    );
+  }
+
+  it('N-1: hesap ölçüm penceresi KAPANDIKTAN SONRA taşındıysa ölçüm geçerli ("hesap taşındı" DEĞİL)', async () => {
+    await standartMetrikAjan4();
+    await denetim({ action: 'campaign.set_budget', target: K1, after: butceSonrasi('1200000000') });
+    await etkiIsi(db(), IDS.adAccount, '2026-09-02', simdi('2026-09-02'));
+    await tasi('2026-09-10T09:00:00Z'); // 7. gün penceresi 8 Eylül'de bitti
+    await etkiIsi(db(), IDS.adAccount, ILK_OLCUM, simdi(ILK_OLCUM));
+    expect((await satirlar())[0]).toMatchObject({ durum: 'sonuclandi', sonuc: 'iyilesti', client_id: IDS.client });
+  });
+
+  it('N-1: taşıma pencerenin İÇİNDEYSE "hesap taşındı"', async () => {
+    await standartMetrikAjan4();
+    await denetim({ action: 'campaign.set_budget', target: K1, after: butceSonrasi('1200000000') });
+    await etkiIsi(db(), IDS.adAccount, '2026-09-02', simdi('2026-09-02'));
+    await tasi('2026-09-05T09:00:00Z');
+    await etkiIsi(db(), IDS.adAccount, ILK_OLCUM, simdi(ILK_OLCUM));
+    expect((await satirlar())[0]).toMatchObject({ durum: 'olculemedi', neden: 'hesap_tasindi' });
   });
 });
 
