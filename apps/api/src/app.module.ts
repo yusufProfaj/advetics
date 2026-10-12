@@ -47,6 +47,7 @@ import { SinyalModule } from './modules/sinyal/sinyal.module';
 import { EtkiModule } from './modules/etki/etki.module';
 import { GeriBeslemeModule } from './modules/geri-besleme/geri-besleme.module';
 import { VeriKaynagiModule } from './modules/veri-kaynagi/veri-kaynagi.module';
+import { KreatifZekaModule } from './modules/kreatif-zeka/kreatif-zeka.module';
 
 @Module({
   imports: [
@@ -96,6 +97,7 @@ import { VeriKaynagiModule } from './modules/veri-kaynagi/veri-kaynagi.module';
     EtkiModule,
     GeriBeslemeModule,
     VeriKaynagiModule,
+    KreatifZekaModule,
   ],
   controllers: [HealthController],
   providers: [

@@ -73,6 +73,13 @@ export interface GeminiIstegi {
   jsonSemasi?: Record<string, unknown>;
   /** Düşünme düzeyi; varsayılana bırakılmıyor (CLAUDE.md "platformun varsayılanına güvenme"). */
   dusunme?: 'low' | 'medium' | 'high';
+  /**
+   * Görsel girdinin çözünürlüğü (Paket D, MIMARI Ç-16). Görsel gönderen
+   * çağrı bunu AÇIKÇA vermeli: token maliyetini doğrudan belirliyor ve
+   * varsayılanı modele göre değişiyor, yani yazılmazsa aynı kod model
+   * güncellemesinde sessizce pahalılaşır. Görselsiz çağrıda gönderilmiyor.
+   */
+  mediaResolution?: 'MEDIA_RESOLUTION_LOW' | 'MEDIA_RESOLUTION_MEDIUM' | 'MEDIA_RESOLUTION_HIGH';
 }
 
 export interface GeminiAyarlari {
@@ -99,6 +106,7 @@ export class GeminiIstemcisi {
         maxOutputTokens: g.enCokCikti,
         thinkingConfig: { thinkingLevel: g.dusunme ?? 'medium' },
         ...(g.jsonSemasi && { responseMimeType: 'application/json', responseJsonSchema: g.jsonSemasi }),
+        ...(g.mediaResolution && { mediaResolution: g.mediaResolution }),
       },
     };
   }
@@ -219,16 +227,57 @@ export async function metinIste(
   u: MetinUretici,
   g: { sistem: string; metin: string; enCokCikti: number; jsonSemasi?: Record<string, unknown>; dusunme?: GeminiIstegi['dusunme'] },
 ): Promise<{ tur: 'tamam'; metin: string } | { tur: 'ret' | 'kesildi' | 'bos'; mesaj: string }> {
+  return (await metinIsteOlcumlu(u, g)).sonuc;
+}
+
+/** Tek atışlık isteğin sonucu + maliyet ölçümü (token ve süre). */
+export interface OlcumluSonuc {
+  sonuc: { tur: 'tamam'; metin: string } | { tur: 'ret' | 'kesildi' | 'bos'; mesaj: string };
+  girdiToken: number;
+  ciktiToken: number;
+  onbellekToken: number;
+  sureMs: number;
+}
+
+/**
+ * `metinIste`in ÖLÇEN hâli ve görsel girdi kabul eden tek yol (Paket D).
+ *
+ * İKİNCİ BİR İSTEMCİ DEĞİL: aynı `uret`i çağırıyor; `metinIste` de buna
+ * yaslanıyor, yani ret/kesilme/boş ayrımı tek yerde. Görseller metinden
+ * ÖNCE ve `inlineData` ile gidiyor (`reklam-metni.service.ts` deseni);
+ * görsel varsa `mediaResolution` açıkça verilmeli, aksi hâlde maliyet
+ * modelin varsayılanına kalır (Ç-16).
+ *
+ * Token sayıları maliyet bekçisine ve ölçüm betiğine yazılıyor: bir çağrının
+ * ne kadar tuttuğu ancak burada biliniyor ve atılırsa § 9.1 ölçümü
+ * yapılamazdı.
+ */
+export async function metinIsteOlcumlu(
+  u: MetinUretici,
+  g: {
+    sistem: string;
+    metin: string;
+    enCokCikti: number;
+    jsonSemasi?: Record<string, unknown>;
+    dusunme?: GeminiIstegi['dusunme'];
+    gorseller?: Array<{ mimeType: string; data: string }>;
+    mediaResolution?: GeminiIstegi['mediaResolution'];
+  },
+): Promise<OlcumluSonuc> {
+  const bas = Date.now();
+  const parcalar: GeminiParcasi[] = [...(g.gorseller ?? []).map((inlineData) => ({ inlineData })), { text: g.metin }];
   const r = await u.uret({
     sistem: g.sistem,
-    mesajlar: [{ role: 'user', parts: [{ text: g.metin }] }],
+    mesajlar: [{ role: 'user', parts: parcalar }],
     enCokCikti: g.enCokCikti,
     jsonSemasi: g.jsonSemasi,
     dusunme: g.dusunme ?? 'low',
+    ...(g.mediaResolution && { mediaResolution: g.mediaResolution }),
   });
-  if (r.sebep === 'ret') return { tur: 'ret', mesaj: r.aciklama ?? 'Yapay zekâ isteği işlemedi.' };
-  if (r.sebep === 'kesildi') return { tur: 'kesildi', mesaj: 'Yapay zekânın cevabı yarıda kesildi.' };
+  const olcum = { girdiToken: r.girdiToken, ciktiToken: r.ciktiToken, onbellekToken: r.onbellekToken, sureMs: Date.now() - bas };
+  if (r.sebep === 'ret') return { sonuc: { tur: 'ret', mesaj: r.aciklama ?? 'Yapay zekâ isteği işlemedi.' }, ...olcum };
+  if (r.sebep === 'kesildi') return { sonuc: { tur: 'kesildi', mesaj: 'Yapay zekânın cevabı yarıda kesildi.' }, ...olcum };
   const metin = gorunurMetin(r.parcalar);
-  if (!metin.trim()) return { tur: 'bos', mesaj: r.aciklama ?? 'Yapay zekâ boş cevap döndü.' };
-  return { tur: 'tamam', metin };
+  if (!metin.trim()) return { sonuc: { tur: 'bos', mesaj: r.aciklama ?? 'Yapay zekâ boş cevap döndü.' }, ...olcum };
+  return { sonuc: { tur: 'tamam', metin }, ...olcum };
 }

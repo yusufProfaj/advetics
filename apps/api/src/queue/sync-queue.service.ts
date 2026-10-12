@@ -449,6 +449,14 @@ export class SyncQueueService implements OnModuleDestroy {
        */
       { name: 'sweep:impact', pattern: '20 7 * * *', jobType: 'impact_evaluate', tz: 'Europe/Istanbul' },
       /*
+       * Paket D — KREATİF ETİKETLEME EMNİYETİ: günde bir, 10:15 İstanbul.
+       * Asıl tetik ZİNCİR (`insights_daily` sonu); bu süpürme zincirin
+       * kaçırdığı hesapları ve dünkü sınırla ertelenen kreatifleri alıyor.
+       * Sinyal özetinden (09:00) sonra; tarih taşımıyor (iş kimliği hesap
+       * başına sabit, tamamlanan iş kaldırılıp yenisi açılıyor).
+       */
+      { name: 'sweep:creative-tags', pattern: '15 10 * * *', jobType: 'creative_tags', tz: 'Europe/Istanbul' },
+      /*
        * Paket A — BİLDİRİM TESLİMİ: 5 dakikada bir (dakika 2, 7, 12...).
        * Bekleyen ve yeniden denenecek gönderimler + 09:00 İstanbul sinyal
        * özeti (özetin saati süpürmenin İÇİNDE kontrol ediliyor). Platform

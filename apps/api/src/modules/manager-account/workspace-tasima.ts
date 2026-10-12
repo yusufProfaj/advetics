@@ -216,6 +216,15 @@ export const CASCADE_ILE_TASINANLAR = [
   'veri_kaynaklari',
   'ga4_gunluk',
   'ga4_anahtar_etkinlik_gunluk',
+  // KREATİF ZEKÂSI (docs/kreatif-zeka/MIMARI.md § 2) TAŞINIYOR. Etiket ve
+  // içerik kaydı workspace'in kreatiflerinden türetilmiş ve kreatifler
+  // hesaplarla gidiyor; geride kalsalar yeni şirkette aynı görseller için
+  // Gemini'ye yeniden para ödenirdi. Sayaç harcanan paranın kaydı (o günün
+  // sınırı workspace'le gider), brief birinin isteği ve workspace'e ait.
+  'kreatif_icerikleri',
+  'kreatif_etiketleri',
+  'kreatif_etiket_sayaci',
+  'kreatif_briefleri',
 ] as const;
 
 export interface WorkspaceTasimaSonucu {

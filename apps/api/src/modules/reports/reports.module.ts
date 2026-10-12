@@ -35,6 +35,8 @@ import { AssetStorageService } from '../ad-builder/asset-storage.service';
     AssetStorageService,
   ],
   exports: [
+    // Paket D: kreatif zekâsı aynı tazeleme çekirdeğini kullanıyor (iş + görsel ucu).
+    KreatifAdresiService,
     ReportsService,
     ShareService,
     RaporPdfService,

@@ -56,7 +56,16 @@ export type QuotaLayer =
    * taramasını da reddettirip hesabı KALICI KİLİDE sokuyor. Yani bu iş,
    * kesilecek ilk şey olmalı.
    */
-  | 'report_creative';
+  | 'report_creative'
+  /**
+   * Kreatif etiketleme işinin (Paket D) Meta görsel adresi tazelemesi.
+   *
+   * Rapordaki gibi TAVAN %50: etiket ertelenebilir bir zenginleştirme,
+   * kotayı %90'ın üstüne çıkarıp yapı taramasını reddettirmesi hesabı
+   * kalıcı kilide sokardı (CLAUDE.md). Ayrı katman çünkü kaynağı ayrı:
+   * teşhiste "bu kotayı kim yedi" sorusu katman adından okunuyor.
+   */
+  | 'creative_tag';
 
 /**
  * Kota tüketim yüzdesine göre hangi katmanların çalışabileceği.
@@ -87,6 +96,8 @@ const LAYER_MAX_USAGE: Record<QuotaLayer, number> = {
    * çıkıyor ve sebebi belgede yazıyor.
    */
   report_creative: 50,
+  // Paket D: ertelenebilir zenginleştirme, rapor görseliyle aynı tavan.
+  creative_tag: 50,
 };
 
 /**

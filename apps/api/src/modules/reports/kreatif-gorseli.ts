@@ -140,18 +140,58 @@ export async function gorselIndir(
 ): Promise<GorselSonucu> {
   const kontrol = adresGuvenliMi(ham);
   if (!kontrol.ok) return kontrol;
-  return indir(kontrol.url, opts.getir, opts.signal);
+  const r = await indir(kontrol.url, RAPOR_AYARI, opts.getir, opts.signal);
+  return r.ok ? { ok: true, bytes: r.bytes, tur: r.tur } : { ok: false, sebep: r.sebep };
 }
 
+/**
+ * Başarısızlığın TÜRÜ (Paket D). Kreatif etiketleme işi kalıcı ret (biçim,
+ * boyut) ile geçici arızayı (ağ, sunucu) AYIRMAK zorunda: kalıcı olanı
+ * tekrar denemek kota harcar, geçici olanı kalıcı saymak kreatifi bir daha
+ * hiç etiketlememek demek. Cümle (`sebep`) aynen kalıyor, kod onun yanında.
+ */
+export type IndirmeHataKodu = 'adres' | 'boyut' | 'bicim' | 'ag';
+
+/**
+ * GÖRÜ (Gemini) İÇİN İNDİRME — rapordakiyle AYNI korumalar, GENİŞ biçim
+ * listesi (Paket D, MIMARI § 5).
+ *
+ * Aynı `adresGuvenliMi` (aynı `IZINLI_SONEKLER`, ikinci liste yok), aynı
+ * `redirect: 'manual'`, aynı gövde-okunurken boyut sınırı. Farkı yalnız
+ * kabul edilen biçim: rapor `pdf-lib` yüzünden JPEG/PNG'ye mahkûm, görü
+ * girdisi WebP'yi de alıyor (`goruBicimi`, shared). Rapor listesini burada
+ * kullanmak WebP'li Meta kreatiflerini sessizce "etiketlenemez" yapardı.
+ *
+ * Rapor yolu (`gorselIndir`) DEĞİŞMEDİ: kendi ayarıyla aynı çekirdeği
+ * çağırıyor.
+ */
+export async function goruIcinIndir<T extends string>(
+  ham: string,
+  ayar: { maxBayt: number; zamanAsimiMs: number; bicimAnla: (b: Uint8Array) => T | null; bicimHatasi: string },
+  opts: { getir?: Getirici; signal?: AbortSignal } = {},
+): Promise<{ ok: true; bytes: Uint8Array; tur: T } | { ok: false; sebep: string; kod: IndirmeHataKodu }> {
+  const kontrol = adresGuvenliMi(ham);
+  if (!kontrol.ok) return { ok: false, sebep: kontrol.sebep, kod: 'adres' };
+  return indir(kontrol.url, ayar, opts.getir, opts.signal);
+}
+
+const RAPOR_AYARI = {
+  maxBayt: GORSEL_SINIRI.maxBayt,
+  zamanAsimiMs: GORSEL_SINIRI.zamanAsimiMs,
+  bicimAnla: turuAnla,
+  bicimHatasi: 'desteklenmeyen biçim (yalnızca JPEG/PNG)',
+};
+
 /** İndirmenin ORTAK gövdesi — adres kontrolü çağırana ait. */
-async function indir(
+async function indir<T extends string>(
   url: URL,
+  ayar: { maxBayt: number; zamanAsimiMs: number; bicimAnla: (b: Uint8Array) => T | null; bicimHatasi: string },
   getirici?: Getirici,
   disSignal?: AbortSignal,
-): Promise<GorselSonucu> {
+): Promise<{ ok: true; bytes: Uint8Array; tur: T } | { ok: false; sebep: string; kod: IndirmeHataKodu }> {
   const getir = getirici ?? fetch;
   const kendi = new AbortController();
-  const zamanlayici = setTimeout(() => kendi.abort(), GORSEL_SINIRI.zamanAsimiMs);
+  const zamanlayici = setTimeout(() => kendi.abort(), ayar.zamanAsimiMs);
   const iptal = (): void => kendi.abort();
   disSignal?.addEventListener('abort', iptal);
 
@@ -164,20 +204,20 @@ async function indir(
     });
 
     if (yanit.status >= 300 && yanit.status < 400) {
-      return { ok: false, sebep: 'yönlendirme izlenmiyor' };
+      return { ok: false, sebep: 'yönlendirme izlenmiyor', kod: 'ag' };
     }
-    if (!yanit.ok) return { ok: false, sebep: `sunucu ${yanit.status}` };
+    if (!yanit.ok) return { ok: false, sebep: `sunucu ${yanit.status}`, kod: 'ag' };
 
-    const bytes = await govdeyiOku(yanit);
-    if (bytes === null) return { ok: false, sebep: 'görsel çok büyük' };
+    const bytes = await govdeyiOku(yanit, ayar.maxBayt);
+    if (bytes === null) return { ok: false, sebep: 'görsel çok büyük', kod: 'boyut' };
 
-    const tur = turuAnla(bytes);
-    if (tur === null) return { ok: false, sebep: 'desteklenmeyen biçim (yalnızca JPEG/PNG)' };
+    const tur = ayar.bicimAnla(bytes);
+    if (tur === null) return { ok: false, sebep: ayar.bicimHatasi, kod: 'bicim' };
 
     return { ok: true, bytes, tur };
   } catch (err) {
-    if (kendi.signal.aborted) return { ok: false, sebep: 'zaman aşımı' };
-    return { ok: false, sebep: err instanceof Error ? err.message : 'indirilemedi' };
+    if (kendi.signal.aborted) return { ok: false, sebep: 'zaman aşımı', kod: 'ag' };
+    return { ok: false, sebep: err instanceof Error ? err.message : 'indirilemedi', kod: 'ag' };
   } finally {
     clearTimeout(zamanlayici);
     disSignal?.removeEventListener('abort', iptal);
@@ -190,11 +230,11 @@ async function indir(
  * `content-length`e bakıp geçmek yetmiyor — başlık yanlış ya da hiç yok
  * olabilir. Sınır okuma sırasında uygulanıyor.
  */
-async function govdeyiOku(yanit: Response): Promise<Uint8Array | null> {
+async function govdeyiOku(yanit: Response, maxBayt: number): Promise<Uint8Array | null> {
   const okuyucu = yanit.body?.getReader();
   if (!okuyucu) {
     const tampon = new Uint8Array(await yanit.arrayBuffer());
-    return tampon.length > GORSEL_SINIRI.maxBayt ? null : tampon;
+    return tampon.length > maxBayt ? null : tampon;
   }
 
   const parcalar: Uint8Array[] = [];
@@ -204,7 +244,7 @@ async function govdeyiOku(yanit: Response): Promise<Uint8Array | null> {
     if (done) break;
     if (!value) continue;
     toplam += value.length;
-    if (toplam > GORSEL_SINIRI.maxBayt) {
+    if (toplam > maxBayt) {
       await okuyucu.cancel();
       return null;
     }

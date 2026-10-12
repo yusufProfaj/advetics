@@ -114,6 +114,12 @@ describe('süpürme tarih aralıkları', () => {
     expect(r).toEqual(kaynakGunlukPencere('ga4', bugun));
   });
 
+  it('kreatif etiketleme (Paket D) tarih İSTEMİYOR: pencere işin içinde, iş kimliği hesap başına', () => {
+    // Bir dal eklenip iş tarihli yapılırsa işleyici yine tarihsiz okur ama
+    // kimlik günlüğe döner ve zincir + süpürme aynı gün iki iş açar.
+    expect(proc.datesForJob('creative_tags', 'Europe/Istanbul')).toBeUndefined();
+  });
+
   it('yapı taraması tarih İSTEMİYOR — aralık üretmek yanıltıcı olurdu', () => {
     expect(proc.datesForJob('structure', 'Europe/Istanbul')).toBeUndefined();
   });
