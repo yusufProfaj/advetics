@@ -16,6 +16,21 @@ RLS politikası var, platform sahibi yalnız hello@profaj.com.
 bu commit'le deploy ediliyor; migration `20261009100000_iyilestir` (üç
 yeni tablo) + `db:rls`.
 
+**ADVCAMPAIGN İKİNCİ TUR (2026-10-12 akşam).** (1) META HİÇ KURULMUYORDU:
+hazır workspace (Dalga 3) rehbere bütçe/kategori/tarihi `workspace_profili` /
+`derleyici` kaynağıyla dolduruyor, Meta taslağının KAYNAK kilidi bunları
+kabul etmiyordu; prova kilidi atladığı için yayında "Bu alanı kendin seç"
+ile düşüyordu. Kaynak eşlemesi düzeldi, kilit provada, mesaj alan adını
+söylüyor, takılmış rehberde yalnız başlamamış platform yeniden denenebilir
+(tek kural `platformYenidenKurulabilirMi`; Google ikinci kez KURULMAZ).
+(2) Google Arama öğeleri (g-1.2.0): arama, işletme adı, logo, açıklama
+metni, ek açıklamalı snippet, isteğe bağlı promosyon ve fiyat listesi;
+site bağlantısı sitemap yedeği. Ege Birlik'in hedef sitesi TEK SAYFA
+(egebirlikseasight.com), alt sayfası yok — site bağlantısı çıkmaması doğru.
+**Canlıda ölç:** BUSINESS_NAME/LOGO Arama'da kabul, `price_offerings`
+GAQL'de seçilebilir mi, öğe onay süresi. **Açık not:** öğe geri okuması
+düşerse sebep yalnız ham kayıtta/logda (ekranda değil).
+
 **ADVCAMPAIGN "SİTEME GELSİNLER" TURU (2026-10-12/13).** Kullanıcı: bütün
 amaçlar tam optimize kurulsun, "Siteme gelsinler"den başla; metin önerisi
 görseli okumuyor ve hep aynı; giriş ekranı kirli ve silinmiyor. Yapılanlar:
