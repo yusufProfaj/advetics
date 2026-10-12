@@ -682,14 +682,25 @@ export function geriAlinabilirMi(p: Pick<PlatformYayinOzeti, 'platform' | 'durum
  * EKSİKSİZ duran bir kurulumun tek yolu silmekti.
  */
 /**
- * "Yeniden dene" düğmesi: platform HİÇ BAŞLAMADI (yayın kaydı yok, sebep
- * var). 2026-10-12'de Google kuruldu, Meta başlamadı ve ekranda tek yol
- * "Aynı içerikle yeniden kur"du: o YENİ bir rehber açar ve Google'ı ikinci
- * kez kurar (para). Sunucu bu yolda yalnız yayın kaydı olmayan platformu
- * prova edip kuruyor (`hedefPlatformlar`); kaydı olan satırda düğme yok.
+ * "Yeniden dene" düğmesi bu satır için var mı. Karar SUNUCUNUN
+ * (`yenidenKurulabilir`, shared `platformYenidenKurulabilirMi`): hiç yayın
+ * kaydı yok ya da kayıt platforma hiçbir şey gitmeden düşmüş ön kontrol
+ * reddi. Panel kendi kuralını yazmıyor; iki kural ayrışınca düğme ya işe
+ * yaramaz ya da sunucunun reddettiği bir kurulumu vaat eder. Sebep de
+ * şart: sebepsiz kayıtsız satır henüz başlıyor, hata değil.
  */
-export function yenidenDenenebilirMi(p: Pick<PlatformYayinOzeti, 'durum' | 'yayinId' | 'sebep'>): boolean {
-  return p.yayinId === null && p.durum === null && !!p.sebep;
+export function yenidenDenenebilirMi(p: Pick<PlatformYayinOzeti, 'yenidenKurulabilir' | 'sebep'>): boolean {
+  return p.yenidenKurulabilir && !!p.sebep;
+}
+
+/**
+ * Düğme HEDEFLERİ söyler: sunucu bir basışta yeniden kurulabilir bütün
+ * platformları dener, "Meta için" yazıp Google'ı da denemek sözü bozardı.
+ * `null`: düğme yok.
+ */
+export function yenidenDenemeEtiketi(platformlar: ReadonlyArray<Pick<PlatformYayinOzeti, 'platform' | 'yenidenKurulabilir' | 'sebep'>>): string | null {
+  const adlar = platformlar.filter(yenidenDenenebilirMi).map((p) => REHBER_PLATFORM_ADI[p.platform]);
+  return adlar.length ? `${adlar.join(' ve ')} için yeniden dene` : null;
 }
 
 export function yenidenOkunabilirMi(p: Pick<PlatformYayinOzeti, 'platform' | 'durum' | 'yayinId'>): boolean {

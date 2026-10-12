@@ -32,6 +32,7 @@ import {
   kararTablosu,
   oranBul,
   platformAcilabilirMi,
+  platformYenidenKurulabilirMi,
   provaNotu,
   kopyalanacakAlanlar,
   rehberAlanlariSchema,
@@ -54,6 +55,7 @@ import {
   type MetinOnerisi,
   type OzelKategori,
   type PlatformProvaSonucu,
+  type PlatformYayinKaydi,
   type PlatformYayinOzeti,
   type RehberAlanlari,
   type RehberDurumu,
@@ -302,6 +304,26 @@ export const METIN_ONERI_GORSEL_SINIRI = 3;
 const METIN_GORSEL_BICIMLERI = ['image/jpeg', 'image/png', 'image/webp'];
 
 /** Yayına alınmış rehberde hiç yayın kaydı açılmamış platformun sözü. */
+/**
+ * Platform başlatıcısının "başlamadı" DIŞINDAKİ üçüncü cevabı: aynı taslağın
+ * aktif yayını başka bir istekle az önce açıldı (kurulum sürüyor). Sebep
+ * yazılmaz, denetime "başlamadı" düşmez.
+ */
+const SURUYOR = { tur: 'suruyor' } as const;
+type BaslatmaSonucu = string | null | typeof SURUYOR;
+
+/**
+ * Aktif yayın tekilliği (`yayin_taslak_aktif_key`) çakıştı mı. Prisma ham
+ * sorgu hatası kısıt adını mesajda taşıyor (P2010, 23505); PGlite de aynı.
+ * Ad ile ayırt ediliyor: başka bir tekillik ihlali (gerçek bir hata) bu
+ * dala düşüp "sürüyor" diye yutulmamalı.
+ */
+export function aktifYayinCakismasiMi(e: unknown): boolean {
+  const m = e instanceof Error ? e.message : String(e);
+  const ek = (e as { meta?: { message?: unknown } } | null)?.meta?.message;
+  return `${m} ${typeof ek === 'string' ? ek : ''}`.includes('yayin_taslak_aktif_key');
+}
+
 export const BASLAMAYAN_PLATFORM_SEBEBI = 'Bu platformda kurulum başlamadı; Yeni reklam ile yeniden deneyebilirsin.';
 
 @Injectable()
@@ -1520,29 +1542,39 @@ export class RehberService {
      */
     const yayindaYaz = () =>
       tx((t) => t.$queryRaw(Prisma.sql`UPDATE reklam_rehberi SET durum = 'yayinda', updated_at = now() WHERE id = ${id}::uuid AND durum = 'taslak' RETURNING id`));
-    const dene = async (baslat: () => Promise<string | null>): Promise<string | null> => {
+    const dene = async (baslat: () => Promise<BaslatmaSonucu>): Promise<BaslatmaSonucu> => {
       try {
         return await baslat();
       } catch (e) {
+        // EŞZAMANLI İKİNCİ İSTEK (Ajan 4 Ö-1): öbür istek aynı taslağın
+        // aktif yayınını az önce yazdı. Bu "başlamadı" DEĞİL: sebep yazmak
+        // ve denetime "başlamadı" düşürmek, kurulum sürerken ekranda
+        // "yeniden dene" düğmesi ve yanlış bir hata gösterirdi.
+        if (aktifYayinCakismasiMi(e)) return SURUYOR;
         logger.error(`Rehber ${id} yayını başlatılırken hata: ${e instanceof Error ? e.message : String(e)}`);
         return `Kurulum başlatılamadı: ${e instanceof Error ? e.message : String(e)}`;
       }
     };
     if (hedef.meta && s.meta_taslak_id) {
       const r = await dene(() => this.metaYayinBaslat(ctx, s.meta_taslak_id!, a, acik, b.meta?.currency ?? b.paraBirimi, { uyum: k.uyum, kapaliKalacak: !platformAcilabilirMi(amac, 'meta') }, b.medyaOranlari ?? new Map()));
-      if (r) baslamayan.push({ platform: 'meta', taslakId: s.meta_taslak_id, yayinId: null, durum: null, sebep: r, kampanyaKimligi: null, duraklatilmisKalacak: !platformAcilabilirMi(amac, 'meta') });
+      if (typeof r === 'string') baslamayan.push({ platform: 'meta', taslakId: s.meta_taslak_id, yayinId: null, durum: null, sebep: r, kampanyaKimligi: null, duraklatilmisKalacak: !platformAcilabilirMi(amac, 'meta'), yenidenKurulabilir: true });
       else await yayindaYaz();
     }
     if (hedef.google && s.google_taslak_id) {
       const r = await dene(() => this.googleYayinBaslat(ctx, s, a, b, k.uyum, !platformAcilabilirMi(amac, 'google')));
-      if (r) baslamayan.push({ platform: 'google', taslakId: s.google_taslak_id, yayinId: null, durum: null, sebep: r, kampanyaKimligi: null, duraklatilmisKalacak: !platformAcilabilirMi(amac, 'google') });
+      if (typeof r === 'string') baslamayan.push({ platform: 'google', taslakId: s.google_taslak_id, yayinId: null, durum: null, sebep: r, kampanyaKimligi: null, duraklatilmisKalacak: !platformAcilabilirMi(amac, 'google'), yenidenKurulabilir: true });
       else await yayindaYaz();
     }
     await this.sebepleriYaz(ctx, s, hedef, baslamayan);
     const d = await this.yayinDurumu(ctx, id);
     // Başlamayan platformun bu denemede yayın kaydı yok: satırı SEBEBİYLE
     // değiştirilir (eski bir yayın kaydını göstermek "başladı" sanılırdı).
-    const yerine = (p: PlatformYayinOzeti) => baslamayan.find((x) => x.platform === p.platform) ?? p;
+    // Yeniden kurulabilirlik SUNUCUNUN kaydından: kuyruğa alınamayan yayının
+    // kaydı var (on_kontrol_reddi) ve kural onu tek yerde değerlendiriyor.
+    const yerine = (p: PlatformYayinOzeti) => {
+      const b = baslamayan.find((x) => x.platform === p.platform);
+      return b ? { ...b, yenidenKurulabilir: p.yenidenKurulabilir } : p;
+    };
     const eksikler2 = baslamayan.filter((x) => !d.platformlar.some((p) => p.platform === x.platform));
     return { ...d, platformlar: [...d.platformlar.map(yerine), ...eksikler2] };
   }
@@ -1560,16 +1592,41 @@ export class RehberService {
    * düğmeye iki kez basılması da buraya düşer.
    */
   private async hedefPlatformlar(ctx: TenantContext, s: RehberSatiri, acik: Record<RehberPlatformu, boolean>): Promise<Record<RehberPlatformu, boolean>> {
-    if (s.durum === 'taslak') return acik;
-    const kayitli = await this.tx(ctx)((t) =>
-      t.$queryRaw<Array<{ taslak_id: string }>>(Prisma.sql`
-        SELECT DISTINCT taslak_id::text FROM yayin
-         WHERE taslak_id = ANY (${[s.meta_taslak_id, s.google_taslak_id].filter((x): x is string => !!x)}::uuid[])`),
-    );
-    const basladi = (id: string | null) => !!id && kayitli.some((x) => x.taslak_id === id);
-    const hedef = { meta: acik.meta && !basladi(s.meta_taslak_id), google: acik.google && !basladi(s.google_taslak_id) };
-    if (!hedef.meta && !hedef.google) throw new ConflictException('Bu rehberin açık platformlarının hepsi yayına alındı; yeniden denenecek platform yok.');
+    // Rehberin durumuna BAKILMAZ (Ajan 4 Ö-2): "yayinda" yazımı düşmüş bir
+    // rehber taslakta kalır ama kayıtlar gerçektir; durumla kısa devre
+    // yapmak iki platformu da ikinci kez kurduruyordu (2 → 4 yayın).
+    const kayitlar = await this.yayinKayitlari(ctx, [s.meta_taslak_id, s.google_taslak_id]);
+    const kurulabilir = (id: string | null) => !id || platformYenidenKurulabilirMi(kayitlar.get(id) ?? []);
+    const hedef = { meta: acik.meta && kurulabilir(s.meta_taslak_id), google: acik.google && kurulabilir(s.google_taslak_id) };
+    if (!hedef.meta && !hedef.google) {
+      const adlar = (['meta', 'google'] as const).filter((p) => acik[p]).map((p) => (p === 'meta' ? 'Meta' : 'Google'));
+      throw new ConflictException(
+        `${adlar.join(' ve ') || 'Açık platform'} için yayın kaydı var (kuruldu, kuruluyor ya da platformda sonlandı); yeniden kurulmaz. Yalnız platforma hiçbir şey gitmeden düşen kurulum yeniden denenir.`,
+      );
+    }
     return hedef;
+  }
+
+  /**
+   * Taslak başına yayın kayıtları: sonlanma sebebi ve platformda nesne açılıp
+   * açılmadığı. `yayin_nesnesi` satırı yayın başlarken PLAN olarak yazılıyor;
+   * platforma bir şey GİTMİŞ nesne = kimliği (`meta_id`, Google'da kaynak
+   * adı) dolu ya da `bekliyor`dan çıkmış satır (`gonderiliyor`/`belirsiz`:
+   * istek gitti, sonucu bilinmiyor; platformda kampanya olabilir). Satırın
+   * varlığına bakmak her kaydı "açıldı" sayardı.
+   */
+  private async yayinKayitlari(ctx: TenantContext, taslaklar: ReadonlyArray<string | null>): Promise<Map<string, PlatformYayinKaydi[]>> {
+    const idler = taslaklar.filter((x): x is string => !!x);
+    const m = new Map<string, PlatformYayinKaydi[]>();
+    if (!idler.length) return m;
+    const satirlar = await this.tx(ctx)((t) =>
+      t.$queryRaw<Array<{ taslak_id: string; sonlanma_sebebi: string | null; nesne_var: boolean }>>(Prisma.sql`
+        SELECT y.taslak_id::text, y.sonlanma_sebebi::text,
+               EXISTS (SELECT 1 FROM yayin_nesnesi n WHERE n.yayin_id = y.id AND (n.meta_id IS NOT NULL OR n.durum <> 'bekliyor')) AS nesne_var
+          FROM yayin y WHERE y.taslak_id = ANY (${idler}::uuid[])`),
+    );
+    for (const r of satirlar) m.set(r.taslak_id, [...(m.get(r.taslak_id) ?? []), { sonlanmaSebebi: r.sonlanma_sebebi, nesneVar: r.nesne_var }]);
+    return m;
   }
 
   /**
@@ -1616,6 +1673,7 @@ export class RehberService {
         SELECT platform_sebepleri FROM reklam_rehberi WHERE id = ${id}::uuid`),
     );
     const kayitliSebep = (p: RehberPlatformu) => ps?.platform_sebepleri?.[p]?.sebep ?? null;
+    const kayitlar = await this.yayinKayitlari(ctx, [s.meta_taslak_id, s.google_taslak_id]);
     const platformlar: PlatformYayinOzeti[] = [];
     let uyum: RehberYayinDurumu['uyum'] = null;
     for (const [platform, taslakId] of [
@@ -1649,6 +1707,7 @@ export class RehberService {
         // Google'da kaynak adı saklanıyor; Reklam Yöneticisi yalın kimlik arıyor.
         kampanyaKimligi: y?.kampanya ? (platform === 'google' ? googleYalinKimlik(y.kampanya) : y.kampanya) : null,
         duraklatilmisKalacak: y?.kapali_kalacak ?? false,
+        yenidenKurulabilir: platformYenidenKurulabilirMi(kayitlar.get(taslakId) ?? []),
       });
     }
     return { rehberId: s.id, platformlar, uyum };
@@ -1663,7 +1722,7 @@ export class RehberService {
     paraBirimi: string,
     rehber: { uyum: { tur: 'gecti'; surum: string }; kapaliKalacak: boolean },
     oranlar: ReadonlyMap<string, GorselOrani | null>,
-  ): Promise<string | null> {
+  ): Promise<BaslatmaSonucu> {
     const [t] = await this.tx(ctx)((x) =>
       x.$queryRaw<Array<{ aktif_surum_no: number; icerik_ozeti: string | null; alanlar: unknown }>>(Prisma.sql`
         SELECT t.aktif_surum_no, s.icerik_ozeti, s.alanlar FROM reklam_taslagi t
@@ -1691,7 +1750,10 @@ export class RehberService {
     const beklenen = yeniden.tur === 'tamam' ? createHash('sha256').update(taslakKanonikIcerik(yeniden.deger)).digest('hex') : null;
     if (beklenen !== t.icerik_ozeti) return 'Meta taslağı rehberden sonra değişmiş; yeniden prova et.';
     const r = await this.yayinSvc.baslat(ctx, { taslakId, surumNo: t.aktif_surum_no, icerikOzeti: t.icerik_ozeti, testKipi: false, kaynak: 'panel', rehber });
-    return r.tur === 'ret' ? r.retler.map((x) => x.mesaj).join(' ') : null;
+    if (r.tur !== 'ret') return null;
+    // DURUM: taslağın aktif yayını var (başka bir istek az önce kurdu).
+    if (r.retler.some((x) => x.kod === 'DURUM')) return SURUYOR;
+    return r.retler.map((x) => x.mesaj).join(' ');
   }
 
   /** Google: çocuk taslağın aktif sürümünden derle, kaydı yaz, kuyruğa al. */
@@ -1702,7 +1764,7 @@ export class RehberService {
     b: Baglam,
     uyum: { tur: 'gecti'; surum: string },
     kapaliKalacak: boolean,
-  ): Promise<string | null> {
+  ): Promise<BaslatmaSonucu> {
     if (!b.google || !s.google_taslak_id) return 'Google Ads hesabı seçilmedi.';
     const tx = this.tx(ctx);
     const [c] = await tx((x) =>
@@ -1712,7 +1774,8 @@ export class RehberService {
          WHERE t.id = ${s.google_taslak_id}::uuid`),
     );
     if (!c?.icerik_ozeti) return 'Google taslağı bulunamadı; yeniden prova et.';
-    if (c.durum !== 'taslak' && c.durum !== 'hazir') return 'Google tarafında süren bir yayın var.';
+    // Süren yayın = başka bir istek az önce kurdu; "başlamadı" değil.
+    if (c.durum !== 'taslak' && c.durum !== 'hazir') return SURUYOR;
     if (c.ad_account_id !== b.google.id) return 'Google hesabı provadan sonra değişti; yeniden prova et.';
     const girdi = googleGirdisiOku(c.alanlar);
     const yayinId = randomUUID();

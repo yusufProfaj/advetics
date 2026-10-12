@@ -51,6 +51,7 @@ import {
   yayinSonucu,
   geriAlinabilirMi,
   yenidenDenenebilirMi,
+  yenidenDenemeEtiketi,
   yenidenOkunabilirMi,
   videoBilgisiKapaktan,
   oneriyiSigdir,
@@ -864,14 +865,22 @@ describe('okunamayan kurulum (canlı WhatsApp turu, 2026-10-11)', () => {
 });
 
 describe('başlamamış platformu yeniden dene (canlı, 2026-10-12: Google kuruldu, Meta başlamadı)', () => {
-  const y = '00000000-0000-4000-8000-000000000001';
-  it('KRİTİK: yalnız yayın kaydı OLMAYAN ve sebebi olan satırda; başlamış platformda asla', () => {
-    expect(yenidenDenenebilirMi({ durum: null, yayinId: null, sebep: 'Tarih: bu alanı kendin seç' })).toBe(true);
-    // Başlamış (kaydı var) platform: düğme yeniden kurmanın yolu olurdu.
-    expect(yenidenDenenebilirMi({ durum: 'kurulamadi', yayinId: y, sebep: 'x' })).toBe(false);
-    expect(yenidenDenenebilirMi({ durum: 'on_kontrol', yayinId: y, sebep: null })).toBe(false);
-    // Sebepsiz null: henüz başlıyor, hata değil.
-    expect(yenidenDenenebilirMi({ durum: null, yayinId: null, sebep: null })).toBe(false);
+  it('KRİTİK: karar SUNUCUNUN alanından (yenidenKurulabilir); sebepsiz satırda düğme yok', () => {
+    expect(yenidenDenenebilirMi({ yenidenKurulabilir: true, sebep: 'Tarih: bu alanı kendin seç' })).toBe(true);
+    // Kayıt on_kontrol_reddi (durum arsivlendi, yayinId dolu) ama sunucu kurulabilir diyor: düğme VAR.
+    expect(yenidenDenenebilirMi({ yenidenKurulabilir: true, sebep: 'Kuyruğa alınamadı: redis yok' })).toBe(true);
+    // Başlamış ya da platforma bir şey gitmiş: sunucu hayır diyor, sebep olsa da düğme yok.
+    expect(yenidenDenenebilirMi({ yenidenKurulabilir: false, sebep: 'Kurulamadı' })).toBe(false);
+    // Sebepsiz: henüz başlıyor, hata değil.
+    expect(yenidenDenenebilirMi({ yenidenKurulabilir: true, sebep: null })).toBe(false);
+  });
+
+  it('N-1: düğme hedefleri söylüyor', () => {
+    const m = { platform: 'meta' as const, yenidenKurulabilir: true, sebep: 'x' };
+    const g = { platform: 'google' as const, yenidenKurulabilir: true, sebep: 'y' };
+    expect(yenidenDenemeEtiketi([m, { ...g, yenidenKurulabilir: false }])).toBe('Meta için yeniden dene');
+    expect(yenidenDenemeEtiketi([m, g])).toBe('Meta ve Google için yeniden dene');
+    expect(yenidenDenemeEtiketi([{ ...m, sebep: null }, { ...g, yenidenKurulabilir: false }])).toBeNull();
   });
 });
 

@@ -23,6 +23,7 @@ import {
   bugun,
   geriAlinabilirMi,
   yenidenDenenebilirMi,
+  yenidenDenemeEtiketi,
   yenidenOkunabilirMi,
   yayinSonucuEtiketi,
   kurulumAdimlari,
@@ -493,14 +494,16 @@ function YenidenKontrol({ rehberId, ozet, guncelle }: { rehberId: string; ozet: 
 }
 
 /**
- * "Yeniden dene": HİÇ BAŞLAMAMIŞ platformu (yayın kaydı yok) yeniden prova
- * edip kurar. Başlamış platforma dokunulmaz; sunucu da onu hedef almıyor.
- * Meta provası kuyrukta: sonucu `GET /prova` ile yoklanır, geçince aynı
+ * "Yeniden dene": sunucunun yeniden kurulabilir dediği platformları
+ * (`yenidenKurulabilir`) prova edip kurar; başlamış platforma dokunulmaz.
+ * Meta provası kuyrukta: sonuç `GET /prova` ile yoklanır, hepsi geçince aynı
  * içeriğin özetiyle yayınlanır. Prova reddederse platformun cümlesi görünür.
  */
-function YenidenDene({ rehberId, ozet, guncelle }: { rehberId: string; ozet: PlatformYayinOzeti; guncelle: (y: RehberYayinDurumu) => void }) {
+function YenidenDene({ rehberId, platformlar, guncelle }: { rehberId: string; platformlar: PlatformYayinOzeti[]; guncelle: (y: RehberYayinDurumu) => void }) {
   const [hal, setHal] = useState<'bos' | 'suruyor' | 'hata'>('bos');
   const [hata, setHata] = useState<string | null>(null);
+  const etiket = yenidenDenemeEtiketi(platformlar);
+  const hedefler = platformlar.filter(yenidenDenenebilirMi).map((p) => p.platform);
   const yol = `/reklam/rehberler/${encodeURIComponent(rehberId)}`;
   async function dene() {
     setHal('suruyor');
@@ -508,21 +511,20 @@ function YenidenDene({ rehberId, ozet, guncelle }: { rehberId: string; ozet: Pla
     try {
       let p = await apiFetch<RehberProvaSonucu>(`${yol}/prova`, { method: 'POST', body: '{}' });
       // Meta provası kuyrukta: en çok ~2 dk yokla.
-      for (let i = 0; i < 40 && p[ozet.platform]?.tur === 'bekliyor'; i++) {
+      for (let i = 0; i < 40 && hedefler.some((x) => p[x]?.tur === 'bekliyor'); i++) {
         await new Promise((r) => setTimeout(r, 3000));
         // Boş gövde (prova kaydı yok) = null; o turda son bilineni koru.
         const okunan = (await apiFetch<RehberProvaSonucu | null>(`${yol}/prova`)) ?? null;
         if (okunan) p = okunan;
       }
-      const sonuc = p[ozet.platform];
-      if (sonuc?.tur !== 'gecti') {
-        setHata(
-          sonuc?.tur === 'reddetti'
-            ? sonuc.mesajlar.join(' ')
-            : sonuc?.tur === 'yapilmadi'
-              ? sonuc.sebep
-              : 'Kontrol bitmedi; birkaç dakika sonra yeniden dene.',
-        );
+      const sorunlar = hedefler.flatMap((x) => {
+        const r = p[x];
+        if (r?.tur === 'gecti') return [];
+        const metin = r?.tur === 'reddetti' ? r.mesajlar.join(' ') : r?.tur === 'yapilmadi' ? r.sebep : 'Kontrol bitmedi; birkaç dakika sonra yeniden dene.';
+        return [`${PLATFORM_ADI[x]}: ${metin}`];
+      });
+      if (sorunlar.length) {
+        setHata(sorunlar.join(' '));
         return setHal('hata');
       }
       guncelle(await apiFetch<RehberYayinDurumu>(`${yol}/yayinla`, { method: 'POST', body: JSON.stringify({ icerikOzeti: p.icerikOzeti }) }));
@@ -532,10 +534,11 @@ function YenidenDene({ rehberId, ozet, guncelle }: { rehberId: string; ozet: Pla
       setHal('hata');
     }
   }
+  if (!etiket) return null;
   return (
-    <div className={s.geriAlOnay}>
+    <div className={s.geriAlOnay} style={{ padding: '0 16px 12px' }}>
       <button type="button" className={s.ikincil} disabled={hal === 'suruyor'} onClick={() => void dene()}>
-        {hal === 'suruyor' ? 'Deneniyor…' : `${REHBER_PLATFORM_ADI[ozet.platform]} için yeniden dene`}
+        {hal === 'suruyor' ? 'Deneniyor…' : etiket}
       </button>
       {hal === 'hata' && hata && (
         <span className={s.hataMetni} role="alert">
@@ -618,12 +621,12 @@ export function SonEkran({
                 <i />
                 {yayinSonucuEtiketi(p)}
               </span>
-              {yenidenDenenebilirMi(p) && <YenidenDene rehberId={rehberId} ozet={p} guncelle={yayinGuncelle} />}
               {yenidenOkunabilirMi(p) && <YenidenKontrol rehberId={rehberId} ozet={p} guncelle={yayinGuncelle} />}
               {geriAlinabilirMi(p) && <GeriAl rehberId={rehberId} ozet={p} guncelle={yayinGuncelle} />}
             </div>
           );
         })}
+        <YenidenDene rehberId={rehberId} platformlar={platformlar} guncelle={yayinGuncelle} />
         <div className={s.sonDugmeler}>
           <Link href={yonetici} className={s.birincil}>
             Reklam Yöneticisi&apos;nde gör

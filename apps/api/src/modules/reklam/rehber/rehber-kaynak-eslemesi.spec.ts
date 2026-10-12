@@ -1,9 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   REHBER_ACILIS,
   TASLAK_IZINLI_KAYNAKLAR,
+  platformYenidenKurulabilirMi,
   rehberEksikleri,
   rehberKaynaklariniTasi,
   taslakEksikleri,
@@ -18,7 +19,7 @@ import { ReklamHazirlikService } from '../hazirlik.service';
 import { ReklamTaslakService } from '../taslak.service';
 import { ReklamYayinService } from '../yayin.service';
 import type { ReklamKuyrugu } from '../reklam-kuyrugu';
-import { RehberService } from './rehber.service';
+import { RehberService, aktifYayinCakismasiMi } from './rehber.service';
 
 /**
  * ═══ CANLI HATA 2026-10-12: "Siteme gelsinler" Meta + Google → Google kuruldu,
@@ -330,6 +331,178 @@ describe('YENİDEN DENEME: yayındaki rehberde yalnız başlamamış platform', 
       `SELECT s.alanlar FROM reklam_taslagi t JOIN taslak_surumu s ON s.taslak_id = t.id AND s.surum_no = t.aktif_surum_no WHERE t.platform = 'meta'`,
     );
     expect(c!.alanlar.butce!.deger.micros).toBe('250000000');
+  });
+
+  /*
+   * ═══ AJAN 4: SONLANMIŞ YAYIN KAYDI DA "BAŞLADI" ═══
+   * Taslak başına tek aktif yayın indeksi (`yayin_taslak_aktif_key`) yalnız
+   * `sonlandi_at IS NULL` satırları kapsıyor ve `yayiniSonlandir` taslağı
+   * `taslak`a geri çeviriyor. Yani sonlanmış bir Google yayınında Google
+   * çocuğu yeniden yayınlanabilir hâlde: tek koruma `hedefPlatformlar`ın
+   * HER kaydı (durumundan bağımsız) "başladı" sayması. `kapali_kuruldu`
+   * (deneme kipinde duraklatılmış BAŞARILI kurulum) ve `kurulamadi` (yarım
+   * nesneler platformda) ikinci kurulumda ikinci kampanya demek.
+   */
+  for (const [durum, sonlanma] of [
+    ['kapali_kuruldu', 'kapali_kuruldu'],
+    ['arsivlendi', 'geri_alindi'],
+    ['arsivlendi', 'on_kontrol_reddi'],
+    ['kurulamadi', null],
+  ] as const) {
+    it(`KRİTİK: Google yayını ${durum}${sonlanma ? ` (${sonlanma}, sonlanmış)` : ''} → yeniden deneme Google'ı ne prova eder ne kurar`, async () => {
+      const t = await takilmisRehber();
+      await h.q(
+        `UPDATE yayin SET durum = $1, sonlandi_at = CASE WHEN $2::text IS NULL THEN NULL ELSE now() END, sonlanma_sebebi = $2
+          WHERE taslak_id IN (SELECT id FROM reklam_taslagi WHERE platform = 'google')`,
+        [durum, sonlanma],
+      );
+      await h.q(`UPDATE reklam_taslagi SET durum = 'taslak' WHERE platform = 'google'`);
+      if (sonlanma === 'on_kontrol_reddi') {
+        // Ö-3 kararı: platforma HİÇBİR şey gitmemiş ön kontrol reddi yeniden
+        // denenebilir. Bu vaka "gitmiş" olanı sınıyor: bir nesnenin isteği
+        // gönderildi ve sonucu bilinmiyor (`belirsiz`) → Google'da kampanya
+        // olabilir, yeniden kurulmaz. Hiç gitmemiş hâl ayrı testte (Meta).
+        await h.q(
+          `INSERT INTO yayin_nesnesi (yayin_id, org_id, client_id, tur, ad, sira, durum)
+           SELECT y.id, y.org_id, y.client_id, 'kampanya', 'kampanya:test', 99, 'belirsiz' FROM yayin y
+            WHERE y.taslak_id IN (SELECT id FROM reklam_taslagi WHERE platform = 'google')`,
+        );
+      }
+      googleMutate = [];
+      kuyrukIsleri = [];
+      const p = await svc.prova(CTX, t.id);
+      expect(p.google).toBeNull();
+      await provalariGecir();
+      await svc.yayinla(CTX, t.id, p.icerikOzeti);
+      expect(await h.q(`SELECT y.id FROM yayin y JOIN reklam_taslagi t ON t.id = y.taslak_id WHERE t.platform = 'google'`)).toHaveLength(1);
+      expect(googleMutate).toEqual([]);
+      expect(kuyrukIsleri.filter((x) => x.startsWith('google_kur:'))).toEqual([]);
+    });
+  }
+
+  it('KRİTİK: eşzamanlı iki "yeniden dene" (iki yayınla isteği) Meta’yı TEK kez kurar', async () => {
+    const t = await takilmisRehber();
+    const p = await svc.prova(CTX, t.id);
+    await provalariGecir();
+    kuyrukIsleri = [];
+    const denetimSay = async () => (await h.q(`SELECT id FROM audit_logs WHERE action = 'reklam.rehber.baslamadi' AND target_id = $1`, [t.id])).length;
+    const denetimOnce = await denetimSay();
+    const sonuclar = await Promise.allSettled([svc.yayinla(CTX, t.id, p.icerikOzeti), svc.yayinla(CTX, t.id, p.icerikOzeti)]);
+    expect(await h.q(`SELECT y.id FROM yayin y JOIN reklam_taslagi t ON t.id = y.taslak_id WHERE t.platform = 'meta'`)).toHaveLength(1);
+    expect(kuyrukIsleri.filter((x) => x.startsWith('kur:'))).toHaveLength(1);
+    // Kaybeden istek Meta'yı "başlamadı" diye GÖSTERMEMELİ: kurulum sürüyorken
+    // ekranda "Meta için yeniden dene" düğmesi ve yanlış bir sebep çıkardı.
+    for (const s of sonuclar) {
+      if (s.status !== 'fulfilled') continue;
+      const meta = s.value.platformlar.find((x) => x.platform === 'meta')!;
+      expect(meta.yayinId, `meta satırı: ${JSON.stringify(meta)}`).not.toBeNull();
+    }
+    // Kalıcı sebep de yazılmamalı (yayın kaydı varken görünmüyor ama
+    // denetim kaydına "başlamadı" düşüyor).
+    const [s] = await h.q<{ platform_sebepleri: Record<string, unknown> }>('SELECT platform_sebepleri FROM reklam_rehberi WHERE id = $1', [t.id]);
+    expect(s!.platform_sebepleri).toEqual({});
+    // Denetime "başlamadı" düşmedi (kurulum sürüyordu).
+    expect(await denetimSay()).toBe(denetimOnce);
+  });
+
+  it('Ö-1: hedef seçildikten SONRA öbür istek kurduysa (taslak artık yayında) platform "sürüyor": sebep ve denetim yok', async () => {
+    const t = await takilmisRehber();
+    const p = await svc.prova(CTX, t.id);
+    await provalariGecir();
+    await svc.yayinla(CTX, t.id, p.icerikOzeti); // Meta kuruldu (öbür istek)
+    const denetimSay = async () => (await h.q(`SELECT id FROM audit_logs WHERE action = 'reklam.rehber.baslamadi' AND target_id = $1`, [t.id])).length;
+    const once = await denetimSay();
+    // Arada kalan istek: hedefi Meta kurulmadan ÖNCE okumuş.
+    const casus = vi
+      .spyOn(svc as unknown as { hedefPlatformlar: () => Promise<Record<string, boolean>> }, 'hedefPlatformlar')
+      .mockResolvedValue({ meta: true, google: true });
+    const d = await svc.yayinla(CTX, t.id, p.icerikOzeti).finally(() => casus.mockRestore());
+    for (const x of d.platformlar) expect(x, x.platform).toMatchObject({ yayinId: expect.any(String), sebep: null });
+    expect(await denetimSay()).toBe(once);
+    const [s] = await h.q<{ platform_sebepleri: Record<string, unknown> }>('SELECT platform_sebepleri FROM reklam_rehberi WHERE id = $1', [t.id]);
+    expect(s!.platform_sebepleri).toEqual({});
+    expect(await h.q(`SELECT id FROM yayin`)).toHaveLength(2);
+  });
+
+  it('Ö-1: çakışma ayırıcısı YALNIZ aktif yayın tekilliğini tanır (başka tekillik ihlali gerçek hata kalır)', () => {
+    expect(aktifYayinCakismasiMi(new Error('duplicate key value violates unique constraint "yayin_taslak_aktif_key"'))).toBe(true);
+    expect(aktifYayinCakismasiMi({ message: 'Raw query failed', meta: { message: 'duplicate key value violates unique constraint "yayin_taslak_aktif_key"' } })).toBe(true);
+    expect(aktifYayinCakismasiMi(new Error('duplicate key value violates unique constraint "prova_bekleyen_key"'))).toBe(false);
+  });
+
+  it('Ö-3: TEK KURAL — kayıt yok ya da hepsi platforma hiçbir şey gitmemiş ön kontrol reddi', () => {
+    expect(platformYenidenKurulabilirMi([])).toBe(true);
+    expect(platformYenidenKurulabilirMi([{ sonlanmaSebebi: 'on_kontrol_reddi', nesneVar: false }])).toBe(true);
+    expect(platformYenidenKurulabilirMi([{ sonlanmaSebebi: 'on_kontrol_reddi', nesneVar: true }])).toBe(false);
+    expect(platformYenidenKurulabilirMi([{ sonlanmaSebebi: 'on_kontrol_reddi', nesneVar: false }, { sonlanmaSebebi: null, nesneVar: false }])).toBe(false);
+    for (const x of ['kapali_kuruldu', 'geri_alindi', null]) expect(platformYenidenKurulabilirMi([{ sonlanmaSebebi: x, nesneVar: false }])).toBe(false);
+  });
+
+  it('Ö-3: 409 cümlesi durumu söylüyor (iki platform da kayıtlı)', async () => {
+    const r = await rehber();
+    const p = await svc.prova(CTX, r.id);
+    await provalariGecir();
+    await svc.yayinla(CTX, r.id, p.icerikOzeti);
+    await expect(svc.prova(CTX, r.id)).rejects.toThrow('Meta ve Google için yayın kaydı var (kuruldu, kuruluyor ya da platformda sonlandı); yeniden kurulmaz.');
+  });
+
+  it('Ö: TASLAKTA kalmış rehberde de yayın kaydı olan platform yeniden kurulmaz (yayindaYaz düştüyse)', async () => {
+    // İki platform da kuruldu, ama "yayinda" yazımı düştü: rehber taslakta
+    // kaldı. Kurulumlar duraklatılmış bitti (kapali_kuruldu: sonlanmış,
+    // taslaklar yeniden `taslak`). Yayınla'ya yeniden basmak İKİ platformu da
+    // ikinci kez kurar; `hedefPlatformlar` taslak durumunda kayda bakmıyor.
+    const r = await rehber();
+    const p = await svc.prova(CTX, r.id);
+    await provalariGecir();
+    await svc.yayinla(CTX, r.id, p.icerikOzeti);
+    await h.q(`UPDATE yayin SET durum = 'kapali_kuruldu', sonlandi_at = now(), sonlanma_sebebi = 'kapali_kuruldu'`);
+    await h.q(`UPDATE reklam_taslagi SET durum = 'taslak'`);
+    await h.q(`UPDATE reklam_rehberi SET durum = 'taslak' WHERE id = $1`, [r.id]);
+    const once = await h.q(`SELECT id FROM yayin`);
+    let sonra = once;
+    try {
+      const p2 = await svc.prova(CTX, r.id);
+      await provalariGecir();
+      await svc.yayinla(CTX, r.id, p2.icerikOzeti);
+    } catch {
+      // 409 kabul: hiçbir şey kurulmamalı.
+    }
+    sonra = await h.q(`SELECT id FROM yayin`);
+    expect(sonra).toHaveLength(once.length);
+  });
+
+  it('Ö: kuyruğa alınamayan Meta yayını (on_kontrol_reddi, Meta’ya hiçbir şey gitmedi) yeniden denenebilir olmalı ya da düğme çıkmamalı', async () => {
+    const t = await takilmisRehber();
+    const p = await svc.prova(CTX, t.id);
+    await provalariGecir();
+    const asil = (svc as unknown as { yayinSvc: { kuyruk: { ekle: unknown } } }).yayinSvc.kuyruk.ekle;
+    const k = (svc as unknown as { yayinSvc: { kuyruk: { ekle: unknown } } }).yayinSvc.kuyruk;
+    k.ekle = async () => {
+      throw new Error('redis yok');
+    };
+    let d;
+    try {
+      d = await svc.yayinla(CTX, t.id, p.icerikOzeti);
+    } finally {
+      k.ekle = asil;
+    }
+    const meta = d.platformlar.find((x) => x.platform === 'meta')!;
+    // Yanıt "birazdan yeniden dene" diyor ve satırda kayıt yok: panel
+    // "Meta için yeniden dene" düğmesini gösteriyor (yenidenDenenebilirMi).
+    // Sunucunun kuralı ve düğmenin okuduğu alan AYNI: kayıt on_kontrol_reddi, nesne yok.
+    expect(meta.yenidenKurulabilir).toBe(true);
+    expect((await svc.yayinDurumu(CTX, t.id)).platformlar.find((x) => x.platform === 'meta')!.yenidenKurulabilir).toBe(true);
+    expect((await svc.yayinDurumu(CTX, t.id)).platformlar.find((x) => x.platform === 'google')!.yenidenKurulabilir).toBe(false);
+    const dugmeVar = meta.yayinId === null && meta.durum === null && !!meta.sebep;
+    expect(dugmeVar).toBe(true);
+    if (dugmeVar) {
+      // Düğme varsa basmak işe yaramalı; bugün 409 "hepsi yayına alındı"
+      // (yanlış cümle) çünkü sonlanmış kayıt "başladı" sayılıyor.
+      const p2 = await svc.prova(CTX, t.id);
+      await provalariGecir();
+      const d2 = await svc.yayinla(CTX, t.id, p2.icerikOzeti);
+      expect(d2.platformlar.find((x) => x.platform === 'meta')!.yayinId).not.toBeNull();
+    }
   });
 
   it('arşivdeki rehberde yeniden deneme yok', async () => {

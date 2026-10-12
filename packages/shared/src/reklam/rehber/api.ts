@@ -176,6 +176,35 @@ export interface PlatformYayinOzeti {
   kampanyaKimligi: string | null;
   /** `deneme` açılışında duraklatılmış kalır; ekranda "Duraklatılmış kuruldu". */
   duraklatilmisKalacak: boolean;
+  /**
+   * Bu platform rehberden YENİDEN KURULABİLİR mi — sunucu
+   * `platformYenidenKurulabilirMi` ile hesaplar, panelin "yeniden dene"
+   * düğmesi YALNIZ bunu okur (iki ayrı kural ayrışınca düğme ya işe yaramaz
+   * ya da sunucunun reddettiği bir şeyi vaat eder).
+   */
+  yenidenKurulabilir: boolean;
+}
+
+/** Bir platform çocuğunun yayın kayıtlarından karar için gereken iki bilgi. */
+export interface PlatformYayinKaydi {
+  sonlanmaSebebi: string | null;
+  /** Platformda en az bir nesne açıldı mı (`yayin_nesnesi` satırı). */
+  nesneVar: boolean;
+}
+
+/**
+ * ═══ YENİDEN KURMA KURALI — TEK YER (Ajan 4 kapısı, 2026-10-12) ═══
+ *
+ * Bir platform rehberden yeniden kurulabilir YALNIZ şu iki hâlde:
+ * hiç yayın kaydı yok, ya da kayıtların HEPSİ ön kontrolde reddedilmiş
+ * (`on_kontrol_reddi`) ve platformda TEK nesne açılmamış. Başka her kayıt
+ * (sürüyor, kuruldu, duraklatılmış bitti, geri alındı, kurulamadı) platformda
+ * bir şey olduğunu ya da olabileceğini gösterir; yeniden kurmak İKİNCİ
+ * kampanya (para). Rehberin durumuna bakılmaz: "yayinda" yazımı düşmüş bir
+ * rehber taslakta kalsa da kayıtlar gerçektir.
+ */
+export function platformYenidenKurulabilirMi(kayitlar: readonly PlatformYayinKaydi[]): boolean {
+  return kayitlar.every((k) => k.sonlanmaSebebi === 'on_kontrol_reddi' && !k.nesneVar);
 }
 
 export interface RehberYayinDurumu {
