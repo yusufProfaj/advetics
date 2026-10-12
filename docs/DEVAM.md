@@ -16,6 +16,27 @@ RLS politikası var, platform sahibi yalnız hello@profaj.com.
 bu commit'le deploy ediliyor; migration `20261009100000_iyilestir` (üç
 yeni tablo) + `db:rls`.
 
+**ADVCAMPAIGN "SİTEME GELSİNLER" TURU (2026-10-12/13).** Kullanıcı: bütün
+amaçlar tam optimize kurulsun, "Siteme gelsinler"den başla; metin önerisi
+görseli okumuyor ve hep aynı; giriş ekranı kirli ve silinmiyor. Yapılanlar:
+(1) Görsele özel metin (HAZIR-WORKSPACE-PLANI Dalga 2): görsel Gemini'ye
+gidiyor, görsel bırakılınca otomatik, `rehber_gorsel_metni` önbelleği,
+çapa kalktı, `temperature` açık, Google 12-15 başlık + görünen yol.
+(2) Meta/Google başlamama sebebi kalıcı (`platform_sebepleri`).
+(3) Giriş ekranı: Yayındakiler · Taslaklar · Arşiv, ayırt edilebilir satır,
+taslağı sil / listeden kaldır (platforma dokunmaz) / geri getir.
+(4) Optimizasyon: Meta LPV yalnız piksel aktifse (yoksa LINK_CLICKS), Google
+dönüşüm teklifi yalnız 30 günde ≥15 dönüşümde, Google site bağlantısı +
+açıklama metni (sitenin gerçek alt sayfalarından; SSRF: port/IP/aynı alan).
+(5) Para riski taşıyan eski hata: Meta kurulup Google fırlatınca rehber
+taslak kalıyordu → yeniden yayın ikinci Meta kampanyası. Düzeldi.
+Migration: `20261015100000_rehber_platform_sebebi`, `20261015100100_rehber_gorsel_metni`.
+**Ölçülmedi:** pikselsiz LINK_CLICKS kurulumunun geri okuması; Google
+uzantı/teklif/görünen yol geri okuma biçimi; büyük harf bağlantı metni;
+Gemini görsel token maliyeti. **Açık not:** uzantı reddi sebebi 15 dk bellek
+önbelleğinde (kalıcı yazılmalı). **Sıradaki amaç:** kullanıcıyla sırayla.
+**Canlı Google deneme kampanyası 24351543772 yayında, günde 250 ₺** (kullanıcıya söylendi).
+
 **ORPHEX UYARLAMASI (2026-10-12 → 13) — CANLIDA `46b78d0` (2026-10-12 09:29 sunucu saati, 102 sn).**
 İlk deploy denemesi panel derlemesinde düştü (canlı `.next/types` eski
 sayfaya atıf yapıyordu; canlıya ve veritabanına dokunulmadan) — `deploy.sh`
