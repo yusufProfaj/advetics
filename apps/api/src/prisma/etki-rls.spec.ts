@@ -103,4 +103,47 @@ describe('degisiklik_etkileri — RLS', () => {
     await workspaceTasi(h.db as never, A, ORG, ORG_B);
     expect(await h.q<{ o: string }>(`SELECT org_id::text AS o FROM degisiklik_etkileri WHERE client_id = $1`, [A])).toEqual([{ o: ORG_B }]);
   });
+  /*
+   * AJAN 4 · KAPI (2026-10-12). Ç-C8: müşteri hesabı (org yöneticisi
+   * DEĞİL, yalnız kendi workspace'i) etkileri RLS seviyesinde GÖRÜYOR
+   * (Paket B özeti onu bu politikayla okuyacak); ekran kapısı `rule.read`.
+   * Aşağıdakiler politikanın iki katmanını ayrı ayrı sınıyor.
+   */
+  it('KRİTİK (Ç-C8): seçili workspace daraltıyor — A ve B’ye erişen kullanıcı A seçiliyken B’yi görmüyor', async () => {
+    await h.q(`
+      SELECT set_config('app.current_org_id', '${ORG}', false),
+             set_config('app.current_user_id', '${USER}', false),
+             set_config('app.current_client_ids', '${A},${B}', false),
+             set_config('app.is_org_admin', 'off', false),
+             set_config('app.current_active_client_id', '${A}', false)`);
+    await h.q(`SET ROLE ${ROL}`);
+    try {
+      expect(await h.q<{ c: string }>(`SELECT client_id::text AS c FROM degisiklik_etkileri`)).toEqual([{ c: A }]);
+    } finally {
+      await h.q('RESET ROLE');
+    }
+  });
+
+  it('KRİTİK: başka ŞİRKETİN satırı, workspace kimliği bağlamda olsa bile görünmüyor (org_kapsaminda)', async () => {
+    const C = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
+    const ACC_C = '44444444-4444-4444-4444-44444444444c';
+    await h.q(`INSERT INTO clients (id, org_id, name, slug, updated_at) VALUES ($1, $2, 'C', 'c', now())`, [C, ORG_B]);
+    const CONN_C = '33333333-3333-3333-3333-33333333333c';
+    await h.q(
+      `INSERT INTO platform_connections (id, org_id, client_id, platform, status, external_user_id, account_label,
+         access_token_enc, granted_scopes, connected_by_user_id, updated_at)
+       VALUES ($1, $2, NULL, 'meta', 'active', 'u2', 'BM2', '\\x00', '{}', $3, now())`,
+      [CONN_C, ORG_B, USER],
+    );
+    await h.q(
+      `INSERT INTO ad_accounts (id, org_id, client_id, connection_id, platform, external_id, name, currency, timezone, updated_at)
+       VALUES ($1, $2, $3, $4, 'meta', 'act_c', 'Hesap', 'TRY', 'Europe/Istanbul', now())`,
+      [ACC_C, ORG_B, C, CONN_C],
+    );
+    await h.q(satir(C, ACC_C, 'k-c').replace(`'${ORG}'`, `'${ORG_B}'`));
+    const r = await kullaniciOlarak<{ c: string }>(`SELECT client_id::text AS c FROM degisiklik_etkileri ORDER BY 1`, [A, B, C], true);
+    expect(r.map((x) => x.c)).toEqual([A, B].sort());
+    // Mutasyon bekçisi: satır gerçekten var.
+    expect(await h.q(`SELECT 1 FROM degisiklik_etkileri WHERE client_id = $1`, [C])).toHaveLength(1);
+  });
 });

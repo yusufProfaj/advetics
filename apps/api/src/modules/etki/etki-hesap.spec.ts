@@ -461,3 +461,92 @@ describe('iş notu', () => {
     );
   });
 });
+
+/*
+ * ═══ AJAN 4 · KAPI BULGULARI (2026-10-12) ═══
+ *
+ * Aşağıdaki iki test KIRMIZI bırakıldı (düzeltme Ajan 2'nin): ikisi de
+ * "ölçülen değişiklik" ile "ölçümü bozan değişiklik" sınırının yanlış
+ * yerde çizildiğini gösteriyor. Hata yok, log yok; ekranda yanlış bir
+ * "İyileşti" yazar.
+ */
+describe('Ajan 4 kapı — ölçülmeyen ama ölçümü bozan değişiklikler', () => {
+  it('BULGU Ö-1: zaten DURMUŞ bir varlığı yeniden "durdur"mak değişiklik değil; ölçüm satırı açmamalı (aynı bütçeyi yeniden yazmanın eşi)', async () => {
+    // Reklam Yöneticisi satır içi düğmesi ya da asistan, aynada hâlâ "active"
+    // görünen ama platformda çoktan durmuş bir varlığa "durdur" gönderebilir;
+    // denetim kaydının before.status'u bunu söylüyor. Etkisi ölçülürse
+    // değişmemiş bir şeyin "etkisi" ekrana yazılır.
+    await denetim({
+      action: 'ad_group.pause',
+      target: S1A,
+      before: { status: 'paused', budgetMode: 'daily', budgetAmountMicros: '500000000' },
+      after: { istenen: { type: 'pause' }, dogrulama: 'dogrulandi', platformDegeri: 'Duraklatıldı' },
+    });
+    const s = await etkiIsi(db(), IDS.adAccount, '2026-09-02', simdi('2026-09-02'));
+    expect(await satirlar()).toHaveLength(0);
+    expect(s.note).toContain('1 ölçülmez');
+  });
+
+  it('BULGU Ö-2: aynı kapsamda pencere içinde Advetics’ten yapılan YENİDEN BAŞLATMA ölçümü "karışık" yapmalı', async () => {
+    // R1 1 Eylül'de durduruldu; aynı setteki R2 3 Eylül'de yeniden başlatıldı.
+    // Set seviyesindeki sonrası penceresi iki değişikliğin toplamı; resume
+    // OLCULMEYEN_DEGISIKLIKLER'de olduğu için satır açmıyor ve karışıklık
+    // sorgusu (degisiklik_etkileri üzerinde) onu HİÇ görmüyor.
+    await metrik('ad_group', S1A, '2026-08-04', '2026-08-31', OLAGAN);
+    await metrik('ad_group', S1A, '2026-09-01', '2026-09-30', { harcamaTl: 1000, tik: 100, donusum: 14 });
+    for (const s of [S2, S3]) await metrik('ad_group', s, '2026-08-04', '2026-09-30', KONTROL);
+    await denetim({ action: 'ad.pause', target: R1, after: { istenen: { type: 'pause' }, dogrulama: 'dogrulandi', platformDegeri: 'x' } });
+    await denetim({
+      action: 'ad.resume',
+      target: R2,
+      zaman: '2026-09-03T09:00:00Z',
+      before: { status: 'paused' },
+      after: { istenen: { type: 'resume' }, dogrulama: 'dogrulandi', platformDegeri: 'x' },
+    });
+    await etkiIsi(db(), IDS.adAccount, ILK_OLCUM, simdi(ILK_OLCUM));
+    const r = (await satirlar()).find((x) => x.varlik_id === R1)!;
+    expect(r).toMatchObject({ durum: 'olculemedi', neden: 'karisik' });
+  });
+});
+
+describe('Ajan 4 kapı — ölçümün sınırları (yeşil, mutasyon bekçisi)', () => {
+  it('kontrol grubunda harcaması tek pencerede olan varlık YOK; kontrol boşsa hüküm değil "ölçülemedi · kontrol yok"', async () => {
+    // K2 yalnız öncesinde, K3 yalnız sonrasında harcamış: ikisi de kontrol
+    // olamaz (oranın paydası ya da payı sıfır). Kontrol boş kalınca sıfıra
+    // bölme yerine kontrol_grubu_yok.
+    await metrik('campaign', K1, '2026-08-04', '2026-08-31', OLAGAN);
+    await metrik('campaign', K1, '2026-09-01', '2026-09-30', { harcamaTl: 1000, tik: 100, donusum: 14 });
+    await metrik('campaign', K2, '2026-08-04', '2026-08-31', KONTROL);
+    await metrik('campaign', K3, '2026-09-02', '2026-09-30', KONTROL);
+    await denetim({ action: 'campaign.set_budget', target: K1, after: butceSonrasi('1200000000') });
+    await etkiIsi(db(), IDS.adAccount, ILK_OLCUM, simdi(ILK_OLCUM));
+    const [r] = await satirlar();
+    expect(r).toMatchObject({ durum: 'olculemedi', neden: 'kontrol_grubu_yok', etki: null, sonraki: null });
+  });
+
+  it('harcaması sıfır olan sonrası penceresi (satır var, tutar 0) sıfıra bölmüyor; hacim yetersiz ile ilerliyor', async () => {
+    await metrik('campaign', K1, '2026-08-04', '2026-08-31', OLAGAN);
+    await metrik('campaign', K1, '2026-09-01', '2026-09-30', { harcamaTl: 0, tik: 0, donusum: 0 });
+    for (const k of [K2, K3]) await metrik('campaign', k, '2026-08-04', '2026-09-30', KONTROL);
+    await denetim({ action: 'campaign.set_budget', target: K1, after: butceSonrasi('1200000000') });
+    await etkiIsi(db(), IDS.adAccount, ILK_OLCUM, simdi(ILK_OLCUM));
+    const [r] = await satirlar();
+    expect(r).toMatchObject({ durum: 'olcumde', sonuc: 'henuz_belli_degil', neden: 'hacim_yetersiz', etki: null });
+  });
+
+  it('havuza dönen hesabın açık satırı "hesap taşındı" ile KAPANIYOR (keşif atlanıyor, değerlendirme sürüyor)', async () => {
+    await standartMetrikAjan4();
+    await denetim({ action: 'campaign.set_budget', target: K1, after: butceSonrasi('1200000000') });
+    await etkiIsi(db(), IDS.adAccount, '2026-09-02', simdi('2026-09-02'));
+    await h.q(`UPDATE ad_accounts SET client_id = NULL WHERE id = $1`, [IDS.adAccount]);
+    const s = await etkiIsi(db(), IDS.adAccount, ILK_OLCUM, simdi(ILK_OLCUM));
+    expect((await satirlar())[0]).toMatchObject({ durum: 'olculemedi', neden: 'hesap_tasindi', sonraki: null });
+    expect(s.note).toContain('atanmamış');
+  });
+});
+
+async function standartMetrikAjan4() {
+  await metrik('campaign', K1, '2026-08-04', '2026-08-31', OLAGAN);
+  await metrik('campaign', K1, '2026-09-01', '2026-09-30', { harcamaTl: 1000, tik: 100, donusum: 14 });
+  for (const k of [K2, K3]) await metrik('campaign', k, '2026-08-04', '2026-09-30', KONTROL);
+}
