@@ -120,7 +120,7 @@ describe('öneri: DÖRT HÂL ayrı', () => {
   });
 
   it('metin önerisi: tamamen boşsa notlarıyla "bos"', () => {
-    const ek = { gorunenYol: [], onbellekten: false, gorselSayisi: 0 };
+    const ek = { gorunenYol: [], aciklamaMetinleri: [], onbellekten: false, gorselSayisi: 0 };
     expect(metinOnerisiHali({ anaMetin: ' ', basliklar: [''], aciklamalar: [], notlar: ['Site okunamadı'], ...ek })).toEqual({ tur: 'bos', neden: 'Site okunamadı' });
     expect(metinOnerisiHali({ anaMetin: 'Merhaba', basliklar: [], aciklamalar: [], notlar: [], ...ek }).tur).toBe('geldi');
   });

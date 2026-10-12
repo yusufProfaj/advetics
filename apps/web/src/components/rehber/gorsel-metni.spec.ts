@@ -26,6 +26,7 @@ const oneri = (ek: Partial<MetinOnerisi> = {}): MetinOnerisi => ({
   basliklar: Array.from({ length: 12 }, (_, i) => `Başlık ${i + 1}`),
   aciklamalar: ['A1', 'A2', 'A3', 'A4'],
   gorunenYol: [],
+  aciklamaMetinleri: [],
   notlar: [],
   onbellekten: false,
   gorselSayisi: 1,

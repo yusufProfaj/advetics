@@ -17,6 +17,7 @@ import { REHBER_AMACLARI, type RehberAmacKodu, type RehberPlatformu } from './am
 import type { GoogleTeklif } from './turet';
 import { metaOptimizasyonHedefi, type SitePikselHali } from '../meta/niyetler';
 import { SITE_BAGLANTISI_YOK_CUMLESI, googleUzantiReddiCumlesi, type GoogleUzantiKaynagi } from './google-uzanti';
+import { GOOGLE_OGE_ADLARI, type GoogleOgeDurumu } from './google-ogeler';
 
 export interface KararHucresi {
   deger: string;
@@ -25,7 +26,7 @@ export interface KararHucresi {
 
 export interface KararSatiri {
   /** Testin derleyiciyle eşleştirdiği sabit kod. */
-  kod: 'TUR' | 'TEKLIF' | 'NEREDE' | 'KONUM' | 'OTOMATIK_METIN' | 'SAYFA' | 'OLCUM' | 'SIKLIK' | 'UZANTI';
+  kod: 'TUR' | 'TEKLIF' | 'NEREDE' | 'KONUM' | 'OTOMATIK_METIN' | 'SAYFA' | 'OLCUM' | 'SIKLIK' | 'UZANTI' | 'OGE';
   konu: string;
   meta: KararHucresi | null;
   google: KararHucresi | null;
@@ -53,6 +54,11 @@ export interface KararEki {
   sitePikseli?: SitePikselHali | null;
   googleTeklifSebebi?: string;
   uzantilar?: GoogleUzantiKaynagi | null;
+  /**
+   * Arama öğelerinin satırları (`googleAramaOgeleri`, derleyicinin okuduğu
+   * AYNI çıktı). Her öğe ayrı satır: "eklendi" ya da "eklenmedi: sebep".
+   */
+  ogeler?: readonly GoogleOgeDurumu[] | null;
 }
 
 /** "Siteme gelsinler" Meta hedefinin ekrandaki cümlesi (tek yer). */
@@ -173,6 +179,14 @@ export function kararTablosu(
     // "sıklık sınırı yok" yazmak gereksiz bir soru doğururdu.
     // UZANTILAR yalnız Arama + site'de (`rehberdenGoogle` aynı koşulla yazar).
     ...(g?.kurgu === 'ARAMA' && g.ulasma === 'site' ? [{ kod: 'UZANTI' as const, konu: 'Ek bağlantılar', meta: null, google: uzantiHucresi(ek.uzantilar ?? null) }] : []),
+    ...(g?.kurgu === 'ARAMA'
+      ? (ek.ogeler ?? []).map((d) => ({
+          kod: 'OGE' as const,
+          konu: GOOGLE_OGE_ADLARI[d.kod],
+          meta: null,
+          google: { deger: d.eklendi ? 'Eklendi' : 'Eklenmedi', not: d.metin },
+        }))
+      : []),
     ...(m && amac === 'ERISIM'
       ? [{ kod: 'SIKLIK' as const, konu: 'Sıklık', meta: hucre('Bir kişiye haftada en çok 2 kez', 'Aynı kişiye tekrar tekrar gösterilmez'), google: null }]
       : []),
@@ -194,8 +208,8 @@ function uzantiHucresi(u: GoogleUzantiKaynagi | null): KararHucresi {
       ? SITE_BAGLANTISI_YOK_CUMLESI
       : `${u.siteBaglantilari.length} site bağlantısı: ${u.siteBaglantilari.map((x) => x.metin).join(', ')}`;
   const aciklama = !u || u.aciklamaMetinleri.length === 0
-    ? "Açıklama metni yok: Marka Merkezi'ndeki vaatlerden 25 karakteri aşmayan, sayı ve fiyat içermeyenler kullanılır"
-    : `Açıklama metinleri: ${u.aciklamaMetinleri.join(', ')}`;
+    ? "Açıklama metni yok: Reklam adımında yaz ya da öner, ya da Marka Merkezi'ne 25 karakteri aşmayan, sayı ve fiyat içermeyen vaatler ekle"
+    : `Açıklama metinleri (${u.aciklamaKaynagi === 'rehber' ? 'Reklam adımından' : "Marka Merkezi vaatlerinden"}): ${u.aciklamaMetinleri.join(', ')}`;
   const sebep = u && u.siteBaglantilari !== null && u.siteBaglantilari.length === 0 && u.siteSebebi ? `${u.siteSebebi} · ` : '';
   return { deger: site, not: `${sebep}${aciklama}` };
 }

@@ -1161,7 +1161,36 @@ export function metinKutusu(m: MetinSeti | undefined, k: Pick<MetinKurali, 'basl
     // GÖRÜNEN YOL KORUNUR: kutu her yazımda bu fonksiyondan geçiyor; alanı
     // burada düşürmek, kullanıcı bir başlığa dokunduğu anda yolu silerdi.
     ...(m?.gorunenYol ? { gorunenYol: m.gorunenYol } : {}),
+    // AÇIKLAMA METİNLERİ de aynı sebeple korunur (g-1.2.0).
+    ...(m?.aciklamaMetinleri ? { aciklamaMetinleri: m.aciklamaMetinleri } : {}),
   };
+}
+
+/**
+ * Açıklama metni kutuları (Google Arama, CalloutAsset): her zaman 4 kutu.
+ * Boşlar kayıtta atılır; dördü de boşsa alan YOK (Marka Merkezi vaatleri
+ * gider, `aciklamaMetniSec`).
+ */
+export function aciklamaMetniKutulari(m: { aciklamaMetinleri?: string[] } | undefined): string[] {
+  const x = m?.aciklamaMetinleri ?? [];
+  return [...x, '', '', '', ''].slice(0, 4);
+}
+
+export function aciklamaMetniYaz<T extends { aciklamaMetinleri?: string[] }>(m: T, kutular: readonly string[]): T {
+  const { aciklamaMetinleri: _a, ...geri } = m;
+  const dolu = kutular.some((x) => x.trim());
+  // Kutu SIRASI korunur (boş kutu ortada kalabilir); boşlar derleyicide atılır.
+  return (dolu ? { ...geri, aciklamaMetinleri: [...kutular] } : geri) as T;
+}
+
+/** Yeni promosyonun ilk hâli: bitiş BOŞ (kullanıcı yazmadan "süresiz" sanılmasın; eksik listesi ister). */
+export function bosPromosyon(): NonNullable<RehberAlanlari['googlePromosyon']>['deger'] {
+  return { hedef: '', indirim: { tur: 'yuzde', yuzde: 10 }, baslangic: null, bitis: null };
+}
+
+/** Yeni fiyat listesi: Google en az 3 kalem istiyor, 3 boş kalemle açılır. */
+export function bosFiyatListesi(): NonNullable<RehberAlanlari['googleFiyatListesi']>['deger'] {
+  return { tur: 'SERVICES', kalemler: [0, 1, 2].map(() => ({ baslik: '', aciklama: '', micros: '0' })) };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

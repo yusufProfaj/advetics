@@ -21,12 +21,18 @@ import {
   advKampanyaAdi,
   googleGorselKurgusuMu,
   googleTeklifKarari,
-  aciklamaMetinleriUret,
+  aciklamaMetniSec,
   altSayfaAdaylari,
+  cipaBaglantiSayisi,
+  siteBaglantisiSebebi,
+  siteHaritasiOku,
+  googleAramaOgeleri,
+  type GoogleOgeKaynagi,
   sayfaOzeti,
   siteBaglantilariUret,
   googleUzantiReddiCumlesi,
   ALT_SAYFA_ESZAMANLI,
+  ALT_SAYFA_ADAY_SINIRI,
   sitePikselHali,
   kanonikJson,
   kararTablosu,
@@ -223,12 +229,31 @@ interface UzantiKaydi {
   /** Son Google provası uzantıları reddetti: sebebi (kurulum uzantısız). */
   googleReddi?: string | null;
   sebep: string | null;
+  /**
+   * Ana sayfa menüsündeki AYRI sayfalara giden bağlantıların metinleri
+   * (snippet'in ikinci kaynağı). Site okunamadıysa boş.
+   */
+  menuMetinleri?: string[];
 }
 
 /** `baglamlar`ın tek transaction'da okuduğu ham veri; satır başına `baglamKur` birleştirir. */
 interface BaglamVerisi {
   /** `vaatler`: Arama + site açıklama metinlerinin kaynağı (`aciklamaMetinleriUret`). */
-  m: { ad: string; marka: string | null; logo: string | null; yasal: string | null; kategoriler: string[]; vaatler: string[] | null } | undefined;
+  m:
+    | {
+        ad: string;
+        marka: string | null;
+        logo: string | null;
+        yasal: string | null;
+        kategoriler: string[];
+        vaatler: string[] | null;
+        /** Arama öğeleri (g-1.2.0): workspace telefonu, ürün/hizmet kategorileri, logonun ölçüsü. */
+        telefon: string | null;
+        urun_kategorileri: string[] | null;
+        logo_genislik: number | null;
+        logo_yukseklik: number | null;
+      }
+    | undefined;
   hesaplar: Array<{ id: string; platform: string; external_id: string; currency: string; timezone: string }>;
   ajans: boolean;
   olculer: Array<{ id: string; kind: string; width: number | null; height: number | null; byte_size: number | null }>;
@@ -243,6 +268,8 @@ interface Baglam extends RehberEksikBaglami {
   sitePikseli: SitePikselHali;
   /** Arama + site uzantı kaynağı; amaç başkaysa `null`. */
   uzantilar: GoogleUzantiKaynagi | null;
+  /** Arama öğelerinin kaynağı (her ulaşma); amaç Arama değilse `null`. */
+  ogeKaynagi: GoogleOgeKaynagi | null;
   isletmeAdi: string;
   logoVarlikId: string | null;
   kategoriTabani: OzelKategori[];
@@ -317,6 +344,8 @@ export class RehberService {
    * okuyucu orada müşteri sitesine AĞDAN çıkardı.
    */
   siteHtmlOku: (adres: string) => Promise<HtmlSonucu> = (adres) => sayfaHtmlGetir(adres);
+  /** Site haritası okuyucu (XML kabul eder; aynı SSRF kuralları). Testte sahte. */
+  siteHaritasiGetir: (adres: string) => Promise<HtmlSonucu> = (adres) => sayfaHtmlGetir(adres, 3, { xml: true });
   private readonly metaSurumu: string;
   private sonKelimeIstegi = 0;
 
@@ -655,39 +684,84 @@ export class RehberService {
     if (!amac || !adres || !a.platformlar?.deger.google) return;
     const g = REHBER_AMACLARI[amac].google;
     if (g.kurgu !== 'ARAMA' || g.ulasma !== 'site') return;
-    const yaz = (siteBaglantilari: SiteBaglantisi[], sebep: string | null) =>
-      this.uzantiOnbellek.set(clientId, { zaman: Date.now(), adres, siteBaglantilari, sebep });
+    const yaz = (siteBaglantilari: SiteBaglantisi[], sebep: string | null, menuMetinleri: string[] = []) =>
+      this.uzantiOnbellek.set(clientId, { zaman: Date.now(), adres, siteBaglantilari, sebep, menuMetinleri });
     try {
       const ana = await this.siteHtmlOku(adres);
       if (!ana.ok) return void yaz([], `Site okunamadı: ${ana.sebep}`);
-      const adaylar = altSayfaAdaylari(ana.html, ana.adres);
-      if (adaylar.length === 0) return void yaz([], 'Ana sayfada alt sayfa bağlantısı bulunamadı');
+      const menu = altSayfaAdaylari(ana.html, ana.adres);
+      const menuMetinleri = menu.map((x) => x.metin).filter((x): x is string => !!x);
       const alanAdi = (u: string) => new URL(u).hostname.toLowerCase().replace(/^www\./, '');
-      // En çok ALT_SAYFA_ESZAMANLI istek aynı anda (paylaşımlı VPS); sıra
-      // korunuyor çünkü bağlantı sırası sitedeki menü sırası.
-      const okunan: Array<SiteAltSayfasi | null> = new Array(adaylar.length).fill(null);
-      let sira = 0;
-      const isci = async () => {
-        while (sira < adaylar.length) {
-          const i = sira++;
-          const c = adaylar[i]!;
-          const r = await this.siteHtmlOku(c.adres);
-          if (!r.ok || !r.adres.startsWith('https://') || alanAdi(r.adres) !== alanAdi(ana.adres)) continue;
-          okunan[i] = { adres: r.adres, ...sayfaOzeti(r.html), baglantiMetni: c.metin };
-        }
+      const okuAdaylar = async (adaylar: Array<{ adres: string; metin: string | null }>) => {
+        // En çok ALT_SAYFA_ESZAMANLI istek aynı anda (paylaşımlı VPS); sıra
+        // korunuyor çünkü bağlantı sırası sitedeki menü sırası.
+        const okunan: Array<SiteAltSayfasi | null> = new Array(adaylar.length).fill(null);
+        let sira = 0;
+        const isci = async () => {
+          while (sira < adaylar.length) {
+            const i = sira++;
+            const c = adaylar[i]!;
+            const r = await this.siteHtmlOku(c.adres);
+            if (!r.ok || !r.adres.startsWith('https://') || alanAdi(r.adres) !== alanAdi(ana.adres)) continue;
+            okunan[i] = { adres: r.adres, ...sayfaOzeti(r.html), baglantiMetni: c.metin };
+          }
+        };
+        await Promise.all(Array.from({ length: Math.min(ALT_SAYFA_ESZAMANLI, adaylar.length) }, isci));
+        return okunan.filter((x): x is SiteAltSayfasi => x !== null);
       };
-      await Promise.all(Array.from({ length: Math.min(ALT_SAYFA_ESZAMANLI, adaylar.length) }, isci));
-      const sayfalar = okunan.filter((x): x is SiteAltSayfasi => x !== null);
       // Ana sayfaya (ve reklamın kendi hedefine) yönlenen sayfa bağlantı değil;
       // tekillik SON adreste (Ajan 4, Ö-2).
-      const baglantilar = siteBaglantilariUret(sayfalar, markaAdi, [ana.adres, adres]);
+      let sayfalar = await okuAdaylar(menu);
+      let baglantilar = siteBaglantilariUret(sayfalar, markaAdi, [ana.adres, adres]);
+      let haritaSayfasi: number | null = null;
+      let aday = menu.length;
+      if (baglantilar.length === 0) {
+        // İKİNCİ KAYNAK: site haritası (tek sayfalık site, JavaScript menüsü).
+        // Menüden zaten okunan adresler tekrar okunmaz.
+        const harita = await this.haritaAdresleri(ana.adres);
+        if (harita !== null) {
+          const anahtar = (u: string) => u.replace(/\/+$/, '').toLowerCase();
+          const gorulen = new Set([ana.adres, adres, ...menu.map((x) => x.adres)].map(anahtar));
+          const ek = harita.filter((u) => !gorulen.has(anahtar(u))).slice(0, ALT_SAYFA_ADAY_SINIRI).map((u) => ({ adres: u, metin: null }));
+          haritaSayfasi = harita.filter((u) => anahtar(u) !== anahtar(ana.adres) && anahtar(u) !== anahtar(adres)).length;
+          if (ek.length) {
+            sayfalar = [...sayfalar, ...(await okuAdaylar(ek))];
+            aday += ek.length;
+            baglantilar = siteBaglantilariUret(sayfalar, markaAdi, [ana.adres, adres]);
+          }
+        }
+      }
       yaz(
         baglantilar,
-        baglantilar.length ? null : `${adaylar.length} alt sayfadan ${sayfalar.length} tanesi açıldı; 25 karaktere sığan en az 2 farklı başlık çıkmadı`,
+        baglantilar.length ? null : siteBaglantisiSebebi({ cipa: cipaBaglantiSayisi(ana.html), aday, haritaSayfasi, acilan: sayfalar.length }),
+        menuMetinleri,
       );
     } catch (e) {
       yaz([], `Site okunamadı: ${(e as Error).message}`);
     }
+  }
+
+  /**
+   * Site haritasındaki sayfa adresleri; harita yoksa `null`. Sırayla
+   * `/sitemap.xml`, `/wp-sitemap.xml`, `/sitemap_index.xml` (WordPress ve
+   * Yoast'un adresleri; Ege Birlik Yapı'da yalnız ikincisi var). Dizin bir
+   * kat açılıyor, en çok iki alt harita: paylaşımlı sunucudan müşteri sitesine
+   * sınırsız istek atılmaz.
+   */
+  private async haritaAdresleri(anaAdres: string): Promise<string[] | null> {
+    const kok = new URL('/', anaAdres).toString();
+    for (const yol of ['sitemap.xml', 'wp-sitemap.xml', 'sitemap_index.xml']) {
+      const r = await this.siteHaritasiGetir(new URL(yol, kok).toString());
+      if (!r.ok || !/<(urlset|sitemapindex)\b/i.test(r.html)) continue;
+      const ilk = siteHaritasiOku(r.html, anaAdres);
+      const sayfalar = [...ilk.sayfalar];
+      for (const alt of ilk.altHaritalar.slice(0, 2)) {
+        const a = await this.siteHaritasiGetir(alt);
+        if (a.ok) sayfalar.push(...siteHaritasiOku(a.html, anaAdres).sayfalar);
+      }
+      return [...new Set(sayfalar)];
+    }
+    return null;
   }
 
   private platformOkuyucu(ctx: TenantContext): RehberPlatformOkuyucu {
@@ -1109,7 +1183,12 @@ export class RehberService {
       mevcut?.basliklar?.length ? `Kullanıcının başlıkları: ${mevcut.basliklar.join(' | ')}` : null,
     ].filter((x): x is string => !!x);
     const girdi = satirlar.join('\n');
-    const kapi = { kaynakMetin: girdi, yasalUyari: p?.yasal ?? null, yolKaynagi: [a.hedefAdres?.deger ?? '', ...kelimeler].join(' ') };
+    const kapi = {
+      kaynakMetin: girdi,
+      yasalUyari: p?.yasal ?? null,
+      yolKaynagi: [a.hedefAdres?.deger ?? '', ...kelimeler].join(' '),
+      vaatAciklamasiVar: aciklamaMetniSec(undefined, p?.vaatler ?? []).metinler.length > 0,
+    };
     /*
      * ÖNBELLEKTEN DÖNEN ÖNERİ DE KAPIDAN GEÇER (Ajan 4, Ö-3). Önbellek anahtarı
      * (workspace, görsel, amaç) rehberi taşımıyor ama uydurma kapısının
@@ -1357,7 +1436,15 @@ export class RehberService {
     uzantiReddi: string | null = null,
   ): Promise<PlatformProvaSonucu> {
     const zaman = new Date().toISOString();
-    const b: Baglam = uzantiReddi && bIlk.uzantilar ? { ...bIlk, uzantilar: { ...bIlk.uzantilar, siteBaglantilari: [], aciklamaMetinleri: [] } } : bIlk;
+    // Öğe reddinde İKİSİ birden boşalır: site bağlantısı/açıklama metni ve
+    // Arama öğeleri (`googleReddi` öğe seçiminde hepsini "eklenmedi" yapar).
+    const b: Baglam = uzantiReddi
+      ? {
+          ...bIlk,
+          uzantilar: bIlk.uzantilar ? { ...bIlk.uzantilar, siteBaglantilari: [], aciklamaMetinleri: [], googleReddi: uzantiReddi } : null,
+          ogeKaynagi: bIlk.ogeKaynagi ? { ...bIlk.ogeKaynagi, googleReddi: uzantiReddi } : null,
+        }
+      : bIlk;
     if (!b.google) return { tur: 'reddetti', zaman, mesajlar: ['Google Ads hesabı seçilmedi.'] };
     const t = rehberdenGoogle(a, acik, {
       musteriId: b.google.externalId,
@@ -1366,6 +1453,7 @@ export class RehberService {
       donusumEtkin: b.googleDonusum,
       son30GunDonusum: b.googleDonusum30Gun,
       uzantilar: b.uzantilar,
+      ogeKaynagi: b.ogeKaynagi,
       satisOlcumu: b.onKosullar?.googleSatisOlcumu ?? null,
       medyaOranlari: b.medyaOranlari ?? new Map(),
       isletmeAdi: b.isletmeAdi,
@@ -1422,7 +1510,7 @@ export class RehberService {
         // YALNIZ uzantı öğeleri reddedildiyse (her hata bir uzantı işleminde)
         // uzantısız yeniden prova. Karışık retler olduğu gibi döner: başka
         // bir sorun uzantıyı atınca kaybolmaz.
-        const uzantiIslemleri = new Set([...(d.sira.siteBaglantilari ?? []), ...(d.sira.aciklamaMetinleri ?? [])].flatMap((i) => [i - 1, i]));
+        const uzantiIslemleri = new Set([...[...(d.sira.siteBaglantilari ?? []), ...(d.sira.aciklamaMetinleri ?? [])].flatMap((i) => [i - 1, i]), ...(d.sira.ogeIslemleri ?? [])]);
         if (!uzantiReddi && uzantiIslemleri.size > 0 && alan.length > 0 && alan.every((h) => h.islemSirasi !== null && uzantiIslemleri.has(h.islemSirasi))) {
           const sebep = alan.map((h) => h.mesaj || h.kod).join('; ');
           const k = this.uzantiOnbellek.get(s.client_id);
@@ -1683,7 +1771,7 @@ export class RehberService {
       gorselKaynaklari: await this.googleGorselKaynaklari(ctx, s.client_id, girdi, b.google.id),
     });
     if (d.tur === 'ret') return d.retler.map((r) => r.mesaj).join(' ');
-    const govde: GoogleYayinGovdesi = { platform: 'google', kurgu: d.kurgu, govde: d.govde, sira: d.sira, logoVarlikId: d.sira.logo !== null ? girdi.logoVarlikId : null };
+    const govde: GoogleYayinGovdesi = { platform: 'google', kurgu: d.kurgu, govde: d.govde, sira: d.sira, logoVarlikId: d.sira.logo !== null ? (girdi.kurgu === 'ARAMA' ? (girdi.ogeler?.logoVarlikId ?? null) : girdi.logoVarlikId) : null };
     try {
       await googleYayinKaydiOlustur(tx, {
         id: yayinId,
@@ -1731,7 +1819,7 @@ export class RehberService {
 
   private async kayit(ctx: TenantContext, s: RehberSatiri): Promise<RehberKaydi> {
     const a = alanlariOku(s);
-    const b = await this.baglam(ctx, s.client_id, a);
+    const b = await this.sonProvaSitesi(ctx, s, a, await this.baglam(ctx, s.client_id, a));
     const amac = a.amac?.deger;
     return {
       id: s.id,
@@ -1752,6 +1840,33 @@ export class RehberService {
   }
 
   /**
+   * SİTE OKUMASI BELLEKTE 15 DAKİKA; SEBEBİ KALICI OLMALI (açık not,
+   * 2026-10-13). Önbellek dolunca karar tablosu "prova sırasında okunur"a
+   * dönüyor ve provanın bulduğu sebep ("site tek sayfa") kayboluyordu;
+   * kullanıcı site bağlantılarının neden boş olduğunu bir daha göremiyordu.
+   * Son provanın Google girdisi (çocuk taslak) bağlantıları ve sebebi
+   * taşıyor: önbellek yokken ve adres aynıysa oradan okunur.
+   */
+  private async sonProvaSitesi(ctx: TenantContext, s: RehberSatiri, a: RehberAlanlari, b: Baglam): Promise<Baglam> {
+    if (!b.uzantilar || b.uzantilar.siteBaglantilari !== null || !s.google_taslak_id) return b;
+    const [c] = await this.tx(ctx)((t) =>
+      t.$queryRaw<Array<{ alanlar: unknown }>>(Prisma.sql`
+        SELECT v.alanlar FROM reklam_taslagi t
+          JOIN taslak_surumu v ON v.taslak_id = t.id AND v.surum_no = t.aktif_surum_no
+         WHERE t.id = ${s.google_taslak_id}::uuid`),
+    );
+    if (!c) return b;
+    let g: GoogleDerlemeGirdisi;
+    try {
+      g = googleGirdisiOku(c.alanlar);
+    } catch {
+      return b;
+    }
+    if (g.hedefAdres !== a.hedefAdres?.deger || g.siteBaglantilari === undefined) return b;
+    return { ...b, uzantilar: { ...b.uzantilar, siteBaglantilari: g.siteBaglantilari, siteSebebi: g.siteSebebi ?? null } };
+  }
+
+  /**
    * Karar tablosu. Teklif ve sebebi `rehberdenGoogle` ile AYNI fonksiyondan
    * (`googleTeklifKarari`), Meta hedefi derleyiciyle AYNI piksel hâlinden.
    */
@@ -1764,7 +1879,13 @@ export class RehberService {
       teklif?.teklif ?? 'MAKS_TIKLAMA',
       a.instagramId?.deger != null,
       rehberYerlesimPlani(a, b.medyaOranlari ?? new Map()),
-      { sitePikseli: b.sitePikseli, ...(teklif ? { googleTeklifSebebi: teklif.sebep } : {}), uzantilar: b.uzantilar },
+      {
+        sitePikseli: b.sitePikseli,
+        ...(teklif ? { googleTeklifSebebi: teklif.sebep } : {}),
+        uzantilar: b.uzantilar,
+        // Öğe satırları derleyicinin okuduğu AYNI fonksiyondan (`googleAramaOgeleri`).
+        ogeler: b.ogeKaynagi ? googleAramaOgeleri(b.ogeKaynagi).durumlar : null,
+      },
     );
   }
 
@@ -1802,8 +1923,10 @@ export class RehberService {
     const ortak = await this.tx(ctx)(async (t) => {
       const [m] = await t.$queryRaw<Array<NonNullable<BaglamVerisi['m']>>>(Prisma.sql`
         SELECT c.name AS ad, p.marka_adi AS marka, p.logo_asset_id::text AS logo, p.yasal_uyari AS yasal,
-               c.special_ad_categories AS kategoriler, p.vaatler
+               c.special_ad_categories AS kategoriler, p.vaatler, c.contact_phone AS telefon,
+               p.urun_kategorileri, la.width AS logo_genislik, la.height AS logo_yukseklik
           FROM clients c LEFT JOIN client_profiles p ON p.client_id = c.id
+          LEFT JOIN assets la ON la.id = p.logo_asset_id AND la.client_id = c.id
          WHERE c.id = ${clientId}::uuid`);
       const hesaplar = hesapIdleri.length
         ? await t.$queryRaw<BaglamVerisi['hesaplar']>(Prisma.sql`
@@ -1857,7 +1980,26 @@ export class RehberService {
             siteBaglantilari: ukTaze ? ukTaze.siteBaglantilari : null,
             googleReddi: ukTaze?.googleReddi ?? null,
             siteSebebi: ukTaze?.sebep ?? null,
-            aciklamaMetinleri: aciklamaMetinleriUret(r.m?.vaatler ?? []).metinler,
+            ...(() => {
+              const ac = aciklamaMetniSec(a.metin?.deger.aciklamaMetinleri, r.m?.vaatler ?? []);
+              return { aciklamaMetinleri: ac.metinler, aciklamaKaynagi: ac.kaynak, aciklamaAtilan: ac.atilan };
+            })(),
+          }
+        : null;
+    // ARAMA ÖĞELERİ her ulaşmada (yönetici kararı 2026-10-12). Kaynaklar
+    // veritabanından; yalnız site menüsü önbellekten (okunduysa).
+    const ogeKaynagi: GoogleOgeKaynagi | null =
+      amacG?.kurgu === 'ARAMA'
+        ? {
+            ulasma: amacG.ulasma === 'site' || amacG.ulasma === 'telefon' ? amacG.ulasma : null,
+            workspaceTelefonu: r.m?.telefon ?? null,
+            markaAdi: r.m?.marka ?? null,
+            logo: r.m?.logo ? { varlikId: r.m.logo, genislik: r.m.logo_genislik ?? null, yukseklik: r.m.logo_yukseklik ?? null } : null,
+            urunKategorileri: r.m?.urun_kategorileri ?? [],
+            menuMetinleri: ukTaze?.menuMetinleri ?? null,
+            promosyon: a.googlePromosyon?.deger ?? null,
+            fiyatListesi: a.googleFiyatListesi?.deger ?? null,
+            googleReddi: ukTaze?.googleReddi ?? null,
           }
         : null;
     const taban: OzelKategori[] = [];
@@ -1897,6 +2039,7 @@ export class RehberService {
       googleDonusum30Gun,
       sitePikseli,
       uzantilar,
+      ogeKaynagi,
       isletmeAdi: r.m?.marka ?? r.m?.ad ?? 'İşletme',
       logoVarlikId: r.m?.logo ?? null,
       kategoriTabani: [...new Set(taban)],
@@ -2003,7 +2146,13 @@ export class RehberService {
 
   /** Talep Yaratma ve Maks. Performans logosu: hesapta kayıtlı kaynak adı, değilse arşivden bayt. */
   private async googleLogo(ctx: TenantContext, clientId: string, g: GoogleDerlemeGirdisi, hesapId: string): Promise<GoogleLogo | null> {
-    if (g.kurgu !== 'TALEP_YARATMA_VIDEO' && !googleGorselKurgusuMu(g.kurgu)) return null;
+    // ARAMA: işletme logosu öğesi (g-1.2.0) — yalnız öğe seçimi logoyu
+    // kabul ettiyse (kare, ≥ 128). Aynı önbellek (`asset_platform_refs`):
+    // hesapta bir kez yüklenen logo yeniden yüklenmez.
+    if (g.kurgu === 'ARAMA') {
+      if (!g.ogeler?.logoVarlikId) return null;
+      g = { ...g, logoVarlikId: g.ogeler.logoVarlikId };
+    } else if (g.kurgu !== 'TALEP_YARATMA_VIDEO' && !googleGorselKurgusuMu(g.kurgu)) return null;
     if (!g.logoVarlikId) return null;
     const tx = this.tx(ctx);
     const [ref] = await tx((t) =>

@@ -1,4 +1,4 @@
-import { METIN_SINIRLARI, karakterSayisi, metinUyariIceriyor, type AnahtarKelimeOnerisi, type MetinOnerisi } from '@advetics/shared';
+import { ACIKLAMA_METNI_EN_COK, ACIKLAMA_METNI_SINIRI, METIN_SINIRLARI, aciklamaMetinleriUret, karakterSayisi, metinUyariIceriyor, type AnahtarKelimeOnerisi, type MetinOnerisi } from '@advetics/shared';
 import { kelimeSonucunuHazirla, sadelestir, type HamKelimeFikri } from '../../strateji/kelime-tekil';
 
 /**
@@ -170,6 +170,12 @@ export interface MetinOneriGirdisi {
    * bir sayfayı vaat eder).
    */
   yolKaynagi?: string;
+  /**
+   * Marka Merkezi vaatlerinden kullanılabilir açıklama metni çıkıyor mu.
+   * Çıkıyorsa öneri açıklama metni YAZMAZ (yönetici kararı: yapay zekâ yalnız
+   * vaat yokken); modelin yazdığı atılır ve notta söylenir.
+   */
+  vaatAciklamasiVar?: boolean;
 }
 
 export interface HamMetinOnerisi {
@@ -177,6 +183,7 @@ export interface HamMetinOnerisi {
   basliklar?: unknown;
   aciklamalar?: unknown;
   gorunenYol?: unknown;
+  aciklamaMetinleri?: unknown;
   /** Modelin görselde OKUDUĞU yazılar; yalnız atılma notunu doğru cümleyle yazmak için. */
   gorseldekiYazilar?: unknown;
   notlar?: unknown;
@@ -281,7 +288,21 @@ export function metinOnerisiTemizle(ham: HamMetinOnerisi, g: MetinOneriGirdisi):
     }
     gorunenYol.push(p.replace(/\s+/g, '-'));
   }
-  return { anaMetin, basliklar, aciklamalar, gorunenYol, notlar, onbellekten: false, gorselSayisi: 0 };
+  // AÇIKLAMA METNİ (CalloutAsset): kampanya düzeyinde SÜRESİZ duruyor; kapı
+  // metin önerisininkinden DAR: kaynakta geçse bile hiç sayı, hiç fiyat sözü
+  // yok (`aciklamaMetinleriUret`, vaatlerle AYNI kural). Önce genel uydurma
+  // kapısı (kaynağa göre), sonra dar kapı.
+  let aciklamaMetinleri: string[] = [];
+  const hamAciklama = liste(ham.aciklamaMetinleri);
+  if (g.vaatAciklamasiVar) {
+    if (hamAciklama.length) notlar.push("Açıklama metinleri Marka Merkezi'ndeki vaatlerden alınıyor; öneri yazmadı.");
+  } else {
+    const genel = ayikla(hamAciklama, ACIKLAMA_METNI_SINIRI, 'Açıklama metni', ACIKLAMA_METNI_EN_COK);
+    const dar = aciklamaMetinleriUret(genel);
+    for (const x of dar.atilan) notlar.push(`Açıklama metni "${x.metin}" atıldı: ${x.sebep}.`);
+    aciklamaMetinleri = dar.metinler;
+  }
+  return { anaMetin, basliklar, aciklamalar, gorunenYol, aciklamaMetinleri, notlar, onbellekten: false, gorselSayisi: 0 };
 }
 
 /**
@@ -311,10 +332,15 @@ export const METIN_ONERI_SEMASI = {
       items: { type: 'string' },
       description: `Google görünen yolu: en çok 2 parça, her biri en çok ${METIN_SINIRLARI.gorunenYol} karakter; YALNIZ site adresinde ya da anahtar kelimelerde geçen kelimelerden. Emin değilsen boş bırak.`,
     },
+    aciklamaMetinleri: {
+      type: 'array',
+      items: { type: 'string' },
+      description: `Google açıklama metni: en çok ${ACIKLAMA_METNI_SINIRI} karakterlik ${ACIKLAMA_METNI_EN_COK} kısa ifade (ör. "Yerinde keşif", "Uzman ekip"); SAYI, fiyat, indirim, garanti YOK.`,
+    },
     gorseldekiYazilar: { type: 'array', items: { type: 'string' }, description: 'Görselde okuduğun yazılar (fiyat, indirim, tarih dahil), olduğu gibi. Görsel yoksa boş.' },
     notlar: { type: 'array', items: { type: 'string' }, description: 'Bilmediğin ve bu yüzden yazmadığın şeyler (ör. fiyat verilmedi).' },
   },
-  required: ['anaMetin', 'basliklar', 'aciklamalar', 'gorunenYol', 'gorseldekiYazilar', 'notlar'],
+  required: ['anaMetin', 'basliklar', 'aciklamalar', 'gorunenYol', 'aciklamaMetinleri', 'gorseldekiYazilar', 'notlar'],
 } as const;
 
 /**
@@ -345,6 +371,7 @@ export function metinOneriIstemi(gorselVar = false): string {
     '- Abartılı iddia (en iyi, bir numara, garanti) yazma.',
     '- Zorunlu yasal uyarı verildiyse ana metnin sonuna aynen ekle.',
     `- Görünen yol için en çok 2 kısa parça (${METIN_SINIRLARI.gorunenYol} karakter) yaz; yalnız site adresinde ya da anahtar kelimelerde geçen kelimelerden. Yoksa boş bırak.`,
+    `- ${ACIKLAMA_METNI_EN_COK} açıklama metni yaz: her biri en çok ${ACIKLAMA_METNI_SINIRI} karakter, marka bilgisinden çıkan kısa bir özellik; içinde sayı, fiyat, indirim ya da garanti olmasın.`,
     '- "Tekrar etme" listesi verildiyse oradaki başlıkları ve ana metni TEKRARLAMA; farklı bir açıdan yaz.',
   ]
     .filter((x): x is string => !!x)

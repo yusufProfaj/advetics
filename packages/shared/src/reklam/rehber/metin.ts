@@ -38,6 +38,8 @@ export interface MetinSeti {
   aciklamalar: string[];
   /** Google Arama görünen yolu (en çok 2 parça); boşsa gönderilmez. */
   gorunenYol?: string[];
+  /** Google Arama açıklama metinleri (CalloutAsset); boşsa Marka Merkezi vaatleri. */
+  aciklamaMetinleri?: string[];
 }
 
 export type ReklamGucu = 'zayif' | 'orta' | 'iyi';

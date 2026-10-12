@@ -89,13 +89,45 @@ export interface GoogleUzantiKaynagi {
   /** Bağlantı kurulmuyorsa NEDENİ (okunamadı / yeterli sayfa yok). */
   siteSebebi: string | null;
   aciklamaMetinleri: string[];
+  /**
+   * Açıklama metinlerinin kaynağı: rehberde yazılan/önerilen (`rehber`) ya da
+   * Marka Merkezi vaatleri (`vaatler`). Ekran hangisinin gittiğini söylüyor.
+   * Eski çağıranlarda yok = vaatler.
+   */
+  aciklamaKaynagi?: 'rehber' | 'vaatler' | null;
+  /** Kapıdan geçemeyen açıklama metinleri ve sebepleri (sessiz atma yok). */
+  aciklamaAtilan?: Array<{ metin: string; sebep: string }>;
 }
 
-export const SITE_BAGLANTISI_YOK_CUMLESI = 'Sitenden alt sayfa okunamadı, site bağlantısı eklenmedi';
+/**
+ * AÇIKLAMA METNİ KAYNAĞI — tek kural. Rehberde yazılan (yapay zekânın
+ * önerip kullanıcının gördüğü ya da kullanıcının yazdığı) metin ÖNCE:
+ * kullanıcının düzelttiği metni vaatlerle ezmek, düzeltmeyi boşa çıkarırdı.
+ * Rehber boşsa Marka Merkezi vaatleri. İkisi de AYNI uydurma kapısından
+ * (`aciklamaMetinleriUret`: sayı yok, fiyat sözü yok, ≤ 25).
+ */
+export function aciklamaMetniSec(rehber: readonly string[] | undefined, vaatler: readonly string[]): {
+  metinler: string[];
+  kaynak: 'rehber' | 'vaatler' | null;
+  atilan: Array<{ metin: string; sebep: string }>;
+} {
+  const r = aciklamaMetinleriUret(rehber ?? []);
+  if (r.metinler.length) return { metinler: r.metinler, kaynak: 'rehber', atilan: r.atilan };
+  const v = aciklamaMetinleriUret(vaatler);
+  return { metinler: v.metinler, kaynak: v.metinler.length ? 'vaatler' : null, atilan: [...r.atilan, ...v.atilan] };
+}
+
+/*
+ * "OKUNAMADI" DEĞİL "BULUNAMADI": cümle site OKUNDUĞUNDA da (tek sayfalık
+ * site) görünüyordu ve kullanıcıyı olmayan bir okuma arızasına
+ * gönderiyordu. Gerçek sebep ayrıca yazılıyor (`siteSebebi`).
+ */
+export const SITE_BAGLANTISI_YOK_CUMLESI = 'Sitende site bağlantısı olacak ayrı sayfa bulunamadı, site bağlantısı eklenmedi';
 
 /** Google uzantı reddinin ekrandaki cümlesi (prova notu ve karar tablosu aynı yerden). */
 export function googleUzantiReddiCumlesi(sebep: string): string {
-  return `Site bağlantıları Google tarafından reddedildi: ${sebep}; reklam bağlantısız kuruldu`;
+  // Öğeler (g-1.2.0) de aynı yeniden provaya giriyor: cümle hepsini kapsıyor.
+  return `Ek öğeler (site bağlantısı, açıklama metni, işletme adı, logo, snippet, promosyon, fiyat) Google tarafından reddedildi: ${sebep}; reklam bu öğeler olmadan kuruldu`;
 }
 
 const VARLIK: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', '#39': "'" };
@@ -175,6 +207,86 @@ export function altSayfaAdaylari(html: string, anaAdres: string, enCok = ALT_SAY
     sonuc.push({ adres: u.toString(), metin: metinCoz(m[2] ?? '') || null });
   }
   return sonuc;
+}
+
+/**
+ * ═══ SİTE HARİTASI — İKİNCİ KAYNAK ═══
+ *
+ * TEŞHİS (2026-10-12, Ege Birlik Yapı ilk canlı Arama kampanyası, site
+ * bağlantıları BOŞ): hedef site tek sayfalık bir tanıtım sayfası. Menüdeki
+ * dört bağlantının dördü de AYNI sayfanın bölümlerine gidiyor (`#hakkinda`,
+ * `#ozellikler`, `#galeri`, `#iletisim`) ve `altSayfaAdaylari` çapaları
+ * doğru olarak atıyor: çapa ayrı bir sayfa değil, Google aynı adrese giden
+ * bağlantıyı site bağlantısı saymıyor. Okuma DÜŞMEDİ; sitede alt sayfa YOK.
+ * Ekran ise "Sitenden alt sayfa okunamadı" diyordu: kullanıcı olmayan bir
+ * okuma arızasını aramaya gidiyordu.
+ *
+ * Menüyü JavaScript ile çizen sitelerde de ana sayfa HTML'inde bağlantı
+ * olmuyor; o yüzden alt sayfa bulunamazsa site haritası (`sitemap.xml`,
+ * WordPress'te `wp-sitemap.xml`) ikinci kaynak. Aynı SSRF kuralları:
+ * yalnız https, aynı alan, açık port yok, sorgu ve dosya yok.
+ *
+ * Harita dizini (`<sitemapindex>`) bir kat açılıyor: WordPress'in dizini
+ * sayfaları ayrı haritada tutuyor (`wp-sitemap-posts-page-1.xml`).
+ */
+export function siteHaritasiOku(xml: string, anaAdres: string): { sayfalar: string[]; altHaritalar: string[] } {
+  let ana: AdresParcasi;
+  try {
+    ana = new URL(anaAdres);
+  } catch {
+    return { sayfalar: [], altHaritalar: [] };
+  }
+  const host = (h: string) => h.toLowerCase().replace(/^www\./, '');
+  const uygun = (ham: string): AdresParcasi | null => {
+    let u: AdresParcasi;
+    try {
+      u = new URL(metinCoz(ham), ana.toString());
+    } catch {
+      return null;
+    }
+    if (u.protocol !== 'https:' || host(u.hostname) !== host(ana.hostname) || u.port !== '' || u.search) return null;
+    return u;
+  };
+  const dizin = /<sitemapindex\b/i.test(xml);
+  const sayfalar: string[] = [];
+  const altHaritalar: string[] = [];
+  for (const m of xml.matchAll(/<loc>\s*([\s\S]*?)\s*<\/loc>/gi)) {
+    const u = uygun(m[1] ?? '');
+    if (!u) continue;
+    if (dizin) {
+      // Sayfa haritaları önce: yazı/kullanıcı haritası site bağlantısı olmaz.
+      altHaritalar.push(u.toString());
+      continue;
+    }
+    if (DOSYA.test(u.pathname)) continue;
+    u.hash = '';
+    sayfalar.push(u.toString());
+  }
+  altHaritalar.sort((a, b) => Number(/page/i.test(b)) - Number(/page/i.test(a)));
+  return { sayfalar, altHaritalar };
+}
+
+/**
+ * Ana sayfanın menüsü yalnız AYNI sayfadaki bölümlere mi gidiyor? Sebep
+ * cümlesi için: "alt sayfa bağlantısı bulunamadı" ile "site tek sayfa"
+ * kullanıcıya farklı iş söylüyor (ilkinde siteye bakılır, ikincisinde
+ * site bağlantısı için ayrı sayfa açmak gerekir).
+ */
+export function cipaBaglantiSayisi(html: string): number {
+  const gorulen = new Set<string>();
+  for (const m of html.matchAll(/<a\b[^>]*\bhref\s*=\s*["']#([^"'\s]+)["']/gi)) {
+    const k = (m[1] ?? '').toLowerCase();
+    if (k && k !== 'content' && k !== 'top' && k !== 'main') gorulen.add(k);
+  }
+  return gorulen.size;
+}
+
+/** Site bağlantısı çıkmadığında ekrandaki sebep — okunamadı / tek sayfa / yetersiz ayrı. */
+export function siteBaglantisiSebebi(p: { cipa: number; aday: number; haritaSayfasi: number | null; acilan: number }): string {
+  const harita = p.haritaSayfasi === null ? 'site haritası bulunamadı' : `site haritasında ${p.haritaSayfasi} ayrı sayfa var`;
+  if (p.aday === 0 && p.cipa > 0) return `Site tek sayfa: menüdeki ${p.cipa} bağlantı aynı sayfanın bölümlerine gidiyor ve ${harita}. Site bağlantısı için sitede ayrı sayfalar gerekiyor`;
+  if (p.aday === 0) return `Ana sayfada ayrı sayfaya giden bağlantı bulunamadı ve ${harita}`;
+  return `${p.aday} alt sayfadan ${p.acilan} tanesi açıldı; 25 karaktere sığan en az 2 farklı başlık çıkmadı`;
 }
 
 /** Başlığın parçaları: "Hizmetler | Ege Birlik Yapı" → ["Hizmetler", "Ege Birlik Yapı"]. */

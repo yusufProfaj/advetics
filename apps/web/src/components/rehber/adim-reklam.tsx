@@ -2,6 +2,12 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import {
+  ACIKLAMA_METNI_SINIRI,
+  FIYAT_EN_COK,
+  FIYAT_METIN_SINIRI,
+  FIYAT_TURLERI,
+  FIYAT_TURU_ETIKETI,
+  PROMOSYON_HEDEF_SINIRI,
   ORAN_ETIKETI,
   METIN_SINIRLARI,
   REHBER_AMACLARI,
@@ -30,8 +36,15 @@ import { HEDEF_OLCULER, boyutUret } from './boyut-uret';
 import { WhatsappNumarasi } from './meta-dalga3';
 import { medyaKabulu } from './meta-dalga3-mantik';
 import {
+  aciklamaMetniKutulari,
+  aciklamaMetniYaz,
   adresGirdisi,
   adresKaydi,
+  bosFiyatListesi,
+  bosPromosyon,
+  paraSimgesi,
+  tutarMetni,
+  tutarOku,
   formListesiHali,
   hazirOzeti,
   googleGorselRozeti,
@@ -210,6 +223,8 @@ export function AdimReklam({
         <MetinBlogu b={b} kaydet={kaydet} />
 
         {googleArama && <KelimeBlogu b={b} kaydet={kaydet} />}
+
+        {googleArama && <EkOgeBlogu b={b} />}
       </div>
       <AltCubuk git={git} adim={4} />
     </>
@@ -986,6 +1001,12 @@ function MetinBlogu({ b, kaydet }: { b: AdimBaglami; kaydet: () => Promise<boole
           aciklamalar: sig.aciklamalar,
           // Görünen yol yalnız Arama'da kullanılıyor; öneri boşsa eskisi kalır.
           ...(googleArama && o.gorunenYol.length ? { gorunenYol: o.gorunenYol } : m.gorunenYol ? { gorunenYol: m.gorunenYol } : {}),
+          // Açıklama metni de öyle: öneri yazmadıysa (vaatler gidiyor) eskisi kalır.
+          ...(googleArama && o.aciklamaMetinleri.length
+            ? { aciklamaMetinleri: o.aciklamaMetinleri }
+            : m.aciklamaMetinleri
+              ? { aciklamaMetinleri: m.aciklamaMetinleri }
+              : {}),
         },
         kural,
       ),
@@ -1040,6 +1061,7 @@ function MetinBlogu({ b, kaydet }: { b: AdimBaglami; kaydet: () => Promise<boole
               </ul>
             )}
             {googleArama && oneriSig.gorunenYol.length > 0 && <span>Görünen yol: /{oneriSig.gorunenYol.join('/')}</span>}
+            {googleArama && oneriSig.aciklamaMetinleri.length > 0 && <span>Açıklama metinleri: {oneriSig.aciklamaMetinleri.join(' · ')}</span>}
             {oneriSig.gorselSayisi > 0 && <span className={s.ops}>{oneriSig.gorselSayisi} görsele bakılarak yazıldı.</span>}
             {oneriSig.disarida > 0 && <span className={s.ops}>Bu reklamda kullanılmayacak {oneriSig.disarida} satır gösterilmedi.</span>}
             {oneriSig.notlar.map((n, i) => (
@@ -1132,6 +1154,23 @@ function MetinBlogu({ b, kaydet }: { b: AdimBaglami; kaydet: () => Promise<boole
             ))}
           </div>
         )}
+        {googleArama && (
+          <div className={s.alan}>
+            <span className={s.alanEtiket}>
+              Açıklama metinleri{' '}
+              <span className={s.ops}>İsteğe bağlı · reklamın altında kısa özellikler; boşsa Marka Merkezi vaatleri kullanılır</span>
+            </span>
+            {aciklamaMetniKutulari(m).map((x, i, hepsi) => (
+              <SayacliGirdi
+                key={`cagri-${i}`}
+                etiketGizli={`Açıklama metni ${i + 1}`}
+                deger={x}
+                sinir={ACIKLAMA_METNI_SINIRI}
+                degisti={(v) => metinYaz(aciklamaMetniYaz(m, hepsi.map((y, j) => (j === i ? v : y))))}
+              />
+            ))}
+          </div>
+        )}
         {kural.gucGoster && (
           <div className={s.guc}>
             <span>Reklam gücü</span>
@@ -1149,6 +1188,135 @@ function MetinBlogu({ b, kaydet }: { b: AdimBaglami; kaydet: () => Promise<boole
               {e.metin}
             </p>
           ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * PROMOSYON VE FİYAT (Google Arama öğeleri, g-1.2.0). UYDURULAMAZ: yalnız
+ * kullanıcı yazarsa kurulur, boşsa hiçbir şey gönderilmez. Reklam bilmeyen
+ * kullanıcıya tek satır açıklama; alan "Ekle" demeden açılmaz.
+ */
+function EkOgeBlogu({ b }: { b: AdimBaglami }) {
+  const p = b.a.googlePromosyon?.deger ?? null;
+  const f = b.a.googleFiyatListesi?.deger ?? null;
+  const pb = b.paraBirimi;
+  const eksik = (kod: string) => b.kayit.eksikler.find((e) => e.kod === kod) ?? null;
+  return (
+    <div className={s.blok}>
+      <div className={s.blokBaslik}>Ek bilgiler (isteğe bağlı)</div>
+      <div className={s.metinler}>
+        <div className={s.alan}>
+          <span className={s.alanEtiket}>
+            Kampanyan var mı? <span className={s.ops}>Google indirimi reklamın altında gösterir</span>
+          </span>
+          {!p ? (
+            <button type="button" className={s.metinDugme} style={{ alignSelf: 'flex-start' }} onClick={() => yaz(b, 'googlePromosyon', bosPromosyon())}>
+              + İndirim ekle
+            </button>
+          ) : (
+            <>
+              <SayacliGirdi etiketGizli="Kampanya konusu" deger={p.hedef} sinir={PROMOSYON_HEDEF_SINIRI} degisti={(v) => yaz(b, 'googlePromosyon', { ...p, hedef: v })} />
+              <div className={s.girdi}>
+                <select
+                  aria-label="İndirim türü"
+                  value={p.indirim.tur}
+                  onChange={(e) => yaz(b, 'googlePromosyon', { ...p, indirim: e.target.value === 'yuzde' ? { tur: 'yuzde', yuzde: 10 } : { tur: 'tutar', micros: '0' } })}
+                >
+                  <option value="yuzde">Yüzde (%)</option>
+                  <option value="tutar">Tutar ({paraSimgesi(pb)})</option>
+                </select>
+                {p.indirim.tur === 'yuzde' ? (
+                  <input
+                    aria-label="İndirim yüzdesi"
+                    inputMode="numeric"
+                    value={String(p.indirim.yuzde)}
+                    onChange={(e) => {
+                      const n = Number(e.target.value.replace(/\D/g, ''));
+                      if (n >= 1 && n <= 99) yaz(b, 'googlePromosyon', { ...p, indirim: { tur: 'yuzde', yuzde: n } });
+                    }}
+                  />
+                ) : (
+                  <input
+                    aria-label="İndirim tutarı"
+                    inputMode="decimal"
+                    defaultValue={p.indirim.micros === '0' ? '' : tutarMetni(p.indirim.micros)}
+                    onBlur={(e) => {
+                      const t = tutarOku(e.target.value, pb);
+                      yaz(b, 'googlePromosyon', { ...p, indirim: { tur: 'tutar', micros: t.tur === 'tamam' ? t.micros : '0' } });
+                    }}
+                  />
+                )}
+              </div>
+              <div className={s.girdi}>
+                <span className={s.on}>Bitiş</span>
+                <input type="date" aria-label="Kampanya bitişi" value={p.bitis ?? ''} onChange={(e) => yaz(b, 'googlePromosyon', { ...p, bitis: e.target.value || null })} />
+              </div>
+              <p className={eksik('G-PROMOSYON') ? s.hataMetni : s.ipucu}>{eksik('G-PROMOSYON')?.metin ?? 'Bitiş tarihinden sonra indirim reklamdan kalkar.'}</p>
+              <button type="button" className={s.metinDugme} style={{ alignSelf: 'flex-start' }} onClick={() => sil(b, 'googlePromosyon')}>
+                İndirimi kaldır
+              </button>
+            </>
+          )}
+        </div>
+        <div className={s.alan}>
+          <span className={s.alanEtiket}>
+            Fiyat listesi <span className={s.ops}>En az 3 kalem; Google fiyatları reklamın altında gösterir</span>
+          </span>
+          {!f ? (
+            <button type="button" className={s.metinDugme} style={{ alignSelf: 'flex-start' }} onClick={() => yaz(b, 'googleFiyatListesi', bosFiyatListesi())}>
+              + Fiyat listesi ekle
+            </button>
+          ) : (
+            <>
+              <div className={s.girdi}>
+                <select aria-label="Liste türü" value={f.tur} onChange={(e) => yaz(b, 'googleFiyatListesi', { ...f, tur: e.target.value as (typeof FIYAT_TURLERI)[number] })}>
+                  {FIYAT_TURLERI.map((t) => (
+                    <option key={t} value={t}>
+                      {FIYAT_TURU_ETIKETI[t]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {f.kalemler.map((k, i) => {
+                const kalem = (y: Partial<typeof k>) => yaz(b, 'googleFiyatListesi', { ...f, kalemler: f.kalemler.map((z, j) => (j === i ? { ...z, ...y } : z)) });
+                return (
+                  <div key={`fiyat-${i}`} className={s.alan}>
+                    <SayacliGirdi etiketGizli={`Kalem ${i + 1} adı`} deger={k.baslik} sinir={FIYAT_METIN_SINIRI} degisti={(v) => kalem({ baslik: v })} />
+                    <SayacliGirdi etiketGizli={`Kalem ${i + 1} açıklaması`} deger={k.aciklama} sinir={FIYAT_METIN_SINIRI} degisti={(v) => kalem({ aciklama: v })} />
+                    <div className={s.girdi}>
+                      <input
+                        aria-label={`Kalem ${i + 1} fiyatı`}
+                        inputMode="decimal"
+                        defaultValue={k.micros === '0' ? '' : tutarMetni(k.micros)}
+                        onBlur={(e) => {
+                          const t = tutarOku(e.target.value, pb);
+                          kalem({ micros: t.tur === 'tamam' ? t.micros : '0' });
+                        }}
+                      />
+                      <span className={s.on}>{paraSimgesi(pb)}</span>
+                    </div>
+                  </div>
+                );
+              })}
+              {f.kalemler.length < FIYAT_EN_COK && (
+                <button
+                  type="button"
+                  className={s.metinDugme}
+                  style={{ alignSelf: 'flex-start' }}
+                  onClick={() => yaz(b, 'googleFiyatListesi', { ...f, kalemler: [...f.kalemler, { baslik: '', aciklama: '', micros: '0' }] })}
+                >
+                  + Kalem ekle
+                </button>
+              )}
+              {eksik('G-FIYAT') && <p className={s.hataMetni}>{eksik('G-FIYAT')!.metin}</p>}
+              <button type="button" className={s.metinDugme} style={{ alignSelf: 'flex-start' }} onClick={() => sil(b, 'googleFiyatListesi')}>
+                Fiyat listesini kaldır
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

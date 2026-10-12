@@ -309,7 +309,13 @@ export type HtmlSonucu = { ok: true; html: string; adres: string } | { ok: false
  * taraması bu yüzden üretimde hiçbir kapsayıcıyı okuyamıyordu (Ajan 4, B1).
  * Varsayılan değişmiyor: diğer çağıranlar yalnız HTML/metin bekliyor.
  */
-export async function sayfaHtmlGetir(rawUrl: string, maxYonlendirme = 3, secenek: { javascript?: boolean } = {}): Promise<HtmlSonucu> {
+/*
+ * `xml: true`: site haritası (`sitemap.xml`) `application/xml` dönüyor ve
+ * HTML süzgeci onu reddederdi; site bağlantısının ikinci kaynağı (tek sayfa
+ * ya da menüsü JavaScript'le çizilen site) hiç okunamazdı. Güvenlik
+ * kontrolleri (https, port, IP, iç ağ, boyut, zaman aşımı) AYNI.
+ */
+export async function sayfaHtmlGetir(rawUrl: string, maxYonlendirme = 3, secenek: { javascript?: boolean; xml?: boolean } = {}): Promise<HtmlSonucu> {
   let url: URL;
   try {
     url = new URL(rawUrl.trim());
@@ -329,7 +335,11 @@ export async function sayfaHtmlGetir(rawUrl: string, maxYonlendirme = 3, secenek
         signal: kontrol.signal,
         headers: {
           'User-Agent': 'Advetics/1.0 (+youtube-kanal-bul)',
-          Accept: secenek.javascript ? 'application/javascript,text/javascript,*/*;q=0.5' : 'text/html,application/xhtml+xml',
+          Accept: secenek.javascript
+            ? 'application/javascript,text/javascript,*/*;q=0.5'
+            : secenek.xml
+              ? 'application/xml,text/xml;q=0.9'
+              : 'text/html,application/xhtml+xml',
         },
       });
       if (res.status >= 300 && res.status < 400) {
@@ -340,7 +350,7 @@ export async function sayfaHtmlGetir(rawUrl: string, maxYonlendirme = 3, secenek
       }
       if (!res.ok) return { ok: false, sebep: `Site ${res.status} döndürdü.` };
       const tur = res.headers.get('content-type') ?? '';
-      const jsKabul = secenek.javascript === true && /javascript|ecmascript/i.test(tur);
+      const jsKabul = (secenek.javascript === true && /javascript|ecmascript/i.test(tur)) || (secenek.xml === true && /xml/i.test(tur));
       if (!jsKabul && !tur.includes('html') && !tur.includes('text')) {
         return { ok: false, sebep: `Site HTML döndürmedi (${tur || 'tür bilinmiyor'}).` };
       }

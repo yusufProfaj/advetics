@@ -10,6 +10,8 @@ import {
   karakterSayisi,
   paraOndaligi,
   SITE_BAGLANTISI_YOK_CUMLESI,
+  GOOGLE_OGE_ADLARI,
+  type GoogleAramaOgeleri,
   type GoogleDerlemeGirdisi,
   type GorselOlcusu,
 } from '@advetics/shared';
@@ -21,6 +23,7 @@ import {
   demandGenGorselAtomikIstek,
   type GoogleGorselKaynagi,
 } from '../../connections/providers/google-demandgen';
+import { aramaOgeIslemleriEkle } from '../../connections/providers/google-arama-ogeleri';
 import { PMAX_OTOMASYONU, pmaxAlanSayilari, pmaxAtomikIstek, type PmaxAlani } from '../../connections/providers/google-pmax';
 
 /**
@@ -49,7 +52,10 @@ import { PMAX_OTOMASYONU, pmaxAlanSayilari, pmaxAtomikIstek, type PmaxAlani } fr
 // g-1.1.0: Arama + site'de site bağlantısı ve açıklama metni öğeleri, görünen yol;
 // dönüşüm teklifi veri eşiğine bağlı (`googleTeklifKarari`). Site gövdesi
 // DEĞİŞTİ: eski provalar uzantısız gövdeyi kanıtlıyordu.
-export const GOOGLE_DERLEYICI_SURUMU = 'g-1.1.0';
+// g-1.2.0: Arama öğeleri (arama her ulaşmada, işletme adı, logo, snippet,
+// promosyon, fiyat; `google-ogeler.ts`). Arama gövdesi DEĞİŞTİ: g-1.1.0
+// provaları öğesiz gövdeyi kanıtlıyordu.
+export const GOOGLE_DERLEYICI_SURUMU = 'g-1.2.0';
 
 /**
  * Google yayınında `yayin.atif_standardi`. Karar tablosunun "Ölçüm"
@@ -108,6 +114,19 @@ export interface GoogleUzantiBeklentisi {
   aciklamaMetinleri: string[];
 }
 
+/**
+ * Arama öğelerinin geri okumada beklenen İÇERİĞİ (g-1.2.0). `null` = o öğe
+ * beklenmiyor ve kampanyaya bağlı (Google'ın kendi üretmediği) bir tane varsa
+ * FARK: söz verilmemiş öğe.
+ */
+export interface GoogleOgeBeklentisi {
+  isletmeAdi: string | null;
+  logo: number;
+  snippet: { baslik: string; degerler: string[] } | null;
+  promosyon: { hedef: string; yuzdeMicros: string | null; tutarMicros: string | null; baslangic: string | null; bitis: string } | null;
+  fiyat: { tur: string; kalemler: Array<{ baslik: string; aciklama: string; micros: string }> } | null;
+}
+
 /** Geri okumada beklenen değerler — `google-geri-okuma.ts` bunlarla karşılaştırır. */
 export interface GoogleBeklenen {
   kanal: 'SEARCH' | 'DEMAND_GEN' | 'PERFORMANCE_MAX';
@@ -133,6 +152,8 @@ export interface GoogleBeklenen {
    * çıkmadı); kampanyaya bağlı öğe varsa fark. Onay durumu beklentide YOK.
    */
   uzantilar?: GoogleUzantiBeklentisi;
+  /** Arama öğeleri (g-1.2.0); eski satırlarda YOK = bakılmaz. */
+  ogeler?: GoogleOgeBeklentisi;
   /**
    * Arama reklamının görünen yolu. YALNIZ gönderildiyse yazılır; eski yayın
    * satırlarında ve yolsuz reklamda alan YOK = bakılmaz. Yeni bir alanı
@@ -169,6 +190,12 @@ export type GoogleDerleme =
         /** Arama + site: uzantı bağlarının (CampaignAsset) sıraları; öğe bir önceki işlem. */
         siteBaglantilari?: number[];
         aciklamaMetinleri?: number[];
+        /**
+         * Arama: İSTEĞE BAĞLI öğelerin BÜTÜN işlemleri (öğe + bağ; site
+         * ulaşmasında arama öğesi dahil). Google yalnız bunları reddettiyse
+         * kurulum öğesiz yeniden prova edilir.
+         */
+        ogeIslemleri?: number[];
       };
       beklenen: GoogleBeklenen;
       atif: typeof GOOGLE_ATIF;
@@ -274,6 +301,29 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
     yol.forEach((x, i) => {
       if (karakterSayisi(x) > METIN_SINIRLARI.gorunenYol) retler.push({ kod: 'G-YOL-UZUN', mesaj: `Görünen yol ${i + 1} en çok ${METIN_SINIRLARI.gorunenYol} karakter olabilir.` });
     });
+    // ── Öğeler (g-1.2.0) ── Kaynak `googleAramaOgeleri` (shared); burada
+    // yalnız yayın anına bağlı iki kontrol: bitmiş promosyon ve okunamayan logo.
+    const ogeler: GoogleAramaOgeleri | null = g.ogeler ? { ...g.ogeler } : null;
+    if (ogeler?.promosyon && ogeler.promosyon.bitis < bu) {
+      // Bitmiş bir indirimi reklama koymak yalan; kampanyanın kendisi bunun
+      // için durmaz, öğe düşer ve söylenir.
+      notlar.push(`Promosyonun bitiş tarihi (${ogeler.promosyon.bitis}) geçti; promosyon eklenmedi.`);
+      ogeler.promosyon = null;
+    }
+    if (ogeler?.logoVarlikId && !b.logo) {
+      notlar.push('İşletme logosu okunamadı; logo eklenmedi.');
+      ogeler.logoVarlikId = null;
+    }
+    let ogeTel: ReturnType<typeof aramaOgesiTelefonu> | null = null;
+    if (g.ulasma === 'site' && ogeler?.telefon) {
+      try {
+        ogeTel = aramaOgesiTelefonu(ogeler.telefon);
+      } catch (e) {
+        // Öğe kaynağı zaten süzüyor; buraya düşen numara öğeyi düşürür,
+        // kampanyayı değil (site reklamının çekirdeği telefon değil).
+        notlar.push(`Arama öğesi eklenmedi: ${(e as Error).message}`);
+      }
+    }
     if (retler.length) return { tur: 'ret', retler };
     const { govde, sira } = aramaAtomikIstek({
       customerId: g.musteriId,
@@ -292,12 +342,29 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
       basliklar: g.basliklar,
       aciklamalar: g.aciklamalar,
       ...(yol.length ? { gorunenYol: yol } : {}),
-      telefon: tel ? g.telefon : null,
+      telefon: tel ? g.telefon : ogeTel ? ogeler!.telefon : null,
       // Uzantılar yalnız site ulaşmasında girdiye yazılıyor (`rehberdenGoogle`).
       siteBaglantilari: g.siteBaglantilari ?? [],
       aciklamaMetinleri: g.aciklamaMetinleri ?? [],
       validateOnly: b.validateOnly,
     });
+    const ogeSira = ogeler
+      ? aramaOgeIslemleriEkle(govde.mutateOperations, {
+          customerId: g.musteriId,
+          kampanya: kampanyaKaynagi(govde.mutateOperations[sira.kampanya]),
+          ogeler,
+          logo: ogeler.logoVarlikId ? b.logo : null,
+          paraBirimi: g.paraBirimi,
+          finalUrl: g.hedefAdres,
+        })
+      : { islemler: [], logo: null };
+    // Site ulaşmasında arama öğesi de İSTEĞE BAĞLI bir öğe; telefon
+    // ulaşmasında reklamın çekirdeği (reddi kampanyanın reddi).
+    const ogeIslemleri = [...(ogeTel && sira.aramaOgesi !== null ? [sira.aramaOgesi - 1, sira.aramaOgesi] : []), ...ogeSira.islemler];
+    // Reddedilip öğesiz kurulan hâlde her öğe için "Google reddetti" yazmak
+    // aynı cümleyi yedi kez tekrarlar; ret cümlesi servisten ayrıca geliyor.
+    const eklenmeyen = g.ogeReddi ? [] : (g.ogeDurumlari ?? []).filter((d) => !d.eklendi && d.kod !== 'PROMOSYON' && d.kod !== 'FIYAT');
+    if (eklenmeyen.length) notlar.push(`Eklenmeyen öğeler: ${eklenmeyen.map((d) => `${GOOGLE_OGE_ADLARI[d.kod]} (${d.metin})`).join('; ')}.`);
     if (tel) {
       // Sessiz kalmasın: iki kısıt da kullanıcının göreceği yerde.
       notlar.push(
@@ -305,7 +372,9 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
       );
       notlar.push('Telefon her saatte görünür: açık olduğun saatler henüz sorulmuyor.');
     }
-    if (g.siteBaglantilari !== undefined && g.siteBaglantilari.length === 0) notlar.push(`${SITE_BAGLANTISI_YOK_CUMLESI}.`);
+    if (g.siteBaglantilari !== undefined && g.siteBaglantilari.length === 0 && !g.ogeReddi) {
+      notlar.push(g.siteSebebi ? `${SITE_BAGLANTISI_YOK_CUMLESI}: ${g.siteSebebi}.` : `${SITE_BAGLANTISI_YOK_CUMLESI}.`);
+    }
     if ((g.siteBaglantilari?.length ?? 0) + (g.aciklamaMetinleri?.length ?? 0) > 0) {
       notlar.push('Site bağlantıları ve açıklama metinleri Google incelemesinden sonra görünür; inceleme sürerken reklam yine yayında.');
     }
@@ -313,7 +382,7 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
       tur: 'govde',
       kurgu: g.kurgu,
       govde,
-      sira: { ...sira, logo: null },
+      sira: { ...sira, logo: ogeSira.logo, ...(ogeler ? { ogeIslemleri } : {}) },
       beklenen: {
         kanal: 'SEARCH',
         kampanyaAdi: kampanyaAdi(govde.mutateOperations[sira.kampanya]),
@@ -324,7 +393,18 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
         konumSayisi: g.konumlar.length,
         anahtarKelimeSayisi: g.anahtarKelimeler.length,
         negatifSayisi: g.negatifler.length,
-        aramaOgesi: tel ? { countryCode: tel.countryCode, phoneNumber: tel.phoneNumber } : null,
+        aramaOgesi: tel ? { countryCode: tel.countryCode, phoneNumber: tel.phoneNumber } : ogeTel ? { countryCode: ogeTel.countryCode, phoneNumber: ogeTel.phoneNumber } : null,
+        ...(ogeler
+          ? {
+              ogeler: {
+                isletmeAdi: ogeler.isletmeAdi,
+                logo: ogeler.logoVarlikId ? 1 : 0,
+                snippet: ogeler.snippet ? { baslik: ogeler.snippet.baslik, degerler: [...ogeler.snippet.degerler] } : null,
+                promosyon: ogeler.promosyon ? { ...ogeler.promosyon } : null,
+                fiyat: ogeler.fiyat ? { tur: ogeler.fiyat.tur, kalemler: ogeler.fiyat.kalemler.map((k) => ({ ...k })) } : null,
+              },
+            }
+          : {}),
         // Teklif Arama'da da geri okunuyor (g-1.1.0): eşik kararı gövdeye
         // gerçekten yansıdı mı, kampanyanın kendisinden.
         teklif: g.teklif === 'MAKS_DONUSUM' ? 'MAXIMIZE_CONVERSIONS' : 'TARGET_SPEND',
@@ -580,6 +660,12 @@ function gorselleriCoz(
   }
   if (dikey) notlar.push(`${dikey} dikey (9:16) görsel Google'a gönderilmedi.`);
   return cikti;
+}
+
+function kampanyaKaynagi(op: Record<string, unknown> | undefined): string {
+  const c = (op?.campaignOperation as { create?: { resourceName?: unknown } } | undefined)?.create;
+  if (typeof c?.resourceName !== 'string') throw new Error('Derlenmiş gövdede kampanya kaynağı yok.');
+  return c.resourceName;
 }
 
 function kampanyaAdi(op: Record<string, unknown> | undefined): string {

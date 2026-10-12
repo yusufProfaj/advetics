@@ -121,6 +121,12 @@ export interface MetinOnerisi {
   aciklamalar: string[];
   /** Google Arama görünen yolu (en çok 2 parça, 15 karakter); doğrulanamayan parça atılır, boşsa gönderilmez. */
   gorunenYol: string[];
+  /**
+   * Google Arama açıklama metinleri (≤ 25, sayı ve fiyat sözü YOK). Yalnız
+   * Marka Merkezi'nde kullanılabilir vaat yokken yazılır; varsa boş (vaatler
+   * gidiyor) ve notlarda söyleniyor.
+   */
+  aciklamaMetinleri: string[];
   /** Model ne bilmiyordu (örn. "fiyat verilmedi, fiyat yazmadım"), atılan görsel ve satırlar. */
   notlar: string[];
   /** Görsele özel istek: sonuç bu görsel + amaç için daha önce yazılmıştı, yapay zekâya gidilmedi. */

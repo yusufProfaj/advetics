@@ -37,6 +37,22 @@ Gemini görsel token maliyeti. **Açık not:** uzantı reddi sebebi 15 dk bellek
 önbelleğinde (kalıcı yazılmalı). **Sıradaki amaç:** kullanıcıyla sırayla.
 **Canlı Google deneme kampanyası 24351543772 yayında, günde 250 ₺** (kullanıcıya söylendi).
 
+**GOOGLE ARAMA ÖĞELERİ (g-1.2.0, 2026-10-13) — DEPLOY EDİLMEDİ, migration yok.**
+Kullanıcı Google Ads'te aramalar, işletme adı, logo, site bağlantıları,
+açıklama metni, snippet, promosyon, fiyatı boş gördü. Site bağlantısı kök
+sebebi: hedef site (egebirlikseasight.com) TEK SAYFA, menünün 4 bağlantısı
+`#bölüm` çapası, WordPress haritasında yalnız `/`; ekran yanlışlıkla
+"okunamadı" diyordu. Yapılan: site haritası ikinci kaynak, sebep cümlesi
+ve kalıcılığı (son provanın girdisinden), arama öğesi her ulaşmada
+(Marka Merkezi telefonu), işletme adı/logo/snippet Marka Merkezi'nden,
+açıklama metni rehberde düzenlenebilir + yapay zekâ (vaat yoksa),
+promosyon/fiyat isteğe bağlı rehber alanı, hepsi tek atomik istekte ve
+geri okumada; öğe reddinde öğesiz yeniden prova; karar tablosunda öğe
+başına satır. Ölçülmedi: `BUSINESS_NAME/BUSINESS_LOGO`'nun Arama
+kampanyasında kampanya düzeyinde kabulü, promosyon hedefi 20 sınırı,
+`price_offerings`/`money_amount_off` GAQL seçilebilirliği, doğrulanmış
+reklamveren adı (v25'te okuyan alan YOK). İlk canlı ölçüm: validateOnly provası.
+
 **ORPHEX UYARLAMASI (2026-10-12 → 13) — CANLIDA `46b78d0` (2026-10-12 09:29 sunucu saati, 102 sn).**
 İlk deploy denemesi panel derlemesinde düştü (canlı `.next/types` eski
 sayfaya atıf yapıyordu; canlıya ve veritabanına dokunulmadan) — `deploy.sh`

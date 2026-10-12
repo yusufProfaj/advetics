@@ -139,6 +139,8 @@ beforeAll(async () => {
   );
   // Ağa çıkılmaz: site bağlantısı okuması sahte (okunamadı).
   svc.siteHtmlOku = async () => ({ ok: false, sebep: "test: ağ yok" });
+  // Site haritası da ağa çıkmaz (ikinci kaynak, g-1.2.0).
+  svc.siteHaritasiGetir = async () => ({ ok: false, sebep: 'test: ağ yok' });
 });
 afterAll(async () => h.close());
 beforeEach(async () => {
@@ -148,6 +150,8 @@ beforeEach(async () => {
   mutateHatasi = null;
   tumGovdeler.length = 0;
   svc.siteHtmlOku = async () => ({ ok: false, sebep: 'test: ağ yok' });
+  // Site haritası da ağa çıkmaz (ikinci kaynak, g-1.2.0).
+  svc.siteHaritasiGetir = async () => ({ ok: false, sebep: 'test: ağ yok' });
   (svc as unknown as { uzantiOnbellek: Map<string, unknown> }).uzantiOnbellek.clear();
   // Piksel önbelleği de servis örneğinde yaşıyor (Ajan 4, N-5).
   (svc as unknown as { sitePikselOnbellek: Map<string, unknown> }).sitePikselOnbellek.clear();
@@ -265,7 +269,7 @@ describe('prova ve yayın', () => {
     expect(p.meta).toBeNull();
     expect(cagrilar.filter((c) => c.startsWith('mutate'))).toEqual(['mutate:true']);
     const [pr] = await h.q<{ durum: string; derleyici_surumu: string }>('SELECT durum, derleyici_surumu FROM prova');
-    expect(pr).toEqual({ durum: 'gecti', derleyici_surumu: 'g-1.1.0' });
+    expect(pr).toEqual({ durum: 'gecti', derleyici_surumu: 'g-1.2.0' });
     const [rr] = await h.q<{ prova_ozeti: string }>('SELECT prova_ozeti FROM reklam_rehberi');
     expect(rr!.prova_ozeti).toBe(p.icerikOzeti);
     // Google çocuk taslağı platform=google; Meta'nın strict şeması uygulanmadı.
@@ -1007,9 +1011,9 @@ describe('Siteme gelsinler (Google): eşik ve uzantılar prova gövdesinde', () 
     expect(tumGovdeler).toHaveLength(2);
     expect(tumGovdeler[1]!.mutateOperations.some((o) => 'assetOperation' in o)).toBe(false);
     expect(p.google).toMatchObject({ tur: 'gecti' });
-    expect((p.google as { not: string }).not).toContain('Site bağlantıları Google tarafından reddedildi: Bağlantı metni politika ihlali; reklam bağlantısız kuruldu.');
+    expect((p.google as { not: string }).not).toContain('Ek öğeler (site bağlantısı, açıklama metni, işletme adı, logo, snippet, promosyon, fiyat) Google tarafından reddedildi: Bağlantı metni politika ihlali; reklam bu öğeler olmadan kuruldu.');
     expect((await svc.oku(CTX, r.id)).kararlar.find((x) => x.kod === 'UZANTI')!.google!.deger).toBe(
-      'Site bağlantıları Google tarafından reddedildi: Bağlantı metni politika ihlali; reklam bağlantısız kuruldu',
+      'Ek öğeler (site bağlantısı, açıklama metni, işletme adı, logo, snippet, promosyon, fiyat) Google tarafından reddedildi: Bağlantı metni politika ihlali; reklam bu öğeler olmadan kuruldu',
     );
     // Yayına giden çocuk taslak da UZANTISIZ (prova ile yayın aynı gövde).
     const [c] = await h.q<{ alanlar: { siteBaglantilari?: unknown[] } }>(
@@ -1124,7 +1128,7 @@ describe('Siteme gelsinler (Google): eşik ve uzantılar prova gövdesinde', () 
     const r = await tamRehber();
     await svc.prova(CTX, r.id);
     expect((sonGovde!.mutateOperations as Op[]).some((o) => 'assetOperation' in o)).toBe(false);
-    expect((await svc.oku(CTX, r.id)).kararlar.find((x) => x.kod === 'UZANTI')!.google!.deger).toBe('Sitenden alt sayfa okunamadı, site bağlantısı eklenmedi');
+    expect((await svc.oku(CTX, r.id)).kararlar.find((x) => x.kod === 'UZANTI')!.google!.deger).toBe('Sitende site bağlantısı olacak ayrı sayfa bulunamadı, site bağlantısı eklenmedi');
   });
 });
 
@@ -1349,5 +1353,148 @@ describe('başlamayan platformun sebebi kalıcı (sessiz hata)', () => {
     await svc.yayinla(CTX, r.id, p.icerikOzeti);
     const [s] = await h.q<{ platform_sebepleri: Record<string, unknown> }>('SELECT platform_sebepleri FROM reklam_rehberi WHERE id = $1', [r.id]);
     expect(s!.platform_sebepleri).toEqual({});
+  });
+});
+
+// =============================================================================
+// ARAMA ÖĞELERİ + SİTE BAĞLANTISI TEŞHİSİ — SERVİS yolundan (g-1.2.0, 2026-10-12)
+// =============================================================================
+describe('Siteme gelsinler (Google): öğeler ve site bağlantısı teşhisi', () => {
+  type Op = Record<string, { create?: Record<string, unknown> }>;
+  const LOGO = '55555555-0000-4000-8000-0000000000f1';
+  const alanlar = (g: { mutateOperations: Op[] }) => g.mutateOperations.filter((o) => 'campaignAssetOperation' in o).map((o) => o.campaignAssetOperation!.create!.fieldType);
+  const profil = async () => {
+    await h.q(`UPDATE clients SET contact_phone = '0232 555 12 34' WHERE id = $1`, [IDS.client]);
+    await h.q(
+      `INSERT INTO assets (id, org_id, client_id, kind, name, file_name, mime_type, byte_size, width, height, storage_key, content_hash, updated_at)
+       VALUES ($1, $2, $3, 'logo', 'logo', 'l.png', 'image/png', 3, 512, 512, 'l.png', $4, now())`,
+      [LOGO, IDS.org, IDS.client, '7'.repeat(64)],
+    );
+    // Hesapta kayıtlı logo: diskten okunmaz, bağ kayıtlı kaynağa.
+    await h.q(
+      `INSERT INTO asset_platform_refs (id, org_id, asset_id, platform, ad_account_id, external_ref) VALUES (gen_random_uuid(), $1, $2, 'google', $3, 'customers/1234567890/assets/777')`,
+      [IDS.org, LOGO, GHESAP],
+    );
+    await h.q(
+      `INSERT INTO client_profiles (id, org_id, client_id, marka_adi, logo_asset_id, urun_kategorileri, updated_at)
+       VALUES (gen_random_uuid(), $1, $2, 'Ege Birlik Yapı', $3, ARRAY['Daire','Villa','Ofis'], now())`,
+      [IDS.org, IDS.client, LOGO],
+    );
+  };
+
+  /*
+   * TEŞHİS FIXTURE'I — Ege Birlik Seasight'ın yapısı (ağ yok): menünün dört
+   * bağlantısı aynı sayfanın bölümleri, WordPress site haritasında yalnız ana
+   * sayfa. g-1.1.0 bu sitede "Sitenden alt sayfa okunamadı" diyordu.
+   */
+  const TEK_SAYFA = '<a href="#content">x</a><a href="#hakkinda">Hakkında</a><a href="#ozellikler">Özellikler</a><a href="#galeri">Galeri</a><a href="#iletisim">İletişim</a>';
+  const DIZIN = '<sitemapindex><sitemap><loc>https://ornek.com.tr/wp-sitemap-posts-page-1.xml</loc></sitemap></sitemapindex>';
+  const YALNIZ_ANA = '<urlset><url><loc>https://ornek.com.tr/</loc></url></urlset>';
+
+  it('KÖK SEBEP (tek sayfa): bağlantı kurulmaz, ekran "tek sayfa" der; sebep 15 dk önbellek dolduktan sonra da görünür', async () => {
+    svc.siteHtmlOku = async (a) => (a === 'https://ornek.com.tr/' ? { ok: true, html: TEK_SAYFA, adres: a } : { ok: false, sebep: '404' });
+    const haritalar: string[] = [];
+    svc.siteHaritasiGetir = async (a) => {
+      haritalar.push(a);
+      if (a === 'https://ornek.com.tr/wp-sitemap.xml') return { ok: true, html: DIZIN, adres: a };
+      if (a === 'https://ornek.com.tr/wp-sitemap-posts-page-1.xml') return { ok: true, html: YALNIZ_ANA, adres: a };
+      return { ok: false, sebep: '404' };
+    };
+    const r = await tamRehber();
+    const p = await svc.prova(CTX, r.id);
+    expect(alanlar(sonGovde!)).not.toContain('SITELINK');
+    expect(haritalar).toEqual(['https://ornek.com.tr/sitemap.xml', 'https://ornek.com.tr/wp-sitemap.xml', 'https://ornek.com.tr/wp-sitemap-posts-page-1.xml']);
+    expect((p.google as { not: string }).not).toContain('Site tek sayfa: menüdeki 4 bağlantı aynı sayfanın bölümlerine gidiyor ve site haritasında 0 ayrı sayfa var');
+    const not = () => svc.oku(CTX, r.id).then((k) => k.kararlar.find((x) => x.kod === 'UZANTI')!.google!.not);
+    expect(await not()).toContain('Site tek sayfa');
+    // Önbellek doldu (yeni süreç ya da 15 dk): sebep son provanın girdisinden.
+    (svc as unknown as { uzantiOnbellek: Map<string, unknown> }).uzantiOnbellek.clear();
+    expect(await not()).toContain('Site tek sayfa');
+  });
+
+  it('JavaScript menüsü: ana sayfada bağlantı yok ama site haritası var → bağlantılar haritadan', async () => {
+    const sayfalar: Record<string, string> = {
+      'https://ornek.com.tr/': '<div id="app"></div>',
+      'https://ornek.com.tr/hizmetler': '<title>Hizmetler | Örnek</title>',
+      'https://ornek.com.tr/projeler': '<title>Projeler | Örnek</title>',
+    };
+    svc.siteHtmlOku = async (a) => (sayfalar[a] ? { ok: true, html: sayfalar[a]!, adres: a } : { ok: false, sebep: '404' });
+    svc.siteHaritasiGetir = async (a) =>
+      a === 'https://ornek.com.tr/sitemap.xml'
+        ? { ok: true, html: '<urlset><url><loc>https://ornek.com.tr/</loc></url><url><loc>https://ornek.com.tr/hizmetler</loc></url><url><loc>https://ornek.com.tr/projeler</loc></url></urlset>', adres: a }
+        : { ok: false, sebep: '404' };
+    const r = await tamRehber();
+    await svc.prova(CTX, r.id);
+    expect(alanlar(sonGovde!)).toEqual(['SITELINK', 'SITELINK']);
+  });
+
+  it('KRİTİK: Marka Merkezi kaynaklarından arama, işletme adı, logo, snippet AYNI prova gövdesinde; karar tablosu her öğeyi söylüyor', async () => {
+    await profil();
+    const r = await tamRehber();
+    const p = await svc.prova(CTX, r.id);
+    expect(p.google).toMatchObject({ tur: 'gecti' });
+    expect(alanlar(sonGovde!)).toEqual(['CALL', 'BUSINESS_NAME', 'BUSINESS_LOGO', 'STRUCTURED_SNIPPET']);
+    const ops = sonGovde!.mutateOperations;
+    expect(ops.find((o) => o.campaignAssetOperation?.create?.fieldType === 'BUSINESS_LOGO')!.campaignAssetOperation!.create!.asset).toBe('customers/1234567890/assets/777');
+    const oge = (await svc.oku(CTX, r.id)).kararlar.filter((x) => x.kod === 'OGE');
+    expect(oge.map((x) => [x.konu, x.google!.deger])).toEqual([
+      ['Aramalar', 'Eklendi'],
+      ['İşletme adı', 'Eklendi'],
+      ['İşletme logosu', 'Eklendi'],
+      ['Ek açıklamalı snippet', 'Eklendi'],
+      ['Promosyon', 'Eklenmedi'],
+      ['Fiyatlar', 'Eklenmedi'],
+    ]);
+  });
+
+  it('KRİTİK: Google YALNIZ öğeyi reddederse öğesiz yeniden prova; yayına giden çocuk taslak öğesiz, ekran sebebi söylüyor', async () => {
+    await profil();
+    svc.siteHtmlOku = async (a) => (a === 'https://ornek.com.tr/' ? { ok: true, html: TEK_SAYFA, adres: a } : { ok: false, sebep: '404' });
+    mutateHatasi = (g) => {
+      const i = g.mutateOperations.findIndex((o) => o.assetOperation?.create?.textAsset);
+      if (i < 0) return null;
+      return new PlatformApiError('google', 'permanent', 'reddedildi', {
+        raw: { error: { details: [{ errors: [{ errorCode: { assetError: 'X' }, message: 'İşletme adı uyuşmuyor', location: { fieldPathElements: [{ fieldName: 'mutate_operations', index: i }] } }] }] } },
+      } as never);
+    };
+    const r = await tamRehber();
+    const p = await svc.prova(CTX, r.id);
+    expect(tumGovdeler).toHaveLength(2);
+    expect(alanlar(tumGovdeler[1]!)).toEqual([]);
+    expect(p.google).toMatchObject({ tur: 'gecti' });
+    expect((p.google as { not: string }).not).toContain('Google tarafından reddedildi: İşletme adı uyuşmuyor');
+    const [c] = await h.q<{ alanlar: { ogeler?: { isletmeAdi: string | null }; ogeReddi?: boolean } }>(
+      `SELECT s.alanlar FROM reklam_taslagi t JOIN taslak_surumu s ON s.taslak_id = t.id AND s.surum_no = t.aktif_surum_no WHERE t.platform = 'google'`,
+    );
+    expect(c!.alanlar.ogeler!.isletmeAdi).toBeNull();
+    expect(c!.alanlar.ogeReddi).toBe(true);
+    const ad = (await svc.oku(CTX, r.id)).kararlar.find((x) => x.kod === 'OGE' && x.konu === 'İşletme adı')!.google!;
+    expect(ad.deger).toBe('Eklenmedi');
+    expect(ad.not).toContain('İşletme adı uyuşmuyor');
+  });
+
+  it('çekirdek işlem de reddedildiyse öğesiz yeniden DENENMEZ', async () => {
+    await profil();
+    mutateHatasi = (g) => {
+      const i = g.mutateOperations.findIndex((o) => o.assetOperation?.create?.textAsset);
+      return new PlatformApiError('google', 'permanent', 'reddedildi', {
+        raw: {
+          error: {
+            details: [
+              {
+                errors: [
+                  { errorCode: { a: 'X' }, message: 'öğe', location: { fieldPathElements: [{ fieldName: 'mutate_operations', index: i }] } },
+                  { errorCode: { b: 'Y' }, message: 'bütçe', location: { fieldPathElements: [{ fieldName: 'mutate_operations', index: 0 }] } },
+                ],
+              },
+            ],
+          },
+        },
+      } as never);
+    };
+    const r = await tamRehber();
+    const p = await svc.prova(CTX, r.id);
+    expect(tumGovdeler).toHaveLength(1);
+    expect(p.google).toMatchObject({ tur: 'reddetti' });
   });
 });

@@ -296,10 +296,11 @@ describe('KRİTİK: uzantılar TEK atomik istekte, sıra çözülebilir', () => 
     expect(k.maximizeConversions).toEqual({});
   });
 
-  it('site bağlantısı çıkmadıysa SITELINK işlemi yok ve not yöneticinin cümlesini taşıyor', () => {
+  it('site bağlantısı çıkmadıysa SITELINK işlemi yok ve not yöneticinin cümlesini SEBEBİYLE taşıyor', () => {
     const b = derle(turet('SITE', { son30GunDonusum: 3, uzantilar: { siteBaglantilari: [], siteSebebi: 'x', aciklamaMetinleri: [] } }));
     expect((b.govde.mutateOperations as Op[]).some((o) => tur(o) === 'assetOperation')).toBe(false);
-    expect(b.notlar).toContain(`${SITE_BAGLANTISI_YOK_CUMLESI}.`);
+    // Sebep notta (2026-10-12): "okunamadı" yerine gerçek sebep, provadan sonra da.
+    expect(b.notlar).toContain(`${SITE_BAGLANTISI_YOK_CUMLESI}: x.`);
     expect(b.beklenen.teklif).toBe('TARGET_SPEND');
     expect(b.beklenen.uzantilar).toEqual({ siteBaglantilari: [], aciklamaMetinleri: [] });
   });
@@ -403,11 +404,11 @@ describe('karar tablosu UZANTI satırı — dört hâl ayrı', () => {
     expect(hucre({}).deger).toBe('Site bağlantıları prova sırasında sitenden okunur');
     expect(hucre({ uzantilar: { siteBaglantilari: [], siteSebebi: 'Site okunamadı: 404', aciklamaMetinleri: [] } })).toEqual({
       deger: SITE_BAGLANTISI_YOK_CUMLESI,
-      not: "Site okunamadı: 404 · Açıklama metni yok: Marka Merkezi'ndeki vaatlerden 25 karakteri aşmayan, sayı ve fiyat içermeyenler kullanılır",
+      not: "Site okunamadı: 404 · Açıklama metni yok: Reklam adımında yaz ya da öner, ya da Marka Merkezi'ne 25 karakteri aşmayan, sayı ve fiyat içermeyen vaatler ekle",
     });
     expect(hucre({ uzantilar: { siteBaglantilari: BAGLANTILAR, siteSebebi: null, aciklamaMetinleri: ['Uzman ekip'] } })).toEqual({
       deger: '2 site bağlantısı: Hizmetler, Projeler',
-      not: 'Açıklama metinleri: Uzman ekip',
+      not: 'Açıklama metinleri (Marka Merkezi vaatlerinden): Uzman ekip',
     });
   });
   it('satır yalnız Arama + site: telefon amacında ve Google kapalıyken yok', () => {
@@ -415,7 +416,8 @@ describe('karar tablosu UZANTI satırı — dört hâl ayrı', () => {
     expect(kararTablosu('SITE', { meta: true, google: false }, 'MAKS_TIKLAMA', false).some((x) => x.kod === 'UZANTI')).toBe(false);
   });
   it('ekrandaki uzantı cümlelerinde uzun tire yok', () => {
-    expect(SITE_BAGLANTISI_YOK_CUMLESI).toBe('Sitenden alt sayfa okunamadı, site bağlantısı eklenmedi');
+    // "okunamadı" DEĞİL: tek sayfalık site okunuyor ama ayrı sayfası yok.
+    expect(SITE_BAGLANTISI_YOK_CUMLESI).toBe('Sitende site bağlantısı olacak ayrı sayfa bulunamadı, site bağlantısı eklenmedi');
     expect(JSON.stringify(hucre({}))).not.toMatch(/[—–]/);
   });
 });
