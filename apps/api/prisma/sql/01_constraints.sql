@@ -523,7 +523,7 @@ ALTER TABLE lead_forms ADD CONSTRAINT lead_forms_type_chk
 
 ALTER TABLE lead_forms DROP CONSTRAINT IF EXISTS lead_forms_status_chk;
 ALTER TABLE lead_forms ADD CONSTRAINT lead_forms_status_chk
-  CHECK (status IN ('draft', 'publishing', 'published', 'superseded', 'failed'));
+  CHECK (status IN ('draft', 'publishing', 'published', 'superseded', 'failed', 'uncertain'));
 
 -- SORUSUZ FORM OLMAZ.
 --

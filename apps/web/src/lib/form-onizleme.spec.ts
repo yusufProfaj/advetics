@@ -8,6 +8,7 @@ import {
   kayittanOnizleme,
   onizlemeEkranlari,
   sayfaTaslaklari,
+  yarimFormDurumu,
   yayinSonrasiSecim,
   yenidenYayinlanabilir,
   type FormTaslagi,
@@ -160,6 +161,21 @@ describe('rehber form akışı', () => {
     expect(yenidenYayinlanabilir(kayit({ status: 'failed', externalFormId: '777' }))).toBe(false);
     expect(yenidenYayinlanabilir(kayit({ status: 'failed' }))).toBe(true);
     expect(yenidenYayinlanabilir(kayit({ status: 'draft' }))).toBe(true);
+  });
+
+  it('KRİTİK: yarım kalan yayının DÖRT hâli ayrı yazılır; belirsiz listede, yeniden yayın düğmesi yok', () => {
+    const belirsiz = kayit({ id: 'u', socialProfileId: 'S', status: 'uncertain', createdAt: '2026-10-06' });
+    expect(sayfaTaslaklari([belirsiz], 'S').map((k) => k.id)).toEqual(['u']);
+    expect(yenidenYayinlanabilir(belirsiz)).toBe(false);
+    const metinler = [
+      yarimFormDurumu({ status: 'draft', error: null }),
+      yarimFormDurumu({ status: 'failed', error: 'yarıda kaldı' }),
+      yarimFormDurumu({ status: 'publishing', error: null }),
+      yarimFormDurumu({ status: 'uncertain', error: null }),
+    ];
+    expect(new Set(metinler).size).toBe(4);
+    expect(metinler[1]).toContain('yarıda kaldı');
+    expect(metinler[3]).toMatch(/form açılmış olabilir.*yeniden dene/);
   });
 
   it('KRİTİK (B-2): geri okuma uyarılı yayın OTOMATİK SEÇİLMEZ; seçim yalnız "Yine de kullan"la', () => {

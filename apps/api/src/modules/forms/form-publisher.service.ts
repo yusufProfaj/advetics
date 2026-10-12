@@ -40,10 +40,17 @@ export class FormPublisherService {
     private readonly quota: QuotaGuardService,
   ) {}
 
-  async publish(ctx: TenantContext, formId: string): Promise<LeadFormRecord> {
+  /**
+   * `belirsizOnayi`: yalnız `uncertain` satırda anlamlı — kullanıcı Meta'da
+   * formun açılmadığını kontrol ettiğini Formlar ekranındaki onay
+   * penceresiyle söyledi. Başka hiçbir engeli açmıyor.
+   */
+  async publish(ctx: TenantContext, formId: string, opts: { belirsizOnayi?: boolean } = {}): Promise<LeadFormRecord> {
+    // `get` yarım kalan yayını da ayırıyor (`yarimKalanYayinlariAyir`):
+    // eşiği aşmış `publishing` satırı burada `failed`/`uncertain` görünür.
     const form = await this.forms.get(ctx, formId);
 
-    const blockers = publishBlockers(form);
+    const blockers = publishBlockers(form, opts);
     if (blockers.length > 0) throw new BadRequestException(blockers.join(' '));
 
     const auth = await this.resolvePage(ctx, form);
@@ -81,7 +88,7 @@ export class FormPublisherService {
      * yayınlarsa ikincisi burada durur; `publishBlockers` okuması tek başına
      * yetmiyordu (ikisi de "taslak" görüp ikisi de form açardı).
      */
-    if (!(await this.forms.yayinSahiplen(ctx, formId))) {
+    if (!(await this.forms.yayinSahiplen(ctx, formId, opts))) {
       throw new ConflictException('Bu form şu an yayınlanıyor ya da yayını yarım kaldı; Formlar’dan kontrol et.');
     }
 
@@ -93,6 +100,25 @@ export class FormPublisherService {
       onRateLimit: (snapshot: Parameters<NonNullable<Parameters<typeof provider.createLeadForm>[0]['onRateLimit']>>[0]) =>
         this.quota.record({ platform: 'meta', adAccountId: form.socialProfileId, endpoint: 'forms:publish', snapshot }),
     };
+
+    /*
+     * 0) DAMGA — Meta'ya gitmeden HEMEN önce. Süreç bundan sonra ölürse satır
+     * `uncertain`a ayrılır (form açılmış olabilir), önce ölürse `failed`a.
+     * Damga yazılamazsa Meta'ya GİDİLMEZ: damgasız ölüm "hiçbir şey gitmedi"
+     * sayılır ve o varsayım ancak gerçekten gitmediyse doğru. Satır `failed`a
+     * çekiliyor (Meta'ya gitmedik, güvenle yeniden denenebilir); o da düşerse
+     * yaş eşiğinden sonra okuma aynı sonuca varır.
+     */
+    try {
+      await this.forms.metaIstegiBasladi(ctx, formId);
+    } catch (e) {
+      const m = e instanceof Error ? e.message : String(e);
+      this.logger.error(`Form yayını Meta'ya gitmeden durdu (${formId}): ${m}`);
+      await this.forms.markFailed(ctx, formId, `Yayın başlatılamadı, Meta'ya istek gitmedi: ${m}`).catch((e2: unknown) =>
+        this.logger.error(`Satır failed'a çekilemedi (${formId}); yaş eşiğinden sonra okumada ayrılacak: ${e2 instanceof Error ? e2.message : String(e2)}`),
+      );
+      throw new BadRequestException(`Yayın başlatılamadı; Meta'ya istek gitmedi, yeniden deneyebilirsin. (${m})`);
+    }
 
     // 1) META. Yalnız BU adımın hatası satırı `failed` yapar: form açılmadı.
     let externalId: string;

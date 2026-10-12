@@ -13,7 +13,7 @@ import type {
   TenantContext,
   TesekkurDugmeTuru,
 } from '@advetics/shared';
-import { tesekkurDugmesiTuru } from '@advetics/shared';
+import { FORM_YAYIN_BELIRSIZ_NOTU, FORM_YAYIN_YARIM_NOTU, FORM_YAYIN_YASLI_DAKIKA, tesekkurDugmesiTuru } from '@advetics/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { TxLike } from '../rules/rules.service';
 import { FORM_YAYIN_BELIRSIZ, planEdit, publishBlockers, publishWarnings } from './form-versioning';
@@ -82,6 +82,7 @@ export class FormsService {
    */
   async list(ctx: TenantContext, clientId: string): Promise<LeadFormRecord[]> {
     return this.prisma.withTenant(ctx, async (tx) => {
+      await this.yarimKalanYayinlariAyir(tx, Prisma.sql`org_id = ${ctx.orgId}::uuid AND client_id = ${clientId}::uuid`);
       const rows = await this.select(
         tx,
         Prisma.sql`f.org_id = ${ctx.orgId}::uuid AND f.client_id = ${clientId}::uuid
@@ -93,6 +94,7 @@ export class FormsService {
 
   async get(ctx: TenantContext, id: string): Promise<LeadFormRecord> {
     return this.prisma.withTenant(ctx, async (tx) => {
+      await this.yarimKalanYayinlariAyir(tx, Prisma.sql`id = ${id}::uuid AND org_id = ${ctx.orgId}::uuid`);
       const [row] = await this.select(
         tx,
         Prisma.sql`f.id = ${id}::uuid AND f.org_id = ${ctx.orgId}::uuid`,
@@ -167,7 +169,7 @@ export class FormsService {
     const current = await this.get(ctx, id);
     // Yayını belirsiz satır düzenlenemez: Meta'da form açılmış olabilir ve
     // içeriği değiştirmek kayıt ile Meta'daki formu ayrıştırırdı.
-    if (current.status === 'publishing') throw new BadRequestException(FORM_YAYIN_BELIRSIZ);
+    if (current.status === 'publishing' || current.status === 'uncertain') throw new BadRequestException(FORM_YAYIN_BELIRSIZ);
     const plan = planEdit(current, toInput(current), input);
 
     const nextId = await this.prisma.withTenant(ctx, async (tx) => {
@@ -243,7 +245,7 @@ export class FormsService {
         WHERE id = ${id}::uuid AND org_id = ${ctx.orgId}::uuid
       `);
       if (!row) throw new NotFoundException('Form bulunamadı');
-      if (row.status === 'published' || row.status === 'superseded' || row.status === 'publishing') {
+      if (row.status === 'published' || row.status === 'superseded' || row.status === 'publishing' || row.status === 'uncertain') {
         throw new BadRequestException(
           "Yayınlanmış form silinemiyor — Meta'da yaşamaya devam ediyor ve " +
             'topladığı bilgilerin kaynağı bu kayıt.',
@@ -304,17 +306,68 @@ export class FormsService {
    * `publishBlockers` okuması tek başına yetmiyor: iki istek de "taslak"
    * görüp ikisi de form açardı.
    */
-  async yayinSahiplen(ctx: TenantContext, id: string): Promise<boolean> {
+  async yayinSahiplen(ctx: TenantContext, id: string, opts: { belirsizOnayi?: boolean } = {}): Promise<boolean> {
+    /*
+     * `uncertain` YALNIZ BİLİNÇLİ ONAYLA sahiplenilir: kullanıcı Meta'da formun
+     * açılmadığını kontrol ettiğini söyledi. Damga sıfırlanıyor, çünkü bu yeni
+     * bir deneme ve onun ölüm noktası kendi damgasıyla ayrılmalı.
+     */
+    const durumlar = opts.belirsizOnayi ? ['draft', 'failed', 'uncertain'] : ['draft', 'failed'];
     return this.prisma.withTenant(ctx, async (tx) => {
       const rows = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
         UPDATE lead_forms
-        SET status = 'publishing', error = NULL, updated_at = now()
+        SET status = 'publishing', error = NULL, meta_request_started_at = NULL, updated_at = now()
         WHERE id = ${id}::uuid AND org_id = ${ctx.orgId}::uuid
-          AND status IN ('draft', 'failed') AND external_form_id IS NULL
+          AND status = ANY(${durumlar}::text[]) AND external_form_id IS NULL
         RETURNING id
       `);
       return rows.length === 1;
     });
+  }
+
+  /**
+   * META İSTEĞİ BAŞLIYOR — `createLeadForm`un HEMEN öncesinde, ayrı yazım.
+   * Bundan sonra süreç ölürse satır `uncertain`a ayrılır (form açılmış
+   * olabilir); öncesinde ölürse `failed`a (hiçbir şey gitmedi). Yazım
+   * düşerse çağıran Meta'ya GİTMEMELİ: damgasız istek, ölünce "güvenle
+   * yeniden dene" sayılır ve ikinci form açabilirdi.
+   */
+  async metaIstegiBasladi(ctx: TenantContext, id: string): Promise<void> {
+    await this.prisma.withTenant(ctx, async (tx) => {
+      const n = await tx.$executeRaw(Prisma.sql`
+        UPDATE lead_forms
+        SET meta_request_started_at = now(), updated_at = now()
+        WHERE id = ${id}::uuid AND org_id = ${ctx.orgId}::uuid
+          AND status = 'publishing' AND external_form_id IS NULL
+      `);
+      if (n !== 1) throw new Error(`Meta isteği damgası yazılamadı (etkilenen satır ${n})`);
+    });
+  }
+
+  /**
+   * YARIM KALAN YAYINI AYIR — okuma anında, tek koşullu UPDATE.
+   *
+   * NEDEN OKUMADA, SÜPÜRMEDE DEĞİL: bu satırı gören ve onunla bir şey yapmak
+   * isteyen tek kişi formu açan kullanıcı; liste, detay ve yayın (`get`le
+   * başlıyor) hepsi buradan geçiyor. Zamanlanmış bir süpürme yeni bir iş
+   * türü, kuyruk kaydı ve kendi sessiz arıza yolu demek; burada ise ayırma
+   * kullanıcının baktığı anda olur ve sonucu aynı yanıtta görünür.
+   *
+   * Yaş eşiği `updated_at`e bakıyor: sahiplenme ve damga ikisi de onu
+   * tazeliyor, yani canlı bir yayın (Meta cevabını bekleyen) eşiği aşmadan
+   * dokunulmaz. Kimliği yazılmış satır zaten `published`; koşul yine de
+   * `external_form_id IS NULL` taşıyor.
+   */
+  private async yarimKalanYayinlariAyir(tx: TxLike, kapsam: Prisma.Sql): Promise<void> {
+    await tx.$executeRaw(Prisma.sql`
+      UPDATE lead_forms
+      SET status = CASE WHEN meta_request_started_at IS NULL THEN 'failed' ELSE 'uncertain' END,
+          error = CASE WHEN meta_request_started_at IS NULL THEN ${FORM_YAYIN_YARIM_NOTU} ELSE ${FORM_YAYIN_BELIRSIZ_NOTU} END,
+          updated_at = now()
+      WHERE ${kapsam}
+        AND status = 'publishing' AND external_form_id IS NULL
+        AND updated_at < now() - make_interval(mins => ${FORM_YAYIN_YASLI_DAKIKA}::int)
+    `);
   }
 
   /**
@@ -323,6 +376,10 @@ export class FormsService {
    * onlar düşerse satır kimliğiyle `published` kalır ve geri okuma
    * uyarısı "tamamlanmadı" der. Bu yazım da düşerse satır `publishing`
    * kalır ve yeniden yayın engellenir (`publishBlockers`).
+   *
+   * `uncertain` DE KABUL: Meta eşikten (`FORM_YAYIN_YASLI_DAKIKA`) geç cevap
+   * verirse satır bu arada belirsiz sayılmış olabilir. Kimlik geldiyse form
+   * KESİN var; yazmamak, açılmış bir formu kayıtta "belirsiz" bırakmak olurdu.
    */
   async kimlikYaz(ctx: TenantContext, id: string, externalFormId: string): Promise<void> {
     await this.prisma.withTenant(ctx, async (tx) => {
@@ -330,7 +387,7 @@ export class FormsService {
         UPDATE lead_forms
         SET status = 'published', external_form_id = ${externalFormId}, published_at = now(),
             readback_warning = ${GERI_OKUMA_BEKLIYOR}, error = NULL, updated_at = now()
-        WHERE id = ${id}::uuid AND org_id = ${ctx.orgId}::uuid AND status = 'publishing'
+        WHERE id = ${id}::uuid AND org_id = ${ctx.orgId}::uuid AND status IN ('publishing', 'uncertain')
       `);
       if (n !== 1) throw new Error(`Form kimliği yazılamadı (etkilenen satır ${n})`);
     });

@@ -2648,9 +2648,13 @@ model LeadForm {
   /// doğrulanamadı. `error`dan AYRI: o "yayınlanamadı" demek.
   readbackWarning  String? @map("readback_warning") @db.VarChar(2000)
 
-  /// draft | published | superseded | failed
+  /// draft | publishing | published | superseded | failed | uncertain
   status         String  @default("draft") @db.VarChar(16)
   externalFormId String? @map("external_form_id") @db.VarChar(128)
+  /// Meta isteğinin HEMEN öncesinde basılıyor. Yarım kalan yayında NULL =
+  /// Meta'ya hiçbir şey gitmedi (failed, yeniden denenebilir); dolu = Meta'da
+  /// form açılmış olabilir (uncertain, yeniden yayın yalnız bilinçli onayla).
+  metaRequestStartedAt DateTime? @map("meta_request_started_at") @db.Timestamptz(6)
 
   version        Int     @default(1)
   /// Zincirin ilk halkası. İLK SÜRÜMDE KENDİ KİMLİĞİ — NULL değil.

@@ -34,7 +34,7 @@ import {
 import { apiFetch, onizlemeAdresi } from '@/lib/api';
 import { FormBuilder } from '@/components/forms/form-builder';
 import { FormOnizleme } from '@/components/forms/form-onizleme';
-import { formOlusturmaDurumu, gizlilikOnerisi, kayittanOnizleme, sayfaTaslaklari, yayinSonrasiSecim, yenidenYayinlanabilir } from '@/lib/form-onizleme';
+import { formOlusturmaDurumu, gizlilikOnerisi, kayittanOnizleme, sayfaTaslaklari, yarimFormDurumu, yayinSonrasiSecim, yenidenYayinlanabilir } from '@/lib/form-onizleme';
 import { medyaOlc, medyaYukle } from '@/reklam/medya';
 import { AltCubuk, Soru, sil, yaz, type AdimBaglami } from './adim-ortak';
 import { IKON, Ikon } from './ikonlar';
@@ -841,11 +841,7 @@ function FormSecici({ b, eksikMetni, formUyarisi }: { b: AdimBaglami; eksikMetni
                 <span className={s.formTaslakAdi}>
                   {t.name}
                   <small>
-                    {t.status === 'publishing'
-                      ? "Yayın yarım kaldı: Meta'da form açılmış olabilir, Formlar'dan kontrol et"
-                      : t.status === 'failed'
-                        ? `Yayınlanamadı${t.error ? `: ${t.error}` : ''}`
-                        : 'Taslak'}
+                    {yarimFormDurumu(t)}
                   </small>
                 </span>
                 <button type="button" className={s.metinDugme} onClick={() => setOnizleme({ tur: 'taslak', kayit: t })}>

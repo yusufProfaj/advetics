@@ -126,7 +126,10 @@ export class FormsController {
   publish(
     @CurrentTenant() ctx: TenantContext,
     @Param('id', ParseUUIDPipe) id: string,
+    // YALNIZ `true` ONAY SAYILIR: gövdesiz eski çağrı, "evet" dizgesi ya da
+    // 1 belirsiz satırı açmamalı. Onay geri alınamayan bir adımın kapısı.
+    @Body() body?: { belirsizOnayi?: unknown },
   ): Promise<LeadFormRecord> {
-    return this.publisher.publish(ctx, id);
+    return this.publisher.publish(ctx, id, { belirsizOnayi: body?.belirsizOnayi === true });
   }
 }

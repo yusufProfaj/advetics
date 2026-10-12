@@ -130,14 +130,25 @@ export function planEdit(
 export const FORM_YAYIN_BELIRSIZ =
   'Bu formun yayını yarım kaldı: Meta’da form açılmış olabilir. Formlar’dan ya da Meta’dan kontrol et; yeniden yayın kapalı.';
 
-export function publishBlockers(form: LeadFormRecord): string[] {
+/** `uncertain` satırın bilinçli onaysız yayın engeli. */
+export const FORM_YAYIN_ONAY_GEREKIR =
+  'Meta’da form açılmış olabilir. Sayfanın formlarında kontrol et; yoksa “Yeniden dene” ile bilinçli olarak yeniden yayınla.';
+
+export function publishBlockers(
+  form: LeadFormRecord,
+  opts: { belirsizOnayi?: boolean } = {},
+): string[] {
   const blockers: string[] = [];
 
   if (form.status === 'published') blockers.push('Bu form zaten yayında.');
   // META'DA FORM AÇILMIŞ OLABİLİR: yeniden yayın İKİNCİ form açar (Meta'da
   // form silinemiyor). Belirsiz satır ve kimliği olan satır yayınlanmaz.
+  // `uncertain` tek istisna: kullanıcı Meta'yı kontrol ettiğini AÇIKÇA
+  // onaylarsa (`belirsizOnayi`). Onay yalnız bu dalı açıyor; kimliği olan
+  // satır onayla da yayınlanmaz (aşağıdaki dal), çünkü orada form kesin var.
   if (form.status === 'publishing') blockers.push(FORM_YAYIN_BELIRSIZ);
-  else if (form.externalFormId && form.status !== 'published') {
+  else if (form.status === 'uncertain' && !opts.belirsizOnayi) blockers.push(FORM_YAYIN_ONAY_GEREKIR);
+  if (form.status !== 'publishing' && form.status !== 'published' && form.externalFormId) {
     blockers.push('Bu formun Meta’da zaten bir kimliği var; yeniden yayın ikinci form açardı.');
   }
   if (form.status === 'superseded') {

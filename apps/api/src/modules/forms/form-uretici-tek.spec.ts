@@ -166,7 +166,7 @@ describe('yayın: geri okuma uyuşmazlığı SESSİZ değil', () => {
   function kur(okuma: () => Promise<Record<string, unknown>>) {
     const markPublished = vi.fn(async () => undefined);
     const markFailed = vi.fn(async () => undefined);
-    const forms = { get: vi.fn(async () => KAYIT), markPublished, markFailed, yayinSahiplen: vi.fn(async () => true), kimlikYaz: vi.fn(async () => undefined) };
+    const forms = { get: vi.fn(async () => KAYIT), markPublished, markFailed, yayinSahiplen: vi.fn(async () => true), metaIstegiBasladi: vi.fn(async () => undefined), kimlikYaz: vi.fn(async () => undefined) };
     const prov = {
       canWrite: () => ({ ok: true, missing: [] }),
       createLeadForm: vi.fn(async () => '777'),

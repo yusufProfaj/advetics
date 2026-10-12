@@ -262,14 +262,33 @@ export function tesekkurDugmesiTuru(v: { thankYouCtaType?: TesekkurDugmeTuru | n
  * UPDATE ile reddediyor; (2) Meta form açtıktan sonra kimlik YAZILAMAZSA
  * satır burada KALIYOR ve yeniden yayın engelleniyor. `failed`a düşmek
  * satırı yeniden denenebilir yapardı ve Meta'da İKİNCİ form açılırdı (form
- * silinemiyor). Bu hâlden çıkış elle: Formlar'da Meta'daki formla eşleştir.
+ * silinemiyor).
+ *
+ * YARIM KALAN YAYIN (süreç sahiplenmeden sonra öldü): `publishing` satırı
+ * yaşlanınca (`FORM_YAYIN_YASLI_DAKIKA`) okuma anında İKİYE ayrılıyor —
+ * `meta_request_started_at` boşsa Meta'ya hiçbir şey gitmemiştir ve satır
+ * `failed` olur (yeniden denenebilir); doluysa Meta'da form açılmış olabilir
+ * ve satır `uncertain` olur: yeniden yayın yalnız bilinçli "Yeniden dene"
+ * onayıyla. İkisini aynı hâle çevirmek ya ikinci formu ya kalıcı kilidi seçmek.
  */
-export const LEAD_FORM_STATUSES = ['draft', 'publishing', 'published', 'superseded', 'failed'] as const;
+export const LEAD_FORM_STATUSES = ['draft', 'publishing', 'published', 'superseded', 'failed', 'uncertain'] as const;
 export type LeadFormStatus = (typeof LEAD_FORM_STATUSES)[number];
+
+/** `publishing` satırı bu kadar dakika dokunulmadan kalırsa yarım kalmış sayılır. */
+export const FORM_YAYIN_YASLI_DAKIKA = 10;
+
+/** Yarım kalan yayın, Meta'ya istek gitmeden: satır `failed`, notu `error`da. */
+export const FORM_YAYIN_YARIM_NOTU =
+  "Yayın yarıda kaldı; Meta'ya istek gitmedi, form açılmadı. Yeniden yayınlayabilirsin.";
+
+/** Yarım kalan yayın, Meta isteği başladıktan sonra: satır `uncertain`. */
+export const FORM_YAYIN_BELIRSIZ_NOTU =
+  "Meta'da form açılmış olabilir; sayfanın formlarında kontrol et, yoksa yeniden dene.";
 
 export const LEAD_FORM_STATUS_LABELS: Record<LeadFormStatus, string> = {
   draft: 'Taslak',
-  publishing: 'Yayın belirsiz',
+  publishing: 'Yayınlanıyor',
+  uncertain: 'Yayın belirsiz',
   published: 'Yayında',
   // "Eski sürüm" DEĞİL "değiştirildi": form hâlâ çalışıyor ve lead topluyor
   // olabilir; yalnızca daha yeni bir sürümü var.

@@ -113,8 +113,13 @@ export function FormBuilder({
   const [error, setError] = useState<string | null>(null);
 
   const published = status === 'published';
-  // Yayını belirsiz form da kilitli: Meta'da açılmış olabilir (sunucu da reddediyor).
-  const locked = published || status === 'superseded' || status === 'publishing';
+  // Yayını süren ya da belirsiz form da kilitli: Meta'da açılmış olabilir
+  // (sunucu da reddediyor).
+  const yayinYarim = status === 'publishing' || status === 'uncertain';
+  const locked = published || status === 'superseded' || yayinYarim;
+  // "Yeniden dene" İKİ ADIMLI: ilk tık onay kutusunu açar, ikincisi yayınlar.
+  // Meta'da form açılmışsa yeniden yayın İKİNCİ formu açar ve silinemez.
+  const [yenidenOnay, setYenidenOnay] = useState(false);
 
   function body() {
     return {
@@ -214,11 +219,16 @@ export function FormBuilder({
     }
   }
 
-  async function publish(): Promise<void> {
+  async function publish(belirsizOnayi = false): Promise<void> {
     if (!formId) return;
     const res = await run('publish', () =>
-      apiFetch<LeadFormRecord>(`/lead-forms/${formId}/publish`, { method: 'POST' }),
+      apiFetch<LeadFormRecord>(`/lead-forms/${formId}/publish`, {
+        method: 'POST',
+        // Onay YALNIZ "Yeniden dene" penceresinden: normal yayın gövdesiz.
+        ...(belirsizOnayi ? { body: JSON.stringify({ belirsizOnayi: true }) } : {}),
+      }),
     );
+    setYenidenOnay(false);
     if (res) {
       setStatus(res.status);
       yenile();
@@ -243,7 +253,60 @@ export function FormBuilder({
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div className="space-y-4">
-        {locked && (
+        {status === 'uncertain' && (
+          /**
+           * YAYIN BELİRSİZ: Meta isteği başladı ama cevabı kayda geçmedi.
+           * Üç cümle, tek eylem: kontrol et, yoksa bilinçli yeniden dene.
+           */
+          <div className="rounded-xl bg-warn-soft px-4 py-3 text-sm text-warn-strong ring-1 ring-inset ring-warn/30" role="alert">
+            <p className="font-semibold">Yayın belirsiz: Meta&apos;da form açılmış olabilir.</p>
+            <p className="mt-1 text-xs">
+              Facebook sayfasının formlarında bu adla bir form var mı kontrol et. Varsa yeniden
+              yayınlama; Meta formu silmiyor ve ikinci bir form açılır. Yoksa yeniden dene.
+            </p>
+            {canPublish && formId && (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {!yenidenOnay ? (
+                  <button
+                    type="button"
+                    onClick={() => setYenidenOnay(true)}
+                    disabled={busy !== null}
+                    className="rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface-sunken disabled:opacity-40"
+                  >
+                    Yeniden dene
+                  </button>
+                ) : (
+                  <>
+                    <span className="text-xs font-semibold">Sayfanın formlarında bu form yok, eminim.</span>
+                    <button
+                      type="button"
+                      onClick={() => void publish(true)}
+                      disabled={busy !== null}
+                      className="rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+                    >
+                      {busy === 'publish' ? 'Yayınlanıyor…' : 'Evet, yeniden yayınla'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setYenidenOnay(false)}
+                      disabled={busy !== null}
+                      className="rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-medium text-ink disabled:opacity-40"
+                    >
+                      Vazgeç
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+        {status === 'publishing' && (
+          <div className="rounded-xl bg-warn-soft px-4 py-3 text-sm text-warn-strong ring-1 ring-inset ring-warn/30" role="status">
+            <p className="font-semibold">Form yayınlanıyor.</p>
+            <p className="mt-1 text-xs">Birkaç dakika sonra sayfayı yenile; yayın yarıda kaldıysa burada yazar.</p>
+          </div>
+        )}
+        {locked && !yayinYarim && (
           /**
            * DEĞİŞMEZLİK UYARISI EN ÜSTTE ve formu açar açmaz görünüyor.
            *

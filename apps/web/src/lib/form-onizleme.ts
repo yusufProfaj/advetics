@@ -1,4 +1,5 @@
 import {
+  FORM_YAYIN_BELIRSIZ_NOTU,
   PREFILL_LABELS,
   TESEKKUR_DUGME_ETIKETI,
   tesekkurDugmesiTuru,
@@ -192,10 +193,25 @@ export function formOlusturmaDurumu(p: { sayfaId: string | null; yayinIzni: bool
  * düşmüş): rehberde "yarım kalan formlar" olarak görünür, kullanıcı açıp
  * yayınlayabilir. Yayın düşünce pencere kapatılırsa form KAYBOLMAMALI.
  */
+/**
+ * DÖRT HÂL, DÖRDÜ DE LİSTEDE: taslak, yayınlanamadı (yarıda kaldıysa da),
+ * yayınlanıyor ve yayın belirsiz. Belirsizi listeden düşürmek, Meta'da
+ * açılmış olabilecek bir formu kullanıcının gözünden kaçırmak olurdu.
+ */
+const YARIM_DURUMLAR: readonly LeadFormRecord['status'][] = ['draft', 'failed', 'publishing', 'uncertain'];
+
+/** Rehberin "Yarım kalan formlar" satırındaki durum cümlesi. */
+export function yarimFormDurumu(k: Pick<LeadFormRecord, 'status' | 'error'>): string {
+  if (k.status === 'publishing') return 'Yayınlanıyor; birkaç dakika sonra listeyi yenile';
+  if (k.status === 'uncertain') return `${FORM_YAYIN_BELIRSIZ_NOTU} Yeniden deneme Formlar'da, onayla.`;
+  if (k.status === 'failed') return `Yayınlanamadı${k.error ? `: ${k.error}` : ''}`;
+  return 'Taslak';
+}
+
 export function sayfaTaslaklari(kayitlar: readonly LeadFormRecord[], sayfaId: string | null): LeadFormRecord[] {
   if (!sayfaId) return [];
   return kayitlar
-    .filter((k) => k.socialProfileId === sayfaId && (k.status === 'draft' || k.status === 'failed' || k.status === 'publishing'))
+    .filter((k) => k.socialProfileId === sayfaId && YARIM_DURUMLAR.includes(k.status))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
