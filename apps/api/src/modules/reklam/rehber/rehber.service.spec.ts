@@ -444,10 +444,11 @@ describe('giriş listesi: satır alanları, arşiv ve geri getir', () => {
   it('KRİTİK (Ajan 4 Ö-1): platform başlatıcısı FIRLATIRSA yayınla düşmüyor; sebep o platformun satırında ve kalıcı', async () => {
     const r = await tamRehber();
     const p = await svc.prova(CTX, r.id);
-    (svc as unknown as { googleYayinBaslat: () => Promise<string | null> }).googleYayinBaslat = async () => {
-      throw new Error('ağ koptu');
-    };
-    const d = await svc.yayinla(CTX, r.id, p.icerikOzeti);
+    // Örnek üstünde sahte; SONRAKİ testlere sızmasın diye spyOn + geri al.
+    const casus = vi
+      .spyOn(svc as unknown as { googleYayinBaslat: () => Promise<string | null> }, 'googleYayinBaslat')
+      .mockRejectedValue(new Error('ağ koptu'));
+    const d = await svc.yayinla(CTX, r.id, p.icerikOzeti).finally(() => casus.mockRestore());
     expect(d.platformlar).toEqual([expect.objectContaining({ platform: 'google', sebep: expect.stringContaining('ağ koptu') })]);
     // Hiçbir platform başlamadı: rehber taslak kalır (yeniden denenebilir) ve sebep okumada da var.
     expect((await svc.oku(CTX, r.id)).durum).toBe('taslak');
