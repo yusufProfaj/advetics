@@ -1,5 +1,7 @@
 import type { MetadataRoute } from 'next';
 
+import { SITE_SAYFALARI } from '@/components/landing/site-icerik';
+
 export default function sitemap(): MetadataRoute.Sitemap {
   const base = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? 'advetics.com';
   const origin = base.startsWith('localhost') ? `http://${base}` : `https://${base}`;
@@ -7,10 +9,11 @@ export default function sitemap(): MetadataRoute.Sitemap {
 
   // Yalnızca oturum gerektirmeyen sayfalar. Panel indekslenmemeli.
   //
-  // Kök `/` tanıtım sayfası ve sitenin indekslenmesi gereken TEK asıl sayfası;
-  // diğerleri yasal metinler ve giriş ekranı. Öncelik farkı bunu söylüyor.
+  // Tanıtım sitesinin sayfaları `SITE_SAYFALARI`ndan geliyor: menü, alt bilgi
+  // ve site haritası aynı listeyi okuyor, yeni bir özellik sayfası haritaya
+  // kendiliğinden giriyor. Yasal metinler ve giriş ekranı düşük öncelikle.
   return [
-    { path: '/', priority: 1 },
+    ...SITE_SAYFALARI.map(({ yol, oncelik }) => ({ path: yol, priority: oncelik })),
     { path: '/login', priority: 0.3 },
     { path: '/gizlilik', priority: 0.3 },
     { path: '/kosullar', priority: 0.3 },

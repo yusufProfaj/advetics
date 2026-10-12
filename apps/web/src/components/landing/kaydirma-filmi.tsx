@@ -340,9 +340,13 @@ export function KaydirmaFilmi({ children }: { children: ReactNode }) {
 
               Rakamlar gerçekçi büyüklükler ama bir müşterinin gerçek verisi
               değil. Yazmamak, ana sayfada bir performans VAADİ vermek olurdu.
+
+              ROAS'ın açıklaması da burada: sayaç etiketi bir terim ve sitenin
+              okuru reklamcılık bilmiyor (kullanıcı kararı, 2026-10-12).
             */}
             <p className="mt-3 text-xs text-ink-muted">
-              Örnek veriler — gerçek bir hesabın rakamları değildir.
+              {'Örnek veriler, gerçek bir hesabın rakamları değildir. ROAS: reklama ' +
+                'harcanan her 1 liranın kaç liralık satış getirdiği.'}
             </p>
           </div>
         </div>

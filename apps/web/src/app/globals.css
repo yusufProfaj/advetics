@@ -234,6 +234,48 @@
   }
 }
 
+/**
+ * ═══ TANITIM SİTESİ: YALNIZ KILAVUZUN DÖRT RENGİ ═══
+ *
+ * `(site)/layout.tsx` sayfayı `.tanitim` ile sarıyor ve belirteçler burada
+ * kılavuza sabitleniyor: beyaz, siyah, gri #302e2d, kırmızı #ff2400 ve
+ * yalnız bunların saydam tonları (TASARIM-DILI §1, "Nötr tonlar").
+ * Panelin karanlık teması mavi-gri (#13151c) ve uyarı renkleri taşıyor;
+ * tanıtım sitesi markanın vitrini, orada kılavuz dışı ton görünmemeli.
+ *
+ * `--brand-primary` de sabit: tanıtım sitesi beyaz etiketli değil, ADVETICS'in
+ * kendisi. Bir gün kök düzene ajans rengi enjekte edilirse vitrin onunla
+ * boyanmasın.
+ *
+ * İkincil metin grinin %78'i (beyazda ~6,5 kontrast). Kılavuz belgesindeki
+ * %60, küçük yazıda 4,5 eşiğinin ALTINDA kalıyor.
+ */
+.tanitim {
+  --brand-primary: #ff2400;
+  --surface: #ffffff;
+  --surface-muted: color-mix(in srgb, #302e2d 4%, #ffffff);
+  --surface-sunken: color-mix(in srgb, #302e2d 8%, #ffffff);
+  --border: color-mix(in srgb, #302e2d 14%, #ffffff);
+  --text: #302e2d;
+  --text-muted: color-mix(in srgb, #302e2d 78%, #ffffff);
+}
+
+/*
+ * Karanlıkta zemin SİYAH, ikinci zemin gri, metin beyaz. Kırmızı siyahta
+ * 5,5 kontrast veriyor, okunabilir tonuna (`--brand-legible`) gerek yok.
+ */
+@media (prefers-color-scheme: dark) {
+  .tanitim {
+    --surface: #000000;
+    --surface-muted: color-mix(in srgb, #302e2d 45%, #000000);
+    --surface-sunken: color-mix(in srgb, #302e2d 70%, #000000);
+    --border: #302e2d;
+    --text: #ffffff;
+    --text-muted: color-mix(in srgb, #ffffff 72%, #000000);
+    --brand-legible: #ff2400;
+  }
+}
+
 body {
   background: var(--surface-muted);
   color: var(--text);

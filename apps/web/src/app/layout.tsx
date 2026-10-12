@@ -54,24 +54,23 @@ export const metadata: Metadata = {
     template: '%s',
   },
   description:
-    'Meta (Facebook, Instagram) ve Google Ads kampanyalarınızı tek panelden yönetin: ' +
-    'birleşik raporlama, kural tabanlı otomasyon ve white-label raporlar.',
+    'Meta (Facebook, Instagram), Google Ads ve LinkedIn reklamlarınız tek panelde. ' +
+    'Ne yapılacağını söyler, onayınızla yapar.',
   applicationName: 'Advetics',
   openGraph: {
     type: 'website',
     siteName: 'Advetics',
     locale: 'tr_TR',
     url: ORIGIN,
-    title: 'Advetics — Meta ve Google Ads tek panelde',
+    title: 'Advetics | Meta, Google ve LinkedIn reklamlarınız tek panelde',
     description:
-      'Birleşik raporlama, kural tabanlı otomasyon ve white-label raporlar. ' +
-      'Meta ve Google Ads hesaplarınızı tek yerden yönetin.',
+      'Reklamcılık bilmeden reklam verin. Ne yapılacağını söyler, onayınızla yapar.',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Advetics — Meta ve Google Ads tek panelde',
+    title: 'Advetics | Meta, Google ve LinkedIn reklamlarınız tek panelde',
     description:
-      'Birleşik raporlama, kural tabanlı otomasyon ve white-label raporlar.',
+      'Reklamcılık bilmeden reklam verin. Ne yapılacağını söyler, onayınızla yapar.',
   },
   // Panel oturum gerektiriyor; kök varsayılan olarak indekslenebilir kalıyor
   // ama korumalı yollar robots.ts içinde Disallow edildi.

@@ -23,6 +23,17 @@ const PUBLIC_PATHS = [
   '/gizlilik',
   '/kosullar',
   '/veri-silme',
+  // Tanıtım sitesi (2026-10-12). Liste elle yazılı, `site-icerik.ts`ten
+  // okunmuyor: o dosya sitenin bütün metnini taşıyor ve middleware her
+  // istekte koşan Edge paketine girer. `site-icerik.spec.ts` iki listeyi
+  // karşılaştırıyor; yeni bir sayfa buraya yazılmazsa ziyaretçi /login'e
+  // atılıyor ve oturumu açık geliştirici bunu HİÇ görmüyor.
+  '/ozellikler',
+  '/cozumler',
+  '/entegrasyonlar',
+  '/fiyatlandirma',
+  '/guvenlik',
+  '/demo',
 ];
 
 /**
