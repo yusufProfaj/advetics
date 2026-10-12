@@ -26,8 +26,12 @@
  * - `autofill_message` dalında `message.text`in kişiye nerede göründüğü:
  *   belge `<GREETING_MESSAGE>` diyor; aynı cümle iki alana yazılıyor ki
  *   hangisi görünürse görünsün Türkçe olsun.
- * - SINIRLAR: WhatsApp için yazılmamış. Messenger sayfasının sınırları
- *   (mesaj ≤ 300, soru başlığı ≤ 80) DAR taraf olarak uygulanıyor.
+ * - SINIRLAR ÖLÇÜLMEDİ: Click-to-WhatsApp belgesi (v25.0, 2026-10-12'de
+ *   yeniden okundu) karşılama, hazır mesaj ve hızlı soru için HİÇBİR sınır
+ *   yazmıyor (örnekte üç soru var, üst sınır yok). Aşağıdaki 300 / 80 / 3
+ *   Messenger ve çoklu hedef sayfalarından (brief 06) DAR taraf olarak
+ *   alındı; WhatsApp'ın daha geniş ya da daha dar olup olmadığı canlıda
+ *   ölçülecek.
  *
  * BANNER SETİ (`asset_feed_spec`) YOLUNDA GÖNDERİLMİYOR: belge bu alanın
  * varlık akışındaki yerini hiç göstermiyor (yalnız iş ortağı akışının
@@ -44,6 +48,7 @@
 import { z } from 'zod';
 
 export const WHATSAPP_VARSAYILAN_MESAJ = 'Merhaba, reklamınızı gördüm, bilgi almak istiyorum.';
+// ÖLÇÜLMEDİ: Messenger sınırları (yukarıdaki not); WhatsApp belgesinde sınır yok.
 export const KARSILAMA_MESAJ_SINIRI = 300;
 export const HIZLI_SORU_SINIRI = 80;
 export const HIZLI_SORU_EN_COK = 3;

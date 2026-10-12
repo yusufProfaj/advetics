@@ -136,4 +136,27 @@ describe('N-21 okuma yüzeyi', () => {
     expect(sonuc).not.toBe('dogrulanamadi');
     expect(sonuc).not.toBe('fark_var');
   });
+
+  it('KRİTİK: reddedilen bilgi alanı ekranda SEBEBİYLE "okunamadı"; ana alanlar yine kıyaslanıyor', async () => {
+    const meta = new SahteMeta();
+    const eski = meta.oku.bind(meta);
+    const istekler: string[][] = [];
+    meta.oku = async (oid, alanlar) => {
+      istekler.push(alanlar);
+      if (alanlar.includes('advantage_state_info')) {
+        throw new MetaKesinHata('(#100) Tried accessing nonexisting field (advantage_state_info) on node type (Campaign)', 100);
+      }
+      return eski(oid, alanlar);
+    };
+    const id = await hazirla();
+    await new YayinMotoru(tx, meta, 'act_1', ACIK, async () => undefined).kur(id);
+    // Bilgi alanı YALNIZ kendi isteğinde; ana okuma onu hiç istemiyor.
+    expect(istekler.filter((a) => a.includes('advantage_state_info'))).toEqual([['advantage_state_info']]);
+    expect(istekler.some((a) => a.includes('daily_budget'))).toBe(true);
+    const [g] = await h.q<{ bilgiler: unknown; ham: Record<string, unknown> }>('SELECT bilgiler, ham FROM geri_okuma WHERE yayin_id = $1', [id]);
+    expect(geriOkumaNotlariniSec(g!.bilgiler).filter((n) => n.tur === 'bilgi').map((n) => n.metin)).toEqual([
+      'Advantage+ durumu okunamadı: (#100) Tried accessing nonexisting field (advantage_state_info) on node type (Campaign)',
+    ]);
+    expect(g!.ham.ek_okuma_hatalari).toBeDefined();
+  });
 });

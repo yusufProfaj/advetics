@@ -8,6 +8,7 @@ import {
   gecisIzinliMi,
   geriOkumaKarsilastir,
   okumaAlanlari,
+  ekOkumaAlanlari,
   type BeklenenYanki,
   type MetaGovdesi,
   type YayinDurumu,
@@ -444,6 +445,7 @@ export class YayinMotoru {
     // bir süre okunamaz gösterebiliyor: iki kez beklenip tekrar soruluyor,
     // yine düşerse Meta'nın mesajı `ham` içinde nesne adıyla saklanıyor.
     const hatalar: Record<string, string> = {};
+    const ekHatalar: Record<string, string> = {};
     for (const n of nesneler) {
       const alanlar = okumaAlanlari(yankilar, n.ad);
       for (const [deneme, ara] of OKUMA_BEKLEMELERI.entries()) {
@@ -457,6 +459,20 @@ export class YayinMotoru {
           hatalar[n.ad] = `${e instanceof Error ? e.message : String(e)} (deneme ${deneme + 1})`;
         }
       }
+      // YALNIZ BİLGİ alanları AYRI istekte (Ajan 4, Ö-1): ölçülmemiş bir alan
+      // ana okumada reddedilseydi bütün nesne "dönmedi" olur ve yayın
+      // "okunamadı"da kilitlenirdi. Bu istek TEK deneme: düşerse yalnız bilgi
+      // satırı sebebi yazar, ana okumanın sonucu değişmez. Ana okuma zaten
+      // düştüyse sorulmuyor (nesne yok, bilgi satırı "döndürmedi" der).
+      const ek = ekOkumaAlanlari(yankilar, n.ad);
+      const ana = okunan[n.ad];
+      if (ek.length && ana) {
+        try {
+          okunan[n.ad] = { ...ana, ...(await this.meta.oku(n.meta_id!, ek)) };
+        } catch (e) {
+          ekHatalar[n.ad] = e instanceof Error ? e.message : String(e);
+        }
+      }
     }
     // Zorunlu yasal uyarı TAZE okunuyor: Meta'nın metin varyasyonu açık
     // döndüyse uyarılı workspace'te yayın durmalı (SENTEZ S-42).
@@ -464,13 +480,13 @@ export class YayinMotoru {
       tx.$queryRaw<Array<{ yasal_uyari: string | null }>>(Prisma.sql`
         SELECT yasal_uyari FROM client_profiles WHERE client_id = ${y.client_id}::uuid`),
     );
-    const r = geriOkumaKarsilastir(yankilar, okunan, { yasalUyariVar: !!profil?.yasal_uyari?.trim(), simdi: new Date() });
+    const r = geriOkumaKarsilastir(yankilar, okunan, { yasalUyariVar: !!profil?.yasal_uyari?.trim(), simdi: new Date(), ekOkumaHatalari: ekHatalar });
     await this.tx((tx) =>
       tx.$queryRaw(Prisma.sql`
         INSERT INTO geri_okuma (yayin_id, org_id, client_id, sonuc, satirlar, bilgiler, ham, api_surumu)
         VALUES (${y.id}::uuid, ${y.org_id}::uuid, ${y.client_id}::uuid, ${r.sonuc},
                 ${JSON.stringify('satirlar' in r ? r.satirlar : [])}::jsonb, ${JSON.stringify(r.bilgiler)}::jsonb,
-                ${JSON.stringify(Object.keys(hatalar).length ? { ...okunan, okuma_hatalari: hatalar } : okunan)}::jsonb, ${y.api_surumu})
+                ${JSON.stringify({ ...okunan, ...(Object.keys(hatalar).length ? { okuma_hatalari: hatalar } : {}), ...(Object.keys(ekHatalar).length ? { ek_okuma_hatalari: ekHatalar } : {}) })}::jsonb, ${y.api_surumu})
         RETURNING id`),
     );
     return r.sonuc;

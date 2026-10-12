@@ -264,9 +264,28 @@ export function beklenenYankilar(govdeler: MetaGovdesi[]): BeklenenYanki[] {
   return sonuc;
 }
 
-/** Geri okumada istenecek alanlar: her nesne için yankıların üst düzey adları. */
+/**
+ * Geri okumada istenecek alanlar: her nesne için yankıların üst düzey adları.
+ *
+ * YALNIZ BİLGİ alanları (N-21) BURADA YOK — Ajan 4 kapısı (Ö-1). Graph
+ * tanımadığı ya da izin vermediği tek bir alanı `(#100) Tried accessing
+ * nonexisting field` ile reddedince İSTEĞİN TAMAMI düşüyor; ana listeye
+ * girmiş ölçülmemiş bir bilgi alanı kampanyanın bütçe, hedef ve kategori
+ * satırlarını "dönmedi" yapıp yayını "okunamadı"da kilitliyordu. Onlar ayrı,
+ * isteğe bağlı ikinci okumayla soruluyor (`ekOkumaAlanlari`).
+ */
 export function okumaAlanlari(yankilar: BeklenenYanki[], govde: string): string[] {
-  const set = new Set(yankilar.filter((y) => y.govde === govde).map((y) => y.alanYolu.split('.')[0]!));
+  const set = new Set(yankilar.filter((y) => y.govde === govde && y.karsilastirma !== 'yalniz_bilgi').map((y) => y.alanYolu.split('.')[0]!));
+  return [...set].sort();
+}
+
+/**
+ * İsteğe bağlı İKİNCİ okumanın alanları (yalnız bilgi). Bu istek düşerse
+ * yalnız bilgi satırı "okunamadı: sebep" olur; yayının durumu etkilenmez
+ * (`geriOkumaKarsilastir` `ekOkumaHatalari`).
+ */
+export function ekOkumaAlanlari(yankilar: BeklenenYanki[], govde: string): string[] {
+  const set = new Set(yankilar.filter((y) => y.govde === govde && y.karsilastirma === 'yalniz_bilgi').map((y) => y.alanYolu.split('.')[0]!));
   return [...set].sort();
 }
 
@@ -603,7 +622,12 @@ export function geriOkumaKarsilastir(
    * çalışır: gönderilen geçmişte mi, dönen kurulum anı mı (Ajan 4, BULGU-9).
    * Verilmezse N-09 hiç uygulanmaz — güvenli yön.
    */
-  secenek: { yasalUyariVar: boolean; simdi?: Date },
+  secenek: {
+    yasalUyariVar: boolean;
+    simdi?: Date;
+    /** Gövde adı → isteğe bağlı ikinci okumanın hata mesajı (`ekOkumaAlanlari`). */
+    ekOkumaHatalari?: Record<string, string>;
+  },
 ): GeriOkumaSonucu {
   const satirlar: FarkSatiri[] = [];
   const bilgiler: FarkSatiri[] = [];
@@ -623,8 +647,10 @@ export function geriOkumaKarsilastir(
     });
 
     if (y.karsilastirma === 'yalniz_bilgi') {
-      // Okuma düştüyse de (nesne yok) cümle söylüyor: "döndürmedi".
-      bilgiler.push(satir('bilgi', advantageDurumuCumlesi(donen)));
+      // İkinci okuma düştüyse SEBEBİYLE "okunamadı"; ana okuma düştüyse ya da
+      // alan gelmediyse "döndürmedi". Hiçbiri satır değil: yayın durmaz.
+      const hata = secenek.ekOkumaHatalari?.[y.govde];
+      bilgiler.push(satir('bilgi', hata ? `Advantage+ durumu okunamadı: ${hata}` : advantageDurumuCumlesi(donen)));
       continue;
     }
     if (y.karsilastirma === 'karsilama') {

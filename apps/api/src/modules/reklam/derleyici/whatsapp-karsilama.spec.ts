@@ -17,6 +17,7 @@ import {
   kararTablosu,
   niyetYerlesimKisiti,
   okumaAlanlari,
+  ekOkumaAlanlari,
   reklamSetiPlani,
   type DerlemeGirdisi,
   type GorselOrani,
@@ -283,11 +284,16 @@ describe('geri okuma: advantage_state_info bilgi satırı (N-21)', () => {
   it('KRİTİK: WHATSAPP ve FORM kampanyasında okunur; SITE ve TELEFON\'da okunmaz (dar kapsam)', () => {
     for (const g of [{}, { niyet: 'FORM' as const, formId: '123' }]) {
       const { yankilar } = kur(g);
-      expect(okumaAlanlari(yankilar, 'kampanya')).toContain('advantage_state_info');
+      // Ö-1: ANA okumada YOK (reddedilirse bütün kampanya okuması düşerdi),
+      // isteğe bağlı ikinci okumada var.
+      expect(okumaAlanlari(yankilar, 'kampanya')).not.toContain('advantage_state_info');
+      expect(ekOkumaAlanlari(yankilar, 'kampanya')).toEqual(['advantage_state_info']);
+      expect(okumaAlanlari(yankilar, 'kampanya')).toContain('daily_budget');
       expect(yankilar.find((x) => x.alanYolu === 'advantage_state_info')).toMatchObject({ karsilastirma: 'yalniz_bilgi', kabulEdilemez: false, nesne: 'kampanya' });
     }
     for (const g of [{ niyet: 'SITE' as const, hedefAdres: 'https://ege.com.tr' }, { niyet: 'TELEFON' as const, telefon: '+905321234567' }]) {
       expect(okumaAlanlari(kur(g).yankilar, 'kampanya')).not.toContain('advantage_state_info');
+      expect(ekOkumaAlanlari(kur(g).yankilar, 'kampanya')).toEqual([]);
     }
   });
 
@@ -312,6 +318,13 @@ describe('geri okuma: advantage_state_info bilgi satırı (N-21)', () => {
     const r = geriOkumaKarsilastir(yankilar, okunamadi, { yasalUyariVar: false });
     expect(('satirlar' in r ? r.satirlar : []).some((x) => x.alanYolu === 'advantage_state_info')).toBe(false);
     expect(r.bilgiler.find((x) => x.alanYolu === 'advantage_state_info')?.bilgi).toBe(advantageDurumuCumlesi(undefined));
+  });
+
+  it('KRİTİK: ikinci okuma düştüyse bilgi satırı SEBEBİYLE "okunamadı", yayın temiz', () => {
+    const { gv, yankilar } = kur({});
+    const r = geriOkumaKarsilastir(yankilar, ayna(gv), { yasalUyariVar: false, ekOkumaHatalari: { kampanya: '(#100) Tried accessing nonexisting field' } });
+    expect(r.sonuc).toBe('temiz');
+    expect(r.bilgiler.find((x) => x.tur === 'bilgi')?.bilgi).toBe('Advantage+ durumu okunamadı: (#100) Tried accessing nonexisting field');
   });
 
   it('ekrana giden notlar: yalnız uyarı ve bilgi, tekil', () => {
