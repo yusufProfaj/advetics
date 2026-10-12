@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import type { NavEntry } from '@/components/nav';
 import { NavSection, AyarlarSatiri } from '@/components/nav';
 import { kenarBolumleri } from '@/lib/nav-sections';
@@ -86,14 +87,26 @@ export function KenarIcerigi({
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand/15 to-brand-accent/20 text-[11px] font-semibold uppercase text-brand-strong ring-1 ring-brand/15">
             {veri.kullaniciAdi.slice(0, 2)}
           </span>
-          <span className="min-w-0 flex-1">
+          {/*
+            AD KARTI HESABIM'A AÇILIYOR (iki adımlı doğrulama orada). Ayrı bir
+            menü satırı değil: Hesabım herkesin kendi sayfası ve menü
+            yetkiye göre süzülen İŞ ekranlarının listesi. Google'ın sağ
+            üstteki profil düğmesinin karşılığı. `onGezinme` çekmeceyi
+            kapatıyor, yoksa sayfa menünün arkasında açılır.
+          */}
+          <Link
+            href="/hesabim"
+            onClick={onGezinme}
+            title="Hesabım ve güvenlik"
+            className="min-w-0 flex-1 rounded-md hover:text-brand-strong"
+          >
             <span className="block truncate text-[13px] font-medium leading-tight">
               {veri.kullaniciAdi}
             </span>
             <span className="block truncate text-[11px] leading-tight text-ink-muted">
-              {veri.rolEtiketi}
+              {veri.rolEtiketi} · Hesabım
             </span>
-          </span>
+          </Link>
           <LogoutButton />
         </div>
       </div>

@@ -211,6 +211,10 @@ model Organization {
   managerAccount      ManagerAccount? @relation("UstHesapSirketleri", fields: [managerAccountId], references: [id], onDelete: SetNull)
   /// Bu şirket bir üst hesabın AJANS şirketiyse o hesap — bkz. `ManagerAccount.ajansOrgId`.
   ajansOlduguUstHesap ManagerAccount? @relation("AjansSirketi")
+  /// İKİ ADIMLI DOĞRULAMA ŞİRKETTE ZORUNLU MU. Bakılan şirket kullanıcının
+  /// EV şirketi (`users.org_id`): zorunluluk girişte ve oturum yenilemede
+  /// uygulanıyor, ikisinde de seçili şirket henüz yok.
+  ikiAdimZorunlu      Boolean         @default(false) @map("iki_adim_zorunlu")
   createdAt           DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt           DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -266,9 +270,21 @@ model User {
   fullName     String  @map("full_name") @db.VarChar(120)
   avatarUrl    String? @map("avatar_url") @db.VarChar(1024)
   locale       String  @default("tr") @db.VarChar(10)
-  /// TOTP secret — AES-256-GCM ile şifreli. (MFA Modül 1.5'te aktifleşir.)
+  /// ═══ İKİ ADIMLI DOĞRULAMA (docs/guvenlik/2FA.md) ═══
+  ///
+  /// TOTP anahtarı — `CryptoService` (AES-256-GCM, sürümlü) ile şifreli.
+  /// `mfaEnabled = false` iken dolu olması "kurulum başlatıldı, kodla
+  /// onaylanmadı" demek; giriş yalnızca `mfaEnabled = true` iken kod ister.
   mfaSecretEnc Bytes?  @map("mfa_secret_enc")
   mfaEnabled   Boolean @default(false) @map("mfa_enabled")
+  /// Son kabul edilen TOTP adımı. Yalnızca BÜYÜK adım kabul: aynı kod iki kez geçmez.
+  mfaSonAdim   BigInt? @map("mfa_son_adim")
+  /// Kullanılmamış kurtarma kodlarının SHA-256 özetleri. Kullanılan kod diziden çıkar.
+  mfaKurtarmaKodlari String[] @default([]) @map("mfa_kurtarma_kodlari")
+  /// Art arda hatalı deneme. Başarıda sıfırlanır, kilitte SIFIRLANMAZ (kilit katlanıyor).
+  mfaBasarisizDeneme Int       @default(0) @map("mfa_basarisiz_deneme")
+  mfaKilitBitis      DateTime? @map("mfa_kilit_bitis") @db.Timestamptz(6)
+  mfaAcilis          DateTime? @map("mfa_acilis") @db.Timestamptz(6)
 
   /// ═══ PLATFORM SAHİBİ — ADVETICS'İ İŞLETEN TARAF ═══
   ///

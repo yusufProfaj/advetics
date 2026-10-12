@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { JwtService, type JwtSignOptions } from '@nestjs/jwt';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { IKI_ADIM_BEKLEME_DK } from '@advetics/shared';
 import { PrismaAdminService } from '../../prisma/prisma-admin.service';
 import { CONFIG, type AppConfig } from '../../config/configuration';
 
@@ -8,6 +9,29 @@ export interface AccessTokenPayload {
   sub: string; // userId
   org: string; // orgId
   typ: 'access';
+}
+
+/**
+ * ═══ İKİ ADIM ARA TOKEN'I ═══
+ *
+ * Parola doğru, ikinci adım bekleniyor. Bu token bir OTURUM DEĞİL: tek işi
+ * "bu kişi parolayı az önce doğru girdi" demek. `typ: 'mfa'` taşıyor ve
+ * `verifyAccessToken` yalnızca `typ: 'access'` kabul ettiği için hiçbir
+ * korumalı uç onu tanımıyor — erişim token'ıyla AYNI anahtarla imzalanması
+ * bu yüzden güvenli, ayırıcı imza değil TÜR. Tersi de kapalı:
+ * `verifyIkiAdimToken` erişim token'ını reddediyor (bir oturum, ikinci adımı
+ * atlamak için ara token yerine sunulamaz).
+ *
+ *   · `amac: 'dogrula'` — 2FA açık, kod girilecek.
+ *   · `amac: 'kurulum'` — şirket zorunlu tutuyor, kullanıcı 2FA'yı girişte kuracak.
+ */
+export interface IkiAdimTokenPayload {
+  sub: string;
+  org: string;
+  typ: 'mfa';
+  amac: 'dogrula' | 'kurulum';
+  /** "Beni hatırla" — oturum ikinci adımdan sonra açıldığı için taşınmak zorunda. */
+  hatirla: boolean;
 }
 
 export interface IssuedTokens {
@@ -81,6 +105,21 @@ export function yenidenKullanimToleransli(
 }
 
 /**
+ * Şirket 2FA'yı zorunlu tutuyor ve kullanıcı kurmamış mı.
+ *
+ * Alanlar OPSİYONEL okunuyor: eski çağıranlar (ve testlerdeki sahte
+ * satırlar) onları taşımıyor; eksik alan "zorunlu değil" sayılıyor. Ters
+ * yön (eksikse zorunlu say) bir select'i unutan her yolda bütün
+ * kullanıcıları dışarı atardı.
+ */
+export function ikiAdimZorunluIhlali(user: {
+  mfaEnabled?: boolean;
+  organization?: { ikiAdimZorunlu?: boolean } | null;
+}): boolean {
+  return user.organization?.ikiAdimZorunlu === true && user.mfaEnabled !== true;
+}
+
+/**
  * Token üretimi, doğrulaması ve rotasyonu.
  *
  * Tasarım:
@@ -129,6 +168,42 @@ export class TokenService {
       return payload;
     } catch {
       throw new UnauthorizedException('Oturum geçersiz veya süresi dolmuş');
+    }
+  }
+
+  /** Ara token'ı imzalar. Ömür `IKI_ADIM_BEKLEME_DK`; çerez ömrüyle aynı. */
+  async signIkiAdimToken(
+    userId: string,
+    orgId: string,
+    amac: IkiAdimTokenPayload['amac'],
+    hatirla: boolean,
+  ): Promise<string> {
+    const payload: IkiAdimTokenPayload = { sub: userId, org: orgId, typ: 'mfa', amac, hatirla };
+    return this.jwt.signAsync({ ...payload }, {
+      secret: this.config.jwt.accessSecret,
+      expiresIn: `${IKI_ADIM_BEKLEME_DK}m` as JwtSignOptions['expiresIn'],
+    });
+  }
+
+  /**
+   * Ara token'ı doğrular. `beklenenAmac` ŞART: kurulum için verilmiş bir
+   * token kod doğrulama ucuna (ya da tersi) sunulamamalı — kurulum ucu
+   * 2FA'sı açık bir hesapta anahtar üretmeye kalkardı.
+   */
+  async verifyIkiAdimToken(
+    token: string,
+    beklenenAmac: IkiAdimTokenPayload['amac'],
+  ): Promise<IkiAdimTokenPayload> {
+    try {
+      const p = await this.jwt.verifyAsync<IkiAdimTokenPayload>(token, {
+        secret: this.config.jwt.accessSecret,
+      });
+      if (p.typ !== 'mfa' || p.amac !== beklenenAmac) throw new Error('wrong token type');
+      return p;
+    } catch {
+      throw new UnauthorizedException(
+        'Doğrulama adımının süresi doldu. E-posta ve şifrenle yeniden giriş yap.',
+      );
     }
   }
 
@@ -211,7 +286,17 @@ export class TokenService {
 
     const existing = await this.db.refreshToken.findUnique({
       where: { tokenHash },
-      include: { user: { select: { id: true, orgId: true, status: true } } },
+      include: {
+        user: {
+          select: {
+            id: true,
+            orgId: true,
+            status: true,
+            mfaEnabled: true,
+            organization: { select: { ikiAdimZorunlu: true } },
+          },
+        },
+      },
     });
 
     if (!existing) {
@@ -226,6 +311,23 @@ export class TokenService {
     if (existing.user.status !== 'active') {
       await this.revokeAllForUser(existing.userId, 'user_disabled');
       throw new UnauthorizedException('Hesabınız devre dışı bırakılmış');
+    }
+    /*
+     * ŞİRKET 2FA'YI ZORUNLU YAPTIYSA, KURMAMIŞ KULLANICININ OTURUMU YENİLENMİYOR.
+     *
+     * Zorunluluk yalnızca girişte uygulansaydı, ayar açıldığı anda açık olan
+     * bütün oturumlar 30 gün daha 2FA'sız yaşardı: "beni hatırla" işaretli
+     * kullanıcı hiç giriş yapmadığı için zorunluluğu hiç görmezdi ve
+     * yönetici ayarın işlediğini sanırdı. Rotasyon en geç erişim token'ının
+     * ömründe (15 dk) bir kez geçiliyor; reddedilen kullanıcı girişe düşüyor
+     * ve giriş onu kuruluma alıyor. Aile `iki_adim_zorunlu` sebebiyle
+     * kapatılıyor; "olası hırsızlık" değil.
+     */
+    if (ikiAdimZorunluIhlali(existing.user)) {
+      await this.revokeFamily(existing.familyId, 'iki_adim_zorunlu');
+      throw new UnauthorizedException(
+        'Şirketin iki adımlı doğrulamayı zorunlu yaptı. Yeniden giriş yapıp kurulumu tamamla.',
+      );
     }
 
     /*
@@ -356,6 +458,29 @@ export class TokenService {
   async revokeFamily(familyId: string, reason: string): Promise<void> {
     await this.db.refreshToken.updateMany({
       where: { familyId, revokedAt: null },
+      data: { revokedAt: new Date(), revokedReason: reason },
+    });
+  }
+
+  /**
+   * Bu tarayıcının oturumu DIŞINDAKİ bütün oturumları kapatır.
+   *
+   * 2FA açılınca kullanılıyor: parolası çalınmış bir hesapta saldırganın
+   * açık oturumu, 2FA açıldıktan sonra da yaşamaya devam ederdi — kullanıcı
+   * korunduğunu sanırdı. Kendi oturumu AİLEYLE korunuyor (çerezdeki token
+   * bir sonraki rotasyonda aynı aileden yenisini alıyor); aile bulunamazsa
+   * (çerez yok) hiçbir şey İSTİSNA tutulmuyor ve hepsi kapanıyor — güvenli yön.
+   */
+  async revokeOthersForUser(userId: string, presentedToken: string | undefined, reason: string): Promise<void> {
+    const kendi = presentedToken
+      ? await this.db.refreshToken.findUnique({
+          where: { tokenHash: this.hash(presentedToken) },
+          select: { familyId: true, userId: true },
+        })
+      : null;
+    const haric = kendi && kendi.userId === userId ? kendi.familyId : null;
+    await this.db.refreshToken.updateMany({
+      where: { userId, revokedAt: null, ...(haric ? { NOT: { familyId: haric } } : {}) },
       data: { revokedAt: new Date(), revokedReason: reason },
     });
   }

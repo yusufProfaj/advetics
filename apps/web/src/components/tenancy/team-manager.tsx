@@ -64,6 +64,12 @@ export interface MemberRow {
   fullName: string | null;
   status: string;
   lastLoginAt: string | null;
+  /**
+   * İki adımlı doğrulama açık mı. Opsiyonel: bu tip başka uçlardan da
+   * dolduruluyor ve alanı taşımayan bir yanıt "kapalı" DEMEK DEĞİL —
+   * ekran `undefined`da rozet basmıyor.
+   */
+  mfaEnabled?: boolean;
   memberships: MembershipRow[];
   /**
    * AKTİF üst hesaptaki üyelik — varsa. Üst hesaba eklenen Yönetici'nin bu

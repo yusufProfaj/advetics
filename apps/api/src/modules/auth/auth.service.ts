@@ -28,6 +28,7 @@ import { ilkSirketAc } from '../manager-account/ilk-sirket';
 import { CONFIG, type AppConfig } from '../../config/configuration';
 import { mailGonder } from '../email/mail-gonderici';
 import { sifirlamaMailiOlustur } from './sifre-sifirlama-maili';
+import { IkiAdimService } from './iki-adim/iki-adim.service';
 
 /**
  * Kullanıcı bulunamadığında da gerçek bir doğrulama maliyeti ödenir ki cevap
@@ -54,6 +55,15 @@ export interface AuthResult {
   session: SessionResponse;
 }
 
+/**
+ * Parola doğru, oturum HENÜZ yok: ikinci adım bekleniyor. Denetleyici ara
+ * token'ı httpOnly çereze yazıp panele yalnızca `amac`ı döndürüyor.
+ */
+export interface IkiAdimBekleniyor {
+  ikiAdim: 'dogrula' | 'kurulum';
+  araToken: string;
+}
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -65,6 +75,7 @@ export class AuthService {
     private readonly tenantContext: TenantContextService,
     private readonly audit: AuditService,
     @Inject(CONFIG) private readonly config: AppConfig,
+    private readonly ikiAdim: IkiAdimService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -132,13 +143,19 @@ export class AuthService {
   // Giriş
   // ---------------------------------------------------------------------------
 
-  async login(input: LoginInput, meta: RequestMeta): Promise<AuthResult> {
+  async login(input: LoginInput, meta: RequestMeta): Promise<AuthResult | IkiAdimBekleniyor> {
     // E-posta org başına tekildir; aynı adres birden fazla organizasyonda
     // bulunabilir. Sessizce birini seçmek, kullanıcıyı yanlış hesaba sokar —
     // bu yüzden belirsizliği açıkça bildiriyoruz.
     const candidates = await this.admin.user.findMany({
       where: { email: input.email, status: 'active' },
-      select: { id: true, orgId: true, passwordHash: true },
+      select: {
+        id: true,
+        orgId: true,
+        passwordHash: true,
+        mfaEnabled: true,
+        organization: { select: { ikiAdimZorunlu: true } },
+      },
       take: 5,
     });
 
@@ -164,7 +181,82 @@ export class AuthService {
       throw new UnauthorizedException('E-posta veya şifre hatalı');
     }
 
+    /*
+     * ═══ İKİNCİ ADIM — OTURUM BURADA AÇILMIYOR ═══
+     *
+     * Parola doğru ama 2FA açıksa (ya da şirket zorunlu tutup kullanıcı
+     * kurmamışsa) refresh token ÜRETİLMİYOR, `lastLoginAt` yazılmıyor,
+     * `auth.login` denetim kaydı düşmüyor: bunların hepsi oturumla birlikte
+     * ikinci adımın sonunda (`completeLogin`). Ara token yalnızca "parola
+     * doğruydu" diyor ve hiçbir korumalı uca geçmiyor.
+     *
+     * Parola yanlışken bu dala HİÇ girilmiyor: "bu hesapta 2FA açık mı"
+     * bilgisi parolayı bilmeyene sızmamalı.
+     */
+    if (user.mfaEnabled || user.organization.ikiAdimZorunlu) {
+      const amac = user.mfaEnabled ? 'dogrula' : 'kurulum';
+      return {
+        ikiAdim: amac,
+        araToken: await this.tokens.signIkiAdimToken(user.id, user.orgId, amac, input.rememberMe),
+      };
+    }
+
     return this.completeLogin(user.id, user.orgId, meta, input.rememberMe);
+  }
+
+  /**
+   * Ara token'ın sahibini yeniden okur. Token beş dakika yaşıyor ve o arada
+   * hesap devre dışı bırakılmış olabilir; imza geçerli diye oturum açmak,
+   * kapatılmış bir hesaba kapı bırakırdı.
+   */
+  private async araTokenSahibi(araToken: string, amac: 'dogrula' | 'kurulum') {
+    const p = await this.tokens.verifyIkiAdimToken(araToken, amac);
+    const user = await this.admin.user.findUnique({
+      where: { id: p.sub },
+      select: { id: true, orgId: true, status: true },
+    });
+    if (!user || user.status !== 'active') {
+      throw new UnauthorizedException('Hesap kullanılamıyor. Yöneticine başvur.');
+    }
+    return { user, hatirla: p.hatirla };
+  }
+
+  /** Girişin ikinci adımı: doğrulayıcı kodu ya da kurtarma kodu. */
+  async ikiAdimlaGiris(
+    araToken: string,
+    kod: string,
+    meta: RequestMeta,
+  ): Promise<AuthResult & { kurtarmaKoduKullanildi: boolean; kalanKurtarmaKodu: number }> {
+    const { user, hatirla } = await this.araTokenSahibi(araToken, 'dogrula');
+    const sonuc = await this.ikiAdim.kodDogrula(user.id, kod);
+    const giris = await this.completeLogin(user.id, user.orgId, meta, hatirla);
+    return {
+      ...giris,
+      kurtarmaKoduKullanildi: sonuc.tur === 'kurtarma',
+      kalanKurtarmaKodu: sonuc.kalanKurtarma,
+    };
+  }
+
+  /** Şirket zorunlu tutuyor, kullanıcı girişte kuruyor: QR ve anahtar. */
+  async girisKurulumBaslat(araToken: string) {
+    const { user } = await this.araTokenSahibi(araToken, 'kurulum');
+    return this.ikiAdim.kurulumBaslat(user.id);
+  }
+
+  /** Girişte kurulumu onaylar ve OTURUMU açar. Kurtarma kodları yalnızca bu yanıtta. */
+  async girisKurulumOnayla(
+    araToken: string,
+    kod: string,
+    meta: RequestMeta,
+  ): Promise<AuthResult & { kurtarmaKodlari: string[] }> {
+    const { user, hatirla } = await this.araTokenSahibi(araToken, 'kurulum');
+    const kurtarmaKodlari = await this.ikiAdim.kurulumOnayla(user.id, kod);
+    // Kurulum anında başka oturum yok sayılamaz: zorunluluk açıldığında
+    // rotasyon onları zaten kapattı, ama ara dönemde açılmış olabilecek
+    // her şeyi kapatmak ucuz ve güvenli yön.
+    await this.tokens.revokeAllForUser(user.id, 'iki_adim_acildi');
+    const giris = await this.completeLogin(user.id, user.orgId, meta, hatirla);
+    return { ...giris, kurtarmaKodlari };
   }
 
   private async completeLogin(

@@ -1,5 +1,6 @@
 import type { CookieOptions, Response } from 'express';
 import type { AppConfig } from '../../config/configuration';
+import { IKI_ADIM_BEKLEME_DK } from '@advetics/shared';
 import { parseTtl } from './token.service';
 
 export const ACCESS_COOKIE = 'adv_at';
@@ -31,6 +32,29 @@ export const ACTIVE_MANAGER_COOKIE = 'adv_mgr';
  * isteğinde tarayıcı uzun ömürlü token'ı taşımaz.
  */
 export const REFRESH_COOKIE_PATH = '/api/auth';
+
+/**
+ * İKİ ADIM ARA ÇEREZİ — parola doğru, kod bekleniyor.
+ *
+ * httpOnly ve yalnızca `/api/auth` altında gönderiliyor: panelin betiği onu
+ * okuyamıyor ve normal API isteklerine eşlik etmiyor. Bekçi (`JwtAuthGuard`)
+ * bu çerezi HİÇ okumuyor; okusaydı bile içindeki token `typ: 'mfa'` taşıyor
+ * ve erişim token'ı yerine geçmiyor. Gövdede dönmek yerine çerez: XSS ile
+ * ara token'ı çalan biri kodu da bilmek zorunda, ama çalamaması daha iyi.
+ */
+export const IKI_ADIM_COOKIE = 'adv_mfa';
+
+export function setIkiAdimCookie(res: Response, config: AppConfig, token: string): void {
+  res.cookie(IKI_ADIM_COOKIE, token, {
+    ...baseOptions(config),
+    path: REFRESH_COOKIE_PATH,
+    maxAge: IKI_ADIM_BEKLEME_DK * 60_000,
+  });
+}
+
+export function clearIkiAdimCookie(res: Response, config: AppConfig): void {
+  res.clearCookie(IKI_ADIM_COOKIE, { ...baseOptions(config), path: REFRESH_COOKIE_PATH });
+}
 
 function baseOptions(config: AppConfig): CookieOptions {
   return {
@@ -145,6 +169,7 @@ export function clearAuthCookies(res: Response, config: AppConfig): void {
   const base = baseOptions(config);
   res.clearCookie(ACCESS_COOKIE, { ...base, path: '/' });
   res.clearCookie(REFRESH_COOKIE, { ...base, path: REFRESH_COOKIE_PATH });
+  res.clearCookie(IKI_ADIM_COOKIE, { ...base, path: REFRESH_COOKIE_PATH });
   res.clearCookie(ACTIVE_CLIENT_COOKIE, { ...base, httpOnly: false, path: '/' });
   /*
    * ŞİRKET SEÇİMİ DE SİLİNİYOR. Kalsaydı, aynı tarayıcıdan giriş yapan

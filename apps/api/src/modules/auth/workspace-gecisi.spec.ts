@@ -9,6 +9,7 @@ import type { AuditService } from '../audit/audit.service';
 import type { TenantContextService } from './tenant-context.service';
 import type { TokenService } from './token.service';
 import { AuthService } from './auth.service';
+import type { IkiAdimService } from './iki-adim/iki-adim.service';
 
 /**
  * ═══ BAŞKA ŞİRKETİN WORKSPACE'İNE GEÇİŞ ═══
@@ -110,6 +111,7 @@ function servis(): AuthService {
     {} as TenantContextService,
     {} as AuditService,
     {} as AppConfig,
+    {} as IkiAdimService,
   );
 }
 

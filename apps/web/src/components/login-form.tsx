@@ -3,9 +3,10 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { loginSchema } from '@advetics/shared';
+import { ikiAdimBekleniyor, loginSchema, type GirisYaniti } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { Alan } from '@/components/auth/alan';
+import { IkiAdimGiris } from '@/components/auth/iki-adim-giris';
 
 export function LoginForm() {
   const router = useRouter();
@@ -24,6 +25,13 @@ export function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [pending, setPending] = useState(false);
+  /*
+   * İKİNCİ ADIM. Parola doğru ama oturum açılmadı: sunucu yalnızca ara
+   * çerez yazdı ve hangi adımın beklendiğini söyledi. Bu yanıtı oturum
+   * sanıp panele yönlendirmek, kullanıcıyı middleware'in /login'e geri
+   * attığı bir döngüye sokardı (erişim çerezi yok).
+   */
+  const [ikiAdim, setIkiAdim] = useState<'dogrula' | 'kurulum' | null>(null);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -44,10 +52,14 @@ export function LoginForm() {
 
     setPending(true);
     try {
-      await apiFetch('/auth/login', {
+      const yanit = await apiFetch<GirisYaniti>('/auth/login', {
         method: 'POST',
         body: JSON.stringify(parsed.data),
       });
+      if (ikiAdimBekleniyor(yanit)) {
+        setIkiAdim(yanit.ikiAdim);
+        return;
+      }
       // Cookie'ler API tarafından set edildi; sunucu tarafı oturumu görsün diye
       // tam yenileme yapıyoruz.
       router.replace(nextPath);
@@ -64,6 +76,19 @@ export function LoginForm() {
     } finally {
       setPending(false);
     }
+  }
+
+  if (ikiAdim) {
+    return (
+      <IkiAdimGiris
+        amac={ikiAdim}
+        sonraki={nextPath}
+        onGeri={() => {
+          setIkiAdim(null);
+          setPassword('');
+        }}
+      />
+    );
   }
 
   return (

@@ -365,6 +365,8 @@ function KisiDetayi({
           )}
         </div>
 
+        <IkiAdimSatiri kisi={kisi} kendisi={kendisi} canManage={canManage} />
+
         {/* YETKİSİZ HESAP SESSİZ KALMIYOR: giriş yapabiliyor ama panelde
             hiçbir veri göremiyor ve sebebi yalnızca burada yazılı. */}
         {/*
@@ -1085,6 +1087,79 @@ function DanismanAtaModal({
  * olabiliyor. Rolü kullanıcıya bağlamak o kuralı sessizce bozardı; yetki
  * workspace kartındaki seçicide kalıyor.
  */
+/**
+ * Kişinin iki adımlı doğrulama durumu ve yöneticinin SIFIRLAMASI.
+ *
+ * Sıfırlama, telefonunu kaybetmiş ve kurtarma kodu kalmamış kişi için:
+ * sonraki girişte yalnızca şifre sorulur (şirket zorunlu tutuyorsa yeniden
+ * kurar). Kendi hesabında düğme YOK: kendi 2FA'nı Hesabım'dan, kodla
+ * kapatırsın; sunucu da reddediyor.
+ *
+ * `mfaEnabled` gelmediyse (eski yanıt) satır HİÇ çizilmiyor: bilinmeyeni
+ * "Kapalı" diye göstermek, açık bir korumayı yok sanıp yöneticiyi boşuna
+ * kişinin peşine düşürürdü.
+ */
+function IkiAdimSatiri({
+  kisi,
+  kendisi,
+  canManage,
+}: {
+  kisi: MemberRow;
+  kendisi: boolean;
+  canManage: boolean;
+}) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [hata, setHata] = useState<string | null>(null);
+  if (kisi.mfaEnabled === undefined) return null;
+
+  async function sifirla(): Promise<void> {
+    if (
+      !window.confirm(
+        `${kisi.fullName ?? kisi.email} için iki adımlı doğrulama sıfırlansın mı? Bir sonraki girişte yalnızca şifresi sorulur.`,
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    setHata(null);
+    try {
+      await apiFetch(`/members/${kisi.id}/2fa/sifirla`, { method: 'POST' });
+      router.refresh();
+    } catch (e) {
+      setHata(e instanceof ApiRequestError ? e.message : 'Sıfırlanamadı.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+      <span className="text-ink-muted">İki adımlı doğrulama:</span>
+      <span
+        className={`rounded-full border px-2 py-0.5 font-medium ${
+          kisi.mfaEnabled
+            ? 'border-ok/40 bg-ok-soft text-ok-strong'
+            : 'border-line bg-surface-muted text-ink-muted'
+        }`}
+      >
+        {kisi.mfaEnabled ? 'Açık' : 'Kapalı'}
+      </span>
+      {canManage && !kendisi && kisi.mfaEnabled && (
+        <button
+          type="button"
+          onClick={() => void sifirla()}
+          disabled={busy}
+          className="font-medium text-danger hover:underline disabled:opacity-40"
+        >
+          {busy ? 'Sıfırlanıyor…' : 'Sıfırla'}
+        </button>
+      )}
+      {hata && <span className="text-danger">{hata}</span>}
+    </div>
+  );
+}
+
 function UyeDuzenleModal({ member, onKapat }: { member: MemberRow; onKapat: () => void }) {
   const router = useRouter();
   const [ad, setAd] = useState(member.fullName ?? '');
