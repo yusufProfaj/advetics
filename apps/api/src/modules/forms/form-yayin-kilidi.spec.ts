@@ -4,6 +4,7 @@ import { formGeriOkumaDenetimi } from '@advetics/shared';
 import { createHarness, seedTenant, IDS, type Harness } from '../../../test/pglite-harness';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { FormsService, GERI_OKUMA_BEKLIYOR } from './forms.service';
+import { PlatformApiError } from '../connections/provider.types';
 import { FormPublisherService } from './form-publisher.service';
 import { FORM_YAYIN_BELIRSIZ, publishBlockers } from './form-versioning';
 import { kutuphaneFormuGovdesi } from './form-govdesi';
@@ -132,7 +133,9 @@ describe('kimlik HEMEN ve AYRI yazılıyor', () => {
   it('Meta form AÇMADIYSA satır failed ve yeniden yayınlanabilir (tek doğru failed)', async () => {
     const f = await forms.create(CTX, GIRDI);
     const { svc, prov } = kur(async () => yanki(f));
-    prov.createLeadForm.mockRejectedValueOnce(new Error('(#200) izin yok'));
+    // Meta'nın AÇIK reddi: sınıflanmış, `transient` değil. Sınıflanmamış
+    // hata belirsiz sayılıyor (form-yarim-yayin.spec.ts).
+    prov.createLeadForm.mockRejectedValueOnce(new PlatformApiError('meta', 'permission_denied', '(#200) izin yok'));
     await expect(svc.publish(CTX, f.id)).rejects.toThrow(/izin yok/);
     expect((await forms.get(CTX, f.id)).status).toBe('failed');
     await svc.publish(CTX, f.id);

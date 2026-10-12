@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { LeadFormRecord, TenantContext } from '@advetics/shared';
+import { FORM_YAYIN_BELIRSIZ_NOTU } from '@advetics/shared';
 import { FORM_GERI_OKUMA_ALANLARI, FORM_GERI_OKUMA_TEMEL_ALANLARI, formGeriOkumaDenetimi, formGeriOkumaUyarisi } from '@advetics/shared';
 import { alanReddiMi } from '../reklam/rehber/platform-okuma';
 import { PlatformApiError } from '../connections/provider.types';
@@ -120,15 +121,32 @@ export class FormPublisherService {
       throw new BadRequestException(`Yayın başlatılamadı; Meta'ya istek gitmedi, yeniden deneyebilirsin. (${m})`);
     }
 
-    // 1) META. Yalnız BU adımın hatası satırı `failed` yapar: form açılmadı.
+    /*
+     * 1) META. Hata İKİYE ayrılıyor:
+     * - Meta isteği AÇIKÇA reddetti (`PlatformApiError`, `transient` dışı:
+     *   doğrulama, izin, token, kota): form açılmadı → `failed`, yeniden
+     *   denenebilir.
+     * - Zaman aşımı, ağ kopması, 5xx (`transient`) ya da sınıflanmamış hata:
+     *   istek Meta'ya ULAŞMIŞ ve form açılmış olabilir → `uncertain`.
+     *   Bunu `failed` yapmak yeniden yayına, yani silinemeyen İKİNCİ forma
+     *   kapı açar ("Kayıt yazılamazsa satır failed DEĞİL"). Sınıflanmamış
+     *   hata da belirsiz: `fetch failed` bir ağ hatası ve isteğin gidip
+     *   gitmediğini söylemiyor.
+     */
     let externalId: string;
     try {
       externalId = await provider.createLeadForm(fetchCtx, { pageExternalId: auth.pageExternalId, pageAccessToken: auth.pageAccessToken, alanlar });
     } catch (err) {
       const message = err instanceof PlatformApiError ? `${err.kind}: ${err.message}` : err instanceof Error ? err.message : String(err);
-      await this.forms.markFailed(ctx, formId, message);
-      this.logger.error(`Form yayınlanamadı (${formId}): ${message}`);
-      throw new BadRequestException(message);
+      const kesinRet = err instanceof PlatformApiError && err.kind !== 'transient';
+      if (kesinRet) {
+        await this.forms.markFailed(ctx, formId, message);
+        this.logger.error(`Form yayınlanamadı (${formId}): ${message}`);
+        throw new BadRequestException(message);
+      }
+      await this.forms.markBelirsiz(ctx, formId, message);
+      this.logger.error(`Form yayını belirsiz (${formId}), Meta'da açılmış olabilir: ${message}`);
+      throw new BadRequestException(`${FORM_YAYIN_BELIRSIZ_NOTU} (${message})`);
     }
 
     /*
