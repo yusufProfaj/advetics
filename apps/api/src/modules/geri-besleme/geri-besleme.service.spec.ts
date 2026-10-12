@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
-import { geriBeslemeAyarSchema, geriBeslemeOlayListeSchema, type TenantContext } from '@advetics/shared';
+import { GERI_BESLEME_OLAY_DURUMLARI, geriBeslemeAyarSchema, geriBeslemeOlayListeSchema, type TenantContext } from '@advetics/shared';
 import { createHarness, IDS, seedTenant, type Harness } from '../../../test/pglite-harness';
 import { ayarAc, lead, olay, olaylar, PIKSEL } from '../../../test/geri-besleme-tohum';
 import type { PrismaService } from '../../prisma/prisma.service';
@@ -137,7 +137,7 @@ describe('ayar okuma', () => {
     expect(r).toMatchObject({ etkin: false, durum: 'kapali', secenekler: [], secenekNotu: 'Seçenekler bu istekte okunmadı.' });
     expect(r.neden.length).toBeGreaterThan(0);
     expect(r.uygunlukEksikleri).toContain('az_lead');
-    expect(Object.keys(r.sayilar)).toHaveLength(8);
+    expect(Object.keys(r.sayilar)).toHaveLength(GERI_BESLEME_OLAY_DURUMLARI.length);
   });
 
   it('seçenekler: hazırlığın pikseli varsayılan; okunamazsa liste boş değil ve not Meta’nın cümlesi', async () => {

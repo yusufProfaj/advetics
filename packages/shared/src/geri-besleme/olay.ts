@@ -23,6 +23,16 @@ import { META_ASAMA_OLAY_ADI, type GeriBeslemeAsamasi } from './asama';
 export const GERI_BESLEME_OLAY_DURUMLARI = [
   'bekliyor',
   'basarisiz',
+  /*
+   * SAHİPLENİLDİ, İSTEK YOLDA (Ajan 4 Ö-1). Gönderim işi satırı göndermeden
+   * ÖNCE bu duruma alıyor: iki koşu (stalled iş, ikinci slot) aynı satırı
+   * seçemesin ve aynı event_id Meta'ya iki kez gitmesin. Platformun cevabı
+   * yazılamazsa satır BURADA KALIR, gönderilebilir duruma DÖNMEZ: olay Meta'ya
+   * ulaşmış olabilir ve tekrar göndermek M-6 belirsizliğine yaslanmak olurdu
+   * (CLAUDE.md "kayıt yazılamazsa satır failed DEĞİL"). Yaşlanan satır
+   * "sonucu bilinmiyor" diye işaretlenir, yeniden gönderilmez.
+   */
+  'gonderiliyor',
   'iletildi',
   'eslesmedi',
   'reddedildi',
@@ -55,6 +65,7 @@ export const GERI_BESLEME_SORUNLU_DURUMLAR: readonly GeriBeslemeOlayDurumu[] = [
 export const GERI_BESLEME_OLAY_DURUM_ADI: Record<GeriBeslemeOlayDurumu, string> = {
   bekliyor: 'Gönderilecek',
   basarisiz: 'Tekrar denenecek',
+  gonderiliyor: 'Gönderiliyor',
   iletildi: 'İletildi',
   eslesmedi: 'İletildi, eşleşmedi',
   reddedildi: 'Platform reddetti',
@@ -107,18 +118,21 @@ export function geriBeslemeGecisi(
   deneme = 0,
 ): GeriBeslemeOlayDurumu | null {
   const gonderilebilir = durum === 'bekliyor' || durum === 'basarisiz';
+  // Platform sonucu SAHİPLENİLMİŞ satıra da yazılır (gönderim yolu bu);
+  // geri alma ise yazılamaz: istek yolda, olay Meta'ya gitmiş olabilir.
+  const sonucYazilabilir = gonderilebilir || durum === 'gonderiliyor';
   switch (olay) {
     case 'kabul':
-      return gonderilebilir ? 'iletildi' : null;
+      return sonucYazilabilir ? 'iletildi' : null;
     case 'eslesmedi':
-      return gonderilebilir ? 'eslesmedi' : null;
+      return sonucYazilabilir ? 'eslesmedi' : null;
     case 'gecici_hata':
-      if (!gonderilebilir) return null;
+      if (!sonucYazilabilir) return null;
       return deneme >= GERI_BESLEME_EN_FAZLA_DENEME ? 'vazgecildi' : 'basarisiz';
     case 'olay_hatasi':
-      return gonderilebilir ? 'reddedildi' : null;
+      return sonucYazilabilir ? 'reddedildi' : null;
     case 'sure_doldu':
-      return gonderilebilir ? 'suresi_doldu' : null;
+      return sonucYazilabilir ? 'suresi_doldu' : null;
     case 'geri_alindi':
       return gonderilebilir ? 'iptal' : null;
     case 'yeniden_istendi':

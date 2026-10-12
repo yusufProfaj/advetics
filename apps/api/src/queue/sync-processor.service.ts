@@ -1223,6 +1223,8 @@ export class SyncProcessorService {
    * notta.
    */
   private async geriBeslemeSupurmesi(): Promise<{ rows: number; note: string }> {
+    // Sonucu bilinmeyen (yaşlı `gonderiliyor`) satırlar işaretleniyor, yeniden GÖNDERİLMİYOR (Ö-1).
+    const bilinmeyen = await this.geriBesleme.yasliSahiplenmeleriIsaretle();
     const musteriler = await this.geriBesleme.bekleyenWorkspaceler();
     let acilan = 0;
     let atlanan = 0;
@@ -1233,7 +1235,7 @@ export class SyncProcessorService {
     }
     return {
       rows: acilan,
-      note: `geri besleme: ${musteriler.length} workspace’te gönderilecek sonuç var · ${acilan} iş açıldı · ${atlanan} zaten kuyrukta`,
+      note: `geri besleme: ${musteriler.length} workspace’te gönderilecek sonuç var · ${acilan} iş açıldı · ${atlanan} zaten kuyrukta${bilinmeyen > 0 ? ` · ${bilinmeyen} gönderimin sonucu bilinmiyor (yeniden gönderilmedi)` : ''}`,
     };
   }
 

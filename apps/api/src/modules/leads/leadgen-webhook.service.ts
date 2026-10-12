@@ -1,3 +1,4 @@
+import { LEAD_KIMLIGI_SAYI } from '../geri-besleme/geri-besleme-uyari';
 import { Inject, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { CONFIG, type AppConfig } from '../../config/configuration';
@@ -168,6 +169,38 @@ export class LeadgenWebhookService {
               `kayıt ${v.leadgen_id} yazılamadı. Sayfayı Platform Bağlantıları ` +
               `ekranından bir workspace’e ata; ardından form mutabakatı geçmişi toplar.`,
           );
+          skipped++;
+          continue;
+        }
+
+        /*
+         * ═══ KİMLİK DİZE DEĞİLSE YAZILMAZ (Ajan 4 N-5) ═══
+         *
+         * Meta `leadgen_id`i dize gönderiyor ve tip de öyle diyor; ama tip
+         * çalışma anında hiçbir şeyi garanti etmiyor. SAYI geldiyse 17 haneli
+         * bir kimlik JSON çözümlemesinde 2^53'ü aşıp ÇOKTAN bozulmuştur
+         * (12345678901234567 → 12345678901234568) ve onunla kayıt çekmek ya
+         * yanlış kişiyi getirir ya da Meta'ya yanlış kimlikle geri bildirim
+         * gönderir; hata vermeden. Kayıt yazılmıyor, teşhis satırı bırakılıyor
+         * (uyarı oradan, `leadKimligiUyariSatirlari`) ve kaydı form
+         * mutabakatı Graph'tan doğru kimlikle çekecek.
+         */
+        if (typeof v.leadgen_id !== 'string') {
+          this.logger.error(
+            `Leadgen bildiriminde kimlik DİZE DEĞİL (${typeof v.leadgen_id}: ${String(v.leadgen_id)}), ` +
+              `sayfa ${pageId}: bozulmuş olabilir, kayıt yazılmadı; mutabakat taraması çekecek.`,
+          );
+          await this.db.syncJob.create({
+            data: {
+              clientId: profile.clientId,
+              socialProfileId: profile.id,
+              jobType: 'lead_fetch',
+              status: 'failed',
+              finishedAt: new Date(),
+              errorCode: LEAD_KIMLIGI_SAYI,
+              errorMessage: `Webhook lead kimliği sayı olarak geldi (${String(v.leadgen_id).slice(0, 40)}); yazılmadı, mutabakat çekecek.`,
+            },
+          });
           skipped++;
           continue;
         }

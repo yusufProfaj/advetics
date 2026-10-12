@@ -38,6 +38,14 @@ export interface Yurutucu {
 /** v1 yalnız Meta (MIMARI Ç-2). Sabit tek yerde: sorgulara dize olarak gidiyor. */
 export const GB_PLATFORM = 'meta' as const;
 
+/**
+ * Sonucu bilinmeyen gönderimin hata kodu (Ajan 4 Ö-1): satır `gonderiliyor`da
+ * yaşlandı, istek gitti ama cevabı yazılamadı. Gönderim işi işaretliyor;
+ * rozet ve uyarı bunu okuyor. Burada, çünkü okuma tarafı gönderim servisini
+ * (kota, kuyruk bağımlılıkları) içe aktarmamalı.
+ */
+export const SONUC_BILINMIYOR = 'sonuc_bilinmiyor';
+
 /** Bir yolun ne yaptığının sayımı; çağıran cevaba ve notlara taşıyor. */
 export interface AsamaSayaci {
   olusturulan: number;

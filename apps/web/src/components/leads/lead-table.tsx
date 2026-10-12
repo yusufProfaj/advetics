@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import {
   LEAD_STATUSES,
   LEAD_STATUS_META,
@@ -12,7 +12,15 @@ import {
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { formatRelative, formatTarih } from '@/lib/format';
-import { DURUM_KISA_ADI, KALITE_SECENEKLERI, asamaSatirlari, geriAlmaKalanDk, rozetGorunumu } from '@/lib/geri-besleme';
+import {
+  DURUM_KISA_ADI,
+  KALITE_SECENEKLERI,
+  asamaSatirlari,
+  geriAlinamayanlar,
+  geriAlmaBitisMs,
+  geriAlmaKalanDk,
+  rozetGorunumu,
+} from '@/lib/geri-besleme';
 
 /**
  * ═══ POTANSİYEL MÜŞTERİ LİSTESİ ═══
@@ -87,6 +95,26 @@ export function LeadTable({
    */
   const [sonIsaret, setSonIsaret] = useState<{ leadId: string; onceki: LeadStatus; zamanMs: number } | null>(null);
 
+  /*
+   * PENCERE KAPANINCA "GERİ AL" KAYBOLUR (Ajan 4 N-1). Kalan süre render
+   * anında hesaplanıyordu ve yeniden render ettiren bir saat yoktu: kart
+   * hareketsiz kalınca düğme 15 dakikadan sonra da görünüyor, o arada olay
+   * Meta'ya gitmiş oluyordu. Zamanlayıcı her dakika yeniden çizdiriyor ve
+   * pencere bitince işareti siliyor. İkinci kat: tıklama yine de geç
+   * kalırsa sunucunun cevabı (`geriAlinamayanlar`) ekrana yazılıyor.
+   */
+  const [, setSaat] = useState(0);
+  useEffect(() => {
+    if (!sonIsaret) return;
+    const bitis = geriAlmaBitisMs(sonIsaret.zamanMs);
+    const tik = setInterval(() => setSaat((n) => n + 1), 60_000);
+    const son = setTimeout(() => setSonIsaret(null), Math.max(0, bitis - Date.now()));
+    return () => {
+      clearInterval(tik);
+      clearTimeout(son);
+    };
+  }, [sonIsaret]);
+
   function navigate(patch: Record<string, string | null>): void {
     const params = new URLSearchParams();
     params.set('musteri', clientId);
@@ -114,6 +142,12 @@ export function LeadTable({
       // Sunucunun döndürdüğü kayıt Meta rozetini de taşıyor ("iletilecek").
       setRows((cur) => cur.map((r) => (r.id === lead.id ? { ...r, ...guncel } : r)));
       setSonIsaret(geriAlma ? null : { leadId: lead.id, onceki: previous, zamanMs: Date.now() });
+      // Geri alma geç kaldıysa (olay gönderildi ya da yolda) SÖYLENİYOR:
+      // durum değişti ama Meta'daki olay silinemiyor.
+      const kalan = geriAlma ? geriAlinamayanlar(guncel.geriBesleme, status) : [];
+      if (kalan.length > 0) {
+        setError(`Durum geri alındı ama ${kalan.join(', ')} Meta’ya zaten gönderildi; Meta’daki bildirim geri alınamıyor.`);
+      }
       startTransition(() => router.refresh());
     } catch (err) {
       // GERİ AL. Hatayı yutmak, ajansın "arandı" sandığı kaydın hâlâ "yeni"

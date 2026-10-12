@@ -122,6 +122,9 @@ CREATE TABLE "geri_besleme_olaylari" (
   "deneme"           SMALLINT       NOT NULL DEFAULT 0,
   -- Ham lead: now(). Kullanıcı işareti: now() + 15 dk (geri alma penceresi).
   "sonraki_deneme"   TIMESTAMPTZ(6),
+  -- Gönderim işinin satırı sahiplendiği an (durum = 'gonderiliyor'). Yaşlanan
+  -- sahiplenme "sonucu bilinmiyor" diye işaretlenir, yeniden gönderilmez.
+  "sahiplenme_zamani" TIMESTAMPTZ(6),
   -- Gönderildiği andaki dataset: ayar sonradan değişebilir ve "bu olay hangi
   -- modeli eğitti" sorusunun cevabı ayarın BUGÜNKÜ değeri değil.
   "gonderilen_hedef" VARCHAR(20),
@@ -139,8 +142,14 @@ CREATE TABLE "geri_besleme_olaylari" (
   CONSTRAINT "geri_besleme_olaylari_platform_chk" CHECK ("platform" IN ('meta')),
   CONSTRAINT "geri_besleme_olaylari_asama_chk" CHECK ("asama" IN ('ham_lead', 'ulasildi', 'nitelikli', 'satisa_dondu', 'uygun_degil')),
   CONSTRAINT "geri_besleme_olaylari_durum_chk" CHECK ("durum" IN (
-    'bekliyor', 'basarisiz', 'iletildi', 'eslesmedi', 'reddedildi', 'vazgecildi', 'suresi_doldu', 'iptal'
+    'bekliyor', 'basarisiz', 'gonderiliyor', 'iletildi', 'eslesmedi', 'reddedildi', 'vazgecildi', 'suresi_doldu', 'iptal'
   )),
+  -- SAHİPLENİLMİŞ SATIRIN SAHİPLENME ANI VAR, DİĞERLERİNİN YOK: zamansız bir
+  -- 'gonderiliyor' süpürmenin "yaşlı sahiplenme" süzgecine hiç düşmez ve
+  -- sonsuza kadar "gönderiliyor" görünürdü.
+  CONSTRAINT "geri_besleme_olaylari_sahiplenme_chk" CHECK (
+    ("durum" = 'gonderiliyor') = ("sahiplenme_zamani" IS NOT NULL)
+  ),
   CONSTRAINT "geri_besleme_olaylari_deneme_chk" CHECK ("deneme" >= 0),
   -- GÖNDERİLEBİLİR SATIRIN ZAMANI OLMAK ZORUNDA: zamansız bir `bekliyor`
   -- satırı süpürmenin `sonraki_deneme <= now()` süzgecine hiç düşmez ve
@@ -164,6 +173,8 @@ CREATE UNIQUE INDEX "geri_besleme_olaylari_lead_asama_key" ON "geri_besleme_olay
 -- reddedildi, vazgeçildi, süresi doldu) ve lead güncellemesi (iptal). Kalıcı
 -- kilit yok (CLAUDE.md "kısmi tekil indeks" dersi; bu indeks tekil de değil).
 CREATE INDEX "geri_besleme_olaylari_bekleyen_idx" ON "geri_besleme_olaylari" ("sonraki_deneme") WHERE "durum" IN ('bekliyor', 'basarisiz');
+-- Yaşlı sahiplenme süpürmesi (sonucu bilinmeyen gönderimler).
+CREATE INDEX "geri_besleme_olaylari_sahiplenme_idx" ON "geri_besleme_olaylari" ("sahiplenme_zamani") WHERE "durum" = 'gonderiliyor';
 CREATE INDEX "geri_besleme_olaylari_client_idx" ON "geri_besleme_olaylari" ("client_id", "durum", "updated_at" DESC);
 CREATE INDEX "geri_besleme_olaylari_org_id_idx" ON "geri_besleme_olaylari" ("org_id");
 ALTER TABLE "geri_besleme_olaylari" ADD CONSTRAINT "geri_besleme_olaylari_client_org_fkey"

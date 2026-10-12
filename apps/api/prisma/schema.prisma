@@ -4333,6 +4333,7 @@ model GeriBeslemeOlayi {
   durum           String    @default("bekliyor") @db.VarChar(16)
   deneme          Int       @default(0) @db.SmallInt
   sonrakiDeneme   DateTime? @map("sonraki_deneme") @db.Timestamptz(6)
+  sahiplenmeZamani DateTime? @map("sahiplenme_zamani") @db.Timestamptz(6)
   gonderilenHedef String?   @map("gonderilen_hedef") @db.VarChar(20)
   gonderildi      DateTime? @db.Timestamptz(6)
   httpDurum       Int?      @map("http_durum")

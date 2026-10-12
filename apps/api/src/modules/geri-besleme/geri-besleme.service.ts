@@ -342,7 +342,10 @@ export class GeriBeslemeService {
             -- zamanı yeni kümeye ait değil: "çalışıyor" yeni kümede ilk
             -- başarılı gönderimle yeniden kazanılır.
             dataset_crm = CASE WHEN geri_besleme_ayarlari.dataset_id IS DISTINCT FROM EXCLUDED.dataset_id THEN NULL ELSE geri_besleme_ayarlari.dataset_crm END,
-            son_ayar_hatasi = CASE WHEN geri_besleme_ayarlari.dataset_id IS DISTINCT FROM EXCLUDED.dataset_id THEN NULL ELSE geri_besleme_ayarlari.son_ayar_hatasi END,
+            -- KAYIT veri kümesini ve bağlantıyı YENİDEN doğruladı: önceki
+            -- ayar hatası (ör. "hesap kalmadı", Ö-2) bu kayıtla geçersiz.
+            -- Token/izin hatası sürüyorsa ilk gönderim onu yeniden yazar.
+            son_ayar_hatasi = NULL,
             son_basarili_gonderim = CASE WHEN geri_besleme_ayarlari.dataset_id IS DISTINCT FROM EXCLUDED.dataset_id THEN NULL ELSE geri_besleme_ayarlari.son_basarili_gonderim END,
             updated_at = now()
         `);
@@ -596,7 +599,8 @@ function ayarNedeni(durum: GeriBeslemeAyari['durum'], a: AyarSatiri | null, bagl
       return 'Kapalı. Açınca işaretlediğin sonuçlar Meta’ya gider.';
     case 'kurulum_eksik':
       if (!a?.dataset_id) return 'Veri kümesi (piksel) seçilmemiş.';
-      if (!a.baglanti_id) return 'Meta bağlantısı bulunamadı; ayarı yeniden kaydet.';
+      // Gönderim işi bağlantıyı boşalttıysa sebebi (Ö-2) ayar hatasında.
+      if (!a.baglanti_id) return a.son_ayar_hatasi ?? 'Meta bağlantısı bulunamadı; ayarı yeniden kaydet.';
       return baglantiGecerli ? GERI_BESLEME_AYAR_DURUM_ADI[durum] : 'Meta bağlantısı yeniden yetki istiyor. Bağlantıyı Platform Bağlantıları ekranında yeniden yetkilendir; bekleyen sonuçlar kendiliğinden gönderilir.';
     case 'hata':
       return a?.son_ayar_hatasi ?? GERI_BESLEME_AYAR_DURUM_ADI[durum];

@@ -7,6 +7,7 @@ import { PlatformApiError } from '../connections/provider.types';
 import type { ProviderRegistry } from '../connections/provider.registry';
 import type { TokenVaultService } from '../connections/token-vault.service';
 import { GeriBeslemeGonderimService } from './geri-besleme-gonderim.service';
+import { durumDegisti } from './lead-asama';
 
 /**
  * ═══ GÖNDERİM İŞİ — gerçek Postgres + META CEVAP FİKSTÜRLERİ ═══
@@ -119,17 +120,29 @@ describe('başarı ve istek gövdesi', () => {
     expect(a!.son_basarili_gonderim).not.toBeNull();
   });
 
-  it('KRİTİK: gönderim sürerken geri alınan (iptal) satır Meta kabul ettiyse İLETİLDİ yazılıyor; platform gerçeği kazanır', async () => {
+  it('KRİTİK: istek yoldayken lead durumu geri alınsa da SAHİPLENİLMİŞ satır iptal edilemiyor; Meta kabul ettiyse İLETİLDİ', async () => {
     await ayarAc(h);
     await olay(h, { leadId: L1, asama: 'ulasildi', olayZamani: saatOnce(1), durum: 'basarisiz', deneme: 1 });
     const varsayilan = cevap;
-    // Yarış: istek yoldayken kullanıcı aşamayı geri alıyor.
+    // Yarış: istek yoldayken kullanıcı aşamayı geri alıyor (Görüştük → Yeni).
+    let geriAlma: Promise<unknown> = Promise.resolve();
     cevap = (g) => {
-      void h.q(`UPDATE geri_besleme_olaylari SET durum = 'iptal', sonraki_deneme = NULL`);
+      geriAlma = durumDegisti(h.db, {
+        leadId: L1,
+        clientId: IDS.client,
+        orgId: IDS.org,
+        onceki: 'contacted',
+        yeni: 'new',
+        submittedAt: saatOnce(3),
+        userId: IDS.user,
+        kaynak: 'panel',
+        simdi: SIMDI,
+      });
       return varsayilan(g);
     };
     await kur().calistir(IDS.client, SIMDI);
-    expect((await olaylar(h))[0]).toMatchObject({ durum: 'iletildi', deneme: 2 });
+    expect(await geriAlma).toMatchObject({ iptal: 0 });
+    expect((await olaylar(h)).find((o) => o.asama === 'ulasildi')).toMatchObject({ durum: 'iletildi', deneme: 2 });
   });
 
   it('aynı lead’in aşamaları huni sırasıyla gidiyor', async () => {

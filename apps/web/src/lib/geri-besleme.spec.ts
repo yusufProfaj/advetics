@@ -7,6 +7,8 @@ import {
   KALITE_SECENEKLERI,
   degisimMetni,
   durumTonu,
+  geriAlinamayanlar,
+  geriAlmaBitisMs,
   geriAlmaKalanDk,
   gonderimlerAdresi,
   olayNotu,
@@ -58,6 +60,29 @@ describe('geri alma penceresi', () => {
     expect(geriAlmaKalanDk(t, t + 60_000)).toBe(14);
     expect(geriAlmaKalanDk(t, t + 14.5 * 60_000)).toBe(1);
     expect(geriAlmaKalanDk(t, t + 15 * 60_000)).toBeNull();
+  });
+});
+
+describe('geri alma geç kaldıysa söyleniyor (Ajan 4 N-1)', () => {
+  it('KRİTİK: yeni durumun ima ETMEDİĞİ ama gitmiş ya da yolda olan aşamalar listeleniyor', () => {
+    const r = {
+      tur: 'iletildi' as const,
+      metin: '',
+      asamalar: [
+        { asama: 'ham_lead' as const, durum: 'iletildi' as const, hata: null, zaman: '' },
+        { asama: 'ulasildi' as const, durum: 'iletildi' as const, hata: null, zaman: '' },
+        { asama: 'nitelikli' as const, durum: 'gonderiliyor' as const, hata: null, zaman: '' },
+        { asama: 'satisa_dondu' as const, durum: 'iptal' as const, hata: null, zaman: '' },
+      ],
+    };
+    // Müşteri oldu → Görüştük geri alındı: ilgili aşama yolda, geri alınamadı.
+    expect(geriAlinamayanlar(r, 'contacted')).toEqual(['İlgili']);
+    expect(geriAlinamayanlar(r, 'qualified')).toEqual([]);
+    expect(geriAlinamayanlar(undefined, 'new')).toEqual([]);
+  });
+
+  it('pencere bitişi 15 dakika sonra (zamanlayıcı bunu kullanıyor)', () => {
+    expect(geriAlmaBitisMs(1000)).toBe(1000 + 15 * 60_000);
   });
 });
 
@@ -184,6 +209,11 @@ describe('ekran bağları (kaynak)', () => {
     expect(SAYFA).toContain("hasPermission(session, 'connection.manage')");
     expect(SERIT).toContain('g.eylem && canManage');
     expect(SERIT).toContain("(!ayar.etkin && !onay)");
+  });
+
+  it('KRİTİK: "Geri al" pencere bitince zamanlayıcıyla siliniyor ve geç kalan geri alma ekrana yazılıyor (Ajan 4 N-1)', () => {
+    expect(LISTE).toContain('setTimeout(() => setSonIsaret(null), Math.max(0, bitis - Date.now()))');
+    expect(LISTE).toContain('geriAlinamayanlar(guncel.geriBesleme, status)');
   });
 
   it('pencere DOM’dan çıkmıyor ve hareket azaltmada geçiş kapalı', () => {

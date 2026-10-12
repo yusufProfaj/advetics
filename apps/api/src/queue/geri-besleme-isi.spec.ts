@@ -26,7 +26,7 @@ function kur(calistir: () => Promise<{ rows: number; apiCalls: number; note: str
       return { enqueued: true };
     }),
   };
-  proc.geriBesleme = { calistir: vi.fn(calistir), bekleyenWorkspaceler: vi.fn(async () => bekleyen) };
+  proc.geriBesleme = { calistir: vi.fn(calistir), bekleyenWorkspaceler: vi.fn(async () => bekleyen), yasliSahiplenmeleriIsaretle: vi.fn(async () => 1) };
   proc.logger = { log: () => undefined, error: () => undefined, warn: () => undefined };
   return { proc, kuyruk, update };
 }
@@ -75,6 +75,8 @@ describe('süpürme ve işleyici', () => {
       { clientId: 'c2', platform: 'meta', jobType: 'lead_feedback_send' },
     ]);
     expect(r.note).toContain('2 workspace');
+    // Yaşlı sahiplenme işaretlemesi her süpürmede koşuyor ve sayısı notta.
+    expect(r.note).toContain('1 gönderimin sonucu bilinmiyor');
   });
 
   it('KRİTİK: iş gönderim servisini çağırıyor, kota kapısından geçmiyor, notu iş kaydına yazıyor', async () => {

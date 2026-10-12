@@ -8,7 +8,7 @@ import {
   type GeriBeslemeOlayDurumu,
   type LeadGeriBeslemeRozeti,
 } from '@advetics/shared';
-import { GB_PLATFORM, type Yurutucu } from './lead-asama';
+import { GB_PLATFORM, SONUC_BILINMIYOR, type Yurutucu } from './lead-asama';
 
 /**
  * ═══ LEAD SATIRININ "META'YA GİTTİ Mİ" ROZETİ ═══
@@ -20,6 +20,8 @@ import { GB_PLATFORM, type Yurutucu } from './lead-asama';
  */
 interface OlaySatiri {
   lead_id: string;
+  /** `sonuc_bilinmiyor`: istek gitti, cevabı yazılamadı (Ö-1). */
+  hata_kodu?: string | null;
   asama: GeriBeslemeAsamasi;
   durum: GeriBeslemeOlayDurumu;
   hata: string | null;
@@ -41,7 +43,7 @@ export async function leadRozetleri(
   const etkin = new Map(ayarlar.map((a) => [a.client_id, a.etkin]));
 
   const satirlar = await tx.$queryRaw<OlaySatiri[]>(Prisma.sql`
-    SELECT lead_id::text AS lead_id, asama, durum, hata, COALESCE(gonderildi, updated_at) AS zaman
+    SELECT lead_id::text AS lead_id, asama, durum, hata, hata_kodu, COALESCE(gonderildi, updated_at) AS zaman
       FROM geri_besleme_olaylari
      WHERE lead_id = ANY(${leadler.map((l) => l.id)}::uuid[]) AND platform = ${GB_PLATFORM}
   `);
@@ -74,7 +76,7 @@ export async function leadRozetleri(
  */
 export function rozetMetni(
   tur: LeadGeriBeslemeRozeti['tur'],
-  olaylar: ReadonlyArray<Pick<OlaySatiri, 'asama' | 'durum' | 'hata'>>,
+  olaylar: ReadonlyArray<Pick<OlaySatiri, 'asama' | 'durum' | 'hata' | 'hata_kodu'>>,
 ): string {
   switch (tur) {
     case 'kapali':
@@ -82,6 +84,11 @@ export function rozetMetni(
     case 'yok':
       return 'Bildirilecek sonuç yok';
     case 'bekliyor':
+      // SONUCU BİLİNMEYEN gönderim "iletilecek" DEĞİL: istek gitti, yeniden
+      // gönderilmeyecek. Aynı cümleyle göstermek kullanıcıyı bekletirdi.
+      if (olaylar.some((o) => o.durum === 'gonderiliyor' && o.hata_kodu === SONUC_BILINMIYOR)) {
+        return 'Meta’ya gönderildi, sonucu bilinmiyor';
+      }
       return 'Meta’ya iletilecek';
     case 'iletildi':
       return 'Meta’ya iletildi';

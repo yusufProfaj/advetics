@@ -1,6 +1,7 @@
 import {
   GERI_BESLEME_ASAMA_ADI,
   GERI_BESLEME_BEKLEME_DK,
+  imaEdilenAsamalar,
   GERI_BESLEME_BOS_NEDEN_ADI,
   GERI_BESLEME_OLAY_DURUM_ADI,
   type GeriBeslemeAyari,
@@ -64,6 +65,22 @@ export function gonderimlerAdresi(clientId: string): string {
  * açıkken: kapandıktan sonra göstermek, platforma gitmiş bir olayı
  * "geri alındı" sandırırdı.
  */
+export function geriAlmaBitisMs(degisimMs: number): number {
+  return degisimMs + GERI_BESLEME_BEKLEME_DK * 60_000;
+}
+
+/**
+ * Geri almadan SONRA sunucunun döndürdüğü rozette, yeni durumun ima ETMEDİĞİ
+ * ama Meta'ya gitmiş (ya da yolda) aşamalar: geri alma geç kaldı demek.
+ * CAPI'de silme yok; ekran bunu söylemezse kullanıcı olayı geri aldığını sanır.
+ */
+export function geriAlinamayanlar(r: LeadGeriBeslemeRozeti | undefined, yeniDurum: LeadStatus): string[] {
+  const ima = new Set(imaEdilenAsamalar(yeniDurum));
+  return (r?.asamalar ?? [])
+    .filter((a) => !ima.has(a.asama) && (a.durum === 'iletildi' || a.durum === 'eslesmedi' || a.durum === 'gonderiliyor'))
+    .map((a) => GERI_BESLEME_ASAMA_ADI[a.asama]);
+}
+
 export function geriAlmaKalanDk(degisimMs: number, simdiMs: number): number | null {
   const kalan = degisimMs + GERI_BESLEME_BEKLEME_DK * 60_000 - simdiMs;
   return kalan > 0 ? Math.ceil(kalan / 60_000) : null;
@@ -155,6 +172,9 @@ export function olayNotu(o: GeriBeslemeOlayi, simdiMs: number): string | null {
       return 'Meta bu kişiyi reklamla eşleştiremedi; yapılacak bir şey yok';
     case 'iptal':
       return o.hata ?? 'Gönderilmeden geri alındı';
+    case 'gonderiliyor':
+      // Yaşlanıp "sonucu bilinmiyor" işaretlenmişse sunucunun cümlesi; değilse istek yolda.
+      return o.hata ?? 'İstek Meta’ya gidiyor';
     case 'iletildi':
       return null;
   }

@@ -2,7 +2,12 @@ import { Injectable } from '@nestjs/common';
 import type { BaglantiDurumu, TenantContext, Uyari, UyariYaniti } from '@advetics/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { gorunenBaglantilar } from '../connections/gorunen-baglantilar';
-import { geriBeslemeUyariSatirlari, geriBeslemeUyarisi } from '../geri-besleme/geri-besleme-uyari';
+import {
+  geriBeslemeUyariSatirlari,
+  geriBeslemeUyarisi,
+  leadKimligiUyariSatirlari,
+  leadKimligiUyarisi,
+} from '../geri-besleme/geri-besleme-uyari';
 import {
   baglantiUyarilari,
   hesapUyarilari,
@@ -158,10 +163,17 @@ export class AlertsService {
         if (!atanmisIdler.has(m.id)) uyarilar.push(hesapsizMusteriUyarisi(m));
       }
 
-      // Paket E: lead sonuçları Meta'ya gitmiyor (ayar hatası ya da son 24
-      // saatte gönderilemeyen sonuç). Depodan, platform çağrısı yok.
-      for (const r of await geriBeslemeUyariSatirlari(tx, simdi)) {
-        uyarilar.push(geriBeslemeUyarisi(r));
+      /*
+       * Paket E: lead sonuçları Meta'ya gitmiyor (ayar hatası ya da son 24
+       * saatte gönderilemeyen sonuç). Depodan, platform çağrısı yok.
+       * `lead.read` İZNİNE BAĞLI (Ajan 4 N-2): uyarı ucu `insights.read` ile
+       * açık ve müşteri hesabında o izin VAR; Meta'nın ham hata cümlesi ve
+       * açamayacağı bir sayfaya bağlantı ona gitmemeli. Genel Bakış'ın
+       * bekleyen işi aynı izni `BEKLEYEN_IS_YETKISI` ile uyguluyor.
+       */
+      if (ctx.permissions.includes('lead.read')) {
+        for (const r of await geriBeslemeUyariSatirlari(tx, simdi)) uyarilar.push(geriBeslemeUyarisi(r));
+        for (const r of await leadKimligiUyariSatirlari(tx, simdi)) uyarilar.push(leadKimligiUyarisi(r));
       }
 
       /*
