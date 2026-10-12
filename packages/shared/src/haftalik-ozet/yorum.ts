@@ -1,3 +1,4 @@
+import { sayiTasiyor } from '../sayi-yasagi';
 /**
  * ═══ YAPAY ZEKÂ YORUMU: SAYI UYDURAMAZ (Paket B) ═══
  *
@@ -68,6 +69,9 @@ export function yorumDenetle(ham: string, izinli: ReadonlySet<string>): YorumDen
   if (rakam) return { gecerli: false, neden: 'rakam', ayrinti: rakam[0] };
   const simge = /[%‰₺$€£]/.exec(govde);
   if (simge) return { gecerli: false, neden: 'simge', ayrinti: simge[0] };
+  // ORTAK YASAK (Paket D ile aynı fonksiyon): yazıyla oran, kesir, tam
+  // genişlik rakam. Aşağıdaki kelime listesi bunun ÜSTÜNE daha katı.
+  if (sayiTasiyor(govde)) return { gecerli: false, neden: 'sayi_sozcugu', ayrinti: 'oran ifadesi' };
   const kelimeler = govde.toLocaleLowerCase('tr').match(/\p{L}+/gu) ?? [];
   const sozcuk = kelimeler.find((k) => SAYI_SOZCUKLERI.includes(k));
   if (sozcuk) return { gecerli: false, neden: 'sayi_sozcugu', ayrinti: sozcuk };

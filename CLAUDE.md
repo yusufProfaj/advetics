@@ -768,11 +768,16 @@ karar gerekiyorsa yardımcı sınıfla yaz, katman onu ezmiyor. Sayfa başlığ�
   test, Kitle Özeti sayfası HİÇ ÜRETİLMEDEN yeşil geçiyordu. Kırmızı bir
   typecheck kimseyi uyarmıyor — `pnpm --filter @advetics/api typecheck`
   temiz tutulmalı, yoksa gerçek uyarı gürültünün içinde kayboluyor.
-- **NEST MODÜL KAYDI DERLEMEDE DEĞİL AÇILIŞTA PATLIYOR.** Depoda bağımlılık
-  grafiğini ayağa kaldıran bir test yok: `nest build` başarılı olur, grafik
-  çözülemez ve hata deploy'un ortasında görünür. Yeni bir servis eklerken
-  sağlayıcı listesini ve `imports`u kaynak taramasıyla kilitle
-  (`kreatif-adresi.spec.ts` sonundaki blok).
+- **NEST MODÜL KAYDI DERLEMEDE DEĞİL AÇILIŞTA PATLIYOR.** `nest build`
+  başarılı olur, grafik çözülemez ve hata deploy'un ortasında görünür.
+  2026-10-13'ten beri grafiği GERÇEKTEN çözen bir test var:
+  `src/nest-grafigi.spec.ts` (+ `test/nest-grafigi-calistir.cjs`). Ayrı
+  süreçte TypeScript'in kendi derleyicisiyle koşuyor, çünkü vitest'in
+  esbuild'i kurucu tip bilgisini (`design:paramtypes`) üretmiyor ve orada
+  her sınıf düşerdi; `init()` çağırmıyor, veritabanına/Redis'e bağlanmıyor
+  (~1,5 sn). `@Optional()` bağımlılık eksik kalınca DI HATA VERMİYOR, sessizce
+  `undefined` — test bunları ayrıca soruyor; yeni bir `@Optional` eklersen
+  oraya ekle. Kaynak taraması (`kreatif-adresi.spec.ts` sonu) da duruyor.
 - **ÖZYİNELEMENİN DURMA KOŞULUNU SUNUM DEĞİŞKENİNE BAĞLAMA.** Meta kreatif
   adresi çekiminde liste hatada yarılanıyor ve durma koşulu `tekli`ye
   bağlıydı — o değişken URL BİÇİMİNİ seçiyor (`?ids=` mi düğüm yolu mu), uzunluğu
