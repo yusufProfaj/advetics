@@ -12,6 +12,7 @@ import {
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { formatRelative, formatTarih } from '@/lib/format';
+import { DURUM_KISA_ADI, KALITE_SECENEKLERI, asamaSatirlari, geriAlmaKalanDk, rozetGorunumu } from '@/lib/geri-besleme';
 
 /**
  * ═══ POTANSİYEL MÜŞTERİ LİSTESİ ═══
@@ -78,6 +79,13 @@ export function LeadTable({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [acik, setAcik] = useState<string | null>(null);
+  /*
+   * GERİ ALMA PENCERESİ (Paket E, Ç-6): son işaretin önceki durumu ve anı.
+   * "Geri al" yalnız 15 dakika içinde: sunucu işareti o kadar bekletiyor ve
+   * pencerede geri alınan aşama Meta'ya hiç gitmiyor. Sonrasında göstermek,
+   * gitmiş bir olayı geri alınmış sandırırdı.
+   */
+  const [sonIsaret, setSonIsaret] = useState<{ leadId: string; onceki: LeadStatus; zamanMs: number } | null>(null);
 
   function navigate(patch: Record<string, string | null>): void {
     const params = new URLSearchParams();
@@ -92,17 +100,20 @@ export function LeadTable({
     startTransition(() => router.push(`/potansiyel-musteriler?${params.toString()}`));
   }
 
-  async function setStatus(lead: LeadRecord, status: LeadStatus): Promise<void> {
+  async function setStatus(lead: LeadRecord, status: LeadStatus, geriAlma = false): Promise<void> {
     const previous = lead.status;
     setBusy(lead.id);
     setError(null);
     // İyimser: değişiklik anında görünüyor.
     setRows((cur) => cur.map((r) => (r.id === lead.id ? { ...r, status } : r)));
     try {
-      await apiFetch(`/leads/${lead.id}`, {
+      const guncel = await apiFetch<LeadRecord>(`/leads/${lead.id}`, {
         method: 'PUT',
         body: JSON.stringify({ status }),
       });
+      // Sunucunun döndürdüğü kayıt Meta rozetini de taşıyor ("iletilecek").
+      setRows((cur) => cur.map((r) => (r.id === lead.id ? { ...r, ...guncel } : r)));
+      setSonIsaret(geriAlma ? null : { leadId: lead.id, onceki: previous, zamanMs: Date.now() });
       startTransition(() => router.refresh());
     } catch (err) {
       // GERİ AL. Hatayı yutmak, ajansın "arandı" sandığı kaydın hâlâ "yeni"
@@ -136,7 +147,7 @@ export function LeadTable({
             title={LEAD_STATUS_META[s].hint}
             className={chip(activeStatus === s)}
           >
-            {LEAD_STATUS_META[s].label}{' '}
+            {DURUM_KISA_ADI[s]}{' '}
             <span className="opacity-60">{initial.byStatus[s]}</span>
           </button>
         ))}
@@ -191,6 +202,11 @@ export function LeadTable({
               canWrite={canWrite}
               busy={busy !== null || isPending}
               onDurum={(s) => void setStatus(lead, s)}
+              geriAl={
+                sonIsaret?.leadId === lead.id
+                  ? { onceki: sonIsaret.onceki, zamanMs: sonIsaret.zamanMs, yap: () => void setStatus(lead, sonIsaret.onceki, true) }
+                  : null
+              }
             />
           </li>
         ))}
@@ -212,6 +228,7 @@ function Kart({
   canWrite,
   busy,
   onDurum,
+  geriAl,
 }: {
   lead: LeadRecord;
   acik: boolean;
@@ -219,7 +236,11 @@ function Kart({
   canWrite: boolean;
   busy: boolean;
   onDurum: (s: LeadStatus) => void;
+  geriAl: { onceki: LeadStatus; zamanMs: number; yap: () => void } | null;
 }) {
+  const rozet = rozetGorunumu(lead.geriBesleme);
+  const asamalar = asamaSatirlari(lead.geriBesleme);
+  const kalanDk = geriAl ? geriAlmaKalanDk(geriAl.zamanMs, Date.now()) : null;
   /*
    * CEVAPLARDAN İLETİŞİM ALANLARI ÇIKARILIYOR.
    *
@@ -240,6 +261,18 @@ function Kart({
           {lead.source === 'reconcile' && (
             <span className="rounded-md bg-warn-soft px-1.5 py-0.5 text-[11px] font-medium text-warn-strong ring-1 ring-inset ring-warn/30">
               taramayla geldi
+            </span>
+          )}
+          {/*
+            META ROZETİ (Paket E): yalnız sorun ya da bekleme varken dikkat
+            çekiyor; iletildi sessiz gri, kapalı ayar rozetsiz.
+          */}
+          {rozet && (
+            <span
+              className={`min-w-0 max-w-full truncate rounded-md px-1.5 py-0.5 text-[11px] font-medium ring-1 ring-inset ${ROZET_TONU[rozet.ton]}`}
+              title={rozet.metin}
+            >
+              {rozet.metin}
             </span>
           )}
         </div>
@@ -285,7 +318,7 @@ function Kart({
           </dl>
         )}
 
-        {(gizli > 0 || lead.campaignName || lead.note) && (
+        {(gizli > 0 || lead.campaignName || lead.note || asamalar.length > 0) && (
           <div>
             <button
               type="button"
@@ -299,7 +332,9 @@ function Kart({
                      söylemiyor ve tıklanmıyor. */
                   gizli > 0
                   ? `${gizli} cevap daha`
-                  : 'Kampanya ve not'}
+                  : asamalar.length > 0
+                    ? 'Meta’ya bildirilenler'
+                    : 'Kampanya ve not'}
             </button>
           </div>
         )}
@@ -325,6 +360,17 @@ function Kart({
               <p className="mt-2 rounded-md bg-surface px-2.5 py-1.5 text-xs text-ink">
                 {lead.note}
               </p>
+            )}
+            {/* HANGİ AŞAMA META'YA GİTTİ: "gönderilemedi" hangi aşama ve neden. */}
+            {asamalar.length > 0 && (
+              <ul className="mt-2 space-y-0.5 text-[11px]">
+                {asamalar.map((a) => (
+                  <li key={a.ad} className={a.sorun ? 'text-danger-strong' : 'text-ink-muted'}>
+                    <span className="font-medium">{a.ad}</span> · {a.durum}
+                    {a.sorun && a.hata ? ` · Meta: “${a.hata}”` : ''}
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
         )}
@@ -363,22 +409,45 @@ function Kart({
           <p className="text-[11px] text-ink-muted">{formatRelative(lead.submittedAt)}</p>
         </div>
 
+        {/*
+          ═══ "BU KİŞİ MÜŞTERİ OLDU MU?" (Paket E, MIMARI § 9) ═══
+
+          Var olan durum seçicisinin YERİNE geçiyor, yanına değil: aynı alan
+          (lead durumu). İki alan olsaydı ajans kişiyi iki yerde işaretler ve
+          Meta'ya hangisinin gittiği ekrandan anlaşılmazdı (Ç-1). Tek tık;
+          seçili olan dolu. Seçimden sonra 15 dakika "Geri al".
+        */}
         {canWrite ? (
-          <label className="mt-auto block">
-            <span className="sr-only">Durum</span>
-            <select
-              value={lead.status}
-              disabled={busy}
-              onChange={(e) => onDurum(e.target.value as LeadStatus)}
-              className="w-full rounded-lg border border-line bg-surface px-2 py-1.5 text-xs outline-none focus:border-brand disabled:opacity-50"
-            >
-              {LEAD_STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {LEAD_STATUS_META[s].label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <fieldset className="mt-auto" disabled={busy}>
+            <legend className="text-[11px] font-medium text-ink">Bu kişi müşteri oldu mu?</legend>
+            <div className="mt-1 grid grid-cols-2 gap-1">
+              {KALITE_SECENEKLERI.map((s) => {
+                const secili = lead.status === s.durum;
+                return (
+                  <button
+                    key={s.durum}
+                    type="button"
+                    aria-pressed={secili}
+                    title={s.ipucu}
+                    onClick={() => !secili && onDurum(s.durum)}
+                    className={`rounded-lg border px-2 py-1.5 text-left text-[11px] font-medium leading-tight transition disabled:opacity-50 ${
+                      secili ? 'border-brand bg-brand-soft text-ink' : 'border-line text-ink hover:bg-surface-sunken'
+                    }`}
+                  >
+                    {s.etiket}
+                  </button>
+                );
+              })}
+            </div>
+            {geriAl && kalanDk !== null && (
+              <p role="status" className="mt-1.5 text-[11px] text-ink-muted">
+                {lead.geriBesleme?.tur === 'bekliyor' ? `${kalanDk} dk içinde Meta’ya iletilecek. ` : ''}
+                <button type="button" onClick={geriAl.yap} className="font-medium text-ink underline underline-offset-2">
+                  Geri al ({DURUM_KISA_ADI[geriAl.onceki]})
+                </button>
+              </p>
+            )}
+          </fieldset>
         ) : null}
       </div>
     </article>
@@ -405,10 +474,18 @@ function DurumRozeti({ status }: { status: LeadStatus }) {
       className={`inline-flex shrink-0 items-center rounded-md px-1.5 py-0.5 text-[11px] font-medium ring-1 ring-inset ${TON_SINIFI[meta.tone]}`}
       title={meta.hint}
     >
-      {meta.label}
+      {/* Soru ve süzgeçle AYNI ad: aynı durumun iki adı olmasın. */}
+      {DURUM_KISA_ADI[status]}
     </span>
   );
 }
+
+/** Meta rozeti: yalnız sorun kırmızı; iletildi sessiz, bekleyen nötr. */
+const ROZET_TONU: Record<'sessiz' | 'notr' | 'sorun', string> = {
+  sessiz: 'bg-surface-sunken text-ink-muted ring-line',
+  notr: 'bg-surface text-ink ring-line',
+  sorun: 'bg-danger-soft text-danger-strong ring-danger/30',
+};
 
 function chip(active: boolean): string {
   return `rounded-lg border px-2.5 py-1 text-xs font-medium transition ${

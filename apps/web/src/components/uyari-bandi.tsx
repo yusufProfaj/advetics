@@ -335,5 +335,7 @@ function kisaBaslik(u: Uyari): string {
       return 'veri güncellenmiyor';
     case 'is_dusuyor':
       return 'senkronizasyon düşüyor';
+    case 'geri_besleme_dusuyor':
+      return 'lead sonuçları Meta’ya gitmiyor';
   }
 }

@@ -1,10 +1,15 @@
 import { sayfaWorkspaceId, workspaceSecimVerisi } from '@/lib/sayfa-workspace';
 import { WorkspaceGerekli } from '@/components/workspace-gerekli';
+import Link from 'next/link';
 import {
   LEAD_STATUSES,
+  type GeriBeslemeAyari,
   type LeadFormRecord,
   type LeadListResult,
 } from '@advetics/shared';
+import { GeriBeslemeSeridi } from '@/components/leads/geri-besleme-seridi';
+import { GonderimlerSekmesi } from '@/components/leads/gonderimler-sekmesi';
+import { potansiyelAdresi, type AyarSonucu } from '@/lib/geri-besleme';
 import { hasPermission, requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
 import { LeadTable } from '@/components/leads/lead-table';
@@ -58,9 +63,20 @@ export default async function LeadsPage({
   if (search) query.set('search', search);
   if (formId) query.set('leadFormId', formId);
 
-  const [result, forms] = await Promise.all([
+  const sekme = first(params.sekme) === 'gonderimler' ? 'gonderimler' : 'kayitlar';
+
+  const [result, forms, ayar] = await Promise.all([
     serverApiFetch<LeadListResult>(`/leads?${query.toString()}`).catch(() => null),
     serverApiFetch<LeadFormRecord[]>(`/lead-forms?clientId=${clientId}`).catch(() => []),
+    /*
+     * META'YA BİLDİRİM AYARI (Paket E). Çağrı düşerse şerit "kapalı" DEMİYOR,
+     * sunucunun cümlesini gösteriyor: açık ve çalışan bir gönderimi kapalı
+     * sandırmak, kullanıcıyı onu yeniden açmaya gönderirdi.
+     */
+    serverApiFetch<GeriBeslemeAyari>(`/geri-besleme/ayar?clientId=${clientId}`).then(
+      (a): AyarSonucu => ({ durum: 'tamam', ayar: a }),
+      (e: unknown): AyarSonucu => ({ durum: 'hata', mesaj: e instanceof Error ? e.message : 'Ayar okunamadı.' }),
+    ),
   ]);
 
   if (!result) {
@@ -73,7 +89,10 @@ export default async function LeadsPage({
 
   const canWrite = hasPermission(session, 'lead.write');
   const canExport = hasPermission(session, 'lead.export');
+  const canManage = hasPermission(session, 'connection.manage');
   const total = Object.values(result.byStatus).reduce((a, b) => a + b, 0);
+  const sorunlu =
+    ayar.durum === 'tamam' ? ayar.ayar.sayilar.reddedildi + ayar.ayar.sayilar.vazgecildi + ayar.ayar.sayilar.suresi_doldu : 0;
 
   return (
     <div className="space-y-5">
@@ -123,7 +142,27 @@ export default async function LeadsPage({
         </div>
       )}
 
-      {total === 0 ? (
+      {/* META'YA BİLDİRİM ŞERİDİ — liste boşken de görünüyor (ayar lead'den önce açılabilir). */}
+      <GeriBeslemeSeridi clientId={clientId} sonuc={ayar} canManage={canManage} />
+
+      {/*
+        İKİ SEKME, AYNI SAYFA: gönderim geçmişi lead'in kendisiyle aynı işin
+        parçası; ayrı sayfa "nereye nereden girdiğimi unutuyorum" şikâyetinin
+        sebebiydi. Adres üreticiden (`potansiyelAdresi`).
+      */}
+      <nav aria-label="Sekmeler" className="flex gap-1 border-b border-line">
+        <Link href={potansiyelAdresi(clientId, 'kayitlar')} aria-current={sekme === 'kayitlar' ? 'page' : undefined} className={sekmeSinifi(sekme === 'kayitlar')}>
+          Kayıtlar <span className="opacity-60">{total}</span>
+        </Link>
+        <Link href={potansiyelAdresi(clientId, 'gonderimler')} aria-current={sekme === 'gonderimler' ? 'page' : undefined} className={sekmeSinifi(sekme === 'gonderimler')}>
+          Meta’ya gönderimler
+          {sorunlu > 0 && <span className="ml-1 rounded-full bg-brand px-1.5 text-[10px] font-semibold text-white">{sorunlu}</span>}
+        </Link>
+      </nav>
+
+      {sekme === 'gonderimler' ? (
+        <GonderimlerSekmesi clientId={clientId} canWrite={canWrite} />
+      ) : total === 0 ? (
         <div className="rounded-xl border border-dashed border-line bg-surface p-8 text-center">
           <h2 className="text-sm font-semibold text-ink">Henüz kayıt yok</h2>
           {/*
@@ -150,6 +189,10 @@ export default async function LeadsPage({
       )}
     </div>
   );
+}
+
+function sekmeSinifi(aktif: boolean): string {
+  return `-mb-px border-b-2 px-3 py-2 text-sm font-medium transition ${aktif ? 'border-brand text-ink' : 'border-transparent text-ink-muted hover:text-ink'}`;
 }
 
 function first(v: string | string[] | undefined): string | undefined {
