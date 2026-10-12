@@ -43,6 +43,12 @@ let svc: RehberService;
 let taslakSvc: ReklamTaslakService;
 let yayinSvc: ReklamYayinService;
 let kuyrukIsleri: string[];
+/**
+ * Seçili Meta hesabının pikselleri (sahte `fetchAdPixels`). Varsayılan: son
+ * 7 günde çalışmış tek piksel → "Siteme gelsinler" sayfa görüntüleme.
+ * `null` = okuma düşer.
+ */
+let pikseller: Array<{ id: string; ad: string; sonCalisma: string | null; kullanilamaz: boolean; satinAlma7Gun: boolean | null }> | null;
 
 const SAYFA = '55555555-0000-4000-8000-0000000000f1';
 const SAYFA_EXT = '1112223334';
@@ -75,6 +81,14 @@ beforeAll(async () => {
   yayinSvc = new ReklamYayinService(prisma, kuyruk, config);
   // Bu dosyadaki yollar Google'a HİÇ gitmemeli: sahte sağlayıcı çağrılırsa patlar.
   const google = new Proxy({}, { get: (_t, ad) => () => Promise.reject(new Error(`Google çağrıldı: ${String(ad)}`)) });
+  const meta = {
+    fetchAdPixels: async (p: { satinAlmaSor?: boolean }) => {
+      // SİTE okuması satın alma istatistiğini SORMAMALI (tek çağrı).
+      if (p.satinAlmaSor !== false) throw new Error('site amacı satın alma sordu');
+      if (!pikseller) throw new Error('Meta: piksel okunamadı');
+      return { satirlar: pikseller, kesildi: false };
+    },
+  };
   svc = new RehberService(
     prisma,
     new ReklamHazirlikService(prisma),
@@ -82,17 +96,22 @@ beforeAll(async () => {
     yayinSvc,
     kuyruk,
     { getAccessToken: async () => 'TOKEN' } as never,
-    { get: () => google } as never,
+    { get: (p: string) => (p === 'meta' ? meta : google) } as never,
     { isEnabled: false } as never,
     { decrypt: () => 'T' } as never,
     config,
     null,
     {} as never,
   );
+  // Ağa çıkılmaz: site bağlantısı okuması sahte (okunamadı).
+  svc.siteHtmlOku = async () => ({ ok: false, sebep: "test: ağ yok" });
 });
 afterAll(async () => h.close());
 beforeEach(async () => {
   kuyrukIsleri = [];
+  pikseller = [{ id: '901', ad: 'Site pikseli', sonCalisma: new Date(Date.now() - 86_400_000).toISOString(), kullanilamaz: false, satinAlma7Gun: null }];
+  // Servis testler arasında yaşıyor: önbellekteki eski okuma bir sonraki testin hâlini taşımasın.
+  (svc as unknown as { sitePikselOnbellek: Map<string, unknown> }).sitePikselOnbellek.clear();
   await h.reset();
   await seedTenant(h);
   await seedAjans(h);
@@ -182,7 +201,7 @@ describe('SÖZ: karar tablosu META satırları ↔ yayinla() ile kurulan gövde'
   });
 
   it('TUR: "Trafik kampanyası · sayfa görüntüleme" ↔ OUTCOME_TRAFFIC + LANDING_PAGE_VIEWS, kampanya ve set DURAKLATILMIŞ', () => {
-    expect(meta.TUR).toBe('Trafik kampanyası · sayfa görüntüleme');
+    expect(meta.TUR).toBe('Trafik kampanyası · sayfa görüntüleme · Sitendeki Meta pikseli son 7 günde çalıştı; reklam sayfa görüntülemeye göre optimize edilir');
     expect(nesne(gv, 'kampanya')).toMatchObject({ objective: 'OUTCOME_TRAFFIC', status: 'PAUSED' });
     expect(nesne(gv, 'reklam_seti')).toMatchObject({ optimization_goal: 'LANDING_PAGE_VIEWS', status: 'PAUSED' });
   });
@@ -335,6 +354,8 @@ describe('BULGU-1 (DÜZELDİ): türetilmiş bütçe AÇIK platform kümesine gö
       paraBirimi: 'TRY',
       saatDilimi: 'Europe/Istanbul',
       donusumEtkin: false,
+      son30GunDonusum: null,
+      uzantilar: null,
       satisOlcumu: null,
       isletmeAdi: 'X',
       logoVarlikId: null,
@@ -423,5 +444,65 @@ describe('BULGU-2 (DÜZELDİ): eski taslak uçları rehbere bağlı taslağı de
       const govde = kaynak.slice(i, m ? i + yol.length + m.index : undefined);
       expect(govde, yol).toContain('rehbereBagliysaReddet(ctx, id)');
     }
+  });
+});
+
+// =============================================================================
+// SİTE HEDEFİ PİKSELE BAĞLI (2026-10-12) — söz, gövde ve geri okuma beklentisi
+// =============================================================================
+describe('Siteme gelsinler: Meta hedefi piksel hâline bağlı', () => {
+  type Yanki = Array<{ alanYolu: string; govde: string; gonderilen: unknown }>;
+  async function kur(): Promise<{ tur: string | undefined; set: Record<string, unknown>; yanki: Yanki }> {
+    const { id, ozet, metaTaslakId } = await provaliMetaRehberi();
+    const d = await svc.yayinla(CTX, id, ozet);
+    expect(d.uyum).toEqual({ tur: 'gecti' });
+    const kayit = await svc.oku(CTX, id);
+    const t = kayit.kararlar.find((k) => k.kod === 'TUR')?.meta;
+    const [y] = await h.q<{ beklenen_yanki: Yanki }>('SELECT beklenen_yanki FROM yayin WHERE taslak_id = $1', [metaTaslakId]);
+    return { tur: t ? `${t.deger} · ${t.not}` : undefined, set: nesne(await metaGovdeleri(metaTaslakId), 'reklam_seti'), yanki: y!.beklenen_yanki };
+  }
+  const hedefYankisi = (yanki: Yanki) => yanki.find((x) => x.govde === 'reklam_seti' && x.alanYolu === 'optimization_goal')?.gonderilen;
+
+  it('piksel YOK → LINK_CLICKS gövdede, beklenen yankıda ve ekranda sebebiyle; atıf 1 gün tıklama', async () => {
+    pikseller = [];
+    const r = await kur();
+    expect(r.set.optimization_goal).toBe('LINK_CLICKS');
+    expect(r.set.attribution_spec).toEqual([{ event_type: 'CLICK_THROUGH', window_days: 1 }]);
+    expect(hedefYankisi(r.yanki)).toBe('LINK_CLICKS');
+    expect(r.tur).toBe(
+      'Trafik kampanyası · bağlantı tıklaması · Sitende Meta pikseli görülmediği için reklam tıklamaya göre optimize edilecek; piksel kurulunca sayfa görüntülemeye geçer',
+    );
+  });
+
+  it('piksel 7 günden ESKİ (sessiz) → LINK_CLICKS', async () => {
+    pikseller = [{ id: '901', ad: 'Eski', sonCalisma: new Date(Date.now() - 8 * 86_400_000).toISOString(), kullanilamaz: false, satinAlma7Gun: null }];
+    const r = await kur();
+    expect(r.set.optimization_goal).toBe('LINK_CLICKS');
+    expect(hedefYankisi(r.yanki)).toBe('LINK_CLICKS');
+  });
+
+  it('piksel OKUNAMADI (bilinmiyor) → LINK_CLICKS, ekran okunamadığını söyler', async () => {
+    pikseller = null;
+    const r = await kur();
+    expect(r.set.optimization_goal).toBe('LINK_CLICKS');
+    expect(r.tur).toContain('Meta pikseli okunamadığı için');
+  });
+
+  it('piksel AKTİF → LANDING_PAGE_VIEWS gövdede ve beklenen yankıda; atıf 1 gün tıklama', async () => {
+    const r = await kur();
+    expect(r.set.optimization_goal).toBe('LANDING_PAGE_VIEWS');
+    expect(r.set.attribution_spec).toEqual([{ event_type: 'CLICK_THROUGH', window_days: 1 }]);
+    expect(hedefYankisi(r.yanki)).toBe('LANDING_PAGE_VIEWS');
+  });
+
+  it('KRİTİK: prova ile yayın arasında piksel hâli DEĞİŞİRSE yayın "taslak değişmiş" demez; provadaki gövde gider (hâl çocuktan)', async () => {
+    const { id, ozet, metaTaslakId } = await provaliMetaRehberi();
+    // Yayın anındaki taze okuma "piksel yok" diyor: rehberden türetilen hâl
+    // provadakinden AYRILIYOR; karşılaştırma çocuğun hâlini kullanmasaydı
+    // yayın sebepsiz "yeniden prova et" ile dururdu.
+    pikseller = [];
+    const d = await svc.yayinla(CTX, id, ozet);
+    expect(d.platformlar.find((p) => p.platform === 'meta')?.sebep ?? null).toBeNull();
+    expect(nesne(await metaGovdeleri(metaTaslakId), 'reklam_seti').optimization_goal).toBe('LANDING_PAGE_VIEWS');
   });
 });

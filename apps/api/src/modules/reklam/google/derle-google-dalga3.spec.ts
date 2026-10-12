@@ -74,6 +74,8 @@ function turet(amac: RehberAmacKodu, o: { donusum?: boolean | null; satis?: bool
     paraBirimi: 'TRY',
     saatDilimi: 'Europe/Istanbul',
     donusumEtkin: o.donusum ?? false,
+    son30GunDonusum: 20,
+    uzantilar: null,
     satisOlcumu: o.satis === undefined ? true : o.satis,
     medyaOranlari: ORANLAR,
     isletmeAdi: 'Garden Villas',
@@ -119,7 +121,7 @@ const islemler = (ops: Array<Record<string, unknown>>, tur: string) =>
 const kampanya = (ops: Array<Record<string, unknown>>) => islemler(ops, 'campaignOperation')[0]!;
 const turler = (ops: Array<Record<string, unknown>>) => ops.map((o) => Object.keys(o)[0]);
 const tablo = (amac: RehberAmacKodu, kurgu: Parameters<typeof googleTeklifi>[0], donusum: boolean | null) =>
-  Object.fromEntries(kararTablosu(amac, ACIK, googleTeklifi(kurgu, donusum), false).map((s) => [s.kod, s.google]));
+  Object.fromEntries(kararTablosu(amac, ACIK, googleTeklifi(kurgu, donusum, 20), false).map((s) => [s.kod, s.google]));
 
 /**
  * Geçici kimlik ancak onu KURAN işlem sırada önce geliyorsa çözülür. Her
@@ -240,7 +242,7 @@ describe('TALEP YARATMA GÖRSEL — altın gövde', () => {
   });
 
   it('VİDEO kurgusunda da aynı: ölçüm etkinken tablo "En çok tıklama" (gövde hep targetSpend)', () => {
-    expect(googleTeklifi('TALEP_YARATMA_VIDEO', true)).toBe('MAKS_TIKLAMA');
+    expect(googleTeklifi('TALEP_YARATMA_VIDEO', true, 20)).toBe('MAKS_TIKLAMA');
     expect(tablo('VIDEO', 'TALEP_YARATMA_VIDEO', true).TEKLIF?.deger).toBe('En çok tıklama');
   });
 

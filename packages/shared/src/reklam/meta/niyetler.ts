@@ -41,6 +41,7 @@ export type MetaOptimizasyonHedefi =
   | 'LEAD_GENERATION'
   | 'CONVERSATIONS'
   | 'LANDING_PAGE_VIEWS'
+  | 'LINK_CLICKS'
   | 'OFFSITE_CONVERSIONS'
   | 'QUALITY_CALL'
   | 'REACH'
@@ -123,6 +124,8 @@ export const NIYET_KATALOGU: Record<NiyetKodu, NiyetSatiri> = {
     kanit: 'belge',
     // destination_type SITE'de de AÇIKÇA WEBSITE: verilmezse Meta tahmin
     // ediyor ve boost'ta bu tahmin canlıda ret üretti.
+    // optimizationGoal KATALOG DEĞERİ, gönderilen değer DEĞİL: SITE'de hedef
+    // pikselin hâline göre seçiliyor (`metaOptimizasyonHedefi`, aşağıda).
     meta: {
       objective: 'OUTCOME_TRAFFIC',
       optimizationGoal: 'LANDING_PAGE_VIEWS',
@@ -130,6 +133,7 @@ export const NIYET_KATALOGU: Record<NiyetKodu, NiyetSatiri> = {
       promotedObject: null,
       cta: 'LEARN_MORE',
     },
+    canliOlculecek: ['LINK_CLICKS dalı (pikselsiz hesap): attribution_spec 1 gün tıklama kabulü ve geri okuma'],
   },
   SATIS: {
     kod: 'SATIS',
@@ -326,6 +330,65 @@ export function acemiNiyetleri(): NiyetSatiri[] {
 }
 
 /**
+ * ═══ "SİTEME GELSİNLER" HEDEFİ PİKSELE BAĞLI — TEK KARAR ═══
+ *
+ * `LANDING_PAGE_VIEWS` Meta'ya "sayfanın YÜKLENDİĞİNİ gördüğün kişiyi bul"
+ * demek ve sayfanın yüklendiğini Meta YALNIZ pikselden görüyor. Pikseli
+ * olmayan (ya da susmuş) bir sitede bu hedef öğrenecek sinyal bulamaz:
+ * teslim yavaşlar, maliyet şişer ve ekranda hata yok, yalnız pahalı ve az
+ * ziyaretçi. Bu yüzden hedef pikselin hâline göre seçiliyor:
+ *
+ * - `aktif` (kullanılabilir bir piksel son 7 günde olay aldı) → sayfa
+ *   görüntüleme;
+ * - `yok`, `sessiz` (piksel var ama 7 gündür olay yok) ve `bilinmiyor`
+ *   (okunamadı ya da liste kesildi) → bağlantı tıklaması. Bilinmeyeni aktif
+ *   saymak, ölçülemeyen bir hedefe para göndermek olurdu; güvenli taraf
+ *   tıklama.
+ *
+ * Derleyici (`derle.ts`), karar tablosu (`kararlar.ts`) ve geri okuma
+ * beklentisi (derlenmiş gövdeden türüyor) bu fonksiyonu okuyor: ekran
+ * "tıklama" deyip gövde LPV gönderemez.
+ */
+export const SITE_PIKSEL_HALLERI = ['aktif', 'yok', 'sessiz', 'bilinmiyor'] as const;
+export type SitePikselHali = (typeof SITE_PIKSEL_HALLERI)[number];
+
+const PIKSEL_PENCERESI_MS = 7 * 86_400_000;
+
+/**
+ * Hesabın piksel listesinden hâl. `liste === null` = okunmadı/okunamadı.
+ * Kesilmiş listede aktif piksel bulunamadıysa `bilinmiyor`: aranan piksel
+ * kesilen sayfada olabilir, "yok" demek yalan olurdu. Tarihi çözülemeyen
+ * piksel aktif SAYILMAZ (güvenli taraf).
+ */
+export function sitePikselHali(
+  liste: ReadonlyArray<{ sonCalisma: string | null; kullanilamaz: boolean }> | null,
+  simdi: Date,
+  kesildi: boolean,
+): SitePikselHali {
+  if (!liste) return 'bilinmiyor';
+  const kullanilir = liste.filter((p) => !p.kullanilamaz);
+  const aktif = kullanilir.some((p) => {
+    const t = p.sonCalisma ? Date.parse(p.sonCalisma) : NaN;
+    return !Number.isNaN(t) && simdi.getTime() - t <= PIKSEL_PENCERESI_MS;
+  });
+  if (aktif) return 'aktif';
+  if (kesildi) return 'bilinmiyor';
+  return kullanilir.length === 0 ? 'yok' : 'sessiz';
+}
+
+/**
+ * Reklam setine GİDEN `optimization_goal`. SITE dışındaki niyetlerde
+ * kataloğun değeri; SITE'de pikselin hâli (verilmemişse `bilinmiyor`:
+ * eski taslak yolu pikseli okumuyor ve oradan gelen taslak tıklamaya düşer).
+ */
+export function metaOptimizasyonHedefi(niyet: NiyetKodu, sitePikseli: SitePikselHali | null | undefined): MetaOptimizasyonHedefi {
+  const m = NIYET_KATALOGU[niyet].meta;
+  if (!m) throw new Error(`${niyet} niyetinin Meta karşılığı yok`);
+  if (niyet !== 'SITE') return m.optimizationGoal;
+  return sitePikseli === 'aktif' ? 'LANDING_PAGE_VIEWS' : 'LINK_CLICKS';
+}
+
+/**
  * Sonuç etiketi `objective`'ten DEĞİL `optimization_goal`'dan türer.
  * WhatsApp niyeti OUTCOME_LEADS ile kuruluyor ama Meta'nın saydığı şey sohbet
  * başlangıcı; "potansiyel müşteri" yazmak müşteriye lead aldığını söyler,
@@ -335,6 +398,7 @@ export const SONUC_ETIKETLERI: Record<MetaOptimizasyonHedefi, string> = {
   LEAD_GENERATION: 'form',
   CONVERSATIONS: 'sohbet başlatan kişi',
   LANDING_PAGE_VIEWS: 'sayfa görüntüleme',
+  LINK_CLICKS: 'bağlantı tıklaması',
   OFFSITE_CONVERSIONS: 'dönüşüm',
   REACH: 'erişilen kişi',
   QUALITY_CALL: 'arama',

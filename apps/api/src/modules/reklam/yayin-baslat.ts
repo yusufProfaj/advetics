@@ -381,6 +381,9 @@ export async function taslakDerle(
     // pikseli Meta da kurulumda reddediyor.
     whatsappNumarasi: alanlar.whatsappNumarasi?.deger ?? null,
     pikselId: alanlar.pikselId?.deger ?? null,
+    // SITE: hedefi seçen piksel hâli taslakta (rehberin okuması); yoksa
+    // derleyici `bilinmiyor` sayar ve tıklamaya optimize eder.
+    sitePikseli: alanlar.sitePikseli?.deger ?? null,
     // Ç-6 (utm-etiketi.ts): GA4 trafiği kampanya KİMLİĞİYLE eşlensin;
     // bağlantıda zaten utm_ varsa müşterinin etiketine dokunulmaz (null).
     urlEtiketleri: advUtmEtiketi(alanlar.niyet!.deger, alanlar.hedefAdres?.deger ?? null),

@@ -126,7 +126,7 @@ describe('VIDEO · Meta', () => {
   });
 
   it('türetme: video fikri kapakla, niyet VIDEO_IZLENME', () => {
-    const r = rehberdenMeta(rehber('VIDEO'), { meta: true, google: false }, 'TRY', Z, new Map());
+    const r = rehberdenMeta(rehber('VIDEO'), { meta: true, google: false }, 'TRY', Z, new Map(), 'aktif');
     if (r.tur !== 'tamam') throw new Error(r.kodlar.join());
     expect(r.deger.niyet?.deger).toBe('VIDEO_IZLENME');
     expect(r.deger.kavramlar?.deger).toEqual([{ varlikId: U(10), kapakVarlikId: U(11), baslik: 'Başlık', metin: 'Ana metin' }]);
@@ -171,11 +171,11 @@ describe('SATIS · Meta piksel', () => {
   });
 
   it('türetme: piksel yalnız satış taslağına taşınır; şema kabul ediyor', () => {
-    const r = rehberdenMeta(satis(), { meta: true, google: false }, 'TRY', Z, ORAN);
+    const r = rehberdenMeta(satis(), { meta: true, google: false }, 'TRY', Z, ORAN, 'aktif');
     if (r.tur !== 'tamam') throw new Error(r.kodlar.join());
     expect(r.deger.pikselId?.deger).toBe(PIKSEL);
     expect(taslakAlanlariSchema.safeParse(r.deger).success).toBe(true);
-    const site = rehberdenMeta({ ...satis(), amac: al('SITE' as const) }, { meta: true, google: false }, 'TRY', Z, ORAN);
+    const site = rehberdenMeta({ ...satis(), amac: al('SITE' as const) }, { meta: true, google: false }, 'TRY', Z, ORAN, 'aktif');
     if (site.tur !== 'tamam') throw new Error(site.kodlar.join());
     expect(site.deger).not.toHaveProperty('pikselId');
   });
@@ -209,10 +209,10 @@ describe('WHATSAPP numarası', () => {
     expect(kodlar(oneri)).toEqual(['WHATSAPP-ONAY']);
     const a = wa({ whatsappNumarasi: al('+905559876543') });
     expect(kodlar(a)).toEqual([]);
-    const r = rehberdenMeta(a, { meta: true, google: false }, 'TRY', Z, ORAN);
+    const r = rehberdenMeta(a, { meta: true, google: false }, 'TRY', Z, ORAN, 'aktif');
     if (r.tur !== 'tamam') throw new Error(r.kodlar.join());
     expect(r.deger.whatsappNumarasi?.deger).toBe('+905559876543');
-    const site = rehberdenMeta({ ...a, amac: al('SITE' as const), hedefAdres: al('https://x.com') }, { meta: true, google: false }, 'TRY', Z, ORAN);
+    const site = rehberdenMeta({ ...a, amac: al('SITE' as const), hedefAdres: al('https://x.com') }, { meta: true, google: false }, 'TRY', Z, ORAN, 'aktif');
     if (site.tur !== 'tamam') throw new Error(site.kodlar.join());
     expect(site.deger).not.toHaveProperty('whatsappNumarasi');
   });

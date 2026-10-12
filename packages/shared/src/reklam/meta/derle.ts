@@ -17,7 +17,7 @@
  */
 import { ACILMADI_ONEKI, adlabels, kampanyaAdi, kreatifAdi, reklamAdi, reklamSetiAdi } from './adlandirma';
 import { etkinKategoriler, hedeflemeUret, type HedeflemeGirdisi, type OzelKategori } from './hedefleme';
-import { NIYET_KATALOGU, type NiyetKodu } from './niyetler';
+import { NIYET_KATALOGU, metaOptimizasyonHedefi, type NiyetKodu, type SitePikselHali } from './niyetler';
 import { microsToMinor } from '../para';
 import type { Butce } from '../butce';
 import { ATIF_STANDARTLARI } from '../taslak';
@@ -33,10 +33,12 @@ import { ORAN_ETIKETI, YERLESIM_GRUPLARI, YERLESIM_SIRASI, bannerSetiDestekleniy
  * 1.3.2: kreatif adı 100 karaktere sığdırılıyor (`kreatifAdi`).
  * 1.5.0: banner seti form, WhatsApp, arama, satış ve erişimde; değerli düğme `call_to_actions`.
  * 1.4.0: ad biçimi "ADV · GG.AA.YYYY · amaç · KOD" (kullanıcı kararı, 2026-10-12).
+ * 1.6.0: SITE'de hedef pikselin hâline göre (`metaOptimizasyonHedefi`):
+ *        aktif piksel yoksa LINK_CLICKS. Eski provalar LPV gövdesini kanıtlıyordu.
  * Sürüm provanın tazeliğine bağlı: eski derleyiciyle geçmiş prova yeni
  * gövdeyi kanıtlamaz.
  */
-export const DERLEYICI_SURUMU = '1.5.0';
+export const DERLEYICI_SURUMU = '1.6.0';
 
 /**
  * CLICK-TO-WHATSAPP SABİTLERİ (CLAUDE.md "CLICK-TO-WHATSAPP"). Bağlantı
@@ -216,6 +218,16 @@ const ATIF_SPEC: Record<AtifStandardi, Array<{ event_type: string; window_days: 
  * bütçe reklam parçasında kontrol ediliyor; atıf orada yok.
  */
 /*
+ * LINK_CLICKS DE 1 GÜN TIKLAMA ALIYOR — ÖLÇÜLMEDİ (2026-10-12). Meta'nın
+ * reklam seti başvurusu yalnız "desteklenen pencereler optimizasyon hedefine
+ * göre değişir" diyor ve hedef başına tabloyu bu sürümde vermiyor (sayfa
+ * okundu, tablo yok). Trafik amacında Reklam Yöneticisi'nin sunduğu tek
+ * pencere 1 gün tıklama; en dar pencereyi göndermek, geniş bir pencerenin
+ * sessizce daraltılmasından ya da reddedilmesinden güvenli. Form dersi
+ * burada da geçerli: ret ancak GERÇEK kurulumda çıkabilir, prova seti tek
+ * başına sınamıyor. Canlı ölçüm listesinde.
+ */
+/*
  * THRUPLAY VE REACH 1 GÜN TIKLAMA ALIYOR — ÖLÇÜLMEDİ (Dalga 3). Video
  * izlenme ve erişimde tıklama zaten sonuç değil; Meta'nın bu hedeflerde
  * hangi pencereyi kabul ettiği canlı turda görülecek. Form dersi aynen
@@ -287,6 +299,12 @@ export interface DerlemeGirdisi {
   whatsappNumarasi?: string | null;
   /** SATIS: Meta piksel kimliği (sayısal). Yoksa RET (`PIKSEL-YOK`). */
   pikselId?: string | null;
+  /**
+   * SITE: hesabın piksel hâli (`sitePikselHali`). Hedefi o seçiyor
+   * (`metaOptimizasyonHedefi`); verilmezse `bilinmiyor` = tıklama. Diğer
+   * niyetlerde okunmaz.
+   */
+  sitePikseli?: SitePikselHali | null;
   urlEtiketleri: string | null;
 }
 
@@ -445,6 +463,8 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
   if (retler.length > 0 || hedef.tur === 'ret' || butceMinor === null) return { tur: 'ret', retler };
 
   const m = niyet.meta;
+  // GİDEN HEDEF katalogdan değil TEK karardan: SITE'de piksele bağlı.
+  const optimizasyon = metaOptimizasyonHedefi(g.niyet, g.sitePikseli);
   const adG = {
     workspaceKisaAdi: g.workspaceKisaAdi,
     niyet: g.niyet,
@@ -475,18 +495,18 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
     campaign_id: '{kampanya}',
     status: 'PAUSED',
     billing_event: 'IMPRESSIONS',
-    optimization_goal: m.optimizationGoal,
+    optimization_goal: optimizasyon,
     promoted_object: tanitilanNesne(g),
     // ELLE YERLEŞİM yalnız bir boyut eksikse: eksik boyutun yerleşimi kapanır
     // (kullanıcı kararı). Dört boyut tamsa ya da oran bilinmiyorsa alanlar
     // yazılmaz ve Advantage+ yerleşim kalır.
     targeting: yerlesim && !yerlesim.otomatik ? { ...hedef.targeting, ...elleYerlesim(yerlesim, !!g.instagramPlatformId) } : hedef.targeting,
-    attribution_spec: atifSpec(m.optimizationGoal, g.atif!),
+    attribution_spec: atifSpec(optimizasyon, g.atif!),
     start_time: g.takvim.baslangic,
     adlabels: etiketler,
   };
   if (m.destinationType) reklamSeti.destination_type = m.destinationType;
-  if (m.optimizationGoal === 'REACH') reklamSeti.frequency_control_specs = ERISIM_SIKLIK_SINIRI.map((x) => ({ ...x }));
+  if (optimizasyon === 'REACH') reklamSeti.frequency_control_specs = ERISIM_SIKLIK_SINIRI.map((x) => ({ ...x }));
   if (g.takvim.bitis) reklamSeti.end_time = g.takvim.bitis;
 
   const govdeler: MetaGovdesi[] = [
@@ -566,7 +586,7 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
     instagram: !!g.instagramPlatformId,
     elleYerlesim: !!yerlesim && !yerlesim.otomatik,
     tanitilan: tanitilanTuru(g.niyet),
-    erisim: m.optimizationGoal === 'REACH',
+    erisim: optimizasyon === 'REACH',
   });
 
   return {

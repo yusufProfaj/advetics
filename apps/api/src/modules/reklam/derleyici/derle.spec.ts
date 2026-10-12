@@ -352,7 +352,8 @@ describe('Dalga 2 sürüm ve açılış', () => {
     // 1.3.2: kreatif adı 100 karaktere sığdırılıyor.
     // 1.4.0: ad biçimi ADV · tarih · amaç · kod.
     // 1.5.0: banner seti beş amaçta.
-    expect(DERLEYICI_SURUMU).toBe('1.5.0');
+    // 1.6.0: "Siteme gelsinler" hedefi piksel hâline bağlı (LINK_CLICKS dalı).
+    expect(DERLEYICI_SURUMU).toBe('1.6.0');
   });
 
   it('KRİTİK: TELEFON/WHATSAPP derleniyor ama üründe AÇIK DEĞİL (canlı tur bekliyor)', () => {

@@ -452,7 +452,8 @@ export const ARAMA_DONUSUM_AYARI = 'USE_ACCOUNT_LEVEL_CALL_CONVERSION_ACTION';
  *
  * SIRA ÖNEMLİ: geçici kimlik ancak onu kuran işlem sırada önce geliyorsa
  * çözülüyor (bütçe → kampanya → kampanya ölçütleri → grup → kelimeler → reklam
- * → [arama öğesi → kampanya-öğe bağı]).
+ * → [arama öğesi → kampanya-öğe bağı] → [site bağlantısı → bağ]… →
+ * [açıklama metni → bağ]…).
  *
  * ARAMA ÖĞESİ (`telefon` verilirse): `Asset` (callAsset) + `CampaignAsset`
  * (fieldType CALL) AYNI istekte. Ayrı bir ikinci istek, kampanya kurulup öğe
@@ -500,6 +501,12 @@ export interface AtomikAramaIstegi {
   aciklamalar: string[];
   /** E.164 (+90…). Verilirse arama öğesi kurulur ve kampanyaya bağlanır. */
   telefon?: string | null;
+  /**
+   * Site bağlantıları (en çok 4) ve açıklama metinleri (en çok 4): kampanya
+   * düzeyinde öğe + bağ, AYNI atomik istekte (aşağıdaki not).
+   */
+  siteBaglantilari?: ReadonlyArray<{ metin: string; adres: string; satir1?: string; satir2?: string }>;
+  aciklamaMetinleri?: readonly string[];
   validateOnly: boolean;
 }
 
@@ -515,7 +522,19 @@ export interface AtomikAramaSirasi {
   reklam: number;
   /** Arama öğesinin kampanya bağı (CampaignAsset); telefon yoksa null. */
   aramaOgesi: number | null;
+  /** Site bağlantısı ve açıklama metni bağlarının (CampaignAsset) sıraları. */
+  siteBaglantilari: number[];
+  aciklamaMetinleri: number[];
 }
+
+/*
+ * UZANTI SINIRLARI kurucuda da: türetme ve seçim (`google-uzanti.ts`) zaten
+ * sığdırıyor, ama gövdeyi kuran son kapı burası ve sınırı aşan bir öğe
+ * atomik isteğin TAMAMINI düşürür (kampanya hiç kurulmaz). Kırpmak yerine
+ * patlıyor: kırpılmış metin müşterinin sözünü değiştirir.
+ */
+const UZANTI_SINIRI = { enCok: 4, baglantiMetni: 25, satir: 35, aciklamaMetni: 25 } as const;
+const uzunluk = (s: string) => [...s].length;
 
 function ilkOlustur(b: GoogleMutateBody): Record<string, unknown> {
   const c = b.operations[0]?.create;
@@ -541,6 +560,18 @@ export function aramaAtomikIstek(p: AtomikAramaIstegi): { govde: AtomikAramaGovd
   // Numara İSTEK KURULMADAN çözülüyor: bilinmeyen önekte hiçbir işlem
   // üretilmeden patlasın, yarım bir gövde kimsenin eline geçmesin.
   const tel = p.telefon ? aramaOgesiTelefonu(p.telefon) : null;
+  const siteBaglantilari = p.siteBaglantilari ?? [];
+  const aciklamaMetinleri = p.aciklamaMetinleri ?? [];
+  if (siteBaglantilari.length > UZANTI_SINIRI.enCok || aciklamaMetinleri.length > UZANTI_SINIRI.enCok) {
+    throw new Error(`En çok ${UZANTI_SINIRI.enCok} site bağlantısı ve ${UZANTI_SINIRI.enCok} açıklama metni kurulur.`);
+  }
+  for (const b of siteBaglantilari) {
+    if (!b.metin.trim() || uzunluk(b.metin) > UZANTI_SINIRI.baglantiMetni) throw new Error(`Site bağlantısı metni 1-${UZANTI_SINIRI.baglantiMetni} karakter olmalı: "${b.metin}"`);
+    if ((b.satir1 === undefined) !== (b.satir2 === undefined)) throw new Error(`Site bağlantısının iki açıklama satırı birlikte verilir: "${b.metin}"`);
+    for (const x of [b.satir1, b.satir2]) if (x !== undefined && (!x.trim() || uzunluk(x) > UZANTI_SINIRI.satir)) throw new Error(`Site bağlantısı satırı 1-${UZANTI_SINIRI.satir} karakter olmalı: "${x}"`);
+    if (!/^https:\/\//.test(b.adres)) throw new Error(`Site bağlantısı https olmalı: ${b.adres}`);
+  }
+  for (const a of aciklamaMetinleri) if (!a.trim() || uzunluk(a) > UZANTI_SINIRI.aciklamaMetni) throw new Error(`Açıklama metni 1-${UZANTI_SINIRI.aciklamaMetni} karakter olmalı: "${a}"`);
 
   const ops: Array<Record<string, unknown>> = [];
   const ekle = (op: Record<string, unknown>): number => ops.push(op) - 1;
@@ -611,9 +642,39 @@ export function aramaAtomikIstek(p: AtomikAramaIstegi): { govde: AtomikAramaGovd
     });
     aramaOgesi = ekle({ campaignAssetOperation: { create: { campaign: KAMPANYA, asset: ARAMA_OGESI, fieldType: 'CALL' } } });
   }
+  /*
+   * SİTE BAĞLANTISI + AÇIKLAMA METNİ — aynı atomik istekte, kampanyaya bağlı.
+   * Ayrı bir ikinci istek, öğe düştüğünde uzantısız açılan bir kampanya ve
+   * ekranda "4 site bağlantısı" yazan bir yalan bırakırdı. Her öğe kendi
+   * geçici kimliğiyle (-5'ten aşağı) ve bağından ÖNCE kuruluyor (geçici
+   * kimlik ancak önce kurulduysa çözülür). Onay (politika incelemesi)
+   * kurulumdan SONRA ve günler sürebilir: geri okuma onay durumuna bakmıyor
+   * (arama öğesi dersi, `GoogleOkunan.aramaOgeleri`).
+   */
+  let gecici = -5;
+  const siteBagi: number[] = [];
+  for (const b of siteBaglantilari) {
+    const kaynak = `${kok}/assets/${gecici--}`;
+    ekle({
+      assetOperation: {
+        create: {
+          resourceName: kaynak,
+          finalUrls: [b.adres],
+          sitelinkAsset: { linkText: b.metin, ...(b.satir1 !== undefined ? { description1: b.satir1, description2: b.satir2 } : {}) },
+        },
+      },
+    });
+    siteBagi.push(ekle({ campaignAssetOperation: { create: { campaign: KAMPANYA, asset: kaynak, fieldType: 'SITELINK' } } }));
+  }
+  const aciklamaBagi: number[] = [];
+  for (const a of aciklamaMetinleri) {
+    const kaynak = `${kok}/assets/${gecici--}`;
+    ekle({ assetOperation: { create: { resourceName: kaynak, calloutAsset: { calloutText: a } } } });
+    aciklamaBagi.push(ekle({ campaignAssetOperation: { create: { campaign: KAMPANYA, asset: kaynak, fieldType: 'CALLOUT' } } }));
+  }
   return {
     govde: { mutateOperations: ops, partialFailure: false, validateOnly: p.validateOnly },
-    sira: { kampanya, reklamGrubu, reklam, aramaOgesi },
+    sira: { kampanya, reklamGrubu, reklam, aramaOgesi, siteBaglantilari: siteBagi, aciklamaMetinleri: aciklamaBagi },
   };
 }
 

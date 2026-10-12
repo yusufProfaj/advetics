@@ -7,7 +7,7 @@ import { kapaliBirak, yayiniSonlandir, type TxRunner } from '../yayin-motoru';
 import { googleYazmaAcikMi } from '../yazma-kapisi';
 import { DEMAND_GEN_GORSEL_OTOMASYONU } from '../../connections/providers/google-demandgen';
 import { PMAX_OTOMASYONU, type PmaxAlani } from '../../connections/providers/google-pmax';
-import type { GoogleBeklenen, GoogleDerleme, GoogleGorselReklamBeklentisi, GoogleVarlikGrubuBeklentisi } from './derle-google';
+import type { GoogleBeklenen, GoogleDerleme, GoogleGorselReklamBeklentisi, GoogleUzantiBeklentisi, GoogleVarlikGrubuBeklentisi } from './derle-google';
 
 const logger = new Logger('GoogleYayin');
 
@@ -175,6 +175,13 @@ export interface GoogleOkunan {
   teklif?: string | null;
   gorselReklam?: GoogleGorselReklamBeklentisi | null;
   varlikGrubu?: GoogleVarlikGrubuBeklentisi | null;
+  /**
+   * Kampanyaya bağlı site bağlantısı ve açıklama metni öğeleri, İÇERİKLE.
+   * Onay durumu (`primary_status`, politika incelemesi) BİLEREK okunmuyor:
+   * öğeler günlerce "inceleniyor" kalabiliyor ve onu fark saymak her yeni
+   * site reklamını açılmadan durdururdu (arama öğesi dersiyle aynı).
+   */
+  uzantilar?: GoogleUzantiBeklentisi | null;
 }
 
 export interface GeriOkumaSatiri {
@@ -217,7 +224,31 @@ export function googleGeriOkumaKarsilastir(b: GoogleBeklenen, o: GoogleOkunan): 
   if (b.teklif) kiyasla('kampanya.teklif', b.teklif, o.teklif ?? null);
   if (b.gorselReklam) kiyasla('gorselReklam', b.gorselReklam, o.gorselReklam ?? null);
   if (b.varlikGrubu) kiyasla('varlikGrubu', b.varlikGrubu, o.varlikGrubu ?? null);
+  // Uzantılar KÜME olarak: Google'ın satır sırası garanti değil. Beklenen
+  // boşsa da kıyaslanır (bağlı öğe varsa fark: söz verilmemiş metin).
+  if (b.uzantilar) kiyasla('uzantilar', uzantiKumesi(b.uzantilar), o.uzantilar ? uzantiKumesi(o.uzantilar) : null);
   return { sonuc: satirlar.length ? 'fark' : 'temiz', satirlar };
+}
+
+/**
+ * Uzantıların sıradan bağımsız biçimi. Adres `URL` ile kanonikleştiriliyor
+ * (`https://x.com` ↔ `https://x.com/`): Google'ın adresi nasıl döndürdüğü
+ * ÖLÇÜLMEDİ ve biçim farkını fark saymak doğru kampanyayı durdururdu; yol,
+ * sorgu ya da alan adı farkı yine fark.
+ */
+export function uzantiKumesi(u: GoogleUzantiBeklentisi): GoogleUzantiBeklentisi {
+  const adres = (a: string) => {
+    try {
+      return new URL(a).toString();
+    } catch {
+      return a;
+    }
+  };
+  const sirala = <T>(x: T[]) => [...x].sort((a, b) => (kararliJson(a) < kararliJson(b) ? -1 : kararliJson(a) > kararliJson(b) ? 1 : 0));
+  return {
+    siteBaglantilari: sirala(u.siteBaglantilari.map((x) => ({ ...x, adres: adres(x.adres) }))),
+    aciklamaMetinleri: sirala(u.aciklamaMetinleri),
+  };
 }
 
 /** Anahtarları sıralı JSON — kıyas için; diziler sırasını korur. */
@@ -260,6 +291,47 @@ export function ulusalNumara(o: { countryCode: string | null; phoneNumber: strin
     else if (rakam.length === 11 && rakam.startsWith('0')) rakam = rakam.slice(1);
   }
   return { countryCode: ulke, phoneNumber: rakam };
+}
+
+interface UzantiSatiri {
+  campaignAsset?: { fieldType?: string; status?: string; source?: string };
+  asset?: {
+    finalUrls?: string[];
+    sitelinkAsset?: { linkText?: string; description1?: string; description2?: string };
+    calloutAsset?: { calloutText?: string };
+  };
+}
+
+/**
+ * Kampanyaya bağlı SITELINK/CALLOUT öğeleri. WHERE'deki her alan SELECT'te
+ * (`campaign_asset` dersi). Onay alanları seçilmiyor (yukarıdaki not).
+ * Alan adları v25 başvurusundan, ÖLÇÜLMEDİ.
+ */
+async function uzantilariOku(port: GoogleYayinPortu, ctx: FetchContext, kampanyaId: string): Promise<GoogleUzantiBeklentisi> {
+  const satirlar = await port.ara<UzantiSatiri>(
+    ctx,
+    `SELECT campaign.id, campaign_asset.field_type, campaign_asset.status, campaign_asset.source, asset.final_urls,
+            asset.sitelink_asset.link_text, asset.sitelink_asset.description1, asset.sitelink_asset.description2,
+            asset.callout_asset.callout_text
+       FROM campaign_asset
+      WHERE campaign.id = ${kampanyaId} AND campaign_asset.field_type IN ('SITELINK', 'CALLOUT') AND campaign_asset.status != 'REMOVED'`,
+  );
+  // GOOGLE'IN KENDİ ÜRETTİĞİ öğe (dinamik site bağlantısı, `source =
+  // AUTOMATICALLY_CREATED`) bizim sözümüz değil ve hesap ayarına bağlı:
+  // onu fark saymak doğru kurulumu durdururdu. Ayıklama kodda, WHERE'de
+  // değil: alanın filtrede davranışı ÖLÇÜLMEDİ, seçmek zararsız.
+  const canli = satirlar.filter((x) => x.campaignAsset?.status !== 'REMOVED' && x.campaignAsset?.source !== 'AUTOMATICALLY_CREATED');
+  return {
+    siteBaglantilari: canli
+      .filter((x) => x.campaignAsset?.fieldType === 'SITELINK')
+      .map((x) => ({
+        metin: x.asset?.sitelinkAsset?.linkText ?? '',
+        adres: x.asset?.finalUrls?.[0] ?? '',
+        satir1: x.asset?.sitelinkAsset?.description1 ?? null,
+        satir2: x.asset?.sitelinkAsset?.description2 ?? null,
+      })),
+    aciklamaMetinleri: canli.filter((x) => x.campaignAsset?.fieldType === 'CALLOUT').map((x) => x.asset?.calloutAsset?.calloutText ?? ''),
+  };
 }
 
 interface KriterSatiri {
@@ -338,6 +410,7 @@ export async function googleGeriOku(port: GoogleYayinPortu, ctx: FetchContext, k
     teklif: c?.biddingStrategyType ?? null,
     ...(b?.gorselReklam ? { gorselReklam: await gorselReklamOku(port, ctx, kampanyaId) } : {}),
     ...(b?.varlikGrubu ? { varlikGrubu: await varlikGrubuOku(port, ctx, kampanyaId) } : {}),
+    ...(b?.uzantilar ? { uzantilar: await uzantilariOku(port, ctx, kampanyaId) } : {}),
   };
 }
 

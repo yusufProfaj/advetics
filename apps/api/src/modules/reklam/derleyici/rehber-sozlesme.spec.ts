@@ -319,7 +319,7 @@ const ORANLAR = new Map<string, GorselOrani | null>([
 
 describe('rehberdenMeta — mevcut Meta zincirine bağlanır', () => {
   it('türetilen taslak Meta şemasından geçer ve Meta eksik listesi temiz', () => {
-    const r = rehberdenMeta(tamSite(), acikPlatformlar(tamSite(), true), 'TRY', Z, ORANLAR);
+    const r = rehberdenMeta(tamSite(), acikPlatformlar(tamSite(), true), 'TRY', Z, ORANLAR, 'aktif');
     expect(r.tur).toBe('tamam');
     if (r.tur !== 'tamam') return;
     expect(taslakAlanlariSchema.safeParse(r.deger).success).toBe(true);
@@ -331,7 +331,7 @@ describe('rehberdenMeta — mevcut Meta zincirine bağlanır', () => {
   });
 
   it('aynı boyuttan iki görsel iki fikir; başlıklar sırayla, metin TEK', () => {
-    const r = rehberdenMeta(tamSite(), acikPlatformlar(tamSite(), true), 'TRY', Z, ORANLAR);
+    const r = rehberdenMeta(tamSite(), acikPlatformlar(tamSite(), true), 'TRY', Z, ORANLAR, 'aktif');
     if (r.tur !== 'tamam') throw new Error('ret');
     const k = r.deger.kavramlar!.deger;
     expect(k.map((x) => x.baslik)).toEqual(['Özel Havuzlu Villalar', 'Kuşadası Garden Villas']);
@@ -343,13 +343,13 @@ describe('rehberdenMeta — mevcut Meta zincirine bağlanır', () => {
   it('VIDEO amacı Meta tarafında VIDEO_IZLENME niyetine gider', () => {
     // Meta VIDEO dalı Dalga 2'de kapalı; eşlemeyi sınamak için açık küme elle veriliyor.
     const a = { ...tamSite(), amac: al('VIDEO' as const) };
-    const r = rehberdenMeta(a, { meta: true, google: true }, 'TRY', Z, ORANLAR);
+    const r = rehberdenMeta(a, { meta: true, google: true }, 'TRY', Z, ORANLAR, 'aktif');
     expect(r.tur === 'tamam' && r.deger.niyet?.deger).toBe('VIDEO_IZLENME');
   });
 });
 
 describe('rehberdenGoogle — derleme girdisi', () => {
-  const GB = { musteriId: '612-448-2093', paraBirimi: 'TRY', saatDilimi: 'Europe/Istanbul', donusumEtkin: false, satisOlcumu: null, isletmeAdi: 'Garden Villas', logoVarlikId: null, kategoriTabani: [] };
+  const GB = { musteriId: '612-448-2093', paraBirimi: 'TRY', saatDilimi: 'Europe/Istanbul', donusumEtkin: false, son30GunDonusum: 20, uzantilar: null, satisOlcumu: null, isletmeAdi: 'Garden Villas', logoVarlikId: null, kategoriTabani: [] };
 
   it('SITE → ARAMA/site, kalan pay, tiresiz Google hesap numarası, taban negatifler', () => {
     const r = rehberdenGoogle(tamSite(), acikPlatformlar(tamSite(), true), GB);

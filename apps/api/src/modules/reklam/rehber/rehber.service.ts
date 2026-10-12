@@ -17,7 +17,12 @@ import {
   REHBER_AMACLARI,
   acikPlatformlar,
   googleGorselKurgusuMu,
-  googleTeklifi,
+  googleTeklifKarari,
+  aciklamaMetinleriUret,
+  altSayfaAdaylari,
+  sayfaOzeti,
+  siteBaglantilariUret,
+  sitePikselHali,
   kanonikJson,
   kararTablosu,
   oranBul,
@@ -33,6 +38,10 @@ import {
   uyumDenetle,
   type AnahtarKelimeOnerisi,
   type GoogleDerlemeGirdisi,
+  type GoogleUzantiKaynagi,
+  type SiteAltSayfasi,
+  type SiteBaglantisi,
+  type SitePikselHali,
   type GorselOlcusu,
   type GorselOrani,
   type MetinOnerisi,
@@ -108,6 +117,7 @@ import {
 } from './platform-okuma';
 import type { MetaProvider } from '../../connections/providers/meta.provider';
 import { rehberYayinKapilari, type PlatformProvaHali } from './yayin-kapilari';
+import { sayfaHtmlGetir, type HtmlSonucu } from '../../tenancy/site-oku';
 
 const logger = new Logger('Rehber');
 
@@ -145,8 +155,20 @@ interface OnKosulKaydi {
   googleDonusum: boolean | null;
   /** Birincil SATIN ALMA dönüşümü (Maks. Performans ön koşulu, Dalga 3). */
   googleSatis: boolean | null;
+  /**
+   * Son 30 günün dönüşüm sayısı (Arama teklif eşiği, `googleTeklifKarari`).
+   * Yalnız ölçüm etkinse okunur; okunmadı/okunamadı = `null` = tıklama.
+   */
+  googleDonusum30Gun: number | null;
 }
 const ONBELLEK_MS = 15 * 60_000;
+
+/**
+ * Son 30 günün dönüşüm sayısı (teklif eşiği). Kaynak taraması sorguyu bu
+ * sabitten okuyor; `segments.date` WHERE'de seçilmeden: `ads-kurulum.ts`
+ * harcama sorgusuyla aynı biçim (çekirdek tarih segmenti istisnası).
+ */
+export const GOOGLE_DONUSUM_SAYISI_SORGUSU = 'SELECT metrics.conversions FROM customer WHERE segments.date DURING LAST_30_DAYS';
 
 /**
  * SAYFA BAŞINA ön koşullar (Lead Ads koşulları, WhatsApp hattı) ve yayında
@@ -176,9 +198,26 @@ interface PikselKaydi {
   kesildi: boolean;
 }
 
+/**
+ * SİTE TARAMASI (Arama + site uzantıları). Anahtar `clientId`; kayıt yalnız
+ * AYNI adres için geçerli. Okunamayan site de yazılır (boş liste + sebep):
+ * burada "okunamadı" ile "okunmadı" ayrı hâller ve ikincisi kayıt yokluğu.
+ */
+interface UzantiKaydi {
+  zaman: number;
+  adres: string;
+  siteBaglantilari: SiteBaglantisi[];
+  sebep: string | null;
+}
+
 /** Bir rehberin eksik/karar bağlamı: yalnız veritabanı + önbellek. */
 interface Baglam extends RehberEksikBaglami {
   googleDonusum: boolean | null;
+  googleDonusum30Gun: number | null;
+  /** "Siteme gelsinler" Meta hedefini seçen piksel hâli (`sitePikselHali`). */
+  sitePikseli: SitePikselHali;
+  /** Arama + site uzantı kaynağı; amaç başkaysa `null`. */
+  uzantilar: GoogleUzantiKaynagi | null;
   isletmeAdi: string;
   logoVarlikId: string | null;
   kategoriTabani: OzelKategori[];
@@ -235,6 +274,15 @@ export class RehberService {
   private readonly onbellek = new Map<string, OnKosulKaydi>();
   private readonly sayfaOnbellek = new Map<string, SayfaKaydi>();
   private readonly pikselOnbellek = new Map<string, PikselKaydi>();
+  /** SİTE amacının piksel listesi: satın alma istatistiği SORULMADAN (tek çağrı). */
+  private readonly sitePikselOnbellek = new Map<string, PikselKaydi>();
+  private readonly uzantiOnbellek = new Map<string, UzantiKaydi>();
+  /**
+   * Site okuyucu (SSRF korumalı `sayfaHtmlGetir`). Alan olarak duruyor ki
+   * testler sahtesini versin: servis testleri prova yolunu koşuyor ve gerçek
+   * okuyucu orada müşteri sitesine AĞDAN çıkardı.
+   */
+  siteHtmlOku: (adres: string) => Promise<HtmlSonucu> = (adres) => sayfaHtmlGetir(adres);
   private readonly metaSurumu: string;
   private sonKelimeIstegi = 0;
 
@@ -290,8 +338,16 @@ export class RehberService {
       metaAsgari: h.asgariGunluk.meta,
       googleDonusum: h.onKosullar.googleDonusumEtkin,
       googleSatis: h.onKosullar.googleSatisOlcumu,
+      googleDonusum30Gun: null,
     });
     const okunan = seciliYoksaIlk(h.sayfalar, secim?.sayfaId)?.id;
+    // Karar tablosu prova ÖNCESİ de doğru söylesin: rehberin amacına göre
+    // piksel hâli ve dönüşüm sayısı burada okunur (düşerse "bilinmiyor").
+    if (rehberId) {
+      const a = alanlariOku(await this.satir(ctx, rehberId));
+      await this.sitePikselTazele(ctx, clientId, a);
+      await this.googleDonusumTazele(ctx, clientId, a, h.onKosullar.googleDonusumEtkin);
+    }
     if (okunan) this.sayfaYaz(clientId, okunan, { formKosullari: h.onKosullar.metaFormKosullari, whatsapp: h.onKosullar.metaWhatsapp });
     return h;
   }
@@ -379,6 +435,11 @@ export class RehberService {
     return k && Date.now() - k.zaman < ONBELLEK_MS ? { satirlar: k.satirlar, kesildi: k.kesildi } : null;
   }
 
+  private sitePikselKaydi(clientId: string, adAccountId: string): { satirlar: PikselSatiri[]; kesildi: boolean } | null {
+    const k = this.sitePikselOnbellek.get(`${clientId}:${adAccountId}`);
+    return k && Date.now() - k.zaman < ONBELLEK_MS ? { satirlar: k.satirlar, kesildi: k.kesildi } : null;
+  }
+
   private sayfaYaz(clientId: string, sayfaId: string, d: Omit<SayfaKaydi, 'zaman'>): void {
     const k = `${clientId}:${sayfaId}`;
     const eski = this.sayfaOnbellek.get(k);
@@ -421,6 +482,12 @@ export class RehberService {
       await guvenli('piksel listesi', () => this.pikselOku(ctx, clientId, hesapId));
       return;
     }
+    // SİTE: hedef (sayfa görüntüleme ↔ tıklama) pikselin hâline bağlı;
+    // prova TAZE okumayla türetir. Düşerse hâl `bilinmiyor` = tıklama.
+    if (amac === 'SITE') {
+      await this.sitePikselTazele(ctx, clientId, a);
+      return;
+    }
     if (!sayfaId || !a.platformlar?.deger.meta || (amac !== 'FORM' && amac !== 'WHATSAPP')) return;
     const okuyucu = this.platformOkuyucu(ctx);
     if (amac === 'WHATSAPP') {
@@ -459,7 +526,120 @@ export class RehberService {
       // Hesap değiştiyse eski hesabın dönüşüm hâli taşınmaz.
       googleDonusum: taze && taze.googleHesapId === hesap ? taze.googleDonusum : null,
       googleSatis: satis,
+      googleDonusum30Gun: taze && taze.googleHesapId === hesap ? taze.googleDonusum30Gun : null,
     });
+  }
+
+  /** SİTE piksel listesi (satın alma istatistiği SORULMADAN). Hata FIRLATIR, önbelleğe yazılmaz. */
+  private async sitePikselOku(ctx: TenantContext, clientId: string, adAccountId: string): Promise<void> {
+    const e = await hesapErisimi(this.tx(ctx), this.crypto, adAccountId, clientId);
+    const p = this.saglayicilar.get('meta') as unknown as Partial<Pick<MetaProvider, 'fetchAdPixels'>>;
+    if (typeof p.fetchAdPixels !== 'function') throw new Error('Meta sağlayıcısı piksel okumayı desteklemiyor');
+    const r = await p.fetchAdPixels({ adAccountPath: e.hesap, accessToken: e.kullaniciToken, satinAlmaSor: false });
+    this.sitePikselOnbellek.set(`${clientId}:${adAccountId}`, { zaman: Date.now(), satirlar: r.satirlar, kesildi: r.kesildi });
+  }
+
+  /** "Siteme gelsinler" + Meta + hesap seçiliyse piksel listesini tazeler; düşerse log (hâl `bilinmiyor`). */
+  private async sitePikselTazele(ctx: TenantContext, clientId: string, a: RehberAlanlari): Promise<void> {
+    const hesapId = a.metaHesabiId?.deger;
+    if (a.amac?.deger !== 'SITE' || !a.platformlar?.deger.meta || !hesapId) return;
+    try {
+      await this.sitePikselOku(ctx, clientId, hesapId);
+    } catch (e) {
+      logger.warn(`Site amacı piksel listesi okunamadı (hesap ${hesapId}): ${(e as Error).message}`);
+    }
+  }
+
+  /**
+   * ARAMA kurgusunda dönüşüm ölçümünü ve son 30 günün dönüşüm sayısını TAZE
+   * okur (teklif eşiği). `etkinBilinen` verilirse (hazırlık az önce okudu)
+   * ölçüm yeniden sorulmaz. Sayı YALNIZ ölçüm etkinse sorulur: etkin değilse
+   * cevap zaten tıklama ve çağrı boşa kota. Düşerse `null` + log.
+   */
+  private async googleDonusumTazele(ctx: TenantContext, clientId: string, a: RehberAlanlari, etkinBilinen?: boolean | null): Promise<void> {
+    const hesap = a.googleHesabiId?.deger;
+    const amac = a.amac?.deger;
+    if (!hesap || !amac || !a.platformlar?.deger.google || REHBER_AMACLARI[amac].google.kurgu !== 'ARAMA') return;
+    let etkin: boolean | null = etkinBilinen ?? null;
+    let sayi: number | null = null;
+    try {
+      if (etkinBilinen === undefined) etkin = await this.platformOkuyucu(ctx).googleDonusumEtkin(hesap);
+      if (etkin === true) sayi = await this.googleDonusumSayisi(ctx, hesap);
+    } catch (e) {
+      logger.warn(`Google dönüşüm sayısı okunamadı (hesap ${hesap}): ${(e as Error).message}`);
+    }
+    const o = this.onbellek.get(clientId);
+    const taze = o && Date.now() - o.zaman < ONBELLEK_MS ? o : null;
+    this.onbellek.set(clientId, {
+      zaman: taze?.zaman ?? Date.now(),
+      metaHesapId: taze?.metaHesapId ?? null,
+      googleHesapId: hesap,
+      metaAsgari: taze?.metaAsgari ?? null,
+      googleDonusum: etkin,
+      googleSatis: taze && taze.googleHesapId === hesap ? taze.googleSatis : null,
+      googleDonusum30Gun: sayi,
+    });
+  }
+
+  /**
+   * Hesabın son 30 gündeki dönüşüm sayısı (`metrics.conversions` = yalnız
+   * "dönüşümlere dahil" işlemler, teklifin öğrendiği sayı). Kota bekçisinden.
+   * `ads-kurulum.ts`teki harcama sorgusuyla aynı biçim (müşteri düzeyi,
+   * `segments.date DURING`). Okunamayan değer sıfır SAYILMAZ: fırlatır.
+   */
+  private async googleDonusumSayisi(ctx: TenantContext, adAccountId: string): Promise<number> {
+    const { fctx } = await this.googleBaglami(ctx, adAccountId, null);
+    await this.kotaKapisi(adAccountId);
+    const r = await this.google.rehberAra<{ metrics?: { conversions?: number | string } }>(fctx, GOOGLE_DONUSUM_SAYISI_SORGUSU);
+    let toplam = 0;
+    for (const x of r) {
+      const v = x.metrics?.conversions;
+      // Proto3 JSON'da sıfır değerli alan HİÇ gelmeyebilir: eksik = 0.
+      const n = v === undefined ? 0 : Number(v);
+      if (!Number.isFinite(n) || n < 0) throw new Error(`Dönüşüm sayısı çözülemedi: ${String(v)}`);
+      toplam += n;
+    }
+    return toplam;
+  }
+
+  /**
+   * ARAMA + SİTE: sitenin alt sayfalarını okuyup site bağlantısı kaynağını
+   * önbelleğe yazar (`google-uzanti.ts`). Ana sayfa + en çok
+   * `ALT_SAYFA_ADAY_SINIRI` alt sayfa, SSRF korumalı okuyucuyla
+   * (`sayfaHtmlGetir`, Ölçüm ve hazırlığın kullandığı). Alt sayfalar
+   * PARALEL: tek tek 8 sn zaman aşımı prova isteğini dakikalarca tutardı.
+   * Yönlendirmeyle BAŞKA alana giden sayfa atlanır.
+   */
+  private async siteUzantiTazele(clientId: string, a: RehberAlanlari, markaAdi: string | null): Promise<void> {
+    const amac = a.amac?.deger;
+    const adres = a.hedefAdres?.deger;
+    if (!amac || !adres || !a.platformlar?.deger.google) return;
+    const g = REHBER_AMACLARI[amac].google;
+    if (g.kurgu !== 'ARAMA' || g.ulasma !== 'site') return;
+    const yaz = (siteBaglantilari: SiteBaglantisi[], sebep: string | null) =>
+      this.uzantiOnbellek.set(clientId, { zaman: Date.now(), adres, siteBaglantilari, sebep });
+    try {
+      const ana = await this.siteHtmlOku(adres);
+      if (!ana.ok) return void yaz([], `Site okunamadı: ${ana.sebep}`);
+      const adaylar = altSayfaAdaylari(ana.html, ana.adres);
+      if (adaylar.length === 0) return void yaz([], 'Ana sayfada alt sayfa bağlantısı bulunamadı');
+      const alanAdi = (u: string) => new URL(u).hostname.toLowerCase().replace(/^www\./, '');
+      const okunan = await Promise.all(
+        adaylar.map(async (c): Promise<SiteAltSayfasi | null> => {
+          const r = await this.siteHtmlOku(c.adres);
+          if (!r.ok || !r.adres.startsWith('https://') || alanAdi(r.adres) !== alanAdi(ana.adres)) return null;
+          return { adres: r.adres, ...sayfaOzeti(r.html), baglantiMetni: c.metin };
+        }),
+      );
+      const sayfalar = okunan.filter((x): x is SiteAltSayfasi => x !== null);
+      const baglantilar = siteBaglantilariUret(sayfalar, markaAdi);
+      yaz(
+        baglantilar,
+        baglantilar.length ? null : `${adaylar.length} alt sayfadan ${sayfalar.length} tanesi açıldı; 25 karaktere sığan en az 2 farklı başlık çıkmadı`,
+      );
+    } catch (e) {
+      yaz([], `Site okunamadı: ${(e as Error).message}`);
+    }
   }
 
   private platformOkuyucu(ctx: TenantContext): RehberPlatformOkuyucu {
@@ -758,6 +938,9 @@ export class RehberService {
     const a = alanlariOku(s);
     await this.sayfaTazele(ctx, s.client_id, a);
     await this.googleSatisTazele(ctx, s.client_id, a);
+    // Arama: teklif eşiği ve uzantılar provadan ÖNCE taze (gövdeye giriyorlar).
+    await this.googleDonusumTazele(ctx, s.client_id, a);
+    await this.siteUzantiTazele(s.client_id, a, await this.markaAdi(ctx, s.client_id));
     const b = await this.baglam(ctx, s.client_id, a);
     const engeller = platformaGiderken(rehberEksikleri(a, b)).filter((e) => e.seviye === 'engel');
     if (engeller.length) throw new BadRequestException({ message: 'Önce eksikleri tamamla.', eksikler: engeller });
@@ -830,7 +1013,7 @@ export class RehberService {
   }
 
   private async metaProva(ctx: TenantContext, s: RehberSatiri, a: RehberAlanlari, b: Baglam, acik: Record<RehberPlatformu, boolean>, zaman: string): Promise<PlatformProvaSonucu> {
-    const t = rehberdenMeta(a, acik, b.meta?.currency ?? b.paraBirimi, zaman, b.medyaOranlari ?? new Map());
+    const t = rehberdenMeta(a, acik, b.meta?.currency ?? b.paraBirimi, zaman, b.medyaOranlari ?? new Map(), b.sitePikseli);
     if (t.tur === 'ret') return { tur: 'reddetti', zaman, mesajlar: t.kodlar.map((k) => `Eksik: ${k}`) };
     try {
       let taslakId = s.meta_taslak_id;
@@ -864,6 +1047,8 @@ export class RehberService {
       paraBirimi: b.google.currency,
       saatDilimi: b.google.timezone,
       donusumEtkin: b.googleDonusum,
+      son30GunDonusum: b.googleDonusum30Gun,
+      uzantilar: b.uzantilar,
       satisOlcumu: b.onKosullar?.googleSatisOlcumu ?? null,
       medyaOranlari: b.medyaOranlari ?? new Map(),
       isletmeAdi: b.isletmeAdi,
@@ -1041,8 +1226,8 @@ export class RehberService {
     oranlar: ReadonlyMap<string, GorselOrani | null>,
   ): Promise<string | null> {
     const [t] = await this.tx(ctx)((x) =>
-      x.$queryRaw<Array<{ aktif_surum_no: number; icerik_ozeti: string | null }>>(Prisma.sql`
-        SELECT t.aktif_surum_no, s.icerik_ozeti FROM reklam_taslagi t
+      x.$queryRaw<Array<{ aktif_surum_no: number; icerik_ozeti: string | null; alanlar: unknown }>>(Prisma.sql`
+        SELECT t.aktif_surum_no, s.icerik_ozeti, s.alanlar FROM reklam_taslagi t
           LEFT JOIN taslak_surumu s ON s.taslak_id = t.id AND s.surum_no = t.aktif_surum_no
          WHERE t.id = ${taslakId}::uuid`),
     );
@@ -1054,7 +1239,16 @@ export class RehberService {
      * içerik "uyum geçti" damgasıyla yayınlanırdı. Rehberden yeniden türetip
      * aynı özet kuralıyla karşılaştırıyoruz; uyuşmazsa yayın yok.
      */
-    const yeniden = rehberdenMeta(a, acik, paraBirimi, new Date().toISOString(), oranlar);
+    /*
+     * PİKSEL HÂLİ ÇOCUKTAN: rehberin içeriği değil, provanın okuduğu
+     * platform hâli. Yayında yeniden okunsaydı (ya da okuma düşseydi) hâl
+     * provadakinden ayrılıp bu karşılaştırmayı "taslak değişmiş" diye
+     * düşürürdü; kullanıcının değiştirdiği hiçbir şey yokken. Uyum denetçisi
+     * bu alana bakmıyor, kapının koruduğu içerik değişmedi.
+     */
+    const cocuk = taslakAlanlariSchema.safeParse(t.alanlar);
+    const sitePikseli = (cocuk.success ? cocuk.data.sitePikseli?.deger : undefined) ?? 'bilinmiyor';
+    const yeniden = rehberdenMeta(a, acik, paraBirimi, new Date().toISOString(), oranlar, sitePikseli);
     const beklenen = yeniden.tur === 'tamam' ? createHash('sha256').update(taslakKanonikIcerik(yeniden.deger)).digest('hex') : null;
     if (beklenen !== t.icerik_ozeti) return 'Meta taslağı rehberden sonra değişmiş; yeniden prova et.';
     const r = await this.yayinSvc.baslat(ctx, { taslakId, surumNo: t.aktif_surum_no, icerikOzeti: t.icerik_ozeti, testKipi: false, kaynak: 'panel', rehber });
@@ -1154,15 +1348,7 @@ export class RehberService {
       // Teklif kuralı `rehberdenGoogle` ile AYNI fonksiyondan (`googleTeklifi`):
       // önceden burada ayrı yazılıydı ve Talep Yaratma'da gövdenin tutmadığı
       // "En çok dönüşüm"ü söylüyordu.
-      kararlar: amac
-        ? kararTablosu(
-            amac,
-            acikPlatformlar(a, b.ajansYoneticisi),
-            REHBER_AMACLARI[amac].google.kurgu ? googleTeklifi(REHBER_AMACLARI[amac].google.kurgu, b.googleDonusum) : 'MAKS_TIKLAMA',
-            a.instagramId?.deger != null,
-            rehberYerlesimPlani(a, b.medyaOranlari ?? new Map()),
-          )
-        : [],
+      kararlar: amac ? this.kararlar(amac, a, b) : [],
       metaTaslakId: s.meta_taslak_id,
       googleTaslakId: s.google_taslak_id,
       icerikOzeti: rehberOzeti(a),
@@ -1170,14 +1356,40 @@ export class RehberService {
     };
   }
 
+  /**
+   * Karar tablosu. Teklif ve sebebi `rehberdenGoogle` ile AYNI fonksiyondan
+   * (`googleTeklifKarari`), Meta hedefi derleyiciyle AYNI piksel hâlinden.
+   */
+  private kararlar(amac: NonNullable<RehberAlanlari['amac']>['deger'], a: RehberAlanlari, b: Baglam) {
+    const kurgu = REHBER_AMACLARI[amac].google.kurgu;
+    const teklif = kurgu ? googleTeklifKarari(kurgu, b.googleDonusum, b.googleDonusum30Gun) : null;
+    return kararTablosu(
+      amac,
+      acikPlatformlar(a, b.ajansYoneticisi),
+      teklif?.teklif ?? 'MAKS_TIKLAMA',
+      a.instagramId?.deger != null,
+      rehberYerlesimPlani(a, b.medyaOranlari ?? new Map()),
+      { sitePikseli: b.sitePikseli, ...(teklif ? { googleTeklifSebebi: teklif.sebep } : {}), uzantilar: b.uzantilar },
+    );
+  }
+
+  /** Marka adı (site bağlantısı metninden ayıklanır: "Hizmetler | Marka"). */
+  private async markaAdi(ctx: TenantContext, clientId: string): Promise<string | null> {
+    const [m] = await this.tx(ctx)((t) =>
+      t.$queryRaw<Array<{ marka: string | null; ad: string }>>(Prisma.sql`
+        SELECT p.marka_adi AS marka, c.name AS ad FROM clients c LEFT JOIN client_profiles p ON p.client_id = c.id WHERE c.id = ${clientId}::uuid`),
+    );
+    return m?.marka ?? m?.ad ?? null;
+  }
+
   /** Eksik/karar bağlamı: YALNIZ veritabanı ve önbellek — platform çağrısı yok. */
   private async baglam(ctx: TenantContext, clientId: string, a: RehberAlanlari): Promise<Baglam> {
     const metaId = a.metaHesabiId?.deger ?? null;
     const googleId = a.googleHesabiId?.deger ?? null;
     const r = await this.tx(ctx)(async (t) => {
-      const [m] = await t.$queryRaw<Array<{ ad: string; marka: string | null; logo: string | null; yasal: string | null; kategoriler: string[] }>>(Prisma.sql`
+      const [m] = await t.$queryRaw<Array<{ ad: string; marka: string | null; logo: string | null; yasal: string | null; kategoriler: string[]; vaatler: string[] | null }>>(Prisma.sql`
         SELECT c.name AS ad, p.marka_adi AS marka, p.logo_asset_id::text AS logo, p.yasal_uyari AS yasal,
-               c.special_ad_categories AS kategoriler
+               c.special_ad_categories AS kategoriler, p.vaatler
           FROM clients c LEFT JOIN client_profiles p ON p.client_id = c.id
          WHERE c.id = ${clientId}::uuid`);
       const hesaplar = await t.$queryRaw<Array<{ id: string; platform: string; external_id: string; currency: string; timezone: string }>>(Prisma.sql`
@@ -1207,6 +1419,21 @@ export class RehberService {
     const sayfa = this.sayfaOku(clientId, a.sayfaId?.deger);
     const googleDonusum = taze && google && taze.googleHesapId === google.id ? taze.googleDonusum : null;
     const googleSatis = taze && google && taze.googleHesapId === google.id ? taze.googleSatis : null;
+    const googleDonusum30Gun = taze && google && taze.googleHesapId === google.id ? taze.googleDonusum30Gun : null;
+    // SİTE piksel hâli: SATIŞ'ın tam listesi de aynı hesabı anlatıyor; hangisi varsa.
+    const sitePk = meta ? (this.pikselKaydi(clientId, meta.id) ?? this.sitePikselKaydi(clientId, meta.id)) : null;
+    const sitePikseli = sitePikselHali(sitePk?.satirlar ?? null, new Date(), sitePk?.kesildi ?? false);
+    const amacG = a.amac?.deger ? REHBER_AMACLARI[a.amac.deger].google : null;
+    const uk = this.uzantiOnbellek.get(clientId);
+    const ukTaze = uk && Date.now() - uk.zaman < ONBELLEK_MS && uk.adres === a.hedefAdres?.deger ? uk : null;
+    const uzantilar: GoogleUzantiKaynagi | null =
+      amacG?.kurgu === 'ARAMA' && amacG.ulasma === 'site'
+        ? {
+            siteBaglantilari: ukTaze ? ukTaze.siteBaglantilari : null,
+            siteSebebi: ukTaze?.sebep ?? null,
+            aciklamaMetinleri: aciklamaMetinleriUret(r.m?.vaatler ?? []).metinler,
+          }
+        : null;
     const taban: OzelKategori[] = [];
     for (const k of r.m?.kategoriler ?? []) {
       // Meta CREDIT'i FINANCIAL_PRODUCTS_SERVICES ile değiştirdi; tanınmayan
@@ -1241,6 +1468,9 @@ export class RehberService {
       paraBirimi,
       paraBirimleriAyni: !(meta && google) || meta.currency === google.currency,
       googleDonusum,
+      googleDonusum30Gun,
+      sitePikseli,
+      uzantilar,
       isletmeAdi: r.m?.marka ?? r.m?.ad ?? 'İşletme',
       logoVarlikId: r.m?.logo ?? null,
       kategoriTabani: [...new Set(taban)],

@@ -64,6 +64,8 @@ function girdi(amac: RehberAmacKodu, donusumEtkin: boolean | null = false): Goog
     paraBirimi: 'TRY',
     saatDilimi: 'Europe/Istanbul',
     donusumEtkin,
+    son30GunDonusum: 20,
+    uzantilar: null,
     satisOlcumu: null,
     isletmeAdi: 'Garden Villas',
     logoVarlikId: U(9),
@@ -163,7 +165,8 @@ describe('ARAMA (Siteme gelsinler) — karar tablosu ile gövde', () => {
   });
 
   it('karar tablosunun BÜTÜN Google satırları yukarıda eşlendi', () => {
-    const eslenen = ['TUR', 'TEKLIF', 'NEREDE', 'KONUM', 'OTOMATIK_METIN', 'SAYFA', 'OLCUM'];
+    // UZANTI (site bağlantısı / açıklama metni) gövdeyle `site-uzanti.spec.ts`te eşleniyor.
+    const eslenen = ['TUR', 'TEKLIF', 'NEREDE', 'KONUM', 'OTOMATIK_METIN', 'SAYFA', 'OLCUM', 'UZANTI'];
     expect(kararTablosu('SITE', { meta: true, google: true }, 'MAKS_TIKLAMA', true).map((s) => s.kod)).toEqual(eslenen);
   });
 });

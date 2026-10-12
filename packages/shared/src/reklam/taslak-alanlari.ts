@@ -12,7 +12,7 @@
  */
 import { z } from 'zod';
 import { ALAN_KAYNAKLARI, type AlanKaynagi } from './taslak';
-import { niyetKoduSchema } from './meta/niyetler';
+import { niyetKoduSchema, SITE_PIKSEL_HALLERI } from './meta/niyetler';
 import { OZEL_KATEGORILER } from './meta/hedefleme';
 import { GORSEL_ORANLARI } from './banner-seti';
 
@@ -132,6 +132,14 @@ export const taslakAlanlariSchema = z
     whatsappNumarasi: alan(z.string().max(20).nullable()),
     /** SATIS niyeti: Meta piksel kimliği (sayısal). İsteğe bağlı, varsayılansız. */
     pikselId: alan(z.string().regex(/^\d{1,30}$/).nullable()),
+    /**
+     * SITE niyeti: hesabın Meta piksel hâli, rehberin TAZE okumasından
+     * (`sitePikselHali`). Hedefi o seçiyor (aktif → sayfa görüntüleme, aksi
+     * tıklama; `metaOptimizasyonHedefi`). Taslakta duruyor çünkü derleme
+     * platform çağırmıyor ve prova ile yayın AYNI gövdeyi kurmalı. İsteğe
+     * bağlı ve varsayılansız: kayıtlı taslakların içerik özeti değişmiyor.
+     */
+    sitePikseli: alan(z.enum(SITE_PIKSEL_HALLERI)),
   })
   .partial()
   .strict();
@@ -154,6 +162,9 @@ const IZINLI: Partial<Record<keyof TaslakAlanlari, readonly AlanKaynagi[]>> = {
   // Tek piksel varsa rehber onu önerir (`derleyici`); yanlış piksel = satış
   // hiç sayılmaz, o yüzden asistan önerisi karar değil.
   pikselId: ['kullanici', 'derleyici'],
+  // Elle "aktif" yazılabilseydi pikselsiz sitede LPV kurulurdu: yalnız
+  // derleyicinin okuması karar.
+  sitePikseli: ['derleyici'],
 };
 
 export interface TaslakEksigi {
@@ -184,7 +195,7 @@ export function kullaniciEksigiMi(e: Pick<TaslakEksigi, 'kod'>): boolean {
 const ALAN_ADIMI: Record<keyof TaslakAlanlari, TaslakEksigi['adim']> = {
   niyet: 0, reklamHesabiId: 0, sayfaId: 0, instagramId: 0, konumlar: 0,
   enDusukYas: 0, ipucuYas: 0, ipucuCinsiyet: 0, ekKategoriler: 0,
-  kavramlar: 1, hedefAdres: 0, formSablonuId: 0, telefon: 0, whatsappNumarasi: 0, pikselId: 0,
+  kavramlar: 1, hedefAdres: 0, formSablonuId: 0, telefon: 0, whatsappNumarasi: 0, pikselId: 0, sitePikseli: 0,
   butce: 3, takvim: 4,
 };
 

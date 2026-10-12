@@ -7,6 +7,7 @@ import {
   gunlukEsdeger,
   karakterSayisi,
   paraOndaligi,
+  SITE_BAGLANTISI_YOK_CUMLESI,
   type GoogleDerlemeGirdisi,
   type GorselOlcusu,
 } from '@advetics/shared';
@@ -43,7 +44,10 @@ import { PMAX_OTOMASYONU, pmaxAlanSayilari, pmaxAtomikIstek, type PmaxAlani } fr
 // gövdesi bayt bayt aynı kaldı ve telefon gövdesi daha önce hiç 'gecti'
 // provası alamazdı (derleyici yerelde reddediyordu). Artırmak bekleyen bütün
 // site provalarını boşuna geçersiz kılardı.
-export const GOOGLE_DERLEYICI_SURUMU = 'g-1.0.0';
+// g-1.1.0: Arama + site'de site bağlantısı ve açıklama metni öğeleri;
+// dönüşüm teklifi veri eşiğine bağlı (`googleTeklifKarari`). Site gövdesi
+// DEĞİŞTİ: eski provalar uzantısız gövdeyi kanıtlıyordu.
+export const GOOGLE_DERLEYICI_SURUMU = 'g-1.1.0';
 
 /**
  * Google yayınında `yayin.atif_standardi`. Karar tablosunun "Ölçüm"
@@ -96,6 +100,12 @@ export interface GoogleVarlikGrubuBeklentisi {
   otomasyon: Record<string, string>;
 }
 
+/** Kampanyaya bağlı site bağlantısı / açıklama metni öğelerinin İÇERİĞİ. */
+export interface GoogleUzantiBeklentisi {
+  siteBaglantilari: Array<{ metin: string; adres: string; satir1: string | null; satir2: string | null }>;
+  aciklamaMetinleri: string[];
+}
+
 /** Geri okumada beklenen değerler — `google-geri-okuma.ts` bunlarla karşılaştırır. */
 export interface GoogleBeklenen {
   kanal: 'SEARCH' | 'DEMAND_GEN' | 'PERFORMANCE_MAX';
@@ -115,6 +125,12 @@ export interface GoogleBeklenen {
    * bu alan HİÇ yok (undefined); okuyan taraf onu null sayıyor.
    */
   aramaOgesi?: { countryCode: string; phoneNumber: string } | null;
+  /**
+   * Site bağlantısı ve açıklama metni (Arama + site, g-1.1.0). Eski satırlarda
+   * YOK (undefined) = bakılmaz. Boş diziler = HİÇ öğe beklenmiyor (kaynak
+   * çıkmadı); kampanyaya bağlı öğe varsa fark. Onay durumu beklentide YOK.
+   */
+  uzantilar?: GoogleUzantiBeklentisi;
   /**
    * Dalga 3 (yalnız yeni kurgularda yazılır; eski satırlarda yok = bakılmaz):
    * teklif stratejisi (`campaign.bidding_strategy_type`), Talep Yaratma görsel
@@ -259,6 +275,9 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
       basliklar: g.basliklar,
       aciklamalar: g.aciklamalar,
       telefon: tel ? g.telefon : null,
+      // Uzantılar yalnız site ulaşmasında girdiye yazılıyor (`rehberdenGoogle`).
+      siteBaglantilari: g.siteBaglantilari ?? [],
+      aciklamaMetinleri: g.aciklamaMetinleri ?? [],
       validateOnly: b.validateOnly,
     });
     if (tel) {
@@ -267,6 +286,10 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
         "Google arama öğesini numara doğrulanınca gösterir: numara sitende yazı olarak (görsel değil) görünmeli; Google'ın algılaması 3 güne kadar sürebilir.",
       );
       notlar.push('Telefon her saatte görünür: açık olduğun saatler henüz sorulmuyor.');
+    }
+    if (g.siteBaglantilari !== undefined && g.siteBaglantilari.length === 0) notlar.push(`${SITE_BAGLANTISI_YOK_CUMLESI}.`);
+    if ((g.siteBaglantilari?.length ?? 0) + (g.aciklamaMetinleri?.length ?? 0) > 0) {
+      notlar.push('Site bağlantıları ve açıklama metinleri Google incelemesinden sonra görünür; inceleme sürerken reklam yine yayında.');
     }
     return {
       tur: 'govde',
@@ -284,6 +307,17 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
         anahtarKelimeSayisi: g.anahtarKelimeler.length,
         negatifSayisi: g.negatifler.length,
         aramaOgesi: tel ? { countryCode: tel.countryCode, phoneNumber: tel.phoneNumber } : null,
+        // Teklif Arama'da da geri okunuyor (g-1.1.0): eşik kararı gövdeye
+        // gerçekten yansıdı mı, kampanyanın kendisinden.
+        teklif: g.teklif === 'MAKS_DONUSUM' ? 'MAXIMIZE_CONVERSIONS' : 'TARGET_SPEND',
+        ...(g.siteBaglantilari !== undefined || g.aciklamaMetinleri !== undefined
+          ? {
+              uzantilar: {
+                siteBaglantilari: (g.siteBaglantilari ?? []).map((x) => ({ metin: x.metin, adres: x.adres, satir1: x.satir1 ?? null, satir2: x.satir2 ?? null })),
+                aciklamaMetinleri: [...(g.aciklamaMetinleri ?? [])],
+              },
+            }
+          : {}),
       },
       atif: GOOGLE_ATIF,
       notlar,

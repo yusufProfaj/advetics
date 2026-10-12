@@ -345,7 +345,7 @@ describe('rehber → banner seti', () => {
   const DORT = [{ varlikId: U(10) }, { varlikId: U(11) }, { varlikId: U(12) }, { varlikId: U(13) }];
 
   it('KRİTİK: Garden Villas’ın dört boyutu → TEK fikir, varsayılan görsel kare', () => {
-    const r = rehberdenMeta(rehber(DORT), { meta: true, google: false }, 'TRY', '2026-10-10T09:00:00.000Z', ORAN);
+    const r = rehberdenMeta(rehber(DORT), { meta: true, google: false }, 'TRY', '2026-10-10T09:00:00.000Z', ORAN, 'aktif');
     if (r.tur !== 'tamam') throw new Error(r.kodlar.join());
     const k = r.deger.kavramlar!.deger;
     expect(k).toHaveLength(1);
@@ -354,7 +354,7 @@ describe('rehber → banner seti', () => {
   });
 
   it('oranı tanınmayan görsel → ret, sessizce atılmıyor', () => {
-    const r = rehberdenMeta(rehber([...DORT, { varlikId: U(14) }]), { meta: true, google: false }, 'TRY', 'z', ORAN);
+    const r = rehberdenMeta(rehber([...DORT, { varlikId: U(14) }]), { meta: true, google: false }, 'TRY', 'z', ORAN, 'aktif');
     expect(r).toEqual({ tur: 'ret', kodlar: ['GORSEL-ORAN'] });
   });
 
@@ -383,7 +383,7 @@ describe('rehber → banner seti', () => {
         const e = rehberEksikleri({ ...rehber(DORT), amac: al(amac) }, { ...B, medyaOranlari: ORAN });
         expect(e.some((x) => x.kod.startsWith('M-SET')), amac).toBe(false);
       }
-      const r = rehberdenMeta({ ...rehber(DORT), amac: al('WHATSAPP' as const) }, { meta: true, google: false }, 'TRY', 'z', ORAN);
+      const r = rehberdenMeta({ ...rehber(DORT), amac: al('WHATSAPP' as const) }, { meta: true, google: false }, 'TRY', 'z', ORAN, 'aktif');
       if (r.tur !== 'tamam') throw new Error(r.kodlar.join());
       const k = r.deger.kavramlar!.deger;
       expect(k).toHaveLength(1);
@@ -395,10 +395,10 @@ describe('rehber → banner seti', () => {
 
   it('KRİTİK: telefon taslağa YALNIZ arama reklamında taşınır (site taslağının özeti değişmez)', () => {
     const tel = al('+905321234567');
-    const site = rehberdenMeta({ ...rehber([{ varlikId: U(13) }]), telefon: tel }, { meta: true, google: false }, 'TRY', 'z', ORAN);
+    const site = rehberdenMeta({ ...rehber([{ varlikId: U(13) }]), telefon: tel }, { meta: true, google: false }, 'TRY', 'z', ORAN, 'aktif');
     if (site.tur !== 'tamam') throw new Error(site.kodlar.join());
     expect(site.deger).not.toHaveProperty('telefon');
-    const arama = rehberdenMeta({ ...rehber([{ varlikId: U(13) }]), amac: al('TELEFON' as const), telefon: tel }, { meta: true, google: false }, 'TRY', 'z', ORAN);
+    const arama = rehberdenMeta({ ...rehber([{ varlikId: U(13) }]), amac: al('TELEFON' as const), telefon: tel }, { meta: true, google: false }, 'TRY', 'z', ORAN, 'aktif');
     if (arama.tur !== 'tamam') throw new Error(arama.kodlar.join());
     expect(arama.deger.telefon).toEqual(tel);
     expect(arama.deger.niyet?.deger).toBe('TELEFON');
@@ -406,10 +406,10 @@ describe('rehber → banner seti', () => {
 
   it('KRİTİK: form kimliği taslağa YALNIZ form amacında taşınır (B5)', () => {
     const form = al('123456789012345');
-    const site = rehberdenMeta({ ...rehber([{ varlikId: U(13) }]), formSablonuId: form }, { meta: true, google: false }, 'TRY', 'z', ORAN);
+    const site = rehberdenMeta({ ...rehber([{ varlikId: U(13) }]), formSablonuId: form }, { meta: true, google: false }, 'TRY', 'z', ORAN, 'aktif');
     if (site.tur !== 'tamam') throw new Error(site.kodlar.join());
     expect(site.deger).not.toHaveProperty('formSablonuId');
-    const f = rehberdenMeta({ ...rehber([{ varlikId: U(13) }]), amac: al('FORM' as const), formSablonuId: form }, { meta: true, google: false }, 'TRY', 'z', ORAN);
+    const f = rehberdenMeta({ ...rehber([{ varlikId: U(13) }]), amac: al('FORM' as const), formSablonuId: form }, { meta: true, google: false }, 'TRY', 'z', ORAN, 'aktif');
     if (f.tur !== 'tamam') throw new Error(f.kodlar.join());
     expect(f.deger.formSablonuId).toEqual(form);
   });

@@ -53,14 +53,18 @@ const CTX = {
   managerAccountId: AJANS_UST_HESAP,
 } as TenantContext;
 
+/** Sahte GAQL cevabı (sorguya göre) ve son mutate gövdesi. */
+let araCevabi: (q: string) => unknown[] = () => [];
+let sonGovde: { mutateOperations: Array<Record<string, { create?: Record<string, unknown> }>> } | null = null;
 const sahteGoogle = {
-  rehberMutate: async (_c: unknown, g: { validateOnly: boolean }) => {
+  rehberMutate: async (_c: unknown, g: { validateOnly: boolean; mutateOperations: Array<Record<string, { create?: Record<string, unknown> }>> }) => {
     cagrilar.push(`mutate:${g.validateOnly}`);
+    sonGovde = g;
     return [];
   },
-  rehberAra: async () => {
+  rehberAra: async (_c: unknown, q: string) => {
     cagrilar.push('ara');
-    return [];
+    return araCevabi(q);
   },
   searchGeoLocations: async (_c: unknown, q: string) => {
     cagrilar.push(`geo:${q}`);
@@ -115,10 +119,16 @@ beforeAll(async () => {
       },
     } as never,
   );
+  // Ağa çıkılmaz: site bağlantısı okuması sahte (okunamadı).
+  svc.siteHtmlOku = async () => ({ ok: false, sebep: "test: ağ yok" });
 });
 afterAll(async () => h.close());
 beforeEach(async () => {
   cagrilar = [];
+  araCevabi = () => [];
+  sonGovde = null;
+  svc.siteHtmlOku = async () => ({ ok: false, sebep: 'test: ağ yok' });
+  (svc as unknown as { uzantiOnbellek: Map<string, unknown> }).uzantiOnbellek.clear();
   kuyrukIsleri = [];
   yz = null;
   whatsappCevabi = { number: null, hata: null };
@@ -230,7 +240,7 @@ describe('prova ve yayın', () => {
     expect(p.meta).toBeNull();
     expect(cagrilar.filter((c) => c.startsWith('mutate'))).toEqual(['mutate:true']);
     const [pr] = await h.q<{ durum: string; derleyici_surumu: string }>('SELECT durum, derleyici_surumu FROM prova');
-    expect(pr).toEqual({ durum: 'gecti', derleyici_surumu: 'g-1.0.0' });
+    expect(pr).toEqual({ durum: 'gecti', derleyici_surumu: 'g-1.1.0' });
     const [rr] = await h.q<{ prova_ozeti: string }>('SELECT prova_ozeti FROM reklam_rehberi');
     expect(rr!.prova_ozeti).toBe(p.icerikOzeti);
     // Google çocuk taslağı platform=google; Meta'nın strict şeması uygulanmadı.
@@ -637,5 +647,68 @@ describe('Meta form listesi ve sayfa ön koşulları (Dalga 2)', () => {
     } finally {
       (REHBER_ACILIS.FORM as Record<string, string>).meta = eski;
     }
+  });
+});
+
+// =============================================================================
+// SİTEME GELSİNLER — Google teklif eşiği ve uzantılar SERVİS yolundan (2026-10-12)
+// =============================================================================
+describe('Siteme gelsinler (Google): eşik ve uzantılar prova gövdesinde', () => {
+  type Op = Record<string, { create?: Record<string, unknown> }>;
+  const kampanya = () => (sonGovde!.mutateOperations as Op[]).find((o) => 'campaignOperation' in o)!.campaignOperation!.create!;
+  const donusum = (etkin: boolean, sayi: number | string | undefined) => (q: string) =>
+    q.includes('FROM conversion_action') ? (etkin ? [{ conversionAction: { id: '1' } }] : []) : q.includes('metrics.conversions') ? [{ metrics: sayi === undefined ? {} : { conversions: sayi } }] : [];
+
+  for (const [sayi, teklif] of [[0, 'targetSpend'], [14, 'targetSpend'], [15, 'maximizeConversions']] as const) {
+    it(`ölçüm etkin, son 30 günde ${sayi} dönüşüm → ${teklif}; ekran sebebi söylüyor`, async () => {
+      araCevabi = donusum(true, sayi);
+      const r = await tamRehber();
+      const p = await svc.prova(CTX, r.id);
+      expect(p.google).toMatchObject({ tur: 'gecti' });
+      expect(kampanya()[teklif]).toEqual({});
+      const k = await svc.oku(CTX, r.id);
+      expect(k.kararlar.find((x) => x.kod === 'TEKLIF')!.google!.not).toMatch(new RegExp(`son 30 günde ${sayi} dönüşüm`, 'i'));
+    });
+  }
+
+  it('ölçüm etkin DEĞİLSE dönüşüm sayısı SORULMAZ (boşa kota) ve teklif tıklama', async () => {
+    const sorgular: string[] = [];
+    araCevabi = (q) => (sorgular.push(q), donusum(false, 100)(q));
+    const r = await tamRehber();
+    await svc.prova(CTX, r.id);
+    expect(sorgular.some((q) => q.includes('metrics.conversions'))).toBe(false);
+    expect(kampanya().targetSpend).toEqual({});
+  });
+
+  it('sayı ÇÖZÜLEMEZSE sıfır sayılmaz: okunamadı, teklif tıklama', async () => {
+    araCevabi = donusum(true, 'abc');
+    const r = await tamRehber();
+    await svc.prova(CTX, r.id);
+    expect(kampanya().targetSpend).toEqual({});
+    expect((await svc.oku(CTX, r.id)).kararlar.find((x) => x.kod === 'TEKLIF')!.google!.not).toMatch(/okunamadı/);
+  });
+
+  it('site alt sayfaları okunursa site bağlantıları AYNI prova gövdesinde; ekran sayıyı ve metinleri söylüyor', async () => {
+    const sayfalar: Record<string, string> = {
+      'https://ornek.com.tr/': '<a href="/hizmetler">Hizmetler</a><a href="/projeler">Projeler</a><a href="https://baska.com/">x</a>',
+      'https://ornek.com.tr/hizmetler': '<title>Hizmetlerimiz | Örnek</title>',
+      'https://ornek.com.tr/projeler': '<title>Projeler | Örnek</title>',
+    };
+    const istenen: string[] = [];
+    svc.siteHtmlOku = async (a) => (istenen.push(a), sayfalar[a] ? { ok: true, html: sayfalar[a]!, adres: a } : { ok: false, sebep: '404' });
+    const r = await tamRehber();
+    await svc.prova(CTX, r.id);
+    const baglar = (sonGovde!.mutateOperations as Op[]).filter((o) => 'campaignAssetOperation' in o).map((o) => o.campaignAssetOperation!.create!.fieldType);
+    expect(baglar).toEqual(['SITELINK', 'SITELINK']);
+    expect(istenen).not.toContain('https://baska.com/');
+    const u = (await svc.oku(CTX, r.id)).kararlar.find((x) => x.kod === 'UZANTI')!.google!;
+    expect(u.deger).toBe('2 site bağlantısı: Hizmetlerimiz, Projeler');
+  });
+
+  it('site okunamazsa site bağlantısı KURULMAZ ve ekran yöneticinin cümlesini yazıyor', async () => {
+    const r = await tamRehber();
+    await svc.prova(CTX, r.id);
+    expect((sonGovde!.mutateOperations as Op[]).some((o) => 'assetOperation' in o)).toBe(false);
+    expect((await svc.oku(CTX, r.id)).kararlar.find((x) => x.kod === 'UZANTI')!.google!.deger).toBe('Sitenden alt sayfa okunamadı, site bağlantısı eklenmedi');
   });
 });

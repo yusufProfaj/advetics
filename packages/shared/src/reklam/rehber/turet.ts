@@ -24,6 +24,8 @@ import { butceBol } from './butce';
 import { METIN_SINIRLARI } from './metin';
 import { reklamSetiPlani, setlereAyir, type GorselOrani, type SetPlani } from '../banner-seti';
 import { googleGorselKurgusuMu, pmaxUzunBaslik } from './google-gorsel';
+import type { GoogleUzantiKaynagi, SiteBaglantisi } from './google-uzanti';
+import type { SitePikselHali } from '../meta/niyetler';
 
 /**
  * Meta taslak şeması en çok 5 kavram taşıyor. Kavram artık bir BANNER SETİ
@@ -72,12 +74,19 @@ export function rehberYerlesimPlani(a: RehberAlanlari, oranlar: ReadonlyMap<stri
  * ve türetme RET verir — sessizce atılan görsel, kullanıcının "yükledim"
  * dediği boyutun reklamda olmaması demek.
  */
+/**
+ * `sitePikseli`: seçili Meta hesabının piksel hâli (`sitePikselHali`), yalnız
+ * "Siteme gelsinler"de taslağa yazılır ve hedefi seçer. ZORUNLU parametre:
+ * varsayılanı olsaydı onu geçirmeyi unutan çağıran derlemede de testte de
+ * sessiz kalır ve her site reklamı tıklamaya düşerdi.
+ */
 export function rehberdenMeta(
   a: RehberAlanlari,
   acik: { meta: boolean; google: boolean },
   paraBirimi: string,
   zaman: string,
   oranlar: ReadonlyMap<string, GorselOrani | null>,
+  sitePikseli: SitePikselHali,
 ): TuretmeSonucu<TaslakAlanlari> {
   const kodlar: string[] = [];
   const amac = a.amac?.deger;
@@ -149,6 +158,9 @@ export function rehberdenMeta(
     // taslağa yazmak kayıtlı provaları sebepsiz bayatlatırdı.
     ...(a.whatsappNumarasi && REHBER_AMACLARI[amac].meta.niyet === 'WHATSAPP' ? { whatsappNumarasi: a.whatsappNumarasi } : {}),
     ...(a.pikselId && REHBER_AMACLARI[amac].meta.niyet === 'SATIS' ? { pikselId: a.pikselId } : {}),
+    // Piksel hâli YALNIZ site amacında: başka amaca yazmak o taslağın
+    // içerik özetini piksel her sustuğunda değiştirip provasını bayatlatırdı.
+    ...(REHBER_AMACLARI[amac].meta.niyet === 'SITE' ? { sitePikseli: turetilmis(sitePikseli, zaman) } : {}),
   };
   return { tur: 'tamam', deger: t };
 }
@@ -186,10 +198,37 @@ export type GoogleTeklif = 'MAKS_TIKLAMA' | 'MAKS_DONUSUM';
  * - MAKS. PERFORMANS: yalnız dönüşüm (Google başka strateji kabul etmiyor);
  *   ölçüm yoksa kurgu HİÇ kurulmuyor (`rehberdenGoogle` → `G-DONUSUM`).
  */
-export function googleTeklifi(kurgu: GoogleKurgu, donusumEtkin: boolean | null): GoogleTeklif {
-  if (kurgu === 'MAKS_PERFORMANS') return 'MAKS_DONUSUM';
-  if (kurgu === 'ARAMA') return donusumEtkin === true ? 'MAKS_DONUSUM' : 'MAKS_TIKLAMA';
-  return 'MAKS_TIKLAMA';
+export function googleTeklifi(kurgu: GoogleKurgu, donusumEtkin: boolean | null, son30GunDonusum: number | null): GoogleTeklif {
+  return googleTeklifKarari(kurgu, donusumEtkin, son30GunDonusum).teklif;
+}
+
+/**
+ * DÖNÜŞÜM TEKLİFİNİN VERİ EŞİĞİ — ÖLÇÜLECEK (yönetici kararı, 2026-10-12).
+ * Birincil dönüşüm işleminin ETKİN olması, teklifin öğreneceği veri olduğu
+ * anlamına gelmiyor: hiç dönüşüm saymamış (etiketi bozuk, sayfası trafik
+ * almıyor) bir hesapta "En çok dönüşüm" harcamayı rastgele dağıtır ve
+ * öğrenme bitmez. 15 / 30 gün Google'ın kendi önerilerinde geçen alt sınır
+ * mertebesi; bu ürünün müşterilerinde doğru eşik ÖLÇÜLMEDİ — ilk kurulumların
+ * sonucuyla güncellenecek.
+ */
+export const GOOGLE_DONUSUM_TEKLIF_ESIGI = 15;
+
+/**
+ * Teklif ve SEBEBİ (ekranda tek cümle). Arama'da dönüşüm teklifi yalnız
+ * ölçüm KESİN etkinse VE son 30 günde eşik kadar dönüşüm OKUNDUYSA; sayı
+ * okunamadıysa (`null`) güvenli taraf tıklama.
+ */
+export function googleTeklifKarari(kurgu: GoogleKurgu, donusumEtkin: boolean | null, son30GunDonusum: number | null): { teklif: GoogleTeklif; sebep: string } {
+  if (kurgu === 'MAKS_PERFORMANS') return { teklif: 'MAKS_DONUSUM', sebep: 'Satın alma ölçümü etkin; Google hesaptaki bütün birincil dönüşümlerden öğrenir' };
+  if (kurgu !== 'ARAMA') return { teklif: 'MAKS_TIKLAMA', sebep: "Talep Yaratma'da dönüşüm teklifi kurulmuyor" };
+  if (donusumEtkin === null) return { teklif: 'MAKS_TIKLAMA', sebep: "Google Ads'teki dönüşüm ölçümü okunamadı; ölçülemeyen teklife para gönderilmez" };
+  if (donusumEtkin === false) return { teklif: 'MAKS_TIKLAMA', sebep: 'Dönüşüm ölçümü kurulunca değiştirmeyi öneririz' };
+  if (son30GunDonusum === null) return { teklif: 'MAKS_TIKLAMA', sebep: 'Son 30 günün dönüşüm sayısı okunamadı; tıklamayla başlıyoruz' };
+  const sayi = Math.floor(son30GunDonusum);
+  if (son30GunDonusum < GOOGLE_DONUSUM_TEKLIF_ESIGI) {
+    return { teklif: 'MAKS_TIKLAMA', sebep: `Son 30 günde ${sayi} dönüşüm var; dönüşüm teklifi için en az ${GOOGLE_DONUSUM_TEKLIF_ESIGI} gerekiyor` };
+  }
+  return { teklif: 'MAKS_DONUSUM', sebep: `Dönüşüm ölçümü etkin ve son 30 günde ${sayi} dönüşüm var` };
 }
 
 export interface GoogleDerlemeGirdisi {
@@ -230,6 +269,13 @@ export interface GoogleDerlemeGirdisi {
   logoVarlikId: string | null;
   /** Kısıtlı kategori; Google'da kendi kural paketiyle derlenir. */
   kategoriler: OzelKategori[];
+  /**
+   * UZANTILAR (`google-uzanti.ts`) — YALNIZ Arama + site ulaşmasında yazılır
+   * (diğer kurguların içerik özeti değişmesin). Boş dizi = AÇIKÇA yok
+   * (kaynak çıkmadı); alanın hiç olmaması = eski girdi.
+   */
+  siteBaglantilari?: SiteBaglantisi[];
+  aciklamaMetinleri?: string[];
 }
 
 export interface GoogleTuretmeBaglami {
@@ -237,6 +283,10 @@ export interface GoogleTuretmeBaglami {
   paraBirimi: string;
   saatDilimi: string;
   donusumEtkin: boolean | null;
+  /** Hesabın son 30 gündeki dönüşüm sayısı (`metrics.conversions`); okunamadıysa `null`. */
+  son30GunDonusum: number | null;
+  /** Arama + site: site bağlantısı ve açıklama metni kaynağı (servis önbelleği). */
+  uzantilar: GoogleUzantiKaynagi | null;
   /** Birincil SATIN ALMA dönüşümü etkin mi; Maks. Performans yalnız `true` ile kurulur. */
   satisOlcumu: boolean | null;
   /** Medyadaki görsellerin oranı (sunucuda, varlığın ölçüsünden); görsel kurgularında zorunlu. */
@@ -296,7 +346,7 @@ export function rehberdenGoogle(a: RehberAlanlari, acik: { meta: boolean; google
     deger: {
       kurgu: tanim.kurgu,
       ulasma: tanim.ulasma,
-      teklif: googleTeklifi(tanim.kurgu, b.donusumEtkin),
+      teklif: googleTeklifi(tanim.kurgu, b.donusumEtkin, b.son30GunDonusum),
       musteriId: b.musteriId.replace(/-/g, ''),
       paraBirimi: b.paraBirimi,
       saatDilimi: b.saatDilimi,
@@ -323,6 +373,12 @@ export function rehberdenGoogle(a: RehberAlanlari, acik: { meta: boolean; google
       logoVarlikId: b.logoVarlikId,
       kategoriler: [...new Set([...b.kategoriTabani, ...ek])],
       ...gorsel,
+      // Site okunmadıysa (`null`) da BOŞ yazılır: türetme prova anında
+      // koşuyor ve okunmamış bir site "bağlantı yok" ile aynı gövdeyi kurar;
+      // ekran sebebi ayrıca söylüyor (karar tablosu UZANTI satırı).
+      ...(tanim.kurgu === 'ARAMA' && tanim.ulasma === 'site'
+        ? { siteBaglantilari: b.uzantilar?.siteBaglantilari ?? [], aciklamaMetinleri: b.uzantilar?.aciklamaMetinleri ?? [] }
+        : {}),
     },
   };
 }

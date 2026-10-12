@@ -15,6 +15,8 @@
 import { YERLESIM_GRUPLARI, type SetPlani } from '../banner-seti';
 import { REHBER_AMACLARI, type RehberAmacKodu, type RehberPlatformu } from './amaclar';
 import type { GoogleTeklif } from './turet';
+import { metaOptimizasyonHedefi, type SitePikselHali } from '../meta/niyetler';
+import { SITE_BAGLANTISI_YOK_CUMLESI, type GoogleUzantiKaynagi } from './google-uzanti';
 
 export interface KararHucresi {
   deger: string;
@@ -23,7 +25,7 @@ export interface KararHucresi {
 
 export interface KararSatiri {
   /** Testin derleyiciyle eşleştirdiği sabit kod. */
-  kod: 'TUR' | 'TEKLIF' | 'NEREDE' | 'KONUM' | 'OTOMATIK_METIN' | 'SAYFA' | 'OLCUM' | 'SIKLIK';
+  kod: 'TUR' | 'TEKLIF' | 'NEREDE' | 'KONUM' | 'OTOMATIK_METIN' | 'SAYFA' | 'OLCUM' | 'SIKLIK' | 'UZANTI';
   konu: string;
   meta: KararHucresi | null;
   google: KararHucresi | null;
@@ -40,12 +42,34 @@ export interface KararSatiri {
  * (video var ya da oran bilinmiyor). Tablo "otomatik" derken gövde yerleşim
  * yazarsa söz yalan olur; `ajan4-denetim.spec` ikisini karşılaştırıyor.
  */
+/**
+ * `ek` — gövdeyi seçen girdiler, ekranda SEBEBİYLE söylensin diye:
+ * - `sitePikseli`: "Siteme gelsinler"de Meta hedefi (`metaOptimizasyonHedefi`,
+ *   derleyiciyle AYNI fonksiyon). Verilmezse `bilinmiyor` = tıklama.
+ * - `googleTeklifSebebi`: `googleTeklifKarari`nın cümlesi.
+ * - `uzantilar`: Arama + site'de site bağlantısı / açıklama metni kaynağı.
+ */
+export interface KararEki {
+  sitePikseli?: SitePikselHali | null;
+  googleTeklifSebebi?: string;
+  uzantilar?: GoogleUzantiKaynagi | null;
+}
+
+/** "Siteme gelsinler" Meta hedefinin ekrandaki cümlesi (tek yer). */
+export function siteHedefCumlesi(h: SitePikselHali | null | undefined): string {
+  if (metaOptimizasyonHedefi('SITE', h) === 'LANDING_PAGE_VIEWS') return 'Sitendeki Meta pikseli son 7 günde çalıştı; reklam sayfa görüntülemeye göre optimize edilir';
+  return h === 'bilinmiyor' || !h
+    ? 'Meta pikseli okunamadığı için reklam tıklamaya göre optimize edilecek; piksel görülünce sayfa görüntülemeye geçer'
+    : 'Sitende Meta pikseli görülmediği için reklam tıklamaya göre optimize edilecek; piksel kurulunca sayfa görüntülemeye geçer';
+}
+
 export function kararTablosu(
   amac: RehberAmacKodu,
   acik: Record<RehberPlatformu, boolean>,
   googleTeklif: GoogleTeklif,
   instagramVar: boolean,
   yerlesim: SetPlani | null = null,
+  ek: KararEki = {},
 ): KararSatiri[] {
   const otomatik = !yerlesim || yerlesim.otomatik;
   const yerlesimMetni = otomatik ? 'otomatik yerleşim' : 'görsel boyutlarına göre seçilen yerleşimler';
@@ -63,7 +87,20 @@ export function kararTablosu(
   const m = acik.meta;
   const hucre = (deger: string, not?: string): KararHucresi => (not ? { deger, not } : { deger });
   return [
-    { kod: 'TUR', konu: 'Kampanya türü', meta: m ? hucre(t.meta.kurulacak) : null, google: g ? hucre(g.kurulacak) : null },
+    {
+      kod: 'TUR',
+      konu: 'Kampanya türü',
+      // SİTE: hedef piksele bağlı ve kullanıcıya NEDENİYLE söyleniyor; tablo
+      // "sayfa görüntüleme" deyip gövde tıklama gönderirse ekran yalan olur.
+      meta: m
+        ? t.meta.niyet === 'SITE'
+          ? metaOptimizasyonHedefi('SITE', ek.sitePikseli) === 'LANDING_PAGE_VIEWS'
+            ? hucre(t.meta.kurulacak, siteHedefCumlesi(ek.sitePikseli))
+            : hucre('Trafik kampanyası · bağlantı tıklaması', siteHedefCumlesi(ek.sitePikseli))
+          : hucre(t.meta.kurulacak)
+        : null,
+      google: g ? hucre(g.kurulacak) : null,
+    },
     {
       kod: 'TEKLIF',
       konu: 'Teklif',
@@ -72,10 +109,10 @@ export function kararTablosu(
         ? pmax
           ? hucre('En çok dönüşüm', 'Satın alma ölçümü etkin; Google hesaptaki bütün birincil dönüşümlerden öğrenir')
           : googleTeklif === 'MAKS_DONUSUM'
-            ? hucre('En çok dönüşüm', 'Dönüşüm ölçümü etkin')
+            ? hucre('En çok dönüşüm', ek.googleTeklifSebebi ?? 'Dönüşüm ölçümü etkin')
             : ty
               ? hucre('En çok tıklama', 'Talep Yaratma\'da dönüşüm teklifi kurulmuyor')
-              : hucre('En çok tıklama', 'Dönüşüm ölçümü kurulunca değiştirmeyi öneririz')
+              : hucre('En çok tıklama', ek.googleTeklifSebebi ?? 'Dönüşüm ölçümü kurulunca değiştirmeyi öneririz')
         : null,
     },
     {
@@ -134,8 +171,29 @@ export function kararTablosu(
     // ERİŞİM sözü gövdede `frequency_control_specs` (ERISIM_SIKLIK_SINIRI);
     // yalnız erişim amacında ve Meta açıkken. Başka amaçta satır yok:
     // "sıklık sınırı yok" yazmak gereksiz bir soru doğururdu.
+    // UZANTILAR yalnız Arama + site'de (`rehberdenGoogle` aynı koşulla yazar).
+    ...(g?.kurgu === 'ARAMA' && g.ulasma === 'site' ? [{ kod: 'UZANTI' as const, konu: 'Ek bağlantılar', meta: null, google: uzantiHucresi(ek.uzantilar ?? null) }] : []),
     ...(m && amac === 'ERISIM'
       ? [{ kod: 'SIKLIK' as const, konu: 'Sıklık', meta: hucre('Bir kişiye haftada en çok 2 kez', 'Aynı kişiye tekrar tekrar gösterilmez'), google: null }]
       : []),
   ];
+}
+
+/**
+ * Uzantı hücresi: site bağlantısı (değer) ve açıklama metni (not). DÖRT
+ * HÂL ayrı yazılıyor: okunmadı, okunamadı/yetersiz, var; açıklama metni
+ * yok ya da var. Okunmadı hâli "yok" diye yazılsaydı kullanıcı sitesini
+ * düzeltmeye giderdi; oysa site henüz hiç okunmadı.
+ */
+function uzantiHucresi(u: GoogleUzantiKaynagi | null): KararHucresi {
+  const site = !u || u.siteBaglantilari === null
+    ? 'Site bağlantıları prova sırasında sitenden okunur'
+    : u.siteBaglantilari.length === 0
+      ? SITE_BAGLANTISI_YOK_CUMLESI
+      : `${u.siteBaglantilari.length} site bağlantısı: ${u.siteBaglantilari.map((x) => x.metin).join(', ')}`;
+  const aciklama = !u || u.aciklamaMetinleri.length === 0
+    ? "Açıklama metni yok: Marka Merkezi'ndeki vaatlerden 25 karakteri aşmayan, sayı ve fiyat içermeyenler kullanılır"
+    : `Açıklama metinleri: ${u.aciklamaMetinleri.join(', ')}`;
+  const sebep = u && u.siteBaglantilari !== null && u.siteBaglantilari.length === 0 && u.siteSebebi ? `${u.siteSebebi} · ` : '';
+  return { deger: site, not: `${sebep}${aciklama}` };
 }

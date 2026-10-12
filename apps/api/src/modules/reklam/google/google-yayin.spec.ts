@@ -429,6 +429,8 @@ describe('geri okuma karşılaştırması', () => {
     anahtarKelimeSayisi: 2,
     negatifSayisi: TABAN_NEGATIFLER.length,
     aramaOgeleri: [],
+    // g-1.1.0: Arama'da teklif de geri okunuyor (eşik kararı gövdeye yansıdı mı).
+    teklif: 'TARGET_SPEND',
   };
   it('temiz okuma temiz; okunamayan alan (null) FARK sayılır; eksik negatif fark', () => {
     expect(googleGeriOkumaKarsilastir(b.beklenen, temiz)).toEqual({ sonuc: 'temiz', satirlar: [] });

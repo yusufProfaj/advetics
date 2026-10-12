@@ -9,3 +9,4 @@ export * from './kararlar';
 export * from './uyum';
 export * from './api';
 export * from './google-gorsel';
+export * from './google-uzanti';
