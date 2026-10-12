@@ -16,11 +16,13 @@ import {
 import type { Response } from 'express';
 import {
   ikiAdimKodSchema,
+  ikiAdimKurulumOnaySchema,
   ikiAdimSirketSchema,
   ikiAdimUygulamaKoduSchema,
   type IkiAdimDurumu,
   type IkiAdimGirisSonucu,
   type IkiAdimKodGirdisi,
+  type IkiAdimKurulumOnayGirdisi,
   type IkiAdimKurtarmaKodlari,
   type IkiAdimKurulumBilgisi,
   type IkiAdimSirketGirdisi,
@@ -143,10 +145,11 @@ export class IkiAdimController {
   @Post('auth/2fa/kurulum/onay')
   async kurulumOnay(
     @CurrentTenant() ctx: TenantContext,
-    @Body(zodBody(ikiAdimUygulamaKoduSchema)) dto: IkiAdimUygulamaKoduGirdisi,
+    @Body(zodBody(ikiAdimKurulumOnaySchema)) dto: IkiAdimKurulumOnayGirdisi,
     @Req() req: AuthedRequest,
   ): Promise<IkiAdimKurtarmaKodlari> {
-    const kurtarmaKodlari = await this.ikiAdim.kurulumOnayla(ctx.userId, dto.kod);
+    // PAROLA YENİDEN SORULUYOR (Ö-1): oturum çerezi tek başına 2FA kurmaya yetmemeli.
+    const kurtarmaKodlari = await this.ikiAdim.kurulumOnayla(ctx.userId, dto.kod, dto.parola);
     await this.tokens.revokeOthersForUser(
       ctx.userId,
       req.cookies?.[REFRESH_COOKIE] as string | undefined,

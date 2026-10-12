@@ -125,6 +125,19 @@ export const ikiAdimUygulamaKoduSchema = z.object({
 });
 export type IkiAdimUygulamaKoduGirdisi = z.infer<typeof ikiAdimUygulamaKoduSchema>;
 
+/**
+ * Oturum açıkken kurulum onayı: uygulama kodu + PAROLA.
+ *
+ * Parola neden yeniden soruluyor: çalınmış bir oturum çerezi, saldırganın
+ * kendi telefonuyla 2FA kurmasına yetseydi asıl sahibi bir sonraki girişte
+ * kodu bilmediği için hesabından kalıcı olarak dışarıda kalırdı. Girişteki
+ * zorunlu kurulumda (ara token) sorulmuyor: o token parolayla az önce üretildi.
+ */
+export const ikiAdimKurulumOnaySchema = ikiAdimUygulamaKoduSchema.extend({
+  parola: z.string().min(1, 'Şifreni yaz').max(128),
+});
+export type IkiAdimKurulumOnayGirdisi = z.infer<typeof ikiAdimKurulumOnaySchema>;
+
 /** Şirket genelinde zorunluluk (org yöneticisi). */
 export const ikiAdimSirketSchema = z.object({ zorunlu: z.boolean() });
 export type IkiAdimSirketGirdisi = z.infer<typeof ikiAdimSirketSchema>;

@@ -245,7 +245,7 @@ describe('IkiAdimService — veritabanıyla', () => {
   async function kur(userId: string = IDS.user): Promise<{ anahtar: Buffer; kodlar: string[] }> {
     const bilgi = await servis.kurulumBaslat(userId);
     const anahtar = base32Coz(bilgi.anahtar);
-    const kodlar = await servis.kurulumOnayla(userId, totpKodu(anahtar, saat));
+    const kodlar = await servis.kurulumOnayla(userId, totpKodu(anahtar, saat), null);
     return { anahtar, kodlar };
   }
 
@@ -259,7 +259,7 @@ describe('IkiAdimService — veritabanıyla', () => {
     // Düz anahtar baytları veritabanında YOK.
     expect(Buffer.from(ham.mfa_secret_enc).includes(base32Coz(bilgi.anahtar))).toBe(false);
 
-    const kodlar = await servis.kurulumOnayla(IDS.user, totpKodu(base32Coz(bilgi.anahtar), saat));
+    const kodlar = await servis.kurulumOnayla(IDS.user, totpKodu(base32Coz(bilgi.anahtar), saat), null);
     expect(kodlar).toHaveLength(10);
     expect(new Set(kodlar).size).toBe(10);
     for (const k of kodlar) expect(k).toMatch(/^[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}$/);
@@ -275,7 +275,7 @@ describe('IkiAdimService — veritabanıyla', () => {
 
   it('yanlış kodla kurulum açılmıyor', async () => {
     await servis.kurulumBaslat(IDS.user);
-    await expect(servis.kurulumOnayla(IDS.user, '000000')).rejects.toThrow(/Kod tutmadı/);
+    await expect(servis.kurulumOnayla(IDS.user, '000000', null)).rejects.toThrow(/Kod tutmadı/);
     expect((await satirOku(h.db, IDS.user))!.acik).toBe(false);
   });
 
@@ -424,6 +424,59 @@ describe('IkiAdimService — veritabanıyla', () => {
     await expect(servis.sirketZorunluAyarla(baglam({ tumSirketler: true }), false, {})).rejects.toThrow(
       /şirket seç/,
     );
+  });
+
+  it('KRİTİK (B-1): kurtarma kodu yolu da hak ayırıyor — 5. hatalı kurtarma kodu kilitliyor', async () => {
+    await kur();
+    for (let i = 0; i < 4; i++) {
+      await expect(servis.kodDogrula(IDS.user, 'zzzz-zzzz-zzzz')).rejects.toMatchObject({ status: 401 });
+    }
+    await expect(servis.kodDogrula(IDS.user, 'zzzz-zzzz-zzzz')).rejects.toMatchObject({ status: 429 });
+    expect((await satirOku(h.db, IDS.user))!.kilitBitis!.getTime() - saat).toBe(15 * 60_000);
+  });
+
+  it('KRİTİK (B-1): SQL kilit süresi kilitSuresiMs ile aynı (15. hatada 60 dk)', async () => {
+    await kur();
+    for (let i = 1; i <= 15; i++) {
+      await servis.kodDogrula(IDS.user, '000000').catch(() => undefined);
+      if (i % 5 === 0 && i < 15) saat += kilitSuresiMs(i) + 1_000;
+    }
+    expect((await satirOku(h.db, IDS.user))!.kilitBitis!.getTime() - saat).toBe(kilitSuresiMs(15));
+  });
+
+  describe('Ö-1: oturumla kurulum onayı parola istiyor', () => {
+    beforeEach(async () => {
+      await h.q('UPDATE users SET password_hash = $1 WHERE id = $2', [
+        await argon2.hash('dogru-parola-123'),
+        IDS.user,
+      ]);
+    });
+
+    it('KRİTİK: yanlış parola 2FA AÇMIYOR ve deneme hakkı yiyor', async () => {
+      const b = await servis.kurulumBaslat(IDS.user);
+      const kod = totpKodu(base32Coz(b.anahtar), saat);
+      await expect(servis.kurulumOnayla(IDS.user, kod, 'yanlis-parola-1')).rejects.toThrow('Şifre hatalı');
+      const s = (await satirOku(h.db, IDS.user))!;
+      expect(s.acik).toBe(false);
+      expect(s.basarisiz).toBe(1);
+    });
+
+    it('KRİTİK: parola tahmini de kilitleniyor (çalınmış oturum sınırsız tahmin yapamaz)', async () => {
+      const b = await servis.kurulumBaslat(IDS.user);
+      const kod = totpKodu(base32Coz(b.anahtar), saat);
+      for (let i = 0; i < 4; i++) {
+        await expect(servis.kurulumOnayla(IDS.user, kod, `yanlis-${i}`)).rejects.toThrow('Şifre hatalı');
+      }
+      await expect(servis.kurulumOnayla(IDS.user, kod, 'yanlis-5')).rejects.toMatchObject({ status: 429 });
+      await expect(servis.kurulumOnayla(IDS.user, kod, 'dogru-parola-123')).rejects.toMatchObject({ status: 429 });
+    });
+
+    it('doğru parola + doğru kod açıyor, sayaç sıfır', async () => {
+      const b = await servis.kurulumBaslat(IDS.user);
+      const kod = totpKodu(base32Coz(b.anahtar), saat);
+      await servis.kurulumOnayla(IDS.user, kod, 'dogru-parola-123');
+      expect((await satirOku(h.db, IDS.user))!).toMatchObject({ acik: true, basarisiz: 0 });
+    });
   });
 });
 
@@ -604,6 +657,66 @@ describe('oturum yenileme — şirket zorunluluğu', () => {
     await expect(tokens.rotate('herhangi')).rejects.toThrow(/zorunlu yaptı/);
     expect(kapatilan).toEqual(['aile:iki_adim_zorunlu']);
   });
+
+  it('KRİTİK (N-1): 30 sn tolerans yolu da zorunluluğu denetliyor, yeni token VERMİYOR', async () => {
+    const kapatilan: string[] = [];
+    const db = {
+      refreshToken: {
+        // Az önce döndürülmüş, aynı tarayıcıdan tekrar sunulan token: tolerans koşullarının hepsi tutuyor.
+        findUnique: async () => ({
+          id: 't1',
+          userId: IDS.user,
+          familyId: 'aile',
+          persistent: true,
+          expiresAt: new Date(Date.now() + 60_000),
+          revokedAt: new Date(Date.now() - 1_000),
+          revokedReason: 'rotated',
+          userAgent: 'UA',
+          user: {
+            id: IDS.user,
+            orgId: IDS.org,
+            status: 'active',
+            mfaEnabled: false,
+            organization: { ikiAdimZorunlu: true },
+          },
+        }),
+        count: async () => 0,
+        updateMany: async (a: { where: { familyId?: string }; data: { revokedReason: string } }) => {
+          kapatilan.push(`${a.where.familyId}:${a.data.revokedReason}`);
+          return { count: 1 };
+        },
+        create: async () => {
+          throw new Error('YENİ TOKEN ÜRETİLDİ');
+        },
+      },
+    } as unknown as PrismaAdminService;
+    const tokens = new TokenService(new JwtService({}), db, CONFIG);
+    await expect(tokens.rotate('herhangi', { userAgent: 'UA' })).rejects.toThrow(/zorunlu yaptı/);
+    expect(kapatilan).toEqual(['aile:iki_adim_zorunlu']);
+  });
+
+  it('pozitif kontrol: zorunluluk yoksa tolerans yolu token veriyor', async () => {
+    let olusturuldu = 0;
+    const db = {
+      refreshToken: {
+        findUnique: async () => ({
+          id: 't1', userId: IDS.user, familyId: 'aile', persistent: true,
+          expiresAt: new Date(Date.now() + 60_000), revokedAt: new Date(Date.now() - 1_000),
+          revokedReason: 'rotated', userAgent: 'UA',
+          user: { id: IDS.user, orgId: IDS.org, status: 'active', mfaEnabled: false, organization: { ikiAdimZorunlu: false } },
+        }),
+        count: async () => 0,
+        updateMany: async () => ({ count: 1 }),
+        create: async () => {
+          olusturuldu++;
+          return { id: 'yeni' };
+        },
+      },
+    } as unknown as PrismaAdminService;
+    const tokens = new TokenService(new JwtService({}), db, CONFIG);
+    await tokens.rotate('herhangi', { userAgent: 'UA' });
+    expect(olusturuldu).toBe(1);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -638,6 +751,17 @@ describe('kaynak taramaları', () => {
     const donus = dal.indexOf('return { ikiAdim');
     expect(donus).toBeGreaterThan(-1);
     expect(dal.slice(0, donus)).not.toContain('setAuthCookies');
+  });
+
+  it('KRİTİK (Ö-1): oturum yolu parolayı geçiriyor; null YALNIZCA girişteki kurulumda', () => {
+    const c = kaynak('./iki-adim.controller.ts');
+    expect(c).toContain('this.ikiAdim.kurulumOnayla(ctx.userId, dto.kod, dto.parola)');
+    expect(c).toContain('zodBody(ikiAdimKurulumOnaySchema)');
+    const a = kaynak('../auth.service.ts');
+    const nullCagri = [...a.matchAll(/kurulumOnayla\([^)]*\bnull\)/g)];
+    expect(nullCagri).toHaveLength(1);
+    const giris = a.slice(a.indexOf('async girisKurulumOnayla('));
+    expect(giris.indexOf('kurulumOnayla(user.id, kod, null)')).toBeGreaterThan(-1);
   });
 
   it('kurulum onayı diğer oturumları kapatıyor', () => {

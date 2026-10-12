@@ -52,8 +52,19 @@ export function IkiAdimSirketAyari({ durum }: { durum: IkiAdimDurumu }) {
           <h2 className="font-semibold text-ink">İki adımlı doğrulama</h2>
           <p className="mt-0.5 text-sm text-ink-muted">
             {sirket.zorunlu
-              ? `${sirket.ad} şirketinde herkes girişte telefon kodu kullanıyor.`
+              ? `${sirket.ad} şirketinin kullanıcıları girişte telefon kodu kullanıyor.`
               : `${sirket.ad} şirketinde isteğe bağlı. Zorunlu yaparsan kurmamış kişiler bir sonraki girişte kurar.`}
+          </p>
+          {/*
+            KAPSAM AÇIKÇA YAZIYOR (Ö-2). Zorunluluk kullanıcının EV şirketinden
+            okunuyor (2FA.md K-4): bu şirkete başka şirketten erişen ajans
+            personeli bu ayara değil kendi şirketininkine tabi. Yazmasaydı
+            yönetici "zorunlu yaptım" deyip ajans personelini de korunuyor
+            sanırdı.
+          */}
+          <p className="mt-1 text-xs text-ink-muted">
+            Zorunluluk yalnız bu şirketin kendi kullanıcılarına uygulanır. Başka şirketten erişen
+            ajans personeli kendi şirketinin ayarına tabidir.
           </p>
         </div>
         {sirket.degistirebilir && (

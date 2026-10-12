@@ -250,7 +250,8 @@ export class AuthService {
     meta: RequestMeta,
   ): Promise<AuthResult & { kurtarmaKodlari: string[] }> {
     const { user, hatirla } = await this.araTokenSahibi(araToken, 'kurulum');
-    const kurtarmaKodlari = await this.ikiAdim.kurulumOnayla(user.id, kod);
+    // Parola YOK (null): ara token parolayla az önce üretildi (2FA.md K-15).
+    const kurtarmaKodlari = await this.ikiAdim.kurulumOnayla(user.id, kod, null);
     // Kurulum anında başka oturum yok sayılamaz: zorunluluk açıldığında
     // rotasyon onları zaten kapattı, ama ara dönemde açılmış olabilecek
     // her şeyi kapatmak ucuz ve güvenli yön.

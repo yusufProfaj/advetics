@@ -107,3 +107,19 @@ describe('panelin çağırdığı her 2FA ucu API\'de var', () => {
     for (const c of cagrilar) expect(rotalar, c).toContain(c);
   });
 });
+
+describe('Ajan 4 düzeltmeleri', () => {
+  it('KRİTİK (Ö-1): Hesabım kurulum onayı parolayı gönderiyor ve parola alanı var', () => {
+    const p = yorumsuz(oku('components/hesap/iki-adim-paneli.tsx'));
+    const bas = p.indexOf("'/auth/2fa/kurulum/onay'");
+    expect(bas).toBeGreaterThan(-1);
+    expect(p.slice(bas, bas + 200)).toContain('JSON.stringify({ kod, parola })');
+    expect(p).toMatch(/<Alan[\s\S]*?type="password"[\s\S]*?value=\{parola\}/);
+  });
+
+  it('Ö-2: zorunluluğun kapsamı ekranda yazıyor', () => {
+    const s = yorumsuz(oku('components/tenancy/iki-adim-sirket-ayari.tsx'));
+    expect(s).toContain('Zorunluluk yalnız bu şirketin kendi kullanıcılarına uygulanır.');
+    expect(s).toContain('kendi şirketinin ayarına tabidir');
+  });
+});

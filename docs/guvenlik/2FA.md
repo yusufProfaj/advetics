@@ -18,12 +18,15 @@ Ajan 1-2-3 tek seferde yürütüldü (küçük güvenlik işi). **Kapıyı Ajan 
 | K-5 | Veri modeli | "yeni kolonlar/tablo" | `users.mfa_secret_enc`, `mfa_enabled` ilk migration'dan beri var, okunmuyordu | **Yeni tablo yok**; `users` (+5 kolon), `organizations` (+1). Kullanıcı başına tek satırlık durum; ayrı tablo RLS + TRUNCATE + tutarlılık borcu getirirdi. Enum yok → tek migration. RLS: satır politikaları devralıyor; TRUNCATE: tablolar listede; `WORKSPACE_TABLOLARI`: `client_id` yok, karar gerekmiyor. |
 | K-6 | Anahtar saklama | "şifreli, mevcut yardımcı" | `CryptoService` (AES-256-GCM, sürümlü) | Uygulandı; anahtar base64 metin olarak şifreleniyor. |
 | K-7 | Kurtarma kodu | 10 kod, hash'li, bir kez | — | 10 kod, 12 karakter Crockford base32 (60 bit, `xxxx-xxxx-xxxx`), **SHA-256** özet. Argon2 değil: her denemede 10 doğrulama = kimliksiz uçta işlemci yükü saldırısı; kod rastgele ve parola da gerekiyor. Kalan risk: veritabanı sızarsa çevrimdışı kırma ~aylar/kod (parolasız işe yaramaz). |
-| K-8 | Kaba kuvvet | sayaç + bekleme | Girişte genel hız sınırı YOK (bu işin kapsamı dışı) | Kullanıcı başına sayaç; her 5 hatada kilit, süre **katlanıyor** (15 dk → 30 → 60 … ≤24 sa). Sabit 15 dk yılda ~%40 tahmin şansı veriyordu. Kilitliyken doğru kod da reddediliyor. Biçimi bozuk girdi sayılmıyor. Kurulum onayındaki hatalar sayılmıyor (korunan bir şey yok). |
+| K-8 | Kaba kuvvet | sayaç + bekleme | Girişte genel hız sınırı YOK (bu işin kapsamı dışı) | Kullanıcı başına sayaç; her 5 hatada kilit, süre **katlanıyor** (15 dk → 30 → 60 … ≤24 sa). **Deneme hakkı doğrulamadan ÖNCE tek deyimle ayrılıyor** (`hakAyir`: sayaç + kilit aynı UPDATE, kilitliyken 0 satır = 429). İlk sürümde kilit okuması ve sayaç ayrı deyimlerdi; 20 paralel istekte 16'sı değerlendirildi ve doğru kod kilide rağmen geçti (Ajan 4, B-1), yani aşağıdaki hesap o sürüm için GEÇERSİZDİ. Hesap (tahmin başına ~3/10⁶, ±1 pencere): sabit 15 dk = yılda ~175.000 tahmin, ~%41; katlanan kilit = ilk ~32 saatte 40, sonra günde 5, yılda ~1.860 tahmin, **~%0,6** (parola da bilinmek zorunda). Kurtarma kodu yolu aynı sayaçtan geçiyor. Kilitliyken doğru kod da reddediliyor. Biçimi bozuk girdi sayılmıyor. Kurulum onayında KOD hatası sayılmıyor (korunan bir şey yok), PAROLA hatası sayılıyor (K-15). |
 | K-9 | Ara oturum | "kısa ömürlü ara token" | Bekçi yalnız `typ: 'access'` kabul ediyor | JWT `typ: 'mfa'`, `amac: dogrula|kurulum`, 5 dk, httpOnly çerez `adv_mfa` (`/api/auth` yolu). Bekçi çerezi hiç okumuyor; token Bearer/erişim çerezi olarak sunulsa da reddediliyor (gerçek bekçiyle test). |
 | K-10 | QR | "bağımlılık eğilimi düşük" | Panelde ve API'de QR kütüphanesi yok | **`qrcode-generator@1.4.4`** (sıfır bağımlılık, MIT, tam sürüm sabit, API'de). TOTP ise bağımlılıksız (`node:crypto`). QR kodlayıcıyı elle yazmak bir QR çözücüyle sınanmayı gerektirirdi. SVG `data:` adresi, panelde `<img>` ile (betik çalışamaz). |
 | K-11 | Ekran yeri | "Ayarlar › Güvenlik ya da Hesabım" | Ayarlar yönetim yetkisine bağlı; workspace kullanıcısı görmüyor; müşteri menüsü 4 ekran (kullanıcı kararı) | **Yeni `/hesabim` sayfası**, kapısı kenar çubuğundaki ad kartı (menü satırı değil). Şirket zorunluluğu ve kişi sıfırlama **Ayarlar › Ekip & Yetkiler**'de (yönetici). |
 | K-12 | Yönetici sıfırlaması | denetim kaydıyla | `members` uçları `@RequireOrgAdmin` + `user.write` | Aynı kapılar; RLS'li istemciyle (görünmeyen kullanıcı "bulunamadı"); kendi hesabına kapalı (kendi 2FA'nı kodla kapatırsın). Denetim: `user.iki_adim_sifirlandi`. |
 | K-13 | Diğer oturumlar | — | — | 2FA açılınca bu tarayıcı dışındaki oturumlar kapanıyor (parolası sızmış hesapta saldırganın oturumu yaşamasın). |
+| K-15 | Oturumla 2FA kurulumu (Ajan 4, Ö-1) | — | Çalınmış oturum çerezi kendi telefonuyla 2FA kurup hesabı kalıcı ele geçirebiliyordu (asıl sahip kodu bilmez) | **Oturum açıkken kurulum onayı parolayı yeniden istiyor** (`ikiAdimKurulumOnaySchema`); hatalı parola 2FA ile aynı sayaçtan hak yiyor, yani çalınmış oturum sınırsız parola tahmini yapamıyor. **Girişteki zorunlu kurulumda parola yeniden sorulmuyor**: ara token parolayla en çok 5 dakika önce üretildi. **Kalan risk:** o 5 dakikalık ara çerez çalınırsa (aynı tarayıcıda XSS; çerez httpOnly) saldırgan 2FA kurabilir. Kabul edildi: parolayı bilmeyen biri ara çereze ancak kullanıcının tarayıcısında ulaşabilir. |
+| K-16 | Zorunluluğun kapsamı (Ö-2) | — | Ekip ekranında ayar seçili şirketi değiştiriyor, zorunluluk ev şirketinden okunuyor (K-4) | Ekranda tek cümle: zorunluluk yalnız bu şirketin kendi kullanıcılarına uygulanır, başka şirketten erişen ajans personeli kendi şirketinin ayarına tabidir. |
+| K-17 | Tolerans yolu (N-1) | — | Rotasyonun 30 sn tolerans dalı zorunluluğu denetlemeden token veriyordu | Aynı fonksiyon (`zorunlulukDenetle`) iki yolda; ikinci kopya yazılmadı. |
 | K-14 | Okuma API anahtarı (MCP) | — | Bearer `adv_ro_` girişten geçmiyor | 2FA'dan muaf kalıyor: anahtar 2FA'lı bir oturumda üretiliyor, yalnız okuyor ve yalnız platform sahibinde. |
 
 ## Uçlar
@@ -34,7 +37,7 @@ Ajan 1-2-3 tek seferde yürütüldü (küçük güvenlik işi). **Kapıyı Ajan 
 | `POST /auth/2fa/giris` | ara çerez (`dogrula`) | kod ya da kurtarma kodu → oturum |
 | `POST /auth/2fa/giris/kurulum`, `/onay` | ara çerez (`kurulum`) | zorunlu şirkette girişte kurulum → oturum + kodlar |
 | `GET /auth/2fa` | oturum | durum (Hesabım, Ekip) |
-| `POST /auth/2fa/kurulum`, `/kurulum/onay` | oturum | aç; onayda diğer oturumlar kapanır |
+| `POST /auth/2fa/kurulum`, `/kurulum/onay` | oturum (+ onayda parola) | aç; onayda diğer oturumlar kapanır |
 | `POST /auth/2fa/kapat` | oturum + kod | şirket zorunluysa ret |
 | `POST /auth/2fa/kurtarma-kodlari` | oturum + uygulama kodu | yeni 10 kod |
 | `PATCH /auth/2fa/sirket` | org yöneticisi | seçili şirkette zorunluluk |
@@ -48,10 +51,7 @@ Ajan 1-2-3 tek seferde yürütüldü (küçük güvenlik işi). **Kapıyı Ajan 
 
 ## Ölçülmeyenler (Ajan 4 / 5 / 6)
 
-- **RLS `SET ROLE` testi yok**: yönetici sıfırlaması ve şirket ayarı RLS'li
-  istemciyle yazıyor ama testte `withTenant` taklit (RLS kapalı). Başka şirketin
-  kullanıcısını sıfırlayamama ve başka şirketin ayarını değiştirememe `SET ROLE`
-  + `RETURNING` ile sınanmalı.
+- RLS `SET ROLE` testi Ajan 4'te yazıldı (`iki-adim-guvenlik.spec.ts`).
 - Gerçek telefonla (Google/Microsoft Authenticator) QR okutma ve kod kabulü
   denenmedi; doğruluk RFC vektörleriyle.
 - Panel ekranları tarayıcıda açılmadı (yerelde `.env`/API yok); masaüstü + mobil

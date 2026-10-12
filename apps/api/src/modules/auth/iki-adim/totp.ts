@@ -201,10 +201,14 @@ export function kurtarmaKoduOzeti(girdi: string): string {
  * `basarisiz` hatalı denemeden sonra uygulanacak kilit süresi (ms); 0 = kilit yok.
  *
  * Her `IKI_ADIM_AZAMI_DENEME` hatada bir kilit ve süre her seferinde İKİYE
- * KATLANIYOR (15 dk, 30 dk, 1 sa, … en çok 24 sa). Sabit 15 dakika günde
- * ~480 tahmin demekti; ±1 pencereyle her tahmin 3/10⁶ ihtimal ve bir yılda
- * hesabın kabaca yarısı düşerdi. Katlanınca günlük tahmin otuzlu sayılara
- * iniyor. Meşru kullanıcı yalnızca ilk kilidi görür: beş kez art arda
+ * KATLANIYOR (15 dk, 30 dk, 1 sa, … en çok 24 sa). Hesap (2FA.md K-8):
+ * ±1 pencereyle bir tahmin ~3/10⁶. Sabit 15 dakika günde 480, yılda
+ * ~175.000 tahmin ve ~%41 başarı demekti. Katlanınca ilk ~32 saatte 40
+ * tahmin, sonra günde 5: yılda ~1.860 tahmin, ~%0,6. Bu hesap YALNIZCA
+ * hak ayırma tek deyimde olduğu için geçerli (`iki-adim-deposu.ts#hakAyir`);
+ * kilit okuması ve sayaç ayrı deyimlerken paralel istekler sınırı tamamen
+ * aşıyordu (B-1). Formül SQL'de de yazılı ve test ikisini karşılaştırıyor.
+ * Meşru kullanıcı yalnızca ilk kilidi görür: beş kez art arda
  * yanlış kod yazan birinin sorunu saat ayarı ya da yanlış hesaptır ve ekran
  * bunu söylüyor.
  */

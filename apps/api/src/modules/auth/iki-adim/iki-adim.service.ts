@@ -9,7 +9,10 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
+import * as argon2 from 'argon2';
 import {
+  IKI_ADIM_AZAMI_DENEME,
+  IKI_ADIM_KILIT_DK,
   ikiAdimKodTuru,
   kurtarmaKoduBicimle,
   type IkiAdimDurumu,
@@ -22,13 +25,13 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { AuditService } from '../../audit/audit.service';
 import {
   adimiTuket,
-  hataSay,
+  hakAyir,
   ikiAdimiKaldir,
-  kilitYaz,
   kurtarmaKodlariniYaz,
   kurtarmaKodunuTuket,
   kurulumAnahtariYaz,
   kurulumuOnayla,
+  parolaOzetiOku,
   satirOku,
   sayaciSifirla,
   sirketOku,
@@ -39,7 +42,6 @@ import {
 import { qrDataAdresi } from './qr';
 import {
   anahtarGosterimi,
-  kilitSuresiMs,
   kurtarmaKoduOzeti,
   otpauthAdresi,
   totpDogrula,
@@ -145,11 +147,7 @@ export class IkiAdimService {
       throw new BadRequestException('Bu hesapta iki adımlı doğrulama açık değil');
     }
 
-    const simdi = this.saat();
-    if (s.kilitBitis && s.kilitBitis.getTime() > simdi) {
-      throw this.kilitHatasi(s.kilitBitis.getTime() - simdi);
-    }
-
+    // BİÇİM HAK AYIRMADAN ÖNCE: yazım hatası deneme hakkı yememeli.
     const tur = ikiAdimKodTuru(kod);
     if (tur === null || (tur === 'kurtarma' && !secenek.kurtarmaKabul)) {
       throw new BadRequestException(
@@ -158,6 +156,9 @@ export class IkiAdimService {
           : 'Uygulamadaki 6 haneli kodu yaz',
       );
     }
+
+    const simdi = this.saat();
+    const hak = await this.hakAl(userId, s.orgId, simdi, true);
 
     let kabul = false;
     let tekrar = false;
@@ -173,19 +174,10 @@ export class IkiAdimService {
     }
 
     if (!kabul) {
-      const n = await hataSay(this.db, userId);
-      const sure = kilitSuresiMs(n);
-      if (sure > 0) {
-        await kilitYaz(this.db, userId, new Date(simdi + sure));
-        await this.audit.recordUnauthenticated(s.orgId, {
-          action: 'auth.iki_adim_kilitlendi',
-          targetType: 'user',
-          targetId: userId,
-          actorId: userId,
-          after: { basarisizDeneme: n, kilitDakika: sure / 60_000 },
-        });
-        this.logger.warn(`2FA kilidi: userId=${userId} deneme=${n} süre=${sure / 60_000} dk`);
-        throw this.kilitHatasi(sure);
+      // Bu deneme kilidi başlattıysa cevap "kod hatalı" değil "kilitlendi":
+      // kullanıcının yapacağı iş değişiyor (beklemek).
+      if (hak.kilitBitis && hak.kilitBitis.getTime() > simdi) {
+        throw this.kilitHatasi(hak.kilitBitis.getTime() - simdi);
       }
       throw new UnauthorizedException(
         tekrar
@@ -197,7 +189,9 @@ export class IkiAdimService {
     }
 
     await sayaciSifirla(this.db, userId);
-    const kalanKurtarma = tur === 'kurtarma' ? s.kalanKurtarma - 1 : s.kalanKurtarma;
+    // Kalan kod sayısı HARCAMADAN SONRA okunuyor: önceden okunan değerden
+    // bir çıkarmak, paralel başka bir harcamayı kaçırırdı.
+    const kalanKurtarma = (await this.satir(userId)).kalanKurtarma;
     if (tur === 'kurtarma') {
       await this.audit.recordUnauthenticated(s.orgId, {
         action: 'auth.iki_adim_kurtarma_kodu_kullanildi',
@@ -208,6 +202,43 @@ export class IkiAdimService {
       });
     }
     return { tur, kalanKurtarma };
+  }
+
+  /**
+   * Bir deneme hakkı ayırır (`hakAyir`, tek deyim). Kilitliyse 429 —
+   * kriptoya hiç gidilmeden. Eşiğe ulaşan deneme kilidi yazmış oluyor;
+   * denetim kaydı ve uyarı burada.
+   */
+  private async hakAl(
+    userId: string,
+    orgId: string,
+    simdi: number,
+    mfaAcikSart: boolean,
+  ): Promise<{ n: number; kilitBitis: Date | null }> {
+    const hak = await hakAyir(this.db, userId, new Date(simdi), {
+      azami: IKI_ADIM_AZAMI_DENEME,
+      ilkKilitDk: IKI_ADIM_KILIT_DK,
+      mfaAcikSart,
+    });
+    if (!hak) {
+      const g = await this.satir(userId);
+      if (g.kilitBitis && g.kilitBitis.getTime() > simdi) {
+        throw this.kilitHatasi(g.kilitBitis.getTime() - simdi);
+      }
+      throw new BadRequestException('Bu hesapta iki adımlı doğrulama açık değil');
+    }
+    if (hak.kilitBitis && hak.kilitBitis.getTime() > simdi) {
+      const dk = Math.round((hak.kilitBitis.getTime() - simdi) / 60_000);
+      await this.audit.recordUnauthenticated(orgId, {
+        action: 'auth.iki_adim_kilitlendi',
+        targetType: 'user',
+        targetId: userId,
+        actorId: userId,
+        after: { basarisizDeneme: hak.n, kilitDakika: dk },
+      });
+      this.logger.warn(`2FA kilidi: userId=${userId} deneme=${hak.n} süre=${dk} dk`);
+    }
+    return hak;
   }
 
   private kilitHatasi(kalanMs: number): HttpException {
@@ -258,12 +289,26 @@ export class IkiAdimService {
    * kimseye bir şey kazandırmıyor. Saymak ise saati kaymış telefonla
    * uğraşan kullanıcıyı açılmamış bir 2FA yüzünden kilitlerdi.
    */
-  async kurulumOnayla(userId: string, kod: string): Promise<string[]> {
+  async kurulumOnayla(
+    userId: string,
+    kod: string,
+    /**
+     * PAROLA (Ö-1). Oturum açıkken ZORUNLU: çalınmış bir oturum çerezi,
+     * saldırganın kendi telefonuyla 2FA kurmasına ve hesabı kalıcı olarak
+     * ele geçirmesine (asıl sahibi artık kod bilmiyor) yetmemeli. `null`
+     * YALNIZCA girişteki zorunlu kurulumdan: oradaki ara token parolayla
+     * zaten az önce üretildi. Varsayılan YOK: çağıranın seçimi açıkça
+     * yazması gerekiyor; varsayılanı `null` olsaydı oturum yolu parolayı
+     * geçirmeyi unutup derlenirdi.
+     */
+    parola: string | null,
+  ): Promise<string[]> {
     const s = await this.satir(userId);
     if (s.acik) throw new ConflictException('İki adımlı doğrulama zaten açık');
     if (s.anahtarSifreli === null) {
       throw new BadRequestException('Önce kurulumu başlat: QR kodu henüz oluşturulmadı');
     }
+    if (parola !== null) await this.parolaDogrula(userId, s.orgId, parola);
     const anahtar = Buffer.from(this.crypto.decrypt(s.anahtarSifreli), 'base64');
     const adim = totpDogrula(anahtar, kod, this.saat());
     if (adim === null) {
@@ -293,6 +338,30 @@ export class IkiAdimService {
       actorId: userId,
     });
     return kodlar.map(kurtarmaKoduBicimle);
+  }
+
+  /**
+   * Parolayı yeniden doğrular. Hatalı parola 2FA ile AYNI sayaçtan hak
+   * yiyor: yoksa çalınmış bir oturum bu ucu sınırsız parola tahmin aracı
+   * olarak kullanabilirdi.
+   */
+  private async parolaDogrula(userId: string, orgId: string, parola: string): Promise<void> {
+    const simdi = this.saat();
+    const hak = await this.hakAl(userId, orgId, simdi, false);
+    const ozet = await parolaOzetiOku(this.db, userId);
+    let dogru = false;
+    try {
+      dogru = ozet !== null && (await argon2.verify(ozet, parola));
+    } catch {
+      dogru = false;
+    }
+    if (!dogru) {
+      if (hak.kilitBitis && hak.kilitBitis.getTime() > simdi) {
+        throw this.kilitHatasi(hak.kilitBitis.getTime() - simdi);
+      }
+      throw new UnauthorizedException('Şifre hatalı');
+    }
+    await sayaciSifirla(this.db, userId);
   }
 
   // ---------------------------------------------------------------------------

@@ -115,26 +115,70 @@ export function kurtarmaKodunuTuket(db: SorguCalistirici, userId: string, ozet: 
   `);
 }
 
-/** Hatalı denemeyi sayar ve YENİ sayıyı döndürür. */
-export async function hataSay(db: SorguCalistirici, userId: string): Promise<number> {
-  const r = await db.$queryRaw<Array<{ n: number }>>(Prisma.sql`
-    UPDATE users SET mfa_basarisiz_deneme = mfa_basarisiz_deneme + 1
+/**
+ * ═══ DENEME HAKKI AYIRMA — DOĞRULAMADAN ÖNCE, TEK DEYİMDE ═══
+ *
+ * Önce kilit OKUNUP sayaç doğrulamadan SONRA ayrı deyimle artırılıyordu.
+ * Aynı anda gelen yirmi isteğin hepsi okumada "kilit yok" gördü ve on altısı
+ * değerlendirildi; doğru kod kilide rağmen geçti (Ajan 4, B-1). Kilit "beş
+ * tahmin / pencere" değil "saldırganın bant genişliği / pencere" olmuştu.
+ *
+ * Şimdi her deneme kod kontrol edilmeden ÖNCE bu deyimle bir hak ayırıyor.
+ * Satır kilidi deyimleri sıraya diziyor: kilit süresince WHERE hiçbir satır
+ * vermiyor (0 satır = kilitli), eşiğe ulaşan deneme kilidi AYNI deyimde
+ * yazıyor ve ardından gelen hiçbir istek araya giremiyor. Başarı sayacı
+ * sıfırlıyor (`sayaciSifirla`), yani sayaç "art arda hatalı" anlamını
+ * koruyor.
+ *
+ * Kilit süresi `totp.ts#kilitSuresiMs` ile AYNI formül (her eşikte ikiye
+ * katlanır, en çok 24 saat); `iki-adim.spec.ts` ikisini karşılaştırıyor.
+ * Bitiş `GREATEST` ile yazılıyor: daha uzun bir kilidi kısaltmak hiçbir
+ * yolda mümkün olmamalı. Zaman uygulamanın saatinden geliyor (`simdi`):
+ * kilidin okunduğu ve yazıldığı saat aynı olmak zorunda.
+ *
+ * `mfaAcikSart` YALNIZCA kurulum onayındaki parola denetiminde kapalı:
+ * orada 2FA henüz açık değil ama aynı sayaç parola tahminini sınırlıyor.
+ */
+export async function hakAyir(
+  db: SorguCalistirici,
+  userId: string,
+  simdi: Date,
+  ayar: { azami: number; ilkKilitDk: number; mfaAcikSart: boolean },
+): Promise<{ n: number; kilitBitis: Date | null } | null> {
+  const r = await db.$queryRaw<Array<{ n: number; k: Date | string | null }>>(Prisma.sql`
+    UPDATE users
+       SET mfa_basarisiz_deneme = mfa_basarisiz_deneme + 1,
+           mfa_kilit_bitis = CASE
+             WHEN (mfa_basarisiz_deneme + 1) % ${ayar.azami}::int = 0
+             THEN GREATEST(
+                    COALESCE(mfa_kilit_bitis, ${simdi}::timestamptz),
+                    ${simdi}::timestamptz + interval '1 minute' * LEAST(
+                      ${ayar.ilkKilitDk}::int * power(2, ((mfa_basarisiz_deneme + 1) / ${ayar.azami}::int) - 1),
+                      1440))
+             ELSE mfa_kilit_bitis
+           END
      WHERE id = ${userId}::uuid
-    RETURNING mfa_basarisiz_deneme AS n
+       AND (mfa_enabled OR NOT ${ayar.mfaAcikSart}::boolean)
+       AND (mfa_kilit_bitis IS NULL OR mfa_kilit_bitis <= ${simdi}::timestamptz)
+    RETURNING mfa_basarisiz_deneme AS n, mfa_kilit_bitis AS k
   `);
-  return Number(r[0]?.n ?? 0);
-}
-
-export function kilitYaz(db: SorguCalistirici, userId: string, bitis: Date): Promise<number> {
-  return db.$executeRaw(Prisma.sql`
-    UPDATE users SET mfa_kilit_bitis = ${bitis}::timestamptz WHERE id = ${userId}::uuid
-  `);
+  const s = r[0];
+  if (!s) return null;
+  return { n: Number(s.n), kilitBitis: s.k === null ? null : new Date(s.k) };
 }
 
 export function sayaciSifirla(db: SorguCalistirici, userId: string): Promise<number> {
   return db.$executeRaw(Prisma.sql`
     UPDATE users SET mfa_basarisiz_deneme = 0, mfa_kilit_bitis = NULL WHERE id = ${userId}::uuid
   `);
+}
+
+/** Parola özeti — kurulum onayında parolayı yeniden sormak için (Ö-1). */
+export async function parolaOzetiOku(db: SorguCalistirici, userId: string): Promise<string | null> {
+  const r = await db.$queryRaw<Array<{ h: string | null }>>(Prisma.sql`
+    SELECT password_hash AS h FROM users WHERE id = ${userId}::uuid
+  `);
+  return r[0]?.h ?? null;
 }
 
 /** Kurulum anahtarını yazar. 0 = 2FA zaten açık (açıkken anahtar EZİLMEZ). */

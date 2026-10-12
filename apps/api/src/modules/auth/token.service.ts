@@ -323,12 +323,7 @@ export class TokenService {
      * ve giriş onu kuruluma alıyor. Aile `iki_adim_zorunlu` sebebiyle
      * kapatılıyor; "olası hırsızlık" değil.
      */
-    if (ikiAdimZorunluIhlali(existing.user)) {
-      await this.revokeFamily(existing.familyId, 'iki_adim_zorunlu');
-      throw new UnauthorizedException(
-        'Şirketin iki adımlı doğrulamayı zorunlu yaptı. Yeniden giriş yapıp kurulumu tamamla.',
-      );
-    }
+    await this.zorunlulukDenetle(existing);
 
     /*
      * İPTAL KOŞULLU VE ATOMİK. Eskiden okuma ile iptal ayrı adımdı ve
@@ -369,6 +364,23 @@ export class TokenService {
     );
   }
 
+  /**
+   * Zorunluluk ihlalinde aileyi kapatır ve fırlatır. TEK YER: hem normal
+   * rotasyon hem 30 saniyelik tolerans yolu yeni token veriyor ve ikisi de
+   * buradan geçiyor; ikinci bir kopya bir gün ayrışırdı.
+   */
+  private async zorunlulukDenetle(existing: {
+    familyId: string;
+    user: { mfaEnabled?: boolean; organization?: { ikiAdimZorunlu?: boolean } | null };
+  }): Promise<void> {
+    if (ikiAdimZorunluIhlali(existing.user)) {
+      await this.revokeFamily(existing.familyId, 'iki_adim_zorunlu');
+      throw new UnauthorizedException(
+        'Şirketin iki adımlı doğrulamayı zorunlu yaptı. Yeniden giriş yapıp kurulumu tamamla.',
+      );
+    }
+  }
+
   private gecerlilikKontrol(satir: { expiresAt: Date }): void {
     if (satir.expiresAt.getTime() <= Date.now()) {
       throw new UnauthorizedException('Oturum süresi doldu, lütfen tekrar giriş yapın');
@@ -395,7 +407,13 @@ export class TokenService {
       revokedAt: Date;
       revokedReason: string | null;
       userAgent: string | null;
-      user: { id: string; orgId: string; status: string };
+      user: {
+        id: string;
+        orgId: string;
+        status: string;
+        mfaEnabled?: boolean;
+        organization?: { ikiAdimZorunlu?: boolean } | null;
+      };
     },
     meta: TokenMeta,
   ): Promise<IssuedTokens> {
@@ -409,6 +427,10 @@ export class TokenService {
       this.logger.warn(
         `Yeni döndürülmüş refresh token tolerans içinde tekrar sunuldu (eşzamanlı istek). userId=${existing.userId} family=${existing.familyId}`,
       );
+      // TOLERANS DA YENİ TOKEN VERİYOR — zorunluluk burada da denetleniyor
+      // (N-1). Atlanırsa 30 saniyelik pencere, zorunluluğa takılan bir
+      // oturumun yenilenmesinin arka kapısı olurdu.
+      await this.zorunlulukDenetle(existing);
       return this.issueTokens(
         existing.user.id,
         existing.user.orgId,

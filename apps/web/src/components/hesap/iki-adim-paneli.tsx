@@ -10,6 +10,7 @@ import {
   type IkiAdimKurulumBilgisi,
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { Alan } from '@/components/auth/alan';
 import { HataKutusu, KodAlani, KurtarmaKodlari, QrKurulumu } from './iki-adim-parcalari';
 
 function hataMetni(err: unknown): string {
@@ -53,6 +54,12 @@ export function IkiAdimPaneli({
   const router = useRouter();
   const [mod, setMod] = useState<Mod>({ tur: 'bos' });
   const [kod, setKod] = useState('');
+  /*
+   * PAROLA YALNIZ KURULUM ONAYINDA (Ö-1). Oturum çerezi çalınmışsa saldırgan
+   * kendi telefonuyla 2FA kurup hesabı kalıcı ele geçirebilirdi; sunucu bu
+   * adımda parolayı yeniden istiyor.
+   */
+  const [parola, setParola] = useState('');
   const [hata, setHata] = useState<string | null>(null);
   const [bekliyor, setBekliyor] = useState(false);
   const [bilgi, setBilgi] = useState<string | null>(null);
@@ -60,6 +67,7 @@ export function IkiAdimPaneli({
   function sifirla(yeni: Mod = { tur: 'bos' }) {
     setMod(yeni);
     setKod('');
+    setParola('');
     setHata(null);
   }
 
@@ -85,10 +93,11 @@ export function IkiAdimPaneli({
   const onayla = (e: React.FormEvent) => {
     e.preventDefault();
     if (ikiAdimKodTuru(kod) !== 'totp') return setHata('Uygulamadaki 6 haneli kodu yaz.');
+    if (parola === '') return setHata('Onaylamak için şifreni yaz.');
     void calistir(async () => {
       const r = await apiFetch<IkiAdimKurtarmaKodlari>('/auth/2fa/kurulum/onay', {
         method: 'POST',
-        body: JSON.stringify({ kod }),
+        body: JSON.stringify({ kod, parola }),
       });
       sifirla({ tur: 'kodlar', kodlar: r.kurtarmaKodlari });
     });
@@ -204,6 +213,18 @@ export function IkiAdimPaneli({
             <HataKutusu mesaj={hata} />
             <div className="max-w-xs">
               <KodAlani id="hesapKurulumKod" value={kod} onChange={setKod} disabled={bekliyor} />
+            </div>
+            <div className="max-w-xs">
+              <Alan
+                id="hesapKurulumParola"
+                label="Şifren"
+                type="password"
+                autoComplete="current-password"
+                value={parola}
+                onChange={setParola}
+                disabled={bekliyor}
+                ipucu="Güvenliğin için şifreni bir kez daha soruyoruz."
+              />
             </div>
             <div className="flex gap-2">
               <button type="submit" disabled={bekliyor} className={BIRINCIL}>
