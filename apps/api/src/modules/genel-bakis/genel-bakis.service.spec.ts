@@ -355,3 +355,42 @@ describe('kaynak taraması — Nest kaydı ve uç', () => {
     expect(govde).toContain('@CurrentTenant()');
   });
 });
+
+describe('sinyal_acik (Paket A)', () => {
+  const REKLAMCI = {
+    ...AJANS,
+    isOrgAdmin: false,
+    role: 'ad_manager',
+    permissions: [...resolvePermissions('ad_manager')],
+  } as unknown as TenantContext;
+
+  async function acikSinyal(): Promise<void> {
+    await h.q(
+      `INSERT INTO sinyaller (org_id, client_id, ad_account_id, platform, anahtar, tur, kod, seviye, varlik_id,
+         varlik_adi, gun, onem, para_birimi, son_acilma)
+       VALUES ($1, $2, $3, 'meta', 'k1', 'saglik', 'donusum_kesildi', 'account', $3, 'Hesap', '2026-10-11', 'yuksek', 'TRY',
+         '2026-10-12T02:00:00Z')`,
+      [IDS.org, IDS.client, IDS.adAccount],
+    );
+  }
+
+  function sessizServis(sessizKosum: boolean): GenelBakisService {
+    const prisma = {
+      withTenant: <T>(_c: TenantContext, fn: (tx: unknown) => Promise<T>) => fn(h.db),
+    } as unknown as PrismaService;
+    return new GenelBakisService(prisma, { sinyal: { sessizKosum } } as unknown as AppConfig);
+  }
+
+  it('açık sinyal workspace başına sayılıyor, en eski açılma anıyla', async () => {
+    await acikSinyal();
+    const y = await sessizServis(false).bekleyenler(REKLAMCI, {});
+    expect(y.isler.find((i) => i.tur === 'sinyal_acik')).toMatchObject({ clientId: IDS.client, sayi: 1, enEski: '2026-10-12T02:00:00.000Z' });
+  });
+
+  it('KRİTİK: SESSİZ KOŞUMDA yalnız org yöneticisi sayıyı görüyor (sinyaller ekranıyla aynı kapı)', async () => {
+    await acikSinyal();
+    const svcSessiz = sessizServis(true);
+    expect((await svcSessiz.bekleyenler(REKLAMCI, {})).isler.filter((i) => i.tur === 'sinyal_acik')).toEqual([]);
+    expect((await svcSessiz.bekleyenler(AJANS, {})).isler.filter((i) => i.tur === 'sinyal_acik')).toHaveLength(1);
+  });
+});

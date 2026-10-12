@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createHarness, type Harness } from '../../../test/pglite-harness';
@@ -107,6 +107,33 @@ describe('KAPSAMA — şemadaki her tablo bir karara bağlı', () => {
     expect(cocuk.filter((t) => !kapsanan.has(t))).toEqual([]);
   });
 
+  it('KRİTİK: kompozit (client_id, org_id) anahtarlı HER tablo CASCADE listesinde ve WORKSPACE_TABLOLARI’nda DEĞİL', () => {
+    /*
+     * İkisinde birden durmak taşımayı ORTASINDA düşürüyordu: önden yazılan
+     * org_id, henüz var olmayan (workspace, hedef şirket) çiftine bakıyor
+     * ve kısıt her deyimde doğrulanıyor (Ajan 4, Paket A kapısı; iyilestir,
+     * strateji, reklam ve sinyal tabloları). Kaynak migration'lar: bir
+     * tablo kompozit anahtarla eklenince bu test onu CASCADE listesine,
+     * düz org_id ile eklenince WORKSPACE_TABLOLARI'na zorluyor.
+     */
+    const kok = join(__dirname, '../../../prisma/migrations');
+    const kompozit = new Set<string>();
+    for (const d of readdirSync(kok).filter((x) => /^\d/.test(x))) {
+      const sql = readFileSync(join(kok, d, 'migration.sql'), 'utf8');
+      for (const m of sql.matchAll(
+        /ALTER TABLE "?(\w+)"?\s+ADD CONSTRAINT "?\w+"?\s+FOREIGN KEY \("client_id", ?"org_id"\) REFERENCES "clients"\s*\("id", ?"org_id"\)[^;]*ON UPDATE CASCADE/g,
+      )) {
+        kompozit.add(m[1]!);
+      }
+    }
+    // Boşa düşme bekçisi: tarama gerçekten buldu.
+    expect(kompozit.has('sinyaller')).toBe(true);
+    expect(kompozit.has('iyilestir_oneri_karar')).toBe(true);
+    expect([...kompozit].sort()).toEqual([...CASCADE_ILE_TASINANLAR].sort());
+    const workspace = new Set(WORKSPACE_TABLOLARI.map((t) => t.tablo));
+    expect([...kompozit].filter((t) => workspace.has(t))).toEqual([]);
+  });
+
   it('listede ŞEMADA OLMAYAN tablo yok', () => {
     // Ters yön: silinmiş bir tabloya UPDATE atmak, taşımanın ORTASINDA
     // patlaması ve transaction'ın geri alınması demek.
@@ -182,6 +209,11 @@ beforeAll(async () => {
              VALUES ('bbbb1111-1111-1111-1111-111111111111','${ORG_A}','${WS}','Kural','campaign','[{"metric":"spend","op":"gt","value":1}]'::jsonb,'{"type":"pause"}'::jsonb,'{}'::jsonb,now(),now())`);
   await h.q(`INSERT INTO rule_runs (id, org_id, rule_id, dry_run, started_at)
              VALUES (gen_random_uuid(),'${ORG_A}','bbbb1111-1111-1111-1111-111111111111',true,now())`);
+  // KOMPOZİT ANAHTARLI tablolardan birer satır: bunlar WORKSPACE_TABLOLARI'nda
+  // dururken taşıma bu satırlar yüzünden ORTASINDA düşüyordu.
+  await h.q(`INSERT INTO iyilestir_oneri_karar (org_id, client_id, anahtar, tur, platform, durum, eylem, user_id)
+             VALUES ('${ORG_A}','${WS}','k','kreatif_yorgunlugu','meta','yoksayildi','{}'::jsonb,'${USER}')`);
+  await h.q(`INSERT INTO iyilestir_asistan_oturum (org_id, client_id, user_id) VALUES ('${ORG_A}','${WS}','${USER}')`);
   // Kalan workspace'in verisi — taşımadan ETKİLENMEMELİ.
   await h.q(`INSERT INTO monthly_budgets (id, org_id, client_id, ad_account_id, month, amount_micros, currency, created_at, updated_at)
              VALUES (gen_random_uuid(),'${ORG_A}','${WS_KALAN}',NULL,'2026-09-01',5000000,'TRY',now(),now())`);
@@ -228,6 +260,9 @@ describe('DAVRANIŞ — gerçek Postgres', () => {
      * yabancı anahtar `clients.org_id` güncellemesini REDDEDERDİ.
      */
     expect(await orgOf('ad_accounts', `id = 'dddd1111-1111-1111-1111-111111111111'`)).toBe(ORG_B);
+    // İyileştir satırları da Postgres'in cascade'iyle geçti (listede değiller).
+    expect(await orgOf('iyilestir_oneri_karar', `client_id = '${WS}'`)).toBe(ORG_B);
+    expect(await orgOf('iyilestir_asistan_oturum', `client_id = '${WS}'`)).toBe(ORG_B);
   });
 
   it('KRİTİK: AYNI ŞİRKETTE KALAN workspace ETKİLENMEDİ', async () => {

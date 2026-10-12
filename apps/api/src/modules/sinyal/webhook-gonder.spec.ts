@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { ozelAdres } from '../tenancy/site-oku';
 import { webhookGonder, WEBHOOK_GOVDE_EN_COK, type WebhookBagimliliklari } from './webhook-gonder';
 
 /**
@@ -77,4 +78,14 @@ describe('webhook gönderimi', () => {
     expect(r.reddedildi).toBe(true);
     expect(fetchMock).not.toHaveBeenCalled();
   });
+});
+
+describe('iç ağ IPv6 biçimleri (Ajan 4, N-a) — ortak ozelAdres', () => {
+  it.each(['::ffff:7f00:1', '::ffff:a9fe:a9fe', '::127.0.0.1', '64:ff9b::a9fe:a9fe', '2002:7f00:1::1', '::ffff:10.0.0.1', 'ff02::1', 'zzzz::1'])(
+    '%s iç ağ (ya da okunamıyor → reddet)',
+    (ip) => expect(ozelAdres(ip)).toBe(true),
+  );
+  it.each(['2606:4700:4700::1111', '::ffff:8.8.8.8', '64:ff9b::808:808', '2a00:1450:4001:80e::200e'])('%s genel adres, engellenmiyor', (ip) =>
+    expect(ozelAdres(ip)).toBe(false),
+  );
 });

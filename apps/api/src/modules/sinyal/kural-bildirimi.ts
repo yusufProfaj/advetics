@@ -66,3 +66,36 @@ export async function kuralBildirimiYaz(tx: TxLike, rule: RuleRecord, runId: str
        ${kanalIdleri ? Prisma.sql`AND k.id = ANY(${kanalIdleri}::uuid[])` : Prisma.empty}
     ON CONFLICT (kanal_id, anahtar) DO NOTHING`);
 }
+
+/**
+ * ═══ KURAL TURUNUN TRANSACTION'INI BİLDİRİM HATASINDAN KORU (Ajan 4, N-d) ═══
+ *
+ * API'nin elle çalıştırma yolu kuralı `withTenant` transaction'ı içinde
+ * yürütüyor. Orada bildirim yazımı düşerse (RLS reddi, bozuk kanal kimliği)
+ * Postgres transaction'ı İPTAL ediyor: hatayı yakalamak yetmiyor, sonraki
+ * `UPDATE rule_runs` "current transaction is aborted" ile düşüyor ve kuralın
+ * bütün kaydı geri alınıyordu. Yazım bir SAVEPOINT içinde: düşerse yalnız
+ * kendisi geri alınıyor ve hata cümlesi çağırana dönüyor (tur kaydına yazılır).
+ *
+ * Worker transaction AÇMIYOR (autocommit); orada SAVEPOINT komutu
+ * "yalnız transaction bloğunda" diye reddediliyor ve buna gerek de yok:
+ * autocommit'te düşen deyim başka hiçbir şeyi iptal etmiyor.
+ */
+export async function kuralBildirimiGuvenli(tx: TxLike, rule: RuleRecord, runId: string): Promise<string | null> {
+  let savepoint = false;
+  try {
+    await tx.$executeRaw(Prisma.sql`SAVEPOINT kural_bildirimi`);
+    savepoint = true;
+  } catch {
+    // Transaction dışı (worker, autocommit): korunacak bir transaction yok.
+    savepoint = false;
+  }
+  try {
+    await kuralBildirimiYaz(tx, rule, runId);
+    if (savepoint) await tx.$executeRaw(Prisma.sql`RELEASE SAVEPOINT kural_bildirimi`);
+    return null;
+  } catch (err) {
+    if (savepoint) await tx.$executeRaw(Prisma.sql`ROLLBACK TO SAVEPOINT kural_bildirimi`);
+    return `Bildirim kuyruğa alınamadı: ${err instanceof Error ? err.message : String(err)}`;
+  }
+}

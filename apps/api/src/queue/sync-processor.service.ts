@@ -25,6 +25,8 @@ import { BoostExecutorService } from '../modules/boosts/boost-executor.service';
 import { SUPURME_HESAP_KOSULU } from './supurme-kapsami';
 import { SinyalHesapService } from '../modules/sinyal/sinyal-hesap.service';
 import { BildirimTeslimService } from '../modules/sinyal/bildirim-teslim.service';
+import { izlenmeyenSinyalleriKapat } from '../modules/sinyal/hesap-sinyalleri';
+import type { TxLike } from '../modules/sinyal/sinyal-hesap';
 import { isYapilabilir } from './platform-isleri';
 import { cekilmisGunler, gunlukAnahtar } from './gunluk-tekrar';
 import { GUN_ICI_ARALIK_DK, gunIciAtlanir, seyreltilir, sonGunIciIsler } from './gun-ici-aralik';
@@ -1186,7 +1188,12 @@ export class SyncProcessorService {
         continue;
       }
       const sinyal = await this.db.syncJob.findFirst({
-        where: { adAccountId: a.id, jobType: 'signals_evaluate', dateFrom: gun },
+        /*
+         * DURUM SÜZGECİ ŞART: düşmüş (`failed`) bir sinyal işi "zaten
+         * hesaplanmış" sayılırsa emniyet süpürmesi tam da yakalaması gereken
+         * hâli (zincir koştu ama iş düştü) atlıyordu (Ajan 4, Ö1).
+         */
+        where: { adAccountId: a.id, jobType: 'signals_evaluate', dateFrom: gun, status: { in: ['queued', 'running', 'succeeded'] } },
         select: { id: true },
       });
       if (sinyal) {
@@ -1203,7 +1210,12 @@ export class SyncProcessorService {
       });
       if (res.enqueued) acilan++;
     }
-    const note = `sinyal emniyet süpürmesi: ${acilan} hesap kuyruğa alındı (zincir kaçırmıştı), ${zatenVar} zaten hesaplanmış, ${metrikYok} hesabın dünü henüz çekilmemiş`;
+    // EMNİYET: atanmamış / izlenmeyen / başka workspace'e geçmiş hesabın
+    // açık sinyalleri (kapatan çağıran bir gün atlanırsa).
+    const kapanan = await izlenmeyenSinyalleriKapat(this.db as unknown as TxLike);
+    const note =
+      `sinyal emniyet süpürmesi: ${acilan} hesap kuyruğa alındı (zincir kaçırmıştı), ${zatenVar} zaten hesaplanmış, ` +
+      `${metrikYok} hesabın dünü henüz çekilmemiş, izlenmeyen hesaplarda ${kapanan} açık sinyal kapatıldı`;
     this.logger.log(note);
     return { rows: acilan, note };
   }

@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { HESAP_AYRILDI_NOTU, hesapSinyalleriniKapat } from '../sinyal/hesap-sinyalleri';
 
 /**
  * REKLAM HESABI EL DEĞİŞTİRİNCE VERİSİ DE TAŞINIR.
@@ -292,6 +293,14 @@ export async function hesapVerisiniTasi(
   const tasinan: Record<string, number> = {};
   let toplam = 0;
   let kalanVeri = 0;
+
+  /*
+   * ATAMA KALDIRILIYOR: hesabın AÇIK sinyalleri kapanıyor (eski workspace'te
+   * kalıyorlar ama hesap artık hesaplanmıyor; açık kalsalar hiç kapanmazdı).
+   * Başka workspace'e geçişte kapanmıyor: satırlar aşağıda taşınıyor ve
+   * yeni sahibin değerlendirmesi devam ediyor.
+   */
+  if (yeniClientId === null) await hesapSinyalleriniKapat(tx, adAccountId, HESAP_AYRILDI_NOTU);
 
   for (const t of HESABIN_KENDI_VERISI) {
     const { tablo } = t;

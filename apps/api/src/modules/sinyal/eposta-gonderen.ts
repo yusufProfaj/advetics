@@ -39,14 +39,7 @@ export async function epostaGonderen(db: TxLike, orgId: string): Promise<EpostaK
     }>
   >(Prisma.sql`
     SELECT e.from_name, e.from_email, e.smtp_host, e.smtp_port, e.smtp_secure, e.smtp_user, e.smtp_pass_enc
-      FROM organizations o
-      LEFT JOIN manager_accounts ma ON ma.id = o.manager_account_id
-      JOIN memberships m ON m.client_id IS NULL AND m.role = 'admin'::"Role"
-                        AND (m.org_id = o.id OR m.org_id = ma.ajans_org_id)
-      JOIN user_email_accounts e ON e.user_id = m.user_id
-     WHERE o.id = ${orgId}::uuid
-     ORDER BY (m.org_id = o.id) DESC, e.created_at ASC
-     LIMIT 1`);
+    ${gonderenKaynagi(orgId)}`);
   if (!r) return null;
   return {
     fromName: r.from_name,
@@ -57,6 +50,34 @@ export async function epostaGonderen(db: TxLike, orgId: string): Promise<EpostaK
     smtpUser: r.smtp_user,
     smtpPassEnc: Buffer.from(r.smtp_pass_enc),
   };
+}
+
+/**
+ * Seçim TEK yerde: gönderim ve "gönderen tanımlı mı" cevabı AYNI kimliği
+ * bulmalı; ayrı yazılırsa ekran bir adres gösterip mail başka adresten gider.
+ */
+function gonderenKaynagi(orgId: string): Prisma.Sql {
+  return Prisma.sql`
+      FROM organizations o
+      LEFT JOIN manager_accounts ma ON ma.id = o.manager_account_id
+      JOIN memberships m ON m.client_id IS NULL AND m.role = 'admin'::"Role"
+                        AND (m.org_id = o.id OR m.org_id = ma.ajans_org_id)
+      JOIN user_email_accounts e ON e.user_id = m.user_id
+     WHERE o.id = ${orgId}::uuid
+     ORDER BY (m.org_id = o.id) DESC, e.created_at ASC
+     LIMIT 1`;
+}
+
+/**
+ * YALNIZ ADRES (Ajan 4, N-g). Kanal listesi "gönderen tanımlı mı" sorusu
+ * için kimliğin TAMAMINI okuyordu: şifreli SMTP parolası her liste isteğinde
+ * belleğe alınıyor ve atılıyordu (`connections-select.spec.ts` dersi). Kolon
+ * listesi sabit ve parola içermiyor; `sinyal-kayit.spec.ts` tarıyor.
+ */
+export async function epostaGonderenAdresi(db: TxLike, orgId: string): Promise<string | null> {
+  const [r] = await db.$queryRaw<Array<{ from_email: string }>>(Prisma.sql`
+    SELECT e.from_email ${gonderenKaynagi(orgId)}`);
+  return r?.from_email ?? null;
 }
 
 export const EPOSTA_GONDEREN_YOK =

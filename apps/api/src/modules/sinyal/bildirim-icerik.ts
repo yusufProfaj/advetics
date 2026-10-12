@@ -71,9 +71,29 @@ function fazlaMetni(g: BildirimGovdesi): string | null {
 
 // ─── Slack ──────────────────────────────────────────────────────────────────
 
-/** Slack mrkdwn kaçışı: yalnız üç karakter (Slack belgesi). */
-function slackKac(s: string): string {
+/**
+ * KULLANICI KAYNAKLI ADLAR (kural, workspace, kampanya) KAÇIŞLANIYOR.
+ *
+ * Slack mrkdwn'da `<...>` bir KOMUT: `<!channel>`/`<!here>` bütün kanalı
+ * uyarıyor, `<@U123>` birini etiketliyor, `<https://x|metin>` başka bir
+ * adrese bağlanıyor. Kampanyasına "<!channel> ACİL" adını veren biri her
+ * sabah bütün kanalı çaldırırdı (Ajan 4, N-e). Slack belgesinin kaçışı üç
+ * karakter: `&`, `<`, `>`; bunlar kaçışlanınca komut düz metne dönüyor.
+ * `text` alanı DA mrkdwn olarak okunuyor (telefon bildirimi): o da kaçışlı.
+ */
+export function slackKac(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/**
+ * Teams (MessageCard markdown + Adaptive Card TextBlock markdown): bağlantı
+ * sözdizimi `[metin](adres)`, vurgu ve HTML. Ters bölüyle kaçışlanıyor;
+ * eski bağlayıcıda `<`/`>`/`&` ayrıca varlık (MessageCard sınırlı HTML yorumluyor).
+ */
+export function teamsKac(s: string, aile: 'baglayici' | 'workflows'): string {
+  const md = s.replace(/[\\`*_[\]()#~|!]/g, (c) => `\\${c}`);
+  // Adaptive Card HTML yorumlamıyor: varlık orada "&lt;" diye GÖRÜNÜRDÜ.
+  return aile === 'baglayici' ? md.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') : md;
 }
 
 export function slackGovdesi(g: BildirimGovdesi): Record<string, unknown> {
@@ -92,7 +112,7 @@ export function slackGovdesi(g: BildirimGovdesi): Record<string, unknown> {
   }
   // `text` BİLDİRİMİN KENDİSİ (telefon bildirimi, ekran okuyucu); blok
   // desteklemeyen istemci yalnız onu gösterir.
-  return { text: g.baslik, blocks };
+  return { text: slackKac(g.baslik), blocks };
 }
 
 // ─── Teams ──────────────────────────────────────────────────────────────────
@@ -104,15 +124,17 @@ export function slackGovdesi(g: BildirimGovdesi): Record<string, unknown> {
  * doğrulayacak.
  */
 export function teamsGovdesi(g: BildirimGovdesi, aile: 'baglayici' | 'workflows'): Record<string, unknown> {
-  const satirlar = g.satirlar.map((s) => `**${s.etiket}** · ${s.metin}`);
+  const satirlar = g.satirlar.map((s) => `**${teamsKac(s.etiket, aile)}** · ${teamsKac(s.metin, aile)}`);
   const fazla = fazlaMetni(g);
-  if (fazla) satirlar.push(`_${fazla}_`);
+  if (fazla) satirlar.push(`_${teamsKac(fazla, aile)}_`);
+  const baslik = teamsKac(g.baslik, aile);
   if (aile === 'baglayici') {
     return {
       '@type': 'MessageCard',
       '@context': 'https://schema.org/extensions',
+      // `summary` bildirim önizlemesinde DÜZ metin: kaçışsız ham başlık.
       summary: g.baslik,
-      title: g.baslik,
+      title: baslik,
       text: satirlar.join('\n\n'),
       ...(g.baglanti
         ? { potentialAction: [{ '@type': 'OpenUri', name: g.baglanti.metin, targets: [{ os: 'default', uri: g.baglanti.adres }] }] }
@@ -129,7 +151,7 @@ export function teamsGovdesi(g: BildirimGovdesi, aile: 'baglayici' | 'workflows'
           type: 'AdaptiveCard',
           version: '1.4',
           body: [
-            { type: 'TextBlock', text: g.baslik, weight: 'Bolder', size: 'Medium', wrap: true },
+            { type: 'TextBlock', text: baslik, weight: 'Bolder', size: 'Medium', wrap: true },
             ...satirlar.map((t) => ({ type: 'TextBlock', text: t, wrap: true, spacing: 'Small' })),
           ],
           ...(g.baglanti ? { actions: [{ type: 'Action.OpenUrl', title: g.baglanti.metin, url: g.baglanti.adres }] } : {}),

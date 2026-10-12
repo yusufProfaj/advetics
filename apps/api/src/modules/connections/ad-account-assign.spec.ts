@@ -4,6 +4,7 @@ import { createHarness, seedTenant, IDS, type Harness } from '../../../test/pgli
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { PrismaAdminService } from '../../prisma/prisma-admin.service';
 import { AuditService } from '../audit/audit.service';
+import { izlenmeyenSinyalleriKapat } from '../sinyal/hesap-sinyalleri';
 import { ConnectionsService } from './connections.service';
 
 /**
@@ -193,6 +194,55 @@ describe('atama', () => {
     // Açık kalsaydı: hesap ekranda "izleniyor" görünür, süpürme işi onu eler,
     // hiç veri gelmez ve hiçbir hata çıkmaz.
     expect(row.sync_enabled).toBe(false);
+  });
+
+  /*
+   * AJAN 4 · Ö3 — izlenmeyen hesabın AÇIK sinyali kalmıyor. Hesaplama işi o
+   * hesap için bir daha koşmuyor; açık kalan sinyali kapatacak tek yol
+   * (`sure_doldu`) o işin içindeydi.
+   */
+  async function acikSinyal(anahtar: string, durum: 'acik' | 'kapatildi' = 'acik'): Promise<void> {
+    await h.q(
+      `INSERT INTO sinyaller (org_id, client_id, ad_account_id, platform, anahtar, tur, kod, seviye, varlik_id,
+         varlik_adi, gun, onem, para_birimi, durum, kapatma_nedeni)
+       VALUES ($1, $2, $3, 'meta', $4, 'saglik', 'donusum_kesildi', 'account', $3, 'Hesap', '2026-10-11', 'yuksek', 'TRY',
+         $5, $6)`,
+      [IDS.org, IDS.client, POOL_ACCOUNT, anahtar, durum, durum === 'acik' ? null : 'kullanici'],
+    );
+  }
+  const sinyalDurumu = async (anahtar: string) =>
+    (await h.q<{ durum: string; kapatma_notu: string | null }>(`SELECT durum, kapatma_notu FROM sinyaller WHERE anahtar = $1`, [anahtar]))[0];
+
+  it('KRİTİK: izleme kapatılınca hesabın AÇIK sinyalleri kendiliğinden kapanıyor; kullanıcının kapattığına dokunulmuyor', async () => {
+    await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
+    await acikSinyal('s-acik');
+    await acikSinyal('s-kapali', 'kapatildi');
+    await svc.setAccountSync(CTX, POOL_ACCOUNT, false, META);
+    expect(await sinyalDurumu('s-acik')).toEqual({ durum: 'kendiliginden_kapandi', kapatma_notu: 'Hesabın izlemesi kapatıldı; sinyal hesaplanmıyor.' });
+    expect((await sinyalDurumu('s-kapali'))!.durum).toBe('kapatildi');
+  });
+
+  it('KRİTİK: atama kaldırılınca hesabın AÇIK sinyalleri kendiliğinden kapanıyor', async () => {
+    await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
+    await acikSinyal('s-atama');
+    await svc.assignAdAccount(CTX, POOL_ACCOUNT, null, META);
+    expect((await sinyalDurumu('s-atama'))!.durum).toBe('kendiliginden_kapandi');
+  });
+
+  it('başka workspace’e geçişte sinyal KAPANMIYOR, yeni sahibe taşınıyor', async () => {
+    await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
+    await acikSinyal('s-gecis');
+    await svc.assignAdAccount(CTX, POOL_ACCOUNT, CLIENT_B, META);
+    expect((await h.q(`SELECT durum, client_id::text AS c FROM sinyaller WHERE anahtar = 's-gecis'`))[0]).toEqual({ durum: 'acik', c: CLIENT_B });
+  });
+
+  it('KRİTİK: emniyet süpürmesi atanmamış/izlenmeyen hesabın açık sinyalini kapatıyor', async () => {
+    await svc.assignAdAccount(CTX, POOL_ACCOUNT, IDS.client, META);
+    await acikSinyal('s-emniyet');
+    // Çağıranı atlayan bir yol: hesap doğrudan izlemeden çıkarılıyor.
+    await h.q(`UPDATE ad_accounts SET sync_enabled = false WHERE id = $1`, [POOL_ACCOUNT]);
+    expect(await izlenmeyenSinyalleriKapat(h.db as never)).toBe(1);
+    expect((await sinyalDurumu('s-emniyet'))!.durum).toBe('kendiliginden_kapandi');
   });
 
   it('DEĞİŞİKLİK YOKSA denetim kaydı yazılmıyor', async () => {

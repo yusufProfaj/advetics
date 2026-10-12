@@ -7,7 +7,7 @@ import { ProviderRegistry } from '../connections/provider.registry';
 import { TokenVaultService } from '../connections/token-vault.service';
 import { QuotaGuardService } from '../../queue/quota-guard.service';
 import { RulesService, type PendingAction, type TxLike } from './rules.service';
-import { kuralBildirimiYaz } from '../sinyal/kural-bildirimi';
+import { kuralBildirimiGuvenli } from '../sinyal/kural-bildirimi';
 
 /**
  * Kural turunu yürütür: değerlendir → uygula (ya da prova et) → kaydet.
@@ -95,12 +95,13 @@ export class RuleExecutorService {
      * kalmıyor: tur kaydının hatasına ekleniyor (kural geçmişinde görünür).
      * Tur başarısız sayılmıyor: kuralın kendisi çalıştı.
      */
-    try {
-      await kuralBildirimiYaz(tx, rule, run.id);
-    } catch (err) {
-      const m = `Bildirim kuyruğa alınamadı: ${err instanceof Error ? err.message : String(err)}`;
-      failure = failure ? `${failure} · ${m}` : m;
-      this.logger.error(`Kural ${rule.name}: ${m}`);
+    // SAVEPOINT İÇİNDE (kural-bildirimi.ts#kuralBildirimiGuvenli): düşen
+    // bildirim yazımı API transaction'ını iptal edip aşağıdaki tur kaydını
+    // da götürüyordu (Ajan 4, N-d).
+    const bildirimHatasi = await kuralBildirimiGuvenli(tx, rule, run.id);
+    if (bildirimHatasi) {
+      failure = failure ? `${failure} · ${bildirimHatasi}` : bildirimHatasi;
+      this.logger.error(`Kural ${rule.name}: ${bildirimHatasi}`);
     }
 
     await tx.$executeRaw(Prisma.sql`

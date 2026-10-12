@@ -21,7 +21,7 @@ import { PrismaAdminService } from '../../prisma/prisma-admin.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { govdeKur } from './bildirim-icerik';
 import { BildirimTeslimService, GONDERIM_KOLONLARI, gonderimSatirindan, type GonderimSatiri } from './bildirim-teslim.service';
-import { EPOSTA_GONDEREN_YOK, epostaGonderen } from './eposta-gonderen';
+import { EPOSTA_GONDEREN_YOK, epostaGonderenAdresi } from './eposta-gonderen';
 import type { TxLike } from './sinyal-hesap';
 
 /**
@@ -123,14 +123,14 @@ export class BildirimService {
       return { satirlar, orgId: c?.org_id ?? null };
     });
     // Gönderen kimliği RLS'te yalnız sahibine görünüyor: BYPASSRLS ile ve
-    // YALNIZ adres dönüyor (parola, sunucu bilgisi yanıta girmiyor).
-    const kimlik = orgId ? await epostaGonderen(this.admin as unknown as TxLike, orgId) : null;
+    // YALNIZ adres OKUNUYOR (parola belleğe bile girmiyor, N-g).
+    const adres = orgId ? await epostaGonderenAdresi(this.admin as unknown as TxLike, orgId) : null;
     const kanallar = satirlar.map(kanalSatirindan);
     return {
       kanallar,
       toplam: kanallar.length,
       emptyReason: kanallar.length === 0 ? 'kanal_yok' : null,
-      epostaGonderen: kimlik ? { tanimli: true, adres: kimlik.fromEmail } : { tanimli: false, neden: EPOSTA_GONDEREN_YOK },
+      epostaGonderen: adres ? { tanimli: true, adres } : { tanimli: false, neden: EPOSTA_GONDEREN_YOK },
     };
   }
 

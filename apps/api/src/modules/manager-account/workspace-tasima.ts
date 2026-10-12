@@ -20,13 +20,13 @@ import { Prisma } from '@prisma/client';
  * aynı transaction'da çözülüyor: yarım kalmış bir taşıma, iki şirketin de
  * verisini sessizce yanlış yapar.
  *
- * ┌─ ÜÇ TABLO BURADA YOK ÇÜNKÜ POSTGRES ONLARI KENDİSİ TAŞIYOR ───────────┐
- * │ `ad_accounts`, `platform_connections` ve `social_profiles`             │
+ * ┌─ KOMPOZİT ANAHTARLI TABLOLAR BURADA YOK: POSTGRES KENDİSİ TAŞIYOR ──┐
  * │ `(client_id, org_id)` kompozit yabancı anahtarını `ON UPDATE CASCADE`  │
- * │ ile taşıyor (bkz. 20260815120000_agency_connections). `clients.org_id` │
- * │ güncellenince üçü de kendiliğinden güncelleniyor. Listeye eklemek      │
- * │ zararsız olurdu ama YANILTICI: "burada olmayan taşınmıyor" kuralını    │
- * │ bozar ve kapsama testinin ne ölçtüğünü belirsizleştirirdi.             │
+ * │ ile taşıyan tablolar (`CASCADE_ILE_TASINANLAR`) `clients.org_id`       │
+ * │ güncellenince kendiliğinden güncelleniyor. Listeye eklemek ZARARSIZ    │
+ * │ DEĞİL: kısıt her deyimde doğrulanıyor ve satırın org_id'sini önden     │
+ * │ yazmak, henüz var olmayan (workspace, hedef şirket) çiftine bakıyor —  │
+ * │ taşıma ORTASINDA düşüyordu (Ajan 4, Paket A kapısı).                   │
  * └───────────────────────────────────────────────────────────────────────┘
  */
 
@@ -67,55 +67,6 @@ export const WORKSPACE_TABLOLARI: ReadonlyArray<{ tablo: string; etiket: string 
   { tablo: 'auto_boost_subscriptions', etiket: 'boost aboneliği' },
   { tablo: 'fatura_belgeleri', etiket: 'fatura' },
   { tablo: 'ai_conversations', etiket: 'asistan sohbeti' },
-  // Yeni reklam modülü: taslak ve DEĞİŞMEZ sürümleri workspace'in bütün
-  // geçmişiyle gidiyor. Sürüm tablosunun trigger'ı client_id/org_id
-  // değişimine bilerek izin veriyor; içerik kolonları kilitli.
-  { tablo: 'reklam_taslagi', etiket: 'yeni reklam taslağı' },
-  { tablo: 'taslak_surumu', etiket: 'taslak sürümü' },
-  { tablo: 'yayin', etiket: 'reklam yayını' },
-  { tablo: 'yayin_nesnesi', etiket: 'yayın nesnesi' },
-  { tablo: 'geri_okuma', etiket: 'geri okuma kaydı' },
-  { tablo: 'prova', etiket: 'Meta provası' },
-  // AdvCampaign sohbeti taslakla birlikte gider: taslak yeni şirkete
-  // taşınıyorsa "bunu kim neden istedi" sorusunun cevabı da gitmeli.
-  { tablo: 'adv_oturum', etiket: 'AdvCampaign oturumu' },
-  { tablo: 'adv_mesaj', etiket: 'AdvCampaign mesajı' },
-  { tablo: 'adv_onay', etiket: 'AdvCampaign onay kartı' },
-  // AdvCampaign rehberi workspace'in YARIM İŞİ ve türettiği taslaklar
-  // (reklam_taslagi) zaten taşınıyor; rehberi geride bırakmak, yeni şirkette
-  // ebeveynsiz taslaklar, eskide hiçbir hesaba bağlanamayan bir rehber demekti.
-  { tablo: 'reklam_rehberi', etiket: 'AdvCampaign rehberi' },
-  // Hazırlık workspace'in KENDİ ayarı (piksel, bütçe önerisi, kategori
-  // cevabı); geride kalsa yeni şirkette workspace "hazırlanmamış" görünür ve
-  // kullanıcıya aynı sorular yeniden sorulurdu.
-  { tablo: 'workspace_hazirlama', etiket: 'Reklama hazırlık' },
-  { tablo: 'workspace_kurulum', etiket: 'Kurulum rehberi' },
-  // AdvStrategy planı workspace'in KENDİ kararı ve dayandığı kitle şablonları
-  // ile varlıklar zaten taşınıyor; planı geride bırakmak, yeni şirkette
-  // kitlesi olup planı olmayan bir workspace ve eski şirkette sahipsiz bir
-  // onay izi demekti (MIMARI § 1). Çocuk tablolar `client_id` taşıyor,
-  // planla aynı turda gidiyor.
-  { tablo: 'strateji_planlari', etiket: 'medya planı' },
-  { tablo: 'strateji_dagilimlari', etiket: 'medya planı dağılımı' },
-  { tablo: 'strateji_matrisi', etiket: 'medya planı matrisi' },
-  { tablo: 'strateji_kelimeleri', etiket: 'medya planı kelimesi' },
-  // İyileştir: karar, workspace'in reklamlarına verilmiş bir cevap ve
-  // reklamlar (hesap atamasıyla) workspace'le gidiyor; kararı geride
-  // bırakmak, yeni şirkette aynı haftanın önerisini yeniden "açık"
-  // gösterir ve ikinci kez uygulatırdı. Asistan sohbeti de AdvCampaign
-  // sohbetiyle aynı gerekçeyle taşınıyor (MIMARI § 4).
-  { tablo: 'iyilestir_oneri_karar', etiket: 'İyileştir kararı' },
-  { tablo: 'iyilestir_asistan_oturum', etiket: 'asistan oturumu' },
-  { tablo: 'iyilestir_asistan_mesaj', etiket: 'asistan mesajı' },
-  // SİNYALLER VE BİLDİRİM KANALLARI (docs/sinyal/MIMARI.md § 2) TAŞINIYOR.
-  // Sinyal, workspace'in reklam hesaplarından türetilmiş bir gözlem ve
-  // hesaplar workspace'le gidiyor; geride kalan sinyal, sahibi olmayan bir
-  // uyarı olurdu. Kanal ajansın o workspace için kurduğu teslim yolu: yeni
-  // şirkette yeniden kurdurmak, ilk sabahki özetin sessizce hiç gitmemesi
-  // demek. Gönderim geçmişi kanalla birlikte ("bu sabah ne gitti").
-  { tablo: 'sinyaller', etiket: 'sinyal' },
-  { tablo: 'bildirim_kanallari', etiket: 'bildirim kanalı' },
-  { tablo: 'bildirim_gonderimleri', etiket: 'bildirim gönderimi' },
 ] as const;
 
 /**
@@ -152,10 +103,6 @@ export const COCUK_TABLOLAR: ReadonlyArray<{
 ] as const;
 
 /**
- * POSTGRES'İN KENDİSİ TAŞIDIĞI TABLOLAR — burada YOK ve olmamalı.
- * Kapsama testi bunları hariç tutabilmek için okuyor.
- */
-/**
  * TAŞINMAYAN ve bunun bir KARAR olduğu tablolar.
  *
  * `sync_batches` `client_id` değil `client_ids` (DİZİ) taşıyor: bir toplu
@@ -176,10 +123,77 @@ export const KAYNAKTA_KALANLAR = [
   'ajans_ayari',
 ] as const;
 
+/**
+ * `(client_id, org_id)` KOMPOZİT YABANCI ANAHTARI `ON UPDATE CASCADE` OLAN
+ * tablolar: `clients.org_id` güncellenince Postgres onları KENDİSİ taşıyor.
+ *
+ * BU TABLOLAR `WORKSPACE_TABLOLARI`NDA DURAMAZ — durunca taşıma PATLIYOR.
+ * Bir süre (reklam modülünden Paket A'ya kadar) orada duruyorlardı ve
+ * `workspaceTasi` önce satırın `org_id`sini hedefe yazıyordu: kısıt ertelenmiş
+ * değil, her deyimde doğrulanıyor ve `(workspace, hedef şirket)` çifti
+ * `clients`ta henüz YOK (o satır EN SONDA güncelleniyor). Sonuç: bu
+ * tablolardan birinde tek satırı olan her workspace'in şirket değiştirmesi
+ * "İlişkili kayıt geçersiz" ile düşüyordu (Ajan 4, Paket A kapısı).
+ *
+ * Kapsama testi (`workspace-tasima.spec.ts`) migration'lardaki kompozit
+ * anahtarları tarayıp bu listeyle KARŞILAŞTIRIYOR; yeni bir tablo kompozit
+ * anahtarla eklenince buraya, düz `org_id` ile eklenince
+ * `WORKSPACE_TABLOLARI`na girmek zorunda. Satırların neden workspace'le
+ * gittiğinin gerekçeleri aşağıda, tablonun yanında.
+ */
 export const CASCADE_ILE_TASINANLAR = [
   'ad_accounts',
   'platform_connections',
   'social_profiles',
+  // Yeni reklam modülü: taslak ve DEĞİŞMEZ sürümleri workspace'in bütün
+  // geçmişiyle gidiyor. Sürüm tablosunun trigger'ı client_id/org_id
+  // değişimine bilerek izin veriyor; içerik kolonları kilitli.
+  'reklam_taslagi',
+  'taslak_surumu',
+  'yayin',
+  'yayin_nesnesi',
+  'geri_okuma',
+  'prova',
+  // AdvCampaign sohbeti taslakla birlikte gider: taslak yeni şirkete
+  // taşınıyorsa "bunu kim neden istedi" sorusunun cevabı da gitmeli.
+  'adv_oturum',
+  'adv_mesaj',
+  'adv_onay',
+  // AdvCampaign rehberi workspace'in YARIM İŞİ ve türettiği taslaklar
+  // (reklam_taslagi) zaten taşınıyor; rehberi geride bırakmak, yeni şirkette
+  // ebeveynsiz taslaklar, eskide hiçbir hesaba bağlanamayan bir rehber demekti.
+  'reklam_rehberi',
+  // Hazırlık workspace'in KENDİ ayarı (piksel, bütçe önerisi, kategori
+  // cevabı); geride kalsa yeni şirkette workspace "hazırlanmamış" görünür ve
+  // kullanıcıya aynı sorular yeniden sorulurdu.
+  'workspace_hazirlama',
+  'workspace_kurulum',
+  // AdvStrategy planı workspace'in KENDİ kararı ve dayandığı kitle şablonları
+  // ile varlıklar zaten taşınıyor; planı geride bırakmak, yeni şirkette
+  // kitlesi olup planı olmayan bir workspace ve eski şirkette sahipsiz bir
+  // onay izi demekti (MIMARI § 1). Çocuk tablolar `client_id` taşıyor,
+  // planla aynı turda gidiyor.
+  'strateji_planlari',
+  'strateji_dagilimlari',
+  'strateji_matrisi',
+  'strateji_kelimeleri',
+  // İyileştir: karar, workspace'in reklamlarına verilmiş bir cevap ve
+  // reklamlar (hesap atamasıyla) workspace'le gidiyor; kararı geride
+  // bırakmak, yeni şirkette aynı haftanın önerisini yeniden "açık"
+  // gösterir ve ikinci kez uygulatırdı. Asistan sohbeti de AdvCampaign
+  // sohbetiyle aynı gerekçeyle taşınıyor (MIMARI § 4).
+  'iyilestir_oneri_karar',
+  'iyilestir_asistan_oturum',
+  'iyilestir_asistan_mesaj',
+  // SİNYALLER VE BİLDİRİM KANALLARI (docs/sinyal/MIMARI.md § 2) TAŞINIYOR.
+  // Sinyal, workspace'in reklam hesaplarından türetilmiş bir gözlem ve
+  // hesaplar workspace'le gidiyor; geride kalan sinyal, sahibi olmayan bir
+  // uyarı olurdu. Kanal ajansın o workspace için kurduğu teslim yolu: yeni
+  // şirkette yeniden kurdurmak, ilk sabahki özetin sessizce hiç gitmemesi
+  // demek. Gönderim geçmişi kanalla birlikte ("bu sabah ne gitti").
+  'sinyaller',
+  'bildirim_kanallari',
+  'bildirim_gonderimleri',
 ] as const;
 
 export interface WorkspaceTasimaSonucu {

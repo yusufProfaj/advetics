@@ -9,6 +9,7 @@ import type { PrismaService } from '../../prisma/prisma.service';
 import { BildirimService } from './bildirim.service';
 import { BildirimTeslimService, type MailGonderici, type WebhookGonderici } from './bildirim-teslim.service';
 import { EPOSTA_GONDEREN_YOK } from './eposta-gonderen';
+import { govdeCoz, govdeKur, slackGovdesi, teamsGovdesi } from './bildirim-icerik';
 import { kuralBildirimiYaz } from './kural-bildirimi';
 import type { TxLike } from './sinyal-hesap';
 
@@ -315,5 +316,56 @@ describe('kural bildirimi (Ç-6)', () => {
     expect(await kuralBildirimiYaz(db, kural({ action: { type: 'notify' } }), RUN)).toBe(0);
     expect(await kuralBildirimiYaz(db, kural({ action: { type: 'notify', kanalIdleri: [a.id] } }), RUN)).toBe(1);
     expect(await h.q(`SELECT kanal_id::text AS k FROM bildirim_gonderimleri`)).toEqual([{ k: a.id }]);
+  });
+});
+
+describe('Ajan 4 düzeltmeleri', () => {
+  it('KRİTİK (N-e): Slack’te kullanıcı kaynaklı ad kanal uyarısı/etiket/bağlantı ÜRETEMİYOR', () => {
+    const g = govdeCoz(
+      govdeKur({
+        baslik: '<!channel> ACİL & <@U123>',
+        konu: 'k',
+        satirlar: [{ etiket: '<!here>', metin: '<https://evil.com|tıkla>' }],
+        fazlaBirimi: 'x',
+        baglanti: null,
+      }),
+      'https://p',
+      IDS.client,
+    );
+    const metin = JSON.stringify(slackGovdesi(g));
+    for (const tehlikeli of ['<!channel>', '<!here>', '<@U123>', '<https://evil.com|']) expect(metin).not.toContain(tehlikeli);
+    expect((slackGovdesi(g) as { text: string }).text).toBe('&lt;!channel&gt; ACİL &amp; &lt;@U123&gt;');
+  });
+
+  it('KRİTİK (N-e): Teams’te markdown bağlantısı ve HTML etkisiz', () => {
+    const g = govdeCoz(
+      govdeKur({ baslik: 'Kural [tıkla](https://evil.com)', konu: 'k', satirlar: [{ etiket: '<b>x</b>', metin: '**kalın**' }], fazlaBirimi: 'x', baglanti: null }),
+      'https://p',
+      IDS.client,
+    );
+    for (const aile of ['baglayici', 'workflows'] as const) {
+      // `summary` DÜZ METİN (bildirim önizlemesi, markdown yorumlanmıyor);
+      // ham bırakılıyor ki önizlemede ters bölüler görünmesin.
+      const { summary: _duz, ...isle } = teamsGovdesi(g, aile) as Record<string, unknown>;
+      const metin = JSON.stringify(isle);
+      expect(metin, aile).not.toContain('[tıkla](https://evil.com)');
+      expect(metin, aile).not.toContain('**kalın**');
+    }
+    expect(JSON.stringify(teamsGovdesi(g, 'baglayici'))).not.toContain('<b>');
+  });
+
+  it('KRİTİK (N-f): yarıda kalmış deneme süpürmede vazgeçiliyor (bekliyor’da kalmıyor)', async () => {
+    const { svc, teslim } = kur();
+    const k = await svc.olustur(CTX, { tur: 'slack', clientId: IDS.client, ad: 'S', olaylar: ['sinyal'], adres: SLACK });
+    const id = await bekleyenSatir(k.id, 'kural', 'deneme:yetim');
+    await h.q(`UPDATE bildirim_gonderimleri SET olay = 'deneme', created_at = now() - interval '1 hour' WHERE id = $1`, [id]);
+    const taze = await bekleyenSatir(k.id, 'kural', 'deneme:taze');
+    await h.q(`UPDATE bildirim_gonderimleri SET olay = 'deneme' WHERE id = $1`, [taze]);
+    const r = await teslim.supur();
+    expect(r.note).toContain('1 yarıda kalmış deneme kapatıldı');
+    expect((await h.q(`SELECT durum FROM bildirim_gonderimleri WHERE id = $1`, [id]))[0]).toEqual({ durum: 'vazgecildi' });
+    // Ucun hâlâ gönderiyor olabileceği taze deneme ellenmiyor ve süpürme onu GÖNDERMİYOR.
+    expect((await h.q(`SELECT durum FROM bildirim_gonderimleri WHERE id = $1`, [taze]))[0]).toEqual({ durum: 'bekliyor' });
+    expect(webhook).not.toHaveBeenCalled();
   });
 });

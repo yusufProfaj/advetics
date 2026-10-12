@@ -45,6 +45,7 @@ import { OdemeMailiGonderici } from '../alerts/odeme-maili-gonderici.service';
 import { CryptoService } from '../../crypto/crypto.service';
 import { MetaProvider } from './providers/meta.provider';
 import { hesapVerisiniTasi, type TasimaSonucu } from './hesap-verisi-tasima';
+import { IZLEME_KAPANDI_NOTU, hesapSinyalleriniKapat } from '../sinyal/hesap-sinyalleri';
 
 interface Meta {
   ip?: string | null;
@@ -1830,6 +1831,9 @@ export class ConnectionsService {
         where: { id: adAccountId },
         data: { syncEnabled },
       });
+      // İzleme kapanınca hesaplama da duruyor: açık sinyaller bir daha hiç
+      // kapanmazdı (sinyal/hesap-sinyalleri.ts, Ajan 4 Ö3).
+      if (!syncEnabled) await hesapSinyalleriniKapat(tx, adAccountId, IZLEME_KAPANDI_NOTU);
 
       await this.audit.record(tx, ctx, {
         action: syncEnabled ? 'ad_account.sync_enabled' : 'ad_account.sync_disabled',

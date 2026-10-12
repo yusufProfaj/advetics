@@ -259,6 +259,16 @@ karar gerekiyorsa yardımcı sınıfla yaz, katman onu ezmiyor. Sayfa başlığ�
   `workspace-tasima.spec.ts` şemayı tarayıp eksikse düşüyor — Bölüm 4'te
   `audience_templates` için tam böyle yakalandı. TRUNCATE ve RLS listesiyle
   birlikte üçüncü durak.
+  **AMA `(client_id, org_id)` KOMPOZİT ANAHTARI `ON UPDATE CASCADE` İLE
+  BAĞLI TABLO ELLE TAŞINMAZ** (2026-10-12, Paket A kapısında bulundu):
+  `workspaceTasi` önce listedeki tabloların `org_id`sini yazıyor,
+  `clients.org_id` EN SONDA değişiyor; arada satır, `clients`ta henüz
+  olmayan bir (workspace, yeni şirket) çiftine bakıyor ve kompozit anahtar
+  ihlaliyle transaction geri alınıyor. 22 tablo (AdvCampaign, rehber,
+  strateji, kurulum, hazırlama, iyilestir…) listedeydi: o tablolardan
+  birinde tek satırı olan her workspace şirket DEĞİŞTİREMİYORDU. Bu tablolar
+  `CASCADE_ILE_TASINANLAR`ta — Postgres kendisi taşıyor; spec migration'daki
+  kompozit anahtarları tarayıp iki listeyi karşılaştırıyor.
 - **Enum'a değer eklemek AYRI migration dosyası ister.** `ALTER TYPE ... ADD
   VALUE` ile eklenen değer aynı transaction içinde kullanılamıyor.
 - **ENUM'DAN DEĞER ÇIKARIRKEN O TİPE BAKAN KISITLARI ÖNCE DÜŞÜR.** Postgres'te

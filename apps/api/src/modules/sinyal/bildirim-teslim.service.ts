@@ -41,6 +41,8 @@ import { webhookGonder } from './webhook-gonder';
 
 /** Sahiplenme süresi: gönderim en çok bu kadar sürer (webhook 10 sn, SMTP daha uzun olabilir). */
 const KILIT_DK = 10;
+/** Bu kadar dakikadır `bekliyor` duran deneme mesajı yarıda kalmıştır (kilit süresinin üstü). */
+const DENEME_YETIM_DK = KILIT_DK + 5;
 /** Süpürme başına en çok bu kadar gönderim; kalanı sonraki turda, sayısı notta. */
 const SUPURME_SINIRI = 100;
 
@@ -207,6 +209,19 @@ export class BildirimTeslimService {
    */
   async supur(simdi = new Date()): Promise<{ rows: number; note: string }> {
     const ozet = await this.ozetleriUret(simdi);
+    /*
+     * SAHİPSİZ DENEME (Ajan 4, N-f): deneme mesajı yalnız ucun içinde
+     * gönderiliyor ve süpürmeye girmiyor. Uç gönderimden önce düşerse
+     * (sahiplenme çakıştı, süreç öldü) satır `bekliyor`da SONSUZA kadar
+     * kalıyor, kanal ekranı "gönderiliyor" diye bekliyordu. Kilit süresini
+     * aşan deneme `vazgecildi` ve nedeniyle kapanıyor.
+     */
+    const yetim = await this.db.$executeRaw(Prisma.sql`
+      UPDATE bildirim_gonderimleri
+         SET durum = 'vazgecildi',
+             hata = 'Deneme mesajı gönderilemeden yarıda kaldı; yeniden deneyin.'
+       WHERE olay = 'deneme' AND durum IN ('bekliyor', 'basarisiz')
+         AND created_at < ${new Date(simdi.getTime() - DENEME_YETIM_DK * 60_000).toISOString()}::timestamptz`);
     const bekleyen = await this.db.$queryRaw<Array<{ id: string }>>(Prisma.sql`
       SELECT id::text AS id FROM bildirim_gonderimleri
        WHERE durum IN ('bekliyor', 'basarisiz') AND sonraki_deneme <= ${simdi.toISOString()}::timestamptz
@@ -229,6 +244,7 @@ export class BildirimTeslimService {
       `${Math.min(bekleyen.length, SUPURME_SINIRI)} gönderim denendi: ${sayac.gonderildi} gönderildi, ${sayac.basarisiz} yeniden denenecek, ${sayac.vazgecildi} vazgeçildi`,
       dusen > 0 ? `${dusen} satır işlenemedi` : null,
       bekleyen.length > SUPURME_SINIRI ? `sınır aşıldı, kalanı sonraki turda` : null,
+      yetim > 0 ? `${yetim} yarıda kalmış deneme kapatıldı` : null,
     ]
       .filter(Boolean)
       .join(' · ');

@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createHarness, type Harness } from '../../test/pglite-harness';
+import { HESABIN_KENDI_VERISI } from '../modules/connections/hesap-verisi-tasima';
 
 /**
  * VERİ TAŞIMASININ RLS POLİTİKALARINDAN GEÇTİĞİ TEST.
@@ -33,17 +34,16 @@ const GRUP = '66666666-6666-6666-6666-666666666666';
 
 const APP_ROLE = 'advetics_tasima_test';
 
-/** Taşınan tabloların hepsi — politikaları tek tek sınanıyor. */
-const TASINAN = [
-  'campaigns',
-  'ad_groups',
-  'ads',
-  'creatives',
-  'insights_daily',
-  'keyword_insights',
-  'search_term_insights',
-  'sync_jobs',
-] as const;
+/**
+ * Taşınan tabloların hepsi — politikaları tek tek sınanıyor.
+ *
+ * LİSTE KAYNAKTAN TÜRETİLİYOR (`HESABIN_KENDI_VERISI`). Elle yazıldığı
+ * sürece taşıma listesine eklenen tablo (kırılımlar, sinyaller) bu testin
+ * dışında kalıyordu ve politikası hiç sınanmıyordu (Ajan 4, Paket A).
+ * Yeni tablo eklenince aşağıdaki tohumlama onun için satır istemek zorunda:
+ * satırsız tabloda UPDATE sessizce sıfır döner ve test yalancı yeşil olur.
+ */
+const TASINAN = HESABIN_KENDI_VERISI.map((t) => t.tablo);
 
 beforeAll(async () => {
   h = await createHarness();
@@ -143,6 +143,20 @@ beforeEach(async () => {
      VALUES ($1, $2, 'structure', 'succeeded')`,
     [CLIENT_A, ACC],
   );
+  await h.q(
+    `INSERT INTO insight_breakdowns
+       (client_id, ad_account_id, platform, dimension, value, date, impressions, clicks,
+        spend_micros, conversions, conversion_value_micros, currency)
+     VALUES ($1, $2, 'meta', 'age', '25-34', current_date, 100, 10, 1000000, 1, 0, 'TRY')`,
+    [CLIENT_A, ACC],
+  );
+  await h.q(
+    `INSERT INTO sinyaller (org_id, client_id, ad_account_id, platform, anahtar, tur, kod, seviye, varlik_id,
+       varlik_adi, gun, onem, para_birimi)
+     VALUES ($1, $2, $3, 'meta', 'saglik:donusum_kesildi:-:account:x', 'saglik', 'donusum_kesildi', 'account',
+       $3, 'Hesap', current_date, 'yuksek', 'TRY')`,
+    [ORG, CLIENT_A, ACC],
+  );
 });
 
 interface Ctx {
@@ -190,7 +204,7 @@ async function tasi(ctx: Ctx, tablo: string): Promise<unknown[]> {
 }
 
 describe('veri taşıması — RLS politikaları', () => {
-  it('KRİTİK: taşıma atama bağlamında SEKİZ tabloda da SATIR TAŞIYOR', async () => {
+  it('KRİTİK: taşıma atama bağlamında HER tabloda SATIR TAŞIYOR', async () => {
     /*
      * "Patlamadı" YETERLİ DEĞİL. UPDATE politikası olmayan bir tabloda
      * Postgres hata vermiyor, satırı sessizce görmüyor — `sync_jobs`'ta tam

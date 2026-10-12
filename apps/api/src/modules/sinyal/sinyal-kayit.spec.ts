@@ -89,6 +89,20 @@ describe('şifreli adres', () => {
   });
 });
 
+describe('gönderen kimliği (Ajan 4, N-g)', () => {
+  it('KRİTİK: kanal listesi gönderenin YALNIZ adresini okuyor; şifreli parola belleğe girmiyor', () => {
+    const servis = oku('bildirim.service.ts');
+    expect(servis).toContain('epostaGonderenAdresi(');
+    expect(servis).not.toMatch(/\bepostaGonderen\(/);
+    const kaynak = oku('eposta-gonderen.ts');
+    const bas = kaynak.indexOf('export async function epostaGonderenAdresi(');
+    if (bas < 0) throw new Error('epostaGonderenAdresi bulunamadı — tarama boşa düşerdi');
+    const govde = kaynak.slice(bas, kaynak.indexOf('\n}', bas));
+    expect(govde).toContain('SELECT e.from_email');
+    expect(govde).not.toMatch(/smtp_pass_enc|smtp_user|smtp_host/);
+  });
+});
+
 describe('uygula yolunun sırası', () => {
   it('KRİTİK: özet kapısı platform çağrısından ÖNCE', () => {
     const src = oku('sinyal.service.ts');

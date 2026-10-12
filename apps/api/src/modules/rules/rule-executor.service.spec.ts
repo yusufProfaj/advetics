@@ -384,3 +384,37 @@ describe('Google — kural aksiyonu kapalı (İyileştir v1)', () => {
     expect(rows[0]).toMatchObject({ outcome: 'failed', error: GOOGLE_KURAL_KAPALI });
   });
 });
+
+describe('kanal bildirimi (Paket A, Ajan 4 N-d)', () => {
+  it('KRİTİK: bildirim yazımı TRANSACTION İÇİNDE düşse de tur kaydı yazılıyor ve hata kayıtta', async () => {
+    /*
+     * API'nin elle çalıştırma yolu kuralı `withTenant` transaction'ında
+     * yürütüyor. Bildirim yazımı düşünce Postgres transaction'ı iptal
+     * ediyordu ve `UPDATE rule_runs` "current transaction is aborted" ile
+     * düşüyordu: kuralın bütün kaydı kayboluyordu. Burada GERÇEK bir
+     * transaction açılıyor ve bildirim yazımı bozuk kanal kimliğiyle
+     * patlatılıyor (uuid dönüşümü).
+     */
+    await seedMatchingCampaign();
+    const rule = await rules.create(CTX, ruleInput({ action: { type: 'notify' } }));
+    const live = await rules.setMode(CTX, rule.id, false);
+    const bozuk = { ...live, action: { type: 'notify' as const, kanalIdleri: ['bozuk-kimlik'] } };
+    await h.q('BEGIN');
+    let res: { runId: string };
+    try {
+      res = await executor.execute(h.db, CTX, bozuk, NOW);
+      await h.q('COMMIT');
+    } catch (e) {
+      await h.q('ROLLBACK');
+      throw e;
+    }
+    const [run] = await h.q<{ finished_at: Date | null; error: string | null; action_count: number }>(
+      `SELECT finished_at, error, action_count FROM rule_runs WHERE id = $1`,
+      [res.runId],
+    );
+    expect(run!.finished_at).not.toBeNull();
+    expect(run!.action_count).toBe(1);
+    expect(run!.error).toContain('Bildirim kuyruğa alınamadı');
+    expect((await logs())[0]?.outcome).toBe('simulated');
+  });
+});

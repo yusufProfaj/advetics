@@ -217,17 +217,7 @@ function ipLiterali(host: string): boolean {
  * barındırmada iç trafiğin bir kısmı orada.
  */
 export function ozelAdres(ip: string): boolean {
-  if (ip.includes(':')) {
-    const alt = ip.toLowerCase();
-    // ::1 (loopback), fc00::/7 (benzersiz yerel), fe80::/10 (bağ yerel)
-    if (alt === '::1' || alt === '::') return true;
-    if (/^f[cd]/.test(alt)) return true;
-    if (/^fe[89ab]/.test(alt)) return true;
-    // IPv4 eşlemeli adres: ::ffff:10.0.0.1
-    const eslem = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(alt);
-    if (eslem) return ozelAdres(eslem[1]!);
-    return false;
-  }
+  if (ip.includes(':')) return ozelIpv6(ip);
 
   const p = ip.split('.').map(Number);
   if (p.length !== 4 || p.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return true;
@@ -241,6 +231,60 @@ export function ozelAdres(ip: string): boolean {
   if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT
   if (a >= 224) return true; // çoklu gönderim ve ayrılmış
   return false;
+}
+
+/**
+ * IPv6 — METİN DEĞİL BAYT ÜZERİNDEN.
+ *
+ * İlk sürüm adresi düzenli ifadeyle okuyordu ve yalnız `::ffff:10.0.0.1`
+ * yazımını tanıyordu. Aynı iç adres ONALTILIK yazılabiliyor
+ * (`::ffff:7f00:1` = 127.0.0.1, `::ffff:a9fe:a9fe` = bulut metadata) ve
+ * IPv4'ü gömen başka aileler var: IPv4-uyumlu `::127.0.0.1`, NAT64
+ * `64:ff9b::/96` (ağ geçidi gömülü IPv4'e bağlanıyor), 6to4 `2002::/16`.
+ * Bir çözücünün hangi biçimi döndüreceği bizim elimizde değil; adres 16
+ * bayta açılıp gömülü IPv4 AYNI IPv4 kontrolünden geçiyor (Ajan 4, Paket A).
+ * Okunamayan adres İÇ AĞ sayılıyor: tanımadığımızı geçirmek yerine reddet.
+ */
+function ozelIpv6(ip: string): boolean {
+  const b = ipv6Baytlari(ip.toLowerCase().replace(/%.*$/, ''));
+  if (!b) return true;
+  const sifir = (bas: number, son: number) => b.slice(bas, son).every((x) => x === 0);
+  const v4 = (i: number) => `${b[i]}.${b[i + 1]}.${b[i + 2]}.${b[i + 3]}`;
+  if (sifir(0, 15) && (b[15] === 0 || b[15] === 1)) return true; // :: ve ::1
+  if ((b[0]! & 0xfe) === 0xfc) return true; // fc00::/7 benzersiz yerel
+  if (b[0] === 0xfe && (b[1]! & 0xc0) === 0x80) return true; // fe80::/10 bağ yerel
+  if (b[0] === 0xff) return true; // çoklu gönderim
+  if (sifir(0, 10) && b[10] === 0xff && b[11] === 0xff) return ozelAdres(v4(12)); // ::ffff:0:0/96 eşlemeli
+  if (sifir(0, 12)) return ozelAdres(v4(12)); // ::/96 IPv4-uyumlu (eskimiş ama çözülebiliyor)
+  if (b[0] === 0x00 && b[1] === 0x64 && b[2] === 0xff && b[3] === 0x9b) return ozelAdres(v4(12)); // 64:ff9b::/96 ve /48 NAT64
+  if (b[0] === 0x20 && b[1] === 0x02) return ozelAdres(v4(2)); // 2002::/16 6to4
+  return false;
+}
+
+/** IPv6 metni → 16 bayt; geçersizse `null`. Sondaki noktalı IPv4 yazımı da açılıyor. */
+function ipv6Baytlari(ip: string): number[] | null {
+  let metin = ip;
+  const noktali = /(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(metin);
+  if (noktali) {
+    const p = noktali.slice(1).map(Number);
+    if (p.some((n) => n > 255)) return null;
+    metin = `${metin.slice(0, noktali.index)}${((p[0]! << 8) | p[1]!).toString(16)}:${((p[2]! << 8) | p[3]!).toString(16)}`;
+  }
+  const yarim = metin.split('::');
+  if (yarim.length > 2) return null;
+  const parca = (s: string) => (s === '' ? [] : s.split(':'));
+  const bas = parca(yarim[0]!);
+  const son = yarim.length === 2 ? parca(yarim[1]!) : [];
+  const eksik = 8 - bas.length - son.length;
+  if ((yarim.length === 2 && eksik < 1) || (yarim.length === 1 && eksik !== 0)) return null;
+  const gruplar = [...bas, ...Array<string>(yarim.length === 2 ? eksik : 0).fill('0'), ...son];
+  const out: number[] = [];
+  for (const g of gruplar) {
+    if (!/^[0-9a-f]{1,4}$/.test(g)) return null;
+    const n = parseInt(g, 16);
+    out.push(n >> 8, n & 0xff);
+  }
+  return out.length === 16 ? out : null;
 }
 
 /**

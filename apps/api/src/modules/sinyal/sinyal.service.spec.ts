@@ -132,6 +132,14 @@ describe('liste', () => {
     expect(diger).toMatchObject({ sinyaller: [], sessizKosum: true, emptyReason: null });
   });
 
+  it('KRİTİK: sessiz koşumda yönetici olmayan TEK SİNYALİ de okuyamıyor (liste kapısının arka kapısı yok)', async () => {
+    const { svc } = kur(true);
+    const id = await sinyal();
+    await expect(svc.tek({ ...CTX, isOrgAdmin: false } as TenantContext, id)).rejects.toThrow(/bulunamadı/);
+    await expect(svc.kapat({ ...CTX, isOrgAdmin: false } as TenantContext, id, undefined)).rejects.toThrow(/bulunamadı/);
+    expect((await svc.tek(CTX, id)).id).toBe(id);
+  });
+
   it('başka workspace 403', async () => {
     const { svc } = kur();
     await expect(svc.liste({ ...CTX, clientIds: [] } as TenantContext, sorgu(), SIMDI)).rejects.toThrow(/erişimin yok/);
