@@ -16,6 +16,29 @@ RLS politikası var, platform sahibi yalnız hello@profaj.com.
 bu commit'le deploy ediliyor; migration `20261009100000_iyilestir` (üç
 yeni tablo) + `db:rls`.
 
+**ORPHEX UYARLAMASI (2026-10-12 → 13, dal `yusuf/rea-reverse-engineering-opensource-31ce9a`, PUSH EDİLMEDİ, DEPLOY EDİLMEDİ).**
+Kullanıcı: Orphex'i (orphex.co) incele, eksiklerimizi Advetics'e uyarla,
+advetics.com'u reklam bilmeyen kişiye anlatan bir ürün sitesine çevir;
+karar yetkisi oturum yöneticisinde. Boşluk analizi ve karar kaydı:
+`docs/rakip-analizi/ORPHEX-BOSLUK.md` (Ç-O1…Ç-O9). Durum:
+- **Paket A — sinyaller** (anomali + sağlık + e-posta/Slack/Teams bildirimi,
+  `docs/sinyal/`): YAZILDI, Ajan 4 kapısı AÇIK. Migration
+  `20261013100000_sinyal` + `20261013100100_sinyal_is_turleri` + `db:rls`.
+  İlk deploy'da `SINYAL_SESSIZ_KOSUM=1` (14 gün yalnız yönetici görür).
+  **Aynı işte bulunan CANLI hata:** 22 tablo (AdvCampaign, rehber, strateji,
+  kurulum, hazırlama, iyilestir) şirket taşımasını kırıyordu; düzeldi.
+- **2FA** (`docs/guvenlik/2FA.md`): YAZILDI, kapı AÇIK (paralel kaba kuvvet
+  açığı bulundu ve kapandı). Migration `20261013200000_iki_adimli_dogrulama`.
+  Yeni bağımlılık `qrcode-generator@1.4.4` (deploy `pnpm install` ister).
+- **Tanıtım sitesi** (`apps/web/src/app/(site)`): 17 sayfa, YAZILDI.
+- **B haftalık özet, C değişiklik etkisi, D kreatif zekâsı, E lead geri
+  besleme, F veri kaynakları (GA4 / Search Console / e-ticaret)**: mimari +
+  sözleşme YAZILDI (`docs/<modül>/MIMARI.md`); uygulama sürüyor (aşağıda
+  güncellenir). Sıra A → C → B.
+**Deploy edilmeden önce:** öbür geliştiriciye haber; `git log origin/main..`
+ile neyin gittiğine bak; kanal/Slack/Teams gerçek gönderimi, eşikler, 2FA'nın
+gerçek telefonla QR okutulması canlıda ÖLÇÜLMEDİ (her MIMARI.md "ölçüm listesi").
+
 **KURULUM REHBERİ (2026-10-12, `docs/kurulum/MIMARI.md`, `BAGLANTI.md`).**
 Kullanıcı: her projenin ayrı Meta, Google Ads, Tag Manager ve Analytics'i;
 ajans atamıyorsa rehber hesapları açar, dönüşümleri kurar ve verinin doğru
