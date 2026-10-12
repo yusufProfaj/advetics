@@ -311,6 +311,12 @@ export function rehberEksikleri(a: RehberAlanlari, b: RehberEksikBaglami): Rehbe
       if (basliklar.length < METIN_SINIRLARI.basliklarEnAz) ekle('metin', 'google', 'G-BASLIK-SAYI', `Google için en az ${METIN_SINIRLARI.basliklarEnAz} başlık gerekiyor`);
       if (aciklamalar.length < METIN_SINIRLARI.aciklamalarEnAz) ekle('metin', 'google', 'G-ACIKLAMA-SAYI', `Google için en az ${METIN_SINIRLARI.aciklamalarEnAz} açıklama gerekiyor`);
     }
+    // Görünen yol (Google Arama): parça başına sınır KESİN; boşsa gönderilmiyor.
+    (m.gorunenYol ?? []).forEach((s, i) => {
+      if (karakterSayisi(s.trim()) > METIN_SINIRLARI.gorunenYol) {
+        ekle('metin', 'google', 'G-YOL-UZUN', `Görünen yol ${i + 1}: en çok ${METIN_SINIRLARI.gorunenYol} karakter`);
+      }
+    });
     // Zorunlu yasal uyarı: Meta'da ana metinde; Google'da en az bir açıklamada
     // (Google'ın açıklamaları dönüşümlü gösterdiğini UYARI olarak yazıyoruz).
     if (b.yasalUyari) {
@@ -320,6 +326,26 @@ export function rehberEksikleri(a: RehberAlanlari, b: RehberEksikBaglami): Rehbe
       }
     }
   }
+  // ── GÖRSELE ÖZEL METİN (Dalga 2) ──
+  // Fikrin kendi metni Meta'ya ORTAK METNİN YERİNE gidiyor; ortak metne
+  // uygulanan sınır ve yasal uyarı kuralı ona da uygulanmazsa yasal uyarısız
+  // bir reklam, ortak metin kusursuzken yayına çıkardı.
+  (a.medya?.deger ?? []).forEach((x, i) => {
+    const k = x.metin;
+    if (!k) return;
+    const no = `Görsel ${i + 1}`;
+    const ana = k.anaMetin ?? '';
+    if (karakterSayisi(ana) > METIN_SINIRLARI.anaMetinEnCok) ekle('medya', 'meta', 'GORSEL-METIN-ANA-UZUN', `${no}: ana metin en çok ${METIN_SINIRLARI.anaMetinEnCok} karakter`);
+    (k.basliklar ?? []).forEach((s) => {
+      if (karakterSayisi(s.trim()) > METIN_SINIRLARI.baslik) ekle('medya', null, 'GORSEL-METIN-BASLIK-UZUN', `${no}: başlık en çok ${METIN_SINIRLARI.baslik} karakter`);
+    });
+    (k.aciklamalar ?? []).forEach((s) => {
+      if (karakterSayisi(s.trim()) > METIN_SINIRLARI.aciklama) ekle('medya', null, 'GORSEL-METIN-ACIKLAMA-UZUN', `${no}: açıklama en çok ${METIN_SINIRLARI.aciklama} karakter`);
+    });
+    if (b.yasalUyari && acik.meta && ana.trim() && !metinUyariIceriyor(ana, b.yasalUyari)) {
+      ekle('medya', 'meta', 'GORSEL-YASAL-UYARI', `${no}: zorunlu yasal uyarı bu görselin metninde yok`);
+    }
+  });
   if (googleArama) {
     const kelimeler = a.anahtarKelimeler?.deger ?? [];
     // Anahtar kelimesiz Arama kampanyası hiç harcamaz ve hata vermez (SENTEZ S-03).

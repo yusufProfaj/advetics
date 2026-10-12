@@ -10,6 +10,7 @@ import { ReklamTaslakService } from '../taslak.service';
 import { ReklamYayinService } from '../yayin.service';
 import type { ReklamKuyrugu } from '../reklam-kuyrugu';
 import { RehberService, platformaGiderken } from './rehber.service';
+import { GeminiIstemcisi } from '../../../yapay-zeka/gemini';
 
 /*
  * TABLODAN BAĞIMSIZ: bu dosyanın testleri "Siteme gelsinler"i DENEME açılışı
@@ -80,6 +81,15 @@ const sahteGoogle = {
 };
 
 let whatsappCevabi: { number: string | null; hata: string | null };
+/** Disk deposunun sahtesi: metin önerisi görseli buradan okuyor (Dalga 2). */
+const depoDosyalari = new Map<string, Buffer>();
+const depo = {
+  read: async (k: string) => {
+    const b = depoDosyalari.get(k);
+    if (!b) throw new Error(`dosya yok: ${k}`);
+    return b;
+  },
+};
 const sahteMeta = {
   fetchPageWhatsapp: async (p: { pageExternalId: string }) => {
     cagrilar.push(`wa:${p.pageExternalId}`);
@@ -118,6 +128,7 @@ beforeAll(async () => {
         return { durum: 'bulundu', videolar: [{ id: 'vid1', channelId: kanal, title: 'Tanıtım', publishedAt: new Date('2026-10-01T00:00:00Z'), thumbnailUrl: 'https://i.ytimg.com/x.jpg' }] };
       },
     } as never,
+    depo as never,
   );
   // Ağa çıkılmaz: site bağlantısı okuması sahte (okunamadı).
   svc.siteHtmlOku = async () => ({ ok: false, sebep: "test: ağ yok" });
@@ -214,15 +225,18 @@ describe('oluştur / oku / güncelle', () => {
     expect(r.kararlar.find((k) => k.kod === 'TUR')?.meta).toBeNull();
   });
 
-  it('liste: arşiv hariç HEPSİ, engel sayısıyla', async () => {
-    await tamRehber();
-    const bos = await svc.olustur(CTX, IDS.client);
+  it('liste: ARŞİV DAHİL hepsi, arşiv EN SONDA, engel sayısıyla (giriş ekranının Arşiv sekmesi)', async () => {
+    const tam = await tamRehber();
     const ars = await svc.olustur(CTX, IDS.client);
     await svc.arsivle(CTX, ars.id);
+    const bos = await svc.olustur(CTX, IDS.client);
     const l = await svc.listele(CTX, IDS.client);
-    expect(l.toplam).toBe(2);
-    expect(l.satirlar).toHaveLength(2);
+    expect(l.toplam).toBe(3);
+    // Arşiv en yeni değişiklik olsa bile sonda: sınır keserse önce onu keser.
+    expect(l.satirlar.map((x) => x.id)).toEqual([bos.id, tam.id, ars.id]);
+    expect(l.satirlar.find((x) => x.id === ars.id)!.durum).toBe('arsivlendi');
     expect(l.satirlar.find((x) => x.id === bos.id)!.eksikSayisi).toBe(1);
+    expect(l.satirlar.find((x) => x.id === tam.id)!.eksikSayisi).toBe(0);
   });
 });
 
@@ -380,6 +394,197 @@ describe('şema', () => {
   });
 });
 
+/**
+ * GİRİŞ EKRANI LİSTESİ (2026-10-12). Kullanıcının şikâyeti: "görüntü
+ * kirliliği, hiçbir şey anlaşılmıyor ve silinmiyor". Satırı ayırt eden
+ * alanlar (görsel, bütçe, yayın adı), arşiv/geri getir ve sabit sorgu sayısı.
+ */
+describe('giriş listesi: satır alanları, arşiv ve geri getir', () => {
+  const GORSEL = '55555555-0000-4000-8000-0000000000b1';
+  const VIDEO = '55555555-0000-4000-8000-0000000000b2';
+  const KAPAK = '55555555-0000-4000-8000-0000000000b3';
+  const YABANCI = '55555555-0000-4000-8000-0000000000b4';
+
+  async function varliklar() {
+    for (const [id, kind, client] of [
+      [GORSEL, 'image', IDS.client],
+      [VIDEO, 'video', IDS.client],
+      [KAPAK, 'image', IDS.client],
+      [YABANCI, 'image', OTEKI],
+    ] as const) {
+      await h.q(
+        `INSERT INTO assets (id, org_id, client_id, kind, name, file_name, mime_type, byte_size, width, height, storage_key, content_hash, updated_at)
+         VALUES ($1, $2, $3, $4, 'v', 'v.bin', $5, 1000, 1080, 1080, 'yok', $6, now())`,
+        [id, IDS.org, client, kind, kind === 'image' ? 'image/png' : 'video/mp4', id],
+      );
+    }
+  }
+  const satiri = async (id: string) => (await svc.listele(CTX, IDS.client)).satirlar.find((x) => x.id === id)!;
+
+  it('küçük görsel: ilk görsel; video ise KAPAĞI; başka workspace’in varlığı ASLA', async () => {
+    await varliklar();
+    const a = await svc.olustur(CTX, IDS.client);
+    await svc.guncelle(CTX, a.id, { surum: 0, degisiklikler: [g('medya', [{ varlikId: GORSEL }])] });
+    const v = await svc.olustur(CTX, IDS.client);
+    await svc.guncelle(CTX, v.id, { surum: 0, degisiklikler: [g('medya', [{ varlikId: VIDEO, kapakVarlikId: KAPAK }, { varlikId: GORSEL }])] });
+    const kapaksiz = await svc.olustur(CTX, IDS.client);
+    await svc.guncelle(CTX, kapaksiz.id, { surum: 0, degisiklikler: [g('medya', [{ varlikId: VIDEO }])] });
+    // Aitlik kapısı yabancı varlığı yazdırmıyor; eski/bozuk kayıt ELLE yazılıyor.
+    const yabanci = await svc.olustur(CTX, IDS.client);
+    await h.q(`UPDATE reklam_rehberi SET alanlar = $2::jsonb WHERE id = $1`, [
+      yabanci.id,
+      JSON.stringify({ medya: { deger: [{ varlikId: YABANCI }], kaynak: 'kullanici', kim: IDS.user, zaman: '2026-10-12T00:00:00.000Z' } }),
+    ]);
+    expect((await satiri(a.id)).gorselVarlikId).toBe(GORSEL);
+    expect((await satiri(v.id)).gorselVarlikId).toBe(KAPAK);
+    // Video kendisi <img> olamaz: kapak yoksa null (panel amaç simgesine düşer).
+    expect((await satiri(kapaksiz.id)).gorselVarlikId).toBeNull();
+    expect((await satiri(yabanci.id)).gorselVarlikId).toBeNull();
+  });
+
+  it('bütçe ve para birimi seçili hesaptan; taslakta yayın adı yok', async () => {
+    const r = await tamRehber();
+    const s = await satiri(r.id);
+    expect(s.butce).toEqual({ tip: 'gunluk', micros: '250000000', paraBirimi: 'TRY' });
+    expect(s.yayinAdi).toBeNull();
+    expect(s.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect((await satiri((await svc.olustur(CTX, IDS.client)).id)).butce).toBeNull();
+  });
+
+  it('yayın adı platformdakiyle AYNI biçim ve kod yayın kimliğinden', async () => {
+    const r = await tamRehber();
+    const p = await svc.prova(CTX, r.id);
+    await svc.yayinla(CTX, r.id, p.icerikOzeti);
+    const [y] = await h.q<{ id: string }>('SELECT id::text FROM yayin');
+    const kod = y!.id.replace(/-/g, '').slice(0, 4).toUpperCase();
+    expect((await satiri(r.id)).yayinAdi).toMatch(new RegExp(`^ADV · \\d{2}\\.\\d{2}\\.\\d{4} · Siteme gelsinler · ${kod}$`));
+  });
+
+  it('KRİTİK: sorgu sayısı satır sayısından BAĞIMSIZ (N+1 yok)', async () => {
+    const db = h.db as unknown as { $queryRaw: (...a: unknown[]) => unknown };
+    const say = async () => {
+      const casus = vi.spyOn(db, '$queryRaw');
+      await svc.listele(CTX, IDS.client);
+      const n = casus.mock.calls.length;
+      casus.mockRestore();
+      return n;
+    };
+    await tamRehber();
+    await svc.olustur(CTX, IDS.client);
+    const iki = await say();
+    for (let i = 0; i < 6; i++) await tamRehber();
+    expect(await say()).toBe(iki);
+  });
+
+  it('arşivle YALNIZ listeden kaldırır: platform çağrısı ve kuyruk işi yok, yayın kaydı değişmez', async () => {
+    const r = await tamRehber();
+    const p = await svc.prova(CTX, r.id);
+    await svc.yayinla(CTX, r.id, p.icerikOzeti);
+    const once = await h.q('SELECT id, durum, sonlandi_at FROM yayin');
+    cagrilar = [];
+    kuyrukIsleri = [];
+    expect((await svc.arsivle(CTX, r.id)).durum).toBe('arsivlendi');
+    expect(cagrilar).toEqual([]);
+    expect(kuyrukIsleri).toEqual([]);
+    expect(await h.q('SELECT id, durum, sonlandi_at FROM yayin')).toEqual(once);
+    // Arşivdeki satır platformun hâlini göstermeye devam ediyor: kampanya orada duruyor.
+    expect((await satiri(r.id)).yayinlar).toEqual([{ platform: 'google', durum: 'on_kontrol', sebep: null }]);
+  });
+
+  it('KRİTİK: geri getir ÖNCEKİ duruma: yayına gitmiş olan "yayinda", gitmemiş "taslak"', async () => {
+    const yayinda = await tamRehber();
+    const p = await svc.prova(CTX, yayinda.id);
+    await svc.yayinla(CTX, yayinda.id, p.icerikOzeti);
+    // Provası yapılmış (çocuk taslağı var) ama yayına gitmemiş: taslak dönmeli.
+    const provali = await tamRehber();
+    await svc.prova(CTX, provali.id);
+    const bos = await svc.olustur(CTX, IDS.client);
+    for (const r of [yayinda, provali, bos]) await svc.arsivle(CTX, r.id);
+    expect((await svc.geriGetir(CTX, yayinda.id)).durum).toBe('yayinda');
+    expect((await svc.geriGetir(CTX, provali.id)).durum).toBe('taslak');
+    expect((await svc.geriGetir(CTX, bos.id)).durum).toBe('taslak');
+    const [k] = await h.q<{ arsivlendi_at: Date | null }>('SELECT arsivlendi_at FROM reklam_rehberi WHERE id = $1', [bos.id]);
+    expect(k!.arsivlendi_at).toBeNull();
+    // Arşivde olmayanı geri getirmek 409; geri gelen taslak yeniden düzenlenebilir.
+    await expect(svc.geriGetir(CTX, bos.id)).rejects.toMatchObject({ status: 409 });
+    expect((await svc.guncelle(CTX, bos.id, { surum: 0, degisiklikler: [g('amac', 'FORM')] })).alanlar.amac?.deger).toBe('FORM');
+    // Yayına gitmiş olan düzenlenemez kalıyor (ikinci kampanya açılmasın).
+    await expect(svc.yayinla(CTX, yayinda.id, p.icerikOzeti)).rejects.toMatchObject({ status: 409 });
+  });
+
+  /*
+   * AJAN 4: KISMEN BAŞLAMIŞ — yayın kaydı YALNIZ META çocuğunda. Mevcut
+   * test yalnız Google çocuğuyla koşuyor; EXISTS'teki IN listesinden
+   * `meta_taslak_id` düşse yine geçerdi ve Meta'da yayında olan reklam
+   * taslağa dönüp İKİNCİ kampanyayı açtırırdı.
+   */
+  it('KRİTİK: yalnız META çocuğunun yayın kaydı var, Google çocuğu hiç başlamamış → "yayinda"', async () => {
+    const r = await tamRehber();
+    const p = await svc.prova(CTX, r.id);
+    await svc.yayinla(CTX, r.id, p.icerikOzeti);
+    // Yayın kaydı olan çocuk Meta sütununa taşınıyor, Google sütununa
+    // kaydı OLMAYAN yeni bir taslak konuyor: "bir platform yayında, öbürü
+    // başlamamış" hâli.
+    const yeni = await svc.olustur(CTX, IDS.client);
+    await svc.guncelle(CTX, yeni.id, { surum: 0, degisiklikler: TAM });
+    await svc.konumlariEsle(CTX, yeni.id);
+    const p2 = await svc.prova(CTX, yeni.id);
+    expect(p2.google).toMatchObject({ tur: 'gecti' });
+    await h.q(
+      `UPDATE reklam_rehberi SET meta_taslak_id = google_taslak_id, google_taslak_id = (SELECT google_taslak_id FROM reklam_rehberi WHERE id = $2) WHERE id = $1`,
+      [r.id, yeni.id],
+    );
+    const [k] = await h.q<{ var: boolean }>(
+      `SELECT EXISTS (SELECT 1 FROM yayin y JOIN reklam_rehberi r ON y.taslak_id = r.google_taslak_id WHERE r.id = $1) AS var`,
+      [r.id],
+    );
+    expect(k!.var).toBe(false);
+    await svc.arsivle(CTX, r.id);
+    expect((await svc.geriGetir(CTX, r.id)).durum).toBe('yayinda');
+  });
+
+  /*
+   * AJAN 4: ARŞİVDEKİ REHBER "Gör" ile açılabiliyor (panel bağlantısı
+   * duruyor). Arşivden çıkmadan hiçbir yazma ve platforma giden hiçbir uç
+   * çalışmamalı — çalışırsa "listeden kaldırılmış" bir taslak sessizce
+   * yayına gidebilir.
+   */
+  it('KRİTİK: arşivdeki taslak düzenlenmez, prova/yayın/konum eşleme reddedilir ve platforma çağrı gitmez', async () => {
+    const r = await tamRehber();
+    const p = await svc.prova(CTX, r.id);
+    const ars = await svc.arsivle(CTX, r.id);
+    cagrilar = [];
+    kuyrukIsleri = [];
+    await expect(svc.guncelle(CTX, r.id, { surum: ars.surum, degisiklikler: [g('amac', 'FORM')] })).rejects.toMatchObject({ status: 409 });
+    await expect(svc.prova(CTX, r.id)).rejects.toMatchObject({ status: 409 });
+    await expect(svc.yayinla(CTX, r.id, p.icerikOzeti)).rejects.toMatchObject({ status: 409 });
+    await expect(svc.konumlariEsle(CTX, r.id)).rejects.toMatchObject({ status: 409 });
+    expect(cagrilar).toEqual([]);
+    expect(kuyrukIsleri).toEqual([]);
+    expect(await h.q('SELECT id FROM yayin')).toHaveLength(0);
+  });
+
+  /*
+   * AJAN 4: arşivlenin erişim denetimi hiç sınanmıyordu — `erisim` satırı
+   * silinince rehber klasörünün 145 testi de yeşil kaldı (mutasyon M5).
+   * Panel bu ucu 2026-10-12'den beri satır menüsünden çağırıyor.
+   */
+  it('KRİTİK: arşivle erişilmeyen workspace’in rehberine dokunmaz (403, durum değişmez)', async () => {
+    const r = await svc.olustur(CTX, IDS.client);
+    const dar = { ...CTX, clientIds: [KARDES_WS], activeClientId: KARDES_WS } as TenantContext;
+    await expect(svc.arsivle(dar, r.id)).rejects.toMatchObject({ status: 403 });
+    expect((await satiri(r.id)).durum).toBe('taslak');
+  });
+
+  it('geri getir: erişilmeyen workspace’in rehberine dokunmaz', async () => {
+    const r = await svc.olustur(CTX, IDS.client);
+    await svc.arsivle(CTX, r.id);
+    const dar = { ...CTX, clientIds: [KARDES_WS], activeClientId: KARDES_WS } as TenantContext;
+    await expect(svc.geriGetir(dar, r.id)).rejects.toMatchObject({ status: 403 });
+    expect((await satiri(r.id)).durum).toBe('arsivlendi');
+  });
+});
+
 /** RLS — gerçek politikalar, sahibi olmayan rolle; "patlamadı" yetmez, ETKİLENEN SATIR sayılır. */
 describe('RLS', () => {
   const ROL = 'advetics_rehber_test';
@@ -419,6 +624,73 @@ describe('RLS', () => {
     await expect(
       kullanici(`INSERT INTO reklam_rehberi (org_id, client_id, olusturan_id) VALUES ('${IDS.org}', '${OTEKI}', '${IDS.user}') RETURNING id`, [IDS.client]),
     ).rejects.toThrow(/row-level security/);
+  });
+
+  /** Servisin GERÇEK sorgularını rol altında koşturur (kopya sorgu düzeltilmiş hâli taşır). */
+  async function rolIle<T>(clientIds: string[], fn: () => Promise<T>): Promise<T> {
+    await h.q(`
+      SELECT set_config('app.current_org_id', '${IDS.org}', false),
+             set_config('app.current_user_id', '${IDS.user}', false),
+             set_config('app.current_client_ids', '${clientIds.join(',')}', false),
+             set_config('app.is_org_admin', 'off', false),
+             set_config('app.current_active_client_id', '', false)`);
+    await h.q(`SET ROLE ${ROL}`);
+    try {
+      return await fn();
+    } finally {
+      await h.q('RESET ROLE');
+    }
+  }
+
+  it('KRİTİK: liste, arşivle ve geri getir politikalardan GEÇİYOR (servisin kendi sorguları, rol altında)', async () => {
+    const r = await svc.olustur(CTX, IDS.client);
+    const ctx = { ...CTX, clientIds: [IDS.client] } as TenantContext;
+    expect((await rolIle([IDS.client], () => svc.arsivle(ctx, r.id))).durum).toBe('arsivlendi');
+    const l = await rolIle([IDS.client], () => svc.listele(ctx, IDS.client));
+    expect(l.satirlar.map((x) => [x.id, x.durum])).toEqual([[r.id, 'arsivlendi']]);
+    expect((await rolIle([IDS.client], () => svc.geriGetir(ctx, r.id))).durum).toBe('taslak');
+    // Başka workspace'in kapsamında satır GÖRÜNMÜYOR: UPDATE'e hiç ulaşılmıyor.
+    await svc.arsivle(CTX, r.id);
+    await expect(rolIle([OTEKI], () => svc.geriGetir({ ...CTX, clientIds: [OTEKI, IDS.client] } as TenantContext, r.id))).rejects.toMatchObject({ status: 404 });
+    const [k] = await h.q<{ durum: string }>('SELECT durum FROM reklam_rehberi WHERE id = $1', [r.id]);
+    expect(k!.durum).toBe('arsivlendi');
+  });
+
+  /*
+   * AJAN 4 (2026-10-12, giriş ekranı kapısı): geri getirin "yayın kaydı var
+   * mı" sorusu `yayin` tablosuna RLS ALTINDA soruluyor. Yukarıdaki test
+   * `yayin`ın politikasını hiç açmadan ve yayına gitmemiş bir rehberle
+   * koşuyordu, yani EXISTS'in rol altında YANLIŞ cevap vermesi (satır var
+   * ama görünmüyor → `taslak` → ikinci kampanya) hiç sınanmamıştı.
+   */
+  it('KRİTİK: yayına gitmiş rehber rol altında da "yayinda" döner (yayin politikası AÇIK, EXISTS görünürlüğe tabi)', async () => {
+    await h.q(`ALTER TABLE yayin ENABLE ROW LEVEL SECURITY`);
+    try {
+      const r = await tamRehber();
+      const p = await svc.prova(CTX, r.id);
+      await svc.yayinla(CTX, r.id, p.icerikOzeti);
+      await svc.arsivle(CTX, r.id);
+      const ctx = { ...CTX, clientIds: [IDS.client] } as TenantContext;
+      // Kayıt rol altında GÖRÜNÜYOR olmalı; görünmeseydi aşağıdaki iddia anlamsız kalırdı.
+      expect(await kullanici(`SELECT id FROM yayin`, [IDS.client])).toHaveLength(1);
+      expect((await rolIle([IDS.client], () => svc.geriGetir(ctx, r.id))).durum).toBe('yayinda');
+      await expect(rolIle([IDS.client], () => svc.yayinla(ctx, r.id, p.icerikOzeti))).rejects.toMatchObject({ status: 409 });
+    } finally {
+      await h.q(`ALTER TABLE yayin DISABLE ROW LEVEL SECURITY`);
+    }
+  });
+
+  it('KRİTİK: görsel metni önbelleği — upsert İKİ KEZ de bir satır etkiler (UPDATE politikası), başka workspace göremez/yazamaz', async () => {
+    await h.q(`ALTER TABLE rehber_gorsel_metni ENABLE ROW LEVEL SECURITY`);
+    const yaz = `INSERT INTO rehber_gorsel_metni (org_id, client_id, icerik_ozeti, amac, sonuc, model)
+      VALUES ('${IDS.org}', '${IDS.client}', '${'a'.repeat(64)}', 'SITE', '{}'::jsonb, 'm')
+      ON CONFLICT (client_id, icerik_ozeti, amac) DO UPDATE SET sonuc = EXCLUDED.sonuc, updated_at = now() RETURNING client_id`;
+    expect(await kullanici(yaz, [IDS.client])).toHaveLength(1);
+    // İkinci yazım UPDATE dalı: politikası olmasaydı sıfır satır dönerdi.
+    expect(await kullanici(yaz, [IDS.client])).toHaveLength(1);
+    expect(await kullanici(`SELECT 1 FROM rehber_gorsel_metni`, [IDS.client])).toHaveLength(1);
+    expect(await kullanici(`SELECT 1 FROM rehber_gorsel_metni`, [OTEKI])).toHaveLength(0);
+    await expect(kullanici(yaz, [OTEKI])).rejects.toThrow(/row-level security/);
   });
 
   it('DELETE politikası YOK: silme sıfır satır (rehber arşivlenir)', async () => {
@@ -710,5 +982,180 @@ describe('Siteme gelsinler (Google): eşik ve uzantılar prova gövdesinde', () 
     await svc.prova(CTX, r.id);
     expect((sonGovde!.mutateOperations as Op[]).some((o) => 'assetOperation' in o)).toBe(false);
     expect((await svc.oku(CTX, r.id)).kararlar.find((x) => x.kod === 'UZANTI')!.google!.deger).toBe('Sitenden alt sayfa okunamadı, site bağlantısı eklenmedi');
+  });
+});
+
+/**
+ * GÖRSELE ÖZEL METİN (Dalga 2) — GERÇEK Gemini istemcisi, sahte `fetch`:
+ * iddialar modele GİDEN GÖVDEYE çapalı (görsel parçası, sıcaklık, çözünürlük,
+ * çapa satırı). Sahte bir `uret` bu alanları hiç görmezdi.
+ */
+describe('metin önerisi: görsel, önbellek, çapa (Dalga 2)', () => {
+  const V1 = '66666666-0000-4000-8000-000000000001';
+  const V2 = '66666666-0000-4000-8000-000000000002';
+  const V3 = '66666666-0000-4000-8000-000000000003';
+  const V4 = '66666666-0000-4000-8000-000000000004';
+  const KV = '66666666-0000-4000-8000-0000000000c1';
+  const BAYT = Buffer.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+  let govdeler: Array<{
+    contents: Array<{ parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> }>;
+    generationConfig: { temperature?: number; mediaResolution?: string };
+    systemInstruction: { parts: Array<{ text: string }> };
+  }>;
+  let cevap: Record<string, unknown>;
+
+  async function varlik(id: string, ws: string = IDS.client, org: string = IDS.org, boyut = BAYT.length, ek: { hash?: string } = {}) {
+    await h.q(
+      `INSERT INTO assets (id, org_id, client_id, kind, name, file_name, mime_type, byte_size, width, height, storage_key, content_hash, updated_at)
+       VALUES ($1, $2, $3, 'image', $4, $4, 'image/png', $5, 1080, 1080, $4, $6, now())`,
+      [id, org, ws, `g-${id.slice(-2)}.png`, boyut, ek.hash ?? id.replace(/-/g, '').padEnd(64, 'a').slice(0, 64)],
+    );
+    depoDosyalari.set(`g-${id.slice(-2)}.png`, BAYT);
+  }
+
+  beforeEach(async () => {
+    depoDosyalari.clear();
+    govdeler = [];
+    cevap = { anaMetin: 'Villa', basliklar: ['Güzel Villa', 'Bahçeli Villa'], aciklamalar: ['Bahçeli açıklama.'], gorunenYol: [], gorseldekiYazilar: [], notlar: [] };
+    (svc as unknown as { yz: unknown }).yz = new GeminiIstemcisi({
+      apiKey: 'k',
+      model: 'gemini-test',
+      fetchFn: (async (_u: string, init: { body: string }) => {
+        govdeler.push(JSON.parse(init.body));
+        return new Response(
+          JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(cevap) }] }, finishReason: 'STOP' }], usageMetadata: { promptTokenCount: 300, candidatesTokenCount: 50 } }),
+          { status: 200 },
+        );
+      }) as unknown as typeof fetch,
+    });
+  });
+
+  async function medyaliRehber(medya: unknown[], ws: string = IDS.client) {
+    const r = await svc.olustur(CTX, ws);
+    const ek = ws === IDS.client ? TAM : [g('amac', 'SITE'), g('hedefAdres', 'https://ornek.com.tr/')];
+    return svc.guncelle(CTX, r.id, { surum: r.surum, degisiklikler: [...ek, g('medya', medya)] });
+  }
+
+  it('KRİTİK: görsel METİNDEN ÖNCE gidiyor; sıcaklık ve orta çözünürlük açıkça; çapa satırı YOK', async () => {
+    await varlik(V1);
+    const r = await medyaliRehber([{ varlikId: V1 }]);
+    const m = await svc.metinOner(CTX, r.id, { varlikId: V1 });
+    expect(govdeler).toHaveLength(1);
+    const parcalar = govdeler[0]!.contents[0]!.parts;
+    expect(parcalar[0]!.inlineData).toEqual({ mimeType: 'image/png', data: BAYT.toString('base64') });
+    expect(parcalar.at(-1)!.text).toMatch(/^Amaç:/);
+    expect(govdeler[0]!.generationConfig.temperature).toBe(0.9);
+    expect(govdeler[0]!.generationConfig.mediaResolution).toBe('MEDIA_RESOLUTION_MEDIUM');
+    // Rehberde metin VAR ("Villa"); normal öneride isteme girmez.
+    expect(parcalar.at(-1)!.text).not.toContain('Kullanıcının yazdığı');
+    expect(govdeler[0]!.systemInstruction.parts[0]!.text).toContain('Görselde yazan fiyat');
+    expect(m).toMatchObject({ basliklar: ['Güzel Villa', 'Bahçeli Villa'], onbellekten: false, gorselSayisi: 1 });
+  });
+
+  it('KRİTİK: aynı görsel aynı amaçla ikinci kez → yapay zekâya GİDİLMEZ; "yeniden yaz" gider ve öncekini tekrar etme der', async () => {
+    await varlik(V1);
+    const r = await medyaliRehber([{ varlikId: V1 }]);
+    await svc.metinOner(CTX, r.id, { varlikId: V1 });
+    const ikinci = await svc.metinOner(CTX, r.id, { varlikId: V1, mod: 'yeni' });
+    expect(govdeler).toHaveLength(1);
+    expect(ikinci).toMatchObject({ onbellekten: true, basliklar: ['Güzel Villa', 'Bahçeli Villa'] });
+    cevap = { ...cevap, basliklar: ['Yeni Başlık'] };
+    const ucuncu = await svc.metinOner(CTX, r.id, { varlikId: V1, mod: 'yeniden_yaz' });
+    expect(govdeler).toHaveLength(2);
+    expect(govdeler[1]!.contents[0]!.parts.at(-1)!.text).toMatch(/Tekrar etme \(önceki öneri\):[\s\S]*- Güzel Villa/);
+    expect(ucuncu.basliklar).toEqual(['Yeni Başlık']);
+    // Önbellek SON sonucu tutuyor (tek satır, güncellendi).
+    const satirlar = await h.q<{ sonuc: { basliklar: string[] }; amac: string; org_id: string }>('SELECT sonuc, amac, org_id::text FROM rehber_gorsel_metni');
+    expect(satirlar).toHaveLength(1);
+    expect(satirlar[0]).toMatchObject({ amac: 'SITE', org_id: IDS.org, sonuc: { basliklar: ['Yeni Başlık'] } });
+  });
+
+  it('KRİTİK: "buna göre yeniden yaz" kullanıcının metnini isteme koyar (çapa YALNIZ burada)', async () => {
+    await varlik(V1);
+    const r = await medyaliRehber([{ varlikId: V1 }]);
+    await svc.metinOner(CTX, r.id, { mod: 'buna_gore' });
+    expect(govdeler[0]!.contents[0]!.parts.at(-1)!.text).toContain('Kullanıcının yazdığı metin: Villa');
+    await svc.metinOner(CTX, r.id, { mod: 'yeniden_yaz', tekrarEtme: ['Eski Başlık'] });
+    expect(govdeler[1]!.contents[0]!.parts.at(-1)!.text).not.toContain('Kullanıcının yazdığı');
+    expect(govdeler[1]!.contents[0]!.parts.at(-1)!.text).toContain('- Eski Başlık');
+  });
+
+  it('KRİTİK: 4 MB üstü görsel gönderilmez ve SESSİZ KALMAZ; önbelleğe de yazılmaz', async () => {
+    await varlik(V1, IDS.client, IDS.org, 5 * 1024 * 1024);
+    const r = await medyaliRehber([{ varlikId: V1 }]);
+    const m = await svc.metinOner(CTX, r.id, { varlikId: V1 });
+    expect(govdeler[0]!.contents[0]!.parts.some((p) => p.inlineData)).toBe(false);
+    expect(govdeler[0]!.generationConfig).not.toHaveProperty('mediaResolution');
+    expect(m.notlar.join(' ')).toMatch(/4 MB’tan büyük olduğu için yapay zekâya gönderilmedi/);
+    expect(m.gorselSayisi).toBe(0);
+    expect(await h.q('SELECT 1 FROM rehber_gorsel_metni')).toHaveLength(0);
+  });
+
+  it('KRİTİK: görseldeki fiyat kaynakta yoksa ATILIR ve not "görselde yazıyor" der', async () => {
+    await varlik(V1);
+    const r = await medyaliRehber([{ varlikId: V1 }]);
+    cevap = { ...cevap, basliklar: ['%50 indirim', 'Güzel Villa'], gorseldekiYazilar: ['%50 İNDİRİM'] };
+    const m = await svc.metinOner(CTX, r.id, { varlikId: V1 });
+    expect(m.basliklar).toEqual(['Güzel Villa']);
+    expect(m.notlar.join(' ')).toContain('görselde "50" yazıyor, doğrulanamadığı için eklenmedi');
+  });
+
+  it('ortak öneri: en çok 3 görsel, üretilen boyut gönderilmez, fazlası söylenir', async () => {
+    const V5 = '66666666-0000-4000-8000-000000000005';
+    for (const v of [V1, V2, V3, V4, V5]) await varlik(v);
+    const r = await medyaliRehber([{ varlikId: V1 }, { varlikId: V2, uretildi: true, kaynakVarlikId: V1 }, { varlikId: V3 }, { varlikId: V4 }, { varlikId: V5 }]);
+    const m = await svc.metinOner(CTX, r.id);
+    expect(govdeler[0]!.contents[0]!.parts.filter((p) => p.inlineData)).toHaveLength(3);
+    expect(m.notlar.join(' ')).toContain('İlk 3 görsel yapay zekâya gönderildi; 1 görsel gönderilmedi.');
+  });
+
+  it('KRİTİK: "tüm şirketler" modunda kardeş şirketin görseli de okunur (client_id süzgeci, ctx.orgId DEĞİL)', async () => {
+    await varlik(KV, KARDES_WS, KARDES_ORG);
+    const r = await medyaliRehber([{ varlikId: KV }], KARDES_WS);
+    const m = await svc.metinOner(CTX, r.id, { varlikId: KV });
+    expect(m.gorselSayisi).toBe(1);
+    expect(govdeler[0]!.contents[0]!.parts[0]!.inlineData).toBeDefined();
+    const [o] = await h.q<{ org_id: string }>('SELECT org_id::text FROM rehber_gorsel_metni');
+    expect(o!.org_id).toBe(KARDES_ORG);
+  });
+
+  it('reklamda olmayan görsel için metin istenmez (400)', async () => {
+    await varlik(V1);
+    const r = await medyaliRehber([{ varlikId: V1 }]);
+    await expect(svc.metinOner(CTX, r.id, { varlikId: V2 })).rejects.toMatchObject({ status: 400 });
+    expect(govdeler).toHaveLength(0);
+  });
+
+  it('KRİTİK: görünen yol adreste ya da kelimede geçmiyorsa atılır, geçiyorsa kalır', async () => {
+    await varlik(V1);
+    const r = await medyaliRehber([{ varlikId: V1 }]);
+    cevap = { ...cevap, gorunenYol: ['villa', 'kampanya'] };
+    const m = await svc.metinOner(CTX, r.id);
+    expect(m.gorunenYol).toEqual(['villa']);
+    expect(m.notlar.join(' ')).toContain('Görünen yol "kampanya" site adresinde ya da anahtar kelimelerde geçmediği için atıldı.');
+  });
+});
+
+describe('başlamayan platformun sebebi kalıcı (sessiz hata)', () => {
+  it('KRİTİK: gerçek sebep yeniden okumada da görünür, denetim kaydına yazılır; başlayınca silinir', async () => {
+    const r = await tamRehber();
+    const p = await svc.prova(CTX, r.id);
+    // Google çocuk taslağının hesabı provadan sonra değişti: kurulum başlamaz.
+    await h.q(`UPDATE reklam_taslagi SET ad_account_id = $1 WHERE platform = 'google'`, [HAVUZ]);
+    const d = await svc.yayinla(CTX, r.id, p.icerikOzeti);
+    const SEBEP = 'Google hesabı provadan sonra değişti; yeniden prova et.';
+    expect(d.platformlar).toEqual([expect.objectContaining({ platform: 'google', yayinId: null, sebep: SEBEP })]);
+    // Rehber taslakta kaldı; eskiden yeniden okumada sebep null'dı.
+    const oku = await svc.yayinDurumu(CTX, r.id);
+    expect(oku.platformlar).toEqual([expect.objectContaining({ platform: 'google', yayinId: null, sebep: SEBEP })]);
+    const [a] = await h.q<{ action: string; org_id: string; after: { google: { sebep: string } } }>(
+      `SELECT action, org_id::text, after FROM audit_logs WHERE action = 'reklam.rehber.baslamadi'`,
+    );
+    expect(a).toMatchObject({ org_id: IDS.org, after: { google: { sebep: SEBEP } } });
+    // Düzeltilip başlayınca eski sebep SİLİNİR.
+    await h.q(`UPDATE reklam_taslagi SET ad_account_id = $1 WHERE platform = 'google'`, [GHESAP]);
+    await svc.yayinla(CTX, r.id, p.icerikOzeti);
+    const [s] = await h.q<{ platform_sebepleri: Record<string, unknown> }>('SELECT platform_sebepleri FROM reklam_rehberi WHERE id = $1', [r.id]);
+    expect(s!.platform_sebepleri).toEqual({});
   });
 });

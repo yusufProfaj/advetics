@@ -50,14 +50,16 @@ describe('rehber modül kaydı', () => {
       ConnectionsModule: ihracat(join(KOK, 'modules/connections/connections.module.ts')),
       AutoBoostModule: ihracat(join(KOK, 'modules/autoboost/autoboost.module.ts')),
     };
-    // @Global modüllerden gelenler (prisma, crypto, queue).
-    const GLOBAL = ['PrismaService', 'CryptoService', 'QuotaGuardService'];
+    // @Global modüllerden gelenler (prisma, crypto, queue, disk deposu —
+    // metin önerisi görseli diskten okuyor, Dalga 2).
+    const GLOBAL = ['PrismaService', 'CryptoService', 'QuotaGuardService', 'AssetStorageService'];
     for (const t of tipler) {
       const nereden = Object.entries(kaynak).find(([m, ex]) => imports.includes(m) && new RegExp(`\\b${t}\\b`).test(ex));
       expect(nereden || GLOBAL.includes(t), `${t} hiçbir modülden gelmiyor`).toBeTruthy();
     }
     expect(enjeksiyonlar.sort()).toEqual(['CONFIG', 'YAPAY_ZEKA']);
     expect(yorumsuz(join(KOK, 'queue/queue.module.ts'))).toMatch(/@Global\(\)[\s\S]*exports:\s*\[[\s\S]*QuotaGuardService/);
+    expect(yorumsuz(join(KOK, 'storage/storage.module.ts'))).toMatch(/@Global\(\)[\s\S]*exports:\s*\[[\s\S]*AssetStorageService/);
   });
 
   it('KRİTİK: ReklamModule hâlâ İŞ MODÜLÜ İÇE AKTARMIYOR (bağımlılık yönü rehber → reklam)', () => {

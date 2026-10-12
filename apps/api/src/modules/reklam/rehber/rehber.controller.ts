@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Put, Query } from '@nestjs/common';
 import {
   anahtarKelimeOnerSchema,
+  metinOnerIstegiSchema,
   rehberGuncelleSchema,
   rehberOlusturSchema,
   rehberYayinlaSchema,
@@ -128,8 +129,12 @@ export class RehberController {
 
   @Post('rehberler/:id/metin-oner')
   @RequirePermissions('bulk.write')
-  metinOner(@CurrentTenant() ctx: TenantContext, @Param('id', ParseUUIDPipe) id: string): Promise<MetinOnerisi> {
-    return this.rehber.metinOner(ctx, id);
+  metinOner(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(zodBody(metinOnerIstegiSchema)) dto: z.infer<typeof metinOnerIstegiSchema>,
+  ): Promise<MetinOnerisi> {
+    return this.rehber.metinOner(ctx, id, dto);
   }
 
   @Post('rehberler/:id/prova')
@@ -161,9 +166,21 @@ export class RehberController {
     return this.rehber.yayinDurumu(ctx, id);
   }
 
+  /**
+   * YALNIZ LİSTEDEN KALDIRIR: rehberin durumunu `arsivlendi` yapar,
+   * platformdaki kampanyaya dokunmaz. Durdurmak Reklam Yöneticisi'nin işi;
+   * panel onay penceresi bunu açıkça yazıyor.
+   */
   @Post('rehberler/:id/arsivle')
   @RequirePermissions('bulk.write')
   arsivle(@CurrentTenant() ctx: TenantContext, @Param('id', ParseUUIDPipe) id: string): Promise<RehberKaydi> {
     return this.rehber.arsivle(ctx, id);
+  }
+
+  /** Arşivden önceki duruma (`taslak` ya da `yayinda`); izin arşivle ile aynı. */
+  @Post('rehberler/:id/geri-getir')
+  @RequirePermissions('bulk.write')
+  geriGetir(@CurrentTenant() ctx: TenantContext, @Param('id', ParseUUIDPipe) id: string): Promise<RehberKaydi> {
+    return this.rehber.geriGetir(ctx, id);
   }
 }

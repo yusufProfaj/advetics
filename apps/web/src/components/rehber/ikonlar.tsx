@@ -103,4 +103,6 @@ export const IKON = {
     </>
   ),
   asagi: <path d="M6 9l6 6 6-6" />,
+  /** Satır menüsü (⋯). */
+  dahaFazla: <path d="M6 12h.01M12 12h.01M18 12h.01" strokeWidth={3} />,
 } as const;

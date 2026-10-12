@@ -88,6 +88,7 @@ beforeAll(async () => {
     config,
     null,
     {} as never,
+    {} as never,
   );
   // Ağa çıkılmaz: site bağlantısı okuması sahte (okunamadı).
   svc.siteHtmlOku = async () => ({ ok: false, sebep: "test: ağ yok" });

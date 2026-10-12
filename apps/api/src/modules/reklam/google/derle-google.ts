@@ -5,6 +5,8 @@ import {
   googleGorselSorunu,
   advKampanyaAdi,
   gunlukEsdeger,
+  gorunenYolu,
+  METIN_SINIRLARI,
   karakterSayisi,
   paraOndaligi,
   SITE_BAGLANTISI_YOK_CUMLESI,
@@ -44,7 +46,7 @@ import { PMAX_OTOMASYONU, pmaxAlanSayilari, pmaxAtomikIstek, type PmaxAlani } fr
 // gövdesi bayt bayt aynı kaldı ve telefon gövdesi daha önce hiç 'gecti'
 // provası alamazdı (derleyici yerelde reddediyordu). Artırmak bekleyen bütün
 // site provalarını boşuna geçersiz kılardı.
-// g-1.1.0: Arama + site'de site bağlantısı ve açıklama metni öğeleri;
+// g-1.1.0: Arama + site'de site bağlantısı ve açıklama metni öğeleri, görünen yol;
 // dönüşüm teklifi veri eşiğine bağlı (`googleTeklifKarari`). Site gövdesi
 // DEĞİŞTİ: eski provalar uzantısız gövdeyi kanıtlıyordu.
 export const GOOGLE_DERLEYICI_SURUMU = 'g-1.1.0';
@@ -131,6 +133,12 @@ export interface GoogleBeklenen {
    * çıkmadı); kampanyaya bağlı öğe varsa fark. Onay durumu beklentide YOK.
    */
   uzantilar?: GoogleUzantiBeklentisi;
+  /**
+   * Arama reklamının görünen yolu. YALNIZ gönderildiyse yazılır; eski yayın
+   * satırlarında ve yolsuz reklamda alan YOK = bakılmaz. Yeni bir alanı
+   * gönderip beklentiye yazmamak, Google'ın onu düşürmesini görmemek olurdu.
+   */
+  gorunenYol?: { path1: string; path2: string | null };
   /**
    * Dalga 3 (yalnız yeni kurgularda yazılır; eski satırlarda yok = bakılmaz):
    * teklif stratejisi (`campaign.bidding_strategy_type`), Talep Yaratma görsel
@@ -257,6 +265,12 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
     if (g.anahtarKelimeler.length === 0) retler.push({ kod: 'G-KELIME', mesaj: 'Anahtar kelime yok: arama kampanyası hiç gösterilmezdi.' });
     if (g.aciklamalar.length < 2) retler.push({ kod: 'G-ACIKLAMA-SAYI', mesaj: 'Google için en az 2 açıklama gerekiyor.' });
     if (g.basliklar.length < 3) retler.push({ kod: 'G-BASLIK-SAYI', mesaj: 'Google için en az 3 başlık gerekiyor.' });
+    // Görünen yol: sınırı aşan parça KIRPILMAZ, ret (yarıda kesilmiş yol
+    // başka bir sayfayı anlatabilir). Eksik listesi aynı sınırı engel sayıyor.
+    const yol = gorunenYolu(g.gorunenYol);
+    yol.forEach((x, i) => {
+      if (karakterSayisi(x) > METIN_SINIRLARI.gorunenYol) retler.push({ kod: 'G-YOL-UZUN', mesaj: `Görünen yol ${i + 1} en çok ${METIN_SINIRLARI.gorunenYol} karakter olabilir.` });
+    });
     if (retler.length) return { tur: 'ret', retler };
     const { govde, sira } = aramaAtomikIstek({
       customerId: g.musteriId,
@@ -274,6 +288,7 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
       finalUrl: g.hedefAdres,
       basliklar: g.basliklar,
       aciklamalar: g.aciklamalar,
+      ...(yol.length ? { gorunenYol: yol } : {}),
       telefon: tel ? g.telefon : null,
       // Uzantılar yalnız site ulaşmasında girdiye yazılıyor (`rehberdenGoogle`).
       siteBaglantilari: g.siteBaglantilari ?? [],
@@ -318,6 +333,7 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
               },
             }
           : {}),
+        ...(yol.length ? { gorunenYol: { path1: yol[0]!, path2: yol[1] ?? null } } : {}),
       },
       atif: GOOGLE_ATIF,
       notlar,

@@ -14,7 +14,6 @@ import {
   amacDegisimi,
   hazirAdimlar,
   kurulumAdimlari,
-  listeDurumu,
   metinKurali,
   metinKutusu,
   platformAnahtari,
@@ -121,8 +120,9 @@ describe('öneri: DÖRT HÂL ayrı', () => {
   });
 
   it('metin önerisi: tamamen boşsa notlarıyla "bos"', () => {
-    expect(metinOnerisiHali({ anaMetin: ' ', basliklar: [''], aciklamalar: [], notlar: ['Site okunamadı'] })).toEqual({ tur: 'bos', neden: 'Site okunamadı' });
-    expect(metinOnerisiHali({ anaMetin: 'Merhaba', basliklar: [], aciklamalar: [], notlar: [] }).tur).toBe('geldi');
+    const ek = { gorunenYol: [], onbellekten: false, gorselSayisi: 0 };
+    expect(metinOnerisiHali({ anaMetin: ' ', basliklar: [''], aciklamalar: [], notlar: ['Site okunamadı'], ...ek })).toEqual({ tur: 'bos', neden: 'Site okunamadı' });
+    expect(metinOnerisiHali({ anaMetin: 'Merhaba', basliklar: [], aciklamalar: [], notlar: [], ...ek }).tur).toBe('geldi');
   });
 
   it('KRİTİK: video listesi boşsa sunucunun nedeniyle "bos", doluysa "geldi"', () => {
@@ -372,35 +372,6 @@ describe('onay penceresi ve son ekran', () => {
     expect(sonEkranOzeti([{ platform: 'meta', sonuc: 'yayinda' }, { platform: 'google', sonuc: 'yayinda' }], false).metin).toContain('İki platformda da');
     expect(sonEkranOzeti([{ platform: 'meta', sonuc: 'hata' }, { platform: 'google', sonuc: 'arsivlendi' }], false).hal).toBe('hata');
     expect(sonEkranOzeti([{ platform: 'meta', sonuc: 'yayinda' }], true).metin).toContain('hiçbir şey gönderilmeden');
-  });
-});
-
-describe('giriş listesi durumu', () => {
-  const r = { durum: 'yayinda' as const, platformlar: { meta: true, google: true } };
-  it('KRİTİK: arşivlenen reklam "Yayında" görünmüyor', () => {
-    expect(listeDurumu({ ...r, platformlar: { meta: true, google: false }, yayinlar: [{ platform: 'meta', durum: 'arsivlendi', sebep: null }] })).toBe('Arşivlendi · Meta');
-    expect(
-      listeDurumu({
-        ...r,
-        yayinlar: [
-          { platform: 'meta', durum: 'arsivlendi', sebep: null },
-          { platform: 'google', durum: 'kapali_kuruldu', sebep: null },
-        ],
-      }),
-    ).toBe('Meta: Arşivlendi · Google: Duraklatılmış');
-  });
-  it('KRİTİK: liste sözü son ekranla aynı (okunamayan ≠ kurulamadı, Google kaldırılır)', () => {
-    expect(listeDurumu({ ...r, platformlar: { meta: true, google: false }, yayinlar: [{ platform: 'meta', durum: 'dogrulanamadi', sebep: null }] })).toBe('Kontrol edilemedi · Meta');
-    expect(listeDurumu({ ...r, platformlar: { meta: false, google: true }, yayinlar: [{ platform: 'google', durum: 'arsivlendi', sebep: null }] })).toBe('Kaldırıldı · Google');
-  });
-  it('KRİTİK: kaydı olmayan ama sebebi olan platform "Kurulamadı", sonsuza kadar "Sürüyor" değil (canlı, rehber 37df523b)', () => {
-    expect(listeDurumu({ ...r, yayinlar: [{ platform: 'meta', durum: 'arsivlendi', sebep: null }, { platform: 'google', durum: null, sebep: 'başlamadı' }] })).toBe('Meta: Arşivlendi · Google: Kurulamadı');
-    expect(listeDurumu({ ...r, platformlar: { meta: true, google: false }, yayinlar: [{ platform: 'meta', durum: null, sebep: null }] })).toBe('Sürüyor · Meta');
-  });
-  it('taslak ve yayın bilgisi olmayan satır', () => {
-    expect(listeDurumu({ ...r, durum: 'taslak', yayinlar: [] })).toBe('Taslak · Meta + Google');
-    expect(listeDurumu({ ...r, yayinlar: [] })).toBe('Yayında · Meta + Google');
-    expect(listeDurumu({ ...r, yayinlar: [{ platform: 'meta', durum: 'yayinda', sebep: null }, { platform: 'google', durum: 'ogreniyor', sebep: null }] })).toBe('Yayında · Meta + Google');
   });
 });
 
@@ -702,12 +673,13 @@ describe('kaynak: sözleşmeye bağlılık', () => {
     expect(k).toContain('kurulumAdimlari(p, ');
     expect(k).toContain('sonEkranOzeti(');
     expect(k).toContain('<h2>{ozet.baslik}</h2>');
-    expect(yorumsuz('rehber-girisi.tsx')).toContain('{listeDurumu(r)}');
+    // Giriş listesinin sözü aynı üreticiden: `lib/reklam-girisi.ts#platformRozetleri`.
+    expect(yorumsuz('rehber-girisi.tsx')).toContain('platformRozetleri(r)');
   });
 
   it('KRİTİK: metin önerisi kendiliğinden yazılmıyor; "Kullan" kullanici kaynağıyla yazıyor', () => {
     const r = yorumsuz('adim-reklam.tsx');
-    const oner = r.slice(r.indexOf('async function oner()'), r.indexOf('function kullan('));
+    const oner = r.slice(r.indexOf('async function oner(mod'), r.indexOf('function kullan('));
     expect(oner).toContain('setOneri(metinOnerisiHali(r))');
     expect(oner).not.toContain("yaz(b, 'metin'");
     expect(r).toMatch(/function metinYaz\(yeni: Metin\) \{\s*yaz\(b, 'metin', yeni\);/);

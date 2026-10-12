@@ -14,12 +14,13 @@
  *   PUT  /reklam/rehberler/:id                    → RehberKaydi         bulk.write (409 = sürüm eski)
  *   POST /reklam/rehberler/:id/konum-esle         → RehberKaydi         bulk.write (Google karşılığı)
  *   POST /reklam/rehberler/:id/anahtar-kelime-oner → AnahtarKelimeOnerisi bulk.write
- *   POST /reklam/rehberler/:id/metin-oner         → MetinOnerisi        bulk.write (KAYDA YAZMAZ, sürüm artmaz)
+ *   POST /reklam/rehberler/:id/metin-oner {MetinOnerIstegi} → MetinOnerisi bulk.write (REHBERE YAZMAZ, sürüm artmaz; görsele özel sonuç önbelleğe)
  *   POST /reklam/rehberler/:id/prova              → RehberProvaSonucu   bulk.write
  *   GET  /reklam/rehberler/:id/prova              → RehberProvaSonucu | null bulk.read (son prova; sayfa yenilenince kaybolmasın)
  *   POST /reklam/rehberler/:id/yayinla {ozet}     → RehberYayinDurumu   bulk.publish
  *   GET  /reklam/rehberler/:id/yayin              → RehberYayinDurumu   bulk.read
- *   POST /reklam/rehberler/:id/arsivle            → RehberKaydi         bulk.write
+ *   POST /reklam/rehberler/:id/arsivle            → RehberKaydi         bulk.write (YALNIZ listeden kaldırır; platforma dokunmaz)
+ *   POST /reklam/rehberler/:id/geri-getir         → RehberKaydi         bulk.write (arşivden önceki duruma)
  */
 import { z } from 'zod';
 import type { YayinDurumu } from '../yayin';
@@ -66,16 +67,44 @@ export interface RehberOzeti {
    * Rehberin kendi `durum`u "Vazgeç ve arşivle"den sonra da `yayinda`
    * kalıyor; liste yalnız onu okuyunca arşivlenen reklam "Yayında" görünüyordu.
    */
-  /** `sebep`: kaydı olmayan platformun başlamama sebebi (yoksa null). */
+  /**
+   * `sebep`: kaydı olmayan platformun başlamama sebebi ya da yayın kaydının
+   * son sebebi (kurulamadıysa platformun mesajı). Panel yalnız hata
+   * rozetinde ipucu olarak gösteriyor.
+   */
   yayinlar: Array<{ platform: RehberPlatformu; durum: YayinDurumu | null; sebep: string | null }>;
+  /**
+   * SATIRI AYIRT EDEN ÜÇ ALAN (2026-10-12). Giriş ekranında altı "Siteme
+   * gelsinler" satırı birbirinden ayırt edilemiyordu: görsel, bütçe ve ad
+   * yoktu. `gorselVarlikId`: ilk medyanın görseli (video ise kapağı),
+   * workspace'in varlıklarında yoksa null (panel amaç simgesine düşer).
+   */
+  gorselVarlikId: string | null;
+  /** Rehberdeki bütçe; para birimi seçili hesaptan (yoksa TRY). micros DİZGE. */
+  butce: { tip: 'gunluk' | 'toplam'; micros: string; paraBirimi: string } | null;
+  /**
+   * Yayına alınmış satırda platformdaki kampanya adı
+   * ("ADV · 12.10.2026 · Siteme gelsinler · 4F2A", `advKampanyaAdi`);
+   * Meta ve Google'ın kodu ayrı olduğundan Meta'nınki önce. Taslakta null.
+   */
+  yayinAdi: string | null;
+  createdAt: string;
   updatedAt: string;
 }
 
-/** Liste kesilirse ekranda "N / toplam" yazılabilsin (sessiz kesme yok). */
+/**
+ * Liste kesilirse ekranda "N / toplam" yazılabilsin (sessiz kesme yok).
+ * 2026-10-12'den beri ARŞİV DE listede (`durum = arsivlendi`): giriş
+ * ekranının Arşiv sekmesi ve "Geri getir" onu okuyor. Sıra: arşiv en sonda,
+ * yani sınır kesecekse önce arşivi keser.
+ */
 export interface RehberListesi {
   satirlar: RehberOzeti[];
   toplam: number;
 }
+
+/** Liste ucunun üst sınırı; aşılırsa `toplam` gerçeği söyler. */
+export const REHBER_LISTE_SINIRI = 300;
 
 export interface AnahtarKelimeOnerisi {
   satirlar: Array<{ metin: string; aylikArama: number | null; rekabet: 'dusuk' | 'orta' | 'yuksek' | null }>;
@@ -90,9 +119,39 @@ export interface MetinOnerisi {
   anaMetin: string;
   basliklar: string[];
   aciklamalar: string[];
-  /** Model ne bilmiyordu (örn. "fiyat verilmedi, fiyat yazmadım"). */
+  /** Google Arama görünen yolu (en çok 2 parça, 15 karakter); doğrulanamayan parça atılır, boşsa gönderilmez. */
+  gorunenYol: string[];
+  /** Model ne bilmiyordu (örn. "fiyat verilmedi, fiyat yazmadım"), atılan görsel ve satırlar. */
   notlar: string[];
+  /** Görsele özel istek: sonuç bu görsel + amaç için daha önce yazılmıştı, yapay zekâya gidilmedi. */
+  onbellekten: boolean;
+  /** Modele giden görsel sayısı (atlananlar notlarda). */
+  gorselSayisi: number;
 }
+
+/**
+ * Metin önerisi isteği (Dalga 2).
+ *
+ * `varlikId` verilirse öneri O GÖRSEL için (rehber medyasındaki varlık;
+ * video için kapağı gider) ve sonuç görselin içerik özeti + amaçla saklanır.
+ * Verilmezse ortak metin: rehberin ilk üç görseli gider, önbellek yok.
+ *
+ * `mod`:
+ * - `yeni`: görsele özel istekte önbellek varsa ONU döndürür (görsel
+ *   bırakıldığında otomatik istek; aynı görsel ikinci kez para harcamasın).
+ * - `yeniden_yaz`: önbelleği atlar, öncekinden FARKLI bir varyant ister.
+ * - `buna_gore`: kullanıcının yazdığı metin isteme girer ("buna göre yeniden
+ *   yaz"). ÇAPA YALNIZ BURADA: normal öneride kullanıcının metnini isteme
+ *   koymak, modeli her seferinde aynı metne bağlıyordu (teşhis 2026-10-12).
+ *
+ * `tekrarEtme`: ekrandaki önceki öneri; model bunları TEKRAR ETMEMELİ.
+ */
+export const metinOnerIstegiSchema = z.object({
+  varlikId: z.string().uuid().optional(),
+  mod: z.enum(['yeni', 'yeniden_yaz', 'buna_gore']).default('yeni'),
+  tekrarEtme: z.array(z.string().max(2200)).max(30).optional(),
+});
+export type MetinOnerIstegi = z.input<typeof metinOnerIstegiSchema>;
 
 export type PlatformProvaSonucu =
   | { tur: 'gecti'; zaman: string; not: string | null }

@@ -36,6 +36,8 @@ export interface MetinSeti {
   anaMetin: string;
   basliklar: string[];
   aciklamalar: string[];
+  /** Google Arama görünen yolu (en çok 2 parça); boşsa gönderilmez. */
+  gorunenYol?: string[];
 }
 
 export type ReklamGucu = 'zayif' | 'orta' | 'iyi';

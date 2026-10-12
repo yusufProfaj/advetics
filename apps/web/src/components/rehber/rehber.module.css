@@ -1668,27 +1668,223 @@
   margin: 0;
   padding: 0;
 }
-.listeSatir {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: 12px;
-  align-items: center;
-  padding: 12px 16px;
-  border-top: 1px solid var(--t-line);
-  font-size: 13px;
-}
-.listeSatir small {
-  display: block;
-  color: var(--t-ink-muted);
-  font-size: 12px;
-  margin-top: 1px;
-}
 .bosMetin {
   margin: 0;
   padding: 18px 16px;
   font-size: 13px;
   color: var(--t-ink-muted);
   border-top: 1px solid var(--t-line);
+}
+
+/*
+ * Giriş listesi (2026-10-12): sekmeler + ayırt edilebilir satır. Google
+ * Ads'in kampanya listesi mantığı: üstte durum sekmeleri, satırda ad,
+ * durum rozeti, bütçe, tek birincil eylem ve ⋯ menüsü. Renk yalnız
+ * durumda: yeşil = yayında, kırmızı = hata; gerisi gri.
+ */
+.gSekmeler {
+  display: flex;
+  gap: 4px;
+  padding: 0 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.gSekme {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 8px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--t-ink-muted);
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  transition:
+    color 0.2s var(--t-ease),
+    border-color 0.2s var(--t-ease);
+}
+.gSekme:hover {
+  color: var(--t-ink);
+}
+.gSekme[aria-current='page'] {
+  color: var(--t-ink);
+  border-bottom-color: var(--t-brand);
+}
+.gSekme .num {
+  font-weight: 400;
+  font-size: 12px;
+}
+.gNot {
+  margin: 0;
+  padding: 8px 16px;
+  font-size: 12px;
+  color: var(--t-ink-muted);
+  border-top: 1px solid var(--t-line);
+}
+.gSatir {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 16px;
+  border-top: 1px solid var(--t-line);
+  font-size: 13px;
+  transition: opacity 0.2s var(--t-ease);
+}
+.gSatir[data-soluk] {
+  opacity: 0.6;
+}
+.gSatir[data-soluk]:hover,
+.gSatir[data-soluk]:focus-within {
+  opacity: 1;
+}
+.gKucuk {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid var(--t-line);
+  background: var(--t-muted);
+}
+.gKucuk[data-simge] {
+  display: grid;
+  place-items: center;
+  color: var(--t-ink-muted);
+}
+.gKucuk[data-simge] svg {
+  width: 22px;
+  height: 22px;
+}
+.gAna {
+  min-width: 0;
+}
+.gAd {
+  display: block;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gAd:hover {
+  text-decoration: underline;
+}
+.gAlt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--t-ink-muted);
+}
+.gRozet {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  max-width: 100%;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--t-line);
+  color: var(--t-ink);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gRozet small {
+  font-weight: 400;
+  color: var(--t-ink-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gRozet[data-ton='iyi'] {
+  border-color: color-mix(in srgb, var(--t-ok) 45%, transparent);
+  color: var(--t-ok);
+}
+.gRozet[data-ton='hata'] {
+  border-color: color-mix(in srgb, var(--t-danger) 45%, transparent);
+  color: var(--t-danger);
+}
+.gEylem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.gMenuKok {
+  position: relative;
+}
+.gMenuDugme {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--t-line);
+  background: var(--t-surface);
+  color: var(--t-ink);
+}
+.gMenuDugme:hover {
+  border-color: var(--t-ink-muted);
+}
+.gMenuDugme svg {
+  width: 18px;
+  height: 18px;
+}
+/* Satır menüsü `.setMenu` görünüşünü kullanıyor; yalnız konumu farklı. */
+.setMenu.gMenu {
+  top: 38px;
+  right: 0;
+  min-width: 170px;
+}
+.gEskiBaslik {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--t-line);
+  background: var(--t-muted);
+  font-size: 13px;
+}
+.gEskiBaslik > div {
+  min-width: 0;
+  flex: 1;
+}
+.gEskiBaslik small {
+  display: block;
+  font-size: 12px;
+  color: var(--t-ink-muted);
+  margin-top: 1px;
+}
+.gPencereAlt {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px 18px;
+}
+/* Mobil: eylemler ikinci satıra iner; yatay kaydırma yok. */
+@media (max-width: 600px) {
+  .gSatir {
+    grid-template-columns: 40px minmax(0, 1fr);
+    gap: 8px 10px;
+    padding: 12px;
+  }
+  .gKucuk {
+    width: 40px;
+    height: 40px;
+  }
+  .gEylem {
+    grid-column: 2;
+    justify-content: flex-start;
+  }
+  .gAd {
+    white-space: normal;
+  }
+  /* Düğme solda: menü sağa açılır, ekranın sol kenarından taşmaz. */
+  .setMenu.gMenu {
+    left: 0;
+    right: auto;
+  }
 }
 
 /* ── Mobil: ray üstte ilerleme, özet altta ── */
@@ -2139,6 +2335,28 @@
   height: 15px;
   flex: none;
   margin-top: 1px;
+}
+/* GÖRSELE ÖZEL METİN (Dalga 2): set kartının altında ve tek görsel
+   satırında aynı kutu. Kalıbın çizgisi ve yazı ölçüsü; yeni renk yok. */
+.fikirMetni {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--t-line);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.fikirMetniUst {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.fikirDugmeler {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 .ortakUyari {
   display: flex;

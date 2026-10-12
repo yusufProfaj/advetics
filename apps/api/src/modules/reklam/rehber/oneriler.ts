@@ -156,27 +156,64 @@ function sayilar(s: string): string[] {
 }
 
 export interface MetinOneriGirdisi {
-  /** Modelin gördüğü bütün metin: uydurma taraması buna göre. */
+  /**
+   * Modelin gördüğü bütün METİN: uydurma taraması buna göre. Görselin
+   * kendisi BURADA YOK ve bilerek yok: görselde "%50 indirim" yazması,
+   * kampanyanın hâlâ sürdüğünü ya da reklamın verdiği sözü kanıtlamıyor.
+   * Görseldeki fiyat yazısı kaynak metinde yoksa satır yine ATILIR.
+   */
   kaynakMetin: string;
   yasalUyari: string | null;
+  /**
+   * Görünen yolun DOĞRULANDIĞI metin: site adresi ve anahtar kelimeler.
+   * Yol parçası burada geçmiyorsa atılır (uydurma yol, reklamın gitmediği
+   * bir sayfayı vaat eder).
+   */
+  yolKaynagi?: string;
 }
 
 export interface HamMetinOnerisi {
   anaMetin?: unknown;
   basliklar?: unknown;
   aciklamalar?: unknown;
+  gorunenYol?: unknown;
+  /** Modelin görselde OKUDUĞU yazılar; yalnız atılma notunu doğru cümleyle yazmak için. */
+  gorseldekiYazilar?: unknown;
   notlar?: unknown;
+}
+
+/** Karşılaştırma için sadeleştirme: Türkçe harfler ASCII'ye, harf/rakam dışı atılır. */
+function yolSade(s: string): string {
+  return s
+    .toLocaleLowerCase('tr-TR')
+    .replace(/ı/g, 'i')
+    .replace(/ğ/g, 'g')
+    .replace(/ü/g, 'u')
+    .replace(/ş/g, 's')
+    .replace(/ö/g, 'o')
+    .replace(/ç/g, 'c')
+    .replace(/[^a-z0-9]/g, '');
 }
 
 export function metinOnerisiTemizle(ham: HamMetinOnerisi, g: MetinOneriGirdisi): MetinOnerisi {
   const notlar: string[] = Array.isArray(ham.notlar) ? ham.notlar.filter((x): x is string => typeof x === 'string').slice(0, 5) : [];
   const kaynakSayilari = new Set(sayilar(g.kaynakMetin));
   const kaynakKucuk = g.kaynakMetin.toLocaleLowerCase('tr-TR');
+  const gorseldekiler = Array.isArray(ham.gorseldekiYazilar)
+    ? ham.gorseldekiYazilar.filter((x): x is string => typeof x === 'string').map((x) => x.toLocaleLowerCase('tr-TR'))
+    : [];
+  // ATILAN İFADE GÖRSELDE YAZIYORSA CÜMLE ONU SÖYLER: kullanıcı "%50"yi
+  // görselinde görüyor; "verilen bilgide yok" demek onu olmayan bir hatayı
+  // aramaya gönderirdi. Karar aynı: doğrulanamayan söz reklama girmez.
+  const sebep = (ifade: string, tur: string) =>
+    gorseldekiler.some((g) => g.includes(ifade.toLocaleLowerCase('tr-TR')))
+      ? `görselde "${ifade}" yazıyor, doğrulanamadığı için eklenmedi`
+      : `"${ifade}" ${tur} verilen bilgide yok`;
   const uydurmaMi = (s: string): string | null => {
     const yabanciSayi = sayilar(s).find((n) => !kaynakSayilari.has(n));
-    if (yabanciSayi) return `"${yabanciSayi}" sayısı verilen bilgide yok`;
+    if (yabanciSayi) return sebep(yabanciSayi, 'sayısı');
     const f = FIYAT_SOZU.exec(s);
-    if (f && !kaynakKucuk.includes(f[0].toLocaleLowerCase('tr-TR'))) return `"${f[0]}" fiyat/kampanya sözü verilen bilgide yok`;
+    if (f && !kaynakKucuk.includes(f[0].toLocaleLowerCase('tr-TR'))) return sebep(f[0], 'fiyat/kampanya sözü');
     return null;
   };
   const liste = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string').map((x) => x.trim()).filter(Boolean) : []);
@@ -227,29 +264,86 @@ export function metinOnerisiTemizle(ham: HamMetinOnerisi, g: MetinOneriGirdisi):
   if (g.yasalUyari && aciklamalar.length && !aciklamalar.some((a) => metinUyariIceriyor(a, g.yasalUyari as string))) {
     notlar.push('Zorunlu yasal uyarı hiçbir Google açıklamasında yok; birine sen ekle.');
   }
-  return { anaMetin, basliklar, aciklamalar, notlar };
+  // GÖRÜNEN YOL: en çok iki parça, 15 karakter; adresten ya da anahtar
+  // kelimeden gelmeyen parça ATILIR. Kaynağı verilmediyse (yol kaynağı yok)
+  // hiç yol üretilmez: doğrulayamadığımız yolu göndermiyoruz.
+  const gorunenYol: string[] = [];
+  const yolKaynak = yolSade(g.yolKaynagi ?? '');
+  for (const p of liste(ham.gorunenYol).slice(0, 2)) {
+    if (karakterSayisi(p) > METIN_SINIRLARI.gorunenYol) {
+      notlar.push(`Görünen yol "${p}" ${METIN_SINIRLARI.gorunenYol} karakteri aştığı için atıldı.`);
+      continue;
+    }
+    const sade = yolSade(p);
+    if (!sade || !yolKaynak.includes(sade)) {
+      notlar.push(`Görünen yol "${p}" site adresinde ya da anahtar kelimelerde geçmediği için atıldı.`);
+      continue;
+    }
+    gorunenYol.push(p.replace(/\s+/g, '-'));
+  }
+  return { anaMetin, basliklar, aciklamalar, gorunenYol, notlar, onbellekten: false, gorselSayisi: 0 };
 }
 
-/** Modelin JSON şeması (Gemini yapılandırılmış çıktı). */
+/**
+ * Modelin JSON şeması (Gemini yapılandırılmış çıktı).
+ *
+ * BAŞLIK 12-15, AÇIKLAMA 4 (yönetici kararı, 2026-10-12): Google duyarlı
+ * arama reklamı 15 başlığa kadar deniyor ve "reklam gücü" başlık sayısıyla
+ * artıyor; 8-10 istemek Google'ın denemesini baştan kısıyordu. Meta zaten
+ * ilk beşini kullanıyor (`oneriyiSigdir` ekranda kesip sayısını söylüyor).
+ */
 export const METIN_ONERI_SEMASI = {
   type: 'object',
   properties: {
     anaMetin: { type: 'string', description: 'Meta ana metni, Türkçe; ilk 125 karakter en önemli bilgi.' },
-    basliklar: { type: 'array', items: { type: 'string' }, description: `En çok ${METIN_SINIRLARI.baslik} karakterlik 8-10 başlık, birbirinden farklı.` },
-    aciklamalar: { type: 'array', items: { type: 'string' }, description: `En çok ${METIN_SINIRLARI.aciklama} karakterlik 3-4 açıklama.` },
+    basliklar: {
+      type: 'array',
+      items: { type: 'string' },
+      description: `En çok ${METIN_SINIRLARI.baslik} karakterlik 12-${METIN_SINIRLARI.basliklarEnCok} başlık, birbirinden farklı.`,
+    },
+    aciklamalar: {
+      type: 'array',
+      items: { type: 'string' },
+      description: `En çok ${METIN_SINIRLARI.aciklama} karakterlik tam ${METIN_SINIRLARI.aciklamalarEnCok} açıklama.`,
+    },
+    gorunenYol: {
+      type: 'array',
+      items: { type: 'string' },
+      description: `Google görünen yolu: en çok 2 parça, her biri en çok ${METIN_SINIRLARI.gorunenYol} karakter; YALNIZ site adresinde ya da anahtar kelimelerde geçen kelimelerden. Emin değilsen boş bırak.`,
+    },
+    gorseldekiYazilar: { type: 'array', items: { type: 'string' }, description: 'Görselde okuduğun yazılar (fiyat, indirim, tarih dahil), olduğu gibi. Görsel yoksa boş.' },
     notlar: { type: 'array', items: { type: 'string' }, description: 'Bilmediğin ve bu yüzden yazmadığın şeyler (ör. fiyat verilmedi).' },
   },
-  required: ['anaMetin', 'basliklar', 'aciklamalar', 'notlar'],
+  required: ['anaMetin', 'basliklar', 'aciklamalar', 'gorunenYol', 'gorseldekiYazilar', 'notlar'],
 } as const;
 
-export function metinOneriIstemi(): string {
+/**
+ * Metin önerisinin sıcaklığı — AÇIKÇA (CLAUDE.md "platformun varsayılanına
+ * güvenme"). Gönderilmediğinde aynı girdi her basışta neredeyse aynı metni
+ * veriyordu ve "Yeniden yaz" bir işe yaramıyordu (teşhis 2026-10-12).
+ * Uydurma kapısı çıktıda ayrıca taranıyor; yüksek sıcaklık onu gevşetmiyor.
+ */
+export const METIN_ONERI_SICAKLIGI = 0.9;
+
+export function metinOneriIstemi(gorselVar = false): string {
   return [
     'Sen Türkçe reklam metni yazan bir yardımcısın. Reklam bilmeyen bir işletme sahibi için yazıyorsun.',
+    gorselVar
+      ? 'Sana reklamın görseli de verildi: metni O GÖRSELE göre yaz (görselde ne görünüyorsa onu anlat, görselle çelişme).'
+      : null,
     'KESİN KURALLAR:',
     '- Verilen bilgide GEÇMEYEN hiçbir sayı, fiyat, indirim, taksit, hediye, süre ya da kampanya YAZMA. Bilmiyorsan yazma ve notlara "fiyat verilmedi" gibi yaz.',
+    gorselVar
+      ? '- Görselde yazan fiyat, indirim, tarih ya da kampanyayı METNE KOYMA: görsel bunun hâlâ geçerli olduğunu kanıtlamaz. Okuduğun yazıları gorseldekiYazilar alanına yaz.'
+      : null,
     `- Başlıklar en çok ${METIN_SINIRLARI.baslik}, açıklamalar en çok ${METIN_SINIRLARI.aciklama} karakter. Sınırı aşan satır atılır.`,
+    `- 12 ile ${METIN_SINIRLARI.basliklarEnCok} arası başlık ve ${METIN_SINIRLARI.aciklamalarEnCok} açıklama yaz.`,
     '- Başlıklar birbirinin tekrarı olmasın.',
     '- Abartılı iddia (en iyi, bir numara, garanti) yazma.',
     '- Zorunlu yasal uyarı verildiyse ana metnin sonuna aynen ekle.',
-  ].join('\n');
+    `- Görünen yol için en çok 2 kısa parça (${METIN_SINIRLARI.gorunenYol} karakter) yaz; yalnız site adresinde ya da anahtar kelimelerde geçen kelimelerden. Yoksa boş bırak.`,
+    '- "Tekrar etme" listesi verildiyse oradaki başlıkları ve ana metni TEKRARLAMA; farklı bir açıdan yaz.',
+  ]
+    .filter((x): x is string => !!x)
+    .join('\n');
 }

@@ -13,6 +13,8 @@ import {
   reklamGucu,
   type AnahtarKelimeOnerisi,
   type GorselOrani,
+  type MedyaMetni,
+  type MetinOnerIstegi,
   type MetinOnerisi,
   type RehberAlanlari,
   type RehberFormListesi,
@@ -40,6 +42,13 @@ import {
   metinKurali,
   metinKutusu,
   oneriyiSigdir,
+  fikirMetinDurumu,
+  fikirMetniYaz,
+  oneridenFikirMetni,
+  ortakMetinBos,
+  otomatikMetinHedefleri,
+  setOgeleri,
+  tekrarEtmeListesi,
   metinOnerisiHali,
   oneriHatasi,
   setGorunumu,
@@ -56,6 +65,7 @@ import {
   uretimPlani,
   type EkranNo,
   type MedyaOgesi,
+  type MetinKurali,
   type OneriHali,
 } from './rehber-mantik';
 import s from './rehber.module.css';
@@ -192,6 +202,8 @@ export function AdimReklam({
             googleArama={googleArama}
             medyaBilgisi={medyaBilgisi}
             medyaBilgisiEkle={medyaBilgisiEkle}
+            kaydet={kaydet}
+            kural={metinKurali(b.acik, kurgu)}
           />
         )}
 
@@ -228,6 +240,8 @@ function MedyaBlogu({
   googleArama,
   medyaBilgisi,
   medyaBilgisiEkle,
+  kaydet,
+  kural,
 }: {
   b: AdimBaglami;
   gorselGerekli: boolean;
@@ -239,9 +253,79 @@ function MedyaBlogu({
   googleArama: boolean;
   medyaBilgisi: ReadonlyMap<string, MedyaBilgisi>;
   medyaBilgisiEkle: (id: string, m: MedyaBilgisi) => void;
+  kaydet: () => Promise<boolean>;
+  kural: MetinKurali;
 }) {
   const medya = b.a.medya?.deger ?? [];
   const dosyaRef = useRef<HTMLInputElement>(null);
+  /*
+   * GÖRSELE ÖZEL METİN (Dalga 2). Cevap saniyeler sonra geliyor; o arada
+   * kullanıcı başka görsel eklemiş olabilir. Yazım render anındaki listeye
+   * değil SON listeye yapılır, yoksa arada eklenen görsel silinirdi.
+   */
+  const sonMedya = useRef(medya);
+  sonMedya.current = medya;
+  const sonMetin = useRef(b.a.metin?.deger);
+  sonMetin.current = b.a.metin?.deger;
+  const [fikirHali, setFikirHali] = useState<Record<string, OneriHali<MetinOnerisi>>>({});
+
+  async function gorseleMetinYaz(sahipId: string, idler: readonly string[], mod: NonNullable<MetinOnerIstegi['mod']>) {
+    setFikirHali((h) => ({ ...h, [sahipId]: { tur: 'isteniyor' } }));
+    // Sunucu KAYITLI medyayı okuyor: yeni bırakılan görsel önce yazılmalı.
+    if (!(await kaydet())) {
+      return setFikirHali((h) => ({ ...h, [sahipId]: { tur: 'dustu', mesaj: 'Taslak kaydedilemedi; metin kayıtlı görselden yazılıyor.' } }));
+    }
+    try {
+      const govde: MetinOnerIstegi = { varlikId: sahipId, mod };
+      const r = await apiFetch<MetinOnerisi>(`/reklam/rehberler/${b.kayit.id}/metin-oner`, { method: 'POST', body: JSON.stringify(govde) });
+      const hal = metinOnerisiHali(r);
+      setFikirHali((h) => ({ ...h, [sahipId]: hal }));
+      if (hal.tur !== 'geldi') return;
+      const fm = oneridenFikirMetni(r, kural);
+      const degisiklikler: Parameters<AdimBaglami['degistir']>[0] = [
+        { alan: 'medya', deger: fikirMetniYaz(sonMedya.current, idler, sahipId, fm), kaynak: 'kullanici' },
+      ];
+      // Ortak metin BOŞSA aynı öneriyle dolar (`derleyici`, onay istemez):
+      // ortak metin Google'a ve metni olmayan fikirlere gidiyor; boş kalsa
+      // kullanıcı görseli bırakıp "metin yok" engeliyle karşılaşırdı.
+      if (ortakMetinBos(sonMetin.current)) {
+        const sig = oneriyiSigdir(r, kural);
+        degisiklikler.push({
+          alan: 'metin',
+          deger: metinKutusu({ anaMetin: sig.anaMetin, basliklar: sig.basliklar, aciklamalar: sig.aciklamalar, ...(r.gorunenYol.length ? { gorunenYol: r.gorunenYol } : {}) }, kural),
+          kaynak: 'derleyici',
+        });
+      }
+      b.degistir(degisiklikler);
+    } catch (e) {
+      setFikirHali((h) => ({ ...h, [sahipId]: oneriHatasi(e) }));
+    }
+  }
+
+  /** Eklenen görsellerin fikirleri: metni olmayan her fikre TEK istek, sırayla. */
+  async function otomatikMetin(simdiki: readonly MedyaOgesi[], yerelOran: ReadonlyMap<string, GorselOrani | null>, eklenen: ReadonlySet<string>) {
+    const amac = b.a.amac?.deger;
+    const g = setGorunumu(simdiki, yerelOran, amac ? REHBER_AMACLARI[amac].meta.niyet : 'SITE');
+    const fikirler = [...g.setler.map(setOgeleri), ...g.videolar.map((x) => [x])];
+    for (const id of otomatikMetinHedefleri(fikirler, eklenen)) {
+      const f = fikirler.find((x) => x.some((y) => y.varlikId === id))!;
+      await gorseleMetinYaz(id, f.map((x) => x.varlikId), 'yeni');
+    }
+  }
+
+  function fikirKutusu(ogeler: Array<MedyaOgesi & { oran?: GorselOrani }>) {
+    const d = fikirMetinDurumu(ogeler);
+    if (!d.sahipId) return null;
+    return (
+      <FikirMetni
+        b={b}
+        durum={d}
+        hal={fikirHali[d.sahipId]}
+        iste={(mod) => void gorseleMetinYaz(d.sahipId!, d.idler, mod)}
+        yazMetin={(m) => yaz(b, 'medya', fikirMetniYaz(medya, d.idler, d.sahipId!, m))}
+      />
+    );
+  }
   const [ustunde, setUstunde] = useState(false);
   const [yukleniyor, setYukleniyor] = useState(0);
   const [hatalar, setHatalar] = useState<Array<{ ad: string; mesaj: string }>>([]);
@@ -356,6 +440,9 @@ function MedyaBlogu({
     }
     const u = await eksikBoyutlariUret(simdiki, yerelOran, olculer, eklenen);
     setHatalar([...yeniHatalar, ...u.hatalar]);
+    // GÖRSEL BIRAKILDIĞI AN METİN (Dalga 2 tetiği): aynı görsel daha önce
+    // yazıldıysa sunucu önbellekten döner, yapay zekâya gidilmez.
+    await otomatikMetin(u.medya, yerelOran, eklenen);
   }
 
   function medyaYaz(yeni: readonly (typeof medya)[number][]) {
@@ -368,7 +455,11 @@ function MedyaBlogu({
     const yeni = [...medya, { varlikId: id }];
     yaz(b, 'medya', yeni);
     const olculer = new Map<string, { en: number | null; boy: number | null }>([...medyaBilgisi].map(([k, v]) => [k, { en: v.en, boy: v.boy }]));
-    void eksikBoyutlariUret(yeni, new Map(oranlar), olculer, new Set([id])).then((u) => u.hatalar.length && setHatalar(u.hatalar));
+    const yerelOran = new Map(oranlar);
+    void eksikBoyutlariUret(yeni, yerelOran, olculer, new Set([id])).then(async (u) => {
+      if (u.hatalar.length) setHatalar(u.hatalar);
+      await otomatikMetin(u.medya, yerelOran, new Set([id]));
+    });
   }
 
   const fazla = b.kayit.eksikler.find((e) => e.kod === 'M-MEDYA-FAZLA');
@@ -524,17 +615,34 @@ function MedyaBlogu({
                       hedefRef.current = hedef;
                       dosyaRef.current?.click();
                     }}
+                    setAlti={(st) => fikirKutusu(setOgeleri(st))}
                   />
                 )}
                 {!setli && g.setler.length > 0 && (
-                  <div className={s.dosyalar}>{g.setler.flatMap((st) => Object.values(st)).map((x) => x && satir(x, null))}</div>
+                  <div className={s.dosyalar}>
+                    {g.setler.map((st, i) => (
+                      <div key={`fikir-${i}`}>
+                        {Object.values(st).map((x) => x && satir(x, null))}
+                        {fikirKutusu(setOgeleri(st))}
+                      </div>
+                    ))}
+                  </div>
                 )}
                 {/* Set yalnız "Siteme gelsinler"de ölçüldü (`BANNER_SETI_NIYETLERI`):
                     bu amaçta her görsel ayrı reklam ve bunu ekran söylüyor. */}
                 {!setli && b.acik.meta && !video && g.setler.length > 1 && (
                   <p className={s.ipucu}>Bu amaçta her görsel ayrı bir reklamdır; Meta hepsini dener.</p>
                 )}
-                {g.videolar.length > 0 && <div className={s.dosyalar}>{g.videolar.map((x) => satir(x, null))}</div>}
+                {g.videolar.length > 0 && (
+                  <div className={s.dosyalar}>
+                    {g.videolar.map((x) => (
+                      <div key={`video-${x.varlikId}`}>
+                        {satir(x, null)}
+                        {fikirKutusu([x])}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </>
             );
           })()}
@@ -740,6 +848,90 @@ function VideoSecici({ b, eksikMetni }: { b: AdimBaglami; eksikMetni: string | n
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Görsele özel metin (Dalga 2)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Bir fikrin (set ya da video) kendi metni. Yapay zekânın yazdığı metin
+ * `derleyici` kaynağıyla doğrudan girer ve kart bunu SÖYLER; kullanıcı
+ * düzeltince `kullanici` olur. Metni olmayan fikre ortak metin gider.
+ * Dört hâl ayrı: istenmedi / yazılıyor / boş (sebebi) / düştü (mesajı).
+ */
+function FikirMetni({
+  b,
+  durum,
+  hal,
+  iste,
+  yazMetin,
+}: {
+  b: AdimBaglami;
+  durum: ReturnType<typeof fikirMetinDurumu>;
+  hal: OneriHali<MetinOnerisi> | undefined;
+  iste: (mod: NonNullable<MetinOnerIstegi['mod']>) => void;
+  yazMetin: (m: MedyaMetni | null) => void;
+}) {
+  const m = durum.metin;
+  const yaziliyor = hal?.tur === 'isteniyor';
+  const duzelt = (degisen: Partial<MedyaMetni>) => yazMetin({ ...(m ?? { kaynak: 'kullanici' }), ...degisen, kaynak: 'kullanici' });
+  const notlar = hal?.tur === 'geldi' ? hal.deger.notlar : [];
+  return (
+    <div className={s.fikirMetni}>
+      <div className={s.fikirMetniUst}>
+        <b>Bu görselin metni</b>
+        <span className={s.ops}>
+          {m ? (m.kaynak === 'derleyici' ? 'Yapay zekâ görsele bakarak yazdı; düzeltebilirsin.' : 'Senin düzenlediğin metin.') : 'Ortak metin kullanılıyor.'}
+          {hal?.tur === 'geldi' && hal.deger.onbellekten ? ' Bu görsel için daha önce yazılmıştı.' : ''}
+        </span>
+      </div>
+      {m && (
+        <>
+          <SayacliGirdi
+            etiketGizli="Bu görselin başlığı"
+            deger={m.basliklar?.[0] ?? ''}
+            sinir={METIN_SINIRLARI.baslik}
+            degisti={(v) => duzelt({ basliklar: [v, ...(m.basliklar ?? []).slice(1)] })}
+          />
+          {b.acik.meta && (
+            <SayacliGirdi
+              etiketGizli="Bu görselin ana metni"
+              deger={m.anaMetin ?? ''}
+              sinir={METIN_SINIRLARI.anaMetinOnerilen}
+              degisti={(v) => duzelt({ anaMetin: v })}
+            />
+          )}
+        </>
+      )}
+      <div className={s.fikirDugmeler}>
+        <button type="button" className={s.metinDugme} disabled={yaziliyor} onClick={() => iste(m ? 'yeniden_yaz' : 'yeni')}>
+          {yaziliyor ? '✦ Yazılıyor…' : m ? '✦ Yeniden yaz' : '✦ Bu görsele metin yaz'}
+        </button>
+        {m?.kaynak === 'kullanici' && (
+          <button type="button" className={s.metinDugme} disabled={yaziliyor} onClick={() => iste('buna_gore')}>
+            Buna göre yeniden yaz
+          </button>
+        )}
+        {m && (
+          <button type="button" className={s.metinDugme} onClick={() => yazMetin(null)}>
+            Ortak metni kullan
+          </button>
+        )}
+      </div>
+      {hal?.tur === 'bos' && <p className={s.ipucu}>Metin çıkmadı: {hal.neden}</p>}
+      {hal?.tur === 'dustu' && (
+        <p className={s.hataMetni} role="alert">
+          Bu görsele metin yazılamadı: {hal.mesaj}
+        </p>
+      )}
+      {notlar.map((n, i) => (
+        <span key={`n${i}`} className={s.ops}>
+          {n}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Metin
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -751,6 +943,8 @@ function MetinBlogu({ b, kaydet }: { b: AdimBaglami; kaydet: () => Promise<boole
   const guc = reklamGucu(m);
   const yuzde = { zayif: 30, orta: 60, iyi: 100 }[guc.gucu];
   const oneriKaynakli = b.a.metin?.kaynak === 'ai_onerisi';
+  const googleArama = b.acik.google && amac !== null && REHBER_AMACLARI[amac].google.kurgu === 'ARAMA';
+  const ortakDolu = !ortakMetinBos(b.a.metin?.deger);
 
   function metinYaz(yeni: Metin) {
     yaz(b, 'metin', yeni);
@@ -762,11 +956,20 @@ function MetinBlogu({ b, kaydet }: { b: AdimBaglami; kaydet: () => Promise<boole
    * `kullanici` kaynağıyla giriyor. Önerinin olduğu gibi yayına gitmesi,
    * kullanıcının okumadığı bir vaadin reklamda çıkması demek.
    */
-  async function oner() {
+  /*
+   * ÇAPA YOK (Dalga 2): kullanıcının yazdığı metin isteme YALNIZ "Buna göre
+   * yeniden yaz" ile girer. Her öneri bir öncekinin "tekrar etme" listesini
+   * taşır; "Kullan"dan sonra da son öneri hatırlanır, yoksa ikinci basış
+   * aynı metni getirirdi.
+   */
+  const sonOneri = useRef<MetinOnerisi | null>(null);
+  async function oner(mod: NonNullable<MetinOnerIstegi['mod']>) {
     setOneri({ tur: 'isteniyor' });
     if (!(await kaydet())) return setOneri({ tur: 'dustu', mesaj: 'Taslak kaydedilemedi; öneri kayıtlı alanlardan üretiliyor.' });
     try {
-      const r = await apiFetch<MetinOnerisi>(`/reklam/rehberler/${b.kayit.id}/metin-oner`, { method: 'POST', body: '{}' });
+      const govde: MetinOnerIstegi = { mod, tekrarEtme: tekrarEtmeListesi(sonOneri.current) };
+      const r = await apiFetch<MetinOnerisi>(`/reklam/rehberler/${b.kayit.id}/metin-oner`, { method: 'POST', body: JSON.stringify(govde) });
+      sonOneri.current = r;
       setOneri(metinOnerisiHali(r));
     } catch (e) {
       setOneri(oneriHatasi(e));
@@ -775,8 +978,26 @@ function MetinBlogu({ b, kaydet }: { b: AdimBaglami; kaydet: () => Promise<boole
 
   function kullan(o: MetinOnerisi) {
     const sig = oneriyiSigdir(o, kural);
-    metinYaz(metinKutusu({ anaMetin: sig.anaMetin, basliklar: sig.basliklar, aciklamalar: sig.aciklamalar }, kural));
+    metinYaz(
+      metinKutusu(
+        {
+          anaMetin: sig.anaMetin,
+          basliklar: sig.basliklar,
+          aciklamalar: sig.aciklamalar,
+          // Görünen yol yalnız Arama'da kullanılıyor; öneri boşsa eskisi kalır.
+          ...(googleArama && o.gorunenYol.length ? { gorunenYol: o.gorunenYol } : m.gorunenYol ? { gorunenYol: m.gorunenYol } : {}),
+        },
+        kural,
+      ),
+    );
     setOneri({ tur: 'istenmedi' });
+  }
+  const yol = [m.gorunenYol?.[0] ?? '', m.gorunenYol?.[1] ?? ''];
+  function yolYaz(i: number, v: string) {
+    const yeni = yol.map((x, j) => (j === i ? v : x));
+    // İki parça da boşsa alan YOK: boş yol Google'a gönderilmez.
+    const { gorunenYol: _y, ...geri } = m;
+    metinYaz(yeni.some((x) => x.trim()) ? { ...geri, gorunenYol: yeni } : geri);
   }
 
   const oneriSig = oneri.tur === 'geldi' ? oneriyiSigdir(oneri.deger, kural) : null;
@@ -784,9 +1005,20 @@ function MetinBlogu({ b, kaydet }: { b: AdimBaglami; kaydet: () => Promise<boole
     <div className={s.blok}>
       <div className={s.blokBaslik}>
         Metin{' '}
-        <button type="button" className={s.metinDugme} style={{ marginLeft: 'auto' }} disabled={oneri.tur === 'isteniyor'} onClick={() => void oner()}>
-          {oneri.tur === 'isteniyor' ? '✦ Öneri yazılıyor…' : '✦ Metin öner'}
+        <button
+          type="button"
+          className={s.metinDugme}
+          style={{ marginLeft: 'auto' }}
+          disabled={oneri.tur === 'isteniyor'}
+          onClick={() => void oner(sonOneri.current ? 'yeniden_yaz' : 'yeni')}
+        >
+          {oneri.tur === 'isteniyor' ? '✦ Öneri yazılıyor…' : sonOneri.current ? '✦ Yeniden yaz' : '✦ Metin öner'}
         </button>
+        {ortakDolu && (
+          <button type="button" className={s.metinDugme} disabled={oneri.tur === 'isteniyor'} onClick={() => void oner('buna_gore')}>
+            Buna göre yeniden yaz
+          </button>
+        )}
       </div>
       <div className={s.metinler}>
         {oneriSig && (
@@ -807,6 +1039,8 @@ function MetinBlogu({ b, kaydet }: { b: AdimBaglami; kaydet: () => Promise<boole
                 ))}
               </ul>
             )}
+            {googleArama && oneriSig.gorunenYol.length > 0 && <span>Görünen yol: /{oneriSig.gorunenYol.join('/')}</span>}
+            {oneriSig.gorselSayisi > 0 && <span className={s.ops}>{oneriSig.gorselSayisi} görsele bakılarak yazıldı.</span>}
             {oneriSig.disarida > 0 && <span className={s.ops}>Bu reklamda kullanılmayacak {oneriSig.disarida} satır gösterilmedi.</span>}
             {oneriSig.notlar.map((n, i) => (
               <span key={`n${i}`} className={s.ops}>
@@ -888,6 +1122,16 @@ function MetinBlogu({ b, kaydet }: { b: AdimBaglami; kaydet: () => Promise<boole
             </button>
           )}
         </div>
+        {googleArama && (
+          <div className={s.alan}>
+            <span className={s.alanEtiket}>
+              Görünen yol <span className={s.ops}>İsteğe bağlı · Google adresin yanında gösterir</span>
+            </span>
+            {yol.map((x, i) => (
+              <SayacliGirdi key={`yol-${i}`} etiketGizli={`Görünen yol ${i + 1}`} deger={x} sinir={METIN_SINIRLARI.gorunenYol} degisti={(v) => yolYaz(i, v)} />
+            ))}
+          </div>
+        )}
         {kural.gucGoster && (
           <div className={s.guc}>
             <span>Reklam gücü</span>
