@@ -86,6 +86,15 @@ describe('sayfaHtmlGetir', () => {
     expect(await sayfaHtmlGetir('https://ege.com')).toMatchObject({ ok: false });
   });
 
+  it('KRİTİK (yeniden kapı): açık :443 varsayılan sayılır; köşeli IPv6 port ne olursa olsun reddedilir', async () => {
+    fetchMock.mockResolvedValue(yanit('<p>x</p>'));
+    expect(await sayfaHtmlGetir('https://ege.com:443/')).toMatchObject({ ok: true, adres: 'https://ege.com/' });
+    expect(await sayfaHtmlGetir('https://[::1]:443/')).toMatchObject({ ok: false });
+    expect(await sayfaHtmlGetir('https://[2001:db8::1]:8443/')).toMatchObject({ ok: false });
+    expect(await sayfaHtmlGetir('https://[::ffff:a9fe:a9fe]/')).toMatchObject({ ok: false });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('fetch yönlendirmeyi KENDİSİ izlemiyor (manual)', async () => {
     fetchMock.mockResolvedValue(yanit('<p>x</p>'));
     await sayfaHtmlGetir('https://ege.com');

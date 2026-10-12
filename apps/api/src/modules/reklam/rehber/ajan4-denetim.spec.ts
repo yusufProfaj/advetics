@@ -496,6 +496,27 @@ describe('Siteme gelsinler: Meta hedefi piksel hâline bağlı', () => {
     expect(t!.alanlar.sitePikseli?.deger).toBe('bilinmiyor');
   });
 
+  /*
+   * Ajan 4 yeniden kapı (N-1): "okunamadı" işareti KALICI olmamalı. Bir kez
+   * düşen okuma sonraki BAŞARILI okumada silinmezse sağlam pikseli olan
+   * hesap 15 dakika boyunca (her provada yeniden yazılırsa sonsuza kadar)
+   * tıklamaya mahkûm olur.
+   */
+  it('KRİTİK (N-1, yeniden kapı): düşen okumadan SONRA başarılı okuma işareti temizler → LANDING_PAGE_VIEWS', async () => {
+    const { id } = await provaliMetaRehberi();
+    const aktif = pikseller;
+    pikseller = null;
+    await svc.prova(CTX, id);
+    await provalariGecir();
+    pikseller = aktif;
+    await svc.prova(CTX, id);
+    await provalariGecir();
+    const [t] = await h.q<{ alanlar: { sitePikseli?: { deger: string } } }>(
+      `SELECT s.alanlar FROM reklam_taslagi t JOIN taslak_surumu s ON s.taslak_id = t.id AND s.surum_no = t.aktif_surum_no WHERE t.platform = 'meta'`,
+    );
+    expect(t!.alanlar.sitePikseli?.deger).toBe('aktif');
+  });
+
   it('piksel OKUNAMADI (bilinmiyor) → LINK_CLICKS, ekran okunamadığını söyler', async () => {
     pikseller = null;
     const r = await kur();
