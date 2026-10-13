@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { dugmeSinifi } from '@/components/ui/dugme';
 import {
   KARSILASTIRMA_SECENEKLERI,
   MAX_GUN,
@@ -224,7 +225,7 @@ export function TarihSecici({
         }}
         aria-expanded={acik}
         aria-haspopup="dialog"
-        className="flex items-center gap-2 whitespace-nowrap rounded-[10px] border border-line bg-surface px-3 py-[7px] text-[13px] shadow-kart transition-colors duration-200 hover:bg-surface-muted"
+        className="flex h-10 items-center gap-2 whitespace-nowrap rounded-full border border-line-strong bg-surface px-4 text-[13px] transition-colors duration-150 hover:bg-surface-sunken"
       >
         {/*
           ONAYLANAN TASLAĞIN DÜZENİ (2026-10-09): ön ayar adı küçük ve soluk,
@@ -308,13 +309,13 @@ export function TarihSecici({
               <p className="mt-2 text-[11px] text-ink-muted">En eski veri günü aranıyor…</p>
             )}
             {kapsamHatasi && (
-              <p role="alert" className="mt-2 rounded border border-danger/30 bg-danger-soft px-2.5 py-1.5 text-[11px] text-danger-strong">
+              <p role="alert" className="mt-2 rounded-alan border border-l-4 border-line border-l-danger bg-surface px-2.5 py-1.5 text-[11px] text-ink">
                 {kapsamHatasi} “Tüm zamanlar” şimdilik son 90 günü gösteriyor.
               </p>
             )}
 
             {asiyor && (
-              <p className="mt-2 rounded border border-warn/40 bg-warn/5 px-2.5 py-1.5 text-[11px] leading-snug">
+              <p className="mt-2 rounded-alan border border-l-4 border-line border-l-danger bg-surface px-2.5 py-1.5 text-[11px] leading-snug">
                 Seçilen aralık {taslakGun} gün. Sunucu en fazla {MAX_GUN} gün tarıyor —
                 uygulandığında <strong>{gunAdi(gunEkle(taslakTo, -(MAX_GUN - 1)))}</strong>{' '}
                 tarihinden başlatılacak.
@@ -374,14 +375,14 @@ export function TarihSecici({
                   setAcik(false);
                   sifirla();
                 }}
-                className="rounded-lg px-3 py-1.5 text-sm text-ink-muted transition hover:text-ink"
+                className={dugmeSinifi('hayalet', 'kucuk')}
               >
                 İptal
               </button>
               <button
                 type="button"
                 onClick={uygula}
-                className="rounded-lg bg-brand px-3.5 py-1.5 text-sm font-medium text-white transition hover:opacity-90"
+                className={dugmeSinifi('birincil', 'kucuk')}
               >
                 Uygula
               </button>

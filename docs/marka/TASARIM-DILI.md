@@ -19,6 +19,11 @@ katmanı (kılavuz renkleri, degrade ikon karoları, buzlu cam üst çubuk, kart
 kalıbı, geçişler) aynen kalır; Google'dan iskelet, akış ve sadelik alınır.
 Google'ın renkleri, yazı tipi ve logosu ALINMAZ.
 
+> **GÜNCELLENDİ 2026-10-14 (§ 5):** degrade ikon karoları, birincil düğmenin
+> degradesi ve parıltısı, zemindeki marka ışığı ve kart gölgeleri KALKTI
+> (kullanıcı kararı, birleşik tasarım sistemi). Animasyon ve geçişler kalıyor.
+> Yukarıdaki cümle geçmiş olarak duruyor.
+
 **Yeşil:** yalnız DURUM göstergesi için onaylandı (kullanıcı, 2026-10-09):
 yayında = yeşil. Başka hiçbir yerde kullanılmaz.
 
@@ -34,7 +39,8 @@ bir karede yok olan animasyon yok). Örnek: `components/rehber/set-kartlari.tsx`
 |---|---|
 | Renk | YALNIZ dört renk: beyaz `#ffffff`, siyah `#000000`, gri `#302e2d`, kırmızı `#ff2400` |
 | Nötr tonlar | Zemin ve çizgi için gerekiyorsa YALNIZ kurumsal grinin saydam tonları (`#302e2d` %4 zemin, %12 çizgi, %60 ikincil metin). Yeni bir ton (mavi-gri, pembe, pastel) YOK |
-| Gradyan, buğu | Advetics'in mevcut dili (marka → aksan degradesi, buzlu cam) KALIR; yeni bir pastel ton eklenmez |
+| Gradyan, buğu | ~~Advetics'in mevcut dili (marka → aksan degradesi, buzlu cam) KALIR; yeni bir pastel ton eklenmez~~ (2026-10-09). **2026-10-14'ten beri DEGRADE YOK** (§ 5): birincil düğme düz kırmızı, ikon karoları düz, zemin düz. Yalnız yapışkan üst çubukta okunabilirlik için hafif bulanıklık kalıyor (referans) |
+| Durum renkleri | **2026-10-14:** hata ve uyarı = marka kırmızısı (ikon + sol çizgi, metin siyah), bilgi = gri. Turuncu uyarı, mavi bilgi, ikinci kırmızı (`#dc2626`) YOK. Yeşil YALNIZ durum noktası |
 | Ana başlık | Montserrat (kalın). Sayfa başlığı, büyük sayılar, kart içi ana sayı |
 | Üst başlık, alt başlık, gövde | Open Sans |
 | Kırmızının rolü | Vurgu: birincil eylem, seçili durum, önemli sayı. Kılavuz örneğinde ("Bu İşte / **Beraberiz!**") kırmızı tek vurgu, gerisi siyah. Ekranda kırmızı az ve anlamlı |
@@ -144,3 +150,65 @@ Etiket | değer satırları, tıklanınca satır açılıyor; ayrı form sayfas�
    ve kabuk (üst çubuk, ray, flyout) — bütün ekranlar birden değişir.
 3. Reklam Yöneticisi (Aşama 3) taslağı, sonra kodu.
 4. Her işin sonunda tasarım denetimi (CLAUDE.md §3 "Tasarım").
+
+---
+
+## 5. Birleşik tasarım sistemi (kullanıcı kararları, 2026-10-14)
+
+Genel uygulama denetimi (`docs/DENETIM-2026-10.md`) panelde İKİ tasarım
+sistemi buldu: Tailwind + `globals.css` panel katmanı ve dört CSS modülünün
+(`taslak`, `iyilestir`, `kreatif-zeka`, `rehber`) kendi `--t-*` token
+kopyaları. Sonuç 22 farklı düğme biçimi, 6 sekme biçimi, 10'dan fazla elle
+modal, 3 sihirbaz dili, 7 sayfa genişliğiydi. Kararlar:
+
+1. **Onaylı referans uygulanır:** [`tasarim-sistemi.html`](tasarim-sistemi.html)
+   ölçü ve davranışta BİREBİR. Bileşenler `apps/web/src/components/ui/`,
+   kullanım kuralları [`BILESENLER.md`](BILESENLER.md).
+2. **Birincil düğme DÜZ KIRMIZI.** Markadan aksana degrade ve marka tonunda
+   parıltı HER YERDEN kalkar (düğme, ikon karosu, zemin ışığı, boş durum
+   kutusu, grafik dolgusu). Kart gölgesi de kalkar; kartlar çizgiyle ayrılır,
+   gölge yalnız açılır menü, pencere ve yan panelde.
+3. **YALNIZ kılavuz renkleri.** Hata ve uyarı = marka kırmızısı (ikon + sol
+   çizgi, metin siyah), bilgi = gri. Turuncu `warn`, mavi `info`, ikinci
+   kırmızı `danger #dc2626` kalkar; token ADLARI duruyor (sayfalar kırılmasın)
+   ama değerleri kılavuza eşli. Yeşil YALNIZ durum noktası. Karanlık tema
+   siyah zemin, `#0d0d0d` yüzey, beyaz metin (eski mavi-gri `#13151c` kalktı).
+4. **Ölçüler:** yarıçap 8 / 16 / tam yuvarlak; yazı 11 · 12 · 13 · 14 · 15 ·
+   18 · 24 · 28; sayfa genişliği iki değer (`genis` 1400, `dar` 4xl); düğme
+   iki boy (40 / 32), hepsi hap.
+5. **Bekçi:** `apps/web/src/app/tasarim-sistemi.spec.ts`. Elle düğme, elle
+   modal, elle `h1`, degrade ve kılavuz dışı renk dosya dosya sayılıyor ve
+   liste YALNIZ KÜÇÜLÜYOR (`tasarim-sistemi.istisnalar.ts`).
+
+Bilinçli küçük sapma: ikincil metin grinin %68'i (referans %64). %64 beyazda
+4,3:1 kontrast veriyor ve 12 piksellik ipucunda 4,5 eşiğinin altında kalıyor.
+
+## 6. Menü sistemi (kullanıcı kararı, 2026-10-14)
+
+**Seçenek A uygulanır:** [`menu-sistemi.html`](menu-sistemi.html). Tek fark
+"+ Oluştur" açılır menüsü Seçenek B'deki gibi
+([`menu-sistemi-b.html`](menu-sistemi-b.html) `#ac-olustur`).
+
+- **Sol sidebar (248 px):** logo → en üstte workspace seçici (arama, şirket
+  grupları, "Tüm şirketler", şirketleri yönet) → altında kırmızı hap
+  **"+ Oluştur"** → grup başlıklı yedi bölüm listesi (seçili öğe kırmızı
+  zemin + kırmızı ikon, bekleyen iş sayacı) → Ayarlar → sol altta kullanıcı
+  kartı (Hesabım, iki adımlı giriş, tema, çıkış). Mobilde aynı içerik soldan
+  çekmece.
+- **"+ Oluştur":** "Ne oluşturalım?" başlığı; her seçenek ikon + ad + bir
+  satır açıklama (Reklam · "Yedi amaçtan biriyle, adım adım"; Strateji ·
+  "Plan, rapor ve müşteri onayı"; Gönderi öne çıkar · "Instagram gönderisini
+  boostla"; ayraç; Kural; Rapor). Hedefler menü satırlarıyla aynı adresler,
+  yetkiye göre süzülür, müşteri rolüne düğme hiç çıkmaz.
+- **Üst çubuk:** kırıntı (şirket › workspace › sayfa) + sağda yalnız ikon.
+- **Tek açılır menü bileşeni** (`AcilirMenu`): seçici, kullanıcı menüsü,
+  bildirim zili, ⋯ menüleri. DOM'da kalır, geçişle açılır, Esc kapatır, ok
+  tuşları gezer, hareket azaltmada animasyon yok.
+- **Sayfa içi alt bölümler** başlığın altında alt çizgili `Sekmeler` (sayı ya
+  da kırmızı nokta). Ayarlar sekmeleri ve Marka Merkezi iç menüsü sayfa iç
+  tasarımları taslaklandıktan sonra geçirilir. Genel Bakış'ın iç düzeni
+  KALIYOR (kullanıcı beğendi), yalnız token ve düğme görünüşü değişir.
+
+Uygulamada taslaktan sapmalar (`BILESENLER.md` § 4): üst çubukta "Ara" ve
+"Yardım" ikonları yok (hedefleri yazılmadı; işlevsiz ikon gösterilmez),
+workspace satırında kurulum durum noktası yok (seçicinin verisi taşımıyor).

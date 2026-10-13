@@ -1,44 +1,38 @@
 'use client';
 
-import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiFetch } from '@/lib/api';
+import { MenuOgesi } from '@/components/ui/acilir-menu';
+import { Ikon } from '@/components/ui/ikon';
 
-export function LogoutButton() {
+/**
+ * Kullanıcı menüsündeki "Çıkış yap" (menü kararı 2026-10-14): tehlikeli
+ * eylem, menünün EN ALTINDA, ayraçtan sonra ve kırmızı (eski ad kartının
+ * yanındaki çıkış ikonunun yerine).
+ *
+ * İSTEK DÜŞSE BİLE GİRİŞ SAYFASINA GİDİLİYOR: sunucu tarafı iptal başarısız
+ * olsa bile ekranda takılı kalmaktansa çerezsiz devam etmek daha iyi. Hata
+ * yutulmuyor, konsola yazılıyor.
+ */
+export function CikisOgesi() {
   const router = useRouter();
-  const [pending, setPending] = useState(false);
-
-  async function logout() {
-    setPending(true);
-    try {
-      await apiFetch('/auth/logout', { method: 'POST' });
-    } catch {
-      // Sunucu tarafı iptal başarısız olsa bile kullanıcıyı çıkarıyoruz —
-      // ekranda takılı kalmasındansa cookie'siz devam etmesi daha iyi.
-    } finally {
-      router.replace('/login');
-      router.refresh();
-    }
-  }
-
   return (
-    <button
-      type="button"
-      onClick={logout}
-      disabled={pending}
-      title="Çıkış yap"
-      aria-label="Çıkış yap"
-      className="shrink-0 rounded-lg p-1.5 text-ink-muted transition hover:bg-surface-muted hover:text-danger disabled:opacity-50"
+    <MenuOgesi
+      tehlike
+      ikon={<Ikon ad="cikis" />}
+      onClick={() => {
+        void apiFetch('/auth/logout', { method: 'POST' })
+          .catch((e: unknown) => {
+            // Oturum sunucuda zaten ölmüş olabilir; giriş sayfası yine doğru yer.
+            console.warn('Çıkış isteği düştü', e);
+          })
+          .finally(() => {
+            router.replace('/login');
+            router.refresh();
+          });
+      }}
     >
-      <svg viewBox="0 0 20 20" fill="none" className="h-[18px] w-[18px]" aria-hidden>
-        <path
-          d="M12.5 6.5V4.5h-8v11h8v-2M9 10h7.5m0 0-2.5-2.5M16.5 10 14 12.5"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    </button>
+      Çıkış yap
+    </MenuOgesi>
   );
 }

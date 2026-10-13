@@ -19,121 +19,244 @@
    * renkli form alanları, açılır listeler ve kaydırma çubukları.
    */
   color-scheme: light dark;
-  /* Marka — branding_profiles tablosundan gelir, buradakiler varsayılan */
+
   /*
-   * KURUMSAL KİMLİK (2026-10-06, Profaj kurumsal kullanım kılavuzu):
-   * kırmızı #ff2400, gri #302e2d, siyah, beyaz. Aksan, gradyanlarda
-   * kırmızının koyu tonu — kılavuzda turuncu yok; eski #f97316 gradyanları
-   * markanın dışına taşıyordu.
+   * ═══ TEK TOKEN SETİ (2026-10-14, birleşik tasarım sistemi) ═══
+   *
+   * Referans `docs/marka/tasarim-sistemi.html` (kullanıcı onaylı). Panelde
+   * iki sistem vardı: bu dosya ve dört CSS modülünün kendi `--t-*`
+   * kopyaları. Kopyalar ayrı yaşadıkça bir modül gölgeyi, öbürü yarıçapı
+   * farklı tutuyordu ve aynı "kart" iki ekranda iki biçimde çiziliyordu.
+   * Bugün değerler YALNIZ BURADA; modüllerin `--t-*` adları aşağıda bu
+   * token'lara bağlanıyor (adlar kaldı ki 5.500 satırlık modül kırılmasın).
+   *
+   * RENK YALNIZ KILAVUZDAN (kullanıcı kararı 2026-10-14): beyaz, siyah,
+   * gri #302e2d, kırmızı #ff2400 ve grinin saydam tonları. Turuncu uyarı,
+   * mavi bilgi ve ikinci kırmızı KALKTI; adları duruyor ama değerleri
+   * kılavuza eşli. Yeşil yalnız durum noktası (`--ok`).
    */
+  --beyaz: #ffffff;
+  --siyah: #000000;
+  --gri: #302e2d;
+  --kirmizi: #ff2400;
+
+  /* Marka — branding_profiles tablosundan gelir, buradakiler varsayılan */
   --brand-primary: #ff2400;
-  --brand-accent: #d21d00;
+  /*
+   * AKSAN ARTIK BİR DEGRADE UCU DEĞİL. Eski koyu kırmızı yalnız birincil
+   * düğmenin ve ikon karolarının degradesini besliyordu; degrade her
+   * yerden kalktı (kullanıcı kararı 2026-10-14) ve aksan marka rengine
+   * eşit. Beyaz etiket profili yine de kendi değerini basabilir.
+   */
+  --brand-accent: var(--brand-primary);
   --brand-font: var(--font-govde), ui-sans-serif, system-ui, -apple-system, sans-serif;
   /* Ana başlıklar: Montserrat. Beyaz etiket gövdeyi değiştirir, bunu değil. */
   --baslik-font: var(--font-baslik), var(--brand-font);
 
   /*
-   * Yüzeyler. Zemin ile kart arasındaki fark bilerek belirgin: eski değerlerde
-   * (#f7f8fa / #fff) kartlar zemine karışıyordu ve sayfa "düz bir kâğıt"
-   * gibi okunuyordu. Derinlik gölgeyle birlikte bu farktan geliyor.
-   */
-  /*
-   * SICAK NÖTRLER. Kimliğin grisi (#302e2d) sıcak; eski mavi-gri zemin ve
-   * kenarlar onun yanında soğuk ve kopuk duruyordu. Kontrastlar ölçüldü:
-   * ikincil metin beyazda 5,2:1, zeminde 4,9:1.
+   * YÜZEYLER: referanstaki `--yuzey`, `--zemin`, `--dolgu`, `--cizgi`.
+   * Saydam ton yerine ÖNCEDEN KARIŞTIRILMIŞ hâl: aynı değerler zemin olarak
+   * da (`body`, `bg-surface-muted`) kullanılıyor ve saydam bir zemin, altındaki
+   * katmana göre renk değiştirirdi.
    */
   --surface: #ffffff;
-  --surface-muted: #f6f5f4;
-  --surface-sunken: #efedeb;
-  --border: #e7e4e2;
-
-  /* Metin — kimliğin grisi */
-  --text: #302e2d;
-  --text-muted: #6f6a67;
-
-  /* Durum renkleri — marka renginden bağımsız, anlamları sabit */
-  --ok: #16a34a;
-  --warn: #d97706;
-  --danger: #dc2626;
-  --info: #0284c7;
+  --surface-muted: color-mix(in srgb, #302e2d 3.5%, #ffffff);
+  --surface-sunken: color-mix(in srgb, #302e2d 6%, #ffffff);
+  --border: color-mix(in srgb, #302e2d 12%, #ffffff);
+  --border-strong: color-mix(in srgb, #302e2d 22%, #ffffff);
+  /* Seçili menü öğesi, hata kutusu zemini: kırmızının %7'si. */
+  --vurgu: color-mix(in srgb, var(--brand-primary) 7%, var(--surface));
 
   /*
-   * ═══ DURUM RENKLERİNİN ZEMİN VE METİN TONLARI ═══
-   *
-   * Panelde 400'den fazla yerde sabit Tailwind paleti yazılıydı
-   * (`bg-amber-50`, `text-rose-700`…) ve 90 tanesi AÇIK ZEMİNDİ. Yüzey
-   * belirteçleri karanlık temada dönüyor, o sınıflar dönmüyordu: koyu bir
-   * sayfanın ortasında bembeyaz uyarı kutuları kalıyordu.
-   *
-   * `-soft` zemin, `-strong` o zemin üzerinde okunan metin. İkisi de temaya
-   * göre dönüyor; bileşenler artık ham palet yazmıyor.
+   * METİN SİYAH, ikincil metin grinin %68'i. Referans %64 diyor; o değer
+   * beyazda 4,3:1 kontrast veriyor ve 12 piksellik ipucu metninde 4,5
+   * eşiğinin ALTINDA kalıyor. %68 = ~4,8:1, göze fark yok.
    */
-  --ok-soft: #ecfdf5;
-  --ok-strong: #047857;
-  --warn-soft: #fffbeb;
-  --warn-strong: #b45309;
-  --danger-soft: #fef2f2;
-  --danger-strong: #b91c1c;
-  --info-soft: #f0f9ff;
-  --info-strong: #0369a1;
+  --text: #000000;
+  --text-muted: color-mix(in srgb, #302e2d 68%, #ffffff);
+  --text-soluk: color-mix(in srgb, #302e2d 42%, #ffffff);
+
+  /* Grafik: birinci seri marka kırmızısı, ikinci seri metin rengi (siyah). */
+  --seri2: var(--text);
 
   /*
-   * ═══ ARAMA SONUCU BAŞLIK MAVİSİ ═══
+   * ═══ DURUM RENKLERİ — KILAVUZA EŞLİ ═══
+   *
+   * Hata ve uyarı = marka kırmızısı (ikon + sol çizgi; metin siyah), bilgi
+   * = gri, başarı = metin + yeşil NOKTA. Kırmızı SABİT, marka değişkeni
+   * DEĞİL: beyaz etiketli bir müşterinin rengi mavi olsa bile "hata" mavi
+   * görünmemeli.
+   *
+   * `-soft` zemin, `-strong` o zemin üzerinde okunan metin. Panelde 400'den
+   * fazla yerde ham palet yazılıydı ve karanlık temada beyaz kutular
+   * kalıyordu; bu çiftler temaya göre dönüyor.
+   */
+  --ok: #1e8e3e;
+  --warn: #ff2400;
+  --danger: #ff2400;
+  --info: #302e2d;
+  --ok-soft: var(--surface-sunken);
+  --ok-strong: var(--text);
+  --warn-soft: color-mix(in srgb, #ff2400 7%, #ffffff);
+  --warn-strong: var(--text);
+  --danger-soft: color-mix(in srgb, #ff2400 7%, #ffffff);
+  /* Kırmızı METİN okunabilir tonda: ham kırmızı beyazda 3,6:1. */
+  --danger-strong: color-mix(in srgb, #ff2400 82%, #000000);
+  --info-soft: var(--surface-sunken);
+  --info-strong: var(--text);
+
+  /*
+   * ═══ ARAMA SONUCU BAŞLIK MAVİSİ — KILAVUZ İSTİSNASI ═══
    *
    * Reklam Keşfi'ndeki arama reklamı önizlemesi Google sonucunun görünümünü
-   * TAKLİT ediyor ve oradaki başlık mavi. Bu MARKA rengi DEĞİL: beyaz
-   * etiketli üründe marka rengi her müşteride farklı, ama Google'ın arama
-   * sonucu herkeste aynı görünüyor ve önizlemenin işi o görünümü
-   * göstermek. Marka rengini kullanmak, müşterinin reklamını olduğundan
-   * başka gösterirdi.
+   * TAKLİT ediyor ve oradaki başlık mavi. Bu MARKA rengi DEĞİL ve panelin
+   * diline girmiyor: önizlemenin işi müşterinin reklamının Google'da nasıl
+   * görüneceğini göstermek. `tasarim-sistemi.spec.ts` bu iki değişkeni
+   * bilerek muaf tutuyor.
    */
   --arama-baslik: #1a0dab;
   --arama-adres: #4d5156;
 
-  --radius: 0.875rem;
   /*
-   * GÖLGELER KATMANLI: yakın ve keskin bir kenar gölgesi + uzak ve yumuşak
-   * bir yayılma. Tek katmanlı gölge ya kirli bir çizgi ya da bulanık bir leke
-   * gibi duruyor; iki katman kartı zeminden "kaldırıyor".
+   * ═══ YARIÇAP: ÜÇ DEĞER ═══
+   * 8 alan ve küçük öğe, 16 kart ve panel, tam yuvarlak düğme/çip/rozet.
+   * `--radius` Tailwind'in `rounded-xl`ini besliyor: eski 14 piksellik
+   * kartların hepsi tek değişiklikle 16'ya geçiyor. 12 yalnız şerit.
    */
-  --shadow-xs: 0 1px 2px rgb(16 24 40 / 0.04);
-  --shadow-card: 0 1px 2px rgb(16 24 40 / 0.04), 0 2px 10px -3px rgb(16 24 40 / 0.07);
-  --shadow-hover: 0 2px 4px rgb(16 24 40 / 0.04), 0 14px 32px -10px rgb(16 24 40 / 0.16);
-  --shadow-pop: 0 4px 8px -2px rgb(16 24 40 / 0.08), 0 20px 44px -12px rgb(16 24 40 / 0.22);
+  --radius: 1rem;
+  --r-sm: 0.5rem;
+  --r: 0.75rem;
+  --r-lg: 1rem;
+  --r-hap: 999px;
+
+  /*
+   * ═══ YAZI ÖLÇEĞİ: SEKİZ BOY ═══
+   * Panelde 9,5'ten 32'ye kadar 20'den fazla farklı boy vardı. Referansın
+   * kullandıkları: 11 grup başlığı, 12 ipucu/tablo başlığı, 13 ikincil,
+   * 14 gövde, 15 kart başlığı, 18 seçim kartı, 24 soru ve küçük sayfa
+   * başlığı, 28 sayfa başlığı. 12,5 ve 13,5 (düğme, menü) yalnız
+   * bileşenlerin içinde. Tailwind'de `text-11` … `text-28`.
+   */
+  --yazi-11: 0.6875rem;
+  --yazi-12: 0.75rem;
+  --yazi-13: 0.8125rem;
+  --yazi-14: 0.875rem;
+  --yazi-15: 0.9375rem;
+  --yazi-18: 1.125rem;
+  --yazi-24: 1.5rem;
+  --yazi-28: 1.75rem;
+
+  /* Boşluk ölçeği (4'ün katları; Tailwind 1·2·3·4·5·6·7·10). */
+  --bosluk-1: 4px;
+  --bosluk-2: 8px;
+  --bosluk-3: 12px;
+  --bosluk-4: 16px;
+  --bosluk-5: 20px;
+  --bosluk-6: 24px;
+  --bosluk-7: 28px;
+  --bosluk-10: 40px;
+
+  /*
+   * ═══ GÖLGE YOK ═══
+   * Kartlar çizgiyle ayrılır (referans "00 · İlke"). Gölge yalnız açılır
+   * menü, pencere ve yan panelde (`--shadow-pop`). Eski kart gölgesinin
+   * adları duruyor ki yüzlerce `shadow-kart` sınıfı kırılmasın; değerleri
+   * artık `none`.
+   */
+  --shadow-xs: none;
+  --shadow-card: none;
+  --shadow-hover: none;
+  --shadow-pop: 0 4px 8px -2px rgb(0 0 0 / 0.08), 0 20px 44px -12px rgb(0 0 0 / 0.2);
 
   /* Hareket: tek eğri, her yerde aynı his. */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /*
+   * ═══ CSS MODÜLLERİNİN ADLARI (`--t-*`) ═══
+   * `taslak`, `iyilestir`, `kreatif-zeka` ve `rehber` modülleri bu adlarla
+   * yazıldı ve her biri kendi kopyasını tanımlıyordu. Kopyalar silindi;
+   * adlar burada TEK KEZ token'lara bağlı.
+   */
+  --t-brand: var(--brand-primary);
+  --t-brand-accent: var(--brand-primary);
+  --t-brand-soft: var(--vurgu);
+  --t-brand-strong: var(--brand-legible);
+  --t-surface: var(--surface);
+  --t-muted: var(--surface-muted);
+  --t-sunken: var(--surface-sunken);
+  --t-line: var(--border);
+  --t-line2: var(--border-strong);
+  --t-ink: var(--text);
+  --t-ink-muted: var(--text-muted);
+  --t-ok: var(--ok);
+  --t-warn: var(--warn);
+  --t-warn-soft: var(--warn-soft);
+  --t-warn-strong: var(--warn-strong);
+  --t-danger: var(--danger);
+  --t-seri2: var(--seri2);
+  --t-shadow: var(--shadow-card);
+  --t-shadow-pop: var(--shadow-pop);
+  --t-ease: var(--ease-out);
+  --t-baslik: var(--baslik-font);
 }
 
+/*
+ * KARANLIK TEMA: zemin SİYAH, yüzey #0d0d0d, metin beyaz ve beyazın saydam
+ * tonları (referanstaki değerler). Eski mavi-gri (#13151c) kılavuzda yoktu.
+ * `data-theme` ile elle seçilen tema sistem tercihini eziyor; iki blok aynı
+ * değerleri taşıyor ve `tasarim-sistemi.spec.ts` ikisini karşılaştırıyor.
+ */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --surface: #13151c;
-    --surface-muted: #0b0d12;
-    --surface-sunken: #1b1e27;
-    --border: #262a35;
-    --text: #f3f5f9;
-    --text-muted: #9ba2b0;
-
-    /*
-     * KARANLIKTA ZEMİN KOYU TONA, METİN AÇIK TONA DÖNÜYOR. Aynı değerleri
-     * bırakmak, koyu sayfada göz alan beyaz kutular demekti.
-     */
-    --ok-soft: #0e2b1e;
-    --ok-strong: #6ee7b7;
-    --warn-soft: #2b2008;
-    --warn-strong: #fbbf24;
-    --danger-soft: #2c1315;
-    --danger-strong: #fca5a5;
-    --info-soft: #0b2434;
-    --info-strong: #7dd3fc;
-    /* Google'ın kendi karanlık tema karşılıkları. */
+  :root:not([data-theme='light']) {
+    --surface: #0d0d0d;
+    --surface-muted: #000000;
+    --surface-sunken: color-mix(in srgb, #ffffff 7%, #0d0d0d);
+    --border: color-mix(in srgb, #ffffff 12%, #0d0d0d);
+    --border-strong: color-mix(in srgb, #ffffff 24%, #0d0d0d);
+    --vurgu: color-mix(in srgb, var(--brand-primary) 15%, #0d0d0d);
+    --text: #ffffff;
+    --text-muted: color-mix(in srgb, #ffffff 66%, #0d0d0d);
+    --text-soluk: color-mix(in srgb, #ffffff 42%, #0d0d0d);
+    --ok: #34a853;
+    --info: #ffffff;
+    --warn-soft: color-mix(in srgb, #ff2400 15%, #0d0d0d);
+    --danger-soft: color-mix(in srgb, #ff2400 15%, #0d0d0d);
+    --danger-strong: color-mix(in srgb, #ff2400 65%, #ffffff);
+    --ok-soft: var(--surface-sunken);
+    --ok-strong: var(--text);
+    --warn-strong: var(--text);
+    --info-soft: var(--surface-sunken);
+    --info-strong: var(--text);
     --arama-baslik: #8ab4f8;
     --arama-adres: #bdc1c6;
-    --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.35);
-    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 0 0 1px rgb(255 255 255 / 0.02);
-    --shadow-hover: 0 2px 4px rgb(0 0 0 / 0.4), 0 16px 36px -10px rgb(0 0 0 / 0.7);
-    --shadow-pop: 0 10px 24px -6px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(255 255 255 / 0.04);
+    --shadow-pop: 0 10px 24px -6px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(255 255 255 / 0.06);
+    color-scheme: dark;
   }
+}
+:root[data-theme='dark'] {
+  --surface: #0d0d0d;
+  --surface-muted: #000000;
+  --surface-sunken: color-mix(in srgb, #ffffff 7%, #0d0d0d);
+  --border: color-mix(in srgb, #ffffff 12%, #0d0d0d);
+  --border-strong: color-mix(in srgb, #ffffff 24%, #0d0d0d);
+  --vurgu: color-mix(in srgb, var(--brand-primary) 15%, #0d0d0d);
+  --text: #ffffff;
+  --text-muted: color-mix(in srgb, #ffffff 66%, #0d0d0d);
+  --text-soluk: color-mix(in srgb, #ffffff 42%, #0d0d0d);
+  --ok: #34a853;
+  --info: #ffffff;
+  --warn-soft: color-mix(in srgb, #ff2400 15%, #0d0d0d);
+  --danger-soft: color-mix(in srgb, #ff2400 15%, #0d0d0d);
+  --danger-strong: color-mix(in srgb, #ff2400 65%, #ffffff);
+  --ok-soft: var(--surface-sunken);
+  --ok-strong: var(--text);
+  --warn-strong: var(--text);
+  --info-soft: var(--surface-sunken);
+  --info-strong: var(--text);
+  --arama-baslik: #8ab4f8;
+  --arama-adres: #bdc1c6;
+  --shadow-pop: 0 10px 24px -6px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(255 255 255 / 0.06);
+  color-scheme: dark;
 }
 
 /**
@@ -151,8 +274,25 @@
   --color-surface-muted: var(--surface-muted);
   --color-surface-sunken: var(--surface-sunken);
   --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
   --color-ink: var(--text);
   --color-ink-muted: var(--text-muted);
+  --color-ink-soluk: var(--text-soluk);
+  --color-vurgu: var(--vurgu);
+  --color-seri2: var(--seri2);
+  /* Yazı ölçeği: `text-11` … `text-28` (bkz. `--yazi-*`). */
+  --text-11: 0.6875rem;
+  --text-12: 0.75rem;
+  --text-13: 0.8125rem;
+  --text-14: 0.875rem;
+  --text-15: 0.9375rem;
+  --text-18: 1.125rem;
+  --text-24: 1.5rem;
+  --text-28: 1.75rem;
+  /* Yarıçap: `rounded-alan` 8, `rounded-kart` 16, `rounded-hap` tam. */
+  --radius-alan: 0.5rem;
+  --radius-kart: 1rem;
+  --radius-hap: 999px;
   --color-ok: var(--ok);
   --color-warn: var(--warn);
   --color-danger: var(--danger);
@@ -212,9 +352,12 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme='light']) {
     --brand-legible: color-mix(in srgb, var(--brand-primary) 65%, white);
   }
+}
+:root[data-theme='dark'] {
+  --brand-legible: color-mix(in srgb, var(--brand-primary) 65%, white);
 }
 
 @utility text-brand-strong {
@@ -484,92 +627,82 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/*
+ * SAYFA BAŞLIĞI referanstan ("01 · Sayfa başlığı"): 28 piksel, 800,
+ * telefonda 23. Elle `h1` yazılmaz; `SayfaBasligi` bu sınıfı kullanır.
+ */
 @utility sayfa-baslik {
   font-family: var(--baslik-font);
-  font-size: 1.625rem;
-  line-height: 2rem;
-  font-weight: 700;
-  letter-spacing: -0.025em;
+  font-size: 1.4375rem;
+  line-height: 1.2;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  @media (min-width: 900px) {
+    font-size: var(--yazi-28);
+  }
   color: var(--text);
   text-wrap: balance;
 }
 
 @layer components {
   /*
-   * ZEMİN: marka renginden türeyen iki çok hafif ışık. Sabit bir renk
-   * yazılmıyor — beyaz etiketli üründe her müşterinin rengi farklı ve ışık
-   * onun tonunu alıyor. `fixed`: uzun sayfada ışık içerikle kaymıyor.
+   * ZEMİN DÜZ (2026-10-14). Burada marka renginden türeyen iki radyal ışık
+   * vardı; kılavuzda degrade ve buğu yok ve kullanıcı kararıyla degrade her
+   * yerden kalktı. Referansta sayfa beyaz, kartlar çizgiyle ayrılıyor.
    */
   .panel {
-    background:
-      radial-gradient(1100px 520px at 105% -8%, color-mix(in srgb, var(--brand-primary) 7%, transparent), transparent 62%),
-      radial-gradient(900px 480px at -8% 108%, color-mix(in srgb, var(--brand-accent) 5%, transparent), transparent 60%),
-      var(--surface-muted);
-    background-attachment: fixed;
+    background: var(--surface);
   }
 
   /*
-   * KARTLAR. Etiket listesi dar (div, section, article, li, form, aside):
-   * aynı sınıf dizisini taşıyan `input` ve `button`lar kart değil, onlara
-   * gölge vermek form alanlarını kabartırdı.
+   * KARTLAR GÖLGESİZ. Etiket listesi dar (div, section, article, li, form,
+   * aside): aynı sınıf dizisini taşıyan `input` ve `button`lar kart değil.
+   * Kural duruyor ve `--shadow-card` artık `none`: bir ekran kendi gölgesini
+   * yazmışsa yine o kazanır (bekçi testi o sınıfları sayıyor).
    */
   .panel :is(div, section, article, li, form, aside, details).border-line.bg-surface:is(.rounded-xl, .rounded-2xl) {
     box-shadow: var(--shadow-card);
-    transition:
-      box-shadow 0.3s var(--ease-out),
-      transform 0.3s var(--ease-out),
-      border-color 0.3s var(--ease-out);
+    transition: border-color 0.15s;
   }
   .panel :is(div, section, article, li, form, details).border-line.bg-surface.rounded-lg {
     box-shadow: var(--shadow-xs);
   }
 
   /*
-   * TIKLANAN KART YÜKSELİYOR — tıklanmayan yükselmiyor. Hover'da kalkan ama
-   * hiçbir şey yapmayan bir kart, kullanıcıya olmayan bir eylem vaat eder.
+   * TIKLANAN KART: kenar koyulaşır ve iki piksel kalkar (referans `.secim`).
+   * Tıklanmayan kart kıpırdamaz: hover'da kalkan ama hiçbir şey yapmayan
+   * bir kart olmayan bir eylem vaat eder. Gölge yok.
    */
   .panel :is(a, button).border-line:is(.rounded-xl, .rounded-2xl):not(:disabled) {
     transition:
-      box-shadow 0.3s var(--ease-out),
-      transform 0.3s var(--ease-out),
-      border-color 0.3s var(--ease-out),
-      background-color 0.2s;
+      transform 0.15s,
+      border-color 0.15s,
+      background-color 0.15s;
   }
   .panel :is(a, button).border-line:is(.rounded-xl, .rounded-2xl):not(:disabled):hover {
-    box-shadow: var(--shadow-hover);
     transform: translateY(-2px);
-    border-color: color-mix(in srgb, var(--brand-primary) 28%, var(--border));
+    border-color: var(--text);
   }
 
   /*
-   * BİRİNCİL DÜĞME: marka renginden vurgu rengine çok hafif bir geçiş ve
-   * marka tonunda bir parıltı. Düz dolgu, "tıklanabilir" ile "renkli kutu"
-   * arasındaki farkı yalnızca renge bırakıyordu.
+   * BİRİNCİL DÜĞME DÜZ KIRMIZI (kullanıcı kararı 2026-10-14). Burada
+   * markadan aksana bir degrade ve marka tonunda bir parıltı vardı; ikisi de
+   * kalktı. Üzerine gelince yalnız %6 koyulaşır (referans `.dg.ana`).
+   * DİKKAT: bu kural `@layer components` içinde ve bir ekranın kendi
+   * `bg-gradient-to-*` sınıfı (utilities) onu EZER. Elle yazılmış degrade
+   * sınıfları bu yüzden `tasarim-sistemi.spec.ts`in istisna listesinde
+   * sayılıyor; sayfa ajanları onları `Dugme`ye çevirerek boşaltıyor.
    */
   .panel :is(button, a).bg-brand {
-    background-image: linear-gradient(
-      135deg,
-      var(--brand-primary),
-      color-mix(in srgb, var(--brand-primary) 72%, var(--brand-accent))
-    );
-    box-shadow:
-      0 1px 2px rgb(16 24 40 / 0.1),
-      0 6px 16px -6px color-mix(in srgb, var(--brand-primary) 60%, transparent),
-      inset 0 1px 0 rgb(255 255 255 / 0.18);
+    background-image: none;
+    box-shadow: none;
     transition:
-      transform 0.2s var(--ease-out),
-      box-shadow 0.25s var(--ease-out),
+      background-color 0.15s,
+      border-color 0.15s,
       filter 0.15s;
   }
   .panel :is(button, a).bg-brand:not(:disabled):hover {
-    transform: translateY(-1px);
-    box-shadow:
-      0 2px 4px rgb(16 24 40 / 0.1),
-      0 10px 24px -8px color-mix(in srgb, var(--brand-primary) 70%, transparent),
-      inset 0 1px 0 rgb(255 255 255 / 0.22);
-  }
-  .panel :is(button, a).bg-brand:not(:disabled):active {
-    transform: translateY(0) scale(0.98);
+    filter: brightness(0.94);
   }
 
   /* İKİNCİL DÜĞMELER: basıldığını hissettiren küçük bir çökme. */
@@ -578,37 +711,30 @@ body {
   }
 
   /*
-   * BOŞ DURUMLAR. Panelde ~20 "henüz yok" kutusu var ve hepsi aynı kalıbı
-   * yazıyor (kesikli kenarlık + ortalı metin). Ortalanmış düz metin
-   * olarak duruyorlardı: ikon yok, hiyerarşi yok, ekran "bozuk mu yoksa
-   * gerçekten boş mu" sorusunu cevaplamıyordu. Kalıba bağlandı: üstte marka
-   * tonlu bir ikon dairesi, hafif noktalı zemin, başlık satırı öne çıkıyor.
-   * `border-line` şartı rapor belgesini DIŞARIDA tutuyor (o slate paleti
-   * kullanıyor ve PDF ile aynı görünmek zorunda).
+   * BOŞ DURUMLAR (referans "06 · Hâller" `.hal`). Panelde ~20 "henüz yok"
+   * kutusu aynı kalıbı yazıyor (kesikli kenarlık + ortalı metin) ve kalıba
+   * bağlı. Burada önce marka tonlu radyal ışık, noktalı zemin ve kırmızı
+   * halkalı bir ikon dairesi vardı; degrade kalktı (2026-10-14). Bugün:
+   * kesikli güçlü çizgi, düz zemin, 36 piksellik GRİ ikon karosu.
+   * `border-line` şartı rapor belgesini DIŞARIDA tutuyor (o PDF ile aynı
+   * görünmek zorunda). Yeni ekranda bu kalıp değil `BosDurum` kullanılır.
    */
   .panel :is(div, section, li, p).border-dashed.border-line.text-center {
-    background-image:
-      radial-gradient(ellipse 60% 70% at 50% 0%, color-mix(in srgb, var(--brand-primary) 6%, transparent), transparent 70%),
-      radial-gradient(color-mix(in srgb, var(--text) 7%, transparent) 1px, transparent 1px);
-    background-size: auto, 14px 14px;
-    border-color: color-mix(in srgb, var(--text-muted) 30%, var(--border));
+    border-color: var(--border-strong);
   }
   .panel :is(div, section, li).border-dashed.border-line.text-center::before {
     content: '';
     display: block;
-    width: 2.75rem;
-    height: 2.75rem;
-    margin: 0 auto 0.875rem;
-    border-radius: 9999px;
+    width: 2.25rem;
+    height: 2.25rem;
+    margin: 0 auto 0.75rem;
+    border-radius: 10px;
     background:
-      no-repeat center / 1.25rem
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%238a93a4' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 11.5 5.2 5a1 1 0 0 1 .95-.7h7.7a1 1 0 0 1 .95.7L17 11.5M3 11.5V15a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5M3 11.5h4l1 2h4l1-2h4'/%3E%3C/svg%3E"),
-      color-mix(in srgb, var(--brand-primary) 12%, transparent);
-    /* İKON NÖTR GRİ, marka renginde değil: arka plan görselinde
-       `currentColor` ya da CSS değişkeni kullanılamıyor ve marka rengi
-       çalışma anında değişiyor. Gri iki temada da okunuyor; marka tonu
-       dairenin kendisinde. */
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand-primary) 18%, transparent);
+      no-repeat center / 1.125rem
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23302e2d' stroke-opacity='.64' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 11.5 5.2 5a1 1 0 0 1 .95-.7h7.7a1 1 0 0 1 .95.7L17 11.5M3 11.5V15a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5M3 11.5h4l1 2h4l1-2h4'/%3E%3C/svg%3E"),
+      var(--surface-sunken);
+    /* İKON GRİ: arka plan görselinde `currentColor` ya da CSS değişkeni
+       kullanılamıyor; kılavuzun grisi %64 saydamlıkla iki temada da okunuyor. */
   }
   .panel :is(div, section, li).border-dashed.border-line.text-center > :first-child:is(h2, h3, p) {
     font-size: 0.9375rem;
@@ -619,7 +745,7 @@ body {
     transition: background-color 0.15s;
   }
   .panel tbody tr:hover {
-    background-color: color-mix(in srgb, var(--surface-sunken) 55%, transparent);
+    background-color: var(--surface-muted);
   }
   /*
    * RAKAM HÜCRESİ SATIR KIRMIYOR. Bütçe tablosunda "16.968,49 ₺" ikiye
@@ -650,14 +776,16 @@ body {
 }
 
 /*
- * ODAKTA ALAN: marka tonunda bir hale. KATMANSIZ, çünkü genel odak kuralı
- * (yukarıda) da katmansız ve alanlara 2 piksellik bir dış çizgi çiziyor;
- * alan için hale ondan daha okunaklı. Yalnızca form alanları.
+ * ODAKTA ALAN: kenar siyaha döner, çevresinde 3 piksellik gri hale
+ * (referans `.girdi:focus`). Önce kırmızı haleydi; kırmızı artık yalnız
+ * hata ve birincil eylem, odaklanmış sağlam bir alan "hatalı" okunuyordu.
+ * KATMANSIZ, çünkü genel odak kuralı da katmansız ve alanlara 2 piksellik
+ * bir dış çizgi çiziyor; alan için hale ondan daha okunaklı.
  */
 .panel :where(input:not([type='checkbox'], [type='radio'], [type='range'], [type='file'], [type='color']), select, textarea):focus-visible {
   outline: none;
-  border-color: color-mix(in srgb, var(--brand-primary) 65%, var(--border));
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand-primary) 16%, transparent);
+  border-color: var(--text);
+  box-shadow: 0 0 0 3px var(--surface-sunken);
 }
 
 /*
@@ -847,7 +975,7 @@ body {
  */
 .mail-onizleme {
   line-height: 1.5;
-  color: var(--ink);
+  color: var(--text);
   /*
    * KAPSAMA. Beyaz liste `style` özniteliğini GEÇİRİYOR (imzalar renk ve
    * hizayı onunla taşıyor) ve mail gövdesi artık panelde de çiziliyor.
@@ -902,7 +1030,7 @@ body {
 }
 .mail-onizleme th,
 .mail-onizleme td {
-  border: 1px solid var(--line);
+  border: 1px solid var(--border);
   padding: 0.3em 0.55em;
   text-align: left;
 }
@@ -910,7 +1038,7 @@ body {
 .mail-onizleme hr {
   margin: 1em 0;
   border: 0;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--border);
 }
 .mail-onizleme img {
   max-width: 100%;
@@ -932,5 +1060,25 @@ body {
 @keyframes pay-cubugu-dol {
   from {
     transform: scaleX(0);
+  }
+}
+
+/*
+ * ═══ HAREKET AZALTILMIŞSA PANELDE HİÇBİR ŞEY KIPIRDAMAZ ═══
+ *
+ * Referansın son kuralı (`tasarim-sistemi.html`). Giriş animasyonları zaten
+ * `no-preference` altında atanıyordu ama geçişler (kartın iki piksel
+ * kalkması, pencerenin kayması, çekmece) her kullanıcıda çalışıyordu.
+ * Süre sıfırlanıyor, özellik değil: öğe DOM'dan çıkmadığı ve son hâline
+ * anında geçtiği için bilgi kaybolmuyor (`transition: none` geçiş bitiş
+ * olayını hiç tetiklemezdi ve onu bekleyen kod askıda kalırdı).
+ */
+@media (prefers-reduced-motion: reduce) {
+  .panel *,
+  .panel *::before,
+  .panel *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
   }
 }

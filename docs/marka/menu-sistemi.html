@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Advetics Menü Sistemi</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600;700&display=swap">
+<style>
+/* Düzen: canlı bir panel kabuğu (tıklanabilir) + altında menü türlerinin kuralları. Tasarım sistemiyle aynı token'lar. */
+:root{
+  --kirmizi:#ff2400; --gri:#302e2d;
+  --bg:#ffffff; --zemin:rgba(48,46,45,.035); --yuzey:#ffffff; --metin:#000000;
+  --ikincil:rgba(48,46,45,.64); --soluk:rgba(48,46,45,.42); --cizgi:rgba(48,46,45,.12); --cizgi2:rgba(48,46,45,.22);
+  --dolgu:rgba(48,46,45,.06); --vurgu:rgba(255,36,0,.07); --ok:#1e8e3e;
+  --golge:0 12px 32px rgba(0,0,0,.12),0 2px 6px rgba(0,0,0,.06);
+  --baslik:"Montserrat",system-ui,sans-serif; --govde:"Open Sans",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#000000; --zemin:rgba(255,255,255,.03); --yuzey:#121212; --metin:#ffffff; --ikincil:rgba(255,255,255,.66); --soluk:rgba(255,255,255,.42);
+  --cizgi:rgba(255,255,255,.12); --cizgi2:rgba(255,255,255,.24); --dolgu:rgba(255,255,255,.07); --vurgu:rgba(255,36,0,.16); --ok:#34a853;
+  --golge:0 12px 32px rgba(0,0,0,.6); color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#000000; --zemin:rgba(255,255,255,.03); --yuzey:#121212; --metin:#ffffff; --ikincil:rgba(255,255,255,.66); --soluk:rgba(255,255,255,.42);
+  --cizgi:rgba(255,255,255,.12); --cizgi2:rgba(255,255,255,.24); --dolgu:rgba(255,255,255,.07); --vurgu:rgba(255,36,0,.16); --ok:#34a853; --golge:0 12px 32px rgba(0,0,0,.6); color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--metin);font:400 14px/1.55 var(--govde);-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--baslik);margin:0;text-wrap:balance}
+button{font:inherit;color:inherit}
+svg.i{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+/* ── ÖNİZLEME ÇERÇEVESİ ── */
+.cerceve{max-width:1240px;margin:24px auto 0;padding:0 16px}
+.cerceve-ust{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap}
+.cerceve-ust h1{font-size:22px}
+.cerceve-ust p{margin:2px 0 0;color:var(--ikincil);font-size:13px}
+.ekran{border:1px solid var(--cizgi);border-radius:16px;overflow:hidden;height:720px;display:grid;grid-template-columns:256px minmax(0,1fr);background:var(--bg);position:relative}
+.ekran.mobil{grid-template-columns:1fr;max-width:390px;margin:0 auto;height:760px}
+
+/* ── ANA MENÜ ── */
+.menu{border-right:1px solid var(--cizgi);display:flex;flex-direction:column;min-height:0;background:var(--bg)}
+.menu-ust{padding:16px 14px 10px;display:grid;gap:12px}
+.logo{font:800 20px/1 var(--baslik);letter-spacing:-.02em;position:relative;display:inline-block;margin:4px 6px 4px}
+.logo i{position:absolute;width:6px;height:6px;border-radius:50%;background:var(--kirmizi);top:0;right:-8px}
+.secici{display:grid;grid-template-columns:32px minmax(0,1fr) 16px;gap:10px;align-items:center;border:1px solid var(--cizgi);border-radius:12px;padding:8px 10px;background:var(--yuzey);cursor:pointer;text-align:left;width:100%}
+.secici:hover{border-color:var(--cizgi2)}
+.secici .harf{width:32px;height:32px;border-radius:8px;background:var(--gri);color:#fff;display:grid;place-items:center;font:800 13px var(--baslik)}
+.secici small{display:block;color:var(--ikincil);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.secici b{display:block;font-weight:700;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.olustur{display:flex;align-items:center;justify-content:center;gap:8px;height:40px;border-radius:999px;background:var(--kirmizi);color:#fff;border:0;font-weight:700;font-size:13.5px;cursor:pointer}
+.olustur:hover{filter:brightness(.94)}
+.menu-liste{flex:1;overflow:auto;padding:4px 10px 10px}
+.grup{font:700 11px/1 var(--govde);letter-spacing:.08em;text-transform:uppercase;color:var(--soluk);margin:16px 10px 6px}
+.oge{display:flex;align-items:center;gap:12px;height:38px;padding:0 10px;border-radius:10px;text-decoration:none;color:var(--metin);font-weight:600;font-size:13.5px;cursor:pointer;border:0;background:none;width:100%;text-align:left;position:relative}
+.oge:hover{background:var(--dolgu)}
+.oge .i{color:var(--ikincil)}
+.oge[aria-current="page"]{background:var(--vurgu);color:var(--kirmizi)}
+.oge[aria-current="page"] .i{color:var(--kirmizi)}
+.oge .sayac{margin-left:auto;font:700 11px var(--govde);background:var(--kirmizi);color:#fff;border-radius:999px;padding:2px 7px}
+.menu-alt{border-top:1px solid var(--cizgi);padding:10px}
+.kullanici{display:grid;grid-template-columns:32px minmax(0,1fr) 16px;gap:10px;align-items:center;padding:8px;border-radius:10px;cursor:pointer;border:0;background:none;width:100%;text-align:left}
+.kullanici:hover{background:var(--dolgu)}
+.avatar{width:32px;height:32px;border-radius:50%;background:var(--dolgu);display:grid;place-items:center;font:700 12px var(--govde)}
+.kullanici small{display:block;color:var(--ikincil);font-size:11.5px}
+
+/* ── ÜST ÇUBUK ── */
+.sag{display:flex;flex-direction:column;min-width:0;min-height:0}
+.ust{height:56px;border-bottom:1px solid var(--cizgi);display:flex;align-items:center;gap:8px;padding:0 20px;flex:none}
+.kirinti{flex:1;min-width:0;font-size:13px;color:var(--ikincil);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kirinti b{color:var(--metin);font-weight:600}
+.ikon-dg{width:36px;height:36px;border-radius:999px;border:0;background:none;display:grid;place-items:center;cursor:pointer;color:var(--ikincil);position:relative}
+.ikon-dg:hover{background:var(--dolgu);color:var(--metin)}
+.ikon-dg .nokta{position:absolute;top:7px;right:8px;width:8px;height:8px;border-radius:50%;background:var(--kirmizi);border:2px solid var(--bg)}
+.hamburger{display:none}
+
+/* ── SAYFA + SEKMELER ── */
+.govde{flex:1;overflow:auto;padding:24px 28px}
+.sb .ust-y{font:700 12px/1 var(--govde);letter-spacing:.08em;text-transform:uppercase;color:var(--kirmizi)}
+.sb h2{font-size:26px;font-weight:800;margin-top:6px}
+.sb p{margin:4px 0 0;color:var(--ikincil)}
+.sb-sat{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.dg{display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 18px;border-radius:999px;font-weight:700;font-size:13.5px;border:1px solid var(--cizgi2);background:var(--yuzey);cursor:pointer}
+.dg.ana{background:var(--kirmizi);border-color:var(--kirmizi);color:#fff}
+.dg.kucuk{height:32px;padding:0 12px;font-size:12.5px}
+.sekmeler{display:flex;gap:2px;border-bottom:1px solid var(--cizgi);margin:20px 0 22px;overflow-x:auto;scrollbar-width:none}
+.sekme{border:0;background:none;padding:12px 14px;font-weight:700;font-size:13.5px;color:var(--ikincil);border-bottom:3px solid transparent;margin-bottom:-1px;cursor:pointer;white-space:nowrap;display:flex;gap:8px;align-items:center}
+.sekme:hover{color:var(--metin)}
+.sekme[aria-selected="true"]{color:var(--metin);border-bottom-color:var(--kirmizi)}
+.sekme .s{font:700 11px var(--govde);background:var(--dolgu);border-radius:999px;padding:1px 7px;color:var(--ikincil)}
+.sekme .durum{width:7px;height:7px;border-radius:50%;background:var(--kirmizi)}
+.icerik-kutu{border:1px dashed var(--cizgi2);border-radius:16px;min-height:300px;display:grid;place-items:center;color:var(--soluk);text-align:center;padding:24px}
+
+/* ── AÇILIR MENÜ (tek bileşen) ── */
+.acilir{position:absolute;z-index:20;background:var(--yuzey);border:1px solid var(--cizgi);border-radius:14px;box-shadow:var(--golge);padding:6px;min-width:240px;opacity:0;transform:translateY(-4px) scale(.98);transform-origin:top left;pointer-events:none;visibility:hidden;transition:opacity .14s ease,transform .14s ease,visibility 0s .14s}
+.acilir.acik{opacity:1;transform:none;pointer-events:auto;visibility:visible;transition:opacity .14s ease,transform .14s ease}
+.acilir .baslik{font:700 11px/1 var(--govde);letter-spacing:.08em;text-transform:uppercase;color:var(--soluk);padding:10px 10px 6px}
+.acilir button,.acilir a{display:flex;align-items:center;gap:10px;width:100%;height:36px;padding:0 10px;border-radius:8px;border:0;background:none;cursor:pointer;font-size:13.5px;font-weight:600;color:var(--metin);text-decoration:none;text-align:left}
+.acilir button:hover,.acilir a:hover{background:var(--dolgu)}
+.acilir .i{color:var(--ikincil)}
+.acilir .ayir{height:1px;background:var(--cizgi);margin:6px 4px}
+.acilir .tehlike{color:var(--kirmizi)} .acilir .tehlike .i{color:var(--kirmizi)}
+.acilir .ip{margin-left:auto;font-size:12px;color:var(--soluk);font-weight:400}
+.acilir .secili{background:var(--vurgu)}
+.acilir .secili .tik{margin-left:auto;color:var(--kirmizi)}
+.ara{display:flex;align-items:center;gap:8px;height:36px;border:1px solid var(--cizgi2);border-radius:8px;padding:0 10px;margin:4px 4px 6px}
+.ara input{border:0;outline:none;background:none;flex:1;font:inherit;color:var(--metin);min-width:0}
+.ws-satir small{display:block;font-weight:400;color:var(--ikincil);font-size:11.5px}
+.ws-satir span.metin{display:flex;flex-direction:column;align-items:flex-start;line-height:1.25}
+.acilir .ws-satir{height:auto;padding:8px 10px}
+.hal-nokta{width:8px;height:8px;border-radius:50%;background:var(--ok);flex:none}
+.hal-nokta.eksik{background:var(--kirmizi)}
+
+/* ── MOBİL ÇEKMECE ── */
+.cekmece-perde{position:absolute;inset:0;background:rgba(0,0,0,.35);opacity:0;visibility:hidden;transition:opacity .2s,visibility 0s .2s;z-index:15}
+.cekmece{position:absolute;top:0;bottom:0;left:0;width:300px;max-width:86%;background:var(--bg);z-index:16;transform:translateX(-100%);transition:transform .22s ease;display:flex;flex-direction:column;border-right:1px solid var(--cizgi)}
+.mobil.cekmece-acik .cekmece{transform:none}
+.mobil.cekmece-acik .cekmece-perde{opacity:1;visibility:visible;transition:opacity .2s}
+.mobil .menu{display:none}
+.mobil .hamburger{display:grid}
+.mobil .govde{padding:18px 16px}
+.mobil .sb h2{font-size:22px}
+.mobil .ust{padding:0 8px 0 4px}
+.mobil .masa{display:none}
+
+/* ── KURALLAR ── */
+.kurallar{max-width:1240px;margin:36px auto 80px;padding:0 16px;display:grid;gap:28px}
+.kural-bas{border-top:3px solid var(--metin);padding-top:12px}
+.kural-bas .no{font:800 12px var(--baslik);letter-spacing:.1em;color:var(--kirmizi)}
+.kural-bas h2{font-size:19px;margin-top:2px}
+.kural-bas p{margin:4px 0 0;color:var(--ikincil);max-width:76ch}
+.tablo{border:1px solid var(--cizgi);border-radius:16px;overflow:hidden}
+.tablo table{width:100%;border-collapse:collapse;font-size:13.5px}
+.tablo th{text-align:left;font-size:12px;color:var(--ikincil);font-weight:600;padding:10px 16px;border-bottom:1px solid var(--cizgi);background:var(--zemin)}
+.tablo td{padding:11px 16px;border-bottom:1px solid var(--cizgi);vertical-align:top}
+.tablo tr:last-child td{border-bottom:0}
+.tablo-sar{overflow-x:auto}
+.kucuk-not{color:var(--ikincil);font-size:12.5px}
+
+@media (max-width:900px){
+  .ekran:not(.mobil){grid-template-columns:1fr}
+  .ekran:not(.mobil) .menu{display:none}
+  .ekran:not(.mobil) .hamburger{display:grid}
+}
+@media (prefers-reduced-motion: reduce){*,*::before,*::after{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="ev" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
+  <symbol id="hedef" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/></symbol>
+  <symbol id="cuzdan" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M16 12h2M3 9h18"/></symbol>
+  <symbol id="roket" viewBox="0 0 24 24"><path d="M5 15c-1 1-2 4-2 6 2 0 5-1 6-2M14 4c3-1 6-1 6-1s0 3-1 6l-6 6-5-5z"/><circle cx="15" cy="9" r="1.5"/></symbol>
+  <symbol id="arti" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="tablo" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10"/></symbol>
+  <symbol id="kisi" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></symbol>
+  <symbol id="ayar" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4.9a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.5a7 7 0 0 0-2 1.2l-2.4-.9-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-.9a7 7 0 0 0 2 1.2L10 21h4l.5-2.5a7 7 0 0 0 2-1.2l2.4.9 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z"/></symbol>
+  <symbol id="kural" viewBox="0 0 24 24"><path d="M4 6h10M4 12h16M4 18h7"/><circle cx="18" cy="6" r="2"/><circle cx="15" cy="18" r="2"/></symbol>
+  <symbol id="rapor" viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7z M14 3v5h5 M10 13h6 M10 17h6"/></symbol>
+  <symbol id="marka" viewBox="0 0 24 24"><path d="M4 7l8-4 8 4-8 4z M4 12l8 4 8-4 M4 17l8 4 8-4"/></symbol>
+  <symbol id="resim" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></symbol>
+  <symbol id="zil" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z M10 21h4"/></symbol>
+  <symbol id="soru" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17h.01"/></symbol>
+  <symbol id="yenile" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/></symbol>
+  <symbol id="asagi" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></symbol>
+  <symbol id="menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+  <symbol id="nokta3" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></symbol>
+  <symbol id="cop" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></symbol>
+  <symbol id="kalem" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></symbol>
+  <symbol id="kopya" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V4H4v12h4"/></symbol>
+  <symbol id="duraklat" viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></symbol>
+  <symbol id="cikis" viewBox="0 0 24 24"><path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10"/></symbol>
+  <symbol id="kalkan" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z"/></symbol>
+  <symbol id="ara" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></symbol>
+  <symbol id="tik" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></symbol>
+</svg>
+
+<div class="cerceve">
+  <div class="cerceve-ust">
+    <div><h1>Menü sistemi</h1><p>Tıklanabilir: workspace seçici, + Oluştur, sekmeler, ⋯, bildirim, kullanıcı ve mobil çekmece.</p></div>
+    <div style="display:flex;gap:8px"><button class="dg kucuk" id="gorunum" type="button">Mobil görünüm</button><button class="dg kucuk" id="tema" type="button">Tema</button></div>
+  </div>
+
+  <div class="ekran" id="ekran">
+    <!-- ANA MENÜ (masaüstü) -->
+    <nav class="menu" aria-label="Ana menü" id="anaMenu"></nav>
+
+    <div class="sag">
+      <header class="ust">
+        <button class="ikon-dg hamburger" id="hamb" type="button" aria-label="Menüyü aç"><svg class="i"><use href="#menu"/></svg></button>
+        <span class="kirinti"><span class="masa">Profaj Reklamcılık › Ege Birlik Yapı › </span><b id="kirSayfa">Marka Merkezi</b></span>
+        <button class="ikon-dg masa" type="button" aria-label="Ara"><svg class="i"><use href="#ara"/></svg></button>
+        <button class="ikon-dg masa" type="button" aria-label="Verileri yenile"><svg class="i"><use href="#yenile"/></svg></button>
+        <button class="ikon-dg" type="button" aria-label="Yardım"><svg class="i"><use href="#soru"/></svg></button>
+        <button class="ikon-dg" id="zilDg" type="button" aria-label="Bildirimler" data-acilir="zil"><svg class="i"><use href="#zil"/></svg><span class="nokta"></span></button>
+      </header>
+      <div class="govde">
+        <div class="sb-sat sb"><div><span class="ust-y" id="ustY">Base</span><h2 id="baslik">Marka Merkezi</h2><p id="aciklama">Seçili workspace'in kurulumu, marka bilgileri ve ayarları.</p></div>
+          <div style="display:flex;gap:8px"><button class="dg" type="button" data-acilir="satir" id="ucNokta" aria-label="Diğer eylemler"><svg class="i"><use href="#nokta3"/></svg></button><button class="dg ana" type="button" id="anaEylem">Sihirbazla tamamla</button></div></div>
+        <div class="sekmeler" role="tablist" id="sekmeler"></div>
+        <div class="icerik-kutu" id="icerik"></div>
+      </div>
+    </div>
+
+    <!-- AÇILIR MENÜLER (tek bileşen, dört kullanım) -->
+    <div class="acilir" id="ac-ws" role="menu" style="top:70px;left:14px;width:320px">
+      <div class="ara"><svg class="i" style="color:var(--soluk)"><use href="#ara"/></svg><input placeholder="Şirket ya da workspace ara" aria-label="Ara"></div>
+      <div class="baslik">Ege Birlik Yapı</div>
+      <button class="ws-satir secili" type="button"><span class="hal-nokta"></span><span class="metin">Seasight Konutları<small>Kurulum 10 / 10</small></span><svg class="i tik"><use href="#tik"/></svg></button>
+      <button class="ws-satir" type="button"><span class="hal-nokta eksik"></span><span class="metin">Narlıdere Konutları<small>4 iş kaldı</small></span></button>
+      <div class="baslik">Diğer şirketler</div>
+      <button class="ws-satir" type="button"><span class="hal-nokta"></span><span class="metin">MySun<small>3 workspace</small></span><span class="ip">›</span></button>
+      <button class="ws-satir" type="button"><span class="hal-nokta"></span><span class="metin">Metropol Hastanesi<small>2 workspace</small></span><span class="ip">›</span></button>
+      <div class="ayir"></div>
+      <button type="button"><svg class="i"><use href="#tablo"/></svg>Tüm şirketler</button>
+      <button type="button"><svg class="i"><use href="#arti"/></svg>Yeni şirket / workspace aç</button>
+    </div>
+    <div class="acilir" id="ac-olustur" role="menu" style="top:118px;left:14px;width:228px">
+      <button type="button"><svg class="i"><use href="#roket"/></svg>Reklam<span class="ip">AdvCampaign</span></button>
+      <button type="button"><svg class="i"><use href="#hedef"/></svg>Strateji<span class="ip">AdvStrategy</span></button>
+      <button type="button"><svg class="i"><use href="#resim"/></svg>Gönderi öne çıkar<span class="ip">Boost</span></button>
+      <div class="ayir"></div>
+      <button type="button"><svg class="i"><use href="#kural"/></svg>Kural</button>
+      <button type="button"><svg class="i"><use href="#rapor"/></svg>Rapor</button>
+      <button type="button"><svg class="i"><use href="#resim"/></svg>Görsel yükle</button>
+    </div>
+    <div class="acilir" id="ac-satir" role="menu" style="top:128px;right:200px;transform-origin:top right">
+      <button type="button"><svg class="i"><use href="#kalem"/></svg>Düzenle</button>
+      <button type="button"><svg class="i"><use href="#kopya"/></svg>Kopyala</button>
+      <button type="button"><svg class="i"><use href="#duraklat"/></svg>Duraklat</button>
+      <div class="ayir"></div>
+      <button type="button" class="tehlike"><svg class="i"><use href="#cop"/></svg>Arşivle</button>
+    </div>
+    <div class="acilir" id="ac-zil" role="menu" style="top:52px;right:12px;width:340px;transform-origin:top right">
+      <div class="baslik">Bildirimler · 2</div>
+      <a href="#"><span class="hal-nokta eksik"></span><span class="metin" style="display:flex;flex-direction:column;line-height:1.3">Google ödemesi eksik<small style="color:var(--ikincil);font-weight:400">Narlıdere Konutları · 2 saat önce</small></span></a>
+      <a href="#"><span class="hal-nokta"></span><span class="metin" style="display:flex;flex-direction:column;line-height:1.3">Strateji onaylandı<small style="color:var(--ikincil);font-weight:400">Seasight · dün</small></span></a>
+      <div class="ayir"></div>
+      <button type="button">Tümünü gör</button>
+    </div>
+    <div class="acilir" id="ac-kul" role="menu" style="bottom:66px;left:14px;width:228px;transform-origin:bottom left">
+      <div class="baslik">Yusuf Algan</div>
+      <button type="button"><svg class="i"><use href="#kisi"/></svg>Hesabım</button>
+      <button type="button"><svg class="i"><use href="#kalkan"/></svg>İki adımlı giriş</button>
+      <button type="button"><svg class="i"><use href="#ayar"/></svg>Tema<span class="ip">Sistem</span></button>
+      <div class="ayir"></div>
+      <button type="button" class="tehlike"><svg class="i"><use href="#cikis"/></svg>Çıkış yap</button>
+    </div>
+
+    <!-- MOBİL ÇEKMECE -->
+    <div class="cekmece-perde" id="perde"></div>
+    <aside class="cekmece" id="cekmece" aria-label="Menü"></aside>
+  </div>
+</div>
+
+<section class="kurallar">
+  <div class="kural-bas"><span class="no">KURAL 1</span><h2>Dört katman, her ekranda aynı yerde</h2><p>Kullanıcı nereye tıklayacağını aramaz: ana menü solda, workspace seçici menünün en üstünde, sayfanın alt bölümleri başlığın altında sekme, satır eylemleri ⋯ menüsünde.</p></div>
+  <div class="tablo"><div class="tablo-sar"><table>
+    <thead><tr><th>Katman</th><th>Biçim</th><th>Nerede</th><th>Ne için</th></tr></thead>
+    <tbody>
+      <tr><td><b>Ana menü</b></td><td>Sol sütun, grup başlıklı liste, seçili öğe kırmızı zemin + kırmızı ikon</td><td>Masaüstü solda; mobilde soldan açılan çekmece</td><td>Sayfalar arası geçiş. Yedi bölüm aynen kalır</td></tr>
+      <tr><td><b>Workspace seçici</b></td><td>Menünün en üstünde kutu, açılınca arama + şirket grupları + durum noktası</td><td>Masaüstü menü başı; mobilde çekmecenin başı</td><td>Hangi workspace'le çalışıldığı. Kurulumu eksik olan kırmızı nokta</td></tr>
+      <tr><td><b>+ Oluştur</b></td><td>Seçicinin altında tek kırmızı hap düğme, açılır menü</td><td>Her sayfada aynı yer</td><td>Reklam, strateji, boost, kural, rapor, görsel. Oluşturma yolları tek kapıdan</td></tr>
+      <tr><td><b>Sekmeler</b></td><td>Başlığın altında alt çizgili sekme, sayıyla ya da kırmızı noktayla</td><td>Alt bölümü olan her sayfa</td><td>Ayarlar, Marka Merkezi, Varlıklar, Raporlar, Reklam Yöneticisi seviyeleri. Dikey iç menü kalkar</td></tr>
+      <tr><td><b>⋯ menüsü</b></td><td>Tek açılır menü bileşeni: ikon + metin, ayraç, tehlikeli eylem en altta kırmızı</td><td>Satır sonu, kart başlığı, sayfa başlığı</td><td>Düzenle, kopyala, duraklat, arşivle. Sık kullanılan tek eylem dışarıda düğme olarak kalır</td></tr>
+      <tr><td><b>Üst çubuk</b></td><td>Kırıntı solda; sağda yalnız ikon: ara, yenile, yardım, bildirim</td><td>Her sayfa</td><td>Kullanıcı ve tema menüsü sol altta, kullanıcı kartında</td></tr>
+    </tbody>
+  </table></div></div>
+
+  <div class="kural-bas"><span class="no">KURAL 2</span><h2>Bugünden yeniye</h2><p>Aynı işi yapan menülerin hepsi tek bileşene iner.</p></div>
+  <div class="tablo"><div class="tablo-sar"><table>
+    <thead><tr><th>Bugün</th><th>Yeni</th></tr></thead>
+    <tbody>
+      <tr><td>Marka Merkezi'nin dikey iç menüsü</td><td>Başlık altı sekmeler: Kurulum · Marka · Workspace bilgileri (eksik varsa kırmızı nokta)</td></tr>
+      <tr><td>Ayarlar sekmeleri (ayrı alt çizgi biçimi, genişlik her sekmede değişiyor)</td><td>Aynı sekme bileşeni, sabit genişlik: Şirketler · Platform bağlantıları · Ekip ve güvenlik</td></tr>
+      <tr><td>Raporlar sekmeleri, Varlıklar sekmeleri, Reklam Yöneticisi seviye hapları, Genel Bakış platform segmenti</td><td>Bölüm geçişi = sekme. Süzgeç (Tümü / Meta / Google, tarih) = bölümlü hap seçici, sekme değil</td></tr>
+      <tr><td>Kapsam seçici açılır listesi, kullanıcı menüsü, bildirim zili, satır ⋯ menüleri (her biri ayrı yazılmış)</td><td>Tek açılır menü bileşeni; dördü aynı görünüş ve klavye davranışı</td></tr>
+      <tr><td>"Reklam oluştur" düğmesi bazı sayfaların başlığında, bazılarında içerikte</td><td>Menüdeki "+ Oluştur" her zaman; sayfanın kendi birincil eylemi başlığın sağında</td></tr>
+      <tr><td>Hesabım ad kartından, Ayarlar menünün altında, tema yok</td><td>Sol altta kullanıcı kartı: Hesabım, iki adımlı giriş, tema, çıkış</td></tr>
+    </tbody>
+  </table></div></div>
+  <p class="kucuk-not">Açılır menü ve çekmece DOM'dan çıkmaz, görünürlüğü geçişle değişir; Esc kapatır, ok tuşları gezer, hareket azaltma tercihinde animasyon yok. Müşteri hesabı menüde yalnız kendi dört ekranını ve "+ Oluştur" olmadan görür.</p>
+</section>
+
+<script>
+(function(){
+  var MENU=[
+    {o:'Genel Bakış',i:'ev'},
+    {g:'Planla'},{o:'AdvStrategy',i:'hedef'},{o:'Aylık Bütçe',i:'cuzdan'},
+    {g:'Oluştur'},{o:'Akıllı Boost',i:'roket',s:3},{o:'AdvCampaign',i:'arti'},
+    {g:'Yönet'},{o:'Reklam Yöneticisi',i:'tablo'},{o:'Potansiyel Müşteriler',i:'kisi',s:12},
+    {g:'İyileştir'},{o:'Kurallar',i:'kural'},
+    {g:'Rapor'},{o:'Raporlar',i:'rapor'},
+    {g:'Base'},{o:'Marka Merkezi',i:'marka'},{o:'Varlıklar',i:'resim'},
+    {g:''},{o:'Ayarlar',i:'ayar'}
+  ];
+  var SAYFALAR={
+    'Marka Merkezi':{u:'Base',a:"Seçili workspace'in kurulumu, marka bilgileri ve ayarları.",e:'Sihirbazla tamamla',s:[['Kurulum','!'],['Marka'],['Workspace bilgileri']]},
+    'Ayarlar':{u:'Ajans',a:'Şirketler, platform bağlantıları ve ekip.',e:'Yeni workspace',s:[['Şirketler ve workspace\'ler'],['Platform bağlantıları','1'],['Ekip ve güvenlik']]},
+    'Varlıklar':{u:'Base',a:'Reklamlarda kullanılan görsel, kreatif, form ve kitleler.',e:'Görsel yükle',s:[['Görseller','148'],['Kreatifler','32'],['Formlar','6'],['Kitleler','4']]},
+    'Raporlar':{u:'Rapor',a:'Müşteriye giden rapor, şablon ve faturalar.',e:'Raporu gönder',s:[['Rapor'],['Şablonlar'],['Faturalar']]},
+    'Reklam Yöneticisi':{u:'Yönet',a:'Kampanya, set ve reklamlar tek tabloda.',e:'Yeni reklam',s:[['Hesaplar','4'],['Kampanyalar','18'],['Reklam setleri','41'],['Reklamlar','96']]},
+    'Genel Bakış':{u:'Ege Birlik Yapı',a:'Bu ay · 1 – 14 Ekim',e:'Reklam kur',s:[]},
+  };
+  var secili='Marka Merkezi', sekme=0;
+  function menuHtml(){
+    return '<div class="menu-ust"><span class="logo">Advetics<i></i></span>'+
+      '<button class="secici" type="button" data-acilir="ws"><span class="harf">EB</span><span style="min-width:0"><small>Ege Birlik Yapı</small><b>Seasight Konutları</b></span><svg class="i" style="color:var(--soluk)"><use href="#asagi"/></svg></button>'+
+      '<button class="olustur" type="button" data-acilir="olustur"><svg class="i"><use href="#arti"/></svg>Oluştur</button></div>'+
+      '<div class="menu-liste">'+MENU.map(function(m){
+        if(m.g!==undefined) return m.g?'<div class="grup">'+m.g+'</div>':'<div style="height:12px"></div>';
+        return '<button class="oge" type="button" data-sayfa="'+m.o+'"'+(m.o===secili?' aria-current="page"':'')+'><svg class="i"><use href="#'+m.i+'"/></svg>'+m.o+(m.s?'<span class="sayac">'+m.s+'</span>':'')+'</button>';
+      }).join('')+'</div>'+
+      '<div class="menu-alt"><button class="kullanici" type="button" data-acilir="kul"><span class="avatar">YA</span><span style="min-width:0"><b style="font-weight:600;font-size:13px">Yusuf Algan</b><small>Ajans yöneticisi</small></span><svg class="i" style="color:var(--soluk)"><use href="#nokta3"/></svg></button></div>';
+  }
+  var ekran=document.getElementById('ekran');
+  function ciz(){
+    document.getElementById('anaMenu').innerHTML=menuHtml();
+    document.getElementById('cekmece').innerHTML=menuHtml();
+    var p=SAYFALAR[secili]||{u:'',a:'Bu sayfanın içeriği.',e:'Yeni',s:[]};
+    document.getElementById('kirSayfa').textContent=secili;
+    document.getElementById('baslik').textContent=secili;
+    document.getElementById('ustY').textContent=p.u;
+    document.getElementById('aciklama').textContent=p.a;
+    document.getElementById('anaEylem').textContent=p.e;
+    var sk=document.getElementById('sekmeler');
+    sk.style.display=p.s.length?'flex':'none';
+    if(sekme>=p.s.length) sekme=0;
+    sk.innerHTML=p.s.map(function(x,i){return '<button class="sekme" role="tab" type="button" data-i="'+i+'" aria-selected="'+(i===sekme)+'">'+x[0]+(x[1]==='!'?'<span class="durum" title="Eksik var"></span>':x[1]?'<span class="s">'+x[1]+'</span>':'')+'</button>';}).join('');
+    document.getElementById('icerik').textContent=p.s.length?(secili+' › '+p.s[sekme][0]+' içeriği'):(secili+' içeriği');
+    bagla();
+  }
+  function kapatHepsi(){document.querySelectorAll('.acilir.acik').forEach(function(a){a.classList.remove('acik');});}
+  function bagla(){
+    document.querySelectorAll('[data-sayfa]').forEach(function(b){b.onclick=function(){secili=b.dataset.sayfa;sekme=0;ekran.classList.remove('cekmece-acik');ciz();};});
+    document.querySelectorAll('.sekme').forEach(function(b){b.onclick=function(){sekme=+b.dataset.i;ciz();};});
+    document.querySelectorAll('[data-acilir]').forEach(function(b){b.onclick=function(e){e.stopPropagation();var a=document.getElementById('ac-'+b.dataset.acilir),acik=a.classList.contains('acik');kapatHepsi();if(!acik){ekran.classList.remove('cekmece-acik');a.classList.add('acik');}};});
+  }
+  document.addEventListener('click',function(e){if(!e.target.closest('.acilir'))kapatHepsi();});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape'){kapatHepsi();ekran.classList.remove('cekmece-acik');}});
+  document.getElementById('hamb').onclick=function(e){e.stopPropagation();kapatHepsi();ekran.classList.add('cekmece-acik');};
+  document.getElementById('perde').onclick=function(){ekran.classList.remove('cekmece-acik');};
+  document.getElementById('gorunum').onclick=function(){var m=ekran.classList.toggle('mobil');this.textContent=m?'Masaüstü görünüm':'Mobil görünüm';kapatHepsi();ekran.classList.remove('cekmece-acik');};
+  document.getElementById('tema').onclick=function(){var k=document.documentElement,d=k.dataset.theme?k.dataset.theme==='dark':matchMedia('(prefers-color-scheme: dark)').matches;k.dataset.theme=d?'light':'dark';};
+  ciz();
+})();
+</script>
+</body>
+</html>

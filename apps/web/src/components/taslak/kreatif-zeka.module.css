@@ -207,10 +207,11 @@
   font-size: 12.5px;
 }
 .tablo th {
-  text-align: left;
-  font-weight: 700;
+  /* Referans `th`: 12 piksel, 600, ikincil renk, BÜYÜK HARF YOK. */
+  font-size: 12px;
+  font-weight: 600;
   color: var(--t-ink-muted);
-  padding: 9px 16px;
+  padding: 10px 16px;
   border-bottom: 1px solid var(--t-line);
   white-space: nowrap;
 }

@@ -43,6 +43,14 @@ export function MobilMenu({
   stil?: React.CSSProperties;
 }) {
   const [acik, setAcik] = useState(false);
+  /*
+   * ÇEKMECE DOM'DA KALIYOR (menü kararı 2026-10-14, CLAUDE.md §3): kapalıyken
+   * görünmez ve etkisiz (`inert`), açılıp kapanma kaymayla. Önce yalnız
+   * açıkken çiziliyordu ve kapanırken bir karede yok oluyordu. Portal
+   * `document` ister; sunucuda yok, hedef ilk boyamadan sonra kuruluyor.
+   */
+  const [hazir, setHazir] = useState(false);
+  useEffect(() => setHazir(true), []);
   const pathname = usePathname();
   const panelRef = useRef<HTMLDivElement>(null);
   const dugmeRef = useRef<HTMLButtonElement>(null);
@@ -83,7 +91,7 @@ export function MobilMenu({
         onClick={() => setAcik(true)}
         aria-label="Menüyü aç"
         aria-expanded={acik}
-        className="-ml-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-ink transition hover:bg-surface-sunken lg:hidden"
+        className="-ml-1.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink transition-colors hover:bg-surface-sunken lg:hidden"
       >
         <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
           <path
@@ -95,7 +103,7 @@ export function MobilMenu({
         </svg>
       </button>
 
-      {acik &&
+      {hazir &&
         createPortal(
           /*
            * MARKA DEĞİŞKENLERİ PORTALA DA GEÇİYOR.
@@ -108,12 +116,20 @@ export function MobilMenu({
            * üründe müşteriye başkasının rengini göstermek, bu depoda
            * açıkça yazılı bir kural ihlali.
            */
-          <div style={stil} className="fixed inset-0 z-50 lg:hidden">
+          <div style={stil}
+            inert={!acik}
+            className={`fixed inset-0 z-50 transition-[visibility] duration-200 motion-reduce:transition-none lg:hidden ${
+              acik ? 'visible' : 'invisible'
+            }`}
+          >
             <button
               type="button"
               aria-label="Menüyü kapat"
+              tabIndex={-1}
               onClick={() => setAcik(false)}
-              className="panel-perde absolute inset-0 bg-black/40 backdrop-blur-[2px]"
+              className={`absolute inset-0 bg-black/35 transition-opacity duration-200 motion-reduce:transition-none ${
+                acik ? 'opacity-100' : 'opacity-0'
+              }`}
             />
             <div
               ref={panelRef}
@@ -122,7 +138,9 @@ export function MobilMenu({
               aria-modal="true"
               aria-label="Menü"
               data-cekmece
-              className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col border-r border-line bg-surface shadow-acilir outline-none"
+              className={`absolute inset-y-0 left-0 flex w-[300px] max-w-[86vw] flex-col border-r border-line bg-surface shadow-acilir outline-none transition-transform duration-[220ms] ease-[var(--ease-out)] motion-reduce:transition-none ${
+                acik ? 'translate-x-0' : '-translate-x-full'
+              }`}
             >
               <KenarIcerigi
                 veri={veri}

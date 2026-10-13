@@ -7,6 +7,7 @@ import type { Uyari } from '@advetics/shared';
 import { useBildirimVerisi } from '@/components/bildirim/bildirim-verisi';
 import { PlatformLogo } from '@/components/platform-logo';
 import { formatRelative } from '@/lib/format';
+import { dugmeSinifi } from '@/components/ui/dugme';
 
 /**
  * ═══ UYARI BANDI ═══
@@ -145,11 +146,12 @@ function ToplananBant({
               key={kod}
               type="button"
               onClick={() => setAcik(acik === kod ? null : kod)}
-              className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs transition ${
-                hata
-                  ? 'border-danger/30 bg-danger/5 text-danger hover:bg-danger/10'
-                  : 'border-warn/30 bg-warn/5 text-warn hover:bg-warn/10'
-              }`}
+              /*
+                YALNIZ KILAVUZ RENKLERİ (2026-10-14): hata da uyarı da
+                kırmızı SOL ÇİZGİ, metin siyah. Ayrımı ikon (⚠ / !) taşıyor;
+                turuncu "uyarı" tonu kılavuzda yok.
+              */
+              className="flex items-center gap-2 rounded-lg border border-l-4 border-line border-l-danger bg-surface px-3 py-1.5 text-xs text-ink transition-colors hover:bg-surface-sunken"
             >
               <span aria-hidden>{hata ? '⚠' : '!'}</span>
               {/*
@@ -224,11 +226,8 @@ function TekTekBant({
   const hata = u.siddet === 'error';
 
   return (
-    <div
-      className={`flex flex-wrap items-center gap-3 border-b px-4 py-2.5 ${
-        hata ? 'border-danger/30 bg-danger/5' : 'border-warn/30 bg-warn/5'
-      }`}
-    >
+    /* Referans şerit: beyaz zemin, sol kırmızı çizgi, metin siyah (2026-10-14). */
+    <div className="flex flex-wrap items-center gap-3 border-b border-l-4 border-line border-l-danger bg-surface px-4 py-2.5">
       {uyarilar.length > 1 && (
         <span className="flex shrink-0 items-center gap-1 text-[11px] text-ink-muted">
           <button
@@ -251,12 +250,12 @@ function TekTekBant({
         </span>
       )}
 
-      <span aria-hidden className={`shrink-0 ${hata ? 'text-danger' : 'text-warn'}`}>
+      <span aria-hidden className="shrink-0 text-danger-strong">
         {hata ? '⚠' : '!'}
       </span>
 
       <span className="min-w-0 flex-1 text-sm">
-        <strong className={hata ? 'text-danger' : 'text-warn'}>{u.baslik}</strong>
+        <strong className="text-ink">{u.baslik}</strong>
         {u.adAccountName && (
           <span className="text-ink-muted"> — {u.adAccountName}</span>
         )}
@@ -296,7 +295,7 @@ function Eylem({ uyari, onGizle }: { uyari: Uyari; onGizle: (anahtar: string) =>
       {uyari.eylem && (
         <Link
           href={uyari.eylem.href}
-          className="rounded-lg bg-brand px-2.5 py-1 text-[11px] font-semibold text-white transition hover:opacity-90"
+          className={dugmeSinifi('koyu', 'kucuk')}
         >
           {uyari.eylem.etiket}
         </Link>

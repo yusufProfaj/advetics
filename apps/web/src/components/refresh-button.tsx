@@ -157,14 +157,14 @@ export function RefreshButton({
           onClick={() => void guncelle()}
           disabled={calisiyor}
           aria-live="polite"
-          className="group flex items-center gap-2 whitespace-nowrap rounded-[10px] border border-line bg-surface px-3 py-[7px] text-[12.5px] font-medium text-ink shadow-kart transition-colors duration-200 hover:bg-surface-muted disabled:cursor-progress"
+          className="group flex h-10 items-center gap-2 whitespace-nowrap rounded-full border border-line-strong bg-surface px-4 text-[12.5px] font-semibold text-ink transition-colors duration-150 hover:bg-surface-sunken disabled:cursor-progress"
         >
           <span className="sr-only">{tazelikCumlesi}</span>
           <svg
             viewBox="0 0 20 20"
             fill="none"
             aria-hidden
-            className={`h-3.5 w-3.5 transition-transform duration-[600ms] ease-[var(--ease-out)] motion-reduce:transition-none ${calisiyor ? 'advetics-donus text-info' : hal.tur === 'guncellendi' && hal.dusen === 0 ? 'text-ok' : 'text-ink-muted group-hover:rotate-180'}`}
+            className={`h-3.5 w-3.5 transition-transform duration-[600ms] ease-[var(--ease-out)] motion-reduce:transition-none ${calisiyor ? 'advetics-donus text-ink-muted' : hal.tur === 'guncellendi' && hal.dusen === 0 ? 'text-ok' : 'text-ink-muted group-hover:rotate-180'}`}
           >
             {hal.tur === 'guncellendi' && hal.dusen === 0 ? (
               <path d="M4.5 10.5 8 14l7.5-8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />

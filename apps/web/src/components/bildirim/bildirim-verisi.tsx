@@ -42,6 +42,15 @@ export interface BildirimVerisi {
 
 const Baglam = createContext<BildirimVerisi | null>(null);
 
+/**
+ * Sağlayıcı DIŞINDA da çağrılabilen sürüm: menü sayaçları (kenar çubuğu)
+ * masaüstünde sağlayıcının içinde, ama `KenarIcerigi` bir gün sağlayıcısız
+ * bir yerde çizilirse sayaç yalnızca kaybolmalı, sayfa çökmemeli.
+ */
+export function useBildirimVerisiVarsa(): BildirimVerisi | null {
+  return useContext(Baglam);
+}
+
 export function useBildirimVerisi(): BildirimVerisi {
   const v = useContext(Baglam);
   if (v === null) {

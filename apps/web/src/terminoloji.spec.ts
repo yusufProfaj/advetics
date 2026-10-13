@@ -91,6 +91,11 @@ const IZINLI: Array<{ neden: string; desen: RegExp }> = [
     // "Müşteri değişiklik istedi", "Müşterinin okuyacağı" aynı kişi.
     desen: /[Mm]üşteriye gönder|[Mm]üşterinin (göreceği|belgesine|onayını|okuyacağı)|Müşteri (revizyon istedi|onaylayınca|panele girmeden|onaylamadan|giriş yapmadan|onayını|değişiklik istedi)|[Mm]üşteri adına onayla|müşteri yalnız onay bekleyen|Müşteriye bağlantı/,
   },
+  /*
+   * "+ OLUŞTUR" MENÜSÜ (menü kararı 2026-10-14, kullanıcının onayladığı
+   * metin): Strateji seçeneğinin açıklaması; onaylayan yine yukarıdaki insan.
+   */
+  { neden: 'KİŞİ — "+ Oluştur" menüsünde stratejiyi onaylayan insan', desen: /'Plan, rapor ve müşteri onayı'/ },
   { neden: 'KİŞİ — "müşteri hesabı" = client_viewer rolüyle açılmış giriş hesabı', desen: /[Mm]üşteri hesa[bp]/ },  // cümle başında da geçiyor
   {
     /*

@@ -13,26 +13,14 @@
  * kullanıcının onayladığı şey olmaktan çıkar.
  */
 
+/*
+ * ═══ TOKEN'LAR globals.css'TE (2026-10-14, birleşik tasarım sistemi) ═══
+ * Bu modül `--t-*` adlarını kendisi tanımlıyordu; tanımlar silindi ve adlar
+ * `globals.css` `:root`ta TEK KEZ token'lara bağlı. Düğme, kart, çip, segment,
+ * tablo ve perde sınıfları referansın (`docs/marka/tasarim-sistemi.html`)
+ * ölçülerine eşlendi; sınıflar sayfa ajanları bileşenlere geçirene kadar duruyor.
+ */
 .kok {
-  --t-brand: var(--brand-primary);
-  --t-brand-accent: var(--brand-accent);
-  --t-brand-soft: color-mix(in srgb, var(--brand-primary) 8%, transparent);
-  --t-brand-strong: var(--brand-legible);
-  --t-surface: var(--surface);
-  --t-muted: var(--surface-muted);
-  --t-sunken: var(--surface-sunken);
-  --t-line: var(--border);
-  --t-ink: var(--text);
-  --t-ink-muted: var(--text-muted);
-  --t-ok: var(--ok);
-  --t-warn: var(--warn);
-  --t-warn-soft: var(--warn-soft);
-  --t-warn-strong: var(--warn-strong);
-  --t-danger: var(--danger);
-  --t-seri2: var(--text);
-  --t-shadow: var(--shadow-card);
-  --t-ease: cubic-bezier(0.16, 1, 0.3, 1);
-  --t-baslik: var(--baslik-font);
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -62,28 +50,32 @@
 
 /* ── Segment (platform, düzey seçici) ── */
 .seg {
+  /* Referans `.bolumlu`: gri hap içinde hap seçenekler. */
   display: inline-flex;
   background: var(--t-sunken);
   border-radius: 999px;
   padding: 3px;
-  gap: 2px;
+  gap: 0;
 }
 .seg > * {
-  padding: 5px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 14px;
   border-radius: 999px;
   font-size: 12.5px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--t-ink-muted);
   transition:
-    background 0.25s var(--t-ease),
-    color 0.25s var(--t-ease),
-    box-shadow 0.25s var(--t-ease);
+    background 0.15s,
+    color 0.15s;
 }
 .seg > [aria-pressed='true'],
 .seg > [aria-current='page'] {
   background: var(--t-surface);
   color: var(--t-ink);
-  box-shadow: var(--t-shadow);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
 }
 
 /* ── Başlık ── */
@@ -149,22 +141,29 @@
   margin-left: auto;
 }
 .hap {
+  /* Referans `.dg.kucuk` (tasarim-sistemi.html): hap, düz renk, gölge ve degrade yok. */
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  border: 1px solid var(--t-line);
-  background: var(--t-surface);
+  justify-content: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 14px;
   border-radius: 999px;
-  padding: 6px 12px;
+  border: 1px solid var(--t-line2);
+  background: var(--t-surface);
+  color: var(--t-ink);
+  font-weight: 700;
   font-size: 12.5px;
-  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
   transition:
-    border-color 0.2s var(--t-ease),
-    transform 0.2s var(--t-ease);
+    background-color 0.15s,
+    border-color 0.15s,
+    filter 0.15s;
 }
 .hap:hover {
-  border-color: var(--t-ink-muted);
-  transform: translateY(-1px);
+  background: var(--t-sunken);
 }
 .rozet {
   font-size: 11px;
@@ -175,37 +174,41 @@
   color: var(--t-brand-strong);
 }
 .birincil {
+  /* Referans `.dg.ana.kucuk` (tasarim-sistemi.html): hap, düz renk, gölge ve degrade yok. */
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  color: #fff;
-  font-weight: 600;
-  font-size: 12.5px;
-  padding: 7px 14px;
+  justify-content: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 14px;
   border-radius: 999px;
-  background-image: linear-gradient(
-    135deg,
-    var(--t-brand),
-    color-mix(in srgb, var(--t-brand) 72%, var(--t-brand-accent))
-  );
-  box-shadow:
-    0 1px 2px rgb(16 24 40 / 0.1),
-    0 4px 14px -4px color-mix(in srgb, var(--t-brand) 45%, transparent);
-  transition: transform 0.2s var(--t-ease);
+  border: 1px solid var(--t-brand);
+  background: var(--t-brand);
+  color: #fff;
+  font-weight: 700;
+  font-size: 12.5px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s,
+    filter 0.15s;
 }
 .birincil:hover {
-  transform: translateY(-1px);
+  filter: brightness(0.94);
 }
 
-/* ── Bildirim şeridi ── */
+/* ── Bildirim şeridi (referans `.serit`: beyaz zemin, sol kırmızı çizgi, metin siyah) ── */
 .bildirim {
   display: flex;
   align-items: center;
   gap: 12px;
-  background: var(--t-warn-soft);
-  border: 1px solid color-mix(in srgb, var(--t-warn) 30%, transparent);
+  background: var(--t-surface);
+  border: 1px solid var(--t-line);
+  border-left: 4px solid var(--t-warn);
   border-radius: 12px;
-  padding: 10px 14px;
+  padding: 12px 16px;
   font-size: 13px;
 }
 .bildirimIkon {
@@ -275,8 +278,8 @@
 .kart {
   background: var(--t-surface);
   border: 1px solid var(--t-line);
-  border-radius: 12px;
-  box-shadow: var(--t-shadow);
+  border-radius: 16px;
+  box-shadow: none;
   min-width: 0;
   overflow: hidden;
 }
@@ -402,7 +405,7 @@ button.metrik:hover {
   background: var(--t-muted);
 }
 .metrik[data-seri='1'] {
-  background: linear-gradient(180deg, var(--t-brand-soft), transparent);
+  background: var(--t-brand-soft);
 }
 .metrik[data-seri='1'] .metrikAd i {
   background: var(--t-brand);
@@ -426,7 +429,7 @@ button.metrik:hover {
   background: var(--t-seri2);
 }
 .metrikVurgu {
-  background: linear-gradient(180deg, var(--t-brand-soft), transparent);
+  background: var(--t-brand-soft);
 }
 
 /* ── Grafik ── */
@@ -534,11 +537,7 @@ button.metrik:hover {
   font-size: 12px;
   font-weight: 800;
   color: #fff;
-  background-image: linear-gradient(
-    135deg,
-    var(--t-brand),
-    color-mix(in srgb, var(--t-brand) 60%, var(--t-brand-accent))
-  );
+  background: var(--t-brand);
 }
 .turGri {
   background-image: none;
@@ -653,11 +652,7 @@ button.metrik:hover {
   position: absolute;
   inset: 0 auto 0 0;
   border-radius: 999px;
-  background-image: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--t-brand) 75%, var(--t-brand-accent)),
-    var(--t-brand)
-  );
+  background: var(--t-brand);
   transform-origin: left;
 }
 .cubukBugun {
@@ -708,20 +703,21 @@ button.metrik:hover {
 .tablo {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 13.5px;
 }
 .tablo th {
-  text-align: right;
-  font-size: 11.5px;
-  font-weight: 700;
+  /* Referans `th`: 12 piksel, 600, ikincil renk, BÜYÜK HARF YOK. */
+  font-size: 12px;
+  font-weight: 600;
   color: var(--t-ink-muted);
-  padding: 9px 14px;
+  padding: 10px 16px;
   border-bottom: 1px solid var(--t-line);
   white-space: nowrap;
+  text-align: right;
   background: var(--t-surface);
 }
 .tablo td {
-  padding: 9px 14px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--t-line);
   text-align: right;
   white-space: nowrap;
@@ -819,11 +815,7 @@ button.metrik:hover {
   color: #fff;
   font-size: 10.5px;
   font-weight: 800;
-  background-image: linear-gradient(
-    135deg,
-    var(--t-brand),
-    color-mix(in srgb, var(--t-brand) 60%, var(--t-brand-accent))
-  );
+  background: var(--t-brand);
 }
 
 /* ── Reklam Yöneticisi: kırıntı hapları ── */
@@ -928,18 +920,25 @@ button.metrik:hover {
   border-bottom: 1px solid var(--t-line);
 }
 .cip {
+  /* Referans `.cip`: 30 piksel hap, gri dolgu, kenarlık yok (seçiliyken kırmızı çizgi). */
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border: 1px solid var(--t-line);
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid transparent;
   border-radius: 999px;
-  padding: 5px 10px;
+  background: var(--t-sunken);
+  color: var(--t-ink);
   font-size: 12.5px;
-  background: var(--t-surface);
-  transition: border-color 0.2s var(--t-ease);
+  font-weight: 600;
+  transition:
+    border-color 0.15s,
+    background 0.15s,
+    color 0.15s;
 }
 .cip:hover {
-  border-color: var(--t-ink-muted);
+  background: var(--t-line);
 }
 .cip b {
   font-weight: 600;

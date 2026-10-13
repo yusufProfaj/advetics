@@ -216,6 +216,20 @@ kullanıcının gözünden hiç geçmiyordu ve kimliğin yalnız dört değeri
   ve Google Ads mantığına göre kontrol edilir, kullanıcıya gösterilir.
   Testler yeşil ve deploy başarılı diye iş bitmiş sayılmaz.
 
+- **BİRLEŞİK TASARIM SİSTEMİ (kullanıcı kararı 2026-10-14).** Onaylı referans
+  [`docs/marka/tasarim-sistemi.html`](docs/marka/tasarim-sistemi.html) ölçü ve
+  davranışta birebir; menü [`menu-sistemi.html`](docs/marka/menu-sistemi.html).
+  Bileşenler `apps/web/src/components/ui/` (`Dugme`, `SayfaBasligi`/
+  `SayfaIskeleti`, `Kart`, `MetrikKutulari`, `Grafik`, `Tablo`, `Sekmeler`,
+  `BolumluSecici`, `Rozet`, `Alan`, `BosDurum`/`HataDurumu`/`Serit`,
+  `Pencere`/`YanPanel`, `AcilirMenu`, sihirbaz parçaları); kullanım ve geçiş
+  tablosu [`docs/marka/BILESENLER.md`](docs/marka/BILESENLER.md). Birincil
+  düğme DÜZ KIRMIZI, degrade ve parıltı hiçbir yerde yok; hata ve uyarı =
+  kırmızı (ikon + sol çizgi, metin siyah), bilgi = gri, yeşil yalnız durum
+  noktası; turuncu/mavi/ikinci kırmızı token'ları kılavuza eşli. Elle düğme,
+  modal, `h1`, degrade ve kılavuz dışı renk `tasarim-sistemi.spec.ts`
+  bekçisinde dosya dosya sayılıyor ve istisna listesi YALNIZ KÜÇÜLÜR.
+
 ### Panel görünüşü kalıba bağlı
 
 `globals.css` → "PANEL TASARIM KATMANI": kart, birincil düğme, tablo satırı,

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { type ReactNode, useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { type ReactNode, useMemo, useState, useTransition } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { PAKET_SINIRLARI, TUM_SIRKETLER, type ManagerPaket } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
@@ -9,6 +9,7 @@ import { baglanti } from '@/lib/baglanti';
 import { gecisHedefi } from '@/lib/kapsam-hedefi';
 import { ayarlarAdresi } from '@/lib/panel-adresleri';
 import { Halka, TamEkranYukleniyor } from './yukleniyor';
+import { AcilirMenu } from '@/components/ui/acilir-menu';
 
 export interface KapsamSirketi {
   id: string;
@@ -137,15 +138,12 @@ export function KapsamSecici({
   const [acikSirketler, setAcikSirketler] = useState<ReadonlySet<string>>(
     () => new Set(tumSirketler ? [] : [aktifSirketId]),
   );
-  const boxRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function disari(e: MouseEvent) {
-      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener('mousedown', disari);
-    return () => document.removeEventListener('mousedown', disari);
-  }, []);
+  /*
+   * DIŞARI TIKLAMA, Esc VE KONUM `AcilirMenu`DE (menü kararı 2026-10-14):
+   * seçici, kullanıcı menüsü, bildirim zili ve "+ Oluştur" aynı bileşenden
+   * geçiyor. Durum burada kalıyor (denetimli kullanım), çünkü geçiş başlarken
+   * menüyü seçici kendisi kapatıyor.
+   */
 
   const aktifSirket = sirketler.find((s) => s.id === aktifSirketId) ?? null;
   const aktifWorkspace = aktifSirket?.workspaces.find((w) => w.id === aktifWorkspaceId) ?? null;
@@ -341,26 +339,46 @@ export function KapsamSecici({
   );
 
   return (
-    <div ref={boxRef} className="relative">
+    <div className="relative">
       {bekliyor && <TamEkranYukleniyor mesaj={`${gecilen ?? 'Kapsam'} görünümüne geçiliyor…`} />}
 
+      {hata && (
+        <p
+          role="alert"
+          className="absolute left-0 top-full z-30 mt-1 w-max max-w-sm rounded-lg border border-l-4 border-line border-l-danger bg-surface px-2.5 py-1.5 text-xs text-ink"
+        >
+          {hata}
+        </p>
+      )}
+
+      <AcilirMenu
+        etiket="Şirket ve workspace seçici"
+        rol="dialog"
+        genislik="w-[min(21rem,calc(100vw-1.5rem))]"
+        sinif={tamGenislik ? 'w-full min-w-0' : ''}
+        acik={open}
+        onAcikDegis={(v) => {
+          if (v) setArama('');
+          setOpen(v);
+        }}
+        tetik={({ acik: _acik, ...o }) => (
       <button
         type="button"
-        onClick={() => {
-          setArama('');
-          setOpen((v) => !v);
-        }}
+        {...o}
         disabled={bekliyor}
-        aria-expanded={open}
-        aria-haspopup="tree"
-        className={`flex ${tamGenislik ? 'w-full min-w-0' : 'min-w-[15rem]'} items-center gap-2.5 rounded-xl border border-line bg-surface px-3 py-2 text-left transition hover:bg-surface-muted disabled:opacity-60`}
+        className={`grid ${tamGenislik ? 'w-full min-w-0' : 'min-w-[15rem]'} grid-cols-[32px_minmax(0,1fr)_16px] items-center gap-2.5 rounded-[12px] border border-line bg-surface px-2.5 py-2 text-left transition-colors hover:border-line-strong disabled:opacity-60`}
       >
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-brand text-[11px] font-semibold uppercase text-white">
+        {/*
+          BAŞ HARF KAROSU GRİ (referans `.secici .harf`): kırmızı yalnız
+          birincil eylem ve seçili durum; hemen altındaki "+ Oluştur" ile iki
+          kırmızı blok üst üste dururdu.
+        */}
+        <span className="grid h-8 w-8 place-items-center rounded-lg bg-[var(--gri)] font-baslik text-13 font-extrabold uppercase text-white">
           {baslik.slice(0, 2)}
         </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-medium leading-tight">{baslik}</span>
-          <span className="block truncate text-[11px] leading-tight text-ink-muted">{altBaslik}</span>
+        <span className="min-w-0">
+          <span className="block truncate text-[11.5px] leading-tight text-ink-muted">{altBaslik}</span>
+          <span className="block truncate text-[13.5px] font-bold leading-tight">{baslik}</span>
         </span>
         {bekliyor ? (
           <Halka />
@@ -375,24 +393,13 @@ export function KapsamSecici({
           </svg>
         )}
       </button>
+        )}
+      >
 
-      {hata && (
-        <p
-          role="alert"
-          className="absolute left-0 top-full z-30 mt-1 w-max max-w-sm rounded-lg border border-danger/30 bg-danger-soft px-2.5 py-1.5 text-xs text-danger-strong"
-        >
-          {hata}
-        </p>
-      )}
 
-      {open && (
-        <div
-          role="tree"
-          className="absolute left-0 top-full z-30 mt-1.5 flex w-[min(21rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-lg"
-        >
+        <div role="tree" className="-m-1.5 flex flex-col overflow-hidden rounded-[14px]">
           <div className="border-b border-line p-2">
             <input
-              autoFocus
               type="search"
               value={arama}
               onChange={(e) => setArama(e.target.value)}
@@ -556,7 +563,7 @@ export function KapsamSecici({
             </div>
           )}
         </div>
-      )}
+      </AcilirMenu>
     </div>
   );
 }

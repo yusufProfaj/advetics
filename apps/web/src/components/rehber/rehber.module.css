@@ -20,26 +20,14 @@
  *   üst barını örtüyor (Google Ads oluşturma ekranı gibi).
  */
 
+/*
+ * ═══ TOKEN'LAR globals.css'TE (2026-10-14, birleşik tasarım sistemi) ═══
+ * Bu modül `--t-*` adlarını kendisi tanımlıyordu; tanımlar silindi ve adlar
+ * `globals.css` `:root`ta TEK KEZ token'lara bağlı. Düğme, kart, çip, segment,
+ * tablo ve perde sınıfları referansın (`docs/marka/tasarim-sistemi.html`)
+ * ölçülerine eşlendi; sınıflar sayfa ajanları bileşenlere geçirene kadar duruyor.
+ */
 .kok {
-  --t-brand: var(--brand-primary);
-  --t-brand-accent: var(--brand-accent);
-  --t-brand-soft: color-mix(in srgb, var(--brand-primary) 8%, transparent);
-  --t-brand-strong: var(--brand-legible);
-  --t-surface: var(--surface);
-  --t-muted: var(--surface-muted);
-  --t-sunken: var(--surface-sunken);
-  --t-line: var(--border);
-  --t-ink: var(--text);
-  --t-ink-muted: var(--text-muted);
-  --t-ok: var(--ok);
-  --t-warn: var(--warn);
-  --t-warn-soft: var(--warn-soft);
-  --t-warn-strong: var(--warn-strong);
-  --t-danger: var(--danger);
-  --t-shadow: var(--shadow-card);
-  --t-shadow-pop: 0 4px 8px -2px rgb(16 24 40 / 0.08), 0 20px 44px -12px rgb(16 24 40 / 0.22);
-  --t-ease: cubic-bezier(0.16, 1, 0.3, 1);
-  --t-baslik: var(--baslik-font);
   color: var(--t-ink);
   font-size: 14px;
 }
@@ -79,53 +67,64 @@
   font-variant-numeric: tabular-nums;
 }
 .birincil {
+  /* Referans `.dg.ana` (tasarim-sistemi.html): hap, düz renk, gölge ve degrade yok. */
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  color: #fff;
-  font-weight: 600;
-  font-size: 13px;
-  padding: 9px 18px;
+  justify-content: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 18px;
   border-radius: 999px;
-  background-image: linear-gradient(
-    135deg,
-    var(--t-brand),
-    color-mix(in srgb, var(--t-brand) 72%, var(--t-brand-accent))
-  );
-  box-shadow:
-    0 1px 2px rgb(16 24 40 / 0.1),
-    0 4px 14px -4px color-mix(in srgb, var(--t-brand) 45%, transparent);
+  border: 1px solid var(--t-brand);
+  background: var(--t-brand);
+  color: #fff;
+  font-weight: 700;
+  font-size: 13.5px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
   transition:
-    transform 0.2s var(--t-ease),
-    opacity 0.2s;
+    background-color 0.15s,
+    border-color 0.15s,
+    filter 0.15s;
 }
 .birincil:hover {
-  transform: translateY(-1px);
+  filter: brightness(0.94);
 }
 .birincil[disabled] {
   opacity: 0.4;
   cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
+  filter: none;
 }
 .ikincil {
+  /* Referans `.dg` (tasarim-sistemi.html): hap, düz renk, gölge ve degrade yok. */
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  border: 1px solid var(--t-line);
-  background: var(--t-surface);
+  justify-content: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 18px;
   border-radius: 999px;
-  padding: 8px 15px;
-  font-size: 13px;
-  font-weight: 600;
-  transition: border-color 0.2s var(--t-ease);
+  border: 1px solid var(--t-line2);
+  background: var(--t-surface);
+  color: var(--t-ink);
+  font-weight: 700;
+  font-size: 13.5px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s,
+    filter 0.15s;
 }
 .ikincil:hover {
-  border-color: var(--t-ink-muted);
+  background: var(--t-sunken);
 }
 .ikincil[disabled] {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: not-allowed;
+  filter: none;
 }
 .metinDugme {
   font-size: 12.5px;
@@ -143,8 +142,8 @@
 .kart {
   background: var(--t-surface);
   border: 1px solid var(--t-line);
-  border-radius: 12px;
-  box-shadow: var(--t-shadow);
+  border-radius: 16px;
+  box-shadow: none;
   min-width: 0;
 }
 
@@ -384,7 +383,7 @@
   flex: 1;
 }
 
-/* İkon karosu: Advetics degradesi */
+/* İkon karosu: düz marka rengi (degrade 2026-10-14 kalktı) */
 .karo {
   width: 40px;
   height: 40px;
@@ -393,12 +392,12 @@
   place-items: center;
   color: #fff;
   flex: none;
-  background-image: linear-gradient(135deg, var(--t-brand), color-mix(in srgb, var(--t-brand) 60%, #302e2d));
-  box-shadow: 0 4px 12px -4px color-mix(in srgb, var(--t-brand) 50%, transparent);
+  background: var(--t-brand);
+  box-shadow: none;
 }
 .karo.gri {
-  background-image: linear-gradient(135deg, #302e2d, #000);
-  box-shadow: 0 4px 12px -4px rgba(0, 0, 0, 0.4);
+  background: var(--gri);
+  box-shadow: none;
 }
 .karo svg {
   width: 20px;
@@ -717,19 +716,22 @@
   gap: 8px;
 }
 .cip {
+  /* Referans `.cip`: 30 piksel hap, gri dolgu, kenarlık yok (seçiliyken kırmızı çizgi). */
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border: 1px solid var(--t-line);
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid transparent;
   border-radius: 999px;
-  padding: 6px 12px;
+  background: var(--t-sunken);
+  color: var(--t-ink);
   font-size: 12.5px;
   font-weight: 600;
-  background: var(--t-surface);
   transition:
-    border-color 0.2s var(--t-ease),
-    background 0.2s var(--t-ease),
-    color 0.2s var(--t-ease);
+    border-color 0.15s,
+    background 0.15s,
+    color 0.15s;
 }
 .cip[aria-pressed='true'] {
   border-color: var(--t-brand);
@@ -1056,26 +1058,31 @@
 
 /* Adım 5: bütçe */
 .seg {
+  /* Referans `.bolumlu`: gri hap içinde hap seçenekler. */
   display: inline-flex;
   background: var(--t-sunken);
   border-radius: 999px;
   padding: 3px;
-  gap: 2px;
+  gap: 0;
 }
 .seg button {
-  padding: 4px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 14px;
   border-radius: 999px;
-  font-size: 11.5px;
-  font-weight: 600;
+  font-size: 12.5px;
+  font-weight: 700;
   color: var(--t-ink-muted);
   transition:
-    background 0.25s var(--t-ease),
-    color 0.25s var(--t-ease);
+    background 0.15s,
+    color 0.15s;
 }
 .seg button[aria-pressed='true'] {
   background: var(--t-surface);
   color: var(--t-ink);
-  box-shadow: var(--t-shadow);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
 }
 .segBaslangic {
   align-self: flex-start;
@@ -1419,7 +1426,7 @@
 .perde {
   position: fixed;
   inset: 0;
-  background: rgb(16 24 40 / 0.35);
+  background: rgb(0 0 0 / 0.4);
   display: grid;
   place-items: center;
   padding: 16px;
@@ -1437,7 +1444,7 @@
 .pencere {
   width: min(560px, 100%);
   background: var(--t-surface);
-  border-radius: 14px;
+  border-radius: 16px;
   box-shadow: var(--t-shadow-pop);
   transform: translateY(10px) scale(0.98);
   transition: transform 0.35s var(--t-ease);

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Montserrat, Open_Sans } from 'next/font/google';
 import './globals.css';
+import { TEMA_BETIGI } from '@/lib/tema';
 
 /*
  * YAZI TİPİ GERÇEKTEN YÜKLENİYOR. `--brand-font` uzun süre 'Inter' diyordu
@@ -79,7 +80,16 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="tr" className={`${govde.variable} ${baslik.variable}`}>
+    /*
+      TEMA İLK BOYAMADAN ÖNCE: kullanıcı kartındaki "Tema" seçimi
+      `<html data-theme>` olarak saklanıyor (`components/tema.tsx`). Betik
+      React'ten önce koştuğu için sunucunun bastığı `<html>` ile istemcinin
+      gördüğü ayrışıyor; `suppressHydrationWarning` YALNIZ bu öğe için.
+    */
+    <html lang="tr" className={`${govde.variable} ${baslik.variable}`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: TEMA_BETIGI }} />
+      </head>
       <body>{children}</body>
     </html>
   );

@@ -1,12 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
 import { platformKanali, type BaglantiDurumu, type Uyari } from '@advetics/shared';
 import { PlatformLogo } from '@/components/platform-logo';
 import { formatRelative } from '@/lib/format';
 import { platformBaglantilariAdresi } from '@/lib/panel-adresleri';
 import { useBildirimVerisi } from './bildirim-verisi';
+import { AcilirMenu, IKON_TETIK, useAcilirMenuKapat } from '@/components/ui/acilir-menu';
+import { Ikon } from '@/components/ui/ikon';
+import { SayiRozeti } from '@/components/ui/rozet';
 
 /**
  * ═══ BİLDİRİM PANELİ ═══
@@ -34,23 +36,6 @@ import { useBildirimVerisi } from './bildirim-verisi';
 export function BildirimZili() {
   const { uyarilar, uyariHatasi, boostKuyrugu, boostHatasi, boostKapsamDisi, yukleniyor } =
     useBildirimVerisi();
-  const [acik, setAcik] = useState(false);
-  const kutuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function disari(e: MouseEvent) {
-      if (kutuRef.current && !kutuRef.current.contains(e.target as Node)) setAcik(false);
-    }
-    function tus(e: KeyboardEvent) {
-      if (e.key === 'Escape') setAcik(false);
-    }
-    document.addEventListener('mousedown', disari);
-    document.addEventListener('keydown', tus);
-    return () => {
-      document.removeEventListener('mousedown', disari);
-      document.removeEventListener('keydown', tus);
-    };
-  }, []);
 
   const bekleyenBoost = boostKuyrugu?.items.filter((i) => i.status === 'pending') ?? [];
   const sorunlar = uyarilar?.uyarilar ?? [];
@@ -65,66 +50,87 @@ export function BildirimZili() {
    */
   const sayac = bekleyenBoost.length + sorunlar.length;
 
+  /*
+   * TEK AÇILIR MENÜ BİLEŞENİ (menü kararı 2026-10-14): panel DOM'da kalıyor,
+   * Esc ve dışarı tıklama kapatıyor, hareket azaltılmışsa geçiş yok. Önce
+   * kendi `mousedown`/`keydown` dinleyicilerini taşıyordu ve koşullu render
+   * ediliyordu. Tetik üst çubuğun yuvarlak ikon düğmesi; sayı varsa kırmızı
+   * NOKTA değil sayı (kaç iş beklediği bilgi).
+   */
   return (
-    <div ref={kutuRef} className="relative">
-      <button
-        type="button"
-        onClick={() => setAcik((v) => !v)}
-        aria-expanded={acik}
-        aria-haspopup="dialog"
-        aria-label={sayac > 0 ? `Bildirimler (${sayac})` : 'Bildirimler'}
-        className="relative flex h-9 w-9 items-center justify-center rounded-lg border border-line bg-surface transition hover:bg-surface-muted"
-      >
-        <svg viewBox="0 0 20 20" fill="none" className="h-[18px] w-[18px] text-ink" aria-hidden>
-          <path
-            d="M10 3a4.5 4.5 0 0 0-4.5 4.5c0 3-1 4-1.5 4.5h12c-.5-.5-1.5-1.5-1.5-4.5A4.5 4.5 0 0 0 10 3ZM8.5 15a1.5 1.5 0 0 0 3 0"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-        {sayac > 0 && (
-          <span className="absolute -right-1 -top-1 flex min-w-[18px] items-center justify-center rounded-full bg-brand px-1 text-[10px] font-semibold leading-[18px] text-white">
-            {sayac > 99 ? '99+' : sayac}
-          </span>
-        )}
-      </button>
-
-      {acik && (
-        <div
-          role="dialog"
-          aria-label="Bildirimler"
-          className="absolute right-0 top-full z-30 mt-1.5 flex max-h-[32rem] w-[24rem] flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-lg"
+    <AcilirMenu
+      etiket="Bildirimler"
+      rol="dialog"
+      hizala="sag"
+      genislik="w-[24rem]"
+      tetik={({ acik: _acik, ...o }) => (
+        <button
+          type="button"
+          {...o}
+          aria-label={sayac > 0 ? `Bildirimler (${sayac})` : 'Bildirimler'}
+          className={IKON_TETIK}
         >
-          <div className="flex-1 overflow-y-auto">
-            <BoostBolumu
-              kartlar={bekleyenBoost}
-              hata={boostHatasi}
-              kapsamDisi={boostKapsamDisi}
-              bosSebebi={boostKuyrugu?.emptyReason ?? null}
-              istendi={boostKuyrugu !== null}
-              onGit={() => setAcik(false)}
-            />
-            <SorunBolumu
-              uyarilar={sorunlar}
-              toplam={uyarilar?.toplam ?? 0}
-              hata={uyariHatasi}
-              yukleniyor={yukleniyor}
-              onGit={() => setAcik(false)}
-            />
-            <DurumBolumu baglantilar={uyarilar?.baglantilar ?? []} onGit={() => setAcik(false)} />
-          </div>
-        </div>
+          <Ikon ad="zil" />
+          {sayac > 0 && <SayiRozeti sayi={sayac} className="absolute -right-0.5 -top-0.5 ring-2 ring-surface" />}
+        </button>
       )}
+    >
+      <ZilIcerigi
+        bekleyenBoost={bekleyenBoost}
+        boostHatasi={boostHatasi}
+        boostKapsamDisi={boostKapsamDisi}
+        bosSebebi={boostKuyrugu?.emptyReason ?? null}
+        istendi={boostKuyrugu !== null}
+        sorunlar={sorunlar}
+        toplam={uyarilar?.toplam ?? 0}
+        uyariHatasi={uyariHatasi}
+        yukleniyor={yukleniyor}
+        baglantilar={uyarilar?.baglantilar ?? []}
+      />
+    </AcilirMenu>
+  );
+}
+
+/** Panelin içi: bağlantıya basınca menüyü kapatan `kapat` bağlamdan geliyor. */
+function ZilIcerigi(p: {
+  bekleyenBoost: Array<{ id: string; title: string | null; clientName: string; platform: string }>;
+  boostHatasi: string | null;
+  boostKapsamDisi: boolean;
+  bosSebebi: string | null;
+  istendi: boolean;
+  sorunlar: Uyari[];
+  toplam: number;
+  uyariHatasi: string | null;
+  yukleniyor: boolean;
+  baglantilar: BaglantiDurumu[];
+}) {
+  const kapat = useAcilirMenuKapat();
+  return (
+    <div className="-m-1.5 max-h-[32rem] overflow-y-auto rounded-[14px]">
+      <BoostBolumu
+        kartlar={p.bekleyenBoost}
+        hata={p.boostHatasi}
+        kapsamDisi={p.boostKapsamDisi}
+        bosSebebi={p.bosSebebi}
+        istendi={p.istendi}
+        onGit={kapat}
+      />
+      <SorunBolumu
+        uyarilar={p.sorunlar}
+        toplam={p.toplam}
+        hata={p.uyariHatasi}
+        yukleniyor={p.yukleniyor}
+        onGit={kapat}
+      />
+      <DurumBolumu baglantilar={p.baglantilar} onGit={kapat} />
     </div>
   );
 }
 
 function Baslik({ children, sag }: { children: React.ReactNode; sag?: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-2 border-b border-line bg-surface-muted/60 px-3 py-1.5">
-      <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-muted">
+    <div className="flex items-center justify-between gap-2 border-b border-line px-3 pb-1.5 pt-2.5">
+      <span className="text-11 font-bold uppercase tracking-[0.08em] text-ink-soluk">
         {children}
       </span>
       {sag}

@@ -4,6 +4,8 @@ import Link from 'next/link';
 import type { Permission } from '@advetics/shared';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { useBildirimVerisiVarsa } from '@/components/bildirim/bildirim-verisi';
+import { SayiRozeti } from '@/components/ui/rozet';
 
 /**
  * Kenar çubuğu gezinmesi.
@@ -139,13 +141,20 @@ export function NavSection({ title, items }: { title?: string; items: NavEntry[]
           type="button"
           onClick={degistir}
           aria-expanded={gorunur}
-          className="flex w-full items-center gap-1.5 rounded-lg px-3 pb-1.5 pt-4 text-[11px] font-semibold uppercase tracking-wider text-ink-muted transition hover:text-ink"
+          className="group/baslik mb-1.5 mt-4 flex w-full items-center gap-1.5 rounded-md px-2.5 text-11 font-bold uppercase leading-none tracking-[0.08em] text-ink-soluk transition-colors hover:text-ink"
         >
+          <span className="truncate">{title}</span>
+          {/*
+            KATLAMA OKU YALNIZ ÜZERİNE GELİNCE ya da bölüm kapalıyken:
+            referans menüde grup başlığı düz bir etiket. Katlanabilirlik
+            kalıyor (kullanıcının kapattığı bölüm kapalı kalır), ama ok her
+            başlıkta durunca menü bir ağaç gibi okunuyordu.
+          */}
           <svg
             viewBox="0 0 20 20"
             aria-hidden="true"
-            className={`h-3 w-3 shrink-0 transition-transform duration-200 ${
-              gorunur ? 'rotate-90' : ''
+            className={`ml-auto h-3 w-3 shrink-0 transition-[transform,opacity] duration-200 ${
+              gorunur ? 'rotate-90 opacity-0 group-hover/baslik:opacity-100 group-focus-visible/baslik:opacity-100' : 'opacity-100'
             }`}
           >
             <path
@@ -157,7 +166,6 @@ export function NavSection({ title, items }: { title?: string; items: NavEntry[]
               strokeLinejoin="round"
             />
           </svg>
-          <span className="truncate">{title}</span>
         </button>
       )}
       {/*
@@ -172,7 +180,7 @@ export function NavSection({ title, items }: { title?: string; items: NavEntry[]
         }`}
       >
         <div className="overflow-hidden">
-      <ul className="space-y-0.5">
+      <ul className="space-y-px">
         {items.map((item) => {
           const ready = item.ready ?? READY_MODULES.has(item.module);
           const active = ready && aktifMi(item, pathname);
@@ -187,13 +195,9 @@ export function NavSection({ title, items }: { title?: string; items: NavEntry[]
                   aria-current={active ? 'page' : undefined}
                   className={satirSinifi(active, Boolean(item.vurgu))}
                 >
-                  <Icon name={item.icon} active={active} vurgu={Boolean(item.vurgu)} />
+                  <Icon name={item.icon} active={active} />
                   <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                  {item.vurgu && (
-                    <span className="shrink-0 rounded-full bg-gradient-to-r from-brand to-brand-accent px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-white">
-                      {item.vurgu}
-                    </span>
-                  )}
+                  <Sayac href={item.href} />
                 </Link>
               ) : (
                 <span
@@ -258,8 +262,8 @@ function AltMenu({ item, ready }: { item: NavEntry; ready: boolean }) {
         type="button"
         onClick={() => setAcik((v) => !v)}
         aria-expanded={gorunur}
-        className={`group flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm transition ${
-          icinde ? 'font-semibold text-brand-strong' : 'text-ink/85 hover:bg-surface-sunken/70 hover:text-ink'
+        className={`group flex h-[38px] w-full items-center gap-3 rounded-[10px] px-2.5 text-[13.5px] font-semibold transition-colors ${
+          icinde ? 'text-brand-strong' : 'text-ink hover:bg-surface-sunken'
         }`}
       >
         <Icon name={item.icon} active={icinde} />
@@ -298,7 +302,7 @@ function AltMenu({ item, ready }: { item: NavEntry; ready: boolean }) {
                     aria-current={aktif ? 'page' : undefined}
                     className={`block truncate rounded-lg px-3 py-1.5 text-[13px] transition ${
                       aktif
-                        ? 'bg-brand-soft font-semibold text-brand-strong'
+                        ? 'bg-vurgu font-semibold text-brand-strong'
                         : 'text-ink-muted hover:bg-surface-sunken/70 hover:text-ink'
                     }`}
                   >
@@ -378,13 +382,11 @@ const ICONS = {
  * ÖNE ÇIKARILMIŞ SATIR (Akıllı Boost) seçili değilken de marka tonlu bir
  * zemin ve ince bir çerçeve taşıyor; seçiliyken diğerleri gibi dolu.
  */
-function satirSinifi(active: boolean, vurgu: boolean): string {
-  const taban = 'group relative flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm transition';
-  if (active) return `${taban} bg-brand-soft font-semibold text-brand-strong`;
-  if (vurgu) {
-    return `${taban} bg-gradient-to-r from-brand/[0.08] to-brand-accent/[0.06] font-medium text-ink ring-1 ring-inset ring-brand/15 hover:from-brand/[0.13] hover:to-brand-accent/[0.1]`;
-  }
-  return `${taban} text-ink/85 hover:bg-surface-sunken/70 hover:text-ink`;
+function satirSinifi(active: boolean, _vurgu: boolean): string {
+  const taban =
+    'group relative flex h-[38px] items-center gap-3 rounded-[10px] px-2.5 text-[13.5px] font-semibold no-underline transition-colors';
+  if (active) return `${taban} bg-vurgu text-brand-strong`;
+  return `${taban} text-ink hover:bg-surface-sunken`;
 }
 
 /**
@@ -395,40 +397,47 @@ function satirSinifi(active: boolean, vurgu: boolean): string {
  */
 /**
  * İkon karosu. `buyuk` ikon rayında (2026-10-09): Google Ads'in rayı gibi
- * ikon + altında ad, karo aynı Advetics degradesiyle. İki ayrı karo
+ * ikon + altında ad, karo aynı düz marka rengiyle (degrade 2026-10-14 kalktı). İki ayrı karo
  * bileşeni yazmak, menü ile rayın bir gün farklı görünmesi demekti.
  */
 export function Icon({
   name,
   active,
-  vurgu = false,
   buyuk = false,
 }: {
   name: keyof typeof ICONS;
   active?: boolean;
+  /** Eski çağrılar için duruyor; görünüşe etkisi yok. */
   vurgu?: boolean;
   buyuk?: boolean;
 }) {
-  const karo = active || vurgu
-    ? 'bg-gradient-to-br from-brand to-brand-accent text-white shadow-[0_4px_10px_-4px_var(--brand-primary)]'
-    : 'bg-surface-sunken/70 text-ink-muted group-hover:bg-surface group-hover:text-ink group-hover:shadow-[var(--shadow-xs)]';
   return (
-    <span
-      className={`flex shrink-0 items-center justify-center transition-[background-color,color,box-shadow] duration-200 ${
-        buyuk ? 'h-9 w-9 rounded-xl' : 'h-7 w-7 rounded-lg'
-      } ${karo}`}
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      aria-hidden
+      className={`shrink-0 transition-colors duration-150 ${buyuk ? 'h-5 w-5' : 'h-[18px] w-[18px]'} ${
+        active ? 'text-brand-strong' : 'text-ink-muted group-hover:text-ink'
+      }`}
     >
-      <svg viewBox="0 0 20 20" fill="none" aria-hidden className={buyuk ? 'h-[1.15rem] w-[1.15rem]' : 'h-4 w-4'}>
-        <path
-          d={ICONS[name]}
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    </span>
+      <path d={ICONS[name]} stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
+}
+
+/**
+ * BEKLEYEN İŞ SAYACI (menü kararı 2026-10-14): satırın sağında kırmızı hap.
+ * Bugün tek kaynak var: Akıllı Boost'un onay bekleyen gönderileri (bildirim
+ * zilinin okuduğu aynı kuyruk, ikinci bir istek yok). Sayı yoksa ya da
+ * kuyruk okunamadıysa HİÇBİR ŞEY çizilmiyor: hatanın yeri zil paneli, menüde
+ * "0" ya da "?" göstermek kullanıcıyı yanlış yere gönderirdi.
+ */
+function Sayac({ href }: { href: string }) {
+  const veri = useBildirimVerisiVarsa();
+  if (href !== '/auto-boost' || !veri?.boostKuyrugu) return null;
+  const n = veri.boostKuyrugu.items.filter((i) => i.status === 'pending').length;
+  if (n === 0) return null;
+  return <SayiRozeti sayi={n} etiket={`${n} onay bekliyor`} className="ml-auto" />;
 }
 
 /**

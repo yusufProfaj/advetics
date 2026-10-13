@@ -10,6 +10,9 @@ import { kapi } from '@/lib/panel-adresleri';
 import { ayarSekmesiAcik } from '@/lib/ayar-kapilari';
 import { KenarIcerigi } from '@/components/kenar-cubugu';
 import { MobilMenu } from '@/components/mobil-menu';
+import { Kirinti } from '@/components/kirinti';
+import { YenileIkonu } from '@/components/kabuk-menuleri';
+import { olusturSecenekleri } from '@/lib/olustur-menusu';
 
 import { ROL_ETIKETI, SAHIP_ETIKETI, type ManagerAccountTree } from '@advetics/shared';
 
@@ -136,7 +139,23 @@ export default async function DashboardLayout({ children }: { children: React.Re
     kullaniciAdi: session.user.fullName,
     /* ROZET ETKİN ROLDEN, Sahip bayrağı önce. */
     rolEtiketi: session.platformAdmin ? SAHIP_ETIKETI : ROL_ETIKETI[session.rol],
+    /* "+ Oluştur": yetkiye göre süzülür, müşteri hesabına hiç çıkmaz. */
+    olustur: olusturSecenekleri(session),
   };
+
+  /*
+   * KIRINTININ KAPSAM PARÇALARI: ajans (varsa) › şirket › workspace. Sayfa
+   * adı istemcide, menü etiketinden ekleniyor (`Kirinti`).
+   */
+  const kirintiSirketi = sirketler.find((s) => s.id === session.activeOrganizationId) ?? null;
+  const aktifWorkspaceAdi =
+    kirintiSirketi?.workspaces.find((w) => w.id === session.activeClientId)?.name ?? null;
+  const kirintiKapsami = session.tumSirketler
+    ? [session.managerAccount?.name ?? 'Tüm şirketler']
+    : [session.organization.name, ...(aktifWorkspaceAdi ? [aktifWorkspaceAdi] : [])];
+  const kirintiSayfalari = kenarVerisi.bolumler.flatMap((b) =>
+    b.items.map((i) => ({ href: i.href, label: i.label, ekYollar: i.ekYollar })),
+  );
 
   /* Seçici iki yerde çiziliyor (masaüstü menü, telefonda üst bar); tek kaynak. */
   const kapsam = {
@@ -152,6 +171,15 @@ export default async function DashboardLayout({ children }: { children: React.Re
   };
 
   return (
+    /*
+      BİLDİRİM SAĞLAYICISI KENAR ÇUBUĞUNU DA SARIYOR (2026-10-14): menüdeki
+      bekleyen iş sayacı zilin okuduğu AYNI kuyruğu okuyor. Ayrı bir istek,
+      menü ile zilin farklı sayı göstermesi demekti.
+    */
+    <BildirimSaglayici
+      aktifWorkspaceId={session.activeClientId}
+      boostGorunur={hasPermission(session, 'boost.read')}
+    >
     <div style={themeStyle} className="panel flex min-h-screen">
       {/* Kenar çubuğu */}
       {/*
@@ -164,11 +192,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
         2026-10-09'da dar bir ikon rayına geçilmişti; kullanıcı geniş menüye
         geri döndürdü ve workspace seçiciyi üst bardan menünün en üstüne,
         logonun altına aldı. Telefonda da aynı yer: çekmecenin başı.
-        `z-30`: `backdrop-blur` kenar çubuğunu kendi katmanı yapıyor; z
-        verilmezse seçicinin açılır listesi (menüden geniş) içeriğin
-        yapışkan üst barının ALTINDA kalırdı.
+        `z-30`: z verilmezse seçicinin açılır listesi (menüden geniş)
+        içeriğin yapışkan üst barının ALTINDA kalırdı. Zemin düz yüzey
+        (2026-10-14): buzlu cam kılavuzda yok ve menü referansta düz.
       */}
-      <aside className="sticky top-0 z-30 hidden h-screen w-64 shrink-0 flex-col border-r border-line bg-surface/80 backdrop-blur-xl lg:flex">
+      <aside className="sticky top-0 z-30 hidden h-screen w-[248px] shrink-0 flex-col border-r border-line bg-surface lg:flex">
         <KenarIcerigi veri={kenarVerisi} ust={<KapsamSecici {...kapsam} tamGenislik />} />
       </aside>
 
@@ -180,12 +208,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
         yüklemesinde iki kez taranırdı. Ayrıca iki tüketicinin farklı sayı
         göstermesi, ikisinin de yanlış sanılması demek.
       */}
-      <BildirimSaglayici
-        aktifWorkspaceId={session.activeClientId}
-        boostGorunur={hasPermission(session, 'boost.read')}
-      >
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-4 border-b border-line/70 bg-surface/75 px-5 shadow-[0_1px_0_rgb(255_255_255/0.5)_inset] backdrop-blur-xl backdrop-saturate-150">
+        <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-line bg-[color-mix(in_srgb,var(--surface)_88%,transparent)] px-5 backdrop-blur-[10px] lg:px-7">
           {/*
             ═══ ÜST BARDA TEK SEÇİCİ ═══
 
@@ -200,30 +224,26 @@ export default async function DashboardLayout({ children }: { children: React.Re
             ağacın en altında, ayrı başlık altında; tek hesabı olan kullanıcı
             o bölümü hiç görmüyor.
           */}
-          <div className="flex min-w-0 items-center gap-2">
           {/* MENÜ DÜĞMESİ YALNIZCA MOBİLDE: masaüstünde kenar çubuğu zaten açık. */}
           {/*
-            TELEFONDA DA SEÇİCİ MENÜNÜN BAŞINDA (çekmece). Üst barda dururken
-            asgari genişliği (15rem) zili örtüyordu; "neredeyim" sayfa
-            başındaki kırıntıda zaten yazıyor.
+            TELEFONDA SEÇİCİ MENÜNÜN BAŞINDA (çekmece). Üst barda dururken
+            asgari genişliği (15rem) zili örtüyordu; "neredeyim" kırıntıda.
           */}
           <MobilMenu veri={kenarVerisi} stil={themeStyle} ust={<KapsamSecici {...kapsam} tamGenislik />} />
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="hidden text-right sm:block">
-              <p className="text-[13px] font-medium leading-tight">{session.user.email}</p>
-              <p className="text-[11px] leading-tight text-ink-muted">
-                {session.organization.name} · {session.organization.plan}
-              </p>
-            </div>
-            {/*
-              ZİL ÜST BARDA, HER EKRANDA. Onay bekleyen boostlar bir süre
-              yalnızca /auto-boost sayfasındaydı ve kullanıcı o sayfaya bir
-              onay beklediğini ZATEN bildiğinde giriyordu — kuyruk, işe
-              yarayacağı anda görünmüyordu.
-            */}
-            <BildirimZili />
-          </div>
+          <Kirinti kapsam={kirintiKapsami} sayfalar={kirintiSayfalari} />
+          {/*
+            SAĞDA YALNIZ İKON (menü kararı 2026-10-14). Kullanıcı ve tema
+            menüsü sol altta, kullanıcı kartında. Taslaktaki "Ara" ve
+            "Yardım" ikonları YOK: panelde genel arama ve yardım sayfası
+            yazılmadı ve hiçbir şey yapmayan bir ikon, çalışmayan bir
+            özelliği vaat ederdi. Hedefleri yazılınca buraya eklenir.
+
+            ZİL ÜST BARDA, HER EKRANDA. Onay bekleyen boostlar bir süre
+            yalnızca /auto-boost sayfasındaydı ve kullanıcı o sayfaya bir
+            onay beklediğini ZATEN bildiğinde giriyordu.
+          */}
+          <YenileIkonu />
+          <BildirimZili />
         </header>
 
         {/* OTURUMU AYAKTA TUTAR. Access token 15 dakikada ölüyor ve panelde
@@ -262,7 +282,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           </footer>
         )}
       </div>
-      </BildirimSaglayici>
     </div>
+    </BildirimSaglayici>
   );
 }

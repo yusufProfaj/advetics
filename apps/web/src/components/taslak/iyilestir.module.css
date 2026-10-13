@@ -16,36 +16,44 @@
  * öğe (onay penceresi) DOM'dan çıkmıyor, görünürlüğü geçişle değişiyor.
  */
 
+/*
+ * ═══ TOKEN'LAR globals.css'TE (2026-10-14, birleşik tasarım sistemi) ═══
+ * Bu modül `--t-*` adlarını kendisi tanımlıyordu; tanımlar silindi ve adlar
+ * `globals.css` `:root`ta TEK KEZ token'lara bağlı. Düğme, kart, çip, segment,
+ * tablo ve perde sınıfları referansın (`docs/marka/tasarim-sistemi.html`)
+ * ölçülerine eşlendi; sınıflar sayfa ajanları bileşenlere geçirene kadar duruyor.
+ */
 .sayfa {
-  --t-shadow-pop: 0 4px 8px -2px rgb(16 24 40 / 0.08), 0 20px 44px -12px rgb(16 24 40 / 0.22);
+  /* Yerel gölge tanımı globals.css `--t-shadow-pop`a taşındı. */
 }
 
 /* ── Sekme seçici ── */
 .seg {
+  /* Referans `.bolumlu`: gri hap içinde hap seçenekler. */
   display: inline-flex;
   background: var(--t-sunken);
   border-radius: 999px;
   padding: 3px;
-  gap: 2px;
+  gap: 0;
 }
 .seg > * {
-  padding: 6px 14px;
-  border-radius: 999px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--t-ink-muted);
-  transition:
-    background 0.25s var(--t-ease),
-    color 0.25s var(--t-ease),
-    box-shadow 0.25s var(--t-ease);
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  height: 30px;
+  padding: 0 14px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--t-ink-muted);
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 .seg > [aria-current='page'] {
   background: var(--t-surface);
   color: var(--t-ink);
-  box-shadow: var(--t-shadow);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
 }
 .rozet {
   font-size: 11px;
@@ -58,53 +66,64 @@
 
 /* ── Düğmeler ── */
 .birincil {
+  /* Referans `.dg.ana.kucuk` (tasarim-sistemi.html): hap, düz renk, gölge ve degrade yok. */
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  color: #fff;
-  font-weight: 600;
-  font-size: 12.5px;
-  padding: 8px 14px;
+  justify-content: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 14px;
   border-radius: 999px;
-  background-image: linear-gradient(
-    135deg,
-    var(--t-brand),
-    color-mix(in srgb, var(--t-brand) 72%, var(--t-brand-accent))
-  );
-  box-shadow:
-    0 1px 2px rgb(16 24 40 / 0.1),
-    0 4px 14px -4px color-mix(in srgb, var(--t-brand) 45%, transparent);
+  border: 1px solid var(--t-brand);
+  background: var(--t-brand);
+  color: #fff;
+  font-weight: 700;
+  font-size: 12.5px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
   transition:
-    transform 0.2s var(--t-ease),
-    opacity 0.2s;
+    background-color 0.15s,
+    border-color 0.15s,
+    filter 0.15s;
 }
 .birincil:hover {
-  transform: translateY(-1px);
+  filter: brightness(0.94);
 }
 .birincil[disabled] {
   opacity: 0.4;
   cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
+  filter: none;
 }
 .ikincil {
+  /* Referans `.dg.kucuk` (tasarim-sistemi.html): hap, düz renk, gölge ve degrade yok. */
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  border: 1px solid var(--t-line);
-  background: var(--t-surface);
+  justify-content: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 14px;
   border-radius: 999px;
-  padding: 7px 13px;
+  border: 1px solid var(--t-line2);
+  background: var(--t-surface);
+  color: var(--t-ink);
+  font-weight: 700;
   font-size: 12.5px;
-  font-weight: 600;
-  transition: border-color 0.2s var(--t-ease);
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s,
+    filter 0.15s;
 }
 .ikincil:hover {
-  border-color: var(--t-ink-muted);
+  background: var(--t-sunken);
 }
 .ikincil[disabled] {
   opacity: 0.4;
   cursor: not-allowed;
+  filter: none;
 }
 .metin {
   font-size: 12.5px;
@@ -185,7 +204,7 @@
   color: var(--t-ink-muted);
 }
 .ozet .vurgu {
-  background: linear-gradient(180deg, var(--t-brand-soft), transparent);
+  background: var(--t-brand-soft);
 }
 
 /* ── Tür çipleri ── */
@@ -196,19 +215,22 @@
   align-items: center;
 }
 .cip {
+  /* Referans `.cip`: 30 piksel hap, gri dolgu, kenarlık yok (seçiliyken kırmızı çizgi). */
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border: 1px solid var(--t-line);
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid transparent;
   border-radius: 999px;
-  padding: 6px 12px;
+  background: var(--t-sunken);
+  color: var(--t-ink);
   font-size: 12.5px;
   font-weight: 600;
-  background: var(--t-surface);
   transition:
-    border-color 0.2s var(--t-ease),
-    background 0.2s var(--t-ease),
-    color 0.2s var(--t-ease);
+    border-color 0.15s,
+    background 0.15s,
+    color 0.15s;
 }
 .cip[aria-pressed='true'] {
   border-color: var(--t-brand);
@@ -394,7 +416,7 @@
 .perde {
   position: fixed;
   inset: 0;
-  background: rgb(16 24 40 / 0.35);
+  background: rgb(0 0 0 / 0.4);
   display: grid;
   place-items: center;
   padding: 16px;
@@ -413,7 +435,7 @@
   width: min(520px, 100%);
   background: var(--t-surface);
   color: var(--t-ink);
-  border-radius: 14px;
+  border-radius: 16px;
   box-shadow: var(--t-shadow-pop);
   transform: translateY(10px) scale(0.98);
   transition: transform 0.35s var(--t-ease);

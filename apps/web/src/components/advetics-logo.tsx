@@ -21,7 +21,7 @@ export function AdveticsLogo({ kompakt = false }: { kompakt?: boolean }) {
     <span className="flex items-center gap-2.5" role="img" aria-label="Advetics">
       <span
         aria-hidden="true"
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[0.6rem] bg-brand shadow-[0_6px_16px_-8px_var(--brand-primary)]"
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[0.6rem] bg-brand"
       >
         <svg width="20" height="20" viewBox="0 0 100 100" fill="none">
           <rect x="6" y="56" width="22" height="38" rx="5" fill="#ffffff" />
