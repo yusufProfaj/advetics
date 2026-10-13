@@ -3,6 +3,7 @@ import type { ReportData, TenantContext } from '@advetics/shared';
 import { createHarness, seedTenant, IDS, type Harness } from '../../../test/pglite-harness';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { KreatifAdresiService } from './kreatif-adresi.service';
+import type { DonemErisimiService } from '../erisim/donem-erisimi.service';
 import { ReportsService } from './reports.service';
 
 /**
@@ -126,7 +127,8 @@ beforeEach(async () => {
     withTenant: async <T>(_ctx: TenantContext, fn: (tx: unknown) => Promise<T>): Promise<T> => fn(h.db),
   } as unknown as PrismaService;
   const kreatifAdresi = { tazele: async (_c: TenantContext, d: ReportData) => d } as unknown as KreatifAdresiService;
-  svc = new ReportsService(prisma, kreatifAdresi);
+  // Erişim bu dosyanın konusu değil: platform çağrısı yok, "okunamadı".
+  svc = new ReportsService(prisma, kreatifAdresi, { oku: async () => ({ tur: 'okunamadi', neden: 'test: platform yok' }) } as unknown as DonemErisimiService);
 });
 
 type Uc = { form: number; message: number; purchase: number };

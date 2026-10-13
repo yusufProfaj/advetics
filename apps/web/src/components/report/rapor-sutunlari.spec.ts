@@ -48,14 +48,22 @@ describe('kampanya tablosu sütunları', () => {
     expect(kampanyaGovdesi()).toContain('keys={sutunlar.filter(');
   });
 
-  it('KRİTİK: ERİŞİM toplanmıyor — tekil kişi sayısı günler arasında toplanamaz', () => {
+  it('KRİTİK: ERİŞİM satırlardan toplanmıyor; SONUÇ toplanamıyor', () => {
     /*
-     * Aynı kişi iki kampanyayı da görmüş olabilir; toplamak müşteriye iki
-     * kat kitle söylemek olur. Karar artık PAYLAŞILAN pakette ve iddia da
-     * oraya bakıyor — davranışa, kaynak metnine değil.
+     * Aynı kişi iki kampanyayı da görmüş olabilir; satır erişimlerini
+     * toplamak müşteriye iki kat kitle söylemek olur. Toplam satırı tablonun
+     * dönem erişimini basıyor (`sumRows(rows, erisim)`, davranışı
+     * `lib/rapor-erisim.spec.ts` sınıyor). Sonuç iki tür taşıdığı için null.
      */
-    expect(COLUMN_TOTALS.reach).toBeNull();
+    expect(COLUMN_TOTALS.result).toBeNull();
     expect(COLUMN_TOTALS.spend).not.toBeNull();
+  });
+
+  it('KRİTİK: toplam satırı tablonun DÖNEM erişimiyle kuruluyor ve günlük ortalama dipnotu kalmadı', () => {
+    const g = kampanyaGovdesi();
+    expect(g).toContain('sumRows(rows, erisim)');
+    expect(g).toContain('erisimDipnotlari(sutunlar, rows, erisim)');
+    expect(g).not.toContain('reachIsDailyAverage');
   });
 
   it('KRİTİK: her sütunun toplam kararı VAR — sessiz boşluk yok', () => {

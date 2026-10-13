@@ -707,7 +707,11 @@ export class SyncProcessorService {
       permissions: [],
     } as unknown as TenantContext;
 
-    const res = await this.executor.execute(this.db, ctx, rule.record, new Date(), false);
+    // Frekans koşulu varsa pencerenin tekil erişimi önce (platform çağrısı,
+    // transaction yok: worker BYPASSRLS istemcisiyle tek tek sorgu atıyor).
+    const now = new Date();
+    const frekans = await this.rules.frekansHazirla((fn) => fn(this.db), rule.record, now);
+    const res = await this.executor.execute(this.db, ctx, rule.record, frekans, now, false);
 
     /*
      * KURAL BİLDİRİMİ "ANINDA": tur kanallara satır yazdıysa hemen gönder.

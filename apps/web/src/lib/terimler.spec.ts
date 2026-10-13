@@ -78,7 +78,10 @@ describe('kartlar iş dilinde', () => {
      * diyordu ve kart bir günün ortalamasını dönemin tekil kişi sayısı gibi
      * gösteriyordu.
      */
-    expect(SAYFA).toContain("'günlük ortalama, hesaplar arası mükerrer olabilir'");
+    // Etiketin KENDİSİ "Günlük ortalama erişim" (erişim ölçümü düzeltmesi):
+    // ipucu küçük yazıyla kayboluyordu ve sayı dönemin kitlesi gibi okunuyordu.
+    expect(SAYFA).toContain("'Günlük ortalama erişim'");
+    expect(SAYFA).toContain("'dönemin tekil kişi sayısı değil, hesaplar arası mükerrer olabilir'");
     const i = SAYFA.indexOf("anahtar: 'erisim'");
     expect(i).toBeGreaterThan(-1);
     const dilim = SAYFA.slice(i, SAYFA.indexOf('}\n      : {', i));

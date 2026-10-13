@@ -65,7 +65,21 @@ export type QuotaLayer =
    * kalıcı kilide sokardı (CLAUDE.md). Ayrı katman çünkü kaynağı ayrı:
    * teşhiste "bu kotayı kim yedi" sorusu katman adından okunuyor.
    */
-  | 'creative_tag';
+  | 'creative_tag'
+  /**
+   * Rapor için DÖNEMİN tekil erişimi (`fetchPeriodReach`). `report_creative`
+   * ile aynı iki özellik: anonim paylaşım bağlantısından tetiklenebiliyor ve
+   * eksikliği raporu bozmuyor (hücre "okunamadı" ve sebep yazıyor). Ayrı
+   * katman çünkü teşhiste "bu kotayı kim yedi" sorusu katman adından okunuyor.
+   */
+  | 'report_reach'
+  /**
+   * Kural motorunun frekans koşulu için pencerenin tekil erişimi. Okunamazsa
+   * koşul DEĞERLENDİRİLMİYOR (eylem yok, sebep kayıtta): kesilmesi para
+   * harcatmaz, yalnız bir turu atlatır. Yapı taramasının (%90) çok altında
+   * durmalı ki frekans kuralı hesabı kalıcı kilide sokmasın.
+   */
+  | 'rule_reach';
 
 /**
  * Kota tüketim yüzdesine göre hangi katmanların çalışabileceği.
@@ -98,6 +112,10 @@ const LAYER_MAX_USAGE: Record<QuotaLayer, number> = {
   report_creative: 50,
   // Paket D: ertelenebilir zenginleştirme, rapor görseliyle aynı tavan.
   creative_tag: 50,
+  // Rapor erişimi kreatif görseliyle aynı gerekçe: anonim tetiklenebilir.
+  report_reach: 50,
+  // Kural frekansı: geri düzeltmeyle aynı basamak; atlanan tur sebebiyle kayıtlı.
+  rule_reach: 75,
 };
 
 /**

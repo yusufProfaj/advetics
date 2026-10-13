@@ -6,7 +6,7 @@ import { PlatformApiError, type PlatformActionRequest } from '../connections/pro
 import { ProviderRegistry } from '../connections/provider.registry';
 import { TokenVaultService } from '../connections/token-vault.service';
 import { QuotaGuardService } from '../../queue/quota-guard.service';
-import { RulesService, type PendingAction, type TxLike } from './rules.service';
+import { RulesService, type FrekansErisimi, type PendingAction, type TxLike } from './rules.service';
 import { kuralBildirimiGuvenli } from '../sinyal/kural-bildirimi';
 
 /**
@@ -51,6 +51,13 @@ export class RuleExecutorService {
     tx: TxLike,
     ctx: TenantContext,
     rule: RuleRecord,
+    /**
+     * Frekans koşulu için pencerenin tekil erişimi, TURDAN ÖNCE ve
+     * transaction'ın DIŞINDA okunmuş (`RulesService.frekansHazirla`).
+     * Zorunlu: burada okumak, API yolunda platform çağrısını kiracı
+     * transaction'ının içine sokardı. Frekans koşulu yoksa `null`.
+     */
+    frekans: FrekansErisimi | null,
     now = new Date(),
     // Varsayılan KORUMALI: unutulan bir çağrı en kötü bir SAVEPOINT gürültüsü
     // üretir; tersi API transaction'ını bildirim hatasıyla kaybettirir.
@@ -69,7 +76,7 @@ export class RuleExecutorService {
     let failure: string | null = null;
 
     try {
-      const outcome = await this.rules.runEvaluation(tx, rule, now);
+      const outcome = await this.rules.runEvaluation(tx, rule, now, frekans);
       evaluated = outcome.evaluatedCount;
       matched = outcome.matchedCount;
 

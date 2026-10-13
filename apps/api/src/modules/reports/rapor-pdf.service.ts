@@ -16,7 +16,13 @@ import {
   VIDEO_DIPNOTU,
   kampanyaTablolari,
   videoHucresi,
+  erisimDipnotlari,
+  erisimHucresi,
+  sonucHucresi,
+  sonucTuru,
+  METRIC_LABELS,
   type ColumnKey,
+  type RaporErisim,
   type ReportCampaignRow,
   type ReportData,
 } from '@advetics/shared';
@@ -485,7 +491,9 @@ export class RaporPdfService {
      * karar): altı sütun daha binince harcama kırpılıyordu. Video ayrı
      * sayfada, yalnız video ölçümü olan kampanyalarla.
      */
-    const { ana: sutunlar, video } = kampanyaTablolari(
+    // SONUÇ VE BGM DE AYRI (`kampanyaTablolari`): ana tabloya binince
+    // altı haneli harcama "123.456…" diye kırpılıyordu (testte ölçüldü).
+    const { ana: sutunlar, video, sonuc } = kampanyaTablolari(
       resolveColumns(ctx.data.options[bolum]?.metrics, DEFAULT_COLUMNS[bolum], satirlar),
       satirlar,
     );
@@ -497,7 +505,10 @@ export class RaporPdfService {
       }
     }
     if (notlar.length) y -= 6;
-    const t = sumRows(satirlar);
+    // TOPLAMIN ERİŞİMİ tablonun dönem erişiminden (hesap seviyesi); satırlar
+    // toplanamaz. Panel aynı alanı okuyor (`data.donemErisimi`).
+    const erisim = ctx.data.donemErisimi[BOLUM_PLATFORMU[bolum]];
+    const t = sumRows(satirlar, erisim);
 
     /*
      * KAMPANYA TABLOSU DA ORTAK ÇİZİCİDEN GEÇİYOR.
@@ -552,6 +563,26 @@ export class RaporPdfService {
     y = sonY;
 
     /*
+     * ERİŞİM DİPNOTLARI TABLONUN ALTINDA (panelle aynı liste): yeni
+     * sütunların tanımı ve "Google tekil erişim vermiyor" gibi boş hücre
+     * sebepleri. Sebebi yazılmayan "—", okuyanı "0 kişi" sanmaya iter.
+     */
+    const erisimNotlari = [
+      ...sutunlar
+        .filter((k): k is 'frequency' => k === 'frequency')
+        .map((k) => `${METRIC_LABELS[k].label} (${METRIC_LABELS[k].tr}): ${METRIC_LABELS[k].hint}`),
+      ...erisimDipnotlari(sutunlar, satirlar, erisim),
+    ];
+    if (erisimNotlari.length > 0) y -= 6;
+    for (const not of erisimNotlari) {
+      for (const satir of sar(not, ctx.normal, 7, EN - 2 * KENAR)) {
+        if (y < KENAR + 12) break;
+        s.drawText(satir, { x: KENAR, y, size: 7, font: ctx.normal, color: GRI });
+        y -= 10;
+      }
+    }
+
+    /*
      * GRAFİK TABLONUN ALTINDA VE YALNIZCA META SAYFASINDA — panelde de öyle
      * (`CampaignPage`e `daily` yalnızca meta_campaigns için geçiliyor).
      *
@@ -579,7 +610,58 @@ export class RaporPdfService {
       });
     }
 
-    if (video) this.videoTablosu(ctx, platform, video);
+    if (sonuc) this.sonucTablosu(ctx, platform, sonuc, erisim);
+    if (video) this.videoTablosu(ctx, platform, video, erisim);
+  }
+
+  /**
+   * SONUÇ VE BİN GÖSTERİM MALİYETİ — ayrı sayfada, panelin `SonucTablosu`yla
+   * AYNI liste ve biçimci. Satırın sonuç TÜRÜ yazılı: erişim kampanyasının
+   * sonucu erişilen kişi; aynı sütunda dönüşümle karıştırılmasın.
+   */
+  private sonucTablosu(
+    ctx: Ctx,
+    platform: string,
+    sonuc: NonNullable<ReturnType<typeof kampanyaTablolari>['sonuc']>,
+    erisim: RaporErisim,
+  ): void {
+    const s = ctx.doc.addPage([EN, BOY]);
+    let y = this.baslik(ctx, s, 'Sonuç ve Maliyet', platform);
+    const tanimlar = sonuc.sutunlar.map((k) => `${METRIC_LABELS[k].label} (${METRIC_LABELS[k].tr}): ${METRIC_LABELS[k].hint}`);
+    for (const not of [sonuc.aciklama, ...tanimlar]) {
+      for (const satir of sar(not, ctx.normal, 8, EN - 2 * KENAR)) {
+        s.drawText(satir, { x: KENAR, y, size: 8, font: ctx.normal, color: GRI });
+        y -= 11;
+      }
+    }
+    y -= 6;
+    const t = sumRows(sonuc.satirlar, erisim);
+    tablo(s, {
+      sutunlar: [
+        { baslik: 'Kampanya Adı', pay: 40, deger: (r: ReportCampaignRow) => r.name },
+        { baslik: 'Sonuç türü', pay: 20, deger: (r: ReportCampaignRow) => sonucTuru(r) },
+        ...sonuc.sutunlar.map((k) => ({
+          baslik: COLUMN_LABELS[k],
+          pay: 40 / sonuc.sutunlar.length,
+          sag: true,
+          deger: (r: ReportCampaignRow) => hucre(k, r, ctx.data.currency),
+        })),
+      ],
+      satirlar: sonuc.satirlar,
+      x: KENAR,
+      y,
+      genislik: EN - 2 * KENAR,
+      altSinir: KENAR + 20,
+      normal: ctx.normal,
+      kalin: ctx.kalin,
+      toplam: {
+        etiket: 'Genel toplam',
+        degerler: [null, ...sonuc.sutunlar.map((k) => {
+          const bicim = COLUMN_TOTALS[k];
+          return bicim ? bicim(t, ctx.data.currency) : null;
+        })],
+      },
+    });
   }
 
   /**
@@ -592,6 +674,7 @@ export class RaporPdfService {
     ctx: Ctx,
     platform: string,
     video: NonNullable<ReturnType<typeof kampanyaTablolari>['video']>,
+    erisim: RaporErisim,
   ): void {
     const s = ctx.doc.addPage([EN, BOY]);
     let y = this.baslik(ctx, s, 'Video İzlenme', platform);
@@ -603,7 +686,7 @@ export class RaporPdfService {
     }
     if (video.satirlar.length === 0) return;
     y -= 6;
-    const t = sumRows(video.satirlar);
+    const t = sumRows(video.satirlar, erisim);
     tablo(s, {
       sutunlar: [
         { baslik: 'Kampanya Adı', pay: 32, deger: (r: ReportCampaignRow) => r.name },
@@ -1735,6 +1818,9 @@ const PLATFORM_ADI = PLATFORM_KISA_ADLARI;
  */
 const PLATFORM_SIRASI = PLATFORMS;
 
+/** Kampanya bölümünün platformu (eşleme; "google değilse Meta" dallanması yok). */
+const BOLUM_PLATFORMU = { meta_campaigns: 'meta', google_campaigns: 'google' } as const;
+
 const KOVA_ADI: Record<string, string> = Object.fromEntries(
   Object.entries(CONVERSION_BUCKETS).map(([k, v]) => [k, v.label]),
 );
@@ -1763,8 +1849,14 @@ function hucre(k: ColumnKey, r: ReportCampaignRow, para: string | null): string 
       return formatNumber(r.impressions);
     case 'clicks':
       return formatNumber(r.clicks);
+    // ERİŞİM/FREKANS/SONUÇ: panelle AYNI biçimci ("okunamadı" / "—" / sayı).
     case 'reach':
-      return formatNumber(r.reach);
+    case 'frequency':
+      return erisimHucresi(k, r.erisim);
+    case 'result':
+      return sonucHucresi(r);
+    case 'cpm':
+      return formatMoney(mikro(r.cpm), para);
     case 'ctr':
       return formatPercent(r.ctr);
     case 'cpc':

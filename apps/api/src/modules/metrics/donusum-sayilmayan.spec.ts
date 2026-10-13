@@ -31,9 +31,13 @@ const NOW = new Date('2026-08-07T09:00:00Z');
 
 beforeAll(async () => {
   h = await createHarness();
-  svc = new RulesService({
-    withTenant: async <T>(_ctx: TenantContext, fn: (tx: unknown) => Promise<T>) => fn(h.db),
-  } as unknown as PrismaService);
+  svc = new RulesService(
+    {
+      withTenant: async <T>(_ctx: TenantContext, fn: (tx: unknown) => Promise<T>) => fn(h.db),
+    } as unknown as PrismaService,
+    // Bu dosyada frekans koşulu yok: platforma gidilirse patlasın.
+    { oku: async () => { throw new Error('beklenmedik erişim okuması'); } } as never,
+  );
 });
 afterAll(async () => {
   await h.close();

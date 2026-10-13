@@ -29,6 +29,9 @@ import {
   type IAdPlatformProvider,
   type InsightsLevel,
   type InsightsRequest,
+  type PeriodReachRequest,
+  type PeriodReachResult,
+  type PeriodReachRow,
   type BoostRequest,
   type BoostSource,
   type CreateAdRequest,
@@ -78,6 +81,17 @@ interface GraphPage {
   data?: Array<Record<string, unknown>>;
   paging?: { next?: string };
 }
+
+/**
+ * `all_days` yanıtında varlık kimliğinin alanı. Hesap seviyesinde Meta kimlik
+ * alanı döndürmüyor: satır hesabın kendisi (`act_…`).
+ */
+const META_DONEM_KIMLIK_ALANI: Record<InsightsLevel, string | null> = {
+  account: null,
+  campaign: 'campaign_id',
+  ad_group: 'adset_id',
+  ad: 'ad_id',
+};
 
 /** Ortak seviye adlarımız → Meta'nın `level` parametresi. */
 const META_LEVEL: Record<InsightsLevel, string> = {
@@ -1163,6 +1177,75 @@ export class MetaProvider implements IAdPlatformProvider {
       pages++;
     }
     return { rows, calls, next };
+  }
+
+  /**
+   * ═══ DÖNEMİN TEKİL ERİŞİMİ (`time_increment=all_days`) ═══
+   *
+   * `fetchInsights` GÜNLÜK satır çekiyor ve günlük erişim günler arasında
+   * toplanamıyor: rapor ortalamasını basıyor (kitle kat kat küçük), kural
+   * motoru ortalamayı frekans paydası yapıyordu (frekans pencere uzunluğu
+   * kadar büyük → çalışan reklam "yoruldu" diye durduruluyordu). Dönemin
+   * tekil kişi sayısını yalnız Meta hesaplayabiliyor: aynı aralık, TEK satır.
+   *
+   * ALAN LİSTESİ DAR: kimlik + reach + impressions + frequency. Graph'te tek
+   * geçersiz alan isteğin tamamını düşürüyor; bu dördü günlük çekimde
+   * zaten kullanılıyor (`metaInsightAlanlari`).
+   *
+   * ATIF AYARLARI AÇIKÇA (günlük çekimle aynı değerler): erişim atıftan
+   * etkilenmiyor ama varsayılana bırakılan her parametre iki hesapta farklı
+   * davranabilir ve aynı istek iki ayrı yolda iki ayrı karar taşımamalı.
+   *
+   * CANLIDA ÖLÇÜLMEDİ (2026-10-13): `all_days` yanıtının biçimi belgeden
+   * (`date_start`/`date_stop` aralığın sınırları, satır başına bir varlık).
+   * Reach'in eşik altı kitlede boş dönme ihtimali var; boş dönen alan satırı
+   * DÜŞÜRÜYOR ve çağıran o varlığı "okunamadı" sayıyor, 0 değil.
+   */
+  async fetchPeriodReach(
+    ctx: FetchContext,
+    request: PeriodReachRequest,
+    opts: { timeoutMs?: number } = {},
+  ): Promise<PeriodReachResult> {
+    const act = actPath(ctx.accountExternalId);
+    const kimlikAlani = META_DONEM_KIMLIK_ALANI[request.level];
+    const url = new URL(`${this.graph}/${act}/insights`);
+    url.searchParams.set('level', META_LEVEL[request.level]);
+    url.searchParams.set('time_increment', 'all_days');
+    url.searchParams.set('time_range', JSON.stringify({ since: request.dateFrom, until: request.dateTo }));
+    url.searchParams.set('fields', [...(kimlikAlani ? [kimlikAlani] : []), 'reach', 'impressions', 'frequency'].join(','));
+    url.searchParams.set('limit', '500');
+    url.searchParams.set('use_unified_attribution_setting', 'true');
+    url.searchParams.set('action_report_time', 'impression');
+    url.searchParams.set('access_token', ctx.accessToken);
+
+    const rows: PeriodReachRow[] = [];
+    let next: string | undefined = url.toString();
+    let calls = 0;
+    // Satır başına bir varlık: 20 sayfa × 500 = 10.000 varlık. Aşılırsa
+    // eksik varlıklar "okunamadı" sayılıyor (`complete: false`), sessiz değil.
+    const MAX_SAYFA = 20;
+    while (next && calls < MAX_SAYFA) {
+      const res = await platformFetch<GraphPage>('meta', next, { timeoutMs: opts.timeoutMs }, parseMetaRateLimit);
+      calls++;
+      if (res.rateLimit && ctx.onRateLimit) await ctx.onRateLimit(res.rateLimit);
+      const body: GraphPage = res.data;
+      for (const raw of body.data ?? []) {
+        const id = kimlikAlani ? text(raw[kimlikAlani]) : act;
+        if (!id) continue;
+        // REACH BOŞSA SATIR YOK: 0 yazmak "kimseye ulaşmadı" demek olurdu.
+        if (raw.reach === undefined || raw.reach === null || raw.reach === '') continue;
+        const reach = int(raw.reach);
+        const frekans = raw.frequency === undefined || raw.frequency === null ? NaN : Number(raw.frequency);
+        rows.push({
+          entityExternalId: id,
+          reach,
+          impressions: int(raw.impressions),
+          frequency: Number.isFinite(frekans) ? frekans : null,
+        });
+      }
+      next = body.paging?.next;
+    }
+    return { rows, apiCalls: calls, complete: !next };
   }
 
   /**

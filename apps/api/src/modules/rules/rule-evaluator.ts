@@ -24,7 +24,17 @@ export interface WindowTotals {
   clicks: number;
   conversions: number;
   conversionValueMicros: bigint;
-  reach: number;
+  /**
+   * PENCERENİN TEKİL ERİŞİMİ — platformdan, pencerenin tamamı için
+   * (`time_increment=all_days`). `null` = okunamadı ya da platform vermiyor;
+   * sebebi `EntitySnapshot.erisimNedeni`nde.
+   *
+   * GÜNLÜK SATIRLARDAN TÜRETİLMİYOR. Bir süre günlük erişimlerin ORTALAMASI
+   * buradaydı: payda bir günün kitlesi, pay pencerenin gösterimi olunca
+   * 7 günlük pencerede frekans ~7 kat büyük çıkıyordu ve "frekans 3'ü
+   * geçerse durdur" kuralı çalışan reklamları durduruyordu.
+   */
+  reach: number | null;
   /** Pencerede veri satırı bulunan gün sayısı. */
   days: number;
 }
@@ -59,6 +69,19 @@ export interface EntitySnapshot {
    * `null`/verilmezse normal değerlendirme.
    */
   donusumsuzHedef?: string | null;
+  /**
+   * Pencere → tekil erişimin NEDEN olmadığı (okunamadı / platform vermiyor).
+   * Frekans koşulu değerlendirilmiyor ve bu cümle kural geçmişine yazılıyor.
+   */
+  erisimNedeni?: Partial<Record<RuleWindow, string>>;
+}
+
+/**
+ * Kural geçmişine yazılan cümle (TEK YER). `rule_action_logs.reason`
+ * VARCHAR(500): platform mesajı kısaltılıyor.
+ */
+export function frekansDegerlendirilemediCumlesi(neden: string): string {
+  return `Değerlendirilemedi: pencerenin tekil erişimi alınamadı, frekans hesaplanmadı (${neden.slice(0, 300)}).`;
 }
 
 /** Dönüşüm sayısına dayanan metrikler: dönüşüm için kurulmamış kampanyada hesaplanamaz. */
@@ -153,8 +176,10 @@ export function metricValue(
     case 'roas':
       return spend > 0 ? value / spend : null;
 
+    // Payda PENCERENİN tekil erişimi (platformdan). Yoksa tanımsız: evaluate
+    // bunu frekans koşuluna gelmeden ayırıp sebebiyle kaydediyor.
     case 'frequency':
-      return totals.reach > 0 ? totals.impressions / totals.reach : null;
+      return totals.reach !== null && totals.reach > 0 ? totals.impressions / totals.reach : null;
 
     case 'budget_spent_ratio':
       // Yüzde olarak: eşik %90 için 90 giriliyor.
@@ -219,6 +244,7 @@ export function evaluate(snapshot: EntitySnapshot, ctx: EvaluationContext): Eval
   const results: boolean[] = [];
   let unavailable: RuleMetric | null = null;
   let donusumAtlandi: RuleMetric | null = null;
+  let erisimAtlandi: string | null = null;
 
   for (const c of ctx.conditions) {
     /*
@@ -231,7 +257,19 @@ export function evaluate(snapshot: EntitySnapshot, ctx: EvaluationContext): Eval
       results.push(false);
       continue;
     }
+    /*
+     * FREKANSIN PAYDASI YOKSA KOŞUL DEĞERLENDİRİLMİYOR. Tekil erişim
+     * okunamadıysa (kota, platform hatası) ya da platform vermiyorsa
+     * (Google), bir payda tahmin etmek düzeltilen hatanın kendisi olurdu.
+     * Koşul SAĞLANMADI sayılıyor; eşleşme olmazsa sebep kaydediliyor.
+     * Pencerede hiç veri yoksa (aşağıdaki dal) bu bir erişim sorunu değil.
+     */
     const totals = snapshot.windows[c.window];
+    if (totals && c.metric === 'frequency' && totals.reach === null) {
+      erisimAtlandi = `${snapshot.erisimNedeni?.[c.window] ?? 'erişim okunmadı'}, ${WINDOW_TEXT[c.window]}`;
+      results.push(false);
+      continue;
+    }
     if (!totals) {
       // Pencerenin verisi hiç çekilmemiş — bu bir programlama hatası değil,
       // varlık o pencerede hiç yayında olmamış olabilir. Sıfır toplamlarla
@@ -266,6 +304,13 @@ export function evaluate(snapshot: EntitySnapshot, ctx: EvaluationContext): Eval
         matched: false,
         outcome: 'skipped_no_conversion_signal',
         reason: `${donusumSayilmiyorCumlesi(snapshot.donusumsuzHedef)} (${METRIC_TEXT[donusumAtlandi]} koşulu).`,
+      };
+    }
+    if (erisimAtlandi) {
+      return {
+        matched: false,
+        outcome: 'skipped_no_reach_signal',
+        reason: frekansDegerlendirilemediCumlesi(erisimAtlandi),
       };
     }
     /**

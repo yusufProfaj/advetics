@@ -946,7 +946,9 @@ export class LinkedInProvider implements IAdPlatformProvider {
           // LinkedIn video izlenmesi bu sorguda istenmiyor: NULL (sorulmadı), 0 değil.
           videoViews: null,
           engagements: 0,
-          reach: 0,
+          // Erişim bu sorguda istenmiyor: NULL (ölçülmedi), 0 değil — Google
+          // ile aynı karar; 0 "kimseye ulaşmadı" diye okunuyordu.
+          reach: null,
           raw: e,
         });
       }

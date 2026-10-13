@@ -3,6 +3,7 @@ import { tabloNotlari, type ReportData, type TenantContext } from '@advetics/sha
 import { createHarness, seedTenant, IDS, type Harness } from '../../../test/pglite-harness';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { KreatifAdresiService } from './kreatif-adresi.service';
+import type { DonemErisimiService, DonemErisimiSonucu, ErisimHesabi } from '../erisim/donem-erisimi.service';
 import { ReportsService } from './reports.service';
 
 /**
@@ -34,6 +35,17 @@ const CAMP_A = '66666666-6666-6666-6666-666666666666';
 const CAMP_B = '99999999-9999-9999-9999-999999999999';
 
 const RANGE = { clientId: IDS.client, from: '2026-08-01', to: '2026-08-02' };
+
+/**
+ * DÖNEM ERİŞİMİ OKUYUCUSU — platform yok, test başına ayarlanıyor.
+ * Varsayılan "okunamadı": erişimle ilgisiz testler sorguları sınıyor.
+ */
+type ErisimIstegi = { seviye: string; from: string; to: string };
+let erisimOku: (h: ErisimHesabi, i: ErisimIstegi) => Promise<DonemErisimiSonucu> = async () => ({
+  tur: 'okunamadi',
+  neden: 'test: platform yok',
+});
+const erisimCagrilari: Array<{ hesap: string; seviye: string; from: string; to: string; katman: string }> = [];
 
 async function seedCampaign(id: string, name: string): Promise<void> {
   await h.q(
@@ -109,7 +121,14 @@ beforeEach(async () => {
     tazele: async (_ctx: TenantContext, data: ReportData): Promise<ReportData> => data,
   } as unknown as KreatifAdresiService;
 
-  svc = new ReportsService(prisma, kreatifAdresi);
+  const donemErisimi = {
+    oku: (hh: ErisimHesabi, i: ErisimIstegi, o: { katman: string }) => {
+      erisimCagrilari.push({ hesap: hh.externalId, seviye: i.seviye, from: i.from, to: i.to, katman: o.katman });
+      return erisimOku(hh, i);
+    },
+  } as unknown as DonemErisimiService;
+
+  svc = new ReportsService(prisma, kreatifAdresi, donemErisimi);
 });
 
 describe('ReportsService — dönüşüm kovaları', () => {
@@ -246,26 +265,117 @@ describe('ReportsService — LATERAL çoğaltması', () => {
 });
 
 describe('ReportsService — erişim', () => {
-  it('kampanya erişimi TOPLANMIYOR, günlük ortalaması alınıyor', async () => {
-    // Aynı kişi kampanyayı iki gün de görmüş olabilir; toplamak müşteriye iki
-    // kat kitle söylemek olur.
+  const satir = (id: string, reach: number, impressions: number, frequency: number | null = null) => ({
+    entityExternalId: id,
+    reach,
+    impressions,
+    frequency,
+  });
+
+  beforeEach(() => {
+    erisimCagrilari.length = 0;
+    erisimOku = async (_h, i) =>
+      i.seviye === 'campaign'
+        ? { tur: 'olculdu', satirlar: new Map([['ext-Kampanya A', satir('ext-Kampanya A', 1500, 2400, 1.6)]]) }
+        : { tur: 'olculdu', satirlar: new Map([['act_999', satir('act_999', 1800, 3000, null)]]) };
+  });
+
+  it('KRİTİK: kampanya erişimi DÖNEMİN tekil kişi sayısı (Meta), günlük ortalama DEĞİL', async () => {
+    // Eski davranış: (800 + 800) / 2 = 800 ve "*". Dönemin tekil erişimi 1500.
     for (const date of ['2026-08-01', '2026-08-02']) {
       await seedRow({ entityId: CAMP_A, date, reach: 800 });
     }
     const data = await svc.build(CTX, RANGE);
-    expect(data.metaCampaigns[0]!.reach).toBe(800);
-    expect(data.metaCampaigns[0]!.reachIsDailyAverage).toBe(true);
+    const a = data.metaCampaigns.find((c) => c.id === CAMP_A)!;
+    expect(a.erisim).toEqual({ reach: 1500, frequency: 1.6, durum: 'olculdu', neden: null });
+    // Toplam satırı: HESAP seviyesi (satırlar toplanmıyor).
+    expect(data.donemErisimi.meta).toMatchObject({ reach: 1800, durum: 'olculdu' });
+    expect(data.erisimHatalari).toEqual([]);
   });
 
-  it('tek günde erişim TAM ve ortalama işareti yok', async () => {
-    await seedRow({ entityId: CAMP_A, date: '2026-08-01', reach: 800 });
-    const data = await svc.build(CTX, {
-      ...RANGE,
-      from: '2026-08-01',
-      to: '2026-08-01',
+  it('KRİTİK: okuma raporun ARALIĞIYLA, kampanya ve hesap seviyesinde, rapor kota katmanıyla', async () => {
+    await seedRow({ entityId: CAMP_A, date: '2026-08-01' });
+    await svc.build(CTX, RANGE);
+    expect(erisimCagrilari).toEqual([
+      { hesap: 'act_999', seviye: 'campaign', from: '2026-08-01', to: '2026-08-02', katman: 'report_reach' },
+      { hesap: 'act_999', seviye: 'account', from: '2026-08-01', to: '2026-08-02', katman: 'report_reach' },
+    ]);
+  });
+
+  it('Meta frekans vermezse aynı satırın gösterim ÷ erişimi', async () => {
+    await seedRow({ entityId: CAMP_A, date: '2026-08-01' });
+    erisimOku = async (_h, i) => ({
+      tur: 'olculdu',
+      satirlar: new Map(i.seviye === 'campaign' ? [['ext-Kampanya A', satir('ext-Kampanya A', 1000, 2500)]] : []),
     });
-    expect(data.metaCampaigns[0]!.reach).toBe(800);
-    expect(data.metaCampaigns[0]!.reachIsDailyAverage).toBe(false);
+    const data = await svc.build(CTX, RANGE);
+    expect(data.metaCampaigns[0]!.erisim.frequency).toBe(2.5);
+  });
+
+  it('KRİTİK: okunamazsa "okunamadı" + sebep tablonun üstünde; 0 ya da ortalama YOK', async () => {
+    await seedRow({ entityId: CAMP_A, date: '2026-08-01', reach: 800 });
+    erisimOku = async () => ({ tur: 'okunamadi', neden: 'kota engeli (usage_high)' });
+    const data = await svc.build(CTX, RANGE);
+    expect(data.metaCampaigns[0]!.erisim).toMatchObject({ reach: null, durum: 'okunamadi' });
+    expect(data.donemErisimi.meta.durum).toBe('okunamadi');
+    expect(data.erisimHatalari).toEqual([{ platform: 'meta', mesaj: 'kota engeli (usage_high)' }]);
+    expect(tabloNotlari(data, 'meta_campaigns').join(' ')).toContain('kota engeli (usage_high)');
+  });
+
+  it('Meta kampanyayı döndürmezse o satır "okunamadı" ve sayısı notta', async () => {
+    await seedRow({ entityId: CAMP_A, date: '2026-08-01' });
+    await seedRow({ entityId: CAMP_B, date: '2026-08-01' });
+    const data = await svc.build(CTX, RANGE);
+    expect(data.metaCampaigns.find((c) => c.id === CAMP_B)!.erisim.durum).toBe('okunamadi');
+    expect(data.metaCampaigns.find((c) => c.id === CAMP_A)!.erisim.durum).toBe('olculdu');
+    expect(data.erisimHatalari.map((x) => x.mesaj)).toContain('Meta 1 kampanya için dönem erişimi döndürmedi');
+  });
+
+  it('KRİTİK: birden çok Meta hesabında TOPLAM erişim "desteklenmiyor" ve hesap seviyesi sorulmuyor', async () => {
+    const IKINCI = '12121212-1212-4212-8212-121212121212';
+    const CAMP_C = '13131313-1313-4313-8313-131313131313';
+    await h.q(
+      `INSERT INTO ad_accounts (id, org_id, client_id, connection_id, platform, external_id, name, currency, timezone, sync_enabled, updated_at)
+       VALUES ($1, $2, $3, $4, 'meta', 'act_888', 'Hesap 2', 'TRY', 'Europe/Istanbul', true, now())`,
+      [IKINCI, IDS.org, IDS.client, IDS.connection],
+    );
+    await h.q(
+      `INSERT INTO campaigns (id, ad_account_id, client_id, platform, external_id, name, objective, status, budget_mode, updated_at)
+       VALUES ($1, $2, $3, 'meta', 'ext-C', 'Kampanya C', 'OUTCOME_LEADS', 'active', 'daily', now())`,
+      [CAMP_C, IKINCI, IDS.client],
+    );
+    await seedRow({ entityId: CAMP_A, date: '2026-08-01' });
+    await h.q(
+      `INSERT INTO insights_daily (client_id, ad_account_id, platform, entity_level, entity_id, entity_external_id,
+         date, breakdown_key, impressions, clicks, spend_micros, conversions, conversion_value_micros, currency, reach, raw_metrics)
+       VALUES ($1, $2, 'meta', 'campaign', $3, 'ext-C', '2026-08-01', '', 100, 10, 1000000, 0, 0, 'TRY', 0, '{}'::jsonb)`,
+      [IDS.client, IKINCI, CAMP_C],
+    );
+    const data = await svc.build(CTX, RANGE);
+    expect(data.donemErisimi.meta.durum).toBe('desteklenmiyor');
+    expect(erisimCagrilari.filter((c) => c.seviye === 'account')).toEqual([]);
+    expect(erisimCagrilari.filter((c) => c.seviye === 'campaign').map((c) => c.hesap).sort()).toEqual(['act_888', 'act_999']);
+  });
+
+  it('erişim için kurulmuş kampanya işaretleniyor (sonuç = erişim)', async () => {
+    await h.q(
+      `INSERT INTO ad_groups (id, campaign_id, ad_account_id, client_id, platform, external_id, name, status, budget_mode, optimization_goal, updated_at)
+       VALUES (gen_random_uuid(), $1, $2, $3, 'meta', 'set-erisim', 'Set', 'active', 'none', 'REACH', now())`,
+      [CAMP_A, IDS.adAccount, IDS.client],
+    );
+    await seedRow({ entityId: CAMP_A, date: '2026-08-01' });
+    await seedRow({ entityId: CAMP_B, date: '2026-08-01' });
+    const data = await svc.build(CTX, RANGE);
+    expect(data.metaCampaigns.find((c) => c.id === CAMP_A)!.erisimKampanyasi).toBe(true);
+    expect(data.metaCampaigns.find((c) => c.id === CAMP_B)!.erisimKampanyasi).toBe(false);
+  });
+
+  it('Meta kampanyası yoksa platforma gidilmiyor', async () => {
+    const data = await svc.build(CTX, RANGE);
+    expect(data.metaCampaigns).toEqual([]);
+    expect(erisimCagrilari).toEqual([]);
+    // Google ve LinkedIn tablosunun toplamı "desteklenmiyor", sebebiyle.
+    expect(data.donemErisimi.google).toMatchObject({ durum: 'desteklenmiyor', neden: 'Google tekil erişim vermiyor' });
   });
 });
 

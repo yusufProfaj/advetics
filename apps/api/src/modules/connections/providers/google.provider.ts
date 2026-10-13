@@ -1243,10 +1243,13 @@ export class GoogleProvider implements IAdPlatformProvider {
             ? (videolar.olcumler.get(`${entityExternalId}|${date}`)?.izlenme ?? 0)
             : null,
         engagements: Number(metrics?.engagements ?? 0) || 0,
-        // Google `reach` vermiyor — bu metrik Meta'ya özgü. 0 bırakıyoruz;
-        // 0 ile "bilinmiyor" arasındaki fark rapor katmanında platforma göre
-        // ele alınacak.
-        reach: 0,
+        /*
+         * GOOGLE TEKİL ERİŞİM VERMİYOR: NULL, 0 DEĞİL. Burada bir süre 0
+         * yazılıyordu ve "fark rapor katmanında ele alınacak" deniyordu;
+         * alınmadı: raporun Google tablosunda her satır "Erişim 0" basıyordu,
+         * yani "kimseye ulaşmadı". NULL ölçülmemiş demek ve SUM onu atlıyor.
+         */
+        reach: null,
         /*
          * DETAY HAM GÖVDEYE İLİŞTİRİLİYOR, YENİ KOLONA DEĞİL.
          *

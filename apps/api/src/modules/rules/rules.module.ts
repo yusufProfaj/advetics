@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConnectionsModule } from '../connections/connections.module';
+import { DonemErisimiModule } from '../erisim/donem-erisimi.module';
 import { RulesController } from './rules.controller';
 import { RulesService } from './rules.service';
 import { RuleExecutorService } from './rule-executor.service';
@@ -14,7 +15,8 @@ import { RuleExecutorService } from './rule-executor.service';
  * başlatma hatası sınıfı.
  */
 @Module({
-  imports: [ConnectionsModule],
+  // Frekans koşulu pencerenin TEKİL erişimini platformdan okuyor.
+  imports: [ConnectionsModule, DonemErisimiModule],
   controllers: [RulesController],
   providers: [RulesService, RuleExecutorService],
   exports: [RulesService, RuleExecutorService],

@@ -369,6 +369,29 @@ export interface PlatformStructure {
 /** Hangi seviyede metrik isteniyor. `insights_daily.entity_level` ile aynı. */
 export type InsightsLevel = 'account' | 'campaign' | 'ad_group' | 'ad';
 
+/** `fetchPeriodReach` isteği. Tarihler YYYY-MM-DD, hesabın zaman diliminde. */
+export interface PeriodReachRequest {
+  level: InsightsLevel;
+  dateFrom: string;
+  dateTo: string;
+}
+
+export interface PeriodReachRow {
+  /** Seviyenin platform kimliği (hesap seviyesinde hesap kimliği). */
+  entityExternalId: string;
+  reach: number;
+  impressions: number;
+  /** Platformun bildirdiği dönem frekansı; yoksa null (hesaplanmıyor). */
+  frequency: number | null;
+}
+
+export interface PeriodReachResult {
+  rows: PeriodReachRow[];
+  apiCalls: number;
+  /** Sayfa sınırında bittiyse false: eksik satırlar "okunamadı" sayılmalı. */
+  complete: boolean;
+}
+
 export interface InsightsRequest {
   level: InsightsLevel;
   /**
@@ -411,7 +434,14 @@ export interface DiscoveredInsightRow {
    */
   videoViews: number | null;
   engagements: number;
-  reach: number;
+  /**
+   * O GÜNÜN tekil erişimi. `null` = platform VERMİYOR (Google, LinkedIn bu
+   * sorguda); 0 = okundu ve sıfır. Bir süre Google her satıra 0 yazıyordu ve
+   * "kimseye ulaşmadı" diye okunuyordu. Günlük erişim günler arasında
+   * TOPLANAMAZ: dönem erişimi ayrı çağrı (`fetchPeriodReach`).
+   */
+  reach: number | null;
+  /** O günün frekansı (günlük); dönem frekansı yerine KULLANILMAZ. */
   frequency?: number;
 
   /**
@@ -1176,6 +1206,27 @@ export interface IAdPlatformProvider {
       butceBitisi?: number;
     },
   ): Promise<Map<string, { url: string } | { hata: string }>>;
+
+  /**
+   * DÖNEMİN TEKİL ERİŞİMİ — bir tarih aralığının TAMAMI için tek satır.
+   *
+   * İSTEĞE BAĞLI: Google ve LinkedIn tekil erişim vermiyor ve uygulamıyor;
+   * çağıran bunu "desteklenmiyor" diye yazıyor (0 değil).
+   *
+   * NEDEN AYRI ÇAĞRI: tekil erişim günlerden toplanamıyor (aynı kişi her
+   * gün yeniden sayılır) ve ortalaması da dönemin kitlesi değil. Rapor ve
+   * kural motoru bir süre günlük satırlardan erişim türetiyordu: rapor
+   * kitleyi kat kat küçük, kural motoru frekansı pencere uzunluğu kadar
+   * büyük gösteriyordu. Tek doğru kaynak platformun kendi dönem hesabı.
+   *
+   * Satır yalnız dönemde GÖSTERİMİ olan varlıklar için gelir; gelmeyen
+   * varlık "okunamadı"dır, 0 değil (çağıranın kararı).
+   */
+  fetchPeriodReach?(
+    ctx: FetchContext,
+    request: PeriodReachRequest,
+    opts?: { timeoutMs?: number },
+  ): Promise<PeriodReachResult>;
 
   /**
    * YAZMA — kural motorunun platforma dokunduğu tek nokta.

@@ -70,8 +70,8 @@ const VERI: ReportData = {
       spendMicros: '821770000',
       conversions: 5,
       conversionValueMicros: '0',
-      reach: 3900,
-      reachIsDailyAverage: false,
+      erisim: { reach: 3900, frequency: 1.07, durum: 'olculdu', neden: null },
+      erisimKampanyasi: false,
       dayCount: 31,
       ctr: 1.58,
       cpc: 12.45,
@@ -121,6 +121,12 @@ const VERI: ReportData = {
   unknownCallActions: [],
   callClicksErrors: [],
   videoMetricsErrors: [],
+  donemErisimi: {
+    meta: { reach: 3900, frequency: null, durum: 'olculdu', neden: null },
+    google: { reach: null, frequency: null, durum: 'desteklenmiyor', neden: 'Google tekil erişim vermiyor' },
+    linkedin: { reach: null, frequency: null, durum: 'desteklenmiyor', neden: 'LinkedIn Ads tekil erişim vermiyor' },
+  },
+  erisimHatalari: [],
   conversionDetail: {
     rows: [
       { platform: 'google' as const, name: 'WhatsApp tıklaması', count: 42, valueMicros: '0' },
@@ -807,16 +813,51 @@ describe('PDF görselliği', () => {
 
   it('KRİTİK: TOPLANAMAYAN sütun toplam satırında "—" basıyor', async () => {
     /*
-     * Erişimde toplam "iki kat kitle" demek: aynı kişi iki kampanyayı da
-     * görmüş olabilir. Boş bırakmak "hesaplanmadı" gibi okunuyordu; panelde
-     * de "—" basılıyor.
+     * Sonuç sütunu satırlarda iki tür taşıyor (erişilen kişi, dönüşüm);
+     * toplamı uydurma olurdu. Boş bırakmak "hesaplanmadı" gibi okunuyordu;
+     * panelde de "—" basılıyor.
      */
-    const erisim = await svc.uret({
+    const sonuc = await svc.uret({
       ...VERI,
       sections: ['meta_campaigns'],
-      options: { meta_campaigns: { metrics: ['reach'] } },
+      options: { meta_campaigns: { metrics: ['result'] } },
     });
-    expect(metinler(erisim)).toContain('—');
+    expect(metinler(sonuc)).toContain('—');
+  });
+
+  it('KRİTİK: erişim TOPLAMI tablonun dönem erişimi (hesap), frekans = toplam gösterim ÷ o erişim', async () => {
+    /*
+     * Satır erişimleri toplanamıyor; toplam satırı Meta'nın HESAP seviyesi
+     * dönem erişimini basmalı. 4.184 gösterim ÷ 2.092 kişi = 2,00.
+     */
+    const pdf = await svc.uret({
+      ...VERI,
+      sections: ['meta_campaigns'],
+      options: { meta_campaigns: { metrics: ['reach', 'frequency'] } },
+      donemErisimi: { ...VERI.donemErisimi, meta: { reach: 2092, frequency: null, durum: 'olculdu', neden: null } },
+    });
+    const m = metinler(pdf);
+    expect(m).toContain('3.900');
+    expect(m).toContain('2.092');
+    expect(m).toContain('2,00');
+    expect(m).toContain('1,07');
+  });
+
+  it('KRİTİK: erişim okunamadıysa hücre ve toplam "okunamadı", sebep tablonun üstünde', async () => {
+    const pdf = await svc.uret({
+      ...VERI,
+      sections: ['meta_campaigns'],
+      options: { meta_campaigns: { metrics: ['reach', 'frequency'] } },
+      metaCampaigns: VERI.metaCampaigns.map((c) => ({ ...c, erisim: { reach: null, frequency: null, durum: 'okunamadi' as const, neden: 'kota' } })),
+      donemErisimi: { ...VERI.donemErisimi, meta: { reach: null, frequency: null, durum: 'okunamadi', neden: 'kota' } },
+      erisimHatalari: [{ platform: 'meta', mesaj: 'kota engeli (usage_high)' }],
+    });
+    const m = metinler(pdf).join(' ');
+    expect(m).toContain('okunamadı');
+    // Not sarılıyor (satır sonunda bölünüyor): iki parçası ayrı aranıyor.
+    expect(m).toContain('Sebep: kota');
+    expect(m).toContain('engeli (usage_high)');
+    expect(m).not.toContain('3.900');
   });
 
   it('KRİTİK: toplam PANELLE aynı kaynaktan — ikinci defter yok', () => {
@@ -1013,6 +1054,29 @@ describe('PDF tabloları', () => {
      * beklenmiyor: tabloda tek bir "…" bile olmamalı.
      */
     expect(metinler(pdf).filter((x) => x.includes('…')), 'tabloda kırpılmış hücre var').toEqual([]);
+  });
+
+  it('KRİTİK: erişim kampanyasında açılan Frekans/Sonuç/BGM sütunları harcamayı KIRPMIYOR', async () => {
+    /*
+     * İlk hâlde varsayılan Meta seti (6) + Frekans + Sonuç + BGM = 9 sütun
+     * ana tablodaydı ve bu test "123.456…" ile DÜŞTÜ. Sonuç ve BGM artık
+     * ayrı sayfada (`kampanyaTablolari`), ana tabloda yalnız Frekans eklendi.
+     * Tutar altı haneli: kıl payı sığan bir tutar mutasyonu yakalamaz.
+     */
+    const pdf = await svc.uret({
+      ...VERI,
+      sections: ['meta_campaigns'],
+      metaCampaigns: [
+        { ...VERI.metaCampaigns[0]!, name: 'Kampanya A', spendMicros: '123456780000', erisimKampanyasi: true, erisim: { reach: 123456, frequency: 1.25, durum: 'olculdu', neden: null } },
+      ],
+    });
+    const m = metinler(pdf);
+    expect(m).toContain('SONUÇ');
+    expect(m).toContain('BGM');
+    expect(m).toContain('FREKANS');
+    // Satırın sonuç türü yazılı: erişim kampanyasının sonucu dönüşüm değil.
+    expect(m).toContain('erişilen kişi');
+    expect(m.filter((x) => x.includes('…')), 'tabloda kırpılmış hücre var').toEqual([]);
   });
 
   it('KRİTİK: sığmayan satır sayısı YAZILIYOR', async () => {

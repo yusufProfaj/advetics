@@ -6,6 +6,7 @@ import {
   DEFAULT_COLUMNS,
   VIDEO_KEYS,
   bosRaporVideo,
+  erisimYok,
   kampanyaTablolari,
   resolveColumns,
   sumRows,
@@ -26,6 +27,7 @@ import {
 } from '../connections/providers/google.provider';
 import { META_VIDEO_CEYREK_ALANLARI, MetaProvider, metaInsightAlanlari } from '../connections/providers/meta.provider';
 import type { KreatifAdresiService } from './kreatif-adresi.service';
+import type { DonemErisimiService } from '../erisim/donem-erisimi.service';
 import { ReportsService } from './reports.service';
 
 /**
@@ -258,11 +260,14 @@ describe('B4 — rapor sütunları (paylaşılan karar)', () => {
   });
 
   it('KRİTİK: toplam null\'ları atlar; izlenme başı maliyet yalnız okunan günlerin harcamasıyla', () => {
-    const t = sumRows([
-      satir(v({ izlenme: 100, harcamaMicros: '50000000', p25: 40 }), '50000000'),
-      satir(v({ izlenme: null, okunamadi: true }), '900000000'),
-      satir(v({ izlenme: 100, harcamaMicros: '150000000', p25: null }), '150000000'),
-    ]);
+    const t = sumRows(
+      [
+        satir(v({ izlenme: 100, harcamaMicros: '50000000', p25: 40 }), '50000000'),
+        satir(v({ izlenme: null, okunamadi: true }), '900000000'),
+        satir(v({ izlenme: 100, harcamaMicros: '150000000', p25: null }), '150000000'),
+      ],
+      erisimYok('desteklenmiyor', 'test'),
+    );
     expect(t.video.izlenme).toBe(200);
     expect(t.video.p25).toBe(40);
     expect(t.video.okunamadi).toBe(true);
@@ -277,7 +282,10 @@ describe('B4 — rapor sütunları (paylaşılan karar)', () => {
    * alınamayan ölçümü "kimse izlemedi" diye söyler.
    */
   it('KRİTİK: bütün satırlar okunamadıysa TOPLAM da okunamadı, 0 değil', () => {
-    const t = sumRows([satir(v({ izlenme: null, okunamadi: true }), '900000000'), satir(v({ izlenme: null, okunamadi: true }), '100000000')]);
+    const t = sumRows(
+      [satir(v({ izlenme: null, okunamadi: true }), '900000000'), satir(v({ izlenme: null, okunamadi: true }), '100000000')],
+      erisimYok('desteklenmiyor', 'test'),
+    );
     expect(t.video.izlenme).toBeNull();
     expect(t.video.p25).toBeNull();
     expect(COLUMN_TOTALS.videoViews!(t, 'TRY')).toBe('okunamadı');
@@ -331,6 +339,8 @@ describe('B4 — rapor sorgusu (PGlite)', () => {
     svc = new ReportsService(
       { withTenant: async <T>(_c: TenantContext, fn: (tx: unknown) => Promise<T>) => fn(h.db) } as unknown as PrismaService,
       { tazele: async (_c: TenantContext, d: ReportData) => d } as unknown as KreatifAdresiService,
+      // Erişim bu dosyanın konusu değil: platform çağrısı yok, "okunamadı".
+      { oku: async () => ({ tur: 'okunamadi', neden: 'test: platform yok' }) } as unknown as DonemErisimiService,
     );
   });
 

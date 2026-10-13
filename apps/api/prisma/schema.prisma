@@ -1415,7 +1415,10 @@ model InsightsDaily {
   /// 0 = okundu ve sıfır. Oynatma ve çeyrekler `raw_metrics.video` içinde.
   videoViews  Int?     @default(0) @map("video_views")
   engagements Int      @default(0)
-  reach       Int      @default(0)
+  /// O GÜNÜN tekil erişimi. NULL = platform vermiyor (Google, LinkedIn);
+  /// 0 = okundu ve sıfır. Günler arasında TOPLANAMAZ: dönem erişimi
+  /// platformdan ayrı okunuyor (`fetchPeriodReach`).
+  reach       Int?     @default(0)
   frequency   Decimal? @db.Decimal(10, 4)
 
   /// Platforma özgü tüm alanlar. Yeni metrik desteği migration gerektirmiyor.

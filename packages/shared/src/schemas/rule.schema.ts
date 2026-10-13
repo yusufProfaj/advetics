@@ -349,6 +349,14 @@ export const ACTION_OUTCOMES = [
    * değerlendirilemedi: o kampanyada dönüşüm SAYILMIYOR, 0 bir ölçüm değil.
    */
   'skipped_no_conversion_signal',
+  /**
+   * Frekans koşulu değerlendirilemedi: pencerenin TEKİL erişimi platformdan
+   * okunamadı (kota, token, platform hatası) ya da platform vermiyor
+   * (Google). Günlük erişimlerden bir payda uydurmak frekansı pencere
+   * uzunluğu kadar şişiriyordu ve çalışan reklamı "yoruldu" diye
+   * durduruyordu; tahmin etmektense değerlendirmiyoruz.
+   */
+  'skipped_no_reach_signal',
 ] as const;
 export type ActionOutcome = (typeof ACTION_OUTCOMES)[number];
 
@@ -363,6 +371,7 @@ export const OUTCOME_LABELS: Record<ActionOutcome, string> = {
   skipped_capped: 'Sınıra takıldı',
   skipped_noop: 'Zaten bu durumda',
   skipped_no_conversion_signal: 'Dönüşüm sayılmıyor',
+  skipped_no_reach_signal: 'Erişim okunamadı',
 };
 
 export interface RuleActionRecord {

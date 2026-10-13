@@ -54,7 +54,9 @@ describe('Nest kaydı', () => {
     expect(cekirdek).not.toMatch(/imports:/);
     expect(cekirdek).toMatch(/providers:\s*\[OzetService, GenelBakisService\]/);
     expect(cekirdek).toMatch(/exports:\s*\[OzetService\]/);
-    expect(oku('../reports/reports.module.ts')).toMatch(/imports:\s*\[ConnectionsModule, HaftalikOzetIsModule\]/);
+    // Liste sabitlenmiyor (Reports başka modüller de içe alıyor, ör. dönem
+    // erişimi); iddia çekirdeğin LİSTEDE olması.
+    expect(oku('../reports/reports.module.ts')).toMatch(/imports:\s*\[[^\]]*\bHaftalikOzetIsModule\b[^\]]*\]/);
     expect(oku('../sinyal/sinyal-is.module.ts')).toMatch(/imports:\s*\[HaftalikOzetIsModule\]/);
     const api = oku('haftalik-ozet.module.ts');
     expect(api).toMatch(/imports:\s*\[HaftalikOzetIsModule, ReportsModule\]/);
