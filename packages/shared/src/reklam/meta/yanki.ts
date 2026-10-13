@@ -118,6 +118,14 @@ const ETIKETLER: Record<string, string> = {
   'object_story_spec.link_data.message': 'Ana metin',
   'object_story_spec.link_data.description': 'Açıklama',
   'object_story_spec.link_data.link': 'Bağlantı',
+  // VİDEO KREATİFİNİN METİNLERİ (VIDEO denetimi B6): etiket olmadan geri
+  // okuma farkı ekranda ham alan yolu ("object_story_spec.video_data.title")
+  // olarak çıkıyordu. Yalnız etiket: karşılaştırma kuralı değişmedi, Meta'nın
+  // bu alanları nasıl döndürdüğü ölçülmeden normalleştirme UYDURULMUYOR.
+  // `image_hash` ve `call_to_action` kabul edilemez sınıfta, etiketleri orada.
+  'object_story_spec.video_data.title': 'Video başlığı',
+  'object_story_spec.video_data.message': 'Ana metin',
+  'object_story_spec.video_data.link_description': 'Açıklama',
   url_tags: 'İzleme etiketleri',
   adlabels: 'Advetics etiketi',
   locale: 'Form dili',
@@ -168,7 +176,7 @@ const KARSILAMA_YOLLARI = new Set(['object_story_spec.link_data.page_welcome_mes
  * (brief 04). Bunu bir hata saymak yanlış olur: ne gönderdik ne
  * değiştirebiliriz. Yalnız ekranda söylenir.
  *
- * DAR: yalnız WhatsApp ve form niyetlerinde (reklam setinin
+ * DAR: yalnız WhatsApp, form ve video izlenme niyetlerinde (reklam setinin
  * `destination_type`ından tanınıyor) ve SATIŞTA (kampanyanın `objective`i;
  * satışın `destination_type`ı WEBSITE ve "Siteme gelsinler" ile aynı,
  * ondan tanınamaz). Okuma AYRI ve isteğe bağlı ikinci istekte
@@ -180,9 +188,19 @@ const KARSILAMA_YOLLARI = new Set(['object_story_spec.link_data.page_welcome_mes
  * kampanya Advantage+ satış koşulunu sağlamıyor; kullanıcı bunu bilmeli
  * ama bir fark değil (yerleşimi biz bilerek daralttık).
  */
-const ADVANTAGE_DURUMU_NIYETLERI = ['WHATSAPP', 'FORM'] as const;
+const ADVANTAGE_DURUMU_NIYETLERI = ['WHATSAPP', 'FORM', 'VIDEO_IZLENME'] as const;
 const ADVANTAGE_DURUMU_HEDEFLERI = new Set<string>(ADVANTAGE_DURUMU_NIYETLERI.map((n) => NIYET_KATALOGU[n].meta!.destinationType!));
 const ADVANTAGE_SATIS_HEDEFI = NIYET_KATALOGU.SATIS.meta!.objective;
+
+/**
+ * VİDEO İZLENMEDE N-21 (VIDEO denetimi B9): kullanıcının kararı "Advantage+
+ * ama Audience Network hariç" ve bu ELLE yerleşim demek; kampanya Meta'da
+ * Advantage+ görünmeyecek. Fark değil (yerleşimi biz bilerek yazdık), bilgi.
+ * Video `destination_type`ı (ON_VIDEO) başka bir rehber niyetinde yok,
+ * yani tanıma dar kalıyor.
+ */
+export const ADVANTAGE_VIDEO_YERLESIM_CUMLESI = 'Audience Network kapalı olduğu için yerleşim elle seçildi; kampanya Advantage+ yerleşimli değil.';
+const ADVANTAGE_VIDEO_HEDEFI = NIYET_KATALOGU.VIDEO_IZLENME.meta!.destinationType!;
 
 /** SATIŞTA elle yerleşime düşülmüşse N-21 satırına eklenen cümle. */
 export const ADVANTAGE_SATIS_YERLESIM_CUMLESI = 'Advantage+ satış koşulu (otomatik yerleşim) sağlanmadı: bazı yerleşimler görsel boyutu eksik olduğu için kapalı.';
@@ -213,6 +231,7 @@ export function beklenenYankilar(govdeler: MetaGovdesi[]): BeklenenYanki[] {
   if (kampanya && ((typeof hedef === 'string' && ADVANTAGE_DURUMU_HEDEFLERI.has(hedef)) || satis)) {
     sonuc.push({
       ...(satis && elleYerlesim ? { ekBilgi: ADVANTAGE_SATIS_YERLESIM_CUMLESI } : {}),
+      ...(hedef === ADVANTAGE_VIDEO_HEDEFI && elleYerlesim ? { ekBilgi: ADVANTAGE_VIDEO_YERLESIM_CUMLESI } : {}),
       nesne: 'kampanya',
       govde: kampanya.ad,
       alanYolu: 'advantage_state_info',

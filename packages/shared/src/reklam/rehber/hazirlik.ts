@@ -36,8 +36,53 @@ export interface RehberYoutubeKanali {
  * Google video reklamı YouTube'daki bir videoyu istiyor; kullanıcıya bağlantı
  * yapıştırtmak yerine kanaldan seçtirilir. Sessiz kesme yok: `toplam`.
  */
+/**
+ * Bir YouTube videosunun reklam için gereken hâli (B15). `videos.list
+ * part=snippet,status,contentDetails` (1 kota birimi, 50 kimliğe kadar).
+ * `null` = YouTube o alanı döndürmedi; "bilinmiyor" ile "hayır" karışmasın.
+ */
+export interface YoutubeVideoBilgisi {
+  videoId: string;
+  baslik: string;
+  kucukResim: string | null;
+  /** Saniye (ISO 8601 `PT1M5S` çözülmüş). */
+  sureSn: number | null;
+  /** `public` / `unlisted` / `private`. */
+  gizlilik: string | null;
+  /** `status.embeddable`: false ise video başka yerde (reklamda) oynatılamaz. */
+  gomulebilir: boolean | null;
+  /** Reklama konamıyorsa SEBEBİ (giriş anında engel); konabiliyorsa `null`. */
+  engel: string | null;
+}
+
+/**
+ * Gizli ya da yerleştirilemeyen video Google video reklamında GÖSTERİLEMEZ:
+ * kurulum provada ya da (daha kötüsü) yayında, gösterimsiz kalarak düşer.
+ * Kural TEK yerde: sunucu okuma ucu, eksik listesi ve panel bunu çağırıyor.
+ * Liste dışı (`unlisted`) video reklamda kullanılabiliyor; engel değil.
+ */
+export function youtubeVideoEngeli(v: { gizlilik?: string | null; gomulebilir?: boolean | null }): string | null {
+  if (v.gizlilik === 'private') return "Bu video YouTube'da gizli; reklamda gösterilemez. Herkese açık ya da liste dışı yap.";
+  if (v.gomulebilir === false) return "Bu videonun başka sitelerde oynatılması YouTube'da kapalı; reklamda gösterilemez. Video ayarlarında yerleştirmeye izin ver.";
+  return null;
+}
+
 export interface YoutubeVideoListesi {
-  satirlar: Array<{ videoId: string; baslik: string; kucukResim: string | null; yayinTarihi: string | null }>;
+  satirlar: Array<{
+    videoId: string;
+    baslik: string;
+    kucukResim: string | null;
+    yayinTarihi: string | null;
+    /** B15: ayrıntı okunduysa dolu; okunamadıysa `null` ve sebep `ayrintiHatasi`nda. */
+    sureSn?: number | null;
+    gizlilik?: string | null;
+    gomulebilir?: boolean | null;
+  }>;
+  /**
+   * Süre ve gizlilik ayrı çağrıyla okunuyor; o çağrı düşerse liste yine
+   * gelir ama SEBEP ekranda yazar (boş alanlar "her şey yolunda" sanılmasın).
+   */
+  ayrintiHatasi?: string | null;
   /** DÖNEN video sayısı (YouTube tek sayfada en çok 50 veriyor). */
   toplam: number;
   /** 50 döndüyse kanalda daha fazlası olabilir: ekranda "son 50 video" yazılır. */

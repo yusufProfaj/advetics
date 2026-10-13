@@ -79,6 +79,22 @@ export const rehberMedyasiSchema = z.object({
   /** Video ise kapak karesi (tarayıcıda alınır; sunucuda video işlenmez). */
   kapakVarlikId: z.string().uuid().optional(),
   /**
+   * KAPAK ADAYLARI (VIDEO denetimi B10): tarayıcıda videonun %10, %33 ve
+   * %60'ından (en az 1. saniye) alınan, siyah olmayan kareler. Kullanıcı
+   * birini seçince `kapakVarlikId` o olur; adaylar yüklenmiş olduğu için
+   * sayfa yenilense de seçim değiştirilebiliyor. Eski kayıtta alan yok =
+   * tek kapak (eski davranış).
+   */
+  kapakAdaylari: z.array(z.string().uuid()).max(3).optional(),
+  /**
+   * METİN ÖNERİSİNİN KARELERİ (B11): başı, ortası ve ~15. saniye, küçük
+   * boyutta. Yapay zekâ kapak yerine bunları görüyor; tek kapak videonun
+   * NE ANLATTIĞINI göstermiyordu. Yoksa kapak gider (eski davranış).
+   */
+  oneriKareleri: z.array(z.string().uuid()).max(3).optional(),
+  /** Video süresi, saniye (tarayıcıda ölçülür; giriş kontrolü `medyaKontrol`). */
+  sureSn: z.number().nonnegative().max(36_000).optional(),
+  /**
    * BANNER SETİ: aynı numaralı görseller tek reklamın boyutları
    * (`banner-seti.ts`). Verilmezse görseller orana göre sırayla gruplanır;
    * kullanıcı bir görseli başka sete taşıyınca yazılır. İsteğe bağlı ve
@@ -149,8 +165,26 @@ export const rehberAlanlariSchema = z
     /** Meta form kimliği (sayısal) ya da eski kayıtlarda `lead_forms.id` (`formKimligiSchema`). */
     formSablonuId: alan(formKimligiSchema.nullable()),
     medya: alan(z.array(rehberMedyasiSchema).max(10)),
-    /** Google video reklamı YouTube'daki bir video ister (bağlı kanaldan seçilir). */
-    youtubeVideo: alan(z.object({ videoId: z.string().max(20), baslik: z.string().max(200) }).nullable()),
+    /**
+     * Google video reklamı YouTube'daki bir video ister (bağlı kanaldan
+     * seçilir ya da bağlantısı yapıştırılır). B15: seçildiği AN YouTube'dan
+     * okunur; gizli (`private`) ya da yerleştirilemeyen (`gomulebilir:
+     * false`) video Google'da gösterilemez ve GİRİŞTE reddedilir. Alanlar
+     * isteğe bağlı: eski kayıtlarda yok = okunmadı (eksik listesi engel
+     * çıkarmaz, derleyici ve prova söyler).
+     */
+    youtubeVideo: alan(
+      z
+        .object({
+          videoId: z.string().max(20),
+          baslik: z.string().max(200),
+          kucukResim: z.string().max(500).nullable().optional(),
+          sureSn: z.number().nonnegative().nullable().optional(),
+          gizlilik: z.string().max(20).nullable().optional(),
+          gomulebilir: z.boolean().nullable().optional(),
+        })
+        .nullable(),
+    ),
     metin: alan(
       z.object({
         anaMetin: z.string().max(5000),

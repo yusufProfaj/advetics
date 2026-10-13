@@ -6,7 +6,7 @@
 > İŞ yazılır; her oturum kapanırken, işin kendi commit'inde güncellenir.
 > 16 Ağustos'a kadarki eski devir belgesi: [`arsiv/DEVAM-2026-08.md`](arsiv/DEVAM-2026-08.md).
 
-**Son güncelleme:** 2026-10-13 (Orphex uyarlaması, A-F + 2FA + site) · 2026-10-12 (kurulum rehberi) · 2026-10-12 (hazır workspace Dalga 3) · 2026-10-11 gece (Dalga 3 canlı tur) · 2026-10-11 (Dalga 2 + set kartı) · 2026-10-10 akşam (AdvCampaign canlı tur 2 + banner seti; canlı `55312f6`) · 2026-10-09: **Canlı `6b51390` (11:43, 81 sn); ondan önce 316be15 (10:30):**
+**Son güncelleme:** 2026-10-13 (VIDEO turu, Ajan 2+3) · 2026-10-13 (Orphex uyarlaması, A-F + 2FA + site) · 2026-10-12 (kurulum rehberi) · 2026-10-12 (hazır workspace Dalga 3) · 2026-10-11 gece (Dalga 3 canlı tur) · 2026-10-11 (Dalga 2 + set kartı) · 2026-10-10 akşam (AdvCampaign canlı tur 2 + banner seti; canlı `55312f6`) · 2026-10-09: **Canlı `6b51390` (11:43, 81 sn); ondan önce 316be15 (10:30):**
 aşağıda "DEPLOY EDİLMEDİ" yazan işlerin HEPSİ artık canlıda (AdvCampaign
 sohbeti, AdvStrategy ikinci tur, YouTube Boost Aşama 0–1 + kanal bulma, Okuma
 API, Base Aşama 1, LinkedIn para birimi). Ölçüldü: `prisma migrate status`
@@ -15,6 +15,37 @@ RLS politikası var, platform sahibi yalnız hello@profaj.com.
 **Bekleyen deploy:** yok hedefleniyor — Aşama 4 (İyileştir + AI Asistan)
 bu commit'le deploy ediliyor; migration `20261009100000_iyilestir` (üç
 yeni tablo) + `db:rls`.
+
+**ADVCAMPAIGN "VİDEOM İZLENSİN" (VIDEO) TURU (2026-10-13, Ajan 2+3).**
+Amaç hâlâ `deneme` (canlı kurulmadı, push/deploy YOK; Ajan 4 kapısı
+bekliyor). Meta: elle yerleşim, Audience Network/Messenger/video arası
+HARİÇ, bilinen dört grubun açık konum listesi (S1, `niyetYerlesimKisiti`
+VIDEO_IZLENME, M-19V); site adresi yoksa DÜĞMESİZ video (S3, M-25
+koşullu, `videoDugmesiVar`); N-21 video için de, elle yerleşim cümlesiyle;
+video metin alanlarına ekran etiketi (B6). Vaat "en az 15 sn ya da sonuna
+kadar" (B5), Ölçüm "ThruPlay: 15 sn ya da tamamı". Giriş anında süre: <1
+sn RET, >15 sn ve dikey olmayan video uyarı (B8, `medyaKontrol` bağlamı);
+3 kapak adayı, siyah kare atılır (B10); metin önerisine 3 küçük kare (B11).
+Google: kart ve TEKLİF "izlenmeye göre teklif vermiyor (API kısıtı)" (B12);
+yedi kanal bayrağı shared sabitinden (`DEMAND_GEN_VIDEO_KANALLARI`,
+`maps:false`), Nerede hücresi ondan türüyor (B20); uzun başlık en uzun
+başlık, açıklamadan ayrı (B14c), 5 başlık notu (B14b); geri okuma teklif +
+kanallar + video kimliği (B13); kare logo TY video/görselde (B17); TRY
+dışında G-ASGARI-BILINMIYOR (B19); YouTube videosu seçim anında okunuyor,
+gizli/yerleştirilemez ENGEL, kanalsız yapıştırma yolu, G-KANAL kalktı
+(B15/B16, `GET rehber/youtube-video`, kota bekçisi `kaynak:youtube:veri_api`).
+DERLEYICI 1.10.0, Google g-1.5.0. **Ölç (validate_only / canlı):**
+THRUPLAY + elle yerleşimde sağ sütun, arama, Marketplace kabulü; Messenger
+ve `instream_video` (bugün kapalı); düğmesiz `video_data` kabulü ve
+Meta'nın geri okumada kendiliğinden düğme ekleyip eklemediği;
+`advantage_state_info` video kampanyasında ne dönüyor; Demand Gen `maps`
+bayrağının video grubunda kabulü; `demand_gen_video_responsive_ad.videos`
+ve `asset.youtube_video_asset.youtube_video_id` GAQL alanları; uzun
+başlığın başlıkla aynı metin olmasının kabulü; Demand Gen'de dil ölçütü
+(Kontrol "Google varsayılanı (ölçülmedi)" diyor) ve video otomasyonları
+(`assetAutomationSettings`, dokunulmadı); YouTube `videos.list`
+kotası/hatası. **Bilinen:** kapak adayları ve öneri kareleri ayrı varlık
+olarak yükleniyor (Marka Merkezi › Varlıklar'da görünür).
 
 **ADVCAMPAIGN "SİTEMDEN SATIŞ GELSİN" TURU (2026-10-13).** Amaç hâlâ
 `deneme` (`amaclar.ts` dokunulmadı). Ajan 4 kapısı AÇIK (742e4d78: piksel sayımı istatistik sayfa sınırı 12 + adsız satır bilinmiyor; cdf6471e: onay "yeniden kur"da kopyalanmıyor). Kalan, kapıyı kapatmayan: Google satış sayısı bütün satın alma kaynaklarını sayıyor (uyarı şişebilir); Meta `/stats` okuması kota bekçisinden geçmiyor; yayında hedefler taze okunup kullanılmıyor (fark yalnız geri okumada). Push + deploy 2026-10-13. Google Maks.

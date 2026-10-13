@@ -366,7 +366,8 @@ describe('Dalga 2 sürüm ve açılış', () => {
     // 1.6.0: "Siteme gelsinler" hedefi piksel hâline bağlı (LINK_CLICKS dalı).
     // 1.7.0: FORM yerleşim kısıtı ve düğme.
     // 1.9.0: TELEFON'da cihaz, zorunlu dar yerleşim, setsiz, ülke kuralı.
-    expect(DERLEYICI_SURUMU).toBe('1.9.0');
+    // 1.10.0: VIDEO_IZLENME elle yerleşim (Audience Network hariç) ve adressiz düğmesiz video.
+    expect(DERLEYICI_SURUMU).toBe('1.10.0');
   });
 
   it('KRİTİK: TELEFON/WHATSAPP derleniyor ama üründe AÇIK DEĞİL (canlı tur bekliyor)', () => {

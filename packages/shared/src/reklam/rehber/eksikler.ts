@@ -22,7 +22,9 @@ import { REHBER_IZINLI_KAYNAKLAR, VARSAYILAN_META_PAYI, type RehberAlanAdi, type
 import { METIN_SINIRLARI, karakterSayisi } from './metin';
 import { GOOGLE_PMAX_SATIS_ESIGI, META_EN_COK_GORSEL } from './turet';
 import { butceBol, gunlukEsdeger } from './butce';
-import type { RehberOnKosullari } from './hazirlik';
+import { youtubeVideoEngeli, type RehberOnKosullari } from './hazirlik';
+import { MEDYA_SINIRLARI } from '../medya';
+import { GOOGLE_KARE_LOGO_KURGULARI } from './google-kanallar';
 import { googleGorselBulgulari, googleGorselKurgusuMu, googleMetinBulgulari, type GorselOlcusu } from './google-gorsel';
 import { fiyatSorunu, promosyonSorunu } from './google-ogeler';
 import { ACIKLAMA_METNI_SINIRI } from './google-uzanti';
@@ -134,8 +136,9 @@ const HTTPS = /^https:\/\/[^\s/]+\.[^\s]+/;
  * - `zorunlu`: siteye gönderen Meta amaçları (SITE, SATIS) ya da Google açık
  *   (Google'ın her kurgusu nihai adres istiyor).
  * - `istege_bagli`: Meta'da tıklamanın sonuç OLMADIĞI amaçlar (video
- *   izlenme, erişim): adres varsa düğme oraya, yoksa Facebook sayfasına gider
- *   (derle.ts `BAGLANTISI_ISTEGE_BAGLI_NIYETLER`).
+ *   izlenme, erişim): adres varsa düğme oraya gider; yoksa erişimde
+ *   Facebook sayfasına, video izlenmede düğme HİÇ kurulmaz (S3,
+ *   `videoDugmesiVar`; derle.ts `BAGLANTISI_ISTEGE_BAGLI_NIYETLER`).
  * - `null`: alan sorulmaz (form, arama, WhatsApp yalnız Meta'da).
  */
 export type AdresAlani = 'zorunlu' | 'istege_bagli' | null;
@@ -226,9 +229,12 @@ export function rehberEksikleri(a: RehberAlanlari, b: RehberEksikBaglami): Rehbe
         else if (n < GOOGLE_PMAX_SATIS_ESIGI) ekle('platformlar', 'google', 'G-SATIS-AZ', googleSatisAzCumlesi(n), 'uyari', 2);
       }
     }
-    // Maks. Performans LOGO kuralı (Google belgesi: 1:1, en az 128×128):
-    // giriş anında, Yayınla'da değil. Ölçü bilinmiyorsa susar (derleyici ve prova söyler).
-    if (tanim.google.kurgu === 'MAKS_PERFORMANS' && ok?.googleLogoKare === false) {
+    // LOGO KURALI (Google belgesi: 1:1, en az 128×128): giriş anında,
+    // Yayınla'da değil. Ölçü bilinmiyorsa susar (derleyici ve prova söyler).
+    // B17: Talep Yaratma video ve görsel reklamının `logoImages`ı da AYNI
+    // kuralı taşıyor (proto: 1:1, en az 128); önce yalnız Maks. Performans'ta
+    // soruluyordu ve kare olmayan logo Talep Yaratma'da ancak provada düşüyordu.
+    if (tanim.google.kurgu && GOOGLE_KARE_LOGO_KURGULARI.includes(tanim.google.kurgu) && ok?.googleLogoKare === false) {
       ekle('googleHesabiId', 'google', 'G-LOGO-KARE', "Marka Merkezi'ndeki logo kare (1:1) ve en az 128×128 olmalı");
     }
     // Maks. Performans da logo ve işletme adı istiyor (marka kuralları açık:
@@ -236,9 +242,13 @@ export function rehberEksikleri(a: RehberAlanlari, b: RehberEksikBaglami): Rehbe
     if (tanim.google.kurgu === 'TALEP_YARATMA_VIDEO' || googleGorselKurgusuMu(tanim.google.kurgu)) {
       if (ok && !ok.googleLogoVeAd) ekle('googleHesabiId', 'google', 'G-LOGO', "Marka Merkezi'nde logo ve işletme adı yok");
     }
-    if (tanim.google.kurgu === 'TALEP_YARATMA_VIDEO' && !a.youtubeKanaliId?.deger) {
-      ekle('youtubeKanaliId', 'google', 'G-KANAL', 'YouTube kanalı bağlı değil');
-    }
+    /*
+     * G-KANAL KALDIRILDI (VIDEO denetimi B16). Kanal yalnız video LİSTESİNİ
+     * okumak için gerekiyor; derleyici video kimliğiyle kuruyor ve bağlantı
+     * yapıştırma yolu kanalsız da çalışıyor (video herkese açık API'den
+     * okunuyor, B15). Kanalı olmayan işletmeyi engelde tutmak, ekranın
+     * sunduğu yolu kullanıcıya kapatmaktı. Video yoksa `G-VIDEO` zaten engel.
+     */
   }
   if (acik.meta && acik.google && !b.paraBirimleriAyni) {
     ekle('metaPayiYuzde', null, 'PARA-BIRIMI', 'İki hesabın para birimi farklı; tek tutar bölünemiyor', 'engel', 5);
@@ -366,6 +376,17 @@ export function rehberEksikleri(a: RehberAlanlari, b: RehberEksikBaglami): Rehbe
   if (acik.google && tanim.google.kurgu === 'TALEP_YARATMA_VIDEO' && !a.youtubeVideo?.deger) {
     ekle('youtubeVideo', 'google', 'G-VIDEO', "YouTube'dan video seç");
   }
+  // B15 İKİNCİ KAPI: panel seçim anında reddediyor; kayıtta gizli ya da
+  // yerleştirilemez işaretli bir video kalmışsa (eski sekme) burada da durur.
+  const ytVideo = acik.google && tanim.google.kurgu === 'TALEP_YARATMA_VIDEO' ? a.youtubeVideo?.deger ?? null : null;
+  const ytEngel = ytVideo ? youtubeVideoEngeli(ytVideo) : null;
+  if (ytEngel) ekle('youtubeVideo', 'google', 'G-VIDEO-GIZLI', ytEngel);
+  // B8 İKİNCİ KAPI: süre girişte ölçülüyor (`medyaKontrol`); kayıtta 1
+  // saniyenin altında bir video kalmışsa Meta reddeder.
+  if (acik.meta && amac === 'VIDEO') {
+    const kisa = medya.filter((x) => x.kapakVarlikId && typeof x.sureSn === 'number' && x.sureSn < MEDYA_SINIRLARI.videoEnAzSaniye).length;
+    if (kisa) ekle('medya', 'meta', 'M-VIDEO-KISA', `${kisa} video ${MEDYA_SINIRLARI.videoEnAzSaniye} saniyeden kısa; Meta en az ${MEDYA_SINIRLARI.videoEnAzSaniye} saniye istiyor`);
+  }
 
   const m = a.metin?.deger;
   if (!m) {
@@ -479,6 +500,14 @@ export function rehberEksikleri(a: RehberAlanlari, b: RehberEksikBaglami): Rehbe
     if (acik.google && ty && b.asgariGunluk.googleTalepYaratma !== null) {
       const g = gunluk(pay.google);
       if (g !== null && g < b.asgariGunluk.googleTalepYaratma) ekle('butce', 'google', 'G-ASGARI', `Google Talep Yaratma reklamı için Google'ın günlük asgarisinin altında.${sonEk}`);
+    } else if (acik.google && ty) {
+      /*
+       * B19: asgari yalnız TRY'de biliniyor (5 USD karşılığı, ölçülen değer
+       * TRY). Başka para biriminde kontrol KOŞMUYORDU ve sessizdi: düşük
+       * bütçe ancak provada `BUDGET_BELOW_PER_DAY_MINIMUM` ile düşüyordu.
+       * Kur uydurulmuyor; bilinmediği söyleniyor.
+       */
+      ekle('butce', 'google', 'G-ASGARI-BILINMIYOR', `Google Talep Yaratma'nın günlük asgarisi (5 USD karşılığı) ${b.paraBirimi} için bilinmiyor; düşük tutar provada reddedilir`, 'uyari');
     }
   }
 

@@ -10,6 +10,11 @@ import {
   type GoogleTeklif,
   type RehberAlanlari,
   type RehberAmacKodu,
+  kanalCumlesi,
+  GOOGLE_VIDEO_TEKLIF_CUMLESI,
+  GOOGLE_TY_DIL_CUMLESI,
+  GOOGLE_VIDEO_OTOMASYON_CUMLESI,
+  type DemandGenKanali,
 } from '@advetics/shared';
 import { derleGoogle, googleYasKovalari, GOOGLE_ATIF, type GoogleDerlemeBaglami } from './derle-google';
 
@@ -333,17 +338,18 @@ describe('TALEP YARATMA (Videom izlensin)', () => {
     expect(d.govde.partialFailure).toBe(false);
   });
 
-  it('NEREDE: "YouTube" ↔ yalnız YouTube kanalları; Discover, Gmail, Görüntülü KAPALI', () => {
-    expect(google('VIDEO', 'MAKS_TIKLAMA').NEREDE?.deger).toBe('YouTube');
+  it('KRİTİK (B20): NEREDE hücresi DERLENMİŞ GÖVDENİN bayraklarından türüyor; açık YouTube üçlüsü, kapalı Gmail/Keşfet/Görüntülü/Haritalar', () => {
     const grup = islemler(ops, 'adGroupOperation')[0]!;
-    expect((grup.demandGenAdGroupSettings as { channelControls: { selectedChannels: unknown } }).channelControls.selectedChannels).toEqual({
-      youtubeInStream: true,
-      youtubeInFeed: true,
-      youtubeShorts: true,
-      discover: false,
-      gmail: false,
-      display: false,
-    });
+    const bayraklar = (grup.demandGenAdGroupSettings as { channelControls: { selectedChannels: Record<DemandGenKanali, boolean> } }).channelControls.selectedChannels;
+    // Yedi bayrak AÇIKÇA (maps dahil, B14d).
+    expect(bayraklar).toEqual({ youtubeInStream: true, youtubeInFeed: true, youtubeShorts: true, discover: false, gmail: false, display: false, maps: false });
+    // Hücre GÖVDEDEN kurulan cümleyle aynı olmalı: biri değişip öbürü kalırsa düşer.
+    const c = kanalCumlesi(bayraklar);
+    const h = google('VIDEO', 'MAKS_TIKLAMA').NEREDE!;
+    expect(h.deger).toBe(c.acik);
+    expect(h.not).toBe(`Kapalı: ${c.kapali}`);
+    expect(h.deger).toBe('YouTube video arası, YouTube akışı, Shorts');
+    expect(h.not).toBe('Kapalı: Gmail, Keşfet, Görüntülü Reklam Ağı, Haritalar');
   });
 
   it('KONUM ↔ PRESENCE açıkça + konum REKLAM GRUBUNDA (upgradedTargeting)', () => {
@@ -361,6 +367,60 @@ describe('TALEP YARATMA (Videom izlensin)', () => {
   it('logo yoksa ret (Google zorunlu tutuyor) — sessizce logosuz kurulmaz', () => {
     const r = derleGoogle(girdi('VIDEO'), { ...B, logo: null });
     expect(r.tur === 'ret' && r.retler.map((x) => x.kod)).toContain('G-LOGO');
+  });
+
+  it('KRİTİK (B12): TEKLIF hücresi API kısıtını söylüyor ↔ gövdede targetSpend, beklenende TARGET_SPEND', () => {
+    expect(google('VIDEO', 'MAKS_TIKLAMA').TEKLIF).toEqual({ deger: 'En çok tıklama', not: GOOGLE_VIDEO_TEKLIF_CUMLESI });
+    expect(kampanya(ops).targetSpend).toEqual({});
+    expect(d.beklenen.teklif).toBe('TARGET_SPEND');
+  });
+
+  it('KRİTİK (B14c): uzun başlık EN UZUN BAŞLIK, açıklamalar ayrı; aynı metin iki alana gitmiyor', () => {
+    const reklam = islemler(ops, 'adGroupAdOperation')[0]!.ad as { demandGenVideoResponsiveAd: Record<string, Array<{ text: string }>> };
+    const v = reklam.demandGenVideoResponsiveAd;
+    // İki 22 karakterlik başlık eşit: İLK olan (kullanıcının sırası, kararlı çıktı).
+    expect(v.longHeadlines!.map((x) => x.text)).toEqual(['Kuşadası Garden Villas']);
+    const aciklamalar = v.descriptions!.map((x) => x.text);
+    expect(aciklamalar).toEqual(['3+1 bahçeli villalar, site içinde havuz.', 'Taksit seçenekleriyle teslime hazır villalar.']);
+    for (const u of v.longHeadlines!) expect(aciklamalar).not.toContain(u.text);
+  });
+
+  it('KRİTİK (B14c): açıklamalardan biri uzun başlıkla AYNI metinse açıklamadan düşer (iki alanda aynı metin yok)', () => {
+    const r = derleGoogle({ ...girdi('VIDEO'), aciklamalar: ['Kuşadası Garden Villas', 'Başka açıklama.'] }, B);
+    if (r.tur !== 'govde') throw new Error(JSON.stringify(r.retler));
+    const v = (islemler(r.govde.mutateOperations, 'adGroupAdOperation')[0]!.ad as { demandGenVideoResponsiveAd: Record<string, Array<{ text: string }>> }).demandGenVideoResponsiveAd;
+    expect(v.longHeadlines!.map((x) => x.text)).toEqual(['Kuşadası Garden Villas']);
+    expect(v.descriptions!.map((x) => x.text)).toEqual(['Başka açıklama.']);
+    // Tek açıklama uzun başlıkla aynıysa geriye açıklama kalmaz: sessizce aynı metni göndermek yerine RET.
+    const t = derleGoogle({ ...girdi('VIDEO'), aciklamalar: ['Kuşadası Garden Villas'] }, B);
+    expect(t.tur === 'ret' && t.retler.map((x) => x.kod)).toEqual(['G-ACIKLAMA-SAYI']);
+  });
+
+  it('B14b: 5’ten fazla başlık kesilince NOT düşüyor (sessiz kesme yok)', () => {
+    const r = derleGoogle({ ...girdi('VIDEO'), basliklar: ['a1', 'a2', 'a3', 'a4', 'a5', 'a6 en uzun'] }, B);
+    if (r.tur !== 'govde') throw new Error(JSON.stringify(r.retler));
+    expect(r.notlar.some((n) => n.includes('en çok 5 başlık'))).toBe(true);
+  });
+
+  it('B14a/B14d: DİL ve otomasyon hücreleri ölçülmediğini söylüyor; gövdede dil ölçütü ve otomasyon alanı YOK', () => {
+    expect(google('VIDEO', 'MAKS_TIKLAMA').DIL?.deger).toBe(GOOGLE_TY_DIL_CUMLESI);
+    expect(google('VIDEO', 'MAKS_TIKLAMA').OTOMATIK_METIN?.deger).toBe(GOOGLE_VIDEO_OTOMASYON_CUMLESI);
+    expect(JSON.stringify(ops)).not.toContain('languageConstants');
+    expect(JSON.stringify(ops)).not.toContain('AssetAutomation');
+  });
+
+  it('KRİTİK (B17): kare olmayan logo Talep Yaratma videoda da RET', () => {
+    const r = derleGoogle(girdi('VIDEO'), { ...B, logoOlcusu: { genislik: 400, yukseklik: 200 } });
+    expect(r.tur === 'ret' && r.retler.map((x) => x.kod)).toEqual(['G-LOGO-KARE']);
+    expect(derleGoogle(girdi('VIDEO'), { ...B, logoOlcusu: { genislik: 128, yukseklik: 128 } }).tur).toBe('govde');
+  });
+
+  it('KRİTİK (B13): beklenen video reklamı videonun KİMLİĞİNİ ve yedi kanalı taşıyor', () => {
+    expect(d.beklenen.videoReklam).toEqual({
+      reklamSayisi: 1,
+      videoKimligi: 'dQw4w9WgXcQ',
+      kanallar: { youtubeInStream: true, youtubeInFeed: true, youtubeShorts: true, discover: false, gmail: false, display: false, maps: false },
+    });
   });
 });
 

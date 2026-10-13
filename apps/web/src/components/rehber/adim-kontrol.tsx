@@ -33,6 +33,7 @@ import {
   REHBER_PLATFORM_ADI,
   sonEkranOzeti,
   provaGosterimi,
+  sureGoster,
   tarihGoster,
   yayinAdimlari,
   yayinSonucu,
@@ -77,7 +78,9 @@ export function AdimKontrol({
   const basliklar = (m?.basliklar ?? []).map((x) => x.trim()).filter(Boolean);
   const aciklamalar = (m?.aciklamalar ?? []).map((x) => x.trim()).filter(Boolean);
   const ilkMedya = b.a.medya?.deger[0];
-  const gorsel = ilkMedya ? medyaBilgisi.get(ilkMedya.varlikId) : undefined;
+  // Videoda SEÇİLİ kapak (B10); kapak bilgisi yoksa videonun türetilmiş bilgisi.
+  const gorsel = ilkMedya ? ((ilkMedya.kapakVarlikId ? medyaBilgisi.get(ilkMedya.kapakVarlikId) : undefined) ?? medyaBilgisi.get(ilkMedya.varlikId)) : undefined;
+  const yt = b.a.youtubeVideo?.deger ?? null;
   const hesapAdi =
     b.h.instagramHesaplari.find((x) => x.id === b.a.instagramId?.deger)?.ad ?? b.h.sayfalar.find((x) => x.id === b.a.sayfaId?.deger)?.ad ?? 'Sayfa seçilmedi';
   const engel = b.kayit.eksikler.filter((e) => e.seviye === 'engel').length;
@@ -119,7 +122,8 @@ export function AdimKontrol({
               </div>
               <div className={s.akisCta}>
                 <b>{basliklar[0] ?? 'Başlık yazılmadı'}</b>
-                <span>{amac ? CTA_METNI[amac] : 'Daha fazla bilgi al'}</span>
+                {/* S3: adressiz video düğmesiz kuruluyor; önizleme olmayan düğmeyi çizmesin. */}
+                {!(amac === 'VIDEO' && !b.a.hedefAdres?.deger) && <span>{amac ? CTA_METNI[amac] : 'Daha fazla bilgi al'}</span>}
               </div>
             </div>
           </div>
@@ -152,11 +156,32 @@ export function AdimKontrol({
                   Google başlık ve açıklamaları farklı sıralarda dener; bu bir örnek.
                 </p>
               </>
+            ) : kurgu === 'TALEP_YARATMA_VIDEO' ? (
+              // B15: kimlik değil VİDEONUN KENDİSİ (başlık, küçük resim, süre):
+              // kullanıcı yanlış videoyu kimlikten tanıyamazdı.
+              <div style={{ margin: 14 }}>
+                {yt ? (
+                  <div className={s.dosya}>
+                    {yt.kucukResim ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={yt.kucukResim} alt="" className={s.kucuk} />
+                    ) : (
+                      <div className={s.kucuk} />
+                    )}
+                    <div>
+                      <b>{yt.baslik || yt.videoId}</b>
+                      <small>{[sureGoster(yt.sureSn), yt.gizlilik === 'unlisted' ? 'Liste dışı' : null].filter(Boolean).join(' · ') || 'YouTube videosu'}</small>
+                    </div>
+                    <span />
+                  </div>
+                ) : (
+                  <p className={s.ipucu}>YouTube videosu seçilmedi.</p>
+                )}
+                <p className={s.ipucu}>YouTube&apos;daki görünüm Google&apos;da kurulduktan sonra Reklam Yöneticisi&apos;nde açılır.</p>
+              </div>
             ) : (
               <p className={s.ipucu} style={{ margin: 14 }}>
-                {kurgu === 'TALEP_YARATMA_VIDEO'
-                  ? `YouTube videosu: ${b.a.youtubeVideo?.deger?.videoId ?? 'seçilmedi'}. YouTube ve Shorts'taki görünüm Google'da kurulduktan sonra Reklam Yöneticisi'nde açılır.`
-                  : "Bu kampanyanın görünümü Google'ın yerleşimine göre değişir; kurulduktan sonra Reklam Yöneticisi'nde açılır."}
+                Bu kampanyanın görünümü Google&apos;ın yerleşimine göre değişir; kurulduktan sonra Reklam Yöneticisi&apos;nde açılır.
               </p>
             )}
           </div>

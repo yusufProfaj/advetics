@@ -152,6 +152,13 @@ export interface NiyetYerlesimKisiti {
   otomatikteDe?: boolean;
   /** Boş grup reddinin cümlesi (derleyici `KRT-ORAN`). */
   bosMesaji: string;
+  /**
+   * `otomatikteDe` niyetinde karar tablosunun "Nerede" cümlesindeki
+   * yerleşim parçası ("yalnız telefonda, seçilen yerleşimlerde"). Tek
+   * niyete yazılmış sabit cümle, ikinci `otomatikteDe` niyetinde (video)
+   * sebebi yanlış söylüyordu.
+   */
+  ekranMetni?: string;
 }
 
 /**
@@ -179,6 +186,24 @@ const TELEFON_YERLESIM_GRUPLARI: readonly YerlesimGrubu[] = ['akis', 'pazar', 'h
 const TELEFON_YERLESIM_CIKARILAN: Readonly<Record<string, readonly string[]>> = { instagram_positions: ['explore', 'reels'] };
 const DAR_YERLESIM_BOS = '4:5, 1:1 ya da 9:16 görsel ekle.';
 
+/*
+ * VİDEO İZLENME (yönetici kararı S1, VIDEO denetimi B9): "Advantage+ ama
+ * Audience Network HARİÇ". Advantage+ yerleşim yalnız yerleşim alanlarının
+ * YOKLUĞUYLA tanımlı (`YASAK_YERLESIM`), yani tek bir ağı çıkarmak ELLE
+ * yerleşim demek. Biçim, canlıda kurulmuş elle yerleşimin AYNISI
+ * (`publisher_platforms` + açık konum listesi; banner seti yayını 3efebf54
+ * ve TELEFON): konumsuz yalnız `publisher_platforms` göndermek bu depoda
+ * hiç ölçülmedi ve Meta'nın onu "bütün konumlar" mı yoksa eksik tanım mı
+ * saydığı bilinmiyor. Gruplar BİLİNEN dördün tamamı; Audience Network
+ * grubu zaten yok. Messenger ve Facebook video arası (`instream_video`)
+ * grup haritasında olmadığı için açılmıyor: bu konumların THRUPLAY ile
+ * kabulü ölçülmedi (DEVAM.md ölçüm listesi) ve tahminle konum değeri
+ * yazmak Meta'nın kabul edip yok saymasına açık. Sağ sütun ve aramada
+ * videonun kabulü de ölçülmedi: reddederse prova (validate_only) YÜKSEK
+ * SESLE söyler, sessiz değil.
+ */
+const VIDEO_YERLESIM_GRUPLARI: readonly YerlesimGrubu[] = ['akis', 'yan', 'pazar', 'hikaye'];
+
 const DAR_YERLESIM_KISITLARI: Partial<Record<NiyetKodu, NiyetYerlesimKisiti>> = {
   FORM: {
     gruplar: DAR_YERLESIM_GRUPLARI,
@@ -199,6 +224,16 @@ const DAR_YERLESIM_KISITLARI: Partial<Record<NiyetKodu, NiyetYerlesimKisiti>> = 
     aciklama:
       'Arama reklamı yalnız telefonda ve Facebook akışı, Marketplace, Facebook Reels, hikâyeler ile Instagram akışında gösterilir; sağ sütun, arama, Instagram Keşfet ve Instagram Reels kapalı.',
     bosMesaji: `Arama reklamı yalnız akış, Marketplace, hikâye ve Facebook Reels’te gösterilir; ${DAR_YERLESIM_BOS}`,
+    ekranMetni: 'yalnız telefonda, seçilen yerleşimlerde',
+  },
+  VIDEO_IZLENME: {
+    gruplar: VIDEO_YERLESIM_GRUPLARI,
+    cikarilanKonumlar: {},
+    otomatikteDe: true,
+    aciklama:
+      'Video reklamı Facebook ve Instagram akışı, Keşfet, hikâye, Reels, Marketplace, sağ sütun ve aramada gösterilir; Audience Network, Messenger ve Facebook video arası kapalı.',
+    bosMesaji: 'Video reklamı için yerleşim kalmadı.',
+    ekranMetni: 'Audience Network hariç yerleşimlerde',
   },
 };
 

@@ -162,9 +162,9 @@ export function AdimNerede({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => vo
             <li key={e.kod} className={s.eksik}>
               <Ikon d={IKON.eksik} />
               <span>{e.metin}</span>
-              {(e.kod === 'M-HESAP' || e.kod === 'M-SAYFA' || e.kod === 'G-HESAP' || e.kod === 'G-KANAL' || e.kod === 'G-LOGO') && (
-                <Link href={e.kod === 'G-LOGO' ? baglanti('/marka-merkezi', { bolum: 'marka', musteri: b.clientId }) : baglantilar}>
-                  {e.kod === 'G-LOGO' ? 'Marka' : 'Bağlantılar'}
+              {(e.kod === 'M-HESAP' || e.kod === 'M-SAYFA' || e.kod === 'G-HESAP' || e.kod === 'G-LOGO' || e.kod === 'G-LOGO-KARE') && (
+                <Link href={e.kod === 'G-LOGO' || e.kod === 'G-LOGO-KARE' ? baglanti('/marka-merkezi', { bolum: 'marka', musteri: b.clientId }) : baglantilar}>
+                  {e.kod === 'G-LOGO' || e.kod === 'G-LOGO-KARE' ? 'Marka' : 'Bağlantılar'}
                 </Link>
               )}
               {OLCUM_ENGEL_KODLARI.includes(e.kod) && <Link href={baglanti('/marka-merkezi', { bolum: 'olcum', musteri: b.clientId })}>Ölçüm&apos;de kur</Link>}

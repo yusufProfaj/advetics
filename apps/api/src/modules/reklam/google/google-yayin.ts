@@ -8,7 +8,15 @@ import { kapaliBirak, yayiniSonlandir, type TxRunner } from '../yayin-motoru';
 import { googleYazmaAcikMi } from '../yazma-kapisi';
 import { DEMAND_GEN_GORSEL_OTOMASYONU } from '../../connections/providers/google-demandgen';
 import { PMAX_OTOMASYONU, type PmaxAlani } from '../../connections/providers/google-pmax';
-import type { GoogleBeklenen, GoogleDerleme, GoogleGorselReklamBeklentisi, GoogleOgeBeklentisi, GoogleUzantiBeklentisi, GoogleVarlikGrubuBeklentisi } from './derle-google';
+import type {
+  GoogleBeklenen,
+  GoogleDerleme,
+  GoogleGorselReklamBeklentisi,
+  GoogleOgeBeklentisi,
+  GoogleUzantiBeklentisi,
+  GoogleVarlikGrubuBeklentisi,
+  GoogleVideoReklamBeklentisi,
+} from './derle-google';
 
 const logger = new Logger('GoogleYayin');
 
@@ -179,6 +187,8 @@ export interface GoogleOkunan {
   /** Yalnız beklenen taşıyorsa okunur: TEK reklamın yolu, değilse null (bilinmeyen = fark). */
   gorunenYol?: { path1: string | null; path2: string | null } | null;
   gorselReklam?: GoogleGorselReklamBeklentisi | null;
+  /** Talep Yaratma video (B13) — yalnız beklenen taşıyorsa okunur. */
+  videoReklam?: GoogleVideoReklamBeklentisi | null;
   varlikGrubu?: GoogleVarlikGrubuBeklentisi | null;
   /** Maks. Performans: teklife giren kampanya dönüşüm hedefleri (`KATEGORI~KAYNAK`, sıralı); yalnız beklenen taşıyorsa okunur. */
   teklifHedefleri?: string[] | null;
@@ -242,6 +252,14 @@ export function googleGeriOkumaKarsilastir(b: GoogleBeklenen, o: GoogleOkunan): 
   if (b.aramaSaatleri) kiyasla('aramaOgesi.saatler', saatPlaniSirala(b.aramaSaatleri), o.aramaSaatleri ? saatPlaniSirala(o.aramaSaatleri) : null);
   if (b.gorunenYol) kiyasla('reklam.gorunenYol', b.gorunenYol, o.gorunenYol ?? null);
   if (b.gorselReklam) kiyasla('gorselReklam', b.gorselReklam, o.gorselReklam ?? null);
+  // B13: video reklamı ALAN ALAN (hangisinin ayrıştığı satırda görünsün);
+  // okunamadıysa (`null`) her alan fark: "temiz" demek bilinmeyeni doğru saymak olurdu.
+  if (b.videoReklam) {
+    const ov = o.videoReklam ?? null;
+    kiyasla('videoReklam.reklamSayisi', b.videoReklam.reklamSayisi, ov ? ov.reklamSayisi : null);
+    kiyasla('videoReklam.videoKimligi', b.videoReklam.videoKimligi, ov ? ov.videoKimligi : null);
+    kiyasla('videoReklam.kanallar', b.videoReklam.kanallar, ov ? ov.kanallar : null);
+  }
   if (b.varlikGrubu) kiyasla('varlikGrubu', b.varlikGrubu, o.varlikGrubu ?? null);
   // "200 döndü doğrulama değil": hedef güncellemesi kabul edildi diye
   // uygulandığı anlamına gelmiyor. Teklife giren küme TAM OLARAK beklenen
@@ -567,6 +585,7 @@ export async function googleGeriOku(port: GoogleYayinPortu, ctx: FetchContext, k
     ...(b?.aramaSaatleri ? { aramaSaatleri: await aramaSaatleriOku(port, ctx, kampanyaId) } : {}),
     ...(b?.gorunenYol ? { gorunenYol: await gorunenYolOku(port, ctx, kampanyaId) } : {}),
     ...(b?.gorselReklam ? { gorselReklam: await gorselReklamOku(port, ctx, kampanyaId) } : {}),
+    ...(b?.videoReklam ? { videoReklam: await videoReklamOku(port, ctx, kampanyaId) } : {}),
     ...(b?.varlikGrubu ? { varlikGrubu: await varlikGrubuOku(port, ctx, kampanyaId) } : {}),
     ...(b?.teklifHedefleri ? { teklifHedefleri: await teklifHedefleriOku(port, ctx, kampanyaId) } : {}),
     ...(b?.uzantilar ? { uzantilar: await uzantilariOku(port, ctx, kampanyaId) } : {}),
@@ -668,8 +687,13 @@ interface GorselReklamSatiri {
   };
 }
 
-async function gorselReklamOku(port: GoogleYayinPortu, ctx: FetchContext, kampanyaId: string): Promise<GoogleGorselReklamBeklentisi | null> {
-  const gruplar = await port.ara<GorselGrupSatiri>(
+/**
+ * Talep Yaratma reklam gruplarının KANAL bayrakları — görsel ve video
+ * dalının ORTAK okuyucusu (B13). İki ayrı sorgu yazılsaydı biri yeni bir
+ * bayrağı (ör. `maps`) okuyup öbürü okumaz ve fark görünmezdi.
+ */
+function grupKanallariOku(port: GoogleYayinPortu, ctx: FetchContext, kampanyaId: string): Promise<GorselGrupSatiri[]> {
+  return port.ara<GorselGrupSatiri>(
     ctx,
     `SELECT campaign.id, ad_group.id, ad_group.status,
             ad_group.demand_gen_ad_group_settings.channel_controls.selected_channels.youtube_in_stream,
@@ -682,6 +706,66 @@ async function gorselReklamOku(port: GoogleYayinPortu, ctx: FetchContext, kampan
        FROM ad_group
       WHERE campaign.id = ${kampanyaId} AND ad_group.status != 'REMOVED'`,
   );
+}
+
+/** Proto3 JSON'da false bayrak HİÇ gelmeyebilir: `=== true` (eksik = kapalı, açık beklenen yalnız `true` ile tutar). */
+function kanalBayraklari(grup: GorselGrupSatiri | undefined): GoogleGorselReklamBeklentisi['kanallar'] {
+  const k = grup?.adGroup?.demandGenAdGroupSettings?.channelControls?.selectedChannels ?? {};
+  return {
+    youtubeInStream: k.youtubeInStream === true,
+    youtubeInFeed: k.youtubeInFeed === true,
+    youtubeShorts: k.youtubeShorts === true,
+    discover: k.discover === true,
+    gmail: k.gmail === true,
+    display: k.display === true,
+    maps: k.maps === true,
+  };
+}
+
+interface VideoReklamSatiri {
+  adGroupAd?: { status?: string; ad?: { type?: string; demandGenVideoResponsiveAd?: { videos?: Array<{ asset?: string }> } } };
+}
+interface VideoVarlikSatiri {
+  asset?: { resourceName?: string; youtubeVideoAsset?: { youtubeVideoId?: string } };
+}
+
+/**
+ * TALEP YARATMA VİDEO REKLAMI GERİ OKUMASI (B13). Kanallar görsel dalıyla
+ * AYNI okuyucudan; video kimliği iki adımda: reklam videonun VARLIK kaynak
+ * adını taşıyor (`customers/x/assets/y`), YouTube kimliği varlığın kendisinde.
+ * Hiçbir şey okunamadıysa `null` (bilinmeyen = fark); kimliği okunamayan
+ * video `''` olur ve beklenenle tutmaz (fark). CANLIDA ÖLÇÜLMEDİ: alan adları
+ * v25 referansından; GAQL kuralı gereği WHERE'deki her alan SELECT'te.
+ */
+async function videoReklamOku(port: GoogleYayinPortu, ctx: FetchContext, kampanyaId: string): Promise<GoogleVideoReklamBeklentisi | null> {
+  const gruplar = await grupKanallariOku(port, ctx, kampanyaId);
+  const reklamlar = await port.ara<VideoReklamSatiri>(
+    ctx,
+    `SELECT campaign.id, ad_group_ad.status, ad_group_ad.ad.type, ad_group_ad.ad.demand_gen_video_responsive_ad.videos
+       FROM ad_group_ad
+      WHERE campaign.id = ${kampanyaId} AND ad_group_ad.status != 'REMOVED'`,
+  );
+  if (gruplar.length === 0 && reklamlar.length === 0) return null;
+  const varliklar = reklamlar.flatMap((r) => (r.adGroupAd?.ad?.demandGenVideoResponsiveAd?.videos ?? []).map((v) => v.asset).filter((x): x is string => !!x));
+  let videoKimligi = '';
+  // TEK reklam, TEK video bekleniyor; başka bir şey dönerse kimlik boş kalır ve fark olur.
+  if (varliklar.length === 1 && /^customers\/\d+\/assets\/\d+$/.test(varliklar[0]!)) {
+    const v = await port.ara<VideoVarlikSatiri>(
+      ctx,
+      `SELECT asset.resource_name, asset.youtube_video_asset.youtube_video_id FROM asset WHERE asset.resource_name = '${varliklar[0]}'`,
+    );
+    videoKimligi = v.length === 1 ? (v[0]!.asset?.youtubeVideoAsset?.youtubeVideoId ?? '') : '';
+  }
+  return {
+    // Grup sayısı 1 değilse reklam sayısı bilerek bozulur: iki grup = söz dışı.
+    reklamSayisi: gruplar.length === 1 ? reklamlar.length : -gruplar.length,
+    videoKimligi,
+    kanallar: kanalBayraklari(gruplar[0]),
+  };
+}
+
+async function gorselReklamOku(port: GoogleYayinPortu, ctx: FetchContext, kampanyaId: string): Promise<GoogleGorselReklamBeklentisi | null> {
+  const gruplar = await grupKanallariOku(port, ctx, kampanyaId);
   const reklamlar = await port.ara<GorselReklamSatiri>(
     ctx,
     `SELECT campaign.id, ad_group_ad.status, ad_group_ad.ad.type,
@@ -700,7 +784,6 @@ async function gorselReklamOku(port: GoogleYayinPortu, ctx: FetchContext, kampan
 }
 
 function gorselOzet(grup: GorselGrupSatiri | undefined, reklamlar: GorselReklamSatiri[], grupSayisi: number): GoogleGorselReklamBeklentisi {
-  const k = grup?.adGroup?.demandGenAdGroupSettings?.channelControls?.selectedChannels ?? {};
   const r = reklamlar[0]?.adGroupAd;
   const m = r?.ad?.demandGenMultiAssetAd;
   return {
@@ -710,15 +793,7 @@ function gorselOzet(grup: GorselGrupSatiri | undefined, reklamlar: GorselReklamS
     kare: m?.squareMarketingImages?.length ?? 0,
     dik45: m?.portraitMarketingImages?.length ?? 0,
     logo: m?.logoImages?.length ?? 0,
-    kanallar: {
-      youtubeInStream: k.youtubeInStream === true,
-      youtubeInFeed: k.youtubeInFeed === true,
-      youtubeShorts: k.youtubeShorts === true,
-      discover: k.discover === true,
-      gmail: k.gmail === true,
-      display: k.display === true,
-      maps: k.maps === true,
-    },
+    kanallar: kanalBayraklari(grup),
     otomasyon: Object.fromEntries(
       (r?.adGroupAdAssetAutomationSettings ?? [])
         .filter((x) => x.assetAutomationType && GORSEL_OTOMASYON_TURLERI.has(x.assetAutomationType))

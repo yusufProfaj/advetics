@@ -180,6 +180,13 @@ export function demandGenAdGroupBody(params: {
    * sonradan kitle bağlanamaz, yani karar burada veriliyor.
    */
   kitleGrubu?: boolean;
+  /**
+   * KANAL BAYRAKLARI — rehber yolu shared'daki `DEMAND_GEN_VIDEO_KANALLARI`nı
+   * (yedi bayrak, `maps: false` dahil) veriyor; Kontrol'ün "Nerede" hücresi
+   * aynı sabitten türüyor (B20). Verilmezse Akıllı Boost'un CANLIDA
+   * doğrulanmış altı bayraklı bloğu gider: o gövde bu turda değişmesin.
+   */
+  kanallar?: Readonly<Record<string, boolean>>;
 }): GoogleMutateBody {
   return body([
     {
@@ -190,16 +197,18 @@ export function demandGenAdGroupBody(params: {
         ...(params.kitleGrubu ? { audienceSetting: { useAudienceGrouped: true } } : {}),
         demandGenAdGroupSettings: {
           channelControls: {
-            selectedChannels: {
-              youtubeInStream: true,
-              youtubeInFeed: true,
-              youtubeShorts: true,
-              // ÜÇÜ DE AÇIKÇA KAPALI. Alanı hiç göndermemek "varsayılana bırak"
-              // demek ve varsayılan AÇIK.
-              discover: false,
-              gmail: false,
-              display: false,
-            },
+            selectedChannels: params.kanallar
+              ? { ...params.kanallar }
+              : {
+                  youtubeInStream: true,
+                  youtubeInFeed: true,
+                  youtubeShorts: true,
+                  // ÜÇÜ DE AÇIKÇA KAPALI. Alanı hiç göndermemek "varsayılana bırak"
+                  // demek ve varsayılan AÇIK.
+                  discover: false,
+                  gmail: false,
+                  display: false,
+                },
           },
         },
       },
@@ -492,6 +501,8 @@ export interface AtomikVideoIstegi {
   longHeadlines: string[];
   descriptions: string[];
   validateOnly: boolean;
+  /** Reklam grubunun kanal bayrakları (`demandGenAdGroupBody#kanallar`); verilmezse Akıllı Boost bloğu. */
+  kanallar?: Readonly<Record<string, boolean>>;
 }
 
 export interface AtomikGovde {
@@ -553,7 +564,7 @@ export function demandGenAtomikIstek(p: AtomikVideoIstegi): { govde: AtomikGovde
   const reklamGrubu = ekle({
     adGroupOperation: {
       create: {
-        ...ilkCreate(demandGenAdGroupBody({ name: p.name, campaignResource: KAMPANYA, kitleGrubu: segmentler.length > 0 })),
+        ...ilkCreate(demandGenAdGroupBody({ name: p.name, campaignResource: KAMPANYA, kitleGrubu: segmentler.length > 0, ...(p.kanallar ? { kanallar: p.kanallar } : {}) })),
         resourceName: GRUP,
       },
     },

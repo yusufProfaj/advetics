@@ -87,6 +87,8 @@ import {
   type RehberProvaSonucu,
   type RehberYayinDurumu,
   type YoutubeVideoListesi,
+  type YoutubeVideoBilgisi,
+  youtubeVideoEngeli,
   type TaslakAlanlari,
   type TenantContext,
   type YayinDurumu,
@@ -368,6 +370,22 @@ export function platformaGiderken(eksikler: RehberEksigi[]): RehberEksigi[] {
  * token'ı demek; üç fikir bir markanın tonunu yakalamaya yetiyor.
  */
 export const METIN_ONERI_GORSEL_SINIRI = 3;
+
+/** YouTube Data API kotasının bekçi anahtarı (`QuotaGuardService.kaynakIzni`). */
+export const YOUTUBE_KOTA_ANAHTARI = 'youtube:veri_api';
+
+/**
+ * VİDEONUN YAPAY ZEKÂYA GİDEN GÖRSELLERİ (B11). Kareler (başı, ortası,
+ * ~15. sn) varsa onlar, yoksa kapak (eski kayıt). Tek kapak videonun ne
+ * anlattığını göstermiyordu: model açılış karesine bakıp ürünü yanlış
+ * anlıyordu. Ortak öneride birden çok medya varsa her video yine TEK
+ * görselle (kapak) temsil edilir: üç kare × birkaç video sınırı (3) ilk
+ * videoya harcardı ve öbür fikirler hiç görülmezdi.
+ */
+export function videoOneriGorselleri(m: { varlikId: string; kapakVarlikId?: string; oneriKareleri?: string[] }, tekMedya: boolean): string[] {
+  if (!m.kapakVarlikId) return [m.varlikId];
+  return tekMedya && m.oneriKareleri?.length ? m.oneriKareleri.slice(0, METIN_ONERI_GORSEL_SINIRI) : [m.kapakVarlikId];
+}
 
 /** Gemini'nin `inlineData` olarak kabul ettiği görsel biçimleri (varlık arşivinin biçimleri). */
 const METIN_GORSEL_BICIMLERI = ['image/jpeg', 'image/png', 'image/webp'];
@@ -1315,16 +1333,27 @@ export class RehberService {
     // Video için KAPAK gider (sunucuda video işlenmez). Üretilen boyutlar aynı
     // tasarımın kırpılmış hâli: ortak öneride onları göndermek aynı görsele
     // birkaç kez para ödemek olurdu.
+    const asil = medya.filter((x) => !x.uretildi);
     const adaylar = hedef
-      ? [hedef.kapakVarlikId ?? hedef.varlikId]
-      : [...new Set(medya.filter((x) => !x.uretildi).map((x) => x.kapakVarlikId ?? x.varlikId))];
+      ? videoOneriGorselleri(hedef, true)
+      : [...new Set(asil.flatMap((x) => videoOneriGorselleri(x, asil.length === 1)))];
+    const videoKaresi = (hedef ?? (asil.length === 1 ? asil[0] : null))?.oneriKareleri?.length ? true : false;
     const secilen = adaylar.slice(0, METIN_ONERI_GORSEL_SINIRI);
     if (adaylar.length > secilen.length) {
       notlar.push(`İlk ${secilen.length} görsel yapay zekâya gönderildi; ${adaylar.length - secilen.length} görsel gönderilmedi.`);
     }
     const gorselOku = await this.metinGorselleri(ctx, s.client_id, secilen);
     notlar.push(...gorselOku.notlar);
-    const hedefOzeti = hedef && gorselOku.gorseller.length === 1 ? gorselOku.gorseller[0]!.ozet : null;
+    // Önbellek anahtarı: tek görselde onun özeti; videonun üç karesinde
+    // ÜÇÜNÜN özetinden türeyen tek özet (sıra korunur). Karelerden biri
+    // okunamadıysa önbellek yok: eksik girdiyle yazılmış öneri tam girdinin
+    // yerine geçmesin.
+    const hedefOzeti =
+      hedef && gorselOku.gorseller.length > 0 && gorselOku.gorseller.length === secilen.length
+        ? gorselOku.gorseller.length === 1
+          ? gorselOku.gorseller[0]!.ozet
+          : createHash('sha256').update(gorselOku.gorseller.map((g) => g.ozet).join('+')).digest('hex')
+        : null;
 
     // ── Önbellek (yalnız görsele özel) ────────────────────────────────────
     let onceki: MetinOnerisi | null = null;
@@ -1351,6 +1380,8 @@ export class RehberService {
     const mevcut = mod === 'buna_gore' ? (hedef ? hedef.metin : a.metin?.deger) : undefined;
     const satirlar = [
       `Amaç: ${amac}`,
+      // B11: model kareleri tek tek görsel sanmasın; sıra anlamlı.
+      videoKaresi ? 'Görseller tek bir videodan alınmış kareler: başı, ortası ve 15. saniyesi. Metni videonun anlattığına göre yaz.' : null,
       `İşletme: ${p?.marka ?? p?.ad ?? ''}`,
       p?.sektor ? `Sektör: ${p.sektor}` : null,
       p?.kategoriler?.length ? `Ürünler: ${p.kategoriler.join(', ')}` : null,
@@ -1568,17 +1599,90 @@ export class RehberService {
          WHERE id = ${kanalId}::uuid AND client_id = ${clientId}::uuid AND profile_type = 'youtube_channel'`),
     );
     if (!k) return { satirlar: [], toplam: 0, dahaFazlaVar: false, bosNeden: 'Bu YouTube kanalı bu workspace’e bağlı değil.' };
+    await this.youtubeKotaKapisi();
     const r = await this.youtube.listRecentVideos(k.external_id, 50);
     // Hata BOŞ LİSTEYE ÇEVRİLMİYOR: "video yok" ile "okunamadı" ayrı iş.
-    if (r.durum === 'hata') throw new ServiceUnavailableException(`YouTube okunamadı: ${r.message}`);
+    if (r.durum === 'hata') {
+      await this.youtubeKotaHatasi(r.message);
+      throw new ServiceUnavailableException(`YouTube okunamadı: ${r.message}`);
+    }
     if (r.durum === 'bulunamadi') return { satirlar: [], toplam: 0, dahaFazlaVar: false, bosNeden: 'YouTube bu kanalı bulamadı; kanal bağlantısını kontrol et.' };
-    const satirlar = r.videolar.map((v) => ({
-      videoId: v.id,
-      baslik: v.title,
-      kucukResim: v.thumbnailUrl,
-      yayinTarihi: v.publishedAt ? v.publishedAt.toISOString() : null,
-    }));
-    return { satirlar, toplam: satirlar.length, dahaFazlaVar: satirlar.length >= 50, bosNeden: satirlar.length ? null : 'Kanalda yüklenmiş video yok.' };
+    /*
+     * SÜRE VE GİZLİLİK (B15) ayrı çağrıda (`videos.list`, 1 birim). O çağrı
+     * düşerse liste YİNE gelir ama sebep `ayrintiHatasi`nda ekrana yazar:
+     * listeyi bütünüyle düşürmek seçimi engellerdi, susmak ise boş alanları
+     * "sorun yok" gibi gösterirdi. Seçilen video ayrıca tek tek okunuyor.
+     */
+    const a = r.videolar.length ? await this.youtube.videoAyrintilari(r.videolar.map((v) => v.id)) : null;
+    if (a?.durum === 'hata') await this.youtubeKotaHatasi(a.message);
+    const ayrinti = a?.durum === 'bulundu' ? a.videolar : null;
+    const satirlar = r.videolar.map((v) => {
+      const d = ayrinti?.get(v.id);
+      return {
+        videoId: v.id,
+        baslik: v.title,
+        kucukResim: v.thumbnailUrl,
+        yayinTarihi: v.publishedAt ? v.publishedAt.toISOString() : null,
+        sureSn: d?.sureSn ?? null,
+        gizlilik: d?.gizlilik ?? null,
+        gomulebilir: d?.gomulebilir ?? null,
+      };
+    });
+    return {
+      satirlar,
+      toplam: satirlar.length,
+      dahaFazlaVar: satirlar.length >= 50,
+      bosNeden: satirlar.length ? null : 'Kanalda yüklenmiş video yok.',
+      ayrintiHatasi: a?.durum === 'hata' ? `Videoların süresi ve gizliliği okunamadı: ${a.message}` : null,
+    };
+  }
+
+  /**
+   * TEK VİDEO (B15/B16): seçildiği ya da bağlantısı yapıştırıldığı AN.
+   * Kanal GEREKMİYOR: Data API anahtarıyla herkese açık veri okunuyor, yani
+   * kanalı bağlı olmayan işletme de videosunu yapıştırıp ilerleyebiliyor.
+   * Bulunamayan video RET (uydurma ya da silinmiş kimlik reklam kurmaz);
+   * okunamayan (kota, ağ) 503 ve YouTube'un mesajı: "yok" ile "okunamadı"
+   * ayrı iş.
+   */
+  async youtubeVideo(ctx: TenantContext, clientId: string, videoId: string): Promise<YoutubeVideoBilgisi> {
+    erisim(ctx, clientId);
+    if (!/^[\w-]{11}$/.test(videoId)) throw new BadRequestException('YouTube video kimliği geçersiz.');
+    await this.youtubeKotaKapisi();
+    const r = await this.youtube.videoAyrintilari([videoId]);
+    if (r.durum === 'hata') {
+      await this.youtubeKotaHatasi(r.message);
+      throw new ServiceUnavailableException(`YouTube okunamadı: ${r.message}`);
+    }
+    const v = r.videolar.get(videoId);
+    if (!v) throw new BadRequestException("Bu video YouTube'da bulunamadı; bağlantıyı kontrol et.");
+    const bilgi = { videoId, baslik: v.baslik.slice(0, 200), kucukResim: v.kucukResim, sureSn: v.sureSn, gizlilik: v.gizlilik, gomulebilir: v.gomulebilir };
+    return { ...bilgi, engel: youtubeVideoEngeli(bilgi) };
+  }
+
+  /**
+   * YOUTUBE KOTA BEKÇİSİ (B15). Data API'nin günlük kotası (10.000 birim)
+   * Akıllı Boost'un WebSub doğrulamasıyla ORTAK; rehberin okumaları onu
+   * tüketip yeni video kartlarını kilitlememeli. Kaynak kotası anahtarında
+   * (`kaynak:youtube:veri_api`) tutuluyor: YouTube kotayı yanıtta
+   * bildirmiyor, bekçi yalnız `quotaExceeded` görülünce kesiliyor
+   * (`youtubeKotaHatasi`). Redis yoksa engellemiyor ama log'a yazıyor.
+   */
+  private async youtubeKotaKapisi(): Promise<void> {
+    if (!this.kota.isEnabled) {
+      logger.warn('Kota bekçisi kapalı (REDIS_URL yok); rehberin YouTube okuması kota kontrolsüz gidiyor.');
+      return;
+    }
+    const g = await this.kota.kaynakIzni(YOUTUBE_KOTA_ANAHTARI, 'interactive');
+    if (!g.allowed) {
+      const dk = Math.max(1, Math.ceil((g.retryAfterMs ?? 60_000) / 60_000));
+      throw new ServiceUnavailableException(`YouTube günlük kotası dolu. Yaklaşık ${dk} dakika sonra tekrar dene ya da videoyu sonra seç.`);
+    }
+  }
+
+  /** YouTube "kota doldu" dediyse bekçiyi bir saat kapatır; diğer hatalar yalnız yukarı taşınır. */
+  private async youtubeKotaHatasi(mesaj: string): Promise<void> {
+    if (this.kota.isEnabled && /quota/i.test(mesaj)) await this.kota.kaynakKesici(YOUTUBE_KOTA_ANAHTARI, 3600);
   }
 
   private async metaProva(ctx: TenantContext, s: RehberSatiri, a: RehberAlanlari, b: Baglam, acik: Record<RehberPlatformu, boolean>, zaman: string): Promise<PlatformProvaSonucu> {
@@ -2205,6 +2309,8 @@ export class RehberService {
         // TELEFON: arama öğesinin saatleri (derleyicinin gönderdiği AYNI değer).
         calismaSaatleri: b.calismaSaatleri,
         googleSaatDilimi: b.google?.timezone ?? null,
+        // VİDEO düğmesi (S3): derleyiciye giden AYNI adres.
+        siteAdresi: a.hedefAdres?.deger ?? null,
         // SATIŞ hacmi: eksik listesinin okuduğu AYNI önbellek değerleri.
         // Piksel okunmadıysa (`seciliPiksel` yok) sayı söylenmez.
         ...(b.onKosullar?.seciliPiksel ? { metaSatinAlma7Gun: b.onKosullar.seciliPiksel.satinAlma7GunSayisi ?? null } : {}),
@@ -2635,7 +2741,14 @@ async function aitlikDenetle(t: { $queryRaw<T = unknown>(q: Prisma.Sql): Promise
   await profil(a.sayfaId?.deger, 'facebook_page', 'Facebook sayfası bu workspace’te değil.');
   await profil(a.instagramId?.deger, 'instagram_business', 'Instagram hesabı bu workspace’te değil.');
   await profil(a.youtubeKanaliId?.deger, 'youtube_channel', 'YouTube kanalı bu workspace’te değil.');
-  const medya = [...new Set((a.medya?.deger ?? []).flatMap((m) => (m.kapakVarlikId ? [m.varlikId, m.kapakVarlikId] : [m.varlikId])))];
+  // Kapak adayları ve öneri kareleri de (B10/B11): yapay zekâya ve kapağa
+  // giden her varlık bu workspace'in olmalı; denetimsiz bir kimlik başka
+  // workspace'in görselini metin önerisine sokardı.
+  const medya = [
+    ...new Set(
+      (a.medya?.deger ?? []).flatMap((m) => [m.varlikId, ...(m.kapakVarlikId ? [m.kapakVarlikId] : []), ...(m.kapakAdaylari ?? []), ...(m.oneriKareleri ?? [])]),
+    ),
+  ];
   if (medya.length) {
     const [r] = await t.$queryRaw<Array<{ n: number }>>(Prisma.sql`
       SELECT count(*)::int AS n FROM assets WHERE client_id = ${clientId}::uuid AND id = ANY(${medya}::uuid[])`);

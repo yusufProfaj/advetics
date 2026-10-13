@@ -156,6 +156,27 @@ class SahteGoogle implements GoogleYayinPortu {
         }),
       );
     }
+    // ── VIDEO (B13): reklam videonun VARLIK kaynak adını taşıyor; geçici
+    // kimlik (`assets/-5`) Google'da gerçek kimliğe dönüyor (taklit: 9005).
+    const gercek = (k: string) => k.replace(/\/assets\/-(\d+)$/, '/assets/900$1');
+    if (sorgu.includes('FROM ad_group_ad') && sorgu.includes('demand_gen_video_responsive_ad')) {
+      return boz(
+        'ad_group_ad_video',
+        c('adGroupAdOperation').map((a) => {
+          const ad = a.ad as { demandGenVideoResponsiveAd?: { videos?: Array<{ asset: string }> } };
+          return { adGroupAd: { status: a.status, ad: { type: 'DEMAND_GEN_VIDEO_RESPONSIVE_AD', demandGenVideoResponsiveAd: { videos: (ad.demandGenVideoResponsiveAd?.videos ?? []).map((v) => ({ asset: gercek(v.asset) })) } } } };
+        }),
+      );
+    }
+    if (/FROM asset\s/.test(sorgu)) {
+      const ad = /asset\.resource_name = '([^']+)'/.exec(sorgu)?.[1];
+      return boz(
+        'asset',
+        c('assetOperation')
+          .filter((v) => v.youtubeVideoAsset && gercek(String(v.resourceName)) === ad)
+          .map((v) => ({ asset: { resourceName: ad, youtubeVideoAsset: { youtubeVideoId: (v.youtubeVideoAsset as { youtubeVideoId: string }).youtubeVideoId } } })),
+      );
+    }
     // ── Dalga 3: Maks. Performans ──
     if (sorgu.includes('brand_guidelines_enabled')) {
       const k = c('campaignOperation')[0]!;
@@ -615,6 +636,99 @@ describe('Dalga 3 — Talep Yaratma GÖRSEL yayını', () => {
     await dalga3Kur(G_GORSEL);
     const g = new SahteGoogle();
     g.dalga3Bozucu = (tur, s) => (tur === 'ad_group_ad' ? s.map((x) => ({ adGroupAd: { ...(x.adGroupAd as object), adGroupAdAssetAutomationSettings: [] } })) : s);
+    expect(await isle(g)).toEqual({ tur: 'bitti', durum: 'fark_var' });
+  });
+});
+
+/*
+ * TALEP YARATMA VİDEO (VIDEO denetimi B13): önceden video kurgusunda
+ * kanallar, teklif ve videonun kendisi geri OKUNMUYORDU; Google başka bir
+ * video ya da Görüntülü Reklam Ağı açık dönse yayın "temiz" açılırdı.
+ */
+const G_VIDEO: GoogleDerlemeGirdisi = {
+  ...GIRDI,
+  kurgu: 'TALEP_YARATMA_VIDEO',
+  ulasma: null,
+  anahtarKelimeler: [],
+  negatifler: [],
+  youtubeVideoId: 'dQw4w9WgXcQ',
+  basliklar: ['Kısa', 'Daha uzun başlık'],
+  aciklamalar: ['Birinci açıklama.'],
+};
+async function videoKur() {
+  const d = derleGoogle(G_VIDEO, {
+    kimlik: YAYIN,
+    workspaceKisaAdi: 'WS',
+    amacEkranAdi: 'Videom izlensin',
+    simdi: new Date('2026-10-10T09:00:00+03:00'),
+    validateOnly: false,
+    logo: { resource: `customers/${MUSTERI}/assets/77` },
+    youtubeVideoBasligi: 'Tanıtım',
+  });
+  if (d.tur !== 'govde') throw new Error(JSON.stringify(d));
+  await googleYayinKaydiOlustur(tx, {
+    id: YAYIN,
+    orgId: IDS.org,
+    clientId: IDS.client,
+    taslakId: TASLAK,
+    taslakSurumNo: 1,
+    icerikOzeti: 'e'.repeat(64),
+    adAccountId: HESAP,
+    govde: { platform: 'google', kurgu: d.kurgu, govde: d.govde, sira: d.sira, logoVarlikId: null },
+    beklenen: d.beklenen,
+    apiSurumu: 'v25',
+    derleyiciSurumu: GOOGLE_DERLEYICI_SURUMU,
+    atifStandardi: GOOGLE_ATIF,
+    baslatanId: IDS.user,
+    kapaliKalacak: false,
+    uyum: { surum: UYUM_SURUMU, tur: 'gecti' },
+  });
+  return d;
+}
+
+describe('Talep Yaratma VİDEO yayını (B13)', () => {
+  it('KRİTİK: kur → geri oku (kanallar + video kimliği + teklif) → aç; sorgular gerçekten soruldu', async () => {
+    await videoKur();
+    const g = new SahteGoogle();
+    expect(await isle(g)).toEqual({ tur: 'bitti', durum: 'iletildi' });
+    const [o] = await h.q<{ sonuc: string; satirlar: unknown[] }>('SELECT sonuc, satirlar FROM geri_okuma');
+    expect(o).toEqual({ sonuc: 'temiz', satirlar: [] });
+    expect(g.sorgular.some((s) => s.includes('selected_channels.maps'))).toBe(true);
+    expect(g.sorgular.some((s) => s.includes('youtube_video_asset.youtube_video_id'))).toBe(true);
+  });
+
+  it('KRİTİK: Google BAŞKA bir video döndürürse fark_var (alan videoReklam.videoKimligi), AÇILMAZ', async () => {
+    await videoKur();
+    const g = new SahteGoogle();
+    g.dalga3Bozucu = (tur, s) => (tur === 'asset' ? s.map((x) => ({ asset: { ...(x.asset as object), youtubeVideoAsset: { youtubeVideoId: 'BASKAVIDEO1' } } })) : s);
+    expect(await isle(g)).toEqual({ tur: 'bitti', durum: 'fark_var' });
+    expect(g.acilan).toEqual([]);
+    const [r] = await h.q<{ satirlar: Array<{ alan: string }> }>('SELECT satirlar FROM geri_okuma');
+    expect(r!.satirlar.map((x) => x.alan)).toEqual(['videoReklam.videoKimligi']);
+  });
+
+  it('KRİTİK: video varlığı OKUNAMAZSA (satır yok) temiz DEĞİL, fark', async () => {
+    await videoKur();
+    const g = new SahteGoogle();
+    g.dalga3Bozucu = (tur, s) => (tur === 'asset' ? [] : s);
+    expect(await isle(g)).toEqual({ tur: 'bitti', durum: 'fark_var' });
+  });
+
+  it('KRİTİK: Gmail açık döndü → fark (alan videoReklam.kanallar)', async () => {
+    await videoKur();
+    const g = new SahteGoogle();
+    g.dalga3Bozucu = kanaliBoz((k) => ({ ...k, gmail: true }));
+    expect(await isle(g)).toEqual({ tur: 'bitti', durum: 'fark_var' });
+    const [r] = await h.q<{ satirlar: Array<{ alan: string }> }>('SELECT satirlar FROM geri_okuma');
+    expect(r!.satirlar.map((x) => x.alan)).toEqual(['videoReklam.kanallar']);
+  });
+
+  it('teklif Google’da başka okunursa fark (kampanya.teklif)', async () => {
+    await videoKur();
+    const g = new SahteGoogle();
+    g.bozucu = (o) => {
+      (o.campaign as Record<string, unknown>).biddingStrategyType = 'MAXIMIZE_CONVERSIONS';
+    };
     expect(await isle(g)).toEqual({ tur: 'bitti', durum: 'fark_var' });
   });
 });

@@ -236,7 +236,8 @@ export const NIYET_KATALOGU: Record<NiyetKodu, NiyetSatiri> = {
   VIDEO_IZLENME: {
     kod: 'VIDEO_IZLENME',
     ekranAdi: 'Videom izlensin',
-    neAlacaksin: 'Videonu sonuna kadar izleyen kişiler.',
+    // ThruPlay: en az 15 saniye ya da kısa videoda sonuna kadar (B5).
+    neAlacaksin: 'Videonu en az 15 saniye ya da sonuna kadar izleyenler.',
     tur: 2,
     kanit: 'belge',
     meta: {

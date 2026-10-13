@@ -22,6 +22,8 @@ import { SITE_BAGLANTISI_YOK_CUMLESI, googleUzantiReddiCumlesi, type GoogleUzant
 import { GOOGLE_OGE_ADLARI, type GoogleOgeDurumu } from './google-ogeler';
 import { KARSILAMA_SETTE_YOK_CUMLESI, karsilamaCoz, type WhatsappKarsilama } from '../meta/karsilama';
 import { calismaSaatleriOzeti, type CalismaSaatleri } from '../calisma-saatleri';
+import { DEMAND_GEN_VIDEO_KANALLARI, kanalCumlesi } from './google-kanallar';
+import { VIDEO_DUGMESIZ_CUMLESI, videoDugmesiVar } from '../meta/derle';
 
 export interface KararHucresi {
   deger: string;
@@ -45,7 +47,9 @@ export interface KararSatiri {
     | 'KARSILAMA'
     | 'GERI_ARAMA'
     | 'SAAT'
-    | 'GORSEL';
+    | 'GORSEL'
+    | 'DUGME'
+    | 'DIL';
   konu: string;
   meta: KararHucresi | null;
   google: KararHucresi | null;
@@ -103,7 +107,30 @@ export interface KararEki {
    */
   metaSatinAlma7Gun?: number | null;
   googleSatis30Gun?: number | null;
+  /**
+   * VİDEO (S3): rehberin site adresi. Düğme kararı derleyiciyle AYNI
+   * fonksiyondan (`videoDugmesiVar`); alan yoksa adres yok sayılır ve
+   * hücre "Düğme yok" der (derleyici de düğmesiz kurar).
+   */
+  siteAdresi?: string | null;
 }
+
+/**
+ * VİDEO SÖZLERİ (VIDEO denetimi, yönetici kararları). Sabit ve tek yerde:
+ * `derle-google.spec`/`dalga3-meta.spec` cümleleri gövdeyle eşliyor.
+ */
+/** ThruPlay'in tanımı (Meta): 15 saniye ya da 15 saniyeden kısa videoda tamamı. */
+export const META_THRUPLAY_CUMLESI = 'ThruPlay: 15 sn ya da tamamı';
+/** S4: Talep Yaratma izlenmeye göre teklif kurulamıyor (CPV yalnız Video kampanyasında, o da API'de salt okunur). */
+export const GOOGLE_VIDEO_TEKLIF_CUMLESI = 'Google izlenmeye göre teklif vermiyor (API kısıtı); tıklamaya göre';
+/**
+ * B14a: Talep Yaratma'da dil ölçütü gönderilmiyor; reklam grubunda dil
+ * ölçütünün kabulü ÖLÇÜLMEDİ ve tahminle eklemek kurulumu prova dışı bir
+ * retle düşürebilirdi. Söz yok, durum söyleniyor.
+ */
+export const GOOGLE_TY_DIL_CUMLESI = 'Google varsayılanı (ölçülmedi)';
+/** B14d: `assetAutomationSettings` video reklamında yazılmıyor (alan ölçülmedi). */
+export const GOOGLE_VIDEO_OTOMASYON_CUMLESI = "Google'ın video otomasyonları varsayılanda (ölçülmedi)";
 
 /**
  * Meta'nın öğrenme aşaması bir reklam setinde haftada ~50 optimizasyon
@@ -205,13 +232,15 @@ export function kararTablosu(
   const niyetKisiti = niyetYerlesimKisiti(REHBER_AMACLARI[amac].meta.niyet);
   // TELEFON'da elle yerleşim boyuttan değil niyetten (`otomatikteDe`):
   // "görsel boyutlarına göre" demek sebebi yanlış söylerdi.
-  const yerlesimMetni = otomatik ? 'otomatik yerleşim' : niyetKisiti?.otomatikteDe ? 'yalnız telefonda, seçilen yerleşimlerde' : 'görsel boyutlarına göre seçilen yerleşimler';
+  const yerlesimMetni = otomatik ? 'otomatik yerleşim' : niyetKisiti?.otomatikteDe ? (niyetKisiti.ekranMetni ?? 'seçilen yerleşimlerde') : 'görsel boyutlarına göre seçilen yerleşimler';
   const kapaliNotu =
     (!otomatik && yerlesim!.kapanan.length
       ? `Görseli olmadığı için kapalı: ${yerlesim!.kapanan.map((x) => YERLESIM_GRUPLARI[x].etiket).join(', ')} · `
       : '') +
     // Niyetin kapattıkları AYRI cümleyle (derleyicinin "kapattıklarımız"ıyla aynı metin).
-    (!otomatik && yerlesim!.niyetKapanan.length ? `${niyetYerlesimKisiti(REHBER_AMACLARI[amac].meta.niyet)?.aciklama ?? ''} · ` : '');
+    // `otomatikteDe` niyetinde (video) kapanan GRUP yok ama kapanan AĞ var
+    // (Audience Network): derleyicinin "kapattıklarımız"ıyla aynı koşul.
+    (!otomatik && (yerlesim!.niyetKapanan.length || niyetKisiti?.otomatikteDe) ? `${niyetKisiti?.aciklama ?? ''} · ` : '');
   const t = REHBER_AMACLARI[amac];
   const g = acik.google && t.google.kurgu !== null ? t.google : null;
   const ty = g?.kurgu === 'TALEP_YARATMA_VIDEO' || g?.kurgu === 'TALEP_YARATMA_GORSEL';
@@ -219,7 +248,11 @@ export function kararTablosu(
   // derlenmiş gövdeyle `derle-google.spec.ts`te eşleniyor.
   const pmax = g?.kurgu === 'MAKS_PERFORMANS';
   const tyGorsel = g?.kurgu === 'TALEP_YARATMA_GORSEL';
+  const tyVideo = g?.kurgu === 'TALEP_YARATMA_VIDEO';
+  // B20: video hücresi GÖVDENİN sabitinden; düz kart cümlesi değil.
+  const videoKanallari = kanalCumlesi(DEMAND_GEN_VIDEO_KANALLARI);
   const m = acik.meta;
+  const metaVideo = m && t.meta.niyet === 'VIDEO_IZLENME';
   const hucre = (deger: string, not?: string): KararHucresi => (not ? { deger, not } : { deger });
   return [
     {
@@ -245,7 +278,9 @@ export function kararTablosu(
           ? hucre('En çok dönüşüm', pmaxTeklifNotu(ek.googleSatis30Gun))
           : googleTeklif === 'MAKS_DONUSUM'
             ? hucre('En çok dönüşüm', ek.googleTeklifSebebi ?? 'Dönüşüm ölçümü etkin')
-            : ty
+            : tyVideo
+              ? hucre('En çok tıklama', GOOGLE_VIDEO_TEKLIF_CUMLESI)
+              : ty
               ? hucre('En çok tıklama', 'Talep Yaratma\'da dönüşüm teklifi kurulmuyor')
               : hucre('En çok tıklama', ek.googleTeklifSebebi ?? 'Dönüşüm ölçümü kurulunca değiştirmeyi öneririz')
         : null,
@@ -263,7 +298,9 @@ export function kararTablosu(
           ? hucre('Bütün Google: Arama, YouTube, Gmail, Keşfet, Haritalar, Görüntülü Reklam Ağı', 'Yeri Google seçer; Maks. Performans bunu kapatmaya izin vermiyor')
           : tyGorsel
             ? hucre('YouTube akışı ve Shorts, Gmail, Keşfet', 'YouTube video arası, Haritalar ve Görüntülü Reklam Ağı kapalı')
-            : ty
+            : tyVideo
+              ? hucre(videoKanallari.acik, `Kapalı: ${videoKanallari.kapali}`)
+              : ty
               ? hucre(g.nerede)
               : hucre('Yalnız Google Arama', 'Arama ortakları ve Görüntülü Reklam Ağı kapalı')
         : null,
@@ -289,11 +326,26 @@ export function kararTablosu(
           : tyGorsel
             ? hucre('Görsellerinden video ve yeni tasarım üretme kapalı', 'Google başlık ve açıklamaları farklı sıralarda dener')
             : ty
-              ? hucre('Google başlık ve açıklamaları farklı sıralarda dener', 'Talep Yaratma bunu kapatmaya izin vermiyor olabilir')
+              ? hucre(GOOGLE_VIDEO_OTOMASYON_CUMLESI, 'Google başlık ve açıklamaları farklı sıralarda dener')
               : hucre('AI Max ve otomatik metin kapalı', 'Yazdığın metin değişmeden çıkar')
         : null,
     },
     { kod: 'SAYFA', konu: 'Sayfa', meta: m ? hucre('Seçtiğin Facebook sayfası, açıkça') : null, google: null },
+    // VİDEO DÜĞMESİ (S3): derleyiciyle AYNI kural (`videoDugmesiVar`).
+    ...(metaVideo
+      ? [
+          {
+            kod: 'DUGME' as const,
+            konu: 'Düğme',
+            meta: videoDugmesiVar({ niyet: 'VIDEO_IZLENME', hedefAdres: ek.siteAdresi ?? null })
+              ? hucre('Daha fazla bilgi', 'Tıklayan sitene gider')
+              : hucre(VIDEO_DUGMESIZ_CUMLESI, 'Site adresi verirsen "Daha fazla bilgi" düğmesi sitene gider'),
+            google: null,
+          },
+        ]
+      : []),
+    // DİL (B14a): yalnız Talep Yaratma; Arama ve Maks. Performans dili açıkça gönderiyor.
+    ...(ty ? [{ kod: 'DIL' as const, konu: 'Dil', meta: null, google: hucre(GOOGLE_TY_DIL_CUMLESI, 'Talep Yaratma kampanyasına dil ölçütü gönderilmiyor') }] : []),
     // FORM: seçili formun türü ve soru sayısı Meta'dan okunan hâliyle.
     ...(m && amac === 'FORM' ? [{ kod: 'FORM' as const, konu: 'Form', meta: formKararHucresi(ek.form), google: null }] : []),
     // WHATSAPP: ilk mesaj (derleyicinin `page_welcome_message`ı, aynı çözüm).
@@ -309,7 +361,9 @@ export function kararTablosu(
           ? hucre('Seçtiğin pikselin saydığı satın almalar', metaSatisOlcumNotu(ek.metaSatinAlma7Gun))
           : t.meta.niyet === 'TELEFON'
             ? hucre('Yapılan aramalar', 'Raporda "Arama" ve "20 sn+ arama" sütunları; Meta bu ülkede aramayı vermiyorsa Ara onayı')
-            : hucre("Meta'nın saydığı")
+            : metaVideo
+              ? hucre("Meta'nın saydığı izlenmeler", META_THRUPLAY_CUMLESI)
+              : hucre("Meta'nın saydığı")
         : null,
       google: g ? (g.kurgu === 'ARAMA' && g.ulasma === 'telefon' ? hucre('Arama düğmesi tıklaması', GOOGLE_ARAMA_OLCUM_CUMLESI) : hucre("Google'ın saydığı")) : null,
     },

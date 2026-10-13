@@ -6,6 +6,7 @@
  * Uçlar (docs/advcampaign/MIMARI-REHBER.md § 3):
  *   GET  /reklam/rehber/hazirlik?clientId=       → RehberHazirligi     bulk.read
  *   GET  /reklam/rehber/youtube-videolari?clientId=&kanalId= → YoutubeVideoListesi bulk.read
+ *   GET  /reklam/rehber/youtube-video?clientId=&videoId=   → YoutubeVideoBilgisi  bulk.read
  *   GET  /reklam/rehber/form-sablonlari?clientId=&sayfaId=  → RehberFormListesi  bulk.read (Meta'dan, seçili sayfa)
  *   GET  /reklam/rehber/form-ayrintisi?clientId=&sayfaId=&formId= → FormOnizlemesi bulk.read (Meta'dan, seçili sayfanın formu)
  *   GET  /reklam/rehber/pikseller?clientId=&adAccountId=   → RehberPikselListesi bulk.read (Meta'dan, seçili hesap)

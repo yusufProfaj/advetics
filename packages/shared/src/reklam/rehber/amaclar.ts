@@ -82,9 +82,16 @@ export const REHBER_AMACLARI: Record<RehberAmacKodu, RehberAmaci> = {
   VIDEO: {
     kod: 'VIDEO',
     ekranAdi: 'Videom izlensin',
-    neAlacaksin: 'Videonu sonuna kadar izleyenler.',
-    meta: { niyet: 'VIDEO_IZLENME', kurulacak: 'Etkileşim · video izlenme (Reels, akış)' },
-    google: { kurgu: 'TALEP_YARATMA_VIDEO', ulasma: null, kurulacak: 'Talep Yaratma · YouTube ve Shorts', nerede: 'YouTube' },
+    // ThruPlay = en az 15 saniye ya da (kısa videoda) sonuna kadar izlenme
+    // (Meta'nın tanımı). "Sonuna kadar" demek, 60 saniyelik bir videoda
+    // kullanıcıya olmayan bir sayı vaat ediyordu (VIDEO denetimi B5).
+    neAlacaksin: 'Videonu en az 15 saniye ya da sonuna kadar izleyenler.',
+    meta: { niyet: 'VIDEO_IZLENME', kurulacak: 'Etkileşim · video izlenme (ThruPlay)' },
+    // GOOGLE VAADİ YUMUŞAK (yönetici kararı S4): Talep Yaratma izlenmeye göre
+    // teklif VERMİYOR (CPV yalnız Video kampanyasında ve o API'den
+    // kurulamıyor); en çok tıklama. Kart "izlenme" sözü verirse Google
+    // tarafında tutamayacağımız bir söz olur.
+    google: { kurgu: 'TALEP_YARATMA_VIDEO', ulasma: null, kurulacak: 'Talep Yaratma · YouTube, tıklamaya göre teklif', nerede: 'YouTube video arası, akış ve Shorts' },
   },
   ERISIM: {
     kod: 'ERISIM',
