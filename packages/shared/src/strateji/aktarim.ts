@@ -26,6 +26,33 @@ import { HUNI_ETIKETLERI, type AktarimAtlamaNedeni, type HuniKatmani, type Strat
  * (`bulk.write`, AdvCampaign'in kendi kapısı). Yalnız birincisiyle aktarım,
  * kullanıcının açamayacağı oturumlar üretirdi.
  */
+/**
+ * ═══ V1 AKTARIMI KAPALI (2026-10-13, kullanıcı onayı) ═══
+ *
+ * Aktarım `adv_oturum`a (AdvCampaign SOHBETİ) yazıyordu; sohbet 2026-10-10'da
+ * kaldırıldı ve o satırları okuyan ekran YOK. Kullanıcı "Aktar"a basıyor,
+ * ekran "aktarıldı" diyor, plan geri dönüşsüz `aktarildi` oluyor ve
+ * AdvCampaign'de tek taslak açılmıyordu — hata yok, log yok
+ * (docs/advstrategy/YENIDEN-TASARIM.md § 1.1).
+ *
+ * Yeni aktarım (kalem → rehber taslağı) yazılana kadar KAPALI: sunucu
+ * reddeder ve `yapilabilir` listesine `aktar` girmez, yani düğme hiç
+ * çizilmez. Sabit tek yerde: servis, panel ve testler onu okur; ikisi ayrı
+ * kapansaydı biri açık kalırdı.
+ */
+export const V1_AKTARIM_ACIK = false as boolean;
+
+export const V1_AKTARIM_KAPALI_SEBEBI =
+  'AdvCampaign’e aktarım yeniden yazılıyor: eski aktarım kaldırılmış sohbet ekranına gidiyor ve AdvCampaign’de taslak açmıyordu. Onaylı plan olduğu gibi korunur; yeni aktarım gelince buradan yapılacak.';
+
+/**
+ * Daha önce `aktarildi` olmuş planın kutusu. Eski kutu "AdvCampaign oturumu"
+ * bağlantıları gösteriyordu; o bağlantılar rehber listesine düşüyor ve
+ * hiçbir şey açmıyor. Gerçeği söylemek zorunda: taslak YOK.
+ */
+export const V1_ESKI_AKTARIM_NOTU =
+  'Bu plan eski AdvCampaign sohbetine aktarılmıştı. O ekran 10 Ekim 2026’da kaldırıldı; AdvCampaign’de bu plandan açılmış bir taslak yok. Reklamlar AdvCampaign’de yeni reklam olarak kurulmalı.';
+
 export const AKTARIM_IZINLERI: readonly Permission[] = ['strategy.write', 'bulk.write'];
 
 /**

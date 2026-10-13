@@ -3,9 +3,8 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { PlanDetayi, PlanEylemi } from '@advetics/shared';
+import { V1_AKTARIM_KAPALI_SEBEBI, V1_ESKI_AKTARIM_NOTU, type PlanDetayi, type PlanEylemi } from '@advetics/shared';
 import { apiFetch } from '@/lib/api';
-import { baglanti } from '@/lib/baglanti';
 import { formatMoney } from '@/lib/format';
 import { Dugme } from '@/components/ui/dugme';
 import { Uyari } from '@/components/ui/uyari';
@@ -200,7 +199,14 @@ export function PlanEkrani({
           <p className="text-sm text-warn-strong">Kaydedilmemiş değişiklik var. Onaya göndermeden önce kaydet.</p>
         )}
         {eylemMesaji && <Uyari ton={eylemMesaji.ton}>{eylemMesaji.metin}</Uyari>}
-        {plan.aktarim && <AktarimKutusu clientId={clientId} detay={detay} />}
+        {/* Onaylı plan AdvCampaign'e AKTARILAMIYOR (ölü sohbet yolu kapatıldı): kullanıcı
+            "Aktar" düğmesini neden göremediğini burada okur. */}
+        {plan.durum === 'onaylandi' && (
+          <Uyari ton="bilgi" baslik="AdvCampaign’e aktarım şu an kapalı.">
+            {V1_AKTARIM_KAPALI_SEBEBI}
+          </Uyari>
+        )}
+        {plan.aktarim && <AktarimKutusu detay={detay} />}
       </div>
 
       {yenileHatasi && (
@@ -260,33 +266,22 @@ export function PlanEkrani({
   );
 }
 
-/** Aktarımın sonucu: kaç satır, kaçı atlandı ve neden; açılan oturumlara bağlantı. */
-function AktarimKutusu({ clientId, detay }: { clientId: string; detay: PlanDetayi }) {
+/**
+ * ESKİ aktarımın kutusu. Eski hâli "AdvCampaign oturumu N" bağlantıları
+ * gösteriyordu: o oturumlar kaldırılmış sohbetin tablosunda ve bağlantı
+ * yalnız rehber listesine düşüyordu. Kutu artık gerçeği söylüyor: bu plandan
+ * AdvCampaign'de taslak YOK. Atlanan satırların sayısı ve nedeni kalıyor.
+ */
+function AktarimKutusu({ detay }: { detay: PlanDetayi }) {
   const a = detay.plan.aktarim;
   if (!a) return null;
   const ozet = aktarimOzeti(a);
   return (
     <div className="space-y-1.5 rounded-lg border border-line bg-surface-muted p-3 text-sm">
-      <p className="font-semibold text-ink">{ozet.baslik}</p>
-      <p className="text-xs text-ink-muted">Aktarım zamanı: {zamanMetni(a.zaman)}</p>
-      {ozet.nedenler.length > 0 && (
-        <ul className="list-disc space-y-0.5 pl-5 text-ink">
-          {ozet.nedenler.map((n) => (
-            <li key={n}>{n}</li>
-          ))}
-        </ul>
-      )}
-      {a.aktarilan.length > 0 && (
-        <ul className="flex flex-wrap gap-2 pt-1">
-          {a.aktarilan.map((x, i) => (
-            <li key={x.oturumId}>
-              <Link href={baglanti('/reklam', { musteri: clientId, oturum: x.oturumId })} className="text-brand-strong underline-offset-2 hover:underline">
-                AdvCampaign oturumu {i + 1}
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
+      <p className="font-semibold text-ink">{V1_ESKI_AKTARIM_NOTU}</p>
+      <p className="text-xs text-ink-muted">
+        Eski aktarım zamanı: {zamanMetni(a.zaman)} · {ozet.baslik}
+      </p>
     </div>
   );
 }

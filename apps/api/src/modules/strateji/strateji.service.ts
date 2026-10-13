@@ -12,11 +12,8 @@ import {
 import { Prisma } from '@prisma/client';
 import {
   AKTARIM_IZINLERI,
-  aktarimEngeli,
-  aktarimIstemi,
-  NIYET_KATALOGU,
-  type AktarimAtlamaNedeni,
-  type AktarimSatiriGirdisi,
+  V1_AKTARIM_ACIK,
+  V1_AKTARIM_KAPALI_SEBEBI,
   dagilimToplamDenetimi,
   duzenlenebilirMi,
   gecisMumkunMu,
@@ -103,14 +100,6 @@ const EYLEM_IZINLERI: Record<PlanEylemi, readonly Permission[]> = {
   iptal: ['strategy.write'],
 };
 
-/** Aktarılamayan satırın kullanıcıya söylenen nedeni (400 mesajı). */
-const ATLAMA_METNI: Record<AktarimAtlamaNedeni, string> = {
-  niyet_desteklenmiyor: 'amacı AdvCampaign henüz kurmuyor',
-  platform_kapali: 'platformu AdvCampaign’de henüz açık değil',
-  kaynak_silinmis: 'kitlesi ya da görseli silinmiş',
-  butce_sifir: 'bütçesi sıfır',
-};
-
 /** Toplam seviyesi: metrik servisindeki `TOTALS_LEVEL` ile aynı (gerekçe aşağıda, `dagilimOner`). */
 const TOPLAM_SEVIYESI = seviyeLiterali('campaign');
 
@@ -184,124 +173,20 @@ export class StratejiService {
     this.modelAdi = config?.yapayZeka.model ?? 'test';
   }
 
-  // ── Aktarım (MIMARI § 6.1) ───────────────────────────────────────────
+  // ── Aktarım (KAPALI, 2026-10-13) ──────────────────────────────────
 
   /**
-   * Onaylı plan → AdvCampaign. Platforma YAZMAZ (Ç-2): her aktarılabilir
-   * matris satırı için hazır doldurulmuş bir oturum açar.
-   *
-   * KISA TRANSACTION'LAR. Okuma bir transaction, her oturum kendi
-   * transaction'ı, son durum yazımı bir transaction. Yarıda düşerse plan
-   * `onaylandi` kalır ve açılmış oturumlar YENİDEN AÇILMAZ (tekil kısmi
-   * indeks + ON CONFLICT: var olan oturum aktarılmış sayılır). Tekrar deneme
-   * yalnız eksikleri tamamlar.
-   *
-   * HİÇBİR SATIR AKTARILAMAZSA plan `onaylandi` kalır ve 400 nedenleri
-   * sayar: boş bir aktarımı "aktarıldı" saymak, müşterinin onayladığı planın
-   * hiçbir yere gitmediğini gizlerdi.
+   * V1 AKTARIMI KAPALI (`V1_AKTARIM_KAPALI_SEBEBI`). Eski gövde `adv_oturum`a,
+   * yani 2026-10-10'da kaldırılan sohbetin tablosuna yazıyordu: plan
+   * `aktarildi` oluyor, AdvCampaign'de hiçbir şey açılmıyordu. Ret, plana ve
+   * veritabanına HİÇ dokunmadan, ilk satırda: kapı bir okuma ya da izin
+   * kontrolünün arkasında kalsaydı hangi hatanın döneceği isteğe göre
+   * değişirdi ve "aktarım kapalı" cümlesi bazen hiç görünmezdi. Yeni aktarım
+   * (kalem → rehber taslağı) docs/advstrategy/YENIDEN-TASARIM.md § 4.
    */
-  async aktar(ctx: TenantContext, id: string, surum: number): Promise<PlanDetayi> {
-    if (!AKTARIM_IZINLERI.every((i) => ctx.permissions.includes(i))) {
-      throw new ForbiddenException('Planı aktarmak için reklam kurma yetkisi de gerekiyor.');
-    }
-    const okuma = await this.prisma.withTenant(ctx, async (tx) => {
-      const p = await planOku(tx, ctx, id, true);
-      if (!gecisMumkunMu(p.durum, 'aktar')) throw new ConflictException(gecisMesaji(p.durum, 'aktar'));
-      if (p.surum !== surum) throw new ConflictException(SURUM_MESAJI);
-      // Aktarım ONAYLANAN sürümü taşır. Onaydan sonra düzenleme yolu yok,
-      // ama bu kontrol o kuralın bir gün gevşemesine karşı son kapı.
-      if (p.onaylanan_surum !== p.surum) throw new ConflictException('Plan onaylandıktan sonra değişmiş; yeniden onaylanmalı.');
-      // org_id HEDEF WORKSPACE'TEN ("tüm şirketler" modunda ctx.orgId ev şirketi).
-      const [c] = await tx.$queryRaw<Array<{ org_id: string }>>(Prisma.sql`
-        SELECT org_id::text FROM clients WHERE id = ${p.client_id}::uuid`);
-      const satirlar = await tx.$queryRaw<Array<{
-        id: string;
-        platform: StratejiPlatformu;
-        katman: HuniKatmani;
-        niyet: NiyetKodu;
-        tutar_micros: string;
-        notu: string | null;
-        varlik_idleri: string[];
-        mevcut_varliklar: string[] | null;
-        kitle_adi: string | null;
-      }>>(Prisma.sql`
-        SELECT m.id::text, m.platform, m.katman, m.niyet, m.tutar_micros::text, m.notu,
-               m.varlik_idleri::text[] AS varlik_idleri,
-               (SELECT array_agg(a.id::text) FROM assets a
-                 WHERE a.id = ANY(m.varlik_idleri) AND a.client_id = m.client_id) AS mevcut_varliklar,
-               t.name AS kitle_adi
-          FROM strateji_matrisi m
-          LEFT JOIN audience_templates t ON t.id = m.kitle_sablonu_id AND t.client_id = m.client_id
-         WHERE m.plan_id = ${p.id}::uuid
-         ORDER BY m.sira`);
-      return { p, orgId: c!.org_id, satirlar };
-    });
-    const { p, orgId } = okuma;
-
-    const sonuc: AktarimSonucu = { zaman: '', aktarilan: [], atlanan: [] };
-    for (const m of okuma.satirlar) {
-      const mevcut = new Set(m.mevcut_varliklar ?? []);
-      // Sıra plandaki sıra: kullanıcı görselleri o sırayla seçti.
-      const varliklar = m.varlik_idleri.filter((v) => mevcut.has(v));
-      const girdi: AktarimSatiriGirdisi = {
-        platform: m.platform,
-        katman: m.katman,
-        niyet: m.niyet,
-        kitleAdi: m.kitle_adi,
-        varlikIdleri: varliklar,
-        planlananVarlikSayisi: m.varlik_idleri.length,
-        tutarMicros: BigInt(m.tutar_micros),
-        paraBirimi: p.para_birimi,
-        donem: p.donem,
-        not: m.notu,
-      };
-      const engel = aktarimEngeli(girdi);
-      if (engel) {
-        sonuc.atlanan.push({ matrisSatiriId: m.id, neden: engel });
-        continue;
-      }
-      const baslik = `${NIYET_KATALOGU[m.niyet].ekranAdi} · ${m.kitle_adi}`.slice(0, 120);
-      const oturumId = await this.prisma.withTenant(ctx, async (tx) => {
-        const [o] = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-          INSERT INTO adv_oturum (org_id, client_id, user_id, baslik, model, hazir_istem, hazir_medyalar, strateji_matris_id)
-          VALUES (${orgId}::uuid, ${p.client_id}::uuid, ${ctx.userId}::uuid, ${baslik}, ${this.modelAdi},
-                  ${aktarimIstemi(girdi)}, ${varliklar}::uuid[], ${m.id}::uuid)
-          ON CONFLICT (strateji_matris_id) WHERE strateji_matris_id IS NOT NULL DO NOTHING
-          RETURNING id::text`);
-        if (o) return o.id;
-        // Satırın oturumu önceki (yarıda düşen) bir denemede açılmış: AYNI
-        // oturum aktarılmış sayılır, ikincisi açılmaz. Ayrı bir ön kontrol
-        // yerine tek kapı tekil indeks: ön kontrol yarışta iki isteği birden
-        // geçirirdi, ON CONFLICT geçirmez.
-        const [var_] = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-          SELECT id::text FROM adv_oturum WHERE strateji_matris_id = ${m.id}::uuid`);
-        return var_!.id;
-      });
-      sonuc.aktarilan.push({ matrisSatiriId: m.id, oturumId });
-    }
-
-    if (sonuc.aktarilan.length === 0) {
-      const sayac = new Map<AktarimAtlamaNedeni, number>();
-      for (const a of sonuc.atlanan) sayac.set(a.neden, (sayac.get(a.neden) ?? 0) + 1);
-      const nedenler = [...sayac].map(([n, k]) => `${k} satırın ${ATLAMA_METNI[n]}`).join(', ');
-      throw new BadRequestException(
-        okuma.satirlar.length === 0
-          ? 'Matriste satır yok; aktarılacak bir şey bulunmadı.'
-          : `Aktarılabilecek satır yok: ${nedenler}.`,
-      );
-    }
-
-    return this.prisma.withTenant(ctx, async (tx) => {
-      sonuc.zaman = new Date().toISOString();
-      const n = await tx.$executeRaw(Prisma.sql`
-        UPDATE strateji_planlari
-           SET durum = ${PLAN_GECISLERI.aktar.hedef}, aktarim = ${JSON.stringify(sonuc)}::jsonb, updated_at = now()
-         WHERE id = ${p.id}::uuid AND durum = 'onaylandi' AND surum = ${surum}`);
-      // Arada başka bir istek planı aktardı ya da iptal etti. Açılan oturumlar
-      // tekil indeks sayesinde mükerrer değil; durum ötekinin yazdığı kalır.
-      if (n === 0) throw new ConflictException(SURUM_MESAJI);
-      return detayKur(tx, ctx, await planOku(tx, ctx, p.id, false));
-    });
+  async aktar(_ctx: TenantContext, _id: string, _surum: number): Promise<PlanDetayi> {
+    if (!V1_AKTARIM_ACIK) throw new BadRequestException(V1_AKTARIM_KAPALI_SEBEBI);
+    throw new BadRequestException('Aktarım bu sürümde yok.');
   }
 
   // ── Okuma ────────────────────────────────────────────────────────────
@@ -639,7 +524,10 @@ export function onayRolu(ctx: Pick<TenantContext, 'role'>): 'musteri' | 'ajans' 
  * ayrışırsa kullanıcı tıklayıp ret alır.
  */
 export function yapilabilirEylemler(durum: PlanDurumu, izinler: readonly Permission[]): PlanEylemi[] {
-  return PLAN_EYLEMLERI.filter((e) => gecisMumkunMu(durum, e) && EYLEM_IZINLERI[e].every((i) => izinler.includes(i)));
+  return PLAN_EYLEMLERI.filter(
+    // `aktar` KAPALI: düğme çizilmesin, sunucu zaten reddediyor (`aktar()`).
+    (e) => (e !== 'aktar' || V1_AKTARIM_ACIK) && gecisMumkunMu(durum, e) && EYLEM_IZINLERI[e].every((i) => izinler.includes(i)),
+  );
 }
 
 /**

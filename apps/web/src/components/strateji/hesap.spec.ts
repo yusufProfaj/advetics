@@ -108,7 +108,10 @@ describe('durum ve eylemler', () => {
     expect(eylemDugmeleri(['onayla']).map((d) => d.eylem)).toEqual(['onayla']);
     // Sıra sabit, sunucunun gönderdiği sıra değil.
     expect(eylemDugmeleri(['iptal', 'onaya_gonder']).map((d) => d.eylem)).toEqual(['onaya_gonder', 'iptal']);
-    expect(eylemDugmeleri([...PLAN_EYLEMLERI])).toHaveLength(PLAN_EYLEMLERI.length);
+    // V1 aktarımı KAPALI: sunucu `aktar` gönderse bile düğme çizilmez.
+    expect(eylemDugmeleri([...PLAN_EYLEMLERI]).map((d) => d.eylem)).not.toContain('aktar');
+    expect(eylemDugmeleri([...PLAN_EYLEMLERI])).toHaveLength(PLAN_EYLEMLERI.length - 1);
+    expect(eylemDugmeleri(['aktar'])).toEqual([]);
   });
 
   it('KRİTİK: onay kendi ucuna gidiyor, diğer eylemler /eylem ucuna', () => {

@@ -1,5 +1,6 @@
 import {
   AKTARIM_ATLAMA_NEDENLERI,
+  V1_AKTARIM_ACIK,
   NIYET_KATALOGU,
   aktarimEngeli,
   HUNI_KATMANLARI,
@@ -118,7 +119,8 @@ export const DURUM_ETIKETI: Record<PlanDurumu, { metin: string; ton: 'notr' | 'u
   taslak: { metin: 'Taslak', ton: 'notr' },
   onayda: { metin: 'Onay bekliyor', ton: 'uyari' },
   onaylandi: { metin: 'Onaylandı', ton: 'tamam' },
-  aktarildi: { metin: 'AdvCampaign’e aktarıldı', ton: 'bilgi' },
+  // Eski aktarım ölü sohbet tablosuna gidiyordu; rozet "AdvCampaign'de" sözü vermemeli.
+  aktarildi: { metin: 'Eski aktarım', ton: 'bilgi' },
   iptal: { metin: 'İptal edildi', ton: 'kapali' },
 };
 
@@ -143,7 +145,9 @@ export function eylemDugmeleri(
   yapilabilir: readonly PlanEylemi[],
 ): Array<{ eylem: PlanEylemi; etiket: string; ton: 'birincil' | 'ikincil' | 'tehlike' }> {
   const izinli = new Set(yapilabilir);
-  return EYLEM_SIRASI.filter((e) => izinli.has(e)).map((e) => ({ eylem: e, ...EYLEM_GORUNUSU[e] }));
+  // V1 aktarımı KAPALI: sunucu listeye koymuyor; panel de koymaz. Sunucu
+  // eski bir sürümle `aktar` döndürse bile düğme ölü yola çıkmasın.
+  return EYLEM_SIRASI.filter((e) => izinli.has(e) && (e !== 'aktar' || V1_AKTARIM_ACIK)).map((e) => ({ eylem: e, ...EYLEM_GORUNUSU[e] }));
 }
 
 /**
@@ -174,7 +178,7 @@ export function duzenlemeKilidi(durum: PlanDurumu, yazabilir: boolean): string |
     case 'onaylandi':
       return 'Plan onaylandı. Onaylanan plan değiştirilemez.';
     case 'aktarildi':
-      return 'Plan AdvCampaign’e aktarıldı. Değiştirilemez.';
+      return 'Plan eski sohbete aktarılmıştı. Değiştirilemez.';
     case 'iptal':
       return 'Plan iptal edildi. Değiştirilemez.';
     default:

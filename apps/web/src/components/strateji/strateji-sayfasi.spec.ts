@@ -194,6 +194,15 @@ describe('ikinci tur: aktarım, sunum, gruplar', () => {
     expect(ekran).toContain('disabled={gidecek.length === 0}');
   });
 
+  it('KRİTİK: aktarım kapalıyken onaylı plan NEDENİNİ söylüyor; eski kutu ölü oturum bağlantısı vermiyor', () => {
+    const ekran = kod('plan-ekrani.tsx');
+    expect(ekran).toMatch(/plan\.durum === 'onaylandi' && \(\s*<Uyari[^>]*>\s*\{V1_AKTARIM_KAPALI_SEBEBI\}/);
+    expect(ekran).toContain('{V1_ESKI_AKTARIM_NOTU}');
+    // Eski kutunun `?oturum=` bağlantısı kaldırılmış sohbetin oturumuna gidiyordu.
+    expect(ekran).not.toMatch(/oturum:\s*x\.oturumId/);
+    expect(ekran).not.toContain('AdvCampaign oturumu');
+  });
+
   it('KRİTİK: PDF adresi TEK üreticiden — başka hiçbir dosya `/pdf` kurmuyor', () => {
     for (const [ad, k] of Object.entries(KOD)) {
       if (ad === 'hesap.ts') continue;

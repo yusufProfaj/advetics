@@ -212,10 +212,10 @@ describe('durum makinesi ve sürüm koruması', () => {
     expect(g.plan).toMatchObject({ durum: 'taslak', surum: 2 });
   });
 
-  it('geçiş tablosu dışı eylem 409 (taslak plan aktarılamaz)', async () => {
+  it('geçiş tablosu dışı eylem 409; aktarım her durumda KAPALI (400, aktarim.spec.ts)', async () => {
     const d = await planAc();
     await expect(svc.eylem(AJANS, d.plan.id, { eylem: 'geri_cek', surum: 1 })).rejects.toMatchObject({ status: 409 });
-    await expect(svc.eylem(AJANS, d.plan.id, { eylem: 'aktar', surum: 1 })).rejects.toMatchObject({ status: 409 });
+    await expect(svc.eylem(AJANS, d.plan.id, { eylem: 'aktar', surum: 1 })).rejects.toMatchObject({ status: 400 });
   });
 
   it('KRİTİK: onay rolü kaydedilir (client_viewer → musteri) ve onaylanan sürüm basılır', async () => {
@@ -232,12 +232,12 @@ describe('durum makinesi ve sürüm koruması', () => {
     expect(onayRolu({ role: 'ad_manager' })).toBe('ajans');
   });
 
-  it('yapilabilir = durum × izin; aktarım İKİ izin ister; müşteri hesabı yalnız onaylar', () => {
+  it('yapilabilir = durum × izin; aktarım KAPALI; müşteri hesabı yalnız onaylar', () => {
     const yaz = [...resolvePermissions('admin')];
     expect(yapilabilirEylemler('taslak', yaz)).toEqual(['onaya_gonder', 'iptal']);
     expect(yapilabilirEylemler('onayda', yaz)).toEqual(['geri_cek', 'onayla', 'iptal']);
-    expect(yapilabilirEylemler('onaylandi', yaz)).toEqual(['aktar', 'iptal']);
-    // Reklam kurma izni yoksa aktarım düğmesi YOK (açamayacağı oturum üretmesin).
+    // V1 aktarımı kapalı (ölü sohbet tablosuna yazıyordu): tam yetkide de düğme yok.
+    expect(yapilabilirEylemler('onaylandi', yaz)).toEqual(['iptal']);
     expect(yapilabilirEylemler('onaylandi', yaz.filter((i) => i !== 'bulk.write'))).toEqual(['iptal']);
     expect(yapilabilirEylemler('onayda', [...resolvePermissions('client_viewer')])).toEqual(['onayla']);
     expect(yapilabilirEylemler('aktarildi', yaz)).toEqual([]);

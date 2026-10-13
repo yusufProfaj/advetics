@@ -1,18 +1,20 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { aktarimIstemi, resolvePermissions, type TenantContext } from '@advetics/shared';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { resolvePermissions, V1_AKTARIM_KAPALI_SEBEBI, type TenantContext } from '@advetics/shared';
 import { createHarness, seedTenant, IDS, type Harness } from '../../../test/pglite-harness';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { AppConfig } from '../../config/configuration';
-import { StratejiService } from './strateji.service';
+import { StratejiService, yapilabilirEylemler } from './strateji.service';
 import type { StratejiKelimeKuyrugu } from './kelime-kuyrugu';
 
 /**
- * AKTARIM — onaylı plan → AdvCampaign oturumları (MIMARI § 6.1). Gerçek şema
- * (PGlite); oturumlar `adv_oturum`a gerçekten yazılıyor.
+ * AKTARIM — 2026-10-13'ten beri KAPALI. Gerçek şema (PGlite).
  *
- * AdvCampaign SOHBET servisi 2026-10-10'da API'den kaldırıldı: bu oturumları
- * okuyan uç artık YOK ve onu sınayan test silindi. Aktarımın rehbere
- * (reklam_rehberi) taşınması açık iş (docs/advcampaign/devir/ajan2.md).
+ * Eski aktarım `adv_oturum`a (kaldırılmış AdvCampaign sohbeti) yazıyordu;
+ * okuyan ekran yoktu ve kullanıcı "aktarıldı" görüp AdvCampaign'de hiçbir
+ * şey bulamıyordu. Yeni aktarım (kalem → rehber taslağı):
+ * docs/advstrategy/YENIDEN-TASARIM.md § 4.
  */
 let h: Harness;
 let svc: StratejiService;
@@ -100,115 +102,50 @@ const oturumlar = () =>
        FROM adv_oturum ORDER BY baslik`,
   );
 
-describe('aktarım', () => {
-  it('KRİTİK: aktarılabilir satır oturum açar, diğerleri NEDENİYLE atlanır; plan aktarildi', async () => {
-    const id = await onayliPlan([
-      satir(),
-      satir({ platform: 'google', niyet: 'SITE', kitleSablonuId: null, varlikIdleri: [], tutar: '5.000' }),
-      satir({ niyet: 'WHATSAPP', tutar: '1.000' }),
-      satir({ niyet: 'SITE', tutar: '0' }),
-    ]);
-    const d = await svc.eylem(AJANS, id, { eylem: 'aktar', surum: 3 });
-    expect(d.plan.durum).toBe('aktarildi');
-    const matris = d.matris.map((m) => m.id);
-    expect(d.plan.aktarim!.aktarilan).toHaveLength(1);
-    expect(d.plan.aktarim!.aktarilan[0]!.matrisSatiriId).toBe(matris[0]);
-    expect(d.plan.aktarim!.atlanan).toEqual([
-      { matrisSatiriId: matris[1], neden: 'platform_kapali' },
-      { matrisSatiriId: matris[2], neden: 'niyet_desteklenmiyor' },
-      { matrisSatiriId: matris[3], neden: 'butce_sifir' },
-    ]);
-    expect(d.yapilabilir).toEqual([]);
-
-    const [o] = await oturumlar();
-    expect(o).toMatchObject({
-      id: d.plan.aktarim!.aktarilan[0]!.oturumId,
-      org_id: IDS.org,
-      client_id: IDS.client,
-      user_id: IDS.user,
-      baslik: 'Form doldursunlar · İzmir kadın 25-44',
-      hazir_medyalar: [V1, V2],
-      strateji_matris_id: matris[0],
-      model: 'gemini-test',
+describe('aktarım KAPALI (V1_AKTARIM_KAPALI_SEBEBI, 2026-10-13)', () => {
+  /*
+   * Eski aktarım `adv_oturum`a yazıyordu ve o tabloyu okuyan ekran yok:
+   * plan "aktarıldı" oluyor, AdvCampaign'de taslak açılmıyordu. Bu testler
+   * kapının GERÇEKTEN kapalı olduğunu kilitler: ret, plana ve tabloya
+   * dokunmadan; düğme hiç çizilmez.
+   */
+  it('KRİTİK: onaylı planın aktarımı NEDENİYLE reddedilir; oturum açılmaz, plan onaylandi kalır', async () => {
+    const id = await onayliPlan([satir(), satir({ niyet: 'SITE', tutar: '5.000' })]);
+    await expect(svc.eylem(AJANS, id, { eylem: 'aktar', surum: 3 })).rejects.toMatchObject({
+      status: 400,
+      message: V1_AKTARIM_KAPALI_SEBEBI,
     });
-    // Hazır metin sözleşmenin üreticisinden; ikinci bir metin kurucusu yok.
-    expect(o!.hazir_istem).toBe(
-      aktarimIstemi({
-        platform: 'meta', katman: 'soguk', niyet: 'FORM', kitleAdi: 'İzmir kadın 25-44', varlikIdleri: [V1, V2],
-        planlananVarlikSayisi: 2, tutarMicros: 10_000_000_000n, paraBirimi: 'TRY', donem: '2026-11', not: null,
-      }),
-    );
-    // Mesaj YAZILMADI: hazır metin yalnız giriş kutusunun önerisi.
-    const [n] = await h.q<{ n: number }>('SELECT count(*)::int AS n FROM adv_mesaj');
-    expect(n!.n).toBe(0);
-  });
-
-  it('KRİTİK: hiçbir satır aktarılamazsa plan onaylandi KALIR ve 400 nedenleri sayar', async () => {
-    const id = await onayliPlan([
-      satir({ platform: 'google', niyet: 'SITE', kitleSablonuId: null, varlikIdleri: [] }),
-      satir({ platform: 'google', niyet: 'SITE', kitleSablonuId: null, varlikIdleri: [], tutar: '1' }),
-      satir({ niyet: 'WHATSAPP' }),
-    ]);
-    await expect(svc.eylem(AJANS, id, { eylem: 'aktar', surum: 3 })).rejects.toThrow(
-      /Aktarılabilecek satır yok: 2 satırın platformu.*, 1 satırın amacı/,
-    );
-    expect((await svc.detay(AJANS, id)).plan.durum).toBe('onaylandi');
     expect(await oturumlar()).toHaveLength(0);
-  });
-
-  it('KRİTİK: tekrar denemede açılmış oturum YENİDEN AÇILMAZ (yarıda düşen aktarım)', async () => {
-    const id = await onayliPlan([satir(), satir({ varlikIdleri: [V1], tutar: '5.000' })]);
     const d = await svc.detay(AJANS, id);
-    // Önceki deneme ilk satırın oturumunu açıp düşmüş.
-    const [onceki] = await h.q<{ id: string }>(
-      `INSERT INTO adv_oturum (org_id, client_id, user_id, baslik, model, strateji_matris_id)
-       VALUES ($1, $2, $3, 'önceki', 'm', $4) RETURNING id::text`,
-      [IDS.org, IDS.client, IDS.user, d.matris[0]!.id],
-    );
-    const a = await svc.eylem(AJANS, id, { eylem: 'aktar', surum: 3 });
-    expect(a.plan.aktarim!.aktarilan.map((x) => x.oturumId)).toContain(onceki!.id);
-    expect(await oturumlar()).toHaveLength(2);
-    // Tekil indeks son kapı: aynı satıra ikinci oturum veritabanında da yazılamaz.
-    await expect(
-      h.q(`INSERT INTO adv_oturum (org_id, client_id, user_id, baslik, model, strateji_matris_id) VALUES ($1, $2, $3, 'x', 'm', $4)`, [
-        IDS.org, IDS.client, IDS.user, d.matris[0]!.id,
-      ]),
-    ).rejects.toThrow(/adv_oturum_strateji_matris_key/);
+    expect(d.plan.durum).toBe('onaylandi');
+    expect(d.plan.aktarim).toBeNull();
   });
 
-  it('KRİTİK: silinmiş kitle ya da görsel satırı sessizce eksiltmez, kaynak_silinmis ile atlar', async () => {
-    const id = await onayliPlan([satir(), satir({ varlikIdleri: [V1], tutar: '5.000' })]);
-    await h.q('DELETE FROM assets WHERE id = $1', [V2]);
-    const a = await svc.eylem(AJANS, id, { eylem: 'aktar', surum: 3 });
-    expect(a.plan.aktarim!.atlanan).toEqual([{ matrisSatiriId: a.matris[0]!.id, neden: 'kaynak_silinmis' }]);
-    expect(a.plan.aktarim!.aktarilan).toHaveLength(1);
+  it('KRİTİK: tam yetkili ajans bile onaylı planda "aktar" eylemini görmez (düğme çizilmez)', async () => {
+    const id = await onayliPlan([satir()]);
+    expect((await svc.detay(AJANS, id)).yapilabilir).not.toContain('aktar');
+    expect(yapilabilirEylemler('onaylandi', [...resolvePermissions('admin')])).not.toContain('aktar');
+    // Kapı yalnız aktarımı kapatıyor; onaylı planın iptali yerinde.
+    expect(yapilabilirEylemler('onaylandi', [...resolvePermissions('admin')])).toContain('iptal');
   });
 
-  it('KRİTİK: reklam kurma izni (bulk.write) yoksa 403 ve hiçbir oturum açılmaz', async () => {
+  it('KRİTİK: ret istek ne olursa olsun AYNI cümle (bayat sürüm, yetkisiz, başka plan)', async () => {
     const id = await onayliPlan([satir()]);
     const yalnizPlan = { ...AJANS, permissions: AJANS.permissions.filter((i) => i !== 'bulk.write') } as TenantContext;
-    await expect(svc.eylem(yalnizPlan, id, { eylem: 'aktar', surum: 3 })).rejects.toMatchObject({ status: 403 });
+    for (const [ctx, pid, surum] of [
+      [AJANS, id, 2],
+      [yalnizPlan, id, 3],
+      [AJANS, '00000000-0000-4000-8000-000000000000', 3],
+    ] as const) {
+      await expect(svc.eylem(ctx, pid, { eylem: 'aktar', surum })).rejects.toMatchObject({ message: V1_AKTARIM_KAPALI_SEBEBI });
+    }
     expect(await oturumlar()).toHaveLength(0);
   });
 
-  it('KRİTİK: onaylanan sürüm planın sürümü değilse aktarım 409 (onaylanmamış belge gitmez)', async () => {
-    const id = await onayliPlan([satir()]);
-    await h.q('UPDATE strateji_planlari SET onaylanan_surum = 2 WHERE id = $1', [id]);
-    await expect(svc.eylem(AJANS, id, { eylem: 'aktar', surum: 3 })).rejects.toThrow(/yeniden onaylanmalı/);
-    expect(await oturumlar()).toHaveLength(0);
-  });
-
-  it('bayat sürümle aktarım 409', async () => {
-    const id = await onayliPlan([satir()]);
-    await expect(svc.eylem(AJANS, id, { eylem: 'aktar', surum: 2 })).rejects.toMatchObject({ status: 409 });
-    expect(await oturumlar()).toHaveLength(0);
-  });
-
-  it('KRİTİK: "tüm şirketler" modunda oturum org_id’si HEDEF workspace’ten (ctx.orgId değil)', async () => {
-    const tum = { ...AJANS, activeClientId: null, tumSirketler: true } as unknown as TenantContext;
-    const id = await onayliPlan([satir({ kitleSablonuId: KARDES_KITLE, varlikIdleri: [] })], tum, KARDES_WS);
-    await svc.eylem(tum, id, { eylem: 'aktar', surum: 3 });
-    const [o] = await oturumlar();
-    expect(o).toMatchObject({ org_id: KARDES_ORG, client_id: KARDES_WS });
+  it('KRİTİK: strateji modülünün kaynağında adv_oturum YAZIMI yok', () => {
+    const kaynak = readFileSync(join(__dirname, 'strateji.service.ts'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    // Gövde gerçekten okundu (boş dilim "yok" iddiasını her zaman doğru yapardı).
+    expect(kaynak).toContain('async aktar(');
+    expect(kaynak).not.toMatch(/INSERT\s+INTO\s+adv_oturum/i);
   });
 });
