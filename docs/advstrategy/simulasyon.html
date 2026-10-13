@@ -1,0 +1,444 @@
+<title>AdvStrategy Simülasyonu</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600;700&display=swap">
+<style>
+/* Düzen: üstte ilerleme rayı, ortada tek soru; her adım bir ekran (Google Ads kampanya kurulumu mantığı). Yalnız Profaj kılavuzu: 4 renk, yeşil yalnız durum. */
+:root{
+  --bg:#ffffff; --yuzey:#ffffff; --metin:#000000; --gri:#302e2d; --kirmizi:#ff2400;
+  --ikincil:rgba(48,46,45,.64); --soluk:rgba(48,46,45,.40); --cizgi:rgba(48,46,45,.13); --cizgi2:rgba(48,46,45,.24);
+  --zemin:rgba(48,46,45,.04); --zemin2:rgba(48,46,45,.08); --vurgu-zemin:rgba(255,36,0,.06);
+  --ok:#1e8e3e; --meta:#302e2d; --google:#ff2400;
+  --baslik:"Montserrat",system-ui,sans-serif; --govde:"Open Sans",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#000000; --yuzey:#0d0d0d; --metin:#ffffff; --ikincil:rgba(255,255,255,.66); --soluk:rgba(255,255,255,.42);
+  --cizgi:rgba(255,255,255,.13); --cizgi2:rgba(255,255,255,.26); --zemin:rgba(255,255,255,.04); --zemin2:rgba(255,255,255,.08);
+  --vurgu-zemin:rgba(255,36,0,.14); --ok:#34a853; --meta:rgba(255,255,255,.82); color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#000000; --yuzey:#0d0d0d; --metin:#ffffff; --ikincil:rgba(255,255,255,.66); --soluk:rgba(255,255,255,.42);
+  --cizgi:rgba(255,255,255,.13); --cizgi2:rgba(255,255,255,.26); --zemin:rgba(255,255,255,.04); --zemin2:rgba(255,255,255,.08);
+  --vurgu-zemin:rgba(255,36,0,.14); --ok:#34a853; --meta:rgba(255,255,255,.82); color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--metin);font-family:var(--govde);font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+h1,h2,h3,.m{font-family:var(--baslik);text-wrap:balance;margin:0}
+button{font:inherit;color:inherit}
+.tutar{font-family:var(--baslik);font-variant-numeric:tabular-nums}
+
+/* Üst çubuk */
+.ust{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);border-bottom:1px solid var(--cizgi)}
+.ust-ic{max-width:1080px;margin:0 auto;padding:0 16px;height:56px;display:flex;align-items:center;gap:14px}
+.logo{font:800 19px/1 var(--baslik);letter-spacing:-.02em;position:relative}
+.logo i{position:absolute;width:6px;height:6px;border-radius:50%;background:var(--kirmizi);top:0;right:-8px}
+.kirinti{font-size:13px;color:var(--ikincil);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0;padding-left:8px}
+.kirinti b{color:var(--metin);font-weight:600}
+.kapat{border:0;background:transparent;font-size:13px;font-weight:600;color:var(--ikincil);cursor:pointer;padding:6px 8px;border-radius:6px}
+.kapat:hover{background:var(--zemin2)}
+.tema{border:1px solid var(--cizgi);background:transparent;border-radius:999px;padding:4px 10px;font-size:12px;cursor:pointer}
+
+/* İlerleme rayı */
+.ray{max-width:1080px;margin:0 auto;padding:14px 16px 0;display:flex;gap:6px}
+.ray .p{flex:1;min-width:0}
+.ray .p i{display:block;height:4px;border-radius:4px;background:var(--zemin2);overflow:hidden;position:relative}
+.ray .p i::after{content:"";position:absolute;inset:0;background:var(--metin);transform:scaleX(0);transform-origin:left;transition:transform .35s ease}
+.ray .p.bitti i::after{transform:scaleX(1)}
+.ray .p.simdi i::after{transform:scaleX(1);background:var(--kirmizi)}
+.ray .p span{display:block;font-size:11.5px;color:var(--soluk);margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ray .p.simdi span,.ray .p.bitti span{color:var(--metin);font-weight:600}
+.ray[hidden]{display:none}
+
+/* Sahne */
+main{max-width:1080px;margin:0 auto;padding:28px 16px 120px}
+.sahne{animation:gir .32s ease both}
+@keyframes gir{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.ust-baslik{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--kirmizi)}
+.soru{font-size:30px;font-weight:800;letter-spacing:-.015em;margin:6px 0 8px;max-width:22ch}
+.aciklama{color:var(--ikincil);max-width:62ch;margin:0 0 26px}
+.dar{max-width:720px}
+
+/* Kapı: iki büyük seçim */
+.kapi{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:8px}
+.buyuk-secim{border:1px solid var(--cizgi);background:var(--yuzey);border-radius:16px;padding:26px;text-align:left;cursor:pointer;display:grid;gap:12px;align-content:start;min-height:250px;transition:border-color .15s,transform .15s,box-shadow .15s}
+.buyuk-secim:hover{border-color:var(--metin);transform:translateY(-2px);box-shadow:0 10px 30px rgba(0,0,0,.06)}
+.buyuk-secim:focus-visible,.kart-secim:focus-visible,.dugme:focus-visible{outline:2px solid var(--kirmizi);outline-offset:2px}
+.karo{width:48px;height:48px;border-radius:12px;display:grid;place-items:center;background:var(--gri);color:#fff}
+.karo.k{background:var(--kirmizi)}
+.karo svg{width:24px;height:24px}
+.buyuk-secim h2{font-size:22px}
+.buyuk-secim p{margin:0;color:var(--ikincil)}
+.buyuk-secim .alt-bilgi{margin-top:auto;font-size:13px;color:var(--ikincil);border-top:1px solid var(--cizgi);padding-top:12px;display:flex;justify-content:space-between;gap:10px}
+.buyuk-secim .ok-ok{font-weight:700;color:var(--metin)}
+
+/* Kart seçimleri (amaç) */
+.kartlar{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
+.kart-secim{position:relative;border:1px solid var(--cizgi);background:var(--yuzey);border-radius:12px;padding:16px;text-align:left;cursor:pointer;display:grid;gap:8px;align-content:start;transition:border-color .15s,background .15s}
+.kart-secim:hover{border-color:var(--cizgi2)}
+.kart-secim[aria-pressed="true"]{border-color:var(--kirmizi);background:var(--vurgu-zemin);box-shadow:0 0 0 1px var(--kirmizi)}
+.kart-secim[disabled]{cursor:not-allowed;opacity:.55}
+.kart-secim b{font-family:var(--baslik);font-size:15px}
+.kart-secim small{color:var(--ikincil);font-size:12.5px}
+.kart-secim .sira{position:absolute;top:12px;right:12px;width:22px;height:22px;border-radius:50%;background:var(--kirmizi);color:#fff;font:700 12px/22px var(--baslik);text-align:center;opacity:0;transform:scale(.6);transition:opacity .15s,transform .15s}
+.kart-secim[aria-pressed="true"] .sira{opacity:1;transform:none}
+.kart-secim .neden{font-size:12px;color:var(--kirmizi)}
+.mini-ikon{width:30px;height:30px;border-radius:8px;background:var(--zemin2);display:grid;place-items:center;font:800 12px var(--baslik)}
+
+/* Bütçe */
+.butce-kutu{border:1px solid var(--cizgi);border-radius:16px;padding:24px;background:var(--yuzey)}
+.butce-sayi{display:flex;align-items:baseline;gap:8px}
+.butce-sayi input{font:800 44px/1 var(--baslik);width:7.5ch;border:0;border-bottom:2px solid var(--cizgi2);background:transparent;color:var(--metin);padding:4px 0;font-variant-numeric:tabular-nums}
+.butce-sayi input:focus{outline:none;border-color:var(--kirmizi)}
+.butce-sayi span{font:700 24px var(--baslik);color:var(--ikincil)}
+input[type=range]{width:100%;accent-color:var(--kirmizi);margin:18px 0 6px}
+.olcek{display:flex;justify-content:space-between;font-size:12px;color:var(--soluk)}
+.hap-sira{display:flex;gap:8px;flex-wrap:wrap}
+.hap{border:1px solid var(--cizgi2);background:var(--yuzey);border-radius:999px;padding:8px 16px;font-weight:600;font-size:14px;cursor:pointer}
+.hap[aria-pressed="true"]{background:var(--metin);color:var(--bg);border-color:var(--metin)}
+.bilgi-satirlari{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:18px}
+.bilgi{border-radius:10px;background:var(--zemin);padding:12px 14px}
+.bilgi span{display:block;font-size:12px;color:var(--ikincil)}
+.bilgi b{font-family:var(--baslik);font-size:17px}
+.bilgi.uyari{background:var(--vurgu-zemin)}
+.bilgi.uyari b{color:var(--kirmizi)}
+.alan{display:grid;gap:6px;margin-bottom:18px}
+.alan label{font-size:13px;font-weight:600}
+.alan .ip{font-size:12.5px;color:var(--ikincil)}
+.cipler{display:flex;flex-wrap:wrap;gap:8px}
+.cip{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--cizgi2);border-radius:999px;padding:6px 12px;font-size:14px;background:var(--yuzey)}
+.cip button{border:0;background:transparent;cursor:pointer;color:var(--ikincil);padding:0;font-size:15px;line-height:1}
+.cip.ekle{border-style:dashed;cursor:pointer;color:var(--ikincil)}
+.metin-kutu{border:1px solid var(--cizgi);border-radius:12px;padding:16px;background:var(--yuzey)}
+.metin-kutu textarea{width:100%;min-height:110px;border:0;resize:vertical;background:transparent;color:var(--metin);font:inherit;line-height:1.6}
+.metin-kutu textarea:focus{outline:none}
+.kaynak{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:var(--ikincil);border:1px solid var(--cizgi2);border-radius:999px;padding:2px 9px}
+.kaynak.ai{border-color:var(--kirmizi);color:var(--kirmizi)}
+
+/* Analiz simülasyonu */
+.analiz{display:grid;grid-template-columns:1fr 1fr;gap:28px;align-items:start}
+.adim-listesi{list-style:none;margin:0;padding:0;display:grid;gap:4px}
+.adim-listesi li{display:grid;grid-template-columns:26px 1fr;gap:12px;padding:12px 4px;border-bottom:1px solid var(--cizgi);opacity:.4;transition:opacity .25s}
+.adim-listesi li.aktif,.adim-listesi li.bitti{opacity:1}
+.durum{width:22px;height:22px;border-radius:50%;border:2px solid var(--cizgi2);display:grid;place-items:center;margin-top:1px}
+.aktif .durum{border-color:var(--zemin2);border-top-color:var(--kirmizi);animation:don .8s linear infinite}
+.bitti .durum{background:var(--metin);border-color:var(--metin);color:var(--bg)}
+.bitti.uyar .durum{background:var(--kirmizi);border-color:var(--kirmizi);color:#fff}
+.durum svg{width:12px;height:12px}
+@keyframes don{to{transform:rotate(360deg)}}
+.adim-listesi b{display:block;font-weight:600}
+.adim-listesi small{color:var(--ikincil);font-size:13px}
+.sayac-buyuk{font:800 64px/1 var(--baslik);letter-spacing:-.03em}
+.sayac-buyuk small{font-size:22px;color:var(--ikincil)}
+.analiz-yan{border:1px solid var(--cizgi);border-radius:16px;padding:24px;position:sticky;top:110px}
+.analiz-yan .cubuk{height:8px;border-radius:8px;background:var(--zemin2);overflow:hidden;margin:16px 0 10px}
+.analiz-yan .cubuk span{display:block;height:100%;width:0;background:var(--kirmizi);transition:width .4s ease}
+
+/* Önerilen plan */
+.plan-ust{display:grid;grid-template-columns:260px 1fr;gap:28px;align-items:center;border:1px solid var(--cizgi);border-radius:16px;padding:24px;margin-bottom:22px}
+.halka-yazi{font:800 20px var(--baslik)}
+.lejant{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--ikincil);margin-bottom:12px}
+.lejant i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.asama{display:grid;grid-template-columns:92px 1fr 100px;gap:12px;align-items:center;margin:10px 0;font-size:14px}
+.asama .c{display:flex;height:12px;border-radius:6px;overflow:hidden;background:var(--zemin2)}
+.asama .c span{height:100%}
+.asama .t{text-align:right}
+.kalemler{display:grid;gap:12px}
+.kalem{border:1px solid var(--cizgi);border-radius:14px;background:var(--yuzey);overflow:hidden}
+.kalem-bas{display:grid;grid-template-columns:44px minmax(0,1fr) auto auto;gap:14px;align-items:center;padding:16px 18px;cursor:pointer}
+.kalem-bas .karo{width:40px;height:40px;border-radius:10px;font:800 14px var(--baslik)}
+.kalem-bas b{font-family:var(--baslik);font-size:16px;display:block}
+.kalem-bas small{color:var(--ikincil);font-size:13px}
+.kalem-bas .tutar{font-size:18px;font-weight:700}
+.ok-isaret{transition:transform .2s;color:var(--ikincil)}
+.kalem[aria-expanded="true"] .ok-isaret{transform:rotate(180deg)}
+.kalem-ic{display:grid;grid-template-rows:0fr;transition:grid-template-rows .25s ease}
+.kalem[aria-expanded="true"] .kalem-ic{grid-template-rows:1fr}
+.kalem-ic > div{overflow:hidden}
+.kalem-govde{padding:4px 18px 18px;border-top:1px solid var(--cizgi);display:grid;grid-template-columns:repeat(4,1fr);gap:14px 18px}
+.kalem-govde dt{font-size:12px;color:var(--ikincil);font-weight:600}
+.kalem-govde dd{margin:2px 0 0;font-size:14px}
+.kalem-govde .genis{grid-column:1/-1}
+.pay-cubuk{display:flex;height:6px;border-radius:4px;overflow:hidden;background:var(--zemin2);margin-top:6px}
+.pay-cubuk span{height:100%}
+.tahmin-yok{color:var(--ikincil);font-size:13px}
+.etiket-ok{color:var(--ok);font-weight:700;font-size:13px}
+.etiket-uyar{color:var(--kirmizi);font-weight:700;font-size:13px}
+.not-kutu{border-left:3px solid var(--kirmizi);background:var(--zemin);border-radius:0 10px 10px 0;padding:12px 14px;font-size:14px;margin:18px 0}
+
+/* Kurulum: tek tek */
+.kurulum{display:grid;grid-template-columns:280px 1fr;gap:24px;align-items:start}
+.kur-liste{list-style:none;margin:0;padding:0;border:1px solid var(--cizgi);border-radius:14px;overflow:hidden}
+.kur-liste li{display:grid;grid-template-columns:26px 1fr;gap:10px;padding:14px;border-top:1px solid var(--cizgi);font-size:14px}
+.kur-liste li:first-child{border-top:0}
+.kur-liste li.simdi{background:var(--vurgu-zemin);box-shadow:inset 3px 0 0 var(--kirmizi)}
+.kur-liste li.bitti .durum{background:var(--metin);border-color:var(--metin);color:var(--bg)}
+.kur-liste small{display:block;color:var(--ikincil);font-size:12.5px}
+.kur-kart{border:1px solid var(--cizgi);border-radius:16px;padding:24px}
+.esleme{display:grid;grid-template-columns:150px 1fr auto;gap:0;margin:16px 0;font-size:14px}
+.esleme > *{padding:10px 0;border-bottom:1px solid var(--cizgi)}
+.esleme span:nth-child(3n+1){color:var(--ikincil)}
+.esleme .kaynak{justify-self:end;align-self:center}
+
+/* Rapor */
+.rapor-liste{display:grid;gap:12px}
+.rapor-satir{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:16px;align-items:center;border:1px solid var(--cizgi);border-radius:12px;padding:16px 18px;cursor:pointer;background:var(--yuzey)}
+.rapor-satir:hover{border-color:var(--cizgi2)}
+.rapor-satir b{font-family:var(--baslik)}
+.rapor-satir small{color:var(--ikincil);display:block}
+.rozet{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;border-radius:999px;padding:3px 10px;border:1px solid var(--cizgi2);white-space:nowrap}
+.rozet .n{width:7px;height:7px;border-radius:50%;background:var(--soluk)}
+.rozet.ok .n{background:var(--ok)}
+.rozet.bek .n{background:var(--kirmizi)}
+.belge{background:#fff;color:#000;border:1px solid var(--cizgi);border-radius:6px;max-width:820px;margin:0 auto;box-shadow:0 10px 40px rgba(0,0,0,.08)}
+.belge-sayfa{padding:44px 52px;border-bottom:1px dashed rgba(48,46,45,.25)}
+.belge-sayfa:last-child{border-bottom:0}
+.belge .logo i{background:#ff2400}
+.belge h1{font-size:42px;line-height:1.05;margin:120px 0 0;font-weight:800;letter-spacing:-.02em}
+.belge h1 em{font-style:normal;color:#ff2400}
+.belge .cizgi-k{width:72px;height:5px;background:#ff2400;margin:24px 0 18px}
+.belge .no{font:800 13px var(--baslik);color:#ff2400;letter-spacing:.08em}
+.belge h2{font-size:22px;margin:2px 0 14px}
+.belge p{color:rgba(48,46,45,.85)}
+.belge .kpi{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid rgba(48,46,45,.14);border-radius:10px;margin-top:14px}
+.belge .kpi div{padding:14px;border-right:1px solid rgba(48,46,45,.14)}
+.belge .kpi div:last-child{border-right:0;background:#302e2d;color:#fff;border-radius:0 9px 9px 0}
+.belge .kpi span{display:block;font-size:12px;opacity:.7}
+.belge .kpi b{font:700 22px var(--baslik)}
+.onay-blok{border:2px solid #000;border-radius:12px;padding:20px;margin-top:8px}
+
+/* Alt eylem çubuğu */
+.alt{position:fixed;left:0;right:0;bottom:0;background:var(--bg);border-top:1px solid var(--cizgi);padding-bottom:env(safe-area-inset-bottom,0px);z-index:6}
+.alt-ic{max-width:1080px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;gap:10px}
+.alt[hidden]{display:none}
+.alt .bosluk{flex:1}
+.alt .not{font-size:13px;color:var(--ikincil)}
+.dugme{display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:999px;padding:11px 22px;font-weight:700;font-size:14px;border:1px solid var(--cizgi2);background:var(--yuzey);cursor:pointer;transition:background .15s,opacity .15s}
+.dugme:hover{background:var(--zemin2)}
+.dugme.ana{background:var(--kirmizi);border-color:var(--kirmizi);color:#fff}
+.dugme.ana:hover{filter:brightness(.95)}
+.dugme.koyu{background:var(--metin);border-color:var(--metin);color:var(--bg)}
+.dugme[disabled]{opacity:.4;cursor:not-allowed}
+.dugme.kucuk{padding:6px 14px;font-size:13px}
+.not-seridi{font-size:12px;color:var(--ikincil);text-align:center;padding:6px 16px;background:var(--zemin);border-bottom:1px solid var(--cizgi)}
+.not-seridi b{color:var(--kirmizi)}
+
+@media (max-width:760px){
+  .kapi,.analiz,.plan-ust,.kurulum,.bilgi-satirlari{grid-template-columns:1fr}
+  .soru{font-size:24px}
+  .kalem-bas{grid-template-columns:40px minmax(0,1fr) auto}
+  .kalem-bas .ok-isaret{display:none}
+  .kalem-govde{grid-template-columns:1fr 1fr}
+  .ray .p span{display:none}
+  .analiz-yan{position:static}
+  .belge-sayfa{padding:28px 20px}
+  .belge h1{font-size:32px;margin-top:60px}
+  .alt .not{display:none}
+  .esleme{grid-template-columns:110px 1fr}
+  .esleme .kaynak{display:none}
+  .rapor-satir{grid-template-columns:1fr}
+  .buyuk-secim{min-height:0}
+}
+@media (prefers-reduced-motion: reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+</style>
+
+<div class="not-seridi"><b>Simülasyon taslağı</b> · tıklanabilir, kod değil. Rakamlar örnek. Ege Birlik Yapı · Seasight Konutları.</div>
+<header class="ust">
+  <div class="ust-ic">
+    <span class="logo">Advetics<i></i></span>
+    <span class="kirinti">Planla › <b id="kirinti">AdvStrategy</b></span>
+    <button class="tema" id="tema" type="button">Tema</button>
+    <button class="kapat" id="kapat" type="button" hidden>Kaydet ve çık</button>
+  </div>
+</header>
+<nav class="ray" id="ray" hidden aria-label="Adımlar"></nav>
+<main id="sahne" aria-live="polite"></main>
+<div class="alt" id="alt" hidden><div class="alt-ic">
+  <button class="dugme" id="geri" type="button">← Geri</button>
+  <span class="not" id="altNot"></span>
+  <span class="bosluk"></span>
+  <button class="dugme ana" id="ileri" type="button">Devam</button>
+</div></div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="tik" viewBox="0 0 12 12"><path d="M2.5 6.3l2.3 2.3 4.7-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="rapor" viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7z M14 3v5h5 M10 13h6 M10 17h6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+  <symbol id="yeni" viewBox="0 0 24 24"><path d="M4 18l6-6 4 4 6-8 M14 8h6v6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
+
+<script>
+(function(){
+  var kok=document.documentElement;
+  document.getElementById('tema').onclick=function(){var k=kok.dataset.theme?kok.dataset.theme==='dark':matchMedia('(prefers-color-scheme: dark)').matches;kok.dataset.theme=k?'light':'dark';};
+
+  var AMACLAR=[
+    {k:'FORM',ad:'Form doldursunlar',alt:'Adını ve telefonunu bıraksınlar',i:'F'},
+    {k:'SITE',ad:'Siteme gelsinler',alt:'Sitende ürünlerine baksınlar',i:'S'},
+    {k:'WHATSAPP',ad:'WhatsApp\'tan yazsınlar',alt:'Doğrudan mesajla sorsunlar',i:'W'},
+    {k:'TELEFON',ad:'Beni arasınlar',alt:'Tek dokunuşla arasınlar',i:'T',neden:'Telefon araması henüz ölçülmüyor'},
+    {k:'VIDEO',ad:'Videom izlensin',alt:'Projeyi videoyla anlat',i:'V'},
+    {k:'ERISIM',ad:'Bölgemde çok kişi görsün',alt:'Çevrende adın duyulsun',i:'E'},
+    {k:'SATIS',ad:'Sitemden satış gelsin',alt:'Siteden ödeme alınsın',i:'₺',neden:'Sitede satış ölçümü yok'}
+  ];
+  var ADIMLAR=['Hedef','Bütçe','Bölge','Kime','İnceleme','Plan','Gönder'];
+  var d={amac:['FORM','SITE'],sure:3,butce:180000,bolge:['İzmir ili'],kitle:'İzmir\'de oturan, kiradan çıkıp ilk evini almak isteyen aileler ve yatırım için ikinci konut arayanlar. Karar uzun sürüyor; reklamın işi danışmanla görüşme başlatmak.',kitleOnay:false,adim:-1,kurulan:0,acik:0};
+  var sahne=document.getElementById('sahne'), ray=document.getElementById('ray'), alt=document.getElementById('alt');
+  var geri=document.getElementById('geri'), ileri=document.getElementById('ileri'), altNot=document.getElementById('altNot');
+  function tl(n){return n.toLocaleString('tr-TR')+' ₺';}
+  function el(h){sahne.innerHTML='<div class="sahne">'+h+'</div>';window.scrollTo({top:0});}
+  function rayCiz(){
+    ray.innerHTML=ADIMLAR.map(function(a,i){return '<div class="p '+(i<d.adim?'bitti':i===d.adim?'simdi':'')+'"><i></i><span>'+(i+1)+' · '+a+'</span></div>';}).join('');
+  }
+  function cerceve(acik){ray.hidden=!acik;alt.hidden=!acik;document.getElementById('kapat').hidden=!acik;}
+
+  /* ── KAPI ── */
+  function kapi(){
+    d.adim=-1;cerceve(false);document.getElementById('kirinti').textContent='AdvStrategy';
+    el('<span class="ust-baslik">AdvStrategy</span><h1 class="soru">Bugün ne yapmak istiyorsun?</h1>'+
+      '<p class="aciklama">Strateji, reklamlarının neden ve nasıl kurulacağını anlatan plan. Ya hazır olanı incele ya da birlikte yenisini oluşturalım.</p>'+
+      '<div class="kapi">'+
+      '<button class="buyuk-secim" type="button" id="incele"><span class="karo"><svg><use href="#rapor"/></svg></span><h2>Raporu incele</h2><p>Hazırlanan stratejiyi oku, onayla ya da değişiklik iste. Onaylanan planın kampanyalarını burada kurarsın.</p><span class="alt-bilgi"><span>Kasım–Ocak stratejisi · onay bekliyor</span><span class="ok-ok">Aç →</span></span></button>'+
+      '<button class="buyuk-secim" type="button" id="olustur"><span class="karo k"><svg><use href="#yeni"/></svg></span><h2>Strateji oluştur</h2><p>Yedi kısa soru. Hesabının geçmişine bakıp sana bir plan önereceğiz; her kalemi tek tek onaylayarak ilerlersin.</p><span class="alt-bilgi"><span>Yaklaşık 5 dakika</span><span class="ok-ok">Başla →</span></span></button>'+
+      '</div>');
+    document.getElementById('incele').onclick=raporlar;
+    document.getElementById('olustur').onclick=function(){git(0);};
+  }
+
+  function git(i){d.adim=i;cerceve(true);rayCiz();document.getElementById('kirinti').textContent='Strateji oluştur · '+ADIMLAR[i];[hedef,butce,bolge,kime,inceleme,plan,gonder][i]();}
+  geri.onclick=function(){if(d.adim<=0)return kapi();git(d.adim-1);};
+  document.getElementById('kapat').onclick=kapi;
+  function eylem(metin,not,ok,fn){ileri.textContent=metin;altNot.textContent=not||'';ileri.disabled=!ok;ileri.onclick=fn;}
+
+  /* ── 1 HEDEF ── */
+  function hedef(){
+    el('<span class="ust-baslik">1 / 7 · Hedef</span><h1 class="soru">Reklamdan ne bekliyorsun?</h1><p class="aciklama">Birden çok seçebilirsin. Seçtiğin sıra önceliği gösterir; bütçenin çoğu ilk seçtiğine gider.</p>'+
+      '<div class="kartlar">'+AMACLAR.map(function(a){var s=d.amac.indexOf(a.k);return '<button class="kart-secim" type="button" data-k="'+a.k+'" aria-pressed="'+(s>-1)+'"'+(a.neden?' disabled':'')+'><span class="mini-ikon">'+a.i+'</span><b>'+a.ad+'</b><small>'+a.alt+'</small>'+(a.neden?'<span class="neden">'+a.neden+'</span>':'')+'<span class="sira">'+(s+1)+'</span></button>';}).join('')+'</div>'+
+      '<div class="not-kutu">Kapalı olanların nedeni Kurulum\'da çözülebilir. Ölçülmeyen bir sonuca reklam vermek, parayı tıklamaya harcamak demek.</div>');
+    sahne.querySelectorAll('.kart-secim').forEach(function(b){b.onclick=function(){var k=b.dataset.k,i=d.amac.indexOf(k);if(i>-1)d.amac.splice(i,1);else d.amac.push(k);hedef();};});
+    eylem('Devam',d.amac.length?d.amac.length+' hedef seçildi':'En az bir hedef seç',d.amac.length>0,function(){git(1);});
+  }
+
+  /* ── 2 BÜTÇE ── */
+  function butce(){
+    var aylik=Math.round(d.butce/d.sure), gunluk=Math.round(d.butce/(d.sure*30)), kalem=d.amac.length, kalemGunluk=Math.round(gunluk/Math.max(kalem,1));
+    var az=kalemGunluk<250;
+    el('<span class="ust-baslik">2 / 7 · Bütçe</span><h1 class="soru">Ne kadar süre, ne kadar bütçe?</h1><p class="aciklama">Toplam tutarı yaz. Günlük karşılığını ve platformların alt sınırına yetip yetmediğini anında görürsün.</p>'+
+      '<div class="dar"><div class="alan"><label>Süre</label><div class="hap-sira">'+[1,2,3].map(function(s){return '<button class="hap" type="button" data-s="'+s+'" aria-pressed="'+(d.sure===s)+'">'+s+' ay</button>';}).join('')+'</div><span class="ip">Kasım 2026\'dan başlar.</span></div>'+
+      '<div class="butce-kutu"><label class="ust-baslik" for="b">Toplam bütçe</label><div class="butce-sayi"><input id="b" inputmode="numeric" value="'+d.butce.toLocaleString('tr-TR')+'"><span>₺</span></div>'+
+      '<input type="range" id="r" min="15000" max="600000" step="5000" value="'+d.butce+'" aria-label="Toplam bütçe"><div class="olcek"><span>15.000 ₺</span><span>600.000 ₺</span></div>'+
+      '<div class="bilgi-satirlari"><div class="bilgi"><span>Aylık</span><b class="tutar">'+tl(aylik)+'</b></div><div class="bilgi"><span>Günlük</span><b class="tutar">'+tl(gunluk)+'</b></div><div class="bilgi'+(az?' uyari':'')+'"><span>Hedef başına günlük</span><b class="tutar">'+tl(kalemGunluk)+'</b></div></div>'+
+      (az?'<p class="ip" style="margin:12px 0 0;color:var(--kirmizi)">Google\'da bir kampanya günde en az 250 ₺ istiyor. Ya bütçeyi artır ya da hedef sayısını azalt.</p>':'<p class="ip" style="margin:12px 0 0">Her hedef iki platformun alt sınırının üstünde.</p>')+'</div></div>');
+    sahne.querySelectorAll('.hap').forEach(function(b){b.onclick=function(){d.sure=+b.dataset.s;butce();};});
+    var r=document.getElementById('r'), b=document.getElementById('b');
+    r.oninput=function(){d.butce=+r.value;butce();document.getElementById('r').focus();};
+    b.onchange=function(){var n=parseInt(b.value.replace(/\D/g,''),10);if(n>0){d.butce=n;}butce();};
+    eylem('Devam','',!az,function(){git(2);});
+  }
+
+  /* ── 3 BÖLGE ── */
+  function bolge(){
+    el('<span class="ust-baslik">3 / 7 · Bölge</span><h1 class="soru">Reklam nerede görünsün?</h1><p class="aciklama">Marka Merkezi\'ndeki adresten önerdik. İl, ilçe ya da şehir ekleyebilirsin.</p>'+
+      '<div class="dar"><div class="alan"><label>Bölgeler</label><div class="cipler">'+d.bolge.map(function(x,i){return '<span class="cip">'+x+'<button type="button" data-i="'+i+'" aria-label="'+x+' kaldır">✕</button></span>';}).join('')+'<span class="cip ekle" id="ekle" role="button" tabindex="0">+ Bölge ekle</span></div></div>'+
+      '<div class="not-kutu"><b>Konut kategorisi beyan edildi.</b> Meta bu kategoride yaşı ve adres çevresini daraltmaya izin vermiyor; bölge en az il düzeyinde kalır, yaş 18–65+.</div></div>');
+    sahne.querySelectorAll('.cip button').forEach(function(x){x.onclick=function(){d.bolge.splice(+x.dataset.i,1);bolge();};});
+    document.getElementById('ekle').onclick=function(){var s=['Manisa ili','Aydın ili','Muğla ili'].filter(function(y){return d.bolge.indexOf(y)<0;});if(s[0])d.bolge.push(s[0]);bolge();};
+    eylem('Devam',d.bolge.length+' bölge',d.bolge.length>0,function(){git(3);});
+  }
+
+  /* ── 4 KİME ── */
+  function kime(){
+    el('<span class="ust-baslik">4 / 7 · Kime</span><h1 class="soru">Kime anlatıyoruz?</h1><p class="aciklama">Sitenden ve Marka Merkezi\'nden yazdık. Değiştir ya da olduğu gibi kullan; rapor ve reklam metinleri buna göre yazılır.</p>'+
+      '<div class="dar"><div class="metin-kutu"><div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:8px"><span class="kaynak ai">Yapay zekâ önerisi</span><button class="dugme kucuk" type="button" id="yeniden">Yeniden yaz</button></div><textarea id="kt" aria-label="Kime anlatıyoruz">'+d.kitle+'</textarea></div>'+
+      '<label style="display:flex;gap:10px;align-items:center;margin-top:14px;font-weight:600;cursor:pointer"><input type="checkbox" id="ko" '+(d.kitleOnay?'checked':'')+' style="width:18px;height:18px;accent-color:var(--kirmizi)"> Bu tarif doğru, kullan</label></div>');
+    document.getElementById('kt').oninput=function(e){d.kitle=e.target.value;};
+    document.getElementById('ko').onchange=function(e){d.kitleOnay=e.target.checked;kime();};
+    document.getElementById('yeniden').onclick=function(){d.kitle='Çiğli ve Karşıyaka çevresinde yaşayan, büyüyen ailesi için daha geniş ve manzaralı bir ev arayanlar; ayrıca kira getirisi için konut almak isteyen yatırımcılar.';d.kitleOnay=false;kime();};
+    eylem('Planı hazırla',d.kitleOnay?'':'Tarifi onayla',d.kitleOnay,function(){git(4);});
+  }
+
+  /* ── 5 İNCELEME (simülasyon) ── */
+  function inceleme(){
+    var L=[['Marka Merkezi okundu','Konut · 2+1, 3+1 · deniz manzarası'],['Site tarandı','egebirlikseasight.com · 14 sayfa'],['Meta hesabı inceleniyor','Son 90 gün · 118 form, form başı 349 ₺'],['Google Ads inceleniyor','Son 90 gün · 3.640 tık, tık başı 5,19 ₺'],['Ölçüm kontrol ediliyor','Form ve site ziyareti sayılıyor · telefon sayılmıyor',1],['Arama kelimeleri bulunuyor','12 kelime · ayda yaklaşık 9.400 arama'],['Bütçe dağıtılıyor','Önce form, sonra site, kalan tanıtım']];
+    el('<span class="ust-baslik">5 / 7 · İnceleme</span><h1 class="soru">Hesabını inceliyoruz</h1><p class="aciklama">Önerideki her sayı buradan gelir. Bulamadığımız bir şeyi uydurmayız; "tahmin yok" der, nedenini yazarız.</p>'+
+      '<div class="analiz"><ol class="adim-listesi" id="al">'+L.map(function(x){return '<li><span class="durum"></span><span><b>'+x[0]+'</b><small>'+x[1]+'</small></span></li>';}).join('')+'</ol>'+
+      '<div class="analiz-yan"><span class="ust-baslik">Hazırlanıyor</span><div class="sayac-buyuk"><span id="yz">0</span><small>%</small></div><div class="cubuk"><span id="yc"></span></div><p class="ip" id="yd" style="margin:0;color:var(--ikincil)">Bu birkaç saniye sürer.</p></div></div>');
+    eylem('Planı gör','',false,function(){git(5);});
+    var lis=sahne.querySelectorAll('#al li'),i=0;
+    var hiz=matchMedia('(prefers-reduced-motion: reduce)').matches?40:620;
+    function adim(){
+      if(i>0){lis[i-1].className='bitti'+(L[i-1][2]?' uyar':'');lis[i-1].querySelector('.durum').innerHTML=L[i-1][2]?'!':'<svg><use href="#tik"/></svg>';}
+      var y=Math.round(i/L.length*100);document.getElementById('yz').textContent=y;document.getElementById('yc').style.width=y+'%';
+      if(i===L.length){document.getElementById('yd').textContent='Hazır. 1 uyarı: telefon araması ölçülmüyor.';eylem('Planı gör','',true,function(){git(5);});return;}
+      lis[i].className='aktif';i++;setTimeout(adim,hiz);
+    }
+    setTimeout(adim,200);
+  }
+
+  /* ── 6 PLAN ── */
+  function kalemler(){
+    var t=d.butce, a=d.amac, pay={FORM:.55,SITE:.3,WHATSAPP:.2,VIDEO:.15,ERISIM:.12};
+    var top=a.reduce(function(s,k){return s+(pay[k]||.2);},0);
+    var V={FORM:['Meta anlık form','Yalnız Meta',1,'160–240 form','Hesap verisi'],SITE:['Meta trafik + Google arama','Meta %40 · Google %60',.4,'9.000–12.500 ziyaret','Hesap verisi'],WHATSAPP:['Meta mesaj reklamı','Yalnız Meta',1,null,'WhatsApp geçmişi yok'],VIDEO:['Reels + YouTube','Meta %55 · Google %45',.55,null,'Video geçmişi yok'],ERISIM:['Erişim, haftada en çok 2 kez','Meta %60 · Google %40',.6,null,'Erişim geçmişi yok']};
+    return a.map(function(k){var am=AMACLAR.filter(function(x){return x.k===k;})[0],v=V[k];return {k:k,ad:am.ad,i:am.i,nasil:v[0],pay:v[1],meta:v[2],tutar:Math.round(t*(pay[k]||.2)/top/1000)*1000,beklenen:v[3],kaynak:v[4]};});
+  }
+  function plan(){
+    var K=kalemler(), meta=K.reduce(function(s,x){return s+x.tutar*x.meta;},0), goog=d.butce-meta, mp=Math.round(meta/d.butce*100);
+    var r=70,c=2*Math.PI*r,m=c*meta/d.butce;
+    el('<span class="ust-baslik">6 / 7 · Plan</span><h1 class="soru">Önerdiğimiz plan</h1><p class="aciklama">Her kaleme tıklayıp neden böyle önerdiğimizi gör. Bir kalemi değiştirmek istersen içinden düzenle.</p>'+
+      '<div class="plan-ust"><svg viewBox="0 0 200 200" width="220" height="220" role="img" aria-label="Meta yüzde '+mp+', Google yüzde '+(100-mp)+'" style="max-width:100%"><circle cx="100" cy="100" r="'+r+'" fill="none" stroke="var(--zemin2)" stroke-width="26"/><circle cx="100" cy="100" r="'+r+'" fill="none" stroke="var(--meta)" stroke-width="26" stroke-dasharray="'+m+' '+c+'" transform="rotate(-90 100 100)"/><circle cx="100" cy="100" r="'+r+'" fill="none" stroke="var(--google)" stroke-width="26" stroke-dasharray="'+(c-m)+' '+c+'" stroke-dashoffset="'+(-m)+'" transform="rotate(-90 100 100)"/><text x="100" y="98" text-anchor="middle" class="halka-yazi" fill="var(--metin)">'+tl(d.butce)+'</text><text x="100" y="120" text-anchor="middle" font-size="12" fill="var(--ikincil)">'+d.sure+' ay toplam</text></svg>'+
+      '<div><div class="lejant"><span><i style="background:var(--meta)"></i>Meta <span class="tutar">'+tl(Math.round(meta))+'</span></span><span><i style="background:var(--google)"></i>Google <span class="tutar">'+tl(Math.round(goog))+'</span></span></div>'+
+      K.map(function(x){return '<div class="asama"><span>'+x.ad.split(' ')[0]+'</span><div class="c"><span style="width:'+(x.tutar/d.butce*100*x.meta)+'%;background:var(--meta)"></span><span style="width:'+(x.tutar/d.butce*100*(1-x.meta))+'%;background:var(--google)"></span></div><span class="t tutar">'+tl(x.tutar)+'</span></div>';}).join('')+
+      '<p class="ip" style="margin:8px 0 0;color:var(--ikincil);font-size:12.5px">Meta ve Google sonuçları farklı sayıldığı için toplanmaz.</p></div></div>'+
+      '<div class="kalemler">'+K.map(function(x,i){return '<div class="kalem" aria-expanded="'+(d.acik===i)+'"><div class="kalem-bas" data-i="'+i+'" role="button" tabindex="0"><span class="karo'+(i===0?' k':'')+'">'+x.i+'</span><span><b>'+x.ad+'</b><small>'+x.nasil+'</small></span><span class="tutar">'+tl(x.tutar)+'</span><span class="ok-isaret">▾</span></div>'+
+        '<div class="kalem-ic"><div><dl class="kalem-govde"><div><dt>Nerede</dt><dd>'+x.pay+'<div class="pay-cubuk"><span style="width:'+x.meta*100+'%;background:var(--meta)"></span><span style="width:'+(1-x.meta)*100+'%;background:var(--google)"></span></div></dd></div><div><dt>Tarih</dt><dd>Kasım–'+['Kasım','Aralık','Ocak'][d.sure-1]+'</dd></div><div><dt>Bölge</dt><dd>'+d.bolge.join(', ')+'</dd></div><div><dt>Beklenen</dt><dd>'+(x.beklenen?x.beklenen+' <span class="kaynak">'+x.kaynak+'</span>':'<span class="tahmin-yok">Tahmin yok · '+x.kaynak+'</span>')+'</dd></div>'+
+        '<div class="genis"><dt>Görsel ve mesaj <span class="kaynak ai">Yapay zekâ</span></dt><dd>Denizi gören salonla açın; ikinci karede kat planı. Fiyat yerine teslim tarihi ve ödeme kolaylığı öne çıksın.</dd></div></dl></div></div></div>';}).join('')+'</div>'+
+      '<div class="not-kutu"><b>Beni arasınlar</b> plana alınmadı: telefon araması ölçülmüyor. Kurulum › Dönüşüm ölçümü tamamlanınca eklenir.</div>');
+    sahne.querySelectorAll('.kalem-bas').forEach(function(b){b.onclick=function(){var i=+b.dataset.i;d.acik=d.acik===i?-1:i;plan();};});
+    eylem('Planı onayla',K.length+' kampanya · '+tl(d.butce),true,function(){git(6);});
+  }
+
+  /* ── 7 GÖNDER ── */
+  function gonder(){
+    el('<span class="ust-baslik">7 / 7 · Gönder</span><h1 class="soru">Plan hazır. Şimdi ne yapalım?</h1><p class="aciklama">Müşteri onaylamadan kampanya kurulmaz. Onay gelince "Raporu incele"den kalemleri tek tek kurarsın.</p>'+
+      '<div class="kapi"><button class="buyuk-secim" type="button" id="gonderM"><span class="karo k"><svg><use href="#rapor"/></svg></span><h2>Müşteriye gönder</h2><p>Kurumsal rapor ve onay bağlantısı e-postayla gider. Müşteri giriş yapmadan onaylar ya da değişiklik ister.</p><span class="alt-bilgi"><span>mehmet@egebirlikyapi.com.tr</span><span class="ok-ok">Gönder →</span></span></button>'+
+      '<button class="buyuk-secim" type="button" id="kendim"><span class="karo"><svg><use href="#yeni"/></svg></span><h2>Müşteri adına onayla</h2><p>Müşteri onayını yazılı aldıysan kendin onayla. Kim, ne zaman onayladı kayda geçer.</p><span class="alt-bilgi"><span>Yalnız ajans yöneticisi</span><span class="ok-ok">Onayla →</span></span></button></div>');
+    document.getElementById('gonderM').onclick=function(){raporAc(true);};
+    document.getElementById('kendim').onclick=function(){kur(0);};
+    eylem('Raporu önizle','',true,function(){raporAc(false);});
+  }
+
+  /* ── RAPORLAR ── */
+  function raporlar(){
+    cerceve(false);document.getElementById('kirinti').textContent='Raporu incele';
+    el('<button class="dugme kucuk" type="button" id="dn">← AdvStrategy</button><h1 class="soru" style="margin-top:18px">Stratejiler</h1><p class="aciklama">Ege Birlik Yapı · Seasight Konutları. Bir rapora tıkla.</p>'+
+      '<div class="rapor-liste"><div class="rapor-satir" id="r1" role="button" tabindex="0"><span><b>Kasım 2026 – Ocak 2027</b><small>4 kampanya · '+tl(180000)+' · sürüm 3 · 13 Eki</small></span><span class="rozet bek"><span class="n"></span>Onay bekliyor</span><span class="ok-ok">Aç →</span></div>'+
+      '<div class="rapor-satir" id="r2" role="button" tabindex="0"><span><b>Ağustos – Ekim 2026</b><small>3 kampanya · '+tl(120000)+' · 3 kampanya yayında</small></span><span class="rozet ok"><span class="n"></span>Onaylandı</span><span class="ok-ok">Aç →</span></div></div>');
+    document.getElementById('dn').onclick=kapi;
+    document.getElementById('r1').onclick=function(){raporAc(false);};
+    document.getElementById('r2').onclick=function(){kur(0);};
+  }
+  function raporAc(gonderildi){
+    cerceve(false);document.getElementById('kirinti').textContent='Rapor';
+    el('<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;max-width:820px;margin:0 auto 14px"><button class="dugme kucuk" type="button" id="dn">← Stratejiler</button><span style="flex:1"></span>'+(gonderildi?'<span class="rozet ok"><span class="n"></span>Müşteriye gönderildi</span>':'')+'<button class="dugme kucuk" type="button">PDF indir</button></div>'+
+      '<article class="belge"><div class="belge-sayfa"><span class="logo">Advetics<i></i></span><h1>Dijital Reklam<br><em>Stratejisi</em></h1><div class="cizgi-k"></div><p style="margin:0">Ege Birlik Yapı · Seasight Konutları · Kasım 2026 – Ocak 2027</p></div>'+
+      '<div class="belge-sayfa"><span class="no">01</span><h2>Özet</h2><p>Ana hedef satış danışmanına ulaşan nitelikli başvuru. Bütçenin çoğu Meta formuna gidiyor; geçmişte başvurular en çok ve en ucuza oradan geldi. Google aramasıyla daire arayanları siteye çekiyoruz.</p><div class="kpi"><div><span>Süre</span><b>3 ay</b></div><div><span>Beklenen form</span><b>160–240</b></div><div><span>Toplam bütçe</span><b class="tutar">'+tl(180000)+'</b></div></div></div>'+
+      '<div class="belge-sayfa"><span class="no">02</span><h2>Onay</h2><div class="onay-blok"><b class="m">Bu stratejiyi onaylıyor musunuz?</b><p style="margin:6px 0 14px">Onaydan sonra kampanyalar tek tek kurulur; yayına almadan önce son hâli tekrar kontrol edilir.</p><div style="display:flex;gap:10px;flex-wrap:wrap"><button class="dugme ana" type="button" id="onay">Onayla</button><button class="dugme" type="button">Değişiklik iste</button></div></div></div></article>');
+    document.getElementById('dn').onclick=raporlar;
+    document.getElementById('onay').onclick=function(){kur(0);};
+  }
+
+  /* ── KURULUM: tek tek ── */
+  function kur(i){
+    var K=kalemler();d.kurulan=i;cerceve(false);document.getElementById('kirinti').textContent='Kampanyaları kur';
+    if(i>=K.length){
+      el('<span class="ust-baslik">Kurulum tamam</span><h1 class="soru">'+K.length+' kampanya AdvCampaign\'de hazır</h1><p class="aciklama">Hiçbiri yayında değil, para harcanmadı. Her birini AdvCampaign\'de son kez kontrol edip yayına al.</p><div style="display:flex;gap:10px;flex-wrap:wrap"><button class="dugme ana" type="button">AdvCampaign\'e git</button><button class="dugme" type="button" id="bas">AdvStrategy</button></div>');
+      document.getElementById('bas').onclick=kapi;return;
+    }
+    var x=K[i];
+    el('<span class="ust-baslik">Kampanya '+(i+1)+' / '+K.length+'</span><h1 class="soru">'+x.ad+'</h1><p class="aciklama">Bu kampanya AdvCampaign\'de dolu bir taslak olarak açılacak. Aşağıdakiler plandan gelir; gerisini AdvCampaign soracak.</p>'+
+      '<div class="kurulum"><ol class="kur-liste">'+K.map(function(y,j){return '<li class="'+(j<i?'bitti':j===i?'simdi':'')+'"><span class="durum">'+(j<i?'<svg><use href="#tik"/></svg>':'')+'</span><span><b style="font-weight:600">'+y.ad+'</b><small>'+(j<i?'Taslak açıldı':j===i?'Şimdi':'Sırada')+'</small></span></li>';}).join('')+'</ol>'+
+      '<div class="kur-kart"><div class="esleme">'+
+      [['Hedef',x.ad,'Plandan'],['Platform',x.pay,'Plandan'],['Bütçe','<span class="tutar">'+tl(x.tutar)+'</span>','Plandan'],['Tarih','Kasım–'+['Kasım','Aralık','Ocak'][d.sure-1],'Plandan'],['Bölge',d.bolge.join(', '),'Plandan'],['Metin','3 başlık, ana metin','Plandan'],['Reklam hesabı','Seasight · Meta','Workspace'],['Görseller','<span class="etiket-uyar">AdvCampaign\'de seçilecek</span>','']].map(function(r){return '<span>'+r[0]+'</span><span>'+r[1]+'</span>'+(r[2]?'<span class="kaynak">'+r[2]+'</span>':'<span></span>');}).join('')+
+      '</div><p class="ip" style="margin:0;color:var(--ikincil);font-size:13px">Taslak açmak reklam kurmaz, para harcamaz.</p></div></div>');
+    cerceve(false);alt.hidden=false;
+    geri.onclick=function(){if(i===0)return raporlar();kur(i-1);};
+    eylem('Taslağı aç ve sonrakine geç',(i+1)+' / '+K.length,true,function(){kur(i+1);});
+  }
+
+  kapi();
+})();
+</script>
