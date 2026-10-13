@@ -67,6 +67,11 @@ export function FirmaBilgileri({
             <DetaySatiri etiket="Saat dilimi" deger={saatDilimi} />
             <DetaySatiri etiket="Raporlama para birimi" deger={paraBirimi} />
           </div>
+          {/*
+            SALT OKUNUR (MIMARI Ç-16 ⚠): metrik günleri ve tutarlar bu dilim ve
+            birimle yazıldı; değiştirmek geçmiş raporları sessizce kaydırırdı.
+          */}
+          <p className="mt-1 text-[11px] text-ink-muted">Saat dilimi ve para birimi reklam hesabının ayarından gelir, burada değişmez.</p>
         </div>
       </div>
       {bilgi.notes && (

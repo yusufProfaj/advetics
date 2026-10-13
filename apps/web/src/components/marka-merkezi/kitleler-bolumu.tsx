@@ -13,6 +13,7 @@ import {
   type KitleSablonuListesi,
   type KitleSablonuRecord,
 } from '@advetics/shared';
+import Link from 'next/link';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { Dugme } from '@/components/ui/dugme';
 import { Uyari } from '@/components/ui/uyari';
@@ -21,11 +22,17 @@ import { IlgiSecici, kitleBuyuklugu } from './ilgi-secici';
 import { OzelKitleSecici } from './ozel-kitle-secici';
 
 /**
- * ═══ MARKA MERKEZİ → KİTLELER (Bölüm 4) ═══
+ * ═══ VARLIKLAR → KİTLELER (Bölüm 4; 2026-10-13'ten beri Varlıklar'ın 4. sekmesi) ═══
  *
- * Workspace'in adlı hedeflemeleri. Hızlı Reklam VARSAYILAN şablonu
- * kendiliğinden uyguluyor; kullanıcı her reklamda konum ve yaşı yeniden
- * seçmiyor.
+ * Workspace'in adlı hedeflemeleri. Reklam kurarken görsel ve form gibi
+ * SEÇİLEN malzeme; bu yüzden Marka Merkezi'nden Varlıklar'a taşındı
+ * (docs/panel-sadelestirme/MIMARI.md Ç-26).
+ *
+ * VARSAYILAN KİTLE BURADA DEĞİŞMİYOR (Ç-9). İki yerden değişiyordu: buradaki
+ * "Varsayılan yap" ve hazırlık kartının konum sorusu; ikisi ayrı şablon
+ * işaretleyebiliyordu ve hangisinin geçerli olduğu ekrandan okunmuyordu.
+ * Evi Marka Merkezi › Kurulum › Reklam varsayılanları; burada rozet SALT
+ * OKUNUR ve oraya bağlantı.
  *
  * YALNIZCA META. Konumlar Meta'nın coğrafi aramasından geliyor ve Google'ın
  * konum kimlikleri ayrı bir uzay; ekran bunu söylüyor.
@@ -63,7 +70,16 @@ const YASLAR = Array.from({ length: 48 }, (_, i) => 18 + i);
 const girdi =
   'w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-ink outline-none focus:border-brand';
 
-export function KitlelerBolumu({ clientId, yazabilir }: { clientId: string; yazabilir: boolean }) {
+export function KitlelerBolumu({
+  clientId,
+  yazabilir,
+  varsayilanAdresi,
+}: {
+  clientId: string;
+  yazabilir: boolean;
+  /** Varsayılan kitlenin evi (Kurulum › Reklam varsayılanları); görme yetkisi yoksa null. */
+  varsayilanAdresi: string | null;
+}) {
   const [durum, setDurum] = useState<Durum>({ tur: 'yukleniyor' });
   const [form, setForm] = useState<Form | null>(null);
   const [silinecek, setSilinecek] = useState<string | null>(null);
@@ -135,8 +151,8 @@ export function KitlelerBolumu({ clientId, yazabilir }: { clientId: string; yaza
             Kitleler
           </h2>
           <p className="mt-0.5 text-sm text-ink-muted">
-            Kime gösterileceği: konum, yaş, cinsiyet. Varsayılan kitle Hızlı Reklam’da kendiliğinden
-            seçilir. Şimdilik yalnızca Meta reklamlarında kullanılır.
+            Kime gösterileceği: konum, yaş, cinsiyet. Varsayılan kitle reklam kurarken kendiliğinden
+            seçilir ve Kurulum’da değişir. Şimdilik yalnızca Meta reklamlarında kullanılır.
           </p>
         </div>
         {yazabilir && !form && durum.tur === 'hazir' && (
@@ -171,7 +187,7 @@ export function KitlelerBolumu({ clientId, yazabilir }: { clientId: string; yaza
       {durum.tur === 'hazir' && durum.veri.items.length === 0 && !form && (
         <p className="rounded-xl border border-dashed border-line bg-surface p-6 text-sm text-ink-muted">
           Kayıtlı kitle yok. Kitle olmadan Hızlı Reklam <strong>Türkiye geneli, 18 yaş ve üzeri</strong>{' '}
-          gösterir.
+          gösterir. Varsayılan konum Kurulum’da seçilir.
         </p>
       )}
       {durum.tur === 'hazir' && durum.veri.items.length > 0 && (
@@ -181,6 +197,7 @@ export function KitlelerBolumu({ clientId, yazabilir }: { clientId: string; yaza
               key={k.id}
               k={k}
               yazabilir={yazabilir}
+              varsayilanAdresi={varsayilanAdresi}
               busy={busy}
               silOnayi={silinecek === k.id}
               duzenle={() => setForm(formdan(k))}
@@ -190,14 +207,6 @@ export function KitlelerBolumu({ clientId, yazabilir }: { clientId: string; yaza
                 void islem(() =>
                   apiFetch(`/audience-templates/${k.id}?clientId=${clientId}`, { method: 'DELETE' }),
                 ).then(() => setSilinecek(null))
-              }
-              varsayilanYap={() =>
-                void islem(() =>
-                  apiFetch('/audience-templates/varsayilan', {
-                    method: 'PUT',
-                    body: JSON.stringify({ clientId, sablonId: k.varsayilan ? null : k.id }),
-                  }),
-                )
               }
             />
           ))}
@@ -223,23 +232,29 @@ function formdan(k: KitleSablonuRecord): Form {
 function KitleSatiri(p: {
   k: KitleSablonuRecord;
   yazabilir: boolean;
+  varsayilanAdresi: string | null;
   busy: boolean;
   silOnayi: boolean;
   duzenle: () => void;
   silIste: () => void;
   silVazgec: () => void;
   sil: () => void;
-  varsayilanYap: () => void;
 }) {
   return (
     <li className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm">
       <div className="min-w-0 flex-1">
         <p className="flex items-center gap-2 font-medium text-ink">
           {p.k.name}
+          {/* SALT OKUNUR ROZET: değiştirmenin tek yeri Kurulum (Ç-9). */}
           {p.k.varsayilan && (
             <span className="rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-medium text-brand-strong">
               Varsayılan
             </span>
+          )}
+          {p.k.varsayilan && p.varsayilanAdresi && (
+            <Link href={p.varsayilanAdresi} className="text-xs font-normal text-ink-muted underline-offset-2 hover:text-ink hover:underline">
+              Kurulum’da değiştir
+            </Link>
           )}
         </p>
         <p className="mt-0.5 text-xs text-ink-muted">{kitleOzeti(p.k)}</p>
@@ -258,9 +273,6 @@ function KitleSatiri(p: {
           </span>
         ) : (
           <span className="flex items-center gap-1">
-            <Dugme ton="sade" boyut="kucuk" onClick={p.varsayilanYap} disabled={p.busy}>
-              {p.k.varsayilan ? 'Varsayılanı kaldır' : 'Varsayılan yap'}
-            </Dugme>
             <Dugme ton="sade" boyut="kucuk" onClick={p.duzenle} disabled={p.busy}>
               Düzenle
             </Dugme>

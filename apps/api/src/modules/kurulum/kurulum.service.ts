@@ -2,6 +2,8 @@ import { BadRequestException, ConflictException, ForbiddenException, Inject, Inj
 import { Prisma } from '@prisma/client';
 import {
   KURULUM_ADIM_ADI,
+  KURULUM_LISTESI,
+  KURULUM_PLATFORMLARI,
   OTOMATIK_SIRA,
   gtmKodu,
   kurulumOzeti,
@@ -10,6 +12,7 @@ import {
   type KurulumAdimKodu,
   type KurulumAdimSonucu,
   type KurulumIstegi,
+  type KurulumPlatformu,
   type KurulumSecenekleri,
   type KurulumYaniti,
   type Platform,
@@ -93,6 +96,8 @@ interface Baglam {
   satir: KurulumSatiri | null;
   sahip: HesapSahibi | null;
   pikselId: string | null;
+  /** Kullanıcının "bu platformu kullanmıyorum" beyanı (`kullanilmayan_platformlar`). */
+  kullanilmayanlar: KurulumPlatformu[];
 }
 
 /**
@@ -192,6 +197,7 @@ export class KurulumService {
       satir,
       sahip: satir?.hesapSahibi ?? null,
       pikselId: r.hz?.piksel_id ?? null,
+      kullanilmayanlar: r.k ? kullanilmayanOku(r.k) : [],
     };
     const gb = this.baglantiSec(b, 'google');
     const mb = this.baglantiSec(b, 'meta');
@@ -240,11 +246,11 @@ export class KurulumService {
       workspaceAdi: b.ad,
       site: b.site,
       hesapSahibi: b.sahip,
-      // BEYAN HENÜZ SAKLANMIYOR (docs/panel-sadelestirme/MIMARI.md Ç-6, Ajan 3:
-      // `workspace_kurulum.kullanilmayan_platformlar` kolonu + PUT ucu). Boş
-      // liste "beyan yok" demek ve bugünkü davranışın ta kendisi: iki platform
-      // da sayılıyor.
-      kullanilmayanPlatformlar: [],
+      // Kullanıcının beyanı (MIMARI Ç-6). Boş liste "beyan yok": iki platform
+      // da sayılıyor. Adımlar SÜZÜLMÜYOR: panelin birleştiricisi
+      // (`kurulumListesi`) kullanılmayan platformun adımını "Kullanılmıyor"
+      // diye gösteriyor; burada atmak o satırı "sunucu döndürmedi" yapardı.
+      kullanilmayanPlatformlar: b.kullanilmayanlar,
       adimlar,
       ozet: kurulumOzeti(adimlar),
       siteKodu: kimlik ? { gtmKimligi: kimlik, ...gtmKodu(kimlik) } : null,
@@ -258,13 +264,13 @@ export class KurulumService {
 
   private async token(b: Baglam, platform: 'meta' | 'google'): Promise<string> {
     const c = this.baglantiSec(b, platform);
-    if (!c) throw new KullaniciGerekli(`${platform === 'meta' ? 'Meta' : 'Google'} bağlantısı yok; önce Bağlantılar’dan bağla.`);
+    if (!c) throw new KullaniciGerekli(`${platform === 'meta' ? 'Meta' : 'Google'} bağlantısı yok; önce Ayarlar › Platform bağlantıları’ndan bağla.`);
     return this.kasa.getAccessToken(c.id, this.saglayicilar.get(platform as Platform));
   }
 
   private async googleOlcumTokeni(b: Baglam): Promise<string> {
     const c = this.baglantiSec(b, 'google');
-    if (!c) throw new KullaniciGerekli('Google bağlantısı yok; önce Bağlantılar’dan bağla.');
+    if (!c) throw new KullaniciGerekli('Google bağlantısı yok; önce Ayarlar › Platform bağlantıları’ndan bağla.');
     if (!GOOGLE_OLCUM_SCOPES.every((s) => c.scopes.includes(s))) throw new KullaniciGerekli('Önce "Ölçüm izinlerini ver" (Tag Manager ve Analytics izni).');
     return this.kasa.getAccessToken(c.id, this.saglayicilar.get('google'));
   }
@@ -354,7 +360,7 @@ export class KurulumService {
     // müşterilerin hesap, sayfa, konteyner adları) ve kota harcıyor: yalnız
     // kurabilen görür (Ajan 4, Ö7).
     this.erisim(ctx, clientId, true);
-    if ((kod === 'meta_hesap' || kod === 'google_hesap' || kod === 'sayfa') && !ctx.permissions.includes('connection.write')) {
+    if ((kod === 'meta_hesap' || kod === 'google_hesap' || kod === 'sayfa') && !hesapYetkisi(ctx)) {
       throw new ForbiddenException('Hesap ve sayfa listesi için bağlantı yönetme yetkisi gerekiyor.');
     }
     const b = await this.baglam(ctx, clientId);
@@ -444,6 +450,32 @@ export class KurulumService {
     return { ...(await this.oku(ctx, clientId)), sonuc };
   }
 
+  /**
+   * "BU PLATFORMU KULLANMIYORUM" BEYANI (MIMARI Ç-6). Sayaç ve "Eksikleri
+   * tamamla" o platformun adımlarını saymıyor. Hiçbir platform verisi
+   * silinmiyor, hesap ataması değişmiyor: beyan yalnız kurulumun neyi
+   * İSTEDİĞİNİ değiştiriyor ve geri alınabilir (boş liste gönderilir).
+   *
+   * Yazma ve okuma AYNI satır: beyan ayrı bir tabloda dursaydı kurulum
+   * yanıtı onu ikinci bir sorguyla birleştirmek zorunda kalırdı.
+   */
+  async platformlar(ctx: TenantContext, clientId: string, kullanilmayanlar: KurulumPlatformu[], meta: Meta): Promise<KurulumYaniti> {
+    this.erisim(ctx, clientId, true);
+    // Sabit sıra: aynı beyan iki farklı dizi olarak saklanmasın (denetim kaydı karşılaştırılabilir kalsın).
+    const liste = KURULUM_PLATFORMLARI.filter((p) => kullanilmayanlar.includes(p));
+    const yazilan = await this.prisma.withTenant(ctx, (t) =>
+      t.$queryRaw<unknown[]>(Prisma.sql`
+        INSERT INTO workspace_kurulum (client_id, org_id, kullanilmayan_platformlar, updated_at)
+        SELECT ${clientId}::uuid, c.org_id, ${liste}::text[], now() FROM clients c WHERE c.id = ${clientId}::uuid
+        ON CONFLICT (client_id) DO UPDATE SET kullanilmayan_platformlar = EXCLUDED.kullanilmayan_platformlar, updated_at = now()
+        RETURNING client_id`),
+    );
+    // Politikası izin vermeyen yazma SIFIR satır etkiler ve hata vermez.
+    if (yazilan.length !== 1) throw new ForbiddenException('Beyan kaydedilemedi: bu workspace’i değiştirme yetkin yok.');
+    await this.denetim(ctx, clientId, 'platform_beyani', { kullanilmayanlar: liste }, meta);
+    return this.oku(ctx, clientId);
+  }
+
   private async kilitli<T>(clientId: string, fn: () => Promise<T>): Promise<T> {
     if (this.calisan.has(clientId)) throw new ConflictException('Bu workspace’te bir kurulum işlemi zaten sürüyor; bitince sayfa güncellenir.');
     this.calisan.add(clientId);
@@ -475,7 +507,7 @@ export class KurulumService {
   private async calistir(ctx: TenantContext, clientId: string, istek: Exclude<KurulumIstegi, { kod: 'hesap_sahibi' }>, meta: Meta): Promise<string> {
     // Hesap açmak ve atamak BAĞLANTI yetkisi istiyor: havuzdan hesap almak
     // ajansın portföyüne dokunmak demek (Bağlantılar ekranıyla aynı kapı).
-    if ((istek.kod === 'meta_hesap' || istek.kod === 'google_hesap' || istek.kod === 'sayfa') && !ctx.permissions.includes('connection.write')) {
+    if ((istek.kod === 'meta_hesap' || istek.kod === 'google_hesap' || istek.kod === 'sayfa') && !hesapYetkisi(ctx)) {
       throw new ForbiddenException('Hesap açmak ve atamak için bağlantı yönetme yetkisi gerekiyor.');
     }
     const b = await this.baglam(ctx, clientId);
@@ -527,7 +559,7 @@ export class KurulumService {
       t.$queryRaw<Array<{ id: string }>>(Prisma.sql`
         SELECT id::text FROM ad_accounts WHERE platform = ${platform}::"Platform" AND replace(external_id, '-', '') = ${externalId.replace(/-/g, '')}`),
     );
-    if (!h) throw new Error(`Hesap açıldı (${externalId}) ama keşifte görünmedi; Bağlantılar’dan "Hesapları yenile" deyip elle ata.`);
+    if (!h) throw new Error(`Hesap açıldı (${externalId}) ama keşifte görünmedi; Ayarlar › Platform bağlantıları’ndan "Hesapları yenile" deyip elle ata.`);
     await this.baglantilar.assignAdAccount(ctx, h.id, clientId, meta);
   }
 
@@ -571,7 +603,7 @@ export class KurulumService {
       await ads.davetEt(secim.mccId, no);
       await this.yaz(ctx, clientId, { google_mcc_id: secim.mccId });
       await this.denetim(ctx, clientId, 'google_davet', { mcc: secim.mccId, musteri: no }, meta);
-      return `Davet gönderildi (${secim.musteriNo}). Şirket Google Ads › Yönetici hesaplar’dan kabul edince Bağlantılar’da "Hesapları yenile" deyip hesabı burada seç.`;
+      return `Davet gönderildi (${secim.musteriNo}). Şirket Google Ads › Yönetici hesaplar’dan kabul edince Ayarlar › Platform bağlantıları’nda "Hesapları yenile" deyip hesabı burada seç.`;
     }
     const onceki = b.satir?.googleAcilanHesap;
     if (onceki) {
@@ -662,7 +694,7 @@ export class KurulumService {
 
   private async mulk(ctx: TenantContext, clientId: string, b: Baglam, secim: Extract<KurulumIstegi, { kod: 'ga4_mulk' }>['secim'] | 'oto'): Promise<string> {
     if (b.satir?.ga4OlcumKimligi && secim === 'oto') return `${b.satir.ga4OlcumKimligi} zaten kurulu.`;
-    if (!b.site) throw new KullaniciGerekli('Web akışı site adresi istiyor; Workspace ayarları’ndan gir.');
+    if (!b.site) throw new KullaniciGerekli('Web akışı site adresi istiyor; Workspace bilgileri’nden gir.');
     const ga = new Ga4Istemcisi(await this.googleOlcumTokeni(b));
     // Önceki denemede açılmış ama akışı kurulamamış mülk YENİDEN AÇILMAZ (Ajan 4, Ö8).
     let mulkId: string | null = secim === 'oto' ? (b.satir?.ga4MulkId ?? null) : null;
@@ -926,7 +958,18 @@ export class KurulumService {
 
   private async tamamlaKilitli(ctx: TenantContext, clientId: string, meta: Meta): Promise<KurulumYaniti & { sonuclar: KurulumAdimSonucu[] }> {
     const sonuclar: KurulumAdimSonucu[] = [];
+    /*
+     * KULLANILMAYAN PLATFORMUN ADIMLARINA DOKUNULMAZ (MIMARI Ç-6). Google'ı
+     * kullanmadığını söyleyen bir workspace'te "Eksikleri tamamla" Google Ads
+     * dönüşümü AÇMAMALI; panelin süzgeci tek başına koruma değil (başka bir
+     * istemci ya da eski sekme bu ucu doğrudan çağırabilir). Beyan döngünün
+     * başında BİR KEZ okunuyor: tamamla sürerken beyan değişirse yarısı eski
+     * yarısı yeni kurala göre çalışmasın.
+     */
+    const ilk = await this.baglam(ctx, clientId);
+    const atlanan = kullanilmayanAdimlar(ilk.kullanilmayanlar);
     for (const kod of OTOMATIK_SIRA) {
+      if (atlanan.has(kod)) continue;
       // Her adımdan önce durum YENİDEN hesaplanır: önceki adım bir sonrakinin
       // ön koşulunu açıyor (konteyner açılınca etiketler yazılabilir).
       const b = await this.baglam(ctx, clientId);
@@ -942,7 +985,7 @@ export class KurulumService {
     try {
       let m: string;
       if (kod === 'sayfa') {
-        if (!ctx.permissions.includes('connection.write')) throw new KullaniciGerekli('Sayfa atamak için bağlantı yönetme yetkisi gerekiyor.');
+        if (!hesapYetkisi(ctx)) throw new KullaniciGerekli('Sayfa atamak için bağlantı yönetme yetkisi gerekiyor.');
         const s = await this.secenekler(ctx, clientId, 'sayfa');
         if (s.mevcut.length !== 1) throw new KullaniciGerekli('Birden çok sayfa var; seç.');
         m = await this.sayfa(ctx, clientId, s.mevcut[0]!.deger, meta);
@@ -986,6 +1029,44 @@ export function satirOku(k: Record<string, unknown>): KurulumSatiri {
     sonDogrulama: nesne(k.son_dogrulama, null),
     siteKodu: nesne(k.site_kodu, null),
   };
+}
+
+/**
+ * HESAP SEÇMEK / AÇMAK / SAYFA ATAMAK HAVUZ ATAMASIYLA AYNI KAPI (MIMARI
+ * Ç-20, `PANEL_KAPILARI['kurulum.hesap']`). Uç yalnız `connection.write`
+ * istiyordu, Ayarlar'daki havuz ataması ise `connection.write` +
+ * `connection.manage`: aynı işin iki kapısı vardı ve `manage` taşımayan biri
+ * (Reklam Yöneticisi) havuzdan hesabı Kurulum üzerinden alabiliyordu.
+ */
+export function hesapYetkisi(ctx: Pick<TenantContext, 'permissions'>): boolean {
+  return ctx.permissions.includes('connection.write') && ctx.permissions.includes('connection.manage');
+}
+
+/** `workspace_kurulum.kullanilmayan_platformlar` → tipli liste; tanınmayan değer atılır. */
+export function kullanilmayanOku(k: Record<string, unknown>): KurulumPlatformu[] {
+  const ham = k.kullanilmayan_platformlar;
+  if (!Array.isArray(ham)) return [];
+  return KURULUM_PLATFORMLARI.filter((p) => ham.includes(p));
+}
+
+/**
+ * KULLANILMAYAN PLATFORMLARIN KURULUM ADIMLARI — panelin tek listesinden
+ * (`KURULUM_LISTESI`) TÜRETİLİYOR. Adım→platform eşlemesini burada ikinci
+ * kez yazmak, panel "kullanılmıyor" derken sunucunun aynı adımı yapması
+ * demekti (ya da tersi). Eşleme `eksikleriTamamlaKapsami` ile AYNI kural:
+ * platformlu adımın bütün kurulum parçaları + platformsuz adımda platformu
+ * işaretli parçalar (Google Ads dönüşümü, Analytics ↔ Ads bağı).
+ */
+export function kullanilmayanAdimlar(kullanilmayanlar: readonly KurulumPlatformu[]): Set<KurulumAdimKodu> {
+  const atla = new Set<KurulumAdimKodu>();
+  for (const a of KURULUM_LISTESI) {
+    for (const p of a.parcalar as ReadonlyArray<{ kaynak: string; kod: string; platform?: KurulumPlatformu }>) {
+      if (p.kaynak !== 'kurulum') continue;
+      const platform = a.platform ?? p.platform;
+      if (platform && kullanilmayanlar.includes(platform)) atla.add(p.kod as KurulumAdimKodu);
+    }
+  }
+  return atla;
 }
 
 /** Silinecek etiketler: YALNIZ bizim ön ekli ve planda olmayanlar. */

@@ -30,7 +30,7 @@ export function siteSutunuKarari(y: TakipAcigiYaniti | { hata: string }): { hata
     case 'kaynak_yok':
       return null;
     case 'izin_eksik':
-      return { hata: null, not: 'Sitede sütunu: Analytics izni yenilenmeli (Marka Merkezi › Bağlantılar).' };
+      return { hata: null, not: 'Sitede sütunu: Analytics izni yenilenmeli (Marka Merkezi › Kurulum › Dönüşüm ölçümü).' };
     case 'cekim_kosmadi':
       return { hata: null, not: 'Sitede sütunu: Analytics verisi henüz çekilmedi.' };
     case 'veri_yok':

@@ -14,10 +14,14 @@ import {
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { Dugme } from '@/components/ui/dugme';
 import { Uyari } from '@/components/ui/uyari';
-import { mmAdresi } from './bolumler';
+import { eskiMarkaMerkeziYonu, markaMerkeziAdresi } from '@/lib/panel-adresleri';
 
 /**
- * ═══ MARKA MERKEZİ › ÖLÇÜM (docs/olcum/MIMARI.md, taslak.html) ═══
+ * ═══ MARKA MERKEZİ › KURULUM › DÖNÜŞÜM ÖLÇÜMÜ (docs/olcum/MIMARI.md) ═══
+ *
+ * 2026-10-13'e kadar ayrı "Ölçüm" bölümüydü; Kurulum'un 5. adımının İÇİNE
+ * katlandı (docs/panel-sadelestirme/MIMARI.md § 7). Adım açılınca monte
+ * oluyor: tablo siteyi tarıyor ve her Kurulum açılışında taramak boşa iş.
  *
  * Google Ads'in Hedefler › Dönüşümler mantığı: önce tablo (neyi ölçüyoruz,
  * durumu NEDENİYLE), sonra TEK en uygun öneri ve tek düğme. Karar
@@ -415,8 +419,16 @@ function Oneri({
       )}
       {e?.tur === 'marka_merkezi' && (
         <div className="mt-3">
-          <Link href={mmAdresi(clientId, e.bolum)} className="text-sm font-semibold text-ink underline-offset-2 hover:text-brand-strong hover:underline">
-            {e.bolum === 'baglantilar' ? "Bağlantılar'a git" : "Workspace ayarları'na git"} →
+          {/*
+            SÖZLEŞMEDEKİ ESKİ BÖLÜM KODU ÇEVRİLİYOR: API'nin yanıt biçimi
+            (`bolum: 'baglantilar' | 'ayarlar'`) değişmedi; yeri değişti.
+            Çeviri tek yerde (`eskiMarkaMerkeziYonu`), burada ikinci eşleme yok.
+          */}
+          <Link
+            href={eskiMarkaMerkeziYonu(e.bolum, { musteri: clientId }) ?? markaMerkeziAdresi('kurulum', clientId)}
+            className="text-sm font-semibold text-ink underline-offset-2 hover:text-brand-strong hover:underline"
+          >
+            {e.bolum === 'baglantilar' ? 'Kurulum’daki hesaplara git' : 'Workspace bilgileri’ne git'} →
           </Link>
         </div>
       )}

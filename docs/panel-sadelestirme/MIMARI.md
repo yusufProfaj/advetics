@@ -458,3 +458,35 @@ tek birincil eylem); Varlıklar = "Öğe kitaplığı" (sekmeler). Mobilde sekme
   açtığı (`hazirlama.service.ts`) — mevcut davranış; Kurulum'da "Değiştir"
   sık kullanılırsa Kitleler'de aynı adlı şablonlar birikir. Ajan 3 ya mevcut
   varsayılanı günceller ya da ekranda yazar.
+
+## 14. Ajan 3 sapmaları (2026-10-13)
+
+- **Ç-10 özel kategori — yazma İKİ uçtan, ekran TEK.** İlk beyan (soru
+  bekliyorsa) `/hazirlama/cevap {kategori}`; beyan verildikten sonra
+  değiştirmek `PATCH /clients/:id` (`SpecialCategoryPicker`). Sebep:
+  hazırlama ucu bekleyen soru yokken cevabı BİLEREK reddediyor (Ajan 4 Ö6,
+  "konut beyanı ayar ekranı dışından sessizce silinmesin") ve
+  `modules/hazirlama/**` § 9'da kimseye verilmemiş. Ekran tek (Kurulum ›
+  Reklam varsayılanları); "cevaplandı" bayrağı ilk beyanla zaten basılı.
+  Ölçülmedi: PATCH'ten sonra hazırlama adımının `baslik`ı eski kategoriyi
+  "Yeniden hazırla"ya kadar gösterebilir (adım listesinde, panelde
+  seçicinin değeri doğru).
+- **Ç-9 varsayılan konum.** Soru bekliyorsa `/hazirlama/cevap {konum}`;
+  değilse MEVCUT şablondan seçim (`PUT /audience-templates/varsayilan`),
+  yeni konum Varlıklar › Kitleler'de şablon olarak. § 13'teki "her
+  Değiştir'de yeni Varsayılan şablonu" birikmesi böylece kapandı.
+- **`/kurulum` sihirbazının adı ve son adımı YAPILMADI**: `app/(dashboard)/
+  kurulum/page.tsx` ve `components/kurulum/**` § 9'da Ajan 2'nin; paralel
+  çakışmamak için dokunulmadı (görev listesinde Ajan 3'e de yazılıydı).
+- **`panel-adresleri.spec.ts` › eski üretici taraması**: liste BOŞALINCA
+  "en az bir ihlal var" iddiası imkânsız oldu; yerine desenin kendisi
+  sınanıyor (boşa düşme bekçisi korunarak).
+- **Kurulum yazmaları aktif workspace şartı** (mevcut API kuralı,
+  `kurulum.service.ts#erisim`): adresteki workspace oturumdakinden farklıysa
+  liste bunu önceden söylüyor; platform beyanı da aynı kurala bağlı.
+- **Sözleşme eki YOK**: `KurulumListesiParcasi` tipi panel kapısından
+  (`panel-adresleri.ts`) yeniden dışa aktarılmıyordu; doğrudan
+  `@advetics/shared`tan okunuyor, ortak dosyaya dokunulmadı.
+- **§ 9 dışı iki spec**: `autoboost/boost-yonlendirme-metni.spec.ts` ve
+  `youtube-otomatik.spec.ts` `LOGO_YERI` metnini kilitliyordu; metin
+  değişince (Ajan 3'ün dosyası) iddialar yeni ada çevrildi.

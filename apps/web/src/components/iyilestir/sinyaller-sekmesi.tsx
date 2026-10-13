@@ -27,7 +27,7 @@ import {
   type SinyalGorunumu,
   type SinyalSonucu,
 } from '@/lib/sinyal';
-import { mmAdresi } from '@/components/marka-merkezi/bolumler';
+import { hesaplarAdresi } from '@/lib/panel-adresleri';
 import { SinyalDurdurPenceresi, SinyalKapatPenceresi } from './sinyal-pencereleri';
 import i from '@/components/taslak/iyilestir.module.css';
 import s from '@/components/taslak/taslak.module.css';
@@ -355,7 +355,7 @@ function BosKutu({
         </button>
       )}
       {b.eylem === 'hesap_ata' && (
-        <Link className={i.ikincil} href={mmAdresi(clientId, 'baglantilar')}>
+        <Link className={i.ikincil} href={hesaplarAdresi(clientId)}>
           Hesap ata
         </Link>
       )}

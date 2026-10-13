@@ -1,16 +1,16 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import {
-  ASSET_KINDS,
   ASSET_KIND_META,
-  type AssetKind,
   type AssetListResult,
   type AssetRecord,
   type AssetUploadResult,
 } from '@advetics/shared';
-import { varlikYonu } from '@/components/marka-merkezi/bolumler';
+import { varliklarAdresi } from '@/lib/panel-adresleri';
+import { GORSEL_TURLERI, type GorselTuru } from './gorsel-turleri';
 import { API_URL, ApiRequestError, apiFetch } from '@/lib/api';
 
 /**
@@ -19,6 +19,12 @@ import { API_URL, ApiRequestError, apiFetch } from '@/lib/api';
  * MÜKERRER YÜKLEME SESSİZ DEĞİL. Aynı dosya ikinci kez bırakıldığında yeni
  * kayıt açılmıyor ve kullanıcıya bu söyleniyor. Sessizce mevcut kaydı seçmek,
  * kullanıcının "yüklendi mi yüklenmedi mi" diye tekrar denemesine yol açardı.
+ *
+ * LOGO BURADA YOK (docs/panel-sadelestirme/MIMARI.md Ç-11). Logonun evi
+ * Marka Merkezi › Marka › Logo; burada hem süzgeçte hem yükleme türünde
+ * olunca aynı dosya iki ekrandan yükleniyor ve "hangi logo kullanılıyor"
+ * sorusu iki yerde cevaplanıyordu. Kayıtlar SİLİNMEDİ: sayıları bu ekranda
+ * "N logo Marka'da" diye yazıyor (sessiz kesme yok) ve bağlantı oraya.
  *
  * KULLANIM SAYISI HER KARTTA. Silme kararının tek dayanağı bu: kullanımdaki
  * bir görseli silmek, Meta'da çalışan bir reklamın kaydını koparmak demek ve
@@ -29,17 +35,23 @@ export function AssetLibrary({
   clientId,
   activeKind,
   canWrite,
+  logoAdresi,
 }: {
   initial: AssetListResult;
   clientId: string;
-  activeKind: AssetKind | null;
+  activeKind: GorselTuru | null;
   canWrite: boolean;
+  /** Marka › Logo — logo kayıtlarının evi. */
+  logoAdresi: string;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
-  const [rows, setRows] = useState<AssetRecord[]>(initial.rows);
-  const [kind, setKind] = useState<AssetKind>('image');
+  // Sunucu süzgeçsiz istekte logoları da döndürüyor; burada listelenmez.
+  const [rows, setRows] = useState<AssetRecord[]>(initial.rows.filter((r) => r.kind !== 'logo'));
+  const [kind, setKind] = useState<GorselTuru>('image');
+  const logoSayisi = initial.byKind.logo;
+  const gorselToplami = GORSEL_TURLERI.reduce((t, k) => t + initial.byKind[k], 0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -102,12 +114,10 @@ export function AssetLibrary({
     }
   }
 
-  function navigate(next: AssetKind | null): void {
-    // Marka Merkezi › Varlıklar içinde: eski `/kutuphane/gorseller` adresine
-    // gitmek her süzgeç tıklamasında bir yönlendirme turu demekti.
-    startTransition(() =>
-      router.push(varlikYonu(clientId, 'gorseller', { tur: next ?? undefined })),
-    );
+  function navigate(next: GorselTuru | null): void {
+    // Varlıklar › Görseller: eski `/kutuphane/gorseller` adresine gitmek her
+    // süzgeç tıklamasında bir yönlendirme turu demekti.
+    startTransition(() => router.push(varliklarAdresi('gorseller', clientId, { tur: next })));
   }
 
   return (
@@ -115,11 +125,9 @@ export function AssetLibrary({
       <div className="flex flex-wrap gap-1.5">
         <button type="button" onClick={() => navigate(null)} className={chip(activeKind === null)}>
           Tümü{' '}
-          <span className="opacity-60">
-            {Object.values(initial.byKind).reduce((a, b) => a + b, 0)}
-          </span>
+          <span className="opacity-60">{gorselToplami}</span>
         </button>
-        {ASSET_KINDS.map((k) => (
+        {GORSEL_TURLERI.map((k) => (
           <button key={k} type="button" onClick={() => navigate(k)} className={chip(activeKind === k)}>
             {ASSET_KIND_META[k].label} <span className="opacity-60">{initial.byKind[k]}</span>
           </button>
@@ -135,10 +143,10 @@ export function AssetLibrary({
               </span>
               <select
                 value={kind}
-                onChange={(e) => setKind(e.target.value as AssetKind)}
+                onChange={(e) => setKind(e.target.value as GorselTuru)}
                 className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-brand"
               >
-                {ASSET_KINDS.map((k) => (
+                {GORSEL_TURLERI.map((k) => (
                   <option key={k} value={k}>
                     {ASSET_KIND_META[k].label}
                   </option>
@@ -161,7 +169,7 @@ export function AssetLibrary({
             </label>
           </div>
 
-          {/* TÜR SEÇİMİNİN NE DEĞİŞTİRDİĞİ YAZIYOR — logo alt sınırı farklı. */}
+          {/* TÜR SEÇİMİNİN NE DEĞİŞTİRDİĞİ YAZIYOR. */}
           <p className="mt-2 text-[11px] text-ink-muted">{ASSET_KIND_META[kind].hint}</p>
           {busy && <p className="mt-1 text-[11px] text-ink-muted">Yükleniyor…</p>}
         </div>
@@ -201,7 +209,6 @@ export function AssetLibrary({
                 <p className="truncate text-xs font-medium text-ink">{a.name}</p>
                 <p className="text-[10px] text-ink-muted">
                   {a.width}×{a.height} · {Math.round(a.byteSize / 1024)} KB
-                  {a.kind === 'logo' && ' · logo'}
                 </p>
 
                 <div className="mt-1.5 flex items-center justify-between gap-2">
@@ -241,7 +248,16 @@ export function AssetLibrary({
 
       <p className="text-[11px] text-ink-muted">
         {rows.length} görsel gösteriliyor
-        {initial.total > rows.length && ` · toplam ${initial.total}.`}
+        {(activeKind ? initial.byKind[activeKind] : gorselToplami) > rows.length &&
+          ` · toplam ${activeKind ? initial.byKind[activeKind] : gorselToplami}.`}
+        {logoSayisi > 0 && (
+          <>
+            {' '}
+            <Link href={logoAdresi} className="font-medium text-ink underline-offset-2 hover:underline">
+              {logoSayisi} logo Marka’da
+            </Link>
+          </>
+        )}
       </p>
     </div>
   );

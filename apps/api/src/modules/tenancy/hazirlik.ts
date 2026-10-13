@@ -161,7 +161,8 @@ export function hazirlikMaddeleri(g: HazirlikGirdisi): HazirlikMaddesi[] {
     ['Sektör', !bos(p?.sektor)],
     ['Ürün/hizmet kategorileri', (p?.kategoriSayisi ?? 0) > 0],
     ['Ana amaç', !bos(p?.anaAmac)],
-    ['Hedef kitle', !bos(p?.hedefKitle)],
+    // Marka bölümündeki kartın adı (eski "Hedef kitle", Kitleler'deki hedeflemeyle karışıyordu).
+    ['Kime satıyoruz', !bos(p?.hedefKitle)],
     ['Öne çıkan vaatler', (p?.vaatSayisi ?? 0) > 0],
   ];
   const bosAlanlar = alanlar.filter(([, dolu]) => !dolu).map(([ad]) => ad);
@@ -249,10 +250,10 @@ export function hazirlikMaddeleri(g: HazirlikGirdisi): HazirlikMaddesi[] {
           durum: 'eksik',
           aciklama:
             hz === null
-              ? 'Hazırlık henüz koşmadı. Reklam hesabı atanınca ya da Bağlantılar açılınca kendiliğinden başlar.'
+              ? 'Hazırlık henüz koşmadı. Reklam hesabı atanınca kendiliğinden başlar.'
               : hz.soruSayisi > 0
                 ? `${hz.soruSayisi} soru cevabını bekliyor; cevaplanınca her reklamda önden dolu gelir.`
-                : 'Bazı adımlar tamamlanamadı; nedeni Bağlantılar’daki hazırlık kartında yazıyor.',
+                : 'Bazı adımlar tamamlanamadı; nedeni Marka Merkezi › Kurulum’da yazıyor.',
         },
   );
 

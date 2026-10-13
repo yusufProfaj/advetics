@@ -35,8 +35,14 @@ const SAYFA_ADI = 'Akıllı Boost';
 /** Artık ön ayar taşımayan eski yer — kullanıcıya görünen metinde YASAK. */
 const ESKI_YERLER = ['Bilgi Bankası', 'Bilgi Bankasi', 'Kütüphane', 'bilgi-bankasi'];
 
-/** Logonun gerçek yeri — `youtube-otomatik.service.ts`, tek sabit. */
-const MUAF_SATIR = "export const LOGO_YERI = 'Bilgi Bankası › Logo sekmesi';";
+/**
+ * Logonun gerçek yeri — `youtube-otomatik.service.ts`, tek sabit. 2026-10-13'e
+ * kadar logo Bilgi Bankası'nın Logo sekmesindeydi ve bu satır muaftı; evi
+ * artık Marka Merkezi › Marka (docs/panel-sadelestirme/MIMARI.md § 4) ve
+ * satır yasak bir dize taşımıyor. Muafiyet kaldırılmadı, satıra çapalı kaldı:
+ * eski ad bir gün geri yazılırsa aşağıdaki "biricik" testi düşer.
+ */
+const MUAF_SATIR = "export const LOGO_YERI = 'Marka Merkezi › Marka › Logo';";
 
 /**
  * Yorumları söker.
@@ -119,7 +125,7 @@ describe('boost yönlendirme metinleri', () => {
     // verir; burada hem varlığı hem biricikliği kilitli.
     const kaynak = yorumsuz(oku('youtube-otomatik.service.ts'));
     expect(kaynak).toContain(MUAF_SATIR);
-    expect(kaynak.split('Bilgi Bankası').length - 1).toBe(1);
+    expect(kaynak.split('Bilgi Bankası').length - 1).toBe(0);
   });
 
   it('yönlendirme panelde DURAN düğmenin etiketini kullanıyor', () => {

@@ -1,13 +1,16 @@
 import { redirect } from 'next/navigation';
-import { bilgiBankasiYonu } from '@/components/marka-merkezi/bolumler';
+import { eskiAdresYonu } from '@/lib/panel-adresleri';
+import { butceAdresi } from '@/lib/butce-adresi';
 
 /**
- * ═══ BİLGİ BANKASI AYRI BİR SAYFA DEĞİL ARTIK ═══
+ * ═══ ESKİ BİLGİ BANKASI → MARKA MERKEZİ › MARKA ═══
  *
- * Beş sekmesi (genel metin, bütçe, hedef kitle metni, marka, logo) Marka
- * Merkezi'nin Marka bölümüne taşındı; bütçe tek yerinde, Aylık Bütçe'de
- * (2026-10-06, kullanıcının "nereye nereden girdiğimi unutuyorum" şikâyeti).
- * Adres silinmiyor, yönleniyor: kayıtlı bağlantılar kırılmamalı.
+ * Adres silinmiyor, yönleniyor: kayıtlı bağlantılar kırılmamalı. Eşleme
+ * TEK YERDE (`ESKI_ADRESLER`, docs/panel-sadelestirme/MIMARI.md § 3).
+ *
+ * BÜTÇE SEKMESİ ÖNCE YAKALANIYOR: Aylık Bütçe'nin tek üreticisi panelde
+ * (`butceAdresi`); eşlemeye ikinci bir bütçe yolu yazmak 2026-10-06'da
+ * `ay` parametresini düşüren iki yönlendirmenin aynısı olurdu.
  */
 export default async function BilgiBankasiYonlendirme({
   searchParams,
@@ -15,7 +18,8 @@ export default async function BilgiBankasiYonlendirme({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const p = await searchParams;
-  redirect(bilgiBankasiYonu(ilk(p.musteri), ilk(p.sekme)));
+  if (ilk(p.sekme) === 'butce') redirect(butceAdresi(ilk(p.musteri), { ay: ilk(p.ay) }));
+  redirect(eskiAdresYonu('kutuphane/bilgi-bankasi', { musteri: ilk(p.musteri), sorgu: { sekme: ilk(p.sekme) } }));
 }
 
 function ilk(v: string | string[] | undefined): string | undefined {

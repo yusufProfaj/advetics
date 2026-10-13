@@ -151,8 +151,8 @@ export function AiDoldur({ clientId, canWrite }: { clientId: string; canWrite: b
 
           {(
             [
-              ['bilgiBankasi', 'Bilgi Bankası'],
-              ['hedefKitle', 'Hedef Kitle'],
+              ['bilgiBankasi', 'Markayı anlat'],
+              ['hedefKitle', 'Kime satıyoruz'],
               ['markaBilgileri', 'Marka: ek notlar'],
             ] as const
           ).map(([alan, etiket]) => (

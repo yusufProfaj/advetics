@@ -1,113 +1,123 @@
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { butceAdresi } from '@/lib/butce-adresi';
 import { describe, expect, it } from 'vitest';
 import { ROLE_PERMISSIONS } from '@advetics/shared';
-import { MM_BOLUMLERI, bilgiBankasiYonu, bolumCoz, mmAdresi, varlikCoz, varlikYonu } from './bolumler';
+import {
+  MARKA_MERKEZI_BOLUMLERI,
+  MARKA_MERKEZI_CAPALARI,
+  markaMerkeziBolumu,
+} from '@/lib/panel-adresleri';
+import { MM_ALT_BASLIKLARI, gorunurVarlikSekmeleri, sirketAdi, varlikSekmesiCoz } from './bolumler';
 
 /**
- * ═══ MARKA MERKEZİ BÖLÜM MODELİ — ÇALIŞTIRILARAK ═══
+ * ═══ MARKA MERKEZİ'NİN İÇ YAPISI — ÇALIŞTIRILARAK ═══
  *
- * İç menü, sayfa, hazırlık bağlantıları ve eski adreslerin yönlendirmesi
- * aynı fonksiyonları okuyor; burada bir hata dördünü birden bozar.
+ * Eski yedi bölümlük model (`MM_BOLUMLERI`, `bolumCoz`, `mmAdresi`)
+ * sözleşmeye taşındı ve üçe indi (docs/panel-sadelestirme/MIMARI.md). Bu
+ * dosya aynı KARARLARIN yeni hâlini kilitliyor: bilinmeyen bölüm ilk bölüme
+ * düşer, yetkisiz sekme açılmaz, bütçe Marka Merkezi'nin bölümü değildir,
+ * menüdeki her alt başlığın sayfada bir kartı vardır.
  */
 const u = (adres: string) => new URL(adres, 'https://x');
+const yorumsuz = (yol: string) =>
+  readFileSync(resolve(__dirname, yol), 'utf8')
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
 
-describe('bolumCoz', () => {
-  const yonetici = ROLE_PERMISSIONS.admin;
-  it('tanınan bölüm seçiliyor, bilinmeyen ilk görünür bölüme düşüyor', () => {
-    expect(bolumCoz('kitleler', yonetici)).toBe('kitleler');
-    // KURULUM İLK (2026-10-12): workspace'e giren eksikleri ilk görür.
-    expect(bolumCoz('yok-boyle', yonetici)).toBe('kurulum');
-    expect(bolumCoz(undefined, yonetici)).toBe('kurulum');
+describe('bölümler', () => {
+  it('üç bölüm, Kurulum ilk; bilinmeyen değer null (sayfa önce eskiyi çevirir, sonra Kurulum’a düşer)', () => {
+    expect(MARKA_MERKEZI_BOLUMLERI.map((b) => b.kod)).toEqual(['kurulum', 'marka', 'workspace']);
+    expect(markaMerkeziBolumu('marka')).toBe('marka');
+    expect(markaMerkeziBolumu('kitleler')).toBeNull();
+    const sayfa = yorumsuz('../../app/(dashboard)/marka-merkezi/page.tsx');
+    expect(sayfa).toContain("markaMerkeziBolumu(hamBolum) ?? 'kurulum'");
+    // ESKİ KOD SESSİZCE KURULUM'A DÜŞMÜYOR: önce eşleme, sonra varsayılan.
+    expect(sayfa.indexOf('eskiMarkaMerkeziYonu(')).toBeLessThan(sayfa.indexOf('markaMerkeziBolumu(hamBolum)'));
   });
 
-  it('KRİTİK: yetkisi olmayan bölüm açılmıyor — paylaşılan bağlantı boş sayfa vermesin', () => {
-    // Bağlantılar connection gerektirmez ama `client.write` ister; yalnız
-    // okuyabilen bir izin kümesinde ilk görünür bölüm Kurulum (salt okunur).
-    const okur = ['client.read'] as const;
-    expect(bolumCoz('baglantilar', [...okur])).toBe('kurulum');
-    expect(bolumCoz('varliklar', [...okur])).toBe('kurulum');
-    expect(bolumCoz('marka', [])).toBeNull();
-  });
-});
-
-describe('adresler', () => {
-  it('KRİTİK: workspace kimliği taşınıyor', () => {
-    expect(u(mmAdresi('ws-1', 'kitleler')).searchParams.get('musteri')).toBe('ws-1');
+  it('KRİTİK: iç menünün her alt başlığı sözleşmedeki çapalarla BİREBİR', () => {
+    for (const b of MARKA_MERKEZI_BOLUMLERI) {
+      expect(MM_ALT_BASLIKLARI[b.kod].map((a) => a.capa), b.kod).toEqual([...MARKA_MERKEZI_CAPALARI[b.kod]]);
+    }
   });
 
-  it('çapa sona ekleniyor', () => {
-    expect(mmAdresi('ws-1', 'marka', {}, 'logo')).toBe('/marka-merkezi?musteri=ws-1&bolum=marka#logo');
+  it('KRİTİK: her çapanın sayfada bir kimliği var (çapa listede, sayfada yok = kırık bağlantı)', () => {
+    const kaynak = ['../../app/(dashboard)/marka-merkezi/page.tsx', 'workspace-bilgileri.tsx', 'kurulum-listesi.tsx']
+      .map(yorumsuz)
+      .join('\n');
+    // Kurulum'un yedi adımı listeden üretiliyor: satır `id={a.kod}`.
+    expect(kaynak).toContain('<li id={a.kod} className="scroll-mt-24">');
+    const kurulumAdimlari = new Set(['meta', 'sayfa', 'piksel', 'google', 'olcum', 'marka', 'varsayilanlar']);
+    for (const [, capalar] of Object.entries(MARKA_MERKEZI_CAPALARI)) {
+      for (const c of capalar) {
+        if (kurulumAdimlari.has(c)) continue;
+        // Kart ya `id="…"` ya `<Kart id="…"` ile.
+        expect(kaynak.includes(`id="${c}"`), c).toBe(true);
+      }
+    }
   });
 
-  it('varlikCoz bilinmeyende görsellere düşüyor', () => {
-    expect(varlikCoz('formlar')).toBe('formlar');
-    expect(varlikCoz('x')).toBe('gorseller');
-  });
-});
-
-describe('eski adresler', () => {
-  it('KRİTİK: Bilgi Bankası bütçe sekmesi Aylık Bütçe bölümüne, gerisi Marka’ya', () => {
-    // Bütçe 2026-10-09'dan beri Planla'da kendi sayfası (önce Base'teydi).
-    expect(bilgiBankasiYonu('ws-1', 'butce')).toBe('/butce?musteri=ws-1');
-    const marka = u(bilgiBankasiYonu('ws-1', 'marka'));
-    expect(marka.pathname).toBe('/marka-merkezi');
-    expect(marka.searchParams.get('bolum')).toBe('marka');
-    expect(u(bilgiBankasiYonu('ws-1', 'logo')).hash).toBe('#logo');
-    expect(u(bilgiBankasiYonu('ws-1', 'hedef-kitle')).hash).toBe('#bilgi');
-    expect(u(bilgiBankasiYonu(undefined, undefined)).searchParams.has('musteri')).toBe(false);
-  });
-
-  it('KRİTİK: varlık süzgeçleri yönlendirmede DÜŞMÜYOR', () => {
-    const g = u(varlikYonu('ws-1', 'gorseller', { tur: 'logo' }));
-    expect(g.searchParams.get('varlik')).toBe('gorseller');
-    expect(g.searchParams.get('tur')).toBe('logo');
-    expect(u(varlikYonu('ws-1', 'formlar', { form: 'f1' })).searchParams.get('form')).toBe('f1');
-  });
-});
-
-describe('Aylık Bütçe Planla’da (2026-10-09)', () => {
-  const oku = async (yol: string) => {
-    const { readFileSync } = await import('node:fs');
-    const { resolve } = await import('node:path');
-    return readFileSync(resolve(__dirname, yol), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-  };
-
-  it('KRİTİK: Marka Merkezi bölümü DEĞİL — aynı ayarın iki kapısı olmasın', () => {
-    expect(MM_BOLUMLERI.map((b) => b.kod)).not.toContain('butce');
-    // Bilinmeyen bölüm gibi ilk görünür bölüme düşüyor; ama sayfa ondan
-    // ÖNCE yönlendiriyor (aşağıda).
-    expect(bolumCoz('butce', ROLE_PERMISSIONS.ad_manager)).toBe('kurulum');
-  });
-
-  it('KRİTİK: eski ?bolum=butce adresi /butce’ye yönleniyor, ay taşınıyor; /butce gerçek sayfa', async () => {
-    const mm = await oku('../../app/(dashboard)/marka-merkezi/page.tsx');
-    expect(mm).toContain("if (first(params.bolum) === 'butce') redirect(butceAdresi(first(params.musteri), { ay: first(params.ay) }));");
-    // Yönlendirme workspace kapısından ÖNCE: kapı "workspace seç" derse
-    // eski bağlantı bütçeye hiç ulaşmaz.
+  it('KRİTİK: Aylık Bütçe Marka Merkezi bölümü DEĞİL; eski adres önce yakalanıyor ve ay taşınıyor', () => {
+    expect(MARKA_MERKEZI_BOLUMLERI.map((b) => b.kod as string)).not.toContain('butce');
+    const mm = yorumsuz('../../app/(dashboard)/marka-merkezi/page.tsx');
+    expect(mm).toContain("if (hamBolum === 'butce') redirect(butceAdresi(musteriParam, { ay: first(params.ay) }));");
+    // Yönlendirme workspace kapısından ÖNCE: kapı "workspace seç" derse eski
+    // bağlantı bütçeye hiç ulaşmaz.
     expect(mm.indexOf("=== 'butce') redirect(")).toBeLessThan(mm.indexOf('sayfaWorkspaceId(session'));
-    expect(mm).not.toContain('ButceIcerik');
-    const sayfa = await oku('../../app/(dashboard)/butce/page.tsx');
-    expect(sayfa).toContain('<ButceIcerik clientId={clientId} params={params} />');
-    expect(sayfa).not.toContain('redirect(');
     expect(u(butceAdresi('ws-1', { ay: '2026-11' })).searchParams.get('ay')).toBe('2026-11');
   });
+});
 
-  it('KRİTİK: ay değiştirmek bütçe sayfasından çıkarmıyor; hata sunucunun cümlesiyle', async () => {
-    const k = await oku('../butce/butce-icerik.tsx');
-    expect(k).toContain('butceAdresi(clientId, { ay: over.ay ?? selected.key })');
-    expect(k).not.toContain('mmAdresi');
-    expect(k).not.toMatch(/\.catch\(\(\)\s*=>\s*null\)/);
-    expect(k).not.toContain('pm2 logs');
+describe('başlıktaki şirket adı', () => {
+  const session = {
+    organization: { id: 'org-ev', name: 'Profaj', slug: 'p', plan: 'x', ustHesabaBagli: true },
+    managerAccount: { organizations: [{ id: 'org-kardes', name: 'Biltaş', slug: 'b' }] },
+  } as unknown as Parameters<typeof sirketAdi>[0];
+
+  it('KRİTİK: workspace’in KENDİ şirketi (tüm şirketler modunda kardeş şirket)', () => {
+    expect(sirketAdi(session, 'org-kardes')).toBe('Biltaş');
+    expect(sirketAdi(session, 'org-ev')).toBe('Profaj');
   });
 
-  it('KRİTİK: Genel Bakış ve kurulum listesi bütçeye aynı üreticiyle gidiyor', async () => {
-    const g = await oku('../../app/(dashboard)/dashboard/page.tsx');
-    expect(g).toContain('month: ayAnahtari()');
-    expect(g).toContain('butceHatasi = hataMetni(e);');
-    // Kartın workspace'i `butceKapsami`ndan (şirket geneli + tek workspace).
-    expect(g).toContain('href={butceAdresi(butceWorkspaceId)}');
-    const h = await oku('hazirlik-listesi.tsx');
-    expect(h).toContain("href: butceAdresi(id)");
-    expect(h).not.toContain("'butce'");
+  it('bilinmeyen şirket adı UYDURULMUYOR', () => {
+    expect(sirketAdi(session, 'org-yabanci')).toBeNull();
+    expect(sirketAdi(session, null)).toBeNull();
+  });
+});
+
+describe('Varlıklar sekmeleri', () => {
+  it('KRİTİK: yetkisiz sekme açılmıyor — paylaşılan bağlantı boş sayfa vermesin', () => {
+    const okur = ['client.read'];
+    expect(gorunurVarlikSekmeleri(okur)).toEqual(['kitleler']);
+    expect(varlikSekmesiCoz('gorseller', okur)).toBe('kitleler');
+    expect(varlikSekmesiCoz('formlar', [])).toBeNull();
+    expect(varlikSekmesiCoz('kitleler', ROLE_PERMISSIONS.ad_manager)).toBe('kitleler');
+  });
+});
+
+describe('eski üretici kalmadı', () => {
+  it('KRİTİK: mmAdresi / varlikYonu / bilgiBankasiYonu tanımı silindi', () => {
+    const b = yorumsuz('bolumler.ts');
+    expect(b).not.toMatch(/export function (mmAdresi|varlikYonu|bilgiBankasiYonu)\b/);
+    expect(b).not.toContain('MM_BOLUMLERI');
+  });
+
+  it('bu dizinde elle Marka Merkezi adresi kuran kod yok (tarama boşa düşmüyor)', () => {
+    const dosyalar: string[] = [];
+    const gez = (d: string) => {
+      for (const ad of readdirSync(d)) {
+        const y = join(d, ad);
+        if (statSync(y).isDirectory()) gez(y);
+        else if (/\.tsx?$/.test(ad) && !ad.endsWith('.spec.ts')) dosyalar.push(y);
+      }
+    };
+    gez(__dirname);
+    expect(dosyalar.length).toBeGreaterThan(10);
+    for (const d of dosyalar) {
+      const k = readFileSync(d, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+      expect(k, d).not.toMatch(/['"`]\/marka-merkezi[?'"`]/);
+    }
   });
 });

@@ -99,7 +99,7 @@ export function kurulumAdimlari(a: KurulumAnlik): KurulumAdimi[] {
         : ({
             durum: 'eksik',
             baslik: 'Atanmadı',
-            neden: a.metaBaglanti ? 'Mevcut bir hesabı seç ya da Business Manager altında yeni hesap aç.' : 'Önce Meta bağlantısı kurulmalı (Bağlantılar).',
+            neden: a.metaBaglanti ? 'Mevcut bir hesabı seç ya da Business Manager altında yeni hesap aç.' : 'Önce Meta bağlantısı kurulmalı (Ayarlar › Platform bağlantıları).',
             eylem: a.metaBaglanti ? { tur: 'secim', etiket: 'Hesap seç ya da aç' } : null,
             otomatik: false,
           }),
@@ -123,7 +123,7 @@ export function kurulumAdimlari(a: KurulumAnlik): KurulumAdimi[] {
         : {
             durum: 'eksik',
             baslik: 'Atanmadı',
-            neden: a.havuzSayfaSayisi > 0 ? `Bağlantıda ${a.havuzSayfaSayisi} sayfa var; bu projeninkini seç.` : 'Sayfa API ile açılamıyor: sayfayı Facebook’ta açıp Business Manager’a ekle, sonra Bağlantılar’dan hesapları yenile.',
+            neden: a.havuzSayfaSayisi > 0 ? `Bağlantıda ${a.havuzSayfaSayisi} sayfa var; bu projeninkini seç.` : 'Sayfa API ile açılamıyor: sayfayı Facebook’ta açıp Business Manager’a ekle, sonra Ayarlar › Platform bağlantıları’ndan hesapları yenile.',
             eylem: a.havuzSayfaSayisi > 0 ? { tur: 'secim', etiket: 'Sayfa seç' } : null,
             // ASLA OTOMATİK: havuzdaki tek sayfa büyük olasılıkla BAŞKA bir
             // müşterinin; atamak reklamı başka markanın sayfasından çıkarırdı
@@ -136,7 +136,7 @@ export function kurulumAdimlari(a: KurulumAnlik): KurulumAdimi[] {
         : ({
             durum: 'eksik',
             baslik: 'Atanmadı',
-            neden: a.googleBaglanti ? 'Mevcut hesabı seç, yönetici hesap altında yeni aç ya da şirketin hesabına bağlantı daveti gönder.' : 'Önce Google bağlantısı kurulmalı (Bağlantılar).',
+            neden: a.googleBaglanti ? 'Mevcut hesabı seç, yönetici hesap altında yeni aç ya da şirketin hesabına bağlantı daveti gönder.' : 'Önce Google bağlantısı kurulmalı (Ayarlar › Platform bağlantıları).',
             eylem: a.googleBaglanti ? { tur: 'secim', etiket: 'Hesap seç ya da aç' } : null,
             otomatik: false,
           }),
@@ -153,7 +153,7 @@ export function kurulumAdimlari(a: KurulumAnlik): KurulumAdimi[] {
       };
     },
     google_izin: () => {
-      if (!a.googleBaglanti) return { durum: 'eksik', baslik: 'Google bağlantısı yok', neden: 'Önce Google bağlantısı kurulmalı (Bağlantılar).', eylem: null, otomatik: false };
+      if (!a.googleBaglanti) return { durum: 'eksik', baslik: 'Google bağlantısı yok', neden: 'Önce Google bağlantısı kurulmalı (Ayarlar › Platform bağlantıları).', eylem: null, otomatik: false };
       return izinVar
         ? { durum: 'tamam', baslik: 'İzin verildi', neden: 'Tag Manager ve Analytics’e yazılabiliyor.', eylem: null, otomatik: false }
         : {
@@ -172,7 +172,7 @@ export function kurulumAdimlari(a: KurulumAnlik): KurulumAdimi[] {
     ga4_mulk: () => {
       if (s?.ga4OlcumKimligi) return { durum: 'tamam', baslik: `${s.ga4OlcumKimligi} · mülk ${s.ga4MulkId ?? '?'}`, neden: 'Bu projenin Analytics mülkü ve web akışı.', eylem: null, otomatik: false };
       if (!izinVar) return izinYok;
-      if (!a.site) return { durum: 'eksik', baslik: 'Site adresi yok', neden: 'Web akışı site adresi istiyor; Workspace ayarları’ndan gir.', eylem: null, otomatik: false };
+      if (!a.site) return { durum: 'eksik', baslik: 'Site adresi yok', neden: 'Web akışı site adresi istiyor; Workspace bilgileri’nden gir.', eylem: null, otomatik: false };
       return { durum: 'eksik', baslik: 'Kurulmadı', neden: 'Sitede erişebildiğimiz bir mülk varsa o kullanılır, yoksa yeni açılır.', eylem: { tur: 'secim', etiket: 'Mülk seç ya da aç' }, otomatik: true };
     },
     meta_piksel: () => {
@@ -227,7 +227,7 @@ export function kurulumAdimlari(a: KurulumAnlik): KurulumAdimi[] {
     },
     site_kodu: () => {
       if (!s?.gtmKimligi) return { durum: 'atlandi', baslik: 'Önce konteyner', neden: 'Siteye eklenecek kod konteynerden geliyor.', eylem: null, otomatik: false };
-      if (!a.site) return { durum: 'eksik', baslik: 'Site adresi yok', neden: 'Workspace ayarları’ndan site adresini gir.', eylem: null, otomatik: false };
+      if (!a.site) return { durum: 'eksik', baslik: 'Site adresi yok', neden: 'Workspace bilgileri’nden site adresini gir.', eylem: null, otomatik: false };
       const k = s.siteKodu;
       if (k?.gorundu) return { durum: 'tamam', baslik: `Sitede görüldü`, neden: `${s.gtmKimligi} sitede yükleniyor (kontrol: ${tarih(k.zaman)}).`, eylem: null, otomatik: false };
       return {
@@ -254,9 +254,9 @@ export function kurulumAdimlari(a: KurulumAnlik): KurulumAdimi[] {
     },
     marka: () => {
       const z = a.hazirlama;
-      if (!z) return { durum: 'eksik', baslik: 'Hazırlık koşmadı', neden: 'Reklam hesabı atanınca kendiliğinden başlar (Bağlantılar’daki hazırlık kartı).', eylem: null, otomatik: false };
+      if (!z) return { durum: 'eksik', baslik: 'Hazırlık koşmadı', neden: 'Reklam hesabı atanınca kendiliğinden başlar.', eylem: null, otomatik: false };
       if (z.durum === 'hazir') return { durum: 'tamam', baslik: 'Hazır', neden: 'Marka bilgileri, kategori, bölge ve bütçe hazır.', eylem: null, otomatik: false };
-      return { durum: 'eksik', baslik: z.soruSayisi > 0 ? `${z.soruSayisi} soru bekliyor` : 'Eksik var', neden: 'Bağlantılar’daki hazırlık kartında cevapla.', eylem: null, otomatik: false };
+      return { durum: 'eksik', baslik: z.soruSayisi > 0 ? `${z.soruSayisi} soru bekliyor` : 'Eksik var', neden: 'Soruları Reklam varsayılanları adımında cevapla.', eylem: null, otomatik: false };
     },
   };
 

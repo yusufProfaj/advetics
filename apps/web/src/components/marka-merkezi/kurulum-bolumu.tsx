@@ -1,11 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import {
   KURULUM_ADIM_ADI,
-  KURULUM_GRUPLARI,
   type DonusumTetigi,
-  type HesapSahibi,
   type KurulumAdimSonucu,
   type KurulumAdimi,
   type KurulumIstegi,
@@ -13,13 +11,13 @@ import {
   type KurulumYaniti,
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { PANEL_KAPILARI } from '@/lib/panel-adresleri';
 import { Dugme } from '@/components/ui/dugme';
 import { Uyari } from '@/components/ui/uyari';
-import { mmAdresi } from './bolumler';
+import { HESAP_ADIMLARI } from './kurulum-listesi-mantik';
 import {
   AD_ISTEYEN,
   DURUM_GOSTERIMI,
-  GRUP_BASLIGI,
   KONTROL_ISTEGI,
   gelistiriciEpostasi,
   izinDonusu,
@@ -29,173 +27,42 @@ import {
 } from './kurulum-mantik';
 
 /**
- * ═══ MARKA MERKEZİ › KURULUM (docs/kurulum/MIMARI.md) ═══
+ * ═══ KURULUM ADIMININ SATIRI VE PANELLERİ (docs/kurulum/MIMARI.md) ═══
  *
- * Google Ads'in "kurulum kontrol listesi" mantığı: üstte ilerleme ve TEK
- * düğme ("Eksikleri tamamla"), altta üç grup halinde adımlar; her adım
- * durumunu NEDENİYLE ve yapılacak tek işi gösterir. Kararlar sunucuda
- * (`kurulum-durum.ts`); burada yalnız çizim ve istek.
+ * Eskiden bu dosya Kurulum bölümünün TAMAMIYDI: kendi sayacı, kendi "Eksikleri
+ * tamamla" düğmesi ve üç grup. 2026-10-13'ten beri tek liste
+ * `kurulum-listesi.tsx`te (docs/panel-sadelestirme/MIMARI.md § 7); burada
+ * yalnız bir kurulum parçasının satırı (durum, neden, tek eylem) ve seçim /
+ * tetik / site kodu panelleri kaldı. Kararlar sunucuda (`kurulum-durum.ts`).
  *
- * DÖRT HÂL AYRI: okunuyor, okunamadı, geldi; bir adımın isteği düşerse o
- * adımın altında platformun mesajı yazar (`.catch(() => setX([]))` yasağı).
+ * İKİ KAPI (MIMARI Ç-20): hesap seçen ve açan adımlar (`HESAP_ADIMLARI`)
+ * havuz atamasıyla AYNI kapıyı (`kurulum.hesap`) istiyor; diğerleri
+ * `kurulum.yaz`. Tek bayrakla çizmek, `connection.manage` taşımayan birine
+ * tıklayınca 403 alacağı bir düğme göstermek demekti.
+ *
+ * Bir adımın isteği düşerse o adımın altında platformun mesajı yazar
+ * (`.catch(() => setX([]))` yasağı).
  */
-type Hal = { tur: 'okunuyor' } | { tur: 'hata'; mesaj: string } | { tur: 'geldi'; veri: KurulumYaniti };
-
 const hataMetni = (e: unknown) => (e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.');
 
-export function KurulumBolumu({ clientId, yazabilir }: { clientId: string; yazabilir: boolean }) {
-  const [hal, setHal] = useState<Hal>({ tur: 'okunuyor' });
-  const [tamamlaniyor, setTamamlaniyor] = useState(false);
-  const [tamamlaSonucu, setTamamlaSonucu] = useState<{ sonuclar: KurulumAdimSonucu[] } | { hata: string } | null>(null);
-
-  const oku = useCallback(async () => {
-    try {
-      setHal({ tur: 'geldi', veri: await apiFetch<KurulumYaniti>(`/clients/${clientId}/kurulum`) });
-    } catch (e) {
-      setHal({ tur: 'hata', mesaj: hataMetni(e) });
-    }
-  }, [clientId]);
-
-  useEffect(() => {
-    void oku();
-  }, [oku]);
-
-  const guncelle = useCallback((v: KurulumYaniti) => setHal({ tur: 'geldi', veri: v }), []);
-
-  async function tamamla() {
-    setTamamlaniyor(true);
-    setTamamlaSonucu(null);
-    try {
-      const r = await apiFetch<KurulumYaniti & { sonuclar: KurulumAdimSonucu[] }>(`/clients/${clientId}/kurulum/tamamla`, { method: 'POST' });
-      guncelle(r);
-      setTamamlaSonucu({ sonuclar: r.sonuclar });
-    } catch (e) {
-      setTamamlaSonucu({ hata: hataMetni(e) });
-    } finally {
-      setTamamlaniyor(false);
-    }
-  }
-
-  async function sahipSec(deger: HesapSahibi) {
-    try {
-      guncelle(await apiFetch<KurulumYaniti>(`/clients/${clientId}/kurulum/adim`, { method: 'POST', body: JSON.stringify({ kod: 'hesap_sahibi', deger }) }));
-    } catch (e) {
-      setTamamlaSonucu({ hata: hataMetni(e) });
-    }
-  }
-
-  if (hal.tur === 'okunuyor') return <p className="rounded-xl border border-line bg-surface p-5 text-sm text-ink-muted">Kurulum durumu okunuyor…</p>;
-  if (hal.tur === 'hata')
-    return (
-      <Uyari ton="tehlike" baslik="Kurulum durumu alınamadı.">
-        {hal.mesaj}{' '}
-        <button type="button" className="font-semibold underline" onClick={() => void oku()}>
-          Yeniden dene
-        </button>
-      </Uyari>
-    );
-
-  const v = hal.veri;
-  const yuzde = Math.round((v.ozet.tamam / Math.max(v.ozet.toplam, 1)) * 100);
-
-  return (
-    <div className="space-y-4">
-      <section className="rounded-xl border border-line bg-surface p-5">
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="min-w-0 flex-1">
-            <p className="font-baslik text-base font-semibold text-ink">
-              {v.ozet.tamam}/{v.ozet.toplam} adım tamam
-            </p>
-            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-sunken" role="progressbar" aria-valuemin={0} aria-valuemax={v.ozet.toplam} aria-valuenow={v.ozet.tamam}>
-              <div className="h-full rounded-full bg-brand transition-[width] duration-500 motion-reduce:transition-none" style={{ width: `${yuzde}%` }} />
-            </div>
-            <p className="mt-2 text-xs text-ink-muted">
-              {v.ozet.otomatikYapilabilir > 0 ? `${v.ozet.otomatikYapilabilir} adımı sistem kendisi tamamlayabilir. ` : ''}
-              {v.ozet.kullanicida > 0 ? `${v.ozet.kullanicida} adım sizin işiniz (ödeme, site kodu, test).` : ''}
-            </p>
-          </div>
-          {yazabilir && (
-            <Dugme bekliyor={tamamlaniyor} disabled={v.ozet.otomatikYapilabilir === 0} onClick={() => void tamamla()}>
-              Eksikleri tamamla
-            </Dugme>
-          )}
-        </div>
-        {yazabilir && (
-          <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-4 text-sm">
-            <span className="text-ink-muted">Yeni hesaplar kimin adına açılsın?</span>
-            {(
-              [
-                ['ajans', 'Ajansın hesapları altında'],
-                ['sirket', 'Şirketin kendi hesaplarında'],
-              ] as const
-            ).map(([d, e]) => (
-              <button
-                key={d}
-                type="button"
-                aria-pressed={v.hesapSahibi === d}
-                onClick={() => void sahipSec(d)}
-                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${v.hesapSahibi === d ? 'border-brand bg-brand text-white' : 'border-line text-ink hover:border-ink-muted'}`}
-              >
-                {e}
-              </button>
-            ))}
-            {v.hesapSahibi === 'sirket' && (
-              <span className="basis-full text-xs text-ink-muted">
-                Şirket kendi Meta ve Google hesabını <a className="font-semibold text-brand-strong hover:underline" href={mmAdresi(clientId, 'baglantilar')}>Bağlantılar</a>’dan bağlar; hesaplar onun adına açılır.
-              </span>
-            )}
-          </div>
-        )}
-        {tamamlaSonucu && 'hata' in tamamlaSonucu && (
-          <div className="mt-3">
-            <Uyari ton="tehlike" baslik="İşlem yapılamadı.">{tamamlaSonucu.hata}</Uyari>
-          </div>
-        )}
-        {tamamlaSonucu && 'sonuclar' in tamamlaSonucu && (
-          <ul className="mt-3 space-y-1 text-sm">
-            {tamamlaSonucu.sonuclar.length === 0 && <li className="text-ink-muted">Sistemin kendi yapabileceği eksik kalmadı.</li>}
-            {tamamlaSonucu.sonuclar.map((s) => (
-              <li key={s.kod} className={s.durum === 'hata' ? 'text-danger-strong' : s.durum === 'atlandi' ? 'text-ink-muted' : 'text-ink'}>
-                <b>{KURULUM_ADIM_ADI[s.kod]}:</b> {s.durum === 'yapildi' ? '' : s.durum === 'atlandi' ? 'atlandı, ' : 'hata, '}
-                {s.mesaj}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {KURULUM_GRUPLARI.map((g) => (
-        <section key={g} className="rounded-xl border border-line bg-surface">
-          <div className="border-b border-line px-5 py-3">
-            <h3 className="font-baslik text-sm font-semibold text-ink">{GRUP_BASLIGI[g].baslik}</h3>
-            <p className="text-xs text-ink-muted">{GRUP_BASLIGI[g].aciklama}</p>
-          </div>
-          <ul className="divide-y divide-line">
-            {v.adimlar
-              .filter((a) => a.grup === g)
-              .map((a) => (
-                <AdimSatiri key={a.kod} a={a} v={v} clientId={clientId} yazabilir={yazabilir} guncelle={guncelle} />
-              ))}
-          </ul>
-        </section>
-      ))}
-    </div>
-  );
-}
-
-function AdimSatiri({
+export function AdimSatiri({
   a,
   v,
   clientId,
   yazabilir,
+  hesapYazabilir,
   guncelle,
 }: {
   a: KurulumAdimi;
   v: KurulumYaniti;
   clientId: string;
+  /** `kurulum.yaz`. */
   yazabilir: boolean;
+  /** `kurulum.hesap` — hesap seçen/açan adımlar için (Ç-20). */
+  hesapYazabilir: boolean;
   guncelle: (v: KurulumYaniti) => void;
 }) {
+  const eylemYetkisi = HESAP_ADIMLARI.has(a.kod) ? hesapYazabilir : yazabilir;
   const [acik, setAcik] = useState(false);
   const [gonderiliyor, setGonderiliyor] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
@@ -236,7 +103,7 @@ function AdimSatiri({
   const e = a.eylem;
   const kontrol = KONTROL_ISTEGI[a.kod];
   return (
-    <li className="px-5 py-3 text-sm">
+    <li className="px-4 py-3 text-sm">
       <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
         <span className={`mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${d.sinif}`}>{d.etiket}</span>
         <div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
@@ -244,13 +111,12 @@ function AdimSatiri({
             {KURULUM_ADIM_ADI[a.kod]} <span className="font-normal text-ink-muted">· {a.baslik}</span>
           </p>
           <p className="text-xs text-ink-muted">{a.neden}</p>
-          {a.kod === 'marka' && a.durum !== 'tamam' && (
-            <a className="text-xs font-semibold text-brand-strong hover:underline" href={mmAdresi(clientId, 'baglantilar')}>
-              Hazırlık kartını aç
-            </a>
+          {/* Kapı kapalıysa düğme yerine NEDEN (boş alan değil, MIMARI § 6). */}
+          {!eylemYetkisi && e && (
+            <p className="text-xs text-ink-muted">{HESAP_ADIMLARI.has(a.kod) ? PANEL_KAPILARI['kurulum.hesap'].neden : PANEL_KAPILARI['kurulum.yaz'].neden}</p>
           )}
         </div>
-        {yazabilir && e && (
+        {eylemYetkisi && e && (
           <div className="flex shrink-0 flex-wrap gap-2">
             {e.tur === 'dis' && (
               <a href={e.adres} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink hover:border-ink-muted">
@@ -311,6 +177,14 @@ function SecimPaneli({
   const [ust, setUst] = useState('');
   const [ad, setAd] = useState(workspaceAdi);
   const [musteriNo, setMusteriNo] = useState('');
+  const [yeniOnay, setYeniOnay] = useState(false);
+  const onayBaslik = useId();
+  const onayDugmesi = useId();
+
+  // Onay açılınca odak onay düğmesine: klavyeyle gelen kişi ne onayladığını okusun.
+  useEffect(() => {
+    if (yeniOnay) document.getElementById(onayDugmesi)?.focus();
+  }, [yeniOnay, onayDugmesi]);
 
   useEffect(() => {
     let iptal = false;
@@ -375,10 +249,46 @@ function SecimPaneli({
             </select>
           )}
           {AD_ISTEYEN.has(kod) && <input className={girdi} value={ad} onChange={(e) => setAd(e.target.value)} maxLength={100} aria-label="Hesap adı" placeholder="Proje adı" />}
-          <Dugme boyut="kucuk" ton="ikincil" bekliyor={gonderiliyor} disabled={(!pikselYeni && !ust) || (AD_ISTEYEN.has(kod) && ad.trim().length < 2)} onClick={() => istek({ tur: 'yeni', ust, ad })}>
-            {yeniEtiket}
-          </Dugme>
-          {AD_ISTEYEN.has(kod) && <p className="text-[11px] text-ink-muted">Gerçek bir reklam hesabı açılır (TRY, İstanbul saati; sonradan değiştirilemez). Ödeme yöntemini şirket ekler.</p>}
+          {/*
+            GERÇEK HESAP AÇAN DÜĞME ONAYSIZ ÇALIŞMAZ (MIMARI Ç-20 ⚠). Bir kez
+            açılan reklam hesabı platformda kalıyor, para birimi ve saat
+            dilimi sonradan değişmiyor; yanlış tık geri alınamıyor. Onay satır
+            İÇİNDE ve DOM'dan çıkmıyor (görünürlük sınıfla değişiyor).
+          */}
+          <div className={yeniOnay ? 'hidden' : ''}>
+            <Dugme
+              boyut="kucuk"
+              ton="ikincil"
+              bekliyor={gonderiliyor}
+              disabled={(!pikselYeni && !ust) || (AD_ISTEYEN.has(kod) && ad.trim().length < 2)}
+              onClick={() => (AD_ISTEYEN.has(kod) ? setYeniOnay(true) : istek({ tur: 'yeni', ust, ad }))}
+            >
+              {yeniEtiket}
+            </Dugme>
+          </div>
+          {AD_ISTEYEN.has(kod) && (
+            <div
+              role="alertdialog"
+              aria-labelledby={onayBaslik}
+              className={`space-y-2 rounded-lg border border-brand/40 p-3 transition-opacity duration-200 motion-reduce:transition-none ${yeniOnay ? 'opacity-100' : 'pointer-events-none hidden opacity-0'}`}
+            >
+              <p id={onayBaslik} className="text-xs font-semibold text-ink">
+                “{ad.trim()}” adıyla gerçek bir reklam hesabı açılsın mı?
+              </p>
+              <p className="text-[11px] text-ink-muted">
+                Hesap platformda kalır ve silinemez. Para birimi TRY, saat dilimi İstanbul; ikisi de sonradan değiştirilemez. Ödeme yöntemini şirket ekler.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Dugme id={onayDugmesi} boyut="kucuk" bekliyor={gonderiliyor} onClick={() => istek({ tur: 'yeni', ust, ad })}>
+                  Hesabı aç
+                </Dugme>
+                <Dugme boyut="kucuk" ton="ikincil" disabled={gonderiliyor} onClick={() => setYeniOnay(false)}>
+                  Vazgeç
+                </Dugme>
+              </div>
+            </div>
+          )}
+          {AD_ISTEYEN.has(kod) && !yeniOnay && <p className="text-[11px] text-ink-muted">Gerçek bir reklam hesabı açılır; açmadan önce onay istenir.</p>}
         </div>
       )}
       {kod === 'google_hesap' && v.ustler.length > 0 && (

@@ -9,7 +9,6 @@ import {
   type Permission,
 } from '@advetics/shared';
 import type { NavEntry } from '@/components/nav';
-import { VARLIK_YOLLARI } from '@/components/marka-merkezi/varliklar';
 
 /**
  * Kenar çubuğu — KATLANABİLİR bölümler.
@@ -204,10 +203,11 @@ function bolumleriKur(
      * 2026-10-13 arası tek kapı Marka Merkezi'ydi; 2026-10-13'ten beri İKİ
      * SATIR: Marka Merkezi (seçili workspace'in kurulumu, markası, bilgileri)
      * ve Varlıklar (görsel, kreatif, form, kitle). Satırlar aşağıda
-     * `BASE_SATIRLARI_ESKI` / `BASE_SATIRLARI_YENI`.
+     * `BASE_SATIRLARI_YENI`.
      *
-     * ŞİRKET GENELİNDEKİ "Ekip & Yetkiler" BURAYA GELMEDİ (2026-10-09):
-     * workspace ekibi zaten Marka Merkezi › Workspace ayarları'nda; Ayarlar'daki
+     * ŞİRKET GENELİNDEKİ EKİP EKRANI BURAYA GELMEDİ (2026-10-09): bir
+     * workspace'i kimin gördüğü Marka Merkezi › Workspace bilgileri'nde salt
+     * okunur yazıyor, yönetimi Ayarlar › Ekip ve güvenlik'te; Ayarlar'daki
      * ekran bütün şirketin kullanıcı ve yetkilerini değiştiriyor ve bir
      * workspace'e bakan ekranda durması kapsamı yanlış anlatırdı.
      *
@@ -245,24 +245,6 @@ function bolumleriKur(
 // BASE VE AYARLAR SATIRLARI — ESKİ ve YENİ (Ayarlar ve Marka Merkezi
 // sadeleştirme, docs/panel-sadelestirme/MIMARI.md)
 // ═════════════════════════════════════════════════════════════════════════════
-
-/**
- * ESKİ BASE — "tek kapı Marka Merkezi" (2026-10-06). Ajan 3 yeni sayfaları
- * yazıp `BASE_SATIRLARI`nı çevirince bu sabit SİLİNİR.
- */
-const BASE_SATIRLARI_ESKI: NavEntry[] = [
-      {
-        href: '/marka-merkezi',
-        label: 'Marka Merkezi',
-        icon: 'brand',
-        module: 1,
-        ready: true,
-        perm: 'client.write',
-        // Varlık ekranları menüden kalkıp buraya indi (Bölüm 3); oradayken
-        // bu satır seçili görünsün.
-        ekYollar: [...VARLIK_YOLLARI, '/kutuphane/bilgi-bankasi'],
-      },
-    ];
 
 /**
  * ═══ YENİ BASE: MARKA MERKEZİ + VARLIKLAR (Karar B, kullanıcı 2026-10-13) ═══
@@ -472,7 +454,7 @@ export const HESABIM_SATIRI: NavEntry = {
  * `_ESKI` sabitini siler. Ajan 4'ün kapısı: ikisi de çevrilmiş, `_ESKI`
  * yok (`nav-hedef.spec.ts`).
  */
-const BASE_SATIRLARI: NavEntry[] = BASE_SATIRLARI_ESKI; // Ajan 3 → BASE_SATIRLARI_YENI
+const BASE_SATIRLARI: NavEntry[] = BASE_SATIRLARI_YENI; // Ajan 3 çevirdi (2026-10-13)
 const AYARLAR_SATIRLARI: NavEntry[] = AYARLAR_SATIRLARI_ESKI; // Ajan 2 → AYARLAR_SATIRLARI_YENI
 
 /** Bugün kullanılan menü (geçiş anahtarlarına göre). */

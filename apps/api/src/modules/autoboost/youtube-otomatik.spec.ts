@@ -146,7 +146,7 @@ describe('eksikler — her biri NEREDE düzeltileceğini söylüyor', () => {
 
   it('logo ve site eksikliği yeriyle yazılıyor', () => {
     const e = eksikler('Mia', 'yok', null, { id: 'k' });
-    expect(e.join(' ')).toContain('Logo sekmesi');
+    expect(e.join(' ')).toContain('Marka Merkezi › Marka › Logo');
     expect(e.join(' ')).toContain('web sitesini ekle');
   });
 

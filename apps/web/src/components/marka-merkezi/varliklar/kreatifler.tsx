@@ -3,8 +3,10 @@ import type {
   CreativeRecord,
   KreatifPerformansListesi,
 } from '@advetics/shared';
-import { hasPermission, requireSession } from '@/lib/session';
-import { serverApiFetch } from '@/lib/api';
+import { requireSession } from '@/lib/session';
+import { ApiRequestError, serverApiFetch } from '@/lib/api';
+import { kapi } from '@/lib/panel-adresleri';
+import { Uyari } from '@/components/ui/uyari';
 import { CreativeLibrary } from './creative-library';
 import { IsleyenKreatifler } from './isleyen-kreatifler';
 
@@ -18,9 +20,9 @@ import { IsleyenKreatifler } from './isleyen-kreatifler';
  * Arşivi de aynı sebeple burada.
  */
 /**
- * MARKA MERKEZİ › VARLIKLAR İÇİNDE ÇİZİLİYOR (2026-10-06). Eskiden
- * `/kutuphane/kreatifler` ayrı sayfasıydı ve menüde görünmüyordu; o adres artık
- * buraya yönleniyor. Başlık ve workspace kapısı Marka Merkezi'nde.
+ * BASE › VARLIKLAR › KREATİFLER (2026-10-13). Eski `/kutuphane/kreatifler`
+ * ve Marka Merkezi'nin Varlıklar bölümü buraya yönleniyor. Başlık ve
+ * workspace kapısı Varlıklar sayfasında.
  */
 export async function KreatiflerIcerik({
   clientId,
@@ -33,13 +35,14 @@ export async function KreatiflerIcerik({
 
   // SESSİZCE İLK WORKSPACE'E DÜŞÜLMÜYOR — gerekçe `lib/sayfa-workspace.ts`.
 
-  const canWrite = hasPermission(session, 'bulk.write');
-  const client = session.availableClients.find((c) => c.id === clientId);
+  const canWrite = kapi(session, 'varlik.yaz');
 
   /*
    * HATA YUTULMUYOR. Üçü de `.catch(() => …)` ile alınıyordu ve liste
    * okunamadığında ekran "kreatif yok" diyordu — kullanıcı kütüphanesinin
-   * boşaldığını sanır.
+   * boşaldığını sanır. `allSettled`a geçilince de reddedilen sonuç `[]`a
+   * çevriliyordu: aynı hata, başka sözdizimi. Her düşen çağrı aşağıda kendi
+   * cümlesiyle yazıyor ve o bölüm "boş" diye çizilmiyor.
    */
   const [kreatifSonuc, arsivSonuc, performansSonuc] = await Promise.allSettled([
     serverApiFetch<CreativeRecord[]>(`/creatives?clientId=${clientId}`),
@@ -52,12 +55,18 @@ export async function KreatiflerIcerik({
     serverApiFetch<KreatifPerformansListesi>(`/creatives/performans?clientId=${clientId}&gun=90`),
   ]);
 
-  const creatives = kreatifSonuc.status === 'fulfilled' ? kreatifSonuc.value : [];
+  const hata = (r: PromiseSettledResult<unknown>) =>
+    r.status === 'rejected' ? (r.reason instanceof ApiRequestError ? r.reason.message : 'Sunucuya ulaşılamadı.') : null;
   const library = arsivSonuc.status === 'fulfilled' ? arsivSonuc.value : null;
   const performans = performansSonuc.status === 'fulfilled' ? performansSonuc.value : null;
 
   return (
     <div className="space-y-5">
+      {hata(performansSonuc) && (
+        <Uyari ton="uyari" baslik="Geçmiş performans alınamadı.">
+          {hata(performansSonuc)}
+        </Uyari>
+      )}
 
       {/*
         ÖNCE GEÇMİŞ, SONRA KÜTÜPHANE. Kullanıcı bu ekrana "yeni bir şey
@@ -86,12 +95,23 @@ export async function KreatiflerIcerik({
         </section>
       )}
 
-      {canWrite ? (
-        <CreativeLibrary
-          clientId={clientId}
-          creatives={creatives}
-          libraryAssets={library?.rows ?? []}
-        />
+      {kreatifSonuc.status === 'rejected' ? (
+        <Uyari ton="tehlike" baslik="Kreatif listesi alınamadı.">
+          {hata(kreatifSonuc)}
+        </Uyari>
+      ) : canWrite ? (
+        <>
+          {hata(arsivSonuc) && (
+            <Uyari ton="uyari" baslik="Görsel arşivi alınamadı; kreatife arşivden görsel seçilemez.">
+              {hata(arsivSonuc)}
+            </Uyari>
+          )}
+          <CreativeLibrary
+            clientId={clientId}
+            creatives={kreatifSonuc.value}
+            libraryAssets={library?.rows ?? []}
+          />
+        </>
       ) : (
         <div className="rounded-xl bg-warn-soft px-4 py-3 text-sm text-warn-strong ring-1 ring-inset ring-warn/30">
           Kreatif düzenlemek için yetkin yok.

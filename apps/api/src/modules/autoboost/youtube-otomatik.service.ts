@@ -30,13 +30,15 @@ export interface YoutubeYayinDegerleri {
 /**
  * LOGONUN YÜKLENDİĞİ YER — kullanıcıya gösterilen tek dize.
  *
- * Bu modülün metinlerinde "Bilgi Bankası" adı YASAK (`boost-yonlendirme-
+ * Bu modülün metinlerinde eski yer adı YASAK (`boost-yonlendirme-
  * metni.spec.ts`): ön ayar formu bir süre orada yaşadı ve taşındıktan sonra
- * altı hata cümlesi kullanıcıyı boş bir sayfaya gönderdi. Logo ise GERÇEKTEN
- * orada, Logo sekmesinde duruyor; tek bir sabitte tutuluyor ve bekçi test
- * yalnızca bu satırı muaf tutuyor. Yer bir gün değişirse değişecek tek dize bu.
+ * altı hata cümlesi kullanıcıyı boş bir sayfaya gönderdi. Logonun evi
+ * 2026-10-13'ten beri Marka Merkezi'nin Marka bölümü (docs/panel-
+ * sadelestirme/MIMARI.md § 4); eski "Bilgi Bankası › Logo sekmesi" adresi
+ * oraya yönleniyor ama metin kullanıcıya artık olmayan bir sekmeyi tarif
+ * ediyordu. Yer bir gün değişirse değişecek tek dize bu.
  */
-export const LOGO_YERI = 'Bilgi Bankası › Logo sekmesi';
+export const LOGO_YERI = 'Marka Merkezi › Marka › Logo';
 
 interface Kaynaklar {
   workspaceAdi: string;
@@ -368,7 +370,7 @@ export function eksikler(
     liste.push(`Logo yok: ${LOGO_YERI} üzerinden bir logo yükle.`);
   }
   if (!url) {
-    liste.push('Web sitesi yok: Şirketler ekranında workspace bilgilerine web sitesini ekle.');
+    liste.push('Web sitesi yok: Marka Merkezi › Workspace bilgileri’nde web sitesini ekle.');
   }
   return liste;
 }

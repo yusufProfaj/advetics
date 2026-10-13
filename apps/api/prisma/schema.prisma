@@ -4153,6 +4153,9 @@ model WorkspaceKurulum {
   adimNotlari          Json      @default("{}") @map("adim_notlari") @db.JsonB
   sonDogrulama         Json?     @map("son_dogrulama") @db.JsonB
   siteKodu             Json?     @map("site_kodu") @db.JsonB
+  /// "Bu platformu kullanmıyorum" beyanı (meta/google, en çok biri; boş = beyan yok).
+  /// Kısıtlar migration'da (20261016400000_kurulum_kullanilmayan_platformlar).
+  kullanilmayanPlatformlar String[] @default([]) @map("kullanilmayan_platformlar")
   createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt            DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
 
