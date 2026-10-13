@@ -240,6 +240,11 @@ export class KurulumService {
       workspaceAdi: b.ad,
       site: b.site,
       hesapSahibi: b.sahip,
+      // BEYAN HENÜZ SAKLANMIYOR (docs/panel-sadelestirme/MIMARI.md Ç-6, Ajan 3:
+      // `workspace_kurulum.kullanilmayan_platformlar` kolonu + PUT ucu). Boş
+      // liste "beyan yok" demek ve bugünkü davranışın ta kendisi: iki platform
+      // da sayılıyor.
+      kullanilmayanPlatformlar: [],
       adimlar,
       ozet: kurulumOzeti(adimlar),
       siteKodu: kimlik ? { gtmKimligi: kimlik, ...gtmKodu(kimlik) } : null,

@@ -68,3 +68,4 @@ export * from './iki-adim';
 export * from './veri-kaynagi';
 export * from './kreatif-zeka';
 export * from './sayi-yasagi';
+export * from './panel';

@@ -1,5 +1,5 @@
 import { requireSession } from '@/lib/session';
-import { AYAR_KISA_AD, kenarBolumleri, visibleSections } from '@/lib/nav-sections';
+import { ayarSekmeleri, kenarBolumleri, visibleSections } from '@/lib/nav-sections';
 import { AyarSekmeleri } from '@/components/ayar-sekmeleri';
 
 /**
@@ -22,11 +22,8 @@ export default async function AyarlarDuzeni({ children }: { children: React.Reac
       platformSahibi: session.platformAdmin,
     }),
   );
-  const sekmeler = ayarlar.map((a) => ({
-    href: a.href,
-    ekYollar: a.ekYollar ?? [],
-    ad: AYAR_KISA_AD[a.href] ?? a.label,
-  }));
+  // Yeni yapıda Hesabım sekmesi de ekleniyor (herkese açık, menüde değil).
+  const sekmeler = ayarSekmeleri(ayarlar);
   return (
     <div className="space-y-6">
       {sekmeler.length > 1 && <AyarSekmeleri sekmeler={sekmeler} />}

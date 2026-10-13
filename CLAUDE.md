@@ -1536,24 +1536,46 @@ Detay: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md),
   tuşlarıyla taşınıyor: yalnızca sürükleme koymak, fare kullanamayan için
   özelliği TAMAMEN kapatmak olurdu. Taşıma TAKAS DEĞİL ARAYA SOKMA — takas
   eden bir sürükleme kullanıcının bıraktığı yere koymuyor.
-- **KURUMSAL KİMLİK VE "BASE" (kullanıcı kararı, 2026-10-06).** Görünüş
-  Profaj kurumsal kılavuzundan: ana başlık Montserrat, gövde Open Sans,
-  kırmızı `#ff2400`, gri `#302e2d`. Menü başlığı "Kütüphane" değil
-  **Base** ve tek kapısı Marka Merkezi; Marka Merkezi'nin kendi iç menüsü
-  var (Bağlantılar · Marka · Kitleler · Varlıklar · Workspace ayarları)
-  ve bölüm adreste (`?bolum=`). **Aylık Bütçe burada DEĞİL** — 2026-10-09'dan
-  beri Planla › Aylık Bütçe (`/butce`, kullanıcı kararı); eski
-  `?bolum=butce` oraya yönleniyor ve bağlantılar `lib/butce-adresi.ts`ten. Workspace'e geçen
-  kullanıcı doldurulacak HER ŞEYİ buradan yapabilmeli (kullanıcı,
+- **KURUMSAL KİMLİK VE "BASE" (kullanıcı kararı, 2026-10-06; Base'in
+  yapısı 2026-10-13'te DEĞİŞTİ).** Görünüş Profaj kurumsal kılavuzundan:
+  ana başlık Montserrat, gövde Open Sans, kırmızı `#ff2400`, gri
+  `#302e2d`. Menü başlığı "Kütüphane" değil **Base**.
+  *Eski karar (2026-10-06 → 2026-10-13):* Base'in TEK kapısı Marka
+  Merkezi'ydi ve iç menüsü yedi bölüm taşıyordu (Kurulum · Bağlantılar ·
+  Marka · Kitleler · Varlıklar · Ölçüm · Workspace ayarları + Bildirimler).
+  Gerekçesi kullanıcının *"nereye nereden girdiğimi unutuyorum"*
+  şikâyetiydi: dört adrese dağılmış kurulumu tek sayfaya toplamak.
+  *Neden değişti (kullanıcının onayladığı yapı, 2026-10-13):* tek sayfa
+  yine üç sayaç (hazırlık şeridi, kurulum, hazır workspace kartı), aynı
+  alanın üç düzenleme yeri (özel kategori: pencere, Workspace ayarları,
+  hazırlama kartı) ve reklam kurarken her gün açılan malzemeyi (görsel,
+  kreatif, form, kitle) bir kurulum ekranının iç menüsünde taşıyordu.
+  *Yeni yapı (sözleşme 2026-10-13'te yazıldı; sayfalar Ajan 2/3'te — menü
+  `nav-sections.ts` geçiş anahtarlarıyla çevrilince bu not silinir):* Base
+  İKİ satır — **Marka Merkezi** (YALNIZ seçili workspace;
+  başlıkta "Şirket › Workspace"; üç bölüm: Kurulum · Marka · Workspace
+  bilgileri) ve **Varlıklar** (`/varliklar`: Görseller · Kreatifler ·
+  Formlar · Kitleler). Ayarlar dört sekme: Şirketler ve workspace'ler ·
+  Platform bağlantıları · Ekip ve güvenlik · Hesabım. Üç kural: (1) her
+  bilginin TEK EVİ var, başka yerde salt okunur + evine bağlantı; (2)
+  kapsam ekranın adında (Ayarlar ajans/şirket/kişi, Marka Merkezi tek
+  workspace); (3) Kurulum tek liste, tek sayaç, tek "Eksikleri tamamla".
+  Şirketler ekranındaki workspace PENCERESİ KALKTI: workspace satırı
+  Marka Merkezi'nde açılıyor. Adresler, eski adres eşlemesi ve eylem
+  kapıları TEK sözleşmede (`packages/shared/src/panel`, panelde
+  `lib/panel-adresleri.ts`); `/ayarlar/…`, `/marka-merkezi?bolum=…`,
+  `/varliklar` dizgesini elle yazan dosya kalmamalı
+  (`panel-adresleri.spec.ts`). Ayrıntı `docs/panel-sadelestirme/MIMARI.md`.
+  **Aylık Bütçe Base'de DEĞİL** — 2026-10-09'dan beri Planla › Aylık
+  Bütçe (`/butce`, kullanıcı kararı); eski `?bolum=butce` oraya yönleniyor
+  ve bağlantılar `lib/butce-adresi.ts`ten. Workspace'e geçen kullanıcı
+  doldurulacak HER ŞEYİ Marka Merkezi'nden yapabilmeli (kullanıcı,
   2026-10-06): iletişim/firma, rapor alıcıları, özel reklam kategorisi,
-  ekip, sayfaların boost hesabı ve gönderi izlemesi dahil. Şirketler
-  ekranındaki workspace penceresi kalıyor ama TEK yol olamaz. Yeni bir
-  workspace kurulum ekranı AYRI SAYFA olarak
-  açılmaz, bu iç menüye bölüm olarak girer (`marka-merkezi/bolumler.ts`) —
-  dağınık yapı kullanıcının "nereye nereden girdiğimi unutuyorum"
-  şikâyetinin sebebiydi. Marka profili (`branding_profiles`) CSS'i ezer:
-  renk/yazı tipi varsayılanı değişirse eski varsayılanı taşıyan satırlar
-  migration'la güncellenmeli, seçilmiş değerlere dokunulmamalı.
+  hesaplar, ölçüm. Yeni bir workspace kurulum ekranı AYRI SAYFA olarak
+  açılmaz, Kurulum listesine ADIM olarak girer. Marka profili
+  (`branding_profiles`) CSS'i ezer: renk/yazı tipi varsayılanı değişirse
+  eski varsayılanı taşıyan satırlar migration'la güncellenmeli, seçilmiş
+  değerlere dokunulmamalı.
 - **HER PROJENİN KENDİ HESAPLARI; KURULUM MARKA MERKEZİ'NİN İLK BÖLÜMÜ**
   (kullanıcı kararı, 2026-10-12). Bir şirketin birden çok projesi varsa
   her projenin ayrı Meta reklam hesabı, Google Ads hesabı, Tag Manager ve

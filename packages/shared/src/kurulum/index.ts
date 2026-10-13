@@ -79,6 +79,36 @@ export type KurulumAdimDurumu = (typeof KURULUM_ADIM_DURUMLARI)[number];
 export const HESAP_SAHIPLERI = ['ajans', 'sirket'] as const;
 export type HesapSahibi = (typeof HESAP_SAHIPLERI)[number];
 
+/**
+ * ═══ KULLANILMAYAN PLATFORM BEYANI (docs/panel-sadelestirme/MIMARI.md Ç-6) ═══
+ *
+ * Kurulum tek sayaçla sayılınca Meta'yı ya da Google'ı HİÇ kullanmayan bir
+ * workspace'in sayacı sonsuza kadar "eksik" der; her gün görülen bir uyarı
+ * okunmaz hâle gelir ve gerçek eksik onun içinde kaybolur. Sistem bunu
+ * TAHMİN ETMEZ (hesap atanmamış olması "kullanmıyor" demek değil, "henüz
+ * atanmadı" da olabilir); kullanıcı açıkça söyler.
+ *
+ * Yazma: `PUT /clients/:id/kurulum/platformlar` (`client.write`), gövde
+ * `kurulumPlatformBeyaniSchema`. Saklama: `workspace_kurulum.
+ * kullanilmayan_platformlar text[]` (Ajan 3, ayrı migration). "Eksikleri
+ * tamamla" kullanılmayan platformun adımlarına DOKUNMAZ.
+ */
+export const KURULUM_PLATFORMLARI = ['meta', 'google'] as const;
+export type KurulumPlatformu = (typeof KURULUM_PLATFORMLARI)[number];
+
+export const kurulumPlatformBeyaniSchema = z.object({
+  /*
+   * İKİSİ BİRDEN KULLANILMIYOR OLAMAZ: o hâlde workspace'in reklam kuracağı
+   * platform kalmıyor ve sayaç "0 / 2" gibi anlamsız bir şey der. İkisini
+   * de kapatmak isteyen workspace'i arşivlemeli.
+   */
+  kullanilmayanlar: z
+    .array(z.enum(KURULUM_PLATFORMLARI))
+    .max(KURULUM_PLATFORMLARI.length - 1)
+    .refine((l) => new Set(l).size === l.length, 'Aynı platform iki kez yazılamaz'),
+});
+export type KurulumPlatformBeyani = z.infer<typeof kurulumPlatformBeyaniSchema>;
+
 export type KurulumEylemi =
   /** Tek tık, sistem yapar. */
   | { tur: 'otomatik'; etiket: string }
@@ -110,6 +140,11 @@ export interface KurulumYaniti {
   /** Site adresi (Workspace ayarları); geliştirici e-postası ve web akışı için. */
   site: string | null;
   hesapSahibi: HesapSahibi | null;
+  /**
+   * Kullanıcının bu workspace'te kullanmadığını BEYAN ettiği platformlar
+   * (`kurulumPlatformBeyaniSchema`). Boş = beyan yok, ikisi de sayılıyor.
+   */
+  kullanilmayanPlatformlar: KurulumPlatformu[];
   adimlar: KurulumAdimi[];
   ozet: { tamam: number; toplam: number; otomatikYapilabilir: number; kullanicida: number };
   /** Konteyner varsa siteye eklenecek kod. */
