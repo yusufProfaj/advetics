@@ -52,10 +52,13 @@ import { ORAN_ETIKETI, YERLESIM_GRUPLARI, YERLESIM_SIRASI, bannerSetiDestekleniy
  *        DÜĞMESİZ video (`video_data.call_to_action` yok; S3). Video
  *        provaları Advantage+ yerleşimli ve sayfa düğmeli gövdeyi
  *        kanıtlıyordu.
+ * 1.11.0: VIDEO_IZLENME yerleşim listesi Meta belgesinden (K1): video
+ *        arası, video akışı, profil akışları ve Keşfet ana sayfa AÇIK;
+ *        sağ sütun ve arama KAPALI. 1.10.0 gövdesi video arasını kapatıyordu.
  * Sürüm provanın tazeliğine bağlı: eski derleyiciyle geçmiş prova yeni
  * gövdeyi kanıtlamaz.
  */
-export const DERLEYICI_SURUMU = '1.10.0';
+export const DERLEYICI_SURUMU = '1.11.0';
 
 /**
  * CLICK-TO-WHATSAPP SABİTLERİ (CLAUDE.md "CLICK-TO-WHATSAPP"). Bağlantı
@@ -762,7 +765,26 @@ function grupKonumlari(g: YerlesimGrubu, instagram: boolean, niyet: NiyetKodu): 
   return out;
 }
 
-/** Açık grupların Meta konumları birleşimi (elle yerleşim). */
+/**
+ * Açık grupların Meta konumları birleşimi (elle yerleşim). DIŞA AÇIK: karar
+ * tablosu video "Nerede" hücresini bu fonksiyonun ÇIKTISINDAN yazıyor (K1);
+ * ayrı bir liste tutsaydı gövdeyle ayrışırdı.
+ */
+export function metaElleYerlesim(p: SetPlani, instagram: boolean, niyet: NiyetKodu): Record<string, string[]> {
+  return elleYerlesim(p, instagram, niyet);
+}
+
+/**
+ * VİDEO İZLENMEDE YASAK KONUMLAR (K1): belgeye göre video/etkileşim için
+ * desteklenmeyen ya da karar gereği kapalı olanlar. Manifesto gövdede
+ * bunlardan biri görünürse FIRLATIR; grup haritasına biri eklense "yalnız
+ * Audience Network hariç" ekranı ile gövde sessizce ayrışırdı.
+ */
+export const VIDEO_KAPALI_YERLESIM = {
+  publisher_platforms: ['audience_network', 'messenger', 'threads'],
+  facebook_positions: ['right_hand_column', 'search'],
+} as const;
+
 function elleYerlesim(p: SetPlani, instagram: boolean, niyet: NiyetKodu): Record<string, string[]> {
   const birlesim: Record<string, Set<string>> = {};
   for (const g of YERLESIM_SIRASI) {
@@ -1084,6 +1106,17 @@ function manifestoDogrula(govdeler: MetaGovdesi[], d: ManifestoHali): void {
     if (d.video) {
       const pp = (t.publisher_platforms ?? []) as unknown[];
       if (pp.includes('audience_network') || 'audience_network_positions' in t) throw new Error('Video reklamında Audience Network yazıldı; söz "Audience Network hariç"');
+      for (const [alan, yasak] of Object.entries(VIDEO_KAPALI_YERLESIM)) {
+        const v = (t[alan] ?? []) as unknown[];
+        const bulunan = yasak.find((x) => v.includes(x));
+        if (bulunan) throw new Error(`Video reklamında kapalı yerleşim yazıldı (${alan}: ${bulunan})`);
+      }
+      if ('messenger_positions' in t || 'threads_positions' in t) throw new Error('Video reklamında Messenger/Threads konumu yazıldı');
+      // Video arası (`instream_video`) sözün ÇEKİRDEĞİ (K1): düşerse ThruPlay'in
+      // en değerli envanteri sessizce kapanır.
+      if (pp.includes('facebook') && !((t.facebook_positions ?? []) as unknown[]).includes('instream_video')) {
+        throw new Error('Video reklamında Facebook video arası (instream_video) yazılmadı');
+      }
     }
   }
 }

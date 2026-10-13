@@ -12,6 +12,7 @@ import {
   ekOkumaAlanlari,
   kararTablosu,
   medyaKontrol,
+  metaKonumCumlesi,
   niyetYerlesimKisiti,
   rehberEksikleri,
   rehberYerlesimPlani,
@@ -61,13 +62,30 @@ const bul = (gs: MetaGovdesi[], ad: string) => gs.find((x) => x.ad === ad)!.alan
 
 // ─────────────────────────────────────────────────────────────────────────────
 describe('S1/B9 — Meta video yerleşimi: Advantage+ ama Audience Network HARİÇ', () => {
-  it('KRİTİK: reklam seti ELLE yerleşimde, açık konum listesiyle; Audience Network ve Messenger YOK', () => {
+  /*
+   * K1 (Ajan 4): Meta placement-targeting belgesinin konum kümesi. Gövde
+   * bunun ALT KÜMESİ olmalı (belgede olmayan değer = kabul edip yok sayma
+   * riski) ve kapalı dışında hepsini açmalı (söz "YALNIZ Audience Network
+   * hariç"; belge video için sağ sütun ve aramayı desteklemeyebilir diyor).
+   */
+  const BELGE = {
+    facebook_positions: ['feed', 'right_hand_column', 'marketplace', 'video_feeds', 'story', 'search', 'instream_video', 'facebook_reels', 'facebook_reels_overlay', 'profile_feed', 'notification'],
+    instagram_positions: ['stream', 'story', 'explore', 'explore_home', 'reels', 'profile_feed', 'ig_search', 'profile_reels'],
+  };
+  it('KRİTİK (K1): video arası, video akışı, profil akışları AÇIK; sağ sütun, arama, Messenger, Audience Network KAPALI', () => {
     const t = bul(govde().govdeler, 'reklam_seti').targeting;
     expect(t.publisher_platforms).toEqual(['facebook', 'instagram']);
-    expect(t.facebook_positions).toEqual(['facebook_reels', 'feed', 'marketplace', 'right_hand_column', 'search', 'story']);
-    expect(t.instagram_positions).toEqual(['explore', 'reels', 'story', 'stream']);
+    expect(t.facebook_positions).toEqual(['facebook_reels', 'feed', 'instream_video', 'marketplace', 'profile_feed', 'story', 'video_feeds']);
+    expect(t.instagram_positions).toEqual(['explore', 'explore_home', 'profile_feed', 'reels', 'story', 'stream']);
+    for (const alan of ['facebook_positions', 'instagram_positions'] as const) for (const k of t[alan]) expect(BELGE[alan]).toContain(k);
     expect(t).not.toHaveProperty('audience_network_positions');
     expect(t).not.toHaveProperty('messenger_positions');
+  });
+
+  it('K1: diğer amaçların konum listesi DEĞİŞMEDİ (ek konum yalnız video kısıtında)', () => {
+    const tel = derleMeta({ ...temel, niyet: 'TELEFON', telefon: '+905321234567', kavramlar: [{ gorselHash: 'h', baslik: 'B', metin: 'M', oran: 'kare' }] });
+    if (tel.tur !== 'govde') throw new Error(JSON.stringify(tel.retler));
+    expect(bul(tel.govdeler, 'reklam_seti').targeting.facebook_positions).not.toContain('instream_video');
   });
 
   it('Instagram hesabı yoksa Instagram düşer, Audience Network yine yok', () => {
@@ -88,6 +106,10 @@ describe('S1/B9 — Meta video yerleşimi: Advantage+ ama Audience Network HARİ
     const h = kararTablosu('VIDEO', { meta: true, google: false }, 'MAKS_TIKLAMA', true, plan).find((x) => x.kod === 'NEREDE')!.meta!;
     expect(h.deger).toBe('Instagram ve Facebook, Audience Network hariç yerleşimlerde');
     expect(h.not).toContain('Audience Network');
+    // K1: açık konumlar GÖVDEDEN türüyor; gövdenin cümlesiyle birebir.
+    expect(h.not).toContain(`Açık: ${metaKonumCumlesi(bul(govde().govdeler, 'reklam_seti').targeting)}`);
+    expect(h.not).toContain('video arası');
+    expect(h.not).not.toMatch(/Açık:[^·]*sağ sütun/);
   });
 
   it('N-21: video kampanyasının Advantage+ durumu bilgi olarak okunur ve elle yerleşim cümlesi eklenir', () => {

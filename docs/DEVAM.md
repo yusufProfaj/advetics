@@ -34,9 +34,13 @@ kanallar + video kimliği (B13); kare logo TY video/görselde (B17); TRY
 dışında G-ASGARI-BILINMIYOR (B19); YouTube videosu seçim anında okunuyor,
 gizli/yerleştirilemez ENGEL, kanalsız yapıştırma yolu, G-KANAL kalktı
 (B15/B16, `GET rehber/youtube-video`, kota bekçisi `kaynak:youtube:veri_api`).
-DERLEYICI 1.10.0, Google g-1.5.0. **Ölç (validate_only / canlı):**
-THRUPLAY + elle yerleşimde sağ sütun, arama, Marketplace kabulü; Messenger
-ve `instream_video` (bugün kapalı); düğmesiz `video_data` kabulü ve
+DERLEYICI 1.11.0 (Ajan 4 K1), Google g-1.5.0. **Video yerleşim listesi
+belgeden** (Meta placement-targeting): FB akış, video akışı, video arası,
+hikâye, Reels, Marketplace, profil akışı; IG akış, hikâye, Keşfet, Keşfet
+ana sayfa, Reels, profil akışı; sağ sütun, arama, Messenger, Threads,
+Audience Network kapalı; validate_only provası ile ölçülecek.
+**Ölç (validate_only / canlı):** THRUPLAY + bu konum listesinin kabulü;
+düğmesiz `video_data` kabulü ve
 Meta'nın geri okumada kendiliğinden düğme ekleyip eklemediği;
 `advantage_state_info` video kampanyasında ne dönüyor; Demand Gen `maps`
 bayrağının video grubunda kabulü; `demand_gen_video_responsive_ad.videos`

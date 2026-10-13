@@ -142,6 +142,12 @@ export interface NiyetYerlesimKisiti {
   gruplar: readonly YerlesimGrubu[];
   /** Açık grupların içinden çıkarılan Meta konumları (`instagram_positions`: Keşfet). */
   cikarilanKonumlar: Readonly<Record<string, readonly string[]>>;
+  /**
+   * Açık grupların konumlarına EKLENEN konumlar (grup başına). Yalnız video
+   * izlenme kullanıyor: grup haritası banner oranlarına göre kurulu ve
+   * videonun belgelenen konumlarının bir kısmı hiçbir grupta yok.
+   */
+  ekKonumlar?: Partial<Record<YerlesimGrubu, Readonly<Record<string, readonly string[]>>>>;
   /** Ekranda ve derleyicinin "kapattıklarımız" satırında. */
   aciklama: string;
   /**
@@ -187,22 +193,30 @@ const TELEFON_YERLESIM_CIKARILAN: Readonly<Record<string, readonly string[]>> = 
 const DAR_YERLESIM_BOS = '4:5, 1:1 ya da 9:16 görsel ekle.';
 
 /*
- * VİDEO İZLENME (yönetici kararı S1, VIDEO denetimi B9): "Advantage+ ama
- * Audience Network HARİÇ". Advantage+ yerleşim yalnız yerleşim alanlarının
- * YOKLUĞUYLA tanımlı (`YASAK_YERLESIM`), yani tek bir ağı çıkarmak ELLE
- * yerleşim demek. Biçim, canlıda kurulmuş elle yerleşimin AYNISI
- * (`publisher_platforms` + açık konum listesi; banner seti yayını 3efebf54
- * ve TELEFON): konumsuz yalnız `publisher_platforms` göndermek bu depoda
- * hiç ölçülmedi ve Meta'nın onu "bütün konumlar" mı yoksa eksik tanım mı
- * saydığı bilinmiyor. Gruplar BİLİNEN dördün tamamı; Audience Network
- * grubu zaten yok. Messenger ve Facebook video arası (`instream_video`)
- * grup haritasında olmadığı için açılmıyor: bu konumların THRUPLAY ile
- * kabulü ölçülmedi (DEVAM.md ölçüm listesi) ve tahminle konum değeri
- * yazmak Meta'nın kabul edip yok saymasına açık. Sağ sütun ve aramada
- * videonun kabulü de ölçülmedi: reddederse prova (validate_only) YÜKSEK
- * SESLE söyler, sessiz değil.
+ * VİDEO İZLENME (yönetici kararı S1, VIDEO denetimi B9; Ajan 4 bulgusu K1):
+ * "Advantage+ ama YALNIZ Audience Network hariç". Advantage+ yerleşim yalnız
+ * yerleşim alanlarının YOKLUĞUYLA tanımlı (`YASAK_YERLESIM`), yani tek bir
+ * ağı çıkarmak ELLE yerleşim demek. Biçim canlıda kurulmuş elle yerleşimin
+ * AYNISI (`publisher_platforms` + açık konum listesi).
+ *
+ * LİSTE META'NIN PLACEMENT-TARGETING BELGESİNDEN (ölçülmedi, validate_only
+ * provası ile ölçülecek). İlk sürüm yalnız banner gruplarının konumlarını
+ * açıyordu ve Facebook video arasını (`instream_video`, ThruPlay için en
+ * değerli envanter), video akışını ve profil akışlarını sessizce
+ * kapatıyordu: "yalnız Audience Network hariç" sözü tutmuyordu. Gruplara
+ * EK KONUM olarak giriyorlar (`ekKonumlar`): yeni grup açmak oran
+ * mimarisini (banner seti kuralları) video için anlamsızca büyütürdü; video
+ * tek dosya, oran kararı yok (16:9 video Reels'e Advantage+'ta da gidiyordu,
+ * kırpma uyarısı giriş anında, `medyaKontrol`).
+ *
+ * KAPALI ve gerekçesi: sağ sütun ve arama (belge video/etkileşim için
+ * desteklemeyebileceğini söylüyor), Messenger (belge VIDEO_VIEWS için
+ * listelemiyor), Threads (ölçülmedi), Audience Network (karar).
  */
-const VIDEO_YERLESIM_GRUPLARI: readonly YerlesimGrubu[] = ['akis', 'yan', 'pazar', 'hikaye'];
+const VIDEO_YERLESIM_GRUPLARI: readonly YerlesimGrubu[] = ['akis', 'pazar', 'hikaye'];
+const VIDEO_EK_KONUMLAR: Partial<Record<YerlesimGrubu, Readonly<Record<string, readonly string[]>>>> = {
+  akis: { facebook_positions: ['video_feeds', 'instream_video', 'profile_feed'], instagram_positions: ['explore_home', 'profile_feed'] },
+};
 
 const DAR_YERLESIM_KISITLARI: Partial<Record<NiyetKodu, NiyetYerlesimKisiti>> = {
   FORM: {
@@ -229,9 +243,9 @@ const DAR_YERLESIM_KISITLARI: Partial<Record<NiyetKodu, NiyetYerlesimKisiti>> = 
   VIDEO_IZLENME: {
     gruplar: VIDEO_YERLESIM_GRUPLARI,
     cikarilanKonumlar: {},
+    ekKonumlar: VIDEO_EK_KONUMLAR,
     otomatikteDe: true,
-    aciklama:
-      'Video reklamı Facebook ve Instagram akışı, Keşfet, hikâye, Reels, Marketplace, sağ sütun ve aramada gösterilir; Audience Network, Messenger ve Facebook video arası kapalı.',
+    aciklama: 'Video reklamında Audience Network, Messenger, Threads, sağ sütun ve arama kapalı.',
     bosMesaji: 'Video reklamı için yerleşim kalmadı.',
     ekranMetni: 'Audience Network hariç yerleşimlerde',
   },
@@ -252,7 +266,47 @@ export function grupMetaKonumlari(g: YerlesimGrubu, niyet?: NiyetKodu | null): R
     const cikan = kisit?.cikarilanKonumlar[alan] ?? [];
     out[alan] = degerler.filter((x) => !cikan.includes(x));
   }
+  for (const [alan, ek] of Object.entries(kisit?.ekKonumlar?.[g] ?? {})) {
+    out[alan] = [...new Set([...(out[alan] ?? []), ...ek])];
+  }
   return out;
+}
+
+/**
+ * META KONUMLARININ EKRAN ADLARI — Kontrol'ün "Nerede" hücresi gövdenin
+ * konumlarından bu tabloyla TÜRETİLİYOR (K1). Elle yazılmış cümle ilk
+ * sürümde gövdeden ayrışmıştı. Tabloda olmayan konum ham adıyla görünür:
+ * sessizce atılmaz.
+ */
+export const META_KONUM_ETIKETI: Record<string, Record<string, string>> = {
+  facebook_positions: {
+    feed: 'akış',
+    video_feeds: 'video akışı',
+    instream_video: 'video arası',
+    profile_feed: 'profil akışı',
+    marketplace: 'Marketplace',
+    story: 'hikâye',
+    facebook_reels: 'Reels',
+    right_hand_column: 'sağ sütun',
+    search: 'arama',
+  },
+  instagram_positions: {
+    stream: 'akış',
+    story: 'hikâye',
+    explore: 'Keşfet',
+    explore_home: 'Keşfet ana sayfa',
+    reels: 'Reels',
+    profile_feed: 'profil akışı',
+  },
+};
+
+/** Elle yerleşim gövdesinden "Facebook: …; Instagram: …" cümlesi. */
+export function metaKonumCumlesi(t: Readonly<Record<string, readonly string[] | undefined>>): string {
+  const parca = (alan: string, ad: string) => {
+    const k = t[alan];
+    return k?.length ? `${ad}: ${k.map((x) => META_KONUM_ETIKETI[alan]?.[x] ?? x).join(', ')}` : null;
+  };
+  return [parca('facebook_positions', 'Facebook'), parca('instagram_positions', 'Instagram')].filter(Boolean).join('; ');
 }
 
 export interface SetPlani {

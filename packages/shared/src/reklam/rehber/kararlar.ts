@@ -12,7 +12,7 @@
  * "Görüntülü Reklam Ağı kapalı" deyip gövde `targetContentNetwork: true`
  * gönderirse ekran yalan söyler — bu depoda en pahalı hata türü.
  */
-import { YERLESIM_GRUPLARI, niyetYerlesimKisiti, type SetPlani } from '../banner-seti';
+import { YERLESIM_GRUPLARI, metaKonumCumlesi, niyetYerlesimKisiti, type SetPlani } from '../banner-seti';
 import { UZUN_FORM_SORU_SAYISI } from '../../schemas/form.schema';
 import type { SeciliFormHali } from './hazirlik';
 import { REHBER_AMACLARI, type RehberAmacKodu, type RehberPlatformu } from './amaclar';
@@ -23,7 +23,7 @@ import { GOOGLE_OGE_ADLARI, type GoogleOgeDurumu } from './google-ogeler';
 import { KARSILAMA_SETTE_YOK_CUMLESI, karsilamaCoz, type WhatsappKarsilama } from '../meta/karsilama';
 import { calismaSaatleriOzeti, type CalismaSaatleri } from '../calisma-saatleri';
 import { DEMAND_GEN_VIDEO_KANALLARI, kanalCumlesi } from './google-kanallar';
-import { VIDEO_DUGMESIZ_CUMLESI, videoDugmesiVar } from '../meta/derle';
+import { VIDEO_DUGMESIZ_CUMLESI, metaElleYerlesim, videoDugmesiVar } from '../meta/derle';
 
 export interface KararHucresi {
   deger: string;
@@ -240,7 +240,10 @@ export function kararTablosu(
     // Niyetin kapattıkları AYRI cümleyle (derleyicinin "kapattıklarımız"ıyla aynı metin).
     // `otomatikteDe` niyetinde (video) kapanan GRUP yok ama kapanan AĞ var
     // (Audience Network): derleyicinin "kapattıklarımız"ıyla aynı koşul.
-    (!otomatik && (yerlesim!.niyetKapanan.length || niyetKisiti?.otomatikteDe) ? `${niyetKisiti?.aciklama ?? ''} · ` : '');
+    (!otomatik && (yerlesim!.niyetKapanan.length || niyetKisiti?.otomatikteDe) ? `${niyetKisiti?.aciklama ?? ''} · ` : '') +
+    // VİDEO (K1): açık konumlar DERLEYİCİNİN ÇIKTISINDAN (`metaElleYerlesim`);
+    // elle yazılmış liste ilk sürümde gövdeden ayrışmıştı.
+    (!otomatik && REHBER_AMACLARI[amac].meta.niyet === 'VIDEO_IZLENME' ? `Açık: ${metaKonumCumlesi(metaElleYerlesim(yerlesim!, instagramVar, 'VIDEO_IZLENME'))} · ` : '');
   const t = REHBER_AMACLARI[amac];
   const g = acik.google && t.google.kurgu !== null ? t.google : null;
   const ty = g?.kurgu === 'TALEP_YARATMA_VIDEO' || g?.kurgu === 'TALEP_YARATMA_GORSEL';
