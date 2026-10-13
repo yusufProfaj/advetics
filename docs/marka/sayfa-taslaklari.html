@@ -352,6 +352,25 @@ textarea.girdi{height:auto;padding:10px 12px;resize:vertical;min-height:84px}
 .balon{max-width:80%;padding:10px 14px;border-radius:14px;background:var(--dolgu);font-size:13px}
 .balon.ben{margin-left:auto;background:var(--metin);color:var(--bg)}
 
+
+/* ── SAYFA İÇİ YAN MENÜ (kullanıcı kararı 2026-10-14: alt bölümler üstte sekme değil, solda dikey liste) ── */
+.sayfa.yanli{grid-template-columns:212px minmax(0,1fr);column-gap:28px}
+.sayfa.yanli > *{grid-column:2}
+.sayfa.yanli > .sb,.sayfa.yanli > .korunur{grid-column:1/-1}
+.sayfa.yanli > .sekmeler{grid-column:1;grid-row:2 / span 30;align-self:start;position:sticky;top:76px;flex-direction:column;border-bottom:0;gap:2px;overflow:visible;padding-right:4px;border-right:1px solid var(--cizgi)}
+.sayfa.yanli > .sekmeler .sekme{border-bottom:0;margin:0;border-radius:10px;justify-content:space-between;padding:10px 12px;font-weight:600;color:var(--ikincil);position:relative;white-space:normal;text-align:left}
+.sayfa.yanli > .sekmeler .sekme:hover{background:var(--dolgu);color:var(--metin)}
+.sayfa.yanli > .sekmeler .sekme[aria-selected="true"]{background:var(--dolgu);color:var(--metin);font-weight:700}
+.sayfa.yanli > .sekmeler .sekme[aria-selected="true"]::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:3px;background:var(--kirmizi)}
+@media (max-width:900px){
+  .sayfa.yanli{grid-template-columns:minmax(0,1fr)}
+  .sayfa.yanli > *{grid-column:1}
+  .sayfa.yanli > .sekmeler{grid-row:auto;position:static;flex-direction:row;overflow-x:auto;border-right:0;border-bottom:1px solid var(--cizgi);padding-right:0}
+  .sayfa.yanli > .sekmeler .sekme{white-space:nowrap;border-radius:999px}
+  .sayfa.yanli > .sekmeler .sekme[aria-selected="true"]::before{display:none}
+  .sayfa.yanli > .sekmeler .sekme[aria-selected="true"]{background:var(--metin);color:var(--bg)}
+}
+
 /* ── MOBİL ── */
 @media (max-width:900px){
   .kabuk{grid-template-columns:minmax(0,1fr)}
@@ -535,6 +554,7 @@ textarea.girdi{height:auto;padding:10px 12px;resize:vertical;min-height:84px}
 
 <!-- ═════════ AKILLI BOOST ═════════ -->
 <section class="sayfa" data-sayfa="boost" hidden tabindex="-1">
+  <div class="korunur"><svg class="i"><use href="#tik"/></svg><span><b>Mevcut tasarım korunur.</b> Akıllı Boost bugünkü düzeniyle kalır (kullanıcı kararı); yalnız renk ve düğme görünüşü yeni dile uyar. Aşağısı yalnız fikir.</span></div>
   <div class="sb"><div><span class="ust-y">Oluştur</span><h1>Akıllı Boost</h1><p>Instagram ve YouTube gönderilerin kurala göre seçilir; onayladığın kart ön ayarla yayınlanır.</p></div>
     <div class="eylem"><button class="dg" type="button">Geçmiş içerikleri getir</button><button class="dg ana" type="button" data-yp="onayar">Boost ön ayarı</button></div></div>
   <div class="serit"><div><b>Instagram: bildirim aboneliği çalışmıyor</b><span>Meta: (#200) Requires pages_manage_metadata permission. Yeni gönderiler saatlik taramayla gelir.</span></div><button class="dg kucuk koyu" type="button" data-git="ayarlar">Bağlantıyı yenile</button></div>
@@ -1207,6 +1227,7 @@ Eylül raporunu ekte bulabilirsiniz. Bu ay 318 potansiyel müşteri geldi.</text
   document.getElementById('leadIcerik').addEventListener('click',function(e){var tr=e.target.closest('[data-lead]');if(tr)leadAc(tr);});
   document.getElementById('leadIcerik').addEventListener('keydown',function(e){var tr=e.target.closest('[data-lead]');if(tr&&(e.key==='Enter'||e.key===' ')){e.preventDefault();leadAc(tr);}});
 
+  document.querySelectorAll('section.sayfa').forEach(function(s){if(s.dataset.sayfa!=='boost'&&s.querySelector(':scope > .sekmeler'))s.classList.add('yanli');});
   ryCiz(); leadCiz('sonuc');
   var bas=(location.hash||'').slice(1); git(document.querySelector('[data-sayfa="'+bas+'"]')?bas:'yonetici');
 })();
