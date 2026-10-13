@@ -630,9 +630,11 @@ describe('kaynak: sözleşmeye bağlılık', () => {
     expect(nerede).toContain('disabled={!d.gorunur}');
   });
 
-  it('KRİTİK: onay penceresi koşulsuz çiziliyor, görünürlük sınıfla', () => {
+  it('KRİTİK: onay penceresi koşulsuz çiziliyor, görünürlük `acik` ile (ortak Pencere)', () => {
     const k = yorumsuz('adim-kontrol.tsx');
-    expect(k).toContain("className={`${s.perde} ${acik ? s.acik : ''}`}");
+    expect(k).toMatch(/<Pencere\s+acik=\{acik\}/);
+    // Kurulum sürerken Esc ya da perde pencereyi kapatmıyor.
+    expect(k).toContain('onKapat={() => !suruyor && kapat()}');
     expect(k).not.toMatch(/if \(!acik\) return null/);
     expect(yorumsuz('rehber-ekrani.tsx')).toMatch(/<OnayPenceresi\s/);
     expect(yorumsuz('rehber-ekrani.tsx')).not.toMatch(/onayAcik\s*&&\s*<OnayPenceresi/);
@@ -685,6 +687,20 @@ describe('kaynak: sözleşmeye bağlılık', () => {
     expect(oner).toContain('setOneri(metinOnerisiHali(r))');
     expect(oner).not.toContain("yaz(b, 'metin'");
     expect(r).toMatch(/function metinYaz\(yeni: Metin\) \{\s*yaz\(b, 'metin', yeni\);/);
+  });
+});
+
+describe('kaynak: ortak sihirbaz dili (2026-10-14)', () => {
+  it('KRİTİK: ray, soru ve alt çubuk ortak `ui/sihirbaz` parçaları; adım geçişi Özet satırlarında', () => {
+    const e = yorumsuz('rehber-ekrani.tsx');
+    expect(e).toContain('<IlerlemeRayi parcalar={rayParcalari}');
+    expect(e).not.toMatch(/s\.ray\b|s\.mobilIlerleme/);
+    // Sol rayın tıklama işi Özet'te: her adımın satırı kendi adımını açıyor.
+    expect(e).toMatch(/REHBER_ADIMLARI\.map\(\(x\) => \{[\s\S]*?onClick=\{\(\) => git\(x\.no\)\}/);
+    const o = yorumsuz('adim-ortak.tsx');
+    expect(o).toContain("from '@/components/ui/sihirbaz'");
+    expect(o).toContain('<OrtakAltCubuk');
+    expect(o).toContain('<OrtakSoru');
   });
 });
 

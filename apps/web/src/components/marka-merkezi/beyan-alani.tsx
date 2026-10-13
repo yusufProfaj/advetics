@@ -10,6 +10,7 @@ import {
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { PANEL_KAPILARI } from '@/lib/panel-adresleri';
 import { Dugme } from '@/components/ui/dugme';
+import { Girdi } from '@/components/ui/alan';
 import { adimBeyanlari, type BeyanSecenegi } from '@/components/kurulum/sihirbaz-akisi';
 import { beyanDegistir } from './kurulum-listesi-mantik';
 import type { KurulumListesiKodu } from '@/lib/panel-adresleri';
@@ -55,7 +56,7 @@ export function BeyanAlani({
   if (secenekler.length === 0) return null;
 
   return (
-    <section id={`beyan-${adim}`} aria-labelledby={baslikId} className="scroll-mt-24 rounded-lg border border-dashed border-line px-3 py-2.5">
+    <section id={`beyan-${adim}`} aria-labelledby={baslikId} className="scroll-mt-24 rounded-alan border border-dashed border-line px-3 py-2.5">
       <p id={baslikId} className="text-xs font-semibold text-ink">
         Bunu kullanmıyorum
       </p>
@@ -187,15 +188,15 @@ function BeyanSatiri({
           ))}
       </div>
       <div id={alanId} className={`mt-2 flex flex-wrap items-center gap-2 ${acik && !var_ ? '' : 'hidden'}`}>
-        <input
+        <Girdi
           value={gerekce}
           onChange={(e) => setGerekce(e.target.value)}
           maxLength={300}
           placeholder="Gerekçe (isteğe bağlı)"
           aria-label="Gerekçe"
-          className="min-w-0 flex-1 rounded-lg border border-line bg-surface px-2 py-1.5 text-xs outline-none focus:border-brand"
+          className="!h-8 !w-auto min-w-0 flex-1"
         />
-        <Dugme boyut="kucuk" bekliyor={bekliyor} onClick={() => void yaz(true)}>
+        <Dugme ton="koyu" boyut="kucuk" bekliyor={bekliyor} onClick={() => void yaz(true)}>
           Kapsam dışı bırak
         </Dugme>
       </div>

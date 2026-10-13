@@ -14,12 +14,13 @@ import {
 import type { AktarimOnizlemesi, StratejiDetayi } from '@advetics/shared';
 import { apiFetch } from '@/lib/api';
 import { baglanti } from '@/lib/baglanti';
-import { dugmeSinifi } from '@/components/ui/dugme';
+import { Dugme, dugmeSinifi } from '@/components/ui/dugme';
+import { Kart } from '@/components/ui/kart';
+import { AltCubuk, Soru } from '@/components/ui/sihirbaz';
 import { okumaHatasi } from '../hesap';
 import { kurulabilirMi, kurulumSirasi, kurulumSatiri, siradakiKalem } from './akis';
-import { AltCubuk, NotKutusu, SoruBasligi } from './akis-cerceve';
 import { PLATFORM_ADI, amacAdi, konumOzeti, payMetni, tarihAraligi, yasMetni } from './hesap';
-import { Bildirim, Rozet, yaz } from './ortak';
+import { Bildirim, Etiket, yaz } from './ortak';
 import { Tutar } from './tutar';
 
 type Okuma<T> = { tur: 'veri'; v: T } | { tur: 'hata'; mesaj: string };
@@ -96,16 +97,17 @@ export function KampanyaKurulumu({ clientId, ilkDetay, ilkKalem, onizleme, izinl
     const bekleyen = kalemler.filter((k) => k.durum.tur !== 'aktarildi');
     return (
       <div className="bolum-gecis">
-        <SoruBasligi
+        <Soru
           ust="Kurulum tamam"
           soru={`${acilan.length} kampanya AdvCampaign'de hazır`}
           aciklama="Hiçbiri yayında değil, para harcanmadı. Her birini AdvCampaign'de son kez kontrol edip yayına al."
         />
         {bekleyen.length > 0 && (
-          <NotKutusu>
-            {bekleyen.length} kampanya açılmadı:{' '}
-            {bekleyen.map((k) => `${amacAdi(k.amac)} (${kurulumSatiri(k, karar(k.id)?.karar ?? null).neden ?? 'atlandı'})`).join(' · ')}
-          </NotKutusu>
+          <div className="mb-4">
+            <Bildirim baslik={`${bekleyen.length} kampanya açılmadı.`}>
+              {bekleyen.map((k) => `${amacAdi(k.amac)} (${kurulumSatiri(k, karar(k.id)?.karar ?? null).neden ?? 'atlandı'})`).join(' · ')}
+            </Bildirim>
+          </div>
         )}
         <div className="flex flex-wrap gap-2.5">
           <Link href={baglanti('/reklam', { musteri: clientId })} className={dugmeSinifi('birincil')}>
@@ -115,9 +117,9 @@ export function KampanyaKurulumu({ clientId, ilkDetay, ilkKalem, onizleme, izinl
             Rapora dön
           </Link>
           {bekleyen.length > 0 && (
-            <button type="button" className={dugmeSinifi('sade')} onClick={() => setAtlanan(new Set())}>
+            <Dugme ton="hayalet" onClick={() => setAtlanan(new Set())}>
               Atlananlara dön
-            </button>
+            </Dugme>
           )}
         </div>
       </div>
@@ -161,7 +163,7 @@ export function KampanyaKurulumu({ clientId, ilkDetay, ilkKalem, onizleme, izinl
   return (
     <div>
       <div key={k.id} className="bolum-gecis">
-        <SoruBasligi ust={`Kampanya ${i + 1} / ${kalemler.length}`} soru={amacAdi(k.amac)} aciklama="Bu kampanya AdvCampaign'de dolu bir taslak olarak açılacak. Aşağıdakiler plandan gelir; gerisini AdvCampaign soracak." />
+        <Soru ust={`Kampanya ${i + 1} / ${kalemler.length}`} soru={amacAdi(k.amac)} aciklama="Bu kampanya AdvCampaign'de dolu bir taslak olarak açılacak. Aşağıdakiler plandan gelir; gerisini AdvCampaign soracak." />
       </div>
       <div className="grid items-start gap-6 lg:grid-cols-[280px_1fr]">
         <ol className="m-0 list-none overflow-hidden rounded-[14px] border border-line p-0">
@@ -169,7 +171,7 @@ export function KampanyaKurulumu({ clientId, ilkDetay, ilkKalem, onizleme, izinl
             const kk = kalemler.find((y) => y.id === x.id)!;
             const bek = !x.acildi && atlanan.has(x.id);
             return (
-              <li key={x.id} className={`grid grid-cols-[26px_1fr] gap-2.5 border-t border-line p-3.5 text-sm first:border-t-0 ${x.hal === 'simdi' ? 'bg-brand/[0.06] shadow-[inset_3px_0_0_var(--color-brand)]' : ''}`}>
+              <li key={x.id} className={`grid grid-cols-[26px_1fr] gap-2.5 border-t border-line p-3.5 text-sm first:border-t-0 ${x.hal === 'simdi' ? 'bg-vurgu shadow-[inset_3px_0_0_var(--color-brand)]' : ''}`}>
                 <span aria-hidden className={`mt-px grid h-[22px] w-[22px] place-items-center rounded-full border-2 ${x.acildi ? 'border-ink bg-ink text-surface' : 'border-ink/25'}`}>
                   {x.acildi && (
                     <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -200,7 +202,7 @@ export function KampanyaKurulumu({ clientId, ilkDetay, ilkKalem, onizleme, izinl
           })}
         </ol>
 
-        <div className="rounded-2xl border border-line bg-surface p-6">
+        <Kart as="div">
           <dl className="m-0 grid grid-cols-[110px_1fr] text-sm sm:grid-cols-[150px_1fr_auto]">
             <Esleme ad="Hedef" deger={amacAdi(k.amac)} kaynak="Plandan" />
             <Esleme ad="Platform" deger={payMetni(k)} kaynak="Plandan" />
@@ -235,7 +237,7 @@ export function KampanyaKurulumu({ clientId, ilkDetay, ilkKalem, onizleme, izinl
             </div>
           )}
           {!kurabilir && <p className="m-0 mt-3 text-[13px] text-ink-muted">Taslak açmak reklam oluşturma yetkisi ister; bu hesapta yok.</p>}
-        </div>
+        </Kart>
       </div>
 
       <AltCubuk
@@ -243,9 +245,9 @@ export function KampanyaKurulumu({ clientId, ilkDetay, ilkKalem, onizleme, izinl
         not={`${i + 1} / ${kalemler.length}`}
         ek={
           s.hal !== 'hazir' || sonuc?.mesaj ? (
-            <button type="button" className={dugmeSinifi('ikincil')} onClick={atla}>
+            <Dugme ton="ikincil" onClick={atla}>
               Bu kampanyayı atla
-            </button>
+            </Dugme>
           ) : undefined
         }
         devam={s.hal === 'hazir' && kurabilir ? { etiket: 'Taslağı aç ve sonrakine geç', onClick: () => void ac(), bekliyor: suruyor } : null}
@@ -264,7 +266,7 @@ function Esleme({ ad, deger, kaynak }: { ad: string; deger: ReactNode; kaynak: s
     <>
       <dt className="border-b border-line py-2.5 text-ink-muted">{ad}</dt>
       <dd className="m-0 border-b border-line py-2.5 text-ink">{deger}</dd>
-      <dd className="m-0 hidden items-center justify-end border-b border-line py-2.5 sm:flex">{kaynak && <Rozet>{kaynak}</Rozet>}</dd>
+      <dd className="m-0 hidden items-center justify-end border-b border-line py-2.5 sm:flex">{kaynak && <Etiket>{kaynak}</Etiket>}</dd>
     </>
   );
 }

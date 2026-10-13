@@ -44,7 +44,7 @@ export function AdimAmac({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => void
 
   return (
     <>
-      <Soru baslik="Bu reklamdan ne bekliyorsun?">
+      <Soru adim={1} baslik="Bu reklamdan ne bekliyorsun?">
         Birini seç. Meta ve Google&apos;da en uygun kurulumu biz seçeriz ve sana gösteririz.
       </Soru>
       {kodlar.length === 0 ? (
@@ -109,7 +109,7 @@ export function AdimNerede({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => vo
   if (!amac) {
     return (
       <>
-        <Soru baslik="Reklam nerede çıksın?">Önce bir amaç seç; platformlar amaca göre açılıyor.</Soru>
+        <Soru adim={2} baslik="Reklam nerede çıksın?">Önce bir amaç seç; platformlar amaca göre açılıyor.</Soru>
         <AltCubuk git={git} adim={2} />
       </>
     );
@@ -201,7 +201,7 @@ export function AdimNerede({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => vo
 
   return (
     <>
-      <Soru baslik="Reklam nerede çıksın?">İkisi de hazırsa ikisinde birden açıyoruz. Kapatmak istediğini kapatabilirsin.</Soru>
+      <Soru adim={2} baslik="Reklam nerede çıksın?">İkisi de hazırsa ikisinde birden açıyoruz. Kapatmak istediğini kapatabilirsin.</Soru>
       <div className={s.neden}>
         <Ikon d={IKON.bilgi} />
         <span>{platformNedeni(amac, b.h)}</span>

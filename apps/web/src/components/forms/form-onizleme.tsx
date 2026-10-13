@@ -17,12 +17,12 @@ import { onizlemeEkranlari, type OnizlemeEkrani } from '@/lib/form-onizleme';
 export function FormOnizleme({ onizleme, baslik = 'Kişinin göreceği form' }: { onizleme: FormOnizlemesi; baslik?: string }) {
   const ekranlar = onizlemeEkranlari(onizleme);
   return (
-    <div className="rounded-xl border border-line bg-surface p-3">
-      <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-ink-muted">{baslik}</p>
+    <div className="rounded-kart border border-line bg-surface p-3">
+      <p className="mb-2 text-12 font-semibold text-ink-muted">{baslik}</p>
       <ol className="space-y-2">
         {ekranlar.map((e, i) => (
-          <li key={e.tur} className="rounded-lg bg-surface-sunken p-3">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">
+          <li key={e.tur} className="rounded-alan bg-surface-sunken p-3">
+            <p className="text-12 font-semibold text-ink-muted">
               {i + 1}. {e.ad}
             </p>
             {e.hal === 'var' ? <EkranIcerigi ekran={e} o={onizleme} /> : <p className="mt-1 text-xs text-ink-muted">{e.not}</p>}
@@ -48,7 +48,7 @@ function EkranIcerigi({ ekran, o }: { ekran: OnizlemeEkrani; o: FormOnizlemesi }
             ))}
           </ul>
         )}
-        {o.giris.dugme && <Dugme>{o.giris.dugme}</Dugme>}
+        {o.giris.dugme && <TaklitDugme>{o.giris.dugme}</TaklitDugme>}
       </div>
     );
   }
@@ -88,7 +88,7 @@ function EkranIcerigi({ ekran, o }: { ekran: OnizlemeEkrani; o: FormOnizlemesi }
         )}
         <p className="text-xs text-ink">{o.gizlilik.metin ?? 'Gizlilik politikası'}</p>
         <p className="break-all text-[11px] text-ink-muted">{o.gizlilik.adres}</p>
-        <Dugme>Gönder</Dugme>
+        <TaklitDugme>Gönder</TaklitDugme>
       </div>
     );
   }
@@ -97,7 +97,7 @@ function EkranIcerigi({ ekran, o }: { ekran: OnizlemeEkrani; o: FormOnizlemesi }
       <div className="mt-1">
         {o.tesekkur.baslik && <p className="text-sm font-semibold text-ink">{o.tesekkur.baslik}</p>}
         {o.tesekkur.metin && <p className="text-xs text-ink-muted">{o.tesekkur.metin}</p>}
-        {o.tesekkur.dugme && <Dugme ikincil>{o.tesekkur.dugme}</Dugme>}
+        {o.tesekkur.dugme && <TaklitDugme ikincil>{o.tesekkur.dugme}</TaklitDugme>}
         {o.tesekkur.adres && <p className="mt-1 break-all text-[11px] text-ink-muted">{o.tesekkur.adres}</p>}
       </div>
     );
@@ -105,11 +105,17 @@ function EkranIcerigi({ ekran, o }: { ekran: OnizlemeEkrani; o: FormOnizlemesi }
   return null;
 }
 
-function Dugme({ children, ikincil = false }: { children: React.ReactNode; ikincil?: boolean }) {
+/*
+ * META FORMUNUN DÜĞMESİNİN TAKLİDİ, panelin düğmesi DEĞİL: tıklanmıyor,
+ * yalnız kişinin göreceği akışı gösteriyor. O yüzden `Dugme` değil düz kutu;
+ * dolu kırmızı da değil, çünkü ekranda tek kırmızı dolu panelin birincil
+ * eylemine ait ve taklit onunla karışırdı.
+ */
+function TaklitDugme({ children, ikincil = false }: { children: React.ReactNode; ikincil?: boolean }) {
   return (
     <div
-      className={`mt-2 rounded-md px-2.5 py-1.5 text-center text-xs font-semibold ${
-        ikincil ? 'border border-line text-ink' : 'bg-brand text-white'
+      className={`mt-2 rounded-alan px-2.5 py-1.5 text-center text-12 font-semibold ${
+        ikincil ? 'border border-line-strong text-ink' : 'bg-ink text-surface'
       }`}
     >
       {children}

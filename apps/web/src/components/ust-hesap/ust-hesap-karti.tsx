@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { ayarlarAdresi } from '@/lib/panel-adresleri';
+import { dugmeSinifi } from '@/components/ui/dugme';
 import { PAKET_SINIRLARI, type ManagerAccountTree } from '@advetics/shared';
 
 /**
@@ -30,9 +31,9 @@ export function UstHesapKarti({ agac, platformSahibi }: { agac: ManagerAccountTr
   const sirketSayisi = agac.organizations.length;
 
   return (
-    <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface px-4 py-3">
+    <section className="flex flex-wrap items-center justify-between gap-3 rounded-kart border border-line bg-surface px-4 py-3">
       <div className="min-w-0">
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-muted">
+        <p className="text-11 font-semibold text-brand-strong">
           Üst hesap
         </p>
         <h2 className="truncate text-base font-semibold text-ink">{agac.name}</h2>
@@ -49,7 +50,7 @@ export function UstHesapKarti({ agac, platformSahibi }: { agac: ManagerAccountTr
       {platformSahibi && (
         <Link
           href={ayarlarAdresi('sirketler', { capa: 'ust-hesaplar' })}
-          className="shrink-0 rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink transition hover:bg-surface-muted"
+          className={dugmeSinifi('ikincil', 'kucuk')}
         >
           Üst hesap ayarları
         </Link>
@@ -65,6 +66,6 @@ export function dolulukMetni(mevcut: number, sinir: number | null, birim: string
 
 function DolulukMetni({ mevcut, sinir, birim }: { mevcut: number; sinir: number | null; birim: string }) {
   const dolu = sinir !== null && mevcut >= sinir;
-  return <span className={dolu ? 'font-medium text-warn-strong' : ''}>{dolulukMetni(mevcut, sinir, birim)}</span>;
+  return <span className={dolu ? 'font-medium text-danger-strong' : ''}>{dolulukMetni(mevcut, sinir, birim)}</span>;
 }
 

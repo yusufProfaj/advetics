@@ -4,6 +4,9 @@ import { useState, useTransition } from 'react';
 import { AliciListesiAlani } from '@/components/alici-listesi-alani';
 import { useRouter } from 'next/navigation';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { Dugme } from '@/components/ui/dugme';
+import { Girdi, MetinAlani } from '@/components/ui/alan';
+import { Serit } from '@/components/ui/hal';
 import { KOORDINAT_BICIM_MESAJI, koordinatCoz, koordinatYaz } from '@advetics/shared';
 
 /**
@@ -177,9 +180,9 @@ export function MusteriBilgiFormu({
         {ALANLAR.map((a) => (
           <label
             key={a.anahtar}
-            className={`block text-xs ${a.tur === 'uzun' ? 'sm:col-span-2' : ''}`}
+            className={`block ${a.tur === 'uzun' ? 'sm:col-span-2' : ''}`}
           >
-            <span className="text-ink-muted">{a.etiket}</span>
+            <span className="mb-1.5 block text-13 font-semibold text-ink">{a.etiket}</span>
             {a.tur === 'alicilar' ? (
               <AliciListesiAlani
                 etiket=""
@@ -190,18 +193,16 @@ export function MusteriBilgiFormu({
             ) : a.tur === 'konum' ? (
               <KonumAlani deger={deger[a.anahtar] as string} degisti={(v) => setDeger({ ...deger, [a.anahtar]: v })} />
             ) : a.tur === 'uzun' ? (
-              <textarea
+              <MetinAlani
                 rows={2}
                 value={deger[a.anahtar] as string}
                 onChange={(e) => setDeger({ ...deger, [a.anahtar]: e.target.value })}
-                className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-xs focus:border-brand focus:outline-none"
               />
             ) : (
-              <input
+              <Girdi
                 type={a.tur}
                 value={deger[a.anahtar] as string}
                 onChange={(e) => setDeger({ ...deger, [a.anahtar]: e.target.value })}
-                className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-xs focus:border-brand focus:outline-none"
               />
             )}
           </label>
@@ -209,25 +210,18 @@ export function MusteriBilgiFormu({
       </div>
 
       {hata && (
-        <p className="rounded-lg bg-danger-soft px-3 py-2 text-xs text-danger">{hata}</p>
+        <Serit ton="hata" baslik="Kaydedilemedi">
+          {hata}
+        </Serit>
       )}
 
       <div className="flex items-center gap-2">
-        <button
-          type="submit"
-          disabled={kaydediliyor || isPending}
-          className="rounded-lg bg-brand px-3 py-1.5 text-xs font-medium text-white transition hover:opacity-90 disabled:opacity-50"
-        >
+        <Dugme type="submit" ton="koyu" boyut="kucuk" disabled={kaydediliyor || isPending}>
           {kaydediliyor ? 'Kaydediliyor…' : 'Kaydet'}
-        </button>
-        <button
-          type="button"
-          onClick={onBitti}
-          disabled={kaydediliyor}
-          className="rounded-lg border border-line px-3 py-1.5 text-xs text-ink-muted transition hover:bg-surface-muted"
-        >
+        </Dugme>
+        <Dugme ton="hayalet" boyut="kucuk" onClick={onBitti} disabled={kaydediliyor}>
           Vazgeç
-        </button>
+        </Dugme>
       </div>
     </form>
   );
@@ -242,23 +236,24 @@ function KonumAlani({ deger, degisti }: { deger: string; degisti: (v: string) =>
   const [hata, setHata] = useState<string | null>(null);
   return (
     <>
-      <input
+      <Girdi
         type="text"
         inputMode="decimal"
         placeholder="38.4237, 27.1428"
         value={deger}
-        aria-invalid={hata ? true : undefined}
+        hatali={Boolean(hata)}
         onChange={(e) => {
           degisti(e.target.value);
           if (hata && koordinatCoz(e.target.value) !== 'gecersiz') setHata(null);
         }}
         onBlur={(e) => setHata(koordinatCoz(e.target.value) === 'gecersiz' ? KOORDINAT_BICIM_MESAJI : null)}
-        className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-xs focus:border-brand focus:outline-none"
       />
       {hata ? (
-        <span className="mt-1 block text-[11px] text-danger">{hata}</span>
+        <span role="alert" className="mt-1 block text-12 text-danger-strong">
+          {hata}
+        </span>
       ) : (
-        <span className="mt-1 block text-[11px] text-ink-muted">
+        <span className="mt-1 block text-12 text-ink-muted">
           &quot;Bölgemde çok kişi görsün&quot; reklamı adresin çevresini buradan alır. Google Haritalar&apos;da adrese sağ tıklayıp ilk satırı kopyala.
         </span>
       )}

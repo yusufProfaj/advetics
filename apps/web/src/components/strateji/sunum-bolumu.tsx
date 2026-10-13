@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { PlanOzeti } from '@advetics/shared';
 import { Dugme } from '@/components/ui/dugme';
 import { Uyari } from '@/components/ui/uyari';
+import { Kart } from '@/components/ui/kart';
 import { donemEtiketi, onayMetni, pdfAdresi, pdfDosyaAdi, sunumNotu, zamanMetni } from './hesap';
 import { BolumBasligi, DurumRozeti } from './ortak';
 
@@ -80,56 +81,58 @@ export function SunumBolumu({ plan, kaydedilmemis }: { plan: PlanOzeti; kaydedil
         aciklama="Planın müşteriye gönderilecek PDF hâli: bütçe dağılımı, kitle ve kreatif, seçili kelimeler."
       />
 
-      <div className="space-y-3 rounded-xl border border-line bg-surface p-4">
-        <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
-          <div>
-            <dt className="text-xs text-ink-muted">Dönem</dt>
-            <dd className="font-semibold text-ink">{donemEtiketi(plan.donem)}</dd>
-          </div>
-          <div>
-            <dt className="text-xs text-ink-muted">Belgenin sürümü</dt>
-            <dd className="font-semibold tabular-nums text-ink">Sürüm {plan.surum}</dd>
-          </div>
-          <div>
-            <dt className="text-xs text-ink-muted">Durum</dt>
-            <dd>
-              <DurumRozeti durum={plan.durum} />
-            </dd>
-          </div>
-        </dl>
-        {onay && <p className="text-sm font-medium text-ok-strong">{onay}</p>}
+      <Kart as="div">
+        <div className="space-y-3">
+          <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
+            <div>
+              <dt className="text-xs text-ink-muted">Dönem</dt>
+              <dd className="font-semibold text-ink">{donemEtiketi(plan.donem)}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-ink-muted">Belgenin sürümü</dt>
+              <dd className="font-semibold tabular-nums text-ink">Sürüm {plan.surum}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-ink-muted">Durum</dt>
+              <dd>
+                <DurumRozeti durum={plan.durum} />
+              </dd>
+            </div>
+          </dl>
+          {onay && <p className="text-sm font-medium text-ink">{onay}</p>}
 
-        <Uyari ton={not.ton}>{not.metin}</Uyari>
-        {kaydedilmemis && (
-          <p className="text-sm text-warn-strong">Kaydedilmemiş değişiklik var. PDF yalnız kaydedilmiş hâli taşır.</p>
-        )}
-
-        <div className="flex flex-wrap items-center gap-3">
-          <Dugme onClick={() => void indir()} bekliyor={hal.tur === 'hazirlaniyor'}>
-            PDF indir
-          </Dugme>
-          {hal.tur === 'hazirlaniyor' && (
-            <span className="text-sm text-ink-muted" role="status">
-              PDF hazırlanıyor…
-            </span>
+          <Uyari ton={not.ton}>{not.metin}</Uyari>
+          {kaydedilmemis && (
+            <p className="text-sm text-warn-strong">Kaydedilmemiş değişiklik var. PDF yalnız kaydedilmiş hâli taşır.</p>
           )}
-          {hal.tur === 'indi' && (
-            <span className="text-sm text-ink-muted" role="status">
-              Sürüm {hal.surum} indirildi · {zamanMetni(hal.zaman)}
-            </span>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <Dugme ton="koyu" onClick={() => void indir()} bekliyor={hal.tur === 'hazirlaniyor'}>
+              PDF indir
+            </Dugme>
+            {hal.tur === 'hazirlaniyor' && (
+              <span className="text-sm text-ink-muted" role="status">
+                PDF hazırlanıyor…
+              </span>
+            )}
+            {hal.tur === 'indi' && (
+              <span className="text-sm text-ink-muted" role="status">
+                Sürüm {hal.surum} indirildi · {zamanMetni(hal.zaman)}
+              </span>
+            )}
+          </div>
+          {hal.tur === 'indi' && hal.surum !== plan.surum && (
+            <Uyari ton="uyari">
+              İndirdiğin PDF sürüm {hal.surum}; plan şimdi sürüm {plan.surum}. Göndermeden önce yeniden indir.
+            </Uyari>
+          )}
+          {hal.tur === 'hata' && (
+            <Uyari ton="tehlike" baslik="PDF indirilemedi.">
+              {hal.mesaj}
+            </Uyari>
           )}
         </div>
-        {hal.tur === 'indi' && hal.surum !== plan.surum && (
-          <Uyari ton="uyari">
-            İndirdiğin PDF sürüm {hal.surum}; plan şimdi sürüm {plan.surum}. Göndermeden önce yeniden indir.
-          </Uyari>
-        )}
-        {hal.tur === 'hata' && (
-          <Uyari ton="tehlike" baslik="PDF indirilemedi.">
-            {hal.mesaj}
-          </Uyari>
-        )}
-      </div>
+      </Kart>
     </section>
   );
 }

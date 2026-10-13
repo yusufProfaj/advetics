@@ -15,7 +15,9 @@ import {
 } from '@advetics/shared';
 import { AliciListesiAlani } from '@/components/alici-listesi-alani';
 import { PaketSecici } from '@/components/ust-hesap/ust-hesap-yonetimi';
-import { Halka } from '@/components/yukleniyor';
+import { Alan as AlanKalibi, Girdi } from '@/components/ui/alan';
+import { Serit } from '@/components/ui/hal';
+import { AltCubuk, HapSecici, IlerlemeRayi, Soru, type RayParcasi } from '@/components/ui/sihirbaz';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { sihirbazAdresi } from '@/lib/panel-adresleri';
 import {
@@ -85,7 +87,7 @@ export function KurulumSihirbazi({
   const adimlar = ADIMLAR[tur];
   const [aktif, setAktif] = useState<AdimKodu>(ilkAdim);
   const aktifSira = adimlar.indexOf(aktif);
-  const baslikRef = useRef<HTMLHeadingElement>(null);
+  const baslikRef = useRef<HTMLDivElement>(null);
 
   // ─── Üst hesap ve şirket ───
   const [ustHesapAdi, setUstHesapAdi] = useState('');
@@ -348,7 +350,7 @@ export function KurulumSihirbazi({
               autoFocus
             />
             {tur === 'sirket' && baglam.ustHesapAdi && (
-              <p className="text-xs text-ink-muted">
+              <p className="text-12 text-ink-muted">
                 <strong className="text-ink">{baglam.ustHesapAdi}</strong> altına açılır.
               </p>
             )}
@@ -406,7 +408,7 @@ export function KurulumSihirbazi({
           />
           <div>
             <AliciListesiAlani etiket="Rapor alıcıları" degerler={alicilar} onChange={setAlicilar} />
-            <p className="mt-1 text-xs text-ink-muted">Raporlar bu adreslere gönderilir.</p>
+            <p className="mt-1 text-12 text-ink-muted">Raporlar bu adreslere gönderilir.</p>
           </div>
           <OzelKategori secili={kategoriler} onChange={setKategoriler} />
         </div>
@@ -419,107 +421,55 @@ export function KurulumSihirbazi({
   const geriAcik =
     sonuc === null && oncekiAdim !== null && geriGidilebilir(tur, oncekiAdim) && !busy;
 
-  return (
-    <div className="rounded-2xl border border-line bg-surface">
-      {/* ═══ RAY ═══ */}
-      <nav
-        aria-label="Kurulum adımları"
-        className="flex items-center gap-1 overflow-x-auto border-b border-line px-3 py-2.5 sm:px-4"
-      >
-        {adimlar.map((a, i) => {
-          const gecti = i < aktifSira;
-          const secili = a === aktif;
-          /*
-           * RAYDAN YALNIZCA GERİYE ve yalnızca bellekteki adımlara gidiliyor.
-           * İleri atlamak doğrulamayı (ad, boost hesabı) atlatırdı; sunucuya
-           * yazılmış bir adıma dönmek ise onu ikinci kez kurdururdu.
-           */
-          const gidilebilir = gecti && sonuc === null && geriGidilebilir(tur, a) && !busy;
-          return (
-            <button
-              key={a}
-              type="button"
-              onClick={() => gidilebilir && adimaGec(a)}
-              disabled={!gidilebilir && !secili}
-              aria-current={secili ? 'step' : undefined}
-              className={`flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
-                secili
-                  ? 'bg-brand text-white'
-                  : gidilebilir
-                    ? 'text-ink-muted hover:bg-surface-sunken hover:text-ink'
-                    : gecti
-                      ? 'text-ink-muted'
-                      : 'text-ink-muted/50'
-              }`}
-            >
-              <span
-                aria-hidden="true"
-                className={`grid h-5 w-5 place-items-center rounded-full text-[10px] font-semibold ${
-                  secili
-                    ? 'bg-white/25 text-white'
-                    : gecti
-                      ? 'bg-ink text-surface'
-                      : 'bg-surface-sunken text-ink-muted'
-                }`}
-              >
-                {/* TAMAMLANMIŞ ADIM RENKLE DEĞİL İŞARETLE de anlatılıyor. */}
-                {gecti ? '✓' : i + 1}
-              </span>
-              <span className="whitespace-nowrap">{ADIM_ADLARI[a]}</span>
-            </button>
-          );
-        })}
-      </nav>
+  /*
+   * RAY ARTIK TIKLANMIYOR, GERİ ALT ÇUBUKTA. Eski ray yalnız GERİYE ve
+   * yalnız bellekteki adımlara izin veriyordu (`geriGidilebilir`); bu
+   * kural üç türün hiçbirinde bir adımdan fazla geri götürmüyor (üst hesap
+   * ve şirket sunucuya yazılmış, geri dönülemez). Yani raydan gidilebilen
+   * tek adım hep bir öncekiydi ve onu alt çubuğun "Geri"si aynı koşulla
+   * taşıyor. İleri atlamak doğrulamayı atlatırdı; o kapı da kapalı kaldı.
+   */
+  const parcalar: RayParcasi[] = adimlar.map((a, i) => ({
+    anahtar: a,
+    etiket: ADIM_ADLARI[a],
+    hal: i < aktifSira ? 'bitti' : a === aktif ? 'simdi' : 'sirada',
+  }));
 
-      {/* ═══ PANEL ═══ */}
-      <div className="px-4 py-5 sm:px-6">
-        <p className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">
-          Adım {aktifSira + 1} / {adimlar.length}
-        </p>
-        <h2
-          ref={baslikRef}
-          tabIndex={-1}
-          className="mt-1 text-lg font-semibold text-ink focus-visible:outline-none"
-        >
-          {adim.baslik}
-        </h2>
-        <p className="mt-1 max-w-prose text-sm text-ink-muted">{adim.alt}</p>
-        <div className="mt-5">{adim.govde}</div>
+  return (
+    // `overflow-clip`, `overflow-hidden` DEĞİL: hidden bir kaydırma kabı
+    // kuruyor ve alt çubuğun `sticky`si sayfaya değil kutuya yapışıp
+    // hiç yapışmamış gibi görünüyordu.
+    <div className="overflow-clip rounded-kart border border-line bg-surface">
+      <div className="border-b border-line px-5 py-4 lg:px-8">
+        <IlerlemeRayi parcalar={parcalar} etiket="Kurulum adımları" />
       </div>
 
-      {/* ═══ EYLEM ÇUBUĞU ═══ */}
-      <div className="border-t border-line px-4 py-3 sm:px-6">
-        {hata && (
-          <p
-            role="alert"
-            className="mb-3 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger-strong ring-1 ring-inset ring-danger/30"
-          >
-            {hata}
-          </p>
-        )}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <button
-            type="button"
-            onClick={() => oncekiAdim && adimaGec(oncekiAdim)}
-            disabled={!geriAcik}
-            className="rounded-lg border border-line px-3.5 py-2 text-sm font-medium text-ink transition hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transition-none"
-          >
-            Geri
-          </button>
-          <div className="flex items-center gap-3">
-            {/* KAPALI DÜĞMENİN SEBEBİ YANINDA YAZILI. */}
-            {adim.eksik && <span className="text-xs text-ink-muted">{adim.eksik}</span>}
-            <button
-              type="button"
-              onClick={adim.eylem}
-              disabled={busy || adim.eksik !== null}
-              className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {busy && <Halka />}
-              {adim.dugme}
-            </button>
-          </div>
+      <div className="px-5 pt-6 lg:px-8">
+        {/* ODAK KABI: `Soru` başlığı ref taşımıyor; ekran okuyucu içeriğin değiştiğini buradan öğrenir. */}
+        <div ref={baslikRef} tabIndex={-1} className="focus-visible:outline-none">
+          <Soru ust={`${aktifSira + 1} / ${adimlar.length} · ${ADIM_ADLARI[aktif]}`} soru={adim.baslik} aciklama={adim.alt} />
         </div>
+        {adim.govde}
+
+        {hata && (
+          <div className="mt-6">
+            <Serit ton="hata" baslik="Bu adım tamamlanamadı">
+              {hata}
+            </Serit>
+          </div>
+        )}
+
+        {/* KAPALI DÜĞMENİN SEBEBİ NOTTA YAZILI. */}
+        <AltCubuk
+          geri={geriAcik ? { onClick: () => oncekiAdim && adimaGec(oncekiAdim) } : null}
+          not={adim.eksik}
+          devam={{
+            etiket: adim.dugme,
+            onClick: adim.eylem,
+            kapali: busy || adim.eksik !== null,
+            bekliyor: busy,
+          }}
+        />
       </div>
     </div>
   );
@@ -565,27 +515,30 @@ function Alan({
   autoFocus?: boolean;
 }) {
   return (
-    <label className="block max-w-lg">
-      <span className="text-sm font-medium text-ink">{etiket}</span>
-      <input
-        type={tip}
-        value={deger}
-        onChange={(e) => onChange(e.target.value)}
-        onBlur={onBlur}
-        placeholder={ornek}
-        autoFocus={autoFocus}
-        className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2.5 text-base outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20 sm:text-sm"
-      />
-      {ipucu && <span className="mt-1 block text-xs text-ink-muted">{ipucu}</span>}
-    </label>
+    <div className="max-w-lg">
+      <AlanKalibi etiket={etiket} ipucu={ipucu}>
+        {(id, aciklamaId) => (
+          <Girdi
+            id={id}
+            aria-describedby={aciklamaId}
+            type={tip}
+            value={deger}
+            onChange={(e) => onChange(e.target.value)}
+            onBlur={onBlur}
+            placeholder={ornek}
+            autoFocus={autoFocus}
+          />
+        )}
+      </AlanKalibi>
+    </div>
   );
 }
 
 function Bilgi({ children }: { children: React.ReactNode }) {
   return (
-    <p className="max-w-prose rounded-lg bg-surface-sunken px-3.5 py-3 text-sm text-ink-muted">
-      {children}
-    </p>
+    <div className="max-w-prose">
+      <Serit ton="bilgi" baslik={children} />
+    </div>
   );
 }
 
@@ -605,37 +558,23 @@ function OzelKategori({
   secili: SpecialAdCategory[];
   onChange: (v: SpecialAdCategory[]) => void;
 }) {
+  const etiket = 'Bu işletme şu alanlardan birinde mi?';
   return (
     <fieldset className="max-w-lg">
-      <legend className="text-sm font-medium text-ink">
-        Bu işletme şu alanlardan birinde mi?
-      </legend>
-      <p className="mt-0.5 text-xs text-ink-muted">
+      <legend className="text-13 font-semibold text-ink">{etiket}</legend>
+      <p className="mb-2.5 mt-0.5 text-12 text-ink-muted">
         Meta bu alanlarda beyan istiyor. Hiçbiri değilse boş bırak.
       </p>
-      <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
-        {SPECIAL_AD_CATEGORIES.map((k) => {
-          const m = SPECIAL_AD_CATEGORY_META[k];
-          const acik = secili.includes(k);
-          return (
-            <label
-              key={k}
-              title={m.hint}
-              className={`flex min-h-11 cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2 text-sm transition ${
-                acik ? 'border-brand bg-brand-soft text-ink' : 'border-line text-ink hover:bg-surface-sunken'
-              }`}
-            >
-              <input
-                type="checkbox"
-                checked={acik}
-                onChange={() => onChange(acik ? secili.filter((x) => x !== k) : [...secili, k])}
-                className="h-4 w-4 shrink-0 accent-brand"
-              />
-              {m.label}
-            </label>
-          );
-        })}
-      </div>
+      {/* AÇIKLAMA KAYBOLMASIN: eski onay kutusunun `title`ı hapın etiketinde. */}
+      <HapSecici
+        etiket={etiket}
+        secenekler={SPECIAL_AD_CATEGORIES.map((k) => ({
+          deger: k,
+          etiket: <span title={SPECIAL_AD_CATEGORY_META[k].hint}>{SPECIAL_AD_CATEGORY_META[k].label}</span>,
+        }))}
+        secili={secili}
+        onDegis={(k) => onChange(secili.includes(k) ? secili.filter((x) => x !== k) : [...secili, k])}
+      />
     </fieldset>
   );
 }

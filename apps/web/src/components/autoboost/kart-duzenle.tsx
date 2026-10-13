@@ -224,7 +224,7 @@ export function HedeflemeAlanlari({
      */
     if (d.youtube) return <YoutubeMetinAlanlari d={d} />;
     return (
-      <p className="rounded-lg border border-line bg-surface-muted px-3 py-2 text-[11px] text-ink-muted">
+      <p className="rounded-alan border border-line bg-surface-muted px-3 py-2 text-[11px] text-ink-muted">
         Bu kart için ön ayar yok; önce Boost ön ayarı tanımla.
       </p>
     );
@@ -239,7 +239,7 @@ export function HedeflemeAlanlari({
       kırmızı yüzey demekti ve ekranda gözün nereye gideceği belirsizleşiyor —
       oysa orada okunması gereken şey ALANLARIN KENDİSİ.
     */
-    <fieldset className="space-y-2.5 rounded-xl border border-line bg-surface-sunken/60 p-3">
+    <fieldset className="space-y-2.5 rounded-kart border border-line bg-surface-sunken p-3">
       <legend className="px-1 text-[11px] font-semibold text-ink">Hedef kitle ve şehir</legend>
 
       {/* AYNI SEÇİCİ ÖN AYAR FORMUNDA DA KULLANILIYOR: ikinci bir kopya
@@ -320,7 +320,7 @@ export function ButceAlanlari({ d }: { d: KartDuzenleDurumu }) {
               type="button"
               onClick={() => d.setKip(k)}
               aria-pressed={d.kip === k}
-              className={`flex-1 rounded-lg border px-2 py-1 text-[11px] font-medium transition ${
+              className={`flex-1 rounded-full border px-2 py-1 text-[11px] font-medium transition ${
                 d.kip === k
                   ? 'border-brand bg-brand/10 text-brand-strong'
                   : 'border-line text-ink-muted hover:bg-surface-sunken'
@@ -380,7 +380,7 @@ export function ButceAlanlari({ d }: { d: KartDuzenleDurumu }) {
 }
 
 const ALAN =
-  'mt-0.5 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm outline-none transition focus:border-brand focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand';
+  'mt-0.5 w-full rounded-alan border border-line bg-surface px-2.5 py-1.5 text-sm outline-none transition focus:border-brand focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand';
 
 /**
  * Etiketi olmayan lokasyon anahtarı → okunabilir yedek.
@@ -466,7 +466,7 @@ export function YoutubeMetinAlanlari({ d }: { d: KartDuzenleDurumu }) {
   return (
     <fieldset
       aria-label="Reklam metni"
-      className="space-y-2.5 rounded-xl border border-line bg-surface-sunken/60 p-3"
+      className="space-y-2.5 rounded-kart border border-line bg-surface-sunken p-3"
     >
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs font-semibold text-ink">Reklam metni</p>
@@ -499,7 +499,7 @@ export function YoutubeMetinAlanlari({ d }: { d: KartDuzenleDurumu }) {
           value={d.hedefAdres}
           onChange={(e) => d.setHedefAdres(e.target.value)}
           placeholder="Boş bırakırsan ön ayardaki adres"
-          className="h-9 w-full rounded-lg border border-line bg-surface px-2.5 text-xs"
+          className="h-9 w-full rounded-alan border border-line bg-surface px-2.5 text-xs"
         />
       </label>
 
@@ -562,7 +562,7 @@ function MetinAlani({
         maxLength={sinir}
         onChange={(e) => onChange(e.target.value)}
         aria-invalid={bos ? 'true' : undefined}
-        className="mt-0.5 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-ink outline-none focus:border-brand"
+        className="mt-0.5 w-full rounded-alan border border-line bg-surface px-2.5 py-1.5 text-sm text-ink outline-none focus:border-brand"
       />
       {bos && <span className="mt-0.5 block text-[11px] text-danger">{etiket} boş olamaz.</span>}
     </label>

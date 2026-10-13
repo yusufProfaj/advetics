@@ -12,7 +12,9 @@ import {
 } from '@advetics/shared';
 import { CallbackBanner } from '@/components/callback-banner';
 import { PlatformLogo } from '@/components/platform-logo';
-import { Halka } from '@/components/yukleniyor';
+import { Dugme } from '@/components/ui/dugme';
+import { Serit } from '@/components/ui/hal';
+import { Rozet } from '@/components/ui/rozet';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { PANEL_YERLERI, platformBaglantilariAdresi } from '@/lib/panel-adresleri';
 import { platformDurumu } from './kurulum-akisi';
@@ -102,12 +104,10 @@ export function PlatformAdimi({
       <CallbackBanner />
 
       {yuklemeHatasi && (
-        <p role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger-strong ring-1 ring-inset ring-danger/30">
-          Bağlantılar okunamadı: {yuklemeHatasi}
-        </p>
+        <Serit ton="hata" baslik={<>Bağlantılar okunamadı: {yuklemeHatasi}</>} />
       )}
 
-      <ul className="divide-y divide-line rounded-xl border border-line">
+      <ul className="divide-y divide-line rounded-kart border border-line">
         {PLATFORMS.map((p) => {
           const d = platformDurumu(p, uygunluk, baglantilar);
           const meslul = bekleyen !== null || yenileniyor;
@@ -116,8 +116,8 @@ export function PlatformAdimi({
             <li key={p} className="flex flex-wrap items-center gap-3 px-3.5 py-3">
               <PlatformLogo kind={platformKanali(p)} className="h-6 w-6 shrink-0" />
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-ink">{PLATFORM_LABELS[p]}</p>
-                <p className="text-xs text-ink-muted">
+                <p className="text-14 font-semibold text-ink">{PLATFORM_LABELS[p]}</p>
+                <p className="text-12 text-ink-muted">
                   {d.durum === 'bagli'
                     ? `${ajansin ? 'Ajansın bağlantısı kullanılıyor' : 'Bağlı'} · ${d.bostaHesap} reklam hesabı, ${d.bostaSayfa} sayfa seçilmeyi bekliyor`
                     : d.durum === 'yeniden'
@@ -132,32 +132,33 @@ export function PlatformAdimi({
 
               {d.durum === 'bagli' && (
                 <span className="flex shrink-0 items-center gap-2">
-                  <span className="rounded-full bg-ink px-2 py-0.5 text-[11px] font-medium text-surface">✓ Bağlı</span>
+                  <Rozet hal="ok">Bağlı</Rozet>
                   {yonetebilir && (
-                    <button
-                      type="button"
+                    <Dugme
+                      ton="ikincil"
+                      boyut="kucuk"
                       onClick={() => void yenile(d.baglanti.id)}
                       disabled={meslul}
-                      className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink transition hover:bg-surface-sunken disabled:opacity-40 motion-reduce:transition-none"
+                      bekliyor={bekleyen === d.baglanti.id}
                     >
-                      {bekleyen === d.baglanti.id && <Halka className="h-3.5 w-3.5" />}
                       Hesapları yenile
-                    </button>
+                    </Dugme>
                   )}
                 </span>
               )}
 
               {/* AJANSIN DÜŞMÜŞ BAĞLANTISI için düğme YOK (yukarıdaki gerekçe). */}
               {(d.durum === 'yok' || (d.durum === 'yeniden' && !ajansin)) && yonetebilir && (
-                <button
-                  type="button"
+                // İKİNCİL: sihirbazın tek birincil düğmesi alt çubukta ("Devam").
+                <Dugme
+                  ton="ikincil"
+                  boyut="kucuk"
                   onClick={() => void bagla(p, d.durum === 'yeniden')}
                   disabled={meslul}
-                  className="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-lg border border-brand px-3.5 py-2 text-sm font-semibold text-brand-strong transition hover:bg-brand-soft disabled:opacity-40 motion-reduce:transition-none"
+                  bekliyor={bekleyen === p}
                 >
-                  {bekleyen === p && <Halka />}
                   {d.durum === 'yeniden' ? 'Yeniden bağla' : 'Bağla'}
-                </button>
+                </Dugme>
               )}
             </li>
           );
@@ -170,7 +171,7 @@ export function PlatformAdimi({
         o cümle kullanıcıyı ajansın kimliğini yeniden yetkilendirmeye ve bütün
         şirketlerin bağlantısını koparmaya gönderiyordu.
       */}
-      <p className="text-xs text-ink-muted">
+      <p className="text-12 text-ink-muted">
         {yonetebilir
           ? 'Ajansın Meta ve Google bağlantısı bu şirkette de kullanılır; yeniden bağlanma. Şirket kendi hesabıyla bağlanmak isterse:'
           : 'Platform bağlamak yönetici işi. Bağlıysa devam edebilirsin.'}{' '}

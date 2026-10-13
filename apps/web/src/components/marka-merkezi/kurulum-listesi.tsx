@@ -29,6 +29,7 @@ import { Dugme, dugmeSinifi } from '@/components/ui/dugme';
 import { Uyari } from '@/components/ui/uyari';
 import { YOKLAMA_ARALIGI_MS, YOKLAMA_SINIRI, yoklamaGerekli } from './hazirlama-mantik';
 import { AdimIcerigi, type AdimIcerigiOzellikleri, type AdimYetkileri } from './adim-icerigi';
+import { DurumRozeti } from './kurulum-yardimcilari';
 import {
   LISTE_DURUMU,
   adimOzeti,
@@ -36,6 +37,10 @@ import {
   dugmeNedeni,
   sayacMetni,
 } from './kurulum-listesi-mantik';
+
+/** Beyan ve hesap sahibi seçimlerinin hap görünüşü (`HapSecici` ölçüsü; ortak bileşen `disabled` taşımıyor). */
+const HAP =
+  'inline-flex h-8 items-center rounded-full border px-3.5 text-12 font-semibold transition-colors motion-reduce:transition-none';
 
 /**
  * ═══ MARKA MERKEZİ › KURULUM — TEK SIRALI LİSTE, TEK SAYAÇ, TEK DÜĞME ═══
@@ -256,7 +261,7 @@ export function KurulumListesi({
           olmadan dönüş sessiz bir 302'ydi ve düğme aynı kalınca kullanıcı
           neyin olmadığını bilmiyordu. */}
       <CallbackBanner />
-      <section aria-label="Kurulum özeti" className="rounded-xl border border-line bg-surface p-5">
+      <section aria-label="Kurulum özeti" className="rounded-kart border border-line bg-surface p-5">
         <div className="flex flex-wrap items-center gap-4">
           <div className="min-w-0 flex-1">
             <p className="font-baslik text-base font-semibold text-ink">{sayacMetni(sayac)}</p>
@@ -312,9 +317,9 @@ export function KurulumListesi({
                   </li>
                 ))}
               </ul>
-              <button type="button" className="mt-1 font-semibold underline" onClick={() => void tazele()}>
+              <Dugme ton="ikincil" boyut="kucuk" className="mt-2" onClick={() => void tazele()}>
                 Yeniden dene
-              </button>
+              </Dugme>
             </Uyari>
           </div>
         )}
@@ -369,8 +374,8 @@ export function KurulumListesi({
                 aria-pressed={kapali}
                 disabled={olmaz || beyanBekliyor !== null || !kurulum.ok}
                 onClick={() => void beyan(p)}
-                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors motion-reduce:transition-none disabled:opacity-50 ${
-                  kapali ? 'border-ink bg-ink text-surface' : 'border-line text-ink hover:border-ink-muted'
+                className={`${HAP} disabled:cursor-not-allowed disabled:opacity-50 ${
+                  kapali ? 'border-ink bg-ink text-surface' : 'border-line-strong bg-surface text-ink hover:bg-surface-sunken'
                 }`}
               >
                 {PLATFORM_ADI[p]}
@@ -378,7 +383,7 @@ export function KurulumListesi({
               </button>
             ) : (
               kapali && (
-                <span key={p} className="rounded-lg bg-surface-sunken px-3 py-1.5 text-xs font-semibold text-ink">
+                <span key={p} className="rounded-full bg-surface-sunken px-3 py-1.5 text-xs font-semibold text-ink">
                   {PLATFORM_ADI[p]} kullanılmıyor
                 </span>
               )
@@ -412,8 +417,8 @@ export function KurulumListesi({
                   type="button"
                   aria-pressed={kurulum.v.hesapSahibi === d}
                   onClick={() => void sahipSec(d)}
-                  className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors motion-reduce:transition-none ${
-                    kurulum.v.hesapSahibi === d ? 'border-brand bg-brand text-white' : 'border-line text-ink hover:border-ink-muted'
+                  className={`${HAP} ${
+                    kurulum.v.hesapSahibi === d ? 'border-brand bg-vurgu text-ink' : 'border-line-strong bg-surface text-ink hover:bg-surface-sunken'
                   }`}
                 >
                   {e}
@@ -426,7 +431,7 @@ export function KurulumListesi({
         )}
       </section>
 
-      <ol className="divide-y divide-line rounded-xl border border-line bg-surface">
+      <ol className="divide-y divide-line rounded-kart border border-line bg-surface">
         {adimlar.map((a, i) => (
           <AdimSatirlari
             key={a.kod}
@@ -500,7 +505,7 @@ function AdimSatirlari({ sira, ilkAcik, icerik }: { sira: number; ilkAcik: boole
         <span
           aria-hidden
           className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-            a.durum === 'tamam' ? 'bg-ok-soft text-ok-strong' : 'bg-surface-sunken text-ink'
+            a.durum === 'tamam' ? 'bg-ink text-surface' : 'bg-surface-sunken text-ink'
           }`}
         >
           {a.durum === 'tamam' ? '✓' : sira}
@@ -508,38 +513,32 @@ function AdimSatirlari({ sira, ilkAcik, icerik }: { sira: number; ilkAcik: boole
         <div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
           <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-ink">
             {a.ad}
-            <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${d.sinif}`}>{d.etiket}</span>
+            <DurumRozeti durum={a.durum} etiket={d.etiket} />
           </p>
           <p className="mt-0.5 text-xs text-ink-muted">{adimOzeti(a)}</p>
         </div>
         {a.kod === 'marka' ? (
           <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <button
-              type="button"
-              aria-expanded={acik}
-              aria-controls={panelId}
-              onClick={ac}
-              className="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-ink-muted hover:text-ink"
-            >
+            <Dugme ton="hayalet" boyut="kucuk" aria-expanded={acik} aria-controls={panelId} onClick={ac}>
               {acik ? 'Kapat' : 'Ayrıntı'}
-            </button>
-            <Link href={markaMerkeziAdresi('marka', clientId)} className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink hover:border-ink-muted">
+            </Dugme>
+            <Link href={markaMerkeziAdresi('marka', clientId)} className={dugmeSinifi('ikincil', 'kucuk')}>
               Marka’ya git
             </Link>
           </div>
         ) : (
           (
-            <button
-              type="button"
+            /* Satır başına KOYU, kırmızı değil: yedi adımda yedi kırmızı düğme
+               sayfanın tek birincil eylemini ("Sihirbazla tamamla") boğuyordu. */
+            <Dugme
+              ton={a.durum === 'tamam' || acik ? 'ikincil' : 'koyu'}
+              boyut="kucuk"
               aria-expanded={acik}
               aria-controls={panelId}
               onClick={ac}
-              className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors motion-reduce:transition-none ${
-                a.durum === 'tamam' || acik ? 'border border-line text-ink hover:border-ink-muted' : 'bg-brand text-white hover:bg-brand-strong'
-              }`}
             >
               {acik ? 'Kapat' : a.durum === 'tamam' ? 'Ayrıntı' : 'Tamamla'}
-            </button>
+            </Dugme>
           )
         )}
       </div>

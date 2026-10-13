@@ -5,9 +5,10 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { stratejiPanelAdresi, stratejiUcYolu, type Permission } from '@advetics/shared';
 import type { GonderimSonucu, StratejiDetayi } from '@advetics/shared';
-import { Dugme } from '@/components/ui/dugme';
-import { BUYUK_KART_SINIFI, BuyukKart, NotKutusu, SoruBasligi } from './akis-cerceve';
-import { Bildirim, GIRDI, yaz } from './ortak';
+import { Dugme, dugmeSinifi } from '@/components/ui/dugme';
+import { Kart } from '@/components/ui/kart';
+import { Soru } from '@/components/ui/sihirbaz';
+import { Bildirim, GIRDI, StratejiIkonu, yaz } from './ortak';
 
 type Is = { tur: 'bos' } | { tur: 'suruyor'; ne: 'gonder' | 'onayla' } | { tur: 'hata'; mesaj: string } | { tur: 'gonderildi'; sonuc: GonderimSonucu };
 
@@ -89,7 +90,7 @@ export function AdimGonder({
     const s = is.sonuc;
     return (
       <>
-        <SoruBasligi ust="7 / 7 · Gönder" soru={s.kabul.length > 0 ? 'Strateji müşteriye gitti' : 'Mail kimseye ulaşmadı'} aciklama="Müşteri onaylayınca Raporu incele ekranından kampanyaları tek tek kurarsın." />
+        <Soru ust="7 / 7 · Gönder" soru={s.kabul.length > 0 ? 'Strateji müşteriye gitti' : 'Mail kimseye ulaşmadı'} aciklama="Müşteri onaylayınca Raporu incele ekranından kampanyaları tek tek kurarsın." />
         <div className="max-w-[720px] space-y-3">
           <Bildirim baslik={`${s.kabul.length} alıcıya gönderildi${s.ret.length > 0 ? `, ${s.ret.length} alıcı reddedildi` : ''}.`} hata={s.ret.length > 0 || s.kabul.length === 0}>
             {s.kabul.length > 0 && <span className="block">Gönderildi: {s.kabul.join(', ')}</span>}
@@ -100,7 +101,7 @@ export function AdimGonder({
             ))}
             {s.baglanti && <span className="block">Maile sürüm {s.baglanti.surum} için girişsiz onay bağlantısı eklendi.</span>}
           </Bildirim>
-          <Link href={raporAdresi} className="inline-flex h-9 items-center rounded-lg bg-brand px-4 text-sm font-semibold text-white no-underline hover:brightness-95">
+          <Link href={raporAdresi} className={dugmeSinifi('ikincil')}>
             Raporu aç
           </Link>
         </div>
@@ -110,65 +111,84 @@ export function AdimGonder({
 
   return (
     <>
-      <SoruBasligi ust="7 / 7 · Gönder" soru="Plan hazır. Şimdi ne yapalım?" aciklama='Müşteri onaylamadan kampanya kurulmaz. Onay gelince "Raporu incele"den kampanyaları tek tek kurarsın.' />
+      <Soru ust="7 / 7 · Gönder" soru="Plan hazır. Şimdi ne yapalım?" aciklama='Müşteri onaylamadan kampanya kurulmaz. Onay gelince "Raporu incele"den kampanyaları tek tek kurarsın.' />
+      {/*
+        İki yol İKİ KART, seçim kartı DEĞİL: kartın içinde alan ve düğme var
+        (iç içe düğme olmaz). Kırmızı dolu düğme alt çubukta ("Raporu
+        önizle"); kart eylemleri koyu.
+      */}
       <div className="grid gap-[18px] md:grid-cols-2">
-        <div className={`${BUYUK_KART_SINIFI} ${mailIzni ? '' : 'opacity-60'}`}>
-          <BuyukKart
-            ikon="rapor"
-            kirmizi
-            baslik="Müşteriye gönder"
-            aciklama="Kurumsal rapor ve onay bağlantısı e-postayla gider. Müşteri giriş yapmadan onaylar ya da değişiklik ister."
-            altSol={
-              mailIzni ? (
-                <input
-                  className={GIRDI}
-                  value={alicilar}
-                  onChange={(e) => setAlicilar(e.target.value)}
-                  placeholder="Boş bırakırsan kayıtlı rapor alıcıları"
-                  aria-label="Alıcılar (virgülle)"
-                />
-              ) : (
-                'Mail göndermek rapor paylaşma yetkisi ister.'
-              )
-            }
-            altSag={
-              <Dugme onClick={() => void gonder()} disabled={!mailIzni || is.tur === 'suruyor'} bekliyor={is.tur === 'suruyor' && is.ne === 'gonder'}>
-                Gönder
-              </Dugme>
-            }
-          />
-        </div>
-        <div className={`${BUYUK_KART_SINIFI} ${ajansYoneticisi ? '' : 'opacity-60'}`}>
-          <BuyukKart
-            ikon="yeni"
-            baslik="Müşteri adına onayla"
-            aciklama="Müşteri onayını yazılı aldıysan kendin onayla. Kim, ne zaman onayladı kayda geçer."
-            altSol={ajansYoneticisi ? (onayAcik ? 'Müşterinin onayını aldığını doğrula.' : 'Yalnız ajans yöneticisi') : 'Yalnız ajans yöneticisi; bu hesap değil.'}
-            altSag={
-              onayAcik ? (
-                <span className="flex gap-2">
-                  <Dugme ton="sade" boyut="kucuk" onClick={() => setOnayAcik(false)}>
-                    Vazgeç
-                  </Dugme>
-                  <Dugme boyut="kucuk" onClick={() => void adinaOnayla()} bekliyor={is.tur === 'suruyor' && is.ne === 'onayla'}>
-                    Onayladım, kuruluma geç
-                  </Dugme>
-                </span>
-              ) : (
-                <Dugme ton="ikincil" onClick={() => setOnayAcik(true)} disabled={!ajansYoneticisi || is.tur === 'suruyor'}>
-                  Onayla
+        <Kart
+          baslik="Müşteriye gönder"
+          className={mailIzni ? '' : 'opacity-60'}
+          altEylem={
+            <Dugme ton="koyu" boyut="kucuk" onClick={() => void gonder()} disabled={!mailIzni || is.tur === 'suruyor'} bekliyor={is.tur === 'suruyor' && is.ne === 'gonder'}>
+              Gönder
+            </Dugme>
+          }
+        >
+          <YolIkonu ikon="rapor" kirmizi />
+          <p className="m-0 mt-3 text-14 leading-relaxed text-ink-muted">Kurumsal rapor ve onay bağlantısı e-postayla gider. Müşteri giriş yapmadan onaylar ya da değişiklik ister.</p>
+          <div className="mt-4 border-t border-line pt-3 text-13 text-ink-muted">
+            {mailIzni ? (
+              <input
+                className={GIRDI}
+                value={alicilar}
+                onChange={(e) => setAlicilar(e.target.value)}
+                placeholder="Boş bırakırsan kayıtlı rapor alıcıları"
+                aria-label="Alıcılar (virgülle)"
+              />
+            ) : (
+              'Mail göndermek rapor paylaşma yetkisi ister.'
+            )}
+          </div>
+        </Kart>
+        <Kart
+          baslik="Müşteri adına onayla"
+          className={ajansYoneticisi ? '' : 'opacity-60'}
+          altEylem={
+            onayAcik ? (
+              <span className="flex gap-2">
+                <Dugme ton="hayalet" boyut="kucuk" onClick={() => setOnayAcik(false)}>
+                  Vazgeç
                 </Dugme>
-              )
-            }
-          />
-        </div>
+                <Dugme ton="koyu" boyut="kucuk" onClick={() => void adinaOnayla()} bekliyor={is.tur === 'suruyor' && is.ne === 'onayla'}>
+                  Onayladım, kuruluma geç
+                </Dugme>
+              </span>
+            ) : (
+              <Dugme ton="ikincil" boyut="kucuk" onClick={() => setOnayAcik(true)} disabled={!ajansYoneticisi || is.tur === 'suruyor'}>
+                Onayla
+              </Dugme>
+            )
+          }
+        >
+          <YolIkonu ikon="yeni" />
+          <p className="m-0 mt-3 text-14 leading-relaxed text-ink-muted">Müşteri onayını yazılı aldıysan kendin onayla. Kim, ne zaman onayladı kayda geçer.</p>
+          <p className="m-0 mt-4 border-t border-line pt-3 text-13 text-ink-muted">
+            {ajansYoneticisi ? (onayAcik ? 'Müşterinin onayını aldığını doğrula.' : 'Yalnız ajans yöneticisi') : 'Yalnız ajans yöneticisi; bu hesap değil.'}
+          </p>
+        </Kart>
       </div>
       {is.tur === 'hata' && (
         <div className="mt-4">
           <Bildirim hata baslik={is.mesaj} />
         </div>
       )}
-      {detay.plan.durum === 'onayda' && <NotKutusu>Bu strateji zaten onayda. Yeniden göndermek eski onay bağlantısını iptal eder ve yenisini yollar.</NotKutusu>}
+      {detay.plan.durum === 'onayda' && (
+        <div className="mt-4">
+          <Bildirim baslik="Bu strateji zaten onayda.">Yeniden göndermek eski onay bağlantısını iptal eder ve yenisini yollar.</Bildirim>
+        </div>
+      )}
     </>
+  );
+}
+
+/** Kartın ikon karosu (seçim kartıyla aynı: gri, birincil yolda kırmızı). */
+function YolIkonu({ ikon, kirmizi = false }: { ikon: 'rapor' | 'yeni'; kirmizi?: boolean }) {
+  return (
+    <span aria-hidden className={`grid h-11 w-11 place-items-center rounded-[12px] text-[var(--beyaz)] ${kirmizi ? 'bg-brand' : 'bg-[var(--gri)]'}`}>
+      <StratejiIkonu ad={ikon} />
+    </span>
   );
 }

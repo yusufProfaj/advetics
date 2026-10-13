@@ -96,7 +96,7 @@ export function AdimKime({
 
   return (
     <>
-      <Soru baslik="Kimler görsün?">
+      <Soru adim={3} baslik="Kimler görsün?">
         {b.a.konumlar?.kaynak === 'marka_merkezi' ? "Konum Marka Merkezi'ndeki kitleden geldi. " : ''}Gerisini platformların kendi sistemi
         bulur; ilgi alanı seçmen gerekmiyor.
       </Soru>

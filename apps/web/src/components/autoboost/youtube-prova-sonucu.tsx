@@ -2,6 +2,7 @@
 
 import type { YoutubeProvaSonucu } from '@advetics/shared';
 import { formatMoney } from '@/lib/format';
+import { DurumNoktasi } from '@/components/ui/rozet';
 
 /**
  * ═══ YOUTUBE PROVASININ SONUCU ═══
@@ -26,7 +27,7 @@ export function YoutubeProvaSonucuKutusu({ durum }: { durum: ProvaDurumu }) {
   }
   if (durum.tur === 'hata') {
     return (
-      <p role="alert" className="rounded-lg border border-danger/40 bg-danger-soft px-3 py-2 text-xs text-danger-strong">
+      <p role="alert" className="rounded-alan border border-danger/40 bg-danger-soft px-3 py-2 text-xs text-danger-strong">
         Prova yapılamadı: {durum.mesaj}
       </p>
     );
@@ -35,11 +36,18 @@ export function YoutubeProvaSonucuKutusu({ durum }: { durum: ProvaDurumu }) {
   return (
     <div
       aria-live="polite"
-      className={`space-y-2 rounded-lg border px-3 py-2 text-xs ${
-        ok ? 'border-ok/40 bg-ok-soft' : 'border-danger/40 bg-danger-soft'
+      // YEŞİL YALNIZ NOKTADA: kabul hâli yeşil zemin değil, yeşil durum
+      // noktası. Ret hâli sol kırmızı çizgi (şerit dili).
+      className={`space-y-2 rounded-alan border border-line px-3 py-2 text-xs ${
+        ok ? 'bg-surface-sunken' : 'border-l-4 border-l-danger bg-surface'
       }`}
     >
-      <p className={`font-semibold ${ok ? 'text-ok-strong' : 'text-danger-strong'}`}>
+      <p
+        className={`flex items-start gap-1.5 font-semibold ${ok ? 'text-ink' : 'text-danger-strong'}`}
+      >
+        <span className="mt-[5px]">
+          <DurumNoktasi hal={ok ? 'ok' : 'hata'} />
+        </span>
         {ok
           ? 'Google bu kampanyayı kabul ediyor. Hiçbir şey kurulmadı, para harcanmadı.'
           : `Google ${hatalar.length} sorun buldu. Hiçbir şey kurulmadı.`}

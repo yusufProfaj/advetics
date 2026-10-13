@@ -5,6 +5,7 @@ import { useState } from 'react';
 import type { BoostRecord } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
+import { Dugme } from '@/components/ui/dugme';
 
 /**
  * Aday boost'un onay düğmeleri.
@@ -46,22 +47,14 @@ export function BoostDecision({
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap gap-1.5">
-        <button
-          type="button"
-          onClick={() => decide(true)}
-          disabled={busy}
-          className="rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
-        >
+        {/* KART İÇİNDE DOLU KIRMIZI YOK: sayfanın tek birincil düğmesi
+            başlıkta. Para taahhüdü koyu düğmeyle ayrışıyor. */}
+        <Dugme ton="koyu" boyut="kucuk" onClick={() => decide(true)} disabled={busy}>
           {formatMoney(boost.totalBudgetMicros, currency)} onayla
-        </button>
-        <button
-          type="button"
-          onClick={() => decide(false)}
-          disabled={busy}
-          className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface-sunken disabled:opacity-50"
-        >
+        </Dugme>
+        <Dugme ton="ikincil" boyut="kucuk" onClick={() => decide(false)} disabled={busy}>
           Reddet
-        </button>
+        </Dugme>
       </div>
       {error && <p className="text-xs text-danger-strong">{error}</p>}
     </div>
@@ -127,14 +120,9 @@ export function RunBoostRuleButton({ ruleId }: { ruleId: string }) {
 
   return (
     <div className="space-y-1.5">
-      <button
-        type="button"
-        onClick={run}
-        disabled={busy}
-        className="rounded-lg border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface-sunken disabled:opacity-50"
-      >
+      <Dugme ton="ikincil" boyut="kucuk" onClick={run} disabled={busy}>
         {busy ? 'Çalışıyor…' : 'Şimdi çalıştır'}
-      </button>
+      </Dugme>
       {result && <p className="text-[11px] text-ink-muted">{result}</p>}
     </div>
   );

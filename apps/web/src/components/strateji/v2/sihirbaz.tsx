@@ -20,9 +20,10 @@ import {
 import type { StratejiDetayi } from '@advetics/shared';
 import { apiFetch } from '@/lib/api';
 import { Dugme } from '@/components/ui/dugme';
+import { HataDurumu } from '@/components/ui/hal';
 import { microsGirdiMetni, okumaHatasi } from '../hesap';
-import { butceDurumu, gecerliAdim, oncekiAdim } from './akis';
-import { AltCubuk, IlerlemeRayi } from './akis-cerceve';
+import { AltCubuk, IlerlemeRayi } from '@/components/ui/sihirbaz';
+import { butceDurumu, gecerliAdim, oncekiAdim, rayParcalari } from './akis';
 import { AdimGonder } from './adim-gonder';
 import { AdimInceleme } from './adim-inceleme';
 import { AdimPlan, type PlanAdimiTutamagi } from './adim-plan';
@@ -204,9 +205,7 @@ export function StratejiSihirbazi({
 
   if (!g && (adim === 'hedef' || adim === 'butce' || adim === 'bolge')) {
     return (
-      <Bildirim hata baslik="Strateji girdileri okunamadı.">
-        {girdiler?.tur === 'hata' ? girdiler.mesaj : 'Girdiler yüklenmedi.'}
-      </Bildirim>
+      <HataDurumu baslik="Strateji girdileri okunamadı." mesaj={girdiler?.tur === 'hata' ? girdiler.mesaj : 'Girdiler yüklenmedi.'} />
     );
   }
 
@@ -268,11 +267,11 @@ export function StratejiSihirbazi({
           </Link>{' '}
           › Strateji oluştur › <b className="font-semibold text-ink">{STRATEJI_ADIM_ETIKETI[adim]}</b>
         </span>
-        <Dugme ton="sade" boyut="kucuk" onClick={() => void kaydetVeCik()} bekliyor={kayit.tur === 'suruyor'} title={detay ? undefined : 'Taslak bütçe adımından sonra kaydedilir'}>
+        <Dugme ton="hayalet" boyut="kucuk" onClick={() => void kaydetVeCik()} bekliyor={kayit.tur === 'suruyor'} title={detay ? undefined : 'Taslak bütçe adımından sonra kaydedilir'}>
           {detay || adim === 'butce' ? 'Kaydet ve çık' : 'Çık'}
         </Dugme>
       </div>
-      <IlerlemeRayi adim={adim} />
+      <IlerlemeRayi etiket="Strateji oluşturma adımları" parcalar={rayParcalari(adim).map((p) => ({ anahtar: p.adim, etiket: p.etiket, hal: p.hal }))} />
 
       <div key={adim} className="bolum-gecis mt-7">
         {adim === 'hedef' && g && <AdimHedef girdiler={g} secili={amaclar} degistir={setAmaclar} clientId={clientId} />}

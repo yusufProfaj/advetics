@@ -29,7 +29,9 @@ import { AiDoldur } from '@/components/bilgi-bankasi/ai-doldur';
 import { AdimSatiri } from './kurulum-bolumu';
 import { ButceDegistir, Soru } from './hazirlama-karti';
 import { OlcumBolumu } from './olcum-bolumu';
-import { Ga4KaynakDurumu, VarsayilanKitleSecici } from './kurulum-yardimcilari';
+import { DurumRozeti, Ga4KaynakDurumu, VarsayilanKitleSecici } from './kurulum-yardimcilari';
+import { Dugme } from '@/components/ui/dugme';
+import { Serit } from '@/components/ui/hal';
 import { LISTE_DURUMU, PARCA_ADI } from './kurulum-listesi-mantik';
 import { FirmaBilgileri } from './firma-bilgileri';
 import { BildirimlerBolumu } from './bildirimler-bolumu';
@@ -130,7 +132,7 @@ export function AdimIcerigi(o: AdimIcerigiOzellikleri) {
 
   return (
     <div className="space-y-4">
-      <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
+      <ul className="divide-y divide-line rounded-kart border border-line bg-surface">
         {a.parcalar.map((p) => {
           const k = p.kaynak === 'kurulum' ? kurulum?.adimlar.find((x) => x.kod === p.kod) : undefined;
           return k && kurulum && p.durum !== 'kapsam_disi' ? (
@@ -267,7 +269,9 @@ export function ParcaSatiri({ p }: { p: KurulumListesiParcasi }) {
   const d = LISTE_DURUMU[p.durum];
   return (
     <li className="flex flex-wrap items-start gap-x-3 gap-y-1 px-4 py-2.5 text-sm">
-      <span className={`mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${d.sinif}`}>{d.etiket}</span>
+      <span className="mt-0.5 shrink-0">
+        <DurumRozeti durum={p.durum} etiket={d.etiket} />
+      </span>
       <div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
         <p className="font-medium text-ink">
           {PARCA_ADI[p.kod] ?? p.kod}
@@ -333,12 +337,17 @@ function ErisimParcasi({ clientId, workspaceAdi, gor, yonet }: { clientId: strin
       <p className="text-xs font-semibold text-ink">Sorumlu kişi</p>
       {uyeler.tur === 'okunuyor' && <p className="text-xs text-ink-muted">Ekip okunuyor…</p>}
       {uyeler.tur === 'hata' && (
-        <p className="text-xs text-danger-strong">
-          Ekip okunamadı: {uyeler.mesaj}{' '}
-          <button type="button" className="font-semibold underline" onClick={() => void oku()}>
-            Tekrar dene
-          </button>
-        </p>
+        <Serit
+          ton="hata"
+          baslik="Ekip okunamadı"
+          eylemler={
+            <Dugme ton="ikincil" boyut="kucuk" onClick={() => void oku()}>
+              Tekrar dene
+            </Dugme>
+          }
+        >
+          {uyeler.mesaj}
+        </Serit>
       )}
       {uyeler.tur === 'geldi' && (
         <>
@@ -386,12 +395,17 @@ function VeriParcasi({ clientId, gor }: { clientId: string; gor: boolean }) {
       </div>
       {veri.tur === 'okunuyor' && <p className="text-xs text-ink-muted">Veri durumu okunuyor…</p>}
       {veri.tur === 'hata' && (
-        <p className="text-xs text-danger-strong">
-          Veri durumu okunamadı: {veri.mesaj}{' '}
-          <button type="button" className="font-semibold underline" onClick={() => void oku()}>
-            Tekrar dene
-          </button>
-        </p>
+        <Serit
+          ton="hata"
+          baslik="Veri durumu okunamadı"
+          eylemler={
+            <Dugme ton="ikincil" boyut="kucuk" onClick={() => void oku()}>
+              Tekrar dene
+            </Dugme>
+          }
+        >
+          {veri.mesaj}
+        </Serit>
       )}
       {veri.tur === 'geldi' && <SenkronDurumu data={veri.v} />}
     </div>

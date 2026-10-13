@@ -17,9 +17,9 @@ import { workspaceUyumu } from '@/lib/sayfa-workspace';
 import { ACILIS_ADI, PANEL_YOLLARI, SIHIRBAZ_ADI, ayarlarAdresi, kapi, sirketKurulumListesi } from '@/lib/panel-adresleri';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { Uyari } from '@/components/ui/uyari';
+import { Serit } from '@/components/ui/hal';
 import { dugmeSinifi } from '@/components/ui/dugme';
-import { SayfaBasligi } from '@/components/ui/sayfa-basligi';
+import { SayfaIskeleti } from '@/components/ui/sayfa-basligi';
 import { WorkspaceGec } from '@/components/workspace-gec';
 import { KurulumSihirbazi } from '@/components/kurulum/kurulum-sihirbazi';
 import { SirketSec } from '@/components/kurulum/sirket-sec';
@@ -89,7 +89,6 @@ export default async function KurulumPage({
   const clientId = mod.musteri;
   const uyum = workspaceUyumu(session, clientId);
   const hedefAdi = session.availableClients.find((c) => c.id === clientId)?.name ?? null;
-  const baslik = <SayfaBasligi baslik={SIHIRBAZ_ADI} />;
   /*
    * ADRES ≠ SEÇİM: üstte BAŞKA workspace seçiliyken RLS adresteki
    * workspace'in satırlarını gizliyor; içerik hiç okunmuyor ve tek tıkla
@@ -98,8 +97,7 @@ export default async function KurulumPage({
    */
   if (uyum === 'farkli') {
     return (
-      <div className="space-y-5">
-        {baslik}
+      <SayfaIskeleti baslik={SIHIRBAZ_ADI}>
         <WorkspaceGec
           clientId={clientId}
           workspaceAdi={hedefAdi}
@@ -107,7 +105,7 @@ export default async function KurulumPage({
           ekran={SIHIRBAZ_ADI}
           uyum={uyum}
         />
-      </div>
+      </SayfaIskeleti>
     );
   }
 
@@ -153,18 +151,17 @@ export default async function KurulumPage({
   const adim = mod.adim;
 
   return (
-    <div className="space-y-5">
-      <SayfaBasligi
-        ust={
-          <nav aria-label="Konum" className="flex flex-wrap items-center gap-1.5 text-sm text-ink-muted">
-            <span>{sirket}</span>
-            <span aria-hidden="true">›</span>
-            <span className="font-semibold text-ink">{workspaceAdi}</span>
-          </nav>
-        }
-        baslik={SIHIRBAZ_ADI}
-        aciklama="Şirketin ve workspace’in reklam vermeye hazır olması için gereken her şey, sırayla. Bitmiş adımlar atlanır ama gösterilir."
-      />
+    <SayfaIskeleti
+      ust={
+        <nav aria-label="Konum" className="flex flex-wrap items-center gap-1.5 text-14 text-ink-muted">
+          <span>{sirket}</span>
+          <span aria-hidden="true">›</span>
+          <span className="font-semibold text-ink">{workspaceAdi}</span>
+        </nav>
+      }
+      baslik={SIHIRBAZ_ADI}
+      aciklama="Şirketin ve workspace’in reklam vermeye hazır olması için gereken her şey, sırayla. Bitmiş adımlar atlanır ama gösterilir."
+    >
       <Tamamlama
         clientId={clientId}
         workspaceAdi={workspaceAdi}
@@ -185,7 +182,7 @@ export default async function KurulumPage({
           ) : null
         }
       />
-    </div>
+    </SayfaIskeleti>
   );
 }
 
@@ -216,12 +213,11 @@ async function baslangic(session: SessionResponse, kartlar: SecimKarti[]) {
     beyanlar: sk.ok ? sk.v.beyanlar : null,
   });
   return (
-    <div className="space-y-5">
-      <SayfaBasligi
-        ust={<span className="text-sm text-ink-muted">{sirketAdi}</span>}
-        baslik={SIHIRBAZ_ADI}
-        aciklama="Yeni şirket ve workspace açar, var olanı kaldığı yerden tamamlar."
-      />
+    <SayfaIskeleti
+      ust={<span className="text-14 text-ink-muted">{sirketAdi}</span>}
+      baslik={SIHIRBAZ_ADI}
+      aciklama="Yeni şirket ve workspace açar, var olanı kaldığı yerden tamamlar."
+    >
       <Baslangic
         sirketAdi={sirketAdi}
         sirketAdimlari={sirketAdimlari}
@@ -231,7 +227,7 @@ async function baslangic(session: SessionResponse, kartlar: SecimKarti[]) {
         kartlar={kartlar}
         platformYazabilir={kapi(session, 'kurulum.yaz')}
       />
-    </div>
+    </SayfaIskeleti>
   );
 }
 
@@ -312,14 +308,21 @@ async function acilis(session: SessionResponse, kartlar: SecimKarti[], hamTur: s
   const sirketAdi =
     ma?.organizations.find((o) => o.id === session.activeOrganizationId)?.name ?? session.organization.name;
 
-  const baslik = (
-    <header>
-      <h1 className="sayfa-baslik">{kart?.baslik ?? ACILIS_ADI}</h1>
-      <p className="mt-1.5 max-w-prose text-sm text-ink-muted">
-        {kart?.aciklama} Workspace açılınca aynı sihirbaz hesapları, ölçümü ve markayı adım adım tamamlar.
-      </p>
-    </header>
-  );
+  /*
+   * SAYFA BAŞLIĞI ÜÇ HÂLDE DE AYNI (`SIHIRBAZ_ADI`): açılış eskiden kendi
+   * `<h1>`inde kartın adını ("Yeni şirket") taşıyordu ve kullanıcı aynı
+   * ekranın içinde başlığın değiştiğini görüyordu. Açılan şeyin adı artık
+   * açıklamanın başında, kalın.
+   */
+  const baslik = {
+    ust: <span className="text-14 text-ink-muted">{sirketAdi}</span>,
+    baslik: SIHIRBAZ_ADI,
+    aciklama: (
+      <>
+        <b className="text-ink">{kart?.baslik ?? ACILIS_ADI}.</b> {kart?.aciklama} Workspace açılınca aynı sihirbaz hesapları, ölçümü ve markayı adım adım tamamlar.
+      </>
+    ),
+  };
 
   /*
    * KAPALI TÜR: sebep yazıyor ve kullanıcı geldiği yere dönebiliyor; kart
@@ -327,29 +330,27 @@ async function acilis(session: SessionResponse, kartlar: SecimKarti[], hamTur: s
    */
   if (!sihirbazAcik) {
     return (
-      <div className="mx-auto w-full max-w-3xl space-y-6">
-        {baslik}
-        <Uyari
+      <SayfaIskeleti genislik="dar" {...baslik}>
+        <Serit
           ton="uyari"
           baslik="Bu kurulum şu an açılamıyor."
-          eylem={
+          eylemler={
             <Link href={ayarlarAdresi('sirketler')} className={dugmeSinifi('ikincil', 'kucuk')}>
               Ayarlara dön
             </Link>
           }
         >
           {kart?.engel}
-        </Uyari>
-      </div>
+        </Serit>
+      </SayfaIskeleti>
     );
   }
 
   if (tur === 'workspace' && session.tumSirketler && ma) {
     return (
-      <div className="mx-auto w-full max-w-3xl space-y-6">
-        {baslik}
+      <SayfaIskeleti genislik="dar" {...baslik}>
         <SirketSec sirketler={ma.organizations.map((o) => ({ id: o.id, name: o.name }))} />
-      </div>
+      </SayfaIskeleti>
     );
   }
 
@@ -377,8 +378,7 @@ async function acilis(session: SessionResponse, kartlar: SecimKarti[], hamTur: s
   }
 
   return (
-    <div className="mx-auto w-full max-w-4xl space-y-6">
-      {baslik}
+    <SayfaIskeleti genislik="dar" {...baslik}>
       <KurulumSihirbazi
         tur={tur}
         ilkAdim={ilkAdim}
@@ -392,6 +392,6 @@ async function acilis(session: SessionResponse, kartlar: SecimKarti[], hamTur: s
         baglantilar={baglantilar}
         yuklemeHatasi={yuklemeHatasi}
       />
-    </div>
+    </SayfaIskeleti>
   );
 }

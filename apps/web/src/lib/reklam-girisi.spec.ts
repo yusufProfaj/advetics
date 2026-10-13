@@ -186,19 +186,17 @@ describe('giriş bileşeni (kaynak bekçileri)', () => {
   const HAM = readFileSync(join(__dirname, '../components/rehber/rehber-girisi.tsx'), 'utf8');
   const KAYNAK = HAM.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
 
-  /** Pencere bloğu: `role="dialog"` ile başlayan div'in GERÇEK sınırı (etiket sayarak). */
+  /**
+   * Pencere bloğu: `<Pencere` ile başlayan öğenin GERÇEK sınırı (`</Pencere>`).
+   * 2026-10-14'ten beri onay penceresi ortak `Pencere` bileşeni (DOM'da
+   * kalma, Esc, odak tuzağı bileşenin kendisinde).
+   */
   function pencere(): string {
-    const i = KAYNAK.indexOf('role="dialog"');
-    if (i < 0) throw new Error('onay penceresi bulunamadı');
-    const bas = KAYNAK.lastIndexOf('<div', i);
-    let derinlik = 0;
-    const re = /<div\b|<\/div>/g;
-    re.lastIndex = bas;
-    for (let m = re.exec(KAYNAK); m; m = re.exec(KAYNAK)) {
-      derinlik += m[0] === '</div>' ? -1 : 1;
-      if (derinlik === 0) return KAYNAK.slice(bas, m.index);
-    }
-    throw new Error('pencere kapanmadı');
+    const bas = KAYNAK.indexOf('<Pencere');
+    if (bas < 0) throw new Error('onay penceresi bulunamadı');
+    const son = KAYNAK.indexOf('</Pencere>', bas);
+    if (son < 0) throw new Error('pencere kapanmadı');
+    return KAYNAK.slice(bas, son);
   }
 
   it('BOŞA DÜŞME BEKÇİSİ: pencere bloğu gerçekten yakalandı', () => {
@@ -224,8 +222,10 @@ describe('giriş bileşeni (kaynak bekçileri)', () => {
   });
 
   it('menü ve pencere DOM’dan çıkmıyor (görünürlük geçişle); hata yutulmuyor', () => {
-    expect(KAYNAK).toMatch(/data-acik=\{menu === r\.id\}/);
-    expect(KAYNAK).toMatch(/className=\{`\$\{s\.perde\} \$\{onayAcik \? s\.acik : ''\}`\}/);
+    // Satır menüsü ortak `AcilirMenu` (DOM'da kalır), pencere koşulsuz `acik` ile çiziliyor.
+    expect(KAYNAK).toContain('<AcilirMenu');
+    expect(pencere()).toMatch(/^<Pencere\s+acik=\{onayAcik\}/);
+    expect(KAYNAK).not.toMatch(/onayAcik\s*&&\s*<Pencere/);
     expect(KAYNAK).not.toMatch(/\.catch\(\s*\(\)\s*=>/);
   });
 
@@ -246,6 +246,6 @@ describe('giriş bileşeni (kaynak bekçileri)', () => {
   });
 
   it('kesilen liste "N / M" ile yazılıyor (sessiz kesme yok)', () => {
-    expect(KAYNAK).toMatch(/\{liste\.satirlar\.length\} \/ \{liste\.toplam\} kayıt gösteriliyor/);
+    expect(KAYNAK).toMatch(/\$?\{liste\.satirlar\.length\} \/ \$?\{liste\.toplam\} kayıt gösteriliyor/);
   });
 });

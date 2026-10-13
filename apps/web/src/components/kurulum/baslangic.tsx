@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import {
   KURULUM_PLATFORMLARI,
@@ -21,7 +21,8 @@ import {
   type KurulumSayaci,
   type SirketKurulumAdimi,
 } from '@/lib/panel-adresleri';
-import { Dugme, dugmeSinifi } from '@/components/ui/dugme';
+import { Serit } from '@/components/ui/hal';
+import { AltCubuk, BuyukSecim, SecimKarti as SecimKartiKalibi, Soru } from '@/components/ui/sihirbaz';
 import { adimOzeti, beyanDegistir } from '@/components/marka-merkezi/kurulum-listesi-mantik';
 import type { SecimKarti } from './kurulum-akisi';
 import { Ray, RayBasligi, RayListesi, type RaySatiri } from './sihirbaz-rayi';
@@ -123,6 +124,7 @@ export function Baslangic({
   const [platformlar, setPlatformlar] = useState<Record<string, KurulumPlatformu[]>>({});
   const [bekliyor, setBekliyor] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
+  const router = useRouter();
 
   /*
    * SAYAÇLAR ÜÇERLİ PARTİLER HÂLİNDE: yüz isteği aynı anda atmak paylaşımlı
@@ -199,37 +201,33 @@ export function Baslangic({
   const sirketTamam = sirketAdimlari.filter((a) => a.durum === 'tamam').length;
   const sirketSayilan = sirketAdimlari.filter((a) => a.durum !== 'kullanilmiyor' && a.durum !== 'kapsam_disi').length;
 
-  const kart = (tur: 'tamamla' | SecimKarti['tur'], baslik: string, aciklama: string, govde: React.ReactNode, engel: string | null = null) => {
+  /*
+   * BÜYÜK SEÇİM (ortak `SecimKarti`), seçimin içeriği ALTINDA. Eskiden her
+   * kart radyo düğmesiydi ve içeriği kartın içinde açılıyordu; dört kart
+   * açılıp kapanırken düğmeler kartın içinde dağınık duruyordu. Bugün
+   * kartlar yalnız seçer, seçimin ayrıntısı altta, eylemi alt çubukta.
+   * ENGELLİ KART DA SEÇİLEBİLİR: kapalı bir kart nedenini söyleyemezdi;
+   * seçilince neden alt çubuğun notunda, "Devam" kapalı.
+   *
+   * AÇILIP KAPANAN İÇERİK DOM'DAN ÇIKMAZ: görünürlük sınıfla (CLAUDE.md).
+   */
+  const kart = (tur: 'tamamla' | SecimKarti['tur'], ikon: string, baslik: string, aciklama: string, engel: string | null = null) => (
+    <SecimKartiKalibi
+      key={tur}
+      ikon={ikon}
+      kirmizi={tur === 'tamamla'}
+      baslik={baslik}
+      aciklama={aciklama}
+      alt={engel ?? undefined}
+      secili={secim === tur}
+      onClick={() => setSecim(tur)}
+    />
+  );
+  const icerik = (tur: 'tamamla' | SecimKarti['tur'], govde: React.ReactNode) => {
     const acik = secim === tur;
     return (
-      <div
-        role="radio"
-        aria-checked={acik}
-        aria-disabled={engel !== null || undefined}
-        tabIndex={0}
-        onClick={() => setSecim(tur)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            setSecim(tur);
-          }
-        }}
-        className={`grid cursor-pointer grid-cols-[22px_1fr] gap-3 rounded-xl border bg-surface px-[18px] py-4 transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand motion-reduce:transition-none ${
-          acik ? 'border-brand/45 shadow-[0_0_0_1px_color-mix(in_srgb,var(--brand-primary)_45%,transparent)]' : 'border-line'
-        }`}
-      >
-        <span aria-hidden className={`mt-0.5 grid h-[18px] w-[18px] place-items-center rounded-full border-2 ${acik ? 'border-brand' : 'border-ink-muted'}`}>
-          <span className={`h-2 w-2 rounded-full bg-brand transition-opacity duration-150 motion-reduce:transition-none ${acik ? 'opacity-100' : 'opacity-0'}`} />
-        </span>
-        <div className="min-w-0">
-          <h3 className="m-0 text-[15px] font-bold text-ink">{baslik}</h3>
-          <p className="mt-0.5 text-[13px] text-ink-muted">{aciklama}</p>
-          {engel && <p className="mt-1 text-[13px] text-ink">{engel}</p>}
-          {/* AÇILIP KAPANAN İÇERİK DOM'DAN ÇIKMAZ: görünürlük sınıfla (CLAUDE.md). */}
-          <div className={acik ? '' : 'hidden'} onClick={(e) => e.stopPropagation()}>
-            {govde}
-          </div>
-        </div>
+      <div key={tur} className={acik ? '' : 'hidden'}>
+        {govde}
       </div>
     );
   };
@@ -239,14 +237,26 @@ export function Baslangic({
   const sirketKarti = yeniKarti('sirket');
   const ustKarti = yeniKarti('ust-hesap');
 
+  const secimKarti = secim === 'tamamla' ? null : yeniKarti(secim);
+  const tamamlaNotu = !secili
+    ? 'Bir workspace seç.'
+    : secili.id !== aktifClientId
+      ? `Üst çubukta seçili workspace de ${secili.name} olur; açık diğer sekmeler de ona geçer.`
+      : `Şirket adımları tamam: ${sirketTamam} / ${sirketSayilan}`;
+  const ACILIS_DUGMESI: Record<SecimKarti['tur'], string> = {
+    workspace: 'Yeni workspace aç',
+    sirket: 'Yeni şirket aç',
+    'ust-hesap': 'Yeni üst hesap aç',
+  };
+
   return (
-    <section aria-label="Kurulum sihirbazı başlangıcı" className="overflow-hidden rounded-[14px] border border-line bg-surface">
+    <section aria-label="Kurulum sihirbazı başlangıcı" className="overflow-clip rounded-kart border border-line bg-surface">
       <div className="grid min-h-[560px] lg:grid-cols-[300px_minmax(0,1fr)]">
         <Ray
           baslik={<RayBasligi tamam={0} toplam={0} metin="workspace seçilmedi" />}
           ozet={
             <>
-              <span className="text-ink-muted">·</span> Adımlar <span className="ml-auto text-xs font-normal text-ink-muted">workspace seçilmedi</span>
+              <span className="text-ink-muted">·</span> Adımlar <span className="ml-auto text-12 font-normal text-ink-muted">workspace seçilmedi</span>
             </>
           }
         >
@@ -263,172 +273,169 @@ export function Baslangic({
           />
         </Ray>
 
-        <div className="flex min-w-0 flex-col px-4 pt-5 lg:px-8 lg:pt-7">
-          <span className="text-xs font-semibold uppercase tracking-[0.06em] text-ink-muted">Kurulum sihirbazı</span>
-          <h2 className="mb-1.5 mt-1.5 font-baslik text-xl font-extrabold text-ink lg:text-2xl">Ne yapmak istiyorsun?</h2>
-          <p className="mb-4 max-w-[66ch] text-sm text-ink-muted">
-            Sihirbaz bir şirketin ve workspace’in reklam vermeye hazır olması için gereken her şeyi sırayla tamamlar. Bitmiş adımları atlar ama gösterir; kalan her işin nedenini yazar.
-          </p>
+        <div className="flex min-w-0 flex-col px-5 pt-6 lg:px-8">
+          <Soru
+            ust="Başlangıç"
+            soru="Ne yapmak istiyorsun?"
+            aciklama="Sihirbaz bir şirketin ve workspace’in reklam vermeye hazır olması için gereken her şeyi sırayla tamamlar. Bitmiş adımları atlar ama gösterir; kalan her işin nedenini yazar."
+          />
 
-          <div role="radiogroup" aria-label="Sihirbaz türü" className="grid gap-3">
-            {workspaceler.length > 0 || workspaceHatasi
-              ? kart(
-                  'tamamla',
-                  'Var olan bir workspace’i tamamla',
-                  `${sirketAdi} şirketinin workspace’leri, en çok eksiği olan üstte.`,
-                  <>
-                    {workspaceHatasi && <p className="mt-2 text-sm text-danger-strong">Workspace listesi okunamadı: {workspaceHatasi}</p>}
-                    <ul role="listbox" aria-label="Workspace seç" className="mt-3.5 overflow-hidden rounded-[10px] border border-line">
-                      {satirlar.map((s) => {
-                        const o = okunan[s.id];
-                        const sayilmadi = !okunacak.includes(s.id);
-                        const kalan = s.sayac ? s.sayac.toplam - s.sayac.tamam : null;
-                        const yuzde = s.sayac ? Math.round((s.sayac.tamam / Math.max(s.sayac.toplam, 1)) * 100) : 0;
-                        return (
-                          <li
-                            key={s.id}
-                            role="option"
-                            aria-selected={seciliWs === s.id}
-                            tabIndex={0}
-                            onClick={() => setSeciliWs(s.id)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault();
-                                setSeciliWs(s.id);
-                              }
-                            }}
-                            className={`grid cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-3.5 border-t border-line px-3.5 py-3 first:border-t-0 focus-visible:outline-2 focus-visible:outline-brand sm:grid-cols-[minmax(0,1fr)_auto_auto] ${
-                              seciliWs === s.id ? 'bg-surface-muted shadow-[inset_3px_0_0_var(--brand-primary)]' : ''
-                            }`}
-                          >
-                            <div className="min-w-0">
-                              <div className="font-semibold text-ink">{s.ad}</div>
-                              <div className="truncate text-[12.5px] text-ink-muted">
-                                {sayilmadi
-                                  ? 'Sayılmadı: ilk ' + BASLANGIC_SAYAC_SINIRI + ' workspace sayılıyor; açınca okunur.'
-                                  : s.sayac === undefined
-                                    ? 'Okunuyor…'
-                                    : s.sayac === null
-                                      ? `Okunamadı${o?.hata ? `: ${o.hata}` : ''}`
-                                      : s.sayac.bitti
-                                        ? 'Hiç eksik yok'
-                                        : `Eksik: ${(o?.eksikler ?? []).slice(0, 4).join(', ')}${(o?.eksikler?.length ?? 0) > 4 ? ` ve ${o!.eksikler!.length - 4} adım daha` : ''}`}
-                              </div>
-                            </div>
-                            <div className="hidden h-1 w-[90px] overflow-hidden rounded bg-surface-sunken sm:block" aria-hidden>
-                              <span className="block h-full bg-ink" style={{ width: `${yuzde}%` }} />
-                            </div>
-                            <div className="text-right font-baslik text-[13px] font-bold text-ink">
-                              {s.sayac ? `${s.sayac.tamam} / ${s.sayac.toplam}` : '—'}
-                              <small className="mt-0.5 block font-sans text-[11.5px] font-normal text-ink-muted">
-                                {s.sayac ? (s.sayac.bitti ? 'hazır' : s.sayac.bilinmiyor > 0 && kalan === s.sayac.bilinmiyor ? `${s.sayac.bilinmiyor} okunamadı` : `${kalan} iş kaldı`) : ''}
-                              </small>
-                            </div>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                    {/* SESSİZ KESME YOK: kaç workspace'in sayıldığı yazılı. */}
-                    {workspaceler.length > BASLANGIC_SAYAC_SINIRI && (
-                      <p className="mt-2 text-[12.5px] text-ink-muted">
-                        {workspaceler.length} workspace’ten {BASLANGIC_SAYAC_SINIRI} tanesinin sayacı okundu.
-                      </p>
-                    )}
-                    {secili && (
-                      <div className="mt-3.5 rounded-[10px] bg-surface-muted px-3.5 py-3 text-[13px]">
-                        <b className="mb-2 block text-ink">{secili.name} workspace’inde hangi platformlarda reklam vereceğiz?</b>
-                        {KURULUM_PLATFORMLARI.map((p) => {
-                          const acik = !yeniKullanilmayan.includes(p);
-                          const yeni = beyanDegistir(yeniKullanilmayan, p);
-                          return (
-                            <label key={p} className="mr-4 inline-flex items-center gap-2 font-semibold text-ink">
-                              <input
-                                type="checkbox"
-                                checked={acik}
-                                disabled={!platformYazabilir || mevcutKullanilmayan === null || yeni === null}
-                                onChange={() => yeni && setPlatformlar((x) => ({ ...x, [secili.id]: yeni }))}
-                                className="h-4 w-4 accent-[var(--text)]"
-                              />
-                              {PLATFORM_ADI[p]}
-                            </label>
-                          );
-                        })}
-                        <p className="mt-2.5 text-[12.5px] text-ink-muted">
-                          {mevcutKullanilmayan === null
-                            ? 'Bu workspace’in platform beyanı henüz okunmadı.'
-                            : 'Kullanmadığın platformun adımları listede soluk kalır ve sayılmaz. Sonradan açabilirsin. İkisi birden kapatılamaz.'}
-                        </p>
-                      </div>
-                    )}
-                    {hata && (
-                      <p role="alert" className="mt-2 text-sm text-danger-strong">
-                        {hata}
-                      </p>
-                    )}
-                    <div className="mt-2.5 flex flex-wrap gap-2">
-                      <Dugme bekliyor={bekliyor} disabled={!secili} onClick={() => void gecVeTamamla()}>
-                        {secili ? (secili.id === aktifClientId ? `${secili.name} workspace’ini tamamla` : `${secili.name} workspace’ine geç ve tamamla`) : 'Bir workspace seç'}
-                      </Dugme>
-                    </div>
-                    {secili && secili.id !== aktifClientId && (
-                      <p className="mt-2.5 text-[12.5px] text-ink-muted">Üst çubukta seçili workspace de {secili.name} olur; açık diğer sekmeler de ona geçer.</p>
-                    )}
-                  </>,
-                )
-              : null}
+          <BuyukSecim>
+            {(workspaceler.length > 0 || workspaceHatasi) &&
+              kart('tamamla', '✓', 'Var olan bir workspace’i tamamla', `${sirketAdi} şirketinin workspace’leri, en çok eksiği olan üstte.`)}
             {wsKarti &&
               kart(
                 'workspace',
+                'W',
                 'Yeni workspace aç',
                 `${sirketAdi} şirketine yeni bir proje ekler. Önce adı ve web sitesi, sonra hesaplar; aynı sihirbaz sonuna kadar götürür.`,
-                !wsKarti.engel && (
-                  <div className="mt-2.5">
-                    <Link href={acilisAdresi('workspace')} className={dugmeSinifi('birincil')}>
-                      Yeni workspace aç
-                    </Link>
-                  </div>
-                ),
                 wsKarti.engel,
               )}
             {sirketKarti &&
               kart(
                 'sirket',
+                'Ş',
                 'Yeni şirket aç',
                 'Ajansa yeni bir şirket ekler. Ajansın Meta ve Google bağlantısı yeni şirkette de kullanılır; yeniden bağlanmaz.',
-                !sirketKarti.engel && (
-                  <div className="mt-2.5">
-                    <Link href={acilisAdresi('sirket')} className={dugmeSinifi('birincil')}>
-                      Yeni şirket aç
-                    </Link>
-                  </div>
-                ),
                 sirketKarti.engel,
               )}
-            {ustKarti &&
-              kart(
-                'ust-hesap',
-                ustKarti.baslik,
-                ustKarti.aciklama,
-                !ustKarti.engel && (
-                  <div className="mt-2.5">
-                    <Link href={acilisAdresi('ust-hesap')} className={dugmeSinifi('birincil')}>
-                      Yeni üst hesap aç
-                    </Link>
-                  </div>
-                ),
-                ustKarti.engel,
+            {ustKarti && kart('ust-hesap', 'Ü', ustKarti.baslik, ustKarti.aciklama, ustKarti.engel)}
+          </BuyukSecim>
+
+          <div className="mt-6">
+            {(workspaceler.length > 0 || workspaceHatasi) &&
+              icerik(
+                'tamamla',
+                <>
+                  {workspaceHatasi && (
+                    <div className="mb-3">
+                      <Serit ton="hata" baslik="Workspace listesi okunamadı">
+                        {workspaceHatasi}
+                      </Serit>
+                    </div>
+                  )}
+                  <ul role="listbox" aria-label="Workspace seç" className="m-0 list-none overflow-clip rounded-kart border border-line p-0">
+                    {satirlar.map((s) => {
+                      const o = okunan[s.id];
+                      const sayilmadi = !okunacak.includes(s.id);
+                      const kalan = s.sayac ? s.sayac.toplam - s.sayac.tamam : null;
+                      const yuzde = s.sayac ? Math.round((s.sayac.tamam / Math.max(s.sayac.toplam, 1)) * 100) : 0;
+                      return (
+                        <li
+                          key={s.id}
+                          role="option"
+                          aria-selected={seciliWs === s.id}
+                          tabIndex={0}
+                          onClick={() => setSeciliWs(s.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              setSeciliWs(s.id);
+                            }
+                          }}
+                          className={`relative grid cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-3.5 border-t border-line px-4 py-3 transition-colors first:border-t-0 hover:bg-surface-sunken focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand sm:grid-cols-[minmax(0,1fr)_auto_auto] ${
+                            seciliWs === s.id
+                              ? 'bg-surface-sunken before:absolute before:inset-y-2 before:left-0 before:w-[3px] before:rounded-full before:bg-brand'
+                              : ''
+                          }`}
+                        >
+                          <div className="min-w-0">
+                            <div className="font-semibold text-ink">{s.ad}</div>
+                            <div className="truncate text-12 text-ink-muted">
+                              {sayilmadi
+                                ? 'Sayılmadı: ilk ' + BASLANGIC_SAYAC_SINIRI + ' workspace sayılıyor; açınca okunur.'
+                                : s.sayac === undefined
+                                  ? 'Okunuyor…'
+                                  : s.sayac === null
+                                    ? `Okunamadı${o?.hata ? `: ${o.hata}` : ''}`
+                                    : s.sayac.bitti
+                                      ? 'Hiç eksik yok'
+                                      : `Eksik: ${(o?.eksikler ?? []).slice(0, 4).join(', ')}${(o?.eksikler?.length ?? 0) > 4 ? ` ve ${o!.eksikler!.length - 4} adım daha` : ''}`}
+                            </div>
+                          </div>
+                          <div className="hidden h-1 w-[90px] overflow-hidden rounded-full bg-surface-sunken sm:block" aria-hidden>
+                            <span className="block h-full bg-ink" style={{ width: `${yuzde}%` }} />
+                          </div>
+                          <div className="text-right font-baslik text-13 font-bold tabular-nums text-ink">
+                            {s.sayac ? `${s.sayac.tamam} / ${s.sayac.toplam}` : '·'}
+                            <small className="mt-0.5 block font-sans text-11 font-normal text-ink-muted">
+                              {s.sayac ? (s.sayac.bitti ? 'hazır' : s.sayac.bilinmiyor > 0 && kalan === s.sayac.bilinmiyor ? `${s.sayac.bilinmiyor} okunamadı` : `${kalan} iş kaldı`) : ''}
+                            </small>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  {/* SESSİZ KESME YOK: kaç workspace'in sayıldığı yazılı. */}
+                  {workspaceler.length > BASLANGIC_SAYAC_SINIRI && (
+                    <p className="mt-2 text-12 text-ink-muted">
+                      {workspaceler.length} workspace’ten {BASLANGIC_SAYAC_SINIRI} tanesinin sayacı okundu.
+                    </p>
+                  )}
+                  {secili && (
+                    <div className="mt-4 rounded-kart border border-line px-4 py-3.5 text-13">
+                      <b className="mb-2 block text-ink">{secili.name} workspace’inde hangi platformlarda reklam vereceğiz?</b>
+                      {KURULUM_PLATFORMLARI.map((p) => {
+                        const acik = !yeniKullanilmayan.includes(p);
+                        const yeni = beyanDegistir(yeniKullanilmayan, p);
+                        return (
+                          <label key={p} className="mr-4 inline-flex items-center gap-2 font-semibold text-ink">
+                            <input
+                              type="checkbox"
+                              checked={acik}
+                              disabled={!platformYazabilir || mevcutKullanilmayan === null || yeni === null}
+                              onChange={() => yeni && setPlatformlar((x) => ({ ...x, [secili.id]: yeni }))}
+                              className="h-4 w-4 accent-[var(--text)]"
+                            />
+                            {PLATFORM_ADI[p]}
+                          </label>
+                        );
+                      })}
+                      <p className="mb-0 mt-2.5 text-12 text-ink-muted">
+                        {mevcutKullanilmayan === null
+                          ? 'Bu workspace’in platform beyanı henüz okunmadı.'
+                          : 'Kullanmadığın platformun adımları listede soluk kalır ve sayılmaz. Sonradan açabilirsin. İkisi birden kapatılamaz.'}
+                      </p>
+                    </div>
+                  )}
+                  {hata && (
+                    <div className="mt-3">
+                      <Serit ton="hata" baslik="Workspace’e geçilemedi">
+                        {hata}
+                      </Serit>
+                    </div>
+                  )}
+                </>,
               )}
           </div>
 
-          <div className="sticky bottom-0 -mx-4 mt-6 flex flex-wrap items-center gap-2.5 border-t border-line bg-surface px-4 py-3.5 lg:-mx-8 lg:px-8">
-            <span className="text-[12.5px] text-ink-muted">
-              Şirket adımları tamam: {sirketTamam} / {sirketSayilan}
-            </span>
-            <span className="flex-1" />
-            <Link href="/dashboard" className={dugmeSinifi('ikincil')}>
-              Vazgeç
-            </Link>
-          </div>
+          {/*
+            TEK BİRİNCİL ALT ÇUBUKTA: "tamamla"da seçili workspace'e geçiş,
+            yeni kartlarda açılış sihirbazı. Kapalıysa nedeni notta
+            (engel ya da "Bir workspace seç").
+          */}
+          <AltCubuk
+            geri={{ etiket: 'Vazgeç', onClick: () => router.push('/dashboard') }}
+            not={secim === 'tamamla' ? tamamlaNotu : (secimKarti?.engel ?? `Şirket adımları tamam: ${sirketTamam} / ${sirketSayilan}`)}
+            devam={
+              secim === 'tamamla'
+                ? {
+                    etiket: secili
+                      ? secili.id === aktifClientId
+                        ? `${secili.name} workspace’ini tamamla`
+                        : `${secili.name} workspace’ine geç ve tamamla`
+                      : 'Bir workspace seç',
+                    onClick: () => void gecVeTamamla(),
+                    kapali: !secili,
+                    bekliyor: bekliyor,
+                  }
+                : {
+                    etiket: ACILIS_DUGMESI[secim],
+                    onClick: () => router.push(acilisAdresi(secim)),
+                    kapali: !secimKarti || secimKarti.engel !== null,
+                  }
+            }
+          />
         </div>
       </div>
     </section>

@@ -3,6 +3,7 @@ import type { ClientSetupResult } from '@advetics/shared';
 import { markaMerkeziAdresi, PANEL_YERLERI } from '@/lib/panel-adresleri';
 import { atamaBildirimi } from '@/lib/atama-bildirimi';
 import { formatNumber } from '@/lib/format';
+import { Serit } from '@/components/ui/hal';
 
 /**
  * KURULUM SONUCU — kısmi başarı SESSİZ KALMIYOR.
@@ -38,20 +39,20 @@ export function KurulumSonucu({
       </ul>
 
       {veriGelecek && (
-        <p className="rounded-lg bg-surface-sunken px-3.5 py-2.5 text-sm text-ink-muted">
-          Son 90 günün verisi çekiliyor. Birkaç dakika içinde Genel Bakış&apos;ta görünür.
-        </p>
+        <Serit ton="bilgi" baslik="Son 90 günün verisi çekiliyor.">
+          Birkaç dakika içinde Genel Bakış&apos;ta görünür.
+        </Serit>
       )}
 
       {boostsuz > 0 && (
-        <p className="rounded-lg bg-warn-soft px-3.5 py-2.5 text-sm text-warn-strong ring-1 ring-inset ring-warn/30">
-          {boostsuz} sayfaya boost hesabı bağlanmadı. Akıllı Boost bu sayfalarda çalışmaz;{' '}
+        <Serit ton="uyari" baslik={`${boostsuz} sayfaya boost hesabı bağlanmadı.`}>
+          Akıllı Boost bu sayfalarda çalışmaz;{' '}
           <KurulumBaglantisi clientId={sonuc.clientId} capa="kanallar" /> bölümünden bağlayabilirsin.
-        </p>
+        </Serit>
       )}
 
       {sonuc.userCreated && (
-        <p className="text-sm text-ink-muted">
+        <p className="text-13 text-ink-muted">
           Giriş hesabı açıldı. Parolayı sen ileteceksin.
         </p>
       )}
@@ -64,51 +65,43 @@ export function KurulumSonucu({
         workspace'in raporundaki rakam da değişti.
       */}
       {(sonuc.movedRows > 0 || Object.keys(sonuc.leftBehind).length > 0) && (
-        <div className="rounded-lg bg-warn-soft px-3.5 py-2.5 text-sm text-warn-strong ring-1 ring-inset ring-warn/30">
+        <Serit ton="uyari" baslik="Başka bir workspace'in verisi değişti.">
           {sonuc.movedRows > 0 && (
-            <p>
+            <span className="block">
               {formatNumber(sonuc.movedRows)} kayıt eski workspace&apos;ten buraya taşındı. Eski
               workspace&apos;in raporundaki rakamlar buna göre değişti.
-            </p>
+            </span>
           )}
           {Object.keys(sonuc.leftBehind).length > 0 && (
-            <p className="mt-1">
+            <span className="mt-1 block">
               Eski workspace&apos;te kalanlar:{' '}
               {Object.entries(sonuc.leftBehind)
                 .map(([etiket, n]) => `${formatNumber(n)} ${etiket}`)
                 .join(', ')}
               .
-            </p>
+            </span>
           )}
-        </div>
+        </Serit>
       )}
 
       {atamaBildirimi(sonuc, true) && (
-        <p className="rounded-lg bg-surface-sunken px-3.5 py-2.5 text-xs text-ink-muted">
-          {atamaBildirimi(sonuc, true)}
-        </p>
+        <Serit ton="bilgi" baslik={atamaBildirimi(sonuc, true)} />
       )}
 
       {sonuc.failures.length > 0 && (
-        <div
-          role="alert"
-          className="rounded-lg bg-danger-soft px-3.5 py-2.5 ring-1 ring-inset ring-danger/30"
-        >
-          <p className="text-sm font-semibold text-danger-strong">
-            {sonuc.failures.length} adım tamamlanamadı
-          </p>
-          <ul className="mt-1 space-y-1">
+        <Serit ton="hata" baslik={`${sonuc.failures.length} adım tamamlanamadı`}>
+          <span className="mt-1 grid gap-1">
             {sonuc.failures.map((f) => (
-              <li key={`${f.kind}-${f.id}`} className="text-xs text-danger-strong">
+              <span key={`${f.kind}-${f.id}`} className="block text-ink">
                 {f.reason}
-              </li>
+              </span>
             ))}
-          </ul>
-          <p className="mt-1.5 text-xs text-ink-muted">
+          </span>
+          <span className="mt-1.5 block">
             Workspace kuruldu. Eksikleri <KurulumBaglantisi clientId={sonuc.clientId} /> bölümünden
             tamamlayabilirsin.
-          </p>
-        </div>
+          </span>
+        </Serit>
       )}
     </div>
   );
@@ -123,7 +116,7 @@ export function KurulumSonucu({
  */
 function KurulumBaglantisi({ clientId, capa }: { clientId: string; capa?: 'kanallar' }) {
   return (
-    <Link href={markaMerkeziAdresi('kurulum', clientId, capa)} className="font-semibold underline-offset-2 hover:underline">
+    <Link href={markaMerkeziAdresi('kurulum', clientId, capa)} className="font-semibold text-ink underline-offset-2 hover:underline">
       {PANEL_YERLERI.kurulum}
     </Link>
   );
@@ -131,9 +124,9 @@ function KurulumBaglantisi({ clientId, capa }: { clientId: string; capa?: 'kanal
 
 function Sayac({ etiket, deger }: { etiket: string; deger: number }) {
   return (
-    <li className="rounded-lg border border-line px-3.5 py-2.5">
-      <span className="block text-xl font-semibold tabular-nums text-ink">{deger}</span>
-      <span className="block text-xs text-ink-muted">{etiket}</span>
+    <li className="rounded-kart border border-line px-4 py-3">
+      <span className="block font-baslik text-18 font-bold tabular-nums text-ink">{deger}</span>
+      <span className="block text-12 text-ink-muted">{etiket}</span>
     </li>
   );
 }

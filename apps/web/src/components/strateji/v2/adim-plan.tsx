@@ -15,8 +15,9 @@ import {
 } from '@advetics/shared';
 import type { StratejiDetayi } from '@advetics/shared';
 import { Dugme } from '@/components/ui/dugme';
+import { Kart } from '@/components/ui/kart';
+import { Soru } from '@/components/ui/sihirbaz';
 import { tutarCoz } from '../hesap';
-import { NotKutusu, SoruBasligi } from './akis-cerceve';
 import { AmacIkonu } from './belge';
 import {
   HALKA_CEVRE,
@@ -41,7 +42,7 @@ import {
 } from './hesap';
 import { KalemDuzenleyici } from './kalem-duzenleyici';
 import { KelimeBolumu } from './kelime-bolumu';
-import { Bildirim, Rozet, yaz } from './ortak';
+import { Bildirim, Etiket, yaz } from './ortak';
 import { Tutar } from './tutar';
 
 /** Rapordaki yapay zekâ metinleri (kitle Kime adımında onaylandı, burada değil). */
@@ -178,7 +179,7 @@ export function AdimPlan({
 
   return (
     <>
-      <SoruBasligi ust="6 / 7 · Plan" soru="Önerdiğimiz plan" aciklama="Her kampanyaya tıklayıp neden böyle önerdiğimizi gör. Bir kampanyayı değiştirmek istersen içinden düzenle." />
+      <Soru ust="6 / 7 · Plan" soru="Önerdiğimiz plan" aciklama="Her kampanyaya tıklayıp neden böyle önerdiğimizi gör. Bir kampanyayı değiştirmek istersen içinden düzenle." />
 
       {plan.durum === 'revizyon' && plan.revizyonNotu && (
         <div className="mb-4">
@@ -188,7 +189,8 @@ export function AdimPlan({
         </div>
       )}
 
-      <section aria-label="Bütçe dağılımı" className="mb-6 grid items-center gap-7 rounded-2xl border border-line bg-surface p-6 md:grid-cols-[240px_1fr]">
+      <Kart baslik="Bütçe dağılımı" className="mb-6">
+        <div className="grid items-center gap-7 md:grid-cols-[240px_1fr]">
         <svg viewBox="0 0 200 200" width="220" height="220" className="mx-auto max-w-full" role="img" aria-label={`Meta yüzde ${Math.round(yuzde(toplamlar.meta, toplamlar.meta + toplamlar.google))}, Google yüzde ${Math.round(yuzde(toplamlar.google, toplamlar.meta + toplamlar.google))}`}>
           <circle cx="100" cy="100" r="70" fill="none" className="stroke-ink/10" strokeWidth="26" />
           <circle cx="100" cy="100" r="70" fill="none" className="stroke-ink" strokeWidth="26" strokeDasharray={`${yay.meta} ${HALKA_CEVRE}`} transform="rotate(-90 100 100)" />
@@ -233,7 +235,8 @@ export function AdimPlan({
             </p>
           )}
         </div>
-      </section>
+        </div>
+      </Kart>
 
       <div className="grid gap-3">
         {taslak.map((k, i) => {
@@ -292,13 +295,15 @@ export function AdimPlan({
       </div>
 
       {disarida.length > 0 && (
-        <NotKutusu>
-          {disarida.map((n) => (
-            <span key={n} className="block">
-              {n}
-            </span>
-          ))}
-        </NotKutusu>
+        <div className="mt-4">
+          <Bildirim baslik="Bazı hedefler plana alınmadı.">
+            {disarida.map((n) => (
+              <span key={n} className="block">
+                {n}
+              </span>
+            ))}
+          </Bildirim>
+        </div>
       )}
 
       {(digerNotlar.length > 0 || detay.riskler.length > 0) && (
@@ -317,9 +322,8 @@ export function AdimPlan({
         </details>
       )}
 
-      <section aria-label="Rapordaki metinler" className="mt-6 rounded-2xl border border-line bg-surface p-5">
-        <b className="font-baslik text-base text-ink">Rapordaki metinler</b>
-        <p className="m-0 mt-1 text-[13px] text-ink-muted">Müşterinin okuyacağı paragraflar. Değiştirebilirsin; "Planı onayla" bunları rapora alır.</p>
+      <Kart baslik="Rapordaki metinler" className="mt-6">
+        <p className="m-0 text-[13px] text-ink-muted">Müşterinin okuyacağı paragraflar. Değiştirebilirsin; "Planı onayla" bunları rapora alır.</p>
         <div className="mt-3 grid gap-3 md:grid-cols-3">
           {RAPOR_METINLERI.map((b) => {
             const m = metinler[b];
@@ -327,10 +331,10 @@ export function AdimPlan({
               <label key={b} className="flex min-w-0 flex-col gap-1.5">
                 <span className="flex items-center justify-between gap-2 text-xs font-semibold text-ink-muted">
                   {BOLUM_BASLIGI[b]}
-                  {m && <Rozet ton={m.kaynak === 'ai' ? 'kirmizi' : 'cizgi'}>{STRATEJI_KAYNAK_ETIKETI[m.kaynak]}</Rozet>}
+                  {m && <Etiket ton={m.kaynak === 'ai' ? 'kirmizi' : 'cizgi'}>{STRATEJI_KAYNAK_ETIKETI[m.kaynak]}</Etiket>}
                 </span>
                 <textarea
-                  className="min-h-[7.5rem] w-full rounded-lg border border-line bg-surface px-2.5 py-2 text-[13px] leading-relaxed text-ink outline-none focus:border-brand"
+                  className="min-h-[7.5rem] w-full rounded-alan border border-line bg-surface px-2.5 py-2 text-[13px] leading-relaxed text-ink outline-none focus:border-brand"
                   maxLength={2000}
                   value={m?.metin ?? ''}
                   placeholder="Yapay zekâ bu bölümü yazamadı; sen yaz ya da boş bırak."
@@ -340,7 +344,7 @@ export function AdimPlan({
             );
           })}
         </div>
-      </section>
+      </Kart>
 
       {hata && (
         <div className="mt-4">
@@ -445,7 +449,7 @@ function KalemAkordiyonu({
                           {k.meta && k.google ? `${PLATFORM_ADI[p]}: ` : ''}
                           {x.veri ? (
                             <>
-                              {x.ana} <Rozet>Hesap verisi</Rozet>
+                              {x.ana} <Etiket>Hesap verisi</Etiket>
                             </>
                           ) : (
                             <span className="text-[13px] text-ink-muted">
@@ -462,7 +466,7 @@ function KalemAkordiyonu({
               </Satir>
               <div className="col-span-2 md:col-span-4">
                 <dt className="flex items-center gap-2 text-xs font-semibold text-ink-muted">
-                  Görsel ve mesaj {k.kreatifYonergesi && <Rozet ton={k.kreatifYonergesi.kaynak === 'ai' ? 'kirmizi' : 'cizgi'}>{k.kreatifYonergesi.kaynak === 'ai' ? 'Yapay zekâ' : 'Ajans yazdı'}</Rozet>}
+                  Görsel ve mesaj {k.kreatifYonergesi && <Etiket ton={k.kreatifYonergesi.kaynak === 'ai' ? 'kirmizi' : 'cizgi'}>{k.kreatifYonergesi.kaynak === 'ai' ? 'Yapay zekâ' : 'Ajans yazdı'}</Etiket>}
                 </dt>
                 <dd className="m-0 mt-0.5 text-sm text-ink">{k.kreatifYonergesi?.metin ?? <span className="text-ink-muted">Yönerge yok; düzenleyerek ekleyebilirsin.</span>}</dd>
                 {k.metin && k.metin.basliklar[0] && <dd className="m-0 mt-1 text-[13px] text-ink-muted">Örnek başlık: "{k.metin.basliklar[0]}"</dd>}

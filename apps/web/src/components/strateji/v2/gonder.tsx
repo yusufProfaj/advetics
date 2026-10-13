@@ -174,12 +174,12 @@ export function GonderPaneli({ planId, surum, izinler, tazeSurum }: { planId: st
               ))}
             </select>
           </label>
-          <Dugme boyut="kucuk" onClick={() => void baglantiOlustur()} bekliyor={suruyor === 'baglanti'}>
+          <Dugme ton="koyu" boyut="kucuk" onClick={() => void baglantiOlustur()} bekliyor={suruyor === 'baglanti'}>
             Bağlantı oluştur
           </Dugme>
         </div>
         {yeni && (
-          <div className="space-y-1.5 rounded-lg border border-line bg-surface-muted p-2.5">
+          <div className="space-y-1.5 rounded-alan border border-line bg-surface-muted p-2.5">
             <input className={GIRDI} readOnly value={yeni.tam} onFocus={(e) => e.target.select()} aria-label="Onay bağlantısı" />
             <div className="flex flex-wrap items-center gap-2">
               <Dugme ton="ikincil" boyut="kucuk" onClick={() => void kopyala()}>
@@ -205,7 +205,7 @@ export function GonderPaneli({ planId, surum, izinler, tazeSurum }: { planId: st
                     Sürüm {b.surum} · {zamanMetni(b.olusturuldu)} · {hal}
                   </span>
                   {acik && (
-                    <Dugme ton="sade" boyut="kucuk" onClick={() => void iptal(b.id)} bekliyor={suruyor === b.id}>
+                    <Dugme ton="hayalet" boyut="kucuk" onClick={() => void iptal(b.id)} bekliyor={suruyor === b.id}>
                       İptal et
                     </Dugme>
                   )}
@@ -221,7 +221,7 @@ export function GonderPaneli({ planId, surum, izinler, tazeSurum }: { planId: st
           <>
             <p className="m-0 text-xs text-ink-muted">PDF eki ve onay bağlantısı gider. Alıcıları virgülle ayırın.</p>
             <textarea className={`${GIRDI} min-h-[56px]`} value={alicilar} onChange={(e) => setAlicilar(e.target.value)} placeholder="ornek@firma.com" aria-label="Alıcılar" />
-            <Dugme boyut="kucuk" onClick={() => void mailGonder()} bekliyor={suruyor === 'mail'}>
+            <Dugme ton="koyu" boyut="kucuk" onClick={() => void mailGonder()} bekliyor={suruyor === 'mail'}>
               Mail gönder
             </Dugme>
             {mail && (

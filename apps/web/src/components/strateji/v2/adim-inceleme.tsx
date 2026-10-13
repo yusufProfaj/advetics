@@ -13,7 +13,8 @@ import { apiFetch } from '@/lib/api';
 import { Dugme } from '@/components/ui/dugme';
 import { okumaHatasi } from '../hesap';
 import { INCELEME_SATIRLARI, incelemeAcilisi, incelemeEtiketi, incelemeYuzdesi, type IncelemeSatirHali } from './akis';
-import { SoruBasligi } from './akis-cerceve';
+import { Kart } from '@/components/ui/kart';
+import { Soru } from '@/components/ui/sihirbaz';
 import { bolumKayitGovdesi, kalemGirdisi } from './hesap';
 import { Bildirim, yaz } from './ortak';
 
@@ -135,7 +136,7 @@ export function AdimInceleme({
 
   return (
     <>
-      <SoruBasligi ust="5 / 7 · İnceleme" soru="Hesabını inceliyoruz" aciklama='Önerideki her sayı buradan gelir. Bulamadığımız bir şeyi uydurmayız; "tahmin yok" der, nedenini yazarız.' />
+      <Soru ust="5 / 7 · İnceleme" soru="Hesabını inceliyoruz" aciklama='Önerideki her sayı buradan gelir. Bulamadığımız bir şeyi uydurmayız; "tahmin yok" der, nedenini yazarız.' />
       {ozetGoster ? (
         <div className="max-w-[720px] space-y-3">
           {acilisHali === 'sor' ? (
@@ -158,13 +159,13 @@ export function AdimInceleme({
               <IncelemeSatiri key={p} etiket={incelemeEtiketi(p)} hal={haller[i]!} />
             ))}
           </ol>
-          <div className="rounded-2xl border border-line bg-surface p-6 lg:sticky lg:top-24">
+          <Kart as="div" className="lg:sticky lg:top-24">
             <span className="text-xs font-bold uppercase tracking-[0.08em] text-brand-strong">{genel.tur === 'bitti' ? 'Hazır' : genel.tur === 'hata' ? 'Durdu' : 'Hazırlanıyor'}</span>
             <div className="font-baslik mt-1 text-[56px] font-extrabold leading-none tracking-tight text-ink">
               {yuzde}
               <small className="text-[22px] text-ink-muted">%</small>
             </div>
-            <div className="mb-2.5 mt-4 h-2 overflow-hidden rounded-full bg-ink/10">
+            <div className="mb-2.5 mt-4 h-2 overflow-hidden rounded-full bg-surface-sunken">
               <span className="block h-full bg-brand motion-safe:transition-[width] motion-safe:duration-300" style={{ width: `${yuzde}%` }} />
             </div>
             <p className="m-0 text-[13px] text-ink-muted">
@@ -183,7 +184,7 @@ export function AdimInceleme({
                 </Dugme>
               </div>
             )}
-          </div>
+          </Kart>
         </div>
       )}
     </>
@@ -203,7 +204,7 @@ function IncelemeSatiri({ etiket, hal }: { etiket: string; hal: IncelemeSatirHal
             : hal.tur === 'sirada'
               ? 'border-ink/25'
               : uyari
-                ? 'border-brand bg-brand text-white'
+                ? 'border-brand bg-brand text-[var(--beyaz)]'
                 : 'border-ink bg-ink text-surface'
         }`}
       >

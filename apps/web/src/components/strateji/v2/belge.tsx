@@ -33,7 +33,7 @@ import {
   yasMetni,
   yuzde,
 } from './hesap';
-import { Nokta, Rozet } from './ortak';
+import { Nokta, Etiket } from './ortak';
 import { Tutar } from './tutar';
 import type { Gerceklesen, StratejiBelgeVerisi } from '@advetics/shared';
 
@@ -61,14 +61,22 @@ export function StratejiBelgesi({
   veri,
   onayYuvasi,
   gerceklesen,
+  kapakBasligi = 'h1',
 }: {
   veri: StratejiBelgeVerisi;
   onayYuvasi: ReactNode;
+  /**
+   * Kapaktaki "Dijital Reklam Stratejisi" başlığının seviyesi. Girişsiz onay
+   * sayfasında belge sayfanın KENDİSİ ve başlığı `h1`; panelde sayfa
+   * başlığı (AdvStrategy) zaten `h1` ve belge onun altında bir bölüm, yani
+   * `h2`. Görünüş sınıftan geliyor, seviye değişince değişmiyor.
+   */
+  kapakBasligi?: 'h1' | 'h2';
   gerceklesen: { tur: 'veri'; v: Gerceklesen } | { tur: 'hata'; mesaj: string } | null;
 }) {
   const durum = veri.plan.durum;
   const cizici: Record<StratejiBolumKodu, () => ReactNode> = {
-    kapak: () => <Kapak veri={veri} />,
+    kapak: () => <Kapak veri={veri} baslik={kapakBasligi} />,
     ozet: () => <Ozet veri={veri} />,
     isletme: () => <Isletme veri={veri} />,
     gecmis: () => <GecmisBolumu veri={veri} />,
@@ -101,17 +109,17 @@ export function StratejiBelgesi({
 function Sayfa({ no, baslik, children }: { no: string | null; baslik: string; children: ReactNode }) {
   return (
     <section className="border-b border-dashed border-black/20 px-5 py-8 last:border-b-0 sm:px-14 sm:py-12" aria-label={baslik}>
-      <span className="font-baslik text-[13px] font-extrabold tracking-[0.08em] text-[#ff2400]">{no}</span>
+      <span className="font-baslik text-[13px] font-extrabold tracking-[0.08em] text-[var(--kirmizi)]">{no}</span>
       <h2 className="font-baslik mb-3 mt-0.5 text-[22px] font-bold">{baslik}</h2>
       {children}
     </section>
   );
 }
 
-const IKINCIL = 'text-[#302e2d]/70';
+const IKINCIL = 'text-[var(--gri)]/70';
 const CIZGI = 'border-black/10';
 
-function Kapak({ veri }: { veri: StratejiBelgeVerisi }) {
+function Kapak({ veri, baslik: Baslik }: { veri: StratejiBelgeVerisi; baslik: 'h1' | 'h2' }) {
   const { plan } = veri;
   const f = filigran(plan.durum);
   const onay = onayCumlesi(plan.onay);
@@ -127,11 +135,11 @@ function Kapak({ veri }: { veri: StratejiBelgeVerisi }) {
         )}
       </div>
       <p className={`mb-1.5 mt-auto text-[15px] ${IKINCIL}`}>{plan.workspaceAdi}</p>
-      <h1 className="font-baslik m-0 text-[32px] font-extrabold leading-[1.06] tracking-[-0.02em] sm:text-[44px]">
+      <Baslik className="font-baslik m-0 text-[32px] font-extrabold leading-[1.06] tracking-[-0.02em] sm:text-[44px]">
         Dijital Reklam
         <br />
-        <span className="text-[#ff2400]">Stratejisi</span>
-      </h1>
+        <span className="text-[var(--kirmizi)]">Stratejisi</span>
+      </Baslik>
       <div className="mb-[18px] mt-[26px] h-[5px] w-[72px] bg-brand" />
       <div className="grid grid-cols-2 gap-3 text-[13px] sm:grid-cols-3">
         <div>
@@ -175,7 +183,7 @@ function Ozet({ veri }: { veri: StratejiBelgeVerisi }) {
         ) : (
           <Kutu etiket="Beklenen sonuç" deger="Tahmin yok" alt="Geçmiş veri yok" />
         )}
-        <div className="col-span-2 bg-[#302e2d] px-4 py-3.5 text-white sm:col-span-1">
+        <div className="col-span-2 bg-[var(--gri)] px-4 py-3.5 text-white sm:col-span-1">
           <div className="text-xs text-white/75">Toplam bütçe</div>
           <Tutar micros={plan.toplamButceMicros} para={plan.paraBirimi} className="text-[20px] font-bold" />
         </div>
@@ -305,8 +313,8 @@ function ButceBolumu({ veri }: { veri: StratejiBelgeVerisi }) {
       <div className="grid items-center gap-6 md:grid-cols-[220px_1fr]">
         <svg viewBox="0 0 200 200" width="200" height="200" role="img" aria-label={`Meta yüzde ${Math.round(yuzde(p.meta, p.meta + p.google))}, Google yüzde ${Math.round(yuzde(p.google, p.meta + p.google))}`} className="mx-auto">
           <circle cx="100" cy="100" r="70" fill="none" stroke="rgba(48,46,45,.07)" strokeWidth="28" />
-          <circle cx="100" cy="100" r="70" fill="none" stroke="#302e2d" strokeWidth="28" strokeDasharray={`${yay.meta} ${HALKA_CEVRE}`} transform="rotate(-90 100 100)" />
-          <circle cx="100" cy="100" r="70" fill="none" stroke="#ff2400" strokeWidth="28" strokeDasharray={`${yay.google} ${HALKA_CEVRE}`} strokeDashoffset={-yay.meta} transform="rotate(-90 100 100)" />
+          <circle cx="100" cy="100" r="70" fill="none" className="stroke-[var(--gri)]" strokeWidth="28" strokeDasharray={`${yay.meta} ${HALKA_CEVRE}`} transform="rotate(-90 100 100)" />
+          <circle cx="100" cy="100" r="70" fill="none" className="stroke-[var(--kirmizi)]" strokeWidth="28" strokeDasharray={`${yay.google} ${HALKA_CEVRE}`} strokeDashoffset={-yay.meta} transform="rotate(-90 100 100)" />
           <text x="100" y="96" textAnchor="middle" className="tutar" fontWeight="700" fontSize="17" fill="#000">
             {/* SVG içinde de Montserrat: `₺` Open Sans'ta yok. */}
             {kisaTutar(plan.toplamButceMicros)} {plan.paraBirimi === 'TRY' ? '₺' : plan.paraBirimi}
@@ -318,7 +326,7 @@ function ButceBolumu({ veri }: { veri: StratejiBelgeVerisi }) {
         <div>
           <div className={`mb-2.5 flex flex-wrap gap-3.5 text-xs ${IKINCIL}`}>
             <span>
-              <i className="mr-1.5 inline-block h-2.5 w-2.5 rounded-sm bg-[#302e2d] align-[-1px]" />
+              <i className="mr-1.5 inline-block h-2.5 w-2.5 rounded-sm bg-[var(--gri)] align-[-1px]" />
               Meta <Tutar micros={p.meta} para={plan.paraBirimi} />
             </span>
             <span>
@@ -330,7 +338,7 @@ function ButceBolumu({ veri }: { veri: StratejiBelgeVerisi }) {
             <div key={a.asama} className="my-2 grid grid-cols-[80px_1fr_100px] items-center gap-2.5 text-[13px] sm:grid-cols-[110px_1fr_120px]">
               <span>{STRATEJI_ASAMA_ETIKETI[a.asama]}</span>
               <div className="flex h-3.5 overflow-hidden rounded-[7px] bg-black/[0.07]">
-                <span className="block h-full bg-[#302e2d]" style={{ width: `${yuzde(a.meta, a.toplam)}%` }} />
+                <span className="block h-full bg-[var(--gri)]" style={{ width: `${yuzde(a.meta, a.toplam)}%` }} />
                 <span className="block h-full bg-brand" style={{ width: `${yuzde(a.google, a.toplam)}%` }} />
               </div>
               <Tutar micros={a.toplam} para={plan.paraBirimi} className="text-right" />
@@ -407,7 +415,7 @@ function KalemKarti({ k, para }: { k: StratejiKalemi; para: string }) {
                 return (
                   <span key={p} className="block">
                     {k.meta && k.google ? `${PLATFORM_ADI[p]}: ` : ''}
-                    {x.ana} {x.veri && <Rozet>Veri</Rozet>}
+                    {x.ana} {x.veri && <Etiket>Veri</Etiket>}
                   </span>
                 );
               })}
@@ -431,7 +439,7 @@ function KalemKarti({ k, para }: { k: StratejiKalemi; para: string }) {
 export function AmacIkonu({ amac }: { amac: StratejiKalemi['amac'] }) {
   const donusum = AMAC_ASAMASI[amac] === 'donusum';
   return (
-    <span className={`font-baslik grid h-[30px] w-[30px] flex-none place-items-center rounded-lg text-xs font-bold text-white ${donusum ? 'bg-brand' : 'bg-[#302e2d]'}`} aria-hidden>
+    <span className={`font-baslik grid h-[30px] w-[30px] flex-none place-items-center rounded-lg text-xs font-bold text-white ${donusum ? 'bg-brand' : 'bg-[var(--gri)]'}`} aria-hidden>
       {amacAdi(amac).charAt(0)}
     </span>
   );
@@ -499,7 +507,7 @@ function Takvim({ veri }: { veri: StratejiBelgeVerisi }) {
               <span className="py-2 pr-2 text-xs font-semibold">{amacAdi(k.amac)}</span>
               <div className="relative h-9">
                 <span
-                  className={`absolute top-[11px] h-3.5 rounded-[7px] ${k.meta && !k.google ? 'bg-[#302e2d]' : k.google && !k.meta ? 'bg-brand' : 'bg-[#302e2d]/60'}`}
+                  className={`absolute top-[11px] h-3.5 rounded-[7px] ${k.meta && !k.google ? 'bg-[var(--gri)]' : k.google && !k.meta ? 'bg-brand' : 'bg-[var(--gri)]/60'}`}
                   style={{ left: `${c.sol}%`, width: `${c.genislik}%` }}
                   title={tarihAraligi(k.baslangic, k.bitis)}
                 />
@@ -525,7 +533,7 @@ function OlcumBolumu({ veri }: { veri: StratejiBelgeVerisi }) {
             {o.etiket}
             {o.platform ? ` · ${PLATFORM_ADI[o.platform]}` : ''}
           </span>
-          <span className={`inline-flex items-center gap-1.5 ${o.durum === 'kurulmali' ? 'font-semibold text-[#ff2400]' : ''}`}>
+          <span className={`inline-flex items-center gap-1.5 ${o.durum === 'kurulmali' ? 'font-semibold text-[var(--kirmizi)]' : ''}`}>
             {o.durum === 'hazir' && <Nokta ton="ok" />}
             {OLCUM_METNI[o.durum]}
           </span>
@@ -551,7 +559,7 @@ function Riskler({ veri }: { veri: StratejiBelgeVerisi }) {
 
 function GerceklesenBolumu({ veri, gerceklesen }: { veri: StratejiBelgeVerisi; gerceklesen: { tur: 'veri'; v: Gerceklesen } | { tur: 'hata'; mesaj: string } | null }) {
   if (gerceklesen === null) return <BosMetin>Gerçekleşen veri bu görünümde yüklenmedi.</BosMetin>;
-  if (gerceklesen.tur === 'hata') return <p className="m-0 text-sm text-[#ff2400]" role="alert">Gerçekleşen veri alınamadı: {gerceklesen.mesaj}</p>;
+  if (gerceklesen.tur === 'hata') return <p className="m-0 text-sm text-[var(--kirmizi)]" role="alert">Gerçekleşen veri alınamadı: {gerceklesen.mesaj}</p>;
   return <PlanGerceklesenTablosu veri={veri} g={gerceklesen.v} />;
 }
 

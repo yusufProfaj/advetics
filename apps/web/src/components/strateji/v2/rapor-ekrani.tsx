@@ -7,13 +7,15 @@ import { stratejiPanelAdresi, stratejiUcYolu, type Permission, type StratejiYoru
 import type { Gerceklesen, StratejiDetayi } from '@advetics/shared';
 import { apiFetch } from '@/lib/api';
 import { dugmeSinifi, Dugme } from '@/components/ui/dugme';
+import { Kart } from '@/components/ui/kart';
+import { Rozet } from '@/components/ui/rozet';
 import { okumaHatasi } from '../hesap';
 import { durumTonu, kurulabilirMi } from './akis';
 import { StratejiBelgesi } from './belge';
 import { GonderPaneli, PdfIndir, pdfDosyaAdi } from './gonder';
 import { STRATEJI_DURUM_ETIKETI, donemMetni } from './hesap';
 import { PanelOnayKutusu } from './onay-kutusu';
-import { Bildirim, Kart, Nokta, yaz } from './ortak';
+import { Bildirim, durumHali, yaz } from './ortak';
 
 type Okuma<T> = { tur: 'veri'; v: T } | { tur: 'hata'; mesaj: string };
 
@@ -82,10 +84,9 @@ export function RaporEkrani({
         <Link href={stratejiPanelAdresi({ musteri: clientId, adim: 'raporlar' })} className={dugmeSinifi('ikincil', 'kucuk')}>
           ← Stratejiler
         </Link>
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-line px-2.5 py-0.5 text-xs font-bold text-ink">
-          <Nokta ton={durumTonu(plan.durum)} />
+        <Rozet hal={durumHali(durumTonu(plan.durum))}>
           {STRATEJI_DURUM_ETIKETI[plan.durum]} · sürüm {plan.surum}
-        </span>
+        </Rozet>
         <span className="min-w-0 flex-1 truncate text-xs text-ink-muted">{donemMetni(plan.baslangic, plan.bitis)}</span>
         {yazabilir && (plan.durum === 'taslak' || plan.durum === 'revizyon') && (
           <Link href={stratejiPanelAdresi({ musteri: clientId, plan: plan.id, adim: 'plan' })} className={dugmeSinifi('ikincil', 'kucuk')}>
@@ -119,12 +120,13 @@ export function RaporEkrani({
       )}
       {yazabilir && plan.durum === 'onayda' && (
         <div className="mx-auto max-w-[860px]">
-          <Kart className="p-4" etiket="Müşteriye gönder">
+          <Kart baslik="Müşteriye gönder">
             <GonderPaneli planId={plan.id} surum={plan.surum} izinler={izinler} tazeSurum={tazeSurum} />
           </Kart>
         </div>
       )}
       <StratejiBelgesi
+        kapakBasligi="h2"
         veri={detay}
         gerceklesen={gerceklesen}
         onayYuvasi={

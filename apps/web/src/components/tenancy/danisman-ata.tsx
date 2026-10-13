@@ -4,6 +4,10 @@ import { useCallback, useEffect, useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation';
 import { WORKSPACE_ROLLERI, type Role } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { Dugme } from '@/components/ui/dugme';
+import { Girdi, Secim } from '@/components/ui/alan';
+import { Serit } from '@/components/ui/hal';
+import { Uyari } from '@/components/ui/uyari';
 import { MusteriDetay } from './musteri-detay';
 import { ENGEL_KISI, atamaEngeli, atamalariYurut, type AtamaSonucu } from './danisman-atama';
 import { ROLE_TR, ROLE_HINT, type MemberRow } from './team-manager';
@@ -138,32 +142,43 @@ export function DanismanAta({
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setAcik(true)}
-        className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
-      >
+      <Dugme ton="ikincil" boyut="kucuk" onClick={() => setAcik(true)}>
         + Danışman ata
-      </button>
+      </Dugme>
 
       <MusteriDetay
         acik={acik}
         onKapat={kapat}
         baslik={clientName}
         altBaslik="Ajans ekibinden bu workspace’e danışman ata"
+        altEylemler={
+          <>
+            <span className="mr-auto self-center text-xs text-ink-muted">
+              {mevcutUyeIdleri.length} kişinin erişimi var
+            </span>
+            <Dugme ton="ikincil" onClick={kapat} disabled={atiyor}>
+              Kapat
+            </Dugme>
+            <Dugme onClick={() => void ata()} disabled={secili.size === 0 || atiyor}>
+              {atiyor ? 'Atanıyor…' : `Ata${secili.size > 0 ? ` (${secili.size})` : ''}`}
+            </Dugme>
+          </>
+        }
       >
         <div className="flex flex-wrap items-center gap-2">
-          <input
+          <Girdi
             type="search"
+            aria-label="Ajans ekibinde ara"
             value={arama}
             onChange={(e) => setArama(e.target.value)}
             placeholder="Ad ya da e-posta ile ara…"
-            className="min-w-0 flex-1 rounded-lg border border-line bg-surface px-3 py-2 text-sm focus:border-brand focus:outline-none"
+            className="!w-auto min-w-0 flex-1"
           />
-          <select
+          <Secim
+            aria-label="Rol"
             value={rol}
             onChange={(e) => setRol(e.target.value as Role)}
-            className="rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink"
+            className="!w-auto"
           >
             {/* TEK WORKSPACE'E ATAMA: Yönetici yok (bkz. WORKSPACE_ROLLERI). */}
             {WORKSPACE_ROLLERI.map((r) => (
@@ -171,7 +186,7 @@ export function DanismanAta({
                 {ROLE_TR[r]}
               </option>
             ))}
-          </select>
+          </Secim>
         </div>
         {/* ROL AÇIKLAMASI SEÇİCİNİN ALTINDA: rolün ne yapabildiğini tahmin
             ettirmek, yanlış yetkiyi sessizce vermenin en kolay yolu. */}
@@ -182,30 +197,35 @@ export function DanismanAta({
           atanacak kimse kalmadı. Dördü de "boş liste" olarak görünürdü ve
           dördünün yapılacak işi farklı.
         */}
-        {yukleniyor && <p className="text-sm text-ink-muted">Ajans ekibi getiriliyor…</p>}
+        {yukleniyor && (
+          <p role="status" className="text-sm text-ink-muted">
+            Ajans ekibi getiriliyor…
+          </p>
+        )}
 
         {hata && (
-          <div className="rounded-lg border border-danger/30 bg-danger/5 px-3 py-2">
-            <p className="text-xs text-danger">{hata}</p>
-            <button
-              type="button"
-              onClick={() => void yukle()}
-              className="mt-1 text-xs font-medium text-brand-strong hover:underline"
-            >
-              Tekrar dene
-            </button>
-          </div>
+          <Serit
+            ton="hata"
+            baslik="Ajans ekibi getirilemedi"
+            eylemler={
+              <Dugme ton="ikincil" boyut="kucuk" onClick={() => void yukle()}>
+                Tekrar dene
+              </Dugme>
+            }
+          >
+            {hata}
+          </Serit>
         )}
 
         {ekip !== null && ekip.length === 0 && (
-          <p className="rounded-lg bg-surface-muted px-3 py-2 text-xs text-ink-muted">
+          <p className="rounded-alan bg-surface-muted px-3 py-2 text-xs text-ink-muted">
             Ajans ekibinde hiç kullanıcı yok. Önce “Kullanıcı ekle” formundan bir
             danışman oluşturun.
           </p>
         )}
 
         {ekip !== null && ekip.length > 0 && atanabilir.length === 0 && (
-          <p className="rounded-lg bg-surface-muted px-3 py-2 text-xs text-ink-muted">
+          <p className="rounded-alan bg-surface-muted px-3 py-2 text-xs text-ink-muted">
             Ajans ekibindeki herkesin bu workspace’e zaten erişimi var.
           </p>
         )}
@@ -215,7 +235,7 @@ export function DanismanAta({
             {suzulmus.map((a) => (
               <li key={a.id}>
                 <label
-                  className={`flex items-center gap-3 rounded-lg border px-3 py-2 ${
+                  className={`flex items-center gap-3 rounded-alan border px-3 py-2 ${
                     a.engel
                       ? 'cursor-not-allowed border-line opacity-60'
                       : 'cursor-pointer border-line hover:border-brand'
@@ -251,16 +271,10 @@ export function DanismanAta({
         )}
 
         {sonuc && (
-          <div
-            className={`rounded-lg px-3 py-2 text-xs ${
-              sonuc.hatalar.length > 0
-                ? 'border border-danger/30 bg-danger/5 text-danger'
-                : 'bg-surface-muted text-ink-muted'
-            }`}
+          <Uyari
+            ton={sonuc.hatalar.length > 0 ? 'tehlike' : 'basari'}
+            baslik={`${sonuc.basarili} kişi bu workspace’e atandı.`}
           >
-            <p>
-              <strong>{sonuc.basarili}</strong> kişi bu workspace’e atandı.
-            </p>
             {/* KISMİ BAŞARI TEK TEK YAZILI. "3 kişi atandı" deyip dördüncüsünü
                 yutmak, atandığı sanılan birinin panelde hiçbir şey görememesi
                 demek ve sebebi hiçbir ekranda yazmaz. */}
@@ -271,30 +285,8 @@ export function DanismanAta({
                 ))}
               </ul>
             )}
-          </div>
+          </Uyari>
         )}
-
-        <div className="flex items-center gap-2 border-t border-line pt-4">
-          <button
-            type="button"
-            onClick={() => void ata()}
-            disabled={secili.size === 0 || atiyor}
-            className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {atiyor ? 'Atanıyor…' : `Ata${secili.size > 0 ? ` (${secili.size})` : ''}`}
-          </button>
-          <button
-            type="button"
-            onClick={kapat}
-            disabled={atiyor}
-            className="rounded-lg border border-line px-4 py-2 text-sm text-ink-muted transition hover:bg-surface-muted disabled:opacity-50"
-          >
-            Kapat
-          </button>
-          <span className="text-xs text-ink-muted">
-            {mevcutUyeIdleri.length} kişinin erişimi var
-          </span>
-        </div>
       </MusteriDetay>
     </>
   );

@@ -230,7 +230,7 @@ describe('KRİTİK: workspace TEK çağrıyla kuruluyor', () => {
 
   it('ad yazılmadan düğme kapalı', () => {
     expect(SIHIRBAZ).toContain("eksik: wsGecerli ? null : 'Workspace adını yaz'");
-    expect(SIHIRBAZ).toContain('disabled={busy || adim.eksik !== null}');
+    expect(SIHIRBAZ).toContain('kapali: busy || adim.eksik !== null,');
   });
 });
 

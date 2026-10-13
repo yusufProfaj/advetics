@@ -289,6 +289,35 @@ Yöneticisi), `rehber/rehber.module.css` → Grup 2 (AdvCampaign),
 - `components/ust-hesap/ust-hesap-yonetimi.tsx` ⚑
 - `components/workspace-gec.tsx`
 
+**Grup 2 geçişi bitti (2026-10-14):** istisna listesinde Grup 2 dosyası
+kalmadı (25 satır silindi). Sapmalar (yeni ortak bileşen yazılmadı, yerel
+yardımcı ya da bilinçli karar):
+
+- **AdvCampaign rehberi:** sol adım rayı kalktı, üstte ortak `IlerlemeRayi`;
+  adımlar arası geçiş sağdaki Özet kartında (her satır kendi adımını açar,
+  kısa akışın atladığı adımlar da oradan). Amaç kartları (`.amac`) ve küçük
+  seçimler modülde kaldı: simülasyonun `.kart-secim` ölçüsü, `SecimKarti`
+  büyük seçim. "Form oluştur" penceresi modül perdesinde kaldı: ortak
+  `Pencere` Esc'te kapanıyor, bu pencere kaydedilmemiş form alanları yüzünden
+  Esc'i BİLEREK yok sayıyor.
+- **Durum rozeti dört hâlli:** "Onay bekliyor", "Süresi doldu", "Reddedildi"
+  gibi ara durumlar gri yuvarlak (`taslak`) ya da kırmızı (`hata`) ile ve
+  METİNLE ayrışıyor; taslaktaki `koyu` rozet `Rozet`te yok. Kurulum
+  sihirbazının yedi durumlu yeşilsiz dili (`DurumIkonu`) ve Marka Merkezi
+  `DurumRozeti` (`kurulum-yardimcilari.tsx`) yerel eşleyiciler.
+- **Kilitlenebilir hap:** `HapSecici` `disabled` taşımıyor; form oluşturucu
+  (`hapSinifi`) ve kurulum listesi (`HAP`) yerel sınıfla.
+- **AdvStrategy:** `akis-cerceve.tsx` silindi, `ui/sihirbaz` doğrudan.
+  `belge.tsx` kapak başlığı `kapakBasligi` ile `h1`/`h2`: girişsiz onay
+  sayfasında belge sayfanın kendisi (`h1`), panelde sayfa başlığı zaten var
+  (`h2`). Strateji tablosunda "Bütçe" sütunu (liste yanıtı aylık değil toplam
+  taşıyor); ⋯ menüsünde yalnız ucu olan eylemler.
+- **Kurulum sihirbazı:** tamamlama ekranının tıklanabilir sol adım listesi
+  korundu (görünüşü `SayfaIcMenu` gibi), üstte `IlerlemeRayi`. Açılış rayı
+  artık tıklanmıyor (gidilebilen tek adım bir öncekiydi; Geri aynı koşulla).
+- **Akıllı Boost:** iç düzen aynı (kullanıcı kararı); yalnız düğme, rozet,
+  şerit, pencere ve token.
+
 #### Grup 3 · İyileştir ve Base (37 dosya)
 
 - `app/(dashboard)/iyilestir/page.tsx` ⚑

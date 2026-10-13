@@ -8,6 +8,8 @@ import {
   type SpecialAdCategory,
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { Dugme } from '@/components/ui/dugme';
+import { Uyari } from '@/components/ui/uyari';
 
 /**
  * Özel reklam kategorisi beyanı — MÜŞTERİ KARTINDA.
@@ -76,7 +78,7 @@ export function SpecialCategoryPicker({
       : secili.map((k) => SPECIAL_AD_CATEGORY_META[k].label).join(', ');
 
   return (
-    <div className="rounded-lg border border-line">
+    <div className="rounded-alan border border-line">
       <button
         type="button"
         onClick={() => setAcik((v) => !v)}
@@ -87,7 +89,7 @@ export function SpecialCategoryPicker({
           <span className="block text-xs font-semibold text-ink">Özel reklam kategorisi</span>
           <span
             className={`block truncate text-[11px] ${
-              secili.length > 0 ? 'text-warn-strong' : 'text-ink-muted'
+              secili.length > 0 ? 'text-danger-strong' : 'text-ink-muted'
             }`}
           >
             {ozet}
@@ -96,11 +98,12 @@ export function SpecialCategoryPicker({
         <span className="shrink-0 text-[11px] text-ink-muted">{acik ? 'kapat' : 'düzenle'}</span>
       </button>
 
-      {!acik ? null : (
-      <div className="border-t border-line p-3">
+      {/* Açılır bölüm DOM'da kalıyor (görünürlük sınıfla): kapatıp açmak
+          seçilmiş ama kaydedilmemiş kategorileri sıfırlamasın. */}
+      <div className={`border-t border-line p-3 ${acik ? '' : 'hidden'}`}>
       <p className="text-[11px] text-ink-muted">
         Konut, istihdam ve kredi reklamları düzenlemeye tabi. Beyan edilmeden yayınlanan
-        reklam politika ihlali ve ceza <strong>hesap seviyesinde</strong> — o hesaptaki
+        reklam politika ihlali ve ceza <strong>hesap seviyesinde</strong>: o hesaptaki
         bütün kampanyaları etkiliyor.
       </p>
 
@@ -119,10 +122,11 @@ export function SpecialCategoryPicker({
                 );
               }}
               title={SPECIAL_AD_CATEGORY_META[k].hint}
-              className={`rounded-lg border px-2 py-1 text-[11px] transition disabled:opacity-50 ${
+              aria-pressed={acik}
+              className={`inline-flex h-8 items-center rounded-full border px-3 text-12 font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                 acik
-                  ? 'border-warn/30 bg-warn-soft text-warn-strong'
-                  : 'border-line text-ink-muted hover:bg-surface-sunken'
+                  ? 'border-brand bg-vurgu text-ink'
+                  : 'border-line-strong bg-surface text-ink-muted hover:bg-surface-sunken'
               }`}
             >
               {acik ? '✓ ' : ''}
@@ -136,30 +140,32 @@ export function SpecialCategoryPicker({
           tıkladığında hedeflemesinin daralacağını bilmeli — yayın anında
           öğrenmek, kurduğu kitlenin uygulanmadığını fark etmek demek. */}
       {secili.length > 0 && (
-        <p className="mt-2 rounded-lg bg-warn-soft px-2.5 py-1.5 text-[11px] text-warn-strong">
-          Bu workspace’in kampanyalarında Meta <strong>yaş ve cinsiyet daraltmasına izin
-          vermiyor</strong>; o alanlar gönderilmeyecek. Beyan her kampanyaya otomatik
-          ekleniyor.
+        <div className="mt-2">
+          <Uyari ton="uyari">
+            Bu workspace’in kampanyalarında Meta <strong>yaş ve cinsiyet daraltmasına izin
+            vermiyor</strong>; o alanlar gönderilmeyecek. Beyan her kampanyaya otomatik
+            ekleniyor.
+          </Uyari>
+        </div>
+      )}
+
+      {error && (
+        <p role="alert" className="mt-2 text-12 text-danger-strong">
+          {error}
         </p>
       )}
 
-      {error && <p className="mt-2 text-[11px] text-danger-strong">{error}</p>}
-
       {canManage && degisti && (
-        <button
-          type="button"
-          onClick={kaydet}
-          disabled={busy}
-          className="mt-2 rounded-lg bg-brand px-2.5 py-1 text-[11px] font-semibold text-white disabled:opacity-50"
-        >
+        <Dugme ton="koyu" boyut="kucuk" className="mt-2" onClick={kaydet} disabled={busy}>
           {busy ? 'Kaydediliyor…' : 'Beyanı kaydet'}
-        </button>
+        </Dugme>
       )}
       {kaydedildi && !degisti && (
-        <p className="mt-2 text-[11px] text-ok-strong">Beyan kaydedildi.</p>
+        <p role="status" className="mt-2 text-12 text-ink">
+          Beyan kaydedildi.
+        </p>
       )}
       </div>
-      )}
     </div>
   );
 }

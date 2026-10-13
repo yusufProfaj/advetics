@@ -34,7 +34,7 @@ function KutuKabi({ children, onay }: { children: ReactNode; onay: StratejiOnayK
   return (
     <div className="rounded-xl border-2 border-black p-5 text-black">
       <b className="font-baslik text-base">Bu stratejiyi onaylıyor musunuz?</b>
-      <p className="m-0 mt-1 text-[13px] text-[#302e2d]/70">Onaydan sonra ajans kampanyaları kurar; yayına almadan önce son hâli tekrar kontrol edilir.</p>
+      <p className="m-0 mt-1 text-[13px] text-[var(--gri)]/70">Onaydan sonra ajans kampanyaları kurar; yayına almadan önce son hâli tekrar kontrol edilir.</p>
       {cumle && <p className="m-0 mt-3 text-[13px] font-semibold">{cumle}</p>}
       {children}
     </div>
@@ -52,7 +52,7 @@ export function YorumListesi({ yorumlar }: { yorumlar: readonly StratejiYorumu[]
           </span>
           <div className="min-w-0">
             <b>{y.ad ?? 'Bilinmiyor'}</b>{' '}
-            <span className="text-[#302e2d]/70">
+            <span className="text-[var(--gri)]/70">
               · {y.rol === 'ajans' ? 'ajans' : y.rol === 'baglanti' ? 'onay bağlantısı' : 'müşteri hesabı'} · sürüm {y.surum} · {zamanMetni(y.zaman)}
               {y.tur === 'revizyon' ? ' · revizyon istedi' : y.tur === 'onay' ? ' · onayladı' : ''}
             </span>
@@ -120,7 +120,7 @@ export function PanelOnayKutusu({
   return (
     <KutuKabi onay={onay}>
       {yapilabilir.length === 0 && durum !== 'onaylandi' && durum !== 'kapandi' && (
-        <p className="m-0 mt-3 text-[13px] text-[#302e2d]/70">
+        <p className="m-0 mt-3 text-[13px] text-[var(--gri)]/70">
           {durum === 'onayda' ? 'Bu hesap karar veremiyor; onay yetkisi olan biri karar verir.' : 'Strateji şu an onay beklemiyor.'}
         </p>
       )}
@@ -146,19 +146,19 @@ export function PanelOnayKutusu({
           </Dugme>
         )}
         {yorumYazabilir && (
-          <Dugme ton="sade" onClick={() => void yorumGonder()} bekliyor={suruyor === 'yorum'} disabled={suruyor !== null || yorum.trim().length === 0}>
+          <Dugme ton="hayalet" onClick={() => void yorumGonder()} bekliyor={suruyor === 'yorum'} disabled={suruyor !== null || yorum.trim().length === 0}>
             Yalnız yorum yaz
           </Dugme>
         )}
       </div>
-      {yapilabilir.includes('revizyon_iste') && revizyonYorumuEksik && <p className="m-0 mt-1.5 text-xs text-[#302e2d]/70">Revizyon için neyin değişmesi gerektiğini yazın.</p>}
+      {yapilabilir.includes('revizyon_iste') && revizyonYorumuEksik && <p className="m-0 mt-1.5 text-xs text-[var(--gri)]/70">Revizyon için neyin değişmesi gerektiğini yazın.</p>}
       {sonuc && (
         <div className="mt-3">
           <Bildirim hata={sonuc.hata} baslik={sonuc.metin} />
         </div>
       )}
       {yorumlar.tur === 'hata' ? (
-        <p className="m-0 mt-3 text-[13px] text-[#ff2400]" role="alert">
+        <p className="m-0 mt-3 text-[13px] text-[var(--kirmizi)]" role="alert">
           Yorumlar alınamadı: {yorumlar.mesaj}
         </p>
       ) : (
@@ -233,11 +233,11 @@ export function BaglantiOnayKutusu({ token, surum, onay, kararAcik, yorumlar }: 
       {kararAcik ? (
         <>
           <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
-            <label className="flex flex-col gap-1 text-xs font-semibold text-[#302e2d]/70">
+            <label className="flex flex-col gap-1 text-xs font-semibold text-[var(--gri)]/70">
               Adınız soyadınız
               <input className={`${GIRDI} bg-white text-black`} autoComplete="name" value={ad} onChange={(e) => setAd(e.target.value)} maxLength={120} />
             </label>
-            <label className="flex flex-col gap-1 text-xs font-semibold text-[#302e2d]/70">
+            <label className="flex flex-col gap-1 text-xs font-semibold text-[var(--gri)]/70">
               E-posta
               <input className={`${GIRDI} bg-white text-black`} type="email" autoComplete="email" value={eposta} onChange={(e) => setEposta(e.target.value)} maxLength={254} />
             </label>
@@ -259,7 +259,7 @@ export function BaglantiOnayKutusu({ token, surum, onay, kararAcik, yorumlar }: 
               Revizyon iste
             </Dugme>
           </div>
-          {yorum.trim().length === 0 && <p className="m-0 mt-1.5 text-xs text-[#302e2d]/70">Revizyon için neyin değişmesi gerektiğini yazın.</p>}
+          {yorum.trim().length === 0 && <p className="m-0 mt-1.5 text-xs text-[var(--gri)]/70">Revizyon için neyin değişmesi gerektiğini yazın.</p>}
           {hata && (
             <div className="mt-3">
               <Bildirim hata baslik={hata} />

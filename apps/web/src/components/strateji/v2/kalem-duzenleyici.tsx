@@ -15,7 +15,7 @@ import { ApiRequestError, apiFetch } from '@/lib/api';
 import { Dugme } from '@/components/ui/dugme';
 import { tutarCoz } from '../hesap';
 import { kullan, platformDegisti } from './hesap';
-import { GIRDI, Rozet } from './ortak';
+import { GIRDI, Etiket } from './ortak';
 
 /**
  * ═══ KALEMİ DÜZENLE (Plan adımında, kalemin İÇİNDEN) ═══
@@ -94,16 +94,16 @@ export function KalemDuzenleyici({
           <Alan etiket="Nerede">
             <div className="flex flex-wrap gap-3 text-sm">
               <label className="inline-flex items-center gap-1.5">
-                <input type="checkbox" className="accent-[#ff2400]" checked={k.meta} onChange={(e) => degistir(platformDegisti(k, 'meta', e.target.checked))} /> Meta
+                <input type="checkbox" className="accent-brand" checked={k.meta} onChange={(e) => degistir(platformDegisti(k, 'meta', e.target.checked))} /> Meta
               </label>
               <label className="inline-flex items-center gap-1.5">
-                <input type="checkbox" className="accent-[#ff2400]" checked={k.google} disabled={g.kurgu === null} onChange={(e) => degistir(platformDegisti(k, 'google', e.target.checked))} /> Google
+                <input type="checkbox" className="accent-brand" checked={k.google} disabled={g.kurgu === null} onChange={(e) => degistir(platformDegisti(k, 'google', e.target.checked))} /> Google
               </label>
             </div>
             {g.kurgu === null && <span className="text-[11px] text-ink-muted">Google kapalı: {g.sebep}.</span>}
             {k.meta && k.google && (
               <>
-                <input type="range" min={10} max={90} step={5} value={k.metaPayi ?? 50} aria-label="Meta payı" className="w-full accent-[#ff2400]" onChange={(e) => set({ metaPayi: Number(e.target.value) })} />
+                <input type="range" min={10} max={90} step={5} value={k.metaPayi ?? 50} aria-label="Meta payı" className="w-full accent-brand" onChange={(e) => set({ metaPayi: Number(e.target.value) })} />
                 <span className="text-[11px] text-ink-muted">
                   Meta %{k.metaPayi ?? 50} · Google %{100 - (k.metaPayi ?? 50)}
                 </span>
@@ -145,7 +145,7 @@ export function KalemDuzenleyici({
           </div>
 
           <div className="flex items-end md:col-span-3">
-            <Dugme ton="sade" boyut="kucuk" onClick={sil}>
+            <Dugme ton="hayalet" boyut="kucuk" onClick={sil}>
               Bu kampanyayı plandan çıkar
             </Dugme>
           </div>
@@ -180,7 +180,7 @@ function MetinKutusu({ baslik, deger, degistir }: { baslik: string; deger: Strat
     <div className="rounded-[10px] border border-line bg-surface px-3 py-2.5">
       <div className="mb-1.5 flex items-center justify-between gap-2">
         <b className="text-[13px]">{baslik}</b>
-        {deger && <Rozet>{deger.kaynak === 'ai' ? 'Yapay zekâ önerisi' : 'Ajans yazdı'}</Rozet>}
+        {deger && <Etiket>{deger.kaynak === 'ai' ? 'Yapay zekâ önerisi' : 'Ajans yazdı'}</Etiket>}
       </div>
       <textarea
         className={`${GIRDI} min-h-[64px]`}
@@ -191,7 +191,7 @@ function MetinKutusu({ baslik, deger, degistir }: { baslik: string; deger: Strat
       />
       {deger?.kaynak === 'ai' && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          <Dugme boyut="kucuk" onClick={() => degistir(kullan(deger))}>
+          <Dugme ton="koyu" boyut="kucuk" onClick={() => degistir(kullan(deger))}>
             Kullan
           </Dugme>
           <span className="text-[11px] text-ink-muted">"Kullan" denmeyen öneri müşterinin belgesine girmez.</span>
@@ -223,7 +223,7 @@ function ReklamMetni({ metin, degistir, planId, kalemId, kalemKayitli }: { metin
     <div className="rounded-[10px] border border-line bg-surface px-3 py-2.5">
       <div className="mb-1.5 flex items-center justify-between gap-2">
         <b className="text-[13px]">Reklam metni önerisi</b>
-        {metin && <Rozet>{metin.kaynak === 'ai' ? 'AdvCampaign metin motoru' : 'Ajans yazdı'}</Rozet>}
+        {metin && <Etiket>{metin.kaynak === 'ai' ? 'AdvCampaign metin motoru' : 'Ajans yazdı'}</Etiket>}
       </div>
       {metin ? (
         <div className="space-y-1 text-[13px]">
@@ -243,7 +243,7 @@ function ReklamMetni({ metin, degistir, planId, kalemId, kalemKayitli }: { metin
       )}
       <div className="mt-2 flex flex-wrap items-center gap-2">
         {metin?.kaynak === 'ai' && (
-          <Dugme boyut="kucuk" onClick={() => degistir(kullan(metin))}>
+          <Dugme ton="koyu" boyut="kucuk" onClick={() => degistir(kullan(metin))}>
             Kullan
           </Dugme>
         )}
@@ -251,7 +251,7 @@ function ReklamMetni({ metin, degistir, planId, kalemId, kalemKayitli }: { metin
           {metin ? 'Yeniden yaz' : 'Metin öner'}
         </Dugme>
         {metin && (
-          <Dugme ton="sade" boyut="kucuk" onClick={() => degistir(null)}>
+          <Dugme ton="hayalet" boyut="kucuk" onClick={() => degistir(null)}>
             Metni kaldır
           </Dugme>
         )}

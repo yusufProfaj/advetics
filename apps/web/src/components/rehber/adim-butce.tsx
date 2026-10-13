@@ -1,5 +1,6 @@
 'use client';
 
+import { BolumluSecici } from '@/components/ui/sekmeler';
 import { useState } from 'react';
 import { VARSAYILAN_META_PAYI, butceBol } from '@advetics/shared';
 import { AltCubuk, Soru, Uyari, sil, yaz, type AdimBaglami } from './adim-ortak';
@@ -75,7 +76,7 @@ export function AdimButce({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => voi
 
   return (
     <>
-      <Soru baslik="Ne kadar harcayalım, ne zamana kadar?">
+      <Soru adim={5} baslik="Ne kadar harcayalım, ne zamana kadar?">
         {ikisi ? 'Toplam tutarı yaz; iki platform arasında nasıl bölüneceğini öneriyoruz.' : 'Tutarı ve süreyi seç.'}
       </Soru>
       <div className={s.kart}>
@@ -83,14 +84,17 @@ export function AdimButce({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => voi
           <div className={s.alanlar}>
             <div className={s.alan}>
               <span className={s.alanEtiket}>Bütçe türü</span>
-              <div className={`${s.seg} ${s.segBaslangic}`} role="group" aria-label="Bütçe türü">
-                <button type="button" aria-pressed={tip === 'gunluk'} onClick={() => tipDegisti('gunluk')}>
-                  Günlük
-                </button>
-                <button type="button" aria-pressed={tip === 'toplam'} onClick={() => tipDegisti('toplam')}>
-                  Toplam
-                </button>
-              </div>
+              <span>
+                <BolumluSecici
+                  etiket="Bütçe türü"
+                  secili={tip}
+                  onSec={tipDegisti}
+                  secenekler={[
+                    { deger: 'gunluk', etiket: 'Günlük' },
+                    { deger: 'toplam', etiket: 'Toplam' },
+                  ]}
+                />
+              </span>
             </div>
             <div className={s.alan}>
               <label htmlFor="rehber-tutar">

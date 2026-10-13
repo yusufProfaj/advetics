@@ -14,6 +14,7 @@ import {
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { Dugme } from '@/components/ui/dugme';
 import { Uyari } from '@/components/ui/uyari';
+import { DurumNoktasi, type DurumHali } from '@/components/ui/rozet';
 import { eskiMarkaMerkeziYonu, markaMerkeziAdresi } from '@/lib/panel-adresleri';
 
 /**
@@ -67,15 +68,20 @@ export function OlcumBolumu({ clientId, yazabilir }: { clientId: string; yazabil
   }
 
   if (hal.tur === 'okunuyor') {
-    return <p className="rounded-xl border border-line bg-surface p-5 text-sm text-ink-muted">Site, Google Ads ve Meta okunuyor…</p>;
+    return <p role="status" className="rounded-kart border border-line bg-surface p-5 text-sm text-ink-muted">Site, Google Ads ve Meta okunuyor…</p>;
   }
   if (hal.tur === 'hata') {
     return (
-      <Uyari ton="tehlike" baslik="Ölçüm durumu alınamadı.">
-        {hal.mesaj}{' '}
-        <button type="button" className="font-semibold underline" onClick={() => void yenidenTara()}>
-          Yeniden dene
-        </button>
+      <Uyari
+        ton="tehlike"
+        baslik="Ölçüm durumu alınamadı."
+        eylem={
+          <Dugme ton="ikincil" boyut="kucuk" onClick={() => void yenidenTara()}>
+            Yeniden dene
+          </Dugme>
+        }
+      >
+        {hal.mesaj}
       </Uyari>
     );
   }
@@ -155,7 +161,7 @@ function Ozet({ v }: { v: OlcumDurumuYaniti }) {
   const hazir = v.satirlar.flatMap((r) => [r.meta, r.google]).filter((h) => h.durum === 'kaydediliyor' || h.durum === 'platform_sayiyor').length;
   const olcululebilir = v.satirlar.flatMap((r) => [r.meta, r.google]).filter((h) => h.durum !== 'platformda_yok').length;
   return (
-    <section className="grid overflow-hidden rounded-xl border border-line bg-surface sm:grid-cols-2 xl:grid-cols-4" aria-label="Ölçüm özeti">
+    <section className="grid overflow-hidden rounded-kart border border-line bg-surface sm:grid-cols-2 xl:grid-cols-4" aria-label="Ölçüm özeti">
       <Kutu baslik="Site" deger={alanAdi(s.adres)} alt={siteAlt} kucukDeger />
       <Kutu
         baslik="Google Ads dönüşümü"
@@ -190,24 +196,26 @@ function Kutu({ baslik, deger, alt, kucukDeger = false }: { baslik: string; dege
 
 // ── Durum: şekil + metin; yeşil yalnız durumda ──────────────────────────────
 
-const DURUM_SEKLI: Record<OlcumHucreDurumu, { renk: string; sekil: 'nokta' | 'carpi' | 'halka' }> = {
-  kaydediliyor: { renk: 'text-ok-strong', sekil: 'nokta' },
-  platform_sayiyor: { renk: 'text-ok-strong', sekil: 'nokta' },
-  ikincil: { renk: 'text-warn-strong', sekil: 'nokta' },
-  sinyal_yok: { renk: 'text-warn-strong', sekil: 'halka' },
-  tanim_yok: { renk: 'text-danger-strong', sekil: 'carpi' },
-  bilinmiyor: { renk: 'text-ink-muted', sekil: 'halka' },
-  platformda_yok: { renk: 'text-ink-muted', sekil: 'halka' },
-  hesap_yok: { renk: 'text-ink-muted', sekil: 'halka' },
+/*
+ * Ortak durum noktası: yeşil yalnız ölçüm GERÇEKTEN sayılıyorsa. Eylem
+ * isteyen üç hâl (ikincil, sinyal yok, tanım yok) kırmızı; tanımı hiç
+ * olmayan ayrıca kırmızı yazıyla, çünkü o hücrede dönüşüm HİÇ sayılmıyor.
+ */
+const DURUM_HALI: Record<OlcumHucreDurumu, DurumHali> = {
+  kaydediliyor: 'ok',
+  platform_sayiyor: 'ok',
+  ikincil: 'hata',
+  sinyal_yok: 'hata',
+  tanim_yok: 'hata',
+  bilinmiyor: 'dur',
+  platformda_yok: 'taslak',
+  hesap_yok: 'taslak',
 };
 
 export function DurumIsareti({ h }: { h: OlcumHucresi }) {
-  const d = DURUM_SEKLI[h.durum];
   return (
-    <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${d.renk}`}>
-      {d.sekil === 'nokta' && <span aria-hidden className="size-2 rounded-full bg-current" />}
-      {d.sekil === 'halka' && <span aria-hidden className="size-2 rounded-full border-2 border-current" />}
-      {d.sekil === 'carpi' && <span aria-hidden className="text-[11px] leading-none">✕</span>}
+    <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${h.durum === 'tanim_yok' ? 'text-danger-strong' : 'text-ink'}`}>
+      <DurumNoktasi hal={DURUM_HALI[h.durum]} />
       {h.etiket}
     </span>
   );
@@ -217,7 +225,7 @@ export function DurumIsareti({ h }: { h: OlcumHucresi }) {
 
 function Tablo({ v }: { v: OlcumDurumuYaniti }) {
   return (
-    <section className="overflow-hidden rounded-xl border border-line bg-surface" aria-labelledby="olcum-tablo">
+    <section className="overflow-hidden rounded-kart border border-line bg-surface" aria-labelledby="olcum-tablo">
       <div className="flex flex-wrap items-baseline gap-2 border-b border-line px-4 py-3">
         <h3 id="olcum-tablo" className="text-sm font-semibold text-ink">
           Neyi ölçüyoruz
@@ -278,7 +286,7 @@ function GoogleIslemleri({ v }: { v: OlcumDurumuYaniti }) {
   const g = v.googleIslemleri;
   if (!g || g.toplam === 0) return null;
   return (
-    <details className="group rounded-xl border border-line bg-surface">
+    <details className="group rounded-kart border border-line bg-surface">
       <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-ink">
         Google Ads dönüşüm işlemleri <span className="font-normal text-ink-muted">· {g.toplam} işlemin {g.satirlar.length}'i</span>
         {v.googleHesabi?.donusumKimligi && <span className="ml-2 text-xs font-normal text-ink-muted">Dönüşüm kimliği {v.googleHesabi.donusumKimligi}</span>}
@@ -359,8 +367,8 @@ function Oneri({
 
   const e = oneri.eylem;
   return (
-    <section className={`rounded-xl border bg-surface p-4 ${tamam ? 'border-line' : 'border-brand/40'}`} aria-labelledby="olcum-oneri">
-      <p className={`text-xs font-semibold ${tamam ? 'text-ok-strong' : 'text-brand-strong'}`}>{tamam ? 'Durum' : 'Sizin için en uygun öneri'}</p>
+    <section className={`rounded-kart border bg-surface p-4 ${tamam ? 'border-line' : 'border-brand/40'}`} aria-labelledby="olcum-oneri">
+      <p className={`text-xs font-semibold ${tamam ? 'text-ink-muted' : 'text-brand-strong'}`}>{tamam ? 'Durum' : 'Sizin için en uygun öneri'}</p>
       <h3 id="olcum-oneri" className="mt-1 font-baslik text-base font-semibold text-ink">
         {oneri.baslik}
       </h3>
@@ -374,12 +382,16 @@ function Oneri({
                 <span className="text-ink">{a.metin}</span>
                 {a.ayrinti && <span className="block text-xs text-ink-muted">{a.ayrinti}</span>}
               </span>
-              <span className={`rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${YER[a.yer].site ? 'bg-brand-soft text-brand-strong' : 'bg-surface-sunken text-ink'}`}>{YER[a.yer].ad}</span>
+              <span className={`rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${YER[a.yer].site ? 'bg-vurgu text-brand-strong' : 'bg-surface-sunken text-ink'}`}>{YER[a.yer].ad}</span>
             </li>
           ))}
         </ol>
       )}
-      {oneri.kisit && <p className="mt-3 rounded-lg bg-warn-soft px-3 py-2 text-xs text-warn-strong">{oneri.kisit}</p>}
+      {oneri.kisit && (
+        <div className="mt-3">
+          <Uyari ton="uyari">{oneri.kisit}</Uyari>
+        </div>
+      )}
 
       {e?.tur === 'birincil_yap' && (
         <div className="mt-3">
@@ -392,7 +404,7 @@ function Oneri({
                 <Dugme onClick={() => setOnay(true)}>Birincil yap</Dugme>
               </div>
               <div
-                className={`rounded-lg border border-line p-3 transition-opacity duration-200 motion-reduce:transition-none ${onay ? 'opacity-100' : 'pointer-events-none hidden opacity-0'}`}
+                className={`rounded-alan border border-line p-3 transition-opacity duration-200 motion-reduce:transition-none ${onay ? 'opacity-100' : 'pointer-events-none hidden opacity-0'}`}
                 role="group"
                 aria-label="Onay"
               >

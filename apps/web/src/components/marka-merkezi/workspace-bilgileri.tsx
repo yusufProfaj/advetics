@@ -4,6 +4,7 @@ import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import type { SessionResponse } from '@/lib/session';
 import { PANEL_KAPILARI, ayarlarAdresi, hesaplarAdresi, kapi } from '@/lib/panel-adresleri';
 import { Uyari } from '@/components/ui/uyari';
+import { Kart as OrtakKart } from '@/components/ui/kart';
 import type { MemberRow } from '@/components/tenancy/team-manager';
 import type { MusteriBilgileri } from '@/components/tenancy/musteri-bilgi-formu';
 import { SenkronDurumu } from '@/components/sync/senkron-durumu';
@@ -115,11 +116,11 @@ export async function WorkspaceBilgileri({
               </Link>
             </div>
             {uyeler.v.length === 0 ? (
-              <p className="rounded-lg border border-dashed border-line p-4 text-sm text-ink-muted">
+              <p className="rounded-alan border border-dashed border-line p-4 text-sm text-ink-muted">
                 Bu workspace’e atanmış kimse yok. Şirket yöneticileri yine de görür; kişi eklemek Ayarlar › Ekip ve güvenlik’te.
               </p>
             ) : (
-              <ul className="divide-y divide-line rounded-lg border border-line">
+              <ul className="divide-y divide-line rounded-alan border border-line">
                 {uyeler.v.map((m) => (
                   <li key={m.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
                     <span className="min-w-0">
@@ -184,14 +185,15 @@ function rolMetni(m: MemberRow, clientId: string): string {
   return genel ? `${ROL_ETIKETI[genel.role]} (şirket geneli)` : '—';
 }
 
+/*
+ * Bölüm kartı ortak `Kart`; burada yalnız çapa (`id`) ve kaydırma payı
+ * ekleniyor. `#firma` gibi bağlantılar bu kimliklere iniyor (bolumler.spec).
+ */
 function Kart({ id, baslik, children }: { id: string; baslik: string; children: React.ReactNode }) {
   return (
-    <section id={id} aria-labelledby={`${id}-baslik`} className="scroll-mt-24 rounded-xl border border-line bg-surface p-5">
-      <h3 id={`${id}-baslik`} className="mb-3 text-sm font-semibold text-ink">
-        {baslik}
-      </h3>
+    <OrtakKart id={id} baslik={baslik} className="scroll-mt-24">
       {children}
-    </section>
+    </OrtakKart>
   );
 }
 

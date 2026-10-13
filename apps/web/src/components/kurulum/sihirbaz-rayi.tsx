@@ -43,7 +43,8 @@ export function DurumIkonu({ tur, numara, kucuk = false }: { tur: IkonTuru | 'si
     tamam: 'bg-ink text-surface',
     eksik: 'border-2 border-ink-muted',
     kul: 'border-2 border-ink',
-    hata: 'bg-brand text-white',
+    // `text-surface`: `tamam` gibi tema ile tersine döner (koyu temada beyaz zemin üstünde beyaz yazı kalmasın).
+    hata: 'bg-brand text-surface',
     bek: 'border-2 border-dashed border-ink-muted',
     dis: 'border-2 border-line',
     bilinmiyor: 'border border-line text-ink-muted',
@@ -90,6 +91,14 @@ export interface RayGrubu {
  * yenilemeden adımı değiştiriyor (`git`). Adres her geçişte güncelleniyor,
  * yani yenileme kullanıcıyı aynı adıma getiriyor.
  */
+/*
+ * SEÇİLİ SATIR SAYFA İÇİ YAN MENÜNÜN DİLİNDE (`SayfaIcMenu`): gri zemin +
+ * solda kırmızı çizgi. Eskiden beyaz kart + gölge çizgisiydi ve panelin
+ * diğer yan menülerinden ayrı bir dil konuşuyordu.
+ */
+const SECILI =
+  'bg-surface-sunken before:absolute before:inset-y-2 before:left-0 before:w-[3px] before:rounded-full before:bg-brand';
+
 export function RayListesi({
   gruplar,
   son,
@@ -111,14 +120,14 @@ export function RayListesi({
           git(s.kod);
         }}
         aria-current={aktif === s.kod ? 'step' : undefined}
-        className={`grid grid-cols-[22px_minmax(0,1fr)] items-start gap-2.5 rounded-[10px] px-2 py-2 no-underline transition-colors duration-150 hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand motion-reduce:transition-none ${
-          aktif === s.kod ? 'bg-surface shadow-[inset_3px_0_0_var(--brand-primary),0_0_0_1px_var(--border)]' : ''
+        className={`relative grid grid-cols-[22px_minmax(0,1fr)] items-start gap-2.5 rounded-alan px-2.5 py-2 no-underline transition-colors duration-150 hover:bg-surface-sunken focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand motion-reduce:transition-none ${
+          aktif === s.kod ? SECILI : ''
         }`}
       >
         <DurumIkonu tur={s.ikon} numara={s.numara} />
         <span className="min-w-0">
-          <span className={`block text-[13.5px] leading-tight ${s.soluk ? 'font-normal text-ink-muted line-through decoration-line' : 'font-semibold text-ink'}`}>{s.ad}</span>
-          {s.alt && <span className="mt-px block truncate text-xs text-ink-muted">{s.alt}</span>}
+          <span className={`block text-13 leading-tight ${s.soluk ? 'font-normal text-ink-muted line-through decoration-line' : 'font-semibold text-ink'}`}>{s.ad}</span>
+          {s.alt && <span className="mt-px block truncate text-12 text-ink-muted">{s.alt}</span>}
         </span>
       </a>
     </li>
@@ -127,7 +136,7 @@ export function RayListesi({
     <>
       {gruplar.map((g) => (
         <div key={g.baslik}>
-          <p className="mx-1.5 mb-1.5 mt-4 font-baslik text-[11px] font-bold uppercase tracking-[0.08em] text-ink-muted">
+          <p className="mx-1.5 mb-1.5 mt-4 font-baslik text-11 font-bold uppercase tracking-[0.08em] text-ink-muted">
             {g.baslik}
             {g.alt && <span className="font-sans font-semibold normal-case tracking-normal"> · {g.alt}</span>}
           </p>
@@ -147,11 +156,11 @@ export function RayBasligi({ tamam, toplam, metin }: { tamam: number; toplam: nu
   return (
     <>
       <div className="mx-1.5 mb-3.5 flex items-baseline justify-between">
-        <h3 className="m-0 font-baslik text-[15px] font-bold text-ink">Adımlar</h3>
-        <span className="font-baslik text-[13px] font-bold text-ink">
+        <h3 className="m-0 font-baslik text-15 font-bold text-ink">Adımlar</h3>
+        <span className="font-baslik text-13 font-bold tabular-nums text-ink">
           {metin ?? (
             <>
-              {tamam} / {toplam} <small className="font-sans text-xs font-normal text-ink-muted">tamam</small>
+              {tamam} / {toplam} <small className="font-sans text-12 font-normal text-ink-muted">tamam</small>
             </>
           )}
         </span>
@@ -189,11 +198,11 @@ export function Ray({
 }) {
   return (
     <>
-      <aside aria-label="Kurulum adımları" className="hidden border-r border-line bg-surface-muted px-3.5 py-5 lg:block">
+      <aside aria-label="Kurulum adımları" className="hidden border-r border-line bg-surface px-3.5 py-5 lg:block">
         {baslik}
         {children}
       </aside>
-      <details className="group border-b border-line bg-surface-muted lg:hidden">
+      <details className="group border-b border-line bg-surface lg:hidden">
         <summary className="flex cursor-pointer list-none items-center gap-2.5 px-4 py-3 font-semibold text-ink [&::-webkit-details-marker]:hidden">
           {ozet}
         </summary>

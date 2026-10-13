@@ -103,7 +103,7 @@ export function GoogleHedefleme({
   const tumYaslar = yaslar.length === 0 || yaslar.length === GOOGLE_YAS_ARALIKLARI.length;
 
   return (
-    <section className="space-y-4 rounded-lg border border-line px-3 py-3">
+    <section className="space-y-4 rounded-kart border border-line px-3 py-3">
       <p className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">Hedef kitle</p>
 
       {/* ═══ KONUM ═══ */}
@@ -143,7 +143,7 @@ export function GoogleHedefleme({
               placeholder="Şehir, il ya da ülke ara"
               aria-label="Konum ara"
               disabled={konumlar.length >= KONUM_SINIRI}
-              className="w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-ink outline-none focus:border-brand disabled:opacity-50"
+              className="w-full rounded-alan border border-line bg-surface px-2.5 py-1.5 text-sm text-ink outline-none focus:border-brand disabled:opacity-50"
             />
             {durum === 'araniyor' && <p className="text-[11px] text-ink-muted">Aranıyor…</p>}
             {hata && (
@@ -155,7 +155,7 @@ export function GoogleHedefleme({
               <p className="text-[11px] text-ink-muted">“{q.trim()}” için konum bulunamadı.</p>
             )}
             {sonuc.length > 0 && (
-              <ul className="max-h-48 divide-y divide-line overflow-y-auto rounded-lg border border-line bg-surface">
+              <ul className="max-h-48 divide-y divide-line overflow-y-auto rounded-alan border border-line bg-surface">
                 {sonuc.map((o) => {
                   const secili = konumlar.some((k) => k.key === o.key);
                   return (
@@ -206,7 +206,7 @@ export function GoogleHedefleme({
                 type="button"
                 onClick={() => yasDegistir(y)}
                 aria-pressed={secili}
-                className={`min-h-9 rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+                className={`min-h-9 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
                   secili
                     ? 'border-brand bg-brand-soft text-ink'
                     : 'border-line text-ink-muted hover:bg-surface-sunken hover:text-ink'

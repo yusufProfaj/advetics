@@ -13,6 +13,7 @@ import {
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { Dugme } from '@/components/ui/dugme';
+import { Girdi } from '@/components/ui/alan';
 import { HedeflemeSecici } from '@/components/autoboost/hedefleme-secici';
 import { butceGirdisi } from './hazirlama-mantik';
 
@@ -54,7 +55,7 @@ export function Soru({ clientId, soru, guncelle }: { clientId: string; soru: Haz
   }
 
   return (
-    <div className="space-y-2 rounded-lg border border-brand/40 p-4">
+    <div className="space-y-2 rounded-alan border border-brand/40 p-4">
       <p className="text-sm font-semibold text-ink">{soru.soru}</p>
       {soru.kod === 'piksel' && (
         <>
@@ -66,7 +67,7 @@ export function Soru({ clientId, soru, guncelle }: { clientId: string; soru: Haz
               </label>
             ))}
           </div>
-          <Dugme boyut="kucuk" disabled={!piksel} bekliyor={gonderiliyor} onClick={() => piksel && void gonder({ kod: 'piksel', pikselId: piksel })}>
+          <Dugme ton="koyu" boyut="kucuk" disabled={!piksel} bekliyor={gonderiliyor} onClick={() => piksel && void gonder({ kod: 'piksel', pikselId: piksel })}>
             Bu pikseli kullan
           </Dugme>
         </>
@@ -90,7 +91,7 @@ export function Soru({ clientId, soru, guncelle }: { clientId: string; soru: Haz
             <Dugme boyut="kucuk" ton="ikincil" bekliyor={gonderiliyor} disabled={kategoriler.length > 0} onClick={() => void gonder({ kod: 'kategori', kategoriler: [] })}>
               Hiçbiri
             </Dugme>
-            <Dugme boyut="kucuk" bekliyor={gonderiliyor} disabled={kategoriler.length === 0} onClick={() => void gonder({ kod: 'kategori', kategoriler })}>
+            <Dugme ton="koyu" boyut="kucuk" bekliyor={gonderiliyor} disabled={kategoriler.length === 0} onClick={() => void gonder({ kod: 'kategori', kategoriler })}>
               Seçilenleri kaydet
             </Dugme>
           </div>
@@ -108,6 +109,7 @@ export function Soru({ clientId, soru, guncelle }: { clientId: string; soru: Haz
             bosMetni="Hizmet verdiğin şehir ya da bölgeleri seç; tüm Türkiye için Türkiye'yi seç."
           />
           <Dugme
+            ton="koyu"
             boyut="kucuk"
             bekliyor={gonderiliyor}
             disabled={konumlar.length === 0}
@@ -160,15 +162,15 @@ export function ButceDegistir({ clientId, guncelle }: { clientId: string; guncel
   return (
     <span className="flex shrink-0 flex-col items-end gap-1">
       <span className="flex items-center gap-2">
-        <input
+        <Girdi
           aria-label="Günlük bütçe"
           inputMode="decimal"
           value={metin}
           onChange={(e) => setMetin(e.target.value)}
           placeholder="750"
-          className="w-24 rounded-lg border border-line bg-surface px-2 py-1 text-sm"
+          className="!h-8 !w-24"
         />
-        <Dugme boyut="kucuk" bekliyor={gonderiliyor} onClick={() => void kaydet()}>
+        <Dugme ton="koyu" boyut="kucuk" bekliyor={gonderiliyor} onClick={() => void kaydet()}>
           Kaydet
         </Dugme>
       </span>

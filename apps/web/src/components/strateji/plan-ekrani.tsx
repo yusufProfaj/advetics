@@ -8,6 +8,7 @@ import { apiFetch } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
 import { Dugme } from '@/components/ui/dugme';
 import { Uyari } from '@/components/ui/uyari';
+import { Kart } from '@/components/ui/kart';
 import { AramaBolumu } from './arama-bolumu';
 import { ButceBolumu } from './butce-bolumu';
 import { MatrisBolumu } from './matris-bolumu';
@@ -133,81 +134,83 @@ export function PlanEkrani({
 
   return (
     <div className="min-w-0 space-y-4">
-      <div className="space-y-3 rounded-xl border border-line bg-surface p-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="font-baslik text-xl font-semibold text-ink">{donemEtiketi(plan.donem)} medya planı</h2>
-              <DurumRozeti durum={plan.durum} />
+      <Kart as="div">
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="font-baslik text-xl font-semibold text-ink">{donemEtiketi(plan.donem)} medya planı</h2>
+                <DurumRozeti durum={plan.durum} />
+              </div>
+              <p className="mt-1 text-sm text-ink-muted">
+                Toplam <strong className="tabular-nums text-ink">{formatMoney(plan.toplamButceMicros, plan.paraBirimi)}</strong> · Sürüm{' '}
+                {plan.surum} · Son değişiklik {zamanMetni(plan.guncellendi)}
+              </p>
+              {onay && <p className="mt-1 text-sm font-medium text-ink">{onay}</p>}
+              {plan.not && <p className="mt-1 text-sm text-ink">{plan.not}</p>}
             </div>
-            <p className="mt-1 text-sm text-ink-muted">
-              Toplam <strong className="tabular-nums text-ink">{formatMoney(plan.toplamButceMicros, plan.paraBirimi)}</strong> · Sürüm{' '}
-              {plan.surum} · Son değişiklik {zamanMetni(plan.guncellendi)}
-            </p>
-            {onay && <p className="mt-1 text-sm font-medium text-ok-strong">{onay}</p>}
-            {plan.not && <p className="mt-1 text-sm text-ink">{plan.not}</p>}
+
+            {dugmeler.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                {dugmeler.map((d) =>
+                  (d.eylem === 'iptal' || d.eylem === 'aktar') && onayBekleyen !== d.eylem ? (
+                    <Dugme
+                      key={d.eylem}
+                      ton={d.eylem === 'iptal' ? 'tehlike' : d.ton}
+                      onClick={() => setOnayBekleyen(d.eylem as 'iptal' | 'aktar')}
+                      disabled={eylemSuruyor !== null}
+                    >
+                      {d.etiket}
+                    </Dugme>
+                  ) : d.eylem === 'aktar' ? null : (
+                    <Dugme
+                      key={d.eylem}
+                      ton={d.ton}
+                      onClick={() => void eylemYap(d.eylem)}
+                      bekliyor={eylemSuruyor === d.eylem}
+                      // Kaydedilmemiş taslakla onaya göndermek, onaylanan planın
+                      // ekranda görünenden FARKLI olması demek.
+                      disabled={(eylemSuruyor !== null && eylemSuruyor !== d.eylem) || (d.eylem === 'onaya_gonder' && kaydedilmemis)}
+                    >
+                      {d.eylem === 'iptal' ? 'Evet, planı iptal et' : d.etiket}
+                    </Dugme>
+                  ),
+                )}
+                {onayBekleyen === 'iptal' && (
+                  <Dugme ton="hayalet" onClick={() => setOnayBekleyen(null)}>
+                    Vazgeç
+                  </Dugme>
+                )}
+              </div>
+            )}
           </div>
 
-          {dugmeler.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2">
-              {dugmeler.map((d) =>
-                (d.eylem === 'iptal' || d.eylem === 'aktar') && onayBekleyen !== d.eylem ? (
-                  <Dugme
-                    key={d.eylem}
-                    ton={d.eylem === 'iptal' ? 'sade' : d.ton}
-                    onClick={() => setOnayBekleyen(d.eylem as 'iptal' | 'aktar')}
-                    disabled={eylemSuruyor !== null}
-                  >
-                    {d.etiket}
-                  </Dugme>
-                ) : d.eylem === 'aktar' ? null : (
-                  <Dugme
-                    key={d.eylem}
-                    ton={d.ton}
-                    onClick={() => void eylemYap(d.eylem)}
-                    bekliyor={eylemSuruyor === d.eylem}
-                    // Kaydedilmemiş taslakla onaya göndermek, onaylanan planın
-                    // ekranda görünenden FARKLI olması demek.
-                    disabled={(eylemSuruyor !== null && eylemSuruyor !== d.eylem) || (d.eylem === 'onaya_gonder' && kaydedilmemis)}
-                  >
-                    {d.eylem === 'iptal' ? 'Evet, planı iptal et' : d.etiket}
-                  </Dugme>
-                ),
-              )}
-              {onayBekleyen === 'iptal' && (
-                <Dugme ton="sade" onClick={() => setOnayBekleyen(null)}>
-                  Vazgeç
-                </Dugme>
-              )}
-            </div>
+          {onayBekleyen === 'aktar' && (
+            <AktarimOnizlemeKutusu
+              onizleme={aktarimOnizlemesi(detay)}
+              para={plan.paraBirimi}
+              bekliyor={eylemSuruyor === 'aktar'}
+              onayla={() => void eylemYap('aktar')}
+              vazgec={() => setOnayBekleyen(null)}
+            />
           )}
+          {onayBekleyen === 'iptal' && (
+            <p className="text-sm text-danger-strong">İptal edilen plan geri açılamaz. Bu ay için yeni plan oluşturulabilir.</p>
+          )}
+          {kaydedilmemis && dugmeler.some((d) => d.eylem === 'onaya_gonder') && (
+            <p className="text-sm text-warn-strong">Kaydedilmemiş değişiklik var. Onaya göndermeden önce kaydet.</p>
+          )}
+          {eylemMesaji && <Uyari ton={eylemMesaji.ton}>{eylemMesaji.metin}</Uyari>}
+          {/* Onaylı plan AdvCampaign'e AKTARILAMIYOR (ölü sohbet yolu kapatıldı): kullanıcı
+              "Aktar" düğmesini neden göremediğini burada okur. */}
+          {plan.durum === 'onaylandi' && (
+            <Uyari ton="bilgi" baslik="AdvCampaign’e aktarım şu an kapalı.">
+              {V1_AKTARIM_KAPALI_SEBEBI}
+            </Uyari>
+          )}
+          {plan.aktarim && <AktarimKutusu detay={detay} />}
         </div>
-
-        {onayBekleyen === 'aktar' && (
-          <AktarimOnizlemeKutusu
-            onizleme={aktarimOnizlemesi(detay)}
-            para={plan.paraBirimi}
-            bekliyor={eylemSuruyor === 'aktar'}
-            onayla={() => void eylemYap('aktar')}
-            vazgec={() => setOnayBekleyen(null)}
-          />
-        )}
-        {onayBekleyen === 'iptal' && (
-          <p className="text-sm text-danger-strong">İptal edilen plan geri açılamaz. Bu ay için yeni plan oluşturulabilir.</p>
-        )}
-        {kaydedilmemis && dugmeler.some((d) => d.eylem === 'onaya_gonder') && (
-          <p className="text-sm text-warn-strong">Kaydedilmemiş değişiklik var. Onaya göndermeden önce kaydet.</p>
-        )}
-        {eylemMesaji && <Uyari ton={eylemMesaji.ton}>{eylemMesaji.metin}</Uyari>}
-        {/* Onaylı plan AdvCampaign'e AKTARILAMIYOR (ölü sohbet yolu kapatıldı): kullanıcı
-            "Aktar" düğmesini neden göremediğini burada okur. */}
-        {plan.durum === 'onaylandi' && (
-          <Uyari ton="bilgi" baslik="AdvCampaign’e aktarım şu an kapalı.">
-            {V1_AKTARIM_KAPALI_SEBEBI}
-          </Uyari>
-        )}
-        {plan.aktarim && <AktarimKutusu detay={detay} />}
-      </div>
+      </Kart>
 
       {yenileHatasi && (
         <Uyari
@@ -277,7 +280,7 @@ function AktarimKutusu({ detay }: { detay: PlanDetayi }) {
   if (!a) return null;
   const ozet = aktarimOzeti(a);
   return (
-    <div className="space-y-1.5 rounded-lg border border-line bg-surface-muted p-3 text-sm">
+    <div className="space-y-1.5 rounded-alan border border-line bg-surface-muted p-3 text-sm">
       <p className="font-semibold text-ink">{V1_ESKI_AKTARIM_NOTU}</p>
       <p className="text-xs text-ink-muted">
         Eski aktarım zamanı: {zamanMetni(a.zaman)} · {ozet.baslik}
@@ -307,7 +310,7 @@ function AktarimOnizlemeKutusu({
 }) {
   const { gidecek, atlanacak, nedenler } = onizleme;
   return (
-    <div className="space-y-2 rounded-lg border border-line bg-surface-muted p-3 text-sm" role="region" aria-label="Aktarım önizlemesi">
+    <div className="space-y-2 rounded-alan border border-line bg-surface-muted p-3 text-sm" role="region" aria-label="Aktarım önizlemesi">
       <p className="font-semibold text-ink">
         {gidecek.length} satır AdvCampaign’e gidecek{atlanacak.length > 0 ? `, ${atlanacak.length} satır atlanacak` : ''}.
       </p>
@@ -334,7 +337,7 @@ function AktarimOnizlemeKutusu({
         <Dugme onClick={onayla} bekliyor={bekliyor} disabled={gidecek.length === 0}>
           Aktarımı onayla
         </Dugme>
-        <Dugme ton="sade" onClick={vazgec}>
+        <Dugme ton="hayalet" onClick={vazgec}>
           Vazgeç
         </Dugme>
       </div>

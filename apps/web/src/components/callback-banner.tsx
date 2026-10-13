@@ -2,6 +2,7 @@
 
 import { useSearchParams } from 'next/navigation';
 import { PLATFORM_LABELS, type Platform } from '@advetics/shared';
+import { Serit } from '@/components/ui/hal';
 
 /**
  * OAuth dönüşünde sonucu gösterir.
@@ -25,26 +26,26 @@ export function CallbackBanner() {
   const accounts = params.get('hesap');
   const message = params.get('mesaj');
 
-  const variants: Record<string, { cls: string; title: string; body: string }> = {
+  const variants: Record<string, { ton: 'uyari' | 'hata' | 'bilgi'; title: string; body: string }> = {
     basarili: {
-      cls: 'border-ok/30 bg-ok-soft/60 text-ok-strong',
+      ton: 'bilgi',
       title: `${platform} bağlantısı kuruldu`,
       body: accounts
-        ? `${accounts} reklam hesabı bulundu. İzlemek istediklerini aşağıdan aç — hepsi kapalı başlar.`
+        ? `${accounts} reklam hesabı bulundu. İzlemek istediklerini aşağıdan aç; hepsi kapalı başlar.`
         : 'Reklam hesabı bulunamadı. "Hesapları yenile" ile tekrar dene.',
     },
     eksik_izin: {
-      cls: 'border-warn/30 bg-warn-soft/60 text-warn-strong',
+      ton: 'uyari',
       title: 'Bağlantı kuruldu ama izinler eksik',
       body: 'Bazı zorunlu izinler verilmedi. Aşağıdaki karttan "Yeniden yetkilendir" ile eksik izinleri tamamla.',
     },
     iptal: {
-      cls: 'border-line bg-surface-muted text-ink',
+      ton: 'bilgi',
       title: 'Yetkilendirme iptal edildi',
       body: 'İzin ekranında iptal ettin, hiçbir şey değişmedi.',
     },
     hata: {
-      cls: 'border-danger/30 bg-danger-soft text-danger-strong',
+      ton: 'hata',
       title: 'Bağlantı kurulamadı',
       body: message ?? 'Bilinmeyen bir hata oluştu.',
     },
@@ -58,24 +59,24 @@ export function CallbackBanner() {
    * hesabı bulundu, izlemek istediklerini aç" metni burada YANLIŞ: bu akış
    * hesap bağlamıyor, var olan bağlantıya izin ekliyor.
    */
-  const olcumVaryantlari: Record<string, { cls: string; title: string; body: string }> = {
+  const olcumVaryantlari: Record<string, { ton: 'uyari' | 'hata' | 'bilgi'; title: string; body: string }> = {
     basarili: {
-      cls: variants.basarili!.cls,
+      ton: variants.basarili!.ton,
       title: 'Ölçüm izinleri verildi',
       body: 'Tag Manager ve Analytics adımları artık kurulabilir.',
     },
     eksik_izin: {
-      cls: variants.eksik_izin!.cls,
+      ton: variants.eksik_izin!.ton,
       title: 'Ölçüm izinleri eksik',
       body: 'Google izin ekranında Tag Manager ya da Analytics kutularından biri işaretsiz bırakıldı. "Ölçüm izinlerini ver" ile tekrar dene ve bütün kutuları işaretli bırak.',
     },
     iptal: {
-      cls: variants.iptal!.cls,
+      ton: variants.iptal!.ton,
       title: 'Ölçüm izni iptal edildi',
       body: 'İzin ekranında iptal ettin, hiçbir şey değişmedi.',
     },
     hata: {
-      cls: variants.hata!.cls,
+      ton: variants.hata!.ton,
       title: 'Ölçüm izni verilemedi',
       body: message ?? 'Bilinmeyen bir hata oluştu.',
     },
@@ -84,9 +85,8 @@ export function CallbackBanner() {
   const v = tablo[result] ?? tablo.hata!;
 
   return (
-    <div role="status" className={`rounded-xl border p-4 ${v.cls}`}>
-      <p className="text-sm font-semibold">{v.title}</p>
-      <p className="mt-1 text-sm">{v.body}</p>
-    </div>
+    <Serit ton={v.ton} baslik={v.title}>
+      {v.body}
+    </Serit>
   );
 }

@@ -6,6 +6,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { IkiAdimDurumu } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { Dugme } from '@/components/ui/dugme';
+import { Kart } from '@/components/ui/kart';
 
 /**
  * ═══ ŞİRKETTE İKİ ADIMLI DOĞRULAMA ZORUNLULUĞU (yönetici) ═══
@@ -47,7 +49,7 @@ export function IkiAdimSirketAyari({ durum }: { durum: IkiAdimDurumu }) {
   }
 
   return (
-    <section className="rounded-xl border border-line bg-surface p-4">
+    <Kart>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <h2 className="font-semibold text-ink">İki adımlı doğrulama</h2>
@@ -69,22 +71,18 @@ export function IkiAdimSirketAyari({ durum }: { durum: IkiAdimDurumu }) {
           </p>
         </div>
         {sirket.degistirebilir && (
-          <button
-            type="button"
+          <Dugme
+            ton={sirket.zorunlu ? 'ikincil' : 'koyu'}
+            boyut="kucuk"
             disabled={bekliyor}
             onClick={() => void degistir(!sirket.zorunlu)}
-            className={
-              sirket.zorunlu
-                ? 'rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink transition hover:bg-surface-sunken disabled:opacity-50'
-                : 'rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50'
-            }
           >
             {bekliyor ? 'Kaydediliyor…' : sirket.zorunlu ? 'Zorunluluğu kaldır' : 'Zorunlu yap'}
-          </button>
+          </Dugme>
         )}
       </div>
       {hata && (
-        <p role="alert" className="mt-3 text-sm text-danger">
+        <p role="alert" className="mt-3 text-sm text-danger-strong">
           {hata}{' '}
           {!durum.acik && (
             <Link href={ayarlarAdresi('hesabim', { capa: 'guvenlik' })} className="font-medium text-brand-strong hover:underline">
@@ -93,6 +91,6 @@ export function IkiAdimSirketAyari({ durum }: { durum: IkiAdimDurumu }) {
           )}
         </p>
       )}
-    </section>
+    </Kart>
   );
 }

@@ -14,6 +14,9 @@ import { formatMoney, formatNumber, formatRelative } from '@/lib/format';
 import { BoostDecision, RunBoostRuleButton } from '@/components/boost/boost-controls';
 import { BildirimHavuzu } from '@/components/autoboost/bildirim-havuzu';
 import { BoostOnAyariDugmesi } from '@/components/autoboost/boost-on-ayari';
+import { SayfaBasligi } from '@/components/ui/sayfa-basligi';
+import { Rozet, type DurumHali } from '@/components/ui/rozet';
+import { BosDurum, Serit } from '@/components/ui/hal';
 
 export const metadata = { title: 'Akıllı Boost · Advetics' };
 export const dynamic = 'force-dynamic';
@@ -124,25 +127,22 @@ export default async function AutoBoostPage({
 
   return (
     <div className="space-y-5">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="sayfa-baslik">Akıllı Boost</h1>
-          {/*
-            DEĞERLENDİRME SIKLIĞI BURADAN KALKTI. "günde iki kez" yalnızca
-            KURAL motoru için doğru; yeni içerik kartları yayınlandığı anda
-            düşüyor. İkisini tek cümlede söylemek, kartını bekleyen
-            kullanıcıya akşamı beklettiriyordu. Sıklık artık kuralların
-            başlığında.
-          */}
-          <p className="mt-0.5 text-sm text-ink-muted">{clientName}</p>
-        </div>
-        {/*
-          BAŞLIK SATIRINDA TEK DÜĞME: ön ayar. Kartın nasıl yayınlanacağını
-          belirleyen tek yer orası ve sayfadaki diğer her şey onun sonucu.
-        */}
-        {canWrite && <BoostOnAyariDugmesi clientId={clientId} canWrite={canWrite} />}
-      </header>
+      {/*
+        DEĞERLENDİRME SIKLIĞI BURADAN KALKTI. "günde iki kez" yalnızca
+        KURAL motoru için doğru; yeni içerik kartları yayınlandığı anda
+        düşüyor. İkisini tek cümlede söylemek, kartını bekleyen
+        kullanıcıya akşamı beklettiriyordu. Sıklık artık kuralların
+        başlığında.
 
+        BAŞLIK SATIRINDA TEK DÜĞME: ön ayar. Kartın nasıl yayınlanacağını
+        belirleyen tek yer orası ve sayfadaki diğer her şey onun sonucu.
+      */}
+      <SayfaBasligi
+        bolum="Oluştur"
+        baslik="Akıllı Boost"
+        aciklama={clientName}
+        eylemler={canWrite ? <BoostOnAyariDugmesi clientId={clientId} canWrite={canWrite} /> : undefined}
+      />
 
       {/*
         SAYFA İÇİ MÜŞTERİ ŞERİDİ KALDIRILDI — aktif workspace TEK BİR yerden
@@ -172,12 +172,12 @@ export default async function AutoBoostPage({
       <BildirimHavuzu clientId={clientId} canWrite={canWrite} />
 
       {boosts === null ? (
-        <Notice tone="error">
-          <strong>Boost listesi okunamadı.</strong> {hataMetni(boostSonuc)}
-        </Notice>
+        <Serit ton="hata" baslik="Boost listesi okunamadı.">
+          {hataMetni(boostSonuc)}
+        </Serit>
       ) : (
         candidates.length > 0 && (
-          <section className="rounded-xl border border-warn/30 bg-warn-soft/50 p-4">
+          <section className="rounded-kart border border-line bg-surface-muted p-4">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               {/*
                 BAŞLIK ARTIK KAYNAĞI SÖYLÜYOR.
@@ -214,15 +214,15 @@ export default async function AutoBoostPage({
         kullanıcıya kuralı silinmiş gibi bir ekran gösteriyordu.
       */}
       {rules === null ? (
-        <Notice tone="error">
-          <strong>Kurallar okunamadı.</strong> {hataMetni(kuralSonuc)}
-        </Notice>
+        <Serit ton="hata" baslik="Kurallar okunamadı.">
+          {hataMetni(kuralSonuc)}
+        </Serit>
       ) : (
         <RuleList rules={rules} currency={currency} canWrite={canWrite} />
       )}
 
       {gecmis.length > 0 && (
-        <section className="overflow-hidden rounded-xl border border-line bg-surface">
+        <section className="overflow-hidden rounded-kart border border-line bg-surface">
           <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line px-4 py-3">
             <h2 className="text-sm font-semibold text-ink">Geçmiş</h2>
             {/* SESSİZ KESME YOK: kaç tanesi gösteriliyor ve toplam kaç. */}
@@ -258,7 +258,7 @@ function BoostCard({
 }) {
   const p = boost.post;
   return (
-    <div className="flex flex-wrap gap-3 rounded-xl bg-surface p-3 sm:flex-nowrap">
+    <div className="flex flex-wrap gap-3 rounded-kart border border-line bg-surface p-3 sm:flex-nowrap">
       {p.thumbnailUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -268,10 +268,10 @@ function BoostCard({
           /* Beyaz etiket alan adını Meta'ya sızdırmamak için — kreatif
              kartında baştan beri var, burada eksikti. */
           referrerPolicy="no-referrer"
-          className="h-24 w-24 shrink-0 rounded-lg bg-surface-sunken object-cover"
+          className="h-24 w-24 shrink-0 rounded-alan bg-surface-sunken object-cover"
         />
       ) : (
-        <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-lg bg-surface-sunken text-[11px] text-ink-muted">
+        <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-alan bg-surface-sunken text-[11px] text-ink-muted">
           {MEDIA_TYPE_LABELS[p.mediaType]}
         </div>
       )}
@@ -349,7 +349,7 @@ function BoostCard({
         </p>
 
         {boost.error && (
-          <p className="mt-1.5 rounded-lg bg-danger-soft px-2 py-1 text-[11px] text-danger-strong">
+          <p className="mt-1.5 rounded-alan bg-danger-soft px-2 py-1 text-[11px] text-danger-strong">
             {boost.error}
           </p>
         )}
@@ -376,7 +376,7 @@ function RuleList({
   if (rules.length === 0) return null;
 
   return (
-    <section className="overflow-hidden rounded-xl border border-line bg-surface">
+    <section className="overflow-hidden rounded-kart border border-line bg-surface">
       <div className="border-b border-line px-4 py-3">
         <h2 className="text-sm font-semibold text-ink">Boost kuralları</h2>
         {/*
@@ -396,11 +396,14 @@ function RuleList({
             <div key={r.id} className="p-4">
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="text-sm font-medium text-ink">{r.name}</h3>
-                {!r.enabled && <Chip cls="bg-surface-sunken text-ink-muted ring-line">Kapalı</Chip>}
+                {!r.enabled && <Rozet hal="dur">Kapalı</Rozet>}
                 {r.autoApprove && (
                   // OTOMATİK ONAY GÖRÜNÜR OLMALI: bu kural insan onayı
-                  // beklemeden para taahhüt ediyor.
-                  <Chip cls="bg-warn-soft text-warn-strong ring-warn/30">Otomatik onay</Chip>
+                  // beklemeden para taahhüt ediyor. Durum değil uyarı: kırmızı
+                  // yazılı hap, nokta yok (bir hata ya da canlı yayın değil).
+                  <span className="inline-flex h-6 shrink-0 items-center whitespace-nowrap rounded-full border border-line-strong px-2.5 text-12 font-bold text-danger-strong">
+                    Otomatik onay
+                  </span>
                 )}
               </div>
 
@@ -416,7 +419,9 @@ function RuleList({
                 </div>
                 <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-surface-sunken">
                   <div
-                    className={`h-full rounded-full ${pct >= 100 ? 'bg-danger' : 'bg-ok'}`}
+                    /* YEŞİL YOK: yeşil yalnız durum noktası (kılavuz). Doluluk
+                       siyah, tavan dolunca kırmızı. */
+                    className={`h-full rounded-full ${pct >= 100 ? 'bg-danger' : 'bg-ink'}`}
                     style={{ width: `${Math.min(pct, 100)}%` }}
                   />
                 </div>
@@ -451,35 +456,29 @@ function describe(r: BoostRuleRecord): string {
   return `${r.minPostAgeHours}–${r.maxPostAgeHours} saatlik gönderilerden ${joined} olanları ${r.durationDays} gün boost et.`;
 }
 
-const STATUS_TONE: Record<BoostStatus, string> = {
-  candidate: 'bg-warn-soft text-warn-strong ring-warn/30',
-  approved: 'bg-info-soft text-info-strong ring-info/30',
-  rejected: 'bg-surface-sunken text-ink-muted ring-line',
-  creating: 'bg-info-soft text-info-strong ring-info/30',
-  active: 'bg-ok-soft text-ok-strong ring-ok/30',
-  // SÜRESİ DOLMUŞ boost NÖTR renkte — yeşil değil. Yeşil "şu an harcıyor"
-  // demek ve biten bir kampanyayı öyle göstermek, aylık harcamayı gözle
-  // toplayan birine yanlış sayı verdirirdi.
-  completed: 'bg-surface-sunken text-ink-muted ring-line',
-  // DURAKLATILMIŞ boost UYARI renginde, nötr DEĞİL: yapılacak bir iş var —
-  // ya sürdürülecek ya iptal edilecek. Biten bir boostla aynı renkte
-  // göstermek, unutulmuş bir kampanyayı görünmez yapardı.
-  paused: 'bg-warn-soft text-warn-strong ring-warn/30',
-  failed: 'bg-danger-soft text-danger-strong ring-danger/30',
+/*
+ * DURUM ROZETİ (`Rozet`): renk dört hâlle sınırlı. Yeşil YALNIZ "şu an
+ * harcıyor" (active).
+ */
+const DURUM_HALI: Record<BoostStatus, DurumHali> = {
+  candidate: 'taslak',
+  approved: 'taslak',
+  rejected: 'taslak',
+  creating: 'taslak',
+  active: 'ok',
+  // SÜRESİ DOLMUŞ boost NÖTR — yeşil değil. Yeşil "şu an harcıyor" demek ve
+  // biten bir kampanyayı öyle göstermek, aylık harcamayı gözle toplayan
+  // birine yanlış sayı verdirirdi.
+  completed: 'taslak',
+  // DURAKLATILMIŞ boost KARE noktalı, biten boostla aynı DEĞİL: yapılacak bir
+  // iş var — ya sürdürülecek ya iptal edilecek. Biten bir boostla aynı
+  // görünmek, unutulmuş bir kampanyayı görünmez yapardı.
+  paused: 'dur',
+  failed: 'hata',
 };
 
 function StatusChip({ status }: { status: BoostStatus }) {
-  return <Chip cls={STATUS_TONE[status]}>{BOOST_STATUS_LABELS[status]}</Chip>;
-}
-
-function Chip({ cls, children }: { cls: string; children: React.ReactNode }) {
-  return (
-    <span
-      className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${cls}`}
-    >
-      {children}
-    </span>
-  );
+  return <Rozet hal={DURUM_HALI[status]}>{BOOST_STATUS_LABELS[status]}</Rozet>;
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
@@ -493,34 +492,17 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 function EmptyState() {
   return (
-    <div className="rounded-xl border border-dashed border-line bg-surface p-8 text-center">
-      <h2 className="text-sm font-semibold text-ink">Henüz boost kuralı yok</h2>
-      <p className="mx-auto mt-2 max-w-lg text-sm text-ink-muted">
-        Auto-Boost, iyi giden organik gönderileri bulup reklama çevirir. Kural gönderiyi
-        seçer, sen onaylarsın, sistem kampanyayı açar.
-      </p>
-      <p className="mx-auto mt-2 max-w-lg text-xs text-ink-muted">
-        Her aday <strong>onay bekler</strong> ve onay düğmesinde taahhüt edilecek toplam
-        tutar yazar. Kuralın aylık bir harcama tavanı var; tavan dolduğunda yeni aday
-        üretilmez.
-      </p>
-    </div>
-  );
-}
-
-function Notice({ tone, children }: { tone: 'warn' | 'error'; children: React.ReactNode }) {
-  const cls =
-    tone === 'error'
-      ? 'bg-danger-soft text-danger-strong ring-danger/30'
-      : 'bg-warn-soft text-warn-strong ring-warn/30';
-  return (
-    // Hata satırı ekran okuyucuya da duyuruluyor; uyarı yalnızca durum.
-    <div
-      role={tone === 'error' ? 'alert' : 'status'}
-      className={`rounded-xl px-4 py-3 text-sm ring-1 ring-inset ${cls}`}
-    >
-      {children}
-    </div>
+    <BosDurum
+      baslik="Henüz boost kuralı yok"
+      neden={
+        <>
+          Akıllı Boost, iyi giden organik gönderileri bulup reklama çevirir. Kural gönderiyi
+          seçer, sen onaylarsın, sistem kampanyayı açar. Her aday <strong>onay bekler</strong> ve
+          onay düğmesinde taahhüt edilecek toplam tutar yazar. Kuralın aylık bir harcama tavanı
+          var; tavan dolduğunda yeni aday üretilmez.
+        </>
+      }
+    />
   );
 }
 

@@ -1,5 +1,7 @@
 'use client';
 
+import { Dugme, dugmeSinifi } from '@/components/ui/dugme';
+import { Pencere } from '@/components/ui/pencere';
 import { useEffect, useId, useRef, useState } from 'react';
 import {
   ACIKLAMA_METNI_SINIRI,
@@ -123,7 +125,7 @@ export function AdimReklam({
   if (!amac) {
     return (
       <>
-        <Soru baslik="Reklamda ne görünsün?">Önce bir amaç seç; istenen alanlar amaca göre değişiyor.</Soru>
+        <Soru adim={4} baslik="Reklamda ne görünsün?">Önce bir amaç seç; istenen alanlar amaca göre değişiyor.</Soru>
         <AltCubuk git={git} adim={4} />
       </>
     );
@@ -144,7 +146,7 @@ export function AdimReklam({
 
   return (
     <>
-      <Soru baslik="Reklamda ne görünsün?">{metinKurali(b.acik, kurgu).soru}</Soru>
+      <Soru adim={4} baslik="Reklamda ne görünsün?">{metinKurali(b.acik, kurgu).soru}</Soru>
       {b.h.hazirlama && (
         <div className={`${s.kart} ${s.hazirOzet}`} aria-label="Hazırlıktan gelen ayarlar">
           {hazirOzeti(b.a, b.acik, b.paraBirimi).map((x) => (
@@ -801,9 +803,9 @@ function FormSecici({ b, eksikMetni, formUyarisi }: { b: AdimBaglami; eksikMetni
   };
   const olusturDugmesi = (birincil: boolean) =>
     olusturma.goster ? (
-      <button type="button" className={`${birincil ? s.birincil : s.ikincil} ${s.ustBosluk}`} onClick={() => olusturAc(null)}>
-        + Form oluştur
-      </button>
+      <Dugme ton={birincil ? 'koyu' : 'ikincil'} ikon="＋" className={s.ustBosluk} onClick={() => olusturAc(null)}>
+        Form oluştur
+      </Dugme>
     ) : sayfaId ? (
       <p className={s.ipucu}>{olusturma.sebep}</p>
     ) : null;
@@ -978,11 +980,8 @@ function FormOnizlemePenceresi({
   sec: (formId: string) => void;
   taslagiAc: (t: LeadFormRecord) => void;
 }) {
-  const kapatRef = useRef<HTMLButtonElement>(null);
-  const baslikId = useId();
   const [hal, setHal] = useState<{ tur: 'isteniyor' } | { tur: 'dustu'; mesaj: string } | { tur: 'geldi'; deger: FormOnizlemesi }>({ tur: 'isteniyor' });
   const acik = konu !== null;
-  usePencereKlavyesi(acik, kapat, kapatRef);
 
   const metaId = konu?.tur === 'meta' ? konu.formId : null;
   useEffect(() => {
@@ -1003,37 +1002,36 @@ function FormOnizlemePenceresi({
   const ad = konu ? (konu.tur === 'meta' ? konu.ad : konu.kayit.name) : '';
 
   return (
-    <div className={`${s.perde} ${acik ? s.acik : ''}`} aria-hidden={!acik}>
-      <div className={s.pencere} role="dialog" aria-modal="true" aria-labelledby={baslikId}>
-        <h3 id={baslikId}>Form önizlemesi: {ad}</h3>
-        <p>{konu?.tur === 'taslak' ? 'Advetics taslağı; henüz Meta’da yayında değil.' : 'Meta’daki formun kişiye görünen ekranları, sırayla.'}</p>
-        <div className={s.pencereGovde}>
-          {gorunen.tur === 'isteniyor' && <p className={s.ipucu}>Form Meta&apos;dan okunuyor…</p>}
-          {gorunen.tur === 'dustu' && (
-            <div className={s.uyari} role="alert">
-              <Ikon d={IKON.ucgen} />
-              <span>{gorunen.mesaj}</span>
-            </div>
-          )}
-          {acik && gorunen.tur === 'geldi' && <FormOnizleme onizleme={gorunen.deger} baslik="Kişinin göreceği ekranlar" />}
-        </div>
-        <div className={s.pencereAlt}>
-          <button ref={kapatRef} type="button" className={s.ikincil} onClick={kapat}>
+    <Pencere
+      acik={acik}
+      onKapat={kapat}
+      baslik={`Form önizlemesi: ${ad}`}
+      aciklama={konu?.tur === 'taslak' ? 'Advetics taslağı; henüz Meta’da yayında değil.' : 'Meta’daki formun kişiye görünen ekranları, sırayla.'}
+      altEylemler={
+        <>
+          <Dugme ton="ikincil" onClick={kapat}>
             Kapat
-          </button>
+          </Dugme>
           {konu?.tur === 'meta' && (
-            <button type="button" className={s.birincil} disabled={secili === konu.formId} onClick={() => sec(konu.formId)}>
+            <Dugme disabled={secili === konu.formId} onClick={() => sec(konu.formId)}>
               {secili === konu.formId ? 'Bu form seçili' : 'Bu formu kullan'}
-            </button>
+            </Dugme>
           )}
-          {konu?.tur === 'taslak' && yayinlayabilir && (
-            <button type="button" className={s.birincil} onClick={() => taslagiAc(konu.kayit)}>
-              Aç ve yayınla
-            </button>
-          )}
-        </div>
+          {konu?.tur === 'taslak' && yayinlayabilir && <Dugme onClick={() => taslagiAc(konu.kayit)}>Aç ve yayınla</Dugme>}
+        </>
+      }
+    >
+      <div className={s.kok}>
+        {gorunen.tur === 'isteniyor' && <p className={s.ipucu}>Form Meta&apos;dan okunuyor…</p>}
+        {gorunen.tur === 'dustu' && (
+          <div className={s.uyari} role="alert">
+            <Ikon d={IKON.ucgen} />
+            <span>{gorunen.mesaj}</span>
+          </div>
+        )}
+        {acik && gorunen.tur === 'geldi' && <FormOnizleme onizleme={gorunen.deger} baslik="Kişinin göreceği ekranlar" />}
       </div>
-    </div>
+    </Pencere>
   );
 }
 
@@ -1108,7 +1106,7 @@ function FormOlusturPenceresi({
           </div>
         )}
         <div className={s.pencereAlt}>
-          <button ref={kapatRef} type="button" className={s.ikincil} onClick={kapat}>
+          <button ref={kapatRef} type="button" className={dugmeSinifi('ikincil')} onClick={kapat}>
             Kapat
           </button>
         </div>
@@ -1522,9 +1520,9 @@ function MetinBlogu({ b, kaydet }: { b: AdimBaglami; kaydet: () => Promise<boole
               </span>
             ))}
             <span style={{ display: 'flex', gap: 8 }}>
-              <button type="button" className={s.ikincil} onClick={() => kullan(oneriSig)}>
+              <Dugme ton="ikincil" onClick={() => kullan(oneriSig)}>
                 Kullan
-              </button>
+              </Dugme>
               <button type="button" className={s.metinDugme} onClick={() => setOneri({ tur: 'istenmedi' })}>
                 Vazgeç
               </button>

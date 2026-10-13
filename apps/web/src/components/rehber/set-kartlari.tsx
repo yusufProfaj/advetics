@@ -12,7 +12,8 @@
  * ve neyin kapandığı `setPlani`/`reklamSetiPlani`nden (shared) okunuyor. Ekran
  * ikinci bir eşleme kurarsa "açık" dediği yerleşimi derleyici kapatır.
  */
-import { useEffect, useState, type ReactNode } from 'react';
+import { AcilirMenu, MenuAyraci, MenuBasligi, MenuOgesi } from '@/components/ui/acilir-menu';
+import { useState, type ReactNode } from 'react';
 import {
   GORSEL_ORANLARI,
   ORAN_ETIKETI,
@@ -77,22 +78,7 @@ export function SetKartlari({
    */
   niyet?: NiyetKodu;
 }) {
-  const [menu, setMenu] = useState<string | null>(null);
   const [ustunde, setUstunde] = useState<number | 'yeni' | null>(null);
-
-  useEffect(() => {
-    if (!menu) return;
-    const tikla = (e: MouseEvent) => {
-      if (!(e.target as HTMLElement).closest('[data-set-menu]')) setMenu(null);
-    };
-    const tus = (e: KeyboardEvent) => e.key === 'Escape' && setMenu(null);
-    document.addEventListener('click', tikla);
-    document.addEventListener('keydown', tus);
-    return () => {
-      document.removeEventListener('click', tikla);
-      document.removeEventListener('keydown', tus);
-    };
-  }, [menu]);
 
   const oranListeleri = setler.map((st) => GORSEL_ORANLARI.filter((o) => st[o]));
   const planlar = oranListeleri.map((o) => setPlani(o, niyet));
@@ -179,7 +165,6 @@ export function SetKartlari({
                   }
                   const bilgi = medyaBilgisi.get(g.varlikId);
                   const yerler = kullanildigiYerler(plan, ortak, o);
-                  const menuAcik = menu === g.varlikId;
                   const digerleri = setler.map((_, j) => j).filter((j) => j !== i);
                   return (
                     <div key={o} className={s.yuva}>
@@ -198,59 +183,40 @@ export function SetKartlari({
                         ) : (
                           <span className={`${s.setGorsel} ${ORAN_CSS[o]}`} />
                         )}
-                        <div data-set-menu>
-                          <button
-                            type="button"
-                            className={s.menuDugme}
-                            aria-label={`${bilgi?.ad ?? 'Görsel'} için seçenekler`}
-                            aria-haspopup="menu"
-                            aria-expanded={menuAcik}
-                            onClick={() => setMenu(menuAcik ? null : g.varlikId)}
+                        {/* Ortak açılır menü (DOM'da kalır, Esc ve ok tuşları bileşende). */}
+                        <div className={s.menuKonum}>
+                          <AcilirMenu
+                            etiket={`${bilgi?.ad ?? 'Görsel'} için seçenekler`}
+                            hizala="sag"
+                            genislik="w-56"
+                            tetik={({ acik: _acik, ...t }) => (
+                              <button type="button" {...t} className={s.menuDugme} aria-label={`${bilgi?.ad ?? 'Görsel'} için seçenekler`}>
+                                ⋯
+                              </button>
+                            )}
                           >
-                            ⋯
-                          </button>
-                          <div className={s.setMenu} role="menu" data-acik={menuAcik}>
-                            <div className={s.mBaslik}>Sete taşı</div>
+                            <MenuBasligi>Sete taşı</MenuBasligi>
                             {digerleri.map((j) => (
-                              <button
+                              <MenuOgesi
                                 key={j}
-                                type="button"
-                                role="menuitem"
-                                tabIndex={menuAcik ? 0 : -1}
-                                onClick={() => {
-                                  setMenu(null);
-                                  tasi(g.varlikId, j);
-                                }}
+                                aciklama={setler[j]![o] ? `${ORAN_ETIKETI[o]} var, yer değiştirirler` : undefined}
+                                onClick={() => tasi(g.varlikId, j)}
                               >
                                 Set {j + 1}
-                                {setler[j]![o] && <small>{ORAN_ETIKETI[o]} var, yer değiştirirler</small>}
-                              </button>
+                              </MenuOgesi>
                             ))}
-                            <button
-                              type="button"
-                              role="menuitem"
-                              tabIndex={menuAcik ? 0 : -1}
-                              disabled={sinirda}
-                              onClick={() => {
-                                setMenu(null);
-                                tasi(g.varlikId, 'yeni');
-                              }}
+                            <MenuOgesi
+                              devreDisi={sinirda}
+                              aciklama={sinirda ? `En çok ${EKRAN_EN_COK_SET} set` : undefined}
+                              onClick={() => tasi(g.varlikId, 'yeni')}
                             >
-                              Yeni set{sinirda && <small>En çok {EKRAN_EN_COK_SET} set</small>}
-                            </button>
-                            <hr />
-                            <button
-                              type="button"
-                              role="menuitem"
-                              tabIndex={menuAcik ? 0 : -1}
-                              onClick={() => {
-                                setMenu(null);
-                                kaldir(g.varlikId);
-                              }}
-                            >
+                              Yeni set
+                            </MenuOgesi>
+                            <MenuAyraci />
+                            <MenuOgesi tehlike onClick={() => kaldir(g.varlikId)}>
                               Kaldır
-                            </button>
-                          </div>
+                            </MenuOgesi>
+                          </AcilirMenu>
                         </div>
                       </div>
                       <div className={s.yuvaAlt}>

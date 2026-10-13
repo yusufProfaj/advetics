@@ -23,6 +23,11 @@ import {
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { kayittanOnizleme } from '@/lib/form-onizleme';
+import { Dugme } from '@/components/ui/dugme';
+import { Kart } from '@/components/ui/kart';
+import { Alan, Girdi, MetinAlani, Secim } from '@/components/ui/alan';
+import { Serit } from '@/components/ui/hal';
+import { Uyari } from '@/components/ui/uyari';
 import { FormOnizleme } from './form-onizleme';
 
 /**
@@ -258,53 +263,36 @@ export function FormBuilder({
            * YAYIN BELİRSİZ: Meta isteği başladı ama cevabı kayda geçmedi.
            * Üç cümle, tek eylem: kontrol et, yoksa bilinçli yeniden dene.
            */
-          <div className="rounded-xl bg-warn-soft px-4 py-3 text-sm text-warn-strong ring-1 ring-inset ring-warn/30" role="alert">
-            <p className="font-semibold">Yayın belirsiz: Meta&apos;da form açılmış olabilir.</p>
-            <p className="mt-1 text-xs">
+          <Uyari ton="tehlike" baslik="Yayın belirsiz: Meta'da form açılmış olabilir.">
+            <p>
               Facebook sayfasının formlarında bu adla bir form var mı kontrol et. Varsa yeniden
               yayınlama; Meta formu silmiyor ve ikinci bir form açılır. Yoksa yeniden dene.
             </p>
             {canPublish && formId && (
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 {!yenidenOnay ? (
-                  <button
-                    type="button"
-                    onClick={() => setYenidenOnay(true)}
-                    disabled={busy !== null}
-                    className="rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface-sunken disabled:opacity-40"
-                  >
+                  <Dugme ton="ikincil" boyut="kucuk" onClick={() => setYenidenOnay(true)} disabled={busy !== null}>
                     Yeniden dene
-                  </button>
+                  </Dugme>
                 ) : (
                   <>
-                    <span className="text-xs font-semibold">Sayfanın formlarında bu form yok, eminim.</span>
-                    <button
-                      type="button"
-                      onClick={() => void publish(true)}
-                      disabled={busy !== null}
-                      className="rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
-                    >
+                    <span className="text-12 font-semibold text-ink">Sayfanın formlarında bu form yok, eminim.</span>
+                    <Dugme ton="koyu" boyut="kucuk" onClick={() => void publish(true)} disabled={busy !== null}>
                       {busy === 'publish' ? 'Yayınlanıyor…' : 'Evet, yeniden yayınla'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setYenidenOnay(false)}
-                      disabled={busy !== null}
-                      className="rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-medium text-ink disabled:opacity-40"
-                    >
+                    </Dugme>
+                    <Dugme ton="hayalet" boyut="kucuk" onClick={() => setYenidenOnay(false)} disabled={busy !== null}>
                       Vazgeç
-                    </button>
+                    </Dugme>
                   </>
                 )}
               </div>
             )}
-          </div>
+          </Uyari>
         )}
         {status === 'publishing' && (
-          <div className="rounded-xl bg-warn-soft px-4 py-3 text-sm text-warn-strong ring-1 ring-inset ring-warn/30" role="status">
-            <p className="font-semibold">Form yayınlanıyor.</p>
-            <p className="mt-1 text-xs">Birkaç dakika sonra sayfayı yenile; yayın yarıda kaldıysa burada yazar.</p>
-          </div>
+          <Serit ton="uyari" baslik="Form yayınlanıyor.">
+            Birkaç dakika sonra sayfayı yenile; yayın yarıda kaldıysa burada yazar.
+          </Serit>
         )}
         {locked && !yayinYarim && (
           /**
@@ -313,19 +301,18 @@ export function FormBuilder({
            * Aşağıya koymak, kullanıcının alanları doldurup en sonda öğrenmesi
            * demek olurdu.
            */
-          <div className="rounded-xl bg-warn-soft px-4 py-3 text-sm text-warn-strong ring-1 ring-inset ring-warn/30">
-            <p className="font-semibold">Bu form yayında — içeriği değiştirilemiyor.</p>
-            <p className="mt-1 text-xs">
+          <Uyari ton="uyari" baslik="Bu form yayında, içeriği değiştirilemiyor.">
+            <p>
               Meta yayınlanmış formu güncellemiyor: bilgilerini bırakan kişiler mevcut onay
               metnini kabul etti. Değişiklik yaparsan yeni bir sürüm oluşturulur. Form adını
-              değiştirmek serbest — o yalnızca burada görünüyor.
+              değiştirmek serbest; o yalnızca burada görünüyor.
             </p>
-            <p className="mt-1 text-xs">
-              <strong>Yeni sürüm yayındaki reklamları değiştirmez.</strong> Çalışan bir
+            <p className="mt-1">
+              <strong className="text-ink">Yeni sürüm yayındaki reklamları değiştirmez.</strong> Çalışan bir
               reklamın formu Meta'da değiştirilemiyor; yeni formu kullanmak için yeni bir
               reklam gerekiyor.
             </p>
-          </div>
+          </Uyari>
         )}
 
         <Section n={1} title="Form tipi">
@@ -335,17 +322,18 @@ export function FormBuilder({
                 key={t}
                 type="button"
                 disabled={locked}
+                aria-pressed={formType === t}
                 onClick={() => setFormType(t)}
-                className={`rounded-lg border p-3 text-left transition disabled:opacity-50 ${
-                  formType === t ? 'border-brand bg-brand/5' : 'border-line hover:bg-surface-sunken'
+                className={`rounded-alan border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                  formType === t ? 'border-brand bg-vurgu' : 'border-line hover:bg-surface-sunken'
                 }`}
               >
-                <p className="text-sm font-medium text-ink">{FORM_TYPE_META[t].label}</p>
-                <p className="mt-1 text-[11px] text-ink-muted">{FORM_TYPE_META[t].promise}</p>
+                <p className="text-14 font-semibold text-ink">{FORM_TYPE_META[t].label}</p>
+                <p className="mt-1 text-12 text-ink-muted">{FORM_TYPE_META[t].promise}</p>
                 {/* HER SEÇİMİN BEDELİ YAZIYOR. "Daha fazla form" kulağa her
                     zaman iyi geliyor; kullanıcının neyi feda ettiğini bilmesi
                     gerekiyor. */}
-                <p className="mt-1 text-[11px] text-ink-muted italic">
+                <p className="mt-1 text-12 italic text-ink-muted">
                   {FORM_TYPE_META[t].tradeoff}
                 </p>
               </button>
@@ -354,68 +342,69 @@ export function FormBuilder({
         </Section>
 
         <Section n={2} title="Giriş ekranı">
-          <Field label="Form adı (yalnızca burada görünür)">
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Yaz kampanyası — form"
-              className={inputCls}
-            />
-          </Field>
-          <Field label="Sayfa">
-            <select
-              value={pageId}
-              onChange={(e) => setPageId(e.target.value)}
-              disabled={locked}
-              className={inputCls}
-            >
-              {pages.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Başlık" hint="Formun üstünde görünen kısa cümle.">
-            <input
-              value={headline}
-              onChange={(e) => setHeadline(e.target.value)}
-              maxLength={60}
-              disabled={locked}
-              placeholder="Ücretsiz keşif randevusu"
-              className={inputCls}
-            />
-          </Field>
-          <Field label="Açıklama">
-            <textarea
-              value={intro}
-              onChange={(e) => setIntro(e.target.value)}
-              maxLength={1000}
-              rows={3}
-              disabled={locked}
-              placeholder="Formu dolduran herkesi uzman ekibimiz 24 saat içinde arıyor."
-              className={inputCls}
-            />
-          </Field>
+          <Alan etiket="Form adı (yalnızca burada görünür)">
+            {(id) => (
+              <Girdi
+                id={id}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Yaz kampanyası formu"
+              />
+            )}
+          </Alan>
+          <Alan etiket="Sayfa">
+            {(id) => (
+              <Secim id={id} value={pageId} onChange={(e) => setPageId(e.target.value)} disabled={locked}>
+                {pages.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </Secim>
+            )}
+          </Alan>
+          <Alan etiket="Başlık" ipucu="Formun üstünde görünen kısa cümle.">
+            {(id, aciklamaId) => (
+              <Girdi
+                id={id}
+                aria-describedby={aciklamaId}
+                value={headline}
+                onChange={(e) => setHeadline(e.target.value)}
+                maxLength={60}
+                disabled={locked}
+                placeholder="Ücretsiz keşif randevusu"
+              />
+            )}
+          </Alan>
+          <Alan etiket="Açıklama">
+            {(id) => (
+              <MetinAlani
+                id={id}
+                value={intro}
+                onChange={(e) => setIntro(e.target.value)}
+                maxLength={1000}
+                rows={3}
+                disabled={locked}
+                placeholder="Formu dolduran herkesi uzman ekibimiz 24 saat içinde arıyor."
+              />
+            )}
+          </Alan>
         </Section>
 
         <Section n={3} title="Sorular">
-          <p className="text-xs text-ink-muted">
-            Bu sorular Facebook profilinden <strong>otomatik doluyor</strong> — kişi yazmıyor,
+          <p className="text-13 text-ink-muted">
+            Bu sorular Facebook profilinden <strong className="text-ink">otomatik doluyor</strong>: kişi yazmıyor,
             onaylıyor. Bu yüzden en çok tamamlanan sorular bunlar.
           </p>
-          <div className="mt-2 flex flex-wrap gap-2">
+          <div role="group" aria-label="Otomatik dolan sorular" className="mt-2 flex flex-wrap gap-2">
             {PREFILL_QUESTIONS.map((q) => (
               <button
                 key={q}
                 type="button"
                 disabled={locked}
+                aria-pressed={prefill.includes(q)}
                 onClick={() => togglePrefill(q)}
-                className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition disabled:opacity-50 ${
-                  prefill.includes(q)
-                    ? 'border-brand bg-brand/5 text-ink'
-                    : 'border-line text-ink-muted hover:bg-surface-sunken'
-                }`}
+                className={hapSinifi(prefill.includes(q))}
               >
                 {prefill.includes(q) ? '✓ ' : ''}
                 {PREFILL_LABELS[q]}
@@ -425,30 +414,31 @@ export function FormBuilder({
 
           <div className="mt-4">
             <div className="flex items-center justify-between">
-              <p className="text-xs font-medium text-ink">Kendi sorun</p>
+              <p className="text-13 font-semibold text-ink">Kendi sorun</p>
               {!locked && custom.length < 5 && (
-                <button
-                  type="button"
+                <Dugme
+                  ton="ikincil"
+                  boyut="kucuk"
                   onClick={() =>
                     setCustom((c) => [...c, { type: 'short_answer', label: '', options: [] }])
                   }
-                  className="rounded-lg border border-line px-2 py-1 text-[11px] text-ink hover:bg-surface-sunken"
                 >
                   + Soru ekle
-                </button>
+                </Dugme>
               )}
             </div>
             {custom.length === 0 ? (
-              <p className="mt-1 text-[11px] text-ink-muted">
-                Her ek soru formu tamamlayan kişi sayısını düşürüyor — bunlar elle
+              <p className="mt-1 text-12 text-ink-muted">
+                Her ek soru formu tamamlayan kişi sayısını düşürüyor; bunlar elle
                 yazılıyor.
               </p>
             ) : (
               <ul className="mt-2 space-y-2">
                 {custom.map((q, i) => (
-                  <li key={i} className="rounded-lg border border-line p-2.5">
-                    <div className="flex gap-2">
-                      <input
+                  <li key={i} className="rounded-alan border border-line p-2.5">
+                    <div className="flex flex-wrap gap-2">
+                      <Girdi
+                        aria-label={`${i + 1}. soru metni`}
                         value={q.label}
                         onChange={(e) =>
                           setCustom((c) =>
@@ -461,9 +451,10 @@ export function FormBuilder({
                             ? 'Eleme sorusu (önerilir): Ne zaman almayı düşünüyorsunuz?'
                             : 'Hangi bölgede arıyorsunuz?'
                         }
-                        className={`${inputCls} flex-1`}
+                        className="!w-auto min-w-0 flex-1"
                       />
-                      <select
+                      <Secim
+                        aria-label={`${i + 1}. soru türü`}
                         value={q.type}
                         onChange={(e) =>
                           setCustom((c) =>
@@ -475,23 +466,25 @@ export function FormBuilder({
                           )
                         }
                         disabled={locked}
-                        className={`${inputCls} w-40`}
+                        className="!w-40"
                       >
                         <option value="short_answer">Kısa cevap</option>
                         <option value="multiple_choice">Çoktan seçmeli</option>
-                      </select>
+                      </Secim>
                       {!locked && (
-                        <button
-                          type="button"
+                        <Dugme
+                          ton="tehlike"
+                          boyut="kucuk"
+                          className="self-center"
                           onClick={() => setCustom((c) => c.filter((_, j) => j !== i))}
-                          className="rounded-lg border border-line px-2 text-xs text-ink-muted"
                         >
                           Sil
-                        </button>
+                        </Dugme>
                       )}
                     </div>
                     {q.type === 'multiple_choice' && (
-                      <input
+                      <Girdi
+                        aria-label={`${i + 1}. sorunun seçenekleri`}
                         value={q.options.join(', ')}
                         onChange={(e) =>
                           setCustom((c) =>
@@ -510,7 +503,7 @@ export function FormBuilder({
                         }
                         disabled={locked}
                         placeholder="Seçenekleri virgülle ayır: 1-2 milyon, 2-5 milyon, 5 milyon+"
-                        className={`${inputCls} mt-2`}
+                        className="mt-2"
                       />
                     )}
                   </li>
@@ -521,65 +514,66 @@ export function FormBuilder({
         </Section>
 
         {soruSayisi >= UZUN_FORM_SORU_SAYISI && (
-          <p className="rounded-xl bg-warn-soft px-4 py-3 text-xs text-warn-strong ring-1 ring-inset ring-warn/30">
-            {soruSayisi} soru var. Uzun form daha az doldurulur.
-          </p>
+          <Serit ton="uyari" baslik={`${soruSayisi} soru var.`}>
+            Uzun form daha az doldurulur.
+          </Serit>
         )}
 
         <Section n={4} title="Gizlilik ve onaylar">
-          <Field
-            label="Gizlilik politikası adresi"
-            hint={
+          <Alan
+            etiket="Gizlilik politikası adresi"
+            ipucu={
               oneri && privacyUrl === oneri.adres
                 ? `Önden dolduruldu: ${oneri.kaynak}. Bu form için doğru değilse değiştir.`
                 : 'Zorunlu. Meta gizlilik politikası olmayan formu kabul etmiyor; adres https:// ile başlamalı.'
             }
           >
-            <input
-              value={privacyUrl}
-              onChange={(e) => setPrivacyUrl(e.target.value)}
-              disabled={locked}
-              placeholder="https://musteri.com/gizlilik"
-              className={inputCls}
-            />
-          </Field>
-          <Field label="Bağlantı metni">
-            <input
-              value={privacyText}
-              onChange={(e) => setPrivacyText(e.target.value)}
-              disabled={locked}
-              className={inputCls}
-            />
-          </Field>
+            {(id, aciklamaId) => (
+              <Girdi
+                id={id}
+                aria-describedby={aciklamaId}
+                value={privacyUrl}
+                onChange={(e) => setPrivacyUrl(e.target.value)}
+                disabled={locked}
+                placeholder="https://musteri.com/gizlilik"
+              />
+            )}
+          </Alan>
+          <Alan etiket="Bağlantı metni">
+            {(id) => (
+              <Girdi id={id} value={privacyText} onChange={(e) => setPrivacyText(e.target.value)} disabled={locked} />
+            )}
+          </Alan>
 
           <div className="mt-3">
-            <p className="text-xs font-medium text-ink">Onay kutuları</p>
-            <p className="mt-0.5 text-[11px] text-ink-muted">
-              Türkiye'de açık rıza ayrı bir onay gerektiriyor — gizlilik politikası linki tek
+            <p className="text-13 font-semibold text-ink">Onay kutuları</p>
+            <p className="mt-0.5 text-12 text-ink-muted">
+              Türkiye'de açık rıza ayrı bir onay gerektiriyor; gizlilik politikası linki tek
               başına yeterli sayılmıyor.
             </p>
             {!locked && (
               <div className="mt-2 flex flex-wrap gap-2">
                 {CONSENT_PRESETS.filter((p) => !consents.some((c) => c.text === p.text)).map(
                   (p) => (
-                    <button
+                    <Dugme
                       key={p.key}
-                      type="button"
+                      ton="ikincil"
+                      boyut="kucuk"
                       onClick={() =>
                         setConsents((c) => [...c, { text: p.text, required: p.key === 'kvkk' }])
                       }
-                      className="rounded-lg border border-line px-2.5 py-1 text-[11px] text-ink hover:bg-surface-sunken"
                     >
                       + {p.label}
-                    </button>
+                    </Dugme>
                   ),
                 )}
               </div>
             )}
             <ul className="mt-2 space-y-2">
               {consents.map((c, i) => (
-                <li key={i} className="rounded-lg border border-line p-2.5">
-                  <textarea
+                <li key={i} className="rounded-alan border border-line p-2.5">
+                  <MetinAlani
+                    aria-label={`${i + 1}. onay metni`}
                     value={c.text}
                     onChange={(e) =>
                       setConsents((cs) =>
@@ -588,10 +582,10 @@ export function FormBuilder({
                     }
                     rows={2}
                     disabled={locked}
-                    className={inputCls}
+                    className="!min-h-0"
                   />
-                  <div className="mt-1.5 flex items-center justify-between">
-                    <label className="flex items-center gap-1.5 text-[11px] text-ink-muted">
+                  <div className="mt-1.5 flex items-center justify-between gap-2">
+                    <label className="flex items-center gap-1.5 text-12 text-ink-muted">
                       <input
                         type="checkbox"
                         checked={c.required}
@@ -604,16 +598,16 @@ export function FormBuilder({
                           )
                         }
                       />
-                      Zorunlu — işaretlenmeden form gönderilemez
+                      Zorunlu: işaretlenmeden form gönderilemez
                     </label>
                     {!locked && (
-                      <button
-                        type="button"
+                      <Dugme
+                        ton="hayalet"
+                        boyut="kucuk"
                         onClick={() => setConsents((cs) => cs.filter((_, j) => j !== i))}
-                        className="text-[11px] text-ink-muted underline"
                       >
                         Kaldır
-                      </button>
+                      </Dugme>
                     )}
                   </div>
                 </li>
@@ -623,81 +617,92 @@ export function FormBuilder({
         </Section>
 
         <Section n={5} title="Teşekkür ekranı">
-          <Field label="Başlık">
-            <input
-              value={tyHeadline}
-              onChange={(e) => setTyHeadline(e.target.value)}
-              maxLength={60}
-              disabled={locked}
-              className={inputCls}
-            />
-          </Field>
-          <Field label="Mesaj">
-            <textarea
-              value={tyBody}
-              onChange={(e) => setTyBody(e.target.value)}
-              maxLength={300}
-              rows={2}
-              disabled={locked}
-              className={inputCls}
-            />
-          </Field>
-          <Field label="Buton">
-            <div className="flex flex-wrap gap-2">
+          <Alan etiket="Başlık">
+            {(id) => (
+              <Girdi
+                id={id}
+                value={tyHeadline}
+                onChange={(e) => setTyHeadline(e.target.value)}
+                maxLength={60}
+                disabled={locked}
+              />
+            )}
+          </Alan>
+          <Alan etiket="Mesaj">
+            {(id) => (
+              <MetinAlani
+                id={id}
+                value={tyBody}
+                onChange={(e) => setTyBody(e.target.value)}
+                maxLength={300}
+                rows={2}
+                disabled={locked}
+              />
+            )}
+          </Alan>
+          <div className="grid gap-1.5">
+            <p className="text-13 font-semibold text-ink">Buton</p>
+            <div role="group" aria-label="Teşekkür ekranı butonu" className="flex flex-wrap gap-2">
               {TESEKKUR_DUGME_TURLERI.map((t) => (
                 <button
                   key={t}
                   type="button"
                   disabled={locked}
+                  aria-pressed={tyCtaType === t}
                   onClick={() => dugmeTuruSec(t)}
-                  className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition disabled:opacity-50 ${
-                    tyCtaType === t ? 'border-brand bg-brand/5 text-ink' : 'border-line text-ink-muted hover:bg-surface-sunken'
-                  }`}
+                  className={hapSinifi(tyCtaType === t)}
                 >
                   {TESEKKUR_DUGME_ETIKETI[t]}
                 </button>
               ))}
             </div>
-          </Field>
+          </div>
           {tyCtaType !== 'NONE' && (
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Buton metni">
-                <input
-                  value={tyCtaText}
-                  onChange={(e) => setTyCtaText(e.target.value)}
-                  maxLength={40}
-                  disabled={locked}
-                  className={inputCls}
-                />
-              </Field>
-              {tyCtaType === 'VIEW_WEBSITE' ? (
-                <Field label="Buton adresi">
-                  <input
-                    value={tyCtaUrl}
-                    onChange={(e) => setTyCtaUrl(e.target.value)}
+              <Alan etiket="Buton metni">
+                {(id) => (
+                  <Girdi
+                    id={id}
+                    value={tyCtaText}
+                    onChange={(e) => setTyCtaText(e.target.value)}
+                    maxLength={40}
                     disabled={locked}
-                    placeholder="https://musteri.com"
-                    className={inputCls}
                   />
-                </Field>
+                )}
+              </Alan>
+              {tyCtaType === 'VIEW_WEBSITE' ? (
+                <Alan etiket="Buton adresi">
+                  {(id) => (
+                    <Girdi
+                      id={id}
+                      value={tyCtaUrl}
+                      onChange={(e) => setTyCtaUrl(e.target.value)}
+                      disabled={locked}
+                      placeholder="https://musteri.com"
+                    />
+                  )}
+                </Alan>
               ) : (
-                <Field
-                  label="Aranacak numara"
-                  hint={
+                <Alan
+                  etiket="Aranacak numara"
+                  ipucu={
                     telefonOnerisi && tyPhone === telefonOnerisi
                       ? 'Marka Merkezi’ndeki telefondan dolduruldu.'
                       : '+90 ile, boşluksuz: +905321234567'
                   }
                 >
-                  <input
-                    value={tyPhone}
-                    onChange={(e) => setTyPhone(e.target.value)}
-                    disabled={locked}
-                    inputMode="tel"
-                    placeholder="+905321234567"
-                    className={inputCls}
-                  />
-                </Field>
+                  {(id, aciklamaId) => (
+                    <Girdi
+                      id={id}
+                      aria-describedby={aciklamaId}
+                      value={tyPhone}
+                      onChange={(e) => setTyPhone(e.target.value)}
+                      disabled={locked}
+                      inputMode="tel"
+                      placeholder="+905321234567"
+                    />
+                  )}
+                </Alan>
               )}
             </div>
           )}
@@ -710,33 +715,26 @@ export function FormBuilder({
            * Kullanıcı "Düzenle"ye bastı ama olacak şey düzenleme değil: Meta'da
            * yeni bir form oluşacak. Bunu onaylamadan hiçbir şey yazılmıyor.
            */
-          <div className="rounded-xl border border-warn/30 bg-warn-soft p-4">
-            <p className="text-sm font-semibold text-warn-strong">
-              {plan.nextVersion}. sürüm oluşturulacak
-            </p>
-            <p className="mt-1 text-xs text-warn-strong">{plan.explanation}</p>
-            <div className="mt-3 flex gap-2">
-              <button
-                type="button"
-                onClick={() => void save()}
-                disabled={busy !== null}
-                className="rounded-lg bg-warn px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
-              >
-                {busy === 'save' ? 'Oluşturuluyor…' : 'Yeni sürüm oluştur'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setPlan(null)}
-                className="rounded-lg border border-warn/30 px-3 py-1.5 text-xs font-medium text-warn-strong"
-              >
-                Vazgeç
-              </button>
-            </div>
-          </div>
+          <Serit
+            ton="uyari"
+            baslik={`${plan.nextVersion}. sürüm oluşturulacak`}
+            eylemler={
+              <>
+                <Dugme ton="hayalet" boyut="kucuk" onClick={() => setPlan(null)}>
+                  Vazgeç
+                </Dugme>
+                <Dugme boyut="kucuk" onClick={() => void save()} disabled={busy !== null}>
+                  {busy === 'save' ? 'Oluşturuluyor…' : 'Yeni sürüm oluştur'}
+                </Dugme>
+              </>
+            }
+          >
+            {plan.explanation}
+          </Serit>
         )}
 
         {warnings.length > 0 && !plan && (
-          <ul className="space-y-1 rounded-xl bg-surface-sunken px-4 py-3 text-xs text-ink-muted">
+          <ul className="space-y-1 rounded-alan bg-surface-sunken px-4 py-3 text-12 text-ink-muted">
             {warnings.map((w, i) => (
               <li key={i}>· {w}</li>
             ))}
@@ -744,36 +742,26 @@ export function FormBuilder({
         )}
 
         {error && (
-          <p className="rounded-xl bg-danger-soft px-4 py-3 text-sm text-danger-strong ring-1 ring-inset ring-danger/30">
+          <Serit ton="hata" baslik="İşlem tamamlanamadı">
             {error}
-          </p>
+          </Serit>
         )}
 
         {!plan && (
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => void save()}
-              disabled={busy !== null || !name || !pageId}
-              className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
-            >
+            <Dugme onClick={() => void save()} disabled={busy !== null || !name || !pageId}>
               {busy === 'save' || busy === 'plan' ? 'Kaydediliyor…' : 'Kaydet'}
-            </button>
+            </Dugme>
 
             {formId && !locked && canPublish && (
-              <button
-                type="button"
-                onClick={() => void publish()}
-                disabled={busy !== null}
-                className="rounded-lg border border-line px-4 py-2 text-sm font-medium text-ink hover:bg-surface-sunken disabled:opacity-40"
-              >
+              <Dugme ton="ikincil" onClick={() => void publish()} disabled={busy !== null}>
                 {busy === 'publish' ? 'Yayınlanıyor…' : "Meta'da yayınla"}
-              </button>
+              </Dugme>
             )}
 
             {formId && !locked && canPublish && (
               // YAYININ GERİ DÖNÜŞÜ OLMADIĞI BUTONUN YANINDA YAZIYOR.
-              <span className="text-[11px] text-ink-muted">
+              <span className="text-12 text-ink-muted">
                 Yayınlandıktan sonra içeriği değiştirilemez.
               </span>
             )}
@@ -807,8 +795,16 @@ export function FormBuilder({
   );
 }
 
-const inputCls =
-  'w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-brand disabled:bg-surface-sunken disabled:text-ink-muted';
+/*
+ * SEÇİM HAPI (`HapSecici` görünüşü). Ortak bileşen `disabled` taşımıyor ve
+ * yayındaki formda seçimler KİLİTLİ olmalı; kilitsiz bir hap, değiştirilemeyen
+ * bir formu değiştirilebilir gösterirdi. O yüzden aynı görünüş yerelde.
+ */
+function hapSinifi(secili: boolean): string {
+  return `inline-flex h-[34px] items-center gap-1.5 rounded-full border px-3.5 text-13 font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+    secili ? 'border-brand bg-vurgu text-ink' : 'border-line-strong bg-surface text-ink-muted hover:bg-surface-sunken'
+  }`;
+}
 
 function Section({
   n,
@@ -820,32 +816,17 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-xl border border-line bg-surface p-4">
-      <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink">
-        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-surface-sunken text-[11px] text-ink-muted">
-          {n}
+    <Kart
+      baslik={
+        <span className="flex items-center gap-2">
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-surface-sunken text-11 text-ink-muted">
+            {n}
+          </span>
+          {title}
         </span>
-        {title}
-      </h2>
+      }
+    >
       <div className="space-y-3">{children}</div>
-    </section>
-  );
-}
-
-function Field({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="block">
-      <span className="mb-1 block text-xs font-medium text-ink">{label}</span>
-      {children}
-      {hint && <span className="mt-1 block text-[11px] text-ink-muted">{hint}</span>}
-    </label>
+    </Kart>
   );
 }

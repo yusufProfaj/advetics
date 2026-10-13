@@ -50,7 +50,7 @@ export function FirmaBilgileri({
       bilgi.addressLatitude != null && bilgi.addressLongitude != null ? koordinatYaz({ enlem: bilgi.addressLatitude, boylam: bilgi.addressLongitude }) : null;
     return (
       <div className="space-y-3">
-        <div className="rounded-lg border border-line px-3 py-1">
+        <div className="rounded-alan border border-line px-3 py-1">
           <DetaySatiri etiket="İnternet sitesi" deger={bilgi.website} />
           <DetaySatiri etiket="Yetkili kişi" deger={bilgi.contactName} />
           <DetaySatiri etiket="Telefon" deger={bilgi.contactPhone} />
@@ -59,7 +59,7 @@ export function FirmaBilgileri({
           <DetaySatiri etiket="Harita konumu" deger={konum} />
         </div>
         {canManage && (
-          <Dugme boyut="kucuk" onClick={() => setDuzenle(true)}>
+          <Dugme ton="koyu" boyut="kucuk" onClick={() => setDuzenle(true)}>
             Bilgileri düzenle
           </Dugme>
         )}
@@ -72,7 +72,7 @@ export function FirmaBilgileri({
       <div className="grid gap-4 md:grid-cols-2">
         <div>
           <p className="mb-1 text-xs font-semibold text-ink">İletişim</p>
-          <div className="rounded-lg border border-line px-3 py-1">
+          <div className="rounded-alan border border-line px-3 py-1">
             <DetaySatiri etiket="Yetkili kişi" deger={bilgi.contactName} />
             <DetaySatiri
               etiket="Rapor alıcıları"
@@ -84,7 +84,7 @@ export function FirmaBilgileri({
         </div>
         <div>
           <p className="mb-1 text-xs font-semibold text-ink">Firma</p>
-          <div className="rounded-lg border border-line px-3 py-1">
+          <div className="rounded-alan border border-line px-3 py-1">
             <DetaySatiri etiket="Adres" deger={bilgi.address} />
             {/* "Bölgemde çok kişi görsün" reklamının "adresin çevresi" seçeneği bunu okuyor. */}
             <DetaySatiri
@@ -105,7 +105,7 @@ export function FirmaBilgileri({
         </div>
       </div>
       {bilgi.notes && (
-        <p className="whitespace-pre-wrap rounded-lg bg-surface-muted px-3 py-2 text-xs text-ink-muted">
+        <p className="whitespace-pre-wrap rounded-alan bg-surface-muted px-3 py-2 text-xs text-ink-muted">
           {bilgi.notes}
         </p>
       )}

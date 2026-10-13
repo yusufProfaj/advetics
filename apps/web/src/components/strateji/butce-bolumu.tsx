@@ -13,6 +13,7 @@ import { ApiRequestError, apiFetch } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
 import { Dugme } from '@/components/ui/dugme';
 import { Uyari } from '@/components/ui/uyari';
+import { Kart } from '@/components/ui/kart';
 import {
   DAGILIM_BOS_METNI,
   HUCRELER,
@@ -249,7 +250,7 @@ export function ButceBolumu({
           {hataliHucre > 0 && <span className="text-sm text-danger-strong">{hataliHucre} tutar okunamadı.</span>}
           {ozet.durum === 'asim' && <span className="text-sm text-danger-strong">Dağılım toplam bütçeyi aşıyor.</span>}
           {kirli && (
-            <Dugme ton="sade" boyut="kucuk" onClick={kayitliyiYukle}>
+            <Dugme ton="hayalet" boyut="kucuk" onClick={kayitliyiYukle}>
               Değişiklikleri at
             </Dugme>
           )}
@@ -277,7 +278,7 @@ function ButceOzetSeridi({
       ? { ad: 'Aşım', deger: formatMoney(fark.toString(), para), sinif: 'text-danger-strong' }
       : durum === 'kalan'
         ? { ad: 'Dağıtılmamış', deger: formatMoney(fark.toString(), para), sinif: 'text-warn-strong' }
-        : { ad: 'Kalan', deger: 'Tamamı dağıtıldı', sinif: 'text-ok-strong' };
+        : { ad: 'Kalan', deger: 'Tamamı dağıtıldı', sinif: 'text-ink' };
   return (
     <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3" aria-live="polite">
       <div className="rounded-xl border border-line bg-surface p-3">
@@ -325,70 +326,72 @@ function OneriKutusu({
   const { oneri } = durum;
   const pencere = `${oneri.pencere.from} ile ${oneri.pencere.to} arası`;
   return (
-    <div className="space-y-3 rounded-xl border border-line bg-surface p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="font-semibold text-ink">Geçmişten öneri</p>
-          <p className="text-sm text-ink-muted">Dayanak: {pencere}, bu workspace’in kendi hesapları.</p>
+    <Kart as="div">
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="font-semibold text-ink">Geçmişten öneri</p>
+            <p className="text-sm text-ink-muted">Dayanak: {pencere}, bu workspace’in kendi hesapları.</p>
+          </div>
+          {oneri.satirlar && uygulanabilir && (
+            <Dugme ton="koyu" boyut="kucuk" onClick={uygula}>
+              Öneriyi uygula
+            </Dugme>
+          )}
         </div>
-        {oneri.satirlar && uygulanabilir && (
-          <Dugme boyut="kucuk" onClick={uygula}>
-            Öneriyi uygula
-          </Dugme>
+
+        {oneri.satirlar === null ? (
+          <p className="text-sm text-ink">
+            {oneri.bosNedeni ? DAGILIM_BOS_METNI[oneri.bosNedeni] : 'Öneri üretilemedi; sunucu bir neden bildirmedi.'}
+          </p>
+        ) : (
+          <ul className="space-y-1 text-sm text-ink">
+            {oneri.satirlar.map((s) => (
+              <li key={`${s.platform}:${s.katman}`}>
+                <span className="font-medium">
+                  {PLATFORM_KISA_ADLARI[s.platform]} · {HUNI_ETIKETLERI[s.katman]}:
+                </span>{' '}
+                <span className="tabular-nums">{formatMoney(s.tutarMicros, para)}</span>
+                {s.gerekce && <span className="text-ink-muted"> · {s.gerekce}</span>}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {durum.korunanElle !== null && durum.korunanElle > 0 && (
+          <p className="text-sm text-warn-strong">
+            {durum.korunanElle} hücre elle yazıldığı için değiştirilmedi.
+          </p>
+        )}
+
+        {oneri.dayanak.length > 0 && (
+          <TabloKabi etiket="Önerinin dayanağı">
+            <table className="w-full min-w-[30rem] text-sm">
+              <thead>
+                <tr className="text-left text-xs text-ink-muted">
+                  <th className="px-3 py-2 font-semibold">Platform</th>
+                  <th className="px-3 py-2 text-right font-semibold">Harcama</th>
+                  <th className="px-3 py-2 text-right font-semibold">Sonuç</th>
+                  <th className="px-3 py-2 text-right font-semibold">Sonuç başı maliyet</th>
+                </tr>
+              </thead>
+              <tbody>
+                {oneri.dayanak.map((d) => (
+                  <tr key={d.platform} className="border-t border-line">
+                    <td className="px-3 py-2 text-ink">{PLATFORM_KISA_ADLARI[d.platform]}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{formatMoney(d.harcamaMicros, para)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{d.donusum.toLocaleString('tr-TR')}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      {/* `null` = sonuç yok, hesaplanamaz. Sıfır değil. */}
+                      {d.donusumBasiMaliyetMicros === null ? 'hesaplanamaz' : formatMoney(d.donusumBasiMaliyetMicros, para)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TabloKabi>
         )}
       </div>
-
-      {oneri.satirlar === null ? (
-        <p className="text-sm text-ink">
-          {oneri.bosNedeni ? DAGILIM_BOS_METNI[oneri.bosNedeni] : 'Öneri üretilemedi; sunucu bir neden bildirmedi.'}
-        </p>
-      ) : (
-        <ul className="space-y-1 text-sm text-ink">
-          {oneri.satirlar.map((s) => (
-            <li key={`${s.platform}:${s.katman}`}>
-              <span className="font-medium">
-                {PLATFORM_KISA_ADLARI[s.platform]} · {HUNI_ETIKETLERI[s.katman]}:
-              </span>{' '}
-              <span className="tabular-nums">{formatMoney(s.tutarMicros, para)}</span>
-              {s.gerekce && <span className="text-ink-muted"> · {s.gerekce}</span>}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {durum.korunanElle !== null && durum.korunanElle > 0 && (
-        <p className="text-sm text-warn-strong">
-          {durum.korunanElle} hücre elle yazıldığı için değiştirilmedi.
-        </p>
-      )}
-
-      {oneri.dayanak.length > 0 && (
-        <TabloKabi etiket="Önerinin dayanağı">
-          <table className="w-full min-w-[30rem] text-sm">
-            <thead>
-              <tr className="text-left text-xs text-ink-muted">
-                <th className="px-3 py-2 font-semibold">Platform</th>
-                <th className="px-3 py-2 text-right font-semibold">Harcama</th>
-                <th className="px-3 py-2 text-right font-semibold">Sonuç</th>
-                <th className="px-3 py-2 text-right font-semibold">Sonuç başı maliyet</th>
-              </tr>
-            </thead>
-            <tbody>
-              {oneri.dayanak.map((d) => (
-                <tr key={d.platform} className="border-t border-line">
-                  <td className="px-3 py-2 text-ink">{PLATFORM_KISA_ADLARI[d.platform]}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatMoney(d.harcamaMicros, para)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{d.donusum.toLocaleString('tr-TR')}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">
-                    {/* `null` = sonuç yok, hesaplanamaz. Sıfır değil. */}
-                    {d.donusumBasiMaliyetMicros === null ? 'hesaplanamaz' : formatMoney(d.donusumBasiMaliyetMicros, para)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </TabloKabi>
-      )}
-    </div>
+    </Kart>
   );
 }

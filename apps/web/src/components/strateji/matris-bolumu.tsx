@@ -24,6 +24,7 @@ import { baglanti } from '@/lib/baglanti';
 import { formatMoney } from '@/lib/format';
 import { Dugme } from '@/components/ui/dugme';
 import { Uyari } from '@/components/ui/uyari';
+import { BosDurum } from '@/components/ui/hal';
 import {
   kitleMetni,
   matrisAsimlari,
@@ -208,9 +209,7 @@ export function MatrisBolumu({
       )}
 
       {taslak.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-line bg-surface p-6 text-center text-sm text-ink-muted">
-          {duzenlenebilir ? 'Henüz satır yok. Her satır bir kitle, amaç ve bütçe eşleşmesi.' : 'Bu planda kitle ve kreatif satırı yok.'}
-        </p>
+        <BosDurum baslik="Satır yok" neden={duzenlenebilir ? 'Henüz satır yok. Her satır bir kitle, amaç ve bütçe eşleşmesi.' : 'Bu planda kitle ve kreatif satırı yok.'} />
       ) : (
         <TabloKabi etiket="Kitle ve kreatif tablosu">
           <table className="w-full min-w-[60rem] text-sm">
@@ -450,7 +449,7 @@ function DuzenlenenSatir({
         {hata && <p className="mt-1 text-left text-xs text-danger-strong">{hata}</p>}
       </td>
       <td className="px-3 py-2">
-        <Dugme ton="sade" boyut="kucuk" onClick={sil} aria-label={`${etiket} sil`}>
+        <Dugme ton="tehlike" boyut="kucuk" onClick={sil} aria-label={`${etiket} sil`}>
           Sil
         </Dugme>
       </td>
@@ -482,11 +481,11 @@ function VarlikSecici({
   const listedeYok = secili.filter((id) => !liste.some((g) => g.id === id));
   return (
     <details className="min-w-[12rem]">
-      <summary className="cursor-pointer rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-ink">
+      <summary className="cursor-pointer rounded-alan border border-line bg-surface px-2.5 py-1.5 text-sm text-ink">
         {secili.length === 0 ? 'Görsel seç' : `${secili.length} / ${MATRIS_VARLIK_SINIRI} görsel`}
         <span className="sr-only"> · {etiket}</span>
       </summary>
-      <div className="mt-2 max-h-64 space-y-1 overflow-y-auto rounded-lg border border-line bg-surface p-2">
+      <div className="mt-2 max-h-64 space-y-1 overflow-y-auto rounded-alan border border-line bg-surface p-2">
         {gorseller.tur !== 'geldi' && <p className="text-xs text-ink-muted">Görsel listesi hazır değil.</p>}
         {gorseller.tur === 'geldi' && liste.length === 0 && (
           <p className="text-xs text-ink-muted">Base’te görsel yok. Varlıklar › Görseller’den yükle.</p>

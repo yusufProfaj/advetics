@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { BoostOnAyarlariFormu } from './boost-on-ayarlari-formu';
+import { Dugme } from '@/components/ui/dugme';
+import { Pencere } from '@/components/ui/pencere';
 
 /**
  * ═══ BOOST ÖN AYARI — AUTO-BOOST'UN İÇİNDEN ═══
@@ -23,9 +24,9 @@ import { BoostOnAyarlariFormu } from './boost-on-ayarlari-formu';
  * değiştirip aynı ekrana dönüyor. Ayrı sayfaya gitmek, geri geldiğinde
  * kuyruğun başına dönmek demekti.
  *
- * PORTAL kullanılıyor — CLAUDE.md: "fixed inset-0 ekranın tamamı demek
- * değil; tam ekran her öğe portal ile document.body altına." Bu tuzağa
- * projede üç kez düşüldü.
+ * ORTAK `Pencere`: portal, Esc, odak tuzağı ve DOM'da kalma orada. Elle
+ * yazılmış katman Esc'te sayfayı TAZELEMİYORDU (yalnız "Kapat" düğmesi
+ * tazeliyordu); artık her kapanış aynı `kapat`tan geçiyor.
  */
 export function BoostOnAyariDugmesi({
   clientId,
@@ -35,16 +36,19 @@ export function BoostOnAyariDugmesi({
   canWrite: boolean;
 }) {
   const [acik, setAcik] = useState(false);
+  /*
+   * FORM HER AÇILIŞTA YENİDEN KURULUYOR (`key`). Pencere kapalıyken DOM'da
+   * kalıyor; form kalıcı olsaydı ikinci açılışta önceki açılışın kaydedilmemiş
+   * hâlini gösterirdi. İlk açılıştan önce hiç kurulmuyor: sayfa her
+   * yüklendiğinde ön ayar çekilmesin.
+   */
+  const [acilis, setAcilis] = useState(0);
   const router = useRouter();
 
-  useEffect(() => {
-    if (!acik) return;
-    const esc = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') setAcik(false);
-    };
-    document.addEventListener('keydown', esc);
-    return () => document.removeEventListener('keydown', esc);
-  }, [acik]);
+  function ac(): void {
+    setAcilis((n) => n + 1);
+    setAcik(true);
+  }
 
   function kapat(): void {
     setAcik(false);
@@ -59,50 +63,21 @@ export function BoostOnAyariDugmesi({
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setAcik(true)}
-        className="rounded-lg border border-line px-3.5 py-2 text-sm transition hover:bg-surface-muted"
-      >
+      <Dugme ton="ikincil" onClick={ac}>
         Boost ön ayarı
-      </button>
+      </Dugme>
 
-      {acik &&
-        typeof document !== 'undefined' &&
-        createPortal(
-          <div
-            className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4"
-            onMouseDown={(e) => {
-              if (e.target === e.currentTarget) kapat();
-            }}
-          >
-            <div className="my-8 flex max-h-[calc(100vh-4rem)] w-full max-w-2xl flex-col rounded-xl border border-line bg-surface p-5 shadow-xl">
-              <div className="flex shrink-0 items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-lg font-semibold text-ink">Boost ön ayarı</h2>
-                  <p className="mt-0.5 text-xs text-ink-muted">
-                    Onayladığın her kart bu ayarlarla yayınlanır. Ayar bu
-                    workspace’e kaydediliyor.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={kapat}
-                  className="rounded-lg px-2 py-1 text-sm text-ink-muted hover:text-ink"
-                >
-                  Kapat
-                </button>
-              </div>
-
-              {/* Gövde kaydırılıyor, başlık sabit — 14 alanlı formda
-                  "Kaydet" ekran dışında kalıyordu (şablon modalıyla aynı ders). */}
-              <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
-                <BoostOnAyarlariFormu clientId={clientId} canWrite={canWrite} />
-              </div>
-            </div>
-          </div>,
-          document.body,
-        )}
+      <Pencere
+        acik={acik}
+        onKapat={kapat}
+        genislik="genis"
+        baslik="Boost ön ayarı"
+        aciklama="Onayladığın her kart bu ayarlarla yayınlanır. Ayar bu workspace’e kaydediliyor."
+      >
+        {/* Gövde Pencere'nin içinde kayıyor, başlık sabit: 14 alanlı formda
+            "Kaydet" ekran dışında kalıyordu (şablon modalıyla aynı ders). */}
+        {acilis > 0 && <BoostOnAyarlariFormu key={acilis} clientId={clientId} canWrite={canWrite} />}
+      </Pencere>
     </>
   );
 }

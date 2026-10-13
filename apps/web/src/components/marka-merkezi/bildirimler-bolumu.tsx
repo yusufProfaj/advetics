@@ -31,6 +31,9 @@ import {
 } from '@/lib/sinyal';
 import { Dugme } from '@/components/ui/dugme';
 import { Uyari } from '@/components/ui/uyari';
+import { DurumNoktasi, type DurumHali } from '@/components/ui/rozet';
+import { Alan, Girdi, MetinAlani } from '@/components/ui/alan';
+import { BosDurum } from '@/components/ui/hal';
 
 /**
  * ═══ MARKA MERKEZİ › BİLDİRİMLER (Paket A, taslak ekran 3) ═══
@@ -55,14 +58,15 @@ type Hal<T> = { tur: 'okunuyor' } | { tur: 'hata'; mesaj: string } | { tur: 'gel
 
 const hataMetni = (e: unknown) => (e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.');
 
-const NOKTA_SINIFI: Record<Nokta, string> = {
-  yesil: 'bg-ok',
-  gri: 'border-2 border-ink-muted',
-  kirmizi: 'bg-brand',
+// Kanal durumu ortak durum noktasıyla: yeşil yalnız doğrulanmış kanalda.
+const NOKTA_HALI: Record<Nokta, DurumHali> = {
+  yesil: 'ok',
+  gri: 'taslak',
+  kirmizi: 'hata',
 };
 
 function NoktaIsareti({ nokta }: { nokta: Nokta }) {
-  return <span aria-hidden className={`inline-block h-2 w-2 shrink-0 rounded-full ${NOKTA_SINIFI[nokta]}`} />;
+  return <DurumNoktasi hal={NOKTA_HALI[nokta]} />;
 }
 
 /** Deneme mesajı sonrası soru: hangi kanal için ve cevap verildiyse ne dendi. */
@@ -178,14 +182,14 @@ export function BildirimlerBolumu({
 
   return (
     <div className="space-y-4">
-      <section className="rounded-xl border border-line bg-surface" aria-labelledby="kanallar-baslik">
+      <section className="rounded-kart border border-line bg-surface" aria-labelledby="kanallar-baslik">
         <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-3">
           <h3 id="kanallar-baslik" className="text-sm font-semibold text-ink">
             Bildirim kanalları
           </h3>
           {veri && <span className="text-xs text-ink-muted">{veri.toplam} kanal</span>}
           {yazabilir && (
-            <Dugme className="ml-auto" boyut="kucuk" onClick={() => setFormAcik(true)} disabled={formAcik}>
+            <Dugme className="ml-auto" ton="ikincil" boyut="kucuk" onClick={() => setFormAcik(true)} disabled={formAcik}>
               + Kanal ekle
             </Dugme>
           )}
@@ -194,21 +198,30 @@ export function BildirimlerBolumu({
         {kanallar.tur === 'okunuyor' && <p className="px-4 py-5 text-sm text-ink-muted">Kanallar okunuyor…</p>}
         {kanallar.tur === 'hata' && (
           <div className="p-4">
-            <Uyari ton="tehlike" baslik="Kanallar alınamadı.">
-              {kanallar.mesaj}{' '}
-              <button type="button" className="font-semibold underline" onClick={() => void kanallariOku()}>
-                Yeniden dene
-              </button>
+            <Uyari
+              ton="tehlike"
+              baslik="Kanallar alınamadı."
+              eylem={
+                <Dugme ton="ikincil" boyut="kucuk" onClick={() => void kanallariOku()}>
+                  Yeniden dene
+                </Dugme>
+              }
+            >
+              {kanallar.mesaj}
             </Uyari>
           </div>
         )}
         {veri && veri.kanallar.length === 0 && (
-          <div className="px-4 py-8 text-center">
-            <p className="text-sm font-semibold text-ink">Bu workspace’te bildirim kanalı yok</p>
-            <p className="mx-auto mt-1 max-w-lg text-sm text-ink-muted">
-              Sinyaller ve kurallar çalışıyor, ama kimseye haber gitmiyor: her şey yalnız panelde ve kural geçmişinde duruyor.
-              {!yazabilir && ' Kanal eklemek için workspace yazma yetkisi gerekiyor.'}
-            </p>
+          <div className="p-4">
+            <BosDurum
+              baslik="Bu workspace’te bildirim kanalı yok"
+              neden={
+                <>
+                  Sinyaller ve kurallar çalışıyor, ama kimseye haber gitmiyor: her şey yalnız panelde ve kural geçmişinde duruyor.
+                  {!yazabilir && ' Kanal eklemek için workspace yazma yetkisi gerekiyor.'}
+                </>
+              }
+            />
           </div>
         )}
         {veri && veri.kanallar.length > 0 && (
@@ -303,7 +316,7 @@ function DenemeSorusu({ soru, onCevap }: { soru: NonNullable<Soru>; onCevap: (ge
   const k = soru.kanal;
   if (soru.hal === 'evet') {
     return (
-      <p role="status" className="mx-4 mb-3 flex items-center gap-2 rounded-lg border border-line px-3 py-2 text-sm">
+      <p role="status" className="mx-4 mb-3 flex items-center gap-2 rounded-alan border border-line px-3 py-2 text-sm">
         <NoktaIsareti nokta="yesil" />
         <b className="text-ink">Kanal doğrulandı.</b>
         <span className="text-ink-muted">{k.olaylar.includes('sinyal')
@@ -316,7 +329,7 @@ function DenemeSorusu({ soru, onCevap }: { soru: NonNullable<Soru>; onCevap: (ge
   }
   if (soru.hal === 'hayir') {
     return (
-      <p role="status" className="mx-4 mb-3 rounded-lg border border-line px-3 py-2 text-sm text-ink">
+      <p role="status" className="mx-4 mb-3 rounded-alan border border-line px-3 py-2 text-sm text-ink">
         <b>Mesaj görünmediyse</b> adres başka bir kanala ait olabilir.{' '}
         {k.tur === 'eposta'
           ? 'Alıcıların istenmeyen posta klasörüne bakın, adresleri kontrol edin.'
@@ -325,12 +338,12 @@ function DenemeSorusu({ soru, onCevap }: { soru: NonNullable<Soru>; onCevap: (ge
     );
   }
   return (
-    <div role="status" className="mx-4 mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-ink px-3 py-2.5 text-sm">
+    <div role="status" className="mx-4 mb-3 flex flex-wrap items-center gap-3 rounded-alan border border-ink px-3 py-2.5 text-sm">
       <span>
         <b className="text-ink">Deneme mesajı {KANAL_TURU_ADI[k.tur]} kanalına gönderildi.</b> {k.ad} {k.tur === 'eposta' ? 'alıcılarına ulaştı mı?' : 'kanalında göründü mü?'}
       </span>
       <span className="ml-auto flex gap-2">
-        <Dugme boyut="kucuk" bekliyor={soru.hal === 'gonderiliyor'} onClick={() => onCevap(true)}>
+        <Dugme ton="koyu" boyut="kucuk" bekliyor={soru.hal === 'gonderiliyor'} onClick={() => onCevap(true)}>
           Evet, geldi
         </Dugme>
         <Dugme ton="ikincil" boyut="kucuk" disabled={soru.hal === 'gonderiliyor'} onClick={() => onCevap(false)}>
@@ -445,7 +458,7 @@ function KanalEkleFormu({
       inert={!acik}
     >
       <div className="overflow-hidden">
-        <section className="rounded-xl border border-line bg-surface" aria-labelledby="kanal-ekle-baslik">
+        <section className="rounded-kart border border-line bg-surface" aria-labelledby="kanal-ekle-baslik">
           <div className="border-b border-line px-4 py-3">
             <h3 id="kanal-ekle-baslik" className="text-sm font-semibold text-ink">
               Kanal ekle
@@ -458,7 +471,7 @@ function KanalEkleFormu({
                 type="button"
                 aria-pressed={tur === t}
                 onClick={() => turSec(t)}
-                className={`flex flex-col gap-1 rounded-lg border p-3 text-left transition-colors ${
+                className={`flex flex-col gap-1 rounded-alan border p-3 text-left transition-colors ${
                   tur === t ? 'border-brand ring-1 ring-brand' : 'border-line hover:border-ink-muted'
                 }`}
               >
@@ -472,7 +485,7 @@ function KanalEkleFormu({
                 type="button"
                 disabled
                 title="İlk sürümde yok"
-                className="flex cursor-not-allowed flex-col gap-1 rounded-lg border border-line p-3 text-left opacity-50"
+                className="flex cursor-not-allowed flex-col gap-1 rounded-alan border border-line p-3 text-left opacity-50"
               >
                 <b className="text-sm text-ink">{d.ad}</b>
                 <small className="text-xs text-ink-muted">{d.neden}</small>
@@ -481,45 +494,42 @@ function KanalEkleFormu({
           </div>
 
           <div className="space-y-3 px-4 pb-4">
-            <label className="block">
-              <span className="mb-1 block text-xs font-semibold text-ink">Kanal adı</span>
-              <input
-                type="text"
-                value={ad}
-                maxLength={80}
-                onChange={(e) => setAd(e.target.value)}
-                placeholder={tur === 'eposta' ? 'Ajans ekibi' : '#reklam-uyarilari'}
-                className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-ink-muted"
-              />
-            </label>
+            <Alan etiket="Kanal adı">
+              {(id) => (
+                <Girdi
+                  id={id}
+                  type="text"
+                  value={ad}
+                  maxLength={80}
+                  onChange={(e) => setAd(e.target.value)}
+                  placeholder={tur === 'eposta' ? 'Ajans ekibi' : '#reklam-uyarilari'}
+                />
+              )}
+            </Alan>
 
             {adresIpucu && tur !== 'eposta' && (
-              <label className="block">
-                <span className="mb-1 block text-xs font-semibold text-ink">Webhook adresi</span>
-                <input
-                  type="url"
-                  value={adres}
-                  autoComplete="off"
-                  spellCheck={false}
-                  placeholder={adresIpucu.yer}
-                  onChange={(e) => {
-                    setAdres(e.target.value);
-                    // Hata gösteriliyorken düzelince hemen kalksın; yazarken YENİ hata gösterilmez.
-                    if (adresHatasi && adresAlaniHatasi(tur, e.target.value) === null) setAdresHatasi(null);
-                  }}
-                  onBlur={() => setAdresHatasi(adresAlaniHatasi(tur, adres))}
-                  aria-invalid={adresHatasi !== null}
-                  className={`w-full rounded-lg border bg-surface px-3 py-2 text-sm text-ink outline-none ${
-                    adresHatasi ? 'border-brand' : 'border-line focus:border-ink-muted'
-                  }`}
-                />
-                {adresHatasi && (
-                  <span role="alert" className="mt-1 block text-xs font-semibold text-brand-strong">
-                    {adresHatasi}
-                  </span>
+              /* Hata ipucunun YERİNİ alıyor ve alan kırmızı kenarlı (`Alan`); hata
+                 `role="alert"` ile duyuruluyor, eskiden olduğu gibi. */
+              <Alan etiket="Webhook adresi" ipucu={adresIpucu.ipucu} hata={adresHatasi}>
+                {(id, aciklamaId, hatali) => (
+                  <Girdi
+                    id={id}
+                    aria-describedby={aciklamaId}
+                    hatali={hatali}
+                    type="url"
+                    value={adres}
+                    autoComplete="off"
+                    spellCheck={false}
+                    placeholder={adresIpucu.yer}
+                    onChange={(e) => {
+                      setAdres(e.target.value);
+                      // Hata gösteriliyorken düzelince hemen kalksın; yazarken YENİ hata gösterilmez.
+                      if (adresHatasi && adresAlaniHatasi(tur, e.target.value) === null) setAdresHatasi(null);
+                    }}
+                    onBlur={() => setAdresHatasi(adresAlaniHatasi(tur, adres))}
+                  />
                 )}
-                <span className="mt-1 block text-xs text-ink-muted">{adresIpucu.ipucu}</span>
-              </label>
+              </Alan>
             )}
 
             {tur === 'eposta' && (
@@ -529,21 +539,27 @@ function KanalEkleFormu({
                     {gonderen.neden}
                   </Uyari>
                 )}
-                <label className="block">
-                  <span className="mb-1 block text-xs font-semibold text-ink">Alıcılar</span>
-                  <textarea
-                    rows={2}
-                    value={alicilar}
-                    onChange={(e) => setAlicilar(e.target.value)}
-                    onBlur={alicilariDenetle}
-                    placeholder="ad@ajans.com, ikinci@ajans.com"
-                    className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-ink-muted"
-                  />
-                  <span className="mt-1 block text-xs text-ink-muted">
-                    Virgülle ayırın, en çok {ALICI_UST_SINIRI}.{' '}
-                    {gonderen?.tanimli ? `Gönderen: ${gonderen.adres}.` : ''} Sinyaller ajansın iç bilgisidir; ajans dışı bir adres yazarsanız uyarırız.
-                  </span>
-                </label>
+                <Alan
+                  etiket="Alıcılar"
+                  ipucu={
+                    <>
+                      Virgülle ayırın, en çok {ALICI_UST_SINIRI}.{' '}
+                      {gonderen?.tanimli ? `Gönderen: ${gonderen.adres}.` : ''} Sinyaller ajansın iç bilgisidir; ajans dışı bir adres yazarsanız uyarırız.
+                    </>
+                  }
+                >
+                  {(id, aciklamaId) => (
+                    <MetinAlani
+                      id={id}
+                      aria-describedby={aciklamaId}
+                      rows={2}
+                      value={alicilar}
+                      onChange={(e) => setAlicilar(e.target.value)}
+                      onBlur={alicilariDenetle}
+                      placeholder="ad@ajans.com, ikinci@ajans.com"
+                    />
+                  )}
+                </Alan>
                 {aliciUyarisi.gecersiz.length > 0 && (
                   <p role="alert" className="text-xs font-semibold text-brand-strong">
                     Geçersiz adres: {aliciUyarisi.gecersiz.join(', ')}
@@ -605,7 +621,7 @@ function KanalEkleFormu({
 
 function SonGonderimler({ hal, onYenile }: { hal: Hal<BildirimGonderimleriYaniti>; onYenile: () => void }) {
   return (
-    <section className="rounded-xl border border-line bg-surface" aria-labelledby="gonderimler-baslik">
+    <section className="rounded-kart border border-line bg-surface" aria-labelledby="gonderimler-baslik">
       <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-3">
         <h3 id="gonderimler-baslik" className="text-sm font-semibold text-ink">
           Son gönderimler
@@ -619,11 +635,16 @@ function SonGonderimler({ hal, onYenile }: { hal: Hal<BildirimGonderimleriYaniti
       {hal.tur === 'okunuyor' && <p className="px-4 py-5 text-sm text-ink-muted">Gönderimler okunuyor…</p>}
       {hal.tur === 'hata' && (
         <div className="p-4">
-          <Uyari ton="tehlike" baslik="Gönderim geçmişi alınamadı.">
-            {hal.mesaj}{' '}
-            <button type="button" className="font-semibold underline" onClick={onYenile}>
-              Yeniden dene
-            </button>
+          <Uyari
+            ton="tehlike"
+            baslik="Gönderim geçmişi alınamadı."
+            eylem={
+              <Dugme ton="ikincil" boyut="kucuk" onClick={onYenile}>
+                Yeniden dene
+              </Dugme>
+            }
+          >
+            {hal.mesaj}
           </Uyari>
         </div>
       )}

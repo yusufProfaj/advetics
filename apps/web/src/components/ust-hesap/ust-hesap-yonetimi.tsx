@@ -14,6 +14,10 @@ import {
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { acilisAdresi, ayarlarAdresi } from '@/lib/panel-adresleri';
 import { Halka } from '@/components/yukleniyor';
+import { Dugme, dugmeSinifi } from '@/components/ui/dugme';
+import { Girdi } from '@/components/ui/alan';
+import { Rozet } from '@/components/ui/rozet';
+import { Uyari } from '@/components/ui/uyari';
 import { dolulukMetni } from './ust-hesap-karti';
 
 /**
@@ -54,7 +58,7 @@ export function UstHesapYonetimi({
 
   return (
     <div className="space-y-4">
-      <section className="rounded-xl border border-line bg-surface">
+      <section className="rounded-kart border border-line bg-surface">
         <header className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-4 py-3">
           <div className="min-w-0">
             <h2 className="text-sm font-semibold text-ink">
@@ -79,7 +83,7 @@ export function UstHesapYonetimi({
             */
             <Link
               href={acilisAdresi('ust-hesap')}
-              className="shrink-0 rounded-lg border border-brand bg-brand px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90"
+              className={dugmeSinifi('koyu', 'kucuk')}
             >
               + Yeni üst hesap
             </Link>
@@ -87,7 +91,7 @@ export function UstHesapYonetimi({
         </header>
 
         {yuklemeHatasi && (
-          <p role="alert" className="border-b border-line px-4 py-2 text-xs text-danger">
+          <p role="alert" className="border-b border-line px-4 py-2 text-xs text-danger-strong">
             Üst hesaplar yüklenemedi: {yuklemeHatasi}
           </p>
         )}
@@ -139,19 +143,17 @@ function HesapSatiri({
             {/* İKİ ROZET, İKİ AYRI BİLGİ: nerede duruyorsun · hangisi seni
                 barındırıyor. İkincisi silinemez olmasının sebebi. */}
             {hesap.aktif && (
-              <span className="rounded bg-brand/10 px-1.5 py-0.5 text-[10px] font-medium text-brand-strong">
+              <span className="rounded-full bg-vurgu px-2 py-0.5 text-11 font-semibold text-brand-strong">
                 şu an buradasın
               </span>
             )}
             {hesap.evHesabi && (
-              <span className="rounded bg-surface-sunken px-1.5 py-0.5 text-[10px] font-medium text-ink-muted">
+              <span className="rounded-full bg-surface-sunken px-2 py-0.5 text-11 font-semibold text-ink-muted">
                 kendi hesabın
               </span>
             )}
             {hesap.status !== 'active' && (
-              <span className="rounded bg-warn/10 px-1.5 py-0.5 text-[10px] font-medium text-warn">
-                askıda
-              </span>
+              <Rozet hal="dur">askıda</Rozet>
             )}
           </p>
           <p className="mt-0.5 text-[11px] text-ink-muted">
@@ -223,17 +225,11 @@ function GecisDugmesi({ id }: { id: string }) {
 
   return (
     <>
-      <button
-        type="button"
-        disabled={pending}
-        onClick={() => void gec()}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink transition hover:bg-surface-muted disabled:opacity-40"
-      >
-        {pending && <Halka />}
+      <Dugme ton="ikincil" boyut="kucuk" bekliyor={pending} onClick={() => void gec()}>
         Bu hesaba geç
-      </button>
+      </Dugme>
       {hata && (
-        <span role="alert" className="text-[11px] text-danger">
+        <span role="alert" className="text-12 text-danger-strong">
           {hata}
         </span>
       )}
@@ -252,18 +248,11 @@ function SatirDugmesi({
   onClick: () => void;
   children: React.ReactNode;
 }) {
-  const taban = 'rounded-lg border px-3 py-1.5 text-xs font-medium transition';
-  const sinif = aktif
-    ? tehlike
-      ? 'border-danger bg-danger/10 text-danger'
-      : 'border-brand bg-brand-soft text-brand-strong'
-    : tehlike
-      ? 'border-line text-ink-muted hover:border-danger hover:text-danger'
-      : 'border-line text-ink hover:bg-surface-muted';
+  // Açık panelin düğmesi KOYU: hangi satırın düzenlendiği bakışta görünsün.
   return (
-    <button type="button" onClick={onClick} aria-expanded={aktif} className={`${taban} ${sinif}`}>
+    <Dugme ton={tehlike ? 'tehlike' : aktif ? 'koyu' : 'ikincil'} boyut="kucuk" onClick={onClick} aria-expanded={aktif}>
       {children}
-    </button>
+    </Dugme>
   );
 }
 
@@ -286,8 +275,8 @@ export function PaketSecici({
         return (
           <label
             key={p}
-            className={`cursor-pointer rounded-lg border p-3 text-left transition ${
-              secili ? 'border-brand bg-brand-soft' : 'border-line hover:bg-surface-muted'
+            className={`cursor-pointer rounded-alan border p-3 text-left transition-colors ${
+              secili ? 'border-brand bg-vurgu' : 'border-line hover:bg-surface-muted'
             } ${disabled ? 'opacity-60' : ''}`}
           >
             <input
@@ -371,13 +360,8 @@ function UstHesapDuzenle({
   return (
     <div className="space-y-3">
       <label className="block max-w-md">
-        <span className="text-[11px] text-ink-muted">Üst hesap adı</span>
-        <input
-          value={ad}
-          onChange={(e) => setAd(e.target.value)}
-          disabled={pending}
-          className="mt-0.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand"
-        />
+        <span className="mb-1.5 block text-13 font-semibold text-ink">Üst hesap adı</span>
+        <Girdi value={ad} onChange={(e) => setAd(e.target.value)} disabled={pending} />
       </label>
 
       {platformAdmin ? (
@@ -391,30 +375,24 @@ function UstHesapDuzenle({
       )}
 
       {hata && (
-        <p role="alert" className="text-xs text-danger">
+        <p role="alert" className="text-xs text-danger-strong">
           {hata}
         </p>
       )}
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
-          disabled={pending || !degisti}
-          onClick={() => void kaydet()}
-          className="inline-flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
-        >
-          {pending && <Halka />}
+      <div className="flex items-center gap-2">
+        <Dugme ton="koyu" boyut="kucuk" bekliyor={pending} disabled={!degisti} onClick={() => void kaydet()}>
           Kaydet
-        </button>
-        <button
-          type="button"
+        </Dugme>
+        <Dugme
+          ton="hayalet"
+          boyut="kucuk"
           onClick={() => {
             onBitti();
             onVazgec();
           }}
-          className="text-xs text-ink-muted transition hover:text-ink"
         >
           Vazgeç
-        </button>
+        </Dugme>
       </div>
     </div>
   );
@@ -490,12 +468,12 @@ function UstHesapSil({ hesap, onVazgec }: { hesap: UstHesapOzeti; onVazgec: () =
   if (!ozet) {
     return (
       <div className="space-y-2">
-        <p role="alert" className="text-xs text-danger">
+        <p role="alert" className="text-xs text-danger-strong">
           {hata ?? 'Özet alınamadı.'}
         </p>
-        <button type="button" onClick={onVazgec} className="text-xs text-ink-muted hover:text-ink">
+        <Dugme ton="hayalet" boyut="kucuk" onClick={onVazgec}>
           Kapat
-        </button>
+        </Dugme>
       </div>
     );
   }
@@ -511,14 +489,16 @@ function UstHesapSil({ hesap, onVazgec }: { hesap: UstHesapOzeti; onVazgec: () =
     <div className="space-y-3">
       {/* ENGEL VARSA SEBEBİ YAZILI — düğme sessizce kapanmıyor. */}
       {ozet.engel !== null ? (
-        <p className="rounded-lg bg-warn/10 px-3 py-2 text-xs text-warn">{ozet.engel}</p>
+        <Uyari ton="uyari">{ozet.engel}</Uyari>
       ) : (
-        <div className="rounded-lg border border-danger/30 bg-danger/5 px-3 py-2 text-xs text-ink">
-          <p className="font-semibold text-danger">
-            {bosHesap
-              ? 'Bu hesap boş — silmek geri alınamaz ama kaybedilecek veri yok.'
-              : 'Bu hesapla birlikte ALTINDAKİ HER ŞEY silinir ve geri alınamaz:'}
-          </p>
+        <Uyari
+          ton="tehlike"
+          baslik={
+            bosHesap
+              ? 'Bu hesap boş; silmek geri alınamaz ama kaybedilecek veri yok.'
+              : 'Bu hesapla birlikte ALTINDAKİ HER ŞEY silinir ve geri alınamaz:'
+          }
+        >
           {!bosHesap && (
             <ul className="mt-1.5 list-disc space-y-0.5 pl-4">
               {/* SAYI DEĞİL AD: "3 şirket" kimseye ne kaybedeceğini söylemiyor. */}
@@ -531,57 +511,52 @@ function UstHesapSil({ hesap, onVazgec }: { hesap: UstHesapOzeti; onVazgec: () =
               {ozet.reklamHesabi > 0 && <li>{ozet.reklamHesabi} reklam hesabı</li>}
               {ozet.kullanici > 0 && (
                 <li>
-                  <strong>{ozet.kullanici} kullanıcı</strong> — silinince giriş yapamazlar
+                  <strong>{ozet.kullanici} kullanıcı</strong>: silinince giriş yapamazlar
                 </li>
               )}
               {ozet.metrikGunu > 0 && (
                 <li>
-                  {ozet.metrikGunu} günlük ölçüm — Meta 37 aydan eskisini vermiyor, Google&apos;da
+                  {ozet.metrikGunu} günlük ölçüm: Meta 37 aydan eskisini vermiyor, Google&apos;da
                   yeniden çekmek kota harcıyor
                 </li>
               )}
             </ul>
           )}
-        </div>
+        </Uyari>
       )}
 
       {ozet.engel === null && ozet.adOnayiGerekli && (
         <label className="block max-w-md">
-          <span className="text-[11px] text-ink-muted">
-            Onaylamak için üst hesap adını birebir yaz: <strong>{ozet.name}</strong>
+          <span className="mb-1.5 block text-13 text-ink-muted">
+            Onaylamak için üst hesap adını birebir yaz: <strong className="text-ink">{ozet.name}</strong>
           </span>
-          <input
-            value={onay}
-            onChange={(e) => setOnay(e.target.value)}
-            disabled={pending}
-            className="mt-0.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-danger"
-          />
+          <Girdi value={onay} onChange={(e) => setOnay(e.target.value)} disabled={pending} />
         </label>
       )}
 
       {hata && (
-        <p role="alert" className="text-xs text-danger">
+        <p role="alert" className="text-xs text-danger-strong">
           {hata}
         </p>
       )}
 
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
+      <div className="flex items-center gap-2">
+        <Dugme
+          ton="tehlike"
+          boyut="kucuk"
+          bekliyor={pending}
           disabled={
             pending ||
             ozet.engel !== null ||
             (ozet.adOnayiGerekli && onay.trim() !== ozet.name)
           }
           onClick={() => void sil()}
-          className="inline-flex items-center gap-2 rounded-lg bg-danger px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
         >
-          {pending && <Halka />}
           Kalıcı olarak sil
-        </button>
-        <button type="button" onClick={onVazgec} className="text-xs text-ink-muted hover:text-ink">
+        </Dugme>
+        <Dugme ton="hayalet" boyut="kucuk" onClick={onVazgec}>
           Vazgeç
-        </button>
+        </Dugme>
       </div>
     </div>
   );

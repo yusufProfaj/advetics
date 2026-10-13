@@ -23,6 +23,8 @@ import { ApiRequestError, apiFetch } from '@/lib/api';
  */
 import { HedeflemeSecici } from '@/components/autoboost/hedefleme-secici';
 import { GoogleHedefleme, type GoogleKonum } from '@/components/autoboost/google-hedefleme';
+import { Dugme } from '@/components/ui/dugme';
+import { Serit } from '@/components/ui/hal';
 
 /**
  * OTOMATİK BOOST ÖN AYARLARI.
@@ -70,7 +72,9 @@ export function BoostOnAyarlariFormu({
   const mevcut = presets?.find((p) => p.platform === sekme) ?? null;
 
   return (
-    <section className="min-w-0 space-y-4 rounded-xl border border-line bg-surface p-4">
+    // ÇERÇEVESİZ: form `Pencere`nin içinde yaşıyor; ikinci bir kart çerçevesi
+    // pencerenin içinde kutu içinde kutu çiziyordu.
+    <section className="min-w-0 space-y-4">
       <header className="min-w-0">
         <h2 className="text-sm font-semibold text-ink">Otomatik boost ön ayarları</h2>
         <p className="mt-0.5 text-xs text-ink-muted">
@@ -113,7 +117,7 @@ export function BoostOnAyarlariFormu({
 }
 
 const input =
-  'w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-ink outline-none focus:border-brand';
+  'w-full rounded-alan border border-line bg-surface px-2.5 py-1.5 text-sm text-ink outline-none focus:border-brand';
 
 function Alan({
   etiket,
@@ -153,15 +157,13 @@ function Kaydet({
     <div className="space-y-2">
       {hata && <p className="max-w-lg text-xs text-danger">{hata}</p>}
       {sonuc && <p className="max-w-lg text-xs text-ink">{sonuc}</p>}
-      <button
-        type="button"
+      <Dugme
         onClick={onKaydet}
         disabled={busy || !canWrite}
-        className="rounded-lg bg-brand px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
         title={canWrite ? undefined : 'Ön ayar yazma yetkin yok'}
       >
         {busy ? 'Kaydediliyor…' : 'Kaydet'}
-      </button>
+      </Dugme>
     </div>
   );
 }
@@ -641,11 +643,10 @@ function GoogleForm({
         Kullanıcı bunu bilerek istedi (2026-09-25); ilk denemenin küçük
         bütçeyle yapılması gerektiği burada söylenmeli.
       */}
-      <p className="rounded-lg bg-warn-soft px-2.5 py-2 text-[11px] text-warn-strong ring-1 ring-inset ring-warn/30">
-        Kart onaylandığında kampanya <strong>yayına girer</strong> ve süre bitince
-        durur. YouTube yayını ilk kez canlıda deneniyor: ilk denemeyi küçük bir
-        bütçeyle yap. Erken durdurmak şimdilik Google Ads&apos;ten.
-      </p>
+      <Serit baslik="Kart onaylandığında kampanya yayına girer ve süre bitince durur.">
+        YouTube yayını ilk kez canlıda deneniyor: ilk denemeyi küçük bir bütçeyle yap. Erken
+        durdurmak şimdilik Google Ads&apos;ten.
+      </Serit>
 
       <Kaydet busy={busy} hata={hata} sonuc={sonuc} canWrite={canWrite} onKaydet={() => void kaydet()} />
     </div>
@@ -703,8 +704,9 @@ function OtomatikBilgiler({
   const eksikVar = otomatik.eksikler.length > 0;
   return (
     <section
-      className={`space-y-3 rounded-lg border px-3 py-3 ${
-        eksikVar ? 'border-warn/40 bg-warn-soft' : 'border-line bg-surface-sunken'
+      // EKSİK VARSA SOL KIRMIZI ÇİZGİ (şerit dili): zemin rengi kılavuzda yok.
+      className={`space-y-3 rounded-kart border px-3 py-3 ${
+        eksikVar ? 'border-line border-l-4 border-l-danger bg-surface' : 'border-line bg-surface-sunken'
       }`}
     >
       <p className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">
@@ -719,10 +721,10 @@ function OtomatikBilgiler({
           <img
             src={otomatik.logo.onizleme}
             alt="Reklam logosu"
-            className="size-12 shrink-0 rounded-lg border border-line bg-surface object-cover"
+            className="size-12 shrink-0 rounded-alan border border-line bg-surface object-cover"
           />
         ) : (
-          <span className="grid size-12 shrink-0 place-items-center rounded-lg border border-dashed border-line text-[10px] text-ink-muted">
+          <span className="grid size-12 shrink-0 place-items-center rounded-alan border border-dashed border-line text-[10px] text-ink-muted">
             logo yok
           </span>
         )}
@@ -763,7 +765,7 @@ function OtomatikBilgiler({
       {eksikVar && (
         <ul className="space-y-1">
           {otomatik.eksikler.map((e) => (
-            <li key={e} className="text-xs font-medium text-warn-strong">
+            <li key={e} className="text-xs font-medium text-danger-strong">
               {e}
             </li>
           ))}

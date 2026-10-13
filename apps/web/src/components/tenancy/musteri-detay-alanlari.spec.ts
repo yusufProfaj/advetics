@@ -100,15 +100,25 @@ describe('workspace satırının alan zinciri', () => {
  */
 describe('tam ekran pencereler', () => {
   const DETAY = readFileSync(join(__dirname, 'musteri-detay.tsx'), 'utf8');
+  const PENCERE = readFileSync(join(__dirname, '..', 'ui', 'pencere.tsx'), 'utf8');
 
-  it('musteri-detay.tsx pencereyi document.body altına taşıyor', () => {
+  /*
+   * 2026-10-14: kabuk ortak `Pencere`ye geçti; portal artık ORADA. İddia iki
+   * halkalı: kabuk `<Pencere`yi ÇAĞIRIYOR ve `Pencere`nin kendisi panel
+   * köküne portal kurup `fixed inset-0` katmanı orada çiziyor. Biri
+   * koparsa (kabuk elle bir katmana döner ya da Pencere portalı bırakır)
+   * pencere yeniden başlığın kutusuna hapsolur.
+   */
+  it('musteri-detay.tsx pencereyi portallı ortak Pencere ile açıyor', () => {
     const k = kod(DETAY);
+    expect(k).toContain('<Pencere acik={acik}');
+    const p = kod(PENCERE);
     /*
      * İDDİA ÇAĞRIYA ÇAPALI, ADA DEĞİL: `import { createPortal }` satırına
      * takılan bir iddia çağrı silindiğinde düşmüyordu.
      */
-    expect(k).toContain('return createPortal(');
-    expect(k).toContain('document.body');
-    expect(k).toContain('fixed inset-0');
+    expect(p).toContain('return createPortal(');
+    expect(p).toContain("document.querySelector<HTMLElement>('.panel') ?? document.body");
+    expect(p).toContain('fixed inset-0');
   });
 });

@@ -15,13 +15,14 @@ import {
 } from '@advetics/shared';
 import { apiFetch } from '@/lib/api';
 import { Dugme } from '@/components/ui/dugme';
+import { Kart } from '@/components/ui/kart';
+import { Soru } from '@/components/ui/sihirbaz';
 import { microsGirdiMetni, okumaHatasi } from '../hesap';
 import { SURE_SECENEKLERI, hedefDegistir, hedefKarti, kaydiriciAraligi, type ButceDurumu } from './akis';
-import { NotKutusu, SoruBasligi } from './akis-cerceve';
 import { AmacIkonu } from './belge';
 import { donemMetni } from './hesap';
 import { KonumSecici } from './kalem-duzenleyici';
-import { Bildirim, Rozet } from './ortak';
+import { Bildirim, Etiket } from './ortak';
 import { Tutar } from './tutar';
 
 /**
@@ -48,7 +49,7 @@ export function AdimHedef({
   const kapaliVar = girdiler.amaclar.some((a) => !a.acik);
   return (
     <>
-      <SoruBasligi ust="1 / 7 · Hedef" soru="Reklamdan ne bekliyorsun?" aciklama="Birden çok seçebilirsin. Seçtiğin sıra önceliği gösterir; bütçenin çoğu ilk seçtiğine gider." />
+      <Soru ust="1 / 7 · Hedef" soru="Reklamdan ne bekliyorsun?" aciklama="Birden çok seçebilirsin. Seçtiğin sıra önceliği gösterir; bütçenin çoğu ilk seçtiğine gider." />
       <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(13rem,1fr))]">
         {REHBER_AMAC_KODLARI.map((amac) => {
           const g = girdiler.amaclar.find((x) => x.amac === amac);
@@ -63,7 +64,7 @@ export function AdimHedef({
               disabled={kart.kapali && !seciliMi}
               title={g && g.sebepler.length > 0 ? g.sebepler.join(' ') : undefined}
               onClick={() => degistir(hedefDegistir(secili, amac))}
-              className={`relative grid content-start gap-2 rounded-xl border p-4 text-left motion-safe:transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-55 ${seciliMi ? 'border-brand bg-brand/[0.06] shadow-[0_0_0_1px_var(--color-brand)]' : 'border-line bg-surface hover:border-ink/25'}`}
+              className={`relative grid content-start gap-2 rounded-xl border p-4 text-left motion-safe:transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-55 ${seciliMi ? 'border-brand bg-vurgu shadow-[0_0_0_1px_var(--color-brand)]' : 'border-line bg-surface hover:border-ink/25'}`}
             >
               <AmacIkonu amac={amac} />
               <b className="font-baslik text-[15px] text-ink">{REHBER_AMACLARI[amac].ekranAdi}</b>
@@ -75,7 +76,7 @@ export function AdimHedef({
               )}
               <span
                 aria-hidden
-                className={`font-baslik absolute right-3 top-3 grid h-[22px] w-[22px] place-items-center rounded-full bg-brand text-xs font-bold text-white motion-safe:transition-[opacity,transform] motion-safe:duration-150 ${seciliMi ? 'scale-100 opacity-100' : 'scale-75 opacity-0'}`}
+                className={`font-baslik absolute right-3 top-3 grid h-[22px] w-[22px] place-items-center rounded-full bg-brand text-xs font-bold text-[var(--beyaz)] motion-safe:transition-[opacity,transform] motion-safe:duration-150 ${seciliMi ? 'scale-100 opacity-100' : 'scale-75 opacity-0'}`}
               >
                 {sira + 1}
               </span>
@@ -84,18 +85,22 @@ export function AdimHedef({
         })}
       </div>
       {kapaliVar && (
-        <NotKutusu>
-          Kapalı olanların nedeni kartın altında yazıyor; çoğu{' '}
-          <Link href={markaMerkeziAdresi('kurulum', clientId, 'olcum')} className="font-semibold text-brand-strong underline-offset-2 hover:underline">
-            Kurulum › Ölçüm
-          </Link>{' '}
-          ekranında çözülür. Ölçülmeyen bir sonuca reklam vermek, parayı tıklamaya harcamak demek.
-        </NotKutusu>
+        <div className="mt-4">
+          <Bildirim baslik="Kapalı olanların nedeni kartın altında yazıyor.">
+            Çoğu{' '}
+            <Link href={markaMerkeziAdresi('kurulum', clientId, 'olcum')} className="font-semibold text-brand-strong underline-offset-2 hover:underline">
+              Kurulum › Ölçüm
+            </Link>{' '}
+            ekranında çözülür. Ölçülmeyen bir sonuca reklam vermek, parayı tıklamaya harcamak demek.
+          </Bildirim>
+        </div>
       )}
       {girdiler.okumaHatalari.length > 0 && (
-        <Bildirim baslik="Bazı bilgiler okunamadı; o hedefler kapatılmadı.">
-          {girdiler.okumaHatalari.join(' ')}
-        </Bildirim>
+        <div className="mt-4">
+          <Bildirim baslik="Bazı bilgiler okunamadı; o hedefler kapatılmadı.">
+            {girdiler.okumaHatalari.join(' ')}
+          </Bildirim>
+        </div>
       )}
     </>
   );
@@ -126,7 +131,7 @@ export function AdimButce({
   const bilinmeyen = durum.kontrol?.satirlar.filter((s) => s.durum === 'bilinmiyor') ?? [];
   return (
     <>
-      <SoruBasligi ust="2 / 7 · Bütçe" soru="Ne kadar süre, ne kadar bütçe?" aciklama="Toplam tutarı yaz. Günlük karşılığını ve platformların alt sınırına yetip yetmediğini anında görürsün." />
+      <Soru ust="2 / 7 · Bütçe" soru="Ne kadar süre, ne kadar bütçe?" aciklama="Toplam tutarı yaz. Günlük karşılığını ve platformların alt sınırına yetip yetmediğini anında görürsün." />
       <div className="max-w-[720px]">
         <div className="mb-5 grid gap-1.5">
           <span className="text-[13px] font-semibold text-ink">Süre</span>
@@ -147,7 +152,7 @@ export function AdimButce({
           <span className="text-[12.5px] text-ink-muted">{donemMetni(durum.donem.baslangic, durum.donem.bitis)} · {durum.gun} gün</span>
         </div>
 
-        <div className="rounded-2xl border border-line bg-surface p-6">
+        <Kart as="div">
           <label htmlFor="strateji-toplam" className="text-xs font-bold uppercase tracking-[0.08em] text-brand-strong">
             Toplam bütçe
           </label>
@@ -174,7 +179,7 @@ export function AdimButce({
             step={aralik.adim}
             value={kaydirici}
             aria-label="Toplam bütçe"
-            className="mb-1.5 mt-5 w-full accent-[#ff2400]"
+            className="mb-1.5 mt-5 w-full accent-brand"
             onChange={(e) => setMetin(microsGirdiMetni(BigInt(e.target.value) * 1_000_000n, para))}
           />
           <div className="flex justify-between text-xs text-ink-muted">
@@ -185,7 +190,7 @@ export function AdimButce({
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
             <BilgiKutusu etiket="Aylık" micros={durum.aylik} para={para} />
             <BilgiKutusu etiket="Günlük" micros={durum.gunluk} para={para} />
-            <div className={`rounded-[10px] px-3.5 py-3 ${yetmeyen.length ? 'bg-brand/[0.06]' : 'bg-ink/[0.04]'}`}>
+            <div className={`rounded-[10px] px-3.5 py-3 ${yetmeyen.length ? 'bg-vurgu' : 'bg-surface-sunken'}`}>
               <span className="block text-xs text-ink-muted">Hedef başına günlük</span>
               {durum.kontrol && durum.kontrol.satirlar.length > 0 ? (
                 <ul className="m-0 list-none p-0">
@@ -212,7 +217,7 @@ export function AdimButce({
             </p>
           ))}
           {durum.kontrol && yetmeyen.length === 0 && bilinmeyen.length === 0 && <p className="m-0 mt-3 text-[13px] text-ink-muted">Her hedef, açık platformlarından en az birinin günlük alt sınırının üstünde.</p>}
-        </div>
+        </Kart>
         {girdiler.paraBirimiHatasi && (
           <div className="mt-4">
             <Bildirim hata baslik="Para birimi çözülemedi; strateji açılamaz.">
@@ -221,7 +226,9 @@ export function AdimButce({
           </div>
         )}
         {durum.planYenidenKurulur && (
-          <NotKutusu>Bütçe ya da süre değişti. Devam edersen kayıtlı kampanyalar silinir ve İnceleme adımı planı bu tutarla yeniden kurar.</NotKutusu>
+          <div className="mt-4">
+            <Bildirim baslik="Bütçe ya da süre değişti.">Devam edersen kayıtlı kampanyalar silinir ve İnceleme adımı planı bu tutarla yeniden kurar.</Bildirim>
+          </div>
         )}
       </div>
     </>
@@ -230,7 +237,7 @@ export function AdimButce({
 
 function BilgiKutusu({ etiket, micros, para }: { etiket: string; micros: bigint | null; para: string }) {
   return (
-    <div className="rounded-[10px] bg-ink/[0.04] px-3.5 py-3">
+    <div className="rounded-[10px] bg-surface-sunken px-3.5 py-3">
       <span className="block text-xs text-ink-muted">{etiket}</span>
       {micros === null ? <b className="font-baslik text-[17px] text-ink-muted">-</b> : <Tutar micros={micros} para={para} className="text-[17px] font-bold text-ink" />}
     </div>
@@ -243,21 +250,19 @@ export function AdimBolge({ girdiler, konumlar, degistir }: { girdiler: Strateji
   const oneri = girdiler.konumOnerisi;
   return (
     <>
-      <SoruBasligi
+      <Soru
         ust="3 / 7 · Bölge"
         soru="Reklam nerede görünsün?"
         aciklama={oneri.kaynak === 'marka' ? "Marka Merkezi'ndeki varsayılan kitleden önerdik. İl, ilçe ya da ülke ekleyebilirsin." : "Marka Merkezi'nde varsayılan bölge yok; aramaya yazıp ekle."}
       />
       <div className="max-w-[720px] space-y-4">
-        <div className="rounded-2xl border border-line bg-surface p-5">
+        <Kart as="div">
           <span className="mb-2 block text-[13px] font-semibold text-ink">Bölgeler</span>
           <KonumSecici konumlar={konumlar} degistir={degistir} hesap={girdiler.konumHesabi} acik />
           {oneri.adres && <p className="m-0 mt-2.5 text-xs text-ink-muted">İşletme adresi: {oneri.adres}. Adresin çevresi AdvCampaign'de ayrıca seçilebilir.</p>}
-        </div>
+        </Kart>
         {girdiler.ozelKategori && (
-          <NotKutusu>
-            <b>Özel reklam kategorisi beyan edildi.</b> Meta bu kategoride yaşı ve adres çevresini daraltmaya izin vermiyor; bölge geniş tutulur, yaş 18-65+.
-          </NotKutusu>
+          <Bildirim baslik="Özel reklam kategorisi beyan edildi.">Meta bu kategoride yaşı ve adres çevresini daraltmaya izin vermiyor; bölge geniş tutulur, yaş 18-65+.</Bildirim>
         )}
       </div>
     </>
@@ -309,11 +314,11 @@ export function AdimKime({ planId, kitle, degistir }: { planId: string; kitle: S
 
   return (
     <>
-      <SoruBasligi ust="4 / 7 · Kime" soru="Kime anlatıyoruz?" aciklama="Sitenden ve Marka Merkezi'nden yazdık. Değiştir ya da olduğu gibi kullan; rapor ve reklam metinleri buna göre yazılır." />
+      <Soru ust="4 / 7 · Kime" soru="Kime anlatıyoruz?" aciklama="Sitenden ve Marka Merkezi'nden yazdık. Değiştir ya da olduğu gibi kullan; rapor ve reklam metinleri buna göre yazılır." />
       <div className="max-w-[720px]">
-        <div className="rounded-xl border border-line bg-surface p-4">
+        <Kart as="div">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            {kitle ? <Rozet ton={kitle.kaynak === 'ai' ? 'kirmizi' : 'cizgi'}>{kitle.kaynak === 'ai' ? 'Yapay zekâ önerisi' : 'Ajans yazdı'}</Rozet> : <span />}
+            {kitle ? <Etiket ton={kitle.kaynak === 'ai' ? 'kirmizi' : 'cizgi'}>{kitle.kaynak === 'ai' ? 'Yapay zekâ önerisi' : 'Ajans yazdı'}</Etiket> : <span />}
             <Dugme ton="ikincil" boyut="kucuk" onClick={() => void iste(kitle?.metin ?? null)} bekliyor={hal.tur === 'suruyor'}>
               {kitle ? 'Yeniden yaz' : 'Tarif yaz'}
             </Dugme>
@@ -326,7 +331,7 @@ export function AdimKime({ planId, kitle, degistir }: { planId: string; kitle: S
             value={kitle?.metin ?? ''}
             onChange={(e) => degistir(e.target.value.trim() === '' ? null : { metin: e.target.value, kaynak: 'ajans', onaylandi: false })}
           />
-        </div>
+        </Kart>
         {hal.tur === 'yok' && <p className="m-0 mt-2 text-[13px] text-ink-muted">Tarif yazılamadı: {hal.neden}</p>}
         {hal.tur === 'hata' && (
           <p className="m-0 mt-2 text-[13px] text-brand-strong" role="alert">
@@ -336,7 +341,7 @@ export function AdimKime({ planId, kitle, degistir }: { planId: string; kitle: S
         <label className={`mt-4 flex items-center gap-2.5 text-sm font-semibold ${kitle ? 'cursor-pointer text-ink' : 'text-ink-muted'}`}>
           <input
             type="checkbox"
-            className="h-[18px] w-[18px] accent-[#ff2400]"
+            className="h-[18px] w-[18px] accent-brand"
             disabled={!kitle}
             checked={kitle?.onaylandi ?? false}
             onChange={(e) => kitle && degistir({ ...kitle, onaylandi: e.target.checked })}

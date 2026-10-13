@@ -4,6 +4,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { stratejiUcYolu } from '@advetics/shared';
 import type { StratejiDetayi } from '@advetics/shared';
 import { Dugme } from '@/components/ui/dugme';
+import { BosDurum } from '@/components/ui/hal';
+import { Kart } from '@/components/ui/kart';
+import { Rozet } from '@/components/ui/rozet';
 import {
   DIGER_GRUBU,
   REKABET_ETIKETI,
@@ -17,7 +20,7 @@ import {
   type KelimeGrubu,
 } from '../hesap';
 import { kelimeAramaHali, seciliKelimeGruplari } from './hesap';
-import { Bildirim, GIRDI, Kart, Nokta, yaz } from './ortak';
+import { Bildirim, GIRDI, durumHali, yaz } from './ortak';
 import { Tutar } from './tutar';
 
 type Taslak = Record<string, { secili: boolean; grup: string }>;
@@ -132,14 +135,8 @@ export function KelimeBolumu({
   }
 
   return (
-    <Kart className="p-4" etiket="Google arama kelimeleri">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <b className="text-sm">Google arama kelimeleri</b>
-          <div className="text-xs text-ink-muted">İnsanların Google'da ne aradığı, ayda yaklaşık kaç kez. Seçtiğin grup, Google Arama kampanyasının kelimeleri olur.</div>
-        </div>
-        <KelimeHali hal={hal} />
-      </div>
+    <Kart baslik="Google arama kelimeleri" eylem={<KelimeHali hal={hal} />}>
+      <p className="m-0 text-12 text-ink-muted">İnsanların Google'da ne aradığı, ayda yaklaşık kaç kez. Seçtiğin grup, Google Arama kampanyasının kelimeleri olur.</p>
 
       {hal === 'erisim_yok' && (
         <div className="mt-3">
@@ -197,7 +194,7 @@ export function KelimeBolumu({
             </span>
           )}
           <span>
-            <Dugme boyut="kucuk" onClick={() => void ara()} bekliyor={araniyor} disabled={hal === 'suruyor'}>
+            <Dugme ton="koyu" boyut="kucuk" onClick={() => void ara()} bekliyor={araniyor} disabled={hal === 'suruyor'}>
               Kelime ara
             </Dugme>
           </span>
@@ -207,9 +204,9 @@ export function KelimeBolumu({
 
       {kelimeler.satirlar.length === 0 ? (
         hal === 'aranmadi' && (
-          <p className="m-0 mt-3 rounded-[10px] border border-dashed border-line p-4 text-center text-[13px] text-ink-muted">
-            {duzenlenebilir ? 'Bu stratejide henüz kelime aranmadı.' : 'Bu stratejide kelime yok.'}
-          </p>
+          <div className="mt-3">
+            <BosDurum baslik="Kelime yok" neden={duzenlenebilir ? 'Bu stratejide henüz kelime aranmadı.' : 'Bu stratejide kelime yok.'} />
+          </div>
         )
       ) : (
         <>
@@ -248,7 +245,7 @@ export function KelimeBolumu({
                     return (
                       <tr key={s.id} className="border-b border-line align-top">
                         <td className="px-2.5 py-2">
-                          <input type="checkbox" className="h-4 w-4 accent-[#ff2400]" aria-label={`${s.kelime} plana alınsın`} checked={t.secili} disabled={!duzenlenebilir} onChange={(e) => guncelle([s.id], { secili: e.target.checked })} />
+                          <input type="checkbox" className="h-4 w-4 accent-brand" aria-label={`${s.kelime} plana alınsın`} checked={t.secili} disabled={!duzenlenebilir} onChange={(e) => guncelle([s.id], { secili: e.target.checked })} />
                         </td>
                         <td className="px-2.5 py-2">
                           {s.kelime}
@@ -277,7 +274,7 @@ export function KelimeBolumu({
           </datalist>
           {duzenlenebilir && (
             <div className="mt-3 flex flex-wrap items-center gap-3">
-              <Dugme boyut="kucuk" onClick={() => void kaydet()} disabled={degisiklik.length === 0} bekliyor={kayit.tur === 'suruyor'}>
+              <Dugme ton="koyu" boyut="kucuk" onClick={() => void kaydet()} disabled={degisiklik.length === 0} bekliyor={kayit.tur === 'suruyor'}>
                 Seçimi kaydet
               </Dugme>
               {degisiklik.length > 0 && <span className="text-xs text-ink-muted">{degisiklik.length} kelimede kaydedilmemiş değişiklik var; gruplar kaydedince kampanyaya bağlanabilir.</span>}
@@ -308,10 +305,7 @@ const HAL_METNI = {
 function KelimeHali({ hal }: { hal: keyof typeof HAL_METNI }) {
   const h = HAL_METNI[hal];
   return (
-    <span className="inline-flex items-center gap-1.5 text-xs text-ink-muted">
-      <Nokta ton={h.ton} />
-      {h.metin}
-    </span>
+    <Rozet hal={durumHali(h.ton)}>{h.metin}</Rozet>
   );
 }
 
@@ -355,7 +349,7 @@ function GrupBasligi({
   return (
     <tr className="border-b border-line bg-surface-muted">
       <td className="px-2.5 py-2">
-        <input ref={kutu} type="checkbox" className="h-4 w-4 accent-[#ff2400]" aria-label={`${ad} grubundaki bütün kelimeler plana alınsın`} checked={hal === 'hepsi'} disabled={kilitli} onChange={() => secimDegistir(hal !== 'hepsi')} />
+        <input ref={kutu} type="checkbox" className="h-4 w-4 accent-brand" aria-label={`${ad} grubundaki bütün kelimeler plana alınsın`} checked={hal === 'hepsi'} disabled={kilitli} onChange={() => secimDegistir(hal !== 'hepsi')} />
       </td>
       <td colSpan={5} className="px-2.5 py-2">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">

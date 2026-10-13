@@ -47,7 +47,6 @@ describe('tarama boşa düşmüyor', () => {
   it('v2 bileşenleri, iki sayfa ve rehber kutusu okundu', () => {
     for (const f of [
       'akis.ts',
-      'akis-cerceve.tsx',
       'adimlar-soru.tsx',
       'adim-inceleme.tsx',
       'adim-plan.tsx',
@@ -97,7 +96,9 @@ describe('sekmeli düzenleyici KALKTI; akış taslaktaki gibi (simulasyon.html)'
       expect(s.match(new RegExp(`<${bilesen} `, 'g'))?.length, bilesen).toBe(1);
       expect(s, adim).toMatch(new RegExp(`\\{adim === '${adim}' && [^\\n]*<${bilesen} `));
     }
-    expect(kod('akis-cerceve.tsx')).toContain('rayParcalari(adim)');
+    // Ray ortak `ui/sihirbaz` bileşeninden; parçalar adımdan sözleşmeyle türüyor.
+    expect(kod('sihirbaz.tsx')).toContain('parcalar={rayParcalari(adim).map((p) => ({ anahtar: p.adim, etiket: p.etiket, hal: p.hal }))}');
+    expect(kod('sihirbaz.tsx')).toMatch(/import \{ AltCubuk, IlerlemeRayi \} from '@\/components\/ui\/sihirbaz';/);
     expect(kod('akis.ts')).toContain('STRATEJI_OLUSTURMA_ADIMLARI.map(');
   });
   it('KRİTİK: her "Devam" kaydediyor (sihirbaz ucu, sürümle); plan bütçe adımında hedef seçimiyle AYNI istekte doğuyor', () => {

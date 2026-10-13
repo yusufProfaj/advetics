@@ -12,9 +12,12 @@ import {
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { PANEL_KAPILARI } from '@/lib/panel-adresleri';
-import { Dugme } from '@/components/ui/dugme';
+import { Dugme, dugmeSinifi } from '@/components/ui/dugme';
+import { Girdi, Secim } from '@/components/ui/alan';
 import { Uyari } from '@/components/ui/uyari';
+import { Serit } from '@/components/ui/hal';
 import { HESAP_ADIMLARI } from './kurulum-listesi-mantik';
+import { DurumRozeti } from './kurulum-yardimcilari';
 import {
   AD_ISTEYEN,
   DURUM_GOSTERIMI,
@@ -112,7 +115,9 @@ export function AdimSatiri({
   return (
     <li className="px-4 py-3 text-sm">
       <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
-        <span className={`mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${d.sinif}`}>{d.etiket}</span>
+        <span className="mt-0.5 shrink-0">
+          <DurumRozeti durum={a.durum} etiket={d.etiket} />
+        </span>
         <div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
           <p className="font-medium text-ink">
             {KURULUM_ADIM_ADI[a.kod]} <span className="font-normal text-ink-muted">· {a.baslik}</span>
@@ -126,7 +131,7 @@ export function AdimSatiri({
         {eylemYetkisi && e && (
           <div className="flex shrink-0 flex-wrap gap-2">
             {e.tur === 'dis' && (
-              <a href={e.adres} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink hover:border-ink-muted">
+              <a href={e.adres} target="_blank" rel="noopener noreferrer" className={dugmeSinifi('ikincil', 'kucuk')}>
                 {e.etiket} ↗
               </a>
             )}
@@ -136,7 +141,7 @@ export function AdimSatiri({
               </Dugme>
             )}
             {e.tur === 'izin' && (
-              <Dugme boyut="kucuk" bekliyor={gonderiliyor} onClick={() => void izinVer(e.baglantiId)}>
+              <Dugme ton="koyu" boyut="kucuk" bekliyor={gonderiliyor} onClick={() => void izinVer(e.baglantiId)}>
                 {e.etiket}
               </Dugme>
             )}
@@ -144,21 +149,29 @@ export function AdimSatiri({
               (() => {
                 const istek = otomatikIstek(a.kod, v.donusumTetigi);
                 return istek ? (
-                  <Dugme boyut="kucuk" bekliyor={gonderiliyor} onClick={() => void gonder(istek)}>
+                  <Dugme ton="koyu" boyut="kucuk" bekliyor={gonderiliyor} onClick={() => void gonder(istek)}>
                     {e.etiket}
                   </Dugme>
                 ) : null;
               })()}
             {(e.tur === 'secim' || e.tur === 'girdi') && (
-              <Dugme boyut="kucuk" ton={acik ? 'ikincil' : 'birincil'} onClick={() => setAcik((x) => !x)} aria-expanded={acik}>
+              <Dugme boyut="kucuk" ton={acik ? 'ikincil' : 'koyu'} onClick={() => setAcik((x) => !x)} aria-expanded={acik}>
                 {acik ? 'Vazgeç' : e.etiket}
               </Dugme>
             )}
           </div>
         )}
       </div>
-      {hata && <p className="mt-2 text-xs text-danger-strong">{hata}</p>}
-      {bilgi && !hata && <p className="mt-2 text-xs text-ok-strong">{bilgi}</p>}
+      {hata && (
+        <p role="alert" className="mt-2 text-xs text-danger-strong">
+          {hata}
+        </p>
+      )}
+      {bilgi && !hata && (
+        <p role="status" className="mt-2 text-xs text-ink">
+          {bilgi}
+        </p>
+      )}
       {acik && e?.tur === 'secim' && <SecimPaneli kod={a.kod} clientId={clientId} workspaceAdi={v.workspaceAdi} gonderiliyor={gonderiliyor} gonder={(i) => void gonder(i)} />}
       {acik && e?.tur === 'girdi' && a.kod === 'gtm_etiket' && <TetikFormu mevcut={v.donusumTetigi} gonderiliyor={gonderiliyor} gonder={(t) => void gonder({ kod: 'gtm_etiket', tetik: t })} />}
       {a.kod === 'site_kodu' && v.siteKodu && a.durum !== 'tamam' && <SiteKodu kod={v.siteKodu} site={v.site} />}
@@ -209,9 +222,16 @@ function SecimPaneli({
   }, [clientId, kod]);
 
   if (s.tur === 'yukleniyor') return <p className="mt-3 text-xs text-ink-muted">Seçenekler platformdan okunuyor…</p>;
-  if (s.tur === 'hata') return <p className="mt-3 text-xs text-danger-strong">Seçenekler alınamadı: {s.mesaj}</p>;
+  if (s.tur === 'hata') {
+    return (
+      <div className="mt-3">
+        <Serit ton="hata" baslik="Seçenekler alınamadı">
+          {s.mesaj}
+        </Serit>
+      </div>
+    );
+  }
   const v = s.v;
-  const girdi = 'w-full rounded-lg border border-line bg-surface px-2 py-1.5 text-sm';
   const istek = (f: SecimFormu) => {
     const i = secimIstegi(kod, f);
     if (i) gonder(i);
@@ -220,7 +240,7 @@ function SecimPaneli({
   const pikselYeni = kod === 'meta_piksel';
 
   return (
-    <div className="mt-3 grid gap-3 rounded-lg border border-line p-3 md:grid-cols-2">
+    <div className="mt-3 grid gap-3 rounded-alan border border-line p-3 md:grid-cols-2">
       {v.not && <p className="text-xs text-ink-muted md:col-span-2">{v.not}</p>}
       <div className="space-y-2">
         <p className="text-xs font-semibold text-ink">Mevcut olanı kullan</p>
@@ -228,7 +248,7 @@ function SecimPaneli({
           <p className="text-xs text-ink-muted">Seçilebilecek bir şey yok.</p>
         ) : (
           <>
-            <select className={girdi} value={mevcut} onChange={(e) => setMevcut(e.target.value)} aria-label="Mevcut seçenekler">
+            <Secim value={mevcut} onChange={(e) => setMevcut(e.target.value)} aria-label="Mevcut seçenekler">
               <option value="">Seç ({v.mevcut.length})</option>
               {v.mevcut.map((o) => (
                 <option key={o.deger} value={o.deger}>
@@ -236,8 +256,8 @@ function SecimPaneli({
                   {o.not ? ` · ${o.not}` : ''}
                 </option>
               ))}
-            </select>
-            <Dugme boyut="kucuk" bekliyor={gonderiliyor} disabled={!mevcut} onClick={() => istek({ tur: 'mevcut', deger: mevcut })}>
+            </Secim>
+            <Dugme ton="koyu" boyut="kucuk" bekliyor={gonderiliyor} disabled={!mevcut} onClick={() => istek({ tur: 'mevcut', deger: mevcut })}>
               Bunu kullan
             </Dugme>
           </>
@@ -247,15 +267,15 @@ function SecimPaneli({
         <div className="space-y-2">
           <p className="text-xs font-semibold text-ink">{yeniEtiket}</p>
           {!pikselYeni && (
-            <select className={girdi} value={ust} onChange={(e) => setUst(e.target.value)} aria-label="Nerede açılsın">
+            <Secim value={ust} onChange={(e) => setUst(e.target.value)} aria-label="Nerede açılsın">
               {v.ustler.map((o) => (
                 <option key={o.deger} value={o.deger}>
                   {o.etiket}
                 </option>
               ))}
-            </select>
+            </Secim>
           )}
-          {AD_ISTEYEN.has(kod) && <input className={girdi} value={ad} onChange={(e) => setAd(e.target.value)} maxLength={100} aria-label="Hesap adı" placeholder="Proje adı" />}
+          {AD_ISTEYEN.has(kod) && <Girdi value={ad} onChange={(e) => setAd(e.target.value)} maxLength={100} aria-label="Hesap adı" placeholder="Proje adı" />}
           {/*
             GERÇEK HESAP AÇAN DÜĞME ONAYSIZ ÇALIŞMAZ (MIMARI Ç-20 ⚠). Bir kez
             açılan reklam hesabı platformda kalıyor, para birimi ve saat
@@ -277,7 +297,7 @@ function SecimPaneli({
             <div
               role="alertdialog"
               aria-labelledby={onayBaslik}
-              className={`space-y-2 rounded-lg border border-brand/40 p-3 transition-opacity duration-200 motion-reduce:transition-none ${yeniOnay ? 'opacity-100' : 'pointer-events-none hidden opacity-0'}`}
+              className={`space-y-2 rounded-alan border border-brand/40 p-3 transition-opacity duration-200 motion-reduce:transition-none ${yeniOnay ? 'opacity-100' : 'pointer-events-none hidden opacity-0'}`}
             >
               <p id={onayBaslik} className="text-xs font-semibold text-ink">
                 “{ad.trim()}” adıyla gerçek bir reklam hesabı açılsın mı?
@@ -286,7 +306,7 @@ function SecimPaneli({
                 Hesap platformda kalır ve silinemez. Para birimi TRY, saat dilimi İstanbul; ikisi de sonradan değiştirilemez. Ödeme yöntemini şirket ekler.
               </p>
               <div className="flex flex-wrap gap-2">
-                <Dugme id={onayDugmesi} boyut="kucuk" bekliyor={gonderiliyor} onClick={() => istek({ tur: 'yeni', ust, ad })}>
+                <Dugme id={onayDugmesi} ton="koyu" boyut="kucuk" bekliyor={gonderiliyor} onClick={() => istek({ tur: 'yeni', ust, ad })}>
                   Hesabı aç
                 </Dugme>
                 <Dugme boyut="kucuk" ton="ikincil" disabled={gonderiliyor} onClick={() => setYeniOnay(false)}>
@@ -302,7 +322,7 @@ function SecimPaneli({
         <div className="space-y-2 md:col-span-2">
           <p className="text-xs font-semibold text-ink">Şirketin mevcut Google Ads hesabına bağlantı daveti</p>
           <div className="flex flex-wrap gap-2">
-            <input className={`${girdi} max-w-48`} value={musteriNo} onChange={(e) => setMusteriNo(e.target.value)} placeholder="123-456-7890" aria-label="Google Ads hesap numarası" />
+            <Girdi className="max-w-48" value={musteriNo} onChange={(e) => setMusteriNo(e.target.value)} placeholder="123-456-7890" aria-label="Google Ads hesap numarası" />
             <Dugme boyut="kucuk" ton="ikincil" bekliyor={gonderiliyor} disabled={!/^\d{3}-?\d{3}-?\d{4}$/.test(musteriNo.trim()) || !ust} onClick={() => istek({ tur: 'davet', ust, musteriNo: musteriNo.trim() })}>
               Davet gönder
             </Dugme>
@@ -321,7 +341,7 @@ function TetikFormu({ mevcut, gonderiliyor, gonder }: { mevcut: DonusumTetigi | 
   const [whatsapp, setWhatsapp] = useState(mevcut?.whatsapp ?? true);
   const yolGecerli = /^(https?:\/\/[^/]+)?\/[^\s]+$/.test(yol.trim()) && !/^(https?:\/\/[^/]+)?\/?$/.test(yol.trim());
   return (
-    <div className="mt-3 space-y-3 rounded-lg border border-line p-3">
+    <div className="mt-3 space-y-3 rounded-alan border border-line p-3">
       <label className="flex items-start gap-2">
         <input type="checkbox" checked={formVar} onChange={(e) => setFormVar(e.target.checked)} className="mt-1" />
         <span>
@@ -330,8 +350,8 @@ function TetikFormu({ mevcut, gonderiliyor, gonder }: { mevcut: DonusumTetigi | 
         </span>
       </label>
       {formVar && (
-        <input
-          className="w-full max-w-md rounded-lg border border-line bg-surface px-2 py-1.5 text-sm"
+        <Girdi
+          className="max-w-md"
           value={yol}
           onChange={(e) => setYol(e.target.value)}
           placeholder="/tesekkurler ya da sayfanın tam adresi"
@@ -345,6 +365,7 @@ function TetikFormu({ mevcut, gonderiliyor, gonder }: { mevcut: DonusumTetigi | 
         <input type="checkbox" checked={whatsapp} onChange={(e) => setWhatsapp(e.target.checked)} /> WhatsApp bağlantısına tıklama dönüşüm sayılsın
       </label>
       <Dugme
+        ton="koyu"
         boyut="kucuk"
         bekliyor={gonderiliyor}
         disabled={(formVar && !yolGecerli) || (!formVar && !telefon && !whatsapp)}
@@ -368,7 +389,7 @@ function SiteKodu({ kod, site }: { kod: NonNullable<KurulumYaniti['siteKodu']>; 
       () => setKopyaHatasi('Tarayıcı panoya yazmaya izin vermedi; kodu seçip kopyala.'),
     );
   return (
-    <div className="mt-3 space-y-3 rounded-lg border border-line p-3">
+    <div className="mt-3 space-y-3 rounded-alan border border-line p-3">
       {(
         [
           ['head', '1. Her sayfanın <head> bölümüne', kod.head],
@@ -382,7 +403,7 @@ function SiteKodu({ kod, site }: { kod: NonNullable<KurulumYaniti['siteKodu']>; 
               {kopyalandi === ad ? 'Kopyalandı' : 'Kopyala'}
             </button>
           </div>
-          <pre className="max-h-40 overflow-auto rounded-lg bg-surface-sunken p-2 text-[11px] leading-relaxed text-ink">{metin}</pre>
+          <pre className="max-h-40 overflow-auto rounded-alan bg-surface-sunken p-2 text-[11px] leading-relaxed text-ink">{metin}</pre>
         </div>
       ))}
       {kopyaHatasi && <p className="text-xs text-danger-strong">{kopyaHatasi}</p>}

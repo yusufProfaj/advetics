@@ -8,7 +8,6 @@ import {
   type HazirlamaYaniti,
   REHBER_ACILIS,
   REHBER_ADIMLARI,
-  REHBER_AMACLARI,
   acikPlatformlar,
   type RehberHazirligi,
   type RehberKaydi,
@@ -47,6 +46,8 @@ import {
   type EkranNo,
 } from './rehber-mantik';
 import { StratejidenKutusu } from './stratejiden-kutusu';
+import { Kart } from '@/components/ui/kart';
+import { IlerlemeRayi, type RayParcasi } from '@/components/ui/sihirbaz';
 import s from './rehber.module.css';
 
 /** Yayın durumu yoklama aralığı: platform başına üç adım, her biri saniyeler sürüyor. */
@@ -343,9 +344,29 @@ export function RehberEkrani({
   const amac = a.amac?.deger ?? null;
   const denemePlatformlari = amac ? (['meta', 'google'] as const).filter((p) => acik[p] && REHBER_ACILIS[amac][p] === 'deneme') : [];
   const yayinlanabilir = kayit.durum === 'taslak' && yayinlanabilirMi(kayit.eksikler, acik, prova.sonuc, kayit.icerikOzeti) && durum.bekleyen.length === 0;
-  const mobilAdim = Math.min(ekran, 6);
   const butce = a.butce?.deger;
   const takvim = a.takvim?.deger;
+
+  /*
+   * İLERLEME RAYI ORTAK (`ui/sihirbaz` `IlerlemeRayi`, simülasyon dili):
+   * biten adım siyah, şimdiki kırmızı. Sol adım listesi kalktı; adımlar
+   * arası geçiş sağdaki Özet kartında (her satır kendi adımını açıyor) ve
+   * "Yayından önce" listesinde. Kısa akışın atladığı adımlar da oradan
+   * açılıyor (`amactanSonraki`).
+   */
+  const rayParcalari: RayParcasi[] = REHBER_ADIMLARI.map((x) => ({
+    anahtar: String(x.no),
+    etiket: x.ad,
+    hal: x.no === ekran ? 'simdi' : adimBittiMi(kayit.eksikler, x.no, ekran, amac !== null) ? 'bitti' : 'sirada',
+  }));
+  const ozetDegeri: Record<number, string> = {
+    3: (a.konumlar?.deger ?? []).map((k) => k.etiket).join(', ') || 'Seçilmedi',
+    5: butce
+      ? `${paraGoster(butce.micros, paraBirimi)}${butce.tip === 'gunluk' ? ' / gün' : ' toplam'} · ${
+          takvim ? (takvim.bitis ? `${gunFarki(takvim.baslangic, takvim.bitis)} gün` : 'bitiş yok') : 'süre seçilmedi'
+        }`
+      : 'Girilmedi',
+  };
 
   const icerik = (
     <div className={`${s.kok} ${s.odakli}`} ref={kabukRef}>
@@ -357,7 +378,7 @@ export function RehberEkrani({
           }}>
             <Ikon d={IKON.kapat} boyut={18} />
           </Link>
-          <h1>AdvCampaign</h1>
+          <b className={s.ustBaslik}>AdvCampaign</b>
           <div className={s.kirinti}>
             {sirketAdi} › <b>{workspaceAdi}</b>
           </div>
@@ -381,43 +402,13 @@ export function RehberEkrani({
         </header>
 
         <main className={s.govde}>
-          <nav className={s.ray} aria-label="Adımlar">
-            {REHBER_ADIMLARI.map((x, i) => {
-              const bitti = adimBittiMi(kayit.eksikler, x.no, ekran, amac !== null);
-              return (
-                <div key={x.no} style={{ display: 'contents' }}>
-                  {i > 0 && <span className={s.cizgi} />}
-                  <button
-                    type="button"
-                    className={`${s.adim} ${bitti ? s.bitti : ''}`}
-                    aria-current={x.no === ekran ? 'step' : undefined}
-                    onClick={() => git(x.no)}
-                  >
-                    <span className={s.no}>{bitti ? '✓' : x.no}</span>
-                    <span>
-                      {x.ad}
-                      <span className={s.alt}>{adimAltMetni(x.no, x.alt, amac, acik)}</span>
-                    </span>
-                  </button>
-                </div>
-              );
-            })}
-          </nav>
+          <div className={s.rayAlani}>
+            <IlerlemeRayi parcalar={rayParcalari} etiket="Reklam adımları" />
+          </div>
 
           <section className={s.orta}>
             {/* Onaylı stratejiden açılan rehberde kreatif yönergesi ve kitle tarifi her adımda görünür. */}
             <StratejidenKutusu rehberId={kayit.id} />
-            <div className={s.mobilIlerleme} aria-hidden>
-              <div className={s.ust}>
-                <span>
-                  Adım <b>{mobilAdim}</b> / 6
-                </span>
-                <b>{REHBER_ADIMLARI[mobilAdim - 1]!.ad}</b>
-              </div>
-              <div className={s.cubuk}>
-                <i style={{ width: `${(mobilAdim / 6) * 100}%` }} />
-              </div>
-            </div>
             <div className={`${s.ekran} ${ekran === 1 ? s.acik : ''}`}>
               {hazirlamaTetik.tur !== 'yok' && (
                 <Uyari>
@@ -465,35 +456,34 @@ export function RehberEkrani({
           </section>
 
           <aside className={s.ozet}>
-            <div className={`${s.kart} ${s.ozetKart}`}>
-              <h3>Özet</h3>
-              <div className={s.ozetSatir}>
-                <span>Amaç</span>
-                <b>{amac ? REHBER_AMACLARI[amac].ekranAdi : 'Seçilmedi'}</b>
-              </div>
-              <div className={s.ozetSatir}>
-                <span>Nerede</span>
-                <b>{[acik.meta && 'Meta', acik.google && 'Google'].filter(Boolean).join(' + ') || 'Seçilmedi'}</b>
-              </div>
-              <div className={s.ozetSatir}>
-                <span>Konum</span>
-                <b>{(a.konumlar?.deger ?? []).map((k) => k.etiket).join(', ') || 'Seçilmedi'}</b>
-              </div>
-              <div className={s.ozetSatir}>
-                <span>Bütçe</span>
-                <b className={s.num}>{butce ? `${paraGoster(butce.micros, paraBirimi)}${butce.tip === 'gunluk' ? ' / gün' : ' toplam'}` : 'Girilmedi'}</b>
-              </div>
-              <div className={s.ozetSatir}>
-                <span>Süre</span>
-                <b>{takvim ? (takvim.bitis ? `${gunFarki(takvim.baslangic, takvim.bitis)} gün` : 'Bitiş yok') : 'Seçilmedi'}</b>
-              </div>
-            </div>
+            {/*
+              ÖZET = ADIM LİSTESİ: her satır kendi adımını açar (sol rayın
+              tıklama işi buraya geçti). Değer amaç ve platformda rayın eski
+              alt metniyle aynı üreticiden (`adimAltMetni`).
+            */}
+            <Kart as="div" baslik="Özet" dolgu={false}>
+              <ul className={s.ozetListe}>
+                {REHBER_ADIMLARI.map((x) => {
+                  const bitti = adimBittiMi(kayit.eksikler, x.no, ekran, amac !== null);
+                  return (
+                    <li key={x.no}>
+                      <button type="button" className={s.ozetSatir} aria-current={x.no === ekran ? 'step' : undefined} onClick={() => git(x.no)}>
+                        <span className={s.ozetNo} data-bitti={bitti || undefined}>
+                          {bitti ? '✓' : x.no}
+                        </span>
+                        <span>{x.ad}</span>
+                        <b className={x.no === 5 ? s.num : undefined}>{ozetDegeri[x.no] ?? adimAltMetni(x.no, x.alt, amac, acik)}</b>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </Kart>
             {/* Son ekranda "yayından önce" listesinin işi bitti; durması "hâlâ eksik var mı" sorusu doğurur. */}
             {ekran !== 7 && (
-              <div className={`${s.kart} ${s.ozetKart}`}>
-                <h3>Yayından önce</h3>
+              <Kart as="div" baslik="Yayından önce" dolgu={false}>
                 <YayindanOnce kayit={kayit} acik={acik} prova={prova} git={git} amacSecili={amac !== null} />
-              </div>
+              </Kart>
             )}
           </aside>
         </main>

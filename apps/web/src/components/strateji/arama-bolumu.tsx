@@ -5,6 +5,8 @@ import type { PlanDetayi } from '@advetics/shared';
 import { formatMoney } from '@/lib/format';
 import { Dugme } from '@/components/ui/dugme';
 import { Uyari } from '@/components/ui/uyari';
+import { BosDurum } from '@/components/ui/hal';
+import { Kart } from '@/components/ui/kart';
 import {
   REKABET_ETIKETI,
   DIGER_GRUBU,
@@ -159,34 +161,36 @@ export function AramaBolumu({
       <ErisimDurumu erisim={kelimeler.erisim} sonHata={kelimeler.sonHata} />
 
       {kelimeler.erisim === 'var' && kilit === null && (
-        <div className="space-y-2 rounded-xl border border-line bg-surface p-4">
-          <label htmlFor="tohumlar" className="block text-sm font-semibold text-ink">
-            Aranacak kelimeler
-          </label>
-          <p id="tohumlar-yardim" className="text-sm text-ink-muted">
-            Her satıra ya da virgülle ayırarak en çok 20 kelime. Örnek: filtre kahve, french press.
-          </p>
-          <textarea
-            id="tohumlar"
-            rows={3}
-            aria-describedby={tohumHatasi ? 'tohumlar-yardim tohumlar-hata' : 'tohumlar-yardim'}
-            aria-invalid={tohumHatasi ? true : undefined}
-            className={GIRDI_SINIFI}
-            value={tohumMetni}
-            onChange={(e) => {
-              setTohumMetni(e.target.value);
-              setTohumHatasi(null);
-            }}
-          />
-          {tohumHatasi && (
-            <p id="tohumlar-hata" className="text-sm text-danger-strong">
-              {tohumHatasi}
+        <Kart as="div">
+          <div className="space-y-2">
+            <label htmlFor="tohumlar" className="block text-sm font-semibold text-ink">
+              Aranacak kelimeler
+            </label>
+            <p id="tohumlar-yardim" className="text-sm text-ink-muted">
+              Her satıra ya da virgülle ayırarak en çok 20 kelime. Örnek: filtre kahve, french press.
             </p>
-          )}
-          <Dugme onClick={ara} bekliyor={araniyor} disabled={kelimeler.aramaSuruyor}>
-            Kelimeleri ara
-          </Dugme>
-        </div>
+            <textarea
+              id="tohumlar"
+              rows={3}
+              aria-describedby={tohumHatasi ? 'tohumlar-yardim tohumlar-hata' : 'tohumlar-yardim'}
+              aria-invalid={tohumHatasi ? true : undefined}
+              className={GIRDI_SINIFI}
+              value={tohumMetni}
+              onChange={(e) => {
+                setTohumMetni(e.target.value);
+                setTohumHatasi(null);
+              }}
+            />
+            {tohumHatasi && (
+              <p id="tohumlar-hata" className="text-sm text-danger-strong">
+                {tohumHatasi}
+              </p>
+            )}
+            <Dugme ton="koyu" onClick={ara} bekliyor={araniyor} disabled={kelimeler.aramaSuruyor}>
+              Kelimeleri ara
+            </Dugme>
+          </div>
+        </Kart>
       )}
 
       {kelimeler.aramaSuruyor && (
@@ -204,13 +208,10 @@ export function AramaBolumu({
       {kelimeler.satirlar.length === 0 ? (
         kelimeler.erisim === 'var' &&
         !kelimeler.aramaSuruyor && (
-          <p className="rounded-xl border border-dashed border-line bg-surface p-6 text-center text-sm text-ink-muted">
-            {kelimeler.sonHata
-              ? 'Son arama sonuç getirmedi; nedeni yukarıda.'
-              : kilit === null
-                ? 'Bu plan için henüz kelime aranmadı.'
-                : 'Bu planda kelime yok.'}
-          </p>
+          <BosDurum
+            baslik="Kelime yok"
+            neden={kelimeler.sonHata ? 'Son arama sonuç getirmedi; nedeni yukarıda.' : kilit === null ? 'Bu plan için henüz kelime aranmadı.' : 'Bu planda kelime yok.'}
+          />
         )
       ) : (
         <>

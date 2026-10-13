@@ -1,7 +1,10 @@
 'use client';
 
+import { BolumluSecici } from '@/components/ui/sekmeler';
+import { Dugme, dugmeSinifi } from '@/components/ui/dugme';
+import { Pencere } from '@/components/ui/pencere';
 import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import {
   REHBER_AMACLARI,
   VARSAYILAN_META_PAYI,
@@ -89,7 +92,7 @@ export function AdimKontrol({
 
   return (
     <>
-      <Soru baslik="Son kontrol">
+      <Soru adim={6} baslik="Son kontrol">
         Reklamın {b.acik.meta && b.acik.google ? 'iki platformda' : 'platformda'} böyle görünecek. Önce prova ediyoruz: platformlar kurulumu para
         harcamadan kontrol ediyor.
       </Soru>
@@ -98,14 +101,15 @@ export function AdimKontrol({
           <div className={`${s.kart} ${s.onKart}`}>
             <header>
               Meta önizleme
-              <div className={s.seg} role="group" aria-label="Meta önizleme biçimi">
-                <button type="button" aria-pressed={metaKip === 'akis'} onClick={() => setMetaKip('akis')}>
-                  Akış
-                </button>
-                <button type="button" aria-pressed={metaKip === 'hikaye'} onClick={() => setMetaKip('hikaye')}>
-                  Hikâye
-                </button>
-              </div>
+              <BolumluSecici
+                etiket="Meta önizleme biçimi"
+                secili={metaKip}
+                onSec={setMetaKip}
+                secenekler={[
+                  { deger: 'akis', etiket: 'Akış' },
+                  { deger: 'hikaye', etiket: 'Hikâye' },
+                ]}
+              />
             </header>
             <div className={s.telefon}>
               <div className={s.akisUst}>
@@ -133,14 +137,15 @@ export function AdimKontrol({
             <header>
               Google önizleme
               {kurgu === 'ARAMA' && (
-                <div className={s.seg} role="group" aria-label="Google önizleme biçimi">
-                  <button type="button" aria-pressed={googleKip === 'arama'} onClick={() => setGoogleKip('arama')}>
-                    Arama
-                  </button>
-                  <button type="button" aria-pressed={googleKip === 'mobil'} onClick={() => setGoogleKip('mobil')}>
-                    Mobil
-                  </button>
-                </div>
+                <BolumluSecici
+                  etiket="Google önizleme biçimi"
+                  secili={googleKip}
+                  onSec={setGoogleKip}
+                  secenekler={[
+                    { deger: 'arama', etiket: 'Arama' },
+                    { deger: 'mobil', etiket: 'Mobil' },
+                  ]}
+                />
               )}
             </header>
             {kurgu === 'ARAMA' ? (
@@ -246,25 +251,23 @@ export function AdimKontrol({
         )}
       </div>
 
-      <AltCubuk git={git} adim={6}>
-        <button
-          type="button"
-          className={s.ikincil}
-          disabled={prova.suruyor || engel > 0}
+      <AltCubuk git={git} adim={6} not={!yayinlanabilir ? (engel > 0 ? `${engel} eksik var` : 'Önce prova geçmeli') : undefined}>
+        <Dugme
+          ton="ikincil"
+          bekliyor={prova.suruyor}
+          disabled={engel > 0}
           title={engel > 0 ? `${engel} eksik var` : undefined}
           onClick={provaEt}
         >
-          {prova.suruyor ? 'Prova ediliyor…' : 'Prova et'}
-        </button>
-        <button
-          type="button"
-          className={s.birincil}
+          {prova.suruyor ? 'Prova ediliyor' : 'Prova et'}
+        </Dugme>
+        <Dugme
           disabled={!yayinlanabilir}
           title={!yayinlanabilir ? (engel > 0 ? `${engel} eksik var` : 'Önce prova geçmeli') : undefined}
           onClick={onayAc}
         >
           Yayınla
-        </button>
+        </Dugme>
       </AltCubuk>
     </>
   );
@@ -320,7 +323,6 @@ export function OnayPenceresi({
   onayla: () => void;
   kapat: () => void;
 }) {
-  const onayRef = useRef<HTMLButtonElement>(null);
   const suruyor = gonderiliyor || (yayin !== null && yayin.uyum?.tur !== 'durdu' && yayin.platformlar.some((p) => yayinSonucu(p) === 'suruyor'));
   const butce = b.a.butce?.deger;
   const baslangic = b.a.takvim?.deger.baslangic;
@@ -328,28 +330,28 @@ export function OnayPenceresi({
   const amacKodu = b.a.amac?.deger ?? null;
   const hepsiDeneme = acikPlatformlar.length > 0 && acikPlatformlar.every((p) => denemePlatformlari.includes(p));
 
-  useEffect(() => {
-    if (acik) onayRef.current?.focus();
-  }, [acik]);
-
-  useEffect(() => {
-    if (!acik) return;
-    const tus = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !suruyor) kapat();
-    };
-    window.addEventListener('keydown', tus);
-    return () => window.removeEventListener('keydown', tus);
-  }, [acik, suruyor, kapat]);
-
   const ne = butce ? `${butce.tip === 'gunluk' ? 'günlük' : 'toplam'} ${paraGoster(butce.micros, b.paraBirimi)}` : '';
   // Geçmiş başlangıç "hemen": Meta onu kurulum anına çekiyor (N-09); geçmiş
   // bir günü yazmak harcamanın ne zaman başladığı konusunda yalan söylerdi.
   const ne_zaman = !baslangic || baslangic <= bugun(b.saatDilimi) ? 'hemen' : `${tarihGoster(baslangic)} tarihinde`;
 
   return (
-    <div className={`${s.perde} ${acik ? s.acik : ''}`} aria-hidden={!acik}>
-      <div className={s.pencere} role="dialog" aria-modal="true" aria-labelledby="rehber-onay-baslik">
-        <h3 id="rehber-onay-baslik">Yayınla: onay</h3>
+    <Pencere
+      acik={acik}
+      onKapat={() => !suruyor && kapat()}
+      baslik="Yayınla: onay"
+      altEylemler={
+        <>
+          <Dugme ton="ikincil" disabled={suruyor} onClick={kapat}>
+            Vazgeç
+          </Dugme>
+          <Dugme bekliyor={suruyor} disabled={yayin !== null} onClick={onayla}>
+            {suruyor ? 'Kuruluyor' : 'Onayla ve yayınla'}
+          </Dugme>
+        </>
+      }
+    >
+      <div className={s.onayGovde}>
         <p>
           {hepsiDeneme ? (
             <>
@@ -392,16 +394,8 @@ export function OnayPenceresi({
             </div>
           );
         })}
-        <div className={s.pencereAlt}>
-          <button type="button" className={s.ikincil} disabled={suruyor} onClick={kapat}>
-            Vazgeç
-          </button>
-          <button ref={onayRef} type="button" className={s.birincil} disabled={suruyor || yayin !== null} onClick={onayla}>
-            {suruyor ? 'Kuruluyor…' : 'Onayla ve yayınla'}
-          </button>
-        </div>
       </div>
-    </div>
+    </Pencere>
   );
 }
 
@@ -451,20 +445,20 @@ function GeriAl({ rehberId, ozet, guncelle }: { rehberId: string; ozet: Platform
     return (
       <div className={s.geriAlOnay} role="group" aria-label="Geri alma onayı">
         <span>{m.onay}</span>
-        <button type="button" className={s.birincil} disabled={hal === 'gonderiliyor'} onClick={() => void arsivle()}>
+        <Dugme ton="tehlike" boyut="kucuk" bekliyor={hal === 'gonderiliyor'} onClick={() => void arsivle()}>
           {hal === 'gonderiliyor' ? m.suruyor : m.eylem}
-        </button>
-        <button type="button" className={s.ikincil} disabled={hal === 'gonderiliyor'} onClick={() => setHal('bos')}>
+        </Dugme>
+        <Dugme ton="ikincil" boyut="kucuk" disabled={hal === 'gonderiliyor'} onClick={() => setHal('bos')}>
           Vazgeç
-        </button>
+        </Dugme>
       </div>
     );
   }
   return (
     <div className={s.geriAlOnay}>
-      <button type="button" className={s.ikincil} onClick={() => setHal('onay')}>
+      <Dugme ton="ikincil" boyut="kucuk" onClick={() => setHal('onay')}>
         {m.dugme}
-      </button>
+      </Dugme>
       {hal === 'hata' && hata && (
         <span className={s.hataMetni} role="alert">
           {hata}
@@ -506,9 +500,9 @@ function YenidenKontrol({ rehberId, ozet, guncelle }: { rehberId: string; ozet: 
   }
   return (
     <div className={s.geriAlOnay}>
-      <button type="button" className={s.ikincil} disabled={hal === 'suruyor'} onClick={() => void kontrol()}>
+      <Dugme ton="ikincil" boyut="kucuk" disabled={hal === 'suruyor'} onClick={() => void kontrol()}>
         {hal === 'suruyor' ? 'Kontrol ediliyor…' : 'Yeniden kontrol et'}
-      </button>
+      </Dugme>
       {hal === 'hata' && hata && (
         <span className={s.hataMetni} role="alert">
           {hata}
@@ -562,9 +556,9 @@ function YenidenDene({ rehberId, platformlar, guncelle }: { rehberId: string; pl
   if (!etiket) return null;
   return (
     <div className={s.geriAlOnay} style={{ padding: '0 16px 12px' }}>
-      <button type="button" className={s.ikincil} disabled={hal === 'suruyor'} onClick={() => void dene()}>
+      <Dugme ton="ikincil" boyut="kucuk" disabled={hal === 'suruyor'} onClick={() => void dene()}>
         {hal === 'suruyor' ? 'Deneniyor…' : etiket}
-      </button>
+      </Dugme>
       {hal === 'hata' && hata && (
         <span className={s.hataMetni} role="alert">
           {hata}
@@ -659,15 +653,15 @@ export function SonEkran({
         })}
         <YenidenDene rehberId={rehberId} platformlar={platformlar} guncelle={yayinGuncelle} />
         <div className={s.sonDugmeler}>
-          <Link href={yonetici} className={s.birincil}>
+          <Link href={yonetici} className={dugmeSinifi('koyu')}>
             Reklam Yöneticisi&apos;nde gör
           </Link>
-          <button type="button" className={s.ikincil} onClick={yenidenKur}>
+          <Dugme ton="ikincil" onClick={yenidenKur}>
             Aynı içerikle yeniden kur
-          </button>
-          <button type="button" className={s.ikincil} onClick={yeniReklam}>
+          </Dugme>
+          <Dugme ton="ikincil" onClick={yeniReklam}>
             Yeni reklam
-          </button>
+          </Dugme>
         </div>
         {yeniHata && (
           <p className={s.hataMetni} role="alert" style={{ margin: '0 16px 12px', textAlign: 'center' }}>

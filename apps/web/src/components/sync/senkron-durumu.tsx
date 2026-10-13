@@ -5,6 +5,10 @@ import type {
   SyncStatusResponse,
 } from '@advetics/shared';
 import { PLATFORM_LABELS, SENKRON_SAYAC_GUNU } from '@advetics/shared';
+import { Kart } from '@/components/ui/kart';
+import { BosDurum } from '@/components/ui/hal';
+import { Rozet, type DurumHali } from '@/components/ui/rozet';
+import { Uyari } from '@/components/ui/uyari';
 
 /** Elenen kategorilerin Türkçe karşılığı — sayaç anlamsız kalmasın. */
 const ELENME_ETIKETLERI: Record<keyof SyncExcludedCounts, string> = {
@@ -33,28 +37,30 @@ export function SenkronDurumu({ data }: { data: SyncStatusResponse }) {
     <div className="space-y-6">
       <OzetSeridi data={data} />
 
-      <section className="rounded-lg border border-line bg-surface">
-        <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line px-4 py-3">
-          <h2 className="font-medium">Reklam hesapları</h2>
-          {/*
-            SESSİZ KESME YOK: kaç hesabın kaçının izlendiği ve elenenlerin
-            SEBEBİ yazılı. "Hiç hesap yok" ile "üç hesap var, üçü de elendi"
-            aynı ekrana düşmemeli.
-          */}
-          <p className="text-xs text-ink-muted">
+      {/*
+        SESSİZ KESME YOK: kaç hesabın kaçının izlendiği ve elenenlerin
+        SEBEBİ yazılı. "Hiç hesap yok" ile "üç hesap var, üçü de elendi"
+        aynı ekrana düşmemeli.
+      */}
+      <Kart
+        baslik="Reklam hesapları"
+        baslikEki={
+          <>
             {data.accounts.length} atanmış hesap · {data.accountCount} tanesi izleniyor
             {elenen.length > 0 && (
               <> · elenen: {elenen.map(([k, n]) => `${n} ${ELENME_ETIKETLERI[k]}`).join(', ')}</>
             )}
-          </p>
-        </header>
-
+          </>
+        }
+        dolgu={false}
+      >
         {data.accounts.length === 0 ? (
-          <p className="px-4 py-8 text-center text-sm text-ink-muted">
-            Bu workspace’e hiç reklam hesabı atanmamış. Kurulum’daki hesaplar
-            bloğundan ata; atama izlemeyi de açıyor ve 90 günlük geçmişi
-            kuyruğa alıyor.
-          </p>
+          <div className="p-4">
+            <BosDurum
+              baslik="Atanmış reklam hesabı yok"
+              neden="Bu workspace’e hiç reklam hesabı atanmamış. Kurulum’daki hesaplar bloğundan ata; atama izlemeyi de açıyor ve 90 günlük geçmişi kuyruğa alıyor."
+            />
+          </div>
         ) : (
           <ul className="divide-y divide-line">
             {data.accounts.map((a) => (
@@ -62,28 +68,32 @@ export function SenkronDurumu({ data }: { data: SyncStatusResponse }) {
             ))}
           </ul>
         )}
-      </section>
+      </Kart>
 
-      <section className="rounded-lg border border-line bg-surface">
-        <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line px-4 py-3">
-          {/* PENCERE SABİTTEN: etiket elle yazılsaydı pencere değişince
-              ekran yanlış süreyi söylerdi. */}
-          <h2 className="font-medium">Son {SENKRON_SAYAC_GUNU} günün senkronizasyon işleri</h2>
-          <p className="text-xs text-ink-muted">
-            {data.recentJobs.length} / {data.recentJobsTotal} iş gösteriliyor
-          </p>
-        </header>
-
+      {/* PENCERE SABİTTEN: etiket elle yazılsaydı pencere değişince
+          ekran yanlış süreyi söylerdi. */}
+      <Kart
+        baslik={<>Son {SENKRON_SAYAC_GUNU} günün senkronizasyon işleri</>}
+        baslikEki={`${data.recentJobs.length} / ${data.recentJobsTotal} iş gösteriliyor`}
+        dolgu={false}
+      >
         {data.recentJobs.length === 0 ? (
-          <p className="px-4 py-8 text-center text-sm text-ink-muted">
-            Son {SENKRON_SAYAC_GUNU} günde hiç senkronizasyon işi kaydedilmemiş. Hesap yeni
-            atandıysa işler birkaç dakika içinde görünür; görünmüyorsa
-            senkronizasyon worker&apos;ı çalışmıyor olabilir.
-          </p>
+          <div className="p-4">
+            <BosDurum
+              baslik="Senkronizasyon işi yok"
+              neden={
+                <>
+                  Son {SENKRON_SAYAC_GUNU} günde hiç senkronizasyon işi kaydedilmemiş. Hesap yeni
+                  atandıysa işler birkaç dakika içinde görünür; görünmüyorsa
+                  senkronizasyon worker&apos;ı çalışmıyor olabilir.
+                </>
+              }
+            />
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[46rem] text-sm">
-              <thead className="text-left text-xs uppercase tracking-wide text-ink-muted">
+              <thead className="text-left text-12 text-ink-muted">
                 <tr className="border-b border-line">
                   <th className="px-4 py-2 font-medium">İş</th>
                   <th className="px-4 py-2 font-medium">Hesap</th>
@@ -100,7 +110,7 @@ export function SenkronDurumu({ data }: { data: SyncStatusResponse }) {
             </table>
           </div>
         )}
-      </section>
+      </Kart>
     </div>
   );
 }
@@ -140,7 +150,7 @@ function OzetSeridi({ data }: { data: SyncStatusResponse }) {
         baslik={`Başarılı ama boş iş · son ${SENKRON_SAYAC_GUNU} gün`}
         deger={String(bosBiten)}
         vurgu={bosBiten > 0 ? 'warn' : undefined}
-        ipucu="İş hatasız bitti ama tek satır yazmadı — genellikle yapı taraması metriklerden sonra koştuğu için."
+        ipucu="İş hatasız bitti ama tek satır yazmadı; genellikle yapı taraması metriklerden sonra koştuğu için."
       />
     </div>
   );
@@ -158,11 +168,11 @@ function Kutu({
   ipucu?: string;
 }) {
   const renk =
-    vurgu === 'danger' ? 'text-danger' : vurgu === 'warn' ? 'text-warn' : 'text-ink';
+    vurgu === 'danger' ? 'text-danger-strong' : vurgu === 'warn' ? 'text-danger-strong' : 'text-ink';
   return (
-    <div className="rounded-lg border border-line bg-surface p-4">
+    <div className="rounded-kart border border-line bg-surface p-4">
       <p className="text-xs text-ink-muted">{baslik}</p>
-      <p className={`mt-1 text-2xl font-semibold ${renk}`}>{deger}</p>
+      <p className={`font-baslik mt-1 text-24 font-bold tabular-nums ${renk}`}>{deger}</p>
       {ipucu && <p className="mt-1 text-[11px] leading-snug text-ink-muted">{ipucu}</p>}
     </div>
   );
@@ -190,9 +200,9 @@ function HesapSatiri({ hesap }: { hesap: SyncAccountStatus }) {
         (`supurme-kapsami.ts`).
       */}
       {hesap.blockedReason !== null && (
-        <p className="mt-2 rounded border border-warn/40 bg-warn/5 px-3 py-2 text-xs leading-relaxed">
-          {hesap.blockedReason}
-        </p>
+        <div className="mt-2">
+          <Uyari ton="uyari">{hesap.blockedReason}</Uyari>
+        </div>
       )}
 
       {hesap.blockedReason === null && !hesap.inScheduledSweep && (
@@ -221,8 +231,8 @@ function HesapSatiri({ hesap }: { hesap: SyncAccountStatus }) {
 function IsOzeti({ is, hata }: { is: SyncJobStatusRow; hata?: boolean }) {
   return (
     <div
-      className={`mt-2 rounded border px-3 py-2 text-xs ${
-        hata ? 'border-danger/40 bg-danger/5' : 'border-line bg-surface-muted'
+      className={`mt-2 rounded-alan border px-3 py-2 text-xs ${
+        hata ? 'border-l-4 border-line border-l-danger bg-surface' : 'border-line bg-surface-muted'
       }`}
     >
       <p className="text-ink-muted">
@@ -232,7 +242,7 @@ function IsOzeti({ is, hata }: { is: SyncJobStatusRow; hata?: boolean }) {
         {is.attempts > 1 && <> · {is.attempts}. deneme</>} · {zaman(is.finishedAt ?? is.createdAt)}
       </p>
       {is.errorMessage && (
-        <p className="mt-1 leading-snug text-danger">
+        <p className="mt-1 leading-snug text-danger-strong">
           {is.errorCode && <span className="font-mono">[{is.errorCode}] </span>}
           {is.errorMessage}
         </p>
@@ -260,7 +270,7 @@ function IsSatiri({ is }: { is: SyncJobStatusRow }) {
           görünmüyordu.
         */}
         {is.errorMessage && (
-          <p className="mt-1 max-w-md text-xs leading-snug text-danger">
+          <p className="mt-1 max-w-md text-xs leading-snug text-danger-strong">
             {is.errorCode && <span className="font-mono">[{is.errorCode}] </span>}
             {is.errorMessage}
           </p>
@@ -275,7 +285,7 @@ function IsSatiri({ is }: { is: SyncJobStatusRow }) {
           log'undaydı ve log rotasyonuyla kayboluyordu.
         */}
         {is.rowsSkipped !== null && is.rowsSkipped > 0 && (
-          <span className="block text-xs text-warn">{is.rowsSkipped} atıldı</span>
+          <span className="block text-xs text-danger-strong">{is.rowsSkipped} atıldı</span>
         )}
       </td>
       <td className="px-4 py-2 text-xs text-ink-muted">
@@ -286,21 +296,15 @@ function IsSatiri({ is }: { is: SyncJobStatusRow }) {
   );
 }
 
+/*
+ * İş durumu ortak rozetle. "Başarılı ama 0 satır" KIRMIZI: bu projede bir
+ * hata türü (CLAUDE.md "succeeded + rows = 0"), yeşil göstermek onu gizlerdi.
+ */
 function DurumRozeti({ status, bosBasari }: { status: string; bosBasari: boolean }) {
-  if (bosBasari) {
-    return (
-      <span className="inline-block rounded bg-warn/15 px-2 py-0.5 text-xs text-warn">
-        başarılı · 0 satır
-      </span>
-    );
-  }
-  const renk =
-    status === 'failed'
-      ? 'bg-danger/15 text-danger'
-      : status === 'succeeded'
-        ? 'bg-ok/15 text-ok'
-        : 'bg-surface-muted text-ink-muted';
-  return <span className={`inline-block rounded px-2 py-0.5 text-xs ${renk}`}>{status}</span>;
+  if (bosBasari) return <Rozet hal="hata">başarılı · 0 satır</Rozet>;
+  const hal: DurumHali =
+    status === 'failed' || status === 'throttled' ? 'hata' : status === 'succeeded' ? 'ok' : 'taslak';
+  return <Rozet hal={hal}>{status}</Rozet>;
 }
 
 /** ISO damgasını okunur hâle getirir. `null` = hiç koşmadı, ve bu bir bilgi. */

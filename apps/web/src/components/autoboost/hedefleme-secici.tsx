@@ -108,7 +108,7 @@ export function HedeflemeSecici({
 
   if (hesapHata !== null) {
     return (
-      <p className="rounded-lg border border-danger/40 bg-danger/5 px-3 py-2 text-[11px] text-danger">
+      <p className="rounded-alan border border-danger/40 bg-danger/5 px-3 py-2 text-[11px] text-danger">
         Reklam hesabı okunamadı — {hesapHata}
       </p>
     );
@@ -129,7 +129,7 @@ export function HedeflemeSecici({
      * yazdıkça hiçbir şey gelmeyen bir alan bırakmak olurdu.
      */
     return (
-      <p className="rounded-lg border border-warn/40 bg-warn/5 px-3 py-2 text-[11px] text-ink">
+      <p className="rounded-alan border border-warn/40 bg-warn/5 px-3 py-2 text-[11px] text-ink">
         Bu workspace’e izlenen bir Meta reklam hesabı atanmamış. Şehir ve kayıtlı
         kitle seçimi hesap atandıktan sonra açılıyor; şu hâliyle hedefleme{' '}
         <strong>Türkiye geneli</strong> olacak.
@@ -138,7 +138,7 @@ export function HedeflemeSecici({
   }
 
   return (
-    <div className="space-y-3 rounded-lg border border-line p-3">
+    <div className="space-y-3 rounded-kart border border-line p-3">
       <p className="text-xs font-medium text-ink">Hedefleme</p>
 
       {kayitliKitle && (
@@ -149,7 +149,7 @@ export function HedeflemeSecici({
         <select
           value={kitleId ?? ''}
           onChange={(e) => setKitleId(e.target.value || null)}
-          className="mt-0.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
+          className="mt-0.5 w-full rounded-alan border border-line bg-surface px-3 py-2 text-sm"
         >
           <option value="">Kullanma — aşağıdan şehir seçeyim</option>
           {(kitleler?.items ?? []).map((k) => (
@@ -165,7 +165,7 @@ export function HedeflemeSecici({
 
       {/* ÜÇ HÂL AYRI: çağrı düştü · kitle yok · kitleler geldi. */}
       {kayitliKitle && kitleHata !== null && (
-        <p className="rounded-lg border border-danger/40 bg-danger/5 px-2 py-1 text-[11px] text-danger">
+        <p className="rounded-alan border border-danger/40 bg-danger/5 px-2 py-1 text-[11px] text-danger">
           Kayıtlı kitleler alınamadı — {kitleHata}
         </p>
       )}
@@ -176,7 +176,7 @@ export function HedeflemeSecici({
       )}
 
       {kitleId ? (
-        <p className="rounded-lg border border-line bg-surface-muted px-3 py-2 text-[11px] text-ink-muted">
+        <p className="rounded-alan border border-line bg-surface-muted px-3 py-2 text-[11px] text-ink-muted">
           Kayıtlı kitle seçili. Şehir, yaş ve cinsiyet <strong>kullanılmıyor</strong> —
           hedeflemeyi kitlenin kendi tanımı belirliyor.
         </p>
@@ -188,7 +188,7 @@ export function HedeflemeSecici({
               value={arama}
               onChange={(e) => setArama(e.target.value)}
               placeholder="İzmir"
-              className="mt-0.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
+              className="mt-0.5 w-full rounded-alan border border-line bg-surface px-3 py-2 text-sm"
             />
           </label>
 
@@ -199,7 +199,7 @@ export function HedeflemeSecici({
             <p className="text-[11px] text-ink-muted">Aranıyor…</p>
           )}
           {aramaHata !== null && (
-            <p className="rounded-lg border border-danger/40 bg-danger/5 px-2 py-1 text-[11px] text-danger">
+            <p className="rounded-alan border border-danger/40 bg-danger/5 px-2 py-1 text-[11px] text-danger">
               {aramaHata}
             </p>
           )}

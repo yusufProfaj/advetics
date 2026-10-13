@@ -22,6 +22,9 @@ import {
 } from '@/components/autoboost/kart-duzenle';
 import { PlatformLogo } from '@/components/platform-logo';
 import { YoutubeProvaSonucuKutusu, type ProvaDurumu } from './youtube-prova-sonucu';
+import { dugmeSinifi } from '@/components/ui/dugme';
+import { BosDurum, HataDurumu, Serit } from '@/components/ui/hal';
+import { Rozet, SayiRozeti, type DurumHali } from '@/components/ui/rozet';
 
 /**
  * ═══ PLATFORM TABLOLARI — HEPSİ `Record`, HİÇBİRİ KOŞUL ZİNCİRİ ═══
@@ -126,6 +129,11 @@ export function BildirimHavuzu({
   const router = useRouter();
   const [liste, setListe] = useState<AutoBoostQueueList | null>(null);
   const [saglik, setSaglik] = useState<AutoBoostSubscriptionHealth[]>([]);
+  /*
+   * Sağlık okunamadıysa liste BOŞ sayılmıyor: boş liste "abonelikler
+   * sağlam" demek; çağrının düşmesi ise bilinmiyor demek ve ayrı yazılır.
+   */
+  const [saglikHatasi, setSaglikHatasi] = useState<string | null>(null);
   const [hata, setHata] = useState<string | null>(null);
   /**
    * MECRA SÜZGECİ — `'hepsi'` varsayılan.
@@ -220,16 +228,19 @@ export function BildirimHavuzu({
     void apiFetch<AutoBoostSubscriptionHealth[]>(
       `/autoboost/subscriptions/health?clientId=${clientId}`,
     )
-      .then(setSaglik)
-      .catch(() => setSaglik([]));
+      .then((h) => {
+        setSaglik(h);
+        setSaglikHatasi(null);
+      })
+      .catch((e: unknown) => {
+        setSaglik([]);
+        setSaglikHatasi(e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.');
+      });
   }, [clientId, kuyruguYukle]);
 
   if (hata) {
     return (
-      <div role="alert" className="rounded-xl border border-danger/40 bg-surface p-4">
-        <p className="text-sm font-semibold text-danger">İçerik listesi açılamadı</p>
-        <p className="mt-1 text-xs text-ink-muted">{hata}</p>
-      </div>
+      <HataDurumu baslik="İçerik listesi açılamadı" mesaj={hata} />
     );
   }
 
@@ -282,9 +293,11 @@ export function BildirimHavuzu({
         <h2 className="text-sm font-semibold text-ink">
           İçerikler
           {bekleyen.length > 0 && (
-            <span className="ml-2 rounded-full bg-brand px-2 py-0.5 text-xs font-semibold text-white">
-              {bekleyen.length}
-            </span>
+            <SayiRozeti
+              sayi={bekleyen.length}
+              etiket={`${bekleyen.length} kart onay bekliyor`}
+              className="ml-2"
+            />
           )}
         </h2>
         {/*
@@ -306,7 +319,7 @@ export function BildirimHavuzu({
               onClick={() => void gecmisiCek()}
               disabled={gecmisBekliyor}
               title="Sayfanın ve kanalın son gönderilerini onay kartına çevirir"
-              className="rounded-lg border border-line px-2.5 py-1 text-[11px] font-medium text-ink transition hover:bg-surface-sunken disabled:opacity-40"
+              className={dugmeSinifi('ikincil', 'kucuk')}
             >
               {gecmisBekliyor ? 'Getiriliyor…' : 'Geçmiş içerikleri getir'}
             </button>
@@ -315,7 +328,7 @@ export function BildirimHavuzu({
       </header>
 
       {gecmisNotlari && (
-        <div className="rounded-xl border border-line bg-surface-sunken px-3 py-2">
+        <div className="rounded-kart border border-line bg-surface-sunken px-3 py-2">
           <ul className="space-y-0.5 text-[11px] text-ink-muted">
             {gecmisNotlari.map((n) => (
               <li key={n}>{n}</li>
@@ -386,18 +399,21 @@ export function BildirimHavuzu({
         YouTube'da, kanalda, izinlerde aranırdı. Uyarı listenin ÜSTÜNDE çünkü
         boş bir liste gördüğünde okunması gereken ilk şey bu.
       */}
+      {saglikHatasi && (
+        <Serit ton="bilgi" baslik="Bildirim aboneliklerinin durumu okunamadı">
+          {saglikHatasi} Kartlar yine de aşağıda.
+        </Serit>
+      )}
       {saglik
         .filter((h) => !h.ok)
         .map((h) => (
-          <div
+          <Serit
             key={h.socialProfileId}
-            className="rounded-xl border border-danger/40 bg-surface p-3"
+            ton="hata"
+            baslik={`${h.channelName}: bildirim aboneliği çalışmıyor`}
           >
-            <p className="text-xs font-semibold text-danger">
-              {h.channelName}: bildirim aboneliği çalışmıyor
-            </p>
-            <p className="mt-1 text-[11px] text-ink-muted">{h.message}</p>
-          </div>
+            {h.message}
+          </Serit>
         ))}
 
       {/*
@@ -417,20 +433,16 @@ export function BildirimHavuzu({
         ))}
 
       {liste.items.length === 0 && (
-        <div className="rounded-xl border border-dashed border-line bg-surface p-6 text-center">
-          <p className="text-sm font-semibold text-ink">Onay bekleyen içerik yok</p>
-          <p className="mx-auto mt-2 max-w-lg text-xs text-ink-muted">{liste.emptyReason}</p>
-        </div>
+        <BosDurum baslik="Onay bekleyen içerik yok" neden={liste.emptyReason} />
       )}
 
       {/* SÜZGEÇ YÜZÜNDEN BOŞALAN LİSTE, GERÇEKTEN BOŞ LİSTEYLE AYNI
           GÖRÜNMEMELİ: biri "kart yok", diğeri "kartlar başka sekmede". */}
       {liste.items.length > 0 && gosterilen.length === 0 && (
-        <div className="rounded-xl border border-dashed border-line bg-surface p-6 text-center">
-          <p className="text-sm text-ink-muted">
-            Bu süzgeçte kart yok. Diğer sekmelerde {liste.items.length} kart var.
-          </p>
-        </div>
+        <BosDurum
+          baslik="Bu süzgeçte kart yok"
+          neden={`Diğer sekmelerde ${liste.items.length} kart var.`}
+        />
       )}
 
       {/*
@@ -491,15 +503,17 @@ function SuzgecDugmesi({
       type="button"
       onClick={onSec}
       aria-pressed={secili}
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition ${
+      // SEÇİLİ SÜZGEÇ KOYU, KIRMIZI DEĞİL: kırmızı dolu yalnız sayfanın tek
+      // birincil eylemi; süzgeç bir görünüm seçimi.
+      className={`inline-flex h-[30px] items-center gap-1.5 rounded-full border px-3 text-[12.5px] font-semibold transition-colors ${
         secili
-          ? 'border-brand bg-brand text-white'
+          ? 'border-ink bg-ink text-surface'
           : 'border-line bg-surface text-ink-muted hover:text-ink'
       }`}
     >
       {kanal && <PlatformLogo kind={kanal} className="h-3.5 w-3.5" />}
       {etiket}
-      <span className={secili ? 'text-white/80' : 'text-ink-muted'}>{adet}</span>
+      <span className={secili ? 'opacity-80' : 'text-ink-muted'}>{adet}</span>
     </button>
   );
 }
@@ -749,7 +763,7 @@ function Kart({
         dikey gönderiyi de yatay küçük resmi de tanınır tutuyor ve tanımak
         için bu yeterli — ayrıntı için "Gönderiyi aç" var.
       */}
-      <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-xl bg-surface-sunken sm:h-28 sm:w-28">
+      <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-alan bg-surface-sunken sm:h-28 sm:w-28">
         {kayit.thumbnailUrl && !gorselDustu ? (
           <>
             {/*
@@ -817,7 +831,7 @@ function Kart({
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           {duzenleAcik ? (
-            <span className="inline-flex shrink-0 items-center rounded-md bg-brand/10 px-1.5 py-0.5 text-[11px] font-medium text-brand-strong ring-1 ring-inset ring-brand/30">
+            <span className="inline-flex h-6 shrink-0 items-center whitespace-nowrap rounded-full border border-line-strong bg-vurgu px-2.5 text-12 font-bold text-brand-strong">
               Düzenleniyor
             </span>
           ) : (
@@ -835,7 +849,7 @@ function Kart({
             konmuşsa RLS satırı göstermiyor ve boş bir rozet, rozetin hiç
             olmamasından kötü.
           */}
-          <span className="inline-flex min-w-0 items-center gap-1 rounded-md bg-surface-sunken px-1.5 py-0.5 text-[11px] text-ink-muted">
+          <span className="inline-flex min-w-0 items-center gap-1 rounded-full bg-surface-sunken px-1.5 py-0.5 text-[11px] text-ink-muted">
             <PlatformLogo
               kind={MECRA_KANALI[kayit.mecra]}
               className="h-3 w-3 shrink-0"
@@ -1373,14 +1387,7 @@ function DurumRozeti({ kayit }: { kayit: AutoBoostQueueItemRecord }) {
    * yayınlanmamış kart ya da YouTube yolu) kartın kendi durumu yazılıyor.
    */
   const anahtar = kayit.boostDurumu ?? kayit.status;
-  const ton = DURUM_TONU[anahtar] ?? 'bg-surface-sunken text-ink-muted ring-line';
-  return (
-    <span
-      className={`inline-flex shrink-0 items-center rounded-md px-1.5 py-0.5 text-[11px] font-medium ring-1 ring-inset ${ton}`}
-    >
-      {DURUM_ETIKETI[anahtar] ?? anahtar}
-    </span>
-  );
+  return <Rozet hal={DURUM_HALI[anahtar] ?? 'taslak'}>{DURUM_ETIKETI[anahtar] ?? anahtar}</Rozet>;
 }
 
 /**
@@ -1393,33 +1400,31 @@ function DurumRozeti({ kayit }: { kayit: AutoBoostQueueItemRecord }) {
  * ODAK HALKASI HER ÜÇÜNDE DE VAR: `focus-visible` olmadan klavye kullanıcısı
  * hangi düğmede olduğunu göremiyor ve bu düğmeler para harcıyor.
  */
-const BIRINCIL_DUGME =
-  'rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:bg-surface-sunken disabled:text-ink-muted';
+const BIRINCIL_DUGME = dugmeSinifi('koyu', 'kucuk');
 
-const IKINCIL_DUGME =
-  'rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink transition hover:bg-surface-sunken focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:text-ink-muted disabled:opacity-70';
+const IKINCIL_DUGME = dugmeSinifi('ikincil', 'kucuk');
 
-const SESSIZ_DUGME =
-  'rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink-muted transition hover:bg-surface-sunken hover:text-danger focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-70';
+const SESSIZ_DUGME = dugmeSinifi('hayalet', 'kucuk');
 
-const DURUM_TONU: Record<string, string> = {
-  pending: 'bg-warn-soft text-warn-strong ring-warn/30',
-  candidate: 'bg-warn-soft text-warn-strong ring-warn/30',
-  approved: 'bg-info-soft text-info-strong ring-info/30',
-  launching: 'bg-info-soft text-info-strong ring-info/30',
-  creating: 'bg-info-soft text-info-strong ring-info/30',
-  /*
-   * YAYINDAKİ KAMPANYA YEŞİL: para O AN harcanıyor ve bu, kartın taşıdığı
-   * en önemli bilgi. Biten ve reddedilen nötr; duraklatılmış UYARI renginde
-   * çünkü yapılacak bir iş var — ya sürdürülecek ya iptal edilecek.
-   */
-  active: 'bg-ok-soft text-ok-strong ring-ok/30',
-  launched: 'bg-surface-sunken text-ink-muted ring-line',
-  completed: 'bg-surface-sunken text-ink-muted ring-line',
-  paused: 'bg-warn-soft text-warn-strong ring-warn/30',
-  rejected: 'bg-surface-sunken text-ink-muted ring-line',
-  failed: 'bg-danger-soft text-danger-strong ring-danger/30',
-  kontrol: 'bg-danger-soft text-danger-strong ring-danger/30',
+/*
+ * DURUM ROZETİ DÖRT HÂLLE SINIRLI (`Rozet`). YAYINDAKİ KAMPANYA YEŞİL: para
+ * O AN harcanıyor ve bu, kartın taşıdığı en önemli bilgi; yeşil başka hiçbir
+ * hâlde yok. Duraklatılmış KARE nokta: biten ve reddedilen kartlardan
+ * ŞEKLİYLE ayrışıyor, çünkü yapılacak bir iş var (sürdür ya da iptal).
+ */
+const DURUM_HALI: Record<string, DurumHali> = {
+  pending: 'taslak',
+  candidate: 'taslak',
+  approved: 'taslak',
+  launching: 'taslak',
+  creating: 'taslak',
+  active: 'ok',
+  launched: 'taslak',
+  completed: 'taslak',
+  paused: 'dur',
+  rejected: 'taslak',
+  failed: 'hata',
+  kontrol: 'hata',
 };
 
 const DURUM_ETIKETI: Record<string, string> = {

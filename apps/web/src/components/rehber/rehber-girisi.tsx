@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { REHBER_AMAC_KODLARI, type RehberAmacKodu, type RehberKaydi, type RehberListesi, type RehberOzeti } from '@advetics/shared';
 import { ApiRequestError, apiFetch, onizlemeAdresi } from '@/lib/api';
 import { baglanti } from '@/lib/baglanti';
@@ -24,19 +24,35 @@ import {
   taslaklariAyir,
   topluSonucMetni,
   type GirisSekmesi,
+  type RozetTonu,
   type SatirEylemi,
 } from '@/lib/reklam-girisi';
+import { AcilirMenu, IKON_TETIK, MenuOgesi } from '@/components/ui/acilir-menu';
+import { Dugme, dugmeSinifi } from '@/components/ui/dugme';
+import { BosDurum, HataDurumu, Serit } from '@/components/ui/hal';
+import { Kart, KART_BAGLANTISI } from '@/components/ui/kart';
+import { Pencere } from '@/components/ui/pencere';
+import { Rozet, type DurumHali } from '@/components/ui/rozet';
+import { SayfaBasligi, SayfaIskeleti } from '@/components/ui/sayfa-basligi';
+import { SayfaIcDuzen, SayfaIcMenu } from '@/components/ui/sayfa-ic-menu';
+import { AdHucresi, Tablo, type TabloSutunu } from '@/components/ui/tablo';
 import { AMAC_IKONU, IKON, Ikon } from './ikonlar';
-import s from './rehber.module.css';
 
 type OnayTuru = 'taslagi_sil' | 'listeden_kaldir' | 'toplu_sil';
+
+/** Platform rozetinin tonu → ortak durum rozeti. Yeşil yalnız yayında olan için. */
+const ROZET_HALI: Readonly<Record<RozetTonu, DurumHali>> = { iyi: 'ok', hata: 'hata', notr: 'taslak' };
 
 /**
  * Rehberin GİRİŞİ (menüden gelinen yer). 2026-10-12'de sadeleşti; kullanıcı:
  * "ilk girişi çok kötü ve görüntü kirliliği hiç bir şey anlaşılmıyor ve
- * silinmiyor". Üç sekme (Google Ads'in durum süzgeci gibi), satır başına
- * görsel + ad + bütçe + platform rozeti, ⋯ menüsünde silme/kaldırma. Karar
- * mantığı `lib/reklam-girisi.ts` içinde ve orada sınanıyor.
+ * silinmiyor". Karar mantığı `lib/reklam-girisi.ts` içinde ve orada sınanıyor.
+ *
+ * 2026-10-14 BİRLEŞİK TASARIM (onaylı taslak `docs/marka/sayfa-taslaklari.html`
+ * `#campaign`): bölümler (Yayındakiler · Taslaklar · Arşiv) SAYFA İÇİ YAN
+ * MENÜDE, listeler TABLO (platform rozeti, bütçe sağa yaslı, tek eylem + ⋯),
+ * "Yeni reklam" başlığın sağında tek birincil. Bölüm adreste (`?sekme=`):
+ * yenileyen ya da bağlantıyı paylaşan kişi aynı bölüme döner.
  *
  * Liste okunamadıysa BOŞ liste gösterilmez, sunucunun mesajı gösterilir:
  * "taslağın yok" ile "taslakları okuyamadım" ayrı iş.
@@ -61,26 +77,10 @@ export function RehberGirisi({
   const router = useRouter();
   const [aciliyor, setAciliyor] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
-  const [menu, setMenu] = useState<string | null>(null);
   const [onay, setOnay] = useState<{ tur: OnayTuru; satirlar: RehberOzeti[] } | null>(null);
   const [onayAcik, setOnayAcik] = useState(false);
   const [isleniyor, setIsleniyor] = useState(false);
   const [islemHatasi, setIslemHatasi] = useState<string | null>(null);
-
-  // Menü dışına tıklayınca ya da Esc ile kapanır (açık menü odağı kilitlemesin).
-  useEffect(() => {
-    if (!menu) return;
-    const kapat = (e: MouseEvent) => {
-      if (!(e.target as HTMLElement).closest('[data-satir-menu]')) setMenu(null);
-    };
-    const tus = (e: KeyboardEvent) => e.key === 'Escape' && setMenu(null);
-    document.addEventListener('mousedown', kapat);
-    document.addEventListener('keydown', tus);
-    return () => {
-      document.removeEventListener('mousedown', kapat);
-      document.removeEventListener('keydown', tus);
-    };
-  }, [menu]);
 
   async function yeni() {
     setAciliyor(true);
@@ -113,7 +113,6 @@ export function RehberGirisi({
   }
 
   function eylem(r: RehberOzeti, e: SatirEylemi) {
-    setMenu(null);
     if (e === 'geri_getir') return void uygula('geri-getir', [r]);
     setOnay({ tur: e, satirlar: [r] });
     setOnayAcik(true);
@@ -130,192 +129,261 @@ export function RehberGirisi({
   const gorunen = sekme === 'taslaklar' ? taslak.guncel : gruplar[sekme];
   const metin = onay ? ONAY_METINLERI[onay.tur] : null;
 
-  const satir = (r: RehberOzeti, soluk = false) => {
+  /*
+   * TEK EYLEM + ⋯ (taslak `#campaign`). Menü yukarı açılıyor: tablo yatay
+   * kaydırma kabının içinde ve aşağı açılan menü son satırda kabın altına
+   * taşıp kırpılırdı. Menüdeki eylemlerin hepsi tek öğe, başlık satırı
+   * yüksekliğine sığıyor.
+   */
+  const eylemHucresi = (r: RehberOzeti) => {
     const eylemler = satirEylemleri(r);
-    const rozetler = platformRozetleri(r);
-    const butce = butceMetni(r.butce, (m, b) => formatMoney(m, b));
-    const plt = r.durum === 'taslak' ? taslakPlatformlari(r) : null;
     return (
-      <li key={r.id} className={s.gSatir} data-soluk={soluk || undefined}>
-        <Kucuk r={r} />
-        <div className={s.gAna}>
-          <Link className={s.gAd} href={satirAdresi(r)}>
-            {satirAdi(r, formatTarih)}
-          </Link>
-          <div className={s.gAlt}>
-            {rozetler.length > 0
-              ? rozetler.map((z) => (
-                  <span key={z.platform} className={s.gRozet} data-ton={z.ton} title={z.ipucu ?? undefined}>
-                    {z.etiket}
-                    {z.ipucu && <small> · {z.ipucu}</small>}
-                  </span>
-                ))
-              : r.durum === 'taslak' && (
-                  <span className={s.gRozet} data-ton="notr">
-                    Taslak{plt ? ` · ${plt}` : ''}
-                    {r.eksikSayisi > 0 && ` · ${r.eksikSayisi} eksik`}
-                  </span>
-                )}
-            {r.durum === 'arsivlendi' && (
-              <span className={s.gRozet} data-ton="notr">
-                Listeden kaldırıldı
-              </span>
-            )}
-            {butce && <span className={s.num}>{butce}</span>}
-            <span>{formatRelative(r.updatedAt)}</span>
-          </div>
-        </div>
-        <div className={s.gEylem}>
-          <Link className={s.ikincil} href={satirAdresi(r)}>
-            {birincilEylem(r)}
-          </Link>
-          {eylemler.length > 0 && (
-            <div className={s.gMenuKok} data-satir-menu>
-              <button
-                type="button"
-                className={s.gMenuDugme}
-                aria-label="Diğer işlemler"
-                aria-haspopup="menu"
-                aria-expanded={menu === r.id}
-                onClick={() => setMenu(menu === r.id ? null : r.id)}
-              >
+      <span className="inline-flex items-center justify-end gap-1.5">
+        <Link className={dugmeSinifi(r.durum === 'taslak' ? 'koyu' : 'ikincil', 'kucuk')} href={satirAdresi(r)}>
+          {birincilEylem(r)}
+        </Link>
+        {eylemler.length > 0 && (
+          <AcilirMenu
+            etiket="Diğer işlemler"
+            hizala="sag"
+            yon="yukari"
+            genislik="w-52"
+            tetik={({ acik: _acik, ...t }) => (
+              <button type="button" {...t} className={IKON_TETIK} aria-label="Diğer işlemler" disabled={isleniyor}>
                 <Ikon d={IKON.dahaFazla} />
               </button>
-              {/* Menü DOM'dan çıkmıyor; görünürlük geçişle (panel kuralı). */}
-              <div className={`${s.setMenu} ${s.gMenu}`} role="menu" data-acik={menu === r.id} aria-hidden={menu !== r.id}>
-                {eylemler.map((e) => (
-                  <button key={e} type="button" role="menuitem" tabIndex={menu === r.id ? 0 : -1} disabled={isleniyor} onClick={() => eylem(r, e)}>
-                    {EYLEM_ADI[e]}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </li>
+            )}
+          >
+            {eylemler.map((e) => (
+              <MenuOgesi key={e} tehlike={e !== 'geri_getir'} devreDisi={isleniyor} onClick={() => eylem(r, e)}>
+                {EYLEM_ADI[e]}
+              </MenuOgesi>
+            ))}
+          </AcilirMenu>
+        )}
+      </span>
     );
   };
 
+  const adSutunu = (baslik: string): TabloSutunu<RehberOzeti> => ({
+    anahtar: 'ad',
+    baslik,
+    hucre: (r) => (
+      <span className="flex min-w-0 items-center gap-3">
+        <Kucuk r={r} />
+        <AdHucresi
+          ad={<Link href={satirAdresi(r)}>{satirAdi(r, formatTarih)}</Link>}
+          alt={
+            r.durum === 'taslak'
+              ? ['Taslak', taslakPlatformlari(r)].filter(Boolean).join(' · ')
+              : r.durum === 'arsivlendi'
+                ? 'Listeden kaldırıldı'
+                : undefined
+          }
+        />
+      </span>
+    ),
+  });
+  const butceSutunu: TabloSutunu<RehberOzeti> = {
+    anahtar: 'butce',
+    baslik: 'Bütçe',
+    sayi: true,
+    hucre: (r) => <span className="tutar">{butceMetni(r.butce, (m, b) => formatMoney(m, b)) ?? '-'}</span>,
+  };
+  const zamanSutunu = (baslik: string): TabloSutunu<RehberOzeti> => ({
+    anahtar: 'zaman',
+    baslik,
+    ikincil: true,
+    hucre: (r) => <span className="whitespace-nowrap text-ink-muted">{formatRelative(r.updatedAt)}</span>,
+  });
+  const eylemSutunu: TabloSutunu<RehberOzeti> = { anahtar: 'eylem', baslik: '', sayi: true, hucre: eylemHucresi };
+  const platformSutunu: TabloSutunu<RehberOzeti> = {
+    anahtar: 'platform',
+    baslik: 'Platform',
+    hucre: (r) => {
+      const rozetler = platformRozetleri(r);
+      if (rozetler.length === 0) return <span className="text-ink-muted">-</span>;
+      return (
+        <span className="flex flex-wrap gap-1.5">
+          {rozetler.map((z) => (
+            <span key={z.platform} className="grid gap-0.5">
+              <Rozet hal={ROZET_HALI[z.ton]} title={z.ipucu ?? undefined}>
+                {z.etiket}
+              </Rozet>
+              {z.ipucu && <small className="max-w-[28ch] text-12 text-danger-strong">{z.ipucu}</small>}
+            </span>
+          ))}
+        </span>
+      );
+    },
+  };
+  const eksikSutunu: TabloSutunu<RehberOzeti> = {
+    anahtar: 'eksik',
+    baslik: 'Eksik',
+    hucre: (r) =>
+      r.amac === null ? (
+        <Rozet hal="taslak">Amaç yok</Rozet>
+      ) : r.eksikSayisi > 0 ? (
+        <Rozet hal="hata">{r.eksikSayisi} eksik</Rozet>
+      ) : (
+        <Rozet hal="taslak">Eksik yok</Rozet>
+      ),
+  };
+  const sutunlar: Record<GirisSekmesi, Array<TabloSutunu<RehberOzeti>>> = {
+    yayindakiler: [adSutunu('Reklam'), platformSutunu, butceSutunu, zamanSutunu('Son değişiklik'), eylemSutunu],
+    taslaklar: [adSutunu('Taslak'), eksikSutunu, butceSutunu, zamanSutunu('Son dokunuş'), eylemSutunu],
+    arsiv: [adSutunu('Reklam'), platformSutunu, butceSutunu, zamanSutunu('Son değişiklik'), eylemSutunu],
+  };
+  const tablo = (satirlar: RehberOzeti[], etiket: string) => (
+    <Tablo
+      etiket={etiket}
+      sutunlar={sutunlar[sekme]}
+      satirlar={satirlar}
+      satirAnahtari={(r) => r.id}
+      sayfalama={{ bas: satirlar.length ? 1 : 0, son: satirlar.length, toplam: satirlar.length }}
+    />
+  );
+
+  const baslik = (
+    <SayfaBasligi
+      bolum="Oluştur"
+      baslik="AdvCampaign"
+      aciklama={
+        <>
+          <b className="text-ink">{workspaceAdi}</b> · Meta ve Google reklamını altı adımda kur
+        </>
+      }
+      eylemler={
+        <Dugme ikon="＋" bekliyor={aciliyor} onClick={() => void yeni()}>
+          Yeni reklam
+        </Dugme>
+      }
+    />
+  );
+
   return (
-    <div className={`${s.kok} ${s.giris}`}>
-      <div className={s.girisUst}>
-        <div>
-          <h1 className="sayfa-baslik">AdvCampaign</h1>
-          <div className={s.altSatir}>
-            <b>{workspaceAdi}</b> · Meta ve Google reklamını altı adımda kur
-          </div>
-        </div>
-        <button type="button" className={s.birincil} disabled={aciliyor} onClick={() => void yeni()}>
-          {aciliyor ? 'Açılıyor…' : 'Yeni reklam'}
-        </button>
-      </div>
+    <div className="grid w-full gap-6">
+      {baslik}
       {devredildi && (
-        <div className={s.neden} role="status">
-          <span>İyileştir&apos;den gelen istek artık sohbetle değil, altı adımlı rehberle kuruluyor. &quot;Yeni reklam&quot;la başla; amaç, bütçe ve metni adım adım seçersin.</span>
-        </div>
+        <Serit ton="bilgi" baslik="İyileştir'den gelen istek rehberle kuruluyor">
+          Sohbet kalktı. &quot;Yeni reklam&quot;la başla; amaç, bütçe ve metni adım adım seçersin.
+        </Serit>
       )}
       {hata && (
-        <p className={s.hataMetni} role="alert" style={{ margin: 0 }}>
-          Yeni reklam açılamadı: {hata}
-        </p>
+        <Serit ton="hata" baslik="Yeni reklam açılamadı">
+          {hata}
+        </Serit>
       )}
       {islemHatasi && (
-        <p className={s.hataMetni} role="alert" style={{ margin: 0 }}>
-          İşlem tamamlanamadı: {islemHatasi}
-        </p>
+        <Serit ton="hata" baslik="İşlem tamamlanamadı">
+          {islemHatasi}
+        </Serit>
       )}
-      <section className={s.kart}>
-        {listeHatasi ? (
-          <p className={s.hataMetni} role="alert" style={{ margin: 0, padding: '14px 16px' }}>
-            Reklam listesi okunamadı: {listeHatasi}
-          </p>
-        ) : (
-          <>
-            <nav className={s.gSekmeler} aria-label="Reklam durumu">
-              {GIRIS_SEKMELERI.map((k: GirisSekmesi) => (
-                <Link key={k} href={baglanti('/reklam', tasinan, { sekme: k })} className={s.gSekme} aria-current={k === sekme ? 'page' : undefined}>
-                  {SEKME_ADLARI[k]} <span className={s.num}>{gruplar[k].length}</span>
-                </Link>
-              ))}
-            </nav>
-            {kesildi && (
-              <p className={s.gNot}>
-                {liste.satirlar.length} / {liste.toplam} kayıt gösteriliyor; sekme sayıları gösterilenlere göre. En eski arşiv kayıtları listede yok.
-              </p>
-            )}
-            {gorunen.length === 0 && !(sekme === 'taslaklar' && taslak.eski.length > 0) ? (
-              <p className={s.bosMetin}>
-                {BOS_SEKME_METNI[sekme]}{' '}
-                {sekme !== 'arsiv' && (
-                  <button type="button" className={s.metinDugme} disabled={aciliyor} onClick={() => void yeni()}>
+      {listeHatasi ? (
+        <HataDurumu baslik="Reklam listesi okunamadı" mesaj={listeHatasi} onTekrar={() => router.refresh()} />
+      ) : (
+        <SayfaIcDuzen
+          menu={
+            <SayfaIcMenu
+              etiket="Reklam durumu"
+              secili={sekme}
+              ogeler={GIRIS_SEKMELERI.map((k: GirisSekmesi) => ({
+                deger: k,
+                etiket: SEKME_ADLARI[k],
+                href: baglanti('/reklam', tasinan, { sekme: k }),
+                sayi: gruplar[k].length,
+              }))}
+            />
+          }
+        >
+          {kesildi && (
+            <Serit ton="bilgi" baslik={`${liste.satirlar.length} / ${liste.toplam} kayıt gösteriliyor`}>
+              Bölüm sayıları gösterilenlere göre. En eski arşiv kayıtları listede yok.
+            </Serit>
+          )}
+          {gorunen.length === 0 && !(sekme === 'taslaklar' && taslak.eski.length > 0) ? (
+            <BosDurum
+              baslik={`${SEKME_ADLARI[sekme]} boş`}
+              neden={BOS_SEKME_METNI[sekme]}
+              eylem={
+                sekme !== 'arsiv' && (
+                  <Dugme ton="ikincil" boyut="kucuk" bekliyor={aciliyor} onClick={() => void yeni()}>
                     Yeni reklam
-                  </button>
-                )}
-              </p>
-            ) : (
-              <ul className={s.liste}>{gorunen.map((r) => satir(r))}</ul>
-            )}
-            {sekme === 'taslaklar' && taslak.eski.length > 0 && (
-              <>
-                <div className={s.gEskiBaslik}>
-                  <div>
-                    <b>Eski taslaklar ({taslak.eski.length})</b>
-                    <small>Amaç seçilmemiş ya da bir haftadır dokunulmamış yarım taslaklar.</small>
-                  </div>
-                  <button
-                    type="button"
-                    className={s.ikincil}
-                    disabled={isleniyor}
-                    onClick={() => {
-                      setOnay({ tur: 'toplu_sil', satirlar: taslak.eski });
-                      setOnayAcik(true);
-                    }}
-                  >
-                    Hepsini sil
-                  </button>
-                </div>
-                <ul className={s.liste}>{taslak.eski.map((r) => satir(r, true))}</ul>
-              </>
-            )}
-          </>
-        )}
-      </section>
+                  </Dugme>
+                )
+              }
+            />
+          ) : (
+            gorunen.length > 0 && (
+              <Kart dolgu={false}>{tablo(gorunen, SEKME_ADLARI[sekme])}</Kart>
+            )
+          )}
+          {sekme === 'taslaklar' && taslak.eski.length > 0 && (
+            <Kart
+              dolgu={false}
+              baslik="Eski taslaklar"
+              baslikEki={`${taslak.eski.length} taslak · amaç seçilmemiş ya da bir haftadır dokunulmamış`}
+              eylem={
+                <Dugme
+                  ton="tehlike"
+                  boyut="kucuk"
+                  disabled={isleniyor}
+                  onClick={() => {
+                    setOnay({ tur: 'toplu_sil', satirlar: taslak.eski });
+                    setOnayAcik(true);
+                  }}
+                >
+                  Hepsini sil
+                </Dugme>
+              }
+            >
+              {tablo(taslak.eski, 'Eski taslaklar')}
+            </Kart>
+          )}
+        </SayfaIcDuzen>
+      )}
 
-      {/* Pencere DOM'da kalıyor; açılıp kapanma görünürlük geçişiyle (panel kuralı). */}
-      <div className={`${s.perde} ${onayAcik ? s.acik : ''}`} aria-hidden={!onayAcik}>
-        <div className={s.pencere} role="dialog" aria-modal="true" aria-labelledby="giris-onay-baslik">
-          <h3 id="giris-onay-baslik">{metin?.baslik}</h3>
-          <p>
+      {/* Pencere DOM'da kalıyor (`Pencere`): açılıp kapanma görünürlük geçişiyle. */}
+      <Pencere
+        acik={onayAcik}
+        onKapat={() => !isleniyor && setOnayAcik(false)}
+        baslik={metin?.baslik ?? ''}
+        genislik="dar"
+        altEylemler={
+          <>
+            <Dugme ton="ikincil" disabled={isleniyor} onClick={() => setOnayAcik(false)}>
+              Vazgeç
+            </Dugme>
+            <Dugme
+              ton={onay?.tur === 'listeden_kaldir' ? 'birincil' : 'tehlike'}
+              bekliyor={isleniyor}
+              disabled={!onay}
+              onClick={() => onay && void uygula('arsivle', onay.satirlar)}
+            >
+              {isleniyor ? metin?.suruyor : metin?.dugme}
+            </Dugme>
+          </>
+        }
+      >
+        <div className="grid gap-3 text-14 text-ink">
+          <p className="m-0">
             {metin?.govde}
             {onay && onay.satirlar.length > 1 && ` (${onay.satirlar.length} taslak)`}
           </p>
           {onay && onay.satirlar.length === 1 && (
-            <p>
+            <p className="m-0">
               <b>{satirAdi(onay.satirlar[0]!, formatTarih)}</b>
             </p>
           )}
           {metin?.yoneticiBaglantisi && (
-            <p>
-              <Link className={s.metinDugme} href={baglanti(REKLAM_YONETICISI, tasinan)}>
-                Reklam Yöneticisi&apos;ne git
+            <p className="m-0">
+              <Link className={KART_BAGLANTISI} href={baglanti(REKLAM_YONETICISI, tasinan)}>
+                Reklam Yöneticisi&apos;ne git →
               </Link>
             </p>
           )}
-          <div className={s.gPencereAlt}>
-            <button type="button" className={s.ikincil} disabled={isleniyor} onClick={() => setOnayAcik(false)}>
-              Vazgeç
-            </button>
-            <button
-              type="button"
-              className={s.birincil}
-              disabled={isleniyor || !onay}
-              onClick={() => onay && void uygula('arsivle', onay.satirlar)}
-            >
-              {isleniyor ? metin?.suruyor : metin?.dugme}
-            </button>
-          </div>
         </div>
-      </div>
+      </Pencere>
     </div>
   );
 }
@@ -334,40 +402,35 @@ const EYLEM_ADI: Readonly<Record<SatirEylemi, string>> = {
 function Kucuk({ r }: { r: RehberOzeti }) {
   const [dustu, setDustu] = useState(false);
   const amac = r.amac && (REHBER_AMAC_KODLARI as readonly string[]).includes(r.amac) ? (r.amac as RehberAmacKodu) : null;
+  const kutu = 'h-10 w-10 shrink-0 rounded-alan border border-line bg-surface-sunken';
   if (r.gorselVarlikId && !dustu) {
     // Düz <img>: önizleme kimlik doğrulamalı API ucu, next/image onu optimize edemez.
     return (
-      <img className={s.gKucuk} src={onizlemeAdresi(`/assets/${r.gorselVarlikId}/preview`)} alt="" loading="lazy" onError={() => setDustu(true)} />
+      <img className={`${kutu} object-cover`} src={onizlemeAdresi(`/assets/${r.gorselVarlikId}/preview`)} alt="" loading="lazy" onError={() => setDustu(true)} />
     );
   }
   return (
-    <span className={s.gKucuk} data-simge title={dustu ? 'Görsel yüklenemedi' : undefined} aria-hidden>
-      {amac ? <Ikon d={AMAC_IKONU[amac]} /> : <Ikon d={IKON.bilgi} />}
+    <span className={`${kutu} grid place-items-center text-ink-muted`} title={dustu ? 'Görsel yüklenemedi' : undefined} aria-hidden>
+      {amac ? <Ikon d={AMAC_IKONU[amac]} boyut={20} /> : <Ikon d={IKON.bilgi} boyut={20} />}
     </span>
   );
 }
 
-/** Rehber açılamadığında (okuma hatası, yanlış workspace, yetki) tek kart. */
+/** Rehber açılamadığında (okuma hatası, yanlış workspace, yetki) tek kutu. */
 export function RehberMesaji({ baslik, children, geri }: { baslik: string; children: React.ReactNode; geri?: string }) {
   return (
-    <div className={`${s.kok} ${s.giris}`}>
-      <div className={s.girisUst}>
-        <h1 className="sayfa-baslik">AdvCampaign</h1>
-      </div>
-      <section className={s.kart} role="alert">
-        <h2 className={s.kartBaslik}>{baslik}</h2>
-        <p className={s.bosMetin}>
-          {children}
-          {geri && (
-            <>
-              {' '}
-              <Link className={s.metinDugme} href={geri}>
-                Reklam listesine dön
-              </Link>
-            </>
-          )}
-        </p>
-      </section>
-    </div>
+    <SayfaIskeleti bolum="Oluştur" baslik="AdvCampaign">
+      <HataDurumu
+        baslik={baslik}
+        mesaj={children}
+        eylem={
+          geri && (
+            <Link className={KART_BAGLANTISI} href={geri}>
+              Reklam listesine dön →
+            </Link>
+          )
+        }
+      />
+    </SayfaIskeleti>
   );
 }

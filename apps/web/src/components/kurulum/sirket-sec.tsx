@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Halka } from '@/components/yukleniyor';
+import { Serit } from '@/components/ui/hal';
+import { BuyukSecim, SecimKarti, Soru } from '@/components/ui/sihirbaz';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { kurulumAdresi } from './kurulum-akisi';
 
@@ -35,33 +36,38 @@ export function SirketSec({ sirketler }: { sirketler: Array<{ id: string; name: 
     }
   }
 
+  /*
+   * SEÇİM KARTI = TEK TIK. Şirket seçmek zaten tek kararlı bir adım; ayrıca
+   * "Devam" istemek bir tıkı boşa harcardı. Geçiş sürerken bütün kartlar
+   * kilitli (ikinci tık ikinci bir geçiş başlatırdı) ve seçilen kart
+   * çizgisinde ve alt satırında bunu söylüyor.
+   */
   return (
-    <section className="rounded-2xl border border-line bg-surface px-4 py-5 sm:px-6">
-      <h2 className="text-lg font-semibold text-ink">Workspace hangi şirkette olacak?</h2>
-      <p className="mt-1 text-sm text-ink-muted">
-        Şu an bütün şirketleri birlikte görüyorsun. Seçtiğin şirkete geçilir ve kurulum orada
-        devam eder.
-      </p>
+    <section className="grid gap-5">
+      <Soru
+        ust="Yeni workspace"
+        soru="Workspace hangi şirkette olacak?"
+        aciklama="Şu an bütün şirketleri birlikte görüyorsun. Seçtiğin şirkete geçilir ve kurulum orada devam eder."
+      />
       {hata && (
-        <p role="alert" className="mt-3 text-sm text-danger-strong">
+        <Serit ton="hata" baslik="Şirkete geçilemedi">
           {hata}
-        </p>
+        </Serit>
       )}
-      <ul className="mt-4 grid gap-2 sm:grid-cols-2">
+      <BuyukSecim sutun={3}>
         {sirketler.map((s) => (
-          <li key={s.id}>
-            <button
-              type="button"
-              onClick={() => void sec(s.id)}
-              disabled={bekleyen !== null}
-              className="flex min-h-12 w-full items-center justify-between gap-2 rounded-lg border border-line px-3.5 py-2.5 text-left text-sm font-medium text-ink transition hover:border-brand hover:bg-surface-sunken disabled:opacity-50"
-            >
-              <span className="truncate">{s.name}</span>
-              {bekleyen === s.id && <Halka />}
-            </button>
-          </li>
+          <SecimKarti
+            key={s.id}
+            ikon={s.name.trim().charAt(0).toLocaleUpperCase('tr') || '·'}
+            baslik={<span className="block truncate">{s.name}</span>}
+            aciklama="Workspace bu şirkette açılır."
+            alt={bekleyen === s.id ? 'Şirkete geçiliyor…' : undefined}
+            secili={bekleyen === s.id}
+            disabled={bekleyen !== null}
+            onClick={() => void sec(s.id)}
+          />
         ))}
-      </ul>
+      </BuyukSecim>
     </section>
   );
 }
