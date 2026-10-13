@@ -40,7 +40,7 @@ import {
   type IAdPlatformProvider,
   type OAuthTokens,
 } from './provider.types';
-import { googleMusteriEtiketi, googleMusteriKimligiMi, kimlikKarari } from './baglanti-kimligi';
+import { eksikKokler, googleMusteriEtiketi, googleMusteriKimligiMi, kimlikKarari } from './baglanti-kimligi';
 import { baglantiHatasiMetni } from './baglanti-hatasi';
 import { TokenVaultService } from './token-vault.service';
 import { OdemeTetigiService } from '../alerts/odeme-tetigi.service';
@@ -957,10 +957,18 @@ export class ConnectionsService {
        * ve kırpılan ilk şey `fbtrace` oluyordu — Meta'ya soru sorarken istenen
        * tek şey o.
        */
+      /*
+       * KENDİ CÜMLEMİZ KIRPILMAZ. 300 sınırı platformun ham (ve boyu
+       * bilinmeyen) metni için; kimlik/izin reddi gibi bizim yazdığımız
+       * cümleler ajans adıyla 300'ü aşıyordu ve kırpılan şey cümlenin SONU
+       * oluyordu: "Bağlantı değiştirilmedi" ve ne yapılacağı (Ajan 4,
+       * 2026-10-13 ölçüm: 328 karakter). Üst sınır yine var — adres sonsuz
+       * uzamasın.
+       */
       const q = new URLSearchParams({
         connection: 'hata',
         platform,
-        mesaj: baglantiHatasiMetni(err).slice(0, 300),
+        mesaj: baglantiHatasiMetni(err).slice(0, err instanceof BadRequestException ? 800 : 300),
         ...(olcumIstendi ? { izin: 'olcum' } : {}),
       });
       return { redirectPath: donusAdresi(backTo, q.toString()) };
@@ -999,7 +1007,7 @@ export class ConnectionsService {
         platform: true,
         externalUserId: true,
         organization: { select: { name: true } },
-        connectedBy: { select: { fullName: true, email: true } },
+        connectedBy: { select: { fullName: true } },
       },
     });
     if (!hedef || hedef.platform !== platform) {
@@ -1007,16 +1015,42 @@ export class ConnectionsService {
     }
 
     const ad = PLATFORM_ADI[platform];
-    if (!kimlikKarari(hedef.externalUserId, tokens).ayni) {
-      const kimin = hedef.clientId === null ? `ajansın (${hedef.organization.name}) ${ad}` : `bu workspace’in ${ad}`;
+    /*
+     * KİŞİNİN E-POSTASI BU CÜMLEDE YOK (Ajan 4, 2026-10-13). Metin dönüş
+     * adresinin SORGU DİZESİNDE (`mesaj=`) taşınıyor: tarayıcı geçmişine,
+     * sunucunun erişim kayıtlarına ve yönlendirme başlığına düşüyor. Ad
+     * yeterli ipucu; e-posta bağlantı kartında zaten görünüyor.
+     */
+    const kimin = hedef.clientId === null ? `ajansın (${hedef.organization.name}) ${ad}` : `bu workspace’in ${ad}`;
+    const kurucu = `Bağlantıyı kuran: ${hedef.connectedBy.fullName}.`;
+    const karar = kimlikKarari(hedef.externalUserId, tokens);
+    if (!karar.ayni) {
       const hesapIpucu = googleMusteriKimligiMi(hedef.externalUserId)
         ? ` (Google Ads ${googleMusteriEtiketi(hedef.externalUserId)} hesabına erişen)`
         : '';
       throw new BadRequestException(
-        `Bu izin ${kimin} bağlantısına verilmeli ama izin ekranında başka bir ${ad} hesabıyla giriş yapıldı. ` +
-          `Bağlantıyı kuran ${ad} hesabıyla${hesapIpucu} giriş yapıp tekrar dene. ` +
-          `Bağlantıyı panelde ${hedef.connectedBy.fullName} (${hedef.connectedBy.email}) kurmuştu. Bağlantı değiştirilmedi.`,
+        `Bağlantı değiştirilmedi: izin ekranında ${kimin} bağlantısının hesabı yerine başka bir ${ad} hesabı seçildi. ` +
+          `Kuran hesapla${hesapIpucu} tekrar dene. ${kurucu}`,
       );
+    }
+    if (karar.kanit === 'hesap_erisimi') {
+      // (b) kişi kanıtı değil — bkz. `eksikKokler`. Bağlantının beslediği
+      // hesap ağaçlarının HEPSİNİ görmeyen token buraya yazılmaz.
+      const kokler = await this.admin.$queryRaw<Array<{ kok: string }>>(Prisma.sql`
+        SELECT DISTINCT COALESCE(manager_external_id, external_id) AS kok
+          FROM ad_accounts
+         WHERE connection_id = ${hedefId}::uuid AND client_id IS NOT NULL`);
+      const eksik = eksikKokler(
+        kokler.map((k) => k.kok),
+        tokens.erisilebilirHesaplar,
+      );
+      if (eksik.length > 0) {
+        throw new BadRequestException(
+          `Bağlantı değiştirilmedi: seçilen ${ad} hesabı bu bağlantının beslediği ${eksik.length} hesap ağacını görmüyor ` +
+            `(${eksik.slice(0, 3).map(googleMusteriEtiketi).join(', ')}${eksik.length > 3 ? ', …' : ''}). ` +
+            `Bu token yazılsaydı o hesapların verisi dururdu. Kuran hesapla tekrar dene. ${kurucu}`,
+        );
+      }
     }
 
     const provider = this.provider(platform);

@@ -5,7 +5,7 @@ import { AJANS_UST_HESAP, createHarness, IDS, seedAjans, seedTenant, type Harnes
 import type { PrismaService } from '../../prisma/prisma.service';
 import { KurulumService } from '../kurulum/kurulum.service';
 import { ConnectionsService } from './connections.service';
-import { kimlikKarari } from './baglanti-kimligi';
+import { eksikKokler, kimlikKarari } from './baglanti-kimligi';
 import type { OAuthTokens } from './provider.types';
 import { GOOGLE_OLCUM_SCOPES } from './providers/google.provider';
 
@@ -214,7 +214,13 @@ beforeEach(async () => {
     AJANS_UST_HESAP,
   ]);
   await h.q(`INSERT INTO clients (id, org_id, name, slug, updated_at) VALUES ($1, $2, 'Metropol WS', 'metropol-ws', now())`, [MUSTERI_WS, MUSTERI_ORG]);
-  await h.q(`UPDATE ad_accounts SET org_id = $2, client_id = $3 WHERE id = $1`, [IDS.adAccount, MUSTERI_ORG, MUSTERI_WS]);
+  // Hesap ajansın MCC'sinin (kayıtlı kimlik) altında: kökü AJANS_KIMLIK.
+  await h.q(`UPDATE ad_accounts SET org_id = $2, client_id = $3, manager_external_id = $4 WHERE id = $1`, [
+    IDS.adAccount,
+    MUSTERI_ORG,
+    MUSTERI_WS,
+    AJANS_KIMLIK,
+  ]);
 });
 
 describe('KRİTİK: hedefli dönüş (Ölçüm izinlerini ver)', () => {
@@ -244,9 +250,43 @@ describe('KRİTİK: hedefli dönüş (Ölçüm izinlerini ver)', () => {
     const q = sorgu(redirectPath);
     expect(q.get('connection')).toBe('hata');
     expect(q.get('izin')).toBe('olcum');
-    expect(q.get('mesaj')).toContain('başka bir Google hesabıyla');
+    expect(q.get('mesaj')).toContain('başka bir Google hesabı seçildi');
     expect(q.get('mesaj')).toContain('960-813-6521');
-    expect(q.get('mesaj')).toContain('test@advetics.com');
+    // E-posta dönüş ADRESİNDE taşınmaz (geçmiş, erişim kaydı); ad yeterli.
+    expect(redirectPath).not.toContain('advetics.com');
+    expect(q.get('mesaj')).not.toContain('@');
+  });
+
+  it('KRİTİK: uzun ajans adında da cümle KIRPILMAZ (kendi metnimiz 300 sınırına tabi değil)', async () => {
+    await h.q(`UPDATE organizations SET name = $2 WHERE id = $1`, [IDS.org, 'Profaj Dijital Reklam Medya Yazılım Danışmanlık Organizasyon ve Pazarlama Hizmetleri Sanayi ve Ticaret Anonim Şirketi']);
+    tokenlar = ajansKisisi({ externalUserId: '111111111111111111111', kisiKimligi: '111111111111111111111', erisilebilirHesaplar: ['7778889999'] });
+    const { redirectPath } = await svc.handleCallback('google', { code: 'k', state: await state({ hedef: IDS.connection, olcum: true }) }, META);
+    const mesaj = sorgu(redirectPath).get('mesaj')!;
+    expect(mesaj.length).toBeGreaterThan(300);
+    expect(mesaj).toMatch(/Bağlantıyı kuran: [^.]+\.$/);
+  });
+
+  it('KRİTİK: aynı MCC’yi gören AMA atanmış başka bir hesap ağacını görmeyen hesap ajansın token’ını EZEMEZ', async () => {
+    // İkinci atanmış hesap, ajansın görebildiği BAŞKA bir kökün altında.
+    await h.q(
+      `INSERT INTO ad_accounts (id, org_id, client_id, connection_id, platform, external_id, name, currency, timezone, status, manager_external_id, updated_at)
+       SELECT gen_random_uuid(), org_id, client_id, connection_id, platform, '6660000002', 'Diğer ağaç', currency, timezone, status, '4440000000', now()
+         FROM ad_accounts WHERE id = $1`,
+      [IDS.adAccount],
+    );
+    // Meslektaş: ajansın MCC'sine (kayıtlı kimlik) erişiyor, 444-000-0000'a erişmiyor.
+    tokenlar = ajansKisisi({ externalUserId: '555555555555555555555', kisiKimligi: '555555555555555555555', erisilebilirHesaplar: [AJANS_KIMLIK] });
+    const { redirectPath } = await svc.handleCallback('google', { code: 'k', state: await state({ hedef: IDS.connection, olcum: true }) }, META);
+
+    expect(await ajansKapsamlari()).toEqual([ADWORDS]);
+    const q = sorgu(redirectPath);
+    expect(q.get('connection')).toBe('hata');
+    expect(q.get('mesaj')).toContain('444-000-0000');
+
+    // Kontrol: iki ağacı da gören (asıl kişi) geçiyor.
+    tokenlar = ajansKisisi({ erisilebilirHesaplar: [AJANS_KIMLIK, '4440000000'] });
+    const ikinci = await svc.handleCallback('google', { code: 'k', state: await state({ hedef: IDS.connection, olcum: true }) }, META);
+    expect(sorgu(ikinci.redirectPath).get('connection')).toBe('basarili');
   });
 
   it('KRİTİK: Google Ads kutusu kaldırılmış token ajansın satırına yazılmaz', async () => {
@@ -329,6 +369,11 @@ describe('kimlik kıyası', () => {
   });
   it('sub uzayındaki kayıt yalnız sub ile eşleşir; erişim listesi onu kurtarmaz', () => {
     expect(kimlikKarari('999999999999999999999', { ...yeni, erisilebilirHesaplar: ['999999999999999999999'] }).ayni).toBe(false);
+  });
+  it('eksik kökler: tiresiz kıyas, tekrar yok, boş gerekli = kapsıyor', () => {
+    expect(eksikKokler(['444-000-0000', '4440000000', AJANS_KIMLIK], [AJANS_KIMLIK])).toEqual(['4440000000']);
+    expect(eksikKokler([], undefined)).toEqual([]);
+    expect(eksikKokler([AJANS_KIMLIK], undefined)).toEqual([AJANS_KIMLIK]);
   });
   it('tek uzaylı platform (Meta) yalnız birebir eşitlik', () => {
     expect(kimlikKarari('123', { externalUserId: '123' }).ayni).toBe(true);

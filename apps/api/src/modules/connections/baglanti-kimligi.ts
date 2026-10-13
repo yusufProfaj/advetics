@@ -70,3 +70,31 @@ export function kimlikKarari(kayitli: string, yeni: YeniKimlik): KimlikKarari {
 export function googleMusteriEtiketi(deger: string): string {
   return googleMusteriKimligiMi(deger) ? `${deger.slice(0, 3)}-${deger.slice(3, 6)}-${deger.slice(6)}` : deger;
 }
+
+/**
+ * ═══ (b) "KÖK ERİŞİM" TEK BAŞINA TOKEN DEĞİŞTİRMEYE YETMEZ ═══
+ *
+ * (b) kişi kanıtı değil: kayıtlı Ads hesabına doğrudan erişen HER kişi
+ * geçiyor. Kimlik ayrımı için doğru, token'ı EZMEK için yetersiz (Ajan 4,
+ * 2026-10-13): ajans yöneticisi izin ekranındaki hesap seçicide kendi
+ * Google hesabını seçerse — tarayıcıda birden çok hesap açıkken en olağan
+ * hata — ve o hesap ajansın MCC'sini görüyorsa, ajansın bağlantısı onun
+ * token'ına geçer. Onun GÖRMEDİĞİ hesap ağaçlarındaki atanmış hesapların
+ * senkronizasyonu o andan itibaren `permission_denied` ile düşer; ekran
+ * "Ölçüm izinleri verildi" der.
+ *
+ * Kural: token yalnız, bağlantının BESLEDİĞİ (atanmış) hesapların bütün
+ * kökleri (`manager_external_id ?? external_id`) yeni token'ın erişim
+ * listesindeyse ezilebilir. Asıl kişinin token'ı bu kökleri zaten görüyor
+ * — keşif onları ONUN token'ından çıkardı. Eksik kalanlar döner; boş dizi =
+ * kapsıyor. Kıyas tiresiz (Ads arayüzü `123-456-7890` yazıyor).
+ *
+ * Yalnız TAZELEME yolunda. "Aynı kimlik başka satırda mı" engelinde (b)
+ * GEVŞEK kalıyor: orada yanlış "aynı" bir RET (görünür), yanlış "farklı"
+ * ise ajans havuzunun müşteri şirketine kopyalanması (sızıntı).
+ */
+export function eksikKokler(gerekli: readonly string[], erisilebilir: readonly string[] | undefined): string[] {
+  const tiresiz = (s: string) => s.replace(/-/g, '');
+  const gorulen = new Set((erisilebilir ?? []).map(tiresiz));
+  return [...new Set(gerekli.map(tiresiz))].filter((k) => !gorulen.has(k)).sort();
+}

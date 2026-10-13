@@ -100,6 +100,33 @@ describe('KRİTİK: plan', () => {
     expect(plan.reddedilen.map((r) => r.sebep)).toEqual([expect.stringContaining('AJANS şirketinde'), 'bağlantı bulunamadı']);
   });
 
+  it('KRİTİK: şirketin KENDİ bağlantısı (kurucusu ajans dışından) reddediliyor', async () => {
+    const MUSTERI_KISI = 'f0f0f0f0-f0f0-4f0f-8f0f-f0f0f0f0f0f0';
+    await h.q(`INSERT INTO users (id, org_id, email, full_name, updated_at) VALUES ($1, $2, 'm@metropol.test', 'Metropol', now())`, [MUSTERI_KISI, MUSTERI_ORG]);
+    await h.q(`UPDATE platform_connections SET connected_by_user_id = $2 WHERE id = $1`, [KOPYA, MUSTERI_KISI]);
+    const plan = await temizlikPlani(db(), [KOPYA]);
+    expect(plan.baglantilar).toEqual([]);
+    expect(plan.reddedilen[0]!.sebep).toContain('ajans dışından');
+  });
+
+  it('KRİTİK: plan hiçbir şey YAZMIYOR (yazan deyim çalışma anında düşer)', async () => {
+    const yazma = /\b(INSERT|UPDATE|DELETE|TRUNCATE|ALTER|DROP)\b/i;
+    let okuma = 0;
+    const salt: Sorgucu = {
+      $queryRaw: (sql) => {
+        if (yazma.test(sql.sql)) throw new Error(`kuru planda yazma: ${sql.sql}`);
+        okuma++;
+        return h.db.$queryRaw(sql) as never;
+      },
+      $executeRaw: () => {
+        throw new Error('kuru planda $executeRaw');
+      },
+    };
+    const plan = await temizlikPlani(salt, [KOPYA]);
+    expect(plan.baglantilar[0]!.hesaplar.silinecek.length).toBe(2);
+    expect(okuma).toBeGreaterThan(3);
+  });
+
   it('KRİTİK: kopyaya atanmış satır varsa satıra dokunulmaz ve bağlantı iptal edilmez', async () => {
     await hesap(H_ATANMIS, '5550000099', '2026-10-13T10:05:10Z', MUSTERI_WS);
     const b = (await temizlikPlani(db(), [KOPYA])).baglantilar[0]!;

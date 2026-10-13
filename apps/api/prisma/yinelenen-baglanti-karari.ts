@@ -183,14 +183,15 @@ export async function temizlikPlani(db: Sorgucu, baglantiIdleri: string[]): Prom
 
   for (const id of baglantiIdleri) {
     const [c] = await db.$queryRaw<
-      Array<{ id: string; org_id: string; sirket: string; platform: string; client_id: string | null; revoked: boolean; kimlik: string; kuruldu: Date; ajans_org_id: string | null }>
+      Array<{ id: string; org_id: string; sirket: string; platform: string; client_id: string | null; revoked: boolean; kimlik: string; kuruldu: Date; ajans_org_id: string | null; kurucu_org_id: string | null }>
     >(Prisma.sql`
       SELECT c.id::text, c.org_id::text, o.name AS sirket, c.platform::text, c.client_id::text,
              (c.revoked_at IS NOT NULL OR c.status = 'revoked') AS revoked, c.external_user_id AS kimlik,
-             c.created_at AS kuruldu, m.ajans_org_id::text AS ajans_org_id
+             c.created_at AS kuruldu, m.ajans_org_id::text AS ajans_org_id, u.org_id::text AS kurucu_org_id
         FROM platform_connections c
         JOIN organizations o ON o.id = c.org_id
         LEFT JOIN manager_accounts m ON m.id = o.manager_account_id
+        LEFT JOIN users u ON u.id = c.connected_by_user_id
        WHERE c.id::text = ${id}`);
     /*
      * GÜVENLİK KOŞULLARI — betik yalnız tarif edilen kopyaya dokunur. Yanlış
@@ -202,6 +203,17 @@ export async function temizlikPlani(db: Sorgucu, baglantiIdleri: string[]): Prom
     else if (c.revoked) plan.reddedilen.push({ id, sebep: 'zaten iptal edilmiş' });
     else if (!c.ajans_org_id) plan.reddedilen.push({ id, sebep: 'şirketin ajansı bilinmiyor (üst hesap yok)' });
     else if (c.ajans_org_id === c.org_id) plan.reddedilen.push({ id, sebep: 'bağlantı AJANS şirketinde; kopya değil, asıl bağlantı' });
+    /*
+     * KOPYAYI AJANSIN KİŞİSİ AÇTI (Ajan 4, 2026-10-13). Müşteri şirketinin
+     * KENDİ Google bağlantısı da `client_id` boş bir havuz bağlantısı ve
+     * hesapları ajans havuzunda da durabiliyor (ajans MCC'den erişiyor):
+     * "karşılığı var" süzgeci onları KOPYA sayar, betik müşterinin kendi
+     * havuzunu siler ve bağlantısını kapatırdı. Yanlış kimlik verilmesine
+     * karşı tek ayırt edici: kopyaları müşteri şirketine GEÇMİŞ ajans
+     * yöneticisi açtı ve ev şirketi ajans.
+     */
+    else if (c.kurucu_org_id !== c.ajans_org_id)
+      plan.reddedilen.push({ id, sebep: 'bağlantıyı ajans dışından biri kurmuş; şirketin KENDİ bağlantısı olabilir' });
     else {
       const b = { id: c.id, orgId: c.org_id, ajansOrgId: c.ajans_org_id, kuruldu: new Date(c.kuruldu) };
       const hesaplar = await satirPlani(db, 'ad_accounts', b);
