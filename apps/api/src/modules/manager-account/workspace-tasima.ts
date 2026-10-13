@@ -184,6 +184,15 @@ export const CASCADE_ILE_TASINANLAR = [
   'strateji_dagilimlari',
   'strateji_matrisi',
   'strateji_kelimeleri',
+  // AdvStrategy v2 (YENIDEN-TASARIM.md § 6.1): kalemler, yorumlar ve onay
+  // bağlantıları planın parçası; (client_id, org_id) kompozit anahtarı
+  // ON UPDATE CASCADE ile bağlı, yani Postgres planla birlikte taşıyor.
+  // Elle yazmak taşımayı ortasından düşürürdü (Paket A kapısı dersi). Onay
+  // bağlantısı token'ın kendisiyle çalışıyor; taşınan workspace'te geçerli
+  // kalması doğru (müşteri aynı, belge aynı).
+  'strateji_kalemleri',
+  'strateji_yorumlari',
+  'strateji_onay_baglantilari',
   // İyileştir: karar, workspace'in reklamlarına verilmiş bir cevap ve
   // reklamlar (hesap atamasıyla) workspace'le gidiyor; kararı geride
   // bırakmak, yeni şirkette aynı haftanın önerisini yeniden "açık"

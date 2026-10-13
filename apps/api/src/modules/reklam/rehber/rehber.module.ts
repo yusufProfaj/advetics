@@ -24,5 +24,9 @@ import { RehberService } from './rehber.service';
   imports: [ConnectionsModule, ReklamModule, AutoBoostModule],
   controllers: [RehberController],
   providers: [RehberService],
+  // AdvStrategy v2 aktarımı ve kalem metin önerisi rehberin KENDİ
+  // servisini kullanıyor (ikinci bir rehber/metin yolu yazılmadı). Ters
+  // yönde bağımlılık yok: rehber stratejiyi tanımıyor, döngü oluşmuyor.
+  exports: [RehberService],
 })
 export class RehberModule {}

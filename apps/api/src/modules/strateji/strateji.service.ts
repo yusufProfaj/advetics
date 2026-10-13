@@ -150,8 +150,19 @@ function planSecimi(kosul: Prisma.Sql, kilit: boolean): Prisma.Sql {
       FROM strateji_planlari p
       LEFT JOIN users u ON u.id = p.onaylayan_user_id
      WHERE ${kosul}
+       -- YALNIZ v1 (bicim = 1). v2 stratejisi (20261018100000) aynı tabloda;
+       -- v1 uçlarından okunsa ya da yazılsa v1'in Record tabloları
+       -- 'revizyon'/'kapandi'yı tanımaz ve v1 eylemleri v2'nin onay kurallarını
+       -- atlardı. v2 planı v1 yolunda "bulunamadı".
+       AND p.bicim = 1
      ${kilit ? Prisma.sql`FOR UPDATE OF p` : Prisma.empty}`;
 }
+
+/**
+ * YENİ PLAN v2'DE AÇILIR (YENIDEN-TASARIM.md § 1.8). v1 oluşturma UCU kapalı
+ * (controller); servis fonksiyonu v1 testlerinin kurulumu için duruyor.
+ */
+export const V1_OLUSTURMA_KAPALI = 'Yeni strateji AdvStrategy’nin yeni ekranından açılır; eski aylık medya planı yalnız okunur.';
 
 /** Kuyruğa alınamayan aramanın plana yazılan cümlesi (ayrıntı log'da). */
 export const KUYRUK_HATASI = 'Arama başlatılamadı. Biraz sonra yeniden deneyin.';
@@ -199,7 +210,7 @@ export class StratejiService {
           ORDER BY p.donem DESC, p.created_at DESC LIMIT ${PLAN_LISTE_SINIRI}`,
       );
       const [n] = await tx.$queryRaw<Array<{ n: number }>>(Prisma.sql`
-        SELECT count(*)::int AS n FROM strateji_planlari WHERE client_id = ${clientId}::uuid`);
+        SELECT count(*)::int AS n FROM strateji_planlari WHERE client_id = ${clientId}::uuid AND bicim = 1`);
       return { planlar: satirlar.map(ozet), toplam: n?.n ?? satirlar.length };
     });
   }

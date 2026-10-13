@@ -1258,10 +1258,6 @@ export class RehberService {
   async olustur(ctx: TenantContext, clientId: string, kaynakRehberId?: string): Promise<RehberKaydi> {
     erisim(ctx, clientId);
     const s = await this.tx(ctx)(async (t) => {
-      // org_id HEDEF WORKSPACE'TEN: "tüm şirketler" modunda ctx.orgId ev
-      // şirketi kalıyor ve (client_id, org_id) kompozit anahtarını deler.
-      const [c] = await t.$queryRaw<Array<{ org_id: string }>>(Prisma.sql`SELECT org_id::text FROM clients WHERE id = ${clientId}::uuid`);
-      if (!c) throw new NotFoundException('Workspace bulunamadı');
       let alanlar: RehberAlanlari = {};
       if (kaynakRehberId) {
         // Kaynak AYNI workspace'te olmalı: başka bir müşterinin hesabı ve
@@ -1269,12 +1265,9 @@ export class RehberService {
         const [k] = await t.$queryRaw<RehberSatiri[]>(Prisma.sql`SELECT ${SUTUNLAR} FROM reklam_rehberi WHERE id = ${kaynakRehberId}::uuid`);
         if (!k || k.client_id !== clientId) throw new NotFoundException('Kopyalanacak reklam bulunamadı');
         alanlar = kopyalanacakAlanlar(alanlariOku(k));
-        await aitlikDenetle(t, clientId, alanlar);
       }
-      const [r] = await t.$queryRaw<RehberSatiri[]>(Prisma.sql`
-        INSERT INTO reklam_rehberi (org_id, client_id, olusturan_id, alanlar)
-        VALUES (${c.org_id}::uuid, ${clientId}::uuid, ${ctx.userId}::uuid, ${JSON.stringify(alanlar)}::jsonb)
-        RETURNING ${SUTUNLAR}`);
+      const { id } = await rehberSatiriEkle(t, ctx, clientId, alanlar);
+      const [r] = await t.$queryRaw<RehberSatiri[]>(Prisma.sql`SELECT ${SUTUNLAR} FROM reklam_rehberi WHERE id = ${id}::uuid`);
       return r!;
     });
     return this.kayit(ctx, s);
@@ -1453,10 +1446,30 @@ export class RehberService {
    */
   async metinOner(ctx: TenantContext, id: string, istek: MetinOnerIstegi = {}): Promise<MetinOnerisi> {
     if (!this.yz) throw new ServiceUnavailableException('Yapay zekâ bağlı değil; metni kendin yaz.');
-    const yz = this.yz;
-    const mod = istek.mod ?? 'yeni';
     const s = await this.satir(ctx, id);
-    const a = alanlariOku(s);
+    return this.metinOnerAlanlardan(ctx, { id, client_id: s.client_id, org_id: s.org_id }, alanlariOku(s), istek);
+  }
+
+  /**
+   * AYNI METİN MOTORU, REHBER SATIRI OLMADAN (AdvStrategy v2, YENIDEN-TASARIM.md
+   * § 2.3 B). Strateji kalemi henüz rehber değil ama reklam metni onun için de
+   * BU motordan gelmeli: ikinci bir metin motoru (ayrı istem, ayrı uydurma
+   * kapısı) doğduğu anda ayrışırdı. Çağıran, kalemi rehber ALANLARINA
+   * çevirip (`kalemdenRehberAlanlari`) verir; erişim ve aitlik çağıranda
+   * denetlenmiş olmalı (görseller yine `client_id` süzgeciyle okunuyor).
+   * Gövde `metinOner`ın gövdesi; yalnız satır yerine (kimlik, workspace) alıyor.
+   */
+  async metinOnerAlanlardan(
+    ctx: TenantContext,
+    s: { id: string; client_id: string; org_id: string },
+    a: RehberAlanlari,
+    istek: MetinOnerIstegi = {},
+  ): Promise<MetinOnerisi> {
+    if (!this.yz) throw new ServiceUnavailableException('Yapay zekâ bağlı değil; metni kendin yaz.');
+    erisim(ctx, s.client_id);
+    const yz = this.yz;
+    const id = s.id;
+    const mod = istek.mod ?? 'yeni';
     const medya = a.medya?.deger ?? [];
     const amacKodu = a.amac?.deger ?? null;
     const onbellekAmaci = amacKodu ?? 'YOK';
@@ -2910,6 +2923,35 @@ function alanlariOku(s: RehberSatiri): RehberAlanlari {
   if (r.success) return r.data;
   logger.error(`reklam_rehberi(${s.id}).alanlar şemadan geçmiyor: ${r.error.message}`);
   throw new ConflictException('Rehberin kayıtlı alanları okunamadı; destek ekibine bildir.');
+}
+
+/**
+ * REHBER SATIRI EKLE — `olustur`un yazımı, ÇAĞIRANIN transaction'ında.
+ *
+ * AdvStrategy aktarımı (YENIDEN-TASARIM.md § 4.3) kalemi kilitleyip rehberi
+ * AYNI kısa transaction'da açıyor ve kalemin `rehber_id`sini koşullu yazıyor:
+ * rehberi ayrı bir transaction'da açmak, ikinci adım düştüğünde hiçbir
+ * kaleme bağlı olmayan bir taslak ve yeniden denemede İKİNCİ bir rehber
+ * demekti. Kural tek yerde: org_id HEDEF workspace'ten ("tüm şirketler"
+ * modunda ctx.orgId ev şirketi kalıyor ve kompozit anahtarı deler), alanlar
+ * şemadan geçer, aitlik denetlenir. Platform çağrısı YOK.
+ */
+export async function rehberSatiriEkle(
+  t: { $queryRaw<T = unknown>(q: Prisma.Sql): Promise<T> },
+  ctx: Pick<TenantContext, 'userId'>,
+  clientId: string,
+  alanlar: RehberAlanlari,
+): Promise<{ id: string }> {
+  const [c] = await t.$queryRaw<Array<{ org_id: string }>>(Prisma.sql`SELECT org_id::text FROM clients WHERE id = ${clientId}::uuid`);
+  if (!c) throw new NotFoundException('Workspace bulunamadı');
+  const r = rehberAlanlariSchema.safeParse(alanlar);
+  if (!r.success) throw new BadRequestException(r.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; '));
+  await aitlikDenetle(t, clientId, r.data);
+  const [yeni] = await t.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    INSERT INTO reklam_rehberi (org_id, client_id, olusturan_id, alanlar)
+    VALUES (${c.org_id}::uuid, ${clientId}::uuid, ${ctx.userId}::uuid, ${JSON.stringify(r.data)}::jsonb)
+    RETURNING id::text`);
+  return { id: yeni!.id };
 }
 
 /** Seçilen hesap, sayfa, kanal ve medya BU workspace'in olmalı (RLS havuzu yöneticiye açıyor). */

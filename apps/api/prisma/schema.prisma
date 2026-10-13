@@ -3978,7 +3978,7 @@ model StratejiPlani {
   toplamButceMicros BigInt    @map("toplam_butce_micros")
   paraBirimi        String    @map("para_birimi") @db.Char(3)
   onaylayanUserId   String?   @map("onaylayan_user_id") @db.Uuid
-  onayRolu          String?   @map("onay_rolu") @db.VarChar(7)
+  onayRolu          String?   @map("onay_rolu") @db.VarChar(8)
   onayZamani        DateTime? @map("onay_zamani") @db.Timestamptz(6)
   onaylananSurum    Int?      @map("onaylanan_surum")
   aktarim           Json?     @db.JsonB
@@ -3990,6 +3990,18 @@ model StratejiPlani {
   kelimeSonHata     String?   @map("kelime_son_hata") @db.VarChar(2000)
   kelimeToplam      Int?      @map("kelime_toplam")
   kelimeAramaId     String?   @map("kelime_arama_id") @db.Uuid
+  /// AdvStrategy v2 (20261018100000_advstrategy_v2): 1 = eski medya planı
+  /// (salt okunur), 2 = strateji. Kısıtlar ve kısmi indeksler migration'da.
+  bicim             Int       @default(1) @db.SmallInt
+  baslangic         DateTime? @db.Date
+  bitis             DateTime? @db.Date
+  bolumler          Json      @default("{}") @db.JsonB
+  oneriImzasi       String?   @map("oneri_imzasi") @db.Char(64)
+  revizyonNotu      String?   @map("revizyon_notu") @db.VarChar(2000)
+  riskler           Json      @default("[]") @db.JsonB
+  olcumOzeti        Json      @default("[]") @map("olcum_ozeti") @db.JsonB
+  onaylayanAd       String?   @map("onaylayan_ad") @db.VarChar(120)
+  onaylayanEposta   String?   @map("onaylayan_eposta") @db.VarChar(254)
   createdBy         String?   @map("created_by") @db.Uuid
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
@@ -4067,6 +4079,88 @@ model StratejiKelimesi {
 }
 
 /// Müşteriye bağlı DEĞİL; elle tutulan takvim. Seed yok (Ç-4).
+/// AdvStrategy v2 kalemi = bir AdvCampaign rehberi (YENIDEN-TASARIM.md § 4.1).
+/// CHECK'ler, ertelenebilir sıra anahtarı ve FK'ler migration'da; servis ham SQL.
+model StratejiKalemi {
+  id               String    @id @default(uuid()) @db.Uuid
+  planId           String    @map("plan_id") @db.Uuid
+  orgId            String    @map("org_id") @db.Uuid
+  clientId         String    @map("client_id") @db.Uuid
+  sira             Int       @db.SmallInt
+  amac             String    @db.VarChar(12)
+  metaAcik         Boolean   @map("meta_acik")
+  googleAcik       Boolean   @map("google_acik")
+  metaPayi         Int?      @map("meta_payi") @db.SmallInt
+  butceMicros      BigInt    @map("butce_micros")
+  baslangic        DateTime  @db.Date
+  bitis            DateTime  @db.Date
+  konumlar         Json      @default("[]") @db.JsonB
+  yasMin           Int?      @map("yas_min") @db.SmallInt
+  yasMax           Int?      @map("yas_max") @db.SmallInt
+  metin            Json?     @db.JsonB
+  kreatifYonergesi Json?     @map("kreatif_yonergesi") @db.JsonB
+  kitleTarifi      Json?     @map("kitle_tarifi") @db.JsonB
+  kelimeGrubu      String?   @map("kelime_grubu") @db.VarChar(80)
+  varlikIdleri     String[]  @default([]) @map("varlik_idleri") @db.Uuid
+  tahmin           Json      @default("{}") @db.JsonB
+  kaynaklar        Json      @default("{}") @db.JsonB
+  rehberId         String?   @unique(map: "strateji_kalemleri_rehber_key") @map("rehber_id") @db.Uuid
+  aktaranId        String?   @map("aktaran_id") @db.Uuid
+  aktarimZamani    DateTime? @map("aktarim_zamani") @db.Timestamptz(6)
+  notu             String?   @db.VarChar(500)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([planId, sira], map: "strateji_kalemleri_sira_key")
+  @@index([clientId], map: "strateji_kalemleri_client_idx")
+  @@index([orgId], map: "strateji_kalemleri_org_id_idx")
+  @@map("strateji_kalemleri")
+}
+
+/// AdvStrategy v2 yorum/revizyon/onay kaydı. Yalnız INSERT + SELECT (02_rls.sql).
+model StratejiYorumu {
+  id        String   @id @default(uuid()) @db.Uuid
+  planId    String   @map("plan_id") @db.Uuid
+  orgId     String   @map("org_id") @db.Uuid
+  clientId  String   @map("client_id") @db.Uuid
+  kalemId   String?  @map("kalem_id") @db.Uuid
+  surum     Int
+  userId    String?  @map("user_id") @db.Uuid
+  rol       String   @db.VarChar(8)
+  tur       String   @db.VarChar(8)
+  metin     String   @db.VarChar(2000)
+  yazanAd   String?  @map("yazan_ad") @db.VarChar(120)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([planId, createdAt], map: "strateji_yorumlari_plan_idx")
+  @@index([clientId], map: "strateji_yorumlari_client_idx")
+  @@index([orgId], map: "strateji_yorumlari_org_id_idx")
+  @@map("strateji_yorumlari")
+}
+
+/// Girişsiz onay bağlantısı (§ 9.3). Ham token YOK; açık bağlantı kısmi tekil
+/// indeksi migration'da (Prisma kısmi indeksi bildiremiyor).
+model StratejiOnayBaglantisi {
+  id            String    @id @default(uuid()) @db.Uuid
+  planId        String    @map("plan_id") @db.Uuid
+  orgId         String    @map("org_id") @db.Uuid
+  clientId      String    @map("client_id") @db.Uuid
+  surum         Int
+  tokenHash     String    @unique(map: "strateji_onay_baglantilari_token_key") @map("token_hash") @db.Char(64)
+  olusturanId   String?   @map("olusturan_id") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  sonGecerlilik DateTime  @map("son_gecerlilik") @db.Timestamptz(6)
+  iptalAt       DateTime? @map("iptal_at") @db.Timestamptz(6)
+  kullanildiAt  DateTime? @map("kullanildi_at") @db.Timestamptz(6)
+  karar         String?   @db.VarChar(16)
+  kararAd       String?   @map("karar_ad") @db.VarChar(120)
+  kararEposta   String?   @map("karar_eposta") @db.VarChar(254)
+
+  @@index([clientId], map: "strateji_onay_baglantilari_client_idx")
+  @@index([orgId], map: "strateji_onay_baglantilari_org_id_idx")
+  @@map("strateji_onay_baglantilari")
+}
+
 model OzelGun {
   id        String   @id @default(uuid()) @db.Uuid
   sektor    String   @db.VarChar(120)

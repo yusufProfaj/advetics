@@ -433,7 +433,19 @@ export class RaporGonderService {
    */
   async ozetGonder(
     ctx: TenantContext,
-    p: { clientId: string; toEmails: readonly string[]; konu: string; html: string; yalnizKendine: boolean },
+    p: {
+      clientId: string;
+      toEmails: readonly string[];
+      konu: string;
+      html: string;
+      yalnizKendine: boolean;
+      /**
+       * İsteğe bağlı ekler (AdvStrategy v2: strateji PDF'i). Aynı çekirdek:
+       * strateji maili için ikinci bir gönderici yazmak imza, doğrulanmamış
+       * kimlik reddi ve kısmi ret kurallarını ikinci kez yazmak demekti.
+       */
+      ekler?: Array<{ filename: string; content: Buffer; contentType: string }>;
+    },
   ): Promise<{ to: string[]; reddedilen: Array<{ adres: string; sebep: string }> }> {
     const gonderen = await this.gonderen(ctx);
     if (!gonderen) {
@@ -469,7 +481,7 @@ export class RaporGonderService {
         user: gonderen.smtp_user,
         pass: this.crypto.decrypt(Buffer.from(gonderen.smtp_pass_enc)),
       },
-      { to: alicilar, subject: p.konu, html: `${p.html}${imza}` },
+      { to: alicilar, subject: p.konu, html: `${p.html}${imza}`, ...(p.ekler?.length ? { attachments: p.ekler } : {}) },
     );
     // KISMİ RET SESSİZ BAŞARI DÖNÜYOR (mail-gonderici.ts): çağıran nota yazıyor.
     if (sonuc.ret.length > 0) {

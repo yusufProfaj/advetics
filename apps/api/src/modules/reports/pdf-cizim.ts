@@ -31,6 +31,39 @@ export const SLATE = {
 } as const;
 
 /**
+ * PROFAJ KURUMSAL KILAVUZU — YALNIZ DÖRT RENK (docs/marka/profaj-kurumsal-kilavuz.jpg).
+ * AdvStrategy belgesinin rengi (YENIDEN-TASARIM.md § 3); rapor PDF'i `SLATE`te
+ * kalıyor. Ara tonlar YENİ RENK DEĞİL: grinin saydamlığı (`opaklik`).
+ * `strateji-pdf.spec.ts` strateji PDF'inin başka renk kullanmadığını tarıyor.
+ */
+export const MARKA = {
+  beyaz: rgb(1, 1, 1),
+  siyah: rgb(0, 0, 0),
+  gri: rgb(0x30 / 255, 0x2e / 255, 0x2d / 255),
+  kirmizi: rgb(1, 0x24 / 255, 0),
+} as const;
+
+/**
+ * Tablonun renkleri. Varsayılan: rapor PDF'inin slate dili (değişmedi).
+ * Strateji PDF'i kılavuzun dört rengini + grinin saydamlığını veriyor.
+ */
+export interface TabloPaleti {
+  baslik: { renk: RGB; opaklik?: number };
+  kural: { renk: RGB; opaklik?: number };
+  ayirici: { renk: RGB; opaklik?: number };
+  metin: { renk: RGB; opaklik?: number };
+  soluk: { renk: RGB; opaklik?: number };
+}
+
+export const SLATE_PALETI: TabloPaleti = {
+  baslik: { renk: SLATE.s500 },
+  kural: { renk: SLATE.s300 },
+  ayirici: { renk: SLATE.s100 },
+  metin: { renk: SLATE.s900 },
+  soluk: { renk: SLATE.s400 },
+};
+
+/**
  * `#RRGGBB` → pdf-lib rengi.
  *
  * BOZUK DEĞER PATLAMAMALI. Marka rengi panelden serbest metin olarak
@@ -245,9 +278,17 @@ export function tablo<T>(
     kalin: PDFFont;
     /** Son satır olarak çizilecek toplam; `null` = toplam satırı yok. */
     toplam?: { etiket: string; degerler: Array<string | null> } | null;
+    /** Verilmezse rapor PDF'inin slate dili. */
+    palet?: TabloPaleti;
+    /** Sayı sütunlarının yazı tipi (strateji PDF'i: Montserrat, ₺ onda var); verilmezse `normal`/`kalin`. */
+    sayiFontu?: PDFFont;
+    /** Hücre başına yazı tipi kararı (glif yoksa yedek yazı tipi); verilmezse sütunun yazı tipi. */
+    fontSec?: (metin: string, font: PDFFont) => PDFFont;
   },
 ): { y: number; cizilen: number } {
   const { sutunlar, satirlar, x, genislik } = opts;
+  const pl = opts.palet ?? SLATE_PALETI;
+  const r = (k: keyof TabloPaleti) => ({ color: pl[k].renk, ...(pl[k].opaklik !== undefined ? { opacity: pl[k].opaklik } : {}) });
   let y = opts.y;
 
   const toplamPay = sutunlar.reduce((a, c) => a + c.pay, 0);
@@ -264,14 +305,14 @@ export function tablo<T>(
   // Başlık
   sutunlar.forEach((c, i) => {
     const metin = c.baslik.toLocaleUpperCase('tr');
-    s.drawText(metin, { x: yazX(i, metin, opts.kalin, 7), y, size: 7, font: opts.kalin, color: SLATE.s500 });
+    s.drawText(metin, { x: yazX(i, metin, opts.kalin, 7), y, size: 7, font: opts.kalin, ...r('baslik') });
   });
   y -= 7;
   s.drawLine({
     start: { x, y },
     end: { x: x + genislik, y },
     thickness: 1.6,
-    color: SLATE.s300,
+    ...r('kural'),
   });
   y -= 14;
 
@@ -285,19 +326,20 @@ export function tablo<T>(
       start: { x, y: y - 5 },
       end: { x: x + genislik, y: y - 5 },
       thickness: 0.5,
-      color: SLATE.s100,
+      ...r('ayirici'),
     });
 
     sutunlar.forEach((c, i) => {
-      const font = c.kalinDeger ? opts.kalin : opts.normal;
       const ham = c.deger(satir);
+      const tercih = c.kalinDeger ? opts.kalin : c.sag && opts.sayiFontu ? opts.sayiFontu : opts.normal;
+      const font = opts.fontSec ? opts.fontSec(ham, tercih) : tercih;
       const metin = kisalt(ham, font, 8.5, genislikler[i]! - 6);
       s.drawText(metin, {
         x: yazX(i, metin, font, 8.5),
         y,
         size: 8.5,
         font,
-        color: SLATE.s900,
+        ...r('metin'),
       });
     });
     y -= 15;
@@ -310,14 +352,14 @@ export function tablo<T>(
       start: { x, y: y + 10 },
       end: { x: x + genislik, y: y + 10 },
       thickness: 1.6,
-      color: SLATE.s300,
+      ...r('kural'),
     });
     s.drawText(opts.toplam.etiket.toLocaleUpperCase('tr'), {
       x,
       y,
       size: 7.5,
       font: opts.kalin,
-      color: SLATE.s500,
+      ...r('baslik'),
     });
     opts.toplam.degerler.forEach((deger, i) => {
       // İlk sütun etiketin kendisi; değerler ikinciden başlıyor.
@@ -339,7 +381,7 @@ export function tablo<T>(
         y,
         size: 8.5,
         font: opts.kalin,
-        color: deger === null ? SLATE.s400 : SLATE.s900,
+        ...(deger === null ? r('soluk') : r('metin')),
       });
     });
     y -= 15;

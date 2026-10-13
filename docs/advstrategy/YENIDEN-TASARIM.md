@@ -755,3 +755,68 @@ amacına eşlenmesi, Ö-4) sözleşmede yalnız girdi tipi olarak var.
 - v1 `aktarildi` planları üretimde varsa panel artık "eski aktarım, taslak yok" diyor; o
   oturumlar (`adv_oturum`) veri olarak duruyor, silinmedi.
 
+
+---
+
+## 9.7 Ajan 2 (Arka Plan) — devir notu ve sapmalar (2026-10-13)
+
+### Yapıldı
+
+| Parça | Dosya |
+|---|---|
+| Migration M1 (ayrı dosya) | `apps/api/prisma/migrations/20261018100000_advstrategy_v2/` — `strateji_planlari` (bicim, baslangic/bitis, bolumler, riskler, olcum_ozeti, oneri_imzasi, revizyon_notu, onaylayan_ad/eposta; `onay_rolu` VARCHAR(8) + `baglanti`; durum CHECK v1 ∪ v2; v1 açık plan indeksi yalnız `bicim = 1`, v2'de workspace başına tek açık), `strateji_kalemleri`, `strateji_yorumlari`, `strateji_onay_baglantilari` |
+| Üç durak | `test/pglite-harness.ts` TRUNCATE · `prisma/sql/02_rls.sql` (kalem dört işlem, yorum YALNIZ INSERT+SELECT, bağlantı SELECT/INSERT/UPDATE) · `workspace-tasima.ts` → `CASCADE_ILE_TASINANLAR` |
+| Motor (saf) | `apps/api/src/modules/strateji/v2/motor.ts` (+ `motor.spec.ts`, çalıştırılarak) |
+| Geçmiş / gerçekleşen | `v2/gecmis.ts` — kampanya amacı → rehber amacı eşlemesi (kısıt; eşlenemeyen harcama ayrı satır), son üç TAM ay, platformlar ayrı |
+| Girdiler | `v2/girdiler.ts` — Marka Merkezi, `workspace_hazirlama` site adımı (tetiklemeden), kurulum beyanları, `OlcumService.durum` (10 dk önbellek), rehber hazırlığı |
+| Yapay zekâ | `v2/strateji-ai.ts` — istem RAKAMSIZ (girdideki rakamlar bile süzülüyor), çıktı `stratejiMetniDenetle`, bir kez yeniden, yine düşerse alan boş + neden |
+| Servisler | `v2/strateji-v2.service.ts`, `v2/onay-baglantisi.service.ts`, `v2/belge-verisi.ts` (müşteriye giden belgenin TEK üreticisi: panel müşteri görünümü, PDF, bağlantı), `v2/yorumlar.ts`, `v2/satirlar.ts` |
+| Uçlar | `v2/strateji-v2.controller.ts` — `STRATEJI_V2_UCLARI` ile kaynak taramasıyla eş (`strateji-v2-saf.spec.ts`); oturumsuz yalnız iki onay ucu (`noindex`, `no-store`, `no-referrer`) |
+| PDF | `v2/strateji-pdf.ts` — yalnız `MARKA` (dört renk + gri saydamlığı), bölümler `STRATEJI_BELGE_BOLUMLERI` sırasıyla, kapakta yalnız Advetics logosu, taslakta filigran, glif yoksa dize başına DejaVu, yazı tipi yoksa açık hata |
+| Mail | `RaporGonderService.ozetGonder`e isteğe bağlı `ekler` (aynı çekirdek: imza, doğrulanmamış kimlik reddi, kısmi ret) |
+| v1 → v2 | v1 servis sorguları `bicim = 1` ile süzülüyor (v2 planı v1 yolunda "bulunamadı"); v1 `POST /strateji/planlar` NEDENİYLE 400 (`V1_OLUSTURMA_KAPALI`); v1 planlar v2 listesinde `bicim: 1`, v2 detayında 409 |
+
+### İlk iş — rehber önden doldurma ÖLÇÜLDÜ
+
+`rehber.service.ts#olustur` alanları sunucuda doldurmuyor; önden doldurma
+panelin açılış etkisinde (`rehber-ekrani.tsx` → `rehber-mantik.ts#onDoldurma`)
+ve **her rehber açılışında, yalnız BOŞ alana, yalnız TEK seçenekten** yazıyor.
+Sonuç: aktarımla açılan rehber ilk açılışta hesap/sayfa/hedef adres/telefonu
+rehberin kendi yoluyla alıyor; aktarımın yazdığı bütçe, takvim, konum
+(`strateji` kaynaklı) ezilmiyor. Düzeltme gerekmedi; ikinci bir doldurma
+yazılmadı (ayrışırdı). Aktarım önizlemesi bunu söylüyor: tek seçenekli alan
+`notlar`a ("rehber açılınca kendiliğinden seçilir"), birden çok seçenekli ya da
+boş alan `rehberdeTamamlanacak`a. Kalan boşluk: sunucunun "N eksik" sayısı
+rehber İLK AÇILANA kadar hesap/sayfa satırlarını da sayar.
+
+### Sapmalar (sözleşmeden ya da § 9.5 sahipliğinden)
+
+1. **Yanıt ve gövde tipleri shared'a eklendi** (`packages/shared/src/strateji/v2/yanit.ts`).
+   Ajan 3'ün panel dosyasındaki şekiller BİREBİR alındı; farklar:
+   - `OlcumSatiri` → `StratejiOlcumSatiri`, `AktarimSonucu` → `StratejiAktarimSonucu` (shared'daki `olcum/index.ts` ve v1 `plan.ts` adlarıyla çakışıyordu).
+   - `GonderimSonucu.ret` `string[]` değil `Array<{adres, sebep}>` + `baglanti` (rapor gönderim deseni; sebepsiz ret listesi teşhis ettirmez).
+   - `StratejiPlani.guncelleyen` = planı OLUŞTURANIN adı (son değiştireni tutan kolon yok).
+   - `YorumGovdesi`, `GonderGovdesi`, `BolumlerGovdesi` zod şemalarıyla; gönderide `konu`/`html` isteğe bağlı (yoksa sunucu şablonu), bölümlerde kaynak `ai` da kabul.
+   - Ek alanlar (`EK:` notlu): `StratejiDetayi.yapilabilir/kelimeler`, `StratejiGirdileri.acilis`, `StratejiOnerisi.riskler/onbellekten`, önizlemede `rehberId`, gerçekleşende `planMicros/sonucNedeni/tahmin`, liste satırında `kalemSayisi`, yorumlarda `toplam`.
+2. **`TAHMIN_YOK_NEDENLERI` += `eslenemedi`, `toplanamaz`** (kalem.ts): eşlenemeyen geçmişe "geçmiş yok" demek yalan; erişim günlerden toplanamaz.
+3. **`STRATEJI_V2_UCLARI` += kelime uçları** (`POST …/kelime-ara`, `PATCH …/kelimeler`): § 6.3 "v1 aynen" diyordu ama v1 uçları v1 detayını döndürür.
+4. **Motor `apps/api` içinde** (`v2/motor.ts`), shared'da değil: panel motoru koşmuyor; kapıların hepsi shared'daki TEK fonksiyonlar.
+5. **Rehber dosyalarına dokunuş üç** (§ 9.5 iki diyordu): `rehberSatiriEkle` (olustur'un yazımı, çağıranın transaction'ında — aktarım kalemi kilitleyip rehberi AYNI kısa transaction'da açıyor), `metinOnerAlanlardan` (metinOner'ın gövdesi satırsız; kalem metni rehberin motorundan, ikinci motor yok), `rehber.module.ts` `exports: [RehberService]`. `GET /reklam/rehberler/:id/strateji` strateji modülünde (`RehberStratejiController`): rehber stratejiyi tanımıyor, bağımlılık tek yönlü. Bağlı kalem yoksa boş gövde (`null`).
+6. **Aktarım yarışı GERİ ALMA ile**: § 4.3 "sonradan açılan rehber arşivlenir" diyordu; tek transaction'da koşullu UPDATE sıfır satır dönerse transaction geri alınıyor, arşivlenecek rehber hiç oluşmuyor (`strateji-v2.service.spec.ts` yarış testi).
+7. **Riskler ve ölçüm SNAPSHOT** (`riskler`, `olcum_ozeti` kolonları): kalem kaydında ve onaya gönderimde yazılıyor; müşteri onayladığı belgenin hâlini görür, her okuma platform okumasına bağlanmaz.
+8. **PDF gövdesi Montserrat Regular** — Open Sans tam TTF yok ve indirmek kullanıcı izni istiyor (ajan izni geçerli değil). `assets/fonts/NEDEN.md`. Montserrat'ta ligatür kapalı (`fl` tek glif olup metin aramasında "Hedefer" oluyordu).
+9. **Onay bağlantısı deneme sınırı BELLEKTE** (API pm2'de tek süreç, fork); yeniden başlatmada sıfırlanır.
+10. Bulunan ve düzeltilen: CHECK'te `NULL BETWEEN` NULL döner ve GEÇER — pay, yaş ve beyan kısıtları `IS NOT NULL`/`IS NOT DISTINCT FROM` ile (üretim sırası testi yakaladı).
+
+### Ölçülmedi
+
+- Ö-4: kampanya amacı → rehber amacı eşlemesinin gerçek hesaplarda harcamanın ne kadarını kapsadığı (`eslenemeyenHarcama` ekranda söylüyor). Google'da yalnız SİTE (arama tıklaması) eşleniyor.
+- Ö-5: geçmiş ve gerçekleşen sorgularının üretim süresi.
+- Ö-6: gömülü yazı tipleriyle PDF boyutu (~3 alt küme Montserrat + DejaVu) ve mail bütçesi.
+- `rehber.hazirlik` (Meta asgari okuması) "Strateji öner"de canlı platformda; testlerde sahte.
+- Mail bağlantısının kökü `config.mail.appUrl`: üretimde bunun KÖK alan adı olduğu doğrulanmalı (beyaz etiket alan adında `/strateji-onay` panel middleware'inde açılmıyor). CORS: onay sayfası çerezsiz istek atıyor; kök alan adı `CORS_ORIGINS`te ise ek ayar gerekmiyor (kod değişmedi).
+- Canlı platform çağrısı yapılmadı; push/deploy yok.
+
+### Testler
+
+`motor.spec.ts` (18), `strateji-v2.service.spec.ts` (25, gerçek BEGIN/ROLLBACK), `strateji-v2-rls.spec.ts` (SET ROLE + RETURNING), `strateji-v2-saf.spec.ts` (geçmiş eşlemesi, sayı yasağı, uç taraması, ölü yol bekçisi), `strateji-pdf.spec.ts`, `src/prisma/advstrategy-v2-uretim-sirasi.spec.ts`. Mutasyon: 14 bozma, 14'ü de yakalandı (pay kırpması, site yok kapısı, ölçüm şartı, karışık birim, yapay zekâ yeniden isteği, aktarımın koşullu UPDATE'i, bağlantı sürüm kontrolü, ayırt etmeme, müşteri görünümü süzgeci, geri çekmede bağlantı iptali, PDF bölüm atlama, yorum UPDATE politikası, deneme sınırı, platform tahmininin karışması).

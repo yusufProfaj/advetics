@@ -24,3 +24,22 @@ cmap tablosu `ğ Ğ ş Ş ı İ ç ö ü ₺ € — †` için gerçek glif kim
 
 Lisans: `LICENSE-DejaVu.txt` (Bitstream Vera + public domain değişiklikler) —
 gömme ve yeniden dağıtım serbest.
+
+## Montserrat (AdvStrategy strateji PDF'i, 2026-10-13)
+
+Profaj kurumsal kılavuzu ana başlık ve büyük sayılar için Montserrat istiyor
+(`docs/advstrategy/YENIDEN-TASARIM.md` § 3, § 9.4). Üç dosya: Bold (başlık),
+Medium (sayılar), Regular (gövde). Sürüm 9.000, Google Fonts / upstream ile
+aynı; kullanıcının kendi diskindeki kopyadan (`reklam-kampanyası/…/marka/`)
+alındı, internetten indirilmedi. `ğ Ğ ş Ş ı İ ç Ç ö Ö ü Ü ₺` cmap'te var;
+`strateji-pdf.spec.ts` her koşuda tarıyor.
+
+Lisans: SIL Open Font License 1.1 — `LICENSE-Montserrat-OFL.txt` (telif satırı
+dosyanın kendi `name` tablosundan). Gömme ve yeniden dağıtım serbest.
+
+**Open Sans YOK.** Kılavuz gövde için Open Sans istiyor; tam TTF depoda ve
+makinede yoktu, indirmek kullanıcı izni istiyor. Gövde şimdilik Montserrat
+Regular (`strateji-pdf.ts#GOVDE_DOSYASI`). Open Sans eklenecekse:
+`OpenSans-Regular.ttf` + lisansı bu klasöre, sabit tek satır değişir; Open
+Sans `₺` taşımıyor (ölçüldü, § 9.4) — o dizeler kodda zaten yedek yazı tipine
+dize başına düşüyor.

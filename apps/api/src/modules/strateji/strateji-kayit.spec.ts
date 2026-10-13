@@ -96,8 +96,15 @@ describe('Nest modül kaydı', () => {
     expect(kurucu).not.toMatch(/@Optional/);
     // PrismaService global modülden; kuyruk BU modülün sağlayıcısı olmalı.
     expect(providers).toMatch(/\bStratejiKelimeKuyrugu\b/);
-    // Başka bir iş modülüne bağımlılık yok (açılışta grafik kırılmasın).
-    expect(MODUL).not.toMatch(/imports:/);
+    // v1 servisi başka iş modülüne bağlı değil. v2 (2026-10-13) dört modülü
+    // BİLEREK içe aktarıyor (rehber yazımı ve metin motoru, hazırlık, ölçüm,
+    // gönderim çekirdeği); liste kilitli: yeni bir modül eklemek bir karar.
+    expect(/imports:\s*\[([^\]]*)\]/.exec(MODUL)?.[1]?.split(',').map((x) => x.trim()).filter(Boolean)).toEqual([
+      'RehberModule',
+      'ReklamModule',
+      'OlcumModule',
+      'ReportsModule',
+    ]);
   });
 
   it('KRİTİK: worker kelime kuyruğunu dinliyor, 1 QPS sınırıyla', () => {
