@@ -19,6 +19,7 @@ import {
   parcaEkle,
   parcalariAyikla,
   sekmeCoz,
+  SEKMELER,
   sonucMetni,
   turaGoreSuz,
   turuBitir,
@@ -345,6 +346,8 @@ const BILESENLER = [
   'components/iyilestir/onay-penceresi.tsx',
   'components/iyilestir/asistan-sekmesi.tsx',
   'components/rules/kurallar-icerik.tsx',
+  'components/rules/rule-controls.tsx',
+  'components/rules/rule-editor.tsx',
   'app/(dashboard)/iyilestir/page.tsx',
 ];
 
@@ -366,13 +369,67 @@ describe('KAYNAK: sessiz hata yasakları', () => {
   });
 
   it('KRİTİK: Kurallar’da hesap listesi hatası yutulmuyor (eski sayfa `.catch(() => [])` diyordu)', () => {
+    // Çağrı 2026-10-14'te SAYFAYA taşındı (başlıktaki "Yeni kural" ile aynı liste);
+    // hata sonucu sayfada üretiliyor, Kurallar bölümünde ve editörde yazılıyor.
+    const sayfa = yorumsuz('app/(dashboard)/iyilestir/page.tsx');
+    expect(sayfa).toMatch(/\(e: unknown\): HesapSonucu => \(\{ durum: 'hata', mesaj: hataMetni\(e\) \}\)/);
     const k = yorumsuz('components/rules/kurallar-icerik.tsx');
-    expect(k).toMatch(/\.catch\(\(e: unknown\) => \{\s*hesapHatasi = hataMetni\(e\);/);
-    expect(k).toContain('{hesapHatasi && (');
+    expect(k).toMatch(/hesaplar\.durum === 'hata' && \(\s*<Serit ton="hata" baslik="Reklam hesapları okunamadı\.">\s*\{hesaplar\.mesaj\}/);
+    expect(k).not.toContain('/connections');
+    // Editörde de: seçicinin altında sebep, "Tüm hesaplar" sessizce seçilmiyor.
+    expect(yorumsuz('components/rules/rule-editor.tsx')).toMatch(/hata=\{hesapHatasi \? `Reklam hesapları okunamadı: \$\{hesapHatasi\}/);
+  });
+
+  it('KRİTİK: kural geçmişi ve son tur kararları hatayı yutmuyor; sunucunun cümlesi ekranda', () => {
+    const k = yorumsuz('components/rules/kurallar-icerik.tsx');
+    expect(k).not.toMatch(/\/runs`\)\.catch\(\(\) => null\)/);
+    expect(k).not.toMatch(/\/actions`\)\.catch\(\(\) => null\)/);
+    expect(k.match(/\(e: unknown\): Sonuc<Rule(Run|Action)Record\[\]> => \(\{ durum: 'hata', mesaj: hataMetni\(e\) \}\)/g)).toHaveLength(2);
+    expect(k).toContain('<HataDurumu baslik="Geçmiş alınamadı." mesaj={turlar.mesaj} />');
+    expect(k).toContain("mesaj={kararlar?.durum === 'hata' ? kararlar.mesaj");
   });
 
   it('KRİTİK: eylemsiz kartta `kisit` yazılıyor', () => {
-    expect(yorumsuz('components/iyilestir/oneri-karti.tsx')).toMatch(/hal === 'bilgi' && <span className=\{i\.kisit\}>\{oneri\.kisit/);
+    // 2026-10-14 birleşik tasarım: modül sınıfı `i.kisit` → yerel `KISIT` sabiti.
+    expect(yorumsuz('components/iyilestir/oneri-karti.tsx')).toMatch(/hal === 'bilgi' && <span className=\{KISIT\}>\{oneri\.kisit/);
+  });
+});
+
+describe('KAYNAK: kural tablosu ve yan paneli', () => {
+  const t = yorumsuz('components/rules/rule-controls.tsx');
+
+  it('KRİTİK: canlıya alma YALNIZ onay penceresinden (dryRun: false tek yerde, onayla içinde)', () => {
+    const govde = t.slice(t.indexOf('async function onayla()'), t.indexOf('const sayilar'));
+    expect(govde.length, 'onayla gövdesi bulunamadı').toBeGreaterThan(100);
+    expect(govde).toContain("onay.tur === 'canli' ? await modDegistir(onay.rule, false)");
+    expect(t.match(/modDegistir\([^)]*, false\)/g)).toHaveLength(1);
+    // Menüdeki "Canlıya al" doğrudan değiştirmiyor, pencereyi açıyor.
+    expect(t).toContain("setOnay({ tur: 'canli', rule: s.rule })");
+  });
+
+  it('KRİTİK: adres paneli açıyor, panel kapanınca adres geçmişsiz hâline dönüyor', () => {
+    expect(t).toMatch(/useEffect\(\(\) => \{\s*if \(acikKural\) setPanel\(\{ id: acikKural, sekme: 'gecmis' \}\);\s*\}, \[acikKural\]\);/);
+    const kapat = t.slice(t.indexOf('function kapat()'), t.indexOf('async function islem'));
+    expect(kapat.length, 'kapat gövdesi bulunamadı').toBeGreaterThan(20);
+    expect(kapat).toContain('router.push(kapatAdresi, { scroll: false })');
+    expect(t).toContain('router.push(gecmisAdresleri[id], { scroll: false })');
+  });
+
+  it('KRİTİK: satır eylemleri yazma/canlıya alma yetkisine bağlı', () => {
+    const rc = t.slice(t.indexOf('export function RuleControls'), t.indexOf('export function NewRuleButton'));
+    expect(rc.length, 'RuleControls gövdesi bulunamadı').toBeGreaterThan(200);
+    expect(rc).toMatch(/\{canWrite && \(\s*<Dugme ton="ikincil" boyut="kucuk" onClick=\{onCalistir\}/);
+    expect(rc).toMatch(/\{canWrite &&\s*canActivate &&/);
+    expect(rc).toMatch(/<MenuOgesi tehlike onClick=\{onSil\}/);
+  });
+
+  it('eski görünüş geri gelmiyor: modül sınıfı ve elle düğme yok', () => {
+    for (const d of ['components/rules/rule-controls.tsx', 'components/rules/rule-editor.tsx', 'components/rules/kurallar-icerik.tsx']) {
+      const k = yorumsuz(d);
+      expect(k, d).not.toContain('.module.css');
+      expect(k, d).not.toMatch(/bg-brand[^'"`]*text-white/);
+      expect(k, d).not.toContain('—');
+    }
   });
 });
 
@@ -395,10 +452,20 @@ describe('KAYNAK: tek uygulama yolu', () => {
   });
 
   it('KRİTİK: pencere DOM’dan çıkmıyor — koşulsuz çiziliyor, görünürlük sınıfla', () => {
-    const govde = pencere.slice(pencere.indexOf('return (\n    <div className={`${i.perde}'));
+    // 2026-10-14 birleşik tasarım: elle perde (`i.perde/perdeAcik`) yerine ortak
+    // `Pencere` (kapalıyken `invisible` + `inert`, DOM'da kalıyor). İddia aynı:
+    // pencere koşulsuz çiziliyor ve açıklık YALNIZ `acik` prop'uyla.
+    const bas = pencere.indexOf('  return (\n    <Pencere');
+    expect(bas, 'pencere gövdesi bulunamadı').toBeGreaterThan(-1);
+    const govde = pencere.slice(bas, pencere.indexOf('</Pencere>', bas));
     expect(govde.length, 'pencere gövdesi bulunamadı').toBeGreaterThan(100);
-    expect(pencere).toContain("${acik ? i.perdeAcik : ''}");
-    expect(pencere).not.toMatch(/if \(!(oneri|acik)\) return null/);
+    expect(govde).toContain('acik={acik}');
+    expect(pencere).toContain('const acik = oneri !== null;');
+    expect(pencere).not.toMatch(/if \(!(oneri|acik|o|gosterilen)\) return null/);
+    expect(pencere).not.toMatch(/\{(acik|oneri) && \(\s*<Pencere/);
+    // İstek sürerken Esc/perde kapatmıyor: `Pencere`e kapılı kapatıcı gidiyor.
+    expect(govde).toContain('onKapat={kapatGuvenli}');
+    expect(pencere).toMatch(/const kapatGuvenli = \(\) => \{\s*if \(!suruyor\) onKapat\(\);/);
   });
 
   it('KRİTİK: uyuşmayan sonuçta pencere kendiliğinden KAPANMIYOR', () => {
@@ -428,6 +495,21 @@ describe('KAYNAK: sayfa ve hareket', () => {
     expect(sayfa).toContain("const yazabilir = hasPermission(session, 'budget.write')");
   });
 
+  it('KRİTİK: yan menü bütün bölümleri gösteriyor; "Yeni kural" başlıkta, hesap hatası yutulmuyor', () => {
+    // Görünür sıra sayfada (SIRA), adres çözümü lib'de (SEKMELER). Biri
+    // eklenip öbürü unutulursa bölüm adresle açılır ama menüde görünmez.
+    const sayfa = yorumsuz('app/(dashboard)/iyilestir/page.tsx');
+    const m = sayfa.match(/const SIRA: readonly Sekme\[\] = \[([^\]]+)\]/);
+    expect(m, 'SIRA bulunamadı, tarama boşa düştü').not.toBeNull();
+    const sira = [...m![1].matchAll(/'(\w+)'/g)].map((x) => x[1]);
+    expect([...sira].sort()).toEqual([...SEKMELER].sort());
+    expect(sira[1]).toBe('kurallar');
+    expect(sayfa).toContain('<SayfaIcMenu');
+    const eylem = sayfa.slice(sayfa.indexOf('eylemler={'), sayfa.indexOf('<SayfaIcDuzen'));
+    expect(eylem).toContain('<NewRuleButton');
+    expect(sayfa).toContain("(e: unknown): HesapSonucu => ({ durum: 'hata', mesaj: hataMetni(e) })");
+  });
+
   it('KRİTİK: /kurallar eski adresi İyileştir’e yönleniyor', () => {
     expect(yorumsuz('app/(dashboard)/kurallar/page.tsx')).toContain('redirect(iyilestirKurallarAdresi(');
   });
@@ -446,7 +528,9 @@ describe('KAYNAK: sayfa ve hareket', () => {
       }
     }
     const hareket = css.slice(bas, son + 1);
-    expect(hareket).toContain('animation: gir');
+    // 2026-10-14: modülde yalnız varlık eylem penceresinin dönen adım
+    // simgesi kaldı (`gir` girişi İyileştir ekranlarıyla birlikte silindi).
+    expect(hareket).toContain('animation: don');
     const disari = (css.slice(0, bas) + css.slice(son + 1)).replace(/@keyframes[\s\S]*?\n}\n/g, '');
     expect(disari).not.toMatch(/animation:(?!\s*none)/);
     expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*transition: none !important/);

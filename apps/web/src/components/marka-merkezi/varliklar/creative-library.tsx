@@ -11,6 +11,14 @@ import {
 } from '@advetics/shared';
 import { API_URL, ApiRequestError, apiFetch } from '@/lib/api';
 import { CreativeEditor } from './creative-editor';
+import { useVarlikYeni } from './birincil-eylem';
+import { Kart } from '@/components/ui/kart';
+import { Dugme } from '@/components/ui/dugme';
+import { AdHucresi, SayfalamaCubugu, Tablo } from '@/components/ui/tablo';
+import { Rozet } from '@/components/ui/rozet';
+import { BosDurum, Serit } from '@/components/ui/hal';
+import { Pencere } from '@/components/ui/pencere';
+import { AcilirMenu, IKON_TETIK, MenuAyraci, MenuOgesi } from '@/components/ui/acilir-menu';
 
 /**
  * Kreatif kütüphanesi listesi.
@@ -20,6 +28,14 @@ import { CreativeEditor } from './creative-editor';
  * olmayabilir ve fark yalnızca metin sayısından geliyor. Listede tek bir
  * "tamam" rozeti göstermek, uzmanın Google kampanyası kurarken neden
  * reddedildiğini anlamaması demek olurdu.
+ *
+ * TABLO + YAN PANEL (2026-10-14, taslak `#varlik`): her kreatif bir satır,
+ * biçim hazırlığı aynı satırda rozet; "Düzenle" dışarıda, Kopyala ve Sil ⋯
+ * menüsünde. Düzenleyici sağdan yan panelde (`CreativeEditor`); "Yeni
+ * kreatif" sayfa başlığının sağındaki birincil düğmeden geliyor.
+ *
+ * SİL ONAYLI: eskiden tek tıkla siliniyordu; ⋯ menüsüne taşınınca yanlış
+ * tıklama ihtimali arttı ve silme geri alınamıyor.
  */
 export function CreativeLibrary({
   clientId,
@@ -35,6 +51,17 @@ export function CreativeLibrary({
   const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [silinecek, setSilinecek] = useState<CreativeRecord | null>(null);
+  /*
+   * DÜZENLEYİCİNİN KİMLİĞİ: her açılışta yeni bir `key`, yoksa yan panel
+   * DOM'da kaldığı için bir önceki kreatifin yarım yazısıyla açılırdı.
+   */
+  const [acilis, setAcilis] = useState(0);
+  useVarlikYeni('kreatifler', () => {
+    setEditing(null);
+    setCreating(true);
+    setAcilis((n) => n + 1);
+  });
 
   async function kopyala(id: string): Promise<void> {
     setBusy(id);
@@ -47,6 +74,7 @@ export function CreativeLibrary({
       // KOPYA HEMEN DÜZENLEMEYE AÇILIYOR: kullanıcı kopyalamayı düzenlemek
       // için istedi, listede bulup tıklamak fazladan bir adım.
       setEditing(kopya);
+      setAcilis((n) => n + 1);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Kopyalanamadı');
     } finally {
@@ -67,124 +95,173 @@ export function CreativeLibrary({
     }
   }
 
-  if (creating || editing) {
-    return (
+  const kapat = () => {
+    setCreating(false);
+    setEditing(null);
+  };
+
+  return (
+    <div className="grid gap-3">
       <CreativeEditor
+        key={acilis}
+        acik={creating || editing !== null}
         clientId={clientId}
         creative={editing}
         libraryAssets={libraryAssets}
-        onDone={() => {
-          setCreating(false);
-          setEditing(null);
-        }}
-        onCancel={() => {
-          setCreating(false);
-          setEditing(null);
-        }}
+        onDone={kapat}
+        onCancel={kapat}
       />
-    );
-  }
 
-  return (
-    <div className="space-y-3">
-      <button
-        type="button"
-        onClick={() => setCreating(true)}
-        className="rounded-lg bg-brand px-3.5 py-2 text-sm font-semibold text-white"
-      >
-        Yeni kreatif
-      </button>
+      <Pencere
+        acik={silinecek !== null}
+        onKapat={() => setSilinecek(null)}
+        genislik="dar"
+        baslik="Kreatif silinsin mi?"
+        aciklama={silinecek ? `“${silinecek.name}” kütüphaneden kalkar. Bu geri alınamaz.` : undefined}
+        altEylemler={
+          <>
+            <Dugme ton="ikincil" onClick={() => setSilinecek(null)}>
+              Vazgeç
+            </Dugme>
+            <Dugme
+              ton="tehlike"
+              bekliyor={busy !== null}
+              onClick={() => {
+                const c = silinecek;
+                if (!c) return;
+                void sil(c.id).then(() => setSilinecek(null));
+              }}
+            >
+              Sil
+            </Dugme>
+          </>
+        }
+      />
 
       {error && (
-        <p className="rounded-lg bg-danger-soft px-3 py-2 text-xs text-danger-strong ring-1 ring-inset ring-danger/30">
+        <Serit ton="hata" baslik="İşlem tamamlanamadı.">
           {error}
-        </p>
+        </Serit>
       )}
 
       {creatives.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-line bg-surface px-4 py-8 text-center text-sm text-ink-muted">
-          Bu workspace’te henüz kreatif yok.
-        </p>
+        <BosDurum
+          baslik="Bu workspace’te henüz kreatif yok."
+          neden="Kreatif metin ve görsel havuzu; bir kez yazılır, her kampanyada kullanılır. Sağ üstteki “Yeni kreatif” ile başla."
+        />
       ) : (
-        <ul className="space-y-2">
-          {creatives.map((c) => (
-            <li key={c.id} className="rounded-xl border border-line bg-surface p-3">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="flex min-w-0 gap-3">
-                  <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-surface-sunken">
-                    {c.assets[0] && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={`${API_URL}${c.assets[0].previewUrl}`}
-                        alt=""
-                        className="h-full w-full object-contain"
-                        loading="lazy"
-                      />
-                    )}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-ink">{c.name}</p>
-                    <p className="text-[11px] text-ink-muted">
-                      {c.assets.length} görsel · {c.texts.headlines.length} başlık ·{' '}
-                      {c.texts.descriptions.length} açıklama
-                    </p>
-
-                    {/* PLATFORM HAZIRLIĞI SATIR SATIR. Aynı kreatif Meta'ya
-                        hazır, Google'a hazır olmayabilir. */}
-                    <div className="mt-1 flex flex-wrap gap-2">
-                      {(['meta_single_image', 'google_rsa'] as CreativeFormat[]).map((f) => {
-                        const p = packTextsFor(f, c.texts);
-                        const hazir = p.blockers.length === 0;
-                        return (
-                          <span
-                            key={f}
-                            title={hazir ? 'Hazır' : p.blockers.join(' ')}
-                            className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                              hazir
-                                ? 'bg-ok-soft text-ok-strong'
-                                : 'bg-danger-soft text-danger-strong'
-                            }`}
-                          >
-                            {FORMAT_TEXT_SPEC[f].label.split(' — ')[0]}: {hazir ? 'hazır' : 'eksik'}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex shrink-0 gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setEditing(c)}
-                    className="rounded-lg border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface-sunken"
-                  >
-                    Düzenle
-                  </button>
-                  {/* KOPYALA HER ZAMAN AÇIK: yayınlanmış kreatifi düzenlemenin
-                      tek yolu bu ve düzenle düğmesi o durumda sunucudan hata
-                      alıyor — mesaj da kopyalamayı söylüyor. */}
-                  <button
-                    type="button"
-                    onClick={() => void kopyala(c.id)}
-                    disabled={busy !== null}
-                    className="rounded-lg border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface-sunken disabled:opacity-50"
-                  >
-                    Kopyala
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void sil(c.id)}
-                    disabled={busy !== null}
-                    className="rounded-lg border border-line px-2.5 py-1 text-xs font-medium text-danger-strong hover:bg-danger-soft disabled:opacity-50"
-                  >
-                    Sil
-                  </button>
-                </div>
-              </div>
-            </li>
-          ))}
-        </ul>
+        <Kart dolgu={false}>
+          <Tablo<CreativeRecord>
+            etiket="Kreatifler"
+            satirlar={creatives}
+            satirAnahtari={(c) => c.id}
+            sutunlar={[
+              {
+                anahtar: 'ad',
+                baslik: 'Kreatif',
+                hucre: (c) => (
+                  <span className="flex min-w-0 items-center gap-3">
+                    <span className="h-10 w-10 shrink-0 overflow-hidden rounded-alan bg-surface-sunken">
+                      {c.assets[0] && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={`${API_URL}${c.assets[0].previewUrl}`}
+                          alt=""
+                          className="h-full w-full object-contain"
+                          loading="lazy"
+                        />
+                      )}
+                    </span>
+                    <AdHucresi
+                      ad={
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditing(c);
+                            setAcilis((n) => n + 1);
+                          }}
+                          className="truncate text-left font-semibold text-ink hover:text-brand-strong hover:underline"
+                        >
+                          {c.name}
+                        </button>
+                      }
+                    />
+                  </span>
+                ),
+              },
+              {
+                anahtar: 'icerik',
+                baslik: 'İçerik',
+                ikincil: true,
+                hucre: (c) => (
+                  <span className="text-13 text-ink-muted">
+                    {c.assets.length} görsel · {c.texts.headlines.length} başlık · {c.texts.descriptions.length} açıklama
+                  </span>
+                ),
+              },
+              {
+                anahtar: 'hazir',
+                baslik: 'Biçim hazır mı',
+                hucre: (c) => (
+                  /* PLATFORM HAZIRLIĞI SATIR SATIR. Aynı kreatif Meta'ya
+                     hazır, Google'a hazır olmayabilir. */
+                  <span className="flex flex-wrap gap-1.5">
+                    {(['meta_single_image', 'google_rsa'] as CreativeFormat[]).map((f) => {
+                      const p = packTextsFor(f, c.texts);
+                      const hazir = p.blockers.length === 0;
+                      return (
+                        <Rozet key={f} hal={hazir ? 'ok' : 'hata'} title={hazir ? 'Hazır' : p.blockers.join(' ')}>
+                          {FORMAT_TEXT_SPEC[f].label.split(' — ')[0]}: {hazir ? 'hazır' : 'eksik'}
+                        </Rozet>
+                      );
+                    })}
+                  </span>
+                ),
+              },
+              {
+                anahtar: 'eylem',
+                baslik: <span className="sr-only">Eylem</span>,
+                sayi: true,
+                hucre: (c) => (
+                  <span className="inline-flex items-center gap-1">
+                    <Dugme
+                      ton="ikincil"
+                      boyut="kucuk"
+                      onClick={() => {
+                        setEditing(c);
+                        setAcilis((n) => n + 1);
+                      }}
+                    >
+                      Düzenle
+                    </Dugme>
+                    <AcilirMenu
+                      etiket={`${c.name}: diğer eylemler`}
+                      hizala="sag"
+                      genislik="w-48"
+                      tetik={(o) => (
+                        <button type="button" {...o} className={IKON_TETIK} aria-label="Diğer eylemler">
+                          ⋯
+                        </button>
+                      )}
+                    >
+                      {/* KOPYALA HER ZAMAN AÇIK: yayınlanmış kreatifi düzenlemenin
+                          tek yolu bu ve düzenle düğmesi o durumda sunucudan hata
+                          alıyor; mesaj da kopyalamayı söylüyor. */}
+                      <MenuOgesi devreDisi={busy !== null} onClick={() => void kopyala(c.id)}>
+                        Kopyala
+                      </MenuOgesi>
+                      <MenuAyraci />
+                      <MenuOgesi tehlike devreDisi={busy !== null} onClick={() => setSilinecek(c)}>
+                        Sil
+                      </MenuOgesi>
+                    </AcilirMenu>
+                  </span>
+                ),
+              },
+            ]}
+          />
+          <SayfalamaCubugu bas={1} son={creatives.length} toplam={creatives.length} />
+        </Kart>
       )}
     </div>
   );

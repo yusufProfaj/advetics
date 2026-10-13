@@ -14,6 +14,10 @@ import {
   type CreativeTexts,
 } from '@advetics/shared';
 import { API_URL, ApiRequestError, apiFetch } from '@/lib/api';
+import { YanPanel } from '@/components/ui/pencere';
+import { Dugme } from '@/components/ui/dugme';
+import { Alan, Girdi, MetinAlani } from '@/components/ui/alan';
+import { Serit } from '@/components/ui/hal';
 
 /**
  * Kreatif düzenleyici — metin havuzu + görsel havuzu.
@@ -27,14 +31,21 @@ import { API_URL, ApiRequestError, apiFetch } from '@/lib/api';
  * Bu ekran olmadan Google'a çıkmak pratikte imkânsızdı: basit yüzeyden
  * oluşturulan kreatifler tek başlık ve tek açıklamayla geliyor ve Google RSA
  * en az 3 + 2 istiyor.
+ *
+ * YAN PANELDE (2026-10-14, BILESENLER § 3.4): düzenleme sayfadan çıkmadan,
+ * sağdan. Eskiden düzenleyici listenin YERİNE açılıyordu ve kullanıcı
+ * hangi kreatifi düzenlediğini listeye bakarak doğrulayamıyordu. Kaydet sağ
+ * altta, kapat sağ üstte; Esc ve perde Vazgeç'le aynı.
  */
 export function CreativeEditor({
+  acik,
   clientId,
   creative,
   libraryAssets,
   onDone,
   onCancel,
 }: {
+  acik: boolean;
   clientId: string;
   /** Boşsa yeni kreatif. */
   creative: CreativeRecord | null;
@@ -81,51 +92,48 @@ export function CreativeEditor({
   }
 
   return (
-    <div className="rounded-xl border border-brand/40 bg-surface p-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-sm font-semibold text-ink">
-          {creative ? 'Kreatifi düzenle' : 'Yeni kreatif'}
-        </h2>
-        <span className="text-[11px] text-ink-muted">
-          Metinler bir HAVUZ — her platform kendi paketini buradan kuruyor.
-        </span>
-      </div>
+    <YanPanel
+      acik={acik}
+      onKapat={onCancel}
+      genislik={720}
+      baslik={creative ? 'Kreatifi düzenle' : 'Yeni kreatif'}
+      altEylemler={
+        <>
+          <Dugme ton="ikincil" onClick={onCancel}>
+            Vazgeç
+          </Dugme>
+          <Dugme onClick={kaydet} bekliyor={busy} disabled={!name.trim()}>
+            {creative ? 'Değişiklikleri kaydet' : 'Kreatifi oluştur'}
+          </Dugme>
+        </>
+      }
+    >
+      <p className="m-0 text-13 text-ink-muted">Metinler bir havuz: her platform kendi paketini buradan kuruyor.</p>
 
-      <div className="mt-3 grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
-        <div className="space-y-4">
-          <label className="block">
-            <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-ink-muted">
-              Kreatif adı
-            </span>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Yaz indirimi — genel"
-              className={input}
-            />
-          </label>
+      <div className="grid gap-5">
+        <div className="grid gap-4">
+          <Alan etiket="Kreatif adı">
+            {(id) => (
+              <Girdi id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="Yaz indirimi, genel" />
+            )}
+          </Alan>
 
           {/* ANA METİN TEK, diğerleri LİSTE. Meta'nın birincil metni tek bir
               alan; Google'da karşılığı yok ve paketleme bunu söylüyor. */}
-          <label className="block">
-            <span className="mb-1 flex items-baseline justify-between">
-              <span className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">
-                Ana metin
-              </span>
-              <span className="text-[11px] text-ink-muted">
-                {(texts.primaryText ?? '').length}/{CREATIVE_TEXT_CAPS.primaryText}
-              </span>
-            </span>
-            <textarea
-              value={texts.primaryText ?? ''}
-              onChange={(e) => setTexts({ ...texts, primaryText: e.target.value })}
-              rows={3}
-              className={input}
-            />
-            <span className="mt-0.5 block text-[11px] text-ink-muted">
-              Yalnızca Meta kullanıyor. Google arama reklamında karşılığı yok.
-            </span>
-          </label>
+          <Alan
+            etiket={`Ana metin (${(texts.primaryText ?? '').length}/${CREATIVE_TEXT_CAPS.primaryText})`}
+            ipucu="Yalnızca Meta kullanıyor. Google arama reklamında karşılığı yok."
+          >
+            {(id, aciklamaId) => (
+              <MetinAlani
+                id={id}
+                aria-describedby={aciklamaId}
+                value={texts.primaryText ?? ''}
+                onChange={(e) => setTexts({ ...texts, primaryText: e.target.value })}
+                rows={3}
+              />
+            )}
+          </Alan>
 
           <MetinListesi
             baslik="Başlıklar"
@@ -149,19 +157,16 @@ export function CreativeEditor({
 
           {/* Görseller */}
           <div>
-            <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-ink-muted">
+            <p className="m-0 mb-1.5 text-13 font-semibold text-ink">
               Görseller
-              <span className="ml-1.5 font-normal normal-case tracking-normal">
-                {assetIds.length} seçili
-              </span>
+              <span className="ml-1.5 text-12 font-normal text-ink-muted">{assetIds.length} seçili</span>
             </p>
             {libraryAssets.length === 0 ? (
-              <p className="rounded-lg bg-surface-sunken px-3 py-2 text-xs text-ink-muted">
-                Arşivde görsel yok. Google arama kampanyası görsel kullanmıyor; Meta için
-                gerekiyor.
+              <p className="m-0 rounded-alan bg-surface-sunken px-3 py-2 text-12 text-ink-muted">
+                Arşivde görsel yok. Google arama kampanyası görsel kullanmıyor; Meta için gerekiyor.
               </p>
             ) : (
-              <ul className="grid grid-cols-6 gap-2">
+              <ul className="m-0 grid list-none grid-cols-4 gap-2 p-0 sm:grid-cols-6">
                 {libraryAssets.map((a) => {
                   const oran = matchRatio(a.width, a.height);
                   const sira = assetIds.indexOf(a.id);
@@ -178,7 +183,8 @@ export function CreativeEditor({
                           )
                         }
                         title={`${a.name} · ${a.width}×${a.height}`}
-                        className={`block w-full overflow-hidden rounded-lg border-2 bg-surface-sunken transition ${
+                        aria-pressed={sira >= 0}
+                        className={`block w-full overflow-hidden rounded-alan border-2 bg-surface-sunken transition-colors motion-reduce:transition-none ${
                           sira >= 0
                             ? 'border-brand'
                             : oran
@@ -193,7 +199,7 @@ export function CreativeEditor({
                           className="aspect-square w-full object-contain"
                           loading="lazy"
                         />
-                        <span className="block truncate px-1 pb-0.5 text-[10px] text-ink-muted">
+                        <span className="block truncate px-1 pb-0.5 text-11 text-ink-muted">
                           {sira >= 0 ? `✓ ${sira + 1}.` : oran ? a.name : 'oran uymuyor'}
                         </span>
                       </button>
@@ -205,20 +211,20 @@ export function CreativeEditor({
           </div>
         </div>
 
-        {/* PLATFORM PAKETLERİ — ekranın asıl değeri */}
-        <div className="space-y-3">
+        {/* PLATFORM PAKETLERİ, ekranın asıl değeri */}
+        <div className="grid gap-3 sm:grid-cols-2">
           {paketler.map(({ format, packed }) => (
             <section
               key={format}
-              className={`rounded-lg border p-3 ${
-                packed.blockers.length > 0 ? 'border-danger/30 bg-danger-soft/40' : 'border-line'
+              className={`rounded-alan border p-3 ${
+                packed.blockers.length > 0 ? 'border-line border-l-4 border-l-danger' : 'border-line'
               }`}
             >
-              <h3 className="text-xs font-semibold text-ink">{FORMAT_TEXT_SPEC[format].label}</h3>
+              <h3 className="font-baslik m-0 text-13 font-bold text-ink">{FORMAT_TEXT_SPEC[format].label}</h3>
 
-              <dl className="mt-2 space-y-1 text-[11px]">
+              <dl className="m-0 mt-2 grid gap-1 text-12">
                 {FORMAT_TEXT_SPEC[format].usesPrimaryText && (
-                  <Satir etiket="Ana metin" deger={packed.primaryText ? '✓' : '—'} />
+                  <Satir etiket="Ana metin" deger={packed.primaryText ? '✓' : 'yok'} />
                 )}
                 <Satir
                   etiket="Başlık"
@@ -232,17 +238,17 @@ export function CreativeEditor({
 
               {/* ENGELLER VE UYARILAR AYRI — yayın kontrolüyle aynı sözleşme. */}
               {packed.blockers.map((b) => (
-                <p key={b} className="mt-1.5 text-[11px] text-danger-strong">
+                <p key={b} className="m-0 mt-1.5 text-12 text-danger-strong">
                   · {b}
                 </p>
               ))}
               {packed.warnings.map((w) => (
-                <p key={w} className="mt-1.5 text-[11px] text-warn-strong">
+                <p key={w} className="m-0 mt-1.5 text-12 text-ink-muted">
                   · {w}
                 </p>
               ))}
               {packed.blockers.length === 0 && packed.warnings.length === 0 && (
-                <p className="mt-1.5 text-[11px] text-ok-strong">Bu platform için hazır.</p>
+                <p className="m-0 mt-1.5 text-12 font-semibold text-ink">Bu platform için hazır.</p>
               )}
             </section>
           ))}
@@ -250,38 +256,19 @@ export function CreativeEditor({
       </div>
 
       {error && (
-        <p className="mt-3 rounded-lg bg-danger-soft px-3 py-2 text-xs text-danger-strong ring-1 ring-inset ring-danger/30">
+        <Serit ton="hata" baslik="Kreatif kaydedilemedi.">
           {error}
-        </p>
+        </Serit>
       )}
-
-      <div className="mt-4 flex gap-2">
-        <button
-          type="button"
-          onClick={kaydet}
-          disabled={busy || !name.trim()}
-          className="rounded-lg bg-brand px-3.5 py-2 text-sm font-semibold text-white disabled:opacity-40"
-        >
-          {busy ? 'Kaydediliyor…' : creative ? 'Değişiklikleri kaydet' : 'Kreatifi oluştur'}
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="rounded-lg border border-line px-3.5 py-2 text-sm font-medium text-ink hover:bg-surface-sunken"
-        >
-          Vazgeç
-        </button>
-      </div>
 
       {/* HİÇBİR PLATFORMA HAZIR DEĞİLSE KAYIT YİNE MÜMKÜN.
           Kullanıcı metni parça parça yazabilmeli; eksik bir kreatifi
           kaydedememek, `ad_drafts`'ta yaşanan "3. adım hiç çalışmıyor"
           hatasının aynısı olurdu. Eksikler yayın kontrolünde de duruyor. */}
-      <p className="mt-2 text-[11px] text-ink-muted">
-        Eksik bir kreatifi kaydedebilirsin — yayın kontrolü hangi platformda neyin eksik
-        olduğunu tekrar söyleyecek.
+      <p className="m-0 text-12 text-ink-muted">
+        Eksik bir kreatifi kaydedebilirsin; yayın kontrolü hangi platformda neyin eksik olduğunu tekrar söyler.
       </p>
-    </div>
+    </YanPanel>
   );
 }
 
@@ -322,77 +309,73 @@ function MetinListesi({
 }) {
   return (
     <div>
-      <p className="mb-1 flex items-baseline justify-between">
-        <span className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">
-          {baslik}
-        </span>
-        <span className="text-[11px] text-ink-muted">
+      <p className="m-0 mb-1.5 flex items-baseline justify-between">
+        <span className="text-13 font-semibold text-ink">{baslik}</span>
+        <span className="text-12 text-ink-muted tabular-nums">
           {items.length}/{max}
         </span>
       </p>
 
-      <ul className="space-y-1.5">
+      <ul className="m-0 grid list-none gap-1.5 p-0">
         {items.map((item, i) => (
           <li key={i} className="flex items-start gap-1.5">
-            <span className="mt-2 w-4 shrink-0 text-[11px] text-ink-muted">{i + 1}.</span>
+            <span className="mt-2.5 w-4 shrink-0 text-12 text-ink-muted">{i + 1}.</span>
             <div className="min-w-0 flex-1">
-              <input
+              <Girdi
+                aria-label={`${baslik} ${i + 1}`}
+                hatali={item.length > uyariUzunlugu}
                 value={item}
                 onChange={(e) => {
                   const next = [...items];
                   next[i] = e.target.value.slice(0, maxLength);
                   onChange(next);
                 }}
-                className={input}
               />
               {/* GOOGLE SINIRI AŞILDIYSA SÖYLENİYOR — metin silinmiyor.
                   Meta'da sorunsuz çalışan bir başlık, Google'a girmiyor diye
                   kesilmemeli; kullanıcı hangi platformu kaybettiğini bilerek
                   karar versin. */}
               {item.length > uyariUzunlugu && (
-                <span className="mt-0.5 block text-[11px] text-warn-strong">
-                  {item.length} karakter — Google paketine giremiyor (sınır {uyariUzunlugu}).
+                <span className="mt-0.5 block text-12 text-danger-strong">
+                  {item.length} karakter: Google paketine giremiyor (sınır {uyariUzunlugu}).
                 </span>
               )}
             </div>
-            <button
-              type="button"
-              onClick={() => onChange(items.filter((_, j) => j !== i))}
-              className="mt-1.5 shrink-0 text-[11px] text-danger-strong hover:underline"
-            >
-              sil
-            </button>
             {i > 0 && (
-              <button
-                type="button"
+              <Dugme
+                ton="hayalet"
+                boyut="kucuk"
                 onClick={() => {
                   const next = [...items];
                   [next[i - 1], next[i]] = [next[i]!, next[i - 1]!];
                   onChange(next);
                 }}
-                title="Yukarı taşı — Meta ilk sıradakini kullanıyor"
-                className="mt-1.5 shrink-0 text-[11px] text-ink-muted hover:underline"
+                title="Yukarı taşı: Meta ilk sıradakini kullanıyor"
+                aria-label={`${baslik} ${i + 1}: yukarı taşı`}
+                className="mt-1 w-8 px-0"
               >
                 ↑
-              </button>
+              </Dugme>
             )}
+            <Dugme
+              ton="hayalet"
+              boyut="kucuk"
+              onClick={() => onChange(items.filter((_, j) => j !== i))}
+              aria-label={`${baslik} ${i + 1}: sil`}
+              className="mt-1 text-danger-strong"
+            >
+              Sil
+            </Dugme>
           </li>
         ))}
       </ul>
 
       {items.length < max && (
-        <button
-          type="button"
-          onClick={() => onChange([...items, ''])}
-          className="mt-1.5 text-[11px] text-brand-strong underline"
-        >
-          + {baslik.toLowerCase()} ekle
-        </button>
+        <Dugme ton="ikincil" boyut="kucuk" onClick={() => onChange([...items, ''])} className="mt-2">
+          + {baslik.toLocaleLowerCase('tr')} ekle
+        </Dugme>
       )}
-      <p className="mt-1 text-[11px] text-ink-muted">{ipucu}</p>
+      <p className="m-0 mt-1 text-12 text-ink-muted">{ipucu}</p>
     </div>
   );
 }
-
-const input =
-  'w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-brand';

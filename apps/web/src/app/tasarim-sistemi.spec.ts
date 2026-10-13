@@ -101,7 +101,6 @@ describe('tasarım sistemi: temel', () => {
     const moduller = [
       'components/taslak/taslak.module.css',
       'components/taslak/iyilestir.module.css',
-      'components/taslak/kreatif-zeka.module.css',
       'components/rehber/rehber.module.css',
     ];
     for (const m of moduller) {

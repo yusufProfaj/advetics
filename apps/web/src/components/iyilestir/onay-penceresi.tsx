@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 import type { Oneri, UygulamaSonucu } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import {
@@ -12,9 +12,12 @@ import {
   sonucMetni,
   uygulaHatasi,
   uygulamaSonucuCoz,
+  type AdimHali,
   type UygulamaAsamasi,
 } from '@/lib/iyilestir';
-import i from '@/components/taslak/iyilestir.module.css';
+import { Dugme } from '@/components/ui/dugme';
+import { Pencere } from '@/components/ui/pencere';
+import { DurumNoktasi } from '@/components/ui/rozet';
 
 /**
  * ═══ ONAY PENCERESİ — ÖNERİ KARTI VE ASİSTANIN UYGULA KARTI AYNI YOLDAN ═══
@@ -24,9 +27,11 @@ import i from '@/components/taslak/iyilestir.module.css';
  * geçiyor: ikinci bir pencere yazılırsa biri "şimdi → sonra"yı, öbürü
  * adımları kaybeder ve kullanıcı aynı işi iki farklı onayla verir.
  *
- * DOM'DAN ÇIKMIYOR (CLAUDE.md tasarım kuralı): kapalıyken `visibility:
- * hidden`, açılırken geçişle görünüyor. Koşullu render, kapanış geçişini
- * keser ve pencere bir karede kaybolur.
+ * DOM'DAN ÇIKMIYOR (CLAUDE.md tasarım kuralı): `Pencere` kapalıyken
+ * `invisible` + `inert`, açılırken geçişle görünüyor; Esc, perde ve odak
+ * tuzağı bileşende. Koşullu render, kapanış geçişini keser ve pencere bir
+ * karede kaybolur. Onay düğmesi KOYU, kırmızı dolu değil: sayfanın tek
+ * birincil eylemi başlıktaki "Yeni kural".
  *
  * İSTEK `ozet` TAŞIYOR: sunucu öneriyi yeniden hesaplayıp özet eşleşmezse
  * 409 dönüyor. Bu hâlde aynı düğmeye tekrar basmak yine 409 alır; pencere
@@ -47,7 +52,13 @@ export function OnayPenceresi({
   const [asama, setAsama] = useState<UygulamaAsamasi>('hazir');
   const [mesaj, setMesaj] = useState<string | null>(null);
   const [sonuc, setSonuc] = useState<UygulamaSonucu | null>(null);
-  const onaylaRef = useRef<HTMLButtonElement>(null);
+  /*
+   * KİMLİKLE ODAK, ref DEĞİL: `Dugme` ref almıyor (ortak bileşen, bu işin
+   * dışında). `Pencere` açılınca odağı ilk öğeye (✕) veriyor; klavye
+   * kullanıcısı eskisi gibi onay düğmesinde başlasın diye bir kare sonra
+   * buraya taşınıyor.
+   */
+  const onaylaId = useId();
   const acik = oneri !== null;
 
   useEffect(() => {
@@ -57,22 +68,11 @@ export function OnayPenceresi({
       setMesaj(null);
       setSonuc(null);
       // Klavye kullanıcısı pencerenin içinde başlasın.
-      requestAnimationFrame(() => onaylaRef.current?.focus());
+      requestAnimationFrame(() => document.getElementById(onaylaId)?.focus());
     }
-  }, [oneri]);
+  }, [oneri, onaylaId]);
 
   const suruyor = asama === 'gonderiliyor';
-
-  useEffect(() => {
-    if (!acik) return;
-    const tus = (e: KeyboardEvent) => {
-      // İstek sürerken Esc kapatmıyor: sonucu görmeden pencereyi kapatan
-      // kullanıcı değişikliğin olup olmadığını bilemez.
-      if (e.key === 'Escape' && !suruyor) onKapat();
-    };
-    window.addEventListener('keydown', tus);
-    return () => window.removeEventListener('keydown', tus);
-  }, [acik, suruyor, onKapat]);
 
   const o = gosterilen;
   const metin = o ? eylemMetni(o) : null;
@@ -116,71 +116,155 @@ export function OnayPenceresi({
     }
   }
 
+  /*
+   * İSTEK SÜRERKEN KAPANMIYOR: `Pencere` Esc'te ve perde tıklamasında
+   * `onKapat` çağırıyor; sonucu görmeden pencereyi kapatan kullanıcı
+   * değişikliğin olup olmadığını bilemez. Kapı burada, tek yerde.
+   */
+  const kapatGuvenli = () => {
+    if (!suruyor) onKapat();
+  };
+
   return (
-    <div className={`${i.perde} ${acik ? i.perdeAcik : ''}`} aria-hidden={!acik} onClick={(e) => e.target === e.currentTarget && !suruyor && onKapat()}>
-      <div className={i.pencere} role="dialog" aria-modal="true" aria-labelledby="iyilestir-onay-baslik">
-        <h3 id="iyilestir-onay-baslik">{metin?.baslik ?? 'Onay'}</h3>
-        <p>{metin?.aciklama ?? ''}</p>
-        <div className={i.degisim}>
-          <div>
-            <small>Şimdi</small>
-            <b>{metin?.once ?? '—'}</b>
-          </div>
-          <span className={i.ok}>→</span>
-          <div>
-            <small>Sonra</small>
-            <b>{metin?.sonra ?? '—'}</b>
-          </div>
-        </div>
-        <ul className={i.adimlar} aria-live="polite">
-          {(adimlar ?? ['', '', '']).map((a, n) => (
-            <li key={n} data-hal={haller[n]}>
-              <i />
-              {a}
-            </li>
-          ))}
-        </ul>
+    <Pencere
+      acik={acik}
+      onKapat={kapatGuvenli}
+      baslik={metin?.baslik ?? 'Onay'}
+      aciklama={metin?.aciklama ?? ''}
+      altEylemler={
+        asama === 'degisti' ? (
+          <Dugme
+            ton="koyu"
+            onClick={() => {
+              onKapat();
+              router.refresh();
+            }}
+          >
+            Yenile
+          </Dugme>
+        ) : sonuc ? (
+          <Dugme ton="ikincil" onClick={onKapat}>
+            Kapat
+          </Dugme>
+        ) : (
+          <>
+            <Dugme ton="ikincil" onClick={onKapat} disabled={suruyor}>
+              Vazgeç
+            </Dugme>
+            <Dugme id={onaylaId} ton="koyu" onClick={onayla} disabled={!metin} bekliyor={suruyor}>
+              {asama === 'hata' ? 'Tekrar dene' : 'Onayla ve uygula'}
+            </Dugme>
+          </>
+        )
+      }
+    >
+      <div className="grid gap-4">
+        <DegisimKutusu once={metin?.once ?? null} sonra={metin?.sonra ?? null} />
+        <AdimListesi adimlar={adimlar ?? ['', '', '']} haller={haller} />
 
         {sonuc && o && (
-          <div className={`${i.sonuc} ${sonuc.durum === 'dogrulandi' ? i.sonucOk : i.sonucUyari}`} role="status">
+          <SonucKutusu ton={sonuc.durum === 'dogrulandi' ? 'ok' : 'uyari'}>
             {sonucMetni(sonuc, o.platform, metin?.sonra ?? null, 'az önce').metin}
-          </div>
+          </SonucKutusu>
         )}
         {mesaj && (
-          <div className={`${i.sonuc} ${i.sonucHata}`} role="alert">
+          <SonucKutusu ton="hata">
             {asama === 'degisti' ? <strong>Öneri değişti, yenile. </strong> : <strong>Uygulanamadı. </strong>}
             {mesaj}
-          </div>
+          </SonucKutusu>
         )}
-
-        <div className={i.pencereAlt}>
-          {asama === 'degisti' ? (
-            <button
-              type="button"
-              className={i.birincil}
-              onClick={() => {
-                onKapat();
-                router.refresh();
-              }}
-            >
-              Yenile
-            </button>
-          ) : sonuc ? (
-            <button type="button" className={i.ikincil} onClick={onKapat}>
-              Kapat
-            </button>
-          ) : (
-            <>
-              <button type="button" className={i.ikincil} onClick={onKapat} disabled={suruyor}>
-                Vazgeç
-              </button>
-              <button ref={onaylaRef} type="button" className={i.birincil} onClick={onayla} disabled={suruyor || !metin}>
-                {asama === 'hata' ? 'Tekrar dene' : 'Onayla ve uygula'}
-              </button>
-            </>
-          )}
-        </div>
       </div>
+    </Pencere>
+  );
+}
+
+/*
+ * ═══ ONAY GÖVDESİNİN PARÇALARI (Grup 3 sapması: yerel yardımcı) ═══
+ *
+ * Öneri onayı ve sinyal durdurma onayı AYNI görünüşte olmak zorunda
+ * (`sinyal-pencereleri.tsx` başı: "kampanyayı durdurmak altındaki setleri de
+ * durdurur" cümlesi iki ekranda ayrışmasın). `components/ui`da "şimdi → sonra"
+ * kutusu ve adım listesi yok; iki pencere bunları buradan alıyor, ikinci bir
+ * kopya doğduğu anda ayrışırdı.
+ */
+
+/** "Şimdi → Sonra" kutusu. Değer yoksa uzun tire DEĞİL kısa çizgi (panel metin dili). */
+export function DegisimKutusu({ once, sonra }: { once: string | null; sonra: string | null }) {
+  return (
+    <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2.5 rounded-alan border border-line p-3">
+      <div className="min-w-0">
+        <small className="block text-12 text-ink-muted">Şimdi</small>
+        <b className="font-baslik text-15 tabular-nums text-ink">{once ?? '-'}</b>
+      </div>
+      <span aria-hidden className="text-18 text-ink-muted">
+        →
+      </span>
+      <div className="min-w-0">
+        <small className="block text-12 text-ink-muted">Sonra</small>
+        <b className="font-baslik text-15 tabular-nums text-ink">{sonra ?? '-'}</b>
+      </div>
+    </div>
+  );
+}
+
+const ADIM_NOKTASI: Record<AdimHali, string> = {
+  bos: 'border-line',
+  // Dönen halka: yalnız hareket serbestse döner (`motion-safe:`), değilse
+  // kırmızı halka olarak durur; adım yine "sürüyor" okunur.
+  suruyor: 'border-brand border-t-transparent motion-safe:animate-spin',
+  // YEŞİL YALNIZ DURUM NOKTASI (kılavuz): doğrulanan adımın noktası.
+  bitti: 'border-ok bg-ok',
+  uyari: 'border-danger bg-danger',
+  hata: 'border-danger bg-danger',
+};
+
+const ADIM_METNI: Record<AdimHali, string> = {
+  bos: 'text-ink-muted',
+  suruyor: 'text-ink',
+  bitti: 'text-ink',
+  uyari: 'text-danger-strong',
+  hata: 'text-danger-strong',
+};
+
+/**
+ * Üç adım GERÇEĞİ gösteriyor (`adimHalleri`); `data-hal` ekran okuyucu ve
+ * test için duruyor, görünüş sınıftan.
+ */
+export function AdimListesi({ adimlar, haller }: { adimlar: readonly string[]; haller: readonly AdimHali[] }) {
+  return (
+    <ul className="m-0 grid list-none gap-1.5 p-0 text-[12.5px]" aria-live="polite">
+      {adimlar.map((a, n) => {
+        const h = haller[n] ?? 'bos';
+        return (
+          <li key={n} data-hal={h} className={`flex items-center gap-2 transition-colors motion-reduce:transition-none ${ADIM_METNI[h]}`}>
+            <i aria-hidden className={`h-4 w-4 shrink-0 rounded-full border-2 ${ADIM_NOKTASI[h]}`} />
+            {a}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/**
+ * Sonuç kutusu: zemin boyanmıyor, renk SOL ÇİZGİDE (kılavuz şeridi). Doğrulanan
+ * sonuçta yeşil yalnız noktada; uyuşmayan ve hata kırmızı çizgi. Rol tondan:
+ * hata hemen duyurulur (`alert`), diğerleri sırası gelince (`status`).
+ */
+export function SonucKutusu({ ton, children }: { ton: 'ok' | 'uyari' | 'hata'; children: ReactNode }) {
+  return (
+    <div
+      role={ton === 'hata' ? 'alert' : 'status'}
+      className={`flex items-start gap-2 rounded-[12px] border border-l-4 border-line bg-surface px-3 py-2.5 text-[12.5px] leading-normal ${
+        ton === 'ok' ? 'border-l-ink-soluk font-semibold text-ink' : 'border-l-danger text-ink'
+      }`}
+    >
+      {ton === 'ok' && (
+        <span className="mt-1.5">
+          <DurumNoktasi hal="ok" />
+        </span>
+      )}
+      <span className="min-w-0 flex-1">{children}</span>
     </div>
   );
 }

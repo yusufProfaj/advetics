@@ -39,21 +39,32 @@ import {
   type KreatifSonucu,
   type KreatifSorgusu,
 } from '@/lib/kreatif-zeka';
-import i from '@/components/taslak/iyilestir.module.css';
-import k from '@/components/taslak/kreatif-zeka.module.css';
-import s from '@/components/taslak/taslak.module.css';
+import { Dugme, dugmeSinifi } from '@/components/ui/dugme';
+import { Kart } from '@/components/ui/kart';
+import { AdHucresi, AracCubugu, SayfalamaCubugu, Tablo } from '@/components/ui/tablo';
+import { BolumluSecici } from '@/components/ui/sekmeler';
+import { DurumNoktasi, type DurumHali } from '@/components/ui/rozet';
+import { BosDurum, HataDurumu, Serit, Yukleniyor } from '@/components/ui/hal';
 
 type BriefHali = { durum: 'bos' } | { durum: 'yukleniyor' } | { durum: 'hata'; mesaj: string };
 
 const hataMesaji = (e: unknown) => (e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.');
 
+/** Kova → durum noktası. Yeşil YALNIZ "iyi gidiyor" (kılavuz: yeşil yalnız durum noktası). */
+const KOVA_HALI: Record<Kova, DurumHali> = { iyi_gidiyor: 'ok', dikkat: 'hata', veri_yetersiz: 'taslak' };
+
+/** Küçük sayı eki (seçenek etiketlerinde "Dikkat 3"). */
+function Sayi({ n }: { n: number }) {
+  return <span className="ml-1.5 tabular-nums text-ink-muted">{n}</span>;
+}
+
 /**
  * ═══ İYİLEŞTİR › KREATİFLER (Paket D, taslak `docs/kreatif-zeka/taslak.html`) ═══
  *
  * Üstte küme seçici ve etiketleme durumu, ortada yeni kreatifler (kova) ya
- * da bütün kreatifler (puan), altta "Ne işe yarıyor" ve üretim brief'i.
- * Kararlar `lib/kreatif-zeka.ts`te ve çalıştırılarak sınanıyor; burada
- * yalnız çizim ve istek.
+ * da bütün kreatifler (puan tablosu), altta "Ne işe yarıyor" ve üretim
+ * brief'i. Kararlar `lib/kreatif-zeka.ts`te ve çalıştırılarak sınanıyor;
+ * burada yalnız çizim ve istek.
  *
  * DÖRT HÂL AYRI (`kreatifKutuHali`): yükleniyor, hata (sunucunun cümlesi),
  * boş (NEDENİYLE), dolu. `.catch(() => setX([]))` YOK.
@@ -61,6 +72,10 @@ const hataMesaji = (e: unknown) => (e instanceof ApiRequestError ? e.message : '
  * SÜZGEÇ SUNUCUDA (küme, görünüm, kova, sayfa); sıra numarası eski yanıtın
  * yenisini ezmesini engelliyor. Özet ve farklar SON GELEN yanıttan: süzgeç
  * isteği sürerken üst şerit boşalmasın.
+ *
+ * GÖRÜNÜŞ (birleşik tasarım 2026-10-14): `Kart`, `Tablo`, `BolumluSecici`
+ * ve dört hâl bileşenleri. Kreatif kartı ve "ne işe yarıyor" aralık çubuğu
+ * `components/ui`da yok; yerel ve yalnız token sınıflarıyla (Grup 3 sapması).
  */
 export function KreatiflerSekmesi({
   clientId,
@@ -157,93 +172,116 @@ export function KreatiflerSekmesi({
   return (
     <>
       {son && son.hatalar.length > 0 && (
-        <div className={`${s.bildirim} ${s.tehlike}`} role="alert">
-          <span className={s.bildirimIkon} aria-hidden>
-            !
-          </span>
-          <span className={s.bildirimMetin}>
-            <strong>Bazı kaynaklar okunamadı; ekran eksik olabilir.</strong> {son.hatalar.map((h) => `${h.kaynak}: ${h.mesaj}`).join(' · ')}
-          </span>
-        </div>
+        <Serit ton="hata" baslik="Bazı kaynaklar okunamadı; ekran eksik olabilir.">
+          {son.hatalar.map((h) => `${h.kaynak}: ${h.mesaj}`).join(' · ')}
+        </Serit>
       )}
 
       {/* Ortak üst: küme seçici + etiketleme durumu */}
-      <div className={s.kart}>
-        {son && son.kumeler.length > 0 && (
-          <div className={i.sArac} role="group" aria-label="Karşılaştırma kümesi">
-            <span className={i.sEtk}>Karşılaştır:</span>
-            {son.kumeler.map((x) => (
-              <button key={x.anahtar} type="button" className={i.cip} aria-pressed={x.anahtar === secili} onClick={() => suz({ kume: x.anahtar })}>
-                {x.ad} <span className={i.say}>{x.kreatif}</span>
-              </button>
-            ))}
-            <span className={i.zaman}>Aynı amaçtaki kreatifler birbiriyle karşılaştırılır</span>
-          </div>
-        )}
-        {son && <EtiketlemeSeridi yanit={son} yazabilir={yetki.yaz} etiketle={etiketle} onEtiketle={() => void etiketleBaslat()} />}
-      </div>
+      {son && (
+        <Kart dolgu={false}>
+          {son.kumeler.length > 0 && (
+            <AracCubugu sag={<span className="text-12 text-ink-muted">Aynı amaçtaki kreatifler birbiriyle karşılaştırılır</span>}>
+              <span className="text-12 font-semibold text-ink-muted">Karşılaştır:</span>
+              <BolumluSecici
+                etiket="Karşılaştırma kümesi"
+                secili={secili ?? ''}
+                onSec={(k) => suz({ kume: k })}
+                secenekler={son.kumeler.map((x) => ({
+                  deger: x.anahtar,
+                  etiket: (
+                    <>
+                      {x.ad}
+                      <Sayi n={x.kreatif} />
+                    </>
+                  ),
+                }))}
+              />
+            </AracCubugu>
+          )}
+          <EtiketlemeSeridi yanit={son} yazabilir={yetki.yaz} etiketle={etiketle} onEtiketle={() => void etiketleBaslat()} />
+        </Kart>
+      )}
 
       {/* Liste */}
-      <div className={s.kart}>
-        <div className={i.sArac} role="group" aria-label="Görünüm">
-          {(['yeni', 'tumu'] as KreatifGorunumu[]).map((g) => (
-            <button key={g} type="button" className={i.cip} aria-pressed={q.gorunum === g} onClick={() => suz({ gorunum: g, kova: null })}>
-              {g === 'yeni' ? 'Yeni kreatifler' : 'Tümü'}
-            </button>
-          ))}
+      <Kart dolgu={false}>
+        <AracCubugu
+          sag={
+            kumeOzet && (
+              <span className="text-12 text-ink-muted">
+                {q.gorunum === 'yeni' ? `İlk 14 gün · karar için en az ${esikMetni(son!.paraBirimi)} harcama · ` : 'Puana göre · '}
+                {metrikAdi(kumeOzet.anaMetrik).toLocaleLowerCase('tr')}
+                {kumeOzet.metrikDusus ? ' (dönüşüm az, tıklama oranına göre)' : ''}
+              </span>
+            )
+          }
+        >
+          <BolumluSecici
+            etiket="Görünüm"
+            secili={q.gorunum}
+            onSec={(g: KreatifGorunumu) => suz({ gorunum: g, kova: null })}
+            secenekler={(['yeni', 'tumu'] as KreatifGorunumu[]).map((g) => ({ deger: g, etiket: g === 'yeni' ? 'Yeni kreatifler' : 'Tümü' }))}
+          />
           {q.gorunum === 'yeni' && son && (
-            <>
-              <span className={i.sAyrac} />
-              <button type="button" className={i.cip} aria-pressed={q.kova === null} onClick={() => suz({ kova: null })}>
-                Hepsi <span className={i.say}>{son.kovaSayilari.iyi_gidiyor + son.kovaSayilari.dikkat + son.kovaSayilari.veri_yetersiz}</span>
-              </button>
-              {(['iyi_gidiyor', 'dikkat', 'veri_yetersiz'] as Kova[]).map((kv) => (
-                <button key={kv} type="button" className={i.cip} aria-pressed={q.kova === kv} onClick={() => suz({ kova: kv })}>
-                  {kv === 'iyi_gidiyor' && <span className={`${i.sNokta} ${i.sNoktaYesil}`} aria-hidden="true" />}
-                  {KOVA_ADI[kv]} <span className={i.say}>{son.kovaSayilari[kv]}</span>
-                </button>
-              ))}
-            </>
+            <BolumluSecici
+              etiket="Kova"
+              secili={q.kova ?? 'hepsi'}
+              onSec={(kv) => suz({ kova: kv === 'hepsi' ? null : kv })}
+              secenekler={[
+                {
+                  deger: 'hepsi' as const,
+                  etiket: (
+                    <>
+                      Hepsi
+                      <Sayi n={son.kovaSayilari.iyi_gidiyor + son.kovaSayilari.dikkat + son.kovaSayilari.veri_yetersiz} />
+                    </>
+                  ),
+                },
+                ...(['iyi_gidiyor', 'dikkat', 'veri_yetersiz'] as Kova[]).map((kv) => ({
+                  deger: kv,
+                  etiket: (
+                    <span className="inline-flex items-center gap-1.5">
+                      {kv === 'iyi_gidiyor' && <DurumNoktasi hal="ok" />}
+                      {KOVA_ADI[kv]}
+                      <Sayi n={son.kovaSayilari[kv]} />
+                    </span>
+                  ),
+                })),
+              ]}
+            />
           )}
-          {kumeOzet && (
-            <span className={i.zaman}>
-              {q.gorunum === 'yeni' ? `İlk 14 gün · karar için en az ${esikMetni(son!.paraBirimi)} harcama · ` : 'Puana göre · '}
-              {metrikAdi(kumeOzet.anaMetrik).toLocaleLowerCase('tr')}
-              {kumeOzet.metrikDusus ? ' (dönüşüm az, tıklama oranına göre)' : ''}
-            </span>
-          )}
-        </div>
+        </AracCubugu>
 
         {hal === 'yukleniyor' && (
-          <div className={i.sYukleniyor} aria-busy="true" aria-label="Kreatifler yükleniyor">
-            <i style={{ width: '40%' }} />
-            <i style={{ width: '90%' }} />
-            <i style={{ width: '75%' }} />
+          <div className="p-4">
+            <Yukleniyor etiket="Kreatifler yükleniyor" />
           </div>
         )}
         {sonuc?.durum === 'hata' && (
-          <div className={i.sHataKutu} role="alert">
-            <b>Kreatifler okunamadı.</b> Sunucunun cevabı: {sonuc.mesaj}{' '}
-            <button type="button" className={i.metin} onClick={() => void yukle(q)}>
-              Yeniden dene
-            </button>
+          <div className="p-4">
+            <HataDurumu baslik="Kreatifler okunamadı." mesaj={<>Sunucunun cevabı: {sonuc.mesaj}</>} onTekrar={() => void yukle(q)} />
           </div>
         )}
-        {hal === 'bos' && sonuc?.durum === 'tamam' && <BosKutu clientId={clientId} neden={sonuc.yanit.emptyReason} onTumu={() => suz({ gorunum: 'tumu', kova: null })} />}
+        {hal === 'bos' && sonuc?.durum === 'tamam' && (
+          <div className="p-4">
+            <BosKutu clientId={clientId} neden={sonuc.yanit.emptyReason} onTumu={() => suz({ gorunum: 'tumu', kova: null })} />
+          </div>
+        )}
         {hal === 'dolu' && sonuc?.durum === 'tamam' && q.gorunum === 'yeni' && (
-          <div className={k.izgara}>
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(250px,1fr))] gap-3 p-4">
             {sonuc.yanit.satirlar.map((x) => (
               <KreatifKarti key={x.creativeId} satir={x} clientId={clientId} />
             ))}
           </div>
         )}
-        {hal === 'dolu' && sonuc?.durum === 'tamam' && q.gorunum === 'tumu' && <Tablo yanit={sonuc.yanit} />}
-        {sonuc?.durum === 'tamam' && <Sayfalama yanit={sonuc.yanit} sayfa={q.sayfa} onSayfa={(n) => void yukle({ ...q, sayfa: n })} />}
-      </div>
+        {hal === 'dolu' && sonuc?.durum === 'tamam' && q.gorunum === 'tumu' && <PuanTablosu yanit={sonuc.yanit} />}
+        {/* SESSİZ KESME YOK: "1 - 24 / 80" her hâlde, tek sayfada da. */}
+        {sonuc?.durum === 'tamam' && <SayfalamaCubugu {...sayfalamaBilgisi(sonuc.yanit, q.sayfa, (n) => void yukle({ ...q, sayfa: n }))} />}
+      </Kart>
 
       {/* Ne işe yarıyor + brief */}
       {son && secili && (
-        <div className={k.iki}>
+        <div className="grid items-start gap-4 min-[1100px]:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
           <NeIseYariyor yanit={son} />
           <BriefKarti
             kume={secili}
@@ -263,6 +301,11 @@ export function KreatiflerSekmesi({
   );
 }
 
+/** Ayrıntı listesi (`<details>`): açılıp kapanan içerik DOM'da kalıyor (yerel tarayıcı davranışı). */
+const AYRINTI = 'border-t border-line px-4 py-3 text-13 text-ink-muted';
+const AYRINTI_OZET = 'cursor-pointer font-semibold text-ink';
+const AYRINTI_LISTE = 'm-0 mt-2 grid list-disc gap-1 pl-5';
+
 function EtiketlemeSeridi({
   yanit,
   yazabilir,
@@ -277,54 +320,57 @@ function EtiketlemeSeridi({
   const d = etiketlemeSeridi(yanit.etiketleme);
   return (
     <>
-      <div className={k.durumS}>
-        <span>
-          <span className={`${i.sNokta} ${i.sNoktaYesil}`} aria-hidden="true" /> <b className={s.num}>{d.incelendi}</b>
+      <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5 px-4 py-2.5 text-[12.5px] text-ink">
+        <span className="inline-flex items-center gap-1.5">
+          <DurumNoktasi hal="ok" /> <b className="font-baslik tabular-nums">{d.incelendi}</b>
         </span>
         {d.sirada && (
-          <span>
-            <span className={`${i.sNokta} ${i.sNoktaGri}`} aria-hidden="true" /> {d.sirada}
+          <span className="inline-flex items-center gap-1.5">
+            <DurumNoktasi hal="taslak" /> {d.sirada}
           </span>
         )}
         {d.incelenemiyor && <span>{d.incelenemiyor}</span>}
-        <span className={k.sag}>
-          {d.sonIs && d.hesaplar.length <= 1 && <span className={i.zaman}>{d.sonIs}</span>}
+        <span className="ml-auto flex items-center gap-2">
+          {d.sonIs && d.hesaplar.length <= 1 && <span className="text-12 text-ink-muted">{d.sonIs}</span>}
           {yazabilir && (
-            <button type="button" className={i.ikincil} disabled={etiketle.durum === 'gidiyor'} onClick={onEtiketle}>
+            <Dugme ton="ikincil" boyut="kucuk" bekliyor={etiketle.durum === 'gidiyor'} onClick={onEtiketle}>
               {etiketle.durum === 'gidiyor' ? 'Başlatılıyor' : 'Şimdi incele'}
-            </button>
+            </Dugme>
           )}
         </span>
       </div>
       {etiketle.durum === 'tamam' && (
-        <div className={k.bildirim} role="status">
-          {etiketle.mesaj}
+        <div className="px-4 pb-3">
+          {/* Sunucunun cümlesi olduğu gibi ("sıraya alındı", "zaten sırada"); başlık uydurulmuyor. */}
+          <Serit ton="bilgi" baslik={etiketle.mesaj} />
         </div>
       )}
       {etiketle.durum === 'hata' && (
-        <div className={i.sHataKutu} role="alert">
-          <b>İnceleme başlatılamadı.</b> {etiketle.mesaj}
+        <div className="px-4 pb-3">
+          <Serit ton="hata" baslik="İnceleme başlatılamadı.">
+            {etiketle.mesaj}
+          </Serit>
         </div>
       )}
       {d.hesaplar.length > 1 && (
-        <details className={i.sDisarida} open={d.hesaplar.some((x) => x.sorunlu)}>
-          <summary>Hesap başına son inceleme</summary>
-          <ul>
+        <details className={AYRINTI} open={d.hesaplar.some((x) => x.sorunlu)}>
+          <summary className={AYRINTI_OZET}>Hesap başına son inceleme</summary>
+          <ul className={AYRINTI_LISTE}>
             {d.hesaplar.map((x) => (
               <li key={x.ad}>
-                <b>{x.ad}</b> {x.cumle}
+                <b className="text-ink">{x.ad}</b> {x.cumle}
               </li>
             ))}
           </ul>
         </details>
       )}
       {d.dokum.length > 0 && (
-        <details className={i.sDisarida}>
-          <summary>Neden incelenemiyor</summary>
-          <ul>
+        <details className={AYRINTI}>
+          <summary className={AYRINTI_OZET}>Neden incelenemiyor</summary>
+          <ul className={AYRINTI_LISTE}>
             {d.dokum.map((x) => (
               <li key={x.cumle}>
-                <b className={s.num}>{x.sayi}</b> {x.cumle}
+                <b className="font-baslik tabular-nums text-ink">{x.sayi}</b> {x.cumle}
               </li>
             ))}
             <li>Performance Max kreatifleri henüz incelenmiyor.</li>
@@ -338,20 +384,24 @@ function EtiketlemeSeridi({
 function BosKutu({ clientId, neden, onTumu }: { clientId: string; neden: KreatifZekaYaniti['emptyReason']; onTumu: () => void }) {
   const b = bosMetni(neden);
   return (
-    <div className={i.sBos}>
-      <b>{b.baslik}</b>
-      <p>{b.metin}</p>
-      {b.suzgec && (
-        <button type="button" className={i.ikincil} onClick={onTumu}>
-          Tümüne bak
-        </button>
-      )}
-      {b.baglanti === 'baglantilar' && (
-        <Link className={i.ikincil} href={hesaplarAdresi(clientId)}>
-          Marka Merkezi › Kurulum
-        </Link>
-      )}
-    </div>
+    <BosDurum
+      baslik={b.baslik}
+      neden={b.metin}
+      eylem={
+        <>
+          {b.suzgec && (
+            <Dugme ton="ikincil" boyut="kucuk" onClick={onTumu}>
+              Tümüne bak
+            </Dugme>
+          )}
+          {b.baglanti === 'baglantilar' && (
+            <Link className={dugmeSinifi('ikincil', 'kucuk')} href={hesaplarAdresi(clientId)}>
+              Marka Merkezi › Kurulum
+            </Link>
+          )}
+        </>
+      }
+    />
   );
 }
 
@@ -398,20 +448,33 @@ function useGorsel(creativeId: string): GorselHali {
 
 function Gorsel({ creativeId, alt }: { creativeId: string; alt: string }) {
   const g = useGorsel(creativeId);
-  if (g.durum === 'tamam') return <img src={g.adres} alt={alt} />;
-  if (g.durum === 'hata') return <span className={k.gorselNot}>{g.mesaj}</span>;
-  return <span className={k.gorselNot} aria-busy="true">Görsel yükleniyor</span>;
+  if (g.durum === 'tamam') return <img className="block h-full w-full object-cover" src={g.adres} alt={alt} />;
+  if (g.durum === 'hata') return <span className="p-3 text-center text-12 text-ink-muted">{g.mesaj}</span>;
+  return (
+    <span className="p-3 text-center text-12 text-ink-muted" aria-busy="true">
+      Görsel yükleniyor
+    </span>
+  );
 }
 
+/** Puan halkası: gri çember + siyah dolu yay; puan yoksa "yok" ve nedeni başlıkta. */
 function Halka({ puan }: { puan: number | null }) {
   const c = halkaCizgisi(puan);
   return (
-    <div className={`${k.halka} ${puan === null ? k.halkaYok : ''}`} title={puan === null ? 'Puan yok' : `Puan ${puan} / 100`}>
-      <svg viewBox="0 0 44 44" aria-hidden="true">
-        <circle cx="22" cy="22" r="19" fill="none" stroke="var(--t-line)" strokeWidth="4" />
-        {puan !== null && <circle cx="22" cy="22" r="19" fill="none" stroke="var(--t-ink)" strokeWidth="4" strokeDasharray={`${c.dolu} ${c.cevre}`} strokeLinecap="round" />}
+    <div className="relative h-11 w-11 shrink-0" title={puan === null ? 'Puan yok' : `Puan ${puan} / 100`}>
+      <svg className="h-11 w-11 -rotate-90" viewBox="0 0 44 44" aria-hidden="true">
+        <circle cx="22" cy="22" r="19" className="fill-none stroke-line" strokeWidth="4" />
+        {puan !== null && (
+          <circle cx="22" cy="22" r="19" className="fill-none stroke-ink" strokeWidth="4" strokeDasharray={`${c.dolu} ${c.cevre}`} strokeLinecap="round" />
+        )}
       </svg>
-      <b className={s.num}>{puan === null ? 'yok' : puan}</b>
+      <b
+        className={`absolute inset-0 grid place-items-center tabular-nums ${
+          puan === null ? 'text-11 font-normal text-ink-muted' : 'font-baslik text-14 text-ink'
+        }`}
+      >
+        {puan === null ? 'yok' : puan}
+      </b>
     </div>
   );
 }
@@ -423,54 +486,67 @@ function KreatifKarti({ satir: x, clientId }: { satir: KreatifSatiri; clientId: 
   const durum = etiketDurumMetni(x);
   const puanYok = puanYokCumlesi(x.puan, x.paraBirimi);
   return (
-    <article className={k.kk}>
-      <div className={`${k.gorsel} ${x.etiketler?.en_boy === 'dikey' ? k.gorselDikey : ''}`}>
+    <article className="flex min-w-0 flex-col overflow-hidden rounded-kart border border-line bg-surface">
+      <div
+        className={`relative grid place-items-center overflow-hidden bg-surface-sunken ${
+          x.etiketler?.en_boy === 'dikey' ? 'aspect-[4/5]' : 'aspect-square'
+        }`}
+      >
         <Gorsel creativeId={x.creativeId} alt={x.adAdi ?? 'Kreatif'} />
-        <span className={k.platformEt}>{platformAdi(x)}</span>
-        {kismi && <span className={k.kisim}>{kismi}</span>}
+        <span className="absolute right-2 top-2 rounded-full border border-line bg-surface px-2 py-0.5 text-11 font-bold text-ink">
+          {platformAdi(x)}
+        </span>
+        {kismi && <span className="absolute bottom-2 left-2 rounded-full bg-ink px-2 py-0.5 text-11 font-bold text-surface">{kismi}</span>}
       </div>
-      <div className={k.kkG}>
-        <div className={k.kkUst}>
+      <div className="flex flex-col gap-2 px-3 py-2.5">
+        <div className="flex items-center gap-2.5">
           <Halka puan={x.puan.puan} />
-          <div className={k.kkAd} title={puanYok ?? undefined}>
-            <b>{x.adAdi ?? 'Adsız reklam'}</b>
-            <small>{x.kampanyaAdi ?? ''}</small>
+          <div className="min-w-0" title={puanYok ?? undefined}>
+            <b className="block truncate text-13 text-ink">{x.adAdi ?? 'Adsız reklam'}</b>
+            <small className="block truncate text-12 text-ink-muted">{x.kampanyaAdi ?? ''}</small>
           </div>
         </div>
         {kova && (
-          <span className={`${k.kova} ${kova.kova === 'dikkat' ? k.kovaDikkat : kova.kova === 'veri_yetersiz' ? k.kovaYetersiz : ''}`}>
-            <span
-              className={`${i.sNokta} ${kova.kova === 'iyi_gidiyor' ? i.sNoktaYesil : kova.kova === 'dikkat' ? i.sNoktaKirmizi : i.sNoktaGri}`}
-              aria-hidden="true"
-            />
+          <span
+            className={`inline-flex items-center gap-1.5 text-12 font-bold ${
+              kova.kova === 'dikkat' ? 'text-danger-strong' : kova.kova === 'veri_yetersiz' ? 'text-ink-muted' : 'text-ink'
+            }`}
+          >
+            <DurumNoktasi hal={KOVA_HALI[kova.kova]} />
             {kova.ad}
           </span>
         )}
         {kova && (
-          <div className={k.cumle}>
-            {kova.oneriye ? <Link href={onerilerAdresi(clientId)}>{kova.cumle}</Link> : kova.cumle}
+          <div className="text-[12.5px] text-ink">
+            {kova.oneriye ? (
+              <Link className="font-semibold text-ink underline hover:text-brand-strong" href={onerilerAdresi(clientId)}>
+                {kova.cumle}
+              </Link>
+            ) : (
+              kova.cumle
+            )}
           </div>
         )}
-        {!kova && puanYok && <div className={k.cumle}>{puanYok}</div>}
+        {!kova && puanYok && <div className="text-[12.5px] text-ink">{puanYok}</div>}
         {cipler.length > 0 && (
-          <div className={k.etiketler}>
+          <div className="flex flex-wrap gap-1">
             {cipler.map((c) => (
-              <span key={c} className={k.et}>
+              <span key={c} className="rounded-full bg-surface-sunken px-2 py-0.5 text-11 font-semibold text-ink">
                 {c}
               </span>
             ))}
           </div>
         )}
-        {durum && <div className={k.etNot}>{durum}</div>}
-        <div className={`${k.metrikler} ${s.num}`}>
+        {durum && <div className="text-12 text-ink-muted">{durum}</div>}
+        <div className="flex flex-wrap gap-x-3 gap-y-1 border-t border-line pt-2 text-12 text-ink-muted">
           <span>
-            Harcama <b>{formatMoney(x.harcamaMicros, x.paraBirimi, { decimals: 0 })}</b>
+            Harcama <b className="font-baslik tabular-nums text-ink">{formatMoney(x.harcamaMicros, x.paraBirimi, { decimals: 0 })}</b>
           </span>
           <span>
-            Dönüşüm <b>{formatNumber(x.donusum)}</b>
+            Dönüşüm <b className="font-baslik tabular-nums text-ink">{formatNumber(x.donusum)}</b>
           </span>
           <span>
-            {metrikAdi(x.anaMetrik)} <b>{metrikMetni(x.anaMetrik, x.anaDeger, x.paraBirimi)}</b>
+            {metrikAdi(x.anaMetrik)} <b className="font-baslik tabular-nums text-ink">{metrikMetni(x.anaMetrik, x.anaDeger, x.paraBirimi)}</b>
           </span>
         </div>
       </div>
@@ -480,79 +556,59 @@ function KreatifKarti({ satir: x, clientId }: { satir: KreatifSatiri; clientId: 
 
 function KucukGorsel({ creativeId }: { creativeId: string }) {
   const g = useGorsel(creativeId);
+  const kap = 'grid h-10 w-10 place-items-center overflow-hidden rounded-alan bg-surface-sunken';
   // HATA HÂLİ BOŞ KUTU DEĞİL (Ajan 4 N): nedeni kısa yazılıyor, tamamı başlıkta.
   if (g.durum === 'hata') {
     return (
-      <span className={k.kucukG} title={g.mesaj}>
-        <span className={k.kucukNot}>{kisaNeden(g.mesaj)}</span>
+      <span className={kap} title={g.mesaj}>
+        <span className="break-words p-0.5 text-center text-[9px] leading-tight text-ink-muted">{kisaNeden(g.mesaj)}</span>
       </span>
     );
   }
-  return <span className={k.kucukG}>{g.durum === 'tamam' ? <img src={g.adres} alt="" /> : null}</span>;
+  return <span className={kap}>{g.durum === 'tamam' ? <img className="h-full w-full object-cover" src={g.adres} alt="" /> : null}</span>;
 }
 
-function Tablo({ yanit }: { yanit: KreatifZekaYaniti }) {
+/** "Tümü" görünümü: puan tablosu. Sütunlar TEK listeden (`Tablo`), sayılar sağa yaslı. */
+function PuanTablosu({ yanit }: { yanit: KreatifZekaYaniti }) {
   const metrik = yanit.satirlar[0]?.anaMetrik ?? null;
   return (
-    <div className={k.tabloS}>
-      <table className={k.tablo}>
-        <thead>
-          <tr>
-            <th aria-label="Görsel" />
-            <th>Reklam</th>
-            <th className={k.sayi}>Puan</th>
-            <th>Özellikler</th>
-            <th className={k.sayi}>Harcama</th>
-            <th className={k.sayi}>Dönüşüm</th>
-            <th className={k.sayi}>{metrikAdi(metrik)}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {yanit.satirlar.map((x) => (
-            <tr key={x.creativeId}>
-              <td>
-                <KucukGorsel creativeId={x.creativeId} />
-              </td>
-              <td>
-                {x.adAdi ?? 'Adsız reklam'}
-                {x.kampanyaAdi && <div className={i.sYol}>{x.kampanyaAdi}</div>}
-              </td>
-              <td className={k.sayi} title={puanYokCumlesi(x.puan, x.paraBirimi) ?? undefined}>
-                <span className={`${k.puanH} ${s.num}`}>{x.puan.puan ?? '-'}</span>
-              </td>
-              <td>{etiketCipleri(x.etiketler).join(' · ') || etiketDurumMetni(x)}</td>
-              <td className={`${k.sayi} ${s.num}`}>{formatMoney(x.harcamaMicros, x.paraBirimi, { decimals: 0 })}</td>
-              <td className={`${k.sayi} ${s.num}`}>{formatNumber(x.donusum)}</td>
-              <td className={`${k.sayi} ${s.num}`}>{metrikMetni(x.anaMetrik, x.anaDeger, x.paraBirimi)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <Tablo<KreatifSatiri>
+      etiket="Kreatif puanları"
+      satirlar={yanit.satirlar}
+      satirAnahtari={(x) => x.creativeId}
+      sutunlar={[
+        { anahtar: 'gorsel', baslik: <span className="sr-only">Görsel</span>, hucre: (x) => <KucukGorsel creativeId={x.creativeId} /> },
+        { anahtar: 'reklam', baslik: 'Reklam', hucre: (x) => <AdHucresi ad={x.adAdi ?? 'Adsız reklam'} alt={x.kampanyaAdi ?? undefined} /> },
+        {
+          anahtar: 'puan',
+          baslik: 'Puan',
+          sayi: true,
+          hucre: (x) => (
+            <span className="font-baslik font-bold" title={puanYokCumlesi(x.puan, x.paraBirimi) ?? undefined}>
+              {x.puan.puan ?? '-'}
+            </span>
+          ),
+        },
+        { anahtar: 'ozellik', baslik: 'Özellikler', ikincil: true, hucre: (x) => etiketCipleri(x.etiketler).join(' · ') || etiketDurumMetni(x) },
+        { anahtar: 'harcama', baslik: 'Harcama', sayi: true, hucre: (x) => formatMoney(x.harcamaMicros, x.paraBirimi, { decimals: 0 }) },
+        { anahtar: 'donusum', baslik: 'Dönüşüm', sayi: true, hucre: (x) => formatNumber(x.donusum) },
+        { anahtar: 'metrik', baslik: metrikAdi(metrik), sayi: true, hucre: (x) => metrikMetni(x.anaMetrik, x.anaDeger, x.paraBirimi) },
+      ]}
+    />
   );
 }
 
-/** "N / M gösteriliyor": sessiz kesme yok. Sayfa boyutu sözleşmeden. */
-function Sayfalama({ yanit, sayfa, onSayfa }: { yanit: KreatifZekaYaniti; sayfa: number; onSayfa: (n: number) => void }) {
+/** Sayfalama bilgisi; sayfa boyutu sözleşmeden (`KREATIF_SAYFA_BOYUTU`). */
+function sayfalamaBilgisi(yanit: KreatifZekaYaniti, sayfa: number, onSayfa: (n: number) => void) {
   const sayfaSayisi = Math.max(1, Math.ceil(yanit.toplam / KREATIF_SAYFA_BOYUTU));
-  return (
-    <div className={i.sSayfalama}>
-      <span>
-        <b className={s.num}>{yanit.toplam}</b> kreatiften <b className={s.num}>{yanit.satirlar.length}</b> tanesi gösteriliyor
-        {sayfaSayisi > 1 ? ` · sayfa ${sayfa} / ${sayfaSayisi}` : ''}
-      </span>
-      {sayfaSayisi > 1 && (
-        <>
-          <button type="button" className={i.metin} disabled={sayfa <= 1} onClick={() => onSayfa(sayfa - 1)}>
-            Önceki
-          </button>
-          <button type="button" className={i.metin} disabled={sayfa >= sayfaSayisi} onClick={() => onSayfa(sayfa + 1)}>
-            Sonraki
-          </button>
-        </>
-      )}
-    </div>
-  );
+  const bas = (sayfa - 1) * KREATIF_SAYFA_BOYUTU;
+  return {
+    bas: yanit.satirlar.length === 0 ? 0 : bas + 1,
+    son: bas + yanit.satirlar.length,
+    toplam: yanit.toplam,
+    onceki: sayfa > 1 ? () => onSayfa(sayfa - 1) : undefined,
+    sonraki: sayfa < sayfaSayisi ? () => onSayfa(sayfa + 1) : undefined,
+  };
 }
 
 function NeIseYariyor({ yanit }: { yanit: KreatifZekaYaniti }) {
@@ -560,52 +616,58 @@ function NeIseYariyor({ yanit }: { yanit: KreatifZekaYaniti }) {
   const eksen = aralikEkseni(anlamli);
   const kume = yanit.kumeler.find((x) => x.anahtar === yanit.kume);
   return (
-    <div className={s.kart}>
-      <div className={s.kartUst}>
-        <h2>Ne işe yarıyor</h2>
-        <span className={i.zaman}>
-          {kume ? `${kume.ad} · ${kume.kreatif} kreatif · ${metrikAdi(kume.anaMetrik).toLocaleLowerCase('tr')}` : ''}
-        </span>
-      </div>
+    <Kart
+      dolgu={false}
+      baslik="Ne işe yarıyor"
+      baslikEki={kume ? `${kume.ad} · ${kume.kreatif} kreatif · ${metrikAdi(kume.anaMetrik).toLocaleLowerCase('tr')}` : undefined}
+    >
       {anlamli.length === 0 && (
-        <div className={i.sBos}>
-          <b>Henüz belirgin bir fark yok</b>
-          <p>İncelenmiş ve yeterli harcamalı kreatiflerde hiçbir özellik ötekinden belirgin biçimde ayrışmıyor.</p>
+        <div className="p-4">
+          <BosDurum
+            baslik="Henüz belirgin bir fark yok"
+            neden="İncelenmiş ve yeterli harcamalı kreatiflerde hiçbir özellik ötekinden belirgin biçimde ayrışmıyor."
+          />
         </div>
       )}
-      {anlamli.map((f) => {
+      {anlamli.map((f, n) => {
         const c = eksen(f);
         return (
-          <div key={`${f.alan}:${f.deger}`} className={k.fark}>
+          <div
+            key={`${f.alan}:${f.deger}`}
+            className={`grid items-center gap-x-4 gap-y-2 px-4 py-3 text-13 text-ink min-[700px]:grid-cols-[minmax(0,1fr)_170px] ${
+              n > 0 ? 'border-t border-line' : ''
+            }`}
+          >
             <div>
               {f.cumle}
-              <small>{orneklemMetni(f)}</small>
+              <small className="mt-0.5 block text-12 text-ink-muted">{orneklemMetni(f)}</small>
             </div>
+            {/* Güven aralığı çubuğu: gri eksen, siyah sıfır çizgisi ve bant, kırmızı orta nokta. */}
             {c && (
-              <div className={k.aralik} aria-hidden="true">
-                <div className={k.eksen} />
-                <div className={k.sifir} style={{ left: `${c.sifir}%` }} />
-                <div className={k.bant} style={{ left: `${c.sol}%`, width: `${c.genislik}%` }} />
-                <div className={k.orta} style={{ left: `${c.orta}%` }} />
+              <div className="relative h-7" aria-hidden="true">
+                <div className="absolute inset-x-0 top-[13px] h-px bg-line" />
+                <div className="absolute top-1 h-5 w-px bg-ink" style={{ left: `${c.sifir}%` }} />
+                <div className="absolute top-[9px] h-[9px] rounded-full bg-ink" style={{ left: `${c.sol}%`, width: `${c.genislik}%` }} />
+                <div className="absolute top-1.5 h-[15px] w-[3px] rounded-sm bg-brand" style={{ left: `${c.orta}%` }} />
               </div>
             )}
           </div>
         );
       })}
       {diger.length > 0 && (
-        <details className={i.sDisarida}>
-          <summary>Belirgin fark yok ya da veri yetersiz ({diger.length} karşılaştırma)</summary>
-          <ul>
+        <details className={AYRINTI}>
+          <summary className={AYRINTI_OZET}>Belirgin fark yok ya da veri yetersiz ({diger.length} karşılaştırma)</summary>
+          <ul className={AYRINTI_LISTE}>
             {diger.map((f) => (
               <li key={`${f.alan}:${f.deger}:${f.karsi}`}>{f.cumle}</li>
             ))}
           </ul>
         </details>
       )}
-      <div className={k.uyari}>
-        <b>Bu bir ilişki, garanti değil.</b> Aynı amaçtaki kreatiflerin geçmişinden; yeni görselle sınayın.
-      </div>
-    </div>
+      <p className="m-0 border-t border-line px-4 py-2.5 text-12 text-ink-muted">
+        <b className="text-ink">Bu bir ilişki, garanti değil.</b> Aynı amaçtaki kreatiflerin geçmişinden; yeni görselle sınayın.
+      </p>
+    </Kart>
   );
 }
 
@@ -633,87 +695,71 @@ function BriefKarti({
   onKopyala: (b: KreatifBrief) => void;
 }) {
   return (
-    <div className={s.kart}>
-      <div className={s.kartUst}>
-        <h2>Üretim brief’i</h2>
-        <span className={i.zaman}>Yalnız belirgin farklardan</span>
-      </div>
-      {hali.durum === 'yukleniyor' && (
-        <div className={i.sYukleniyor} aria-busy="true" aria-label="Brief hazırlanıyor">
-          <i style={{ width: '70%' }} />
-          <i style={{ width: '92%' }} />
-          <i style={{ width: '60%' }} />
-        </div>
-      )}
-      {hali.durum === 'hata' && (
-        <div className={i.sHataKutu} role="alert">
-          <b>Brief hazırlanamadı.</b> {hali.mesaj}
-        </div>
-      )}
-      {!brief && hali.durum !== 'yukleniyor' && (
-        <div className={i.sBos}>
-          {bosNeden ? (
-            <>
-              <b>{briefBosMetni(bosNeden).baslik}</b>
-              <p>{briefBosMetni(bosNeden).metin}</p>
-            </>
+    <Kart baslik="Üretim brief’i" baslikEki="Yalnız belirgin farklardan">
+      <div className="grid gap-3">
+        {hali.durum === 'yukleniyor' && <Yukleniyor etiket="Brief hazırlanıyor" />}
+        {hali.durum === 'hata' && <HataDurumu baslik="Brief hazırlanamadı." mesaj={hali.mesaj} />}
+        {!brief &&
+          hali.durum !== 'yukleniyor' &&
+          (bosNeden ? (
+            <BosDurum baslik={briefBosMetni(bosNeden).baslik} neden={briefBosMetni(bosNeden).metin} />
           ) : (
-            <>
-              <b>Bir sonraki görsel için brief</b>
-              <p>Belirgin farklardan tasarımcıya ya da AdvCampaign’e verilecek kısa bir yönerge hazırlar ({kumeAdi(kume)}).</p>
-              {yetki.yaz ? (
-                <button type="button" className={i.birincil} onClick={onHazirla}>
-                  Brief hazırla
-                </button>
-              ) : (
-                <p>Brief hazırlama yetkin yok.</p>
-              )}
-            </>
-          )}
-        </div>
-      )}
-      {brief && hali.durum !== 'yukleniyor' && (
-        <>
-          <div className={k.brief}>
-            <div className={k.yon}>{brief.cevap.yon}</div>
-            <div className={k.kaynak}>Bulgular (Advetics verisi)</div>
-            {brief.bulgular.map((b) => (
-              <div key={`${b.alan}:${b.deger}`} className={k.bulgu}>
-                {b.cumle}
-              </div>
-            ))}
-            <div className={k.kaynak}>Yönerge (yapay zekâ)</div>
-            <ol>
-              {brief.cevap.talimatlar.map((t) => (
-                <li key={t.alan}>{t.talimat}</li>
+            <BosDurum
+              baslik="Bir sonraki görsel için brief"
+              neden={`Belirgin farklardan tasarımcıya ya da AdvCampaign’e verilecek kısa bir yönerge hazırlar (${kumeAdi(kume)}).`}
+              eylem={
+                yetki.yaz ? (
+                  <Dugme ton="koyu" boyut="kucuk" onClick={onHazirla}>
+                    Brief hazırla
+                  </Dugme>
+                ) : (
+                  <p className="m-0 text-12 text-ink-muted">Brief hazırlama yetkin yok.</p>
+                )
+              }
+            />
+          ))}
+        {brief && hali.durum !== 'yukleniyor' && (
+          <>
+            <div className="grid gap-3">
+              <div className="font-baslik text-15 font-bold text-ink">{brief.cevap.yon}</div>
+              <div className="text-12 text-ink-muted">Bulgular (Advetics verisi)</div>
+              {brief.bulgular.map((b) => (
+                <div key={`${b.alan}:${b.deger}`} className="border-l-[3px] border-ink py-0.5 pl-2.5 text-[12.5px] text-ink">
+                  {b.cumle}
+                </div>
               ))}
-            </ol>
-            {brief.cevap.kacin.length > 0 && (
-              <div className={k.kacin}>
-                <b>Kaçın:</b> {brief.cevap.kacin.join('; ')}
-              </div>
-            )}
-          </div>
-          <div className={k.eylemS}>
-            {yetki.aktar && (
-              <button type="button" className={i.birincil} disabled={aktarim.durum === 'gidiyor'} onClick={() => onKur(brief)}>
-                {aktarim.durum === 'gidiyor' ? 'Açılıyor' : 'Bu brief ile reklam kur'}
-              </button>
-            )}
-            <button type="button" className={i.ikincil} onClick={() => onKopyala(brief)}>
-              {kopyalandi ? 'Kopyalandı' : 'Kopyala'}
-            </button>
-            <span>
-              {formatRelative(brief.uretildi)} · aynı bulgularla tekrar istenirse yeniden hazırlanmaz
-            </span>
-          </div>
-          {aktarim.durum === 'hata' && (
-            <div className={i.sHataKutu} role="alert">
-              {aktarim.mesaj}
+              <div className="text-12 text-ink-muted">Yönerge (yapay zekâ)</div>
+              <ol className="m-0 grid list-decimal gap-1.5 pl-[18px] text-13 text-ink">
+                {brief.cevap.talimatlar.map((t) => (
+                  <li key={t.alan}>{t.talimat}</li>
+                ))}
+              </ol>
+              {brief.cevap.kacin.length > 0 && (
+                <div className="text-[12.5px] text-ink">
+                  <b>Kaçın:</b> {brief.cevap.kacin.join('; ')}
+                </div>
+              )}
             </div>
-          )}
-        </>
-      )}
-    </div>
+            <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3">
+              <span className="mr-auto text-12 text-ink-muted">
+                {formatRelative(brief.uretildi)} · aynı bulgularla tekrar istenirse yeniden hazırlanmaz
+              </span>
+              <Dugme ton="ikincil" boyut="kucuk" onClick={() => onKopyala(brief)}>
+                {kopyalandi ? 'Kopyalandı' : 'Kopyala'}
+              </Dugme>
+              {yetki.aktar && (
+                <Dugme ton="koyu" boyut="kucuk" bekliyor={aktarim.durum === 'gidiyor'} onClick={() => onKur(brief)}>
+                  {aktarim.durum === 'gidiyor' ? 'Açılıyor' : 'Bu brief ile reklam kur'}
+                </Dugme>
+              )}
+            </div>
+            {aktarim.durum === 'hata' && (
+              // Aktarım ya da pano hatası: sunucunun/tarayıcının cümlesi başlıkta.
+              <Serit ton="hata" baslik={aktarim.mesaj} />
+            )}
+          </>
+        )}
+      </div>
+    </Kart>
   );
 }

@@ -79,6 +79,38 @@ describe('Varlıklar sayfası', () => {
   });
 });
 
+describe('Varlıklar: birincil eylem başlıkta, metni bölümden (2026-10-14)', () => {
+  it('KRİTİK: her bölümün eylemi başlıkta ve her bölümün dinleyicisi var', () => {
+    const eylem = SAYFA.slice(SAYFA.indexOf('const eylem ='), SAYFA.indexOf('return (\n    <div className="grid gap-6">'));
+    for (const [b, metin] of [
+      ['gorseller', 'Görsel yükle'],
+      ['kreatifler', 'Yeni kreatif'],
+      ['kitleler', 'Yeni kitle'],
+    ]) {
+      expect(eylem).toContain(`<VarlikBirincilEylem bolum="${b}" etiket="${metin}"`);
+    }
+    expect(eylem).toContain("varliklarAdresi('formlar', clientId, { form: 'yeni' })");
+    expect(SAYFA).toContain('eylemler={eylem}');
+    expect(yorumsuz('../assets/asset-library.tsx')).toContain("useVarlikYeni('gorseller', () => dosyaRef.current?.click(), canWrite)");
+    expect(yorumsuz('varliklar/creative-library.tsx')).toContain("useVarlikYeni('kreatifler'");
+    expect(yorumsuz('kitleler-bolumu.tsx')).toContain("useVarlikYeni('kitleler'");
+  });
+
+  it('KRİTİK: olayı kimse almazsa düğme sessiz kalmıyor', () => {
+    const E = yorumsuz('varliklar/birincil-eylem.tsx');
+    expect(E).toContain('setAlinmadi(window.dispatchEvent(olay))');
+    expect(E).toContain('cancelable: true');
+    expect(E).toContain('e.preventDefault();');
+    expect(E).toContain('Bu bölüm yüklenemedi');
+  });
+
+  it('form oluşturucu yalnız adreste `form` varken açık', () => {
+    const F = yorumsuz('varliklar/formlar.tsx');
+    expect(F).toContain('const olusturucuAcik = editId !== undefined;');
+    expect(F).toContain(') : olusturucuAcik ? (');
+  });
+});
+
 describe('Görseller: logo sayısı sessiz değil', () => {
   it('KRİTİK: logo kayıtları listelenmiyor ama sayısı bağlantıyla yazıyor', () => {
     const A = yorumsuz('../assets/asset-library.tsx');

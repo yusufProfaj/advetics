@@ -15,8 +15,9 @@ import {
 import { kartEtkiSatiri, type EtkiSonucu } from '@/lib/etki';
 import { OneriKarti } from './oneri-karti';
 import { OnayPenceresi } from './onay-penceresi';
-import i from '@/components/taslak/iyilestir.module.css';
-import s from '@/components/taslak/taslak.module.css';
+import { MetrikKutulari } from '@/components/ui/metrik-kutulari';
+import { BolumluSecici } from '@/components/ui/sekmeler';
+import { BosDurum, HataDurumu, Serit } from '@/components/ui/hal';
 
 export type OneriSonucu = { durum: 'tamam'; liste: OneriListesi } | { durum: 'hata'; mesaj: string };
 
@@ -74,16 +75,7 @@ export function OnerilerSekmesi({
   }, []);
 
   if (sonuc.durum === 'hata') {
-    return (
-      <div className={`${s.bildirim} ${s.tehlike}`} role="alert">
-        <span className={s.bildirimIkon} aria-hidden>
-          !
-        </span>
-        <span className={s.bildirimMetin}>
-          <strong>Öneriler alınamadı.</strong> {sonuc.mesaj}
-        </span>
-      </div>
-    );
+    return <HataDurumu baslik="Öneriler alınamadı." mesaj={sonuc.mesaj} />;
   }
 
   const liste = sonuc.liste;
@@ -116,81 +108,76 @@ export function OnerilerSekmesi({
     }
   }
 
+  /*
+   * SAYAÇ HER ZAMAN (sessiz kesme yok): sunucu hesap başına ilk N öneriyi
+   * döndürüyor; kesildiyse "toplamdan kaçı" yazıyor, kesilmediyse süzgeçten
+   * sonra kaç kart görüldüğü. Yoksayılanlar listeden düşüyor ama sayısı
+   * aynı satırda kalıyor.
+   */
+  const kesildi = liste.toplam > liste.oneriler.length;
+  const sayac = [
+    kesildi ? `${liste.toplam} öneriden ${liste.oneriler.length} tanesi gösteriliyor` : `${suzulen.length} öneri gösteriliyor`,
+    gizli > 0 ? `${gizli} yoksayılan öneri gizli` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
   return (
     <>
-      <div className={s.kart}>
-        <div className={i.ozet}>
-          <div className={i.vurgu}>
-            <small>Uygulanabilir öneri</small>
-            <b className={s.num}>{ozet.uygulanabilir}</b>
-            <em>tek tıkla, onaylı</em>
-          </div>
-          <div>
-            <small>Etkilenen harcama</small>
-            <b className={s.num}>{ozet.harcama}</b>
-            <em>son 7 günde bu öğelere giden</em>
-          </div>
-          <div>
-            <small>Yalnız bilgi</small>
-            <b className={s.num}>{ozet.yalnizBilgi}</b>
-            <em>platformda elle yapılmalı</em>
-          </div>
-          <div>
-            <small>Bu ay uygulanan</small>
-            <b className={s.num}>{ozet.buAyUygulanan}</b>
-            <em>platformdan geri okunarak</em>
-          </div>
-        </div>
-      </div>
+      {/*
+       * ÖZET: dört kutu, yalnız sözleşmede DURAN sayılar (`ozetSayilari`).
+       * Harcama yoksa kütüphane uzun tire döndürüyor; panel metin dilinde
+       * uzun tire yok, kısa çizgiye çevriliyor.
+       */}
+      <MetrikKutulari
+        kutular={[
+          { anahtar: 'uygulanabilir', ad: 'Uygulanabilir öneri', deger: ozet.uygulanabilir, ipucu: 'tek tıkla, onaylı' },
+          { anahtar: 'harcama', ad: 'Etkilenen harcama', deger: ozet.harcama.replace('—', '-'), ipucu: 'son 7 günde bu öğelere giden' },
+          { anahtar: 'bilgi', ad: 'Yalnız bilgi', deger: ozet.yalnizBilgi, ipucu: 'platformda elle yapılmalı' },
+          { anahtar: 'buay', ad: 'Bu ay uygulanan', deger: ozet.buAyUygulanan, ipucu: 'platformdan geri okunarak' },
+        ]}
+      />
 
       {liste.hatalar.length > 0 && (
-        <div className={`${s.bildirim} ${s.tehlike}`} role="alert">
-          <span className={s.bildirimIkon} aria-hidden>
-            !
-          </span>
-          <span className={s.bildirimMetin}>
-            <strong>Bazı kaynaklar okunamadı; liste eksik olabilir.</strong>{' '}
-            {liste.hatalar.join(' · ')}
-          </span>
-        </div>
+        <Serit ton="hata" baslik="Bazı kaynaklar okunamadı; liste eksik olabilir.">
+          {liste.hatalar.join(' · ')}
+        </Serit>
       )}
 
       {gorunen.length > 0 && (
-        <div className={i.cipler} role="group" aria-label="Öneri türü">
-          {cipler.map((c) => (
-            <button
-              key={c.anahtar}
-              type="button"
-              className={i.cip}
-              aria-pressed={etkinSecim === c.anahtar}
-              onClick={() => setSecili(c.anahtar)}
-            >
-              {c.etiket} <span className={i.say}>{c.sayi}</span>
-            </button>
-          ))}
-          {/* SESSİZ KESME YOK: sunucu hesap başına ilk N öneriyi döndürüyor. */}
-          {(liste.toplam > liste.oneriler.length || gizli > 0) && (
-            <span className={i.gizliNot}>
-              {liste.toplam > liste.oneriler.length && `${liste.toplam} öneriden ${liste.oneriler.length} tanesi gösteriliyor`}
-              {liste.toplam > liste.oneriler.length && gizli > 0 && ' · '}
-              {gizli > 0 && `${gizli} yoksayılan öneri gizli`}
-            </span>
-          )}
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Tür süzgeci aynı listenin GÖRÜNÜMÜ: bölümlü seçici (BILESENLER §3.5). */}
+          <BolumluSecici
+            etiket="Öneri türü"
+            secili={etkinSecim}
+            onSec={setSecili}
+            secenekler={cipler.map((c) => ({
+              deger: c.anahtar,
+              etiket: (
+                <>
+                  {c.etiket}
+                  <span className="ml-1.5 tabular-nums text-ink-muted">{c.sayi}</span>
+                </>
+              ),
+            }))}
+          />
+          <span className="ml-auto text-12 text-ink-muted">{sayac}</span>
         </div>
       )}
 
       {gorunen.length === 0 ? (
-        <div className={s.kart}>
-          <p className={s.bosMetin}>
-            {liste.hatalar.length > 0
+        <BosDurum
+          baslik="Açık öneri yok"
+          neden={
+            liste.hatalar.length > 0
               ? 'Okunabilen hesaplarda öneri yok. Okunamayan kaynaklar yukarıda.'
               : gizli > 0
                 ? `Açık öneri yok; ${gizli} öneri yoksayıldı.`
-                : 'Şu an öneri yok. Reklamlar yoruldukça ve bütçeler dolup boşaldıkça burada belirir.'}
-          </p>
-        </div>
+                : 'Şu an öneri yok. Reklamlar yoruldukça ve bütçeler dolup boşaldıkça burada belirir.'
+          }
+        />
       ) : (
-        <div className={i.oneriler}>
+        <div className="grid items-start gap-4 min-[1100px]:grid-cols-2">
           {suzulen.map((o) => (
             <OneriKarti
               key={o.anahtar}

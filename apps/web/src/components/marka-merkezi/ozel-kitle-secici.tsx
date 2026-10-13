@@ -47,10 +47,10 @@ export function OzelKitleSecici({
       });
   }, [hesap]);
 
-  if (hesapHata) return <p className="text-[11px] text-danger-strong">Reklam hesabı okunamadı — {hesapHata}</p>;
-  if (hesap === undefined) return <p className="text-[11px] text-ink-muted">Reklam hesabı aranıyor…</p>;
+  if (hesapHata) return <p className="text-12 text-danger-strong">Reklam hesabı okunamadı: {hesapHata}</p>;
+  if (hesap === undefined) return <p className="text-12 text-ink-muted">Reklam hesabı aranıyor…</p>;
   if (hesap === null) {
-    return <p className="text-[11px] text-ink-muted">Özel kitleler izlenen bir Meta reklam hesabı istiyor.</p>;
+    return <p className="text-12 text-ink-muted">Özel kitleler izlenen bir Meta reklam hesabı istiyor.</p>;
   }
 
   // Şablonda BAŞKA hesabın kitlesi varsa (hesap değişmiş) açıkça söyleniyor.
@@ -64,27 +64,27 @@ export function OzelKitleSecici({
   }
 
   return (
-    <div className="space-y-2 rounded-lg border border-line p-3">
-      <p className="text-xs font-medium text-ink">
-        Meta’daki kitleler ({secili.length}/{KITLE_SINIRLARI.ozelKitle}) — <strong>{hesap.name}</strong>
+    <div className="grid gap-2 rounded-alan border border-line p-3">
+      <p className="m-0 text-13 font-semibold text-ink">
+        Meta’daki kitleler ({secili.length}/{KITLE_SINIRLARI.ozelKitle}) · <strong>{hesap.name}</strong>
       </p>
-      <p className="text-[11px] text-ink-muted">
+      <p className="text-12 text-ink-muted">
         Ads Manager’da kurulmuş özel ve benzer kitleler. Yalnızca bu hesapta çalışır. “Hariç” seçilen kitleye
         reklam gösterilmez (örn. zaten satın almış kişiler).
       </p>
       {yabanci.length > 0 && (
-        <p className="text-[11px] text-warn-strong">
+        <p className="text-12 text-warn-strong">
           Bu kitlede başka hesabın özel kitleleri var ({yabanci.map((o) => `${o.name} · ${o.hesapAdi}`).join(', ')}).
           Yalnızca kendi hesaplarında çalışırlar; kaldırıp buradan yeniden seç.
         </p>
       )}
-      {hata && <p className="text-[11px] text-danger-strong">{hata}</p>}
-      {!hata && liste === null && <p className="text-[11px] text-ink-muted">Kitleler yükleniyor…</p>}
+      {hata && <p className="text-12 text-danger-strong">{hata}</p>}
+      {!hata && liste === null && <p className="text-12 text-ink-muted">Kitleler yükleniyor…</p>}
       {liste && liste.items.length === 0 && (
-        <p className="text-[11px] text-ink-muted">Bu hesapta Ads Manager’da kurulmuş özel ya da benzer kitle yok.</p>
+        <p className="text-12 text-ink-muted">Bu hesapta Ads Manager’da kurulmuş özel ya da benzer kitle yok.</p>
       )}
       {liste && liste.items.length > 0 && (
-        <ul className="max-h-56 divide-y divide-line overflow-y-auto rounded-md border border-line">
+        <ul className="max-h-56 divide-y divide-line overflow-y-auto rounded-alan border border-line">
           {liste.items.map((o) => {
             const mevcut = secili.find((x) => x.id === o.id)?.mod ?? null;
             const kapali = o.hazir === false;
@@ -97,7 +97,7 @@ export function OzelKitleSecici({
                     {o.tip === 'benzer' ? 'Benzer' : 'Özel'} · {boyut(o)}
                   </span>
                   {(kapali || o.hazir === null) && (
-                    <span className={`block text-[10px] ${kapali ? 'text-danger-strong' : 'text-ink-muted'}`}>
+                    <span className={`block text-11 ${kapali ? 'text-danger-strong' : 'text-ink-muted'}`}>
                       {kapali
                         ? `Yayına hazır değil${o.durum ? `: ${o.durum}` : ''}`
                         : 'Meta hazır olup olmadığını bildirmedi'}
@@ -108,7 +108,7 @@ export function OzelKitleSecici({
                   value={mevcut ?? ''}
                   disabled={kapali || dolu}
                   onChange={(e) => sec(o, (e.target.value || null) as KitleOzel['mod'] | null)}
-                  className="rounded border border-line bg-surface px-1.5 py-0.5 text-[11px]"
+                  className="h-8 rounded-alan border border-line-strong bg-surface px-2 text-12 text-ink"
                 >
                   <option value="">Kullanma</option>
                   <option value="dahil">Dahil et</option>

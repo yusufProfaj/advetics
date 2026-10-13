@@ -13,7 +13,10 @@ import { formatDayLong } from '@/lib/format';
 import { kaynakDurumMetni } from '@/lib/veri-kaynagi';
 import { markaMerkeziAdresi } from '@/lib/panel-adresleri';
 import { Dugme } from '@/components/ui/dugme';
-import { Uyari } from '@/components/ui/uyari';
+import { Kart } from '@/components/ui/kart';
+import { HataDurumu, Yukleniyor } from '@/components/ui/hal';
+import { DurumNoktasi } from '@/components/ui/rozet';
+import { Pencere } from '@/components/ui/pencere';
 
 /**
  * ═══ MARKA MERKEZİ › KURULUM › DİĞER VERİ KAYNAKLARI (Paket F1) ═══
@@ -78,22 +81,15 @@ export function VeriKaynaklari({
   }, [oku]);
 
   return (
-    <section aria-labelledby="veri-kaynaklari-baslik" className="rounded-xl border border-line bg-surface">
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-line px-5 py-4">
-        <h3 id="veri-kaynaklari-baslik" className="font-heading text-base font-bold text-ink">
-          Veri kaynakları
-        </h3>
-        <span className="text-sm text-ink-muted">Reklam dışı veri: site, organik arama, ürün, sipariş. Yalnız okunur.</span>
-      </div>
-      {hal.tur === 'okunuyor' && <p className="px-5 py-4 text-sm text-ink-muted">Veri kaynakları okunuyor…</p>}
+    <Kart baslik="Veri kaynakları" baslikEki="Reklam dışı veri: site, organik arama, ürün, sipariş. Yalnız okunur." dolgu={false}>
+      {hal.tur === 'okunuyor' && (
+        <div className="p-5">
+          <Yukleniyor satir={2} etiket="Veri kaynakları okunuyor" />
+        </div>
+      )}
       {hal.tur === 'hata' && (
         <div className="p-5">
-          <Uyari ton="tehlike" baslik="Veri kaynakları alınamadı.">
-            {hal.mesaj}{' '}
-            <button type="button" className="font-semibold underline" onClick={() => void oku()}>
-              Yeniden dene
-            </button>
-          </Uyari>
+          <HataDurumu baslik="Veri kaynakları alınamadı." mesaj={hal.mesaj} onTekrar={() => void oku()} />
         </div>
       )}
       {hal.tur === 'geldi' && (
@@ -106,35 +102,35 @@ export function VeriKaynaklari({
               <BaglanabilirKart key={b.tur} tur={b.tur} engel={b.engel} izinBaglantiId={b.izinBaglantiId ?? null} clientId={clientId} yonetebilir={yonetebilir} yazabilir={yazabilir} yenile={oku} />
             ))}
           </div>
-          <ul className="space-y-1 border-t border-line px-5 py-3 text-xs text-ink-muted">
+          <ul className="m-0 grid list-none gap-1 border-t border-line px-5 py-3 text-12 text-ink-muted">
             <li>Bir mülk yalnız bir workspace’e bağlanabilir (ajans toplamında iki kez sayılmasın).</li>
             {haric.includes('ga4') && <li>Google Analytics Dönüşüm ölçümü adımında bağlanır; durumu orada yazar.</li>}
           </ul>
         </>
       )}
-    </section>
+    </Kart>
   );
 }
 
 function KartBasi({ tur, alt }: { tur: KaynakTuru; alt: string }) {
   return (
     <div className="flex items-center gap-3">
-      <span aria-hidden className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-ink font-heading text-xs font-bold text-white">
+      <span aria-hidden className="flex h-9 w-9 shrink-0 items-center justify-center rounded-alan bg-ink font-baslik text-12 font-bold text-surface">
         {KISALTMA[tur]}
       </span>
       <div className="min-w-0">
-        <p className="font-semibold text-ink">{KAYNAK_TANIMI[tur].ad}</p>
-        <p className="truncate text-xs text-ink-muted">{alt}</p>
+        <p className="m-0 text-13 font-bold text-ink">{KAYNAK_TANIMI[tur].ad}</p>
+        <p className="m-0 truncate text-12 text-ink-muted">{alt}</p>
       </div>
     </div>
   );
 }
 
 function Durum({ metin, ton }: { metin: string; ton: 'yesil' | 'kirmizi' | 'gri' }) {
-  const renk = ton === 'yesil' ? 'bg-ok' : ton === 'kirmizi' ? 'bg-brand' : 'bg-ink-muted';
+  // ORTAK DURUM NOKTASI: yeşil yalnız burada (kılavuz), kırmızı = hata.
   return (
-    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink">
-      <span aria-hidden className={`h-2 w-2 rounded-full ${renk}`} />
+    <span className="inline-flex items-center gap-1.5 text-12 font-semibold text-ink">
+      <DurumNoktasi hal={ton === 'yesil' ? 'ok' : ton === 'kirmizi' ? 'hata' : 'taslak'} />
       {metin}
     </span>
   );
@@ -168,6 +164,9 @@ function BagliKart({
   const [islem, setIslem] = useState<string | null>(null);
   const [hata, setHata] = useState<string | null>(null);
   const [bilgi, setBilgi] = useState<string | null>(null);
+  // KALDIRMA ONAYI ORTAK PENCEREDE: `window.confirm` tarayıcının kendi
+  // kutusuydu (marka dışı, temasız, bazı gömülü görünümlerde hiç açılmıyor).
+  const [kaldirOnay, setKaldirOnay] = useState(false);
   const d = kaynakDurumMetni(k);
 
   async function yap(ad: string, yol: string, method: 'POST' | 'DELETE', sonra?: string) {
@@ -186,10 +185,10 @@ function BagliKart({
   }
 
   return (
-    <article className="flex flex-col gap-3 rounded-xl border border-line bg-surface p-4">
+    <article className="flex flex-col gap-3 rounded-alan border border-line bg-surface p-4">
       <KartBasi tur={k.tur} alt={`Mülk ${k.disKimlik} · ${k.ad}`} />
       <Durum {...d} />
-      <ul className="space-y-1 text-xs text-ink-muted">
+      <ul className="space-y-1 text-12 text-ink-muted">
         <li>
           Son çekim <b className="text-ink">{k.sonBasariliCekim ? formatDayLong(k.sonBasariliCekim.slice(0, 10)) : 'henüz yok'}</b>
           {k.sonBasariliCekim ? ' (son 3 gün her gece yenilenir)' : ''}
@@ -206,21 +205,21 @@ function BagliKart({
           </li>
         )}
       </ul>
-      {k.sonHata && <p className="rounded-lg bg-brand/5 px-3 py-2 text-xs text-ink">Google’ın cevabı: {k.sonHata}</p>}
+      {k.sonHata && <p className="rounded-alan bg-brand/5 px-3 py-2 text-12 text-ink">Google’ın cevabı: {k.sonHata}</p>}
       {k.kurulumUyusmazligi && (
-        <p className="rounded-lg bg-ink/5 px-3 py-2 text-xs text-ink">
+        <p className="rounded-alan bg-ink/5 px-3 py-2 text-12 text-ink">
           Kurulumdaki mülk farklı ({k.kurulumUyusmazligi.kurulumMulkId}). Okunan mülk {k.disKimlik}; doğru olan bu değilse kaldırıp kurulumdakini seç.
         </p>
       )}
       {hata && (
-        <p role="alert" className="text-xs font-semibold text-brand-strong">
+        <p role="alert" className="text-12 font-semibold text-brand-strong">
           {hata}
         </p>
       )}
-      {bilgi && <p className="text-xs text-ink-muted">{bilgi}</p>}
+      {bilgi && <p className="text-12 text-ink-muted">{bilgi}</p>}
       <div className="mt-auto flex flex-wrap gap-2">
         {k.izinBaglantiId && yonetebilir && yazabilir && (
-          <Dugme boyut="kucuk" bekliyor={islem === 'izin'} onClick={() => (setIslem('izin'), void izinVer(k.izinBaglantiId!, clientId, (m) => (setHata(m), setIslem(null))))}>
+          <Dugme ton="koyu" boyut="kucuk" bekliyor={islem === 'izin'} onClick={() => (setIslem('izin'), void izinVer(k.izinBaglantiId!, clientId, (m) => (setHata(m), setIslem(null))))}>
             Analytics iznini ver
           </Dugme>
         )}
@@ -239,14 +238,36 @@ function BagliKart({
             boyut="kucuk"
             ton="sade"
             bekliyor={islem === 'kaldir'}
-            onClick={() => {
-              if (window.confirm('Okuma durur, çekilmiş veri raporlarda kalır. Kaldırılsın mı?')) void yap('kaldir', `/veri-kaynaklari/${k.id}`, 'DELETE');
-            }}
+            onClick={() => setKaldirOnay(true)}
           >
             Kaldır
           </Dugme>
         )}
       </div>
+      <Pencere
+        acik={kaldirOnay}
+        onKapat={() => setKaldirOnay(false)}
+        genislik="dar"
+        baslik={`${KAYNAK_TANIMI[k.tur].ad} kaldırılsın mı?`}
+        aciklama="Okuma durur, çekilmiş veri raporlarda kalır."
+        altEylemler={
+          <>
+            <Dugme ton="ikincil" onClick={() => setKaldirOnay(false)}>
+              Vazgeç
+            </Dugme>
+            <Dugme
+              ton="tehlike"
+              bekliyor={islem === 'kaldir'}
+              onClick={() => {
+                setKaldirOnay(false);
+                void yap('kaldir', `/veri-kaynaklari/${k.id}`, 'DELETE');
+              }}
+            >
+              Kaldır
+            </Dugme>
+          </>
+        }
+      />
     </article>
   );
 }
@@ -303,13 +324,13 @@ function BaglanabilirKart({
   }
 
   return (
-    <article className={`flex flex-col gap-3 rounded-xl border border-line p-4 ${sonraki ? 'bg-ink/[0.03]' : 'bg-surface'}`}>
+    <article className={`flex flex-col gap-3 rounded-alan border border-line p-4 ${sonraki ? 'bg-ink/[0.03]' : 'bg-surface'}`}>
       <KartBasi tur={tur} alt={sonraki ? 'Sonraki aşama' : 'Bağlı değil'} />
       <Durum metin={sonraki ? 'Henüz bağlanamıyor' : engel ? 'Bağlanamıyor' : 'Bağlı değil'} ton={engel && !sonraki ? 'kirmizi' : 'gri'} />
-      {engel && <p className="text-xs text-ink-muted">{engel}</p>}
+      {engel && <p className="text-12 text-ink-muted">{engel}</p>}
       {!sonraki && izinBaglantiId && yonetebilir && yazabilir && (
         <div>
-          <Dugme boyut="kucuk" onClick={() => void izinVer(izinBaglantiId, clientId, setHata)}>
+          <Dugme ton="koyu" boyut="kucuk" onClick={() => void izinVer(izinBaglantiId, clientId, setHata)}>
             Analytics iznini ver
           </Dugme>
         </div>
@@ -321,15 +342,15 @@ function BaglanabilirKart({
               Mülk seç
             </Dugme>
           )}
-          {secim.tur === 'okunuyor' && <p className="text-xs text-ink-muted">Analytics mülkleri okunuyor…</p>}
+          {secim.tur === 'okunuyor' && <p className="text-12 text-ink-muted">Analytics mülkleri okunuyor…</p>}
           {secim.tur === 'hata' && (
-            <p role="alert" className="text-xs font-semibold text-brand-strong">
+            <p role="alert" className="text-12 font-semibold text-brand-strong">
               {secim.mesaj}
             </p>
           )}
           {secim.tur === 'geldi' &&
             (secim.veri.secenekler.length === 0 ? (
-              <p className="text-xs text-ink-muted">Bu Google hesabının erişebildiği Analytics mülkü yok.</p>
+              <p className="text-12 text-ink-muted">Bu Google hesabının erişebildiği Analytics mülkü yok.</p>
             ) : (
               <div className="flex flex-wrap items-end gap-2">
                 <label htmlFor={etiket} className="sr-only">
@@ -337,7 +358,7 @@ function BaglanabilirKart({
                 </label>
                 <select
                   id={etiket}
-                  className="min-w-0 flex-1 rounded-lg border border-line bg-surface px-2 py-1.5 text-sm"
+                  className="min-w-0 flex-1 rounded-alan border border-line bg-surface px-2 py-1.5 text-sm"
                   value={secili}
                   onChange={(e) => setSecili(e.target.value)}
                 >
@@ -354,16 +375,16 @@ function BaglanabilirKart({
                     </optgroup>
                   ))}
                 </select>
-                <Dugme boyut="kucuk" disabled={!secili} bekliyor={bagliyor} onClick={() => void bagla()}>
+                <Dugme ton="koyu" boyut="kucuk" disabled={!secili} bekliyor={bagliyor} onClick={() => void bagla()}>
                   Bağla
                 </Dugme>
               </div>
             ))}
         </div>
       )}
-      {!sonraki && !engel && !(yonetebilir && yazabilir) && <p className="text-xs text-ink-muted">Bağlamak için bağlantıları yönetme yetkisi gerekiyor.</p>}
+      {!sonraki && !engel && !(yonetebilir && yazabilir) && <p className="text-12 text-ink-muted">Bağlamak için bağlantıları yönetme yetkisi gerekiyor.</p>}
       {hata && (
-        <p role="alert" className="text-xs font-semibold text-brand-strong">
+        <p role="alert" className="text-12 font-semibold text-brand-strong">
           {hata}
         </p>
       )}

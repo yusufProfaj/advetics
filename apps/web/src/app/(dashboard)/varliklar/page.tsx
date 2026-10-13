@@ -13,6 +13,9 @@ import { WorkspaceGerekli } from '@/components/workspace-gerekli';
 import { WorkspaceGec } from '@/components/workspace-gec';
 import { SayfaBasligi } from '@/components/ui/sayfa-basligi';
 import { Uyari } from '@/components/ui/uyari';
+import { dugmeSinifi } from '@/components/ui/dugme';
+import { SayfaIcDuzen, SayfaIcMenu } from '@/components/ui/sayfa-ic-menu';
+import { VarlikBirincilEylem } from '@/components/marka-merkezi/varliklar/birincil-eylem';
 import { gorunurVarlikSekmeleri, varlikSekmeAdi, varlikSekmesiCoz } from '@/components/marka-merkezi/bolumler';
 import { GorsellerIcerik } from '@/components/marka-merkezi/varliklar/gorseller';
 import { KreatiflerIcerik } from '@/components/marka-merkezi/varliklar/kreatifler';
@@ -54,7 +57,7 @@ export default async function VarliklarPage({
   if (!kapi(session, 'varliklar.gor')) {
     return (
       <div className="space-y-5">
-        <SayfaBasligi baslik="Varlıklar" />
+        <SayfaBasligi bolum="Base" baslik="Varlıklar" />
         <Uyari ton="uyari" baslik={PANEL_KAPILARI['varliklar.gor'].neden}>
           Görseller, kreatifler ve formlar ajans tarafında yönetiliyor. Yöneticine sor.
         </Uyari>
@@ -83,7 +86,7 @@ export default async function VarliklarPage({
   if (uyum === 'farkli') {
     return (
       <div className="space-y-5">
-        <SayfaBasligi baslik="Varlıklar" />
+        <SayfaBasligi bolum="Base" baslik="Varlıklar" />
         <WorkspaceGec
           clientId={clientId}
           workspaceAdi={session.availableClients.find((c) => c.id === clientId)?.name ?? null}
@@ -99,69 +102,82 @@ export default async function VarliklarPage({
   const sekme = varlikSekmesiCoz(varliklarSekmesi(first(params.sekme)), session.permissions);
   const workspaceAdi = session.availableClients.find((c) => c.id === clientId)?.name ?? null;
 
+  /*
+   * BİRİNCİL EYLEMİN YERİ SABİT, METNİ BÖLÜMDEN (taslak `#varlik`). Kapı
+   * bölümün kendi yazma kapısı: görsel, kreatif ve form `varlik.yaz`,
+   * kitle `kitle.yaz`. Yetkisi olmayan düğmeyi KAPALI ve nedeniyle görüyor;
+   * gizlemek "buradan nasıl eklenir" sorusunu cevapsız bırakırdı.
+   *
+   * FORM ADRESLE AÇILIYOR (`?form=yeni`): form oluşturucu zaten adresteki
+   * `form` parametresiyle düzenlemeye açılıyordu; yeni form da aynı yol.
+   * Geri tuşu oluşturucuyu kapatıyor, yer imi doğrudan oraya götürüyor.
+   */
+  const yazmaNedeni = (k: 'varlik.yaz' | 'kitle.yaz') => (kapi(session, k) ? null : PANEL_KAPILARI[k].neden);
+  const eylem =
+    sekme === 'gorseller' ? (
+      <VarlikBirincilEylem bolum="gorseller" etiket="Görsel yükle" kapaliNedeni={yazmaNedeni('varlik.yaz')} />
+    ) : sekme === 'kreatifler' ? (
+      <VarlikBirincilEylem bolum="kreatifler" etiket="Yeni kreatif" kapaliNedeni={yazmaNedeni('varlik.yaz')} />
+    ) : sekme === 'formlar' ? (
+      yazmaNedeni('varlik.yaz') ? (
+        <VarlikBirincilEylem bolum="formlar" etiket="Yeni form" kapaliNedeni={yazmaNedeni('varlik.yaz')} />
+      ) : (
+        <Link href={varliklarAdresi('formlar', clientId, { form: 'yeni' })} className={dugmeSinifi('birincil')} scroll={false}>
+          <span aria-hidden="true">＋</span> Yeni form
+        </Link>
+      )
+    ) : sekme === 'kitleler' ? (
+      <VarlikBirincilEylem bolum="kitleler" etiket="Yeni kitle" kapaliNedeni={yazmaNedeni('kitle.yaz')} />
+    ) : null;
+
   return (
-    <div className="space-y-5">
+    <div className="grid gap-6">
       <SayfaBasligi
-        ust={
-          <nav aria-label="Konum" className="flex flex-wrap items-center gap-1.5 text-sm text-ink-muted">
-            <span>Base</span>
-            <span aria-hidden="true">›</span>
-            <span>Varlıklar</span>
-            {sekme && (
-              <>
-                <span aria-hidden="true">›</span>
-                <span className="font-semibold text-ink">{varlikSekmeAdi(sekme)}</span>
-              </>
-            )}
-          </nav>
-        }
+        bolum="Base"
         baslik="Varlıklar"
         aciklama={
           <>
-            {workspaceAdi && <strong className="font-medium text-ink">{workspaceAdi}</strong>}
+            {workspaceAdi && <strong className="font-semibold text-ink">{workspaceAdi}</strong>}
             {workspaceAdi && ' · '}
             Reklamlarda kullanılan görseller, kreatifler, formlar ve kitleler.
           </>
         }
+        eylemler={eylem}
       />
 
-      {/* SEKME ÇUBUĞU: dar ekranda yatay kayar, sayfa kaymaz. */}
-      <nav aria-label="Varlık türü" className="-mx-1 overflow-x-auto px-1">
-        <ul className="flex min-w-max gap-1 border-b border-line">
-          {sekmeler.map((k) => (
-            <li key={k}>
-              <Link
-                href={varliklarAdresi(k, clientId)}
-                aria-current={k === sekme ? 'page' : undefined}
-                className={`-mb-px inline-block border-b-2 px-3 py-2 text-sm transition-colors motion-reduce:transition-none ${
-                  k === sekme ? 'border-brand font-semibold text-ink' : 'border-transparent text-ink-muted hover:text-ink'
-                }`}
-              >
-                {varlikSekmeAdi(k)}
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </nav>
-
-      {/* `key` SEKMEDEN: içerik değiştiği hissedilsin (geçiş animasyonu). */}
-      <div key={sekme ?? 'yok'} className="bolum-gecis min-w-0 space-y-4">
-        {sekme === null && (
-          <Uyari ton="uyari" baslik="Görebileceğin bir varlık sekmesi yok.">
-            Yöneticine sor.
-          </Uyari>
-        )}
-        {sekme === 'gorseller' && <GorsellerIcerik clientId={clientId} params={params} />}
-        {sekme === 'kreatifler' && <KreatiflerIcerik clientId={clientId} params={params} />}
-        {sekme === 'formlar' && <FormlarIcerik clientId={clientId} params={params} />}
-        {sekme === 'kitleler' && (
-          <KitlelerBolumu
-            clientId={clientId}
-            yazabilir={kapi(session, 'kitle.yaz')}
-            varsayilanAdresi={kapi(session, 'markaMerkezi.gor') ? markaMerkeziAdresi('kurulum', clientId, 'varsayilanlar') : null}
+      {/*
+        BÖLÜMLER SAYFA İÇİ YAN MENÜDE (BILESENLER § 9): eskiden başlığın
+        altında alt çizgili sekme şeridiydi. Seçim yine ADRESTE (`?sekme=`),
+        menü öğeleri bağlantı; geri tuşu bölümler arasında çalışıyor.
+      */}
+      <SayfaIcDuzen
+        menu={
+          <SayfaIcMenu
+            etiket="Varlık türü"
+            secili={sekme ?? ''}
+            ogeler={sekmeler.map((k) => ({ deger: k, etiket: varlikSekmeAdi(k), href: varliklarAdresi(k, clientId) }))}
           />
-        )}
-      </div>
+        }
+      >
+        {/* `key` SEKMEDEN: içerik değiştiği hissedilsin (geçiş animasyonu). */}
+        <div key={sekme ?? 'yok'} className="bolum-gecis grid min-w-0 content-start gap-4">
+          {sekme === null && (
+            <Uyari ton="uyari" baslik="Görebileceğin bir varlık sekmesi yok.">
+              Yöneticine sor.
+            </Uyari>
+          )}
+          {sekme === 'gorseller' && <GorsellerIcerik clientId={clientId} params={params} />}
+          {sekme === 'kreatifler' && <KreatiflerIcerik clientId={clientId} params={params} />}
+          {sekme === 'formlar' && <FormlarIcerik clientId={clientId} params={params} />}
+          {sekme === 'kitleler' && (
+            <KitlelerBolumu
+              clientId={clientId}
+              yazabilir={kapi(session, 'kitle.yaz')}
+              varsayilanAdresi={kapi(session, 'markaMerkezi.gor') ? markaMerkeziAdresi('kurulum', clientId, 'varsayilanlar') : null}
+            />
+          )}
+        </div>
+      </SayfaIcDuzen>
     </div>
   );
 }

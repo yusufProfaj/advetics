@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
+import { useRef, useState, useTransition } from 'react';
 import {
   ASSET_KIND_META,
   type AssetListResult,
@@ -12,6 +12,13 @@ import {
 import { varliklarAdresi } from '@/lib/panel-adresleri';
 import { GORSEL_TURLERI, type GorselTuru } from './gorsel-turleri';
 import { API_URL, ApiRequestError, apiFetch } from '@/lib/api';
+import { Kart, KART_BAGLANTISI } from '@/components/ui/kart';
+import { Dugme } from '@/components/ui/dugme';
+import { Secim } from '@/components/ui/alan';
+import { BolumluSecici } from '@/components/ui/sekmeler';
+import { AracCubugu, SayfalamaCubugu } from '@/components/ui/tablo';
+import { BosDurum, Serit } from '@/components/ui/hal';
+import { useVarlikYeni } from '@/components/marka-merkezi/varliklar/birincil-eylem';
 
 /**
  * Varlık arşivi — ızgara, yükleme, silme.
@@ -55,6 +62,15 @@ export function AssetLibrary({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  /*
+   * DOSYA SEÇİCİSİ GİZLİ, TETİK BAŞLIKTA ("Görsel yükle", sayfanın birincil
+   * eylemi). Eskiden yükleme kutusu listenin üstünde her zaman açıktı ve
+   * kırmızı "Dosya seç" düğmesi taşıyordu; ekranda iki birincil vardı.
+   * `input.click()` aynı kullanıcı dokunuşunun içinde çağrılıyor (olay
+   * eşzamanlı), yoksa tarayıcı seçiciyi açmaz.
+   */
+  const dosyaRef = useRef<HTMLInputElement>(null);
+  useVarlikYeni('gorseller', () => dosyaRef.current?.click(), canWrite);
 
   async function upload(files: FileList | null): Promise<void> {
     if (!files || files.length === 0) return;
@@ -96,7 +112,7 @@ export function AssetLibrary({
       setNotice(
         added > 0
           ? `${added} görsel eklendi, ${duplicates} tanesi zaten arşivde vardı.`
-          : `${duplicates} görsel zaten arşivde vardı — tekrar eklenmedi.`,
+          : `${duplicates} görsel zaten arşivde vardı, tekrar eklenmedi.`,
       );
     }
     setBusy(false);
@@ -120,151 +136,160 @@ export function AssetLibrary({
     startTransition(() => router.push(varliklarAdresi('gorseller', clientId, { tur: next })));
   }
 
+  const toplam = activeKind ? initial.byKind[activeKind] : gorselToplami;
+
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap gap-1.5">
-        <button type="button" onClick={() => navigate(null)} className={chip(activeKind === null)}>
-          Tümü{' '}
-          <span className="opacity-60">{gorselToplami}</span>
-        </button>
-        {GORSEL_TURLERI.map((k) => (
-          <button key={k} type="button" onClick={() => navigate(k)} className={chip(activeKind === k)}>
-            {ASSET_KIND_META[k].label} <span className="opacity-60">{initial.byKind[k]}</span>
-          </button>
-        ))}
-      </div>
-
+    <div className="grid gap-4">
       {canWrite && (
-        <div className="rounded-xl border border-dashed border-line bg-surface p-4">
-          <div className="flex flex-wrap items-end gap-3">
-            <label className="block">
-              <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-ink-muted">
-                Ne yüklüyorsun
-              </span>
-              <select
-                value={kind}
-                onChange={(e) => setKind(e.target.value as GorselTuru)}
-                className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-brand"
-              >
-                {GORSEL_TURLERI.map((k) => (
-                  <option key={k} value={k}>
-                    {ASSET_KIND_META[k].label}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="flex-1">
-              <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-ink-muted">
-                Dosyalar
-              </span>
-              <input
-                type="file"
-                multiple
-                accept="image/jpeg,image/png"
-                disabled={busy || isPending}
-                onChange={(e) => void upload(e.target.files)}
-                className="w-full text-sm text-ink file:mr-3 file:rounded-lg file:border-0 file:bg-brand file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white"
-              />
-            </label>
-          </div>
-
-          {/* TÜR SEÇİMİNİN NE DEĞİŞTİRDİĞİ YAZIYOR. */}
-          <p className="mt-2 text-[11px] text-ink-muted">{ASSET_KIND_META[kind].hint}</p>
-          {busy && <p className="mt-1 text-[11px] text-ink-muted">Yükleniyor…</p>}
-        </div>
+        <input
+          ref={dosyaRef}
+          type="file"
+          multiple
+          accept="image/jpeg,image/png"
+          disabled={busy || isPending}
+          onChange={(e) => {
+            void upload(e.target.files);
+            // Aynı dosya ikinci kez seçilebilsin (mükerrer bildirimi görünsün).
+            e.target.value = '';
+          }}
+          className="sr-only"
+          tabIndex={-1}
+          aria-hidden="true"
+        />
       )}
 
-      {notice && (
-        <p className="rounded-lg bg-surface-sunken px-3 py-2 text-xs text-ink">{notice}</p>
-      )}
+      {notice && <Serit ton="bilgi" baslik={notice} />}
       {error && (
-        <p className="rounded-lg bg-danger-soft px-3 py-2 text-xs text-danger-strong ring-1 ring-inset ring-danger/30">
+        <Serit ton="hata" baslik="Yüklenemedi ya da silinemedi.">
           {error}
+        </Serit>
+      )}
+      {busy && (
+        <p role="status" className="m-0 text-12 text-ink-muted">
+          Yükleniyor…
         </p>
       )}
 
-      {rows.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-line bg-surface p-8 text-center">
-          <h2 className="text-sm font-semibold text-ink">Arşiv boş</h2>
-          <p className="mx-auto mt-2 max-w-md text-xs text-ink-muted">
-            Buraya yüklediğin görselleri her kampanyada yeniden kullanabilirsin — bir daha
-            yüklemen gerekmez.
-          </p>
-        </div>
-      ) : (
-        <ul className="grid gap-3 sm:grid-cols-3 lg:grid-cols-4">
-          {rows.map((a) => (
-            <li key={a.id} className="overflow-hidden rounded-xl border border-line bg-surface">
-              <div className="aspect-square bg-surface-sunken">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={`${API_URL}${a.previewUrl}`}
-                  alt={a.name}
-                  className="h-full w-full object-contain"
-                  loading="lazy"
-                />
-              </div>
-              <div className="p-2.5">
-                <p className="truncate text-xs font-medium text-ink">{a.name}</p>
-                <p className="text-[10px] text-ink-muted">
-                  {a.width}×{a.height} · {Math.round(a.byteSize / 1024)} KB
-                </p>
+      <Kart dolgu={false}>
+        <AracCubugu
+          sag={
+            canWrite ? (
+              <label className="flex items-center gap-2 text-12 text-ink-muted">
+                Yüklenecek tür
+                <Secim
+                  value={kind}
+                  onChange={(e) => setKind(e.target.value as GorselTuru)}
+                  className="h-8 w-auto text-13"
+                  title={ASSET_KIND_META[kind].hint}
+                >
+                  {GORSEL_TURLERI.map((k) => (
+                    <option key={k} value={k}>
+                      {ASSET_KIND_META[k].label}
+                    </option>
+                  ))}
+                </Secim>
+              </label>
+            ) : undefined
+          }
+        >
+          {/* GÖRÜNÜM DEĞİŞİMİ = BÖLÜMLÜ SEÇİCİ (BILESENLER § 3.5); sayılar her seçenekte. */}
+          <BolumluSecici
+            etiket="Görsel türü"
+            secili={activeKind ?? 'hepsi'}
+            onSec={(d) => navigate(d === 'hepsi' ? null : (d as GorselTuru))}
+            secenekler={[
+              { deger: 'hepsi', etiket: <>Tümü <span className="text-ink-muted">{gorselToplami}</span></> },
+              ...GORSEL_TURLERI.map((k) => ({
+                deger: k as string,
+                etiket: (
+                  <>
+                    {ASSET_KIND_META[k].label} <span className="text-ink-muted">{initial.byKind[k]}</span>
+                  </>
+                ),
+              })),
+            ]}
+          />
+        </AracCubugu>
+        {/* TÜR SEÇİMİNİN NE DEĞİŞTİRDİĞİ YAZIYOR. */}
+        {canWrite && <p className="m-0 border-b border-line px-4 py-2 text-12 text-ink-muted">{ASSET_KIND_META[kind].hint}</p>}
 
-                <div className="mt-1.5 flex items-center justify-between gap-2">
-                  {/* KULLANIM SAYISI — silme kararının dayanağı. */}
-                  <span className="text-[10px] text-ink-muted">
-                    {a.usageCount > 0 ? `${a.usageCount} reklamda` : 'kullanılmıyor'}
-                  </span>
-                  {canWrite && (
-                    <button
-                      type="button"
-                      onClick={() => void remove(a)}
-                      disabled={a.usageCount > 0}
-                      title={
-                        a.usageCount > 0
-                          ? 'Kullanımdaki görsel silinemez — yayındaki reklamların kaydı kopar'
-                          : undefined
-                      }
-                      className="text-[10px] text-ink-muted underline disabled:no-underline disabled:opacity-40"
-                    >
-                      Sil
-                    </button>
+        {rows.length === 0 ? (
+          <div className="p-4">
+            <BosDurum
+              baslik="Arşiv boş"
+              neden={
+                canWrite
+                  ? 'Buraya yüklediğin görselleri her kampanyada yeniden kullanırsın; bir daha yüklemen gerekmez. Sağ üstteki “Görsel yükle” ile başla.'
+                  : 'Bu workspace’e henüz görsel yüklenmemiş. Yükleme yetkin yok; yöneticine sor.'
+              }
+            />
+          </div>
+        ) : (
+          <ul className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-3 p-4">
+            {rows.map((a) => (
+              <li key={a.id} className="overflow-hidden rounded-alan border border-line bg-surface">
+                <div className="aspect-square bg-surface-sunken">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={`${API_URL}${a.previewUrl}`}
+                    alt={a.name}
+                    className="h-full w-full object-contain"
+                    loading="lazy"
+                  />
+                </div>
+                <div className="grid gap-0.5 p-2.5">
+                  <p className="m-0 truncate text-13 font-semibold text-ink" title={a.name}>
+                    {a.name}
+                  </p>
+                  <p className="m-0 text-12 text-ink-muted tabular-nums">
+                    {a.width}×{a.height} · {Math.round(a.byteSize / 1024)} KB
+                  </p>
+                  <div className="mt-1 flex items-center justify-between gap-2">
+                    {/* KULLANIM SAYISI — silme kararının dayanağı. */}
+                    <span className="text-12 text-ink-muted">
+                      {a.usageCount > 0 ? `${a.usageCount} reklamda` : 'kullanılmıyor'}
+                    </span>
+                    {canWrite && (
+                      <Dugme
+                        ton="hayalet"
+                        boyut="kucuk"
+                        onClick={() => void remove(a)}
+                        disabled={a.usageCount > 0}
+                        title={
+                          a.usageCount > 0
+                            ? 'Kullanımdaki görsel silinemez; yayındaki reklamların kaydı kopar'
+                            : undefined
+                        }
+                        className="-mr-2"
+                      >
+                        Sil
+                      </Dugme>
+                    )}
+                  </div>
+
+                  {/* PLATFORM YÜKLEMELERİ. Aynı görselin hesap başına ayrı bir
+                      Meta kimliği var; bu satır onu görünür kılıyor. */}
+                  {a.platformRefs.length > 0 && (
+                    <p className="m-0 text-12 text-ink-muted">{a.platformRefs.length} hesaba yüklendi</p>
                   )}
                 </div>
-
-                {/* PLATFORM YÜKLEMELERİ. Aynı görselin hesap başına ayrı bir
-                    Meta kimliği var; bu satır onu görünür kılıyor. */}
-                {a.platformRefs.length > 0 && (
-                  <p className="mt-1 text-[10px] text-ink-muted">
-                    {a.platformRefs.length} hesaba yüklendi
-                  </p>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <p className="text-[11px] text-ink-muted">
-        {rows.length} görsel gösteriliyor
-        {(activeKind ? initial.byKind[activeKind] : gorselToplami) > rows.length &&
-          ` · toplam ${activeKind ? initial.byKind[activeKind] : gorselToplami}.`}
-        {logoSayisi > 0 && (
-          <>
-            {' '}
-            <Link href={logoAdresi} className="font-medium text-ink underline-offset-2 hover:underline">
-              {logoSayisi} logo Marka’da
-            </Link>
-          </>
+              </li>
+            ))}
+          </ul>
         )}
-      </p>
+
+        {/* SESSİZ KESME YOK: kaç görselin gösterildiği ve toplam her zaman. */}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line">
+          <span className="px-4 text-12 text-ink-muted">
+            {logoSayisi > 0 && (
+              <Link href={logoAdresi} className={KART_BAGLANTISI}>
+                {logoSayisi} logo Marka’da
+              </Link>
+            )}
+          </span>
+          <SayfalamaCubugu bas={rows.length === 0 ? 0 : 1} son={rows.length} toplam={Math.max(toplam, rows.length)} />
+        </div>
+      </Kart>
     </div>
   );
-}
-
-function chip(active: boolean): string {
-  return `rounded-lg border px-2.5 py-1 text-xs font-medium transition ${
-    active ? 'border-brand bg-brand-soft text-ink' : 'border-line text-ink-muted hover:bg-surface-sunken'
-  }`;
 }

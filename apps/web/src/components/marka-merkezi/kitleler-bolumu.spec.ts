@@ -20,7 +20,10 @@ describe('Kitleler bölümü', () => {
   it('dört hâl ayrı: yükleniyor, hata, boş (sebebiyle), liste', () => {
     expect(K).toContain("durum.tur === 'yukleniyor'");
     expect(K).toContain("durum.tur === 'hata'");
-    expect(K).toContain('Kitle olmadan Hızlı Reklam');
+    // Boş liste NEDENİNİ söylüyor: kitle yoksa reklamın kime gideceği.
+    expect(K).toContain('<BosDurum');
+    expect(K).toContain('Kitle olmadan reklam');
+    expect(K).toContain('Türkiye geneli, 18 yaş ve üzeri');
     expect(K).not.toMatch(/\.catch\(\(\) => set/);
   });
 
@@ -32,7 +35,13 @@ describe('Kitleler bölümü', () => {
   });
 
   it('silme iki adımlı; ekran "yalnızca Meta" kısıtını söylüyor', () => {
-    expect(K).toContain('Silinsin mi?');
+    // 2026-10-14: ⋯ menüsü (1. adım) + onay penceresi (2. adım); silme
+    // çağrısı YALNIZ pencerenin tehlike düğmesinde.
+    expect(K).toContain('baslik="Kitle silinsin mi?"');
+    const pencere = K.slice(K.indexOf('baslik="Kitle silinsin mi?"'));
+    expect(pencere.slice(0, pencere.indexOf('/>'))).toContain("method: 'DELETE'");
+    expect(K.match(/method: 'DELETE'/g)?.length).toBe(1);
+    expect(K).toContain('onClick={() => setSilinecek(k.id)}');
     expect(K).toContain('yalnızca Meta reklamlarında');
   });
 

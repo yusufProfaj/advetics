@@ -3,7 +3,10 @@
 import { useEffect, useState } from 'react';
 import type { ClientProfileRecord } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
-import { Halka } from '@/components/yukleniyor';
+import { Kart } from '@/components/ui/kart';
+import { Dugme } from '@/components/ui/dugme';
+import { Alan, MetinAlani } from '@/components/ui/alan';
+import { Serit, Yukleniyor } from '@/components/ui/hal';
 
 /**
  * Bilgi Bankası / Hedef Kitle / Marka Bilgileri sekmeleri — ÜÇÜ DE
@@ -79,54 +82,61 @@ export function MetinSekmesi({
     }
   }
 
+  /*
+   * KART KALIBI (taslak `#marka`): başlık kartın başlık satırında, Kaydet
+   * kartın SAĞ ALTINDA koyu küçük düğme. Kart içinde kırmızı dolu düğme yok;
+   * sayfanın tek birincil eylemi başlığın sağında.
+   */
   if (yukleniyor) {
     return (
-      <div className="flex items-center gap-2 py-8 text-sm text-ink-muted">
-        <Halka className="h-4 w-4" /> Yükleniyor…
-      </div>
+      <Kart baslik={baslik}>
+        <Yukleniyor satir={3} etiket={`${baslik} yükleniyor`} />
+      </Kart>
     );
   }
 
   return (
-    <div className="max-w-2xl space-y-3">
-      <div>
-        <h2 className="text-sm font-semibold text-ink">{baslik}</h2>
-        <p className="mt-0.5 text-xs text-ink-muted">{aciklama}</p>
+    <Kart
+      baslik={baslik}
+      altEylem={
+        canWrite ? (
+          <div className="flex items-center gap-3">
+            {kaydedildi && (
+              <span role="status" className="text-12 text-ink-muted">
+                Kaydedildi
+              </span>
+            )}
+            <Dugme ton="koyu" boyut="kucuk" onClick={kaydet} bekliyor={busy}>
+              Kaydet
+            </Dugme>
+          </div>
+        ) : undefined
+      }
+    >
+      <div className="grid max-w-2xl gap-3">
+        <Alan etiket={aciklama} ipucu={`${deger.length}/2000`}>
+          {(id, aciklamaId) => (
+            <MetinAlani
+              id={id}
+              aria-describedby={aciklamaId}
+              value={deger}
+              onChange={(e) => {
+                setDeger(e.target.value);
+                setKaydedildi(false);
+              }}
+              disabled={!canWrite}
+              placeholder={placeholder}
+              rows={6}
+              maxLength={2000}
+            />
+          )}
+        </Alan>
+        {error && (
+          <Serit ton="hata" baslik="Kaydedilemedi ya da okunamadı.">
+            {error}
+          </Serit>
+        )}
       </div>
-
-      <textarea
-        value={deger}
-        onChange={(e) => {
-          setDeger(e.target.value);
-          setKaydedildi(false);
-        }}
-        disabled={!canWrite}
-        placeholder={placeholder}
-        rows={6}
-        maxLength={2000}
-        className="w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-brand disabled:opacity-60"
-      />
-      <p className="text-right text-[11px] text-ink-muted">{deger.length}/2000</p>
-
-      {error && (
-        <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger-strong ring-1 ring-inset ring-danger/30">
-          {error}
-        </p>
-      )}
-
-      {canWrite && (
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={kaydet}
-            disabled={busy}
-            className="rounded-lg bg-brand px-3.5 py-2 text-sm font-semibold text-white disabled:opacity-40"
-          >
-            {busy ? 'Kaydediliyor…' : 'Kaydet'}
-          </button>
-          {kaydedildi && <span className="text-xs text-ok-strong">Kaydedildi</span>}
-        </div>
-      )}
-    </div>
+    </Kart>
   );
 }
