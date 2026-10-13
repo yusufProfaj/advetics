@@ -573,3 +573,47 @@ dosyası KALMADI (`ELLE_ADRES`, `API_GECIS`, `YONLENDIRME_BEKLEYEN`).
   iki küçük ek: alanın varsayılanı kalktı, `failures.kind`e `'kategori'`.
   § 13'teki Ç-10 maddesi bununla kapandı. Ölçülmedi: canlıda sihirbazla
   açılan bir workspace'in Kurulum'unda sorunun çıkmadığı gözle görülmedi.
+
+### 14d. Ajan 4 kapısı (Test & Güvenlik, 2026-10-13) — KAPI AÇIK
+
+**Düzeltilen bulgular** (her biri ayrı commit, test + mutasyon):
+
+- **B1 — adres ≠ seçim, boş ekran** (`a30c1e01`). Marka Merkezi ve
+  Varlıklar workspace'i adresten okuyor, RLS (`app.can_access_client`)
+  seçili workspace'e göre süzüyor: üstte A seçiliyken B'nin Marka
+  Merkezi'si B başlığıyla BOŞ kartlar çiziyordu; Kurulum yazmaları
+  "önce üstten seç" ile reddediliyordu. `workspaceUyumu` (lib/sayfa-workspace.ts):
+  farklıysa içerik okunmuyor + tek tıkla `switch-client` (`WorkspaceGec`);
+  seçim yoksa okuma doğru, yazma için uyarı + düğme. Otomatik geçiş YOK
+  (seçim bütün sekmeleri etkiliyor).
+- **B2 — eski ekran adları** (`1cba54f5`). API'de 19 cümle + açılış
+  sonucu eski ekranları anlatıyordu ("Platform Bağlantıları ekranından ata",
+  "Workspace ayarları", "Kütüphane > Formlar", "Ayarlar → E-posta Ayarları",
+  "Şirketler ekranındaki workspace kartı"). Yer adları shared
+  `PANEL_YERLERI` (sekme adından türüyor); iki tarama spec'i
+  (`apps/api/src/eski-ekran-adlari.spec.ts`, `apps/web/src/lib/eski-ekran-adlari.spec.ts`).
+- **B3 — boş test** (`4b4cea1b`). `kategori-beyani.ts` bayrak kontrolü
+  silinince hiçbir test düşmüyordu; sıfır satırlık bayrak yazımı testi eklendi.
+
+**Mutasyonla ölçülen (hepsi düştü, geri alındı):** PATCH status kapısı
+(org yöneticisi şartı), geri almada `activeClientId: null`, `/sync/status`
+404 kontrolü, `tamamla`nın kullanılmayan platformu atlaması, kurulum hesap
+kapısında `connection.manage`, YouTube atama kapısı, kategori bayrağı;
+shared'da (her seferinde `tsc` ile derlenip, test sayısı 144 sabit):
+`kapiAcikMi` org yöneticisi dalı, sayaçta `kullanilmiyor` süzgeci, eski
+`?bolum=ayarlar` yönü, `tur=logo` yönü; panelde `workspaceUyumu` ve
+Varlıklar'ın erken dönüşü, eski ad taraması.
+
+**Ölçülmeyen / kalan:**
+
+- Next `redirect()` sonrası `#çapa`nın istemci içi gezinmede korunduğu
+  tarayıcıda görülmedi (doğrudan yüklemede 307 Location'da parça yok,
+  tarayıcı eskisini korur; `EskiCapaYonlendirici` istemcide çeviriyor).
+- Açılış sihirbazının son adımındaki `AiDoldur` yeni workspace'e
+  `switch-client`TEN ÖNCE yazıyor; üstte başka workspace seçiliyse RLS
+  profili reddedebilir (B1'in kardeşi, sihirbaz bu modülden önce de
+  böyleydi). Canlıda ölçülmedi.
+- `varliklar/formlar.tsx` yayın kapısı (`bulk.publish`) `PANEL_KAPILARI`
+  dışında elle; sözleşmede karşılığı yok.
+- Tasarım (Ajan 6): `WorkspaceGec` kutusu ve sonuç ekranı bağlantısı
+  gözle görülmedi.
