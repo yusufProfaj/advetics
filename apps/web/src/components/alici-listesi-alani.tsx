@@ -74,21 +74,21 @@ export function AliciListesiAlani({
   }
 
   return (
-    <div className="min-w-0">
-      <span className="text-xs text-ink-muted">{etiket}</span>
+    <div className="grid min-w-0 gap-1.5">
+      <span className="text-13 font-semibold text-ink">{etiket}</span>
 
-      <div className="mt-1 flex min-h-[38px] flex-wrap items-center gap-1.5 rounded-lg border border-line bg-surface px-2 py-1.5">
+      <div className="flex min-h-10 flex-wrap items-center gap-1.5 rounded-alan border border-line-strong bg-surface px-2 py-1.5">
         {degerler.map((adres) => (
           <span
             key={adres}
-            className="inline-flex items-center gap-1 rounded-md bg-surface-muted px-2 py-0.5 text-xs text-ink"
+            className="inline-flex h-[26px] items-center gap-1 rounded-full bg-surface-sunken px-2.5 text-12 font-semibold text-ink"
           >
             {adres}
             <button
               type="button"
               aria-label={`${adres} adresini çıkar`}
               onClick={() => onChange(degerler.filter((d) => d !== adres))}
-              className="text-ink-muted hover:text-danger"
+              className="text-ink-muted hover:text-danger-strong"
             >
               ×
             </button>
@@ -123,34 +123,34 @@ export function AliciListesiAlani({
           }}
           onBlur={() => ekle(taslak)}
           placeholder={degerler.length === 0 ? 'ornek@firma.com' : 'ekle…'}
-          className="min-w-[140px] flex-1 bg-transparent text-sm outline-none"
+          className="min-w-[140px] flex-1 bg-transparent text-14 text-ink outline-none placeholder:text-ink-soluk"
         />
       </div>
 
-      {hata !== null && <p className="mt-1 text-xs text-danger">{hata}</p>}
+      {hata !== null && <p role="alert" className="m-0 text-12 text-danger-strong">{hata}</p>}
 
       {/* SAYAÇ KOŞULSUZ — kaç kişiye gideceği her zaman görünür olmalı. */}
       {degerler.length > 0 && (
-        <p className="mt-1 text-[11px] text-ink-muted">
+        <p className="m-0 text-12 text-ink-muted">
           {degerler.length} alıcı · hepsi birbirinin adresini görecek
         </p>
       )}
 
       {degerler.length === 0 && bosVarsayilan !== undefined && (
-        <p className="mt-1 text-[11px] text-ink-muted">
+        <p className="m-0 text-12 text-ink-muted">
           {bosVarsayilan.length > 0 ? (
             <>
               Boş bırakılırsa <strong>{bosVarsayilan.join(', ')}</strong> adresine gönderilir.
             </>
           ) : (
-            <span className="text-warn">
-              Workspace’in kayıtlı rapor alıcısı yok — en az bir adres eklemelisin.
+            <span className="text-danger-strong">
+              Workspace’in kayıtlı rapor alıcısı yok: en az bir adres eklemelisin.
             </span>
           )}
         </p>
       )}
 
-      {yardim !== undefined && <p className="mt-1 text-[11px] text-ink-muted">{yardim}</p>}
+      {yardim !== undefined && <p className="m-0 text-12 text-ink-muted">{yardim}</p>}
     </div>
   );
 }

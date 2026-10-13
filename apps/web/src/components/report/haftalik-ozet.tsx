@@ -16,6 +16,10 @@ import { AliciListesiAlani } from '@/components/alici-listesi-alani';
 import { markaMerkeziAdresi } from '@/lib/panel-adresleri';
 import { Halka } from '@/components/yukleniyor';
 import { apiFetch } from '@/lib/api';
+import { Dugme } from '@/components/ui/dugme';
+import { BosDurum, HataDurumu, Yukleniyor } from '@/components/ui/hal';
+import { DurumNoktasi } from '@/components/ui/rozet';
+import { BolumluSecici } from '@/components/ui/sekmeler';
 import {
   cerceveIcerigi,
   haftaSec,
@@ -92,15 +96,15 @@ export function HaftalikOzetSekmesi({
   const aralik = isoHaftaAraligi(hafta)!;
 
   return (
-    <div className="space-y-4">
+    <div className="grid gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-ink-muted">Geçen haftanın bir önceki haftaya göre özeti, her pazartesi sabahı</p>
-        <label className="flex items-center gap-2 text-sm">
-          <span className="text-ink-muted">Hafta</span>
+        <p className="m-0 text-13 text-ink-muted">Geçen haftanın bir önceki haftaya göre özeti, her pazartesi sabahı</p>
+        <label className="flex items-center gap-2 text-13">
+          <span className="font-semibold text-ink-muted">Hafta</span>
           <select
             value={hafta}
             onChange={(e) => haftaDegistir(e.target.value)}
-            className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm"
+            className="h-8 rounded-full border border-line-strong bg-surface px-3 text-13 font-semibold text-ink"
           >
             {secenekler.map((s) => (
               <option key={s.kod} value={s.kod}>
@@ -111,35 +115,26 @@ export function HaftalikOzetSekmesi({
         </label>
       </div>
       {duzeltildi && (
-        <p role="status" className="text-xs text-ink-muted">
+        <p role="status" className="m-0 text-12 text-ink-muted">
           Bağlantıdaki hafta gösterilemiyor (tamamlanmamış ya da çok eski); {aralikMetni(aralik)} açıldı.
         </p>
       )}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <section className="min-w-0 rounded-xl border border-line bg-surface">
+        <section className="min-w-0 rounded-kart border border-line bg-surface">
           <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-3">
             {ajansGorur ? (
-              <div role="group" aria-label="Görünüm" className="flex gap-1">
-                {(['musteri', 'ajans'] as const).map((k) => (
-                  <button
-                    key={k}
-                    type="button"
-                    aria-pressed={kitle === k}
-                    onClick={() => setKitle(k)}
-                    className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
-                      kitle === k ? 'bg-ink text-white' : 'text-ink-muted hover:text-ink'
-                    }`}
-                  >
-                    {OZET_KITLESI_ADI[k]}
-                  </button>
-                ))}
-              </div>
+              <BolumluSecici
+                etiket="Görünüm"
+                secili={kitle}
+                onSec={setKitle}
+                secenekler={(['musteri', 'ajans'] as const).map((k) => ({ deger: k, etiket: OZET_KITLESI_ADI[k] }))}
+              />
             ) : (
-              <span className="text-sm font-semibold text-ink">{OZET_KITLESI_ADI.musteri}</span>
+              <span className="font-baslik text-15 font-bold text-ink">{OZET_KITLESI_ADI.musteri}</span>
             )}
             {veri && hal !== 'hata' && (
-              <small className="ml-auto text-xs text-ink-muted">
+              <small className="ml-auto text-12 text-ink-muted">
                 {zamanMetni(veri.ozet.uretildi)} üretildi · gönderilenle aynı
               </small>
             )}
@@ -147,34 +142,28 @@ export function HaftalikOzetSekmesi({
           </div>
 
           {hal === 'yukleniyor' && (
-            <div aria-busy="true" className="space-y-2 p-4">
-              {[40, 90, 75, 60].map((w) => (
-                <span key={w} className="block h-3.5 rounded bg-line/60" style={{ width: `${w}%` }} />
-              ))}
+            <div className="p-4">
+              <Yukleniyor satir={4} etiket="Özet hazırlanıyor" />
             </div>
           )}
 
           {hal === 'hata' && (
-            <div role="alert" className="flex flex-wrap items-center gap-2 p-4 text-sm text-danger-strong">
-              <strong>Özet hazırlanamadı.</strong>
-              <span>{hata}</span>
-              <button
-                type="button"
-                onClick={() => setDeneme((n) => n + 1)}
-                className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink"
-              >
-                Yeniden dene
-              </button>
+            <div className="p-4">
+              <HataDurumu baslik="Özet hazırlanamadı" mesaj={hata ?? 'Sunucu sebep bildirmedi.'} onTekrar={() => setDeneme((n) => n + 1)} />
             </div>
           )}
 
           {hal === 'bos' && (
-            <div className="px-4 py-10 text-center">
-              <p className="text-base font-semibold text-ink">Bu hafta harcama yok</p>
-              <p className="mx-auto mt-1 max-w-md text-sm text-ink-muted">
-                {aralikMetni(aralik)} ve önceki hafta reklam harcaması kaydedilmedi. Boş özet gönderilmez; müşteriye giden plan bu hafta
-                &ldquo;Atlandı&rdquo; yazar.
-              </p>
+            <div className="p-4">
+              <BosDurum
+                baslik="Bu hafta harcama yok"
+                neden={
+                  <>
+                    {aralikMetni(aralik)} ve önceki hafta reklam harcaması kaydedilmedi. Boş özet gönderilmez;
+                    müşteriye giden plan bu hafta &ldquo;Atlandı&rdquo; yazar.
+                  </>
+                }
+              />
             </div>
           )}
 
@@ -184,11 +173,11 @@ export function HaftalikOzetSekmesi({
         <div className="flex min-w-0 flex-col gap-4">
           {planYetkisi && <MusteriPlaniKarti clientId={clientId} gonderim={veri?.gonderim.musteri ?? null} />}
           {ajansGorur && (
-            <section className="rounded-xl border border-line bg-surface">
-              <div className="border-b border-line px-4 py-3">
-                <h2 className="text-sm font-semibold text-ink">Ajans kanalları</h2>
+            <section className="rounded-kart border border-line bg-surface">
+              <div className="border-b border-line px-5 py-4">
+                <h3 className="m-0 font-baslik text-15 font-bold text-ink">Ajans kanalları</h3>
               </div>
-              <div className="space-y-2 px-4 py-3 text-sm">
+              <div className="grid gap-2 px-5 py-4 text-13">
                 {kitle !== 'ajans' ? (
                   <p className="text-ink-muted">Kanal durumu ajans görünümünde.</p>
                 ) : veri && veri.gonderim.kanallar.length > 0 ? (
@@ -217,9 +206,8 @@ export function HaftalikOzetSekmesi({
 }
 
 function Nokta({ durum }: { durum: 'iyi' | 'kotu' | 'notr' }) {
-  // Yeşil YALNIZ durum noktası (kılavuz); kötü kırmızı, nötr gri.
-  const renk = durum === 'iyi' ? 'bg-ok' : durum === 'kotu' ? 'bg-brand' : 'bg-ink-muted';
-  return <span aria-hidden="true" className={`inline-block h-2 w-2 shrink-0 rounded-full ${renk}`} />;
+  // Yeşil YALNIZ durum noktası (kılavuz, ortak `DurumNoktasi`); kötü kırmızı, nötr gri.
+  return <DurumNoktasi hal={durum === 'iyi' ? 'ok' : durum === 'kotu' ? 'hata' : 'taslak'} />;
 }
 
 function MailOnizleme({ veri }: { veri: HaftalikOzetOnizleme }) {
@@ -254,7 +242,7 @@ function MailOnizleme({ veri }: { veri: HaftalikOzetOnizleme }) {
         )}
         <span>{musteriGonderimMetni(veri.gonderim.musteri)}</span>
       </div>
-      <div className="bg-line/30 p-2 sm:p-4">
+      <div className="bg-surface-sunken p-2 sm:p-4">
         <iframe
           ref={cerceve}
           title={`Haftalık özet maili, ${OZET_KITLESI_ADI[veri.kitle]}`}
@@ -269,8 +257,8 @@ function MailOnizleme({ veri }: { veri: HaftalikOzetOnizleme }) {
         <div className="space-y-3 border-t border-line px-4 py-4">
           {veri.kisa && (
             <div>
-              <h3 className="mb-1.5 text-sm font-semibold text-ink">Slack ve Teams&apos;e giden kısa sürüm</h3>
-              <div className="rounded-lg border border-line px-3 py-2.5 text-sm">
+              <h3 className="m-0 mb-1.5 text-13 font-semibold text-ink">Slack ve Teams&apos;e giden kısa sürüm</h3>
+              <div className="rounded-alan border border-line px-3 py-2.5 text-13">
                 <p className="font-semibold text-ink">{veri.kisa.baslik}</p>
                 <ul className="mt-1 space-y-0.5 text-ink">
                   {veri.kisa.satirlar.map((s, i) => (
@@ -376,9 +364,9 @@ function MusteriPlaniKarti({
 
   const etkin = plan?.etkin ?? false;
   return (
-    <section className="rounded-xl border border-line bg-surface">
-      <div className="flex items-center gap-2 border-b border-line px-4 py-3">
-        <h2 className="text-sm font-semibold text-ink">Müşteriye giden özet</h2>
+    <section className="rounded-kart border border-line bg-surface">
+      <div className="flex items-center gap-2 border-b border-line px-5 py-4">
+        <h3 className="m-0 font-baslik text-15 font-bold text-ink">Müşteriye giden özet</h3>
         <button
           type="button"
           role="switch"
@@ -386,18 +374,18 @@ function MusteriPlaniKarti({
           aria-label="Müşteriye giden özet"
           disabled={plan === null || kaydediliyor}
           onClick={() => void kaydet(!etkin)}
-          className={`relative ml-auto h-[22px] w-10 shrink-0 rounded-full border border-line transition-colors disabled:opacity-50 ${
-            etkin ? 'bg-ink' : 'bg-line/60'
+          className={`relative ml-auto h-5 w-9 shrink-0 rounded-full transition-colors motion-reduce:transition-none disabled:opacity-50 ${
+            etkin ? 'bg-ink' : 'bg-line-strong'
           }`}
         >
           <span
-            className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform motion-reduce:transition-none ${
-              etkin ? 'translate-x-[18px]' : ''
+            className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-surface transition-transform motion-reduce:transition-none ${
+              etkin ? 'translate-x-4' : ''
             }`}
           />
         </button>
       </div>
-      <div className="flex items-center gap-2 border-b border-line px-4 py-2.5 text-xs">
+      <div className="flex items-center gap-2 border-b border-line px-5 py-2.5 text-12">
         <Nokta durum={etkin ? 'iyi' : 'notr'} />
         <span className="text-ink-muted">
           {plan === null && !hata
@@ -408,14 +396,14 @@ function MusteriPlaniKarti({
         </span>
       </div>
       {hata && (
-        <p role="alert" className="border-b border-line px-4 py-2.5 text-xs text-danger-strong">
+        <p role="alert" className="m-0 border-b border-line px-5 py-2.5 text-12 text-danger-strong">
           {hata}
         </p>
       )}
       {plan && (
-        <div className="space-y-3 px-4 py-3 text-sm">
-          <label className="block">
-            <span className="mb-1 block text-xs font-semibold text-ink">Saat (pazartesi)</span>
+        <div className="grid gap-3 px-5 py-4 text-13">
+          <label className="grid gap-1.5">
+            <span className="text-13 font-semibold text-ink">Saat (pazartesi)</span>
             <select
               value={saat}
               disabled={kaydediliyor}
@@ -424,7 +412,7 @@ function MusteriPlaniKarti({
                 setSaat(s);
                 if (plan.kurulu) void kaydet(etkin, s);
               }}
-              className="w-full rounded-lg border border-line bg-surface px-2.5 py-1.5"
+              className="h-10 w-full rounded-alan border border-line-strong bg-surface px-3 text-14 text-ink"
             >
               {SAATLER.map((s) => (
                 <option key={s} value={s}>
@@ -444,31 +432,26 @@ function MusteriPlaniKarti({
             bosVarsayilan={plan.cozulenAliciListesi}
           />
           {plan.cozulenAliciListesi.length === 0 && (
-            <p role="alert" className="text-xs text-danger-strong">
+            <p role="alert" className="m-0 text-12 text-danger-strong">
               Alıcı yok: plan açılsa da mail gidemez. Alıcı ekle ya da Marka Merkezi&apos;nde rapor alıcısı tanımla.
             </p>
           )}
           <Satir etiket="Gönderen" deger={plan.gonderen ? [plan.gonderen.ad, plan.gonderen.eposta].filter(Boolean).join(' · ') : 'Açan kişinin e-posta kimliği'} />
           {plan.senderReady === false && (
-            <p role="alert" className="text-xs text-danger-strong">E-posta kimliği doğrulanmadı; plan açılamaz ya da gönderemez.</p>
+            <p role="alert" className="m-0 text-12 text-danger-strong">E-posta kimliği doğrulanmadı; plan açılamaz ya da gönderemez.</p>
           )}
           <Satir
             etiket="Son gönderim"
             deger={plan.son ? `${zamanMetni(plan.son.zaman)} · ${plan.son.durum === 'sent' ? 'Gönderildi' : plan.son.durum === 'skipped' ? 'Atlandı' : 'Başarısız'}` : 'Henüz yok'}
           />
-          {plan.son?.hata && <p className="text-xs text-danger-strong">{plan.son.hata}</p>}
+          {plan.son?.hata && <p className="m-0 text-12 text-danger-strong">{plan.son.hata}</p>}
           <Satir etiket="Sıradaki" deger={plan.siradaki ? zamanMetni(plan.siradaki) : etkin ? '-' : 'Kapalı'} />
-          {gonderim && <p className="text-xs text-ink-muted">Bu hafta: {musteriGonderimMetni(gonderim)}</p>}
-          <button
-            type="button"
-            onClick={() => void kendimeGonder()}
-            disabled={gonderiliyor}
-            className="w-full rounded-lg border border-line px-3 py-2 text-sm font-semibold text-ink hover:border-ink disabled:opacity-50"
-          >
-            {gonderiliyor ? 'Gönderiliyor…' : 'Kendime gönder'}
-          </button>
+          {gonderim && <p className="m-0 text-12 text-ink-muted">Bu hafta: {musteriGonderimMetni(gonderim)}</p>}
+          <Dugme ton="ikincil" boyut="kucuk" onClick={() => void kendimeGonder()} bekliyor={gonderiliyor} className="justify-self-start">
+            Kendime gönder
+          </Dugme>
           {denemeSonucu && (
-            <p role={denemeSonucu.tur === 'hata' ? 'alert' : 'status'} className={`text-xs ${denemeSonucu.tur === 'hata' ? 'text-danger-strong' : 'text-ink-muted'}`}>
+            <p role={denemeSonucu.tur === 'hata' ? 'alert' : 'status'} className={`m-0 text-12 ${denemeSonucu.tur === 'hata' ? 'text-danger-strong' : 'text-ink-muted'}`}>
               {denemeSonucu.metin}
             </p>
           )}
@@ -480,8 +463,8 @@ function MusteriPlaniKarti({
 
 function Satir({ etiket, deger }: { etiket: string; deger: string }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-      <span className="text-xs text-ink-muted">{etiket}</span>
+    <div className="flex flex-wrap items-center justify-between gap-2 text-13">
+      <span className="text-12 text-ink-muted">{etiket}</span>
       <span className="text-right text-ink">{deger}</span>
     </div>
   );

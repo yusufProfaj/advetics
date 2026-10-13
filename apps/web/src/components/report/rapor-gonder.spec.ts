@@ -104,7 +104,8 @@ describe('RaporGonder', () => {
      * görünürdü. Ayrı kutu ve uyarı rengi.
      */
     expect(KAYNAK).toContain('adres reddedildi');
-    expect(KAYNAK).toContain('border-warn/40');
+    // 2026-10-14: uyarı şeridi (ortak `Serit`), yeşil başarı cümlesinden ayrı.
+    expect(KAYNAK).toContain('<Serit baslik={`${reddedilen.length} adres reddedildi`}>');
     // İddia RENGE değil, reddi TAŞIYAN duruma da çapalı olmalı.
     expect(KAYNAK).toContain('setReddedilen(r.reddedilen)');
   });

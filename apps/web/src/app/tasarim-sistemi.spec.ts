@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ISTISNALAR } from './tasarim-sistemi.istisnalar';
+import { ISTISNALAR, KALICI_ISTISNALAR } from './tasarim-sistemi.istisnalar';
 import { KILAVUZ, SRC, TARANAN, UI, ihlalSay, mevcutSayilar, yorumsuz } from './tasarim-sistemi.tarama';
 
 /**
@@ -42,14 +42,19 @@ describe('tasarım sistemi: istisna listesi yalnız küçülür', () => {
     ).toEqual({ renk: 0, degrade: 0, dugme: 0, modal: 0, h1: 0 });
   });
 
+  it('kalıcı istisna geçici listede İKİNCİ KEZ yok (bir dosya tek yerde sayılır)', () => {
+    for (const d of Object.keys(KALICI_ISTISNALAR)) expect(ISTISNALAR[d], d).toBeUndefined();
+  });
+
   it('KRİTİK: hiçbir dosyada listedekinden FAZLA ihlal yok, düzelen dosya listede kalmıyor', () => {
     const mevcut = mevcutSayilar();
     const hatalar: string[] = [];
-    const dosyaAdlari = new Set([...Object.keys(mevcut), ...Object.keys(ISTISNALAR)]);
+    const dosyaAdlari = new Set([...Object.keys(mevcut), ...Object.keys(ISTISNALAR), ...Object.keys(KALICI_ISTISNALAR)]);
     for (const d of dosyaAdlari) {
       for (const tur of ['renk', 'degrade', 'dugme', 'modal', 'h1'] as const) {
         const simdi = mevcut[d]?.[tur] ?? 0;
-        const izin = ISTISNALAR[d]?.[tur] ?? 0;
+        // Kalıcı istisna (gerekçeli) da AYNI kesinlikle sayılıyor: büyüyemez, küçülürse listeden düşmeli.
+        const izin = ISTISNALAR[d]?.[tur] ?? KALICI_ISTISNALAR[d]?.[tur] ?? 0;
         if (simdi > izin) {
           hatalar.push(`YENİ İHLAL ${d} · ${tur}: ${simdi} (izin ${izin}) — components/ui bileşenini kullan (docs/marka/BILESENLER.md)`);
         } else if (simdi < izin) {

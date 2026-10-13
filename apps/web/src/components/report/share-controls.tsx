@@ -1,27 +1,32 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { sablonAlanlari } from '@advetics/shared';
+import { AcilirMenu, IKON_TETIK, MenuOgesi } from '@/components/ui/acilir-menu';
+import { Alan, Girdi, Secim } from '@/components/ui/alan';
+import { Dugme } from '@/components/ui/dugme';
+import { Serit } from '@/components/ui/hal';
+import { YanPanel } from '@/components/ui/pencere';
 import { MailGonderModal, RaporGonder } from './rapor-gonder';
 import { RaporPlanla } from './rapor-planla';
 
 /**
- * ═══ PAYLAŞ — TEK GİRİŞ, İKİ YOL ═══
+ * ═══ RAPOR İŞLEMLERİ: BAŞLIĞIN SAĞINDA (kullanıcı kararı 2026-10-14) ═══
  *
- * Öncesinde müşteriye ulaştırmanın iki yolu ekranın İKİ AYRI yerindeydi:
- * üstte "Müşteriye gönder" düğmesi, altta bu panelde "Bağlantı oluştur".
- * Aynı iş için iki giriş noktası, her seferinde "hangisi neydi" sorusunu
- * sorduruyordu. İkisi tek bir "Paylaş" menüsünde toplandı.
+ * "Raporu gönder" TEK birincil eylem (kırmızı), "PDF indir" yanında ikincil
+ * düğme; "Planla" ve "Paylaşım bağlantısı" ⋯ menüsünde. Onaylı taslak
+ * `docs/marka/sayfa-taslaklari.html#raporlar`. Ekranın asıl işi raporu
+ * müşteriye ulaştırmak: eski "Paylaş" menüsü bu işi bağlantı üretmenin
+ * yanına bir seçenek olarak gömüyordu ve kullanıcı "nasıl gönderiyorum"u
+ * menüde arıyordu.
  *
- * SÜRE MENÜNÜN İÇİNDE. Panelin sağında ayrı bir seçici olarak durduğunda,
- * bağlantı üretmeyecek kullanıcıya da sorulmuş oluyordu. Menüde, tam da
- * kararın verildiği yerde.
+ * ÜÇ YOL DA AYNI ŞABLONU TAŞIYOR (`sablon`). Öncesinde buraya
+ * `templateId={null}` SABİT geçiliyordu ve PDF ile mail ekrandaki seçimi hiç
+ * görmüyordu: kullanıcı Google raporuna bakarken Genel raporu indiriyordu.
  *
- * Ham token yalnızca ÜRETİM ANINDA bir kez dönüyor (sunucuda hash'i
- * saklanıyor), bu yüzden ekranda gösterilip kopyalanması gerekiyor. Sayfa
- * yenilenince kaybolduğu açıkça yazıyor — kullanıcı "sonra bakarım" diye
- * kapatmasın.
+ * Mail, plan ve bağlantı YAN PANELDE: rapor ekranından çıkmadan sağdan
+ * açılıyor; sonuçları da panelin içinde kalıyor.
  */
 export function ShareControls({
   clientId,
@@ -35,50 +40,128 @@ export function ShareControls({
   to: string;
   hasData: boolean;
   /**
-   * Ekranda seçili şablon — ön ayar kodu ya da kayıtlı şablonun UUID'si.
+   * Ekranda seçili şablon: ön ayar kodu ya da kayıtlı şablonun UUID'si.
    *
-   * TEK DEĞER, ÜÇ TÜKETİCİ. Öncesinde buraya `templateId={null}` SABİT
-   * geçiliyordu ve PDF ile mail ekrandaki seçimi hiç görmüyordu: kullanıcı
-   * Google raporuna bakarken Genel raporu indiriyordu. Seçim artık tek yerden
-   * geliyor ve aşağıdaki üç yol da onu taşıyor.
+   * TEK DEĞER, ÜÇ TÜKETİCİ (PDF, mail, bağlantı).
    */
   sablon: string | null;
+}) {
+  /** Seçim kayıtlı bir şablonsa UUID'si; ön ayarsa `null`. */
+  const kayitliSablonId = sablonAlanlari(sablon).templateId ?? null;
+  const [mailAcik, setMailAcik] = useState(false);
+  const [planAcik, setPlanAcik] = useState(false);
+  const [baglantiAcik, setBaglantiAcik] = useState(false);
+
+  return (
+    <>
+      {/*
+        PDF DÜZ BİR BAĞLANTI, ikincil düğme görünüşünde: indirmek belgeyi
+        kendine almak, göndermek müşteriye ulaştırmak. İkisi aynı yerde ama
+        AYNI DÜĞME DEĞİL.
+      */}
+      <RaporGonder clientId={clientId} from={from} to={to} hasData={hasData} sablon={sablon} />
+
+      <AcilirMenu
+        etiket="Diğer rapor işlemleri"
+        hizala="sag"
+        genislik="w-72"
+        tetik={({ acik: _acik, ...o }) => (
+          <button type="button" {...o} aria-label="Diğer rapor işlemleri" className={`${IKON_TETIK} h-10 w-10 border border-line-strong`}>
+            <span aria-hidden className="text-15 leading-none">
+              ⋯
+            </span>
+          </button>
+        )}
+      >
+        {/*
+          PLANLA VERİYE BAĞLI DEĞİL: diğer işlemler BU dönemin raporuyla
+          ilgili ve dönem boşsa anlamsız; planlama ise GELECEK dönemleri
+          kuruyor. `hasData` ile kapatmak, bu hafta harcaması olmayan bir
+          müşteriye plan kurulamaması demek olurdu.
+        */}
+        <MenuOgesi onClick={() => setPlanAcik(true)} aciklama="Raporu düzenli olarak otomatik gönder">
+          Planla
+        </MenuOgesi>
+        <MenuOgesi
+          onClick={() => setBaglantiAcik(true)}
+          devreDisi={!hasData}
+          aciklama={hasData ? 'Giriş gerektirmeyen gizli sayfa' : 'Bu dönemde veri yok'}
+        >
+          Paylaşım bağlantısı
+        </MenuOgesi>
+      </AcilirMenu>
+
+      <Dugme onClick={() => setMailAcik(true)} disabled={!hasData} title={hasData ? undefined : 'Bu dönemde veri yok'}>
+        Raporu gönder
+      </Dugme>
+
+      {/*
+        PLANLAMA YALNIZCA KAYITLI ŞABLONU ALABİLİYOR. `report_plans.template_id`
+        bir UUID ve ön ayarların UUID'si YOK; ön ayar seçiliyken plana `null`
+        geçiyor ve sunucu müşterinin kendi şablonunu bulup yoksa varsayılanı
+        üretiyor.
+      */}
+      <RaporPlanla clientId={clientId} templateId={kayitliSablonId} acik={planAcik} onKapat={() => setPlanAcik(false)} />
+
+      <PaylasimBaglantisi
+        clientId={clientId}
+        from={from}
+        to={to}
+        sablon={sablon}
+        kayitliSablonId={kayitliSablonId}
+        hasData={hasData}
+        acik={baglantiAcik}
+        onKapat={() => setBaglantiAcik(false)}
+      />
+
+      <MailGonderModal
+        clientId={clientId}
+        from={from}
+        to={to}
+        acik={mailAcik}
+        onKapat={() => setMailAcik(false)}
+        sablon={sablon}
+      />
+    </>
+  );
+}
+
+/**
+ * ═══ PAYLAŞIM BAĞLANTISI: YAN PANEL ═══
+ *
+ * Ham token yalnızca ÜRETİM ANINDA bir kez dönüyor (sunucuda hash'i
+ * saklanıyor), bu yüzden ekranda gösterilip kopyalanması gerekiyor. Panel
+ * kapanınca kaybolduğu açıkça yazıyor: kullanıcı "sonra bakarım" diye
+ * kapatmasın.
+ *
+ * SÜRE BAĞLANTIYI ÜRETEN DÜĞMENİN ÜSTÜNDE: kararın verildiği yer burası.
+ */
+function PaylasimBaglantisi({
+  clientId,
+  from,
+  to,
+  sablon,
+  kayitliSablonId,
+  hasData,
+  acik,
+  onKapat,
+}: {
+  clientId: string;
+  from: string;
+  to: string;
+  sablon: string | null;
+  kayitliSablonId: string | null;
+  hasData: boolean;
+  acik: boolean;
+  onKapat: () => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [link, setLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expiresInDays, setExpiresInDays] = useState<string>('');
-  const [menuAcik, setMenuAcik] = useState(false);
-  /** Seçim kayıtlı bir şablonsa UUID'si; ön ayarsa `null`. */
-  const kayitliSablonId = sablonAlanlari(sablon).templateId ?? null;
-  const [mailAcik, setMailAcik] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  /*
-   * DIŞARI TIKLAMA VE ESC İLE KAPANIYOR.
-   *
-   * Yalnızca düğmeyle açılıp kapanan bir menü, kullanıcı başka bir yere
-   * tıkladığında ekranda asılı kalıyor ve altındaki içeriği örtüyor.
-   */
-  useEffect(() => {
-    if (!menuAcik) return;
-    const disari = (e: MouseEvent): void => {
-      if (!menuRef.current?.contains(e.target as Node)) setMenuAcik(false);
-    };
-    const esc = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') setMenuAcik(false);
-    };
-    document.addEventListener('mousedown', disari);
-    document.addEventListener('keydown', esc);
-    return () => {
-      document.removeEventListener('mousedown', disari);
-      document.removeEventListener('keydown', esc);
-    };
-  }, [menuAcik]);
 
   async function createLink() {
-    setMenuAcik(false);
     setBusy(true);
     setError(null);
     setLink(null);
@@ -87,16 +170,13 @@ export function ShareControls({
         method: 'POST',
         body: JSON.stringify({
           /*
-           * SEÇİLİ ŞABLON KAYITLIYSA BAĞLANTIYA DA GİRİYOR.
-           *
-           * Öncesinde HİÇ gönderilmiyordu ve gerekçesi "sunucu bulur ya da
-           * oluşturur"du — doğru, ama ekranda bir şablon seçen kullanıcı için
-           * yanlış: müşteri linki açtığında BAŞKA bir raporu görüyordu.
+           * SEÇİLİ ŞABLON KAYITLIYSA BAĞLANTIYA DA GİRİYOR. Öncesinde HİÇ
+           * gönderilmiyordu: müşteri linki açtığında BAŞKA bir raporu
+           * görüyordu.
            *
            * ÖN AYARLAR BAĞLANTIYA KONULAMIYOR: `report_shares.template_id`
-           * bir UUID ve ön ayarların UUID'si yok. Uydurmak yerine menüde
-           * yazıyoruz — sessizce farklı bir rapor paylaşmaktansa kısıtı
-           * söylemek.
+           * bir UUID ve ön ayarların UUID'si yok. Uydurmak yerine panelde
+           * yazıyoruz.
            */
           ...(kayitliSablonId ? { templateId: kayitliSablonId } : {}),
           clientId,
@@ -108,25 +188,18 @@ export function ShareControls({
       const adres = `${window.location.origin}/r/${res.token}`;
       setLink(adres);
       /*
-       * ÜRETİP HEMEN KOPYALIYOR. Menüdeki seçenek "Bağlantıyı kopyala"
-       * diyor; kullanıcıyı ikinci bir "Kopyala" düğmesine göndermek verdiği
-       * sözü tutmamak olurdu. Kopyalama başarısız olursa (izin yok, güvensiz
-       * bağlam) bağlantı ekranda duruyor ve elle kopyalanabiliyor.
+       * ÜRETİP HEMEN KOPYALIYOR. Kopyalama başarısız olursa (izin yok,
+       * güvensiz bağlam) bağlantı ekranda duruyor ve elle kopyalanabiliyor.
        */
       try {
         await navigator.clipboard.writeText(adres);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
       } catch {
-        // Sessiz geçilmiyor: bağlantı kutusu zaten açılıyor ve orada
-        // "Kopyala" düğmesi var.
+        // Sessiz geçilmiyor: bağlantı kutusu zaten açık ve orada "Kopyala" düğmesi var.
       }
     } catch (err) {
-      setError(
-        err instanceof ApiRequestError
-          ? err.message
-          : 'Link oluşturulamadı. Tekrar deneyin.',
-      );
+      setError(err instanceof ApiRequestError ? err.message : 'Link oluşturulamadı. Tekrar deneyin.');
     } finally {
       setBusy(false);
     }
@@ -140,186 +213,65 @@ export function ShareControls({
   }
 
   return (
-    /*
-     * ARAÇ ÇUBUĞU, KART DEĞİL (2026-09-30). Bu bir başlık ve açıklama
-     * cümlesi taşıyan tam genişlikte bir karttı ve raporun ÖNÜNDE sayfanın
-     * ilk ekranını kaplıyordu; belgenin kendisi aşağıya itiliyordu. Üç
-     * düğme artık sekmelerle aynı satırda, sağda. Açıklama menünün içinde,
-     * seçeneğin yanında duruyor: kararın verildiği yerde.
-     */
-    <div className="flex min-w-0 flex-col items-end gap-2">
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <div className="flex items-center gap-2">
-          {/*
-            İNDİR VE PAYLAŞ YAN YANA. Öncesinde "PDF indir" sayfanın üstünde
-            ayrı duruyordu; kullanıcı raporla ilgili bir şey yapmak için iki
-            ayrı yere bakıyordu. İkisi aynı yerde ama AYNI DÜĞME DEĞİL:
-            indirmek belgeyi kendine almak, paylaşmak müşteriye ulaştırmak.
-            Aynı menüye koymak iki farklı işi tek başlık altında toplardı.
-          */}
-          {/*
-            PLANLA "PDF indir"İN SOLUNDA ve VERİYE BAĞLI DEĞİL.
-            Diğer ikisi BU dönemin raporuyla ilgili ve dönem boşsa anlamsız;
-            planlama ise GELECEK dönemleri kuruyor. `hasData` ile kapatmak,
-            bu hafta harcaması olmayan bir müşteriye plan kurulamaması
-            demek olurdu.
-          */}
-          {/*
-            PLANLAMA YALNIZCA KAYITLI ŞABLONU ALABİLİYOR.
-            `report_plans.template_id` bir UUID ve ön ayarların UUID'si YOK —
-            kodda duruyorlar, veritabanında değil. Ön ayar seçiliyken plana
-            `null` geçiyor ve sunucu müşterinin kendi şablonunu bulup yoksa
-            varsayılanı üretiyor; uydurma bir UUID yazmak, planın her koşusunda
-            var olmayan bir şablonu araması demekti.
-          */}
-          <RaporPlanla clientId={clientId} templateId={kayitliSablonId} />
+    <YanPanel
+      acik={acik}
+      onKapat={onKapat}
+      baslik="Paylaşım bağlantısı"
+      altEylemler={
+        <>
+          <Dugme ton="ikincil" onClick={onKapat}>
+            Kapat
+          </Dugme>
+          <Dugme onClick={() => void createLink()} bekliyor={busy} disabled={busy || !hasData}>
+            Bağlantıyı kopyala
+          </Dugme>
+        </>
+      }
+    >
+      <p className="m-0 text-13 text-ink-muted">
+        Giriş gerektirmeyen gizli sayfa. Tarih aralığı sabit kalır.
+      </p>
 
-          <RaporGonder
-            clientId={clientId}
-            from={from}
-            to={to}
-            hasData={hasData}
-            sablon={sablon}
-          />
+      <Alan etiket="Bağlantı süresi">
+        {(id) => (
+          <Secim id={id} value={expiresInDays} onChange={(e) => setExpiresInDays(e.target.value)}>
+            <option value="">Süresiz</option>
+            <option value="7">7 gün</option>
+            <option value="30">30 gün</option>
+            <option value="90">90 gün</option>
+          </Secim>
+        )}
+      </Alan>
 
-        <div className="relative" ref={menuRef}>
-          <button
-            type="button"
-            onClick={() => setMenuAcik((a) => !a)}
-            disabled={busy || !hasData}
-            title={hasData ? undefined : 'Bu dönemde veri yok'}
-            aria-haspopup="menu"
-            aria-expanded={menuAcik}
-            className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {busy ? 'Oluşturuluyor…' : 'Paylaş'}
-          </button>
-
-          {menuAcik && (
-            <div
-              role="menu"
-              className="absolute right-0 z-30 mt-1.5 w-72 rounded-xl border border-line bg-surface p-1.5 shadow-lg"
-            >
-              {/*
-                SÜRE SEÇENEKLERİN ÜSTÜNDE. Kararın verildiği yer burası;
-                panelin sağında ayrı dururken bağlantı üretmeyecek kullanıcıya
-                da sorulmuş oluyordu.
-              */}
-              <label className="flex items-center justify-between gap-2 px-2.5 py-1.5 text-xs text-ink-muted">
-                Bağlantı süresi
-                <select
-                  value={expiresInDays}
-                  onChange={(e) => setExpiresInDays(e.target.value)}
-                  className="rounded-md border border-line bg-surface px-2 py-1 text-xs text-ink"
-                >
-                  <option value="">Süresiz</option>
-                  <option value="7">7 gün</option>
-                  <option value="30">30 gün</option>
-                  <option value="90">90 gün</option>
-                </select>
-              </label>
-
-              {/*
-                KISIT EKRANDA YAZIYOR — kararın verildiği yerde.
-                Ön ayar seçiliyken üretilen bağlantı, müşterinin kendi
-                şablonunu (yoksa varsayılanı) gösteriyor. Bunu söylememek,
-                kullanıcının ekranda gördüğünden farklı bir raporu sessizce
-                paylaşması demekti; PDF'te düzelttiğimiz hatanın aynısı.
-              */}
-              {sablon !== null && kayitliSablonId === null && (
-                <p className="mx-1 mt-1 rounded-lg bg-warn-soft px-2.5 py-1.5 text-[11px] leading-snug text-warn-strong">
-                  Hazır şablonlar bağlantıya taşınmıyor. Workspace, kayıtlı
-                  şablonu (yoksa varsayılanı) görecek. Bu görünümü paylaşmak
-                  için önce şablon olarak kaydet.
-                </p>
-              )}
-
-              <div className="my-1 h-px bg-line" />
-
-              <button
-                type="button"
-                role="menuitem"
-                onClick={createLink}
-                className="flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition hover:bg-surface-muted"
-              >
-                <MenuIkonu yol="M8.5 11.5a3 3 0 0 0 4.24 0l2.5-2.5a3 3 0 0 0-4.24-4.24l-.75.75M11.5 8.5a3 3 0 0 0-4.24 0l-2.5 2.5a3 3 0 0 0 4.24 4.24l.75-.75" />
-                <span>
-                  <span className="block text-sm font-medium text-ink">Bağlantıyı kopyala</span>
-                  <span className="block text-[11px] text-ink-muted">
-                    Giriş gerektirmeyen gizli sayfa. Tarih aralığı sabit kalır.
-                  </span>
-                </span>
-              </button>
-
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setMenuAcik(false);
-                  setMailAcik(true);
-                }}
-                className="flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition hover:bg-surface-muted"
-              >
-                <MenuIkonu yol="M3.5 6l6.5 4.5L16.5 6M4 5h12a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5H4a.5.5 0 0 1-.5-.5v-9A.5.5 0 0 1 4 5Z" />
-                <span>
-                  <span className="block text-sm font-medium text-ink">Mail yoluyla ilet</span>
-                  <span className="block text-[11px] text-ink-muted">
-                    PDF eki + özet, kendi adresinden
-                  </span>
-                </span>
-              </button>
-            </div>
-          )}
-        </div>
-        </div>
-      </div>
+      {/*
+        KISIT EKRANDA YAZIYOR: kararın verildiği yerde. Ön ayar seçiliyken
+        üretilen bağlantı müşterinin kendi şablonunu (yoksa varsayılanı)
+        gösteriyor; söylememek, ekranda görülenden farklı bir raporu sessizce
+        paylaşmak olurdu.
+      */}
+      {sablon !== null && kayitliSablonId === null && (
+        <Serit baslik="Hazır şablonlar bağlantıya taşınmıyor">
+          Workspace, kayıtlı şablonu (yoksa varsayılanı) görecek. Bu görünümü paylaşmak için önce şablon olarak kaydet.
+        </Serit>
+      )}
 
       {error && (
-        <p className="w-full max-w-xl rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger-strong">{error}</p>
+        <Serit ton="hata" baslik="Bağlantı oluşturulamadı">
+          {error}
+        </Serit>
       )}
 
       {link && (
-        <div className="w-full max-w-xl rounded-lg border border-ok/30 bg-ok-soft p-3">
-          <p className="text-xs font-semibold text-ok-strong">
-            Bağlantı hazır. Bir daha gösterilmeyecek, şimdi kopyala.
-          </p>
-          <div className="mt-2 flex gap-2">
-            <input
-              readOnly
-              value={link}
-              onFocus={(e) => e.currentTarget.select()}
-              className="min-w-0 flex-1 rounded-md border border-ok/30 bg-surface px-2 py-1.5 font-mono text-xs text-ink"
-            />
-            <button
-              type="button"
-              onClick={copy}
-              className="rounded-md bg-ok px-3 py-1.5 text-xs font-medium text-white"
-            >
+        <div className="grid gap-2 rounded-alan border border-line p-3">
+          <p className="m-0 text-13 font-semibold text-ink">Bağlantı hazır. Bir daha gösterilmeyecek, şimdi kopyala.</p>
+          <div className="flex gap-2">
+            <Girdi readOnly value={link} onFocus={(e) => e.currentTarget.select()} className="font-mono text-12" aria-label="Paylaşım bağlantısı" />
+            <Dugme ton="koyu" onClick={() => void copy()}>
               {copied ? 'Kopyalandı' : 'Kopyala'}
-            </button>
+            </Dugme>
           </div>
         </div>
       )}
-
-      <MailGonderModal
-        clientId={clientId}
-        from={from}
-        to={to}
-        acik={mailAcik}
-        onKapat={() => setMailAcik(false)}
-        sablon={sablon}
-      />
-    </div>
-  );
-}
-
-/** Menü satırının ikonu: emoji yerine çizgi ikon, panelin geri kalanıyla aynı dil. */
-function MenuIkonu({ yol }: { yol: string }) {
-  return (
-    <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-surface-sunken text-ink-muted">
-      <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className="h-4 w-4">
-        <path d={yol} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    </span>
+    </YanPanel>
   );
 }

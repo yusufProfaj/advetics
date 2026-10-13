@@ -382,3 +382,54 @@ yalnız token, düğme ve renk görünüşü yeni dile uyar; yerleşim değişme
 Kararlar: menü adı "İyileştir"; Potansiyel Müşteriler tablo + yan panel;
 Raporlar'da "Raporu gönder" birincil, "PDF indir" ikincil, Planla ve Paylaş ⋯.
 Onaylı taslak: `docs/marka/sayfa-taslaklari.html`.
+
+## 10. Grup 1 geçişi (2026-10-14): sapmalar ve yerel yardımcılar
+
+Grup 1 (Genel Bakış, Reklam Yöneticisi, Reklam Galerisi, Potansiyel
+Müşteriler, Raporlar, Aylık Bütçe bileşenleri) bileşenlere geçti. İstisna
+listesinde Grup 1'den geçici satır kalmadı; rapor belgesinin üç parçası
+gerekçesiyle `KALICI_ISTISNALAR`a taşındı (`report-document` h1,
+`kitle-ozeti` ve `conversion-chart` renk: PDF çizicisinin aynası).
+
+**Grup 1 sapması: ortak bileşende karşılığı olmayan, YALNIZ Grup 1 dosyasında
+yazılmış küçük yardımcılar** (yeni ortak bileşen değil; ikinci bir grup
+ihtiyaç duyarsa `ui/`a taşınmalı):
+
+| Yardımcı | Dosya | Neden ortak bileşen yetmedi |
+|---|---|---|
+| `SuzgecMenusu` (çip + `AcilirMenu`) | `components/suzgec-menusu.tsx` | `Cip` uygulanmış süzgeci gösteriyor; seçenekleri sayılı, aramalı, bağlantı ya da `onSec` taşıyan çip-menü yok |
+| `BolumluBaglantilar` | aynı dosya | `BolumluSecici` yalnız `onSec` alıyor; sunucu sayfasında (Genel Bakış, Galeri, Bütçe) süzgeç adreste ve seçenek BAĞLANTI olmak zorunda |
+| `SayfalamaBaglantilari` | aynı dosya | `SayfalamaCubugu` yalnız `onClick` alıyor; Galeri sunucu sayfası |
+| `SecimCipi` | aynı dosya | taslağın `.cip.secim-cip`i (sayılı durum süzgeci, seçili siyah); `Cip`/`BolumluSecici` karşılamıyor |
+| Reklam Yöneticisi tablosu elle `<table>` | `taslak/reklam-yoneticisi-tablosu.tsx` | sıralanabilir başlık ve satır altında açılan önizleme; `Tablo` ikisini taşımıyor. Hücre ölçüleri `Tablo` ile aynı |
+| Lead tablosu elle `<table>` | `leads/lead-table.tsx` | satır klavyeyle odaklanıp yan paneli açıyor (`tabIndex`, Enter/Space); `Tablo`nun `onSatir`ı klavye taşımıyor |
+| Galeri toplam şeridi (`Total`) | `ads-explorer/galeri/page.tsx` | altı kutu; `MetrikKutulari` dört sütuna sabit |
+| Bütçe hesap ızgarası | `butce/butce-icerik.tsx` | sütun başlıklı + toplamlı satır ızgarası; tablo değil çünkü dar ekranda "Bütçe tanımla" kaydırmanın dışında kalıyordu (`marka-merkezi.spec.ts`) |
+
+**Taslaktan bilinçli sapmalar:**
+
+- Reklam Yöneticisi ⋯ menüsünde taslaktaki "Platformda aç · Kopyala ·
+  AdvCampaign'de düzenle · Arşivle" YOK: panelde yazılmadılar; hiçbir şey
+  yapmayan menü öğesi çalışmayan bir özelliği vaat eder (§ 4 "Ara/Yardım"
+  kararı). Menüde yalnız çalışanlar: alt düzeyi aç, önizlemeyi aç/kapat,
+  kampanyanın Galeri'si. "Sütunlar" ve "İndir" düğmeleri de aynı gerekçeyle yok.
+- Aylık Bütçe'de taslaktaki başlık birincil "Bütçeyi düzenle" YOK: başlık
+  `app/(dashboard)/butce/page.tsx`te (Grup 2 dosyası). Workspace geneli
+  bütçenin "Düzenle"si kartın başlığında; yan paneldeki "Hesap" seçici yok,
+  her düğme kendi kapsamını düzenliyor.
+- Potansiyel Müşteriler yan panelinde durum seçimi TEK TIKLA uygulanıyor
+  (eski davranış, 15 dk "Geri al"); "Kaydet" yalnız NOTU yazıyor.
+- Raporlar'da "Planlı: …" çipi yalnız paylaşım yetkisinde (planlar o
+  yetkiyle okunuyor); ⋯ "Planla" eskisi gibi herkese.
+- Boş değer yer tutucusu tabloda `—` kaldı (taslakta `-`): Genel Bakış ve
+  `kapsam-tablolari.spec.ts` aynı işareti kullanıyor; iki ekranda iki işaret
+  olmasın.
+- Genel Bakış iç düzeni korundu: yalnız başlık `SayfaBasligi`, platform
+  `BolumluBaglantilar`, kısayollar `dugmeSinifi`, kurulum şeridi `Serit`,
+  "En çok harcayan" düzey seçici `BolumluSecici`. Kart/bildirim görünüşü
+  `taslak.module.css`ten (token'lara eşli) gelmeye devam ediyor.
+
+`taslak.module.css`: Grup 1'in bıraktığı 30 sınıf (`.seg`, `.hap`,
+`.birincil`, `.duzeyler`, `.arac`, `.cip`, `.menu`, `.ymTablo` …) silindi
+(1282 → ~850 satır). Kalanlar Genel Bakış, kırıntı (`hiyerarsi-yolu`),
+İyileştir ve Kurallar tarafından kullanılıyor.

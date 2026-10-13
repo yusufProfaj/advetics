@@ -41,10 +41,19 @@ describe('paylaş menüsü', () => {
     expect(kod(MENU)).not.toContain('Müşteriye gönder');
   });
 
-  it('KRİTİK: tek "Paylaş" düğmesi ve İKİ seçenek var', () => {
-    expect(MENU).toContain(">\n            {busy ? 'Oluşturuluyor…' : 'Paylaş'}\n          </button>");
+  it('KRİTİK: "Raporu gönder" TEK birincil; Planla ve Paylaşım bağlantısı ⋯ menüsünde (kullanıcı kararı 2026-10-14)', () => {
+    const k = kod(MENU);
+    const menu = k.indexOf('<AcilirMenu');
+    expect(menu, 'menü bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
+    const menuSonu = k.indexOf('</AcilirMenu>', menu);
+    const menuGovdesi = k.slice(menu, menuSonu);
+    expect(menuGovdesi).toContain('Planla');
+    expect(menuGovdesi).toContain('Paylaşım bağlantısı');
+    // Birincil düğme (ton verilmemiş `Dugme` = birincil) menünün DIŞINDA ve sağında.
+    const gonder = k.indexOf('<Dugme onClick={() => setMailAcik(true)}');
+    expect(gonder).toBeGreaterThan(menuSonu);
+    expect(k.slice(gonder, k.indexOf('</Dugme>', gonder))).toContain('Raporu gönder');
     expect(MENU).toContain('Bağlantıyı kopyala');
-    expect(MENU).toContain('Mail yoluyla ilet');
   });
 
   it('KRİTİK: "Bağlantıyı kopyala" GERÇEKTEN panoya yazıyor', () => {
@@ -72,9 +81,11 @@ describe('paylaş menüsü', () => {
 
   it('KRİTİK: menü dışarı tıklama ve ESC ile kapanıyor', () => {
     // Yalnızca düğmeyle kapanan bir menü, başka yere tıklandığında ekranda
-    // asılı kalıp altındaki içeriği örtüyor.
-    expect(MENU).toContain("document.addEventListener('mousedown', disari)");
-    expect(MENU).toContain("if (e.key === 'Escape') setMenuAcik(false)");
+    // asılı kalıp altındaki içeriği örtüyor. 2026-10-14: ortak `AcilirMenu`.
+    expect(MENU).toContain('<AcilirMenu');
+    const ortak = readFileSync(join(__dirname, '..', 'ui', 'acilir-menu.tsx'), 'utf8');
+    expect(ortak).toContain("document.addEventListener('mousedown', disari)");
+    expect(ortak).toContain("if (e.key === 'Escape') {");
   });
 
   it('KRİTİK: mail modalı KONTROLLÜ — kendi düğmesi yok', () => {
@@ -84,10 +95,10 @@ describe('paylaş menüsü', () => {
     expect(MENU).toContain('<MailGonderModal');
   });
 
-  it('SÜRE seçeneği menünün İÇİNDE — panelin sağında değil', () => {
-    // Panelde ayrı dururken, bağlantı üretmeyecek kullanıcıya da soruluyordu.
-    const i = MENU.indexOf('role="menu"');
-    expect(i, 'menü bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
+  it('SÜRE seçeneği bağlantıyı üreten panelin İÇİNDE', () => {
+    // Ayrı dururken, bağlantı üretmeyecek kullanıcıya da soruluyordu.
+    const i = MENU.indexOf('function PaylasimBaglantisi(');
+    expect(i, 'bağlantı paneli bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
     expect(MENU.indexOf('Bağlantı süresi')).toBeGreaterThan(i);
   });
 
@@ -104,7 +115,7 @@ describe('paylaş menüsü', () => {
     // Kilitlenen şey elemanın YERİ, prop'larının yazımı değil.
     expect(MENU).toContain('<RaporGonder');
 
-    const menuBasi = MENU.indexOf('role="menu"');
+    const menuBasi = MENU.indexOf('<AcilirMenu');
     expect(menuBasi, 'menü bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
     // İndir düğmesi menü bloğundan ÖNCE: kardeş, çocuk değil.
     expect(MENU.indexOf('<RaporGonder')).toBeLessThan(menuBasi);

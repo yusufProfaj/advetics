@@ -30,7 +30,9 @@ import {
   type YmSatir,
   type YmSekme,
 } from '@/components/taslak/reklam-yoneticisi-tablosu';
-import s from '@/components/taslak/taslak.module.css';
+import { SayfaIskeleti } from '@/components/ui/sayfa-basligi';
+import { dugmeSinifi } from '@/components/ui/dugme';
+import { BosDurum, HataDurumu, Serit } from '@/components/ui/hal';
 import { HiyerarsiYolu, type YolBasamagi } from '@/components/hiyerarsi-yolu';
 import { kirilimSirala, siralamaCoz } from '@/lib/kirilim-siralama';
 import { first, hataMetni, resolvePlatform } from '@/lib/sayfa-yardimcilari';
@@ -451,6 +453,15 @@ export default async function DashboardPage({
         : breakdown &&
           kirilimSirala(breakdown, siralama).map((b) => ({
             ...varlikSatiri(b, varlik, tasinan),
+            /*
+             * KAMPANYA SATIRININ ⋯ MENÜSÜ: aynı kampanyanın reklam kartları
+             * Galeri'de. Kimlik aynı uzayda (iki uç da iç kampanya UUID'si
+             * alıyor) ve tarih anahtarları taşınıyor: aralık düşerse Galeri
+             * başka dönemin reklamlarını gösterirdi.
+             */
+            ...(varlik === 'campaign'
+              ? { galeriHref: baglanti(`${REKLAM_YONETICISI}/galeri`, rangeParams(range), { kampanya: b.entityId }) }
+              : {}),
             ...(site ? { sitede: sitede?.get(b.entityId) ?? null } : {}),
           }));
   const yuklenemedi = ajansGorunumu
@@ -470,17 +481,61 @@ export default async function DashboardPage({
     tasinan,
   });
 
+  /*
+   * YAZI: başlık ortak `SayfaIskeleti` (Yönet › Reklam Yöneticisi), düzeyler
+   * sayfa içi yan menüde, kırıntı hapları ve şeritler içerik sütununun
+   * başında (onaylı taslak `#yonetici`). Tablo çizilemiyorsa yerine NEDENİ
+   * yazan hâl geliyor ama yan menü duruyor: kullanıcı başka düzeye geçebilmeli.
+   */
+  const seritler =
+    summary === null ? (
+      <Serit ton="hata" baslik="Veriler alınamadı">
+        {ozetHatasi ?? 'Sunucu sebep bildirmedi.'}
+      </Serit>
+    ) : summary.hiddenAccounts > 0 ? (
+      /* İzlenmeyen hesap bu rakamlara girmiyor: söylenmezse "harcama neden az" sorulur. */
+      <Serit
+        ton="bilgi"
+        baslik={`${summary.hiddenAccounts} hesap izlenmiyor ve bu rakamlara dâhil değil`}
+        eylemler={
+          hesapHedefi && (
+            <Link className={dugmeSinifi('ikincil', 'kucuk')} href={hesapHedefi}>
+              Hesaplarda aç
+            </Link>
+          )
+        }
+      />
+    ) : null;
+
+  const yerine =
+    summary !== null && summary.accountCount === 0 ? (
+      <BosDurum
+        baslik="Henüz veri yok"
+        neden={hesapHedefi ? 'Bir platform bağlayıp reklam hesabını bir workspace’e ata.' : HESAP_AJANSTA}
+        eylem={
+          hesapHedefi && (
+            <Link className={dugmeSinifi('ikincil', 'kucuk')} href={hesapHedefi}>
+              Hesaplara git
+            </Link>
+          )
+        }
+      />
+    ) : satirlar === null ? (
+      <HataDurumu baslik={yuklenemedi} mesaj="Sunucu bu düzeyin satırlarını döndürmedi. Sayfayı yenileyip tekrar dene." />
+    ) : undefined;
+
   return (
-    <div className={s.kok}>
-      <header className={s.ust}>
-        <div>
-          <h1>Reklam Yöneticisi</h1>
-          <div className={s.altSatir}>
-            {scopeLabel} · {formatDayLong(range.from)} - {formatDayLong(range.to)}
-            {range.incomplete && <span className={s.uyarMetin}> · Gün bitmedi</span>}
-          </div>
-        </div>
-        <div className={s.kontroller}>
+    <SayfaIskeleti
+      bolum="Yönet"
+      baslik="Reklam Yöneticisi"
+      aciklama={
+        <>
+          {scopeLabel} · {formatDayLong(range.from)} - {formatDayLong(range.to)}
+          {range.incomplete && <span className="text-danger-strong"> · Gün bitmedi</span>}
+        </>
+      }
+      eylemler={
+        <>
           <TarihSecici aralik={range} enEskiGun={kapsam?.earliestDate ?? null} />
           <RefreshButton
             dateFrom={range.from}
@@ -489,92 +544,43 @@ export default async function DashboardPage({
             sonGuncelleme={summary?.lastFetchedAt ?? null}
           />
           {session.permissions.includes('bulk.write') && (
-            <Link className={s.birincil} href="/reklam">
+            <Link className={dugmeSinifi('birincil')} href="/reklam">
               ＋ Reklam oluştur
             </Link>
           )}
-        </div>
-      </header>
+        </>
+      }
+    >
+      <ReklamYoneticisiTablosu
+        duzey={duzey}
+        sekmeler={sekmeler}
+        metrikler={summary === null ? null : ymMetrikleri(summary, range.karsilastirma !== 'yok')}
+        satirlar={satirlar ?? []}
+        kirinti={<HiyerarsiYolu basamaklar={basamaklar} tasinan={tasinan} gorunum="hap" />}
+        seritler={seritler}
+        yerine={yerine}
+        platformSecenekleri={[null, ...PLATFORMS].map((p) => ({
+          ad: p ? PLATFORM_KISA_ADLARI[p] : 'Tümü',
+          href: baglanti(
+            REKLAM_YONETICISI,
+            tasinan,
+            platformSekmesiSorgusu(p, { platform, hesap, seviye: level }),
+          ),
+          secili: platform === p,
+        }))}
+        kesmeNotu={
+          varlik !== null && breakdown !== null && breakdown.length >= KIRILIM_LIMITI
+            ? `harcamaya göre ilk ${KIRILIM_LIMITI} satır`
+            : null
+        }
+        aralik={{ from: range.from, to: range.to }}
+        galeriHref={`${REKLAM_YONETICISI}/galeri`}
+        yazabilir={session.permissions.includes('budget.write')}
+        site={site}
+      />
 
-      <HiyerarsiYolu basamaklar={basamaklar} tasinan={tasinan} gorunum="hap" />
-
-      {summary === null ? (
-        <div className={`${s.bildirim} ${s.tehlike}`} role="alert">
-          <span className={s.bildirimIkon} aria-hidden>
-            !
-          </span>
-          <span className={s.bildirimMetin}>
-            <strong>Veriler alınamadı.</strong>
-            {ozetHatasi && <span className="ml-1">{ozetHatasi}</span>}
-          </span>
-        </div>
-      ) : summary.hiddenAccounts > 0 ? (
-        /* İzlenmeyen hesap bu rakamlara girmiyor: söylenmezse "harcama neden az" sorulur. */
-        <div className={s.bildirim} role="status">
-          <span className={s.bildirimIkon} aria-hidden>
-            !
-          </span>
-          <span className={s.bildirimMetin}>
-            <strong>{summary.hiddenAccounts} hesap izlenmiyor</strong> ve bu rakamlara dâhil değil.
-          </span>
-          {hesapHedefi && (
-            <Link className={s.cozum} href={hesapHedefi}>
-              Hesaplarda aç →
-            </Link>
-          )}
-        </div>
-      ) : null}
-
-      {summary !== null && summary.accountCount === 0 ? (
-        <div className={s.bildirim} role="status">
-          <span className={s.bildirimIkon} aria-hidden>
-            !
-          </span>
-          <span className={s.bildirimMetin}>
-            <strong>Henüz veri yok.</strong>{' '}
-            {hesapHedefi ? 'Bir platform bağlayıp reklam hesabını bir workspace’e ata.' : HESAP_AJANSTA}
-          </span>
-          {hesapHedefi && (
-            <Link className={s.cozum} href={hesapHedefi}>
-              Hesaplara git →
-            </Link>
-          )}
-        </div>
-      ) : satirlar === null ? (
-        <section className={s.kart}>
-          <p role="alert" className={s.hataMetin}>
-            {yuklenemedi}
-          </p>
-        </section>
-      ) : (
-        <ReklamYoneticisiTablosu
-          duzey={duzey}
-          sekmeler={sekmeler}
-          metrikler={summary === null ? null : ymMetrikleri(summary, range.karsilastirma !== 'yok')}
-          satirlar={satirlar}
-          platformSecenekleri={[null, ...PLATFORMS].map((p) => ({
-            ad: p ? PLATFORM_KISA_ADLARI[p] : 'Tümü',
-            href: baglanti(
-              REKLAM_YONETICISI,
-              tasinan,
-              platformSekmesiSorgusu(p, { platform, hesap, seviye: level }),
-            ),
-            secili: platform === p,
-          }))}
-          kesmeNotu={
-            varlik !== null && breakdown !== null && breakdown.length >= KIRILIM_LIMITI
-              ? `harcamaya göre ilk ${KIRILIM_LIMITI} satır`
-              : null
-          }
-          aralik={{ from: range.from, to: range.to }}
-          galeriHref={`${REKLAM_YONETICISI}/galeri`}
-          yazabilir={session.permissions.includes('budget.write')}
-          site={site}
-        />
-      )}
-
-      {!range.incomplete && <p className={s.notKucuk}>Bugün dâhil değil.</p>}
-    </div>
+      {!range.incomplete && <p className="m-0 text-12 text-ink-muted">Bugün dâhil değil.</p>}
+    </SayfaIskeleti>
   );
 }
 

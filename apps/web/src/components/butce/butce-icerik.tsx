@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import type { BudgetPacing, ClientPacing } from '@advetics/shared';
 import { requireSession, hasPermission } from '@/lib/session';
 import { ApiRequestError, serverApiFetch } from '@/lib/api';
@@ -8,6 +7,9 @@ import { PaceDelta, PacingBar, StatusChip } from '@/components/budget/pacing-bar
 import { butceAdresi } from '@/lib/butce-adresi';
 import { PLATFORMS, PLATFORM_KISA_ADLARI, platformKanali } from '@advetics/shared';
 import { PlatformLogo } from '@/components/platform-logo';
+import { BolumluBaglantilar } from '@/components/suzgec-menusu';
+import { BosDurum, HataDurumu, Serit } from '@/components/ui/hal';
+import { MetrikKutulari } from '@/components/ui/metrik-kutulari';
 
 
 /**
@@ -63,34 +65,28 @@ export async function ButceIcerik({
     session.availableClients.find((c) => c.id === clientId)?.name ?? 'Workspace';
 
   return (
-    <div className="space-y-5">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        {/* Sayfa başlığı ("Aylık Bütçe") sayfada; burada hangi ay olduğu. */}
-        <p className="text-sm text-ink-muted">
-          <strong className="font-medium text-ink">{clientName}</strong> · {selected.label}
-        </p>
-
-        <div className="flex flex-wrap gap-1.5">
-          {months.map((m) => (
-            <Link
-              key={m.key}
-              href={linkWith({ ay: m.key })}
-              className={`rounded-lg px-2.5 py-1 text-xs font-medium transition ${
-                m.key === selected.key
-                  ? 'bg-brand text-white'
-                  : 'border border-line text-ink-muted hover:bg-surface-sunken'
-              }`}
-            >
-              {m.short}
-              {m.future && <span className="ml-1 opacity-60">plan</span>}
-            </Link>
-          ))}
-        </div>
-      </header>
-
+    <div className="grid gap-5">
+      {/*
+        AY SEÇİMİ BÖLÜMLÜ SEÇİCİ (onaylı taslak `#butce`): aynı verinin ay ay
+        görünümü, sayfa değil. Bağlantı olarak: ay adreste taşınıyor ve
+        sayfa sunucuda çiziliyor. Gelecek ay "plan" etiketiyle.
+      */}
+      <div className="flex flex-wrap items-center gap-2.5">
+        <BolumluBaglantilar
+          etiket="Ay"
+          secenekler={months.map((m) => ({
+            href: linkWith({ ay: m.key }),
+            etiket: m.future ? `${m.short} · plan` : m.short,
+            secili: m.key === selected.key,
+          }))}
+        />
+        <span className="text-12 text-ink-muted">
+          <strong className="font-semibold text-ink">{clientName}</strong> · {selected.label}
+        </span>
+      </div>
 
       {data === null ? (
-        <Notice tone="error">Bütçe verisi alınamadı: {okuma.ok ? '' : okuma.hata}</Notice>
+        <HataDurumu baslik="Bütçe verisi alınamadı" mesaj={okuma.ok ? 'Sunucu sebep bildirmedi.' : okuma.hata} />
       ) : (
         <>
           <Warnings pacing={data} />
@@ -121,11 +117,10 @@ function Warnings({ pacing }: { pacing: ClientPacing }) {
 
   if (o.excludedCurrencies.length > 0) {
     notices.push(
-      <Notice key="fx" tone="warn">
-        <strong>Farklı para birimindeki harcama toplama dâhil edilmedi</strong> (
-        {o.excludedCurrencies.join(', ')}). Kur çevrimi henüz yok; karışık bir toplamı bütçeyle
-        karşılaştırmak yanıltıcı olurdu. O hesapları tabloda ayrı ayrı görebilirsin.
-      </Notice>,
+      <Serit key="fx" baslik={`Farklı para birimindeki harcama toplama dâhil edilmedi (${o.excludedCurrencies.join(', ')})`}>
+        Kur çevrimi henüz yok; karışık bir toplamı bütçeyle karşılaştırmak yanıltıcı olurdu. O hesapları tabloda
+        ayrı ayrı görebilirsin.
+      </Serit>,
     );
   }
 
@@ -134,31 +129,27 @@ function Warnings({ pacing }: { pacing: ClientPacing }) {
   // bütçeyi artırmasına yol açabilirdi.
   if (o.daysElapsed > 0 && o.daysWithData > 0 && o.daysWithData < o.daysElapsed) {
     notices.push(
-      <Notice key="coverage" tone="warn">
-        <strong>
-          Eksik veri: {o.daysElapsed} günün {o.daysWithData} günü senkronize.
-        </strong>{' '}
-        Harcama ve tüketim oranı olduğundan düşük görünüyor. Eksik günler çekilene kadar bu
-        sayfadaki hız yorumu güvenilir değil.
-      </Notice>,
+      <Serit key="coverage" baslik={`Eksik veri: ${o.daysElapsed} günün ${o.daysWithData} günü senkronize`}>
+        Harcama ve tüketim oranı olduğundan düşük görünüyor. Eksik günler çekilene kadar bu sayfadaki hız yorumu
+        güvenilir değil.
+      </Serit>,
     );
   }
 
   if (o.alertTriggered && o.budget) {
     notices.push(
-      <Notice key="alert" tone={o.status === 'exhausted' ? 'error' : 'warn'}>
-        <strong>
-          Uyarı eşiği aşıldı: bütçenin %
-          {((o.spentRatio ?? 0) * 100).toLocaleString('tr-TR', { maximumFractionDigits: 1 })}
-          &apos;i harcandı
-        </strong>{' '}
-        (eşik %{o.budget.alertThresholdPct}).
-      </Notice>,
+      <Serit
+        key="alert"
+        ton={o.status === 'exhausted' ? 'hata' : 'uyari'}
+        baslik={`Uyarı eşiği aşıldı: bütçenin %${((o.spentRatio ?? 0) * 100).toLocaleString('tr-TR', { maximumFractionDigits: 1 })}'i harcandı`}
+      >
+        Eşik %{o.budget.alertThresholdPct}.
+      </Serit>,
     );
   }
 
   if (notices.length === 0) return null;
-  return <div className="space-y-2">{notices}</div>;
+  return <div className="grid gap-2">{notices}</div>;
 }
 
 // -----------------------------------------------------------------------------
@@ -183,87 +174,71 @@ function OverallCard({
   const cur = pacing.budget?.currency ?? currency;
 
   return (
-    <section className="rounded-xl border border-line bg-surface p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-sm font-semibold text-ink">Workspace geneli</h2>
-            <StatusChip status={pacing.status} />
-          </div>
-          <p className="mt-0.5 text-[11px] text-ink-muted">
+    <section className="min-w-0 overflow-hidden rounded-kart border border-line bg-surface">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4">
+        <div className="min-w-0">
+          <h3 className="m-0 font-baslik text-15 font-bold text-ink">Workspace geneli</h3>
+          <small className="text-12 text-ink-muted">
             Tüm reklam hesaplarının toplamı
-            {!future && (
-              <> · {formatDayLong(pacing.throughDate)} tarihine kadar</>
-            )}
-          </p>
+            {!future && <> · {formatDayLong(pacing.throughDate)} tarihine kadar</>}
+          </small>
         </div>
-        {canWrite && (
-          <BudgetForm
-            clientId={clientId}
-            adAccountId={null}
-            adAccountName={null}
-            month={month}
-            existing={pacing.budget}
-            currency={cur}
-          />
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusChip status={pacing.status} />
+          {canWrite && (
+            <BudgetForm
+              clientId={clientId}
+              adAccountId={null}
+              adAccountName={null}
+              month={month}
+              existing={pacing.budget}
+              currency={cur}
+            />
+          )}
+        </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <span className="text-2xl font-semibold tabular-nums text-ink">
-          {formatMoney(pacing.spentMicros, cur)}
-        </span>
-        {pacing.budget ? (
-          <span className="text-sm text-ink-muted">
-            / {formatMoney(pacing.budget.amountMicros, cur)}
-          </span>
-        ) : (
-          <span className="text-sm text-ink-muted">harcandı · bütçe tanımlı değil</span>
-        )}
-      </div>
-
-      <div className="mt-3">
+      <div className="grid gap-3.5 p-5">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <div className="flex flex-wrap items-baseline gap-x-2">
+            <span className="font-baslik text-28 font-extrabold tabular-nums tracking-[-0.02em] text-ink">
+              {formatMoney(pacing.spentMicros, cur)}
+            </span>
+            {pacing.budget ? (
+              <span className="text-14 text-ink-muted">/ {formatMoney(pacing.budget.amountMicros, cur)} harcandı</span>
+            ) : (
+              <span className="text-14 text-ink-muted">harcandı · bütçe tanımlı değil</span>
+            )}
+          </div>
+        </div>
         <PacingBar pacing={pacing} />
+        {pacing.budget?.note && <p className="m-0 text-12 text-ink-muted">{pacing.budget.note}</p>}
       </div>
 
       {pacing.budget && (
-        <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
-          <Stat label="Kalan" value={formatMoney(pacing.remainingMicros, cur)} />
-          <Stat
-            label="Kalan gün"
-            value={`${pacing.daysRemaining} / ${pacing.daysTotal}`}
+        <div className="border-t border-line [&>div]:border-b-0">
+          <MetrikKutulari
+            cerceveli={false}
+            kutular={[
+              { anahtar: 'kalan', ad: 'Kalan', deger: formatMoney(pacing.remainingMicros, cur) },
+              { anahtar: 'gun', ad: 'Kalan gün', deger: `${pacing.daysRemaining} / ${pacing.daysTotal}` },
+              {
+                anahtar: 'gunluk',
+                ad: 'Günlük harcanabilir',
+                deger: formatMoney(pacing.suggestedDailyMicros, cur),
+                ipucu: 'Kalan bütçe ÷ kalan gün',
+              },
+              {
+                anahtar: 'tahmin',
+                ad: 'Ay sonu tahmini',
+                deger: formatMoney(pacing.projectedMicros, cur),
+                ipucu: 'Bu hızla devam edilirse',
+              },
+            ]}
           />
-          <Stat
-            label="Günlük harcanabilir"
-            value={formatMoney(pacing.suggestedDailyMicros, cur)}
-            hint="Kalan bütçe ÷ kalan gün"
-          />
-          <Stat
-            label="Ay sonu tahmini"
-            value={formatMoney(pacing.projectedMicros, cur)}
-            hint="Bu hızla devam edilirse"
-          />
-        </dl>
-      )}
-
-      {pacing.budget?.note && (
-        <p className="mt-3 text-xs text-ink-muted">{pacing.budget.note}</p>
+        </div>
       )}
     </section>
-  );
-}
-
-function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
-  return (
-    <div>
-      <dt
-        className="text-[11px] font-medium uppercase tracking-wide text-ink-muted"
-        title={hint}
-      >
-        {label}
-      </dt>
-      <dd className="mt-0.5 text-sm font-semibold tabular-nums text-ink">{value}</dd>
-    </div>
   );
 }
 
@@ -282,9 +257,10 @@ function AccountTable({
 }) {
   if (data.accounts.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-line bg-surface p-8 text-center text-sm text-ink-muted">
-        Bu workspace’e bağlı reklam hesabı yok.
-      </div>
+      <BosDurum
+        baslik="Reklam hesabı yok"
+        neden="Bu workspace’e bağlı reklam hesabı yok. Hesap atanınca bütçesi burada tanımlanır."
+      />
     );
   }
 
@@ -305,17 +281,17 @@ function AccountTable({
   const idle = data.accounts.filter((a) => a.budget === null && BigInt(a.spentMicros) === 0n);
 
   return (
-    <section className="overflow-hidden rounded-xl border border-line bg-surface">
-      <div className="flex items-center justify-between border-b border-line px-4 py-3">
-        <h2 className="text-sm font-semibold text-ink">Reklam hesabı bazında</h2>
-        <span className="text-[11px] text-ink-muted">
+    <section className="min-w-0 rounded-kart border border-line bg-surface">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line px-5 py-4">
+        <h3 className="m-0 font-baslik text-15 font-bold text-ink">Reklam hesabı bazında</h3>
+        <small className="text-12 text-ink-muted">
           {active.length} aktif
           {idle.length > 0 && ` · ${idle.length} hareketsiz`}
-        </span>
+        </small>
       </div>
 
       {active.length === 0 ? (
-        <p className="px-4 py-8 text-center text-sm text-ink-muted">
+        <p className="m-0 px-5 py-8 text-center text-13 text-ink-muted">
           Bu ay hiçbir hesabın bütçesi ya da harcaması yok.
         </p>
       ) : (
@@ -324,21 +300,26 @@ function AccountTable({
 
       {idle.length > 0 && (
         // `details` KULLANILIYOR, useState değil: bu sayfa sunucu bileşeni ve
-        // yalnızca aç/kapa için istemciye JS indirmek gereksiz.
+        // yalnızca aç/kapa için istemciye JS indirmek gereksiz. İçerik DOM'da.
         <details className="border-t border-line">
-          <summary className="cursor-pointer px-4 py-2.5 text-xs text-ink-muted transition hover:bg-surface-sunken">
+          <summary className="cursor-pointer px-5 py-2.5 text-12 font-semibold text-ink-muted transition-colors hover:bg-surface-muted">
             Bu ay hareketi olmayan {idle.length} hesabı göster
           </summary>
           <AccountRows rows={idle} data={data} month={month} canWrite={canWrite} />
         </details>
       )}
 
-      <p className="border-t border-line px-4 py-2.5 text-[11px] text-ink-muted">
-        Tüketim çubuğundaki dikey çizgi ayın geçen kısmını gösteriyor. Çubuk çizginin
-        sağındaysa bütçe hedeften hızlı tüketiliyor. Hesaplar{' '}
-        <strong>bugün hariç</strong>, dünün sonuna kadar olan veriyle hesaplanıyor — gün
-        bitmeden gelen kısmi veri her sabah &quot;yavaş gidiyoruz&quot; dedirtirdi.
-      </p>
+      {/* SESSİZ KESME YOK: kaç hesap gösteriliyor, toplam kaç. */}
+      <div className="flex flex-wrap items-center justify-end gap-4 border-t border-line px-5 py-2.5 text-[12.5px] text-ink-muted">
+        <span className="mr-auto">
+          Kırmızı çizgi ayın geçen kısmı; çubuk çizginin sağındaysa bütçe hedeften hızlı tüketiliyor. Hesaplar{' '}
+          <strong className="text-ink">bugün hariç</strong>, dünün sonuna kadar olan veriyle hesaplanıyor: gün bitmeden
+          gelen kısmi veri her sabah &quot;yavaş gidiyoruz&quot; dedirtirdi.
+        </span>
+        <span className="tabular-nums">
+          {active.length} aktif / {data.accounts.length} hesap
+        </span>
+      </div>
     </section>
   );
 }
@@ -367,38 +348,71 @@ function AccountRows({
    * edilebiliyordu. Grup başlığı mecrayı ve kaç hesabında sınır olduğunu
    * söylüyor.
    */
+  /*
+   * TOPLAM SATIRI (onaylı taslak `#butce`): harcanan, bütçe ve günlük öneri
+   * toplanıyor. KARIŞIK PARA BİRİMİ TOPLANMIYOR: kur çevrimi yok ve iki
+   * para biriminin toplamı yanlış bir sayı olurdu; "karışık" yazıyor.
+   */
+  const birimler = new Set(rows.map((a) => a.budget?.currency ?? data.currency));
+  const tekBirim = birimler.size === 1 ? [...birimler][0]! : null;
+  const toplamHarcanan = rows.reduce((t, a) => t + BigInt(a.spentMicros), 0n);
+  const butceli = rows.filter((a) => a.budget !== null);
+  const toplamButce = butceli.reduce((t, a) => t + BigInt(a.budget!.amountMicros), 0n);
+  const toplamGunluk = butceli.reduce((t, a) => t + BigInt(a.suggestedDailyMicros ?? '0'), 0n);
+  const para = (m: bigint) => (tekBirim ? formatMoney(m.toString(), tekBirim) : 'karışık');
+
   return (
     <div>
+      {/* SÜTUN BAŞLIKLARI: satırlar tablo gibi okunuyor ama kolona sığıyor. */}
+      <div className={`${HESAP_IZGARASI} border-b border-line px-5 py-2.5 text-12 font-semibold text-ink-muted max-sm:hidden`}>
+        <span>Hesap</span>
+        <span>Gidişat</span>
+        <span className="text-right">Harcanan</span>
+        <span className="text-right">Bütçe</span>
+        <span className="text-right">Günlük öneri</span>
+        <span className="sr-only">Eylem</span>
+      </div>
       {PLATFORMS.filter((p) => rows.some((a) => a.platform === p)).map((platform) => {
         const grup = rows.filter((a) => a.platform === platform);
         const sinirli = grup.filter((a) => a.budget !== null).length;
         return (
-          <section key={platform} className="border-t border-line first:border-t-0">
-            <h4 className="flex flex-wrap items-center gap-2 bg-surface-muted px-4 py-2 text-sm font-semibold text-ink">
+          <section key={platform} className="border-b border-line last:border-b-0">
+            <h4 className="m-0 flex flex-wrap items-center gap-2 bg-surface-muted px-5 py-2 text-13 font-semibold text-ink">
               <PlatformLogo kind={platformKanali(platform)} className="h-4 w-4 shrink-0" />
               {PLATFORM_KISA_ADLARI[platform]}
-              <span className="text-xs font-normal text-ink-muted">
+              <span className="text-12 font-normal text-ink-muted">
                 {grup.length} hesap ·{' '}
                 {sinirli === 0 ? 'hiçbirinde bütçe sınırı yok' : `${sinirli} hesapta bütçe sınırı var`}
               </span>
             </h4>
-            <ul className="divide-y divide-line/60">
+            <ul className="m-0 list-none divide-y divide-line p-0">
               {grup.map((a) => (
-                <HesapSatiri
-                  key={a.adAccountId}
-                  a={a}
-                  data={data}
-                  month={month}
-                  canWrite={canWrite}
-                />
+                <HesapSatiri key={a.adAccountId} a={a} data={data} month={month} canWrite={canWrite} />
               ))}
             </ul>
           </section>
         );
       })}
+      <div className={`${HESAP_IZGARASI} border-t border-line bg-surface-muted px-5 py-3 text-13 font-bold text-ink`}>
+        <span>Toplam · {rows.length} hesap</span>
+        <span className="max-sm:hidden" />
+        <span className="text-right font-baslik tabular-nums">{para(toplamHarcanan)}</span>
+        <span className="text-right font-baslik tabular-nums">{butceli.length > 0 ? para(toplamButce) : '—'}</span>
+        <span className="text-right font-baslik tabular-nums">{butceli.length > 0 ? para(toplamGunluk) : '—'}</span>
+        <span />
+      </div>
     </div>
   );
 }
+
+/**
+ * Hesap satırlarının ızgarası. TABLO DEĞİL IZGARA: sekiz sütunlu tablo
+ * `min-w` taşıyordu ve dar kolonda kendi içinde yatay kayıyor, satırın
+ * sonundaki "Bütçe tanımla" düğmesi ekranın DIŞINDA kalıyordu. Izgara
+ * telefonda alt alta iniyor ve düğme her zaman görünür.
+ */
+const HESAP_IZGARASI =
+  'grid items-center gap-x-5 gap-y-1.5 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1.2fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_auto]';
 
 function HesapSatiri({
   a,
@@ -413,55 +427,54 @@ function HesapSatiri({
 }) {
   const cur = a.budget?.currency ?? data.currency;
   return (
-    <li className="grid gap-x-6 gap-y-2 px-4 py-3 text-sm sm:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_auto] sm:items-center">
+    <li className={`${HESAP_IZGARASI} px-5 py-3 text-13`}>
       <div className="min-w-0">
-        <p className="truncate font-medium text-ink">{a.adAccountName}</p>
-        <p className="mt-0.5 flex flex-wrap items-center gap-1.5">
+        <p className="m-0 truncate font-semibold text-ink" title={a.adAccountName}>
+          {a.adAccountName}
+        </p>
+        <p className="m-0 flex flex-wrap items-center gap-1.5">
           {/* "Bütçe yok" çipi sınırsız hesapta gösterilmiyor: yanındaki
               "Sınır yok" ile aynı şeyi ikinci kez söylüyordu. */}
           {a.budget && <StatusChip status={a.status} />}
-          {/* Bu hesabın kendi veri kapsaması — genel uyarı hangi hesabın
+          {/* Bu hesabın kendi veri kapsaması: genel uyarı hangi hesabın
               eksik olduğunu söylemiyor. */}
           {a.daysElapsed > 0 && a.daysWithData < a.daysElapsed && (
-            <span
-              className="text-[11px] text-warn-strong"
-              title={`${a.daysElapsed} günün ${a.daysWithData} günü senkronize`}
-            >
+            <small className="text-12 text-danger-strong" title={`${a.daysElapsed} günün ${a.daysWithData} günü senkronize`}>
               {a.daysWithData}/{a.daysElapsed} gün veri
-            </span>
+            </small>
           )}
         </p>
       </div>
 
-      {a.budget ? (
-        <div className="min-w-0 space-y-1.5">
-          <p className="flex flex-wrap items-baseline justify-between gap-x-3 tabular-nums">
-            <span>
-              <span className="font-semibold text-ink">{formatMoney(a.spentMicros, cur)}</span>
-              <span className="text-ink-muted"> / {formatMoney(a.budget.amountMicros, cur)}</span>
-            </span>
-            <span className="text-xs">
+      <div className="min-w-0">
+        {a.budget ? (
+          <div className="grid gap-1">
+            <PacingBar pacing={a} compact />
+            <small className="text-12">
               <PaceDelta pacing={a} />
-            </span>
-          </p>
-          <PacingBar pacing={a} compact />
-          <p className="text-xs text-ink-muted tabular-nums">
-            Kalan {formatMoney(a.remainingMicros, cur)} · günlük öneri{' '}
-            {formatMoney(a.suggestedDailyMicros, cur)}
-          </p>
-        </div>
-      ) : (
-        <p className="tabular-nums">
-          <span className="font-semibold text-ink">{formatMoney(a.spentMicros, cur)}</span>
-          <span className="text-ink-muted"> harcandı · </span>
-          <span className="font-medium text-ink-muted">Sınır yok</span>
-        </p>
-      )}
+            </small>
+          </div>
+        ) : (
+          <span className="text-12 font-semibold text-ink-muted">Sınır yok</span>
+        )}
+      </div>
 
-      {/* FORM AÇILINCA SATIRIN TAMAMINA YAYILIYOR: kapalıyken düğme, açıkken
-          iki alanlı bir kart; dar üçüncü kolonda alanlar ezilirdi. */}
-      {canWrite && (
-        <div className="sm:justify-self-end has-[>div]:col-span-full has-[>div]:justify-self-stretch">
+      <span className="text-right font-baslik font-semibold tabular-nums text-ink">
+        <span className="text-12 font-normal text-ink-muted sm:hidden">Harcanan </span>
+        {formatMoney(a.spentMicros, cur)}
+      </span>
+      <span className="text-right font-baslik font-semibold tabular-nums text-ink">
+        <span className="text-12 font-normal text-ink-muted sm:hidden">Bütçe </span>
+        {a.budget ? formatMoney(a.budget.amountMicros, cur) : '—'}
+      </span>
+      <span className="text-right font-baslik font-semibold tabular-nums text-ink" title={a.budget ? `Kalan ${formatMoney(a.remainingMicros, cur)}` : undefined}>
+        <span className="text-12 font-normal text-ink-muted sm:hidden">Günlük öneri </span>
+        {a.budget ? formatMoney(a.suggestedDailyMicros, cur) : '—'}
+      </span>
+
+      {/* DÜZENLEME YAN PANELDE: satırda yalnız düğme, form sağdan açılıyor. */}
+      <div className="sm:justify-self-end">
+        {canWrite && (
           <BudgetForm
             clientId={data.clientId}
             adAccountId={a.adAccountId}
@@ -470,27 +483,9 @@ function HesapSatiri({
             existing={a.budget}
             currency={cur}
           />
-        </div>
-      )}
+        )}
+      </div>
     </li>
-  );
-}
-
-// -----------------------------------------------------------------------------
-
-function Notice({
-  tone,
-  children,
-}: {
-  tone: 'warn' | 'error';
-  children: React.ReactNode;
-}) {
-  const cls =
-    tone === 'error'
-      ? 'bg-danger-soft text-danger-strong ring-danger/30'
-      : 'bg-warn-soft text-warn-strong ring-warn/30';
-  return (
-    <div className={`rounded-xl px-4 py-3 text-sm ring-1 ring-inset ${cls}`}>{children}</div>
   );
 }
 

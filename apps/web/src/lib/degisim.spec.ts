@@ -52,7 +52,13 @@ const yorumsuz = (yol: string): string =>
     .replace(/^\s*\/\/.*$/gm, '');
 
 describe('iki ekran da ortak kararı kullanıyor', () => {
-  const BILESENLER = ['components/taslak/genel-bakis-parcalari.tsx', 'components/taslak/reklam-yoneticisi-tablosu.tsx'];
+  const BILESENLER = ['components/taslak/genel-bakis-parcalari.tsx'];
+  /*
+   * 2026-10-14: Reklam Yöneticisi metrik kutularını ortak `MetrikKutulari`
+   * ile çiziyor; karar yine `degisimHali`nden, etiket kutuya `fark.etiket`
+   * olarak gidiyor ve `title` + ekran okuyucu metnini ORTAK bileşen basıyor.
+   */
+  const YM_TABLO = 'components/taslak/reklam-yoneticisi-tablosu.tsx';
 
   it('KRİTİK: bileşenler KENDİ kopyasını tutmuyor', () => {
     for (const yol of BILESENLER) {
@@ -60,6 +66,9 @@ describe('iki ekran da ortak kararı kullanıyor', () => {
       expect(k, yol).toContain('const h = degisimHali(d, ters);');
       expect(k, yol).not.toMatch(/!==\s*Boolean\(ters\)/);
     }
+    const t = yorumsuz(YM_TABLO);
+    expect(t).toContain('const h = degisimHali(m.degisim, m.ters);');
+    expect(t).not.toMatch(/!==\s*Boolean\(ters\)/);
   });
 
   it('KRİTİK: iyi/kötü yalnızca RENKTEN okunmuyor', () => {
@@ -69,6 +78,10 @@ describe('iki ekran da ortak kararı kullanıyor', () => {
       expect(k, yol).toContain('title={h.etiket}');
       expect(k, yol).toContain('<span className="sr-only">, {h.etiket}</span>');
     }
+    expect(yorumsuz(YM_TABLO)).toContain('etiket: h.etiket');
+    const kutu = yorumsuz('components/ui/metrik-kutulari.tsx');
+    expect(kutu).toContain('title={k.fark.etiket}');
+    expect(kutu).toContain('<span className="sr-only">, {k.fark.etiket}</span>');
   });
 
   it('KRİTİK: Reklam Yöneticisi’nde maliyet `ters`, harcama değil', () => {

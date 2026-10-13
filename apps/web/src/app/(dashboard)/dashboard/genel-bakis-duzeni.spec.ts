@@ -65,8 +65,9 @@ describe('taslağın düzeni', () => {
   });
 
   it('veri tazeliği başlıkta, güncelle düğmesinin içinde', () => {
-    const bas = SAYFA.indexOf('<header');
-    const son = SAYFA.indexOf('</header>');
+    // 2026-10-14: başlık ortak `SayfaBasligi`; güncelle düğmesi onun `eylemler`inde.
+    const bas = SAYFA.indexOf('<SayfaBasligi');
+    const son = SAYFA.indexOf('/>', SAYFA.indexOf('<RefreshButton', bas)) + 2;
     expect(SAYFA.slice(bas, son)).toContain('sonGuncelleme={summary?.lastFetchedAt ?? null}');
   });
 
@@ -185,6 +186,6 @@ describe('tablolarda kaydırma', () => {
   it('KRİTİK: yatay kayan tablolar kendi kabında — sayfa gövdesi kaymıyor', () => {
     expect(CSS).toMatch(/\.tabloSar \{\s*overflow-x: auto;/);
     expect(PARCA).toContain('<div className={s.tabloSar}>');
-    expect(tablo('taslak/reklam-yoneticisi-tablosu.tsx')).toContain('<div className={s.tabloSar}>');
+    expect(tablo('taslak/reklam-yoneticisi-tablosu.tsx')).toContain('<div className="overflow-x-auto">');
   });
 });

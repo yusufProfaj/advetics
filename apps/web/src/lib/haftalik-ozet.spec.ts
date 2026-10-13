@@ -71,7 +71,7 @@ describe('önizleme çerçevesi', () => {
 
   it('KRİTİK: ajans görünümü düğmesi yalnız rule.read ile; sayfa izni doğru yerden', () => {
     expect(KAYNAK).toMatch(/useState<OzetKitlesi>\(ajansGorur \? 'ajans' : 'musteri'\)/);
-    expect(KAYNAK).toMatch(/\{ajansGorur \? \(\s*<div role="group" aria-label="Görünüm"/);
+    expect(KAYNAK).toMatch(/\{ajansGorur \? \(\s*<BolumluSecici\s+etiket="Görünüm"/);
     const sayfa = yorumsuz(join(__dirname, '..', 'app', '(dashboard)', 'raporlar', 'page.tsx'));
     expect(sayfa).toMatch(/ajansGorur=\{hasPermission\(session, 'rule\.read'\)\}/);
     expect(sayfa).toMatch(/planYetkisi=\{canShare\}/);

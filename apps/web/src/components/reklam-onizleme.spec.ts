@@ -104,15 +104,17 @@ describe('açılır önizleme', () => {
     // 2026-10-10: "Eylem" sütunu KOŞULLU (yalnız yazabilen kullanıcıda).
     // Sabit sütunlar sayılıyor, koşullu olan +1; colSpan ikisini de taşımalı.
     const thead = TABLO.slice(TABLO.indexOf('<thead>'), TABLO.indexOf('</thead>'));
-    const kosullu = (thead.match(/\{eylemSutunu && <th>/g) ?? []).length;
-    const sutun = (thead.match(/<th>|<Baslik /g) ?? []).length - kosullu;
+    // 2026-10-14: başlık hücreleri `<th scope="col"`; koşullu olanlar `{x && (<th`.
+    const kosullu = (thead.match(/\{eylemSutunu && \(\s*<th\b/g) ?? []).length;
+    const site = (thead.match(/\{siteSutunu && \(\s*<th\b/g) ?? []).length;
+    const sutun = (thead.match(/<th\b|<Baslik /g) ?? []).length - kosullu - site;
     expect(sutun).toBeGreaterThan(5);
     expect(kosullu).toBe(1);
     // 2026-10-14 (Paket F1): "Sitede" sütunu da KOŞULLU (yalnız GA4 bağlıysa).
-    expect((thead.match(/\{siteSutunu && <th /g) ?? []).length).toBe(1);
+    expect(site).toBe(1);
     expect(TABLO).toContain(`const sutunSayisi = ${sutun} + (eylemSutunu ? 1 : 0) + (siteSutunu ? 1 : 0);`);
-    const satir = TABLO.slice(TABLO.indexOf('className={`${s.onizlemeSatir}'));
-    expect(satir.slice(0, 200)).toContain('<td colSpan={sutunSayisi}>');
+    const satir = TABLO.slice(TABLO.indexOf('{reklamda && (acilmis.has(r.id) || acik) && ('));
+    expect(satir.slice(0, 200)).toContain('<td colSpan={sutunSayisi}');
   });
 });
 

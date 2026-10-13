@@ -4,6 +4,10 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import type { BudgetRecord } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { Alan, FormIzgarasi, Girdi } from '@/components/ui/alan';
+import { Dugme } from '@/components/ui/dugme';
+import { Serit } from '@/components/ui/hal';
+import { YanPanel } from '@/components/ui/pencere';
 
 /**
  * Bütçe tanımlama / güncelleme.
@@ -15,6 +19,11 @@ import { ApiRequestError, apiFetch } from '@/lib/api';
  * Alan `type="text"`, `type="number"` DEĞİL: sayı girdisi Türkçe klavyede
  * virgülü sessizce yutuyor ve "1500,75" tarayıcıya göre "1500" ya da geçersiz
  * oluyor. Doğrulama sunucuda, biçim serbest.
+ *
+ * YAN PANELDE (onaylı taslak `#butce`): satırda yalnız "Düzenle" ya da
+ * "Bütçe tanımla" düğmesi, form sağdan açılıyor. Eski form satırın İÇİNDE
+ * açılıyor ve tabloyu bölüp aşağıdaki satırları itiyordu; hangi hesabın
+ * bütçesini düzenlediğin kayboluyordu.
  */
 export function BudgetForm({
   clientId,
@@ -93,142 +102,109 @@ export function BudgetForm({
     }
   }
 
-  if (!open) {
-    return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="rounded-lg border border-line px-2.5 py-1 text-xs font-medium text-ink transition hover:bg-surface-sunken"
-      >
+  return (
+    <>
+      <Dugme ton="ikincil" boyut="kucuk" onClick={() => setOpen(true)}>
         {existing ? 'Düzenle' : 'Bütçe tanımla'}
-      </button>
-    );
-  }
+      </Dugme>
 
-  return (
-    <div className="rounded-xl border border-line bg-surface p-4 text-left shadow-sm">
-      <h3 className="text-sm font-semibold text-ink">
-        {adAccountName ?? 'Workspace geneli'} · {monthLabel(month)}
-      </h3>
-      {adAccountId === null && (
-        <p className="mt-1 text-[11px] text-ink-muted">
-          Şemsiye bütçe: workspace’in tüm reklam hesaplarının toplamı bu tutarla karşılaştırılır.
+      <YanPanel
+        acik={open}
+        onKapat={() => !busy && setOpen(false)}
+        baslik={existing ? 'Bütçeyi düzenle' : 'Bütçe tanımla'}
+        altEylemler={
+          <>
+            {existing && (
+              <Dugme ton="tehlike" onClick={remove} disabled={busy} className="mr-auto">
+                Bütçeyi sil
+              </Dugme>
+            )}
+            <Dugme ton="ikincil" onClick={() => setOpen(false)} disabled={busy}>
+              Vazgeç
+            </Dugme>
+            <Dugme onClick={save} bekliyor={busy} disabled={!amount.trim()}>
+              Kaydet
+            </Dugme>
+          </>
+        }
+      >
+        <p className="m-0 text-13 font-semibold text-ink">
+          {adAccountName ?? 'Workspace geneli'} · {monthLabel(month)}
         </p>
-      )}
-
-      <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        <Field label={`Aylık bütçe${currency ? ` (${currency})` : ''}`}>
-          <input
-            type="text"
-            inputMode="decimal"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="45000"
-            className="w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-brand"
-          />
-        </Field>
-
-        <Field label="Günlük limit (opsiyonel)">
-          <input
-            type="text"
-            inputMode="decimal"
-            value={dailyCap}
-            onChange={(e) => setDailyCap(e.target.value)}
-            placeholder="boş = limit yok"
-            className="w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-brand"
-          />
-        </Field>
-
-        <Field label="Uyarı eşiği (%)">
-          <input
-            type="number"
-            min={1}
-            max={200}
-            value={alertPct}
-            onChange={(e) => setAlertPct(e.target.value)}
-            className="w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-brand"
-          />
-        </Field>
-
-        <Field label="Otomatik durdurma (%)">
-          <input
-            type="number"
-            min={1}
-            max={200}
-            value={autoPause}
-            onChange={(e) => setAutoPause(e.target.value)}
-            placeholder="boş = kapalı"
-            className="w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-brand"
-          />
-          {/* Alan kaydediliyor ama HENÜZ UYGULANMIYOR. Kullanıcının açık
-              bıraktığı bir korumanın çalıştığını sanması, hiç olmamasından
-              kötü — o yüzden burada yazıyor. Bir süre "Kural motoru (Modül 5)"
-              diyordu: kural motoru çoktan var (`budget_spent_ratio` koşulu),
-              ama bu alanı OKUMUYOR. Panelde iç terim geçmez; kullanıcıyı
-              çalışan yola yönlendir. */}
-          <p className="mt-1 text-[11px] text-ink-muted">
-            Henüz yalnızca kaydediliyor, kampanyayı durdurmuyor. Durdurmak için Kurallar’da
-            bütçe kuralı kur.
+        {adAccountId === null && (
+          <p className="m-0 text-12 text-ink-muted">
+            Şemsiye bütçe: workspace’in tüm reklam hesaplarının toplamı bu tutarla karşılaştırılır.
           </p>
-        </Field>
-      </div>
-
-      <Field label="Not (opsiyonel)">
-        <input
-          type="text"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          maxLength={500}
-          className="mt-3 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-brand"
-        />
-      </Field>
-
-      {error && (
-        <p className="mt-3 rounded-lg bg-danger-soft px-3 py-2 text-xs text-danger-strong ring-1 ring-inset ring-danger/30">
-          {error}
-        </p>
-      )}
-
-      <div className="mt-4 flex items-center gap-2">
-        <button
-          type="button"
-          onClick={save}
-          disabled={busy || !amount.trim()}
-          className="rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white transition disabled:opacity-50"
-        >
-          {busy ? 'Kaydediliyor…' : 'Kaydet'}
-        </button>
-        <button
-          type="button"
-          onClick={() => setOpen(false)}
-          disabled={busy}
-          className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink transition hover:bg-surface-sunken"
-        >
-          Vazgeç
-        </button>
-        {existing && (
-          <button
-            type="button"
-            onClick={remove}
-            disabled={busy}
-            className="ml-auto rounded-lg px-3 py-1.5 text-xs font-medium text-danger-strong transition hover:bg-danger-soft"
-          >
-            Bütçeyi sil
-          </button>
         )}
-      </div>
-    </div>
-  );
-}
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="block">
-      <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-ink-muted">
-        {label}
-      </span>
-      {children}
-    </label>
+        <Alan etiket={`Aylık bütçe${currency ? ` (${currency})` : ''}`}>
+          {(id) => (
+            <Girdi
+              id={id}
+              type="text"
+              inputMode="decimal"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="45000"
+              className="font-baslik tabular-nums"
+            />
+          )}
+        </Alan>
+
+        <Alan etiket="Günlük limit (isteğe bağlı)">
+          {(id) => (
+            <Girdi
+              id={id}
+              type="text"
+              inputMode="decimal"
+              value={dailyCap}
+              onChange={(e) => setDailyCap(e.target.value)}
+              placeholder="boş = limit yok"
+              className="font-baslik tabular-nums"
+            />
+          )}
+        </Alan>
+
+        <FormIzgarasi>
+          <Alan etiket="Uyarı eşiği (%)">
+            {(id) => (
+              <Girdi id={id} type="number" min={1} max={200} value={alertPct} onChange={(e) => setAlertPct(e.target.value)} />
+            )}
+          </Alan>
+          <Alan etiket="Otomatik durdurma (%)">
+            {(id) => (
+              <Girdi
+                id={id}
+                type="number"
+                min={1}
+                max={200}
+                value={autoPause}
+                onChange={(e) => setAutoPause(e.target.value)}
+                placeholder="boş = kapalı"
+              />
+            )}
+          </Alan>
+        </FormIzgarasi>
+        {/* Alan kaydediliyor ama HENÜZ UYGULANMIYOR. Kullanıcının açık
+            bıraktığı bir korumanın çalıştığını sanması, hiç olmamasından
+            kötü: o yüzden burada yazıyor. Kural motoru (`budget_spent_ratio`
+            koşulu) bu alanı OKUMUYOR; kullanıcıyı çalışan yola yönlendir. */}
+        <p className="m-0 text-12 text-ink-muted">
+          Otomatik durdurma henüz yalnızca kaydediliyor, kampanyayı durdurmuyor. Durdurmak için Kurallar’da bütçe
+          kuralı kur.
+        </p>
+
+        <Alan etiket="Not (isteğe bağlı)">
+          {(id) => <Girdi id={id} type="text" value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} />}
+        </Alan>
+
+        {error && (
+          <Serit ton="hata" baslik="Bütçe kaydedilemedi">
+            {error}
+          </Serit>
+        )}
+      </YanPanel>
+    </>
   );
 }
 

@@ -142,3 +142,35 @@ describe('SON 30 GÜNÜ GETİR', () => {
     expect(SAYFA).toContain('{canWrite && <Son30Gun');
   });
 });
+
+/**
+ * ═══ TABLO + YAN PANEL (kullanıcı kararı 2026-10-14, taslak `#leads`) ═══
+ */
+describe('tablo ve yan panel', () => {
+  it('KRİTİK: satır klavyeyle de açılıyor; telefon/e-posta bağlantısı satırı açmıyor', () => {
+    expect(LISTE).toContain("if (e.key === 'Enter' || e.key === ' ') {");
+    expect(LISTE).toContain('tabIndex={0}');
+    expect(LISTE).toContain('onClick={(e) => e.stopPropagation()}');
+  });
+
+  it('KRİTİK: notu kaydetmek DURUMU DEĞİŞTİRMİYOR — mevcut durum aynen gidiyor', () => {
+    // Uç durum ve notu birlikte alıyor; başka bir durum göndermek Meta'ya
+    // istenmemiş bir sonuç bildirirdi.
+    expect(LISTE).toContain('body: JSON.stringify({ status: lead.status, note: not.trim() }),');
+  });
+
+  it('KRİTİK: süzgece uyan kayıt yoksa nedeni ayrı ("henüz kayıt yok" değil)', () => {
+    expect(LISTE).toContain('Bu süzgece uyan kayıt yok');
+    expect(SAYFA).toContain('<BosDurum baslik="Henüz kayıt yok" neden={result.emptyReason} />');
+  });
+
+  it('KRİTİK: liste düşerse sunucunun cümlesi ekranda', () => {
+    expect(SAYFA).toContain('listeHatasi = hataMetni(e);');
+    expect(SAYFA).toContain("<HataDurumu baslik=\"Kayıtlar yüklenemedi\" mesaj={listeHatasi ?? 'Sunucu sebep bildirmedi.'} />");
+  });
+
+  it('KRİTİK: Meta gönderim sorunu yan menüde kırmızı nokta', () => {
+    expect(SAYFA).toContain('uyari: sorunlu > 0,');
+  });
+});
+

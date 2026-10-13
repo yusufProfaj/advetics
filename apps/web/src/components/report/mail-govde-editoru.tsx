@@ -94,9 +94,9 @@ export function MailGovdeEditoru({
   }
 
   return (
-    <div className="min-w-0">
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-ink-muted">
+    <div className="grid min-w-0 gap-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-13 font-semibold text-ink">
           Mail metni. Sayılar rapordan geldi, değerlendirme kısmını sen yaz
         </span>
         {/*
@@ -107,7 +107,7 @@ export function MailGovdeEditoru({
         <button
           type="button"
           onClick={() => setKodModu((v) => !v)}
-          className="rounded-md border border-line px-2 py-0.5 text-[11px] text-ink-muted hover:bg-surface-muted"
+          className="inline-flex h-7 items-center rounded-full border border-line-strong bg-surface px-3 text-12 font-bold text-ink transition-colors hover:bg-surface-sunken"
         >
           {kodModu ? 'Önizleme' : 'HTML'}
         </button>
@@ -119,7 +119,7 @@ export function MailGovdeEditoru({
           onChange={(e) => onChange(e.target.value)}
           rows={12}
           spellCheck={false}
-          className="mt-0.5 w-full rounded-lg border border-line bg-surface px-3 py-2 font-mono text-xs focus:border-brand focus:outline-none"
+          className="w-full rounded-alan border border-line-strong bg-surface px-3 py-2 font-mono text-12 text-ink focus:border-ink focus:outline-none"
         />
       ) : (
         <div
@@ -166,11 +166,11 @@ export function MailGovdeEditoru({
             document.execCommand('insertHTML', false, temiz);
             yaz();
           }}
-          className="mail-onizleme mt-0.5 max-h-[340px] min-h-[220px] w-full overflow-y-auto rounded-lg border border-line bg-surface px-4 py-3 text-sm focus:border-brand focus:outline-none"
+          className="mail-onizleme max-h-[340px] min-h-[220px] w-full overflow-y-auto rounded-alan border border-line-strong bg-surface px-4 py-3 text-14 text-ink focus:border-ink focus:outline-none"
         />
       )}
 
-      {uyari !== null && <p className="mt-1 text-[11px] text-warn">{uyari}</p>}
+      {uyari !== null && <p className="m-0 text-12 text-danger-strong">{uyari}</p>}
 
       {kirpilan.length > 0 && (
         /*
@@ -178,7 +178,7 @@ export function MailGovdeEditoru({
          * yapıyor ve sessiz kalsaydı fark yalnızca alıcının istemcisinde
          * görünürdü.
          */
-        <p className="mt-1 text-[11px] text-warn">
+        <p className="m-0 text-12 text-danger-strong">
           Gönderimde şunlar kaldırılacak: {kirpilan.join(', ')}
         </p>
       )}

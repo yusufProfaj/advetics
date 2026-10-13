@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { Dugme } from '@/components/ui/dugme';
 
 /**
  * ═══ SON 30 GÜNÜ GETİR ═══
@@ -21,6 +22,7 @@ export function Son30Gun({ clientId }: { clientId: string }) {
   const [bekliyor, setBekliyor] = useState(false);
   const [notlar, setNotlar] = useState<string[] | null>(null);
   const [kayitlar, setKayitlar] = useState<number | null>(null);
+  const [notAcik, setNotAcik] = useState(false);
 
   async function getir(): Promise<void> {
     setBekliyor(true);
@@ -38,41 +40,51 @@ export function Son30Gun({ clientId }: { clientId: string }) {
        */
       setKayitlar(r.kayitlar);
       setNotlar(r.notlar);
+      setNotAcik(true);
       router.refresh();
     } catch (err) {
       setNotlar([
         err instanceof ApiRequestError ? err.message : 'Kayıtlar çekilemedi.',
       ]);
+      setNotAcik(true);
     } finally {
       setBekliyor(false);
     }
   }
 
+  /*
+   * SONUÇ DÜĞMENİN ALTINDA, BAŞLIĞIN EYLEM SATIRINDA: ayrı bir şerit sayfayı
+   * kaydırıp düğmeden kopardı ve kullanıcı neyin sonucu olduğunu çıkaramazdı.
+   */
   return (
-    <div className="flex flex-col items-end gap-1.5">
-      <button
-        type="button"
+    <div className="relative">
+      <Dugme
+        ton="ikincil"
         onClick={() => void getir()}
-        disabled={bekliyor}
+        bekliyor={bekliyor}
         title="Meta’daki bütün anlık formların son 30 günlük kayıtlarını çeker"
-        className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink transition hover:bg-surface-sunken focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {bekliyor ? 'Çekiliyor…' : 'Son 30 günü getir'}
-      </button>
+        {bekliyor ? 'Çekiliyor' : 'Son 30 günü getir'}
+      </Dugme>
 
+      {/* SONUÇ KUTUSU DOM'DA KALIYOR: kapatınca görünmez + etkisiz, içerik sonraki çekime kadar duruyor. */}
       {notlar && (
         <div
           role="status"
-          className="max-w-md rounded-lg border border-line bg-surface-sunken px-3 py-2 text-right"
+          inert={!notAcik}
+          className={`absolute right-0 top-full z-10 mt-1.5 w-[min(22rem,calc(100vw-2rem))] rounded-alan border border-line bg-surface px-3 py-2 text-right shadow-acilir transition-opacity duration-150 motion-reduce:transition-none ${
+            notAcik ? 'visible opacity-100' : 'invisible opacity-0'
+          }`}
         >
-          {kayitlar !== null && (
-            <p className="text-[11px] font-medium text-ink">{kayitlar} yeni kayıt</p>
-          )}
-          <ul className="space-y-0.5 text-[11px] text-ink-muted">
+          {kayitlar !== null && <p className="m-0 text-12 font-semibold text-ink">{kayitlar} yeni kayıt</p>}
+          <ul className="m-0 grid list-none gap-0.5 p-0 text-12 text-ink-muted">
             {notlar.map((n) => (
               <li key={n}>{n}</li>
             ))}
           </ul>
+          <button type="button" onClick={() => setNotAcik(false)} className="mt-1 text-12 font-semibold text-ink underline underline-offset-2">
+            Kapat
+          </button>
         </div>
       )}
     </div>

@@ -39,7 +39,8 @@ describe('önizlemeler', () => {
 describe('düzeyler ve satırlar', () => {
   it('KRİTİK: gidilemeyen düzey soluk ve NEDENİNİ söylüyor', () => {
     expect(SAYFA).toContain("neden: 'Bu düzey için bir workspace seç'");
-    expect(TABLO).toContain('aria-disabled={kapali || undefined}');
+    // 2026-10-14: düzeyler sayfa içi yan menüde; nedeni `kapaliNedeni`, soluk/tıklanmaz hâli ortak bileşende.
+    expect(TABLO).toContain("kapaliNedeni: t.hedef.tur === 'kapali' ? t.hedef.neden : undefined,");
   });
 
   it('KRİTİK: "Şirketler" sekmesi ajans kapsamına ÖZEL DEĞERLE geçiyor', () => {
