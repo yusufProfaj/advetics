@@ -1,9 +1,10 @@
-import type { RehberHazirligi, RehberKaydi, RehberListesi } from '@advetics/shared';
+import { siteYokMu, type RehberHazirligi, type RehberKaydi, type RehberListesi } from '@advetics/shared';
 import { WorkspaceGerekli } from '@/components/workspace-gerekli';
 import { RehberEkrani } from '@/components/rehber/rehber-ekrani';
 import { RehberGirisi, RehberMesaji } from '@/components/rehber/rehber-girisi';
 import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import { baglanti } from '@/lib/baglanti';
+import { beyanGirdisi, beyanlariOkuKurulumsuz } from '@/lib/kurulum-beyanlari';
 import { sayfaWorkspaceId, workspaceSecimVerisi } from '@/lib/sayfa-workspace';
 import { hasPermission, requireSession } from '@/lib/session';
 
@@ -104,6 +105,12 @@ export default async function AdvCampaignPage({ searchParams }: { searchParams: 
       </RehberMesaji>
     );
   }
+  /*
+   * "WEB SİTEMİZ YOK" BEYANI (kurulum sihirbazı, kullanıcı kararı 2): site
+   * isteyen amaç kartları üstü çizili ve sebebiyle. Okunamazsa `null` ve
+   * hiçbir amaç kapanmaz — çalışan bir amacı gizlemek yanlış alarmın tersi.
+   */
+  const siteYok = siteYokMu(beyanGirdisi(await beyanlariOkuKurulumsuz(serverApiFetch, clientId)));
   return (
     <RehberEkrani
       key={r.value.id}
@@ -112,6 +119,7 @@ export default async function AdvCampaignPage({ searchParams }: { searchParams: 
       sirketAdi={workspaceSecimVerisi(session).sirketAdi}
       workspaceAdi={workspaceAdi}
       formYayinIzni={hasPermission(session, 'bulk.publish')}
+      siteYok={siteYok}
     />
   );
 }

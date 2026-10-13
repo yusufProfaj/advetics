@@ -475,6 +475,19 @@
   color: var(--t-ink-muted);
   line-height: 1.45;
 }
+/* "Web sitemiz yok" kapısı: kart GİZLENMEZ, üstü çizili ve sebebi yazılı (kurulum sihirbazı). */
+.amacKapali {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+.amacKapali:hover {
+  transform: none;
+  box-shadow: var(--t-shadow);
+}
+.amacKapali h3 {
+  text-decoration: line-through;
+  color: var(--t-ink-muted);
+}
 .platformlar {
   display: flex;
   flex-wrap: wrap;

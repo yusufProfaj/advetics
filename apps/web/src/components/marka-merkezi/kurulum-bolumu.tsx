@@ -52,6 +52,7 @@ export function AdimSatiri({
   yazabilir,
   hesapYazabilir,
   guncelle,
+  izinDonusAdresi,
 }: {
   a: KurulumAdimi;
   v: KurulumYaniti;
@@ -61,6 +62,12 @@ export function AdimSatiri({
   /** `kurulum.hesap` — hesap seçen/açan adımlar için (Ç-20). */
   hesapYazabilir: boolean;
   guncelle: (v: KurulumYaniti) => void;
+  /**
+   * OAuth izin dönüşü. Verilmezse Marka Merkezi › Kurulum (`izinDonusu`).
+   * Sihirbaz KENDİ adresini veriyor: yoksa "Ölçüm izinlerini ver"den dönen
+   * kullanıcı sihirbazdan çıkıp listeye düşer ve kaldığı adımı arar.
+   */
+  izinDonusAdresi?: string;
 }) {
   const eylemYetkisi = HESAP_ADIMLARI.has(a.kod) ? hesapYazabilir : yazabilir;
   const [acik, setAcik] = useState(false);
@@ -90,7 +97,7 @@ export function AdimSatiri({
     setHata(null);
     try {
       const r = await apiFetch<{ authorizeUrl: string }>(
-        `/connections/${baglantiId}/reauthorize?platform=google&kapsam=olcum&donus=${encodeURIComponent(izinDonusu(clientId))}`,
+        `/connections/${baglantiId}/reauthorize?platform=google&kapsam=olcum&donus=${encodeURIComponent(izinDonusAdresi ?? izinDonusu(clientId))}`,
         { method: 'POST' },
       );
       window.location.href = r.authorizeUrl;

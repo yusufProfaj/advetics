@@ -16,6 +16,8 @@
  *   yazılırsa derleyiciyle karşılaştıran test ekranı yakalayamaz.
  */
 import {
+  SITE_YOK_SEBEBI,
+  siteYokRehberKapisi,
   OZEL_KATEGORI_ETIKETLERI,
   META_EN_COK_GORSEL,
   GORSEL_ORANLARI,
@@ -262,6 +264,52 @@ export function platformDurumu(amac: RehberAmacKodu, platform: RehberPlatformu, 
   const kapali = REHBER_ACILIS[amac][platform] === 'kapali' ? REHBER_KAPALI_SEBEBI[amac]?.[platform] : undefined;
   if (kapali) return { gorunur, sebep: kapali, deneme };
   return { gorunur, sebep: `Bu amaçta ${platform === 'meta' ? 'Meta' : 'Google'} henüz açık değil`, deneme };
+}
+
+/**
+ * ═══ "WEB SİTEMİZ YOK" KAPISI (kurulum sihirbazı, kullanıcı kararı 2) ═══
+ *
+ * Workspace için "web sitemiz yok" dendiyse site isteyen amaç × platform
+ * kapanır. Kural İKİNCİ KEZ YAZILMIYOR: `siteYokRehberKapisi` (shared)
+ * rehberin kendi adres kuralına bakıyor. Burada yalnız ekranın durumu:
+ * görünür bir platform kapıdan geçemiyorsa `gorunur: false` ve sebep
+ * `SITE_YOK_SEBEBI` — kart GİZLENMİYOR, üstü çizili ve sebebi yazılı
+ * ("çalışmayan seçenek gösterilmez" kuralı "neden yok"u söylemeyi
+ * yasaklamıyor).
+ *
+ * PANEL SÜZGECİ TEK BAŞINA KORUMA DEĞİL: sunucunun eksik listesi / yayın
+ * kapısı aynı yardımcıyı okur (Ajan 2). `siteYok === null` (okunamadı)
+ * kapatmaz — adres alanı zaten zorunlu ve eksik listesi onu söyler.
+ */
+export function siteKapisiyla(d: PlatformDurumu, amac: RehberAmacKodu, platform: RehberPlatformu, siteYok: boolean | null): PlatformDurumu {
+  if (!d.gorunur) return d;
+  const k = siteYokRehberKapisi(amac, platform, siteYok);
+  return k.acik ? d : { gorunur: false, sebep: k.sebep, deneme: false };
+}
+
+/**
+ * AMAÇ KARTI BÜTÜNÜYLE KAPALI MI: kapı olmadan görünür olan HER platform
+ * site yüzünden kapanıyorsa kartın sebebi o. Bir platform açık kalıyorsa
+ * kart seçilebilir (ör. form amacı: Meta açık, Google site istiyor).
+ */
+export function amacSiteSebebi(amac: RehberAmacKodu, ajansYoneticisi: boolean, siteYok: boolean | null): string | null {
+  const gorunenler = (['meta', 'google'] as const).filter((p) => platformDurumu(amac, p, ajansYoneticisi).gorunur);
+  if (gorunenler.length === 0) return null;
+  const kapali = gorunenler.filter((p) => !siteYokRehberKapisi(amac, p, siteYok).acik);
+  return kapali.length === gorunenler.length ? SITE_YOK_SEBEBI : null;
+}
+
+/** Açık platformlar ∩ site kapısı: "web sitemiz yok"ta site isteyen platform AÇIK görünmez. */
+export function acikSiteKapisiyla(
+  acik: Record<RehberPlatformu, boolean>,
+  amac: RehberAmacKodu | null,
+  siteYok: boolean | null,
+): Record<RehberPlatformu, boolean> {
+  if (!amac || siteYok !== true) return acik;
+  return {
+    meta: acik.meta && siteYokRehberKapisi(amac, 'meta', siteYok).acik,
+    google: acik.google && siteYokRehberKapisi(amac, 'google', siteYok).acik,
+  };
 }
 
 /**

@@ -24,6 +24,11 @@ export interface AdimBaglami {
    * kullanıcıya düğme gösterilmez, sebebi yazılır.
    */
   formYayinIzni: boolean;
+  /**
+   * "Web sitemiz yok" beyanı (kurulum sihirbazı) — ÜÇ HÂLLİ: `null` beyanlar
+   * okunamadı ve HİÇBİR amacı kapatmaz (`siteYokRehberKapisi`).
+   */
+  siteYok: boolean | null;
 }
 
 export function yaz(b: AdimBaglami, alan: Degisiklik['alan'], deger: unknown, kaynak: Degisiklik['kaynak'] = 'kullanici') {

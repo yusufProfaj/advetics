@@ -118,7 +118,7 @@ describe('KRİTİK: workspace PENCERESİ KALKTI — satır Marka Merkezi’ne a�
     expect(bas, 'ac() bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
     const govde = k.slice(bas, k.indexOf('\n  }\n', bas));
     const gecis = govde.indexOf("apiFetch('/auth/switch-client'");
-    const git = govde.indexOf("router.push(markaMerkeziAdresi('kurulum', s.id))");
+    const git = govde.indexOf("router.push(hedef === 'marka' ? markaMerkeziAdresi('kurulum', s.id) : sihirbazAdresi(s.id))");
     expect(gecis).toBeGreaterThan(-1);
     expect(git).toBeGreaterThan(gecis);
   });
