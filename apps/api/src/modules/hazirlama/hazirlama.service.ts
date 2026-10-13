@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { BadRequestException, ForbiddenException, Inject, Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
+  PANEL_YERLERI,
   gunlukButceBasligi,
   hazirlamaDurumu,
   kategoriBasligi,
@@ -236,7 +237,7 @@ export class HazirlamaService {
     let site = c.website;
     let siteYazildi = false;
     if (site) {
-      adimlar.push({ kod: 'site', durum: 'tamam', baslik: site, neden: 'Workspace ayarlarında girilmiş' });
+      adimlar.push({ kod: 'site', durum: 'tamam', baslik: site, neden: `${PANEL_YERLERI.workspaceBilgileri}’nde girilmiş` });
     } else if (c.sayfa?.token) {
       try {
         const token = this.crypto.decrypt(Buffer.from(c.sayfa.token));
@@ -266,18 +267,18 @@ export class HazirlamaService {
             site = g?.website?.trim() || null;
             adimlar.push(
               site
-                ? { kod: 'site', durum: 'tamam', baslik: site, neden: 'Workspace ayarlarında girilmiş' }
-                : { kod: 'site', durum: 'hata', baslik: 'Site adresi yazılamadı', neden: 'Facebook sayfasındaki adres workspace’e kaydedilemedi; Workspace ayarları’ndan gir' },
+                ? { kod: 'site', durum: 'tamam', baslik: site, neden: `${PANEL_YERLERI.workspaceBilgileri}’nde girilmiş` }
+                : { kod: 'site', durum: 'hata', baslik: 'Site adresi yazılamadı', neden: `Facebook sayfasındaki adres workspace’e kaydedilemedi; ${PANEL_YERLERI.workspaceBilgileri}’nden gir` },
             );
           }
         } else {
-          adimlar.push({ kod: 'site', durum: 'eksik', baslik: 'Site adresi yok', neden: "Facebook sayfasında da site adresi yazmıyor; Workspace ayarları'ndan gir" });
+          adimlar.push({ kod: 'site', durum: 'eksik', baslik: 'Site adresi yok', neden: `Facebook sayfasında da site adresi yazmıyor; ${PANEL_YERLERI.workspaceBilgileri}’nden gir` });
         }
       } catch (e) {
         adimlar.push({ kod: 'site', durum: 'hata', baslik: 'Site adresi okunamadı', neden: `Facebook sayfası okunamadı: ${mesaj(e)}` });
       }
     } else {
-      adimlar.push({ kod: 'site', durum: 'eksik', baslik: 'Site adresi yok', neden: "Workspace ayarları'ndan site adresini gir; sayfa bağlıysa oradan da alınır" });
+      adimlar.push({ kod: 'site', durum: 'eksik', baslik: 'Site adresi yok', neden: `${PANEL_YERLERI.workspaceBilgileri}’nden site adresini gir; sayfa bağlıysa oradan da alınır` });
     }
 
     // ── marka ───────────────────────────────────────────────────────────

@@ -1,3 +1,4 @@
+import { PANEL_YERLERI } from '@advetics/shared';
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { TenantContext, YoutubeOtomatikOnizleme } from '@advetics/shared';
@@ -38,7 +39,7 @@ export interface YoutubeYayinDegerleri {
  * oraya yönleniyor ama metin kullanıcıya artık olmayan bir sekmeyi tarif
  * ediyordu. Yer bir gün değişirse değişecek tek dize bu.
  */
-export const LOGO_YERI = 'Marka Merkezi › Marka › Logo';
+export const LOGO_YERI = PANEL_YERLERI.logo;
 
 interface Kaynaklar {
   workspaceAdi: string;

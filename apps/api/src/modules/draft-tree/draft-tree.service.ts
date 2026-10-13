@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
+  PANEL_YERLERI,
   buildDraftTree,
   buildExpertTree,
   moneyToMicros,
@@ -485,7 +486,7 @@ export class DraftTreeService {
       // değil, hesabı müşteriye atamak.
       if (acc.client_id === null) {
         throw new BadRequestException(
-          'Bu reklam hesabı henüz bir workspace’e atanmamış. Platform Bağlantıları ekranından ata.',
+          `Bu reklam hesabı henüz bir workspace’e atanmamış. ${PANEL_YERLERI.kurulum}’da ata.`,
         );
       }
       if (acc.client_id !== input.clientId) {
@@ -515,7 +516,7 @@ export class DraftTreeService {
       if (!profile) throw new NotFoundException('Sayfa bulunamadı');
       if (profile.client_id === null) {
         throw new BadRequestException(
-          'Bu sayfa henüz bir workspace’e atanmamış. Platform Bağlantıları ekranından ata.',
+          `Bu sayfa henüz bir workspace’e atanmamış. ${PANEL_YERLERI.kurulum}’da ata.`,
         );
       }
       if (profile.client_id !== input.clientId) {

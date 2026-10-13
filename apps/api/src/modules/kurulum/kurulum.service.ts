@@ -5,6 +5,7 @@ import {
   KURULUM_LISTESI,
   KURULUM_PLATFORMLARI,
   OTOMATIK_SIRA,
+  PANEL_YERLERI,
   gtmKodu,
   kurulumOzeti,
   type DonusumTetigi,
@@ -264,13 +265,13 @@ export class KurulumService {
 
   private async token(b: Baglam, platform: 'meta' | 'google'): Promise<string> {
     const c = this.baglantiSec(b, platform);
-    if (!c) throw new KullaniciGerekli(`${platform === 'meta' ? 'Meta' : 'Google'} bağlantısı yok; önce Ayarlar › Platform bağlantıları’ndan bağla.`);
+    if (!c) throw new KullaniciGerekli(`${platform === 'meta' ? 'Meta' : 'Google'} bağlantısı yok; önce ${PANEL_YERLERI.platformBaglantilari}’ndan bağla.`);
     return this.kasa.getAccessToken(c.id, this.saglayicilar.get(platform as Platform));
   }
 
   private async googleOlcumTokeni(b: Baglam): Promise<string> {
     const c = this.baglantiSec(b, 'google');
-    if (!c) throw new KullaniciGerekli('Google bağlantısı yok; önce Ayarlar › Platform bağlantıları’ndan bağla.');
+    if (!c) throw new KullaniciGerekli(`Google bağlantısı yok; önce ${PANEL_YERLERI.platformBaglantilari}’ndan bağla.`);
     if (!GOOGLE_OLCUM_SCOPES.every((s) => c.scopes.includes(s))) throw new KullaniciGerekli('Önce "Ölçüm izinlerini ver" (Tag Manager ve Analytics izni).');
     return this.kasa.getAccessToken(c.id, this.saglayicilar.get('google'));
   }
@@ -559,7 +560,7 @@ export class KurulumService {
       t.$queryRaw<Array<{ id: string }>>(Prisma.sql`
         SELECT id::text FROM ad_accounts WHERE platform = ${platform}::"Platform" AND replace(external_id, '-', '') = ${externalId.replace(/-/g, '')}`),
     );
-    if (!h) throw new Error(`Hesap açıldı (${externalId}) ama keşifte görünmedi; Ayarlar › Platform bağlantıları’ndan "Hesapları yenile" deyip elle ata.`);
+    if (!h) throw new Error(`Hesap açıldı (${externalId}) ama keşifte görünmedi; ${PANEL_YERLERI.platformBaglantilari}’ndan "Hesapları yenile" deyip elle ata.`);
     await this.baglantilar.assignAdAccount(ctx, h.id, clientId, meta);
   }
 
@@ -603,7 +604,7 @@ export class KurulumService {
       await ads.davetEt(secim.mccId, no);
       await this.yaz(ctx, clientId, { google_mcc_id: secim.mccId });
       await this.denetim(ctx, clientId, 'google_davet', { mcc: secim.mccId, musteri: no }, meta);
-      return `Davet gönderildi (${secim.musteriNo}). Şirket Google Ads › Yönetici hesaplar’dan kabul edince Ayarlar › Platform bağlantıları’nda "Hesapları yenile" deyip hesabı burada seç.`;
+      return `Davet gönderildi (${secim.musteriNo}). Şirket Google Ads › Yönetici hesaplar’dan kabul edince ${PANEL_YERLERI.platformBaglantilari}’nda "Hesapları yenile" deyip hesabı burada seç.`;
     }
     const onceki = b.satir?.googleAcilanHesap;
     if (onceki) {
@@ -694,7 +695,7 @@ export class KurulumService {
 
   private async mulk(ctx: TenantContext, clientId: string, b: Baglam, secim: Extract<KurulumIstegi, { kod: 'ga4_mulk' }>['secim'] | 'oto'): Promise<string> {
     if (b.satir?.ga4OlcumKimligi && secim === 'oto') return `${b.satir.ga4OlcumKimligi} zaten kurulu.`;
-    if (!b.site) throw new KullaniciGerekli('Web akışı site adresi istiyor; Workspace bilgileri’nden gir.');
+    if (!b.site) throw new KullaniciGerekli(`Web akışı site adresi istiyor; ${PANEL_YERLERI.workspaceBilgileri}’nden gir.`);
     const ga = new Ga4Istemcisi(await this.googleOlcumTokeni(b));
     // Önceki denemede açılmış ama akışı kurulamamış mülk YENİDEN AÇILMAZ (Ajan 4, Ö8).
     let mulkId: string | null = secim === 'oto' ? (b.satir?.ga4MulkId ?? null) : null;

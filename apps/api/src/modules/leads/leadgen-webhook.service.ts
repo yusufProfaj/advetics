@@ -1,3 +1,4 @@
+import { PANEL_YERLERI } from '@advetics/shared';
 import { LEAD_KIMLIGI_SAYI } from '../geri-besleme/geri-besleme-uyari';
 import { Inject, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { createHmac, timingSafeEqual } from 'node:crypto';
@@ -166,8 +167,8 @@ export class LeadgenWebhookService {
         if (profile.clientId === null) {
           this.logger.error(
             `Leadgen bildirimi ATANMAMIŞ sayfadan: ${pageId} (${profile.id}) — ` +
-              `kayıt ${v.leadgen_id} yazılamadı. Sayfayı Platform Bağlantıları ` +
-              `ekranından bir workspace’e ata; ardından form mutabakatı geçmişi toplar.`,
+              `kayıt ${v.leadgen_id} yazılamadı. Sayfayı ${PANEL_YERLERI.kurulum}’da ` +
+              `bir workspace’e ata; ardından form mutabakatı geçmişi toplar.`,
           );
           skipped++;
           continue;

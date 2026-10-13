@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
+  PANEL_YERLERI,
   imzaTemizle,
   nihaiAlicilar,
   raporDosyaAdi,
@@ -85,7 +86,7 @@ export class RaporGonderService {
     const gonderen = await this.gonderen(ctx);
     if (!gonderen) {
       throw new BadRequestException(
-        'Önce kendi e-posta ayarlarını kaydet (Ayarlar → E-posta Ayarları).',
+        `Önce kendi e-posta ayarlarını kaydet (${PANEL_YERLERI.hesabimEposta}).`,
       );
     }
     if (gonderen.verified_at === null) {
@@ -299,7 +300,7 @@ export class RaporGonderService {
     if (!gonderen) {
       throw new BadRequestException(
         'Planı kuran kullanıcının e-posta kimliği tanımlı değil. ' +
-          'Ayarlar → E-posta Ayarları ekranından kurulmalı.',
+          `${PANEL_YERLERI.hesabimEposta} ekranından kurulmalı.`,
       );
     }
     if (gonderen.verified_at === null) {
@@ -310,7 +311,7 @@ export class RaporGonderService {
        */
       throw new BadRequestException(
         `${gonderen.from_email} adresinin doğrulaması düşmüş. ` +
-          'Ayarlar → E-posta Ayarları ekranından kendine test maili gönder.',
+          `${PANEL_YERLERI.hesabimEposta} ekranından kendine test maili gönder.`,
       );
     }
 
@@ -438,15 +439,15 @@ export class RaporGonderService {
     if (!gonderen) {
       throw new BadRequestException(
         p.yalnizKendine
-          ? 'Önce kendi e-posta ayarlarını kaydet (Ayarlar → E-posta Ayarları).'
-          : 'Planı kuran kullanıcının e-posta kimliği tanımlı değil. Ayarlar → E-posta Ayarları ekranından kurulmalı.',
+          ? `Önce kendi e-posta ayarlarını kaydet (${PANEL_YERLERI.hesabimEposta}).`
+          : `Planı kuran kullanıcının e-posta kimliği tanımlı değil. ${PANEL_YERLERI.hesabimEposta} ekranından kurulmalı.`,
       );
     }
     if (gonderen.verified_at === null) {
       // Planlı rapordaki kuralın aynısı: BAŞKA BİR GÖNDERİCİYE DÜŞÜLMÜYOR.
       throw new BadRequestException(
         `${gonderen.from_email} adresinin doğrulaması düşmüş. ` +
-          'Ayarlar → E-posta Ayarları ekranından kendine test maili gönder.',
+          `${PANEL_YERLERI.hesabimEposta} ekranından kendine test maili gönder.`,
       );
     }
     const alicilar = p.yalnizKendine

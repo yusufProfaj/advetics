@@ -1,4 +1,5 @@
 import {
+  PANEL_YERLERI,
   advancedDefaultsFor,
   type AdvancedIssue,
   type AdvancedSettings,
@@ -227,7 +228,7 @@ export function validateAdvanced(
       field: 'leadForm',
       message:
         'Anlık form optimizasyonu seçildi ama forma bağlanmadı. ' +
-        'Kütüphane > Formlar bölümünden bir form seç.',
+        `${PANEL_YERLERI.formlar} bölümünden bir form seç.`,
     });
   }
 

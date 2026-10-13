@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { RehberAmacKodu } from '../reklam/rehber/amaclar';
+import { PANEL_YERLERI } from '../panel/adresler';
 
 /**
  * ═══ ÖLÇÜM KURULUMU — SÖZLEŞME (docs/olcum/MIMARI.md) ═══
@@ -381,7 +382,7 @@ export function enUygunOneri(g: OlcumGirdisi, satirlar: readonly OlcumSatiri[]):
       baslik: g.site.durum === 'adres_yok' ? 'Site adresi girilmemiş' : 'Site okunamadı',
       metin:
         g.site.durum === 'adres_yok'
-          ? "Sitede hangi etiketlerin olduğunu görebilmemiz için Workspace ayarları'na site adresini yaz."
+          ? `Sitede hangi etiketlerin olduğunu görebilmemiz için ${PANEL_YERLERI.workspaceBilgileri} › İletişim ve firma kartına site adresini yaz.`
           : `Siteni tarayamadık: ${g.site.hata ?? 'bilinmeyen hata'}. Adresi kontrol et ya da biraz sonra yeniden tara.`,
       adimlar: [],
       eylem: { tur: 'marka_merkezi', bolum: 'ayarlar' },

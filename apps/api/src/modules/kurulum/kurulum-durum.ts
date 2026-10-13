@@ -1,5 +1,6 @@
 import {
   KURULUM_ADIM_ADI,
+  PANEL_YERLERI,
   KURULUM_ADIM_GRUBU,
   KURULUM_ADIM_KODLARI,
   type DonusumTetigi,
@@ -99,7 +100,7 @@ export function kurulumAdimlari(a: KurulumAnlik): KurulumAdimi[] {
         : ({
             durum: 'eksik',
             baslik: 'Atanmadı',
-            neden: a.metaBaglanti ? 'Mevcut bir hesabı seç ya da Business Manager altında yeni hesap aç.' : 'Önce Meta bağlantısı kurulmalı (Ayarlar › Platform bağlantıları).',
+            neden: a.metaBaglanti ? 'Mevcut bir hesabı seç ya da Business Manager altında yeni hesap aç.' : `Önce Meta bağlantısı kurulmalı (${PANEL_YERLERI.platformBaglantilari}).`,
             eylem: a.metaBaglanti ? { tur: 'secim', etiket: 'Hesap seç ya da aç' } : null,
             otomatik: false,
           }),
@@ -123,7 +124,7 @@ export function kurulumAdimlari(a: KurulumAnlik): KurulumAdimi[] {
         : {
             durum: 'eksik',
             baslik: 'Atanmadı',
-            neden: a.havuzSayfaSayisi > 0 ? `Bağlantıda ${a.havuzSayfaSayisi} sayfa var; bu projeninkini seç.` : 'Sayfa API ile açılamıyor: sayfayı Facebook’ta açıp Business Manager’a ekle, sonra Ayarlar › Platform bağlantıları’ndan hesapları yenile.',
+            neden: a.havuzSayfaSayisi > 0 ? `Bağlantıda ${a.havuzSayfaSayisi} sayfa var; bu projeninkini seç.` : `Sayfa API ile açılamıyor: sayfayı Facebook’ta açıp Business Manager’a ekle, sonra ${PANEL_YERLERI.platformBaglantilari}’ndan hesapları yenile.`,
             eylem: a.havuzSayfaSayisi > 0 ? { tur: 'secim', etiket: 'Sayfa seç' } : null,
             // ASLA OTOMATİK: havuzdaki tek sayfa büyük olasılıkla BAŞKA bir
             // müşterinin; atamak reklamı başka markanın sayfasından çıkarırdı
@@ -136,7 +137,7 @@ export function kurulumAdimlari(a: KurulumAnlik): KurulumAdimi[] {
         : ({
             durum: 'eksik',
             baslik: 'Atanmadı',
-            neden: a.googleBaglanti ? 'Mevcut hesabı seç, yönetici hesap altında yeni aç ya da şirketin hesabına bağlantı daveti gönder.' : 'Önce Google bağlantısı kurulmalı (Ayarlar › Platform bağlantıları).',
+            neden: a.googleBaglanti ? 'Mevcut hesabı seç, yönetici hesap altında yeni aç ya da şirketin hesabına bağlantı daveti gönder.' : `Önce Google bağlantısı kurulmalı (${PANEL_YERLERI.platformBaglantilari}).`,
             eylem: a.googleBaglanti ? { tur: 'secim', etiket: 'Hesap seç ya da aç' } : null,
             otomatik: false,
           }),
@@ -153,7 +154,7 @@ export function kurulumAdimlari(a: KurulumAnlik): KurulumAdimi[] {
       };
     },
     google_izin: () => {
-      if (!a.googleBaglanti) return { durum: 'eksik', baslik: 'Google bağlantısı yok', neden: 'Önce Google bağlantısı kurulmalı (Ayarlar › Platform bağlantıları).', eylem: null, otomatik: false };
+      if (!a.googleBaglanti) return { durum: 'eksik', baslik: 'Google bağlantısı yok', neden: `Önce Google bağlantısı kurulmalı (${PANEL_YERLERI.platformBaglantilari}).`, eylem: null, otomatik: false };
       return izinVar
         ? { durum: 'tamam', baslik: 'İzin verildi', neden: 'Tag Manager ve Analytics’e yazılabiliyor.', eylem: null, otomatik: false }
         : {
@@ -172,7 +173,7 @@ export function kurulumAdimlari(a: KurulumAnlik): KurulumAdimi[] {
     ga4_mulk: () => {
       if (s?.ga4OlcumKimligi) return { durum: 'tamam', baslik: `${s.ga4OlcumKimligi} · mülk ${s.ga4MulkId ?? '?'}`, neden: 'Bu projenin Analytics mülkü ve web akışı.', eylem: null, otomatik: false };
       if (!izinVar) return izinYok;
-      if (!a.site) return { durum: 'eksik', baslik: 'Site adresi yok', neden: 'Web akışı site adresi istiyor; Workspace bilgileri’nden gir.', eylem: null, otomatik: false };
+      if (!a.site) return { durum: 'eksik', baslik: 'Site adresi yok', neden: `Web akışı site adresi istiyor; ${PANEL_YERLERI.workspaceBilgileri}’nden gir.`, eylem: null, otomatik: false };
       return { durum: 'eksik', baslik: 'Kurulmadı', neden: 'Sitede erişebildiğimiz bir mülk varsa o kullanılır, yoksa yeni açılır.', eylem: { tur: 'secim', etiket: 'Mülk seç ya da aç' }, otomatik: true };
     },
     meta_piksel: () => {
@@ -227,7 +228,7 @@ export function kurulumAdimlari(a: KurulumAnlik): KurulumAdimi[] {
     },
     site_kodu: () => {
       if (!s?.gtmKimligi) return { durum: 'atlandi', baslik: 'Önce konteyner', neden: 'Siteye eklenecek kod konteynerden geliyor.', eylem: null, otomatik: false };
-      if (!a.site) return { durum: 'eksik', baslik: 'Site adresi yok', neden: 'Workspace bilgileri’nden site adresini gir.', eylem: null, otomatik: false };
+      if (!a.site) return { durum: 'eksik', baslik: 'Site adresi yok', neden: `${PANEL_YERLERI.workspaceBilgileri}’nden site adresini gir.`, eylem: null, otomatik: false };
       const k = s.siteKodu;
       if (k?.gorundu) return { durum: 'tamam', baslik: `Sitede görüldü`, neden: `${s.gtmKimligi} sitede yükleniyor (kontrol: ${tarih(k.zaman)}).`, eylem: null, otomatik: false };
       return {

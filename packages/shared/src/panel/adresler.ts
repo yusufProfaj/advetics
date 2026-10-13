@@ -367,3 +367,32 @@ export function veriDurumuAdresi(musteri: string | null | undefined): string {
 export function platformBaglantilariAdresi(): string {
   return ayarlarAdresi('baglantilar', { capa: 'kanallar' });
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Kullanıcıya yazılan YER ADLARI — "şuraya git" cümleleri
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ayarlarSekmeAdi = (kod: AyarlarSekmeKodu): string => AYARLAR_SEKMELERI.find((s) => s.kod === kod)!.ad;
+const mmBolumAdi = (kod: MarkaMerkeziBolumKodu): string => MARKA_MERKEZI_BOLUMLERI.find((b) => b.kod === kod)!.ad;
+const varlikSekmeAdi = (kod: VarliklarSekmeKodu): string => VARLIKLAR_SEKMELERI.find((s) => s.kod === kod)!.ad;
+
+/**
+ * ═══ EKRAN YERLERİ — ADRESLE AYNI SÖZLEŞMEDEN TÜREYEN AD ═══
+ *
+ * API hata ve uyarı cümlelerinde kullanıcıyı bir ekrana gönderiyor ("Platform
+ * Bağlantıları ekranından ata", "Workspace ayarları'ndan gir", "Kütüphane >
+ * Formlar"). Sekmeler yeniden adlandırılınca bu cümleler ELLE yazıldıkları için
+ * eski adda kaldı ve kullanıcıyı artık var olmayan bir ekrana gönderdi —
+ * hata yok, yalnız yanlış bir cümle. Ad sekmenin `ad` alanından türüyor; bir
+ * sekme yeniden adlandırılırsa cümle de değişir.
+ *
+ * `›` panelin kırıntı ayracı (Marka Merkezi başlığı, MIMARI § 5).
+ */
+export const PANEL_YERLERI = {
+  platformBaglantilari: `Ayarlar › ${ayarlarSekmeAdi('baglantilar')}`,
+  hesabimEposta: `Ayarlar › ${ayarlarSekmeAdi('hesabim')} › E-posta`,
+  kurulum: `Marka Merkezi › ${mmBolumAdi('kurulum')}`,
+  workspaceBilgileri: `Marka Merkezi › ${mmBolumAdi('workspace')}`,
+  logo: `Marka Merkezi › ${mmBolumAdi('marka')} › Logo`,
+  formlar: `Varlıklar › ${varlikSekmeAdi('formlar')}`,
+} as const;

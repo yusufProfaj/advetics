@@ -1,4 +1,6 @@
+import Link from 'next/link';
 import type { ClientSetupResult } from '@advetics/shared';
+import { markaMerkeziAdresi, PANEL_YERLERI } from '@/lib/panel-adresleri';
 import { atamaBildirimi } from '@/lib/atama-bildirimi';
 import { formatNumber } from '@/lib/format';
 
@@ -43,8 +45,8 @@ export function KurulumSonucu({
 
       {boostsuz > 0 && (
         <p className="rounded-lg bg-warn-soft px-3.5 py-2.5 text-sm text-warn-strong ring-1 ring-inset ring-warn/30">
-          {boostsuz} sayfaya boost hesabı bağlanmadı. Akıllı Boost bu sayfalarda çalışmaz;
-          Şirketler ekranındaki workspace kartından bağlayabilirsin.
+          {boostsuz} sayfaya boost hesabı bağlanmadı. Akıllı Boost bu sayfalarda çalışmaz;{' '}
+          <KurulumBaglantisi clientId={sonuc.clientId} capa="kanallar" /> bölümünden bağlayabilirsin.
         </p>
       )}
 
@@ -103,12 +105,27 @@ export function KurulumSonucu({
             ))}
           </ul>
           <p className="mt-1.5 text-xs text-ink-muted">
-            Workspace kuruldu. Eksikleri Şirketler ekranındaki workspace kartından
+            Workspace kuruldu. Eksikleri <KurulumBaglantisi clientId={sonuc.clientId} /> bölümünden
             tamamlayabilirsin.
           </p>
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * EKSİĞİN EVİ MARKA MERKEZİ › KURULUM (docs/panel-sadelestirme/MIMARI.md).
+ * Burada uzun süre "Şirketler ekranındaki workspace kartından" yazıyordu;
+ * o pencere kaldırıldı ve hesap/sayfa/boost ataması tek yerde: yeni
+ * workspace'in Kurulum'u. Adres ve ad sözleşmeden (`markaMerkeziAdresi`,
+ * `PANEL_YERLERI`), elle değil.
+ */
+function KurulumBaglantisi({ clientId, capa }: { clientId: string; capa?: 'kanallar' }) {
+  return (
+    <Link href={markaMerkeziAdresi('kurulum', clientId, capa)} className="font-semibold underline-offset-2 hover:underline">
+      {PANEL_YERLERI.kurulum}
+    </Link>
   );
 }
 

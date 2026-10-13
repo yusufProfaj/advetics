@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
+  PANEL_YERLERI,
   boostNameWithLabel,
   CONVERSION_BUCKETS,
   restrictTargetingFor,
@@ -3113,7 +3114,7 @@ export class MetaProvider implements IAdPlatformProvider {
         throw new PlatformApiError(
           'meta',
           'permanent',
-          'Form reklamı için önce bir form seç: Marka Merkezi › Varlıklar › Formlar’da oluşturup yayınla.',
+          `Form reklamı için önce bir form seç: ${PANEL_YERLERI.formlar}’da oluşturup yayınla.`,
         );
       }
 

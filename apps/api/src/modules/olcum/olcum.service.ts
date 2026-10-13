@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
+  PANEL_YERLERI,
   analyticsBagliMi,
   altyapiBul,
   GOOGLE_KATEGORI_TURU,
@@ -55,7 +56,7 @@ export async function siteTara(adres: string | null, oku: SiteOkuyucu): Promise<
   try {
     new URL(tam);
   } catch {
-    return { durum: 'ulasilamadi', adres: null, hata: `Site adresi geçerli değil: "${adres.trim()}". Workspace ayarları'ndan düzelt.`, ...bos };
+    return { durum: 'ulasilamadi', adres: null, hata: `Site adresi geçerli değil: "${adres.trim()}". ${PANEL_YERLERI.workspaceBilgileri}’nden düzelt.`, ...bos };
   }
   const ana = await oku(tam);
   if (!ana.ok) return { durum: 'ulasilamadi', adres: tam, hata: ana.sebep, ...bos };

@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
+  PANEL_YERLERI,
   KAYNAK_TANIMI,
   KAYNAK_TURLERI,
   TAKIP_ACIGI,
@@ -229,7 +230,7 @@ export class VeriKaynagiService {
   }
 
   private async googleTokeni(g: GoogleBaglami): Promise<string> {
-    if (!g.baglanti) throw new BadRequestException('Google bağlantısı yok. Önce Bağlantılar’dan Google hesabını bağla.');
+    if (!g.baglanti) throw new BadRequestException(`Google bağlantısı yok. Önce ${PANEL_YERLERI.platformBaglantilari}’ndan Google hesabını bağla.`);
     if (eksikKaynakIzni('ga4', g.baglanti.scopes)) {
       throw new BadRequestException('Google bağlantısında Analytics okuma izni yok. Önce "İzni ver".');
     }
@@ -467,7 +468,7 @@ export class VeriKaynagiService {
         t.$queryRaw<Array<{ dis_kimlik: string }>>(Prisma.sql`
           SELECT dis_kimlik FROM veri_kaynaklari WHERE client_id = ${clientId}::uuid AND tur = 'ga4' AND durum <> 'kaldirildi'`),
       );
-      if (var_) return var_.dis_kimlik === mulkId ? null : `Okunan Analytics mülkü (${var_.dis_kimlik}) kurulumdakinden farklı; Bağlantılar’da seç.`;
+      if (var_) return var_.dis_kimlik === mulkId ? null : `Okunan Analytics mülkü (${var_.dis_kimlik}) kurulumdakinden farklı; ${PANEL_YERLERI.kurulum} › Dönüşüm ölçümü adımında kontrol et.`;
       if (!g.baglanti || eksikKaynakIzni('ga4', g.baglanti.scopes)) return 'Analytics okuması bağlanmadı: Google bağlantısında okuma izni yok.';
       await this.kaydet(ctx, clientId, g, { mulkId, ad: mulkId, saatDilimi: null, paraBirimi: null }, null, {});
       return 'Analytics okuması bağlandı.';

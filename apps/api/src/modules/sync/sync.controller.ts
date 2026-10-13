@@ -13,6 +13,7 @@ import {
   Req,
 } from '@nestjs/common';
 import {
+  PANEL_YERLERI,
   backfillSchema,
   bulkRefreshSchema,
   refreshRangeSchema,
@@ -508,8 +509,8 @@ export class SyncController {
     const profiles = await this.enabledProfiles(ctx);
     if (accounts.length === 0 && profiles.length === 0) {
       throw new BadRequestException(
-        'Bu workspace’te izlemeye alınmış hesap ya da sayfa yok. Platform Bağlantıları ' +
-          've Workspace’ler ekranından izlemeye al.',
+        `Bu workspace’te izlemeye alınmış hesap ya da sayfa yok. ${PANEL_YERLERI.kurulum}’da ` +
+          'izlemeye al.',
       );
     }
 
@@ -764,7 +765,7 @@ export class SyncController {
     const accounts = await this.enabledAccounts(ctx);
     if (accounts.length === 0) {
       throw new BadRequestException(
-        'Bu workspace’te izlemeye alınmış hesap yok. Platform Bağlantıları ekranından hesap seçin.',
+        `Bu workspace’te izlemeye alınmış hesap yok. ${PANEL_YERLERI.kurulum}’da hesabı izlemeye alın.`,
       );
     }
 
@@ -920,7 +921,7 @@ export class SyncController {
 
     if (hesaplar.length === 0) {
       throw new BadRequestException(
-        'Seçilen workspace’lerde izlemeye alınmış hesap yok. Platform Bağlantıları ekranından izlemeye alın.',
+        `Seçilen workspace’lerde izlemeye alınmış hesap yok. Her workspace’in ${PANEL_YERLERI.kurulum} bölümünden izlemeye alın.`,
       );
     }
 

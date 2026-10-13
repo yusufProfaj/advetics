@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
+  PANEL_YERLERI,
   LEAD_STATUSES,
   type LeadField,
   type LeadListResult,
@@ -167,7 +168,7 @@ export class LeadsService {
     if (!durum || durum.sayfa === 0) {
       return (
         'Bu workspace’e atanmış bir Facebook sayfası yok. Anlık form kayıtları ' +
-        'sayfanın altında yaşıyor; Platform Bağlantıları ekranından sayfayı bu ' +
+        `sayfanın altında yaşıyor; ${PANEL_YERLERI.kurulum}’da sayfayı bu ` +
         'workspace’e ata.'
       );
     }

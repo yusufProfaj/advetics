@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
+  PANEL_YERLERI,
   ACCEPTED_MIME,
   AD_TEXT_FIELDS,
   ASSET_RATIOS,
@@ -665,7 +666,7 @@ export class AdBuilderService {
     // düzeltmek değil, sayfayı müşteriye atamak.
     if (profile.client_id === null) {
       throw new BadRequestException(
-        'Bu sayfa henüz bir workspace’e atanmamış. Platform Bağlantıları ekranından ata.',
+        `Bu sayfa henüz bir workspace’e atanmamış. ${PANEL_YERLERI.kurulum}’da ata.`,
       );
     }
     if (profile.client_id !== input.clientId) {

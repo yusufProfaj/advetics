@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { CANLI_BOOST_SQL } from './canli-boost';
-import { boostAssetName, MEDIA_TYPE_LABELS } from '@advetics/shared';
+import { PANEL_YERLERI, boostAssetName, MEDIA_TYPE_LABELS } from '@advetics/shared';
 import type {
   BoostablePostList,
   BoostablePostQuery,
@@ -321,7 +321,7 @@ export class BoostsService {
     }
     if (p.client_id === null) {
       throw new BadRequestException(
-        'Bu sayfa henüz bir workspace’e atanmamış. Platform Bağlantıları ekranından ata — ' +
+        `Bu sayfa henüz bir workspace’e atanmamış. ${PANEL_YERLERI.kurulum}’da ata — ` +
           'atanmamış sayfanın organik gönderileri çekilmiyor, dolayısıyla boost adayı da oluşmaz.',
       );
     }

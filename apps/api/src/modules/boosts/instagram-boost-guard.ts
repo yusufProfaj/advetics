@@ -1,3 +1,4 @@
+import { PANEL_YERLERI } from '@advetics/shared';
 /**
  * INSTAGRAM BOOST — artık destekleniyor, ama iki kısıtla.
  *
@@ -51,7 +52,7 @@ export function isInstagramProfile(profileType: string): boolean {
  */
 export const INSTAGRAM_PARENT_PAGE_MISSING =
   'Bu Instagram hesabının bağlı olduğu Facebook sayfası kayıtlarda yok. ' +
-  'Platform Bağlantıları ekranından "Hesapları yenile" çalıştır — Meta’da her ' +
+  `${PANEL_YERLERI.platformBaglantilari}’ndan "Hesapları yenile" çalıştır — Meta’da her ` +
   'reklam bir Facebook sayfasına bağlı ve o bilgi yalnızca yenilemeyle geliyor.';
 
 /**

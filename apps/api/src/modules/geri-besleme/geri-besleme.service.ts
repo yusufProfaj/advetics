@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
+  PANEL_YERLERI,
   GERI_BESLEME_AYAR_DURUM_ADI,
   GERI_BESLEME_OLAY_DURUMLARI,
   GERI_BESLEME_ULASAN_DURUMLAR,
@@ -249,7 +250,7 @@ export class GeriBeslemeService {
     if (hesaplar.length === 0) {
       return {
         satirlar: [],
-        not: 'Bu workspace’e Meta reklam hesabı atanmamış. Önce Marka Merkezi › Bağlantılar’dan hesap ata.',
+        not: `Bu workspace’e Meta reklam hesabı atanmamış. Önce ${PANEL_YERLERI.kurulum}’da hesap ata.`,
         okunanHesap: 0,
       };
     }
@@ -603,7 +604,7 @@ function ayarNedeni(durum: GeriBeslemeAyari['durum'], a: AyarSatiri | null, bagl
       if (!a?.dataset_id) return 'Veri kümesi (piksel) seçilmemiş.';
       // Gönderim işi bağlantıyı boşalttıysa sebebi (Ö-2) ayar hatasında.
       if (!a.baglanti_id) return a.son_ayar_hatasi ?? 'Meta bağlantısı bulunamadı; ayarı yeniden kaydet.';
-      return baglantiGecerli ? GERI_BESLEME_AYAR_DURUM_ADI[durum] : 'Meta bağlantısı yeniden yetki istiyor. Bağlantıyı Platform Bağlantıları ekranında yeniden yetkilendir; bekleyen sonuçlar kendiliğinden gönderilir.';
+      return baglantiGecerli ? GERI_BESLEME_AYAR_DURUM_ADI[durum] : `Meta bağlantısı yeniden yetki istiyor. Bağlantıyı ${PANEL_YERLERI.platformBaglantilari}’nda yeniden yetkilendir; bekleyen sonuçlar kendiliğinden gönderilir.`;
     case 'hata':
       return a?.son_ayar_hatasi ?? GERI_BESLEME_AYAR_DURUM_ADI[durum];
     case 'bekliyor':

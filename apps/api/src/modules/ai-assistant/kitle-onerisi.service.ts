@@ -1,3 +1,4 @@
+import { PANEL_YERLERI } from '@advetics/shared';
 import {
   BadRequestException,
   Inject,
@@ -325,7 +326,7 @@ export class KitleOnerisiService {
     if (!h) {
       throw new BadRequestException(
         'Bu workspace’e izlenen bir Meta reklam hesabı atanmamış. Öneri konum ve ilgi alanlarını ' +
-          'Meta’nın aramasıyla çözüyor; önce Bağlantılar’dan hesap ata.',
+          `Meta’nın aramasıyla çözüyor; önce ${PANEL_YERLERI.kurulum}’da hesap ata.`,
       );
     }
     return h;

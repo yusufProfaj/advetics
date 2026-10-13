@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import {
+  PANEL_YERLERI,
   GA4_KOTA,
   eksikKaynakIzni,
   ga4KotaIzni,
@@ -139,7 +140,7 @@ export function kaynakBugun(saatDilimi: string | null, simdi: Date): string {
  * alır ve kotadan yer; cevap zaten belli.
  */
 function baglantiEngeli(k: KaynakSatiri): { durum: 'izin_eksik'; neden: string } | null {
-  if (!k.connection_id || k.granted_scopes === null) return { durum: 'izin_eksik', neden: 'Google bağlantısı yok ya da kaldırılmış. Bağlantılar’dan Google’ı yeniden bağla.' };
+  if (!k.connection_id || k.granted_scopes === null) return { durum: 'izin_eksik', neden: `Google bağlantısı yok ya da kaldırılmış. ${PANEL_YERLERI.platformBaglantilari}’ndan Google’ı yeniden bağla.` };
   if (k.baglanti_durumu !== 'active') return { durum: 'izin_eksik', neden: 'Google bağlantısının yeniden yetkilendirilmesi gerekiyor.' };
   const eksik = eksikKaynakIzni(k.tur, k.granted_scopes);
   if (eksik) return { durum: 'izin_eksik', neden: 'Google bağlantısında Analytics okuma izni yok. "İzni ver" ile ekle; Google Ads bağlantısı kopmaz.' };

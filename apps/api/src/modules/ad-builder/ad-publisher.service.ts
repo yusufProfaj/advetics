@@ -1,3 +1,4 @@
+import { PANEL_YERLERI } from '@advetics/shared';
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { AdDraftRecord, AssetRatio, TenantContext } from '@advetics/shared';
@@ -309,7 +310,7 @@ export class AdPublisherService {
       );
       if (!form?.external_form_id) {
         throw new BadRequestException(
-          'Seçilen form henüz Meta’da yayınlanmamış. Kütüphane > Formlar bölümünden yayınla.',
+          `Seçilen form henüz Meta’da yayınlanmamış. ${PANEL_YERLERI.formlar} bölümünden yayınla.`,
         );
       }
       leadFormExternalId = form.external_form_id;

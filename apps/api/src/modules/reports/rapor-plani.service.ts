@@ -1,6 +1,7 @@
 import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
+  PANEL_YERLERI,
   OZET,
   OZET_PENCERE_ANAHTARI,
   bugunUtc,
@@ -264,7 +265,7 @@ export class RaporPlaniService {
     );
     if (!gonderen) {
       throw new BadRequestException(
-        'Önce kendi e-posta ayarlarını kaydet (Ayarlar → E-posta Ayarları). ' +
+        `Önce kendi e-posta ayarlarını kaydet (${PANEL_YERLERI.hesabimEposta}). ` +
           'Planlanan rapor senin adresinden gidiyor.',
       );
     }

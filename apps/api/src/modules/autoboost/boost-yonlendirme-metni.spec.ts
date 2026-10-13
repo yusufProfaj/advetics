@@ -40,9 +40,11 @@ const ESKI_YERLER = ['Bilgi Bankası', 'Bilgi Bankasi', 'Kütüphane', 'bilgi-ba
  * kadar logo Bilgi Bankası'nın Logo sekmesindeydi ve bu satır muaftı; evi
  * artık Marka Merkezi › Marka (docs/panel-sadelestirme/MIMARI.md § 4) ve
  * satır yasak bir dize taşımıyor. Muafiyet kaldırılmadı, satıra çapalı kaldı:
- * eski ad bir gün geri yazılırsa aşağıdaki "biricik" testi düşer.
+ * eski ad bir gün geri yazılırsa aşağıdaki "biricik" testi düşer. Ad artık
+ * sözleşmeden (`PANEL_YERLERI.logo`, `eski-ekran-adlari.spec.ts`), elle
+ * kopya değil.
  */
-const MUAF_SATIR = "export const LOGO_YERI = 'Marka Merkezi › Marka › Logo';";
+const MUAF_SATIR = 'export const LOGO_YERI = PANEL_YERLERI.logo;';
 
 /**
  * Yorumları söker.
