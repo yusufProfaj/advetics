@@ -1806,7 +1806,12 @@ export class MetaProvider implements IAdPlatformProvider {
     let url: string | null = ilk.toString();
     let toplam = 0;
     try {
-      for (let i = 0; i < PIKSEL_SAYFA_SINIRI && url; i++) {
+      // İSTATİSTİK sınırı, LİSTE sınırı DEĞİL (Ajan 4): sayım artık ilk satın
+      // almada durmuyor, 7 günün saatlik kovalarının TAMAMINI geziyor (ölçüldü:
+      // ~50 kova/sayfa + sonda boş sayfa = 5 sayfa). Liste sınırı (5) tam
+      // kıyıda; aşılınca sonuç `null` olur ve en çok satan mağazada sayı
+      // "okunamadı" görünür, hata yok.
+      for (let i = 0; i < PIKSEL_ISTATISTIK_SAYFA_SINIRI && url; i++) {
         const res: PlatformResponse<unknown> = await platformFetch<unknown>('meta', url, auth, parseMetaRateLimit);
         const c = pikselSatinAlmaCoz(res.data);
         if (c.sayi === null) return null;
@@ -3705,7 +3710,11 @@ export function pikselSatinAlmaCoz(govde: unknown): { bulundu: boolean | null; s
     if (!Array.isArray(ic)) return bilinmiyor;
     for (const s of ic) {
       const o = s as { value?: unknown; count?: unknown } | null;
-      if (typeof o?.value !== 'string' || o.value.toLowerCase() !== 'purchase') continue;
+      // Olay ADI olmayan satır tanınmayan biçim (ölçülen biçimde `value` her
+      // zaman dizge): onu "satın alma değil" sayıp atlamak sıfır üretir ve
+      // sıfır yayını onaya bağlıyor (Ajan 4).
+      if (typeof o?.value !== 'string') return bilinmiyor;
+      if (o.value.toLowerCase() !== 'purchase') continue;
       const n = typeof o.count === 'number' ? o.count : typeof o.count === 'string' && o.count.trim() !== '' ? Number(o.count) : NaN;
       if (!Number.isFinite(n) || n < 0) return bilinmiyor;
       sayi += n;

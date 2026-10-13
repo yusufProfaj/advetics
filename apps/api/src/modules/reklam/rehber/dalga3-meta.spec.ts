@@ -342,6 +342,8 @@ describe('piksel okuması — saf çözümleyiciler', () => {
     expect(pikselSatinAlmaCoz({ data: [{ data: [{ value: 'Purchase', count: 'abc' }] }] }).sayi).toBeNull();
     expect(pikselSatinAlmaCoz({ data: [{ data: [{ value: 'Purchase', count: -1 }] }] }).sayi).toBeNull();
     expect(pikselSatinAlmaCoz({ data: [{ data: [{ value: 'Purchase' }] }] }).sayi).toBeNull();
+    // Ajan 4: olay adı taşımayan satır "satın alma değil" DEĞİL, tanınmayan biçim.
+    expect(pikselSatinAlmaCoz({ data: [{ data: [{ event: 'Purchase', count: 3 }] }] }).sayi).toBeNull();
   });
 
   it('KRİTİK seciliPikselHali: listede yok / hiç çalışmadı / son 7 gün', () => {
@@ -404,6 +406,20 @@ describe('MetaProvider.fetchAdPixels', () => {
 
     globalThis.fetch = vi.fn(async () => yanit({ error: { message: 'izin yok', code: 200 } }, 403)) as unknown as typeof fetch;
     await expect(provider().fetchAdPixels({ adAccountPath: 'act_9', accessToken: 'T' })).rejects.toBeTruthy();
+  });
+
+  it('KRİTİK (Ajan 4): satın alma sayımı İSTATİSTİK sayfa sınırıyla gezer — 7 dolu sayfa okunur, sayı kaybolmaz', async () => {
+    // 168 saatlik kova ~50/sayfa: yoğun sitede 5 sayfayı aşabilir. Liste
+    // sınırıyla (5) gezilseydi sonuç null ("okunamadı") olurdu.
+    let n = 0;
+    globalThis.fetch = vi.fn(async (u: string) => {
+      if (u.includes('/adspixels')) return yanit({ data: [{ id: '1', name: 'A', last_fired_time: '2026-10-10T09:00:00+0000' }] });
+      n++;
+      return yanit({ data: [{ start_time: 't', data: [{ value: 'Purchase', count: 1 }] }], ...(n < 7 ? { paging: { next: `https://graph.facebook.com/v25.0/1/stats?sayfa=${n}` } } : {}) });
+    }) as unknown as typeof fetch;
+    const r = await provider().fetchAdPixels({ adAccountPath: 'act_9', accessToken: 'T', simdi: new Date('2026-10-11T00:00:00Z') });
+    expect(n).toBe(7);
+    expect(r.satirlar[0]?.satinAlma7GunSayisi).toBe(7);
   });
 
   it('act_ öneksiz hesap reddedilir', async () => {
