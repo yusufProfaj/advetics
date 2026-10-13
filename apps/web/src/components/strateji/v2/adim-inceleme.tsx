@@ -12,7 +12,7 @@ import type { StratejiDetayi, StratejiOnerisi } from '@advetics/shared';
 import { apiFetch } from '@/lib/api';
 import { Dugme } from '@/components/ui/dugme';
 import { okumaHatasi } from '../hesap';
-import { INCELEME_SATIRLARI, incelemeEtiketi, incelemeYuzdesi, type IncelemeSatirHali } from './akis';
+import { INCELEME_SATIRLARI, incelemeAcilisi, incelemeEtiketi, incelemeYuzdesi, type IncelemeSatirHali } from './akis';
 import { SoruBasligi } from './akis-cerceve';
 import { bolumKayitGovdesi, kalemGirdisi } from './hesap';
 import { Bildirim, yaz } from './ortak';
@@ -44,11 +44,16 @@ export function AdimInceleme({
   bittiBildir: (bitti: boolean) => void;
 }) {
   const imza = sihirbazGirdiImzasi(durum, detay.plan);
-  const dahaOnce = detay.kalemler.length > 0 && detay.sihirbaz?.incelenen === imza;
+  // Kayıtlı kampanya varken KENDİLİĞİNDEN koşulmaz (`incelemeAcilisi`):
+  // inceleme kalemlerin tamamını yeniden yazıyor ve Plan'daki düzenlemeleri
+  // soru sormadan silerdi.
+  const acilis = incelemeAcilisi({ kalemSayisi: detay.kalemler.length, kayitliImza: detay.sihirbaz?.incelenen ?? null, imza });
+  const dahaOnce = acilis !== 'kos';
   // AÇILIŞTAKİ hâl sabitlenir: inceleme bitince imza da eşleşiyor ve canlı
   // `dahaOnce`a bakan bir dal, biten kontrol listesini gizleyip yerine
   // "daha önce yapıldı" kutusunu koyardı.
   const [ozetGoster, setOzetGoster] = useState(dahaOnce);
+  const [acilisHali] = useState(acilis);
   const [haller, setHaller] = useState<IncelemeSatirHali[]>(() => INCELEME_SATIRLARI.map(() => ({ tur: 'sirada' })));
   const [genel, setGenel] = useState<{ tur: 'bekliyor' | 'suruyor' | 'bitti' } | { tur: 'hata'; mesaj: string }>({ tur: dahaOnce ? 'bitti' : 'bekliyor' });
   const basladi = useRef(false);
@@ -133,9 +138,15 @@ export function AdimInceleme({
       <SoruBasligi ust="5 / 7 · İnceleme" soru="Hesabını inceliyoruz" aciklama='Önerideki her sayı buradan gelir. Bulamadığımız bir şeyi uydurmayız; "tahmin yok" der, nedenini yazarız.' />
       {ozetGoster ? (
         <div className="max-w-[720px] space-y-3">
-          <Bildirim baslik="Bu girdilerle inceleme yapıldı.">
-            Plan adımındaki düzenlemelerin duruyor. Yeniden incelemek kampanyaları baştan kurar ve düzenlemeleri siler.
-          </Bildirim>
+          {acilisHali === 'sor' ? (
+            <Bildirim baslik="Girdiler son incelemeden sonra değişti.">
+              Kayıtlı kampanyalar önceki girdilere göre kurulu ve düzenlemelerin duruyor. Yeniden incelemek kampanyaları bu girdilerle baştan kurar ve düzenlemeleri siler; incelemeden devam edersen kampanyalar olduğu gibi kalır.
+            </Bildirim>
+          ) : (
+            <Bildirim baslik="Bu girdilerle inceleme yapıldı.">
+              Plan adımındaki düzenlemelerin duruyor. Yeniden incelemek kampanyaları baştan kurar ve düzenlemeleri siler.
+            </Bildirim>
+          )}
           <Dugme ton="ikincil" onClick={() => void kos()}>
             Yeniden incele
           </Dugme>

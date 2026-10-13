@@ -144,8 +144,21 @@ describe('İNCELEME: gerçek okuma, sahte bekleme yok', () => {
   });
   it('KRİTİK: girdiler değişmediyse yeniden koşmuyor (Plan düzenlemeleri ezilmesin)', () => {
     const i = kod('adim-inceleme.tsx');
-    expect(i).toContain('const dahaOnce = detay.kalemler.length > 0 && detay.sihirbaz?.incelenen === imza;');
+    // Karar saf fonksiyonda (`incelemeAcilisi`, akis.spec.ts çalıştırarak sınıyor); burada ÇAĞRILDIĞI.
+    expect(i).toContain("const acilis = incelemeAcilisi({ kalemSayisi: detay.kalemler.length, kayitliImza: detay.sihirbaz?.incelenen ?? null, imza });");
+    expect(i).toContain("const dahaOnce = acilis !== 'kos';");
     expect(i).toMatch(/if \(dahaOnce\) \{\s*bittiBildir\(true\);\s*return;\s*\}/);
+  });
+});
+
+describe('oluşturma: plan ile girdiler AYNI workspace', () => {
+  it('KRİTİK: adresteki workspace planınkiyle uyuşmazsa planın workspace\'ine yönlenir (B\'nin planı A\'nın kapılarıyla düzenlenmez)', () => {
+    const s = kod('page');
+    const i = s.indexOf('if (olusturmaAdimiMi(ekran)) {');
+    const j = s.indexOf('<StratejiSihirbazi', i);
+    expect(i).toBeGreaterThan(-1);
+    expect(j).toBeGreaterThan(i);
+    expect(s.slice(i, j)).toMatch(/if \(detay && detay\.v\.plan\.clientId !== clientId\) \{\s*redirect\(stratejiPanelAdresi\(\{ musteri: detay\.v\.plan\.clientId, plan: detay\.v\.plan\.id, adim: ekran \}\)\);/);
   });
 });
 

@@ -6,6 +6,7 @@ import {
   gecerliAdim,
   hedefDegistir,
   hedefKarti,
+  incelemeAcilisi,
   incelemeYuzdesi,
   kaydiriciAraligi,
   kurulabilirMi,
@@ -99,6 +100,14 @@ describe('2 · bütçe', () => {
 });
 
 describe('5 · inceleme', () => {
+  it('KRİTİK: kayıtlı kampanya varken inceleme KENDİLİĞİNDEN koşmaz (düzenlemeler sorulmadan silinmez)', () => {
+    expect(incelemeAcilisi({ kalemSayisi: 0, kayitliImza: null, imza: 'a' })).toBe('kos');
+    expect(incelemeAcilisi({ kalemSayisi: 0, kayitliImza: 'b', imza: 'a' })).toBe('kos');
+    expect(incelemeAcilisi({ kalemSayisi: 3, kayitliImza: 'a', imza: 'a' })).toBe('ozet');
+    // Girdi değişti ya da sihirbazdan önce açılmış plan (imza yok): SOR.
+    expect(incelemeAcilisi({ kalemSayisi: 3, kayitliImza: 'b', imza: 'a' })).toBe('sor');
+    expect(incelemeAcilisi({ kalemSayisi: 3, kayitliImza: null, imza: 'a' })).toBe('sor');
+  });
   it('KRİTİK: yüzde SAYIM (biten + düşen), zaman değil', () => {
     expect(incelemeYuzdesi([{ tur: 'sirada' }, { tur: 'okunuyor' }])).toBe(0);
     expect(incelemeYuzdesi([{ tur: 'bitti', ozet: 'x', uyari: false }, { tur: 'dustu', mesaj: 'y' }, { tur: 'okunuyor' }, { tur: 'sirada' }])).toBe(50);

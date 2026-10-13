@@ -172,6 +172,24 @@ export type IncelemeSatirHali =
   | { tur: 'bitti'; ozet: string; uyari: boolean }
   | { tur: 'dustu'; mesaj: string };
 
+/**
+ * İnceleme adımı açılınca ne olur. İnceleme KALEMLERİN TAMAMINI yeniden
+ * yazıyor (`PUT …/kalemler`); kayıtlı kampanya varken kendiliğinden koşmak,
+ * Plan adımındaki düzenlemeleri SORMADAN silmek demek (Ajan 4, 2026-10-13):
+ *
+ * - `ozet`: aynı girdilerle inceleme yapılmış; düzenlemeler durur.
+ * - `sor`: kampanya var ama girdiler değişmiş YA DA hiç imza yok (sihirbazdan
+ *   önce açılmış v2 taslağı/revizyonu: kalemleri ajans elle kurmuştu ve
+ *   "Geri" ile buraya düşen kullanıcı bütün planını motorun seçtiği
+ *   amaçlarla kaybediyordu). Kullanıcı "Yeniden incele"ye basar ya da eski
+ *   kampanyalarla devam eder; ikisi de ekranda yazılı.
+ * - `kos`: kampanya yok (ilk inceleme ya da bütçe değişti, sunucu sildi).
+ */
+export function incelemeAcilisi(o: { kalemSayisi: number; kayitliImza: string | null; imza: string }): 'ozet' | 'sor' | 'kos' {
+  if (o.kalemSayisi === 0) return 'kos';
+  return o.kayitliImza === o.imza ? 'ozet' : 'sor';
+}
+
 /** Yüzde: biten (düşen dahil) satır / toplam. Animasyon değil sayım: sahte ilerleme yok. */
 export function incelemeYuzdesi(haller: readonly IncelemeSatirHali[]): number {
   if (haller.length === 0) return 0;

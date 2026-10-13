@@ -101,6 +101,14 @@ export default async function StratejiPage({ searchParams }: { searchParams: Pro
         </div>
       );
     }
+    // PLAN BAŞKA WORKSPACE'İN (Ajan 4, 2026-10-13): girdiler (hedef kapıları,
+    // Meta asgarisi, bölge önerisi) adresteki `musteri`den, plan ise kendi
+    // workspace'inden okunuyordu. İki workspace'e erişen ajans çalışanı
+    // `?musteri=A&plan=<B'nin planı>` ile açınca B'nin planını A'nın
+    // kapılarıyla düzenliyordu; hiçbir hata yok. Planın workspace'ine yönlen.
+    if (detay && detay.v.plan.clientId !== clientId) {
+      redirect(stratejiPanelAdresi({ musteri: detay.v.plan.clientId, plan: detay.v.plan.id, adim: ekran }));
+    }
     // Onaya gitmiş ya da onaylanmış strateji düzenlenmez: raporuna.
     if (detay && !stratejiDuzenlenebilirMi(detay.v.plan.durum) && ekran !== 'gonder') {
       redirect(stratejiPanelAdresi({ musteri: clientId, plan: detay.v.plan.id, adim: 'rapor' }));

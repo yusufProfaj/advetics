@@ -206,6 +206,17 @@ describe('seçilen hedeflerle motor (adım adım akış)', () => {
     expect(r.kalemler[0]!.gerekceler.join(' ')).toMatch(/Öncelik sırası 1/);
   });
 
+  it('KRİTİK: 3:2:1 bölmede kuruş KAYBOLMAZ: kalemlerin toplamı yazılan bütçeye eşit (Ajan 4)', () => {
+    // 100.000,01 TL üçe bölünmez: 50.000,005 / 33.333,336… / 16.666,668…
+    // Her pay kuruşa aşağı yuvarlanıyor; kalan ilk hedefe gitmezse plan
+    // toplamdan EKSİK bütçe dağıtır ve hiçbir hata düşmez.
+    const toplam = 100_000n * M + 10_000n;
+    const r = secimliMotor(girdi({ toplamMicros: toplam }), ['SITE', 'FORM', 'ERISIM']);
+    expect(r.kalemler).toHaveLength(3);
+    expect(r.kalemler.reduce((t, k) => t + BigInt(k.butceMicros), 0n)).toBe(toplam);
+    for (const k of r.kalemler) expect(BigInt(k.butceMicros) % 10_000n).toBe(0n);
+  });
+
   it('KRİTİK: ölçümü KESİN olmayan dönüşüm hedefi plana alınmaz, NEDENİ not olur ve payı kalanlara gider', () => {
     const r = secimliMotor(girdi({ toplamMicros: 60_000n * M, olcum: { arama: { meta: false, google: false } } }), ['TELEFON', 'SITE']);
     expect(amaclar(r)).toEqual(['SITE']);
