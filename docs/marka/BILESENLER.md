@@ -365,3 +365,20 @@ Yöneticisi), `rehber/rehber.module.css` → Grup 2 (AdvCampaign),
 - `components/ust-hesap/sirket-duzenle.tsx` ⚑
 - `components/ust-hesap/sirket-sil.tsx` ⚑
 - `components/ust-hesap/ust-hesap-ekrani.tsx` ⚑
+
+
+## 9. Sayfa içi yan menü (kullanıcı kararı 2026-10-14)
+
+Sayfanın alt bölümleri **üstte sekme değil, içeriğin solunda dikey menü**:
+`SayfaIcMenu` + `SayfaIcDuzen` (`components/ui/sayfa-ic-menu.tsx`). Başlık
+(`SayfaBasligi`) tam genişlikte üstte; altında solda 212px menü (masaüstünde
+yapışkan), sağda içerik. Seçili öğe gri zemin + solda kırmızı çizgi; sayı ya da
+kırmızı nokta (eksik var) sağda; telefonda yatay haplar. `Sekmeler` YALNIZ yan
+panelin içinde (ör. kural düzenleyici Kural · Geçmiş) kullanılır.
+Uygulanan sayfalar: Reklam Yöneticisi (seviyeler), Potansiyel Müşteriler,
+AdvCampaign, İyileştir, Raporlar, Marka Merkezi, Varlıklar, Ayarlar, Hesabım.
+**DÜZENİ KORUNAN sayfalar: Genel Bakış ve Akıllı Boost** (kullanıcı kararı):
+yalnız token, düğme ve renk görünüşü yeni dile uyar; yerleşim değişmez.
+Kararlar: menü adı "İyileştir"; Potansiyel Müşteriler tablo + yan panel;
+Raporlar'da "Raporu gönder" birincil, "PDF indir" ikincil, Planla ve Paylaş ⋯.
+Onaylı taslak: `docs/marka/sayfa-taslaklari.html`.
