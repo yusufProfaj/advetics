@@ -46,6 +46,8 @@ interface Kim {
   aktif?: string;
   yonetici?: boolean;
   org?: string;
+  /** "Tüm şirketler" modu: üst hesap + bayrak. */
+  tum?: string;
 }
 
 async function olarak<T = Record<string, unknown>>(sql: string, k: Kim): Promise<T[]> {
@@ -56,8 +58,8 @@ async function olarak<T = Record<string, unknown>>(sql: string, k: Kim): Promise
            set_config('app.is_org_admin', '${k.yonetici ? 'on' : 'off'}', false),
            set_config('app.can_manage_pool', 'off', false),
            set_config('app.current_active_client_id', '${k.aktif ?? ''}', false),
-           set_config('app.current_manager_account_id', '', false),
-           set_config('app.tum_sirketler', 'off', false)`);
+           set_config('app.current_manager_account_id', '${k.tum ?? ''}', false),
+           set_config('app.tum_sirketler', '${k.tum ? 'on' : 'off'}', false)`);
   await h.q(`SET ROLE ${ROL}`);
   try {
     return await h.q<T>(sql);
@@ -115,6 +117,21 @@ describe('şirket satırı', () => {
     const k = { clientIds: [A, B], yonetici: true };
     expect(await olarak(`DELETE FROM kurulum_beyanlari WHERE client_id IS NULL RETURNING id`, k)).toHaveLength(1);
     expect(await olarak(`INSERT INTO kurulum_beyanlari (org_id, client_id, oge) VALUES ('${ORG}', NULL, 'iki_adim') RETURNING id`, k)).toHaveLength(1);
+  });
+
+  it('KRİTİK: "TÜM ŞİRKETLER" modunda kardeş şirketin kararı GÖRÜNÜR ama yazılamaz/silinemez (yazma current_org_id’ye çivili)', async () => {
+    const UST = '13131313-1313-1313-1313-131313131313';
+    await h.q(`INSERT INTO manager_accounts (id, name, slug, updated_at) VALUES ($1, 'Profaj', 'profaj', now())`, [UST]);
+    await h.q(`UPDATE organizations SET manager_account_id = $1`, [UST]);
+    await h.q(`INSERT INTO kurulum_beyanlari (org_id, client_id, oge) VALUES ($1, NULL, 'iki_adim')`, [ORG2]);
+    const k = { clientIds: [A, B], yonetici: true, tum: UST };
+    // Okuma modun kapsamında: iki şirketin satırı da görünüyor (iddia boşa düşmüyor).
+    expect(await olarak(`SELECT org_id FROM kurulum_beyanlari WHERE client_id IS NULL ORDER BY org_id`, k)).toHaveLength(2);
+    expect(await olarak(`DELETE FROM kurulum_beyanlari WHERE client_id IS NULL AND org_id = '${ORG2}' RETURNING id`, k)).toEqual([]);
+    expect(await olarak(`UPDATE kurulum_beyanlari SET gerekce = 'x' WHERE org_id = '${ORG2}' RETURNING id`, k)).toEqual([]);
+    expect(await sayi(`org_id = '${ORG2}' AND gerekce IS NULL`)).toBe(1);
+    await h.q(`DELETE FROM kurulum_beyanlari WHERE org_id = $1`, [ORG2]);
+    await expect(olarak(`INSERT INTO kurulum_beyanlari (org_id, client_id, oge) VALUES ('${ORG2}', NULL, 'iki_adim') RETURNING id`, k)).rejects.toThrow(/row-level security/);
   });
 
   it('KRİTİK: yönetici BAŞKA şirketin kararını yazamaz ve göremez', async () => {

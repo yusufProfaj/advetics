@@ -372,7 +372,7 @@ export function hazirlikMaddeleri(g: HazirlikGirdisi): HazirlikMaddesi[] {
  * uyguluyor (`kurulumListesi`). Burada da uygulamak, beyan geri alınınca
  * iki yerin ayrışması demekti.
  *
- * Sıra `HAZIRLIK_SIHIRBAZ_KODLARI` sırası; `hazirlik.spec.ts` kilitliyor.
+ * Sıra `HAZIRLIK_KODLARI`ndaki sihirbaz maddelerinin sırası; `hazirlik.spec.ts` kilitliyor.
  */
 function sihirbazMaddeleri(g: HazirlikGirdisi): HazirlikMaddesi[] {
   const b = g.bilgiler;

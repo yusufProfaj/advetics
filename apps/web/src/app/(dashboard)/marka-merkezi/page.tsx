@@ -147,7 +147,7 @@ export default async function MarkaMerkeziPage({
    * kadar "eksik" derdi ve sihirbaz "hiç eksik yok" derken menü 9 / 10
    * gösterirdi — iki ekranın aynı sayıyı söylemesi bu modülün sözü.
    */
-  const beyanlar = await beyanlariOku(serverApiFetch, clientId, kurulum.ok ? kurulum.v : null);
+  const beyanlar = await beyanlariOku(serverApiFetch, clientId);
 
   const sayac = kurulumSayaci(
     kurulumListesi({

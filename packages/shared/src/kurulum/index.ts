@@ -145,6 +145,15 @@ export interface KurulumYaniti {
    * (`kurulumPlatformBeyaniSchema`). Boş = beyan yok, ikisi de sayılıyor.
    */
   kullanilmayanPlatformlar: KurulumPlatformu[];
+  /**
+   * Platform beyanının İZİ — kim, ne zaman (MIMARI § 2c: son kontrol "kim, ne
+   * zaman" yazar). `null` = beyan yok. Beyan `kurulum_beyanlari`na TAŞINMADI
+   * (anlamı farklı: parça değil adımı bütünüyle düşürüyor ve okuyan dört
+   * yer var); iz `workspace_kurulum`un iki kolonunda (entegrasyon 2026-10-13).
+   *   · `beyanEden: null` — kullanıcı silinmiş ya da adı RLS yüzünden okunamıyor,
+   *   · `tarih: null`     — beyan bu iz tutulmadan ÖNCE verilmiş; uydurulmaz.
+   */
+  platformBeyani: { beyanEden: { id: string; ad: string } | null; tarih: string | null } | null;
   adimlar: KurulumAdimi[];
   ozet: { tamam: number; toplam: number; otomatikYapilabilir: number; kullanicida: number };
   /** Konteyner varsa siteye eklenecek kod. */
@@ -274,6 +283,21 @@ export const kurulumTamamlaSchema = z
   })
   .optional();
 export type KurulumTamamlaIstegi = z.infer<typeof kurulumTamamlaSchema>;
+
+/**
+ * KURULUM UÇLARININ 409 KODLARI. Aynı durum kodu iki ayrı şey söylüyordu ve
+ * panel ikisini MESAJ METNİYLE ayırıyordu (`/sürüyor/`): metin bir gün
+ * değişince "sürüyor" yoklamaya değil hataya düşer ya da tersi — ve hiçbir
+ * test bunu görmez. Kod sözleşmede; panel yalnız koda bakar.
+ *   · `suruyor`            — bu workspace'te başka bir kurulum işlemi koşuyor; bekle.
+ *   · `workspaceSecilmeli` — yazma yalnız o workspace seçiliyken; üstten seç.
+ *   · `sirketSecilmeli`    — şirket kararı "tüm şirketler" görünümünde verilmez.
+ */
+export const KURULUM_HATA_KODLARI = {
+  suruyor: 'KURULUM_SURUYOR',
+  workspaceSecilmeli: 'KURULUM_WORKSPACE_SECILMELI',
+  sirketSecilmeli: 'KURULUM_SIRKET_SECILMELI',
+} as const;
 
 /** "Eksikleri tamamla"nın sırası: bağımlılık sırası (konteyner ve mülk etiketlerden önce). */
 export const OTOMATIK_SIRA: readonly KurulumAdimKodu[] = ['sayfa', 'meta_piksel', 'gtm_konteyner', 'ga4_mulk', 'ads_donusum', 'ga4_ads_bag', 'gtm_etiket'];

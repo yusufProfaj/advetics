@@ -6,13 +6,14 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition, type 
 import {
   KURULUM_ADIM_ADI,
   KURULUM_BEYAN_OGESI_ADI,
-  KURULUM_PLATFORMLARI,
   type ConnectionSummary,
   type HazirlamaYaniti,
   type IkiAdimDurumu,
   type KurulumAdimSonucu,
+  type KurulumTamamlaIstegi,
   type KurulumYaniti,
   type ProviderAvailability,
+  type SirketKurulumYaniti,
   type SpecialAdCategory,
   type WorkspaceHazirlik,
 } from '@advetics/shared';
@@ -44,6 +45,7 @@ import type { Sonuc } from '@/components/marka-merkezi/kurulum-listesi';
 import { tarihYaz } from '@/components/marka-merkezi/beyan-alani';
 import { YOKLAMA_ARALIGI_MS, YOKLAMA_SINIRI, yoklamaGerekli } from '@/components/marka-merkezi/hazirlama-mantik';
 import { adimOzeti } from '@/components/marka-merkezi/kurulum-listesi-mantik';
+import { CallbackBanner } from '@/components/callback-banner';
 import { PlatformAdimi } from './platform-adimi';
 import { DurumIkonu, Ray, RayBasligi, RayListesi, type RaySatiri } from './sihirbaz-rayi';
 import {
@@ -97,8 +99,14 @@ export interface TamamlamaVerisi {
   /** PARAMETRESİZ `/connections` (MIMARI Ç-2: `?clientId=` ajans bağlantısını gizler). */
   baglantilar: Sonuc<ConnectionSummary[]>;
   uygunluk: Sonuc<ProviderAvailability[]>;
+  /** Yalnız 2FA ayar bileşeni için (`IkiAdimSirketAyari`); hüküm `sirket`ten. */
   ikiAdim: Sonuc<IkiAdimDurumu>;
-  sirketBeyanlari: BeyanOkumasi;
+  /**
+   * `GET /kurulum/sirket` TAM yanıtı: şirket beyanları, 2FA zorunluluğu,
+   * şirketin kullandığı platformlar. "Tüm şirketler" görünümünde ya da
+   * şirket uyuşmazsa okunamadı (sayfa kuruyor).
+   */
+  sirket: Sonuc<SirketKurulumYaniti>;
   /** Sihirbazı kullanan kişinin rapor gönderen e-postası — ÜÇ HÂLLİ (Ç-6); `yetkisiz` = satır çizilmez. */
   eposta: boolean | null | 'yetkisiz';
 }
@@ -192,18 +200,18 @@ export function Tamamlama({
         baglantilar: veri.baglantilar.ok ? veri.baglantilar.v : null,
         uygunluk: veri.uygunluk.ok ? veri.uygunluk.v : null,
         /*
-         * ŞİRKETİN KULLANDIĞI PLATFORMLAR — BU WORKSPACE'İN beyanından.
-         * Sözleşme "en az bir workspace kullanıyorsa" diyor; bütün
-         * workspace'lerin kurulumunu okumak her açılışta N × dört uç (ve
-         * hazırlık tetikleyicisi) demek. Bu workspace Google kullanıyorsa
-         * Google bağlantısı onun için zaten şart; kullanmıyorsa başka bir
-         * workspace'in Google ihtiyacı O workspace'in sihirbazında görünür.
+         * ŞİRKETİN KULLANDIĞI PLATFORMLAR — SUNUCUDAN, sözleşmenin kuralıyla
+         * ("en az bir workspace kullanıyorsa"; `SirketKurulumYaniti`). Bir süre
+         * BU workspace'in beyanından türetiliyordu: Google'ı kullanmayan bir
+         * workspace'te şirketin Google bağlantısı "kullanılmıyor" diye düşüyor,
+         * aynı şirket başka workspace'in sihirbazında "eksik" diyordu — tek
+         * şirkete iki hüküm. Okunamazsa `null` (bilinmiyor), tahmin yok.
          */
-        kullanilanPlatformlar: KURULUM_PLATFORMLARI.filter((p) => !kullanilmayanlar.includes(p)),
-        ikiAdimZorunlu: veri.ikiAdim.ok ? (veri.ikiAdim.v.secilenSirket?.zorunlu ?? null) : null,
-        beyanlar: beyanGirdisi(veri.sirketBeyanlari),
+        kullanilanPlatformlar: veri.sirket.ok ? veri.sirket.v.kullanilanPlatformlar : null,
+        ikiAdimZorunlu: veri.sirket.ok ? veri.sirket.v.ikiAdimZorunlu : null,
+        beyanlar: veri.sirket.ok ? veri.sirket.v.beyanlar : null,
       }),
-    [veri.baglantilar, veri.uygunluk, veri.ikiAdim, veri.sirketBeyanlari, kullanilmayanlar],
+    [veri.baglantilar, veri.uygunluk, veri.sirket],
   );
   const wsSayac = kurulumSayaci(adimlar);
   const sSayac = kurulumSayaci(sirketAdimlari);
@@ -316,15 +324,18 @@ export function Tamamlama({
       let sonuclar: KurulumAdimSonucu[] = [];
       if (kapsam.kurulumAdimlari.length > 0) {
         /*
-         * `kodlar` SÜZGECİ: adım başına "Otomatik yap" yalnız bu adımın
-         * parçalarını yapar (MIMARI § 7, Ajan 2). Sunucu süzgeci henüz
-         * tanımıyorsa gövdeyi yok sayar ve "Eksikleri tamamla"nın bütününü
-         * yapar — o da yalnız sistemin güvenle yapabildikleri (`OTOMATIK_SIRA`,
-         * hesap açmak yok); yanlış bir şey değil, yalnız daha geniş.
+         * `kodlar` SÜZGECİ: adım başına "Otomatik yap" YALNIZ bu adımın
+         * parçalarını yapar (`kurulumTamamlaSchema`, sunucu süzgeci Ajan 2).
+         * Gövde sözleşmenin tipinden kuruluyor: alan adı elle yazılsaydı ve
+         * bir gün ayrışsaydı sunucu gövdeyi yok sayıp `OTOMATIK_SIRA`nın
+         * TAMAMINI yapardı — ölçüm adımında "Otomatik yap"a basan kullanıcı
+         * sayfa atamasını ve Google Ads dönüşümlerini de tetiklerdi. İstenen
+         * ama otomatik olmayan kod sunucudan `atlandi` + nedeniyle döner.
          */
+        const govde: KurulumTamamlaIstegi = { kodlar: [...kapsam.kurulumAdimlari] };
         const r = await apiFetch<KurulumYaniti & { sonuclar: KurulumAdimSonucu[] }>(`/clients/${clientId}/kurulum/tamamla`, {
           method: 'POST',
-          body: JSON.stringify({ kodlar: kapsam.kurulumAdimlari }),
+          body: JSON.stringify(govde),
         });
         sonuclar = r.sonuclar ?? [];
         setKurulum({ ok: true, v: r });
@@ -411,6 +422,7 @@ export function Tamamlama({
                 sirketSayac={sSayac}
                 wsSayac={wsSayac}
                 eposta={veri.eposta}
+                platformBeyani={kurulum.ok ? kurulum.v.platformBeyani : undefined}
                 git={git}
                 baslikRef={baslikRef}
               />
@@ -425,6 +437,14 @@ export function Tamamlama({
                 <p className="mb-4 max-w-[66ch] text-sm text-ink-muted">{NEDEN[aktif]}</p>
 
                 <Haplar parcalar={(aktifAdim ?? aktifSirket)?.parcalar ?? []} />
+
+                {/*
+                  OAUTH DÖNÜŞÜNÜN SONUCU (`?connection=…`): "Ölçüm izinlerini ver"
+                  Google'dan bu adıma dönüyor. Bant yalnız S1'de (PlatformAdimi
+                  kendi bandını çiziyor) vardı; ölçüm adımında izin reddedilince
+                  ya da düşünce ekran aynı düğmeyi gösterip HİÇBİR ŞEY söylemiyordu.
+                */}
+                {aktif !== 'baglantilar' && <CallbackBanner />}
 
                 {/* KAYNAK OKUNAMADIYSA SÖYLENİYOR: rozet "Okunamadı" diyor, sebebi burada. */}
                 <Dusenler veri={veri} sirket={sirketAdimiMi} tazele={tazele} />
@@ -550,8 +570,8 @@ function Dusenler({ veri, sirket, tazele }: { veri: TamamlamaVerisi; sirket: boo
     ? [
         ['Platform bağlantıları', veri.baglantilar],
         ['Platform ayarları', veri.uygunluk],
-        ['İki adımlı doğrulama', veri.ikiAdim],
-        ['Şirket beyanları', veri.sirketBeyanlari],
+        ['İki adımlı doğrulama ayarı', veri.ikiAdim],
+        ['Şirket kurulumu', veri.sirket],
       ]
     : [
         ['Kurulum adımları', veri.kurulum],
@@ -690,7 +710,7 @@ function SirketGuvenligi({
   const [hata, setHata] = useState<string | null>(null);
   const [gerekce, setGerekce] = useState('');
   const beyan = parcalar.find((p) => p.kod === 'iki_adim')?.beyan ?? null;
-  const zorunlu = veri.ikiAdim.ok ? (veri.ikiAdim.v.secilenSirket?.zorunlu ?? null) : null;
+  const zorunlu = veri.sirket.ok ? veri.sirket.v.ikiAdimZorunlu : null;
 
   async function beyanYaz(kapsamDisi: boolean) {
     setBekliyor(true);
@@ -756,7 +776,7 @@ function SirketGuvenligi({
                 aria-label="Gerekçe"
                 className="min-w-0 flex-1 rounded-lg border border-line bg-surface px-2 py-1.5 text-xs outline-none focus:border-brand"
               />
-              <Dugme boyut="kucuk" bekliyor={bekliyor} disabled={!veri.sirketBeyanlari.ok} onClick={() => void beyanYaz(true)}>
+              <Dugme boyut="kucuk" bekliyor={bekliyor} disabled={!veri.sirket.ok} onClick={() => void beyanYaz(true)}>
                 {KURULUM_BEYAN_OGESI_ADI.iki_adim}
               </Dugme>
             </div>
@@ -829,6 +849,7 @@ function SonKontrol({
   sirketSayac,
   wsSayac,
   eposta,
+  platformBeyani,
   git,
   baslikRef,
 }: {
@@ -840,6 +861,8 @@ function SonKontrol({
   sirketSayac: ReturnType<typeof kurulumSayaci>;
   wsSayac: ReturnType<typeof kurulumSayaci>;
   eposta: TamamlamaVerisi['eposta'];
+  /** Platform beyanının izi; `undefined` = kurulum okunamadı. */
+  platformBeyani: KurulumYaniti['platformBeyani'] | undefined;
   git: (kod: string) => void;
   baslikRef: React.RefObject<HTMLHeadingElement | null>;
 }) {
@@ -862,6 +885,16 @@ function SonKontrol({
           {a.durum === 'kullanilmiyor' ? (
             <>
               <b className="text-ink">Kullanılmıyor.</b> Bu workspace’te bu platformda reklam verilmeyeceği söylendi.
+              {/*
+                KİM, NE ZAMAN (MIMARI § 2c). İz yoksa UYDURULMAZ: beyan iz
+                kolonlarından önce verildiyse tarih yok, ad okunamıyorsa ad yok.
+              */}
+              {platformBeyani && (
+                <span className="block text-[12.5px]">
+                  {platformBeyani.beyanEden ? `${platformBeyani.beyanEden.ad}, ` : ''}
+                  {platformBeyani.tarih ? tarihYaz(platformBeyani.tarih) : 'tarih kaydı yok'}
+                </span>
+              )}
             </>
           ) : beyanlar.length > 0 ? (
             <>

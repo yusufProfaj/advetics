@@ -73,9 +73,16 @@ export interface SirketKurulumGirdisi {
   /**
    * Şirkette kullanılan platformlar: en az bir workspace'i o platformu
    * kullanıyorsa (beyanla kapatmamışsa) sayılır. Hiçbir workspace Google
-   * kullanmıyorsa şirketten Google bağlantısı istemek yanlış alarm.
+   * kullanmıyorsa şirketten Google bağlantısı istemek yanlış alarm. Kaynak
+   * `SirketKurulumYaniti.kullanilanPlatformlar` (sunucu bütün workspace'lere
+   * bakıyor); panel bunu AKTİF workspace'in beyanından türetmez.
+   *
+   * `null` = OKUNAMADI. İki platform da gösterilir; ETKİN bağlantısı olan
+   * platform yine `tamam` (kullanım bilinmese de bağlantı vardır), olmayan
+   * `bilinmiyor` — "eksik" demek, belki hiç kullanılmayan bir platform için
+   * kullanıcıyı bağlantı kurmaya gönderirdi.
    */
-  kullanilanPlatformlar: readonly KurulumPlatformu[];
+  kullanilanPlatformlar: readonly KurulumPlatformu[] | null;
   /** Şirketin 2FA zorunluluğu; `null` = okunamadı (yönetici olmayan okuyamıyor olabilir). */
   ikiAdimZorunlu: boolean | null;
   /** Şirket düzeyi beyanlar (`client_id IS NULL`); `null` = okunamadı. */
@@ -163,8 +170,13 @@ export interface SirketKurulumYaniti {
 
 /** İki adımı kurar. Kullanılan platform yoksa bağlantı adımı `kullanilmiyor`. */
 export function sirketKurulumListesi(g: SirketKurulumGirdisi): SirketKurulumAdimi[] {
-  const platformlar = (['meta', 'google'] as const).filter((p) => g.kullanilanPlatformlar.includes(p));
-  const baglanti = platformlar.map((p) => baglantiParcasi(p, g));
+  const kullanim = g.kullanilanPlatformlar;
+  const platformlar = (['meta', 'google'] as const).filter((p) => kullanim === null || kullanim.includes(p));
+  const baglanti = platformlar.map((p) => {
+    const c = baglantiParcasi(p, g);
+    if (kullanim !== null || c.durum === 'tamam' || c.durum === 'bilinmiyor') return c;
+    return { ...c, durum: 'bilinmiyor' as const, neden: `${PLATFORM_ADI[p]}: şirketin hangi platformları kullandığı okunamadı. ${c.neden}`, eylem: null };
+  });
   const guvenlik = [ikiAdimParcasi(g)];
   return [
     {

@@ -4166,6 +4166,10 @@ model WorkspaceKurulum {
   /// "Bu platformu kullanmıyorum" beyanı (meta/google, en çok biri; boş = beyan yok).
   /// Kısıtlar migration'da (20261016400000_kurulum_kullanilmayan_platformlar).
   kullanilmayanPlatformlar String[] @default([]) @map("kullanilmayan_platformlar")
+  /// O beyanın izi (kim, ne zaman); beyan kalkınca NULL. FK migration'da
+  /// (20261017300000_platform_beyani_izi), servis ham SQL kullanıyor.
+  platformBeyanEden    String?   @map("platform_beyan_eden") @db.Uuid
+  platformBeyanTarihi  DateTime? @map("platform_beyan_tarihi") @db.Timestamptz(6)
   createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt            DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
 

@@ -1,13 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { OTOMATIK_SIRA, eksikleriTamamlaKapsami, type TenantContext } from '@advetics/shared';
+import { ConflictException } from '@nestjs/common';
+import { KURULUM_HATA_KODLARI, OTOMATIK_SIRA, eksikleriTamamlaKapsami, type TenantContext } from '@advetics/shared';
 import { createHarness, IDS, seedTenant, type Harness } from '../../../test/pglite-harness';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { GOOGLE_OLCUM_SCOPES } from '../connections/providers/google.provider';
 import { AdsKurulumIstemcisi } from './ads-kurulum';
 import { KurulumController } from './kurulum.controller';
-import { KurulumService, hesapYetkisi, kullanilmayanAdimlar, kullanilmayanOku } from './kurulum.service';
+import { KurulumService, hesapYetkisi, kullanilmayanAdimlar, kullanilmayanOku, platformBeyaniOku } from './kurulum.service';
 
 /**
  * ═══ KULLANILMAYAN PLATFORM BEYANI + KURULUM HESAP KAPISI ═══
@@ -111,6 +112,60 @@ describe('beyan saklanıyor ve okunuyor', () => {
   });
 });
 
+/** Reddin GÖVDESİ — panel 409'un iki anlamını `code` ile ayırıyor. */
+async function kodu(p: Promise<unknown>): Promise<string | null> {
+  try {
+    await p;
+  } catch (e) {
+    if (!(e instanceof ConflictException)) throw e;
+    const r = e.getResponse() as { code?: string };
+    return r.code ?? null;
+  }
+  throw new Error('reddedilmedi');
+}
+
+describe('platform beyanının izi — kim, ne zaman (entegrasyon, MIMARI § 15)', () => {
+  const iz = async () =>
+    (await h.q<{ e: string | null; t: Date | null }>(`SELECT platform_beyan_eden AS e, platform_beyan_tarihi AS t FROM workspace_kurulum WHERE client_id = $1`, [IDS.client]))[0];
+
+  it('KRİTİK: beyan izi beyanla AYNI deyimde yazılır, yanıtta kim/ne zaman; beyan kalkınca iz de kalkar', async () => {
+    const once = Date.now();
+    const y = await svc.platformlar(ctx, IDS.client, ['google'], {});
+    expect(y.platformBeyani?.beyanEden?.id).toBe(IDS.user);
+    expect(typeof y.platformBeyani?.beyanEden?.ad).toBe('string');
+    expect(Date.parse(y.platformBeyani!.tarih!)).toBeGreaterThanOrEqual(once - 1000);
+    expect((await iz())!.e).toBe(IDS.user);
+    expect((await svc.oku(ctx, IDS.client)).platformBeyani).toEqual(y.platformBeyani);
+    const geri = await svc.platformlar(ctx, IDS.client, [], {});
+    expect(geri.platformBeyani).toBeNull();
+    expect(await iz()).toEqual({ e: null, t: null });
+  });
+
+  it('iz kolonlarından ÖNCE verilmiş beyan: tarih UYDURULMAZ (null), beyan yine görünür', async () => {
+    await h.q(`INSERT INTO workspace_kurulum (client_id, org_id, kullanilmayan_platformlar) VALUES ($1, $2, ARRAY['meta'])`, [IDS.client, IDS.org]);
+    expect((await svc.oku(ctx, IDS.client)).platformBeyani).toEqual({ beyanEden: null, tarih: null });
+    expect(platformBeyaniOku({ kullanilmayan_platformlar: [] , platform_beyan_eden: IDS.user })).toBeNull();
+  });
+
+  it('KRİTİK: kullanıcı silinince beyan KALIR, ad bilinmiyor olur (ON DELETE SET NULL)', async () => {
+    await svc.platformlar(ctx, IDS.client, ['meta'], {});
+    const [fk] = await h.q<{ d: string }>(`SELECT pg_get_constraintdef(oid) AS d FROM pg_constraint WHERE conname = 'workspace_kurulum_platform_beyan_eden_fkey'`);
+    expect(fk!.d).toMatch(/REFERENCES users\(id\) ON UPDATE CASCADE ON DELETE SET NULL/);
+  });
+});
+
+describe('409 KODLARI — panel metne değil koda bakıyor (entegrasyon)', () => {
+  it('KRİTİK: seçili workspace değilse KURULUM_WORKSPACE_SECILMELI', async () => {
+    expect(await kodu(svc.platformlar({ ...ctx, activeClientId: null } as TenantContext, IDS.client, ['meta'], {}))).toBe(KURULUM_HATA_KODLARI.workspaceSecilmeli);
+    expect(await kodu(svc.tamamla({ ...ctx, activeClientId: null } as TenantContext, IDS.client, {}))).toBe(KURULUM_HATA_KODLARI.workspaceSecilmeli);
+  });
+
+  it('KRİTİK: aynı workspace\'te işlem sürerken KURULUM_SURUYOR (yoklamaya çevrilen TEK kod)', async () => {
+    (svc as unknown as { calisan: Set<string> }).calisan.add(IDS.client);
+    expect(await kodu(svc.tamamla(ctx, IDS.client, {}))).toBe(KURULUM_HATA_KODLARI.suruyor);
+  });
+});
+
 describe('veritabanı son savunma hattı', () => {
   it('KRİTİK: tanınmayan platform ve iki platform birden REDDEDİLİYOR', async () => {
     await h.q(`INSERT INTO workspace_kurulum (client_id, org_id) VALUES ($1, $2)`, [IDS.client, IDS.org]);
@@ -176,6 +231,7 @@ describe('"Eksikleri tamamla" kullanılmayan platforma dokunmuyor', () => {
       hazirlama: null,
       hazirlik: null,
       kullanilmayanlar: ['google'],
+      beyanlar: [],
     }).kurulumAdimlari;
     for (const k of kullanilmayanAdimlar(['google'])) expect(panel).not.toContain(k);
   });

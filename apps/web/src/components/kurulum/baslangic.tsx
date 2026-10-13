@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import {
   KURULUM_PLATFORMLARI,
+  hazirlamaSayacYolu,
   type HazirlamaYaniti,
   type KurulumYaniti,
   type WorkspaceHazirlik,
@@ -39,8 +40,8 @@ import { BASLANGIC_SAYAC_SINIRI, DURUM_IKONU, baslangicSirasi, bittiMi, type Bas
  * geçiş YASAK (B1): başka sekmede A ile çalışan kullanıcının bir sonraki
  * yazması sessizce B'ye giderdi.
  *
- * SAYAÇLAR TEMBEL VE SINIRLI: her sayaç dört uç ve hazırlık okuması imzası
- * değişmiş workspace'te AI hazırlığını başlatıyor. İlk
+ * SAYAÇLAR TEMBEL VE SINIRLI: her sayaç dört uç (paylaşımlı sunucuda yük).
+ * Hazırlama TETİKLEMEDEN okunuyor (`hazirlamaSayacYolu`). İlk
  * `BASLANGIC_SAYAC_SINIRI` workspace okunur, kalanı "sayılmadı" yazar.
  */
 type SayacHali = KurulumSayaci | null | undefined;
@@ -67,13 +68,19 @@ async function sayacOku(id: string): Promise<Okunan> {
       return null;
     }
   };
-  const [k, hz, hk] = await Promise.all([
+  /*
+   * HAZIRLAMA TETİKLEMEDEN OKUNUR (`hazirlamaSayacYolu`, Ajan 4 kapısı):
+   * düz okuma imzası değişmiş her workspace'te site taraması + AI işi
+   * başlatıyordu — bu ekran her açılışta on iki workspace'e bakıyor ve
+   * kullanıcı hiçbirini açmamış oluyordu.
+   */
+  const [k, hz, hk, by] = await Promise.all([
     oku<KurulumYaniti>(`/clients/${id}/kurulum`),
-    oku<HazirlamaYaniti>(`/clients/${id}/hazirlama`),
+    oku<HazirlamaYaniti>(hazirlamaSayacYolu(id)),
     oku<WorkspaceHazirlik>(`/clients/${id}/hazirlik`),
+    beyanlariOku(apiFetch, id),
   ]);
   if (!k && !hz && !hk) return { sayac: null, hata: 'Kurulum bilgisi okunamadı.' };
-  const by = await beyanlariOku(apiFetch, id, k);
   const adimlar = kurulumListesi({
     kurulum: k,
     hazirlama: hz,

@@ -312,6 +312,7 @@ function kurulumYaniti(ozel: Partial<Record<KurulumAdimKodu, { durum: KurulumAdi
     site: null,
     hesapSahibi: null,
     kullanilmayanPlatformlar: [],
+    platformBeyani: null,
     adimlar: KURULUM_KODLARI.map((kod) => ({
       kod,
       grup: 'hesaplar',
@@ -350,7 +351,7 @@ function hazirlik(ozel: Partial<Record<string, 'tamam' | 'eksik' | 'bilinmiyor'>
     hazir: true,
     maddeler: ([
       'reklam_hesabi', 'veri_akisi', 'marka_bilgisi', 'logo', 'aylik_butce', 'sosyal_kanal', 'reklam_hazirligi',
-      // Sihirbazın yeni maddeleri (HAZIRLIK_SIHIRBAZ_KODLARI).
+      // Sihirbazın maddeleri (HAZIRLIK_KODLARI'nın parçası).
       'site_adresi', 'iletisim', 'rapor_alicisi', 'adres', 'bildirim', 'erisim',
     ] as const).map(
       (kod) => ({ kod, zorunlu: false, durum: ozel[kod] ?? 'tamam', aciklama: `${kod} açıklaması` }),
@@ -363,6 +364,7 @@ const tamGirdi = (ek: Partial<KurulumListesiGirdisi> = {}): KurulumListesiGirdis
   hazirlama: hazirlamaYaniti(),
   hazirlik: hazirlik(),
   kullanilmayanlar: [],
+  beyanlar: [],
   ...ek,
 });
 

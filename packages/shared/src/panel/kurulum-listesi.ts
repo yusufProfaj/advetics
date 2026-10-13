@@ -295,16 +295,16 @@ export interface KurulumListesiGirdisi {
    */
   kullanilmayanlar: readonly KurulumPlatformu[];
   /**
-   * Kurulum beyanları (`GET /clients/:id/kurulum` yanıtındaki ya da ayrı
-   * uçtaki liste — Ajan 2 seçer). ÜÇ HÂL:
-   *   · dizi      — okundu,
-   *   · `null`    — OKUNAMADI: beyanla kapanabilecek, tamam olmayan parça
-   *                 `bilinmiyor` (yok saymak, verilmiş kararı "eksik" gösterir),
-   *   · `undefined` — GEÇİŞ: çağıran beyanları henüz okumuyor; "beyan yok"
-   *                 sayılır (bugünkü davranış). Ajan 3 bütün çağıranları
-   *                 bağlayınca alan ZORUNLU olur (MIMARI § 6, geçici).
+   * Kurulum beyanları — `GET /clients/:id/kurulum/beyanlar` (TEK biçim,
+   * entegrasyon 2026-10-13). ZORUNLU ve İKİ HÂLLİ:
+   *   · dizi   — okundu,
+   *   · `null` — OKUNAMADI: beyanla kapanabilecek, tamam olmayan parça
+   *              `bilinmiyor` (yok saymak, verilmiş kararı "eksik" gösterir).
+   * Bir süre isteğe bağlıydı ve `undefined` "beyan yok" sayılıyordu: beyanı
+   * okumayan bir çağıran ("adresimiz yok" denmiş workspace'i) sessizce
+   * "eksik" sayardı ve TypeScript hiçbir şey demezdi. Artık unutan derlenmez.
    */
-  beyanlar?: readonly KurulumBeyani[] | null;
+  beyanlar: readonly KurulumBeyani[] | null;
 }
 
 const OKUNAMADI = 'Bu bilgi okunamadı; sayfayı yenile ya da birazdan tekrar bak.';
@@ -381,7 +381,7 @@ function beyanNedeni(b: KurulumBeyani): string {
  */
 function beyanUygula(p: Parca, c: KurulumListesiParcasi, g: KurulumListesiGirdisi): KurulumListesiParcasi {
   if (p.kaynak !== 'hazirlik' || !p.beyan || c.durum === 'tamam') return c;
-  const beyanlar = g.beyanlar === undefined ? [] : g.beyanlar;
+  const beyanlar = beyanlarOkundu(g);
   const var_ = beyanVarMi(beyanlar, p.beyan);
   if (var_ === null) return { ...c, durum: 'bilinmiyor', neden: BEYAN_OKUNAMADI };
   if (!var_) return c;
@@ -389,9 +389,18 @@ function beyanUygula(p: Parca, c: KurulumListesiParcasi, g: KurulumListesiGirdis
   return { ...c, durum: 'kapsam_disi', neden: beyanNedeni(b), beyan: b };
 }
 
-/** "Site yok" beyanının bu girdideki hâli; geçişte (`undefined`) beyan yok. */
+/**
+ * Alan ZORUNLU ama bir JS çağıranı (ya da `as` ile kurulmuş girdi) onu yine
+ * de atlayabilir: o hâl "beyan yok" DEĞİL, OKUNAMADI. Eski geçiş kuralı
+ * (`undefined` = beyan yok) tam da bu sessiz yanlış alarmı üretiyordu.
+ */
+function beyanlarOkundu(g: KurulumListesiGirdisi): readonly KurulumBeyani[] | null {
+  return g.beyanlar ?? null;
+}
+
+/** "Site yok" beyanının bu girdideki hâli; okunamadıysa `null`. */
 function siteYokDurumu(g: KurulumListesiGirdisi): boolean | null {
-  return g.beyanlar === undefined ? false : siteYokMu(g.beyanlar);
+  return siteYokMu(beyanlarOkundu(g));
 }
 
 const siteYokParcasiMi = (p: Parca): boolean =>
@@ -536,16 +545,6 @@ export interface EksikleriTamamlaKapsami {
 }
 
 /**
- * `adim` verilirse kapsam O ADIMA daralır (sihirbazın adım başına "Otomatik
- * yap"ı). API'nin `tamamla` ucu bunun için `kodlar` süzgeci alacak (Ajan 2);
- * gelene kadar panel `kurulumAdimlari`nı `/kurulum/adim` ile tek tek yürütür.
- *
- * "SİTE YOK" beyanı varsa — ya da beyanlar OKUNAMADIYSA — site isteyen
- * kurulum adımları (konteyner, mülk, etiket…) kapsamda DEĞİL: belirsizde
- * sitesi olmayan bir workspace'e Tag Manager kurmak, belirsizde
- * beklemekten pahalı.
- */
-/**
  * GERÇEK HESAP AÇABİLEN adımlar — düğme bunları sunucu `otomatik` dese bile
  * ALMAZ (⚠ para, MIMARI Ç-4). Tek kapı sunucunun bayrağı olsaydı, bir gün
  * yanlış işaretlenen tek satır "Eksikleri tamamla"ya gerçek reklam hesabı
@@ -553,6 +552,17 @@ export interface EksikleriTamamlaKapsami {
  */
 export const HESAP_ACAN_KODLAR: readonly KurulumAdimKodu[] = ['meta_hesap', 'google_hesap'];
 
+/**
+ * `adim` verilirse kapsam O ADIMA daralır (sihirbazın adım başına "Otomatik
+ * yap"ı). `kurulumAdimlari` doğrudan `POST /clients/:id/kurulum/tamamla`
+ * gövdesine `kodlar` olarak gider (`kurulumTamamlaSchema`); sunucu yalnız
+ * onları koşar ve otomatik olmayan kodu nedeniyle `atlandi` döndürür.
+ *
+ * "SİTE YOK" beyanı varsa — ya da beyanlar OKUNAMADIYSA — site isteyen
+ * kurulum adımları (konteyner, mülk, etiket…) kapsamda DEĞİL: belirsizde
+ * sitesi olmayan bir workspace'e Tag Manager kurmak, belirsizde
+ * beklemekten pahalı. Sunucu aynı kuralı ayrıca uyguluyor.
+ */
 export function eksikleriTamamlaKapsami(g: KurulumListesiGirdisi, adim?: KurulumListesiKodu): EksikleriTamamlaKapsami {
   const adimlar = kurulumListesi(g);
   const kullanilan = (p: KurulumPlatformu | undefined) => !p || !g.kullanilmayanlar.includes(p);

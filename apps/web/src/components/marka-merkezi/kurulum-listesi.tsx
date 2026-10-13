@@ -140,7 +140,7 @@ export function KurulumListesi({
       oku<HazirlamaYaniti>(`/clients/${clientId}/hazirlama`),
       oku<WorkspaceHazirlik>(`/clients/${clientId}/hazirlik`),
     ]);
-    const by = await beyanlariOku(apiFetch, clientId, k.ok ? k.v : null);
+    const by = await beyanlariOku(apiFetch, clientId);
     setKurulum(k);
     setHazirlama(hz);
     setHazirlik(hk);

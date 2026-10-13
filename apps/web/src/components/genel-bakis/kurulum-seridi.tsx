@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import type { HazirlamaYaniti, KurulumYaniti, WorkspaceHazirlik } from '@advetics/shared';
+import { hazirlamaSayacYolu, type HazirlamaYaniti, type KurulumYaniti, type WorkspaceHazirlik } from '@advetics/shared';
 import { apiFetch } from '@/lib/api';
 import { beyanGirdisi, beyanlariOku } from '@/lib/kurulum-beyanlari';
 import { kurulumListesi, kurulumSayaci, sihirbazAdresi, type KurulumSayaci } from '@/lib/panel-adresleri';
@@ -54,12 +54,14 @@ export function KurulumSeridi({ clientId }: { clientId: string }) {
     let iptal = false;
     void (async () => {
       const oku = async <T,>(yol: string): Promise<T | null> => apiFetch<T>(yol).catch((): null => null);
-      const [k, hz, hk] = await Promise.all([
+      // Hazırlama TETİKLEMEDEN (`hazirlamaSayacYolu`): Genel Bakış her açılışta
+      // bu sayacı okuyor; tetikleseydi panelin ana sayfası AI işi başlatırdı.
+      const [k, hz, hk, by] = await Promise.all([
         oku<KurulumYaniti>(`/clients/${clientId}/kurulum`),
-        oku<HazirlamaYaniti>(`/clients/${clientId}/hazirlama`),
+        oku<HazirlamaYaniti>(hazirlamaSayacYolu(clientId)),
         oku<WorkspaceHazirlik>(`/clients/${clientId}/hazirlik`),
+        beyanlariOku(apiFetch, clientId),
       ]);
-      const by = await beyanlariOku(apiFetch, clientId, k);
       if (iptal) return;
       const s = kurulumSayaci(
         kurulumListesi({ kurulum: k, hazirlama: hz, hazirlik: hk, kullanilmayanlar: k?.kullanilmayanPlatformlar ?? [], beyanlar: beyanGirdisi(by) }),

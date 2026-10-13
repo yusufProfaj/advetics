@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { KURULUM_BEYAN_OGELERI, PANEL_KAPILARI, siteYokKurulumKodlari, type TenantContext } from '@advetics/shared';
+import { ConflictException } from '@nestjs/common';
+import { KURULUM_BEYAN_OGELERI, KURULUM_HATA_KODLARI, PANEL_KAPILARI, siteYokKurulumKodlari, type TenantContext } from '@advetics/shared';
 import { createHarness, IDS, seedTenant, type Harness } from '../../../test/pglite-harness';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { GOOGLE_OLCUM_SCOPES } from '../connections/providers/google.provider';
@@ -196,6 +197,28 @@ describe('şirket kurulumu — servis', () => {
     await svc().sirketBeyanYaz(ctx, { oge: 'iki_adim', kapsamDisi: true }, {});
     expect(await satirlar()).toHaveLength(1);
     expect((await svc().sirketBeyanYaz(ctx, { oge: 'iki_adim', kapsamDisi: false }, {})).beyanlar).toEqual([]);
+  });
+
+  it('KRİTİK: "tüm şirketler" görünümünde şirket beyanı YAZILMAZ — ctx.orgId ev şirketi, karar yanlış şirkete giderdi', async () => {
+    const tum = { ...ctx, tumSirketler: true } as TenantContext;
+    const hata = await svc()
+      .sirketBeyanYaz(tum, { oge: 'iki_adim', kapsamDisi: true }, {})
+      .then(() => null, (e: unknown) => e);
+    expect(hata).toBeInstanceOf(ConflictException);
+    expect((hata as ConflictException).getResponse()).toMatchObject({ code: KURULUM_HATA_KODLARI.sirketSecilmeli });
+    expect(await satirlar()).toEqual([]);
+    expect(kayit).not.toHaveBeenCalled();
+    // Geri alma da aynı kapıdan.
+    await h.q(`INSERT INTO kurulum_beyanlari (org_id, client_id, oge) VALUES ($1, NULL, 'iki_adim')`, [IDS.org]);
+    await expect(svc().sirketBeyanYaz(tum, { oge: 'iki_adim', kapsamDisi: false }, {})).rejects.toBeInstanceOf(ConflictException);
+    expect(await satirlar()).toHaveLength(1);
+  });
+
+  it('workspace beyanında seçim yoksa 409 KURULUM_WORKSPACE_SECILMELI (panel koda bakıyor)', async () => {
+    const hata = await svc()
+      .workspaceBeyanYaz({ ...ctx, activeClientId: null } as TenantContext, IDS.client, { oge: 'adres', kapsamDisi: true }, {})
+      .then(() => null, (e: unknown) => e);
+    expect((hata as ConflictException).getResponse()).toMatchObject({ code: KURULUM_HATA_KODLARI.workspaceSecilmeli });
   });
 });
 

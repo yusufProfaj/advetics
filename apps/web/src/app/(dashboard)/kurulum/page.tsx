@@ -1,5 +1,4 @@
 import {
-  KURULUM_PLATFORMLARI,
   PAKET_SINIRLARI,
   paketAsildiMi,
   type ConnectionSummary,
@@ -12,7 +11,7 @@ import {
 } from '@advetics/shared';
 import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import { requireSession, type SessionResponse } from '@/lib/session';
-import { beyanlariOku, type BeyanOkumasi } from '@/lib/kurulum-beyanlari';
+import { beyanlariOku } from '@/lib/kurulum-beyanlari';
 import { adimYetkileri } from '@/lib/kurulum-yetkileri';
 import { workspaceUyumu } from '@/lib/sayfa-workspace';
 import { ACILIS_ADI, PANEL_YOLLARI, SIHIRBAZ_ADI, ayarlarAdresi, kapi, sirketKurulumListesi } from '@/lib/panel-adresleri';
@@ -27,7 +26,7 @@ import { SirketSec } from '@/components/kurulum/sirket-sec';
 import { Baslangic } from '@/components/kurulum/baslangic';
 import { Tamamlama, type TamamlamaVerisi } from '@/components/kurulum/tamamlama';
 import { ADIMLAR, adimOku, turOku, type SecimKarti } from '@/components/kurulum/kurulum-akisi';
-import { sihirbazModu, yanittakiBeyanlar } from '@/components/kurulum/sihirbaz-akisi';
+import { sihirbazModu, sirketKurulumuOku } from '@/components/kurulum/sihirbaz-akisi';
 import type { Sonuc } from '@/components/marka-merkezi/kurulum-listesi';
 import type { WorkspaceDetay } from '@/components/marka-merkezi/workspace-bilgileri';
 
@@ -113,7 +112,7 @@ export default async function KurulumPage({
   }
 
   const epostaAcik = kapi(session, 'eposta.duzenle');
-  const [kurulum, hazirlama, hazirlik, detay, baglantilar, uygunluk, ikiAdim, sirketYaniti, eposta] = await Promise.all([
+  const [kurulum, hazirlama, hazirlik, detay, baglantilar, uygunluk, ikiAdim, sirketYaniti, eposta, beyanlar] = await Promise.all([
     oku<KurulumYaniti>(`/clients/${clientId}/kurulum`),
     oku<HazirlamaYaniti>(`/clients/${clientId}/hazirlama`),
     oku<WorkspaceHazirlik>(`/clients/${clientId}/hazirlik`),
@@ -130,8 +129,8 @@ export default async function KurulumPage({
     oku<unknown>('/kurulum/sirket'),
     /* `?? null`: ayar yoksa uç BOŞ GÖVDE ile 200 dönüyor ve istemci `undefined` veriyor. */
     epostaAcik ? oku<EmailAccountSummary | null>('/me/email-account') : Promise.resolve(null),
+    beyanlariOku(serverApiFetch, clientId),
   ]);
-  const beyanlar = await beyanlariOku(serverApiFetch, clientId, kurulum.ok ? kurulum.v : null);
 
   const veri: TamamlamaVerisi = {
     kurulum,
@@ -142,7 +141,7 @@ export default async function KurulumPage({
     baglantilar: baglantilar.ok ? { ok: true, v: baglantilar.v ?? [] } : baglantilar,
     uygunluk: uygunluk.ok ? { ok: true, v: uygunluk.v ?? [] } : uygunluk,
     ikiAdim,
-    sirketBeyanlari: sirketBeyanlari(sirketYaniti),
+    sirket: sirketKurulumuOku(sirketYaniti, { tumSirketler: session.tumSirketler, workspaceOrgId: detay.ok ? detay.v.orgId : null }),
     eposta: eposta === null ? 'yetkisiz' : !eposta.ok ? null : !eposta.v ? false : eposta.v.verifiedAt !== null,
   };
 
@@ -190,17 +189,6 @@ export default async function KurulumPage({
   );
 }
 
-/**
- * ŞİRKET BEYANLARI `GET /kurulum/sirket` yanıtında (MIMARI § 7, Ajan 2).
- * Uç okunamazsa ya da alan yoksa OKUNAMADI — "beyan yok" değil: iki adımlı
- * doğrulama kararını vermiş bir yöneticiye aynı soruyu yeniden sormak olurdu.
- */
-function sirketBeyanlari(s: Sonuc<unknown>): BeyanOkumasi {
-  if (!s.ok) return s;
-  const b = yanittakiBeyanlar(s.v);
-  return b ? { ok: true, v: b } : { ok: false, hata: 'Şirket beyanları yanıtta yok.' };
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Başlangıç
 // ─────────────────────────────────────────────────────────────────────────────
@@ -208,25 +196,24 @@ function sirketBeyanlari(s: Sonuc<unknown>): BeyanOkumasi {
 async function baslangic(session: SessionResponse, kartlar: SecimKarti[]) {
   const sirketAdi =
     session.managerAccount?.organizations.find((o) => o.id === session.activeOrganizationId)?.name ?? session.organization.name;
-  const [workspaceler, baglantilar, uygunluk, ikiAdim, sirketYaniti] = await Promise.all([
+  const [workspaceler, baglantilar, uygunluk, sirketYaniti] = await Promise.all([
     oku<Array<{ id: string; name: string; status: string }>>('/clients'),
     oku<ConnectionSummary[]>('/connections'),
     oku<ProviderAvailability[]>('/connections/availability'),
-    oku<IkiAdimDurumu>('/auth/2fa'),
     oku<unknown>('/kurulum/sirket'),
   ]);
-  const sb = sirketBeyanlari(sirketYaniti);
   /*
-   * BAŞLANGIÇTA WORKSPACE SEÇİLMEDİ: iki platform da "kullanılıyor" sayılır.
-   * Şirket adımı burada yalnız GÖSTERİLİYOR; hüküm workspace seçilince o
-   * workspace'in platform beyanıyla veriliyor (tamamlama).
+   * ŞİRKETİN KULLANDIĞI PLATFORMLAR SUNUCUDAN (`kullanilanPlatformlar`: en
+   * az bir workspace'in kullandığı). Tamamlama ekranıyla AYNI kaynak; iki
+   * ekranın ayrı kural taşıması aynı şirkete iki ayrı hüküm demekti.
    */
+  const sk = sirketKurulumuOku(sirketYaniti, { tumSirketler: session.tumSirketler, workspaceOrgId: null });
   const sirketAdimlari = sirketKurulumListesi({
     baglantilar: baglantilar.ok ? (baglantilar.v ?? []) : null,
     uygunluk: uygunluk.ok ? (uygunluk.v ?? []) : null,
-    kullanilanPlatformlar: KURULUM_PLATFORMLARI,
-    ikiAdimZorunlu: ikiAdim.ok ? (ikiAdim.v.secilenSirket?.zorunlu ?? null) : null,
-    beyanlar: sb.ok ? sb.v : null,
+    kullanilanPlatformlar: sk.ok ? sk.v.kullanilanPlatformlar : null,
+    ikiAdimZorunlu: sk.ok ? sk.v.ikiAdimZorunlu : null,
+    beyanlar: sk.ok ? sk.v.beyanlar : null,
   });
   return (
     <div className="space-y-5">

@@ -1,6 +1,7 @@
 import { ConflictException, ForbiddenException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
+  KURULUM_HATA_KODLARI,
   KURULUM_PLATFORMLARI,
   type KurulumBeyaniIstegi,
   type KurulumBeyani,
@@ -65,7 +66,9 @@ export class KurulumBeyanService {
    */
   async workspaceBeyanYaz(ctx: TenantContext, clientId: string, dto: KurulumBeyaniIstegi, meta: Meta): Promise<KurulumBeyani[]> {
     if (!ctx.clientIds.includes(clientId)) throw new ForbiddenException('Bu workspace’e erişimin yok.');
-    if (ctx.activeClientId !== clientId) throw new ConflictException('Değişiklik için önce üstten bu workspace’i seç.');
+    if (ctx.activeClientId !== clientId) {
+      throw new ConflictException({ code: KURULUM_HATA_KODLARI.workspaceSecilmeli, message: 'Değişiklik için önce üstten bu workspace’i seç.' });
+    }
     if (!ctx.permissions.includes('client.write')) throw new ForbiddenException('Kurulum kapsamını değiştirme yetkin yok.');
     const gerekce = gerekceTemizle(dto.gerekce);
     return this.prisma.withTenant(ctx, async (t) => {
@@ -164,6 +167,17 @@ export class KurulumBeyanService {
    */
   async sirketBeyanYaz(ctx: TenantContext, dto: SirketKurulumBeyaniIstegi, meta: Meta): Promise<SirketKurulumYaniti> {
     if (!ctx.isOrgAdmin) throw new ForbiddenException('Şirketin güvenlik kararını yönetici verir.');
+    /*
+     * "TÜM ŞİRKETLER" GÖRÜNÜMÜNDE YAZILMAZ (Ajan 4 kapısı). O modda `ctx.orgId`
+     * EV şirketi kalıyor (CLAUDE.md) ve RLS'in yazma kuralı da
+     * `current_org_id()` — ikisi de ev şirketini gösteriyor. Sihirbaz ise bir
+     * KARDEŞ şirketin workspace'inde açık olabilir: ekranda "Biltaş" yazarken
+     * "iki adımlı doğrulamayı zorunlu tutmuyoruz" kararı ajansın kendi
+     * şirketine yazılırdı. Hata vermeden, yanlış şirkete.
+     */
+    if (ctx.tumSirketler) {
+      throw new ConflictException({ code: KURULUM_HATA_KODLARI.sirketSecilmeli, message: 'Şirketin kararı “Tüm şirketler” görünümünde verilmez; üstten şirketi seç.' });
+    }
     const gerekce = gerekceTemizle(dto.gerekce);
     await this.prisma.withTenant(ctx, async (t) => {
       const db = t as unknown as SorguCalistirici;

@@ -1,62 +1,39 @@
 import type { KurulumBeyani } from '@advetics/shared';
 import { ApiRequestError } from '@/lib/api';
-import { yanittakiBeyanlar } from '@/components/kurulum/sihirbaz-akisi';
+import { beyanDizisi } from '@/components/kurulum/sihirbaz-akisi';
 
 /**
  * ═══ KURULUM BEYANLARINI OKUMAK — TEK YOL (docs/kurulum-sihirbazi/MIMARI.md § 7) ═══
  *
  * Sayaç beyanları okumazsa "adresimiz yok" denmiş bir workspace sonsuza kadar
  * "eksik" der; OKUNAMAYAN beyanı "yok" saymak da aynı yanlış alarmı üretir.
- * Bu yüzden ÜÇ HÂL: dizi (okundu), hata (okunamadı → sözleşmede `null`), ve
- * bu fonksiyonun hiç çağrılmaması (`undefined`, geçiş — artık çağıran yok).
+ * Bu yüzden İKİ HÂL: dizi (okundu) ve hata (okunamadı → sözleşmede `null`).
  *
- * Marka Merkezi sayfası, sihirbaz ve AdvCampaign AYNI fonksiyonu çağırıyor:
- * her biri kendi okumasını yazsaydı biri okunamayan beyanı "yok" sayınca
- * sayaçlar ayrışırdı (`siteYokMu` ile aynı gerekçe).
+ * TEK BİÇİM: ayrı uç `GET /clients/:id/kurulum/beyanlar`, yanıt DİZİ (Ajan 2'nin
+ * seçimi, entegrasyon 2026-10-13). Bir süre `/kurulum` yanıtında alan da
+ * aranıyordu ve AdvCampaign iki biçimi sırayla deniyordu: iki okuma yolu
+ * birinin hatasını öbürünün "beyan yok"una çevirebiliyordu.
  *
- * İKİ BİÇİM: Ajan 2 beyanları ya `/kurulum` yanıtına alan olarak ya da ayrı
- * uçta (`/clients/:id/kurulum/beyanlar`) veriyor (MIMARI § 7 "biri"). Alan
- * varsa ikinci istek atılmaz.
+ * Marka Merkezi, sihirbaz, Genel Bakış şeridi ve AdvCampaign AYNI fonksiyonu
+ * çağırıyor: her biri kendi okumasını yazsaydı biri okunamayan beyanı "yok"
+ * sayınca sayaçlar ayrışırdı (`siteYokMu` ile aynı gerekçe).
  */
 export type BeyanOkumasi = { ok: true; v: KurulumBeyani[] } | { ok: false; hata: string };
 
-export async function beyanlariOku(
-  getir: <T>(yol: string) => Promise<T>,
-  clientId: string,
-  /** Aynı istekte okunmuş `/kurulum` yanıtı; okunamadıysa `null`. */
-  kurulum: unknown,
-): Promise<BeyanOkumasi> {
-  const yanitta = yanittakiBeyanlar(kurulum);
-  if (yanitta) return { ok: true, v: yanitta };
+export function beyanlarYolu(clientId: string): string {
+  return `/clients/${encodeURIComponent(clientId)}/kurulum/beyanlar`;
+}
+
+export async function beyanlariOku(getir: <T>(yol: string) => Promise<T>, clientId: string): Promise<BeyanOkumasi> {
   try {
-    const v = await getir<unknown>(`/clients/${encodeURIComponent(clientId)}/kurulum/beyanlar`);
+    const dizi = beyanDizisi(await getir<unknown>(beyanlarYolu(clientId)));
     /*
      * BOŞ GÖVDE = BEYAN YOK değil, BİÇİM BİLİNMİYOR. Uç dizi döndürmezse
      * okunamadı sayılır; `[]` sanmak verilmiş bir kararı "eksik" gösterirdi.
      */
-    const dizi = yanittakiBeyanlar({ beyanlar: Array.isArray(v) ? v : (v as { beyanlar?: unknown } | null)?.beyanlar });
     return dizi ? { ok: true, v: dizi } : { ok: false, hata: 'Kurulum beyanları beklenmeyen biçimde geldi.' };
   } catch (e) {
     return { ok: false, hata: e instanceof ApiRequestError ? e.message : 'Kurulum beyanları okunamadı.' };
-  }
-}
-
-/**
- * `/kurulum` yanıtı ELDE YOKKEN (AdvCampaign): önce ayrı uç, düşerse
- * `/kurulum` yanıtındaki alan. Ajan 2 hangi biçimi seçerse seçsin kapı
- * çalışsın: yalnız birini denemek, öbür biçimde kapıyı SESSİZCE açık
- * bırakırdı (okunamayan beyan hiçbir amacı kapatmıyor).
- */
-export async function beyanlariOkuKurulumsuz(getir: <T>(yol: string) => Promise<T>, clientId: string): Promise<BeyanOkumasi> {
-  const ayri = await beyanlariOku(getir, clientId, null);
-  if (ayri.ok) return ayri;
-  try {
-    const k = await getir<unknown>(`/clients/${encodeURIComponent(clientId)}/kurulum`);
-    const v = yanittakiBeyanlar(k);
-    return v ? { ok: true, v } : ayri;
-  } catch {
-    // İkinci deneme de düştü: İLK hatanın cümlesi kalır (asıl uç o).
-    return ayri;
   }
 }
 

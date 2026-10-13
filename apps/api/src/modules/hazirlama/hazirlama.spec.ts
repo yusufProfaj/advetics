@@ -158,6 +158,45 @@ describe('servis (PGlite)', () => {
     expect(cagri).toBe(1);
   });
 
+  it('KRİTİK: SAYAÇ OKUMASI (tetikle: false) işi BAŞLATMAZ — imza değişmiş olsa da; düz okuma başlatır', async () => {
+    let cagri = 0;
+    const sayan = {
+      withTenant: <T>(_c: TenantContext, fn: (tx: unknown) => Promise<T>) =>
+        fn({
+          ...h.db,
+          $queryRaw: async (q: { sql: string }) => {
+            if (q.sql.includes('AS kategoriler')) {
+              cagri += 1;
+              throw new Error('iş başladı');
+            }
+            return h.db.$queryRaw(q as never);
+          },
+        }),
+    };
+    const s2 = new HazirlamaService(sayan as never, {} as never, {} as never, {} as never, {} as never, {} as never, {} as never, {} as never);
+    // Hesap atanmış, satır yok: imza farklı — düz okuma burada işi başlatırdı.
+    for (let i = 0; i < 3; i++) expect((await s2.oku(ctx, IDS.client, { tetikle: false })).durum).toBe('bekliyor');
+    await new Promise((r) => setTimeout(r, 20));
+    expect(cagri).toBe(0);
+    expect(await satir()).toBeUndefined();
+    // Kontrol: aynı girdide düz okuma işi başlatıyor (test boşa düşmüyor).
+    expect((await s2.oku(ctx, IDS.client)).durum).toBe('calisiyor');
+    await vi.waitFor(() => expect(cagri).toBe(1));
+  });
+
+  it('KRİTİK: uç `tetikle=hayir`ı servise geçiriyor; panelin sayaç okuyucuları tek üreticiyi kullanıyor', () => {
+    const ctrl = yorumsuz(readFileSync(join(__dirname, 'hazirlama.controller.ts'), 'utf8'));
+    expect(ctrl).toMatch(/@Query\(HAZIRLAMA_TETIKLEME_SORGUSU\.anahtar\)\s*tetikle/);
+    expect(ctrl).toMatch(/this\.hazirlama\.oku\(ctx, id, \{ tetikle: tetikle !== HAZIRLAMA_TETIKLEME_SORGUSU\.kapali \}\)/);
+    const web = join(__dirname, '../../../../web/src');
+    for (const f of ['components/kurulum/baslangic.tsx', 'components/genel-bakis/kurulum-seridi.tsx']) {
+      const k = yorumsuz(readFileSync(join(web, f), 'utf8'));
+      expect(k, f).toContain('hazirlamaSayacYolu(');
+      // Tetikleyen yolu elle yazmak (`/hazirlama\``) sayaç okumasını yeniden tetikleyici yapardı.
+      expect(k, f).not.toMatch(/\/hazirlama[`'"]/);
+    }
+  });
+
   it('KRİTİK: dustu() satırı "eksik" ve sebebiyle yazar', async () => {
     await svc.dustu(ctx, IDS.client, 'a'.repeat(64), 'Graph yanıt vermedi');
     const s = await satir();

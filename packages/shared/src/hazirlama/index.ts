@@ -52,6 +52,29 @@ export interface HazirlamaYaniti {
   sonCalisma: string | null;
 }
 
+/**
+ * ═══ HAZIRLAMAYI TETİKLEMEDEN OKUMAK (Ajan 4 kapısı, 2026-10-13) ═══
+ *
+ * `GET /clients/:id/hazirlama` OKUMADA TETİKLİYOR: girdi imzası değişmiş
+ * workspace'te site taraması + AI çağrısı + Graph okuması arka planda başlar
+ * (HAZIR-WORKSPACE-PLANI Dalga 3). Bu, hazırlığın İLERLEMESİNİ gösteren ekran
+ * için doğru (Marka Merkezi, sihirbazın tamamlama ekranı). SAYAÇ okuyan ekran
+ * için yanlış: sihirbazın başlangıcı on iki workspace'in sayacını okuyor ve
+ * her açılış, imzası değişmiş HER workspace için bir AI işi başlatıyordu —
+ * kullanıcı o workspace'lerin hiçbirini açmamışken. Genel Bakış şeridi de
+ * her panel açılışında aynısını yapardı.
+ *
+ * Sayaç okuyucuları BU yolu kullanır; uç `tetikle=hayir` görünce satırı
+ * olduğu gibi döndürür (kilit ve imza kontrolü yok, platform çağrısı yok).
+ * Adres TEK üreticiden: elle yazılan sorgu dizgesi bir gün `tetikle=hayır`
+ * (ı ile) olur ve sessizce tetiklemeye geri döner.
+ */
+export const HAZIRLAMA_TETIKLEME_SORGUSU = { anahtar: 'tetikle', kapali: 'hayir' } as const;
+
+export function hazirlamaSayacYolu(clientId: string): string {
+  return `/clients/${encodeURIComponent(clientId)}/hazirlama?${HAZIRLAMA_TETIKLEME_SORGUSU.anahtar}=${HAZIRLAMA_TETIKLEME_SORGUSU.kapali}`;
+}
+
 export const hazirlamaCevapSchema = z.discriminatedUnion('kod', [
   z.object({ kod: z.literal('piksel'), pikselId: z.string().regex(/^\d{1,30}$/) }),
   /** Boş dizi = "hiçbiri" (beyan); sorulmadı ile ayrı (`kategori_cevaplandi`). */

@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import {
   HESAP_ACAN_KODLAR,
   KURULUM_ADIM_ADI,
+  KURULUM_HATA_KODLARI,
   KURULUM_LISTESI,
   KURULUM_PLATFORMLARI,
   OTOMATIK_SIRA,
@@ -102,6 +103,8 @@ interface Baglam {
   pikselId: string | null;
   /** Kullanıcının "bu platformu kullanmıyorum" beyanı (`kullanilmayan_platformlar`). */
   kullanilmayanlar: KurulumPlatformu[];
+  /** O beyanın izi (kim, ne zaman); beyan yoksa `null`. */
+  platformBeyani: KurulumYaniti['platformBeyani'];
 }
 
 /**
@@ -139,7 +142,9 @@ export class KurulumService {
    */
   private erisim(ctx: TenantContext, clientId: string, yazma = false): void {
     if (!ctx.clientIds.includes(clientId)) throw new ForbiddenException('Bu workspace’e erişimin yok.');
-    if (yazma && ctx.activeClientId !== clientId) throw new ConflictException('Değişiklik için önce üstten bu workspace’i seç.');
+    if (yazma && ctx.activeClientId !== clientId) {
+      throw new ConflictException({ code: KURULUM_HATA_KODLARI.workspaceSecilmeli, message: 'Değişiklik için önce üstten bu workspace’i seç.' });
+    }
     if (yazma && !ctx.permissions.includes('client.write')) throw new ForbiddenException('Kurulum için workspace’i düzenleme yetkisi gerekiyor.');
   }
 
@@ -171,7 +176,16 @@ export class KurulumService {
          WHERE revoked_at IS NULL AND status = 'active' AND platform IN ('meta', 'google')
            AND (client_id = ${clientId}::uuid OR client_id IS NULL)
          ORDER BY created_at`);
-      const [k] = await t.$queryRaw<Array<Record<string, unknown>>>(Prisma.sql`SELECT * FROM workspace_kurulum WHERE client_id = ${clientId}::uuid`);
+      /*
+       * LEFT JOIN users — beyan edenin ADI için. INNER JOIN kurulum satırının
+       * KENDİSİNİ süzerdi (users politikası dar; CLAUDE.md "RLS'li bir tabloya
+       * yapılan INNER JOIN ana satırı sessizce süzüyor") ve bütün kurulum
+       * "hiç başlanmamış" görünürdü.
+       */
+      const [k] = await t.$queryRaw<Array<Record<string, unknown>>>(Prisma.sql`
+        SELECT k.*, u.full_name AS platform_beyan_eden_adi
+          FROM workspace_kurulum k LEFT JOIN users u ON u.id = k.platform_beyan_eden
+         WHERE k.client_id = ${clientId}::uuid`);
       const [hz] = await t.$queryRaw<Array<{ durum: string; soru: number; piksel_id: string | null }>>(Prisma.sql`
         SELECT durum, jsonb_array_length(sorular)::int AS soru, piksel_id FROM workspace_hazirlama WHERE client_id = ${clientId}::uuid`);
       return { c, hesaplar, profiller, baglantilar, k, hz };
@@ -202,6 +216,7 @@ export class KurulumService {
       sahip: satir?.hesapSahibi ?? null,
       pikselId: r.hz?.piksel_id ?? null,
       kullanilmayanlar: r.k ? kullanilmayanOku(r.k) : [],
+      platformBeyani: r.k ? platformBeyaniOku(r.k) : null,
     };
     const gb = this.baglantiSec(b, 'google');
     const mb = this.baglantiSec(b, 'meta');
@@ -255,6 +270,7 @@ export class KurulumService {
       // (`kurulumListesi`) kullanılmayan platformun adımını "Kullanılmıyor"
       // diye gösteriyor; burada atmak o satırı "sunucu döndürmedi" yapardı.
       kullanilmayanPlatformlar: b.kullanilmayanlar,
+      platformBeyani: b.platformBeyani,
       adimlar,
       ozet: kurulumOzeti(adimlar),
       siteKodu: kimlik ? { gtmKimligi: kimlik, ...gtmKodu(kimlik) } : null,
@@ -467,11 +483,20 @@ export class KurulumService {
     this.erisim(ctx, clientId, true);
     // Sabit sıra: aynı beyan iki farklı dizi olarak saklanmasın (denetim kaydı karşılaştırılabilir kalsın).
     const liste = KURULUM_PLATFORMLARI.filter((p) => kullanilmayanlar.includes(p));
+    /*
+     * BEYANIN İZİ (kim, ne zaman) beyanla AYNI deyimde: son kontrol ekranı
+     * "kim, ne zaman" yazıyor ve iz ayrı yazılsaydı beyan izsiz kalabilirdi.
+     * Beyan kalkınca iz de NULL — eski bir kişinin adı boş bir beyanın
+     * üstünde asılı kalmasın.
+     */
+    const izEden = liste.length > 0 ? ctx.userId : null;
+    const izTarih = liste.length > 0 ? new Date().toISOString() : null;
     const yazilan = await this.prisma.withTenant(ctx, (t) =>
       t.$queryRaw<unknown[]>(Prisma.sql`
-        INSERT INTO workspace_kurulum (client_id, org_id, kullanilmayan_platformlar, updated_at)
-        SELECT ${clientId}::uuid, c.org_id, ${liste}::text[], now() FROM clients c WHERE c.id = ${clientId}::uuid
-        ON CONFLICT (client_id) DO UPDATE SET kullanilmayan_platformlar = EXCLUDED.kullanilmayan_platformlar, updated_at = now()
+        INSERT INTO workspace_kurulum (client_id, org_id, kullanilmayan_platformlar, platform_beyan_eden, platform_beyan_tarihi, updated_at)
+        SELECT ${clientId}::uuid, c.org_id, ${liste}::text[], ${izEden}::uuid, ${izTarih}::timestamptz, now() FROM clients c WHERE c.id = ${clientId}::uuid
+        ON CONFLICT (client_id) DO UPDATE SET kullanilmayan_platformlar = EXCLUDED.kullanilmayan_platformlar,
+          platform_beyan_eden = EXCLUDED.platform_beyan_eden, platform_beyan_tarihi = EXCLUDED.platform_beyan_tarihi, updated_at = now()
         RETURNING client_id`),
     );
     // Politikası izin vermeyen yazma SIFIR satır etkiler ve hata vermez.
@@ -481,7 +506,11 @@ export class KurulumService {
   }
 
   private async kilitli<T>(clientId: string, fn: () => Promise<T>): Promise<T> {
-    if (this.calisan.has(clientId)) throw new ConflictException('Bu workspace’te bir kurulum işlemi zaten sürüyor; bitince sayfa güncellenir.');
+    // KOD SÖZLEŞMEDE (`KURULUM_HATA_KODLARI`): panel bunu yoklamaya çeviriyor,
+    // öbür 409'u (workspace seç) mesaj olarak gösteriyor. Ayıran metin değil kod.
+    if (this.calisan.has(clientId)) {
+      throw new ConflictException({ code: KURULUM_HATA_KODLARI.suruyor, message: 'Bu workspace’te bir kurulum işlemi zaten sürüyor; bitince sayfa güncellenir.' });
+    }
     this.calisan.add(clientId);
     try {
       return await fn();
@@ -1157,6 +1186,20 @@ export function satirOku(k: Record<string, unknown>): KurulumSatiri {
  */
 export function hesapYetkisi(ctx: Pick<TenantContext, 'permissions'>): boolean {
   return ctx.permissions.includes('connection.write') && ctx.permissions.includes('connection.manage');
+}
+
+/**
+ * Platform beyanının izi. Beyan yoksa `null`; beyan var ama iz yoksa (iz
+ * kolonlarından ÖNCE verilmiş beyan) `tarih: null` — tarih UYDURULMAZ,
+ * `updated_at` satırın başka bir alanı yazılınca da değişiyor.
+ */
+export function platformBeyaniOku(k: Record<string, unknown>): KurulumYaniti['platformBeyani'] {
+  if (kullanilmayanOku(k).length === 0) return null;
+  const eden = typeof k.platform_beyan_eden === 'string' ? k.platform_beyan_eden : null;
+  const ad = typeof k.platform_beyan_eden_adi === 'string' ? k.platform_beyan_eden_adi : null;
+  const t = k.platform_beyan_tarihi;
+  const tarih = t instanceof Date ? t.toISOString() : typeof t === 'string' ? new Date(t).toISOString() : null;
+  return { beyanEden: eden && ad ? { id: eden, ad } : null, tarih };
 }
 
 /** `workspace_kurulum.kullanilmayan_platformlar` → tipli liste; tanınmayan değer atılır. */

@@ -1,9 +1,12 @@
 import {
   KURULUM_BEYAN_OGELERI,
+  KURULUM_HATA_KODLARI,
+  KURULUM_PLATFORMLARI,
   SITE_YOK_KAPSAM_DISI_ADIMLAR,
   SITE_YOK_KAPSAM_DISI_PARCALAR,
   type KurulumBeyani,
   type KurulumPlatformu,
+  type SirketKurulumYaniti,
   type WorkspaceBeyanOgesi,
 } from '@advetics/shared';
 import {
@@ -143,8 +146,8 @@ export type IstekSonucu =
 
 /**
  * DÖRT HÂL AYRI:
- *   · 409 + "sürüyor" → başka bir kurulum işlemi bu workspace'te koşuyor
- *     (`kurulum.service.ts#kilitli`). Hata değil: bitmesini bekle.
+ *   · 409 + kod `KURULUM_SURUYOR` → başka bir kurulum işlemi bu workspace'te
+ *     koşuyor (`kurulum.service.ts#kilitli`). Hata değil: bitmesini bekle.
  *   · durum kodu YOK (ağ koptu, sekme uyudu) → istek sunucuya ulaşmış ve
  *     orada sürüyor olabilir. "Düştü" demek kullanıcıyı ikinci kez bastırır
  *     ve GTM'e ikinci yayın gider.
@@ -152,17 +155,21 @@ export type IstekSonucu =
  *     GTM yazma + yayın 30 sn'yi aşabiliyor (MIMARI § 11/3 ölçülecek).
  *   · diğer her şey → platformun mesajı, adımın altında.
  *
- * 409'UN İKİ ANLAMI VAR ve yalnız MESAJ ayırıyor: aynı uç "önce üstten bu
- * workspace'i seç" için de 409 dönüyor. Onu beklemeye çevirmek kullanıcıyı
- * iki dakika boşuna bekletip "hâlâ sürüyor olabilir" dedirtirdi — oysa
- * yapacağı iş belli. Sunucu ikisine ayrı `code` verene kadar ayıran mesaj
- * (CLAUDE.md Meta "reduce the amount of data" dersiyle aynı durum).
+ * 409'UN İKİ ANLAMI KODLA AYRILIYOR (`KURULUM_HATA_KODLARI`, entegrasyon
+ * 2026-10-13): aynı uç "önce üstten bu workspace'i seç" için de 409 dönüyor
+ * ve onu beklemeye çevirmek kullanıcıyı iki dakika boşuna bekletirdi. Bir
+ * süre MESAJ metni (`/sürüyor/`) ayırıyordu; metin değişince sessizce
+ * kayardı. Kodu olmayan 409 MESAJDIR — bilinmeyen bir çakışmayı beklemek,
+ * yapılacak işi saklamak olur.
  */
 export function istekSonucu(e: unknown): IstekSonucu {
-  const status = typeof e === 'object' && e !== null && 'status' in e && typeof (e as { status: unknown }).status === 'number' ? (e as { status: number }).status : null;
+  const alan = <T,>(ad: string, tur: 'number' | 'string'): T | null =>
+    typeof e === 'object' && e !== null && ad in e && typeof (e as Record<string, unknown>)[ad] === tur ? ((e as Record<string, unknown>)[ad] as T) : null;
+  const status = alan<number>('status', 'number');
+  const kod = alan<string>('code', 'string');
   const mesaj = e instanceof Error && e.message ? e.message : 'Sunucuya ulaşılamadı.';
   if (status === null) return { tur: 'yoklama', neden: 'ag' };
-  if (status === 409 && /sürüyor/i.test(mesaj)) return { tur: 'yoklama', neden: 'kilit' };
+  if (status === 409 && kod === KURULUM_HATA_KODLARI.suruyor) return { tur: 'yoklama', neden: 'kilit' };
   if (status === 502 || status === 503 || status === 504) return { tur: 'yoklama', neden: 'zaman_asimi' };
   return { tur: 'mesaj', mesaj };
 }
@@ -245,23 +252,59 @@ export function adimBeyanlari(kod: KurulumListesiKodu): BeyanSecenegi[] {
 }
 
 /**
- * BEYANLAR NEREDEN OKUNUYOR — iki biçimden biri (MIMARI § 7, Ajan 2 seçer):
- * `GET /clients/:id/kurulum` yanıtında `beyanlar` alanı ya da ayrı uç. Bu
- * fonksiyon yanıtta alan VARSA onu döndürür; yoksa `undefined` (çağıran
- * ayrı uca gider). "Alan yok" ile "boş dizi" ayrı: boş dizi "beyan yok"
- * demek ve ayrı uca gitmek gereksiz.
+ * BEYAN DİZİSİ — `GET /clients/:id/kurulum/beyanlar` yanıtı ve
+ * `SirketKurulumYaniti.beyanlar` (TEK biçim: dizi; entegrasyon 2026-10-13).
+ * Dizi değilse `null` = OKUNAMADI: "beyan yok" sanmak verilmiş bir kararı
+ * "eksik" gösterirdi.
+ *
+ * TANINMAYAN ÖĞE ATILIR, dizi yine "okundu" sayılır: sunucuya yeni bir öğe
+ * eklenip panel eskiyse o öğe hiçbir parçayı kapatmaz — listenin TAMAMINI
+ * "okunamadı" yapmak bütün beyanlı parçaları "bilinmiyor"a çekerdi.
  */
-export function yanittakiBeyanlar(kurulum: unknown): KurulumBeyani[] | undefined {
-  if (typeof kurulum !== 'object' || kurulum === null || !('beyanlar' in kurulum)) return undefined;
-  const b = (kurulum as { beyanlar: unknown }).beyanlar;
-  if (!Array.isArray(b)) return undefined;
-  /*
-   * TANINMAYAN ÖĞE ATILIR, çağıran yine beyanları "okundu" sayar: sunucuya
-   * yeni bir öğe eklenip panel eskiyse o öğe hiçbir parçayı kapatmaz —
-   * listenin TAMAMINI "okunamadı" yapmak bütün beyanlı parçaları
-   * "bilinmiyor"a çekerdi.
-   */
-  return b.filter((x): x is KurulumBeyani => typeof x === 'object' && x !== null && (KURULUM_BEYAN_OGELERI as readonly string[]).includes((x as { oge?: string }).oge ?? ''));
+export function beyanDizisi(v: unknown): KurulumBeyani[] | null {
+  if (!Array.isArray(v)) return null;
+  return v.filter((x): x is KurulumBeyani => typeof x === 'object' && x !== null && (KURULUM_BEYAN_OGELERI as readonly string[]).includes((x as { oge?: string }).oge ?? ''));
+}
+
+/**
+ * ŞİRKET KURULUMU — `GET /kurulum/sirket`in TAM yanıtı (`SirketKurulumYaniti`,
+ * entegrasyon 2026-10-13): şirket beyanları, iki adımlı doğrulama zorunluluğu
+ * ve şirketin KULLANDIĞI platformlar (en az bir workspace'in kullandığı —
+ * sunucu bütün workspace'lere bakıyor; panel aktif workspace'ten türetmiyor).
+ * Bağlantılar BURADA DEĞİL: parametresiz `/connections` (MIMARI Ç-2).
+ *
+ * BİÇİM DOĞRULANIYOR: alanlardan biri eksikse yanıt OKUNAMADI sayılır —
+ * eksik beyan dizisini "beyan yok", eksik platform listesini "hiçbiri"
+ * okumak, kararı verilmiş bir adımı "eksik" ya da gereken bağlantıyı
+ * "kullanılmıyor" gösterirdi.
+ *
+ * ŞİRKET UYUŞMAZSA OKUNAMADI. "Tüm şirketler" görünümünde sunucunun şirketi
+ * (`ctx.orgId`) EV şirketi; sihirbaz ise bir KARDEŞ şirketin workspace'inde
+ * açık olabilir. Ev şirketinin bağlantıları ve 2FA kararı o workspace'in
+ * şirketi diye gösterilirdi — başlık ≠ gövde.
+ */
+export function sirketKurulumuOku(
+  s: { ok: true; v: unknown } | { ok: false; hata: string },
+  o: { tumSirketler: boolean; workspaceOrgId: string | null },
+): { ok: true; v: SirketKurulumYaniti } | { ok: false; hata: string } {
+  if (o.tumSirketler) return { ok: false, hata: '“Tüm şirketler” görünümünde şirketin kurulumu okunmuyor; üstten şirketi seç.' };
+  if (!s.ok) return s;
+  const v = s.v as Partial<SirketKurulumYaniti> | null;
+  const beyanlar = beyanDizisi(v?.beyanlar);
+  if (!v || typeof v.orgId !== 'string' || beyanlar === null || !Array.isArray(v.kullanilanPlatformlar) || !('ikiAdimZorunlu' in v)) {
+    return { ok: false, hata: 'Şirket kurulumu beklenmeyen biçimde geldi.' };
+  }
+  if (o.workspaceOrgId !== null && v.orgId !== o.workspaceOrgId) {
+    return { ok: false, hata: 'Şirket bilgisi bu workspace’in şirketine ait değil; üstten workspace’in şirketini seç.' };
+  }
+  return {
+    ok: true,
+    v: {
+      ...(v as SirketKurulumYaniti),
+      beyanlar,
+      kullanilanPlatformlar: KURULUM_PLATFORMLARI.filter((p) => v.kullanilanPlatformlar!.includes(p)),
+    },
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -315,10 +358,11 @@ export function baslangicSirasi(satirlar: readonly BaslangicSatiri[]): Baslangic
 }
 
 /**
- * KAÇ WORKSPACE'İN SAYACI OKUNUR. Her sayaç dört uç ve hazırlama okuması
- * imzası değişmiş workspace'te AI hazırlığını BAŞLATIYOR (`hazirlama.service.ts#oku`).
- * Yüz workspace'li bir şirkette başlangıç ekranını açmak yüz hazırlık
- * başlatmamalı. İlk N okunur, kalanı "sayılmadı" yazar (sessiz kesme yok).
+ * KAÇ WORKSPACE'İN SAYACI OKUNUR. Her sayaç dört uç; yüz workspace'li bir
+ * şirkette başlangıç ekranı paylaşımlı sunucuya dört yüz istek atmamalı. İlk
+ * N okunur, kalanı "sayılmadı" yazar (sessiz kesme yok). Hazırlama burada
+ * TETİKLEMEDEN okunuyor (`hazirlamaSayacYolu`); sınır bir zamanlar AI işinin
+ * de sınırıydı, Ajan 4 kapısında o tetikleme sayaçtan çıkarıldı.
  */
 export const BASLANGIC_SAYAC_SINIRI = 12;
 

@@ -46,7 +46,7 @@ export const PARCA_ADI: Record<string, string> = {
   butce: 'Varsayılan günlük bütçe',
   marka_bilgisi: 'Marka alanları',
   logo: 'Logo',
-  // Sihirbazın yeni hazırlık maddeleri (HAZIRLIK_SIHIRBAZ_KODLARI).
+  // Sihirbazın hazırlık maddeleri (HAZIRLIK_KODLARI sonundaki altı madde).
   site_adresi: 'Web sitesi',
   iletisim: 'İletişim kişisi ve telefon',
   rapor_alicisi: 'Rapor alıcıları',

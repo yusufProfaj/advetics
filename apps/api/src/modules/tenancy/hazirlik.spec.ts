@@ -1,7 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { HAZIRLIK_KODLARI, HAZIRLIK_SIHIRBAZ_KODLARI, type TenantContext } from '@advetics/shared';
+import { HAZIRLIK_KODLARI, type TenantContext } from '@advetics/shared';
+
+/** Sihirbazın altı maddesi (MIMARI § 2b) — artık `HAZIRLIK_KODLARI`nın parçası. */
+const SIHIRBAZ_MADDELERI = ['site_adresi', 'iletisim', 'rapor_alicisi', 'adres', 'bildirim', 'erisim'] as const;
 import { createHarness, seedTenant, IDS, type Harness } from '../../../test/pglite-harness';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { ILK_CEKIM_BEKLEME_SINIRI_MS, hazirlikMaddeleri, type HazirlikGirdisi, type HazirlikHesabi } from './hazirlik';
@@ -65,7 +68,8 @@ describe('karar', () => {
     // boş satır ya da hiç görünmeyen bir madde demek.
     // Sihirbazın maddeleri SONDA (MIMARI § 6 "Geçiciler": Ajan 1 iki listeyi
     // birleştirince bu satır tek listeye döner).
-    expect(hazirlikMaddeleri(TAM).map((m) => m.kod)).toEqual([...HAZIRLIK_KODLARI, ...HAZIRLIK_SIHIRBAZ_KODLARI]);
+    expect(hazirlikMaddeleri(TAM).map((m) => m.kod)).toEqual([...HAZIRLIK_KODLARI]);
+    for (const k of SIHIRBAZ_MADDELERI) expect(HAZIRLIK_KODLARI).toContain(k);
   });
 
   it('hiçbir madde boş açıklama döndürmüyor', () => {
@@ -155,7 +159,7 @@ describe('sihirbaz maddeleri (MIMARI § 2b)', () => {
   const bilgi = (b: Partial<HazirlikGirdisi['bilgiler']>): HazirlikGirdisi => ({ ...TAM, bilgiler: { ...TAM.bilgiler, ...b } });
 
   it('TAM girdide altı madde de tamam ve hiçbiri zorunlu değil (hazir bayrağı anlamını korur)', () => {
-    for (const kod of HAZIRLIK_SIHIRBAZ_KODLARI) {
+    for (const kod of SIHIRBAZ_MADDELERI) {
       expect(madde(TAM, kod), kod).toMatchObject({ durum: 'tamam', zorunlu: false });
     }
   });

@@ -1,8 +1,8 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { SITE_YOK_SEBEBI, type KurulumBeyani } from '@advetics/shared';
-import { KURULUM_LISTESI, type KurulumSayaci } from '@/lib/panel-adresleri';
+import { KURULUM_HATA_KODLARI, ROLE_PERMISSIONS, SITE_YOK_SEBEBI, kapiAcikMi, startOAuthSchema, type KurulumBeyani } from '@advetics/shared';
+import { KURULUM_LISTESI, sihirbazAdresi, type KurulumSayaci } from '@/lib/panel-adresleri';
 import { YOKLAMA_SINIRI } from '@/components/marka-merkezi/hazirlama-mantik';
 import { acikSiteKapisiyla, amacSiteSebebi, platformDurumu, siteKapisiyla } from '@/components/rehber/rehber-mantik';
 import {
@@ -17,8 +17,9 @@ import {
   otomatikDurumu,
   seritGorunur,
   sihirbazModu,
+  sirketKurulumuOku,
   sonrakiAdim,
-  yanittakiBeyanlar,
+  beyanDizisi,
   yoklamaKarari,
 } from './sihirbaz-akisi';
 
@@ -31,7 +32,7 @@ import {
  */
 
 const sayac = (s: Partial<KurulumSayaci>): KurulumSayaci => ({ tamam: 0, toplam: 10, kapsamDisi: 0, bilinmiyor: 0, bitti: false, ...s });
-const hata = (status: number, mesaj: string) => Object.assign(new Error(mesaj), { status });
+const hata = (status: number, mesaj: string, code = 'CONFLICT') => Object.assign(new Error(mesaj), { status, code });
 
 describe('adres → hâl', () => {
   it('KRİTİK: `musteri` `tur`dan ÖNCE — OAuth dönüşü kaldığı adıma döner', () => {
@@ -74,15 +75,19 @@ describe('gezinme', () => {
 });
 
 describe('KRİTİK: istek düşüşü — hata mı bekleme mi (MIMARI § 3d), dört hâl ayrı', () => {
-  it('409 "sürüyor" → bekleme (kilit), hata DEĞİL', () => {
-    expect(istekSonucu(hata(409, 'Bu workspace’te bir kurulum işlemi zaten sürüyor; bitince sayfa güncellenir.'))).toEqual({ tur: 'yoklama', neden: 'kilit' });
+  it('409 + KURULUM_SURUYOR kodu → bekleme (kilit), hata DEĞİL — METİN ne derse desin', () => {
+    expect(istekSonucu(hata(409, 'Bu workspace’te bir kurulum işlemi zaten sürüyor.', KURULUM_HATA_KODLARI.suruyor))).toEqual({ tur: 'yoklama', neden: 'kilit' });
+    // Metin değişse de kod aynıysa bekleme: ayıran kod.
+    expect(istekSonucu(hata(409, 'Başka bir işlem var.', KURULUM_HATA_KODLARI.suruyor))).toEqual({ tur: 'yoklama', neden: 'kilit' });
   });
 
-  it('409 "önce bu workspace’i seç" → MESAJ: yapılacak iş belli, beklemek boşa', () => {
-    expect(istekSonucu(hata(409, 'Değişiklik için önce üstten bu workspace’i seç.'))).toEqual({
+  it('KRİTİK: 409 "önce bu workspace’i seç" → MESAJ; metninde "sürüyor" geçse bile kodu yoksa ya da başka kodsa bekleme DEĞİL', () => {
+    expect(istekSonucu(hata(409, 'Değişiklik için önce üstten bu workspace’i seç.', KURULUM_HATA_KODLARI.workspaceSecilmeli))).toEqual({
       tur: 'mesaj',
       mesaj: 'Değişiklik için önce üstten bu workspace’i seç.',
     });
+    expect(istekSonucu(hata(409, 'İşlem sürüyor gibi görünüyor.', 'CONFLICT'))).toMatchObject({ tur: 'mesaj' });
+    expect(istekSonucu(hata(409, 'İşlem sürüyor.', KURULUM_HATA_KODLARI.sirketSecilmeli))).toMatchObject({ tur: 'mesaj' });
   });
 
   it('durum kodu yok (ağ koptu) → bekleme: işlem sunucuda sürüyor olabilir, "düştü" denmez', () => {
@@ -143,15 +148,74 @@ describe('alt çubuk', () => {
 });
 
 describe('beyanların okunuşu', () => {
-  it('KRİTİK: alan YOK ile BOŞ dizi ayrı — yoksa ayrı uca gidilir, boşsa "beyan yok"', () => {
-    expect(yanittakiBeyanlar({ adimlar: [] })).toBeUndefined();
-    expect(yanittakiBeyanlar(null)).toBeUndefined();
-    expect(yanittakiBeyanlar({ beyanlar: [] })).toEqual([]);
+  it('KRİTİK: TEK biçim dizi — dizi değilse OKUNAMADI (`null`), boş dizi "beyan yok"', () => {
+    expect(beyanDizisi([])).toEqual([]);
+    expect(beyanDizisi(null)).toBeNull();
+    expect(beyanDizisi(undefined)).toBeNull();
+    // Eski "yanıtta alan" biçimi artık okunmuyor: nesne = biçim bilinmiyor.
+    expect(beyanDizisi({ beyanlar: [] })).toBeNull();
   });
 
   it('tanınmayan öğe atılır, listenin tamamı "okunamadı" yapılmaz', () => {
     const b: KurulumBeyani = { oge: 'adres', clientId: 'c', gerekce: null, beyanEden: null, tarih: '2026-10-13T10:00:00Z' };
-    expect(yanittakiBeyanlar({ beyanlar: [b, { oge: 'yeni_bir_sey' }] })).toEqual([b]);
+    expect(beyanDizisi([b, { oge: 'yeni_bir_sey' }])).toEqual([b]);
+  });
+});
+
+describe('KRİTİK: şirket kurulumu yanıtı (`GET /kurulum/sirket`, entegrasyon)', () => {
+  const ORG = '11111111-1111-1111-1111-111111111111';
+  const tam = { orgId: ORG, sirketAdi: 'Ege', ikiAdimZorunlu: false, beyanlar: [], workspaceler: [], kullanilanPlatformlar: ['google'] };
+
+  it('tam yanıt okunur; platform listesi sunucudan, tanınmayan değer atılır', () => {
+    const r = sirketKurulumuOku({ ok: true, v: { ...tam, kullanilanPlatformlar: ['google', 'tiktok'] } }, { tumSirketler: false, workspaceOrgId: ORG });
+    expect(r).toMatchObject({ ok: true, v: { kullanilanPlatformlar: ['google'], ikiAdimZorunlu: false, beyanlar: [] } });
+  });
+
+  it('KRİTİK: "tüm şirketler" görünümünde OKUNAMADI — sunucunun şirketi ev şirketi, workspace kardeş şirketin olabilir', () => {
+    const r = sirketKurulumuOku({ ok: true, v: tam }, { tumSirketler: true, workspaceOrgId: ORG });
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.hata).toContain('Tüm şirketler');
+  });
+
+  it('KRİTİK: yanıtın şirketi workspace’in şirketi değilse OKUNAMADI (başlık ≠ gövde)', () => {
+    expect(sirketKurulumuOku({ ok: true, v: tam }, { tumSirketler: false, workspaceOrgId: '22222222-2222-2222-2222-222222222222' }).ok).toBe(false);
+    // Başlangıç ekranında workspace yok: karşılaştırma yapılmaz.
+    expect(sirketKurulumuOku({ ok: true, v: tam }, { tumSirketler: false, workspaceOrgId: null }).ok).toBe(true);
+  });
+
+  it('KRİTİK: eksik alan "beyan yok" / "hiçbir platform" DEĞİL — okunamadı', () => {
+    const o = { tumSirketler: false, workspaceOrgId: ORG };
+    for (const bozuk of [{ ...tam, beyanlar: undefined }, { ...tam, kullanilanPlatformlar: undefined }, { orgId: ORG }, null]) {
+      expect(sirketKurulumuOku({ ok: true, v: bozuk }, o).ok, JSON.stringify(bozuk)).toBe(false);
+    }
+    expect(sirketKurulumuOku({ ok: false, hata: 'x' }, o)).toEqual({ ok: false, hata: 'x' });
+  });
+});
+
+describe('KRİTİK: OAuth dönüşü sunucunun beyaz listesinden geçiyor', () => {
+  it('her adımın sihirbaz adresi `redirectTo` kuralına uyar (yoksa sunucu dönüşü düşürür, kullanıcı başlangıca düşer)', () => {
+    const id = '0b6c3c1e-2f5d-4a8e-9c1f-6a1b2c3d4e5f';
+    for (const k of SIHIRBAZ_SIRASI) {
+      const a = sihirbazAdresi(id, k);
+      expect(startOAuthSchema.shape.redirectTo.safeParse(a).success, a).toBe(true);
+      expect(sihirbazModu(Object.fromEntries(new URL(a, 'https://x').searchParams))).toEqual({ tur: 'tamamlama', musteri: id, adim: k });
+    }
+  });
+
+  it('açık yönlendirme reddediliyor: protokol-göreli, mutlak ve ters bölü', () => {
+    for (const kotu of ['//evil.com', 'https://evil.com', '/\\evil.com', 'evil.com', '/kurulum\n']) {
+      expect(startOAuthSchema.shape.redirectTo.safeParse(kotu).success, kotu).toBe(false);
+    }
+  });
+});
+
+describe('KRİTİK: client_viewer rolü sihirbaza giremez', () => {
+  it('sayfa kapısı (`markaMerkezi.gor`) client_viewer rolünde kapalı, yönetici ve reklam yöneticisinde açık', () => {
+    const oturum = (rol: keyof typeof ROLE_PERMISSIONS) => ({ permissions: [...ROLE_PERMISSIONS[rol]], isOrgAdmin: rol === 'admin', platformAdmin: false, managerAccount: null });
+    expect(kapiAcikMi(oturum('client_viewer'), 'markaMerkezi.gor')).toBe(false);
+    expect(kapiAcikMi(oturum('client_viewer'), 'kurulum.yaz')).toBe(false);
+    expect(kapiAcikMi(oturum('ad_manager'), 'markaMerkezi.gor')).toBe(true);
+    expect(kapiAcikMi(oturum('admin'), 'markaMerkezi.gor')).toBe(true);
   });
 });
 
@@ -304,6 +368,20 @@ describe('KRİTİK: kaynak kuralları', () => {
     expect(icerik).not.toMatch(/apiFetch\(`\/clients\/\$\{clientId\}`,\s*\{\s*method: 'PATCH'/);
   });
 
+  it('KRİTİK: şirketin platformları SUNUCUDAN — aktif workspace’in beyanından türetilmiyor', () => {
+    const t = oku('components/kurulum/tamamlama.tsx');
+    expect(t).toContain('kullanilanPlatformlar: veri.sirket.ok ? veri.sirket.v.kullanilanPlatformlar : null,');
+    expect(t).toContain('ikiAdimZorunlu: veri.sirket.ok ? veri.sirket.v.ikiAdimZorunlu : null,');
+    expect(t).not.toMatch(/kullanilanPlatformlar:\s*KURULUM_PLATFORMLARI/);
+    expect(SAYFA).toContain('kullanilanPlatformlar: sk.ok ? sk.v.kullanilanPlatformlar : null,');
+    expect(SAYFA).not.toMatch(/kullanilanPlatformlar:\s*KURULUM_PLATFORMLARI/);
+  });
+
+  it('KRİTİK: OAuth dönüşünün sonucu S1 dışındaki adımda da görünüyor (ölçüm izni reddi sessiz kalmasın)', () => {
+    expect(oku('components/kurulum/tamamlama.tsx')).toContain("{aktif !== 'baglantilar' && <CallbackBanner />}");
+    expect(oku('components/kurulum/platform-adimi.tsx')).toContain('<CallbackBanner />');
+  });
+
   it('KRİTİK: OAuth izin dönüşü sihirbazın AYNI adımına', () => {
     expect(oku('components/kurulum/tamamlama.tsx')).toContain('izinDonusu={sihirbazAdresi(clientId, aktifAdim.kod)}');
     expect(oku('components/marka-merkezi/kurulum-bolumu.tsx')).toContain('encodeURIComponent(izinDonusAdresi ?? izinDonusu(clientId))');
@@ -312,7 +390,9 @@ describe('KRİTİK: kaynak kuralları', () => {
   it('KRİTİK: "Otomatik yap" adım başına `kodlar` süzgeciyle ve kapsam sözleşmeden', () => {
     const t = oku('components/kurulum/tamamlama.tsx');
     expect(t).toContain('eksikleriTamamlaKapsami(girdi, aktifAdim.kod)');
-    expect(t).toContain('body: JSON.stringify({ kodlar: kapsam.kurulumAdimlari })');
+    // Gövde sözleşmenin tipinden (`KurulumTamamlaIstegi`) ve YALNIZ bu adımın kodlarıyla.
+    expect(t).toContain('const govde: KurulumTamamlaIstegi = { kodlar: [...kapsam.kurulumAdimlari] };');
+    expect(t).toContain('body: JSON.stringify(govde)');
     expect(t).toContain("const s = istekSonucu(e);");
   });
 

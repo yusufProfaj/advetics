@@ -120,6 +120,18 @@ describe('kurulum beyanları migration\'ı üretim sırasında', () => {
     ]);
   });
 
+  it('KRİTİK: sonraki migration (platform beyanının izi) eski beyanı BOZMUYOR, iz uydurmuyor (NULL)', async () => {
+    const sonraki = readdirSync(MIGRATIONS).filter((d) => /^\d/.test(d));
+    expect(sonraki).toContain('20261017300000_platform_beyani_izi');
+    expect(
+      await q<{ k: string[]; e: string | null; t: string | null }>(
+        `SELECT kullanilmayan_platformlar AS k, platform_beyan_eden AS e, platform_beyan_tarihi AS t FROM workspace_kurulum WHERE client_id = '${WS}'`,
+      ),
+    ).toEqual([{ k: ['google'], e: null, t: null }]);
+    await pg.exec(`UPDATE workspace_kurulum SET platform_beyan_eden = '${USER}', platform_beyan_tarihi = now() WHERE client_id = '${WS}'`);
+    await expect(pg.exec(`UPDATE workspace_kurulum SET platform_beyan_eden = '99999999-9999-9999-9999-999999999999' WHERE client_id = '${WS}'`)).rejects.toThrow(/platform_beyan_eden_fkey/);
+  });
+
   it('prisma/sql ikinci kez koşunca da temiz (deploy\'un db:rls\'i her seferinde koşuyor)', async () => {
     await sqlDosyalari();
     expect(await q<{ n: number }>(`SELECT count(*)::int AS n FROM pg_policies WHERE tablename = 'kurulum_beyanlari'`)).toEqual([{ n: 4 }]);

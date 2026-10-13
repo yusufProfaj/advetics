@@ -4,7 +4,7 @@ import { RehberEkrani } from '@/components/rehber/rehber-ekrani';
 import { RehberGirisi, RehberMesaji } from '@/components/rehber/rehber-girisi';
 import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import { baglanti } from '@/lib/baglanti';
-import { beyanGirdisi, beyanlariOkuKurulumsuz } from '@/lib/kurulum-beyanlari';
+import { beyanGirdisi, beyanlariOku } from '@/lib/kurulum-beyanlari';
 import { sayfaWorkspaceId, workspaceSecimVerisi } from '@/lib/sayfa-workspace';
 import { hasPermission, requireSession } from '@/lib/session';
 
@@ -110,7 +110,7 @@ export default async function AdvCampaignPage({ searchParams }: { searchParams: 
    * isteyen amaç kartları üstü çizili ve sebebiyle. Okunamazsa `null` ve
    * hiçbir amaç kapanmaz — çalışan bir amacı gizlemek yanlış alarmın tersi.
    */
-  const siteYok = siteYokMu(beyanGirdisi(await beyanlariOkuKurulumsuz(serverApiFetch, clientId)));
+  const siteYok = siteYokMu(beyanGirdisi(await beyanlariOku(serverApiFetch, clientId)));
   return (
     <RehberEkrani
       key={r.value.id}

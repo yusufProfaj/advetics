@@ -151,8 +151,15 @@ export class HazirlamaService {
     };
   }
 
-  async oku(ctx: TenantContext, clientId: string): Promise<HazirlamaYaniti> {
+  async oku(ctx: TenantContext, clientId: string, o: { tetikle: boolean } = { tetikle: true }): Promise<HazirlamaYaniti> {
     this.erisim(ctx, clientId);
+    /*
+     * SAYAÇ OKUMASI TETİKLEMEZ (Ajan 4 kapısı): sihirbazın başlangıcı on iki
+     * workspace'in sayacını okuyor; tetikleseydi her açılış imzası değişmiş
+     * her workspace için site taraması + AI işi başlatırdı. Kilit yine
+     * okunuyor: çalışan iş "calisiyor" görünsün, sayaç "eksik" demesin.
+     */
+    if (!o.tetikle) return this.yanit(clientId, await this.satir(ctx, clientId));
     // KİLİT SATIRDAN ÖNCE OKUNUR. İş satırı yazıp SONRA kilidi bırakıyor;
     // ters sırada (önce satır, sonra kilit) biten işin yoklaması eski satırı
     // görüp kilidi boş buluyor ve işi bir kez daha başlatıyordu (test yakaladı).

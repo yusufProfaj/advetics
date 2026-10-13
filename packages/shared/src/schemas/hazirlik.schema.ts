@@ -24,19 +24,13 @@ export const HAZIRLIK_KODLARI = [
   'aylik_butce',
   'sosyal_kanal',
   'reklam_hazirligi',
-] as const;
-/**
- * SİHİRBAZIN YENİ MADDELERİ (docs/kurulum-sihirbazi/MIMARI.md § 2b) —
- * "Workspace bilgileri" ve "Bildirimler ve erişim" adımlarının parçaları.
- *
- * GEÇİCİ AYRI LİSTE: API (`tenancy/hazirlik.ts`) bunları henüz üretmiyor ve
- * `hazirlik.spec.ts` ürettiği kodları `HAZIRLIK_KODLARI` ile birebir
- * karşılaştırıyor. Ajan 2 maddeleri yazınca bu liste `HAZIRLIK_KODLARI`na
- * katılır ve bu sabit silinir. O güne kadar kurulum listesi bu parçaları
- * "Sunucu bu parçayı döndürmedi" (bilinmiyor) olarak gösterir — yani bu
- * sözleşme commit'i API'siz CANLIYA ALINMAZ.
- */
-export const HAZIRLIK_SIHIRBAZ_KODLARI = [
+  /*
+   * SİHİRBAZIN MADDELERİ (docs/kurulum-sihirbazi/MIMARI.md § 2b) — "Workspace
+   * bilgileri" ve "Bildirimler ve erişim" adımlarının parçaları. Bir süre
+   * ayrı bir listede (`HAZIRLIK_SIHIRBAZ_KODLARI`) duruyordu, çünkü API
+   * bunları henüz üretmiyordu; Ajan 2 yazdı, liste tek oldu (entegrasyon
+   * 2026-10-13). Sıra API'nin ürettiği sıra (`hazirlik.spec.ts`).
+   */
   /** `clients.website` dolu ve https. */
   'site_adresi',
   /** `contact_name` ve `contact_phone` dolu. */
@@ -47,11 +41,11 @@ export const HAZIRLIK_SIHIRBAZ_KODLARI = [
   'adres',
   /** En az bir ETKİN bildirim kanalı (beyan: `bildirim`). */
   'bildirim',
-  /** Org yöneticisi dışında en az bir sorumlu kişi (beyan: `erisim`). */
+  /** Workspace'e atanmış en az bir sorumlu kişi (beyan: `erisim`). */
   'erisim',
 ] as const;
 
-export type HazirlikKodu = (typeof HAZIRLIK_KODLARI)[number] | (typeof HAZIRLIK_SIHIRBAZ_KODLARI)[number];
+export type HazirlikKodu = (typeof HAZIRLIK_KODLARI)[number];
 
 /**
  * `bekliyor` (YENİ, sihirbaz): iş başladı ama henüz bitmedi — ilk veri

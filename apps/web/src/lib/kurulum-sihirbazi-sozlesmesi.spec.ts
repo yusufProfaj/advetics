@@ -52,6 +52,7 @@ function kurulum(ozel: Partial<Record<KurulumAdimKodu, { durum: KurulumAdimDurum
     site: null,
     hesapSahibi: null,
     kullanilmayanPlatformlar: [],
+    platformBeyani: null,
     adimlar: KURULUM_KODLARI.map((kod) => ({
       kod,
       grup: 'hesaplar',
@@ -139,10 +140,14 @@ describe('beyanlar — parça kapsam dışı', () => {
     expect(kurulumSayaci(kurulumListesi(g)).bitti).toBe(false);
   });
 
-  it('GEÇİŞ: beyanlar verilmezse (undefined) beyan yok sayılır — bugünkü çağıranların davranışı', () => {
+  it('KRİTİK: beyanlar ZORUNLU — geçiş (undefined = "beyan yok") KALKTI, verilmeyen alan derlenmez ve çalışma anında "okunamadı" gibi davranır', () => {
+    // @ts-expect-error — alan zorunlu; eksik bırakan çağıran DERLENMEZ (entegrasyon 2026-10-13).
+    const eksikAlan: KurulumListesiGirdisi = { kurulum: null, hazirlama: null, hazirlik: hazirlik({ erisim: 'eksik' }), kullanilmayanlar: [] };
+    expect(eksikAlan.kullanilmayanlar).toEqual([]);
+    // Bir JS çağıranı yine de alanı atlarsa beyanlı parça "eksik" DEĞİL (sessiz yanlış alarm yok).
     const g = girdi({ hazirlik: hazirlik({ erisim: 'eksik' }) });
     delete (g as { beyanlar?: unknown }).beyanlar;
-    expect(adim(g, 'bildirimler').parcalar.find((p) => p.kod === 'erisim')?.durum).toBe('eksik');
+    expect(adim(g, 'bildirimler').parcalar.find((p) => p.kod === 'erisim')?.durum).not.toBe('eksik');
   });
 
   it('bütün parçalar kapsam dışıysa adım kapsam dışı ve sayaçtan düşer, AYRI sayılır', () => {
@@ -363,6 +368,17 @@ describe('şirket kurulumu', () => {
   it('sunucu ayarı yoksa hata ve Advetics ekibine; okunamadıysa bilinmiyor', () => {
     expect(sirketKurulumListesi(sg({ uygunluk: [{ platform: 'meta', configured: false }], kullanilanPlatformlar: ['meta'] }))[0]!.parcalar[0]?.eylem).toBe('advetics_ekibine');
     expect(sirketKurulumListesi(sg({ baglantilar: null }))[0]!.durum).toBe('bilinmiyor');
+  });
+
+  it('KRİTİK: şirketin platform kullanımı OKUNAMADIYSA (null): etkin bağlantı tamam, olmayan "bilinmiyor" — "bağla" yok', () => {
+    const b = sirketKurulumListesi(sg({ kullanilanPlatformlar: null, baglantilar: [{ platform: 'meta', status: 'active', sahip: 'ajans' }] }))[0]!;
+    expect(b.parcalar.map((p) => [p.kod, p.durum])).toEqual([
+      ['meta', 'tamam'],
+      ['google', 'bilinmiyor'],
+    ]);
+    expect(b.parcalar.every((p) => p.eylem === null)).toBe(true);
+    expect(b.durum).toBe('bilinmiyor');
+    expect(kurulumSayaci(sirketKurulumListesi(sg({ kullanilanPlatformlar: null, baglantilar: [] }))).bitti).toBe(false);
   });
 
   it('hiçbir workspace platform kullanmıyorsa bağlantı adımı kullanılmıyor', () => {
