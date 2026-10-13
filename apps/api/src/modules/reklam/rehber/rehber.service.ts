@@ -155,7 +155,8 @@ import {
   type PikselSatiri,
 } from './platform-okuma';
 import type { MetaProvider } from '../../connections/providers/meta.provider';
-import { rehberYayinKapilari, type PlatformProvaHali } from './yayin-kapilari';
+import { rehberYayinKapilari, siteYokEngelleri, type PlatformProvaHali } from './yayin-kapilari';
+import { siteYokBeyaniVarMi } from '../../kurulum/kurulum-beyan';
 import { sayfaHtmlGetir, type HtmlSonucu } from '../../tenancy/site-oku';
 
 const logger = new Logger('Rehber');
@@ -497,6 +498,21 @@ export class RehberService {
 
   private tx(ctx: TenantContext): TxRunner {
     return (fn) => this.prisma.withTenant(ctx, (t) => fn(t as never));
+  }
+
+  /**
+   * "Web sitemiz yok" beyanı — kurulum modülünün TEK okuyucusuyla. ÜÇ HÂLLİ:
+   * sorgu düşerse `null` ve kapı AÇIK kalır (`siteYokRehberKapisi`): rehberin
+   * kendi adres kuralı site yoksa eksik listesinde zaten durduruyor, okunamayan
+   * bir beyan yüzünden çalışan bir amacı kapatmak yanlış alarmın ters yüzü.
+   */
+  private async siteYokOku(ctx: TenantContext, clientId: string): Promise<boolean | null> {
+    try {
+      return await this.tx(ctx)((t) => siteYokBeyaniVarMi(t as never, clientId));
+    } catch (e) {
+      logger.warn(`Kurulum beyanı okunamadı (${clientId}): ${(e as Error).message}`);
+      return null;
+    }
   }
 
   private get google(): GoogleProvider {
@@ -1670,6 +1686,13 @@ export class RehberService {
     let s = await this.satir(ctx, id);
     if (s.durum !== 'taslak' && s.durum !== 'yayinda') throw new ConflictException('Bu rehber için prova yapılmaz.');
     const a = alanlariOku(s);
+    /*
+     * "WEB SİTEMİZ YOK" PROVADAN ÖNCE ve TAZELEMEDEN ÖNCE (MIMARI § 0/2):
+     * aşağıdaki tazeleme ve prova platforma gidiyor; kapalı bir amaç için
+     * kota harcamak, sonunda zaten reddedilecek bir kurulumu prova etmek.
+     */
+    const siteEngeli = siteYokEngelleri(a.amac?.deger, a.platformlar?.deger ?? { meta: false, google: false }, await this.siteYokOku(ctx, s.client_id));
+    if (siteEngeli.length) throw new BadRequestException({ message: siteEngeli.join(' '), kapi: 'SITE', mesajlar: siteEngeli });
     await this.sayfaTazele(ctx, s.client_id, a);
     await this.googleSatisTazele(ctx, s.client_id, a);
     // Arama: teklif eşiği ve uzantılar provadan ÖNCE taze (gövdeye giriyorlar).
@@ -2002,8 +2025,16 @@ export class RehberService {
     // daraltılsaydı Meta bütün bütçeyi alırdı), `hedef` KURULACAK platformlar.
     const hedef = await this.hedefPlatformlar(ctx, s, acik);
     const tx = this.tx(ctx);
+    const siteYok = await this.siteYokOku(ctx, s.client_id);
     const k = await rehberYayinKapilari(
-      { istenenOzet, guncelOzet: rehberOzeti(a), provaOzeti: s.prova_ozeti, eksikler, acik: hedef },
+      {
+        istenenOzet,
+        guncelOzet: rehberOzeti(a),
+        provaOzeti: s.prova_ozeti,
+        eksikler,
+        acik: hedef,
+        siteYokEngelleri: siteYokEngelleri(a.amac?.deger, hedef, siteYok),
+      },
       {
         prova: (p) => this.provaHali(ctx, s, p),
         yazma: (p) => (p === 'meta' ? metaYazmaAcikMi(tx, s.client_id) : googleYazmaAcikMi(tx, s.client_id)),

@@ -436,3 +436,73 @@ mesaj; dört hâl ayrı); `.catch(() => set…([]))` taraması; `panel-tasarim`,
   beyana gerek kalmaz — Ajan 2 ilk iş bakar.
 - Sunucudaki Postgres sürümü (`NULLS NOT DISTINCT` yerine iki kısmi indeks
   bu yüzden seçildi; sürüm ≥15 ise tek indeks de olur).
+
+## 14. Ajan 2 (Arka Plan) — yapılanlar ve sapmalar (2026-10-13)
+
+**Uçlar** (hepsi `apps/api/src/modules/kurulum/`):
+
+| Uç | Kapı | Not |
+|---|---|---|
+| `GET /clients/:id/kurulum/beyanlar` → `KurulumBeyani[]` | `client.read` | § 7'deki "biri" seçimi: **ayrı uç**. Panel girdisi beyanları üç hâlli istiyor; kurulum okuması düşünce beyanlar ayrıca okunabilmeli. Bağlam o workspace'e daraltılıyor (hazırlık servisiyle aynı). |
+| `PUT /clients/:id/kurulum/beyan` (`kurulumBeyaniSchema`) → güncel liste | `client.write` + aktif workspace | Yeniden beyan üzerine yazar (tek satır); geri al siler; denetim kaydı AYNI transaction'da (`kurulum.beyan` / `kurulum.beyan_geri_alindi`). Görünen ama silinemeyen satır 403. |
+| `GET /kurulum/sirket` → `SirketKurulumYaniti` | `client.read` | Şirket = `ctx.orgId`; seçim katmanı bu okuma için kapalı (bütün workspace'ler). Workspace yoksa iki platform da "kullanılıyor". |
+| `PUT /kurulum/sirket/beyan` (`sirketKurulumBeyaniSchema`) | `@RequireOrgAdmin()` | `kurulum.sirket_beyan` denetimi; RLS de yalnız `current_org_id` + yönetici. |
+| `POST /clients/:id/kurulum/tamamla` gövde `{ kodlar? }` (`kurulumTamamlaSchema`) | `client.write` | Gövdesiz = bugünkü davranış. İstenen ama otomatik olmayan kod sessiz atlanmıyor (`atlandi` + neden; hesap açan kodlar adıyla). "Site yok" beyanında `siteYokKurulumKodlari()` koşmuyor; beyan **okunamazsa** da koşmuyor ve her site adımı için "okunamadı" sonucu dönüyor. |
+
+**Hazırlık** (`tenancy/hazirlik.ts`): altı yeni madde (`site_adresi`, `iletisim`,
+`rapor_alicisi`, `adres`, `bildirim`, `erisim`) — hiçbiri `zorunlu` değil
+(`hazir` bayrağı anlamını korusun). Maddeler BEYANI UYGULAMIYOR, gerçeği
+söylüyor; beyanı `kurulumListesi` uygular. `erisim`: workspace'e ÖZEL
+`admin`/`ad_manager` üyeliği; yönetici olmayan kişi sıfır görüyorsa
+`bilinmiyor` (memberships politikası). `bildirim`: varsayılan kanal YOK
+(§ 13'teki soru — kaynak okundu); "kanal var ama etkin değil" ayrı cümle.
+`veri_akisi` → `bekliyor`: hesabın son yapı/metrik işi `queued`/`running`/
+`throttled` ve 3 saatten genç (`ILK_CEKIM_BEKLEME_SINIRI_MS`); daha yaşlıysa
+`eksik` + "takılmış olabilir", düşmüşse `eksik` + işin hata metni.
+
+**→ Ajan 1'e:** API altı maddeyi ÜRETİYOR; `HAZIRLIK_SIHIRBAZ_KODLARI`
+artık `HAZIRLIK_KODLARI`na katılabilir (API sırası: önce eski yedi, sonra
+bu altı — `hazirlik.spec.ts` "her kod tam bir kez" testi tek listeye
+dönecek). Shared'a bu yüzden dokunmadım.
+
+**AdvCampaign site-yok sunucu aynası** (`reklam/rehber/yayin-kapilari.ts`):
+yeni kapı `SITE` (özet kapısından hemen sonra, sıfır platform çağrısı);
+`siteYokEngelleri(amac, platformlar, siteYok)` shared `siteYokRehberKapisi`
+ile. Prova da tazeleme ve platform çağrısından ÖNCE reddediyor (400,
+`kapi: 'SITE'`, Türkçe `SITE_YOK_SEBEBI`). Beyan okunamazsa (null) kapı
+açık — rehberin adres kuralı zaten durduruyor (yardımcının sözleşmesi).
+
+**Ç-7 kapandı (ölçüldü, kaynak):** kurulumun `sayfa` adımı boost hesabını
+BAĞLAMIYORDU. Artık sayfa atanınca (ve Meta hesabı sayfadan sonra atanınca)
+workspace'in Meta hesabı yalnız BOŞ boost bağlarına `setProfileAdAccount`
+ile yazılıyor; düşerse adım düşmüyor, sebep sonuç cümlesinde.
+
+### Ajan 2 sapmaları
+
+1. **Kısıtlar 01_constraints.sql'de DEĞİL migration'da** (§ 5, § 9). Üretim
+   sırası testleri önceki migration'ların üstüne BUGÜNKÜ `prisma/sql`i
+   koşuyor; tabloyu adıyla anan bir 01_constraints satırı o testlerin
+   hepsini "relation does not exist" ile düşürürdü. Tablo yeni, çakışma
+   yok (`workspace_kurulum`, `sinyaller` de böyle).
+2. **Shared'a iki küçük ekleme** (sözleşmede uç vardı, tip yoktu):
+   `SirketKurulumYaniti` (`panel/sirket-kurulum-listesi.ts`) ve
+   `kurulumTamamlaSchema` / `KurulumTamamlaIstegi` (`kurulum/index.ts`).
+   Bağlantılar `SirketKurulumYaniti`nda YOK: girdi parametresiz
+   `/connections`tan (sözleşmedeki tuzak), ikinci özet aynı soruya iki cevap olurdu.
+3. **RLS UPDATE politikası var** (§ 5 yalnız select/yazma diyordu): yeniden
+   beyan `ON CONFLICT DO UPDATE` ile yazılıyor ve o yol UPDATE politikası
+   istiyor. Kural INSERT ile aynı.
+4. Şirket satırı yazma kuralı `org_kapsaminda` DEĞİL `org_id =
+   current_org_id() AND is_org_admin()`: "tüm şirketler" modunda bir
+   şirketin güvenlik kararı kardeş şirketten yazılamasın.
+
+### Ölçmediklerim
+
+- Canlı veritabanında migration (Postgres sürümü dahil) — Ajan 5.
+- `ILK_CEKIM_BEKLEME_SINIRI_MS` = 3 saat tahmin: büyük hesapta 90 günlük
+  reklam seviyesi geçmişinin gerçek süresi görülmedi.
+- `tamamla` + `kodlar`ın gerçek platformda süresi (§ 11/3).
+- Boost bağının canlıda Akıllı Boost kartında "bağlı hesap yok"u
+  kaldırdığı gözle görülmedi (§ 11/6).
+- `erisim`: org geneli `ad_manager` (client_id NULL) sorumlu SAYILMIYOR —
+  "workspace'e atanmış" okuması; ürün olarak tersi istenirse tek satır.

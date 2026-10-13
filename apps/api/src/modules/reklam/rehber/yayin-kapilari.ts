@@ -1,4 +1,11 @@
-import { yayinaEngelVarMi, type RehberEksigi, type RehberPlatformu, type UyumSonucu } from '@advetics/shared';
+import {
+  siteYokRehberKapisi,
+  yayinaEngelVarMi,
+  type RehberAmacKodu,
+  type RehberEksigi,
+  type RehberPlatformu,
+  type UyumSonucu,
+} from '@advetics/shared';
 
 /**
  * ═══ REHBER YAYIN KAPILARI — SIRAYLA ve SIFIR PLATFORM ÇAĞRISIYLA ═══
@@ -15,7 +22,7 @@ import { yayinaEngelVarMi, type RehberEksigi, type RehberPlatformu, type UyumSon
  * fonksiyona hiç verilmiyor. Sıfır çağrı kuralı böylece tipte duruyor.
  */
 
-export type KapiAdi = 'OZET' | 'EKSIK' | 'PROVA' | 'YAZMA' | 'UYUM';
+export type KapiAdi = 'OZET' | 'SITE' | 'EKSIK' | 'PROVA' | 'YAZMA' | 'UYUM';
 
 export type PlatformProvaHali = { tur: 'gecti' } | { tur: 'yok' | 'bekliyor' | 'reddedildi' | 'dogrulanamadi' | 'bayat'; metin: string };
 export type YazmaHali = { acik: true } | { acik: false; sebep: string };
@@ -29,6 +36,32 @@ export interface KapiGirdisi {
   provaOzeti: string | null;
   eksikler: readonly RehberEksigi[];
   acik: Record<RehberPlatformu, boolean>;
+  /**
+   * "Web sitemiz yok" beyanının engelleri (`siteYokEngelleri`). ZORUNLU alan:
+   * isteğe bağlı olsaydı yeni bir çağıran onu vermeyi unutur ve kapı sessizce
+   * açık kalırdı — panel süzgeci tek başına koruma değil.
+   */
+  siteYokEngelleri: readonly string[];
+}
+
+/**
+ * ═══ "WEB SİTEMİZ YOK" — SUNUCU AYNASI (docs/kurulum-sihirbazi/MIMARI.md § 0/2) ═══
+ *
+ * Panel site isteyen amaç kartlarını üstü çizili gösteriyor; sunucu da aynı
+ * yardımcıyla (`siteYokRehberKapisi`, kural İKİNCİ KEZ yazılmıyor) reddediyor.
+ * Eski bir sekme ya da doğrudan API çağrısı panel süzgecini atlayabilir.
+ * `siteYok` ÜÇ HÂLLİ: `null` (beyan okunamadı) KAPATMAZ — rehberin kendi
+ * adres kuralı site yoksa eksik listesinde zaten durduruyor.
+ */
+export function siteYokEngelleri(amac: RehberAmacKodu | null | undefined, platformlar: Record<RehberPlatformu, boolean>, siteYok: boolean | null): string[] {
+  if (!amac || siteYok !== true) return [];
+  const engeller: string[] = [];
+  for (const p of ['meta', 'google'] as const) {
+    if (!platformlar[p]) continue;
+    const k = siteYokRehberKapisi(amac, p, siteYok);
+    if (!k.acik) engeller.push(`${PLATFORM_ADI[p]}: ${k.sebep}`);
+  }
+  return engeller;
 }
 
 export interface KapiOkuyuculari {
@@ -51,6 +84,8 @@ export async function rehberYayinKapilari(g: KapiGirdisi, oku: KapiOkuyuculari):
   if (g.istenenOzet !== g.guncelOzet) {
     return { tur: 'ret', kapi: 'OZET', mesajlar: ['Sen bakarken rehber değişti; sayfayı yenileyip yeniden gözden geçir.'] };
   }
+  // 1b — Site yok: beyanlı workspace'te site isteyen amaç (veritabanı okuması, sıfır çağrı).
+  if (g.siteYokEngelleri.length > 0) return { tur: 'ret', kapi: 'SITE', mesajlar: [...g.siteYokEngelleri] };
   // 2 — Eksik: engel seviyesinde tek bir eksik bile yayını durdurur.
   if (yayinaEngelVarMi(g.eksikler)) {
     return { tur: 'ret', kapi: 'EKSIK', mesajlar: g.eksikler.filter((e) => e.seviye === 'engel').map((e) => e.metin) };

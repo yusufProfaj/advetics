@@ -1,10 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { HAZIRLIK_KODLARI, type TenantContext } from '@advetics/shared';
+import { HAZIRLIK_KODLARI, HAZIRLIK_SIHIRBAZ_KODLARI, type TenantContext } from '@advetics/shared';
 import { createHarness, seedTenant, IDS, type Harness } from '../../../test/pglite-harness';
 import type { PrismaService } from '../../prisma/prisma.service';
-import { hazirlikMaddeleri, type HazirlikGirdisi, type HazirlikHesabi } from './hazirlik';
+import { ILK_CEKIM_BEKLEME_SINIRI_MS, hazirlikMaddeleri, type HazirlikGirdisi, type HazirlikHesabi } from './hazirlik';
 import { HazirlikService } from './hazirlik.service';
 
 /**
@@ -44,6 +44,17 @@ const TAM: HazirlikGirdisi = {
   },
   buAyButceVar: true,
   hazirlama: { durum: 'hazir', soruSayisi: 0 },
+  bilgiler: {
+    website: 'https://mirnas.com',
+    contactName: 'Ayşe',
+    contactPhone: '+905321112233',
+    contactEmails: ['a@mirnas.com'],
+    address: 'Alsancak, İzmir',
+    konumVar: true,
+  },
+  bildirimKanali: { etkin: 1, toplam: 1 },
+  sorumluKisi: 1,
+  simdi: new Date('2026-09-28T10:00:00Z'),
 };
 
 const madde = (g: HazirlikGirdisi, kod: string) => hazirlikMaddeleri(g).find((m) => m.kod === kod)!;
@@ -52,7 +63,9 @@ describe('karar', () => {
   it('her kod tam bir kez ve sabitteki sırayla', () => {
     // Panel kodları bir haritayla çiziyor; eksik ya da fazla kod ekranda
     // boş satır ya da hiç görünmeyen bir madde demek.
-    expect(hazirlikMaddeleri(TAM).map((m) => m.kod)).toEqual([...HAZIRLIK_KODLARI]);
+    // Sihirbazın maddeleri SONDA (MIMARI § 6 "Geçiciler": Ajan 1 iki listeyi
+    // birleştirince bu satır tek listeye döner).
+    expect(hazirlikMaddeleri(TAM).map((m) => m.kod)).toEqual([...HAZIRLIK_KODLARI, ...HAZIRLIK_SIHIRBAZ_KODLARI]);
   });
 
   it('hiçbir madde boş açıklama döndürmüyor', () => {
@@ -62,6 +75,10 @@ describe('karar', () => {
       profil: null,
       buAyButceVar: null,
       hazirlama: null,
+      bilgiler: { website: null, contactName: null, contactPhone: null, contactEmails: [], address: null, konumVar: false },
+      bildirimKanali: { etkin: 0, toplam: 0 },
+      sorumluKisi: null,
+      simdi: TAM.simdi,
     };
     for (const g of [TAM, bosGirdi]) {
       for (const m of hazirlikMaddeleri(g)) expect(m.aciklama.length, m.kod).toBeGreaterThan(8);
@@ -131,6 +148,98 @@ describe('karar', () => {
   it('KRİTİK: bütçeyi göremeyen kişiye "bütçe yok" DENMİYOR', () => {
     expect(madde({ ...TAM, buAyButceVar: null }, 'aylik_butce').durum).toBe('bilinmiyor');
     expect(madde({ ...TAM, buAyButceVar: false }, 'aylik_butce').durum).toBe('eksik');
+  });
+});
+
+describe('sihirbaz maddeleri (MIMARI § 2b)', () => {
+  const bilgi = (b: Partial<HazirlikGirdisi['bilgiler']>): HazirlikGirdisi => ({ ...TAM, bilgiler: { ...TAM.bilgiler, ...b } });
+
+  it('TAM girdide altı madde de tamam ve hiçbiri zorunlu değil (hazir bayrağı anlamını korur)', () => {
+    for (const kod of HAZIRLIK_SIHIRBAZ_KODLARI) {
+      expect(madde(TAM, kod), kod).toMatchObject({ durum: 'tamam', zorunlu: false });
+    }
+  });
+
+  it('KRİTİK: site adresi boşsa da https değilse de eksik — ve http olanı adıyla söylüyor', () => {
+    expect(madde(bilgi({ website: null }), 'site_adresi').durum).toBe('eksik');
+    expect(madde(bilgi({ website: '   ' }), 'site_adresi').durum).toBe('eksik');
+    const http = madde(bilgi({ website: 'http://mirnas.com' }), 'site_adresi');
+    expect(http.durum).toBe('eksik');
+    expect(http.aciklama).toContain('http://mirnas.com');
+    expect(madde(bilgi({ website: 'HTTPS://mirnas.com' }), 'site_adresi').durum).toBe('tamam');
+  });
+
+  it('KRİTİK: iletişimde HANGİ alanın boş olduğu yazıyor', () => {
+    const m = madde(bilgi({ contactPhone: ' ' }), 'iletisim');
+    expect(m.durum).toBe('eksik');
+    expect(m.aciklama).toContain('Boş: telefon.');
+    expect(m.aciklama).not.toContain('yetkili');
+  });
+
+  it('KRİTİK: boş e-posta dizisi ve yalnız boşluk içeren adres rapor alıcısı SAYILMIYOR', () => {
+    expect(madde(bilgi({ contactEmails: [] }), 'rapor_alicisi').durum).toBe('eksik');
+    expect(madde(bilgi({ contactEmails: ['  '] }), 'rapor_alicisi').durum).toBe('eksik');
+  });
+
+  it('KRİTİK: adres yazılı ama konumu yoksa eksik ve sebebi konum', () => {
+    const m = madde(bilgi({ konumVar: false }), 'adres');
+    expect(m.durum).toBe('eksik');
+    expect(m.aciklama).toContain('konumu işaretlenmemiş');
+    expect(madde(bilgi({ address: null, konumVar: true }), 'adres').durum).toBe('eksik');
+  });
+
+  it('KRİTİK: kanal var ama etkin değil ile hiç kanal yok AYRI cümle', () => {
+    const kapali = madde({ ...TAM, bildirimKanali: { etkin: 0, toplam: 2 } }, 'bildirim');
+    const yok = madde({ ...TAM, bildirimKanali: { etkin: 0, toplam: 0 } }, 'bildirim');
+    expect(kapali.durum).toBe('eksik');
+    expect(yok.durum).toBe('eksik');
+    expect(kapali.aciklama).toContain('2 bildirim kanalı var ama hiçbiri etkin değil');
+    expect(yok.aciklama).toContain('Bildirim kanalı yok');
+  });
+
+  it('KRİTİK: ekibi göremeyen kişiye "kimse yok" DENMİYOR — bilinmiyor', () => {
+    expect(madde({ ...TAM, sorumluKisi: null }, 'erisim').durum).toBe('bilinmiyor');
+    expect(madde({ ...TAM, sorumluKisi: 0 }, 'erisim').durum).toBe('eksik');
+  });
+});
+
+describe('veri akışı: ilk çekim (MIMARI Ç-5, bekliyor)', () => {
+  const TARANMAMIS: HazirlikHesabi = { ...SAGLAM, lastStructureSyncAt: null, lastInsightsSyncAt: null };
+  const dk = (n: number) => new Date(TAM.simdi.getTime() - n * 60_000);
+
+  it('KRİTİK: ilk çekim sürüyorsa bekliyor — eksik DEĞİL — ve kaç dakika önce başladığını yazıyor', () => {
+    const m = madde({ ...TAM, hesaplar: [{ ...TARANMAMIS, sonIs: { durum: 'running', zaman: dk(12), hata: null } }] }, 'veri_akisi');
+    expect(m.durum).toBe('bekliyor');
+    expect(m.aciklama).toContain('Mirnas Meta (12 dk önce başladı)');
+  });
+
+  it('KRİTİK: sınırı aşan "sürüyor" iş bekliyor DEĞİL, eksik ve takılmış olabileceğini söylüyor', () => {
+    const eski = new Date(TAM.simdi.getTime() - ILK_CEKIM_BEKLEME_SINIRI_MS - 60_000);
+    const m = madde({ ...TAM, hesaplar: [{ ...TARANMAMIS, sonIs: { durum: 'queued', zaman: eski, hata: null } }] }, 'veri_akisi');
+    expect(m.durum).toBe('eksik');
+    expect(m.aciklama).toContain('takılmış olabilir');
+  });
+
+  it('KRİTİK: düşen iş eksik ve işin hata metnini taşıyor', () => {
+    const m = madde({ ...TAM, hesaplar: [{ ...TARANMAMIS, sonIs: { durum: 'failed', zaman: dk(5), hata: '(#100) izin yok' } }] }, 'veri_akisi');
+    expect(m.durum).toBe('eksik');
+    expect(m.aciklama).toContain('(#100) izin yok');
+  });
+
+  it('KRİTİK: izleme kapalı hesapta iş sürse bile bekliyor DEĞİL (kullanıcının işi)', () => {
+    const m = madde(
+      { ...TAM, hesaplar: [{ ...TARANMAMIS, syncEnabled: false, sonIs: { durum: 'running', zaman: dk(1), hata: null } }] },
+      'veri_akisi',
+    );
+    expect(m.durum).toBe('eksik');
+    expect(m.aciklama).toContain('İzleme kapalı');
+  });
+
+  it('bir hesap bozuk, öteki bekliyorsa eksik (kesin eksik bekleyeni ezer)', () => {
+    const bozuk = { ...SAGLAM, name: 'Bozuk', syncEnabled: false };
+    const m = madde({ ...TAM, hesaplar: [{ ...TARANMAMIS, sonIs: { durum: 'running', zaman: dk(1), hata: null } }, bozuk] }, 'veri_akisi');
+    expect(m.durum).toBe('eksik');
+    expect(m.aciklama).toMatch(/^2 hesaptan 1 tanesinden veri gelmiyor\. Bozuk:/);
   });
 });
 
@@ -233,6 +342,21 @@ describe('servis', () => {
       [IDS.org, IDS.client, IDS.connection],
     );
     await h.q(`INSERT INTO workspace_hazirlama (client_id, org_id, durum) VALUES ($1, $2, 'hazir')`, [IDS.client, IDS.org]);
+    await h.q(
+      `UPDATE clients SET website = 'https://test.com', contact_name = 'Ayşe', contact_phone = '+905321112233',
+              contact_emails = ARRAY['a@test.com'], address = 'İzmir', address_latitude = 38.4, address_longitude = 27.1
+        WHERE id = $1`,
+      [IDS.client],
+    );
+    await h.q(
+      `INSERT INTO bildirim_kanallari (id, org_id, client_id, tur, ad, hedef_enc, hedef_ipucu, alicilar, olaylar)
+       VALUES (gen_random_uuid(), $1, $2, 'eposta', 'E-posta', NULL, 'a@test.com', ARRAY['a@test.com'], ARRAY['sinyal'])`,
+      [IDS.org, IDS.client],
+    );
+    await h.q(
+      `INSERT INTO memberships (id, user_id, org_id, client_id, role, updated_at) VALUES (gen_random_uuid(), $1, $2, $3, 'ad_manager', now())`,
+      [IDS.user, IDS.org, IDS.client],
+    );
 
     const r = await svc.get(CTX(['client.read', 'budget.read']), IDS.client, SIMDI);
     for (const m of r.maddeler) expect(m.durum, `${m.kod}: ${m.aciklama}`).toBe('tamam');
@@ -261,6 +385,42 @@ describe('servis', () => {
   it('bütçe yetkisi yoksa sorulmuyor bile: bilinmiyor', async () => {
     const r = await svc.get(CTX(['client.read']), IDS.client, SIMDI);
     expect(r.maddeler.find((m) => m.kod === 'aylik_butce')!.durum).toBe('bilinmiyor');
+  });
+
+  it('KRİTİK (PGlite): boş e-posta dizisi eksik, koordinatsız adres eksik, kanal yoksa eksik — gerçek kolon adlarıyla', async () => {
+    await h.q(`UPDATE clients SET contact_emails = '{}', address = 'İzmir', address_latitude = NULL WHERE id = $1`, [IDS.client]);
+    const r = await svc.get(CTX(), IDS.client, SIMDI);
+    const m = (kod: string) => r.maddeler.find((x) => x.kod === kod)!;
+    expect(m('rapor_alicisi').durum).toBe('eksik');
+    expect(m('adres').durum).toBe('eksik');
+    expect(m('adres').aciklama).toContain('konumu işaretlenmemiş');
+    expect(m('bildirim').durum).toBe('eksik');
+    expect(m('site_adresi').durum).toBe('eksik');
+  });
+
+  it('KRİTİK (PGlite): yönetici, workspace’e özel üyelik yoksa "eksik"; yönetici olmayan sıfır görüyorsa "bilinmiyor"', async () => {
+    // Org geneli üyelik (client_id NULL) SAYILMIYOR.
+    await h.q(`INSERT INTO memberships (id, user_id, org_id, client_id, role, updated_at) VALUES (gen_random_uuid(), $1, $2, NULL, 'admin', now())`, [
+      IDS.user,
+      IDS.org,
+    ]);
+    const yonetici = await svc.get(CTX(), IDS.client, SIMDI);
+    expect(yonetici.maddeler.find((x) => x.kod === 'erisim')!.durum).toBe('eksik');
+    const calisan = await svc.get({ ...CTX(), isOrgAdmin: false } as TenantContext, IDS.client, SIMDI);
+    expect(calisan.maddeler.find((x) => x.kod === 'erisim')!.durum).toBe('bilinmiyor');
+  });
+
+  it('KRİTİK (PGlite): atanmış hesabın ilk yapı işi koşuyorsa veri akışı BEKLİYOR (sync_jobs gerçek sorgusu)', async () => {
+    await h.q(`UPDATE ad_accounts SET status = 'active' WHERE id = $1`, [IDS.adAccount]);
+    await h.q(
+      `INSERT INTO sync_jobs (client_id, ad_account_id, job_type, status, started_at, created_at)
+       VALUES ($1, $2, 'structure', 'running', $3, $3)`,
+      [IDS.client, IDS.adAccount, new Date(SIMDI.getTime() - 4 * 60_000)],
+    );
+    const r = await svc.get(CTX(), IDS.client, SIMDI);
+    const veri = r.maddeler.find((m) => m.kod === 'veri_akisi')!;
+    expect(veri.durum, veri.aciklama).toBe('bekliyor');
+    expect(veri.aciklama).toContain('4 dk önce başladı');
   });
 
   it('havuzdaki (atanmamış) hesap bu workspace\'in hesabı sayılmıyor', async () => {

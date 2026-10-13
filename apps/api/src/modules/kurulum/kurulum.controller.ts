@@ -1,7 +1,12 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Put, Query, Req } from '@nestjs/common';
 import {
+  kurulumBeyaniSchema,
   kurulumIstegiSchema,
   kurulumPlatformBeyaniSchema,
+  kurulumTamamlaSchema,
+  type KurulumBeyani,
+  type KurulumBeyaniIstegi,
+  type KurulumTamamlaIstegi,
   type KurulumPlatformBeyani,
   kurulumSecenekSorgusuSchema,
   type KurulumIstegi,
@@ -11,6 +16,7 @@ import {
 } from '@advetics/shared';
 import { CurrentTenant, RequirePermissions } from '../../common/decorators';
 import { zodBody } from '../../common/pipes/zod-validation.pipe';
+import { KurulumBeyanService } from './kurulum-beyan.service';
 import { KurulumService } from './kurulum.service';
 
 interface IstekBilgisi {
@@ -26,7 +32,10 @@ interface IstekBilgisi {
  */
 @Controller('clients/:id/kurulum')
 export class KurulumController {
-  constructor(private readonly kurulum: KurulumService) {}
+  constructor(
+    private readonly kurulum: KurulumService,
+    private readonly beyan: KurulumBeyanService,
+  ) {}
 
   private meta(req: IstekBilgisi) {
     const ua = req.headers['user-agent'];
@@ -66,9 +75,43 @@ export class KurulumController {
     return this.kurulum.platformlar(ctx, id, dto.kullanilmayanlar, this.meta(req));
   }
 
+  /**
+   * Gövde İSTEĞE BAĞLI: gövdesiz istek bütün otomatik adımları koşar
+   * (bugünkü davranış); `kodlar` sihirbazın adım başına "Otomatik yap"ı.
+   */
   @Post('tamamla')
   @RequirePermissions('client.write')
-  tamamla(@CurrentTenant() ctx: TenantContext, @Param('id', ParseUUIDPipe) id: string, @Req() req: IstekBilgisi) {
-    return this.kurulum.tamamla(ctx, id, this.meta(req));
+  tamamla(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(zodBody(kurulumTamamlaSchema)) dto: KurulumTamamlaIstegi,
+    @Req() req: IstekBilgisi,
+  ) {
+    return this.kurulum.tamamla(ctx, id, this.meta(req), dto?.kodlar);
+  }
+
+  /**
+   * KURULUM BEYANLARI (docs/kurulum-sihirbazi/MIMARI.md § 5) — AYRI UÇ,
+   * `/kurulum` yanıtında alan DEĞİL (§ 7 "biri"): panel girdisi beyanları
+   * ÜÇ HÂLLİ istiyor ve kurulum okuması düştüğünde beyanlar ayrıca
+   * okunabilmeli (yoksa "okunamadı" iki ayrı kaynağın hatasını tek
+   * hataya çevirirdi).
+   */
+  @Get('beyanlar')
+  @RequirePermissions('client.read')
+  beyanlar(@CurrentTenant() ctx: TenantContext, @Param('id', ParseUUIDPipe) id: string): Promise<KurulumBeyani[]> {
+    return this.beyan.workspaceBeyanlari(ctx, id);
+  }
+
+  /** Kapı `client.write` = panelde `PANEL_KAPILARI['kurulum.beyan']`. Yanıt güncel liste. */
+  @Put('beyan')
+  @RequirePermissions('client.write')
+  beyanYaz(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(zodBody(kurulumBeyaniSchema)) dto: KurulumBeyaniIstegi,
+    @Req() req: IstekBilgisi,
+  ): Promise<KurulumBeyani[]> {
+    return this.beyan.workspaceBeyanYaz(ctx, id, dto, this.meta(req));
   }
 }

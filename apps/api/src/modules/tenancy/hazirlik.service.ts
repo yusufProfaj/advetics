@@ -14,6 +14,10 @@ interface HesapSatiri {
   /** `null` = bağlantı bu kapsamda görünmüyor (RLS). Yokluk değil. */
   connection_status: string | null;
   client_status: string;
+  /** Hesabın en son veri işi (`sync_jobs`); NULL = hiç iş yok. */
+  is_durum: string | null;
+  is_zaman: Date | null;
+  is_hata: string | null;
 }
 
 /**
@@ -50,15 +54,28 @@ export class HazirlikService {
     const ay = `${now.toISOString().slice(0, 7)}-01`;
 
     return this.prisma.withTenant(scoped, async (tx) => {
-      const [client] = await tx.$queryRaw<Array<{ name: string }>>(Prisma.sql`
-        SELECT name FROM clients WHERE id = ${clientId}::uuid
+      const [client] = await tx.$queryRaw<
+        Array<{
+          name: string;
+          website: string | null;
+          contact_name: string | null;
+          contact_phone: string | null;
+          contact_emails: string[] | null;
+          address: string | null;
+          konum_var: boolean;
+        }>
+      >(Prisma.sql`
+        SELECT name, website, contact_name, contact_phone, contact_emails, address,
+               (address_latitude IS NOT NULL AND address_longitude IS NOT NULL) AS konum_var
+          FROM clients WHERE id = ${clientId}::uuid
       `);
       if (!client) throw new NotFoundException('Workspace bulunamadı');
 
       const hesaplar = await tx.$queryRaw<HesapSatiri[]>(Prisma.sql`
         SELECT a.name, a.platform::text AS platform, a.status::text AS status,
                a.sync_enabled, a.last_structure_sync_at, a.last_insights_sync_at,
-               c.status::text AS connection_status, cl.status::text AS client_status
+               c.status::text AS connection_status, cl.status::text AS client_status,
+               j.status::text AS is_durum, j.zaman AS is_zaman, j.error_message AS is_hata
           FROM ad_accounts a
           -- LEFT JOIN: RLS gizlediği bağlantıda INNER JOIN hesabı SESSİZCE
           -- eliyordu. Canlıda bir workspace'in kendi bağlantısından gelen
@@ -66,8 +83,30 @@ export class HazirlikService {
           -- görünüyordu. Görünürlüğe YALNIZCA kendi politikası karar verir.
           LEFT JOIN platform_connections c ON c.id = a.connection_id
           JOIN clients cl ON cl.id = a.client_id
+          -- Hesabın EN SON veri işi: ilk çekimin sürdüğünü "hiç koşmadı"dan
+          -- ayırmak için (sihirbaz, bekliyor durumu). Kural, sinyal, organik
+          -- gönderi işleri sayılmıyor; yalnız hesabın yapısını ve metriğini
+          -- çeken türler.
+          LEFT JOIN LATERAL (
+            SELECT s.status, COALESCE(s.started_at, s.created_at) AS zaman, s.error_message
+              FROM sync_jobs s
+             WHERE s.ad_account_id = a.id
+               AND s.job_type IN ('structure', 'initial_backfill', 'insights_daily', 'insights_backfill', 'insights_realtime')
+             ORDER BY s.created_at DESC, s.id DESC
+             LIMIT 1
+          ) j ON true
          WHERE a.client_id = ${clientId}::uuid
          ORDER BY a.platform, a.name
+      `);
+
+      const [kanal] = await tx.$queryRaw<Array<{ etkin: number; toplam: number }>>(Prisma.sql`
+        SELECT count(*) FILTER (WHERE etkin)::int AS etkin, count(*)::int AS toplam
+          FROM bildirim_kanallari WHERE client_id = ${clientId}::uuid
+      `);
+
+      const [ekip] = await tx.$queryRaw<Array<{ n: number }>>(Prisma.sql`
+        SELECT count(DISTINCT user_id)::int AS n FROM memberships
+         WHERE client_id = ${clientId}::uuid AND role IN ('admin', 'ad_manager')
       `);
 
       const [sosyal] = await tx.$queryRaw<Array<{ n: number }>>(Prisma.sql`
@@ -118,6 +157,7 @@ export class HazirlikService {
           lastInsightsSyncAt: h.last_insights_sync_at,
           connection: h.connection_status === null ? null : { status: h.connection_status },
           client: { status: h.client_status },
+          sonIs: h.is_durum && h.is_zaman ? { durum: h.is_durum, zaman: new Date(h.is_zaman), hata: h.is_hata } : null,
         })),
         sosyalKanalSayisi: sosyal?.n ?? 0,
         profil: profil
@@ -135,6 +175,24 @@ export class HazirlikService {
           : null,
         buAyButceVar,
         hazirlama: hazirlama ? { durum: hazirlama.durum, soruSayisi: hazirlama.soru_sayisi } : null,
+        bilgiler: {
+          website: client.website,
+          contactName: client.contact_name,
+          contactPhone: client.contact_phone,
+          contactEmails: client.contact_emails ?? [],
+          address: client.address,
+          konumVar: client.konum_var === true,
+        },
+        bildirimKanali: { etkin: kanal?.etkin ?? 0, toplam: kanal?.toplam ?? 0 },
+        /*
+         * EKİP LİSTESİNİ GÖREMEYEN için sıfır "kimse yok" DEĞİL. `memberships`
+         * politikası yöneticiye hepsini, diğerine yalnız KENDİ satırını
+         * gösteriyor: yönetici olmayan biri sıfır görüyorsa bu "kimse
+         * atanmamış" da olabilir "göremiyorum" da. Kendi satırı görünüyorsa
+         * (n > 0) cevap kesin: en az bir sorumlu var, o kendisi.
+         */
+        sorumluKisi: ctx.isOrgAdmin || (ekip?.n ?? 0) > 0 ? (ekip?.n ?? 0) : null,
+        simdi: now,
       });
 
       return {

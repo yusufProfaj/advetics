@@ -329,6 +329,20 @@ describe('prova ve yayın', () => {
     expect(kuyrukIsleri).toEqual([]);
   });
 
+  it('KRİTİK: "web sitemiz yok" beyanında site isteyen amaç SUNUCUDA reddediliyor — prova platforma gitmeden, yayın kuyruğa girmeden (karşı örnekle)', async () => {
+    const r = await tamRehber();
+    // KARŞI ÖRNEK: beyansız aynı rehber prova ediliyor (iddia boşa düşmüyor).
+    const p = await svc.prova(CTX, r.id);
+    expect(p.google).toMatchObject({ tur: 'gecti' });
+    await h.q(`INSERT INTO kurulum_beyanlari (org_id, client_id, oge) VALUES ($1, $2, 'site_yok')`, [IDS.org, IDS.client]);
+    cagrilar = [];
+    await expect(svc.yayinla(CTX, r.id, p.icerikOzeti)).rejects.toMatchObject({ status: 400, response: { kapi: 'SITE' } });
+    expect(kuyrukIsleri).toEqual([]);
+    expect(await h.q('SELECT id FROM yayin')).toHaveLength(0);
+    await expect(svc.prova(CTX, r.id)).rejects.toMatchObject({ status: 400, response: { kapi: 'SITE', mesajlar: [expect.stringContaining('web sitemiz yok')] } });
+    expect(cagrilar).toEqual([]);
+  });
+
   it('KRİTİK: Google yazma kesicisi kapalıysa YAZMA kapısı; kuyruğa iş girmez', async () => {
     const r = await tamRehber();
     const p = await svc.prova(CTX, r.id);

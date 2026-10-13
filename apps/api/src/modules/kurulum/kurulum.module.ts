@@ -2,7 +2,9 @@ import { Module } from '@nestjs/common';
 import { ConnectionsModule } from '../connections/connections.module';
 import { OlcumModule } from '../olcum/olcum.module';
 import { VeriKaynagiModule } from '../veri-kaynagi/veri-kaynagi.module';
+import { KurulumBeyanService } from './kurulum-beyan.service';
 import { KurulumController } from './kurulum.controller';
+import { KurulumSirketController } from './kurulum-sirket.controller';
 import { KurulumService } from './kurulum.service';
 
 /**
@@ -14,7 +16,8 @@ import { KurulumService } from './kurulum.service';
  */
 @Module({
   imports: [ConnectionsModule, OlcumModule, VeriKaynagiModule],
-  controllers: [KurulumController],
-  providers: [KurulumService],
+  controllers: [KurulumController, KurulumSirketController],
+  // Beyan servisi (sihirbaz, MIMARI § 5) yalnız Prisma ve Audit istiyor; ikisi global.
+  providers: [KurulumService, KurulumBeyanService],
 })
 export class KurulumModule {}

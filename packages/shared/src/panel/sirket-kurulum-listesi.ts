@@ -135,6 +135,32 @@ function ikiAdimParcasi(g: SirketKurulumGirdisi): SirketKurulumParcasi {
   };
 }
 
+/**
+ * `GET /kurulum/sirket` yanıtı (Ajan 2 sapması — sözleşmede uç vardı, tip
+ * yoktu; MIMARI § 7). Bağlantılar BURADA DEĞİL: girdi PARAMETRESİZ
+ * `GET /connections` ve `/connections/availability`ten (yukarıdaki tuzak);
+ * ikinci bir bağlantı özeti, aynı soruya iki cevap demekti.
+ */
+export interface SirketKurulumYaniti {
+  orgId: string;
+  sirketAdi: string;
+  /** `organizations.iki_adim_zorunlu`; `null` = okunamadı. */
+  ikiAdimZorunlu: boolean | null;
+  /** Şirket düzeyi beyanlar (`client_id IS NULL`). */
+  beyanlar: KurulumBeyani[];
+  /**
+   * Şirketin arşivlenmemiş workspace'leri — yalnız ad/id ve platform beyanı;
+   * sayaçlar başlangıç ekranında tembel okunur (MIMARI § 7).
+   */
+  workspaceler: Array<{ id: string; ad: string; kullanilmayanPlatformlar: KurulumPlatformu[] }>;
+  /**
+   * En az bir workspace'in kullandığı (beyanla kapatmadığı) platformlar —
+   * `SirketKurulumGirdisi.kullanilanPlatformlar`. Hiç workspace yoksa İKİSİ:
+   * beyan yok = hepsi sayılır.
+   */
+  kullanilanPlatformlar: KurulumPlatformu[];
+}
+
 /** İki adımı kurar. Kullanılan platform yoksa bağlantı adımı `kullanilmiyor`. */
 export function sirketKurulumListesi(g: SirketKurulumGirdisi): SirketKurulumAdimi[] {
   const platformlar = (['meta', 'google'] as const).filter((p) => g.kullanilanPlatformlar.includes(p));

@@ -256,6 +256,25 @@ export const kurulumSecenekSorgusuSchema = z.object({
   kod: z.enum(['meta_hesap', 'sayfa', 'google_hesap', 'gtm_konteyner', 'ga4_mulk', 'meta_piksel']),
 });
 
+/**
+ * `POST /clients/:id/kurulum/tamamla` gövdesi (Ajan 2 sapması — MIMARI § 7
+ * `kodlar` süzgeci). Gövdesiz istek bugünkü davranış: bütün otomatik adımlar.
+ * `kodlar` verilirse YALNIZ onlar koşar (sihirbazın adım başına "Otomatik
+ * yap"ı); otomatik olmayan bir kod istenirse sessizce atlanmaz, sonuç
+ * listesinde `atlandi` ve nedeniyle döner.
+ */
+export const kurulumTamamlaSchema = z
+  .object({
+    kodlar: z
+      .array(z.enum(KURULUM_ADIM_KODLARI))
+      .min(1)
+      .max(KURULUM_ADIM_KODLARI.length)
+      .refine((l) => new Set(l).size === l.length, 'Aynı adım iki kez yazılamaz')
+      .optional(),
+  })
+  .optional();
+export type KurulumTamamlaIstegi = z.infer<typeof kurulumTamamlaSchema>;
+
 /** "Eksikleri tamamla"nın sırası: bağımlılık sırası (konteyner ve mülk etiketlerden önce). */
 export const OTOMATIK_SIRA: readonly KurulumAdimKodu[] = ['sayfa', 'meta_piksel', 'gtm_konteyner', 'ga4_mulk', 'ads_donusum', 'ga4_ads_bag', 'gtm_etiket'];
 

@@ -417,6 +417,8 @@ DECLARE
     -- Hazır workspace (docs/advcampaign/HAZIR-WORKSPACE-PLANI.md § Dalga 3)
     'workspace_hazirlama',
     'workspace_kurulum',
+    -- Kurulum beyanları (docs/kurulum-sihirbazi/MIMARI.md § 5). Kendi satırında.
+    'kurulum_beyanlari',
     -- Sinyaller + bildirim kanalları (docs/sinyal/MIMARI.md § 2). Her tablo
     -- KENDİ satırında (test/sonraki-tablolar.ts satır satır çıkarıyor).
     -- AdvStrategy bloğundan ÖNCE: üretim sırası testleri o bloğun dizinin
@@ -2427,6 +2429,49 @@ CREATE POLICY adv_workspace_kurulum_insert ON workspace_kurulum
 CREATE POLICY adv_workspace_kurulum_update ON workspace_kurulum
   FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
   WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+
+
+-- ============================================================================
+-- KURULUM BEYANLARI — kurulum_beyanlari (docs/kurulum-sihirbazi/MIMARI.md § 5)
+-- ============================================================================
+--
+-- İKİ DÜZEY, İKİ KURAL:
+--   · WORKSPACE satırı (client_id dolu): workspace kapsamlı, workspace_kurulum
+--     ile aynı. Yazma izni (client.write) servis katmanında.
+--   · ŞİRKET satırı (client_id NULL, bugün yalnız iki adımlı doğrulama):
+--     şirketteki herkes OKUR (son kontrol ekranı kimin ne dediğini yazıyor),
+--     yalnız O ŞİRKETİN yöneticisi YAZAR. Yazmada org_kapsaminda DEĞİL
+--     current_org_id: "tüm şirketler" modunda org_kapsaminda bütün kardeş
+--     şirketleri kapsıyor ve bir şirketin güvenlik kararı başka şirketin
+--     ekranından verilebilirdi.
+-- UPDATE YALNIZ YENİDEN BEYAN İÇİN: servis aynı öğeyi ikinci kez beyan
+-- edeni ON CONFLICT ... DO UPDATE ile yazıyor (gerekçe ve kim/ne zaman
+-- tazeleniyor) ve o yol UPDATE politikası istiyor; kural INSERT ile aynı.
+-- Geri almak DELETE (iz audit_logs'ta).
+CREATE POLICY adv_kurulum_beyanlari_select ON kurulum_beyanlari
+  FOR SELECT USING (
+    app.org_kapsaminda(org_id)
+    AND (client_id IS NULL OR app.can_access_client(client_id))
+  );
+CREATE POLICY adv_kurulum_beyanlari_insert ON kurulum_beyanlari
+  FOR INSERT WITH CHECK (
+    (client_id IS NOT NULL AND app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+    OR (client_id IS NULL AND org_id = app.current_org_id() AND app.is_org_admin())
+  );
+CREATE POLICY adv_kurulum_beyanlari_update ON kurulum_beyanlari
+  FOR UPDATE USING (
+    (client_id IS NOT NULL AND app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+    OR (client_id IS NULL AND org_id = app.current_org_id() AND app.is_org_admin())
+  )
+  WITH CHECK (
+    (client_id IS NOT NULL AND app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+    OR (client_id IS NULL AND org_id = app.current_org_id() AND app.is_org_admin())
+  );
+CREATE POLICY adv_kurulum_beyanlari_delete ON kurulum_beyanlari
+  FOR DELETE USING (
+    (client_id IS NOT NULL AND app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+    OR (client_id IS NULL AND org_id = app.current_org_id() AND app.is_org_admin())
+  );
 
 
 -- ============================================================================

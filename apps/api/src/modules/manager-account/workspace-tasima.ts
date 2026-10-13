@@ -168,6 +168,13 @@ export const CASCADE_ILE_TASINANLAR = [
   // kullanıcıya aynı sorular yeniden sorulurdu.
   'workspace_hazirlama',
   'workspace_kurulum',
+  // KURULUM BEYANLARI (docs/kurulum-sihirbazi/MIMARI.md § 5): workspace
+  // satırları ("adresimiz yok", "web sitemiz yok") workspace'in KENDİ kararı;
+  // geride kalsa yeni şirkette aynı soru yeniden sorulur, sayaç bitmiş bir
+  // kurulumu "eksik" gösterirdi. ŞİRKET satırları (client_id NULL, iki adımlı
+  // doğrulama) kompozit anahtara takılmıyor ve eski şirkette KALIYOR — o
+  // karar şirketin, workspace'in değil.
+  'kurulum_beyanlari',
   // AdvStrategy planı workspace'in KENDİ kararı ve dayandığı kitle şablonları
   // ile varlıklar zaten taşınıyor; planı geride bırakmak, yeni şirkette
   // kitlesi olup planı olmayan bir workspace ve eski şirkette sahipsiz bir

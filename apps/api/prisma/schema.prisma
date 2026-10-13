@@ -4173,6 +4173,23 @@ model WorkspaceKurulum {
   @@map("workspace_kurulum")
 }
 
+/// KURULUM BEYANLARI (docs/kurulum-sihirbazi/MIMARI.md § 5): "adresimiz yok",
+/// "web sitemiz yok"… `clientId` NULL = şirket düzeyi (iki adımlı doğrulama).
+/// CHECK'ler, İKİ KISMİ tekil indeks ve FK'ler migration'da (Prisma kısmi
+/// indeks bildiremiyor); RLS 02_rls.sql'de. Servis ham SQL kullanıyor.
+model KurulumBeyani {
+  id        String   @id @default(uuid()) @db.Uuid
+  orgId     String   @map("org_id") @db.Uuid
+  clientId  String?  @map("client_id") @db.Uuid
+  oge       String   @db.VarChar(20)
+  gerekce   String?  @db.VarChar(300)
+  beyanEden String?  @map("beyan_eden") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([orgId], map: "kurulum_beyanlari_org_id_idx")
+  @@map("kurulum_beyanlari")
+}
+
 // ═══ SİNYALLER + BİLDİRİM KANALLARI (Paket A, docs/sinyal/MIMARI.md § 2) ═══
 // CHECK kısıtları, kısmi indeksler ve FK'ler migration'da; RLS 02_rls.sql'de.
 // Servisler ham SQL kullanıyor (PGlite testleri gerçek sorguyu koşsun).

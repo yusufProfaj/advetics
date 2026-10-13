@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { UYUM_SURUMU, type RehberEksigi, type UyumSonucu } from '@advetics/shared';
+import { SITE_YOK_SEBEBI, UYUM_SURUMU, type RehberEksigi, type UyumSonucu } from '@advetics/shared';
 import { degisiklikleriUygula, rehberOzeti } from './rehber-kayit';
 import { GOOGLE_TURKIYE, kelimeOnerisiHazirla, kelimeTohumlari, konumEsle, metinOnerisiTemizle } from './oneriler';
 import { FORM_SAYFA_SINIRI, formKosuluCoz, metaAsgariCoz, metaFormlariCoz, metaSayfaFormlariOku, seciliFormHali, whatsappHali } from './platform-okuma';
-import { rehberYayinKapilari, type KapiOkuyuculari } from './yayin-kapilari';
+import { rehberYayinKapilari, siteYokEngelleri, type KapiOkuyuculari } from './yayin-kapilari';
 
 const KIM = '11111111-1111-4111-8111-111111111111';
 const Z1 = '2026-10-10T09:00:00.000+03:00';
@@ -199,6 +199,7 @@ describe('yayın kapıları — sıra ve tembellik', () => {
     provaOzeti: O,
     eksikler: [uyari],
     acik: { meta: true, google: true },
+    siteYokEngelleri: [] as string[],
     ...o,
   });
 
@@ -206,6 +207,22 @@ describe('yayın kapıları — sıra ve tembellik', () => {
     const { r, cagri } = okuyucu();
     expect(await rehberYayinKapilari(girdi({ istenenOzet: 'b'.repeat(64) }), r)).toMatchObject({ tur: 'ret', kapi: 'OZET' });
     expect(cagri).toEqual([]);
+  });
+
+  it('KRİTİK: "web sitemiz yok" engeli prova/yazma/uyum OKUNMADAN reddeder (sunucu aynası)', async () => {
+    const { r, cagri } = okuyucu();
+    expect(await rehberYayinKapilari(girdi({ siteYokEngelleri: ['Meta: site yok'] }), r)).toMatchObject({ tur: 'ret', kapi: 'SITE', mesajlar: ['Meta: site yok'] });
+    expect(cagri).toEqual([]);
+  });
+
+  it('KRİTİK: site yok engelleri rehberin KENDİ adres kuralından — Meta SITE/SATIS ve Google kurgusu olan amaç kapalı; FORM Meta açık; beyan okunamadıysa (null) kapatmaz', () => {
+    const iki = { meta: true, google: true };
+    expect(siteYokEngelleri('SITE', iki, true)).toEqual([`Meta: ${SITE_YOK_SEBEBI}`, `Google: ${SITE_YOK_SEBEBI}`]);
+    expect(siteYokEngelleri('SATIS', { meta: true, google: false }, true)).toEqual([`Meta: ${SITE_YOK_SEBEBI}`]);
+    expect(siteYokEngelleri('FORM', { meta: true, google: false }, true)).toEqual([]);
+    expect(siteYokEngelleri('SITE', iki, null)).toEqual([]);
+    expect(siteYokEngelleri('SITE', iki, false)).toEqual([]);
+    expect(siteYokEngelleri(null, iki, true)).toEqual([]);
   });
 
   it('KRİTİK: engel varsa prova/yazma/uyum okunmaz; uyarı engel değil', async () => {

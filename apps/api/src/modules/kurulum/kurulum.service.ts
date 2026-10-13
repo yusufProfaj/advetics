@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
+  HESAP_ACAN_KODLAR,
   KURULUM_ADIM_ADI,
   KURULUM_LISTESI,
   KURULUM_PLATFORMLARI,
@@ -8,6 +9,7 @@ import {
   PANEL_YERLERI,
   gtmKodu,
   kurulumOzeti,
+  siteYokKurulumKodlari,
   type DonusumTetigi,
   type HesapSahibi,
   type KurulumAdimKodu,
@@ -34,6 +36,7 @@ import { AdsKurulumIstemcisi, DONUSUM_ADI, DONUSUM_KATEGORISI, type DonusumTuru 
 import { Ga4Istemcisi } from '../connections/providers/ga4';
 import { GtmIstemcisi, ON_EK, SURUM_ADI, TUM_SAYFALAR_TETIGI, gtmPlani, konteynerdeYuklu } from './gtm';
 import { MetaKurulumIstemcisi } from './meta-kurulum';
+import { siteYokBeyaniVarMi, type SorguCalistirici } from './kurulum-beyan';
 import {
   etiketImzasi,
   gerekenDonusumler,
@@ -514,7 +517,8 @@ export class KurulumService {
     const b = await this.baglam(ctx, clientId);
     switch (istek.kod) {
       case 'meta_hesap':
-        return this.metaHesap(ctx, clientId, b, istek.secim, meta);
+        // Sayfa hesaptan ÖNCE atanmış olabilir: hesap gelince boş boost bağı kurulur.
+        return this.boostIle(ctx, clientId, await this.metaHesap(ctx, clientId, b, istek.secim, meta), meta);
       case 'google_hesap':
         return this.googleHesap(ctx, clientId, b, istek.secim, meta);
       case 'sayfa':
@@ -629,7 +633,51 @@ export class KurulumService {
          WHERE i.client_id IS NULL AND i.profile_type = 'instagram_business' AND i.parent_page_external_id = p.external_id`),
     );
     for (const i of ig) await this.baglantilar.assignSocialProfile(ctx, i.id, clientId, meta);
-    return ig.length ? `Sayfa ve Instagram (${ig.map((i) => i.ad).join(', ')}) atandı.` : 'Sayfa atandı. Bağlı Instagram hesabı bulunamadı.';
+    const m = ig.length ? `Sayfa ve Instagram (${ig.map((i) => i.ad).join(', ')}) atandı.` : 'Sayfa atandı. Bağlı Instagram hesabı bulunamadı.';
+    return this.boostIle(ctx, clientId, m, meta);
+  }
+
+  /**
+   * ═══ BOOST HESABI KURULUMDA BAĞLANIYOR (kurulum sihirbazı Ç-7) ═══
+   *
+   * Açılış artık hesap atamıyor; hesap ve sayfa bu rehberin adımlarından
+   * geliyor. Açılışın yaptığı bağ (`client-setup.service.ts`, `boostHesabiId`)
+   * burada YOKTU: sayfa atanıp boost hesabı bağlanmayınca Akıllı Boost her
+   * gönderide "bağlı reklam hesabı yok" diyor ve çaresi başka bir ekrandaki
+   * açılır kutu. Workspace'in Meta hesabı TEK (her projenin kendi hesabı),
+   * yani hangi hesabın bağlanacağı tahmin değil.
+   *
+   * YALNIZ BOŞ BAĞ DOLDURULUR: kullanıcının elle seçtiği hesabı ezmek bir
+   * kararı sessizce bozmak olurdu. Doğrulama MEVCUT yoldan
+   * (`setProfileAdAccount`: hesap Meta mı, aynı workspace'te mi) — ikinci
+   * bir doğrulama ayrışırdı. Bağ düşerse adım DÜŞMEZ (sayfa atandı) ama
+   * sebep sonuç cümlesinde yazar.
+   */
+  private async boostIle(ctx: TenantContext, clientId: string, mesajMetni: string, meta: Meta): Promise<string> {
+    const r = await this.prisma.withTenant({ ...ctx, activeClientId: clientId }, async (t) => {
+      const [hesap] = await t.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        SELECT id::text FROM ad_accounts WHERE client_id = ${clientId}::uuid AND platform = 'meta' ORDER BY name, id LIMIT 1`);
+      const profiller = await t.$queryRaw<Array<{ id: string; ad: string }>>(Prisma.sql`
+        SELECT id::text, name AS ad FROM social_profiles
+         WHERE client_id = ${clientId}::uuid AND profile_type IN ('facebook_page', 'instagram_business') AND linked_ad_account_id IS NULL
+         ORDER BY name, id`);
+      return { hesap: hesap?.id ?? null, profiller };
+    });
+    if (!r.hesap || r.profiller.length === 0) return mesajMetni;
+    const dusen: string[] = [];
+    for (const p of r.profiller) {
+      try {
+        await this.baglantilar.setProfileAdAccount(ctx, p.id, r.hesap, meta);
+      } catch (e) {
+        dusen.push(`${p.ad} (${mesaj(e)})`);
+      }
+    }
+    const baglanan = r.profiller.length - dusen.length;
+    return (
+      mesajMetni +
+      (baglanan > 0 ? ` Boost hesabı ${baglanan} profile bağlandı.` : '') +
+      (dusen.length ? ` Boost hesabı bağlanamadı: ${dusen.join(', ')}.` : '')
+    );
   }
 
   private async piksel(ctx: TenantContext, clientId: string, b: Baglam, secim: Extract<KurulumIstegi, { kod: 'meta_piksel' }>['secim'] | 'oto'): Promise<string> {
@@ -952,13 +1000,64 @@ export class KurulumService {
   // Eksikleri tamamla
   // ───────────────────────────────────────────────────────────────────────
 
-  async tamamla(ctx: TenantContext, clientId: string, meta: Meta): Promise<KurulumYaniti & { sonuclar: KurulumAdimSonucu[] }> {
+  /**
+   * `kodlar` verilirse YALNIZ o adımlar (sihirbazın adım başına "Otomatik
+   * yap"ı, MIMARI § 7); verilmezse bütün otomatik adımlar (bugünkü davranış).
+   */
+  async tamamla(ctx: TenantContext, clientId: string, meta: Meta, kodlar?: readonly KurulumAdimKodu[]): Promise<KurulumYaniti & { sonuclar: KurulumAdimSonucu[] }> {
     this.erisim(ctx, clientId, true);
-    return this.kilitli(clientId, () => this.tamamlaKilitli(ctx, clientId, meta));
+    return this.kilitli(clientId, () => this.tamamlaKilitli(ctx, clientId, meta, kodlar));
   }
 
-  private async tamamlaKilitli(ctx: TenantContext, clientId: string, meta: Meta): Promise<KurulumYaniti & { sonuclar: KurulumAdimSonucu[] }> {
+  /**
+   * "WEB SİTEMİZ YOK" BEYANI — ÜÇ HÂLLİ. Sorgu düşerse `null` (okunamadı),
+   * `false` DEĞİL: okunamayan beyanı "yok" saymak sitesi olmayan bir
+   * workspace'e Tag Manager konteyneri açtırmak demek.
+   */
+  private async siteYokOku(ctx: TenantContext, clientId: string): Promise<boolean | null> {
+    try {
+      return await this.prisma.withTenant(ctx, (t) => siteYokBeyaniVarMi(t as unknown as SorguCalistirici, clientId));
+    } catch (e) {
+      logger.warn(`Kurulum beyanı okunamadı (${clientId}): ${mesaj(e)}`);
+      return null;
+    }
+  }
+
+  private async tamamlaKilitli(
+    ctx: TenantContext,
+    clientId: string,
+    meta: Meta,
+    kodlar?: readonly KurulumAdimKodu[],
+  ): Promise<KurulumYaniti & { sonuclar: KurulumAdimSonucu[] }> {
     const sonuclar: KurulumAdimSonucu[] = [];
+    const istenen = kodlar ? new Set(kodlar) : null;
+    /*
+     * İSTENEN AMA OTOMATİK OLMAYAN ADIM SESSİZCE ATLANMAZ. Sihirbaz adım
+     * başına "Otomatik yap" gönderiyor; dönen listede o kod hiç yoksa ekran
+     * "yapıldı mı, yapılmadı mı" bilemez. GERÇEK HESAP AÇAN kodlar
+     * (`HESAP_ACAN_KODLAR`) ayrıca adıyla reddediliyor: panelin süzgeci
+     * tek başına koruma değil (MIMARI Ç-4).
+     */
+    for (const kod of kodlar ?? []) {
+      if (OTOMATIK_SIRA.includes(kod)) continue;
+      sonuclar.push({
+        kod,
+        durum: 'atlandi',
+        mesaj: HESAP_ACAN_KODLAR.includes(kod)
+          ? 'Gerçek bir reklam hesabı açar; "Otomatik yap" bunu yapmaz, adımın içinden seçerek yapılır.'
+          : 'Bu adım otomatik yapılmıyor; adımın içinden yapılır.',
+      });
+    }
+    /*
+     * SİTE YOK BEYANI (kullanıcı kararı 2026-10-13, MIMARI § 0/2): piksel ve
+     * ölçüm adımlarına DOKUNULMAZ. Liste panelin tek tanımından türüyor
+     * (`siteYokKurulumKodlari`); beyan OKUNAMADIYSA da dokunulmaz ve bu
+     * SÖYLENİR — belirsizde Tag Manager kurmak, beklemekten pahalı. Beyan
+     * varsa adım panelde zaten "kapsam dışı" görünüyor; sonuç yalnız adım
+     * açıkça istendiyse yazılıyor.
+     */
+    const siteYok = await this.siteYokOku(ctx, clientId);
+    const siteAdimlari = siteYok === false ? new Set<KurulumAdimKodu>() : siteYokKurulumKodlari();
     /*
      * KULLANILMAYAN PLATFORMUN ADIMLARINA DOKUNULMAZ (MIMARI Ç-6). Google'ı
      * kullanmadığını söyleyen bir workspace'te "Eksikleri tamamla" Google Ads
@@ -970,12 +1069,29 @@ export class KurulumService {
     const ilk = await this.baglam(ctx, clientId);
     const atlanan = kullanilmayanAdimlar(ilk.kullanilmayanlar);
     for (const kod of OTOMATIK_SIRA) {
-      if (atlanan.has(kod)) continue;
+      if (istenen && !istenen.has(kod)) continue;
+      if (atlanan.has(kod)) {
+        if (istenen) sonuclar.push({ kod, durum: 'atlandi', mesaj: 'Bu workspace’te bu platform kullanılmıyor.' });
+        continue;
+      }
+      if (siteAdimlari.has(kod)) {
+        if (siteYok === null) {
+          sonuclar.push({ kod, durum: 'atlandi', mesaj: 'Kurulum beyanları okunamadı; "web sitemiz yok" denip denmediği bilinmediği için site işleri yapılmadı. Birazdan tekrar dene.' });
+        } else if (istenen) {
+          sonuclar.push({ kod, durum: 'atlandi', mesaj: 'Bu workspace için "web sitemiz yok" dendi; site işleri yapılmaz. Site eklenince beyanı geri al.' });
+        }
+        continue;
+      }
       // Her adımdan önce durum YENİDEN hesaplanır: önceki adım bir sonrakinin
       // ön koşulunu açıyor (konteyner açılınca etiketler yazılabilir).
       const b = await this.baglam(ctx, clientId);
       const adim = kurulumAdimlari(b.anlik).find((x) => x.kod === kod)!;
-      if (!adim.otomatik) continue;
+      if (!adim.otomatik) {
+        // Açıkça istenen adım bu durumda yapılamıyorsa NEDENİ dönüyor
+        // (zaten tamam, önceki adım bekleniyor…); toplu çağrıda bugünkü gibi sessiz.
+        if (istenen) sonuclar.push({ kod, durum: 'atlandi', mesaj: adim.durum === 'tamam' ? 'Zaten tamam.' : adim.neden });
+        continue;
+      }
       const r = await this.otomatikAdim(ctx, clientId, b, kod, meta);
       sonuclar.push(r);
     }
