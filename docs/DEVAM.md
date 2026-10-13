@@ -17,7 +17,7 @@ bu commit'le deploy ediliyor; migration `20261009100000_iyilestir` (üç
 yeni tablo) + `db:rls`.
 
 **ADVCAMPAIGN "SİTEMDEN SATIŞ GELSİN" TURU (2026-10-13).** Amaç hâlâ
-`deneme` (`amaclar.ts` dokunulmadı), push/deploy YOK. Google Maks.
+`deneme` (`amaclar.ts` dokunulmadı). Ajan 4 kapısı AÇIK (742e4d78: piksel sayımı istatistik sayfa sınırı 12 + adsız satır bilinmiyor; cdf6471e: onay "yeniden kur"da kopyalanmıyor). Kalan, kapıyı kapatmayan: Google satış sayısı bütün satın alma kaynaklarını sayıyor (uyarı şişebilir); Meta `/stats` okuması kota bekçisinden geçmiyor; yayında hedefler taze okunup kullanılmıyor (fark yalnız geri okumada). Push + deploy 2026-10-13. Google Maks.
 Performans artık YALNIZ satın almaya bağlı: atomik isteğin SONUNDA
 hesabın bütün `customer_conversion_goal`ları için `CampaignConversionGoal`
 güncellemesi (`customers/{cid}/campaignConversionGoals/-2~KAT~KAYNAK`,
