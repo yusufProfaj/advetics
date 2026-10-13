@@ -3,11 +3,7 @@
 import { useEffect, useState } from 'react';
 import {
   KALEM_KONUM_SINIRI,
-  REHBER_ACILIS,
   REHBER_AMACLARI,
-  REHBER_AMAC_KODLARI,
-  STRATEJI_ASAMA_ETIKETI,
-  AMAC_ASAMASI,
   kalemTarihHatasi,
   stratejiUcYolu,
   type GeoLocationOption,
@@ -18,22 +14,25 @@ import {
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { Dugme } from '@/components/ui/dugme';
 import { tutarCoz } from '../hesap';
-import { KALEM_KELIME_METNI, kalemKelimeDurumu, kullan, platformDegisti } from './hesap';
+import { kullan, platformDegisti } from './hesap';
 import { GIRDI, Rozet } from './ortak';
-import type { StratejiGirdileri } from '@advetics/shared';
 
 /**
- * ═══ KALEM DÜZENLEYİCİ (taslak a: satıra tıklayınca açılan) ═══
+ * ═══ KALEMİ DÜZENLE (Plan adımında, kalemin İÇİNDEN) ═══
  *
- * Satır açılıp kapanırken DOM'dan ÇIKMAZ (CLAUDE.md "açılıp kapanan öğe DOM'dan
- * çıkmaz"): yazılan metin, açık konum araması kaybolmasın. Kapalıyken `inert`:
- * görünmeyen alan klavyeyle odaklanmasın. Geçiş `grid-template-rows` ile ve
- * `motion-reduce` altında kapalı.
+ * Sekmeli düzenleyicinin alanları SADE biçimde: bütçe, tarih, platform ve
+ * pay, bölge, yaş, görsel yönergesi, reklam metni. Amaç burada YOK: hedefi
+ * Hedef adımı seçti, kalemin amacını değiştirmek o seçimi sessizce bozardı.
+ * "Kime anlatıyoruz" da yok: Kime adımında onaylandı ve bütün kalemlere
+ * aynı tarif gidiyor. Kelimeler kalemin kendi kutusunda (`KelimeBolumu`).
  *
- * Kalem tek bir `StratejiKalemiGirdisi` (sözleşme): ekran ikinci bir kalem
- * şekli kurmuyor; kaydederken `stratejiKalemleriKaydetSchema` aynen parse
- * ediyor. Doğrulama GİRİŞ ANINDA: tarih dönem dışına taşıyorsa satırın
- * altında `kalemTarihHatasi`nin cümlesi (sunucunun da koştuğu fonksiyon).
+ * Kapalıyken DOM'dan ÇIKMAZ (CLAUDE.md): yazılan metin, açık konum araması
+ * kaybolmasın; `inert` görünmeyen alanı klavyeden saklar, geçiş
+ * `motion-safe` altında.
+ *
+ * Kalem tek bir `StratejiKalemiGirdisi` (sözleşme); doğrulama GİRİŞ
+ * ANINDA: tarih dönem dışına taşıyorsa `kalemTarihHatasi`nin cümlesi
+ * (sunucunun da koştuğu fonksiyon).
  */
 export function KalemDuzenleyici({
   acik,
@@ -42,12 +41,11 @@ export function KalemDuzenleyici({
   sil,
   plan,
   para,
-  girdiler,
+  konumHesabi,
+  ozelKategori,
   kilitli,
   planId,
   kalemKayitli,
-  kelimeGruplari,
-  kelimeAra,
 }: {
   acik: boolean;
   k: StratejiKalemiGirdisi;
@@ -55,43 +53,22 @@ export function KalemDuzenleyici({
   sil: () => void;
   plan: { baslangic: string; bitis: string };
   para: string;
-  girdiler: StratejiGirdileri | null;
+  konumHesabi: string | null;
+  ozelKategori: boolean;
   kilitli: boolean;
   planId: string;
   /** Metin önerisi kayıtlı kalem ister (uç `:kalemId` taşıyor). */
   kalemKayitli: boolean;
-  /** Seçili kelimesi olan gruplar, CANLI kelime tablosundan (`seciliKelimeGruplari`). */
-  kelimeGruplari: ReadonlyArray<{ grup: string; kelime: number; aylikArama: number }>;
-  /** Kelime bölümüne götürür (kaydırır, arama kutusunu odaklar). */
-  kelimeAra: () => void;
 }) {
-  const kelimeDurumu = kalemKelimeDurumu(k, kelimeGruplari);
   const tutar = tutarCoz(k.butce, para);
   const tarihHatasi = kalemTarihHatasi(k, plan);
-  const ozelKategori = girdiler?.ozelKategori ?? false;
   const g = REHBER_AMACLARI[k.amac].google;
   const set = (x: Partial<StratejiKalemiGirdisi>) => degistir({ ...k, ...x });
 
   return (
     <div className={`grid motion-safe:transition-[grid-template-rows] motion-safe:duration-200 ${acik ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`} inert={!acik}>
       <div className="overflow-hidden">
-        <fieldset disabled={kilitli} className="grid gap-3.5 bg-surface-muted px-3 py-4 sm:px-4 md:grid-cols-3">
-          <Alan etiket="Ne istiyoruz">
-            <select className={GIRDI} value={k.amac} onChange={(e) => set({ amac: e.target.value as StratejiKalemiGirdisi['amac'] })}>
-              {REHBER_AMAC_KODLARI.map((a) => {
-                const acilis = REHBER_ACILIS[a];
-                const kapali = acilis.meta === 'kapali' && acilis.google === 'kapali';
-                return (
-                  <option key={a} value={a} disabled={kapali}>
-                    {REHBER_AMACLARI[a].ekranAdi}
-                    {kapali ? ' (henüz açık değil)' : acilis.meta !== 'acik' && acilis.google !== 'acik' ? ' (deneme)' : ''}
-                  </option>
-                );
-              })}
-            </select>
-            <span className="text-[11px] text-ink-muted">{STRATEJI_ASAMA_ETIKETI[AMAC_ASAMASI[k.amac]]} aşaması · {REHBER_AMACLARI[k.amac].neAlacaksin}</span>
-          </Alan>
-
+        <fieldset disabled={kilitli} className="grid gap-3.5 rounded-xl bg-surface-muted px-3 py-4 sm:px-4 md:grid-cols-3">
           <Alan etiket="Bütçe (dönem toplamı)">
             <input className={GIRDI} inputMode="decimal" value={k.butce} onChange={(e) => set({ butce: e.target.value })} aria-invalid={tutar.tur === 'hata'} />
             {tutar.tur === 'hata' && (
@@ -114,7 +91,7 @@ export function KalemDuzenleyici({
             )}
           </Alan>
 
-          <Alan etiket="Platformlar">
+          <Alan etiket="Nerede">
             <div className="flex flex-wrap gap-3 text-sm">
               <label className="inline-flex items-center gap-1.5">
                 <input type="checkbox" className="accent-[#ff2400]" checked={k.meta} onChange={(e) => degistir(platformDegisti(k, 'meta', e.target.checked))} /> Meta
@@ -134,10 +111,12 @@ export function KalemDuzenleyici({
             )}
           </Alan>
 
-          <Alan etiket="Bölge">
-            <KonumSecici konumlar={k.konumlar} degistir={(konumlar) => set({ konumlar })} hesap={girdiler?.konumHesabi ?? null} acik={acik && !kilitli} />
-            {ozelKategori && <span className="text-[11px] text-ink-muted">Özel reklam kategorisi: bölge geniş tutulur, adres çevresi kurulamaz.</span>}
-          </Alan>
+          <div className="md:col-span-2">
+            <Alan etiket="Bölge">
+              <KonumSecici konumlar={k.konumlar} degistir={(konumlar) => set({ konumlar })} hesap={konumHesabi} acik={acik && !kilitli} />
+              {ozelKategori && <span className="text-[11px] text-ink-muted">Özel reklam kategorisi: bölge geniş tutulur, adres çevresi kurulamaz.</span>}
+            </Alan>
+          </div>
 
           <Alan etiket="Yaş">
             {ozelKategori ? (
@@ -152,51 +131,22 @@ export function KalemDuzenleyici({
                   <span aria-hidden>-</span>
                   <input type="number" min={18} max={65} className={GIRDI} placeholder="65+" value={k.yasMax ?? ''} aria-label="En büyük yaş" onChange={(e) => set(yasDegisti(k, 'yasMax', e.target.value))} />
                 </div>
-                <span className="text-[11px] text-ink-muted">İpucu aralığı; boş bırakılırsa 18-65+. AdvCampaign'de kitleyi sert biçimde daraltmaz.</span>
+                <span className="text-[11px] text-ink-muted">Boş bırakılırsa 18-65+.</span>
               </>
             )}
           </Alan>
 
-          <div className="md:col-span-2">
-            <MetinKutusu baslik="Kreatif yönergesi" deger={k.kreatifYonergesi} degistir={(m) => set({ kreatifYonergesi: m })} />
-          </div>
-          <div>
-            <MetinKutusu baslik="Kime anlatıyoruz" deger={k.kitleTarifi} degistir={(m) => set({ kitleTarifi: m })} />
+          <div className="md:col-span-3">
+            <MetinKutusu baslik="Görsel ve mesaj" deger={k.kreatifYonergesi} degistir={(m) => set({ kreatifYonergesi: m })} />
           </div>
 
           <div className="md:col-span-3">
             <ReklamMetni metin={k.metin} degistir={(m) => set({ metin: m })} planId={planId} kalemId={k.id ?? null} kalemKayitli={kalemKayitli} />
           </div>
 
-          {kelimeDurumu !== 'gerekmez' && (
-            <div className="md:col-span-3">
-              <Alan etiket="Google arama kelimeleri">
-                {/* Liste CANLI kelime tablosundan (`seciliKelimeGruplari`): sayfa açılışındaki `girdiler` aramadan sonra bayat kalırdı. */}
-                <div className="flex flex-wrap items-center gap-2">
-                  <select className={`${GIRDI} max-w-[22rem]`} value={k.kelimeGrubu ?? ''} onChange={(e) => set({ kelimeGrubu: e.target.value || null })}>
-                    <option value="">Kelime grubu seçilmedi</option>
-                    {k.kelimeGrubu && !kelimeGruplari.some((x) => x.grup === k.kelimeGrubu) && <option value={k.kelimeGrubu}>{k.kelimeGrubu} · seçili kelime yok</option>}
-                    {kelimeGruplari.map((x) => (
-                      <option key={x.grup} value={x.grup}>
-                        {x.grup} · {x.kelime} kelime · ayda yaklaşık {x.aylikArama.toLocaleString('tr-TR')} arama
-                      </option>
-                    ))}
-                  </select>
-                  {/* KELİMESİZ ARAMA KALEMİ DOĞRUDAN YOLU GÖSTERİR (Ajan 4 AÇIK-1): "arama yapılmadı" deyip bırakmak kalemi kelimesiz aktartıyordu. */}
-                  {kelimeDurumu !== 'tamam' && !kilitli && (
-                    <Dugme ton="ikincil" boyut="kucuk" onClick={kelimeAra}>
-                      Kelime ara
-                    </Dugme>
-                  )}
-                </div>
-                {kelimeDurumu !== 'tamam' && <span className="text-[11px] font-semibold text-brand-strong">{KALEM_KELIME_METNI[kelimeDurumu]}</span>}
-              </Alan>
-            </div>
-          )}
-
           <div className="flex items-end md:col-span-3">
             <Dugme ton="sade" boyut="kucuk" onClick={sil}>
-              Bu kampanyayı çıkar
+              Bu kampanyayı plandan çıkar
             </Dugme>
           </div>
         </fieldset>
@@ -326,7 +276,7 @@ const KONUM_TURLERI = new Set(['country', 'region', 'city']);
  * ayrı yazılı ("aramadım", "arıyorum", "sonuç yok", "çağrı düştü"); hatayı
  * boş listeye çevirmek lokasyon aramasının teşhisini bir kez imkânsız kıldı.
  */
-function KonumSecici({ konumlar, degistir, hesap, acik }: { konumlar: RehberKonumu[]; degistir: (k: RehberKonumu[]) => void; hesap: string | null; acik: boolean }) {
+export function KonumSecici({ konumlar, degistir, hesap, acik }: { konumlar: RehberKonumu[]; degistir: (k: RehberKonumu[]) => void; hesap: string | null; acik: boolean }) {
   const [q, setQ] = useState('');
   const [hal, setHal] = useState<AramaHali>({ tur: 'bos' });
 

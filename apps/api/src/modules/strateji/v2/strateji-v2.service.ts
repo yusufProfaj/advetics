@@ -71,6 +71,16 @@ import {
   type StratejiYorumu,
   type TenantContext,
   type YorumGovdesi,
+  AMAC_OLCUTU,
+  OLCUM_TURU_ADLARI,
+  REHBER_AMAC_KODLARI,
+  type KitleOnerGirdisi,
+  type StratejiIncelemeParcasi,
+  type StratejiIncelemeSatiri,
+  type StratejiKitleOnerisi,
+  type StratejiSihirbazGirdileri,
+  type StratejiSihirbazKaydetGirdisi,
+  type StratejiSihirbazOlusturGirdisi,
 } from '@advetics/shared';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CONFIG, type AppConfig } from '../../../config/configuration';
@@ -103,8 +113,8 @@ import {
   videoVarMi,
   ANA_AMAC_REHBER,
 } from './girdiler';
-import { gunlukAsgari, stratejiMotoru, type OnerilenKalem } from './motor';
-import { stratejiMetinleri, type OneriBolumMetni } from './strateji-ai';
+import { amacOlcumTuru, amacPlatformlari, gunlukAsgari, secimliMotor, stratejiMotoru, type OnerilenKalem } from './motor';
+import { kitleTarifiUret, stratejiMetinleri, type OneriBolumMetni, type StratejiAiGirdisi } from './strateji-ai';
 import { stratejiDosyaAdi, stratejiPdf } from './strateji-pdf';
 import {
   KALEM_SUTUNLARI,
@@ -115,6 +125,7 @@ import {
   olcumOzetiOku,
   planKur,
   planSecimi,
+  sihirbazOku,
   tahminOku,
   type PlanSatiri,
   type Sorgucu,
@@ -275,6 +286,7 @@ export class StratejiV2Service {
       olcum: olcumOzetiOku(p.olcum_ozeti),
       yapilabilir: stratejiYapilabilir(p.durum as StratejiDurumu, ctx.permissions),
       kelimeler: musteri ? bosKelimeler() : await kelimeleriOku(tx, p),
+      sihirbaz: musteri ? null : sihirbazOku(p.sihirbaz),
     };
   }
 
@@ -286,7 +298,8 @@ export class StratejiV2Service {
    * stratejilerin dönemleri ÇAKIŞAMAZ (servis kontrolü: indeksle ifade
    * edilemiyor).
    */
-  async olustur(ctx: TenantContext, girdi: StratejiOlusturGirdisi): Promise<StratejiDetayi> {
+  async olustur(ctx: TenantContext, girdi: StratejiOlusturGirdisi | StratejiSihirbazOlusturGirdisi): Promise<StratejiDetayi> {
+    const sihirbaz = 'sihirbaz' in girdi && girdi.sihirbaz ? JSON.stringify(girdi.sihirbaz) : null;
     erisim(ctx, girdi.clientId);
     const donem = stratejiDonemi(girdi.baslangicAyi, girdi.sureAy);
     try {
@@ -311,9 +324,9 @@ export class StratejiV2Service {
              AND baslangic <= ${donem.bitis}::date AND bitis >= ${donem.baslangic}::date`);
         if ((cakisan?.n ?? 0) > 0) throw new ConflictException('Bu dönemle çakışan onaylı bir strateji var; önce onu kapatın.');
         const [yeni] = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-          INSERT INTO strateji_planlari (org_id, client_id, bicim, donem, baslangic, bitis, toplam_butce_micros, para_birimi, created_by)
+          INSERT INTO strateji_planlari (org_id, client_id, bicim, donem, baslangic, bitis, toplam_butce_micros, para_birimi, created_by, sihirbaz)
           VALUES (${c.org_id}::uuid, ${girdi.clientId}::uuid, 2, ${girdi.baslangicAyi}, ${donem.baslangic}::date, ${donem.bitis}::date,
-                  ${toplam}::bigint, ${paraBirimi}, ${ctx.userId}::uuid)
+                  ${toplam}::bigint, ${paraBirimi}, ${ctx.userId}::uuid, ${sihirbaz}::jsonb)
           RETURNING id::text`);
         return this.detayKur(tx, ctx, await planOku(tx, ctx, yeni!.id, false));
       });
@@ -406,7 +419,14 @@ export class StratejiV2Service {
       googleTalepYaratma: hazirlik.asgariGunluk.googleTalepYaratma === null ? null : BigInt(hazirlik.asgariGunluk.googleTalepYaratma),
     };
     const bugun = istanbulBugun(this.simdi());
+    // ADIM ADIM AKIŞ: kullanıcının seçtiği hedefler (sırasıyla), bölgesi ve
+    // ONAYLADIĞI kitle tarifi. Sihirbaz durumu yoksa (eski plan) motor
+    // amacı kendisi seçer; ikisi aynı `kalemKur`dan geçiyor.
+    const sihirbaz = sihirbazOku(p.sihirbaz);
+    const secilen = sihirbaz && sihirbaz.amaclar.length > 0 ? sihirbaz.amaclar : null;
+    const kitle = sihirbaz?.kitle?.onaylandi ? sihirbaz.kitle.metin : null;
     const motorGirdisi = {
+      konumKaynagi: sihirbaz && sihirbaz.konumlar.length > 0 ? ('ajans' as const) : ('marka' as const),
       toplamMicros: BigInt(p.toplam_butce_micros),
       paraBirimi: p.para_birimi,
       donem: { baslangic: p.baslangic!, bitis: p.bitis! },
@@ -421,24 +441,11 @@ export class StratejiV2Service {
       gecmis: g.gecmis.sonuc,
       videoVarligiVar: g.video,
       adresKonumuVar: !!hazirlik.iletisim.adresKonumu,
-      konumlar: markaKonumlari(hazirlik),
+      konumlar: sihirbaz && sihirbaz.konumlar.length > 0 ? sihirbaz.konumlar : markaKonumlari(hazirlik),
       kelimeGrubu: g.kelimeGrubu,
     };
-    const motor = stratejiMotoru(motorGirdisi);
-    const aiGirdisi = {
-      marka: {
-        ad: g.marka?.marka_adi ?? g.marka?.ad ?? null,
-        sektor: g.marka?.sektor ?? null,
-        urunler: g.marka?.urunler ?? [],
-        vaatler: g.marka?.vaatler ?? [],
-        hedefKitle: g.marka?.hedef_kitle ?? null,
-        bilgi: g.marka?.bilgi ?? null,
-        uslup: g.marka?.uslup ?? null,
-      },
-      site: { adres: g.marka?.website ?? null, tarama: g.siteTaramasi?.baslik ?? null },
-      kalemler: motor.kalemler.map((k) => ({ amac: k.amac })),
-      gecmisAmaclari: [...new Set(g.gecmis.ozet.map((x) => x.amac))],
-    };
+    const motor = secilen ? secimliMotor(motorGirdisi, secilen) : stratejiMotoru(motorGirdisi);
+    const aiGirdisi = aiGirdisiKur(g, motor.kalemler.map((k) => k.amac), kitle);
     // İMZA: motorun çıktısı + yapay zekânın girdisi. Aynıysa öneri saklanandan.
     const imza = createHash('sha256').update(JSON.stringify({ motor: motor.kalemler, ai: aiGirdisi, notlar: motor.notlar })).digest('hex');
     const onceki = p.oneri_imzasi === imza ? (p.son_oneri as StratejiOnerisi | null) : null;
@@ -450,13 +457,17 @@ export class StratejiV2Service {
     const bolumler: StratejiOnerisi['bolumler'] = {};
     for (const b of AI_METIN_BOLUMLERI) {
       const m = metinler.bolumler[b];
+      if (b === 'kitle' && kitle) continue;
       if (m.metin === null) uretilemeyen.push({ bolum: b, neden: m.aciklama });
       else bolumler[b] = { metin: m.metin, kaynak: 'ai', kim: null, zaman };
     }
+    if (kitle) bolumler.kitle = { metin: kitle, kaynak: 'ajans', kim: ctx.userId, zaman };
     const kalemler: StratejiKalemi[] = motor.kalemler.map((k, i) => {
       const mt = metinler.kalemMetinleri[i];
       const ky = mt ? oneriMetni(mt.kreatifYonergesi, zaman) : null;
-      const kt = mt ? oneriMetni(mt.kitleTarifi, zaman) : null;
+      // Onaylanan tarif kalemin tarifi olur (ajans "Bu tarif doğru" dedi);
+      // yapay zekâya ikinci kez yazdırmak onaylanmamış bir cümleyi araya sokardı.
+      const kt = kitle ? { metin: kitle, kaynak: 'ajans' as const, kim: ctx.userId, zaman } : mt ? oneriMetni(mt.kitleTarifi, zaman) : null;
       if (mt?.kreatifYonergesi.metin === null) uretilemeyen.push({ bolum: 'kampanyalar', neden: `Kampanya ${i + 1} kreatif yönergesi: ${mt.kreatifYonergesi.aciklama}` });
       return oneriKalemi(k, i + 1, ky, kt);
     });
@@ -469,6 +480,181 @@ export class StratejiV2Service {
          WHERE id = ${p.id}::uuid RETURNING id`),
     );
     return oneri;
+  }
+
+  // ── Adım adım akış (sihirbaz) ────────────────────────────────────────
+
+  /**
+   * Hedef ve bütçe adımlarının girdileri — PLAN DOĞMADAN. Plan bütçe
+   * adımında açılıyor (oluşturma toplam istiyor), ama hedef kartlarının
+   * kapalı/açık hâli ve bütçenin asgari kontrolü ondan önce lazım.
+   *
+   * Kapılar MOTORUN kendisinden (`amacPlatformlari`): kart açık görünüp
+   * motorun plana almaması "seçtim, planda yok" hâlini üretirdi. Meta
+   * asgarisi platformdan okunur (rehberin hazırlığı); okunamazsa `null` ve
+   * nedeni `okumaHatalari`nda: bütçe adımı "kontrol edilemedi" der.
+   */
+  async sihirbazGirdileri(ctx: TenantContext, clientId: string): Promise<StratejiSihirbazGirdileri> {
+    erisim(ctx, clientId);
+    const yerel = await this.tx(ctx, async (tx) => ({
+      siteYok: await siteYokBeyaniVarMi(tx, clientId),
+      kullanilmayan: await kullanilmayanPlatformlar(tx, clientId),
+      para: await paraBirimiDurumu(tx, clientId),
+    }));
+    const [olcum, hazirlik] = await Promise.all([this.olcumOku(ctx, clientId), this.hazirlikOku(ctx, clientId, true)]);
+    const harita = olcumHaritasi(olcum);
+    const kapi = {
+      ajansYoneticisi: hazirlik.ajansYoneticisi,
+      kullanilmayan: new Set(yerel.kullanilmayan),
+      hesap: { meta: hazirlik.hesaplar.length > 0, google: hazirlik.googleHesaplari.length > 0 },
+      siteYok: yerel.siteYok,
+      olcum: harita.harita,
+    };
+    const okumaHatalari = [...harita.hatalar];
+    if (kapi.hesap.meta && hazirlik.asgariGunluk.meta === null) okumaHatalari.push('Meta’nın bu hesaptaki günlük asgari bütçesi okunamadı; Meta için bütçe kontrolü yapılamadı.');
+    const konumlar = markaKonumlari(hazirlik);
+    return {
+      amaclar: REHBER_AMAC_KODLARI.map((amac) => {
+        const { acik, dusen } = amacPlatformlari(amac, kapi);
+        return { amac, acik: acik.length > 0, platformlar: acik, sebepler: dusen };
+      }),
+      asgariGunluk: hazirlik.asgariGunluk,
+      paraBirimi: yerel.para.para ?? 'TRY',
+      paraBirimiHatasi: yerel.para.hata,
+      konumOnerisi: { konumlar, kaynak: konumlar.length > 0 ? 'marka' : 'yok', adres: hazirlik.iletisim.adres ?? null },
+      konumHesabi: hazirlik.hesaplar[0]?.id ?? null,
+      ozelKategori: ozelKategoriVar({ marka: await this.tx(ctx, (tx) => markaOku(tx, clientId)), hazirlik }),
+      ajansYoneticisi: hazirlik.ajansYoneticisi,
+      baslangicAyi: gelecekAy(istanbulBugun(this.simdi())),
+      okumaHatalari,
+    };
+  }
+
+  /**
+   * "Devam" — sihirbaz durumunu yazar (sürüm, 409). Bütçe adımında dönem ve
+   * toplam da değişebilir; değişirse KAYITLI KAMPANYALAR SİLİNİR ve İnceleme
+   * planı yeniden kurar. Eski bütçeye göre kurulmuş kalemleri bırakmak,
+   * toplamı aşan ya da dönem dışına taşan bir planı sessizce taşımak olurdu.
+   * Ekran bunu Devam'dan ÖNCE söylüyor. Taslak/revizyon plan hiç onaylanmadığı
+   * için aktarılmış kalem taşıyamaz (aktarım yalnız onaylı planda).
+   *
+   * Onaylanan kitle tarifi ("Bu tarif doğru, kullan") belgenin "Kitle ve
+   * bölge" metni olur, kaynak `ajans` + kim + zaman: onay kutusu "Kullan"ın
+   * kendisi.
+   */
+  async sihirbazKaydet(ctx: TenantContext, id: string, girdi: StratejiSihirbazKaydetGirdisi): Promise<StratejiDetayi> {
+    return this.tx(ctx, async (tx) => {
+      const p = await yazmaKapisi(tx, ctx, id, girdi.surum);
+      const donem = girdi.donem ? stratejiDonemi(girdi.donem.baslangicAyi, girdi.donem.sureAy) : { baslangic: p.baslangic!, bitis: p.bitis! };
+      const toplam = girdi.toplamButce !== undefined ? tutarCoz(girdi.toplamButce, p.para_birimi, 'Toplam bütçe') : BigInt(p.toplam_butce_micros);
+      if (toplam <= 0n) throw new BadRequestException('Toplam bütçe sıfırdan büyük olmalı.');
+      const degisti = donem.baslangic !== p.baslangic || donem.bitis !== p.bitis || toplam !== BigInt(p.toplam_butce_micros);
+      if (degisti) {
+        const [cakisan] = await tx.$queryRaw<Array<{ n: number }>>(Prisma.sql`
+          SELECT count(*)::int AS n FROM strateji_planlari
+           WHERE client_id = ${p.client_id}::uuid AND bicim = 2 AND durum = 'onaylandi' AND id <> ${p.id}::uuid
+             AND baslangic <= ${donem.bitis}::date AND bitis >= ${donem.baslangic}::date`);
+        if ((cakisan?.n ?? 0) > 0) throw new ConflictException('Bu dönemle çakışan onaylı bir strateji var; önce onu kapatın.');
+        await tx.$queryRaw(Prisma.sql`DELETE FROM strateji_kalemleri WHERE plan_id = ${p.id}::uuid AND rehber_id IS NULL RETURNING id`);
+        await tx.$queryRaw(Prisma.sql`
+          UPDATE strateji_planlari SET baslangic = ${donem.baslangic}::date, bitis = ${donem.bitis}::date,
+                 donem = ${donem.baslangic.slice(0, 7)}, toplam_butce_micros = ${toplam}::bigint, riskler = '[]'::jsonb
+           WHERE id = ${p.id}::uuid RETURNING id`);
+      }
+      const s = { ...girdi.sihirbaz, incelenen: degisti ? null : girdi.sihirbaz.incelenen };
+      await tx.$queryRaw(Prisma.sql`UPDATE strateji_planlari SET sihirbaz = ${JSON.stringify(s)}::jsonb WHERE id = ${p.id}::uuid RETURNING id`);
+      if (s.kitle?.onaylandi) {
+        const mevcut = (p.bolumler && typeof p.bolumler === 'object' ? { ...(p.bolumler as Record<string, unknown>) } : {}) as Record<string, KaynakliMetin | undefined>;
+        if (mevcut.kitle?.metin !== s.kitle.metin || mevcut.kitle?.kaynak !== 'ajans') {
+          mevcut.kitle = damgala({ metin: s.kitle.metin, kaynak: 'ajans' }, ctx, this.simdi().toISOString());
+          await tx.$queryRaw(Prisma.sql`UPDATE strateji_planlari SET bolumler = ${JSON.stringify(mevcut)}::jsonb WHERE id = ${p.id}::uuid RETURNING id`);
+        }
+      }
+      await surumArttir(tx, p.id);
+      return this.detayKur(tx, ctx, await planOku(tx, ctx, p.id, false));
+    });
+  }
+
+  /** "Kime anlatıyoruz" önerisi. YAZMAZ: tarif kullanıcı onaylayınca `sihirbazKaydet` ile yazılır. */
+  async kitleOner(ctx: TenantContext, id: string, girdi: KitleOnerGirdisi): Promise<StratejiKitleOnerisi> {
+    const p = await this.tx(ctx, async (tx) => {
+      const x = await planOku(tx, ctx, id, false);
+      if (!stratejiDuzenlenebilirMi(x.durum as StratejiDurumu)) throw new ConflictException('Yalnız taslak ya da revizyondaki stratejiye öneri alınır.');
+      return x;
+    });
+    const g = await this.girdiOku(ctx, p);
+    const amaclar = sihirbazOku(p.sihirbaz)?.amaclar ?? [];
+    return kitleTarifiUret(this.yz, aiGirdisiKur(g, amaclar, null), girdi.yeniden ? (girdi.onceki ?? null) : null);
+  }
+
+  /**
+   * İnceleme adımının TEK satırı. Her parça gerçek bir okuma ve alt metni
+   * okunan veriden (sayılar hesabın kendi verisi; uydurma yok). Okunamayan
+   * parça `bilinmiyor` ve okumanın mesajıyla döner; panel satırda yazar.
+   */
+  async inceleme(ctx: TenantContext, id: string, parca: StratejiIncelemeParcasi): Promise<StratejiIncelemeSatiri> {
+    const p = await this.tx(ctx, (tx) => planOku(tx, ctx, id, false));
+    const amaclar = sihirbazOku(p.sihirbaz)?.amaclar ?? [];
+    if (parca === 'olcum') {
+      const olcum = await this.olcumOku(ctx, p.client_id);
+      const h = olcumHaritasi(olcum);
+      if (!olcum) return { parca, durum: 'bilinmiyor', ozet: h.hatalar[0] ?? 'Ölçüm durumu okunamadı.', uyari: true };
+      const satirlar: string[] = [];
+      let eksik = false;
+      for (const amac of amaclar) {
+        const tur = amacOlcumTuru(amac);
+        if (!tur) continue;
+        const hucre = h.harita[tur];
+        const metin = REHBER_PLATFORMLARI.map((pl) => {
+          const v = hucre?.[pl];
+          if (v === false) eksik = true;
+          return `${pl === 'meta' ? 'Meta' : 'Google'} ${v === true ? 'sayıyor' : v === false ? 'saymıyor' : 'bilinmiyor'}`;
+        }).join(', ');
+        satirlar.push(`${OLCUM_TURU_ADLARI[tur].ad}: ${metin}`);
+      }
+      if (satirlar.length === 0) return { parca, durum: 'hazir', ozet: 'Seçilen hedefler ölçüm gerektirmiyor (ziyaret, izlenme, erişim platformda sayılır).', uyari: false };
+      return { parca, durum: eksik ? 'eksik' : 'hazir', ozet: satirlar.join(' · '), uyari: eksik };
+    }
+    return this.tx(ctx, async (tx) => {
+      if (parca === 'marka') {
+        const m = await markaOku(tx, p.client_id);
+        if (!m?.profil_var) return { parca, durum: 'bos', ozet: 'Marka profili kurulmamış; metinler genel yazılır.', uyari: true };
+        const bos = [!m.sektor && 'sektör', !(m.urunler ?? []).length && 'ürünler', !(m.vaatler ?? []).length && 'vaatler', !m.hedef_kitle && 'hedef kitle'].filter((x): x is string => !!x);
+        const ozet = [m.sektor, (m.urunler ?? []).slice(0, 3).join(', ') || null, (m.vaatler ?? [])[0] ?? null].filter(Boolean).join(' · ');
+        return { parca, durum: bos.length ? 'eksik' : 'hazir', ozet: [ozet || null, bos.length ? `Boş: ${bos.join(', ')}` : null].filter(Boolean).join(' · '), uyari: bos.length > 0 };
+      }
+      if (parca === 'site') {
+        const siteYok = await siteYokBeyaniVarMi(tx, p.client_id);
+        if (siteYok) return { parca, durum: 'hazir', ozet: '"Web sitemiz yok" dendi; siteye yönlendiren hedefler plana alınmaz.', uyari: false };
+        const m = await markaOku(tx, p.client_id);
+        const t = await siteTaramasiOku(tx, p.client_id);
+        if (!m?.website) return { parca, durum: 'eksik', ozet: 'Site adresi girilmedi.', uyari: true };
+        return { parca, durum: 'hazir', ozet: [alanAdi(m.website), t ? `Tarama: ${t.baslik}` : 'Site henüz taranmadı'].join(' · '), uyari: false };
+      }
+      if (parca === 'meta' || parca === 'google') {
+        const pencere = tahminPenceresi(istanbulBugun(this.simdi()));
+        const g = await gecmisOku(tx, p.client_id, p.para_birimi, pencere);
+        const belge = belgeGecmisi(g, pencere);
+        const satirlar = belge.satirlar.filter((s) => s.platform === parca);
+        if (!g.hesapVar) return { parca, durum: 'bos', ozet: 'İzlenen reklam hesabı yok; beklenen sonuç gösterilmez.', uyari: false };
+        if (satirlar.length === 0) return { parca, durum: 'bos', ozet: `Son ${belge.gun} günde bu platformda harcama yok; tahmin yapılmaz.`, uyari: false };
+        const enBuyuk = [...satirlar].sort((a, b) => (BigInt(b.harcamaMicros) > BigInt(a.harcamaMicros) ? 1 : -1)).slice(0, 2);
+        const ozet = enBuyuk
+          .map((s) => `${s.etiket}: ${tutarGoster(BigInt(s.harcamaMicros), p.para_birimi)}${s.sonuc !== null ? `, ${Math.round(s.sonuc).toLocaleString('tr-TR')} ${s.birim}` : ''}`)
+          .join(' · ');
+        return { parca, durum: 'hazir', ozet: `Son ${belge.gun} gün · ${ozet}${satirlar.length > enBuyuk.length ? ` · ${satirlar.length - enBuyuk.length} satır daha` : ''}`, uyari: false };
+      }
+      // kelime
+      const k = await kelimeleriOku(tx, p);
+      const aramaGerekir = amaclar.some((a) => REHBER_AMACLARI[a].google.kurgu === 'ARAMA');
+      const secili = k.satirlar.filter((s) => s.secili);
+      if (secili.length > 0) {
+        const hacim = secili.reduce((t, s) => t + (s.aylikArama ?? 0), 0);
+        return { parca, durum: 'hazir', ozet: `${secili.length} kelime seçili · ayda yaklaşık ${hacim.toLocaleString('tr-TR')} arama`, uyari: false };
+      }
+      if (!aramaGerekir) return { parca, durum: 'hazir', ozet: 'Seçilen hedeflerde Google Arama kampanyası yok; kelime gerekmez.', uyari: false };
+      return { parca, durum: 'bos', ozet: 'Henüz kelime aranmadı; Plan adımında Google Arama kampanyasının içinden aranır.', uyari: true };
+    });
   }
 
   // ── Kalemler ve bölümler ─────────────────────────────────────────────
@@ -732,6 +918,14 @@ export class StratejiV2Service {
       if (!stratejiGecisMumkunMu(p.durum as StratejiDurumu, 'onayla')) throw new ConflictException(gecisMesaji(p.durum as StratejiDurumu));
       if (p.surum !== surum) throw new ConflictException(SURUM_MESAJI);
       const rol = v2Rol(ctx);
+      // "MÜŞTERİ ADINA ONAYLA" YALNIZ AJANS YÖNETİCİSİ (taslak, 2026-10-13):
+      // onay müşterinin imzası yerine geçiyor ve AdvCampaign'e kurulumun
+      // kapısını açıyor. Panel kartı yalnız yöneticiye gösteriyor; sunucu
+      // da reddediyor (gizli düğme tek savunma olamaz). Kural rehberin
+      // `deneme` kapısıyla AYNI fonksiyon (`ajansYoneticisiMi`).
+      if (rol === 'ajans' && !(await ajansYoneticisiMi(tx, ctx))) {
+        throw new ForbiddenException('Müşteri adına onayı yalnız ajans yöneticisi verebilir; stratejiyi müşteriye gönderin.');
+      }
       await tx.$queryRaw(Prisma.sql`
         UPDATE strateji_planlari
            SET durum = 'onaylandi', onaylayan_user_id = ${ctx.userId}::uuid, onay_rolu = ${rol}, onay_zamani = now(),
@@ -949,7 +1143,7 @@ export class StratejiV2Service {
       yol = b.yol;
     }
     const kok = this.config.mail.appUrl.replace(/\/+$/, '');
-    const panel = `${kok}${stratejiPanelAdresi({ musteri: p.client_id, plan: p.id, gorunum: 'belge' })}`;
+    const panel = `${kok}${stratejiPanelAdresi({ musteri: p.client_id, plan: p.id, adim: 'rapor' })}`;
     const varsayilan = [
       `<p>Merhaba,</p>`,
       `<p>${kacis(workspace)} için hazırladığımız dijital reklam stratejisi ektedir.</p>`,
@@ -1062,14 +1256,62 @@ async function kelimeleriOku(tx: Sorgucu, p: PlanSatiri): Promise<PlanDetayi['ke
   };
 }
 
-async function workspaceParaBirimi(tx: Sorgucu, clientId: string): Promise<string> {
+/**
+ * Workspace'in para birimi ya da çözülememesinin NEDENİ. Fırlatmıyor: sihirbazın
+ * girdileri bunu ekranda söylüyor, plan oluşturma (`workspaceParaBirimi`) aynı
+ * cümleyle reddediyor. Transaction içinde `catch` gerekmiyor.
+ */
+async function paraBirimiDurumu(tx: Sorgucu, clientId: string): Promise<{ para: string | null; hata: string | null }> {
   const birimler = await tx.$queryRaw<Array<{ currency: string }>>(Prisma.sql`
     SELECT DISTINCT currency FROM ad_accounts
      WHERE client_id = ${clientId}::uuid AND platform IN ('meta'::"Platform", 'google'::"Platform") ORDER BY currency`);
-  if (birimler.length === 0) throw new BadRequestException('Bu workspace’e atanmış Meta ya da Google hesabı yok. Para birimini seçin.');
+  if (birimler.length === 0) return { para: null, hata: 'Bu workspace’e atanmış Meta ya da Google hesabı yok. Para birimini seçin.' };
   // Kur çevrimi yok: 1 USD + 1 TRY toplanamaz. Tahmin etmek yerine sor.
-  if (birimler.length > 1) throw new BadRequestException(`Workspace hesapları farklı para birimleri kullanıyor (${birimler.map((b) => b.currency).join(', ')}). Para birimini seçin.`);
-  return birimler[0]!.currency;
+  if (birimler.length > 1) return { para: null, hata: `Workspace hesapları farklı para birimleri kullanıyor (${birimler.map((b) => b.currency).join(', ')}). Para birimini seçin.` };
+  return { para: birimler[0]!.currency, hata: null };
+}
+
+async function workspaceParaBirimi(tx: Sorgucu, clientId: string): Promise<string> {
+  const d = await paraBirimiDurumu(tx, clientId);
+  if (d.para === null) throw new BadRequestException(d.hata ?? 'Para birimi çözülemedi.');
+  return d.para;
+}
+
+/** İstanbul takvimiyle bugünden bir sonraki ay, `YYYY-MM` (Date'e çevrilmez). */
+export function gelecekAy(bugun: string): string {
+  const y = Number(bugun.slice(0, 4));
+  const m = Number(bugun.slice(5, 7));
+  return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+}
+
+function alanAdi(adres: string): string {
+  try {
+    return new URL(adres.startsWith('http') ? adres : `https://${adres}`).hostname;
+  } catch {
+    return adres;
+  }
+}
+
+/**
+ * Yapay zekânın girdisi — öneri ve kitle tarifi AYNI kurucudan. Onaylanan
+ * kitle tarifi varsa işletmenin kendi tarifinin yerine geçer: bölüm metinleri
+ * ajansın onayladığı kişiye göre yazılsın.
+ */
+function aiGirdisiKur(g: GirdiOkumasi, amaclar: readonly StratejiKalemi['amac'][], kitle: string | null): StratejiAiGirdisi {
+  return {
+    marka: {
+      ad: g.marka?.marka_adi ?? g.marka?.ad ?? null,
+      sektor: g.marka?.sektor ?? null,
+      urunler: g.marka?.urunler ?? [],
+      vaatler: g.marka?.vaatler ?? [],
+      hedefKitle: kitle ?? g.marka?.hedef_kitle ?? null,
+      bilgi: g.marka?.bilgi ?? null,
+      uslup: g.marka?.uslup ?? null,
+    },
+    site: { adres: g.marka?.website ?? null, tarama: g.siteTaramasi?.baslik ?? null },
+    kalemler: amaclar.map((amac) => ({ amac })),
+    gecmisAmaclari: [...new Set(g.gecmis.ozet.map((x) => x.amac))],
+  };
 }
 
 /** Kalemin platform başına tahmini — motorla AYNI fonksiyon (`kalemTahmini`), platform payıyla. */

@@ -201,3 +201,45 @@ export async function stratejiMetinleri(yz: MetinUretici | null, g: StratejiAiGi
   }
   return { bolumler, kalemMetinleri };
 }
+
+// ─── "Kime anlatıyoruz" (adım adım akış, 4. adım) ────────────────────────
+
+const KITLE_SEMASI = {
+  type: 'object',
+  properties: { kitle: { type: 'string', description: 'Kime anlatıyoruz; iki-üç cümle, rakamsız.' } },
+  required: ['kitle'],
+} as const;
+
+/**
+ * Kitle tarifi — belgenin aynı sistemi, aynı istemi ve aynı sayı yasağı;
+ * yalnız tek alan isteniyor. "Yeniden yaz"da önceki tarif modele "bundan
+ * FARKLI yaz" diye gidiyor (rakamları istemin geri kalanı gibi süzülerek):
+ * aynı girdiyle ikinci çağrı çoğu zaman aynı cümleyi döndürür ve düğme
+ * hiçbir şey yapmıyor gibi görünür.
+ *
+ * Sayı yasağına takılırsa BİR KEZ yeniden istenir; yine düşerse metin yok
+ * ve NEDENİ döner: kullanıcı kutuya kendisi yazar.
+ */
+export async function kitleTarifiUret(yz: MetinUretici | null, g: StratejiAiGirdisi, onceki: string | null): Promise<{ tur: 'metin'; metin: string } | { tur: 'yok'; neden: string }> {
+  if (!yz) return { tur: 'yok', neden: 'Yapay zekâ bağlı değil; tarifi sen yaz.' };
+  const ek = onceki ? `\n\nÖnceki tarif şuydu, bundan FARKLI bir açıdan yaz: ${onceki.replace(/[\p{Nd}%％]+/gu, '')}` : '';
+  const istem = `${stratejiAiIstemi(g)}\n\nYalnız "kitle" alanını yaz: bu işletmenin reklamları kime anlatmalı.${ek}`;
+  const tekIstek = async (metin: string): Promise<OneriBolumMetni> => {
+    const r = await metinIsteOlcumlu(yz, { sistem: STRATEJI_AI_SISTEMI, metin, enCokCikti: 600, jsonSemasi: KITLE_SEMASI as unknown as Record<string, unknown> });
+    if (r.sonuc.tur !== 'tamam') throw new YapayZekaHatasi(null, r.sonuc.mesaj);
+    let ham: { kitle?: unknown };
+    try {
+      ham = JSON.parse(r.sonuc.metin) as { kitle?: unknown };
+    } catch {
+      throw new YapayZekaHatasi(null, 'Yapay zekânın cevabı okunamadı.');
+    }
+    return denetle(ham.kitle);
+  };
+  try {
+    let m = await tekIstek(istem);
+    if (m.metin === null && m.neden === 'sayi_var') m = await tekIstek(`${istem}\n\nÖNCEKİ CEVAPTA RAKAM YA DA ORAN VARDI. Bu sefer hiçbir sayı, yüzde ya da oran yazma.`);
+    return m.metin === null ? { tur: 'yok', neden: m.aciklama } : { tur: 'metin', metin: m.metin };
+  } catch (e) {
+    return { tur: 'yok', neden: `Yapay zekâ cevap vermedi: ${e instanceof Error ? e.message : String(e)}` };
+  }
+}

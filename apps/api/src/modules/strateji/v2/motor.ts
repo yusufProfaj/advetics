@@ -4,6 +4,9 @@ import {
   REHBER_AMACLARI,
   REHBER_KAPALI_SEBEBI,
   REHBER_PLATFORMLARI,
+  amacGunlukAsgari,
+  oncelikAgirliklari,
+  oncelikPaylari,
   VARSAYILAN_META_PAYI,
   butceBol,
   donemGunSayisi,
@@ -78,8 +81,10 @@ export interface MotorGirdisi {
   gecmis: (amac: RehberAmacKodu, p: RehberPlatformu) => GecmisSonucu;
   videoVarligiVar: boolean;
   adresKonumuVar: boolean;
-  /** Marka Merkezi'nin varsayılan kitle konumları; boşsa Türkiye. */
+  /** Bölge adımının seçimi ya da Marka Merkezi'nin varsayılan kitle konumları; boşsa Türkiye. */
   konumlar: readonly RehberKonumu[];
+  /** Konumların kaynağı (rozet): sihirbazda seçildiyse `ajans`, Marka Merkezi'nden geldiyse `marka`. Verilmezse `marka`. */
+  konumKaynagi?: 'marka' | 'ajans';
   /** En çok seçili kelimesi olan grup (Google Arama kurgusu için). */
   kelimeGrubu: string | null;
 }
@@ -195,11 +200,10 @@ export function platformTabani(
  * karşılığı (bilinmiyorsa `null`). Maks. Performans'ınki ölçülmedi: `null`.
  */
 export function gunlukAsgari(amac: RehberAmacKodu, p: RehberPlatformu, asgari: MotorGirdisi['asgari']): bigint | null {
-  if (p === 'meta') return asgari.meta;
-  const kurgu = REHBER_AMACLARI[amac].google.kurgu;
-  if (kurgu === 'ARAMA') return 0n;
-  if (kurgu === 'TALEP_YARATMA_VIDEO' || kurgu === 'TALEP_YARATMA_GORSEL') return asgari.googleTalepYaratma;
-  return null;
+  // TEK KURAL shared'da: sihirbazın bütçe adımı aynı fonksiyonla "yeter /
+  // yetmez" diyor. İki kopya ayrışırsa adım ilerletir, plan asgarinin
+  // altında bir kampanya önerir.
+  return amacGunlukAsgari(amac, p, asgari);
 }
 
 function tahminYok(neden: TahminYokNedeni): KalemTahmini {
@@ -209,7 +213,7 @@ function tahminYok(neden: TahminYokNedeni): KalemTahmini {
 interface KalemTaslagi {
   amac: RehberAmacKodu;
   platformlar: RehberPlatformu[];
-  amacKaynagi: 'marka' | 'kural';
+  amacKaynagi: 'marka' | 'kural' | 'ajans';
   gerekceler: string[];
 }
 
@@ -218,7 +222,9 @@ interface KalemTaslagi {
  * (`false`) olan platform düşer: o sonuç sayılmazsa reklam tıklamaya
  * optimize olur ve "form" diye para harcanır. `null` (okunamadı) düşürmez.
  */
-function acikPlatformlar(amac: RehberAmacKodu, g: MotorGirdisi, olcumSart: boolean): { acik: RehberPlatformu[]; dusen: string[] } {
+type KapiGirdisi = Pick<MotorGirdisi, 'ajansYoneticisi' | 'kullanilmayan' | 'hesap' | 'siteYok' | 'olcum'>;
+
+function acikPlatformlar(amac: RehberAmacKodu, g: KapiGirdisi, olcumSart: boolean): { acik: RehberPlatformu[]; dusen: string[] } {
   const acik: RehberPlatformu[] = [];
   const dusen: string[] = [];
   for (const p of REHBER_PLATFORMLARI) {
@@ -316,6 +322,21 @@ function kalemKur(t: KalemTaslagi, butce: bigint, takvim: { baslangic: string; b
       platformlar = platformlar.filter((p) => p !== altta[0]);
       gerekceler.push(`${PLATFORM_ADI[altta[0]!]} payı platformun günlük asgarisinin altında kaldı; bütçenin tamamı ${PLATFORM_ADI[platformlar[0]!]}'a verildi.`);
       pay = null;
+    } else if (altta.length === 2) {
+      // İKİ PAY DA ALTTA: iki platformu birlikte bırakmak asgarinin altında
+      // iki yarım kampanya demekti. Bütçenin TAMAMI tek platforma verilince
+      // asgarisi karşılananlardan asgarisi küçük olan kalır. Sihirbazın bütçe
+      // adımı "yeter" derken bu yola güveniyor (`sihirbazButceKontrolu`).
+      const tamGunluk = gunlukEsdeger(butce, 'toplam', takvim);
+      const tam = platformlar
+        .map((p) => ({ p, a: gunlukAsgari(t.amac, p, g.asgari) }))
+        .filter((x): x is { p: RehberPlatformu; a: bigint } => x.a !== null && tamGunluk !== null && tamGunluk >= x.a);
+      if (tam.length > 0) {
+        const kalan = tam.reduce((m, x) => (x.a < m.a ? x : m)).p;
+        platformlar = [kalan];
+        gerekceler.push(`İki platformun payı da günlük asgarinin altında kaldı; bütçenin tamamı ${PLATFORM_ADI[kalan]}'a verildi (iki yarım kampanya yerine bir tam kampanya).`);
+        pay = null;
+      }
     }
   }
 
@@ -337,7 +358,7 @@ function kalemKur(t: KalemTaslagi, butce: bigint, takvim: { baslangic: string; b
     platformlar: 'kural',
     butce: 'kural',
     takvim: 'kural',
-    konumlar: g.konumlar.length > 0 ? 'marka' : 'kural',
+    konumlar: g.konumlar.length > 0 ? (g.konumKaynagi ?? 'marka') : 'kural',
     ...(ikisi ? { metaPayi: pay!.kaynak } : {}),
   };
   return {
@@ -436,6 +457,62 @@ export function stratejiMotoru(g: MotorGirdisi): MotorSonucu {
 
   const kalemler = [kalemKur(ana, anaButce, takvim, g)];
   if (tanitimKalemi) kalemler.push(tanitimKalemi);
+  return { kalemler, notlar };
+}
+
+/**
+ * Bir amacın bu workspace'te açık platformları ve düşenlerin cümlesi —
+ * motorun KENDİ kuralıyla: dönüşüm aşamasındaki amaçta ölçümü KESİN yok
+ * (`false`) olan platform düşer. Sihirbazın hedef adımı kartı bununla
+ * kapatıyor; ikinci bir kural yazılsaydı ekran açık gösterip motor
+ * plana almazdı.
+ */
+export function amacPlatformlari(amac: RehberAmacKodu, g: KapiGirdisi): { acik: RehberPlatformu[]; dusen: string[] } {
+  return acikPlatformlar(amac, g, AMAC_ASAMASI[amac] === 'donusum');
+}
+
+/**
+ * ═══ SEÇİLEN HEDEFLERLE MOTOR (adım adım akış) ═══
+ *
+ * Kullanıcı hedefleri SIRAYLA seçti; motor amacı kendisi seçmez, seçileni
+ * kurar. Bütçe öncelik sırasıyla bölünür (`oncelikPaylari`, bütçe adımının
+ * kullandığı fonksiyon), sonra her kalem `kalemKur`dan geçer: pay, asgari,
+ * tahmin aynı kurallarla.
+ *
+ * KURULAMAYAN HEDEF PLANA ALINMAZ ve NEDENİ NOT olur ("plana alınmadı"):
+ * hedef adımı kapalı kartı seçtirmiyor ama seçimden sonra ölçüm ya da hesap
+ * değişmiş olabilir. Payı kalan hedeflere dağılır (açılan sayısıyla yeniden
+ * bölünür); kapalı bir hedefe para ayırıp onu kurulmayan bir kalemde
+ * bırakmak, dağıtılmamış bütçeyi sessizce saklamak olurdu.
+ */
+export function secimliMotor(g: MotorGirdisi, amaclar: readonly RehberAmacKodu[]): MotorSonucu {
+  const notlar: string[] = [];
+  if (g.toplamMicros <= 0n) return { kalemler: [], notlar: ['Toplam bütçe sıfır.'] };
+  if (amaclar.length === 0) return { kalemler: [], notlar: ['Hedef seçilmedi.'] };
+  const ilkGun = yarin(g.bugun);
+  const takvim = { baslangic: g.donem.baslangic < ilkGun ? ilkGun : g.donem.baslangic, bitis: g.donem.bitis };
+  if (takvim.baslangic > takvim.bitis) return { kalemler: [], notlar: ['Strateji döneminde kurulacak gün kalmadı.'] };
+  if (takvim.baslangic !== g.donem.baslangic) notlar.push(`Dönemin başı geçmişte kaldığı için kampanyalar ${takvim.baslangic} tarihinden başlıyor.`);
+
+  const acilan: KalemTaslagi[] = [];
+  for (const amac of amaclar) {
+    const { acik, dusen } = amacPlatformlari(amac, g);
+    if (acik.length === 0) {
+      notlar.push(`“${REHBER_AMACLARI[amac].ekranAdi}” plana alınmadı: ${dusen.join(' ')}`);
+      continue;
+    }
+    acilan.push({ amac, platformlar: acik, amacKaynagi: 'ajans', gerekceler: dusen });
+  }
+  if (acilan.length === 0) return { kalemler: [], notlar };
+
+  const paylar = oncelikPaylari(g.toplamMicros, acilan.length, g.paraBirimi);
+  const agirlik = oncelikAgirliklari(acilan.length);
+  const payda = agirlik.reduce((a, b) => a + b, 0);
+  const kalemler = acilan.map((t, i) => {
+    if (acilan.length > 1) t.gerekceler.unshift(`Öncelik sırası ${i + 1}: bütçenin ${payda} payından ${agirlik[i]} pay (Advetics kuralı: ilk seçilen hedef en büyük payı alır).`);
+    const k = kalemKur(t, paylar[i]!, takvim, g);
+    return k;
+  });
   return { kalemler, notlar };
 }
 

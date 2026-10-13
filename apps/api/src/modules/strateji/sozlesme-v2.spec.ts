@@ -37,7 +37,8 @@ import {
   resolvePermissions,
   stratejiDonemi,
   stratejiGecisMumkunMu,
-  stratejiGorunumKapisi,
+  stratejiEkranKapisi,
+  eskiGorunumEkrani,
   stratejiKalemiGirdiSchema,
   stratejiMetniDenetle,
   stratejiPanelAdresi,
@@ -324,14 +325,26 @@ describe('girişsiz onay bağlantısı', () => {
   });
 });
 
-describe('adresler, uçlar, görünüm kapısı', () => {
-  it('KRİTİK: müşteri hesabı düzenleyiciyi istese de belgeyi görür; aktarım reklam kurma izni ister', () => {
-    expect(stratejiGorunumKapisi([...resolvePermissions('client_viewer')], 'duzenle')).toBe('belge');
-    expect(stratejiGorunumKapisi([...resolvePermissions('client_viewer')], 'aktar')).toBe('belge');
-    expect(stratejiGorunumKapisi([...resolvePermissions('admin')], 'aktar')).toBe('aktar');
-    expect(stratejiGorunumKapisi([...resolvePermissions('admin')], null)).toBe('duzenle');
-    expect(stratejiGorunumKapisi(['strategy.read', 'strategy.write'], 'aktar')).toBe('duzenle');
-    expect(stratejiGorunumKapisi([], null)).toBeNull();
+describe('adresler, uçlar, ekran kapısı (adım adım akış)', () => {
+  it('KRİTİK: müşteri hesabı YALNIZ "Raporu incele" yolunu görür; oluşturma adımı istese de listeye düşer', () => {
+    const musteri = [...resolvePermissions('client_viewer')];
+    expect(stratejiEkranKapisi(musteri, null)).toBe('raporlar');
+    for (const e of ['giris', 'hedef', 'butce', 'bolge', 'kime', 'inceleme', 'plan', 'gonder'] as const) expect(stratejiEkranKapisi(musteri, e), e).toBe('raporlar');
+    expect(stratejiEkranKapisi(musteri, 'rapor')).toBe('rapor');
+    expect(stratejiEkranKapisi(musteri, 'kur')).toBe('rapor');
+  });
+  it('KRİTİK: ajans girişi görür; kurma reklam kurma izni ister, yoksa rapora düşer', () => {
+    expect(stratejiEkranKapisi([...resolvePermissions('admin')], null)).toBe('giris');
+    expect(stratejiEkranKapisi([...resolvePermissions('admin')], 'kur')).toBe('kur');
+    expect(stratejiEkranKapisi(['strategy.read', 'strategy.write'], 'kur')).toBe('rapor');
+    expect(stratejiEkranKapisi(['strategy.read', 'strategy.write'], 'plan')).toBe('plan');
+    expect(stratejiEkranKapisi([], null)).toBeNull();
+  });
+  it('eski üç görünümün adresi yeni ekrana', () => {
+    expect(eskiGorunumEkrani('belge')).toBe('rapor');
+    expect(eskiGorunumEkrani('aktar')).toBe('kur');
+    expect(eskiGorunumEkrani('duzenle')).toBe('giris');
+    expect(eskiGorunumEkrani('baska')).toBeNull();
   });
 
   it('KRİTİK: oturumsuz uç YALNIZ onay bağlantısının ikisi', () => {
@@ -342,8 +355,10 @@ describe('adresler, uçlar, görünüm kapısı', () => {
   });
 
   it('adres ve yol tek üreticiden; eksik parametre hata', () => {
-    expect(stratejiPanelAdresi({ musteri: 'm 1', plan: 'p', gorunum: 'belge' })).toBe('/strateji?musteri=m%201&plan=p&gorunum=belge');
-    expect(stratejiPanelAdresi({ musteri: 'm' })).toBe('/strateji?musteri=m');
+    expect(stratejiPanelAdresi({ musteri: 'm 1', plan: 'p', adim: 'rapor' })).toBe('/strateji?musteri=m%201&plan=p&adim=rapor');
+    expect(stratejiPanelAdresi({ musteri: 'm', adim: 'giris' })).toBe('/strateji?musteri=m');
+    expect(stratejiPanelAdresi({ musteri: 'm', adim: 'butce', amaclar: ['FORM', 'SITE'] })).toBe('/strateji?musteri=m&adim=butce&amaclar=FORM%2CSITE');
+    expect(stratejiPanelAdresi({ musteri: 'm', plan: 'p', adim: 'kur', kalem: 'k' })).toBe('/strateji?musteri=m&plan=p&adim=kur&kalem=k');
     expect(stratejiPdfYolu('p1', 3)).toBe('/strateji/v2/planlar/p1/pdf?surum=3');
     expect(() => stratejiUcYolu('/strateji/v2/planlar/:id/kalemler/:kalemId/metin-oner', { id: 'p' })).toThrow(/kalemId/);
   });

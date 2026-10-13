@@ -7,6 +7,8 @@ import {
   kalemDurumu,
   kalemMetniSchema,
   rehberKonumuSchema,
+  stratejiSihirbazDurumuSchema,
+  type StratejiSihirbazi,
   type KalemMetni,
   type KalemTahmini,
   type KaynakliMetin,
@@ -71,6 +73,7 @@ export interface PlanSatiri {
   son_oneri: unknown;
   oneri_imzasi: string | null;
   revizyon_notu: string | null;
+  sihirbaz: unknown;
   kalem_sayisi: number;
   created_at: Date;
   updated_at: Date;
@@ -90,7 +93,7 @@ export function planSecimi(kosul: Prisma.Sql, kilit: boolean): Prisma.Sql {
            p.onay_rolu, p.onay_zamani, p.onaylanan_surum, p.notu, p.bolumler, p.riskler, p.olcum_ozeti,
            ou.full_name AS olusturan_adi, c.name AS workspace_adi,
            COALESCE(ao.name, o.name) AS hazirlayan,
-           p.son_oneri, p.oneri_imzasi, p.revizyon_notu,
+           p.son_oneri, p.oneri_imzasi, p.revizyon_notu, p.sihirbaz,
            (CASE WHEN p.bicim = 2
                  THEN (SELECT count(*) FROM strateji_kalemleri k WHERE k.plan_id = p.id)
                  ELSE (SELECT count(*) FROM strateji_matrisi m WHERE m.plan_id = p.id) END)::int AS kalem_sayisi,
@@ -166,19 +169,42 @@ export function olcumOzetiOku(ham: unknown): StratejiOlcumSatiri[] {
   return Array.isArray(ham) ? (ham as StratejiOlcumSatiri[]) : [];
 }
 
+/**
+ * Sihirbaz durumu. Kolonu yalnız `stratejiSihirbazDurumuSchema`dan geçen
+ * gövde yazıyor; okurken de aynı şemadan geçer. Geçmeyen (elle bozulmuş)
+ * satır `null`: ekran planı kayıtlı kalemleriyle açar ve sihirbaz baştan
+ * başlar; yarım bir durumu "doğru" sayıp yanlış adıma götürmek daha kötü.
+ */
+export function sihirbazOku(ham: unknown): StratejiSihirbazi | null {
+  if (ham === null || ham === undefined) return null;
+  const r = stratejiSihirbazDurumuSchema.safeParse(ham);
+  return r.success ? r.data : null;
+}
+
 // ─── Bölümler ───────────────────────────────────────────────────────────
 
-const bolumlerSchema = z.record(z.string(), kaynakliMetinSchema);
-
-/** Kayıtlı bölüm metinleri; şemadan geçmeyen satır ATILMAZ, log'a yazılır ve boş döner. */
+/**
+ * Kayıtlı bölüm metinleri. Her bölüm AYRI doğrulanır; şemadan geçmeyen bölüm
+ * atlanır, diğerleri gelir.
+ *
+ * `z.record(z.string(), kaynakliMetinSchema)` KULLANILMIYOR (2026-10-13,
+ * adım adım akış testinde bulundu): bu dosyanın `zod`u ile shared'ın
+ * derlenmiş `zod`u testte AYRI iki kopya (vite ESM ↔ dist CJS) ve `z.record`
+ * ikinci argümanın kendi `ZodType`ı olup olmadığına `instanceof` ile bakıyor.
+ * Bakamayınca İLK argümanı değer şeması sanıyor: her bölüm "string bekleniyor"
+ * diye düşüyor ve fonksiyon SESSİZCE `{}` dönüyordu. Testte belgenin bütün
+ * metinleri boş görünüyordu ve hiçbir test bölüm okumasını sınamıyordu.
+ * Shared şemasını doğrudan çağırmak iki kopyadan bağımsız.
+ */
 export function bolumleriOku(ham: unknown, musteriGorunumu: boolean): Partial<Record<StratejiBolumKodu, KaynakliMetin>> {
-  const r = bolumlerSchema.safeParse(ham ?? {});
-  if (!r.success) return {};
+  if (!ham || typeof ham !== 'object' || Array.isArray(ham)) return {};
   const out: Partial<Record<StratejiBolumKodu, KaynakliMetin>> = {};
-  for (const [k, v] of Object.entries(r.data)) {
+  for (const [k, ham_] of Object.entries(ham as Record<string, unknown>)) {
+    const r = kaynakliMetinSchema.safeParse(ham_);
+    if (!r.success) continue;
     // Yapay zekânın "Kullan" denmemiş önerisi MÜŞTERİYE GİTMEZ (§ 2.1).
-    if (musteriGorunumu && !belgeyeGirerMi(v)) continue;
-    out[k as StratejiBolumKodu] = v;
+    if (musteriGorunumu && !belgeyeGirerMi(r.data)) continue;
+    out[k as StratejiBolumKodu] = r.data;
   }
   return out;
 }

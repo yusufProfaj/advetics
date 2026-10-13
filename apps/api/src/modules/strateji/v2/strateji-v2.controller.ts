@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseIntPipe, ParseUUIDPipe, Patch, Post, Put, Query, Req, Res } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, ParseIntPipe, ParseUUIDPipe, Patch, Post, Put, Query, Req, Res } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import {
   kelimeAraSchema,
@@ -10,7 +10,10 @@ import {
   stratejiEylemSchema,
   stratejiGonderSchema,
   stratejiKalemleriKaydetSchema,
-  stratejiOlusturSchema,
+  stratejiSihirbazOlusturSchema,
+  stratejiSihirbazKaydetSchema,
+  kitleOnerSchema,
+  stratejiIncelemeParcasi,
   stratejiOnaySchema,
   stratejiRevizyonSchema,
   stratejiYorumSchema,
@@ -36,7 +39,12 @@ import {
   type StratejiGirdileri,
   type StratejiKalemleriKaydetGirdisi,
   type StratejiListesi,
-  type StratejiOlusturGirdisi,
+  type StratejiSihirbazOlusturGirdisi,
+  type StratejiSihirbazKaydetGirdisi,
+  type StratejiSihirbazGirdileri,
+  type StratejiKitleOnerisi,
+  type KitleOnerGirdisi,
+  type StratejiIncelemeSatiri,
   type StratejiOnerisi,
   type StratejiRevizyonGirdisi,
   type StratejiYorumlari,
@@ -70,8 +78,39 @@ export class StratejiV2Controller {
 
   @Post('planlar')
   @RequirePermissions('strategy.write')
-  olustur(@CurrentTenant() ctx: TenantContext, @Body(zodBody(stratejiOlusturSchema)) dto: StratejiOlusturGirdisi): Promise<StratejiDetayi> {
+  olustur(@CurrentTenant() ctx: TenantContext, @Body(zodBody(stratejiSihirbazOlusturSchema)) dto: StratejiSihirbazOlusturGirdisi): Promise<StratejiDetayi> {
     return this.svc.olustur(ctx, dto);
+  }
+
+  @Get('sihirbaz-girdileri')
+  @RequirePermissions('strategy.write')
+  sihirbazGirdileri(@CurrentTenant() ctx: TenantContext, @Query('clientId', ParseUUIDPipe) clientId: string): Promise<StratejiSihirbazGirdileri> {
+    return this.svc.sihirbazGirdileri(ctx, clientId);
+  }
+
+  @Put('planlar/:id/sihirbaz')
+  @RequirePermissions('strategy.write')
+  sihirbaz(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(zodBody(stratejiSihirbazKaydetSchema)) dto: StratejiSihirbazKaydetGirdisi,
+  ): Promise<StratejiDetayi> {
+    return this.svc.sihirbazKaydet(ctx, id, dto);
+  }
+
+  @Post('planlar/:id/kitle-oner')
+  @RequirePermissions('strategy.write')
+  kitleOner(@CurrentTenant() ctx: TenantContext, @Param('id', ParseUUIDPipe) id: string, @Body(zodBody(kitleOnerSchema)) dto: KitleOnerGirdisi): Promise<StratejiKitleOnerisi> {
+    return this.svc.kitleOner(ctx, id, dto);
+  }
+
+  @Get('planlar/:id/inceleme/:parca')
+  @RequirePermissions('strategy.write')
+  inceleme(@CurrentTenant() ctx: TenantContext, @Param('id', ParseUUIDPipe) id: string, @Param('parca') ham: string): Promise<StratejiIncelemeSatiri> {
+    const parca = stratejiIncelemeParcasi(ham);
+    // Bilinmeyen parça 400 (NEDENİYLE): sessizce boş satır dönmek panelde "okundu" gibi görünürdü.
+    if (!parca) throw new BadRequestException(`Bilinmeyen inceleme parçası: ${ham}`);
+    return this.svc.inceleme(ctx, id, parca);
   }
 
   @Get('planlar/:id')

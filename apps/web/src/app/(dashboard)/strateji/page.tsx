@@ -1,8 +1,12 @@
-import type { ReactNode } from 'react';
+import { redirect } from 'next/navigation';
 import {
   STRATEJI_SAYFA_IZNI,
-  stratejiGorunumKapisi,
-  stratejiGorunumu,
+  eskiGorunumEkrani,
+  olusturmaAdimiMi,
+  stratejiDuzenlenebilirMi,
+  stratejiEkrani,
+  stratejiEkranKapisi,
+  stratejiPanelAdresi,
   stratejiUcYolu,
   type PlanDetayi,
 } from '@advetics/shared';
@@ -13,12 +17,14 @@ import { sayfaWorkspaceId, workspaceSecimVerisi } from '@/lib/sayfa-workspace';
 import { WorkspaceGerekli } from '@/components/workspace-gerekli';
 import { SayfaBasligi } from '@/components/ui/sayfa-basligi';
 import { PlanEkrani } from '@/components/strateji/plan-ekrani';
-import { bolumCoz, gelecekAy, okumaHatasi, ucAdresi } from '@/components/strateji/hesap';
-import { StratejiGorunumleri } from '@/components/strateji/v2/gorunumler';
+import { bolumCoz, okumaHatasi, ucAdresi } from '@/components/strateji/hesap';
+import { adrestekiHedefler } from '@/components/strateji/v2/akis';
+import { StratejiGirisi, StratejiListesiEkrani } from '@/components/strateji/v2/giris';
+import { KampanyaKurulumu } from '@/components/strateji/v2/kurulum';
+import { RaporEkrani } from '@/components/strateji/v2/rapor-ekrani';
+import { StratejiSihirbazi } from '@/components/strateji/v2/sihirbaz';
 import { Bildirim } from '@/components/strateji/v2/ortak';
-import { STRATEJI_DURUM_ETIKETI, donemMetni, monteGorunumler } from '@/components/strateji/v2/hesap';
-import { PlanSecici, YeniStrateji } from '@/components/strateji/v2/plan-secici';
-import type { AktarimOnizlemesi, Gerceklesen, StratejiDetayi, StratejiGirdileri, StratejiListesi, StratejiYorumlari } from '@advetics/shared';
+import type { AktarimOnizlemesi, Gerceklesen, StratejiDetayi, StratejiListesi, StratejiSihirbazGirdileri, StratejiYorumlari } from '@advetics/shared';
 
 export const metadata = { title: 'AdvStrategy · Advetics' };
 export const dynamic = 'force-dynamic';
@@ -31,21 +37,27 @@ const oku = <T,>(yol: string): Promise<Okuma<T>> =>
   );
 
 /**
- * ═══ ADVSTRATEGY v2 — STRATEJİ, BELGE, AKTARIM (YENIDEN-TASARIM.md) ═══
+ * ═══ ADVSTRATEGY — ADIM ADIM AKIŞ (kullanıcı onaylı taslak `simulasyon.html`) ═══
  *
- * TEK SAYFA, ÜÇ GÖRÜNÜM (`?gorunum=duzenle|belge|aktar`). Hangisinin
- * açılacağına sözleşmenin `stratejiGorunumKapisi` karar verir: müşteri hesabı
- * (`strategy.read` + `approve`) `?gorunum=duzenle` yazsa da BELGEYİ görür ve
- * düzenleyici hiç monte edilmez (`monteGorunumler`).
+ * Kullanıcı sekmeli ekranı (strateji / belge / aktarım) *"çok karışık"*
+ * buldu ve istedi: *"stratejiye tıkladılar ve 2 seçenek var raporu incele ya
+ * da strateji oluştur"*. Ekran adreste (`?adim=`), kapıyı sözleşme veriyor
+ * (`stratejiEkranKapisi`):
  *
- * SAYFA KAPISI menü satırıyla AYNI anahtar (`STRATEJI_SAYFA_IZNI`).
+ * - giriş: iki büyük kart.
+ * - Strateji oluştur: yedi adım (Hedef → … → Gönder), istemcide geçer.
+ * - Raporu incele: liste → kurumsal rapor (onay) → onaylıysa "Kampanyaları
+ *   kur" (tek tek).
  *
- * ESKİ PLANLAR (`bicim = 1`) SİLİNMEDİ: aynı listede, v1 ekranıyla SALT
- * OKUNUR açılıyor (§ 1.8). v1 bileşenleri yalnız bunun için duruyor.
+ * MÜŞTERİ HESABI yalnız "Raporu incele" yolunu görür: kapı onu `raporlar`a
+ * düşürür ve oluşturma ile kurma bileşenleri hiç monte edilmez.
  *
- * DÖRT HÂL AYRI: liste okunamadı, liste boş (nedeniyle), plan okunamadı,
- * yan okumalar (girdiler, yorumlar, önizleme) düştü. Yan okumanın düşmesi
- * planı göstermeyi engellemez; hata kendi kutusunda yazar.
+ * ESKİ ADRESLER ölmez: `?gorunum=belge|aktar|duzenle` yeni ekrana yönlenir
+ * (maillerdeki ve rehberin "Stratejiden" kutusundaki bağlantılar).
+ * ESKİ PLANLAR (`bicim = 1`) listede, v1 ekranıyla SALT OKUNUR açılır.
+ *
+ * DÖRT HÂL AYRI: liste okunamadı, liste boş (nedeniyle), plan okunamadı, yan
+ * okumalar düştü; hatalar kendi kutusunda yazar.
  */
 export default async function StratejiPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const session = await requireSession();
@@ -56,28 +68,61 @@ export default async function StratejiPage({ searchParams }: { searchParams: Pro
     return <WorkspaceGerekli ekran="AdvStrategy" neden="Strateji bir workspace'in reklam bütçesi için hazırlanıyor." {...workspaceSecimVerisi(session)} />;
   }
 
-  const baslik = (aciklama?: ReactNode, eylemler?: ReactNode) => <SayfaBasligi baslik="AdvStrategy" aciklama={aciklama} eylemler={eylemler} />;
+  const planParam = first(params.plan) ?? null;
+  const eski = eskiGorunumEkrani(first(params.gorunum));
+  if (eski && !first(params.adim)) redirect(stratejiPanelAdresi({ musteri: clientId, plan: eski === 'giris' ? null : planParam, adim: eski }));
 
-  const gorunum = stratejiGorunumKapisi(session.permissions, stratejiGorunumu(first(params.gorunum)));
-  if (!hasPermission(session, STRATEJI_SAYFA_IZNI) || gorunum === null) {
+  const baslik = (aciklama?: React.ReactNode) => <SayfaBasligi baslik="AdvStrategy" aciklama={aciklama} />;
+  const ekran = stratejiEkranKapisi(session.permissions, stratejiEkrani(first(params.adim)));
+  if (!hasPermission(session, STRATEJI_SAYFA_IZNI) || ekran === null) {
     return (
       <div className="space-y-5">
         {baslik()}
-        <Bildirim baslik="Stratejileri görme yetkin yok.">
-          Yöneticine sor.
-        </Bildirim>
+        <Bildirim baslik="Stratejileri görme yetkin yok.">Yöneticine sor.</Bildirim>
       </div>
     );
   }
-
-  const yazabilir = hasPermission(session, 'strategy.write');
   const workspaceAdi = session.availableClients.find((c) => c.id === clientId)?.name ?? null;
+  const ws = workspaceAdi ? <strong className="font-medium text-ink">{workspaceAdi}</strong> : null;
+
+  // ── Strateji oluştur (yedi adım) ──
+  if (olusturmaAdimiMi(ekran)) {
+    const [girdiler, detay] = await Promise.all([
+      oku<StratejiSihirbazGirdileri>(baglanti(stratejiUcYolu('/strateji/v2/sihirbaz-girdileri'), { clientId })),
+      planParam ? oku<StratejiDetayi>(stratejiUcYolu('/strateji/v2/planlar/:id', { id: planParam })) : Promise.resolve(null),
+    ]);
+    if (detay?.tur === 'hata') {
+      return (
+        <div className="space-y-5">
+          {baslik(ws)}
+          <Bildirim hata baslik="Strateji alınamadı.">
+            {detay.mesaj}
+          </Bildirim>
+        </div>
+      );
+    }
+    // Onaya gitmiş ya da onaylanmış strateji düzenlenmez: raporuna.
+    if (detay && !stratejiDuzenlenebilirMi(detay.v.plan.durum) && ekran !== 'gonder') {
+      redirect(stratejiPanelAdresi({ musteri: clientId, plan: detay.v.plan.id, adim: 'rapor' }));
+    }
+    return (
+      <StratejiSihirbazi
+        key={detay?.v.plan.id ?? 'yeni'}
+        clientId={clientId}
+        ilkDetay={detay?.v ?? null}
+        ilkAdim={ekran}
+        ilkAmaclar={adrestekiHedefler(first(params.amaclar))}
+        girdiler={girdiler}
+        izinler={session.permissions}
+      />
+    );
+  }
 
   const liste = await oku<StratejiListesi>(baglanti(stratejiUcYolu('/strateji/v2/planlar'), { clientId }));
   if (liste.tur === 'hata') {
     return (
       <div className="space-y-5">
-        {baslik(workspaceAdi)}
+        {baslik(ws)}
         <Bildirim hata baslik="Stratejiler alınamadı.">
           {liste.mesaj}
         </Bildirim>
@@ -85,40 +130,37 @@ export default async function StratejiPage({ searchParams }: { searchParams: Pro
     );
   }
 
-  const istenen = first(params.plan);
-  const secili = liste.v.planlar.find((p) => p.id === istenen) ?? liste.v.planlar[0] ?? null;
-  const acikVar = liste.v.planlar.some((p) => p.bicim === 2 && (p.durum === 'taslak' || p.durum === 'onayda' || p.durum === 'revizyon'));
-  const eylemler = (
-    <>
-      <PlanSecici clientId={clientId} liste={liste.v} seciliId={secili?.id ?? null} gorunum={gorunum} />
-      {/* Workspace başına TEK açık strateji (kısmi tekil indeks): açık varken yeni düğmesi yok, sunucunun 409'unu beklemiyoruz. */}
-      {yazabilir && !acikVar && liste.v.planlar.length > 0 && <YeniStrateji clientId={clientId} varsayilanAy={gelecekAy(new Date())} baslangictaAcik={false} />}
-    </>
-  );
-
-  if (!secili) {
+  // ── Giriş: iki kart ──
+  if (ekran === 'giris') {
+    const acik = liste.v.planlar.find((p) => p.bicim === 2 && (p.durum === 'taslak' || p.durum === 'revizyon'));
+    // "Taslağa devam et" kaldığı adımı açsın: adım planın sihirbaz durumunda.
+    const acikDetay = acik ? await oku<StratejiDetayi>(stratejiUcYolu('/strateji/v2/planlar/:id', { id: acik.id })) : null;
     return (
-      <div className="space-y-5">
-        {baslik(workspaceAdi, null)}
-        {yazabilir ? (
-          <YeniStrateji clientId={clientId} varsayilanAy={gelecekAy(new Date())} baslangictaAcik />
-        ) : (
-          // BOŞ LİSTE NEDENİNİ SÖYLÜYOR: okuyan hesabın yapacağı iş beklemek.
-          <p className="rounded-xl border border-dashed border-line bg-surface p-5 text-center text-sm text-ink-muted">Bu workspace için henüz strateji yok. Ajansınız hazırlayınca burada görünür.</p>
-        )}
+      <div className="space-y-6">
+        {baslik(ws)}
+        <StratejiGirisi clientId={clientId} planlar={liste.v.planlar} devamAdimi={acikDetay?.tur === 'veri' ? (acikDetay.v.sihirbaz?.adim ?? null) : null} />
       </div>
     );
   }
 
-  const adresteYok = Boolean(istenen) && secili.id !== istenen;
+  // ── Raporu incele: liste ──
+  const secili = planParam ? (liste.v.planlar.find((p) => p.id === planParam) ?? null) : null;
+  if (ekran === 'raporlar' || !secili) {
+    return (
+      <div className="space-y-5">
+        {baslik(ws)}
+        {planParam && !secili && <Bildirim baslik="Bağlantıdaki strateji bu workspace'te bulunamadı.">Listeden seç.</Bildirim>}
+        <StratejiListesiEkrani clientId={clientId} planlar={liste.v.planlar} toplam={liste.v.toplam} workspaceAdi={workspaceAdi} />
+      </div>
+    );
+  }
 
   // ── Eski medya planı: v1 ekranı, salt okunur ──
   if (secili.bicim === 1) {
     const v1 = await oku<PlanDetayi>(ucAdresi('/strateji/planlar/:id', secili.id));
     return (
       <div className="space-y-5">
-        {baslik(<>{workspaceAdi} · Eski medya planı, salt okunur. Yeni stratejiler AdvCampaign'e aktarılabilir.</>, eylemler)}
-        {adresteYok && <AdresteYok />}
+        {baslik(<>{ws} · Eski medya planı, salt okunur.</>)}
         {v1.tur === 'veri' ? (
           <PlanEkrani key={secili.id} clientId={clientId} ilkDetay={v1.v} bolum={bolumCoz(first(params.bolum))} yazabilir={false} />
         ) : (
@@ -130,64 +172,49 @@ export default async function StratejiPage({ searchParams }: { searchParams: Pro
     );
   }
 
-  const detay = await oku<StratejiDetayi>(stratejiUcYolu('/strateji/v2/planlar/:id', { id: secili.id }));
+  const id = { id: secili.id };
+  const detay = await oku<StratejiDetayi>(stratejiUcYolu('/strateji/v2/planlar/:id', id));
   if (detay.tur === 'hata') {
     return (
       <div className="space-y-5">
-        {baslik(workspaceAdi, eylemler)}
+        {baslik(ws)}
         <Bildirim hata baslik="Strateji alınamadı.">
           {detay.mesaj}
         </Bildirim>
       </div>
     );
   }
-
   const { plan } = detay.v;
-  const monte = monteGorunumler(session.permissions);
   const onayli = plan.durum === 'onaylandi' || plan.durum === 'kapandi';
-  const aktarilabilir = plan.durum === 'onaylandi' && plan.onaylananSurum === plan.surum;
-  const id = { id: plan.id };
-  // Yan okumalar paralel; her biri kendi hatasını taşır.
-  const [girdiler, yorumlar, onizleme, gerceklesen] = await Promise.all([
-    monte.includes('duzenle') ? oku<StratejiGirdileri>(stratejiUcYolu('/strateji/v2/planlar/:id/girdiler', id)) : Promise.resolve(null),
+
+  // ── Kampanyaları kur (tek tek) ──
+  if (ekran === 'kur') {
+    const onizleme = plan.durum === 'onaylandi' && plan.onaylananSurum === plan.surum ? await oku<AktarimOnizlemesi>(stratejiUcYolu('/strateji/v2/planlar/:id/aktarim-onizleme', id)) : null;
+    return (
+      <div className="space-y-5">
+        {baslik(ws)}
+        <KampanyaKurulumu clientId={clientId} ilkDetay={detay.v} ilkKalem={first(params.kalem) ?? null} onizleme={onizleme} izinler={session.permissions} />
+      </div>
+    );
+  }
+
+  // ── Rapor ──
+  const [yorumlar, gerceklesen] = await Promise.all([
     oku<StratejiYorumlari>(stratejiUcYolu('/strateji/v2/planlar/:id/yorumlar', id)),
-    monte.includes('aktar') ? (aktarilabilir ? oku<AktarimOnizlemesi>(stratejiUcYolu('/strateji/v2/planlar/:id/aktarim-onizleme', id)) : Promise.resolve({ tur: 'onaysiz' as const })) : Promise.resolve(null),
     onayli ? oku<Gerceklesen>(stratejiUcYolu('/strateji/v2/planlar/:id/gerceklesen', id)) : Promise.resolve(null),
   ]);
-
   return (
     <div className="space-y-5">
-      {baslik(
-        <>
-          {workspaceAdi && <strong className="font-medium text-ink">{workspaceAdi}</strong>}
-          {workspaceAdi && ' · '}
-          {donemMetni(plan.baslangic, plan.bitis)} stratejisi · {STRATEJI_DURUM_ETIKETI[plan.durum]} · sürüm {plan.surum}
-        </>,
-        eylemler,
-      )}
-      {adresteYok && <AdresteYok />}
-      <StratejiGorunumleri
+      {baslik(ws)}
+      <RaporEkrani
         key={plan.id}
         clientId={clientId}
         ilkDetay={detay.v}
-        gorunum={gorunum}
-        monte={monte}
-        izinler={session.permissions}
-        girdiler={girdiler}
         yorumlar={yorumlar.tur === 'veri' ? { tur: 'veri', v: yorumlar.v.yorumlar } : yorumlar}
-        onizleme={onizleme}
         gerceklesen={gerceklesen}
+        izinler={session.permissions}
       />
     </div>
-  );
-}
-
-/** Bağlantıdaki strateji bulunamadı: başkası gösteriliyor ve bu SÖYLENİYOR. */
-function AdresteYok() {
-  return (
-    <Bildirim baslik="Bağlantıdaki strateji bu workspace'te bulunamadı.">
-      En yeni strateji açıldı.
-    </Bildirim>
   );
 }
 

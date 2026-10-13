@@ -909,3 +909,43 @@ sınandı); sunucudaki Nginx'in `X-Forwarded-For` ayarı ve `INTERNAL_API_URL`
 üretimde `APP_URL`/`CORS_ORIGINS` değerleri; `next build` dışında tarayıcıda
 onay sayfası; PDF'te uzun tutarın tablo hücresinde kırpılması (ortak `tablo()`
 çizicisinden geliyor, strateji PDF'ine özel test yok).
+
+---
+
+## 9.9 Adım adım akış (Ajan 3 + küçük Ajan 2 eklemeleri, 2026-10-13)
+
+Kullanıcı sekmeli v2 ekranını (düzenleyici / belge / aktarım) *"çok karışık ve
+tasarım açısından çok kötü"* buldu; onaylanan taslak `simulasyon.html`
+(tıklanabilir prototip). Panel o akışa çevrildi.
+
+### Yapıldı
+
+| Parça | Dosya |
+|---|---|
+| Sözleşme | `packages/shared/src/strateji/v2/sihirbaz.ts` (yedi adım, sihirbaz durumu şeması, `oncelikPaylari`, `amacGunlukAsgari` TEK kural, `sihirbazButceKontrolu`, inceleme parçaları, imza); `adresler.ts`: üç görünüm KALKTI → `STRATEJI_EKRANLARI` + `stratejiEkranKapisi` + `eskiGorunumEkrani`; `stratejiPanelAdresi` `adim/kalem/amaclar` taşıyor; dört yeni uç |
+| Migration | `20261019100000_advstrategy_sihirbaz` — `strateji_planlari.sihirbaz JSONB` (NULL'lı; kısıt/RLS değişikliği yok) |
+| Motor | `secimliMotor` (seçilen hedefler sırasıyla, öncelik bölmesi, kurulamayan hedef NEDENİYLE "plana alınmadı"), `amacPlatformlari` (hedef kartının kapısı = motorun kapısı), `kalemKur`: iki platformun payı da asgari altındaysa bütçenin tamamı asgarisi karşılanan platforma |
+| Servis/uçlar | `GET sihirbaz-girdileri` (plan doğmadan), `PUT planlar/:id/sihirbaz` (sürüm; bütçe/dönem değişince kayıtlı kalemler silinir; onaylanan kitle → belge "Kitle" bölümü, `ajans`), `POST planlar/:id/kitle-oner` (YAZMAZ), `GET planlar/:id/inceleme/:parca` (tek satır, gerçek okuma); `oner` sihirbaz durumunu okuyor; `POST planlar` ilk durumu aynı istekte alıyor; `onayla` ajans rolünde yalnız ajans yöneticisi |
+| Panel | `page.tsx` ekran kapısıyla; `giris.tsx` (iki kart + strateji listesi), `sihirbaz.tsx` + `akis-cerceve.tsx` + `adimlar-soru.tsx` (Hedef, Bütçe, Bölge, Kime) + `adim-inceleme.tsx` + `adim-plan.tsx` + `adim-gonder.tsx`, `rapor-ekrani.tsx`, `kurulum.tsx` (tek tek); saf kararlar `akis.ts` (+ `akis.spec.ts`). Silinen: `duzenleyici.tsx`, `gorunumler.tsx`, `aktarim.tsx`, `plan-secici.tsx`. `kalem-duzenleyici.tsx` sadeleşti (amaç ve kitle yok) |
+
+### Taslaktan sapmalar
+
+1. **Plan bütçe adımında doğuyor.** Oluşturma toplam bütçe istiyor; hedef adımında kaydedilecek plan yok. Hedef seçimi plan doğana kadar adreste (`?amaclar=`), bütçenin "Devam"ında AYNI istekte plana yazılıyor. Hedef/bütçe adımında "Kaydet ve çık" yerine "Çık" (bütçe geçerliyse plan açılıp kaydedilir).
+2. **Bütçe bölmesi bir kural, örnekteki oranlar değil.** Taslaktaki `.55/.3` örnekti; gerçek kural öncelik ağırlığı (n…1), "Advetics kuralı" diye yazılıyor ve bütçe adımı ile motor aynı fonksiyonu kullanıyor. Asgari: Meta hesaptan okunan, Google Arama sınırsız, Talep Yaratma 5 USD karşılığı; okunamazsa "kontrol edilemedi" ve ilerler.
+3. **Kaydırıcı aralığı** arayüz denetimi (1.000 ₺ - en az 1.000.000 ₺, yazılan tutarla büyür); taslaktaki 15.000-600.000 örnekti.
+4. **"Planı onayla" yapay zekâ metinlerini kabul ediyor** (özet, işletme, kreatif ve kalem yönergeleri `ajans` olur). Taslakta bu metinler görünmüyordu; Plan adımına "Rapordaki metinler" kutusu eklendi ki kullanıcı onayladığını görsün. Kabul edilmemiş öneri belgeye girmiyordu ve onaysız belge boş özetle giderdi.
+5. **İnceleme bir kez koşar.** Plan'dan "Geri" ile dönülürse ve girdiler değişmediyse (imza `incelenen`) yeniden koşmaz; "Yeniden incele" bilerek koşar. İncelemenin notları (`notlar`, "plana alınmadı") sihirbaz durumunda saklanıyor: öneri yanıtı yazılmıyordu ve sayfa yenilenince kaybolurdu.
+6. **"Müşteriye gönder" kartında alıcı kutusu** (boş = kayıtlı rapor alıcıları); taslakta sabit bir adres vardı ve panel o adresi bilmiyor. Gönderim düşerse strateji onayda kalır ve rapor ekranında onay bağlantısı paneli açılır.
+7. **"Müşteri adına onayla" ikinci tıklamayla** ("Onayladım, kuruluma geç").
+8. **Rapor ekranında ajans eylemleri:** taslakta "Düzenle", onaydaysa "Geri çek ve düzenle" + onay bağlantısı paneli; onaylıysa "Kampanyaları kur".
+
+### Bulunan ve düzeltilen
+
+- **`bolumleriOku` testte HER ZAMAN `{}` dönüyordu.** `z.record(z.string(), kaynakliMetinSchema)`: API'nin `zod`u (vite ESM) ile shared dist'inin `zod`u (CJS) testte iki kopya; `z.record` ikinci argümanın kendi `ZodType`ı olduğunu `instanceof` ile anlayamayınca ilk argümanı değer şeması sanıyor ve her bölüm "string bekleniyor" diye düşüyor. Hiçbir test bölüm okumasını sınamıyordu. Üretimde (CJS tek kopya) muhtemelen çalışıyordu, ÖLÇÜLMEDİ. Bölümler artık tek tek shared şemasıyla doğrulanıyor.
+
+### Ölçülmedi
+
+- **Ekran tarayıcıda GÖRÜLMEDİ** (worktree'de `.env`, API ve veritabanı yok). `next build` temiz. Ajan 6 denetimi (masaüstü + mobil ekran görüntüsü) bekliyor.
+- `sihirbaz-girdileri` Meta asgarisini platformdan okuyor (rehber hazırlığı): adım açılışında süresi ölçülmedi.
+- `history.pushState` ile istemci geçişi Next 15'te `useSearchParams` kullanan başka bileşenleri etkilemiyor varsayıldı (sayfada yok).
+- Kitle tarifi yapay zekâ çağrısı canlıda; "Yeniden yaz"ın farklı tarif ürettiği ölçülmedi.

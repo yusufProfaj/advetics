@@ -1,4 +1,5 @@
 import type { Permission } from '../../auth/roles';
+import { STRATEJI_OLUSTURMA_ADIMLARI, type StratejiOlusturmaAdimi } from './sihirbaz';
 
 /**
  * ═══ ADVSTRATEGY v2 — ADRESLER, UÇLAR, GÖRÜNÜM KAPILARI (TEK ÜRETİCİ) ═══
@@ -20,40 +21,89 @@ function sorgu(cift: Array<[string, string | number | null | undefined]>): strin
 export const STRATEJI_SAYFA_YOLU = '/strateji';
 
 /**
- * Üç görünüm, TEK SAYFA (`?gorunum=`), taslakta onaylanan üç ekran:
- * `duzenle` (ajansın planlayıcısı), `belge` (müşterinin gördüğü rapor),
- * `aktar` (AdvCampaign'e aktarım). Ayrı sayfaya bölmek bu projede iki kez
- * hata üretti (rapor şablonu dersi).
+ * EKRANLAR (`?adim=`), kullanıcı onaylı taslak `docs/advstrategy/simulasyon.html`:
+ *
+ * - `giris` (parametresiz): iki büyük kart, "Raporu incele" / "Strateji oluştur".
+ * - Yedi oluşturma adımı (`STRATEJI_OLUSTURMA_ADIMLARI`), her ekranda tek soru.
+ * - `raporlar` (strateji listesi), `rapor` (kurumsal belge + onay),
+ *   `kur` (onaylı planın kampanyalarını TEK TEK AdvCampaign taslağına açmak).
+ *
+ * Eski üç görünüm (`?gorunum=duzenle|belge|aktar`) KALDIRILDI: kullanıcı
+ * sekmeli ekranı *"çok karışık"* buldu. Sayfa eski adresleri
+ * `eskiGorunumEkrani` ile yeni ekrana yönlendirir; maillerdeki ve rehberin
+ * "Stratejiden" kutusundaki eski bağlantılar ölmesin.
  */
-export const STRATEJI_GORUNUMLERI = ['duzenle', 'belge', 'aktar'] as const;
-export type StratejiGorunumu = (typeof STRATEJI_GORUNUMLERI)[number];
+export const STRATEJI_EKRANLARI = ['giris', ...STRATEJI_OLUSTURMA_ADIMLARI, 'raporlar', 'rapor', 'kur'] as const;
+export type StratejiEkrani = (typeof STRATEJI_EKRANLARI)[number];
 
-export function stratejiGorunumu(ham: string | null | undefined): StratejiGorunumu | null {
-  return (STRATEJI_GORUNUMLERI as readonly string[]).includes(ham ?? '') ? (ham as StratejiGorunumu) : null;
+export function stratejiEkrani(ham: string | null | undefined): StratejiEkrani | null {
+  return (STRATEJI_EKRANLARI as readonly string[]).includes(ham ?? '') ? (ham as StratejiEkrani) : null;
 }
 
-export function stratejiPanelAdresi(o: { musteri: string; plan?: string | null; gorunum?: StratejiGorunumu | null }): string {
-  return `${STRATEJI_SAYFA_YOLU}${sorgu([['musteri', o.musteri], ['plan', o.plan], ['gorunum', o.gorunum]])}`;
+export function olusturmaAdimiMi(e: StratejiEkrani): e is StratejiOlusturmaAdimi {
+  return (STRATEJI_OLUSTURMA_ADIMLARI as readonly string[]).includes(e);
 }
 
-/** Görünümün izinleri. Müşteri hesabı (`strategy.read` + `approve`) YALNIZ belgeyi görür. */
-export const STRATEJI_GORUNUM_IZINLERI: Record<StratejiGorunumu, readonly Permission[]> = {
-  duzenle: ['strategy.write'],
-  belge: ['strategy.read'],
-  // Aktarım reklam kurma izni de ister (AdvCampaign'in kendi kapısı).
-  aktar: ['strategy.write', 'bulk.write'],
+/** Eski `?gorunum=` adresinin yeni ekranı. Düzenleyici yok: girişe (orada "Taslağa devam et"). */
+export function eskiGorunumEkrani(ham: string | null | undefined): StratejiEkrani | null {
+  if (ham === 'belge') return 'rapor';
+  if (ham === 'aktar') return 'kur';
+  if (ham === 'duzenle') return 'giris';
+  return null;
+}
+
+/**
+ * Panel adresi — TEK üretici. `giris` adrese yazılmaz. `amaclar` yalnız
+ * plan doğmadan (hedef → bütçe arası) taşınır: plan bütçe adımında doğuyor;
+ * o ana kadar seçim adreste, sonra planın sihirbaz durumunda.
+ */
+export function stratejiPanelAdresi(o: {
+  musteri: string;
+  plan?: string | null;
+  adim?: StratejiEkrani | null;
+  kalem?: string | null;
+  amaclar?: readonly string[] | null;
+}): string {
+  return `${STRATEJI_SAYFA_YOLU}${sorgu([
+    ['musteri', o.musteri],
+    ['plan', o.plan],
+    ['adim', o.adim === 'giris' ? null : o.adim],
+    ['kalem', o.kalem],
+    ['amaclar', o.amaclar && o.amaclar.length > 0 ? o.amaclar.join(',') : null],
+  ])}`;
+}
+
+/**
+ * Ekranın izinleri. Giriş ve oluşturma ajansın (`strategy.write`); rapor
+ * okuma herkesin (`strategy.read`); kurma reklam kurma izni de ister
+ * (AdvCampaign'in kendi kapısı, `bulk.write`).
+ */
+export const STRATEJI_EKRAN_IZINLERI: Record<StratejiEkrani, readonly Permission[]> = {
+  giris: ['strategy.write'],
+  hedef: ['strategy.write'],
+  butce: ['strategy.write'],
+  bolge: ['strategy.write'],
+  kime: ['strategy.write'],
+  inceleme: ['strategy.write'],
+  plan: ['strategy.write'],
+  gonder: ['strategy.write'],
+  raporlar: ['strategy.read'],
+  rapor: ['strategy.read'],
+  kur: ['strategy.write', 'bulk.write'],
 };
 
 /**
- * Kullanıcının açacağı görünüm: istenen görünüm izinliyse o, değilse
- * izinli İLK görünüm (sıra: düzenle → belge). Müşteri `?gorunum=duzenle`
- * yazsa da belgeyi görür; düzenleyici bileşeni hiç monte edilmez. `null`
- * = hiçbiri (sayfa yetki mesajı).
+ * Kullanıcının açacağı ekran. MÜŞTERİ HESABI (`strategy.read` + `approve`)
+ * YALNIZ "Raporu incele" yolunu görür: giriş ve oluşturma adımları ona
+ * `raporlar`a düşer ve oluşturma bileşenleri hiç monte edilmez. Kurma izni
+ * olmayan `kur` isteği `rapor`a düşer. `null` = hiçbiri (yetki mesajı).
  */
-export function stratejiGorunumKapisi(izinler: readonly Permission[], istenen: StratejiGorunumu | null): StratejiGorunumu | null {
-  const izinli = (g: StratejiGorunumu) => STRATEJI_GORUNUM_IZINLERI[g].every((i) => izinler.includes(i));
-  if (istenen && izinli(istenen)) return istenen;
-  return (['duzenle', 'belge'] as const).find(izinli) ?? null;
+export function stratejiEkranKapisi(izinler: readonly Permission[], istenen: StratejiEkrani | null): StratejiEkrani | null {
+  const izinli = (e: StratejiEkrani) => STRATEJI_EKRAN_IZINLERI[e].every((i) => izinler.includes(i));
+  const e = istenen ?? 'giris';
+  if (izinli(e)) return e;
+  if ((e === 'kur' || e === 'rapor') && izinli('rapor')) return 'rapor';
+  return izinli('raporlar') ? 'raporlar' : null;
 }
 
 // ─── Girişsiz onay sayfası ───────────────────────────────────────────────
@@ -79,7 +129,11 @@ export function onayBaglantisiYolu(token: string): string {
  */
 export const STRATEJI_V2_UCLARI = [
   { yontem: 'GET', yol: '/strateji/v2/planlar', izin: 'strategy.read', ne: 'Liste (v1 + v2, bicim ile)' },
-  { yontem: 'POST', yol: '/strateji/v2/planlar', izin: 'strategy.write', ne: 'Yeni taslak (stratejiOlusturSchema)' },
+  { yontem: 'POST', yol: '/strateji/v2/planlar', izin: 'strategy.write', ne: 'Yeni taslak (stratejiSihirbazOlusturSchema: + ilk sihirbaz durumu)' },
+  { yontem: 'GET', yol: '/strateji/v2/sihirbaz-girdileri', izin: 'strategy.write', ne: 'Hedef ve bütçe adımının girdileri, plan doğmadan (?clientId=)' },
+  { yontem: 'PUT', yol: '/strateji/v2/planlar/:id/sihirbaz', izin: 'strategy.write', ne: 'Adım adım ilerleme + dönem/toplam (sürüm, 409)' },
+  { yontem: 'POST', yol: '/strateji/v2/planlar/:id/kitle-oner', izin: 'strategy.write', ne: '"Kime anlatıyoruz" yapay zekâ tarifi; YAZMAZ' },
+  { yontem: 'GET', yol: '/strateji/v2/planlar/:id/inceleme/:parca', izin: 'strategy.write', ne: 'İnceleme adımının TEK satırı (gerçek okuma)' },
   { yontem: 'GET', yol: '/strateji/v2/planlar/:id', izin: 'strategy.read', ne: 'Plan + kalemler + bölümler + riskler + kalem durumları' },
   { yontem: 'GET', yol: '/strateji/v2/planlar/:id/girdiler', izin: 'strategy.write', ne: 'Önerinin dayandığı bilgiler (tetiklemeden okur)' },
   { yontem: 'POST', yol: '/strateji/v2/planlar/:id/oner', izin: 'strategy.write', ne: 'Motor + yapay zekâ metni; YAZMAZ' },

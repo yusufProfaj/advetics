@@ -1,0 +1,14 @@
+-- ADVSTRATEGY — ADIM ADIM OLUŞTURMA (kullanıcı onaylı taslak simulasyon.html)
+--
+-- Sekmeli düzenleyici yerine yedi adımlı akış. İlerleme (seçilen hedefler
+-- sırasıyla, bölge, onaylanan kitle tarifi, son adım) TASLAK PLANIN İÇİNDE
+-- duruyor: "Kaydet ve çık" diyen kişi başka bir makineden de devam edebilmeli;
+-- tarayıcı deposu iki ajans çalışanı arasında paylaşılmazdı.
+--
+-- Yalnız NULL'a izin veren bir kolon: v1 planları ve bu migration'dan önce
+-- açılmış v2 planları NULL kalır (ekran planın kayıtlı kalemleriyle açılır).
+-- Kısıt, indeks, RLS değişikliği YOK: satırın görünürlüğü tablonun mevcut
+-- politikalarıyla aynı. Şekli sözleşme denetliyor
+-- (stratejiSihirbazDurumuSchema); veritabanı CHECK'i JSON şeklini
+-- doğrulayamaz ve ikinci bir kural ayrışırdı.
+ALTER TABLE "strateji_planlari" ADD COLUMN "sihirbaz" JSONB;

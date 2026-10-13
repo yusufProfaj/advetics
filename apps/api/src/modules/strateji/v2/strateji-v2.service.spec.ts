@@ -597,3 +597,97 @@ describe('öneri', () => {
     expect(ikinci.onbellekten).toBe(true);
   });
 });
+
+describe('adım adım akış (sihirbaz)', () => {
+  const IZMIR = { tur: 'region' as const, key: '35', etiket: 'İzmir', ulkeKodu: 'TR' };
+  const durum = (o: Record<string, unknown> = {}) => ({ adim: 'bolge' as const, amaclar: ['SITE' as const], konumlar: [], kitle: null, incelenen: null, ...o });
+  const sihirbazliPlan = () => svc.olustur(AJANS, { clientId: IDS.client, baslangicAyi: '2026-11', sureAy: 1, toplamButce: '50.000', sihirbaz: durum() });
+
+  it('KRİTİK: plan hedef seçimiyle AYNI istekte doğar; müşteri hesabı ajansın çalışma hâlini görmez', async () => {
+    const p = await sihirbazliPlan();
+    expect(p.sihirbaz).toMatchObject({ adim: 'bolge', amaclar: ['SITE'] });
+    expect((await svc.detay(MUSTERI, p.plan.id)).sihirbaz).toBeNull();
+    expect((await planAc().catch((e: Error) => e.message)) as string).toMatch(/açık bir strateji zaten var/);
+  });
+
+  it('KRİTİK: "Devam" sürümle yazar; eski sürüm 409 ve hiçbir şey yazılmaz', async () => {
+    const p = await sihirbazliPlan();
+    const d = await svc.sihirbazKaydet(AJANS, p.plan.id, { surum: 1, sihirbaz: durum({ adim: 'kime', konumlar: [IZMIR] }) });
+    expect(d.plan.surum).toBe(2);
+    expect(d.sihirbaz?.konumlar).toEqual([IZMIR]);
+    await expect(svc.sihirbazKaydet(AJANS, p.plan.id, { surum: 1, sihirbaz: durum({ adim: 'plan' }) })).rejects.toThrow(/siz bakarken değişti/);
+    expect((await svc.detay(AJANS, p.plan.id)).sihirbaz?.adim).toBe('kime');
+  });
+
+  it('KRİTİK: bütçe ya da süre değişince kayıtlı kampanyalar silinir ve inceleme yeniden koşar (eski plana göre kalem taşınmaz)', async () => {
+    const p = await sihirbazliPlan();
+    const k = await svc.kalemleriKaydet(AJANS, p.plan.id, { surum: 1, kalemler: [kalem()] });
+    const ayni = await svc.sihirbazKaydet(AJANS, p.plan.id, { surum: k.plan.surum, sihirbaz: durum({ incelenen: 'abc' }), toplamButce: '50.000' });
+    expect(ayni.kalemler).toHaveLength(1);
+    expect(ayni.sihirbaz?.incelenen).toBe('abc');
+    const d = await svc.sihirbazKaydet(AJANS, p.plan.id, { surum: ayni.plan.surum, sihirbaz: durum({ incelenen: 'abc' }), toplamButce: '80.000', donem: { baslangicAyi: '2026-11', sureAy: 2 } });
+    expect(d.kalemler).toEqual([]);
+    expect(d.sihirbaz?.incelenen).toBeNull();
+    expect(d.plan).toMatchObject({ toplamButceMicros: '80000000000', baslangic: '2026-11-01', bitis: '2026-12-31' });
+    await expect(svc.sihirbazKaydet(AJANS, p.plan.id, { surum: d.plan.surum, sihirbaz: durum(), toplamButce: '0' })).rejects.toThrow(/sıfır/);
+  });
+
+  it('KRİTİK: onaylanan kitle tarifi belgenin metni olur (ajans), onaylanmamış taslak belgeye girmez', async () => {
+    const p = await sihirbazliPlan();
+    const t = await svc.sihirbazKaydet(AJANS, p.plan.id, { surum: 1, sihirbaz: durum({ kitle: { metin: 'İlk evini arayan aileler', kaynak: 'ai', onaylandi: false } }) });
+    expect(t.bolumler.kitle).toBeUndefined();
+    const o = await svc.sihirbazKaydet(AJANS, p.plan.id, { surum: t.plan.surum, sihirbaz: durum({ kitle: { metin: 'İlk evini arayan aileler', kaynak: 'ajans', onaylandi: true } }) });
+    expect(o.bolumler.kitle).toMatchObject({ metin: 'İlk evini arayan aileler', kaynak: 'ajans', kim: IDS.user });
+  });
+
+  it('KRİTİK: öneri SEÇİLEN hedeflerden, seçilen bölgeyle ve onaylanan tarifle; kurulamayan hedef NEDENİYLE not', async () => {
+    const p = await sihirbazliPlan();
+    // Google hesabı yok (HAZIRLIK): SITE yalnız Meta'da açık; TELEFON'un ölçümü kesin yok.
+    olcumYaniti = { satirlar: [{ tur: 'arama', meta: { durum: 'tanim_yok', etiket: 'Tanım yok' }, google: { durum: 'tanim_yok', etiket: 'Tanım yok' } }], okumaHatalari: [] };
+    const d = await svc.sihirbazKaydet(AJANS, p.plan.id, {
+      surum: 1,
+      sihirbaz: durum({ adim: 'inceleme', amaclar: ['TELEFON', 'SITE'], konumlar: [IZMIR], kitle: { metin: 'Ev arayan aileler', kaynak: 'ajans', onaylandi: true } }),
+    });
+    const o = await svc.oner(AJANS, d.plan.id);
+    expect(o.kalemler.map((k) => k.amac)).toEqual(['SITE']);
+    expect(o.kalemler[0]!.konumlar).toEqual([IZMIR]);
+    expect(o.kalemler[0]!.kaynaklar.konumlar).toBe('ajans');
+    expect(o.kalemler[0]!.kitleTarifi).toMatchObject({ metin: 'Ev arayan aileler', kaynak: 'ajans' });
+    expect(o.bolumler.kitle).toMatchObject({ metin: 'Ev arayan aileler', kaynak: 'ajans' });
+    expect(o.notlar.join(' ')).toMatch(/Beni arasınlar.*plana alınmadı/);
+  });
+
+  it('girdiler plan doğmadan okunur: kapalı hedef nedeniyle, asgari ve para birimi', async () => {
+    const g = await svc.sihirbazGirdileri(AJANS, IDS.client);
+    const site = g.amaclar.find((a) => a.amac === 'SITE')!;
+    expect(site.acik).toBe(true);
+    expect(site.platformlar).toEqual(['meta']);
+    expect(site.sebepler.join(' ')).toMatch(/Google reklam hesabı/);
+    expect(g.asgariGunluk.meta).toBe('50000000');
+    expect(g.baslangicAyi).toBe('2026-11');
+    expect(g.ajansYoneticisi).toBe(false);
+    const OTEKI = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbc';
+    await expect(svc.sihirbazGirdileri(AJANS, OTEKI)).rejects.toThrow(/erişimin yok/);
+  });
+
+  it('inceleme satırları gerçek okumadan; Google Arama hedefi kelimesizse uyarı', async () => {
+    const p = await sihirbazliPlan();
+    const kelime = await svc.inceleme(AJANS, p.plan.id, 'kelime');
+    expect(kelime).toMatchObject({ durum: 'bos', uyari: true });
+    expect(kelime.ozet).toMatch(/Plan adımında/);
+    const olcum = await svc.inceleme(AJANS, p.plan.id, 'olcum');
+    expect(olcum.durum).toBe('bilinmiyor');
+    const site = await svc.inceleme(AJANS, p.plan.id, 'site');
+    expect(['hazir', 'eksik']).toContain(site.durum);
+  });
+
+  it('KRİTİK: "müşteri adına onayla" yalnız ajans yöneticisi; müşteri hesabı kendi onayını verir', async () => {
+    const p = await planAc();
+    const d = await svc.kalemleriKaydet(AJANS, p.plan.id, { surum: 1, kalemler: [kalem()] });
+    const g = await svc.eylem(AJANS, p.plan.id, { eylem: 'onaya_gonder', surum: d.plan.surum });
+    const yoneticiDegil = { ...AJANS, platformAdmin: false, managerAccountId: undefined } as unknown as TenantContext;
+    await expect(svc.onayla(yoneticiDegil, p.plan.id, g.plan.surum)).rejects.toThrow(/yalnız ajans yöneticisi/);
+    expect((await svc.detay(AJANS, p.plan.id)).plan.durum).toBe('onayda');
+    expect((await svc.onayla(AJANS, p.plan.id, g.plan.surum)).plan.onay?.rol).toBe('ajans');
+  });
+});

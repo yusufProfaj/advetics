@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { REHBER_AMACLARI, type RehberAmacKodu, type RehberPlatformu } from '@advetics/shared';
-import { metaPayiHesapla, platformTabani, sonucBasiMaliyet, stratejiMotoru, type GecmisSonucu, type MotorGirdisi } from './motor';
+import { amacPlatformlari, metaPayiHesapla, platformTabani, secimliMotor, sonucBasiMaliyet, stratejiMotoru, type GecmisSonucu, type MotorGirdisi } from './motor';
 
 /**
  * Motor ÇALIŞTIRILARAK sınanıyor (YENIDEN-TASARIM.md § 6.5 madde 5). Kaynak
@@ -194,5 +194,53 @@ describe('takvim', () => {
     expect(stratejiMotoru(girdi({ anaAmac: 'SITE', kelimeGrubu: 'Kahve' })).kalemler[0]!.kelimeGrubu).toBe('Kahve');
     expect(stratejiMotoru(girdi({ anaAmac: 'SITE', kelimeGrubu: 'Kahve', hesap: { meta: true, google: false } })).kalemler[0]!.kelimeGrubu).toBeNull();
     expect(REHBER_AMACLARI.SITE.google.kurgu).toBe('ARAMA');
+  });
+});
+
+describe('seçilen hedeflerle motor (adım adım akış)', () => {
+  it('KRİTİK: hedefler SEÇİLDİĞİ SIRAYLA kalem olur; bütçe öncelik ağırlığıyla (2:1) ve toplamı tam', () => {
+    const r = secimliMotor(girdi({ toplamMicros: 90_000n * M }), ['SITE', 'FORM']);
+    expect(amaclar(r)).toEqual(['SITE', 'FORM']);
+    expect(r.kalemler.map((k) => k.butceMicros)).toEqual([String(60_000n * M), String(30_000n * M)]);
+    expect(r.kalemler.every((k) => k.kaynaklar.amac === 'ajans')).toBe(true);
+    expect(r.kalemler[0]!.gerekceler.join(' ')).toMatch(/Öncelik sırası 1/);
+  });
+
+  it('KRİTİK: ölçümü KESİN olmayan dönüşüm hedefi plana alınmaz, NEDENİ not olur ve payı kalanlara gider', () => {
+    const r = secimliMotor(girdi({ toplamMicros: 60_000n * M, olcum: { arama: { meta: false, google: false } } }), ['TELEFON', 'SITE']);
+    expect(amaclar(r)).toEqual(['SITE']);
+    expect(r.kalemler[0]!.butceMicros).toBe(String(60_000n * M));
+    expect(r.notlar.join(' ')).toMatch(/Beni arasınlar.*plana alınmadı/);
+  });
+
+  it('KRİTİK: iki platformun payı da asgarinin altındaysa bütçenin TAMAMI asgarisi karşılanan platforma gider', () => {
+    // 30 gün × 60 TL = 1.800 TL; pay %50 ile Meta 30 TL/gün (asgari 50) ve
+    // Google Talep Yaratma 30 TL/gün (asgari 250). Tamamı Meta'ya: 60 TL ≥ 50.
+    const r = secimliMotor(girdi({ toplamMicros: 1_800n * M, videoVarligiVar: true }), ['VIDEO']);
+    const k = r.kalemler[0]!;
+    expect(k.meta).toBe(true);
+    expect(k.google).toBe(false);
+    expect(k.gerekceler.join(' ')).toMatch(/İki platformun payı da/);
+  });
+
+  it('bölge seçildiyse konum kaynağı "ajans", seçilmediyse Marka Merkezi', () => {
+    const izmir = { tur: 'region' as const, key: '35', etiket: 'İzmir', ulkeKodu: 'TR' };
+    expect(secimliMotor(girdi({ konumlar: [izmir], konumKaynagi: 'ajans' }), ['SITE']).kalemler[0]!.kaynaklar.konumlar).toBe('ajans');
+    expect(secimliMotor(girdi({ konumlar: [izmir] }), ['SITE']).kalemler[0]!.kaynaklar.konumlar).toBe('marka');
+  });
+
+  it('hiç hedef yoksa ya da hiçbiri kurulamıyorsa boş liste ve nedeni', () => {
+    expect(secimliMotor(girdi(), []).notlar).toEqual(['Hedef seçilmedi.']);
+    const r = secimliMotor(girdi({ hesap: { meta: false, google: false } }), ['SITE']);
+    expect(r.kalemler).toEqual([]);
+    expect(r.notlar[0]).toMatch(/plana alınmadı/);
+  });
+
+  it('KRİTİK: hedef kartının kapısı motorun kapısı (`amacPlatformlari`): ölçümsüz dönüşüm platformu düşer, tanıtım düşmez', () => {
+    // TELEFON: Meta ve Google Arama ikisi de açık; ölçüm yalnız Google'da hazır.
+    const g = girdi({ olcum: { arama: { meta: false, google: true } } });
+    expect(amacPlatformlari('TELEFON', g).acik).toEqual(['google']);
+    expect(amacPlatformlari('TELEFON', g).dusen.join(' ')).toMatch(/Meta: .*ölçülmüyor/);
+    expect(amacPlatformlari('ERISIM', girdi({ olcum: {} })).acik).toContain('meta');
   });
 });

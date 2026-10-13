@@ -9,6 +9,7 @@ import type { KalemAktarimEngeli, KalemAktarimKarari } from './rehber-esleme';
 import type { KalemMetni, KalemTahmini, StratejiKalemi } from './kalem';
 import type { KaynakliMetin } from './kaynak';
 import type { BaglantiHali, OnayBaglantisiOzeti } from './paylasim';
+import type { StratejiSihirbazi } from './sihirbaz';
 
 /**
  * ═══ ADVSTRATEGY v2 — UÇ GÖVDELERİ VE YANITLARI ═══
@@ -193,6 +194,12 @@ export interface StratejiDetayi {
   yapilabilir: StratejiEylemi[];
   /** EK: kelime araması (v1 ile AYNI tablo ve kuyruk). */
   kelimeler: PlanDetayi['kelimeler'];
+  /**
+   * EK (2026-10-13, adım adım akış): oluşturma adımlarının durumu. Sihirbazdan
+   * önce açılmış planda ve müşteri hesabında `null`: müşteri ajansın çalışma
+   * hâlini değil belgeyi görür.
+   */
+  sihirbaz: StratejiSihirbazi | null;
 }
 
 /** Belgenin ihtiyacı: panel belgesi ve girişsiz bağlantı AYNI veriyi okur. */

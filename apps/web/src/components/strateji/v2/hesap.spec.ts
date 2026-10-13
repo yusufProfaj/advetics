@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BAGLANTI_HALI_METNI, type KalemTahmini, type Permission, type StratejiKalemi } from '@advetics/shared';
+import { BAGLANTI_HALI_METNI, type KalemTahmini, type StratejiKalemi } from '@advetics/shared';
 import { kaynakRozeti } from '@/components/rehber/kaynak-rozeti';
 import {
   HALKA_CEVRE,
@@ -12,7 +12,6 @@ import {
   gorunurBolumler,
   halkaYaylari,
   kalemGirdisi,
-  monteGorunumler,
   onayCumlesi,
   onaySayfasiHali,
   platformDegisti,
@@ -61,17 +60,6 @@ function kalem(x: Partial<StratejiKalemi>): StratejiKalemi {
   };
 }
 
-describe('monte edilen görünümler', () => {
-  it('KRİTİK: müşteri hesabında (read + approve) YALNIZ belge monte — düzenleyici DOM\'a hiç girmez', () => {
-    const musteri: Permission[] = ['strategy.read', 'strategy.approve'];
-    expect(monteGorunumler(musteri)).toEqual(['belge']);
-  });
-
-  it('ajans: yazma + reklam kurma izni üçünü de monte eder; reklam kurma izni yoksa aktarım yok', () => {
-    expect(monteGorunumler(['strategy.read', 'strategy.write', 'bulk.write'])).toEqual(['duzenle', 'belge', 'aktar']);
-    expect(monteGorunumler(['strategy.read', 'strategy.write'])).toEqual(['duzenle', 'belge']);
-  });
-});
 
 describe('para: aşama ve platform', () => {
   const k1 = kalem({ amac: 'FORM', butceMicros: '72000000000' });

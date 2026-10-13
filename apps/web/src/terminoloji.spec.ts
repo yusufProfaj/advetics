@@ -87,7 +87,9 @@ const IZINLI: Array<{ neden: string; desen: RegExp }> = [
    */
   {
     neden: 'KİŞİ — stratejiyi okuyup onaylayan insan (AdvStrategy v2)',
-    desen: /[Mm]üşteriye gönder|[Mm]üşterinin (göreceği|belgesine)|Müşteri (revizyon istedi|onaylayınca|panele girmeden)|müşteri yalnız onay bekleyen|Müşteriye bağlantı/,
+    // Adım adım akış (2026-10-13): "Müşteri adına onayla", "Müşteri onaylamadan",
+    // "Müşteri değişiklik istedi", "Müşterinin okuyacağı" aynı kişi.
+    desen: /[Mm]üşteriye gönder|[Mm]üşterinin (göreceği|belgesine|onayını|okuyacağı)|Müşteri (revizyon istedi|onaylayınca|panele girmeden|onaylamadan|giriş yapmadan|onayını|değişiklik istedi)|[Mm]üşteri adına onayla|müşteri yalnız onay bekleyen|Müşteriye bağlantı/,
   },
   { neden: 'KİŞİ — "müşteri hesabı" = client_viewer rolüyle açılmış giriş hesabı', desen: /[Mm]üşteri hesa[bp]/ },  // cümle başında da geçiyor
   {

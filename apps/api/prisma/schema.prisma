@@ -4002,6 +4002,9 @@ model StratejiPlani {
   olcumOzeti        Json      @default("[]") @map("olcum_ozeti") @db.JsonB
   onaylayanAd       String?   @map("onaylayan_ad") @db.VarChar(120)
   onaylayanEposta   String?   @map("onaylayan_eposta") @db.VarChar(254)
+  /// Adım adım oluşturmanın durumu (20261019100000_advstrategy_sihirbaz);
+  /// şekli `stratejiSihirbazDurumuSchema`.
+  sihirbaz          Json?     @db.JsonB
   createdBy         String?   @map("created_by") @db.Uuid
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)

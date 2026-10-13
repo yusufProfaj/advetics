@@ -57,7 +57,7 @@ export function StratejidenKutusu({ rehberId }: { rehberId: string }) {
         <b className="text-ink">
           Stratejiden: {donemMetni(v.baslangic, v.bitis)} · Kampanya {v.sira} · {REHBER_AMACLARI[v.amac].ekranAdi}
         </b>
-        <Link href={stratejiPanelAdresi({ musteri: v.clientId, plan: v.planId, gorunum: 'belge' })} className="text-xs font-semibold text-brand-strong underline-offset-2 hover:underline">
+        <Link href={stratejiPanelAdresi({ musteri: v.clientId, plan: v.planId, adim: 'rapor' })} className="text-xs font-semibold text-brand-strong underline-offset-2 hover:underline">
           Stratejiyi aç
         </Link>
       </div>

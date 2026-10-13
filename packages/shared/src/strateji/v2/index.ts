@@ -11,3 +11,4 @@ export * from './paylasim';
 export * from './adresler';
 export * from './belge';
 export * from './yanit';
+export * from './sihirbaz';

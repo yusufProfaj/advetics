@@ -45,10 +45,141 @@ const EKRANLAR = Object.keys(KOD).filter((k) => k.endsWith('.tsx') || k.endsWith
 
 describe('tarama boşa düşmüyor', () => {
   it('v2 bileşenleri, iki sayfa ve rehber kutusu okundu', () => {
-    for (const f of ['aktarim.tsx', 'belge.tsx', 'duzenleyici.tsx', 'gonder.tsx', 'gorunumler.tsx', 'hesap.ts', 'kalem-duzenleyici.tsx', 'onay-kutusu.tsx', 'ortak.tsx', 'plan-secici.tsx', 'tutar.tsx', 'page', 'onay-page', 'stratejiden-kutusu.tsx']) {
+    for (const f of [
+      'akis.ts',
+      'akis-cerceve.tsx',
+      'adimlar-soru.tsx',
+      'adim-inceleme.tsx',
+      'adim-plan.tsx',
+      'adim-gonder.tsx',
+      'belge.tsx',
+      'giris.tsx',
+      'gonder.tsx',
+      'hesap.ts',
+      'kalem-duzenleyici.tsx',
+      'kurulum.tsx',
+      'onay-kutusu.tsx',
+      'ortak.tsx',
+      'rapor-ekrani.tsx',
+      'sihirbaz.tsx',
+      'tutar.tsx',
+      'page',
+      'onay-page',
+      'stratejiden-kutusu.tsx',
+    ]) {
       expect(kod(f).length, f).toBeGreaterThan(200);
     }
-    expect(EKRANLAR.length).toBeGreaterThanOrEqual(12);
+    expect(EKRANLAR.length).toBeGreaterThanOrEqual(17);
+  });
+});
+
+describe('sekmeli düzenleyici KALKTI; akış taslaktaki gibi (simulasyon.html)', () => {
+  it('KRİTİK: eski üç görünümün bileşenleri ve görünüm kapısı yok', () => {
+    for (const f of ['duzenleyici.tsx', 'gorunumler.tsx', 'aktarim.tsx', 'plan-secici.tsx']) expect(V2_DOSYALAR, f).not.toContain(f);
+    for (const [ad, k] of Object.entries(KOD)) expect(k, ad).not.toMatch(/stratejiGorunumKapisi|monteGorunumler|StratejiGorunumleri|gorunum:/);
+  });
+  it('KRİTİK: eski adres yeni ekrana yönleniyor (mail ve rehber bağlantıları ölmesin)', () => {
+    const s = kod('page');
+    expect(s).toContain('const eski = eskiGorunumEkrani(first(params.gorunum));');
+    expect(s).toMatch(/if \(eski && !first\(params\.adim\)\) redirect\(stratejiPanelAdresi\(/);
+  });
+  it('KRİTİK: yedi adımın her biri sihirbazda TEK bileşenle ve sırası sözleşmeden', () => {
+    const s = kod('sihirbaz.tsx');
+    for (const [adim, bilesen] of [
+      ['hedef', 'AdimHedef'],
+      ['butce', 'AdimButce'],
+      ['bolge', 'AdimBolge'],
+      ['kime', 'AdimKime'],
+      ['inceleme', 'AdimInceleme'],
+      ['plan', 'AdimPlan'],
+      ['gonder', 'AdimGonder'],
+    ]) {
+      expect(s.match(new RegExp(`<${bilesen} `, 'g'))?.length, bilesen).toBe(1);
+      expect(s, adim).toMatch(new RegExp(`\\{adim === '${adim}' && [^\\n]*<${bilesen} `));
+    }
+    expect(kod('akis-cerceve.tsx')).toContain('rayParcalari(adim)');
+    expect(kod('akis.ts')).toContain('STRATEJI_OLUSTURMA_ADIMLARI.map(');
+  });
+  it('KRİTİK: her "Devam" kaydediyor (sihirbaz ucu, sürümle); plan bütçe adımında hedef seçimiyle AYNI istekte doğuyor', () => {
+    const s = kod('sihirbaz.tsx');
+    expect(s).toContain("stratejiUcYolu('/strateji/v2/planlar/:id/sihirbaz', { id: d0.plan.id })");
+    expect(s).toMatch(/surum: d0\.plan\.surum,\s*sihirbaz:/);
+    expect(s).toMatch(/stratejiUcYolu\('\/strateji\/v2\/planlar'\)[\s\S]{0,200}sihirbaz: \{ \.\.\.durum\(/);
+    for (const a of ['bolge', 'kime', 'inceleme', 'plan', 'gonder']) expect(s, a).toContain(`kaydet('${a}'`);
+  });
+  it('KRİTİK: adım adresi tek üreticiden ve istemcide (pushState); geri tuşu dinleniyor', () => {
+    const s = kod('sihirbaz.tsx');
+    expect(s).toContain('stratejiPanelAdresi({ musteri: clientId, plan: pid, adim: a, amaclar: pid ? null : sec })');
+    expect(s).toContain('window.history.pushState(null, \'\', url)');
+    expect(s).toContain("window.addEventListener('popstate', geriTusu)");
+    expect(s).toContain("return () => window.removeEventListener('popstate', geriTusu)");
+  });
+  it('KRİTİK: bütçe adımı asgarinin altında ilerletmiyor (karar `butceDurumu` → sözleşmenin `sihirbazButceKontrolu`)', () => {
+    const s = kod('sihirbaz.tsx');
+    expect(s).toMatch(/case 'butce': \{\s*const ok = !!butce && butce\.ilerler && !g\?\.paraBirimiHatasi;/);
+    expect(kod('akis.ts')).toContain('sihirbazButceKontrolu({ amaclar: o.amaclar');
+    const b = kod('adimlar-soru.tsx');
+    expect(b).toMatch(/yetmeyen\.map\(\(s\) => \(\s*<p key=\{s\.amac\}[^>]*role="alert">\s*\{s\.cumle\}/);
+  });
+  it('KRİTİK: kitle tarifi onaylanmadan plana geçilmiyor; metne dokunmak onayı kaldırıyor', () => {
+    expect(kod('sihirbaz.tsx')).toMatch(/case 'kime':\s*devam = \{ etiket: 'Planı hazırla', kapali: !kitle\?\.onaylandi,/);
+    expect(kod('adimlar-soru.tsx')).toContain("degistir(e.target.value.trim() === '' ? null : { metin: e.target.value, kaynak: 'ajans', onaylandi: false })");
+  });
+  it('KRİTİK: "müşteri adına onayla" yalnız ajans yöneticisine açık ve ikinci tıklamayla', () => {
+    const g = kod('adim-gonder.tsx');
+    expect(g).toContain('disabled={!ajansYoneticisi || is.tur === \'suruyor\'}');
+    expect(g).toContain('Onayladım, kuruluma geç');
+    expect(kod('sihirbaz.tsx')).toContain('ajansYoneticisi={g?.ajansYoneticisi ?? false}');
+  });
+});
+
+describe('İNCELEME: gerçek okuma, sahte bekleme yok', () => {
+  it('KRİTİK: zamanlayıcı yok; her satır gerçek uç, son satır motor + kayıt', () => {
+    const i = kod('adim-inceleme.tsx');
+    expect(i).not.toMatch(/setTimeout|setInterval/);
+    expect(i).toContain("apiFetch<StratejiIncelemeSatiri>(stratejiUcYolu('/strateji/v2/planlar/:id/inceleme/:parca', { ...id, parca }))");
+    expect(i).toContain("apiFetch<StratejiOnerisi>(stratejiUcYolu('/strateji/v2/planlar/:id/oner', id)");
+    expect(i).toContain("stratejiUcYolu('/strateji/v2/planlar/:id/kalemler', id), 'PUT'");
+    expect(i).toContain("satir(i, { tur: 'dustu', mesaj: okumaHatasi(e) })");
+  });
+  it('KRİTİK: girdiler değişmediyse yeniden koşmuyor (Plan düzenlemeleri ezilmesin)', () => {
+    const i = kod('adim-inceleme.tsx');
+    expect(i).toContain('const dahaOnce = detay.kalemler.length > 0 && detay.sihirbaz?.incelenen === imza;');
+    expect(i).toMatch(/if \(dahaOnce\) \{\s*bittiBildir\(true\);\s*return;\s*\}/);
+  });
+});
+
+describe('müşteri hesabı yalnız "Raporu incele" yolunu görür', () => {
+  it('KRİTİK: sayfa ekranı sözleşmenin kapısıyla seçiyor; oluşturma ve kurma YALNIZ kapıdan geçen ekranda monte', () => {
+    const s = kod('page');
+    expect(s).toContain('const ekran = stratejiEkranKapisi(session.permissions, stratejiEkrani(first(params.adim)));');
+    expect(s).toMatch(/if \(olusturmaAdimiMi\(ekran\)\) \{[\s\S]*<StratejiSihirbazi/);
+    expect(s).toMatch(/if \(ekran === 'kur'\) \{[\s\S]*<KampanyaKurulumu /);
+    expect(s.match(/<StratejiSihirbazi/g)?.length).toBe(1);
+    expect(s.match(/<KampanyaKurulumu /g)?.length).toBe(1);
+    for (const ad of EKRANLAR) {
+      if (ad === 'page') continue;
+      expect(kod(ad), ad).not.toContain('<StratejiSihirbazi');
+      expect(kod(ad), ad).not.toContain('<KampanyaKurulumu');
+    }
+  });
+});
+
+describe('açılıp kapanan öğe DOM\'dan çıkmaz, hareket yalnız motion-safe', () => {
+  it('KRİTİK: kalem akordiyonu ve düzenleyici kapalıyken `inert`, yükseklik `grid-template-rows` ile', () => {
+    for (const ad of ['adim-plan.tsx', 'kalem-duzenleyici.tsx']) {
+      const k = kod(ad);
+      expect(k, ad).toContain('inert={!acik}');
+      expect(k, ad).toMatch(/motion-safe:transition-\[grid-template-rows\]/);
+      expect(k, ad).toContain("acik ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'");
+    }
+  });
+  it('KRİTİK: animasyon ve geçiş sınıfları `motion-safe:` önekli (ya da globals.css\'in reduced-motion altındaki sınıfı)', () => {
+    for (const ad of EKRANLAR) {
+      for (const m of kod(ad).matchAll(/(?<![\w:-])(animate-[\w[\]-]+|transition-[\w[\],-]+|duration-[\w[\]]+)/g)) {
+        throw new Error(`${ad}: önekiz hareket sınıfı ${m[0]}`);
+      }
+    }
   });
 });
 
@@ -73,9 +204,10 @@ describe('yanıt tipleri TEK YERDE — shared sözleşmesi (Ajan 4 entegrasyonu)
     expect(g).toMatch(/mail\.ret\.map\(\(x\) =>[\s\S]{0,200}x\.adres[\s\S]{0,40}x\.sebep/);
   });
   it('KRİTİK: bölüm kaydı farkı `bolumKayitGovdesi`nden (yalnız ajans süzgeci geri gelmedi)', () => {
-    const d = kod('duzenleyici.tsx');
-    expect(d).toContain('bolumKayitGovdesi(kayitliBolumler, bolumler, AI_METIN_BOLUMLERI)');
-    expect(d).not.toMatch(/filter\(\(b\) => bolumler\[b\]\?\.kaynak === 'ajans'\)/);
+    // İnceleme önerinin metinlerini, Plan adımı kabul edilen metinleri yazıyor; ikisi de farktan.
+    expect(kod('adim-inceleme.tsx')).toContain('bolumKayitGovdesi(d.bolumler, o.bolumler, AI_METIN_BOLUMLERI)');
+    expect(kod('adim-plan.tsx')).toContain('bolumKayitGovdesi(d.bolumler, kabulMetin, RAPOR_METINLERI)');
+    for (const ad of ['adim-inceleme.tsx', 'adim-plan.tsx']) expect(kod(ad), ad).not.toMatch(/filter\(\(b\) => \w+\[b\]\?\.kaynak === 'ajans'\)/);
   });
 });
 
@@ -106,7 +238,7 @@ describe('para tutarı Montserrat ile (Open Sans `₺` taşımıyor)', () => {
       expect(kod(ad), ad).not.toContain('formatMoney');
     }
     // Ekranlar gerçekten kullanıyor (bileşen var ama çağrılmıyorsa iddia boşa düşerdi).
-    for (const ad of ['belge.tsx', 'duzenleyici.tsx', 'aktarim.tsx']) expect(kod(ad), ad).toContain('<Tutar ');
+    for (const ad of ['belge.tsx', 'adim-plan.tsx', 'adimlar-soru.tsx', 'kurulum.tsx', 'giris.tsx']) expect(kod(ad), ad).toContain('<Tutar ');
   });
 });
 
@@ -142,27 +274,7 @@ describe('tahmin yoksa "Tahmin yok"; varsayım rozeti YOK (kullanıcı kararı K
     for (const ad of EKRANLAR) expect(kod(ad), ad).not.toMatch(/[Vv]arsay[ıi]m/);
   });
   it('tahmin metni tek yardımcıdan', () => {
-    for (const ad of ['belge.tsx', 'duzenleyici.tsx']) expect(kod(ad), ad).toContain('tahminMetni(');
-  });
-});
-
-describe('müşteri hesabında düzenleyici monte edilmez', () => {
-  it('KRİTİK: sayfa görünümü sözleşmenin kapısıyla, monte listesini `monteGorunumler`le seçiyor', () => {
-    const s = kod('page');
-    expect(s).toContain('stratejiGorunumKapisi(session.permissions, stratejiGorunumu(first(params.gorunum)))');
-    expect(s).toContain('const monte = monteGorunumler(session.permissions)');
-    expect(s).toContain('monte={monte}');
-  });
-  it('KRİTİK: her görünüm `monte.includes(...)` arkasında; düzenleyici başka yerde çizilmiyor', () => {
-    const g = kod('gorunumler.tsx');
-    expect(g).toMatch(/\{monte\.includes\('duzenle'\) && \(/);
-    expect(g).toMatch(/\{monte\.includes\('belge'\) && \(/);
-    expect(g).toMatch(/\{monte\.includes\('aktar'\) && \(/);
-    expect(g.match(/<StratejiDuzenleyici /g)?.length).toBe(1);
-    for (const ad of EKRANLAR) {
-      if (ad === 'gorunumler.tsx' || ad === 'duzenleyici.tsx') continue;
-      expect(kod(ad), ad).not.toContain('<StratejiDuzenleyici');
-    }
+    for (const ad of ['belge.tsx', 'adim-plan.tsx']) expect(kod(ad), ad).toContain('tahminMetni(');
   });
 });
 
@@ -184,11 +296,11 @@ describe('adresler TEK üreticiden (sözleşme `adresler.ts`)', () => {
   });
   it('KRİTİK: panel adresi `stratejiPanelAdresi`, PDF `stratejiPdfYolu` (sürüm zorunlu)', () => {
     for (const ad of EKRANLAR) {
-      expect(kod(ad), ad).not.toMatch(/[?&](gorunum|plan|musteri)=/);
+      expect(kod(ad), ad).not.toMatch(/[?&](gorunum|plan|musteri|adim|kalem|amaclar)=/);
       expect(kod(ad), ad).not.toMatch(/\/pdf['`?]/);
     }
     expect(kod('gonder.tsx')).toContain('stratejiPdfYolu(planId, surum)');
-    expect(kod('gorunumler.tsx')).toContain('stratejiPanelAdresi({ musteri: clientId, plan: planId, gorunum: g })');
+    expect(kod('kurulum.tsx')).toContain("stratejiPanelAdresi({ musteri: clientId, plan: plan.id, adim: 'kur', kalem })");
   });
 });
 
@@ -294,15 +406,12 @@ describe('Google kelime araması v2 ekranı (Ajan 4 AÇIK-1)', () => {
     expect(k).toContain('seciliKelimeGruplari(kelimeler.satirlar)');
     expect(k).toContain("baglanabilir={g.anahtar !== '' && baglanabilir.has(g.anahtar) && !kirli}");
   });
-  it('KRİTİK: kelimesiz Arama kalemi düzenleyicide doğrudan "Kelime ara" gösteriyor; liste canlı tablodan', () => {
-    const kd = kod('kalem-duzenleyici.tsx');
-    expect(kd).toContain('kalemKelimeDurumu(k, kelimeGruplari)');
-    expect(kd).toMatch(/kelimeDurumu !== 'tamam' && !kilitli && \(\s*<Dugme [^>]*onClick=\{kelimeAra\}>\s*Kelime ara/);
-    expect(kd).not.toContain('girdiler?.kelimeGruplari');
-    const d = kod('duzenleyici.tsx');
-    expect(d).toContain('seciliKelimeGruplari(detay.kelimeler.satirlar)');
-    expect(d).toContain('kelimeAra={kelimeAraAc}');
-    expect(d).toContain('document.getElementById(KELIME_TOHUM_ID)');
-    expect(d).toMatch(/\{kelimeBolumuGorunur && \(\s*<KelimeBolumu/);
+  it('KRİTİK: Google Arama kalemi kelimeleri Plan adımında KALEMİN İÇİNDE arıyor; eksikse nedeni yazıyor; liste canlı tablodan', () => {
+    const p = kod('adim-plan.tsx');
+    expect(p).toContain('const kelimeGruplari = seciliKelimeGruplari(detay.kelimeler.satirlar);');
+    expect(p).toMatch(/\{kalemKelimeDurumu\(k, kelimeGruplari\) !== 'gerekmez' && \([\s\S]{0,400}KALEM_KELIME_METNI\[[\s\S]{0,200}<KelimeBolumu/);
+    expect(p).toContain('aramaKalemleri={[{ index: i, ad: amacAdi(k.amac), kelimeGrubu: k.kelimeGrubu }]}');
+    expect(p.match(/<KelimeBolumu/g)?.length).toBe(1);
+    expect(kod('kalem-duzenleyici.tsx')).not.toContain('girdiler?.kelimeGruplari');
   });
 });

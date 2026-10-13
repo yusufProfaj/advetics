@@ -5,8 +5,6 @@ import {
   REHBER_AMACLARI,
   STRATEJI_ASAMALARI,
   STRATEJI_BELGE_BOLUMLERI,
-  STRATEJI_GORUNUMLERI,
-  STRATEJI_GORUNUM_IZINLERI,
   STRATEJI_ONAY_CUMLESI,
   STRATEJI_KAYNAK_ETIKETI,
   TAHMIN_YOK_METNI,
@@ -18,12 +16,10 @@ import {
   type KalemPlatformDurumu,
   type KalemTahmini,
   type KaynakliMetin,
-  type Permission,
   type RehberKonumu,
   type RehberPlatformu,
   type StratejiAsamasi,
   type StratejiDurumu,
-  type StratejiGorunumu,
   type StratejiKalemi,
   type StratejiKalemiGirdisi,
 } from '@advetics/shared';
@@ -40,26 +36,6 @@ import type { StratejiDetayi, StratejiOnayKaydi } from '@advetics/shared';
  * görünüm monte edilir, para nasıl bölünür, tahmin nasıl yazılır, hangi
  * bölüm belgeye girer: hepsi burada ve `hesap.spec.ts` ÇALIŞTIRARAK sınıyor.
  */
-
-// ─── Görünüm ─────────────────────────────────────────────────────────────────
-
-/**
- * MONTE EDİLECEK görünümler. Kapı (`stratejiGorunumKapisi`) hangisinin
- * GÖSTERİLECEĞİNİ söylüyor; bu fonksiyon hangilerinin DOM'a gireceğini.
- * İkisi ayrı soru: görünümler arasında geçişte kaydedilmemiş taslak
- * kaybolmasın diye izinli üçü birden monte, ama müşteri hesabının ekranında
- * düzenleyici HİÇ monte edilmez (gizli bir düzenleyici de olsa, gizli
- * düğmesiyle bir istek atabilirdi ve sunucunun reddi tek savunma kalırdı).
- */
-export function monteGorunumler(izinler: readonly Permission[]): StratejiGorunumu[] {
-  return STRATEJI_GORUNUMLERI.filter((g) => STRATEJI_GORUNUM_IZINLERI[g].every((i) => izinler.includes(i)));
-}
-
-export const GORUNUM_ETIKETI: Record<StratejiGorunumu, string> = {
-  duzenle: 'Strateji',
-  belge: 'Müşterinin göreceği',
-  aktar: 'AdvCampaign’e aktar',
-};
 
 // ─── Durum ───────────────────────────────────────────────────────────────────
 
