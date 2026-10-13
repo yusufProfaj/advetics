@@ -205,7 +205,7 @@ export function kalemTarihHatasi(
  * girdiği bir varsayım aralığı da gösterilmez. Neden ayrı yazılır
  * (`emptyReason` deseni): "geçmiş yok" ile "ölçüm kurulmamış" farklı iş.
  */
-export const TAHMIN_YOK_NEDENLERI = ['gecmis_yok', 'olcum_yok', 'karisik_birim', 'platform_kapali'] as const;
+export const TAHMIN_YOK_NEDENLERI = ['gecmis_yok', 'olcum_yok', 'karisik_birim', 'platform_kapali', 'eslenemedi', 'toplanamaz'] as const;
 export type TahminYokNedeni = (typeof TAHMIN_YOK_NEDENLERI)[number];
 
 export const TAHMIN_YOK_METNI: Record<TahminYokNedeni, string> = {
@@ -213,6 +213,14 @@ export const TAHMIN_YOK_METNI: Record<TahminYokNedeni, string> = {
   olcum_yok: 'Tahmin yok: bu sonuç ölçülmüyor.',
   karisik_birim: 'Tahmin yok: geçmiş veri başka para biriminde.',
   platform_kapali: 'Bu platform bu kampanyada kapalı.',
+  // AJAN 2 SAPMASI (§ 9.7): iki neden eklendi. Geçmiş kampanyanın amacı bu
+  // kalemin amacına güvenle eşlenemiyorsa (Google Arama kampanyası site mi
+  // form mu arama mı?) "geçmiş yok" demek YALAN olurdu: geçmiş var, hangi
+  // sonuca ait olduğu bilinmiyor. Erişim ise günler arasında TOPLANAMAZ
+  // (insights_daily.reach); günlük erişimi toplayıp "kişiye erişim" yazmak
+  // aynı kişiyi her gün yeniden saymak demek.
+  eslenemedi: 'Tahmin yok: geçmiş kampanyalar bu amaçla eşleştirilemedi.',
+  toplanamaz: 'Tahmin yok: erişim günlerden toplanamıyor.',
 };
 
 /** Kaç ayın verisine bakılır (en iyi ve en kötü ay arası). */

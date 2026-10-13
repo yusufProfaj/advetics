@@ -608,6 +608,7 @@ export async function createHarness(): Promise<Harness> {
         bildirim_gonderimleri, bildirim_kanallari, sinyaller,
         iyilestir_asistan_mesaj, iyilestir_asistan_oturum, iyilestir_oneri_karar,
         ai_messages, ai_conversations,
+        strateji_onay_baglantilari, strateji_yorumlari, strateji_kalemleri,
         strateji_kelimeleri, strateji_matrisi, strateji_dagilimlari, strateji_planlari, ozel_gunler,
         kurulum_beyanlari,
         workspace_kurulum, workspace_hazirlama, reklam_rehberi, adv_onay, adv_mesaj, adv_oturum, prova, geri_okuma, yayin_nesnesi, yayin, taslak_surumu, reklam_taslagi, ajans_ayari,

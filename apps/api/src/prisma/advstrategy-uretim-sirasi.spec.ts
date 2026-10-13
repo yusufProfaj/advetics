@@ -109,8 +109,11 @@ describe('advstrategy migration üretim sırasında', () => {
   it('KRİTİK: politikalar ikinci db:rls koşusundan sonra da tam (idempotent)', async () => {
     const r = await q<{ tablename: string; n: number }>(`
       SELECT tablename, count(*)::int AS n FROM pg_policies
-       WHERE tablename LIKE 'strateji_%' OR tablename = 'ozel_gunler'
+       WHERE tablename IN ('strateji_planlari','strateji_dagilimlari','strateji_matrisi','strateji_kelimeleri','ozel_gunler')
        GROUP BY tablename ORDER BY tablename`);
+    // Liste AÇIKÇA bu migration'ın tabloları: v2 (20261018100000) aynı
+    // önekle tablo ekledi ve LIKE süzgeci onları da sayıp bu testi
+    // sınadığı şeyle ilgisiz bir sebeple düşürüyordu.
     expect(r).toEqual([
       { tablename: 'ozel_gunler', n: 1 },
       { tablename: 'strateji_dagilimlari', n: 4 },

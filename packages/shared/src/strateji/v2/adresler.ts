@@ -86,6 +86,10 @@ export const STRATEJI_V2_UCLARI = [
   { yontem: 'PUT', yol: '/strateji/v2/planlar/:id/kalemler', izin: 'strategy.write', ne: 'Kalemler tek seferde (sürüm, 409)' },
   { yontem: 'PUT', yol: '/strateji/v2/planlar/:id/bolumler', izin: 'strategy.write', ne: 'Belge metinleri' },
   { yontem: 'POST', yol: '/strateji/v2/planlar/:id/kalemler/:kalemId/metin-oner', izin: 'strategy.write', ne: 'Rehberin metin motoru' },
+  // AJAN 2 SAPMASI (§ 9.7): § 6.3 kelime uçlarını "v1 aynen" diyordu ama
+  // v1 uçları v1 detayını döndürüyor; v2 planı v2 detayıyla dönmeli.
+  { yontem: 'POST', yol: '/strateji/v2/planlar/:id/kelime-ara', izin: 'strategy.write', ne: 'Keyword Planner araması (v1 ile aynı kuyruk)' },
+  { yontem: 'PATCH', yol: '/strateji/v2/planlar/:id/kelimeler', izin: 'strategy.write', ne: 'Kelime seçimi ve grubu (sürüm, 409)' },
   { yontem: 'POST', yol: '/strateji/v2/planlar/:id/eylem', izin: 'strategy.write', ne: 'onaya_gonder | geri_cek | kapat | iptal' },
   { yontem: 'POST', yol: '/strateji/v2/planlar/:id/onayla', izin: 'strategy.approve', ne: 'Panel içi onay (rol kaydı)' },
   { yontem: 'POST', yol: '/strateji/v2/planlar/:id/revizyon', izin: 'strategy.approve', ne: 'Revizyon iste (yorum zorunlu)' },

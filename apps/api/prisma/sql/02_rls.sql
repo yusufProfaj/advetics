@@ -447,6 +447,13 @@ DECLARE
     'haftalik_ozetler',
     -- AdvCampaign Dalga 2: görsele özel metin önbelleği. Kendi satırında.
     'rehber_gorsel_metni',
+    -- AdvStrategy v2 (docs/advstrategy/YENIDEN-TASARIM.md § 6.1, § 9.3). Her
+    -- tablo KENDİ satırında ve dizinin ORTASINDA: üretim sırası testleri
+    -- sonraki tabloları satır satır çıkarıyor (test/sonraki-tablolar.ts) ve
+    -- son elemanı çıkarmak öncekinin virgülünü sarkıtırdı.
+    'strateji_kalemleri',
+    'strateji_yorumlari',
+    'strateji_onay_baglantilari',
     -- AdvStrategy aylık medya planı (docs/advstrategy/MIMARI.md § 1)
     'strateji_planlari', 'strateji_dagilimlari', 'strateji_matrisi', 'strateji_kelimeleri',
     'ozel_gunler'
@@ -2564,6 +2571,46 @@ CREATE POLICY adv_strateji_kelimeleri_update ON strateji_kelimeleri
   WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 CREATE POLICY adv_strateji_kelimeleri_delete ON strateji_kelimeleri
   FOR DELETE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+
+-- ============================================================================
+-- ADVSTRATEGY v2 — strateji_kalemleri, strateji_yorumlari,
+-- strateji_onay_baglantilari (docs/advstrategy/YENIDEN-TASARIM.md § 6.1, § 9.3)
+-- ============================================================================
+--
+-- KALEMLER: dört işlem. Kayıt kalemleri kimliğiyle UPSERT ediyor ve
+-- listeden çıkarılanı SİLİYOR; DELETE politikası olmasaydı silme SIFIR satır
+-- etkileyip hata vermeden geçer, kaldırılan kalem planda kalırdı. Kimin
+-- yazabileceği (strategy.write; müşteri hesabı YAZAMAZ) servis katmanında:
+-- RLS yetki kümesini görmüyor, workspace sınırını tutuyor.
+CREATE POLICY adv_strateji_kalemleri_select ON strateji_kalemleri
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_strateji_kalemleri_insert ON strateji_kalemleri
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_strateji_kalemleri_update ON strateji_kalemleri
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+  WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_strateji_kalemleri_delete ON strateji_kalemleri
+  FOR DELETE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+
+-- YORUMLAR: YALNIZ SELECT + INSERT. Yorum, revizyon nedeni ve onay izi bir
+-- KAYIT; UPDATE/DELETE politikası yok, yani panelden değiştirilemez ve
+-- silinemez (sıfır satır). Müşteri hesabı da yazıyor (revizyon, yorum).
+CREATE POLICY adv_strateji_yorumlari_select ON strateji_yorumlari
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_strateji_yorumlari_insert ON strateji_yorumlari
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+
+-- ONAY BAĞLANTILARI: panel yönetimi (oluştur, listele, iptal) RLS'li
+-- bağlantıyla; DELETE YOK (iptal edilir, iz kalır). Girişsiz yol (token)
+-- yönetim bağlantısıyla TEK satır okuyor: oturum yok, RLS bağlamı yok,
+-- erişim kararı token'ın kendisi (rapor paylaşımıyla aynı desen).
+CREATE POLICY adv_strateji_onay_baglantilari_select ON strateji_onay_baglantilari
+  FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_strateji_onay_baglantilari_insert ON strateji_onay_baglantilari
+  FOR INSERT WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_strateji_onay_baglantilari_update ON strateji_onay_baglantilari
+  FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
+  WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 -- ozel_gunler: müşteriye bağlı DEĞİL, fx_rates gibi ortak referans veri.
 -- Okuma oturumu olan herkese; YAZMA POLİTİKASI YOK: satırlar migration ya da

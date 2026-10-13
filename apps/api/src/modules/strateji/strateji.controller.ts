@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Put, Query, Res } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Put, Query, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import {
   dagilimKaydetSchema,
@@ -21,7 +21,7 @@ import {
 } from '@advetics/shared';
 import { CurrentTenant, RequirePermissions } from '../../common/decorators';
 import { zodBody } from '../../common/pipes/zod-validation.pipe';
-import { StratejiService } from './strateji.service';
+import { StratejiService, V1_OLUSTURMA_KAPALI } from './strateji.service';
 
 /**
  * AdvStrategy uçları — `STRATEJI_UCLARI` (packages/shared/src/strateji/uclar.ts)
@@ -52,7 +52,11 @@ export class StratejiController {
     @CurrentTenant() ctx: TenantContext,
     @Body(zodBody(planOlusturSchema)) dto: PlanOlusturGirdisi,
   ): Promise<PlanDetayi> {
-    return this.strateji.olustur(ctx, dto);
+    // v1 → v2 GEÇİŞİ: yeni planlar v2 (`POST /strateji/v2/planlar`). Uç
+    // listede duruyor (eski panel çağırırsa NEDENİYLE 400 alsın, 404 değil).
+    void ctx;
+    void dto;
+    return Promise.reject(new BadRequestException(V1_OLUSTURMA_KAPALI));
   }
 
   @Get('planlar/:id')
