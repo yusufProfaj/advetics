@@ -18,7 +18,7 @@ import {
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { Dugme } from '@/components/ui/dugme';
 import { tutarCoz } from '../hesap';
-import { kullan, platformDegisti } from './hesap';
+import { KALEM_KELIME_METNI, kalemKelimeDurumu, kullan, platformDegisti } from './hesap';
 import { GIRDI, Rozet } from './ortak';
 import type { StratejiGirdileri } from '@advetics/shared';
 
@@ -46,6 +46,8 @@ export function KalemDuzenleyici({
   kilitli,
   planId,
   kalemKayitli,
+  kelimeGruplari,
+  kelimeAra,
 }: {
   acik: boolean;
   k: StratejiKalemiGirdisi;
@@ -58,7 +60,12 @@ export function KalemDuzenleyici({
   planId: string;
   /** Metin önerisi kayıtlı kalem ister (uç `:kalemId` taşıyor). */
   kalemKayitli: boolean;
+  /** Seçili kelimesi olan gruplar, CANLI kelime tablosundan (`seciliKelimeGruplari`). */
+  kelimeGruplari: ReadonlyArray<{ grup: string; kelime: number; aylikArama: number }>;
+  /** Kelime bölümüne götürür (kaydırır, arama kutusunu odaklar). */
+  kelimeAra: () => void;
 }) {
+  const kelimeDurumu = kalemKelimeDurumu(k, kelimeGruplari);
   const tutar = tutarCoz(k.butce, para);
   const tarihHatasi = kalemTarihHatasi(k, plan);
   const ozelKategori = girdiler?.ozelKategori ?? false;
@@ -161,18 +168,30 @@ export function KalemDuzenleyici({
             <ReklamMetni metin={k.metin} degistir={(m) => set({ metin: m })} planId={planId} kalemId={k.id ?? null} kalemKayitli={kalemKayitli} />
           </div>
 
-          {g.kurgu === 'ARAMA' && k.google && (
-            <Alan etiket="Google arama kelimeleri">
-              <select className={GIRDI} value={k.kelimeGrubu ?? ''} onChange={(e) => set({ kelimeGrubu: e.target.value || null })}>
-                <option value="">Kelime grubu seçilmedi</option>
-                {(girdiler?.kelimeGruplari ?? []).map((x) => (
-                  <option key={x.grup} value={x.grup}>
-                    {x.grup} · {x.kelime} kelime
-                  </option>
-                ))}
-              </select>
-              {girdiler && girdiler.kelimeGruplari.length === 0 && <span className="text-[11px] text-ink-muted">Bu stratejide kelime araması yapılmadı; grup yok.</span>}
-            </Alan>
+          {kelimeDurumu !== 'gerekmez' && (
+            <div className="md:col-span-3">
+              <Alan etiket="Google arama kelimeleri">
+                {/* Liste CANLI kelime tablosundan (`seciliKelimeGruplari`): sayfa açılışındaki `girdiler` aramadan sonra bayat kalırdı. */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <select className={`${GIRDI} max-w-[22rem]`} value={k.kelimeGrubu ?? ''} onChange={(e) => set({ kelimeGrubu: e.target.value || null })}>
+                    <option value="">Kelime grubu seçilmedi</option>
+                    {k.kelimeGrubu && !kelimeGruplari.some((x) => x.grup === k.kelimeGrubu) && <option value={k.kelimeGrubu}>{k.kelimeGrubu} · seçili kelime yok</option>}
+                    {kelimeGruplari.map((x) => (
+                      <option key={x.grup} value={x.grup}>
+                        {x.grup} · {x.kelime} kelime · ayda yaklaşık {x.aylikArama.toLocaleString('tr-TR')} arama
+                      </option>
+                    ))}
+                  </select>
+                  {/* KELİMESİZ ARAMA KALEMİ DOĞRUDAN YOLU GÖSTERİR (Ajan 4 AÇIK-1): "arama yapılmadı" deyip bırakmak kalemi kelimesiz aktartıyordu. */}
+                  {kelimeDurumu !== 'tamam' && !kilitli && (
+                    <Dugme ton="ikincil" boyut="kucuk" onClick={kelimeAra}>
+                      Kelime ara
+                    </Dugme>
+                  )}
+                </div>
+                {kelimeDurumu !== 'tamam' && <span className="text-[11px] font-semibold text-brand-strong">{KALEM_KELIME_METNI[kelimeDurumu]}</span>}
+              </Alan>
+            </div>
           )}
 
           <div className="flex items-end md:col-span-3">

@@ -29,7 +29,7 @@ import {
 } from '@advetics/shared';
 import { formatDayShort } from '@/lib/format';
 import { microsGirdiMetni, zamanMetni } from '../hesap';
-import type { StratejiOnayKaydi } from '@advetics/shared';
+import type { StratejiDetayi, StratejiOnayKaydi } from '@advetics/shared';
 
 /**
  * ═══ ADVSTRATEGY v2 — EKRANIN KARARLARI (SAF) ═══
@@ -463,3 +463,72 @@ export function bolumKayitGovdesi<K extends string>(
   }
   return govde;
 }
+
+// ─── Google kelime araması (v1 ile aynı tablo, kuyruk ve satır şekli) ─────────
+
+type KelimeVerisi = StratejiDetayi['kelimeler'];
+
+/**
+ * Kelime aramasının hâli. HER HÂL AYRI YAZILIR: "Google reddetti",
+ * "sürüyor", "düştü", "sonuç geldi" ve "hiç aranmadı" aynı boş tabloya
+ * dönerse kullanıcı sorunu kelimesinde arar (v1'in `ErisimDurumu` dersi,
+ * CLAUDE.md "boş liste NEDENİNİ söylesin").
+ *
+ * "Kuyrukta" ile "Google'a soruluyor" AYRILAMIYOR: sözleşme
+ * (`PlanDetayi['kelimeler']`) yalnız `aramaSuruyor` taşıyor; ekran ikisini
+ * uydurup ayırmıyor, "sürüyor" der (devir notunda bulgu). Takılmış arama
+ * sunucuda zaman aşımıyla `sonHata`ya dönüyor, yani "düştü" olarak gelir.
+ *
+ * `olculmedi` ARAMAYI KAPATMAZ: erişim ilk aramada ölçülüyor (v2 servisi
+ * aramayı kabul ediyor); kapatsaydık erişim hiçbir zaman ölçülemezdi.
+ */
+export type KelimeAramaHali = 'erisim_yok' | 'suruyor' | 'dustu' | 'bitti' | 'aranmadi';
+
+export function kelimeAramaHali(k: Pick<KelimeVerisi, 'erisim' | 'aramaSuruyor' | 'sonHata' | 'satirlar'>): KelimeAramaHali {
+  if (k.aramaSuruyor) return 'suruyor';
+  if (k.erisim === 'yok') return 'erisim_yok';
+  if (k.sonHata) return 'dustu';
+  return k.satirlar.length > 0 ? 'bitti' : 'aranmadi';
+}
+
+/**
+ * Kaleme bağlanabilecek gruplar: YALNIZ SEÇİLİ kelimesi olanlar. Aktarım
+ * `secili AND grup = kelime_grubu` ile okuyor; seçili kelimesi olmayan bir
+ * grubu kaleme bağlamak rehbere KELİMESİZ bir Google Arama kampanyası
+ * göndermek demekti (Ajan 4, AÇIK-1). Hacim Google'ın kova değeri
+ * ("yaklaşık") ve yakın varyantlar satırın İÇİNDE: toplama ikinci kez girmez.
+ */
+export function seciliKelimeGruplari(satirlar: KelimeVerisi['satirlar']): Array<{ grup: string; kelime: number; aylikArama: number }> {
+  const h = new Map<string, { grup: string; kelime: number; aylikArama: number }>();
+  for (const s of satirlar) {
+    const g = s.grup?.trim();
+    if (!s.secili || !g) continue;
+    const x = h.get(g) ?? { grup: g, kelime: 0, aylikArama: 0 };
+    x.kelime += 1;
+    x.aylikArama += s.aylikArama ?? 0;
+    h.set(g, x);
+  }
+  return [...h.values()].sort((a, b) => b.aylikArama - a.aylikArama || a.grup.localeCompare(b.grup, 'tr'));
+}
+
+/**
+ * Kalemin kelime durumu. Google payı olan Arama kurgulu kalem kelimesizse
+ * rehbere kelimesiz gider: düzenleyici bunu söyler ve "Kelime ara" eylemini
+ * doğrudan gösterir. Bağlı grup artık seçili kelime taşımıyorsa (seçim
+ * kaldırıldı, grup yeniden adlandırıldı) sonuç aynı, cümle ayrı.
+ */
+export type KalemKelimeDurumu = 'gerekmez' | 'eksik' | 'bos_grup' | 'tamam';
+
+export function kalemKelimeDurumu(
+  k: Pick<StratejiKalemiGirdisi, 'amac' | 'google' | 'kelimeGrubu'>,
+  gruplar: ReadonlyArray<{ grup: string }>,
+): KalemKelimeDurumu {
+  if (!k.google || REHBER_AMACLARI[k.amac].google.kurgu !== 'ARAMA') return 'gerekmez';
+  if (!k.kelimeGrubu) return 'eksik';
+  return gruplar.some((g) => g.grup === k.kelimeGrubu) ? 'tamam' : 'bos_grup';
+}
+
+export const KALEM_KELIME_METNI: Record<'eksik' | 'bos_grup', string> = {
+  eksik: 'Google Arama kampanyası kelimesiz; AdvCampaign’e kelimesiz gider.',
+  bos_grup: 'Bağlı kelime grubunda seçili kelime yok; AdvCampaign’e kelimesiz gider.',
+};

@@ -258,3 +258,51 @@ describe('rehber: "Stratejiden"', () => {
     expect(k).toContain("setHal({ tur: 'hata'");
   });
 });
+
+describe('Google kelime araması v2 ekranı (Ajan 4 AÇIK-1)', () => {
+  it('KRİTİK: v2 uçlarıyla arıyor ve kaydediyor; v1 detayına ya da v1 ucuna yazmıyor', () => {
+    const k = kod('kelime-bolumu.tsx');
+    expect(k).toContain("stratejiUcYolu('/strateji/v2/planlar/:id/kelime-ara', { id: plan.id })");
+    expect(k).toContain("stratejiUcYolu('/strateji/v2/planlar/:id/kelimeler', { id: plan.id }), 'PATCH', { satirlar: degisiklik, surum: plan.surum }");
+    expect(k).not.toMatch(/['`]\/strateji\/planlar/);
+    expect(k).not.toContain('PlanDetayi');
+  });
+  it('KRİTİK: tohum, gruplama ve değişiklik v1\'in saf yardımcılarından (ikinci ayrıştırıcı yok)', () => {
+    const k = kod('kelime-bolumu.tsx');
+    for (const f of ['tohumlariAyir(tohum)', 'kelimeGruplari(kelimeler.satirlar, taslak)', 'kelimeDegisiklikleri(kelimeler.satirlar, taslak)', 'aylikAramaMetni(s.aylikArama)']) expect(k, f).toContain(f);
+    expect(k).toContain("s.varyantlar.join(', ')");
+    expect(k).toMatch(/import \{[^}]*\btohumlariAyir\b[^}]*\} from '\.\.\/hesap'/);
+  });
+  it('KRİTİK: yoklama yalnız arama sürerken, temizleniyor ve okuma düşünce duruyor', () => {
+    const k = kod('kelime-bolumu.tsx');
+    const i = k.indexOf('YOKLAMA_MS);');
+    expect(i).toBeGreaterThan(-1);
+    const effect = k.slice(k.lastIndexOf('useEffect(', i), k.indexOf('}, [kelimeler, yenile, yoklamaDustu]);', i));
+    expect(effect).toContain('if (!kelimeler.aramaSuruyor || yoklamaDustu) return;');
+    expect(effect).toContain('if (!taze) setYoklamaDustu(true);');
+    expect(effect).toContain('return () => window.clearTimeout(t);');
+  });
+  it('KRİTİK: hâller ayrı yazılı ve platformun mesajı ekranda', () => {
+    const k = kod('kelime-bolumu.tsx');
+    expect(k).toContain('kelimeAramaHali(kelimeler)');
+    expect(k).toMatch(/hal === 'erisim_yok' && \([\s\S]{0,200}\{kelimeler\.sonHata \?\?/);
+    expect(k).toMatch(/hal === 'dustu' && \([\s\S]{0,200}\{kelimeler\.sonHata\}/);
+    expect(k).toContain("hal === 'suruyor' && (");
+  });
+  it('KRİTİK: grup kaleme yalnız kaydedilmiş seçili kelimeyle bağlanıyor', () => {
+    const k = kod('kelime-bolumu.tsx');
+    expect(k).toContain('seciliKelimeGruplari(kelimeler.satirlar)');
+    expect(k).toContain("baglanabilir={g.anahtar !== '' && baglanabilir.has(g.anahtar) && !kirli}");
+  });
+  it('KRİTİK: kelimesiz Arama kalemi düzenleyicide doğrudan "Kelime ara" gösteriyor; liste canlı tablodan', () => {
+    const kd = kod('kalem-duzenleyici.tsx');
+    expect(kd).toContain('kalemKelimeDurumu(k, kelimeGruplari)');
+    expect(kd).toMatch(/kelimeDurumu !== 'tamam' && !kilitli && \(\s*<Dugme [^>]*onClick=\{kelimeAra\}>\s*Kelime ara/);
+    expect(kd).not.toContain('girdiler?.kelimeGruplari');
+    const d = kod('duzenleyici.tsx');
+    expect(d).toContain('seciliKelimeGruplari(detay.kelimeler.satirlar)');
+    expect(d).toContain('kelimeAra={kelimeAraAc}');
+    expect(d).toContain('document.getElementById(KELIME_TOHUM_ID)');
+    expect(d).toMatch(/\{kelimeBolumuGorunur && \(\s*<KelimeBolumu/);
+  });
+});

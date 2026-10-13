@@ -32,15 +32,19 @@ import {
   bolumKayitGovdesi,
   dagitilmamis,
   donemMetni,
+  KALEM_KELIME_METNI,
   kalemGirdisi,
+  kalemKelimeDurumu,
   konumOzeti,
   payMetni,
   platformToplamlari,
+  seciliKelimeGruplari,
   tahminMetni,
   tarihAraligi,
   yuzde,
 } from './hesap';
 import { KalemDuzenleyici } from './kalem-duzenleyici';
+import { KELIME_TOHUM_ID, KelimeBolumu } from './kelime-bolumu';
 import { Bildirim, GIRDI, Kart, Nokta, Rozet, yaz } from './ortak';
 import { Tutar } from './tutar';
 import type { StratejiDetayi, StratejiGirdileri, StratejiOnerisi } from '@advetics/shared';
@@ -140,6 +144,20 @@ export function StratejiDuzenleyici({
   const platform = platformToplamlari(gorunum, para);
   const kalan = dagitilmamis(plan.toplamButceMicros, gorunum);
   const beklenen = beklenenKutulari(detay.kalemler).slice(0, 2);
+  // Kelime grupları CANLI tablodan: arama bitince sayfa yenilenmeden kaleme bağlanabilsin.
+  const kelimeGruplari = useMemo(() => seciliKelimeGruplari(detay.kelimeler.satirlar), [detay.kelimeler.satirlar]);
+  const aramaKalemleri = kalemler
+    .map((k, index) => ({ k, index }))
+    .filter(({ k }) => kalemKelimeDurumu(k, kelimeGruplari) !== 'gerekmez')
+    .map(({ k, index }) => ({ index, ad: `Kampanya ${index + 1} · ${amacAdi(k.amac)}`, kelimeGrubu: k.kelimeGrubu }));
+  const kelimeBolumuGorunur = aramaKalemleri.length > 0 || detay.kelimeler.satirlar.length > 0;
+
+  /** Kalem düzenleyicinin "Kelime ara" eylemi: kelime bölümüne kaydırır ve arama kutusunu odaklar. */
+  function kelimeAraAc() {
+    const el = document.getElementById(KELIME_TOHUM_ID);
+    el?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
+    el?.focus({ preventScroll: true });
+  }
 
   async function oner() {
     setOneri({ tur: 'suruyor' });
@@ -423,6 +441,11 @@ export function StratejiDuzenleyici({
                               <div>
                                 <b className="block font-semibold">{amacAdi(k.amac)}</b>
                                 <span className="text-xs text-ink-muted">{STRATEJI_ASAMA_ETIKETI[AMAC_ASAMASI[k.amac]]}</span>
+                                {(() => {
+                                  // Kelimesiz Google Arama kalemi tablodan da görünür: satırı açmadan fark edilsin.
+                                  const kd = kalemKelimeDurumu(k, kelimeGruplari);
+                                  return kd === 'eksik' || kd === 'bos_grup' ? <span className="block text-[11px] font-semibold text-brand-strong">{KALEM_KELIME_METNI[kd]}</span> : null;
+                                })()}
                               </div>
                             </div>
                           </td>
@@ -475,6 +498,8 @@ export function StratejiDuzenleyici({
                               kilitli={!duzenlenebilir}
                               planId={plan.id}
                               kalemKayitli={s !== null}
+                              kelimeGruplari={kelimeGruplari}
+                              kelimeAra={kelimeAraAc}
                             />
                           </td>
                         </tr>
@@ -511,6 +536,20 @@ export function StratejiDuzenleyici({
               <Tutar micros={kalan < 0n ? -kalan : kalan} para={para} />
             </p>
           </Kart>
+
+          {kelimeBolumuGorunur && (
+            <KelimeBolumu
+              detay={detay}
+              duzenlenebilir={duzenlenebilir}
+              yenile={yenile}
+              tazeSurum={tazeSurum}
+              aramaKalemleri={aramaKalemleri}
+              grubaBagla={(i, grup) => {
+                setKalemler((x) => x.map((z, j) => (j === i ? { ...z, kelimeGrubu: grup } : z)));
+                setAcikSatir(i);
+              }}
+            />
+          )}
 
           <Kart className="p-4" etiket="Riskler">
             <div className="flex flex-wrap items-center justify-between gap-2">

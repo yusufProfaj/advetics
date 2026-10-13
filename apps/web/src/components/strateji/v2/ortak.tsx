@@ -60,7 +60,7 @@ export type Yazma<T> = { tur: 'tamam'; veri: T } | { tur: 'cakisma'; mesaj: stri
  */
 export async function yaz<T>(
   yol: string,
-  yontem: 'POST' | 'PUT',
+  yontem: 'POST' | 'PUT' | 'PATCH',
   govde: unknown,
   tazeSurum: () => Promise<number | null>,
   gonderilenSurum: number | null,

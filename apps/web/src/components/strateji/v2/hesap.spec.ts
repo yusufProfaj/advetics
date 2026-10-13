@@ -19,7 +19,11 @@ import {
   tahminMetni,
   takvimCubugu,
   tokenSorulmaliMi,
+  kalemKelimeDurumu,
+  kelimeAramaHali,
+  seciliKelimeGruplari,
 } from './hesap';
+import type { KelimeSatiri } from '@advetics/shared';
 
 /**
  * ═══ AdvStrategy v2 ekran kararları — ÇALIŞTIRILARAK ═══
@@ -231,5 +235,61 @@ describe('bölüm kaydı gövdesi (kayıtlı hâlden fark)', () => {
     expect(bolumKayitGovdesi(kayitli, { isletme: { metin: 'Aynı', kaynak: 'ajans' } }, K)).toEqual({ ozet: null });
     expect(bolumKayitGovdesi(kayitli, { ...kayitli, ozet: { metin: 'Yeni', kaynak: 'ajans' } }, K)).toEqual({ ozet: { metin: 'Yeni', kaynak: 'ajans' } });
     expect(bolumKayitGovdesi(kayitli, kayitli, K)).toEqual({});
+  });
+});
+
+describe('Google kelime araması (Ajan 4 AÇIK-1)', () => {
+  const satir = (x: Partial<KelimeSatiri>): KelimeSatiri => ({
+    id: x.id ?? 'k',
+    kelime: 'satılık daire',
+    aylikArama: 1000,
+    rekabet: null,
+    teklifAltMicros: null,
+    teklifUstMicros: null,
+    varyantlar: [],
+    grup: 'Daire',
+    grupElle: false,
+    secili: true,
+    cekimZamani: '2026-10-13T10:00:00Z',
+    ...x,
+  });
+  const kv = (x: Partial<{ erisim: 'olculmedi' | 'var' | 'yok'; aramaSuruyor: boolean; sonHata: string | null; satirlar: KelimeSatiri[] }>) => ({
+    erisim: 'var' as const,
+    aramaSuruyor: false,
+    sonHata: null,
+    satirlar: [],
+    ...x,
+  });
+
+  it('KRİTİK: hâller ayrı — sürüyor, düştü, bitti, aranmadı, erişim yok aynı boş tabloya dönmez', () => {
+    expect(kelimeAramaHali(kv({ aramaSuruyor: true }))).toBe('suruyor');
+    expect(kelimeAramaHali(kv({ sonHata: 'Google: kota doldu' }))).toBe('dustu');
+    expect(kelimeAramaHali(kv({ satirlar: [satir({})] }))).toBe('bitti');
+    expect(kelimeAramaHali(kv({}))).toBe('aranmadi');
+    expect(kelimeAramaHali(kv({ erisim: 'yok', sonHata: 'izin yok' }))).toBe('erisim_yok');
+    // Ölçülmemiş erişim aramayı KAPATMAZ: erişim ilk aramada ölçülüyor.
+    expect(kelimeAramaHali(kv({ erisim: 'olculmedi' }))).toBe('aranmadi');
+    // Eski sonuçlar dururken düşen arama "bitti" sayılmaz.
+    expect(kelimeAramaHali(kv({ sonHata: 'düştü', satirlar: [satir({})] }))).toBe('dustu');
+  });
+
+  it('KRİTİK: kaleme yalnız SEÇİLİ kelimesi olan grup bağlanır; hacim varyantla ikiye katlanmaz', () => {
+    const g = seciliKelimeGruplari([
+      satir({ id: 'a', grup: 'Daire', aylikArama: 2900, varyantlar: ['satilik daire'] }),
+      satir({ id: 'b', grup: 'Daire', aylikArama: null }),
+      satir({ id: 'c', grup: 'Manzara', secili: false, aylikArama: 99999 }),
+      satir({ id: 'd', grup: null, aylikArama: 500 }),
+    ]);
+    expect(g).toEqual([{ grup: 'Daire', kelime: 2, aylikArama: 2900 }]);
+  });
+
+  it('KRİTİK: Google payı olan Arama kalemi kelimesizse eksik; seçimi boşalan grup ayrı hâl', () => {
+    const gruplar = [{ grup: 'Daire' }];
+    expect(kalemKelimeDurumu({ amac: 'SITE', google: true, kelimeGrubu: null }, gruplar)).toBe('eksik');
+    expect(kalemKelimeDurumu({ amac: 'SITE', google: true, kelimeGrubu: 'Manzara' }, gruplar)).toBe('bos_grup');
+    expect(kalemKelimeDurumu({ amac: 'SITE', google: true, kelimeGrubu: 'Daire' }, gruplar)).toBe('tamam');
+    expect(kalemKelimeDurumu({ amac: 'SITE', google: false, kelimeGrubu: null }, gruplar)).toBe('gerekmez');
+    // Google kurgusu Arama olmayan amaç (Talep Yaratma) kelime istemez.
+    expect(kalemKelimeDurumu({ amac: 'ERISIM', google: true, kelimeGrubu: null }, gruplar)).toBe('gerekmez');
   });
 });
