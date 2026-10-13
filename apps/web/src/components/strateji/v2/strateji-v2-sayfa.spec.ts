@@ -45,10 +45,46 @@ const EKRANLAR = Object.keys(KOD).filter((k) => k.endsWith('.tsx') || k.endsWith
 
 describe('tarama boşa düşmüyor', () => {
   it('v2 bileşenleri, iki sayfa ve rehber kutusu okundu', () => {
-    for (const f of ['aktarim.tsx', 'belge.tsx', 'duzenleyici.tsx', 'gonder.tsx', 'gorunumler.tsx', 'hesap.ts', 'kalem-duzenleyici.tsx', 'onay-kutusu.tsx', 'ortak.tsx', 'plan-secici.tsx', 'tutar.tsx', 'yanit.ts', 'page', 'onay-page', 'stratejiden-kutusu.tsx']) {
+    for (const f of ['aktarim.tsx', 'belge.tsx', 'duzenleyici.tsx', 'gonder.tsx', 'gorunumler.tsx', 'hesap.ts', 'kalem-duzenleyici.tsx', 'onay-kutusu.tsx', 'ortak.tsx', 'plan-secici.tsx', 'tutar.tsx', 'page', 'onay-page', 'stratejiden-kutusu.tsx']) {
       expect(kod(f).length, f).toBeGreaterThan(200);
     }
     expect(EKRANLAR.length).toBeGreaterThanOrEqual(12);
+  });
+});
+
+describe('yanıt tipleri TEK YERDE — shared sözleşmesi (Ajan 4 entegrasyonu)', () => {
+  /*
+   * Panel bir süre uçların yanıt şekillerini kendi `yanit.ts`inde taşıdı;
+   * Ajan 2 aynı şekilleri shared'a aldı ve üç yerde ayrıştı (`ret` sebepli
+   * nesneye döndü, iki ad değişti). `serverApiFetch<T>` denetimsiz bir
+   * dönüşüm: iki tanım yan yana durduğu sürece panel derlenir ve `ret`i
+   * "[object Object]" diye yazar. Panel yanıt tipi TANIMLAMAZ.
+   */
+  it('KRİTİK: v2 dizininde yanıt dosyası yok; hiçbir ekran yerel yanıt tipi tanımlamıyor', () => {
+    expect(V2_DOSYALAR).not.toContain('yanit.ts');
+    for (const [ad, k] of Object.entries(KOD)) {
+      expect(k, ad).not.toMatch(/from '(\.\/|@\/components\/strateji\/v2\/)yanit'/);
+      expect(k, ad).not.toMatch(/\b(interface|type)\s+(StratejiDetayi|StratejiListesi|GonderimSonucu|BaglantiBelgesi|AktarimOnizlemesi|Gerceklesen|StratejiGirdileri|StratejiOnerisi)\b/);
+    }
+  });
+  it('KRİTİK: mail reddi SEBEBİYLE yazılıyor (ret nesne dizisi, `join` değil)', () => {
+    const g = kod('gonder.tsx');
+    expect(g).not.toContain('mail.ret.join');
+    expect(g).toMatch(/mail\.ret\.map\(\(x\) =>[\s\S]{0,200}x\.adres[\s\S]{0,40}x\.sebep/);
+  });
+  it('KRİTİK: bölüm kaydı farkı `bolumKayitGovdesi`nden (yalnız ajans süzgeci geri gelmedi)', () => {
+    const d = kod('duzenleyici.tsx');
+    expect(d).toContain('bolumKayitGovdesi(kayitliBolumler, bolumler, AI_METIN_BOLUMLERI)');
+    expect(d).not.toMatch(/filter\(\(b\) => bolumler\[b\]\?\.kaynak === 'ajans'\)/);
+  });
+});
+
+describe('onay sayfası istemcinin IP\'sini iletir (deneme sınırı ortak sunucu IP\'sine düşmesin)', () => {
+  it('KRİTİK: belge iç adresten, X-Forwarded-For zincirinin SON elemanıyla okunuyor', () => {
+    const o = kod('onay-page');
+    expect(o).toMatch(/fetch\(`\$\{INTERNAL_API_URL\}\$\{stratejiUcYolu\('\/strateji\/v2\/onay\/:token'/);
+    expect(o).toContain("headers: ip ? { 'X-Forwarded-For': ip } : {}");
+    expect(o).toContain('zincir.at(-1)');
   });
 });
 

@@ -820,3 +820,92 @@ rehber İLK AÇILANA kadar hesap/sayfa satırlarını da sayar.
 ### Testler
 
 `motor.spec.ts` (18), `strateji-v2.service.spec.ts` (25, gerçek BEGIN/ROLLBACK), `strateji-v2-rls.spec.ts` (SET ROLE + RETURNING), `strateji-v2-saf.spec.ts` (geçmiş eşlemesi, sayı yasağı, uç taraması, ölü yol bekçisi), `strateji-pdf.spec.ts`, `src/prisma/advstrategy-v2-uretim-sirasi.spec.ts`. Mutasyon: 14 bozma, 14'ü de yakalandı (pay kırpması, site yok kapısı, ölçüm şartı, karışık birim, yapay zekâ yeniden isteği, aktarımın koşullu UPDATE'i, bağlantı sürüm kontrolü, ayırt etmeme, müşteri görünümü süzgeci, geri çekmede bağlantı iptali, PDF bölüm atlama, yorum UPDATE politikası, deneme sınırı, platform tahmininin karışması).
+
+---
+
+## 9.8 Entegrasyon + Ajan 4 (Test & Güvenlik) — devir notu (2026-10-13)
+
+### Entegrasyon: panel çağrısı ↔ controller
+
+Panelin `components/strateji/v2/yanit.ts` dosyası SİLİNDİ; bütün ekranlar yanıt
+tiplerini `@advetics/shared`ten (`strateji/v2/yanit.ts`) okuyor ve controller
+dönüşleri aynı tiplere bağlı. `strateji-v2-sayfa.spec.ts` panelde yerel yanıt
+tipi tanımını yasaklıyor.
+
+| Uç | Panel çağrısı (gövde) | Controller | Sonuç |
+|---|---|---|---|
+| GET planlar | page.tsx `?clientId` | `StratejiListesi` | uyumlu |
+| POST planlar | plan-secici (`stratejiOlusturSchema`) | `StratejiDetayi` | panel `{id}` dalı atıldı (tip yalanı) |
+| GET planlar/:id, girdiler, yorumlar, aktarim-onizleme, gerceklesen | page.tsx | aynı adlar | uyumlu |
+| POST oner (`{}`) | duzenleyici | `StratejiOnerisi` | uyumlu |
+| PUT kalemler | duzenleyici (`stratejiKalemleriKaydetSchema`) | uyumlu | — |
+| PUT bolumler | duzenleyici | `stratejiBolumleriKaydetSchema` | **BULGU-A1** düzeltildi |
+| POST metin-oner (`{}`) | kalem-duzenleyici | `KalemMetinOnerisi` (⊇ `KalemMetni`) | uyumlu |
+| POST eylem / onayla / revizyon / yorumlar | duzenleyici, onay-kutusu | şemalar | uyumlu |
+| POST onay-baglantisi, GET onay-baglantilari, POST …/iptal | gonder.tsx | uyumlu | — |
+| POST gonder | gonder.tsx `{surum, alicilar}` | `GonderimSonucu` | **BULGU-A2** düzeltildi |
+| POST aktar | aktarim.tsx | `StratejiAktarimSonucu` | ad değişti, uyumlu |
+| GET onay/:token, POST …/karar | onay sayfası, onay-kutusu | `BaglantiBelgesi` | **BULGU-G1** düzeltildi |
+| GET pdf | `stratejiPdfYolu` | ham bayt | uyumlu |
+| GET rehberler/:id/strateji | stratejiden-kutusu | `RehberinStratejisi \| null` | uyumlu |
+| POST kelime-ara, PATCH kelimeler | **panel ÇAĞIRMIYOR** | var | **AÇIK-1** |
+
+`guncelleyen` (= oluşturan) panelde hiç gösterilmiyor; etiket gerekmedi.
+v1 uçlarının 400'ü paneli kırmıyor: eski plan yalnız `GET /strateji/planlar/:id`
+ile salt okunur açılıyor, `POST /strateji/planlar` (400) panelde monte edilmeyen
+`plan-listesi.tsx`te.
+
+Mail kökü `config.mail.appUrl` = `APP_URL ?? OAUTH_REDIRECT_BASE_URL`;
+DEPLOYMENT.md üretimde `APP_URL=https://advetics.com` (kök) diyor. Onay sayfası
+kararı tarayıcıdan `NEXT_PUBLIC_API_URL`e atıyor; üretimde bu aynı kökün
+`/api`si (aynı köken, CORS gerekmez). `site-setup.sh` `CORS_ORIGINS`e kökü ve
+`www`yi yazıyor. Sunucudaki gerçek değerler ÖLÇÜLMEDİ.
+
+### Bulgular ve düzeltmeler
+
+| # | Bulgu | Düzeltme | Test (mutasyonla) |
+|---|---|---|---|
+| G1 | **Onay sayfası okumaları tek IP'den.** Belge Next SUNUCUSUNDAN okunuyor; deneme sınırı her okumayı sayıyordu → 30 sayfa açılışından sonra 15 dk BÜTÜN müşterilerin bağlantısı "Çok fazla deneme". Sessiz: ajansın oturumu bunu görmez | Sınır yalnız BAŞARISIZ okumayı + her kararı sayıyor; onay sayfası iç adresten (`INTERNAL_API_URL`) istemci IP'sini `X-Forwarded-For` son elemanıyla iletiyor (`trust proxy 1` onu okuyor) | service spec "GEÇERLİ token okuması sayılmaz" + sayfa taraması (M1, M2, M10) |
+| A1 | **Önerinin bölümleri kaydedilemiyordu.** Panel yalnız `kaynak: 'ajans'` bölümleri gönderiyordu; "Strateji öner" uygulanınca gövde boş → 400 "En az bir bölüm"; silinen bölüm hiç gönderilmiyordu | `bolumKayitGovdesi` (kayıtlıdan FARK: değişen, silinen = null, `ai` aynen) | hesap.spec (M7, M8) |
+| A2 | Mail reddi `ret.join` ile "[object Object]" yazıyordu; mailin açtığı yeni bağlantı eskisini iptal ediyor ama liste tazelenmiyordu | Sebepli satır + liste tazeleme | sayfa taraması (M9) |
+| G2 | Gönderimde bağlantı PDF'ten ÖNCE açılıyordu: PDF düşerse müşterinin elindeki çalışan bağlantı iptal, yenisi hiç gönderilmemiş | PDF önce | service spec (M12) |
+| G3 | İki `catch { siteYok = null }` TRANSACTION İÇİNDE: Postgres düşen sorgudan sonra tx'i iptal ediyor, gerçek sebep yutulup sonraki sorgu "transaction is aborted" veriyordu | catch kaldırıldı | — (davranış hatayı yüzeye çıkarmak) |
+
+Ek testler (hepsi mutasyonla): eski sürümün açık bağlantısı yeniden onaya
+gönderimden sonra karar yazamaz; karar yarışı (araya giren tüketim → 0 satır,
+plan yazılmaz; M3); başka workspace'in planı/kalemi/bağlantısı kimlikle
+okunamaz, aktarılamaz, iptal edilemez (M4); `deneme` amaç ajans yöneticisi
+olmayana sunucuda aktarılmaz (M5); rehberde kullanıcı değiştirince alan
+`kullanici` olur, dokunulmayan `strateji` kalır. Shared mutasyonu (onaylanan
+sürüm kontrolü, tsc ile derle → test → geri al → derle) `sozlesme-v2.spec.ts`te
+yakalandı.
+
+### Kontrol edilip temiz bulunanlar
+
+Token 256 bit, DB'de SHA-256, biçimsiz token sorgu harcatmıyor, bulunamadı /
+iptal / süresi doldu aynı 404; karar `FOR UPDATE OF b, p` + iki koşullu UPDATE;
+sürüm bağı hem `baglantiHali`nde hem SQL'de; XSS: panel ve onay sayfası React
+kaçışıyla, `dangerouslySetInnerHTML` yok, mail `kacis` + `imzaTemizle`, PDF
+metin çizimi; RLS dört tablo `SET ROLE` + `RETURNING` ile; "tüm şirketler"
+modunda `org_id` hedef workspace'ten (plan, kalem, rehber); migration CHECK'leri
+`IS NOT NULL`/`IS NOT DISTINCT FROM`, eski satırlar `bicim = 1`, üretim sırası
+testi yeşil; platform çağrıları (ölçüm, rehber hazırlığı) transaction DIŞINDA.
+
+### Açık (kapıyı tutan)
+
+- **AÇIK-1 (Ajan 3):** v2'de kelime araması ekranı YOK. Uçlar var ama panel
+  çağırmıyor; kalem düzenleyici "Bu stratejide kelime araması yapılmadı" diyor
+  ve araması için bir yol göstermiyor. Onaylanan taslakta kalemde kelime
+  çipleri var. Sonuç: Google Arama kalemi kelimesiz aktarılıyor, rehber
+  kelimeyi eksik olarak soruyor (sessiz değil, ama tasarlanan akış eksik).
+  v1'in `arama-bolumu.tsx`i uç adresi parametreleştirilerek v2 detayıyla
+  kullanılabilir (aynı `kelimeler` şekli); yoklama da gerekir.
+
+### Ölçülmedi
+
+Gerçek eşzamanlı iki karar (PGlite tek bağlantı; yarış araya girerek
+sınandı); sunucudaki Nginx'in `X-Forwarded-For` ayarı ve `INTERNAL_API_URL`
+(yoksa okuma ortak IP'ye düşer ama G1'in birinci yarısı yine korur);
+üretimde `APP_URL`/`CORS_ORIGINS` değerleri; `next build` dışında tarayıcıda
+onay sayfası; PDF'te uzun tutarın tablo hücresinde kırpılması (ortak `tablo()`
+çizicisinden geliyor, strateji PDF'ine özel test yok).

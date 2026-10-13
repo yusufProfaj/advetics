@@ -34,7 +34,7 @@ export function onizlemeAdresi(previewUrl: string): string {
  *
  * Tanımlı değilse dış adrese düşer — yerel geliştirmede ikisi zaten aynıdır.
  */
-const INTERNAL_API_URL = process.env.INTERNAL_API_URL ?? API_URL;
+export const INTERNAL_API_URL = process.env.INTERNAL_API_URL ?? API_URL;
 
 export interface ApiError {
   statusCode: number;

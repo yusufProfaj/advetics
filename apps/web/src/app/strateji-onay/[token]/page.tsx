@@ -1,10 +1,11 @@
 import type { Metadata } from 'next';
+import { headers } from 'next/headers';
 import { stratejiUcYolu } from '@advetics/shared';
-import { API_URL } from '@/lib/api';
+import { INTERNAL_API_URL } from '@/lib/api';
 import { StratejiBelgesi } from '@/components/strateji/v2/belge';
 import { onaySayfasiHali, tokenSorulmaliMi, type OnaySayfasiHali } from '@/components/strateji/v2/hesap';
 import { BaglantiOnayKutusu } from '@/components/strateji/v2/onay-kutusu';
-import type { BaglantiBelgesi } from '@/components/strateji/v2/yanit';
+import type { BaglantiBelgesi } from '@advetics/shared';
 
 /**
  * ═══ GİRİŞSİZ STRATEJİ ONAYI (kullanıcı kararı K-2) — OTURUM GEREKTİRMEZ ═══
@@ -32,9 +33,30 @@ export const metadata: Metadata = {
   referrer: 'no-referrer',
 };
 
+/**
+ * İSTEMCİNİN IP'Sİ API'YE İLETİLİR (Ajan 4 bulgusu). Belge Next SUNUCUSUNDAN
+ * okunuyor; başlık iletilmezse API bütün müşterileri tek IP (sunucunun
+ * kendisi) olarak görüyor ve deneme sınırı herkes için ORTAK oluyordu: tahmin
+ * deneyen biri onay sayfasını bütün müşterilere kapatabilirdi. Ters vekil
+ * `X-Forwarded-For`un SONUNA gerçek adresi ekliyor; istemcinin kendi yazdığı
+ * değerler solda kalıyor, yani SON eleman alınır. İstek iç adrese
+ * (`INTERNAL_API_URL`, vekilsiz) gidiyor; API `trust proxy 1` ile bu başlığın
+ * son elemanını IP sayıyor. Vekil üzerinden gidilseydi vekil sunucunun
+ * adresini sona ekler ve iletim boşa giderdi.
+ */
+async function istemciIp(): Promise<string | null> {
+  const h = await headers();
+  const zincir = (h.get('x-forwarded-for') ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+  return zincir.at(-1) ?? h.get('x-real-ip')?.trim() ?? null;
+}
+
 async function belgeOku(token: string): Promise<{ status: number | null; govde: BaglantiBelgesi | null }> {
   try {
-    const res = await fetch(`${API_URL}${stratejiUcYolu('/strateji/v2/onay/:token', { token })}`, { cache: 'no-store' });
+    const ip = await istemciIp();
+    const res = await fetch(`${INTERNAL_API_URL}${stratejiUcYolu('/strateji/v2/onay/:token', { token })}`, {
+      cache: 'no-store',
+      headers: ip ? { 'X-Forwarded-For': ip } : {},
+    });
     if (!res.ok) return { status: res.status, govde: null };
     return { status: res.status, govde: (await res.json()) as BaglantiBelgesi };
   } catch {

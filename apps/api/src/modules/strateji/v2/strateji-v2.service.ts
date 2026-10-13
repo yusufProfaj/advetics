@@ -329,13 +329,11 @@ export class StratejiV2Service {
     const bugun = istanbulBugun(this.simdi());
     const pencere = tahminPenceresi(bugun);
     return this.tx(ctx, async (tx) => {
-      let siteYok: boolean | null;
-      try {
-        siteYok = await siteYokBeyaniVarMi(tx, p.client_id);
-      } catch {
-        // Okunamayan beyan KAPATMAZ (`siteYokRehberKapisi`): üç hâlli.
-        siteYok = null;
-      }
+      // TRANSACTION İÇİNDE `catch` YOK (Ajan 4): Postgres düşen sorgudan sonra
+      // transaction'ı iptal ediyor; yutulan hata bir sonraki sorguda "current
+      // transaction is aborted" olarak patlıyor ve asıl sebep hiçbir yerde
+      // yazmıyordu. Okunamayan beyan isteği düşürür, sebebiyle.
+      const siteYok: boolean | null = await siteYokBeyaniVarMi(tx, p.client_id);
       const gruplar = await tx.$queryRaw<Array<{ grup: string; kelime: number }>>(Prisma.sql`
         SELECT grup, count(*)::int AS kelime FROM strateji_kelimeleri
          WHERE plan_id = ${p.id}::uuid AND secili AND grup IS NOT NULL GROUP BY grup ORDER BY 2 DESC, 1`);
@@ -793,12 +791,8 @@ export class StratejiV2Service {
   // ── Aktarım (kalem → rehber taslağı, § 4) ───────────────────────────
 
   private async aktarimBaglami(tx: Sorgucu, ctx: TenantContext, p: PlanSatiri) {
-    let siteYok: boolean | null;
-    try {
-      siteYok = await siteYokBeyaniVarMi(tx, p.client_id);
-    } catch {
-      siteYok = null;
-    }
+    // `catch` YOK: bu okuma aktarımın transaction'ında (bkz. `girdiOku`).
+    const siteYok: boolean | null = await siteYokBeyaniVarMi(tx, p.client_id);
     return { ajansYoneticisi: await ajansYoneticisiMi(tx, ctx), siteYok, bugun: istanbulBugun(this.simdi()) };
   }
 
@@ -942,15 +936,18 @@ export class StratejiV2Service {
       if (p.surum !== g.surum) throw new ConflictException(SURUM_MESAJI);
       return { p, workspace: p.workspace_adi ?? '' };
     });
+    if (g.onayBaglantisi && p.durum !== 'onayda') throw new BadRequestException('Onay bağlantısı yalnız onay bekleyen stratejiye eklenir; önce onaya gönderin ya da bağlantısız gönderin.');
+    // SIRA (Ajan 4): PDF bağlantıdan ÖNCE. Yeni bağlantı açık olanı İPTAL
+    // ediyor; PDF üretimi düşerse (yazı tipi, veri) müşterinin elindeki
+    // çalışan bağlantı, hiç gönderilmeyen bir bağlantı uğruna ölmüş olurdu.
+    const { bayt, dosyaAdi } = await this.pdf(ctx, id, g.surum);
     let baglanti: GonderimSonucu['baglanti'] = null;
     let yol: string | null = null;
     if (g.onayBaglantisi) {
-      if (p.durum !== 'onayda') throw new BadRequestException('Onay bağlantısı yalnız onay bekleyen stratejiye eklenir; önce onaya gönderin ya da bağlantısız gönderin.');
       const b = await this.baglantilar.olustur(ctx, id, { surum: g.surum, sureGun: g.sureGun ?? 14 });
       baglanti = b.baglanti;
       yol = b.yol;
     }
-    const { bayt, dosyaAdi } = await this.pdf(ctx, id, g.surum);
     const kok = this.config.mail.appUrl.replace(/\/+$/, '');
     const panel = `${kok}${stratejiPanelAdresi({ musteri: p.client_id, plan: p.id, gorunum: 'belge' })}`;
     const varsayilan = [

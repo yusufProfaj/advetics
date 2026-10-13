@@ -61,6 +61,7 @@ const V1 = '88888888-0000-4000-8000-000000000001';
 const V2 = '88888888-0000-4000-8000-000000000002';
 const KIM = '11111111-0000-4000-8000-000000000001';
 const ZAMAN = '2026-10-20T09:00:00.000Z';
+const DIGER = '11111111-0000-4000-8000-000000000002';
 
 const kalem = (o: Partial<StratejiKalemiGirdisi> = {}): StratejiKalemiGirdisi => ({
   amac: 'SITE',
@@ -208,6 +209,19 @@ describe('strateji kalemi → rehber', () => {
     expect(ISTEMCI_YAZAMAZ).toContain('strateji');
     const r = degisiklikleriUygula({}, [{ alan: 'butce', deger: { tip: 'toplam', micros: '1000000' }, kaynak: 'strateji' }], KIM, ZAMAN);
     expect(r.tur).toBe('ret');
+  });
+
+  it('KRİTİK (Ajan 4): rehberde kullanıcı DEĞİŞTİRİNCE alan `kullanici` olur; dokunulmayan alan "Stratejiden" kalır', () => {
+    const onceki = {
+      butce: { deger: { tip: 'toplam', micros: '30000000000' }, kaynak: 'strateji', kim: KIM, zaman: ZAMAN },
+      metaPayiYuzde: { deger: 60, kaynak: 'strateji', kim: KIM, zaman: ZAMAN },
+    };
+    const r = degisiklikleriUygula(onceki, [{ alan: 'butce', deger: { tip: 'toplam', micros: '25000000000' }, kaynak: 'kullanici' }], DIGER, ZAMAN);
+    expect(r.tur).toBe('tamam');
+    if (r.tur !== 'tamam') return;
+    expect(r.alanlar.butce).toMatchObject({ kaynak: 'kullanici', kim: DIGER, deger: { micros: '25000000000' } });
+    // Değişiklik farkla gidiyor: dokunulmayan alan stratejinin izini taşımaya devam eder.
+    expect(r.alanlar.metaPayiYuzde).toMatchObject({ kaynak: 'strateji', kim: KIM });
   });
 
   it('KRİTİK: onaysız ya da onaydan sonra değişmiş plan aktarılmaz', () => {

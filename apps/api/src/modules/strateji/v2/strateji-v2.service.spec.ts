@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { Prisma } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import {
+  BAGLANTI_HALI_METNI,
   ONAY_BAGLANTISI_DENEME_SINIRI,
   rehberAlanlariSchema,
   resolvePermissions,
@@ -305,6 +306,47 @@ describe('aktarım (kalem → rehber taslağı)', () => {
     expect(n!.n).toBe(0);
   });
 
+  it('KRİTİK (Ajan 4): `deneme` amaçlı kalem ajans yöneticisi OLMAYANA sunucuda da aktarılmaz', async () => {
+    // Ajans yöneticisi onaya gönderdi, müşteri onayladı; aktarımı üst hesap
+    // üyesi olmayan bir yönetici deniyor. Panelin gizlemesi yetmez: kapı sunucuda.
+    const p = await planAc();
+    const d = await svc.kalemleriKaydet(AJANS, p.plan.id, { surum: 1, kalemler: [kalem({ amac: 'TELEFON', varlikIdleri: [] })] });
+    await svc.eylem(AJANS, p.plan.id, { eylem: 'onaya_gonder', surum: d.plan.surum });
+    const o = await svc.onayla(MUSTERI, p.plan.id, d.plan.surum);
+    const ajansDisi = { ...AJANS, platformAdmin: false, managerAccountId: undefined } as unknown as TenantContext;
+    await expect(svc.aktar(ajansDisi, o.plan.id, { surum: o.plan.surum })).rejects.toThrow(/yalnız ajans yöneticisine açık|kapalı|açık değil/);
+    const [n] = await h.q<{ n: number }>('SELECT count(*)::int AS n FROM reklam_rehberi');
+    expect(n!.n).toBe(0);
+    // Aynı kalem ajans yöneticisiyle açılır (kapı amaca değil kişiye bağlı).
+    expect((await svc.aktar(AJANS, o.plan.id, { surum: o.plan.surum })).kalemler[0]!.tur).toBe('acildi');
+  });
+
+  it('KRİTİK (Ajan 4): başka workspace’in stratejisi ve bağlantısı kimlikle OKUNAMAZ, AKTARILAMAZ, İPTAL EDİLEMEZ', async () => {
+    const OTEKI = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    await h.q(`INSERT INTO clients (id, org_id, name, slug, updated_at) VALUES ($1, $2, 'Öteki', 'oteki', now())`, [OTEKI, IDS.org]);
+    const p = await planAc();
+    const d = await svc.kalemleriKaydet(AJANS, p.plan.id, { surum: 1, kalemler: [kalem()] });
+    const g = await svc.eylem(AJANS, p.plan.id, { eylem: 'onaya_gonder', surum: d.plan.surum });
+    const b = await onay.olustur(AJANS, p.plan.id, { surum: g.plan.surum });
+    // Aynı şirkette YALNIZ öteki workspace'e erişen kullanıcı (RLS burada
+    // kapalı: kapı servisin kendi listesi, "tüm şirketler" modundaki gibi).
+    const otekiAjans = { ...AJANS, clientIds: [OTEKI], activeClientId: OTEKI } as unknown as TenantContext;
+    await expect(svc.detay(otekiAjans, p.plan.id)).rejects.toThrow(/bulunamadı/);
+    await expect(svc.yorumlar(otekiAjans, p.plan.id)).rejects.toThrow(/bulunamadı/);
+    await expect(svc.aktarimOnizleme(otekiAjans, p.plan.id)).rejects.toThrow(/bulunamadı/);
+    await expect(svc.kalemMetinOner(otekiAjans, p.plan.id, d.kalemler[0]!.id)).rejects.toThrow(/bulunamadı/);
+    await expect(svc.onayla(otekiAjans, p.plan.id, g.plan.surum)).rejects.toThrow(/bulunamadı/);
+    await expect(onay.listele(otekiAjans, p.plan.id)).rejects.toThrow(/bulunamadı/);
+    await expect(onay.iptal(otekiAjans, b.baglanti.id)).rejects.toThrow(/bulunamadı/);
+    await expect(svc.pdf(otekiAjans, p.plan.id, g.plan.surum)).rejects.toThrow(/bulunamadı/);
+    await expect(svc.aktar(otekiAjans, p.plan.id, { surum: g.plan.surum })).rejects.toThrow(/bulunamadı/);
+    const [x] = await h.q<{ durum: string; iptal: number }>(
+      `SELECT p.durum, (SELECT count(*)::int FROM strateji_onay_baglantilari WHERE iptal_at IS NOT NULL) AS iptal FROM strateji_planlari p WHERE p.id = $1`,
+      [p.plan.id],
+    );
+    expect(x).toEqual({ durum: 'onayda', iptal: 0 });
+  });
+
   it('AdvCampaign reklam kurma izni (bulk.write) yoksa 403', async () => {
     const d = await onayliPlan();
     const yetkisiz = { ...AJANS, permissions: AJANS.permissions.filter((x) => x !== 'bulk.write') } as unknown as TenantContext;
@@ -424,6 +466,36 @@ describe('girişsiz onay bağlantısı', () => {
     expect(p!.durum).toBe('onayda');
   });
 
+  it('KRİTİK (Ajan 4): yarış — hâl kontrolünden SONRA başka karar bağlantıyı tükettiyse koşullu UPDATE 0 satır, plan YAZILMAZ', async () => {
+    // Gerçek eşzamanlılık PGlite'ın tek bağlantısında kurulamıyor (araya giren
+    // iki BEGIN birbirini geri alır); aktarım yarışı testiyle aynı yol: öteki
+    // karar, tüketim sorgusundan hemen önce araya giriyor.
+    const d = await onaydaPlan();
+    const token = tokenAl((await onay.olustur(AJANS, d.plan.id, { surum: d.plan.surum })).yol);
+    const orijinal = h.db.$queryRaw.bind(h.db);
+    let araya = false;
+    const planYazimi: string[] = [];
+    (h.db as unknown as { $queryRaw: unknown }).$queryRaw = async (sorgu: Prisma.Sql) => {
+      if (!araya && sorgu.sql.includes('UPDATE strateji_onay_baglantilari b')) {
+        araya = true;
+        await orijinal(Prisma.sql`UPDATE strateji_onay_baglantilari SET kullanildi_at = now(), karar = 'revizyon_iste', karar_ad = 'Öteki Sekme', karar_eposta = 'o@s.com' RETURNING id`);
+      }
+      if (sorgu.sql.includes('UPDATE strateji_planlari')) planYazimi.push(sorgu.sql);
+      return orijinal(sorgu);
+    };
+    try {
+      await expect(onay.karar(token, { karar: 'onayla', ad: 'Ayşe Yılmaz', eposta: 'a@y.com', surum: d.plan.surum }, { ip: '5.5.5.5', userAgent: null })).rejects.toThrow(BAGLANTI_HALI_METNI.kullanildi);
+    } finally {
+      (h.db as unknown as { $queryRaw: unknown }).$queryRaw = orijinal;
+    }
+    expect(araya).toBe(true);
+    expect(planYazimi).toHaveLength(0);
+    const [p] = await h.q<{ durum: string; onay_rolu: string | null }>('SELECT durum, onay_rolu FROM strateji_planlari WHERE id = $1', [d.plan.id]);
+    expect(p).toEqual({ durum: 'onayda', onay_rolu: null });
+    const [n] = await h.q<{ n: number }>(`SELECT count(*)::int AS n FROM strateji_yorumlari WHERE rol = 'baglanti'`);
+    expect(n!.n).toBe(0);
+  });
+
   it('yeni bağlantı eskisini iptal eder (plan başına tek açık bağlantı)', async () => {
     const d = await onaydaPlan();
     const eski = tokenAl((await onay.olustur(AJANS, d.plan.id, { surum: d.plan.surum })).yol);
@@ -437,6 +509,39 @@ describe('girişsiz onay bağlantısı', () => {
     for (let i = 0; i < ONAY_BAGLANTISI_DENEME_SINIRI.istek; i++) await onay.belge('x', '9.9.9.9').catch(() => undefined);
     await expect(onay.belge('x', '9.9.9.9')).rejects.toThrow(/Çok fazla deneme/);
     await expect(onay.belge('x', '8.8.8.8')).rejects.toThrow('Bağlantı geçersiz.');
+  });
+
+  it('KRİTİK (Ajan 4): GEÇERLİ token okuması sayılmaz — onay sayfası belgeyi tek sunucu IP\'sinden okuyor', async () => {
+    // İlk hâl her okumayı sayıyordu: 30 sayfa açılışından sonra BÜTÜN
+    // müşterilerin bağlantısı 15 dakika "Çok fazla deneme" diyordu.
+    const d = await onaydaPlan();
+    const token = tokenAl((await onay.olustur(AJANS, d.plan.id, { surum: d.plan.surum })).yol);
+    for (let i = 0; i < ONAY_BAGLANTISI_DENEME_SINIRI.istek + 5; i++) await onay.belge(token, '127.0.0.1');
+    await expect(onay.belge(token, '127.0.0.1')).resolves.toMatchObject({ okunabilir: true });
+    // Başarısız okuma hâlâ sayılıyor ve sınır dolunca GEÇERLİ token da 429 alır (tahmin eden IP kendini yakar).
+    for (let i = 0; i < ONAY_BAGLANTISI_DENEME_SINIRI.istek; i++) await onay.belge('B'.repeat(43), '127.0.0.1').catch(() => undefined);
+    await expect(onay.belge(token, '127.0.0.1')).rejects.toThrow(/Çok fazla deneme/);
+  });
+
+  it('KRİTİK (Ajan 4): panelden revizyon istenip yeniden onaya gönderilince ESKİ sürümün açık bağlantısı karar YAZAMAZ', async () => {
+    const d = await onaydaPlan();
+    const token = tokenAl((await onay.olustur(AJANS, d.plan.id, { surum: d.plan.surum })).yol);
+    // Müşteri panelden revizyon istiyor: bağlantı tüketilmedi, iptal de edilmedi.
+    await svc.revizyon(MUSTERI, d.plan.id, { surum: d.plan.surum, yorum: 'Bütçe az' });
+    const k = await svc.detay(AJANS, d.plan.id);
+    const yeni = await svc.kalemleriKaydet(AJANS, d.plan.id, { surum: k.plan.surum, kalemler: [kalem()] });
+    const tekrar = await svc.eylem(AJANS, d.plan.id, { eylem: 'onaya_gonder', surum: yeni.plan.surum });
+    expect(tekrar.plan.surum).toBeGreaterThan(d.plan.surum);
+    // Eski sekme ESKİ sürümle de yeni sürümle de karar veremez.
+    for (const surum of [d.plan.surum, tekrar.plan.surum]) {
+      await expect(onay.karar(token, { karar: 'onayla', ad: 'Mehmet Kaya', eposta: 'm@k.com', surum }, { ip: null, userAgent: null })).rejects.toThrow();
+    }
+    // Bugün sürüm değişiminde bağlantı İPTAL de ediliyor; iptal ve sürüm kontrolü iki ayrı kapı.
+    await expect(onay.belge(token, '4.4.4.4')).rejects.toThrow('Bağlantı geçersiz.');
+    const [p] = await h.q<{ durum: string; onay_rolu: string | null }>('SELECT durum, onay_rolu FROM strateji_planlari WHERE id = $1', [d.plan.id]);
+    expect(p).toMatchObject({ durum: 'onayda', onay_rolu: null });
+    const [b] = await h.q<{ kullanildi_at: Date | null }>('SELECT kullanildi_at FROM strateji_onay_baglantilari');
+    expect(b!.kullanildi_at).toBeNull();
   });
 });
 
@@ -453,6 +558,22 @@ describe('gönderim ve PDF', () => {
     const arg = gonder.mock.calls[0]![1] as { html: string; ekler: Array<{ contentType: string }> };
     expect(arg.ekler[0]!.contentType).toBe('application/pdf');
     expect(arg.html).toMatch(/https:\/\/panel\.advetics\.com\/strateji-onay\/[A-Za-z0-9_-]{43}/);
+  });
+
+  it('KRİTİK (Ajan 4): PDF üretilemezse daha önce iletilmiş AÇIK bağlantı iptal EDİLMEZ (PDF bağlantıdan önce)', async () => {
+    const p = await planAc();
+    const d = await svc.kalemleriKaydet(AJANS, p.plan.id, { surum: 1, kalemler: [kalem()] });
+    const g = await svc.eylem(AJANS, p.plan.id, { eylem: 'onaya_gonder', surum: d.plan.surum });
+    const eski = await onay.olustur(AJANS, p.plan.id, { surum: g.plan.surum });
+    const casus = vi.spyOn(svc, 'pdf').mockRejectedValueOnce(new Error('Strateji PDF yazı tipi bulunamadı'));
+    try {
+      await expect(svc.gonder(AJANS, p.plan.id, { surum: g.plan.surum, alicilar: [] }, { ip: null, userAgent: null })).rejects.toThrow(/yazı tipi/);
+    } finally {
+      casus.mockRestore();
+    }
+    const l = await onay.listele(AJANS, p.plan.id);
+    expect(l.baglantilar.map((b) => [b.id, b.iptalZamani])).toEqual([[eski.baglanti.id, null]]);
+    expect(gonder).not.toHaveBeenCalled();
   });
 
   it('onay beklemeyen planda bağlantılı gönderim NEDENİYLE reddedilir; yetkisiz gönderim 403', async () => {

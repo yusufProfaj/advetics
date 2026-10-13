@@ -39,7 +39,7 @@ import { planSecimi, type PlanSatiri, type Sorgucu } from './satirlar';
  *   + plan UPDATE (`durum = 'onayda' AND surum = $s`) AYNI transaction'da;
  *   ikisinden biri SIFIR satır dönerse transaction geri alınır ve 409.
  *   İki sekmeden aynı anda gelen iki karardan yalnız biri satır döndürür.
- * - IP başına deneme sınırı. BELLEKTE: API pm2'de tek süreç (`ecosystem
+ * - IP başına deneme sınırı (başarısız okuma + her karar). BELLEKTE: API pm2'de tek süreç (`ecosystem
  *   .config`: instances 1, fork); süreç yeniden başlarsa sayaç sıfırlanır —
  *   kabul edilen kalıntı (Redis'e taşımak bağımlılık ekler, token 256 bit).
  * - Anonim yol YÖNETİM bağlantısıyla (RLS bağlamı yok; erişim kararı token);
@@ -115,36 +115,64 @@ export class OnayBaglantisiService {
 
   // ── Oturumsuz ────────────────────────────────────────────────────────
 
-  /** IP başına pencere; aşılırsa 429. Okuma ve karar AYNI sayaçta. */
-  denemeSay(ip: string | null): void {
-    const anahtar = ip ?? 'bilinmiyor';
-    const simdi = this.simdi().getTime();
-    const pencere = ONAY_BAGLANTISI_DENEME_SINIRI.pencereDk * 60_000;
-    const liste = (this.denemeler.get(anahtar) ?? []).filter((t) => simdi - t < pencere);
+  /**
+   * IP başına pencere; aşılırsa 429. SAYILAN: BAŞARISIZ okuma (biçimsiz,
+   * bulunamadı, iptal, süresi dolmuş) ve HER karar denemesi. GEÇERLİ bir
+   * token'ın okunması SAYILMAZ.
+   *
+   * AJAN 4 BULGUSU (2026-10-13): ilk hâl her okumayı sayıyordu. Onay sayfası
+   * belgeyi Next SUNUCUSUNDAN okuyor; yani bütün müşterilerin okumaları API'ye
+   * TEK IP'den (sunucunun kendisi) geliyor ve ilk 30 sayfa açılışından sonra
+   * 15 dakika boyunca HER bağlantı "Çok fazla deneme" diyordu — hata yok,
+   * log yok, müşteri onaylayamıyor, ajans kendi oturumunda hiçbir şey
+   * görmüyor. Sınırın korumak istediği şey token TAHMİNİ: o yalnız başarısız
+   * denemede görünür. Onay sayfası ayrıca istemcinin IP'sini iletiyor
+   * (`strateji-onay/[token]/page.tsx`), yani tahmin deneyen biri ortak
+   * sunucu IP'sini değil kendi IP'sini yakar.
+   */
+  denemeSiniriAsildiMi(ip: string | null): void {
+    const liste = this.pencere(ip);
     if (liste.length >= ONAY_BAGLANTISI_DENEME_SINIRI.istek) {
-      this.denemeler.set(anahtar, liste);
       throw new HttpException('Çok fazla deneme. Biraz sonra yeniden deneyin.', HttpStatus.TOO_MANY_REQUESTS);
     }
-    liste.push(simdi);
-    this.denemeler.set(anahtar, liste);
+  }
+
+  denemeSay(ip: string | null): void {
+    this.denemeSiniriAsildiMi(ip);
+    const liste = this.pencere(ip);
+    liste.push(this.simdi().getTime());
+    this.denemeler.set(ip ?? 'bilinmiyor', liste);
     // Bellek sınırsız büyümesin: eski IP'ler ara ara temizlenir.
     if (this.denemeler.size > 10_000) {
+      const simdi = this.simdi().getTime();
+      const pencere = ONAY_BAGLANTISI_DENEME_SINIRI.pencereDk * 60_000;
       for (const [k, v] of this.denemeler) if (v.every((t) => simdi - t >= pencere)) this.denemeler.delete(k);
     }
   }
 
+  private pencere(ip: string | null): number[] {
+    const simdi = this.simdi().getTime();
+    const pencere = ONAY_BAGLANTISI_DENEME_SINIRI.pencereDk * 60_000;
+    return (this.denemeler.get(ip ?? 'bilinmiyor') ?? []).filter((t) => simdi - t < pencere);
+  }
+
   async belge(token: string, ip: string | null): Promise<BaglantiBelgesi> {
-    this.denemeSay(ip);
-    if (!onayTokenBicimiGecerli(token)) throw gecersiz();
+    this.denemeSiniriAsildiMi(ip);
+    // Başarısız okuma SAYILIR ve aynı nötr cevabı alır (`denemeSay`).
+    const gecersizSay = (): NotFoundException => {
+      this.denemeSay(ip);
+      return gecersiz();
+    };
+    if (!onayTokenBicimiGecerli(token)) throw gecersizSay();
     const simdi = this.simdi();
     const s = await baglantiOku(this.admin, tokenOzeti(token));
-    if (!s) throw gecersiz();
+    if (!s) throw gecersizSay();
     const h = baglantiHali(halGirdisi(s), { durum: s.plan_durum as StratejiDurumu, surum: s.plan_surum }, simdi);
     // Geçersiz / iptal / süresi dolmuş AYIRT EDİLMEZ (var olanı tahmin ettirmez).
-    if (h.hal === 'iptal' || h.hal === 'suresi_doldu') throw gecersiz();
+    if (h.hal === 'iptal' || h.hal === 'suresi_doldu') throw gecersizSay();
     if (!h.okunabilir) return { hal: h.hal, okunabilir: false, karar: false, belge: null, yorumlar: [] };
     const [p] = await this.admin.$queryRaw<PlanSatiri[]>(planSecimi(Prisma.sql`p.id = ${s.plan_id}::uuid AND p.client_id = ${s.client_id}::uuid`, false));
-    if (!p) throw gecersiz();
+    if (!p) throw gecersizSay();
     const belge = await belgeVerisiKur(this.admin as unknown as Sorgucu, p, simdi);
     const yorumlar = (await yorumlariOku(this.admin as unknown as Sorgucu, p)).yorumlar;
     return { hal: h.hal, okunabilir: true, karar: h.karar, belge, yorumlar };
