@@ -50,7 +50,38 @@ export function CallbackBanner() {
     },
   };
 
-  const v = variants[result] ?? variants.hata!;
+  /*
+   * ÖLÇÜM İZNİ AKIŞI KENDİ CÜMLELERİYLE (`izin=olcum`, connections.service).
+   * Kurulum ekranı bu bandı hiç çizmiyordu: kullanıcı Google'dan dönüyor,
+   * aynı "Ölçüm izinlerini ver" düğmesini görüyor ve izin mi verilmedi,
+   * yanlış hesapla mı girildi, iptal mi etti bilemiyordu. Genel "reklam
+   * hesabı bulundu, izlemek istediklerini aç" metni burada YANLIŞ: bu akış
+   * hesap bağlamıyor, var olan bağlantıya izin ekliyor.
+   */
+  const olcumVaryantlari: Record<string, { cls: string; title: string; body: string }> = {
+    basarili: {
+      cls: variants.basarili!.cls,
+      title: 'Ölçüm izinleri verildi',
+      body: 'Tag Manager ve Analytics adımları artık kurulabilir.',
+    },
+    eksik_izin: {
+      cls: variants.eksik_izin!.cls,
+      title: 'Ölçüm izinleri eksik',
+      body: 'Google izin ekranında Tag Manager ya da Analytics kutularından biri işaretsiz bırakıldı. "Ölçüm izinlerini ver" ile tekrar dene ve bütün kutuları işaretli bırak.',
+    },
+    iptal: {
+      cls: variants.iptal!.cls,
+      title: 'Ölçüm izni iptal edildi',
+      body: 'İzin ekranında iptal ettin, hiçbir şey değişmedi.',
+    },
+    hata: {
+      cls: variants.hata!.cls,
+      title: 'Ölçüm izni verilemedi',
+      body: message ?? 'Bilinmeyen bir hata oluştu.',
+    },
+  };
+  const tablo = params.get('izin') === 'olcum' ? olcumVaryantlari : variants;
+  const v = tablo[result] ?? tablo.hata!;
 
   return (
     <div role="status" className={`rounded-xl border p-4 ${v.cls}`}>

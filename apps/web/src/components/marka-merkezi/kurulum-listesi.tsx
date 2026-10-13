@@ -25,6 +25,7 @@ import {
   type KurulumListesiAdimi,
   type KurulumPlatformu,
 } from '@/lib/panel-adresleri';
+import { CallbackBanner } from '@/components/callback-banner';
 import { Dugme } from '@/components/ui/dugme';
 import { Uyari } from '@/components/ui/uyari';
 import { SpecialCategoryPicker } from '@/components/tenancy/special-category-picker';
@@ -241,6 +242,10 @@ export function KurulumListesi({
 
   return (
     <div className="space-y-4">
+      {/* OAuth dönüşünün sonucu ("Ölçüm izinlerini ver" buraya dönüyor). Bant
+          olmadan dönüş sessiz bir 302'ydi ve düğme aynı kalınca kullanıcı
+          neyin olmadığını bilmiyordu. */}
+      <CallbackBanner />
       <section aria-label="Kurulum özeti" className="rounded-xl border border-line bg-surface p-5">
         <div className="flex flex-wrap items-center gap-4">
           <div className="min-w-0 flex-1">

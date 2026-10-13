@@ -153,6 +153,14 @@ export interface OAuthTokens {
   externalUserId: string;
   /** UI'da gösterilecek ad. */
   accountLabel: string;
+  /**
+   * KİŞİ KİMLİĞİ — Google `tokeninfo.sub`, döndüyse. `externalUserId` sub
+   * gelmezse ilk Ads müşterisine düşüyor ve iki uzay birbirine eşit olamaz;
+   * kayıtlı bağlantıyla kıyas ikisini ayrı istiyor (`baglanti-kimligi.ts`).
+   */
+  kisiKimligi?: string;
+  /** Google `listAccessibleCustomers` kök müşterileri (tiresiz). */
+  erisilebilirHesaplar?: string[];
 }
 
 export interface TokenVerification {

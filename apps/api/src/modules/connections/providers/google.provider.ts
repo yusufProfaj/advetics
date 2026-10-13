@@ -349,9 +349,11 @@ export class GoogleProvider implements IAdPlatformProvider {
      * Hata artık saklanıyor ve kimlik çözülemezse SEBEP OLARAK kullanılıyor.
      */
     let listeHatasi: unknown = null;
+    let erisilebilirHesaplar: string[] | undefined;
 
     try {
       const customers = await this.listAccessibleCustomerIds(accessToken);
+      erisilebilirHesaplar = customers;
       if (customers.length > 0) {
         externalUserId = externalUserId || customers[0]!;
         /**
@@ -417,6 +419,10 @@ export class GoogleProvider implements IAdPlatformProvider {
       grantedScopes: scope ? scope.split(' ') : [...this.requiredScopes],
       externalUserId,
       accountLabel,
+      // KIYAS İÇİN AYRI ALANLAR (`baglanti-kimligi.ts`): `externalUserId`
+      // hangi uzaydan geldiğini söylemiyor.
+      ...(verification.externalUserId ? { kisiKimligi: verification.externalUserId } : {}),
+      ...(erisilebilirHesaplar ? { erisilebilirHesaplar } : {}),
     };
   }
 

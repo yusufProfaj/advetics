@@ -26,7 +26,7 @@ export type OwnershipDecision =
   | { ok: true }
   | { ok: false; message: string };
 
-const PLATFORM_ADI: Record<Platform, string> = {
+export const PLATFORM_ADI: Record<Platform, string> = {
   meta: 'Meta',
   google: 'Google',
   linkedin: 'LinkedIn',

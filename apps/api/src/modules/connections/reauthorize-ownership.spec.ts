@@ -37,15 +37,22 @@ const META = { ip: null, userAgent: null, requestId: 'test' };
  * sağlayıcı yapılandırması ve veritabanı isterdi; sınanan şey ona GEÇEN
  * DEĞER.
  */
-function servis(kayit: { clientId: string | null; platform: string } | null): {
+function servis(
+  kayit: { clientId: string | null; platform: string; orgId?: string } | null,
+  /** Politikanın yazma yoklaması (RETURNING) kaç satır döndürüyor. */
+  yazabilir = true,
+): {
   svc: ConnectionsService;
-  gecen: () => { clientId?: string } | null;
+  gecen: () => { clientId?: string; hedefBaglantiId?: string } | null;
 } {
-  let gecen: { clientId?: string } | null = null;
+  let gecen: { clientId?: string; hedefBaglantiId?: string } | null = null;
 
   const prisma = {
     withTenant: <T>(_c: TenantContext, fn: (tx: unknown) => Promise<T>) =>
-      fn({ platformConnection: { findFirst: () => Promise.resolve(kayit) } }),
+      fn({
+        platformConnection: { findFirst: () => Promise.resolve(kayit ? { orgId: ORG, ...kayit } : null) },
+        $queryRaw: () => Promise.resolve(yazabilir ? [{ id: CONN }] : []),
+      }),
   } as unknown as PrismaService;
 
   const svc = new ConnectionsService(
@@ -68,7 +75,7 @@ function servis(kayit: { clientId: string | null; platform: string } | null): {
   );
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (svc as any).startOAuth = (_ctx: unknown, _p: unknown, opts: { clientId?: string }) => {
+  (svc as any).startOAuth = (_ctx: unknown, _p: unknown, opts: { clientId?: string; hedefBaglantiId?: string }) => {
     gecen = opts;
     return Promise.resolve({ authorizeUrl: 'https://ornek' });
   };
@@ -112,5 +119,23 @@ describe('yeniden yetkilendirme — sahiplik', () => {
      */
     const { svc } = servis({ clientId: EGE, platform: 'meta' });
     await expect(svc.reauthorize(CTX, CONN, 'google', META)).rejects.toThrow();
+  });
+  /*
+   * HEDEF BAĞLANTI (2026-10-13). State'e yazılmazsa dönüş yeni satır
+   * açıyordu: ajansın bağlantısı müşteri şirketinden yetkilendirilince o
+   * şirkette kopya doğdu ve izin verilen satır kurulumun okuduğu satır
+   * değildi.
+   */
+  it('KRİTİK: yenilenen bağlantı state’e HEDEF olarak geçiyor', async () => {
+    const { svc, gecen } = servis({ clientId: null, platform: 'google' });
+    await svc.reauthorize(CTX, CONN, 'google', META, { kapsam: 'olcum' });
+    expect(gecen()?.hedefBaglantiId).toBe(CONN);
+  });
+
+  it('KRİTİK: politika yazmaya izin vermiyorsa (ajansın bağlantısı, şirket yöneticisi) reddediliyor', async () => {
+    const AJANS_ORG = '99999999-9999-9999-9999-999999999999';
+    const { svc, gecen } = servis({ clientId: null, platform: 'google', orgId: AJANS_ORG }, false);
+    await expect(svc.reauthorize(CTX, CONN, 'google', META, { kapsam: 'olcum' })).rejects.toThrow(/ajansın/);
+    expect(gecen()).toBeNull();
   });
 });

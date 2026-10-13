@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Inject,
   Injectable,
   Logger,
@@ -31,13 +32,15 @@ import { PrismaService, type TenantClient } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { ProviderRegistry } from './provider.registry';
 import { SyncQueueService } from '../../queue/sync-queue.service';
-import { decideConnectionOwnership } from './connection-ownership';
+import { PLATFORM_ADI, decideConnectionOwnership } from './connection-ownership';
 import { baglantiKorunsunMu, cakismaKarari, sahiplikKarari } from './hesap-sahipligi';
 import {
   PlatformApiError,
   type FetchContext,
   type IAdPlatformProvider,
+  type OAuthTokens,
 } from './provider.types';
+import { googleMusteriEtiketi, googleMusteriKimligiMi, kimlikKarari } from './baglanti-kimligi';
 import { baglantiHatasiMetni } from './baglanti-hatasi';
 import { TokenVaultService } from './token-vault.service';
 import { OdemeTetigiService } from '../alerts/odeme-tetigi.service';
@@ -171,6 +174,11 @@ export const VARSAYILAN_DONUS = ayarlarAdresi('baglantilar');
 export function donusAdresi(yol: string, sorgu: string): string {
   return `${yol}${yol.includes('?') ? '&' : '?'}${sorgu}`;
 }
+
+/** Kimliği zaten bağlı olan kullanıcıya ölçüm izninin DOĞRU yolunu söyler. */
+const OLCUM_IZNI_NOTU: Partial<Record<Platform, string>> = {
+  google: ' Tag Manager ve Analytics izni için Marka Merkezi › Kurulum’daki "Ölçüm izinlerini ver" düğmesini kullan.',
+};
 
 @Injectable()
 export class ConnectionsService {
@@ -535,7 +543,17 @@ export class ConnectionsService {
   async startOAuth(
     ctx: TenantContext,
     platform: Platform,
-    opts: { redirectTo?: string; forceReconsent?: boolean; clientId?: string; kapsam?: 'olcum' },
+    opts: {
+      redirectTo?: string;
+      forceReconsent?: boolean;
+      clientId?: string;
+      kapsam?: 'olcum';
+      /**
+       * Dönüşte YENİ SATIR AÇILMAZ, bu bağlantı tazelenir. Yalnız
+       * `reauthorize` veriyor ve yetki kapısını o kuruyor.
+       */
+      hedefBaglantiId?: string;
+    },
     meta: Meta,
   ): Promise<{ authorizeUrl: string }> {
     const provider = this.provider(platform);
@@ -577,6 +595,7 @@ export class ConnectionsService {
           tokenHash: this.hash(rawState),
           redirectTo: opts.redirectTo ?? null,
           requestedScopes: [...provider.requiredScopes, ...ekScopes],
+          targetConnectionId: opts.hedefBaglantiId ?? null,
           createdByUserId: ctx.userId,
           expiresAt: new Date(Date.now() + STATE_TTL_MS),
           ip: meta.ip ?? null,
@@ -620,13 +639,41 @@ export class ConnectionsService {
     meta: Meta,
     ek: { kapsam?: 'olcum'; redirectTo?: string } = {},
   ): Promise<{ authorizeUrl: string }> {
-    const conn = await this.prisma.withTenant({ ...ctx, activeClientId: null }, (tx) =>
-      tx.platformConnection.findFirst({
+    const { conn, yazabilir } = await this.prisma.withTenant({ ...ctx, activeClientId: null }, async (tx) => {
+      const c = await tx.platformConnection.findFirst({
         where: { id: connectionId },
-        select: { clientId: true, platform: true },
-      }),
-    );
+        select: { clientId: true, platform: true, orgId: true },
+      });
+      /*
+       * ═══ YETKİ KAPISI: VERİTABANININ BU SATIRA YAZMA KURALI ═══
+       *
+       * Dönüş bu satırın TOKEN'INI ve İZİNLERİNİ değiştiriyor ve yönetim
+       * istemcisiyle (RLS'siz) yazıyor — kimlik doğrulaması orada yok. Kapı
+       * burada ve İKİNCİ BİR KURAL YAZILMADI: politikanın kendisine soruluyor
+       * (`adv_connections_write`). Havuz bağlantısında bu "kendi şirketi ya
+       * da üyesi olduğu ajans + havuz yönetimi" demek; müşteri şirketinin
+       * yöneticisi ajansın Google bağlantısına GÖREBİLDİĞİ hâlde (havuz
+       * okuma kapsamı) dokunamıyor. Okuyabilmek yeterli sayılsaydı, ajansın
+       * 55 atanmış hesabını besleyen token'ı bir müşteri değiştirebilirdi.
+       * Yoklama no-op bir UPDATE: satırı değiştirmiyor, yalnızca politikanın
+       * USING koşulundan geçip geçmediğini RETURNING ile sayıyor.
+       */
+      const y = c
+        ? await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+            UPDATE platform_connections SET updated_at = updated_at
+             WHERE id = ${connectionId}::uuid
+            RETURNING id::text AS id`)
+        : [];
+      return { conn: c, yazabilir: y.length === 1 };
+    });
     if (!conn) throw new NotFoundException('Bağlantı bulunamadı');
+    if (!yazabilir) {
+      throw new ForbiddenException(
+        conn.clientId === null && conn.orgId !== ctx.orgId
+          ? 'Bu bağlantı ajansın. İzni yalnızca ajansın yöneticisi verebilir.'
+          : 'Bu bağlantıyı yeniden yetkilendirme yetkin yok.',
+      );
+    }
 
     /*
      * PLATFORM KAYITTAN DOĞRULANIYOR. Adres çubuğundan gelen `?platform=`
@@ -647,6 +694,13 @@ export class ConnectionsService {
         redirectTo: ek.redirectTo ?? VARSAYILAN_DONUS,
         clientId: conn.clientId ?? undefined,
         ...(ek.kapsam ? { kapsam: ek.kapsam } : {}),
+        /*
+         * HEDEF BAĞLANTI. Olmadan dönüş `başlatanın şirketi + kimlik` ile
+         * upsert ediyordu: ajansın bağlantısı müşteri şirketinden
+         * yetkilendirilince o şirkette YENİ satır açıldı ve izin verilen
+         * satır, kurulumun okuduğu satır değildi (2026-10-13 üretim).
+         */
+        hedefBaglantiId: connectionId,
       },
       meta,
     );
@@ -743,6 +797,14 @@ export class ConnectionsService {
     });
 
     const backTo = state.redirectTo ?? VARSAYILAN_DONUS;
+    const provider = this.provider(platform);
+    /*
+     * ÖLÇÜM İZNİ AKIŞI MI — dönüş bandı ona göre konuşuyor. Kurulum ekranı
+     * bu parametre olmadan hiçbir şey söylemiyordu: kullanıcı Google'dan
+     * dönüyor, aynı düğmeyi görüyor ve neyin olmadığını bilmiyordu.
+     */
+    const olcumIstendi = state.requestedScopes.some((s) => provider.optionalScopes.includes(s));
+    const izinEki = olcumIstendi ? '&izin=olcum' : '';
 
     // Platform hata döndürdüyse: kullanıcı izni reddetti VEYA yapılandırma hatası.
     if (platformError) {
@@ -758,7 +820,7 @@ export class ConnectionsService {
       });
 
       if (declined) {
-        return { redirectPath: donusAdresi(backTo, `connection=iptal&platform=${platform}`) };
+        return { redirectPath: donusAdresi(backTo, `connection=iptal&platform=${platform}${izinEki}`) };
       }
 
       const reason = describePlatformOAuthError(platform, platformError, platformErrorText);
@@ -766,7 +828,7 @@ export class ConnectionsService {
       return {
         redirectPath: donusAdresi(
           backTo,
-          `connection=hata&platform=${platform}&mesaj=${encodeURIComponent(reason)}`,
+          `connection=hata&platform=${platform}&mesaj=${encodeURIComponent(reason)}${izinEki}`,
         ),
       };
     }
@@ -777,24 +839,29 @@ export class ConnectionsService {
           backTo,
           `connection=hata&platform=${platform}&mesaj=${encodeURIComponent(
             'Yetkilendirme kodu dönmedi. Platform izin ekranını tamamlamadan geri dönülmüş olabilir.',
-          )}`,
+          )}${izinEki}`,
         ),
       };
     }
 
-    const provider = this.provider(platform);
-
     try {
       const tokens = await provider.exchangeCode(params.code, this.redirectUri(platform));
 
-      const missing = provider.requiredScopes.filter((s) => !tokens.grantedScopes.includes(s));
-      const connectionId = await this.persistConnection(
-        state.orgId,
-        state.clientId,
-        state.createdByUserId,
-        platform,
-        tokens,
-      );
+      /*
+       * EKSİK İZİN = İSTENİP VERİLMEYEN. Eskiden yalnız zorunlu kapsamlara
+       * bakılıyordu: Google'ın onay ekranında Tag Manager/Analytics kutusu
+       * işaretsiz bırakılınca dönüş "başarılı" diyordu ve kurulum aynı
+       * düğmeyi göstermeye devam ediyordu.
+       */
+      const istenen = state.requestedScopes.length > 0 ? state.requestedScopes : [...provider.requiredScopes];
+      const missing = istenen.filter((s) => !tokens.grantedScopes.includes(s));
+      /*
+       * HEDEFLİ DÖNÜŞ (yeniden yetkilendirme, ölçüm izni) YENİ SATIR AÇMAZ:
+       * başlatılan bağlantı tazelenir ya da açık bir sebeple reddedilir.
+       */
+      const connectionId = state.targetConnectionId
+        ? await this.hedefBaglantiyiTazele(state.targetConnectionId, platform, tokens)
+        : await this.persistConnection(state.orgId, state.clientId, state.createdByUserId, platform, tokens);
 
       // Hesap keşfi bağlantıyı bozmamalı: token kaydedildi, kullanıcı zaten
       // bağlandı. Keşif başarısız olursa sonradan "Hesapları yenile" ile
@@ -846,6 +913,8 @@ export class ConnectionsService {
           accountLabel: tokens.accountLabel,
           grantedScopes: tokens.grantedScopes,
           missingScopes: missing,
+          // Hedefli dönüş YENİ bağlantı değil: aynı satırın tazelenmesi.
+          ...(state.targetConnectionId ? { yenidenYetki: true } : {}),
           ...discovered,
         },
         ...meta,
@@ -855,6 +924,7 @@ export class ConnectionsService {
         connection: missing.length ? 'eksik_izin' : 'basarili',
         platform,
         hesap: String(discovered.adAccounts),
+        ...(olcumIstendi ? { izin: 'olcum' } : {}),
       });
       return { redirectPath: donusAdresi(backTo, q.toString()) };
     } catch (err) {
@@ -891,9 +961,153 @@ export class ConnectionsService {
         connection: 'hata',
         platform,
         mesaj: baglantiHatasiMetni(err).slice(0, 300),
+        ...(olcumIstendi ? { izin: 'olcum' } : {}),
       });
       return { redirectPath: donusAdresi(backTo, q.toString()) };
     }
+  }
+
+  /**
+   * ═══ HEDEFLİ DÖNÜŞ — BAŞLATILAN BAĞLANTI TAZELENİR, YENİ SATIR AÇILMAZ ═══
+   *
+   * "Ölçüm izinlerini ver" ve "Yeniden yetkilendir" bir BAĞLANTIYA izin
+   * ekliyor. Dönüş eskiden `persistConnection`a gidiyordu ve o, başlatanın
+   * şirketi + platform kimliğiyle upsert ediyordu. Ajansın Google bağlantısı
+   * ajans şirketinde; kullanıcı müşteri şirketinin Kurulum ekranından izin
+   * verince tekil anahtar eşleşmedi ve O ŞİRKETTE yeni bir bağlantı açıldı.
+   * Keşif ajans havuzunun kopyasını oraya yazdı, kurulum ise hâlâ ajansın
+   * (yalnız `adwords` taşıyan) satırını okuduğu için düğme hiç kaybolmadı
+   * (2026-10-13 üretim: üç deneme, üç şirket, 133–134'er havuz satırı).
+   *
+   * Üç kapı, hepsi YAZMADAN ÖNCE ve hepsi açık bir cümleyle:
+   *   1. Kimlik — izni veren kişi bu bağlantının kişisi mi
+   *      (`baglanti-kimligi.ts`; Google'da iki kimlik uzayı var).
+   *   2. Zorunlu kapsam — Google'ın onay ekranında kutular tek tek
+   *      kaldırılabiliyor. Ads izni düşmüş bir token'ı ajansın satırına
+   *      yazmak, ona bağlı bütün hesapların senkronizasyonunu durdururdu.
+   *   3. Satır var ve aynı platformda.
+   * Sahiplik (`org_id`, `client_id`) ve `external_user_id` DEĞİŞMİYOR: bu bir
+   * token tazelemesi, taşıma değil.
+   */
+  private async hedefBaglantiyiTazele(hedefId: string, platform: Platform, tokens: OAuthTokens): Promise<string> {
+    const hedef = await this.admin.platformConnection.findUnique({
+      where: { id: hedefId },
+      select: {
+        id: true,
+        orgId: true,
+        clientId: true,
+        platform: true,
+        externalUserId: true,
+        organization: { select: { name: true } },
+        connectedBy: { select: { fullName: true, email: true } },
+      },
+    });
+    if (!hedef || hedef.platform !== platform) {
+      throw new BadRequestException('Yetkilendirilecek bağlantı bulunamadı. Sayfayı yenileyip tekrar dene.');
+    }
+
+    const ad = PLATFORM_ADI[platform];
+    if (!kimlikKarari(hedef.externalUserId, tokens).ayni) {
+      const kimin = hedef.clientId === null ? `ajansın (${hedef.organization.name}) ${ad}` : `bu workspace’in ${ad}`;
+      const hesapIpucu = googleMusteriKimligiMi(hedef.externalUserId)
+        ? ` (Google Ads ${googleMusteriEtiketi(hedef.externalUserId)} hesabına erişen)`
+        : '';
+      throw new BadRequestException(
+        `Bu izin ${kimin} bağlantısına verilmeli ama izin ekranında başka bir ${ad} hesabıyla giriş yapıldı. ` +
+          `Bağlantıyı kuran ${ad} hesabıyla${hesapIpucu} giriş yapıp tekrar dene. ` +
+          `Bağlantıyı panelde ${hedef.connectedBy.fullName} (${hedef.connectedBy.email}) kurmuştu. Bağlantı değiştirilmedi.`,
+      );
+    }
+
+    const provider = this.provider(platform);
+    const zorunluEksik = provider.requiredScopes.filter((s) => !tokens.grantedScopes.includes(s));
+    if (zorunluEksik.length > 0) {
+      throw new BadRequestException(
+        `${ad} izin ekranında ${ad} reklam erişimi işaretsiz bırakıldı. Bağlantı değiştirilmedi; ` +
+          'tekrar dene ve bütün kutuları işaretli bırak.',
+      );
+    }
+
+    const access = this.vault.encrypt(tokens.accessToken);
+    const refresh = tokens.refreshToken ? this.vault.encrypt(tokens.refreshToken) : null;
+    // Şifreli eski token belleğe ALINMIYOR: yalnızca var olup olmadığı.
+    const eskiYenileme = refresh
+      ? false
+      : (
+          await this.admin.$queryRaw<Array<{ var: boolean }>>(Prisma.sql`
+            SELECT refresh_token_enc IS NOT NULL AS var FROM platform_connections WHERE id = ${hedefId}::uuid`)
+        )[0]?.var === true;
+
+    await this.admin.platformConnection.update({
+      where: { id: hedefId },
+      data: {
+        accessTokenEnc: access.data,
+        // Google yenileme yanıtında refresh token göndermeyebilir; eskisini
+        // null ile ezmek bağlantıyı kurtarılamaz yapar.
+        ...(refresh ? { refreshTokenEnc: refresh.data } : {}),
+        keyVersion: access.keyVersion,
+        tokenExpiresAt: tokens.expiresAt ?? null,
+        authorizationExpiresAt: yetkiBitisi({
+          yenilemeVar: refresh !== null || eskiYenileme,
+          erisimBitisi: tokens.expiresAt,
+          yenilemeBitisi: tokens.refreshTokenExpiresAt,
+        }),
+        // Google `include_granted_scopes=true` ile BİRLEŞİK izni döndürüyor:
+        // önceki `adwords` + yeni ölçüm kapsamları.
+        grantedScopes: tokens.grantedScopes,
+        status: 'active',
+        failureCount: 0,
+        lastErrorCode: null,
+        lastErrorAt: null,
+        lastVerifiedAt: new Date(),
+        revokedAt: null,
+      },
+    });
+    return hedef.id;
+  }
+
+  /**
+   * ═══ AYNI KİMLİK BAŞKA BİR SATIR OLARAK AÇILMAZ ═══
+   *
+   * Tekil anahtar `(org, platform, external_user_id)`: (1) ŞİRKET başına,
+   * (2) Google'da kimliğin hangi uzaydan yazıldığına bağlı. İkisi birlikte
+   * ajansın kimliğinin müşteri şirketinde ikinci bağlantı olarak açılmasına
+   * izin veriyordu ve keşif ajans havuzunu o şirkete kopyalıyordu. Kural
+   * CLAUDE.md'de ("AJANSIN BAĞLANTISI BİR KEZ KURULUR") ama yalnız aynı
+   * şirkette ve yalnız birebir eşit kimlikte zorlanıyordu.
+   *
+   * Bakılan yer: bu şirketin ve AJANSININ bağlantıları. Kardeş müşteri
+   * şirketleri bilerek dışarıda — onların kendi bağlantıları kendi işi.
+   * Eşleşme yoksa `null`; varsa kullanıcıya gösterilecek cümle.
+   */
+  private async ayniKimlikBaskaSatirda(orgId: string, platform: Platform, tokens: OAuthTokens): Promise<string | null> {
+    const [a] = await this.admin.$queryRaw<Array<{ ajans_org_id: string | null }>>(Prisma.sql`
+      SELECT m.ajans_org_id::text AS ajans_org_id
+        FROM organizations o JOIN manager_accounts m ON m.id = o.manager_account_id
+       WHERE o.id = ${orgId}::uuid`);
+    const ajansOrgId = a?.ajans_org_id ?? null;
+    const orgler = ajansOrgId && ajansOrgId !== orgId ? [orgId, ajansOrgId] : [orgId];
+
+    const adaylar = await this.admin.platformConnection.findMany({
+      where: { orgId: { in: orgler }, platform: platform as PrismaPlatform, revokedAt: null, status: { not: 'revoked' } },
+      select: { orgId: true, externalUserId: true, organization: { select: { name: true } } },
+    });
+    const eslesen = adaylar.find((c) => kimlikKarari(c.externalUserId, tokens).ayni);
+    if (!eslesen) return null;
+
+    const ad = PLATFORM_ADI[platform];
+    // Ölçüm izni yalnız Google'da ayrı bir akış; diğerlerinde not yok.
+    const olcumNotu = OLCUM_IZNI_NOTU[platform] ?? '';
+    if (eslesen.orgId !== orgId) {
+      return (
+        `Bu ${ad} hesabı zaten ajansın bağlantısı olarak bağlı (${eslesen.organization.name}). ` +
+        `Aynı kimliği şirket başına yeniden bağlamak gerekmiyor: ajansın bağlantısı bu şirkete de hizmet ediyor.${olcumNotu}`
+      );
+    }
+    return (
+      `Bu ${ad} hesabı bu şirkette zaten bağlı. Yeni bağlantı yerine Ayarlar › Platform bağlantıları’nda ` +
+      `o bağlantının "Yeniden yetkilendir" düğmesini kullan.${olcumNotu}`
+    );
   }
 
   /**
@@ -913,15 +1127,7 @@ export class ConnectionsService {
     clientId: string | null,
     userId: string,
     platform: Platform,
-    tokens: {
-      accessToken: string;
-      refreshToken?: string;
-      expiresAt?: Date;
-      refreshTokenExpiresAt?: Date;
-      grantedScopes: string[];
-      externalUserId: string;
-      accountLabel: string;
-    },
+    tokens: OAuthTokens,
   ): Promise<string> {
     /*
      * ═══ SAHİPLİK DEĞİŞTİRİLEMEZ — SESSİZ YANLIŞ WORKSPACE'İN ÖNÜ ═══
@@ -956,6 +1162,13 @@ export class ConnectionsService {
       },
       select: { clientId: true, client: { select: { name: true } } },
     });
+
+    // Satır yoksa: aynı kişi başka bir kimlik uzayıyla ya da ajansın
+    // şirketinde zaten bağlı mı (bkz. `ayniKimlikBaskaSatirda`).
+    if (!mevcut) {
+      const engel = await this.ayniKimlikBaskaSatirda(orgId, platform, tokens);
+      if (engel) throw new BadRequestException(engel);
+    }
 
     const sahiplik = decideConnectionOwnership({
       platform,

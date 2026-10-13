@@ -829,6 +829,7 @@ model PlatformConnection {
   connectedBy    User            @relation(fields: [connectedByUserId], references: [id])
   adAccounts     AdAccount[]
   socialProfiles SocialProfile[]
+  oauthStates    OAuthState[]
 
   @@unique([orgId, platform, externalUserId])
   @@index([orgId, status])
@@ -1016,6 +1017,15 @@ model OAuthState {
   redirectTo      String?  @map("redirect_to") @db.VarChar(512)
   /// Talep edilen scope'lar — callback'te platformun verdikleriyle karşılaştırılır.
   requestedScopes String[] @map("requested_scopes")
+
+  /// HEDEF BAĞLANTI — yeniden yetkilendirme ve "Ölçüm izinlerini ver" BU
+  /// satırı tazeler. Boşken dönüş `orgId + platform + externalUserId` ile
+  /// upsert ediyordu: ajansın bağlantısı müşteri şirketinden yetkilendirilince
+  /// tekil anahtar (org başına) eşleşmiyor ve O ŞİRKETTE yeni satır açılıyordu
+  /// (2026-10-13 üretim, üç deneme üç kopya). Dolu olduğunda dönüş YENİ SATIR
+  /// AÇMAZ; kimlik kıyası tutmazsa reddeder (`baglanti-kimligi.ts`).
+  targetConnectionId String?             @map("target_connection_id") @db.Uuid
+  targetConnection   PlatformConnection? @relation(fields: [targetConnectionId], references: [id], onDelete: Cascade)
 
   createdByUserId String    @map("created_by_user_id") @db.Uuid
   expiresAt       DateTime  @map("expires_at") @db.Timestamptz(6)
