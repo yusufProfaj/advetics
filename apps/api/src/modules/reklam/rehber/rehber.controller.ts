@@ -18,6 +18,7 @@ import {
   type RehberYayinDurumu,
   type TenantContext,
   type YoutubeVideoListesi,
+  type YoutubeVideoBilgisi,
 } from '@advetics/shared';
 import type { z } from 'zod';
 import { CurrentTenant, RequirePermissions } from '../../../common/decorators';
@@ -55,6 +56,17 @@ export class RehberController {
     @Query('kanalId', ParseUUIDPipe) kanalId: string,
   ): Promise<YoutubeVideoListesi> {
     return this.rehber.youtubeVideolari(ctx, clientId, kanalId);
+  }
+
+  /** Tek YouTube videosu (B15): seçim/yapıştırma anında gizlilik, yerleştirme ve süre. Kanal gerekmez (B16). */
+  @Get('rehber/youtube-video')
+  @RequirePermissions('bulk.read')
+  youtubeVideo(
+    @CurrentTenant() ctx: TenantContext,
+    @Query('clientId', ParseUUIDPipe) clientId: string,
+    @Query('videoId') videoId: string,
+  ): Promise<YoutubeVideoBilgisi> {
+    return this.rehber.youtubeVideo(ctx, clientId, String(videoId ?? ''));
   }
 
   /** Seçili sayfanın Meta'daki yayında anlık formları (Ç-2). Okunamazsa 503 + Meta'nın mesajı. */

@@ -5,6 +5,7 @@ import {
   derleMeta,
   manifestoSatiriGecerli,
   tanitilanTuru,
+  videoDugmesiVar,
   type DerlemeGirdisi,
   type MetaGovdesi,
 } from '@advetics/shared';
@@ -65,7 +66,7 @@ const PIKSEL = '424242424242';
 const satisGirdisi: Partial<DerlemeGirdisi> = { niyet: 'SATIS', pikselId: PIKSEL };
 
 describe('VIDEO_IZLENME (Videom izlensin)', () => {
-  it('KRİTİK: altın kreatif — video_data, adres yoksa düğme Facebook sayfasına', () => {
+  it('KRİTİK: altın kreatif — video_data, adres yoksa DÜĞMESİZ (S3; eskiden Facebook sayfasına bağlanıyordu)', () => {
     const oss = bul(govde(videoGirdisi).govdeler, 'kreatif:1').object_story_spec;
     expect(oss).toEqual({
       page_id: '111',
@@ -75,7 +76,6 @@ describe('VIDEO_IZLENME (Videom izlensin)', () => {
         image_hash: 'KAPAK',
         title: 'B',
         message: 'M',
-        call_to_action: { type: 'LEARN_MORE', value: { link: 'https://facebook.com/111' } },
       },
     });
   });
@@ -198,7 +198,8 @@ describe('Dalga 3 manifesto', () => {
   it('KRİTİK: yeni amaçların gövdelerinde geçerli her manifesto satırı açıkça yazılı', () => {
     for (const g of [videoGirdisi, erisimGirdisi, satisGirdisi, waGirdisi]) {
       const r = govde(g);
-      const hal = { kategoriVar: false, instagram: true, tanitilan: tanitilanTuru(g.niyet!), erisim: g.niyet === 'ERISIM' };
+      // Video (1.10.0): elle yerleşim satırı (M-19V) ve KOŞULLU düğme (M-25, adres yoksa düğme yok).
+      const hal = { kategoriVar: false, instagram: true, tanitilan: tanitilanTuru(g.niyet!), erisim: g.niyet === 'ERISIM', video: g.niyet === 'VIDEO_IZLENME', dugme: videoDugmesiVar({ niyet: g.niyet!, hedefAdres: g.hedefAdres ?? null }) };
       const satirlar = MANIFESTO.filter((s) => manifestoSatiriGecerli(s.kosul, hal));
       for (const s of satirlar) {
         const yollar = typeof s.yol === 'string' ? [s.yol] : s.yol;

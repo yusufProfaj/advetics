@@ -75,6 +75,20 @@ export interface YouTubeKanalDetayi {
 
 const ANAHTAR_YOK = 'YOUTUBE_API_KEY tanımlı değil; YouTube sorgulanamıyor. Adımlar: docs/DEPLOYMENT.md §5c';
 
+/**
+ * YouTube süresi ISO 8601 (`PT1H2M5S`, `P1DT2H`, canlı yayında `P0D`).
+ * Çözülemeyen biçim `null`: "0 saniye" demek, videoyu 1 saniyeden kısa
+ * sayıp reddetmek olurdu. `P0D` (yayın/premiere) da `null`: süre yok.
+ */
+export function isoSureSaniye(s: string | null | undefined): number | null {
+  if (!s) return null;
+  const m = /^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?)?$/.exec(s);
+  if (!m || s === 'P' || s.endsWith('T')) return null;
+  const [, g, sa, dk, sn] = m;
+  const toplam = Number(g ?? 0) * 86_400 + Number(sa ?? 0) * 3_600 + Number(dk ?? 0) * 60 + Number(sn ?? 0);
+  return toplam > 0 ? toplam : null;
+}
+
 export type YouTubeKanalSonucu =
   | { durum: 'bulundu'; kanal: YouTubeKanal }
   | { durum: 'bulunamadi' }
@@ -486,6 +500,55 @@ export class YouTubeApiService {
     if (r.durum === 'hata') return r;
     const id = r.govde.items?.[0]?.id;
     return id ? { durum: 'bulundu', channelId: id } : { durum: 'bulunamadi' };
+  }
+
+  /**
+   * REKLAM İÇİN VİDEO AYRINTISI (AdvCampaign rehberi, VIDEO denetimi B15).
+   * `part=snippet,status,contentDetails` — tek istekte 50 kimliğe kadar,
+   * 1 kota birimi. Gizli ya da yerleştirilemeyen video Google video
+   * reklamında oynatılamıyor ve bunu kullanıcı seçtiği AN öğrenmeli; süre
+   * Kontrol'de gösteriliyor. Dönmeyen kimlik haritada YOK = YouTube'da yok
+   * (silinmiş ya da uydurma); hata ayrı hâl (`getVideo` dersi).
+   */
+  async videoAyrintilari(ids: readonly string[]): Promise<
+    | {
+        durum: 'bulundu';
+        videolar: Map<string, { baslik: string; kanalId: string | null; kucukResim: string | null; sureSn: number | null; gizlilik: string | null; gomulebilir: boolean | null }>;
+      }
+    | { durum: 'hata'; message: string }
+  > {
+    const key = this.config.platforms.youtube.apiKey;
+    if (!key) return { durum: 'hata', message: ANAHTAR_YOK };
+    const temiz = [...new Set(ids.filter((x) => /^[\w-]{11}$/.test(x)))].slice(0, 50);
+    if (temiz.length === 0) return { durum: 'bulundu', videolar: new Map() };
+    const url = new URL('https://www.googleapis.com/youtube/v3/videos');
+    url.searchParams.set('part', 'snippet,status,contentDetails');
+    url.searchParams.set('id', temiz.join(','));
+    url.searchParams.set('key', key);
+    const r = await this.iste<{
+      items?: Array<{
+        id?: string;
+        snippet?: { title?: string; channelId?: string; thumbnails?: Record<string, { url?: string } | undefined> };
+        status?: { privacyStatus?: string; embeddable?: boolean };
+        contentDetails?: { duration?: string };
+      }>;
+    }>(url);
+    if (r.durum !== 'bulundu') return r;
+    const videolar = new Map<string, { baslik: string; kanalId: string | null; kucukResim: string | null; sureSn: number | null; gizlilik: string | null; gomulebilir: boolean | null }>();
+    for (const item of r.govde.items ?? []) {
+      if (!item.id) continue;
+      const t = item.snippet?.thumbnails;
+      videolar.set(item.id, {
+        baslik: item.snippet?.title ?? '',
+        kanalId: item.snippet?.channelId ?? null,
+        kucukResim: t?.medium?.url ?? t?.high?.url ?? t?.default?.url ?? null,
+        sureSn: isoSureSaniye(item.contentDetails?.duration),
+        gizlilik: item.status?.privacyStatus ?? null,
+        // Alan dönmediyse BİLİNMİYOR (`null`), "yerleştirilebilir" değil.
+        gomulebilir: typeof item.status?.embeddable === 'boolean' ? item.status.embeddable : null,
+      });
+    }
+    return { durum: 'bulundu', videolar };
   }
 
   /**

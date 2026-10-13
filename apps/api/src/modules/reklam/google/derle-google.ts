@@ -19,6 +19,10 @@ import {
   type GoogleDerlemeGirdisi,
   type GorselOlcusu,
   PMAX_HEDEF_CUMLESI,
+  DEMAND_GEN_VIDEO_KANALLARI,
+  DEMAND_GEN_VIDEO_EN_COK_BASLIK,
+  videoUzunBaslik,
+  type DemandGenKanali,
 } from '@advetics/shared';
 import { aramaAtomikIstek, aramaOgesiTelefonu, nameStamp } from '../../connections/providers/google-write';
 import {
@@ -76,7 +80,12 @@ import {
 // teklife giriyor, `pmaxHedefIslemleri`) ve kare logo kuralı. Maks.
 // Performans gövdesi DEĞİŞTİ: g-1.3.0 provaları hedefsiz gövdeyi kanıtlıyordu
 // ve o gövde hesabın bütün dönüşümlerine optimize olurdu.
-export const GOOGLE_DERLEYICI_SURUMU = 'g-1.4.0';
+// g-1.5.0: Talep Yaratma VİDEO (VIDEO denetimi): yedi kanal bayrağı shared
+// sabitinden (`maps: false` dahil), uzun başlık en uzun başlıktan ve
+// açıklamalardan AYRI (`videoUzunBaslik`), kare logo kuralı Talep Yaratma
+// video ve görselde de. Video gövdesi DEĞİŞTİ: g-1.4.0 provaları uzun başlığı
+// açıklamayla aynı ve haritaları belirsiz gövdeyi kanıtlıyordu.
+export const GOOGLE_DERLEYICI_SURUMU = 'g-1.5.0';
 
 /**
  * Google yayınında `yayin.atif_standardi`. Karar tablosunun "Ölçüm"
@@ -122,6 +131,18 @@ export interface GoogleGorselReklamBeklentisi {
   logo: number;
   kanallar: Record<keyof typeof DEMAND_GEN_GORSEL_KANALLARI, boolean>;
   otomasyon: Record<string, string>;
+}
+
+/**
+ * Talep Yaratma VİDEO reklamının geri okumada beklenen hâli (B13). Önceden
+ * video kurgusunda yalnız kampanya, bütçe ve konum okunuyordu: kanallar,
+ * teklif ve videonun kendisi Google'da başka çıksa yayın "temiz" açılırdı.
+ */
+export interface GoogleVideoReklamBeklentisi {
+  reklamSayisi: number;
+  /** YouTube video kimliği (asset `youtube_video_asset.youtube_video_id`). */
+  videoKimligi: string;
+  kanallar: Record<DemandGenKanali, boolean>;
 }
 
 /** Maks. Performans varlık grubunun geri okumada beklenen hâli. */
@@ -200,6 +221,8 @@ export interface GoogleBeklenen {
    */
   teklif?: 'TARGET_SPEND' | 'MAXIMIZE_CONVERSIONS';
   gorselReklam?: GoogleGorselReklamBeklentisi;
+  /** g-1.5.0 Talep Yaratma video; eski satırlarda YOK = bakılmaz. */
+  videoReklam?: GoogleVideoReklamBeklentisi;
   varlikGrubu?: GoogleVarlikGrubuBeklentisi;
   /**
    * MAKS. PERFORMANS (g-1.4.0): kampanyada TEKLİFE GİREN dönüşüm hedefleri
@@ -258,6 +281,9 @@ export function googleYasKovalari(enDusukYas: number): { kovalar: string[]; not:
     not: enDusukYas < 25 ? `Google'da yaş ${enDusukYas}'ten değil 25'ten başlıyor (Google'ın yaş grupları 18-24, 25-34 …).` : null,
   };
 }
+
+/** Kare logo reddi (B17): Talep Yaratma ve Maks. Performans aynı Google kuralı, aynı cümle. */
+export const GOOGLE_LOGO_KARE_MESAJI = "Google logosu kare (1:1) ve en az 128×128 olmalı; Marka Merkezi'ndeki logoyu değiştir.";
 
 /** Hesabın saat diliminde bugün, `YYYY-MM-DD`. */
 function bugun(simdi: Date, saatDilimi: string): string {
@@ -491,10 +517,23 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
     if (!g.youtubeVideoId) retler.push({ kod: 'G-VIDEO', mesaj: "YouTube'dan video seç." });
     if (!g.isletmeAdi) retler.push({ kod: 'G-LOGO', mesaj: "Marka Merkezi'nde işletme adı yok." });
     if (!b.logo) retler.push({ kod: 'G-LOGO', mesaj: "Marka Merkezi'nde logo yok." });
-    if (g.aciklamalar.length === 0) retler.push({ kod: 'G-ACIKLAMA-SAYI', mesaj: 'YouTube reklamı için en az 1 açıklama gerekiyor.' });
-    if (retler.length || !g.youtubeVideoId || !g.isletmeAdi || !b.logo) return { tur: 'ret', retler };
+    if (pmaxLogoKareMi(b.logoOlcusu) === false) retler.push({ kod: 'G-LOGO-KARE', mesaj: GOOGLE_LOGO_KARE_MESAJI });
+    // UZUN BAŞLIK AÇIKLAMADAN AYRI (B14c): eski gövde ikisini de
+    // `aciklamalar`dan dolduruyordu ve aynı metin iki alana gidiyordu.
+    const uzun = videoUzunBaslik(g.basliklar, g.aciklamalar);
+    if (!uzun) retler.push({ kod: 'G-BASLIK-SAYI', mesaj: 'YouTube reklamı için en az 1 başlık gerekiyor.' });
+    else if (uzun.aciklamalar.length === 0) {
+      retler.push({ kod: 'G-ACIKLAMA-SAYI', mesaj: 'YouTube reklamı için başlıktan farklı en az 1 açıklama gerekiyor.' });
+    }
+    if (retler.length || !g.youtubeVideoId || !g.isletmeAdi || !b.logo || !uzun) return { tur: 'ret', retler };
     const yas = googleYasKovalari(g.enDusukYas);
     if (yas.not) notlar.push(yas.not);
+    // SESSİZ KESME YOK (B14b): görsel dalı söylüyordu, video dalı söylemiyordu.
+    if (g.basliklar.length > DEMAND_GEN_VIDEO_EN_COK_BASLIK) {
+      notlar.push(`Google video reklamı en çok ${DEMAND_GEN_VIDEO_EN_COK_BASLIK} başlık alıyor; ilk ${DEMAND_GEN_VIDEO_EN_COK_BASLIK} başlığın gitti (${g.basliklar.length} yazdın).`);
+    }
+    const aciklamalar = uzun.aciklamalar.slice(0, 5);
+    if (uzun.aciklamalar.length > 5) notlar.push(`Google video reklamı en çok 5 açıklama alıyor; ilk 5 açıklaman gitti.`);
     const { govde, sira } = demandGenAtomikIstek({
       customerId: g.musteriId,
       name: ad,
@@ -516,11 +555,13 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
       businessName: g.isletmeAdi,
       finalUrl: g.hedefAdres,
       // Talep Yaratma video reklamı: başlık ≤ 40, uzun başlık ve açıklama
-      // ≤ 90 (rehber başlığı zaten ≤ 30, açıklaması ≤ 90). Uzun başlık
-      // açıklamalardan: başka bir metin UYDURULMUYOR.
-      headlines: g.basliklar.slice(0, 5),
-      longHeadlines: g.aciklamalar.slice(0, 5),
-      descriptions: g.aciklamalar.slice(0, 5),
+      // ≤ 90 (rehber başlığı zaten ≤ 30, açıklaması ≤ 90). Uzun başlık EN
+      // UZUN BAŞLIK (yönetici kararı): başka bir metin UYDURULMUYOR.
+      headlines: g.basliklar.slice(0, DEMAND_GEN_VIDEO_EN_COK_BASLIK),
+      longHeadlines: [uzun.uzunBaslik],
+      descriptions: aciklamalar,
+      // B20/B14d: yedi kanal bayrağı, Kontrol'ün "Nerede" hücresiyle AYNI sabit.
+      kanallar: DEMAND_GEN_VIDEO_KANALLARI,
       validateOnly: b.validateOnly,
     });
     return {
@@ -539,6 +580,10 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
         anahtarKelimeSayisi: null,
         negatifSayisi: null,
         aramaOgesi: null,
+        // B13: teklif, kanallar ve videonun KENDİSİ geri okunuyor; okunamayan
+        // (`null`) fark sayılır, "temiz" değil.
+        teklif: 'TARGET_SPEND',
+        videoReklam: { reklamSayisi: 1, videoKimligi: g.youtubeVideoId, kanallar: { ...DEMAND_GEN_VIDEO_KANALLARI } },
       },
       atif: GOOGLE_ATIF,
       notlar,
@@ -553,6 +598,10 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
       retler.push({ kod: 'G-ISLETME-ADI', mesaj: `Google'da işletme adı en çok ${GOOGLE_ISLETME_ADI_EN_COK} karakter; Marka Merkezi'ndeki marka adını kısalt.` });
     }
     if (!b.logo) retler.push({ kod: 'G-LOGO', mesaj: "Marka Merkezi'nde logo yok." });
+    // B17: Talep Yaratma görselinde de (Maks. Performans aşağıda kendi kodunu yazıyor).
+    if (g.kurgu === 'TALEP_YARATMA_GORSEL' && pmaxLogoKareMi(b.logoOlcusu) === false) {
+      retler.push({ kod: 'G-LOGO-KARE', mesaj: GOOGLE_LOGO_KARE_MESAJI });
+    }
     const gorseller = gorselleriCoz(g, b, retler, notlar);
     const say = (o: 'yatay' | 'kare' | 'dik45') => gorseller.filter((x) => x.oran === o).length;
     if (g.kurgu === 'TALEP_YARATMA_GORSEL') {

@@ -57,6 +57,12 @@ const CTX = {
 
 /** Sahte GAQL cevabı (sorguya göre) ve son mutate gövdesi. */
 let araCevabi: (q: string) => unknown[] = () => [];
+type YtAyrinti = { baslik: string; kanalId: string | null; kucukResim: string | null; sureSn: number | null; gizlilik: string | null; gomulebilir: boolean | null };
+const YT_VARSAYILAN = (ids: string[]) =>
+  ({ durum: 'bulundu', videolar: new Map<string, YtAyrinti>(ids.map((id) => [id, { baslik: 'Tanıtım', kanalId: 'UCx', kucukResim: 'https://i.ytimg.com/x.jpg', sureSn: 42, gizlilik: 'public', gomulebilir: true }])) }) as
+  | { durum: 'bulundu'; videolar: Map<string, YtAyrinti> }
+  | { durum: 'hata'; message: string };
+let youtubeAyrinti = YT_VARSAYILAN;
 let sonGovde: { mutateOperations: Array<Record<string, { create?: Record<string, unknown> }>> } | null = null;
 /** Verilirse mutate gövdeye bakıp bir hata fırlatabilir (Google reddi). */
 let mutateHatasi: ((g: { mutateOperations: Array<Record<string, { create?: Record<string, unknown> }>> }) => Error | null) | null = null;
@@ -134,6 +140,11 @@ beforeAll(async () => {
         cagrilar.push(`youtube:${kanal}`);
         return { durum: 'bulundu', videolar: [{ id: 'vid1', channelId: kanal, title: 'Tanıtım', publishedAt: new Date('2026-10-01T00:00:00Z'), thumbnailUrl: 'https://i.ytimg.com/x.jpg' }] };
       },
+      // B15: süre/gizlilik ayrı çağrı. `youtubeAyrinti` testler arasında değiştirilebiliyor.
+      videoAyrintilari: async (ids: string[]) => {
+        cagrilar.push(`youtube-ayrinti:${ids.join(',')}`);
+        return youtubeAyrinti(ids);
+      },
     } as never,
     depo as never,
   );
@@ -146,6 +157,7 @@ afterAll(async () => h.close());
 beforeEach(async () => {
   cagrilar = [];
   araCevabi = () => [];
+  youtubeAyrinti = YT_VARSAYILAN;
   sonGovde = null;
   mutateHatasi = null;
   tumGovdeler.length = 0;
@@ -269,7 +281,7 @@ describe('prova ve yayın', () => {
     expect(p.meta).toBeNull();
     expect(cagrilar.filter((c) => c.startsWith('mutate'))).toEqual(['mutate:true']);
     const [pr] = await h.q<{ durum: string; derleyici_surumu: string }>('SELECT durum, derleyici_surumu FROM prova');
-    expect(pr).toEqual({ durum: 'gecti', derleyici_surumu: 'g-1.4.0' });
+    expect(pr).toEqual({ durum: 'gecti', derleyici_surumu: 'g-1.5.0' });
     const [rr] = await h.q<{ prova_ozeti: string }>('SELECT prova_ozeti FROM reklam_rehberi');
     expect(rr!.prova_ozeti).toBe(p.icerikOzeti);
     // Google çocuk taslağı platform=google; Meta'nın strict şeması uygulanmadı.
@@ -353,7 +365,40 @@ describe('hazırlık, son prova, YouTube videoları', () => {
       [KANAL.replace('e1', 'a1'), IDS.org, IDS.client, IDS.connection],
     );
     const l = await svc.youtubeVideolari(CTX, IDS.client, KANAL.replace('e1', 'a1'));
-    expect(l).toEqual({ satirlar: [{ videoId: 'vid1', baslik: 'Tanıtım', kucukResim: 'https://i.ytimg.com/x.jpg', yayinTarihi: '2026-10-01T00:00:00.000Z' }], toplam: 1, dahaFazlaVar: false, bosNeden: null });
+    expect(l).toEqual({
+      satirlar: [{ videoId: 'vid1', baslik: 'Tanıtım', kucukResim: 'https://i.ytimg.com/x.jpg', yayinTarihi: '2026-10-01T00:00:00.000Z', sureSn: 42, gizlilik: 'public', gomulebilir: true }],
+      toplam: 1,
+      dahaFazlaVar: false,
+      bosNeden: null,
+      ayrintiHatasi: null,
+    });
+  });
+
+  it('KRİTİK (B15): ayrıntı çağrısı düşerse liste YİNE gelir ama SEBEP yazılı (boş alanlar "sorun yok" sanılmasın)', async () => {
+    const KANAL = '66666666-0000-4000-8000-0000000000a1';
+    await h.q(
+      `INSERT INTO social_profiles (id, org_id, client_id, connection_id, profile_type, external_id, name, updated_at)
+       VALUES ($1, $2, $3, $4, 'youtube_channel', 'UCx', 'Kanal', now())`,
+      [KANAL, IDS.org, IDS.client, IDS.connection],
+    );
+    youtubeAyrinti = () => ({ durum: 'hata', message: 'YouTube API: quotaExceeded' });
+    const l = await svc.youtubeVideolari(CTX, IDS.client, KANAL);
+    expect(l.satirlar[0]).toMatchObject({ videoId: 'vid1', sureSn: null, gizlilik: null, gomulebilir: null });
+    expect(l.ayrintiHatasi).toContain('quotaExceeded');
+  });
+
+  it('KRİTİK (B15/B16): tek video KANALSIZ okunuyor; gizli video ENGEL ile dönüyor, bulunamayan RET, okunamayan 503', async () => {
+    expect(await svc.youtubeVideo(CTX, IDS.client, 'dQw4w9WgXcQ')).toMatchObject({ videoId: 'dQw4w9WgXcQ', sureSn: 42, engel: null });
+    youtubeAyrinti = (ids) => ({ durum: 'bulundu', videolar: new Map([[ids[0]!, { baslik: 'G', kanalId: null, kucukResim: null, sureSn: 5, gizlilik: 'private', gomulebilir: true }]]) });
+    expect((await svc.youtubeVideo(CTX, IDS.client, 'dQw4w9WgXcQ')).engel).toMatch(/gizli/);
+    youtubeAyrinti = () => ({ durum: 'bulundu', videolar: new Map() });
+    await expect(svc.youtubeVideo(CTX, IDS.client, 'dQw4w9WgXcQ')).rejects.toThrow(/bulunamadı/);
+    youtubeAyrinti = () => ({ durum: 'hata', message: 'YouTube API: ağ' });
+    await expect(svc.youtubeVideo(CTX, IDS.client, 'dQw4w9WgXcQ')).rejects.toThrow(/YouTube okunamadı: YouTube API: ağ/);
+    // Geçersiz kimlik YouTube'a gitmez.
+    cagrilar = [];
+    await expect(svc.youtubeVideo(CTX, IDS.client, 'kisa')).rejects.toThrow(/geçersiz/);
+    expect(cagrilar).toEqual([]);
   });
 });
 

@@ -28,10 +28,12 @@ import {
   type LeadFormRecord,
   type RehberFormListesi,
   type YoutubeVideoListesi,
+  type YoutubeVideoBilgisi,
+  youtubeVideoEngeli,
   googleGorselKurgusuMu,
   trTelefonOnerisi,
 } from '@advetics/shared';
-import { apiFetch, onizlemeAdresi } from '@/lib/api';
+import { ApiRequestError, apiFetch, onizlemeAdresi } from '@/lib/api';
 import { FormBuilder } from '@/components/forms/form-builder';
 import { FormOnizleme } from '@/components/forms/form-onizleme';
 import { formOlusturmaDurumu, gizlilikOnerisi, kayittanOnizleme, sayfaTaslaklari, yarimFormDurumu, yayinSonrasiSecim, yenidenYayinlanabilir } from '@/lib/form-onizleme';
@@ -83,6 +85,9 @@ import {
   telefonKaydi,
   videoListesiHali,
   youtubeKimligi,
+  youtubeSecimi,
+  kapakSec,
+  sureGoster,
   uretimPlani,
   type EkranNo,
   type MedyaOgesi,
@@ -194,7 +199,8 @@ export function AdimReklam({
               )}
               {adresHali === 'istege_bagli' && (
                 <p className={s.ipucu} style={{ margin: '0 0 6px' }}>
-                  İsteğe bağlı. Boş bırakırsan düğme Facebook sayfana gider.
+                  {/* S3: video izlenmede adres yoksa düğme hiç kurulmuyor (`videoDugmesiVar`). */}
+                  {amac === 'VIDEO' ? 'İsteğe bağlı. Boş bırakırsan video düğmesiz yayınlanır.' : 'İsteğe bağlı. Boş bırakırsan düğme Facebook sayfana gider.'}
                 </p>
               )}
               <div className={s.girdi}>
@@ -448,14 +454,23 @@ function MedyaBlogu({
       }
       setYukleniyor((n) => n + 1);
       try {
-        const [olcu, y] = await Promise.all([medyaOlc(d), medyaYukle(b.clientId, d)]);
+        // B8: "Videom izlensin"de Meta açıksa süre ve dikeylik GİRİŞTE söylenir.
+        const [olcu, y] = await Promise.all([medyaOlc(d), medyaYukle(b.clientId, d, { videoIzlenme: video && b.acik.meta })]);
         const bilgi = { ad: y.ad, onizleme: onizlemeAdresi(y.onizlemeAdresi), en: olcu.en, boy: olcu.boy };
         medyaBilgisiEkle(y.id, bilgi);
+        // Kapak adaylarının önizlemesi seçicide gösterilsin (ölçü videonunki).
+        for (const a of y.kapakAdaylari ?? []) medyaBilgisiEkle(a.id, { ad: y.ad, onizleme: onizlemeAdresi(a.onizlemeAdresi), en: olcu.en, boy: olcu.boy });
         // Ekleme ile çizim arasında bilgi state'e geçmemiş olabilir; üretim aynı turda okuyor.
         yeniBilgi.current.set(y.id, bilgi);
         olculer.set(y.id, { en: olcu.en, boy: olcu.boy });
         if (!y.kapakId) eklenen.add(y.id);
-        const oge = { varlikId: y.id, ...(y.kapakId ? { kapakVarlikId: y.kapakId } : {}) };
+        const oge = {
+          varlikId: y.id,
+          ...(y.kapakId ? { kapakVarlikId: y.kapakId } : {}),
+          ...(y.kapakAdaylari && y.kapakAdaylari.length > 1 ? { kapakAdaylari: y.kapakAdaylari.map((a) => a.id) } : {}),
+          ...(y.oneriKareleri?.length ? { oneriKareleri: y.oneriKareleri } : {}),
+          ...(typeof y.sure === 'number' ? { sureSn: Math.round(y.sure * 10) / 10 } : {}),
+        };
         if (olcu.en && olcu.boy) yerelOran.set(y.id, oranBul(olcu.en, olcu.boy));
         simdiki = y.kapakId || sira === undefined ? [...simdiki, oge] : yuvayaEkle(simdiki, yerelOran, oge, sira);
         yaz(b, 'medya', simdiki);
@@ -589,18 +604,22 @@ function MedyaBlogu({
             const satir = (x: (typeof medya)[number], hata: string | null) => {
               const bilgi = medyaBilgisi.get(x.varlikId);
               const oran = oranlar.get(x.varlikId) ?? null;
+              // Videoda küçük resim SEÇİLİ kapak (B10): aday değişince satır da değişsin.
+              const onizleme = (x.kapakVarlikId ? medyaBilgisi.get(x.kapakVarlikId)?.onizleme : undefined) ?? bilgi?.onizleme;
+              const sure = sureGoster(x.sureSn);
               return (
                 <div key={x.varlikId} className={s.dosya}>
-                  {bilgi ? (
+                  {onizleme ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={bilgi.onizleme} alt="" className={`${s.kucuk} ${oran === 'dikey' ? s.dikey : ''}`} />
+                    <img src={onizleme} alt="" className={`${s.kucuk} ${oran === 'dikey' ? s.dikey : ''}`} />
                   ) : (
                     <div className={s.kucuk} />
                   )}
                   <div>
                     <b>{bilgi?.ad ?? 'Varlık'}</b>
                     <small className={hata ? s.kapaliYazi : undefined}>
-                      {hata ?? (bilgi?.en && bilgi.boy ? `${bilgi.en} × ${bilgi.boy}${oran ? ` · ${ORAN_ETIKETI[oran]}` : ''}` : 'Boyut bilinmiyor')}
+                      {hata ??
+                        `${bilgi?.en && bilgi.boy ? `${bilgi.en} × ${bilgi.boy}${oran ? ` · ${ORAN_ETIKETI[oran]}` : ''}` : 'Boyut bilinmiyor'}${sure ? ` · ${sure}` : ''}`}
                     </small>
                   </div>
                   <div className={s.uygun}>
@@ -667,6 +686,7 @@ function MedyaBlogu({
                     {g.videolar.map((x) => (
                       <div key={`video-${x.varlikId}`}>
                         {satir(x, null)}
+                        <KapakSecici oge={x} medyaBilgisi={medyaBilgisi} sec={(id) => medyaYaz(kapakSec(medya, x.varlikId, id))} />
                         {fikirKutusu([x])}
                       </div>
                     ))}
@@ -1107,12 +1127,20 @@ function VideoSecici({ b, eksikMetni }: { b: AdimBaglami; eksikMetni: string | n
   const [hal, setHal] = useState<OneriHali<YoutubeVideoListesi>>({ tur: 'istenmedi' });
   const [yedek, setYedek] = useState('');
   const [yedekAcik, setYedekAcik] = useState(false);
+  /*
+   * SEÇİM KONTROLÜ (B15) — dört hâl ayrı: okunuyor / engel (gizli ya da
+   * yerleştirilemez; seçim YAZILMAZ) / düştü (YouTube okunamadı; seçim
+   * "doğrulanmadı" diye yazılır, kullanıcı kilitlenmez, prova söyler) /
+   * temiz. Engel ile düşüşü aynı kırmızı cümleye çevirmek kullanıcıyı ya
+   * sağlam bir videoyu değiştirmeye ya da gizli videoyla ilerlemeye gönderirdi.
+   */
+  const [kontrol, setKontrol] = useState<{ tur: 'yok' } | { tur: 'okunuyor'; videoId: string } | { tur: 'engel'; mesaj: string } | { tur: 'dustu'; mesaj: string }>({ tur: 'yok' });
 
   /*
    * Liste kanal seçilince bir kez okunur (kanal değişirse yeniden). Dört
    * hâl ayrı: kanal yok / okunuyor / kanalda video yok (sunucunun nedeni) /
-   * çağrı düştü (sunucunun mesajı). Bağlantı yapıştırma YEDEK yol: liste
-   * okunamasa da kullanıcı ilerleyebilsin.
+   * çağrı düştü (sunucunun mesajı). KANAL YOKSA (B16) yalnız bağlantı
+   * yapıştırma gösterilir: kanal yalnız listeyi okumak için gerekiyor.
    */
   useEffect(() => {
     if (!kanalId) return setHal({ tur: 'istenmedi' });
@@ -1128,15 +1156,39 @@ function VideoSecici({ b, eksikMetni }: { b: AdimBaglami; eksikMetni: string | n
     };
   }, [kanalId, b.clientId]);
 
+  /** Videoyu YouTube'dan okuyup yazar; engel varsa yazmaz (giriş anında). */
+  async function sec(videoId: string, yedekBaslik: string) {
+    setKontrol({ tur: 'okunuyor', videoId });
+    try {
+      const r = await apiFetch<YoutubeVideoBilgisi>(
+        `/reklam/rehber/youtube-video?clientId=${encodeURIComponent(b.clientId)}&videoId=${encodeURIComponent(videoId)}`,
+      );
+      const x = youtubeSecimi(r);
+      if (x.engel || !x.deger) return setKontrol({ tur: 'engel', mesaj: x.engel ?? 'Bu video seçilemiyor.' });
+      yaz(b, 'youtubeVideo', x.deger);
+      setKontrol({ tur: 'yok' });
+    } catch (e) {
+      const h = oneriHatasi(e);
+      const mesaj = h.mesaj;
+      // Bulunamayan video (400) seçilmez; okunamayan (503, kota) doğrulanmadan
+      // yazılır: bilinmeyen bir şey yüzünden kullanıcı kilitlenmesin.
+      if (e instanceof ApiRequestError && e.status === 400) return setKontrol({ tur: 'engel', mesaj });
+      yaz(b, 'youtubeVideo', { videoId, baslik: yedekBaslik.slice(0, 200) });
+      setKontrol({ tur: 'dustu', mesaj });
+    }
+  }
+
   const yedekKimlik = youtubeKimligi(yedek);
   const listede = hal.tur === 'geldi' && secili ? hal.deger.satirlar.some((v) => v.videoId === secili.videoId) : false;
+  const yapistirmaAcik = yedekAcik || !kanalId;
+  const sure = sureGoster(secili?.sureSn);
 
   return (
     <>
       <div className={s.blokBaslik}>
         YouTube videosu <span className={s.ops}>Google için</span>
       </div>
-      {hal.tur === 'istenmedi' && <p className={s.ipucu} style={{ margin: 0 }}>Önce Nerede adımında YouTube kanalını seç; videolar oradan listelenir.</p>}
+      {!kanalId && <p className={s.ipucu} style={{ margin: 0 }}>YouTube kanalı bağlı değil; videonun bağlantısını yapıştır.</p>}
       {hal.tur === 'isteniyor' && <p className={s.ipucu} style={{ margin: 0 }}>Kanalın videoları okunuyor…</p>}
       {hal.tur === 'bos' && <p className={s.ipucu} style={{ margin: 0 }}>Video bulunamadı: {hal.neden}</p>}
       {hal.tur === 'dustu' && (
@@ -1147,18 +1199,25 @@ function VideoSecici({ b, eksikMetni }: { b: AdimBaglami; eksikMetni: string | n
       {hal.tur === 'geldi' && (
         <>
           <div className={s.secim}>
-            {hal.deger.satirlar.map((v) => (
-              <button
-                key={v.videoId}
-                type="button"
-                aria-pressed={secili?.videoId === v.videoId}
-                onClick={() => yaz(b, 'youtubeVideo', { videoId: v.videoId, baslik: v.baslik.slice(0, 200) })}
-              >
-                {v.baslik || v.videoId}
-                {v.yayinTarihi && <small>{tarihGoster(v.yayinTarihi.slice(0, 10))}</small>}
-              </button>
-            ))}
+            {hal.deger.satirlar.map((v) => {
+              const engel = youtubeVideoEngeli(v);
+              const vs = sureGoster(v.sureSn);
+              return (
+                <button
+                  key={v.videoId}
+                  type="button"
+                  aria-pressed={secili?.videoId === v.videoId}
+                  disabled={!!engel || kontrol.tur === 'okunuyor'}
+                  title={engel ?? undefined}
+                  onClick={() => void sec(v.videoId, v.baslik)}
+                >
+                  {v.baslik || v.videoId}
+                  <small>{engel ? 'Reklamda gösterilemez' : [v.yayinTarihi ? tarihGoster(v.yayinTarihi.slice(0, 10)) : null, vs].filter(Boolean).join(' · ')}</small>
+                </button>
+              );
+            })}
           </div>
+          {hal.deger.ayrintiHatasi && <p className={s.hataMetni}>{hal.deger.ayrintiHatasi}</p>}
           {hal.deger.dahaFazlaVar && (
             <p className={s.ipucu}>
               Son {hal.deger.toplam} video gösteriliyor; kanalda daha eskileri olabilir. Aradığın yoksa bağlantısını yapıştır.
@@ -1166,42 +1225,92 @@ function VideoSecici({ b, eksikMetni }: { b: AdimBaglami; eksikMetni: string | n
           )}
         </>
       )}
-      {secili && (
-        <p className={s.ipucu}>
-          {!listede && (
-            <>
-              Seçili video: <b>{secili.baslik || secili.videoId}</b>{' '}
-            </>
-          )}
-          <button type="button" className={s.metinDugme} onClick={() => sil(b, 'youtubeVideo')}>
-            Video seçimini kaldır
-          </button>
+      {kontrol.tur === 'okunuyor' && <p className={s.ipucu}>Video YouTube&apos;da kontrol ediliyor…</p>}
+      {kontrol.tur === 'engel' && (
+        <p className={s.hataMetni} role="alert">
+          {kontrol.mesaj}
         </p>
       )}
-      <button type="button" className={`${s.metinDugme} ${s.ustBosluk}`} aria-expanded={yedekAcik} onClick={() => setYedekAcik((x) => !x)}>
-        {yedekAcik ? 'Bağlantı kutusunu gizle' : 'Bağlantı yapıştır'}
-      </button>
-      <div className={s.gizlenir} data-acik={yedekAcik}>
+      {kontrol.tur === 'dustu' && (
+        <p className={s.hataMetni} role="alert">
+          Video YouTube&apos;da doğrulanamadı ({kontrol.mesaj}); seçildi, Google provada kontrol edecek.
+        </p>
+      )}
+      {secili && (
+        <div className={`${s.dosya} ${s.ustBosluk}`}>
+          {secili.kucukResim ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={secili.kucukResim} alt="" className={s.kucuk} />
+          ) : (
+            <div className={s.kucuk} />
+          )}
+          <div>
+            <b>{secili.baslik || secili.videoId}</b>
+            <small>{[listede ? 'Kanalından seçildi' : 'Bağlantıyla seçildi', sure].filter(Boolean).join(' · ')}</small>
+          </div>
+          <div className={s.uygun}>
+            <button type="button" className={s.metinDugme} onClick={() => sil(b, 'youtubeVideo')}>
+              Kaldır
+            </button>
+          </div>
+        </div>
+      )}
+      {kanalId && (
+        <button type="button" className={`${s.metinDugme} ${s.ustBosluk}`} aria-expanded={yedekAcik} onClick={() => setYedekAcik((x) => !x)}>
+          {yedekAcik ? 'Bağlantı kutusunu gizle' : 'Bağlantı yapıştır'}
+        </button>
+      )}
+      <div className={s.gizlenir} data-acik={yapistirmaAcik}>
         <div>
           <div className={s.girdi} style={{ marginTop: 8 }}>
             <input
               value={yedek}
               placeholder="YouTube bağlantısını yapıştır"
               aria-label="YouTube videosu bağlantısı"
-              tabIndex={yedekAcik ? 0 : -1}
+              tabIndex={yapistirmaAcik ? 0 : -1}
               onChange={(e) => {
                 setYedek(e.target.value);
                 const k = youtubeKimligi(e.target.value);
-                if (k) yaz(b, 'youtubeVideo', { videoId: k, baslik: '' });
+                if (k && k !== secili?.videoId) void sec(k, '');
               }}
             />
           </div>
           {yedek.trim() && !yedekKimlik && <p className={s.hataMetni}>Bu bir YouTube video bağlantısı değil.</p>}
-          <p className={s.ipucu}>Video bağlı kanalda yayınlanmış olmalı.</p>
+          <p className={s.ipucu}>Video herkese açık ya da liste dışı olmalı; gizli video reklamda gösterilemez.</p>
         </div>
       </div>
       {eksikMetni && !secili && <p className={s.ipucu}>{eksikMetni}</p>}
     </>
+  );
+}
+
+/**
+ * KAPAK SEÇİCİ (B10): tarayıcıda alınan aday kareler (siyahlar atıldı),
+ * seçili olan marka çerçevesiyle. Tek aday varsa seçici gösterilmez:
+ * seçilecek bir şey yokken boş bir seçim alanı yalnız gürültü. Önizlemesi
+ * bilinmeyen aday (sayfa yenilendi, hazırlık listesinde yok) yine seçilebilir
+ * ama boş kutu olarak; gizlenseydi kullanıcı adayın varlığını bilmezdi.
+ */
+function KapakSecici({ oge, medyaBilgisi, sec }: { oge: MedyaOgesi; medyaBilgisi: ReadonlyMap<string, MedyaBilgisi>; sec: (id: string) => void }) {
+  const adaylar = oge.kapakAdaylari ?? [];
+  if (adaylar.length < 2) return null;
+  return (
+    <div className={s.ustBosluk}>
+      <p className={s.ipucu} style={{ margin: 0 }}>
+        Kapak: reklam başlamadan görünen kare. Siyah kareler çıkarıldı.
+      </p>
+      <div className={s.varliklar} role="group" aria-label="Kapak karesi">
+        {adaylar.map((id, i) => {
+          const bilgi = medyaBilgisi.get(id);
+          return (
+            <button key={id} type="button" className={s.varlik} aria-pressed={oge.kapakVarlikId === id} aria-label={`Kapak adayı ${i + 1}`} onClick={() => sec(id)}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              {bilgi && <img src={bilgi.onizleme} alt="" loading="lazy" />}
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

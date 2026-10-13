@@ -47,10 +47,15 @@ import { ORAN_ETIKETI, YERLESIM_GRUPLARI, YERLESIM_SIRASI, bannerSetiDestekleniy
  *        `karsilama.ts`) tek görsel ve video kreatifinde; banner setinde
  *        gönderilmiyor. Elle yerleşimde WhatsApp da yalnız akış, hikâye ve
  *        Reels (`niyetYerlesimKisiti`, FORM'la aynı küme).
+ * 1.10.0: VIDEO_IZLENME'de elle yerleşim, Audience Network HARİÇ
+ *        (`niyetYerlesimKisiti`, yönetici kararı S1) ve site adresi yoksa
+ *        DÜĞMESİZ video (`video_data.call_to_action` yok; S3). Video
+ *        provaları Advantage+ yerleşimli ve sayfa düğmeli gövdeyi
+ *        kanıtlıyordu.
  * Sürüm provanın tazeliğine bağlı: eski derleyiciyle geçmiş prova yeni
  * gövdeyi kanıtlamaz.
  */
-export const DERLEYICI_SURUMU = '1.9.0';
+export const DERLEYICI_SURUMU = '1.10.0';
 
 /**
  * CLICK-TO-WHATSAPP SABİTLERİ (CLAUDE.md "CLICK-TO-WHATSAPP"). Bağlantı
@@ -598,8 +603,15 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
         image_hash: k.gorselHash,
         title: k.baslik,
         message: k.metin,
-        call_to_action: g.niyet === 'FORM' ? { ...cta, value: { lead_gen_form_id: g.formId, link: 'http://fb.me/' } } : cta,
       };
+      // DÜĞMESİZ VİDEO (yönetici kararı S3): yalnız video izlenmede ve site
+      // adresi YOKSA. Önceden düğme Facebook sayfasına bağlanıyordu: izlenme
+      // reklamında sayfaya giden bir "Daha fazla bilgi" düğmesi tıklamayı
+      // izlenmeden çalıyor ve kullanıcıya bir şey kazandırmıyordu. Meta'nın
+      // düğmesiz video kreatifini kabul ettiği ÖLÇÜLMEDİ (DEVAM.md).
+      if (videoDugmesiVar(g)) {
+        videoData.call_to_action = g.niyet === 'FORM' ? { ...cta, value: { lead_gen_form_id: g.formId, link: 'http://fb.me/' } } : cta;
+      }
       if (k.aciklama) videoData.link_description = k.aciklama;
       // VİDEODA KONUM ÖLÇÜLMEDİ: belge video örneği vermiyor; `link_data`
       // ile aynı düzeyde yazılıyor (yönetici kararı), geri okuma kökte de arar.
@@ -667,6 +679,8 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
     erisim: optimizasyon === 'REACH',
     karsilama: !!karsilama,
     telefon: g.niyet === 'TELEFON',
+    video: g.niyet === 'VIDEO_IZLENME',
+    dugme: videoDugmesiVar(g),
   });
 
   return {
@@ -679,7 +693,10 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
       ...(yerlesim?.kapanan.length
         ? [`Görseli olmadığı için kapalı yerleşimler: ${yerlesim.kapanan.map((x) => YERLESIM_GRUPLARI[x].etiket).join(', ')}.`]
         : []),
-      ...(yerlesim?.niyetKapanan.length ? [niyetYerlesimKisiti(g.niyet)!.aciklama] : []),
+      // `otomatikteDe` niyetinde (video) niyetin kapattığı GRUP olmayabilir
+      // ama kapattığı ağ var (Audience Network): cümle yine söylenmeli.
+      ...(yerlesim && !yerlesim.otomatik && (yerlesim.niyetKapanan.length || niyetYerlesimKisiti(g.niyet)?.otomatikteDe) ? [niyetYerlesimKisiti(g.niyet)!.aciklama] : []),
+      ...(g.niyet === 'VIDEO_IZLENME' && !videoDugmesiVar(g) ? [VIDEO_DUGMESIZ_CUMLESI] : []),
       'Başka markaların reklamlarıyla yan yana gösterim kapalı.',
       `Kapattığımız otomatik özellikler: ${Object.values(KAPATILAN_OZELLIK_ADLARI).join(', ')}.`,
     ],
@@ -689,6 +706,19 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
     derleyiciSurumu: DERLEYICI_SURUMU,
   };
 }
+
+/**
+ * VİDEO DÜĞMESİ (S3): video izlenmede yalnız site adresi VERİLMİŞSE düğme
+ * (LEARN_MORE → site). Diğer niyetlerde video kreatifinin düğmesi
+ * değişmedi (form, WhatsApp, arama değerini taşıyor). Derleyici, manifesto
+ * ve karar tablosu bu tek kuralı okuyor.
+ */
+export function videoDugmesiVar(g: Pick<DerlemeGirdisi, 'niyet' | 'hedefAdres'>): boolean {
+  return g.niyet !== 'VIDEO_IZLENME' || !!g.hedefAdres;
+}
+
+/** Ekranda ve "kapattıklarımız"da AYNI cümle (kontrol tablosu da bunu yazıyor). */
+export const VIDEO_DUGMESIZ_CUMLESI = 'Düğme yok: site adresi verilmedi';
 
 /**
  * Bütün fikirlerin ortak yerleşim planı; bir fikrin oranı bilinmiyorsa
@@ -887,6 +917,8 @@ function kreatifBaglantisi(g: DerlemeGirdisi): string | null {
       return sayfaAdresi(g.sayfaPlatformId);
     // ÖLÇÜLMEDİ: sayfa adresinin video/erişim reklamında bağlantı olarak
     // kabul edildiği, TELEFON'daki gibi canlı provada görülecek.
+    // VİDEO: adres yoksa düğme de bağlantı da YOK (`videoDugmesiVar`);
+    // bu dal yalnız adres varken okunur.
     case 'VIDEO_IZLENME':
     case 'ERISIM':
       return g.hedefAdres ?? sayfaAdresi(g.sayfaPlatformId);
@@ -919,7 +951,7 @@ function alanYollari(nesne: string, o: Record<string, unknown>, onek = ''): stri
  * `kosul`: satır yalnız o hâlde zorunlu. M-10 dallara ayrıldı (Dalga 3):
  * sayfa kimliği SATIŞTA yok (piksel taşıyor), WhatsApp'ta numara da var.
  */
-export type ManifestoKosulu = 'kategori' | 'instagram' | 'sayfa' | 'piksel' | 'whatsapp' | 'erisim' | 'telefon';
+export type ManifestoKosulu = 'kategori' | 'instagram' | 'sayfa' | 'piksel' | 'whatsapp' | 'erisim' | 'telefon' | 'video' | 'dugme';
 export const MANIFESTO: ReadonlyArray<{ kod: string; nesne: NesneTuru; yol: string | readonly string[]; kosul?: ManifestoKosulu }> = [
   { kod: 'M-01', nesne: 'kampanya', yol: 'status' },
   { kod: 'M-01', nesne: 'reklam_seti', yol: 'status' },
@@ -945,7 +977,12 @@ export const MANIFESTO: ReadonlyArray<{ kod: string; nesne: NesneTuru; yol: stri
   { kod: 'M-18', nesne: 'reklam_seti', yol: 'targeting.geo_locations' },
   { kod: 'M-21', nesne: 'reklam_seti', yol: 'attribution_spec' },
   { kod: 'M-24', nesne: 'kreatif', yol: 'object_story_spec.instagram_user_id', kosul: 'instagram' },
-  { kod: 'M-25', nesne: 'kreatif', yol: ['object_story_spec.link_data.call_to_action', 'object_story_spec.video_data.call_to_action', 'asset_feed_spec.call_to_action_types', 'asset_feed_spec.call_to_actions'] },
+  { kod: 'M-19V', nesne: 'reklam_seti', yol: 'targeting.publisher_platforms', kosul: 'video' },
+  // M-25 KOŞULLU (S3): video izlenmede site adresi yoksa düğme BİLEREK yok.
+  // Koşulsuz kalsaydı düğmesiz video derlenemez ve kullanıcı adres girmeye
+  // zorlanırdı; hiç yazılmasaydı başka bir amaçta düğmesi düşen kreatif
+  // sessizce Meta'nın varsayılanına kalırdı.
+  { kod: 'M-25', nesne: 'kreatif', yol: ['object_story_spec.link_data.call_to_action', 'object_story_spec.video_data.call_to_action', 'asset_feed_spec.call_to_action_types', 'asset_feed_spec.call_to_actions'], kosul: 'dugme' },
   // M-26/M-27: belgedeki adapt_to_placement ve pac_relaxation canlıda
   // reddedildi (yukarıdaki not); manifesto ölçülen kümeden iki satır taşıyor,
   // derle.spec bütün kümeyi ayrıca tarıyor.
@@ -960,7 +997,11 @@ export const MANIFESTO: ReadonlyArray<{ kod: string; nesne: NesneTuru; yol: stri
   { kod: 'M-36', nesne: 'reklam', yol: 'adlabels' },
 ];
 
-/** Yerleşim BİLEREK boş: Advantage+ yerleşim yalnız bu alanların yokluğuyla tanımlı. */
+/**
+ * Yerleşim BİLEREK boş: Advantage+ yerleşim yalnız bu alanların yokluğuyla
+ * tanımlı. Video izlenme (S1) bu yüzden Advantage+ DEĞİL: Audience
+ * Network'ü çıkarmanın tek yolu bu alanları yazmak (elle yerleşim, M-19V).
+ */
 const YASAK_YERLESIM = ['publisher_platforms', 'facebook_positions', 'instagram_positions', 'messenger_positions', 'audience_network_positions'];
 
 function deger(o: Record<string, unknown>, yol: string): unknown {
@@ -977,6 +1018,10 @@ export interface ManifestoHali {
   karsilama?: boolean;
   /** TELEFON: cihaz ve elle yerleşim zorunlu. */
   telefon?: boolean;
+  /** VIDEO_IZLENME: elle yerleşim zorunlu ve Audience Network YASAK (S1). */
+  video?: boolean;
+  /** Kreatifte düğme olmalı mı (`videoDugmesiVar`); verilmezse `true`. */
+  dugme?: boolean;
 }
 
 /** Bu hâlde satır zorunlu mu (testler de AYNI kuralı okuyor). */
@@ -986,6 +1031,10 @@ export function manifestoSatiriGecerli(kosul: ManifestoKosulu | undefined, d: Om
       return true;
     case 'telefon':
       return !!d.telefon;
+    case 'video':
+      return !!d.video;
+    case 'dugme':
+      return d.dugme !== false;
     case 'kategori':
       return d.kategoriVar;
     case 'instagram':
@@ -1030,5 +1079,11 @@ function manifestoDogrula(govdeler: MetaGovdesi[], d: ManifestoHali): void {
       throw new Error('Eksik boyut için elle yerleşim kararı verildi ama yerleşim yazılmadı');
     }
     if ('age_max' in t) throw new Error('age_max yazıldı; Advantage+ açıkken gönderilmez');
+    // VİDEO: "Audience Network hariç" sözü (S1). Grup haritasında ağ yok;
+    // biri gruba eklerse video sözü sessizce bozulurdu.
+    if (d.video) {
+      const pp = (t.publisher_platforms ?? []) as unknown[];
+      if (pp.includes('audience_network') || 'audience_network_positions' in t) throw new Error('Video reklamında Audience Network yazıldı; söz "Audience Network hariç"');
+    }
   }
 }

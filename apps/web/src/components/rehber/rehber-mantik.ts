@@ -60,6 +60,8 @@ import {
   type RehberProvaSonucu,
   type YayinDurumu,
   type YoutubeVideoListesi,
+  type YoutubeVideoBilgisi,
+  youtubeVideoEngeli,
 } from '@advetics/shared';
 import { ApiRequestError } from '@/lib/api';
 
@@ -283,7 +285,12 @@ export function platformNedeni(
     if (amac === 'SITE') {
       return 'İkisini birden öneriyoruz: Google, seni zaten arayan kişiyi yakalar; Meta, henüz aramayan ama ilgilenebilecek kişiye gösterir.';
     }
-    if (amac === 'VIDEO') return "İkisini birden öneriyoruz: aynı video Reels ve YouTube Shorts'ta farklı kişilere ulaşır.";
+    // B18/S6: iki platformda AYNI video yok. Meta'ya yüklenen dosya gidiyor,
+    // Google'a YouTube'da duran video (YouTube'a yükleme yapılmıyor). Eski
+    // cümle "aynı video Reels ve Shorts'ta" diyerek olmayan bir şeyi vaat ediyordu.
+    if (amac === 'VIDEO') {
+      return "İkisini birden öneriyoruz: Meta'da yüklediğin video; Google'da YouTube'dan seçtiğin video (YouTube'da video arası, akış ve Shorts).";
+    }
     return 'İkisi de bu workspace için hazır; ikisinde birden açıyoruz.';
   }
   return 'Bu amaç için şu an açık bir platform yok.';
@@ -971,6 +978,21 @@ export function youtubeKimligi(metin: string): string | null {
   return m ? (m[1] as string) : null;
 }
 
+/**
+ * YOUTUBE SEÇİMİ (B15): sunucunun okuduğu video → rehbere yazılacak değer.
+ * Engel varsa (gizli, yerleştirilemez) DEĞER YOK: seçim yazılmaz, sebep
+ * ekranda kalır. Kural shared'da (`youtubeVideoEngeli`); sunucunun `engel`
+ * alanı eski bir sunucudan boş gelse de panel aynı kuralla yeniden bakar.
+ */
+export function youtubeSecimi(v: YoutubeVideoBilgisi): { deger: NonNullable<RehberAlanlari['youtubeVideo']>['deger'] | null; engel: string | null } {
+  const engel = v.engel ?? youtubeVideoEngeli(v);
+  if (engel) return { deger: null, engel };
+  return {
+    deger: { videoId: v.videoId, baslik: v.baslik.slice(0, 200), kucukResim: v.kucukResim, sureSn: v.sureSn, gizlilik: v.gizlilik, gomulebilir: v.gomulebilir },
+    engel: null,
+  };
+}
+
 /** Telefon kutusu "+90" önekli: kayıt E.164 (`+905551234567`). */
 export function telefonKaydi(girdi: string): string | null {
   const rakam = girdi.replace(/\D/g, '').replace(/^0+/, '');
@@ -1398,9 +1420,31 @@ export function videoBilgisiKapaktan<T extends { ad: string; onizleme: string; e
     const kapak = bilgi.get(m.kapakVarlikId);
     if (!kapak) continue;
     sonuc ??= new Map(bilgi);
-    sonuc.set(m.varlikId, { ...kapak, ad: kapak.ad.replace(/-kapak\.jpg$/i, '') });
+    // Kapak adayları (B10) `-kapak-2.jpg`, `-kapak-3.jpg`: seçilen aday
+    // kapak olunca ad yine videonunki görünsün.
+    sonuc.set(m.varlikId, { ...kapak, ad: kapak.ad.replace(/-kapak(?:-\d)?\.jpg$/i, '') });
   }
   return sonuc ?? bilgi;
+}
+
+/**
+ * KAPAK SEÇİMİ (B10): yalnız o videonun ADAYLARINDAN biri kapak olabilir.
+ * Aday listesinde olmayan bir kimlik (eski sekme, başka videonun adayı)
+ * yok sayılır: kapak başka bir videonun karesi olursa Meta reklamı yanlış
+ * görselle açar, hata vermeden.
+ */
+export function kapakSec<T extends { varlikId: string; kapakVarlikId?: string; kapakAdaylari?: string[] }>(medya: readonly T[], videoId: string, kapakId: string): readonly T[] {
+  const v = medya.find((x) => x.varlikId === videoId);
+  if (!v || !v.kapakAdaylari?.includes(kapakId) || v.kapakVarlikId === kapakId) return medya;
+  return medya.map((x) => (x.varlikId === videoId ? { ...x, kapakVarlikId: kapakId } : x));
+}
+
+/** Video süresinin ekrandaki hâli ("12 sn", "1 dk 05 sn"); bilinmiyorsa `null`. */
+export function sureGoster(sn: number | null | undefined): string | null {
+  if (typeof sn !== 'number' || !Number.isFinite(sn) || sn <= 0) return null;
+  const t = Math.round(sn);
+  if (t < 60) return `${t} sn`;
+  return `${Math.floor(t / 60)} dk ${String(t % 60).padStart(2, '0')} sn`;
 }
 
 /**

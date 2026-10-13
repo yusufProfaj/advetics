@@ -148,7 +148,8 @@ describe('karşılama mesajı: derleyici gövdesi', () => {
   });
 
   it('derleyici sürümü 1.8.0 ya da sonrası (eski provalar karşılamalı gövdeyi kanıtlamaz)', () => {
-    expect(DERLEYICI_SURUMU).toBe('1.9.0');
+    // 1.10.0: VIDEO_IZLENME elle yerleşim (Audience Network hariç) ve adressiz düğmesiz video.
+    expect(DERLEYICI_SURUMU).toBe('1.10.0');
   });
 
   it('karışık fikirler: setsiz kare görsel karşılama taşır, setli fikir taşımaz', () => {
