@@ -6,8 +6,8 @@ import { acilisAdresi } from '@/lib/panel-adresleri';
  *
  * Panelde bileşen render eden bir test altyapısı yok (`vitest.config.ts`
  * bunu bilinçli reddediyor). Sihirbazın doğru çalışması birkaç karara
- * bağlı: hangi adımlar hangi sırayla, geri dönülebilir mi, boost hesabı
- * kendiliğinden mi seçiliyor yoksa soruluyor mu. Bunlar bileşenin içinde
+ * bağlı: hangi adımlar hangi sırayla, geri dönülebilir mi, platformun
+ * hangi hâlde olduğu. Bunlar bileşenin içinde
  * kalsaydı yalnızca kaynak taramasıyla sınanabilirdi ve o tarama yanlış
  * şeyi kilitleyebiliyor. Burada saf fonksiyon olarak duruyorlar ve
  * ÇALIŞTIRILARAK sınanıyorlar.
@@ -16,9 +16,16 @@ import { acilisAdresi } from '@/lib/panel-adresleri';
  *
  * Üst hesap, şirket ve workspace kurulumu aynı merdivenin üç basamağı:
  * üst hesap kuran şirketi de, şirket kuran workspace'i de kuruyor. Üç ayrı
- * bileşen yazmak, aynı "platform bağla → hesap seç → boost hesabı" dizisini
- * üç kez yazmak ve birinin bir gün eksik kalması demekti. Tür yalnızca
- * merdivenin HANGİ BASAMAKTAN başladığını seçiyor.
+ * bileşen yazmak, aynı "platform bağla → workspace aç" dizisini üç kez
+ * yazmak ve birinin bir gün eksik kalması demekti. Tür yalnızca merdivenin
+ * HANGİ BASAMAKTAN başladığını seçiyor.
+ *
+ * AÇILIŞ ARTIK YALNIZ AÇAR (kurulum sihirbazı, MIMARI Ç-7, 2026-10-13):
+ * hesap seçimi ve boost hesabı açılıştan çıktı. Workspace açılınca ona
+ * geçilir ve AYNI sayfa tamamlama moduna döner (`sihirbazAdresi`); hesaplar
+ * kurulumun `meta_hesap`/`google_hesap`/`sayfa` adımlarından TEK yoldan
+ * atanır. İki atama yolu ayrışırdı: açılışın boost kararı ile kurulumun
+ * sayfa adımı aynı soruyu iki ayrı kuralla cevaplıyordu.
  */
 
 export const KURULUM_TURLERI = ['ust-hesap', 'sirket', 'workspace'] as const;
@@ -36,7 +43,7 @@ export interface SecimKarti {
   engel: string | null;
 }
 
-export type AdimKodu = 'ust-hesap' | 'sirket' | 'baglantilar' | 'workspace' | 'hesaplar' | 'bitti';
+export type AdimKodu = 'ust-hesap' | 'sirket' | 'baglantilar' | 'workspace';
 
 /**
  * ADIM SIRASI SABİT VE GEREKÇELİ.
@@ -48,16 +55,21 @@ export type AdimKodu = 'ust-hesap' | 'sirket' | 'baglantilar' | 'workspace' | 'h
  * yazacaktı. Platform adımına gelindiğinde ondan önceki her şey SUNUCUDA
  * duruyor (üst hesap, şirket), ondan sonraki hiçbir şey henüz yazılmamış.
  *
- * BAĞLANTI ŞİRKETE AİT. Yeni bir şirkette Meta ve Google yeniden bağlanmak
- * zorunda: bağlantı tablosu `org_id` ile süzülüyor ve kardeş şirketin
- * bağlantısı görünmüyor. Bu kural uzun süre yalnızca sistemi kuran kişinin
- * kafasındaydı; bu yüzden workspace sihirbazında bile platform adımı var,
- * bağlıysa tek tıkla geçiliyor.
+ * AJANSIN BAĞLANTISI YENİ ŞİRKETTE DE GÖRÜNÜR — YENİDEN BAĞLANILMAZ
+ * (kurulum sihirbazı Ç-2, kaynak okundu 2026-10-13). Burada uzun süre
+ * "yeni şirkette Meta ve Google yeniden bağlanmak zorunda, bağlantı tablosu
+ * `org_id` ile süzülüyor" yazıyordu; ESKİDİ. PARAMETRESİZ `/connections`
+ * RLS'te `havuz_kapsaminda` ile süzülüyor (kendi şirketi + AJANS şirketi),
+ * yani ajansın bağlantısı müşteri şirketinde görünüyor; aynı kimliği o
+ * şirkette yeniden yetkilendirmek önceki token'ı geçersiz kılıp bütün
+ * şirketlerin bağlantısını koparıyordu ve artık sunucuda reddediliyor.
+ * Platform adımı yine duruyor: bağlantı HİÇ yoksa (bağımsız şirket) ya da
+ * yetkisi düştüyse ne yapılacağını söylüyor (`PlatformAdimi`).
  */
 export const ADIMLAR: Record<KurulumTuru, readonly AdimKodu[]> = {
-  'ust-hesap': ['ust-hesap', 'sirket', 'baglantilar', 'workspace', 'hesaplar', 'bitti'],
-  sirket: ['sirket', 'baglantilar', 'workspace', 'hesaplar', 'bitti'],
-  workspace: ['baglantilar', 'workspace', 'hesaplar', 'bitti'],
+  'ust-hesap': ['ust-hesap', 'sirket', 'baglantilar', 'workspace'],
+  sirket: ['sirket', 'baglantilar', 'workspace'],
+  workspace: ['baglantilar', 'workspace'],
 };
 
 /** Adımların rayda görünen kısa adları. */
@@ -66,8 +78,6 @@ export const ADIM_ADLARI: Record<AdimKodu, string> = {
   sirket: 'Şirket',
   baglantilar: 'Platformlar',
   workspace: 'Workspace',
-  hesaplar: 'Hesaplar',
-  bitti: 'Marka',
 };
 
 export function turOku(deger: string | undefined | null): KurulumTuru | null {
@@ -77,17 +87,12 @@ export function turOku(deger: string | undefined | null): KurulumTuru | null {
 }
 
 /**
- * URL'DEKİ ADIM — tanınmıyorsa türün İLK adımı.
- *
- * `bitti` URL'DEN AÇILAMIYOR: o adım bu oturumda kurulan workspace'in
- * sonucunu gösteriyor ve sonuç yalnızca bellekte. Adres çubuğundan oraya
- * gelmek, boş bir "kuruldu" ekranı demekti.
+ * URL'DEKİ ADIM — tanınmıyorsa türün İLK adımı. Eski `hesaplar`/`bitti`
+ * yer imleri de ilk adıma düşer (açılış artık yalnız açıyor).
  */
 export function adimOku(tur: KurulumTuru, deger: string | undefined | null): AdimKodu {
   const liste = ADIMLAR[tur];
-  const aday = liste.find((a) => a === deger);
-  if (!aday || aday === 'bitti') return liste[0]!;
-  return aday;
+  return liste.find((a) => a === deger) ?? liste[0]!;
 }
 
 /**
@@ -157,48 +162,6 @@ export function platformDurumu(
   const bozuk = buPlatform[0];
   if (bozuk) return { durum: 'yeniden', baglanti: bozuk };
   return { durum: 'yok' };
-}
-
-// ---------------------------------------------------------------------------
-// Boost hesabı
-// ---------------------------------------------------------------------------
-
-export type BoostKarari =
-  /** Boost'a uygun sayfa seçilmedi — soru yok. */
-  | { durum: 'gereksiz'; hesapId: null }
-  /** Sayfa seçildi ama Meta reklam hesabı yok — boost çalışmayacak. */
-  | { durum: 'hesap-yok'; hesapId: null }
-  /** Tek Meta hesabı var, o kullanılıyor. */
-  | { durum: 'otomatik'; hesapId: string }
-  /** Birden çok hesap, kullanıcı seçti. */
-  | { durum: 'secildi'; hesapId: string }
-  /** Birden çok hesap, henüz seçilmedi — kurulum bekliyor. */
-  | { durum: 'secilmeli'; hesapId: null };
-
-/**
- * BOOST HESABI SORULMALI MI?
- *
- * Akıllı Boost'un ön koşulu her sayfanın bir Meta reklam hesabına bağlı
- * olması ve kurulum bunu hiç yapmıyordu: sayfa atanıyor, her gönderi "bağlı
- * reklam hesabı yok" diyordu. Çoğu workspace'te TEK Meta hesabı var ve
- * soru sormak gereksiz bir adım; birden çok olduğunda ise TAHMİN ETMEK
- * yanlış hesabın bütçesinden harcamak demek. O yüzden: tek hesap =
- * sessizce seç ve SÖYLE, birden çok = sor ve seçilmeden kurma.
- *
- * Seçim listede yoksa (kullanıcı hesabı sonradan kaldırdı) seçim YOK
- * sayılıyor: kaldırılmış bir hesabı sunucuya göndermek "hesap bu
- * workspace'e atanmamış" hatasıyla sayfaları boost'suz bırakırdı.
- */
-export function boostKarari(
-  metaHesapIdleri: readonly string[],
-  boostSayfaSayisi: number,
-  secim: string | null,
-): BoostKarari {
-  if (boostSayfaSayisi === 0) return { durum: 'gereksiz', hesapId: null };
-  if (metaHesapIdleri.length === 0) return { durum: 'hesap-yok', hesapId: null };
-  if (metaHesapIdleri.length === 1) return { durum: 'otomatik', hesapId: metaHesapIdleri[0]! };
-  if (secim !== null && metaHesapIdleri.includes(secim)) return { durum: 'secildi', hesapId: secim };
-  return { durum: 'secilmeli', hesapId: null };
 }
 
 // ---------------------------------------------------------------------------

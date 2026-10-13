@@ -1,36 +1,26 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import {
-  PLATFORM_LABELS,
   PLATFORMS,
   SPECIAL_AD_CATEGORIES,
   SPECIAL_AD_CATEGORY_META,
-  platformKanali,
   type ClientSetupResult,
   type ConnectionSummary,
   type ManagerPaket,
-  type Platform,
   type ProviderAvailability,
   type SirketOlusturmaSonucu,
   type SpecialAdCategory,
 } from '@advetics/shared';
 import { AliciListesiAlani } from '@/components/alici-listesi-alani';
-import { AiDoldur } from '@/components/bilgi-bankasi/ai-doldur';
-import { CallbackBanner } from '@/components/callback-banner';
-import { PlatformLogo } from '@/components/platform-logo';
 import { PaketSecici } from '@/components/ust-hesap/ust-hesap-yonetimi';
 import { Halka } from '@/components/yukleniyor';
 import { ApiRequestError, apiFetch } from '@/lib/api';
-import { PANEL_YOLLARI, acilisAdresi, markaMerkeziAdresi } from '@/lib/panel-adresleri';
-import { havuzlariCikar, KANALLAR } from '@/lib/havuz';
-import { BoostHesabi, HesapSecimi } from './hesap-secimi';
+import { sihirbazAdresi } from '@/lib/panel-adresleri';
 import {
   ADIM_ADLARI,
   ADIMLAR,
-  boostKarari,
   geriGidilebilir,
   kurulumAdresi,
   platformDurumu,
@@ -39,6 +29,7 @@ import {
   type KurulumTuru,
 } from './kurulum-akisi';
 import { KurulumSonucu } from './kurulum-sonucu';
+import { PlatformAdimi } from './platform-adimi';
 
 export interface KurulumBaglami {
   platformAdmin: boolean;
@@ -47,7 +38,6 @@ export interface KurulumBaglami {
   /** Aktif şirketin adı. Üst hesap/şirket kurulduktan sonra YENİ şirket. */
   sirketAdi: string;
   baglantiYonetebilir: boolean;
-  bilgiBankasiYazabilir: boolean;
 }
 
 /**
@@ -59,23 +49,22 @@ export interface KurulumBaglami {
  * penceresi) ve aralarındaki sıra hiçbir yerde yazmıyordu:
  *
  *   · yeni şirkete GEÇMEDEN bağlantı kurulursa bağlantı eski şirkete gider,
- *   · yeni şirkette Meta/Google yeniden bağlanmalı (bağlantı şirkete ait),
- *   · sayfa atanıp boost hesabı bağlanmazsa Akıllı Boost çalışmaz,
  *   · Meta'nın özel kategorisi (konut, kredi, istihdam) beyan edilmezse
  *     reklam politika ihlali sayılır.
  *
- * Dördü de SESSİZ: hiçbiri hata vermiyor, yalnızca bir şey çalışmıyor.
- * Sihirbaz bu kuralları adımların sırasına gömüyor; kullanıcının onları
- * bilmesi gerekmiyor.
+ * İkisi de SESSİZ: hata vermiyor, yalnızca bir şey çalışmıyor. Sihirbaz bu
+ * kuralları adımların sırasına gömüyor.
  *
- * ═══ NEREDE YAZILIYOR ═══
+ * ═══ AÇILIŞ YALNIZ AÇAR (kurulum sihirbazı, MIMARI Ç-7) ═══
  *
  *   · Üst hesap ve şirket, platform adımına geçerken kuruluyor ve sayfa
  *     TAM yenileniyor: çerez yeni bağlamı gösteriyor, üst bardaki seçiciler
  *     oturumdan besleniyor ve `router.refresh()` onları tazelemiyor.
- *   · Workspace, hesaplar ve boost hesabı son adımda TEK çağrıyla
- *     (`/clients/setup`) kuruluyor. Parça parça çağrı, adımlardan birinin
- *     sessizce atlandığı eski akışı geri getirirdi.
+ *   · Workspace son adımda TEK çağrıyla (`/clients/setup`, kategori dahil,
+ *     `adAccountIds: []`) açılıyor; sonra ona GEÇİLİYOR ve aynı sayfa
+ *     tamamlama moduna dönüyor (`sihirbazAdresi`). Hesap, sayfa, boost
+ *     hesabı, piksel, ölçüm, bildirim: hepsi oradaki adımlardan, TEK yoldan.
+ *     Geçiş HER YAZMADAN ÖNCE: kurulum yazmaları aktif workspace istiyor.
  */
 export function KurulumSihirbazi({
   tur,
@@ -115,27 +104,15 @@ export function KurulumSihirbazi({
   const [alicilar, setAlicilar] = useState<string[]>([]);
   const [kategoriler, setKategoriler] = useState<SpecialAdCategory[]>([]);
 
-  // ─── Hesaplar ───
-  const havuzlar = useMemo(() => havuzlariCikar(baglantilar), [baglantilar]);
-  const [secili, setSecili] = useState<Set<string>>(new Set());
-  const [boostSecim, setBoostSecim] = useState<string | null>(null);
-  const [girisAcik, setGirisAcik] = useState(false);
-  const [giris, setGiris] = useState({ email: '', fullName: '', password: '' });
-
   const [busy, setBusy] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [hata, setHata] = useState<string | null>(null);
+  /*
+   * YALNIZ KISMİ BAŞARIDA DOLU. Workspace açıldı ama kategori yazılamadıysa
+   * (`failures`) sonuç ekranda kalır ve geçiş kullanıcının tıkıyla olur;
+   * sessizce kuruluma geçmek "kuruldu" deyip eksiği gizlerdi.
+   */
   const [sonuc, setSonuc] = useState<ClientSetupResult | null>(null);
-
-  const seciliMetaHesaplar = havuzlar.meta_ads.filter((o) => secili.has(o.id));
-  const boostSayfaSayisi = [...havuzlar.facebook, ...havuzlar.instagram].filter((o) =>
-    secili.has(o.id),
-  ).length;
-  const boost = boostKarari(
-    seciliMetaHesaplar.map((h) => h.id),
-    boostSayfaSayisi,
-    boostSecim,
-  );
 
   /*
    * ODAK ADIM BAŞLIĞINA TAŞINIYOR. Ekran okuyucu kullanıcısı "Devam"a
@@ -155,7 +132,7 @@ export function KurulumSihirbazi({
   function adimaGec(hedef: AdimKodu): void {
     setHata(null);
     setAktif(hedef);
-    if (hedef !== 'bitti') window.history.replaceState(null, '', kurulumAdresi(tur, hedef));
+    window.history.replaceState(null, '', kurulumAdresi(tur, hedef));
   }
 
   function sonraki(): AdimKodu {
@@ -251,72 +228,62 @@ export function KurulumSihirbazi({
 
   async function workspaceKur(): Promise<void> {
     /*
-     * SEÇİLENLER TİPİNE GÖRE İKİ LİSTEYE AYRILIYOR. Sunucu reklam hesabı ve
-     * sosyal profili ayrı alanlarda bekliyor.
+     * İKİNCİ BASIŞ İKİNCİ WORKSPACE AÇMAZ: kısmi başarıda sonuç ekranda ve
+     * düğme yalnız GEÇİŞİ yapıyor.
      */
-    const tumu = KANALLAR.flatMap((k) => havuzlar[k]);
-    const adAccountIds = tumu.filter((o) => o.reklamHesabi && secili.has(o.id)).map((o) => o.id);
-    const socialProfileIds = tumu
-      .filter((o) => !o.reklamHesabi && secili.has(o.id))
-      .map((o) => o.id);
-    const girisDolu = girisAcik && giris.email.trim() !== '' && giris.password !== '';
-
+    if (sonuc) return workspaceeGec(sonuc.clientId);
     setBusy(true);
     setHata(null);
+    let r: ClientSetupResult;
     try {
-      const r = await apiFetch<ClientSetupResult>('/clients/setup', {
+      r = await apiFetch<ClientSetupResult>('/clients/setup', {
         method: 'POST',
         body: JSON.stringify({
           name: wsAdi.trim(),
           website: site.trim() === '' ? null : siteAdresiDuzelt(site),
           contactEmails: alicilar,
           specialAdCategories: kategoriler,
-          adAccountIds,
-          socialProfileIds,
-          boostHesabiId: boost.hesapId,
-          ...(girisDolu
-            ? {
-                clientUser: {
-                  email: giris.email.trim(),
-                  fullName: giris.fullName.trim() || wsAdi.trim(),
-                  password: giris.password,
-                },
-              }
-            : {}),
+          // HESAP ATAMASI KURULUM ADIMLARINDAN (Ç-7): iki atama yolu ayrışırdı.
+          adAccountIds: [],
+          socialProfileIds: [],
         }),
       });
-      setSonuc(r);
-      /*
-       * ADRES SİHİRBAZIN BAŞINA ÇEKİLİYOR. Sonuç yalnızca bellekte; sayfa
-       * yenilenirse "Hesaplar" adımı boş bir seçimle açılır ve oradan
-       * "Kurulumu tamamla" AYNI workspace'i ikinci kez kurardı.
-       */
-      window.history.replaceState(null, '', PANEL_YOLLARI.acilis);
-      setAktif('bitti');
     } catch (e) {
       setHata(hataMetni(e, 'Workspace kurulamadı.'));
-    } finally {
       setBusy(false);
+      return;
     }
+    /*
+     * ADRES SİHİRBAZIN BAŞINA ÇEKİLİYOR: workspace açıldı; geri tuşu ya da
+     * yenileme bu formu yeniden açarsa "Devam" AYNI adla ikinci bir
+     * workspace açardı.
+     */
+    window.history.replaceState(null, '', kurulumAdresi(tur, ADIMLAR[tur][0]!));
+    if (r.failures.length > 0) {
+      setSonuc(r);
+      setBusy(false);
+      return;
+    }
+    await workspaceeGec(r.clientId);
   }
 
-  async function workspaceeGec(): Promise<void> {
-    if (!sonuc) return;
+  /**
+   * YENİ WORKSPACE'E GEÇ, SONRA TAMAMLAMA MODU. Kurulum yazmaları aktif
+   * workspace istiyor (`kurulum.service.ts#erisim`); geçmeden açılan
+   * tamamlama ekranı her yazmada "önce bu workspace'i seç" derdi.
+   * `assign` (tam sayfa): üst bardaki seçiciler oturumdan besleniyor.
+   */
+  async function workspaceeGec(clientId: string): Promise<void> {
     setBusy(true);
+    setHata(null);
     try {
       await apiFetch('/auth/switch-client', {
         method: 'POST',
-        body: JSON.stringify({ clientId: sonuc.clientId }),
+        body: JSON.stringify({ clientId }),
       });
-      /*
-       * AÇILIŞIN SONU MARKA MERKEZİ › KURULUM (MIMARI Ç-17), Genel Bakış
-       * DEĞİL: yeni workspace'in henüz verisi yok ve Genel Bakış "veri yok"
-       * diyordu; yapılacak sıradaki iş (hesap, piksel, ölçüm, marka)
-       * Kurulum'un listesinde.
-       */
-      window.location.assign(markaMerkeziAdresi('kurulum', sonuc.clientId));
+      window.location.assign(sihirbazAdresi(clientId));
     } catch (e) {
-      setHata(hataMetni(e, 'Workspace’e geçilemedi.'));
+      setHata(`Workspace açıldı ama içine geçilemedi. ${hataMetni(e, '')}`.trim());
       setBusy(false);
     }
   }
@@ -398,7 +365,7 @@ export function KurulumSihirbazi({
       eylem: () => adimaGec(sonraki()),
       govde: (
         <PlatformAdimi
-          tur={tur}
+          redirectTo={kurulumAdresi(tur, 'baglantilar')}
           uygunluk={uygunluk}
           baglantilar={baglantilar}
           yonetebilir={baglam.baglantiYonetebilir}
@@ -410,12 +377,16 @@ export function KurulumSihirbazi({
       ),
     },
     workspace: {
-      baslik: 'Workspace bilgileri',
-      alt: 'Workspace, firmanın bir markası ya da projesi. Raporlar ve reklamlar burada tutulur.',
+      baslik: sonuc ? `${sonuc.name} açıldı` : 'Workspace bilgileri',
+      alt: sonuc
+        ? 'Bazı adımlar tamamlanamadı; sebepleri aşağıda. Kalanı kurulumda adım adım tamamlanır.'
+        : 'Workspace, firmanın bir markası ya da projesi. Hesaplar, ölçüm ve marka bir sonraki ekranda adım adım kurulur.',
       eksik: wsGecerli ? null : 'Workspace adını yaz',
-      dugme: 'Devam',
-      eylem: () => adimaGec('hesaplar'),
-      govde: (
+      dugme: sonuc ? 'Kuruluma geç' : 'Workspace’i aç ve kuruluma geç',
+      eylem: () => void workspaceKur(),
+      govde: sonuc ? (
+        <KurulumSonucu sonuc={sonuc} boostSayfaSayisi={0} />
+      ) : (
         <div className="space-y-5">
           <Alan
             etiket="Workspace adı"
@@ -440,67 +411,6 @@ export function KurulumSihirbazi({
           <OzelKategori secili={kategoriler} onChange={setKategoriler} />
         </div>
       ),
-    },
-    hesaplar: {
-      baslik: 'Hangi hesaplar bu workspace’e ait?',
-      alt: 'Seçtiğin hesapların verisi hemen çekilmeye başlar.',
-      eksik: boost.durum === 'secilmeli' ? 'Boost hesabını seç' : null,
-      dugme: 'Workspace’i aç',
-      eylem: () => void workspaceKur(),
-      govde: (
-        <div className="space-y-4">
-          <HesapSecimi
-            havuzlar={havuzlar}
-            secili={secili}
-            onDegistir={(id) =>
-              setSecili((s) => {
-                const n = new Set(s);
-                if (n.has(id)) n.delete(id);
-                else n.add(id);
-                return n;
-              })
-            }
-          />
-          <BoostHesabi
-            karar={boost}
-            metaHesaplar={seciliMetaHesaplar}
-            secim={boostSecim}
-            onSecim={setBoostSecim}
-          />
-          <MusteriGirisi
-            acik={girisAcik}
-            onAcik={setGirisAcik}
-            deger={giris}
-            onChange={setGiris}
-          />
-        </div>
-      ),
-    },
-    bitti: {
-      baslik: sonuc ? `${sonuc.name} hazır` : 'Workspace açıldı',
-      alt: 'Son olarak markanı anlat. Reklam metinleri buradan beslenir; kalan adımlar Marka Merkezi › Kurulum’da.',
-      eksik: null,
-      dugme: 'Workspace’e geç',
-      eylem: () => void workspaceeGec(),
-      govde: sonuc ? (
-        <div className="space-y-5">
-          <KurulumSonucu sonuc={sonuc} boostSayfaSayisi={boostSayfaSayisi} />
-          {site.trim() !== '' ? (
-            <AiDoldur clientId={sonuc.clientId} canWrite={baglam.bilgiBankasiYazabilir} />
-          ) : (
-            <Bilgi>
-              Web sitesi girmediğin için marka bilgileri otomatik doldurulamıyor. Sonra{' '}
-              <Link
-                href={markaMerkeziAdresi('marka', sonuc.clientId)}
-                className="font-medium text-brand-strong hover:underline"
-              >
-                Marka Merkezi › Marka
-              </Link>{' '}
-              bölümünden elle doldurabilirsin.
-            </Bilgi>
-          )}
-        </div>
-      ) : null,
     },
   };
 
@@ -547,8 +457,8 @@ export function KurulumSihirbazi({
                 className={`grid h-5 w-5 place-items-center rounded-full text-[10px] font-semibold ${
                   secili
                     ? 'bg-white/25 text-white'
-                    : gecti || (sonuc !== null && a !== 'bitti')
-                      ? 'bg-ok-soft text-ok-strong'
+                    : gecti
+                      ? 'bg-ink text-surface'
                       : 'bg-surface-sunken text-ink-muted'
                 }`}
               >
@@ -588,23 +498,14 @@ export function KurulumSihirbazi({
           </p>
         )}
         <div className="flex flex-wrap items-center justify-between gap-3">
-          {aktif === 'bitti' ? (
-            <Link
-              href={acilisAdresi('workspace')}
-              className="rounded-lg border border-line px-3.5 py-2 text-sm font-medium text-ink transition hover:bg-surface-sunken"
-            >
-              Bir workspace daha kur
-            </Link>
-          ) : (
-            <button
-              type="button"
-              onClick={() => oncekiAdim && adimaGec(oncekiAdim)}
-              disabled={!geriAcik}
-              className="rounded-lg border border-line px-3.5 py-2 text-sm font-medium text-ink transition hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Geri
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => oncekiAdim && adimaGec(oncekiAdim)}
+            disabled={!geriAcik}
+            className="rounded-lg border border-line px-3.5 py-2 text-sm font-medium text-ink transition hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transition-none"
+          >
+            Geri
+          </button>
           <div className="flex items-center gap-3">
             {/* KAPALI DÜĞMENİN SEBEBİ YANINDA YAZILI. */}
             {adim.eksik && <span className="text-xs text-ink-muted">{adim.eksik}</span>}
@@ -638,155 +539,6 @@ function hataMetni(e: unknown, yedek: string): string {
   // SUNUCUNUN KENDİ CÜMLESİ: "paket sınırı dolu", "zaten bir üst hesaba
   // bağlı" gibi mesajlar kullanıcıya ne yapacağını söylüyor.
   return e instanceof ApiRequestError ? e.message : yedek;
-}
-
-// ---------------------------------------------------------------------------
-// Platform adımı
-// ---------------------------------------------------------------------------
-
-function PlatformAdimi({
-  tur,
-  uygunluk,
-  baglantilar,
-  yonetebilir,
-  yuklemeHatasi,
-  onHata,
-  onYenile,
-  yenileniyor,
-}: {
-  tur: KurulumTuru;
-  uygunluk: ProviderAvailability[];
-  baglantilar: ConnectionSummary[];
-  yonetebilir: boolean;
-  yuklemeHatasi: string | null;
-  onHata: (m: string | null) => void;
-  onYenile: () => void;
-  yenileniyor: boolean;
-}) {
-  const [bekleyen, setBekleyen] = useState<string | null>(null);
-
-  async function bagla(platform: Platform, yeniden: boolean): Promise<void> {
-    onHata(null);
-    setBekleyen(platform);
-    try {
-      const { authorizeUrl } = await apiFetch<{ authorizeUrl: string }>('/connections/authorize', {
-        method: 'POST',
-        body: JSON.stringify({
-          platform,
-          // DÖNÜŞ BU ADIMA: sunucu sonucu `&connection=...` olarak ekliyor
-          // (`donusAdresi`) ve banner onu okuyor.
-          redirectTo: kurulumAdresi(tur, 'baglantilar'),
-          ...(yeniden ? { forceReconsent: true } : {}),
-        }),
-      });
-      // Yönlendirmeyi TARAYICI yapmalı: fetch üzerinden gelen bir 302,
-      // platformun izin ekranını görünmez kılar.
-      window.location.href = authorizeUrl;
-    } catch (e) {
-      onHata(hataMetni(e, 'Bağlantı başlatılamadı.'));
-      setBekleyen(null);
-    }
-  }
-
-  /*
-   * "HESABIM LİSTEDE YOK" EN SIK SORU. Meta'da yeni eklenen bir reklam
-   * hesabı, bağlantı kurulduktan SONRA eklendiyse havuza kendiliğinden
-   * düşmüyor; çaresi başka bir ekranda duruyordu.
-   */
-  async function yenile(baglantiId: string): Promise<void> {
-    onHata(null);
-    setBekleyen(baglantiId);
-    try {
-      await apiFetch(`/connections/${baglantiId}/refresh-accounts`, { method: 'POST' });
-      onYenile();
-    } catch (e) {
-      onHata(hataMetni(e, 'Hesaplar yenilenemedi.'));
-    } finally {
-      setBekleyen(null);
-    }
-  }
-
-  return (
-    <div className="space-y-3">
-      <CallbackBanner />
-
-      {yuklemeHatasi && (
-        <p
-          role="alert"
-          className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger-strong ring-1 ring-inset ring-danger/30"
-        >
-          Bağlantılar okunamadı: {yuklemeHatasi}
-        </p>
-      )}
-
-      <ul className="divide-y divide-line rounded-xl border border-line">
-        {PLATFORMS.map((p) => {
-          const d = platformDurumu(p, uygunluk, baglantilar);
-          const meslul = bekleyen !== null || yenileniyor;
-          return (
-            <li key={p} className="flex flex-wrap items-center gap-3 px-3.5 py-3">
-              <PlatformLogo kind={platformKanali(p)} className="h-6 w-6 shrink-0" />
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-ink">{PLATFORM_LABELS[p]}</p>
-                <p className="truncate text-xs text-ink-muted">
-                  {d.durum === 'bagli'
-                    ? `Bağlı · ${d.bostaHesap} reklam hesabı, ${d.bostaSayfa} sayfa seçilmeyi bekliyor`
-                    : d.durum === 'yeniden'
-                      ? 'Bağlantının süresi dolmuş, yeniden bağlanmalı'
-                      : d.durum === 'ayarsiz'
-                        ? 'Sunucu ayarı eksik. Advetics ekibine bildir.'
-                        : 'Bağlı değil'}
-                </p>
-              </div>
-
-              {d.durum === 'bagli' && (
-                <span className="flex shrink-0 items-center gap-2">
-                  <span className="rounded-full bg-ok-soft px-2 py-0.5 text-[11px] font-medium text-ok-strong">
-                    ✓ Bağlı
-                  </span>
-                  {yonetebilir && (
-                    <button
-                      type="button"
-                      onClick={() => void yenile(d.baglanti.id)}
-                      disabled={meslul}
-                      className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink transition hover:bg-surface-sunken disabled:opacity-40"
-                    >
-                      {bekleyen === d.baglanti.id && <Halka className="h-3.5 w-3.5" />}
-                      Hesapları yenile
-                    </button>
-                  )}
-                </span>
-              )}
-
-              {(d.durum === 'yok' || d.durum === 'yeniden') && yonetebilir && (
-                <button
-                  type="button"
-                  onClick={() => void bagla(p, d.durum === 'yeniden')}
-                  disabled={meslul}
-                  className="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-lg border border-brand px-3.5 py-2 text-sm font-semibold text-brand-strong transition hover:bg-brand-soft disabled:opacity-40"
-                >
-                  {bekleyen === p && <Halka />}
-                  {d.durum === 'yeniden' ? 'Yeniden bağla' : 'Bağla'}
-                </button>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-
-      {/*
-        YENİ ŞİRKET KENDİ BAĞLANTISINI İSTER — ve bunu yalnızca sistemi kuran
-        kişi biliyordu. Kardeş şirketteki Meta bağlantısı burada görünmüyor
-        (bağlantı tablosu şirkete göre süzülüyor); söylenmezse kullanıcı
-        "Meta zaten bağlıydı" deyip boş bir listeye bakar.
-      */}
-      <p className="text-xs text-ink-muted">
-        {yonetebilir
-          ? 'Her şirket kendi bağlantısını kullanır. Aynı Meta ya da Google hesabıyla bağlanman yeterli.'
-          : 'Platform bağlamak yönetici işi. Bağlıysa devam edebilirsin.'}
-      </p>
-    </div>
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -885,64 +637,5 @@ function OzelKategori({
         })}
       </div>
     </fieldset>
-  );
-}
-
-function MusteriGirisi({
-  acik,
-  onAcik,
-  deger,
-  onChange,
-}: {
-  acik: boolean;
-  onAcik: (v: boolean) => void;
-  deger: { email: string; fullName: string; password: string };
-  onChange: (v: { email: string; fullName: string; password: string }) => void;
-}) {
-  return (
-    <section className="rounded-xl border border-line">
-      <button
-        type="button"
-        onClick={() => onAcik(!acik)}
-        aria-expanded={acik}
-        className="flex min-h-12 w-full items-center justify-between gap-3 px-3.5 py-2.5 text-left transition hover:bg-surface-sunken"
-      >
-        <span>
-          <span className="block text-sm font-medium text-ink">Giriş hesabı aç</span>
-          <span className="block text-xs text-ink-muted">
-            İsteğe bağlı. Bu hesapla giren kişi yalnızca bu workspace’i görür.
-          </span>
-        </span>
-        <span className="shrink-0 text-xs font-medium text-brand-strong">{acik ? 'Kapat' : 'Aç'}</span>
-      </button>
-      {acik && (
-        <div className="grid gap-3 border-t border-line px-3.5 py-3 sm:grid-cols-3">
-          <Alan
-            etiket="E-posta"
-            tip="email"
-            deger={deger.email}
-            onChange={(v) => onChange({ ...deger, email: v })}
-          />
-          <Alan
-            etiket="Ad soyad"
-            deger={deger.fullName}
-            onChange={(v) => onChange({ ...deger, fullName: v })}
-          />
-          <Alan
-            etiket="Parola"
-            tip="password"
-            deger={deger.password}
-            onChange={(v) => onChange({ ...deger, password: v })}
-            ipucu="En az 10 karakter"
-          />
-          {/* PAROLA ELDEN İLETİLİYOR ve bu bir kısıt: davet e-postası
-              altyapısı yok. Kullanıcıya söylenmezse parolayı nasıl
-              ileteceğini bilemez. */}
-          <p className="text-xs text-ink-muted sm:col-span-3">
-            Davet e-postası gönderilmiyor. Parolayı sen ileteceksin.
-          </p>
-        </div>
-      )}
-    </section>
   );
 }

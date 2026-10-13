@@ -68,7 +68,8 @@ export function adimOzeti(a: KurulumListesiAdimi): string {
   if (a.durum === 'kullanilmiyor') return 'Bu platformu kullanmadığını söyledin; sayaca girmiyor.';
   if (a.durum === 'kapsam_disi') return 'Kapsam dışı bırakıldı; sayaca girmiyor.';
   if (a.durum === 'tamam') {
-    const basliklar = a.parcalar.map((p) => p.baslik).filter((b): b is string => !!b);
+    // AYNI BAŞLIK TEKRARLANMAZ: iki platform da ajansın bağlantısıysa "Ajansın bağlantısı · Ajansın bağlantısı" yazıyordu.
+    const basliklar = [...new Set(a.parcalar.map((p) => p.baslik).filter((b): b is string => !!b))];
     return basliklar.length > 0 ? basliklar.join(' · ') : 'Tamam.';
   }
   const ilk = a.parcalar.find((p) => p.durum !== 'tamam');

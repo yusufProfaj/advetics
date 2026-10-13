@@ -58,6 +58,8 @@ import {
 import s from '@/components/taslak/taslak.module.css';
 import { first, hataMetni, resolvePlatform } from '@/lib/sayfa-yardimcilari';
 import { REKLAM_YONETICISI } from '@/lib/reklam-yoneticisi';
+import { kapi } from '@/lib/panel-adresleri';
+import { KurulumSeridi } from '@/components/genel-bakis/kurulum-seridi';
 import { HaftalikOzetBaglantisi } from '@/components/report/haftalik-ozet-baglantisi';
 
 export const metadata = { title: 'Genel Bakış · Advetics' };
@@ -296,6 +298,15 @@ export default async function DashboardPage({
           />
         </div>
       </header>
+
+      {/*
+        KURULUM EKSİK ŞERİDİ (kurulum sihirbazı, MIMARI § 3a): yalnız kurulumu
+        YAPABİLENE ve bir workspace seçiliyken. Müşteri hesabı Marka
+        Merkezi'ni göremiyor; ona yapamayacağı bir işi her gün göstermek olmaz.
+      */}
+      {session.activeClientId && kapi(session, 'kurulum.yaz') && kapi(session, 'markaMerkezi.gor') && (
+        <KurulumSeridi clientId={session.activeClientId} />
+      )}
 
       <div className={s.serit2}>
         <nav className={s.seg} aria-label="Platform">

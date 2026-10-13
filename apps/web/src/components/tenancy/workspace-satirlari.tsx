@@ -4,7 +4,7 @@ import { Fragment, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { CHANNEL_KINDS, type ChannelKind } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
-import { markaMerkeziAdresi } from '@/lib/panel-adresleri';
+import { markaMerkeziAdresi, sihirbazAdresi } from '@/lib/panel-adresleri';
 import { PlatformLogo, adAccountKanali, profilKanali } from '@/components/platform-logo';
 import { Dugme } from '@/components/ui/dugme';
 
@@ -19,9 +19,9 @@ import { Dugme } from '@/components/ui/dugme';
  * onayladığı yapı (2026-10-13): Ayarlar'da workspace DÜZEYİNDE hiçbir alan
  * düzenlenmiyor, satır Marka Merkezi'ne AÇILIYOR (MIMARI Ç-23).
  *
- * SATIRDA KALAN ÜÇ EYLEM ve üçü de bu ekranın işi: Marka Merkezi'nde aç
- * (gezinme), Taşı (workspace'in ŞİRKETİNİ değiştirir — şirket düzeyi bir
- * karar) ve Arşivle (listeden çıkarır). Kapıları sunucuda `PANEL_KAPILARI`
+ * SATIRDA DÖRT EYLEM: Marka Merkezi'nde aç (gezinme), Kurulumu tamamla
+ * (aynı workspace'in kurulum sihirbazı), Taşı (workspace'in ŞİRKETİNİ
+ * değiştirir — şirket düzeyi bir karar) ve Arşivle (listeden çıkarır). Kapıları sunucuda `PANEL_KAPILARI`
  * ile hesaplanıp buraya geliyor; kapalı eylemin düğmesi hiç çizilmiyor.
  *
  * Google Ads "Yönetici hesabı › Hesaplar" tablosunun karşılığı: ad, kimlik,
@@ -93,12 +93,18 @@ export function WorkspaceSatirlari({
    * gösteren bir panel bırakırdı — eski "Hesapları yönet" düğmesinin
    * yaşadığı hatanın aynısı (Ege'nin kartından Çiftçi Grup'un hesapları).
    */
-  async function ac(s: WorkspaceSatiri) {
-    setMesgul(`ac:${s.id}`);
+  async function ac(s: WorkspaceSatiri, hedef: 'marka' | 'sihirbaz' = 'marka') {
+    setMesgul(`${hedef === 'marka' ? 'ac' : 'kurulum'}:${s.id}`);
     setHata(null);
     try {
       await apiFetch('/auth/switch-client', { method: 'POST', body: JSON.stringify({ clientId: s.id }) });
-      router.push(markaMerkeziAdresi('kurulum', s.id));
+      /*
+       * KURULUMU TAMAMLA = SİHİRBAZ (MIMARI § 3a). Satırda sayaç YOK: her
+       * satırın sayacı dört uç ve hazırlık okuması imzası değişmiş
+       * workspace'te AI hazırlığını başlatıyor; Şirketler'i açmak her
+       * workspace'te hazırlık başlatmamalı. Sayaç sihirbazın kendisinde.
+       */
+      router.push(hedef === 'marka' ? markaMerkeziAdresi('kurulum', s.id) : sihirbazAdresi(s.id));
     } catch (e) {
       hataYaz(s.id, e, 'Workspace’e geçilemedi.');
       setMesgul(null);
@@ -253,6 +259,15 @@ export function WorkspaceSatirlari({
                             onClick={() => void ac(s)}
                           >
                             Marka Merkezi’nde aç
+                          </Dugme>
+                          <Dugme
+                            ton="ikincil"
+                            boyut="kucuk"
+                            bekliyor={mesgul === `kurulum:${s.id}`}
+                            disabled={mesgul !== null}
+                            onClick={() => void ac(s, 'sihirbaz')}
+                          >
+                            Kurulumu tamamla
                           </Dugme>
                           {tasiAcik && (
                             <Dugme

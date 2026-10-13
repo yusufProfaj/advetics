@@ -29,6 +29,8 @@ const SIHIRBAZ = readFileSync(
   join(__dirname, 'kurulum', 'kurulum-sihirbazi.tsx'),
   'utf8',
 );
+/* Platform adımı açılıştan ayrı dosyaya çıktı (sihirbazın şirket adımı da çiziyor). */
+const PLATFORM_ADIMI = readFileSync(join(__dirname, 'kurulum', 'platform-adimi.tsx'), 'utf8');
 const CSS = readFileSync(join(__dirname, '..', 'app', 'globals.css'), 'utf8');
 
 /** Yorum satırlarını atar — dosyalar bu kuralları ANLATAN yorumlar taşıyor. */
@@ -85,7 +87,7 @@ describe('KRİTİK: bekleme penceresi tazelemeyi kapsıyor', () => {
     // Düğmeler tazeleme bitene kadar kapalı: yarım yenilenmiş listede
     // ikinci bir "Hesapları yenile" iki kez kota harcar.
     expect(SIHIRBAZ_KOD).toContain('yenileniyor={isPending}');
-    expect(SIHIRBAZ_KOD).toContain('const meslul = bekleyen !== null || yenileniyor;');
+    expect(kod(PLATFORM_ADIMI)).toContain('const meslul = bekleyen !== null || yenileniyor;');
   });
 
   it('kapsam tabloları: örtü İSTEK + YENİLEME boyunca açık', () => {

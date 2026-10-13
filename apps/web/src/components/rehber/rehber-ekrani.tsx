@@ -28,6 +28,7 @@ import { AdimKontrol, OnayPenceresi, SonEkran, type ProvaHali } from './adim-kon
 import { IKON, Ikon } from './ikonlar';
 import { RehberKaydedici, type KayitHali } from './rehber-kaydedici';
 import {
+  acikSiteKapisiyla,
   adimAltMetni,
   adimBittiMi,
   gunFarki,
@@ -75,12 +76,15 @@ export function RehberEkrani({
   sirketAdi,
   workspaceAdi,
   formYayinIzni,
+  siteYok,
 }: {
   ilkKayit: RehberKaydi;
   hazirlik: RehberHazirligi;
   sirketAdi: string;
   workspaceAdi: string;
   formYayinIzni: boolean;
+  /** "Web sitemiz yok" beyanı; `null` = okunamadı (kapatmaz). */
+  siteYok: boolean | null;
 }) {
   const router = useRouter();
   const [kaydedici] = useState(
@@ -92,7 +96,8 @@ export function RehberEkrani({
   const durum = useSyncExternalStore(kaydedici.abone, kaydedici.durum, kaydedici.durum);
   const kayit = durum.kayit;
   const a = useMemo(() => yerelAlanlar(kayit.alanlar, durum.bekleyen), [kayit.alanlar, durum.bekleyen]);
-  const acik = acikPlatformlar(a, hazirlik.ajansYoneticisi);
+  // SİTE KAPISI: "web sitemiz yok"ta site isteyen platform açık sayılmaz (`acikSiteKapisiyla`).
+  const acik = acikSiteKapisiyla(acikPlatformlar(a, hazirlik.ajansYoneticisi), a.amac?.deger ?? null, siteYok);
   const { paraBirimi, saatDilimi } = hesapBaglami(a, hazirlik);
   const listeAdresi = baglanti('/reklam', { musteri: kayit.clientId });
 
@@ -116,7 +121,7 @@ export function RehberEkrani({
   const medyaGorunumu = useMemo(() => videoBilgisiKapaktan(medyaBilgisi, a.medya?.deger ?? []), [medyaBilgisi, a.medya]);
 
   const degistir = useCallback((d: Degisiklik[]) => kaydedici.degistir(d), [kaydedici]);
-  const b: AdimBaglami = { a, kayit, h: hazirlik, acik, degistir, paraBirimi, saatDilimi, clientId: kayit.clientId, formYayinIzni };
+  const b: AdimBaglami = { a, kayit, h: hazirlik, acik, degistir, paraBirimi, saatDilimi, clientId: kayit.clientId, formYayinIzni, siteYok };
 
   /*
    * PORTAL: odaklı kip `position: fixed` bir katman. Sayfa şablonunun giriş

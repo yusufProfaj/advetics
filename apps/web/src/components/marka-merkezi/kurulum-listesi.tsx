@@ -5,16 +5,15 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   KURULUM_ADIM_ADI,
-  type HazirlamaSorusu,
   type HazirlamaYaniti,
   type HesapSahibi,
   type KurulumAdimSonucu,
-  type KurulumListesiParcasi,
   type KurulumYaniti,
   type SpecialAdCategory,
   type WorkspaceHazirlik,
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { beyanGirdisi, beyanlariOku, type BeyanOkumasi } from '@/lib/kurulum-beyanlari';
 import {
   KURULUM_PLATFORMLARI,
   PANEL_KAPILARI,
@@ -22,21 +21,16 @@ import {
   kurulumListesi,
   kurulumSayaci,
   markaMerkeziAdresi,
-  type KurulumListesiAdimi,
+  sihirbazAdresi,
   type KurulumPlatformu,
 } from '@/lib/panel-adresleri';
 import { CallbackBanner } from '@/components/callback-banner';
-import { Dugme } from '@/components/ui/dugme';
+import { Dugme, dugmeSinifi } from '@/components/ui/dugme';
 import { Uyari } from '@/components/ui/uyari';
-import { SpecialCategoryPicker } from '@/components/tenancy/special-category-picker';
-import { AdimSatiri } from './kurulum-bolumu';
-import { ButceDegistir, Soru } from './hazirlama-karti';
 import { YOKLAMA_ARALIGI_MS, YOKLAMA_SINIRI, yoklamaGerekli } from './hazirlama-mantik';
-import { OlcumBolumu } from './olcum-bolumu';
-import { Ga4KaynakDurumu, VarsayilanKitleSecici } from './kurulum-yardimcilari';
+import { AdimIcerigi, type AdimIcerigiOzellikleri, type AdimYetkileri } from './adim-icerigi';
 import {
   LISTE_DURUMU,
-  PARCA_ADI,
   adimOzeti,
   beyanDegistir,
   dugmeNedeni,
@@ -66,7 +60,7 @@ export type Sonuc<T> = { ok: true; v: T } | { ok: false; hata: string };
 
 const hataMetni = (e: unknown) => (e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.');
 
-const KAYNAK_ADI = { kurulum: 'Kurulum adımları', hazirlama: 'Reklam hazırlığı', hazirlik: 'Hazırlık maddeleri' } as const;
+const KAYNAK_ADI = { kurulum: 'Kurulum adımları', hazirlama: 'Reklam hazırlığı', hazirlik: 'Hazırlık maddeleri', beyanlar: 'Kurulum beyanları' } as const;
 
 const PLATFORM_ADI: Record<KurulumPlatformu, string> = { meta: 'Meta', google: 'Google Ads' };
 
@@ -74,29 +68,42 @@ export function KurulumListesi({
   clientId,
   ilk,
   kategoriler,
-  yazabilir,
-  hesapYazabilir,
+  detay,
+  yetki,
+  ajansAdresi,
+  workspaceAdi,
   aktifDegil,
 }: {
   clientId: string;
-  ilk: { kurulum: Sonuc<KurulumYaniti>; hazirlama: Sonuc<HazirlamaYaniti>; hazirlik: Sonuc<WorkspaceHazirlik> };
+  ilk: {
+    kurulum: Sonuc<KurulumYaniti>;
+    hazirlama: Sonuc<HazirlamaYaniti>;
+    hazirlik: Sonuc<WorkspaceHazirlik>;
+    /** Kurulum beyanları (`lib/kurulum-beyanlari.ts`); okunamadıysa beyanlı parçalar "Okunamadı". */
+    beyanlar: BeyanOkumasi;
+  };
   /** Workspace'in kayıtlı özel reklam kategorileri (`GET /clients/:id`); okunamadıysa null. */
   kategoriler: SpecialAdCategory[] | null;
-  /** `kurulum.yaz`. */
-  yazabilir: boolean;
-  /** `kurulum.hesap` (Ç-20). */
-  hesapYazabilir: boolean;
+  /** `GET /clients/:id` — "Workspace bilgileri" adımının formu; okunamadıysa null. */
+  detay: AdimIcerigiOzellikleri['detay'];
+  /** Adım eylemlerinin kapıları (`PANEL_KAPILARI`, sunucuda hesaplandı). */
+  yetki: AdimYetkileri;
+  ajansAdresi: string;
+  workspaceAdi: string;
   /** Oturumda seçili workspace bu değil: kurulum yazmaları sunucuda reddedilir. */
   aktifDegil: boolean;
 }) {
+  const { yazabilir, hesapYazabilir } = yetki;
   const router = useRouter();
   const [kurulum, setKurulum] = useState(ilk.kurulum);
   const [hazirlama, setHazirlama] = useState(ilk.hazirlama);
   const [hazirlik, setHazirlik] = useState(ilk.hazirlik);
+  const [beyanlar, setBeyanlar] = useState(ilk.beyanlar);
   // Sunucu yeniden çizdiğinde (router.refresh) taze veri yerel kopyayı ezer.
   useEffect(() => setKurulum(ilk.kurulum), [ilk.kurulum]);
   useEffect(() => setHazirlama(ilk.hazirlama), [ilk.hazirlama]);
   useEffect(() => setHazirlik(ilk.hazirlik), [ilk.hazirlik]);
+  useEffect(() => setBeyanlar(ilk.beyanlar), [ilk.beyanlar]);
 
   const [tamamlaniyor, setTamamlaniyor] = useState(false);
   const [sonuc, setSonuc] = useState<{ sonuclar: KurulumAdimSonucu[]; hazirlamaYeniden: boolean } | { hata: string } | null>(null);
@@ -110,8 +117,9 @@ export function KurulumListesi({
       hazirlama: hazirlama.ok ? hazirlama.v : null,
       hazirlik: hazirlik.ok ? hazirlik.v : null,
       kullanilmayanlar,
+      beyanlar: beyanGirdisi(beyanlar),
     }),
-    [kurulum, hazirlama, hazirlik, kullanilmayanlar],
+    [kurulum, hazirlama, hazirlik, kullanilmayanlar, beyanlar],
   );
   const adimlar = useMemo(() => kurulumListesi(girdi), [girdi]);
   const sayac = kurulumSayaci(adimlar);
@@ -132,9 +140,11 @@ export function KurulumListesi({
       oku<HazirlamaYaniti>(`/clients/${clientId}/hazirlama`),
       oku<WorkspaceHazirlik>(`/clients/${clientId}/hazirlik`),
     ]);
+    const by = await beyanlariOku(apiFetch, clientId, k.ok ? k.v : null);
     setKurulum(k);
     setHazirlama(hz);
     setHazirlik(hk);
+    setBeyanlar(by);
     router.refresh();
   }, [clientId, router]);
 
@@ -233,8 +243,8 @@ export function KurulumListesi({
     [router],
   );
 
-  const dusenler = (['kurulum', 'hazirlama', 'hazirlik'] as const).flatMap((k) => {
-    const s = { kurulum, hazirlama, hazirlik }[k];
+  const dusenler = (['kurulum', 'hazirlama', 'hazirlik', 'beyanlar'] as const).flatMap((k) => {
+    const s = { kurulum, hazirlama, hazirlik, beyanlar }[k];
     return s.ok ? [] : [{ k, hata: s.hata }];
   });
   const hesapAdimiAcik = adimlar.some((a) => (a.kod === 'meta' || a.kod === 'google') && a.durum !== 'tamam' && a.durum !== 'kullanilmiyor');
@@ -261,8 +271,19 @@ export function KurulumListesi({
               <div className="h-full rounded-full bg-brand transition-[width] duration-500 motion-reduce:transition-none" style={{ width: `${yuzde}%` }} />
             </div>
           </div>
+          {/*
+            SİHİRBAZ AYNI LİSTENİN ADIM ADIM GÖRÜNÜMÜ (MIMARI § 3a): sayaç
+            bitmemişse birincil giriş, bitmişse YOK — bitmiş kurulumu
+            "tamamla" demek boş bir ekran açtırırdı. Yazamayan kişiye de açık:
+            sihirbaz her adımda kimin yapacağını söylüyor.
+          */}
+          {!sayac.bitti && (
+            <Link href={sihirbazAdresi(clientId)} className={dugmeSinifi('birincil')}>
+              Sihirbazla tamamla
+            </Link>
+          )}
           {yazabilir && (
-            <Dugme bekliyor={tamamlaniyor || calisiyor} disabled={!kapsam.yapacakVar} onClick={() => void eksikleriTamamla()}>
+            <Dugme ton={sayac.bitti ? 'birincil' : 'ikincil'} bekliyor={tamamlaniyor || calisiyor} disabled={!kapsam.yapacakVar} onClick={() => void eksikleriTamamla()}>
               Eksikleri tamamla
             </Dugme>
           )}
@@ -410,17 +431,25 @@ export function KurulumListesi({
           <AdimSatirlari
             key={a.kod}
             sira={i + 1}
-            a={a}
-            clientId={clientId}
-            kurulum={kurulum.ok ? kurulum.v : null}
-            sorular={hazirlama.ok ? hazirlama.v.sorular : []}
-            hazirlamaVar={hazirlama.ok && hazirlama.v.sonCalisma !== null}
-            kategoriler={kategoriler}
-            yazabilir={yazabilir}
-            hesapYazabilir={hesapYazabilir}
-            kurulumGuncelle={kurulumGuncelle}
-            hazirlamaGuncelle={hazirlamaGuncelle}
-            ilkAcik={adimlar.findIndex((x) => x.durum !== 'tamam' && x.durum !== 'kullanilmiyor') === i}
+            ilkAcik={adimlar.findIndex((x) => x.durum !== 'tamam' && x.durum !== 'kullanilmiyor' && x.durum !== 'kapsam_disi') === i}
+            icerik={{
+              a,
+              clientId,
+              workspaceAdi,
+              kurulum: kurulum.ok ? kurulum.v : null,
+              sorular: hazirlama.ok ? hazirlama.v.sorular : [],
+              hazirlamaVar: hazirlama.ok && hazirlama.v.sonCalisma !== null,
+              kategoriler,
+              detay,
+              beyanlar: beyanGirdisi(beyanlar),
+              kullanilmayanlar,
+              yetki,
+              ajansAdresi,
+              kurulumGuncelle,
+              hazirlamaGuncelle,
+              tazele: () => void tazele(),
+              kip: 'liste',
+            }}
           />
         ))}
       </ol>
@@ -438,40 +467,15 @@ export function KurulumListesi({
  * `#olcum` ile gelen bağlantı o satırı AÇARAK getiriyor; kapalı bir satıra
  * kaydırmak kullanıcıyı aradığı içeriğin önüne bırakırdı.
  */
-function AdimSatirlari({
-  sira,
-  a,
-  clientId,
-  kurulum,
-  sorular,
-  hazirlamaVar,
-  kategoriler,
-  yazabilir,
-  hesapYazabilir,
-  kurulumGuncelle,
-  hazirlamaGuncelle,
-  ilkAcik,
-}: {
-  sira: number;
-  a: KurulumListesiAdimi;
-  clientId: string;
-  kurulum: KurulumYaniti | null;
-  sorular: HazirlamaSorusu[];
-  hazirlamaVar: boolean;
-  kategoriler: SpecialAdCategory[] | null;
-  yazabilir: boolean;
-  hesapYazabilir: boolean;
-  kurulumGuncelle: (v: KurulumYaniti) => void;
-  hazirlamaGuncelle: (v: HazirlamaYaniti) => void;
-  ilkAcik: boolean;
-}) {
+function AdimSatirlari({ sira, ilkAcik, icerik }: { sira: number; ilkAcik: boolean; icerik: AdimIcerigiOzellikleri }) {
+  const { a, clientId } = icerik;
   const [acik, setAcik] = useState(ilkAcik);
   // İçerik İLK açılışta monte edilir ve sonra DOM'da kalır: ölçüm tablosu
   // siteyi tarıyor; her Kurulum açılışında yedi adımın hepsini okumak boşa iş.
   const [monte, setMonte] = useState(ilkAcik);
   const panelId = useId();
   const d = LISTE_DURUMU[a.durum];
-  const kullanilmiyor = a.durum === 'kullanilmiyor';
+  // Kullanılmayan ve kapsam dışı adım da AÇILIYOR: içinde "Geri al" var.
 
   useEffect(() => {
     const capaya = () => {
@@ -524,7 +528,7 @@ function AdimSatirlari({
             </Link>
           </div>
         ) : (
-          !kullanilmiyor && (
+          (
             <button
               type="button"
               aria-expanded={acik}
@@ -549,18 +553,7 @@ function AdimSatirlari({
         <div className="min-h-0 overflow-hidden">
           {monte && (
             <div className="space-y-3 border-t border-line bg-surface-muted/40 px-4 py-3">
-              <ParcaPaneli
-                a={a}
-                clientId={clientId}
-                kurulum={kurulum}
-                sorular={sorular}
-                hazirlamaVar={hazirlamaVar}
-                kategoriler={kategoriler}
-                yazabilir={yazabilir}
-                hesapYazabilir={hesapYazabilir}
-                kurulumGuncelle={kurulumGuncelle}
-                hazirlamaGuncelle={hazirlamaGuncelle}
-              />
+              <AdimIcerigi {...icerik} />
             </div>
           )}
         </div>
@@ -569,152 +562,3 @@ function AdimSatirlari({
   );
 }
 
-/** Kurulum kaynaklı olmayan parçanın satırı: durum ve NEDEN. */
-function ParcaSatiri({ p }: { p: KurulumListesiParcasi }) {
-  const d = LISTE_DURUMU[p.durum];
-  return (
-    <li className="flex flex-wrap items-start gap-x-3 gap-y-1 px-4 py-2.5 text-sm">
-      <span className={`mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${d.sinif}`}>{d.etiket}</span>
-      <div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
-        <p className="font-medium text-ink">
-          {PARCA_ADI[p.kod] ?? p.kod}
-          {p.baslik && <span className="font-normal text-ink-muted"> · {p.baslik}</span>}
-        </p>
-        <p className="text-xs text-ink-muted">{p.neden}</p>
-      </div>
-    </li>
-  );
-}
-
-function ParcaPaneli({
-  a,
-  clientId,
-  kurulum,
-  sorular,
-  hazirlamaVar,
-  kategoriler,
-  yazabilir,
-  hesapYazabilir,
-  kurulumGuncelle,
-  hazirlamaGuncelle,
-}: {
-  a: KurulumListesiAdimi;
-  clientId: string;
-  kurulum: KurulumYaniti | null;
-  sorular: HazirlamaSorusu[];
-  hazirlamaVar: boolean;
-  kategoriler: SpecialAdCategory[] | null;
-  yazabilir: boolean;
-  hesapYazabilir: boolean;
-  kurulumGuncelle: (v: KurulumYaniti) => void;
-  hazirlamaGuncelle: (v: HazirlamaYaniti) => void;
-}) {
-  const soru = (kod: HazirlamaSorusu['kod']) => sorular.find((q) => q.kod === kod) ?? null;
-  return (
-    <>
-      <ul className="divide-y divide-line rounded-lg border border-line bg-surface">
-        {a.parcalar.map((p) => {
-          const k = p.kaynak === 'kurulum' ? kurulum?.adimlar.find((x) => x.kod === p.kod) : undefined;
-          return k && kurulum ? (
-            <AdimSatiri
-              key={`${p.kaynak}-${p.kod}`}
-              a={k}
-              v={kurulum}
-              clientId={clientId}
-              yazabilir={yazabilir}
-              hesapYazabilir={hesapYazabilir}
-              guncelle={kurulumGuncelle}
-            />
-          ) : (
-            <ParcaSatiri key={`${p.kaynak}-${p.kod}`} p={p} />
-          );
-        })}
-      </ul>
-
-      {a.kod === 'piksel' && soru('piksel') && (
-        <SoruAlani yazabilir={yazabilir} clientId={clientId} soru={soru('piksel')!} guncelle={hazirlamaGuncelle} />
-      )}
-
-      {a.kod === 'olcum' && (
-        <div className="space-y-3">
-          <Ga4KaynakDurumu clientId={clientId} />
-          <div>
-            <p className="mb-2 text-xs font-semibold text-ink">Neyi ölçüyoruz</p>
-            <OlcumBolumu clientId={clientId} yazabilir={yazabilir} />
-          </div>
-        </div>
-      )}
-
-      {a.kod === 'marka' && (
-        <p className="flex flex-wrap gap-3 text-xs">
-          <Link href={markaMerkeziAdresi('marka', clientId, 'marka-bilgileri')} className="font-semibold text-ink underline-offset-2 hover:underline">
-            Marka bilgilerini doldur
-          </Link>
-          <Link href={markaMerkeziAdresi('marka', clientId, 'logo')} className="font-semibold text-ink underline-offset-2 hover:underline">
-            Logo yükle
-          </Link>
-        </p>
-      )}
-
-      {a.kod === 'varsayilanlar' && (
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <p className="text-xs font-semibold text-ink">Özel reklam kategorisi</p>
-            {/*
-              İLK BEYAN hazırlama sorusuyla (beyan + "cevaplandı" bayrağı +
-              denetim kaydı birlikte). Beyan verildikten sonra DEĞİŞTİRMEK
-              workspace kaydından (`PATCH /clients/:id`): hazırlama ucu bekleyen
-              soru yokken cevabı bilerek reddediyor (Ajan 4, Ö6).
-            */}
-            {soru('kategori') ? (
-              <SoruAlani yazabilir={yazabilir} clientId={clientId} soru={soru('kategori')!} guncelle={hazirlamaGuncelle} />
-            ) : kategoriler === null ? (
-              <p className="text-xs text-danger-strong">Kayıtlı kategori okunamadı; sayfayı yenile.</p>
-            ) : (
-              <SpecialCategoryPicker clientId={clientId} value={kategoriler} canManage={yazabilir} />
-            )}
-          </div>
-          <div className="space-y-2">
-            <p className="text-xs font-semibold text-ink">Varsayılan konum ve kitle</p>
-            {soru('konum') ? (
-              <SoruAlani yazabilir={yazabilir} clientId={clientId} soru={soru('konum')!} guncelle={hazirlamaGuncelle} />
-            ) : (
-              <VarsayilanKitleSecici clientId={clientId} yazabilir={yazabilir} />
-            )}
-          </div>
-          <div className="space-y-1">
-            <p className="text-xs font-semibold text-ink">Varsayılan günlük bütçe</p>
-            {!hazirlamaVar ? (
-              <p className="text-xs text-ink-muted">Reklam hazırlığı henüz koşmadı; bir reklam hesabı atanınca başlar, bütçe ondan sonra belirlenir.</p>
-            ) : yazabilir ? (
-              <ButceDegistir clientId={clientId} guncelle={hazirlamaGuncelle} />
-            ) : (
-              <p className="text-xs text-ink-muted">{PANEL_KAPILARI['kurulum.yaz'].neden}</p>
-            )}
-          </div>
-        </div>
-      )}
-    </>
-  );
-}
-
-function SoruAlani({
-  yazabilir,
-  clientId,
-  soru,
-  guncelle,
-}: {
-  yazabilir: boolean;
-  clientId: string;
-  soru: HazirlamaSorusu;
-  guncelle: (v: HazirlamaYaniti) => void;
-}) {
-  if (!yazabilir) {
-    return (
-      <p className="text-xs text-ink-muted">
-        {soru.soru} Cevabı workspace’i düzenleme yetkisi olan kişi verecek.
-      </p>
-    );
-  }
-  return <Soru clientId={clientId} soru={soru} guncelle={guncelle} />;
-}

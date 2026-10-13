@@ -2,6 +2,8 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import type { ClientChannels, HazirlamaYaniti, KurulumYaniti, SpecialAdCategory, WorkspaceHazirlik } from '@advetics/shared';
 import { ApiRequestError, serverApiFetch } from '@/lib/api';
+import { beyanGirdisi, beyanlariOku } from '@/lib/kurulum-beyanlari';
+import { adimYetkileri } from '@/lib/kurulum-yetkileri';
 import { requireSession } from '@/lib/session';
 import { sayfaWorkspaceId, workspaceSecimVerisi, workspaceUyumu } from '@/lib/sayfa-workspace';
 import { butceAdresi } from '@/lib/butce-adresi';
@@ -139,6 +141,13 @@ export default async function MarkaMerkeziPage({
     oku<WorkspaceDetay>(`/clients/${clientId}`),
     bolum === 'kurulum' ? oku<ClientChannels>(`/clients/${clientId}/channels`) : Promise.resolve(null),
   ]);
+  /*
+   * BEYANLAR ROZETE DE GİRİYOR (kurulum sihirbazı, MIMARI § 6 "geçiciler"):
+   * okunmasalardı "adresimiz yok" denmiş bir workspace'in rozeti sonsuza
+   * kadar "eksik" derdi ve sihirbaz "hiç eksik yok" derken menü 9 / 10
+   * gösterirdi — iki ekranın aynı sayıyı söylemesi bu modülün sözü.
+   */
+  const beyanlar = await beyanlariOku(serverApiFetch, clientId, kurulum.ok ? kurulum.v : null);
 
   const sayac = kurulumSayaci(
     kurulumListesi({
@@ -146,6 +155,7 @@ export default async function MarkaMerkeziPage({
       hazirlama: hazirlama.ok ? hazirlama.v : null,
       hazirlik: hazirlik.ok ? hazirlik.v : null,
       kullanilmayanlar: kurulum.ok ? kurulum.v.kullanilmayanPlatformlar : [],
+      beyanlar: beyanGirdisi(beyanlar),
     }),
   );
   const rozetler: BolumRozetleri = { kurulum: rozetMetni(sayac) };
@@ -192,10 +202,12 @@ export default async function MarkaMerkeziPage({
               />
               <KurulumListesi
                 clientId={clientId}
-                ilk={{ kurulum, hazirlama, hazirlik }}
+                ilk={{ kurulum, hazirlama, hazirlik, beyanlar }}
                 kategoriler={detay.ok ? ((detay.v.specialAdCategories ?? []) as SpecialAdCategory[]) : null}
-                yazabilir={kapi(session, 'kurulum.yaz')}
-                hesapYazabilir={kapi(session, 'kurulum.hesap')}
+                detay={detay.ok ? detay.v : null}
+                yetki={adimYetkileri(session)}
+                ajansAdresi={session.user.email}
+                workspaceAdi={workspaceAdi}
                 aktifDegil={session.activeClientId !== clientId}
               />
 

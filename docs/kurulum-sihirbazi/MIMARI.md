@@ -306,8 +306,44 @@ artık sayıyor).
   = okunamadı. Ajan 3 bütün çağıranları (Marka Merkezi sayfası + liste,
   sihirbaz) bağlayınca alan ZORUNLU olur; API'deki `platform-beyani.spec.ts`
   de verir.
-- `tamamla` ucunun `kodlar` süzgeci yokken panel adım başına "Otomatik yap"ı
-  `kurulumAdimlari`nı `/kurulum/adim` ile tek tek yürüterek yapar.
+  **AJAN 3 BAĞLADI (2026-10-13):** panelde `kurulumListesi(` çağıran beş
+  yerin beşi de (`marka-merkezi/page.tsx`, `kurulum-listesi.tsx`,
+  `kurulum/tamamlama.tsx`, `kurulum/baslangic.tsx`,
+  `genel-bakis/kurulum-seridi.tsx`) `beyanlar: beyanGirdisi(...)` veriyor;
+  `sihirbaz-akisi.spec.ts` kaynak taramasıyla kilitliyor. **Mimar alanı
+  ZORUNLU yapabilir** (API tarafı: `platform-beyani.spec.ts`).
+- ~~`tamamla` ucunun `kodlar` süzgeci yokken panel adım başına "Otomatik yap"ı
+  `kurulumAdimlari`nı `/kurulum/adim` ile tek tek yürütür.~~ YAPILAMADI:
+  `/kurulum/adim` seçim isteyen kodlarda (sayfa, piksel, konteyner, mülk)
+  gövdede seçim bekliyor, "otomatik" yolu yalnız `tamamla`da. Panel bugün
+  `POST /clients/:id/kurulum/tamamla` gövdesine `{ kodlar: [...] }` koyuyor;
+  sunucu süzgeci tanımayana kadar gövdeyi yok sayıp `OTOMATIK_SIRA`nın
+  tamamını yapar (hesap açmaz; yalnız daha geniş). Gövde biçimi sözleşmede
+  YOK — Ajan 1 `kurulumTamamlaSchema` eklemeli.
+
+### Ajan 3'ün sözleşmede bulduğu boşluklar (Ajan 1 / Ajan 2)
+
+- **Beyanların okunuşu iki biçime de hazır** (`lib/kurulum-beyanlari.ts`):
+  `/kurulum` yanıtında `beyanlar` dizisi VARSA o, yoksa
+  `GET /clients/:id/kurulum/beyanlar` (dizi ya da `{ beyanlar }`). Okunamazsa
+  `null` → beyanlı bitmemiş parça "Okunamadı". Ajan 2 hangisini seçtiyse
+  sözleşmeye yazılmalı.
+- **`SirketKurulumYaniti` tipi shared'da YOK** (§ 7 adını veriyor). Panel
+  şirket listesini var olan uçlardan kuruyor (`/connections` parametresiz,
+  `/connections/availability`, `/auth/2fa` → `secilenSirket.zorunlu`) ve
+  `GET /kurulum/sirket` yanıtından YALNIZ `beyanlar` alanını okuyor; alan
+  yoksa şirket beyanları "okunamadı".
+- **Şirket beyanı ucu** `PUT /kurulum/sirket/beyan` gövdesi
+  `sirketKurulumBeyaniSchema`; workspace beyanı `PUT /clients/:id/kurulum/beyan`
+  `kurulumBeyaniSchema`. Panel yanıt gövdesine güvenmiyor, yazdıktan sonra
+  sunucuyu yeniden çiziyor.
+- **409'un iki anlamı** (`kilitli` "sürüyor" ve "önce bu workspace'i seç")
+  panelde MESAJLA ayrılıyor (`istekSonucu`). Sunucu ayrı `code` verirse
+  ayrım koda taşınmalı.
+- **Şirketin kullandığı platformlar** sözleşmede "en az bir workspace"; panel
+  bütün workspace'leri okumamak için AKTİF workspace'in platform beyanını
+  veriyor (bkz. `tamamlama.tsx` yorumu). Başlangıç ekranında iki platform da
+  sayılıyor (workspace seçilmedi).
 
 ## 7. Uçlar
 

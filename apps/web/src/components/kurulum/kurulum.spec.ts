@@ -6,7 +6,6 @@ import {
   ADIMLAR,
   KURULUM_TURLERI,
   adimOku,
-  boostKarari,
   geriGidilebilir,
   kurulumAdresi,
   platformDurumu,
@@ -32,7 +31,7 @@ const oku = (...yol: string[]): string =>
   yorumsuz(readFileSync(join(__dirname, ...yol), 'utf8'));
 
 const SIHIRBAZ = oku('kurulum-sihirbazi.tsx');
-const SECIM = oku('hesap-secimi.tsx');
+const PLATFORM = oku('platform-adimi.tsx');
 const SONUC = oku('kurulum-sonucu.tsx');
 const SAYFA = oku('..', '..', 'app', '(dashboard)', 'kurulum', 'page.tsx');
 const WORKSPACE_BOLUMU = oku('..', 'tenancy', 'workspace-bolumu.tsx');
@@ -66,8 +65,9 @@ describe('adım sırası', () => {
       const a = ADIMLAR[t];
       expect(a.indexOf('baglantilar'), t).toBeGreaterThan(-1);
       expect(a.indexOf('baglantilar'), t).toBeLessThan(a.indexOf('workspace'));
-      expect(a.indexOf('workspace'), t).toBeLessThan(a.indexOf('hesaplar'));
-      expect(a.at(-1), t).toBe('bitti');
+      // AÇILIŞ YALNIZ AÇAR (kurulum sihirbazı Ç-7): son adım workspace, hesaplar tamamlamada.
+      expect(a.at(-1), t).toBe('workspace');
+      expect(a as readonly string[], t).not.toContain('hesaplar');
     }
   });
 
@@ -84,12 +84,13 @@ describe('adım sırası', () => {
     expect(turOku('sirket')).toBe('sirket');
     expect(turOku('baska')).toBeNull();
     expect(turOku(undefined)).toBeNull();
-    expect(adimOku('sirket', 'hesaplar')).toBe('hesaplar');
+    // Eski yer imi (`hesaplar`) ilk adıma düşer: o adım artık tamamlamada.
+    expect(adimOku('sirket', 'hesaplar')).toBe('sirket');
     expect(adimOku('sirket', 'ust-hesap')).toBe('sirket');
     expect(adimOku('workspace', undefined)).toBe('baglantilar');
   });
 
-  it('KRİTİK: "bitti" adresten AÇILAMIYOR — sonuç yalnızca bellekte', () => {
+  it('eski "bitti" adresi de ilk adıma düşer', () => {
     expect(adimOku('workspace', 'bitti')).toBe('baglantilar');
   });
 
@@ -168,35 +169,6 @@ describe('platformDurumu — dört hâl ayrı', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Boost hesabı
-// ---------------------------------------------------------------------------
-
-describe('boostKarari', () => {
-  it('sayfa seçilmediyse soru yok', () => {
-    expect(boostKarari(['a', 'b'], 0, null)).toEqual({ durum: 'gereksiz', hesapId: null });
-  });
-
-  it('sayfa var, Meta hesabı yok: uyarı, engel değil', () => {
-    expect(boostKarari([], 2, null)).toEqual({ durum: 'hesap-yok', hesapId: null });
-  });
-
-  it('KRİTİK: tek Meta hesabı SORULMADAN seçiliyor', () => {
-    expect(boostKarari(['a'], 1, null)).toEqual({ durum: 'otomatik', hesapId: 'a' });
-  });
-
-  it('KRİTİK: birden çok hesapta TAHMİN YOK — seçilene kadar bekliyor', () => {
-    expect(boostKarari(['a', 'b'], 1, null)).toEqual({ durum: 'secilmeli', hesapId: null });
-    expect(boostKarari(['a', 'b'], 1, 'b')).toEqual({ durum: 'secildi', hesapId: 'b' });
-  });
-
-  it('KRİTİK: sonradan kaldırılan hesap seçim sayılmıyor', () => {
-    // Kaldırılmış hesabı göndermek "bu workspace'e atanmamış" hatasıyla
-    // sayfaları boost'suz bırakırdı.
-    expect(boostKarari(['a', 'b'], 1, 'c')).toEqual({ durum: 'secilmeli', hesapId: null });
-  });
-});
-
 describe('siteAdresiDuzelt', () => {
   it('şemasız adrese https ekliyor, http’yi https’e çeviriyor', () => {
     expect(siteAdresiDuzelt('miayapi.com')).toBe('https://miayapi.com');
@@ -214,7 +186,8 @@ describe('siteAdresiDuzelt', () => {
 describe('tarama boşa düşmüyor', () => {
   it('dosyalar okundu ve beklenen gövdeleri taşıyor', () => {
     expect(SIHIRBAZ).toContain('export function KurulumSihirbazi(');
-    expect(govde(SIHIRBAZ, 'async function workspaceKur(').length).toBeGreaterThan(500);
+    expect(govde(SIHIRBAZ, 'async function workspaceKur(').length).toBeGreaterThan(400);
+    expect(PLATFORM).toContain('export function PlatformAdimi(');
     expect(SAYFA).toContain('KurulumSihirbazi');
   });
 });
@@ -228,31 +201,35 @@ describe('KRİTİK: workspace TEK çağrıyla kuruluyor', () => {
     expect(SIHIRBAZ).not.toContain("apiFetch('/clients',");
   });
 
-  it('seçilenler reklam hesabı ve profil diye ayrılıyor', () => {
-    expect(kur).toContain('o.reklamHesabi && secili.has(o.id)');
-    expect(kur).toContain('adAccountIds');
-    expect(kur).toContain('socialProfileIds');
+  it('KRİTİK: açılış HESAP ATAMAZ — hesaplar tamamlamanın adımlarından tek yoldan (Ç-7)', () => {
+    // İki atama yolu ayrışırdı: açılışın boost kararı ile kurulumun sayfa
+    // adımı aynı soruyu iki ayrı kuralla cevaplıyordu.
+    expect(kur).toContain('adAccountIds: []');
+    expect(kur).toContain('socialProfileIds: []');
+    expect(SIHIRBAZ).not.toContain('boostHesabiId');
+    expect(SIHIRBAZ).not.toContain('HesapSecimi');
   });
 
-  it('KRİTİK: boost hesabı, özel kategori ve site gövdeye giriyor', () => {
-    // Üçü de kurulumun yalnızca sistemi kuran kişinin bildiği kuralı;
-    // biri gövdeden düşerse ekran sorar ama hiçbir yere yazılmaz.
-    expect(kur).toContain('boostHesabiId: boost.hesapId');
+  it('KRİTİK: özel kategori, site ve rapor alıcıları gövdeye giriyor', () => {
+    // Biri gövdeden düşerse ekran sorar ama hiçbir yere yazılmaz.
     expect(kur).toContain('specialAdCategories: kategoriler');
     expect(kur).toContain('siteAdresiDuzelt(site)');
     expect(kur).toContain('contactEmails: alicilar');
   });
 
-  it('KRİTİK: başarıdan sonra adres sihirbazın başına çekiliyor', () => {
-    // Yenilemede "Hesaplar" adımı boş açılır ve aynı workspace ikinci kez
-    // kurulurdu.
-    expect(kur.indexOf("window.history.replaceState(null, '', PANEL_YOLLARI.acilis)")).toBeGreaterThan(
-      kur.indexOf('setSonuc(r)'),
-    );
+  it('KRİTİK: açıldıktan sonra adres başa çekiliyor, kısmi başarı ekranda kalıyor', () => {
+    // Yenileme/geri tuşu formu yeniden açıp AYNI adla ikinci workspace açardı.
+    const bas = kur.indexOf("window.history.replaceState(null, '', kurulumAdresi(tur, ADIMLAR[tur][0]!))");
+    expect(bas).toBeGreaterThan(kur.indexOf("'/clients/setup'"));
+    // `failures` varsa GEÇİLMEZ: sonuç ekranda, geçiş kullanıcının tıkıyla.
+    expect(kur.indexOf('if (r.failures.length > 0)')).toBeGreaterThan(bas);
+    expect(kur.indexOf('await workspaceeGec(r.clientId)')).toBeGreaterThan(kur.indexOf('if (r.failures.length > 0)'));
+    // İkinci basış ikinci workspace açmıyor.
+    expect(kur.indexOf('if (sonuc) return workspaceeGec(sonuc.clientId)')).toBeLessThan(kur.indexOf("'/clients/setup'"));
   });
 
-  it('boost hesabı seçilmeden kurulum düğmesi kapalı', () => {
-    expect(SIHIRBAZ).toContain("eksik: boost.durum === 'secilmeli' ? 'Boost hesabını seç' : null");
+  it('ad yazılmadan düğme kapalı', () => {
+    expect(SIHIRBAZ).toContain("eksik: wsGecerli ? null : 'Workspace adını yaz'");
     expect(SIHIRBAZ).toContain('disabled={busy || adim.eksik !== null}');
   });
 });
@@ -313,10 +290,13 @@ describe('KRİTİK: üst hesap ve şirket — kur, GEÇ, tam sayfa', () => {
 });
 
 describe('platform adımı', () => {
-  const g = govde(SIHIRBAZ, 'async function bagla(');
+  const g = govde(PLATFORM, 'async function bagla(');
 
   it('KRİTİK: bağlantı dönüşü SİHİRBAZIN AYNI ADIMINA', () => {
-    expect(g).toContain("redirectTo: kurulumAdresi(tur, 'baglantilar')");
+    // Bileşen dönüşü çağırandan alıyor; açılış kendi adımını, tamamlama kendi adımını veriyor.
+    expect(g).toContain('redirectTo,');
+    expect(SIHIRBAZ).toContain("redirectTo={kurulumAdresi(tur, 'baglantilar')}");
+    expect(oku('tamamlama.tsx')).toContain("redirectTo={sihirbazAdresi(clientId, 'baglantilar')}");
   });
 
   it('yetkisi düşmüş bağlantı onay ekranını zorluyor', () => {
@@ -326,15 +306,30 @@ describe('platform adımı', () => {
   it('dönüş sonucu ekranda (banner) ve liste hatası yutulmuyor', () => {
     // Parametre listesi de süslü parantezle açılıyor; gövde sayılamaz,
     // bileşen bir sonraki bileşenin başına kadar alınıyor.
-    const bas = SIHIRBAZ.indexOf('function PlatformAdimi(');
-    const p = SIHIRBAZ.slice(bas, SIHIRBAZ.indexOf('function Alan(', bas));
-    expect(bas).toBeGreaterThan(-1);
-    expect(p).toContain('<CallbackBanner />');
-    expect(p).toContain('Bağlantılar okunamadı: {yuklemeHatasi}');
+    expect(PLATFORM).toContain('<CallbackBanner />');
+    expect(PLATFORM).toContain('Bağlantılar okunamadı: {yuklemeHatasi}');
   });
 
-  it('KRİTİK: "her şirket kendi bağlantısını kullanır" yazılı', () => {
-    expect(SIHIRBAZ).toContain('Her şirket kendi bağlantısını kullanır.');
+  it('KRİTİK: AJANSIN bağlantısı yeni şirkette de kullanılır — "her şirket yeniden bağlansın" YOK (Ç-2)', () => {
+    /*
+     * Eski cümle kullanıcıyı ajansın kimliğini şirket başına yeniden
+     * yetkilendirmeye gönderiyordu; bu önceki token'ı geçersiz kılıp bütün
+     * şirketlerin bağlantısını koparıyordu.
+     */
+    expect(PLATFORM).not.toContain('Her şirket kendi bağlantısını kullanır.');
+    expect(PLATFORM).toContain('Ajansın Meta ve Google bağlantısı bu şirkette de kullanılır; yeniden bağlanma.');
+  });
+
+  it('KRİTİK: ajansın DÜŞMÜŞ bağlantısına "Yeniden bağla" sunulmuyor (Ç-2)', () => {
+    // Yanlış kişinin token'ı ajansın satırına yazılırdı.
+    expect(PLATFORM).toContain("const ajansin = (d.durum === 'bagli' || d.durum === 'yeniden') && d.baglanti.sahip === 'ajans';");
+    expect(PLATFORM).toContain("(d.durum === 'yok' || (d.durum === 'yeniden' && !ajansin)) && yonetebilir");
+  });
+
+  it('kurulum-akisi.ts eskimiş "yeni şirkette yeniden bağlanmak zorunda" yorumunu taşımıyor', () => {
+    const ham = readFileSync(join(__dirname, 'kurulum-akisi.ts'), 'utf8');
+    expect(ham).not.toContain('Yeni bir şirkette Meta ve Google yeniden bağlanmak\n * zorunda');
+    expect(ham).toContain('AJANSIN BAĞLANTISI YENİ ŞİRKETTE DE GÖRÜNÜR');
   });
 });
 
@@ -348,21 +343,8 @@ describe('sessiz kalmayan yerler', () => {
     expect(SONUC).toContain('boostSayfaSayisi - sonuc.boostBaglanan');
   });
 
-  it('yönetici (MCC) hesabı listede ama seçilemiyor', () => {
-    expect(SECIM).toContain('disabled={o.isManager}');
-  });
-
-  it('kaç hesap gösterildiği yazılı — sessiz kesme yok', () => {
-    expect(SECIM).toContain('{liste.length} / {ogeler.length} hesap');
-  });
-
-  it('parolanın elden iletileceği yazılı — davet e-postası yok', () => {
-    expect(SIHIRBAZ).toContain('Davet e-postası gönderilmiyor');
-  });
-
-  it('havuz ORTAK yardımcıdan — ikinci profil eşlemesi yok', () => {
-    expect(SIHIRBAZ).toContain('havuzlariCikar(baglantilar)');
-    expect(SIHIRBAZ + SECIM).not.toContain("'instagram_business'");
+  it('kısmi başarıda sonuç ekranda çiziliyor', () => {
+    expect(SIHIRBAZ).toContain('<KurulumSonucu sonuc={sonuc} boostSayfaSayisi={0} />');
   });
 });
 
@@ -370,7 +352,7 @@ describe('sayfa', () => {
   it('KRİTİK: engel yalnızca İLK adımda sınanıyor', () => {
     // Üst hesabı az önce kuran kullanıcı "zaten bir üst hesabın var"
     // kuralına takılıp kendi sihirbazından atılırdı.
-    expect(SAYFA).toContain('const ilkAdimda = tur !== null && ilkAdim === ADIMLAR[tur][0];');
+    expect(SAYFA).toContain('const ilkAdimda = ilkAdim === ADIMLAR[tur][0];');
     expect(SAYFA).toContain('!(ilkAdimda && kart?.engel)');
   });
 
@@ -394,28 +376,26 @@ describe('KRİTİK: eski kurulum yolları sihirbaza gidiyor', () => {
 });
 
 /**
- * MIMARI Ç-17 — sihirbazın adı ve sonu. Ad "Kurulum" DEĞİL: o ad Marka
- * Merkezi'nin bölümünde ve iki ekranın aynı adı taşıması "hangi kurulum?"
- * sorusu doğuruyordu. Son adım Genel Bakış'a değil Kurulum listesine
- * gidiyor: yeni workspace'in verisi yok, sıradaki iş o listede.
+ * Sihirbazın adı ve sonu (kurulum sihirbazı Ç-9, 2026-10-13). Sayfanın adı
+ * artık "Kurulum sihirbazı" (`SIHIRBAZ_ADI`): iki ekran AYNI listenin iki
+ * görünümü ve karışma sebebi kalktı. `ACILIS_ADI` açılış hâlinin başlığı.
+ * Açılışın sonu tamamlama modu: yeni workspace'e GEÇ, sonra aynı sihirbaz.
  */
-describe('KRİTİK: açılış sihirbazının adı ve son adımı (Ç-17)', () => {
-  it('sekme başlığı ACILIS_ADI sabitinden türüyor, düz dize yok', () => {
-    expect(SAYFA).toContain('export const metadata = { title: `${ACILIS_ADI} · Advetics` };');
-    // Başlık da (tür kartı yoksa) aynı sabitte.
+describe('KRİTİK: sihirbazın adı ve açılışın sonu', () => {
+  it('sekme başlığı SIHIRBAZ_ADI sabitinden türüyor, düz dize yok', () => {
+    expect(SAYFA).toContain('export const metadata = { title: `${SIHIRBAZ_ADI} · Advetics` };');
+    // Açılış başlığı (tür kartı yoksa) ACILIS_ADI'nda.
     expect(SAYFA).toContain('{kart?.baslik ?? ACILIS_ADI}');
+    expect(SAYFA).not.toMatch(/['"`]Kurulum sihirbazı/);
     expect(SAYFA).not.toMatch(/['"`]Açılış/);
   });
 
-  it('"Workspace’e geç" önce workspace’e geçiyor, sonra Marka Merkezi › Kurulum’a gidiyor', () => {
-    const i = SIHIRBAZ.indexOf('async function workspaceeGec(');
-    if (i < 0) throw new Error('workspaceeGec bulunamadı — tarama boşa düştü.');
-    const j = SIHIRBAZ.indexOf('\n  }\n', i);
-    const govde = SIHIRBAZ.slice(i, j);
-    const gecis = govde.indexOf("'/auth/switch-client'");
-    const hedef = govde.indexOf("window.location.assign(markaMerkeziAdresi('kurulum', sonuc.clientId))");
+  it('KRİTİK: açılışın sonu önce workspace’e GEÇİYOR, sonra tamamlama moduna gidiyor', () => {
+    const g = govde(SIHIRBAZ, 'async function workspaceeGec(');
+    const gecis = g.indexOf("'/auth/switch-client'");
+    const hedef = g.indexOf('window.location.assign(sihirbazAdresi(clientId))');
     expect(gecis).toBeGreaterThan(-1);
     expect(hedef).toBeGreaterThan(gecis);
-    expect(govde).not.toContain('/dashboard');
+    expect(g).not.toContain('/dashboard');
   });
 });

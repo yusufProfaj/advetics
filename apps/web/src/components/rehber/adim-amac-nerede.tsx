@@ -2,12 +2,23 @@
 
 import Link from 'next/link';
 import { useId } from 'react';
-import { REHBER_AMACLARI, type RehberAmacKodu, type RehberPlatformu } from '@advetics/shared';
+import { REHBER_AMACLARI, SITE_YOK_SEBEBI, type RehberAmacKodu, type RehberPlatformu } from '@advetics/shared';
 import { hesaplarAdresi, markaMerkeziAdresi } from '@/lib/panel-adresleri';
 import { AltCubuk, Soru, sil, yaz, type AdimBaglami } from './adim-ortak';
 import { AMAC_IKONU, IKON, Ikon } from './ikonlar';
 import { PikselSecici } from './meta-dalga3';
-import { OLCUM_ENGEL_KODLARI, amacDegisimi, amactanSonraki, gorunurAmaclar, platformAnahtari, platformDurumu, platformNedeni, type EkranNo } from './rehber-mantik';
+import {
+  OLCUM_ENGEL_KODLARI,
+  amacDegisimi,
+  amacSiteSebebi,
+  amactanSonraki,
+  gorunurAmaclar,
+  platformAnahtari,
+  platformDurumu,
+  platformNedeni,
+  siteKapisiyla,
+  type EkranNo,
+} from './rehber-mantik';
 import s from './rehber.module.css';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -26,6 +37,8 @@ export function AdimAmac({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => void
    */
   function sec(kod: RehberAmacKodu) {
     if (kod === secili) return;
+    // "WEB SİTEMİZ YOK" KAPISI: kapalı kart seçilmez, sebebi kartın üstünde yazılı.
+    if (amacSiteSebebi(kod, b.h.ajansYoneticisi, b.siteYok) !== null) return;
     b.degistir(amacDegisimi(kod, b.a.platformlar, b.h));
   }
 
@@ -47,8 +60,16 @@ export function AdimAmac({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => void
         <div className={s.amaclar}>
           {kodlar.map((kod) => {
             const t = REHBER_AMACLARI[kod];
+            const siteSebebi = amacSiteSebebi(kod, b.h.ajansYoneticisi, b.siteYok);
             return (
-              <button key={kod} type="button" className={s.amac} aria-pressed={kod === secili} onClick={() => sec(kod)}>
+              <button
+                key={kod}
+                type="button"
+                className={`${s.amac} ${siteSebebi ? s.amacKapali : ''}`}
+                aria-pressed={kod === secili}
+                aria-disabled={siteSebebi !== null || undefined}
+                onClick={() => sec(kod)}
+              >
                 <span className={s.tik}>
                   <Ikon d={IKON.tik} />
                 </span>
@@ -57,9 +78,10 @@ export function AdimAmac({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => void
                 </span>
                 <h3>{t.ekranAdi}</h3>
                 <p>{t.neAlacaksin}</p>
+                {siteSebebi && <span className={s.kapaliYazi}>{siteSebebi}</span>}
                 <span className={s.platformlar}>
                   {(['meta', 'google'] as const).map((p) => {
-                    const d = platformDurumu(kod, p, b.h.ajansYoneticisi);
+                    const d = siteKapisiyla(platformDurumu(kod, p, b.h.ajansYoneticisi), kod, p, b.siteYok);
                     return (
                       <span key={p} className={`${s.plt} ${d.gorunur ? '' : s.yok}`} title={d.sebep ?? undefined}>
                         <i />
@@ -102,7 +124,7 @@ export function AdimNerede({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => vo
   }
 
   const kart = (p: RehberPlatformu) => {
-    const d = platformDurumu(amac, p, b.h.ajansYoneticisi);
+    const d = siteKapisiyla(platformDurumu(amac, p, b.h.ajansYoneticisi), amac, p, b.siteYok);
     const kurulacak = p === 'meta' ? t.meta.kurulacak : t.google.kurgu !== null ? t.google.kurulacak : null;
     const eksikler = b.kayit.eksikler.filter((e) => e.adim === 2 && e.platform === p);
     const tamamlar: string[] = [];
@@ -149,7 +171,8 @@ export function AdimNerede({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => vo
             <li className={s.eksik}>
               <Ikon d={IKON.yok} />
               <span>
-                {d.sebep}. Bu amaç yalnız {p === 'meta' ? 'Google' : 'Meta'}&apos;da açılır.
+                {/* SİTE KAPISININ CÜMLESİ ZATEN TAM: "yalnız X'te açılır" eki yanlış olurdu (diğer platform da kapalı olabilir). */}
+                {d.sebep === SITE_YOK_SEBEBI ? d.sebep : `${d.sebep}. Bu amaç yalnız ${p === 'meta' ? 'Google' : 'Meta'}'da açılır.`}
               </span>
             </li>
           )}

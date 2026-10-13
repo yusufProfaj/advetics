@@ -24,17 +24,47 @@ export function FirmaBilgileri({
   saatDilimi,
   paraBirimi,
   canManage,
+  kompakt = false,
 }: {
   clientId: string;
   bilgi: MusteriBilgileri;
   saatDilimi: string;
   paraBirimi: string;
   canManage: boolean;
+  /**
+   * Sihirbazın "Workspace bilgileri" adımı: yalnız SAYILAN alanlar (site,
+   * iletişim, rapor alıcıları, adres + konum). Vergi, IBAN, saat dilimi
+   * sayılmıyor ve adımda göstermek "bunlar da mı eksik" sorusu doğururdu;
+   * evleri Workspace bilgileri bölümü. FORM AYNI (`MusteriBilgiFormu`).
+   */
+  kompakt?: boolean;
 }) {
   const [duzenle, setDuzenle] = useState(false);
 
   if (duzenle) {
     return <MusteriBilgiFormu clientId={clientId} baslangic={bilgi} onBitti={() => setDuzenle(false)} />;
+  }
+
+  if (kompakt) {
+    const konum =
+      bilgi.addressLatitude != null && bilgi.addressLongitude != null ? koordinatYaz({ enlem: bilgi.addressLatitude, boylam: bilgi.addressLongitude }) : null;
+    return (
+      <div className="space-y-3">
+        <div className="rounded-lg border border-line px-3 py-1">
+          <DetaySatiri etiket="İnternet sitesi" deger={bilgi.website} />
+          <DetaySatiri etiket="Yetkili kişi" deger={bilgi.contactName} />
+          <DetaySatiri etiket="Telefon" deger={bilgi.contactPhone} />
+          <DetaySatiri etiket="Rapor alıcıları" deger={bilgi.contactEmails.length > 0 ? bilgi.contactEmails.join(', ') : null} />
+          <DetaySatiri etiket="Adres" deger={bilgi.address} />
+          <DetaySatiri etiket="Harita konumu" deger={konum} />
+        </div>
+        {canManage && (
+          <Dugme boyut="kucuk" onClick={() => setDuzenle(true)}>
+            Bilgileri düzenle
+          </Dugme>
+        )}
+      </div>
+    );
   }
 
   return (

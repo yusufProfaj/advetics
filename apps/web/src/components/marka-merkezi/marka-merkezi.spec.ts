@@ -26,6 +26,8 @@ const yorumsuz = (yol: string): string =>
 const SAYFA = yorumsuz('app/(dashboard)/marka-merkezi/page.tsx');
 const KANAL = yorumsuz('components/tenancy/bagli-kanallar.tsx');
 const LISTE = yorumsuz('components/marka-merkezi/kurulum-listesi.tsx');
+/* Adımın içeriği liste ve sihirbazda ORTAK (kurulum sihirbazı, MIMARI § 4). */
+const ICERIK = yorumsuz('components/marka-merkezi/adim-icerigi.tsx');
 const BILGI = yorumsuz('components/marka-merkezi/workspace-bilgileri.tsx');
 
 describe('KRİTİK: tek sayaç — hazırlık şeridi ve ikinci sayaç yok', () => {
@@ -102,7 +104,8 @@ describe('sayfa', () => {
 
   it('GA4 veri kaynakları listesinde bağlanmıyor (tek kayıt Kurulum’da)', () => {
     expect(SAYFA).toContain("haric={['ga4']}");
-    expect(LISTE).toContain('<Ga4KaynakDurumu clientId={clientId} />');
+    expect(ICERIK).toContain('<Ga4KaynakDurumu clientId={clientId} />');
+    expect(LISTE).toContain('<AdimIcerigi {...icerik} />');
   });
 });
 
@@ -230,7 +233,7 @@ describe('Workspace bilgileri (eski Workspace ayarları + Bildirimler + Senkroni
 
   it('KRİTİK: özel kategori burada değil (evi Kurulum › Reklam varsayılanları)', () => {
     expect(BILGI).not.toContain('<SpecialCategoryPicker');
-    expect(LISTE).toContain('<SpecialCategoryPicker');
+    expect(ICERIK).toContain('<SpecialCategoryPicker');
   });
 
   it('KRİTİK: veri durumu ADRESTEKİ workspace’i okuyor', () => {
