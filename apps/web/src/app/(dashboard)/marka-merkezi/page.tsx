@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import type { ClientChannels, HazirlamaYaniti, KurulumYaniti, SpecialAdCategory, WorkspaceHazirlik } from '@advetics/shared';
 import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import { requireSession } from '@/lib/session';
-import { sayfaWorkspaceId, workspaceSecimVerisi } from '@/lib/sayfa-workspace';
+import { sayfaWorkspaceId, workspaceSecimVerisi, workspaceUyumu } from '@/lib/sayfa-workspace';
 import { butceAdresi } from '@/lib/butce-adresi';
 import {
   PANEL_KAPILARI,
@@ -17,6 +17,7 @@ import {
   type MarkaMerkeziBolumKodu,
 } from '@/lib/panel-adresleri';
 import { WorkspaceGerekli } from '@/components/workspace-gerekli';
+import { WorkspaceGec } from '@/components/workspace-gec';
 import { SayfaBasligi } from '@/components/ui/sayfa-basligi';
 import { Uyari } from '@/components/ui/uyari';
 import { BagliKanallar } from '@/components/tenancy/bagli-kanallar';
@@ -100,6 +101,33 @@ export default async function MarkaMerkeziPage({
   const bolum: MarkaMerkeziBolumKodu = markaMerkeziBolumu(hamBolum) ?? 'kurulum';
 
   /*
+   * ADRES ≠ SEÇİM (`workspaceUyumu`): üstte BAŞKA workspace seçiliyken RLS
+   * adresteki workspace'in satırlarını gizliyor ve sayfa B'nin başlığıyla
+   * BOŞ kartlar çiziyordu. O hâlde içerik hiç okunmuyor (beş uç, hazırlık
+   * tetikleyicisi dahil) ve tek tıkla geçiş öneriliyor.
+   */
+  const uyum = workspaceUyumu(session, clientId);
+  const hedefAdi = session.availableClients.find((c) => c.id === clientId)?.name ?? null;
+  const gecis =
+    uyum === 'ayni' ? null : (
+      <WorkspaceGec
+        clientId={clientId}
+        workspaceAdi={hedefAdi}
+        aktifAdi={session.availableClients.find((c) => c.id === session.activeClientId)?.name ?? null}
+        ekran="Marka Merkezi"
+        uyum={uyum}
+      />
+    );
+  if (uyum === 'farkli') {
+    return (
+      <div className="space-y-5">
+        <SayfaBasligi baslik="Marka Merkezi" />
+        {gecis}
+      </div>
+    );
+  }
+
+  /*
    * ROZET VE LİSTE AYNI ÜÇ YANITTAN. Kurulum rozeti her bölümde görünüyor,
    * yani üç uç her sayfada okunuyor; ikinci bir sayaç (ör. yalnız hazırlık)
    * yazmak, eski üç ayrışan sayının birini geri getirmek olurdu.
@@ -132,6 +160,7 @@ export default async function MarkaMerkeziPage({
   return (
     <div className="space-y-5">
       <EskiCapaYonlendirici bolum={bolum} musteri={clientId} />
+      {gecis}
       <SayfaBasligi
         ust={
           /* KIRINTI: "neredeyim" sorusunun cevabı başlıktan önce. */

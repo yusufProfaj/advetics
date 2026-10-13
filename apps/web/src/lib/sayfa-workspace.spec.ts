@@ -2,7 +2,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { SessionResponse } from '@advetics/shared';
-import { sayfaWorkspaceId, workspaceSecimVerisi } from './sayfa-workspace';
+import { sayfaWorkspaceId, workspaceSecimVerisi, workspaceUyumu } from './sayfa-workspace';
 
 /**
  * ═══ WORKSPACE BAZINDA SAYFALAR SESSİZCE İLK WORKSPACE'E DÜŞMÜYOR ═══
@@ -172,5 +172,76 @@ describe('bileşen', () => {
   it('seçim hatası yutulmuyor', () => {
     expect(BILESEN).toContain('setHata(');
     expect(BILESEN).toContain('<Uyari ton="tehlike">{hata}</Uyari>');
+  });
+});
+
+/**
+ * ═══ ADRES ≠ SEÇİM (Ajan 4, 2026-10-13) ═══
+ *
+ * Marka Merkezi ve Varlıklar workspace'i adresten okuyor ama RLS seçili
+ * workspace'e göre süzüyor (`app.can_access_client`). Üstte A seçiliyken
+ * B'nin sayfası B başlığıyla BOŞ kartlar çiziyordu. Karar saf fonksiyonda;
+ * sayfaların onu veri okumadan ÖNCE çağırdığı kaynakta kilitli.
+ */
+describe('workspaceUyumu', () => {
+  const aktif = (id: string) => ({ id, status: 'active' });
+  const oturum = (activeClientId: string | null, ...ids: string[]) => ({ activeClientId, availableClients: ids.map(aktif) });
+
+  it('adres = seçim → ayni', () => {
+    expect(workspaceUyumu(oturum('a', 'a', 'b'), 'a')).toBe('ayni');
+  });
+
+  it('KRİTİK: üstte BAŞKA workspace seçiliyse farkli (okuma boş gelirdi)', () => {
+    expect(workspaceUyumu(oturum('a', 'a', 'b'), 'b')).toBe('farkli');
+  });
+
+  it('seçim yok ve hedef bu şirkette → secimYok (okuma doğru, yazma seçim ister)', () => {
+    expect(workspaceUyumu(oturum(null, 'a', 'b'), 'b')).toBe('secimYok');
+  });
+
+  it('seçim yok ama hedef bu şirkette değil ya da arşivde → farkli', () => {
+    expect(workspaceUyumu(oturum(null, 'a'), 'z')).toBe('farkli');
+    expect(workspaceUyumu({ activeClientId: null, availableClients: [{ id: 'b', status: 'archived' }] }, 'b')).toBe('farkli');
+  });
+});
+
+describe('KRİTİK: Marka Merkezi ve Varlıklar adres ≠ seçimde içerik OKUMUYOR', () => {
+  for (const [ad, yol] of [
+    ['Marka Merkezi', 'app/(dashboard)/marka-merkezi/page.tsx'],
+    ['Varlıklar', 'app/(dashboard)/varliklar/page.tsx'],
+  ] as const) {
+    it(`${ad}: farkli hâlinde erken dönüş, veri okumadan ve içerikten önce`, () => {
+      const g = yorumsuz(join(SRC, yol));
+      const karar = g.indexOf('workspaceUyumu(session, clientId)');
+      const donus = g.indexOf("if (uyum === 'farkli')");
+      expect(karar, 'workspaceUyumu çağrılmıyor').toBeGreaterThan(-1);
+      expect(donus, 'farkli dalı yok').toBeGreaterThan(karar);
+      // Dalın gövdesi WorkspaceGec çiziyor ve return ediyor.
+      const govde = g.slice(donus, g.indexOf('\n  }\n', donus));
+      expect(govde).toContain('return (');
+      // Marka Merkezi geçiş kutusunu `gecis` değişkeninde kuruyor (secimYok'ta
+      // içeriğin üstünde de çiziliyor); Varlıklar doğrudan.
+      expect(govde).toMatch(/<WorkspaceGec|\{gecis\}/);
+      expect(g).toContain('<WorkspaceGec');
+      // İlk veri okuması / içerik dalın SONRASINDA.
+      const ilkOkuma = Math.min(
+        ...['oku<', 'gorunurVarlikSekmeleri('].map((d) => g.indexOf(d)).filter((i) => i > -1),
+      );
+      expect(ilkOkuma).toBeGreaterThan(donus);
+    });
+  }
+
+  it('Kurulum listesi kullanıcıyı var olmayan "üstten seç"e değil, düğmeye gönderiyor', () => {
+    const g = yorumsuz(join(SRC, 'components/marka-merkezi/kurulum-listesi.tsx'));
+    expect(g).not.toContain('üstten bu workspace');
+    expect(g).toContain('Bu workspace’e geç');
+    expect(yorumsuz(join(SRC, 'components/workspace-gec.tsx'))).toContain('Bu workspace’e geç');
+  });
+
+  it('geçiş hatası yutulmuyor', () => {
+    const g = yorumsuz(join(SRC, 'components/workspace-gec.tsx'));
+    expect(g).toContain("'/auth/switch-client'");
+    expect(g).toContain('setHata(');
+    expect(g).not.toMatch(/\.catch\(\s*\(\s*\)\s*=>/);
   });
 });

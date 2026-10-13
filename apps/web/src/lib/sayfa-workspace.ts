@@ -69,3 +69,42 @@ export function workspaceSecimVerisi(session: SessionResponse): WorkspaceSecimVe
     kurulumGorunur: session.permissions.includes('client.write'),
   };
 }
+
+/**
+ * ═══ ADRESTEKİ WORKSPACE ≠ OTURUMDAKİ WORKSPACE (Ajan 4, 2026-10-13) ═══
+ *
+ * Marka Merkezi ve Varlıklar workspace'i ADRESTEN okuyor (`?musteri=`) ve
+ * bağlantıların çoğu adresle geliyor: bildirim zilinin "Hesap ata"sı,
+ * Bağlantılar › İzlenen hesaplar'daki workspace adı, Varlıklar › Kitleler'in
+ * "Kurulum'da değiştir"i. Ama veri RLS'ten OTURUMDAKİ seçimle geçiyor:
+ * `app.can_access_client` seçili workspace varken YALNIZ onu açıyor. Yani
+ * üstte A seçiliyken B'nin Marka Merkezi'ni açan kullanıcı başlıkta B'yi,
+ * gövdede ise BOŞ kartlar görüyordu ("Atanmadı", boş marka bilgileri) —
+ * hata yok, yanlış bir ekran. Kurulum yazmaları da reddediliyordu
+ * ("önce üstten bu workspace'i seç") ve ekranda tıklanacak bir şey yoktu.
+ *
+ * Üç hâl:
+ *  · `ayni`     — adres = seçim; normal ekran.
+ *  · `secimYok` — üstte workspace seçili değil (şirket geneli) ve hedef bu
+ *                 şirkette: okuma doğru (RLS seçim yokken bütün erişim
+ *                 listesini açıyor), yazma seçim istiyor → uyarı + tek tık.
+ *  · `farkli`   — üstte BAŞKA workspace seçili ya da hedef bu şirkette değil:
+ *                 okuma yanlış/boş gelir → içerik ÇİZİLMEZ, tek tıkla geçiş.
+ *
+ * NEDEN OTOMATİK GEÇİŞ DEĞİL: seçim çerezde ve bütün sekmeleri etkiliyor.
+ * Başka sekmede A ile çalışan kullanıcının seçimini bir bağlantı açtı diye
+ * sessizce B'ye çevirmek, o sekmedeki bir sonraki yazmayı B'ye gönderirdi.
+ * Geçiş açık bir tık.
+ */
+export type WorkspaceUyumu = 'ayni' | 'secimYok' | 'farkli';
+
+export function workspaceUyumu(
+  session: Pick<SessionResponse, 'activeClientId'> & {
+    availableClients?: ReadonlyArray<{ id: string; status: string }>;
+  },
+  clientId: string,
+): WorkspaceUyumu {
+  if (session.activeClientId === clientId) return 'ayni';
+  const buSirkette = (session.availableClients ?? []).some((c) => c.id === clientId && c.status === 'active');
+  return session.activeClientId === null && buSirkette ? 'secimYok' : 'farkli';
+}

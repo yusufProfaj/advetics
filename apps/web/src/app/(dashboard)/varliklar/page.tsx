@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { requireSession } from '@/lib/session';
-import { sayfaWorkspaceId, workspaceSecimVerisi } from '@/lib/sayfa-workspace';
+import { sayfaWorkspaceId, workspaceSecimVerisi, workspaceUyumu } from '@/lib/sayfa-workspace';
 import {
   PANEL_KAPILARI,
   kapi,
@@ -10,6 +10,7 @@ import {
   varliklarSekmesi,
 } from '@/lib/panel-adresleri';
 import { WorkspaceGerekli } from '@/components/workspace-gerekli';
+import { WorkspaceGec } from '@/components/workspace-gec';
 import { SayfaBasligi } from '@/components/ui/sayfa-basligi';
 import { Uyari } from '@/components/ui/uyari';
 import { gorunurVarlikSekmeleri, varlikSekmeAdi, varlikSekmesiCoz } from '@/components/marka-merkezi/bolumler';
@@ -69,6 +70,28 @@ export default async function VarliklarPage({
         neden="Görseller, kreatifler, formlar ve kitleler bir workspace’e ait."
         {...workspaceSecimVerisi(session)}
       />
+    );
+  }
+
+  /*
+   * ADRES ≠ SEÇİM: üstte başka workspace seçiliyken liste RLS'ten BOŞ gelir
+   * ("henüz görsel yok" gibi okunur). İçerik çizilmiyor, tek tıkla geçiş
+   * (`workspaceUyumu`). Seçim hiç yoksa okuma doğru; Varlıklar'ın yazmaları
+   * seçim istemiyor, o yüzden uyarı yalnız `farkli` hâlinde.
+   */
+  const uyum = workspaceUyumu(session, clientId);
+  if (uyum === 'farkli') {
+    return (
+      <div className="space-y-5">
+        <SayfaBasligi baslik="Varlıklar" />
+        <WorkspaceGec
+          clientId={clientId}
+          workspaceAdi={session.availableClients.find((c) => c.id === clientId)?.name ?? null}
+          aktifAdi={session.availableClients.find((c) => c.id === session.activeClientId)?.name ?? null}
+          ekran="Varlıklar"
+          uyum={uyum}
+        />
+      </div>
     );
   }
 

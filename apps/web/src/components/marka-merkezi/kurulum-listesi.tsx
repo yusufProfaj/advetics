@@ -267,7 +267,7 @@ export function KurulumListesi({
           <p className="mt-2 text-xs text-ink-muted">Hesap açmaz, ödeme eklemez, site kodunu yerleştirmez; bunlar aşağıda adımında yazıyor.</p>
         )}
         {aktifDegil && yazabilir && (
-          <p className="mt-2 text-xs text-warn-strong">Kurulumu değiştirmek için önce üstten bu workspace’i seç.</p>
+          <p className="mt-2 text-xs text-warn-strong">Kurulumu değiştirmek için önce yukarıdaki “Bu workspace’e geç” düğmesine bas.</p>
         )}
         {calisiyor && (
           <p className="mt-2 text-xs text-ink-muted">Site, marka bilgileri ve piksel okunuyor. Sayfadan ayrılabilirsin, iş arka planda sürer.</p>
