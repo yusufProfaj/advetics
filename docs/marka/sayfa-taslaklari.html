@@ -1,0 +1,1215 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Advetics Sayfa Taslakları</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600;700&display=swap">
+<style>
+/* Düzen: menu-sistemi.html kabuğu (sol menü + üst çubuk) ve tasarim-sistemi.html bileşenleri.
+   Her sayfa aynı iskelet: kırmızı üst başlık + h1 + bir cümle, sağda tek birincil eylem, altında sekme, süzgeç, içerik.
+   Renk: yalnız #ffffff #000000 #302e2d #ff2400 ve grinin saydam tonları; yeşil yalnız durum noktası. */
+:root{
+  --kirmizi:#ff2400; --gri:#302e2d;
+  --bg:#ffffff; --zemin:rgba(48,46,45,.035); --yuzey:#ffffff; --metin:#000000;
+  --ikincil:rgba(48,46,45,.64); --soluk:rgba(48,46,45,.42); --cizgi:rgba(48,46,45,.12); --cizgi2:rgba(48,46,45,.22);
+  --dolgu:rgba(48,46,45,.06); --vurgu:rgba(255,36,0,.07); --ok:#1e8e3e; --seri2:#000000;
+  --golge:0 12px 32px rgba(0,0,0,.12),0 2px 6px rgba(0,0,0,.06);
+  --r-sm:8px; --r:12px; --r-lg:16px; --r-hap:999px;
+  --baslik:"Montserrat",system-ui,sans-serif; --govde:"Open Sans",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#000000; --zemin:rgba(255,255,255,.03); --yuzey:#0d0d0d; --metin:#ffffff; --ikincil:rgba(255,255,255,.66); --soluk:rgba(255,255,255,.42);
+  --cizgi:rgba(255,255,255,.12); --cizgi2:rgba(255,255,255,.24); --dolgu:rgba(255,255,255,.07); --vurgu:rgba(255,36,0,.16); --ok:#34a853; --seri2:#ffffff;
+  --golge:0 12px 32px rgba(0,0,0,.6); color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#000000; --zemin:rgba(255,255,255,.03); --yuzey:#0d0d0d; --metin:#ffffff; --ikincil:rgba(255,255,255,.66); --soluk:rgba(255,255,255,.42);
+  --cizgi:rgba(255,255,255,.12); --cizgi2:rgba(255,255,255,.24); --dolgu:rgba(255,255,255,.07); --vurgu:rgba(255,36,0,.16); --ok:#34a853; --seri2:#ffffff;
+  --golge:0 12px 32px rgba(0,0,0,.6); color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--metin);font:400 14px/1.55 var(--govde);-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4{font-family:var(--baslik);margin:0;text-wrap:balance}
+p{margin:0}
+button{font:inherit;color:inherit}
+a{color:inherit}
+.sayi{font-family:var(--baslik);font-variant-numeric:tabular-nums}
+.ik2{color:var(--ikincil)} .kucuk{font-size:12.5px} .soluk{color:var(--soluk)}
+svg.i{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+[hidden]{display:none!important}
+
+/* ── KABUK ── */
+.kabuk{display:grid;grid-template-columns:256px minmax(0,1fr);min-height:100vh}
+.menu{border-right:1px solid var(--cizgi);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;background:var(--bg);z-index:30}
+.menu-ust{padding:16px 14px 10px;display:grid;gap:12px}
+.logo{font:800 20px/1 var(--baslik);letter-spacing:-.02em;position:relative;display:inline-block;margin:4px 6px;justify-self:start}
+.logo i{position:absolute;width:6px;height:6px;border-radius:50%;background:var(--kirmizi);top:0;right:-8px}
+.secici{display:grid;grid-template-columns:32px minmax(0,1fr) 16px;gap:10px;align-items:center;border:1px solid var(--cizgi);border-radius:12px;padding:8px 10px;background:var(--yuzey);cursor:pointer;text-align:left;width:100%}
+.secici:hover{border-color:var(--cizgi2)}
+.harf{width:32px;height:32px;border-radius:8px;background:var(--gri);color:#fff;display:grid;place-items:center;font:800 13px var(--baslik);flex:none}
+.secici small{display:block;color:var(--ikincil);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.secici b{display:block;font-weight:700;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.olustur{display:flex;align-items:center;justify-content:center;gap:8px;height:40px;border-radius:999px;background:var(--kirmizi);color:#fff;border:0;font-weight:700;font-size:13.5px;cursor:pointer}
+.olustur:hover{filter:brightness(.94)}
+.menu-liste{flex:1;overflow:auto;padding:4px 10px 10px}
+.grup{font:700 11px/1 var(--govde);letter-spacing:.08em;text-transform:uppercase;color:var(--soluk);margin:16px 10px 6px}
+.oge{display:flex;align-items:center;gap:12px;height:38px;padding:0 10px;border-radius:10px;color:var(--metin);font-weight:600;font-size:13.5px;cursor:pointer;border:0;background:none;width:100%;text-align:left}
+.oge:hover{background:var(--dolgu)}
+.oge .i{color:var(--ikincil)}
+.oge[aria-current="page"]{background:var(--vurgu);color:var(--kirmizi)}
+.oge[aria-current="page"] .i{color:var(--kirmizi)}
+.oge .sayac{margin-left:auto;font:700 11px var(--govde);background:var(--kirmizi);color:#fff;border-radius:999px;padding:2px 7px}
+.menu-alt{border-top:1px solid var(--cizgi);padding:10px}
+.kullanici{display:grid;grid-template-columns:32px minmax(0,1fr) 16px;gap:10px;align-items:center;padding:8px;border-radius:10px;cursor:pointer;border:0;background:none;width:100%;text-align:left}
+.kullanici:hover{background:var(--dolgu)}
+.avatar{width:32px;height:32px;border-radius:50%;background:var(--dolgu);display:grid;place-items:center;font:700 12px var(--govde)}
+.kullanici small{display:block;color:var(--ikincil);font-size:11.5px}
+
+.icerik{min-width:0;display:flex;flex-direction:column}
+.ust{position:sticky;top:0;z-index:20;height:56px;border-bottom:1px solid var(--cizgi);display:flex;align-items:center;gap:6px;padding:0 20px;background:color-mix(in srgb,var(--bg) 90%,transparent);backdrop-filter:blur(10px)}
+.kirinti{flex:1;min-width:0;font-size:13px;color:var(--ikincil);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kirinti b{color:var(--metin);font-weight:600}
+.ikon-dg{width:36px;height:36px;border-radius:999px;border:0;background:none;display:grid;place-items:center;cursor:pointer;color:var(--ikincil);position:relative;flex:none}
+.ikon-dg:hover{background:var(--dolgu);color:var(--metin)}
+.ikon-dg .nokta{position:absolute;top:7px;right:8px;width:8px;height:8px;border-radius:50%;background:var(--kirmizi);border:2px solid var(--bg)}
+.hamburger{display:none}
+.taslak-et{font:700 11px var(--govde);letter-spacing:.06em;text-transform:uppercase;border:1px dashed var(--cizgi2);border-radius:999px;padding:3px 9px;color:var(--ikincil);white-space:nowrap}
+main{padding:24px 28px 96px;max-width:1240px;width:100%;margin:0 auto}
+.sayfa{display:grid;gap:20px;grid-template-columns:minmax(0,1fr)}
+.sayfa:focus{outline:none}
+
+/* ── SAYFA BAŞLIĞI ── */
+.sb{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.sb .ust-y{font:700 12px/1 var(--govde);letter-spacing:.08em;text-transform:uppercase;color:var(--kirmizi)}
+.sb h1{font-size:28px;font-weight:800;letter-spacing:-.015em;margin-top:6px}
+.sb p{margin-top:4px;color:var(--ikincil);max-width:66ch}
+.sb .eylem{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.geri{display:inline-flex;gap:4px;align-items:center;font-size:13px;font-weight:600;color:var(--ikincil);background:none;border:0;padding:0;cursor:pointer;margin-bottom:8px}
+.geri:hover{color:var(--metin)}
+
+/* ── DÜĞMELER ── */
+.dg{vertical-align:middle;display:inline-flex;align-items:center;justify-content:center;gap:8px;height:40px;padding:0 18px;border-radius:var(--r-hap);font:700 13.5px/1 var(--govde);border:1px solid var(--cizgi2);background:var(--yuzey);color:var(--metin);cursor:pointer;transition:background .15s,border-color .15s,filter .15s;white-space:nowrap;text-decoration:none}
+.dg:hover{background:var(--dolgu)}
+.dg:focus-visible,.sekme:focus-visible,.oge:focus-visible,.cip:focus-visible{outline:2px solid var(--kirmizi);outline-offset:2px}
+.dg.ana{background:var(--kirmizi);border-color:var(--kirmizi);color:#fff}
+.dg.ana:hover{filter:brightness(.94)}
+.dg.koyu{background:var(--metin);border-color:var(--metin);color:var(--bg)}
+.dg.hayalet{border-color:transparent;background:transparent}
+.dg.hayalet:hover{background:var(--dolgu)}
+.dg.tehlike{color:var(--kirmizi);border-color:color-mix(in srgb,var(--kirmizi) 45%,transparent)}
+.dg.kucuk{height:32px;padding:0 13px;font-size:12.5px}
+.dg.ikon{width:40px;padding:0}
+.dg.kucuk.ikon{width:32px}
+.dg[disabled]{opacity:.4;cursor:not-allowed}
+
+/* ── KART ── */
+.kart{background:var(--yuzey);border:1px solid var(--cizgi);border-radius:var(--r-lg);min-width:0}
+.kart-bas{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid var(--cizgi);flex-wrap:wrap}
+.kart-bas h3{font-size:15px}
+.kart-bas small{color:var(--ikincil);font-size:12.5px}
+.kart-ic{padding:20px}
+.kart-alt{padding:12px 20px;border-top:1px solid var(--cizgi);display:flex;justify-content:flex-end;gap:8px;align-items:center}
+.kart-alt .sol{margin-right:auto;color:var(--ikincil);font-size:12.5px}
+.bag{font-weight:700;font-size:13px;text-decoration:none;color:var(--metin);background:none;border:0;cursor:pointer;padding:0}
+.bag:hover{color:var(--kirmizi)}
+.izgara-2{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:16px;align-items:start}
+.izgara-e{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.izgara-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.yigin{display:grid;gap:16px;min-width:0;grid-template-columns:minmax(0,1fr)}
+.satir-l{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 12px;align-items:center;padding:12px 0;border-bottom:1px solid var(--cizgi)}
+.satir-l:last-child{border-bottom:0}
+.satir-l > div{min-width:0}
+.satir-l small{display:block;color:var(--ikincil);font-size:12px}
+
+/* ── METRİK ── */
+.metrikler{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--cizgi);border-radius:var(--r-lg);overflow:hidden;background:var(--yuzey)}
+.metrikler.ic{border:0;border-bottom:1px solid var(--cizgi);border-radius:16px 16px 0 0}
+.metrik{padding:14px 18px;border-right:1px solid var(--cizgi);display:grid;gap:3px;min-width:0}
+.metrik:last-child{border-right:0}
+.metrik span{font-size:12.5px;color:var(--ikincil);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.metrik b{font:800 24px/1.15 var(--baslik);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.metrik small{font-size:12px;color:var(--ikincil)}
+.metrik small.kotu{color:var(--kirmizi)}
+.metrik.s1{box-shadow:inset 0 -3px 0 var(--kirmizi)}
+.metrik.s2{box-shadow:inset 0 -3px 0 var(--seri2)}
+.grafik{width:100%;height:180px;display:block}
+
+/* ── TABLO ── */
+.arac{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--cizgi)}
+.arac .bosluk{flex:1}
+.cip{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:var(--r-hap);background:var(--dolgu);font-size:12.5px;font-weight:600;border:1px solid transparent;cursor:pointer;white-space:nowrap}
+.cip b{font-weight:700}
+.cip .x{border:0;background:none;cursor:pointer;color:var(--ikincil);padding:0;font-size:12px}
+.cip.ekle{background:transparent;border:1px dashed var(--cizgi2);color:var(--ikincil)}
+.cip.secim-cip{background:transparent;border-color:var(--cizgi2);color:var(--ikincil)}
+.cip.secim-cip[aria-pressed="true"]{background:var(--metin);border-color:var(--metin);color:var(--bg)}
+.cip .s{font-size:11px;opacity:.75}
+.ara-kutu{display:flex;align-items:center;gap:8px;height:32px;border:1px solid var(--cizgi2);border-radius:999px;padding:0 12px;min-width:0;flex:0 1 240px;background:var(--yuzey)}
+.ara-kutu input{border:0;outline:none;background:none;flex:1;font:inherit;font-size:13px;color:var(--metin);min-width:0}
+.ara-kutu .i{width:15px;height:15px;color:var(--soluk)}
+.tablo-sar{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{text-align:left;font-weight:600;font-size:12px;color:var(--ikincil);padding:10px 16px;border-bottom:1px solid var(--cizgi);white-space:nowrap}
+td{padding:11px 16px;border-bottom:1px solid var(--cizgi);vertical-align:middle}
+th.s,td.s{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+td.s{font-family:var(--baslik);font-weight:600;font-size:13px}
+tbody tr:hover{background:var(--zemin)}
+tbody tr.tik{cursor:pointer}
+tfoot td{font-weight:700;background:var(--zemin);border-bottom:0}
+td .ad{color:var(--metin);font-weight:600;text-decoration:none;background:none;border:0;padding:0;cursor:pointer;text-align:left}
+td .ad:hover{color:var(--kirmizi);text-decoration:underline}
+td small{display:block;color:var(--ikincil);font-size:12px}
+.hucre-ad{display:flex;gap:10px;align-items:center;min-width:220px}
+.dn{width:8px;height:8px;border-radius:50%;background:var(--soluk);flex:none}
+.dn.ok{background:var(--ok)} .dn.hata{background:var(--kirmizi)} .dn.dur{border-radius:2px;background:var(--ikincil)}
+.sayfalama{display:flex;justify-content:flex-end;gap:16px;align-items:center;padding:10px 16px;font-size:12.5px;color:var(--ikincil);flex-wrap:wrap}
+.sayfalama .sol{margin-right:auto}
+.ok-dg{border:0;background:none;width:28px;height:28px;border-radius:999px;cursor:pointer;color:var(--ikincil)}
+.ok-dg:hover{background:var(--dolgu)}
+
+/* ── ROZET ── */
+.rozet{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:var(--r-hap);font-size:12px;font-weight:700;border:1px solid var(--cizgi2);white-space:nowrap;background:var(--yuzey)}
+.rozet i{width:7px;height:7px;border-radius:50%;background:var(--soluk)}
+.rozet.ok i{background:var(--ok)}
+.rozet.hata{color:var(--kirmizi);border-color:color-mix(in srgb,var(--kirmizi) 40%,transparent)} .rozet.hata i{background:var(--kirmizi)}
+.rozet.dur i{border-radius:2px;background:var(--ikincil)}
+.rozet.koyu{background:var(--metin);color:var(--bg);border-color:var(--metin)} .rozet.koyu i{background:var(--bg)}
+.etiket{display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:6px;background:var(--dolgu);font-size:11.5px;font-weight:700;color:var(--ikincil);white-space:nowrap}
+
+/* ── SEKME, BÖLÜMLÜ ── */
+.sekmeler{display:flex;gap:2px;border-bottom:1px solid var(--cizgi);overflow-x:auto;scrollbar-width:none}
+.sekmeler::-webkit-scrollbar{display:none}
+.sekme{border:0;background:none;padding:12px 14px;font-weight:700;font-size:13.5px;color:var(--ikincil);border-bottom:3px solid transparent;margin-bottom:-1px;cursor:pointer;white-space:nowrap;display:flex;gap:8px;align-items:center}
+.sekme:hover{color:var(--metin)}
+.sekme[aria-selected="true"]{color:var(--metin);border-bottom-color:var(--kirmizi)}
+.sekme[aria-disabled="true"]{opacity:.4;cursor:not-allowed}
+.sekme .s{font:700 11px var(--govde);background:var(--dolgu);border-radius:999px;padding:1px 7px;color:var(--ikincil)}
+.sekme .durum{width:7px;height:7px;border-radius:50%;background:var(--kirmizi)}
+.bolumlu{display:inline-flex;background:var(--dolgu);border-radius:var(--r-hap);padding:3px;max-width:100%;overflow-x:auto;scrollbar-width:none}
+.bolumlu button{border:0;background:none;height:30px;padding:0 14px;border-radius:var(--r-hap);font-weight:700;font-size:12.5px;cursor:pointer;color:var(--ikincil);white-space:nowrap}
+.bolumlu button[aria-pressed="true"]{background:var(--yuzey);color:var(--metin);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.tarih{display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 14px;border:1px solid var(--cizgi2);border-radius:999px;background:var(--yuzey);font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap}
+.tarih small{color:var(--ikincil);font-weight:400}
+
+/* ── FORM ── */
+.alan{display:grid;gap:6px;min-width:0}
+.alan label,.alan .lb{font-weight:600;font-size:13px}
+.alan small{color:var(--ikincil);font-size:12px}
+.alan small.hata{color:var(--kirmizi)}
+.girdi{height:40px;border:1px solid var(--cizgi2);border-radius:var(--r-sm);padding:0 12px;background:var(--yuzey);color:var(--metin);font:inherit;width:100%;min-width:0}
+textarea.girdi{height:auto;padding:10px 12px;resize:vertical;min-height:84px}
+.girdi:focus{outline:none;border-color:var(--metin);box-shadow:0 0 0 3px var(--dolgu)}
+.form-izgara{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.form-izgara .tam{grid-column:1/-1}
+.kosul{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,.7fr) minmax(0,.8fr) minmax(0,1fr) 32px;gap:8px;align-items:center}
+.anahtar{display:inline-flex;align-items:center;gap:10px;cursor:pointer;font-weight:600;font-size:13px}
+.anahtar i{width:36px;height:20px;border-radius:999px;background:var(--cizgi2);position:relative;transition:background .15s;flex:none}
+.anahtar i::after{content:"";position:absolute;width:16px;height:16px;border-radius:50%;background:#fff;top:2px;left:2px;transition:transform .15s}
+.anahtar[aria-checked="true"] i{background:var(--metin)}
+.anahtar[aria-checked="true"] i::after{transform:translateX(16px)}
+:root[data-theme="dark"] .anahtar[aria-checked="true"] i::after{background:#000}
+
+/* ── HÂLLER ── */
+.hal{border:1px dashed var(--cizgi2);border-radius:var(--r-lg);padding:28px;display:grid;gap:8px;justify-items:start;align-content:start}
+.hal.orta{justify-items:center;text-align:center}
+.hal b{font-family:var(--baslik);font-size:15px}
+.hal p{color:var(--ikincil);font-size:13px;max-width:56ch}
+.hal .ik{width:36px;height:36px;border-radius:10px;background:var(--dolgu);display:grid;place-items:center;font:800 14px var(--baslik)}
+.hal.hata{border-style:solid;border-color:color-mix(in srgb,var(--kirmizi) 40%,transparent);background:var(--vurgu)}
+.hal.hata .ik{background:var(--kirmizi);color:#fff}
+.hal code{font-size:12px;background:var(--yuzey);border:1px solid var(--cizgi);border-radius:6px;padding:2px 6px}
+.iskelet{height:12px;border-radius:6px;background:linear-gradient(90deg,var(--dolgu),var(--zemin),var(--dolgu));background-size:200% 100%;animation:akis 1.4s linear infinite;width:100%}
+@keyframes akis{to{background-position:-200% 0}}
+.serit{display:flex;gap:12px;align-items:center;border:1px solid var(--cizgi);border-left:4px solid var(--kirmizi);border-radius:var(--r);padding:12px 16px;background:var(--yuzey);flex-wrap:wrap}
+.serit.bilgi{border-left-color:var(--gri)}
+:root[data-theme="dark"] .serit.bilgi{border-left-color:var(--ikincil)}
+.serit > div{flex:1;min-width:200px}
+.serit b{display:block}
+.serit span{color:var(--ikincil);font-size:13px}
+.taslak-kontrol{display:flex;gap:10px;align-items:center;flex-wrap:wrap;border:1px dashed var(--cizgi2);border-radius:var(--r);padding:8px 12px;font-size:12.5px;color:var(--ikincil)}
+
+/* ── İLERLEME ÇUBUĞU ── */
+.cubuk{height:8px;border-radius:999px;background:var(--dolgu);position:relative;overflow:visible}
+.cubuk > i{position:absolute;inset:0 auto 0 0;border-radius:999px;background:var(--metin)}
+.cubuk > i.asim{background:var(--kirmizi)}
+.cubuk > u{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--kirmizi);border-radius:2px}
+.cubuk.ince{height:6px}
+
+/* ── SİHİRBAZ ── */
+.ray{display:flex;gap:6px}
+.ray .p{flex:1;min-width:0}
+.ray .p i{display:block;height:4px;border-radius:4px;background:var(--dolgu)}
+.ray .p.bitti i{background:var(--metin)} .ray .p.simdi i{background:var(--kirmizi)}
+.ray .p span{display:block;font-size:11.5px;color:var(--soluk);margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ray .p.simdi span,.ray .p.bitti span{color:var(--metin);font-weight:600}
+.secimler{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px}
+.secim{border:1px solid var(--cizgi);border-radius:var(--r-lg);padding:20px;display:grid;gap:8px;background:var(--yuzey);cursor:pointer;text-align:left;transition:border-color .15s,transform .15s;align-content:start}
+.secim:hover{border-color:var(--metin);transform:translateY(-2px)}
+.secim[aria-pressed="true"]{border-color:var(--kirmizi);box-shadow:inset 0 0 0 1px var(--kirmizi)}
+.karo{width:44px;height:44px;border-radius:12px;background:var(--gri);color:#fff;display:grid;place-items:center;font:800 15px var(--baslik)}
+.karo.k{background:var(--kirmizi)}
+.secim h3{font-size:16px}
+.secim p{color:var(--ikincil);font-size:13px}
+.altcubuk{display:flex;align-items:center;gap:10px;border:1px solid var(--cizgi);border-radius:var(--r-lg);padding:12px 16px;background:var(--yuzey);position:sticky;bottom:12px}
+.altcubuk span{flex:1;color:var(--ikincil);font-size:13px;min-width:0}
+.soru{font-size:30px;font-weight:800;letter-spacing:-.015em;margin-top:6px}
+
+/* ── AÇILIR MENÜ ── */
+.acilir{position:fixed;z-index:60;background:var(--yuzey);border:1px solid var(--cizgi);border-radius:14px;box-shadow:var(--golge);padding:6px;min-width:220px;max-width:calc(100vw - 16px);opacity:0;transform:translateY(-4px) scale(.98);transform-origin:top left;pointer-events:none;visibility:hidden;transition:opacity .14s ease,transform .14s ease,visibility 0s .14s}
+.acilir.acik{opacity:1;transform:none;pointer-events:auto;visibility:visible;transition:opacity .14s ease,transform .14s ease}
+.acilir .baslik{font:700 11px/1 var(--govde);letter-spacing:.08em;text-transform:uppercase;color:var(--soluk);padding:10px 10px 6px}
+.acilir button{display:flex;align-items:center;gap:10px;width:100%;min-height:36px;padding:6px 10px;border-radius:8px;border:0;background:none;cursor:pointer;font-size:13.5px;font-weight:600;color:var(--metin);text-align:left}
+.acilir button:hover,.acilir button:focus-visible{background:var(--dolgu);outline:none}
+.acilir .i{color:var(--ikincil)}
+.acilir .ayir{height:1px;background:var(--cizgi);margin:6px 4px}
+.acilir .tehlike,.acilir .tehlike .i{color:var(--kirmizi)}
+.acilir .ip{margin-left:auto;font-size:12px;color:var(--soluk);font-weight:400}
+.acilir .secili{background:var(--vurgu)}
+.metin2{display:flex;flex-direction:column;line-height:1.25;min-width:0}
+.metin2 small{font-weight:400;color:var(--ikincil);font-size:12px;margin-top:2px}
+.hn{width:8px;height:8px;border-radius:50%;background:var(--ok);flex:none} .hn.e{background:var(--kirmizi)}
+.acilir .ara{display:flex;align-items:center;gap:8px;height:36px;border:1px solid var(--cizgi2);border-radius:8px;padding:0 10px;margin:4px 4px 6px}
+.acilir .ara input{border:0;outline:none;background:none;flex:1;font:inherit;color:var(--metin);min-width:0}
+
+/* ── YAN PANEL ── */
+.perde{position:fixed;inset:0;background:rgba(0,0,0,.32);opacity:0;visibility:hidden;transition:opacity .2s,visibility 0s .2s;z-index:70}
+.perde.acik{opacity:1;visibility:visible;transition:opacity .2s}
+.yp{position:fixed;top:0;right:0;bottom:0;width:min(440px,100%);background:var(--yuzey);border-left:1px solid var(--cizgi);box-shadow:var(--golge);z-index:71;display:flex;flex-direction:column;transform:translateX(100%);visibility:hidden;transition:transform .22s ease,visibility 0s .22s}
+.yp.acik{transform:none;visibility:visible;transition:transform .22s ease}
+.yp-bas{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:16px 20px;border-bottom:1px solid var(--cizgi)}
+.yp-bas h3{font-size:17px}
+.yp-bas small{display:block;color:var(--ikincil);font-size:12.5px;margin-top:2px}
+.yp-ic{padding:20px;display:grid;gap:16px;flex:1;overflow:auto;align-content:start}
+.yp-alt{padding:12px 20px;border-top:1px solid var(--cizgi);display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.dl{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:8px 12px;font-size:13px}
+.dl dt{color:var(--ikincil)} .dl dd{margin:0;font-weight:600;overflow-wrap:anywhere}
+.fark{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:center;border:1px solid var(--cizgi);border-radius:var(--r);padding:14px}
+.fark small{display:block;color:var(--ikincil);font-size:12px}
+.adimlar{display:grid;gap:8px;margin:0;padding:0;list-style:none;counter-reset:a}
+.adimlar li{display:flex;gap:10px;align-items:center;font-size:13px;counter-increment:a}
+.adimlar li::before{content:counter(a);width:22px;height:22px;border-radius:50%;background:var(--dolgu);display:grid;place-items:center;font:700 11px var(--govde);flex:none}
+
+/* ── ÖZEL PARÇALAR ── */
+.kirinti-hap{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:13px}
+.kirinti-hap button{border:1px solid var(--cizgi);background:var(--yuzey);border-radius:999px;height:28px;padding:0 12px;font-weight:600;font-size:12.5px;cursor:pointer;color:var(--ikincil);white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis}
+.kirinti-hap button:hover{color:var(--metin);border-color:var(--cizgi2)}
+.kirinti-hap b{font-weight:700;white-space:nowrap}
+.kirinti-hap .ayr{color:var(--soluk)}
+.onizleme-sat td{background:var(--zemin);padding:16px}
+.onizleme{display:flex;gap:16px;flex-wrap:wrap}
+.akis-kart{width:260px;border:1px solid var(--cizgi);border-radius:12px;background:var(--yuzey);overflow:hidden;font-size:12.5px}
+.akis-kart .ust2{display:flex;gap:8px;align-items:center;padding:10px}
+.akis-kart .gorsel{aspect-ratio:4/5;background:var(--gri);color:#fff;display:grid;place-items:center;font:800 15px var(--baslik);text-align:center;padding:16px}
+.akis-kart .alt2{padding:10px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.arama-kart{max-width:420px;border:1px solid var(--cizgi);border-radius:12px;background:var(--yuzey);padding:14px;font-size:13px}
+.arama-kart .rk{font-weight:700;font-size:12px} .arama-kart .bs{font-family:var(--baslik);font-size:16px;font-weight:700;margin:4px 0}
+.galeri{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px}
+.g-kart{border:1px solid var(--cizgi);border-radius:var(--r-lg);overflow:hidden;background:var(--yuzey);display:flex;flex-direction:column;min-width:0}
+.g-gorsel{aspect-ratio:1/1;background:var(--gri);color:#fff;position:relative;display:grid;place-items:center;font:800 14px var(--baslik);text-align:center;padding:16px}
+.g-gorsel.acik{background:var(--dolgu);color:var(--ikincil)}
+.g-gorsel .r{position:absolute;top:10px;left:10px}
+.g-gorsel .arti{position:absolute;bottom:10px;right:10px;font:700 11px var(--govde);background:rgba(0,0,0,.55);color:#fff;border-radius:999px;padding:2px 8px}
+.g-ic{padding:14px;display:grid;gap:6px;flex:1;align-content:start}
+.g-ic h4{font-size:14px}
+.g-ic small{color:var(--ikincil);font-size:12px}
+.mini-m{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;border-top:1px solid var(--cizgi);padding:10px 14px;font-size:11.5px;color:var(--ikincil)}
+.mini-m b{display:block;font:700 13px var(--baslik);color:var(--metin)}
+.oneri{display:grid;gap:12px}
+.oneri .ust3{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.oneri h3{font-size:16px}
+.kanit{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.kanit div{background:var(--zemin);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--ikincil)}
+.kanit b{display:block;font:700 14px var(--baslik);color:var(--metin)}
+.kanit b.kotu{color:var(--kirmizi)}
+.kontrol-l{display:grid}
+.kontrol{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:12px;align-items:center;padding:14px 20px;border-bottom:1px solid var(--cizgi)}
+.kontrol:last-child{border-bottom:0}
+.kontrol .tk{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font:800 12px var(--govde);border:1.5px solid var(--cizgi2);color:var(--ikincil)}
+.kontrol.bitti .tk{background:var(--metin);border-color:var(--metin);color:var(--bg)}
+.kontrol.eksik .tk{border-color:var(--kirmizi);color:var(--kirmizi)}
+.kontrol b{font-weight:700} .kontrol small{display:block;color:var(--ikincil);font-size:12.5px}
+.belge{background:var(--zemin);border-radius:var(--r-lg);padding:24px;display:grid;gap:20px;justify-items:center}
+.belge-sayfa{width:100%;max-width:720px;background:#fff;color:#000;border:1px solid rgba(48,46,45,.12);border-radius:6px;padding:36px;display:grid;gap:14px}
+.belge-sayfa .kapak-cizgi{width:48px;height:4px;background:#ff2400;border-radius:2px}
+.belge-sayfa h2{font-size:26px}
+.belge-sayfa .bm{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.belge-sayfa .bm div{border:1px solid rgba(48,46,45,.14);border-radius:8px;padding:10px;font-size:11px;color:rgba(48,46,45,.64)}
+.belge-sayfa .bm div.top{background:#ff2400;color:#fff;border-color:#ff2400}
+.belge-sayfa .bm b{display:block;font:800 16px var(--baslik);color:inherit}
+.belge-sayfa .bm div:not(.top) b{color:#000}
+.belge-sayfa table{font-size:11.5px} .belge-sayfa th{color:rgba(48,46,45,.64);padding:6px 8px;border-color:rgba(48,46,45,.14)} .belge-sayfa td{padding:6px 8px;border-color:rgba(48,46,45,.14)}
+.belge-sayfa tbody tr:hover{background:none}
+.belge-sayfa .alt-b{color:#ff2400;font:700 11px var(--govde);letter-spacing:.08em;text-transform:uppercase}
+.bolum-liste{display:grid;gap:6px}
+.bolum-liste label{display:flex;gap:10px;align-items:center;font-size:13px;padding:8px 10px;border:1px solid var(--cizgi);border-radius:8px;cursor:grab;background:var(--yuzey)}
+.bolum-liste label .tut{color:var(--soluk);letter-spacing:-2px}
+.not{border-top:1px solid var(--cizgi);padding-top:14px;color:var(--ikincil);font-size:12.5px}
+.not summary{cursor:pointer;font-weight:700;color:var(--metin);font-size:13px}
+.not ul{margin:8px 0 0;padding-left:18px;display:grid;gap:4px}
+.korunur{display:flex;gap:10px;align-items:center;border:1px dashed var(--cizgi2);border-radius:var(--r);padding:10px 14px;font-size:13px;color:var(--ikincil)}
+.korunur b{color:var(--metin)}
+.platform-kart .kart-ic{display:grid;gap:10px}
+.sohbet{display:grid;gap:10px}
+.balon{max-width:80%;padding:10px 14px;border-radius:14px;background:var(--dolgu);font-size:13px}
+.balon.ben{margin-left:auto;background:var(--metin);color:var(--bg)}
+
+/* ── MOBİL ── */
+@media (max-width:900px){
+  .kabuk{grid-template-columns:minmax(0,1fr)}
+  .menu{position:fixed;left:0;top:0;bottom:0;width:300px;max-width:86%;transform:translateX(-100%);visibility:hidden;transition:transform .22s ease,visibility 0s .22s;box-shadow:var(--golge)}
+  .kabuk.cekmece-acik .menu{transform:none;visibility:visible;transition:transform .22s ease}
+  .hamburger{display:grid}
+  .ust{padding:0 8px 0 4px}
+  .masa{display:none!important}
+  main{padding:18px 16px 96px}
+  .sb h1{font-size:23px}
+  .soru{font-size:23px}
+  .metrikler{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .metrik:nth-child(2n){border-right:0}
+  .metrik:nth-child(-n+2){border-bottom:1px solid var(--cizgi)}
+  .metrik b{font-size:20px}
+  .izgara-2,.izgara-e,.izgara-3,.form-izgara,.kanit{grid-template-columns:minmax(0,1fr)}
+  .kosul{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+  .belge{padding:12px} .belge-sayfa{padding:18px} .belge-sayfa .bm{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ray .p span{display:none}
+  .ara-kutu{flex:1 1 100%}
+  .kontrol{grid-template-columns:28px minmax(0,1fr);padding:14px 16px}
+  .kontrol > :last-child{grid-column:2}
+  .sb .eylem{width:100%}
+  .akis-kart{width:100%;max-width:300px}
+}
+@media (prefers-reduced-motion: reduce){*,*::before,*::after{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="ev" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
+  <symbol id="hedef" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/></symbol>
+  <symbol id="cuzdan" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M16 12h2M3 9h18"/></symbol>
+  <symbol id="roket" viewBox="0 0 24 24"><path d="M5 15c-1 1-2 4-2 6 2 0 5-1 6-2M14 4c3-1 6-1 6-1s0 3-1 6l-6 6-5-5z"/><circle cx="15" cy="9" r="1.5"/></symbol>
+  <symbol id="arti" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="tablo" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10"/></symbol>
+  <symbol id="kisi" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></symbol>
+  <symbol id="ayar" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4.9a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.5a7 7 0 0 0-2 1.2l-2.4-.9-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-.9a7 7 0 0 0 2 1.2L10 21h4l.5-2.5a7 7 0 0 0 2-1.2l2.4.9 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z"/></symbol>
+  <symbol id="kural" viewBox="0 0 24 24"><path d="M4 6h10M4 12h16M4 18h7"/><circle cx="18" cy="6" r="2"/><circle cx="15" cy="18" r="2"/></symbol>
+  <symbol id="rapor" viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7z M14 3v5h5 M10 13h6 M10 17h6"/></symbol>
+  <symbol id="marka" viewBox="0 0 24 24"><path d="M4 7l8-4 8 4-8 4z M4 12l8 4 8-4 M4 17l8 4 8-4"/></symbol>
+  <symbol id="resim" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></symbol>
+  <symbol id="zil" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z M10 21h4"/></symbol>
+  <symbol id="soru" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17h.01"/></symbol>
+  <symbol id="yenile" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/></symbol>
+  <symbol id="asagi" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></symbol>
+  <symbol id="sag" viewBox="0 0 24 24"><path d="M10 7l5 5-5 5"/></symbol>
+  <symbol id="menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+  <symbol id="nokta3" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></symbol>
+  <symbol id="cop" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></symbol>
+  <symbol id="kalem" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></symbol>
+  <symbol id="kopya" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V4H4v12h4"/></symbol>
+  <symbol id="duraklat" viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></symbol>
+  <symbol id="cikis" viewBox="0 0 24 24"><path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10"/></symbol>
+  <symbol id="kalkan" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z"/></symbol>
+  <symbol id="ara" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></symbol>
+  <symbol id="tik" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></symbol>
+  <symbol id="indir" viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></symbol>
+  <symbol id="saat" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></symbol>
+  <symbol id="baglanti" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></symbol>
+  <symbol id="kapat" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+</svg>
+
+<div class="kabuk" id="kabuk">
+  <!-- ANA MENÜ: menu-sistemi.html Seçenek A -->
+  <nav class="menu" id="anaMenu" aria-label="Ana menü">
+    <div class="menu-ust">
+      <span class="logo">Advetics<i></i></span>
+      <button class="secici" type="button" data-acilir="ws" aria-haspopup="menu"><span class="harf">EB</span><span style="min-width:0"><small>Ege Birlik Yapı</small><b>Seasight Konutları</b></span><svg class="i" style="color:var(--soluk)"><use href="#asagi"/></svg></button>
+      <button class="olustur" type="button" data-acilir="olustur" aria-haspopup="menu"><svg class="i"><use href="#arti"/></svg>Oluştur</button>
+    </div>
+    <div class="menu-liste" id="menuListe"></div>
+    <div class="menu-alt"><button class="kullanici" type="button" data-acilir="kul" aria-haspopup="menu"><span class="avatar">YA</span><span style="min-width:0"><b style="font-weight:600;font-size:13px">Yusuf Algan</b><small>Ajans yöneticisi</small></span><svg class="i" style="color:var(--soluk)"><use href="#nokta3"/></svg></button></div>
+  </nav>
+
+  <div class="icerik">
+    <header class="ust">
+      <button class="ikon-dg hamburger" id="hamb" type="button" aria-label="Menüyü aç"><svg class="i"><use href="#menu"/></svg></button>
+      <span class="kirinti"><span class="masa">Profaj Reklamcılık › Ege Birlik Yapı › </span><b id="kirSayfa">Reklam Yöneticisi</b></span>
+      <span class="taslak-et masa">Taslak</span>
+      <button class="ikon-dg masa" type="button" aria-label="Ara"><svg class="i"><use href="#ara"/></svg></button>
+      <button class="ikon-dg masa" type="button" aria-label="Verileri yenile"><svg class="i"><use href="#yenile"/></svg></button>
+      <button class="ikon-dg" type="button" id="tema" aria-label="Temayı değiştir"><svg class="i"><use href="#hedef"/></svg></button>
+      <button class="ikon-dg" type="button" data-acilir="zil" aria-label="Bildirimler" aria-haspopup="menu"><svg class="i"><use href="#zil"/></svg><span class="nokta"></span></button>
+    </header>
+
+    <main id="ana">
+
+<!-- ═════════ GENEL BAKIŞ (mevcut düzen korunur) ═════════ -->
+<section class="sayfa" data-sayfa="genel" hidden tabindex="-1">
+  <div class="korunur"><svg class="i"><use href="#tik"/></svg><span><b>Mevcut tasarım korunur.</b> Bu ekran bugünkü düzenin sadık çizimi; yalnız kabuk (menü, üst çubuk) yeni.</span></div>
+  <div class="sb"><div><span class="ust-y">Seasight Konutları</span><h1>Genel Bakış</h1><p>Seasight Konutları · 1 - 13 Ekim 2026 · Gün bitmedi, rakamlar artacak</p></div>
+    <div class="eylem"><button class="tarih" type="button">Bu ay <small>1 - 13 Eki</small><svg class="i"><use href="#asagi"/></svg></button><button class="dg ikon" type="button" aria-label="Yenile"><svg class="i"><use href="#yenile"/></svg></button></div></div>
+  <div class="serit"><div><b>Kurulum: 2 iş kaldı</b><span>Google Ads ödemesi eksik, telefon araması ölçülmüyor.</span></div><button class="dg kucuk hayalet" type="button">7 gün gizle</button><button class="dg kucuk koyu" type="button" data-git="marka">Kurulumu tamamla</button></div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+    <div class="bolumlu" role="group" aria-label="Platform"><button type="button" aria-pressed="true">Tümü</button><button type="button" aria-pressed="false">Meta</button><button type="button" aria-pressed="false">Google</button></div>
+    <span class="ik2 kucuk">3 reklam hesabı</span><span style="flex:1"></span>
+    <button class="dg kucuk" type="button" data-git="boost">Akıllı Boost <span class="etiket">3</span></button><button class="dg kucuk" type="button" data-git="strateji">AdvStrategy</button><button class="dg kucuk" type="button" data-git="raporlar">Raporlar</button>
+    <button class="dg ana kucuk" type="button" data-git="sihirbaz">＋ Reklam oluştur</button>
+  </div>
+  <div class="izgara-2">
+    <div class="yigin">
+      <div class="kart"><div class="kart-bas"><h3>Performans</h3><small>önceki 13 güne göre</small></div>
+        <div class="metrikler ic"><div class="metrik s1"><span>Harcama</span><b>48.210 ₺</b><small>▲ %12</small></div><div class="metrik s2"><span>Dönüşüm</span><b>164</b><small>▲ %21</small></div><div class="metrik"><span>Dönüşüm başı maliyet</span><b>294 ₺</b><small class="kotu">▲ %8</small></div><div class="metrik"><span>Tıklama</span><b>6.912</b><small>▼ %3</small></div></div>
+        <div class="kart-ic"><svg class="grafik" viewBox="0 0 800 180" preserveAspectRatio="none" role="img" aria-label="Harcama ve dönüşüm, 13 gün"><g stroke="var(--cizgi)"><line x1="0" y1="40" x2="800" y2="40"/><line x1="0" y1="95" x2="800" y2="95"/><line x1="0" y1="150" x2="800" y2="150"/></g><path d="M0,130 C60,120 100,104 160,108 S260,76 320,86 S420,58 480,68 S600,50 660,54 S760,40 800,42" fill="none" stroke="var(--kirmizi)" stroke-width="2.5" vector-effect="non-scaling-stroke"/><path d="M0,150 C70,146 110,130 170,140 S270,112 330,118 S430,98 490,104 S610,86 670,90 S760,78 800,80" fill="none" stroke="var(--seri2)" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>
+          <div class="kucuk ik2" style="display:flex;gap:16px;flex-wrap:wrap;margin-top:10px"><span>Gösterim <b class="sayi" style="color:var(--metin)">412.300</b></span><span>Tıklama oranı <b class="sayi" style="color:var(--metin)">%1,68</b></span><span>Tıklama başı <b class="sayi" style="color:var(--metin)">6,97 ₺</b></span><span>Bin gösterim <b class="sayi" style="color:var(--metin)">116,93 ₺</b></span><span>Erişim <b class="sayi" style="color:var(--metin)">188.400</b></span></div></div></div>
+      <div class="kart"><div class="kart-bas"><h3>Hesaplar</h3><button class="bag" type="button" data-git="yonetici">Tümü →</button></div><div class="kart-ic" style="padding-top:4px;padding-bottom:4px">
+        <div class="satir-l"><div><b>Meta · Seasight Konutları</b><small>act_1029384756</small></div><span class="sayi">38.110 ₺</span></div>
+        <div class="satir-l"><div><b>Google · Seasight Arama</b><small>516-174-6317</small></div><span class="sayi">10.100 ₺</span></div>
+        <div class="satir-l"><div><b>Meta · Seasight Yatırım</b><small>izlenmiyor</small></div><span class="ik2">-</span></div></div></div>
+      <div class="kart"><div class="kart-bas"><h3>En çok harcayan</h3></div><div class="kart-ic" style="padding-top:4px;padding-bottom:4px">
+        <div class="satir-l"><div><b>Seasight · Form</b><small>Meta · 61 dönüşüm</small></div><span class="sayi">18.400 ₺</span></div>
+        <div class="satir-l"><div><b>Seasight · Erişim İzmir</b><small>Meta · 0 dönüşüm</small></div><span class="sayi">11.900 ₺</span></div>
+        <div class="satir-l"><div><b>Seasight · Arama</b><small>Google · 52 dönüşüm</small></div><span class="sayi">6.100 ₺</span></div></div>
+        <div class="kart-alt"><button class="bag" type="button" data-git="yonetici">Reklam Yöneticisi →</button></div></div>
+    </div>
+    <div class="yigin">
+      <div class="kart"><div class="kart-bas"><h3>Bekleyen işler</h3><small>2</small></div><div class="kart-ic" style="padding-top:4px;padding-bottom:4px">
+        <div class="satir-l"><div><b>Google Ads ödemesi</b><small>Kart eklenmeden reklam yayınlanmaz.</small></div><button class="dg kucuk" type="button">Aç</button></div>
+        <div class="satir-l"><div><b>3 gönderi onay bekliyor</b><small>Akıllı Boost</small></div><button class="dg kucuk" type="button" data-git="boost">Gör</button></div></div></div>
+      <div class="kart"><div class="kart-bas"><h3>Aylık Bütçe</h3><span class="rozet ok"><i></i>Yolunda</span></div><div class="kart-ic" style="display:grid;gap:10px">
+        <div class="cubuk"><i style="width:39%"></i><u style="left:42%"></u></div>
+        <div class="dl"><dt>Ayın geçen kısmı</dt><dd>%42</dd><dt>Bu tempoyla ay sonu</dt><dd class="sayi">114.900 ₺</dd><dt>Kalan günlük bütçe</dt><dd class="sayi">3.947 ₺</dd></dl></div>
+        <div class="kart-alt"><button class="bag" type="button" data-git="butce">Aylık Bütçe →</button></div></div>
+      <div class="kart"><div class="kart-bas"><h3>Harcamanın mecralara dağılımı</h3></div><div class="kart-ic" style="display:grid;gap:10px">
+        <div><div style="display:flex;justify-content:space-between" class="kucuk"><span>Meta</span><b class="sayi">%79</b></div><div class="cubuk ince"><i style="width:79%"></i></div></div>
+        <div><div style="display:flex;justify-content:space-between" class="kucuk"><span>Google</span><b class="sayi">%21</b></div><div class="cubuk ince"><i style="width:21%"></i></div></div></div></div>
+      <div class="kart"><div class="kart-bas"><h3>Dönüşümler neydi?</h3></div><div class="kart-ic" style="padding-top:4px;padding-bottom:4px">
+        <div class="satir-l"><span>Form gönderimi</span><b class="sayi">104</b></div><div class="satir-l"><span>WhatsApp konuşması</span><b class="sayi">38</b></div><div class="satir-l"><span>Telefon araması</span><b class="sayi">22</b></div></div></div>
+    </div>
+  </div>
+  <p class="ik2 kucuk">Bugün dâhil değil.</p>
+</section>
+
+<!-- ═════════ ADVSTRATEGY GİRİŞ ═════════ -->
+<section class="sayfa" data-sayfa="strateji" hidden tabindex="-1">
+  <div class="sb"><div><span class="ust-y">Planla</span><h1>AdvStrategy</h1><p>Seasight Konutları için reklam stratejisi: hedef, bütçe, bölge ve kampanyalar. Müşteri raporu panelde onaylar.</p></div>
+    <div class="eylem"><a class="dg ana" href="../advstrategy/simulasyon.html">＋ Strateji oluştur</a></div></div>
+  <div class="secimler" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr))">
+    <button class="secim" type="button"><span class="karo">R</span><h3>Raporu incele</h3><p>Hazırlanan stratejiyi oku, onayla ya da değişiklik iste.</p><span class="rozet koyu" style="justify-self:start"><i></i>Onay bekliyor</span><span class="bag">Raporu aç →</span></button>
+    <a class="secim" href="../advstrategy/simulasyon.html" style="text-decoration:none;color:inherit"><span class="karo k">+</span><h3>Strateji oluştur</h3><p>Yedi kısa soru, yaklaşık 5 dakika. Adımlar simülasyondaki gibi.</p><span class="bag">Başla →</span></a>
+  </div>
+  <div class="kart"><div class="kart-bas"><h3>Stratejiler</h3><small>Seasight Konutları · 3 strateji</small></div>
+    <div class="tablo-sar"><table><thead><tr><th>Strateji</th><th>Durum</th><th class="s">Kampanya</th><th class="s">Aylık bütçe</th><th>Sürüm</th><th></th></tr></thead><tbody>
+      <tr class="tik"><td><button class="ad" type="button">Ekim - Aralık 2026</button><small>Form ve site trafiği · İzmir ili</small></td><td><span class="rozet koyu"><i></i>Onay bekliyor</span></td><td class="s">4</td><td class="s">60.000 ₺</td><td>2</td><td class="s"><button class="dg kucuk hayalet ikon" type="button" data-menu="Raporu aç|Kopyala|-|!İptal et" aria-label="Diğer"><svg class="i"><use href="#nokta3"/></svg></button></td></tr>
+      <tr class="tik"><td><button class="ad" type="button">Yaz lansmanı</button><small>Erişim · İzmir, Çeşme</small></td><td><span class="rozet ok"><i></i>Onaylandı</span></td><td class="s">3</td><td class="s">45.000 ₺</td><td>1</td><td class="s"><button class="dg kucuk hayalet ikon" type="button" data-menu="Raporu aç|Kampanyaları kur|Kopyala" aria-label="Diğer"><svg class="i"><use href="#nokta3"/></svg></button></td></tr>
+      <tr class="tik"><td><button class="ad" type="button">Nisan medya planı</button><small>Eski plan, salt okunur</small></td><td><span class="rozet"><i></i>Kapandı</span></td><td class="s">2</td><td class="s">30.000 ₺</td><td>1</td><td class="s"><button class="dg kucuk hayalet ikon" type="button" data-menu="Raporu aç" aria-label="Diğer"><svg class="i"><use href="#nokta3"/></svg></button></td></tr>
+    </tbody></table></div><div class="sayfalama"><span>1 - 3 / 3</span></div></div>
+  <details class="not"><summary>Bugünden farkı</summary><ul><li>"Strateji oluştur" başlığın sağına çıktı; iki büyük kart kalır, üçüncü bir yol eklenmedi.</li><li>Strateji listesi satır listesinden tabloya döndü: durum rozeti, kampanya sayısı, bütçe, sürüm aynı satırda.</li><li>Sihirbazın içi simülasyondaki gibi; değişmedi.</li></ul></details>
+</section>
+
+<!-- ═════════ AYLIK BÜTÇE ═════════ -->
+<section class="sayfa" data-sayfa="butce" hidden tabindex="-1">
+  <div class="sb"><div><span class="ust-y">Planla</span><h1>Aylık Bütçe</h1><p>Ay ay harcama hedefi ve gidişat. Plan AdvStrategy'de, burada ayın taahhüdü.</p></div>
+    <div class="eylem"><button class="dg ana" type="button" data-yp="butce">Bütçeyi düzenle</button></div></div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+    <div class="bolumlu" role="group" aria-label="Ay"><button type="button" aria-pressed="false">Ağustos</button><button type="button" aria-pressed="false">Eylül</button><button type="button" aria-pressed="true">Ekim</button><button type="button" aria-pressed="false">Kasım · plan</button></div>
+    <span class="ik2 kucuk">Seasight Konutları · Ekim 2026</span>
+  </div>
+  <div class="serit"><div><b>Eksik veri: 13 günün 12 günü senkronize</b><span>Google Ads hesabında 9 Ekim henüz gelmedi; kalan tutar biraz yüksek görünebilir.</span></div><button class="dg kucuk" type="button">Şimdi güncelle</button></div>
+  <div class="kart">
+    <div class="kart-bas"><div><h3>Workspace geneli</h3><small>Tüm reklam hesaplarının toplamı · 13 Ekim tarihine kadar</small></div><span class="rozet ok"><i></i>Hedefte</span></div>
+    <div class="kart-ic" style="display:grid;gap:14px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px"><div><span class="sayi" style="font-size:30px;font-weight:800">48.210 ₺</span> <span class="ik2">/ 120.000 ₺ harcandı</span></div><span class="ik2 kucuk">%40 harcandı · ayın geçen kısmı %42</span></div>
+      <div class="cubuk"><i style="width:40%"></i><u style="left:42%" title="Ayın geçen kısmı"></u></div>
+    </div>
+    <div class="metrikler" style="border:0;border-top:1px solid var(--cizgi);border-radius:0 0 16px 16px">
+      <div class="metrik"><span>Kalan</span><b>71.790 ₺</b></div><div class="metrik"><span>Kalan gün</span><b>18</b></div><div class="metrik"><span>Günlük harcanabilir</span><b>3.988 ₺</b><small>Kalan bütçe ÷ kalan gün</small></div><div class="metrik"><span>Ay sonu tahmini</span><b>114.900 ₺</b><small>Bu hızla devam edilirse</small></div>
+    </div>
+  </div>
+  <div class="kart"><div class="kart-bas"><h3>Reklam hesabı bazında</h3><small>2 aktif · 1 hareketsiz</small></div>
+    <div class="tablo-sar"><table><thead><tr><th>Hesap</th><th>Durum</th><th style="min-width:200px">Gidişat</th><th class="s">Harcanan</th><th class="s">Bütçe</th><th class="s">Günlük öneri</th><th></th></tr></thead><tbody>
+      <tr><td><b>Meta · Seasight Konutları</b><small>act_1029384756 · 13/13 gün veri</small></td><td><span class="rozet ok"><i></i>Hedefte</span></td><td><div class="cubuk ince"><i style="width:42%"></i><u style="left:42%"></u></div></td><td class="s">38.110 ₺</td><td class="s">90.000 ₺</td><td class="s">2.883 ₺</td><td class="s"><button class="dg kucuk" type="button" data-yp="butce">Düzenle</button></td></tr>
+      <tr><td><b>Google · Seasight Arama</b><small>516-174-6317 · <span style="color:var(--kirmizi)">12/13 gün veri</span></small></td><td><span class="rozet hata"><i></i>Hızlı</span></td><td><div class="cubuk ince"><i class="asim" style="width:34%"></i><u style="left:42%"></u></div></td><td class="s">10.100 ₺</td><td class="s">30.000 ₺</td><td class="s">1.106 ₺</td><td class="s"><button class="dg kucuk" type="button" data-yp="butce">Düzenle</button></td></tr>
+      <tr><td><b>Meta · Seasight Yatırım</b><small>Bu ay hareket yok</small></td><td><span class="rozet"><i></i>Bütçe yok</span></td><td><span class="ik2 kucuk">Sınır yok</span></td><td class="s">0 ₺</td><td class="s">-</td><td class="s">-</td><td class="s"><button class="dg kucuk" type="button" data-yp="butce">Bütçe tanımla</button></td></tr>
+    </tbody><tfoot><tr><td>Toplam · 3 hesap</td><td></td><td></td><td class="s">48.210 ₺</td><td class="s">120.000 ₺</td><td class="s">3.988 ₺</td><td></td></tr></tfoot></table></div>
+    <div class="sayfalama"><span class="sol">Kırmızı çizgi ayın geçen kısmı. Bugün hariç.</span><span>1 - 3 / 3</span></div></div>
+  <details class="not"><summary>Bugünden farkı</summary><ul><li>Ay seçimi bölümlü hap seçiciye döndü; düzenleme sayfa içi form yerine sağdan açılan yan panelde.</li><li>Hesap satırları sütunlu tabloya döndü: harcanan, bütçe ve günlük öneri hizalı, toplam satırı var.</li><li>Dört özet sayı tasarım sistemindeki metrik kutularına geçti; kart yapısı aynı.</li></ul></details>
+</section>
+
+<!-- ═════════ AKILLI BOOST ═════════ -->
+<section class="sayfa" data-sayfa="boost" hidden tabindex="-1">
+  <div class="sb"><div><span class="ust-y">Oluştur</span><h1>Akıllı Boost</h1><p>Instagram ve YouTube gönderilerin kurala göre seçilir; onayladığın kart ön ayarla yayınlanır.</p></div>
+    <div class="eylem"><button class="dg" type="button">Geçmiş içerikleri getir</button><button class="dg ana" type="button" data-yp="onayar">Boost ön ayarı</button></div></div>
+  <div class="serit"><div><b>Instagram: bildirim aboneliği çalışmıyor</b><span>Meta: (#200) Requires pages_manage_metadata permission. Yeni gönderiler saatlik taramayla gelir.</span></div><button class="dg kucuk koyu" type="button" data-git="ayarlar">Bağlantıyı yenile</button></div>
+  <div class="sekmeler" role="tablist" data-sekme-grup="boost">
+    <button class="sekme" role="tab" type="button" data-sekme="kart" aria-selected="true">İçerikler <span class="s">3</span></button>
+    <button class="sekme" role="tab" type="button" data-sekme="kural" aria-selected="false">Boost kuralları <span class="s">2</span></button>
+    <button class="sekme" role="tab" type="button" data-sekme="gecmis" aria-selected="false">Geçmiş</button>
+  </div>
+  <div data-panel-grup="boost" data-panel="kart" class="yigin">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <div class="bolumlu" role="group"><button type="button" aria-pressed="false">Tümü</button><button type="button" aria-pressed="true">Onay bekliyor 3</button><button type="button" aria-pressed="false">Yayında 2</button><button type="button" aria-pressed="false">Kapanan</button></div>
+      <button class="cip ekle" type="button">Mecra: Her mecra ▾</button><span style="flex:1"></span><span class="ik2 kucuk">3 kart gösteriliyor · toplam 14, en yeniler</span>
+    </div>
+    <div class="galeri">
+      <div class="g-kart"><div class="g-gorsel">Deniz manzaralı 2+1<span class="r rozet koyu"><i></i>Onay bekliyor</span></div><div class="g-ic"><small>@seasightkonutlari · 3 saat önce</small><h4>Kuralın seçtiği: etkileşim oranı %6,2</h4><small>Erişim 4.120 · Yorum 38 · Paylaşım 21</small><small><b style="color:var(--metin)">750 ₺ toplam · 5 gün</b> · Etkileşim</small></div><div class="kart-alt"><button class="dg kucuk hayalet" type="button">Yayınlama</button><button class="dg kucuk koyu" type="button">Bu ayarlarla yayınla</button></div></div>
+      <div class="g-kart"><div class="g-gorsel">Teslim tarihi duyurusu<span class="r rozet koyu"><i></i>Onay bekliyor</span></div><div class="g-ic"><small>@seasightkonutlari · dün</small><h4>Kuralın seçtiği: kaydetme 2 kat</h4><small>Erişim 6.880 · Yorum 12 · Paylaşım 44</small><small><b style="color:var(--metin)">750 ₺ toplam · 5 gün</b> · Etkileşim</small></div><div class="kart-alt"><button class="dg kucuk hayalet" type="button">Yayınlama</button><button class="dg kucuk koyu" type="button">Bu ayarlarla yayınla</button></div></div>
+      <div class="g-kart"><div class="g-gorsel">Şantiye videosu · Shorts<span class="r rozet koyu"><i></i>Onay bekliyor</span></div><div class="g-ic"><small>YouTube · Seasight · 2 gün önce</small><h4>Kuralın seçtiği: izlenme 1.940</h4><small>Demand Gen · günlük</small><small><b style="color:var(--metin)">250 ₺/gün × 7 gün = 1.750 ₺</b></small></div><div class="kart-alt"><button class="dg kucuk hayalet" type="button">Yayınlama</button><button class="dg kucuk koyu" type="button">Bu ayarlarla yayınla</button></div></div>
+    </div>
+  </div>
+  <div data-panel-grup="boost" data-panel="kural" class="kart" hidden>
+    <div class="kart-bas"><h3>Boost kuralları</h3><small>Her gün 08:30 ve 20:30'da çalışıyor</small></div>
+    <div class="kart-ic" style="padding-top:4px;padding-bottom:4px">
+      <div class="satir-l"><div><b>Instagram · etkileşimi yüksek gönderi</b><small>Son 48 saatte etkileşim oranı %5 üstü olanlar · son çalışma 08:30</small><div style="display:flex;gap:8px;align-items:center;margin-top:6px"><span class="kucuk ik2">Aylık tavan 1.500 ₺ / 5.000 ₺</span><div class="cubuk ince" style="width:120px"><i style="width:30%"></i></div></div></div><div style="display:flex;gap:6px"><span class="rozet"><i></i>Onayla</span><button class="dg kucuk" type="button">Şimdi çalıştır</button></div></div>
+      <div class="satir-l"><div><b>YouTube · yeni Shorts</b><small>Yayından 24 saat sonra 1.000 izlenme · henüz çalışmadı</small></div><div style="display:flex;gap:6px"><span class="rozet ok"><i></i>Otomatik onay</span><button class="dg kucuk" type="button">Şimdi çalıştır</button></div></div>
+    </div></div>
+  <div data-panel-grup="boost" data-panel="gecmis" class="kart" hidden>
+    <div class="tablo-sar"><table><thead><tr><th>Gönderi</th><th>Durum</th><th class="s">Bütçe</th><th class="s">Gösterim</th><th class="s">Tık</th></tr></thead><tbody>
+      <tr><td><b>Lansman indirimi</b><small>Instagram · 2 Ekim</small></td><td><span class="rozet ok"><i></i>Yayında</span></td><td class="s">750 ₺</td><td class="s">41.200</td><td class="s">612</td></tr>
+      <tr><td><b>Örnek daire turu</b><small>Instagram · 26 Eylül</small></td><td><span class="rozet"><i></i>Süresi doldu</span></td><td class="s">750 ₺</td><td class="s">38.900</td><td class="s">540</td></tr>
+      <tr><td><b>Sosyal tesis</b><small>Instagram · 20 Eylül</small></td><td><span class="rozet hata"><i></i>Başarısız</span></td><td class="s">-</td><td class="s">-</td><td class="s">-</td></tr>
+    </tbody></table></div><div class="sayfalama"><span>son 10 · toplam 14</span><span>1 - 3 / 14</span></div></div>
+  <details class="not"><summary>Bugünden farkı</summary><ul><li>İçerikler, kurallar ve geçmiş alt alta uzun sayfa yerine üç sekme.</li><li>Bildirim havuzu sağlığı sayfanın üstünde tek şerit; hatada Meta'nın mesajı ve tek "Bağlantıyı yenile".</li><li>Ön ayar penceresi sağdan yan panel; kart eylemleri sağ altta, tek koyu düğme.</li></ul></details>
+</section>
+
+<!-- ═════════ ADVCAMPAIGN GİRİŞ ═════════ -->
+<section class="sayfa" data-sayfa="campaign" hidden tabindex="-1">
+  <div class="sb"><div><span class="ust-y">Oluştur</span><h1>AdvCampaign</h1><p>Seasight Konutları · Meta ve Google reklamını altı adımda kur.</p></div>
+    <div class="eylem"><button class="dg ana" type="button" data-git="sihirbaz">＋ Yeni reklam</button></div></div>
+  <div class="sekmeler" role="tablist" data-sekme-grup="camp">
+    <button class="sekme" role="tab" type="button" data-sekme="yayin" aria-selected="true">Yayındakiler <span class="s">4</span></button>
+    <button class="sekme" role="tab" type="button" data-sekme="taslak" aria-selected="false">Taslaklar <span class="s">2</span></button>
+    <button class="sekme" role="tab" type="button" data-sekme="arsiv" aria-selected="false">Arşiv <span class="s">0</span></button>
+  </div>
+  <div class="kart" data-panel-grup="camp" data-panel="yayin">
+    <div class="tablo-sar"><table><thead><tr><th>Reklam</th><th>Platform</th><th class="s">Bütçe</th><th>Kuruldu</th><th></th></tr></thead><tbody>
+      <tr><td><div class="hucre-ad"><span class="harf" style="background:var(--kirmizi)">F</span><div><button class="ad" type="button">Seasight · Form</button><small>Form doldursunlar</small></div></div></td><td><span class="rozet ok"><i></i>Meta</span> <span class="rozet ok"><i></i>Google</span></td><td class="s">750 ₺/gün</td><td>3 gün önce</td><td class="s"><button class="dg kucuk" type="button" data-git="yonetici">Gör</button> <button class="dg kucuk hayalet ikon" type="button" data-menu="Reklam Yöneticisi'nde aç|Kopyala|-|!Listeden kaldır" aria-label="Diğer"><svg class="i"><use href="#nokta3"/></svg></button></td></tr>
+      <tr><td><div class="hucre-ad"><span class="harf">W</span><div><button class="ad" type="button">Seasight · WhatsApp</button><small>Bana yazsınlar</small></div></div></td><td><span class="rozet ok"><i></i>Meta</span></td><td class="s">400 ₺/gün</td><td>1 hafta önce</td><td class="s"><button class="dg kucuk" type="button">Gör</button> <button class="dg kucuk hayalet ikon" type="button" data-menu="Reklam Yöneticisi'nde aç|Kopyala|-|!Listeden kaldır" aria-label="Diğer"><svg class="i"><use href="#nokta3"/></svg></button></td></tr>
+      <tr><td><div class="hucre-ad"><span class="harf">A</span><div><button class="ad" type="button">Seasight · Arama</button><small>Siteme gelsinler</small></div></div></td><td><span class="rozet hata"><i></i>Google: ödeme yok</span></td><td class="s">300 ₺/gün</td><td>2 hafta önce</td><td class="s"><button class="dg kucuk" type="button">Gör</button> <button class="dg kucuk hayalet ikon" type="button" data-menu="Reklam Yöneticisi'nde aç|Kopyala|-|!Listeden kaldır" aria-label="Diğer"><svg class="i"><use href="#nokta3"/></svg></button></td></tr>
+      <tr><td><div class="hucre-ad"><span class="harf">E</span><div><button class="ad" type="button">Seasight · Erişim İzmir</button><small>Bölgemde çok kişi görsün</small></div></div></td><td><span class="rozet ok"><i></i>Meta</span></td><td class="s">5.000 ₺ toplam</td><td>3 hafta önce</td><td class="s"><button class="dg kucuk" type="button">Gör</button> <button class="dg kucuk hayalet ikon" type="button" data-menu="Reklam Yöneticisi'nde aç|Kopyala|-|!Listeden kaldır" aria-label="Diğer"><svg class="i"><use href="#nokta3"/></svg></button></td></tr>
+    </tbody></table></div><div class="sayfalama"><span>1 - 4 / 4</span></div></div>
+  <div class="kart" data-panel-grup="camp" data-panel="taslak" hidden>
+    <div class="tablo-sar"><table><thead><tr><th>Taslak</th><th>Eksik</th><th class="s">Bütçe</th><th>Son dokunuş</th><th></th></tr></thead><tbody>
+      <tr><td><div class="hucre-ad"><span class="harf">T</span><div><button class="ad" type="button" data-git="sihirbaz">Narlıdere · Telefon</button><small>Taslak · Meta + Google</small></div></div></td><td><span class="rozet hata"><i></i>2 eksik</span></td><td class="s">500 ₺/gün</td><td>dün</td><td class="s"><button class="dg kucuk koyu" type="button" data-git="sihirbaz">Devam et</button> <button class="dg kucuk hayalet ikon" type="button" data-menu="!Taslağı sil" aria-label="Diğer"><svg class="i"><use href="#nokta3"/></svg></button></td></tr>
+      <tr><td><div class="hucre-ad"><span class="harf">?</span><div><button class="ad" type="button" data-git="sihirbaz">Adsız taslak</button><small>Amaç seçilmemiş</small></div></div></td><td><span class="rozet"><i></i>Amaç yok</span></td><td class="s">-</td><td>9 gün önce</td><td class="s"><button class="dg kucuk" type="button" data-git="sihirbaz">Devam et</button> <button class="dg kucuk hayalet ikon" type="button" data-menu="!Taslağı sil" aria-label="Diğer"><svg class="i"><use href="#nokta3"/></svg></button></td></tr>
+    </tbody></table></div><div class="sayfalama"><span class="sol">1 eski taslak: bir haftadır dokunulmadı.</span><span>1 - 2 / 2</span></div></div>
+  <div data-panel-grup="camp" data-panel="arsiv" hidden><div class="hal orta"><span class="ik">0</span><b>Arşiv boş</b><p>Listeden kaldırdığın reklamlar burada durur; platformda yayında kalırlar.</p></div></div>
+  <details class="not"><summary>Bugünden farkı</summary><ul><li>Satır kartları tabloya döndü: platform durumu rozet, bütçe sağa yaslı, tek eylem + ⋯.</li><li>"Eski taslaklar" ayrı bölüm yerine Taslaklar sekmesinin altında tek satır not.</li><li>Sihirbaz simülasyon dilinde odaklı kip (aşağıdaki "Yeni reklam").</li></ul></details>
+</section>
+
+<!-- ═════════ ADVCAMPAIGN SİHİRBAZ (örnek adım) ═════════ -->
+<section class="sayfa" data-sayfa="sihirbaz" hidden tabindex="-1">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px"><button class="geri" type="button" data-git="campaign" style="margin:0"><svg class="i"><use href="#kapat"/></svg>Kapat</button><span class="ik2 kucuk">Taslak otomatik kaydedilir</span></div>
+  <nav class="ray" aria-label="Adımlar"><div class="p bitti"><i></i><span>1 · Amaç</span></div><div class="p bitti"><i></i><span>2 · Nerede</span></div><div class="p simdi"><i></i><span>3 · Kime</span></div><div class="p"><i></i><span>4 · Reklam</span></div><div class="p"><i></i><span>5 · Bütçe</span></div><div class="p"><i></i><span>6 · Kontrol</span></div></nav>
+  <div><span class="sb"><span class="ust-y">3 / 6 · Kime</span></span><h2 class="soru">Reklam kimlere ve nerede görünsün?</h2><p class="ik2">Konutun satıldığı bölgeyi seç. Yaş aralığı varsayılan; gerekirse değiştir.</p></div>
+  <div class="secimler" id="bolgeSecim">
+    <button class="secim" type="button" aria-pressed="true"><span class="karo k">İ</span><h3>İzmir ili</h3><p>Yaşayan ya da yakın zamanda bulunan. Yaklaşık 3,1 milyon kişi.</p></button>
+    <button class="secim" type="button" aria-pressed="false"><span class="karo">Ç</span><h3>Çeşme ve Urla</h3><p>Yazlık ve yatırım arayan, dar bölge.</p></button>
+    <button class="secim" type="button" aria-pressed="false"><span class="karo">T</span><h3>Türkiye geneli</h3><p>Geniş; konut için genelde gereksiz harcama.</p></button>
+  </div>
+  <div class="kart kart-ic form-izgara">
+    <div class="alan"><label for="yasA">Yaş aralığı</label><div style="display:flex;gap:8px;align-items:center"><input class="girdi" id="yasA" value="28"><span class="ik2">-</span><input class="girdi" aria-label="En büyük yaş" value="65+"></div><small>Konut ilanında Meta yaşı kısıtlamaz; bilgi amaçlı.</small></div>
+    <div class="alan"><span class="lb">Özel reklam kategorisi</span><div class="rozet" style="justify-self:start"><i></i>Konut · Marka Merkezi'nden</div><small>Kategori açık olduğu için cinsiyet ve dar yaş seçilemiyor.</small></div>
+  </div>
+  <div class="altcubuk"><button class="dg" type="button">← Geri</button><span>1 bölge seçildi · İzmir ili</span><button class="dg ana" type="button">Devam</button></div>
+</section>
+
+<!-- ═════════ REKLAM YÖNETİCİSİ ═════════ -->
+<section class="sayfa" data-sayfa="yonetici" hidden tabindex="-1">
+  <div class="sb"><div><span class="ust-y">Yönet</span><h1>Reklam Yöneticisi</h1><p>Seasight Konutları · 1 - 13 Ekim · Gün bitmedi</p></div>
+    <div class="eylem"><button class="tarih" type="button">Bu ay <small>1 - 13 Eki</small><svg class="i"><use href="#asagi"/></svg></button><button class="dg ikon" type="button" aria-label="Yenile"><svg class="i"><use href="#yenile"/></svg></button><button class="dg ana" type="button" data-git="sihirbaz">＋ Reklam oluştur</button></div></div>
+  <div class="kirinti-hap" id="ryKirinti"></div>
+  <div class="sekmeler" role="tablist" id="rySekme"></div>
+  <div class="metrikler"><div class="metrik s1"><span>Harcama</span><b>48.210 ₺</b><small>▲ %12 önceki döneme göre</small></div><div class="metrik s2"><span>Dönüşüm</span><b>164</b><small>▲ %21</small></div><div class="metrik"><span>Dönüşüm başı maliyet</span><b>294 ₺</b><small class="kotu">▲ %8</small></div><div class="metrik"><span>Tıklama</span><b>6.912</b><small>▼ %3</small></div></div>
+  <div class="serit bilgi"><div><b>1 hesap izlenmiyor ve bu rakamlara dâhil değil</b><span>Meta · Seasight Yatırım</span></div><button class="dg kucuk" type="button" data-git="ayarlar">Hesaplarda aç</button></div>
+  <div class="kart">
+    <div class="arac">
+      <button class="cip" type="button">Platform: <b>Tümü</b> ▾</button><button class="cip" type="button">Durum: <b>Yayında</b> <span class="x" aria-label="Kaldır">✕</span></button><button class="cip ekle" type="button">+ Süzgeç</button>
+      <label class="ara-kutu"><svg class="i"><use href="#ara"/></svg><input placeholder="Ada göre ara" aria-label="Ada göre ara"></label>
+      <span class="bosluk"></span>
+      <button class="anahtar" type="button" role="switch" aria-checked="false" id="onizAnahtar" title="Reklam düzeyinde açılır"><i></i>Önizlemeler</button>
+      <button class="dg kucuk" type="button">Sütunlar</button><button class="dg kucuk ikon" type="button" aria-label="İndir"><svg class="i"><use href="#indir"/></svg></button>
+    </div>
+    <div class="tablo-sar"><table id="ryTablo"></table></div>
+    <div class="sayfalama"><button class="bag sol" type="button" data-git="galeri">Reklam Galerisi →</button><span>Satır 10 ▾</span><span id="rySay">1 - 5 / 5</span><span><button class="ok-dg" type="button" aria-label="Önceki">‹</button><button class="ok-dg" type="button" aria-label="Sonraki">›</button></span></div>
+  </div>
+  <p class="ik2 kucuk">Bugün dâhil değil. Platformlar arası dönüşüm toplamı tanımları farklı olduğu için yaklaşıktır.</p>
+  <details class="not"><summary>Bugünden farkı</summary><ul><li>Seviye hapları sekme bileşenine döndü (sayıyla); kullanılamayan seviye soluk ve nedeni üzerinde.</li><li>Platform ve durum süzgeçleri çip; satır sonunda "Durdur/Başlat" kalır, diğer eylemler ⋯ menüsünde. Onay penceresi yan panel.</li><li>Sayfalama "1 - 5 / 5" ve satır sayısı tablonun altında; Reklam Galerisi bağlantısı aynı yerde.</li></ul></details>
+</section>
+
+<!-- ═════════ REKLAM GALERİSİ ═════════ -->
+<section class="sayfa" data-sayfa="galeri" hidden tabindex="-1">
+  <div><button class="geri" type="button" data-git="yonetici">‹ Reklam Yöneticisi</button>
+  <div class="sb"><div><span class="ust-y">Yönet</span><h1>Reklam Galerisi</h1><p>1 - 13 Ekim · 18 reklam. Görselleri, metinleri ve sorunlu reklamları tek bakışta gör.</p></div>
+    <div class="eylem"><button class="tarih" type="button">Bu ay <small>1 - 13 Eki</small><svg class="i"><use href="#asagi"/></svg></button></div></div></div>
+  <div class="kart">
+    <div class="arac">
+      <label class="ara-kutu"><svg class="i"><use href="#ara"/></svg><input placeholder="Reklam adı, başlık ya da metin ara" aria-label="Ara"></label>
+      <div class="bolumlu" role="group"><button type="button" aria-pressed="true">Tümü</button><button type="button" aria-pressed="false">Meta</button><button type="button" aria-pressed="false">Google</button></div>
+      <button class="cip" type="button">Kampanya: <b>Seasight · Form</b> <span class="x">✕</span></button><button class="cip ekle" type="button">+ Süzgeç</button>
+      <span class="bosluk"></span>
+      <button class="cip" type="button" style="color:var(--kirmizi)">Sorunlu 2</button><button class="cip" type="button">Sırala: <b>Harcama ↓</b></button>
+    </div>
+    <div class="metrikler" style="border:0;border-bottom:1px solid var(--cizgi);border-radius:0;grid-template-columns:repeat(6,minmax(0,1fr))" id="galMet"><div class="metrik"><span>Harcama</span><b>18.400 ₺</b></div><div class="metrik"><span>Gösterim</span><b>142.300</b></div><div class="metrik"><span>Tık</span><b>2.310</b></div><div class="metrik"><span>CTR</span><b>%1,62</b></div><div class="metrik"><span>Dönüşüm</span><b>61</b></div><div class="metrik"><span>CPA</span><b>302 ₺</b></div></div>
+    <div class="kart-ic"><div class="galeri">
+      <div class="g-kart"><div class="g-gorsel">Denize sıfır 2+1<span class="r rozet ok"><i></i>Aktif</span><span class="arti">+3 görsel</span></div><div class="g-ic"><small>Meta · Form · Daha fazla bilgi al</small><h4>İzmir'de denize sıfır yaşam</h4><small>Seasight · Form › İzmir 28-65</small></div><div class="mini-m"><span>Harcama<b>9.200 ₺</b></span><span>Dönüşüm<b>34</b></span><span>CPA<b>271 ₺</b></span></div></div>
+      <div class="g-kart"><div class="g-gorsel">Teslim 2027 bahar<span class="r rozet ok"><i></i>Aktif</span></div><div class="g-ic"><small>Meta · Form · Daha fazla bilgi al</small><h4>Ön satışa özel fiyat</h4><small>Seasight · Form › İzmir 28-65</small></div><div class="mini-m"><span>Harcama<b>6.100 ₺</b></span><span>Dönüşüm<b>19</b></span><span>CPA<b>321 ₺</b></span></div></div>
+      <div class="g-kart"><div class="g-gorsel acik">Arama reklamı, görseli yok<span class="r rozet hata"><i></i>Reddedildi</span></div><div class="g-ic"><small>Google · Arama · seasight.com.tr</small><h4>Seasight Konutları | Urla'da 2+1</h4><small>Politika: konut reklamı doğrulaması gerekli</small></div><div class="mini-m"><span>Harcama<b>0 ₺</b></span><span>Dönüşüm<b>0</b></span><span>CPA<b>-</b></span></div></div>
+      <div class="g-kart"><div class="g-gorsel">Sosyal tesis videosu<span class="r rozet dur"><i></i>Duraklatıldı</span></div><div class="g-ic"><small>Meta · Video · Mesaj gönder</small><h4>Havuz, spor salonu, otopark</h4><small>Seasight · WhatsApp › İzmir</small></div><div class="mini-m"><span>Harcama<b>3.100 ₺</b></span><span>Dönüşüm<b>8</b></span><span>CPA<b>388 ₺</b></span></div></div>
+    </div></div>
+    <div class="sayfalama"><span>1 - 4 / 18</span><span><button class="ok-dg" type="button">‹</button><button class="ok-dg" type="button">›</button></span></div>
+  </div>
+  <details class="not"><summary>Bugünden farkı</summary><ul><li>Açılır listeler (hesap, durum, kampanya, sırala) çip süzgeçlere döndü; "Sorunlu" çipi kırmızı yazı, dolgusuz.</li><li>Toplam şeridi metrik kutularına geçti; kart metrikleri üç sayıya indi (ayrıntı önizlemede).</li><li>Sayfalama "Sayfa x / y" yerine "1 - 4 / 18".</li></ul></details>
+</section>
+
+<!-- ═════════ POTANSİYEL MÜŞTERİLER ═════════ -->
+<section class="sayfa" data-sayfa="leads" hidden tabindex="-1">
+  <div class="sb"><div><span class="ust-y">Yönet</span><h1>Potansiyel Müşteriler</h1><p>Anlık formu dolduran kişiler. Yeni kayıtlar birkaç saniye içinde düşer.</p></div>
+    <div class="eylem"><button class="dg" type="button">Son 30 günü getir</button><button class="dg ana" type="button"><svg class="i"><use href="#indir"/></svg>CSV indir</button></div></div>
+  <div class="serit bilgi"><div><b>Sonuçlar Meta'ya bildiriliyor</b><span>"Müşteri oldu" işaretlediğin kişiler 15 dakika sonra Meta'ya gider; reklam bu kişilere benzeyenleri arar.</span></div><button class="dg kucuk" type="button">Ayarlar</button></div>
+  <div class="taslak-kontrol"><b>Taslak kontrolü</b>Hâli göster:<div class="bolumlu" role="group" id="leadHal"><button type="button" aria-pressed="true" data-hal="sonuc">Sonuç</button><button type="button" aria-pressed="false" data-hal="yuk">Yükleniyor</button><button type="button" aria-pressed="false" data-hal="bos">Boş</button><button type="button" aria-pressed="false" data-hal="hata">Hata</button></div></div>
+  <div class="sekmeler" role="tablist" data-sekme-grup="leads">
+    <button class="sekme" role="tab" type="button" data-sekme="kayit" aria-selected="true">Kayıtlar <span class="s">37</span></button>
+    <button class="sekme" role="tab" type="button" data-sekme="gonder" aria-selected="false">Meta'ya gönderimler <span class="durum" title="1 sorun"></span></button>
+  </div>
+  <div class="kart" data-panel-grup="leads" data-panel="kayit">
+    <div class="arac">
+      <button class="cip secim-cip" type="button" aria-pressed="true">Tümü <span class="s">37</span></button><button class="cip secim-cip" type="button" aria-pressed="false">Yeni <span class="s">12</span></button><button class="cip secim-cip" type="button" aria-pressed="false">Görüştük <span class="s">9</span></button><button class="cip secim-cip" type="button" aria-pressed="false">İlgileniyor <span class="s">8</span></button><button class="cip secim-cip" type="button" aria-pressed="false">Müşteri oldu <span class="s">3</span></button><button class="cip secim-cip" type="button" aria-pressed="false">Uygun değil <span class="s">5</span></button>
+      <span class="bosluk"></span>
+      <button class="cip" type="button">Form: <b>Tüm formlar</b> ▾</button>
+      <label class="ara-kutu"><svg class="i"><use href="#ara"/></svg><input placeholder="Ad, e-posta ya da telefon" aria-label="Ara"></label>
+    </div>
+    <div id="leadIcerik"></div>
+  </div>
+  <div class="kart" data-panel-grup="leads" data-panel="gonder" hidden>
+    <div class="arac"><span class="ik2 kucuk">Son 30 gün · 14 gönderim, 1 gönderilemedi</span><span class="bosluk"></span><button class="dg kucuk" type="button">Gönderilemeyenleri tekrar dene (1)</button></div>
+    <div class="tablo-sar"><table><thead><tr><th>Kişi</th><th>Sonuç</th><th>Zaman</th><th>Durum</th></tr></thead><tbody>
+      <tr><td><b>Ayşe Kara</b></td><td>Müşteri oldu</td><td>bugün 11:20</td><td><span class="rozet ok"><i></i>Meta kabul etti</span></td></tr>
+      <tr><td><b>Mehmet Öz</b></td><td>Uygun değil</td><td>dün 16:05</td><td><span class="rozet hata"><i></i>Gönderilemedi</span><small>Meta: (#100) Invalid lead_id</small></td></tr>
+      <tr><td><b>Zeynep Arslan</b></td><td>Görüştük</td><td>dün 10:40</td><td><span class="rozet ok"><i></i>Meta kabul etti</span></td></tr>
+    </tbody></table></div><div class="sayfalama"><span>1 - 3 / 14</span></div></div>
+  <details class="not"><summary>Bugünden farkı</summary><ul><li>Kayıt kartları sütunlu tabloya döndü (kişi, form, durum, tarih); satıra tıklayınca bütün cevaplar ve durum düğmeleri sağdaki yan panelde.</li><li>Durum süzgeci sayılı çipler, form süzgeci çip; CSV birincil eylem olarak başlığın sağında.</li><li>Dört hâl (yükleniyor, boş nedeniyle, hata platform mesajıyla, sonuç) aynı kutu biçiminde.</li></ul></details>
+</section>
+
+<!-- ═════════ İYİLEŞTİR ═════════ -->
+<section class="sayfa" data-sayfa="iyilestir" hidden tabindex="-1">
+  <div class="sb"><div><span class="ust-y">İyileştir</span><h1>İyileştir</h1><p id="iyiAciklama">Seasight Konutları · Son 7 gün · uygulanabilir öneriler ve otomatik kurallar.</p></div>
+    <div class="eylem"><button class="dg ana" type="button" data-yp="kural">＋ Yeni kural</button></div></div>
+  <div class="sekmeler" role="tablist" data-sekme-grup="iyi">
+    <button class="sekme" role="tab" type="button" data-sekme="oneri" aria-selected="true">Öneriler <span class="s">3</span></button>
+    <button class="sekme" role="tab" type="button" data-sekme="kurallar" aria-selected="false">Kurallar <span class="s">3</span></button>
+    <button class="sekme" role="tab" type="button" data-sekme="sinyal" aria-selected="false">Sinyaller <span class="s">2</span></button>
+    <button class="sekme" role="tab" type="button" data-sekme="etki" aria-selected="false">Etkisi</button>
+    <button class="sekme" role="tab" type="button" data-sekme="kreatif" aria-selected="false">Kreatifler</button>
+    <button class="sekme" role="tab" type="button" data-sekme="ai" aria-selected="false">AI Asistan</button>
+  </div>
+  <div data-panel-grup="iyi" data-panel="oneri" class="yigin">
+    <div class="metrikler"><div class="metrik s1"><span>Uygulanabilir öneri</span><b>2</b><small>tek tıkla, onaylı</small></div><div class="metrik"><span>Etkilenen harcama</span><b>14.200 ₺</b><small>son 7 günde</small></div><div class="metrik"><span>Yalnız bilgi</span><b>1</b><small>platformda elle yapılmalı</small></div><div class="metrik"><span>Bu ay uygulanan</span><b>4</b></div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="cip secim-cip" type="button" aria-pressed="true">Tümü <span class="s">3</span></button><button class="cip secim-cip" type="button" aria-pressed="false">Kreatif yorgunluğu <span class="s">1</span></button><button class="cip secim-cip" type="button" aria-pressed="false">Bütçe <span class="s">1</span></button><button class="cip secim-cip" type="button" aria-pressed="false">Form optimizasyonu <span class="s">1</span></button><span style="flex:1"></span><span class="ik2 kucuk">3 öneriden 3'ü gösteriliyor · 1 yoksayılan gizli</span></div>
+    <div class="izgara-e">
+      <div class="kart"><div class="kart-ic oneri"><div class="ust3"><span class="etiket">Kreatif yorgunluğu</span><span class="etiket">Meta</span><span class="etiket">Reklam</span></div><h3>"Denize sıfır 2+1" yoruldu, duraklat</h3><small class="ik2">Seasight · Form › İzmir 28-65</small>
+        <div class="kanit"><div>Sıklık<b>4,1 → 6,8</b></div><div>CTR<b class="kotu">%2,1 → %0,9</b></div><div>CPA<b class="kotu">240 → 410 ₺</b></div></div>
+        <p class="ik2 kucuk">Aynı kişiler reklamı çok kez gördü; tıklama yarıya düştü. Duraklatınca bütçe setteki diğer iki reklama kayar.</p></div>
+        <div class="kart-alt"><button class="dg kucuk hayalet" type="button">Yoksay</button><button class="dg kucuk" type="button" data-git="sihirbaz">Yeni kreatif</button><button class="dg kucuk koyu" type="button" data-yp="durdur">Duraklat</button></div></div>
+      <div class="kart"><div class="kart-ic oneri"><div class="ust3"><span class="etiket">Bütçe</span><span class="etiket">Google</span><span class="etiket">Kampanya</span></div><h3>Seasight · Arama bütçeyle sınırlı, %20 artır</h3><small class="ik2">Google · Seasight Arama</small>
+        <div class="kanit"><div>Gösterim payı kaybı<b class="kotu">%38</b></div><div>CPA<b>194 ₺</b></div><div>Günlük bütçe<b>300 → 360 ₺</b></div></div>
+        <p class="ik2 kucuk">Hesabın en ucuz dönüşümü bu kampanyada ve bütçe öğleden önce bitiyor.</p></div>
+        <div class="kart-alt"><button class="dg kucuk hayalet" type="button">Yoksay</button><button class="dg kucuk koyu" type="button">Bütçeyi artır</button></div></div>
+    </div>
+  </div>
+  <div data-panel-grup="iyi" data-panel="kurallar" class="kart" hidden>
+    <div class="arac"><button class="cip secim-cip" type="button" aria-pressed="true">Tümü <span class="s">3</span></button><button class="cip secim-cip" type="button" aria-pressed="false">Canlı <span class="s">1</span></button><button class="cip secim-cip" type="button" aria-pressed="false">Prova <span class="s">1</span></button><button class="cip secim-cip" type="button" aria-pressed="false">Kapalı <span class="s">1</span></button><span class="bosluk"></span><span class="ik2 kucuk">Saatte bir değerlendiriliyor</span></div>
+    <div class="tablo-sar"><table><thead><tr><th>Kural</th><th>Mod</th><th>Hesap</th><th>Son çalışma</th><th></th></tr></thead><tbody>
+      <tr><td><button class="ad" type="button" data-yp="kural">EBM koruması</button><small>Reklam bazında, son 7 günde EBM 400 ₺ üstü ve 50 tıklamadan fazla olanları duraklat.</small></td><td><span class="rozet ok"><i></i>Canlı</span></td><td>Tüm hesaplar</td><td>13:00 · 2 eşleşti</td><td class="s"><button class="dg kucuk" type="button">Şimdi çalıştır</button> <button class="dg kucuk hayalet ikon" type="button" data-menu="Düzenle|Geçmiş|Provaya al|-|!Sil" aria-label="Diğer"><svg class="i"><use href="#nokta3"/></svg></button></td></tr>
+      <tr><td><button class="ad" type="button" data-yp="kural">Bütçe tavanı</button><small>Kampanya bazında, bütçe tüketimi %95 olunca yalnızca bildir.</small></td><td><span class="rozet"><i></i>Prova</span></td><td>Meta · Seasight Konutları</td><td>13:00 · 0 eşleşti</td><td class="s"><button class="dg kucuk" type="button">Şimdi çalıştır</button> <button class="dg kucuk hayalet ikon" type="button" data-menu="Düzenle|Geçmiş|Canlıya al|-|!Sil" aria-label="Diğer"><svg class="i"><use href="#nokta3"/></svg></button></td></tr>
+      <tr><td><button class="ad" type="button" data-yp="kural">Hafta sonu artırımı</button><small>Kampanya bazında, ROAS 3 üstü olanların bütçesini %15 artır.</small></td><td><span class="rozet dur"><i></i>Kapalı</span></td><td>Tüm hesaplar</td><td>henüz çalışmadı</td><td class="s"><button class="dg kucuk" type="button">Şimdi çalıştır</button> <button class="dg kucuk hayalet ikon" type="button" data-menu="Düzenle|Geçmiş|Provaya al|-|!Sil" aria-label="Diğer"><svg class="i"><use href="#nokta3"/></svg></button></td></tr>
+    </tbody></table></div><div class="sayfalama"><span class="sol">Yeni kurallar prova modunda başlar; hiçbir şeye dokunmaz.</span><span>1 - 3 / 3</span></div></div>
+  <div data-panel-grup="iyi" data-panel="sinyal" class="yigin" hidden>
+    <div class="metrikler"><div class="metrik"><span>Açık sinyal</span><b>2</b></div><div class="metrik"><span>Kapatılan</span><b>5</b></div><div class="metrik"><span>Kendiliğinden kapanan</span><b>3</b></div><div class="metrik"><span>Son değerlendirme</span><b>03:10</b></div></div>
+    <div class="kart"><div class="tablo-sar"><table><thead><tr><th>Sinyal</th><th>Beklenen</th><th>Gerçekleşen</th><th>Durum</th></tr></thead><tbody><tr><td><b>Seasight · Arama dönüşüm düştü</b><small>dün</small></td><td class="s">6 - 11</td><td class="s">1</td><td><span class="rozet hata"><i></i>Açık</span></td></tr><tr><td><b>Seasight · Form harcama yükseldi</b><small>dün</small></td><td class="s">1.100 - 1.500 ₺</td><td class="s">2.240 ₺</td><td><span class="rozet hata"><i></i>Açık</span></td></tr></tbody></table></div><div class="sayfalama"><span>1 - 2 / 2</span></div></div>
+  </div>
+  <div data-panel-grup="iyi" data-panel="etki" hidden><div class="metrikler"><div class="metrik"><span>Sonuçlanan</span><b>4</b></div><div class="metrik"><span>İyileşen</span><b>3</b></div><div class="metrik"><span>Kötüleşen</span><b>1</b></div><div class="metrik"><span>Ölçülüyor</span><b>2</b></div></div></div>
+  <div data-panel-grup="iyi" data-panel="kreatif" class="kart" hidden><div class="tablo-sar"><table><thead><tr><th>Reklam</th><th class="s">Puan</th><th>Özellikler</th><th class="s">Harcama</th><th class="s">Dönüşüm</th></tr></thead><tbody><tr><td><b>Denize sıfır 2+1</b><small>Meta · görsel</small></td><td class="s">82</td><td>Fiyat yazıyor · insan yok</td><td class="s">9.200 ₺</td><td class="s">34</td></tr><tr><td><b>Sosyal tesis videosu</b><small>Meta · video</small></td><td class="s">54</td><td>İlk 3 sn logo</td><td class="s">3.100 ₺</td><td class="s">8</td></tr></tbody></table></div><div class="sayfalama"><span>son 90 gün · 1 - 2 / 2</span></div></div>
+  <div data-panel-grup="iyi" data-panel="ai" class="kart" hidden><div class="kart-ic sohbet"><div class="balon ben">Geçen haftaya göre neden pahalılaştı?</div><div class="balon">Seasight · Form'da sıklık 6,8'e çıktı ve tıklama oranı yarıya düştü. Önerim yorgun reklamı duraklatmak; Öneriler sekmesinde hazır.</div></div><div class="kart-alt"><label class="ara-kutu" style="flex:1 1 auto"><input placeholder="Bir şey sor: bu ay en iyi kampanya hangisi?" aria-label="Soru"></label><button class="dg kucuk koyu" type="button">Sor</button></div></div>
+  <details class="not"><summary>Bugünden farkı</summary><ul><li>Kurallar sekmesi ikinci sıraya geldi (menüden en çok gelinen yer); satırlar tabloya döndü, eylemler ⋯ menüsünde, "Şimdi çalıştır" dışarıda.</li><li>Kural düzenleyici ve geçmiş sağdan yan panel; birincil eylem "Yeni kural" her sekmede başlığın sağında.</li><li>Öneri kartları aynı kart kalıbında: kanıt üç kutu, eylemler sağ altta, tek koyu düğme.</li></ul></details>
+</section>
+
+<!-- ═════════ RAPORLAR ═════════ -->
+<section class="sayfa" data-sayfa="raporlar" hidden tabindex="-1">
+  <div class="sb"><div><span class="ust-y">Rapor</span><h1>Raporlar</h1><p>Müşteriye giden rapor, şablon ve faturalar. Eylül 2026.</p></div>
+    <div class="eylem"><button class="tarih" type="button">Geçen ay <small>1 - 30 Eyl</small><svg class="i"><use href="#asagi"/></svg></button><button class="dg ikon" type="button" data-menu="PDF indir|Planla|Paylaşım bağlantısı" aria-label="Diğer"><svg class="i"><use href="#nokta3"/></svg></button><button class="dg ana" type="button" data-yp="mail">Raporu gönder</button></div></div>
+  <div class="sekmeler" role="tablist" data-sekme-grup="rap">
+    <button class="sekme" role="tab" type="button" data-sekme="rapor" aria-selected="true">Rapor</button>
+    <button class="sekme" role="tab" type="button" data-sekme="haftalik" aria-selected="false">Haftalık özet</button>
+    <button class="sekme" role="tab" type="button" data-sekme="sablon" aria-selected="false">Şablonlar <span class="s">4</span></button>
+    <button class="sekme" role="tab" type="button" data-sekme="fatura" aria-selected="false">Faturalar <span class="durum" title="Eylül faturası eksik"></span></button>
+  </div>
+  <div data-panel-grup="rap" data-panel="rapor" class="yigin">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="cip" type="button">Şablon: <b>Genel rapor</b> ▾</button><button class="cip" type="button">Planlı: <b>her ayın 1'i, 09:00</b></button><span style="flex:1"></span><span class="ik2 kucuk">Önizleme müşterinin göreceği PDF ile aynı</span></div>
+    <div class="serit"><div><b>Eylül Google faturası yüklenmedi</b><span>Rapor maili faturasız gider.</span></div><button class="dg kucuk" type="button" data-sekme-git="rap:fatura">Fatura yükle</button></div>
+    <div class="belge">
+      <div class="belge-sayfa"><span style="font:800 16px var(--baslik)">Advetics</span><div class="kapak-cizgi"></div><h2>Reklam Özet Raporu</h2><p style="color:rgba(48,46,45,.64)">Seasight Konutları · 1 - 30 Eylül 2026</p></div>
+      <div class="belge-sayfa"><span class="alt-b">Reklam özet raporu</span>
+        <div class="bm"><div class="top">TOPLAM HARCAMA<b>96.400 ₺</b></div><div>Dönüşüm<b>318</b></div><div>Dönüşüm başı<b>303 ₺</b></div><div>Tıklama<b>13.880</b></div></div>
+        <span class="alt-b">Kampanyalar · Meta Ads</span>
+        <div class="tablo-sar"><table><thead><tr><th>Kampanya</th><th class="s">Maliyet</th><th class="s">Dönüşüm</th><th class="s">EBM</th></tr></thead><tbody><tr><td>Seasight · Form</td><td class="s">41.200 ₺</td><td class="s">142</td><td class="s">290 ₺</td></tr><tr><td>Seasight · Erişim İzmir</td><td class="s">22.800 ₺</td><td class="s">0</td><td class="s">-</td></tr></tbody><tfoot><tr><td>TOPLAM</td><td class="s">64.000 ₺</td><td class="s">142</td><td class="s">451 ₺</td></tr></tfoot></table></div></div>
+    </div>
+  </div>
+  <div data-panel-grup="rap" data-panel="haftalik" class="izgara-e" hidden>
+    <div class="kart"><div class="kart-bas"><h3>Müşteriye giden özet</h3><small>her pazartesi</small></div><div class="kart-ic"><p>Geçen hafta 11.200 ₺ harcandı, 41 potansiyel müşteri geldi. En iyi reklam "Denize sıfır 2+1".</p></div></div>
+    <div class="kart"><div class="kart-bas"><h3>Ajans kanalları</h3><small>Slack ve Teams'e giden kısa sürüm</small></div><div class="kart-ic"><p>Seasight · 11,2 b₺ · 41 dönüşüm · EBM 273 ₺ (▼ %6)</p></div></div>
+  </div>
+  <div data-panel-grup="rap" data-panel="sablon" class="izgara-2" hidden>
+    <div class="kart"><div class="tablo-sar"><table><thead><tr><th>Şablon</th><th>Kapsam</th><th>Bölüm</th><th></th></tr></thead><tbody>
+      <tr><td><b>Genel rapor</b><small>Ön ayar</small></td><td>Herkes</td><td>11</td><td class="s"><button class="dg kucuk" type="button">Bu şablonla aç</button></td></tr>
+      <tr><td><b>Google raporu</b><small>Ön ayar</small></td><td>Herkes</td><td>7</td><td class="s"><button class="dg kucuk" type="button">Bu şablonla aç</button></td></tr>
+      <tr><td><b>Ege Birlik aylık</b><small>Organizasyon varsayılanı</small></td><td>Şirket</td><td>9</td><td class="s"><button class="dg kucuk" type="button">Bu şablonla aç</button> <button class="dg kucuk hayalet ikon" type="button" data-menu="Düzenle|Kopyala|-|!Sil" aria-label="Diğer"><svg class="i"><use href="#nokta3"/></svg></button></td></tr>
+      <tr><td><b>Seasight kısa</b><small>Workspace</small></td><td>Seasight</td><td>5</td><td class="s"><button class="dg kucuk" type="button">Bu şablonla aç</button> <button class="dg kucuk hayalet ikon" type="button" data-menu="Düzenle|Kopyala|-|!Sil" aria-label="Diğer"><svg class="i"><use href="#nokta3"/></svg></button></td></tr>
+    </tbody></table></div><div class="kart-alt"><span class="sol">1 - 4 / 4</span><button class="dg kucuk" type="button">＋ Yeni şablon</button></div></div>
+    <div class="kart"><div class="kart-bas"><h3>Ege Birlik aylık</h3><small>sürükle ya da ok tuşları</small></div><div class="kart-ic bolum-liste">
+      <label><span class="tut">⋮⋮</span><input type="checkbox" checked>Kapak</label><label><span class="tut">⋮⋮</span><input type="checkbox" checked>Reklam Özet Raporu</label><label><span class="tut">⋮⋮</span><input type="checkbox" checked>Kampanyalar · Meta Ads</label><label><span class="tut">⋮⋮</span><input type="checkbox" checked>Kampanyalar · Google Ads</label><label><span class="tut">⋮⋮</span><input type="checkbox">Anahtar Kelime Performansı</label><label><span class="tut">⋮⋮</span><input type="checkbox" checked>Kitle Özeti</label><label><span class="tut">⋮⋮</span><input type="checkbox" checked>Öne Çıkan Reklamlar</label></div><div class="kart-alt"><button class="dg kucuk koyu" type="button">Kaydet</button></div></div>
+  </div>
+  <div data-panel-grup="rap" data-panel="fatura" class="yigin" hidden>
+    <div class="kart"><div class="kart-bas"><h3>Platform faturaları</h3><small>rapor mailine ayrı ek olarak gider · PDF ya da ZIP, en çok 20 MB</small></div>
+      <div class="kart-ic form-izgara"><div class="alan"><label>Dönem</label><input class="girdi" value="Eylül 2026"></div><div class="alan"><label>Platform</label><input class="girdi" value="Google Ads"></div><div class="alan tam"><label>Not (isteğe bağlı)</label><input class="girdi" placeholder="Fatura no"></div></div>
+      <div class="kart-alt"><button class="dg kucuk koyu" type="button">Yükle</button></div></div>
+    <div class="kart"><div class="kart-bas"><h3>Yüklü faturalar</h3><small>2 fatura</small></div><div class="tablo-sar"><table><thead><tr><th>Dosya</th><th>Dönem</th><th>Platform</th><th class="s">Boyut</th><th></th></tr></thead><tbody><tr><td><b>meta-eylul.pdf</b></td><td>Eylül 2026</td><td>Meta</td><td class="s">212 KB</td><td class="s"><button class="dg kucuk hayalet ikon" type="button" data-menu="Aç|-|!Sil" aria-label="Diğer"><svg class="i"><use href="#nokta3"/></svg></button></td></tr><tr><td><b>google-agustos.zip</b></td><td>Ağustos 2026</td><td>Google</td><td class="s">1,4 MB</td><td class="s"><button class="dg kucuk hayalet ikon" type="button" data-menu="Aç|-|!Sil" aria-label="Diğer"><svg class="i"><use href="#nokta3"/></svg></button></td></tr></tbody></table></div></div>
+  </div>
+  <details class="not"><summary>Bugünden farkı</summary><ul><li>"Raporu gönder" tek birincil eylem; PDF indir, Planla ve Paylaş ⋯ menüsünde. Mail penceresi yan panel.</li><li>Şablonlar kendi sekmesinde: liste solda, bölüm sırası sağda, aynı sayfada; seçici Rapor sekmesinde çip olarak kalır.</li><li>Fatura eksiği raporun üstünde şerit ve sekmede kırmızı nokta.</li></ul></details>
+</section>
+
+<!-- ═════════ MARKA MERKEZİ ═════════ -->
+<section class="sayfa" data-sayfa="marka" hidden tabindex="-1">
+  <div class="sb"><div><span class="ust-y">Base</span><h1>Marka Merkezi</h1><p>Seasight Konutları'nın kurulumu, markası ve bilgileri. Reklamlar ve raporlar buradan okur.</p></div>
+    <div class="eylem"><button class="dg ana" type="button">Eksikleri tamamla</button></div></div>
+  <div class="sekmeler" role="tablist" data-sekme-grup="mm">
+    <button class="sekme" role="tab" type="button" data-sekme="kurulum" aria-selected="true">Kurulum <span class="durum" title="Eksik var"></span></button>
+    <button class="sekme" role="tab" type="button" data-sekme="marka" aria-selected="false">Marka</button>
+    <button class="sekme" role="tab" type="button" data-sekme="ws" aria-selected="false">Workspace bilgileri</button>
+  </div>
+  <div data-panel-grup="mm" data-panel="kurulum" class="izgara-2">
+    <div class="kart">
+      <div class="kart-bas"><div><h3>Kurulum 8 / 10</h3><small>Sistemin kendi yapabileceği eksik kalmadı; 2 iş sende.</small></div><div class="cubuk" style="width:160px;max-width:100%"><i style="width:80%"></i></div></div>
+      <div class="kontrol-l">
+        <div class="kontrol bitti"><span class="tk">✓</span><div><b>Workspace bilgileri</b><small>Site, telefon, rapor alıcıları</small></div><button class="dg kucuk hayalet" type="button">Ayrıntı</button></div>
+        <div class="kontrol bitti"><span class="tk">✓</span><div><b>Meta reklam hesabı ve ödeme</b><small>act_1029384756 · kart tanımlı</small></div><button class="dg kucuk hayalet" type="button">Ayrıntı</button></div>
+        <div class="kontrol bitti"><span class="tk">✓</span><div><b>Facebook sayfası ve Instagram</b><small>Seasight Konutları · @seasightkonutlari</small></div><button class="dg kucuk hayalet" type="button">Ayrıntı</button></div>
+        <div class="kontrol bitti"><span class="tk">✓</span><div><b>Meta pikseli</b><small>Son olay 12 dk önce</small></div><button class="dg kucuk hayalet" type="button">Ayrıntı</button></div>
+        <div class="kontrol eksik"><span class="tk">!</span><div><b>Google Ads hesabı ve ödeme</b><small>516-174-6317 · ödeme yöntemi yok. API kart ekleyemiyor; Google Ads'te elle.</small></div><button class="dg kucuk koyu" type="button">Tamamla</button></div>
+        <div class="kontrol eksik"><span class="tk">!</span><div><b>Dönüşüm ölçümü</b><small>Telefon araması ölçülmüyor</small></div><button class="dg kucuk" type="button">Tamamla</button></div>
+        <div class="kontrol bitti"><span class="tk">✓</span><div><b>Marka bilgileri ve logo</b></div><button class="dg kucuk hayalet" type="button">Ayrıntı</button></div>
+        <div class="kontrol bitti"><span class="tk">✓</span><div><b>Reklam varsayılanları</b><small>Özel kategori: Konut</small></div><button class="dg kucuk hayalet" type="button">Ayrıntı</button></div>
+        <div class="kontrol bitti"><span class="tk">✓</span><div><b>Bildirimler ve erişim</b></div><button class="dg kucuk hayalet" type="button">Ayrıntı</button></div>
+        <div class="kontrol bitti"><span class="tk">✓</span><div><b>Veri akışı</b><small>Yapı 13:06 · Metrik 13:20</small></div><button class="dg kucuk hayalet" type="button">Ayrıntı</button></div>
+      </div>
+    </div>
+    <div class="yigin">
+      <div class="kart"><div class="kart-bas"><h3>Hesaplar ve kanallar</h3></div><div class="kart-ic" style="padding-top:4px;padding-bottom:4px"><div class="satir-l"><div><b>Meta · Seasight Konutları</b><small>Ajans bağlantısı</small></div><span class="rozet ok"><i></i>İzleniyor</span></div><div class="satir-l"><div><b>Google · Seasight Arama</b><small>Ajans MCC</small></div><span class="rozet ok"><i></i>İzleniyor</span></div><div class="satir-l"><div><b>YouTube · Seasight</b><small>Kanal</small></div><span class="rozet ok"><i></i>Bağlı</span></div></div><div class="kart-alt"><button class="bag" type="button" data-git="ayarlar">Platform bağlantıları →</button></div></div>
+      <div class="kart"><div class="kart-bas"><h3>Yeni hesaplar kimin adına?</h3></div><div class="kart-ic"><div class="bolumlu" role="group"><button type="button" aria-pressed="true">Ajansın altında</button><button type="button" aria-pressed="false">Şirketin kendi</button></div></div></div>
+      <div class="kart"><div class="kart-bas"><h3>Diğer veri kaynakları</h3><small>isteğe bağlı, sayaca girmez</small></div><div class="kart-ic"><p class="ik2 kucuk">Google Analytics 4 · Tag Manager konteyneri</p></div></div>
+    </div>
+  </div>
+  <div data-panel-grup="mm" data-panel="marka" class="izgara-2" hidden>
+    <div class="kart"><div class="kart-bas"><h3>Marka bilgileri</h3><button class="dg kucuk" type="button">Yapay zekâ ile doldur</button></div>
+      <div class="kart-ic form-izgara"><div class="alan"><label>Marka adı</label><input class="girdi" value="Seasight Konutları"></div><div class="alan"><label>Sektör</label><input class="girdi" value="Konut, gayrimenkul"></div><div class="alan"><label>Ana amaç</label><input class="girdi" value="Satış görüşmesi"></div><div class="alan"><label>Üslup</label><input class="girdi" value="Güven veren, sade"></div><div class="alan tam"><label>Öne çıkan vaatler</label><textarea class="girdi">Denize sıfır · 2027 bahar teslim · ön satışa özel fiyat</textarea></div><div class="alan tam"><label>Zorunlu yasal uyarı</label><input class="girdi" value="Görseller temsilidir."><small>Her reklam metninin sonuna eklenir.</small></div></div>
+      <div class="kart-alt"><button class="dg kucuk koyu" type="button">Kaydet</button></div></div>
+    <div class="yigin"><div class="kart"><div class="kart-bas"><h3>Logo</h3></div><div class="kart-ic" style="display:grid;gap:12px;justify-items:start"><div class="harf" style="width:72px;height:72px;font-size:22px;border-radius:14px">SK</div><button class="dg kucuk" type="button">Yeni logo yükle</button></div></div>
+      <div class="kart"><div class="kart-bas"><h3>Kime satıyoruz</h3></div><div class="kart-ic"><p class="ik2 kucuk">İzmir'de oturan, ilk evini almak isteyen aileler ve ikinci konut arayan yatırımcılar.</p></div><div class="kart-alt"><button class="bag" type="button">Düzenle →</button></div></div></div>
+  </div>
+  <div data-panel-grup="mm" data-panel="ws" class="izgara-e" hidden>
+    <div class="kart"><div class="kart-bas"><h3>İletişim</h3></div><div class="kart-ic form-izgara"><div class="alan tam"><label>İnternet sitesi</label><input class="girdi" value="https://seasight.com.tr"></div><div class="alan"><label>Yetkili kişi</label><input class="girdi" value="Elif Demir"></div><div class="alan"><label>Telefon</label><input class="girdi" value="+90 232 000 00 00"></div><div class="alan tam"><label>Rapor alıcıları</label><input class="girdi" value="elif@seasight.com.tr"></div></div><div class="kart-alt"><button class="dg kucuk koyu" type="button">Kaydet</button></div></div>
+    <div class="kart"><div class="kart-bas"><h3>Firma</h3></div><div class="kart-ic form-izgara"><div class="alan"><label>Vergi dairesi</label><input class="girdi" value="Karşıyaka"></div><div class="alan"><label>Vergi numarası</label><input class="girdi" value="1234567890"></div><div class="alan"><label>Saat dilimi</label><input class="girdi" value="Europe/Istanbul"></div><div class="alan"><label>Raporlama para birimi</label><input class="girdi" value="TRY"></div></div><div class="kart-alt"><button class="dg kucuk koyu" type="button">Kaydet</button></div></div>
+    <div class="kart"><div class="kart-bas"><h3>Erişim</h3><small>3 kişi</small></div><div class="kart-ic" style="padding-top:4px;padding-bottom:4px"><div class="satir-l"><div><b>Yusuf Algan</b><small>Ajans yöneticisi</small></div></div><div class="satir-l"><div><b>Elif Demir</b><small>Müşteri hesabı · 4 ekran</small></div></div></div></div>
+    <div class="kart"><div class="kart-bas"><h3>Bildirimler</h3></div><div class="kart-ic" style="display:grid;gap:10px"><button class="anahtar" type="button" role="switch" aria-checked="true"><i></i>Yeni potansiyel müşteri maili</button><button class="anahtar" type="button" role="switch" aria-checked="false"><i></i>Haftalık özet Slack'e</button></div></div>
+  </div>
+  <details class="not"><summary>Bugünden farkı</summary><ul><li>Dikey iç menü kalktı; üç bölüm başlık altı sekme, eksik varsa kırmızı nokta.</li><li>Kurulum tek sayaçlı tek liste (8 / 10); dört alt grup yerine eksik adım kırmızı, bitmiş siyah işaret.</li><li>"Eksikleri tamamla" başlığın sağında; gerçek hesap açan adımlar yine listeye girmez.</li></ul></details>
+</section>
+
+<!-- ═════════ VARLIKLAR ═════════ -->
+<section class="sayfa" data-sayfa="varlik" hidden tabindex="-1">
+  <div class="sb"><div><span class="ust-y">Base</span><h1>Varlıklar</h1><p>Reklamlarda kullanılan görseller, kreatifler, formlar ve kitleler.</p></div>
+    <div class="eylem"><button class="dg ana" type="button" id="varlikEylem">＋ Görsel yükle</button></div></div>
+  <div class="sekmeler" role="tablist" data-sekme-grup="var" data-eylem-hedef="varlikEylem">
+    <button class="sekme" role="tab" type="button" data-sekme="gorsel" data-eylem="＋ Görsel yükle" aria-selected="true">Görseller <span class="s">148</span></button>
+    <button class="sekme" role="tab" type="button" data-sekme="kreatif" data-eylem="＋ Yeni kreatif" aria-selected="false">Kreatifler <span class="s">32</span></button>
+    <button class="sekme" role="tab" type="button" data-sekme="form" data-eylem="＋ Yeni form" aria-selected="false">Formlar <span class="s">6</span></button>
+    <button class="sekme" role="tab" type="button" data-sekme="kitle" data-eylem="＋ Yeni kitle" aria-selected="false">Kitleler <span class="s">4</span></button>
+  </div>
+  <div data-panel-grup="var" data-panel="gorsel" class="kart">
+    <div class="arac"><button class="cip secim-cip" type="button" aria-pressed="true">Tümü</button><button class="cip secim-cip" type="button" aria-pressed="false">Kullanımda</button><button class="cip secim-cip" type="button" aria-pressed="false">Kullanılmıyor</button><button class="cip" type="button">Oran: <b>Hepsi</b> ▾</button><span class="bosluk"></span><label class="ara-kutu"><svg class="i"><use href="#ara"/></svg><input placeholder="Görsel ara" aria-label="Görsel ara"></label></div>
+    <div class="kart-ic"><div class="galeri" style="grid-template-columns:repeat(auto-fill,minmax(170px,1fr))">
+      <div class="g-kart"><div class="g-gorsel">1:1<span class="r etiket">Kare</span></div><div class="g-ic"><h4>seasight-kare-01.jpg</h4><small>3 reklamda · 2 hesaba yüklendi</small></div></div>
+      <div class="g-kart"><div class="g-gorsel">4:5<span class="r etiket">Dikey</span></div><div class="g-ic"><h4>seasight-dikey-01.jpg</h4><small>2 reklamda · 1 hesaba yüklendi</small></div></div>
+      <div class="g-kart"><div class="g-gorsel">9:16<span class="r etiket">Hikâye</span></div><div class="g-ic"><h4>seasight-story.jpg</h4><small>1 reklamda</small></div></div>
+      <div class="g-kart"><div class="g-gorsel acik">1.91:1<span class="r etiket">Yatay</span></div><div class="g-ic"><h4>sosyal-tesis.png</h4><small>kullanılmıyor</small></div></div>
+    </div></div>
+    <div class="sayfalama"><span>1 - 4 / 148</span><span><button class="ok-dg" type="button">‹</button><button class="ok-dg" type="button">›</button></span></div></div>
+  <div data-panel-grup="var" data-panel="kreatif" class="kart" hidden>
+    <div class="tablo-sar"><table><thead><tr><th>Kreatif</th><th>İçerik</th><th>Biçim hazır mı</th><th></th></tr></thead><tbody>
+      <tr><td><b>Denize sıfır · ana</b><small>dün düzenlendi</small></td><td>4 görsel · 5 başlık · 3 açıklama</td><td><span class="rozet ok"><i></i>Akış</span> <span class="rozet ok"><i></i>Hikâye</span> <span class="rozet ok"><i></i>Arama</span></td><td class="s"><button class="dg kucuk" type="button">Düzenle</button> <button class="dg kucuk hayalet ikon" type="button" data-menu="Kopyala|-|!Sil" aria-label="Diğer"><svg class="i"><use href="#nokta3"/></svg></button></td></tr>
+      <tr><td><b>Ön satış fiyatı</b><small>5 gün önce</small></td><td>1 görsel · 2 başlık · 1 açıklama</td><td><span class="rozet ok"><i></i>Akış</span> <span class="rozet hata"><i></i>Hikâye eksik</span></td><td class="s"><button class="dg kucuk" type="button">Düzenle</button> <button class="dg kucuk hayalet ikon" type="button" data-menu="Kopyala|-|!Sil" aria-label="Diğer"><svg class="i"><use href="#nokta3"/></svg></button></td></tr>
+    </tbody></table></div><div class="sayfalama"><span>1 - 2 / 32</span></div></div>
+  <div data-panel-grup="var" data-panel="form" hidden class="yigin">
+    <div class="hal"><span class="ik">0</span><b>Bu workspace'te form yayınlanmamış</b><p>Seasight Konutları sayfasında Meta anlık formu yok. Form, reklam kurulurken de açılabilir.</p><button class="dg kucuk" type="button">Form oluştur</button></div>
+    <p class="ik2 kucuk">Boş hâl örneği. Sayfa hiç bağlı değilse neden "Önce bir Facebook sayfası gerekiyor" olur ve düğme Platform bağlantılarına gider.</p>
+  </div>
+  <div data-panel-grup="var" data-panel="kitle" class="kart" hidden>
+    <div class="tablo-sar"><table><thead><tr><th>Kitle</th><th>Tanım</th><th>Kaynak</th><th></th></tr></thead><tbody>
+      <tr><td><b>İzmir aileler</b></td><td>İzmir ili · 28-55 · Tümü</td><td>Advetics şablonu</td><td class="s"><button class="dg kucuk" type="button">Düzenle</button></td></tr>
+      <tr><td><b>Site ziyaretçileri 30 gün</b></td><td>Web sitesi · <span class="ik2">1.000 - 1.000 (Meta tabanı)</span></td><td>Meta özel kitle</td><td class="s"><span class="rozet"><i></i>Çok küçük</span></td></tr>
+      <tr><td><b>Form dolduranlara benzer</b></td><td>Benzer kitle %1 · Türkiye</td><td>Meta özel kitle</td><td class="s"><span class="rozet ok"><i></i>Hazır</span></td></tr>
+    </tbody></table></div><div class="sayfalama"><span>1 - 3 / 4</span></div></div>
+  <details class="not"><summary>Bugünden farkı</summary><ul><li>Birincil eylem yeri sabit, metni sekmeye göre değişir (Görsel yükle, Yeni kreatif, Yeni form, Yeni kitle).</li><li>Kreatif kartları tabloya döndü; biçim hazırlığı rozetle aynı satırda.</li><li>Kitleler formu satır içi değil tablo + yan panel; Meta'nın 1.000 tabanı "tam sayı" diye okunmasın diye açıkça yazılı.</li></ul></details>
+</section>
+
+<!-- ═════════ AYARLAR ═════════ -->
+<section class="sayfa" data-sayfa="ayarlar" hidden tabindex="-1">
+  <div class="sb"><div><span class="ust-y">Ajans</span><h1>Ayarlar</h1><p>Şirketler, platform bağlantıları ve ekip.</p></div>
+    <div class="eylem"><button class="dg ana" type="button" id="ayarEylem">＋ Yeni workspace</button></div></div>
+  <div class="sekmeler" role="tablist" data-sekme-grup="ayr" data-eylem-hedef="ayarEylem">
+    <button class="sekme" role="tab" type="button" data-sekme="sirket" data-eylem="＋ Yeni workspace" aria-selected="true">Şirketler ve workspace'ler</button>
+    <button class="sekme" role="tab" type="button" data-sekme="baglanti" data-eylem="＋ Platform bağla" aria-selected="false">Platform bağlantıları <span class="durum" title="1 sorun"></span></button>
+    <button class="sekme" role="tab" type="button" data-sekme="ekip" data-eylem="＋ Kullanıcı ekle" aria-selected="false">Ekip ve güvenlik</button>
+  </div>
+  <div data-panel-grup="ayr" data-panel="sirket" class="izgara-2" style="grid-template-columns:minmax(0,1fr) minmax(0,2.6fr)">
+    <div class="kart"><div class="kart-bas"><h3>Şirketler</h3><small>4</small></div><div class="kart-ic" style="padding:6px">
+      <button class="oge" type="button" aria-current="page"><span class="harf" style="width:26px;height:26px;font-size:11px">EB</span>Ege Birlik Yapı</button><button class="oge" type="button"><span class="harf" style="width:26px;height:26px;font-size:11px">MS</span>MySun</button><button class="oge" type="button"><span class="harf" style="width:26px;height:26px;font-size:11px">MH</span>Metropol Hastanesi</button><button class="oge" type="button"><span class="harf" style="width:26px;height:26px;font-size:11px">PK</span>Polimek</button></div>
+      <div class="kart-alt"><button class="dg kucuk" type="button">＋ Şirket ekle</button></div></div>
+    <div class="kart"><div class="arac"><label class="ara-kutu"><svg class="i"><use href="#ara"/></svg><input placeholder="Workspace adı ya da kısa adı" aria-label="Ara"></label><button class="cip" type="button">Durum: <b>Etkin</b> ▾</button></div>
+      <div class="tablo-sar"><table><thead><tr><th>Workspace</th><th>Hesaplar</th><th class="s">Ekip</th><th>Durum</th><th></th></tr></thead><tbody>
+        <tr><td><button class="ad" type="button" data-git="marka">Seasight Konutları</button><small>seasight</small></td><td>Meta, Google</td><td class="s">3 kişi</td><td><span class="rozet ok"><i></i>Veri geliyor</span></td><td class="s"><button class="dg kucuk hayalet ikon" type="button" data-menu="Marka Merkezi'nde aç|Başka şirkete taşı|-|!Arşivle" aria-label="Diğer"><svg class="i"><use href="#nokta3"/></svg></button></td></tr>
+        <tr><td><button class="ad" type="button">Narlıdere Konutları</button><small>narlidere</small></td><td>Meta</td><td class="s">2 kişi</td><td><span class="rozet hata"><i></i>Veri çekilmiyor</span></td><td class="s"><button class="dg kucuk hayalet ikon" type="button" data-menu="Marka Merkezi'nde aç|Başka şirkete taşı|-|!Arşivle" aria-label="Diğer"><svg class="i"><use href="#nokta3"/></svg></button></td></tr>
+        <tr><td><button class="ad" type="button">Ege Birlik Kurumsal</button><small>kurumsal</small></td><td><span class="ik2">Hesap atanmamış</span></td><td class="s">1 kişi</td><td><span class="rozet"><i></i>Hesap yok</span></td><td class="s"><button class="dg kucuk hayalet ikon" type="button" data-menu="Marka Merkezi'nde aç|Başka şirkete taşı|-|!Arşivle" aria-label="Diğer"><svg class="i"><use href="#nokta3"/></svg></button></td></tr>
+      </tbody></table></div><div class="sayfalama"><span class="sol">Arşivde 1 workspace</span><span>1 - 3 / 3</span></div></div>
+  </div>
+  <div data-panel-grup="ayr" data-panel="baglanti" class="yigin" hidden>
+    <div class="izgara-3">
+      <div class="kart platform-kart"><div class="kart-bas"><h3>Meta</h3><span class="rozet ok"><i></i>Bağlı</span></div><div class="kart-ic"><b class="sayi" style="font-size:22px">412 hesap</b><small class="ik2">38 atanmış, 31 veri çekiyor · Ajans bağlantısı</small></div><div class="kart-alt"><button class="dg kucuk hayalet ikon" type="button" data-menu="İzlemeyi geri aç|-|!Bağlantıyı kaldır" aria-label="Diğer"><svg class="i"><use href="#nokta3"/></svg></button><button class="dg kucuk" type="button">Hesapları tara</button></div></div>
+      <div class="kart platform-kart"><div class="kart-bas"><h3>Google Ads</h3><span class="rozet hata"><i></i>Yeniden yetki</span></div><div class="kart-ic"><b class="sayi" style="font-size:22px">64 hesap</b><small class="ik2" style="color:var(--kirmizi)">Google: invalid_grant · Token has been expired or revoked.</small></div><div class="kart-alt"><button class="dg kucuk koyu" type="button">Yeniden bağlan</button></div></div>
+      <div class="kart platform-kart"><div class="kart-bas"><h3>LinkedIn Ads</h3><span class="rozet"><i></i>Bağlı değil</span></div><div class="kart-ic"><b class="sayi" style="font-size:22px">-</b><small class="ik2">Bağlantı bir yıl sonra yeniden yetki ister.</small></div><div class="kart-alt"><button class="dg kucuk" type="button">Bağlan</button></div></div>
+    </div>
+    <div class="kart"><div class="kart-bas"><h3>Atanmamış hesaplar</h3><small>374 hesap havuzda</small></div><div class="arac"><label class="ara-kutu"><svg class="i"><use href="#ara"/></svg><input placeholder="Hesap adı ya da numara" aria-label="Ara"></label><button class="cip secim-cip" type="button" aria-pressed="true">Tümü</button><button class="cip secim-cip" type="button" aria-pressed="false">Meta</button><button class="cip secim-cip" type="button" aria-pressed="false">Google</button></div>
+      <div class="tablo-sar"><table><thead><tr><th>Hesap</th><th>Kaynak</th><th>Atanacak workspace</th><th></th></tr></thead><tbody>
+        <tr><td><b>Seasight Yatırım</b><small>act_5566778899</small></td><td><span class="etiket">Ajans bağlantısı</span></td><td><button class="cip" type="button">Seç ▾</button></td><td class="s"><button class="dg kucuk koyu" type="button">Ata</button></td></tr>
+        <tr><td><b>Narlıdere Arama</b><small>284-110-9921</small></td><td><span class="etiket">Yönetici (MCC)</span></td><td><button class="cip" type="button">Narlıdere Konutları ▾</button></td><td class="s"><button class="dg kucuk koyu" type="button">Ata</button></td></tr>
+      </tbody></table></div><div class="sayfalama"><span class="sol">Atama izlemeyi açar ve 90 günlük geçmişi kuyruğa alır.</span><span>1 - 2 / 374</span></div></div>
+  </div>
+  <div data-panel-grup="ayr" data-panel="ekip" class="kart" hidden>
+    <div class="arac"><label class="ara-kutu"><svg class="i"><use href="#ara"/></svg><input placeholder="Ad ya da e-posta ara" aria-label="Ara"></label><button class="cip secim-cip" type="button" aria-pressed="true">Ajans</button><button class="cip secim-cip" type="button" aria-pressed="false">Müşteri hesabı</button><span class="bosluk"></span><button class="anahtar" type="button" role="switch" aria-checked="true"><i></i>İki adımlı giriş zorunlu</button></div>
+    <div class="tablo-sar"><table><thead><tr><th>Kişi</th><th>Rol</th><th>Kapsam</th><th>İki adımlı</th><th></th></tr></thead><tbody>
+      <tr><td><b>Yusuf Algan</b><small>yusuf@…</small></td><td>Ajans yöneticisi</td><td>Tüm şirketler</td><td><span class="rozet ok"><i></i>Açık</span></td><td class="s"><button class="dg kucuk hayalet ikon" type="button" data-menu="Düzenle|Parolayı sıfırla" aria-label="Diğer"><svg class="i"><use href="#nokta3"/></svg></button></td></tr>
+      <tr><td><b>Deniz Kaya</b><small>deniz@…</small></td><td>Danışman</td><td>Ege Birlik Yapı, MySun</td><td><span class="rozet ok"><i></i>Açık</span></td><td class="s"><button class="dg kucuk hayalet ikon" type="button" data-menu="Düzenle|Danışman ata|İki adımlıyı sıfırla|-|!Kaldır" aria-label="Diğer"><svg class="i"><use href="#nokta3"/></svg></button></td></tr>
+      <tr><td><b>Elif Demir</b><small>elif@seasight…</small></td><td>Müşteri</td><td>Seasight Konutları</td><td><span class="rozet hata"><i></i>Kapalı</span></td><td class="s"><button class="dg kucuk hayalet ikon" type="button" data-menu="Düzenle|-|!Kaldır" aria-label="Diğer"><svg class="i"><use href="#nokta3"/></svg></button></td></tr>
+    </tbody></table></div><div class="sayfalama"><span>1 - 3 / 9</span></div></div>
+  <details class="not"><summary>Bugünden farkı</summary><ul><li>Hesabım Ayarlar sekmesinden çıktı, kullanıcı kartının menüsüne taşındı (sol alt).</li><li>Birincil eylem başlığın sağında, metni sekmeye göre değişir; workspace satır eylemleri ⋯ menüsünde.</li><li>Platform kartları aynı kart kalıbı: sayı, tek cümle, hata varsa platformun mesajı, tek eylem sağ altta.</li></ul></details>
+</section>
+
+<!-- ═════════ HESABIM ═════════ -->
+<section class="sayfa" data-sayfa="hesabim" hidden tabindex="-1">
+  <div class="sb"><div><span class="ust-y">Yusuf Algan</span><h1>Hesabım</h1><p>Giriş bilgilerin, hesabının güvenliği ve senin adına giden e-postalar.</p></div>
+    <div class="eylem"><button class="dg ana" type="button">Kaydet</button></div></div>
+  <div class="sekmeler" role="tablist" data-sekme-grup="hsp">
+    <button class="sekme" role="tab" type="button" data-sekme="guv" aria-selected="true">Giriş ve güvenlik</button>
+    <button class="sekme" role="tab" type="button" data-sekme="eposta" aria-selected="false">E-posta <span class="durum" title="Doğrulanmadı"></span></button>
+    <button class="sekme" role="tab" type="button" data-sekme="api" aria-selected="false">Okuma API <span class="s">2</span></button>
+  </div>
+  <div data-panel-grup="hsp" data-panel="guv" class="izgara-e">
+    <div class="kart"><div class="kart-bas"><h3>İki adımlı doğrulama</h3><span class="rozet ok"><i></i>Açık</span></div><div class="kart-ic"><dl class="dl"><dt>Açıldığı tarih</dt><dd>4 Eylül 2026</dd><dt>Kurtarma kodları</dt><dd>8 / 10 kaldı</dd></dl></div><div class="kart-alt"><button class="dg kucuk" type="button">Kodları yenile</button></div></div>
+    <div class="kart"><div class="kart-bas"><h3>Parola</h3></div><div class="kart-ic form-izgara"><div class="alan tam"><label>Yeni parola</label><input class="girdi" type="password" placeholder="En az 12 karakter"></div></div><div class="kart-alt"><button class="dg kucuk koyu" type="button">Parolayı değiştir</button></div></div>
+  </div>
+  <div data-panel-grup="hsp" data-panel="eposta" class="yigin" hidden>
+    <div class="serit"><div><b>E-posta ayarların doğrulanmamış</b><span>Rapor maili gönderilemez. Kendine test maili gönder.</span></div><button class="dg kucuk koyu" type="button">Test maili gönder</button></div>
+    <div class="kart"><div class="kart-ic form-izgara"><div class="alan"><label>Görünen ad</label><input class="girdi" value="Yusuf Algan · Profaj"></div><div class="alan"><label>Gönderen adresi</label><input class="girdi" value="yusuf@profaj.com"></div><div class="alan"><label>SMTP sunucu</label><input class="girdi" value="smtp.gmail.com"></div><div class="alan"><label>Port</label><input class="girdi" value="465"></div><div class="alan tam"><label>İmza</label><textarea class="girdi">Yusuf Algan · Profaj Reklamcılık</textarea><small>Gmail imzası SMTP ile otomatik eklenmez; buraya yapıştır.</small></div></div></div>
+  </div>
+  <div data-panel-grup="hsp" data-panel="api" class="kart" hidden>
+    <div class="tablo-sar"><table><thead><tr><th>Anahtar</th><th>Durum</th><th>Bitiş</th><th>Son kullanım</th><th></th></tr></thead><tbody><tr><td><b>Looker Studio</b><small>adv_…3f2a</small></td><td><span class="rozet ok"><i></i>Etkin</span></td><td>Süresiz</td><td>bugün</td><td class="s"><button class="dg kucuk tehlike" type="button">İptal et</button></td></tr><tr><td><b>Eski entegrasyon</b><small>adv_…91bc</small></td><td><span class="rozet"><i></i>Süresi doldu</span></td><td>1 Eylül</td><td>30 Ağustos</td><td></td></tr></tbody></table></div><div class="kart-alt"><span class="sol">1 - 2 / 2</span><button class="dg kucuk" type="button">＋ Yeni anahtar</button></div></div>
+  <details class="not"><summary>Bugünden farkı</summary><ul><li>Ayarlar'ın dördüncü sekmesi yerine kendi sayfası; sol alttaki kullanıcı kartından açılır.</li><li>Uzun tek sayfa üç sekmeye bölündü; doğrulanmamış e-posta sekmede kırmızı nokta ve şerit.</li></ul></details>
+</section>
+
+    </main>
+  </div>
+</div>
+
+<!-- ═════════ AÇILIR MENÜLER ═════════ -->
+<div class="acilir" id="ac-ws" role="menu" style="width:320px">
+  <div class="ara"><svg class="i" style="color:var(--soluk)"><use href="#ara"/></svg><input placeholder="Şirket ya da workspace ara" aria-label="Ara"></div>
+  <div class="baslik">Ege Birlik Yapı</div>
+  <button class="secili" type="button"><span class="hn"></span><span class="metin2">Seasight Konutları<small>Kurulum 8 / 10</small></span><svg class="i" style="margin-left:auto;color:var(--kirmizi)"><use href="#tik"/></svg></button>
+  <button type="button"><span class="hn e"></span><span class="metin2">Narlıdere Konutları<small>4 iş kaldı</small></span></button>
+  <div class="baslik">Diğer şirketler</div>
+  <button type="button"><span class="hn"></span><span class="metin2">MySun<small>3 workspace</small></span><span class="ip">›</span></button>
+  <button type="button"><span class="hn"></span><span class="metin2">Metropol Hastanesi<small>2 workspace</small></span><span class="ip">›</span></button>
+  <div class="ayir"></div>
+  <button type="button"><svg class="i"><use href="#tablo"/></svg>Tüm şirketler</button>
+  <button type="button" data-git="ayarlar"><svg class="i"><use href="#arti"/></svg>Yeni şirket / workspace aç</button>
+</div>
+<div class="acilir" id="ac-olustur" role="menu" style="width:290px">
+  <div class="baslik">Ne oluşturalım?</div>
+  <button type="button" data-git="sihirbaz"><svg class="i"><use href="#roket"/></svg><span class="metin2">Reklam<small>Yedi amaçtan biriyle, adım adım</small></span></button>
+  <button type="button" data-git="strateji"><svg class="i"><use href="#hedef"/></svg><span class="metin2">Strateji<small>Plan, rapor ve müşteri onayı</small></span></button>
+  <button type="button" data-git="boost"><svg class="i"><use href="#resim"/></svg><span class="metin2">Gönderi öne çıkar<small>Instagram gönderisini boostla</small></span></button>
+  <div class="ayir"></div>
+  <button type="button" data-git="iyilestir" data-yp-sonra="kural"><svg class="i"><use href="#kural"/></svg>Kural</button>
+  <button type="button" data-git="raporlar"><svg class="i"><use href="#rapor"/></svg>Rapor</button>
+</div>
+<div class="acilir" id="ac-zil" role="menu" style="width:340px">
+  <div class="baslik">Bildirimler · 2</div>
+  <button type="button" data-git="marka"><span class="hn e"></span><span class="metin2">Google ödemesi eksik<small>Seasight Konutları · 2 saat önce</small></span></button>
+  <button type="button" data-git="strateji"><span class="hn"></span><span class="metin2">Strateji onaylandı<small>Seasight · dün</small></span></button>
+  <div class="ayir"></div><button type="button">Tümünü gör</button>
+</div>
+<div class="acilir" id="ac-kul" role="menu" style="width:240px">
+  <div class="baslik">Yusuf Algan</div>
+  <button type="button" data-git="hesabim"><svg class="i"><use href="#kisi"/></svg>Hesabım</button>
+  <button type="button" data-git="hesabim"><svg class="i"><use href="#kalkan"/></svg>İki adımlı giriş</button>
+  <button type="button" id="temaMenu"><svg class="i"><use href="#ayar"/></svg>Tema<span class="ip">Değiştir</span></button>
+  <div class="ayir"></div>
+  <button type="button" class="tehlike"><svg class="i"><use href="#cikis"/></svg>Çıkış yap</button>
+</div>
+<div class="acilir" id="ac-satir" role="menu"></div>
+
+<!-- ═════════ YAN PANELLER ═════════ -->
+<div class="perde" id="perde"></div>
+
+<aside class="yp" id="yp-lead" aria-label="Kayıt ayrıntısı">
+  <div class="yp-bas"><div><h3 id="ypLeadAd">Ayşe Kara</h3><small id="ypLeadAlt">Seasight · Bilgi formu · bugün 10:42</small></div><button class="dg kucuk hayalet ikon" type="button" data-kapat aria-label="Kapat"><svg class="i"><use href="#kapat"/></svg></button></div>
+  <div class="yp-ic">
+    <div class="alan"><span class="lb">Bu kişi müşteri oldu mu?</span><div class="bolumlu" role="group"><button type="button" aria-pressed="false">Uygun değil</button><button type="button" aria-pressed="true">Görüştük</button><button type="button" aria-pressed="false">İlgileniyor</button><button type="button" aria-pressed="false">Müşteri oldu</button></div><small>15 dakika içinde Meta'ya iletilecek. Geri alabilirsin.</small></div>
+    <dl class="dl"><dt>Telefon</dt><dd><a href="#">+90 532 000 00 01</a></dd><dt>E-posta</dt><dd><a href="#">ayse.kara@ornek.com</a></dd><dt>Hangi daire tipi?</dt><dd>2+1</dd><dt>Ne zaman taşınmayı düşünüyorsunuz?</dt><dd>6 ay içinde</dd><dt>Bütçeniz</dt><dd>4 - 6 milyon ₺</dd><dt>Kampanya</dt><dd>Seasight · Form</dd><dt>Geliş yolu</dt><dd>Anlık bildirim</dd></dl>
+    <div class="alan"><label for="leadNot">Not</label><textarea class="girdi" id="leadNot" placeholder="Görüşme notu"></textarea></div>
+    <div class="alan"><span class="lb">Meta'ya bildirilenler</span><div class="satir-l" style="padding:6px 0"><span class="kucuk">Görüştük · bugün 11:05</span><span class="rozet ok"><i></i>Kabul edildi</span></div></div>
+  </div>
+  <div class="yp-alt"><button class="dg" type="button" data-kapat>Kapat</button><button class="dg ana" type="button" data-kapat>Kaydet</button></div>
+</aside>
+
+<aside class="yp" id="yp-butce" aria-label="Bütçeyi düzenle">
+  <div class="yp-bas"><div><h3>Bütçeyi düzenle</h3><small>Ekim 2026 · Seasight Konutları</small></div><button class="dg kucuk hayalet ikon" type="button" data-kapat aria-label="Kapat"><svg class="i"><use href="#kapat"/></svg></button></div>
+  <div class="yp-ic">
+    <div class="alan"><label>Hesap</label><div class="bolumlu" role="group"><button type="button" aria-pressed="true">Workspace geneli</button><button type="button" aria-pressed="false">Meta</button><button type="button" aria-pressed="false">Google</button></div><small>Workspace geneli bir şemsiye bütçe; hesapların toplamını izler.</small></div>
+    <div class="alan"><label for="b1">Aylık bütçe (TRY)</label><input class="girdi sayi" id="b1" value="120.000"></div>
+    <div class="alan"><label for="b2">Günlük limit</label><input class="girdi sayi" id="b2" placeholder="boş = limit yok"></div>
+    <div class="form-izgara"><div class="alan"><label for="b3">Uyarı eşiği (%)</label><input class="girdi sayi" id="b3" value="80"></div><div class="alan"><label for="b4">Otomatik durdurma (%)</label><input class="girdi sayi" id="b4" placeholder="boş = kapalı"></div></div>
+    <small class="ik2">Otomatik durdurma şimdilik yalnız kaydediliyor, kampanyayı durdurmuyor. Durdurmak için İyileştir'de bütçe kuralı kur.</small>
+    <div class="alan"><label for="b5">Not</label><input class="girdi" id="b5" placeholder="İsteğe bağlı"></div>
+  </div>
+  <div class="yp-alt"><button class="dg tehlike" type="button" style="margin-right:auto">Bütçeyi sil</button><button class="dg" type="button" data-kapat>Vazgeç</button><button class="dg ana" type="button" data-kapat>Kaydet</button></div>
+</aside>
+
+<aside class="yp" id="yp-durdur" aria-label="Durdurma onayı">
+  <div class="yp-bas"><div><h3 id="ypDurBaslik">Kampanyayı durdur: onay</h3><small id="ypDurAlt">Seasight · Erişim İzmir · Meta</small></div><button class="dg kucuk hayalet ikon" type="button" data-kapat aria-label="Kapat"><svg class="i"><use href="#kapat"/></svg></button></div>
+  <div class="yp-ic">
+    <div class="fark"><div><small>Şimdi</small><span class="rozet ok"><i></i>Yayında</span></div><span class="ik2">→</span><div><small>Sonra</small><span class="rozet dur"><i></i>Duraklatıldı</span></div></div>
+    <ol class="adimlar"><li>Meta'ya gönder</li><li>Meta'dan geri oku ve karşılaştır</li><li>Kaydet (kim, ne zaman, eski → yeni)</li></ol>
+    <p class="ik2 kucuk">Bu kampanyanın son 7 günlük harcaması 5.200 ₺. Duraklatınca bütçe harcanmaz; istediğin an yeniden başlatabilirsin.</p>
+  </div>
+  <div class="yp-alt"><button class="dg" type="button" data-kapat>Vazgeç</button><button class="dg ana" type="button" data-kapat>Onayla ve uygula</button></div>
+</aside>
+
+<aside class="yp" id="yp-kural" aria-label="Kural düzenleyici">
+  <div class="yp-bas"><div><h3>Kuralı düzenle</h3><small>Yeni kurallar prova modunda başlar</small></div><button class="dg kucuk hayalet ikon" type="button" data-kapat aria-label="Kapat"><svg class="i"><use href="#kapat"/></svg></button></div>
+  <div class="yp-ic">
+    <div class="sekmeler" role="tablist" data-sekme-grup="kd" style="margin-top:-8px"><button class="sekme" role="tab" type="button" data-sekme="ayar" aria-selected="true">Kural</button><button class="sekme" role="tab" type="button" data-sekme="gecmis" aria-selected="false">Geçmiş</button></div>
+    <div data-panel-grup="kd" data-panel="ayar" class="yigin">
+      <div class="alan"><label for="k1">Kural adı</label><input class="girdi" id="k1" value="EBM koruması"></div>
+      <div class="form-izgara"><div class="alan"><label>Reklam hesabı</label><button class="cip" type="button" style="justify-content:space-between">Tüm hesaplar ▾</button></div><div class="alan"><label>Seviye</label><div class="bolumlu" role="group"><button type="button" aria-pressed="false">Kampanya</button><button type="button" aria-pressed="false">Set</button><button type="button" aria-pressed="true">Reklam</button></div></div></div>
+      <div class="alan"><span class="lb">Koşullar</span><div class="bolumlu" role="group"><button type="button" aria-pressed="true">Hepsi sağlanmalı</button><button type="button" aria-pressed="false">Biri yeterli</button></div>
+        <div class="kosul"><input class="girdi" value="EBM" aria-label="Metrik"><input class="girdi" value="büyük" aria-label="Operatör"><input class="girdi sayi" value="400 ₺" aria-label="Değer"><input class="girdi" value="Son 7 gün" aria-label="Pencere"><button class="dg kucuk hayalet ikon" type="button" aria-label="Kaldır"><svg class="i"><use href="#kapat"/></svg></button></div>
+        <div class="kosul"><input class="girdi" value="Tıklama" aria-label="Metrik"><input class="girdi" value="büyük" aria-label="Operatör"><input class="girdi sayi" value="50" aria-label="Değer"><input class="girdi" value="Son 7 gün" aria-label="Pencere"><button class="dg kucuk hayalet ikon" type="button" aria-label="Kaldır"><svg class="i"><use href="#kapat"/></svg></button></div>
+        <button class="cip ekle" type="button" style="justify-self:start">+ Koşul</button></div>
+      <div class="alan"><span class="lb">Aksiyon</span><div class="bolumlu" role="group"><button type="button" aria-pressed="true">Duraklat</button><button type="button" aria-pressed="false">Başlat</button><button type="button" aria-pressed="false">Bütçe</button><button type="button" aria-pressed="false">Bildir</button></div></div>
+      <div class="form-izgara"><div class="alan"><label>En az gösterim</label><input class="girdi sayi" value="1.000"></div><div class="alan"><label>Bekleme süresi (dk)</label><input class="girdi sayi" value="1.440"></div></div>
+      <div class="serit bilgi"><div><b>Bu kural şunu yapacak</b><span>Reklam bazında, son 7 günde EBM 400 ₺ üstü ve 50 tıklamadan fazla olanları duraklat.</span></div></div>
+    </div>
+    <div data-panel-grup="kd" data-panel="gecmis" class="yigin" hidden>
+      <div class="satir-l"><div><b>Bugün 13:00</b><small>41 varlık incelendi · 2 eşleşti</small></div><span class="rozet ok"><i></i>2 aksiyon</span></div>
+      <div class="satir-l"><div><b>Bugün 12:00</b><small>41 varlık incelendi · 0 eşleşti</small></div><span class="rozet"><i></i>Aksiyon yok</span></div>
+      <div class="satir-l"><div><b>Bugün 11:00</b><small>Meta: (#17) User request limit reached</small></div><span class="rozet hata"><i></i>Hata</span></div>
+      <small class="ik2">Son 3 tur gösteriliyor, toplam 214.</small>
+    </div>
+  </div>
+  <div class="yp-alt"><button class="dg" type="button" data-kapat>Vazgeç</button><button class="dg ana" type="button" data-kapat>Kaydet</button></div>
+</aside>
+
+<aside class="yp" id="yp-mail" aria-label="Raporu gönder">
+  <div class="yp-bas"><div><h3>Raporu müşteriye gönder</h3><small>Gönderen: yusuf@profaj.com · yanıtlar sana gelir</small></div><button class="dg kucuk hayalet ikon" type="button" data-kapat aria-label="Kapat"><svg class="i"><use href="#kapat"/></svg></button></div>
+  <div class="yp-ic">
+    <div class="alan"><label>Alıcılar</label><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="cip">elif@seasight.com.tr <span class="x">✕</span></span><button class="cip ekle" type="button">+ Alıcı</button></div></div>
+    <div class="alan"><label for="m1">Konu</label><input class="girdi" id="m1" value="Seasight Konutları · Eylül 2026 reklam raporu"></div>
+    <div class="alan"><label for="m2">Mesaj</label><textarea class="girdi" id="m2" rows="6">Merhaba Elif Hanım,
+
+Eylül raporunu ekte bulabilirsiniz. Bu ay 318 potansiyel müşteri geldi.</textarea></div>
+    <div class="alan"><span class="lb">Ekler</span><div class="satir-l" style="padding:6px 0"><span class="kucuk">seasight-eylul-2026.pdf · Genel rapor</span><span class="ik2 kucuk">2,1 MB</span></div><div class="satir-l" style="padding:6px 0"><span class="kucuk">meta-eylul.pdf</span><span class="ik2 kucuk">212 KB</span></div><small class="hata">Google faturası eksik.</small></div>
+  </div>
+  <div class="yp-alt"><button class="dg" type="button" data-kapat>Vazgeç</button><button class="dg ana" type="button" data-kapat>Gönder</button></div>
+</aside>
+
+<aside class="yp" id="yp-onayar" aria-label="Boost ön ayarı">
+  <div class="yp-bas"><div><h3>Boost ön ayarı</h3><small>Onayladığın her kart bu ayarlarla yayınlanır</small></div><button class="dg kucuk hayalet ikon" type="button" data-kapat aria-label="Kapat"><svg class="i"><use href="#kapat"/></svg></button></div>
+  <div class="yp-ic">
+    <div class="sekmeler" role="tablist" data-sekme-grup="oa" style="margin-top:-8px"><button class="sekme" role="tab" type="button" data-sekme="ig" aria-selected="true">Instagram</button><button class="sekme" role="tab" type="button" data-sekme="yt" aria-selected="false">YouTube</button></div>
+    <div data-panel-grup="oa" data-panel="ig" class="yigin">
+      <div class="alan"><span class="lb">Bütçe</span><div class="bolumlu" role="group"><button type="button" aria-pressed="true">Toplam</button><button type="button" aria-pressed="false">Günlük</button></div></div>
+      <div class="form-izgara"><div class="alan"><label>Tutar (₺)</label><input class="girdi sayi" value="750"></div><div class="alan"><label>Süre (gün)</label><input class="girdi sayi" value="5"></div></div>
+      <div class="alan"><span class="lb">Amaç</span><div class="bolumlu" role="group"><button type="button" aria-pressed="true">Etkileşim</button><button type="button" aria-pressed="false">Erişim</button><button type="button" aria-pressed="false">Profil ziyareti</button></div></div>
+      <div class="alan"><span class="lb">Kitle</span><button class="cip" type="button" style="justify-self:start">Kitle şablonundan doldur: İzmir aileler ▾</button></div>
+      <button class="anahtar" type="button" role="switch" aria-checked="true"><i></i>Otomatik boost açık</button>
+    </div>
+    <div data-panel-grup="oa" data-panel="yt" class="yigin" hidden>
+      <div class="form-izgara"><div class="alan"><label>Günlük bütçe (₺)</label><input class="girdi sayi" value="250"><small>Google alt sınırı 5 USD karşılığı.</small></div><div class="alan"><label>Süre (gün)</label><input class="girdi sayi" value="7"></div></div>
+      <dl class="dl"><dt>Marka adı</dt><dd>Marka Merkezi'nden</dd><dt>Logo</dt><dd>Marka Merkezi'nden</dd><dt>Hedef adres</dt><dd>seasight.com.tr</dd></dl>
+    </div>
+  </div>
+  <div class="yp-alt"><button class="dg" type="button" data-kapat>Vazgeç</button><button class="dg ana" type="button" data-kapat>Kaydet</button></div>
+</aside>
+
+<script>
+(function(){
+  var MENU=[
+    {o:'Genel Bakış',i:'ev',id:'genel'},
+    {g:'Planla'},{o:'AdvStrategy',i:'hedef',id:'strateji'},{o:'Aylık Bütçe',i:'cuzdan',id:'butce'},
+    {g:'Oluştur'},{o:'Akıllı Boost',i:'roket',id:'boost',s:3},{o:'AdvCampaign',i:'arti',id:'campaign'},
+    {g:'Yönet'},{o:'Reklam Yöneticisi',i:'tablo',id:'yonetici'},{o:'Potansiyel Müşteriler',i:'kisi',id:'leads',s:12},
+    {g:'İyileştir'},{o:'İyileştir',i:'kural',id:'iyilestir'},
+    {g:'Rapor'},{o:'Raporlar',i:'rapor',id:'raporlar'},
+    {g:'Base'},{o:'Marka Merkezi',i:'marka',id:'marka'},{o:'Varlıklar',i:'resim',id:'varlik'},
+    {g:''},{o:'Ayarlar',i:'ayar',id:'ayarlar'}
+  ];
+  var ADLAR={sihirbaz:'AdvCampaign · Yeni reklam',galeri:'Reklam Galerisi',hesabim:'Hesabım'};
+  var USTMENU={sihirbaz:'campaign',galeri:'yonetici',hesabim:null};
+  MENU.forEach(function(m){if(m.id)ADLAR[m.id]=m.o;});
+  var kabuk=document.getElementById('kabuk'), secili='yonetici';
+
+  function menuCiz(){
+    var aktif=USTMENU.hasOwnProperty(secili)?USTMENU[secili]:secili;
+    document.getElementById('menuListe').innerHTML=MENU.map(function(m){
+      if(m.g!==undefined) return m.g?'<div class="grup">'+m.g+'</div>':'<div style="height:12px"></div>';
+      return '<button class="oge" type="button" data-git="'+m.id+'"'+(m.id===aktif?' aria-current="page"':'')+'><svg class="i"><use href="#'+m.i+'"/></svg>'+m.o+(m.s?'<span class="sayac">'+m.s+'</span>':'')+'</button>';
+    }).join('');
+  }
+  function git(id){
+    secili=id;
+    document.querySelectorAll('[data-sayfa]').forEach(function(s){s.hidden=s.dataset.sayfa!==id;});
+    document.getElementById('kirSayfa').textContent=ADLAR[id]||id;
+    menuCiz(); kapatHepsi(); kabuk.classList.remove('cekmece-acik');
+    window.scrollTo(0,0);
+    try{history.replaceState(null,'','#'+id);}catch(e){}
+  }
+  window.__git=git;
+
+  /* ── Açılır menüler: tek bileşen, yerini düğmeye göre bulur ── */
+  function kapatHepsi(){document.querySelectorAll('.acilir.acik').forEach(function(a){a.classList.remove('acik');});}
+  function konumla(menu,dg){
+    var r=dg.getBoundingClientRect(), w=menu.offsetWidth, h=menu.offsetHeight, vw=innerWidth, vh=innerHeight;
+    var sol=r.left; if(sol+w>vw-8) sol=Math.max(8,r.right-w);
+    var ust=r.bottom+6; if(ust+h>vh-8) ust=Math.max(8,r.top-h-6);
+    menu.style.left=sol+'px'; menu.style.top=ust+'px';
+  }
+  function ac(menu,dg){var acik=menu.classList.contains('acik')&&menu._dg===dg;kapatHepsi();if(acik)return;menu._dg=dg;konumla(menu,dg);menu.classList.add('acik');var ilk=menu.querySelector('button,input');if(ilk)ilk.focus({preventScroll:true});}
+  var PANEL_ESLE={'Düzenle':'kural','Geçmiş':'kural'};
+
+  /* ── Yan panel ── */
+  var perde=document.getElementById('perde');
+  function ypAc(id,sekme){kapatHepsi();var p=document.getElementById('yp-'+id);if(!p)return;p.classList.add('acik');perde.classList.add('acik');if(sekme)sekmeSec(p.querySelector('[data-sekme-grup]'),sekme);var k=p.querySelector('[data-kapat]');if(k)k.focus({preventScroll:true});}
+  function ypKapat(){document.querySelectorAll('.yp.acik').forEach(function(p){p.classList.remove('acik');});perde.classList.remove('acik');}
+
+  /* ── Sekmeler (tek bileşen) ── */
+  function sekmeSec(grupEl,ad){
+    if(!grupEl)return; var g=grupEl.dataset.sekmeGrup, b=grupEl.querySelector('[data-sekme="'+ad+'"]');
+    grupEl.querySelectorAll('.sekme').forEach(function(x){x.setAttribute('aria-selected',x===b);});
+    document.querySelectorAll('[data-panel-grup="'+g+'"]').forEach(function(p){p.hidden=p.dataset.panel!==ad;});
+    if(grupEl.dataset.eylemHedef&&b&&b.dataset.eylem) document.getElementById(grupEl.dataset.eylemHedef).textContent=b.dataset.eylem;
+  }
+
+  document.addEventListener('click',function(e){
+    var t=e.target;
+    var kapat=t.closest('[data-kapat]'); if(kapat){ypKapat();return;}
+    var acDg=t.closest('[data-acilir]'); if(acDg){e.stopPropagation();ac(document.getElementById('ac-'+acDg.dataset.acilir),acDg);return;}
+    var mDg=t.closest('[data-menu]');
+    if(mDg){e.stopPropagation();var m=document.getElementById('ac-satir');
+      m.innerHTML=mDg.dataset.menu.split('|').map(function(x){if(x==='-')return '<div class="ayir"></div>';var th=x.charAt(0)==='!',ad=th?x.slice(1):x;return '<button type="button"'+(th?' class="tehlike"':'')+' data-oge="'+ad+'">'+ad+'</button>';}).join('');
+      ac(m,mDg);return;}
+    var oge=t.closest('#ac-satir [data-oge]'); if(oge){var ad=oge.dataset.oge;kapatHepsi();if(secili==='iyilestir'&&PANEL_ESLE[ad])ypAc('kural',ad==='Geçmiş'?'gecmis':'ayar');else if(ad==='Durdur'||ad==='Duraklat')ypAc('durdur');else if(ad==='Reklam Yöneticisi\'nde aç')git('yonetici');else if(ad==='Marka Merkezi\'nde aç')git('marka');return;}
+    var g=t.closest('[data-git]'); if(g&&!g.closest('a[href]')){var sonra=g.dataset.ypSonra;git(g.dataset.git);if(sonra)ypAc(sonra);return;}
+    var yp=t.closest('[data-yp]'); if(yp){ypAc(yp.dataset.yp);return;}
+    var sg=t.closest('[data-sekme-git]'); if(sg){var p=sg.dataset.sekmeGit.split(':');sekmeSec(document.querySelector('[data-sekme-grup="'+p[0]+'"]'),p[1]);return;}
+    var sk=t.closest('.sekme[data-sekme]'); if(sk){sekmeSec(sk.closest('[data-sekme-grup]'),sk.dataset.sekme);return;}
+    var bl=t.closest('.bolumlu button'); if(bl){bl.parentNode.querySelectorAll('button').forEach(function(x){x.setAttribute('aria-pressed',x===bl);});return;}
+    var cp=t.closest('.cip.secim-cip'); if(cp){cp.parentNode.querySelectorAll('.cip.secim-cip').forEach(function(x){x.setAttribute('aria-pressed',x===cp);});return;}
+    var an=t.closest('.anahtar'); if(an&&an.id!=='onizAnahtar'){an.setAttribute('aria-checked',an.getAttribute('aria-checked')!=='true');return;}
+    var sc=t.closest('#bolgeSecim .secim'); if(sc){sc.parentNode.querySelectorAll('.secim').forEach(function(x){x.setAttribute('aria-pressed',x===sc);});return;}
+    if(!t.closest('.acilir'))kapatHepsi();
+  });
+  perde.onclick=function(){ypKapat();kabuk.classList.remove('cekmece-acik');perde.classList.remove('acik');};
+  document.addEventListener('keydown',function(e){
+    if(e.key==='Escape'){kapatHepsi();ypKapat();kabuk.classList.remove('cekmece-acik');}
+    var m=document.querySelector('.acilir.acik');
+    if(m&&(e.key==='ArrowDown'||e.key==='ArrowUp')){e.preventDefault();var b=[].slice.call(m.querySelectorAll('button')),i=b.indexOf(document.activeElement);i=e.key==='ArrowDown'?(i+1)%b.length:(i-1+b.length)%b.length;b[i].focus();}
+  });
+  addEventListener('resize',kapatHepsi); addEventListener('scroll',kapatHepsi,{passive:true});
+  document.getElementById('hamb').onclick=function(e){e.stopPropagation();kapatHepsi();kabuk.classList.add('cekmece-acik');perde.classList.add('acik');};
+  function tema(){var k=document.documentElement,d=k.dataset.theme?k.dataset.theme==='dark':matchMedia('(prefers-color-scheme: dark)').matches;k.dataset.theme=d?'light':'dark';}
+  document.getElementById('tema').onclick=tema; document.getElementById('temaMenu').onclick=function(){tema();kapatHepsi();};
+
+  /* ── Reklam Yöneticisi: seviye sekmeleri, kırıntı, tablo, önizleme ── */
+  var SEV=[{k:'hesap',a:'Hesaplar',s:3},{k:'kamp',a:'Kampanyalar',s:5},{k:'set',a:'Reklam setleri',s:9},{k:'reklam',a:'Reklamlar',s:18}];
+  var VERI={
+    hesap:[['ok','Meta · Seasight Konutları','act_1029384756 · İzleniyor','Meta','38.110','251.400','4.180','%1,66','112','340'],['ok','Google · Seasight Arama','516-174-6317 · İzleniyor','Google','10.100','160.900','2.732','%1,70','52','194'],['','Meta · Seasight Yatırım','act_5566778899 · izlenmiyor','Meta','-','-','-','-','-','-']],
+    kamp:[['ok','Seasight · Form','Form doldursunlar','Meta','18.400','142.300','2.310','%1,62','61','302'],['ok','Seasight · Erişim İzmir','Bölgemde çok kişi görsün','Meta','11.900','98.200','820','%0,84','0','-'],['ok','Seasight · Arama','Siteme gelsinler','Google','6.100','24.800','1.420','%5,73','52','117'],['dur','Seasight · WhatsApp','Bana yazsınlar · Duraklatıldı','Meta','7.810','10.900','1.050','%9,63','51','153'],['hata','Seasight · Demand Gen','Ödeme sorunu','Google','4.000','136.100','1.312','%0,96','0','-']],
+    set:[['ok','İzmir 28-65','Seasight · Form','Meta','12.300','96.100','1.540','%1,60','42','293'],['ok','İzmir benzer kitle %1','Seasight · Form','Meta','6.100','46.200','770','%1,67','19','321'],['ok','Seasight marka kelimeleri','Seasight · Arama','Google','2.400','8.100','690','%8,52','31','77']],
+    reklam:[['ok','Denize sıfır 2+1','İzmir 28-65 · görsel','Meta','9.200','71.400','1.190','%1,67','34','271'],['ok','Ön satışa özel fiyat','İzmir 28-65 · görsel','Meta','3.100','24.700','350','%1,42','8','388'],['ok','Seasight Konutları | Urla\'da 2+1','Marka kelimeleri · arama','Google','2.400','8.100','690','%8,52','31','77']]
+  };
+  var sev='kamp', onizAcik=false;
+  function ryCiz(){
+    var i=SEV.findIndex(function(x){return x.k===sev;});
+    document.getElementById('rySekme').innerHTML=SEV.map(function(x){return '<button class="sekme" role="tab" type="button" data-sev="'+x.k+'" aria-selected="'+(x.k===sev)+'">'+x.a+' <span class="s">'+x.s+'</span></button>';}).join('');
+    var yol=[['Tüm şirketler',null],['Ege Birlik Yapı',null],['Seasight Konutları','hesap']];
+    if(i>=2) yol.push(['Meta · Seasight Konutları','kamp']);
+    if(i>=3) yol.push(['Seasight · Form','set']);
+    document.getElementById('ryKirinti').innerHTML=yol.map(function(y,j){return (j?'<span class="ayr">›</span>':'')+(j===yol.length-1?'<b>'+y[0]+'</b>':'<button type="button"'+(y[1]?' data-sev="'+y[1]+'"':'')+'>'+y[0]+'</button>');}).join('');
+    var ad=SEV[i].a.replace(/lar$|ler$/,'').replace('Reklam setleri','Reklam seti');
+    var bas={hesap:'Hesap',kamp:'Kampanya',set:'Reklam seti',reklam:'Reklam'}[sev];
+    var eylemVar=sev!=='hesap';
+    var html='<thead><tr>'+(sev==='reklam'?'<th style="width:32px"></th>':'')+'<th>'+bas+'</th><th>Mecra</th><th class="s">Harcama</th><th class="s">Gösterim</th><th class="s">Tıklama</th><th class="s">Tıklama oranı</th><th class="s">Dönüşüm</th><th class="s">Dönüşüm başı</th>'+(eylemVar?'<th class="s">Eylem</th>':'')+'</tr></thead><tbody>';
+    VERI[sev].forEach(function(r,j){
+      var durumEtiket={ok:'Yayında',dur:'Duraklatıldı',hata:'Ödeme sorunu','':'İzlenmiyor'}[r[0]];
+      html+='<tr>'+(sev==='reklam'?'<td><button class="ok-dg" type="button" data-oniz="'+j+'" aria-label="Önizleme" aria-expanded="false">›</button></td>':'')+
+        '<td><div class="hucre-ad"><span class="dn '+r[0]+'" title="'+durumEtiket+'"></span><div><button class="ad" type="button"'+(sev!=='reklam'?' data-in="1"':'')+'>'+r[1]+'</button><small>'+r[2]+'</small></div></div></td><td>'+r[3]+'</td>'+
+        '<td class="s">'+r[4]+(r[4]!=='-'?' ₺':'')+'</td><td class="s">'+r[5]+'</td><td class="s">'+r[6]+'</td><td class="s">'+r[7]+'</td><td class="s">'+r[8]+'</td><td class="s">'+r[9]+(r[9]!=='-'?' ₺':'')+'</td>'+
+        (eylemVar?'<td class="s" style="white-space:nowrap">'+(r[0]==='dur'?'<button class="dg kucuk" type="button" data-yp="durdur">Başlat</button>':r[0]==='ok'?'<button class="dg kucuk" type="button" data-yp="durdur">Durdur</button>':'')+' <button class="dg kucuk hayalet ikon" type="button" data-menu="Platformda aç|Kopyala|AdvCampaign\'de düzenle|-|!Arşivle" aria-label="Diğer"><svg class="i"><use href="#nokta3"/></svg></button></td>':'')+'</tr>';
+      if(sev==='reklam') html+='<tr class="onizleme-sat" data-oniz-sat="'+j+'"'+(onizAcik?'':' hidden')+'><td colspan="10">'+onizleme(r)+'</td></tr>';
+    });
+    var top={hesap:['48.210','412.300','6.912','%1,68','164','294'],kamp:['48.210','412.300','6.912','%1,68','164','294'],set:['20.800','150.400','3.000','%2,00','92','226'],reklam:['14.700','104.200','2.230','%2,14','73','201']}[sev];
+    html+='</tbody><tfoot><tr>'+(sev==='reklam'?'<td></td>':'')+'<td>Toplam: mevcut görünüm</td><td></td><td class="s">'+top[0]+' ₺</td><td class="s">'+top[1]+'</td><td class="s">'+top[2]+'</td><td class="s">'+top[3]+'</td><td class="s">'+top[4]+'</td><td class="s">'+top[5]+' ₺</td>'+(eylemVar?'<td></td>':'')+'</tr></tfoot>';
+    document.getElementById('ryTablo').innerHTML=html;
+    var n=VERI[sev].length; document.getElementById('rySay').textContent='1 - '+n+' / '+SEV[i].s+' '+bas.toLowerCase();
+    var an=document.getElementById('onizAnahtar'); an.setAttribute('aria-checked',sev==='reklam'&&onizAcik); an.disabled=sev!=='reklam'; an.style.opacity=sev==='reklam'?1:.45;
+  }
+  function onizleme(r){
+    if(r[3]==='Google') return '<div class="onizleme"><div class="arama-kart"><span class="rk">Sponsorlu · seasight.com.tr</span><div class="bs">'+r[1]+'</div><span class="ik2">Denize sıfır 2+1 daireler. Ön satışa özel fiyat ve 2027 bahar teslim. Hemen bilgi alın.</span></div><div class="ik2 kucuk" style="align-self:end">Arama reklamının görseli yok; önizleme metindir.</div></div>';
+    return '<div class="onizleme"><div class="akis-kart"><div class="ust2"><span class="harf" style="width:28px;height:28px;font-size:11px">SK</span><div><b>Seasight Konutları</b><div class="soluk" style="font-size:11px">Sponsorlu</div></div></div><div style="padding:0 10px 8px">İzmir\'de denize sıfır yaşam. Görseller temsilidir.</div><div class="gorsel">'+r[1]+'</div><div class="alt2"><span>seasight.com.tr</span><span class="dg kucuk" style="pointer-events:none">Daha fazla bilgi al</span></div></div><div class="ik2 kucuk" style="align-self:end;max-width:260px">+3 görsel · yerleşime göre 1:1, 4:5, 9:16.<br><button class="bag" type="button">Bütün yerleşimleri önizle →</button></div></div>';
+  }
+  document.querySelector('[data-sayfa="yonetici"]').addEventListener('click',function(e){
+    var s=e.target.closest('[data-sev]'); if(s){sev=s.dataset.sev;ryCiz();e.stopPropagation();return;}
+    var inn=e.target.closest('[data-in]'); if(inn){var i=SEV.findIndex(function(x){return x.k===sev;});if(i<3){sev=SEV[i+1].k;ryCiz();}e.stopPropagation();return;}
+    var o=e.target.closest('[data-oniz]'); if(o){var sat=document.querySelector('[data-oniz-sat="'+o.dataset.oniz+'"]');sat.hidden=!sat.hidden;o.setAttribute('aria-expanded',!sat.hidden);o.textContent=sat.hidden?'›':'⌄';e.stopPropagation();return;}
+    if(e.target.closest('#onizAnahtar')&&sev==='reklam'){onizAcik=!onizAcik;ryCiz();e.stopPropagation();}
+  },true);
+
+  /* ── Potansiyel Müşteriler: tablo + dört hâl ── */
+  var KAYIT=[['Ayşe Kara','+90 532 000 00 01','Bilgi formu','Yeni','bugün 10:42','2+1 · 6 ay içinde'],['Mehmet Öz','+90 533 000 00 02','Bilgi formu','Görüştük','bugün 09:15','3+1 · hemen'],['Zeynep Arslan','zeynep@ornek.com','Fiyat listesi formu','İlgileniyor','dün 18:20','2+1 · 1 yıl içinde'],['Can Yıldız','+90 534 000 00 04','Bilgi formu','Müşteri oldu','dün 11:02','3+1 · hemen'],['Adsız kayıt','+90 535 000 00 05','Fiyat listesi formu','Uygun değil','3 gün önce','Yanlış numara']];
+  function leadCiz(hal){
+    var k=document.getElementById('leadIcerik');
+    if(hal==='yuk'){k.innerHTML='<div class="kart-ic" style="display:grid;gap:14px">'+[60,100,80,90].map(function(w){return '<div class="iskelet" style="width:'+w+'%"></div>';}).join('')+'</div>';return;}
+    if(hal==='bos'){k.innerHTML='<div class="kart-ic"><div class="hal orta"><span class="ik">0</span><b>Henüz kayıt yok</b><p>Bu workspace\'in sayfasında yayında anlık form yok. Form reklamı kurulunca kayıtlar birkaç saniyede buraya düşer.</p><button class="dg kucuk" type="button" data-git="sihirbaz">Form reklamı kur</button></div></div>';return;}
+    if(hal==='hata'){k.innerHTML='<div class="kart-ic"><div class="hal hata"><span class="ik">!</span><b>Kayıtlar yüklenemedi</b><p>Meta: <code>(#190) Error validating access token: Session has expired</code></p><div style="display:flex;gap:8px"><button class="dg kucuk" type="button">Tekrar dene</button><button class="dg kucuk hayalet" type="button" data-git="ayarlar">Bağlantıya git</button></div></div></div>';return;}
+    var ROZ={'Yeni':'koyu','Görüştük':'','İlgileniyor':'','Müşteri oldu':'ok','Uygun değil':'dur'};
+    k.innerHTML='<div class="tablo-sar"><table><thead><tr><th>Kişi</th><th>İlk cevaplar</th><th>Form</th><th>Durum</th><th>Tarih</th></tr></thead><tbody>'+KAYIT.map(function(r,i){return '<tr class="tik" data-lead="'+i+'" tabindex="0"><td><b>'+r[0]+'</b><small>'+r[1]+'</small></td><td>'+r[5]+'</td><td>'+r[2]+'</td><td><span class="rozet '+ROZ[r[3]]+'"><i></i>'+r[3]+'</span></td><td style="white-space:nowrap">'+r[4]+'</td></tr>';}).join('')+'</tbody></table></div><div class="sayfalama"><span class="sol">Satıra tıkla: bütün cevaplar ve durum yan panelde.</span><span>1 - 5 / 37</span><span><button class="ok-dg" type="button">‹</button><button class="ok-dg" type="button">›</button></span></div>';
+  }
+  document.getElementById('leadHal').addEventListener('click',function(e){var b=e.target.closest('[data-hal]');if(b)leadCiz(b.dataset.hal);});
+  function leadAc(tr){var r=KAYIT[+tr.dataset.lead];document.getElementById('ypLeadAd').textContent=r[0];document.getElementById('ypLeadAlt').textContent='Seasight · '+r[2]+' · '+r[4];ypAc('lead');}
+  document.getElementById('leadIcerik').addEventListener('click',function(e){var tr=e.target.closest('[data-lead]');if(tr)leadAc(tr);});
+  document.getElementById('leadIcerik').addEventListener('keydown',function(e){var tr=e.target.closest('[data-lead]');if(tr&&(e.key==='Enter'||e.key===' ')){e.preventDefault();leadAc(tr);}});
+
+  ryCiz(); leadCiz('sonuc');
+  var bas=(location.hash||'').slice(1); git(document.querySelector('[data-sayfa="'+bas+'"]')?bas:'yonetici');
+})();
+</script>
+</body>
+</html>
