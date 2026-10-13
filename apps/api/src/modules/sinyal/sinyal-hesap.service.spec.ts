@@ -234,4 +234,34 @@ describe('arama kampanyası ve dönüşüm sinyalleri', () => {
     expect(await donusumAnomalisi()).toBe(0);
     expect(r.note).toContain('donusum_sayilmiyor');
   });
+
+  /*
+   * ESKİ BİR DÖNÜŞÜMSÜZ KAMPANYA HESABIN DÖNÜŞÜM ANOMALİSİNİ KAPATMAMALI
+   * (Ajan 4, VIDEO kapısı). Liste QUALITY_CALL'dan POST_ENGAGEMENT, REACH ve
+   * THRUPLAY'e genişleyince hesap satırı kuralı "hesapta BİR TANE bile
+   * dönüşümsüz kampanya varsa" diyordu: Akıllı Boost'un aylar önce bitmiş tek
+   * bir gönderi kampanyası, o hesabın hesap seviyesi dönüşüm anomalisini
+   * SÜRESİZ kapatıyordu ve not dışında iz yoktu. Karar yalnız değerlendirme
+   * penceresinde METRİĞİ olan kampanyalara bakmalı.
+   */
+  it('KRİTİK: penceresinde metriği olmayan eski boost kampanyası hesap dönüşüm anomalisini kapatmıyor', async () => {
+    await kur('LEAD_GENERATION');
+    const ESKI = '88888888-8888-8888-8888-888888888888';
+    await h.q(
+      `INSERT INTO campaigns (id, ad_account_id, client_id, platform, external_id, name, status, budget_mode, updated_at, created_at)
+       VALUES ($1, $2, $3, 'meta', 'c-eski', 'Eski boost', 'paused', 'none', now(), '2025-01-01')`,
+      [ESKI, IDS.adAccount, IDS.client],
+    );
+    await h.q(
+      `INSERT INTO ad_groups (id, campaign_id, ad_account_id, client_id, platform, external_id, name, status, budget_mode, optimization_goal, updated_at)
+       VALUES (gen_random_uuid(), $1, $2, $3, 'meta', 'set-eski', 'Set', 'paused', 'none', 'POST_ENGAGEMENT', now())`,
+      [ESKI, IDS.adAccount, IDS.client],
+    );
+    const r = await degerlendir(db(), IDS.adAccount, GUN, SIMDI);
+    const hesapDonusum = await h.q(
+      `SELECT 1 FROM sinyaller WHERE seviye = 'account' AND kod IN ('donusum', 'donusum_basi_maliyet')`,
+    );
+    expect(hesapDonusum.length).toBeGreaterThan(0);
+    expect(r.note).not.toContain('donusum_sayilmiyor');
+  });
 });

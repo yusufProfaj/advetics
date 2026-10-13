@@ -188,8 +188,15 @@ export async function degerlendir(db: TxLike, adAccountId: string, gun: string, 
    * atlanıyor: hesap satırı kampanyalara ayrışmıyor ve o kampanyanın
    * gösterimi dönüşümsüz sayılıp "dönüşüm düştü" üretirdi. Tahmin etmektense
    * kısıtla: kampanya düzeyindeki diğer kampanyalar yine değerlendiriliyor.
+   *
+   * YALNIZ PENCEREDE METRİĞİ OLAN KAMPANYA (Ajan 4, VIDEO kapısı): liste
+   * gönderi etkileşimi, erişim ve video izlenmeyi de kapsayınca bütün
+   * kampanya satırlarına bakmak, Akıllı Boost'un aylar önce bitmiş tek bir
+   * gönderi kampanyasıyla hesabın dönüşüm anomalisini SÜRESİZ kapatıyordu.
+   * Hesap satırını etkileyebilen yalnız bu günlerde verisi olan kampanya
+   * (`kampanyalar` yalnız o satırlardan kuruluyor).
    */
-  hesapSerisi.donusumSayilmiyor = kampanyaSatirlari.some((k) => k.donusumsuz);
+  hesapSerisi.donusumSayilmiyor = kampanyalar.some((k) => k.donusumSayilmiyor === true);
 
   const nedenler = bosNedenSayaci();
   const bulgular: Bulgu[] = [
