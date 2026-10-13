@@ -4,6 +4,10 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import type { EmailAccountSummary, SignatureCleanReport } from '@advetics/shared';
 import { apiFetch, ApiRequestError } from '@/lib/api';
+import { Kart } from '@/components/ui/kart';
+import { Dugme } from '@/components/ui/dugme';
+import { Serit } from '@/components/ui/hal';
+import { Alan, FormIzgarasi, Girdi, MetinAlani } from '@/components/ui/alan';
 
 /**
  * KENDİ E-POSTA KİMLİĞİN — SMTP ve imza.
@@ -87,220 +91,168 @@ export function EpostaAyarlari({
 
   const dogrulandi = mevcut?.verifiedAt != null;
 
+  const testDugmesi = (
+    <Dugme
+      ton="koyu"
+      boyut="kucuk"
+      onClick={test}
+      disabled={bekleyen !== null || !mevcut}
+      bekliyor={bekleyen === 'test'}
+      title={mevcut ? undefined : 'Önce ayarları kaydet'}
+    >
+      Kendine test maili gönder
+    </Dugme>
+  );
+
   return (
-    <div className="space-y-5">
-      {/* DURUM EN ÜSTTE: "kaydedildi" ile "çalışıyor" farklı şeyler. */}
-      <div
-        className={`rounded-lg border px-4 py-3 text-sm ${
-          dogrulandi ? 'border-ok/40 bg-ok/5' : 'border-warn/40 bg-warn/5'
-        }`}
-      >
-        {dogrulandi ? (
-          <p>
-            <strong>Doğrulandı.</strong> Bu hesaptan rapor gönderilebilir — son test{' '}
-            {new Date(mevcut!.verifiedAt!).toLocaleString('tr-TR')}.
+    <div className="grid gap-5">
+      {/*
+        DURUM EN ÜSTTE ŞERİT (taslak `#hesabim`): "kaydedildi" ile "çalışıyor"
+        farklı şeyler. Doğrulanmamışsa menüde de kırmızı nokta var
+        (`hesabim/page.tsx`); şerit nedenini ve tek çaresini söylüyor.
+      */}
+      {dogrulandi ? (
+        <Serit ton="bilgi" baslik="Doğrulandı">
+          Bu hesaptan rapor gönderilebilir. Son test {new Date(mevcut!.verifiedAt!).toLocaleString('tr-TR')}.
+        </Serit>
+      ) : (
+        <Serit ton="hata" baslik="E-posta ayarların doğrulanmamış" eylemler={testDugmesi}>
+          Rapor maili gönderilemez. Kaydetmek yeterli değil: SMTP bilgisi yanlışsa hata ancak ilk gerçek
+          gönderimde çıkar ve o gönderim workspace’e gidecek olandır. Kaydettikten sonra kendine test maili gönder.
+          {mevcut?.lastError && (
+            <span className="mt-1 block font-semibold text-danger-strong">Son hata: {mevcut.lastError}</span>
+          )}
+        </Serit>
+      )}
+
+      <Kart baslik="Gönderen">
+        <FormIzgarasi>
+          <Alan etiket="Görünen ad">
+            <Girdi value={fromName} onChange={(e) => setFromName(e.target.value)} placeholder="Yusuf Algan" />
+          </Alan>
+          <Alan etiket="Gönderen adresi">
+            <Girdi value={fromEmail} onChange={(e) => setFromEmail(e.target.value)} />
+          </Alan>
+        </FormIzgarasi>
+      </Kart>
+
+      <Kart baslik="SMTP">
+        <div className="grid gap-4">
+          <p className="m-0 text-13 text-ink-muted">
+            Google Workspace kullanıyorsan sunucu <code>smtp.gmail.com</code>, port <code>465</code>. Parola
+            olarak normal şifreni değil <strong>uygulama parolasını</strong> gir. Bunun için hesabında iki
+            adımlı doğrulama açık olmalı, aksi hâlde Google uygulama parolası üretmiyor.
           </p>
-        ) : (
-          <>
-            <p className="font-medium">Henüz doğrulanmadı.</p>
-            <p className="mt-1 text-ink-muted">
-              Kaydetmek yeterli değil: SMTP bilgisi yanlışsa hata ancak ilk gerçek
-              gönderimde çıkar ve o gönderim <strong>workspace’e gidecek olandır</strong>.
-              Kaydettikten sonra kendine test maili gönder.
-            </p>
-            {mevcut?.lastError && (
-              <p className="mt-2 rounded border border-danger/40 bg-danger/5 px-2.5 py-1.5 text-xs text-danger">
-                Son hata: {mevcut.lastError}
-              </p>
-            )}
-          </>
-        )}
-      </div>
-
-      <section className="rounded-xl border border-line bg-surface p-4">
-        <h2 className="font-medium">Gönderen</h2>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <Alan label="Görünen ad">
-            <Girdi value={fromName} onChange={setFromName} placeholder="Yusuf Algan" />
-          </Alan>
-          <Alan label="Gönderen adresi">
-            <Girdi value={fromEmail} onChange={setFromEmail} />
-          </Alan>
-        </div>
-      </section>
-
-      <section className="rounded-xl border border-line bg-surface p-4">
-        <h2 className="font-medium">SMTP</h2>
-        <p className="mt-0.5 text-xs text-ink-muted">
-          Google Workspace kullanıyorsan sunucu <code>smtp.gmail.com</code>, port{' '}
-          <code>465</code>. Parola olarak normal şifreni değil{' '}
-          <strong>uygulama parolasını</strong> gir — bunun için hesabında iki adımlı
-          doğrulama açık olmalı, aksi hâlde Google uygulama parolası üretmiyor.
-        </p>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <Alan label="Sunucu">
-            <Girdi value={smtpHost} onChange={setSmtpHost} />
-          </Alan>
-          <Alan label="Port">
-            <Girdi value={smtpPort} onChange={setSmtpPort} />
-          </Alan>
-          <Alan label="Kullanıcı">
-            <Girdi value={smtpUser} onChange={setSmtpUser} />
-          </Alan>
-          <Alan
-            label={
-              mevcut?.hasPassword
-                ? 'Uygulama parolası (boş bırakırsan değişmez)'
-                : 'Uygulama parolası'
-            }
-          >
-            <Girdi
-              value={smtpPass}
-              onChange={setSmtpPass}
-              type="password"
-              placeholder={mevcut?.hasPassword ? '•••••••• (kayıtlı)' : ''}
+          <FormIzgarasi>
+            <Alan etiket="Sunucu">
+              <Girdi value={smtpHost} onChange={(e) => setSmtpHost(e.target.value)} />
+            </Alan>
+            <Alan etiket="Port">
+              <Girdi value={smtpPort} onChange={(e) => setSmtpPort(e.target.value)} inputMode="numeric" />
+            </Alan>
+            <Alan etiket="Kullanıcı">
+              <Girdi value={smtpUser} onChange={(e) => setSmtpUser(e.target.value)} />
+            </Alan>
+            <Alan
+              etiket="Uygulama parolası"
+              ipucu={mevcut?.hasPassword ? 'Boş bırakırsan değişmez.' : undefined}
+            >
+              <Girdi
+                type="password"
+                value={smtpPass}
+                onChange={(e) => setSmtpPass(e.target.value)}
+                placeholder={mevcut?.hasPassword ? '•••••••• (kayıtlı)' : ''}
+              />
+            </Alan>
+          </FormIzgarasi>
+          <label className="flex items-center gap-2 text-14 text-ink">
+            <input
+              type="checkbox"
+              checked={smtpSecure}
+              onChange={(e) => setSmtpSecure(e.target.checked)}
+              className="h-4 w-4 accent-[var(--brand-primary)]"
             />
-          </Alan>
+            SSL/TLS (port 465 için açık, 587 için kapalı)
+          </label>
         </div>
-        <label className="mt-3 flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={smtpSecure}
-            onChange={(e) => setSmtpSecure(e.target.checked)}
+      </Kart>
+
+      <Kart baslik="İmza">
+        <div className="grid gap-3">
+          <p className="m-0 text-13 text-ink-muted">
+            Gmail&apos;deki imzan bizim gönderdiğimiz maile <strong>otomatik eklenmiyor</strong>; onu
+            Gmail&apos;in arayüzü ekliyor. İmzanın HTML&apos;ini buraya yapıştır. Güvenlik için script ve
+            olay öznitelikleri temizleniyor; ne atıldığı kaydettikten sonra yazılıyor.
+          </p>
+          <MetinAlani
+            aria-label="İmza HTML"
+            value={imza}
+            onChange={(e) => setImza(e.target.value)}
+            rows={8}
+            spellCheck={false}
+            className="font-mono text-12"
           />
-          SSL/TLS (port 465 için açık, 587 için kapalı)
-        </label>
-      </section>
 
-      <section className="rounded-xl border border-line bg-surface p-4">
-        <h2 className="font-medium">İmza</h2>
-        <p className="mt-0.5 text-xs text-ink-muted">
-          Gmail&apos;deki imzan bizim gönderdiğimiz maile <strong>otomatik
-          eklenmiyor</strong> — onu Gmail&apos;in arayüzü ekliyor. İmzanın HTML&apos;ini
-          buraya yapıştır. Güvenlik için script ve olay öznitelikleri temizleniyor;
-          ne atıldığı kaydettikten sonra yazılıyor.
-        </p>
-        <textarea
-          value={imza}
-          onChange={(e) => setImza(e.target.value)}
-          rows={8}
-          spellCheck={false}
-          className="mt-2 w-full rounded-lg border border-line bg-surface px-3 py-2 font-mono text-xs text-ink focus:border-brand focus:outline-none"
-        />
+          {rapor && (
+            <Serit ton="bilgi" baslik="İmza kaydedildi">
+              <ul className="m-0 mt-1 grid list-none gap-0.5 p-0">
+                {rapor.rewrittenImages > 0 && (
+                  <li>
+                    {rapor.rewrittenImages} görsel adresi Gmail önbelleğinden gerçek kaynağına çevrildi. O
+                    adresler Gmail dışında çalışmıyor ve mailde kırık görünürdü.
+                  </li>
+                )}
+                {rapor.removedTags.length > 0 && <li>Atılan etiketler: {rapor.removedTags.join(', ')}</li>}
+                {rapor.removedAttributes.length > 0 && (
+                  <li>Atılan öznitelikler: {rapor.removedAttributes.join(', ')}</li>
+                )}
+                {rapor.removedTags.length === 0 &&
+                  rapor.removedAttributes.length === 0 &&
+                  rapor.rewrittenImages === 0 && <li>Hiçbir şey atılmadı.</li>}
+              </ul>
+            </Serit>
+          )}
 
-        {rapor && (
-          <div className="mt-2 rounded border border-line bg-surface-muted px-3 py-2 text-xs">
-            <p className="font-medium">İmza kaydedildi.</p>
-            <ul className="mt-1 space-y-0.5 text-ink-muted">
-              {rapor.rewrittenImages > 0 && (
-                <li>
-                  {rapor.rewrittenImages} görsel adresi Gmail önbelleğinden gerçek
-                  kaynağına çevrildi — o adresler Gmail dışında çalışmıyor ve mailde
-                  kırık görünürdü.
-                </li>
-              )}
-              {rapor.removedTags.length > 0 && (
-                <li>Atılan etiketler: {rapor.removedTags.join(', ')}</li>
-              )}
-              {rapor.removedAttributes.length > 0 && (
-                <li>Atılan öznitelikler: {rapor.removedAttributes.join(', ')}</li>
-              )}
-              {rapor.removedTags.length === 0 &&
-                rapor.removedAttributes.length === 0 &&
-                rapor.rewrittenImages === 0 && <li>Hiçbir şey atılmadı.</li>}
-            </ul>
-          </div>
-        )}
+          {mevcut?.signatureHtml && (
+            <div className="grid gap-1">
+              <p className="m-0 text-12 text-ink-muted">Önizleme (kayıtlı hâli):</p>
+              {/*
+                KAYITLI HÂL ÖNİZLENİYOR, girilen ham metin değil. Saklanan şey
+                gönderilecek şey; ham metni göstermek, temizlikten sonra neyin
+                gideceği konusunda yanıltırdı.
 
-        {mevcut?.signatureHtml && (
-          <div className="mt-3">
-            <p className="text-xs text-ink-muted">Önizleme (kayıtlı hâli):</p>
-            {/*
-              KAYITLI HÂL ÖNİZLENİYOR, girilen ham metin değil. Saklanan şey
-              gönderilecek şey; ham metni göstermek, temizlikten sonra neyin
-              gideceği konusunda yanıltırdı.
-
-              İçerik sunucuda beyaz listeyle temizlendi: script, olay
-              öznitelikleri ve javascript:/data: şemaları atıldı.
-            */}
-            <div
-              className="mt-1 overflow-x-auto rounded border border-line bg-white p-3"
-              dangerouslySetInnerHTML={{ __html: mevcut.signatureHtml }}
-            />
-          </div>
-        )}
-      </section>
+                İçerik sunucuda beyaz listeyle temizlendi: script, olay
+                öznitelikleri ve javascript:/data: şemaları atıldı. Zemin
+                BEYAZ (tema ne olursa olsun): müşterinin mail istemcisinde
+                imza beyaz zeminde görünüyor.
+              */}
+              <div
+                className="overflow-x-auto rounded-alan border border-line bg-white p-3"
+                dangerouslySetInnerHTML={{ __html: mevcut.signatureHtml }}
+              />
+            </div>
+          )}
+        </div>
+      </Kart>
 
       {hata && (
-        <p className="rounded border border-danger/40 bg-danger/5 px-3 py-2 text-sm text-danger">
+        <Serit ton="hata" baslik="Kaydedilemedi">
           {hata}
-        </p>
+        </Serit>
       )}
 
       {testSonuc && (
-        <p
-          className={`rounded border px-3 py-2 text-sm ${
-            testSonuc.ok
-              ? 'border-ok/40 bg-ok/5'
-              : 'border-danger/40 bg-danger/5 text-danger'
-          }`}
-        >
-          {testSonuc.ok
-            ? `Test maili ${fromEmail} adresine gönderildi. Gelen kutunu kontrol et.`
-            : `Gönderilemedi — ${testSonuc.error}`}
-        </p>
+        <Serit ton={testSonuc.ok ? 'bilgi' : 'hata'} baslik={testSonuc.ok ? 'Test maili gönderildi' : 'Test maili gönderilemedi'}>
+          {testSonuc.ok ? `${fromEmail} adresine gönderildi. Gelen kutunu kontrol et.` : testSonuc.error}
+        </Serit>
       )}
 
       <div className="flex flex-wrap justify-end gap-2">
-        <button
-          type="button"
-          onClick={test}
-          disabled={bekleyen !== null || !mevcut}
-          title={mevcut ? undefined : 'Önce ayarları kaydet'}
-          className="rounded-lg border border-line px-3.5 py-2 text-sm transition hover:bg-surface-muted disabled:opacity-50"
-        >
-          {bekleyen === 'test' ? 'Gönderiliyor…' : 'Kendine test maili gönder'}
-        </button>
-        <button
-          type="button"
-          onClick={kaydet}
-          disabled={bekleyen !== null}
-          className="rounded-lg bg-brand px-3.5 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
-        >
-          {bekleyen === 'kaydet' ? 'Kaydediliyor…' : 'Kaydet'}
-        </button>
+        {dogrulandi && testDugmesi}
+        <Dugme onClick={kaydet} bekliyor={bekleyen === 'kaydet'} disabled={bekleyen !== null}>
+          Kaydet
+        </Dugme>
       </div>
     </div>
-  );
-}
-
-function Alan({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="block">
-      <span className="text-xs text-ink-muted">{label}</span>
-      <span className="mt-0.5 block">{children}</span>
-    </label>
-  );
-}
-
-function Girdi({
-  value,
-  onChange,
-  type = 'text',
-  placeholder,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  type?: string;
-  placeholder?: string;
-}) {
-  return (
-    <input
-      type={type}
-      value={value}
-      placeholder={placeholder}
-      onChange={(e) => onChange(e.target.value)}
-      className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm focus:border-brand focus:outline-none"
-    />
   );
 }

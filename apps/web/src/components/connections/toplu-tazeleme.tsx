@@ -10,6 +10,10 @@ import type {
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { Nokta } from '@/components/yukleniyor';
+import { Kart } from '@/components/ui/kart';
+import { Dugme } from '@/components/ui/dugme';
+import { Serit } from '@/components/ui/hal';
+import { Alan, Secim } from '@/components/ui/alan';
 
 /**
  * ═══ TÜM VERİLERİ GÜNCELLE ═══
@@ -166,36 +170,33 @@ export function TopluTazeleme({
   }
 
   return (
-    <section className="rounded-xl border border-line bg-surface p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold text-ink">Tüm verileri güncelle</h2>
-          <p className="mt-1 text-xs text-ink-muted">
-            Seçtiğin workspace’lerin geçmiş verisini tek seferde çeker: kampanya yapısı ve
-            günlük metrikler. Saatler sürebilir ve platform kotası harcar.
-          </p>
-        </div>
-        {!parti && (
-          <button
-            type="button"
-            onClick={() => setAcik((v) => !v)}
-            className="rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink transition hover:bg-surface-sunken"
-          >
+    <Kart
+      baslik="Tüm verileri güncelle"
+      eylem={
+        !parti && (
+          <Dugme ton="ikincil" boyut="kucuk" aria-expanded={acik} onClick={() => setAcik((v) => !v)}>
             {acik ? 'Kapat' : 'Workspace seç'}
-          </button>
-        )}
-      </div>
+          </Dugme>
+        )
+      }
+    >
+      <p className="m-0 text-13 text-ink-muted">
+        Seçtiğin workspace’lerin geçmiş verisini tek seferde çeker: kampanya yapısı ve günlük metrikler.
+        Saatler sürebilir ve platform kotası harcar.
+      </p>
 
       {hata && (
-        <p role="alert" className="mt-3 rounded-lg border border-danger/30 bg-danger/5 px-3 py-2 text-xs text-danger">
-          {hata}
-        </p>
+        <div className="mt-3">
+          <Serit ton="hata" baslik="İşlem yapılamadı">
+            {hata}
+          </Serit>
+        </div>
       )}
 
       {/* ── İLERLEME ── */}
       {parti && ilerleme && (
-        <div className="mt-4 rounded-lg border border-line bg-surface-muted p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div className="mt-4 rounded-alan border border-line bg-surface-muted p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-12">
             {/*
               AŞAMA METNİ YÜZDENİN YANINDA. Yüzde tek başına "neyin %40'ı"
               sorusunu cevaplamıyor ve kullanıcı saatlerce bir sayıya bakıyor.
@@ -215,7 +216,7 @@ export function TopluTazeleme({
 
           <div className="mt-2 h-2 overflow-hidden rounded-full bg-surface-sunken">
             <div
-              className="h-full rounded-full bg-brand transition-[width] duration-700 ease-out"
+              className="h-full rounded-full bg-brand transition-[width] duration-700 ease-out motion-reduce:transition-none"
               style={{ width: `${ilerleme.yuzde}%` }}
               role="progressbar"
               aria-valuenow={ilerleme.yuzde}
@@ -224,7 +225,7 @@ export function TopluTazeleme({
             />
           </div>
 
-          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-ink-muted">
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-12 text-ink-muted">
             <span>
               %{ilerleme.yuzde} · {ilerleme.dateFrom} / {ilerleme.dateTo} ·{' '}
               {ilerleme.clientCount} workspace
@@ -236,7 +237,7 @@ export function TopluTazeleme({
                 sayılıyor, yoksa çubuk kalıcı olarak takılırdı.
               */}
               {ilerleme.dusen > 0 && (
-                <span className="text-danger">{ilerleme.dusen} iş düştü</span>
+                <span className="font-semibold text-danger-strong">{ilerleme.dusen} iş düştü</span>
               )}
               {ilerleme.atlanan > 0 && (
                 <span>{ilerleme.atlanan} iş zaten kuyruktaydı</span>
@@ -250,13 +251,9 @@ export function TopluTazeleme({
                 yapabileceği hiçbir şey yoktu. İşler arka planda sürüyor,
                 kapanan yalnızca takip.
               */}
-              <button
-                type="button"
-                onClick={takibiBirak}
-                className="font-medium text-brand-strong hover:underline"
-              >
+              <Dugme ton="hayalet" boyut="kucuk" onClick={takibiBirak}>
                 {ilerleme.bitti ? 'Kapat' : 'Takibi bırak'}
-              </button>
+              </Dugme>
             </span>
           </div>
 
@@ -269,24 +266,19 @@ export function TopluTazeleme({
             kuyruktan düşmüş bir işi kimse almıyor ve o veri hiç gelmiyor.
           */}
           {ilerleme.tani && (
-            <div className="mt-3 rounded-lg border border-warn/30 bg-warn-soft p-3">
+            <div className="mt-3 rounded-[12px] border border-l-4 border-line border-l-danger bg-surface p-3">
               {ilerleme.tani.kayip > 0 ? (
                 <>
-                  <p className="text-xs text-ink">
+                  <p className="m-0 text-13 text-ink">
                     <strong>{ilerleme.tani.kayip} iş kuyrukta yok.</strong> Bu işler
                     kendiliğinden başlamıyor, yeniden kuyruğa konması gerekiyor.
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => void kurtar()}
-                    disabled={busy}
-                    className="mt-2 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-40"
-                  >
-                    {busy ? <>Geri konuyor <Nokta className="ml-1" /></> : 'Takılan işleri yeniden başlat'}
-                  </button>
+                  <Dugme ton="koyu" boyut="kucuk" className="mt-2" onClick={() => void kurtar()} bekliyor={busy}>
+                    Takılan işleri yeniden başlat
+                  </Dugme>
                 </>
               ) : (
-                <p className="text-xs text-ink">
+                <p className="m-0 text-13 text-ink">
                   {ilerleme.tani.kuyrukta} iş sırada bekliyor. Kota penceresi açılınca
                   kendiliğinden sürecek
                   {ilerleme.tani.enYakinDeneme &&
@@ -294,17 +286,17 @@ export function TopluTazeleme({
                   .
                 </p>
               )}
-              <p className="mt-1.5 text-[11px] text-ink-muted">
+              <p className="mt-1.5 text-12 text-ink-muted">
                 Son hareket {gecenSure(ilerleme.tani.sonHareket)}
                 {ilerleme.tani.acikToplam > ilerleme.tani.bakilan &&
                   ` · ${ilerleme.tani.acikToplam} açık işin ${ilerleme.tani.bakilan} tanesine bakıldı`}
               </p>
-              {kurtarmaNotu && <p className="mt-1.5 text-[11px] text-ink">{kurtarmaNotu}</p>}
+              {kurtarmaNotu && <p className="mt-1.5 text-12 text-ink">{kurtarmaNotu}</p>}
             </div>
           )}
 
           {ilerleme.dusen > 0 && (
-            <p className="mt-2 text-[11px] text-ink-muted">
+            <p className="mt-2 text-12 text-ink-muted">
               Düşen işlerin sebebi her workspace’in Marka Merkezi › Workspace bilgileri › Veri durumu bölümünde iş bazında yazılı.
             </p>
           )}
@@ -313,26 +305,26 @@ export function TopluTazeleme({
 
       {/* ── SEÇİM ── */}
       {acik && !parti && (
-        <div className="mt-4 space-y-3">
+        <div className="mt-4 grid gap-3">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] text-ink-muted">
+            <span className="text-12 text-ink-muted">
               {secili.size} / {workspaceler.length} workspace seçildi
             </span>
-            <button
-              type="button"
+            <Dugme
+              ton="hayalet"
+              boyut="kucuk"
               onClick={() =>
                 setSecili(hepsiSecili ? new Set() : new Set(workspaceler.map((w) => w.id)))
               }
-              className="text-[11px] font-medium text-brand-strong hover:underline"
             >
               {hepsiSecili ? 'Seçimi kaldır' : 'Hepsini seç'}
-            </button>
+            </Dugme>
           </div>
 
-          <ul className="max-h-52 space-y-1 overflow-y-auto rounded-lg border border-line p-1">
+          <ul className="m-0 max-h-52 list-none overflow-y-auto rounded-alan border border-line p-1">
             {workspaceler.map((w) => (
               <li key={w.id}>
-                <label className="flex cursor-pointer items-center gap-2.5 rounded px-2 py-1.5 hover:bg-surface-sunken">
+                <label className="flex cursor-pointer items-center gap-2.5 rounded-alan px-2 py-1.5 hover:bg-surface-sunken">
                   <input
                     type="checkbox"
                     checked={secili.has(w.id)}
@@ -343,32 +335,32 @@ export function TopluTazeleme({
                       setSecili(y);
                       setTahmin(null);
                     }}
-                    className="h-3.5 w-3.5 shrink-0 accent-[var(--brand-primary)]"
+                    className="h-4 w-4 shrink-0 accent-[var(--brand-primary)]"
                   />
-                  <span className="min-w-0 flex-1 truncate text-sm text-ink">{w.name}</span>
+                  <span className="min-w-0 flex-1 truncate text-14 text-ink">{w.name}</span>
                 </label>
               </li>
             ))}
           </ul>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <label className="text-xs">
-              <span className="text-ink-muted">Geriye</span>
-              <select
-                value={yil}
-                onChange={(e) => {
-                  setYil(Number(e.target.value));
-                  setTahmin(null);
-                }}
-                className="ml-2 rounded-lg border border-line bg-surface px-2 py-1 text-xs"
-              >
-                <option value={1}>1 yıl</option>
-                <option value={2}>2 yıl</option>
-                <option value={3}>3 yıl</option>
-              </select>
-            </label>
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="w-40">
+              <Alan etiket="Geriye">
+                <Secim
+                  value={yil}
+                  onChange={(e) => {
+                    setYil(Number(e.target.value));
+                    setTahmin(null);
+                  }}
+                >
+                  <option value={1}>1 yıl</option>
+                  <option value={2}>2 yıl</option>
+                  <option value={3}>3 yıl</option>
+                </Secim>
+              </Alan>
+            </div>
 
-            <label className="flex items-center gap-2 text-xs text-ink-muted">
+            <label className="flex items-center gap-2 pb-2.5 text-13 text-ink">
               <input
                 type="checkbox"
                 checked={kirilimlar}
@@ -376,7 +368,7 @@ export function TopluTazeleme({
                   setKirilimlar(e.target.checked);
                   setTahmin(null);
                 }}
-                className="h-3.5 w-3.5 accent-[var(--brand-primary)]"
+                className="h-4 w-4 accent-[var(--brand-primary)]"
               />
               {/*
                 KIRILIM VARSAYILAN KAPALI ve maliyeti YAZILI. Pencere başına
@@ -392,58 +384,53 @@ export function TopluTazeleme({
             iş açılacağını görmeden başlatmamalı.
           */}
           {tahmin === null ? (
-            <button
-              type="button"
-              onClick={() => void tahminAl()}
-              disabled={busy || secili.size === 0}
-              className="rounded-lg border border-line px-4 py-2 text-sm font-medium text-ink transition hover:bg-surface-sunken disabled:opacity-40"
-            >
-              {busy ? <>Hesaplanıyor <Nokta className="ml-1" /></> : 'Ne kadar sürecek?'}
-            </button>
+            <div className="flex justify-end">
+              <Dugme
+                ton="ikincil"
+                onClick={() => void tahminAl()}
+                disabled={secili.size === 0}
+                bekliyor={busy}
+              >
+                Ne kadar sürecek?
+              </Dugme>
+            </div>
           ) : (
-            <div className="rounded-lg border border-warn/30 bg-warn/5 p-3">
-              <p className="text-xs text-ink">
-                <strong>{tahmin.accountCount} reklam hesabı</strong> için{' '}
-                <strong>{tahmin.jobCount} iş</strong> açılacak: {tahmin.dateFrom} ile{' '}
-                {tahmin.dateTo} arası, {tahmin.windowCount} pencere.
-              </p>
+            <Serit
+              baslik={
+                <>
+                  {tahmin.accountCount} reklam hesabı için {tahmin.jobCount} iş açılacak: {tahmin.dateFrom} ile{' '}
+                  {tahmin.dateTo} arası, {tahmin.windowCount} pencere.
+                </>
+              }
+              eylemler={
+                <>
+                  <Dugme ton="hayalet" boyut="kucuk" onClick={() => setTahmin(null)} disabled={busy}>
+                    Vazgeç
+                  </Dugme>
+                  <Dugme
+                    ton="koyu"
+                    boyut="kucuk"
+                    onClick={() => void baslat()}
+                    disabled={tahmin.accountCount === 0}
+                    bekliyor={busy}
+                  >
+                    Başlat
+                  </Dugme>
+                </>
+              }
+            >
               {/*
                 YAPI TARAMASI OLMAYAN HESAP SAYISI YAZILI ama iş ATLANMIYOR:
                 yapı işi planın ilk adımı ve aynı turda koşuyor.
               */}
-              {tahmin.noStructure > 0 && (
-                <p className="mt-1 text-[11px] text-ink-muted">
-                  {tahmin.noStructure} hesabın yapı taraması hiç koşmamış. Önce o çekilecek,
-                  metrikler ondan sonra yazılabiliyor.
-                </p>
-              )}
-              <p className="mt-1 text-[11px] text-ink-muted">
-                Bu işlem platform kotası harcıyor ve geri alınamıyor. Kotaya takılan işler
-                düşmüyor, bekliyor.
-              </p>
-              <div className="mt-2 flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => void baslat()}
-                  disabled={busy || tahmin.accountCount === 0}
-                  className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-40"
-                >
-                  {busy ? <>Başlatılıyor <Nokta className="ml-1" /></> : 'Başlat'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTahmin(null)}
-                  disabled={busy}
-                  className="text-xs text-ink-muted hover:underline"
-                >
-                  Vazgeç
-                </button>
-              </div>
-            </div>
+              {tahmin.noStructure > 0 &&
+                `${tahmin.noStructure} hesabın yapı taraması hiç koşmamış. Önce o çekilecek, metrikler ondan sonra yazılabiliyor. `}
+              Bu işlem platform kotası harcıyor ve geri alınamıyor. Kotaya takılan işler düşmüyor, bekliyor.
+            </Serit>
           )}
         </div>
       )}
-    </section>
+    </Kart>
   );
 }
 

@@ -3,6 +3,7 @@ import type { ReportData } from '@advetics/shared';
 import { API_URL } from '@/lib/api';
 import { ReportDocument } from '@/components/report/report-document';
 import { PrintButton } from '@/components/report/print-button';
+import { SayfaBasligi } from '@/components/ui/sayfa-basligi';
 
 /**
  * Müşteriye gönderilen rapor — OTURUM GEREKTİRMEZ.
@@ -51,30 +52,39 @@ export default async function SharedReportPage({
   const result = await fetchReport(token);
 
   if ('error' in result) {
+    /*
+     * ORTAK SAYFA BAŞLIĞI (`SayfaBasligi`), elle `h1` değil: müşterinin
+     * gördüğü tek panel ekranı bu ve yazı tipi panelle aynı olmalı. İki
+     * hâl ayrı cümle: "süresi doldu" yeni bağlantı istemeye, "bulunamadı"
+     * adresi kontrol etmeye gönderiyor.
+     */
     return (
-      <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-6 text-center">
-        <h1 className="text-lg font-semibold text-ink">
-          {result.error === 'gone' ? 'Bu raporun süresi doldu' : 'Rapor bulunamadı'}
-        </h1>
-        <p className="mt-2 text-sm text-ink-muted">
-          {result.error === 'gone'
-            ? 'Ajansınızdan yeni bir bağlantı isteyebilirsiniz.'
-            : 'Bağlantı hatalı olabilir ya da iptal edilmiş olabilir.'}
-        </p>
+      <main className="flex min-h-screen items-center justify-center bg-surface-muted px-4">
+        <div className="w-full max-w-md">
+          <SayfaBasligi
+            baslik={result.error === 'gone' ? 'Bu raporun süresi doldu' : 'Rapor bulunamadı'}
+            aciklama={
+              result.error === 'gone'
+                ? 'Ajansınızdan yeni bir bağlantı isteyebilirsiniz.'
+                : 'Bağlantı hatalı olabilir ya da iptal edilmiş olabilir.'
+            }
+          />
+        </div>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-surface-sunken py-8 print:bg-white print:py-0">
+    <main className="min-h-screen bg-surface-muted py-8 print:bg-white print:py-0">
       {/* Yazdırma çubuğu basılan çıktıda görünmüyor (`rpt-noprint`). */}
       <div className="rpt-noprint mx-auto mb-4 flex max-w-[880px] items-center justify-between gap-4 px-8">
-        <p className="text-xs text-ink-muted">
-          {result.client.name} · {result.from} — {result.to}
+        <p className="m-0 text-12 text-ink-muted">
+          {result.client.name} · {result.from} - {result.to}
         </p>
         <PrintButton />
       </div>
-      <div className="mx-auto max-w-[880px] shadow-sm print:max-w-none print:shadow-none">
+      {/* GÖLGE YOK (kart kalıbı): belge çizgiyle ayrılıyor; baskıda çizgi de yok. */}
+      <div className="mx-auto max-w-[880px] border border-line print:max-w-none print:border-0">
         <ReportDocument data={result} />
       </div>
     </main>

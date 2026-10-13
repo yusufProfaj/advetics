@@ -2,6 +2,8 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { platformListesi } from '@/lib/platform-listesi';
 import { AdveticsLogo } from '@/components/advetics-logo';
+import { SayfaBasligi } from '@/components/ui/sayfa-basligi';
+import { Kart, KART_BAGLANTISI } from '@/components/ui/kart';
 
 /**
  * Oturum ekranlarının ORTAK KABUĞU — giriş, şifremi unuttum, şifre sıfırlama.
@@ -22,33 +24,36 @@ export function AuthKabuk({
   /** Kart altındaki dönüş bağlantısı. Giriş ekranında yok. */
   altBaglanti?: { href: string; metin: string };
 }) {
+  /*
+   * PANELİN DİLİ (BILESENLER): gri zemin, beyaz gölgesiz kart, başlık
+   * `SayfaBasligi` (Montserrat, menüdeki başlıklarla aynı boy). Eskiden
+   * ortalanmış elle bir `h1` ve gölgeli kart vardı; kullanıcı girişten
+   * panele geçince yazı tipinin ve kartın değiştiğini görüyordu.
+   * İŞLEYİŞ AYNI: bu kabuk yalnız yerleşim, formlar kendi dosyalarında.
+   */
   return (
-    <main className="flex min-h-screen items-center justify-center px-4 py-12">
-      <div className="w-full max-w-sm">
-        <div className="mb-8 text-center">
-          {/* MARKA KENAR ÇUBUĞUYLA AYNI BİLEŞENDEN. Burada elle çizilmiş bir
-              "A" kutusu duruyordu ve logo yenilendiğinde unutuldu: kullanıcı
-              panelde yeni işareti, girişte eskisini görüyordu. */}
-          <div className="mb-6 flex justify-center">
-            <AdveticsLogo />
-          </div>
-          <h1 className="text-xl font-semibold text-ink">{baslik}</h1>
-          <p className="mt-1 text-sm text-ink-muted">{aciklama}</p>
+    <main className="flex min-h-screen items-center justify-center bg-surface-muted px-4 py-12">
+      <div className="grid w-full max-w-sm gap-6">
+        {/* MARKA KENAR ÇUBUĞUYLA AYNI BİLEŞENDEN. Burada elle çizilmiş bir
+            "A" kutusu duruyordu ve logo yenilendiğinde unutuldu: kullanıcı
+            panelde yeni işareti, girişte eskisini görüyordu. */}
+        <div className="flex">
+          <AdveticsLogo />
         </div>
 
-        <div className="rounded-xl border border-line bg-surface p-6 shadow-sm">{children}</div>
+        <SayfaBasligi baslik={baslik} aciklama={aciklama} />
+
+        <Kart>{children}</Kart>
 
         {altBaglanti && (
-          <p className="mt-4 text-center text-sm">
-            <Link href={altBaglanti.href} className="text-brand-strong hover:underline">
+          <p className="m-0 text-14">
+            <Link href={altBaglanti.href} className={KART_BAGLANTISI}>
               {altBaglanti.metin}
             </Link>
           </p>
         )}
 
-        <p className="mt-6 text-center text-xs text-ink-muted">
-          Advetics · {platformListesi()} otomasyonu
-        </p>
+        <p className="m-0 text-12 text-ink-muted">Advetics · {platformListesi()} otomasyonu</p>
       </div>
     </main>
   );

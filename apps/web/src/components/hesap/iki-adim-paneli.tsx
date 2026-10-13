@@ -12,6 +12,10 @@ import {
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { Alan } from '@/components/auth/alan';
 import { HataKutusu, KodAlani, KurtarmaKodlari, QrKurulumu } from './iki-adim-parcalari';
+import { Kart } from '@/components/ui/kart';
+import { Dugme } from '@/components/ui/dugme';
+import { Rozet } from '@/components/ui/rozet';
+import { Serit } from '@/components/ui/hal';
 
 function hataMetni(err: unknown): string {
   return err instanceof ApiRequestError ? err.message : 'Bağlantı kurulamadı. Tekrar dene.';
@@ -27,10 +31,6 @@ type Mod =
   | { tur: 'yenile' }
   | { tur: 'kodlar'; kodlar: string[] };
 
-const BIRINCIL =
-  'rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50';
-const IKINCIL =
-  'rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink transition hover:bg-surface-sunken disabled:opacity-50';
 
 /**
  * ═══ HESABIM › İKİ ADIMLI DOĞRULAMA ═══
@@ -128,87 +128,84 @@ export function IkiAdimPaneli({
 
   const azKaldi = durum.acik && durum.kalanKurtarmaKodu <= AZ_KOD;
 
+  /*
+   * KARTIN İÇİNDE KIRMIZI DOLU DÜĞME YOK (BILESENLER § 3.3): sayfanın tek
+   * birincil eylemi başlıkta. Kartın eylemleri `koyu` (asıl iş) ve
+   * `ikincil`; eskiden burada elle yazılmış bir kırmızı düğme vardı.
+   */
   return (
-    <section className="rounded-xl border border-line bg-surface p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="font-semibold text-ink">İki adımlı doğrulama</h2>
-          <p className="mt-0.5 text-sm text-ink-muted">
-            Girişte şifrenin yanında telefonundaki kodu da sorar. Şifren başkasının eline geçse bile
-            hesabına giremez.
-          </p>
-        </div>
-        {/* Yeşil yalnız durum göstergesinde (kılavuz). */}
-        <span
-          className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-medium ${
-            durum.acik ? 'border-ok/40 bg-ok-soft text-ok-strong' : 'border-line bg-surface-muted text-ink-muted'
-          }`}
-        >
-          {durum.acik ? 'Açık' : 'Kapalı'}
-        </span>
-      </div>
+    <Kart
+      baslik="İki adımlı doğrulama"
+      /* Yeşil yalnız durum göstergesinde (kılavuz): `Rozet`. */
+      eylem={<Rozet hal={durum.acik ? 'ok' : 'hata'}>{durum.acik ? 'Açık' : 'Kapalı'}</Rozet>}
+    >
+      <div className="grid gap-4">
+        <p className="m-0 text-14 text-ink-muted">
+          Girişte şifrenin yanında telefonundaki kodu da sorar. Şifren başkasının eline geçse bile hesabına
+          giremez.
+        </p>
 
-      <div className="mt-4 space-y-4">
         {bilgi && (
-          <p role="status" className="rounded-lg bg-surface-muted px-3 py-2 text-sm text-ink">
-            {bilgi}
-          </p>
+          <Serit ton="bilgi" baslik={bilgi} />
         )}
 
         {(kurtarmaIleGirdi || azKaldi) && durum.acik && mod.tur === 'bos' && (
-          <p className="rounded-lg border border-warn/40 bg-warn-soft px-3 py-2 text-sm text-warn-strong">
-            {durum.kalanKurtarmaKodu === 0
-              ? 'Hiç kurtarma kodun kalmadı. Yeni kodlar oluştur.'
-              : `${durum.kalanKurtarmaKodu} kurtarma kodun kaldı. Yeni kodlar oluşturman iyi olur.`}
-          </p>
+          <Serit
+            baslik={
+              durum.kalanKurtarmaKodu === 0
+                ? 'Hiç kurtarma kodun kalmadı. Yeni kodlar oluştur.'
+                : `${durum.kalanKurtarmaKodu} kurtarma kodun kaldı. Yeni kodlar oluşturman iyi olur.`
+            }
+          />
         )}
 
         {mod.tur === 'bos' && !durum.acik && (
-          <div className="space-y-2">
+          <div className="grid gap-3">
             {durum.sirketteZorunlu && (
-              <p className="text-sm text-ink-muted">Şirketin bu korumayı zorunlu tutuyor.</p>
+              <Serit baslik="Şirketin bu korumayı zorunlu tutuyor." />
             )}
             <HataKutusu mesaj={hata} />
-            <button type="button" onClick={() => void baslat()} disabled={bekliyor} className={BIRINCIL}>
-              {bekliyor ? 'Hazırlanıyor…' : 'Aç'}
-            </button>
+            <div className="flex justify-end">
+              <Dugme ton="koyu" onClick={() => void baslat()} bekliyor={bekliyor}>
+                Aç
+              </Dugme>
+            </div>
           </div>
         )}
 
         {mod.tur === 'bos' && durum.acik && (
-          <div className="space-y-3">
-            <dl className="grid gap-1 text-sm sm:grid-cols-[10rem_1fr]">
+          <div className="grid gap-4">
+            <dl className="m-0 grid gap-x-6 gap-y-2 text-14 sm:grid-cols-[10rem_1fr]">
               <dt className="text-ink-muted">Açıldığı tarih</dt>
-              <dd className="text-ink">
+              <dd className="m-0 text-ink">
                 {durum.acilis
                   ? new Date(durum.acilis).toLocaleDateString('tr-TR', { dateStyle: 'medium' })
                   : '-'}
               </dd>
               <dt className="text-ink-muted">Kurtarma kodları</dt>
-              <dd className="text-ink">
+              <dd className="m-0 text-ink">
                 {durum.kalanKurtarmaKodu} / {IKI_ADIM_KURTARMA_SAYISI} kullanılmadı
               </dd>
             </dl>
-            <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={() => sifirla({ tur: 'yenile' })} className={IKINCIL}>
-                Yeni kurtarma kodları oluştur
-              </button>
+            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line pt-4">
               {durum.sirketteZorunlu ? (
-                <p className="self-center text-xs text-ink-muted">
-                  Şirketin zorunlu tuttuğu için kapatılamaz. Telefonunu değiştirdiysen yöneticine
-                  sıfırlat.
+                <p className="m-0 mr-auto text-12 text-ink-muted">
+                  Şirketin zorunlu tuttuğu için kapatılamaz. Telefonunu değiştirdiysen yöneticine sıfırlat.
                 </p>
               ) : (
-                <button type="button" onClick={() => sifirla({ tur: 'kapat' })} className={IKINCIL}>
+                <Dugme ton="ikincil" boyut="kucuk" onClick={() => sifirla({ tur: 'kapat' })}>
                   Kapat
-                </button>
+                </Dugme>
               )}
+              <Dugme ton="koyu" boyut="kucuk" onClick={() => sifirla({ tur: 'yenile' })}>
+                Yeni kurtarma kodları oluştur
+              </Dugme>
             </div>
           </div>
         )}
 
         {mod.tur === 'kurulum' && (
-          <form onSubmit={onayla} className="space-y-4" noValidate>
+          <form onSubmit={onayla} className="grid gap-4" noValidate>
             <QrKurulumu bilgi={mod.bilgi} />
             <HataKutusu mesaj={hata} />
             <div className="max-w-xs">
@@ -226,20 +223,20 @@ export function IkiAdimPaneli({
                 ipucu="Güvenliğin için şifreni bir kez daha soruyoruz."
               />
             </div>
-            <div className="flex gap-2">
-              <button type="submit" disabled={bekliyor} className={BIRINCIL}>
-                {bekliyor ? 'Kontrol ediliyor…' : 'Aç'}
-              </button>
-              <button type="button" onClick={() => sifirla()} className={IKINCIL}>
+            <div className="flex justify-end gap-2 border-t border-line pt-4">
+              <Dugme ton="ikincil" onClick={() => sifirla()}>
                 Vazgeç
-              </button>
+              </Dugme>
+              <Dugme type="submit" ton="koyu" bekliyor={bekliyor}>
+                Aç
+              </Dugme>
             </div>
           </form>
         )}
 
         {(mod.tur === 'kapat' || mod.tur === 'yenile') && (
-          <form onSubmit={mod.tur === 'kapat' ? kapat : yenile} className="space-y-3" noValidate>
-            <p className="text-sm text-ink">
+          <form onSubmit={mod.tur === 'kapat' ? kapat : yenile} className="grid gap-3" noValidate>
+            <p className="m-0 text-14 text-ink">
               {mod.tur === 'kapat'
                 ? 'Kapatmak için uygulamadaki kodu ya da bir kurtarma kodunu yaz.'
                 : 'Yeni kodlar oluşunca eski kurtarma kodların çalışmaz. Onaylamak için uygulamadaki kodu yaz.'}
@@ -255,13 +252,13 @@ export function IkiAdimPaneli({
                 autoFocus
               />
             </div>
-            <div className="flex gap-2">
-              <button type="submit" disabled={bekliyor} className={BIRINCIL}>
-                {bekliyor ? 'Kontrol ediliyor…' : mod.tur === 'kapat' ? 'Kapat' : 'Oluştur'}
-              </button>
-              <button type="button" onClick={() => sifirla()} className={IKINCIL}>
+            <div className="flex justify-end gap-2 border-t border-line pt-4">
+              <Dugme ton="ikincil" onClick={() => sifirla()}>
                 Vazgeç
-              </button>
+              </Dugme>
+              <Dugme type="submit" ton={mod.tur === 'kapat' ? 'tehlike' : 'koyu'} bekliyor={bekliyor}>
+                {mod.tur === 'kapat' ? 'Kapat' : 'Oluştur'}
+              </Dugme>
             </div>
           </form>
         )}
@@ -277,6 +274,6 @@ export function IkiAdimPaneli({
           />
         )}
       </div>
-    </section>
+    </Kart>
   );
 }

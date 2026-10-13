@@ -181,23 +181,28 @@ describe('izin tavsiyesi uygulanabilir mi', () => {
  * kesin.
  */
 function dugmeMetniKonumu(kaynak: string): number {
-  const m = /Yeniden yetkilendir\s*<\/Dugme>/.exec(kaynak);
+  /*
+   * 2026-10-14 (Grup 4 tasarım geçişi): çare kartın ⋯ menüsünde bir
+   * `MenuOgesi` oldu; kartın görünür TEK eylemi gerektiğinde "Yeniden
+   * bağlan". İddialar aynı kaldı, çapa yeni etikete taşındı.
+   */
+  const m = /Yeniden yetkilendir\s*<\/MenuOgesi>/.exec(kaynak);
   expect(m, 'düğme metin düğümü bulunamadı — tarama boşa düştü').not.toBeNull();
   return m!.index;
 }
 
 describe('yeniden yetkilendirme çaresi erişilebilir mi', () => {
   /**
-   * Düğmenin RENDER KAPISI — `<Dugme` etiketinden GERİYE doğru çıkarılıyor.
+   * Düğmenin RENDER KAPISI — `<MenuOgesi` etiketinden GERİYE doğru çıkarılıyor.
    *
-   * Sabit uzunluklu bir dilim burada komşu düğmeleri (Kaldır, Hesapları tara)
-   * içine alır ve iddia yanlış yerde tutar. Sınır, sınırlanmak istenen şeyin
-   * kendisi: düğmenin açılış etiketi ve onu saran koşul.
+   * Sabit uzunluklu bir dilim burada komşu öğeleri (Kaldır, Durumu kontrol
+   * et) içine alır ve iddia yanlış yerde tutar. Sınır, sınırlanmak istenen
+   * şeyin kendisi: öğenin açılış etiketi ve onu saran koşul.
    */
   function renderKapisi(): string {
     const kaynak = yorumsuz(KART);
     const etiket = dugmeMetniKonumu(kaynak);
-    const dugme = kaynak.lastIndexOf('<Dugme', etiket);
+    const dugme = kaynak.lastIndexOf('<MenuOgesi', etiket);
     expect(dugme, 'düğme etiketi bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
 
     const kapi = kaynak.lastIndexOf('{canManage', dugme);
@@ -225,11 +230,15 @@ describe('yeniden yetkilendirme çaresi erişilebilir mi', () => {
   it('vurgu KORUNUYOR — gerçekten eksik bir şey varken öne çıkıyor', () => {
     // Koşul silinip düğme her zaman vurgulu bırakılırsa vurgu anlamını
     // yitirir ve gerçek bir eksik izin diğer düğmelerden ayırt edilemez.
+    // Vurgu bugün kartın görünür eylemi: koşul `yetkiGerekli`, düğme "Yeniden bağlan".
     const kaynak = yorumsuz(KART);
-    const etiket = dugmeMetniKonumu(kaynak);
-    const dugme = kaynak.lastIndexOf('<Dugme', etiket);
-    const govde = kaynak.slice(dugme, etiket);
-    expect(govde).toContain('vurgulu={');
-    expect(govde).toContain('missingOptionalScopes');
+    const bas = kaynak.indexOf('const yetkiGerekli =');
+    expect(bas, 'vurgu koşulu bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
+    const kosul = kaynak.slice(bas, kaynak.indexOf(';', bas));
+    expect(kosul).toContain('missingOptionalScopes');
+    expect(kosul).toContain('missingScopes');
+    const dal = kaynak.indexOf('{yetkiGerekli && canManage ? (');
+    expect(dal, 'vurgulu dal bulunamadı').toBeGreaterThan(-1);
+    expect(kaynak.slice(dal, kaynak.indexOf(') : (', dal))).toContain('Yeniden bağlan');
   });
 });

@@ -11,6 +11,8 @@ import {
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { ayarlarAdresi } from '@/lib/panel-adresleri';
 import { HataKutusu, KodAlani, KurtarmaKodlari, QrKurulumu } from '@/components/hesap/iki-adim-parcalari';
+import { Dugme } from '@/components/ui/dugme';
+import { KART_BAGLANTISI } from '@/components/ui/kart';
 
 function hataMetni(err: unknown): string {
   return err instanceof ApiRequestError ? err.message : 'Bağlantı kurulamadı. Tekrar dene.';
@@ -82,10 +84,10 @@ function KodDogrula({ sonraki, onGeri }: { sonraki: string; onGeri: () => void }
   }
 
   return (
-    <form onSubmit={gonder} className="space-y-4" noValidate>
+    <form onSubmit={gonder} className="grid gap-4" noValidate>
       <div>
-        <p className="font-medium text-ink">İki adımlı doğrulama</p>
-        <p className="mt-0.5 text-sm text-ink-muted">
+        <p className="m-0 font-bold text-ink">İki adımlı doğrulama</p>
+        <p className="m-0 mt-0.5 text-14 text-ink-muted">
           {kurtarma
             ? 'Kaydettiğin kurtarma kodlarından birini yaz.'
             : 'Telefonundaki doğrulama uygulamasını aç ve gösterdiği kodu yaz.'}
@@ -100,14 +102,10 @@ function KodDogrula({ sonraki, onGeri }: { sonraki: string; onGeri: () => void }
         disabled={bekliyor}
         autoFocus
       />
-      <button
-        type="submit"
-        disabled={bekliyor}
-        className="w-full rounded-lg bg-brand px-4 py-2.5 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-      >
+      <Dugme type="submit" className="w-full" bekliyor={bekliyor}>
         {bekliyor ? 'Doğrulanıyor…' : 'Doğrula'}
-      </button>
-      <div className="flex items-center justify-between gap-3 text-sm">
+      </Dugme>
+      <div className="flex items-center justify-between gap-3 text-14">
         <button
           type="button"
           onClick={() => {
@@ -115,13 +113,13 @@ function KodDogrula({ sonraki, onGeri }: { sonraki: string; onGeri: () => void }
             setKod('');
             setHata(null);
           }}
-          className="text-brand-strong hover:underline"
+          className={`${KART_BAGLANTISI} text-left`}
         >
           {kurtarma ? 'Uygulamadaki kodu kullan' : 'Telefonun yanında değil mi? Kurtarma kodu kullan'}
         </button>
-        <button type="button" onClick={onGeri} className="text-ink-muted hover:underline">
+        <Dugme ton="hayalet" boyut="kucuk" onClick={onGeri}>
           Geri
-        </button>
+        </Dugme>
       </div>
     </form>
   );
@@ -190,10 +188,10 @@ function GiristeKurulum({ sonraki, onGeri }: { sonraki: string; onGeri: () => vo
   }
 
   return (
-    <div className="space-y-4">
+    <div className="grid gap-4">
       <div>
-        <p className="font-medium text-ink">İki adımlı doğrulamayı kur</p>
-        <p className="mt-0.5 text-sm text-ink-muted">
+        <p className="m-0 font-bold text-ink">İki adımlı doğrulamayı kur</p>
+        <p className="m-0 mt-0.5 text-14 text-ink-muted">
           Şirketin bu korumayı zorunlu tutuyor. Bir kez kurarsın, sonraki girişlerde telefonundaki
           kodu yazarsın.
         </p>
@@ -202,29 +200,27 @@ function GiristeKurulum({ sonraki, onGeri }: { sonraki: string; onGeri: () => vo
       {yuklemeHatasi ? (
         <>
           <HataKutusu mesaj={yuklemeHatasi} />
-          <button type="button" onClick={onGeri} className="text-sm text-brand-strong hover:underline">
+          <button type="button" onClick={onGeri} className={`${KART_BAGLANTISI} text-left`}>
             Giriş ekranına dön
           </button>
         </>
       ) : !bilgi ? (
-        <p className="text-sm text-ink-muted" aria-live="polite">
+        <p className="m-0 text-14 text-ink-muted" aria-live="polite">
           QR kodu hazırlanıyor…
         </p>
       ) : (
-        <form onSubmit={onayla} className="space-y-4" noValidate>
+        <form onSubmit={onayla} className="grid gap-4" noValidate>
           <QrKurulumu bilgi={bilgi} />
           <HataKutusu mesaj={hata} />
           <KodAlani id="kurulumKod" value={kod} onChange={setKod} disabled={bekliyor} />
-          <button
-            type="submit"
-            disabled={bekliyor}
-            className="w-full rounded-lg bg-brand px-4 py-2.5 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-          >
+          <Dugme type="submit" className="w-full" bekliyor={bekliyor}>
             {bekliyor ? 'Kontrol ediliyor…' : 'Kur ve devam et'}
-          </button>
-          <button type="button" onClick={onGeri} className="text-sm text-ink-muted hover:underline">
-            Geri
-          </button>
+          </Dugme>
+          <div>
+            <Dugme ton="hayalet" boyut="kucuk" onClick={onGeri}>
+              Geri
+            </Dugme>
+          </div>
         </form>
       )}
     </div>

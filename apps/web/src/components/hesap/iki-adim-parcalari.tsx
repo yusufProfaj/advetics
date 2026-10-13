@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { IKI_ADIM_HANE, type IkiAdimKurulumBilgisi } from '@advetics/shared';
+import { Dugme } from '@/components/ui/dugme';
+import { Serit } from '@/components/ui/hal';
 
 /**
  * ═══ İKİ ADIMLI DOĞRULAMA — ORTAK EKRAN PARÇALARI ═══
@@ -16,17 +18,14 @@ import { IKI_ADIM_HANE, type IkiAdimKurulumBilgisi } from '@advetics/shared';
  * "doğrulayıcı uygulama" tek başına bir şey ifade etmiyor.
  */
 
-/** Ekranda gösterilen hata. Platformun (API'nin) kendi cümlesi olduğu gibi. */
+/**
+ * Ekranda gösterilen hata. Platformun (API'nin) kendi cümlesi olduğu gibi.
+ * Görünüş ortak şerit (sol kırmızı çizgi, siyah metin): kırmızı zeminli
+ * kutu kılavuzda yok ve giriş ekranında da panelde de aynı görünmeli.
+ */
 export function HataKutusu({ mesaj }: { mesaj: string | null }) {
   if (!mesaj) return null;
-  return (
-    <div
-      role="alert"
-      className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger-strong"
-    >
-      {mesaj}
-    </div>
-  );
+  return <Serit ton="hata" baslik={mesaj} />;
 }
 
 /**
@@ -52,8 +51,8 @@ export function KodAlani({
   autoFocus?: boolean;
 }) {
   return (
-    <div>
-      <label htmlFor={id} className="mb-1.5 block text-sm font-medium text-ink">
+    <div className="grid gap-1.5">
+      <label htmlFor={id} className="text-13 font-semibold text-ink">
         {kurtarma ? 'Kurtarma kodu' : `${IKI_ADIM_HANE} haneli kod`}
       </label>
       <input
@@ -68,7 +67,7 @@ export function KodAlani({
         maxLength={kurtarma ? 20 : 7}
         placeholder={kurtarma ? 'xxxx-xxxx-xxxx' : '123456'}
         spellCheck={false}
-        className="w-full rounded-lg border border-line bg-surface px-3 py-2 font-mono text-lg tracking-widest text-ink outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:opacity-60"
+        className="h-12 w-full rounded-alan border border-line-strong bg-surface px-3 font-mono text-18 tracking-widest text-ink outline-none transition-colors focus:border-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand disabled:opacity-60"
       />
     </div>
   );
@@ -100,15 +99,15 @@ export function QrKurulumu({ bilgi }: { bilgi: IkiAdimKurulumBilgisi }) {
   }
 
   return (
-    <ol className="space-y-4 text-sm text-ink">
+    <ol className="m-0 grid list-none gap-4 p-0 text-14 text-ink">
       <li>
-        <p className="font-medium">1. Telefonuna bir doğrulama uygulaması kur</p>
-        <p className="mt-0.5 text-ink-muted">
+        <p className="m-0 font-bold">1. Telefonuna bir doğrulama uygulaması kur</p>
+        <p className="m-0 mt-0.5 text-ink-muted">
           Google Authenticator ya da Microsoft Authenticator olur. İkisi de ücretsiz.
         </p>
       </li>
       <li>
-        <p className="font-medium">2. Uygulamada bu kodu tara</p>
+        <p className="m-0 font-bold">2. Uygulamada bu kodu tara</p>
         <div className="mt-2 flex flex-col items-start gap-3 sm:flex-row sm:items-center">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -116,41 +115,40 @@ export function QrKurulumu({ bilgi }: { bilgi: IkiAdimKurulumBilgisi }) {
             alt="Doğrulama uygulaması için QR kodu"
             width={176}
             height={176}
-            className="h-44 w-44 rounded-lg border border-line bg-white p-1"
+            className="h-44 w-44 rounded-alan border border-line bg-white p-1"
           />
           <div className="min-w-0 text-ink-muted">
-            <p>Uygulamada “+” ya da “Hesap ekle” seç, sonra “QR kodu tara”.</p>
+            <p className="m-0">Uygulamada “+” ya da “Hesap ekle” seç, sonra “QR kodu tara”.</p>
             <button
               type="button"
               onClick={() => setAnahtarAcik((a) => !a)}
               aria-expanded={anahtarAcik}
-              className="mt-2 text-sm font-medium text-brand-strong hover:underline"
+              className="mt-2 text-13 font-bold text-ink underline-offset-2 hover:text-brand-strong hover:underline"
             >
               Tarayamıyor musun? Kodu elle yaz
             </button>
-            {anahtarAcik && (
-              <div className="mt-2 space-y-2">
-                <code className="block break-all rounded-lg border border-line bg-surface-muted px-3 py-2 font-mono text-sm text-ink">
+            {/* AÇILIR ÖĞE DOM'DA KALIYOR (`hidden`): kapanınca anahtar silinmiyor, gizleniyor. */}
+            <div hidden={!anahtarAcik} className="mt-2">
+              <div className="grid gap-2">
+                <code className="block break-all rounded-alan border border-line bg-surface-muted px-3 py-2 font-mono text-14 text-ink">
                   {bilgi.anahtar}
                 </code>
-                <button
-                  type="button"
-                  onClick={() => void kopyala()}
-                  className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink transition hover:bg-surface-sunken"
-                >
-                  {kopyalandi ? 'Kopyalandı' : 'Kopyala'}
-                </button>
+                <div>
+                  <Dugme ton="ikincil" boyut="kucuk" onClick={() => void kopyala()}>
+                    {kopyalandi ? 'Kopyalandı' : 'Kopyala'}
+                  </Dugme>
+                </div>
                 {kopyaHatasi && (
-                  <p className="text-xs text-danger">Kopyalanamadı. Kodu seçip elle kopyala.</p>
+                  <p className="m-0 text-12 font-semibold text-danger-strong">Kopyalanamadı. Kodu seçip elle kopyala.</p>
                 )}
-                <p className="text-xs">Uygulamada “Kurulum anahtarı gir” seçeneğini kullan.</p>
+                <p className="m-0 text-12">Uygulamada “Kurulum anahtarı gir” seçeneğini kullan.</p>
               </div>
-            )}
+            </div>
           </div>
         </div>
       </li>
       <li>
-        <p className="font-medium">3. Uygulamanın gösterdiği {IKI_ADIM_HANE} haneli kodu aşağıya yaz</p>
+        <p className="m-0 font-bold">3. Uygulamanın gösterdiği {IKI_ADIM_HANE} haneli kodu aşağıya yaz</p>
       </li>
     </ol>
   );
@@ -198,53 +196,46 @@ export function KurtarmaKodlari({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="grid gap-4">
       <div>
-        <p className="font-medium text-ink">Kurtarma kodlarını sakla</p>
-        <p className="mt-0.5 text-sm text-ink-muted">
+        <p className="m-0 font-bold text-ink">Kurtarma kodlarını sakla</p>
+        <p className="m-0 mt-0.5 text-14 text-ink-muted">
           Telefonunu kaybedersen bu kodlardan biriyle girersin. Her kod bir kez çalışır. Bu kodları
           bir daha göremezsin.
         </p>
       </div>
-      <ul className="grid grid-cols-2 gap-2 rounded-lg border border-line bg-surface-muted p-3 font-mono text-sm text-ink">
+      <ul className="m-0 grid list-none grid-cols-2 gap-2 rounded-alan border border-line bg-surface-muted p-3 font-mono text-14 text-ink">
         {kodlar.map((k) => (
           <li key={k}>{k}</li>
         ))}
       </ul>
       <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => void kopyala()}
-          className="rounded-lg border border-line px-3 py-1.5 text-sm font-medium text-ink transition hover:bg-surface-sunken"
-        >
+        <Dugme ton="ikincil" boyut="kucuk" onClick={() => void kopyala()}>
           {kopyalandi ? 'Kopyalandı' : 'Kopyala'}
-        </button>
-        <button
-          type="button"
-          onClick={indir}
-          className="rounded-lg border border-line px-3 py-1.5 text-sm font-medium text-ink transition hover:bg-surface-sunken"
-        >
+        </Dugme>
+        <Dugme ton="ikincil" boyut="kucuk" onClick={indir}>
           Dosya olarak indir
-        </button>
+        </Dugme>
       </div>
-      {kopyaHatasi && <p className="text-xs text-danger">Kopyalanamadı. Kodları seçip elle kopyala.</p>}
-      <label className="flex cursor-pointer items-center gap-2 text-sm text-ink">
+      {kopyaHatasi && (
+        <p className="m-0 text-12 font-semibold text-danger-strong">Kopyalanamadı. Kodları seçip elle kopyala.</p>
+      )}
+      <label className="flex cursor-pointer items-center gap-2 text-14 text-ink">
         <input
           type="checkbox"
           checked={kaydettim}
           onChange={(e) => setKaydettim(e.target.checked)}
-          className="h-4 w-4 rounded border-line"
+          className="h-4 w-4 accent-[var(--brand-primary)]"
         />
         Kodları güvenli bir yere kaydettim
       </label>
-      <button
-        type="button"
-        onClick={onDevam}
-        disabled={!kaydettim}
-        className="w-full rounded-lg bg-brand px-4 py-2.5 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-      >
+      {/*
+        DEVAM KOYU, KIRMIZI DEĞİL: bu parça hem giriş ekranında hem Hesabım
+        kartının içinde çiziliyor ve kart içinde kırmızı dolu düğme yok.
+      */}
+      <Dugme ton="koyu" className="w-full" onClick={onDevam} disabled={!kaydettim}>
         {devamEtiketi}
-      </button>
+      </Dugme>
     </div>
   );
 }

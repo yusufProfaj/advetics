@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { requestPasswordResetSchema } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { Alan } from '@/components/auth/alan';
+import { Dugme } from '@/components/ui/dugme';
+import { Serit } from '@/components/ui/hal';
 
 /** API yanıtı. `devToken` YALNIZCA geliştirme ortamında dolu gelir. */
 interface SifirlamaYaniti {
@@ -55,43 +57,33 @@ export function SifremiUnuttumFormu() {
 
   if (gonderildi) {
     return (
-      <div className="space-y-3">
-        <p className="text-sm leading-relaxed text-ink">
+      <div className="grid gap-3">
+        <p className="m-0 text-14 leading-relaxed text-ink">
           Bu adres kayıtlıysa şifre sıfırlama bağlantısı <strong>{email}</strong> adresine
           gönderildi. Bağlantı 60 dakika geçerli.
         </p>
-        <p className="text-xs leading-relaxed text-ink-muted">
+        <p className="m-0 text-12 leading-relaxed text-ink-muted">
           Mail birkaç dakika içinde gelmezse spam klasörünü kontrol et. Yine yoksa yöneticine
-          başvur — gönderim hatası sunucu kayıtlarına yazılıyor.
+          başvur; gönderim hatası sunucu kayıtlarına yazılıyor.
         </p>
 
         {devToken && (
-          <div className="rounded-lg border border-warn/30 bg-warn-soft px-3 py-2">
-            <p className="text-xs font-semibold text-warn-strong">
-              Geliştirme ortamı — bağlantı mail yerine burada
-            </p>
+          <Serit baslik="Geliştirme ortamı: bağlantı mail yerine burada">
             <a
               href={`/sifre-sifirla?token=${encodeURIComponent(devToken)}`}
-              className="mt-1 block break-all text-xs text-warn-strong underline"
+              className="mt-1 block break-all text-12 font-semibold text-ink underline"
             >
               /sifre-sifirla?token={devToken}
             </a>
-          </div>
+          </Serit>
         )}
       </div>
     );
   }
 
   return (
-    <form onSubmit={gonder} className="space-y-4" noValidate>
-      {hata && (
-        <div
-          role="alert"
-          className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger-strong"
-        >
-          {hata}
-        </div>
-      )}
+    <form onSubmit={gonder} className="grid gap-4" noValidate>
+      {hata && <Serit ton="hata" baslik={hata} />}
 
       <Alan
         id="email"
@@ -105,13 +97,9 @@ export function SifremiUnuttumFormu() {
         ipucu="Hesabına kayıtlı adresi yaz; sıfırlama bağlantısını oraya gönderiyoruz."
       />
 
-      <button
-        type="submit"
-        disabled={pending}
-        className="w-full rounded-lg bg-brand px-4 py-2.5 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-      >
+      <Dugme type="submit" className="w-full" bekliyor={pending}>
         {pending ? 'Gönderiliyor…' : 'Sıfırlama bağlantısı gönder'}
-      </button>
+      </Dugme>
     </form>
   );
 }

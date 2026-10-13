@@ -1,12 +1,20 @@
 'use client';
 
-import { Fragment, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { CHANNEL_KINDS, type ChannelKind } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { markaMerkeziAdresi, sihirbazAdresi } from '@/lib/panel-adresleri';
 import { PlatformLogo, adAccountKanali, profilKanali } from '@/components/platform-logo';
 import { Dugme } from '@/components/ui/dugme';
+import { Kart } from '@/components/ui/kart';
+import { AdHucresi, AracCubugu, Tablo, type TabloSutunu } from '@/components/ui/tablo';
+import { Alan, Girdi, Secim } from '@/components/ui/alan';
+import { BosDurum, Serit } from '@/components/ui/hal';
+import { Rozet } from '@/components/ui/rozet';
+import { Pencere } from '@/components/ui/pencere';
+import { MenuAyraci, MenuOgesi } from '@/components/ui/acilir-menu';
+import { DigerMenusu } from '@/components/ayar-sekmeleri';
 
 /**
  * ═══ ŞİRKETİN WORKSPACE'LERİ — SATIR, PENCERE DEĞİL ═══
@@ -153,227 +161,246 @@ export function WorkspaceSatirlari({
   function panelAc(id: string, tur: 'tasi' | 'arsivle') {
     setHata(null);
     setHedefSirket('');
-    setPanel((p) => (p?.id === id && p.tur === tur ? null : { id, tur }));
+    setPanel({ id, tur });
   }
 
-  return (
-    <div className="rounded-xl border border-line bg-surface">
-      <div className="flex flex-wrap items-center gap-3 border-b border-line p-3">
-        <input
-          type="search"
-          value={arama}
-          onChange={(e) => setArama(e.target.value)}
-          placeholder="Workspace adı ya da kısa adıyla ara…"
-          aria-label="Workspace ara"
-          className="min-w-0 flex-1 rounded-lg border border-line bg-surface px-3 py-1.5 text-sm outline-none focus:border-brand"
+  /*
+   * PENCERE TEK, SATIR DEĞİŞKEN: hangi satırın taşındığı/arşivlendiği
+   * `panel`de. Pencere DOM'da kalıyor; satır bulunamazsa (liste tazelendi)
+   * içerik boş ve pencere kapalı.
+   */
+  const panelSatiri = panel ? (satirlar.find((s) => s.id === panel.id) ?? null) : null;
+  const hataSatiri = hata ? (satirlar.find((s) => s.id === hata.id) ?? null) : null;
+  const toplamHesap = satirlar.reduce((n, s) => n + s._count.adAccounts, 0);
+  const toplamIzlenen = satirlar.reduce((n, s) => n + s.adAccounts.filter((a) => a.syncEnabled).length, 0);
+
+  const sutunlar: Array<TabloSutunu<WorkspaceSatiri>> = [
+    {
+      anahtar: 'ad',
+      baslik: 'Workspace',
+      hucre: (s) => (
+        <AdHucresi
+          /*
+            AD BİR BAĞLANTI GİBİ: taslakta satırın adı Marka Merkezi'ne
+            açılıyor (Google Ads'te hesap adı hesaba girer). Düğme, bağlantı
+            DEĞİL: açmadan önce o workspace'e geçmek gerekiyor (`ac`).
+          */
+          ad={
+            <button
+              type="button"
+              disabled={mesgul !== null}
+              onClick={() => void ac(s)}
+              className="text-left font-semibold text-ink hover:text-brand-strong hover:underline disabled:opacity-60"
+            >
+              {s.name}
+            </button>
+          }
+          alt={mesgul === `ac:${s.id}` || mesgul === `kurulum:${s.id}` ? 'Açılıyor…' : s.slug}
         />
-        {/* SESSİZ KESME YOK: süzülmüş listede kaçının göründüğü yazılı. */}
-        <span className="text-xs text-ink-muted">
-          {q === '' ? `${satirlar.length} workspace` : `${satirlar.length} workspace’ten ${suzulmus.length} tanesi gösteriliyor`}
-        </span>
-      </div>
+      ),
+    },
+    {
+      anahtar: 'hesaplar',
+      baslik: 'Hesaplar',
+      hucre: (s) => {
+        const izlemede = s.adAccounts.filter((a) => a.syncEnabled).length;
+        const kanallar = CHANNEL_KINDS.filter(
+          (k: ChannelKind) =>
+            s.adAccounts.some((a) => adAccountKanali(a.platform) === k) ||
+            s.socialProfiles.some((p) => profilKanali(p.profileType) === k),
+        );
+        return (
+          <>
+            {/*
+              BOŞ HÂL SEBEBİYLE: "0" bir sayı, "atanmamış" yapılacak
+              bir iş. "Atanmış ama hiçbiri izlemede değil" ise veri
+              gelmemesinin AYRI bir sebebi ve ayrı yazılıyor.
+            */}
+            {s._count.adAccounts === 0 && s.socialProfiles.length === 0 ? (
+              <span className="text-13 text-ink-muted">Hesap atanmamış</span>
+            ) : (
+              <span className="flex flex-wrap items-center gap-1.5">
+                {kanallar.map((k) => (
+                  <PlatformLogo key={k} kind={k} className="h-4 w-4" />
+                ))}
+                <span className="text-13 text-ink-muted">
+                  <strong className="text-ink">{s._count.adAccounts}</strong> hesap · {izlemede} izlemede
+                </span>
+              </span>
+            )}
+            {s._count.adAccounts > 0 && izlemede === 0 && (
+              <span className="mt-0.5 block text-12 font-semibold text-danger-strong">Veri çekilmiyor</span>
+            )}
+          </>
+        );
+      },
+    },
+    {
+      anahtar: 'ekip',
+      baslik: 'Ekip',
+      sayi: true,
+      ikincil: true,
+      hucre: (s) => `${s._count.memberships} kişi`,
+    },
+    {
+      anahtar: 'durum',
+      baslik: 'Durum',
+      /* YEŞİL YALNIZ DURUM GÖSTERGESİ (TASARIM-DILI) — `Rozet` bunu taşıyor. */
+      hucre: (s) => (
+        <Rozet hal={s.status === 'active' ? 'ok' : s.status === 'paused' ? 'dur' : 'taslak'}>
+          {DURUM_ETIKET[s.status] ?? s.status}
+        </Rozet>
+      ),
+    },
+    {
+      anahtar: 'eylem',
+      baslik: <span className="sr-only">Eylemler</span>,
+      sayi: true,
+      hucre: (s) => (
+        <DigerMenusu etiket={`${s.name} için işlemler`}>
+          <MenuOgesi onClick={() => void ac(s)}>Marka Merkezi’nde aç</MenuOgesi>
+          <MenuOgesi onClick={() => void ac(s, 'sihirbaz')}>Kurulumu tamamla</MenuOgesi>
+          {tasiAcik && (
+            <MenuOgesi onClick={() => panelAc(s.id, 'tasi')}>Başka şirkete taşı</MenuOgesi>
+          )}
+          {arsivleyebilir && (
+            <>
+              <MenuAyraci />
+              <MenuOgesi tehlike onClick={() => panelAc(s.id, 'arsivle')}>
+                Arşivle
+              </MenuOgesi>
+            </>
+          )}
+        </DigerMenusu>
+      ),
+    },
+  ];
 
-      {suzulmus.length === 0 ? (
-        <p className="px-4 py-8 text-center text-sm text-ink-muted">“{arama}” ile eşleşen workspace yok.</p>
-      ) : (
-        /*
-         * TABLO KENDİ KABINDA YATAY KAYIYOR, SAYFA KAYMIYOR. Telefonda beş
-         * sütun sığmıyor; sütunları alt alta dizmek satırı satır olmaktan
-         * çıkarır, sayfanın kendisini kaydırmak ise üstteki sekme çubuğunu
-         * da ekran dışına iter.
-         */
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[40rem] text-sm">
-            <thead>
-              <tr className="border-b border-line text-left text-xs text-ink-muted">
-                <th className="px-4 py-2">Workspace</th>
-                <th className="px-4 py-2">Hesaplar</th>
-                <th className="px-4 py-2">Ekip</th>
-                <th className="px-4 py-2">Durum</th>
-                <th className="px-4 py-2 text-right">
-                  <span className="sr-only">Eylemler</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {suzulmus.map((s) => {
-                const izlemede = s.adAccounts.filter((a) => a.syncEnabled).length;
-                const kanallar = CHANNEL_KINDS.filter(
-                  (k: ChannelKind) =>
-                    s.adAccounts.some((a) => adAccountKanali(a.platform) === k) ||
-                    s.socialProfiles.some((p) => profilKanali(p.profileType) === k),
-                );
-                const acikPanel = panel?.id === s.id ? panel.tur : null;
-                return (
-                  <Fragment key={s.id}>
-                    <tr className="border-b border-line align-middle last:border-b-0">
-                      <td className="px-4 py-3">
-                        <span className="block font-medium text-ink">{s.name}</span>
-                        <span className="block text-xs text-ink-muted">{s.slug}</span>
-                      </td>
-                      <td className="px-4 py-3">
-                        {/*
-                          BOŞ HÂL SEBEBİYLE: "0" bir sayı, "atanmamış" yapılacak
-                          bir iş. "Atanmış ama hiçbiri izlemede değil" ise veri
-                          gelmemesinin AYRI bir sebebi ve ayrı yazılıyor.
-                        */}
-                        {s._count.adAccounts === 0 && s.socialProfiles.length === 0 ? (
-                          <span className="text-xs text-ink-muted">Hesap atanmamış</span>
-                        ) : (
-                          <span className="flex flex-wrap items-center gap-1.5">
-                            {kanallar.map((k) => (
-                              <PlatformLogo key={k} kind={k} className="h-4 w-4" />
-                            ))}
-                            <span className="text-xs text-ink-muted">
-                              <strong className="text-ink">{s._count.adAccounts}</strong> hesap ·{' '}
-                              {izlemede} izlemede
-                            </span>
-                          </span>
-                        )}
-                        {s._count.adAccounts > 0 && izlemede === 0 && (
-                          <span className="mt-0.5 block text-[11px] text-warn-strong">Veri çekilmiyor</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-ink-muted">
-                        <strong className="text-ink">{s._count.memberships}</strong> kişi
-                      </td>
-                      <td className="px-4 py-3">
-                        {/* YEŞİL YALNIZ DURUM GÖSTERGESİ (TASARIM-DILI). */}
-                        <span
-                          className={`inline-flex items-center gap-1.5 text-xs ${s.status === 'active' ? 'text-ok-strong' : 'text-ink-muted'}`}
-                        >
-                          <span
-                            aria-hidden
-                            className={`h-1.5 w-1.5 rounded-full ${s.status === 'active' ? 'bg-ok-strong' : 'bg-ink-muted'}`}
-                          />
-                          {DURUM_ETIKET[s.status] ?? s.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <Dugme
-                            ton="birincil"
-                            boyut="kucuk"
-                            bekliyor={mesgul === `ac:${s.id}`}
-                            disabled={mesgul !== null}
-                            onClick={() => void ac(s)}
-                          >
-                            Marka Merkezi’nde aç
-                          </Dugme>
-                          <Dugme
-                            ton="ikincil"
-                            boyut="kucuk"
-                            bekliyor={mesgul === `kurulum:${s.id}`}
-                            disabled={mesgul !== null}
-                            onClick={() => void ac(s, 'sihirbaz')}
-                          >
-                            Kurulumu tamamla
-                          </Dugme>
-                          {tasiAcik && (
-                            <Dugme
-                              ton="sade"
-                              boyut="kucuk"
-                              aria-expanded={acikPanel === 'tasi'}
-                              disabled={mesgul !== null}
-                              onClick={() => panelAc(s.id, 'tasi')}
-                            >
-                              Taşı
-                            </Dugme>
-                          )}
-                          {arsivleyebilir && (
-                            <Dugme
-                              ton="sade"
-                              boyut="kucuk"
-                              aria-expanded={acikPanel === 'arsivle'}
-                              disabled={mesgul !== null}
-                              onClick={() => panelAc(s.id, 'arsivle')}
-                            >
-                              Arşivle
-                            </Dugme>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
+  return (
+    <div className="grid gap-3">
+      {/* TOPLAM HER ZAMAN YAZILI: hesabı olup izlenmeyen workspace "veri gelmiyor" diye okunur. */}
+      <p className="m-0 text-13 text-ink-muted">
+        {satirlar.length} workspace · {toplamHesap} reklam hesabı · {toplamIzlenen} tanesi izlemede
+      </p>
 
-                    {(acikPanel !== null || hata?.id === s.id) && (
-                      <tr className="border-b border-line bg-surface-muted/50">
-                        <td colSpan={5} className="px-4 py-3">
-                          {hata?.id === s.id && (
-                            <p role="alert" className="mb-2 text-sm text-danger-strong">
-                              {hata.metin}
-                            </p>
-                          )}
-
-                          {acikPanel === 'arsivle' && (
-                            <div className="flex flex-wrap items-center justify-between gap-3">
-                              <p className="max-w-prose text-sm text-ink">
-                                <strong>{s.name}</strong> listeden kalkar. Hesaplar ve geçmiş veri silinmez;
-                                aşağıdaki Arşiv’den geri alabilirsin.
-                              </p>
-                              <div className="flex gap-2">
-                                <Dugme ton="ikincil" boyut="kucuk" onClick={() => setPanel(null)}>
-                                  Vazgeç
-                                </Dugme>
-                                <Dugme
-                                  ton="tehlike"
-                                  boyut="kucuk"
-                                  bekliyor={mesgul === `arsiv:${s.id}`}
-                                  onClick={() => void arsivle(s)}
-                                >
-                                  Arşivle
-                                </Dugme>
-                              </div>
-                            </div>
-                          )}
-
-                          {acikPanel === 'tasi' && (
-                            <div className="flex flex-wrap items-center gap-2">
-                              <label htmlFor={`tasi-${s.id}`} className="text-sm text-ink">
-                                <strong>{s.name}</strong> şu şirkete taşınsın:
-                              </label>
-                              <select
-                                id={`tasi-${s.id}`}
-                                value={hedefSirket}
-                                onChange={(e) => setHedefSirket(e.target.value)}
-                                disabled={mesgul !== null}
-                                className="min-w-[14rem] rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-brand"
-                              >
-                                <option value="">Şirket seç…</option>
-                                {tasiHedefleri.map((h) => (
-                                  <option key={h.id} value={h.id}>
-                                    {h.name}
-                                  </option>
-                                ))}
-                              </select>
-                              <Dugme
-                                ton="ikincil"
-                                boyut="kucuk"
-                                disabled={hedefSirket === ''}
-                                bekliyor={mesgul === `tasi:${s.id}`}
-                                onClick={() => void tasi(s)}
-                              >
-                                Taşı
-                              </Dugme>
-                              <p className="w-full text-xs text-ink-muted">
-                                Reklam hesapları, kampanyalar ve geçmiş veri birlikte taşınır.
-                              </p>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+      {hata && (
+        <Serit ton="hata" baslik={hataSatiri ? `${hataSatiri.name}: işlem yapılamadı` : 'İşlem yapılamadı'}>
+          {hata.metin}
+        </Serit>
       )}
 
-      {/* KAPI KAPALIYSA SEBEBİ YAZIYOR, düğme sessizce kaybolmuyor. */}
-      {!arsivleyebilir && (
-        <p className="border-t border-line px-4 py-2 text-[11px] text-ink-muted">{arsivNedeni}</p>
-      )}
+      <Kart dolgu={false}>
+        <Tablo
+          etiket="Workspace’ler"
+          sutunlar={sutunlar}
+          satirlar={suzulmus}
+          satirAnahtari={(s) => s.id}
+          aracCubugu={
+            <AracCubugu
+              sag={
+                /* SESSİZ KESME YOK: süzülmüş listede kaçının göründüğü yazılı. */
+                <span className="text-12 text-ink-muted">
+                  {q === ''
+                    ? `${satirlar.length} workspace`
+                    : `${satirlar.length} workspace’ten ${suzulmus.length} tanesi gösteriliyor`}
+                </span>
+              }
+            >
+              <div className="w-full max-w-sm">
+                <Girdi
+                  type="search"
+                  value={arama}
+                  onChange={(e) => setArama(e.target.value)}
+                  placeholder="Workspace adı ya da kısa adı"
+                  aria-label="Workspace ara"
+                />
+              </div>
+            </AracCubugu>
+          }
+          bos={
+            <BosDurum
+              baslik={`“${arama}” ile eşleşen workspace yok.`}
+              neden="Ad ya da kısa adın bir parçasını yaz; aramayı temizleyince bütün liste döner."
+            />
+          }
+          sayfalama={{ bas: suzulmus.length === 0 ? 0 : 1, son: suzulmus.length, toplam: suzulmus.length }}
+        />
+        {/* KAPI KAPALIYSA SEBEBİ YAZIYOR, düğme sessizce kaybolmuyor. */}
+        {!arsivleyebilir && (
+          <p className="m-0 border-t border-line px-4 py-2.5 text-12 text-ink-muted">{arsivNedeni}</p>
+        )}
+      </Kart>
+
+      <Pencere
+        acik={panel?.tur === 'arsivle' && panelSatiri !== null}
+        onKapat={() => setPanel(null)}
+        baslik="Workspace’i arşivle"
+        genislik="dar"
+        altEylemler={
+          panelSatiri && (
+            <>
+              <Dugme ton="ikincil" onClick={() => setPanel(null)}>
+                Vazgeç
+              </Dugme>
+              <Dugme
+                ton="tehlike"
+                bekliyor={mesgul === `arsiv:${panelSatiri.id}`}
+                onClick={() => void arsivle(panelSatiri)}
+              >
+                Arşivle
+              </Dugme>
+            </>
+          )
+        }
+      >
+        {panelSatiri && (
+          <p className="m-0 text-14 text-ink">
+            <strong>{panelSatiri.name}</strong> listeden kalkar. Hesaplar ve geçmiş veri silinmez;
+            aşağıdaki Arşiv’den geri alabilirsin.
+          </p>
+        )}
+      </Pencere>
+
+      <Pencere
+        acik={panel?.tur === 'tasi' && panelSatiri !== null}
+        onKapat={() => setPanel(null)}
+        baslik="Başka şirkete taşı"
+        aciklama="Reklam hesapları, kampanyalar ve geçmiş veri birlikte taşınır."
+        altEylemler={
+          panelSatiri && (
+            <>
+              <Dugme ton="ikincil" onClick={() => setPanel(null)}>
+                Vazgeç
+              </Dugme>
+              <Dugme
+                disabled={hedefSirket === ''}
+                bekliyor={mesgul === `tasi:${panelSatiri.id}`}
+                onClick={() => void tasi(panelSatiri)}
+              >
+                Taşı
+              </Dugme>
+            </>
+          )
+        }
+      >
+        {panelSatiri && (
+          <Alan etiket={`${panelSatiri.name} şu şirkete taşınsın`} id={`tasi-${panelSatiri.id}`}>
+            <Secim
+              id={`tasi-${panelSatiri.id}`}
+              value={hedefSirket}
+              onChange={(e) => setHedefSirket(e.target.value)}
+              disabled={mesgul !== null}
+            >
+              <option value="">Şirket seç</option>
+              {tasiHedefleri.map((h) => (
+                <option key={h.id} value={h.id}>
+                  {h.name}
+                </option>
+              ))}
+            </Secim>
+          </Alan>
+        )}
+      </Pencere>
     </div>
   );
 }

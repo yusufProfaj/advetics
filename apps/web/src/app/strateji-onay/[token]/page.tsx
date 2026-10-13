@@ -6,6 +6,8 @@ import { StratejiBelgesi } from '@/components/strateji/v2/belge';
 import { onaySayfasiHali, tokenSorulmaliMi, type OnaySayfasiHali } from '@/components/strateji/v2/hesap';
 import { BaglantiOnayKutusu } from '@/components/strateji/v2/onay-kutusu';
 import type { BaglantiBelgesi } from '@advetics/shared';
+import { SayfaBasligi } from '@/components/ui/sayfa-basligi';
+import { Serit } from '@/components/ui/hal';
 
 /**
  * ═══ GİRİŞSİZ STRATEJİ ONAYI (kullanıcı kararı K-2) — OTURUM GEREKTİRMEZ ═══
@@ -72,23 +74,31 @@ export default async function StratejiOnayPage({ params }: { params: Promise<{ t
 
   if (hal.tur === 'mesaj' || !okuma.govde?.belge) {
     const m = hal.tur === 'mesaj' ? hal : { baslik: 'Bağlantı geçersiz.', metin: '' };
+    /*
+     * TEK NÖTR CÜMLE, ORTAK BAŞLIKLA (`SayfaBasligi`, elle `h1` değil).
+     * Renkler token: eskiden sabit beyaz/siyah ve kılavuz hex'leri elle
+     * yazılıydı; karanlık temada sayfanın geri kalanı koyu, bu kutu beyaz
+     * kalıyordu.
+     */
     return (
-      <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center bg-white px-6 text-center text-black">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/advetics-logo.png" alt="Advetics" width={140} height={29} className="mb-8 h-[29px] w-auto" />
-        <h1 className="font-baslik text-lg font-semibold">{m.baslik}</h1>
-        {m.metin && <p className="mt-2 text-sm text-[#302e2d]/70">{m.metin}</p>}
+      <main className="flex min-h-screen items-center justify-center bg-surface-muted px-4">
+        <div className="grid w-full max-w-md gap-6">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/advetics-logo.png" alt="Advetics" width={140} height={29} className="h-[29px] w-auto self-start" />
+          <SayfaBasligi baslik={m.baslik} aciklama={m.metin || undefined} />
+        </div>
       </main>
     );
   }
 
   const { belge, yorumlar } = okuma.govde;
   return (
-    <main className="min-h-screen bg-[#302e2d]/[0.04] px-3 py-6 sm:px-4 sm:py-8">
+    <main className="min-h-screen bg-surface-muted px-3 py-6 sm:px-4 sm:py-8">
       {hal.not && (
-        <p className="mx-auto mb-3 max-w-[860px] rounded-xl border border-l-4 border-black/10 border-l-[#ff2400] bg-white px-4 py-3 text-sm font-semibold text-black" role="status">
-          {hal.not}
-        </p>
+        <div className="mx-auto mb-3 max-w-[860px]">
+          {/* Ortak şerit: sol kırmızı çizgi, siyah metin (eskiden aynı görünüş elle yazılıydı). */}
+          <Serit baslik={hal.not} />
+        </div>
       )}
       <StratejiBelgesi
         veri={belge}

@@ -123,11 +123,22 @@ describe('atama ucu', () => {
 });
 
 describe('pop-up sözleşmesi', () => {
-  it('modal erişilebilir ve ESC ile kapanıyor', () => {
+  it('onay penceresi ORTAK `Pencere` — elle modal yok (BILESENLER § 5)', () => {
+    /*
+     * Havuz bir süre elle yazılmış bir pop-up'tı (kendi `role="dialog"`u,
+     * kendi Esc dinleyicisi, odak tuzağı YOK). Liste artık sayfadaki tabloda;
+     * kalan tek katman toplu işlemin onayı ve o ortak `Pencere`den geçiyor
+     * (portal, Esc, odak tuzağı, DOM'da kalır).
+     */
     const kod = yorumsuz(KART);
-    expect(kod).toContain("role=\"dialog\"");
-    expect(kod).toContain('aria-modal');
-    expect(kod).toContain("'Escape'");
+    expect(kod).toContain('<Pencere');
+    expect(kod).not.toContain('fixed inset-0');
+  });
+
+  it('KRİTİK: liste SAYFALI — 374 hesap tek sayfada metrelerce uzamıyor', () => {
+    const kod = yorumsuz(KART);
+    expect(kod).toContain('suzulmus.slice(gecerliSayfa * SAYFA_BOYU');
+    expect(kod).toContain('toplam: suzulmus.length');
   });
 
   it('KRİTİK: arama kutusu var — 284 hesapta kaydırmak yanlış atamanın yolu', () => {

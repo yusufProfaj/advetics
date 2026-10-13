@@ -1,51 +1,81 @@
 'use client';
 
-import Link from 'next/link';
+import type { ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
 import { aktifMi } from '@/components/nav';
+import { SayfaIcMenu } from '@/components/ui/sayfa-ic-menu';
+import { AcilirMenu, IKON_TETIK } from '@/components/ui/acilir-menu';
+import { Ikon } from '@/components/ui/ikon';
 
 /**
- * Ayarlar ekranlarının sekme çubuğu. Seçili sekme `aktifMi` ile bulunuyor,
- * menüdekiyle aynı tanım: iki ayrı "bu yolda mı" kuralı yazmak, menüde
- * "Ayarlar" seçili görünürken hiçbir sekmenin seçili olmaması demekti.
+ * ═══ SATIR SONU ⋯ MENÜSÜ (Ayarlar ve Hesabım ekranlarının ortak tetiği) ═══
  *
- * DAR EKRANDA YATAY KAYIYOR, ALT SATIRA KIRILMIYOR: altı sekme telefonda iki
- * satıra bölününce seçili sekmenin altındaki çizgi yanlış satırda kalıyordu.
+ * `AcilirMenu` + `IKON_TETIK` + `nokta3` ikonu her satırda aynı üç satırla
+ * kuruluyordu; burada bir kez. GRUP 4 SAPMASI (BILESENLER § 8): `ui/`
+ * altında bir "⋯ menüsü" bileşeni yok ve yeni ortak bileşen yazılmıyor;
+ * başka gruplar da aynı deseni kurarsa `ui/acilir-menu.tsx`e taşınmalı.
+ *
+ * `etiket` ZORUNLU ve satırın adını taşımalı ("Seasight için işlemler"):
+ * on satırlık bir tabloda ekran okuyucu on kez "Diğer" okursa hangi satırın
+ * menüsünde olduğu bilinmez.
+ */
+export function DigerMenusu({ etiket, children }: { etiket: string; children: ReactNode }) {
+  return (
+    <AcilirMenu
+      etiket={etiket}
+      hizala="sag"
+      genislik="w-64"
+      tetik={({ acik: _acik, ...o }) => (
+        <button type="button" aria-label={etiket} className={IKON_TETIK} {...o}>
+          <Ikon ad="nokta3" />
+        </button>
+      )}
+    >
+      {children}
+    </AcilirMenu>
+  );
+}
+
+/**
+ * ═══ AYARLAR BÖLÜMLERİ — SAYFA İÇİ YAN MENÜ (kullanıcı kararı 2026-10-14) ═══
+ *
+ * Ayarlar ekranları üstte alt çizgili bir sekme çubuğuydu; artık içeriğin
+ * solunda dikey menü (`SayfaIcMenu`, BILESENLER § 9). Onaylı taslak:
+ * `docs/marka/sayfa-taslaklari.html` `#ayarlar`.
+ *
+ * Seçili öğe `aktifMi` ile bulunuyor, kenar çubuğundakiyle aynı tanım: iki
+ * ayrı "bu yolda mı" kuralı yazmak, menüde "Ayarlar" seçili görünürken
+ * hiçbir bölümün seçili olmaması demekti.
+ *
+ * BÖLÜMLER BAĞLANTI: her bölüm kendi adresinde (`/ayarlar/baglantilar`…).
+ * Geri tuşu bölümler arasında çalışıyor ve bildirim zilinin çapaları
+ * (`#havuz`, `#kisiler`) doğrudan doğru bölümü açıyor.
+ *
+ * KIRMIZI NOKTA `uyarili`: sorunlu bir platform bağlantısı (yeniden yetki,
+ * hata, eksik izin) Ayarlar'ın HER bölümünden görünüyor. Yalnız Bağlantılar
+ * bölümünün içinde yazsaydı, Ekip'te çalışan kullanıcı Google'ın veri
+ * çekmeyi bıraktığını hiç görmezdi.
  */
 export function AyarSekmeleri({
   sekmeler,
+  uyarili = [],
 }: {
   sekmeler: Array<{ href: string; ekYollar: readonly string[]; ad: string }>;
+  /** Kırmızı nokta taşıyacak bölümlerin adresleri. */
+  uyarili?: string[];
 }) {
   const pathname = usePathname();
-  /*
-   * ALT ÇİZGİ `after:` İLE, NEGATİF KENAR BOŞLUĞUYLA DEĞİL. İlk sürüm
-   * bağlantılara `-mb-px` veriyordu: yatay kaydırılan kap bu bir pikseli
-   * dikey taşma sayıyor ve sağ uçta boş bir dikey kaydırma çubuğu
-   * çiziyordu. `after:` kutunun içinde kalıyor, kap hiç taşmıyor.
-   */
+  const secili = sekmeler.find((s) => aktifMi(s, pathname))?.href ?? '';
   return (
-    <nav aria-label="Ayarlar" className="border-b border-line">
-      <ul className="flex gap-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none]">
-        {sekmeler.map((s) => {
-          const aktif = aktifMi(s, pathname);
-          return (
-            <li key={s.href} className="shrink-0">
-              <Link
-                href={s.href}
-                aria-current={aktif ? 'page' : undefined}
-                className={`relative block whitespace-nowrap px-3 py-2.5 text-sm transition-colors after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:transition-colors ${
-                  aktif
-                    ? 'font-semibold text-ink after:bg-brand'
-                    : 'text-ink-muted after:bg-transparent hover:text-ink hover:after:bg-line'
-                }`}
-              >
-                {s.ad}
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
-    </nav>
+    <SayfaIcMenu
+      etiket="Ayarlar bölümleri"
+      secili={secili}
+      ogeler={sekmeler.map((s) => ({
+        deger: s.href,
+        etiket: s.ad,
+        href: s.href,
+        uyari: uyarili.includes(s.href),
+      }))}
+    />
   );
 }

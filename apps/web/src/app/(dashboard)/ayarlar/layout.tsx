@@ -1,33 +1,16 @@
-import { requireSession } from '@/lib/session';
-import { ayarSekmeleri, kenarBolumleri, visibleSections } from '@/lib/nav-sections';
-import { AyarSekmeleri } from '@/components/ayar-sekmeleri';
-
 /**
- * AYARLAR: TEK KAPI, SEKMELİ İÇERİK.
+ * AYARLAR: TEK KAPI, BÖLÜMLER SAYFA İÇİ YAN MENÜDE.
  *
- * Yedi ayar ekranı kenar çubuğunda ayrı satırlardı; artık kenar çubuğunda
- * tek "Ayarlar" satırı var ve ekranlar burada sekme. Sekme listesi menüyle
- * AYNI süzgeçten geçiyor (`visibleSections`): ayrı bir liste yazmak, bir
- * ekranın menüde görünüp sekmede görünmemesi ya da yetkisi olmayana
- * gösterilmesi demekti.
+ * Bu düzen bir süre sekme çubuğunu çiziyordu ve başlık sayfanın içinde,
+ * sekmelerin ALTINDA kalıyordu. Yeni dilde başlık tam genişlikte üstte,
+ * bölüm menüsü onun altında solda (BILESENLER § 9); ikisinin sırası
+ * düzenden kurulamıyor, çünkü başlığın sağındaki birincil eylem her bölümün
+ * kendi kapısıyla kuruluyor. Çerçeve `AyarlarSayfasi`nda
+ * (`components/ayar-kapsam.tsx`) ve her bölüm sayfası onu çağırıyor.
  *
- * Oturum burada ikinci kez isteniyor ama ağa ikinci kez gitmiyor:
- * `getSession` istek başına önbellekli.
+ * Dosya SİLİNMEDİ: `ayarlar.spec.ts` modülün dosyalarını sayıyor ve düzen
+ * yeniden bir şey taşıması gerektiğinde yeri burası.
  */
-export default async function AyarlarDuzeni({ children }: { children: React.ReactNode }) {
-  const session = await requireSession();
-  const { ayarlar } = kenarBolumleri(
-    visibleSections(session.permissions, {
-      ustHesapGorunur: session.platformAdmin || session.managerAccount !== null,
-      platformSahibi: session.platformAdmin,
-    }),
-  );
-  // Yeni yapıda Hesabım sekmesi de ekleniyor (herkese açık, menüde değil).
-  const sekmeler = ayarSekmeleri(ayarlar);
-  return (
-    <div className="space-y-6">
-      {sekmeler.length > 1 && <AyarSekmeleri sekmeler={sekmeler} />}
-      {children}
-    </div>
-  );
+export default function AyarlarDuzeni({ children }: { children: React.ReactNode }) {
+  return <>{children}</>;
 }

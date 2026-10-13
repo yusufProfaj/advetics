@@ -3,7 +3,9 @@
 import { useEffect, useState } from 'react';
 import type { SirketSilmeOzeti } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
-import { Halka } from '@/components/yukleniyor';
+import { Alan, Girdi } from '@/components/ui/alan';
+import { Dugme } from '@/components/ui/dugme';
+import { Serit, Yukleniyor } from '@/components/ui/hal';
 
 /**
  * ═══ ŞİRKET SİLME — NE GİDECEĞİ ÖNCE YAZILIYOR ═══
@@ -78,60 +80,60 @@ export function SirketSil({
     }
   }
 
+  /*
+   * PENCERENİN İÇİ: başlık ve kapat düğmesi `Pencere`de. Eskiden kırmızı
+   * zeminli bir kutuydu (`bg-danger-soft`); kırmızı zemin kılavuzda yok ve
+   * uyarı artık şeritte (sol kırmızı çizgi), silme düğmesi `tehlike` tonu.
+   */
   if (hata !== null && ozet === null) {
     return (
-      <Kutu>
-        <p role="alert" className="text-sm text-danger-strong">
+      <div className="grid gap-4">
+        <Serit ton="hata" baslik="Silme özeti alınamadı">
           {hata}
-        </p>
-        <Vazgec onVazgec={onVazgec} />
-      </Kutu>
+        </Serit>
+        <Eylemler>
+          <Vazgec onVazgec={onVazgec} />
+        </Eylemler>
+      </div>
     );
   }
   if (ozet === null) {
-    return (
-      <Kutu>
-        <p className="text-sm text-ink-muted">Ne silineceği hesaplanıyor…</p>
-      </Kutu>
-    );
+    return <Yukleniyor satir={3} etiket="Ne silineceği hesaplanıyor" />;
   }
 
   if (ozet.engel !== null) {
     return (
-      <Kutu>
-        <h3 className="text-sm font-semibold text-ink">Bu şirket silinemez</h3>
+      <div className="grid gap-4">
         {/* SEBEP YAZILIYOR: kapalı bir düğme "neden" sorusunu ekranda
             bırakıyor ve kullanıcı onu aramaya gidiyor. */}
-        <p className="mt-1 text-sm text-ink-muted">{ozet.engel}</p>
-        <Vazgec onVazgec={onVazgec} />
-      </Kutu>
+        <Serit ton="uyari" baslik="Bu şirket silinemez">
+          {ozet.engel}
+        </Serit>
+        <Eylemler>
+          <Vazgec onVazgec={onVazgec} />
+        </Eylemler>
+      </div>
     );
   }
 
   const bosSirket = !ozet.adOnayiGerekli;
 
   return (
-    <Kutu>
-      <h3 className="text-sm font-semibold text-danger-strong">
-        “{ozet.name}” kalıcı olarak silinecek
-      </h3>
+    <div className="grid gap-4">
+      <Serit ton="hata" baslik={`“${ozet.name}” kalıcı olarak silinecek`}>
+        {bosSirket
+          ? 'Bu şirkette workspace, reklam hesabı, kullanıcı ve ölçüm yok. Silinecek bir veri bulunmuyor.'
+          : 'Aşağıdakilerle birlikte gider ve geri getirilemez.'}
+      </Serit>
 
-      {bosSirket ? (
-        <p className="mt-1 text-sm text-ink-muted">
-          Bu şirkette workspace, reklam hesabı, kullanıcı ve ölçüm yok — silinecek bir veri
-          bulunmuyor.
-        </p>
-      ) : (
+      {!bosSirket && (
         <>
-          <p className="mt-1 text-sm text-ink-muted">
-            Şununla birlikte gidecek ve <strong>geri getirilemez</strong>:
-          </p>
           {/*
             SAYI DEĞİL AD YAZILIYOR. "3 workspace" kimseye ne kaybedeceğini
             söylemiyor; adları görünce kullanıcı yanlış şirketi seçtiğini
             fark ediyor.
           */}
-          <ul className="mt-2 space-y-1 text-sm">
+          <ul className="m-0 grid list-none gap-1.5 p-0 text-14 text-ink">
             {ozet.workspaceAdlari.length > 0 && (
               <Satir>
                 {ozet.workspaceAdlari.length} workspace: {ozet.workspaceAdlari.join(', ')}
@@ -140,79 +142,68 @@ export function SirketSil({
             {ozet.reklamHesabi > 0 && <Satir>{ozet.reklamHesabi} reklam hesabı</Satir>}
             {ozet.kullanici > 0 && (
               <Satir>
-                {ozet.kullanici} kullanıcı — giriş hesapları da silinir, bir daha giriş
-                yapamazlar
+                {ozet.kullanici} kullanıcı: giriş hesapları da silinir, bir daha giriş yapamazlar
               </Satir>
             )}
             {ozet.metrikGunu > 0 && (
-              <Satir>
-                {ozet.metrikGunu} günlük ölçüm geçmişi — platformdan yeniden çekilemez
-              </Satir>
+              <Satir>{ozet.metrikGunu} günlük ölçüm geçmişi: platformdan yeniden çekilemez</Satir>
             )}
           </ul>
 
-          <label className="mt-3 block">
-            <span className="text-[11px] text-ink-muted">
-              Onaylamak için şirket adını birebir yaz
-            </span>
-            <input
+          <Alan etiket="Onaylamak için şirket adını birebir yaz">
+            <Girdi
               value={onayAdi}
               onChange={(e) => setOnayAdi(e.target.value)}
               disabled={pending}
               placeholder={ozet.name}
-              className="mt-0.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-danger/30"
             />
-          </label>
+          </Alan>
         </>
       )}
 
       {hata && (
-        <p role="alert" className="mt-2 text-xs text-danger-strong">
+        <Serit ton="hata" baslik="Silinemedi">
           {hata}
-        </p>
+        </Serit>
       )}
 
-      <div className="mt-3 flex items-center gap-3">
-        <button
-          type="button"
+      <Eylemler>
+        <Vazgec onVazgec={onVazgec} />
+        <Dugme
+          ton="tehlike"
           /*
            * AD EŞLEŞMEDEN DÜĞME KAPALI. Açık bırakmak, kullanıcının yanlış
            * yazıp 400 alması ve "neden olmadı" diye bakması demekti.
            */
-          disabled={pending || (!bosSirket && onayAdi.trim() !== ozet.name)}
+          disabled={(!bosSirket && onayAdi.trim() !== ozet.name)}
+          bekliyor={pending}
           onClick={() => void sil()}
-          className="inline-flex items-center gap-2 rounded-lg bg-danger px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
         >
-          {pending && <Halka />}
           {bosSirket ? 'Şirketi sil' : 'Kalıcı olarak sil'}
-        </button>
-        <Vazgec onVazgec={onVazgec} satirIci />
-      </div>
-    </Kutu>
+        </Dugme>
+      </Eylemler>
+    </div>
   );
 }
 
-function Kutu({ children }: { children: React.ReactNode }) {
-  return <div className="rounded-xl border border-danger/30 bg-danger-soft/60 p-4">{children}</div>;
+/** Pencerenin alt satırı: Vazgeç solda, tehlikeli eylem en sağda. */
+function Eylemler({ children }: { children: React.ReactNode }) {
+  return <div className="flex flex-wrap justify-end gap-2 border-t border-line pt-4">{children}</div>;
 }
 
 function Satir({ children }: { children: React.ReactNode }) {
   return (
-    <li className="flex gap-2 text-ink">
+    <li className="flex gap-2">
       <span aria-hidden>·</span>
       <span>{children}</span>
     </li>
   );
 }
 
-function Vazgec({ onVazgec, satirIci }: { onVazgec: () => void; satirIci?: boolean }) {
+function Vazgec({ onVazgec }: { onVazgec: () => void }) {
   return (
-    <button
-      type="button"
-      onClick={onVazgec}
-      className={`text-xs text-ink-muted transition hover:text-ink ${satirIci ? '' : 'mt-3'}`}
-    >
+    <Dugme ton="ikincil" onClick={onVazgec}>
       Vazgeç
-    </button>
+    </Dugme>
   );
 }

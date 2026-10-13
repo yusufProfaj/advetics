@@ -1,6 +1,9 @@
 import Link from 'next/link';
 import type { ConnectionSummary } from '@advetics/shared';
 import { markaMerkeziAdresi } from '@/lib/panel-adresleri';
+import { Kart } from '@/components/ui/kart';
+import { BosDurum, Serit } from '@/components/ui/hal';
+import { AdHucresi, Tablo } from '@/components/ui/tablo';
 
 /**
  * İZLENEN HESAPLAR — ÖZET KART, tam liste DEĞİL.
@@ -43,54 +46,52 @@ export function IzlenenHesaplar({
     .filter((c) => c.hesap + c.profil > 0);
 
   return (
-    <section className="rounded-xl border border-line bg-surface p-4">
-      <h3 className="text-sm font-semibold text-ink">İzlenen hesaplar</h3>
-
-      <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm">
-        <span>
-          <strong className="text-ink">{izlenenHesap.length}</strong>
-          <span className="text-ink-muted"> reklam hesabı</span>
-        </span>
-        <span>
-          <strong className="text-ink">{izlenenProfil.length}</strong>
-          <span className="text-ink-muted"> sayfa / kanal</span>
-        </span>
-      </div>
-
+    <Kart
+      dolgu={false}
+      baslik="İzlenen hesaplar"
+      baslikEki={`${izlenenHesap.length} reklam hesabı · ${izlenenProfil.length} sayfa / kanal`}
+    >
       {/* SESSİZ KALMASI EN KOLAY DURUM: atanmış ama izlemesi kapalı hesap
           panelde "bağlı" görünür ve hiç veri getirmez. */}
       {(kapaliHesap > 0 || kapaliProfil > 0) && (
-        <p className="mt-2 rounded-lg bg-warn/10 px-3 py-2 text-[11px] text-warn">
-          {kapaliHesap > 0 && <>{kapaliHesap} reklam hesabı</>}
-          {kapaliHesap > 0 && kapaliProfil > 0 && ' ve '}
-          {kapaliProfil > 0 && <>{kapaliProfil} sayfa</>} atanmış ama izlemesi
-          KAPALI, bunlardan veri çekilmiyor. Workspace’i aşağıdan aç ve
-          Kurulum’daki hesaplar bölümünden izlemeyi aç.
-        </p>
+        <div className="border-b border-line p-4">
+          <Serit
+            baslik={
+              <>
+                {kapaliHesap > 0 && <>{kapaliHesap} reklam hesabı</>}
+                {kapaliHesap > 0 && kapaliProfil > 0 && ' ve '}
+                {kapaliProfil > 0 && <>{kapaliProfil} sayfa</>} atanmış ama izlemesi KAPALI
+              </>
+            }
+          >
+            Bunlardan veri çekilmiyor. Workspace’i aşağıdan aç ve Kurulum’daki hesaplar bölümünden izlemeyi aç.
+          </Serit>
+        </div>
       )}
 
-      {musteriBasina.length === 0 ? (
-        <p className="mt-2 text-[11px] text-ink-muted">
-          Henüz hiçbir workspace’e hesap atanmamış. Yukarıdaki havuz
-          kartlarından ata.
-        </p>
-      ) : (
-        <ul className="mt-3 space-y-1">
-          {musteriBasina.map((c) => (
-            <li key={c.id} className="flex items-center justify-between gap-2 text-sm">
-              <Link
-                href={markaMerkeziAdresi('kurulum', c.id, 'kanallar')}
-                className="truncate text-brand-strong hover:underline"
-              >
-                {c.name}
-              </Link>
-              <span className="shrink-0 text-[11px] text-ink-muted">
-                {c.hesap} hesap · {c.profil} sayfa
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
+      <Tablo
+        etiket="İzlenen hesaplar"
+        satirlar={musteriBasina}
+        satirAnahtari={(c) => c.id}
+        sutunlar={[
+          {
+            anahtar: 'ws',
+            baslik: 'Workspace',
+            hucre: (c) => (
+              <AdHucresi ad={<Link href={markaMerkeziAdresi('kurulum', c.id, 'kanallar')}>{c.name}</Link>} />
+            ),
+          },
+          { anahtar: 'hesap', baslik: 'Reklam hesabı', sayi: true, hucre: (c) => c.hesap },
+          { anahtar: 'profil', baslik: 'Sayfa / kanal', sayi: true, hucre: (c) => c.profil },
+        ]}
+        bos={
+          <BosDurum
+            baslik="Henüz atanmış hesap yok"
+            neden="Hiçbir workspace’e hesap atanmamış. Yukarıdaki Atanmamış hesaplar tablosundan ata."
+          />
+        }
+        sayfalama={{ bas: musteriBasina.length === 0 ? 0 : 1, son: musteriBasina.length, toplam: musteriBasina.length }}
+      />
+    </Kart>
   );
 }

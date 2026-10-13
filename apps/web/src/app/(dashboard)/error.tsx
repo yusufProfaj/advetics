@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { HataDurumu } from '@/components/ui/hal';
 
 /**
  * PANEL HATA SINIRI.
@@ -28,30 +29,32 @@ export default function Error({
     console.error('Panel hatası:', error.digest ?? error.message);
   }, [error]);
 
+  /*
+   * ORTAK HATA HÂLİ (`HataDurumu`, referans "06 · Hâller"): elle yazılmış
+   * ortalanmış kutu ve kırmızı dolu düğme yerine panelin her yerinde
+   * görülen hata kartı. Mesaj alanında SUNUCUNUN mesajı DEĞİL (aşağıya bkz.),
+   * kullanıcının yapabileceği iş ve eşleşme anahtarı var.
+   */
   return (
-    <div className="mx-auto max-w-2xl rounded-xl border border-line bg-surface p-8 text-center">
-      <h2 className="text-base font-semibold text-ink">Bu ekran yüklenemedi</h2>
-      <p className="mx-auto mt-2 max-w-md text-sm text-ink-muted">
-        Sunucudan veri alınırken bir hata oluştu. Menüden başka bir ekrana
-        geçebilir ya da tekrar deneyebilirsin.
-      </p>
-
-      {/* HATA KİMLİĞİ GÖSTERİLİYOR: kullanıcı "çalışmıyor" derken elinde
-          sunucu log'uyla eşleşen bir anahtar olsun. Mesajın kendisi
-          gösterilmiyor — sunucu hataları tablo ve kolon adı sızdırabiliyor. */}
-      {error.digest && (
-        <p className="mt-3 text-[11px] text-ink-muted">
-          Hata kimliği: <code>{error.digest}</code>
-        </p>
-      )}
-
-      <button
-        type="button"
-        onClick={reset}
-        className="mt-5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition"
-      >
-        Tekrar dene
-      </button>
+    <div className="mx-auto w-full max-w-4xl">
+      <HataDurumu
+        baslik="Bu ekran yüklenemedi"
+        mesaj={
+          <>
+            Sunucudan veri alınırken bir hata oluştu. Menüden başka bir ekrana geçebilir ya da tekrar
+            deneyebilirsin.
+            {/* HATA KİMLİĞİ GÖSTERİLİYOR: kullanıcı "çalışmıyor" derken elinde
+                sunucu log'uyla eşleşen bir anahtar olsun. Mesajın kendisi
+                gösterilmiyor — sunucu hataları tablo ve kolon adı sızdırabiliyor. */}
+            {error.digest && (
+              <span className="mt-2 block text-12">
+                Hata kimliği: <code>{error.digest}</code>
+              </span>
+            )}
+          </>
+        }
+        onTekrar={reset}
+      />
     </div>
   );
 }

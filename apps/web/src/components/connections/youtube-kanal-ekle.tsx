@@ -1,9 +1,13 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
+import { useState, useTransition, type ReactNode } from 'react';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { PlatformLogo } from '@/components/platform-logo';
+import { Kart } from '@/components/ui/kart';
+import { Girdi } from '@/components/ui/alan';
+import { Dugme } from '@/components/ui/dugme';
+import { Serit } from '@/components/ui/hal';
 
 /**
  * YOUTUBE KANALINI HAVUZA EKLER.
@@ -26,7 +30,7 @@ import { PlatformLogo } from '@/components/platform-logo';
  * yanlış müşteride abone olur ve videoları başka bir markanın paneline
  * düşerdi.
  */
-export function YouTubeKanalEkle({ canManage }: { canManage: boolean }) {
+export function YouTubeKanalEkle({ canManage, children }: { canManage: boolean; children?: ReactNode }) {
   const router = useRouter();
   const [girdi, setGirdi] = useState('');
   const [bekliyor, setBekliyor] = useState(false);
@@ -49,7 +53,7 @@ export function YouTubeKanalEkle({ canManage }: { canManage: boolean }) {
         },
       );
       setGirdi('');
-      setSonuc(`${r.title} havuza eklendi. Aşağıdan bir workspace'e ata.`);
+      setSonuc(`${r.title} havuza eklendi. Atanmamış hesaplar tablosundan bir workspace'e ata.`);
       // Havuz sayacı sunucu tarafında hesaplanıyor; yenilemeden kanal
       // listede görünmez ve kullanıcı ekleme başarısız sanır.
       startTransition(() => router.refresh());
@@ -67,62 +71,69 @@ export function YouTubeKanalEkle({ canManage }: { canManage: boolean }) {
   }
 
   return (
-    <section className="rounded-xl border border-line bg-surface p-4">
-      <div className="flex items-start gap-2.5">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-line bg-surface">
+    <Kart
+      baslik={
+        <span className="flex items-center gap-2">
           <PlatformLogo kind="youtube" className="h-5 w-5" />
+          YouTube kanalı bağla
         </span>
-        <div className="min-w-0">
-          <h3 className="text-sm font-semibold text-ink">YouTube kanalı bağla</h3>
-          <p className="mt-0.5 text-[11px] leading-snug text-ink-muted">
-            Kanal adresini ya da @tanıtıcısını yapıştır. Kanal havuza düşer, workspace
-            atamasını aşağıdan yaparsın.
-          </p>
-        </div>
-      </div>
-
-      <div className="mt-3 flex flex-wrap gap-2">
-        <input
-          type="text"
-          value={girdi}
-          onChange={(e) => setGirdi(e.target.value)}
-          onKeyDown={(e) => {
-            // Enter ile eklemek, kısa bir alanda düğmeye uzanmaktan hızlı.
-            if (e.key === 'Enter') void ekle();
-          }}
-          disabled={!canManage || bekliyor}
-          placeholder="@kanaladi"
-          className="min-w-0 flex-1 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-brand disabled:opacity-40"
-        />
-        <button
-          type="button"
-          onClick={() => void ekle()}
-          disabled={!canManage || bekliyor || girdi.trim() === ''}
-          className="shrink-0 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white transition disabled:opacity-40"
-        >
-          {bekliyor || isPending ? 'Ekleniyor…' : 'Ekle'}
-        </button>
-      </div>
-
-      {!canManage && (
-        <p className="mt-2 text-[11px] text-ink-muted">Kanal bağlamak yöneticinin işi.</p>
-      )}
-      {hata && (
-        <p role="alert" className="mt-2 text-[11px] text-danger">
-          {hata}
+      }
+    >
+      <div className="grid gap-3">
+        <p className="m-0 text-13 text-ink-muted">
+          Kanal adresini ya da @tanıtıcısını yapıştır. Kanal havuza düşer, workspace atamasını yukarıdaki
+          tablodan yaparsın.
         </p>
-      )}
-      {sonuc && <p className="mt-2 text-[11px] text-ok-strong">{sonuc}</p>}
 
-      {/*
-        KANALIN KENDİSİ NEREDE BULUNUR — kullanıcı "kanal kimliği" kavramını
-        bilmek zorunda değil ve bilmediğinde yapıştırdığı şey genelde video
-        adresi oluyor.
-      */}
-      <p className="mt-2 text-[11px] text-ink-muted">
-        Kanal sayfasını aç, adres çubuğundakini kopyala. Video adresi değil, kanal
-        adresi olmalı.
-      </p>
-    </section>
+        <div className="flex flex-wrap gap-2">
+          <div className="min-w-0 flex-1">
+            <Girdi
+              type="text"
+              value={girdi}
+              onChange={(e) => setGirdi(e.target.value)}
+              onKeyDown={(e) => {
+                // Enter ile eklemek, kısa bir alanda düğmeye uzanmaktan hızlı.
+                if (e.key === 'Enter') void ekle();
+              }}
+              disabled={!canManage || bekliyor}
+              placeholder="@kanaladi"
+              aria-label="YouTube kanal adresi"
+            />
+          </div>
+          <Dugme
+            ton="koyu"
+            onClick={() => void ekle()}
+            disabled={!canManage || girdi.trim() === ''}
+            bekliyor={bekliyor || isPending}
+          >
+            Ekle
+          </Dugme>
+        </div>
+
+        {!canManage && <p className="m-0 text-12 text-ink-muted">Kanal bağlamak yöneticinin işi.</p>}
+        {hata && (
+          <Serit ton="hata" baslik="Kanal eklenemedi">
+            {hata}
+          </Serit>
+        )}
+        {sonuc && (
+          <Serit ton="bilgi" baslik="Eklendi">
+            {sonuc}
+          </Serit>
+        )}
+
+        {/*
+          KANALIN KENDİSİ NEREDE BULUNUR — kullanıcı "kanal kimliği" kavramını
+          bilmek zorunda değil ve bilmediğinde yapıştırdığı şey genelde video
+          adresi oluyor.
+        */}
+        <p className="m-0 text-12 text-ink-muted">
+          Kanal sayfasını aç, adres çubuğundakini kopyala. Video adresi değil, kanal adresi olmalı.
+        </p>
+
+        {/* Adresi bilmeyen için isimle arama (sayfa veriyor): aynı işin ikinci yolu, aynı kartta. */}
+        {children && <div className="grid gap-2 border-t border-line pt-4">{children}</div>}
+      </div>
+    </Kart>
   );
 }

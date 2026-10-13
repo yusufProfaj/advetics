@@ -382,3 +382,49 @@ yalnız token, düğme ve renk görünüşü yeni dile uyar; yerleşim değişme
 Kararlar: menü adı "İyileştir"; Potansiyel Müşteriler tablo + yan panel;
 Raporlar'da "Raporu gönder" birincil, "PDF indir" ikincil, Planla ve Paylaş ⋯.
 Onaylı taslak: `docs/marka/sayfa-taslaklari.html`.
+
+## 10. Grup 4 geçişi: notlar ve sapmalar (2026-10-14)
+
+Ayarlar (Şirketler ve workspace'ler · Platform bağlantıları · Ekip ve
+güvenlik), Hesabım, giriş/2FA/parola ekranları, panel hata sınırı, paylaşılan
+rapor, girişsiz strateji onayı ve "workspace seç" ekranı yeni dilde. İstisna
+listesinden Grup 4'ün 22 dosyası çıktı; Grup 4'ün kendi dosyalarında ihlal
+kalmadı.
+
+- **Ayarlar çerçevesi** `components/ayar-kapsam.tsx` → `AyarlarSayfasi`: başlık
+  tam genişlikte, altında `SayfaIcMenu` (`components/ayar-sekmeleri.tsx`).
+  Genişlik her bölümde panelin geniş düzeni (eski 4xl/5xl/7xl zıplaması
+  bitti). Sorunlu bağlantı (yeniden yetki, hata, zorunlu izin eksik ya da
+  liste okunamadı) Bağlantılar satırında kırmızı nokta; `revoked` sorun
+  sayılmıyor. `ayarlar/layout.tsx` artık geçirgen.
+- **Başlık birincil eylemi**: "+ Yeni workspace" (sihirbaz bağlantısı),
+  "+ Platform bağla" (`PlatformBaglaMenusu`, OAuth'u kartın "Bağlan"ıyla aynı
+  `baglantiBaslat`tan başlatıyor), "+ Kullanıcı ekle" (`KullaniciEkle`, düğme
+  ve yan paneli birlikte). Kapı kapalıysa düğme yok, sebebi bölümde yazılı.
+- **Grup 4 sapması: `DigerMenusu`** (`components/ayar-sekmeleri.tsx`): satır
+  sonu ⋯ tetiği (`AcilirMenu` + `IKON_TETIK` + `nokta3`). `ui/` altında yok;
+  başka gruplar da kurarsa `ui/acilir-menu.tsx`e taşınmalı.
+- **Grup 4 sapması: başlık metni.** Taslakta h1 "Ayarlar", üst başlık
+  kapsam. Uygulamada h1 BÖLÜMÜN adı ("Platform bağlantıları"), kırmızı üst
+  başlık "Ayarlar", kapsam satırı onun üstünde: `nav-sections.spec` ve
+  `ayarlar.spec` menü etiketinin sayfa başlığında ve `metadata.title`da
+  geçmesini kilitliyor ve her bölüm kendi adresinde.
+- **Grup 4 sapması: Hesabım'da başlıkta "Kaydet" yok** (taslakta var): kayıt
+  form başına (e-posta ayarları kendi Kaydet'i, 2FA kendi akışı); her şeyi
+  kaydeden tek düğme çalışmayan bir vaat olurdu. Parola değiştirme kartı da
+  yok: panelde bu iş için bir uç yok (şifre sıfırlama girişte).
+- **Hesabım bölümleri** `components/hesap/hesabim-bolumleri.tsx`: bölüm
+  adresin çapasında (`#guvenlik`, `#e-posta`, `#okuma-api`; sözleşmedeki
+  çapalar ve eski adres yönlendirmeleri aynen çalışıyor), bölümler DOM'da,
+  gizleme `data-secili` + CSS. Doğrulanmamış/okunamamış e-posta ve
+  zorunlu ama kapalı 2FA kırmızı nokta.
+- **Ekip**: ray + detay → tablo (Kişi · Rol · Kapsam · İki adımlı · ⋯) + sağdan
+  yan panel (erişimler, rol değiştir/kaldır). Tür süzgeci görünür çip
+  (Tümü/Ajans/Müşteri hesabı), sayı her zaman yazılı. `window.confirm`lar
+  (2FA sıfırla, bağlantıyı kaldır, okuma anahtarı iptal) ortak `Pencere`.
+- **Atanmamış hesaplar** tek tablo, kanal çipi, sayfa başına 25 satır ve
+  "1 - 25 / N"; hedef workspace araç çubuğunda bir kez seçiliyor.
+- **Gruplar dışında kalan ama dokunulmayan**: Grup 2'nin `ust-hesap-karti`,
+  `ust-hesap-yonetimi`, `iki-adim-sirket-ayari`, `team-manager`,
+  `danisman-ata` (Ayarlar'da çiziliyor, kendi görünüşleri Grup 2'de);
+  `components/report/report-document.tsx` ve `print-button.tsx` Grup 1'de.
