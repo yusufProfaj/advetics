@@ -195,6 +195,18 @@ export type PaginationInput = z.infer<typeof paginationSchema>;
  * unutulması demekti.
  */
 export const clientSetupSchema = createClientSchema.extend({
+  /**
+   * ÖZEL KATEGORİ — VARSAYILANSIZ, çünkü YOKLUĞU BİR BİLGİ (MIMARI Ç-10).
+   *
+   * Açılış sihirbazı soruyu soruyor ve cevabı ("hiçbiri" = boş liste dahil)
+   * HER ZAMAN gönderiyor; Bağlantılar'daki "her hesaba workspace aç" toplu
+   * yolu soruyu sormuyor ve alanı göndermiyor. Varsayılan `[]` olsaydı iki
+   * hâl sunucuda aynı görünürdü: ya sorulmamış soru "cevaplandı" sayılırdı
+   * (konut müşterisinin reklamı beyansız çıkar) ya da sihirbazda "hiçbiri"
+   * diyen kişiye Kurulum'da aynı soru bir kez daha sorulurdu.
+   * Alan GELDİYSE beyan verilmiş demek; servis hazırlamanın bayrağını basar.
+   */
+  specialAdCategories: specialAdCategoriesSchema.removeDefault().optional(),
   /** Havuzdan bu müşteriye atanacak reklam hesapları. */
   adAccountIds: z.array(z.string().uuid()).max(50).default([]),
   /** Havuzdan atanacak Facebook sayfaları / Instagram hesapları. */
@@ -249,7 +261,7 @@ export interface ClientSetupResult {
    * gelmediğinde sebebin aranacağı yeri gizlerdi.
    */
   failures: Array<{
-    kind: 'adAccount' | 'socialProfile' | 'user' | 'boost';
+    kind: 'adAccount' | 'socialProfile' | 'user' | 'boost' | 'kategori';
     id: string;
     reason: string;
   }>;

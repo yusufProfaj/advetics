@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   HAZIRLAMA_DURUMLARI,
+  clientSetupSchema,
   gunlukButceBasligi,
   hazirlamaDurumu,
   kategoriBasligi,
@@ -13,6 +14,7 @@ import {
 import { createHarness, IDS, seedTenant, type Harness } from '../../../test/pglite-harness';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { HazirlamaService, bosAlanlariDoldur, sayfaSitesi } from './hazirlama.service';
+import { ClientSetupService } from '../tenancy/client-setup.service';
 
 /**
  * ═══ HAZIR WORKSPACE (HAZIR-WORKSPACE-PLANI.md § Dalga 3) ═══
@@ -224,6 +226,62 @@ describe('servis (PGlite)', () => {
     const y = await svc.oku(okuyan, IDS.client);
     expect(y.sorular.map((q) => q.kod)).not.toContain('kategori');
     expect(y.adimlar.find((a) => a.kod === 'kategori')?.baslik).toBe('Konut');
+  });
+
+  // ── Ç-10: açılış sihirbazının beyanı hazırlamaya da yazılıyor ─────────
+  // Sihirbaz `ClientSetupService` üzerinden; hesap/profil/üye atamaları
+  // taklit, beyan yolu GERÇEK veritabanında.
+  const kurulum = () =>
+    new ClientSetupService(
+      { create: async () => ({ id: IDS.client, name: 'Seed' }) } as never,
+      {} as never,
+      {} as never,
+      { withTenant: <T>(_c: TenantContext, fn: (tx: unknown) => Promise<T>) => fn(h.db) } as never,
+      { record: auditKayit } as never,
+    );
+  const kurulumGirdisi = (over: Record<string, unknown>) =>
+    ({ name: 'Seed', timezone: 'Europe/Istanbul', reportingCurrency: 'TRY', adAccountIds: [], socialProfileIds: [], ...over }) as never;
+
+  it('KRİTİK: sihirbazda "hiçbiri" (boş liste) cevaplandı sayılır; hazırlama soruyu YENİDEN sormaz (Ç-10)', async () => {
+    const r = await kurulum().setup(ctx, kurulumGirdisi({ specialAdCategories: [] }), {});
+    expect(r.failures).toEqual([]);
+    expect((await satir())!.kategori_cevaplandi).toBe(true);
+    // Denetim kaydı hazırlamanın yolundan, kaynağıyla.
+    expect(auditKayit.mock.calls[0]![2]).toMatchObject({ action: 'client.updated', after: { specialAdCategories: [], kaynak: 'kurulum' } });
+    olcumDurum.mockResolvedValue(olcumYaniti(['111'], ['111']));
+    await svc.calistir(ctx, IDS.client, 'b'.repeat(64));
+    const y = await svc.oku(okuyan, IDS.client);
+    expect(y.varsayilanlar.kategoriCevaplandi).toBe(true);
+    expect(y.sorular.map((q) => q.kod)).not.toContain('kategori');
+    expect(y.adimlar.find((a) => a.kod === 'kategori')).toMatchObject({ durum: 'tamam', baslik: 'Özel kategori yok' });
+  });
+
+  it('KRİTİK: kurulum şeması kategoriye varsayılan KOYMAZ (yokluk = soru sorulmadı)', () => {
+    // Varsayılan `[]` geri gelirse toplu açılış da "hiçbiri" beyanı sayılır
+    // ve konut müşterisinin reklamı beyansız çıkar.
+    expect(clientSetupSchema.parse({ name: 'Ab' }).specialAdCategories).toBeUndefined();
+    expect(clientSetupSchema.parse({ name: 'Ab', specialAdCategories: [] }).specialAdCategories).toEqual([]);
+  });
+
+  it('KRİTİK: soruyu sormayan açılış (alan yok) beyan SAYILMAZ; soru hazırlamada bekler', async () => {
+    const r = await kurulum().setup(ctx, kurulumGirdisi({}), {});
+    expect(r.failures).toEqual([]);
+    expect(await satir()).toBeUndefined();
+    expect(auditKayit).not.toHaveBeenCalled();
+    olcumDurum.mockResolvedValue(olcumYaniti(['111'], ['111']));
+    await svc.calistir(ctx, IDS.client, 'b'.repeat(64));
+    expect((await svc.oku(okuyan, IDS.client)).sorular.map((q) => q.kod)).toContain('kategori');
+  });
+
+  it('KRİTİK: sihirbazın beyanı yazılamazsa kurulum SESSİZ kalmaz, bayrak basılmaz', async () => {
+    const yazmaz = {
+      withTenant: <T>(_c: TenantContext, fn: (tx: unknown) => Promise<T>) =>
+        fn({ ...h.db, $queryRaw: async (q: { sql: string }) => (q.sql.startsWith('UPDATE clients') ? [] : h.db.$queryRaw(q as never)) }),
+    };
+    const k = new ClientSetupService({ create: async () => ({ id: IDS.client, name: 'Seed' }) } as never, {} as never, {} as never, yazmaz as never, { record: vi.fn() } as never);
+    const r = await k.setup(ctx, kurulumGirdisi({ specialAdCategories: ['HOUSING'] }), {});
+    expect(r.failures).toEqual([expect.objectContaining({ kind: 'kategori', reason: expect.stringMatching(/yeniden sorulacak.*kaydedilemedi/) })]);
+    expect(await satir()).toBeUndefined();
   });
 
   it('KRİTİK: sitedeki piksel seçilir, iki aday soru olur; bütçe para birimiyle saklanır', async () => {

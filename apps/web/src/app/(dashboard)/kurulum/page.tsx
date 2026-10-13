@@ -21,8 +21,12 @@ import { ADIMLAR, adimOku, turOku, type SecimKarti } from '@/components/kurulum/
  * Marka Merkezi'nde hesapları ve ölçümü kuran bölümün adı; iki ekranın aynı
  * adı taşıması "hangi kurulum?" sorusu doğuruyordu. Adres (`/kurulum`) yer
  * imleri ve bağlantılar kırılmasın diye aynı.
+ *
+ * Sekme başlığı sabitten TÜRÜYOR: elle yazılmış dize, ad bir gün yeniden
+ * değişince sekmede eski adı göstermeye devam ederdi (CLAUDE.md "aynı
+ * ekranın menüde ve sayfada iki ayrı adı oluyor").
  */
-export const metadata = { title: 'Yeni şirket / workspace aç · Advetics' };
+export const metadata = { title: `${ACILIS_ADI} · Advetics` };
 
 function first(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v[0] : v;

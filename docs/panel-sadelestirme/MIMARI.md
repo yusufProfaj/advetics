@@ -559,3 +559,17 @@ dosyası KALMADI (`ELLE_ADRES`, `API_GECIS`, `YONLENDIRME_BEKLEYEN`).
   `YONLENDIRME_BEKLEYEN`); kalıcı istisna yalnız `app/robots.ts`.
 - `marka-merkezi.spec.ts`: Ajan 2'nin eski kanallar sayfasının yönlendirdiği
   iddiası (S2-7) korundu.
+- **Ç-17 doğrulandı:** `/kurulum` adı `ACILIS_ADI`; sekme başlığı artık
+  sabitten türüyor (elle dize yoktu ama ayrışabilirdi), "Workspace'e geç"
+  önce `switch-client`, sonra `markaMerkeziAdresi('kurulum', yeniId)`.
+  İkisi `kurulum.spec.ts`te kilitli (mutasyonla ölçüldü).
+- **Ç-10 KAPANDI:** beyan yolu hazırlamadan `hazirlama/kategori-beyani.ts`e
+  çıkarıldı (sütun + `client.updated` denetim kaydı + `kategori_cevaplandi`
+  bayrağı, tek işlemde); hazırlama cevabı ve açılış sihirbazı İKİSİ de onu
+  çağırıyor. `clientSetupSchema.specialAdCategories` varsayılansız:
+  sihirbaz her zaman gönderiyor (boş liste = "hiçbiri" beyanı), Bağlantılar'daki
+  toplu açılış göndermiyor ve beyan sayılmıyor. Yazılamazsa kurulum geri
+  alınmıyor, `failures`ta `kind: 'kategori'` ile yazıyor. Shared sözleşmesine
+  iki küçük ek: alanın varsayılanı kalktı, `failures.kind`e `'kategori'`.
+  § 13'teki Ç-10 maddesi bununla kapandı. Ölçülmedi: canlıda sihirbazla
+  açılan bir workspace'in Kurulum'unda sorunun çıkmadığı gözle görülmedi.

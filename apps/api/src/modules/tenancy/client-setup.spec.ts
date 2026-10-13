@@ -134,7 +134,10 @@ beforeEach(() => {
     },
   } as unknown as MembersService;
 
-  svc = new ClientSetupService(clients, connections, members);
+  // Beyan yolu (Ç-10) gerçek veritabanıyla `hazirlama.spec.ts`te sınanıyor;
+  // burada yalnız orkestrasyon, işlem taklit.
+  const prisma = { withTenant: async () => undefined } as never;
+  svc = new ClientSetupService(clients, connections, members, prisma, { record: async () => undefined } as never);
 });
 
 describe('bağlam', () => {

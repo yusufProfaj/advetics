@@ -24,6 +24,7 @@ import { BilgiBankasiAiService } from '../tenancy/bilgi-bankasi-ai.service';
 import { ClientProfileService } from '../tenancy/client-profile.service';
 import { KitleSablonuService } from '../tenancy/kitle-sablonu.service';
 import { GOOGLE_TY_ASGARI_TRY_MICROS } from '../reklam/hazirlik.service';
+import { kategoriBeyaniYaz } from './kategori-beyani';
 
 const logger = new Logger('HazirlamaService');
 
@@ -421,28 +422,9 @@ export class HazirlamaService {
       pikselId = c.pikselId;
       guncelle({ kod: 'piksel', durum: 'tamam', baslik: secenek.etiket, neden: 'Sen seçtin' });
     } else if (c.kod === 'kategori') {
-      // Beyan ve denetim kaydı AYNI işlemde: konut beyanının kim tarafından
-      // ne zaman değiştirildiği politika soruşturmasında ilk sorulan şey
-      // (`clients.service.ts` ile aynı `client.updated` kaydı).
-      await this.prisma.withTenant(ctx, async (t) => {
-        const [once] = await t.$queryRaw<Array<{ kategoriler: string[] }>>(
-          Prisma.sql`SELECT special_ad_categories AS kategoriler FROM clients WHERE id = ${clientId}::uuid`,
-        );
-        // Politikası izin vermeyen UPDATE hata vermez, SIFIR satır etkiler:
-        // beyan yazılmadan "cevaplandı" basılırsa reklam kategorisiz açılır.
-        const yazilan = await t.$queryRaw<Array<{ id: string }>>(
-          Prisma.sql`UPDATE clients SET special_ad_categories = ${c.kategoriler}::text[] WHERE id = ${clientId}::uuid RETURNING id`,
-        );
-        if (yazilan.length !== 1 || !once) throw new ForbiddenException('Reklam kategorisi kaydedilemedi: bu workspace’i değiştirme yetkin yok.');
-        await this.audit.record(t as never, ctx, {
-          action: 'client.updated',
-          targetType: 'client',
-          targetId: clientId,
-          clientId,
-          before: { specialAdCategories: once.kategoriler },
-          after: { specialAdCategories: c.kategoriler, kaynak: 'hazirlama' },
-        });
-      });
+      // Beyan, denetim kaydı ve bayrak AYNI işlemde ve TEK yoldan
+      // (`kategori-beyani.ts`); açılış sihirbazı da aynı yolu kullanıyor.
+      await this.prisma.withTenant(ctx, (t) => kategoriBeyaniYaz(t, this.audit, ctx, clientId, c.kategoriler, 'hazirlama'));
       kategori = true;
       guncelle({ kod: 'kategori', durum: 'tamam', baslik: kategoriBasligi(c.kategoriler), neden: 'Bir kez cevaplandı; her reklamda yeniden sorulmaz' });
     } else if (c.kod === 'konum') {

@@ -392,3 +392,30 @@ describe('KRİTİK: eski kurulum yolları sihirbaza gidiyor', () => {
     expect(SIRKETLER).not.toContain("gonder('/manager-account', { name })");
   });
 });
+
+/**
+ * MIMARI Ç-17 — sihirbazın adı ve sonu. Ad "Kurulum" DEĞİL: o ad Marka
+ * Merkezi'nin bölümünde ve iki ekranın aynı adı taşıması "hangi kurulum?"
+ * sorusu doğuruyordu. Son adım Genel Bakış'a değil Kurulum listesine
+ * gidiyor: yeni workspace'in verisi yok, sıradaki iş o listede.
+ */
+describe('KRİTİK: açılış sihirbazının adı ve son adımı (Ç-17)', () => {
+  it('sekme başlığı ACILIS_ADI sabitinden türüyor, düz dize yok', () => {
+    expect(SAYFA).toContain('export const metadata = { title: `${ACILIS_ADI} · Advetics` };');
+    // Başlık da (tür kartı yoksa) aynı sabitte.
+    expect(SAYFA).toContain('{kart?.baslik ?? ACILIS_ADI}');
+    expect(SAYFA).not.toMatch(/['"`]Açılış/);
+  });
+
+  it('"Workspace’e geç" önce workspace’e geçiyor, sonra Marka Merkezi › Kurulum’a gidiyor', () => {
+    const i = SIHIRBAZ.indexOf('async function workspaceeGec(');
+    if (i < 0) throw new Error('workspaceeGec bulunamadı — tarama boşa düştü.');
+    const j = SIHIRBAZ.indexOf('\n  }\n', i);
+    const govde = SIHIRBAZ.slice(i, j);
+    const gecis = govde.indexOf("'/auth/switch-client'");
+    const hedef = govde.indexOf("window.location.assign(markaMerkeziAdresi('kurulum', sonuc.clientId))");
+    expect(gecis).toBeGreaterThan(-1);
+    expect(hedef).toBeGreaterThan(gecis);
+    expect(govde).not.toContain('/dashboard');
+  });
+});

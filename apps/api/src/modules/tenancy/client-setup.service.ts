@@ -1,6 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { ClientSetupInput, ClientSetupResult, TenantContext } from '@advetics/shared';
+import { PrismaService } from '../../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 import { ConnectionsService } from '../connections/connections.service';
+import { kategoriBeyaniYaz } from '../hazirlama/kategori-beyani';
 import { ClientsService } from './clients.service';
 import { MembersService } from './members.service';
 
@@ -40,6 +43,8 @@ export class ClientSetupService {
     private readonly clients: ClientsService,
     private readonly connections: ConnectionsService,
     private readonly members: MembersService,
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
   ) {}
 
   async setup(
@@ -47,7 +52,12 @@ export class ClientSetupService {
     input: ClientSetupInput,
     meta: Meta,
   ): Promise<ClientSetupResult> {
-    const client = await this.clients.create(ctx, input, meta);
+    // Alan gelmediyse (toplu açılış) sütun varsayılanı boş; beyan SAYILMAZ.
+    const client = await this.clients.create(
+      ctx,
+      { ...input, specialAdCategories: input.specialAdCategories ?? [] },
+      meta,
+    );
 
     /*
      * BAĞLAM YENİ MÜŞTERİYLE GENİŞLETİLİYOR — ve bu bir yetki açığı DEĞİL.
@@ -70,6 +80,37 @@ export class ClientSetupService {
     };
 
     const failures: ClientSetupResult['failures'] = [];
+
+    /*
+     * ═══ KATEGORİ BEYANI HAZIRLAMAYA DA YAZILIYOR (MIMARI Ç-10) ═══
+     *
+     * Sihirbaz soruyu sordu ve cevabı gönderdi; "hiçbiri" (boş liste) de bir
+     * cevap. Sütun `create`te yazıldı ama hazırlamanın "cevaplandı" bayrağı
+     * basılmıyordu: hazırlama boş listeyi "sorulmadı" sayıp soruyu Kurulum'da
+     * bir kez daha soruyordu. Yol hazırlamanın KENDİ beyan yolu (denetim
+     * kaydı dahil) — ikinci bir yazma yolu, ikisinin bir gün ayrışması demek.
+     *
+     * Alan gelmediyse (toplu açılış) soru sorulmadı: bayrak basılmaz, soru
+     * hazırlamada beklemeye devam eder. Düşerse kurulum geri alınmaz (aşağıya
+     * bkz. "kısmi başarı") ama SESSİZ de kalmaz: soru Kurulum'da yeniden
+     * çıkacak ve sebebi ekranda.
+     */
+    if (input.specialAdCategories !== undefined) {
+      const kategoriler = input.specialAdCategories;
+      try {
+        await this.prisma.withTenant(scoped, (t) =>
+          kategoriBeyaniYaz(t, this.audit, scoped, client.id, kategoriler, 'kurulum'),
+        );
+      } catch (err) {
+        failures.push({
+          kind: 'kategori',
+          id: client.id,
+          reason: `Özel reklam kategorisi kaydedilemedi, Kurulum'da yeniden sorulacak: ${
+            err instanceof Error ? err.message : 'bilinmeyen hata'
+          }`,
+        });
+      }
+    }
     let assignedAccounts = 0;
     let assignedProfiles = 0;
     /*
