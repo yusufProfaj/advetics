@@ -112,7 +112,7 @@ describe('karar', () => {
     const g = { ...TAM, profil: { ...TAM.profil!, hedefKitle: '   ', kategoriSayisi: 0 } };
     const m = madde(g, 'marka_bilgisi');
     expect(m.durum).toBe('eksik');
-    expect(m.aciklama).toContain('Boş: Ürün/hizmet kategorileri, Hedef kitle.');
+    expect(m.aciklama).toContain('Boş: Ürün/hizmet kategorileri, Kime satıyoruz.');
     expect(m.aciklama).not.toContain('Sektör');
   });
 

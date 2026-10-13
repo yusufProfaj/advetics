@@ -254,9 +254,30 @@ export class SyncController {
    */
   @Get('status')
   @RequirePermissions('insights.read')
-  async status(@CurrentTenant() ctx: TenantContext): Promise<SyncStatusResponse> {
+  async status(
+    @CurrentTenant() ctx: TenantContext,
+    @Query('clientId', new ParseUUIDPipe({ optional: true })) clientId?: string,
+  ): Promise<SyncStatusResponse> {
+    /*
+     * ADRESTEKİ WORKSPACE (docs/panel-sadelestirme/MIMARI.md Ç-12). Ekran
+     * Marka Merkezi › Workspace bilgileri › Veri durumu'na taşındı ve o sayfa
+     * workspace'i ADRESTEN (`?musteri=`) okuyor; bu uç ise oturumdaki aktif
+     * seçimi okuyordu. Başka sekmede başka workspace seçmiş kullanıcı, A'nın
+     * sayfasında B'nin verisini görürdü — hatasız ve başlığı A diyen bir
+     * ekranda.
+     *
+     * Doğrulama `ctx.clientIds` ile: erişemediği bir workspace'in kimliği
+     * 404 alıyor (403 değil: kimliğin VAR olduğu bilgisi de sızmasın).
+     * Kapsam daraltma RLS'in kendi mekanizmasıyla (`activeClientId`), elle
+     * yazılmış bir `WHERE client_id` değil: aşağıdaki dört sorgunun hepsine
+     * ayrı ayrı süzgeç eklemek, birini unutmak demekti.
+     */
+    if (clientId !== undefined && !ctx.clientIds.includes(clientId)) {
+      throw new NotFoundException('Workspace bulunamadı.');
+    }
+    const kapsam: TenantContext = clientId === undefined ? ctx : { ...ctx, activeClientId: clientId };
     const { rows, jobs, jobsTotal, failedCount, emptyCount, runningCount, sonIsler } =
-      await this.prisma.withTenant(ctx, async (tx) => {
+      await this.prisma.withTenant(kapsam, async (tx) => {
       /*
        * YALNIZCA ATANMIŞ HESAPLAR. `clientId: { not: null }` şart:
        * `ad_accounts` RLS politikasının NULL dalı org yöneticisine havuzun

@@ -33,7 +33,7 @@ import {
 } from '@advetics/shared';
 import { baglanti } from '@/lib/baglanti';
 import { REKLAM_YONETICISI } from '@/lib/reklam-yoneticisi';
-import { mmAdresi } from '@/components/marka-merkezi/bolumler';
+import { markaMerkeziAdresi } from '@/lib/panel-adresleri';
 
 /**
  * ═══ SİNYALLER + BİLDİRİMLER: EKRANIN SAF KARARLARI (Paket A, Ajan 3) ═══
@@ -145,7 +145,7 @@ export function bosMetni(liste: SinyalListesi, gorunum: SinyalGorunumu): BosMetn
   const metinler: Record<SinyalBosNedeni, BosMetni> = {
     hesap_yok: {
       baslik: 'Bu workspace’e reklam hesabı atanmamış',
-      metin: 'Sinyaller atanmış hesapların günlük verisinden hesaplanır. Hesabı Marka Merkezi › Bağlantılar’dan atayın.',
+      metin: 'Sinyaller atanmış hesapların günlük verisinden hesaplanır. Hesabı Marka Merkezi › Kurulum’da atayın.',
       eylem: 'hesap_ata',
     },
     hesaplanmadi: {
@@ -409,7 +409,7 @@ export function satirEylemi(s: Sinyal, yetki: { butce: boolean; kural: boolean }
     case 'incele':
       return { ...bos, birincil: inceleBag };
     case 'olcum':
-      return { ...bos, birincil: { tur: 'bag', href: mmAdresi(e.clientId, 'olcum'), etiket: 'Ölçümü aç' } };
+      return { ...bos, birincil: { tur: 'bag', href: markaMerkeziAdresi('kurulum', e.clientId, 'olcum'), etiket: 'Ölçümü aç' } };
   }
 }
 

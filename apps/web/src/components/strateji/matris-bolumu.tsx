@@ -415,7 +415,7 @@ function DuzenlenenSatir({
           ))}
         </select>
         {kitleler.tur === 'geldi' && kitleler.veri.items.length === 0 && (
-          <p className="text-xs text-ink-muted">Base’te kitle şablonu yok. Marka Merkezi › Kitleler’den ekle.</p>
+          <p className="text-xs text-ink-muted">Base’te kitle şablonu yok. Varlıklar › Kitleler’den ekle.</p>
         )}
         {s.platform === 'google' && (
           <input
@@ -489,7 +489,7 @@ function VarlikSecici({
       <div className="mt-2 max-h-64 space-y-1 overflow-y-auto rounded-lg border border-line bg-surface p-2">
         {gorseller.tur !== 'geldi' && <p className="text-xs text-ink-muted">Görsel listesi hazır değil.</p>}
         {gorseller.tur === 'geldi' && liste.length === 0 && (
-          <p className="text-xs text-ink-muted">Base’te görsel yok. Marka Merkezi › Varlıklar’dan yükle.</p>
+          <p className="text-xs text-ink-muted">Base’te görsel yok. Varlıklar › Görseller’den yükle.</p>
         )}
         {listedeYok.map((id) => {
           const ad = kayitli?.varliklar.find((v) => v.id === id)?.ad ?? null;

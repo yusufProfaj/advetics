@@ -517,14 +517,6 @@ const KALICI_ISTISNA = new Set<string>([
  * MIMARI § Dosya sahipliği.
  */
 const ELLE_ADRES_GECIS_ISTISNASI = new Set<string>([
-  'components/marka-merkezi/bolumler.ts',
-  'components/marka-merkezi/hazirlik-listesi.tsx',
-  'components/marka-merkezi/kurulum-mantik.ts',
-  'components/marka-merkezi/varliklar.ts',
-  'components/marka-merkezi/veri-kaynaklari.tsx',
-  'components/rehber/adim-amac-nerede.tsx',
-  'components/rehber/adim-kime.tsx',
-  'lib/nav-sections.ts',
 ]);
 
 /**
@@ -533,24 +525,6 @@ const ELLE_ADRES_GECIS_ISTISNASI = new Set<string>([
  */
 const ESKI_URETICI = /\b(mmAdresi|varlikYonu|bilgiBankasiYonu)\(/;
 const ESKI_URETICI_GECIS_ISTISNASI = new Set<string>([
-  'app/(dashboard)/kutuphane/bilgi-bankasi/page.tsx',
-  'app/(dashboard)/kutuphane/formlar/page.tsx',
-  'app/(dashboard)/kutuphane/gorseller/page.tsx',
-  'app/(dashboard)/kutuphane/kreatifler/page.tsx',
-  'app/(dashboard)/marka-merkezi/page.tsx',
-  'components/assets/asset-library.tsx',
-  'components/iyilestir/kreatifler-sekmesi.tsx',
-  'components/iyilestir/sinyaller-sekmesi.tsx',
-  'components/marka-merkezi/bolumler.ts',
-  'components/marka-merkezi/hazirlik-listesi.tsx',
-  'components/marka-merkezi/ic-menu.tsx',
-  'components/marka-merkezi/kurulum-bolumu.tsx',
-  'components/marka-merkezi/olcum-bolumu.tsx',
-  'components/marka-merkezi/varliklar/formlar.tsx',
-  'components/rehber/rehber-ekrani.tsx',
-  'components/report/haftalik-ozet.tsx',
-  'components/rules/rule-editor.tsx',
-  'lib/sinyal.ts',
 ]);
 
 /** API'de panel yolu yazan dosyalar — shared üreticiye geçecek (Ajan 2). */
@@ -596,7 +570,10 @@ describe('KRİTİK: TEK ÜRETİCİ — panelde elle Ayarlar / Marka Merkezi / Va
 
   it('eski üretici (mmAdresi/varlikYonu/bilgiBankasiYonu) yeni dosyada kullanılmıyor; bayat istisna yok', () => {
     const b = ihlaller(WEB_SRC, ESKI_URETICI);
-    expect(b.length).toBeGreaterThan(0);
+    // Liste BOŞALDI (Ajan 3, 2026-10-13): tarama boşa düşmesin diye desenin
+    // kendisi sınanıyor; "hiç ihlal yok" ile "desen bozuk" ayırt edilsin.
+    expect(ESKI_URETICI.test("mmAdresi(id, 'marka')")).toBe(true);
+    expect(ESKI_URETICI.test('markaMerkeziAdresi(')).toBe(false);
     expect(mandal(b, ESKI_URETICI_GECIS_ISTISNASI)).toEqual({ yeni: [], bayat: [] });
   });
 
@@ -612,10 +589,6 @@ describe('KRİTİK: TEK ÜRETİCİ — panelde elle Ayarlar / Marka Merkezi / Va
  * yönleniyor); her biri yazıldıkça listeden çıkar.
  */
 const YONLENDIRME_BEKLEYEN = new Set<EskiAdresAnahtari>([
-  'kutuphane/bilgi-bankasi',
-  'kutuphane/gorseller',
-  'kutuphane/kreatifler',
-  'kutuphane/formlar',
 ]);
 
 describe('KRİTİK: ESKİ ADRESLER YÖNLENİYOR — 404 yok', () => {
@@ -638,7 +611,7 @@ describe('KRİTİK: ESKİ ADRESLER YÖNLENİYOR — 404 yok', () => {
   });
 
   it('Marka Merkezi eski ?bolum= değerlerini eşlemeden yönlendiriyor (Ajan 3 yazınca bayrak false olur)', () => {
-    const MM_ESKI_BOLUM_BEKLIYOR = true;
+    const MM_ESKI_BOLUM_BEKLIYOR = false;
     const kod = yorumsuz(readFileSync(join(DASHBOARD, 'marka-merkezi', 'page.tsx'), 'utf8'));
     expect(kod.includes('eskiMarkaMerkeziYonu(')).toBe(!MM_ESKI_BOLUM_BEKLIYOR);
   });

@@ -22,7 +22,7 @@ import {
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { baglanti } from '@/lib/baglanti';
 import { kaydedilecekKanallar, kanalAdi, kanalSecimi } from '@/lib/sinyal';
-import { mmAdresi } from '@/components/marka-merkezi/bolumler';
+import { markaMerkeziAdresi } from '@/lib/panel-adresleri';
 
 /**
  * Kural düzenleyici.
@@ -387,7 +387,7 @@ export function RuleEditor({
                 <strong>Bu workspace’te bildirim kanalı yok.</strong> Kural çalışır ve eşleşmeleri kural geçmişine yazar, ama
                 kimseye haber gitmez.
               </p>
-              <Link href={mmAdresi(clientId, 'bildirimler')} className="mt-1.5 inline-block font-semibold text-brand-strong underline">
+              <Link href={markaMerkeziAdresi('workspace', clientId, 'bildirimler')} className="mt-1.5 inline-block font-semibold text-brand-strong underline">
                 Kanal ekle
               </Link>
             </div>

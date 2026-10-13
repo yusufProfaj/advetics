@@ -1,10 +1,11 @@
 import { redirect } from 'next/navigation';
-import { varlikYonu } from '@/components/marka-merkezi/bolumler';
+import { eskiAdresYonu } from '@/lib/panel-adresleri';
 
 /**
- * Marka Merkezi › Varlıklar içine taşındı (2026-10-06). Bu adres menüde hiç
- * görünmüyordu ve geri dönmenin yolu tarayıcının geri tuşuydu. Silinmiyor,
- * yönleniyor; süzgeç parametreleri (`tur`, `form`) taşınıyor.
+ * ESKİ VARLIK ADRESİ → Base › Varlıklar (docs/panel-sadelestirme/MIMARI.md
+ * § 3). Silinmiyor, yönleniyor; süzgeç parametreleri (`tur`, `form`)
+ * taşınıyor ve `tur=logo` logonun evine (Marka › Logo) gidiyor. Eşleme tek
+ * yerde: `ESKI_ADRESLER`.
  */
 export default async function Yonlendirme({
   searchParams,
@@ -12,7 +13,7 @@ export default async function Yonlendirme({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const p = await searchParams;
-  redirect(varlikYonu(ilk(p.musteri), 'formlar', { tur: ilk(p.tur), form: ilk(p.form) }));
+  redirect(eskiAdresYonu('kutuphane/formlar', { musteri: ilk(p.musteri), sorgu: { tur: ilk(p.tur), form: ilk(p.form) } }));
 }
 
 function ilk(v: string | string[] | undefined): string | undefined {

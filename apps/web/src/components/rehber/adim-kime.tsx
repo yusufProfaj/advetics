@@ -11,7 +11,7 @@ import {
   type RehberKonumu,
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
-import { baglanti } from '@/lib/baglanti';
+import { markaMerkeziAdresi } from '@/lib/panel-adresleri';
 import { AltCubuk, Soru, Uyari, type AdimBaglami } from './adim-ortak';
 import {
   KATEGORI_SECENEKLERI,
@@ -118,9 +118,9 @@ export function AdimKime({
             </div>
             {!adresKonumu && (
               <p className={s.ipucu}>
-                Adresin harita konumunu Marka Merkezi &gt; Workspace ayarları &gt; İletişim ve firma bölümüne gir (Google Haritalar&apos;da adrese sağ
+                Adresin harita konumunu Marka Merkezi &gt; Workspace bilgileri &gt; İletişim ve firma bölümüne gir (Google Haritalar&apos;da adrese sağ
                 tıklayıp ilk satırı kopyala).{' '}
-                <Link href={baglanti('/marka-merkezi', { bolum: 'ayarlar', musteri: b.clientId })} className={s.metinDugme}>
+                <Link href={markaMerkeziAdresi('workspace', b.clientId, 'firma')} className={s.metinDugme}>
                   Marka Merkezi&apos;ne git
                 </Link>
               </p>

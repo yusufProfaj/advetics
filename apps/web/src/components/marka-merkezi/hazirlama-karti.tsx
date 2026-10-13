@@ -1,7 +1,6 @@
 'use client';
 
-import Link from 'next/link';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import {
   SPECIAL_AD_CATEGORIES,
   SPECIAL_AD_CATEGORY_META,
@@ -13,171 +12,29 @@ import {
   type SpecialAdCategory,
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
-import { baglanti } from '@/lib/baglanti';
 import { Dugme } from '@/components/ui/dugme';
-import { Uyari } from '@/components/ui/uyari';
 import { HedeflemeSecici } from '@/components/autoboost/hedefleme-secici';
-import { ADIM_ADI, ADIM_DURUM_TONU, GENEL_DURUM_METNI, YOKLAMA_ARALIGI_MS, YOKLAMA_SINIRI, butceGirdisi, yoklamaGerekli } from './hazirlama-mantik';
+import { butceGirdisi } from './hazirlama-mantik';
 
 /**
- * ═══ HAZIR WORKSPACE KARTI (HAZIR-WORKSPACE-PLANI.md § Dalga 3) ═══
+ * ═══ HAZIRLAMA SORULARI (HAZIR-WORKSPACE-PLANI.md § Dalga 3) ═══
  *
- * Kullanıcı (2026-10-12): "kullanıcı neredeyse hiç uğraşmaması lazım, marka
- * merkezini doldurmayla falan". Hesap atanınca sistem siteyi, marka
- * bilgilerini, pikseli, bütçeyi KENDİSİ hazırlıyor; bu kart yalnız SONUCU
- * ve tahmin edilemeyen soruları (iki piksel, kategori beyanı, hizmet bölgesi)
- * gösteriyor. Soru yoksa kart tek satıra iner: "Reklama hazır".
+ * Hesap atanınca sistem siteyi, marka bilgilerini, pikseli ve bütçeyi
+ * KENDİSİ hazırlıyor; burada yalnız tahmin edilemeyen soruların (iki piksel,
+ * özel kategori beyanı, hizmet bölgesi) ve günlük bütçenin girdisi var.
  *
- * Okuma hazırlığı TETİKLİYOR (sunucu, imza değiştiyse); kart çalışırken
- * yokluyor ve sınırda durup bunu söylüyor.
+ * KART KALKTI (2026-10-13): "Reklam hazırlığı" kartı Bağlantılar'da kendi
+ * sayacıyla duruyordu; şimdi soruları Kurulum'un ilgili adımlarının İÇİNDE
+ * (piksel → Meta pikseli, kategori/konum/bütçe → Reklam varsayılanları) ve
+ * sayaç tek (`kurulum-listesi.tsx`, docs/panel-sadelestirme/MIMARI.md § 7).
  */
-type Hal = { tur: 'okunuyor' } | { tur: 'hata'; mesaj: string } | { tur: 'geldi'; veri: HazirlamaYaniti };
-
 const hataMetni = (e: unknown) => (e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.');
 
-const TON_SINIFI: Record<'tamam' | 'soru' | 'eksik' | 'pasif', string> = {
-  tamam: 'bg-ok',
-  soru: 'bg-brand',
-  eksik: 'bg-danger',
-  pasif: 'bg-line',
-};
-
-export function HazirlamaKarti({ clientId, yazabilir }: { clientId: string; yazabilir: boolean }) {
-  const [hal, setHal] = useState<Hal>({ tur: 'okunuyor' });
-  const [yeniden, setYeniden] = useState(false);
-  const [yoklamaBitti, setYoklamaBitti] = useState(false);
-  const yoklama = useRef(0);
-
-  const oku = useCallback(async () => {
-    try {
-      setHal({ tur: 'geldi', veri: await apiFetch<HazirlamaYaniti>(`/clients/${clientId}/hazirlama`) });
-    } catch (e) {
-      setHal({ tur: 'hata', mesaj: hataMetni(e) });
-    }
-  }, [clientId]);
-
-  useEffect(() => {
-    void oku();
-  }, [oku]);
-
-  const calisiyor = hal.tur === 'geldi' && yoklamaGerekli(hal.veri.durum);
-  useEffect(() => {
-    if (!calisiyor) {
-      yoklama.current = 0;
-      return;
-    }
-    if (yoklama.current >= YOKLAMA_SINIRI) {
-      setYoklamaBitti(true);
-      return;
-    }
-    const z = window.setTimeout(() => {
-      yoklama.current += 1;
-      void oku();
-    }, YOKLAMA_ARALIGI_MS);
-    return () => window.clearTimeout(z);
-  }, [calisiyor, hal, oku]);
-
-  async function yenidenHazirla() {
-    setYeniden(true);
-    setYoklamaBitti(false);
-    yoklama.current = 0;
-    try {
-      setHal({ tur: 'geldi', veri: await apiFetch<HazirlamaYaniti>(`/clients/${clientId}/hazirlama`, { method: 'POST' }) });
-    } catch (e) {
-      setHal({ tur: 'hata', mesaj: hataMetni(e) });
-    } finally {
-      setYeniden(false);
-    }
-  }
-
-  if (hal.tur === 'okunuyor') {
-    return <p className="rounded-xl border border-line bg-surface p-5 text-sm text-ink-muted">Reklam hazırlığı okunuyor…</p>;
-  }
-  if (hal.tur === 'hata') {
-    return (
-      <Uyari ton="tehlike" baslik="Reklam hazırlığı alınamadı.">
-        {hal.mesaj}{' '}
-        <button type="button" className="font-semibold underline" onClick={() => void oku()}>
-          Yeniden dene
-        </button>
-      </Uyari>
-    );
-  }
-
-  const v = hal.veri;
-  return (
-    <section aria-labelledby="hazirlama-baslik" className="rounded-xl border border-line bg-surface">
-      <div className="flex flex-wrap items-center gap-3 border-b border-line px-5 py-4">
-        <div className="min-w-0 flex-1">
-          <h3 id="hazirlama-baslik" className="font-baslik text-base font-semibold text-ink">
-            Reklam hazırlığı · {GENEL_DURUM_METNI[v.durum]}
-          </h3>
-          <p className="text-xs text-ink-muted">
-            {calisiyor
-              ? 'Site, marka bilgileri ve piksel okunuyor. Bu sayfadan ayrılabilirsin, iş arka planda sürer.'
-              : 'Reklam kurarken bunlar önden dolu gelir; sen yalnız amacı ve görseli seçersin.'}
-            {v.sonCalisma && !calisiyor && ` Son hazırlık: ${new Date(v.sonCalisma).toLocaleString('tr-TR', { dateStyle: 'medium', timeStyle: 'short' })}.`}
-          </p>
-        </div>
-        {yazabilir && (
-          <Dugme ton="ikincil" boyut="kucuk" bekliyor={yeniden || calisiyor} onClick={() => void yenidenHazirla()}>
-            Yeniden hazırla
-          </Dugme>
-        )}
-        {v.durum === 'hazir' && (
-          <Link href={baglanti('/reklam', { musteri: clientId })} className="text-sm font-semibold text-brand-strong hover:underline">
-            Reklam kur
-          </Link>
-        )}
-      </div>
-
-      {yoklamaBitti && calisiyor && (
-        <div className="px-5 pt-4">
-          <Uyari ton="uyari" baslik="Hazırlık beklenenden uzun sürüyor.">
-            Sayfayı yenileyerek durumu tekrar okuyabilirsin. Site yavaşsa ya da platform yanıt vermiyorsa adımlar hata nedeniyle görünecek.
-          </Uyari>
-        </div>
-      )}
-
-      {v.sorular.length > 0 && !yazabilir && (
-        <p className="border-b border-line px-5 py-3 text-sm text-ink-muted">
-          {v.sorular.length} soru cevap bekliyor; cevabı workspace’i düzenleme yetkisi olan kişi verecek.
-        </p>
-      )}
-      {v.sorular.length > 0 && yazabilir && (
-        <div className="space-y-3 border-b border-line px-5 py-4">
-          {v.sorular.map((q) => (
-            <Soru key={q.kod} clientId={clientId} soru={q} guncelle={(y) => setHal({ tur: 'geldi', veri: y })} />
-          ))}
-        </div>
-      )}
-
-      <ul className="divide-y divide-line">
-        {v.adimlar.map((a) => (
-          <li key={a.kod} className="flex flex-wrap items-start gap-x-3 gap-y-0.5 px-5 py-2.5 text-sm">
-            <span aria-hidden className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${TON_SINIFI[ADIM_DURUM_TONU[a.durum]]}`} />
-            {/* Mobilde etiket üstte: sabit genişlikli sütun site adresini taşırıyordu. */}
-            <span className="min-w-0 flex-1 text-ink-muted sm:w-36 sm:flex-none">{ADIM_ADI[a.kod]}</span>
-            <span className="min-w-0 basis-full break-words pl-5 sm:basis-0 sm:flex-1 sm:pl-0 [overflow-wrap:anywhere]">
-              <span className="font-medium text-ink">{a.baslik}</span>
-              <span className="block text-xs text-ink-muted">{a.neden}</span>
-            </span>
-            {a.kod === 'butce' && yazabilir && <ButceDegistir clientId={clientId} guncelle={(y) => setHal({ tur: 'geldi', veri: y })} />}
-          </li>
-        ))}
-      </ul>
-      {v.adimlar.length === 0 && !calisiyor && (
-        <p className="px-5 py-4 text-sm text-ink-muted">Hazırlık henüz koşmadı. Bu workspace’e bir reklam hesabı atandığında kendiliğinden başlar.</p>
-      )}
-    </section>
-  );
-}
-
-async function cevapla(clientId: string, c: HazirlamaCevabi): Promise<HazirlamaYaniti> {
+export async function cevapla(clientId: string, c: HazirlamaCevabi): Promise<HazirlamaYaniti> {
   return apiFetch<HazirlamaYaniti>(`/clients/${clientId}/hazirlama/cevap`, { method: 'POST', body: JSON.stringify(c) });
 }
 
-function Soru({ clientId, soru, guncelle }: { clientId: string; soru: HazirlamaSorusu; guncelle: (y: HazirlamaYaniti) => void }) {
+export function Soru({ clientId, soru, guncelle }: { clientId: string; soru: HazirlamaSorusu; guncelle: (y: HazirlamaYaniti) => void }) {
   const [gonderiliyor, setGonderiliyor] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
   const [piksel, setPiksel] = useState<string | null>(null);
@@ -272,7 +129,7 @@ function Soru({ clientId, soru, guncelle }: { clientId: string; soru: HazirlamaS
   );
 }
 
-function ButceDegistir({ clientId, guncelle }: { clientId: string; guncelle: (y: HazirlamaYaniti) => void }) {
+export function ButceDegistir({ clientId, guncelle }: { clientId: string; guncelle: (y: HazirlamaYaniti) => void }) {
   const [acik, setAcik] = useState(false);
   const [metin, setMetin] = useState('');
   const [hata, setHata] = useState<string | null>(null);

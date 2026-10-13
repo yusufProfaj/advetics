@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { PANEL_KAPILARI, ROLE_PERMISSIONS, STRATEJI_SAYFA_IZNI, kapiAcikMi, type Permission } from '@advetics/shared';
-import { SAYFA_GIRIS_IZNI } from '@/components/bilgi-bankasi/sekmeler';
+import { MARKA_MERKEZI_IZNI, VARLIKLAR_IZNI } from './panel-adresleri';
 import { SECTIONS, visibleSections } from './nav-sections';
 
 /**
@@ -105,26 +105,31 @@ describe('menü verisi gerçekten okunuyor', () => {
     expect(korumali.length).toBeGreaterThanOrEqual(4);
   });
 
-  it('Base bölümünün TEK kapısı Marka Merkezi — Bilgi Bankası ayrı satır değil', () => {
+  it('Base iki satır: Marka Merkezi ve Varlıklar — Bilgi Bankası ayrı satır değil', () => {
     /*
      * Kullanıcı: "nereye nereden girdiğimi unutuyorum" (2026-10-06). Bilgi
      * Bankası aynı workspace profilinin yarısını ayrı bir sayfada
-     * gösteriyordu; içeriği Marka Merkezi › Marka'ya taşındı ve eski adres
-     * oraya yönleniyor. Satırın geri gelmesi, iki kapılı yapının geri
-     * gelmesi demek.
+     * gösteriyordu; içeriği Marka Merkezi › Marka'ya taşındı. 2026-10-13'ten
+     * beri Varlıklar (görsel, kreatif, form, kitle) ayrı satır (Karar B,
+     * docs/panel-sadelestirme/MIMARI.md): her gün açılan malzeme bir kurulum
+     * ekranının iç menüsünde durmamalı.
      */
     const base = SECTIONS.find((s) => s.title === 'Base');
     expect(base, 'Base bölümü yok — tarama boşa düştü').toBeDefined();
-    expect(base!.items.map((i) => i.label)).toEqual(['Marka Merkezi']);
+    expect(base!.items.map((i) => i.label)).toEqual(['Marka Merkezi', 'Varlıklar']);
     expect(SECTIONS.flatMap((s) => s.items).some((i) => i.label === 'Bilgi Bankası')).toBe(false);
   });
 
-  it('KRİTİK: Marka Merkezi satırı eski Bilgi Bankası kapısını (client.write) taşıyor', () => {
-    // Müşteri hesabı (client.read) bu ekranı görmüyor; kullanıcı sınırı üç
-    // ekranla çizdi. Eski Bilgi Bankası'nın kapısı da buydu.
-    const satir = SECTIONS.flatMap((s) => s.items).find((i) => i.href === '/marka-merkezi');
-    expect(satir?.perm).toBe(SAYFA_GIRIS_IZNI);
-    expect(SAYFA_GIRIS_IZNI).toBe('client.write');
+  it('KRİTİK: Marka Merkezi ve Varlıklar satırları sözleşmenin kapısını taşıyor', () => {
+    // Müşteri hesabı (client.read) iki ekranı da görmüyor; kullanıcı sınırı
+    // dört ekranla çizdi. Satırın izni sayfanın kapısıyla AYNI sabitten.
+    const satir = (href: string) => SECTIONS.flatMap((s) => s.items).find((i) => i.href === href);
+    expect(satir('/marka-merkezi')?.perm).toBe(MARKA_MERKEZI_IZNI);
+    expect(MARKA_MERKEZI_IZNI).toBe('client.write');
+    expect(satir('/varliklar')?.perm).toBe(VARLIKLAR_IZNI);
+    for (const izin of [MARKA_MERKEZI_IZNI, VARLIKLAR_IZNI]) {
+      expect(ROLE_PERMISSIONS.client_viewer).not.toContain(izin);
+    }
   });
 
   it('KRİTİK: iş bölümlerinin HER satırı yetki taşıyor', () => {

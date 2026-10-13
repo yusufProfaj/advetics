@@ -13,7 +13,7 @@ import {
   type OzetKitlesi,
 } from '@advetics/shared';
 import { AliciListesiAlani } from '@/components/alici-listesi-alani';
-import { mmAdresi } from '@/components/marka-merkezi/bolumler';
+import { markaMerkeziAdresi } from '@/lib/panel-adresleri';
 import { Halka } from '@/components/yukleniyor';
 import { apiFetch } from '@/lib/api';
 import {
@@ -204,7 +204,7 @@ export function HaftalikOzetSekmesi({
                 ) : (
                   <p className="text-ink-muted">Haftalık özeti alan kanal yok. Slack, Teams ya da e-posta kanalında &ldquo;Haftalık özet&rdquo; seçilince pazartesi sabahı oraya da gider.</p>
                 )}
-                <Link href={mmAdresi(clientId, 'bildirimler')} className="inline-block text-xs font-semibold text-ink underline">
+                <Link href={markaMerkeziAdresi('workspace', clientId, 'bildirimler')} className="inline-block text-xs font-semibold text-ink underline">
                   Marka Merkezi › Bildirimler
                 </Link>
               </div>

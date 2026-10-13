@@ -662,7 +662,7 @@ const MARKA_KAYNAGI: Record<YoutubeOtomatikOnizleme['marka']['kaynak'], string> 
 
 const LOGO_KAYNAGI: Record<YoutubeOtomatikOnizleme['logo']['kaynak'], string> = {
   'on-ayar': 'Ön ayarda seçilmiş',
-  'profil-logosu': 'Bilgi Bankası logosu',
+  'profil-logosu': 'Marka logosu',
   kanal: 'YouTube kanal görseli (ilk yayında arşive eklenir)',
   yok: 'Bulunamadı',
 };

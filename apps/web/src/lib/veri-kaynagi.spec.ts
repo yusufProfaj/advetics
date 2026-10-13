@@ -51,10 +51,11 @@ describe('kaynak kartı durumu', () => {
     expect(kaynakDurumMetni({ durum: 'duraklatildi' }).ton).toBe('gri');
   });
 
-  it('kart grubu Bağlantılar bölümünün İÇİNDE (ayrı bölüm değil) ve hatayı yutmuyor', () => {
+  it('kart grubu Kurulum bölümünün İÇİNDE (ayrı bölüm değil) ve hatayı yutmuyor', () => {
+    // 2026-10-13: eski Bağlantılar bölümü Kurulum'a katlandı (docs/panel-sadelestirme/MIMARI.md).
     const sayfa = readFileSync(join(__dirname, '../app/(dashboard)/marka-merkezi/page.tsx'), 'utf8');
-    const bas = sayfa.indexOf("bolum === 'baglantilar'");
-    if (bas < 0) throw new Error('bağlantılar bölümü bulunamadı');
+    const bas = sayfa.indexOf("bolum === 'kurulum'");
+    if (bas < 0) throw new Error('kurulum bölümü bulunamadı');
     expect(sayfa.slice(bas, sayfa.indexOf("bolum === 'marka'", bas))).toContain('<VeriKaynaklari');
     const kart = readFileSync(join(__dirname, '../components/marka-merkezi/veri-kaynaklari.tsx'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     expect(kart).not.toMatch(/\.catch\(\(\) => set\w+\(\[\]\)\)/);

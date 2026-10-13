@@ -60,6 +60,14 @@ describe('workspace_kurulum RLS', () => {
     expect(await asUser(`SELECT client_id FROM workspace_kurulum`, [A])).toEqual([{ client_id: A }]);
   });
 
+  it('KRİTİK: platform beyanı (yeni kolon) yalnız kendi workspace\'inde yazılır — başkasınınki sıfır satır', async () => {
+    await h.q(`INSERT INTO workspace_kurulum (client_id, org_id) VALUES ($1, $2)`, [A, ORG]);
+    expect(await asUser(`UPDATE workspace_kurulum SET kullanilmayan_platformlar = ARRAY['google'] WHERE client_id = '${A}' RETURNING client_id`, [A])).toHaveLength(1);
+    expect(await asUser(`UPDATE workspace_kurulum SET kullanilmayan_platformlar = ARRAY['google'] WHERE client_id = '${B}' RETURNING client_id`, [A])).toEqual([]);
+    const [b] = await h.q<{ k: string[] }>(`SELECT kullanilmayan_platformlar AS k FROM workspace_kurulum WHERE client_id = $1`, [B]);
+    expect(b!.k).toEqual([]);
+  });
+
   it('KRİTİK: başka workspace\'in satırını göremez, güncelleyemez (sıfır satır), ekleyemez', async () => {
     expect(await asUser(`SELECT client_id FROM workspace_kurulum WHERE client_id = '${B}'`, [A])).toEqual([]);
     expect(await asUser(`UPDATE workspace_kurulum SET hesap_sahibi = 'sirket' WHERE client_id = '${B}' RETURNING client_id`, [A])).toEqual([]);

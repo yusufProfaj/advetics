@@ -461,7 +461,12 @@ tek birincil eylem); Varlıklar = "Öğe kitaplığı" (sekmeler). Mobilde sekme
 
 ---
 
-## 14. Ajan 2 devir notu (Ayarlar tarafı, 2026-10-13)
+## 14. Sapmalar ve devir notları (Ajan 2 ‖ Ajan 3, 2026-10-13)
+
+İki ajan aynı sözleşmeden (9a85bb0c) paralel çalıştı; notları birleştirmede
+yan yana bırakıldı. Birleştirmenin kapattığı maddeler 14c'de.
+
+### 14a. Ajan 2 devir notu (Ayarlar tarafı)
 
 **Yapılan:** dört sekme (`/ayarlar/sirketler`, `/baglantilar`, `/ekip[?workspace=]`,
 `/hesabim`), başlıkta kapsam satırı (`components/ayar-kapsam.tsx`: Ajans / Şirket /
@@ -510,3 +515,47 @@ dosyası KALMADI (`ELLE_ADRES`, `API_GECIS`, `YONLENDIRME_BEKLEYEN`).
 - Arşiv kartı yalnız `workspace.geriAl` kapısında (org yöneticisi) listeyi
   çekiyor; RLS arşivliyi zaten yalnız ona gösteriyor. Diğerlerine kapının
   sebebi yazıyor.
+
+### 14b. Ajan 3 sapmaları (Marka Merkezi + Varlıklar)
+
+- **Ç-10 özel kategori — yazma İKİ uçtan, ekran TEK.** İlk beyan (soru
+  bekliyorsa) `/hazirlama/cevap {kategori}`; beyan verildikten sonra
+  değiştirmek `PATCH /clients/:id` (`SpecialCategoryPicker`). Sebep:
+  hazırlama ucu bekleyen soru yokken cevabı BİLEREK reddediyor (Ajan 4 Ö6,
+  "konut beyanı ayar ekranı dışından sessizce silinmesin") ve
+  `modules/hazirlama/**` § 9'da kimseye verilmemiş. Ekran tek (Kurulum ›
+  Reklam varsayılanları); "cevaplandı" bayrağı ilk beyanla zaten basılı.
+  Ölçülmedi: PATCH'ten sonra hazırlama adımının `baslik`ı eski kategoriyi
+  "Yeniden hazırla"ya kadar gösterebilir (adım listesinde, panelde
+  seçicinin değeri doğru).
+- **Ç-9 varsayılan konum.** Soru bekliyorsa `/hazirlama/cevap {konum}`;
+  değilse MEVCUT şablondan seçim (`PUT /audience-templates/varsayilan`),
+  yeni konum Varlıklar › Kitleler'de şablon olarak. § 13'teki "her
+  Değiştir'de yeni Varsayılan şablonu" birikmesi böylece kapandı.
+- **`/kurulum` sihirbazının adı ve son adımı YAPILMADI**: `app/(dashboard)/
+  kurulum/page.tsx` ve `components/kurulum/**` § 9'da Ajan 2'nin; paralel
+  çakışmamak için dokunulmadı (görev listesinde Ajan 3'e de yazılıydı).
+- **`panel-adresleri.spec.ts` › eski üretici taraması**: liste BOŞALINCA
+  "en az bir ihlal var" iddiası imkânsız oldu; yerine desenin kendisi
+  sınanıyor (boşa düşme bekçisi korunarak).
+- **Kurulum yazmaları aktif workspace şartı** (mevcut API kuralı,
+  `kurulum.service.ts#erisim`): adresteki workspace oturumdakinden farklıysa
+  liste bunu önceden söylüyor; platform beyanı da aynı kurala bağlı.
+- **Sözleşme eki YOK**: `KurulumListesiParcasi` tipi panel kapısından
+  (`panel-adresleri.ts`) yeniden dışa aktarılmıyordu; doğrudan
+  `@advetics/shared`tan okunuyor, ortak dosyaya dokunulmadı.
+- **§ 9 dışı iki spec**: `autoboost/boost-yonlendirme-metni.spec.ts` ve
+  `youtube-otomatik.spec.ts` `LOGO_YERI` metnini kilitliyordu; metin
+  değişince (Ajan 3'ün dosyası) iddialar yeni ada çevrildi.
+
+### 14c. Birleştirme (Ajan 2 ‖ Ajan 3, 2026-10-13)
+
+- `lib/nav-sections.ts`: iki geçiş anahtarı da `_YENI`
+  (`BASE_SATIRLARI_YENI`, `AYARLAR_SATIRLARI_YENI`); her iki taraf kendi
+  `_ESKI` sabitini silmişti, birleşik dosyada hiç `_ESKI` yok.
+- Bu yüzden `lib/nav-sections.ts` `ELLE_ADRES_GECIS_ISTISNASI`ndan çıktı.
+  Mandal listelerinin HEPSİ boş (`ELLE_ADRES_GECIS_ISTISNASI`,
+  `ESKI_URETICI_GECIS_ISTISNASI`, `API_GECIS_ISTISNASI`,
+  `YONLENDIRME_BEKLEYEN`); kalıcı istisna yalnız `app/robots.ts`.
+- `marka-merkezi.spec.ts`: Ajan 2'nin eski kanallar sayfasının yönlendirdiği
+  iddiası (S2-7) korundu.

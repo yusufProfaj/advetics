@@ -7,7 +7,7 @@ import type { KreatifBrief, KreatifSatiri, KreatifZekaYaniti, Kova } from '@adve
 import { KOVA_ADI, KREATIF_SAYFA_BOYUTU, formatMoney, formatNumber } from '@advetics/shared';
 import { API_URL, ApiRequestError, apiFetch } from '@/lib/api';
 import { formatRelative } from '@/lib/format';
-import { mmAdresi } from '@/components/marka-merkezi/bolumler';
+import { hesaplarAdresi } from '@/lib/panel-adresleri';
 import {
   advcampaignAdresi,
   aralikEkseni,
@@ -347,8 +347,8 @@ function BosKutu({ clientId, neden, onTumu }: { clientId: string; neden: Kreatif
         </button>
       )}
       {b.baglanti === 'baglantilar' && (
-        <Link className={i.ikincil} href={mmAdresi(clientId, 'baglantilar')}>
-          Marka Merkezi › Bağlantılar
+        <Link className={i.ikincil} href={hesaplarAdresi(clientId)}>
+          Marka Merkezi › Kurulum
         </Link>
       )}
     </div>

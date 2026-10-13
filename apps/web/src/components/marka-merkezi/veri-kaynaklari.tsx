@@ -11,11 +11,18 @@ import {
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { formatDayLong } from '@/lib/format';
 import { kaynakDurumMetni } from '@/lib/veri-kaynagi';
+import { markaMerkeziAdresi } from '@/lib/panel-adresleri';
 import { Dugme } from '@/components/ui/dugme';
 import { Uyari } from '@/components/ui/uyari';
 
 /**
- * ═══ MARKA MERKEZİ › BAĞLANTILAR › VERİ KAYNAKLARI (Paket F1) ═══
+ * ═══ MARKA MERKEZİ › KURULUM › DİĞER VERİ KAYNAKLARI (Paket F1) ═══
+ *
+ * GA4 BURADA BAĞLANMIYOR (docs/panel-sadelestirme/MIMARI.md Ç-8): Analytics'in
+ * TEK kaydı Kurulum'un `ga4_mulk` adımı (mülk seçilince `kurulumdanBagla`
+ * veri kaynağını da bağlıyor). İkinci bir bağlama formu aynı mülk için
+ * ikinci bir doğru üretirdi. GA4 kartı `haric` ile bu listeden çıkıyor ve
+ * durumu Dönüşüm ölçümü adımında salt okunur (`Ga4KaynakDurumu`).
  *
  * docs/veri-kaynagi/MIMARI.md § 3.4 ve taslak.html ekran 1. AYRI BÖLÜM
  * DEĞİL, Bağlantılar'ın içinde kart grubu (dağınık yapı "nereye nereden
@@ -39,14 +46,18 @@ const KISALTMA: Record<KaynakTuru, string> = {
 };
 
 const hataMetni = (e: unknown) => (e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.');
-const izinDonusu = (clientId: string) => `/marka-merkezi?bolum=baglantilar&musteri=${encodeURIComponent(clientId)}`;
+// Dönüş Kurulum'a (eski Bağlantılar bölümü kalktı). ÇAPASIZ: OAuth dönüş denetimi `#` kabul etmiyor.
+const izinDonusu = (clientId: string) => markaMerkeziAdresi('kurulum', clientId);
 
 export function VeriKaynaklari({
   clientId,
   yonetebilir,
   yazabilir,
+  haric = [],
 }: {
   clientId: string;
+  /** Bu listede GÖSTERİLMEYEN türler (GA4: evi Dönüşüm ölçümü adımı). */
+  haric?: readonly KaynakTuru[];
   /** `connection.manage`: bağla / kaldır. */
   yonetebilir: boolean;
   /** `connection.write`: yenile / duraklat / mülk listesi. */
@@ -88,16 +99,16 @@ export function VeriKaynaklari({
       {hal.tur === 'geldi' && (
         <>
           <div className="grid gap-3 p-5 sm:grid-cols-2">
-            {hal.veri.kaynaklar.map((k) => (
+            {hal.veri.kaynaklar.filter((k) => !haric.includes(k.tur)).map((k) => (
               <BagliKart key={k.id} k={k} clientId={clientId} yonetebilir={yonetebilir} yazabilir={yazabilir} yenile={oku} />
             ))}
-            {hal.veri.baglanabilir.map((b) => (
+            {hal.veri.baglanabilir.filter((b) => !haric.includes(b.tur)).map((b) => (
               <BaglanabilirKart key={b.tur} tur={b.tur} engel={b.engel} izinBaglantiId={b.izinBaglantiId ?? null} clientId={clientId} yonetebilir={yonetebilir} yazabilir={yazabilir} yenile={oku} />
             ))}
           </div>
           <ul className="space-y-1 border-t border-line px-5 py-3 text-xs text-ink-muted">
             <li>Bir mülk yalnız bir workspace’e bağlanabilir (ajans toplamında iki kez sayılmasın).</li>
-            <li>Kurulumdaki mülk farklıysa kartta yazar; hangisinin okunacağını siz seçersiniz.</li>
+            {haric.includes('ga4') && <li>Google Analytics Dönüşüm ölçümü adımında bağlanır; durumu orada yazar.</li>}
           </ul>
         </>
       )}

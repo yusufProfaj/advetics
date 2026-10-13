@@ -141,7 +141,7 @@ describe('BİLGİ BANKASI ARTIK YÖNLENDİRME', () => {
   const SAYFA = kod('app/(dashboard)/kutuphane/bilgi-bankasi/page.tsx');
 
   it('KRİTİK: yalnızca yönlendiriyor', () => {
-    expect(SAYFA).toContain('redirect(bilgiBankasiYonu(');
+    expect(SAYFA).toContain("redirect(eskiAdresYonu('kutuphane/bilgi-bankasi'");
     expect(SAYFA).not.toContain('<MarkaSekmesi');
     expect(SAYFA).not.toContain('<AiDoldur');
   });
@@ -216,6 +216,6 @@ describe('YAPAY ZEKÂ İLE DOLDUR', () => {
     // Taslak üretmek dışarı HTTP isteği yapıyor ve model çağırıyor; okuma
     // yetkisiyle aynı kefeye konamaz.
     expect(DOLDUR).toContain('if (!canWrite) return null;');
-    expect(SAYFA).toContain("<AiDoldur clientId={clientId} canWrite={yaz('client.write')} />");
+    expect(SAYFA).toContain("<AiDoldur clientId={clientId} canWrite={kapi(session, 'marka.yaz')} />");
   });
 });

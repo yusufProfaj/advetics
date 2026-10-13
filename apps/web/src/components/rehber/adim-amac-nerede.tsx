@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useId } from 'react';
 import { REHBER_AMACLARI, type RehberAmacKodu, type RehberPlatformu } from '@advetics/shared';
-import { baglanti } from '@/lib/baglanti';
+import { hesaplarAdresi, markaMerkeziAdresi } from '@/lib/panel-adresleri';
 import { AltCubuk, Soru, sil, yaz, type AdimBaglami } from './adim-ortak';
 import { AMAC_IKONU, IKON, Ikon } from './ikonlar';
 import { PikselSecici } from './meta-dalga3';
@@ -93,7 +93,8 @@ export function AdimNerede({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => vo
     );
   }
   const t = REHBER_AMACLARI[amac];
-  const baglantilar = baglanti('/marka-merkezi', { bolum: 'baglantilar', musteri: b.clientId });
+  // Hesap/sayfa atama bir WORKSPACE işi: Kurulum'un hesaplar bloğu (tek karar `hesaplarAdresi`te).
+  const baglantilar = hesaplarAdresi(b.clientId);
   const videoKurgusu = t.google.kurgu === 'TALEP_YARATMA_VIDEO';
 
   function anahtar(p: RehberPlatformu) {
@@ -163,11 +164,11 @@ export function AdimNerede({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => vo
               <Ikon d={IKON.eksik} />
               <span>{e.metin}</span>
               {(e.kod === 'M-HESAP' || e.kod === 'M-SAYFA' || e.kod === 'G-HESAP' || e.kod === 'G-LOGO' || e.kod === 'G-LOGO-KARE') && (
-                <Link href={e.kod === 'G-LOGO' || e.kod === 'G-LOGO-KARE' ? baglanti('/marka-merkezi', { bolum: 'marka', musteri: b.clientId }) : baglantilar}>
-                  {e.kod === 'G-LOGO' || e.kod === 'G-LOGO-KARE' ? 'Marka' : 'Bağlantılar'}
+                <Link href={e.kod === 'G-LOGO' || e.kod === 'G-LOGO-KARE' ? markaMerkeziAdresi('marka', b.clientId, 'logo') : baglantilar}>
+                  {e.kod === 'G-LOGO' || e.kod === 'G-LOGO-KARE' ? 'Marka › Logo' : 'Kurulum'}
                 </Link>
               )}
-              {OLCUM_ENGEL_KODLARI.includes(e.kod) && <Link href={baglanti('/marka-merkezi', { bolum: 'olcum', musteri: b.clientId })}>Ölçüm&apos;de kur</Link>}
+              {OLCUM_ENGEL_KODLARI.includes(e.kod) && <Link href={markaMerkeziAdresi('kurulum', b.clientId, 'olcum')}>Kurulum › Dönüşüm ölçümü</Link>}
             </li>
           ))}
         </ul>

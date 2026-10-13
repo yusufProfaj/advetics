@@ -51,9 +51,9 @@ export function SenkronDurumu({ data }: { data: SyncStatusResponse }) {
 
         {data.accounts.length === 0 ? (
           <p className="px-4 py-8 text-center text-sm text-ink-muted">
-            Bu workspace’e hiç reklam hesabı atanmamış. Platform Bağlantıları
-            ekranından havuzdan hesap ata — atama izlemeyi de açıyor ve 90
-            günlük geçmişi kuyruğa alıyor.
+            Bu workspace’e hiç reklam hesabı atanmamış. Kurulum’daki hesaplar
+            bloğundan ata; atama izlemeyi de açıyor ve 90 günlük geçmişi
+            kuyruğa alıyor.
           </p>
         ) : (
           <ul className="divide-y divide-line">

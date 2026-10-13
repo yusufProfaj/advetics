@@ -125,7 +125,7 @@ export class YoutubeKanalBulService {
     notlar: string[],
   ): Promise<void> {
     if (!website) {
-      notlar.push('Workspace’in web sitesi girilmemiş; siteye bakılamadı (Marka Merkezi › Workspace ayarları).');
+      notlar.push('Workspace’in web sitesi girilmemiş; siteye bakılamadı (Marka Merkezi › Workspace bilgileri).');
       return;
     }
     const adres = /^https?:\/\//i.test(website) ? website.replace(/^http:/i, 'https:') : `https://${website}`;

@@ -1,144 +1,105 @@
-import type { Permission } from '@advetics/shared';
-import { baglanti } from '@/lib/baglanti';
-import { butceAdresi } from '@/lib/butce-adresi';
+import type { SessionResponse } from '@advetics/shared';
+import {
+  KURULUM_LISTESI,
+  MARKA_MERKEZI_BOLUMLERI,
+  VARLIKLAR_SEKMELERI,
+  type MarkaMerkeziBolumKodu,
+  type MarkaMerkeziCapasi,
+  type VarliklarSekmeKodu,
+} from '@/lib/panel-adresleri';
 
 /**
- * ═══ MARKA MERKEZİ'NİN BÖLÜMLERİ — TEK TANIM ═══
+ * ═══ MARKA MERKEZİ'NİN İÇ YAPISI — SAF KARARLAR ═══
  *
- * Kullanıcının sorunu kendi cümlesiyle: *"karmakarışık bir mapping'i var,
- * nereye nereden girdiğimi unutuyorum"* (2026-10-06). Bir workspace'in
- * kurulumu dört adrese dağılmıştı: Marka Merkezi (uzun tek sayfa), Bilgi
- * Bankası (beş sekmeli ayrı sayfa), menüde HİÇ görünmeyen üç varlık sayfası
- * (`/kutuphane/gorseller` …) ve Aylık Bütçe. Hazırlık listesindeki her
- * bağlantı da kullanıcıyı başka bir sayfaya atıyordu.
+ * Adresler ve bölüm listesi sözleşmede (`@advetics/shared` › `panel`,
+ * docs/panel-sadelestirme/MIMARI.md); burada YALNIZ panelin ekrana dair
+ * kararları: iç menüde her bölümün altında hangi kartların listeleneceği,
+ * başlıktaki şirket adı ve Varlıklar'da görülebilen sekmeler. Panelde
+ * bileşen render eden test altyapısı yok; karar burada sınanıyor
+ * (`bolumler.spec.ts`).
  *
- * Artık tek sayfa ve onun İÇ MENÜSÜ: menüde "Base › Marka Merkezi", sayfada
- * solda bölüm listesi, üstte "Base › Marka Merkezi › Marka" kırıntısı.
- * Seçim URL'de (`?bolum=`), yani paylaşılabiliyor ve geri tuşu çalışıyor.
- *
- * Liste BURADA: iç menü, sayfa, hazırlık bağlantıları ve eski adreslerin
- * yönlendirmesi aynı kodları okuyor. Bir bölümü yalnızca menüye eklemek
- * (ya da yalnızca sayfaya) tıklanınca boş açılan bir satır demekti.
+ * ESKİ İÇERİK (`MM_BOLUMLERI`, `mmAdresi`, `varlikYonu`,
+ * `bilgiBankasiYonu`, `MM_VARLIKLARI`) SÖZLEŞMEYE TAŞINDI: yedi bölümlük
+ * eski yapı burada, adres üreticisi ayrı bir dosyada ve eski adres eşlemesi
+ * iki yerde yazılıydı. Biri değişip diğeri unutulduğunda bağlantı sessizce
+ * yanlış bölüme açılıyordu.
  */
-export const MM_BOLUMLERI = [
-  /*
-   * KURULUM İLK (2026-10-12, kullanıcı: "workspace'e girdiğimizde
-   * eksiklikleri görebilip tek tuşla tamamlayabilmemiz lazım"). Hesaplar,
-   * ölçüm ve marka tek listede; diğer bölümler o listenin ayrıntısı.
-   */
-  { kod: 'kurulum', ad: 'Kurulum', izin: 'client.read' },
-  { kod: 'baglantilar', ad: 'Bağlantılar', izin: 'client.write' },
-  { kod: 'marka', ad: 'Marka', izin: 'client.read' },
-  /*
-   * AYLIK BÜTÇE BURADA DEĞİL — PLANLA'DA (2026-10-09, kullanıcı kararı).
-   * 2026-10-06'dan beri bu listedeydi; bütçe bir plan kararı ve AdvStrategy
-   * ile aynı bölümde duruyor (`/butce`, `lib/butce-adresi.ts`). Eski
-   * `?bolum=butce` adresi sayfada oraya yönleniyor. Buraya geri eklemek,
-   * aynı ayarın iki kapısı demek.
-   */
-  { kod: 'kitleler', ad: 'Kitleler', izin: 'client.read' },
-  { kod: 'varliklar', ad: 'Varlıklar', izin: 'bulk.read' },
-  /*
-   * ÖLÇÜM (2026-10-11, docs/olcum/MIMARI.md): reklamların neyi saydığı.
-   * Bağlantılar'dan sonra çünkü hesaplardan okunuyor; AdvCampaign'in
-   * "dönüşüm yok" engeli buraya bağlanıyor.
-   */
-  { kod: 'olcum', ad: 'Ölçüm', izin: 'client.read' },
-  /*
-   * WORKSPACE AYARLARI (2026-10-06, kullanıcının isteği). İletişim/firma
-   * bilgileri, özel reklam kategorisi ve ekip yalnızca Şirketler ekranındaki
-   * pencerede vardı; workspace'e geçen kullanıcı oraya Marka Merkezi'nden
-   * ulaşamıyordu. SONDA: kurulumun ilk adımları (bağlantı, marka) önce.
-   */
-  { kod: 'ayarlar', ad: 'Workspace ayarları', izin: 'client.read' },
-  /*
-   * BİLDİRİMLER (Paket A, 2026-10-12, docs/sinyal/MIMARI.md § 9): workspace
-   * başına e-posta / Slack / Teams kanalları; sinyaller ve kural bildirimleri
-   * buraya gider. AYRI SAYFA DEĞİL, Workspace ayarlarının ALT bölümü
-   * (`MM_ALT_BOLUMLERI`): ayrı sayfa, kullanıcının "nereye nereden girdiğimi
-   * unutuyorum" şikâyetinin sebebiydi. İzin `rule.read` (kanal listesinin
-   * okuma izni, `SINYAL_UCLARI`): müşteri hesabı bu yetkiyi taşımıyor ve
-   * sinyal ajansın iç bilgisi. Kanal ekleme/silme bölümün İÇİNDE
-   * `client.write` ile açılıyor.
-   */
-  { kod: 'bildirimler', ad: 'Bildirimler', izin: 'rule.read' },
-] as const satisfies ReadonlyArray<{ kod: string; ad: string; izin: Permission }>;
 
-export type MmBolumKodu = (typeof MM_BOLUMLERI)[number]['kod'];
+type AltBaslik<B extends MarkaMerkeziBolumKodu> = { capa: MarkaMerkeziCapasi<B>; ad: string };
 
 /**
- * Menüde bir üst bölümün ALTINDA (girintili) çizilen bölümler. Kendi
- * adresi ve kendi sayfa gövdesi var; yalnız menüdeki yeri üst bölüme bağlı.
+ * İÇ MENÜDE SEÇİLİ BÖLÜMÜN ALTINDAKİ KARTLAR — sayfadaki `id`lere çapa.
+ * Tipi sözleşmedeki çapa listesi: listede olmayan bir çapa derlenmiyor ve
+ * `bolumler.spec.ts` her çapanın burada da bulunduğunu kilitliyor (çapa
+ * sözleşmede var, menüde yok = kullanıcı karta yolu bilmiyor).
+ *
+ * KURULUM'UN YEDİ ADIMI `KURULUM_LISTESI`NDEN türüyor: adım adı iki yerde
+ * yazılırsa menü ile liste ayrışır.
  */
-export const MM_ALT_BOLUMLERI: Partial<Record<MmBolumKodu, MmBolumKodu>> = {
-  bildirimler: 'ayarlar',
+export const MM_ALT_BASLIKLARI: { [B in MarkaMerkeziBolumKodu]: ReadonlyArray<AltBaslik<B>> } = {
+  kurulum: [
+    ...KURULUM_LISTESI.map((a) => ({ capa: a.kod, ad: a.ad })),
+    { capa: 'kanallar', ad: 'Hesaplar ve kanallar' },
+    { capa: 'veri-kaynaklari', ad: 'Diğer veri kaynakları' },
+  ],
+  marka: [
+    { capa: 'marka-bilgileri', ad: 'Marka bilgileri' },
+    { capa: 'markayi-anlat', ad: 'Markayı anlat' },
+    { capa: 'kime-satiyoruz', ad: 'Kime satıyoruz' },
+    { capa: 'logo', ad: 'Logo' },
+  ],
+  workspace: [
+    { capa: 'firma', ad: 'İletişim ve firma' },
+    { capa: 'erisim', ad: 'Erişim' },
+    { capa: 'bildirimler', ad: 'Bildirimler' },
+    { capa: 'veri-durumu', ad: 'Veri durumu' },
+  ],
 };
 
-/**
- * Varlıklar'ın alt bölümleri. Üçü de eskiden ayrı sayfaydı ve MENÜDE
- * yoktu: Marka Merkezi'ndeki bir karttan gidiliyor, geri dönmenin yolu
- * tarayıcının geri tuşuydu.
- */
-export const MM_VARLIKLARI = [
-  { kod: 'gorseller', ad: 'Görseller' },
-  { kod: 'kreatifler', ad: 'Kreatifler' },
-  { kod: 'formlar', ad: 'Formlar' },
-] as const;
-
-export type MmVarlikKodu = (typeof MM_VARLIKLARI)[number]['kod'];
-
-/**
- * Adresteki bölüm. Tanınmayan ya da YETKİSİ OLMAYAN bölüm, görülebilen ilk
- * bölüme düşüyor: ekipte paylaşılan bir `?bolum=varliklar` bağlantısı,
- * varlık yetkisi olmayan birine boş bir sayfa açmamalı.
- */
-export function bolumCoz(
-  raw: string | undefined,
-  izinler: readonly Permission[],
-): MmBolumKodu | null {
-  const gorunen = MM_BOLUMLERI.filter((b) => izinler.includes(b.izin));
-  return gorunen.find((b) => b.kod === raw)?.kod ?? gorunen[0]?.kod ?? null;
-}
-
-export function varlikCoz(raw: string | undefined): MmVarlikKodu {
-  return MM_VARLIKLARI.find((v) => v.kod === raw)?.kod ?? 'gorseller';
+/** Bölümün görünen adı (kırıntı ve iç menü aynı yerden). */
+export function bolumAdi(kod: MarkaMerkeziBolumKodu): string {
+  return MARKA_MERKEZI_BOLUMLERI.find((b) => b.kod === kod)!.ad;
 }
 
 /**
- * Marka Merkezi içindeki bir yerin adresi. `musteri` TAŞINIYOR: sayfalar
- * aktif workspace'i `params.musteri ?? session.activeClientId` sırasıyla
- * çözüyor ve parametresiz bir bağlantı, başka sekmede başka workspace seçili
- * olan kullanıcıyı sessizce başka bir workspace'e götürürdü.
- */
-export function mmAdresi(
-  clientId: string | null | undefined,
-  bolum: MmBolumKodu,
-  ek: Record<string, string | undefined> = {},
-  capa?: string,
-): string {
-  const adres = baglanti('/marka-merkezi', { musteri: clientId ?? undefined, bolum, ...ek });
-  return capa ? `${adres}#${capa}` : adres;
-}
-
-/**
- * ═══ ESKİ ADRESLER NEREYE GİDİYOR ═══
+ * BAŞLIKTAKİ ŞİRKET ADI ("Şirket › Workspace", MIMARI Ç-24).
  *
- * Eski sayfalar SİLİNMİYOR, yönleniyor: kayıtlı yer imleri, ekip içinde
- * paylaşılmış bağlantılar ve mailde duran adresler kırılmamalı.
- *
- * Bilgi Bankası'nın Bütçe sekmesi Aylık Bütçe bölümüne gidiyor; bütçenin
- * tek yeri orası.
+ * Workspace'in şirketi oturumdaki aktif şirketle AYNI olmayabilir: "tüm
+ * şirketler" modunda kullanıcı kardeş bir şirketin workspace'ini açabiliyor
+ * ve başlığa oturumun şirket adını yazmak, ekranda yanlış şirketi gösterirdi.
+ * Önce workspace'in kendi `orgId`si üst hesabın şirket listesinde aranıyor;
+ * bulunamazsa ve oturumun şirketiyle aynıysa onun adı; ikisi de değilse
+ * `null` — ad UYDURULMUYOR, başlık yalnız workspace adını yazar.
  */
-export function bilgiBankasiYonu(clientId: string | undefined, sekme: string | undefined): string {
-  if (sekme === 'butce') return butceAdresi(clientId);
-  const capa = sekme === 'logo' ? 'logo' : sekme === 'bilgi-bankasi' || sekme === 'hedef-kitle' ? 'bilgi' : undefined;
-  return mmAdresi(clientId, 'marka', {}, capa);
+export function sirketAdi(
+  session: Pick<SessionResponse, 'organization' | 'managerAccount'>,
+  orgId: string | null | undefined,
+): string | null {
+  if (!orgId) return null;
+  const ust = session.managerAccount?.organizations.find((o) => o.id === orgId);
+  if (ust) return ust.name;
+  return session.organization.id === orgId ? session.organization.name : null;
 }
 
-export function varlikYonu(
-  clientId: string | undefined,
-  varlik: MmVarlikKodu,
-  ek: Record<string, string | undefined> = {},
-): string {
-  return mmAdresi(clientId, 'varliklar', { varlik, ...ek });
+/**
+ * VARLIKLAR'DA GÖRÜLEBİLEN SEKMELER — her sekmenin kapısı o sekmenin okuma
+ * ucunun kapısı (sözleşme). Adresteki sekme yetkisizse görülebilen ilkine
+ * düşülür: ekipte paylaşılan bir `?sekme=kitleler` bağlantısı, yetkisi
+ * olmayana boş bir sayfa açmamalı.
+ */
+export function gorunurVarlikSekmeleri(izinler: readonly string[]): VarliklarSekmeKodu[] {
+  return VARLIKLAR_SEKMELERI.filter((s) => izinler.includes(s.izin)).map((s) => s.kod);
+}
+
+export function varlikSekmesiCoz(
+  istenen: VarliklarSekmeKodu,
+  izinler: readonly string[],
+): VarliklarSekmeKodu | null {
+  const gorunen = gorunurVarlikSekmeleri(izinler);
+  return gorunen.includes(istenen) ? istenen : (gorunen[0] ?? null);
+}
+
+/** Varlıklar sekmesinin görünen adı. */
+export function varlikSekmeAdi(kod: VarliklarSekmeKodu): string {
+  return VARLIKLAR_SEKMELERI.find((s) => s.kod === kod)!.ad;
 }

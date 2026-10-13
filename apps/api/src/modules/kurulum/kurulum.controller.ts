@@ -1,6 +1,8 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Put, Query, Req } from '@nestjs/common';
 import {
   kurulumIstegiSchema,
+  kurulumPlatformBeyaniSchema,
+  type KurulumPlatformBeyani,
   kurulumSecenekSorgusuSchema,
   type KurulumIstegi,
   type KurulumSecenekleri,
@@ -19,7 +21,8 @@ interface IstekBilgisi {
 /**
  * Workspace kurulum rehberi (docs/kurulum/MIMARI.md). Okuma `client.read`;
  * platformda bir şey açan/yazan her uç `client.write`. Hesap açma ve atama
- * ayrıca `connection.write` istiyor (serviste).
+ * ayrıca `connection.write` + `connection.manage` istiyor (serviste,
+ * `hesapYetkisi`; havuz atamasıyla AYNI kapı, MIMARI Ç-20).
  */
 @Controller('clients/:id/kurulum')
 export class KurulumController {
@@ -46,6 +49,21 @@ export class KurulumController {
   @RequirePermissions('client.write')
   adim(@CurrentTenant() ctx: TenantContext, @Param('id', ParseUUIDPipe) id: string, @Body(zodBody(kurulumIstegiSchema)) dto: KurulumIstegi, @Req() req: IstekBilgisi) {
     return this.kurulum.adim(ctx, id, dto, this.meta(req));
+  }
+
+  /**
+   * "Bu platformu kullanmıyorum" beyanı (docs/panel-sadelestirme/MIMARI.md
+   * Ç-6). Kapı `client.write` = panelde `PANEL_KAPILARI['kurulum.yaz']`.
+   */
+  @Put('platformlar')
+  @RequirePermissions('client.write')
+  platformlar(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(zodBody(kurulumPlatformBeyaniSchema)) dto: KurulumPlatformBeyani,
+    @Req() req: IstekBilgisi,
+  ): Promise<KurulumYaniti> {
+    return this.kurulum.platformlar(ctx, id, dto.kullanilmayanlar, this.meta(req));
   }
 
   @Post('tamamla')

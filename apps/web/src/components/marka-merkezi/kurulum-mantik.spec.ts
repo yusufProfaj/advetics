@@ -1,12 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { KURULUM_GRUPLARI, KURULUM_ADIM_DURUMLARI, kurulumIstegiSchema } from '@advetics/shared';
-import { DURUM_GOSTERIMI, GRUP_BASLIGI, gelistiriciEpostasi, izinDonusu, otomatikIstek, secimIstegi } from './kurulum-mantik';
+import { KURULUM_ADIM_DURUMLARI, kurulumIstegiSchema } from '@advetics/shared';
+import { DURUM_GOSTERIMI, gelistiriciEpostasi, izinDonusu, otomatikIstek, secimIstegi } from './kurulum-mantik';
 
 describe('kurulum bölümü', () => {
-  it('her grup ve durumun gösterimi var', () => {
-    for (const g of KURULUM_GRUPLARI) expect(GRUP_BASLIGI[g].baslik.length).toBeGreaterThan(3);
+  it('her durumun gösterimi var', () => {
     for (const d of KURULUM_ADIM_DURUMLARI) expect(DURUM_GOSTERIMI[d].etiket.length).toBeGreaterThan(2);
   });
 
@@ -40,12 +39,33 @@ describe('kurulum bölümü', () => {
     expect(m.startsWith('mailto:?subject=')).toBe(true);
     expect(decodeURIComponent(m)).toContain('GTM-ABC123');
     expect(decodeURIComponent(m)).toContain('<script>h</script>');
-    expect(izinDonusu('abc').startsWith('/marka-merkezi?bolum=kurulum')).toBe(true);
+    // Sözleşmenin üreticisinden ve ÇAPASIZ: OAuth dönüş denetimi `#` kabul etmiyor.
+    expect(izinDonusu('abc')).toBe('/marka-merkezi?musteri=abc&bolum=kurulum');
   });
 
   it('KRİTİK: bileşen hatayı yutmaz', () => {
     const k = readFileSync(join(__dirname, 'kurulum-bolumu.tsx'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     expect(k).not.toMatch(/\.catch\(\s*\(\)\s*=>/);
-    expect(k).toContain("setHal({ tur: 'hata'");
+    // Seçenekler okunamazsa sebebi, adım isteği düşerse platformun mesajı yazıyor.
+    expect(k).toContain("setS({ tur: 'hata', mesaj: hataMetni(e) })");
+    expect(k).toContain('setHata(hataMetni(e))');
+  });
+
+  it('KRİTİK: gerçek hesap açan düğme onaysız istek göndermiyor (Ç-20)', () => {
+    const k = readFileSync(join(__dirname, 'kurulum-bolumu.tsx'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    // Hesap adı isteyen adımda (Meta/Google hesabı) ilk tık ONAYI açıyor.
+    expect(k).toContain("onClick={() => (AD_ISTEYEN.has(kod) ? setYeniOnay(true) : istek({ tur: 'yeni', ust, ad }))}");
+    // İsteği gönderen tek düğme onay panelinin içinde.
+    const panel = k.slice(k.indexOf('role="alertdialog"'));
+    if (panel.length === k.length) throw new Error('onay paneli bulunamadı');
+    expect(panel.slice(0, panel.indexOf('Vazgeç'))).toContain("onClick={() => istek({ tur: 'yeni', ust, ad })}");
+    // Onay DOM'dan çıkmıyor; görünürlük sınıfla.
+    expect(k).toContain("${yeniOnay ? 'opacity-100' : 'pointer-events-none hidden opacity-0'}");
+  });
+
+  it('KRİTİK: hesap adımlarının eylemi kurulum.hesap kapısıyla, diğerleri kurulum.yaz ile', () => {
+    const k = readFileSync(join(__dirname, 'kurulum-bolumu.tsx'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(k).toContain('const eylemYetkisi = HESAP_ADIMLARI.has(a.kod) ? hesapYazabilir : yazabilir;');
+    expect(k).toContain('{eylemYetkisi && e && (');
   });
 });

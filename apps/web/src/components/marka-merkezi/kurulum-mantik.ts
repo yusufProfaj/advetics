@@ -1,15 +1,14 @@
-import type { KurulumAdimDurumu, KurulumAdimKodu, KurulumGrubu, KurulumIstegi } from '@advetics/shared';
+import type { KurulumAdimDurumu, KurulumAdimKodu, KurulumIstegi } from '@advetics/shared';
+import { markaMerkeziAdresi } from '@/lib/panel-adresleri';
 
 /**
- * Kurulum bölümünün saf kararları (`kurulum-bolumu.tsx`). Panelde bileşen
- * render eden test altyapısı yok; karar burada, çizim orada.
+ * Kurulum parçası satırının saf kararları (`kurulum-bolumu.tsx`). Panelde
+ * bileşen render eden test altyapısı yok; karar burada, çizim orada.
+ *
+ * ÜÇ GRUP BAŞLIĞI KALKTI (2026-10-13): kurulum artık yedi adımlı TEK liste
+ * (`KURULUM_LISTESI`, docs/panel-sadelestirme/MIMARI.md § 7) ve grupların
+ * yerini adımlar aldı.
  */
-
-export const GRUP_BASLIGI: Record<KurulumGrubu, { baslik: string; aciklama: string }> = {
-  hesaplar: { baslik: '1. Reklam hesapları', aciklama: 'Her projenin kendi Meta ve Google Ads hesabı, sayfası ve ödeme yöntemi.' },
-  olcum: { baslik: '2. Dönüşüm ölçümü', aciklama: 'Tag Manager, Analytics, piksel ve dönüşümler; en sonda verinin doğru geldiği canlı olarak doğrulanır.' },
-  marka: { baslik: '3. Marka bilgileri', aciklama: 'Reklam açarken önden dolan bilgiler ve varsayılanlar.' },
-};
 
 export const DURUM_GOSTERIMI: Record<KurulumAdimDurumu, { etiket: string; sinif: string }> = {
   tamam: { etiket: 'Tamam', sinif: 'bg-ok-soft text-ok-strong' },
@@ -85,7 +84,11 @@ export function gelistiriciEpostasi(site: string | null, gtmKimligi: string, hea
   return `mailto:?subject=${encodeURIComponent(konu)}&body=${encodeURIComponent(govde)}`;
 }
 
-/** İzin akışının dönüş adresi: kurulum bölümü, aynı workspace. */
+/**
+ * İzin akışının dönüş adresi: Kurulum bölümü, aynı workspace. ÇAPASIZ:
+ * OAuth dönüş denetimi (`connections.controller.ts`) `#` kabul etmiyor ve
+ * çapalı adres sessizce varsayılan dönüşe düşerdi.
+ */
 export function izinDonusu(clientId: string): string {
-  return `/marka-merkezi?bolum=kurulum&musteri=${encodeURIComponent(clientId)}`;
+  return markaMerkeziAdresi('kurulum', clientId);
 }

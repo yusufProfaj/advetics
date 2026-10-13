@@ -1,16 +1,16 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { CHANNEL_KINDS, HAZIRLIK_KODLARI, type ChannelGroup, type ChannelItem } from '@advetics/shared';
-import { HAZIRLIK_MADDE_TANIMI } from './hazirlik-listesi';
+import { CHANNEL_KINDS, type ChannelGroup, type ChannelItem } from '@advetics/shared';
 import { havuzdaAra } from '../tenancy/bagli-kanallar';
 import { visibleSections } from '@/lib/nav-sections';
 import { ROLE_PERMISSIONS } from '@advetics/shared';
 
 /**
- * ═══ MARKA MERKEZİ — BÖLÜM 1 ═══
+ * ═══ MARKA MERKEZİ — SAYFA, KURULUM, KANALLAR, WORKSPACE BİLGİLERİ ═══
  *
- * Hazırlık listesi, bağlantılar ve menü satırı. Kaynak taramaları yorumsuz
+ * 2026-10-13'te üç bölüme indi (docs/panel-sadelestirme/MIMARI.md). Hazırlık
+ * şeridi ve Bağlantılar bölümü kalktı; kararların yeni hâli burada. Kaynak taramaları yorumsuz
  * kaynakta yapılıyor: kuralı anlatan yorum aynı dosyada duruyor ve
  * `toContain` ikisini ayırt etmiyor (CLAUDE.md).
  */
@@ -23,76 +23,86 @@ const yorumsuz = (yol: string): string =>
     .filter((l) => !l.trim().startsWith('//'))
     .join('\n');
 
-const LISTE = yorumsuz('components/marka-merkezi/hazirlik-listesi.tsx');
 const SAYFA = yorumsuz('app/(dashboard)/marka-merkezi/page.tsx');
 const KANAL = yorumsuz('components/tenancy/bagli-kanallar.tsx');
+const LISTE = yorumsuz('components/marka-merkezi/kurulum-listesi.tsx');
+const BILGI = yorumsuz('components/marka-merkezi/workspace-bilgileri.tsx');
 
-describe('hazırlık listesi', () => {
-  it('KRİTİK: marka maddesi Marka bölümünün marka bilgileri kartına açılıyor', () => {
-    // Eskiden Bilgi Bankası'nın serbest metin sekmesine açılıyordu (canlı tur,
-    // 2026-10-05); 2026-10-06'dan beri sayfadan çıkarmıyor.
-    const u = new URL(HAZIRLIK_MADDE_TANIMI.marka_bilgisi.eylem('ws-1').href, 'https://x');
-    expect(u.pathname).toBe('/marka-merkezi');
-    expect(u.searchParams.get('bolum')).toBe('marka');
-    expect(u.hash).toBe('#marka-bilgileri');
-    expect(SAYFA).toContain('<Kart id="marka-bilgileri">');
+describe('KRİTİK: tek sayaç — hazırlık şeridi ve ikinci sayaç yok', () => {
+  it('şerit ve eski kart sayfada çizilmiyor', () => {
+    expect(SAYFA).not.toContain('HazirlikListesi');
+    expect(SAYFA).not.toContain('HazirlamaKarti');
+    expect(SAYFA).not.toContain('KurulumBolumu');
   });
 
-  it('KRİTİK: hazırlık bağlantıları Marka Merkezi’nden ÇIKARMIYOR (bütçe ve veri durumu hariç)', () => {
-    for (const kod of ['reklam_hesabi', 'marka_bilgisi', 'logo', 'sosyal_kanal'] as const) {
-      expect(HAZIRLIK_MADDE_TANIMI[kod].eylem('ws-1').href, kod).toMatch(/^\/marka-merkezi\?/);
-    }
-    expect(SAYFA).toContain('<Kart id="logo">');
+  it('iç menü rozeti ve liste AYNI sayaçtan (kurulumSayaci)', () => {
+    expect(SAYFA).toContain('const sayac = kurulumSayaci(');
+    expect(SAYFA).toContain('kurulum: rozetMetni(sayac)');
+    expect(LISTE).toContain('const sayac = kurulumSayaci(adimlar);');
+    // Kurulum ucunun kendi özeti (`ozet.tamam/toplam`) ekranda sayaç olarak KULLANILMIYOR.
+    expect(LISTE).not.toContain('ozet.tamam');
+    expect(SAYFA).not.toContain('ozet.tamam');
   });
 
-  it('dar ekranda eylem metni sıkıştırmıyor: metnin alt genişlik sınırı var', () => {
-    expect(LISTE).toContain('<div className="min-w-[14rem] flex-1">');
+  it('"Eksikleri tamamla" kapsamı sözleşmeden; hesap açan istek bu düğmede yok', () => {
+    expect(LISTE).toContain('const kapsam = eksikleriTamamlaKapsami(girdi);');
+    const i = LISTE.indexOf('async function eksikleriTamamla()');
+    const govde = LISTE.slice(i, LISTE.indexOf('async function beyan(', i));
+    if (i < 0 || govde.length < 50) throw new Error('eksikleriTamamla gövdesi bulunamadı');
+    expect(govde).toContain('if (kapsam.kurulumAdimlari.length > 0)');
+    expect(govde).toContain('if (kapsam.hazirlamaYeniden)');
+    expect(govde).not.toContain('/kurulum/adim');
+    expect(govde).not.toContain('meta_hesap');
+    expect(govde).not.toContain('google_hesap');
   });
 
-  it('KRİTİK: sunucunun her maddesinin panelde başlığı ve bağlantısı var', () => {
-    for (const kod of HAZIRLIK_KODLARI) {
-      const t = HAZIRLIK_MADDE_TANIMI[kod];
-      expect(t, kod).toBeDefined();
-      expect(t.baslik.length, kod).toBeGreaterThan(3);
-      expect(t.eylem('ws-1').href, kod).toMatch(/^(\/|#)/);
-    }
+  it('düşen kaynak sessiz kalmıyor: her kaynak kendi hatasıyla, düğme nedeniyle pasif', () => {
+    expect(LISTE).toContain('Bazı bilgiler okunamadı');
+    expect(LISTE).toContain('{kapaliNeden && <p');
+    expect(LISTE).not.toMatch(/\.catch\(\(\) => set/);
   });
 
-  it('workspace sayfalarına giden bağlantılar workspace kimliğini taşıyor', () => {
-    // URL'deki workspace üst bardakinden farklı olabilir; taşınmazsa
-    // bağlantı BAŞKA bir workspace'in bilgi bankasını açar.
-    for (const kod of ['reklam_hesabi', 'marka_bilgisi', 'logo', 'aylik_butce', 'sosyal_kanal'] as const) {
-      expect(HAZIRLIK_MADDE_TANIMI[kod].eylem('ws-1').href, kod).toContain('musteri=ws-1');
-    }
-  });
-
-  it('KRİTİK: eylem yalnızca EKSİK maddede, tamam olanda değil', () => {
-    expect(LISTE).toContain("{m.durum === 'eksik' && (");
-  });
-
-  it('durum yalnızca renkten okunmuyor', () => {
-    expect(LISTE).toContain('<span className="sr-only">{d.okunus}: </span>');
-    expect(LISTE).toContain('role="progressbar"');
-    expect(LISTE).toContain('aria-valuenow={tamam}');
+  it('açılan adım DOM’dan çıkmıyor; hareket prefers-reduced-motion altında kapalı', () => {
+    expect(LISTE).toContain('inert={!acik}');
+    expect(LISTE).toContain("acik ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'");
+    expect(LISTE).toContain('motion-reduce:transition-none');
   });
 });
 
 describe('sayfa', () => {
-  it('KRİTİK: iki çağrı ayrı hata taşıyor, biri düşünce öteki çizilmeye devam ediyor', () => {
+  it('KRİTİK: çağrılar ayrı hata taşıyor, biri düşünce öteki çizilmeye devam ediyor', () => {
     expect(SAYFA).toContain('Promise.all([');
-    expect(SAYFA).toContain('Kurulum durumu alınamadı.');
-    expect(SAYFA).toContain('Bağlantılar alınamadı.');
+    expect(SAYFA).toContain('Hesaplar ve kanallar alınamadı.');
     expect(SAYFA).not.toContain('.catch(() => null)');
   });
 
-  it('atama yetkisi olmayana düğmeler değil salt okunur liste', () => {
-    expect(SAYFA).toContain("yaz('connection.write')");
+  it('atama yetkisi olmayana düğmeler değil salt okunur liste; kapı PANEL_KAPILARI’ndan', () => {
+    expect(SAYFA).toContain("kapi(session, 'hesap.ata') ? (");
     expect(SAYFA).toContain('<SaltOkunurKanallar');
   });
 
-  it('bağlantılar bölümü hazırlık listesinin bağlantısıyla aynı bölüm', () => {
-    expect(SAYFA).toContain("{bolum === 'baglantilar' && (");
-    expect(new URL(HAZIRLIK_MADDE_TANIMI.reklam_hesabi.eylem('x').href, 'https://x').searchParams.get('bolum')).toBe('baglantilar');
+  it('KRİTİK: elle yazılmış kapı yok (hasPermission / isOrgAdmin)', () => {
+    for (const k of [SAYFA, LISTE, BILGI]) {
+      expect(k).not.toContain('hasPermission(');
+      expect(k).not.toContain('session.isOrgAdmin');
+    }
+  });
+
+  it('başlık "Şirket › Workspace", kırıntı Base › Marka Merkezi › bölüm', () => {
+    expect(SAYFA).toContain('baslik={sirket ? `${sirket} › ${workspaceAdi}` : workspaceAdi}');
+    expect(SAYFA).toContain('<span className="font-semibold text-ink">{bolumAdi(bolum)}</span>');
+  });
+
+  it('Marka bölümünde eski adlar yok; iki metin AYRI kartta', () => {
+    expect(SAYFA).toContain('<Kart id="markayi-anlat">');
+    expect(SAYFA).toContain('<Kart id="kime-satiyoruz">');
+    expect(SAYFA).not.toContain('Bilgi bankası');
+    expect(SAYFA).not.toContain('Hedef kitle');
+  });
+
+  it('GA4 veri kaynakları listesinde bağlanmıyor (tek kayıt Kurulum’da)', () => {
+    expect(SAYFA).toContain("haric={['ga4']}");
+    expect(LISTE).toContain('<Ga4KaynakDurumu clientId={clientId} />');
   });
 });
 
@@ -202,28 +212,36 @@ describe('Bağlantılar düzeni (2026-10-06)', () => {
   });
 });
 
-describe('Workspace ayarları Marka Merkezi’nde (2026-10-06)', () => {
+describe('Workspace bilgileri (eski Workspace ayarları + Bildirimler + Senkronizasyon)', () => {
   /*
-   * Kullanıcı: "workspace'e geçiş yaptığımda doldurulması gereken her yeri
-   * Marka Merkezi kısmından halletmek istiyorum". Bu bilgiler yalnızca
-   * Şirketler ekranındaki pencerede vardı.
+   * Kullanıcı (2026-10-06): "workspace'e geçiş yaptığımda doldurulması
+   * gereken her yeri Marka Merkezi kısmından halletmek istiyorum". 2026-10-13:
+   * tek bölüm, dört kart; ekip salt okunur, kategori Kurulum'da.
    */
-  const AYAR = yorumsuz('components/marka-merkezi/workspace-ayarlari.tsx');
-
   it('KRİTİK: sayfa bölümü çiziyor', () => {
-    expect(SAYFA).toContain("{bolum === 'ayarlar' && <WorkspaceAyarlari clientId={clientId} session={session} />}");
+    expect(SAYFA).toContain('<WorkspaceBilgileri clientId={clientId} session={session} detay={detay} />');
   });
 
-  it('KRİTİK: menüdeki her alt başlık sayfadaki bir karta gidiyor', async () => {
-    const { AYAR_ALT_BASLIKLARI } = await import('./ic-menu');
-    expect(AYAR_ALT_BASLIKLARI.length).toBe(3);
-    for (const a of AYAR_ALT_BASLIKLARI) expect(AYAR, a.capa).toMatch(new RegExp(`<(Kart|section) id="${a.capa}"`));
+  it('KRİTİK: ekip burada YÖNETİLMİYOR — salt okunur liste ve Ayarlar › Ekip bağlantısı', () => {
+    expect(BILGI).not.toContain('<TeamManager');
+    expect(BILGI).not.toContain('<DanismanAta');
+    expect(BILGI).toContain("ayarlarAdresi('ekip', { workspace: clientId, capa: 'workspace-erisimi' })");
   });
 
-  it('rapor alıcıları ve özel kategori aynı ekranda düzenlenebiliyor', () => {
-    expect(AYAR).toContain('<FirmaBilgileri');
-    expect(AYAR).toContain('<SpecialCategoryPicker');
-    expect(AYAR).toContain('<TeamManager');
+  it('KRİTİK: özel kategori burada değil (evi Kurulum › Reklam varsayılanları)', () => {
+    expect(BILGI).not.toContain('<SpecialCategoryPicker');
+    expect(LISTE).toContain('<SpecialCategoryPicker');
+  });
+
+  it('KRİTİK: veri durumu ADRESTEKİ workspace’i okuyor', () => {
+    expect(BILGI).toContain('`/sync/status?clientId=${encodeURIComponent(clientId)}`');
+    expect(BILGI).not.toContain("serverApiFetch<SyncStatusResponse>('/sync/status')");
+  });
+
+  it('kapalı kart boş değil, nedenini yazıyor', () => {
+    for (const k of ['erisim.gor', 'bildirim.gor', 'veriDurumu.gor']) {
+      expect(BILGI).toContain(`PANEL_KAPILARI['${k}'].neden`);
+    }
   });
 });
 

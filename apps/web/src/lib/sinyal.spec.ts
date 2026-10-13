@@ -30,7 +30,8 @@ import {
 } from './sinyal';
 import { bekleyenIsAdresi, bekleyenIsCumlesi } from './bekleyen-isler';
 import { SEKMELER, sekmeCoz } from './iyilestir';
-import { MM_ALT_BOLUMLERI, MM_BOLUMLERI, bolumCoz } from '@/components/marka-merkezi/bolumler';
+import { MM_ALT_BASLIKLARI } from '@/components/marka-merkezi/bolumler';
+import { MARKA_MERKEZI_CAPALARI, kapiAcikMi, markaMerkeziAdresi } from './panel-adresleri';
 
 /**
  * ═══ SİNYALLER + BİLDİRİMLER EKRANI — ÇALIŞTIRILARAK ═══
@@ -208,9 +209,9 @@ describe('satır', () => {
     expect(satirEylemi(sinyal({ durum: 'kapatildi' }), { butce: true, kural: true }).birincil).toBeNull();
   });
 
-  it('ölçüm eylemi Marka Merkezi › Ölçüm’e, workspace’iyle', () => {
+  it('ölçüm eylemi Marka Merkezi › Kurulum › Dönüşüm ölçümü’ne, workspace’iyle', () => {
     const e = satirEylemi(sinyal({ eylem: { tur: 'olcum', clientId: 'ws-9' } }), { butce: true, kural: true });
-    expect(e.birincil).toMatchObject({ tur: 'bag', href: '/marka-merkezi?musteri=ws-9&bolum=olcum' });
+    expect(e.birincil).toMatchObject({ tur: 'bag', href: '/marka-merkezi?musteri=ws-9&bolum=kurulum#olcum' });
   });
 
   it('inceleme adresi seviyeye göre ve hesabı taşıyor; reklam seviyesi Sorunlu galeriye', () => {
@@ -334,11 +335,19 @@ describe('yerleşim: sekme, Marka Merkezi bölümü, bekleyen iş', () => {
     expect(sekmeCoz('sinyaller')).toBe('sinyaller');
   });
 
-  it('KRİTİK: Bildirimler ayrı sayfa değil, Workspace ayarlarının alt bölümü; müşteri hesabı görmüyor', () => {
-    expect(MM_BOLUMLERI.map((b) => b.kod)).toContain('bildirimler');
-    expect(MM_ALT_BOLUMLERI.bildirimler).toBe('ayarlar');
-    expect(bolumCoz('bildirimler', ROLE_PERMISSIONS.admin)).toBe('bildirimler');
-    expect(bolumCoz('bildirimler', ROLE_PERMISSIONS.client_viewer)).not.toBe('bildirimler');
+  it('KRİTİK: Bildirimler ayrı sayfa değil, Workspace bilgileri’nin kartı; müşteri hesabı görmüyor', () => {
+    // 2026-10-13: Marka Merkezi'nin üç bölümü; bildirimler Workspace bilgileri › #bildirimler.
+    expect(MARKA_MERKEZI_CAPALARI.workspace).toContain('bildirimler');
+    expect(MM_ALT_BASLIKLARI.workspace.map((a) => a.capa)).toContain('bildirimler');
+    expect(markaMerkeziAdresi('workspace', 'ws-1', 'bildirimler')).toBe('/marka-merkezi?musteri=ws-1&bolum=workspace#bildirimler');
+    const oturum = (rol: keyof typeof ROLE_PERMISSIONS) => ({
+      permissions: [...ROLE_PERMISSIONS[rol]],
+      isOrgAdmin: rol === 'admin',
+      platformAdmin: false,
+      managerAccount: null,
+    });
+    expect(kapiAcikMi(oturum('admin'), 'bildirim.gor')).toBe(true);
+    expect(kapiAcikMi(oturum('client_viewer'), 'bildirim.gor')).toBe(false);
   });
 
   it('KRİTİK: "sinyal açık" satırı işin workspace’indeki Sinyaller sekmesine gidiyor', () => {
@@ -385,7 +394,9 @@ describe('kaynak: bağlar', () => {
   it('sayfalar bölümü ve sekmeyi çiziyor', () => {
     expect(SAYFA).toContain("{sekme === 'sinyaller' && (");
     expect(SAYFA).toContain('<SinyallerSekmesi');
-    expect(MM).toContain("{bolum === 'bildirimler' && (");
-    expect(MM).toContain('<BildirimlerBolumu');
+    // 2026-10-13: Bildirimler Workspace bilgileri'nin kartı.
+    expect(MM).toContain("{bolum === 'workspace' && (");
+    expect(MM).toContain('<WorkspaceBilgileri');
+    expect(readFileSync(join(__dirname, '../components/marka-merkezi/workspace-bilgileri.tsx'), 'utf8')).toContain('<BildirimlerBolumu');
   });
 });

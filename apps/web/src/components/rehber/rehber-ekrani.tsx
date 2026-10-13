@@ -19,7 +19,7 @@ import {
 import { ApiRequestError, apiFetch, onizlemeAdresi } from '@/lib/api';
 import { baglanti } from '@/lib/baglanti';
 import { Uyari, type AdimBaglami } from './adim-ortak';
-import { mmAdresi } from '@/components/marka-merkezi/bolumler';
+import { markaMerkeziAdresi } from '@/lib/panel-adresleri';
 import { AdimAmac, AdimNerede } from './adim-amac-nerede';
 import { AdimKime, type KonumEslemeHali } from './adim-kime';
 import { AdimReklam, type MedyaBilgisi } from './adim-reklam';
@@ -416,7 +416,7 @@ export function RehberEkrani({
                   {hazirlamaTetik.tur === 'basladi' ? (
                     <>
                       Bu workspace reklama hazırlanıyor (site, marka bilgileri, piksel). Bu reklamda eksikleri sen seçersin; sonraki reklamlarda önden dolu
-                      gelir. <Link href={mmAdresi(kayit.clientId, 'baglantilar')}>Hazırlığı gör</Link>
+                      gelir. <Link href={markaMerkeziAdresi('kurulum', kayit.clientId)}>Kurulumu gör</Link>
                     </>
                   ) : (
                     <>Workspace hazırlığı başlatılamadı: {hazirlamaTetik.mesaj}</>

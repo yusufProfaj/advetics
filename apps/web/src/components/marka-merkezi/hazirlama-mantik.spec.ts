@@ -18,10 +18,12 @@ describe('hazırlama kartı', () => {
     for (const d of ['bekliyor', 'hazir', 'soru', 'eksik'] as const) expect(yoklamaGerekli(d)).toBe(false);
   });
 
-  it('KRİTİK: kart hatayı yutmaz ve yoklama sınırı taşır', () => {
-    const k = readFileSync(join(__dirname, 'hazirlama-karti.tsx'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
-    expect(k).not.toMatch(/\.catch\(\s*\(\)\s*=>/);
-    expect(k).toContain('yoklama.current >= YOKLAMA_SINIRI');
-    expect(k).toContain("setHal({ tur: 'hata'");
+  it('KRİTİK: hazırlık hatayı yutmaz ve yoklama sınırı taşır (2026-10-13: Kurulum listesinde)', () => {
+    const soru = readFileSync(join(__dirname, 'hazirlama-karti.tsx'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(soru).not.toMatch(/\.catch\(\s*\(\)\s*=>/);
+    expect(soru).toContain('setHata(hataMetni(e))');
+    const liste = readFileSync(join(__dirname, 'kurulum-listesi.tsx'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(liste).toContain('yoklama.current >= YOKLAMA_SINIRI');
+    expect(liste).toContain('return { ok: false, hata: hataMetni(e) };');
   });
 });

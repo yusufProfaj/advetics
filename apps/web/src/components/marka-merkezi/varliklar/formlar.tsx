@@ -6,10 +6,11 @@ import {
   type LeadFormRecord,
 } from '@advetics/shared';
 import { hasPermission, requireSession } from '@/lib/session';
-import { serverApiFetch } from '@/lib/api';
+import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import { formatRelative } from '@/lib/format';
+import { hesaplarAdresi, kapi, varliklarAdresi } from '@/lib/panel-adresleri';
 import { FormBuilder } from '@/components/forms/form-builder';
-import { mmAdresi, varlikYonu } from '../bolumler';
+import { Uyari } from '@/components/ui/uyari';
 
 
 /**
@@ -23,9 +24,14 @@ import { mmAdresi, varlikYonu } from '../bolumler';
  * olması demek.
  */
 /**
- * MARKA MERKEZİ › VARLIKLAR İÇİNDE ÇİZİLİYOR (2026-10-06). Eskiden
- * `/kutuphane/formlar` ayrı sayfasıydı ve menüde görünmüyordu; o adres artık
- * buraya yönleniyor. Başlık ve workspace kapısı Marka Merkezi'nde.
+ * BASE › VARLIKLAR › FORMLAR (2026-10-13). Eski `/kutuphane/formlar` ve
+ * Marka Merkezi'nin Varlıklar bölümü buraya yönleniyor. Başlık ve workspace
+ * kapısı Varlıklar sayfasında.
+ *
+ * OKUMA HATASI "SAYFA YOK" DEĞİL: sayfa listesi `.catch(() => [])` ile
+ * alınıyordu ve bağlantı listesi düştüğünde ekran "Önce bir Facebook sayfası
+ * gerekiyor" diyordu — sayfası zaten atanmış kullanıcıyı olmayan bir işe
+ * gönderen yanlış bir cümle. Düşen çağrı kendi cümlesiyle yazıyor.
  */
 export async function FormlarIcerik({
   clientId,
@@ -38,14 +44,22 @@ export async function FormlarIcerik({
 
   // SESSİZCE İLK WORKSPACE'E DÜŞÜLMÜYOR — gerekçe `lib/sayfa-workspace.ts`.
 
-  const canWrite = hasPermission(session, 'bulk.write');
+  const canWrite = kapi(session, 'varlik.yaz');
+  // Yayınlama bu modülün kapı tablosunda değil (formun kendi akışı): uçla aynı izin.
   const canPublish = hasPermission(session, 'bulk.publish');
+  const hataMetni = (e: unknown) => (e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.');
 
-  const [connections, forms, telefon] = await Promise.all([
+  const [baglantiSonucu, formSonucu, telefon] = await Promise.all([
     serverApiFetch<
       Array<{ socialProfiles: Array<{ id: string; name: string; profileType: string }> }>
-    >(`/connections?clientId=${clientId}`).catch(() => []),
-    serverApiFetch<LeadFormRecord[]>(`/lead-forms?clientId=${clientId}`).catch(() => []),
+    >(`/connections?clientId=${clientId}`).then(
+      (v) => ({ ok: true as const, v }),
+      (e: unknown) => ({ ok: false as const, hata: hataMetni(e) }),
+    ),
+    serverApiFetch<LeadFormRecord[]>(`/lead-forms?clientId=${clientId}`).then(
+      (v) => ({ ok: true as const, v }),
+      (e: unknown) => ({ ok: false as const, hata: hataMetni(e) }),
+    ),
     // Yalnız ÖNERİ: okunamazsa "Bizi ara" numarası boş gelir ve kullanıcı
     // yazar; form ekranı bundan bağımsız çalışmalı. Boş liste değil, boş öneri.
     serverApiFetch<{ contactPhone: string | null }>(`/clients/${clientId}`).then(
@@ -56,28 +70,39 @@ export async function FormlarIcerik({
 
   // FORM SAYFAYA AİT. Meta'da `leadgen_forms` sayfanın altında yaşıyor;
   // Instagram hesabı tek başına form barındıramıyor.
-  const pages = connections
+  const pages = (baglantiSonucu.ok ? baglantiSonucu.v : [])
     .flatMap((c) => c.socialProfiles ?? [])
     .filter((p) => p.profileType === 'facebook_page');
 
+  const forms = formSonucu.ok ? formSonucu.v : [];
   const editId = first(params.form);
   const editing = editId ? forms.find((f) => f.id === editId) : undefined;
 
   return (
     <div className="space-y-5">
+      {!formSonucu.ok && (
+        <Uyari ton="tehlike" baslik="Form listesi alınamadı.">
+          {formSonucu.hata}
+        </Uyari>
+      )}
 
-      {pages.length === 0 ? (
+      {!baglantiSonucu.ok ? (
+        <Uyari ton="tehlike" baslik="Sayfalar okunamadı; form oluşturulamıyor.">
+          {baglantiSonucu.hata}
+        </Uyari>
+      ) : pages.length === 0 ? (
         <div className="rounded-xl border border-dashed border-line bg-surface p-8 text-center">
           <h2 className="text-sm font-semibold text-ink">Önce bir Facebook sayfası gerekiyor</h2>
           <p className="mx-auto mt-2 max-w-md text-xs text-ink-muted">
             Anlık form sayfaya ait — reklam hesabına değil. Instagram hesabı tek başına
             yeterli değil.
           </p>
+          {/* Sayfa ataması bir WORKSPACE işi: Kurulum'un hesaplar bloğu. */}
           <Link
-            href={mmAdresi(clientId, 'baglantilar')}
+            href={hesaplarAdresi(clientId)}
             className="mt-4 inline-block rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white"
           >
-            Platform bağlantılarına git
+            Kurulum’da sayfa ata
           </Link>
         </div>
       ) : canWrite ? (
@@ -131,7 +156,7 @@ export async function FormlarIcerik({
                 </div>
                 {canWrite && (
                   <Link
-                    href={varlikYonu(clientId, 'formlar', { form: f.id })}
+                    href={varliklarAdresi('formlar', clientId, { form: f.id })}
                     className="shrink-0 rounded-lg border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface-sunken"
                   >
                     {f.status === 'published' ? 'Görüntüle' : 'Düzenle'}

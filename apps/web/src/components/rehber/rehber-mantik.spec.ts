@@ -935,10 +935,10 @@ describe('kaynak: aynı içerikle yeniden kur', () => {
   });
 });
 
-describe('ölçüm engeli Ölçüm bölümüne bağlanıyor', () => {
-  it('KRİTİK: satış dönüşümü engeli ve piksel uyarıları Marka Merkezi › Ölçüm bağlantısı taşıyor; kodlar eksik listesinde var', () => {
+describe('ölçüm engeli Kurulum › Dönüşüm ölçümü’ne bağlanıyor', () => {
+  it('KRİTİK: satış dönüşümü engeli ve piksel uyarıları Kurulum › Dönüşüm ölçümü bağlantısı taşıyor; kodlar eksik listesinde var', () => {
     const e = yorumsuz('adim-amac-nerede.tsx');
-    expect(e).toContain("OLCUM_ENGEL_KODLARI.includes(e.kod) && <Link href={baglanti('/marka-merkezi', { bolum: 'olcum', musteri: b.clientId })}>");
+    expect(e).toContain("OLCUM_ENGEL_KODLARI.includes(e.kod) && <Link href={markaMerkeziAdresi('kurulum', b.clientId, 'olcum')}>");
     const eksik = readFileSync(join(__dirname, '../../../../../packages/shared/src/reklam/rehber/eksikler.ts'), 'utf8');
     for (const kod of OLCUM_ENGEL_KODLARI) expect(eksik, kod).toContain(`'${kod}'`);
   });
