@@ -15,8 +15,10 @@ import {
   type RuleRunRecord,
   type RuleWindow,
   type TenantContext,
+  type Platform,
 } from '@advetics/shared';
 import { PrismaService } from '../../prisma/prisma.service';
+import { DonemErisimiService } from '../erisim/donem-erisimi.service';
 import {
   evaluate,
   nextBudgetMicros,
@@ -66,7 +68,6 @@ interface WindowRow {
   clicks: string | number | null;
   conversions: string | number | null;
   conversion_value_micros: string | number | bigint | null;
-  reach: string | number | null;
   days: string | number | null;
   newest: Date | null;
 }
@@ -116,9 +117,31 @@ export interface EvaluationOutcome {
   actions: PendingAction[];
 }
 
+/**
+ * Pencere → varlık → pencerenin TEKİL erişimi ya da neden yok.
+ * Kural turundan ÖNCE, transaction'ın DIŞINDA okunuyor (`frekansHazirla`).
+ */
+export type FrekansErisimi = Map<RuleWindow, Map<string, { reach: number } | { neden: string }>>;
+
+/** Kısa bir transaction'da kod çalıştıran yürütücü (CLAUDE.md: tx değil ÇALIŞTIRICI ver). */
+export type DbCalistirici = <T>(fn: (tx: TxLike) => Promise<T>) => Promise<T>;
+
+/**
+ * Pencerenin tarih aralığı: DÜN dahil, bugün hariç. Metrik penceresi
+ * (`loadWindows`) ve erişim okuması AYNI fonksiyondan: ayrı yazılırsa bir gün
+ * kayar ve frekansın payı ile paydası farklı dönemleri anlatır.
+ */
+export function pencereAraligi(w: RuleWindow, now: Date): { from: string; to: string } {
+  const yesterday = shiftDate(toDateText(now), -1);
+  return { from: shiftDate(yesterday, -(WINDOW_DAYS[w] - 1)), to: yesterday };
+}
+
 @Injectable()
 export class RulesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly donemErisimi: DonemErisimiService,
+  ) {}
 
   // ---------------------------------------------------------------------------
   // CRUD
@@ -322,14 +345,86 @@ export class RulesService {
     now = new Date(),
   ): Promise<EvaluationOutcome> {
     const rule = await this.get(ctx, ruleId);
-    return this.prisma.withTenant(ctx, (tx) => this.runEvaluation(tx, rule, now));
+    const frekans = await this.frekansHazirla((fn) => this.prisma.withTenant(ctx, fn), rule, now);
+    return this.prisma.withTenant(ctx, (tx) => this.runEvaluation(tx, rule, now, frekans));
   }
 
-  async runEvaluation(
-    tx: TxLike,
-    rule: RuleRecord,
-    now: Date,
-  ): Promise<EvaluationOutcome> {
+  /**
+   * ═══ FREKANS KOŞULU İÇİN PENCERENİN TEKİL ERİŞİMİ ═══
+   *
+   * Kuralda frekans koşulu YOKSA `null` ve platforma hiç gidilmiyor.
+   * Varsa: varlık ve hesap bilgisi `calistir` ile KISA bir transaction'da,
+   * platform çağrısı DIŞARIDA (`withTenant` 5 sn; Meta çağrısı üretimde 12
+   * sn sürdü). Hesap ve pencere başına TEK çağrı (`all_days`, kuralın
+   * seviyesinde), kota bekçisinden (`rule_reach`) ve önbellekten geçerek.
+   *
+   * HATA FIRLATMIYOR: okunamayan varlık `{ neden }` taşıyor ve frekans
+   * koşulu o varlıkta DEĞERLENDİRİLMİYOR (eylem yok, sebep kayıtta).
+   */
+  async frekansHazirla(calistir: DbCalistirici, rule: RuleRecord, now: Date): Promise<FrekansErisimi | null> {
+    const pencereler = [...new Set(rule.conditions.filter((c) => c.metric === 'frequency').map((c) => c.window))];
+    if (pencereler.length === 0) return null;
+
+    const { varliklar, hesaplar } = await calistir(async (tx) => {
+      const varliklar = await this.varliklariOku(tx, rule);
+      const hesapIdleri = [...new Set(varliklar.map((v) => v.ad_account_id))];
+      const hesaplar =
+        hesapIdleri.length === 0
+          ? []
+          : await tx.$queryRaw<
+              Array<{
+                id: string;
+                client_id: string | null;
+                platform: Platform;
+                external_id: string;
+                connection_id: string;
+                manager_external_id: string | null;
+              }>
+            >(Prisma.sql`
+              SELECT id::text AS id, client_id::text AS client_id, platform, external_id,
+                     connection_id::text AS connection_id, manager_external_id
+              FROM ad_accounts WHERE id = ANY(${hesapIdleri}::uuid[])
+            `);
+      return { varliklar, hesaplar };
+    });
+
+    const out: FrekansErisimi = new Map();
+    for (const w of pencereler) {
+      const aralik = pencereAraligi(w, now);
+      const pencere = new Map<string, { reach: number } | { neden: string }>();
+      for (const h of hesaplar) {
+        const sonuc = await this.donemErisimi.oku(
+          {
+            id: h.id,
+            clientId: h.client_id,
+            platform: h.platform,
+            externalId: h.external_id,
+            connectionId: h.connection_id,
+            managerExternalId: h.manager_external_id,
+          },
+          { seviye: rule.level, ...aralik },
+          { katman: 'rule_reach', etiket: 'kural_frekans', simdi: now },
+        );
+        for (const v of varliklar.filter((x) => x.ad_account_id === h.id)) {
+          if (sonuc.tur !== 'olculdu') {
+            pencere.set(v.id, { neden: sonuc.neden });
+            continue;
+          }
+          const satir = sonuc.satirlar.get(v.external_id);
+          pencere.set(v.id, satir ? { reach: satir.reach } : { neden: 'Meta bu varlık için pencere erişimi döndürmedi' });
+        }
+      }
+      out.set(w, pencere);
+    }
+    return out;
+  }
+
+  /**
+   * Kuralın kapsamındaki varlıklar: değerlendirme ve erişim okuması AYNI
+   * sorguyu kullanıyor. İkinci bir kopya kapsamı ayrıştırırdı (erişimi
+   * okunmayan bir varlığın frekansı "okunamadı" diye atlanırdı).
+   */
+  private async varliklariOku(tx: TxLike, rule: RuleRecord): Promise<EntityRow[]> {
     const { table, hasBudget } = LEVEL_TABLE[rule.level];
 
     const accountFilter = rule.adAccountId
@@ -340,7 +435,7 @@ export class RulesService {
       ? Prisma.sql`e.budget_mode::text AS budget_mode, e.budget_amount_micros`
       : Prisma.sql`NULL::text AS budget_mode, NULL::bigint AS budget_amount_micros`;
 
-    const entities = await tx.$queryRaw<EntityRow[]>(Prisma.sql`
+    return tx.$queryRaw<EntityRow[]>(Prisma.sql`
       SELECT e.id::text AS id, e.name, e.external_id, e.status::text AS status,
              e.ad_account_id::text AS ad_account_id, ${budgetCols},
              a.currency, ${donusumsuzHedefSql(rule.level, 'e')} AS donusumsuz_hedef
@@ -351,6 +446,20 @@ export class RulesService {
         -- reddederdi ve her tur aynı hatayı kaydederdik.
         AND e.status <> 'deleted'
     `);
+  }
+
+  /**
+   * `frekans` ZORUNLU PARAMETRE (varsayılanı yok): unutan çağıran derlemede
+   * yakalanıyor. Frekans koşulu olan kuralda `null` gelirse koşul
+   * değerlendirilmiyor ve sebep yazılıyor; eski paydaya sessizce dönmüyor.
+   */
+  async runEvaluation(
+    tx: TxLike,
+    rule: RuleRecord,
+    now: Date,
+    frekans: FrekansErisimi | null,
+  ): Promise<EvaluationOutcome> {
+    const entities = await this.varliklariOku(tx, rule);
 
     if (entities.length === 0) {
       return { evaluatedCount: 0, matchedCount: 0, actions: [] };
@@ -371,7 +480,25 @@ export class RulesService {
     let matchedCount = 0;
     let applied = 0;
 
+    const frekansPencereleri = [...new Set(rule.conditions.filter((c) => c.metric === 'frequency').map((c) => c.window))];
+
     for (const e of entities) {
+      /*
+       * PENCERENİN TEKİL ERİŞİMİ toplamlara İŞLENİYOR; yoksa `reach` null
+       * kalıyor ve neden snapshot'a yazılıyor (evaluate frekans koşulunu
+       * atlayıp sebebi kaydediyor).
+       */
+      const pencereler = { ...(windowData.get(e.id)?.windows ?? {}) };
+      const erisimNedeni: Partial<Record<RuleWindow, string>> = {};
+      for (const w of frekansPencereleri) {
+        const okuma = frekans?.get(w)?.get(e.id);
+        const toplam = pencereler[w];
+        if (okuma && 'reach' in okuma) {
+          if (toplam) pencereler[w] = { ...toplam, reach: okuma.reach };
+        } else {
+          erisimNedeni[w] = okuma?.neden ?? 'erişim okunmadı';
+        }
+      }
       const snapshot: EntitySnapshot = {
         entityId: e.id,
         entityName: e.name,
@@ -380,11 +507,12 @@ export class RulesService {
         budgetMode: (e.budget_mode as EntitySnapshot['budgetMode']) ?? 'none',
         budgetAmountMicros: e.budget_amount_micros === null ? null : BigInt(e.budget_amount_micros),
         currency: e.currency,
-        windows: windowData.get(e.id)?.windows ?? {},
+        windows: pencereler,
         budgetSpentRatio: budgetRatios.get(e.ad_account_id) ?? null,
         newestDataAt: windowData.get(e.id)?.newestAt ?? null,
         lastActionAt: lastActions.get(e.id) ?? null,
         donusumsuzHedef: e.donusumsuz_hedef,
+        erisimNedeni,
       };
 
       const result = evaluate(snapshot, {
@@ -485,11 +613,10 @@ export class RulesService {
     now: Date,
   ): Promise<Map<string, EntityWindows>> {
     // BUGÜN DIŞARIDA. Panel, rapor ve bütçe sayfasıyla aynı kural: gün
-    // bitmeden gelen kısmi veri EBM'yi düşük gösterir.
-    const yesterday = shiftDate(toDateText(now), -1);
-
+    // bitmeden gelen kısmi veri EBM'yi düşük gösterir. Aralık erişim
+    // okumasıyla AYNI fonksiyondan (`pencereAraligi`).
     const parts = windows.map((w) => {
-      const from = shiftDate(yesterday, -(WINDOW_DAYS[w] - 1));
+      const { from, to: yesterday } = pencereAraligi(w, now);
       return Prisma.sql`
         SELECT ${w} AS win, entity_id::text AS entity_id,
                SUM(spend_micros) AS spend_micros,
@@ -497,11 +624,10 @@ export class RulesService {
                SUM(clicks) AS clicks,
                SUM(conversions) AS conversions,
                SUM(conversion_value_micros) AS conversion_value_micros,
-               -- ERİŞİM TOPLANAMAZ ama frekans için bir paydaya ihtiyaç var.
-               -- Günlük erişimlerin ORTALAMASI alınıyor: toplamak aynı kişiyi
-               -- her gün yeniden sayardı ve frekansı olduğundan düşük
-               -- gösterirdi — yorgunluk kuralını tam ters yönde bozar.
-               COALESCE(AVG(NULLIF(reach, 0)), 0)::bigint AS reach,
+               -- ERISIM BURADA OKUNMUYOR: gunluk satirlardan pencerenin
+               -- tekil kisi sayisi cikmaz. Ortalama paydasi frekansi pencere
+               -- uzunlugu kadar sisiriyordu; tekil erisim platformdan
+               -- (frekansHazirla).
                COUNT(DISTINCT date) AS days,
                MAX(fetched_at) AS newest
         FROM insights_daily
@@ -525,7 +651,8 @@ export class RulesService {
         clicks: Number(r.clicks ?? 0),
         conversions: Number(r.conversions ?? 0),
         conversionValueMicros: toBigInt(r.conversion_value_micros),
-        reach: Number(r.reach ?? 0),
+        // Pencerenin tekil erişimi runEvaluation'da platform okumasından.
+        reach: null,
         days: Number(r.days ?? 0),
       };
       // TAZELİK PENCERE BAZLI DEĞİL VARLIK BAZLI: hangi pencereden gelirse

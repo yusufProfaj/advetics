@@ -537,7 +537,15 @@ function performansMetrikleri(summary: MetricsSummary, karsilastir: boolean): Pe
     summary.roas === null
       ? {
           anahtar: 'erisim',
-          ad: 'Erişim',
+          /*
+           * ETİKETİN KENDİSİ "GÜNLÜK ORTALAMA" DİYOR, ipucu değil. Çok günlü
+           * aralıkta bu sayı dönemin tekil kitlesi DEĞİL (günlük satırlardan
+           * tekil kişi çıkmaz) ve "Erişim" başlığıyla durduğunda dönemin
+           * kitlesi gibi okunuyordu; ipucu küçük yazıyla kayboluyordu. Dönemin
+           * tekil erişimi raporda Meta'dan okunuyor; panelde her sayfa
+           * yüklemesinde platforma çıkmak kota demek (DEVAM notu).
+           */
+          ad: summary.reach !== null && summary.reachKind === 'daily_average' ? 'Günlük ortalama erişim' : 'Erişim',
           deger: formatNumber(summary.reach),
           degisim: null,
           ipucu:
@@ -545,8 +553,8 @@ function performansMetrikleri(summary: MetricsSummary, karsilastir: boolean): Pe
               ? 'platform bildirmiyor'
               : summary.reachKind === 'daily_average'
                 ? summary.reachAcrossAccounts
-                  ? 'günlük ortalama, hesaplar arası mükerrer olabilir'
-                  : 'günlük ortalama'
+                  ? 'dönemin tekil kişi sayısı değil, hesaplar arası mükerrer olabilir'
+                  : 'dönemin tekil kişi sayısı değil'
                 : summary.reachAcrossAccounts
                   ? 'hesaplar arası mükerrer olabilir'
                   : undefined,

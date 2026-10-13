@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConnectionsModule } from '../connections/connections.module';
+import { DonemErisimiModule } from '../erisim/donem-erisimi.module';
 import { KreatifAdresiService } from './kreatif-adresi.service';
 import { ReportsController } from './reports.controller';
 import { ReportsService } from './reports.service';
@@ -24,7 +25,8 @@ import { HaftalikOzetIsModule } from '../haftalik-ozet/haftalik-ozet-is.module';
    * süpürmesiyle gidiyor (`RaporPlaniService`). Çekirdek hiçbir modülü içe
    * almıyor; döngü yok.
    */
-  imports: [ConnectionsModule, HaftalikOzetIsModule],
+  // DÖNEM ERİŞİMİ: kampanya erişimi ve frekansı raporun aralığı için Meta'dan.
+  imports: [ConnectionsModule, HaftalikOzetIsModule, DonemErisimiModule],
   controllers: [ReportsController],
   providers: [
     ReportsService,

@@ -131,7 +131,10 @@ export class RulesController {
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<{ runId: string; actionCount: number; matchedCount: number }> {
     const rule = await this.rules.get(ctx, id);
-    return this.prisma.withTenant(ctx, (tx) => this.executor.execute(tx, ctx, rule));
+    const now = new Date();
+    // Pencere erişimi transaction'dan ÖNCE ve dışında (platform çağrısı).
+    const frekans = await this.rules.frekansHazirla((fn) => this.prisma.withTenant(ctx, fn), rule, now);
+    return this.prisma.withTenant(ctx, (tx) => this.executor.execute(tx, ctx, rule, frekans, now));
   }
 
   @Delete(':id')

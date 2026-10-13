@@ -86,7 +86,8 @@ beforeAll(async () => {
     withTenant: async <T>(_c: TenantContext, fn: (tx: unknown) => Promise<T>) => fn(h.db),
   } as unknown as PrismaService;
 
-  rules = new RulesService(prisma);
+  // Bu dosyada frekans koşulu yok: erişim okuyucusu çağrılırsa patlasın.
+  rules = new RulesService(prisma, { oku: async () => { throw new Error('beklenmedik erişim okuması'); } } as never);
   executor = new RuleExecutorService(
     rules,
     { get: () => ({ platform: 'meta', applyAction, canWrite }) } as never,
@@ -121,7 +122,7 @@ describe('prova modu', () => {
     await seedMatchingCampaign();
     const rule = await rules.create(CTX, ruleInput());
     // Kural prova modunda doğuyor.
-    const res = await executor.execute(h.db, CTX, rule, NOW, false);
+    const res = await executor.execute(h.db, CTX, rule, null, NOW, false);
 
     expect(applyAction).not.toHaveBeenCalled();
     expect(res.actionCount).toBe(1);
@@ -132,7 +133,7 @@ describe('prova modu', () => {
     // Denetim kaydı olan biteni anlatır, olabilecekleri değil.
     await seedMatchingCampaign();
     const rule = await rules.create(CTX, ruleInput());
-    await executor.execute(h.db, CTX, rule, NOW, false);
+    await executor.execute(h.db, CTX, rule, null, NOW, false);
 
     const audit = await h.q<{ count: string | number }>(
       `SELECT COUNT(*) AS count FROM audit_logs WHERE actor_type = 'rule'`,
@@ -143,7 +144,7 @@ describe('prova modu', () => {
   it('tur kaydı PROVA olarak işaretleniyor', async () => {
     await seedMatchingCampaign();
     const rule = await rules.create(CTX, ruleInput());
-    await executor.execute(h.db, CTX, rule, NOW, false);
+    await executor.execute(h.db, CTX, rule, null, NOW, false);
     const runs = await h.q<{ dry_run: boolean }>(`SELECT dry_run FROM rule_runs`);
     expect(runs[0]?.dry_run).toBe(true);
   });
@@ -151,7 +152,7 @@ describe('prova modu', () => {
   it('KURAL SONRADAN CANLIYA ALINSA DA geçmiş tur prova kalıyor', async () => {
     await seedMatchingCampaign();
     const rule = await rules.create(CTX, ruleInput());
-    await executor.execute(h.db, CTX, rule, NOW, false);
+    await executor.execute(h.db, CTX, rule, null, NOW, false);
     await rules.setMode(CTX, rule.id, false);
 
     const runs = await h.q<{ dry_run: boolean }>(`SELECT dry_run FROM rule_runs`);
@@ -165,7 +166,7 @@ describe('canlı mod', () => {
     const rule = await rules.create(CTX, ruleInput());
     const live = await rules.setMode(CTX, rule.id, false);
 
-    await executor.execute(h.db, CTX, live, NOW, false);
+    await executor.execute(h.db, CTX, live, null, NOW, false);
 
     expect(applyAction).toHaveBeenCalledTimes(1);
     // Platform kimliği gönderiliyor, bizim UUID'miz değil.
@@ -187,7 +188,7 @@ describe('canlı mod', () => {
     await seedMatchingCampaign();
     const rule = await rules.create(CTX, ruleInput());
     const live = await rules.setMode(CTX, rule.id, false);
-    await executor.execute(h.db, CTX, live, NOW, false);
+    await executor.execute(h.db, CTX, live, null, NOW, false);
 
     const audit = await h.q<{
       actor_type: string;
@@ -213,7 +214,7 @@ describe('canlı mod', () => {
       ruleInput({ name: 'Bütçe azalt', action: { type: 'adjust_budget', percent: -20 } }),
     );
     const live = await rules.setMode(CTX, rule.id, false);
-    await executor.execute(h.db, CTX, live, NOW, false);
+    await executor.execute(h.db, CTX, live, null, NOW, false);
 
     expect(applyAction.mock.calls[0]?.[1]).toMatchObject({
       type: 'set_budget',
@@ -234,7 +235,7 @@ describe('yazma izni', () => {
 
     const rule = await rules.create(CTX, ruleInput());
     const live = await rules.setMode(CTX, rule.id, false);
-    await executor.execute(h.db, CTX, live, NOW, false);
+    await executor.execute(h.db, CTX, live, null, NOW, false);
 
     expect(applyAction).not.toHaveBeenCalled();
     const rows = await logs();
@@ -251,7 +252,7 @@ describe('yazma izni', () => {
     await seedMatchingCampaign();
     const rule = await rules.create(CTX, ruleInput());
     const live = await rules.setMode(CTX, rule.id, false);
-    await executor.execute(h.db, CTX, live, NOW, false);
+    await executor.execute(h.db, CTX, live, null, NOW, false);
 
     const rows = await logs();
     expect(rows[0]?.error).toContain('yeniden bağlanmak');
@@ -266,7 +267,7 @@ describe('hata yolları', () => {
     );
     const rule = await rules.create(CTX, ruleInput());
     const live = await rules.setMode(CTX, rule.id, false);
-    const res = await executor.execute(h.db, CTX, live, NOW, false);
+    const res = await executor.execute(h.db, CTX, live, null, NOW, false);
 
     const rows = await logs();
     expect(rows[0]?.outcome).toBe('failed');
@@ -285,7 +286,7 @@ describe('hata yolları', () => {
     applyAction.mockRejectedValue(new PlatformApiError('meta', 'permanent', 'hata'));
     const rule = await rules.create(CTX, ruleInput());
     const live = await rules.setMode(CTX, rule.id, false);
-    await executor.execute(h.db, CTX, live, NOW, false);
+    await executor.execute(h.db, CTX, live, null, NOW, false);
 
     const audit = await h.q<{ count: string | number }>(
       `SELECT COUNT(*) AS count FROM audit_logs WHERE actor_type = 'rule'`,
@@ -302,7 +303,7 @@ describe('tur kaydı', () => {
       CTX,
       ruleInput({ guard: { minImpressions: 999_999, minClicks: 0, minSpend: 0, minDaysWithData: 0 } }),
     );
-    await executor.execute(h.db, CTX, rule, NOW, false);
+    await executor.execute(h.db, CTX, rule, null, NOW, false);
 
     const rows = await logs();
     expect(rows[0]?.outcome).toBe('skipped_guard');
@@ -318,7 +319,7 @@ describe('tur kaydı', () => {
       [CAMPAIGN, IDS.adAccount, IDS.client],
     );
     const rule = await rules.create(CTX, ruleInput());
-    const res = await executor.execute(h.db, CTX, rule, NOW, false);
+    const res = await executor.execute(h.db, CTX, rule, null, NOW, false);
 
     expect(res.matchedCount).toBe(0);
     const runs = await h.q<{ evaluated_count: number; action_count: number }>(
@@ -338,7 +339,7 @@ describe('tur kaydı', () => {
       [CAMPAIGN, IDS.adAccount, IDS.client],
     );
     const rule = await rules.create(CTX, ruleInput());
-    await executor.execute(h.db, CTX, rule, NOW, false);
+    await executor.execute(h.db, CTX, rule, null, NOW, false);
 
     const after = await rules.get(CTX, rule.id);
     expect(after.lastRunAt).not.toBeNull();
@@ -356,7 +357,7 @@ describe('notify aksiyonu', () => {
       ruleInput({ name: 'Sadece uyar', action: { type: 'notify' } }),
     );
     const live = await rules.setMode(CTX, rule.id, false);
-    await executor.execute(h.db, CTX, live, NOW, false);
+    await executor.execute(h.db, CTX, live, null, NOW, false);
 
     expect(applyAction).not.toHaveBeenCalled();
     expect((await logs())[0]?.outcome).toBe('simulated');
@@ -377,7 +378,7 @@ describe('Google — kural aksiyonu kapalı (İyileştir v1)', () => {
     await h.q(`UPDATE insights_daily SET platform = 'google'`);
     const rule = await rules.create(CTX, ruleInput());
     const live = await rules.setMode(CTX, rule.id, false);
-    await executor.execute(h.db, CTX, live, NOW, false);
+    await executor.execute(h.db, CTX, live, null, NOW, false);
     expect(applyAction).not.toHaveBeenCalled();
     const rows = await logs();
     expect(rows).toHaveLength(1);
@@ -402,7 +403,7 @@ describe('kanal bildirimi (Paket A, Ajan 4 N-d)', () => {
     await h.q('BEGIN');
     let res: { runId: string };
     try {
-      res = await executor.execute(h.db, CTX, bozuk, NOW, true);
+      res = await executor.execute(h.db, CTX, bozuk, null, NOW, true);
       await h.q('COMMIT');
     } catch (e) {
       await h.q('ROLLBACK');

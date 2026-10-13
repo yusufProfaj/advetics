@@ -2,8 +2,9 @@ import { z } from 'zod';
 import { ALICI_UST_SINIRI } from '../alici-listesi';
 import type { MetricTotals } from './metrics.schema';
 import { PLATFORMS, type Platform } from '../constants/platforms';
-import { formatMoney, formatNumber, formatPercent } from '../format';
+import { formatDecimal, formatMoney, formatNumber, formatPercent } from '../format';
 import type { TakipAcigiYaniti } from '../veri-kaynagi/takip-acigi';
+import { SONUC_ETIKETLERI, type MetaOptimizasyonHedefi } from '../reklam/meta/niyetler';
 
 /**
  * Modül 6 — White-label raporlama sözleşmeleri.
@@ -29,7 +30,40 @@ export const METRIC_LABELS = {
   spend: { label: 'Harcama', tr: 'Harcama' },
   impressions: { label: 'Gösterim', tr: 'Gösterim' },
   clicks: { label: 'Tıklama', tr: 'Tıklama' },
-  reach: { label: 'Erişim', tr: 'Erişim' },
+  /*
+   * ERİŞİM DÖNEMİN TEKİL KİŞİ SAYISI, günlük satırlardan TÜRETİLMİYOR.
+   * Bir süre günlük erişimlerin ortalaması basılıyordu ("*" ile); bu ne
+   * dönemin kitlesi ne de bir günün: müşteriye ikisinin arasında uydurma
+   * bir sayı gidiyordu. Değer rapor üretilirken Meta'dan dönemin tamamı
+   * için okunuyor (`time_increment=all_days`); okunamazsa "okunamadı".
+   */
+  reach: {
+    label: 'Erişim',
+    tr: 'Erişim',
+    hint: "Dönemde reklamı en az bir kez gören tekil kişi sayısı; Meta'dan dönemin tamamı için okunur. Google tekil erişim vermiyor.",
+  },
+  frequency: {
+    label: 'Frekans',
+    tr: 'Frekans',
+    hint: 'Gösterim sayısının dönemin tekil erişimine bölümü: bir kişinin reklamı dönemde ortalama kaç kez gördüğü.',
+  },
+  cpm: {
+    label: 'BGM',
+    tr: 'Bin Gösterim Maliyeti',
+    hint: 'Toplam harcamanın gösterim sayısına bölümünün 1000 katı: 1000 gösterimin maliyeti.',
+  },
+  /*
+   * SONUÇ: kampanyanın KURULDUĞU hedefin sayısı. Erişim için kurulmuş bir
+   * kampanyanın dönüşümü her gün 0 ve o 0 bir başarısızlık değil; satırda
+   * yalnız "Dönüşüm 0" görünürse rapor çalışan bir kampanyayı boşa para
+   * yakıyor gibi anlatır. Etiket rehberin sonuç sözlüğünden
+   * (`SONUC_ETIKETLERI.REACH`), ikinci bir kopya yazılmıyor.
+   */
+  result: {
+    label: 'Sonuç',
+    tr: 'Sonuç',
+    hint: `Kampanyanın kurulduğu hedefin sayısı: erişim için kurulmuş kampanyada ${SONUC_ETIKETLERI.REACH}, diğerlerinde dönüşüm. İki tür toplanamadığı için toplam satırı boş.`,
+  },
   ctr: { label: 'TO', tr: 'Tıklama Oranı', hint: 'Tıklama sayısının gösterim sayısına bölümü.' },
   cpc: {
     label: 'Ort. TBM',
@@ -322,17 +356,41 @@ export function aramaTiklamasiHataCumlesi(mesaj: string): string {
  * (ikinci bir kopya doğduğu anda biri unutulur). Eski veride alan yoksa boş.
  */
 export function tabloNotlari(
-  data: Pick<ReportData, 'unknownCallActions' | 'callClicksErrors'> & Partial<Pick<ReportData, 'videoMetricsErrors'>>,
+  data: Pick<ReportData, 'unknownCallActions' | 'callClicksErrors'> &
+    Partial<Pick<ReportData, 'videoMetricsErrors' | 'erisimHatalari'>>,
   bolum: 'meta_campaigns' | 'google_campaigns',
 ): string[] {
   const platform = bolum === 'meta_campaigns' ? 'meta' : 'google';
   const video = (data.videoMetricsErrors ?? []).filter((h) => h.platform === platform).map((h) => videoHataCumlesi(platform, h.mesaj));
+  const erisim = (data.erisimHatalari ?? []).filter((h) => h.platform === platform).map((h) => erisimHataCumlesi(h.mesaj));
   return [
     ...(bolum === 'meta_campaigns'
       ? (data.unknownCallActions ?? []).map(taninmayanAramaCumlesi)
       : (data.callClicksErrors ?? []).map(aramaTiklamasiHataCumlesi)),
     ...video,
+    ...erisim,
   ];
+}
+
+/** Dönem erişimi alınamadığında tablonun üstündeki not (panel ve PDF, tek yer). */
+export function erisimHataCumlesi(mesaj: string): string {
+  return `Dönemin tekil erişimi Meta'dan alınamadı; erişim ve frekans hücreleri "okunamadı" yazıyor, tahmin edilmiyor. Sebep: ${mesaj.slice(0, 200)}`;
+}
+
+/**
+ * Kampanya tablosunun ALTINDAKİ erişim dipnotları (panel ve PDF, tek yer).
+ * Yalnız tabloda erişim/frekans/sonuç sütunu varsa ve ilgili hâl görülürse.
+ */
+export function erisimDipnotlari(
+  sutunlar: readonly string[],
+  satirlar: readonly ReportCampaignRow[],
+  toplam: RaporErisim,
+): string[] {
+  const erisimSutunu = sutunlar.some((k) => k === 'reach' || k === 'frequency' || k === 'result');
+  if (!erisimSutunu) return [];
+  const hepsi = [...satirlar.map((r) => r.erisim), toplam].filter((e): e is RaporErisim => !!e);
+  const nedenler = new Set(hepsi.filter((e) => e.durum === 'desteklenmiyor' && e.neden).map((e) => e.neden!));
+  return [...nedenler].map((n) => `${n}; bu hücreler boş bırakıldı, 0 yazılmadı.`);
 }
 
 /** Video ölçümü alınamadığında tablonun üstündeki not (panel ve PDF, tek yer). */
@@ -489,9 +547,15 @@ const COLUMN_KEY_ENUM = z.enum(COLUMN_KEYS as unknown as [ColumnKey, ...ColumnKe
  * döndürmüyor ve o sütunlar orada her zaman 0 çıkardı — "hiç form gelmedi"
  * gibi okunurdu.
  */
+/*
+ * GOOGLE VARSAYILANINDA ERİŞİM YOK: Google tekil erişim vermiyor ve sütun
+ * her satırda 0 basıyordu (senkron 0 yazıyordu) — "kimseye ulaşmadı" gibi
+ * okunan uydurma bir sıfır. Kullanıcı yine de seçerse hücre "—" ve dipnot
+ * sebebini yazıyor.
+ */
 export const DEFAULT_COLUMNS = {
   meta_campaigns: ['spend', 'impressions', 'reach', 'clicks', 'form', 'message'],
-  google_campaigns: ['spend', 'impressions', 'reach', 'clicks', 'ctr', 'conversions'],
+  google_campaigns: ['spend', 'impressions', 'clicks', 'ctr', 'conversions'],
 } as const satisfies Record<string, readonly string[]>;
 
 export const sectionOptionsSchema = z.object({
@@ -587,14 +651,19 @@ export interface ReportCampaignRow extends MetricTotals {
   status: string;
   objective: string | null;
   /**
-   * Erişim — TEK BİR KAMPANYANIN aralık boyunca erişimi.
+   * DÖNEMİN TEKİL ERİŞİMİ VE FREKANSI — platformdan, dönemin tamamı için.
    *
-   * Günlük satırların TOPLAMI değil ortalaması: aynı kişi kampanyayı iki gün
-   * de görmüş olabilir ve toplamak müşteriye iki kat kitle söylemek olur.
-   * `reachIsDailyAverage` hangisi olduğunu söylüyor.
+   * Günlük satırlardan TÜRETİLMİYOR: toplamı aynı kişiyi her gün yeniden
+   * sayar, ortalaması da ne dönemin kitlesi ne bir günün. Bir süre ortalama
+   * basılıyordu ve 30 günlük raporda kampanyanın kitlesi olduğundan kat kat
+   * küçük görünüyordu. Okunamadıysa `durum` söylüyor; sayı uydurulmuyor.
    */
-  reach: number | null;
-  reachIsDailyAverage: boolean;
+  erisim: RaporErisim;
+  /**
+   * Kampanya ERİŞİM için kurulmuş (Meta reklam seti hedefi
+   * `ERISIM_OPTIMIZASYON_HEDEFI`): sonucu erişilen kişi, dönüşüm değil.
+   */
+  erisimKampanyasi: boolean;
   conversionCounts: ConversionCounts;
   /**
    * VERİ KAPSAMASI — bu kampanyanın aralıkta kaç günü var.
@@ -607,6 +676,76 @@ export interface ReportCampaignRow extends MetricTotals {
   dayCount: number;
   /** Video ölçümü (`VIDEO_KEYS`); video olmayan kampanyada izlenme 0 ya da null. */
   video: RaporVideo;
+}
+
+/**
+ * ═══ DÖNEM ERİŞİMİ (erişim ölçümü düzeltmesi, 2026-10-13) ═══
+ *
+ * ÜÇ HÂL AYRI, çünkü üçünün okuyana söylediği iş farklı:
+ *  · `olculdu`        platform dönemin tekil erişimini verdi;
+ *  · `okunamadi`      platform veriyor ama bu rapor için alınamadı (kota,
+ *                     token, platform hatası) — sebep tablonun üstünde;
+ *  · `desteklenmiyor` platform tekil erişim VERMİYOR (Google) ya da hesaplar
+ *                     arası tekilleştirilemiyor — hücre "—", dipnot sebebi.
+ * Üçünü aynı boş hücreye ya da 0'a çevirmek, bu projenin baş belası olan
+ * sessiz hatanın ta kendisi olurdu.
+ */
+export type ErisimDurumu = 'olculdu' | 'okunamadi' | 'desteklenmiyor';
+
+export interface RaporErisim {
+  /** Dönemin tekil erişimi. `durum !== 'olculdu'` ise null. */
+  reach: number | null;
+  /** Platformun bildirdiği dönem frekansı (satırda); toplamda hesaplanıyor. */
+  frequency: number | null;
+  durum: ErisimDurumu;
+  /** `desteklenmiyor`/`okunamadi` için kısa sebep (dipnot ve not). */
+  neden: string | null;
+}
+
+/**
+ * Meta reklam seti hedefi: kampanya ERİŞİM için kurulmuş. Rehberin hedef
+ * sözlüğüyle aynı tip (`MetaOptimizasyonHedefi`): yazım hatası derlemede
+ * yakalanıyor.
+ */
+export const ERISIM_OPTIMIZASYON_HEDEFI = 'REACH' as const satisfies MetaOptimizasyonHedefi;
+
+export function erisimYok(durum: Exclude<ErisimDurumu, 'olculdu'>, neden: string): RaporErisim {
+  return { reach: null, frequency: null, durum, neden };
+}
+
+/** Google'ın tek cümlesi (dipnot, toplam ve hücre sebebi aynı yerden). */
+export const GOOGLE_ERISIM_YOK = 'Google tekil erişim vermiyor';
+
+/**
+ * Erişim ve frekans hücresi — PANEL VE PDF AYNI FONKSİYONU çağırıyor.
+ * "okunamadı" (alınamadı) ile "—" (platform vermiyor) ayrı; 0 ASLA
+ * uydurulmuyor.
+ */
+export function erisimHucresi(k: 'reach' | 'frequency', e: RaporErisim | undefined): string {
+  if (!e) return '—';
+  if (e.durum === 'okunamadi') return 'okunamadı';
+  if (e.durum === 'desteklenmiyor') return '—';
+  if (k === 'reach') return formatNumber(e.reach);
+  return e.frequency === null ? '—' : formatDecimal(e.frequency);
+}
+
+/**
+ * Sonuç hücresi: erişim kampanyasında erişim (aynı biçimci, "okunamadı"
+ * dahil), diğerlerinde dönüşüm sayısı.
+ */
+export function sonucHucresi(r: ReportCampaignRow): string {
+  return r.erisimKampanyasi ? erisimHucresi('reach', r.erisim) : formatNumber(r.conversions);
+}
+
+/**
+ * TOPLAM SATIRININ ERİŞİMİ: tablonun dönem erişimi (hesap seviyesi) ve
+ * frekansı = toplam gösterim ÷ o erişim. Erişim okunamadıysa frekans da
+ * okunamadı; bir paydayı tahmin etmek, kural motorunda frekansı pencere
+ * uzunluğu kadar şişiren hatanın aynısını rapora taşımak olurdu.
+ */
+export function toplamFrekansi(impressions: number, e: RaporErisim): RaporErisim {
+  if (e.durum !== 'olculdu' || e.reach === null || e.reach <= 0) return { ...e, frequency: null };
+  return { ...e, frequency: impressions / e.reach };
 }
 
 /**
@@ -715,19 +854,57 @@ export function videoOlcumuVar(r: ReportCampaignRow): boolean {
   return (r.video?.izlenme ?? 0) > 0 || r.video?.okunamadi === true || (r.video?.p25 ?? 0) > 0;
 }
 
+/**
+ * ═══ SONUÇ VE BGM DE AYRI TABLODA (video ile aynı gerekçe, ölçüldü) ═══
+ *
+ * İlk denemede erişim kampanyası olan raporda Sonuç ve BGM ana tabloya
+ * ekleniyordu: varsayılan altı sütun + Frekans + Sonuç + BGM = dokuz ve
+ * PDF'te altı haneli harcama "123.456…" diye KIRPILDI (test yakaladı).
+ * İki sütun ayrı, dar bir tabloda ve satırın SONUÇ TÜRÜ de yazılıyor:
+ * erişim kampanyasında "erişilen kişi", diğerlerinde "dönüşüm". Kaç
+ * kampanyanın erişim için kurulduğu yazılıyor.
+ */
+export const SONUC_SUTUNLARI = ['result', 'cpm'] as const;
+export type SonucSutunu = (typeof SONUC_SUTUNLARI)[number];
+export function sonucSutunuMu(k: string): k is SonucSutunu {
+  return (SONUC_SUTUNLARI as readonly string[]).includes(k);
+}
+
+/** Satırın sonuç türü (Sonuç tablosunun ikinci sütunu). */
+export function sonucTuru(r: ReportCampaignRow): string {
+  return r.erisimKampanyasi ? SONUC_ETIKETLERI.REACH : 'dönüşüm';
+}
+
 export function kampanyaTablolari(
   sutunlar: readonly ColumnKey[],
   satirlar: readonly ReportCampaignRow[],
-): { ana: ColumnKey[]; video: { sutunlar: VideoKey[]; satirlar: ReportCampaignRow[]; aciklama: string } | null } {
-  const ana = sutunlar.filter((k) => !videoSutunuMu(k));
+): {
+  ana: ColumnKey[];
+  video: { sutunlar: VideoKey[]; satirlar: ReportCampaignRow[]; aciklama: string } | null;
+  sonuc: { sutunlar: SonucSutunu[]; satirlar: ReportCampaignRow[]; aciklama: string } | null;
+} {
+  const ana = sutunlar.filter((k) => !videoSutunuMu(k) && !sonucSutunuMu(k));
+  const sonucSutunlari = sutunlar.filter(sonucSutunuMu);
+  const erisimSayisi = satirlar.filter((r) => r.erisimKampanyasi === true).length;
+  const sonuc =
+    sonucSutunlari.length === 0
+      ? null
+      : {
+          sutunlar: sonucSutunlari,
+          satirlar: [...satirlar],
+          aciklama:
+            erisimSayisi === 0
+              ? `${satirlar.length} kampanya; hiçbiri erişim için kurulmamış, sonuç dönüşüm.`
+              : `${satirlar.length} kampanyadan ${erisimSayisi} tanesi erişim için kurulmuş; onların sonucu ${SONUC_ETIKETLERI.REACH}, dönüşüm değil.`,
+        };
   const videoSutunlari = sutunlar.filter(videoSutunuMu);
-  if (videoSutunlari.length === 0) return { ana, video: null };
+  if (videoSutunlari.length === 0) return { ana, video: null, sonuc };
   const videoSatirlari = satirlar.filter(videoOlcumuVar);
   const aciklama =
     videoSatirlari.length === 0
       ? 'Bu dönemde video ölçümü olan kampanya yok.'
       : `Video ölçümü olan ${videoSatirlari.length} kampanya (tablodaki ${satirlar.length} kampanyadan).`;
-  return { ana, video: { sutunlar: videoSutunlari, satirlar: videoSatirlari, aciklama } };
+  return { ana, video: { sutunlar: videoSutunlari, satirlar: videoSatirlari, aciklama }, sonuc };
 }
 
 export interface ReportPlatformBlock extends MetricTotals {
@@ -914,6 +1091,19 @@ export interface ReportData {
    */
   videoMetricsErrors: Array<{ platform: 'meta' | 'google'; mesaj: string }>;
   /**
+   * TABLONUN DÖNEM ERİŞİMİ (toplam satırı): platformun hesap seviyesi tekil
+   * erişimi. Bütün platformlar için dolu (`PLATFORMS`'tan kuruluyor): elle
+   * yazılmış bir platform listesi üçüncü platformu sessizce düşürür.
+   */
+  donemErisimi: Record<Platform, RaporErisim>;
+  /**
+   * Dönem erişimi alınamadığında SEBEPLER (platform başına ayrık, kısa).
+   * Boş = hata yok. Dolu iken ilgili hücreler "okunamadı" ve not tablonun
+   * ÜSTÜNDE (`tabloNotlari`): sebebi yazmayan "okunamadı" okuyanı tahmine
+   * iter.
+   */
+  erisimHatalari: Array<{ platform: Platform; mesaj: string }>;
+  /**
    * Anahtar kelime performansı.
    *
    * `null` "veri yok" DEĞİL, "bu yetenek henüz yok" demek: Google anahtar
@@ -1014,7 +1204,29 @@ export function resolveColumns(
   for (const k of veriyleAcilanVideoSutunlari(satirlar ?? [])) {
     if (!sutunlar.includes(k)) sutunlar.push(k);
   }
+  for (const k of veriyleAcilanErisimSutunlari(satirlar ?? [])) {
+    if (!sutunlar.includes(k)) sutunlar.push(k);
+  }
   return sutunlar;
+}
+
+/**
+ * ERİŞİM SÜTUNLARI DA VERİYLE AÇILIR (arama kovası deseni, yalnız
+ * varsayılan kullanılırken):
+ *  · Frekans: en az bir satırda dönem erişimi ÖLÇÜLDÜYSE. Google-only
+ *    tabloda her satırı "—" olan bir sütun eklemek gürültü olurdu.
+ *  · Sonuç ve BGM: en az bir satır ERİŞİM için kurulmuşsa. O kampanyanın
+ *    sonucu erişilen kişi ve maliyet ölçüsü bin gösterim; ikisi gizli
+ *    kalırsa satırda yalnız "Dönüşüm 0" görünür ve çalışan kampanya boşa
+ *    para yakıyor gibi okunur. Her raporda açmak ise her müşteriye boş bir
+ *    tablo eklemek olurdu. İkisi ana tabloda DEĞİL, ayrı tabloda
+ *    (`kampanyaTablolari`): ana tabloya binince harcama kırpılıyordu.
+ */
+export function veriyleAcilanErisimSutunlari(satirlar: readonly ReportCampaignRow[]): MetricKey[] {
+  const out: MetricKey[] = [];
+  if (satirlar.some((r) => r.erisim?.durum === 'olculdu' && r.erisim.frequency !== null)) out.push('frequency');
+  if (satirlar.some((r) => r.erisimKampanyasi === true)) out.push('result', 'cpm');
+  return out;
 }
 
 /**
@@ -1113,7 +1325,15 @@ export interface ReportMailDraft {
 // hiçbir şey demiyor — `Record<ColumnKey, …>` bunu derleme hatasına çeviriyor.
 // -----------------------------------------------------------------------------
 
-export function sumRows(rows: ReportCampaignRow[]): MetricTotals & { counts: ConversionCounts; video: RaporVideo } {
+/**
+ * `erisim` ZORUNLU PARAMETRE: tablonun dönem erişimi (toplam satırı) satır
+ * toplamından türetilemiyor ve varsayılanı olsaydı çağıranın onu unutması
+ * hem derlemede hem testte sessiz kalırdı (rapor eki bütçesi dersi).
+ */
+export function sumRows(
+  rows: ReportCampaignRow[],
+  erisim: RaporErisim,
+): MetricTotals & { counts: ConversionCounts; video: RaporVideo; erisim: RaporErisim } {
   let impressions = 0;
   let clicks = 0;
   let spend = 0n;
@@ -1152,14 +1372,17 @@ export function sumRows(rows: ReportCampaignRow[]): MetricTotals & { counts: Con
     counts,
     // Eski kayıtta (video alanı yok) boş ölçüm: "—", 0 değil.
     video: videoTopla(rows.map((r) => r.video ?? bosRaporVideo())),
+    erisim: toplamFrekansi(impressions, erisim),
   };
 }
 
 /**
  * Sütun başına TOPLAM biçimi. `null` = toplanamaz.
  *
- * `reach` toplanamıyor: aynı kişi iki kampanyayı da görmüş olabilir ve
- * toplamak müşteriye iki kat kitle söylemek olur.
+ * `reach` SATIRLARDAN TOPLANMIYOR (aynı kişi iki kampanyayı da görmüş
+ * olabilir); toplam satırı tablonun DÖNEM erişimini (hesap seviyesi,
+ * platformdan) basıyor. Frekans = toplam gösterim ÷ o erişim.
+ * `result` toplanamıyor: satırlarda iki farklı tür (erişilen kişi, dönüşüm).
  */
 export const COLUMN_TOTALS: Record<
   ColumnKey,
@@ -1168,7 +1391,10 @@ export const COLUMN_TOTALS: Record<
   spend: (t, m) => formatMoney(t.spendMicros, m, { decimals: 2 }),
   impressions: (t) => formatNumber(t.impressions),
   clicks: (t) => formatNumber(t.clicks),
-  reach: null,
+  reach: (t) => erisimHucresi('reach', t.erisim),
+  frequency: (t) => erisimHucresi('frequency', t.erisim),
+  cpm: (t, m) => formatMoney(microsOf(t.cpm), m),
+  result: null,
   ctr: (t) => formatPercent(t.ctr),
   cpc: (t, m) => formatMoney(microsOf(t.cpc), m),
   cpa: (t, m) => formatMoney(microsOf(t.cpa), m),

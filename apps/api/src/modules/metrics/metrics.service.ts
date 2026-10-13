@@ -272,7 +272,11 @@ export class MetricsService {
           -- setinin kartinda "0 kisiye ulasildi" gostermek olurdu; gosterim
           -- varken erisim sifir OLAMAZ, yani sifir tek basina "bilmiyoruz"
           -- demek.
-          SELECT NULLIF(SUM(reach), 0) AS total_reach, COUNT(DISTINCT date) AS day_count
+          -- GUN SAYISI YALNIZ ERISIMI OLAN GUNLERDEN: Google satirlarinda
+          -- erisim NULL (Google vermiyor); onlari paydaya katmak karisik
+          -- hesapta gunluk ortalamayi sessizce kucultur.
+          SELECT NULLIF(SUM(reach), 0) AS total_reach,
+                 COUNT(DISTINCT date) FILTER (WHERE reach IS NOT NULL) AS day_count
           FROM insights_daily
           WHERE date BETWEEN ${query.from}::date AND ${query.to}::date
             -- ODAKLIYKEN ERİŞİM DE ODAKTAN OKUNUYOR.

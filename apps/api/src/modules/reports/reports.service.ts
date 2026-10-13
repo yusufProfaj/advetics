@@ -23,9 +23,15 @@ import {
   type ReportPlatformBlock,
   type ReportSection,
   type RaporVideo,
+  type RaporErisim,
   type TenantContext,
+  ERISIM_OPTIMIZASYON_HEDEFI,
+  PLATFORMS,
+  erisimYok,
 } from '@advetics/shared';
 import { PrismaService } from '../../prisma/prisma.service';
+import type { PeriodReachRow } from '../connections/provider.types';
+import { DonemErisimiService, erisimYokCumlesi, type DonemErisimiSonucu, type ErisimHesabi } from '../erisim/donem-erisimi.service';
 import { emptyCounts, roundCounts } from './conversion-buckets';
 import { KreatifAdresiService } from './kreatif-adresi.service';
 
@@ -61,7 +67,6 @@ interface RawMetricRow {
   conversions: string | number | null;
   conversion_value_micros: string | number | bigint | null;
   currency: string | null;
-  reach_sum: string | number | null;
   day_count: string | number | null;
 }
 
@@ -233,6 +238,33 @@ function trackedAccounts(izlenen: string[], alias = ''): Prisma.Sql {
   return Prisma.sql`AND ${Prisma.raw(column)} = ANY(${izlenen}::uuid[])`;
 }
 
+/**
+ * Transaction'dan erişim adımına geçen bilgi: kampanya satırının platform
+ * kimliği ve hesabı (rapor satırı bunları taşımıyor; müşteriye gitmiyor).
+ */
+type ErisimGirdisi = {
+  kampanyalar: Array<{ rowId: string; platform: Platform; externalId: string | null; adAccountId: string | null }>;
+  hesaplar: ErisimHesabi[];
+};
+
+/**
+ * Transaction içindeki ilk hâl. Meta "okunamadı" başlıyor ve `erisimEkle`
+ * dolduruyor: doldurulamayan satır sebebiyle "okunamadı" kalıyor, ASLA 0.
+ */
+function ilkErisim(platform: Platform): RaporErisim {
+  if (platform === 'meta') return erisimYok('okunamadi', 'dönem erişimi okunmadı');
+  return erisimYok('desteklenmiyor', erisimYokCumlesi(platform));
+}
+
+/**
+ * Platform satırından rapor erişimi. Frekans Meta'nınki; Meta vermediyse
+ * AYNI satırın gösterimi ÷ erişimi (dönem içi, tutarlı payda).
+ */
+function olculenErisim(satir: PeriodReachRow): RaporErisim {
+  const frekans = satir.frequency ?? (satir.reach > 0 ? satir.impressions / satir.reach : null);
+  return { reach: satir.reach, frequency: frekans, durum: 'olculdu', neden: null };
+}
+
 /** Rapor sorgularının ortak parametresi. `izlenen` bir kez, `veriToplaK`ta çekiliyor. */
 type RaporSorgusu = {
   clientId: string;
@@ -309,6 +341,7 @@ export class ReportsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly kreatifAdresi: KreatifAdresiService,
+    private readonly donemErisimi: DonemErisimiService,
   ) {}
 
   async build(
@@ -337,7 +370,15 @@ export class ReportsService {
       platform?: Platform;
     },
   ): Promise<ReportData> {
-    const data = await this.veriToplaK(ctx, params);
+    const { data, erisimGirdisi } = await this.veriToplaK(ctx, params);
+
+    /*
+     * DÖNEM ERİŞİMİ DE TRANSACTION KAPANDIKTAN SONRA (aynı iki gerekçe):
+     * Meta çağrısı transaction'ın içinde olamaz ve PDF, panel, paylaşım
+     * bağlantısı, mail aynı `build()`ten geçiyor. Yalnız birinde okumak iki
+     * gösterimi ayrıştırırdı.
+     */
+    const erisimli = await this.erisimEkle(data, erisimGirdisi);
 
     /*
      * KREATİF GÖRSEL ADRESLERİ TRANSACTION KAPANDIKTAN SONRA TAZELENİYOR.
@@ -352,7 +393,95 @@ export class ReportsService {
      * geçiyor. Yalnızca PDF yolunda tazeleseydim panel kırık kalırdı ve iki
      * gösterim yine ayrışırdı.
      */
-    return this.kreatifAdresi.tazele(ctx, data);
+    return this.kreatifAdresi.tazele(ctx, erisimli);
+  }
+
+  /**
+   * ═══ KAMPANYA ERİŞİMİ VE FREKANSI — rapor aralığının TAMAMI için ═══
+   *
+   * Hesap başına İKİ çağrı (kampanya seviyesi + hesap seviyesi), ikisi de
+   * `time_increment=all_days`, kota bekçisinden geçerek ve önbellekli
+   * (`DonemErisimiService`). Hesap seviyesi tablonun TOPLAM satırı için:
+   * kampanya erişimleri toplanamaz (aynı kişi iki kampanyayı da görmüş
+   * olabilir).
+   *
+   * BİRDEN ÇOK META HESABI: toplam erişim "desteklenmiyor". Hesap erişimleri
+   * de toplanamaz (aynı kişi iki hesabın reklamını da görmüş olabilir) ve
+   * hesap seviyesi çağrısı hiç yapılmıyor; kampanya satırları yine dolu.
+   *
+   * HATA RAPORU BOZMUYOR AMA SESSİZ DE KALMIYOR: hücre "okunamadı", sebep
+   * `erisimHatalari` ile tablonun üstünde.
+   */
+  private async erisimEkle(data: ReportData, girdi: ErisimGirdisi): Promise<ReportData> {
+    const metaKampanyalari = girdi.kampanyalar.filter((k) => k.platform === 'meta');
+    if (metaKampanyalari.length === 0) return data;
+
+    const hatalar = new Set<string>();
+    const kampanyaErisimi = new Map<string, RaporErisim>();
+    const hesapErisimi = new Map<string, DonemErisimiSonucu>();
+    const hesapIdleri = [...new Set(metaKampanyalari.map((k) => k.adAccountId).filter((x): x is string => !!x))];
+    const tekHesap = hesapIdleri.length === 1;
+
+    for (const hesapId of hesapIdleri) {
+      const hesap = girdi.hesaplar.find((h) => h.id === hesapId);
+      const buHesabinKampanyalari = metaKampanyalari.filter((k) => k.adAccountId === hesapId);
+      if (!hesap) {
+        // RLS ya da izleme süzgeci hesabı göstermedi: okunamadı, sebebiyle.
+        const neden = 'reklam hesabı bilgisi okunamadı';
+        hatalar.add(neden);
+        for (const k of buHesabinKampanyalari) kampanyaErisimi.set(k.rowId, erisimYok('okunamadi', neden));
+        continue;
+      }
+      const istek = { from: data.from, to: data.to };
+      const kampanya = await this.donemErisimi.oku(hesap, { ...istek, seviye: 'campaign' }, { katman: 'report_reach', etiket: 'rapor_erisim' });
+      let eksik = 0;
+      for (const k of buHesabinKampanyalari) {
+        if (kampanya.tur !== 'olculdu') {
+          kampanyaErisimi.set(k.rowId, erisimYok('okunamadi', kampanya.neden));
+          continue;
+        }
+        const satir = k.externalId ? kampanya.satirlar.get(k.externalId) : undefined;
+        if (!satir) {
+          eksik++;
+          kampanyaErisimi.set(k.rowId, erisimYok('okunamadi', 'Meta bu kampanya için dönem erişimi döndürmedi'));
+          continue;
+        }
+        kampanyaErisimi.set(k.rowId, olculenErisim(satir));
+      }
+      if (kampanya.tur === 'okunamadi') hatalar.add(kampanya.neden);
+      if (eksik > 0) hatalar.add(`Meta ${eksik} kampanya için dönem erişimi döndürmedi`);
+      if (tekHesap) {
+        const hesapSonucu = await this.donemErisimi.oku(hesap, { ...istek, seviye: 'account' }, { katman: 'report_reach', etiket: 'rapor_erisim' });
+        hesapErisimi.set(hesapId, hesapSonucu);
+        if (hesapSonucu.tur === 'okunamadi') hatalar.add(hesapSonucu.neden);
+      }
+    }
+
+    let metaToplam: RaporErisim;
+    if (!tekHesap) {
+      metaToplam = erisimYok('desteklenmiyor', 'Birden çok Meta reklam hesabı: hesaplar arası tekil kişi sayısı alınamıyor, toplam erişim boş');
+    } else {
+      const hesap = girdi.hesaplar.find((h) => h.id === hesapIdleri[0]);
+      const sonuc = hesapErisimi.get(hesapIdleri[0]!);
+      if (!hesap || !sonuc) metaToplam = erisimYok('okunamadi', 'reklam hesabı bilgisi okunamadı');
+      else if (sonuc.tur !== 'olculdu') metaToplam = erisimYok(sonuc.tur, sonuc.neden);
+      else {
+        const satir = sonuc.satirlar.get(hesap.externalId) ?? (sonuc.satirlar.size === 1 ? [...sonuc.satirlar.values()][0] : undefined);
+        metaToplam = satir ? olculenErisim(satir) : erisimYok('okunamadi', 'Meta hesap için dönem erişimi döndürmedi');
+        if (!satir) hatalar.add('Meta hesap için dönem erişimi döndürmedi');
+      }
+    }
+
+    const doldur = (r: ReportCampaignRow): ReportCampaignRow => {
+      const e = kampanyaErisimi.get(r.id);
+      return e ? { ...r, erisim: e } : r;
+    };
+    return {
+      ...data,
+      metaCampaigns: data.metaCampaigns.map(doldur),
+      donemErisimi: { ...data.donemErisimi, meta: metaToplam },
+      erisimHatalari: [...hatalar].sort().map((mesaj) => ({ platform: 'meta' as const, mesaj })),
+    };
   }
 
   /** Rapor verisinin TAMAMI tek transaction'da — platform çağrısı yok. */
@@ -366,7 +495,7 @@ export class ReportsService {
       sablon?: 'genel' | 'google' | 'meta';
       platform?: Platform;
     },
-  ): Promise<ReportData> {
+  ): Promise<{ data: ReportData; erisimGirdisi: ErisimGirdisi }> {
     return this.prisma.withTenant(ctx, async (tx) => {
       const [client] = await tx.$queryRaw<Array<{ id: string; name: string }>>(
         Prisma.sql`SELECT id, name FROM clients WHERE id = ${params.clientId}::uuid`,
@@ -439,6 +568,33 @@ export class ReportsService {
       const currencies = [...new Set(platformBlocks.map((b) => b.currency).filter(Boolean))];
       const currency = currencies.length === 1 ? currencies[0]! : null;
 
+      /*
+       * ERİŞİM İÇİN HESAP BİLGİSİ AYNI TRANSACTION'DA (RLS aynı bağlam);
+       * platform çağrısı `erisimEkle`de, transaction kapandıktan sonra.
+       * Yalnız Meta ve yalnız izlenen hesaplar: Google/LinkedIn tekil
+       * erişim vermiyor, izlenmeyen hesabın satırı rapora zaten girmiyor.
+       */
+      const erisimHesaplari = campaigns.some((c) => c.platform === 'meta')
+        ? (
+            await tx.$queryRaw<Array<{ id: string; client_id: string | null; platform: Platform; external_id: string; connection_id: string; manager_external_id: string | null }>>(
+              Prisma.sql`
+                SELECT id::text AS id, client_id::text AS client_id, platform, external_id,
+                       connection_id::text AS connection_id, manager_external_id
+                FROM ad_accounts
+                WHERE client_id = ${params.clientId}::uuid AND platform = 'meta'::"Platform"
+                  AND id = ANY(${izlenen}::uuid[])
+              `,
+            )
+          ).map((h) => ({
+            id: h.id,
+            clientId: h.client_id,
+            platform: h.platform,
+            externalId: h.external_id,
+            connectionId: h.connection_id,
+            managerExternalId: h.manager_external_id,
+          }))
+        : [];
+
       const keywords = await this.keywordRows(tx, sorgu);
       const searchTerms = await this.searchTermRows(tx, sorgu);
 
@@ -471,7 +627,7 @@ export class ReportsService {
         ? await takipAcigiYaniti(tx as unknown as Parameters<typeof takipAcigiYaniti>[0], { clientId: params.clientId, from: params.from, to: params.to }, new Date())
         : null;
 
-      return {
+      const data: ReportData = {
         client,
         branding,
         title: template.title ?? 'Dijital Pazarlama Raporu',
@@ -493,6 +649,10 @@ export class ReportsService {
         unknownCallActions,
         callClicksErrors,
         videoMetricsErrors,
+        // Yer tutucu: Meta toplamı `erisimEkle`de dolduruluyor; Google ve
+        // LinkedIn "desteklenmiyor" (PLATFORMS'tan, elle liste yok).
+        donemErisimi: Object.fromEntries(PLATFORMS.map((p) => [p, ilkErisim(p)])) as Record<Platform, RaporErisim>,
+        erisimHatalari: [],
         // `null` HÂLÂ "bu yetenek yok" demek — ama artık yalnızca Google
         // bağlantısı olmayan müşteriler için. Meta-only bir müşteride boş dizi
         // döndürmek "anahtar kelimen yok" demek olurdu; oysa o platformda
@@ -502,6 +662,13 @@ export class ReportsService {
         conversionDetail,
         siteConversion,
         generatedAt: new Date().toISOString(),
+      };
+      return {
+        data,
+        erisimGirdisi: {
+          kampanyalar: campaigns.map((c) => ({ rowId: c.row.id, platform: c.platform, externalId: c.externalId, adAccountId: c.adAccountId })),
+          hesaplar: erisimHesaplari,
+        },
       };
     }, { timeoutMs: RAPOR_OKUMA_SURESI_MS });
   }
@@ -982,7 +1149,6 @@ export class ReportsService {
                  SUM(conversion_value_micros) AS conversion_value_micros,
                  MAX(currency) AS currency,
                  ${hamSayacToplami('')},
-                 NULL::numeric AS reach_sum,
                  NULL::bigint AS day_count,
                  NULL::uuid AS entity_id
           FROM insights_daily
@@ -994,7 +1160,7 @@ export class ReportsService {
         ),
         buckets AS (${this.bucketSelect(params, Prisma.sql`platform`)})
         SELECT b.platform, b.impressions, b.clicks, b.spend_micros, b.conversions,
-               b.conversion_value_micros, b.currency, b.reach_sum, b.day_count,
+               b.conversion_value_micros, b.currency, b.day_count,
                b.entity_id,
                ${KOVA_SECIMI}
         FROM base b
@@ -1019,7 +1185,7 @@ export class ReportsService {
   private async campaignRows(
     tx: TxLike,
     params: RaporSorgusu,
-  ): Promise<Array<{ platform: Platform; row: ReportCampaignRow }>> {
+  ): Promise<Array<{ platform: Platform; row: ReportCampaignRow; externalId: string | null; adAccountId: string | null }>> {
     const rows = await tx.$queryRaw<
       Array<
         RawMetricRow &
@@ -1029,6 +1195,9 @@ export class ReportsService {
             name: string | null;
             status: string | null;
             objective: string | null;
+            campaign_external_id: string | null;
+            campaign_ad_account_id: string | null;
+            erisim_kampanyasi: boolean | null;
           }
       >
     >(
@@ -1044,10 +1213,10 @@ export class ReportsService {
                  MAX(i.currency) AS currency,
                  ${hamSayacToplami('i')},
                  ${videoToplami('i')},
-                 -- ERİŞİM TOPLANMIYOR, ortalaması alınıyor: aynı kişi
-                 -- kampanyayı iki gün de görmüş olabilir ve toplamak
-                 -- müşteriye iki kat kitle söylemek olur.
-                 SUM(i.reach) AS reach_sum,
+                 -- ERİŞİM BURADA OKUNMUYOR: günlük satırlardan dönemin tekil
+                 -- kişi sayısı çıkmaz (toplam aynı kişiyi her gün sayar,
+                 -- ortalama ne dönemin ne bir günün kitlesi). Transaction
+                 -- kapandıktan sonra Meta'dan okunuyor (erisimEkle).
                  COUNT(DISTINCT i.date) AS day_count
           FROM insights_daily i
           WHERE i.client_id = ${params.clientId}::uuid ${trackedAccounts(params.izlenen, 'i')}
@@ -1058,6 +1227,18 @@ export class ReportsService {
         ),
         buckets AS (${this.bucketSelect(params, Prisma.sql`entity_id`)})
         SELECT b.*, c.name, c.status::text AS status, c.objective,
+               c.external_id AS campaign_external_id,
+               c.ad_account_id::text AS campaign_ad_account_id,
+               -- ERİŞİM KAMPANYASI: setlerinden biri erişim için kurulmuşsa
+               -- sonucu erişilen kişi (donusum-sayilmayan.ts ile aynı
+               -- "setlerinden BİRİ" kararı). Sabit kodda, kullanıcı girdisi
+               -- değil; yine de bağlı parametre.
+               EXISTS (
+                 SELECT 1 FROM ad_groups ag
+                 WHERE ag.campaign_id = b.entity_id
+                   AND ag.platform = 'meta'::"Platform"
+                   AND ag.optimization_goal = ${ERISIM_OPTIMIZASYON_HEDEFI}
+               ) AS erisim_kampanyasi,
                ${KOVA_SECIMI}
         FROM base b
         LEFT JOIN campaigns c ON c.id = b.entity_id
@@ -1068,10 +1249,11 @@ export class ReportsService {
 
     return rows.map((r) => {
       const days = Number(r.day_count ?? 0);
-      const reachSum = r.reach_sum === null ? null : Number(r.reach_sum);
 
       return {
         platform: r.platform,
+        externalId: r.campaign_external_id,
+        adAccountId: r.campaign_ad_account_id,
         row: {
           id: r.entity_id,
           // Yapı senkronizasyonu eksikse ad boş olabiliyor; kimliği
@@ -1079,8 +1261,10 @@ export class ReportsService {
           name: r.name ?? r.entity_id.slice(0, 8),
           status: r.status ?? 'unknown',
           objective: r.objective,
-          reach: reachSum === null || days === 0 ? null : Math.round(reachSum / days),
-          reachIsDailyAverage: days > 1,
+          // Meta için yer tutucu: `erisimEkle` transaction'dan SONRA dolduruyor.
+          // Doldurulamazsa bu hâl kalıyor ve hücre "okunamadı" diyor, 0 değil.
+          erisim: ilkErisim(r.platform),
+          erisimKampanyasi: r.erisim_kampanyasi === true,
           dayCount: days,
           conversionCounts: kovaSayilari(r),
           video: videoOlcumu(r),

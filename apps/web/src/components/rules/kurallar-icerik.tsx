@@ -285,6 +285,9 @@ const OUTCOME_TONE: Record<ActionOutcome, string> = {
   skipped_capped: 'bg-warn-soft text-warn-strong ring-warn/30',
   skipped_noop: 'bg-surface-sunken text-ink-muted ring-line',
   skipped_no_conversion_signal: 'bg-warn-soft text-warn-strong ring-warn/30',
+  // Frekans koşulu tekil erişim alınamadığı için değerlendirilmedi: ajansın
+  // bilmesi gereken bir eksik (sebep satırda), hata değil.
+  skipped_no_reach_signal: 'bg-warn-soft text-warn-strong ring-warn/30',
 };
 
 function OutcomeChip({ outcome }: { outcome: ActionOutcome }) {

@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import type { DonemErisimiService, DonemErisimiSonucu, ErisimHesabi } from '../erisim/donem-erisimi.service';
 import type { RuleInput, TenantContext } from '@advetics/shared';
 import { createHarness, seedTenant, IDS, type Harness } from '../../../test/pglite-harness';
 import type { PrismaService } from '../../prisma/prisma.service';
@@ -16,6 +17,24 @@ import { RulesService } from './rules.service';
 
 let h: Harness;
 let svc: RulesService;
+
+/**
+ * DÖNEM ERİŞİMİ OKUYUCUSU — platform çağrısı yok, test başına ayarlanıyor.
+ * Varsayılanı PATLAMAK: frekans koşulu olmayan bir kuralın platforma
+ * gitmesi kota israfı ve bu test onu yakalamalı.
+ */
+type Okuma = (h: ErisimHesabi, istek: { seviye: string; from: string; to: string }, opts: { katman: string }) => Promise<DonemErisimiSonucu>;
+const bekledikDisi: Okuma = async () => {
+  throw new Error('frekans koşulu yokken platforma gidildi');
+};
+let erisimOku: Okuma = bekledikDisi;
+const erisimCagrilari: Array<{ hesap: string; seviye: string; from: string; to: string; katman: string }> = [];
+const erisimStub = {
+  oku: (hh: ErisimHesabi, istek: { seviye: string; from: string; to: string }, opts: { katman: string }) => {
+    erisimCagrilari.push({ hesap: hh.id, seviye: istek.seviye, from: istek.from, to: istek.to, katman: opts.katman });
+    return erisimOku(hh, istek, opts);
+  },
+} as unknown as DonemErisimiService;
 
 const CTX: TenantContext = {
   orgId: IDS.org,
@@ -105,9 +124,12 @@ async function seedInsight(params: {
 
 beforeAll(async () => {
   h = await createHarness();
-  svc = new RulesService({
-    withTenant: async <T>(_ctx: TenantContext, fn: (tx: unknown) => Promise<T>) => fn(h.db),
-  } as unknown as PrismaService);
+  svc = new RulesService(
+    {
+      withTenant: async <T>(_ctx: TenantContext, fn: (tx: unknown) => Promise<T>) => fn(h.db),
+    } as unknown as PrismaService,
+    erisimStub,
+  );
 });
 
 afterAll(async () => {
@@ -117,6 +139,8 @@ afterAll(async () => {
 beforeEach(async () => {
   await h.reset();
   await seedTenant(h);
+  erisimOku = bekledikDisi;
+  erisimCagrilari.length = 0;
 });
 
 // -----------------------------------------------------------------------------
@@ -593,24 +617,102 @@ describe('bütçe değiştirme', () => {
 
 describe('frekans', () => {
   const NOW = new Date('2026-08-07T10:00:00Z');
+  const yorgunluk = (value: number) =>
+    ruleInput({ name: 'Yorgunluk', conditions: [{ metric: 'frequency', operator: 'gt', value, window: 'last_7d' }] });
 
-  it('ERİŞİM TOPLANMIYOR, ortalaması alınıyor', async () => {
-    // Erişim tekil kullanıcı sayısı. Günlük erişimleri toplamak aynı kişiyi
-    // her gün yeniden sayar ve frekansı OLDUĞUNDAN DÜŞÜK gösterir —
-    // yorgunluk kuralını tam ters yönde bozar.
+  async function ucGun(): Promise<void> {
     await seedCampaign(CAMPAIGN, 'Kampanya A');
     for (const date of ['2026-08-04', '2026-08-05', '2026-08-06']) {
       await seedInsight({ entityId: CAMPAIGN, date, impressions: 30_000, reach: 10_000 });
     }
-    // Toplasaydık: 90.000 / 30.000 = 3. Ortalamayla: 90.000 / 10.000 = 9.
-    const rule = await svc.create(
+  }
+
+  it('KRİTİK: payda PENCERENİN tekil erişimi (platform), günlük ortalama DEĞİL', async () => {
+    /*
+     * Eski davranış: 90.000 gösterim ÷ ORTALAMA günlük erişim (10.000) = 9
+     * ve "frekans 8'i geçerse durdur" bu kampanyayı DURDURUYORDU. Pencerenin
+     * tekil erişimi 30.000 ise gerçek frekans 3 ve kural eşleşmemeli.
+     */
+    await ucGun();
+    erisimOku = async () => ({
+      tur: 'olculdu',
+      satirlar: new Map([[`ext-${CAMPAIGN.slice(0, 8)}`, { entityExternalId: `ext-${CAMPAIGN.slice(0, 8)}`, reach: 30_000, impressions: 90_000, frequency: 3 }]]),
+    });
+    const dokuz = await svc.create(CTX, yorgunluk(8));
+    const sonuc = await svc.evaluateRule(CTX, dokuz.id, NOW);
+    expect(sonuc.matchedCount).toBe(0);
+    expect(sonuc.actions).toEqual([]);
+
+    const iki = await svc.create(CTX, { ...yorgunluk(2), name: 'Yorgunluk 2' });
+    const r2 = await svc.evaluateRule(CTX, iki.id, NOW);
+    expect(r2.matchedCount).toBe(1);
+    expect(r2.actions[0]?.reason).toContain('Frekans 3');
+  });
+
+  it('KRİTİK: erişim okuması pencereyle AYNI aralık, kuralın seviyesi ve kural kota katmanı', async () => {
+    await ucGun();
+    erisimOku = async () => ({ tur: 'olculdu', satirlar: new Map() });
+    const kural = await svc.create(CTX, yorgunluk(8));
+    await svc.evaluateRule(CTX, kural.id, NOW);
+    // last_7d, bugün hariç: 31 Tem – 6 Ağu (loadWindows ile aynı aralık).
+    expect(erisimCagrilari).toEqual([
+      { hesap: IDS.adAccount, seviye: 'campaign', from: '2026-07-31', to: '2026-08-06', katman: 'rule_reach' },
+    ]);
+  });
+
+  it('KRİTİK: erişim okunamazsa koşul DEĞERLENDİRİLMİYOR ve sebep kayda yazılıyor', async () => {
+    await ucGun();
+    erisimOku = async () => ({ tur: 'okunamadi', neden: 'kota engeli (usage_high)' });
+    const kural = await svc.create(CTX, yorgunluk(2));
+    const sonuc = await svc.evaluateRule(CTX, kural.id, NOW);
+    expect(sonuc.matchedCount).toBe(0);
+    expect(sonuc.actions).toHaveLength(1);
+    expect(sonuc.actions[0]?.outcome).toBe('skipped_no_reach_signal');
+    expect(sonuc.actions[0]?.reason).toContain('kota engeli (usage_high)');
+  });
+
+  it('platform satırı döndürmezse "okunamadı" (0 ya da eski payda değil)', async () => {
+    await ucGun();
+    erisimOku = async () => ({ tur: 'olculdu', satirlar: new Map() });
+    const kural = await svc.create(CTX, yorgunluk(2));
+    const sonuc = await svc.evaluateRule(CTX, kural.id, NOW);
+    expect(sonuc.actions[0]?.outcome).toBe('skipped_no_reach_signal');
+    expect(sonuc.actions[0]?.reason).toContain('döndürmedi');
+  });
+
+  it('Google hesabında frekans değerlendirilmiyor: sebep "Google tekil erişim vermiyor"', async () => {
+    await ucGun();
+    erisimOku = async () => ({ tur: 'desteklenmiyor', neden: 'Google tekil erişim vermiyor' });
+    const kural = await svc.create(CTX, yorgunluk(2));
+    const sonuc = await svc.evaluateRule(CTX, kural.id, NOW);
+    expect(sonuc.actions[0]?.outcome).toBe('skipped_no_reach_signal');
+    expect(sonuc.actions[0]?.reason).toContain('Google tekil erişim vermiyor');
+  });
+
+  it('frekans koşulu YOKSA platforma hiç gidilmiyor (kota israfı yok)', async () => {
+    await ucGun();
+    const kural = await svc.create(CTX, ruleInput());
+    await svc.evaluateRule(CTX, kural.id, NOW);
+    expect(erisimCagrilari).toEqual([]);
+  });
+
+  it('VEYA ile bağlı başka koşul eşleşirse eylem sürüyor; okunamayan frekans yalnız sağlanmadı sayılıyor', async () => {
+    await ucGun();
+    erisimOku = async () => ({ tur: 'okunamadi', neden: 'token geçersiz' });
+    const kural = await svc.create(
       CTX,
       ruleInput({
-        name: 'Yorgunluk',
-        conditions: [{ metric: 'frequency', operator: 'gt', value: 8, window: 'last_7d' }],
+        name: 'Gösterim ya da frekans',
+        combinator: 'or',
+        conditions: [
+          { metric: 'frequency', operator: 'gt', value: 2, window: 'last_7d' },
+          { metric: 'impressions', operator: 'gt', value: 1000, window: 'last_7d' },
+        ],
       }),
     );
-    expect((await svc.evaluateRule(CTX, rule.id, NOW)).matchedCount).toBe(1);
+    const sonuc = await svc.evaluateRule(CTX, kural.id, NOW);
+    expect(sonuc.actions[0]?.outcome).toBe('eligible');
+    expect(sonuc.actions[0]?.reason).not.toContain('Frekans');
   });
 });
 

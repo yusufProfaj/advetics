@@ -41,6 +41,12 @@ const VERI: ReportData = {
   unknownCallActions: [],
   callClicksErrors: [],
   videoMetricsErrors: [],
+  donemErisimi: {
+    meta: { reach: null, frequency: null, durum: 'okunamadi', neden: 'test' },
+    google: { reach: null, frequency: null, durum: 'desteklenmiyor', neden: 'Google tekil erişim vermiyor' },
+    linkedin: { reach: null, frequency: null, durum: 'desteklenmiyor', neden: 'LinkedIn Ads tekil erişim vermiyor' },
+  },
+  erisimHatalari: [],
   conversionDetail: { rows: [], errors: [], totalConversions: 0 },
   siteConversion: null,
   client: { id: 'c1', name: 'Sabancı İnşaat' },

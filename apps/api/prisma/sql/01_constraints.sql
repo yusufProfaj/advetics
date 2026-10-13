@@ -207,7 +207,7 @@ ALTER TABLE rule_action_logs ADD CONSTRAINT rule_action_logs_outcome_chk
     'simulated', 'applied', 'failed',
     'skipped_cooldown', 'skipped_guard', 'skipped_stale_data',
     'skipped_no_budget', 'skipped_capped', 'skipped_noop',
-    'skipped_no_conversion_signal'
+    'skipped_no_conversion_signal', 'skipped_no_reach_signal'
   ));
 
 ALTER TABLE rule_action_logs DROP CONSTRAINT IF EXISTS rule_action_logs_type_chk;

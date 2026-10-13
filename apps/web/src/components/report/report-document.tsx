@@ -19,7 +19,12 @@ import {
   bosRaporVideo,
   kampanyaTablolari,
   videoHucresi,
+  erisimDipnotlari,
+  erisimHucresi,
+  sonucHucresi,
+  sonucTuru,
   type ColumnKey,
+  type RaporErisim,
   type VideoKey,
   PLATFORMS,
   PLATFORM_LABELS,
@@ -126,6 +131,7 @@ export function ReportDocument({ data }: { data: ReportData }) {
                   to={data.to}
                   secim={data.options.meta_campaigns?.metrics}
                   varsayilan={DEFAULT_COLUMNS.meta_campaigns}
+                  erisim={data.donemErisimi.meta}
                   uyarilar={tabloNotlari(data, 'meta_campaigns')}
                 />
               );
@@ -140,6 +146,7 @@ export function ReportDocument({ data }: { data: ReportData }) {
                   rangeDays={data.rangeDays}
                   secim={data.options.google_campaigns?.metrics}
                   varsayilan={DEFAULT_COLUMNS.google_campaigns}
+                  erisim={data.donemErisimi.google}
                   uyarilar={tabloNotlari(data, 'google_campaigns')}
                 />
               );
@@ -330,8 +337,8 @@ interface Sutun {
   /**
    * TOPLAM satırındaki değer. `null` = TOPLANAMAZ.
    *
-   * Erişim tekil kişi sayısı ve günler arasında toplanamıyor; oraya bir sayı
-   * yazmak uydurma olurdu. "—" basılıyor.
+   * Sonuç satırlarda iki farklı tür taşıyor (erişilen kişi, dönüşüm);
+   * toplamı uydurma olurdu. "—" basılıyor. (Toplamlar `COLUMN_TOTALS`ta.)
    */
 }
 
@@ -343,13 +350,14 @@ const SUTUNLAR: Record<ColumnKey, Sutun> = {
     hucre: (r) => formatNumber(r.impressions),
   },
   clicks: { hucre: (r) => formatNumber(r.clicks) },
-  reach: {
-    hucre: (r) => (
-      <>
-        {formatNumber(r.reach)}
-        {r.reachIsDailyAverage && <span className="text-slate-400">*</span>}
-      </>
-    ),
+  // ERİŞİM/FREKANS/SONUÇ: PDF ile AYNI biçimci ("okunamadı" / "—" / sayı).
+  // Dönemin tekil erişimi platformdan; günlük ortalama ("*") artık yok.
+  reach: { hucre: (r) => erisimHucresi('reach', r.erisim) },
+  frequency: { hucre: (r) => erisimHucresi('frequency', r.erisim) },
+  cpm: { hucre: (r, m) => formatMoney(microsOf(r.cpm), m) },
+  result: {
+    hucre: (r) =>
+      r.erisimKampanyasi ? <span title={METRIC_LABELS.result.hint}>{sonucHucresi(r)}</span> : sonucHucresi(r),
   },
   ctr: { hucre: (r) => formatPercent(r.ctr) },
   cpc: {
@@ -402,11 +410,13 @@ function videoHucre(k: VideoKey, r: ReportCampaignRow, m: string | null): string
 function VideoTablosu({
   video,
   money,
+  erisim,
 }: {
   video: NonNullable<ReturnType<typeof kampanyaTablolari>['video']>;
   money: string | null;
+  erisim: RaporErisim;
 }) {
-  const totals = sumRows(video.satirlar);
+  const totals = sumRows(video.satirlar, erisim);
   return (
     <div className="mt-8">
       <h3 className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">Video izlenme</h3>
@@ -458,6 +468,77 @@ function VideoTablosu({
   );
 }
 
+/**
+ * SONUÇ VE BGM TABLOSU — ana tablodan ayrı (`kampanyaTablolari`, PDF'in
+ * `sonucTablosu` sayfasıyla aynı liste ve biçimci). Ana tabloya binince
+ * PDF'te harcama kırpılıyordu. Her satırın sonuç TÜRÜ yazılı: erişim
+ * kampanyasının sonucu erişilen kişi, diğerlerinin dönüşüm.
+ */
+function SonucTablosu({
+  sonuc,
+  money,
+  erisim,
+}: {
+  sonuc: NonNullable<ReturnType<typeof kampanyaTablolari>['sonuc']>;
+  money: string | null;
+  erisim: RaporErisim;
+}) {
+  const totals = sumRows(sonuc.satirlar, erisim);
+  return (
+    <div className="mt-8">
+      <h3 className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">Sonuç ve bin gösterim maliyeti</h3>
+      <p className="mt-1 text-xs text-slate-600">{sonuc.aciklama}</p>
+      <div className="mt-3 overflow-x-auto">
+        <table className="w-full min-w-[480px] border-collapse text-sm">
+          <thead>
+            <tr className="border-b-2 border-slate-300 text-left text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">
+              <th className="py-2 pr-3">Kampanya Adı</th>
+              <th className="px-2 py-2">Sonuç türü</th>
+              {sonuc.sutunlar.map((k) => (
+                <th key={k} className="px-2 py-2 text-right">
+                  {COLUMN_LABELS[k]}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {sonuc.satirlar.map((r) => (
+              <tr key={r.id} className="border-b border-slate-100">
+                <td className="max-w-[220px] py-2.5 pr-3 font-medium">
+                  <span className="block truncate" title={r.name}>
+                    {r.name}
+                  </span>
+                </td>
+                <td className="px-2 py-2.5 text-slate-600">{sonucTuru(r)}</td>
+                {sonuc.sutunlar.map((k) => (
+                  <td key={k} className="px-2 py-2.5 text-right tabular-nums">
+                    {SUTUNLAR[k].hucre(r, money)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="border-t-2 border-slate-300 font-semibold">
+              <td className="py-2.5 pr-3 text-[11px] uppercase tracking-wide text-slate-500">Genel toplam</td>
+              <td />
+              {sonuc.sutunlar.map((k) => {
+                const t = COLUMN_TOTALS[k];
+                return (
+                  <td key={k} className={`px-2 py-2.5 text-right ${t === null ? 'text-slate-400' : 'tabular-nums'}`}>
+                    {t === null ? '—' : t(totals, money)}
+                  </td>
+                );
+              })}
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <Footnotes keys={sonuc.sutunlar} />
+    </div>
+  );
+}
+
 function CampaignPage({
   title,
   platform,
@@ -469,6 +550,7 @@ function CampaignPage({
   to,
   secim,
   varsayilan,
+  erisim,
   uyarilar = [],
 }: {
   title: string;
@@ -482,6 +564,8 @@ function CampaignPage({
   /** Şablondan gelen sütun seçimi; yoksa `varsayilan` kullanılıyor. */
   secim?: ColumnKey[];
   varsayilan: readonly ColumnKey[];
+  /** Tablonun dönem erişimi (toplam satırı); PDF ile aynı alan (`donemErisimi`). */
+  erisim: RaporErisim;
   /** Tablonun ÜSTÜNDE yazılan kısıtlar (tanınmayan arama sonucu); PDF'le aynı cümle. */
   uyarilar?: string[];
 }) {
@@ -495,13 +579,12 @@ function CampaignPage({
   }
 
   // VİDEO SÜTUNLARI AYRI TABLODA (`kampanyaTablolari`, PDF ile aynı karar).
-  const { ana: sutunlar, video } = kampanyaTablolari(resolveColumns(secim, varsayilan, rows), rows);
-  const totals = sumRows(rows);
+  // SONUÇ VE BGM DE AYRI TABLODA (ana tabloya binince PDF'te harcama kırpılıyordu).
+  const { ana: sutunlar, video, sonuc } = kampanyaTablolari(resolveColumns(secim, varsayilan, rows), rows);
+  const totals = sumRows(rows, erisim);
   // Karışık para biriminde `currency` null geliyor ve `formatMoney` sembol
   // basmıyor — tek bir sembol göstermek yanlış olurdu.
   const money = currency;
-  // Erişim en az bir satırda günlük ortalamaysa dipnot gerekiyor.
-  const anyAverage = rows.some((r) => r.reachIsDailyAverage);
 
   // EKSİK KAPSAMA. Yeni senkronize edilmiş bir kampanya aralığın yalnızca bir
   // kısmını kapsıyor ve harcaması düşük görünüyor — müşteri bunu "bu kampanya
@@ -570,8 +653,9 @@ function CampaignPage({
               {/*
                 TOPLAM SATIRI BAŞLIKLARLA AYNI LİSTEDEN. Ayrı yazıldığında
                 sütun eklenip toplamı eklenmeyince tablo sessizce kayıyordu.
-                `toplam === null` olan sütun (erişim) "—" basıyor: tekil kişi
-                sayısı günler arasında toplanamaz.
+                `toplam === null` olan sütun (sonuç: iki farklı tür) "—"
+                basıyor. Erişimin toplamı satırlardan değil tablonun dönem
+                erişiminden (`sumRows(rows, erisim)`).
               */}
               {sutunlar.map((k) => {
                 const t = COLUMN_TOTALS[k];
@@ -591,7 +675,8 @@ function CampaignPage({
         </table>
       </div>
 
-      {video && <VideoTablosu video={video} money={money} />}
+      {sonuc && <SonucTablosu sonuc={sonuc} money={money} erisim={erisim} />}
+      {video && <VideoTablosu video={video} money={money} erisim={erisim} />}
 
       {daily && daily.length > 1 && from && to && (
         <div className="mt-8">
@@ -608,9 +693,8 @@ function CampaignPage({
         keys={sutunlar.filter((k): k is keyof typeof METRIC_LABELS => k in METRIC_LABELS)}
         kovalar={sutunlar.filter((k): k is ConversionBucket => k in CONVERSION_BUCKETS)}
         extra={[
-          anyAverage
-            ? '* Erişim tekil kişi sayısıdır ve günler arasında toplanamaz; bu sütun günlük ortalamayı gösterir.'
-            : null,
+          // Boş erişim hücrelerinin SEBEBİ (PDF ile aynı liste).
+          ...erisimDipnotlari(sutunlar, rows, erisim),
           partial.length > 0
             ? `† Bu kampanyaların raporlanan dönemde yalnızca bir bölümü ölçülmüştür (${partial
                 .map((r) => `${r.dayCount}/${rangeDays} gün`)

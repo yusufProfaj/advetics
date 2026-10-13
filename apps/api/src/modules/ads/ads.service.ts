@@ -272,7 +272,10 @@ export class AdsService {
         Array<{ total_reach: string | number | null; day_count: string | number }>
       >(
         Prisma.sql`
-          SELECT SUM(reach) AS total_reach, COUNT(DISTINCT date) AS day_count
+          -- NULL = platform vermiyor (Google): SUM atliyor, gun de sayilmiyor;
+          -- hepsi NULL ise erisim null kaliyor ("0 kisi" degil).
+          SELECT SUM(reach) AS total_reach,
+                 COUNT(DISTINCT date) FILTER (WHERE reach IS NOT NULL) AS day_count
           FROM insights_daily
           WHERE entity_level = 'ad'::"EntityLevel"
             AND entity_id = ${adId}::uuid
