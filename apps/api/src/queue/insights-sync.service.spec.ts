@@ -788,3 +788,53 @@ describe('callClicks korunur', () => {
     expect(await ham()).toEqual({ spend: '1', callClicks: 7 });
   });
 });
+
+/**
+ * VİDEO ÖLÇÜMÜ EZİLMEZ (2026-10-13): Google video ek sorgusu bir gün düşerse
+ * yeni satır izlenme yerine NULL ve hata taşıyor. Önceki okunmuş ölçüm
+ * (kolon VE gövdedeki `video`) korunmalı, ikisi AYNI koşulla; ama Meta'da
+ * çeyrek reddinde ThruPlay yine okunuyor ve taze sayı yazılmalı.
+ */
+describe('video ölçümü korunur', () => {
+  const params = { adAccountId: IDS.adAccount, jobType: 'insights_daily' as const, dateFrom: '2026-08-05', dateTo: '2026-08-05' };
+  const oku = async () =>
+    (await h.q<{ video_views: number | null; raw_metrics: Record<string, unknown> }>('SELECT video_views, raw_metrics FROM insights_daily'))[0]!;
+  const VIDEO = { oynatma: null, p25: 50, p50: 30, p75: 20, p100: 10 };
+
+  it('KRİTİK: önce ölçüm, sonra hata → izlenme ve video nesnesi kalır, hata atılır, öbür alanlar yenilenir', async () => {
+    provider.rowsByLevel = { campaign: [row({ videoViews: 120, raw: { spend: '1', video: VIDEO } })] };
+    await svc.syncAccount(params);
+    provider.rowsByLevel = { campaign: [row({ videoViews: null, raw: { spend: '2', videoMetricsError: 'UNRECOGNIZED_FIELD' } })] };
+    await svc.syncAccount(params);
+    const r = await oku();
+    expect(r.video_views).toBe(120);
+    expect(r.raw_metrics).toEqual({ spend: '2', video: VIDEO });
+  });
+
+  it('KRİTİK: daha önce ölçüm yoksa NULL ve hata yazılır (0 DEĞİL)', async () => {
+    provider.rowsByLevel = { campaign: [row({ videoViews: null, raw: { spend: '1', videoMetricsError: 'x' } })] };
+    await svc.syncAccount(params);
+    const r = await oku();
+    expect(r.video_views).toBeNull();
+    expect(r.raw_metrics).toMatchObject({ videoMetricsError: 'x' });
+  });
+
+  it('Meta çeyrek reddi: ThruPlay okunmuşsa TAZE sayı yazılır, eski çeyrekler kalır', async () => {
+    provider.rowsByLevel = { campaign: [row({ videoViews: 100, raw: { spend: '1', video: VIDEO } })] };
+    await svc.syncAccount(params);
+    provider.rowsByLevel = { campaign: [row({ videoViews: 140, raw: { spend: '1', video: { ...VIDEO, p25: null }, videoMetricsError: 'ret' } })] };
+    await svc.syncAccount(params);
+    const r = await oku();
+    expect(r.video_views).toBe(140);
+    expect(r.raw_metrics).toMatchObject({ video: VIDEO });
+    expect(r.raw_metrics).not.toHaveProperty('videoMetricsError');
+  });
+
+  it('arama tıklaması koruması video korumasıyla birlikte de çalışıyor', async () => {
+    provider.rowsByLevel = { campaign: [row({ videoViews: 5, raw: { spend: '1', video: VIDEO, callClicks: 4 } })] };
+    await svc.syncAccount(params);
+    provider.rowsByLevel = { campaign: [row({ videoViews: null, raw: { spend: '3', videoMetricsError: 'v', callClicksError: 'c' } })] };
+    await svc.syncAccount(params);
+    expect((await oku()).raw_metrics).toEqual({ spend: '3', video: VIDEO, callClicks: 4 });
+  });
+});

@@ -1411,7 +1411,9 @@ model InsightsDaily {
   conversions           Decimal @default(0) @db.Decimal(14, 4)
   conversionValueMicros BigInt  @default(0) @map("conversion_value_micros")
 
-  videoViews  Int      @default(0) @map("video_views")
+  /// ThruPlay (Meta) / TrueView (Google). NULL = okunamadı ya da sorulmadı;
+  /// 0 = okundu ve sıfır. Oynatma ve çeyrekler `raw_metrics.video` içinde.
+  videoViews  Int?     @default(0) @map("video_views")
   engagements Int      @default(0)
   reach       Int      @default(0)
   frequency   Decimal? @db.Decimal(10, 4)

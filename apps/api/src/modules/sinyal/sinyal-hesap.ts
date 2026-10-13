@@ -71,7 +71,7 @@ export interface VarlikSerisi {
    */
   degerlendir: boolean;
   /**
-   * Arama kampanyası (ya da içinde arama kampanyası olan hesap): dönüşüm
+   * Dönüşüm için kurulmamış kampanya (arama, video, erişim; ya da böyle bir kampanyası olan hesap): dönüşüm
    * metrikleri DEĞERLENDİRİLMİYOR, sebep `donusum_sayilmiyor` sayılıyor.
    */
   donusumSayilmiyor?: boolean;
@@ -182,7 +182,7 @@ export function bosNedenSayaci(): NedenSayaci {
  * "sinyal yok" ile "hepsi düşük hacim yüzünden elendi" aynı boş liste ve
  * iş notuna yazılmazsa eşik ayarı (Ajan 5 ölçümü) körlemesine yapılır.
  */
-/** Dönüşüm sayısına dayanan anomali metrikleri (arama kampanyasında atlanır). */
+/** Dönüşüm sayısına dayanan anomali metrikleri (dönüşüm için kurulmamış kampanyada atlanır). */
 export const DONUSUM_ANOMALI_METRIKLERI: ReadonlySet<string> = new Set(['donusum', 'donusum_basi_maliyet']);
 
 export function anomaliBul(v: VarlikSerisi, gun: string, nedenler: NedenSayaci): Bulgu[] {

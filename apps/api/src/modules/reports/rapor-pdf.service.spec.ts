@@ -120,6 +120,7 @@ const VERI: ReportData = {
   topAdsMissingPlatforms: [],
   unknownCallActions: [],
   callClicksErrors: [],
+  videoMetricsErrors: [],
   conversionDetail: {
     rows: [
       { platform: 'google' as const, name: 'WhatsApp tıklaması', count: 42, valueMicros: '0' },
@@ -1330,6 +1331,28 @@ describe('arama sütunu ve tanınmayan arama sonucu', () => {
   it('KRİTİK: tanınmayan arama eylemi Meta tablosunun üstünde yazılıyor', async () => {
     const m = metinler(await svc.uret({ ...aramali(0), unknownCallActions: ['click_to_call_yeni_tur'] }));
     expect(m.some((s) => s.includes('click_to_call_yeni_tur'))).toBe(true);
+  });
+  it('KRİTİK (video): izlenme verisi varsa video sütunu ve tanımı PDF\'te; "okunamadı" hücresi 0 değil', async () => {
+    const videolu = (video: Record<string, unknown> | undefined): ReportData => ({
+      ...VERI,
+      sections: ['google_campaigns'],
+      googleCampaigns: VERI.metaCampaigns.map((c) => ({ ...c, video: video as never })),
+    });
+    const tam = metinler(await svc.uret(videolu({ izlenme: 4321, okunamadi: false, harcamaMicros: '821770000', p25: 1500, p50: 900, p75: 400, p100: 210 })));
+    expect(tam.some((s) => /V.DEO .ZLENME/.test(s))).toBe(true);
+    expect(tam.some((s) => s.includes('4.321'))).toBe(true);
+    expect(tam.some((s) => s.includes('ThruPlay'))).toBe(true);
+    // Video sütunları ana tabloya binmiyor: harcama KIRPILMIYOR (ilk denemede
+    // altı sütun eklenince "821,7…" oldu — kırpılmış para yanlış sayıdır).
+    const harcama = tam.filter((s) => s.startsWith('821,7'));
+    expect(harcama.length).toBeGreaterThan(0);
+    expect(harcama.every((s) => !s.includes('…'))).toBe(true);
+    expect(tam.some((s) => s.includes('Video ölçümü olan 1 kampanya'))).toBe(true);
+    const okunamadi = metinler(await svc.uret({ ...videolu({ izlenme: null, okunamadi: true, harcamaMicros: '0', p25: null, p50: null, p75: null, p100: null }), videoMetricsErrors: [{ platform: 'google', mesaj: 'UNRECOGNIZED_FIELD_vid' }] }));
+    expect(okunamadi).toContain('okunamadı');
+    expect(okunamadi.some((s) => s.includes('UNRECOGNIZED_FIELD_vid'))).toBe(true);
+    // Video alanı olmayan (eski) kayıtta sütun açılmıyor.
+    expect(metinler(await svc.uret(videolu(undefined))).some((s) => /V.DEO .ZLENME/.test(s))).toBe(false);
   });
   it('KRİTİK (Ö-2): Google arama tıklaması hatası Google tablosunun üstünde yazılıyor', async () => {
     const m = metinler(await svc.uret({ ...VERI, sections: ['google_campaigns'], googleCampaigns: VERI.metaCampaigns, callClicksErrors: ['UNRECOGNIZED_FIELD_xyz'] }));

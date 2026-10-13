@@ -417,15 +417,38 @@ export class InsightsSyncService {
             spend_micros = EXCLUDED.spend_micros,
             conversions = EXCLUDED.conversions,
             conversion_value_micros = EXCLUDED.conversion_value_micros,
-            video_views = EXCLUDED.video_views,
+            -- VIDEO OLCUMU EZILMEZ (2026-10-13): ek sorgu duserse yeni satir
+            -- izlenme yerine NULL ve govdede hata tasiyor. Daha once okunmus
+            -- olcum varsa sayi da govdedeki video nesnesi de korunuyor; ikisi
+            -- AYNI kosulla, yoksa kolon ile govde ayrisirdi.
+            -- Meta'da cekirdek reddinde ThruPlay yine okunuyor (NULL degil):
+            -- taze sayi yaziliyor, yalniz govdedeki eski cekirdekler kaliyor.
+            video_views = CASE
+              WHEN EXCLUDED.video_views IS NULL
+               AND EXCLUDED.raw_metrics -> 'videoMetricsError' IS NOT NULL
+               AND insights_daily.raw_metrics -> 'video' IS NOT NULL
+              THEN insights_daily.video_views
+              ELSE EXCLUDED.video_views
+            END,
             engagements = EXCLUDED.engagements,
             reach = EXCLUDED.reach,
             frequency = EXCLUDED.frequency,
             -- ARAMA DUGMESI TIKLAMASI EZILMEZ (Google, 2026-10-13): yan sorgu
             -- duserse yeni govde sayi yerine hata tasiyor. Daha once dogru
             -- yazilmis sayi varsa o korunuyor; hata yalniz sayisi hic olmayan
-            -- gunde kalir ve raporda not olarak gorunur.
+            -- gunde kalir ve raporda not olarak gorunur. Video icin ayni
+            -- kural dista (ic ifade arama korumasi).
             raw_metrics = CASE
+              WHEN EXCLUDED.raw_metrics -> 'videoMetricsError' IS NOT NULL
+               AND insights_daily.raw_metrics -> 'video' IS NOT NULL
+              THEN (CASE
+                      WHEN EXCLUDED.raw_metrics -> 'callClicksError' IS NOT NULL
+                       AND jsonb_typeof(insights_daily.raw_metrics -> 'callClicks') = 'number'
+                      THEN (EXCLUDED.raw_metrics - 'callClicksError')
+                           || jsonb_build_object('callClicks', insights_daily.raw_metrics -> 'callClicks')
+                      ELSE EXCLUDED.raw_metrics
+                    END - 'videoMetricsError')
+                   || jsonb_build_object('video', insights_daily.raw_metrics -> 'video')
               WHEN EXCLUDED.raw_metrics -> 'callClicksError' IS NOT NULL
                AND jsonb_typeof(insights_daily.raw_metrics -> 'callClicks') = 'number'
               THEN (EXCLUDED.raw_metrics - 'callClicksError')

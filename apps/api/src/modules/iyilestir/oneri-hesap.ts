@@ -242,7 +242,7 @@ export interface ButceGirdisi {
   /** Google bütçesi başka kampanyalarla paylaşılıyorsa yazılamaz (MIMARI § 2). */
   paylasimliButce: boolean;
   /**
-   * Arama kampanyası (`aramaVarligiSql`): dönüşüm her gün 0 ve ölçüm değil.
+   * Dönüşüm için kurulmamış kampanya (`donusumsuzVarlikSql`: arama, video, erişim): dönüşüm 0 ve ölçüm değil.
    * ARTIRMA kararı dönüşüm maliyetine dayandığı için verilmiyor; düşürme
    * (kullanım) etkilenmiyor. Verilmezse `false`.
    */

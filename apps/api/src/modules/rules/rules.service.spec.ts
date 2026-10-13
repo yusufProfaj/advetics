@@ -644,7 +644,7 @@ describe('arama kampanyasında dönüşüm koşulu', () => {
     const arama = out.actions.find((a) => a.entityId === CAMPAIGN)!;
     const form = out.actions.find((a) => a.entityId === FORM_K)!;
     expect(arama.outcome).toBe('skipped_no_conversion_signal');
-    expect(arama.reason).toContain('arama kampanyasında dönüşüm sayılmıyor');
+    expect(arama.reason).toContain('kampanya dönüşüm için kurulmamış (hedef: telefon araması)');
     expect(form.outcome).toBe('eligible');
   });
 

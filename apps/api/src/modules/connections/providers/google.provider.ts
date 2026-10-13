@@ -8,7 +8,7 @@ import {
   type AtomikGovde,
   type KampanyaAcilisi,
 } from './google-demandgen';
-import { gecerliGorselAdresi } from '@advetics/shared';
+import { gecerliGorselAdresi, VIDEO_HATA_ANAHTARI, type VideoHamOlcumu } from '@advetics/shared';
 import type { GeoLocationOption,
   InterestOption,
   CustomAudienceOption, Platform, SavedAudienceOption } from '@advetics/shared';
@@ -1150,17 +1150,16 @@ export class GoogleProvider implements IAdPlatformProvider {
     const rows = await this.searchGaqlPaged<Record<string, unknown>>(
       accessToken,
       customerId,
-      // METRICS.VIDEO_VIEWS SEÇİLMİYOR — v25 reddediyor:
-      //   UNRECOGNIZED_FIELD — "Unrecognized field in the query:
-      //   'metrics.video_views'."
+      // METRICS.VIDEO_VIEWS SEÇİLMİYOR — v25 reddediyor (UNRECOGNIZED_FIELD).
+      // v22'den beri adı `metrics.video_trueview_views` ve o da BU SORGUDA
+      // DEĞİL: video ölçümü yalnız video kanallarında anlamlı ve ayrı ek
+      // sorguda (`videoOlcumleri`); burada reddedilirse günlük metriklerin
+      // tamamı giderdi.
       //
-      // Hem hesap hem kampanya seviyesinde reddediliyor, yani seviyeye özgü
-      // bir kısıt değil; alan bu sürümde yok. Video görüntüleme Google
-      // tarafında sıfır kalıyor ve bu, sıfır sanılmaması gereken bir sıfır —
-      // rapor katmanı zaten platforma göre ayrım yapıyor.
-      //
-      // `metrics.impressions` iki kez yazılmıştı; tekrarı da temizlendi.
-      `SELECT ${view.idField}, segments.date, customer.currency_code,
+      // KANAL TÜRÜ yalnız kampanya seviyesinde seçiliyor: kaynak niteliği,
+      // segment değil, satırı ÇOĞALTMIYOR. Hangi satırın video ölçümü
+      // beklediğini (ve ek sorgunun hiç gerekip gerekmediğini) o söylüyor.
+      `SELECT ${view.idField},${request.level === 'campaign' ? ' campaign.advertising_channel_type,' : ''} segments.date, customer.currency_code,
               metrics.impressions, metrics.clicks, metrics.cost_micros,
               metrics.conversions, metrics.conversions_value,
               metrics.engagements
@@ -1196,6 +1195,19 @@ export class GoogleProvider implements IAdPlatformProvider {
       request,
       calls,
     );
+    // VİDEO ÖLÇÜMÜ — dördüncü ve AYRI sorgu, yalnız video kanalı varsa.
+    const videoKampanyalari = new Set(
+      request.level === 'campaign'
+        ? rows
+            .filter((r) => GOOGLE_VIDEO_KANALLARI.includes(this.str(this.obj(r.campaign)?.advertisingChannelType) ?? ''))
+            .map((r) => view.readId(r, this))
+            .filter((x): x is string => !!x)
+        : [],
+    );
+    const videolar =
+      videoKampanyalari.size > 0
+        ? await this.videoOlcumleri({ accessToken, customerId, loginCustomerId }, request, calls)
+        : null;
 
     const mapped: DiscoveredInsightRow[] = [];
     for (const row of rows) {
@@ -1221,8 +1233,15 @@ export class GoogleProvider implements IAdPlatformProvider {
         spendMicros: this.micros(metrics?.costMicros) ?? 0n,
         conversions: Number(metrics?.conversions ?? 0) || 0,
         conversionValueMicros: googleValueToMicros(metrics?.conversionsValue),
-        // Sorgu bu alanı seçmiyor (v25'te yok) — daima 0.
-        videoViews: Number(metrics?.videoViews ?? 0) || 0,
+        /*
+         * TRUEVIEW YALNIZ VİDEO KANALINDA. Diğer kampanyada NULL (sorulmadı,
+         * "kimse izlemedi" değil); ek sorgu düştüyse de NULL ve hata ham
+         * gövdede. 0 yalnız okunmuş ve sıfır olan gün.
+         */
+        videoViews:
+          videoKampanyalari.has(entityExternalId) && videolar && videolar.hata === null
+            ? (videolar.olcumler.get(`${entityExternalId}|${date}`)?.izlenme ?? 0)
+            : null,
         engagements: Number(metrics?.engagements ?? 0) || 0,
         // Google `reach` vermiyor — bu metrik Meta'ya özgü. 0 bırakıyoruz;
         // 0 ile "bilinmiyor" arasındaki fark rapor katmanında platforma göre
@@ -1252,6 +1271,18 @@ export class GoogleProvider implements IAdPlatformProvider {
             : aramalar.hata !== null
               ? { callClicksError: aramalar.hata }
               : { callClicks: aramalar.sayilar.get(`${entityExternalId}|${date}`) ?? 0 }),
+          // Video ölçümü yalnız video kampanyasının satırında; çeyrek ORANI
+          // o günün gösterimiyle sayıya çevriliyor (Meta ile aynı birim).
+          ...(!videoKampanyalari.has(entityExternalId) || videolar === null
+            ? {}
+            : videolar.hata !== null
+              ? { [VIDEO_HATA_ANAHTARI]: videolar.hata }
+              : {
+                  video: googleVideoHam(
+                    videolar.olcumler.get(`${entityExternalId}|${date}`),
+                    Number(metrics?.impressions ?? 0) || 0,
+                  ),
+                }),
         },
       });
     }
@@ -1389,6 +1420,63 @@ export class GoogleProvider implements IAdPlatformProvider {
       sayilar.set(anahtar, (sayilar.get(anahtar) ?? 0) + (Number(this.obj(row.metrics)?.clicks ?? 0) || 0));
     }
     return { sayilar, hata: null };
+  }
+
+  /**
+   * ═══ VİDEO ÖLÇÜMÜ (TrueView izlenme + çeyrek oranları) ═══
+   *
+   * v22'den beri ad `metrics.video_trueview_views` (eski `video_views` v25'te
+   * UNRECOGNIZED_FIELD). Çeyrekler `metrics.video_quartile_p25_rate` vb. ve
+   * ORAN (gösterime göre). CANLIDA ÖLÇÜLMEDİ (2026-10-13).
+   *
+   * AYRI SORGU: ana metrik sorgusunda bir alanın reddi günlük metriklerin
+   * TAMAMINI düşürürdü. Yalnız kampanya seviyesi ve yalnız video kanalları
+   * (`GOOGLE_VIDEO_KANALLARI`, WHERE'de). Segment eklenmiyor, gösterim
+   * SEÇİLMİYOR: çeyrek sayısı ana satırın gösterimiyle hesaplanıyor; burada
+   * gösterim seçmek o satırların bir gün toplamlara karışması demek olurdu
+   * (CLAUDE.md "SEGMENT EKLEMEK SATIRI ÇOĞALTIYOR", simetrik tehlike).
+   *
+   * HATA ANA ÇEKİMİ DÜŞÜRMÜYOR, SESSİZ DE KALMIYOR: `videoMetricsError`.
+   */
+  private async videoOlcumleri(
+    kimlik: { accessToken: string; customerId: string; loginCustomerId?: string },
+    request: InsightsRequest,
+    calls: { n: number },
+  ): Promise<{ olcumler: Map<string, GoogleVideoSatiri>; hata: string | null }> {
+    const olcumler = new Map<string, GoogleVideoSatiri>();
+    let rows: Array<Record<string, unknown>>;
+    try {
+      rows = await this.searchGaqlPaged<Record<string, unknown>>(
+        kimlik.accessToken,
+        kimlik.customerId,
+        googleVideoSorgusu(request.dateFrom, request.dateTo),
+        kimlik.loginCustomerId,
+        calls,
+      );
+    } catch (err) {
+      const mesaj = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Google video ölçümü alınamadı (${kimlik.customerId}): ${mesaj}`);
+      return { olcumler, hata: mesaj };
+    }
+    const oran = (v: unknown): number | null => {
+      if (v === undefined || v === null) return null;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    };
+    for (const row of rows) {
+      const date = this.str(this.obj(row.segments)?.date);
+      const id = this.readNested(row, ['campaign', 'id']);
+      if (!date || !id) continue;
+      const m = this.obj(row.metrics);
+      olcumler.set(`${id}|${date}`, {
+        izlenme: Number(m?.videoTrueviewViews ?? 0) || 0,
+        p25: oran(m?.videoQuartileP25Rate),
+        p50: oran(m?.videoQuartileP50Rate),
+        p75: oran(m?.videoQuartileP75Rate),
+        p100: oran(m?.videoQuartileP100Rate),
+      });
+    }
+    return { olcumler, hata: null };
   }
 
   /**
@@ -2879,6 +2967,49 @@ export class GoogleProvider implements IAdPlatformProvider {
     return { rows, apiCalls: calls.n };
   }
 
+}
+
+/**
+ * VİDEO KANALLARI: TrueView ölçümünün sorulduğu kampanyalar. VIDEO (eski
+ * YouTube kampanyaları) ve DEMAND_GEN (Akıllı Boost'un yeni video
+ * kampanyası). Demand Gen'de TrueView'ın dolu gelip gelmediği ÖLÇÜLMEDİ.
+ */
+export const GOOGLE_VIDEO_KANALLARI: readonly string[] = ['VIDEO', 'DEMAND_GEN'];
+
+export interface GoogleVideoSatiri {
+  izlenme: number;
+  /** Oran (0-1), gösterime göre; `null` = Google alanı döndürmedi. */
+  p25: number | null;
+  p50: number | null;
+  p75: number | null;
+  p100: number | null;
+}
+
+/** Video ek sorgusu: YALNIZ video metrikleri, kanal süzgeci WHERE'de ve SELECT'te. */
+export function googleVideoSorgusu(from: string, to: string): string {
+  const kanallar = GOOGLE_VIDEO_KANALLARI.map((k) => `'${k}'`).join(', ');
+  return `SELECT campaign.id, campaign.advertising_channel_type, segments.date,
+              metrics.video_trueview_views, metrics.video_quartile_p25_rate,
+              metrics.video_quartile_p50_rate, metrics.video_quartile_p75_rate,
+              metrics.video_quartile_p100_rate
+       FROM campaign
+       WHERE segments.date BETWEEN '${from}' AND '${to}'
+         AND campaign.advertising_channel_type IN (${kanallar})`;
+}
+
+/**
+ * Google video satırını ortak ham şekle (`VideoHamOlcumu`) çevirir: çeyrek
+ * ORANI × o günün gösterimi = SAYI (Meta kişi sayısı veriyor; sayı günler ve
+ * kampanyalar arasında toplanabilir, oran toplanamaz). Ölçüm satırı yoksa
+ * (Google o gün satır döndürmedi = gösterim yok) çeyrekler 0. Oynatma
+ * Google'da sorulmuyor: null.
+ */
+export function googleVideoHam(v: GoogleVideoSatiri | undefined, gosterim: number): VideoHamOlcumu {
+  const sayi = (o: number | null | undefined): number | null => {
+    if (v === undefined) return 0;
+    return o === null || o === undefined ? null : Math.round(o * gosterim);
+  };
+  return { oynatma: null, p25: sayi(v?.p25), p50: sayi(v?.p50), p75: sayi(v?.p75), p100: sayi(v?.p100) };
 }
 
 /** Arama düğmesi tıklamasının sorulduğu seviyeler (bkz. `aramaDugmesiTiklamalari`). */

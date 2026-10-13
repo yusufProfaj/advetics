@@ -15,7 +15,12 @@ import {
   resolveColumns,
   sumRows,
   COLUMN_TOTALS,
+  VIDEO_DIPNOTU,
+  bosRaporVideo,
+  kampanyaTablolari,
+  videoHucresi,
   type ColumnKey,
+  type VideoKey,
   PLATFORMS,
   PLATFORM_LABELS,
 } from '@advetics/shared';
@@ -374,7 +379,84 @@ const SUTUNLAR: Record<ColumnKey, Sutun> = {
   callClicks: {
     hucre: (r) => formatNumber(r.conversionCounts.callClicks),
   },
+  // VİDEO: PDF ile AYNI biçimci (`videoHucresi`): "okunamadı" / "—" / sayı.
+  videoViews: { hucre: (r, m) => videoHucre('videoViews', r, m) },
+  costPerView: { hucre: (r, m) => videoHucre('costPerView', r, m) },
+  videoP25: { hucre: (r, m) => videoHucre('videoP25', r, m) },
+  videoP50: { hucre: (r, m) => videoHucre('videoP50', r, m) },
+  videoP75: { hucre: (r, m) => videoHucre('videoP75', r, m) },
+  videoP100: { hucre: (r, m) => videoHucre('videoP100', r, m) },
 };
+
+/** Eski kayıtta (video alanı yok) "—": ölçüm yok, 0 değil. */
+function videoHucre(k: VideoKey, r: ReportCampaignRow, m: string | null): string {
+  return videoHucresi(k, r.video ?? bosRaporVideo(), m);
+}
+
+/**
+ * VİDEO İZLENME TABLOSU — kampanya tablosunun video sütunları, yalnız video
+ * ölçümü olan kampanyalarla. PDF'in `videoTablosu` sayfasıyla aynı liste,
+ * aynı hücre (`SUTUNLAR`) ve toplam (`COLUMN_TOTALS`) biçimcisi. Tanım
+ * tablonun üstünde: "video izlenme" iki platformda iki farklı metrik.
+ */
+function VideoTablosu({
+  video,
+  money,
+}: {
+  video: NonNullable<ReturnType<typeof kampanyaTablolari>['video']>;
+  money: string | null;
+}) {
+  const totals = sumRows(video.satirlar);
+  return (
+    <div className="mt-8">
+      <h3 className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">Video izlenme</h3>
+      <p className="mt-1 text-xs text-slate-600">{video.aciklama}</p>
+      <p className="mt-1 text-[11px] leading-relaxed text-slate-500">{VIDEO_DIPNOTU}</p>
+      {video.satirlar.length > 0 && (
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-full min-w-[620px] border-collapse text-sm">
+            <thead>
+              <tr className="border-b-2 border-slate-300 text-left text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                <th className="py-2 pr-3">Kampanya Adı</th>
+                {video.sutunlar.map((k) => (
+                  <th key={k} className="px-2 py-2 text-right">
+                    {COLUMN_LABELS[k]}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {video.satirlar.map((r) => (
+                <tr key={r.id} className="border-b border-slate-100">
+                  <td className="max-w-[220px] py-2.5 pr-3 font-medium">
+                    <span className="block truncate" title={r.name}>
+                      {r.name}
+                    </span>
+                  </td>
+                  {video.sutunlar.map((k) => (
+                    <td key={k} className="px-2 py-2.5 text-right tabular-nums">
+                      {SUTUNLAR[k].hucre(r, money)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t-2 border-slate-300 font-semibold">
+                <td className="py-2.5 pr-3 text-[11px] uppercase tracking-wide text-slate-500">Genel toplam</td>
+                {video.sutunlar.map((k) => (
+                  <td key={k} className="px-2 py-2.5 text-right tabular-nums">
+                    {COLUMN_TOTALS[k]!(totals, money)}
+                  </td>
+                ))}
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function CampaignPage({
   title,
@@ -412,7 +494,8 @@ function CampaignPage({
     );
   }
 
-  const sutunlar = resolveColumns(secim, varsayilan, rows);
+  // VİDEO SÜTUNLARI AYRI TABLODA (`kampanyaTablolari`, PDF ile aynı karar).
+  const { ana: sutunlar, video } = kampanyaTablolari(resolveColumns(secim, varsayilan, rows), rows);
   const totals = sumRows(rows);
   // Karışık para biriminde `currency` null geliyor ve `formatMoney` sembol
   // basmıyor — tek bir sembol göstermek yanlış olurdu.
@@ -507,6 +590,8 @@ function CampaignPage({
           </tfoot>
         </table>
       </div>
+
+      {video && <VideoTablosu video={video} money={money} />}
 
       {daily && daily.length > 1 && from && to && (
         <div className="mt-8">

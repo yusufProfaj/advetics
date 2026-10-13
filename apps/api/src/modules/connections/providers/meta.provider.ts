@@ -9,6 +9,8 @@ import {
   type Platform,
   type SavedAudienceOption,
   type SpecialAdCategory,
+  type VideoHamOlcumu,
+  VIDEO_HATA_ANAHTARI,
 } from '@advetics/shared';
 import { CONFIG, type AppConfig } from '../../../config/configuration';
 import {
@@ -1094,31 +1096,52 @@ export class MetaProvider implements IAdPlatformProvider {
     url.searchParams.set('action_report_time', 'impression');
 
     url.searchParams.set('access_token', ctx.accessToken);
-    url.searchParams.set(
-      'fields',
-      [
-        'date_start',
-        'account_currency',
-        request.level === 'campaign' ? 'campaign_id' : '',
-        request.level === 'ad_group' ? 'adset_id' : '',
-        request.level === 'ad' ? 'ad_id' : '',
-        'impressions',
-        'clicks',
-        'spend',
-        'reach',
-        'frequency',
-        'inline_post_engagement',
-        // Dönüşümler aksiyon dizilerinde; hangi aksiyonun "dönüşüm" sayıldığı
-        // kampanya amacına göre değişiyor, bu yüzden hepsini alıp saklıyoruz.
-        'actions',
-        'action_values',
-        'video_thruplay_watched_actions',
-        'video_play_actions',
-      ]
-        .filter(Boolean)
-        .join(','),
-    );
 
+    /*
+     * ═══ VİDEO ÇEYREKLERİ İSTEĞE BAĞLI ALAN — REDDEDİLİRSE ALANSIZ TEKRAR ═══
+     *
+     * Graph'te TEK geçersiz alan adı isteğin TAMAMINI düşürüyor (organik
+     * gönderilerde yaşandı, CLAUDE.md). Çeyrek alanları belgede kesin ama
+     * bu hesaplarla CANLIDA ÖLÇÜLMEDİ; reddedilirlerse günlük metriklerin
+     * hepsini kaybetmek kabul edilemez. Ret görülürse istek çeyreksiz
+     * baştan tekrarlanıyor ve ret mesajı video satırlarının ham gövdesine
+     * (`videoMetricsError`) yazılıyor: rapor "okunamadı" diyor, 0 değil.
+     */
+    let ceyrekHatasi: string | null = null;
+    let sonuc: { rows: DiscoveredInsightRow[]; calls: number; next: string | undefined };
+    try {
+      sonuc = await this.insightSayfalari(ctx, url, request.level, act, true, null);
+    } catch (err) {
+      if (!videoCeyrekReddiMi(err)) throw err;
+      ceyrekHatasi = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Meta video çeyrekleri reddedildi (${act}); çeyreksiz tekrar: ${ceyrekHatasi}`);
+      sonuc = await this.insightSayfalari(ctx, url, request.level, act, false, ceyrekHatasi);
+      sonuc.calls += 1;
+    }
+    const { rows, calls, next } = sonuc;
+    const MAX_PAGES = 60;
+
+    if (next) {
+      this.logger.warn(
+        `Meta insights ${MAX_PAGES} sayfada bitmedi (${act}, ${request.dateFrom}..${request.dateTo}) — KISMİ`,
+      );
+      return { rows, apiCalls: calls, complete: false };
+    }
+
+    return { rows, apiCalls: calls, complete: true };
+  }
+
+  /** `fetchInsights`in sayfa döngüsü; çeyrekli ve çeyreksiz iki kez koşabiliyor. */
+  private async insightSayfalari(
+    ctx: FetchContext,
+    taban: URL,
+    level: InsightsLevel,
+    act: string,
+    ceyrekler: boolean,
+    ceyrekHatasi: string | null,
+  ): Promise<{ rows: DiscoveredInsightRow[]; calls: number; next: string | undefined }> {
+    const url = new URL(taban.toString());
+    url.searchParams.set('fields', metaInsightAlanlari(level, ceyrekler).join(','));
     const rows: DiscoveredInsightRow[] = [];
     let next: string | undefined = url.toString();
     let pages = 0;
@@ -1133,21 +1156,13 @@ export class MetaProvider implements IAdPlatformProvider {
       // Adlandırılmış tip bağı koparıyor — bkz. GraphPage yorumundaki TS7022.
       const body: GraphPage = res.data;
       for (const raw of body.data ?? []) {
-        const row = this.mapMetaInsightRow(raw, request.level, act);
+        const row = this.mapMetaInsightRow(raw, level, act, ceyrekHatasi);
         if (row) rows.push(row);
       }
       next = body.paging?.next;
       pages++;
     }
-
-    if (next) {
-      this.logger.warn(
-        `Meta insights ${MAX_PAGES} sayfada bitmedi (${act}, ${request.dateFrom}..${request.dateTo}) — KISMİ`,
-      );
-      return { rows, apiCalls: calls, complete: false };
-    }
-
-    return { rows, apiCalls: calls, complete: true };
+    return { rows, calls, next };
   }
 
   /**
@@ -1292,6 +1307,7 @@ export class MetaProvider implements IAdPlatformProvider {
     raw: Record<string, unknown>,
     level: InsightsLevel,
     act: string,
+    ceyrekHatasi: string | null = null,
   ): DiscoveredInsightRow | null {
     const date = text(raw.date_start);
     if (!date) return null;
@@ -1326,14 +1342,19 @@ export class MetaProvider implements IAdPlatformProvider {
       spendMicros: decimalToMicros(raw.spend),
       conversions,
       conversionValueMicros: decimalToMicros(values),
-      // ThruPlay tercih ediliyor: "video görüntüleme" olarak anlamlı olan
-      // 15 saniye/tamamlanma eşiği, 3 saniyelik oynatma değil.
-      videoViews:
-        sumAll(raw.video_thruplay_watched_actions) || sumAll(raw.video_play_actions),
+      /*
+       * YALNIZ THRUPLAY. Bir süre `thruplay || oynatma` yazılıyordu: ThruPlay
+       * yoksa 3 sn oynatma AYNI kolona düşüyor ve aynı sütunda iki farklı
+       * metrik karşılaştırılıyordu (bir kampanyanın "izlenme"si diğerinin
+       * beş katı görünüyordu). Oynatma `raw.video.oynatma`da ayrı duruyor.
+       * Meta değeri sıfır olan aksiyon alanını HİÇ döndürmüyor ve alan
+       * istendi: yokluk 0 demek, okunamadı değil.
+       */
+      videoViews: sumAll(raw.video_thruplay_watched_actions),
       engagements: int(raw.inline_post_engagement),
       reach: int(raw.reach),
       frequency: raw.frequency !== undefined ? Number(raw.frequency) || undefined : undefined,
-      raw,
+      raw: metaVideoHam(raw, ceyrekHatasi),
     };
   }
 
@@ -4667,6 +4688,75 @@ function sumAll(value: unknown): number {
   let total = 0;
   for (const v of actionMap(value).values()) total += v;
   return total;
+}
+
+/**
+ * ═══ META İNSIGHTS ALAN LİSTESİ ═══
+ *
+ * Saf ve dışa açık: kaynak taraması ve testler aynı listeyi okuyor. Çeyrek
+ * alanları İSTEĞE BAĞLI (`fetchInsights` reddedilirse alansız tekrarlıyor).
+ */
+export const META_VIDEO_CEYREK_ALANLARI = [
+  'video_p25_watched_actions',
+  'video_p50_watched_actions',
+  'video_p75_watched_actions',
+  'video_p100_watched_actions',
+] as const;
+
+export function metaInsightAlanlari(level: InsightsLevel, ceyrekler: boolean): string[] {
+  return [
+    'date_start',
+    'account_currency',
+    level === 'campaign' ? 'campaign_id' : '',
+    level === 'ad_group' ? 'adset_id' : '',
+    level === 'ad' ? 'ad_id' : '',
+    'impressions',
+    'clicks',
+    'spend',
+    'reach',
+    'frequency',
+    'inline_post_engagement',
+    // Dönüşümler aksiyon dizilerinde; hangi aksiyonun "dönüşüm" sayıldığı
+    // kampanya amacına göre değişiyor, bu yüzden hepsini alıp saklıyoruz.
+    'actions',
+    'action_values',
+    'video_thruplay_watched_actions',
+    'video_play_actions',
+    ...(ceyrekler ? META_VIDEO_CEYREK_ALANLARI : []),
+  ].filter(Boolean);
+}
+
+/**
+ * Hata bir çeyrek alanının REDDİ mi. Mesaj alan adını taşıyor; kod/subcode
+ * (çoğu zaman #100) başka geçersiz parametrelerle ortak, ayırmıyor. Mesajda
+ * çeyrek adı yoksa ret başka bir şeyin ve normal yoldan fırlatılıyor.
+ */
+export function videoCeyrekReddiMi(err: unknown): boolean {
+  if (!(err instanceof PlatformApiError) || err.kind === 'rate_limited' || err.kind === 'transient') return false;
+  const m = `${err.message} ${JSON.stringify(err.detail?.raw ?? '')}`;
+  return META_VIDEO_CEYREK_ALANLARI.some((a) => m.includes(a));
+}
+
+/**
+ * Ham gövdeye normalize video ölçümü (`raw.video`, `VideoHamOlcumu`) ekler.
+ * Ham alanlar da yerinde kalıyor; `video` raporun iki platformda AYNI
+ * şekli okuması için. Videosu olmayan satıra (hiç video alanı yok)
+ * eklenmiyor; çeyrek reddi varsa çeyrekler null ve hata gövdede.
+ */
+function metaVideoHam(raw: Record<string, unknown>, ceyrekHatasi: string | null): Record<string, unknown> {
+  const videoVar = ['video_thruplay_watched_actions', 'video_play_actions', ...META_VIDEO_CEYREK_ALANLARI].some(
+    (a) => raw[a] !== undefined,
+  );
+  if (!videoVar) return raw;
+  const ceyrek = (a: (typeof META_VIDEO_CEYREK_ALANLARI)[number]) => (ceyrekHatasi !== null ? null : sumAll(raw[a]));
+  const video: VideoHamOlcumu = {
+    oynatma: sumAll(raw.video_play_actions),
+    p25: ceyrek('video_p25_watched_actions'),
+    p50: ceyrek('video_p50_watched_actions'),
+    p75: ceyrek('video_p75_watched_actions'),
+    p100: ceyrek('video_p100_watched_actions'),
+  };
+  return { ...raw, video, ...(ceyrekHatasi !== null ? { [VIDEO_HATA_ANAHTARI]: ceyrekHatasi } : {}) };
 }
 
 /**

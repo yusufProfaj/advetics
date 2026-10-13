@@ -1,0 +1,14 @@
+-- insights_daily.video_views artik BOS OLABILIYOR (video olcumu, 2026-10-13).
+--
+-- Kolon NOT NULL DEFAULT 0 idi ve iki farkli seyi ayni sifira ceviriyordu:
+-- Google tarafinda alan v25'te reddedildigi icin her gun 0 yaziliyordu
+-- ("kimse izlemedi" gibi okunuyor) ve Meta tarafinda ThruPlay yoksa 3 sn
+-- oynatma ayni kolona dusuyordu (iki farkli metrik tek sayida).
+-- NULL = okunamadi ya da sorulmadi; 0 = okundu ve sifir. Rapor ikisini ayri
+-- yaziyor ("okunamadı" / "0").
+--
+-- DEFAULT 0 KALIYOR: kolonu acikca yazmayan eski ekleme yollari (test
+-- tohumlari) eski davranisi surduruyor; senkron her zaman acikca yaziyor.
+-- Bolumlenmis tabloda DROP NOT NULL bolumlere de iniyor ve tabloyu yeniden
+-- yazmiyor (yalniz katalog degisikligi).
+ALTER TABLE insights_daily ALTER COLUMN video_views DROP NOT NULL;

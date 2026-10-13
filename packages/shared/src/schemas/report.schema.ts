@@ -322,12 +322,23 @@ export function aramaTiklamasiHataCumlesi(mesaj: string): string {
  * (ikinci bir kopya doğduğu anda biri unutulur). Eski veride alan yoksa boş.
  */
 export function tabloNotlari(
-  data: Pick<ReportData, 'unknownCallActions' | 'callClicksErrors'>,
+  data: Pick<ReportData, 'unknownCallActions' | 'callClicksErrors'> & Partial<Pick<ReportData, 'videoMetricsErrors'>>,
   bolum: 'meta_campaigns' | 'google_campaigns',
 ): string[] {
-  return bolum === 'meta_campaigns'
-    ? (data.unknownCallActions ?? []).map(taninmayanAramaCumlesi)
-    : (data.callClicksErrors ?? []).map(aramaTiklamasiHataCumlesi);
+  const platform = bolum === 'meta_campaigns' ? 'meta' : 'google';
+  const video = (data.videoMetricsErrors ?? []).filter((h) => h.platform === platform).map((h) => videoHataCumlesi(platform, h.mesaj));
+  return [
+    ...(bolum === 'meta_campaigns'
+      ? (data.unknownCallActions ?? []).map(taninmayanAramaCumlesi)
+      : (data.callClicksErrors ?? []).map(aramaTiklamasiHataCumlesi)),
+    ...video,
+  ];
+}
+
+/** Video ölçümü alınamadığında tablonun üstündeki not (panel ve PDF, tek yer). */
+export function videoHataCumlesi(platform: 'meta' | 'google', mesaj: string): string {
+  const ad = platform === 'meta' ? 'Meta' : 'Google';
+  return `${ad} video izlenmesi bazı günler için alınamadı; o hücreler "okunamadı" yazıyor, 0 değil. ${ad}'ın mesajı: ${mesaj.slice(0, 200)}`;
 }
 
 /** Uyarının ekrandaki ve PDF'teki cümlesi (tek yer). */
@@ -422,10 +433,37 @@ export type BucketKey = (typeof BUCKET_KEYS)[number];
  * SIRASINI seçtirmiyordu: "Form"u "Tıklama"nın önüne almak imkânsız olurdu.
  * Tek sıralı liste hem seçimi hem sırayı taşıyor.
  */
-export const COLUMN_KEYS = [...METRIC_KEYS, ...BUCKET_KEYS] as const;
+/**
+ * ═══ VİDEO SÜTUNLARI (video ölçümü, 2026-10-13) ═══
+ *
+ * "Video izlenme" iki platformda iki AYRI metriğin karşılığı ve ikisi de
+ * platformun "nitelikli izlenme"si: Meta'da ThruPlay (videonun en az 15
+ * saniyesi ya da tamamı), Google'da TrueView. 3 saniyelik OYNATMA burada
+ * DEĞİL: bir süre ThruPlay yoksa oynatma aynı kolona düşüyordu ve aynı
+ * sütunda iki farklı metrik karşılaştırılıyordu.
+ *
+ * ÇEYREKLER SAYI, ORAN DEĞİL: Meta kişi sayısı veriyor, Google oran
+ * (gösterime göre); Google oranı senkronda o günün gösterimiyle çarpılıyor.
+ * Sayı kampanyalar ve günler arasında TOPLANABİLİYOR, oran toplanamazdı.
+ */
+export const VIDEO_KEYS = ['videoViews', 'costPerView', 'videoP25', 'videoP50', 'videoP75', 'videoP100'] as const;
+export type VideoKey = (typeof VIDEO_KEYS)[number];
+export const VIDEO_LABELS: Record<VideoKey, string> = {
+  videoViews: 'Video izlenme',
+  costPerView: 'İzlenme başı maliyet',
+  videoP25: '%25 izlenen',
+  videoP50: '%50 izlenen',
+  videoP75: '%75 izlenen',
+  videoP100: 'Sonuna kadar izlenen',
+};
+/** Tabloda video sütunu varsa altına yazılan tanım (panel ve PDF, tek yer). */
+export const VIDEO_DIPNOTU =
+  "Video izlenme: Meta'da ThruPlay (videonun en az 15 saniyesi ya da tamamı), Google'da TrueView izlenmesi. 3 saniyelik oynatma sayılmaz. %25/%50/%75 ve sonuna kadar izlenen: videonun o noktasına kadar izlenme sayısı; Google'da oran ile gösterimden hesaplanır.";
+
+export const COLUMN_KEYS = [...METRIC_KEYS, ...BUCKET_KEYS, ...VIDEO_KEYS] as const;
 export type ColumnKey = (typeof COLUMN_KEYS)[number];
 
-/** Sütun başlıkları — `METRIC_LABELS` ve kova etiketleri tek haritada. */
+/** Sütun başlıkları — `METRIC_LABELS`, kova ve video etiketleri tek haritada. */
 export const COLUMN_LABELS: Record<ColumnKey, string> = {
   ...(Object.fromEntries(
     METRIC_KEYS.map((k) => [k, METRIC_LABELS[k].label]),
@@ -433,6 +471,7 @@ export const COLUMN_LABELS: Record<ColumnKey, string> = {
   ...(Object.fromEntries(
     BUCKET_KEYS.map((k) => [k, CONVERSION_BUCKETS[k].label]),
   ) as Record<BucketKey, string>),
+  ...VIDEO_LABELS,
 };
 
 const COLUMN_KEY_ENUM = z.enum(COLUMN_KEYS as unknown as [ColumnKey, ...ColumnKey[]]);
@@ -566,6 +605,129 @@ export interface ReportCampaignRow extends MetricTotals {
    * veri eksik. Farkı göstermeden rapor göndermek yanıltıcı olur.
    */
   dayCount: number;
+  /** Video ölçümü (`VIDEO_KEYS`); video olmayan kampanyada izlenme 0 ya da null. */
+  video: RaporVideo;
+}
+
+/**
+ * BİR KAMPANYANIN (ya da toplamın) VİDEO ÖLÇÜMÜ.
+ *
+ * `null` = HİÇ OKUNMADI (sorulmadı ya da platform reddetti), 0 = okundu ve
+ * sıfır. İkisini aynı 0'a çevirmek, alınamayan bir ölçümü "kimse izlemedi"
+ * diye müşteriye göndermek olurdu. `okunamadi` en az bir günde platformun
+ * HATA verdiğini söylüyor: hücre o zaman "—" değil "okunamadı" yazıyor.
+ */
+export interface RaporVideo {
+  izlenme: number | null;
+  okunamadi: boolean;
+  /** İzlenmenin OKUNDUĞU günlerin harcaması (izlenme başı maliyetin payı). */
+  harcamaMicros: string;
+  p25: number | null;
+  p50: number | null;
+  p75: number | null;
+  p100: number | null;
+}
+
+/**
+ * `insights_daily.raw_metrics.video` — iki platformda AYNI şekil (senkron
+ * yazıyor, rapor okuyor). Çeyrekler SAYI. `oynatma` yalnız Meta'da (3 sn+);
+ * Google'da karşılığı sorulmuyor ve `null`.
+ */
+export interface VideoHamOlcumu {
+  oynatma: number | null;
+  p25: number | null;
+  p50: number | null;
+  p75: number | null;
+  p100: number | null;
+}
+/** Video ek sorgusu düşünce ham gövdeye yazılan hata anahtarı (Meta ve Google). */
+export const VIDEO_HATA_ANAHTARI = 'videoMetricsError';
+
+export function bosRaporVideo(): RaporVideo {
+  return { izlenme: null, okunamadi: false, harcamaMicros: '0', p25: null, p50: null, p75: null, p100: null };
+}
+
+/** Okunamayanı "okunamadı", sorulmayanı "—", okunanı sayı olarak yazar. */
+function videoSayisi(v: number | null, okunamadi: boolean): string {
+  if (v === null) return okunamadi ? 'okunamadı' : '—';
+  return formatNumber(v);
+}
+
+/**
+ * Video sütununun hücre metni — PANEL VE PDF AYNI FONKSİYONU çağırıyor ve
+ * TOPLAM satırı da aynı fonksiyondan (toplanmış `RaporVideo` ile) geçiyor.
+ */
+export function videoHucresi(k: VideoKey, v: RaporVideo, para: string | null): string {
+  switch (k) {
+    case 'videoViews':
+      return videoSayisi(v.izlenme, v.okunamadi);
+    case 'costPerView':
+      if (v.izlenme === null) return videoSayisi(null, v.okunamadi);
+      // Sıfır izlenmede maliyet TANIMSIZ (sonsuz değil): "—".
+      if (v.izlenme === 0) return '—';
+      return formatMoney(String((BigInt(v.harcamaMicros) * 1000n) / BigInt(Math.round(v.izlenme * 1000))), para);
+    case 'videoP25':
+      return videoSayisi(v.p25, v.okunamadi);
+    case 'videoP50':
+      return videoSayisi(v.p50, v.okunamadi);
+    case 'videoP75':
+      return videoSayisi(v.p75, v.okunamadi);
+    case 'videoP100':
+      return videoSayisi(v.p100, v.okunamadi);
+  }
+}
+
+/** Satırların video ölçümünü toplar: null'lar atlanır, hepsi null ise null kalır. */
+export function videoTopla(list: readonly RaporVideo[]): RaporVideo {
+  const t = bosRaporVideo();
+  let harcama = 0n;
+  const ekle = (a: number | null, b: number | null) => (b === null ? a : (a ?? 0) + b);
+  for (const v of list) {
+    t.izlenme = ekle(t.izlenme, v.izlenme);
+    t.okunamadi ||= v.okunamadi;
+    harcama += BigInt(v.harcamaMicros);
+    t.p25 = ekle(t.p25, v.p25);
+    t.p50 = ekle(t.p50, v.p50);
+    t.p75 = ekle(t.p75, v.p75);
+    t.p100 = ekle(t.p100, v.p100);
+  }
+  t.harcamaMicros = harcama.toString();
+  return t;
+}
+
+export function videoSutunuMu(k: string): k is VideoKey {
+  return (VIDEO_KEYS as readonly string[]).includes(k);
+}
+
+/**
+ * ═══ VİDEO SÜTUNLARI AYRI TABLODA (panel ve PDF, tek karar) ═══
+ *
+ * İlk denemede video sütunları kampanya tablosunun SONUNA ekleniyordu: altı
+ * sütun daha binince PDF'te harcama "821,7…" diye kırpıldı — kırpılmış para
+ * tutarı yanlış sayı göstermekle aynı şey (CLAUDE.md). Video ölçümü de
+ * yalnız video kampanyasında anlamlı; arama kampanyasının satırında altı
+ * "—" okunmuyor. Google Ads da video metriklerini ayrı sütun setinde
+ * gösteriyor. Karar: ana tablo video sütunlarını TAŞIMAZ; seçilen video
+ * sütunları altta, YALNIZ video ölçümü olan kampanyaların tablosunda.
+ * Kaç kampanyanın gösterildiği yazılıyor (sessiz kesme yok).
+ */
+export function videoOlcumuVar(r: ReportCampaignRow): boolean {
+  return (r.video?.izlenme ?? 0) > 0 || r.video?.okunamadi === true || (r.video?.p25 ?? 0) > 0;
+}
+
+export function kampanyaTablolari(
+  sutunlar: readonly ColumnKey[],
+  satirlar: readonly ReportCampaignRow[],
+): { ana: ColumnKey[]; video: { sutunlar: VideoKey[]; satirlar: ReportCampaignRow[]; aciklama: string } | null } {
+  const ana = sutunlar.filter((k) => !videoSutunuMu(k));
+  const videoSutunlari = sutunlar.filter(videoSutunuMu);
+  if (videoSutunlari.length === 0) return { ana, video: null };
+  const videoSatirlari = satirlar.filter(videoOlcumuVar);
+  const aciklama =
+    videoSatirlari.length === 0
+      ? 'Bu dönemde video ölçümü olan kampanya yok.'
+      : `Video ölçümü olan ${videoSatirlari.length} kampanya (tablodaki ${satirlar.length} kampanyadan).`;
+  return { ana, video: { sutunlar: videoSutunlari, satirlar: videoSatirlari, aciklama } };
 }
 
 export interface ReportPlatformBlock extends MetricTotals {
@@ -746,6 +908,12 @@ export interface ReportData {
    */
   callClicksErrors: string[];
   /**
+   * Video ek ölçümünün hata mesajları (ham gövdedeki `videoMetricsError`,
+   * platform başına ayrık). Boş = hata yok. Dolu iken ilgili hücreler
+   * "okunamadı" yazıyor ve not tablonun ÜSTÜNDE (`tabloNotlari`).
+   */
+  videoMetricsErrors: Array<{ platform: 'meta' | 'google'; mesaj: string }>;
+  /**
    * Anahtar kelime performansı.
    *
    * `null` "veri yok" DEĞİL, "bu yetenek henüz yok" demek: Google anahtar
@@ -843,7 +1011,24 @@ export function resolveColumns(
   for (const k of VERIYLE_ACILAN_SUTUNLAR) {
     if (!sutunlar.includes(k) && (satirlar ?? []).some((r) => (r.conversionCounts[k] ?? 0) > 0)) sutunlar.push(k);
   }
+  for (const k of veriyleAcilanVideoSutunlari(satirlar ?? [])) {
+    if (!sutunlar.includes(k)) sutunlar.push(k);
+  }
   return sutunlar;
+}
+
+/**
+ * VİDEO SÜTUNLARI DA VERİYLE AÇILIR (arama kovasıyla aynı gerekçe): video
+ * kampanyası olmayan raporda altı boş sütun; olan raporda ise kampanyanın
+ * TEK sonucu (izlenme) gizli kalırdı. "Okunamadı" da açar: platform ölçümü
+ * vermediyse bunu okuyanın görmesi gerekiyor, sütunu gizlemek o bilgiyi de
+ * gizlerdi. Çeyrekler ancak çeyrek verisi varsa açılır.
+ */
+export function veriyleAcilanVideoSutunlari(satirlar: readonly ReportCampaignRow[]): VideoKey[] {
+  const izlenme = satirlar.some((r) => (r.video?.izlenme ?? 0) > 0 || r.video?.okunamadi === true);
+  if (!izlenme) return [];
+  const ceyrek = satirlar.some((r) => (r.video?.p25 ?? 0) > 0);
+  return ceyrek ? [...VIDEO_KEYS] : ['videoViews', 'costPerView'];
 }
 
 /**
@@ -928,7 +1113,7 @@ export interface ReportMailDraft {
 // hiçbir şey demiyor — `Record<ColumnKey, …>` bunu derleme hatasına çeviriyor.
 // -----------------------------------------------------------------------------
 
-export function sumRows(rows: ReportCampaignRow[]): MetricTotals & { counts: ConversionCounts } {
+export function sumRows(rows: ReportCampaignRow[]): MetricTotals & { counts: ConversionCounts; video: RaporVideo } {
   let impressions = 0;
   let clicks = 0;
   let spend = 0n;
@@ -965,6 +1150,8 @@ export function sumRows(rows: ReportCampaignRow[]): MetricTotals & { counts: Con
     cpa: conversions > 0 ? spendUnits / conversions : null,
     roas: spendUnits > 0 && valueUnits > 0 ? valueUnits / spendUnits : null,
     counts,
+    // Eski kayıtta (video alanı yok) boş ölçüm: "—", 0 değil.
+    video: videoTopla(rows.map((r) => r.video ?? bosRaporVideo())),
   };
 }
 
@@ -992,6 +1179,13 @@ export const COLUMN_TOTALS: Record<
   calls: (t) => formatNumber(t.counts.calls),
   calls20s: (t) => formatNumber(t.counts.calls20s),
   callClicks: (t) => formatNumber(t.counts.callClicks),
+  // Video toplamı satırla AYNI biçimciden: "okunamadı" toplamda da görünür.
+  videoViews: (t, m) => videoHucresi('videoViews', t.video, m),
+  costPerView: (t, m) => videoHucresi('costPerView', t.video, m),
+  videoP25: (t, m) => videoHucresi('videoP25', t.video, m),
+  videoP50: (t, m) => videoHucresi('videoP50', t.video, m),
+  videoP75: (t, m) => videoHucresi('videoP75', t.video, m),
+  videoP100: (t, m) => videoHucresi('videoP100', t.video, m),
 };
 
 /** Ondalık birimden micros dizgesine — `formatMoney` micros bekliyor. */

@@ -404,7 +404,12 @@ export interface DiscoveredInsightRow {
   spendMicros: bigint;
   conversions: number;
   conversionValueMicros: bigint;
-  videoViews: number;
+  /**
+   * Nitelikli video izlenme: Meta ThruPlay, Google TrueView (yalnız video
+   * kampanyası). `null` = okunamadı ya da sorulmadı; 0 = okundu ve sıfır.
+   * 3 sn oynatma ve çeyrekler `raw.video` içinde (`VideoHamOlcumu`).
+   */
+  videoViews: number | null;
   engagements: number;
   reach: number;
   frequency?: number;

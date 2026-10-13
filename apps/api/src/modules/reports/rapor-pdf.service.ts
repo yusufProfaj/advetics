@@ -13,6 +13,9 @@ import {
   resolveColumns,
   sumRows,
   SECTION_LABELS,
+  VIDEO_DIPNOTU,
+  kampanyaTablolari,
+  videoHucresi,
   type ColumnKey,
   type ReportCampaignRow,
   type ReportData,
@@ -477,6 +480,15 @@ export class RaporPdfService {
      * Meta'da tanınmayan arama eylemi, Google'da alınamayan arama tıklaması.
      * İkisinde de sütun eksik sayar; okuyan bunu "arama gelmedi" sanmasın.
      */
+    /*
+     * VİDEO SÜTUNLARI ANA TABLODA DEĞİL (`kampanyaTablolari`, panelle aynı
+     * karar): altı sütun daha binince harcama kırpılıyordu. Video ayrı
+     * sayfada, yalnız video ölçümü olan kampanyalarla.
+     */
+    const { ana: sutunlar, video } = kampanyaTablolari(
+      resolveColumns(ctx.data.options[bolum]?.metrics, DEFAULT_COLUMNS[bolum], satirlar),
+      satirlar,
+    );
     const notlar = tabloNotlari(ctx.data, bolum);
     for (const not of notlar) {
       for (const satir of sar(not, ctx.normal, 8, EN - 2 * KENAR)) {
@@ -485,7 +497,6 @@ export class RaporPdfService {
       }
     }
     if (notlar.length) y -= 6;
-    const sutunlar = resolveColumns(ctx.data.options[bolum]?.metrics, DEFAULT_COLUMNS[bolum], satirlar);
     const t = sumRows(satirlar);
 
     /*
@@ -567,6 +578,54 @@ export class RaporPdfService {
         kalin: ctx.kalin,
       });
     }
+
+    if (video) this.videoTablosu(ctx, platform, video);
+  }
+
+  /**
+   * VİDEO İZLENME — kampanya tablosunun video sütunları, ayrı sayfada.
+   * Panelin `VideoTablosu`yla AYNI liste, aynı hücre ve toplam biçimcisi.
+   * Tanım (`VIDEO_DIPNOTU`) tablonun üstünde: "video izlenme" iki platformda
+   * iki farklı metrik ve tanımı yazmadan okuyan ikisini aynı şey sanar.
+   */
+  private videoTablosu(
+    ctx: Ctx,
+    platform: string,
+    video: NonNullable<ReturnType<typeof kampanyaTablolari>['video']>,
+  ): void {
+    const s = ctx.doc.addPage([EN, BOY]);
+    let y = this.baslik(ctx, s, 'Video İzlenme', platform);
+    for (const not of [video.aciklama, VIDEO_DIPNOTU]) {
+      for (const satir of sar(not, ctx.normal, 8, EN - 2 * KENAR)) {
+        s.drawText(satir, { x: KENAR, y, size: 8, font: ctx.normal, color: GRI });
+        y -= 11;
+      }
+    }
+    if (video.satirlar.length === 0) return;
+    y -= 6;
+    const t = sumRows(video.satirlar);
+    tablo(s, {
+      sutunlar: [
+        { baslik: 'Kampanya Adı', pay: 32, deger: (r: ReportCampaignRow) => r.name },
+        ...video.sutunlar.map((k) => ({
+          baslik: COLUMN_LABELS[k],
+          pay: 68 / video.sutunlar.length,
+          sag: true,
+          deger: (r: ReportCampaignRow) => hucre(k, r, ctx.data.currency),
+        })),
+      ],
+      satirlar: video.satirlar,
+      x: KENAR,
+      y,
+      genislik: EN - 2 * KENAR,
+      altSinir: KENAR + 20,
+      normal: ctx.normal,
+      kalin: ctx.kalin,
+      toplam: {
+        etiket: 'Genel toplam',
+        degerler: video.sutunlar.map((k) => COLUMN_TOTALS[k]!(t, ctx.data.currency)),
+      },
+    });
   }
 
   /**
@@ -1726,6 +1785,14 @@ function hucre(k: ColumnKey, r: ReportCampaignRow, para: string | null): string 
       return formatNumber(r.conversionCounts.calls20s);
     case 'callClicks':
       return formatNumber(r.conversionCounts.callClicks);
+    // VİDEO: panelle AYNI biçimci ("okunamadı" / "—" / sayı).
+    case 'videoViews':
+    case 'costPerView':
+    case 'videoP25':
+    case 'videoP50':
+    case 'videoP75':
+    case 'videoP100':
+      return r.video ? videoHucresi(k, r.video, para) : '—';
     default:
       // Yeni bir sütun anahtarı eklenip burası unutulursa "—" çıkıyor ve
       // sessizce yanlış bir sayı basılmıyor.

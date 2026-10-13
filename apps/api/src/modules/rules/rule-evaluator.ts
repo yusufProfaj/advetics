@@ -6,7 +6,7 @@ import {
   type RuleMetric,
   type RuleWindow,
 } from '@advetics/shared';
-import { ARAMA_DONUSUM_CUMLESI } from '../metrics/arama-kampanyasi';
+import { donusumSayilmiyorCumlesi } from '../metrics/donusum-sayilmayan';
 
 /**
  * Kural değerlendirme — SAF fonksiyonlar, veritabanı ve platform çağrısı yok.
@@ -53,13 +53,15 @@ export interface EntitySnapshot {
   /** Bu kuralın bu varlığa en son ne zaman DOKUNDUĞU (atlananlar hariç). */
   lastActionAt: Date | null;
   /**
-   * Arama kampanyası (`aramaVarligiSql`): `conversions` her gün 0 ve o 0
-   * ölçüm değil. Dönüşüme dayalı koşul DEĞERLENDİRİLMEZ. Verilmezse `false`.
+   * Dönüşüm için KURULMAMIŞ varlığın hedef kodu (`donusumsuzHedefSql`:
+   * arama, video izlenme, erişim…): `conversions` 0 ve o 0 ölçüm değil.
+   * Dönüşüme dayalı koşul DEĞERLENDİRİLMEZ ve kod sebep cümlesine girer.
+   * `null`/verilmezse normal değerlendirme.
    */
-  donusumSayilmiyor?: boolean;
+  donusumsuzHedef?: string | null;
 }
 
-/** Dönüşüm sayısına dayanan metrikler: arama kampanyasında hesaplanamaz. */
+/** Dönüşüm sayısına dayanan metrikler: dönüşüm için kurulmamış kampanyada hesaplanamaz. */
 export const DONUSUM_METRIKLERI: ReadonlySet<RuleMetric> = new Set<RuleMetric>(['conversions', 'cpa', 'roas']);
 
 export interface EvaluationContext {
@@ -220,11 +222,11 @@ export function evaluate(snapshot: EntitySnapshot, ctx: EvaluationContext): Eval
 
   for (const c of ctx.conditions) {
     /*
-     * ARAMA KAMPANYASI: "dönüşüm 0 → durdur" kuralı çalışan bir arama
-     * reklamını durdururdu (aramalar `conversions`a yazılmıyor). Koşul
-     * SAĞLANMADI sayılıyor ve eşleşme olmazsa sebep ayrıca kaydediliyor.
+     * DÖNÜŞÜM İÇİN KURULMAMIŞ KAMPANYA (arama, video, erişim): "dönüşüm 0
+     * → durdur" kuralı çalışan bir video reklamını durdururdu. Koşul
+     * SAĞLANMADI sayılıyor ve eşleşme olmazsa sebep (hedefiyle) kaydediliyor.
      */
-    if (snapshot.donusumSayilmiyor && DONUSUM_METRIKLERI.has(c.metric)) {
+    if (snapshot.donusumsuzHedef && DONUSUM_METRIKLERI.has(c.metric)) {
       donusumAtlandi = c.metric;
       results.push(false);
       continue;
@@ -263,7 +265,7 @@ export function evaluate(snapshot: EntitySnapshot, ctx: EvaluationContext): Eval
       return {
         matched: false,
         outcome: 'skipped_no_conversion_signal',
-        reason: `${ARAMA_DONUSUM_CUMLESI} (${METRIC_TEXT[donusumAtlandi]} koşulu).`,
+        reason: `${donusumSayilmiyorCumlesi(snapshot.donusumsuzHedef)} (${METRIC_TEXT[donusumAtlandi]} koşulu).`,
       };
     }
     /**

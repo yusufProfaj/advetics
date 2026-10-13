@@ -1,4 +1,4 @@
-import { aramaVarligiSql } from '../metrics/arama-kampanyasi';
+import { donusumsuzHedefSql } from '../metrics/donusum-sayilmayan';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
@@ -55,8 +55,8 @@ interface EntityRow {
   budget_mode: string | null;
   budget_amount_micros: bigint | null;
   currency: string;
-  /** Arama kampanyasına ait mi (`aramaVarligiSql`). */
-  arama: boolean;
+  /** Dönüşüm için kurulmamışsa hedef kodu (`donusumsuzHedefSql`), değilse null. */
+  donusumsuz_hedef: string | null;
 }
 
 interface WindowRow {
@@ -343,7 +343,7 @@ export class RulesService {
     const entities = await tx.$queryRaw<EntityRow[]>(Prisma.sql`
       SELECT e.id::text AS id, e.name, e.external_id, e.status::text AS status,
              e.ad_account_id::text AS ad_account_id, ${budgetCols},
-             a.currency, ${aramaVarligiSql(rule.level, 'e')} AS arama
+             a.currency, ${donusumsuzHedefSql(rule.level, 'e')} AS donusumsuz_hedef
       FROM ${Prisma.raw(table)} e
       JOIN ad_accounts a ON a.id = e.ad_account_id
       WHERE e.client_id = ${rule.clientId}::uuid ${accountFilter}
@@ -384,7 +384,7 @@ export class RulesService {
         budgetSpentRatio: budgetRatios.get(e.ad_account_id) ?? null,
         newestDataAt: windowData.get(e.id)?.newestAt ?? null,
         lastActionAt: lastActions.get(e.id) ?? null,
-        donusumSayilmiyor: e.arama === true,
+        donusumsuzHedef: e.donusumsuz_hedef,
       };
 
       const result = evaluate(snapshot, {

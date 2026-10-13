@@ -943,7 +943,8 @@ export class LinkedInProvider implements IAdPlatformProvider {
            */
           conversions: (e.externalWebsiteConversions ?? 0) + (e.oneClickLeads ?? 0),
           conversionValueMicros: 0n,
-          videoViews: 0,
+          // LinkedIn video izlenmesi bu sorguda istenmiyor: NULL (sorulmadı), 0 değil.
+          videoViews: null,
           engagements: 0,
           reach: 0,
           raw: e,

@@ -22,6 +22,7 @@ import {
   type ReportDailyPoint,
   type ReportPlatformBlock,
   type ReportSection,
+  type RaporVideo,
   type TenantContext,
 } from '@advetics/shared';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -100,6 +101,50 @@ function hamSayacToplami(alias: string): Prisma.Sql {
     ).join(', '),
   );
 }
+/**
+ * ═══ VİDEO TOPLAMI (kampanya satırının base CTE'sine) ═══
+ *
+ * `video_views` NULL = okunamadı/sorulmadı: SUM onu atlıyor ve kampanyanın
+ * bütün günleri NULL ise toplam da NULL kalıyor ("okunamadı" / "—", 0
+ * DEĞİL). Çeyrekler `raw_metrics.video` içinde SAYI; sayı olmayan değer
+ * atlanıyor. Harcama yalnız izlenmenin OKUNDUĞU günlerden: okunamayan günün
+ * harcamasını paya katmak izlenme başı maliyeti şişirirdi.
+ * Anahtar adları kodda sabit (kullanıcı girdisi değil): `Prisma.raw` güvenli.
+ */
+const VIDEO_CEYREKLERI = ['p25', 'p50', 'p75', 'p100'] as const;
+function videoToplami(alias: string): Prisma.Sql {
+  const on = alias ? `${alias}.` : '';
+  return Prisma.raw(
+    [
+      `SUM(${on}video_views) AS video_views`,
+      `bool_or(${on}raw_metrics -> 'videoMetricsError' IS NOT NULL) AS video_hata`,
+      `SUM(CASE WHEN ${on}video_views IS NOT NULL THEN ${on}spend_micros END) AS video_harcama`,
+      ...VIDEO_CEYREKLERI.map(
+        (q) =>
+          `SUM(CASE WHEN jsonb_typeof(${on}raw_metrics -> 'video' -> '${q}') = 'number' THEN (${on}raw_metrics -> 'video' ->> '${q}')::numeric END) AS video_${q}`,
+      ),
+    ].join(', '),
+  );
+}
+type RawVideoRow = {
+  video_views: string | number | bigint | null;
+  video_hata: boolean | null;
+  video_harcama: string | number | bigint | null;
+} & Record<`video_${(typeof VIDEO_CEYREKLERI)[number]}`, string | number | null>;
+
+function videoOlcumu(r: RawVideoRow): RaporVideo {
+  const sayi = (v: string | number | bigint | null | undefined) => (v === null || v === undefined ? null : Math.round(Number(v)));
+  return {
+    izlenme: sayi(r.video_views),
+    okunamadi: r.video_hata === true,
+    harcamaMicros: r.video_harcama === null || r.video_harcama === undefined ? '0' : String(r.video_harcama),
+    p25: sayi(r.video_p25),
+    p50: sayi(r.video_p50),
+    p75: sayi(r.video_p75),
+    p100: sayi(r.video_p100),
+  };
+}
+
 function kovaSayilari(r: Partial<Record<ConversionBucket, string | number | null>>): ConversionCounts {
   return roundCounts(Object.fromEntries(KOVA_ANAHTARLARI.map((k) => [k, Number(r[k] ?? 0)])) as ConversionCounts);
 }
@@ -377,7 +422,7 @@ export class ReportsService {
         izlenen,
       };
 
-      const [platformBlocks, campaigns, daily, topAds, topAdsMissingPlatforms, unknownCallActions, callClicksErrors] = await Promise.all([
+      const [platformBlocks, campaigns, daily, topAds, topAdsMissingPlatforms, unknownCallActions, callClicksErrors, videoMetricsErrors] = await Promise.all([
         this.platformBlocks(tx, sorgu),
         this.campaignRows(tx, sorgu),
         this.dailySeries(tx, sorgu),
@@ -385,6 +430,7 @@ export class ReportsService {
         this.topAdsMissingPlatforms(tx, sorgu),
         this.unknownCallActions(tx, sorgu),
         this.callClicksErrors(tx, sorgu),
+        this.videoMetricsErrors(tx, sorgu),
       ]);
 
       // Para birimi: tek ise toplam anlamlı, birden fazlaysa null.
@@ -446,6 +492,7 @@ export class ReportsService {
         topAdsMissingPlatforms,
         unknownCallActions,
         callClicksErrors,
+        videoMetricsErrors,
         // `null` HÂLÂ "bu yetenek yok" demek — ama artık yalnızca Google
         // bağlantısı olmayan müşteriler için. Meta-only bir müşteride boş dizi
         // döndürmek "anahtar kelimen yok" demek olurdu; oysa o platformda
@@ -976,7 +1023,8 @@ export class ReportsService {
     const rows = await tx.$queryRaw<
       Array<
         RawMetricRow &
-          RawBucketRow & {
+          RawBucketRow &
+          RawVideoRow & {
             platform: Platform;
             name: string | null;
             status: string | null;
@@ -995,6 +1043,7 @@ export class ReportsService {
                  SUM(i.conversion_value_micros) AS conversion_value_micros,
                  MAX(i.currency) AS currency,
                  ${hamSayacToplami('i')},
+                 ${videoToplami('i')},
                  -- ERİŞİM TOPLANMIYOR, ortalaması alınıyor: aynı kişi
                  -- kampanyayı iki gün de görmüş olabilir ve toplamak
                  -- müşteriye iki kat kitle söylemek olur.
@@ -1034,6 +1083,7 @@ export class ReportsService {
           reachIsDailyAverage: days > 1,
           dayCount: days,
           conversionCounts: kovaSayilari(r),
+          video: videoOlcumu(r),
           ...this.totals(r),
         },
       };
@@ -1141,6 +1191,35 @@ export class ReportsService {
     );
     const hepsi = rows.map((r) => r.mesaj).filter((x): x is string => !!x).sort();
     return hepsi.length > 5 ? [...hepsi.slice(0, 5), `ve ${hepsi.length - 5} farklı hata daha`] : hepsi;
+  }
+
+  /**
+   * VİDEO ÖLÇÜMÜ HATALARI (`videoMetricsError`, platform başına ayrık, ilk 5).
+   * Okuyan olmazsa iz yalnız worker log'unda kalırdı ve hücre "okunamadı"
+   * derken SEBEBİ hiçbir yerde yazmazdı.
+   */
+  private async videoMetricsErrors(
+    tx: TxLike,
+    params: RaporSorgusu,
+  ): Promise<ReportData['videoMetricsErrors']> {
+    const rows = await tx.$queryRaw<Array<{ platform: Platform; mesaj: string | null }>>(
+      Prisma.sql`
+        SELECT DISTINCT i.platform, i.raw_metrics ->> 'videoMetricsError' AS mesaj
+        FROM insights_daily i
+        WHERE i.client_id = ${params.clientId}::uuid ${trackedAccounts(params.izlenen, 'i')}
+          ${platformFiltresi(params.platform, 'i')}
+          AND i.date BETWEEN ${params.from}::date AND ${params.to}::date
+          AND i.entity_level = ${LEVEL}
+          AND i.raw_metrics -> 'videoMetricsError' IS NOT NULL
+      `,
+    );
+    const out: ReportData['videoMetricsErrors'] = [];
+    for (const platform of ['meta', 'google'] as const) {
+      const hepsi = rows.filter((r) => r.platform === platform).map((r) => r.mesaj).filter((x): x is string => !!x).sort();
+      const liste = hepsi.length > 5 ? [...hepsi.slice(0, 5), `ve ${hepsi.length - 5} farklı hata daha`] : hepsi;
+      out.push(...liste.map((mesaj) => ({ platform, mesaj })));
+    }
+    return out;
   }
 
   private async topAdsMissingPlatforms(
