@@ -1,6 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import type {
+  ArsivWorkspaceSatiri,
   CreateClientInput,
   TenantContext,
   UpdateClientInput,
@@ -27,6 +33,28 @@ interface Meta {
   userAgent?: string | null;
   requestId?: string | null;
 }
+
+/**
+ * ═══ WORKSPACE DURUMUNU KİM DEĞİŞTİREBİLİR — ARŞİV KAPISININ AYNISI ═══
+ *
+ * `PATCH /clients/:id` `client.write` ile açık ve şema `status` alanını
+ * kabul ediyordu. Yani arşivleme kapısı (`DELETE /clients/:id`:
+ * `client.delete` + org yöneticisi) bir ARKA KAPIDAN aşılabiliyordu:
+ * reklam yöneticisi `{status: 'archived'}` gönderip workspace'i arşive
+ * atabiliyor, geri alabiliyor ya da duraklatabiliyordu. Panel bunu hiç
+ * göstermiyordu ama uç kabul ediyordu (MIMARI Ç-4).
+ *
+ * SESSİZCE YOK SAYMAK DEĞİL, 403: alanı atlayıp kalan alanları yazmak "200
+ * döndü, durum değişmedi" hâli üretir ve çağıran neden değişmediğini hiçbir
+ * yerde göremez. Bu projenin baş belası tam olarak bu.
+ */
+export function durumYazabilirMi(ctx: Pick<TenantContext, 'isOrgAdmin' | 'permissions'>): boolean {
+  return ctx.isOrgAdmin && ctx.permissions.includes('client.delete');
+}
+
+/** Durum kapısının ekrana giden cümlesi — uç ile test aynı metni okuyor. */
+export const DURUM_KAPISI_MESAJI =
+  'Workspace durumunu (arşiv, duraklatma) yalnız yönetici değiştirebilir. Arşivlemek ve geri almak için Ayarlar › Şirketler ve workspace’ler.';
 
 /**
  * Müşteri (client) yönetimi.
@@ -272,6 +300,13 @@ export class ClientsService {
   }
 
   async update(ctx: TenantContext, id: string, input: UpdateClientInput, meta: Meta) {
+    /*
+     * KAPI TRANSACTION'DAN ÖNCE: veritabanına hiç gitmeden reddediliyor,
+     * kısmi yazma ihtimali yok (bkz. `durumYazabilirMi`).
+     */
+    if (input.status !== undefined && !durumYazabilirMi(ctx)) {
+      throw new ForbiddenException(DURUM_KAPISI_MESAJI);
+    }
     return this.prisma.withTenant(ctx, async (tx) => {
       const before = await tx.client.findUnique({ where: { id } });
       if (!before) throw new NotFoundException('Workspace bulunamadı');
@@ -302,7 +337,16 @@ export class ClientsService {
             ? { reportingCurrency: input.reportingCurrency }
             : {}),
           ...(input.status !== undefined ? { status: input.status } : {}),
-          ...(input.status === 'archived' ? { archivedAt: new Date() } : {}),
+          /*
+           * ARŞİVDEN ÇIKAN SATIR `archived_at`i TAŞIMAZ: geri alma ucu onu
+           * `NULL`a çeviriyor ve bu yol ayrışırsa "aktif ama arşiv tarihi
+           * var" yarım satırı doğar.
+           */
+          ...(input.status === 'archived'
+            ? { archivedAt: new Date() }
+            : input.status !== undefined
+              ? { archivedAt: null }
+              : {}),
           /**
            * ÖZEL KATEGORİ DEĞİŞİKLİĞİ DENETİM KAYDINA DA GİRİYOR (aşağıda,
            * `client.updated`). Bir müşterinin konut beyanının ne zaman ve kim
@@ -374,6 +418,78 @@ export class ClientsService {
           reportingCurrency: after.reportingCurrency,
           status: after.status,
         },
+        ...meta,
+      });
+
+      return after;
+    });
+  }
+
+  /**
+   * ARŞİVDEKİ WORKSPACE'LER — `GET /clients?arsiv=1`.
+   *
+   * `list()` arşivlileri BİLEREK döndürmüyor (seçicide, raporda, menüde
+   * görünmesinler). Ama geri alma ekranı yoktu ve arşivlenen workspace
+   * panelden bir daha HİÇ görünmüyordu: eski pencere "geri almak için
+   * durumu aktif yap" diyordu ve o alanı gösteren bir ekran yoktu.
+   *
+   * RLS: arşivli workspace oturumun `clientIds` listesine girmiyor
+   * (`tenant-context.service.ts` arşivlileri eliyor), yani yalnız org
+   * yöneticisi görüyor (`adv_clients_select`: `is_org_admin() OR ...`).
+   * Geri alma da yalnız ona açık; ikisi aynı sınırda.
+   */
+  async listArchived(ctx: TenantContext): Promise<ArsivWorkspaceSatiri[]> {
+    const satirlar = await this.prisma.withTenant({ ...ctx, activeClientId: null }, (tx) =>
+      tx.client.findMany({
+        where: { status: 'archived' },
+        orderBy: { name: 'asc' },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          archivedAt: true,
+          _count: { select: { adAccounts: true } },
+        },
+      }),
+    );
+    return satirlar.map((s) => ({ ...s, archivedAt: s.archivedAt?.toISOString() ?? null }));
+  }
+
+  /**
+   * ARŞİVDEN GERİ AL — `POST /clients/:id/geri-al`.
+   *
+   * Arşivleme hiçbir veriyi silmiyor; geri alma da yalnız durumu
+   * `active`e ve `archived_at`i `NULL`a çeviriyor. Hesap atamaları, izleme
+   * ve geçmiş olduğu gibi duruyor.
+   *
+   * `activeClientId: null` ŞART: arşivli workspace oturumun seçili
+   * workspace'i olamaz ve seçim RLS'te görünürlüğü daraltıyor; o daraltma
+   * altında satır hiç bulunmazdı (CLAUDE.md "UPDATE sonrası YENİ satır").
+   *
+   * ARŞİVDE OLMAYAN WORKSPACE 409: "geri alındı" deyip hiçbir şey
+   * yapmamak, çift tıklamada ikinci isteğin sessizce başarılı görünmesi
+   * demekti; denetim kaydına da olmayan bir geri alma yazılırdı.
+   */
+  async restore(ctx: TenantContext, id: string, meta: Meta) {
+    return this.prisma.withTenant({ ...ctx, activeClientId: null }, async (tx) => {
+      const before = await tx.client.findUnique({ where: { id } });
+      if (!before) throw new NotFoundException('Workspace bulunamadı');
+      if (before.status !== 'archived') {
+        throw new ConflictException(`"${before.name}" arşivde değil.`);
+      }
+
+      const after = await tx.client.update({
+        where: { id },
+        data: { status: 'active', archivedAt: null },
+      });
+
+      await this.audit.record(tx, ctx, {
+        action: 'client.restored',
+        targetType: 'client',
+        targetId: id,
+        clientId: id,
+        before: { status: before.status, archivedAt: before.archivedAt?.toISOString() ?? null },
+        after: { status: after.status },
         ...meta,
       });
 

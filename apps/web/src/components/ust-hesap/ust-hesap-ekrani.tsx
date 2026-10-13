@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import type { ManagerAccountTree } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { acilisAdresi, ayarlarAdresi } from '@/lib/panel-adresleri';
 import { Halka } from '@/components/yukleniyor';
 import { SirketDuzenle } from './sirket-duzenle';
 import { SirketSil } from './sirket-sil';
@@ -74,7 +74,11 @@ export function UstHesapEkrani({
    */
   sirket: { id: string; name: string; slug: string } | null;
   sirketHatasi: string | null;
-  /** Advetics'i işleten taraf mı — yeni üst hesap açabiliyor, paket seçebiliyor. */
+  /**
+   * Advetics'i işleten taraf mı. Üst hesap şeridinden "Üst hesap ayarları"na
+   * (aynı sayfadaki `#ust-hesaplar` kartı) yalnız o gidebiliyor; kart da
+   * yalnız ona çiziliyor (`PANEL_KAPILARI['ustHesap.yonet']`).
+   */
   platformAdmin: boolean;
   /**
    * "ÜST HESAP KUR" KİME ÇIKIYOR.
@@ -89,37 +93,22 @@ export function UstHesapEkrani({
   /** Workspace bölümü — sunucuda üretiliyor. */
   children: React.ReactNode;
 }) {
-  const router = useRouter();
-  const [agac, setAgac] = useState<ManagerAccountTree | null>(ilkAgac);
-  const [hata, setHata] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
+  /*
+   * AĞAÇ SUNUCUDAN GELİYOR ve bu bileşen onu değiştirmiyor: şirket
+   * işlemleri (düzenle, sil) bitince sayfa sunucudan yeniden çiziliyor.
+   * Taşıma bu ekrandan kalkınca istemcide tutulan kopya da gereksizleşti.
+   */
+  const agac = ilkAgac;
   /*
    * TEK SEFERDE TEK PANEL. İkisini birden açık bırakmak, ekranın yine
    * düzeltmeye çalıştığımız hâle dönmesi demekti.
+   *
+   * "WORKSPACE TAŞI" PANELİ BURADAN KALKTI (2026-10-13): taşıma artık
+   * workspace SATIRININ eylemi (`workspace-satirlari.tsx`, MIMARI Ç-23).
+   * İki ayrı yol aynı işi iki ayrı yerde yapıyordu ve bu ekran onu ters
+   * yönden ("başka şirketten buraya çek") soruyordu.
    */
-  const [panel, setPanel] = useState<'yok' | 'duzenle' | 'tasi' | 'sil'>('yok');
-
-  async function gonder(yol: string, govde: unknown) {
-    setPending(true);
-    setHata(null);
-    try {
-      const sonuc = await apiFetch<ManagerAccountTree>(yol, {
-        method: 'POST',
-        body: JSON.stringify(govde),
-      });
-      setAgac(sonuc);
-      /*
-       * SUNUCU BİLEŞENLERİ TAZELENİYOR. Üst bardaki şirket seçici oturum
-       * yanıtından besleniyor; tazelenmezse yeni şirket ekranda listelenir
-       * ama seçicide GÖRÜNMEZ ve kullanıcı ona geçemez.
-       */
-      router.refresh();
-    } catch (e) {
-      setHata(e instanceof ApiRequestError ? e.message : 'İşlem tamamlanamadı.');
-    } finally {
-      setPending(false);
-    }
-  }
+  const [panel, setPanel] = useState<'yok' | 'duzenle' | 'sil'>('yok');
 
   /*
    * ═══ ÜST HESAP KATMANI DÜŞSE DE DETAY ÇİZİLİYOR ═══
@@ -139,7 +128,6 @@ export function UstHesapEkrani({
   if (yuklemeHatasi || !agac) {
     return (
       <div className="space-y-6">
-        {hata && <Uyari mesaj={hata} />}
         {yuklemeHatasi ? (
           <p className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger-strong">
             Üst hesap bilgisi alınamadı: {yuklemeHatasi}
@@ -163,11 +151,8 @@ export function UstHesapEkrani({
     );
   }
 
-  const aktifSirket = agac.organizations.find((o) => o.id === aktifOrgId) ?? null;
-
   return (
     <div className="space-y-4">
-      {hata && <Uyari mesaj={hata} />}
 
       {/*
         RAY SABİT GENİŞLİKTE, DETAY KALANI ALIYOR (`minmax(0,1fr)`).
@@ -179,7 +164,7 @@ export function UstHesapEkrani({
         kadarını doldurdun. Şirket listesinin ÜSTÜNDE çünkü onların hepsini
         kapsıyor; yanına koymak hiyerarşiyi gizlerdi.
       */}
-      <UstHesapKarti agac={agac} />
+      <UstHesapKarti agac={agac} platformSahibi={platformAdmin} />
 
       <div className="grid gap-6 lg:grid-cols-[19rem_minmax(0,1fr)]">
         <SirketRayi agac={agac} aktifOrgId={aktifOrgId} />
@@ -216,12 +201,6 @@ export function UstHesapEkrani({
                   >
                     Düzenle
                   </EylemDugmesi>
-                  <EylemDugmesi
-                    aktif={panel === 'tasi'}
-                    onClick={() => setPanel((p) => (p === 'tasi' ? 'yok' : 'tasi'))}
-                  >
-                    Workspace taşı
-                  </EylemDugmesi>
                   <button
                     type="button"
                     onClick={() => setPanel((p) => (p === 'sil' ? 'yok' : 'sil'))}
@@ -242,27 +221,6 @@ export function UstHesapEkrani({
                 </div>
               )}
 
-              {panel === 'tasi' && aktifSirket && (
-                <div className="mt-4 border-t border-line pt-4">
-                  {/*
-                    TAŞIMA DETAYDA, RAY'DE DEĞİL. Her satıra bir seçici koymak
-                    kırk şirkette kırk bin `option` düğümü demekti ve seçicinin
-                    hedefi zaten "şu an bulunduğun şirket".
-                  */}
-                  <WorkspaceTasi
-                    agac={agac}
-                    hedef={aktifSirket}
-                    pending={pending}
-                    onTasi={(clientId) =>
-                      void gonder('/manager-account/workspaces/move', {
-                        clientId,
-                        organizationId: aktifSirket.id,
-                      })
-                    }
-                  />
-                </div>
-              )}
-
               {panel === 'sil' && (
                 <div className="mt-4 border-t border-line pt-4">
                   <SirketSil
@@ -277,7 +235,7 @@ export function UstHesapEkrani({
                        * durmaya devam eder.
                        */
                       setPanel('yok');
-                      window.location.assign('/ayarlar/ust-hesap');
+                      window.location.assign(ayarlarAdresi('sirketler'));
                     }}
                   />
                 </div>
@@ -313,17 +271,6 @@ function EylemDugmesi({
     >
       {children}
     </button>
-  );
-}
-
-function Uyari({ mesaj }: { mesaj: string }) {
-  return (
-    <p
-      role="alert"
-      className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger-strong"
-    >
-      {mesaj}
-    </p>
   );
 }
 
@@ -465,7 +412,7 @@ function SirketRayi({
             aynı adımları sırayla yürütüyor.
           */}
           <Link
-            href="/kurulum?tur=sirket"
+            href={acilisAdresi('sirket')}
             className="block w-full rounded-lg border border-line px-3 py-1.5 text-center text-sm font-medium text-ink transition hover:bg-surface-sunken"
           >
             + Şirket ekle
@@ -496,6 +443,7 @@ function SirketSatiri({
 }) {
   const [acik, setAcik] = useState(false);
   const [gecis, setGecis] = useState(false);
+  const [gecisHatasi, setGecisHatasi] = useState<string | null>(null);
 
   /**
    * ŞİRKETE GEÇ — tam sayfa yükleme.
@@ -507,6 +455,7 @@ function SirketSatiri({
    */
   function gec(): void {
     setGecis(true);
+    setGecisHatasi(null);
     void apiFetch('/auth/switch-org', {
       method: 'POST',
       body: JSON.stringify({ organizationId: sirket.id }),
@@ -515,9 +464,18 @@ function SirketSatiri({
         // AYNI SAYFAYA DÖNÜYOR, `/dashboard`A DEĞİL. Kullanıcı şirketi
         // düzenlemek için tıkladı; onu Genel Bakış'a atmak, aradığı ekranı
         // yeniden bulmasını istemek olurdu.
-        window.location.assign('/ayarlar/ust-hesap');
+        window.location.assign(ayarlarAdresi('sirketler'));
       })
-      .catch(() => setGecis(false));
+      .catch((e: unknown) => {
+        /*
+         * HATA YUTULMUYOR: düğme eski hâline dönüp hiçbir şey söylemeseydi
+         * kullanıcı tıklamanın "tutmadığını" sanıp tekrar tekrar basardı
+         * (yetkisi kalkmış ya da silinmiş bir şirket). Sunucunun cümlesi
+         * satırın altında.
+         */
+        setGecis(false);
+        setGecisHatasi(e instanceof ApiRequestError ? e.message : 'Şirkete geçilemedi.');
+      });
   }
 
   return (
@@ -585,6 +543,12 @@ function SirketSatiri({
         sorusunun cevabı bir tıklama daha gerektirseydi, arama işi yarım
         yapmış olurdu.
       */}
+      {gecisHatasi && (
+        <p role="alert" className="mx-1.5 mb-1 text-[11px] text-danger-strong">
+          {gecisHatasi}
+        </p>
+      )}
+
       {!acik && eslesen.length > 0 && (
         <ul className="mb-1 ml-3 border-l border-line pl-2.5">
           {eslesen.map((ad) => (
@@ -618,90 +582,6 @@ function SirketSatiri({
 }
 
 // ---------------------------------------------------------------------------
-// DETAY — WORKSPACE TAŞIMA
-// ---------------------------------------------------------------------------
-
-/**
- * VAR OLAN BİR WORKSPACE'İ BU ŞİRKETE TAŞI.
- *
- * TEK SEÇİCİ, RAY'DE DEĞİL DETAYDA. Her şirket kartında bir tane vardı ve
- * her biri DİĞER bütün şirketlerin workspace'lerini listeliyordu: kırk
- * şirkette kırk bin `option` düğümü. Ekranın yavaşlığının ölçülebilir kısmı
- * buydu ve hiçbir yerde görünmüyordu.
- *
- * ADAYLAR YALNIZCA BAŞKA ŞİRKETLERDEN. Kendi workspace'lerini listelemek,
- * "buraya taşı" deyip hiçbir şey yapmayan bir seçenek göstermek olurdu.
- *
- * Taşıma 30 tabloda `org_id` güncelliyor ve RLS DIŞINDA koşuyor (`workspaceTasi`).
- */
-function WorkspaceTasi({
-  agac,
-  hedef,
-  pending,
-  onTasi,
-}: {
-  agac: ManagerAccountTree;
-  hedef: Sirket;
-  pending: boolean;
-  onTasi: (clientId: string) => void;
-}) {
-  const [secilen, setSecilen] = useState('');
-
-  const adaylar = useMemo(
-    () =>
-      agac.organizations
-        .filter((d) => d.id !== hedef.id)
-        .flatMap((d) => d.workspaces.map((w) => ({ id: w.id, name: w.name, sirket: d.name }))),
-    [agac.organizations, hedef.id],
-  );
-
-  // ADAY YOKSA KUTU DA YOK: boş bir seçici, yapılabilir bir iş varmış gibi
-  // görünüp hiçbir şey yapmıyor.
-  if (adaylar.length === 0) return null;
-
-  return (
-    <section className="rounded-xl border border-line bg-surface p-4">
-      <h2 className="text-sm font-semibold text-ink">Başka şirketten workspace taşı</h2>
-      <p className="mt-1 max-w-prose text-xs text-ink-muted">
-        Seçilen workspace <strong>{hedef.name}</strong> şirketine geçer; reklam hesapları,
-        kampanyaları ve geçmiş verisi birlikte taşınır.
-      </p>
-
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <label htmlFor="tasinacak-workspace" className="sr-only">
-          Bu şirkete taşınacak workspace
-        </label>
-        <select
-          id="tasinacak-workspace"
-          value={secilen}
-          disabled={pending}
-          onChange={(e) => setSecilen(e.target.value)}
-          className="min-w-[16rem] flex-1 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-brand"
-        >
-          <option value="">Workspace seç…</option>
-          {adaylar.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.name} ({a.sirket})
-            </option>
-          ))}
-        </select>
-        <button
-          type="button"
-          disabled={pending || secilen === ''}
-          onClick={() => {
-            onTasi(secilen);
-            setSecilen('');
-          }}
-          className="shrink-0 rounded-lg border border-line bg-surface px-3 py-1.5 text-sm text-ink hover:bg-surface-muted disabled:opacity-40"
-        >
-          Taşı
-        </button>
-      </div>
-    </section>
-  );
-}
-
-// ---------------------------------------------------------------------------
 
 function UstHesapKur() {
   return (
@@ -717,7 +597,7 @@ function UstHesapKur() {
         yazmıyordu.
       */}
       <Link
-        href="/kurulum?tur=ust-hesap"
+        href={acilisAdresi('ust-hesap')}
         className="mt-4 inline-flex items-center rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
       >
         Kurulumu başlat

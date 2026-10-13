@@ -31,7 +31,7 @@ describe('tarama boşa düşmüyor', () => {
   it('kaynaklar okundu', () => {
     expect(KANAL).toContain('export function KanalKartlari');
     expect(KANAL.length).toBeGreaterThan(3000);
-    expect(SAYFA).toContain('Platform Bağlantıları');
+    expect(SAYFA).toContain('Platform bağlantıları');
   });
 });
 

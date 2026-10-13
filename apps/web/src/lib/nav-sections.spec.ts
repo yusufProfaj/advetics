@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ROLE_PERMISSIONS, STRATEJI_SAYFA_IZNI, type Permission } from '@advetics/shared';
+import { PANEL_KAPILARI, ROLE_PERMISSIONS, STRATEJI_SAYFA_IZNI, kapiAcikMi, type Permission } from '@advetics/shared';
 import { SAYFA_GIRIS_IZNI } from '@/components/bilgi-bankasi/sekmeler';
 import { SECTIONS, visibleSections } from './nav-sections';
 
@@ -89,14 +89,11 @@ describe('menü verisi gerçekten okunuyor', () => {
       .map((i) => i.href)
       .sort();
     for (const zorunlu of [
-      // WORKSPACE'LER ARTIK BU SAYFANIN İÇİNDE — `/ayarlar/musteriler`
-      // menüden kalktı ve yönlendirmeye düştü.
-      '/ayarlar/ust-hesap',
-      // ÜST HESAPLAR (çoğul) — hesabın KENDİSİNİ yöneten sayfa. Yetkisiz
-      // kalırsa müşteri hesabı menüde satılan hesapların varlığını görürdü.
-      '/ayarlar/ust-hesaplar',
+      // ŞİRKETLER VE WORKSPACE'LER (2026-10-13): eski Şirketler, workspace
+      // listesi ve Üst hesaplar tek sekmede. Yetkisiz kalırsa müşteri hesabı
+      // ajansın şirket ağacını görürdü.
+      '/ayarlar/sirketler',
       '/ayarlar/baglantilar',
-      '/ayarlar/senkronizasyon',
       '/ayarlar/ekip',
       // Bilgi Bankası'nın içeriği Marka Merkezi'ne taşındı (2026-10-06);
       // kapı oradan devam ediyor: yetkisiz kalırsa müşteri hesabı Base'i görür.
@@ -341,13 +338,13 @@ describe('MÜŞTERİ HESABI (client_viewer)', () => {
     expect(basliklar('client_viewer')).not.toContain('Ayarlar');
   });
 
-  it('KRİTİK: Şirketler, Platform Bağlantıları ve Ekip & Yetkiler görünmüyor', () => {
+  it('KRİTİK: Şirketler ve workspace’ler, Platform bağlantıları ve Ekip ve güvenlik görünmüyor', () => {
     const gorunen = etiketler('client_viewer');
-    // Şirketler sayfası workspace listesini de İÇERİYOR — tek satır
-    // kapanınca ikisi birden kapanıyor.
-    expect(gorunen).not.toContain('Şirketler');
-    expect(gorunen).not.toContain('Platform Bağlantıları');
-    expect(gorunen).not.toContain('Ekip & Yetkiler');
+    // Etiketler SÖZLEŞMEDEN: düz dizge yazmak, ad değişince "görünmüyor"
+    // iddiasını sessizce her zaman doğru yapardı (eski adlar böyle kaldı).
+    const ayarlar = SECTIONS.find((s) => s.title === 'Ayarlar')!.items.map((i) => i.label);
+    expect(ayarlar).toEqual(['Şirketler ve workspace’ler', 'Platform bağlantıları', 'Ekip ve güvenlik']);
+    for (const etiket of ayarlar) expect(gorunen).not.toContain(etiket);
   });
 
   it('KRİTİK: TAM OLARAK dört ekran görüyor — Genel Bakış, Reklam Yöneticisi, AdvStrategy, Raporlar', () => {
@@ -383,65 +380,66 @@ describe('MÜŞTERİ HESABI (client_viewer)', () => {
 });
 
 describe('AJANS ROLLERİ', () => {
-  it('Yönetici "Ayarlar" bölümünü ve ekranlarını görüyor', () => {
+  it('Yönetici "Ayarlar" bölümünü ve üç sekmeyi görüyor', () => {
     expect(basliklar('admin')).toContain('Ayarlar');
     const gorunen = etiketler('admin');
-    // "Workspace'ler" ARTIK BİR MENÜ SATIRI DEĞİL: workspace listesi
-    // Şirketler sayfasının içinde bir bölüm.
-    expect(gorunen).toContain('Şirketler');
-    expect(gorunen).toContain('Platform Bağlantıları');
-    expect(gorunen).toContain('Ekip & Yetkiler');
+    // Workspace listesi, Üst hesaplar, Senkronizasyon, E-posta ve Okuma API
+    // AYRI SATIR DEĞİL — sekmelerin ve Marka Merkezi'nin içinde.
+    expect(gorunen).toContain('Şirketler ve workspace’ler');
+    expect(gorunen).toContain('Platform bağlantıları');
+    expect(gorunen).toContain('Ekip ve güvenlik');
   });
 
-  it('Reklam Yöneticisi: Ayarlar bölümünü görüyor, Şirketler ve kişi yönetimi hariç', () => {
+  it('KRİTİK: Reklam Yöneticisi Şirketler ve workspace’ler sekmesini GÖRÜYOR (MIMARI Ç-2)', () => {
     /*
-     * Bu test bir DAVRANIŞI değil bir KARARI kilitliyor: reklam yöneticisi
-     * ajans çalışanı, müşteri değil — Platform Bağlantıları'nı görmeli
-     * (hesap atıyor). Ama Şirketler `org.write` ile kapalı: şirket açmak
-     * erişilebilen şirket kümesini değiştiriyor ve o Yönetici işi. Ekip &
-     * Yetkiler görünüyor (`user.read`) — listeyi görür, değiştiremez.
+     * KARAR DEĞİŞTİ (2026-10-13). Sekme `org.write` ile kapalıydı; reklam
+     * yöneticisi workspace AÇABİLİYOR (`client.write`, rolün tanımı) ama
+     * listeye giremiyordu. Sekme kapısı artık `client.write`; şirket
+     * kartları ve şirket işlemleri sayfanın İÇİNDE `sirket.yonet` ile
+     * kapalı (org yöneticisi) — şirket kümesini değiştirmek hâlâ onun işi.
      */
     const gorunen = etiketler('ad_manager');
-    expect(gorunen).toContain('Platform Bağlantıları');
-    // Üst Hesaplar da `org.write` ile kapalı: hesabın kendisini yönetmek
-    // Yönetici işi.
-    expect(gorunen).not.toContain('Üst Hesaplar');
+    expect(gorunen).toContain('Şirketler ve workspace’ler');
+    expect(gorunen).toContain('Platform bağlantıları');
     expect(gorunen).toContain('AdvCampaign');
-    // Kurallar 2026-10-09'dan beri İyileştir sayfasının sekmesi.
     expect(gorunen).toContain('İyileştir');
-    expect(gorunen).toContain('Ekip & Yetkiler');
-    expect(gorunen).not.toContain('Şirketler');
+    // `user.read`: listeyi görür, değiştiremez (`ekip.yonet` org yöneticisi).
+    expect(gorunen).toContain('Ekip ve güvenlik');
+    expect(ROLE_PERMISSIONS.ad_manager).not.toContain('org.write');
   });
 });
 
-describe('KRİTİK: "Üst Hesaplar" üyelikle açılıyor, yetkiyle değil', () => {
+describe('KRİTİK: "Üst hesaplar" menü satırı DEĞİL — Şirketler sekmesinde, yalnız platform sahibine', () => {
   /*
-   * Müşteri şirketinin admini `org.write` taşıyor ama üst hesaba üye değil.
-   * Menüde "Üst Hesaplar"ı görüyor ve içeride boş bir liste buluyordu:
-   * üstünde bir katman olduğunu öğrenip giremediği bir ekran.
+   * Eskiden ayrı bir menü satırıydı ve üyelikle (`ustHesapGorunur`)
+   * açılıyordu. Kullanıcı kararı (2026-10-13): üst hesabın kendisini
+   * (ad, paket, silme) yalnız Advetics yönetir; kart Şirketler ve
+   * workspace'ler sekmesinin içinde `ustHesap.yonet` ile çiziliyor.
    */
   const menu = (ustHesapGorunur: boolean): string[] =>
     visibleSections(izinler('admin'), { ustHesapGorunur, platformSahibi: false }).flatMap((s) => s.items.map((i) => i.label));
 
-  it('üyeliği olmayan admin "Üst Hesaplar"ı GÖRMÜYOR', () => {
-    expect(menu(false)).not.toContain('Üst Hesaplar');
+  it('üyelik bayrağı hiçbir menü satırını saklamıyor ya da açmıyor', () => {
+    expect(menu(true)).toEqual(menu(false));
+    expect(menu(true)).toContain('Şirketler ve workspace’ler');
   });
 
-  it('KRİTİK: aynı admin "Şirketler"i GÖRÜYOR — kendi workspace’lerini orada yönetiyor', () => {
-    // İki satırı birlikte gizlemek kolaydı ve yanlıştı: workspace yönetimi
-    // Şirketler sayfasının içinde.
-    expect(menu(false)).toContain('Şirketler');
-  });
-
-  it('üyesi olan admin ikisini de görüyor', () => {
-    expect(menu(true)).toEqual(expect.arrayContaining(['Şirketler', 'Üst Hesaplar']));
-  });
-
-  it('bayrak yalnızca "Üst Hesaplar" satırında — başka hiçbir satırı saklamıyor', () => {
-    // Bayrağın yanlış satıra kopyalanması, üyeliği olmayan birinden çalışan
-    // bir ekranı sessizce gizlerdi.
-    const farki = menu(true).filter((l) => !menu(false).includes(l));
-    expect(farki).toEqual(['Üst Hesaplar']);
+  it('KRİTİK: sayfa kartı platform sahibi kapısıyla çiziyor', () => {
+    const kod = readFileSync(join(__dirname, '..', 'app', '(dashboard)', 'ayarlar', 'sirketler', 'page.tsx'), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+    expect(kod).toContain("const ustHesapYonetir = kapi(session, 'ustHesap.yonet');");
+    const kart = kod.indexOf('id="ust-hesaplar"');
+    expect(kart, 'üst hesaplar kartı bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
+    // Kart, kapının koşulu içinde: koşul ile kart arasında başka bir JSX dalı yok.
+    /*
+     * KOŞUL BULUNMAZSA `slice(-1, …)` BOŞ DİLİM verir ve "arada `)}` yok"
+     * iddiası HER ZAMAN doğru olur — mutasyonla yakalandı (koşul silinince
+     * test yeşil kalıyordu). Önce koşulun varlığı.
+     */
+    const kosul = kod.lastIndexOf('{ustHesapYonetir && (', kart);
+    expect(kosul, 'kart kapının içinde değil').toBeGreaterThan(-1);
+    expect(kod.slice(kosul, kart)).not.toContain(')}');
   });
 });
 
@@ -460,38 +458,52 @@ describe('AKILLI BOOST — Oluştur bölümünün öne çıkarılmış ilk satı
   });
 });
 
-describe('KRİTİK: "Okuma API" yalnızca platform sahibine', () => {
+describe('KRİTİK: "Okuma API" yalnızca platform sahibine — Hesabım’ın kartı', () => {
   /*
    * Kullanıcının isteği: "sadece bu hesapla (platform sahibi) giriş
-   * yaptığımda ayarlarda API kontrol paneli olsun". Yetki anahtarı bunu
-   * anlatamıyor: admin bütün izinleri taşıyabilir ama Sahip değil.
+   * yaptığımda ayarlarda API kontrol paneli olsun". 2026-10-13'ten beri
+   * ayrı menü satırı değil, Hesabım'ın `#okuma-api` kartı. Yetki anahtarı
+   * bunu anlatamıyor: admin bütün izinleri taşıyabilir ama Sahip değil —
+   * kapı bayrak (`PANEL_KAPILARI['okumaApi.yonet'].platformSahibi`).
    */
   const menu = (platformSahibi: boolean): string[] =>
     visibleSections(izinler('admin'), { ustHesapGorunur: true, platformSahibi }).flatMap((s) =>
       s.items.map((i) => i.label),
     );
+  const HESABIM = readFileSync(
+    join(__dirname, '..', 'app', '(dashboard)', 'ayarlar', 'hesabim', 'page.tsx'),
+    'utf8',
+  )
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
 
-  it('KRİTİK: bütün izinleri taşıyan admin GÖRMÜYOR', () => {
-    expect(menu(false)).not.toContain('Okuma API');
+  it('menüde kimse için ayrı satır yok; platform sahibi bayrağı hiçbir satırı açmıyor', () => {
+    expect(menu(true)).not.toContain('Okuma API');
+    expect(menu(true)).toEqual(menu(false));
   });
 
-  it('platform sahibi Ayarlar altında görüyor', () => {
-    expect(menu(true)).toContain('Okuma API');
-    const ayar = SECTIONS.find((s) => s.title === 'Ayarlar')!.items.map((i) => i.href);
-    expect(ayar).toContain('/ayarlar/okuma-api');
+  it('KRİTİK: kapı bayrak — bütün izinleri taşıyan admin açamıyor', () => {
+    expect(PANEL_KAPILARI['okumaApi.yonet']).toMatchObject({ izinler: [], platformSahibi: true });
+    const admin = { permissions: izinler('admin'), isOrgAdmin: true, platformAdmin: false, managerAccount: null };
+    expect(kapiAcikMi(admin, 'okumaApi.yonet')).toBe(false);
+    expect(kapiAcikMi({ ...admin, platformAdmin: true }, 'okumaApi.yonet')).toBe(true);
   });
 
-  it('bayrak yalnızca o satırda — başka hiçbir satırı saklamıyor', () => {
-    expect(menu(true).filter((l) => !menu(false).includes(l))).toEqual(['Okuma API']);
+  it('KRİTİK: Hesabım kartı ve anahtar isteği AYNI kapının içinde', () => {
+    expect(HESABIM).toContain("const okumaApiAcik = kapi(session, 'okumaApi.yonet');");
+    const kart = HESABIM.indexOf('id="okuma-api"');
+    expect(kart, 'okuma API kartı bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
+    // Koşulun VARLIĞI önce: bulunamazsa `slice(-1, …)` boş dilim verir ve iddia boşa geçer (mutasyonla yakalandı).
+    const kosul = HESABIM.lastIndexOf('{okumaApiAcik && (', kart);
+    expect(kosul, 'kart kapının içinde değil').toBeGreaterThan(-1);
+    expect(HESABIM.slice(kosul, kart)).not.toContain(')}');
+    // Anahtarlar kapı kapalıyken İSTENMİYOR bile (uç 403 verirdi).
+    expect(HESABIM).toMatch(/okumaApiAcik\s*\?\s*serverApiFetch<OkumaAnahtariOzeti\[\]>\('\/okuma-api\/anahtarlar'\)/);
   });
 
-  it('KRİTİK: sayfa da bayrağı okuyor — adresi bilen 404 alıyor', () => {
-    const kod = readFileSync(
-      join(__dirname, '..', 'app', '(dashboard)', 'ayarlar', 'okuma-api', 'page.tsx'),
-      'utf8',
-    )
-      .replace(/\/\*[\s\S]*?\*\//g, '')
-      .replace(/^\s*\/\/.*$/gm, '');
-    expect(kod).toContain('if (!session.platformAdmin) notFound();');
+  it('eski adres herkesi Hesabım’a yönlendiriyor (kart yoksa varlık sızmıyor)', () => {
+    const eski = readFileSync(join(__dirname, '..', 'app', '(dashboard)', 'ayarlar', 'okuma-api', 'page.tsx'), 'utf8');
+    expect(eski).toContain("redirect(eskiAdresYonu('ayarlar/okuma-api'));");
   });
 });

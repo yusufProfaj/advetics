@@ -223,7 +223,7 @@ describe('KRİTİK: "her birine workspace aç"', () => {
     expect(K).toContain('onClick={() => void herBirineWorkspaceAc()}');
   });
 
-  it('sayfa yetkiyi client.write’dan veriyor', () => {
-    expect(yorumsuz(SAYFA)).toContain("workspaceAcabilir={hasPermission(session, 'client.write')}");
+  it('sayfa yetkiyi workspace açma kapısından veriyor (client.write)', () => {
+    expect(yorumsuz(SAYFA)).toContain("workspaceAcabilir={kapi(session, 'workspace.ekle')}");
   });
 });

@@ -57,8 +57,9 @@ const YONETIM = kod('ust-hesap-yonetimi.tsx');
 const EKRAN = kod('ust-hesap-ekrani.tsx');
 const sayfa = (...yol: string[]): string =>
   readFileSync(join(__dirname, '..', '..', 'app', '(dashboard)', 'ayarlar', ...yol), 'utf8');
-const SAYFA = sayfa('ust-hesap', 'page.tsx');
-const YONETIM_SAYFA = sayfa('ust-hesaplar', 'page.tsx');
+/* Şirketler, workspace'ler ve Üst hesaplar 2026-10-13'ten beri TEK sekmede. */
+const SAYFA = sayfa('sirketler', 'page.tsx');
+const YONETIM_SAYFA = SAYFA;
 
 describe('tarama boşa düşmüyor', () => {
   it('kaynaklar okundu', () => {
@@ -91,11 +92,17 @@ describe('KRİTİK: şerit SALT OKUNUR', () => {
     expect(KART).not.toContain('method:');
   });
 
-  it('KRİTİK: ayarlara bağlantı VAR — özellik kaybolmuş gibi görünmüyor', () => {
-    // Kullanıcı hesabı bu ekranda görüp ayarını başka yerde araması
-    // gerektiğini bilmiyorsa, taşıma onu özelliği kaybetmiş hissettirir.
-    expect(KART).toContain('href="/ayarlar/ust-hesaplar"');
+  it('KRİTİK: ayarlara bağlantı YALNIZ kartı görebilene — çizilmeyen karta götürmüyor', () => {
+    /*
+     * Kullanıcı hesabı bu ekranda görüp ayarını başka yerde araması
+     * gerektiğini bilmiyorsa taşıma onu özelliği kaybetmiş hissettirir;
+     * ama kart 2026-10-13'ten beri YALNIZ platform sahibine çiziliyor ve
+     * başkasına bağlantı göstermek var olmayan bir ayarı aratırdı.
+     */
+    expect(KART).toContain("href={ayarlarAdresi('sirketler', { capa: 'ust-hesaplar' })}");
     expect(KART).toContain('Üst hesap ayarları');
+    const bag = KART.indexOf("href={ayarlarAdresi('sirketler', { capa: 'ust-hesaplar' })}");
+    expect(KART.lastIndexOf('{platformSahibi && (', bag)).toBeGreaterThan(-1);
   });
 
   it('ekran kartı şirket listesinin ÜSTÜNE koyuyor', () => {
@@ -151,10 +158,12 @@ describe('KRİTİK: yetki yüzeyi', () => {
     expect(SAYFA).toContain('platformAdmin={session.platformAdmin}');
   });
 
-  it('KRİTİK: sayfa `org.write` istiyor ve yetkisizi yönlendiriyor', () => {
+  it('KRİTİK: yönetim kartı YALNIZ platform sahibine; sekme kapısı yetkisizi yönlendiriyor', () => {
     // Menü süzgeci bağlantıyı gizliyor ama adresi bilen biri yine girebilir.
-    expect(YONETIM_SAYFA).toContain("hasPermission(session, 'org.write')");
-    expect(YONETIM_SAYFA).toContain("redirect('/dashboard')");
+    expect(YONETIM_SAYFA).toContain("if (!ayarSekmesiAcik(session, 'sirketler')) redirect('/dashboard');");
+    expect(YONETIM_SAYFA).toContain("const ustHesapYonetir = kapi(session, 'ustHesap.yonet');");
+    const kart = YONETIM_SAYFA.indexOf('<UstHesapYonetimi');
+    expect(YONETIM_SAYFA.lastIndexOf('{ustHesapYonetir && (', kart)).toBeGreaterThan(-1);
   });
 });
 
@@ -207,7 +216,8 @@ describe('KRİTİK: hesap değiştiren işlemler TAM SAYFA yeniliyor', () => {
   it('AKTİF hesap silinince panele dönüyor — silinmiş bağlamda kalmıyor', () => {
     // Sunucu çerezleri ev hesabına taşıyor; aynı sayfada kalmak, artık var
     // olmayan bir hesabın listesine bakmak olurdu.
-    expect(YONETIM).toContain("sonuc.aktifti ? '/dashboard' : '/ayarlar/ust-hesaplar'");
+    expect(YONETIM).toContain("sonuc.aktifti ? '/dashboard' : UST_HESAPLAR_ADRESI");
+    expect(YONETIM).toContain("const UST_HESAPLAR_ADRESI = ayarlarAdresi('sirketler', { capa: 'ust-hesaplar' });");
   });
 });
 
@@ -220,8 +230,8 @@ describe('KRİTİK: yeni hesap SİHİRBAZDA kuruluyor', () => {
    * kilitli: ikinci bir kurma formu, sihirbazın eklediği adımları atlar.
    */
   it('düğme sihirbaza gidiyor ve yalnızca platform sahibinde', () => {
-    expect(YONETIM).toContain('href="/kurulum?tur=ust-hesap"');
-    const bag = YONETIM.indexOf('href="/kurulum?tur=ust-hesap"');
+    expect(YONETIM).toContain("href={acilisAdresi('ust-hesap')}");
+    const bag = YONETIM.indexOf("href={acilisAdresi('ust-hesap')}");
     expect(YONETIM.lastIndexOf('{platformAdmin && (', bag)).toBeGreaterThan(-1);
   });
 

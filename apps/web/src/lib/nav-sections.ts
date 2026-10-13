@@ -33,20 +33,11 @@ import { VARLIK_YOLLARI } from '@/components/marka-merkezi/varliklar';
 export const AYARLAR_BOLUMU = 'Ayarlar';
 
 /**
- * Ayarlar sekmelerindeki KISA ad. Menü etiketi sayfa başlığıyla aynı kalıyor
- * (`nav-sections.spec.ts`); sekme çubuğunda "Platform Bağlantıları ·
- * Senkronizasyon Durumu · E-posta Ayarları" yan yana sığmıyor ve "Ayarlar"
- * sekmesinin içinde "Ayarları" demek tekrar.
+ * Ayarlar sekmelerindeki KISA ad — sözleşmeden (`AYARLAR_SEKMELERI.kisaAd`).
+ * Menü etiketi sayfa başlığıyla aynı kalıyor (`nav-sections.spec.ts`);
+ * sekme çubuğunda "Şirketler ve workspace’ler" gibi uzun adlar dar ekranda
+ * sığmıyor.
  */
-const AYAR_KISA_AD_ESKI: Record<string, string> = {
-  '/ayarlar/baglantilar': 'Bağlantılar',
-  '/ayarlar/senkronizasyon': 'Senkronizasyon',
-  '/ayarlar/e-posta': 'E-posta',
-  '/ayarlar/ekip': 'Ekip',
-  '/ayarlar/okuma-api': 'Okuma API',
-};
-
-/** Yeni dört sekmenin kısa adı — sözleşmeden (`AYARLAR_SEKMELERI.kisaAd`). */
 const AYAR_KISA_AD_YENI: Record<string, string> = Object.fromEntries(
   AYARLAR_SEKMELERI.map((s) => [s.yol, s.kisaAd]),
 );
@@ -295,130 +286,6 @@ export const BASE_SATIRLARI_YENI: NavEntry[] = [
   },
 ];
 
-/**
- * ESKİ AYARLAR — yedi sekme. Ajan 2 yeni sayfaları yazıp
- * `AYARLAR_SATIRLARI`nı çevirince bu sabit SİLİNİR.
- */
-const AYARLAR_SATIRLARI_ESKI: NavEntry[] = [
-      {
-        /*
-         * WORKSPACE'LER AYRI BİR SATIR DEĞİL — ŞİRKETLER'İN İÇİNDE.
-         *
-         * "Şirketler" ve "Workspace'ler" yan yana iki satırdı ve menünün
-         * kendisi hiyerarşiyi yanlış anlatıyordu: workspace şirketin
-         * İÇİNDE, kardeşi değil. Yan yana dururken kullanıcı workspace
-         * listesine bakarken hangi şirkette olduğunu ekrandan okuyamıyordu.
-         * `/ayarlar/musteriler` yönlendiriyor (yer imleri ve panel içi
-         * bağlantılar için); alt yolları yerinde duruyor.
-         *
-         * `org.write` ile kapalı — bu ekran bir kullanıcının ERİŞEBİLDİĞİ
-         * ŞİRKET KÜMESİNİ değiştiriyor, yani izolasyonun sınırını.
-         * `client.write` (workspace açma) yetmez: `ad_manager` onu taşıyor
-         * ama şirket açamamalı. Workspace bölümü bu sayfanın İÇİNDE ve
-         * kendi yetkisini ayrıca kontrol ediyor.
-         */
-        href: '/ayarlar/ust-hesap',
-        // Workspace ekip/kanal alt sayfaları Şirketler sekmesinin altında.
-        ekYollar: ['/ayarlar/musteriler'],
-        label: 'Şirketler',
-        icon: 'clients',
-        module: 1,
-        ready: true,
-        perm: 'org.write',
-      },
-      {
-        /*
-         * ÜST HESAPLAR — ŞİRKETLER'DEN AYRI SATIR.
-         *
-         * İkisi farklı kapsam: "Şirketler" bir üst hesabın ALTINI yönetiyor,
-         * bu satır hesapların KENDİSİNİ (ad, paket, ekip büyüklüğü, silme,
-         * yeni hesap). Aynı sayfada toplamak, aktif olmayan bir hesabı
-         * düzenlemek için önce ona geçmeyi zorunlu kılıyordu.
-         *
-         * `org.write` — Şirketler ile aynı anahtar ve aynı gerekçe: bu ekran
-         * bir kullanıcının ERİŞEBİLDİĞİ ŞİRKET KÜMESİNİ değiştiriyor.
-         * Platform sahibi burada bütün hesapları görüyor; ayrım sunucuda.
-         */
-        href: '/ayarlar/ust-hesaplar',
-        label: 'Üst Hesaplar',
-        icon: 'clients',
-        module: 1,
-        ready: true,
-        perm: 'org.write',
-        ustHesapUyeligi: true,
-      },
-      {
-        href: '/ayarlar/baglantilar',
-        label: 'Platform Bağlantıları',
-        icon: 'plug',
-        module: 2,
-        ready: true,
-        perm: 'connection.read',
-      },
-      {
-        /*
-         * TEŞHİS EKRANI AYARLAR ALTINDA ve `connection.read` ile kapalı.
-         * `insights.read` ile açmak client_viewer'a da gösterirdi: bu ekran
-         * platformun ham hata mesajlarını (subcode, fbtrace) basıyor ve o
-         * müşteri tarafına ait bir bilgi değil.
-         */
-        href: '/ayarlar/senkronizasyon',
-        label: 'Senkronizasyon Durumu',
-        icon: 'sync',
-        module: 3,
-        ready: true,
-        perm: 'connection.read',
-      },
-      {
-        /*
-         * `report.share` İLE KAPALI — yönetim izniyle DEĞİL.
-         *
-         * Bu ekran "başkasının ayarı" kavramı taşımıyor: herkes yalnızca
-         * kendi satırını görüyor (RLS). O yüzden yönetici iznine bağlamak
-         * yanlış olurdu — danışmanın kendi imzasını düzenlemesi yöneticiye
-         * bağlanırdı.
-         *
-         * Ama izinsiz de bırakılamıyor: `client_viewer` (müşteri hesabı)
-         * rapor GÖNDERMİYOR, yalnızca okuyor. İzinsiz bırakmak ona hem bu
-         * ekranı hem de tamamı ajans işi olan "Ayarlar" başlığını
-         * gösteriyordu — `nav-sections.spec.ts` bunu yakaladı.
-         *
-         * `report.share` tam olarak "rapor gönderebilir" demek ve e-posta
-         * kimliği de onun için gerekiyor.
-         */
-        href: '/ayarlar/e-posta',
-        label: 'E-posta Ayarları',
-        icon: 'mail',
-        module: 6,
-        ready: true,
-        perm: 'report.share',
-      },
-      {
-        href: '/ayarlar/ekip',
-        label: 'Ekip & Yetkiler',
-        icon: 'team',
-        module: 1,
-        ready: true,
-        perm: 'user.read',
-      },
-      {
-        /*
-         * OKUMA API — YALNIZCA PLATFORM SAHİBİ (kullanıcı isteği,
-         * 2026-10-08: "sadece bu hesapla giriş yaptığımda ayarlarda API
-         * kontrol paneli olsun"). Bir YETKİ ANAHTARI DEĞİL bayrak: Sahip
-         * bir rol değil ve bütün izinleri taşıyan bir şirket admini bile bu
-         * satırı görmemeli. Sayfa kapısı ve API aynı bayrağı ayrıca okuyor;
-         * menüden gizlemek tek başına koruma değil.
-         */
-        href: '/ayarlar/okuma-api',
-        label: 'Okuma API',
-        icon: 'ai',
-        module: 1,
-        ready: true,
-        platformSahibi: true,
-      },
-    ];
-
 const SEKME_IKONU: Record<AyarlarSekmeKodu, NavEntry['icon']> = {
   sirketler: 'clients',
   baglantilar: 'plug',
@@ -473,7 +340,7 @@ export const HESABIM_SATIRI: NavEntry = {
  * yok (`nav-hedef.spec.ts`).
  */
 const BASE_SATIRLARI: NavEntry[] = BASE_SATIRLARI_ESKI; // Ajan 3 → BASE_SATIRLARI_YENI
-const AYARLAR_SATIRLARI: NavEntry[] = AYARLAR_SATIRLARI_ESKI; // Ajan 2 → AYARLAR_SATIRLARI_YENI
+const AYARLAR_SATIRLARI: NavEntry[] = AYARLAR_SATIRLARI_YENI; // Ajan 2 (2026-10-13, çevrildi)
 
 /** Bugün kullanılan menü (geçiş anahtarlarına göre). */
 export const SECTIONS: Array<{ title?: string; items: NavEntry[] }> = bolumleriKur(BASE_SATIRLARI, AYARLAR_SATIRLARI);
@@ -494,8 +361,8 @@ export const GECIS = {
   base: (BASE_SATIRLARI as NavEntry[]) === BASE_SATIRLARI_YENI,
 } as const;
 
-/** Ayarlar sekmelerinin kısa adı — geçişle birlikte kendiliğinden değişir. */
-export const AYAR_KISA_AD: Record<string, string> = GECIS.ayarlar ? AYAR_KISA_AD_YENI : AYAR_KISA_AD_ESKI;
+/** Ayarlar sekmelerinin kısa adı (sekme çubuğu). */
+export const AYAR_KISA_AD: Record<string, string> = AYAR_KISA_AD_YENI;
 
 /**
  * Ayarlar sekme çubuğunun listesi: menüyle AYNI süzülmüş satırlar + (yeni

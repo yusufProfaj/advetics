@@ -411,6 +411,23 @@ export interface ClientChannels {
 }
 
 /**
+ * ARŞİVDEKİ WORKSPACE — `GET /clients?arsiv=1` satırı (Ajan 2 sapması,
+ * MIMARI Ç-4: sözleşmede bu uçun satırı yoktu, en küçük tip eklendi).
+ *
+ * `archivedAt` ISO dizgesi ya da `null` (eski satırlar arşive alanı
+ * doldurulmadan girmiş olabilir: `PATCH status` yolu bir süre yalnız durumu
+ * yazıyordu). Hesap sayısı satırda: arşivden almadan önce "bu workspace'in
+ * hesabı var mıydı" sorusu ekrandan okunmalı.
+ */
+export interface ArsivWorkspaceSatiri {
+  id: string;
+  name: string;
+  slug: string;
+  archivedAt: string | null;
+  _count: { adAccounts: number };
+}
+
+/**
  * KULLANICI BİLGİSİ GÜNCELLEME — rol DEĞİL.
  *
  * Rol ve yetkiler `PATCH /memberships/:id` üzerinden yönetiliyor ve öyle

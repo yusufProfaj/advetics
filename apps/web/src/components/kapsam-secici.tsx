@@ -7,6 +7,7 @@ import { PAKET_SINIRLARI, TUM_SIRKETLER, type ManagerPaket } from '@advetics/sha
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { baglanti } from '@/lib/baglanti';
 import { gecisHedefi } from '@/lib/kapsam-hedefi';
+import { ayarlarAdresi } from '@/lib/panel-adresleri';
 import { Halka, TamEkranYukleniyor } from './yukleniyor';
 
 export interface KapsamSirketi {
@@ -86,6 +87,7 @@ export function KapsamSecici({
   aktifWorkspaceId,
   tumSirketler,
   yonetimGorunur,
+  ustHesaplarGorunur,
   ustHesaplar,
   aktifUstHesapId,
   tamGenislik = false,
@@ -96,8 +98,17 @@ export function KapsamSecici({
   aktifSirketId: string;
   aktifWorkspaceId: string | null;
   tumSirketler: boolean;
-  /** "Yönetim paneli" bağlantısı — `org.write` yoksa basılmıyor. */
+  /**
+   * "Şirketleri yönet" bağlantısı — Şirketler sekmesinin kapısı kapalıysa
+   * basılmıyor (`ayarSekmesiAcik(session, 'sirketler')`, menüyle aynı kaynak).
+   */
   yonetimGorunur: boolean;
+  /**
+   * "Üst hesaplar" bağlantısı — YALNIZ platform sahibi
+   * (`PANEL_KAPILARI['ustHesap.yonet']`, MIMARI Ç-3). Kart yalnız ona
+   * çiziliyor; başkasına bağlantı göstermek çizilmeyen bir karta götürürdü.
+   */
+  ustHesaplarGorunur: boolean;
   /**
    * Geçilebilecek ÜST HESAPLAR (oturumdan). Tek elemanlıysa ağacın o
    * seviyesi hiç çizilmiyor: geçilecek yer yokken bir bölüm başlığı,
@@ -521,7 +532,7 @@ export function KapsamSecici({
           {yonetimGorunur && (
             <div className="flex border-t border-line bg-surface-muted/60 p-1.5">
               <Link
-                href="/ayarlar/ust-hesap"
+                href={ayarlarAdresi('sirketler')}
                 onClick={() => setOpen(false)}
                 className="flex flex-1 items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-ink transition hover:bg-surface-sunken"
               >
@@ -530,9 +541,9 @@ export function KapsamSecici({
                 </svg>
                 Şirketleri yönet
               </Link>
-              {ustHesaplar.length > 1 && (
+              {ustHesaplarGorunur && ustHesaplar.length > 1 && (
                 <Link
-                  href="/ayarlar/ust-hesaplar"
+                  href={ayarlarAdresi('sirketler', { capa: 'ust-hesaplar' })}
                   onClick={() => setOpen(false)}
                   className="flex flex-1 items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-ink transition hover:bg-surface-sunken"
                 >

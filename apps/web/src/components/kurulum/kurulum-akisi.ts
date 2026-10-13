@@ -1,4 +1,5 @@
 import type { ConnectionSummary, Platform, ProviderAvailability } from '@advetics/shared';
+import { acilisAdresi } from '@/lib/panel-adresleri';
 
 /**
  * ═══ KURULUM AKIŞI — sihirbazın KARARLARI, çiziminden ayrı ═══
@@ -66,7 +67,7 @@ export const ADIM_ADLARI: Record<AdimKodu, string> = {
   baglantilar: 'Platformlar',
   workspace: 'Workspace',
   hesaplar: 'Hesaplar',
-  bitti: 'Bilgi bankası',
+  bitti: 'Marka',
 };
 
 export function turOku(deger: string | undefined | null): KurulumTuru | null {
@@ -99,7 +100,7 @@ export function adimOku(tur: KurulumTuru, deger: string | undefined | null): Adi
  * düşerdi ve kurduğu şirketin yarım kaldığını sanırdı.
  */
 export function kurulumAdresi(tur: KurulumTuru, adim: AdimKodu): string {
-  return `/kurulum?tur=${tur}&adim=${adim}`;
+  return acilisAdresi(tur, adim);
 }
 
 /**

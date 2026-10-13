@@ -140,7 +140,7 @@ describe('KRİTİK: menü kapalıyken hangi ağaçta olduğu görünüyor', () =
 
 describe('KRİTİK: alttaki sabit sekmeler', () => {
   it('yönetim paneli duruyor ve yetkisize basılmıyor', () => {
-    expect(SECICI).toContain('href="/ayarlar/ust-hesap"');
+    expect(SECICI).toContain("href={ayarlarAdresi('sirketler')}");
     expect(SECICI).toContain('Şirketleri yönet');
     expect(SECICI).toContain('{yonetimGorunur && (');
   });
@@ -150,14 +150,15 @@ describe('KRİTİK: alttaki sabit sekmeler', () => {
     expect(SECICI).not.toContain('bg-ink');
   });
 
-  it('üst hesap ayarları YALNIZCA birden çok hesapta', () => {
+  it('üst hesap ayarları YALNIZCA platform sahibine ve birden çok hesapta', () => {
     /*
-     * Hesaplar ARASINDA çalışan bir ekran. Tek hesaplı kullanıcıda kenar
-     * çubuğundaki aynı bağlantının kopyasından ibaret olurdu.
+     * Hesaplar ARASINDA çalışan bir kart (Şirketler sekmesinin
+     * `#ust-hesaplar`ı) ve 2026-10-13'ten beri yalnız platform sahibine
+     * çiziliyor. Tek hesaplı kullanıcıda da gidilecek ikinci hesap yok.
      */
     const blok = SECICI.slice(SECICI.indexOf('{yonetimGorunur && ('));
-    expect(blok).toContain('{ustHesaplar.length > 1 && (');
-    expect(SECICI).toContain('href="/ayarlar/ust-hesaplar"');
+    expect(blok).toContain('{ustHesaplarGorunur && ustHesaplar.length > 1 && (');
+    expect(SECICI).toContain("href={ayarlarAdresi('sirketler', { capa: 'ust-hesaplar' })}");
   });
 });
 

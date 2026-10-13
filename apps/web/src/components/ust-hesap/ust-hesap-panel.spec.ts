@@ -26,9 +26,14 @@ function kod(yol: string): string {
 
 const LAYOUT = kod('app/(dashboard)/layout.tsx');
 const SECICI = kod('components/kapsam-secici.tsx');
-const SAYFA = kod('app/(dashboard)/ayarlar/ust-hesap/page.tsx');
+/*
+ * ŞİRKETLER, WORKSPACE'LER VE ÜST HESAPLAR TEK SEKMEDE (2026-10-13):
+ * `/ayarlar/sirketler`. Eski üç sayfa (`ust-hesap`, `musteriler`,
+ * `ust-hesaplar`) yönleniyor.
+ */
+const SAYFA = kod('app/(dashboard)/ayarlar/sirketler/page.tsx');
 const EKRAN = kod('components/ust-hesap/ust-hesap-ekrani.tsx');
-const UST_HESAPLAR = kod('app/(dashboard)/ayarlar/ust-hesaplar/page.tsx');
+const UST_HESAPLAR = SAYFA;
 
 describe('TEK SEÇİCİ — ajans › şirket › workspace', () => {
   it('BOŞA DÜŞME BEKÇİSİ: dosyalar gerçekten okundu', () => {
@@ -150,8 +155,12 @@ describe('SEÇİCİ — üst hesabı OLMAYAN kullanıcı', () => {
      * yönlendiriyor. Bağlantıyı herkese göstermek, tıklayınca sebepsizce
      * başka bir ekrana atılan bir düğme demekti.
      */
+    // Kapı Şirketler sekmesinin kapısıyla AYNI kaynaktan (menü ve sayfa da onu okuyor).
     expect(SECICI).toContain('{yonetimGorunur && (');
-    expect(LAYOUT).toContain("yonetimGorunur: hasPermission(session, 'org.write'),");
+    expect(LAYOUT).toContain("yonetimGorunur: ayarSekmesiAcik(session, 'sirketler'),");
+    // "Üst hesaplar" bağlantısı yalnız platform sahibine (kart yalnız ona çiziliyor).
+    expect(LAYOUT).toContain("ustHesaplarGorunur: kapi(session, 'ustHesap.yonet'),");
+    expect(SECICI).toContain('{ustHesaplarGorunur && ustHesaplar.length > 1 && (');
   });
 });
 
@@ -365,47 +374,43 @@ describe('ŞİRKET RAYI — kırk şirkette de kullanılabilir', () => {
      * doğar ve biri eksik kalır.
      */
     const ray = blok(EKRAN, 'function SirketRayi');
-    expect(ray).toContain('href="/kurulum?tur=sirket"');
+    expect(ray).toContain("href={acilisAdresi('sirket')}");
     expect(ray).toContain('+ Şirket ekle');
     expect(EKRAN).not.toContain("'/manager-account/organizations'");
     expect(EKRAN).not.toContain('function SirketEkle');
   });
 });
 
-describe('WORKSPACE TAŞIMA — kırk bin option düğümü kalmadı', () => {
+describe('WORKSPACE TAŞIMA — satırın eylemi, ray’de değil (MIMARI Ç-23)', () => {
   const EKRAN = kod('components/ust-hesap/ust-hesap-ekrani.tsx');
+  const SATIRLAR = kod('components/tenancy/workspace-satirlari.tsx');
 
-  it('KRİTİK: seçici RAY SATIRINDA DEĞİL, detayda TEK tane', () => {
+  it('KRİTİK: seçici RAY SATIRINDA DEĞİL; şirket ekranında taşıma paneli de yok', () => {
     /*
-     * Her şirket kartında bir tane vardı ve her biri DİĞER bütün şirketlerin
-     * workspace'lerini listeliyordu: kırk şirkette kırk bin `option` düğümü.
-     * Ekranın yavaşlığının ölçülebilir kısmı buydu ve hiçbir yerde
-     * görünmüyordu.
+     * Her şirket kartında bir seçici vardı ve her biri DİĞER bütün
+     * şirketlerin workspace'lerini listeliyordu: kırk şirkette kırk bin
+     * `option`. 2026-10-13'ten beri taşıma workspace SATIRININ eylemi ve
+     * seçici yalnız açılan satırda, şirket sayısı kadar seçenekle.
      */
-    const satir = blok(EKRAN, 'function SirketSatiri');
-    expect(satir).not.toContain('<select');
-    expect(blok(EKRAN, 'function WorkspaceTasi')).toContain('<select');
+    expect(blok(EKRAN, 'function SirketSatiri')).not.toContain('<select');
+    expect(EKRAN).not.toContain('function WorkspaceTasi');
+    expect(EKRAN).not.toContain("'/manager-account/workspaces/move'");
+    expect(SATIRLAR).toContain("apiFetch('/manager-account/workspaces/move'");
   });
 
-  it('KRİTİK: adaylar YALNIZCA başka şirketlerden', () => {
-    // Kendi workspace'lerini listelemek, "buraya taşı" deyip hiçbir şey
-    // yapmayan bir seçenek göstermek olurdu.
-    expect(blok(EKRAN, 'function WorkspaceTasi')).toContain('.filter((d) => d.id !== hedef.id)');
+  it('KRİTİK: hedefler YALNIZCA başka şirketler — sayfa aktif şirketi eliyor', () => {
+    // Kendine taşımak, "taşı" deyip hiçbir şey yapmayan bir seçenek olurdu.
+    expect(SAYFA).toContain('.filter((o) => o.id !== session.activeOrganizationId)');
   });
 
-  it('KRİTİK: aday yoksa kutu HİÇ çizilmiyor', () => {
-    // Boş bir seçici, yapılabilir bir iş varmış gibi görünüp hiçbir şey
-    // yapmıyor.
-    expect(blok(EKRAN, 'function WorkspaceTasi')).toContain(
-      'if (adaylar.length === 0) return null',
-    );
+  it('KRİTİK: hedef yoksa düğme HİÇ çizilmiyor', () => {
+    expect(SATIRLAR).toContain('const tasiAcik = tasiyabilir && tasiHedefleri.length > 0;');
+    expect(SATIRLAR).toContain('{tasiAcik && (');
   });
 
-  it('KRİTİK: hedef AKTİF şirket — istemciden gelen bir kimlik değil', () => {
-    // Taşıma 30 tabloda `org_id` güncelliyor ve RLS DIŞINDA koşuyor; hedefi
-    // ekranda seçili olandan başka bir yerden almak, o yazmanın kapsamını
-    // belirsiz yapardı.
-    expect(EKRAN).toContain('organizationId: aktifSirket.id');
+  it('KRİTİK: taşınan workspace SATIRIN kendisi, hedef seçilen şirket', () => {
+    expect(SATIRLAR).toContain('body: JSON.stringify({ clientId: s.id, organizationId: hedefSirket })');
+    expect(SATIRLAR).toContain("if (hedefSirket === '') return;");
   });
 });
 
@@ -419,7 +424,7 @@ describe('WORKSPACE’LER ŞİRKETİN İÇİNDE', () => {
     // Dilimler boşalırsa aşağıdaki "içeriyor" iddiaları hep yanlış,
     // "içermiyor" iddiaları hep DOĞRU olurdu — ikincisi sessiz.
     expect(BOLUM).toContain('WorkspaceBolumu');
-    expect(NAV).toContain("href: '/ayarlar/ust-hesap'");
+    expect(NAV).toContain('AYARLAR_SEKMELERI');
   });
 
   it('KRİTİK: workspace bölümü Şirketler sayfasında render ediliyor', () => {
@@ -429,7 +434,7 @@ describe('WORKSPACE’LER ŞİRKETİN İÇİNDE', () => {
      * doğrulanmalı; bu depoda bir fonksiyon test edilip çağrıldığı test
      * edilmediği için bir mutasyon kaçmıştı.
      */
-    expect(SAYFA).toContain('<WorkspaceBolumu session={session} />');
+    expect(SAYFA).toContain('<WorkspaceBolumu session={session} tasiHedefleri={tasiHedefleri} />');
   });
 
   it('KRİTİK: menüde AYRI BİR "Workspace’ler" satırı KALMADI', () => {
@@ -444,7 +449,7 @@ describe('WORKSPACE’LER ŞİRKETİN İÇİNDE', () => {
      * Bu adres panelin dört ayrı yerinden bağlanıyordu ve kullanıcıların
      * yer imlerinde de duruyor; silmek onları 404'e düşürürdü.
      */
-    expect(ESKI_SAYFA).toContain("redirect('/ayarlar/ust-hesap')");
+    expect(ESKI_SAYFA).toContain("redirect(eskiAdresYonu('ayarlar/musteriler'));")
   });
 
   it('KRİTİK: şirket satırına TIKLAMAK o şirkete geçiriyor', () => {
@@ -472,7 +477,7 @@ describe('WORKSPACE’LER ŞİRKETİN İÇİNDE', () => {
      * aradığı ekranı yeniden bulmasını istemek olurdu.
      */
     const satir = blok(EKRAN, 'function SirketSatiri');
-    expect(satir).toContain("window.location.assign('/ayarlar/ust-hesap')");
+    expect(satir).toContain("window.location.assign(ayarlarAdresi('sirketler'))");
   });
 
   it('KRİTİK: "Tüm şirketler" modunda workspace bölümü ÇİZİLMİYOR', () => {
@@ -484,7 +489,7 @@ describe('WORKSPACE’LER ŞİRKETİN İÇİNDE', () => {
      * söylediğinden BAŞKA bir şirketi.
      */
     expect(SAYFA).toContain('const sirketKapsami = !session.tumSirketler');
-    expect(SAYFA).toContain('{!sirketKapsami ? (');
+    expect(SAYFA).toContain('const workspaceler = !sirketKapsami ? (');
   });
 
   it('KRİTİK: workspace bölümü hatayı YUTMUYOR', () => {
@@ -522,9 +527,9 @@ describe('şirket düzenleme', () => {
      * duruyordu ve workspace listesini aşağı itiyordu. Kullanıcının tarifi:
      * *"gereksiz ve karışık duruyor … bu kadar açıkta durmasın."*
      */
-    expect(EKRAN).toContain("useState<'yok' | 'duzenle' | 'tasi' | 'sil'>('yok')");
+    expect(EKRAN).toContain("useState<'yok' | 'duzenle' | 'sil'>('yok')");
     expect(EKRAN).toContain("{panel === 'duzenle' && (");
-    expect(EKRAN).toContain("{panel === 'tasi' && aktifSirket && (");
+    expect(EKRAN).toContain("{panel === 'sil' && (");
   });
 
   it('KRİTİK: kısa ad GİZLİ — teknik bilgi istiyor', () => {
@@ -565,39 +570,42 @@ describe('şirket düzenleme', () => {
 });
 
 describe('ekranın yetkisi', () => {
-  it('KRİTİK: sayfa `org.write` istiyor — menü süzgeci tek başına yetmiyor', () => {
+  it('KRİTİK: sayfa sekme kapısını SÖZLEŞMEDEN okuyor — menü süzgeci tek başına yetmiyor', () => {
     /*
-     * Menü bağlantıyı gizliyor ama adresi bilen biri yine girebilir. Asıl
-     * kapı API'de (`assertOrgAdmin`); buradaki kontrol yetkisiz kullanıcının
-     * boş ekrana bakıp "bozuk" sanmasını engelliyor.
+     * Menü bağlantıyı gizliyor ama adresi bilen biri yine girebilir. Kapı
+     * elle (`hasPermission(session, 'org.write')`) yazılıydı ve menüden
+     * ayrışmıştı; artık ikisi de `AYARLAR_SEKMELERI`ni okuyor.
      */
-    expect(SAYFA).toContain("hasPermission(session, 'org.write')");
-    expect(SAYFA).toContain("redirect('/dashboard')");
+    expect(SAYFA).toContain("if (!ayarSekmesiAcik(session, 'sirketler')) redirect('/dashboard');");
+    expect(SAYFA).not.toContain('hasPermission(session,');
   });
 
-  it('KRİTİK: menüde `org.write` ile kapalı', () => {
-    const girdi = SECTIONS.flatMap((s) => s.items).find((i) => i.label === 'Şirketler');
+  it('KRİTİK: menü satırı sekme kapısıyla AYNI (client.write)', () => {
+    const girdi = SECTIONS.flatMap((s) => s.items).find((i) => i.href === '/ayarlar/sirketler');
     expect(girdi).toBeDefined();
-    expect(girdi?.perm).toBe('org.write');
+    expect(girdi?.perm).toBe('client.write');
   });
 
-  it('KRİTİK: `ad_manager` GÖRMÜYOR — workspace açabiliyor ama şirket açamamalı', () => {
+  it('KRİTİK: şirket işlemleri sayfanın İÇİNDE sirket.yonet ile — ad_manager şirket açamıyor', () => {
     /*
-     * `client.write` ile kapatmak yetmezdi: reklam yöneticisi onu taşıyor.
-     * Şirket açmak, erişilebilen organizasyon kümesini büyütüyor.
+     * Sekme `client.write` ile açık (reklam yöneticisi workspace açıyor) ama
+     * şirket ray'i, düzenle/sil ve şirket ekleme `sirket.yonet` arkasında:
+     * şirket açmak erişilebilen organizasyon kümesini büyütüyor.
      */
     expect(ROLE_PERMISSIONS.ad_manager).not.toContain('org.write');
-    const gorunen = etiketler('ad_manager');
-    expect(gorunen).not.toContain('Şirketler');
+    expect(SAYFA).toContain("const sirketYonetir = kapi(session, 'sirket.yonet');");
+    const ekran = SAYFA.indexOf('<UstHesapEkrani');
+    expect(ekran).toBeGreaterThan(-1);
+    expect(SAYFA.lastIndexOf('{sirketYonetir ? (', ekran)).toBeGreaterThan(-1);
+    expect(etiketler('ad_manager')).toContain('Şirketler ve workspace’ler');
   });
 
   it('owner ve admin görüyor', () => {
-    expect(etiketler('admin')).toContain('Şirketler');
-    expect(etiketler('admin')).toContain('Şirketler');
+    expect(etiketler('admin')).toContain('Şirketler ve workspace’ler');
   });
 
   it('KRİTİK: müşteri hesabı (client_viewer) GÖRMÜYOR', () => {
-    expect(etiketler('client_viewer')).not.toContain('Şirketler');
+    expect(etiketler('client_viewer')).not.toContain('Şirketler ve workspace’ler');
   });
 });
 
@@ -693,9 +701,11 @@ describe('KRİTİK: ajansa bağlı şirketin admini "Üst hesap kur" görmüyor'
     );
   });
 
-  it('"Üst Hesaplar" sayfası üyesi olmayanı yönlendiriyor — menüdekiyle aynı koşul', () => {
-    expect(UST_HESAPLAR).toContain('if (!session.platformAdmin && session.managerAccount === null) {');
-    expect(LAYOUT).toContain('ustHesapGorunur: session.platformAdmin || session.managerAccount !== null');
+  it('"Üst hesaplar" kartı YALNIZ platform sahibine (kullanıcı kararı, 2026-10-13)', () => {
+    expect(UST_HESAPLAR).toContain("const ustHesapYonetir = kapi(session, 'ustHesap.yonet');");
+    expect(UST_HESAPLAR).toContain('{ustHesapYonetir && (');
+    // Şeritteki "Üst hesap ayarları" bağlantısı da aynı kişiye.
+    expect(EKRAN).toContain('<UstHesapKarti agac={agac} platformSahibi={platformAdmin} />');
   });
 });
 

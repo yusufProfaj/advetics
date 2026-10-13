@@ -123,7 +123,8 @@ describe('atamalariYurut', () => {
 describe('pencere bu kararları kullanıyor', () => {
   const EKRAN = readFileSync(join(__dirname, 'danisman-ata.tsx'), 'utf8');
   const SAYFA = readFileSync(
-    join(__dirname, '..', '..', 'app', '(dashboard)', 'ayarlar', 'musteriler', '[id]', 'ekip', 'page.tsx'),
+    // Workspace erişimi 2026-10-13'ten beri Ekip ve güvenlik sekmesinin bölümü (eski sayfa yönleniyor).
+    join(__dirname, 'workspace-erisimi.tsx'),
     'utf8',
   );
 
@@ -154,17 +155,21 @@ describe('pencere bu kararları kullanıyor', () => {
     expect(EKRAN_KOD).toContain('atamalariYurut(');
   });
 
-  it('düğme yalnızca org yöneticisine gösteriliyor', () => {
+  it('düğme yalnızca ekip yönetimi kapısı açıkken gösteriliyor', () => {
     /*
      * `POST /memberships` `@RequireOrgAdmin()` istiyor. Düğmeyi herkese
      * gösterip 403 aldırmak, yapılamayacak bir işi yapılabilir göstermek.
+     * Kapı `PANEL_KAPILARI['ekip.yonet']` (org yöneticisi + user.write) ve
+     * sayfa onu `yonetebilir` olarak geçiriyor.
      */
     const k = kod(SAYFA);
     const i = k.indexOf('<DanismanAta');
-    expect(i, 'ekip sayfasında <DanismanAta yok — tarama boşa düştü').toBeGreaterThan(-1);
-    // Koşul, ELEMANIN KENDİSİNDEN geriye doğru aranıyor: dosyanın başka bir
-    // yerindeki `isOrgAdmin` geçişine takılan bir iddia hiçbir zaman düşmez.
-    expect(k.slice(0, i)).toMatch(/session\.isOrgAdmin && \($/m);
+    expect(i, 'erişim bölümünde <DanismanAta yok — tarama boşa düştü').toBeGreaterThan(-1);
+    // Koşul, ELEMANIN KENDİSİNDEN geriye doğru aranıyor.
+    expect(k.slice(0, i)).toMatch(/\{yonetebilir \? \($/m);
+    const ekip = readFileSync(join(__dirname, '..', '..', 'app', '(dashboard)', 'ayarlar', 'ekip', 'page.tsx'), 'utf8');
+    expect(ekip).toContain("const ekipYonetir = kapi(session, 'ekip.yonet');");
+    expect(ekip).toContain('yonetebilir={ekipYonetir}');
   });
 
   it('kısmi başarı ekranda tek tek yazılıyor', () => {

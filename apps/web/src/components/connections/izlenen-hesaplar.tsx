@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { ConnectionSummary } from '@advetics/shared';
+import { markaMerkeziAdresi } from '@/lib/panel-adresleri';
 
 /**
  * İZLENEN HESAPLAR — ÖZET KART, tam liste DEĞİL.
@@ -7,7 +8,8 @@ import type { ConnectionSummary } from '@advetics/shared';
  * Bu ekran bir süre bütün hesapları satır satır basıyordu ve 284 hesapta
  * metrelerce uzuyordu. Ama tam listeyi buradan kaldırmak bir bilgiyi de
  * götürüyordu: "kaç hesap gerçekten veri çekiyor". O soru burada tek satırda
- * cevaplanıyor; hesabın kendisi müşterisinin "Bağlı kanallar" ekranında.
+ * cevaplanıyor; hesabın kendisi workspace'in Marka Merkezi › Kurulum ›
+ * hesaplar ve kanallar bloğunda (eski "Bağlı kanallar" ekranı, 2026-10-13).
  *
  * ATANMIŞ AMA İZLEMESİ KAPALI HESAP AYRICA SAYILIYOR. İkisini tek sayıda
  * toplamak, "atadım ama veri gelmiyor" hâlini görünmez yapardı — bu üründe
@@ -62,8 +64,8 @@ export function IzlenenHesaplar({
           {kapaliHesap > 0 && <>{kapaliHesap} reklam hesabı</>}
           {kapaliHesap > 0 && kapaliProfil > 0 && ' ve '}
           {kapaliProfil > 0 && <>{kapaliProfil} sayfa</>} atanmış ama izlemesi
-          KAPALI — bunlardan veri çekilmiyor. Workspace’in “Bağlı kanallar”
-          ekranından kaldırıp yeniden ekle.
+          KAPALI, bunlardan veri çekilmiyor. Workspace’i aşağıdan aç ve
+          Kurulum’daki hesaplar bölümünden izlemeyi aç.
         </p>
       )}
 
@@ -77,7 +79,7 @@ export function IzlenenHesaplar({
           {musteriBasina.map((c) => (
             <li key={c.id} className="flex items-center justify-between gap-2 text-sm">
               <Link
-                href={`/ayarlar/musteriler/${c.id}/kanallar`}
+                href={markaMerkeziAdresi('kurulum', c.id, 'kanallar')}
                 className="truncate text-brand-strong hover:underline"
               >
                 {c.name}

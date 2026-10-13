@@ -5,7 +5,8 @@ import {
   type ProviderAvailability,
 } from '@advetics/shared';
 import { ApiRequestError, serverApiFetch } from '@/lib/api';
-import { hasPermission, requireSession } from '@/lib/session';
+import { requireSession } from '@/lib/session';
+import { ACILIS_ADI, ayarlarAdresi, kapi, markaMerkeziAdresi } from '@/lib/panel-adresleri';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Uyari } from '@/components/ui/uyari';
@@ -15,12 +16,13 @@ import { SirketSec } from '@/components/kurulum/sirket-sec';
 import { ADIMLAR, adimOku, turOku, type SecimKarti } from '@/components/kurulum/kurulum-akisi';
 
 /*
- * ADI "AÇILIŞ" (2026-10-12, kullanıcı kararı): bu sihirbaz üst hesap, şirket
- * ve workspace AÇIYOR. "Kurulum" artık Marka Merkezi'nde hesapları ve ölçümü
- * kuran bölümün adı; iki ekranın aynı adı taşıması "hangi kurulum?" sorusu
- * doğuruyordu. Adres (`/kurulum`) yer imleri ve bağlantılar kırılmasın diye aynı.
+ * ADI "YENİ ŞİRKET / WORKSPACE AÇ" (`ACILIS_ADI`, 2026-10-13; önce
+ * "Açılış"tı): bu sihirbaz üst hesap, şirket ve workspace AÇIYOR. "Kurulum"
+ * Marka Merkezi'nde hesapları ve ölçümü kuran bölümün adı; iki ekranın aynı
+ * adı taşıması "hangi kurulum?" sorusu doğuruyordu. Adres (`/kurulum`) yer
+ * imleri ve bağlantılar kırılmasın diye aynı.
  */
-export const metadata = { title: 'Açılış · Advetics' };
+export const metadata = { title: 'Yeni şirket / workspace aç · Advetics' };
 
 function first(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v[0] : v;
@@ -54,7 +56,13 @@ export default async function KurulumPage({
   const session = await requireSession();
   const params = await searchParams;
 
-  const orgYazar = hasPermission(session, 'org.write');
+  /*
+   * KAPILAR `PANEL_KAPILARI`NDAN (MIMARI § Yetki kapıları). Üst hesap ve
+   * şirket açmak `sirket.yonet` (servis `assertOrgAdmin` istiyor; eskiden
+   * kart yalnız `org.write` sınıyordu ve org yöneticisi olmayan biri
+   * sihirbazın sonunda reddediliyordu), workspace `workspace.ekle`.
+   */
+  const sirketAcar = kapi(session, 'sirket.yonet');
   const ma = session.managerAccount;
   const sirketAdi =
     ma?.organizations.find((o) => o.id === session.activeOrganizationId)?.name ??
@@ -78,7 +86,7 @@ export default async function KurulumPage({
       tur: 'ust-hesap',
       baslik: 'Yeni üst hesap',
       aciklama: 'Yeni bir ajans ya da danışmanlık. İlk şirketi ve workspace’i de birlikte kurarsın.',
-      engel: !orgYazar
+      engel: !sirketAcar
         ? 'Bunun için yönetici yetkisi gerekiyor.'
         : ajansaBagli
           ? 'Bu şirket bir ajansın üst hesabına bağlı.'
@@ -92,7 +100,7 @@ export default async function KurulumPage({
       aciklama: ma
         ? `${ma.name} altında yeni bir firma ve ilk workspace’i.`
         : 'Üst hesabın altında yeni bir firma ve ilk workspace’i.',
-      engel: !orgYazar || !session.isOrgAdmin
+      engel: !sirketAcar
         ? 'Bunun için yönetici yetkisi gerekiyor.'
         : ajansaBagli
           ? 'Yeni şirketi bağlı olduğun ajans açabiliyor.'
@@ -108,7 +116,7 @@ export default async function KurulumPage({
       aciklama: session.tumSirketler
         ? 'Bir şirketin içinde yeni bir marka ya da proje.'
         : `${sirketAdi} içinde yeni bir marka ya da proje.`,
-      engel: hasPermission(session, 'client.write') ? null : 'Workspace kurma yetkin yok.',
+      engel: kapi(session, 'workspace.ekle') ? null : 'Workspace kurma yetkin yok.',
     },
   ];
 
@@ -134,12 +142,14 @@ export default async function KurulumPage({
    * ekranı çizmek, kaldırılan kapıyı geri açmak olurdu.
    */
   if (tur === null || ilkAdim === null) {
-    redirect(session.activeClientId ? '/marka-merkezi' : '/ayarlar/ust-hesap');
+    redirect(
+      session.activeClientId ? markaMerkeziAdresi('kurulum', session.activeClientId) : ayarlarAdresi('sirketler'),
+    );
   }
 
   const baslik = (
     <header>
-      <h1 className="sayfa-baslik">{kart?.baslik ?? 'Açılış'}</h1>
+      <h1 className="sayfa-baslik">{kart?.baslik ?? ACILIS_ADI}</h1>
       <p className="mt-1.5 max-w-prose text-sm text-ink-muted">
         {kart?.aciklama} Adımları sırayla tamamla; her adımda neyin gerektiği yazıyor.
       </p>
@@ -159,7 +169,7 @@ export default async function KurulumPage({
           ton="uyari"
           baslik="Bu kurulum şu an açılamıyor."
           eylem={
-            <Link href="/ayarlar/ust-hesap" className={dugmeSinifi('ikincil', 'kucuk')}>
+            <Link href={ayarlarAdresi('sirketler')} className={dugmeSinifi('ikincil', 'kucuk')}>
               Ayarlara dön
             </Link>
           }
@@ -213,10 +223,8 @@ export default async function KurulumPage({
           platformAdmin: session.platformAdmin,
           ustHesapAdi: ma?.name ?? null,
           sirketAdi,
-          baglantiYonetebilir:
-            hasPermission(session, 'connection.write') &&
-            hasPermission(session, 'connection.manage'),
-          bilgiBankasiYazabilir: hasPermission(session, 'client.write'),
+          baglantiYonetebilir: kapi(session, 'baglanti.yetkilendir'),
+          bilgiBankasiYazabilir: kapi(session, 'marka.yaz'),
         }}
         uygunluk={uygunluk}
         baglantilar={baglantilar}

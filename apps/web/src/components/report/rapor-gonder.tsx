@@ -251,7 +251,7 @@ export function MailGonderModal({
               <div className="mt-3 rounded border border-warn/40 bg-warn/5 px-3 py-2 text-sm">
                 <p className="font-medium">E-posta ayarların doğrulanmamış.</p>
                 <p className="mt-1 text-ink-muted">
-                  Ayarlar → E-posta Ayarları ekranından kendine test maili gönder.
+                  Ayarlar › Hesabım › E-posta bölümünden kendine test maili gönder.
                   Doğrulanmamış bir hesapla müşteriye mail atmak, ilk hatanın
                   müşteriye gitmesi demek.
                 </p>

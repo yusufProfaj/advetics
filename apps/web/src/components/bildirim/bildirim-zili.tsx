@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { platformKanali, type BaglantiDurumu, type Uyari } from '@advetics/shared';
 import { PlatformLogo } from '@/components/platform-logo';
 import { formatRelative } from '@/lib/format';
+import { platformBaglantilariAdresi } from '@/lib/panel-adresleri';
 import { useBildirimVerisi } from './bildirim-verisi';
 
 /**
@@ -311,7 +312,7 @@ function DurumBolumu({
       <Baslik
         sag={
           <Link
-            href="/ayarlar/baglantilar"
+            href={platformBaglantilariAdresi()}
             onClick={onGit}
             className="text-[11px] font-medium text-brand-strong hover:underline"
           >

@@ -1,4 +1,10 @@
-import type { Platform, Uyari } from '@advetics/shared';
+import {
+  hesaplarAdresi,
+  platformBaglantilariAdresi,
+  veriDurumuAdresi,
+  type Platform,
+  type Uyari,
+} from '@advetics/shared';
 
 /**
  * ═══ UYARI KURALLARI — SAF KARARLAR ═══
@@ -88,7 +94,20 @@ function taban(h: UyariHesabi): Omit<Uyari, 'kod' | 'siddet' | 'baslik' | 'detay
   };
 }
 
-const KANALLAR = '/ayarlar/baglantilar';
+/*
+ * ═══ UYARININ GÖTÜRDÜĞÜ YER — PANELİN ÜRETİCİSİNDEN ═══
+ *
+ * Burada `/ayarlar/baglantilar` ve `/ayarlar/senkronizasyon` ELLE yazılıydı.
+ * Panelde sayfalar taşındı (Ayarlar ve Marka Merkezi sadeleştirme,
+ * 2026-10-13): hesap ataması ve izleme artık workspace'in Kurulum'unda,
+ * veri durumu Workspace bilgileri'nde. Elle yazılmış yol bildirim zilini
+ * eski adrese, oradan bir yönlendirmeyle YANLIŞ workspace'e götürürdü
+ * (eski Senkronizasyon ekranı adresteki değil OTURUMDAKİ workspace'i
+ * okuyordu). Uyarı hangi workspace'e aitse bağlantı onu TAŞIYOR.
+ *
+ * BAĞLANTI uyarıları (yetki, token) workspace'e değil ajansa ait: onların
+ * evi her zaman Ayarlar › Platform bağlantıları.
+ */
 
 /**
  * Bir reklam hesabının ürettiği uyarılar.
@@ -212,7 +231,7 @@ export function hesapUyarilari(h: UyariHesabi, simdi: Date): Uyari[] {
         baslik: 'Hesap izlemede değil',
         detay:
           'Hesap workspace’e atanmış ama izleme kapalı: hiç veri çekilmiyor ve panelde bu hesabın harcaması görünmüyor.',
-        eylem: { etiket: 'İzlemeyi aç', href: KANALLAR },
+        eylem: { etiket: 'İzlemeyi aç', href: hesaplarAdresi(h.clientId) },
       },
     ];
   }
@@ -233,8 +252,8 @@ export function hesapUyarilari(h: UyariHesabi, simdi: Date): Uyari[] {
         siddet: 'error',
         baslik: 'Bu hesaptan hiç veri gelmedi',
         detay:
-          'İzleme açık ama bugüne kadar tek bir metrik satırı yazılmadı. Senkronizasyon ekranından "Şimdi güncelle" deyip işin sonucuna bakın.',
-        eylem: { etiket: 'Senkronizasyonu aç', href: '/ayarlar/senkronizasyon' },
+          'İzleme açık ama bugüne kadar tek bir metrik satırı yazılmadı. Workspace bilgileri › Veri durumu ekranından işin sonucuna bakın.',
+        eylem: { etiket: 'Veri durumunu aç', href: veriDurumuAdresi(h.clientId) },
       },
     ];
   }
@@ -249,7 +268,7 @@ export function hesapUyarilari(h: UyariHesabi, simdi: Date): Uyari[] {
         baslik: `Veri ${Math.floor(saat / 24)} gündür güncellenmedi`,
         detay:
           'Zamanlanmış güncelleme koşmuyor olabilir. Panel bu arada eski rakamları göstermeye devam ediyor — düşen bir harcama gerçek değil, durmuş bir senkronizasyon olabilir.',
-        eylem: { etiket: 'Senkronizasyonu aç', href: '/ayarlar/senkronizasyon' },
+        eylem: { etiket: 'Veri durumunu aç', href: veriDurumuAdresi(h.clientId) },
       },
     ];
   }
@@ -264,13 +283,13 @@ export function hesapsizMusteriUyarisi(client: { id: string; name: string }): Uy
     siddet: 'warn',
     baslik: 'Workspace’e reklam hesabı atanmamış',
     detay:
-      'Bu workspace’te hiçbir ekran veri göstermeyecek. Platform Bağlantıları ekranından havuzdaki bir hesabı atayın.',
+      'Bu workspace’te hiçbir ekran veri göstermeyecek. Marka Merkezi › Kurulum’dan havuzdaki bir hesabı atayın.',
     clientId: client.id,
     clientName: client.name,
     adAccountId: null,
     adAccountName: null,
     platform: null,
-    eylem: { etiket: 'Hesap ata', href: KANALLAR },
+    eylem: { etiket: 'Hesap ata', href: hesaplarAdresi(client.id) },
     veriZamani: null,
   };
 }
@@ -322,8 +341,8 @@ export function baglantiUyarilari(b: UyariBaglantisi, simdi: Date): Uyari[] {
         kod: 'baglanti_yetki_istiyor',
         siddet: 'error',
         baslik: 'Platform bağlantısı yeniden yetki istiyor',
-        detay: `Bağlantı kopmuş ve veri güncellenmiyor. ${kapsam} Platform Bağlantıları ekranından yeniden yetkilendirin.`,
-        eylem: { etiket: 'Bağlantıyı onar', href: KANALLAR },
+        detay: `Bağlantı kopmuş ve veri güncellenmiyor. ${kapsam} Ayarlar › Platform bağlantıları ekranından yeniden yetkilendirin.`,
+        eylem: { etiket: 'Bağlantıyı onar', href: platformBaglantilariAdresi() },
       },
     ];
   }
@@ -357,7 +376,7 @@ export function baglantiUyarilari(b: UyariBaglantisi, simdi: Date): Uyari[] {
                her gün gereksiz yere çağırıyordu.
              */
             `Sistem yetkiyi kendi tazelemeye çalışıyor; bu uyarı duruyorsa deneme başarısız oluyor demektir. ${kapsam}`,
-      eylem: { etiket: 'Yeniden yetkilendir', href: KANALLAR },
+      eylem: { etiket: 'Yeniden yetkilendir', href: platformBaglantilariAdresi() },
     },
   ];
 }

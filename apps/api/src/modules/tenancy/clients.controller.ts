@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query, Req } from '@nestjs/common';
 import {
   createClientSchema,
   updateClientSchema,
@@ -32,9 +32,20 @@ export class ClientsController {
     return { ip: req.ip ?? null, userAgent: req.get('user-agent') ?? null, requestId: req.requestId };
   }
 
+  /**
+   * `?arsiv=1` ARŞİVDEKİLERİ döndürüyor (Ayarlar › Şirketler ve
+   * workspace'ler › Arşiv). Ayrı bir yol değil sorgu: aynı kaynağın başka
+   * bir görünümü ve kapısı aynı (`client.read`); arşivliyi kimin göreceğine
+   * RLS karar veriyor (yalnız org yöneticisi, bkz. `listArchived`).
+   *
+   * Tanınmayan değer (`?arsiv=evet`) ARŞİV DEĞİL normal liste: "1" dışında
+   * bir şey yazan çağıran arşivi beklemiyordur ve normal listeyi alıp
+   * farkı ekranda görür.
+   */
   @Get()
   @RequirePermissions('client.read')
-  list(@CurrentTenant() ctx: TenantContext) {
+  list(@CurrentTenant() ctx: TenantContext, @Query('arsiv') arsiv?: string) {
+    if (arsiv === '1') return this.clients.listArchived(ctx);
     return this.clients.list(ctx);
   }
 
@@ -116,6 +127,10 @@ export class ClientsController {
     return this.hazirlik.get(ctx, id);
   }
 
+  /**
+   * `status` alanı bu uçtan YALNIZ arşiv kapısını taşıyana açık; değilse
+   * 403 (`durumYazabilirMi`, MIMARI Ç-4 — arka kapı kapandı).
+   */
   @Patch(':id')
   @RequirePermissions('client.write')
   update(
@@ -125,6 +140,24 @@ export class ClientsController {
     @Req() req: AuthedRequest,
   ) {
     return this.clients.update(ctx, id, dto, this.meta(req));
+  }
+
+  /**
+   * ARŞİVDEN GERİ AL — arşivlemeyle AYNI kapı (`client.delete` + org
+   * yöneticisi; panelde `PANEL_KAPILARI['workspace.geriAl']`). Arşivleyebilen
+   * geri alabilmeli; daha geniş bir kapı arşivi bir oyuncağa, daha dar bir
+   * kapı yanlışlıkla arşivlenen workspace'i kurtarılamaz yapardı.
+   */
+  @Post(':id/geri-al')
+  @HttpCode(200)
+  @RequireOrgAdmin()
+  @RequirePermissions('client.delete')
+  geriAl(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthedRequest,
+  ) {
+    return this.clients.restore(ctx, id, this.meta(req));
   }
 
   /** Arşivler — kalıcı silmez. Bkz. ClientsService.archive */

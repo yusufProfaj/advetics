@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { NavEntry } from '@/components/nav';
 import { NavSection, AyarlarSatiri } from '@/components/nav';
 import { kenarBolumleri } from '@/lib/nav-sections';
+import { ayarlarAdresi } from '@/lib/panel-adresleri';
 import { LogoutButton } from '@/components/logout-button';
 import { AdveticsLogo } from '@/components/advetics-logo';
 
@@ -95,7 +96,7 @@ export function KenarIcerigi({
             kapatıyor, yoksa sayfa menünün arkasında açılır.
           */}
           <Link
-            href="/hesabim"
+            href={ayarlarAdresi('hesabim')}
             onClick={onGezinme}
             title="Hesabım ve güvenlik"
             className="min-w-0 flex-1 rounded-md hover:text-brand-strong"

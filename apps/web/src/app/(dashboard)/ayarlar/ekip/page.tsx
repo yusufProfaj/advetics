@@ -1,93 +1,84 @@
-import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import type { IkiAdimDurumu, ManagerAccountTree, UstHesapUyesi } from '@advetics/shared';
 import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import { requireSession } from '@/lib/session';
+import { PANEL_KAPILARI, kapi } from '@/lib/panel-adresleri';
+import { ayarSekmesiAcik } from '@/lib/ayar-kapilari';
+import { SayfaBasligi } from '@/components/ui/sayfa-basligi';
+import { AyarKapsami, aktifSirketAdi } from '@/components/ayar-kapsam';
 import type { MemberRow } from '@/components/tenancy/team-manager';
 import { TeamScreen } from '@/components/tenancy/team-screen';
+import { WorkspaceErisimi } from '@/components/tenancy/workspace-erisimi';
 import { IkiAdimSirketAyari } from '@/components/tenancy/iki-adim-sirket-ayari';
 
-export const metadata = { title: 'Ekip & Yetkiler · Advetics' };
+export const metadata = { title: 'Ekip ve güvenlik · Advetics' };
 
 interface ClientRow {
   id: string;
   name: string;
 }
 
-/**
- * Ekip & Yetkiler — kurulumun ÜÇÜNCÜ adımı.
- *
- * Yetki MÜŞTERİ BAZINDA veriliyor, kullanıcı bazında değil: bir kişi A
- * müşterisinde kampanya yöneticisi, B'de yalnızca görüntüleyici olabilir.
- * Ekranın merkezinde bu yüzden kullanıcı değil, kullanıcı × müşteri eşleşmesi
- * var.
- *
- * Veri sunucuda çekiliyor, eylemler istemcide. Kullanıcı EKLEME uç noktası
- * (`POST /members`) yalnızca org yöneticisine açık; portföy yöneticisi
- * listeyi görür ama ekleyemez.
- *
- * DAVET AKIŞI KALDIRILDI: token üretiliyor, hash'lenip saklanıyor ve düz
- * metni atılıyordu — e-posta altyapısı olmadığı için üretimde kimse daveti
- * kabul edemiyordu. Kullanıcı artık doğrudan oluşuyor.
- */
 /** Hata mesajını çıkarır — platformun kendi cümlesi ekranda görünmeli. */
 function hataMetni(e: unknown): string {
   return e instanceof ApiRequestError ? e.message : 'Bağlantı kurulamadı';
 }
 
-export default async function TeamPage() {
+/**
+ * ═══ EKİP VE GÜVENLİK — EKİBİN TEK YERİ ═══
+ *
+ * Yetki MÜŞTERİ BAZINDA veriliyor: bir kişi A workspace'inde kampanya
+ * yöneticisi, B'de yalnızca görüntüleyici olabilir. Bu sekme kişileri
+ * (ajans personeli), bir workspace'in erişimini (`?workspace=`, müşterinin
+ * kendi hesapları dahil), üst hesap ekibini, rol tablosunu ve şirketin iki
+ * adımlı doğrulama kuralını taşıyor.
+ *
+ * EKİP TEK YERDE (MIMARI Ç-14). Workspace ekibi üç yerde düzenlenebiliyordu:
+ * bu sayfa, `/ayarlar/musteriler/<id>/ekip` ve Marka Merkezi › Workspace
+ * ayarları. İkincisi buraya yönleniyor, üçüncüsü salt okunur oldu ve
+ * buraya bağlanıyor.
+ *
+ * KAPILAR `PANEL_KAPILARI`NDAN: kişi eklemek `ekip.yonet`, üst hesap ekibi
+ * `ustHesapEkibi.yonet`, şirket 2FA kuralı `ikiAdim.sirketZorunlulugu`.
+ * Kişisel 2FA bu sekmede DEĞİL, Hesabım'da (herkesin kendi hesabı).
+ */
+export default async function EkipSayfasi({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const session = await requireSession();
+  if (!ayarSekmesiAcik(session, 'ekip')) redirect('/dashboard');
+  const p = await searchParams;
+  const secili = (Array.isArray(p.workspace) ? p.workspace[0] : p.workspace) ?? null;
+
+  const ekipYonetir = kapi(session, 'ekip.yonet');
+  const sirket2fa = kapi(session, 'ikiAdim.sirketZorunlulugu');
 
   /*
-   * HATA YUTULMUYOR — `.catch(() => [])` KALDIRILDI.
-   *
-   * İki uç da boş dizeye düşüyordu ve o desen bu depoda adı konmuş bir
-   * yasak (CLAUDE.md): "henüz yok", "yüklenemedi" ve "yetkin yok" AYNI boş
-   * ekrana çevriliyor. Canlıda tam olarak bu oldu — "Danışman ata"
-   * penceresindeki liste boş göründü ve ekranda tek bir ipucu yoktu;
-   * kullanıcı hiç kimsenin olmadığını sandı.
-   *
-   * Sebep artık ekranda yazıyor ve sayfa yine açılıyor: listeler boş
-   * gelse de diğer bölümler çalışmaya devam ediyor.
+   * HATA YUTULMUYOR (`.catch(() => [])` yasak): "henüz yok", "yüklenemedi"
+   * ve "yetkin yok" aynı boş ekrana çevriliyordu; canlıda "Danışman ata"
+   * listesi boş göründü ve kullanıcı hiç kimsenin olmadığını sandı. Sebep
+   * ekranda yazıyor ve diğer bölümler çalışmaya devam ediyor.
    */
   const [uyeSonuc, workspaceSonuc, agacSonuc, ustEkipSonuc, ikiAdimSonuc] = await Promise.allSettled([
     serverApiFetch<MemberRow[]>('/members'),
     serverApiFetch<ClientRow[]>('/clients'),
-    /*
-     * `?? null` ÇAĞRININ YANINDA. Uç `null` döndüğünde NestJS gövdeyi boş
-     * bırakıyor ve `serverApiFetch` `undefined` dönüyor; normalizasyonu
-     * `allSettled` sonucunu açarken yapmak da işe yarardı ama o zaman
-     * kural çağrının yanında GÖRÜNMEZ olurdu — ve bu kod tabanında o
-     * görünmezlik bir kez canlıda patladı.
-     */
+    /* `?? null` ÇAĞRININ YANINDA: uç `null` döndüğünde gövde boş geliyor. */
     serverApiFetch<ManagerAccountTree | null>('/manager-account').then((x) => x ?? null),
-    /*
-     * ÜST HESAP EKİBİ — yalnızca üst hesap varsa çekiliyor. Yoksa uç boş
-     * liste dönerdi ama boşuna bir istek ve ekranda çizilmeyecek bir bölüm.
-     */
     session.managerAccount
       ? serverApiFetch<UstHesapUyesi[]>('/manager-account/members').then((x) => x ?? [])
       : Promise.resolve<UstHesapUyesi[]>([]),
-    /*
-     * ŞİRKET 2FA AYARI — yalnızca yöneticide çekiliyor (bölümü yalnızca o
-     * görüyor). Düşerse hata satırına yazılıyor, bölüm sessizce kaybolmuyor.
-     */
-    session.isOrgAdmin
-      ? serverApiFetch<IkiAdimDurumu>('/auth/2fa')
-      : Promise.resolve<IkiAdimDurumu | null>(null),
+    sirket2fa ? serverApiFetch<IkiAdimDurumu>('/auth/2fa') : Promise.resolve<IkiAdimDurumu | null>(null),
   ]);
 
   const members = uyeSonuc.status === 'fulfilled' ? (uyeSonuc.value ?? []) : [];
   const clients = workspaceSonuc.status === 'fulfilled' ? (workspaceSonuc.value ?? []) : [];
 
   /*
-   * ŞİRKET LİSTESİ — "Danışman ata" penceresi buraya yetki veriyor.
-   *
-   * Üst hesap yoksa (bağımsız şirket) liste TEK ELEMANLI kuruluyor: pencere
-   * tek bir şekil biliyor ve iki ayrı yol (ağaçlı / ağaçsız) yazmak,
-   * birinin bir gün diğerini tutmaması demekti.
+   * ŞİRKET LİSTESİ — "Danışman ata" penceresi buraya yetki veriyor. Üst
+   * hesap yoksa TEK ELEMANLI kuruluyor: pencere tek bir şekil biliyor.
    */
-  const agac =
-    agacSonuc.status === 'fulfilled' ? (agacSonuc.value ?? null) : null;
+  const agac = agacSonuc.status === 'fulfilled' ? (agacSonuc.value ?? null) : null;
   const sirketler = agac
     ? agac.organizations.map((o) => ({ id: o.id, name: o.name }))
     : [{ id: session.activeOrganizationId, name: session.organization.name }];
@@ -96,87 +87,63 @@ export default async function TeamPage() {
     ? {
         hesapAdi: session.managerAccount.name,
         uyeler: ustEkipSonuc.status === 'fulfilled' ? ustEkipSonuc.value : [],
-        yonetebilir: session.managerAccount.yonetebilir,
-        // Hata BÖLÜMÜN İÇİNDE yazıyor: "kimse yok" ile "yüklenemedi" ayrı.
-        yuklemeHatasi:
-          ustEkipSonuc.status === 'rejected' ? hataMetni(ustEkipSonuc.reason) : null,
+        yonetebilir: kapi(session, 'ustHesapEkibi.yonet'),
+        yuklemeHatasi: ustEkipSonuc.status === 'rejected' ? hataMetni(ustEkipSonuc.reason) : null,
       }
     : null;
 
   const yuklemeHatalari = [
     uyeSonuc.status === 'rejected' ? `Ekip listesi: ${hataMetni(uyeSonuc.reason)}` : null,
-    workspaceSonuc.status === 'rejected'
-      ? `Workspace listesi: ${hataMetni(workspaceSonuc.reason)}`
-      : null,
+    workspaceSonuc.status === 'rejected' ? `Workspace listesi: ${hataMetni(workspaceSonuc.reason)}` : null,
     agacSonuc.status === 'rejected' ? `Şirket listesi: ${hataMetni(agacSonuc.reason)}` : null,
-    ikiAdimSonuc.status === 'rejected'
-      ? `İki adımlı doğrulama ayarı: ${hataMetni(ikiAdimSonuc.reason)}`
-      : null,
+    ikiAdimSonuc.status === 'rejected' ? `İki adımlı doğrulama ayarı: ${hataMetni(ikiAdimSonuc.reason)}` : null,
   ].filter((x): x is string => x !== null);
 
   return (
-    /*
-     * 5xl'DEN 7xl'E. Üye kartları dikey yığındaydı ve geniş ekranda her kart
-     * satırın tamamını kaplayıp sağda ölü alan bırakıyordu — kanallar
-     * ekranındaki şikâyetin aynısı. Kartlar artık ızgarada; genişlik onlara
-     * yarıyor.
-     *
-     * TAM GENİŞLİK DEĞİL: bu ekranda yetki açıklamaları ve rol metinleri var
-     * ve tam genişlikte satır başına çok fazla karakter düşüyor.
-     */
+    /* 7xl: üye kartları ızgarada; TAM GENİŞLİK DEĞİL, rol metinleri satır başına fazla karakter alırdı. */
     <div className="mx-auto max-w-7xl space-y-6">
+      <SayfaBasligi
+        ust={<AyarKapsami duzey="sirket" ad={aktifSirketAdi(session)} />}
+        baslik="Ekip ve güvenlik"
+        aciklama="Danışmanlar şirketlere yetkilendirilir ve o şirketin bütün workspace’lerini görür. Müşteri hesapları tek bir workspace’e bağlı kalır."
+      />
+
       {yuklemeHatalari.length > 0 && (
-        <div
-          role="alert"
-          className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger-strong"
-        >
+        <div role="alert" className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger-strong">
           {yuklemeHatalari.map((h) => (
             <p key={h}>{h}</p>
           ))}
         </div>
       )}
 
-      <div>
-        <h1 className="sayfa-baslik">Ekip &amp; Yetkiler</h1>
-        <p className="mt-1 text-sm text-ink-muted">
-          Danışmanlar AJANS seviyesinde duruyor ve şirketlere yetkilendiriliyor —
-          bir şirkete yetki verilen danışman o şirketin bütün workspace’lerini
-          görür. Müşteri hesapları tek bir workspace’e bağlı kalır. Roller ve ne
-          yapabildikleri aşağıdaki tabloda.
-        </p>
-      </div>
-
-      {/*
-        SAYAÇ BANDI, EKLEME DÜĞMESİ VE LİSTELER TEK BİLEŞENDE.
-        Ekleme formu sayfanın üstünde sabit duruyordu ve her açılışta yer
-        kaplıyordu; oysa kullanıcı eklemek seyrek bir iş. Asıl soru
-        ("bu workspace’e kim erişiyor") ise hiç cevaplanmıyordu — kullanıcılar
-        tek tek kart olarak basılıyordu.
-      */}
-      {ikiAdimSonuc.status === 'fulfilled' && ikiAdimSonuc.value && (
-        <IkiAdimSirketAyari durum={ikiAdimSonuc.value} />
-      )}
-
+      {/* Kişiler (#kisiler), üst hesap ekibi (#ust-hesap-ekibi) ve roller (#roller) bu bileşenin içinde. */}
       <TeamScreen
         members={members}
         clients={clients}
         sirketler={sirketler}
         currentUserId={session.user.id}
-        canManage={session.isOrgAdmin}
+        canManage={ekipYonetir}
         ustHesap={ustHesap}
       />
+      {!ekipYonetir && <p className="text-xs text-ink-muted">{PANEL_KAPILARI['ekip.yonet'].neden}</p>}
 
-      <p className="text-xs text-ink-muted">
-        Yeni workspace açmak için{' '}
-        <Link href="/ayarlar/ust-hesap" className="font-medium text-brand-strong hover:underline">
-          Şirketler
-        </Link>
-        , reklam hesabı bağlamak için{' '}
-        <Link href="/ayarlar/baglantilar" className="font-medium text-brand-strong hover:underline">
-          Platform Bağlantıları
-        </Link>
-        .
-      </p>
+      <WorkspaceErisimi
+        workspaceler={clients}
+        secili={secili}
+        currentUserId={session.user.id}
+        yonetebilir={ekipYonetir}
+        neden={PANEL_KAPILARI['ekip.yonet'].neden}
+      />
+
+      <section id="iki-adim-zorunlulugu" className="scroll-mt-4">
+        {!sirket2fa ? (
+          <p className="rounded-xl border border-line bg-surface px-4 py-3 text-sm text-ink-muted">
+            İki adımlı doğrulama: {PANEL_KAPILARI['ikiAdim.sirketZorunlulugu'].neden}
+          </p>
+        ) : ikiAdimSonuc.status === 'fulfilled' && ikiAdimSonuc.value ? (
+          <IkiAdimSirketAyari durum={ikiAdimSonuc.value} />
+        ) : null}
+      </section>
     </div>
   );
 }

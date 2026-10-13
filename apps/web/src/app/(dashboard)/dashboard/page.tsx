@@ -36,6 +36,7 @@ import { HiyerarsiYolu, type YolBasamagi } from '@/components/hiyerarsi-yolu';
 import { bekleyenIslerYolu, boostRozeti, type BekleyenIslerSonucu } from '@/lib/bekleyen-isler';
 import { hizliErisim } from '@/lib/hizli-erisim';
 import { visibleSections } from '@/lib/nav-sections';
+import { HESAP_AJANSTA, hesaplarHedefi } from '@/lib/ayar-kapilari';
 import {
   BildirimSeridi,
   EnCokHarcayanlarKarti,
@@ -135,6 +136,13 @@ export default async function DashboardPage({
       platformSahibi: session.platformAdmin,
     }),
   );
+
+  /*
+   * "HESABI BAĞLA / ATA" BAĞLANTISI YALNIZ HEDEFİ AÇIKSA (MIMARI Ç-19).
+   * Müşteri hesabı "Bağlantılara git"i görüp 403 alıyordu. Workspace
+   * seçiliyse onun Kurulum'u, değilse Ayarlar'daki havuz (`hesaplarAdresi`).
+   */
+  const hesapHedefi = hesaplarHedefi(session, session.activeClientId);
 
   /* KAPSAM YALNIZCA "Tüm zamanlar" İÇİN OKUNUYOR (en eski gün). */
   const aralik = first(params.aralik) ?? GENEL_BAKIS_ARALIGI;
@@ -339,14 +347,17 @@ export default async function DashboardPage({
             !
           </span>
           <span className={s.bildirimMetin}>
-            <strong>Henüz veri yok.</strong> Bir platform bağlayıp reklam hesabını bir workspace&apos;e ata.
+            <strong>Henüz veri yok.</strong>{' '}
+            {hesapHedefi ? 'Bir platform bağlayıp reklam hesabını bir workspace’e ata.' : HESAP_AJANSTA}
           </span>
-          <Link className={s.cozum} href="/ayarlar/baglantilar">
-            Bağlantılara git →
-          </Link>
+          {hesapHedefi && (
+            <Link className={s.cozum} href={hesapHedefi}>
+              Hesaplara git →
+            </Link>
+          )}
         </div>
       ) : (
-        <BildirimSeridi bildirimler={bildirimler(summary)} />
+        <BildirimSeridi bildirimler={bildirimler(summary, hesapHedefi)} />
       )}
 
       <div className={s.izgara}>
@@ -452,7 +463,7 @@ export default async function DashboardPage({
           {/* Her görünümde: sağ sütun soldan kısa kalıp boşluk bırakmasın (kullanıcı: "boşlukları doldur"). */}
           {veriVar && (
             <KapsamOzeti
-              satirlar={kapsamSatirlari({ summary: summary!, sirketler, musteriler, kampanyalar, donusum })}
+              satirlar={kapsamSatirlari({ summary: summary!, sirketler, musteriler, kampanyalar, donusum, hesapHedefi })}
             />
           )}
 
@@ -494,7 +505,7 @@ async function BoostSayisi({ sonuc }: { sonuc: Promise<BekleyenIslerSonucu> }) {
  * izlenmeyen hesabın harcaması toplamdan çıkıyor ve söylenmezse "harcama
  * neden azaldı" sorulur.
  */
-function bildirimler(summary: MetricsSummary): Bildirim[] {
+function bildirimler(summary: MetricsSummary, hesapHedefi: string | null): Bildirim[] {
   const out: Bildirim[] = [];
   if (summary.hiddenAccounts > 0) {
     out.push({
@@ -504,7 +515,7 @@ function bildirimler(summary: MetricsSummary): Bildirim[] {
           duruyor.
         </>
       ),
-      eylem: { etiket: 'Bağlantılarda aç', href: '/ayarlar/baglantilar' },
+      ...(hesapHedefi ? { eylem: { etiket: 'Hesaplarda aç', href: hesapHedefi } } : {}),
     });
   }
   if (summary.currency === null && summary.byCurrency.length > 1) {
@@ -704,6 +715,8 @@ function kapsamSatirlari(v: {
   musteriler: MetricsClientRow[] | null;
   kampanyalar: MetricsBreakdownRow[] | null;
   donusum: MetricsConversionDetail | null;
+  /** İzlenmeyen hesapların evi — kapı kapalıysa `null` ve satır bağlantısız. */
+  hesapHedefi: string | null;
 }): Array<{ etiket: string; deger: string; uyari?: boolean; href?: string }> {
   const out: Array<{ etiket: string; deger: string; uyari?: boolean; href?: string }> = [];
   if (v.sirketler) {
@@ -738,7 +751,7 @@ function kapsamSatirlari(v: {
       etiket: 'İzlenmeyen hesap',
       deger: formatNumber(v.summary.hiddenAccounts),
       uyari: true,
-      href: '/ayarlar/baglantilar',
+      ...(v.hesapHedefi ? { href: v.hesapHedefi } : {}),
     });
   }
   return out;

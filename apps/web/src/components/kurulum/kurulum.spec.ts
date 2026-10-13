@@ -246,7 +246,7 @@ describe('KRİTİK: workspace TEK çağrıyla kuruluyor', () => {
   it('KRİTİK: başarıdan sonra adres sihirbazın başına çekiliyor', () => {
     // Yenilemede "Hesaplar" adımı boş açılır ve aynı workspace ikinci kez
     // kurulurdu.
-    expect(kur.indexOf("window.history.replaceState(null, '', '/kurulum')")).toBeGreaterThan(
+    expect(kur.indexOf("window.history.replaceState(null, '', PANEL_YOLLARI.acilis)")).toBeGreaterThan(
       kur.indexOf('setSonuc(r)'),
     );
   });
@@ -382,13 +382,13 @@ describe('sayfa', () => {
 
 describe('KRİTİK: eski kurulum yolları sihirbaza gidiyor', () => {
   it('workspace bölümü', () => {
-    expect(WORKSPACE_BOLUMU).toContain('href="/kurulum?tur=workspace"');
+    expect(WORKSPACE_BOLUMU).toContain("href={acilisAdresi('workspace')}");
     expect(WORKSPACE_BOLUMU).not.toContain('ClientSetupWizard');
   });
 
   it('şirketler ekranı: şirket ekle ve üst hesap kur', () => {
-    expect(SIRKETLER).toContain('href="/kurulum?tur=sirket"');
-    expect(SIRKETLER).toContain('href="/kurulum?tur=ust-hesap"');
+    expect(SIRKETLER).toContain("href={acilisAdresi('sirket')}");
+    expect(SIRKETLER).toContain("href={acilisAdresi('ust-hesap')}");
     expect(SIRKETLER).not.toContain("gonder('/manager-account', { name })");
   });
 });

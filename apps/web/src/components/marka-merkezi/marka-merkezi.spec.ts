@@ -151,8 +151,10 @@ describe('ajansın atadığı kalemi kaldırma', () => {
     const govde = KANAL.slice(KANAL.indexOf('function BagliKart('), KANAL.indexOf('function SecilebilirSatir('));
     expect(govde).toContain('kaldirmaOnayMetni(item.ajansAtadi === true, ajansUyesi)');
     expect(SAYFA).toContain('ajansUyesi={session.managerAccount !== null}');
+    // Eski "Bağlı kanallar" sayfası 2026-10-13'ten beri Kurulum'a YÖNLENİYOR
+    // (Ajan 2); bileşeni çizen tek sayfa Marka Merkezi.
     const ESKI = yorumsuz('app/(dashboard)/ayarlar/musteriler/[id]/kanallar/page.tsx');
-    expect(ESKI).toContain('ajansUyesi={session.managerAccount !== null}');
+    expect(ESKI).toContain("redirect(eskiAdresYonu('ayarlar/musteriler/[id]/kanallar', { id }));");
   });
 });
 

@@ -22,7 +22,7 @@ const DOSYALAR = [
   'components/hesap/iki-adim-paneli.tsx',
   'components/auth/iki-adim-giris.tsx',
   'components/tenancy/iki-adim-sirket-ayari.tsx',
-  'app/(dashboard)/hesabim/page.tsx',
+  'app/(dashboard)/ayarlar/hesabim/page.tsx',
 ];
 
 describe('giriş formu ikinci adımı tanıyor', () => {
@@ -65,11 +65,13 @@ describe('güvenlik ve sessiz hata', () => {
 
 describe('Hesabım kapısı', () => {
   it('sayfa başlığı ve menü dışı kapı (ad kartı) aynı adı taşıyor', () => {
-    const sayfa = yorumsuz(oku('app/(dashboard)/hesabim/page.tsx'));
+    // 2026-10-13'ten beri Ayarlar'ın dördüncü sekmesi (`/ayarlar/hesabim`); eski adres yönleniyor.
+    const sayfa = yorumsuz(oku('app/(dashboard)/ayarlar/hesabim/page.tsx'));
     expect(sayfa).toContain("title: 'Hesabım · Advetics'");
-    expect(sayfa).toContain('<h1 className="sayfa-baslik">Hesabım</h1>');
+    expect(sayfa).toContain('baslik="Hesabım"');
     const kenar = yorumsuz(oku('components/kenar-cubugu.tsx'));
-    expect(kenar).toContain('href="/hesabim"');
+    expect(kenar).toContain("href={ayarlarAdresi('hesabim')}");
+    expect(yorumsuz(oku('app/(dashboard)/hesabim/page.tsx'))).toContain("redirect(eskiAdresYonu('hesabim', { sorgu: { kurtarma } }));");
     expect(kenar).toContain('Hesabım');
   });
 

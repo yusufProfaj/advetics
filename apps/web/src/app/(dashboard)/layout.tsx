@@ -6,6 +6,8 @@ import { BildirimSaglayici } from '@/components/bildirim/bildirim-verisi';
 import { BildirimZili } from '@/components/bildirim/bildirim-zili';
 import { OturumTazeleyici } from '@/components/oturum-tazeleyici';
 import { visibleSections } from '@/lib/nav-sections';
+import { kapi } from '@/lib/panel-adresleri';
+import { ayarSekmesiAcik } from '@/lib/ayar-kapilari';
 import { KenarIcerigi } from '@/components/kenar-cubugu';
 import { MobilMenu } from '@/components/mobil-menu';
 
@@ -140,7 +142,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const kapsam = {
     ajans: session.managerAccount?.name ?? null,
     sirketler,
-    yonetimGorunur: hasPermission(session, 'org.write'),
+    yonetimGorunur: ayarSekmesiAcik(session, 'sirketler'),
+    ustHesaplarGorunur: kapi(session, 'ustHesap.yonet'),
     aktifSirketId: session.activeOrganizationId,
     aktifWorkspaceId: session.activeClientId,
     tumSirketler: session.tumSirketler,

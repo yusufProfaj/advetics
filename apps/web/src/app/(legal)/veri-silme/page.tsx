@@ -106,7 +106,7 @@ export default async function DataDeletionPage({
 
       <Section title="Seçenek 1 — Reklam hesabı bağlantısını kaldır">
         <p>
-          Panele giriş yapın, <strong>Ayarlar → Platform Bağlantıları</strong> sayfasına gidin ve
+          Panele giriş yapın, <strong>Ayarlar › Platform bağlantıları</strong> sayfasına gidin ve
           ilgili bağlantının yanındaki <strong>Kaldır</strong> düğmesine basın.
         </p>
         <p>Bu işlem anında şunları yapar:</p>

@@ -218,7 +218,7 @@ async function main(): Promise<void> {
   if (!connection) {
     console.log(
       '  ✗ Google bağlantısı yok.\n' +
-        '      Panelden Platform Bağlantıları → Google Ads ile bağlan, sonra tekrar çalıştır.\n',
+        '      Panelden Ayarlar › Platform bağlantıları › Google Ads ile bağlan, sonra tekrar çalıştır.\n',
     );
     await app.close();
     process.exit(1);

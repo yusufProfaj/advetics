@@ -517,38 +517,13 @@ const KALICI_ISTISNA = new Set<string>([
  * MIMARI § Dosya sahipliği.
  */
 const ELLE_ADRES_GECIS_ISTISNASI = new Set<string>([
-  'app/(dashboard)/ads-explorer/page.tsx',
-  'app/(dashboard)/ayarlar/ekip/page.tsx',
-  'app/(dashboard)/ayarlar/musteriler/[id]/ekip/page.tsx',
-  'app/(dashboard)/ayarlar/musteriler/[id]/kanallar/page.tsx',
-  'app/(dashboard)/ayarlar/musteriler/page.tsx',
-  'app/(dashboard)/ayarlar/ust-hesaplar/page.tsx',
-  'app/(dashboard)/dashboard/page.tsx',
-  'app/(dashboard)/kurulum/page.tsx',
-  'components/auth/iki-adim-giris.tsx',
-  'components/bildirim/bildirim-zili.tsx',
-  'components/connections/izlenen-hesaplar.tsx',
-  'components/connections/kanal-kartlari.tsx',
-  'components/kapsam-secici.tsx',
-  'components/kenar-cubugu.tsx',
-  'components/kurulum/kurulum-akisi.ts',
-  'components/kurulum/kurulum-sihirbazi.tsx',
   'components/marka-merkezi/bolumler.ts',
   'components/marka-merkezi/hazirlik-listesi.tsx',
   'components/marka-merkezi/kurulum-mantik.ts',
   'components/marka-merkezi/varliklar.ts',
   'components/marka-merkezi/veri-kaynaklari.tsx',
-  'components/refresh-button.tsx',
   'components/rehber/adim-amac-nerede.tsx',
   'components/rehber/adim-kime.tsx',
-  'components/tenancy/client-actions.tsx',
-  'components/tenancy/iki-adim-sirket-ayari.tsx',
-  'components/tenancy/musteri-karti.tsx',
-  'components/tenancy/workspace-bolumu.tsx',
-  'components/ust-hesap/ust-hesap-ekrani.tsx',
-  'components/ust-hesap/ust-hesap-karti.tsx',
-  'components/ust-hesap/ust-hesap-yonetimi.tsx',
-  'components/workspace-gerekli.tsx',
   'lib/nav-sections.ts',
 ]);
 
@@ -580,8 +555,6 @@ const ESKI_URETICI_GECIS_ISTISNASI = new Set<string>([
 
 /** API'de panel yolu yazan dosyalar — shared üreticiye geçecek (Ajan 2). */
 const API_GECIS_ISTISNASI = new Set<string>([
-  'modules/alerts/uyari-kurallari.ts',
-  'modules/connections/connections.service.ts',
 ]);
 
 function ihlaller(kok: string, desen: RegExp): string[] {
@@ -639,15 +612,6 @@ describe('KRİTİK: TEK ÜRETİCİ — panelde elle Ayarlar / Marka Merkezi / Va
  * yönleniyor); her biri yazıldıkça listeden çıkar.
  */
 const YONLENDIRME_BEKLEYEN = new Set<EskiAdresAnahtari>([
-  'ayarlar/ust-hesap',
-  'ayarlar/ust-hesaplar',
-  'ayarlar/musteriler',
-  'ayarlar/musteriler/[id]/ekip',
-  'ayarlar/musteriler/[id]/kanallar',
-  'ayarlar/senkronizasyon',
-  'ayarlar/e-posta',
-  'ayarlar/okuma-api',
-  'hesabim',
   'kutuphane/bilgi-bankasi',
   'kutuphane/gorseller',
   'kutuphane/kreatifler',

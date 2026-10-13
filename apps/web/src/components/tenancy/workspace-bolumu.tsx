@@ -1,293 +1,144 @@
 import Link from 'next/link';
-import { MusteriArama } from '@/components/tenancy/musteri-arama';
-import { MusteriKarti } from '@/components/tenancy/musteri-karti';
-import type { ConnectionSummary, SpecialAdCategory } from '@advetics/shared';
+import { PANEL_KAPILARI, type ArsivWorkspaceSatiri } from '@advetics/shared';
 import { ApiRequestError, serverApiFetch } from '@/lib/api';
-import { profilAtamaYolu } from '@/lib/havuz';
-import { hasPermission, type SessionResponse } from '@/lib/session';
-import { ClientActions } from '@/components/tenancy/client-actions';
-import { SpecialCategoryPicker } from '@/components/tenancy/special-category-picker';
-import {
-  ClientAssets,
-  type ClientAdAccount,
-  type ClientProfile,
-  type PoolItem,
-} from '@/components/tenancy/client-assets';
+import { acilisAdresi, kapi } from '@/lib/panel-adresleri';
+import type { SessionResponse } from '@/lib/session';
+import { dugmeSinifi } from '@/components/ui/dugme';
+import { WorkspaceSatirlari, type WorkspaceSatiri } from '@/components/tenancy/workspace-satirlari';
+import { ArsivListesi } from '@/components/tenancy/arsiv-listesi';
 
 /**
- * ═══ ŞİRKETİN WORKSPACE'LERİ ═══
+ * ═══ ŞİRKETİN WORKSPACE'LERİ (Ayarlar › Şirketler ve workspace'ler) ═══
  *
- * Bu bölüm AYRI BİR SAYFAYDI (`/ayarlar/musteriler`) ve hiyerarşiyi
- * gizliyordu: kenar çubuğunda "Şirketler" ve "Workspace'ler" yan yana iki
- * satırdı, oysa workspace şirketin İÇİNDE. Kullanıcı workspace listesine
- * bakarken hangi şirkette olduğunu ekrandan okuyamıyordu.
+ * AKTİF ŞİRKETİN workspace'leri — bu bir tercih değil, sınırın kendisi:
+ * `/clients` RLS ile aktif şirkete çivili (`app.org_kapsaminda`). Başka bir
+ * şirketin workspace'i için önce o şirkete geçiliyor (soldaki ray).
  *
- * ARTIK ŞİRKET SAYFASININ İÇİNDE ve gösterdiği şey AKTİF ŞİRKETİN
- * workspace'leri. Bu bir arayüz tercihi değil, sınırın kendisi: `/clients`
- * ucu RLS ile aktif şirkete çivili (`app.org_kapsaminda`), yazma yolları da
- * öyle. Başka bir şirketin workspace'ini buradan düzenlemek, RLS'in ifade
- * EDEMEDİĞİ bir yazma olurdu — ekran o yüzden önce o şirkete geçiriyor.
+ * WORKSPACE PENCERESİ KALKTI (MIMARI Ç-23): kart → pencere → atama,
+ * kategori, firma bilgisi, arşiv. O alanların hepsinin ikinci bir evi vardı
+ * ve aynı bilgi iki yerden düzenleniyordu. Satır yalnız SAYILARI gösteriyor
+ * ve Marka Merkezi'ne açılıyor; hesap ataması Marka Merkezi › Kurulum'da,
+ * firma bilgisi Workspace bilgileri'nde, özel reklam kategorisi Kurulum ›
+ * Reklam varsayılanları'nda.
  *
- * Bir workspace = bir şirketin bir markası/projesi. BİRDEN ÇOK reklam hesabı
- * olabiliyor ve bu istisna değil kural: portföyde Özemeksan'ın iki Google,
- * Maxra'nın iki Meta + iki Google hesabı var. Bu yüzden düzen "workspace
- * başına tek hesap" varsaymıyor; sayılar hep "kaç hesap" diye gösteriliyor.
+ * Bir workspace = bir şirketin bir markası/projesi ve BİRDEN ÇOK reklam
+ * hesabı olabiliyor (portföyde Maxra iki Meta + iki Google). Sayılar hep
+ * "kaç hesap" diye yazılıyor.
  */
-interface ClientRow {
-  id: string;
-  name: string;
-  slug: string;
-  timezone: string;
-  reportingCurrency: string;
-  status: string;
-  createdAt: string;
-  /** Meta özel reklam kategorileri — beyan edilmezse politika ihlali. */
-  specialAdCategories?: SpecialAdCategory[];
-  _count: { adAccounts: number; memberships: number };
-  /** Bu müşteriye ATANMIŞ hesaplar — izlemede olup olmadıkları alan içinde. */
-  adAccounts: ClientAdAccount[];
-  socialProfiles: ClientProfile[];
-  /*
-   * İLETİŞİM VE FİRMA ALANLARI — detay penceresi bunları gösteriyor.
-   *
-   * `serverApiFetch<T>` DENETİMSİZ bir dönüşüm: burada bir alan yazıp uçta
-   * SELECT'e eklemeyi unutmak TypeScript'e hiçbir şey söyletmiyor, alan
-   * `undefined` geliyor ve ekranda sessizce "—" oluyor. Uçtaki karşılığı
-   * `clients.service.ts` içindeki `list()` seçimi.
-   */
-  contactName: string | null;
-  contactEmails: string[];
-  contactPhone: string | null;
-  website: string | null;
-  address: string | null;
-  /** Adresin harita konumu (ERİŞİM K4); ikisi birlikte dolu ya da boş. */
-  addressLatitude: number | null;
-  addressLongitude: number | null;
-  taxOffice: string | null;
-  taxNumber: string | null;
-  iban: string | null;
-  notes: string | null;
-}
 
-/** Hata mesajını çıkarır — platformun kendi cümlesi ekranda görünmeli. */
+/**
+ * `/clients` satırı — `clients.service.ts#list` seçiminin bu ekranın
+ * KULLANDIĞI alt kümesi. `serverApiFetch<T>` denetimsiz bir dönüşüm: alan
+ * eklenirse uçtaki `select`e de eklenmeli (`musteri-detay-alanlari.spec.ts`).
+ */
+type ClientRow = WorkspaceSatiri;
+
 function hataMetni(e: unknown): string {
   return e instanceof ApiRequestError ? e.message : 'Bağlantı kurulamadı';
 }
 
-export async function WorkspaceBolumu({ session }: { session: SessionResponse }) {
-  /*
-   * OTURUM PROP OLARAK GELİYOR — burada YENİDEN ÇEKİLMİYOR.
-   *
-   * `requireSession()` her çağrıda `/auth/session`e gidiyor (yetkiler
-   * bilerek taze okunuyor, JWT'ye gömülmüyor). Bu bölüm bir SAYFANIN İÇİNDE
-   * render ediliyor ve o sayfa oturumu zaten çekmiş durumda; ikinci bir
-   * çağrı aynı isteğe fazladan bir tur atmak olurdu.
-   */
-
-  /**
-   * HAVUZ DA ÇEKİLİYOR — atama buradan yapılabilsin diye.
-   *
-   * `/connections` parametresiz çağrıldığında atanmamış hesap ve sayfaları da
-   * döndürüyor, ama yalnızca org yöneticisine: RLS havuz satırlarını başkasına
-   * göstermiyor. Yani müşteri düzeyindeki bir kullanıcı için bu liste zaten
-   * boş dönüyor ve arayüz de atama kontrollerini göstermiyor.
-   */
-  /*
-   * KAPILAR YETKİYE BAKIYOR, `isOrgAdmin`E DEĞİL.
-   *
-   * Uçlar `client.write` / `connection.manage` istiyor ve bu yetkiler artık
-   * org yöneticisi olmayan bir role de (reklam yöneticisi) verilebiliyor.
-   * `isOrgAdmin`e bakan bir ekran o rolde her düğmeyi gizler: API izin verir,
-   * panel göstermez ve arada hiçbir hata mesajı olmaz.
-   */
-  const musteriYazabilir = hasPermission(session, 'client.write');
-  const varlikAtayabilir = hasPermission(session, 'connection.manage');
+export async function WorkspaceBolumu({
+  session,
+  tasiHedefleri,
+}: {
+  session: SessionResponse;
+  /** Workspace'in taşınabileceği DİĞER şirketler (üst hesap ağacından). */
+  tasiHedefleri: Array<{ id: string; name: string }>;
+}) {
+  const geriAlabilir = kapi(session, 'workspace.geriAl');
 
   /*
-   * HATA YUTULMUYOR — `.catch(() => [])` KALDIRILDI.
+   * HATA YUTULMUYOR (CLAUDE.md: `.catch(() => [])` yasak). "Henüz workspace
+   * yok" ile "liste okunamadı" aynı boş ekrana çevrilirse kullanıcı var olan
+   * workspace'in ikincisini açar.
    *
-   * İki uç da boş dizeye düşüyordu ve o desen bu depoda adı konmuş bir yasak
-   * (CLAUDE.md): "henüz yok", "yüklenemedi" ve "yetkin yok" AYNI boş ekrana
-   * çevriliyor. Ekip ekranında tam olarak bu oldu — liste boş göründü,
-   * kullanıcı hiç kimsenin olmadığını sandı ve sebebi hiçbir yerde
-   * yazmıyordu.
-   *
-   * `allSettled`: bir uç düşse de diğeri çalışmaya devam ediyor. Havuz
-   * (`/connections`) alınamazsa workspace kartları YİNE listeleniyor,
-   * yalnızca atama kontrolleri boş kalıyor ve sebebi ekranda yazıyor.
+   * ARŞİV YALNIZ GERİ ALABİLENE ÇEKİLİYOR: arşivli workspace oturumun
+   * erişim listesine girmiyor ve RLS onu yalnız org yöneticisine gösteriyor.
+   * Başkası için uç boş dönerdi ve "Arşivde workspace yok" YANLIŞ bir cümle
+   * olurdu — onun yerine kapının sebebi yazılıyor.
    */
-  const [musteriSonuc, baglantiSonuc] = await Promise.allSettled([
+  const [musteriSonuc, arsivSonuc] = await Promise.allSettled([
     serverApiFetch<ClientRow[]>('/clients'),
-    varlikAtayabilir
-      ? serverApiFetch<ConnectionSummary[]>('/connections')
-      : Promise.resolve<ConnectionSummary[]>([]),
+    geriAlabilir
+      ? serverApiFetch<ArsivWorkspaceSatiri[]>('/clients?arsiv=1')
+      : Promise.resolve<ArsivWorkspaceSatiri[]>([]),
   ]);
 
   const clients = musteriSonuc.status === 'fulfilled' ? (musteriSonuc.value ?? []) : [];
-  const connections = baglantiSonuc.status === 'fulfilled' ? (baglantiSonuc.value ?? []) : [];
+  const arsiv = arsivSonuc.status === 'fulfilled' ? (arsivSonuc.value ?? []) : [];
 
   const yuklemeHatalari = [
-    musteriSonuc.status === 'rejected'
-      ? `Workspace listesi: ${hataMetni(musteriSonuc.reason)}`
-      : null,
-    baglantiSonuc.status === 'rejected'
-      ? `Bağlantı havuzu: ${hataMetni(baglantiSonuc.reason)}`
-      : null,
+    musteriSonuc.status === 'rejected' ? `Workspace listesi: ${hataMetni(musteriSonuc.reason)}` : null,
   ].filter((x): x is string => x !== null);
 
-  const pool: PoolItem[] = [
-    ...connections
-      .flatMap((c) => c.adAccounts)
-      .filter((a) => a.clientId === null)
-      .map((a) => ({
-        id: a.id,
-        name: a.name,
-        externalId: a.externalId,
-        kind: 'ad_account' as const,
-        isManager: a.isManager,
-        atamaYolu: `/connections/ad-accounts/${a.id}/client`,
-      })),
-    ...connections
-      .flatMap((c) => c.socialProfiles)
-      .filter((p) => p.clientId === null)
-      .map((p) => ({
-        id: p.id,
-        name: p.name,
-        externalId: p.externalId,
-        kind: 'social_profile' as const,
-        atamaYolu: profilAtamaYolu(p.profileType, p.id),
-      })),
-  ];
-
-  const totalAccounts = clients.reduce((sum, c) => sum + c._count.adAccounts, 0);
-  const totalWatched = clients.reduce(
-    (sum, c) => sum + c.adAccounts.filter((a) => a.syncEnabled).length,
-    0,
-  );
+  const toplamHesap = clients.reduce((n, c) => n + c._count.adAccounts, 0);
+  const toplamIzlenen = clients.reduce((n, c) => n + c.adAccounts.filter((a) => a.syncEnabled).length, 0);
 
   return (
-    <section className="space-y-4">
-      <div>
-        <h2 className="text-sm font-semibold text-ink">Workspace’ler</h2>
-        <p className="mt-1 max-w-prose text-sm text-ink-muted">
-          Workspace, şirketin bir markası ya da projesi. Reklam hesapları workspace’e
-          bağlanıyor: önce workspace’i açın, sonra hesaplarını bağlayın, en son ekibi
-          yetkilendirin.
-        </p>
-      </div>
-
-      {yuklemeHatalari.length > 0 && (
-        <div
-          role="alert"
-          className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger-strong"
-        >
-          {yuklemeHatalari.map((h) => (
-            <p key={h}>{h}</p>
-          ))}
+    <div className="space-y-6">
+      <section id="workspaceler" className="scroll-mt-4 space-y-3">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-ink">Workspace’ler</h2>
+            {/* TOPLAM HER ZAMAN YAZILI: hesabı olup izlenmeyen workspace "veri gelmiyor" diye okunur. */}
+            <p className="mt-0.5 text-xs text-ink-muted">
+              {clients.length} workspace · {toplamHesap} reklam hesabı · {toplamIzlenen} tanesi izlemede
+            </p>
+          </div>
+          {/* YENİ WORKSPACE SİHİRBAZDA KURULUYOR — platform bağlantısını, boost hesabını ve kategoriyi soruyor. */}
+          {kapi(session, 'workspace.ekle') ? (
+            <Link href={acilisAdresi('workspace')} className={dugmeSinifi('birincil', 'kucuk')}>
+              + Yeni workspace
+            </Link>
+          ) : (
+            <span className="text-xs text-ink-muted">{PANEL_KAPILARI['workspace.ekle'].neden}</span>
+          )}
         </div>
-      )}
 
-      {/*
-        TOPLAM HER ZAMAN YAZILI. Kaç müşteri listelendiği ve hesapların kaçının
-        izlendiği görünmezse, hesabı bağlı ama izlemeye açılmamış bir müşteri
-        "veri gelmiyor" diye okunur ve sebebi hiçbir ekranda yazmaz.
-      */}
-      {/*
-        "YENİ MÜŞTERİ" SAYAÇ BANDININ İÇİNDE — altında ayrı bir satırda değil.
-        Ayrı satırda dururken sağa yaslanmış tek bir düğme kendi başına bir
-        şerit kaplıyordu ve bandın sağındaki boşluk boş duruyordu. Ekip
-        ekranındaki "+ Kullanıcı ekle" ile aynı yer ve aynı desen.
-      */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface px-5 py-3.5 text-sm">
-        <div className="flex flex-wrap gap-x-6 gap-y-1">
-          <span>
-            <strong>{clients.length}</strong> workspace
-          </span>
-          <span className="text-ink-muted">
-            <strong className="text-ink">{totalAccounts}</strong> reklam hesabı
-          </span>
-          <span className="text-ink-muted">
-            <strong className="text-ink">{totalWatched}</strong> tanesi izlemede
-          </span>
-        </div>
-        {/*
-          YENİ WORKSPACE SİHİRBAZDA KURULUYOR. Buradaki pencere platform
-          bağlantısını bilmiyordu (yeni şirkette havuz BOŞ ve pencere yalnızca
-          "havuzda hesap yok" diyordu), boost hesabını hiç bağlamıyordu ve
-          Meta'nın özel kategorisini sormuyordu.
-        */}
-        {hasPermission(session, 'client.write') && (
-          <Link
-            href="/kurulum?tur=workspace"
-            className="rounded-lg bg-brand px-3.5 py-2 text-sm font-semibold text-white transition hover:opacity-90"
-          >
-            + Yeni workspace
-          </Link>
+        {yuklemeHatalari.length > 0 && (
+          <div role="alert" className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger-strong">
+            {yuklemeHatalari.map((h) => (
+              <p key={h}>{h}</p>
+            ))}
+          </div>
         )}
-      </div>
 
-      {clients.length === 0 ? (
-        <div className="rounded-xl border border-line bg-surface p-8 text-center">
-          <p className="text-sm font-medium text-ink">Henüz workspace yok</p>
-          <p className="mx-auto mt-1.5 max-w-md text-sm text-ink-muted">
-            İlk workspace’i yukarıdan ekleyin. Reklam hesapları workspace’e bağlanıyor,
-            bu yüzden workspace olmadan hesap bağlanamıyor.
+        {musteriSonuc.status === 'fulfilled' && clients.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-line bg-surface p-8 text-center">
+            <p className="text-sm font-medium text-ink">Bu şirkette henüz workspace yok</p>
+            <p className="mx-auto mt-1.5 max-w-md text-sm text-ink-muted">
+              Reklam hesapları workspace’e bağlanıyor. Önce bir workspace aç.
+            </p>
+          </div>
+        ) : clients.length > 0 ? (
+          <WorkspaceSatirlari
+            satirlar={clients}
+            arsivleyebilir={kapi(session, 'workspace.arsivle')}
+            arsivNedeni={PANEL_KAPILARI['workspace.arsivle'].neden}
+            tasiyabilir={kapi(session, 'workspace.tasi')}
+            tasiHedefleri={tasiHedefleri}
+          />
+        ) : null}
+      </section>
+
+      <section id="arsiv" className="scroll-mt-4 rounded-xl border border-line bg-surface">
+        <div className="border-b border-line px-4 py-2.5">
+          <h2 className="text-sm font-semibold text-ink">Arşiv</h2>
+          <p className="text-xs text-ink-muted">
+            Arşivlenen workspace silinmez; hesapları ve geçmişi durur.
+            {geriAlabilir && arsivSonuc.status === 'fulfilled' && ` ${arsiv.length} workspace arşivde.`}
           </p>
         </div>
-      ) : (
-        /*
-          LİSTE ARAMA BİLEŞENİNE VERİLİYOR. Kart içeriği burada, SUNUCUDA
-          kuruluyor; istemci yalnızca hangisinin görüneceğine karar veriyor.
-          Kartları tamamen istemciye taşımak, içlerindeki sunucu tarafı
-          çözümleri de taşımak olurdu.
-        */
-        <MusteriArama
-          kartlar={clients.map((client) => ({
-            id: client.id,
-            ad: client.name,
-            slug: client.slug,
-            icerik: (
-              <MusteriKarti
-                client={client}
-                canManage={session.isOrgAdmin}
-                /*
-                  YÖNETİM KONTROLLERİ SUNUCUDA KURULUYOR, PENCEREDE ÇİZİLİYOR.
-                  Havuz (`pool`) ve oturumun yönetici olup olmadığı sunucu
-                  tarafı bilgiler; kartı tamamen istemciye taşımak ikisini de
-                  taşımak olurdu.
-                */
-                yonetim={
-                  <div className="space-y-3">
-                    <ClientAssets
-                      clientId={client.id}
-                      clientName={client.name}
-                      adAccounts={client.adAccounts}
-                      profiles={client.socialProfiles}
-                      pool={pool}
-                      canManage={varlikAtayabilir}
-                    />
-
-                    {/* ÖZEL KATEGORİ BEYANI MÜŞTERİ DÜZEYİNDE: bir emlak
-                        firması her kampanyasında emlakçı ve kampanya başına
-                        sormak bir gün unutulacağı anlamına gelir. */}
-                    <SpecialCategoryPicker
-                      clientId={client.id}
-                      value={client.specialAdCategories ?? []}
-                      canManage={musteriYazabilir}
-                    />
-
-                    <ClientActions
-                      clientId={client.id}
-                      clientName={client.name}
-                      accountCount={client._count.adAccounts}
-                    />
-                  </div>
-                }
-              />
-            ),
-          }))}
-        />
-      )}
-    </section>
+        {!geriAlabilir ? (
+          <p className="px-4 py-3 text-sm text-ink-muted">{PANEL_KAPILARI['workspace.geriAl'].neden}</p>
+        ) : arsivSonuc.status === 'rejected' ? (
+          <p role="alert" className="px-4 py-3 text-sm text-danger-strong">
+            Arşiv okunamadı: {hataMetni(arsivSonuc.reason)}
+          </p>
+        ) : (
+          <ArsivListesi satirlar={arsiv} geriAlabilir={geriAlabilir} />
+        )}
+      </section>
+    </div>
   );
 }

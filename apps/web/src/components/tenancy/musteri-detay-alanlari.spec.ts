@@ -3,111 +3,87 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 /**
- * ═══ MÜŞTERİ DETAY PENCERESİ — ALAN ZİNCİRİ ═══
+ * ═══ WORKSPACE SATIRI — ALAN ZİNCİRİ ═══
  *
- * Pencerenin gösterdiği her alan ÜÇ yerde birden yazılı olmak zorunda:
+ * Satırın gösterdiği her alan İKİ yerde birden yazılı olmak zorunda:
  *
- *   1. `clients.service.ts` → `list()` seçimi  (uç gerçekten döndürüyor mu)
- *   2. `page.tsx` → `ClientRow` tipi           (istemci ne beklediğini söylüyor)
- *   3. `musteri-karti.tsx`                     (ekranda çiziliyor)
+ *   1. `clients.service.ts` → `list()` seçimi   (uç gerçekten döndürüyor mu)
+ *   2. `workspace-satirlari.tsx` → `WorkspaceSatiri` tipi ve çizim
  *
- * Üçü ayrıştığında HİÇBİR ARAÇ SES ÇIKARMIYOR. `serverApiFetch<T>` denetimsiz
- * bir dönüşüm: tipe alan eklenip uçtaki `select`e eklenmezse alan `undefined`
- * geliyor, ekran onu boş sayıyor ve pencere "vergi numarası girilmemiş"
- * diyor — oysa numara veritabanında duruyor. Belirti, veri girişiyle uğraşıp
- * hiçbir şeyin görünmediğini sanan bir kullanıcı.
+ * İkisi ayrıştığında HİÇBİR ARAÇ SES ÇIKARMIYOR. `serverApiFetch<T>`
+ * denetimsiz bir dönüşüm: tipe alan eklenip uçtaki `select`e eklenmezse alan
+ * `undefined` geliyor ve satır sessizce "Hesap atanmamış" ya da "0 kişi"
+ * diyor — oysa hesaplar veritabanında duruyor.
  *
- * Ters yön de aynı derecede sessiz: uçta seçilip ekranda kullanılmayan alan,
- * her müşteri listesinde boşuna okunan bir kolon.
+ * 2026-10-13'E KADAR bu zincir workspace PENCERESİNİN (`musteri-karti.tsx`)
+ * firma alanlarını kilitliyordu. Pencere kalktı (MIMARI Ç-23); firma
+ * alanlarının evi Marka Merkezi › Workspace bilgileri ve o ekranın zinciri
+ * kendi testinde. `list()` firma alanlarını döndürmeye devam ediyor (Marka
+ * Merkezi ve başka tüketiciler okuyor) — burada kilitlenen yalnız SATIRIN
+ * okuduğu alanlar.
  */
-const KART = readFileSync(join(__dirname, 'musteri-karti.tsx'), 'utf8');
-const SAYFA = readFileSync(
-  // WORKSPACE BÖLÜMÜ SAYFADAN BİLEŞENE TAŞINDI: workspace listesi artık
-  // Şirketler sayfasının içinde (`/ayarlar/ust-hesap`).
-  join(__dirname, 'workspace-bolumu.tsx'),
-  'utf8',
-);
+const SATIRLAR = readFileSync(join(__dirname, 'workspace-satirlari.tsx'), 'utf8');
 const SERVIS = readFileSync(
   join(__dirname, '..', '..', '..', '..', 'api', 'src', 'modules', 'tenancy', 'clients.service.ts'),
   'utf8',
 );
 
-/**
- * Yorum satırlarını atar.
- *
- * Üç dosya da bu zinciri ANLATAN yorumlar taşıyor ve o yorumların içinde alan
- * adları geçiyor. `toContain` yorumla kodu ayırt etmiyor: `contactEmail`i
- * seçimden silmek, iki satır yukarıdaki açıklamaya takılıp testi geçirirdi.
- */
+/** Yorumsuz kaynak — zinciri ANLATAN yorumlar alan adlarını taşıyor. */
 function kod(src: string): string {
   return src
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
     .split('\n')
-    .filter((l) => {
-      const t = l.trim();
-      return !t.startsWith('//') && !t.startsWith('*') && !t.startsWith('/*');
-    })
+    .filter((l) => !l.trim().startsWith('//'))
     .join('\n');
 }
 
-const KART_KOD = kod(KART);
-const SAYFA_KOD = kod(SAYFA);
+const SATIR_KOD = kod(SATIRLAR);
 const SERVIS_KOD = kod(SERVIS);
-
-/** Pencerede çizilen müşteri alanları — `client.<alan>` kullanımından. */
-const CIZILEN = [
-  ...new Set([...KART_KOD.matchAll(/\bclient\.([a-zA-Z]+)\b/g)].map((m) => m[1])),
-].filter((a) => !['id', 'name', 'slug', 'status', 'adAccounts', 'socialProfiles'].includes(a));
 
 /** `list()` gövdesi — başka metotların `select`leri iddiayı boşa düşürmesin. */
 function listGovdesi(): string {
   const bas = SERVIS_KOD.indexOf('async list(');
-  expect(bas, 'clients.service.ts içinde list() bulunamadı — tarama boşa düştü').toBeGreaterThan(
-    -1,
-  );
+  expect(bas, 'clients.service.ts içinde list() bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
   const son = SERVIS_KOD.indexOf('\n  async ', bas + 10);
   return SERVIS_KOD.slice(bas, son === -1 ? undefined : son);
 }
 
-/** `ClientRow` tanımı — sayfadaki diğer tipler karışmasın. */
-function clientRowGovdesi(): string {
-  const bas = SAYFA_KOD.indexOf('interface ClientRow {');
-  expect(bas, 'page.tsx içinde ClientRow bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
-  const son = SAYFA_KOD.indexOf('\n}', bas);
-  return SAYFA_KOD.slice(bas, son);
-}
+/** Satırda çizilen üst düzey alanlar — `s.<alan>` kullanımından. */
+const CIZILEN = [...new Set([...SATIR_KOD.matchAll(/\bs\.([a-zA-Z_]+)\b/g)].map((m) => m[1]!))];
 
-describe('workspace detay penceresinin alan zinciri', () => {
+describe('workspace satırının alan zinciri', () => {
   it('tarama gerçekten bir şey yakaladı', () => {
     // Dilim boşalırsa aşağıdaki "hepsi var" iddiaları BOŞ KÜMEDE doğru olur.
-    expect(CIZILEN.length).toBeGreaterThan(8);
-    expect(CIZILEN).toContain('contactEmails');
-    expect(CIZILEN).toContain('taxNumber');
+    expect(CIZILEN).toEqual(expect.arrayContaining(['name', 'slug', 'status', '_count', 'adAccounts', 'socialProfiles']));
     expect(listGovdesi().length).toBeGreaterThan(200);
-    expect(clientRowGovdesi().length).toBeGreaterThan(200);
   });
 
-  /*
-   * `contactEmails` ÇOĞUL ve bu zincirin ta kendisi: alan uçtan gelmezse
-   * rapor gönderimi "alıcı yok" der ve kullanıcı müşteriyi düzenlemeye
-   * gittiğinde alanın dolu olduğunu görür — teşhis edilemeyen bir hâl.
-   */
-  it.each(['contactName', 'contactEmails', 'contactPhone', 'website', 'address', 'taxOffice', 'taxNumber', 'iban', 'notes'])(
-    '%s alanı uçtan geliyor, tipte tanımlı ve pencerede çiziliyor',
+  it.each(['name', 'slug', 'status', 'adAccounts', 'socialProfiles'])(
+    'KRİTİK: satırın okuduğu %s list() seçiminde',
     (alan) => {
-      expect(listGovdesi(), `${alan} list() seçiminde yok — uçtan undefined gelir`).toContain(
-        `${alan}: true`,
+      expect(listGovdesi(), `${alan} list() seçiminde yok — uçtan undefined gelir`).toMatch(
+        new RegExp(`\\b${alan}: (true|\\{)`),
       );
-      expect(clientRowGovdesi(), `${alan} ClientRow tipinde yok`).toContain(`${alan}:`);
-      expect(KART_KOD, `${alan} pencerede çizilmiyor`).toContain(`client.${alan}`);
     },
   );
 
-  it('pencerede çizilen HER alan uçtan da geliyor', () => {
-    const eksik = CIZILEN.filter(
-      (a) => !listGovdesi().includes(`${a}: true`) && !clientRowGovdesi().includes(`${a}:`),
-    );
-    expect(eksik, `bu alanlar çiziliyor ama zincirin bir halkasında yok: ${eksik.join(', ')}`)
-      .toEqual([]);
+  it('KRİTİK: sayılar (_count) iki alanı da seçiyor — "0 kişi" yalanı olmasın', () => {
+    expect(SATIR_KOD).toContain('s._count.adAccounts');
+    expect(SATIR_KOD).toContain('s._count.memberships');
+    expect(listGovdesi()).toContain('_count: { select: { adAccounts: true, memberships: true } }');
+  });
+
+  it('KRİTİK: izleme durumu (syncEnabled) hesap seçiminde — "veri çekilmiyor" uyarısı ona bağlı', () => {
+    expect(SATIR_KOD).toContain('a.syncEnabled');
+    const hesaplar = listGovdesi().slice(listGovdesi().indexOf('adAccounts: {'));
+    expect(hesaplar).toContain('syncEnabled: true');
+    expect(hesaplar).toContain('platform: true');
+  });
+
+  it('profil türü seçimde — kanal logosu ona bağlı', () => {
+    expect(SATIR_KOD).toContain('profilKanali(p.profileType)');
+    expect(listGovdesi().slice(listGovdesi().indexOf('socialProfiles: {'))).toContain('profileType: true');
   });
 });
 
@@ -117,27 +93,19 @@ describe('workspace detay penceresinin alan zinciri', () => {
  * `fixed inset-0` "ekranın tamamı" DEMEK DEĞİL: `transform`, `filter` ya da
  * `backdrop-filter` taşıyan bir ata, sabit konumlu alt öğeler için KAPSAYICI
  * BLOK oluşturuyor. Yönetim paneli üst bardaki `backdrop-blur`lu `<header>`ın
- * içindeydi ve pencere 64 puntoluk başlık kutusuna sıkışıyordu — kullanıcının
- * bildirdiği hâli *"üst barda saçma sapan gözüküyor"*.
+ * içindeydi ve pencere 64 puntoluk başlık kutusuna sıkışıyordu.
  *
- * Müşteri detayı da aynı riski taşıyor: kart bir ızgara hücresinin içinde ve
- * `hover:shadow`/geçiş sınıfları eklenen herhangi bir sarmalayıcı aynı tuzağı
- * kurabiliyor. İkisi de ağaçtan çıkıyor.
+ * `musteri-detay.tsx` (pencere kabuğu) DURUYOR: `DanismanAta` onu panel
+ * olarak kullanıyor (MIMARI § Korunacak). Kural onun için geçerli.
  */
 describe('tam ekran pencereler', () => {
   const DETAY = readFileSync(join(__dirname, 'musteri-detay.tsx'), 'utf8');
-  const YONETIM = readFileSync(join(__dirname, 'yonetim-paneli.tsx'), 'utf8');
 
-  it.each([
-    ['musteri-detay.tsx', DETAY],
-    ['yonetim-paneli.tsx', YONETIM],
-  ])('%s pencereyi document.body altına taşıyor', (_ad, src) => {
-    const k = kod(src);
+  it('musteri-detay.tsx pencereyi document.body altına taşıyor', () => {
+    const k = kod(DETAY);
     /*
-     * İDDİA ÇAĞRIYA ÇAPALI, ADA DEĞİL. İlk hâli `toContain('createPortal')`
-     * diyordu ve `import { createPortal } from 'react-dom'` satırına
-     * takılıyordu: çağrıyı silmek testi DÜŞÜRMÜYORDU. Parantez ve `return`
-     * ile birlikte aranınca iddia gerçekten çizilen çıktıyı tutuyor.
+     * İDDİA ÇAĞRIYA ÇAPALI, ADA DEĞİL: `import { createPortal }` satırına
+     * takılan bir iddia çağrı silindiğinde düşmüyordu.
      */
     expect(k).toContain('return createPortal(');
     expect(k).toContain('document.body');

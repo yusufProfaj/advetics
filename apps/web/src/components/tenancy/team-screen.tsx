@@ -166,18 +166,26 @@ export function TeamScreen({
         ROLLER EN ÜSTTE — kullanıcı yetkilendirirken tabloyu görmek istedi.
         Özet kartlar hep açık, ayrıntılı tablo düğmeyle.
       */}
-      <RolMatrisi />
+      {/*
+        ÇAPALAR (`AYARLAR_CAPALARI.ekip`): Marka Merkezi'nin erişim listesi ve
+        eski adres yönlendirmeleri bu kimliklere bağlanıyor.
+      */}
+      <div id="roller" className="scroll-mt-4">
+        <RolMatrisi />
+      </div>
 
       {ustHesap && (
-        <UstHesapEkibi
-          hesapAdi={ustHesap.hesapAdi}
-          uyeler={ustHesap.uyeler}
-          yonetebilir={ustHesap.yonetebilir}
-          yuklemeHatasi={ustHesap.yuklemeHatasi}
-        />
+        <div id="ust-hesap-ekibi" className="scroll-mt-4">
+          <UstHesapEkibi
+            hesapAdi={ustHesap.hesapAdi}
+            uyeler={ustHesap.uyeler}
+            yonetebilir={ustHesap.yonetebilir}
+            yuklemeHatasi={ustHesap.yuklemeHatasi}
+          />
+        </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[20rem_minmax(0,1fr)]">
+      <div id="kisiler" className="grid scroll-mt-4 gap-6 lg:grid-cols-[20rem_minmax(0,1fr)]">
         <aside className="lg:sticky lg:top-4 lg:self-start">
           <div className="flex flex-col rounded-xl border border-line bg-surface">
             <div className="border-b border-line px-3 py-2.5">

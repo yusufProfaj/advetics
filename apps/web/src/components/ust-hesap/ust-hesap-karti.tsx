@@ -1,14 +1,18 @@
 'use client';
 
 import Link from 'next/link';
+import { ayarlarAdresi } from '@/lib/panel-adresleri';
 import { PAKET_SINIRLARI, type ManagerAccountTree } from '@advetics/shared';
 
 /**
  * ═══ ÜST HESAP ŞERİDİ — "hangi hesaptasın, ne kadarını doldurdun" ═══
  *
  * KART BİR ZAMANLAR YÖNETİM EKRANIYDI ve artık değil: düzenleme, paket
- * seçimi, yeni hesap ve silme `/ayarlar/ust-hesaplar` sayfasına taşındı
- * (`ust-hesap-yonetimi.tsx`).
+ * seçimi, yeni hesap ve silme aynı sayfanın "Üst hesaplar" kartında
+ * (`ust-hesap-yonetimi.tsx`, `#ust-hesaplar`) ve o kart YALNIZ platform
+ * sahibine çiziliyor (kullanıcı kararı, 2026-10-13). Ajans yöneticisine
+ * bağlantı gösterilmiyor: tıklayınca çizilmeyen bir karta gitmek, var olan
+ * bir ayarı aratır.
  *
  * SEBEBİ: bu kart yalnızca AKTİF hesabı biliyor. İkinci bir hesabın adını
  * değiştirmek için önce ona geçmek gerekiyordu — bir ad düzeltmesi için
@@ -21,7 +25,7 @@ import { PAKET_SINIRLARI, type ManagerAccountTree } from '@advetics/shared';
  * geziyor. Doluluk da burada: "3 / 5 şirket" yazmadan, paket sınırına
  * takılan kullanıcı sebebi yalnızca hata mesajından öğrenirdi.
  */
-export function UstHesapKarti({ agac }: { agac: ManagerAccountTree }) {
+export function UstHesapKarti({ agac, platformSahibi }: { agac: ManagerAccountTree; platformSahibi: boolean }) {
   const sinir = PAKET_SINIRLARI[agac.paket];
   const sirketSayisi = agac.organizations.length;
 
@@ -42,12 +46,14 @@ export function UstHesapKarti({ agac }: { agac: ManagerAccountTree }) {
         görüp ayarını başka yerde araması gerektiğini bilmiyorsa, taşıma onu
         özelliği kaybetmiş gibi hissettirir.
       */}
-      <Link
-        href="/ayarlar/ust-hesaplar"
-        className="shrink-0 rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink transition hover:bg-surface-muted"
-      >
-        Üst hesap ayarları
-      </Link>
+      {platformSahibi && (
+        <Link
+          href={ayarlarAdresi('sirketler', { capa: 'ust-hesaplar' })}
+          className="shrink-0 rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink transition hover:bg-surface-muted"
+        >
+          Üst hesap ayarları
+        </Link>
+      )}
     </section>
   );
 }

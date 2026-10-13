@@ -9,6 +9,7 @@ import {
   type IkiAdimKurulumBilgisi,
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { ayarlarAdresi } from '@/lib/panel-adresleri';
 import { HataKutusu, KodAlani, KurtarmaKodlari, QrKurulumu } from '@/components/hesap/iki-adim-parcalari';
 
 function hataMetni(err: unknown): string {
@@ -72,7 +73,7 @@ function KodDogrula({ sonraki, onGeri }: { sonraki: string; onGeri: () => void }
       // KURTARMA KODUYLA GİRDİYSE Hesabım'a: kalan kod sayısını ve yeni
       // kod üretme yolunu görsün. Panele gitseydi kodların azaldığını
       // ancak sonuncusu bittiğinde öğrenirdi.
-      router.replace(r.kurtarmaKoduKullanildi ? '/hesabim?kurtarma=1' : sonraki);
+      router.replace(r.kurtarmaKoduKullanildi ? ayarlarAdresi('hesabim', { kurtarma: true }) : sonraki);
       router.refresh();
     } catch (err) {
       setHata(hataMetni(err));

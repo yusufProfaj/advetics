@@ -12,8 +12,16 @@ import {
   type UstHesapSilmeYaniti,
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { acilisAdresi, ayarlarAdresi } from '@/lib/panel-adresleri';
 import { Halka } from '@/components/yukleniyor';
 import { dolulukMetni } from './ust-hesap-karti';
+
+/**
+ * ÜST HESAPLAR KARTI ŞİRKETLER SEKMESİNİN İÇİNDE (2026-10-13, kullanıcı
+ * kararı: yalnız platform sahibine). Ayrı sayfaydı (`/ayarlar/ust-hesaplar`,
+ * artık yönleniyor); işlem sonrası tam sayfa dönüşü kartın çapasına.
+ */
+const UST_HESAPLAR_ADRESI = ayarlarAdresi('sirketler', { capa: 'ust-hesaplar' });
 
 /**
  * ═══ ÜST HESAPLAR — SATILAN ÜRÜNÜN ENVANTERİ ═══
@@ -70,7 +78,7 @@ export function UstHesapYonetimi({
               hiçbir yerde yazmayan bir sırayla yapılıyordu.
             */
             <Link
-              href="/kurulum?tur=ust-hesap"
+              href={acilisAdresi('ust-hesap')}
               className="shrink-0 rounded-lg border border-brand bg-brand px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90"
             >
               + Yeni üst hesap
@@ -206,7 +214,7 @@ function GecisDugmesi({ id }: { id: string }) {
         method: 'POST',
         body: JSON.stringify({ managerAccountId: id }),
       });
-      window.location.assign('/ayarlar/ust-hesaplar');
+      window.location.assign(UST_HESAPLAR_ADRESI);
     } catch (e) {
       setHata(e instanceof ApiRequestError ? e.message : 'Geçilemedi.');
       setPending(false);
@@ -353,7 +361,7 @@ function UstHesapDuzenle({
        * tazeleniyor. Yarısı yenilenmiş bir ekran, kullanıcıya kaydın
        * yapılmadığını düşündürüyor.
        */
-      window.location.assign('/ayarlar/ust-hesaplar');
+      window.location.assign(UST_HESAPLAR_ADRESI);
     } catch (e) {
       setHata(e instanceof ApiRequestError ? e.message : 'Kaydedilemedi.');
       setPending(false);
@@ -464,7 +472,7 @@ function UstHesapSil({ hesap, onVazgec }: { hesap: UstHesapOzeti; onVazgec: () =
        * ev hesabına taşıyor ve panelin bütün bağlamı (şirket listesi,
        * workspace seçimi, bağlantılar) değişiyor.
        */
-      window.location.assign(sonuc.aktifti ? '/dashboard' : '/ayarlar/ust-hesaplar');
+      window.location.assign(sonuc.aktifti ? '/dashboard' : UST_HESAPLAR_ADRESI);
     } catch (e) {
       setHata(e instanceof ApiRequestError ? e.message : 'Silinemedi.');
       setPending(false);

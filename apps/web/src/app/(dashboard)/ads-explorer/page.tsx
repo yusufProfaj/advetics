@@ -10,6 +10,7 @@ import type {
 } from '@advetics/shared';
 import { PLATFORMS, PLATFORM_KISA_ADLARI, type TakipAcigiYaniti } from '@advetics/shared';
 import { requireSession } from '@/lib/session';
+import { HESAP_AJANSTA, hesaplarHedefi } from '@/lib/ayar-kapilari';
 import { serverApiFetch } from '@/lib/api';
 import { enEskiGunGerekli, rangeParams, resolveRange } from '@/lib/date-range';
 import { TarihSecici } from '@/components/tarih-secici';
@@ -98,6 +99,12 @@ export default async function DashboardPage({
 }) {
   const session = await requireSession();
   const params = await searchParams;
+  /*
+   * "HESABI ATA / İZLEMEYİ AÇ" BAĞLANTISI YALNIZ HEDEFİ AÇIKSA (MIMARI
+   * Ç-19): müşteri hesabı bu ekranı görüyor ve "Bağlantılara git"e basınca
+   * 403 alıyordu. Kapalıysa bağlantı yerine "ajansınıza yazın".
+   */
+  const hesapHedefi = hesaplarHedefi(session, session.activeClientId);
 
 
   /*
@@ -510,9 +517,11 @@ export default async function DashboardPage({
           <span className={s.bildirimMetin}>
             <strong>{summary.hiddenAccounts} hesap izlenmiyor</strong> ve bu rakamlara dâhil değil.
           </span>
-          <Link className={s.cozum} href="/ayarlar/baglantilar">
-            Bağlantılarda aç →
-          </Link>
+          {hesapHedefi && (
+            <Link className={s.cozum} href={hesapHedefi}>
+              Hesaplarda aç →
+            </Link>
+          )}
         </div>
       ) : null}
 
@@ -522,11 +531,14 @@ export default async function DashboardPage({
             !
           </span>
           <span className={s.bildirimMetin}>
-            <strong>Henüz veri yok.</strong> Bir platform bağlayıp reklam hesabını bir workspace&apos;e ata.
+            <strong>Henüz veri yok.</strong>{' '}
+            {hesapHedefi ? 'Bir platform bağlayıp reklam hesabını bir workspace’e ata.' : HESAP_AJANSTA}
           </span>
-          <Link className={s.cozum} href="/ayarlar/baglantilar">
-            Bağlantılara git →
-          </Link>
+          {hesapHedefi && (
+            <Link className={s.cozum} href={hesapHedefi}>
+              Hesaplara git →
+            </Link>
+          )}
         </div>
       ) : satirlar === null ? (
         <section className={s.kart}>

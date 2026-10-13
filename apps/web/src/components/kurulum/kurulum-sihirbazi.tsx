@@ -24,6 +24,7 @@ import { PlatformLogo } from '@/components/platform-logo';
 import { PaketSecici } from '@/components/ust-hesap/ust-hesap-yonetimi';
 import { Halka } from '@/components/yukleniyor';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { PANEL_YOLLARI, acilisAdresi, markaMerkeziAdresi } from '@/lib/panel-adresleri';
 import { havuzlariCikar, KANALLAR } from '@/lib/havuz';
 import { BoostHesabi, HesapSecimi } from './hesap-secimi';
 import {
@@ -290,7 +291,7 @@ export function KurulumSihirbazi({
        * yenilenirse "Hesaplar" adımı boş bir seçimle açılır ve oradan
        * "Kurulumu tamamla" AYNI workspace'i ikinci kez kurardı.
        */
-      window.history.replaceState(null, '', '/kurulum');
+      window.history.replaceState(null, '', PANEL_YOLLARI.acilis);
       setAktif('bitti');
     } catch (e) {
       setHata(hataMetni(e, 'Workspace kurulamadı.'));
@@ -307,7 +308,13 @@ export function KurulumSihirbazi({
         method: 'POST',
         body: JSON.stringify({ clientId: sonuc.clientId }),
       });
-      window.location.assign('/dashboard');
+      /*
+       * AÇILIŞIN SONU MARKA MERKEZİ › KURULUM (MIMARI Ç-17), Genel Bakış
+       * DEĞİL: yeni workspace'in henüz verisi yok ve Genel Bakış "veri yok"
+       * diyordu; yapılacak sıradaki iş (hesap, piksel, ölçüm, marka)
+       * Kurulum'un listesinde.
+       */
+      window.location.assign(markaMerkeziAdresi('kurulum', sonuc.clientId));
     } catch (e) {
       setHata(hataMetni(e, 'Workspace’e geçilemedi.'));
       setBusy(false);
@@ -438,7 +445,7 @@ export function KurulumSihirbazi({
       baslik: 'Hangi hesaplar bu workspace’e ait?',
       alt: 'Seçtiğin hesapların verisi hemen çekilmeye başlar.',
       eksik: boost.durum === 'secilmeli' ? 'Boost hesabını seç' : null,
-      dugme: 'Açılışı tamamla',
+      dugme: 'Workspace’i aç',
       eylem: () => void workspaceKur(),
       govde: (
         <div className="space-y-4">
@@ -470,8 +477,8 @@ export function KurulumSihirbazi({
       ),
     },
     bitti: {
-      baslik: sonuc ? `${sonuc.name} hazır` : 'Açılış tamamlandı',
-      alt: 'Son olarak bilgi bankasını doldur. Reklam metinleri buradan beslenir.',
+      baslik: sonuc ? `${sonuc.name} hazır` : 'Workspace açıldı',
+      alt: 'Son olarak markanı anlat. Reklam metinleri buradan beslenir; kalan adımlar Marka Merkezi › Kurulum’da.',
       eksik: null,
       dugme: 'Workspace’e geç',
       eylem: () => void workspaceeGec(),
@@ -484,7 +491,7 @@ export function KurulumSihirbazi({
             <Bilgi>
               Web sitesi girmediğin için marka bilgileri otomatik doldurulamıyor. Sonra{' '}
               <Link
-                href="/marka-merkezi?bolum=marka"
+                href={markaMerkeziAdresi('marka', sonuc.clientId)}
                 className="font-medium text-brand-strong hover:underline"
               >
                 Marka Merkezi › Marka
@@ -583,7 +590,7 @@ export function KurulumSihirbazi({
         <div className="flex flex-wrap items-center justify-between gap-3">
           {aktif === 'bitti' ? (
             <Link
-              href="/kurulum?tur=workspace"
+              href={acilisAdresi('workspace')}
               className="rounded-lg border border-line px-3.5 py-2 text-sm font-medium text-ink transition hover:bg-surface-sunken"
             >
               Bir workspace daha kur

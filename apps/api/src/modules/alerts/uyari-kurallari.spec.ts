@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { hesaplarAdresi, platformBaglantilariAdresi, veriDurumuAdresi } from '@advetics/shared';
 import {
   BAYAT_ESIGI_SAAT,
   TOKEN_UYARI_GUNU,
@@ -177,7 +178,9 @@ describe('bağlantı', () => {
   it('bağlantı aktif değilse yeniden yetki uyarısı', () => {
     const [u] = baglantiUyarilari(baglanti({ status: 'expired' }), SIMDI);
     expect(u?.kod).toBe('baglanti_yetki_istiyor');
-    expect(u?.eylem?.href).toBe('/ayarlar/baglantilar');
+    // Bağlantı ajansın: evi her zaman Ayarlar › Platform bağlantıları (shared üretici).
+    expect(u?.eylem?.href).toBe(platformBaglantilariAdresi());
+    expect(u?.eylem?.href).toBe('/ayarlar/baglantilar#kanallar');
   });
 
   it('token süresi DOLMUŞSA error, DOLMAK ÜZEREYSE warn', () => {
@@ -380,5 +383,55 @@ describe('bağlantısı GÖRÜNMEYEN hesap', () => {
     expect(kodlar(hesap({ connectionStatus: null, lastInsightsSyncAt: null }))).toEqual([
       'veri_hic_gelmedi',
     ]);
+  });
+});
+
+/**
+ * ═══ UYARININ GÖTÜRDÜĞÜ YER — UYARININ WORKSPACE'İ ═══
+ *
+ * Eylem bağlantıları elle yazılmış eski Ayarlar yollarıydı (`/ayarlar/
+ * baglantilar`, `/ayarlar/senkronizasyon`). Panel sadeleşince hesap ataması
+ * ve izleme workspace'in Kurulum'una, veri durumu Workspace bilgileri'ne
+ * taşındı. Eski Senkronizasyon ekranı OTURUMDAKİ workspace'i okuyordu: zil
+ * A'nın uyarısını gösterirken B seçiliyse kullanıcı B'nin durumunu
+ * görüyordu. Bağlantı artık uyarının workspace'ini TAŞIYOR.
+ */
+describe('KRİTİK: uyarı bağlantısı uyarının workspace’ine gidiyor', () => {
+  it('izleme kapalı → o workspace’in Kurulum › hesaplar bloğu', () => {
+    const [u] = hesapUyarilari(hesap({ syncEnabled: false, clientId: 'ws-7' }), SIMDI);
+    expect(u?.eylem?.href).toBe(hesaplarAdresi('ws-7'));
+    expect(u?.eylem?.href).toContain('musteri=ws-7');
+  });
+
+  it('veri hiç gelmedi / bayat → o workspace’in Veri durumu', () => {
+    const [hic] = hesapUyarilari(hesap({ lastInsightsSyncAt: null, clientId: 'ws-7' }), SIMDI);
+    expect(hic?.eylem?.href).toBe(veriDurumuAdresi('ws-7'));
+    const bayat = new Date(SIMDI.getTime() - (BAYAT_ESIGI_SAAT + 1) * SAAT);
+    const [b] = hesapUyarilari(hesap({ lastInsightsSyncAt: bayat, clientId: 'ws-7' }), SIMDI);
+    expect(b?.eylem?.href).toBe(veriDurumuAdresi('ws-7'));
+    expect(b?.eylem?.href).toContain('musteri=ws-7');
+  });
+
+  it('hesapsız workspace → kendi Kurulum’u', () => {
+    expect(hesapsizMusteriUyarisi({ id: 'c9', name: 'Yeni' }).eylem?.href).toBe(hesaplarAdresi('c9'));
+  });
+
+  it('bağlantı uyarıları workspace’e değil ajansa ait → Platform bağlantıları', () => {
+    const [yetki] = baglantiUyarilari(baglanti({ status: 'expired' }), SIMDI);
+    const [token] = baglantiUyarilari(baglanti({ tokenExpiresAt: new Date(SIMDI.getTime() + GUN) }), SIMDI);
+    expect(yetki?.eylem?.href).toBe(platformBaglantilariAdresi());
+    expect(token?.eylem?.href).toBe(platformBaglantilariAdresi());
+  });
+
+  it('hiçbir eylem eski Ayarlar yoluna gitmiyor', () => {
+    const hepsi = [
+      ...hesapUyarilari(hesap({ syncEnabled: false }), SIMDI),
+      ...hesapUyarilari(hesap({ lastInsightsSyncAt: null }), SIMDI),
+      hesapsizMusteriUyarisi({ id: 'c9', name: 'Yeni' }),
+    ];
+    expect(hepsi.length).toBe(3);
+    for (const u of hepsi) {
+      expect(u.eylem?.href).not.toMatch(/\/ayarlar\/(baglantilar|senkronizasyon)/);
+    }
   });
 });

@@ -75,7 +75,7 @@ export class GecmisIcerikService {
         kartlar: 0,
         notlar: [
           'Bu workspace’e Instagram sayfası ya da YouTube kanalı atanmamış. ' +
-            'Platform Bağlantıları ekranından ata.',
+            'Marka Merkezi › Kurulum’dan ata.',
         ],
       };
     }

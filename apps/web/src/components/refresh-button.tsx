@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { GuncellemeDurumu, RefreshResult } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { formatRelative, isStale } from '@/lib/format';
+import { veriDurumuAdresi } from '@/lib/panel-adresleri';
 import { dugmeHali, type DugmeHali } from './guncelleme-hali';
 
 /** İlerleme kaç saniyede bir soruluyor. */
@@ -189,7 +190,8 @@ export function RefreshButton({
       {hal.tur === 'guncellendi' && hal.dusen > 0 && (
         <span className="max-w-xs text-right text-[11px] text-warn-strong">
           {hal.dusen} iş tamamlanamadı{hal.sonHata ? `: ${hal.sonHata}` : '.'}{' '}
-          <Link href="/ayarlar/senkronizasyon" className="underline underline-offset-2">
+          {/* Veri durumu artık workspace'in Marka Merkezi'nde; `null` = sayfa aktif workspace'i çözer (düğme de onu tazeliyor). */}
+          <Link href={veriDurumuAdresi(null)} className="underline underline-offset-2">
             Ayrıntı
           </Link>
         </span>

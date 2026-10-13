@@ -461,10 +461,17 @@ export class AutoBoostController {
    * bölmek, birincisi başarıp ikincisi düştüğünde "kanal atandı ama kart
    * gelmiyor" hâlini üretirdi — bu projenin klasik yarım satırı.
    *
-   * `connection.write` — kanal eklemekle aynı yetki ve aynı gerekçe.
+   * KAPI HAVUZ ATAMASIYLA AYNI: `connection.write` + `connection.manage`
+   * (MIMARI Ç-20, panelde `PANEL_KAPILARI['hesap.ata']`). Burada yalnız
+   * `connection.write` istiyordu; Instagram sayfasının ve reklam hesabının
+   * ataması (`PATCH /connections/.../client`) ikisini birden istiyor. Yani
+   * aynı "havuzdan workspace'e ver" hareketinin kapısı kanal türüne göre
+   * değişiyordu ve `connection.manage` taşımayan biri YouTube kanalını
+   * başka bir workspace'e taşıyabiliyordu. Kanal EKLEMEK (`POST
+   * youtube/channels`) havuza giriş, atama değil; o kapı değişmedi.
    */
   @Patch('youtube/channels/:socialProfileId/client')
-  @RequirePermissions('connection.write')
+  @RequirePermissions('connection.write', 'connection.manage')
   async setYouTubeChannelClient(
     @CurrentTenant() ctx: TenantContext,
     @Param('socialProfileId', ParseUUIDPipe) socialProfileId: string,

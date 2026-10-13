@@ -1,0 +1,77 @@
+'use client';
+
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import type { ArsivWorkspaceSatiri } from '@advetics/shared';
+import { ApiRequestError, apiFetch } from '@/lib/api';
+import { Dugme } from '@/components/ui/dugme';
+
+/**
+ * ═══ ARŞİV — ARŞİVLENEN WORKSPACE GERİ ALINABİLİYOR ═══
+ *
+ * Arşivleme silme değildi ama arşivlenen workspace panelden bir daha HİÇ
+ * görünmüyordu: liste ucu arşivlileri eliyordu, geri alma ucu yoktu ve
+ * eski pencere "geri almak için durumu aktif yap" diyordu — o alanı
+ * gösteren bir ekran olmadan. Yanlışlıkla arşivlenen bir workspace için
+ * tek yol veritabanına elle girmekti (MIMARI Ç-4).
+ *
+ * Geri alma yalnız durumu değiştiriyor: hesap atamaları, izleme ve geçmiş
+ * arşivdeyken de yerinde duruyordu.
+ */
+export function ArsivListesi({
+  satirlar,
+  geriAlabilir,
+}: {
+  satirlar: ArsivWorkspaceSatiri[];
+  /** `PANEL_KAPILARI['workspace.geriAl']` — sunucuda hesaplandı. */
+  geriAlabilir: boolean;
+}) {
+  const router = useRouter();
+  const [mesgul, setMesgul] = useState<string | null>(null);
+  const [hata, setHata] = useState<{ id: string; metin: string } | null>(null);
+
+  async function geriAl(s: ArsivWorkspaceSatiri) {
+    setMesgul(s.id);
+    setHata(null);
+    try {
+      await apiFetch(`/clients/${s.id}/geri-al`, { method: 'POST' });
+      router.refresh();
+    } catch (e) {
+      setHata({ id: s.id, metin: e instanceof ApiRequestError ? e.message : 'Arşivden alınamadı.' });
+    } finally {
+      setMesgul(null);
+    }
+  }
+
+  if (satirlar.length === 0) {
+    return <p className="px-4 py-3 text-sm text-ink-muted">Arşivde workspace yok.</p>;
+  }
+
+  return (
+    <ul className="divide-y divide-line">
+      {satirlar.map((s) => (
+        <li key={s.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-ink">{s.name}</p>
+            <p className="text-xs text-ink-muted">
+              {s.slug} · {s._count.adAccounts} hesap ·{' '}
+              {s.archivedAt
+                ? `${new Date(s.archivedAt).toLocaleDateString('tr-TR', { timeZone: 'Europe/Istanbul' })} tarihinde arşivlendi`
+                : 'arşiv tarihi kayıtlı değil'}
+            </p>
+            {hata?.id === s.id && (
+              <p role="alert" className="mt-1 text-sm text-danger-strong">
+                {hata.metin}
+              </p>
+            )}
+          </div>
+          {geriAlabilir && (
+            <Dugme ton="ikincil" boyut="kucuk" bekliyor={mesgul === s.id} disabled={mesgul !== null} onClick={() => void geriAl(s)}>
+              Geri al
+            </Dugme>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}

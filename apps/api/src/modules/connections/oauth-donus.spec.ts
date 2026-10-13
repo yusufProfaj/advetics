@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { donusAdresi } from './connections.service';
+import { VARSAYILAN_DONUS, donusAdresi } from './connections.service';
 
 /**
  * OAUTH DÖNÜŞ ADRESİ — kurulum sihirbazı kendi adımını sorguda taşıyor.
@@ -41,5 +41,25 @@ describe('KRİTİK: geri dönüşün HER dalı yardımcıdan geçiyor', () => {
 
   it('elle birleştirilmiş dönüş adresi KALMADI', () => {
     expect(KAYNAK).not.toContain('`${backTo}?');
+  });
+});
+
+/**
+ * VARSAYILAN DÖNÜŞ PANELİN ÜRETİCİSİNDEN ve ÇAPASIZ (2026-10-13). Sayfa
+ * taşınınca elle yazılmış yol ölü adrese döndürürdü; çapalı bir adresin
+ * arkasına eklenen `?connection=…` ise çapanın parçası sayılıp sunucuya hiç
+ * gitmez ve "bağlandı" bandı görünmezdi.
+ */
+describe('KRİTİK: varsayılan OAuth dönüşü', () => {
+  it('Platform bağlantıları sekmesi, çapa YOK', () => {
+    expect(VARSAYILAN_DONUS).toBe('/ayarlar/baglantilar');
+    expect(VARSAYILAN_DONUS).not.toContain('#');
+    const u = new URL(donusAdresi(VARSAYILAN_DONUS, 'connection=basarili'), 'https://x.test');
+    expect(u.searchParams.get('connection')).toBe('basarili');
+  });
+
+  it('servis panel yolunu elle yazmıyor; üç dal da sabiti kullanıyor', () => {
+    expect(KAYNAK).not.toMatch(/['"`]\/ayarlar\//);
+    expect(KAYNAK.match(/VARSAYILAN_DONUS/g)?.length ?? 0).toBeGreaterThanOrEqual(4);
   });
 });

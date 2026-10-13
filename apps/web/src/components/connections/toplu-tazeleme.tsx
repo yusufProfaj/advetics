@@ -305,7 +305,7 @@ export function TopluTazeleme({
 
           {ilerleme.dusen > 0 && (
             <p className="mt-2 text-[11px] text-ink-muted">
-              Düşen işlerin sebebi Senkronizasyon ekranında iş bazında yazılı.
+              Düşen işlerin sebebi her workspace’in Marka Merkezi › Workspace bilgileri › Veri durumu bölümünde iş bazında yazılı.
             </p>
           )}
         </div>

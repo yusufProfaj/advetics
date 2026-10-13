@@ -9,6 +9,7 @@ import {
   type ProviderAvailability,
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { ayarlarAdresi } from '@/lib/panel-adresleri';
 import { PlatformLogo, adAccountKanali } from '@/components/platform-logo';
 import { eksikIzinMetni } from '@/lib/izin-etiketleri';
 
@@ -39,10 +40,18 @@ export function KanalKartlari({
   availability,
   connections,
   canManage,
+  kaldirabilir,
 }: {
   availability: ProviderAvailability[];
   connections: ConnectionSummary[];
+  /** Bağla / yeniden yetkilendir — `PANEL_KAPILARI['baglanti.yetkilendir']`. */
   canManage: boolean;
+  /**
+   * Bağlantıyı KALDIRMAK ayrı kapı (`baglanti.kaldir`: + org yöneticisi).
+   * Tek bayrakla çizilince Reklam Yöneticisi "Kaldır"ı görüp 403 alıyordu
+   * (MIMARI § Yetki kapıları).
+   */
+  kaldirabilir: boolean;
 }) {
   const [hata, setHata] = useState<string | null>(null);
 
@@ -78,6 +87,7 @@ export function KanalKartlari({
              */
             baglantilar={connections.filter((c) => c.platform === a.platform)}
             canManage={canManage}
+            kaldirabilir={kaldirabilir}
             onHata={setHata}
           />
         ))}
@@ -104,11 +114,13 @@ function KanalKarti({
   uygunluk,
   baglantilar,
   canManage,
+  kaldirabilir,
   onHata,
 }: {
   uygunluk: ProviderAvailability;
   baglantilar: ConnectionSummary[];
   canManage: boolean;
+  kaldirabilir: boolean;
   onHata: (m: string | null) => void;
 }) {
   const bagli = baglantilar.length > 0;
@@ -144,7 +156,13 @@ function KanalKarti({
       ) : (
         <div className="divide-y divide-line/60">
           {baglantilar.map((c) => (
-            <BaglantiSatiri key={c.id} baglanti={c} canManage={canManage} onHata={onHata} />
+            <BaglantiSatiri
+              key={c.id}
+              baglanti={c}
+              canManage={canManage}
+              kaldirabilir={kaldirabilir}
+              onHata={onHata}
+            />
           ))}
         </div>
       )}
@@ -174,7 +192,8 @@ function BaglanmaAlani({
           method: 'POST',
           body: JSON.stringify({
             platform: uygunluk.platform,
-            redirectTo: '/ayarlar/baglantilar',
+            // Çapasız: dönüşte arkasına `?connection=…` ekleniyor (API `VARSAYILAN_DONUS`).
+            redirectTo: ayarlarAdresi('baglantilar'),
           }),
         },
       );
@@ -236,10 +255,12 @@ function BaglanmaAlani({
 function BaglantiSatiri({
   baglanti,
   canManage,
+  kaldirabilir,
   onHata,
 }: {
   baglanti: ConnectionSummary;
   canManage: boolean;
+  kaldirabilir: boolean;
   onHata: (m: string | null) => void;
 }) {
   const router = useRouter();
@@ -406,7 +427,7 @@ function BaglantiSatiri({
             Yeniden yetkilendir
           </Dugme>
         )}
-        {canManage && (
+        {kaldirabilir && (
           <Dugme
             meslul={meslul}
             calisiyor={busy === 'disconnect'}

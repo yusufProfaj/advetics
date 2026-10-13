@@ -294,7 +294,7 @@ export class AutoBoostReadService {
     if (!durum || durum.sayfa + durum.kanal === 0) {
       return (
         'Bu workspace’e izlenen bir Instagram sayfası ya da YouTube kanalı ' +
-        'atanmamış. Platform Bağlantıları ekranından hesabı bu workspace’e ata.'
+        'atanmamış. Marka Merkezi › Kurulum’dan bu workspace’e ata.'
       );
     }
     if (durum.on_ayar === 0) {

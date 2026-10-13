@@ -502,8 +502,8 @@ export class FormsService {
     }
     if (profile.client_id === null) {
       throw new BadRequestException(
-        'Bu Facebook sayfası henüz bir workspace’e atanmamış. Platform Bağlantıları ' +
-          'ekranından sayfayı bu workspace’e ata; atanmamış sayfadan gelen kayıtlar yazılamaz.',
+        'Bu Facebook sayfası henüz bir workspace’e atanmamış. Marka Merkezi › Kurulum’dan ' +
+          'sayfayı bu workspace’e ata; atanmamış sayfadan gelen kayıtlar yazılamaz.',
       );
     }
     if (profile.client_id !== input.clientId) {

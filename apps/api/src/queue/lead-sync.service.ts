@@ -140,8 +140,8 @@ export class LeadSyncService {
         note: 'atanmış Facebook sayfası yok',
         notlar: [
           'Bu workspace’e atanmış bir Facebook sayfası yok. ' +
-            'Anlık form kayıtları sayfanın altında yaşıyor; Platform Bağlantıları ' +
-            'ekranından sayfayı bu workspace’e ata.',
+            'Anlık form kayıtları sayfanın altında yaşıyor; Marka Merkezi › Kurulum’dan ' +
+            'sayfayı bu workspace’e ata.',
         ],
       };
     }

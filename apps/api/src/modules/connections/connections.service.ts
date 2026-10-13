@@ -23,7 +23,7 @@ import type {
 } from '@advetics/shared';
 // DEĞER import'u AYRI: `PLATFORMS` bir dizi, yukarıdaki blok `import type`
 // ve oraya değer koymak TS1361 veriyor (bu depoda bir kez düşüldü).
-import { PLATFORMS } from '@advetics/shared';
+import { PLATFORMS, ayarlarAdresi } from '@advetics/shared';
 import { CONFIG, type AppConfig } from '../../config/configuration';
 import { PrismaAdminService } from '../../prisma/prisma-admin.service';
 import { yetkiBitisi } from './yetki-bitisi';
@@ -145,6 +145,17 @@ const PROFIL_REKLAM_PLATFORMU: Record<SocialProfileTypeValue, { platform: string
     hata: 'YouTube reklamı Google Ads hesabından yayınlanıyor — kanala bir Google Ads hesabı bağla.',
   },
 };
+
+/**
+ * VARSAYILAN OAUTH DÖNÜŞÜ — Ayarlar › Platform bağlantıları, ÇAPASIZ.
+ *
+ * Panelin üreticisinden (`ayarlarAdresi`), elle değil: sayfa taşındığında
+ * elle yazılmış yol kullanıcıyı izin ekranından ölü bir adrese döndürür.
+ * Çapa (`#kanallar`) BİLEREK yok: dönüşte arkasına `?connection=…`
+ * ekleniyor ve çapanın ardına gelen sorgu, çapanın parçası sayılıp
+ * sunucuya hiç gitmez — "bağlandı" bandı hiç görünmezdi.
+ */
+export const VARSAYILAN_DONUS = ayarlarAdresi('baglantilar');
 
 /**
  * OAUTH DÖNÜŞ ADRESİ — sorgu dizesi VARSA `&` ile eklenir.
@@ -633,7 +644,7 @@ export class ConnectionsService {
       // workspace bağlantısı kendi workspace’inde kalıyor.
       {
         forceReconsent: true,
-        redirectTo: ek.redirectTo ?? '/ayarlar/baglantilar',
+        redirectTo: ek.redirectTo ?? VARSAYILAN_DONUS,
         clientId: conn.clientId ?? undefined,
         ...(ek.kapsam ? { kapsam: ek.kapsam } : {}),
       },
@@ -704,7 +715,10 @@ export class ConnectionsService {
         : 'Yetkilendirme yanıtı eksik döndü (state parametresi yok).';
       this.logger.warn(`OAuth callback state'siz döndü: ${platformError ?? 'bilinmiyor'} — ${reason}`);
       return {
-        redirectPath: `/ayarlar/baglantilar?connection=hata&platform=${platform}&mesaj=${encodeURIComponent(reason)}`,
+        redirectPath: donusAdresi(
+          VARSAYILAN_DONUS,
+          `connection=hata&platform=${platform}&mesaj=${encodeURIComponent(reason)}`,
+        ),
       };
     }
 
@@ -728,7 +742,7 @@ export class ConnectionsService {
       data: { consumedAt: new Date() },
     });
 
-    const backTo = state.redirectTo ?? '/ayarlar/baglantilar';
+    const backTo = state.redirectTo ?? VARSAYILAN_DONUS;
 
     // Platform hata döndürdüyse: kullanıcı izni reddetti VEYA yapılandırma hatası.
     if (platformError) {
@@ -1786,7 +1800,7 @@ export class ConnectionsService {
     if (!account) throw new NotFoundException('Reklam hesabı bulunamadı');
     if (account.clientId === null) {
       throw new BadRequestException(
-        'Bu reklam hesabı henüz bir workspace’e atanmamış. Platform Bağlantıları ' +
+        'Bu reklam hesabı henüz bir workspace’e atanmamış. Ayarlar › Platform bağlantıları ' +
           'ekranından ata.',
       );
     }

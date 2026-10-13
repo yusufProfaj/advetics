@@ -5,6 +5,7 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { baglanti } from '@/lib/baglanti';
+import { acilisAdresi } from '@/lib/panel-adresleri';
 import type { WorkspaceSecimVerisi } from '@/lib/sayfa-workspace';
 import { dugmeSinifi } from '@/components/ui/dugme';
 import { Uyari } from '@/components/ui/uyari';
@@ -91,7 +92,7 @@ export function WorkspaceGerekli({
             {neden} {sirketAdi} altında henüz workspace yok.
           </p>
           {kurulumGorunur ? (
-            <Link href="/kurulum?tur=workspace" className={`mt-5 ${dugmeSinifi()}`}>
+            <Link href={acilisAdresi('workspace')} className={`mt-5 ${dugmeSinifi()}`}>
               Workspace oluştur
             </Link>
           ) : (

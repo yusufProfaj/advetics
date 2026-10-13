@@ -458,3 +458,55 @@ tek birincil eylem); Varlıklar = "Öğe kitaplığı" (sekmeler). Mobilde sekme
   açtığı (`hazirlama.service.ts`) — mevcut davranış; Kurulum'da "Değiştir"
   sık kullanılırsa Kitleler'de aynı adlı şablonlar birikir. Ajan 3 ya mevcut
   varsayılanı günceller ya da ekranda yazar.
+
+---
+
+## 14. Ajan 2 devir notu (Ayarlar tarafı, 2026-10-13)
+
+**Yapılan:** dört sekme (`/ayarlar/sirketler`, `/baglantilar`, `/ekip[?workspace=]`,
+`/hesabim`), başlıkta kapsam satırı (`components/ayar-kapsam.tsx`: Ajans / Şirket /
+Kişisel), `AYARLAR_SATIRLARI` → `_YENI` (`_ESKI` ve `AYAR_KISA_AD_ESKI` silindi),
+workspace penceresi kalktı (satır + "Marka Merkezi'nde aç" / "Taşı" / "Arşivle"),
+`#arsiv` kartı + `GET /clients?arsiv=1` + `POST /clients/:id/geri-al`
+(`client.delete` + org yöneticisi, `client.restored` denetim kaydı), `PATCH
+/clients/:id` `status` → 403 (`durumYazabilirMi`), Üst hesaplar kartı ve kapsam
+seçicideki bağlantı yalnız platform sahibine, Ekip tek yer (`WorkspaceErisimi`),
+YouTube kanal ataması `connection.write + connection.manage`, eski Ayarlar
+adreslerinin dokuzu `eskiAdresYonu` ile yönleniyor, `yonetim-paneli.tsx`,
+`musteri-karti.tsx`, `client-assets.tsx`, `client-actions.tsx` silindi, API'nin
+panel yolları shared üreticiden (`uyari-kurallari.ts` uyarının workspace'ini
+taşıyor, `connections.service.ts#VARSAYILAN_DONUS`). Mandal listelerinde Ajan 2
+dosyası KALMADI (`ELLE_ADRES`, `API_GECIS`, `YONLENDIRME_BEKLEYEN`).
+
+**Ajan 2 sapmaları:**
+
+| # | Sapma | Neden |
+|---|---|---|
+| S2-1 | Shared'a `ArsivWorkspaceSatiri` (tenant.schema.ts) eklendi | `?arsiv=1` satırının sözleşmede tipi yoktu; en küçük ekleme |
+| S2-2 | `app/(dashboard)/layout.tsx` iki satır: `yonetimGorunur: ayarSekmesiAcik(session,'sirketler')`, `ustHesaplarGorunur: kapi(session,'ustHesap.yonet')` | Ç-3'ün kapsam seçici kısmı layout'tan prop ister; dosya § 9'da kimseye verilmemişti |
+| S2-3 | `MusteriArama` silindi; arama `WorkspaceSatirlari`nın içinde | Kart → satır geçişiyle bileşenin tek tüketicisi kalmadı; `musteri-arama.spec.ts` yeni dosyaya çevrildi (silinmedi) |
+| S2-4 | Şirket panelindeki "Workspace taşı" kaldırıldı, taşıma SATIRIN eylemi (hedef: diğer şirketler) | Ç-23 satırda "Taşı" istiyor; iki yol aynı işi ters yönden yapıyordu |
+| S2-5 | Sihirbazda "Yeni üst hesap" kartı `sirket.yonet` (org yöneticisi) istiyor | Eski kart yalnız `org.write` sınıyordu, servis `assertOrgAdmin` ile reddediyordu |
+| S2-6 | `KanalKartlari`na `kaldirabilir` (`baglanti.kaldir`) | "Kaldır" tek bayrakla (`connection.manage`) çiziliyordu, API org yöneticisi istiyor |
+| S2-7 | `components/marka-merkezi/marka-merkezi.spec.ts` (Ajan 3) bir iddia: eski kanallar sayfası artık yönlendiriyor | Sayfa Ajan 2'nin; iddia yalnız o satırda değişti |
+| S2-8 | `ust-hesap-ekrani` şirkete geçiş hatasını yutuyordu (`.catch(() => setGecis(false))`) → satırın altında yazıyor | `ayarlar.spec.ts` taraması buldu |
+| S2-9 | Yeni yardımcılar: `lib/ayar-kapilari.ts` (`ayarSekmesiAcik`, `hesaplarHedefi`, `HESAP_AJANSTA`) | Sekme kapısı ve Ç-19 kararı tek yerde |
+
+**Ölçülmeyen / açık kalan:**
+
+- Ekranlar tarayıcıda GÖZLE görülmedi (MIMARI § 12 "önce görsel"): Şirketler
+  satır tablosu, Hesabım üç kartı, Ekip workspace süzgeci. Derleme (`next build`)
+  ve kaynak taramaları yeşil; tasarım denetimi Ajan 6'da.
+- Ç-10 kontrol edildi, KAPANMADI: sihirbaz kategoriyi `POST /clients/setup`
+  gövdesinde yazıyor, hazırlamanın "cevaplandı" bayrağını basmıyor. Kategori
+  SEÇİLDİYSE hazırlama onu cevaplanmış sayıyor (`c.kategoriler.length > 0`);
+  "hiçbiri" seçildiyse soru Kurulum'da bir kez daha soruluyor. Düzeltme
+  `hazirlama.service.ts`te (kimseye verilmemiş modül) — orkestratör kararı.
+- `lib/nav-sections.ts` `ELLE_ADRES_GECIS_ISTISNASI`nda kalıyor: içindeki
+  elle yol `BASE_SATIRLARI_ESKI` (Ajan 3 silince liste satırı da silinmeli).
+- API'de "Platform Bağlantıları" eski adı bu modülün dışındaki altı dosyada
+  duruyor (`leads.service.ts`, `leadgen-webhook.service.ts`, `draft-tree.service.ts`,
+  `ad-builder.service.ts`, `geri-besleme.service.ts`, `boosts/*`): § 9'da sahibi yok.
+- Arşiv kartı yalnız `workspace.geriAl` kapısında (org yöneticisi) listeyi
+  çekiyor; RLS arşivliyi zaten yalnız ona gösteriyor. Diğerlerine kapının
+  sebebi yazıyor.

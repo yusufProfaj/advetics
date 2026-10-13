@@ -77,7 +77,7 @@ describe('taslağın düzeni', () => {
 
 describe('uyarılar', () => {
   it('KRİTİK: hepsi TEK şeritte ve hiç yoksa şerit çizilmiyor', () => {
-    expect(SAYFA).toContain('<BildirimSeridi bildirimler={bildirimler(summary)} />');
+    expect(SAYFA).toContain('<BildirimSeridi bildirimler={bildirimler(summary, hesapHedefi)} />');
     expect(PARCA).toContain('if (bildirimler.length === 0) return null;');
   });
 

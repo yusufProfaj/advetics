@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { ayarlarAdresi } from '@/lib/panel-adresleri';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { IkiAdimDurumu } from '@advetics/shared';
@@ -86,7 +87,7 @@ export function IkiAdimSirketAyari({ durum }: { durum: IkiAdimDurumu }) {
         <p role="alert" className="mt-3 text-sm text-danger">
           {hata}{' '}
           {!durum.acik && (
-            <Link href="/hesabim" className="font-medium text-brand-strong hover:underline">
+            <Link href={ayarlarAdresi('hesabim', { capa: 'guvenlik' })} className="font-medium text-brand-strong hover:underline">
               Hesabım
             </Link>
           )}

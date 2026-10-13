@@ -165,7 +165,7 @@ describe('bileşen', () => {
     const dal = BILESEN.slice(i, son);
     expect(dal).toContain('kurulumGorunur ?');
     // Doğrudan workspace formu: türsüz /kurulum artık yönlendiriyor.
-    expect(dal).toContain('href="/kurulum?tur=workspace"');
+    expect(dal).toContain("href={acilisAdresi('workspace')}");
     expect(dal).toContain('Yöneticinden');
   });
 
