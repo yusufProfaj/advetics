@@ -284,6 +284,21 @@ describe('servis (PGlite)', () => {
     expect(await satir()).toBeUndefined();
   });
 
+  it('KRİTİK: bayrak satırı yazılamazsa (RLS sıfır satır) beyan BAŞARILI sayılmıyor', async () => {
+    // `kategori_cevaplandi` yazılmadan "tamam" denirse soru Kurulum'da bir
+    // kez daha sorulur ve kullanıcı neden sorulduğunu göremez. Politikası
+    // izin vermeyen INSERT … RETURNING hata vermez, sıfır satır döner
+    // (Ajan 4 mutasyonu: kontrol silinince bu test olmadan her şey yeşildi).
+    const bayraksiz = {
+      withTenant: <T>(_c: TenantContext, fn: (tx: unknown) => Promise<T>) =>
+        fn({ ...h.db, $queryRaw: async (q: { sql: string }) => (q.sql.trimStart().startsWith('INSERT INTO workspace_hazirlama') ? [] : h.db.$queryRaw(q as never)) }),
+    };
+    const k = new ClientSetupService({ create: async () => ({ id: IDS.client, name: 'Seed' }) } as never, {} as never, {} as never, bayraksiz as never, { record: vi.fn() } as never);
+    const r = await k.setup(ctx, kurulumGirdisi({ specialAdCategories: [] }), {});
+    expect(r.failures).toEqual([expect.objectContaining({ kind: 'kategori' })]);
+    expect(await satir()).toBeUndefined();
+  });
+
   it('KRİTİK: sitedeki piksel seçilir, iki aday soru olur; bütçe para birimiyle saklanır', async () => {
     olcumDurum.mockResolvedValue(olcumYaniti(['111', '222'], ['222']));
     await svc.calistir(ctx, IDS.client, 'b'.repeat(64));
