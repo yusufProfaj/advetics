@@ -46,6 +46,7 @@ import {
   type Degisiklik,
   type EkranNo,
 } from './rehber-mantik';
+import { StratejidenKutusu } from './stratejiden-kutusu';
 import s from './rehber.module.css';
 
 /** Yayın durumu yoklama aralığı: platform başına üç adım, her biri saniyeler sürüyor. */
@@ -404,6 +405,8 @@ export function RehberEkrani({
           </nav>
 
           <section className={s.orta}>
+            {/* Onaylı stratejiden açılan rehberde kreatif yönergesi ve kitle tarifi her adımda görünür. */}
+            <StratejidenKutusu rehberId={kayit.id} />
             <div className={s.mobilIlerleme} aria-hidden>
               <div className={s.ust}>
                 <span>

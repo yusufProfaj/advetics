@@ -15,6 +15,7 @@ import {
   type BitisSecenegi,
   type EkranNo,
 } from './rehber-mantik';
+import { kaynakRozeti } from './kaynak-rozeti';
 import s from './rehber.module.css';
 
 export function AdimButce({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => void }) {
@@ -92,7 +93,11 @@ export function AdimButce({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => voi
               </div>
             </div>
             <div className={s.alan}>
-              <label htmlFor="rehber-tutar">{tip === 'gunluk' ? 'Günlük tutar' : gun ? `Toplam tutar (${gun} gün)` : 'Toplam tutar'}</label>
+              <label htmlFor="rehber-tutar">
+                {tip === 'gunluk' ? 'Günlük tutar' : gun ? `Toplam tutar (${gun} gün)` : 'Toplam tutar'}{' '}
+                {/* Bütçe yalnız stratejiden gelince rozetli: rehber bütçeyi kendisi önermiyor. */}
+                <KaynakRozeti metin={kaynakRozeti(b.a.butce?.kaynak, null)} />
+              </label>
               <div className={s.girdi}>
                 <input id="rehber-tutar" className={s.num} value={metin} inputMode="decimal" placeholder="500" onChange={(e) => tutarDegisti(e.target.value)} />
                 <span className={s.on}>{paraSimgesi(b.paraBirimi)}</span>
@@ -136,7 +141,7 @@ export function AdimButce({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => voi
         {ikisi && (
           <div className={s.blok}>
             <div className={s.blokBaslik}>
-              İki platforma paylaşım {b.a.metaPayiYuzde?.kaynak !== 'kullanici' && <span className={s.onerilen}>Önerilen</span>}
+              İki platforma paylaşım <KaynakRozeti metin={kaynakRozeti(b.a.metaPayiYuzde?.kaynak, 'Önerilen')} />
             </div>
             <div className={s.pay}>
               <div className={s.payCubuk}>
@@ -198,4 +203,9 @@ function ButceUyarilari({ eksikler }: { eksikler: ReadonlyArray<{ kod: string; m
       )}
     </>
   );
+}
+
+/** "Önerilen" / "Stratejiden" rozeti; karar `kaynakRozeti`nde. */
+function KaynakRozeti({ metin }: { metin: string | null }) {
+  return metin ? <span className={s.onerilen}>{metin}</span> : null;
 }

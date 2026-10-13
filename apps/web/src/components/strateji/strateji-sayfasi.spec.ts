@@ -84,9 +84,14 @@ describe('sessiz hata yok', () => {
 
   it('KRİTİK: okuma hataları sunucunun cümlesiyle (`okumaHatasi`) gösteriliyor', () => {
     const sayfa = kod('page');
-    // Liste ve plan okuması ayrı ayrı hata dalı taşıyor.
-    expect(sayfa.match(/\(e: unknown\) => \(\{ ok: false as const, hata: okumaHatasi\(e\) \}\)/g)?.length).toBe(2);
-    expect(sayfa).toContain('baslik="Planlar alınamadı."');
+    // Sayfa v2'ye geçti (AdvStrategy v2): bütün okumalar TEK yardımcıdan
+    // (`oku`) ve hata dalı sunucunun cümlesini taşıyor. Liste, v2 plan ve
+    // eski (v1) plan okuması ayrı ayrı hata kutusu çiziyor.
+    expect(sayfa.match(/\(e: unknown\) => \(\{ tur: 'hata' as const, mesaj: okumaHatasi\(e\) \}\)/g)?.length).toBe(1);
+    // `oku` dışında doğrudan okuma yok (hatası yakalanmamış bir okuma sayfayı düşürürdü).
+    expect(sayfa.match(/serverApiFetch</g)?.length).toBe(1);
+    expect(sayfa).toContain('baslik="Stratejiler alınamadı."');
+    expect(sayfa).toContain('baslik="Strateji alınamadı."');
     expect(sayfa).toContain('baslik="Plan alınamadı."');
     const matris = kod('matris-bolumu.tsx');
     expect(matris.match(/setKitleler\(\{ tur: 'hata', mesaj: okumaHatasi\(e\) \}\)/g)?.length).toBe(1);

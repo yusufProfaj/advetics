@@ -24,6 +24,7 @@ import {
   type EkranNo,
   type KategoriKodu,
 } from './rehber-mantik';
+import { kaynakRozeti } from './kaynak-rozeti';
 import s from './rehber.module.css';
 
 export type KonumEslemeHali = { tur: 'yok' } | { tur: 'esleniyor' } | { tur: 'hata'; mesaj: string };
@@ -39,6 +40,8 @@ export function AdimKime({
   esleme: KonumEslemeHali;
   yenidenEsle: () => void;
 }) {
+  // Marka Merkezi'nden gelen konum o adla, stratejiden gelen "Stratejiden" (`kaynakRozeti`).
+  const konumRozeti = kaynakRozeti(b.a.konumlar?.kaynak, b.a.konumlar?.kaynak === 'marka_merkezi' ? "Marka Merkezi'nden" : null);
   const konumlar = b.a.konumlar?.deger ?? [];
   const [aramaAcik, setAramaAcik] = useState(false);
   const [ozelYas, setOzelYas] = useState(false);
@@ -140,7 +143,8 @@ export function AdimKime({
           <div>
             <div className={s.blok}>
               <div className={s.blokBaslik}>
-                Konum {b.a.konumlar?.kaynak === 'marka_merkezi' && <span className={s.onerilen}>Marka Merkezi&apos;nden</span>}
+                Konum{' '}
+                {konumRozeti && <span className={s.onerilen}>{konumRozeti}</span>}
               </div>
               <div className={s.cipler}>
                 {konumlar.map((k) => (

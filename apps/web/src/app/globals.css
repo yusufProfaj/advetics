@@ -470,6 +470,20 @@ body {
   font-family: var(--baslik-font);
 }
 
+/*
+ * PARA TUTARI MONTSERRAT İLE. Open Sans'ın Google Fonts sürümünün (3.003)
+ * HİÇBİR alt kümesinde `₺` (U+20BA) yok — ölçüldü, YENIDEN-TASARIM § 9.4.
+ * Gövde yazı tipiyle çizilen "72.000 ₺"de rakamlar Open Sans, `₺` tarayıcının
+ * YEDEK yazı tipinden geliyor: farklı kalınlık, farklı taban çizgisi, ekran
+ * ekran değişen bir işaret. Montserrat'ta `₺` var ve kılavuz büyük sayıları
+ * zaten Montserrat istiyor. TEK SINIF: tutar basan her yer bunu taşır;
+ * ekran ekran `font-baslik tabular-nums` yazmak birinin unutması demekti.
+ */
+@utility tutar {
+  font-family: var(--baslik-font);
+  font-variant-numeric: tabular-nums;
+}
+
 @utility sayfa-baslik {
   font-family: var(--baslik-font);
   font-size: 1.625rem;

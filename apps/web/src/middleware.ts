@@ -20,6 +20,13 @@ const PUBLIC_PATHS = [
   // "Şifremi unuttum" bağlantısı kullanıcıyı /login'e geri atardı.
   '/sifremi-unuttum',
   '/r',
+  // Girişsiz strateji onayı (AdvStrategy v2, kullanıcı kararı K-2). Erişim
+  // kararı yoldaki token; müşterinin panel hesabı yok. Liste dışında kalsa
+  // mail ile gelen bağlantı /login'e atar ve müşteri onaylayamaz — ajans
+  // bunu HİÇ görmez, çünkü kendi oturumu açık. Önek sözleşmede
+  // (`ONAY_SAYFASI_ONEKI`); middleware Edge paketine shared'ı sokmamak için
+  // elle yazılı, `strateji-v2-sayfa.spec.ts` ikisini karşılaştırıyor.
+  '/strateji-onay',
   '/gizlilik',
   '/kosullar',
   '/veri-silme',

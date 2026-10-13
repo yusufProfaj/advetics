@@ -80,6 +80,15 @@ const IZINLI: Array<{ neden: string; desen: RegExp }> = [
   { neden: 'LEAD — nitelikli form/havuz', desen: /nitelikli müşteri|müşteri havuzu|müşteri listesi/ },
   { neden: 'KİŞİ — raporun/mailin ALICISI bir insan', desen: /müşteriye (gönder|mail|gitm|giden)|[Mm]üşteriye gönderdiğin|rapor müşteriye/ },
   { neden: 'KİŞİ — parolayı teslim alan insan', desen: /parolayı müşteriye/ },
+  /*
+   * ADVSTRATEGY v2: stratejiyi okuyup ONAYLAYAN insan (panelde müşteri
+   * hesabı, girişsiz onay bağlantısında adını yazan kişi). Desenler ekran
+   * cümlelerine çapalı; serbest bir "müşteri" metni bu izinden geçmez.
+   */
+  {
+    neden: 'KİŞİ — stratejiyi okuyup onaylayan insan (AdvStrategy v2)',
+    desen: /[Mm]üşteriye gönder|[Mm]üşterinin (göreceği|belgesine)|Müşteri (revizyon istedi|onaylayınca|panele girmeden)|müşteri yalnız onay bekleyen|Müşteriye bağlantı/,
+  },
   { neden: 'KİŞİ — "müşteri hesabı" = client_viewer rolüyle açılmış giriş hesabı', desen: /[Mm]üşteri hesa[bp]/ },  // cümle başında da geçiyor
   {
     /*
