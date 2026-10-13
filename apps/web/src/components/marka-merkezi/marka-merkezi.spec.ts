@@ -90,14 +90,22 @@ describe('sayfa', () => {
     }
   });
 
-  it('başlık "Şirket › Workspace", kırıntı Base › Marka Merkezi › bölüm', () => {
-    expect(SAYFA).toContain('baslik={sirket ? `${sirket} › ${workspaceAdi}` : workspaceAdi}');
-    expect(SAYFA).toContain('<span className="font-semibold text-ink">{bolumAdi(bolum)}</span>');
+  it('başlık menü adı ("Marka Merkezi"), workspace açıklamanın başında; bölüm yan menüde', () => {
+    // 2026-10-14 (BILESENLER § 9): başlık menü adının AYNISI; hangi
+    // workspace'in kurulumu olduğu açıklamanın İLK sözcükleri.
+    expect(SAYFA).toContain('baslik="Marka Merkezi"');
+    expect(SAYFA).toContain('{sirket ? `${sirket} › ${workspaceAdi}` : workspaceAdi}');
+    expect(SAYFA).toContain('<SayfaIcDuzen menu={<IcMenu clientId={clientId} aktif={bolum} rozetler={rozetler} />}>');
+    const MENU = readFileSync(join(SRC, 'components/marka-merkezi/ic-menu.tsx'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(MENU).toContain('<SayfaIcMenu');
+    expect(MENU).toContain("uyari: rozet?.ton === 'eksik'");
+    expect(MENU).toContain('href: markaMerkeziAdresi(b.kod, clientId)');
   });
 
   it('Marka bölümünde eski adlar yok; iki metin AYRI kartta', () => {
-    expect(SAYFA).toContain('<Kart id="markayi-anlat">');
-    expect(SAYFA).toContain('<Kart id="kime-satiyoruz">');
+    // Kart kalıbı bileşenin içinde (`MetinSekmesi`); sayfada çapa kabı.
+    expect(SAYFA).toContain('<Capa id="markayi-anlat">');
+    expect(SAYFA).toContain('<Capa id="kime-satiyoruz">');
     expect(SAYFA).not.toContain('Bilgi bankası');
     expect(SAYFA).not.toContain('Hedef kitle');
   });

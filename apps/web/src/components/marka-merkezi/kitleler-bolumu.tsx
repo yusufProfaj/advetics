@@ -16,7 +16,13 @@ import {
 import Link from 'next/link';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { Dugme } from '@/components/ui/dugme';
-import { Uyari } from '@/components/ui/uyari';
+import { Kart } from '@/components/ui/kart';
+import { Alan, FormIzgarasi, Girdi, MetinAlani, Secim } from '@/components/ui/alan';
+import { AdHucresi, SayfalamaCubugu, Tablo } from '@/components/ui/tablo';
+import { BosDurum, HataDurumu, Serit, Yukleniyor } from '@/components/ui/hal';
+import { Pencere, YanPanel } from '@/components/ui/pencere';
+import { AcilirMenu, IKON_TETIK, MenuOgesi } from '@/components/ui/acilir-menu';
+import { useVarlikYeni } from './varliklar/birincil-eylem';
 import { HedeflemeSecici } from '@/components/autoboost/hedefleme-secici';
 import { IlgiSecici, kitleBuyuklugu } from './ilgi-secici';
 import { OzelKitleSecici } from './ozel-kitle-secici';
@@ -39,6 +45,11 @@ import { OzelKitleSecici } from './ozel-kitle-secici';
  *
  * DÖRT HÂL AYRI (CLAUDE.md, `.catch(() => setX([]))` yasağı): yükleniyor,
  * çağrı düştü, şablon yok, şablonlar geldi.
+ *
+ * TABLO + YAN PANEL (2026-10-14, taslak `#varlik`): kitle formu listenin
+ * üstünde satır içi açılıyordu ve uzun formun altında liste kayboluyordu.
+ * Artık liste tablo, form sağdan yan panelde; "Yeni kitle" sayfa başlığının
+ * sağındaki birincil düğmeden. Silme onayı pencerede (iki adım korunuyor).
  */
 type Durum =
   | { tur: 'yukleniyor' }
@@ -67,8 +78,6 @@ const BOS_FORM: Form = {
   ozelKitleler: [],
 };
 const YASLAR = Array.from({ length: 48 }, (_, i) => 18 + i);
-const girdi =
-  'w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-ink outline-none focus:border-brand';
 
 export function KitlelerBolumu({
   clientId,
@@ -85,6 +94,21 @@ export function KitlelerBolumu({
   const [silinecek, setSilinecek] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
+  /*
+   * YAN PANEL DOM'DA KALIYOR (kapanış geçişi için); içindeki form son açılan
+   * kitleyi göstermeye devam etsin diye ayrı tutuluyor. Her açılışta yeni
+   * `key`: önceki kitlenin "tarif et" önerisi yeni formda kalmasın.
+   */
+  const [panelFormu, setPanelFormu] = useState<Form>(BOS_FORM);
+  const [acilis, setAcilis] = useState(0);
+  const formAc = (f: Form) => {
+    setHata(null);
+    setPanelFormu(f);
+    setForm(f);
+    setAcilis((n) => n + 1);
+  };
+  // Başlıktaki "Yeni kitle": liste gelmeden açılmıyor (eskisiyle aynı koşul).
+  useVarlikYeni('kitleler', () => formAc(BOS_FORM), yazabilir && durum.tur === 'hazir');
 
   const yukle = useCallback(async () => {
     try {
@@ -143,74 +167,161 @@ export function KitlelerBolumu({
     if (tamam) setForm(null);
   }
 
-  return (
-    <section id="kitleler" aria-labelledby="kitleler-baslik" className="scroll-mt-24">
-      <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 id="kitleler-baslik" className="text-base font-semibold text-ink">
-            Kitleler
-          </h2>
-          <p className="mt-0.5 text-sm text-ink-muted">
-            Kime gösterileceği: konum, yaş, cinsiyet. Varsayılan kitle reklam kurarken kendiliğinden
-            seçilir ve Kurulum’da değişir. Şimdilik yalnızca Meta reklamlarında kullanılır.
-          </p>
-        </div>
-        {yazabilir && !form && durum.tur === 'hazir' && (
-          <Dugme ton="ikincil" boyut="kucuk" onClick={() => setForm(BOS_FORM)}>
-            Yeni kitle
-          </Dugme>
-        )}
-      </div>
+  const formuGuncelle = (f: Form) => {
+    setPanelFormu(f);
+    setForm(f);
+  };
+  const vazgec = () => {
+    setForm(null);
+    setHata(null);
+  };
+  const silinecekKitle = durum.tur === 'hazir' ? durum.veri.items.find((k) => k.id === silinecek) : undefined;
 
-      {hata && (
-        <div className="mb-3">
-          <Uyari ton="tehlike">{hata}</Uyari>
-        </div>
+  return (
+    <section id="kitleler" aria-label="Kitleler" className="grid scroll-mt-24 gap-3">
+      <p className="m-0 text-13 text-ink-muted">
+        Kime gösterileceği: konum, yaş, cinsiyet. Varsayılan kitle reklam kurarken kendiliğinden seçilir ve Kurulum’da
+        değişir. Şimdilik yalnızca Meta reklamlarında kullanılır.
+      </p>
+
+      {hata && form === null && (
+        <Serit ton="hata" baslik="İşlem tamamlanamadı.">
+          {hata}
+        </Serit>
       )}
 
-      {form && (
-        <KitleFormu
-          clientId={clientId}
-          form={form}
-          setForm={setForm}
-          busy={busy}
-          kaydet={() => void kaydet()}
-          vazgec={() => {
-            setForm(null);
-            setHata(null);
-          }}
+      <YanPanel
+        acik={form !== null}
+        onKapat={vazgec}
+        genislik={560}
+        baslik={panelFormu.id ? 'Kitleyi düzenle' : 'Yeni kitle'}
+        altEylemler={
+          <>
+            <Dugme ton="ikincil" onClick={vazgec} disabled={busy}>
+              Vazgeç
+            </Dugme>
+            <Dugme onClick={() => void kaydet()} bekliyor={busy} disabled={!panelFormu.name.trim()}>
+              Kaydet
+            </Dugme>
+          </>
+        }
+      >
+        <KitleFormu key={acilis} clientId={clientId} form={panelFormu} setForm={formuGuncelle} />
+        {/* SUNUCUNUN KENDİ CÜMLESİ panelin içinde: "bu adla şablon var". */}
+        {hata && form !== null && (
+          <Serit ton="hata" baslik="Kaydedilemedi.">
+            {hata}
+          </Serit>
+        )}
+      </YanPanel>
+
+      <Pencere
+        acik={silinecek !== null}
+        onKapat={() => setSilinecek(null)}
+        genislik="dar"
+        baslik="Kitle silinsin mi?"
+        aciklama={silinecekKitle ? `“${silinecekKitle.name}” silinir. Bu geri alınamaz.` : undefined}
+        altEylemler={
+          <>
+            <Dugme ton="ikincil" onClick={() => setSilinecek(null)} disabled={busy}>
+              Vazgeç
+            </Dugme>
+            <Dugme
+              ton="tehlike"
+              bekliyor={busy}
+              onClick={() => {
+                const id = silinecek;
+                if (!id) return;
+                void islem(() => apiFetch(`/audience-templates/${id}?clientId=${clientId}`, { method: 'DELETE' })).then(() =>
+                  setSilinecek(null),
+                );
+              }}
+            >
+              Sil
+            </Dugme>
+          </>
+        }
+      />
+
+      {durum.tur === 'yukleniyor' && <Yukleniyor satir={3} etiket="Kitleler yükleniyor" />}
+      {durum.tur === 'hata' && <HataDurumu baslik="Kitleler yüklenemedi." mesaj={durum.mesaj} onTekrar={() => void yukle()} />}
+      {durum.tur === 'hazir' && durum.veri.items.length === 0 && (
+        <BosDurum
+          baslik="Kayıtlı kitle yok"
+          neden={
+            <>
+              Kitle olmadan reklam <strong>Türkiye geneli, 18 yaş ve üzeri</strong> gösterilir. Varsayılan konum
+              Kurulum’da seçilir.
+            </>
+          }
         />
       )}
-
-      {durum.tur === 'yukleniyor' && <p className="text-sm text-ink-muted">Kitleler yükleniyor…</p>}
-      {durum.tur === 'hata' && <Uyari ton="tehlike" baslik="Kitleler yüklenemedi.">{durum.mesaj}</Uyari>}
-      {durum.tur === 'hazir' && durum.veri.items.length === 0 && !form && (
-        <p className="rounded-xl border border-dashed border-line bg-surface p-6 text-sm text-ink-muted">
-          Kayıtlı kitle yok. Kitle olmadan Hızlı Reklam <strong>Türkiye geneli, 18 yaş ve üzeri</strong>{' '}
-          gösterir. Varsayılan konum Kurulum’da seçilir.
-        </p>
-      )}
       {durum.tur === 'hazir' && durum.veri.items.length > 0 && (
-        <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
-          {durum.veri.items.map((k) => (
-            <KitleSatiri
-              key={k.id}
-              k={k}
-              yazabilir={yazabilir}
-              varsayilanAdresi={varsayilanAdresi}
-              busy={busy}
-              silOnayi={silinecek === k.id}
-              duzenle={() => setForm(formdan(k))}
-              silIste={() => setSilinecek(k.id)}
-              silVazgec={() => setSilinecek(null)}
-              sil={() =>
-                void islem(() =>
-                  apiFetch(`/audience-templates/${k.id}?clientId=${clientId}`, { method: 'DELETE' }),
-                ).then(() => setSilinecek(null))
-              }
-            />
-          ))}
-        </ul>
+        <Kart dolgu={false}>
+          <Tablo<KitleSablonuRecord>
+            etiket="Kitleler"
+            satirlar={durum.veri.items}
+            satirAnahtari={(k) => k.id}
+            sutunlar={[
+              {
+                anahtar: 'ad',
+                baslik: 'Kitle',
+                hucre: (k) => (
+                  <AdHucresi
+                    ad={
+                      <span className="inline-flex flex-wrap items-center gap-2">
+                        {k.name}
+                        {/* SALT OKUNUR ROZET: değiştirmenin tek yeri Kurulum (Ç-9). */}
+                        {k.varsayilan && (
+                          <span className="rounded-full bg-vurgu px-2 py-0.5 text-11 font-bold text-brand-strong">
+                            Varsayılan
+                          </span>
+                        )}
+                      </span>
+                    }
+                    alt={
+                      k.varsayilan && varsayilanAdresi ? (
+                        <Link href={varsayilanAdresi} className="text-ink-muted underline-offset-2 hover:text-ink hover:underline">
+                          Kurulum’da değiştir
+                        </Link>
+                      ) : undefined
+                    }
+                  />
+                ),
+              },
+              { anahtar: 'tanim', baslik: 'Tanım', hucre: (k) => <span className="text-13 text-ink-muted">{kitleOzeti(k)}</span> },
+              {
+                anahtar: 'eylem',
+                baslik: <span className="sr-only">Eylem</span>,
+                sayi: true,
+                hucre: (k) =>
+                  yazabilir ? (
+                    <span className="inline-flex items-center gap-1">
+                      <Dugme ton="ikincil" boyut="kucuk" onClick={() => formAc(formdan(k))} disabled={busy}>
+                        Düzenle
+                      </Dugme>
+                      <AcilirMenu
+                        etiket={`${k.name}: diğer eylemler`}
+                        hizala="sag"
+                        genislik="w-44"
+                        tetik={(o) => (
+                          <button type="button" {...o} className={IKON_TETIK} aria-label="Diğer eylemler">
+                            ⋯
+                          </button>
+                        )}
+                      >
+                        {/* İKİ ADIMLI SİLME (Bölüm 1 deseni): menü + onay penceresi. */}
+                        <MenuOgesi tehlike devreDisi={busy} onClick={() => setSilinecek(k.id)}>
+                          Sil
+                        </MenuOgesi>
+                      </AcilirMenu>
+                    </span>
+                  ) : null,
+              },
+            ]}
+          />
+          <SayfalamaCubugu bas={1} son={durum.veri.items.length} toplam={durum.veri.items.length} />
+        </Kart>
       )}
     </section>
   );
@@ -229,70 +340,7 @@ function formdan(k: KitleSablonuRecord): Form {
   };
 }
 
-function KitleSatiri(p: {
-  k: KitleSablonuRecord;
-  yazabilir: boolean;
-  varsayilanAdresi: string | null;
-  busy: boolean;
-  silOnayi: boolean;
-  duzenle: () => void;
-  silIste: () => void;
-  silVazgec: () => void;
-  sil: () => void;
-}) {
-  return (
-    <li className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm">
-      <div className="min-w-0 flex-1">
-        <p className="flex items-center gap-2 font-medium text-ink">
-          {p.k.name}
-          {/* SALT OKUNUR ROZET: değiştirmenin tek yeri Kurulum (Ç-9). */}
-          {p.k.varsayilan && (
-            <span className="rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-medium text-brand-strong">
-              Varsayılan
-            </span>
-          )}
-          {p.k.varsayilan && p.varsayilanAdresi && (
-            <Link href={p.varsayilanAdresi} className="text-xs font-normal text-ink-muted underline-offset-2 hover:text-ink hover:underline">
-              Kurulum’da değiştir
-            </Link>
-          )}
-        </p>
-        <p className="mt-0.5 text-xs text-ink-muted">{kitleOzeti(p.k)}</p>
-      </div>
-      {p.yazabilir &&
-        (p.silOnayi ? (
-          // İKİ ADIMLI SİLME (Bölüm 1 deseni): yanlış tıklama geri alınamaz.
-          <span className="flex items-center gap-2 text-xs">
-            <span className="text-ink-muted">Silinsin mi?</span>
-            <Dugme ton="tehlike" boyut="kucuk" onClick={p.sil} bekliyor={p.busy}>
-              Sil
-            </Dugme>
-            <Dugme ton="sade" boyut="kucuk" onClick={p.silVazgec} disabled={p.busy}>
-              Vazgeç
-            </Dugme>
-          </span>
-        ) : (
-          <span className="flex items-center gap-1">
-            <Dugme ton="sade" boyut="kucuk" onClick={p.duzenle} disabled={p.busy}>
-              Düzenle
-            </Dugme>
-            <Dugme ton="sade" boyut="kucuk" onClick={p.silIste} disabled={p.busy}>
-              Sil
-            </Dugme>
-          </span>
-        ))}
-    </li>
-  );
-}
-
-function KitleFormu(p: {
-  clientId: string;
-  form: Form;
-  setForm: (f: Form) => void;
-  busy: boolean;
-  kaydet: () => void;
-  vazgec: () => void;
-}) {
+function KitleFormu(p: { clientId: string; form: Form; setForm: (f: Form) => void }) {
   const f = p.form;
   const degis = (patch: Partial<Form>) => p.setForm({ ...f, ...patch });
   // Seçici `GeoLocationOption` konuşuyor, şablon `KitleKonumu`; ikisi aynı
@@ -306,19 +354,20 @@ function KitleFormu(p: {
   }));
 
   return (
-    <div className="mb-3 space-y-4 rounded-xl border border-brand/40 bg-surface p-4">
+    <div className="grid gap-4">
       <TarifEt clientId={p.clientId} uygula={(o) => degis(o)} />
 
-      <label className="block space-y-1">
-        <span className="block text-xs font-medium text-ink">Kitle adı</span>
-        <input
-          value={f.name}
-          onChange={(e) => degis({ name: e.target.value })}
-          maxLength={KITLE_SINIRLARI.ad}
-          placeholder="Örn. İzmir, 25-45 kadın"
-          className={girdi}
-        />
-      </label>
+      <Alan etiket="Kitle adı">
+        {(id) => (
+          <Girdi
+            id={id}
+            value={f.name}
+            onChange={(e) => degis({ name: e.target.value })}
+            maxLength={KITLE_SINIRLARI.ad}
+            placeholder="Örn. İzmir, 25-45 kadın"
+          />
+        )}
+      </Alan>
 
       <HedeflemeSecici
         clientId={p.clientId}
@@ -341,40 +390,39 @@ function KitleFormu(p: {
         kayitliKitle={false}
       />
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <label className="block space-y-1">
-          <span className="block text-xs font-medium text-ink">En küçük yaş</span>
-          <select value={f.ageMin} onChange={(e) => degis({ ageMin: Number(e.target.value) })} className={girdi}>
-            {YASLAR.map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block space-y-1">
-          <span className="block text-xs font-medium text-ink">En büyük yaş</span>
-          <select value={f.ageMax} onChange={(e) => degis({ ageMax: Number(e.target.value) })} className={girdi}>
-            {YASLAR.map((y) => (
-              <option key={y} value={y}>
-                {y === 65 ? '65 ve üzeri' : y}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block space-y-1">
-          <span className="block text-xs font-medium text-ink">Cinsiyet</span>
-          <select
-            value={f.genders}
-            onChange={(e) => degis({ genders: e.target.value as Form['genders'] })}
-            className={girdi}
-          >
-            <option value="all">Tümü</option>
-            <option value="female">Kadın</option>
-            <option value="male">Erkek</option>
-          </select>
-        </label>
-      </div>
+      <FormIzgarasi>
+        <Alan etiket="En küçük yaş">
+          {(id) => (
+            <Secim id={id} value={f.ageMin} onChange={(e) => degis({ ageMin: Number(e.target.value) })}>
+              {YASLAR.map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </Secim>
+          )}
+        </Alan>
+        <Alan etiket="En büyük yaş">
+          {(id) => (
+            <Secim id={id} value={f.ageMax} onChange={(e) => degis({ ageMax: Number(e.target.value) })}>
+              {YASLAR.map((y) => (
+                <option key={y} value={y}>
+                  {y === 65 ? '65 ve üzeri' : y}
+                </option>
+              ))}
+            </Secim>
+          )}
+        </Alan>
+        <Alan etiket="Cinsiyet">
+          {(id) => (
+            <Secim id={id} value={f.genders} onChange={(e) => degis({ genders: e.target.value as Form['genders'] })}>
+              <option value="all">Tümü</option>
+              <option value="female">Kadın</option>
+              <option value="male">Erkek</option>
+            </Secim>
+          )}
+        </Alan>
+      </FormIzgarasi>
 
       <IlgiSecici clientId={p.clientId} secili={f.interests} degis={(v) => degis({ interests: v })} />
 
@@ -384,16 +432,7 @@ function KitleFormu(p: {
         degis={(v) => degis({ ozelKitleler: v })}
       />
 
-      <p className="text-xs text-ink-muted">Özet: {kitleOzeti(f)}</p>
-
-      <div className="flex items-center gap-2">
-        <Dugme onClick={p.kaydet} bekliyor={p.busy} disabled={!f.name.trim()}>
-          Kaydet
-        </Dugme>
-        <Dugme ton="sade" onClick={p.vazgec} disabled={p.busy}>
-          Vazgeç
-        </Dugme>
-      </div>
+      <p className="m-0 rounded-alan bg-surface-muted px-3 py-2 text-12 text-ink-muted">Özet: {kitleOzeti(f)}</p>
     </div>
   );
 }
@@ -442,32 +481,38 @@ function TarifEt({
   }
 
   return (
-    <div className="space-y-2 rounded-lg bg-surface-sunken p-3">
-      <label className="block space-y-1">
-        <span className="block text-xs font-medium text-ink">Kitleyi tarif et (isteğe bağlı)</span>
-        <textarea
-          value={metin}
-          onChange={(e) => setMetin(e.target.value)}
-          rows={2}
-          maxLength={500}
-          placeholder="Örn. İzmir’de lüks araçlarla ilgilenen 30-55 yaş erkekler"
-          className={girdi}
-        />
-      </label>
+    <div className="grid gap-2 rounded-alan bg-surface-muted p-3">
+      <Alan etiket="Kitleyi tarif et (isteğe bağlı)">
+        {(id) => (
+          <MetinAlani
+            id={id}
+            value={metin}
+            onChange={(e) => setMetin(e.target.value)}
+            rows={2}
+            maxLength={500}
+            placeholder="Örn. İzmir’de lüks araçlarla ilgilenen 30-55 yaş erkekler"
+            className="min-h-0"
+          />
+        )}
+      </Alan>
       <div className="flex items-center gap-2">
         <Dugme ton="ikincil" boyut="kucuk" onClick={() => void oner()} bekliyor={busy} disabled={metin.trim().length < 5}>
           Öner
         </Dugme>
-        <span className="text-[11px] text-ink-muted">
+        <span className="text-12 text-ink-muted">
           Öneri aşağıdaki alanları doldurur; kaydetmeden önce kontrol et.
         </span>
       </div>
-      {hata && <p className="text-[11px] text-danger-strong">{hata}</p>}
+      {hata && (
+        <p role="alert" className="m-0 text-12 text-danger-strong">
+          {hata}
+        </p>
+      )}
       {oneri && (
-        <div className="space-y-1 text-[11px]">
-          <p className="text-ink-muted">Meta’da arandı: {oneri.hesapAdi}</p>
+        <div className="grid gap-1 text-12">
+          <p className="m-0 text-ink-muted">Meta’da arandı: {oneri.hesapAdi}</p>
           {oneri.interests.length > 0 && (
-            <ul className="text-ink">
+            <ul className="m-0 list-none p-0 text-ink">
               {oneri.interests.map((i) => (
                 <li key={i.id}>
                   “{i.terim}” → {i.name} <span className="text-ink-muted">({kitleBuyuklugu(i)})</span>
@@ -476,13 +521,13 @@ function TarifEt({
             </ul>
           )}
           {oneri.eslesmeyen.length > 0 && (
-            <p className="text-warn-strong">
+            <p className="m-0 text-danger-strong">
               Meta’da bulunamadı:{' '}
               {oneri.eslesmeyen.map((e) => `“${e.terim}” (${e.tur === 'konum' ? 'konum' : 'ilgi'})`).join(', ')}
             </p>
           )}
           {oneri.uygulanamayan.length > 0 && (
-            <ul className="text-warn-strong">
+            <ul className="m-0 list-none p-0 text-danger-strong">
               {oneri.uygulanamayan.map((u) => (
                 <li key={u.ifade}>
                   Uygulanamadı: “{u.ifade}”, {u.sebep}

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { platformKisaAdi, type KreatifPerformansi } from '@advetics/shared';
 import { formatNumber, formatPercent } from '@/lib/format';
+import { Dugme } from '@/components/ui/dugme';
 
 /**
  * ═══ GEÇMİŞTE İŞE YARAYANLAR ═══
@@ -17,7 +18,7 @@ import { formatNumber, formatPercent } from '@/lib/format';
  */
 export function IsleyenKreatifler({ liste }: { liste: KreatifPerformansi[] }) {
   return (
-    <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <ul className="m-0 grid list-none gap-3 p-0 sm:grid-cols-2 lg:grid-cols-3">
       {liste.map((k) => (
         <Kart key={k.id} kreatif={k} />
       ))}
@@ -27,14 +28,19 @@ export function IsleyenKreatifler({ liste }: { liste: KreatifPerformansi[] }) {
 
 function Kart({ kreatif }: { kreatif: KreatifPerformansi }) {
   const [gorselDustu, setGorselDustu] = useState(false);
-  const [kopyalandi, setKopyalandi] = useState(false);
+  /*
+   * ÜÇ HÂL: kopyalanmadı, kopyalandı, KOPYALANAMADI. Pano izni reddedilince
+   * (http, iframe, tarayıcı ayarı) düğme eskiden hiçbir şey söylemiyordu ve
+   * kullanıcı boş panoyu yeni kreatife yapıştırıyordu.
+   */
+  const [kopya, setKopya] = useState<'yok' | 'tamam' | 'olmadi'>('yok');
 
   const metin = [kreatif.headline, kreatif.primaryText, kreatif.description]
     .filter((p): p is string => Boolean(p))
     .join('\n\n');
 
   return (
-    <li className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-line bg-surface">
+    <li className="flex min-w-0 flex-col overflow-hidden rounded-alan border border-line bg-surface">
       {/*
         GÖRSEL DÜŞEBİLİR ve bu normal: platformun CDN adresi İMZALI ve süresi
         doluyor (CLAUDE.md). Kırık bir görsel kutusu göstermek yerine metne
@@ -53,8 +59,8 @@ function Kart({ kreatif }: { kreatif: KreatifPerformansi }) {
       )}
 
       <div className="flex min-w-0 flex-1 flex-col gap-1.5 p-3">
-        <div className="flex flex-wrap items-center gap-2 text-[11px] text-ink-muted">
-          <span className="rounded-full bg-surface-sunken px-2 py-0.5 font-medium text-ink">
+        <div className="flex flex-wrap items-center gap-2 text-12 text-ink-muted">
+          <span className="rounded-full bg-surface-sunken px-2 py-0.5 font-semibold text-ink">
             {platformKisaAdi(kreatif.platform)}
           </span>
           <span>
@@ -66,13 +72,13 @@ function Kart({ kreatif }: { kreatif: KreatifPerformansi }) {
         </div>
 
         {kreatif.headline && (
-          <p className="line-clamp-2 text-sm font-medium text-ink">{kreatif.headline}</p>
+          <p className="m-0 line-clamp-2 text-13 font-bold text-ink">{kreatif.headline}</p>
         )}
         {kreatif.primaryText && (
-          <p className="line-clamp-3 text-xs text-ink-muted">{kreatif.primaryText}</p>
+          <p className="m-0 line-clamp-3 text-12 text-ink-muted">{kreatif.primaryText}</p>
         )}
 
-        <p className="mt-auto pt-1.5 text-[11px] text-ink-muted">
+        <p className="m-0 mt-auto pt-1.5 text-12 text-ink-muted">
           {kreatif.adCount} reklamda kullanıldı · son gösterim {kreatif.sonGun}
         </p>
 
@@ -83,19 +89,20 @@ function Kart({ kreatif }: { kreatif: KreatifPerformansi }) {
           değerli olan o: kullanıcı çalışan bir metni yeni kreatife
           yapıştırıp görselini kendi seçiyor.
         */}
-        <button
-          type="button"
+        <Dugme
+          ton="ikincil"
+          boyut="kucuk"
           disabled={metin.length === 0}
           onClick={() => {
             void navigator.clipboard
               .writeText(metin)
-              .then(() => setKopyalandi(true))
-              .catch(() => setKopyalandi(false));
+              .then(() => setKopya('tamam'))
+              .catch(() => setKopya('olmadi'));
           }}
-          className="mt-1.5 rounded-lg border border-line px-2.5 py-1 text-xs font-medium text-ink transition hover:bg-surface-sunken disabled:opacity-40"
+          className="mt-1.5 self-end"
         >
-          {kopyalandi ? 'Kopyalandı' : 'Metni kopyala'}
-        </button>
+          {kopya === 'tamam' ? 'Kopyalandı' : kopya === 'olmadi' ? 'Kopyalanamadı, metni elle seç' : 'Metni kopyala'}
+        </Dugme>
       </div>
     </li>
   );

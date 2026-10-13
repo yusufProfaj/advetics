@@ -18,8 +18,28 @@ import {
   type MetinParcasi,
 } from '@/lib/iyilestir';
 import { OnayPenceresi } from './onay-penceresi';
-import i from '@/components/taslak/iyilestir.module.css';
-import s from '@/components/taslak/taslak.module.css';
+import { Dugme, dugmeSinifi } from '@/components/ui/dugme';
+import { Kart, KART_BAGLANTISI } from '@/components/ui/kart';
+import { Girdi } from '@/components/ui/alan';
+import { DurumNoktasi } from '@/components/ui/rozet';
+
+/*
+ * ═══ SOHBET GÖRÜNÜŞÜ (birleşik tasarım, 2026-10-14) ═══
+ *
+ * Balonlar SADE: kullanıcı gri zeminde sağda, asistan beyaz kartta solda;
+ * hata balonu beyaz zemin + KIRMIZI SOL ÇİZGİ (kılavuz şeridi) ve
+ * platformun/sunucunun cümlesi olduğu gibi içinde. Kılavuz dışı renk ve
+ * gölge yok. Yerel sabitler: `components/ui`da sohbet balonu yok
+ * (Grup 3 sapması).
+ */
+const BALON = 'max-w-[82%] whitespace-pre-wrap break-words rounded-kart px-3.5 py-2.5 text-[13.5px] leading-relaxed';
+const BALON_BEN = `${BALON} self-end rounded-br-[4px] bg-surface-sunken text-ink`;
+const BALON_O = `${BALON} self-start rounded-bl-[4px] border border-line bg-surface text-ink`;
+const BALON_HATA = `${BALON} self-start rounded-bl-[4px] border border-l-4 border-line border-l-danger bg-surface text-ink`;
+/** İç kart (Uygula / devir): kart kalıbı, gölgesiz. */
+const IC_KART = 'w-[min(420px,100%)] self-start rounded-kart border border-line bg-surface';
+const ETIKET = 'inline-flex h-6 items-center rounded-full bg-surface-sunken px-2.5 text-11 font-bold text-ink-muted';
+const KISIT = 'text-12 text-ink-muted';
 
 /**
  * `asistanBagli` sözleşmede yok, API ekliyor (model anahtarı tanımlı mı).
@@ -215,34 +235,58 @@ export function AsistanSekmesi({
   }, [yaziyor]);
 
   return (
-    <div className={i.asistan}>
-      <div className={`${s.kart} ${i.sohbet}`}>
-        <div className={s.kartUst}>
-          <h2>AI Asistan</h2>
-          <span className={i.etiket}>{clientAdi}</span>
-          <span className={i.zaman}>Okur, önerir, onayınla uygular. Reklam kurmaz.</span>
-          {mesajlar.length > 0 && (
-            <button type="button" className={i.metin} onClick={yeniSohbet} disabled={akis}>
+    <div className="grid items-start gap-4 min-[1100px]:grid-cols-[minmax(0,1fr)_300px]">
+      <Kart
+        dolgu={false}
+        baslik="AI Asistan"
+        baslikEki={clientAdi}
+        eylem={
+          mesajlar.length > 0 && (
+            <Dugme ton="hayalet" boyut="kucuk" onClick={yeniSohbet} disabled={akis}>
               Yeni sohbet
-            </button>
-          )}
-        </div>
-        <div className={i.mesajlar} ref={kutu} aria-live="polite">
-          <div className={`${i.balon} ${i.o}`}>
+            </Dugme>
+          )
+        }
+        altEylem={
+          <form
+            className="flex w-full items-center gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void gonder(metin);
+            }}
+          >
+            <Girdi
+              value={metin}
+              onChange={(e) => setMetin(e.target.value)}
+              placeholder="Bir şey sor: “Bu hafta en çok para nereye boşa gitti?”"
+              autoComplete="off"
+              maxLength={2000}
+              aria-label="Asistana soru"
+              className="min-w-0 flex-1"
+            />
+            <Dugme ton="koyu" type="submit" disabled={metin.trim() === ''} bekliyor={akis}>
+              Sor
+            </Dugme>
+          </form>
+        }
+      >
+        <p className="m-0 border-b border-line px-5 py-2.5 text-12 text-ink-muted">Okur, önerir, onayınla uygular. Reklam kurmaz.</p>
+        <div className="flex h-[560px] flex-col gap-3.5 overflow-y-auto p-4" ref={kutu} aria-live="polite">
+          <div className={BALON_O}>
             Merhaba. {clientAdi} reklam verilerine bakabilirim: nereye para gidiyor, ne çalışıyor, ne yoruldu. Bir
             şey değiştirmem gerekirse önce ne yapacağımı kart olarak gösteririm, sen onaylamadan hiçbir şey değişmez.
           </div>
           {bagliDegil && (
-            <div className={i.balonHata} role="alert">
+            <div className={BALON_HATA} role="alert">
               Asistan şu an bağlı değil: sunucuda yapay zekâ anahtarı tanımlı değil. Sorular cevaplanamaz; öneriler
               ve kurallar çalışmaya devam ediyor.
             </div>
           )}
           {okumaHatasi && (
-            <div className={i.balonHata} role="alert">
+            <div className={BALON_HATA} role="alert">
               Sohbet okunamadı: {okumaHatasi}{' '}
               {oturumId && (
-                <button type="button" className={i.metin} onClick={() => void kayitliOku(oturumId)}>
+                <button type="button" className={KART_BAGLANTISI} onClick={() => void kayitliOku(oturumId)}>
                   Yeniden dene
                 </button>
               )}
@@ -250,7 +294,7 @@ export function AsistanSekmesi({
           )}
           {mesajlar.map((m) =>
             m.rol === 'kullanici' ? (
-              <div key={m.id} className={`${i.balon} ${i.ben}`}>
+              <div key={m.id} className={BALON_BEN}>
                 {m.parcalar.map((p) => (p.tur === 'metin' ? p.metin : '')).join('')}
               </div>
             ) : (
@@ -267,71 +311,63 @@ export function AsistanSekmesi({
             ),
           )}
           {yaziyor && (
-            <div className={`${i.balon} ${i.o}`} aria-label="Asistan yazıyor">
-              <span className={i.yaziyor}>
-                <span />
-                <span />
-                <span />
+            <div className={BALON_O} aria-label="Asistan yazıyor">
+              {/* Üç nokta yalnız hareket serbestse nabız atıyor; değilse durağan. */}
+              <span className="inline-flex gap-1" aria-hidden>
+                {[0, 150, 300].map((g) => (
+                  <span
+                    key={g}
+                    className="inline-block h-1.5 w-1.5 rounded-full bg-ink-muted motion-safe:animate-pulse"
+                    style={{ animationDelay: `${g}ms` }}
+                  />
+                ))}
               </span>
               {uzunSuruyor && (
-                <span style={{ display: 'block', marginTop: 6, fontSize: 12, color: 'var(--t-ink-muted)' }}>
+                <span className="mt-1.5 block text-12 text-ink-muted">
                   Model bu sefer yavaş cevap veriyor; en fazla 3 dakika bekleniyor.
                 </span>
               )}
             </div>
           )}
           {akisSorunu && (
-            <div className={i.balonHata} role="alert">
+            <div className={BALON_HATA} role="alert">
               {akisSorunu}
             </div>
           )}
         </div>
-        <form
-          className={i.yaz}
-          onSubmit={(e) => {
-            e.preventDefault();
-            void gonder(metin);
-          }}
-        >
-          <input
-            value={metin}
-            onChange={(e) => setMetin(e.target.value)}
-            placeholder="Bir şey sor: “Bu hafta en çok para nereye boşa gitti?”"
-            autoComplete="off"
-            maxLength={2000}
-            aria-label="Asistana soru"
-          />
-          <button className={i.birincil} type="submit" disabled={akis || metin.trim() === ''}>
-            Gönder
-          </button>
-        </form>
-      </div>
+      </Kart>
 
-      <div className={i.yanSutun}>
-        <div className={s.kart}>
-          <div className={s.kartUst}>
-            <h2>Sık sorulanlar</h2>
-          </div>
-          <div className={i.oneriSorular}>
+      <div className="grid min-w-0 content-start gap-4">
+        <Kart baslik="Sık sorulanlar">
+          {/*
+           * Hazır sorular BAĞLANTI görünüşünde (kartın eylemi bağlantıdır,
+           * BILESENLER §3.3): `Dugme` tek satırlık hap ve uzun soru metni
+           * taşıp kesilirdi.
+           */}
+          <ul className="m-0 grid list-none gap-2.5 p-0">
             {SIK_SORULANLAR.map((soru) => (
-              <button key={soru} type="button" onClick={() => void gonder(soru)} disabled={akis}>
-                {soru}
-              </button>
+              <li key={soru}>
+                <button
+                  type="button"
+                  className={`${KART_BAGLANTISI} text-left disabled:cursor-not-allowed disabled:opacity-40`}
+                  onClick={() => void gonder(soru)}
+                  disabled={akis}
+                >
+                  {soru}
+                </button>
+              </li>
             ))}
-          </div>
-        </div>
-        <div className={s.kart}>
-          <div className={s.kartUst}>
-            <h2>Asistan ne yapabilir?</h2>
-          </div>
-          <div className={i.bilgi}>
-            <b>Okur:</b> özet, günlük seri, kampanya → reklam kırılımı, dönüşümler, bütçe temposu.
+          </ul>
+        </Kart>
+        <Kart baslik="Asistan ne yapabilir?">
+          <p className="m-0 text-13 leading-relaxed text-ink-muted">
+            <b className="text-ink">Okur:</b> özet, günlük seri, kampanya → reklam kırılımı, dönüşümler, bütçe temposu.
             <br />
-            <b>Önerir ve uygular (onayla):</b> Meta ve Google’da reklam veya kampanya durdurma, bütçe değişikliği.
+            <b className="text-ink">Önerir ve uygular (onayla):</b> Meta ve Google’da reklam veya kampanya durdurma, bütçe değişikliği.
             <br />
-            <b>Yapmaz:</b> reklam kurmaz (AdvCampaign’e devreder), LinkedIn’e yazmaz.
-          </div>
-        </div>
+            <b className="text-ink">Yapmaz:</b> reklam kurmaz (AdvCampaign’e devreder), LinkedIn’e yazmaz.
+          </p>
+        </Kart>
       </div>
 
       <OnayPenceresi
@@ -385,9 +421,11 @@ function AsistanParcalari({
       {gruplar.map((g, n) => {
         if (g.tur === 'iz') {
           return (
-            <div key={n} className={i.iz}>
+            <div key={n} className="flex flex-wrap gap-1.5 self-start">
               {g.izler.map((t, k) => (
-                <span key={k}>{t}</span>
+                <span key={k} className="rounded-full border border-line px-2.5 py-0.5 text-11 text-ink-muted">
+                  {t}
+                </span>
               ))}
             </div>
           );
@@ -395,27 +433,29 @@ function AsistanParcalari({
         const p = g.parca;
         if (p.tur === 'metin') {
           return (
-            <div key={n} className={`${i.balon} ${i.o}`}>
+            <div key={n} className={BALON_O}>
               <BicimliMetin metin={p.metin} />
             </div>
           );
         }
         if (p.tur === 'hata') {
           return (
-            <div key={n} className={i.balonHata} role="alert">
+            <div key={n} className={BALON_HATA} role="alert">
               {p.mesaj}
             </div>
           );
         }
         if (p.tur === 'devret') {
           return (
-            <div key={n} className={i.icKart}>
-              <div className={i.ust2}>
-                <span className={`${i.tur} ${i.turButce}`}>AdvCampaign’e devret</span>
+            <div key={n} className={IC_KART}>
+              <div className="flex items-center gap-2 border-b border-line px-3 py-2.5">
+                <span className={ETIKET}>AdvCampaign’e devret</span>
               </div>
-              <p>“{p.istem}” için AdvCampaign’de yeni bir reklam aç; rehber amaçtan bütçeye adım adım kurar.</p>
-              <div className={i.alt2}>
-                <Link className={i.birincil} href={devretAdresi(clientId, p.oturumId)}>
+              <p className="m-0 px-3 py-2.5 text-13 leading-normal text-ink">
+                “{p.istem}” için AdvCampaign’de yeni bir reklam aç; rehber amaçtan bütçeye adım adım kurar.
+              </p>
+              <div className="flex justify-end border-t border-line px-3 py-2.5">
+                <Link className={dugmeSinifi('koyu', 'kucuk')} href={devretAdresi(clientId, p.oturumId)}>
                   AdvCampaign’de aç
                 </Link>
               </div>
@@ -429,40 +469,40 @@ function AsistanParcalari({
         const sonuc = sonuclar[o.anahtar] ?? (o.durum === 'uygulandi' ? o.uygulama : null);
         const vazgecildi = vazgecilen.has(`${mesaj.id}:${o.anahtar}`);
         return (
-          <div key={n} className={i.icKart}>
-            <div className={i.ust2}>
-              <span className={i.tur}>Uygula kartı</span> {metin?.dugme ?? o.baslik}
+          <div key={n} className={IC_KART}>
+            <div className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2.5 text-[12.5px] font-bold text-ink">
+              <span className={ETIKET}>Uygula kartı</span> {metin?.dugme ?? o.baslik}
             </div>
-            <p>
+            <p className="m-0 px-3 py-2.5 text-13 leading-normal text-ink">
               {o.baslik}. {metin ? `${metin.once} → ${metin.sonra}.` : ''} {o.neden}
             </p>
-            <div className={i.alt2}>
+            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line px-3 py-2.5">
               {sonuc ? (
                 (() => {
                   const t = sonucMetni(sonuc, o.platform, metin?.sonra ?? null, 'az önce');
                   return (
-                    <span className={`${i.durum} ${t.ton === 'uyari' ? i.durumUyari : ''}`}>
-                      <i />
+                    <span className="mr-auto inline-flex items-center gap-2 text-[12.5px] font-semibold text-ink">
+                      <DurumNoktasi hal={t.ton === 'uyari' ? 'hata' : 'ok'} />
                       {t.metin}
                     </span>
                   );
                 })()
               ) : o.durum === 'yoksayildi' ? (
-                <span className={i.kisit}>Bu öneri yoksayılmış.</span>
+                <span className={`${KISIT} mr-auto`}>Bu öneri yoksayılmış.</span>
               ) : o.eylem === null ? (
-                <span className={i.kisit}>{o.kisit ?? 'Bu öneri yalnız bilgi; panelden uygulanamıyor.'}</span>
+                <span className={`${KISIT} mr-auto`}>{o.kisit ?? 'Bu öneri yalnız bilgi; panelden uygulanamıyor.'}</span>
               ) : !yazabilir ? (
-                <span className={i.kisit}>Uygulamak için bütçe yazma yetkisi gerekiyor. Yöneticine sor.</span>
+                <span className={`${KISIT} mr-auto`}>Uygulamak için bütçe yazma yetkisi gerekiyor. Yöneticine sor.</span>
               ) : vazgecildi ? (
-                <span className={i.kisit}>Vazgeçildi; hiçbir şey değişmedi.</span>
+                <span className={`${KISIT} mr-auto`}>Vazgeçildi; hiçbir şey değişmedi.</span>
               ) : (
                 <>
-                  <button type="button" className={i.birincil} onClick={() => onUygula(o)}>
-                    Onayla ve uygula
-                  </button>
-                  <button type="button" className={i.metin} onClick={() => onVazgec(o.anahtar)}>
+                  <Dugme ton="hayalet" boyut="kucuk" onClick={() => onVazgec(o.anahtar)}>
                     Vazgeç
-                  </button>
+                  </Dugme>
+                  <Dugme ton="koyu" boyut="kucuk" onClick={() => onUygula(o)}>
+                    Onayla ve uygula
+                  </Dugme>
                 </>
               )}
             </div>
@@ -484,13 +524,13 @@ function BicimliMetin({ metin }: { metin: string }) {
     <>
       {metinBloklari(metin).map((b, n) =>
         b.tur === 'liste' ? (
-          <ul key={n} style={{ margin: '4px 0 8px', paddingLeft: 18, listStyle: 'disc' }}>
+          <ul key={n} className="mb-2 mt-1 list-disc pl-[18px]">
             {b.ogeler.map((o, k) => (
               <li key={k}>{satir(o, k)}</li>
             ))}
           </ul>
         ) : (
-          <p key={n} style={{ margin: '0 0 8px' }}>
+          <p key={n} className="m-0 mb-2 last:mb-0">
             {b.satirlar.map((s, k) => (
               <span key={k}>
                 {k > 0 && <br />}

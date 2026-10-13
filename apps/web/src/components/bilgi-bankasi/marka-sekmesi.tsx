@@ -18,9 +18,11 @@ import {
   type SikSayfa,
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
-import { Halka } from '@/components/yukleniyor';
+import type { ReactNode } from 'react';
 import { Dugme } from '@/components/ui/dugme';
-import { Uyari } from '@/components/ui/uyari';
+import { Kart } from '@/components/ui/kart';
+import { Alan, Girdi, MetinAlani } from '@/components/ui/alan';
+import { HataDurumu, Serit, Yukleniyor } from '@/components/ui/hal';
 
 /**
  * ═══ MARKA SEKMESİ — YAPILANDIRILMIŞ ALANLAR ═══
@@ -75,8 +77,6 @@ const BOS: Form = {
   calismaSaatleri: [],
 };
 
-const girdi =
-  'w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-ink outline-none focus:border-brand disabled:bg-surface-sunken';
 
 export function MarkaSekmesi({ clientId, canWrite }: { clientId: string; canWrite: boolean }) {
   const [durum, setDurum] = useState<Durum>({ tur: 'yukleniyor' });
@@ -161,51 +161,75 @@ export function MarkaSekmesi({ clientId, canWrite }: { clientId: string; canWrit
 
   if (durum.tur === 'yukleniyor') {
     return (
-      <div className="flex items-center gap-2 p-4 text-sm text-ink-muted">
-        <Halka className="h-4 w-4" /> Marka bilgileri yükleniyor…
-      </div>
+      <Kart baslik="Marka bilgileri">
+        <Yukleniyor satir={4} etiket="Marka bilgileri yükleniyor" />
+      </Kart>
     );
   }
   if (durum.tur === 'hata') {
-    return <Uyari ton="tehlike" baslik="Marka bilgileri yüklenemedi">{durum.mesaj}</Uyari>;
+    return <HataDurumu baslik="Marka bilgileri yüklenemedi." mesaj={durum.mesaj} />;
   }
 
   const kapali = !canWrite || busy;
 
   return (
     /*
-      ÇERÇEVESİZ: Marka Merkezi bu bileşeni zaten bir kartın (`Kart`) içine
-      koyuyor ve kendi çerçevesi kart içinde kart üretiyordu. Açıklama
-      cümlesi de bölüm başlığında yazılı; burada ikinci kez yazıyordu.
+      KARTIN KENDİSİ BURADA (2026-10-14, taslak `#marka`): başlık kartın
+      başlık satırında, Kaydet kartın SAĞ ALTINDA koyu küçük düğme. Eskiden
+      sayfa çerçeveyi, bileşen başlığı ve kırmızı Kaydet'i çiziyordu; ekranda
+      birden çok kırmızı dolu düğme "asıl eylem hangisi" sorusunu açıyordu.
+      Marka Merkezi artık bu bileşeni yalnız bir çapa kabına (`Capa`) koyuyor.
     */
-    <div className="space-y-5">
-      <div>
-        <h2 className="text-sm font-semibold text-ink">Marka bilgileri</h2>
-        <p className="mt-0.5 text-xs text-ink-muted">Marka adı, amaç, üslup ve öne çıkan vaatler.</p>
-      </div>
+    <Kart
+      baslik="Marka bilgileri"
+      altEylem={
+        canWrite ? (
+          <div className="flex items-center gap-3">
+            {kaydedildi && (
+              <span role="status" className="text-12 text-ink-muted">
+                Kaydedildi.
+              </span>
+            )}
+            <Dugme ton="koyu" boyut="kucuk" onClick={() => void kaydet()} bekliyor={busy}>
+              Kaydet
+            </Dugme>
+          </div>
+        ) : (
+          <span className="text-12 text-ink-muted">Bu bilgileri düzenleme yetkin yok.</span>
+        )
+      }
+    >
+    <div className="grid gap-5">
+      <p className="m-0 text-13 text-ink-muted">Marka adı, amaç, üslup ve öne çıkan vaatler.</p>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Alan etiket="Marka adı" ipucu="Boşsa workspace adı kullanılır.">
-          <input
-            value={form.markaAdi}
-            onChange={(e) => degis('markaAdi', e.target.value)}
-            maxLength={MARKA_SINIRLARI.markaAdi}
-            disabled={kapali}
-            className={girdi}
-          />
+          {(id, aciklamaId) => (
+            <Girdi
+              id={id}
+              aria-describedby={aciklamaId}
+              value={form.markaAdi}
+              onChange={(e) => degis('markaAdi', e.target.value)}
+              maxLength={MARKA_SINIRLARI.markaAdi}
+              disabled={kapali}
+            />
+          )}
         </Alan>
         <Alan etiket="Sektör" ipucu="Örn. Konut inşaatı, Diş kliniği">
-          <input
-            value={form.sektor}
-            onChange={(e) => degis('sektor', e.target.value)}
-            maxLength={MARKA_SINIRLARI.sektor}
-            disabled={kapali}
-            className={girdi}
-          />
+          {(id, aciklamaId) => (
+            <Girdi
+              id={id}
+              aria-describedby={aciklamaId}
+              value={form.sektor}
+              onChange={(e) => degis('sektor', e.target.value)}
+              maxLength={MARKA_SINIRLARI.sektor}
+              disabled={kapali}
+            />
+          )}
         </Alan>
       </div>
 
-      <Alan etiket="Ana amaç" ipucu="AdvCampaign bu amaçla açılır; istersen orada değiştirirsin.">
+      <Grup etiket="Ana amaç" ipucu="AdvCampaign bu amaçla açılır; istersen orada değiştirirsin.">
         <div className="grid gap-2 sm:grid-cols-3">
           {CAMPAIGN_GOALS.map((g) => (
             <button
@@ -214,16 +238,16 @@ export function MarkaSekmesi({ clientId, canWrite }: { clientId: string; canWrit
               disabled={kapali}
               aria-pressed={form.anaAmac === g}
               onClick={() => degis('anaAmac', form.anaAmac === g ? null : g)}
-              className={`rounded-lg border p-2.5 text-left transition disabled:cursor-not-allowed ${
-                form.anaAmac === g ? 'border-brand bg-brand-soft' : 'border-line hover:bg-surface-sunken'
+              className={`rounded-alan border p-3 text-left transition-colors disabled:cursor-not-allowed motion-reduce:transition-none ${
+                form.anaAmac === g ? 'border-brand bg-vurgu' : 'border-line-strong hover:bg-surface-sunken'
               }`}
             >
-              <span className="block text-sm font-semibold text-ink">{GOAL_META[g].label}</span>
-              <span className="mt-0.5 block text-xs text-ink-muted">{GOAL_META[g].promise}</span>
+              <span className="block text-13 font-bold text-ink">{GOAL_META[g].label}</span>
+              <span className="mt-0.5 block text-12 text-ink-muted">{GOAL_META[g].promise}</span>
             </button>
           ))}
         </div>
-      </Alan>
+      </Grup>
 
       <ListeAlani
         etiket="Ürün ve hizmet kategorileri"
@@ -241,13 +265,16 @@ export function MarkaSekmesi({ clientId, canWrite }: { clientId: string; canWrit
       />
 
       <Alan etiket="Üslup" ipucu="Reklam metninin tonu. Örn. Güven veren, sade, kurumsal">
-        <input
-          value={form.uslup}
-          onChange={(e) => degis('uslup', e.target.value)}
-          maxLength={MARKA_SINIRLARI.uslup}
-          disabled={kapali}
-          className={girdi}
-        />
+        {(id, aciklamaId) => (
+          <Girdi
+            id={id}
+            aria-describedby={aciklamaId}
+            value={form.uslup}
+            onChange={(e) => degis('uslup', e.target.value)}
+            maxLength={MARKA_SINIRLARI.uslup}
+            disabled={kapali}
+          />
+        )}
       </Alan>
 
       <ListeAlani
@@ -272,64 +299,60 @@ export function MarkaSekmesi({ clientId, canWrite }: { clientId: string; canWrit
         etiket="Zorunlu yasal uyarı"
         ipucu="Doluysa her Meta reklamının ana metninin sonuna eklenir ve metinde yoksa reklam yayınlanmaz. Örn. sağlık, finans, konut sektörlerindeki zorunlu cümle."
       >
-        <textarea
-          value={form.yasalUyari}
-          onChange={(e) => degis('yasalUyari', e.target.value)}
-          rows={2}
-          maxLength={MARKA_SINIRLARI.yasalUyari}
-          disabled={kapali}
-          className={girdi}
-        />
+        {(id, aciklamaId) => (
+          <MetinAlani
+            id={id}
+            aria-describedby={aciklamaId}
+            value={form.yasalUyari}
+            onChange={(e) => degis('yasalUyari', e.target.value)}
+            rows={2}
+            maxLength={MARKA_SINIRLARI.yasalUyari}
+            disabled={kapali}
+            className="min-h-0"
+          />
+        )}
       </Alan>
 
       <CalismaSaatleriAlani saatler={form.calismaSaatleri} kapali={kapali} degis={(v) => degis('calismaSaatleri', v)} />
 
       <Alan etiket="Ek notlar" ipucu="Kaçınılacak ifadeler, dikkat edilecek şeyler.">
-        <textarea
-          value={form.markaBilgileri}
-          onChange={(e) => degis('markaBilgileri', e.target.value)}
-          rows={3}
-          maxLength={2000}
-          disabled={kapali}
-          className={girdi}
-        />
+        {(id, aciklamaId) => (
+          <MetinAlani
+            id={id}
+            aria-describedby={aciklamaId}
+            value={form.markaBilgileri}
+            onChange={(e) => degis('markaBilgileri', e.target.value)}
+            rows={3}
+            maxLength={2000}
+            disabled={kapali}
+          />
+        )}
       </Alan>
 
-      {kayitHatasi && <Uyari ton="tehlike">{kayitHatasi}</Uyari>}
-
-      {canWrite ? (
-        <div className="flex items-center gap-3">
-          <Dugme onClick={() => void kaydet()} bekliyor={busy}>
-            Kaydet
-          </Dugme>
-          {kaydedildi && (
-            <span role="status" className="text-xs text-ok-strong">
-              Kaydedildi.
-            </span>
-          )}
-        </div>
-      ) : (
-        <p className="text-xs text-ink-muted">Bu bilgileri düzenleme yetkin yok.</p>
+      {kayitHatasi && (
+        <Serit ton="hata" baslik="Kaydedilemedi.">
+          {kayitHatasi}
+        </Serit>
       )}
     </div>
+    </Kart>
   );
 }
 
-function Alan({
-  etiket,
-  ipucu,
-  children,
-}: {
-  etiket: string;
-  ipucu?: string;
-  children: React.ReactNode;
-}) {
+/**
+ * BİRDEN ÇOK DENETİMLİ ALAN (seçim kartları, liste, gün satırları): ortak
+ * `Alan` bir `<label for>` çiziyor ve tek bir girdiye bağlanıyor; burada
+ * bağlanacak tek girdi yok. Aynı görünüş (13 kalın etiket, 12 gri ipucu)
+ * `fieldset` + `legend` ile; ekran okuyucu grubun adını okuyor.
+ * (Grup 3 sapması: ortak bileşende grup alanı yok.)
+ */
+function Grup({ etiket, ipucu, children }: { etiket: string; ipucu?: string; children: ReactNode }) {
   return (
-    <div className="block space-y-1">
-      <span className="block text-xs font-medium text-ink">{etiket}</span>
+    <fieldset className="m-0 grid min-w-0 gap-1.5 border-0 p-0">
+      <legend className="mb-1.5 p-0 text-13 font-semibold text-ink">{etiket}</legend>
       {children}
-      {ipucu && <span className="block text-[11px] text-ink-muted">{ipucu}</span>}
-    </div>
+      {ipucu && <small className="text-12 text-ink-muted">{ipucu}</small>}
+    </fieldset>
   );
 }
 
@@ -369,13 +392,13 @@ function ListeAlani({
   }
 
   return (
-    <Alan etiket={`${etiket} (${degerler.length}/${sinir.adet})`} ipucu={ipucu}>
+    <Grup etiket={`${etiket} (${degerler.length}/${sinir.adet})`} ipucu={ipucu}>
       {degerler.length > 0 && (
         <ul className="flex flex-wrap gap-1.5">
           {degerler.map((d) => (
             <li
               key={d}
-              className="inline-flex items-center gap-1 rounded-full bg-surface-sunken px-2.5 py-1 text-xs text-ink"
+              className="inline-flex h-[30px] items-center gap-1.5 rounded-full bg-surface-sunken px-3 text-[12.5px] font-semibold text-ink"
             >
               {d}
               {!kapali && (
@@ -383,9 +406,9 @@ function ListeAlani({
                   type="button"
                   onClick={() => degis(degerler.filter((x) => x !== d))}
                   aria-label={`${d} kaldır`}
-                  className="text-ink-muted hover:text-danger"
+                  className="-mr-1 inline-flex h-5 w-5 items-center justify-center rounded-full text-ink-muted hover:bg-surface hover:text-ink"
                 >
-                  ×
+                  ✕
                 </button>
               )}
             </li>
@@ -394,7 +417,7 @@ function ListeAlani({
       )}
       {!kapali && !dolu && (
         <div className="flex gap-2">
-          <input
+          <Girdi
             value={yeni}
             onChange={(e) => setYeni(e.target.value)}
             onKeyDown={(e) => {
@@ -405,7 +428,7 @@ function ListeAlani({
             }}
             maxLength={sinir.uzunluk}
             placeholder="Yaz ve Enter’a bas"
-            className={girdi}
+            aria-label={`${etiket}: yeni öğe`}
           />
           <Dugme ton="ikincil" boyut="kucuk" onClick={ekle} disabled={!yeni.trim()}>
             Ekle
@@ -413,10 +436,14 @@ function ListeAlani({
         </div>
       )}
       {dolu && !kapali && (
-        <span className="block text-[11px] text-ink-muted">Sınıra ulaşıldı: en fazla {sinir.adet}.</span>
+        <span className="block text-12 text-ink-muted">Sınıra ulaşıldı: en fazla {sinir.adet}.</span>
       )}
-      {uyari && <span className="block text-[11px] text-warn-strong">{uyari}</span>}
-    </Alan>
+      {uyari && (
+        <span role="alert" className="block text-12 text-danger-strong">
+          {uyari}
+        </span>
+      )}
+    </Grup>
   );
 }
 
@@ -462,31 +489,27 @@ function SayfaListesi({
   }
 
   return (
-    <Alan
+    <Grup
       etiket={`Sık kullanılan sayfalar (${sayfalar.length}/${s.adet})`}
       ipucu="Reklamın gideceği sayfalar. AdvCampaign hedef adresi bu listeden seçer."
     >
       {sayfalar.length > 0 && (
-        <ul className="divide-y divide-line rounded-lg border border-line">
+        <ul className="m-0 list-none divide-y divide-line rounded-alan border border-line p-0">
           {sayfalar.map((p) => (
-            <li key={p.url} className="flex items-center gap-3 px-3 py-2 text-sm">
-              <span className="w-32 shrink-0 truncate font-medium text-ink">{p.ad}</span>
+            <li key={p.url} className="flex items-center gap-3 px-3 py-2 text-13">
+              <span className="w-32 shrink-0 truncate font-semibold text-ink">{p.ad}</span>
               <a
                 href={p.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="min-w-0 flex-1 truncate text-xs text-brand-strong hover:underline"
+                className="min-w-0 flex-1 truncate text-12 text-ink-muted hover:text-brand-strong hover:underline"
               >
                 {p.url}
               </a>
               {!kapali && (
-                <button
-                  type="button"
-                  onClick={() => degis(sayfalar.filter((x) => x.url !== p.url))}
-                  className="text-xs text-ink-muted hover:text-danger"
-                >
+                <Dugme ton="hayalet" boyut="kucuk" onClick={() => degis(sayfalar.filter((x) => x.url !== p.url))}>
                   Kaldır
-                </button>
+                </Dugme>
               )}
             </li>
           ))}
@@ -494,14 +517,16 @@ function SayfaListesi({
       )}
       {!kapali && !dolu && (
         <div className="grid gap-2 sm:grid-cols-[10rem_1fr_auto]">
-          <input
+          <Girdi
             value={ad}
             onChange={(e) => setAd(e.target.value)}
             maxLength={s.ad}
             placeholder="Ad (örn. Projeler)"
-            className={girdi}
+            aria-label="Sayfa adı"
           />
-          <input
+          <Girdi
+            aria-label="Sayfa adresi"
+            hatali={hata !== null}
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             onBlur={() => {
@@ -510,15 +535,18 @@ function SayfaListesi({
             maxLength={s.url}
             placeholder="https://…"
             inputMode="url"
-            className={girdi}
           />
           <Dugme ton="ikincil" boyut="kucuk" onClick={ekle} disabled={!ad.trim() || !url.trim()}>
             Ekle
           </Dugme>
         </div>
       )}
-      {hata && <span className="block text-[11px] text-danger-strong">{hata}</span>}
-    </Alan>
+      {hata && (
+        <span role="alert" className="block text-12 text-danger-strong">
+          {hata}
+        </span>
+      )}
+    </Grup>
   );
 }
 
@@ -546,16 +574,16 @@ function CalismaSaatleriAlani({
     degis(CALISMA_GUNLERI.flatMap((gg) => yeni.filter((x) => x.gun === gg)));
   };
   return (
-    <Alan
+    <Grup
       etiket="Çalışma saatleri"
       ipucu="Telefonla aranmak istediğin saatler. Google arama düğmesini yalnız bu saatlerde gösterir; boş bırakırsan her saatte gösterir. Meta'da saat sınırı uygulanamıyor."
     >
-      <ul className="divide-y divide-line rounded-lg border border-line">
+      <ul className="m-0 list-none divide-y divide-line rounded-alan border border-line p-0">
         {CALISMA_GUNLERI.map((g) => {
           const a = gunun(g);
           const hata = a ? calismaAraligiSchema.safeParse(a) : null;
           return (
-            <li key={g} className="flex flex-wrap items-center gap-3 px-3 py-2 text-sm">
+            <li key={g} className="flex flex-wrap items-center gap-3 px-3 py-2 text-13">
               <label className="flex w-32 shrink-0 items-center gap-2 text-ink">
                 <input
                   type="checkbox"
@@ -567,36 +595,38 @@ function CalismaSaatleriAlani({
               </label>
               {a ? (
                 <span className="flex items-center gap-2">
-                  <input
+                  <Girdi
                     type="time"
                     step={900}
                     value={a.acilis}
                     disabled={kapali}
                     onChange={(e) => yaz(g, { ...a, acilis: e.target.value })}
                     aria-label={`${GUN_ADI[g]} açılış`}
-                    className={`${girdi} w-28`}
+                    className="w-28"
                   />
                   <span className="text-ink-muted">-</span>
-                  <input
+                  <Girdi
                     type="time"
                     step={900}
                     value={a.kapanis === '24:00' ? '23:59' : a.kapanis}
                     disabled={kapali}
                     onChange={(e) => yaz(g, { ...a, kapanis: e.target.value === '23:59' ? '24:00' : e.target.value })}
                     aria-label={`${GUN_ADI[g]} kapanış`}
-                    className={`${girdi} w-28`}
+                    className="w-28"
                   />
                 </span>
               ) : (
-                <span className="text-xs text-ink-muted">Kapalı</span>
+                <span className="text-12 text-ink-muted">Kapalı</span>
               )}
               {hata && !hata.success && (
-                <span className="basis-full text-[11px] text-danger-strong">{hata.error.issues[0]?.message}</span>
+                <span role="alert" className="basis-full text-12 text-danger-strong">
+                  {hata.error.issues[0]?.message}
+                </span>
               )}
             </li>
           );
         })}
       </ul>
-    </Alan>
+    </Grup>
   );
 }

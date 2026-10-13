@@ -160,7 +160,7 @@ export function YouTubeKanalBul({
             onChange={(e) => setQ(e.target.value)}
             placeholder="Firma ya da kanal adı"
             maxLength={80}
-            className="h-8 w-full rounded-lg border border-line bg-surface px-2.5 text-sm focus-visible:border-brand focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand/30"
+            className="h-8 w-full rounded-alan border border-line-strong bg-surface px-2.5 text-13 text-ink placeholder:text-ink-soluk"
           />
         </label>
         <Dugme
@@ -173,7 +173,7 @@ export function YouTubeKanalBul({
           YouTube’da ara
         </Dugme>
       </form>
-      <p className="text-[11px] text-ink-muted">
+      <p className="text-12 text-ink-muted">
         {clientId
           ? 'Öneriler workspace sitesinden ve Google Ads geçmişinden gelir. İsimle arama YouTube kotasını kullanır; aynı arama 24 saat önbellekte tutulur.'
           : 'İsimle arama YouTube kotasını kullanır; aynı arama 24 saat önbellekte tutulur.'}
@@ -181,8 +181,10 @@ export function YouTubeKanalBul({
 
       {bildirim && (
         <p
-          className={`rounded-lg border px-3 py-2 text-sm ${
-            bildirim.ton === 'ok' ? 'border-ok/40 bg-ok-soft text-ok-strong' : 'border-danger/40 bg-danger-soft text-danger-strong'
+          /* Şerit dili (BILESENLER § 2): beyaz zemin, sol çizgi; yeşil zemin
+             kılavuzda yok, başarı gri çizgiyle, hata kırmızı çizgiyle. */
+          className={`m-0 rounded-alan border border-l-4 border-line bg-surface px-3 py-2 text-13 text-ink ${
+            bildirim.ton === 'ok' ? 'border-l-ink-soluk' : 'border-l-danger'
           }`}
           aria-live="polite"
         >
@@ -196,7 +198,7 @@ export function YouTubeKanalBul({
         </p>
       )}
       {durum.tur === 'hata' && (
-        <p className="rounded-lg border border-danger/40 bg-danger-soft px-3 py-2 text-sm text-danger-strong">
+        <p role="alert" className="m-0 rounded-alan border border-l-4 border-line border-l-danger bg-surface px-3 py-2 text-13 text-ink">
           {durum.ne === 'oneri' ? 'Öneriler alınamadı: ' : 'Arama yapılamadı: '}
           {durum.mesaj}
         </p>
@@ -222,7 +224,7 @@ export function YouTubeKanalBul({
           )}
           {/* BOŞ LİSTE NEDENİNİ SÖYLÜYOR: notlar her kaynağın ne olduğunu yazıyor. */}
           {durum.veri.notlar.length > 0 && (
-            <ul className="space-y-0.5 text-[11px] text-ink-muted">
+            <ul className="space-y-0.5 text-12 text-ink-muted">
               {durum.veri.notlar.map((n) => (
                 <li key={n}>· {n}</li>
               ))}
@@ -256,7 +258,7 @@ function OneriSatiri({
           ? 'Zaten havuzda.'
           : null;
   return (
-    <li className="flex items-start gap-3 rounded-lg border border-line bg-surface p-2.5">
+    <li className="flex items-start gap-3 rounded-alan border border-line bg-surface p-2.5">
       {k.thumbnailUrl ? (
         // eslint-disable-next-line @next/next/no-img-element -- YouTube görseli, Next görsel iyileştiricisinden geçmiyor
         <img src={k.thumbnailUrl} alt="" className="h-10 w-10 shrink-0 rounded-full object-cover" />
@@ -285,10 +287,10 @@ function OneriSatiri({
         </p>
         <ul className="mt-1 space-y-0.5">
           {k.kaynaklar.map((x) => (
-            <li key={x.tur + x.aciklama} className="text-[11px] text-ink-muted">
+            <li key={x.tur + x.aciklama} className="text-12 text-ink-muted">
               <span
                 className={`mr-1 rounded px-1 py-px font-medium ${
-                  x.tur === 'arama' ? 'bg-surface-sunken text-ink-muted' : 'bg-ok-soft text-ok-strong'
+                  x.tur === 'arama' ? 'bg-surface-sunken text-ink-muted' : 'bg-ink text-surface'
                 }`}
               >
                 {KAYNAK_ETIKETI[x.tur]}
@@ -297,9 +299,9 @@ function OneriSatiri({
             </li>
           ))}
         </ul>
-        {engel && <p className="mt-1 text-[11px] font-medium text-ink-muted">{engel}</p>}
+        {engel && <p className="mt-1 text-12 font-medium text-ink-muted">{engel}</p>}
       </div>
-      <Dugme boyut="kucuk" bekliyor={bekliyor} disabled={kapali || engel !== null} onClick={onSec}>
+      <Dugme ton="koyu" boyut="kucuk" bekliyor={bekliyor} disabled={kapali || engel !== null} onClick={onSec}>
         {workspaceVar ? 'Bu kanal' : 'Havuza ekle'}
       </Dugme>
     </li>

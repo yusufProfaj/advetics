@@ -1,9 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Platform, Sinyal, SinyalListesi, SinyalUygulamaSonucu } from '@advetics/shared';
-import { PLATFORM_KISA_ADLARI, SINYAL_SAYFA_BOYUTU, SINYAL_TURU_ADI } from '@advetics/shared';
+import { PLATFORM_KISA_ADLARI, SINYAL_DURUM_ADI, SINYAL_SAYFA_BOYUTU, SINYAL_TURU_ADI } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { formatRelative } from '@/lib/format';
 import {
@@ -29,18 +29,29 @@ import {
 } from '@/lib/sinyal';
 import { hesaplarAdresi } from '@/lib/panel-adresleri';
 import { SinyalDurdurPenceresi, SinyalKapatPenceresi } from './sinyal-pencereleri';
-import i from '@/components/taslak/iyilestir.module.css';
-import s from '@/components/taslak/taslak.module.css';
+import { Dugme, dugmeSinifi } from '@/components/ui/dugme';
+import { Kart } from '@/components/ui/kart';
+import { MetrikKutulari } from '@/components/ui/metrik-kutulari';
+import { AracCubugu, Tablo } from '@/components/ui/tablo';
+import { BolumluSecici } from '@/components/ui/sekmeler';
+import { DurumNoktasi, Rozet, type DurumHali } from '@/components/ui/rozet';
+import { BosDurum, HataDurumu, Serit, Yukleniyor } from '@/components/ui/hal';
+import { AcilirMenu, IKON_TETIK, MenuAyraci, MenuOgesi } from '@/components/ui/acilir-menu';
+import { Ikon } from '@/components/ui/ikon';
 
 /** Satırın çıkış geçişi; taslakta 300 ms. */
 const CIKIS_MS = 300;
 
-const NOKTA: Record<Nokta, string> = { yesil: i.sNoktaYesil, gri: i.sNoktaGri, kirmizi: i.sNoktaKirmizi };
+/** Hesap durumu noktası → ortak durum noktası. Yeşil YALNIZ "hesaplandı" (`hesapDurumu`). */
+const NOKTA: Record<Nokta, DurumHali> = { yesil: 'ok', gri: 'taslak', kirmizi: 'hata' };
+
+/** Sinyal durumu → rozet. Açık sinyal kırmızı (bir şey ters gidiyor), kapalılar gri. */
+const DURUM_HALI: Record<Sinyal['durum'], DurumHali> = { acik: 'hata', kapatildi: 'dur', kendiliginden_kapandi: 'taslak' };
 
 /**
  * ═══ İYİLEŞTİR › SİNYALLER (Paket A, taslak `docs/sinyal/taslak.html`) ═══
  *
- * "Bir şey ters gidince" listesi: özet şeridi, süzgeçler, satırlar, hesap
+ * "Bir şey ters gidince" listesi: özet kutuları, süzgeçler, tablo, hesap
  * başına durum ve "kontrol edilmeyenler". Kararlar `lib/sinyal.ts`te ve
  * çalıştırılarak sınanıyor; burada yalnız çizim ve istek.
  *
@@ -167,126 +178,187 @@ export function SinyallerSekmesi({
   }
 
   const hal = sinyalKutuHali(sonuc);
+  const platformlar = sonListe ? platformCipleri(sonListe) : [];
 
   return (
     <>
-      {sonListe && <OzetSeridi liste={sonListe} gorunum={gorunum} />}
+      {sonListe && <OzetKutulari liste={sonListe} gorunum={gorunum} />}
 
       {sonuc?.durum === 'tamam' && sonuc.liste.hatalar.length > 0 && (
-        <div className={`${s.bildirim} ${s.tehlike}`} role="alert">
-          <span className={s.bildirimIkon} aria-hidden>
-            !
-          </span>
-          <span className={s.bildirimMetin}>
-            <strong>Bazı kaynaklar okunamadı; liste eksik olabilir.</strong>{' '}
-            {sonuc.liste.hatalar.map((h) => `${h.kaynak}: ${h.mesaj}`).join(' · ')}
-          </span>
-        </div>
+        <Serit ton="hata" baslik="Bazı kaynaklar okunamadı; liste eksik olabilir.">
+          {sonuc.liste.hatalar.map((h) => `${h.kaynak}: ${h.mesaj}`).join(' · ')}
+        </Serit>
       )}
 
-      <div className={s.kart}>
-        <div className={s.kartUst}>
-          <h2>Bir şey ters gidince</h2>
-          <div className={i.cipler} style={{ marginLeft: 'auto' }} role="group" aria-label="Açık ya da kapalı">
-            <button type="button" className={i.cip} aria-pressed={gorunum === 'acik'} onClick={() => suz({ gorunum: 'acik' })}>
-              Açık
-              {sonListe && <span className={i.say}>{sonListe.sayilar.acik}</span>}
-            </button>
-            <button type="button" className={i.cip} aria-pressed={gorunum === 'kapali'} onClick={() => suz({ gorunum: 'kapali' })}>
-              Kapalı
-              {sonListe && (
-                <span className={i.say}>{sonListe.sayilar.kapatildi + sonListe.sayilar.kendiliginden_kapandi}</span>
-              )}
-            </button>
-          </div>
-        </div>
-
-        <div className={i.sArac} role="group" aria-label="Süzgeç">
-          <span className={i.sEtk}>Süzgeç</span>
-          <button type="button" className={i.cip} aria-pressed={tur === null} onClick={() => suz({ tur: null })}>
-            Tümü
-          </button>
-          {(['anomali', 'saglik'] as const).map((t) => (
-            <button key={t} type="button" className={i.cip} aria-pressed={tur === t} onClick={() => suz({ tur: t })}>
-              {SINYAL_TURU_ADI[t]}
-            </button>
-          ))}
-          {sonListe && platformCipleri(sonListe).length > 0 && (
-            <>
-              <span className={i.sAyrac} />
-              <span className={i.sEtk}>Platform</span>
-              <button type="button" className={i.cip} aria-pressed={platform === null} onClick={() => suz({ platform: null })}>
-                Hepsi
-              </button>
-              {platformCipleri(sonListe).map((p) => (
-                <button key={p} type="button" className={i.cip} aria-pressed={platform === p} onClick={() => suz({ platform: p })}>
-                  {PLATFORM_KISA_ADLARI[p]}
-                </button>
-              ))}
-            </>
+      <Kart
+        dolgu={false}
+        baslik="Bir şey ters gidince"
+        eylem={
+          <BolumluSecici
+            etiket="Açık ya da kapalı"
+            secili={gorunum}
+            onSec={(g) => suz({ gorunum: g })}
+            secenekler={[
+              {
+                deger: 'acik' as const,
+                etiket: (
+                  <>
+                    Açık
+                    {sonListe && <span className="ml-1.5 tabular-nums text-ink-muted">{sonListe.sayilar.acik}</span>}
+                  </>
+                ),
+              },
+              {
+                deger: 'kapali' as const,
+                etiket: (
+                  <>
+                    Kapalı
+                    {sonListe && (
+                      <span className="ml-1.5 tabular-nums text-ink-muted">
+                        {sonListe.sayilar.kapatildi + sonListe.sayilar.kendiliginden_kapandi}
+                      </span>
+                    )}
+                  </>
+                ),
+              },
+            ]}
+          />
+        }
+      >
+        {/*
+         * SÜZGEÇLER tablonun üstünde. Tür ve platform küçük, sabit kümeler
+         * (2-4 seçenek): uygulanmış süzgeç çipi (`Cip` ✕) yerine bölümlü
+         * seçici, çünkü "Tümü" her an bir tıkla geri dönülebilen bir görünüm.
+         */}
+        <AracCubugu
+          sag={
+            sonuc?.durum === 'tamam' && (
+              <span className="text-12 text-ink-muted">
+                {sonuc.liste.toplam} sinyalden {sonuc.liste.sinyaller.length} tanesi gösteriliyor
+              </span>
+            )
+          }
+        >
+          <BolumluSecici
+            etiket="Süzgeç"
+            secili={tur ?? 'hepsi'}
+            onSec={(t) => suz({ tur: t === 'hepsi' ? null : t })}
+            secenekler={[
+              { deger: 'hepsi' as const, etiket: 'Tümü' },
+              ...(['anomali', 'saglik'] as const).map((t) => ({ deger: t, etiket: SINYAL_TURU_ADI[t] })),
+            ]}
+          />
+          {platformlar.length > 0 && (
+            <BolumluSecici
+              etiket="Platform"
+              secili={platform ?? 'hepsi'}
+              onSec={(p) => suz({ platform: p === 'hepsi' ? null : p })}
+              secenekler={[
+                { deger: 'hepsi' as const, etiket: 'Hepsi' },
+                ...platformlar.map((p) => ({ deger: p, etiket: PLATFORM_KISA_ADLARI[p] })),
+              ]}
+            />
           )}
-        </div>
+        </AracCubugu>
 
         {sonuc?.durum === 'tamam' && sonuc.liste.sessizKosum && hal === 'dolu' && (
-          <div className={i.sBant} role="status">
-            <b>{OLCUM_DONEMI_METNI.baslik}.</b> {OLCUM_DONEMI_METNI.bant}
+          <div className="px-4 pt-4">
+            <Serit ton="bilgi" baslik={`${OLCUM_DONEMI_METNI.baslik}.`}>
+              {OLCUM_DONEMI_METNI.bant}
+            </Serit>
           </div>
         )}
 
         {hal === 'yukleniyor' && (
-          <div className={i.sYukleniyor} aria-busy="true" aria-label="Sinyaller yükleniyor">
-            <i style={{ width: '60%' }} />
-            <i style={{ width: '80%' }} />
-            <i style={{ width: '45%' }} />
+          <div className="p-4">
+            <Yukleniyor etiket="Sinyaller yükleniyor" />
           </div>
         )}
 
         {sonuc?.durum === 'hata' && (
-          <div className={i.sHataKutu} role="alert">
-            <b>Sinyaller alınamadı.</b> Sunucunun cevabı: {sonuc.mesaj}{' '}
-            <button type="button" className={i.metin} onClick={() => void yukle(sorgu.current)}>
-              Yeniden dene
-            </button>
+          <div className="p-4">
+            <HataDurumu
+              baslik="Sinyaller alınamadı."
+              mesaj={<>Sunucunun cevabı: {sonuc.mesaj}</>}
+              onTekrar={() => void yukle(sorgu.current)}
+            />
           </div>
         )}
 
         {hal === 'olcum_donemi' && (
-          <div className={i.sBos}>
-            <b>{OLCUM_DONEMI_METNI.baslik}</b>
-            <p>{OLCUM_DONEMI_METNI.bos}</p>
+          <div className="p-4">
+            <BosDurum baslik={OLCUM_DONEMI_METNI.baslik} neden={OLCUM_DONEMI_METNI.bos} />
           </div>
         )}
 
-        {hal === 'bos' && sonuc?.durum === 'tamam' && (
-          <BosKutu
-            liste={sonuc.liste}
-            gorunum={gorunum}
-            clientId={clientId}
-            onTemizle={() => suz({ tur: null, platform: null })}
-            onKapali={() => suz({ gorunum: 'kapali' })}
+        {/* BOŞ ve DOLU aynı tablodan: satır yoksa `bos` (NEDENİYLE), sayfalama her iki hâlde. */}
+        {(hal === 'bos' || hal === 'dolu') && sonuc?.durum === 'tamam' && (
+          <Tablo<Sinyal>
+            etiket="Sinyaller"
+            satirlar={hal === 'dolu' ? sonuc.liste.sinyaller : []}
+            satirAnahtari={(sg) => sg.id}
+            bos={
+              hal === 'bos' ? (
+                <BosKutu
+                  liste={sonuc.liste}
+                  gorunum={gorunum}
+                  clientId={clientId}
+                  onTemizle={() => suz({ tur: null, platform: null })}
+                  onKapali={() => suz({ gorunum: 'kapali' })}
+                />
+              ) : undefined
+            }
+            sutunlar={[
+              {
+                anahtar: 'sinyal',
+                baslik: 'Sinyal',
+                hucre: (sg) => (
+                  <Cikis gidiyor={gidenler.has(sg.id)}>
+                    <SinyalHucresi sinyal={sg} yetki={yetki} hata={satirHatalari[sg.id] ?? null} />
+                  </Cikis>
+                ),
+              },
+              {
+                anahtar: 'gecmis',
+                baslik: 'Geçmiş',
+                ikincil: true,
+                hucre: (sg) => (
+                  <Cikis gidiyor={gidenler.has(sg.id)}>
+                    <MiniGrafik sinyal={sg} />
+                  </Cikis>
+                ),
+              },
+              {
+                anahtar: 'durum',
+                baslik: 'Durum',
+                hucre: (sg) => (
+                  <Cikis gidiyor={gidenler.has(sg.id)}>
+                    <DurumRozeti sinyal={sg} />
+                  </Cikis>
+                ),
+              },
+              {
+                anahtar: 'eylem',
+                baslik: <span className="sr-only">Eylemler</span>,
+                sayi: true,
+                hucre: (sg) => (
+                  <Cikis gidiyor={gidenler.has(sg.id)}>
+                    <SatirEylemleri
+                      sinyal={sg}
+                      yetki={yetki}
+                      geriAciliyor={geriAcilan === sg.id}
+                      onDurdur={() => setDurdurulacak(sg)}
+                      onKapat={() => setKapatilacak(sg)}
+                      onGeriAc={() => void geriAc(sg)}
+                    />
+                  </Cikis>
+                ),
+              },
+            ]}
+            sayfalama={sayfalamaBilgisi(sonuc.liste, sayfa, (n) => suz({ sayfa: n }))}
           />
         )}
-
-        {hal === 'dolu' &&
-          sonuc?.durum === 'tamam' &&
-          sonuc.liste.sinyaller.map((sg) => (
-            <SinyalSatiri
-              key={sg.id}
-              sinyal={sg}
-              yetki={yetki}
-              gidiyor={gidenler.has(sg.id)}
-              hata={satirHatalari[sg.id] ?? null}
-              geriAciliyor={geriAcilan === sg.id}
-              onDurdur={() => setDurdurulacak(sg)}
-              onKapat={() => setKapatilacak(sg)}
-              onGeriAc={() => void geriAc(sg)}
-            />
-          ))}
-
-        {sonuc?.durum === 'tamam' && (
-          <Sayfalama liste={sonuc.liste} sayfa={sayfa} onSayfa={(n) => suz({ sayfa: n })} />
-        )}
-      </div>
+      </Kart>
 
       {sonListe && <HesaplarKarti liste={sonListe} />}
 
@@ -296,33 +368,38 @@ export function SinyallerSekmesi({
   );
 }
 
-function OzetSeridi({ liste, gorunum }: { liste: SinyalListesi; gorunum: SinyalGorunumu }) {
+/**
+ * SATIRIN ÇIKIŞ GEÇİŞİ hücre içeriğinde: `Tablo` satıra sınıf vermiyor
+ * (ortak bileşen). Kapatılan satır 300 ms'de soluyor, sonra liste sunucudan
+ * tazelenip satır düşüyor. Hareket azaltılmışsa geçiş yok.
+ */
+function Cikis({ gidiyor, children }: { gidiyor: boolean; children: ReactNode }) {
+  return (
+    <div className={`transition-opacity duration-300 motion-reduce:transition-none ${gidiyor ? 'opacity-0' : ''}`}>{children}</div>
+  );
+}
+
+function OzetKutulari({ liste, gorunum }: { liste: SinyalListesi; gorunum: SinyalGorunumu }) {
   const o = sinyalOzeti(liste, gorunum);
   return (
-    <div className={s.kart}>
-      <div className={i.ozet}>
-        <div className={i.vurgu}>
-          <small>Açık sinyal</small>
-          <b className={s.num}>{o.acik}</b>
-          <em>{o.yuksek === null ? 'önem dağılımı listede' : o.yuksek > 0 ? `${o.yuksek} yüksek önemli` : 'yüksek önemli yok'}</em>
-        </div>
-        <div>
-          <small>Kapatılan</small>
-          <b className={s.num}>{o.kapatildi}</b>
-          <em>elle ya da durdurularak</em>
-        </div>
-        <div>
-          <small>Kendiliğinden kapanan</small>
-          <b className={s.num}>{o.kendiliginden}</b>
-          <em>koşul bir daha görülmedi</em>
-        </div>
-        <div>
-          <small>Son değerlendirme</small>
-          <b className={s.num}>{o.sonHesaplama ? formatRelative(o.sonHesaplama) : 'hiç'}</b>
-          <em>dünün verisiyle, hesap başına</em>
-        </div>
-      </div>
-    </div>
+    <MetrikKutulari
+      kutular={[
+        {
+          anahtar: 'acik',
+          ad: 'Açık sinyal',
+          deger: o.acik,
+          ipucu: o.yuksek === null ? 'önem dağılımı listede' : o.yuksek > 0 ? `${o.yuksek} yüksek önemli` : 'yüksek önemli yok',
+        },
+        { anahtar: 'kapatildi', ad: 'Kapatılan', deger: o.kapatildi, ipucu: 'elle ya da durdurularak' },
+        { anahtar: 'kendiliginden', ad: 'Kendiliğinden kapanan', deger: o.kendiliginden, ipucu: 'koşul bir daha görülmedi' },
+        {
+          anahtar: 'son',
+          ad: 'Son değerlendirme',
+          deger: o.sonHesaplama ? formatRelative(o.sonHesaplama) : 'hiç',
+          ipucu: 'dünün verisiyle, hesap başına',
+        },
+      ]}
+    />
   );
 }
 
@@ -341,33 +418,140 @@ function BosKutu({
 }) {
   const b = bosMetni(liste, gorunum);
   return (
-    <div className={i.sBos}>
-      <b>{b.baslik}</b>
-      <p>{b.metin}</p>
-      {b.eylem === 'suzgeci_temizle' && (
-        <button type="button" className={i.ikincil} onClick={onTemizle}>
-          Süzgeci temizle
-        </button>
-      )}
-      {b.eylem === 'kapaliya_bak' && (
-        <button type="button" className={i.ikincil} onClick={onKapali}>
-          Kapalı sinyaller
-        </button>
-      )}
-      {b.eylem === 'hesap_ata' && (
-        <Link className={i.ikincil} href={hesaplarAdresi(clientId)}>
-          Hesap ata
-        </Link>
-      )}
+    <BosDurum
+      baslik={b.baslik}
+      neden={b.metin}
+      eylem={
+        <>
+          {b.eylem === 'suzgeci_temizle' && (
+            <Dugme ton="ikincil" boyut="kucuk" onClick={onTemizle}>
+              Süzgeci temizle
+            </Dugme>
+          )}
+          {b.eylem === 'kapaliya_bak' && (
+            <Dugme ton="ikincil" boyut="kucuk" onClick={onKapali}>
+              Kapalı sinyaller
+            </Dugme>
+          )}
+          {b.eylem === 'hesap_ata' && (
+            <Link className={dugmeSinifi('ikincil', 'kucuk')} href={hesaplarAdresi(clientId)}>
+              Hesap ata
+            </Link>
+          )}
+        </>
+      }
+    />
+  );
+}
+
+/** Önem ikonu: yüksek kırmızı tonlu, orta çerçeveli, sağlık gri. Renk tek başına anlam taşımıyor (etiket). */
+function OnemIkonu({ sinyal }: { sinyal: Sinyal }) {
+  const taban = 'font-baslik grid h-[26px] w-[26px] shrink-0 place-items-center rounded-full text-13 font-extrabold';
+  if (sinyal.tur === 'saglik') {
+    return (
+      <span className={`${taban} bg-surface-sunken text-ink`} aria-label="Sağlık">
+        +
+      </span>
+    );
+  }
+  return sinyal.onem === 'yuksek' ? (
+    <span className={`${taban} bg-vurgu text-danger-strong`} aria-label="Yüksek önem">
+      !
+    </span>
+  ) : (
+    <span className={`${taban} border-2 border-ink text-ink`} aria-label="Orta önem">
+      !
+    </span>
+  );
+}
+
+/**
+ * Kapalı sinyalin KAPANIŞ rozeti ("Kapatıldı · Yusuf") Durum sütununda; aynı
+ * metin ilk hücrede ikinci kez yazılmasın diye oradan düşülüyor.
+ * `sinyalRozetleri` kapanış rozetini her zaman SONA koyuyor.
+ */
+function rozetleriAyir(sg: Sinyal) {
+  const hepsi = sinyalRozetleri(sg);
+  const kapanis = sg.durum !== 'acik' ? (hepsi.at(-1) ?? null) : null;
+  return { ust: kapanis ? hepsi.slice(0, -1) : hepsi, kapanis };
+}
+
+function DurumRozeti({ sinyal }: { sinyal: Sinyal }) {
+  const { kapanis } = rozetleriAyir(sinyal);
+  return <Rozet hal={DURUM_HALI[sinyal.durum]}>{kapanis?.metin ?? SINYAL_DURUM_ADI[sinyal.durum]}</Rozet>;
+}
+
+function SinyalHucresi({
+  sinyal,
+  yetki,
+  hata,
+}: {
+  sinyal: Sinyal;
+  yetki: { butce: boolean; kural: boolean };
+  hata: string | null;
+}) {
+  const e = satirEylemi(sinyal, yetki);
+  const kanit = sinyalKaniti(sinyal);
+  const yol = sinyalYolu(sinyal);
+  const { ust } = rozetleriAyir(sinyal);
+  return (
+    <div className="flex min-w-0 gap-3">
+      <OnemIkonu sinyal={sinyal} />
+      <div className="grid min-w-0 gap-1">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <b className="text-14 font-bold text-ink">{sinyal.baslik}</b>
+          {ust.map((r) => (
+            <span
+              key={r.metin}
+              className={`inline-flex h-5 items-center rounded-full px-2 text-11 font-bold ${
+                r.vurgu ? 'bg-vurgu text-danger-strong' : 'bg-surface-sunken text-ink-muted'
+              }`}
+            >
+              {r.metin}
+            </span>
+          ))}
+        </div>
+        <div className="text-12 text-ink-muted">
+          {yol.slice(0, -1).join(' › ')} ›{' '}
+          <Link className="font-semibold text-ink no-underline hover:text-brand-strong hover:underline" href={sinyalIncelemeAdresi(sinyal)}>
+            {yol[yol.length - 1]}
+          </Link>
+        </div>
+        {kanit && (
+          <div className="text-13 text-ink">
+            {kanit.gun} <b className="font-baslik tabular-nums">{kanit.gozlenen}</b>
+            {kanit.beklenen && (
+              <>
+                {' '}
+                · beklenen <b className="font-baslik tabular-nums">{kanit.beklenen.alt}</b> ile{' '}
+                <b className="font-baslik tabular-nums">{kanit.beklenen.ust}</b> arası
+              </>
+            )}
+            {kanit.dipnot && ` (${kanit.dipnot})`}
+            {sinyal.sapmaMetni && ` · ${sinyal.sapmaMetni}`}
+          </div>
+        )}
+        {sinyal.neden && <p className="m-0 text-13 text-ink-muted">{sinyal.neden}</p>}
+        {sinyal.durum !== 'acik' && sinyal.kapatma?.not && <p className="m-0 text-13 text-ink-muted">Not: “{sinyal.kapatma.not}”</p>}
+        {e.kisit && <p className="m-0 text-12 text-ink-muted">{e.kisit}</p>}
+        {hata && (
+          <p className="m-0 text-12 text-danger-strong" role="alert">
+            {hata}
+          </p>
+        )}
+      </div>
     </div>
   );
 }
 
-function SinyalSatiri({
+/**
+ * Satır sonu: SIK EYLEM dışarıda tek düğme (Durdur ya da platforma bağlantı),
+ * kalanlar ⋯ menüsünde (İncele, Kapat, Geri aç). Durdur KOYU: kırmızı dolu
+ * düğme sayfada yalnız başlıktaki "Yeni kural".
+ */
+function SatirEylemleri({
   sinyal,
   yetki,
-  gidiyor,
-  hata,
   geriAciliyor,
   onDurdur,
   onKapat,
@@ -375,126 +559,77 @@ function SinyalSatiri({
 }: {
   sinyal: Sinyal;
   yetki: { butce: boolean; kural: boolean };
-  gidiyor: boolean;
-  hata: string | null;
   geriAciliyor: boolean;
   onDurdur: () => void;
   onKapat: () => void;
   onGeriAc: () => void;
 }) {
   const e = satirEylemi(sinyal, yetki);
-  const kanit = sinyalKaniti(sinyal);
-  const yol = sinyalYolu(sinyal);
-  const ikon =
-    sinyal.tur === 'saglik' ? (
-      <span className={`${i.sIkon} ${i.sIkonSaglik}`} aria-label="Sağlık">
-        +
-      </span>
-    ) : (
-      <span
-        className={`${i.sIkon} ${sinyal.onem === 'yuksek' ? i.sIkonYuksek : i.sIkonOrta}`}
-        aria-label={sinyal.onem === 'yuksek' ? 'Yüksek önem' : 'Orta önem'}
-      >
-        !
-      </span>
-    );
+  const menu = e.incele || e.kapatilabilir || e.geriAcilabilir;
   return (
-    <div className={`${i.sSatir} ${gidiyor ? i.sGidiyor : ''}`}>
-      {ikon}
-      <div>
-        <div>
-          <span className={i.sBaslik}>{sinyal.baslik}</span>
-          <span className={i.sRozetler}>
-            {sinyalRozetleri(sinyal).map((r) => (
-              <span key={r.metin} className={`${i.sRozet} ${r.vurgu ? i.sRozetVurgu : ''}`}>
-                {r.metin}
-              </span>
-            ))}
-          </span>
-        </div>
-        <div className={i.sYol}>
-          {yol.slice(0, -1).join(' › ')} ›{' '}
-          <Link href={sinyalIncelemeAdresi(sinyal)}>{yol[yol.length - 1]}</Link>
-        </div>
-        {kanit && (
-          <div className={i.sKanit}>
-            {kanit.gun} <b className={s.num}>{kanit.gozlenen}</b>
-            {kanit.beklenen && (
-              <>
-                {' '}
-                · beklenen <b className={s.num}>{kanit.beklenen.alt}</b> ile <b className={s.num}>{kanit.beklenen.ust}</b> arası
-              </>
-            )}
-            {kanit.dipnot && ` (${kanit.dipnot})`}
-            {sinyal.sapmaMetni && ` · ${sinyal.sapmaMetni}`}
-          </div>
-        )}
-        {sinyal.neden && <div className={i.sNeden}>{sinyal.neden}</div>}
-        {sinyal.durum !== 'acik' && sinyal.kapatma?.not && <div className={i.sNeden}>Not: “{sinyal.kapatma.not}”</div>}
-        {e.kisit && <div className={i.sKisit}>{e.kisit}</div>}
-        {hata && (
-          <div className={i.sSatirHata} role="alert">
-            {hata}
-          </div>
-        )}
-      </div>
-      <MiniGrafik sinyal={sinyal} />
-      <div className={i.sEylemler}>
-        {e.birincil?.tur === 'durdur' && (
-          <button type="button" className={i.birincil} onClick={onDurdur}>
-            Durdur
-          </button>
-        )}
-        {e.birincil?.tur === 'bag' && (
-          <Link className={i.ikincil} href={e.birincil.href}>
-            {e.birincil.etiket}
-          </Link>
-        )}
-        {(e.incele || e.kapatilabilir || e.geriAcilabilir) && (
-          <div className={i.sYan}>
-            {e.incele && (
-              <Link className={i.metin} href={e.incele}>
-                İncele
-              </Link>
-            )}
-            {e.kapatilabilir && (
-              <button type="button" className={i.metin} onClick={onKapat}>
+    <span className="inline-flex items-center justify-end gap-1">
+      {e.birincil?.tur === 'durdur' && (
+        <Dugme ton="koyu" boyut="kucuk" onClick={onDurdur}>
+          Durdur
+        </Dugme>
+      )}
+      {e.birincil?.tur === 'bag' && (
+        <Link className={dugmeSinifi('ikincil', 'kucuk')} href={e.birincil.href}>
+          {e.birincil.etiket}
+        </Link>
+      )}
+      {menu && (
+        <AcilirMenu
+          etiket={`${sinyal.baslik} eylemleri`}
+          hizala="sag"
+          genislik="w-52"
+          tetik={({ acik: _acik, ...o }) => (
+            <button type="button" {...o} aria-label={`${sinyal.baslik}: diğer eylemler`} className={IKON_TETIK}>
+              <Ikon ad="nokta3" />
+            </button>
+          )}
+        >
+          {e.incele && <MenuOgesi href={e.incele}>İncele</MenuOgesi>}
+          {e.geriAcilabilir && (
+            <MenuOgesi onClick={onGeriAc} devreDisi={geriAciliyor}>
+              {geriAciliyor ? 'Açılıyor' : 'Geri aç'}
+            </MenuOgesi>
+          )}
+          {e.kapatilabilir && (
+            <>
+              {(e.incele || e.geriAcilabilir) && <MenuAyraci />}
+              <MenuOgesi onClick={onKapat}>
                 Kapat
-              </button>
-            )}
-            {e.geriAcilabilir && (
-              <button type="button" className={i.metin} onClick={onGeriAc} disabled={geriAciliyor}>
-                {geriAciliyor ? 'Açılıyor…' : 'Geri aç'}
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
+              </MenuOgesi>
+            </>
+          )}
+        </AcilirMenu>
+      )}
+    </span>
   );
 }
 
 /** Mini grafik; çizilemezse BOŞ YER (sütun hizası korunuyor), boş SVG değil. */
 function MiniGrafik({ sinyal }: { sinyal: Sinyal }) {
   const m = sinyalMiniYolu(sinyal.seri);
-  if (!m) return <figure className={i.sMiniK} aria-hidden="true" />;
+  if (!m) return <figure className="m-0 w-[180px]" aria-hidden="true" />;
   const { W, H } = SINYAL_MINI;
   return (
-    <figure className={i.sMiniK}>
-      <svg className={i.sMini} viewBox={`0 0 ${W} ${H + 4}`} role="img" aria-label="Geçmiş haftalar, beklenen aralık ve gözlenen gün">
-        {m.bant && <rect x={0} y={m.bant.y} width={W} height={Math.max(m.bant.h, 1)} fill="var(--t-sunken)" />}
-        <path d={m.cizgi} fill="none" stroke="var(--t-ink)" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
-        {m.son && <circle cx={m.son.x} cy={m.son.y} r={3.5} fill="var(--t-brand)" />}
+    <figure className="m-0 grid w-[180px] gap-1">
+      <svg className="h-auto w-full" viewBox={`0 0 ${W} ${H + 4}`} role="img" aria-label="Geçmiş haftalar, beklenen aralık ve gözlenen gün">
+        {m.bant && <rect x={0} y={m.bant.y} width={W} height={Math.max(m.bant.h, 1)} className="fill-surface-sunken" />}
+        <path d={m.cizgi} className="fill-none stroke-ink" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
+        {m.son && <circle cx={m.son.x} cy={m.son.y} r={3.5} className="fill-brand" />}
       </svg>
-      <figcaption className={i.sLejant}>
+      <figcaption className="flex gap-3 text-11 text-ink-muted">
         {m.bant && (
-          <span>
-            <i style={{ background: 'var(--t-sunken)' }} />
+          <span className="flex items-center gap-1.5">
+            <i aria-hidden className="block h-2 w-2.5 bg-surface-sunken" />
             beklenen
           </span>
         )}
-        <span>
-          <i style={{ background: 'var(--t-brand)', borderRadius: '50%', width: 6 }} />
+        <span className="flex items-center gap-1.5">
+          <i aria-hidden className="block h-1.5 w-1.5 rounded-full bg-brand" />
           gözlenen
         </span>
       </figcaption>
@@ -502,67 +637,66 @@ function MiniGrafik({ sinyal }: { sinyal: Sinyal }) {
   );
 }
 
-/** "N / M gösteriliyor": sessiz kesme yok. Sayfa sınırı sözleşmeden (`SINYAL_SAYFA_BOYUTU`). */
-function Sayfalama({ liste, sayfa, onSayfa }: { liste: SinyalListesi; sayfa: number; onSayfa: (n: number) => void }) {
+/** "1 - 50 / 120": sessiz kesme yok. Sayfa sınırı sözleşmeden (`SINYAL_SAYFA_BOYUTU`). */
+function sayfalamaBilgisi(liste: SinyalListesi, sayfa: number, onSayfa: (n: number) => void) {
   const sayfaSayisi = Math.max(1, Math.ceil(liste.toplam / SINYAL_SAYFA_BOYUTU));
-  return (
-    <div className={i.sSayfalama}>
-      <span>
-        Gösterilen <b className={s.num}>{liste.sinyaller.length}</b> / <b className={s.num}>{liste.toplam}</b>
-        {sayfaSayisi > 1 && ` · sayfa ${sayfa} / ${sayfaSayisi}`}
-      </span>
-      {sayfaSayisi > 1 && (
-        <>
-          <button type="button" className={i.metin} disabled={sayfa <= 1} onClick={() => onSayfa(sayfa - 1)}>
-            Önceki
-          </button>
-          <button type="button" className={i.metin} disabled={sayfa >= sayfaSayisi} onClick={() => onSayfa(sayfa + 1)}>
-            Sonraki
-          </button>
-        </>
-      )}
-    </div>
-  );
+  const bas = (sayfa - 1) * SINYAL_SAYFA_BOYUTU;
+  return {
+    bas: liste.sinyaller.length === 0 ? 0 : bas + 1,
+    son: bas + liste.sinyaller.length,
+    toplam: liste.toplam,
+    onceki: sayfa > 1 ? () => onSayfa(sayfa - 1) : undefined,
+    sonraki: sayfa < sayfaSayisi ? () => onSayfa(sayfa + 1) : undefined,
+  };
 }
 
 function HesaplarKarti({ liste }: { liste: SinyalListesi }) {
   const disarida = kontrolEdilmeyenler(liste.kontrolEdilmeyen);
   return (
-    <div className={s.kart}>
-      <div className={s.kartUst}>
-        <h2>Hesaplar</h2>
-        <span className={i.zaman}>Sinyaller her gece, hesabın günü kapanınca hesaplanır</span>
-      </div>
-      {liste.hesaplar.length === 0 ? (
-        <p className={s.bosMetin}>Bu workspace’e atanmış reklam hesabı yok.</p>
-      ) : (
-        <div>
-          {liste.hesaplar.map((h) => {
-            const d = hesapDurumu(h, formatRelative);
-            return (
-              <div key={h.adAccountId} className={i.sHesap}>
-                <span className={`${i.sNokta} ${NOKTA[d.nokta]}`} aria-hidden="true" />
-                <b>
-                  {h.adAccountAdi} · {PLATFORM_KISA_ADLARI[h.platform]}
-                </b>
-                <span>{d.metin}</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
+    <Kart dolgu={false} baslik="Hesaplar" baslikEki="Sinyaller her gece, hesabın günü kapanınca hesaplanır">
+      <Tablo
+        etiket="Hesaplar"
+        satirlar={liste.hesaplar}
+        satirAnahtari={(h) => h.adAccountId}
+        bos={<BosDurum baslik="Hesap yok" neden="Bu workspace’e atanmış reklam hesabı yok." />}
+        sutunlar={[
+          {
+            anahtar: 'hesap',
+            baslik: 'Hesap',
+            hucre: (h) => (
+              <b className="font-semibold text-ink">
+                {h.adAccountAdi} · {PLATFORM_KISA_ADLARI[h.platform]}
+              </b>
+            ),
+          },
+          {
+            anahtar: 'durum',
+            baslik: 'Durum',
+            hucre: (h) => {
+              const d = hesapDurumu(h, formatRelative);
+              return (
+                <span className="inline-flex items-center gap-2 text-13 text-ink">
+                  <DurumNoktasi hal={NOKTA[d.nokta]} />
+                  {d.metin}
+                </span>
+              );
+            },
+          },
+        ]}
+        sayfalama={{ bas: liste.hesaplar.length === 0 ? 0 : 1, son: liste.hesaplar.length, toplam: liste.hesaplar.length }}
+      />
       {disarida.length > 0 && (
-        <details className={i.sDisarida}>
-          <summary>Kontrol edilmeyenler ({disarida.length})</summary>
-          <ul>
+        <details className="border-t border-line px-4 py-3 text-13 text-ink-muted">
+          <summary className="cursor-pointer font-semibold text-ink">Kontrol edilmeyenler ({disarida.length})</summary>
+          <ul className="m-0 mt-2 grid list-disc gap-1 pl-5">
             {disarida.map((d) => (
               <li key={d.kod}>
-                <b>{d.ad}:</b> {d.neden}
+                <b className="text-ink">{d.ad}:</b> {d.neden}
               </li>
             ))}
           </ul>
         </details>
       )}
-    </div>
+    </Kart>
   );
 }

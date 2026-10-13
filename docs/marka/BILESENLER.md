@@ -411,3 +411,34 @@ yalnız token, düğme ve renk görünüşü yeni dile uyar; yerleşim değişme
 Kararlar: menü adı "İyileştir"; Potansiyel Müşteriler tablo + yan panel;
 Raporlar'da "Raporu gönder" birincil, "PDF indir" ikincil, Planla ve Paylaş ⋯.
 Onaylı taslak: `docs/marka/sayfa-taslaklari.html`.
+
+## 10. Grup 3 (İyileştir ve Base) geçiş notları (2026-10-14)
+
+Uygulanan: İyileştir (Öneriler · Kurallar · Sinyaller · Etkisi · Kreatifler ·
+AI Asistan yan menüde, "Yeni kural" her bölümde başlığın sağında), Marka
+Merkezi (Kurulum · Marka · Workspace bilgileri yan menüde, eksikte kırmızı
+nokta, çapa bağlantıları menünün altında), Varlıklar (Görseller · Kreatifler ·
+Formlar · Kitleler yan menüde, birincil eylem başlığın sağında ve metni
+bölümden).
+
+**Grup 3 sapmaları** (ortak bileşen yazılmadı, yerel yardımcı):
+- `marka-merkezi/varliklar/birincil-eylem.tsx`: başlıktaki düğme sunucu
+  bileşeninde, işi yapacak durum bölümün istemci bileşeninde; köprü
+  eşzamanlı `CustomEvent` (dosya seçicisi aynı dokunuşta açılabilsin).
+  Kimse olayı almazsa düğme yanında nedenini yazar. Formlar adresle
+  (`?form=yeni`) açılıyor, olay kullanmıyor.
+- `bilgi-bankasi/marka-sekmesi.tsx` `Grup`: birden çok denetimli alan için
+  `fieldset/legend` (ortak `Alan` tek girdiye `label for` bağlıyor).
+- `tenancy/bagli-kanallar.tsx` `Acilir`: açılır bölüm (grid-rows + `inert`);
+  ortak bileşenlerde açılır bölüm yok.
+- İyileştir ve Kurallar sekmelerinin yerel yardımcıları kendi dosyalarında
+  (`KurallarTablosu`, `ModRozeti`, `KuralGecmisi` …).
+
+**Grup 2'ye devir:** taslakta "Eksikleri tamamla" / "Sihirbazla tamamla"
+Marka Merkezi başlığının sağında; düğmeler ve durumları
+`marka-merkezi/kurulum-listesi.tsx` (Grup 2) içinde. Taşınmadı; kurulum
+listesinin tek sayaçlı kontrol satırı görünüşü de o dosyanın işi.
+
+**Ölçülmeyen:** "Son çalışma · N eşleşti" (kural kaydı son turun eşleşme
+sayısını taşımıyor; API alanı gerekir). Varlıklar menüsünde bölüm sayıları
+yok (sayfa düzeyinde dört ayrı çağrı gerekirdi).

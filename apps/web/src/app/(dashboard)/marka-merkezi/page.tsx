@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import type { ReactNode } from 'react';
 import { redirect } from 'next/navigation';
 import type { ClientChannels, HazirlamaYaniti, KurulumYaniti, SpecialAdCategory, WorkspaceHazirlik } from '@advetics/shared';
 import { ApiRequestError, serverApiFetch } from '@/lib/api';
@@ -22,9 +23,12 @@ import { WorkspaceGerekli } from '@/components/workspace-gerekli';
 import { WorkspaceGec } from '@/components/workspace-gec';
 import { SayfaBasligi } from '@/components/ui/sayfa-basligi';
 import { Uyari } from '@/components/ui/uyari';
+import { KART_BAGLANTISI, Kart as UiKart } from '@/components/ui/kart';
+import { BosDurum, Serit } from '@/components/ui/hal';
+import { SayfaIcDuzen } from '@/components/ui/sayfa-ic-menu';
 import { BagliKanallar } from '@/components/tenancy/bagli-kanallar';
 import { IcMenu, type BolumRozetleri } from '@/components/marka-merkezi/ic-menu';
-import { bolumAdi, sirketAdi } from '@/components/marka-merkezi/bolumler';
+import { sirketAdi } from '@/components/marka-merkezi/bolumler';
 import { EskiCapaYonlendirici } from '@/components/marka-merkezi/eski-capa';
 import { KurulumListesi, type Sonuc } from '@/components/marka-merkezi/kurulum-listesi';
 import { rozetMetni } from '@/components/marka-merkezi/kurulum-listesi-mantik';
@@ -80,7 +84,7 @@ export default async function MarkaMerkeziPage({
   if (!kapi(session, 'markaMerkezi.gor')) {
     return (
       <div className="space-y-5">
-        <SayfaBasligi baslik="Marka Merkezi" />
+        <SayfaBasligi bolum="Base" baslik="Marka Merkezi" />
         <Uyari ton="uyari" baslik={PANEL_KAPILARI['markaMerkezi.gor'].neden}>
           Workspace’in kurulumu ve marka bilgileri ajans tarafında düzenleniyor. Yöneticine sor.
         </Uyari>
@@ -123,7 +127,7 @@ export default async function MarkaMerkeziPage({
   if (uyum === 'farkli') {
     return (
       <div className="space-y-5">
-        <SayfaBasligi baslik="Marka Merkezi" />
+        <SayfaBasligi bolum="Base" baslik="Marka Merkezi" />
         {gecis}
       </div>
     );
@@ -168,33 +172,33 @@ export default async function MarkaMerkeziPage({
   const sirket = sirketAdi(session, detay.ok ? detay.v.orgId : null);
 
   return (
-    <div className="space-y-5">
+    <div className="grid gap-6">
       <EskiCapaYonlendirici bolum={bolum} musteri={clientId} />
       {gecis}
+      {/*
+        BAŞLIK MENÜ ADININ AYNISI ("Marka Merkezi", nav-sections bekçisi);
+        hangi workspace'in kurulumunu değiştirdiğini ise açıklamanın İLK
+        sözcükleri söylüyor: "Şirket › Workspace". Eskiden başlığın kendisi
+        "Şirket › Workspace"ti ve menüde "Marka Merkezi"ne tıklayan kullanıcı
+        sayfada o adı hiç görmüyordu. Bölüm kırıntısı kalktı: seçili bölüm yan
+        menüde, sayfa adı üst çubuğun kırıntısında.
+      */}
       <SayfaBasligi
-        ust={
-          /* KIRINTI: "neredeyim" sorusunun cevabı başlıktan önce. */
-          <nav aria-label="Konum" className="flex flex-wrap items-center gap-1.5 text-sm text-ink-muted">
-            <span>Base</span>
-            <span aria-hidden="true">›</span>
-            <Link href={markaMerkeziAdresi('kurulum', clientId)} className="hover:text-ink">
-              Marka Merkezi
-            </Link>
-            <span aria-hidden="true">›</span>
-            <span className="font-semibold text-ink">{bolumAdi(bolum)}</span>
-          </nav>
+        bolum="Base"
+        baslik="Marka Merkezi"
+        aciklama={
+          <>
+            <strong className="font-semibold text-ink">{sirket ? `${sirket} › ${workspaceAdi}` : workspaceAdi}</strong>
+            {': kurulumu, markası ve bilgileri. Reklamlar, raporlar ve AI asistan buradan okur.'}
+          </>
         }
-        baslik={sirket ? `${sirket} › ${workspaceAdi}` : workspaceAdi}
-        aciklama="Bu workspace’in kurulumu, markası ve bilgileri. Reklamlar, raporlar ve AI asistan buradan okur."
       />
 
-      <div className="grid gap-5 lg:grid-cols-[15rem_minmax(0,1fr)]">
-        <IcMenu clientId={clientId} aktif={bolum} rozetler={rozetler} />
-
+      <SayfaIcDuzen menu={<IcMenu clientId={clientId} aktif={bolum} rozetler={rozetler} />}>
         {/* `key` BÖLÜMDEN: aynı ağaç korunursa geçiş animasyonu bir daha oynamaz. */}
-        <div key={bolum} className="bolum-gecis min-w-0 space-y-4">
+        <div key={bolum} className="bolum-gecis grid min-w-0 content-start gap-5">
           {bolum === 'kurulum' && (
-            <section aria-labelledby="kurulum-baslik" className="space-y-4">
+            <section aria-labelledby="kurulum-baslik" className="grid gap-4">
               <BolumBasligi
                 id="kurulum-baslik"
                 baslik="Kurulum"
@@ -211,7 +215,7 @@ export default async function MarkaMerkeziPage({
                 aktifDegil={session.activeClientId !== clientId}
               />
 
-              <section id="kanallar" aria-labelledby="kanallar-baslik" className="scroll-mt-24 space-y-3">
+              <section id="kanallar" aria-labelledby="kanallar-baslik" className="grid scroll-mt-24 gap-3">
                 <BolumBasligi
                   id="kanallar-baslik"
                   baslik="Bu workspace’in hesapları ve kanalları"
@@ -219,24 +223,24 @@ export default async function MarkaMerkeziPage({
                   altBaslik
                 />
                 {kanallar === null ? null : !kanallar.ok ? (
-                  <Uyari ton="tehlike" baslik="Hesaplar ve kanallar alınamadı.">
+                  <Serit ton="hata" baslik="Hesaplar ve kanallar alınamadı.">
                     {kanallar.hata}
-                  </Uyari>
+                  </Serit>
                 ) : kapi(session, 'hesap.ata') ? (
                   <BagliKanallar data={kanallar.v} ajansUyesi={session.managerAccount !== null} />
                 ) : (
                   <SaltOkunurKanallar data={kanallar.v} neden={PANEL_KAPILARI['hesap.ata'].neden} />
                 )}
-                <p className="text-xs text-ink-muted">
+                <p className="text-12 text-ink-muted">
                   Platform bağlantısı yoksa ya da yetkisi düştüyse:{' '}
-                  <Link href={platformBaglantilariAdresi()} className="font-semibold text-ink underline-offset-2 hover:underline">
+                  <Link href={platformBaglantilariAdresi()} className={KART_BAGLANTISI}>
                     Ayarlar › Platform bağlantıları
                   </Link>
                 </p>
               </section>
 
-              <section id="veri-kaynaklari" className="scroll-mt-24 space-y-2">
-                <p className="text-xs text-ink-muted">İsteğe bağlı; sayaca girmez.</p>
+              <section id="veri-kaynaklari" className="grid scroll-mt-24 gap-2">
+                <p className="text-12 text-ink-muted">İsteğe bağlı; sayaca girmez.</p>
                 <VeriKaynaklari
                   clientId={clientId}
                   yonetebilir={kapi(session, 'veriKaynagi.yonet')}
@@ -248,7 +252,7 @@ export default async function MarkaMerkeziPage({
           )}
 
           {bolum === 'marka' && (
-            <section aria-labelledby="marka-baslik" className="space-y-4">
+            <section aria-labelledby="marka-baslik" className="grid gap-4">
               <BolumBasligi
                 id="marka-baslik"
                 baslik="Marka"
@@ -256,10 +260,10 @@ export default async function MarkaMerkeziPage({
               />
               {/* DOLDUR KARTLARIN ÜSTÜNDE: taslak dört kartı birden dolduruyor. */}
               <AiDoldur clientId={clientId} canWrite={kapi(session, 'marka.yaz')} />
-              <Kart id="marka-bilgileri">
+              <Capa id="marka-bilgileri">
                 <MarkaSekmesi clientId={clientId} canWrite={kapi(session, 'marka.yaz')} />
-              </Kart>
-              <Kart id="markayi-anlat">
+              </Capa>
+              <Capa id="markayi-anlat">
                 <MetinSekmesi
                   clientId={clientId}
                   canWrite={kapi(session, 'marka.yaz')}
@@ -268,8 +272,8 @@ export default async function MarkaMerkeziPage({
                   aciklama="Ne satıyor, hangi hizmetleri veriyor, sık sorulan sorular. Reklam metni ve AI bu metni bağlam olarak okuyor."
                   placeholder="Örn. 20 yıllık emlak ofisiyiz. Konut satışı ve kiralama yapıyoruz; İzmir Bornova ve Karşıyaka'da ofisimiz var."
                 />
-              </Kart>
-              <Kart id="kime-satiyoruz">
+              </Capa>
+              <Capa id="kime-satiyoruz">
                 <MetinSekmesi
                   clientId={clientId}
                   canWrite={kapi(session, 'marka.yaz')}
@@ -278,19 +282,21 @@ export default async function MarkaMerkeziPage({
                   aciklama="Düz dille. Konum, yaş ve ilgi gibi teknik hedefleme Varlıklar › Kitleler’de."
                   placeholder="Örn. İzmir ve çevresinde, 25-45 yaş arası, ev almayı düşünen aileler."
                 />
-              </Kart>
-              <Kart id="logo">
+              </Capa>
+              <Capa id="logo">
                 {kapi(session, 'varliklar.gor') ? (
                   <LogoSekmesi clientId={clientId} canWrite={kapi(session, 'logo.yaz')} />
                 ) : (
-                  <p className="text-sm text-ink-muted">{PANEL_KAPILARI['varliklar.gor'].neden}</p>
+                  <UiKart baslik="Logo">
+                    <p className="m-0 text-13 text-ink-muted">{PANEL_KAPILARI['varliklar.gor'].neden}</p>
+                  </UiKart>
                 )}
-              </Kart>
+              </Capa>
             </section>
           )}
 
           {bolum === 'workspace' && (
-            <section aria-labelledby="workspace-baslik" className="space-y-4">
+            <section aria-labelledby="workspace-baslik" className="grid gap-4">
               <BolumBasligi
                 id="workspace-baslik"
                 baslik="Workspace bilgileri"
@@ -300,7 +306,7 @@ export default async function MarkaMerkeziPage({
             </section>
           )}
         </div>
-      </div>
+      </SayfaIcDuzen>
     </div>
   );
 }
@@ -312,24 +318,34 @@ async function oku<T>(yol: string): Promise<Sonuc<T>> {
   );
 }
 
+/**
+ * Bölümün kendi başlığı (h2): sayfa başlığı "Marka Merkezi", bölüm adı yan
+ * menüde seçili; bu satır bölümün NE İŞE YARADIĞINI bir cümleyle söylüyor.
+ * Boy ölçeği referanstan (18 / 15), elle `text-lg` değil.
+ */
 function BolumBasligi({ id, baslik, aciklama, altBaslik = false }: { id: string; baslik: string; aciklama: string; altBaslik?: boolean }) {
   const Etiket = altBaslik ? 'h3' : 'h2';
   return (
     <div>
-      <Etiket id={id} className={`font-baslik font-semibold text-ink ${altBaslik ? 'text-base' : 'text-lg'}`}>
+      <Etiket id={id} className={`font-baslik m-0 font-bold text-ink ${altBaslik ? 'text-15' : 'text-18'}`}>
         {baslik}
       </Etiket>
-      <p className="mt-0.5 text-sm text-ink-muted">{aciklama}</p>
+      <p className="m-0 mt-1 text-13 text-ink-muted">{aciklama}</p>
     </div>
   );
 }
 
-/** Bölüm içindeki kart — çapa hedefi; üst bar altında kalmasın diye `scroll-mt`. */
-function Kart({ id, children }: { id: string; children: React.ReactNode }) {
+/**
+ * ÇAPA KABI: alt başlık bağlantıları (`#marka-bilgileri`…) buraya atlıyor;
+ * üst bar altında kalmasın diye `scroll-mt`. Kartın KENDİSİ içerideki
+ * bileşende (`Kart` kalıbı, başlık + sağ altta Kaydet): çerçeveyi burada
+ * çizmek kart içinde kart üretiyordu.
+ */
+function Capa({ id, children }: { id: string; children: ReactNode }) {
   return (
-    <section id={id} className="scroll-mt-24 rounded-xl border border-line bg-surface p-5">
+    <div id={id} className="scroll-mt-24">
       {children}
-    </section>
+    </div>
   );
 }
 
@@ -337,26 +353,22 @@ function Kart({ id, children }: { id: string; children: React.ReactNode }) {
 function SaltOkunurKanallar({ data, neden }: { data: ClientChannels; neden: string }) {
   const bagli = data.groups.flatMap((g) => g.connected.map((i) => ({ ...i, kind: g.kind })));
   if (bagli.length === 0) {
-    return (
-      <p className="rounded-xl border border-dashed border-line bg-surface p-6 text-sm text-ink-muted">
-        Bu workspace’e bağlı hesap ya da kanal yok. {neden}
-      </p>
-    );
+    return <BosDurum baslik="Bu workspace’e bağlı hesap ya da kanal yok." neden={neden} />;
   }
   return (
-    <div className="space-y-2">
-      <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
+    <UiKart dolgu={false} baslik="Bağlı hesaplar ve kanallar" baslikEki={`${bagli.length}`}>
+      <ul className="m-0 list-none divide-y divide-line p-0">
         {bagli.map((i) => (
-          <li key={i.id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
-            <span className="min-w-0 truncate text-ink">{i.name}</span>
-            <span className="shrink-0 text-xs text-ink-muted" translate="no">
+          <li key={i.id} className="flex items-center justify-between gap-3 px-5 py-3 text-13">
+            <span className="min-w-0 truncate font-semibold text-ink">{i.name}</span>
+            <span className="shrink-0 text-12 text-ink-muted tabular-nums" translate="no">
               {i.externalId}
             </span>
           </li>
         ))}
       </ul>
-      <p className="text-xs text-ink-muted">{neden}</p>
-    </div>
+      <p className="m-0 border-t border-line px-5 py-3 text-12 text-ink-muted">{neden}</p>
+    </UiKart>
   );
 }
 

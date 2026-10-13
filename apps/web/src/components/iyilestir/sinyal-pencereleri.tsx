@@ -1,13 +1,16 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import type { Sinyal, SinyalUygulamaSonucu } from '@advetics/shared';
 import { PLATFORM_KISA_ADLARI } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { adimHalleri, adimMetinleri, uygulaHatasi, type UygulamaAsamasi } from '@/lib/iyilestir';
 import { sinyalEylemYolu, sinyalUygulamaCoz } from '@/lib/sinyal';
 import { varlikEylemMetni } from '@/lib/varlik-eylemi';
-import i from '@/components/taslak/iyilestir.module.css';
+import { Dugme } from '@/components/ui/dugme';
+import { Pencere } from '@/components/ui/pencere';
+import { Alan, MetinAlani } from '@/components/ui/alan';
+import { AdimListesi, DegisimKutusu, SonucKutusu } from './onay-penceresi';
 
 /**
  * ═══ SİNYAL › DURDUR ONAYI ═══
@@ -27,7 +30,9 @@ import i from '@/components/taslak/iyilestir.module.css';
  * yapıyor; istek sürerken yalnız ilk adım dönüyor. Taslaktaki 650 ms'lik
  * zamanlayıcı, henüz geri okunmamış bir değeri "okundu" gösterirdi.
  *
- * DOM'DAN ÇIKMIYOR: kapalıyken `visibility: hidden` (tasarım kuralı).
+ * DOM'DAN ÇIKMIYOR: `Pencere` kapalıyken `invisible` + `inert` (tasarım
+ * kuralı); Esc, perde ve odak tuzağı bileşende. Gövde parçaları öneri
+ * onayıyla ORTAK (`onay-penceresi.tsx`), iki pencere aynı görünüşte kalsın.
  */
 export function SinyalDurdurPenceresi({
   sinyal,
@@ -44,7 +49,8 @@ export function SinyalDurdurPenceresi({
   const [asama, setAsama] = useState<UygulamaAsamasi>('hazir');
   const [mesaj, setMesaj] = useState<string | null>(null);
   const [sonuc, setSonuc] = useState<SinyalUygulamaSonucu | null>(null);
-  const onaylaRef = useRef<HTMLButtonElement>(null);
+  // Kimlikle odak: `Dugme` ref almıyor (bkz. `onay-penceresi.tsx`).
+  const onaylaId = useId();
   const acik = sinyal !== null;
   const suruyor = asama === 'gonderiliyor';
 
@@ -54,17 +60,8 @@ export function SinyalDurdurPenceresi({
     setAsama('hazir');
     setMesaj(null);
     setSonuc(null);
-    requestAnimationFrame(() => onaylaRef.current?.focus());
-  }, [sinyal]);
-
-  useEffect(() => {
-    if (!acik) return;
-    // İstek sürerken Esc kapatmıyor: sonucu görmeden kapatan kullanıcı
-    // kampanyanın durup durmadığını bilemez.
-    const tus = (e: KeyboardEvent) => e.key === 'Escape' && !suruyor && onKapat();
-    window.addEventListener('keydown', tus);
-    return () => window.removeEventListener('keydown', tus);
-  }, [acik, suruyor, onKapat]);
+    requestAnimationFrame(() => document.getElementById(onaylaId)?.focus());
+  }, [sinyal, onaylaId]);
 
   const s = gosterilen;
   const hedef =
@@ -105,75 +102,70 @@ export function SinyalDurdurPenceresi({
   }
 
   const platform = s ? PLATFORM_KISA_ADLARI[s.platform] : '';
+  /*
+   * İstek sürerken Esc ve perde kapatmıyor: sonucu görmeden kapatan
+   * kullanıcı kampanyanın durup durmadığını bilemez. `Pencere` ikisinde de
+   * `onKapat` çağırıyor; kapı burada.
+   */
+  const kapatGuvenli = () => {
+    if (!suruyor) onKapat();
+  };
   return (
-    <div className={`${i.perde} ${acik ? i.perdeAcik : ''}`} aria-hidden={!acik} onClick={(e) => e.target === e.currentTarget && !suruyor && onKapat()}>
-      <div className={i.pencere} role="dialog" aria-modal="true" aria-labelledby="sinyal-durdur-baslik">
-        <h3 id="sinyal-durdur-baslik">{metin?.baslik ?? 'Onay'}</h3>
-        <p>
+    <Pencere
+      acik={acik}
+      onKapat={kapatGuvenli}
+      baslik={metin?.baslik ?? 'Onay'}
+      aciklama={
+        <>
           {s ? `${s.varlik.ad} · ${s.clientAdi} · ${platform}. ` : ''}
           {metin?.aciklama ?? ''}
-        </p>
-        <div className={i.degisim}>
-          <div>
-            <small>Şimdi</small>
-            <b>{metin?.once ?? '—'}</b>
-          </div>
-          <span className={i.ok}>→</span>
-          <div>
-            <small>Sonra</small>
-            <b>{metin?.sonra ?? '—'}</b>
-          </div>
-        </div>
-        <ul className={i.adimlar} aria-live="polite">
-          {[adimlar[0], adimlar[1], 'Kaydet ve sinyali kapat'].map((a, n) => (
-            <li key={n} data-hal={haller[n]}>
-              <i />
-              {a}
-            </li>
-          ))}
-        </ul>
+        </>
+      }
+      altEylemler={
+        asama === 'degisti' ? (
+          <Dugme
+            ton="koyu"
+            onClick={() => {
+              onKapat();
+              onYenile();
+            }}
+          >
+            Yenile
+          </Dugme>
+        ) : sonuc ? (
+          <Dugme ton="ikincil" onClick={onKapat}>
+            Kapat
+          </Dugme>
+        ) : (
+          <>
+            <Dugme ton="ikincil" onClick={onKapat} disabled={suruyor}>
+              Vazgeç
+            </Dugme>
+            <Dugme id={onaylaId} ton="koyu" onClick={() => void onayla()} disabled={!metin} bekliyor={suruyor}>
+              {asama === 'hata' ? 'Tekrar dene' : 'Durdur'}
+            </Dugme>
+          </>
+        )
+      }
+    >
+      <div className="grid gap-4">
+        <DegisimKutusu once={metin?.once ?? null} sonra={metin?.sonra ?? null} />
+        <AdimListesi adimlar={[adimlar[0], adimlar[1], 'Kaydet ve sinyali kapat']} haller={haller} />
         {sonuc && (
-          <div className={`${i.sonuc} ${sonuc.dogrulama === 'dogrulandi' ? i.sonucOk : i.sonucUyari}`} role="status">
+          <SonucKutusu ton={sonuc.dogrulama === 'dogrulandi' ? 'ok' : 'uyari'}>
             {sonuc.dogrulama === 'dogrulandi'
               ? `Durduruldu · ${platform} tarafında doğrulandı: ${sonuc.platformDegeri}. Sinyal kapatıldı.`
               : `${platform} isteği kabul etti ama okunan durum farklı: ${sonuc.platformDegeri}.`}
-          </div>
+          </SonucKutusu>
         )}
         {mesaj && (
-          <div className={`${i.sonuc} ${i.sonucHata}`} role="alert">
+          <SonucKutusu ton="hata">
             {asama === 'degisti' ? <strong>Sinyal değişti, yenile. </strong> : <strong>Durdurulamadı. </strong>}
             {mesaj}
-          </div>
+          </SonucKutusu>
         )}
-        <div className={i.pencereAlt}>
-          {asama === 'degisti' ? (
-            <button
-              type="button"
-              className={i.birincil}
-              onClick={() => {
-                onKapat();
-                onYenile();
-              }}
-            >
-              Yenile
-            </button>
-          ) : sonuc ? (
-            <button type="button" className={i.ikincil} onClick={onKapat}>
-              Kapat
-            </button>
-          ) : (
-            <>
-              <button type="button" className={i.ikincil} onClick={onKapat} disabled={suruyor}>
-                Vazgeç
-              </button>
-              <button ref={onaylaRef} type="button" className={i.birincil} onClick={() => void onayla()} disabled={suruyor || !metin}>
-                {asama === 'hata' ? 'Tekrar dene' : 'Durdur'}
-              </button>
-            </>
-          )}
-        </div>
       </div>
-    </div>
+    </Pencere>
   );
 }
 
@@ -199,7 +191,9 @@ export function SinyalKapatPenceresi({
   const [not, setNot] = useState('');
   const [gonderiliyor, setGonderiliyor] = useState(false);
   const [hata, setHata] = useState<{ mesaj: string; degisti: boolean } | null>(null);
-  const alanRef = useRef<HTMLTextAreaElement>(null);
+  // Kimlikle odak: not alanı `MetinAlani` (ortak bileşen) ref'i iletse de
+  // açılış odağını `Pencere` ✕'e veriyor; bir kare sonra alana taşınıyor.
+  const alanId = useId();
   const acik = sinyal !== null;
 
   useEffect(() => {
@@ -207,15 +201,8 @@ export function SinyalKapatPenceresi({
     setNot('');
     setHata(null);
     setGonderiliyor(false);
-    requestAnimationFrame(() => alanRef.current?.focus());
-  }, [sinyal]);
-
-  useEffect(() => {
-    if (!acik) return;
-    const tus = (e: KeyboardEvent) => e.key === 'Escape' && !gonderiliyor && onKapat();
-    window.addEventListener('keydown', tus);
-    return () => window.removeEventListener('keydown', tus);
-  }, [acik, gonderiliyor, onKapat]);
+    requestAnimationFrame(() => document.getElementById(alanId)?.focus());
+  }, [sinyal, alanId]);
 
   async function kapat() {
     if (!sinyal) return;
@@ -237,53 +224,61 @@ export function SinyalKapatPenceresi({
     }
   }
 
+  // İstek sürerken Esc ve perde kapatmıyor (yukarıdaki pencereyle aynı kural).
+  const kapatGuvenli = () => {
+    if (!gonderiliyor) onKapat();
+  };
+
   return (
-    <div className={`${i.perde} ${acik ? i.perdeAcik : ''}`} aria-hidden={!acik} onClick={(e) => e.target === e.currentTarget && !gonderiliyor && onKapat()}>
-      <div className={i.pencere} role="dialog" aria-modal="true" aria-labelledby="sinyal-kapat-baslik">
-        <h3 id="sinyal-kapat-baslik">Sinyali kapat</h3>
-        <p>Bu olay sürdükçe tekrar açılmaz. Daha kötüye giderse yeniden açılır ve haber verilir.</p>
-        <label className="sr-only" htmlFor="sinyal-kapat-not">
-          Not
-        </label>
-        <textarea
-          id="sinyal-kapat-not"
-          ref={alanRef}
-          className={i.notAlani}
-          value={not}
-          maxLength={300}
-          onChange={(e) => setNot(e.target.value)}
-          placeholder="Not (isteğe bağlı): ör. kampanya bilerek yavaşlatıldı"
-        />
+    <Pencere
+      acik={acik}
+      onKapat={kapatGuvenli}
+      genislik="dar"
+      baslik="Sinyali kapat"
+      aciklama="Bu olay sürdükçe tekrar açılmaz. Daha kötüye giderse yeniden açılır ve haber verilir."
+      altEylemler={
+        hata?.degisti ? (
+          <Dugme
+            ton="koyu"
+            onClick={() => {
+              onKapat();
+              onYenile();
+            }}
+          >
+            Yenile
+          </Dugme>
+        ) : (
+          <>
+            <Dugme ton="ikincil" onClick={onKapat} disabled={gonderiliyor}>
+              Vazgeç
+            </Dugme>
+            <Dugme ton="koyu" onClick={() => void kapat()} bekliyor={gonderiliyor}>
+              {gonderiliyor ? 'Kapatılıyor' : 'Kapat'}
+            </Dugme>
+          </>
+        )
+      }
+    >
+      <div className="grid gap-4">
+        <Alan etiket="Not (isteğe bağlı)" id={alanId}>
+          {(id, aciklamaId) => (
+            <MetinAlani
+              id={id}
+              aria-describedby={aciklamaId}
+              value={not}
+              maxLength={300}
+              onChange={(e) => setNot(e.target.value)}
+              placeholder="ör. kampanya bilerek yavaşlatıldı"
+            />
+          )}
+        </Alan>
         {hata && (
-          <div className={`${i.sonuc} ${i.sonucHata}`} role="alert">
+          <SonucKutusu ton="hata">
             {hata.degisti ? <strong>Sinyal değişti, yenile. </strong> : <strong>Kapatılamadı. </strong>}
             {hata.mesaj}
-          </div>
+          </SonucKutusu>
         )}
-        <div className={i.pencereAlt}>
-          {hata?.degisti ? (
-            <button
-              type="button"
-              className={i.birincil}
-              onClick={() => {
-                onKapat();
-                onYenile();
-              }}
-            >
-              Yenile
-            </button>
-          ) : (
-            <>
-              <button type="button" className={i.ikincil} onClick={onKapat} disabled={gonderiliyor}>
-                Vazgeç
-              </button>
-              <button type="button" className={i.birincil} onClick={() => void kapat()} disabled={gonderiliyor}>
-                {gonderiliyor ? 'Kapatılıyor…' : 'Kapat'}
-              </button>
-            </>
-          )}
-        </div>
       </div>
-    </div>
+    </Pencere>
   );
 }

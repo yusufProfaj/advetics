@@ -205,9 +205,15 @@ describe('kaynak: bağlar', () => {
   });
 
   it('KRİTİK: ayrıntı DOM’dan ÇIKMIYOR (görünürlük data-acik ile), ölçülmeyenler her zaman', () => {
-    const i = SEKME.indexOf('className={i.eAyrinti}');
+    // 2026-10-14 birleşik tasarım: modül sınıfı (`i.eAyrinti`) yerine
+    // `AYRINTI_KAP` (grid-rows geçişi). İddia aynı: kap koşulsuz çiziliyor,
+    // açıklık yalnız `data-acik` ile ve kapalıyken `inert`.
+    const i = SEKME.indexOf('className={AYRINTI_KAP}');
     expect(i).toBeGreaterThan(-1);
-    expect(SEKME.slice(i, SEKME.indexOf('>', i))).toContain('data-acik={acik}');
+    const etiket = SEKME.slice(i, SEKME.indexOf('>', i));
+    expect(etiket).toContain('data-acik={acik}');
+    expect(etiket).toContain('inert={!acik}');
+    expect(SEKME).toMatch(/const AYRINTI_KAP =\s*'[^']*data-\[acik=true\]:grid-rows-\[1fr\]/);
     expect(SEKME).not.toMatch(/\{acik && \(/);
     expect(SEKME).toContain('sonListe.olculmeyen.map(');
   });

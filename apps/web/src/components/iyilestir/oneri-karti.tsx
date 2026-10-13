@@ -7,21 +7,35 @@ import type { Oneri } from '@advetics/shared';
 import { ONERI_TURU_ETIKETI, PLATFORM_KISA_ADLARI } from '@advetics/shared';
 import { formatRelative } from '@/lib/format';
 import { etkiAdresi, type KartEtkiSatiri } from '@/lib/etki';
-import { NOKTA_SINIFI } from './etki-sekmesi';
+import { NOKTA_HALI } from './etki-sekmesi';
 import { eylemMetni, kartHali, miniYollar, MINI, seviyeAdi, sonucMetni } from '@/lib/iyilestir';
-import i from '@/components/taslak/iyilestir.module.css';
-import s from '@/components/taslak/taslak.module.css';
+import { Dugme, dugmeSinifi } from '@/components/ui/dugme';
+import { Kart, KART_BAGLANTISI } from '@/components/ui/kart';
+import { DurumNoktasi } from '@/components/ui/rozet';
 
 /**
- * ÖNERİ KARTI — taslaktaki `.oneri` (tür + mecra, başlık, yol, kanıtlar +
- * mini grafik, neden, eylem satırı). Kartın hangi hâlde olduğu `kartHali`
- * kararından; burada yalnız çiziliyor.
+ * ÖNERİ KARTI (onaylı taslak `docs/marka/sayfa-taslaklari.html` #iyilestir):
+ * `Kart` kalıbı; üstte gri etiketler (tür · platform · seviye), başlık, gri
+ * yol, KANIT KUTULARI yan yana (ad + "önce → şimdi"), mini grafik, bir
+ * paragraf gerekçe; eylemler SAĞ ALTTA (`Kart altEylem`). Kartın hangi
+ * hâlde olduğu `kartHali` kararından; burada yalnız çiziliyor.
+ *
+ * KART İÇİNDE KIRMIZI DOLU DÜĞME YOK (BILESENLER §3): ana eylem TEK `koyu`
+ * düğme, yan eylem ikincil, "Yoksay" hayalet. Sayfanın tek birincili
+ * başlıktaki "Yeni kural".
  *
  * "YENİ KREATİF" BAĞLANTISI yorgunluk kartlarında: yorgun reklamın çaresi
  * yeni kreatif ve reklam kurmanın tek yolu AdvCampaign (kullanıcı kararı
  * 2026-10-07). Sözleşme "setteki tek reklam" bilgisini ayrı bir alan
  * olarak taşımıyor; o durumda uyarı sunucunun `neden` cümlesinde.
  */
+
+/** Kartın eylem satırındaki kısa durum/kısıt metni: gri, satırın solunda. */
+const KISIT = 'mr-auto basis-full text-12 text-ink-muted min-[560px]:basis-auto';
+
+/** Gri etiket hapı (tür · platform · seviye). */
+const ETIKET = 'inline-flex h-6 items-center rounded-full bg-surface-sunken px-2.5 text-11 font-bold text-ink-muted';
+
 export function OneriKarti({
   oneri,
   yazabilir,
@@ -49,107 +63,127 @@ export function OneriKarti({
 }) {
   const hal = kartHali(oneri, yazabilir);
   const metin = eylemMetni(oneri);
-  // Rozet rengi yalnız bütçe kartlarında; form optimizasyonu bütçe değil.
-  const butce = oneri.tur === 'butce_artir' || oneri.tur === 'butce_azalt';
   const yol = oneri.varlik.ustAd ? `${oneri.varlik.ustAd} › ${oneri.varlik.ad}` : oneri.varlik.ad;
 
-  return (
-    <article className={`${s.kart} ${i.oneri} ${gidiyor ? i.gitti : ''}`}>
-      <div className={i.oneriUst}>
-        <span className={`${i.tur} ${butce ? i.turButce : ''}`}>{ONERI_TURU_ETIKETI[oneri.tur]}</span>
-        <span className={i.etiket}>{PLATFORM_KISA_ADLARI[oneri.platform]}</span>
-        <span className={i.zaman}>{seviyeAdi(oneri.platform, oneri.varlik.seviye)}</span>
-      </div>
-      <h3>{oneri.baslik}</h3>
-      {/* Üst varlık yoksa alt satır başlığın adını tekrar ederdi (canlı denetim). */}
-      {oneri.varlik.ustAd && <p className={i.kim}>{yol}</p>}
+  /*
+   * EYLEM SATIRI: solda durum ya da kısıt cümlesi, sağda düğmeler (hayalet
+   * Yoksay → ikincil yan eylem → koyu ana eylem). Uygulanmış kartta düğme
+   * yok, yalnız geri okumanın sonucu.
+   */
+  const eylemler =
+    hal === 'dogrulandi' || hal === 'uyusmadi' ? (
+      (() => {
+        const t = sonucMetni(oneri.uygulama!, oneri.platform, metin?.sonra ?? null, formatRelative(oneri.uygulama!.zaman));
+        return (
+          <span className="mr-auto inline-flex items-center gap-2 text-[12.5px] font-semibold text-ink">
+            <DurumNoktasi hal={t.ton === 'uyari' ? 'hata' : 'ok'} />
+            {t.metin}
+          </span>
+        );
+      })()
+    ) : hal === 'uygulandi' ? (
+      <span className="mr-auto inline-flex items-center gap-2 text-[12.5px] font-semibold text-ink">
+        <DurumNoktasi hal="ok" />
+        Uygulandı · geri okuma sonucu kayıtta yok
+      </span>
+    ) : (
+      <>
+        {hal === 'bilgi' && <span className={KISIT}>{oneri.kisit ?? 'Bu öneri yalnız bilgi; panelden uygulanamıyor.'}</span>}
+        {hal === 'yetkisiz' && <span className={KISIT}>Uygulamak için bütçe yazma yetkisi gerekiyor. Yöneticine sor.</span>}
+        {hata && (
+          <span className="mr-auto basis-full text-12 text-danger-strong" role="alert">
+            {hata}
+          </span>
+        )}
+        {yazabilir && (
+          <Dugme ton="hayalet" boyut="kucuk" onClick={onYoksay} bekliyor={yoksayiliyor}>
+            {yoksayiliyor ? 'Yoksayılıyor' : 'Yoksay'}
+          </Dugme>
+        )}
+        {oneri.tur === 'kreatif_yorgunlugu' && (
+          <Link className={dugmeSinifi('ikincil', 'kucuk')} href={`/reklam?musteri=${encodeURIComponent(oneri.clientId)}`}>
+            Yeni kreatif için AdvCampaign’e geç
+          </Link>
+        )}
+        {oneri.tur === 'donusum_optimizasyonu' && (
+          // YAZMA YOK (bu tur): kart yalnız bilgi; reklam setini görmek
+          // için Reklam Yöneticisi'ne bağlanıyor.
+          <Link className={dugmeSinifi('ikincil', 'kucuk')} href={baglanti(REKLAM_YONETICISI, {}, { seviye: 'ad_group' })}>
+            Reklam Yöneticisi’nde gör
+          </Link>
+        )}
+        {hal === 'uygulanabilir' && metin && (
+          <Dugme ton="koyu" boyut="kucuk" onClick={onUygula}>
+            {metin.dugme}
+          </Dugme>
+        )}
+      </>
+    );
 
-      <div className={i.kanit}>
-        <ul>
+  return (
+    <Kart
+      as="article"
+      className={`flex flex-col transition-[opacity,transform] duration-300 motion-reduce:transition-none ${
+        gidiyor ? 'scale-[0.98] opacity-0' : ''
+      }`}
+      altEylem={<div className="flex w-full flex-wrap items-center justify-end gap-2">{eylemler}</div>}
+    >
+      <div className="grid gap-3">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className={ETIKET}>{ONERI_TURU_ETIKETI[oneri.tur]}</span>
+          <span className={ETIKET}>{PLATFORM_KISA_ADLARI[oneri.platform]}</span>
+          <span className={ETIKET}>{seviyeAdi(oneri.platform, oneri.varlik.seviye)}</span>
+        </div>
+        <div>
+          <h3 className="font-baslik m-0 text-15 font-bold leading-snug text-ink">{oneri.baslik}</h3>
+          {/* Üst varlık yoksa alt satır başlığın adını tekrar ederdi (canlı denetim). */}
+          {oneri.varlik.ustAd && <p className="m-0 mt-0.5 text-12 text-ink-muted">{yol}</p>}
+        </div>
+
+        {/*
+         * KANIT KUTULARI yan yana; dar kartta kendiliğinden alt satıra iner.
+         * Sayı Montserrat ve hizalı rakam; "kötü" yön kırmızı, "iyi" yön
+         * düz siyah (yeşil yalnız durum noktası).
+         */}
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(104px,1fr))] gap-2">
           {oneri.kanitlar.map((k) => (
-            <li key={k.etiket}>
-              <span>{k.etiket}</span>
-              <b className={`${s.num} ${k.yon === 'kotu' ? i.kotu : k.yon === 'iyi' ? i.iyi : ''}`}>
+            <div key={k.etiket} className="grid gap-0.5 rounded-alan border border-line px-3 py-2">
+              <span className="text-12 text-ink-muted">{k.etiket}</span>
+              <b
+                className={`font-baslik whitespace-nowrap text-14 font-bold tabular-nums ${
+                  k.yon === 'kotu' ? 'text-danger-strong' : 'text-ink'
+                }`}
+              >
                 {k.once !== null ? `${k.once} → ${k.simdi}` : k.simdi}
               </b>
-            </li>
+            </div>
           ))}
-        </ul>
+        </div>
         <MiniGrafik oneri={oneri} />
-      </div>
 
-      <div className={i.neden}>{oneri.neden}</div>
+        <p className="m-0 text-13 leading-normal text-ink-muted">{oneri.neden}</p>
 
-      <div className={i.oneriAlt}>
-        {hal === 'dogrulandi' || hal === 'uyusmadi' ? (
-          (() => {
-            const s = sonucMetni(oneri.uygulama!, oneri.platform, metin?.sonra ?? null, formatRelative(oneri.uygulama!.zaman));
-            return (
-              <span className={`${i.durum} ${s.ton === 'uyari' ? i.durumUyari : ''}`}>
-                <i />
-                {s.metin}
-              </span>
-            );
-          })()
-        ) : hal === 'uygulandi' ? (
-          <span className={i.durum}>
-            <i />
-            Uygulandı · geri okuma sonucu kayıtta yok
-          </span>
-        ) : (
-          <>
-            {hal === 'bilgi' && <span className={i.kisit}>{oneri.kisit ?? 'Bu öneri yalnız bilgi; panelden uygulanamıyor.'}</span>}
-            {hal === 'yetkisiz' && <span className={i.kisit}>Uygulamak için bütçe yazma yetkisi gerekiyor. Yöneticine sor.</span>}
-            {hal === 'uygulanabilir' && metin && (
-              <button type="button" className={i.birincil} onClick={onUygula}>
-                {metin.dugme}
-              </button>
-            )}
-            {oneri.tur === 'kreatif_yorgunlugu' && (
-              <Link className={i.ikincil} href={`/reklam?musteri=${encodeURIComponent(oneri.clientId)}`}>
-                Yeni kreatif için AdvCampaign’e geç
+        {etkiSatiri && (
+          <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3 text-[12.5px] text-ink">
+            <DurumNoktasi hal={NOKTA_HALI[etkiSatiri.nokta]} />
+            <span>{etkiSatiri.metin}</span>
+            {etkiSatiri.bagli && (
+              <Link className={`${KART_BAGLANTISI} ml-auto`} href={etkiAdresi(oneri.clientId)}>
+                Etkisi sekmesinde gör
               </Link>
             )}
-            {oneri.tur === 'donusum_optimizasyonu' && (
-              // YAZMA YOK (bu tur): kart yalnız bilgi; reklam setini görmek
-              // için Reklam Yöneticisi'ne bağlanıyor.
-              <Link className={i.ikincil} href={baglanti(REKLAM_YONETICISI, {}, { seviye: 'ad_group' })}>
-                Reklam Yöneticisi’nde gör
-              </Link>
-            )}
-            {yazabilir && (
-              <button type="button" className={i.metin} onClick={onYoksay} disabled={yoksayiliyor}>
-                {yoksayiliyor ? 'Yoksayılıyor…' : 'Yoksay'}
-              </button>
-            )}
-            {hata && (
-              <span className={i.kartHata} role="alert">
-                {hata}
-              </span>
-            )}
-          </>
+          </div>
         )}
       </div>
-
-      {etkiSatiri && (
-        <div className={i.eKartSatiri}>
-          <span className={`${i.sNokta} ${NOKTA_SINIFI[etkiSatiri.nokta]}`} aria-hidden="true" />
-          <span>{etkiSatiri.metin}</span>
-          {etkiSatiri.bagli && (
-            <Link className={i.metin} href={etkiAdresi(oneri.clientId)}>
-              Etkisi sekmesinde gör
-            </Link>
-          )}
-        </div>
-      )}
-    </article>
+    </Kart>
   );
 }
 
 /**
- * Mini grafik. Çizgiler CSS ile ÇİZİLİYOR (`pathLength=1` + dash): taslak
- * bunu `getTotalLength()` ile JS'te yapıyordu; burada efekt gerekmiyor ve
- * `prefers-reduced-motion` altında animasyon CSS'te kapanıyor.
+ * Mini grafik: iki seri, her biri KENDİ ölçeğinde (`miniYollar`). 1. seri
+ * kırmızı, 2. seri siyah (`Grafik` bileşeniyle aynı sıra). Çizim animasyonu
+ * kalktı: modül sınıfı (`ciz`) gidince karşılığı yok ve kartlar art arda
+ * girerken her grafiğin yeniden çizilmesi bilgi taşımıyordu.
  * Seri ADLARI sözleşmeden (`adlar`); taslaktaki "Sıklık/Tıklama oranı"
  * varsayılanı yorgunluk dışındaki kartta yanlış ad yazardı.
  */
@@ -157,18 +191,18 @@ function MiniGrafik({ oneri }: { oneri: Oneri }) {
   const yollar = miniYollar(oneri.seri);
   if (!yollar || !oneri.seri) return null;
   return (
-    <figure className={i.miniK}>
-      <svg className={i.mini} viewBox={`0 0 ${MINI.W} ${MINI.H}`} aria-hidden="true">
-        <path d={yollar.b} stroke="var(--t-brand)" pathLength={1} className={i.ciz} />
-        <path d={yollar.a} stroke="var(--t-ink)" opacity={0.55} pathLength={1} className={i.ciz} />
+    <figure className="m-0 flex flex-wrap items-center gap-3">
+      <svg className="h-16 w-[150px] shrink-0" viewBox={`0 0 ${MINI.W} ${MINI.H}`} aria-hidden="true">
+        <path d={yollar.b} className="fill-none stroke-brand" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+        <path d={yollar.a} className="fill-none stroke-ink" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
       </svg>
-      <figcaption>
-        <span>
-          <i style={{ background: 'var(--t-brand)' }} />
+      <figcaption className="grid gap-1 text-11 text-ink-muted">
+        <span className="flex items-center gap-1.5">
+          <i aria-hidden className="block h-0.5 w-2.5 rounded-full bg-brand" />
           {oneri.seri.adlar[1]}
         </span>
-        <span>
-          <i style={{ background: 'var(--t-ink)', opacity: 0.55 }} />
+        <span className="flex items-center gap-1.5">
+          <i aria-hidden className="block h-0.5 w-2.5 rounded-full bg-ink" />
           {oneri.seri.adlar[0]}
         </span>
       </figcaption>

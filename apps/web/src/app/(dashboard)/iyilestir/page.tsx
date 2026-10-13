@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { YORGUNLUK } from '@advetics/shared';
 import type { AsistanOturumu, EtkiListesi, KreatifZekaYaniti, OneriListesi, RuleRecord, SinyalListesi } from '@advetics/shared';
 import { hasPermission, requireSession } from '@/lib/session';
@@ -7,20 +6,21 @@ import { sayfaWorkspaceId, workspaceSecimVerisi } from '@/lib/sayfa-workspace';
 import { first, hataMetni } from '@/lib/sayfa-yardimcilari';
 import { formatDayLong } from '@/lib/format';
 import { baglanti } from '@/lib/baglanti';
-import { SEKMELER, SEKME_ETIKETI, ozetSayilari, sekmeCoz } from '@/lib/iyilestir';
+import { SEKMELER, SEKME_ETIKETI, ozetSayilari, sekmeCoz, type Sekme } from '@/lib/iyilestir';
 import { sinyalListeYolu, type SinyalSonucu } from '@/lib/sinyal';
 import { etkiListeYolu, type EtkiSonucu } from '@/lib/etki';
 import { kreatifZekaYolu, rozetSayisi, type KreatifSonucu } from '@/lib/kreatif-zeka';
 import { WorkspaceGerekli } from '@/components/workspace-gerekli';
+import { SayfaBasligi } from '@/components/ui/sayfa-basligi';
+import { SayfaIcDuzen, SayfaIcMenu } from '@/components/ui/sayfa-ic-menu';
 import { Uyari } from '@/components/ui/uyari';
 import { OnerilerSekmesi, type OneriSonucu } from '@/components/iyilestir/oneriler-sekmesi';
 import { AsistanSekmesi, type OturumSonucu } from '@/components/iyilestir/asistan-sekmesi';
 import { SinyallerSekmesi } from '@/components/iyilestir/sinyaller-sekmesi';
 import { EtkiSekmesi } from '@/components/iyilestir/etki-sekmesi';
 import { KreatiflerSekmesi } from '@/components/iyilestir/kreatifler-sekmesi';
-import { KurallarIcerik, type KurallarSonucu } from '@/components/rules/kurallar-icerik';
-import s from '@/components/taslak/taslak.module.css';
-import i from '@/components/taslak/iyilestir.module.css';
+import { KurallarIcerik, type HesapSonucu, type KurallarSonucu } from '@/components/rules/kurallar-icerik';
+import { NewRuleButton } from '@/components/rules/rule-controls';
 
 export const metadata = { title: 'İyileştir · Advetics' };
 export const dynamic = 'force-dynamic';
@@ -82,7 +82,7 @@ export default async function IyilestirPage({
   if (!hasPermission(session, 'rule.read')) {
     return (
       <div className="space-y-5">
-        <h1 className="sayfa-baslik">İyileştir</h1>
+        <SayfaBasligi bolum="İyileştir" baslik="İyileştir" />
         <Uyari ton="uyari" baslik="Bu ekranı görme yetkin yok.">
           Yöneticine sor.
         </Uyari>
@@ -106,7 +106,8 @@ export default async function IyilestirPage({
   };
 
   const oturumParam = first(params.oturum);
-  const [oneriSonucu, kuralSonucu, sinyalSonucu, oturumSonucu, etkiSonucu, kreatifSonucu] = await Promise.all([
+  const kuralYazabilir = hasPermission(session, 'rule.write');
+  const [oneriSonucu, kuralSonucu, sinyalSonucu, oturumSonucu, etkiSonucu, kreatifSonucu, hesapSonucu] = await Promise.all([
     serverApiFetch<OneriListesi>(
       `/iyilestir/oneriler?${new URLSearchParams({ clientId })}`,
     ).then(
@@ -161,6 +162,21 @@ export default async function IyilestirPage({
       (yanit): KreatifSonucu => ({ durum: 'tamam', yanit }),
       (e: unknown): KreatifSonucu => ({ durum: 'hata', mesaj: hataMetni(e) }),
     ),
+    /*
+     * REKLAM HESAPLARI SAYFADA OKUNUYOR, KURAL SEKMESİNDE DEĞİL: "Yeni kural"
+     * artık her sekmede başlığın sağında ve kural düzenleyicinin hesap
+     * seçicisi bu listeyi istiyor. Tek çağrı iki yere veriliyor (başlık ve
+     * Kurallar sekmesi); iki çağrı iki farklı liste gösterebilirdi.
+     * HATA YUTULMUYOR: eski kod `.catch(() => [])` diyordu ve düşen çağrı
+     * "hiç hesap yok" gibi görünüp kuralı sessizce bütün hesaplara
+     * kurduruyordu. Yazma yetkisi yoksa hiç sorulmuyor.
+     */
+    kuralYazabilir
+      ? serverApiFetch<Array<{ adAccounts: Array<{ id: string; name: string }> }>>(`/connections?clientId=${clientId}`).then(
+          (baglantilar): HesapSonucu => ({ durum: 'tamam', liste: baglantilar.flatMap((c) => c.adAccounts ?? []) }),
+          (e: unknown): HesapSonucu => ({ durum: 'hata', mesaj: hataMetni(e) }),
+        )
+      : Promise.resolve<HesapSonucu>({ durum: 'tamam', liste: [] }),
   ]);
 
   const rozet: Record<(typeof SEKMELER)[number], number | null> = {
@@ -187,63 +203,85 @@ export default async function IyilestirPage({
         ? `${clientAdi} · otomatik kurallar saatte bir değerlendiriliyor`
         : `${clientAdi} · okur, önerir, onayınla uygular`;
 
+  /*
+   * BÖLÜMLER SAYFA İÇİ YAN MENÜDE (kullanıcı kararı 2026-10-14, BILESENLER
+   * § 9). SIRA taslaktan: Kurallar ikinci (menüden en çok gelinen yer).
+   * `SEKMELER` (lib) adres çözümünün listesi; görünür sıra burada, çünkü
+   * sıra bir görünüş kararı ve adres çözümünü değiştirmemeli.
+   */
+  const SIRA: readonly Sekme[] = ['oneriler', 'kurallar', 'sinyaller', 'etki', 'kreatifler', 'asistan'];
+
   return (
-    <div className={`${s.kok} ${i.sayfa}`}>
-      <header className={s.ust}>
-        <div>
-          <h1>İyileştir</h1>
-          <div className={s.altSatir}>{altSatir}</div>
-        </div>
-      </header>
+    <div className="grid gap-6">
+      <SayfaBasligi
+        bolum="İyileştir"
+        baslik="İyileştir"
+        aciklama={altSatir}
+        eylemler={
+          /*
+           * TEK BİRİNCİL HER SEKMEDE AYNI YERDE: "Yeni kural". Eskiden düğme
+           * yalnız Kurallar sekmesinin kartındaydı ve öneriden kural kurmak
+           * isteyen kullanıcı önce sekme değiştirmek zorundaydı.
+           */
+          <NewRuleButton
+            clientId={clientId}
+            accounts={hesapSonucu.durum === 'tamam' ? hesapSonucu.liste : []}
+            hesapHatasi={hesapSonucu.durum === 'hata' ? hesapSonucu.mesaj : null}
+            etiket="Yeni kural"
+            kapaliNedeni={kuralYazabilir ? undefined : 'Kural yazma yetkin yok.'}
+          />
+        }
+      />
 
-      <div>
-        <nav className={i.seg} aria-label="İyileştir sekmeleri">
-          {SEKMELER.map((k) => (
-            <Link
-              key={k}
-              href={baglanti('/iyilestir', tasinan, { sekme: k })}
-              aria-current={sekme === k ? 'page' : undefined}
-              scroll={false}
-            >
-              {SEKME_ETIKETI[k]}
-              {rozet[k] !== null && rozet[k]! > 0 && <span className={i.rozet}>{rozet[k]}</span>}
-            </Link>
-          ))}
-        </nav>
-      </div>
-
-      <section key={sekme} className={i.sekme}>
-        {sekme === 'oneriler' && <OnerilerSekmesi sonuc={oneriSonucu} yazabilir={yazabilir} etki={etkiSonucu} />}
-        {sekme === 'etki' && etkiSonucu && <EtkiSekmesi clientId={clientId} ilk={etkiSonucu} />}
-        {sekme === 'kreatifler' && (
-          <KreatiflerSekmesi
-            clientId={clientId}
-            ilk={kreatifSonucu}
-            yetki={{ yaz: hasPermission(session, 'rule.write'), aktar: hasPermission(session, 'bulk.write') }}
+      <SayfaIcDuzen
+        menu={
+          <SayfaIcMenu
+            etiket="İyileştir bölümleri"
+            secili={sekme}
+            ogeler={SIRA.map((k) => ({
+              deger: k,
+              etiket: SEKME_ETIKETI[k],
+              href: baglanti('/iyilestir', tasinan, { sekme: k }),
+              // Rozet yalnız sayı GELDİYSE: düşen çağrının "0"ı yalan olurdu.
+              sayi: rozet[k] !== null && rozet[k]! > 0 ? rozet[k]! : undefined,
+            }))}
           />
-        )}
-        {sekme === 'sinyaller' && (
-          <SinyallerSekmesi
-            clientId={clientId}
-            ilk={sinyalSonucu}
-            yetki={{ butce: yazabilir, kural: hasPermission(session, 'rule.write') }}
-          />
-        )}
-        {sekme === 'asistan' && (
-          <AsistanSekmesi clientId={clientId} clientAdi={clientAdi} ilk={oturumSonucu} yazabilir={yazabilir} />
-        )}
-        {sekme === 'kurallar' && (
-          <KurallarIcerik
-            sonuc={kuralSonucu}
-            clientId={clientId}
-            clientAdi={clientAdi}
-            canWrite={hasPermission(session, 'rule.write')}
-            canActivate={hasPermission(session, 'rule.activate')}
-            acikKural={first(params.kural)}
-            adres={(kural) => baglanti('/iyilestir', tasinan, { sekme: 'kurallar', kural })}
-          />
-        )}
-      </section>
+        }
+      >
+        <section key={sekme} className="bolum-gecis grid min-w-0 content-start gap-5">
+          {sekme === 'oneriler' && <OnerilerSekmesi sonuc={oneriSonucu} yazabilir={yazabilir} etki={etkiSonucu} />}
+          {sekme === 'etki' && etkiSonucu && <EtkiSekmesi clientId={clientId} ilk={etkiSonucu} />}
+          {sekme === 'kreatifler' && (
+            <KreatiflerSekmesi
+              clientId={clientId}
+              ilk={kreatifSonucu}
+              yetki={{ yaz: hasPermission(session, 'rule.write'), aktar: hasPermission(session, 'bulk.write') }}
+            />
+          )}
+          {sekme === 'sinyaller' && (
+            <SinyallerSekmesi
+              clientId={clientId}
+              ilk={sinyalSonucu}
+              yetki={{ butce: yazabilir, kural: hasPermission(session, 'rule.write') }}
+            />
+          )}
+          {sekme === 'asistan' && (
+            <AsistanSekmesi clientId={clientId} clientAdi={clientAdi} ilk={oturumSonucu} yazabilir={yazabilir} />
+          )}
+          {sekme === 'kurallar' && (
+            <KurallarIcerik
+              sonuc={kuralSonucu}
+              hesaplar={hesapSonucu}
+              clientId={clientId}
+              clientAdi={clientAdi}
+              canWrite={kuralYazabilir}
+              canActivate={hasPermission(session, 'rule.activate')}
+              acikKural={first(params.kural)}
+              adres={(kural) => baglanti('/iyilestir', tasinan, { sekme: 'kurallar', kural })}
+            />
+          )}
+        </section>
+      </SayfaIcDuzen>
     </div>
   );
 }

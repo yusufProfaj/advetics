@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   CHANNEL_HINTS,
@@ -15,6 +15,9 @@ import { ApiRequestError, apiFetch } from '@/lib/api';
 import { atamaBildirimi, type AtamaYaniti } from '@/lib/atama-bildirimi';
 import { PlatformLogo } from '@/components/platform-logo';
 import { Dugme } from '@/components/ui/dugme';
+import { Kart } from '@/components/ui/kart';
+import { Girdi } from '@/components/ui/alan';
+import { DurumNoktasi } from '@/components/ui/rozet';
 import { YouTubeKanalBul } from '@/components/connections/youtube-kanal-bul';
 
 /**
@@ -73,13 +76,13 @@ export function BagliKanallar({
       {/* ÖZET: hangi kanalın eksik olduğunu kartları taramadan söylüyor.
           İzleme kapalı hesap varsa burada da yazıyor; satırın içinde kalan
           bir uyarı uzun listede gözden kaçıyordu. */}
-      <p className="text-sm text-ink-muted" aria-live="polite">
+      <p className="m-0 text-13 text-ink-muted" aria-live="polite">
         <span className="font-semibold text-ink">
           {bagliKanal} / {data.groups.length}
         </span>{' '}
         kanal bağlı · {tum.length} hesap
         {izlemeKapali > 0 && (
-          <span className="font-medium text-warn-strong"> · {izlemeKapali} hesapta izleme kapalı</span>
+          <span className="font-semibold text-danger-strong"> · {izlemeKapali} hesapta izleme kapalı</span>
         )}
       </p>
       {reklam.length > 0 && (
@@ -116,11 +119,12 @@ function KanalKarti({
   boost: BoostSecenekleri;
 }) {
   return (
-    <section className="rounded-xl border border-line bg-surface">
-      <h3 className="border-b border-line px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-ink-muted">
-        {baslik}
-      </h3>
-      <ul className="divide-y divide-line">
+    /*
+      ORTAK KART KALIBI: başlık satırı 15 piksel, BÜYÜK HARF YOK (büyük
+      harfli başlık Türkçe "İ/ı" ile kırılıyordu, BILESENLER § 2 Tablo).
+    */
+    <Kart baslik={baslik} baslikEki={`${gruplar.length}`} dolgu={false}>
+      <ul className="m-0 list-none divide-y divide-line p-0">
         {gruplar.map((g) => (
           <li key={g.kind}>
             <KanalGrubu
@@ -133,7 +137,30 @@ function KanalKarti({
           </li>
         ))}
       </ul>
-    </section>
+    </Kart>
+  );
+}
+
+/**
+ * AÇILIP KAPANAN PANEL DOM'DAN ÇIKMIYOR (CLAUDE.md § 3 Tasarım): kapalıyken
+ * yüksekliği sıfır, `inert` (klavye ve ekran okuyucu içine girmiyor),
+ * açılış `grid-rows` geçişiyle; hareket azaltılmışsa geçiş yok. Eskiden
+ * `{acik && …}` ile çiziliyordu ve kapanırken bir karede yok oluyordu;
+ * aramaya yazılan metin de her kapanışta siliniyordu.
+ * (Grup 3 sapması: ortak bileşenlerde açılır bölüm yok; kurulum listesinin
+ * deseniyle aynı.)
+ */
+function Acilir({ acik, children }: { acik: boolean; children: ReactNode }) {
+  return (
+    <div
+      inert={!acik}
+      aria-hidden={!acik}
+      className={`grid transition-[grid-template-rows,opacity] duration-200 motion-reduce:transition-none ${
+        acik ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+      }`}
+    >
+      <div className="min-h-0 overflow-hidden">{children}</div>
+    </div>
   );
 }
 
@@ -187,16 +214,14 @@ function KanalGrubu({
         <div className="flex min-w-0 items-center gap-3">
           {/* LOGO BEYAZ ZEMİNDE: markaların kendi renkleri var ve renkli
               bir rozetin üstünde ikisi çakışıyordu. */}
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-line bg-surface">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-alan border border-line bg-surface">
             <PlatformLogo kind={grup.kind} className="h-5 w-5" />
           </span>
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-ink">{CHANNEL_LABELS[grup.kind]}</p>
-            <p className="flex items-center gap-1.5 text-xs text-ink-muted">
-              <span
-                aria-hidden
-                className={`h-1.5 w-1.5 rounded-full ${bagli ? 'bg-ok' : 'bg-ink-muted/40'}`}
-              />
+            <p className="m-0 text-13 font-bold text-ink">{CHANNEL_LABELS[grup.kind]}</p>
+            <p className="m-0 flex items-center gap-1.5 text-12 text-ink-muted">
+              {/* YEŞİL YALNIZ DURUM NOKTASINDA (kılavuz): bağlı = yeşil, değil = gri. */}
+              <DurumNoktasi hal={bagli ? 'ok' : 'taslak'} />
               {bagli
                 ? `${grup.connected.length} hesap bağlı`
                 : eklenebilir
@@ -238,13 +263,15 @@ function KanalGrubu({
         </div>
       </div>
 
-      {bulAcik && (
-        <div className="ml-12 mt-3 rounded-lg border border-line bg-surface-sunken p-3">
-          <p className="text-xs font-medium text-ink">YouTube kanalını bul</p>
-          <div className="mt-2">
-            <YouTubeKanalBul clientId={clientId} workspaceAdi={workspaceAdi} />
+      {youtube && (
+        <Acilir acik={bulAcik}>
+          <div className="ml-12 mt-3 rounded-alan border border-line bg-surface-muted p-3">
+            <p className="m-0 text-12 font-bold text-ink">YouTube kanalını bul</p>
+            <div className="mt-2">
+              <YouTubeKanalBul clientId={clientId} workspaceAdi={workspaceAdi} />
+            </div>
           </div>
-        </div>
+        </Acilir>
       )}
 
       {/* HESAPLAR LOGONUN HİZASINDA, ÇERÇEVESİZ: her hesabı ayrı bir kutuya
@@ -264,17 +291,17 @@ function KanalGrubu({
         </ul>
       )}
 
-      {acik && (
-        <div className="ml-12 mt-3 rounded-lg border border-line bg-surface-sunken p-3">
-          <p className="text-xs font-medium text-ink">Havuzdan seç</p>
-          <p className="mt-0.5 text-xs text-ink-muted">{CHANNEL_HINTS[grup.kind]}</p>
+      <Acilir acik={acik}>
+        <div className="ml-12 mt-3 rounded-alan border border-line bg-surface-muted p-3">
+          <p className="m-0 text-12 font-bold text-ink">Havuzdan seç</p>
+          <p className="m-0 mt-0.5 text-12 text-ink-muted">{CHANNEL_HINTS[grup.kind]}</p>
           {/* SEÇİCİNİN YÜKSEKLİĞİ SINIRLI: havuzda onlarca hesap olabiliyor
               ve sınırsız liste, kartı sayfa boyunca uzatıp altındaki
               kanalları ekrandan atıyordu. */}
           {grup.available.length > ARAMA_ESIGI && (
             <label className="mt-2 block">
               <span className="sr-only">{CHANNEL_LABELS[grup.kind]} havuzunda ara</span>
-              <input
+              <Girdi
                 type="search"
                 name={`havuz-ara-${grup.kind}`}
                 autoComplete="off"
@@ -282,25 +309,24 @@ function KanalGrubu({
                 value={ara}
                 onChange={(e) => setAra(e.target.value)}
                 placeholder="Ad ya da hesap numarası…"
-                className="h-8 w-full rounded-lg border border-line bg-surface px-2.5 text-sm focus-visible:border-brand focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand/30"
               />
             </label>
           )}
           {/* SESSİZ KESME YOK: süzüldüyse kaçının göründüğü yazıyor. */}
           {ara.trim() && (
-            <p className="mt-1.5 text-xs text-ink-muted" aria-live="polite">
+            <p className="m-0 mt-1.5 text-12 text-ink-muted" aria-live="polite">
               {gorunen.length === 0
                 ? `Aramaya uyan hesap yok (havuzda ${grup.available.length} hesap var).`
                 : `${gorunen.length} / ${grup.available.length} hesap gösteriliyor.`}
             </p>
           )}
-          <ul className="mt-2 max-h-80 space-y-1.5 overflow-y-auto overscroll-contain">
+          <ul className="m-0 mt-2 grid max-h-80 list-none gap-1.5 overflow-y-auto overscroll-contain p-0">
             {gorunen.map((i) => (
               <SecilebilirSatir key={i.id} clientId={clientId} kind={grup.kind} item={i} />
             ))}
           </ul>
         </div>
-      )}
+      </Acilir>
     </div>
   );
 }
@@ -413,8 +439,8 @@ function BagliKart({
       </div>
 
       {onay && (
-        <div className="mt-2 rounded-lg border border-danger/30 bg-danger-soft p-2.5">
-          <p className="text-xs text-danger-strong">
+        <div className="mt-2 rounded-alan border border-l-4 border-line border-l-danger bg-surface p-2.5">
+          <p className="m-0 text-12 text-ink">
             {kaldirmaOnayMetni(item.ajansAtadi === true, ajansUyesi)}
           </p>
           <div className="mt-2 flex gap-2">
@@ -438,7 +464,7 @@ function BagliKart({
         <ProfilAyarlari item={item} kind={kind} secenekler={boostSecenekleri} />
       ) : (
         !item.syncEnabled && (
-          <p className="mt-1.5 text-xs text-warn-strong">
+          <p className="m-0 mt-1.5 text-12 font-semibold text-danger-strong">
             İzleme kapalı, bu hesaptan veri çekilmiyor. Kaldırıp yeniden ekle.
           </p>
         )
@@ -470,7 +496,7 @@ function SecilebilirSatir({
 
   return (
     <li>
-      <div className="flex items-center justify-between gap-2 rounded-lg bg-surface px-3 py-2">
+      <div className="flex items-center justify-between gap-2 rounded-alan bg-surface px-3 py-2">
         <div className="min-w-0">
           <p className="truncate text-sm text-ink">{item.name}</p>
           <p className="truncate text-xs text-ink-muted" translate="no">
@@ -481,9 +507,10 @@ function SecilebilirSatir({
             aradığı hesabı bulamayan kullanıcı senkronizasyonun bozuk
             olduğunu sanıyor. */}
         {item.isManager ? (
-          <span className="shrink-0 text-[11px] text-ink-muted">Yönetici (MCC) — atanamaz</span>
+          <span className="shrink-0 text-12 text-ink-muted">Yönetici (MCC), atanamaz</span>
         ) : (
-          <Dugme boyut="kucuk" bekliyor={busy} onClick={() => void ata(clientId)}>
+          /* KOYU, KIRMIZI DEĞİL: kart içinde kırmızı dolu düğme yok (BILESENLER § 3). */
+          <Dugme ton="koyu" boyut="kucuk" bekliyor={busy} onClick={() => void ata(clientId)}>
             Ekle
           </Dugme>
         )}

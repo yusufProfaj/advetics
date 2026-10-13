@@ -3,7 +3,9 @@
 import { useEffect, useState } from 'react';
 import type { AssetListResult, AssetRecord, AssetUploadResult, ClientProfileRecord } from '@advetics/shared';
 import { API_URL, ApiRequestError, apiFetch, onizlemeAdresi } from '@/lib/api';
-import { Halka } from '@/components/yukleniyor';
+import { Kart } from '@/components/ui/kart';
+import { dugmeSinifi } from '@/components/ui/dugme';
+import { BosDurum, Serit, Yukleniyor } from '@/components/ui/hal';
 import { KreatifGorsel } from '@/components/kreatif-gorsel';
 
 /**
@@ -98,62 +100,78 @@ export function LogoSekmesi({ clientId, canWrite }: { clientId: string; canWrite
 
   if (yukleniyor) {
     return (
-      <div className="flex items-center gap-2 py-8 text-sm text-ink-muted">
-        <Halka className="h-4 w-4" /> Yükleniyor…
-      </div>
+      <Kart baslik="Logo">
+        <Yukleniyor satir={2} etiket="Logo yükleniyor" />
+      </Kart>
     );
   }
 
   return (
-    <div className="max-w-2xl space-y-3">
-      <div>
-        <h2 className="text-sm font-semibold text-ink">Logo</h2>
-        <p className="mt-0.5 text-xs text-ink-muted">
-          Reklam kreatifinde ve AI üretiminde kullanılacak marka logosu.
-        </p>
-      </div>
+    <Kart
+      baslik="Logo"
+      altEylem={
+        canWrite ? (
+          /*
+           * YÜKLEME BİR `label`: dosya seçicisini açmanın klavye ve ekran
+           * okuyucuyla çalışan tek yolu gerçek `<input type=file>`. Görünüş
+           * ortak düğme sınıfından (`dugmeSinifi`), kendi kopyası değil.
+           */
+          <label className={`${dugmeSinifi('ikincil', 'kucuk')} cursor-pointer ${busy !== null ? 'pointer-events-none opacity-40' : ''}`}>
+            {busy === 'yukle' ? 'Yükleniyor…' : 'Yeni logo yükle'}
+            <input
+              type="file"
+              accept="image/png,image/jpeg"
+              className="sr-only"
+              disabled={busy !== null}
+              onChange={(e) => void yukle(e.target.files)}
+            />
+          </label>
+        ) : undefined
+      }
+    >
+      <div className="grid max-w-2xl gap-3">
+        <p className="m-0 text-13 text-ink-muted">Reklam kreatifinde ve AI üretiminde kullanılacak marka logosu.</p>
 
-      {assets.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-line px-3 py-6 text-center text-xs text-ink-muted">
-          Henüz logo yüklenmedi.
-        </p>
-      ) : (
-        <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
-          {assets.map((a) => (
-            <button
-              key={a.id}
-              type="button"
-              disabled={!canWrite || busy !== null}
-              onClick={() => sec(a.id)}
-              className={`aspect-square overflow-hidden rounded-lg border-2 transition ${
-                seciliId === a.id ? 'border-brand' : 'border-line hover:border-brand-soft'
-              }`}
-            >
-              <KreatifGorsel src={onizlemeAdresi(a.previewUrl)} alt={a.name} bosMetin="Görsel yok" />
-            </button>
-          ))}
-        </div>
-      )}
-
-      {error && (
-        <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger-strong ring-1 ring-inset ring-danger/30">
-          {error}
-        </p>
-      )}
-      {kaydedildi && !error && <p className="text-xs text-ok-strong">Kaydedildi</p>}
-
-      {canWrite && (
-        <label className="inline-block cursor-pointer rounded-lg border border-line bg-surface px-3.5 py-2 text-sm font-medium text-ink hover:bg-surface-sunken">
-          {busy === 'yukle' ? 'Yükleniyor…' : 'Yeni logo yükle'}
-          <input
-            type="file"
-            accept="image/png,image/jpeg"
-            className="hidden"
-            disabled={busy !== null}
-            onChange={(e) => void yukle(e.target.files)}
+        {assets.length === 0 ? (
+          <BosDurum
+            baslik="Henüz logo yüklenmedi."
+            neden={
+              canWrite
+                ? 'Google Performance Max logosuz kampanya kurmuyor. Sağ alttan yükle.'
+                : 'Logo yükleme yetkin yok; yöneticine sor.'
+            }
           />
-        </label>
-      )}
-    </div>
+        ) : (
+          <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
+            {assets.map((a) => (
+              <button
+                key={a.id}
+                type="button"
+                disabled={!canWrite || busy !== null}
+                onClick={() => sec(a.id)}
+                aria-pressed={seciliId === a.id}
+                aria-label={`${a.name}${seciliId === a.id ? ' (seçili)' : ''}`}
+                className={`aspect-square overflow-hidden rounded-alan border-2 transition-colors motion-reduce:transition-none ${
+                  seciliId === a.id ? 'border-brand' : 'border-line hover:border-line-strong'
+                }`}
+              >
+                <KreatifGorsel src={onizlemeAdresi(a.previewUrl)} alt={a.name} bosMetin="Görsel yok" />
+              </button>
+            ))}
+          </div>
+        )}
+
+        {error && (
+          <Serit ton="hata" baslik="Logo kaydedilemedi ya da okunamadı.">
+            {error}
+          </Serit>
+        )}
+        {kaydedildi && !error && (
+          <p role="status" className="m-0 text-12 text-ink-muted">
+            Kaydedildi
+          </p>
+        )}
+      </div>
+    </Kart>
   );
 }

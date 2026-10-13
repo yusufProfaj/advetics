@@ -4,13 +4,18 @@ import {
   LEAD_FORM_STATUS_LABELS,
   trTelefonOnerisi,
   type LeadFormRecord,
+  type LeadFormStatus,
 } from '@advetics/shared';
 import { hasPermission, requireSession } from '@/lib/session';
 import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import { formatRelative } from '@/lib/format';
 import { hesaplarAdresi, kapi, varliklarAdresi } from '@/lib/panel-adresleri';
 import { FormBuilder } from '@/components/forms/form-builder';
-import { Uyari } from '@/components/ui/uyari';
+import { KART_BAGLANTISI, Kart } from '@/components/ui/kart';
+import { dugmeSinifi } from '@/components/ui/dugme';
+import { AdHucresi, Tablo, SayfalamaCubugu } from '@/components/ui/tablo';
+import { Rozet, type DurumHali } from '@/components/ui/rozet';
+import { BosDurum, HataDurumu, Serit } from '@/components/ui/hal';
 
 
 /**
@@ -78,98 +83,159 @@ export async function FormlarIcerik({
   const editId = first(params.form);
   const editing = editId ? forms.find((f) => f.id === editId) : undefined;
 
+  /*
+   * OLUŞTURUCU YALNIZ ADRESTE `form` VARKEN AÇIK (2026-10-14, taslak
+   * `#varlik`): `?form=yeni` yeni form, `?form=<id>` düzenleme. Eskiden
+   * oluşturucu her zaman listenin ÜSTÜNDE açık duruyordu ve formu olan
+   * workspace'te liste ekranın altına itiliyordu; "Yeni form" artık başlığın
+   * sağında, sayfanın birincil eylemi.
+   */
+  const olusturucuAcik = editId !== undefined;
+  const listeAdresi = varliklarAdresi('formlar', clientId);
+
   return (
-    <div className="space-y-5">
-      {!formSonucu.ok && (
-        <Uyari ton="tehlike" baslik="Form listesi alınamadı.">
-          {formSonucu.hata}
-        </Uyari>
-      )}
+    <div className="grid gap-5">
+      {!formSonucu.ok && <HataDurumu baslik="Form listesi alınamadı." mesaj={formSonucu.hata} />}
 
       {!baglantiSonucu.ok ? (
-        <Uyari ton="tehlike" baslik="Sayfalar okunamadı; form oluşturulamıyor.">
+        <Serit ton="hata" baslik="Sayfalar okunamadı; form oluşturulamıyor.">
           {baglantiSonucu.hata}
-        </Uyari>
+        </Serit>
       ) : pages.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-line bg-surface p-8 text-center">
-          <h2 className="text-sm font-semibold text-ink">Önce bir Facebook sayfası gerekiyor</h2>
-          <p className="mx-auto mt-2 max-w-md text-xs text-ink-muted">
-            Anlık form sayfaya ait — reklam hesabına değil. Instagram hesabı tek başına
-            yeterli değil.
-          </p>
-          {/* Sayfa ataması bir WORKSPACE işi: Kurulum'un hesaplar bloğu. */}
-          <Link
-            href={hesaplarAdresi(clientId)}
-            className="mt-4 inline-block rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white"
-          >
-            Kurulum’da sayfa ata
-          </Link>
-        </div>
-      ) : canWrite ? (
-        <FormBuilder
-          key={editing?.id ?? 'new'}
-          clientId={clientId}
-          pages={pages}
-          existing={editing}
-          canPublish={canPublish}
-          telefonOnerisi={telefon}
+        <BosDurum
+          baslik="Önce bir Facebook sayfası gerekiyor"
+          neden="Anlık form sayfaya ait, reklam hesabına değil. Instagram hesabı tek başına yeterli değil."
+          eylem={
+            /* Sayfa ataması bir WORKSPACE işi: Kurulum'un hesaplar bloğu. */
+            <Link href={hesaplarAdresi(clientId)} className={dugmeSinifi('koyu', 'kucuk')}>
+              Kurulum’da sayfa ata
+            </Link>
+          }
         />
-      ) : (
-        <div className="rounded-xl bg-warn-soft px-4 py-3 text-sm text-warn-strong ring-1 ring-inset ring-warn/30">
-          Form oluşturmak için yetkin yok.
-        </div>
-      )}
+      ) : !canWrite ? (
+        olusturucuAcik && <Serit baslik="Form oluşturmak için yetkin yok.">Yöneticine sor.</Serit>
+      ) : olusturucuAcik ? (
+        <Kart
+          baslik={editing ? editing.name : 'Yeni form'}
+          eylem={
+            <Link href={listeAdresi} scroll={false} className={dugmeSinifi('hayalet', 'kucuk')}>
+              Kapat
+            </Link>
+          }
+        >
+          {editId !== 'yeni' && !editing && formSonucu.ok && (
+            <div className="mb-4">
+              <Serit baslik="Bu form bulunamadı.">Silinmiş ya da başka bir workspace’e ait olabilir; boş bir form açıldı.</Serit>
+            </div>
+          )}
+          <FormBuilder
+            key={editing?.id ?? 'new'}
+            clientId={clientId}
+            pages={pages}
+            existing={editing}
+            canPublish={canPublish}
+            telefonOnerisi={telefon}
+          />
+        </Kart>
+      ) : null}
+
+      {formSonucu.ok &&
+        baglantiSonucu.ok &&
+        pages.length > 0 &&
+        forms.length === 0 &&
+        !olusturucuAcik && (
+          <BosDurum
+            baslik="Bu workspace’te form yok"
+            neden={`${pages.map((p) => p.name).join(', ')} sayfasında Advetics’ten açılmış anlık form yok. Form, reklam kurulurken de açılabilir.`}
+            eylem={
+              canWrite ? (
+                <Link href={varliklarAdresi('formlar', clientId, { form: 'yeni' })} scroll={false} className={dugmeSinifi('koyu', 'kucuk')}>
+                  Form oluştur
+                </Link>
+              ) : undefined
+            }
+          />
+        )}
 
       {forms.length > 0 && (
-        <section className="rounded-xl border border-line bg-surface">
-          <h2 className="border-b border-line px-4 py-3 text-sm font-semibold text-ink">
-            Formların
-          </h2>
-          <ul>
-            {forms.map((f) => (
-              <li
-                key={f.id}
-                className="flex flex-wrap items-center justify-between gap-2 border-b border-line/60 px-4 py-2.5 last:border-0"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-ink">
-                    {f.name}
-                    {/* SÜRÜM ROZETİ yalnızca 1'den büyükse. Her formun yanında
-                        "v1" yazmak, sürümlemeyi kullanıcının düşünmesi gereken
-                        bir şeymiş gibi gösterirdi. */}
-                    {f.version > 1 && (
-                      <span className="ml-2 rounded bg-surface-sunken px-1.5 py-0.5 text-[10px] text-ink-muted">
-                        {f.version}. sürüm
-                      </span>
-                    )}
-                  </p>
-                  <p className="text-[11px] text-ink-muted">
-                    {f.socialProfileName} · {FORM_TYPE_META[f.formType].label} ·{' '}
-                    {LEAD_FORM_STATUS_LABELS[f.status]} · {f.prefillQuestions.length} soru ·{' '}
-                    {formatRelative(f.createdAt)}
-                    {f.error && <span className="text-danger-strong"> · {f.error}</span>}
-                    {/* GERİ OKUMA: form Meta'da açık ama gönderilenden farklı
-                        ya da doğrulanamadı. "Yayında" yazısının yanında
-                        KIRMIZI: KVKK kutusunun düşmüş olması sessiz kalmamalı. */}
-                    {f.readbackWarning && <span className="text-danger-strong"> · {f.readbackWarning}</span>}
-                  </p>
-                </div>
-                {canWrite && (
-                  <Link
-                    href={varliklarAdresi('formlar', clientId, { form: f.id })}
-                    className="shrink-0 rounded-lg border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface-sunken"
-                  >
-                    {f.status === 'published' ? 'Görüntüle' : 'Düzenle'}
-                  </Link>
-                )}
-              </li>
-            ))}
-          </ul>
-        </section>
+        <Kart baslik="Formların" baslikEki={`${forms.length}`} dolgu={false}>
+          <Tablo<LeadFormRecord>
+            etiket="Formlar"
+            satirlar={forms}
+            satirAnahtari={(f) => f.id}
+            sutunlar={[
+              {
+                anahtar: 'ad',
+                baslik: 'Form',
+                hucre: (f) => (
+                  <AdHucresi
+                    ad={
+                      <>
+                        {f.name}
+                        {/* SÜRÜM ROZETİ yalnızca 1'den büyükse. Her formun
+                            yanında "v1" yazmak, sürümlemeyi kullanıcının
+                            düşünmesi gereken bir şeymiş gibi gösterirdi. */}
+                        {f.version > 1 && (
+                          <span className="ml-2 rounded-full bg-surface-sunken px-2 py-0.5 text-11 font-semibold text-ink-muted">
+                            {f.version}. sürüm
+                          </span>
+                        )}
+                      </>
+                    }
+                    alt={
+                      <>
+                        {f.socialProfileName} · {FORM_TYPE_META[f.formType].label}
+                        {f.error && <span className="text-danger-strong"> · {f.error}</span>}
+                        {/* GERİ OKUMA: form Meta'da açık ama gönderilenden
+                            farklı ya da doğrulanamadı. "Yayında" yazısının
+                            yanında KIRMIZI: KVKK kutusunun düşmüş olması
+                            sessiz kalmamalı. */}
+                        {f.readbackWarning && <span className="text-danger-strong"> · {f.readbackWarning}</span>}
+                      </>
+                    }
+                  />
+                ),
+              },
+              {
+                anahtar: 'durum',
+                baslik: 'Durum',
+                hucre: (f) => <Rozet hal={FORM_DURUM_HALI[f.status]}>{LEAD_FORM_STATUS_LABELS[f.status]}</Rozet>,
+              },
+              { anahtar: 'soru', baslik: 'Soru', sayi: true, hucre: (f) => f.prefillQuestions.length },
+              { anahtar: 'zaman', baslik: 'Oluşturuldu', ikincil: true, hucre: (f) => formatRelative(f.createdAt) },
+              {
+                anahtar: 'eylem',
+                baslik: <span className="sr-only">Eylem</span>,
+                sayi: true,
+                hucre: (f) =>
+                  canWrite ? (
+                    <Link href={varliklarAdresi('formlar', clientId, { form: f.id })} scroll={false} className={KART_BAGLANTISI}>
+                      {f.status === 'published' ? 'Görüntüle' : 'Düzenle'}
+                    </Link>
+                  ) : null,
+              },
+            ]}
+          />
+          <SayfalamaCubugu bas={1} son={forms.length} toplam={forms.length} />
+        </Kart>
       )}
     </div>
   );
 }
+
+/**
+ * Form durumu → durum rozeti. YEŞİL YALNIZ "Yayında"; yayın belirsiz ya da
+ * düşmüşse kırmızı (kullanıcının bakması gereken iş), taslak ve yeni sürümü
+ * olan gri. `Record` olduğu için yeni bir durum eklenince derleme burayı ister.
+ */
+const FORM_DURUM_HALI: Record<LeadFormStatus, DurumHali> = {
+  draft: 'taslak',
+  publishing: 'taslak',
+  uncertain: 'hata',
+  published: 'ok',
+  superseded: 'dur',
+  failed: 'hata',
+};
 
 function first(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v[0] : v;

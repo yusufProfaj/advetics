@@ -6,7 +6,8 @@ import type {
 import { requireSession } from '@/lib/session';
 import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import { kapi } from '@/lib/panel-adresleri';
-import { Uyari } from '@/components/ui/uyari';
+import { Kart } from '@/components/ui/kart';
+import { HataDurumu, Serit } from '@/components/ui/hal';
 import { CreativeLibrary } from './creative-library';
 import { IsleyenKreatifler } from './isleyen-kreatifler';
 
@@ -61,11 +62,11 @@ export async function KreatiflerIcerik({
   const performans = performansSonuc.status === 'fulfilled' ? performansSonuc.value : null;
 
   return (
-    <div className="space-y-5">
+    <div className="grid gap-5">
       {hata(performansSonuc) && (
-        <Uyari ton="uyari" baslik="Geçmiş performans alınamadı.">
+        <Serit baslik="Geçmiş performans alınamadı.">
           {hata(performansSonuc)}
-        </Uyari>
+        </Serit>
       )}
 
       {/*
@@ -74,37 +75,28 @@ export async function KreatiflerIcerik({
         elindeki en iyi bilgiyi kullanmamak demek.
       */}
       {performans !== null && performans.rows.length > 0 && (
-        <section className="space-y-2">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <div>
-              <h2 className="text-sm font-semibold text-ink">Geçmişte işe yarayanlar</h2>
-              <p className="mt-0.5 text-xs text-ink-muted">
-                Son {performans.gun} günde yayınlanmış reklamların gerçek performansı.
-                Tıklama oranına göre sıralı.
-              </p>
-            </div>
-            {/* SESSİZ KESME YOK: yeterli gösterim almadığı için sıralanmayan
-                kreatifler sayılıyor. */}
-            {performans.yetersiz > 0 && (
-              <span className="text-[11px] text-ink-muted">
-                {performans.yetersiz} kreatif yeterli gösterim almamış, listede yok
-              </span>
-            )}
-          </div>
+        <Kart
+          baslik="Geçmişte işe yarayanlar"
+          baslikEki={`son ${performans.gun} gün · tıklama oranına göre`}
+        >
+          {/* SESSİZ KESME YOK: yeterli gösterim almadığı için sıralanmayan
+              kreatifler sayılıyor. */}
+          <p className="m-0 mb-3 text-12 text-ink-muted">
+            {performans.rows.length} kreatif gösteriliyor
+            {performans.yetersiz > 0 && ` · ${performans.yetersiz} kreatif yeterli gösterim almamış, listede yok`}
+          </p>
           <IsleyenKreatifler liste={performans.rows} />
-        </section>
+        </Kart>
       )}
 
       {kreatifSonuc.status === 'rejected' ? (
-        <Uyari ton="tehlike" baslik="Kreatif listesi alınamadı.">
-          {hata(kreatifSonuc)}
-        </Uyari>
+        <HataDurumu baslik="Kreatif listesi alınamadı." mesaj={hata(kreatifSonuc)} />
       ) : canWrite ? (
         <>
           {hata(arsivSonuc) && (
-            <Uyari ton="uyari" baslik="Görsel arşivi alınamadı; kreatife arşivden görsel seçilemez.">
+            <Serit baslik="Görsel arşivi alınamadı; kreatife arşivden görsel seçilemez.">
               {hata(arsivSonuc)}
-            </Uyari>
+            </Serit>
           )}
           <CreativeLibrary
             clientId={clientId}
@@ -113,9 +105,7 @@ export async function KreatiflerIcerik({
           />
         </>
       ) : (
-        <div className="rounded-xl bg-warn-soft px-4 py-3 text-sm text-warn-strong ring-1 ring-inset ring-warn/30">
-          Kreatif düzenlemek için yetkin yok.
-        </div>
+        <Serit baslik="Kreatif düzenlemek için yetkin yok.">Yöneticine sor.</Serit>
       )}
     </div>
   );
