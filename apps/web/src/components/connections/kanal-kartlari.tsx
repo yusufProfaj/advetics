@@ -12,6 +12,13 @@ import { ApiRequestError, apiFetch } from '@/lib/api';
 import { ayarlarAdresi } from '@/lib/panel-adresleri';
 import { PlatformLogo, adAccountKanali } from '@/components/platform-logo';
 import { eksikIzinMetni } from '@/lib/izin-etiketleri';
+import { Dugme, dugmeSinifi } from '@/components/ui/dugme';
+import { Kart } from '@/components/ui/kart';
+import { Rozet, type DurumHali } from '@/components/ui/rozet';
+import { Serit } from '@/components/ui/hal';
+import { Pencere } from '@/components/ui/pencere';
+import { AcilirMenu, MenuAyraci, MenuOgesi } from '@/components/ui/acilir-menu';
+import { DigerMenusu } from '@/components/ayar-sekmeleri';
 
 /**
  * ═══ KANAL KARTLARI — BAĞLANMAK VE BAĞLANTININ DURUMU AYNI YERDE ═══
@@ -31,10 +38,11 @@ import { eksikIzinMetni } from '@/lib/izin-etiketleri';
  * │ zorundaydı ve bağlıyken bile "Bağlan" görüyordu.                       │
  * └─────────────────────────────────────────────────────────────────────────┘
  *
- * Artık PLATFORM BAŞINA TEK KART: bağlı mı, kim yetkilendirmiş, ne getirdi,
- * ne kadarı kullanılıyor ve yapılabilecek her şey. Bağlanmak da bu kartın
- * içinde, çünkü "bağlan" bir kanalın DURUMLARINDAN biri; ayrı bir kutuya
- * koymak onu bağlantının kendisinden kopuk bir işlem gibi gösteriyordu.
+ * Artık PLATFORM BAŞINA TEK KART ve kart ORTAK KALIPTA (taslak `#ayarlar`):
+ * başlıkta platform ve durum rozeti, gövdede sayı ve TEK cümle, hata varsa
+ * platformun kendi kodu, tek eylem sağ altta. Seyrek işler (durumu kontrol
+ * et, yeniden yetkilendir, kaldır) ⋯ menüsünde: altı düğmenin yan yana
+ * durması "hangisine basmalıyım" sorusunu üretiyordu.
  */
 export function KanalKartlari({
   availability,
@@ -56,25 +64,18 @@ export function KanalKartlari({
   const [hata, setHata] = useState<string | null>(null);
 
   return (
-    <section className="space-y-3">
-      <div>
-        <h2 className="text-sm font-semibold text-ink">Kanallar</h2>
-        <p className="mt-0.5 text-xs text-ink-muted">
-          Her platformu bir kez bağlıyorsun. Bağlantı ajansa ait, workspace ayrımı hesap
-          atamasıyla yapılıyor.
-        </p>
-      </div>
+    <section className="grid gap-3">
+      <p className="m-0 text-13 text-ink-muted">
+        Her platformu bir kez bağlıyorsun. Bağlantı ajansa ait, workspace ayrımı hesap atamasıyla yapılıyor.
+      </p>
 
       {hata && (
-        <div
-          role="alert"
-          className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger-strong"
-        >
+        <Serit ton="hata" baslik="İşlem yapılamadı">
           {hata}
-        </div>
+        </Serit>
       )}
 
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {availability.map((a) => (
           <KanalKarti
             key={a.platform}
@@ -96,18 +97,112 @@ export function KanalKartlari({
   );
 }
 
-const DURUM: Record<
-  ConnectionSummary['status'],
-  { etiket: string; nokta: string; metin: string }
-> = {
-  active: { etiket: 'Bağlı', nokta: 'bg-ok', metin: 'text-ok-strong' },
-  needs_reauth: {
-    etiket: 'Yeniden yetkilendirme gerekli',
-    nokta: 'bg-warn',
-    metin: 'text-warn-strong',
-  },
-  error: { etiket: 'Hata', nokta: 'bg-danger', metin: 'text-danger-strong' },
-  revoked: { etiket: 'Kaldırıldı', nokta: 'bg-line', metin: 'text-ink-muted' },
+/**
+ * OAuth'u başlatır: API yetki adresini verir, yönlendirmeyi TARAYICI yapar.
+ * Fetch üzerinden gelen bir 302, platformun izin ekranını görünmez kılar.
+ * Hem kartın "Bağlan" düğmesi hem başlıktaki "Platform bağla" menüsü bunu
+ * çağırıyor: iki ayrı yazım, dönüş adresini bir gün iki farklı yere yazardı.
+ */
+async function baglantiBaslat(platform: Platform): Promise<void> {
+  const { authorizeUrl } = await apiFetch<{ authorizeUrl: string }>('/connections/authorize', {
+    method: 'POST',
+    body: JSON.stringify({
+      platform,
+      // Çapasız: dönüşte arkasına `?connection=…` ekleniyor (API `VARSAYILAN_DONUS`).
+      redirectTo: ayarlarAdresi('baglantilar'),
+    }),
+  });
+  window.location.href = authorizeUrl;
+}
+
+/**
+ * ═══ BAŞLIKTAKİ "PLATFORM BAĞLA" (bölümün birincil eylemi) ═══
+ *
+ * Taslakta bölümün birincil eylemi başlığın sağında; bağlanacak platform
+ * menüden seçiliyor. Yapılandırılmamış platform menüde KAPALI ve sebebi
+ * altında yazıyor: gizlemek, desteklenmediğini sanmak demekti. Bağlı bir
+ * platform da listede: ikinci bir kimlikle ikinci bağlantı kurulabiliyor
+ * (açıklamada "bağlı" yazıyor ki aynı kimliği yanlışlıkla yeniden
+ * yetkilendirip ilk token'ı düşürmesin).
+ */
+export function PlatformBaglaMenusu({
+  availability,
+  connections,
+}: {
+  availability: ProviderAvailability[];
+  connections: Array<Pick<ConnectionSummary, 'platform'>>;
+}) {
+  const [bekleyen, setBekleyen] = useState<Platform | null>(null);
+  const [hata, setHata] = useState<string | null>(null);
+
+  function bagla(platform: Platform): void {
+    setBekleyen(platform);
+    setHata(null);
+    baglantiBaslat(platform).catch((err: unknown) => {
+      setHata(err instanceof ApiRequestError ? err.message : 'Bağlantı başlatılamadı.');
+      setBekleyen(null);
+    });
+  }
+
+  return (
+    <>
+      <AcilirMenu
+        etiket="Bağlanacak platform"
+        hizala="sag"
+        genislik="w-72"
+        tetik={({ acik: _acik, ...o }) => (
+          <button type="button" className={dugmeSinifi('birincil')} aria-busy={bekleyen !== null || undefined} {...o}>
+            + Platform bağla
+          </button>
+        )}
+      >
+        {availability.map((a) => {
+          const bagli = connections.some((c) => c.platform === a.platform);
+          return (
+            <MenuOgesi
+              key={a.platform}
+              ikon={<PlatformLogo kind={adAccountKanali(a.platform)} className="h-4 w-4" />}
+              devreDisi={!a.configured || bekleyen !== null}
+              aciklama={
+                !a.configured
+                  ? 'Sunucu ayarları eksik'
+                  : bekleyen === a.platform
+                    ? 'Yönlendiriliyor…'
+                    : bagli
+                      ? 'Bağlı. Başka bir kimlikle ikinci bağlantı'
+                      : undefined
+              }
+              onClick={() => bagla(a.platform)}
+            >
+              {PLATFORM_LABELS[a.platform]}
+            </MenuOgesi>
+          );
+        })}
+      </AcilirMenu>
+
+      <Pencere
+        acik={hata !== null}
+        onKapat={() => setHata(null)}
+        baslik="Bağlantı başlatılamadı"
+        genislik="dar"
+        altEylemler={
+          <Dugme ton="ikincil" onClick={() => setHata(null)}>
+            Kapat
+          </Dugme>
+        }
+      >
+        {/* PLATFORMUN/API'NİN KENDİ CÜMLESİ: "başlatılamadı" tek başına teşhis değil. */}
+        <p className="m-0 break-words text-14 text-ink">{hata}</p>
+      </Pencere>
+    </>
+  );
+}
+
+const DURUM: Record<ConnectionSummary['status'], { etiket: string; hal: DurumHali }> = {
+  active: { etiket: 'Bağlı', hal: 'ok' },
+  needs_reauth: { etiket: 'Yeniden yetki gerekli', hal: 'hata' },
+  error: { etiket: 'Hata', hal: 'hata' },
+  revoked: { etiket: 'Kaldırıldı', hal: 'taslak' },
 };
 
 function KanalKarti({
@@ -124,37 +219,35 @@ function KanalKarti({
   onHata: (m: string | null) => void;
 }) {
   const bagli = baglantilar.length > 0;
+  /*
+   * ROZET EN KÖTÜ DURUMU GÖSTERİYOR. İki bağlantıdan biri yeniden yetki
+   * istiyorsa kart "Bağlı" yazamaz: ilkine bakmak, ikincinin veri
+   * çekmediğini rozetten gizlerdi.
+   */
+  const sorunlu = baglantilar.find((c) => c.status === 'needs_reauth' || c.status === 'error');
+  const durum = sorunlu ? DURUM[sorunlu.status] : bagli ? DURUM[baglantilar[0].status] : null;
 
   return (
-    <section className="flex flex-col rounded-xl border border-line bg-surface">
-      <header className="flex items-start gap-3 border-b border-line px-4 py-3">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-line">
+    <Kart
+      dolgu={false}
+      baslik={
+        <span className="flex items-center gap-2">
           <PlatformLogo kind={adAccountKanali(uygunluk.platform)} className="h-5 w-5" />
+          {PLATFORM_LABELS[uygunluk.platform]}
         </span>
-        <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-semibold text-ink">{PLATFORM_LABELS[uygunluk.platform]}</h3>
-          {/*
-            DURUM BAŞLIĞIN ALTINDA, ROZET DEĞİL SATIR. Rozet dar kartta
-            başlığın yanına sığmıyor ve "Yeniden yetkilendirme gerekli" gibi
-            uzun bir durumu kırpıyordu; kırpılmış bir durum, yanlış durum.
-          */}
-          {bagli ? (
-            <p className={`mt-0.5 flex items-center gap-1.5 text-xs ${DURUM[baglantilar[0].status].metin}`}>
-              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${DURUM[baglantilar[0].status].nokta}`} />
-              {baglantilar.length > 1
-                ? `${baglantilar.length} bağlantı`
-                : DURUM[baglantilar[0].status].etiket}
-            </p>
-          ) : (
-            <p className="mt-0.5 text-xs text-ink-muted">Bağlı değil</p>
-          )}
-        </div>
-      </header>
-
+      }
+      eylem={
+        durum ? (
+          <Rozet hal={durum.hal}>{baglantilar.length > 1 ? `${baglantilar.length} bağlantı` : durum.etiket}</Rozet>
+        ) : (
+          <Rozet hal="taslak">Bağlı değil</Rozet>
+        )
+      }
+    >
       {!bagli ? (
         <BaglanmaAlani uygunluk={uygunluk} canManage={canManage} onHata={onHata} />
       ) : (
-        <div className="divide-y divide-line/60">
+        <div className="divide-y divide-line">
           {baglantilar.map((c) => (
             <BaglantiSatiri
               key={c.id}
@@ -166,7 +259,7 @@ function KanalKarti({
           ))}
         </div>
       )}
-    </section>
+    </Kart>
   );
 }
 
@@ -186,20 +279,7 @@ function BaglanmaAlani({
     onHata(null);
     setPending(true);
     try {
-      const { authorizeUrl } = await apiFetch<{ authorizeUrl: string }>(
-        '/connections/authorize',
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            platform: uygunluk.platform,
-            // Çapasız: dönüşte arkasına `?connection=…` ekleniyor (API `VARSAYILAN_DONUS`).
-            redirectTo: ayarlarAdresi('baglantilar'),
-          }),
-        },
-      );
-      // Yönlendirmeyi TARAYICI yapmalı: fetch üzerinden gelen bir 302,
-      // platformun izin ekranını görünmez kılar.
-      window.location.href = authorizeUrl;
+      await baglantiBaslat(uygunluk.platform);
     } catch (err) {
       onHata(err instanceof ApiRequestError ? err.message : 'Bağlantı başlatılamadı.');
       setPending(false);
@@ -213,34 +293,33 @@ function BaglanmaAlani({
      * sunucudaki anahtar ve bunu ancak kuran kişi görebilir.
      */
     return (
-      <div className="px-4 py-3">
-        <p className="text-xs text-ink-muted">
+      <div className="grid gap-1 p-5">
+        <b className="font-baslik text-[22px] leading-none text-ink">-</b>
+        <p className="m-0 text-13 text-ink-muted">
           Bu kanal için sunucu ayarları tamamlanmamış. Advetics ekibine bildir.
         </p>
-        <p className="mt-1 font-mono text-[10px] text-ink-muted">
-          {uygunluk.missingConfig.join(', ')}
-        </p>
+        <p className="m-0 font-mono text-11 text-ink-muted">{uygunluk.missingConfig.join(', ')}</p>
       </div>
     );
   }
 
   return (
-    <div className="px-4 py-3">
-      <button
-        type="button"
-        onClick={() => void bagla()}
-        disabled={!canManage || pending}
-        className="w-full rounded-lg bg-brand px-3 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {pending ? 'Yönlendiriliyor…' : 'Bağlan'}
-      </button>
-      {!canManage && (
-        // Kapalı düğmenin SEBEBİ yazılı: sebepsiz kapalı bir düğme,
-        // kullanıcıyı olmayan bir arızayı aramaya gönderiyor.
-        <p className="mt-1.5 text-[11px] text-ink-muted">
-          Bağlantı kurmak yöneticinin işi.
+    <div className="grid gap-3 p-5">
+      <div className="grid gap-1">
+        <b className="font-baslik text-[22px] leading-none text-ink">-</b>
+        {/*
+          Kapalı düğmenin SEBEBİ yazılı: sebepsiz kapalı bir düğme,
+          kullanıcıyı olmayan bir arızayı aramaya gönderiyor.
+        */}
+        <p className="m-0 text-13 text-ink-muted">
+          {canManage ? 'Henüz bağlanmadı.' : 'Bağlantı kurmak yöneticinin işi.'}
         </p>
-      )}
+      </div>
+      <div className="flex justify-end">
+        <Dugme ton="ikincil" boyut="kucuk" onClick={() => void bagla()} disabled={!canManage || pending}>
+          {pending ? 'Yönlendiriliyor…' : 'Bağlan'}
+        </Dugme>
+      </div>
     </div>
   );
 }
@@ -266,6 +345,7 @@ function BaglantiSatiri({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [busy, setBusy] = useState<string | null>(null);
+  const [kaldirOnay, setKaldirOnay] = useState(false);
 
   async function calistir(anahtar: string, fn: () => Promise<unknown>): Promise<void> {
     onHata(null);
@@ -293,33 +373,76 @@ function BaglantiSatiri({
   const atanmis = hesap.filter((a) => a.clientId !== null).length;
   const izlenen = hesap.filter((a) => a.clientId !== null && a.syncEnabled).length;
   const meslul = busy !== null || isPending;
+  /*
+   * YENİDEN YETKİ GEREKİYOR MU — kartın TEK görünür eylemini seçiyor
+   * (eski "vurgulu" düğmenin karşılığı). Gerekiyorsa "Yeniden bağlan"
+   * (koyu), gerekmiyorsa "Hesapları tara". Menüdeki "Yeniden yetkilendir"
+   * bu koşula BAĞLI DEĞİL, her zaman orada: vurgu yalnız gerçekten eksik bir
+   * şey varken; her zaman vurgulu bir düğme, vurgunun kendisini
+   * anlamsızlaştırır.
+   */
+  const yetkiGerekli =
+    baglanti.status === 'needs_reauth' ||
+    baglanti.status === 'error' ||
+    baglanti.missingScopes.length > 0 ||
+    baglanti.missingOptionalScopes.length > 0;
 
   return (
-    <div className="px-4 py-3">
-      {baglanti.accountLabel && (
-        <p className="truncate text-xs text-ink-muted" title={baglanti.accountLabel}>
-          {baglanti.accountLabel}
-        </p>
-      )}
-
-      {/*
-        ÜÇ SAYI, BİRİ DİĞERİNİN İÇİNDE. "12 hesabın 8'i atanmış, 6'sı veri
-        çekiyor" cümlesi kapsama ilişkisini de anlatıyor; üç ayrı rozet
-        bunu anlatmıyordu ve kullanıcı sayıları topluyordu.
-      */}
-      <p className="mt-1.5 text-sm text-ink">
-        <strong>{hesap.length}</strong> reklam hesabı
-        {profil.length > 0 && (
-          <>
-            {' '}ve <strong>{profil.length}</strong> sayfa
-          </>
-        )}
-        {hesap.length > 0 && (
-          <span className="text-ink-muted">
-            {' '}· {atanmis} atanmış, {izlenen} veri çekiyor
-          </span>
-        )}
-      </p>
+    <div className="grid gap-3 p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="grid min-w-0 gap-1">
+          {/*
+            ÜÇ SAYI, BİRİ DİĞERİNİN İÇİNDE. "12 hesabın 8'i atanmış, 6'sı veri
+            çekiyor" cümlesi kapsama ilişkisini de anlatıyor; üç ayrı rozet
+            bunu anlatmıyordu ve kullanıcı sayıları topluyordu.
+          */}
+          <b className="font-baslik text-[22px] leading-none tabular-nums text-ink">
+            {hesap.length} reklam hesabı
+          </b>
+          <p className="m-0 text-13 text-ink-muted">
+            {hesap.length > 0 && <>{atanmis} atanmış, {izlenen} veri çekiyor · </>}
+            {profil.length > 0 && <>{profil.length} sayfa · </>}
+            {baglanti.sahip === 'ajans' ? 'Ajans bağlantısı' : 'Şirket bağlantısı'}
+          </p>
+          {baglanti.accountLabel && (
+            <p className="m-0 truncate text-12 text-ink-soluk" title={baglanti.accountLabel}>
+              {baglanti.accountLabel}
+            </p>
+          )}
+        </div>
+        <DigerMenusu etiket={`${PLATFORM_LABELS[baglanti.platform]} bağlantısı için işlemler`}>
+          <MenuOgesi
+            devreDisi={meslul}
+            onClick={() =>
+              void calistir('verify', () => apiFetch(`/connections/${baglanti.id}/verify`, { method: 'POST' }))
+            }
+          >
+            Durumu kontrol et
+          </MenuOgesi>
+          {/*
+            KOŞULSUZ GÖRÜNÜYOR — eskiden yalnızca eksik izin ya da
+            `needs_reauth` varken çıkıyordu ve bu, ÇAREYİ TAM DA GEREKTİĞİ
+            ANDA GİZLİYORDU: sağlayıcıya yeni bir izin eklendiğinde panel onu
+            ancak yeni sürüm yayına çıktıktan sonra "eksik" sayıyor. Düğmeyi
+            bulamayan kullanıcı bağlantıyı KALDIRIP yeniden kurmaya yöneliyor
+            ve `disconnect` o bağlantıdaki her hesabın `syncEnabled`ını
+            kapatıyor.
+          */}
+          {canManage && (
+            <MenuOgesi devreDisi={meslul} onClick={() => void calistir('reauth', yenidenYetkilendir)}>
+              Yeniden yetkilendir
+            </MenuOgesi>
+          )}
+          {kaldirabilir && (
+            <>
+              <MenuAyraci />
+              <MenuOgesi tehlike devreDisi={meslul} onClick={() => setKaldirOnay(true)}>
+                Bağlantıyı kaldır
+              </MenuOgesi>
+            </>
+          )}
+        </DigerMenusu>
+      </div>
 
       {/* ATANMIŞ AMA VERİ ÇEKMEYEN HESAP: bu üründe en sık çıkan sessiz
           arıza. Panelde "bağlı" görünüyor, hiçbir şey getirmiyor.
@@ -327,32 +450,39 @@ function BaglantiSatiri({
           BURADA BİR SÜRE "kaldırıp yeniden ekle" YAZIYORDU VE O TAVSİYE
           ARIZANIN KENDİSİNİ ÜRETİYORDU: `disconnect` bağlantıdaki her hesabın
           `syncEnabled`ını kapatıyor, keşif upsert'i onu bilerek geri açmıyor
-          ve kullanıcı 131 hesabı tek tek açmak zorunda kalıyor. Yani çözüm
-          diye gösterilen yol, sayacı büyüten yoldu. */}
+          ve kullanıcı 131 hesabı tek tek açmak zorunda kalıyor. */}
       {atanmis > izlenen && (
-        <div className="mt-1.5 rounded-lg bg-warn-soft px-2.5 py-1.5 text-[11px] text-warn-strong">
-          <p>
-            {atanmis - izlenen} hesap atanmış ama veri çekmiyor.
-          </p>
-          {canManage && (
-            <button
-              type="button"
-              disabled={meslul}
-              onClick={() =>
-                void calistir('resume', () =>
-                  apiFetch(`/connections/${baglanti.id}/resume-sync`, { method: 'POST' }),
-                )
-              }
-              className="mt-1 font-medium underline underline-offset-2 disabled:opacity-50"
-            >
-              {busy === 'resume' ? 'Açılıyor…' : 'İzlemeyi geri aç'}
-            </button>
-          )}
-        </div>
+        <Serit
+          baslik={`${atanmis - izlenen} hesap atanmış ama veri çekmiyor.`}
+          eylemler={
+            canManage && (
+              <Dugme
+                ton="koyu"
+                boyut="kucuk"
+                bekliyor={busy === 'resume'}
+                disabled={meslul}
+                onClick={() =>
+                  void calistir('resume', () =>
+                    apiFetch(`/connections/${baglanti.id}/resume-sync`, { method: 'POST' }),
+                  )
+                }
+              >
+                İzlemeyi geri aç
+              </Dugme>
+            )
+          }
+        />
+      )}
+
+      {/* PLATFORMUN KENDİ KODU: "hata" tek başına neye bakılacağını söylemiyor. */}
+      {(baglanti.status === 'needs_reauth' || baglanti.status === 'error') && baglanti.lastErrorCode && (
+        <p className="m-0 break-words text-13 font-semibold text-danger-strong">
+          {PLATFORM_LABELS[baglanti.platform]}: {baglanti.lastErrorCode}
+        </p>
       )}
 
       {baglanti.missingScopes.length > 0 && (
-        <p className="mt-1.5 rounded-lg bg-danger-soft px-2.5 py-1.5 text-[11px] text-danger-strong">
+        <p className="m-0 text-13 font-semibold text-danger-strong">
           Eksik izinler yüzünden veri çekilemiyor. Yeniden yetkilendirmen gerekiyor.
         </p>
       )}
@@ -360,137 +490,83 @@ function BaglantiSatiri({
       {baglanti.missingScopes.length === 0 && baglanti.missingOptionalScopes.length > 0 && (
         /* Bağlantı ÇALIŞIYOR, yalnızca bir özellik kapalı. Bunu hata gibi
            göstermek kullanıcıyı olmayan bir arızayı aramaya gönderir.
-           HANGİ özelliğin kapalı olduğu yazılıyor: sabit bir cümle listeye
-           ikinci bir izin girdiği anda yanlış özelliği söylemeye başlıyor. */
-        <p className="mt-1.5 text-[11px] text-ink-muted">
-          {eksikIzinMetni(baglanti.missingOptionalScopes)}
-        </p>
+           HANGİ özelliğin kapalı olduğu yazılıyor. */
+        <p className="m-0 text-12 text-ink-muted">{eksikIzinMetni(baglanti.missingOptionalScopes)}</p>
       )}
 
-      <div className="mt-2.5 flex flex-wrap gap-1.5">
-        <Dugme
-          meslul={meslul}
-          calisiyor={busy === 'verify'}
-          onClick={() =>
-            void calistir('verify', () =>
-              apiFetch(`/connections/${baglanti.id}/verify`, { method: 'POST' }),
-            )
-          }
-        >
-          Durumu kontrol et
-        </Dugme>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-11 text-ink-soluk">
+          {baglanti.lastVerifiedAt
+            ? `Son kontrol ${new Date(baglanti.lastVerifiedAt).toLocaleString('tr-TR')}`
+            : 'Henüz kontrol edilmedi'}
+        </span>
         {/*
           "HESAPLARI YENİLE" DEĞİL "HESAPLARI TARA". Sayfanın altında bir de
           "Tüm verileri güncelle" var ve ikisi "yenile" dediği için aynı iş
           sanılıyordu: bu, platformdan HESAP LİSTESİNİ yeniden okuyor;
           diğeri METRİK çekiyor.
         */}
-        <Dugme
-          meslul={meslul}
-          calisiyor={busy === 'refresh'}
-          onClick={() =>
-            void calistir('refresh', () =>
-              apiFetch(`/connections/${baglanti.id}/refresh-accounts`, { method: 'POST' }),
-            )
-          }
-        >
-          Hesapları tara
-        </Dugme>
-        {/*
-          KOŞULSUZ GÖRÜNÜYOR — eskiden yalnızca eksik izin ya da `needs_reauth`
-          varken çıkıyordu ve bu, ÇAREYİ TAM DA GEREKTİĞİ ANDA GİZLİYORDU:
-          sağlayıcıya yeni bir izin eklendiğinde panel onu ancak yeni sürüm
-          yayına çıktıktan sonra "eksik" sayıyor, o ana kadar kullanıcının
-          yeniden yetkilendirme yolu yok.
-
-          Bedeli teoride değil üretimde görüldü: düğmeyi bulamayan kullanıcı
-          bağlantıyı KALDIRIP yeniden kurmaya yöneliyor ve `disconnect` o
-          bağlantıdaki her reklam hesabının ve sayfanın `syncEnabled`ını
-          kapatıyor. Keşif upsert'i onu bilerek geri açmadığı için atamalar
-          duruyor ama veri akmıyor — onlarca hesapta birden, elle tek tek
-          açılmayı bekleyerek.
-
-          Vurgu (`vurgulu`) yalnızca gerçekten eksik bir şey varken: her zaman
-          vurgulu bir düğme, vurgunun kendisini anlamsızlaştırır.
-        */}
-        {canManage && (
+        {yetkiGerekli && canManage ? (
           <Dugme
-            meslul={meslul}
-            calisiyor={busy === 'reauth'}
-            vurgulu={
-              baglanti.status === 'needs_reauth' ||
-              baglanti.missingScopes.length > 0 ||
-              baglanti.missingOptionalScopes.length > 0
-            }
+            ton="koyu"
+            boyut="kucuk"
+            bekliyor={busy === 'reauth'}
+            disabled={meslul}
             onClick={() => void calistir('reauth', yenidenYetkilendir)}
           >
-            Yeniden yetkilendir
+            Yeniden bağlan
           </Dugme>
-        )}
-        {kaldirabilir && (
+        ) : (
           <Dugme
-            meslul={meslul}
-            calisiyor={busy === 'disconnect'}
-            tehlike
-            onClick={() => {
-              // UYARI BÜTÜN WORKSPACE'LERİ SÖYLÜYOR: bağlantı ajansa ait ve
-              // kaldırmak tek bir workspace'i değil, o bağlantıya bağlı HER
-              // hesabın veri akışını durduruyor.
-              if (
-                !confirm(
-                  'Bu bağlantı ajansa ait ve altındaki tüm workspace’lerin hesaplarını besliyor. ' +
-                    'Kaldırılırsa hepsinin veri akışı durur. Geçmiş veriler korunur. Devam?',
-                )
-              ) {
-                return;
-              }
-              void calistir('disconnect', () =>
-                apiFetch(`/connections/${baglanti.id}/disconnect`, { method: 'POST' }),
-              );
-            }}
+            ton="ikincil"
+            boyut="kucuk"
+            bekliyor={busy === 'refresh'}
+            disabled={meslul}
+            onClick={() =>
+              void calistir('refresh', () =>
+                apiFetch(`/connections/${baglanti.id}/refresh-accounts`, { method: 'POST' }),
+              )
+            }
           >
-            Kaldır
+            Hesapları tara
           </Dugme>
         )}
       </div>
 
-      {baglanti.lastVerifiedAt && (
-        <p className="mt-2 text-[10px] text-ink-muted">
-          Son kontrol {new Date(baglanti.lastVerifiedAt).toLocaleString('tr-TR')}
+      <Pencere
+        acik={kaldirOnay}
+        onKapat={() => setKaldirOnay(false)}
+        baslik="Bağlantıyı kaldır"
+        altEylemler={
+          <>
+            <Dugme ton="ikincil" onClick={() => setKaldirOnay(false)}>
+              Vazgeç
+            </Dugme>
+            <Dugme
+              ton="tehlike"
+              bekliyor={busy === 'disconnect'}
+              onClick={() => {
+                setKaldirOnay(false);
+                void calistir('disconnect', () =>
+                  apiFetch(`/connections/${baglanti.id}/disconnect`, { method: 'POST' }),
+                );
+              }}
+            >
+              Kaldır
+            </Dugme>
+          </>
+        }
+      >
+        {/*
+          UYARI BÜTÜN WORKSPACE'LERİ SÖYLÜYOR: bağlantı ajansa ait ve
+          kaldırmak tek bir workspace'i değil, o bağlantıya bağlı HER
+          hesabın veri akışını durduruyor.
+        */}
+        <p className="m-0 text-14 text-ink">
+          Bu bağlantı ajansa ait ve altındaki tüm workspace’lerin hesaplarını besliyor. Kaldırılırsa
+          hepsinin veri akışı durur. Geçmiş veriler korunur.
         </p>
-      )}
+      </Pencere>
     </div>
-  );
-}
-
-function Dugme({
-  meslul,
-  calisiyor,
-  vurgulu,
-  tehlike,
-  onClick,
-  children,
-}: {
-  meslul: boolean;
-  calisiyor: boolean;
-  vurgulu?: boolean;
-  tehlike?: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  const sinif = vurgulu
-    ? 'border-warn bg-warn text-white hover:opacity-90'
-    : tehlike
-      ? 'border-danger/30 text-danger-strong hover:bg-danger-soft'
-      : 'border-line text-ink hover:bg-surface-muted';
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={meslul}
-      className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition disabled:opacity-50 ${sinif}`}
-    >
-      {calisiyor ? '…' : children}
-    </button>
   );
 }

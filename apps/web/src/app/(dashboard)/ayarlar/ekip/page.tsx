@@ -4,10 +4,10 @@ import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import { requireSession } from '@/lib/session';
 import { PANEL_KAPILARI, kapi } from '@/lib/panel-adresleri';
 import { ayarSekmesiAcik } from '@/lib/ayar-kapilari';
-import { SayfaBasligi } from '@/components/ui/sayfa-basligi';
-import { AyarKapsami, aktifSirketAdi } from '@/components/ayar-kapsam';
+import { Serit } from '@/components/ui/hal';
+import { AyarKapsami, AyarlarSayfasi, aktifSirketAdi } from '@/components/ayar-kapsam';
 import type { MemberRow } from '@/components/tenancy/team-manager';
-import { TeamScreen } from '@/components/tenancy/team-screen';
+import { KullaniciEkle, TeamScreen } from '@/components/tenancy/team-screen';
 import { WorkspaceErisimi } from '@/components/tenancy/workspace-erisimi';
 import { IkiAdimSirketAyari } from '@/components/tenancy/iki-adim-sirket-ayari';
 
@@ -100,20 +100,18 @@ export default async function EkipSayfasi({
   ].filter((x): x is string => x !== null);
 
   return (
-    /* 7xl: üye kartları ızgarada; TAM GENİŞLİK DEĞİL, rol metinleri satır başına fazla karakter alırdı. */
-    <div className="mx-auto max-w-7xl space-y-6">
-      <SayfaBasligi
-        ust={<AyarKapsami duzey="sirket" ad={aktifSirketAdi(session)} />}
-        baslik="Ekip ve güvenlik"
-        aciklama="Danışmanlar şirketlere yetkilendirilir ve o şirketin bütün workspace’lerini görür. Müşteri hesapları tek bir workspace’e bağlı kalır."
-      />
-
+    <AyarlarSayfasi
+      session={session}
+      ust={<AyarKapsami duzey="sirket" ad={aktifSirketAdi(session)} />}
+      baslik="Ekip ve güvenlik"
+      aciklama="Danışmanlar şirketlere yetkilendirilir ve o şirketin bütün workspace’lerini görür. Müşteri hesapları tek bir workspace’e bağlı kalır."
+      /* BÖLÜMÜN BİRİNCİL EYLEMİ BAŞLIĞIN SAĞINDA; kapı kapalıysa sebebi listenin altında. */
+      eylemler={ekipYonetir ? <KullaniciEkle clients={clients} /> : undefined}
+    >
       {yuklemeHatalari.length > 0 && (
-        <div role="alert" className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger-strong">
-          {yuklemeHatalari.map((h) => (
-            <p key={h}>{h}</p>
-          ))}
-        </div>
+        <Serit ton="hata" baslik="Bazı bölümler okunamadı">
+          {yuklemeHatalari.join(' · ')}
+        </Serit>
       )}
 
       {/* Kişiler (#kisiler), üst hesap ekibi (#ust-hesap-ekibi) ve roller (#roller) bu bileşenin içinde. */}
@@ -125,7 +123,7 @@ export default async function EkipSayfasi({
         canManage={ekipYonetir}
         ustHesap={ustHesap}
       />
-      {!ekipYonetir && <p className="text-xs text-ink-muted">{PANEL_KAPILARI['ekip.yonet'].neden}</p>}
+      {!ekipYonetir && <p className="m-0 text-12 text-ink-muted">{PANEL_KAPILARI['ekip.yonet'].neden}</p>}
 
       <WorkspaceErisimi
         workspaceler={clients}
@@ -135,15 +133,15 @@ export default async function EkipSayfasi({
         neden={PANEL_KAPILARI['ekip.yonet'].neden}
       />
 
-      <section id="iki-adim-zorunlulugu" className="scroll-mt-4">
+      <section id="iki-adim-zorunlulugu" className="scroll-mt-24">
         {!sirket2fa ? (
-          <p className="rounded-xl border border-line bg-surface px-4 py-3 text-sm text-ink-muted">
-            İki adımlı doğrulama: {PANEL_KAPILARI['ikiAdim.sirketZorunlulugu'].neden}
-          </p>
+          <Serit ton="bilgi" baslik="İki adımlı doğrulama">
+            {PANEL_KAPILARI['ikiAdim.sirketZorunlulugu'].neden}
+          </Serit>
         ) : ikiAdimSonuc.status === 'fulfilled' && ikiAdimSonuc.value ? (
           <IkiAdimSirketAyari durum={ikiAdimSonuc.value} />
         ) : null}
       </section>
-    </div>
+    </AyarlarSayfasi>
   );
 }

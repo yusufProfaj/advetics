@@ -11,11 +11,19 @@ import {
 } from '@advetics/shared';
 import { API_URL, ApiRequestError, apiFetch } from '@/lib/api';
 import { mcpAdresi, baglantiOrnekleri } from './baglanti-ornekleri';
+import { Kart } from '@/components/ui/kart';
+import { Dugme } from '@/components/ui/dugme';
+import { Alan, Girdi, Secim } from '@/components/ui/alan';
+import { BosDurum, Serit } from '@/components/ui/hal';
+import { Rozet, type DurumHali } from '@/components/ui/rozet';
+import { AdHucresi, Tablo } from '@/components/ui/tablo';
+import { Pencere } from '@/components/ui/pencere';
 
-const DURUM_ETIKETI: Record<OkumaAnahtariOzeti['durum'], { ad: string; sinif: string }> = {
-  etkin: { ad: 'Etkin', sinif: 'border-ok/40 bg-ok-soft text-ok-strong' },
-  suresi_doldu: { ad: 'Süresi doldu', sinif: 'border-line bg-surface-muted text-ink-muted' },
-  iptal: { ad: 'İptal', sinif: 'border-danger/40 bg-danger/5 text-danger' },
+/* Durum rozeti: yeşil YALNIZ etkin anahtarda (kılavuz: yeşil yalnız durum göstergesi). */
+const DURUM_ETIKETI: Record<OkumaAnahtariOzeti['durum'], { ad: string; hal: DurumHali }> = {
+  etkin: { ad: 'Etkin', hal: 'ok' },
+  suresi_doldu: { ad: 'Süresi doldu', hal: 'taslak' },
+  iptal: { ad: 'İptal', hal: 'dur' },
 };
 
 function tarih(iso: string | null): string {
@@ -29,6 +37,10 @@ function tarih(iso: string | null): string {
  * daha üretemiyor. Bu yüzden yeni anahtar kutusu sayfa yenilenene kadar
  * duruyor ve bağlantı örnekleri anahtarla DOLU geliyor; kullanıcı anahtarı
  * kopyalayıp ayrıca bir komuta yapıştırmak zorunda kalmıyor.
+ *
+ * İPTAL ONAYI ORTAK `Pencere`DE (eskiden `window.confirm`): tarayıcının onay
+ * kutusu panelin dilinde değildi ve iptalin neyi durduracağını söyleyen
+ * cümle ancak oraya sığıyordu.
  */
 export function OkumaApiPaneli({
   anahtarlar,
@@ -44,6 +56,7 @@ export function OkumaApiPaneli({
   const [hata, setHata] = useState<string | null>(null);
   const [yeni, setYeni] = useState<OkumaAnahtariOlusturmaYaniti | null>(null);
   const [kopyalanan, setKopyalanan] = useState<string | null>(null);
+  const [iptalEdilecek, setIptalEdilecek] = useState<OkumaAnahtariOzeti | null>(null);
   /*
    * MCP ADRESİ TARAYICIDA KURULUYOR: `NEXT_PUBLIC_API_URL` göreli olabilir
    * ("/api") ve sunucuda render edilen sayfa kullanıcının gördüğü alan
@@ -72,15 +85,16 @@ export function OkumaApiPaneli({
   }
 
   async function iptalEt(a: OkumaAnahtariOzeti) {
-    if (!window.confirm(`"${a.ad}" anahtarı iptal edilsin mi? Bu anahtarı kullanan bağlantılar hemen durur.`)) return;
     setBekleyen(a.id);
     setHata(null);
     try {
       await apiFetch<OkumaAnahtariOzeti>(`/okuma-api/anahtarlar/${a.id}`, { method: 'DELETE' });
       if (yeni?.ozet.id === a.id) setYeni(null);
+      setIptalEdilecek(null);
       router.refresh();
     } catch (err) {
       setHata(err instanceof ApiRequestError ? err.message : 'İptal edilemedi.');
+      setIptalEdilecek(null);
     } finally {
       setBekleyen(null);
     }
@@ -100,168 +114,185 @@ export function OkumaApiPaneli({
   const ornekler = baglantiOrnekleri(mcpUrl, yeni?.anahtar ?? null);
 
   return (
-    <div className="space-y-5">
+    <div className="grid gap-5">
       {hata && (
-        <p className="rounded border border-danger/40 bg-danger/5 px-3 py-2 text-sm text-danger">{hata}</p>
+        <Serit ton="hata" baslik="İşlem yapılamadı">
+          {hata}
+        </Serit>
       )}
 
       {yeni && (
-        <section className="rounded-xl border border-warn/50 bg-warn-soft p-4">
-          <h2 className="font-medium">Yeni anahtar: {yeni.ozet.ad}</h2>
-          <p className="mt-0.5 text-sm text-ink-muted">
-            Bu anahtar yalnızca şimdi görünüyor. Sayfadan çıkınca bir daha gösterilemez; kaybedersen
-            iptal edip yenisini oluştur.
-          </p>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <code className="min-w-0 flex-1 break-all rounded border border-line bg-surface px-3 py-2 font-mono text-xs">
-              {yeni.anahtar}
-            </code>
-            <button
-              type="button"
-              onClick={() => kopyala('anahtar', yeni.anahtar)}
-              className="rounded-lg bg-brand px-3.5 py-2 text-sm font-medium text-white transition hover:opacity-90"
-            >
+        <Serit
+          baslik={`Yeni anahtar: ${yeni.ozet.ad}`}
+          eylemler={
+            <Dugme ton="koyu" boyut="kucuk" onClick={() => kopyala('anahtar', yeni.anahtar)}>
               {kopyalanan === 'anahtar' ? 'Kopyalandı' : 'Kopyala'}
-            </button>
-          </div>
-        </section>
+            </Dugme>
+          }
+        >
+          Bu anahtar yalnızca şimdi görünüyor. Sayfadan çıkınca bir daha gösterilemez; kaybedersen iptal edip
+          yenisini oluştur.
+          <code className="mt-2 block break-all rounded-alan border border-line bg-surface-muted px-3 py-2 font-mono text-12 text-ink">
+            {yeni.anahtar}
+          </code>
+        </Serit>
       )}
 
-      <section className="rounded-xl border border-line bg-surface p-4">
-        <h2 className="font-medium">Yeni anahtar</h2>
-        <p className="mt-0.5 text-xs text-ink-muted">
-          Her araç için ayrı anahtar oluştur; biri sızarsa yalnızca onu iptal edersin. En çok{' '}
-          {OKUMA_ANAHTARI_UST_SINIR} etkin anahtar olabilir ({etkinSayisi} etkin).
-        </p>
-        <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_12rem_auto] sm:items-end">
-          <label className="text-sm">
-            <span className="text-ink-muted">Ad</span>
-            <input
-              value={ad}
-              onChange={(e) => setAd(e.target.value)}
-              maxLength={80}
-              placeholder="Örn. Claude Desktop, dizüstü"
-              className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm focus:border-brand focus:outline-none"
-            />
-          </label>
-          <label className="text-sm">
-            <span className="text-ink-muted">Geçerlilik</span>
-            <select
-              value={sure}
-              onChange={(e) => setSure(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm focus:border-brand focus:outline-none"
-            >
-              {OKUMA_ANAHTARI_SURELERI.map((g) => (
-                <option key={g} value={String(g)}>
-                  {g} gün
-                </option>
-              ))}
-              <option value="suresiz">Süresiz</option>
-            </select>
-          </label>
-          <button
-            type="button"
-            onClick={olustur}
-            disabled={bekleyen !== null || ad.trim() === '' || etkinSayisi >= OKUMA_ANAHTARI_UST_SINIR}
-            className="rounded-lg bg-brand px-3.5 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
-          >
-            {bekleyen === 'olustur' ? 'Oluşturuluyor…' : 'Anahtar oluştur'}
-          </button>
-        </div>
-      </section>
+      <Kart
+        dolgu={false}
+        baslik="Anahtarlar"
+        baslikEki={`${etkinSayisi} etkin · en çok ${OKUMA_ANAHTARI_UST_SINIR}`}
+      >
+        <Tablo
+          etiket="Okuma API anahtarları"
+          satirlar={anahtarlar}
+          satirAnahtari={(a) => a.id}
+          sutunlar={[
+            {
+              anahtar: 'ad',
+              baslik: 'Anahtar',
+              hucre: (a) => <AdHucresi ad={a.ad} alt={<span className="font-mono">{a.gorunenOnek}…</span>} />,
+            },
+            {
+              anahtar: 'durum',
+              baslik: 'Durum',
+              hucre: (a) => <Rozet hal={DURUM_ETIKETI[a.durum].hal}>{DURUM_ETIKETI[a.durum].ad}</Rozet>,
+            },
+            {
+              anahtar: 'bitis',
+              baslik: 'Bitiş',
+              ikincil: true,
+              hucre: (a) => <span className="text-13">{a.bitis === null ? 'Süresiz' : tarih(a.bitis)}</span>,
+            },
+            {
+              anahtar: 'son',
+              baslik: 'Son kullanım',
+              ikincil: true,
+              hucre: (a) => (
+                <span className="text-13">
+                  {a.sonKullanim === null ? 'Hiç kullanılmadı' : tarih(a.sonKullanim)}
+                  {a.sonKullanimIp && <span className="block text-12 text-ink-muted">{a.sonKullanimIp}</span>}
+                </span>
+              ),
+            },
+            {
+              anahtar: 'eylem',
+              baslik: <span className="sr-only">Eylemler</span>,
+              sayi: true,
+              hucre: (a) =>
+                a.durum === 'etkin' ? (
+                  <Dugme
+                    ton="tehlike"
+                    boyut="kucuk"
+                    disabled={bekleyen !== null}
+                    onClick={() => setIptalEdilecek(a)}
+                  >
+                    İptal et
+                  </Dugme>
+                ) : null,
+            },
+          ]}
+          bos={<BosDurum baslik="Henüz anahtar yok" neden="Aşağıdan bir tane oluştur; her araç için ayrı anahtar önerilir." />}
+          sayfalama={{ bas: anahtarlar.length === 0 ? 0 : 1, son: anahtarlar.length, toplam: anahtarlar.length }}
+        />
+      </Kart>
 
-      <section className="rounded-xl border border-line bg-surface p-4">
-        <h2 className="font-medium">Anahtarlar</h2>
-        {anahtarlar.length === 0 ? (
-          <p className="mt-2 text-sm text-ink-muted">Henüz anahtar yok. Yukarıdan bir tane oluştur.</p>
-        ) : (
-          <div className="mt-3 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-left text-xs text-ink-muted">
-                <tr>
-                  <th className="py-1.5 pr-3 font-medium">Ad</th>
-                  <th className="py-1.5 pr-3 font-medium">Anahtar</th>
-                  <th className="py-1.5 pr-3 font-medium">Durum</th>
-                  <th className="py-1.5 pr-3 font-medium">Bitiş</th>
-                  <th className="py-1.5 pr-3 font-medium">Son kullanım</th>
-                  <th className="py-1.5" />
-                </tr>
-              </thead>
-              <tbody>
-                {anahtarlar.map((a) => (
-                  <tr key={a.id} className="border-t border-line">
-                    <td className="py-2 pr-3">{a.ad}</td>
-                    <td className="py-2 pr-3 font-mono text-xs">{a.gorunenOnek}…</td>
-                    <td className="py-2 pr-3">
-                      <span className={`rounded border px-1.5 py-0.5 text-xs ${DURUM_ETIKETI[a.durum].sinif}`}>
-                        {DURUM_ETIKETI[a.durum].ad}
-                      </span>
-                    </td>
-                    <td className="py-2 pr-3 text-xs">{a.bitis === null ? 'Süresiz' : tarih(a.bitis)}</td>
-                    <td className="py-2 pr-3 text-xs">
-                      {a.sonKullanim === null ? 'Hiç kullanılmadı' : tarih(a.sonKullanim)}
-                      {a.sonKullanimIp && <span className="block text-ink-muted">{a.sonKullanimIp}</span>}
-                    </td>
-                    <td className="py-2 text-right">
-                      {a.durum === 'etkin' && (
-                        <button
-                          type="button"
-                          onClick={() => iptalEt(a)}
-                          disabled={bekleyen !== null}
-                          className="rounded-lg border border-line px-2.5 py-1 text-xs transition hover:bg-surface-muted disabled:opacity-50"
-                        >
-                          {bekleyen === a.id ? 'İptal ediliyor…' : 'İptal et'}
-                        </button>
-                      )}
-                    </td>
-                  </tr>
+      <Kart baslik="Yeni anahtar">
+        <div className="grid gap-4">
+          <p className="m-0 text-13 text-ink-muted">
+            Her araç için ayrı anahtar oluştur; biri sızarsa yalnızca onu iptal edersin. En çok{' '}
+            {OKUMA_ANAHTARI_UST_SINIR} etkin anahtar olabilir ({etkinSayisi} etkin).
+          </p>
+          <div className="grid gap-4 sm:grid-cols-[1fr_12rem_auto] sm:items-end">
+            <Alan etiket="Ad">
+              <Girdi value={ad} onChange={(e) => setAd(e.target.value)} maxLength={80} placeholder="Örn. Claude Desktop, dizüstü" />
+            </Alan>
+            <Alan etiket="Geçerlilik">
+              <Secim value={sure} onChange={(e) => setSure(e.target.value)}>
+                {OKUMA_ANAHTARI_SURELERI.map((g) => (
+                  <option key={g} value={String(g)}>
+                    {g} gün
+                  </option>
                 ))}
-              </tbody>
-            </table>
+                <option value="suresiz">Süresiz</option>
+              </Secim>
+            </Alan>
+            <Dugme
+              ton="koyu"
+              onClick={olustur}
+              bekliyor={bekleyen === 'olustur'}
+              disabled={bekleyen !== null || ad.trim() === '' || etkinSayisi >= OKUMA_ANAHTARI_UST_SINIR}
+            >
+              Anahtar oluştur
+            </Dugme>
           </div>
-        )}
-      </section>
+        </div>
+      </Kart>
 
-      <section className="rounded-xl border border-line bg-surface p-4">
-        <h2 className="font-medium">Bağlan</h2>
-        <p className="mt-0.5 text-xs text-ink-muted">
-          MCP adresi: <code className="font-mono">{mcpUrl}</code>.{' '}
-          {yeni ? 'Örnekler yeni anahtarla dolduruldu.' : 'Anahtar oluşturunca örnekler anahtarla dolar.'}
-        </p>
-        <div className="mt-3 space-y-3">
+      <Kart baslik="Bağlan">
+        <div className="grid gap-4">
+          <p className="m-0 text-13 text-ink-muted">
+            MCP adresi: <code className="font-mono">{mcpUrl}</code>.{' '}
+            {yeni ? 'Örnekler yeni anahtarla dolduruldu.' : 'Anahtar oluşturunca örnekler anahtarla dolar.'}
+          </p>
           {ornekler.map((o) => (
-            <div key={o.baslik}>
+            <div key={o.baslik} className="grid gap-1">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-medium">{o.baslik}</p>
-                <button
-                  type="button"
-                  onClick={() => kopyala(o.baslik, o.metin)}
-                  className="rounded-lg border border-line px-2.5 py-1 text-xs transition hover:bg-surface-muted"
-                >
+                <p className="m-0 text-14 font-bold text-ink">{o.baslik}</p>
+                <Dugme ton="ikincil" boyut="kucuk" onClick={() => kopyala(o.baslik, o.metin)}>
                   {kopyalanan === o.baslik ? 'Kopyalandı' : 'Kopyala'}
-                </button>
+                </Dugme>
               </div>
-              <p className="text-xs text-ink-muted">{o.aciklama}</p>
-              <pre className="mt-1 overflow-x-auto rounded border border-line bg-surface-muted px-3 py-2 font-mono text-xs">
+              <p className="m-0 text-12 text-ink-muted">{o.aciklama}</p>
+              <pre className="m-0 overflow-x-auto rounded-alan border border-line bg-surface-muted px-3 py-2 font-mono text-12">
                 {o.metin}
               </pre>
             </div>
           ))}
         </div>
-      </section>
+      </Kart>
 
-      <section className="rounded-xl border border-line bg-surface p-4">
-        <h2 className="font-medium">Araçlar ({araclar.length})</h2>
-        <p className="mt-0.5 text-xs text-ink-muted">Yapay zekânın kullanabildiği okuma araçları. Hiçbiri veri değiştirmez.</p>
-        <ul className="mt-3 space-y-2 text-sm">
-          {araclar.map((a) => (
-            <li key={a.ad}>
-              <code className="font-mono text-xs">{a.ad}</code> <span className="font-medium">{a.baslik}</span>
-              <p className="text-xs text-ink-muted">{a.aciklama}</p>
-            </li>
-          ))}
-        </ul>
-      </section>
+      <Kart baslik="Araçlar" baslikEki={`${araclar.length} araç`}>
+        <div className="grid gap-3">
+          <p className="m-0 text-13 text-ink-muted">Yapay zekânın kullanabildiği okuma araçları. Hiçbiri veri değiştirmez.</p>
+          <ul className="m-0 grid list-none gap-2 p-0 text-14">
+            {araclar.map((a) => (
+              <li key={a.ad}>
+                <code className="font-mono text-12">{a.ad}</code> <span className="font-bold">{a.baslik}</span>
+                <p className="m-0 text-12 text-ink-muted">{a.aciklama}</p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </Kart>
+
+      <Pencere
+        acik={iptalEdilecek !== null}
+        onKapat={() => setIptalEdilecek(null)}
+        baslik="Anahtarı iptal et"
+        genislik="dar"
+        altEylemler={
+          <>
+            <Dugme ton="ikincil" onClick={() => setIptalEdilecek(null)}>
+              Vazgeç
+            </Dugme>
+            <Dugme
+              ton="tehlike"
+              bekliyor={iptalEdilecek !== null && bekleyen === iptalEdilecek.id}
+              onClick={() => iptalEdilecek && void iptalEt(iptalEdilecek)}
+            >
+              İptal et
+            </Dugme>
+          </>
+        }
+      >
+        {iptalEdilecek && (
+          <p className="m-0 text-14 text-ink">
+            <strong>{iptalEdilecek.ad}</strong> anahtarı iptal edilsin mi? Bu anahtarı kullanan bağlantılar hemen
+            durur.
+          </p>
+        )}
+      </Pencere>
     </div>
   );
 }

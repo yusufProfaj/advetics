@@ -12,6 +12,8 @@ import {
   yetkiVar,
   type Role,
 } from '@advetics/shared';
+import { Kart } from '@/components/ui/kart';
+import { Dugme } from '@/components/ui/dugme';
 
 /**
  * ═══ ROL KARŞILAŞTIRMA TABLOSU ═══
@@ -33,89 +35,88 @@ export function RolMatrisi({ baslangictaAcik = false }: { baslangictaAcik?: bool
   const [acik, setAcik] = useState(baslangictaAcik);
 
   return (
-    <section className="rounded-xl border border-line bg-surface">
-      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-4 py-3">
-        <div className="min-w-0">
-          <h2 className="text-sm font-semibold text-ink">Roller — kim ne yapabilir</h2>
-          <p className="mt-0.5 max-w-prose text-[11px] text-ink-muted">
-            Yetki KİŞİYE değil, kişi × kapsam eşleşmesine veriliyor: aynı kişi bir
-            şirkette Yönetici, başka bir workspace’te yalnızca izleyici olabilir.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setAcik((a) => !a)}
-          aria-expanded={acik}
-          className="shrink-0 text-xs font-medium text-brand-strong hover:underline"
-        >
+    <Kart
+      dolgu={false}
+      baslik="Roller: kim ne yapabilir"
+      eylem={
+        <Dugme ton="hayalet" boyut="kucuk" onClick={() => setAcik((a) => !a)} aria-expanded={acik}>
           {acik ? 'Ayrıntılı karşılaştırmayı gizle' : 'Ayrıntılı karşılaştırmayı göster'}
-        </button>
-      </header>
+        </Dugme>
+      }
+    >
+      <p className="m-0 border-b border-line px-5 py-3 text-13 text-ink-muted">
+        Yetki KİŞİYE değil, kişi × kapsam eşleşmesine veriliyor: aynı kişi bir şirkette Yönetici, başka bir
+        workspace’te yalnızca izleyici olabilir.
+      </p>
 
-      <div className="grid gap-3 px-4 py-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-4">
         <RolKarti etiket={sutunEtiketi('sahip')} aciklama={SAHIP_ACIKLAMASI} sahip />
         {ROLES.map((r) => (
           <RolKarti key={r} etiket={ROL_ETIKETI[r]} aciklama={ROL_ACIKLAMASI[r]} />
         ))}
       </div>
 
-      {acik && (
-        <div className="overflow-x-auto border-t border-line">
-          <table className="w-full min-w-[40rem] text-left text-xs">
-            <thead>
-              <tr className="border-b border-line text-[11px] text-ink-muted">
-                <th scope="col" className="px-4 py-2 font-medium">
-                  Ne yapabilir
+      {/*
+        TABLO DOM'DA KALIYOR, `hidden` İLE GİZLENİYOR (CLAUDE.md §3 Tasarım):
+        açılıp kapanan öğe DOM'dan çıkmıyor; ekran okuyucu ve sayfa içi
+        arama da gizliyken onu görmüyor.
+      */}
+      <div hidden={!acik} className="overflow-x-auto border-t border-line">
+        <table className="w-full min-w-[40rem] border-collapse text-left text-13">
+          <thead>
+            <tr>
+              <th scope="col" className="border-b border-line px-4 py-2.5 text-12 font-semibold text-ink-muted">
+                Ne yapabilir
+              </th>
+              {ROL_SUTUNLARI.map((s) => (
+                <th
+                  key={s}
+                  scope="col"
+                  className="border-b border-line px-3 py-2.5 text-center text-12 font-semibold text-ink-muted"
+                >
+                  {sutunEtiketi(s)}
                 </th>
-                {ROL_SUTUNLARI.map((s) => (
-                  <th key={s} scope="col" className="px-3 py-2 text-center font-medium">
-                    {sutunEtiketi(s)}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {YETKI_GRUPLARI.map((grup) => (
-                <GrupSatirlari key={grup.baslik} grup={grup} />
               ))}
-            </tbody>
-          </table>
-          <p className="px-4 py-2 text-[11px] text-ink-muted">
-            Yönetici yetkisi verildiği kapsamda geçerli: üst hesapta verilirse bütün
-            şirketler, tek şirkette verilirse yalnızca o şirket. Sahip yetkisi panelden
-            verilemez.
-          </p>
-        </div>
-      )}
-    </section>
+            </tr>
+          </thead>
+          <tbody>
+            {YETKI_GRUPLARI.map((grup) => (
+              <GrupSatirlari key={grup.baslik} grup={grup} />
+            ))}
+          </tbody>
+        </table>
+        <p className="m-0 px-4 py-3 text-12 text-ink-muted">
+          Yönetici yetkisi verildiği kapsamda geçerli: üst hesapta verilirse bütün şirketler, tek şirkette
+          verilirse yalnızca o şirket. Sahip yetkisi panelden verilemez.
+        </p>
+      </div>
+    </Kart>
   );
 }
 
 function GrupSatirlari({ grup }: { grup: (typeof YETKI_GRUPLARI)[number] }) {
   return (
     <>
-      <tr className="bg-surface-sunken/60">
+      <tr className="bg-surface-muted">
+        {/* GRUP BAŞLIĞI BÜYÜK HARF DEĞİL (BILESENLER § 2 Tablo): Türkçe "İ/ı" büyük harfte kırılıyordu. */}
         <th
           scope="rowgroup"
           colSpan={ROL_SUTUNLARI.length + 1}
-          className="px-4 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-muted"
+          className="px-4 py-2 text-left text-12 font-bold text-ink"
         >
           {grup.baslik}
         </th>
       </tr>
       {grup.satirlar.map((satir) => (
-        <tr key={satir.baslik} className="border-b border-line/60">
+        <tr key={satir.baslik} className="border-b border-line">
           <td className="px-4 py-2 text-ink">{satir.baslik}</td>
           {ROL_SUTUNLARI.map((s) => {
             const var_ = yetkiVar(s, satir.izin);
             return (
               <td key={s} className="px-3 py-2 text-center">
                 {/* İşaret metin olarak da okunuyor — ekran okuyucu ve kopyala-yapıştır için. */}
-                <span
-                  aria-label={var_ ? 'evet' : 'hayır'}
-                  className={var_ ? 'font-semibold text-ok' : 'text-ink-muted/40'}
-                >
-                  {var_ ? '✓' : '—'}
+                <span aria-label={var_ ? 'evet' : 'hayır'} className={var_ ? 'font-bold text-ink' : 'text-ink-soluk'}>
+                  {var_ ? '✓' : '-'}
                 </span>
               </td>
             );
@@ -136,24 +137,23 @@ function RolKarti({
   sahip?: boolean;
 }) {
   return (
-    <div className="rounded-lg border border-line bg-surface-sunken/40 p-3">
-      <p className="text-sm font-semibold text-ink">
+    <div className="rounded-alan border border-line bg-surface-muted p-3">
+      <p className="m-0 flex flex-wrap items-center gap-1.5 text-14 font-bold text-ink">
         {etiket}
         {sahip && (
-          <span className="ml-1.5 rounded bg-brand/10 px-1.5 py-0.5 text-[10px] font-medium text-brand-strong">
-            platform
-          </span>
+          <span className="rounded-full bg-surface-sunken px-2 py-0.5 text-11 font-semibold text-ink-muted">platform</span>
         )}
       </p>
-      <p className="mt-1 text-[11px] leading-snug text-ink-muted">{aciklama}</p>
+      <p className="m-0 mt-1 text-12 leading-snug text-ink-muted">{aciklama}</p>
     </div>
   );
 }
 
 /**
  * Seçicinin altında duran tek satırlık açıklama — kişi ekleme ve yetki
- * verme pencereleri aynı metni buradan alıyor.
+ * verme pencereleri aynı metni buradan alıyor. `span` (blok): `Alan`ın
+ * ipucu kutusu bir `small` ve içine `p` koymak geçersiz HTML.
  */
 export function RolAciklamasi({ rol }: { rol: Role }) {
-  return <p className="mt-1 text-[11px] text-ink-muted">{ROL_ACIKLAMASI[rol]}</p>;
+  return <span className="block text-12 text-ink-muted">{ROL_ACIKLAMASI[rol]}</span>;
 }

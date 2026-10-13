@@ -56,8 +56,14 @@ export function Alan({
   const etkinTip = sifreAlani && gorunur ? 'text' : type;
 
   return (
-    <div>
-      <label htmlFor={id} className="mb-1.5 block text-sm font-medium text-ink">
+    /*
+     * GÖRÜNÜŞ ORTAK FORM ALANIYLA AYNI (`ui/alan.tsx`, referans "05 · Form"):
+     * etiket 13 kalın, alan 40 yüksek ve 8 yarıçap, hata kırmızı kenar.
+     * Bileşen ayrı kalıyor çünkü "Göster/Gizle" ve kendi `aria` bağı burada;
+     * yalnız sınıflar ortak kalıba eşlendi.
+     */
+    <div className="grid gap-1.5">
+      <label htmlFor={id} className="text-13 font-semibold text-ink">
         {label}
       </label>
       <div className="relative">
@@ -71,9 +77,9 @@ export function Alan({
         onChange={(e) => onChange(e.target.value)}
         aria-invalid={error ? 'true' : undefined}
         aria-describedby={yardimId}
-        className={`w-full rounded-lg border border-line bg-surface py-2 pl-3 text-sm text-ink outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:opacity-60 ${
-          sifreAlani ? 'pr-16' : 'pr-3'
-        }`}
+        className={`h-10 w-full rounded-alan border bg-surface pl-3 text-14 text-ink outline-none transition-colors focus:border-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand disabled:opacity-60 ${
+          error ? 'border-danger' : 'border-line-strong'
+        } ${sifreAlani ? 'pr-16' : 'pr-3'}`}
       />
       {sifreAlani && (
         /*
@@ -90,18 +96,18 @@ export function Alan({
           disabled={disabled}
           aria-pressed={gorunur}
           aria-controls={id}
-          className="absolute inset-y-0 right-0 px-3 text-xs font-medium text-ink-muted transition hover:text-ink disabled:opacity-60"
+          className="absolute inset-y-0 right-0 px-3 text-12 font-bold text-ink-muted transition-colors hover:text-ink disabled:opacity-60"
         >
           {gorunur ? 'Gizle' : 'Göster'}
         </button>
       )}
       </div>
       {error ? (
-        <p id={`${id}-error`} className="mt-1 text-xs text-danger-strong">
+        <p id={`${id}-error`} className="m-0 text-12 text-danger-strong">
           {error}
         </p>
       ) : ipucu ? (
-        <p id={`${id}-ipucu`} className="mt-1 text-xs text-ink-muted">
+        <p id={`${id}-ipucu`} className="m-0 text-12 text-ink-muted">
           {ipucu}
         </p>
       ) : null}

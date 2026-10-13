@@ -4,10 +4,10 @@ import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import { requireSession } from '@/lib/session';
 import { kapi } from '@/lib/panel-adresleri';
 import { ayarSekmesiAcik } from '@/lib/ayar-kapilari';
-import { SayfaBasligi } from '@/components/ui/sayfa-basligi';
-import { AyarKapsami, aktifSirketAdi } from '@/components/ayar-kapsam';
+import { Serit } from '@/components/ui/hal';
+import { AyarKapsami, AyarlarSayfasi, aktifSirketAdi } from '@/components/ayar-kapsam';
 import { TopluTazeleme } from '@/components/connections/toplu-tazeleme';
-import { KanalKartlari } from '@/components/connections/kanal-kartlari';
+import { KanalKartlari, PlatformBaglaMenusu } from '@/components/connections/kanal-kartlari';
 import { HavuzKartlari } from '@/components/connections/havuz-kartlari';
 import { YouTubeKanalEkle } from '@/components/connections/youtube-kanal-ekle';
 import { YouTubeKanalBul } from '@/components/connections/youtube-kanal-bul';
@@ -77,26 +77,37 @@ export default async function PlatformBaglantilariSayfasi() {
         : null;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
-      <SayfaBasligi
-        ust={<AyarKapsami duzey="sirket" ad={aktifSirketAdi(session)} />}
-        baslik="Platform bağlantıları"
-        aciklama="Reklam hesaplarını buradan bağlıyorsun. Bir hesabı workspace’e atadığında veri akışı kendiliğinden başlar."
-      />
-
+    <AyarlarSayfasi
+      session={session}
+      ust={<AyarKapsami duzey="sirket" ad={aktifSirketAdi(session)} />}
+      baslik="Platform bağlantıları"
+      aciklama="Reklam hesaplarını buradan bağlıyorsun. Bir hesabı workspace’e atadığında veri akışı kendiliğinden başlar."
+      /*
+        BÖLÜMÜN BİRİNCİL EYLEMİ BAŞLIĞIN SAĞINDA: "Platform bağla". Kapı
+        kapalıysa düğme yok ve sebebi kartların altında yazıyor.
+      */
+      eylemler={
+        yetkilendirir && availability.length > 0 ? (
+          /* YALNIZ PLATFORM ADLARI: hesap listesi istemciye ikinci kez taşınmasın. */
+          <PlatformBaglaMenusu
+            availability={availability}
+            connections={connections.map((c) => ({ platform: c.platform }))}
+          />
+        ) : undefined
+      }
+      /* Liste zaten çekildi: yan menünün kırmızı noktası ikinci istek atmasın. */
+      baglantilar={baglantiSonuc.status === 'fulfilled' ? connections : null}
+    >
       <CallbackBanner />
 
       {yuklemeHatasi && (
-        <div
-          role="alert"
-          className="rounded-lg border border-danger/30 bg-danger-soft px-3.5 py-2.5 text-sm text-danger-strong"
-        >
-          <strong>Bağlantılar okunamadı.</strong> <span>{yuklemeHatasi}</span>
-        </div>
+        <Serit ton="hata" baslik="Bağlantılar okunamadı">
+          {yuklemeHatasi}
+        </Serit>
       )}
 
       {/* 1. KANALLAR: bağlı mıyım, sağlıklı mı, değilse nasıl bağlanırım. */}
-      <div id="kanallar" className="scroll-mt-4 space-y-2">
+      <div id="kanallar" className="grid scroll-mt-24 gap-2">
         <KanalKartlari
           availability={availability}
           connections={connections}
@@ -104,49 +115,42 @@ export default async function PlatformBaglantilariSayfasi() {
           kaldirabilir={kapi(session, 'baglanti.kaldir')}
         />
         {!yetkilendirir && (
-          <p className="text-xs text-ink-muted">{PANEL_KAPILARI['baglanti.yetkilendir'].neden}</p>
+          <p className="m-0 text-12 text-ink-muted">{PANEL_KAPILARI['baglanti.yetkilendir'].neden}</p>
         )}
       </div>
 
       {connections.length > 0 && (
         <>
           {/* 2. HAVUZ: hangi hesaplar henüz kimseye ait değil. */}
-          <section id="havuz" className="scroll-mt-4 space-y-3">
-            <div>
-              <h2 className="text-sm font-semibold text-ink">Atanmamış hesaplar</h2>
-              <p className="mt-0.5 text-xs text-ink-muted">
-                Bir hesabı workspace’e atadığında veri akışı başlar ve 90 günlük geçmiş kuyruğa girer.
-              </p>
-            </div>
+          <section id="havuz" className="grid scroll-mt-24 gap-2">
             <HavuzKartlari
               connections={connections}
               clients={session.availableClients}
               canManage={atayabilir}
               workspaceAcabilir={kapi(session, 'workspace.ekle')}
             />
-            {!atayabilir && <p className="text-xs text-ink-muted">{PANEL_KAPILARI['hesap.ata'].neden}</p>}
+            {!atayabilir && <p className="m-0 text-12 text-ink-muted">{PANEL_KAPILARI['hesap.ata'].neden}</p>}
           </section>
 
           {/*
             YOUTUBE KANALI HAVUZUN YANINDA: kanal eklemek havuza hesap
             eklemekle aynı iş ve sonucu da aynı yere düşüyor. Adres
-            bilinmiyorsa isimle arama; workspace'e tek adımda bağlamak için
-            Marka Merkezi › Kurulum'daki kanallar bloğu.
+            bilinmiyorsa isimle arama AYNI KARTTA; workspace'e tek adımda
+            bağlamak için Marka Merkezi › Kurulum'daki kanallar bloğu.
           */}
-          <section id="youtube" className="scroll-mt-4 space-y-3">
-            <YouTubeKanalEkle canManage={kanalEkler} />
-            {kanalEkler && (
-              <div className="rounded-xl border border-line bg-surface p-4">
-                <p className="text-sm font-semibold text-ink">Adresi bilmiyor musun? İsimle ara</p>
-                <div className="mt-2">
+          <section id="youtube" className="scroll-mt-24">
+            <YouTubeKanalEkle canManage={kanalEkler}>
+              {kanalEkler && (
+                <>
+                  <p className="m-0 text-13 font-semibold text-ink">Adresi bilmiyor musun? İsimle ara</p>
                   <YouTubeKanalBul clientId={null} workspaceAdi={null} />
-                </div>
-              </div>
-            )}
+                </>
+              )}
+            </YouTubeKanalEkle>
           </section>
 
           {/* 3. ATANANLAR: hangi workspace neyi kullanıyor. */}
-          <div id="izlenen" className="scroll-mt-4">
+          <div id="izlenen" className="scroll-mt-24">
             <IzlenenHesaplar connections={connections} clients={session.availableClients} />
           </div>
         </>
@@ -156,12 +160,12 @@ export default async function PlatformBaglantilariSayfasi() {
         4. BAKIM EN ALTTA. "Tüm verileri güncelle" metrik çekiyor; kanal
         kartındaki "Hesapları tara" hesap listesini okuyor. İkisi farklı iş.
       */}
-      <div id="tazeleme" className="scroll-mt-4">
+      <div id="tazeleme" className="scroll-mt-24">
         {kapi(session, 'veri.topluGuncelle') && session.availableClients.length > 0 ? (
           <TopluTazeleme workspaceler={session.availableClients.map((c) => ({ id: c.id, name: c.name }))} />
         ) : null}
       </div>
-    </div>
+    </AyarlarSayfasi>
   );
 }
 

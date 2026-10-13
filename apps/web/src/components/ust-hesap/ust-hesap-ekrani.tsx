@@ -6,6 +6,13 @@ import type { ManagerAccountTree } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { acilisAdresi, ayarlarAdresi } from '@/lib/panel-adresleri';
 import { Halka } from '@/components/yukleniyor';
+import { Kart } from '@/components/ui/kart';
+import { Girdi } from '@/components/ui/alan';
+import { Serit } from '@/components/ui/hal';
+import { Pencere, YanPanel } from '@/components/ui/pencere';
+import { MenuAyraci, MenuOgesi } from '@/components/ui/acilir-menu';
+import { dugmeSinifi } from '@/components/ui/dugme';
+import { DigerMenusu } from '@/components/ayar-sekmeleri';
 import { SirketDuzenle } from './sirket-duzenle';
 import { SirketSil } from './sirket-sil';
 import { UstHesapKarti } from './ust-hesap-karti';
@@ -127,11 +134,11 @@ export function UstHesapEkrani({
    */
   if (yuklemeHatasi || !agac) {
     return (
-      <div className="space-y-6">
+      <div className="grid gap-5">
         {yuklemeHatasi ? (
-          <p className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger-strong">
-            Üst hesap bilgisi alınamadı: {yuklemeHatasi}
-          </p>
+          <Serit ton="hata" baslik="Üst hesap bilgisi alınamadı">
+            {yuklemeHatasi}
+          </Serit>
         ) : ustHesapKurabilir ? (
           <UstHesapKur />
         ) : (
@@ -141,10 +148,9 @@ export function UstHesapEkrani({
            * görmesin. Ajansın adı da yazmıyor: oturum ona yalnızca "bağlı"
            * olgusunu taşıyor.
            */
-          <p className="rounded-lg border border-line bg-surface-muted/50 px-3 py-2 text-sm text-ink-muted">
-            Bu şirket bir ajansın üst hesabına bağlı. Şirketinin workspace&apos;lerini aşağıdan
-            yönetebilirsin.
-          </p>
+          <Serit ton="bilgi" baslik="Bu şirket bir ajansın üst hesabına bağlı">
+            Şirketinin workspace&apos;lerini aşağıdan yönetebilirsin.
+          </Serit>
         )}
         {children}
       </div>
@@ -152,13 +158,7 @@ export function UstHesapEkrani({
   }
 
   return (
-    <div className="space-y-4">
-
-      {/*
-        RAY SABİT GENİŞLİKTE, DETAY KALANI ALIYOR (`minmax(0,1fr)`).
-        `1fr` yazmak yetmiyor: içerideki tablolar `min-content`u büyütüp
-        ray'i eziyor ve sayfa yatay kayıyor.
-      */}
+    <div className="grid gap-5">
       {/*
         ÜST HESABIN KENDİSİ EN ÜSTTE: hangi hesaptasın, paketin ne, ne
         kadarını doldurdun. Şirket listesinin ÜSTÜNDE çünkü onların hepsini
@@ -166,111 +166,86 @@ export function UstHesapEkrani({
       */}
       <UstHesapKarti agac={agac} platformSahibi={platformAdmin} />
 
-      <div className="grid gap-6 lg:grid-cols-[19rem_minmax(0,1fr)]">
+      {/*
+        RAY SABİT GENİŞLİKTE, DETAY KALANI ALIYOR (`minmax(0,1fr)`).
+        `1fr` yazmak yetmiyor: içerideki tablolar `min-content`u büyütüp
+        ray'i eziyor ve sayfa yatay kayıyor.
+      */}
+      <div className="grid gap-5 lg:grid-cols-[19rem_minmax(0,1fr)]">
         <SirketRayi agac={agac} aktifOrgId={aktifOrgId} />
 
-        <div className="min-w-0 space-y-6">
+        <div className="grid min-w-0 content-start gap-5">
           {/*
             ═══ ŞİRKET BAŞLIĞI VE EYLEMLERİ ═══
 
             Önce iki kutu (taşıma ve şirket bilgileri) ekranın üstünde SÜREKLİ
             AÇIK duruyordu ve workspace listesini aşağı itiyordu. Kullanıcının
             tarifi *"gereksiz ve karışık duruyor"*. Bugün bir başlık satırı ve
-            üç düğme; paneller istendiğinde açılıyor.
+            ⋯ menüsü; düzenleme sağdan yan panelde, silme onay penceresinde
+            (BILESENLER § 3.4).
           */}
           {sirketHatasi !== null ? (
             /* SEBEBİ EKRANDA: form olmadan boş bırakmak, "düzenleyemiyorum"
                ile "yüklenemedi" hâllerini aynı gösterirdi. */
-            <p
-              role="alert"
-              className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger-strong"
-            >
-              Şirket bilgisi alınamadı: {sirketHatasi}
-            </p>
+            <Serit ton="hata" baslik="Şirket bilgisi alınamadı">
+              {sirketHatasi}
+            </Serit>
           ) : sirket ? (
-            <section className="rounded-xl border border-line bg-surface p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <h2 className="truncate text-base font-semibold text-ink">{sirket.name}</h2>
-                  <p className="text-[11px] text-ink-muted">{sirket.slug}</p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <EylemDugmesi
-                    aktif={panel === 'duzenle'}
-                    onClick={() => setPanel((p) => (p === 'duzenle' ? 'yok' : 'duzenle'))}
-                  >
-                    Düzenle
-                  </EylemDugmesi>
-                  <button
-                    type="button"
-                    onClick={() => setPanel((p) => (p === 'sil' ? 'yok' : 'sil'))}
-                    className={`rounded-lg border px-3 py-1.5 text-sm transition ${
-                      panel === 'sil'
-                        ? 'border-danger/30 bg-danger-soft text-danger-strong'
-                        : 'border-line text-danger-strong hover:bg-danger-soft'
-                    }`}
-                  >
-                    Sil
-                  </button>
-                </div>
-              </div>
-
-              {panel === 'duzenle' && (
-                <div className="mt-4 border-t border-line pt-4">
-                  <SirketDuzenle sirketAdi={sirket.name} sirketSlug={sirket.slug} />
-                </div>
-              )}
-
-              {panel === 'sil' && (
-                <div className="mt-4 border-t border-line pt-4">
-                  <SirketSil
-                    organizationId={sirket.id}
-                    onVazgec={() => setPanel('yok')}
-                    onSilindi={() => {
-                      /*
-                       * SİLİNEN ŞİRKETTE KALINAMAZ. Sunucu aktif şirketin
-                       * silinmesini zaten reddediyor, yani buradaki şirket
-                       * BAŞKA bir şirket; yine de ağaç ve üst bardaki seçici
-                       * tazelenmek zorunda, yoksa silinen şirket listede
-                       * durmaya devam eder.
-                       */
-                      setPanel('yok');
-                      window.location.assign(ayarlarAdresi('sirketler'));
-                    }}
-                  />
-                </div>
-              )}
-            </section>
+            <Kart
+              baslik={sirket.name}
+              baslikEki={sirket.slug}
+              eylem={
+                <DigerMenusu etiket={`${sirket.name} için işlemler`}>
+                  <MenuOgesi onClick={() => setPanel('duzenle')}>Şirket bilgilerini düzenle</MenuOgesi>
+                  <MenuAyraci />
+                  <MenuOgesi tehlike onClick={() => setPanel('sil')}>
+                    Şirketi sil
+                  </MenuOgesi>
+                </DigerMenusu>
+              }
+            />
           ) : null}
 
           {children}
         </div>
       </div>
-    </div>
-  );
-}
 
-/** Panel açan düğme — açıkken işaretli. */
-function EylemDugmesi({
-  aktif,
-  onClick,
-  children,
-}: {
-  aktif: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-expanded={aktif}
-      className={`rounded-lg border px-3 py-1.5 text-sm transition ${
-        aktif ? 'border-brand bg-brand-soft text-brand-strong' : 'border-line text-ink hover:bg-surface-muted'
-      }`}
-    >
-      {children}
-    </button>
+      {sirket && (
+        <>
+          {/*
+            İÇERİK YALNIZ AÇIKKEN ÇİZİLİYOR (katmanın kendisi DOM'da kalıyor):
+            silme özeti sunucudan sayılıyor ve sayfanın her açılışında o
+            isteği atmak gereksiz yük; düzenleme formu da her açılışta kayıtlı
+            değerden başlamalı.
+          */}
+          <YanPanel acik={panel === 'duzenle'} onKapat={() => setPanel('yok')} baslik="Şirket bilgileri">
+            {panel === 'duzenle' && (
+              <SirketDuzenle sirketAdi={sirket.name} sirketSlug={sirket.slug} />
+            )}
+          </YanPanel>
+
+          <Pencere acik={panel === 'sil'} onKapat={() => setPanel('yok')} baslik="Şirketi sil">
+            {panel === 'sil' && (
+              <SirketSil
+                organizationId={sirket.id}
+                onVazgec={() => setPanel('yok')}
+                onSilindi={() => {
+                  /*
+                   * SİLİNEN ŞİRKETTE KALINAMAZ. Sunucu aktif şirketin
+                   * silinmesini zaten reddediyor, yani buradaki şirket
+                   * BAŞKA bir şirket; yine de ağaç ve üst bardaki seçici
+                   * tazelenmek zorunda, yoksa silinen şirket listede
+                   * durmaya devam eder.
+                   */
+                  setPanel('yok');
+                  window.location.assign(ayarlarAdresi('sirketler'));
+                }}
+              />
+            )}
+          </Pencere>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -344,28 +319,44 @@ function SirketRayi({
   const toplamWorkspace = agac.organizations.reduce((n, o) => n + o.workspaces.length, 0);
 
   return (
-    <aside className="lg:sticky lg:top-4 lg:self-start">
-      <div className="flex flex-col rounded-xl border border-line bg-surface">
-        <div className="border-b border-line px-3 py-2.5">
-          <p className="truncate text-sm font-semibold text-ink">{agac.name}</p>
-          {/* SESSİZ KESME YOK: kaç şirket ve kaç workspace olduğu yazılı. */}
-          <p className="mt-0.5 text-[11px] text-ink-muted">
-            {agac.organizations.length} şirket · {toplamWorkspace} workspace
-          </p>
-        </div>
+    <aside className="min-w-0 lg:self-start">
+      {/*
+        RAYIN KARTI ORTAK KART KALIBI (`Kart`): başlık satırı, gövde, sağ altta
+        tek eylem. Yapışkan DEĞİL: sayfa içi yan menü zaten solda yapışkan ve
+        ikinci bir yapışkan sütun dar ekranda içeriğin üstüne biniyordu.
+      */}
+      <Kart
+        as="div"
+        dolgu={false}
+        baslik={agac.name}
+        /* SESSİZ KESME YOK: kaç şirket ve kaç workspace olduğu yazılı. */
+        baslikEki={`${agac.organizations.length} şirket · ${toplamWorkspace} workspace`}
+        altEylem={
+          /*
+            ŞİRKET SİHİRBAZLA AÇILIYOR, BURADAKİ SATIR İÇİ FORMLA DEĞİL.
 
-        <div className="border-b border-line p-2">
+            Form yalnızca adı soruyordu ve şirket BOŞ açılıyordu: bağlantı
+            yok, workspace yok. Sonraki üç adım (şirkete geç, Meta/Google'ı
+            O ŞİRKETTE bağla, workspace kurup hesap ata) hiçbir ekranda
+            yazmıyordu ve yalnızca sistemi kuran kişi biliyordu. Sihirbaz
+            aynı adımları sırayla yürütüyor.
+          */
+          <Link href={acilisAdresi('sirket')} className={dugmeSinifi('ikincil', 'kucuk')}>
+            + Şirket ekle
+          </Link>
+        }
+      >
+        <div className="border-b border-line p-3">
           {/*
             `type="search"` — tarayıcının temizleme düğmesi bedava geliyor ve
             uzun bir aramadan sonra listeyi geri getirmenin yolu o.
           */}
-          <input
+          <Girdi
             type="search"
             value={arama}
             onChange={(e) => setArama(e.target.value)}
-            placeholder="Şirket veya workspace ara…"
-            aria-label="Şirket veya workspace ara"
-            className="w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-brand"
+            placeholder="Şirket ya da workspace ara"
+            aria-label="Şirket ya da workspace ara"
           />
         </div>
 
@@ -374,10 +365,10 @@ function SirketRayi({
           kırk şirkette detayın ekrandan çıkması demekti — kullanıcı ray'i
           gezerken düzenlediği şirketi göremiyordu.
         */}
-        <ul ref={listeRef} className="max-h-[60vh] min-h-0 overflow-y-auto p-1.5">
+        <ul ref={listeRef} className="m-0 max-h-[60vh] min-h-0 list-none overflow-y-auto p-1.5">
           {suzulmus.length === 0 ? (
             /* ÜÇ HÂL AYRI: hiç şirket yok · arama eşleşmedi. */
-            <li className="px-2 py-6 text-center text-xs text-ink-muted">
+            <li className="px-2 py-6 text-center text-13 text-ink-muted">
               {agac.organizations.length === 0
                 ? 'Bu üst hesaba bağlı şirket yok.'
                 : `“${arama}” ile eşleşen şirket ya da workspace yok.`}
@@ -396,29 +387,11 @@ function SirketRayi({
 
         {/* KESME EKRANDA YAZILI — kaç şirketin süzülüp kaçının kaldığı. */}
         {q !== '' && agac.organizations.length > 0 && (
-          <p className="border-t border-line px-3 py-1.5 text-[11px] text-ink-muted">
+          <p className="m-0 border-t border-line px-4 py-2 text-12 text-ink-muted">
             {agac.organizations.length} şirketten {suzulmus.length} tanesi gösteriliyor
           </p>
         )}
-
-        <div className="border-t border-line p-2">
-          {/*
-            ŞİRKET SİHİRBAZLA AÇILIYOR, BURADAKİ SATIR İÇİ FORMLA DEĞİL.
-
-            Form yalnızca adı soruyordu ve şirket BOŞ açılıyordu: bağlantı
-            yok, workspace yok. Sonraki üç adım (şirkete geç, Meta/Google'ı
-            O ŞİRKETTE bağla, workspace kurup hesap ata) hiçbir ekranda
-            yazmıyordu ve yalnızca sistemi kuran kişi biliyordu. Sihirbaz
-            aynı adımları sırayla yürütüyor.
-          */}
-          <Link
-            href={acilisAdresi('sirket')}
-            className="block w-full rounded-lg border border-line px-3 py-1.5 text-center text-sm font-medium text-ink transition hover:bg-surface-sunken"
-          >
-            + Şirket ekle
-          </Link>
-        </div>
-      </div>
+      </Kart>
     </aside>
   );
 }
@@ -480,9 +453,16 @@ function SirketSatiri({
 
   return (
     <li data-aktif={aktif ? 'true' : undefined}>
+      {/*
+        SEÇİLİ SATIR SAYFA İÇİ YAN MENÜYLE AYNI DİLDE: gri zemin + solda
+        kırmızı çizgi. Kırmızı dolgu ana menünün seçili satırına ayrılmış;
+        ikisi aynı görünse kullanıcı hangi listede olduğunu karıştırır.
+      */}
       <div
-        className={`flex items-center gap-1 rounded-lg px-1 ${
-          aktif ? 'bg-brand/10 ring-1 ring-inset ring-brand/30' : 'hover:bg-surface-sunken'
+        className={`relative flex items-center gap-1 rounded-alan px-1 ${
+          aktif
+            ? 'bg-surface-sunken before:absolute before:inset-y-2 before:left-0 before:w-[3px] before:rounded-full before:bg-brand'
+            : 'hover:bg-surface-sunken'
         }`}
       >
         {/*
@@ -491,24 +471,22 @@ function SirketSatiri({
           ekranın boşuna sıfırlandığını görürdü.
         */}
         {aktif ? (
-          <span className="min-w-0 flex-1 px-1.5 py-1.5" aria-current="true">
-            <span className="block truncate text-sm font-semibold text-ink">{sirket.name}</span>
-            <span className="block truncate text-[11px] text-brand-strong">
-              şu an buradasın — sağdan düzenle
-            </span>
+          <span className="min-w-0 flex-1 px-2 py-2" aria-current="true">
+            <span className="block truncate text-13 font-bold text-ink">{sirket.name}</span>
+            <span className="block truncate text-12 text-brand-strong">şu an buradasın, sağdan düzenle</span>
           </span>
         ) : (
           <button
             type="button"
             disabled={gecis}
             onClick={gec}
-            className="min-w-0 flex-1 px-1.5 py-1.5 text-left disabled:opacity-50"
+            className="min-w-0 flex-1 rounded-alan px-2 py-2 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand disabled:opacity-50"
           >
             <span className="flex items-center gap-1.5">
-              <span className="truncate text-sm text-ink">{sirket.name}</span>
+              <span className="truncate text-13 font-semibold text-ink">{sirket.name}</span>
               {gecis && <Halka />}
             </span>
-            <span className="block truncate text-[11px] text-ink-muted">
+            <span className="block truncate text-12 text-ink-muted">
               {sirket.workspaces.length} workspace
               {sirket.isHome && ' · kendi şirketin'}
             </span>
@@ -525,12 +503,12 @@ function SirketSatiri({
           onClick={() => setAcik((v) => !v)}
           aria-expanded={acik}
           aria-label={`${sirket.name} workspace’leri`}
-          className="shrink-0 rounded p-1.5 text-ink-muted transition hover:text-ink"
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-surface hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"
         >
           <svg
             viewBox="0 0 20 20"
             fill="none"
-            className={`h-3.5 w-3.5 transition ${acik ? 'rotate-90' : ''}`}
+            className={`h-3.5 w-3.5 transition-transform motion-reduce:transition-none ${acik ? 'rotate-90' : ''}`}
             aria-hidden
           >
             <path d="m8 6 4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
@@ -544,15 +522,15 @@ function SirketSatiri({
         yapmış olurdu.
       */}
       {gecisHatasi && (
-        <p role="alert" className="mx-1.5 mb-1 text-[11px] text-danger-strong">
+        <p role="alert" className="mx-2 mb-1 text-12 text-danger-strong">
           {gecisHatasi}
         </p>
       )}
 
       {!acik && eslesen.length > 0 && (
-        <ul className="mb-1 ml-3 border-l border-line pl-2.5">
+        <ul className="mb-1 ml-4 list-none border-l border-line pl-2.5">
           {eslesen.map((ad) => (
-            <li key={ad} className="truncate py-0.5 text-[11px] text-brand-strong">
+            <li key={ad} className="truncate py-0.5 text-12 text-brand-strong">
               {ad}
             </li>
           ))}
@@ -560,17 +538,17 @@ function SirketSatiri({
       )}
 
       {acik && (
-        <ul className="mb-1 ml-3 border-l border-line pl-2.5">
+        <ul className="mb-1 ml-4 list-none border-l border-line pl-2.5">
           {sirket.workspaces.length === 0 ? (
             /* BOŞ LİSTE NEDENİNİ SÖYLÜYOR (CLAUDE.md): "henüz eklenmedi" ile
                "yüklenemedi" aynı boş alana çevrilmemeli. */
-            <li className="py-0.5 text-[11px] text-ink-muted">
-              Bu şirkette henüz workspace yok. Şirkete geçince sağdaki
-              &quot;Workspace&apos;ler&quot; bölümünden ekleyebilirsin.
+            <li className="py-0.5 text-12 text-ink-muted">
+              Bu şirkette henüz workspace yok. Şirkete geçince sayfa başlığındaki
+              &quot;Yeni workspace&quot; ile ekleyebilirsin.
             </li>
           ) : (
             sirket.workspaces.map((w) => (
-              <li key={w.id} className="truncate py-0.5 text-[11px] text-ink-muted">
+              <li key={w.id} className="truncate py-0.5 text-12 text-ink-muted">
                 {w.name}
               </li>
             ))
@@ -585,23 +563,24 @@ function SirketSatiri({
 
 function UstHesapKur() {
   return (
-    <section className="rounded-xl border border-line bg-surface p-5">
-      <h2 className="text-sm font-semibold text-ink">Üst hesap oluştur</h2>
-      <p className="mt-1 max-w-prose text-sm text-ink-muted">
+    <Kart
+      baslik="Üst hesap oluştur"
+      altEylem={
+        /*
+          SİHİRBAZA GİDİYOR. Buradaki form yalnızca adı soruyordu; sonraki
+          adımlar (platform bağlama, workspace, hesap atama) hiçbir ekranda
+          yazmıyordu. Kart içinde KIRMIZI DOLU DÜĞME YOK (BILESENLER § 3.3):
+          sayfanın birincil eylemi başlıkta.
+        */
+        <Link href={acilisAdresi('ust-hesap')} className={dugmeSinifi('koyu', 'kucuk')}>
+          Kurulumu başlat
+        </Link>
+      }
+    >
+      <p className="m-0 max-w-prose text-14 text-ink-muted">
         Birden çok şirketi tek girişle yönetmek için. Şu anki şirketin bu üst hesabın altına
         bağlanır, sonra yanına yenilerini ekleyebilirsin.
       </p>
-      {/*
-        SİHİRBAZA GİDİYOR. Buradaki form yalnızca adı soruyordu; sonraki
-        adımlar (platform bağlama, workspace, hesap atama) hiçbir ekranda
-        yazmıyordu.
-      */}
-      <Link
-        href={acilisAdresi('ust-hesap')}
-        className="mt-4 inline-flex items-center rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
-      >
-        Kurulumu başlat
-      </Link>
-    </section>
+    </Kart>
   );
 }

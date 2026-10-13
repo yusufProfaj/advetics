@@ -9,6 +9,9 @@ import { acilisAdresi } from '@/lib/panel-adresleri';
 import type { WorkspaceSecimVerisi } from '@/lib/sayfa-workspace';
 import { dugmeSinifi } from '@/components/ui/dugme';
 import { Uyari } from '@/components/ui/uyari';
+import { SayfaIskeleti } from '@/components/ui/sayfa-basligi';
+import { Kart } from '@/components/ui/kart';
+import { Girdi } from '@/components/ui/alan';
 
 /**
  * ═══ WORKSPACE SEÇİLMEDEN AÇILAMAYAN SAYFA — SEÇİM YERİNDE ═══
@@ -77,10 +80,15 @@ export function WorkspaceGerekli({
       )
     : workspaceler;
 
+  /*
+   * SAYFANIN YERİNE ÇİZİLİYOR: başlık ortak iskeletten (`SayfaIskeleti`,
+   * `dar` genişlik; seçim bir form işi), içerik tek kart. Elle yazılmış
+   * `h1` ve kendi yarıçaplı kutusu vardı; menüden bu ekrana düşen kullanıcı
+   * başlığın diğer sayfalardan farklı yerde durduğunu görüyordu.
+   */
   return (
-    <div className="mx-auto max-w-3xl rounded-2xl border border-line bg-surface p-6">
-      <h1 className="sayfa-baslik">{ekran}</h1>
-
+    <SayfaIskeleti genislik="dar" baslik={ekran}>
+      <Kart>
       {workspaceler.length === 0 ? (
         /*
          * HİÇ WORKSPACE YOK: seçim ekranı değil, KURULUM ekranı. Eski kutu
@@ -88,15 +96,15 @@ export function WorkspaceGerekli({
          * bir şey yoktu.
          */
         <>
-          <p className="mt-2 text-sm text-ink-muted">
+          <p className="m-0 text-14 text-ink-muted">
             {neden} {sirketAdi} altında henüz workspace yok.
           </p>
           {kurulumGorunur ? (
-            <Link href={acilisAdresi('workspace')} className={`mt-5 ${dugmeSinifi()}`}>
+            <Link href={acilisAdresi('workspace')} className={`mt-5 ${dugmeSinifi('koyu')}`}>
               Workspace oluştur
             </Link>
           ) : (
-            <p className="mt-4 text-sm text-ink">
+            <p className="m-0 mt-4 text-14 text-ink">
               Workspace açma yetkin yok. Yöneticinden bir workspace oluşturmasını ya da seni
               birine eklemesini iste.
             </p>
@@ -104,34 +112,33 @@ export function WorkspaceGerekli({
         </>
       ) : (
         <>
-          <p className="mt-2 text-sm text-ink-muted">
+          <p className="m-0 text-14 text-ink-muted">
             {neden} Hangi workspace ile çalışmak istiyorsun?
           </p>
-          <p className="mt-1 text-xs text-ink-muted">
+          <p className="m-0 mt-1 text-12 text-ink-muted">
             Seçimin üst bara da yansır ve diğer ekranlarda da geçerli olur.
           </p>
 
           {workspaceler.length > 6 && (
             <label className="mt-4 block max-w-sm">
               <span className="sr-only">Workspace ara</span>
-              <input
+              <Girdi
                 type="search"
                 name="workspace-ara"
                 autoComplete="off"
                 value={ara}
                 onChange={(e) => setAra(e.target.value)}
-                placeholder="Workspace ara…"
-                className="h-9 w-full rounded-lg border border-line bg-surface px-3 text-sm focus-visible:border-brand focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand/30"
+                placeholder="Workspace ara"
               />
             </label>
           )}
 
           {suzulmus.length === 0 ? (
-            <p className="mt-4 text-sm text-ink-muted">
+            <p className="m-0 mt-4 text-14 text-ink-muted">
               Aramaya uyan workspace yok ({workspaceler.length} workspace var).
             </p>
           ) : (
-            <ul className="mt-4 grid gap-2 sm:grid-cols-2">
+            <ul className="m-0 mt-4 grid list-none gap-2 p-0 sm:grid-cols-2">
               {suzulmus.map((w) => (
                 <li key={w.id}>
                   <button
@@ -139,7 +146,7 @@ export function WorkspaceGerekli({
                     disabled={bekleyen !== null}
                     aria-busy={bekleyen === w.id || undefined}
                     onClick={() => void sec(w.id)}
-                    className="flex w-full items-center justify-between gap-2 rounded-xl border border-line bg-surface px-4 py-3 text-left text-sm font-medium text-ink transition-colors hover:border-brand/40 hover:bg-surface-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-wait disabled:opacity-60"
+                    className="flex w-full items-center justify-between gap-2 rounded-alan border border-line bg-surface px-4 py-3 text-left text-14 font-semibold text-ink transition-colors hover:border-line-strong hover:bg-surface-sunken focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-wait disabled:opacity-60"
                   >
                     <span className="min-w-0 truncate">{w.name}</span>
                     <span aria-hidden="true" className="shrink-0 text-ink-muted">
@@ -153,12 +160,12 @@ export function WorkspaceGerekli({
 
           {/* SESSİZ KESME YOK: arama süzdüyse kaç tanesinin göründüğü yazıyor. */}
           {suzulmus.length > 0 && suzulmus.length < workspaceler.length && (
-            <p className="mt-2 text-xs text-ink-muted">
+            <p className="m-0 mt-2 text-12 text-ink-muted">
               {suzulmus.length} / {workspaceler.length} workspace gösteriliyor.
             </p>
           )}
 
-          <p className="mt-4 text-xs text-ink-muted">{sirketAdi}</p>
+          <p className="m-0 mt-4 text-12 text-ink-muted">{sirketAdi}</p>
         </>
       )}
 
@@ -167,6 +174,7 @@ export function WorkspaceGerekli({
           <Uyari ton="tehlike">{hata}</Uyari>
         </div>
       )}
-    </div>
+      </Kart>
+    </SayfaIskeleti>
   );
 }

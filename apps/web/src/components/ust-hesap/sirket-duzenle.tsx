@@ -4,7 +4,9 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { updateOrganizationSchema } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
-import { Halka } from '@/components/yukleniyor';
+import { Alan, Girdi } from '@/components/ui/alan';
+import { Dugme } from '@/components/ui/dugme';
+import { Serit } from '@/components/ui/hal';
 
 /**
  * ŞİRKET DÜZENLEME — ad ve kısa ad.
@@ -107,81 +109,73 @@ export function SirketDuzenle({
   }
 
   return (
-    <section>
-      <p className="max-w-prose text-sm text-ink-muted">
+    <section className="grid gap-4">
+      <p className="m-0 text-13 text-ink-muted">
         Bu ad seçicide, raporlarda ve müşteriye giden maillerde görünüyor.
       </p>
 
-      <label className="mt-3 block max-w-md">
-        <span className="text-[11px] text-ink-muted">Şirket adı</span>
-        <input
+      <Alan etiket="Şirket adı">
+        <Girdi
           value={ad}
           onChange={(e) => {
             setAd(e.target.value);
             setKaydedildi(false);
           }}
           disabled={pending}
-          className="mt-0.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand"
         />
-      </label>
+      </Alan>
 
-      <div className="mt-3">
+      <div className="grid gap-2">
         <button
           type="button"
           onClick={() => setGelismis((v) => !v)}
           aria-expanded={gelismis}
-          className="text-xs text-ink-muted underline-offset-2 transition hover:text-ink hover:underline"
+          className="justify-self-start text-13 font-semibold text-ink-muted underline-offset-2 transition-colors hover:text-ink hover:underline"
         >
           {gelismis ? 'Gelişmiş ayarları gizle' : 'Gelişmiş'}
         </button>
         {gelismis && (
-          <label className="mt-2 block max-w-md">
-            <span className="text-[11px] text-ink-muted">
-              Kısa ad — adreslerde ve dosya adlarında kullanılıyor
-            </span>
-            <input
+          /*
+            DEĞİŞTİRMENİN BEDELİ YAZILIYOR. Paylaşılmış rapor bağlantıları
+            ve üretilmiş dosya adları eski kısa adı taşıyor; sessizce
+            değiştirmek onları kırar.
+          */
+          <Alan
+            etiket="Kısa ad"
+            ipucu="Adreslerde ve dosya adlarında kullanılıyor. Değiştirmek, daha önce paylaşılmış rapor bağlantılarını bozabilir."
+          >
+            <Girdi
               value={slug}
               onChange={(e) => {
                 setSlug(e.target.value);
                 setKaydedildi(false);
               }}
               disabled={pending}
-              className="mt-0.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand"
             />
-            {/*
-              DEĞİŞTİRMENİN BEDELİ YAZILIYOR. Paylaşılmış rapor bağlantıları
-              ve üretilmiş dosya adları eski kısa adı taşıyor; sessizce
-              değiştirmek onları kırar.
-            */}
-            <span className="mt-1 block text-[11px] text-ink-muted">
-              Değiştirmek, daha önce paylaşılmış rapor bağlantılarını bozabilir.
-            </span>
-          </label>
+          </Alan>
         )}
       </div>
 
       {hata && (
-        <p role="alert" className="mt-2 text-xs text-danger-strong">
+        <Serit ton="hata" baslik="Kaydedilemedi">
           {hata}
-        </p>
+        </Serit>
       )}
 
-      <div className="mt-3 flex items-center gap-3">
-        <button
-          type="button"
+      <div className="flex items-center justify-end gap-3">
+        {kaydedildi && !degisti && <span className="text-13 text-ink-muted">Kaydedildi.</span>}
+        <Dugme
           /*
            * DEĞİŞİKLİK YOKSA KAPALI. Açık bırakmak, hiçbir şeyi
            * değiştirmeyen bir isteği ve ardından "kaydedildi" yazan bir
-           * mesajı üretirdi — kullanıcı bir şey yaptığını sanır.
+           * mesajı üretirdi; kullanıcı bir şey yaptığını sanır.
            */
-          disabled={pending || !degisti}
+          disabled={!degisti}
+          bekliyor={pending}
           onClick={() => void kaydet()}
-          className="inline-flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
         >
-          {pending && <Halka />}
           Kaydet
-        </button>
-        {kaydedildi && !degisti && <span className="text-xs text-ink-muted">Kaydedildi.</span>}
+        </Dugme>
       </div>
     </section>
   );

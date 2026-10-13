@@ -1,9 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  CHANNEL_HINTS,
   CHANNEL_LABELS,
   type ChannelKind,
   type ConnectionSummary,
@@ -20,22 +19,37 @@ import {
   type HavuzOgesi,
 } from '@/lib/havuz';
 import { PlatformLogo } from '@/components/platform-logo';
+import { Dugme } from '@/components/ui/dugme';
+import { Kart } from '@/components/ui/kart';
+import { Girdi, Secim } from '@/components/ui/alan';
+import { BosDurum, Serit } from '@/components/ui/hal';
+import { AdHucresi, AracCubugu, Tablo, type TabloSutunu } from '@/components/ui/tablo';
+import { BolumluSecici } from '@/components/ui/sekmeler';
+import { Pencere } from '@/components/ui/pencere';
 
 interface Musteri {
   id: string;
   name: string;
 }
 
+/** Sayfa başına satır. 374 hesaplık havuzda tek sayfa metrelerce uzuyordu. */
+const SAYFA_BOYU = 25;
+
 /**
- * HAVUZ KARTLARI — bağlantı ekranının atama yüzü.
+ * ═══ ATANMAMIŞ HESAPLAR — TEK TABLO (taslak `#ayarlar`) ═══
  *
- * ESKİ DÜZEN: her bağlantının altında bütün hesaplar SATIR SATIR listeleniyordu.
- * 284 hesapta ekran metrelerce uzuyor ve "hangi hesap boşta" sorusu ancak
- * kaydırarak cevaplanabiliyordu.
+ * İLK DÜZEN: her bağlantının altında bütün hesaplar SATIR SATIR
+ * listeleniyordu. 284 hesapta ekran metrelerce uzuyor ve "hangi hesap
+ * boşta" sorusu ancak kaydırarak cevaplanabiliyordu.
  *
- * YENİ DÜZEN: kanal başına tek kart, üstünde havuzda kaç hesap beklediği.
- * Liste ancak istendiğinde ve POP-UP olarak açılıyor — ayrı bir sayfaya
- * gitmek, kullanıcıyı bağlam değiştirip geri dönmeye zorluyordu.
+ * İKİNCİ DÜZEN: kanal başına bir kart ve "Havuzdan hesap ata" ile açılan bir
+ * pop-up. Atanacak hesabı görmek için önce kanalı bilmek ve pencere açmak
+ * gerekiyordu; pencere elle yazılmıştı (odak tuzağı yok, DOM'dan çıkıyordu).
+ *
+ * BUGÜN: Google Ads'in "hesaplar" tablosu. Kanal SÜZGEÇ (Tümü · Meta ·
+ * Google…), arama tablonun üstünde, satırda TEK eylem "Ata", hedef workspace
+ * araç çubuğunda bir kez seçiliyor. Liste SAYFALI ve "1 - 25 / 374" her zaman
+ * yazıyor: sessiz kesme yok, metrelerce liste de yok.
  */
 export function HavuzKartlari({
   connections,
@@ -49,121 +63,29 @@ export function HavuzKartlari({
   /** `client.write` — toplu workspace açma ancak onunla. */
   workspaceAcabilir: boolean;
 }) {
-  const [acikKanal, setAcikKanal] = useState<ChannelKind | null>(null);
-
-  const havuzlar = useMemo(() => havuzlariCikar(connections), [connections]);
-
-  return (
-    <>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {KANALLAR.map((k) => (
-          <HavuzKarti
-            key={k}
-            kind={k}
-            adet={havuzlar[k].length}
-            canManage={canManage}
-            onAc={() => setAcikKanal(k)}
-          />
-        ))}
-      </div>
-
-      {acikKanal && (
-        <HavuzModal
-          kind={acikKanal}
-          ogeler={havuzlar[acikKanal]}
-          clients={clients}
-          workspaceAcabilir={workspaceAcabilir}
-          onKapat={() => setAcikKanal(null)}
-        />
-      )}
-    </>
-  );
-}
-
-function HavuzKarti({
-  kind,
-  adet,
-  canManage,
-  onAc,
-}: {
-  kind: ChannelKind;
-  adet: number;
-  canManage: boolean;
-  onAc: () => void;
-}) {
-  return (
-    <section className="rounded-xl border border-line bg-surface p-4">
-      <div className="flex items-start gap-2.5">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-line bg-surface">
-          <PlatformLogo kind={kind} className="h-5 w-5" />
-        </span>
-        <div className="min-w-0">
-          <h3 className="text-sm font-semibold text-ink">{CHANNEL_LABELS[kind]} havuzu</h3>
-          <p className="mt-0.5 text-[11px] leading-snug text-ink-muted">{CHANNEL_HINTS[kind]}</p>
-        </div>
-      </div>
-
-      <p className="mt-3 text-2xl font-semibold text-ink">
-        {adet}
-        <span className="ml-1 text-xs font-normal text-ink-muted">hesap boşta</span>
-      </p>
-
-      {/* SIFIRDA DA DÜĞME DURUYOR ama kapalı ve sebebi altında yazılı:
-          gizlemek, "buradan nasıl atanıyor" diye aramaya yol açardı. */}
-      <button
-        type="button"
-        onClick={onAc}
-        disabled={!canManage || adet === 0}
-        className="mt-3 w-full rounded-lg border border-line px-3 py-2 text-xs font-medium text-ink transition hover:bg-surface-sunken disabled:opacity-40"
-      >
-        Havuzdan hesap ata
-      </button>
-      {adet === 0 && (
-        <p className="mt-1.5 text-[11px] text-ink-muted">Bu kanalda atanmamış hesap yok.</p>
-      )}
-    </section>
-  );
-}
-
-/**
- * HAVUZ SEÇİCİ — POP-UP, ayrı sayfa DEĞİL.
- *
- * Ayrı sayfaya gitmek kullanıcıyı bağlam değiştirip geri dönmeye zorluyordu;
- * atama tek tıklık bir iş ve sayfayı terk etmeyi hak etmiyor.
- *
- * ARAMA HER KANALDA VAR. 284 hesaplı bir havuzda aradığını kaydırarak bulmak,
- * yanlış hesabı atamanın en kolay yolu.
- */
-function HavuzModal({
-  kind,
-  ogeler,
-  clients,
-  workspaceAcabilir,
-  onKapat,
-}: {
-  kind: ChannelKind;
-  ogeler: HavuzOgesi[];
-  clients: Musteri[];
-  workspaceAcabilir: boolean;
-  onKapat: () => void;
-}) {
   const router = useRouter();
+  const havuzlar = useMemo(() => havuzlariCikar(connections), [connections]);
+  const [kanal, setKanal] = useState<ChannelKind | 'tumu'>('tumu');
   const [arama, setArama] = useState('');
+  const [sayfa, setSayfa] = useState(0);
   const [hedef, setHedef] = useState<string>(clients[0]?.id ?? '');
   const [bekleyen, setBekleyen] = useState<string | null>(null);
   const [hata, setHata] = useState<string | null>(null);
   const [bildirim, setBildirim] = useState<string | null>(null);
-  const kutuRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    function onKey(e: KeyboardEvent): void {
-      if (e.key === 'Escape') onKapat();
-    }
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onKapat]);
-
+  /*
+   * SÜZGEÇ YALNIZ KANAL: "Tümü" bütün kanalların havuzu. Aynı hesap iki
+   * kanalda birden durmuyor (`havuzlariCikar` kanal başına ayırıyor), yani
+   * birleşim sayıyı şişirmiyor.
+   */
+  const ogeler = useMemo(
+    () => (kanal === 'tumu' ? KANALLAR.flatMap((k) => havuzlar[k]) : havuzlar[kanal]),
+    [havuzlar, kanal],
+  );
   const suzulmus = useMemo(() => havuzSuz(ogeler, arama), [ogeler, arama]);
+  const sonSayfa = Math.max(0, Math.ceil(suzulmus.length / SAYFA_BOYU) - 1);
+  const gecerliSayfa = Math.min(sayfa, sonSayfa);
+  const gorunen = suzulmus.slice(gecerliSayfa * SAYFA_BOYU, (gecerliSayfa + 1) * SAYFA_BOYU);
 
   /*
    * ═══ HER BİRİNE WORKSPACE AÇ ═══
@@ -171,7 +93,8 @@ function HavuzModal({
    * Aday listesi ARAMADAN BAĞIMSIZ: arama bir görünüm, toplu işlem bir
    * karar. Arama kutusunda bir şey yazılıyken düğmeye basıp yalnızca
    * görünenlere workspace açmak, kullanıcının ne yaptığını bilmediği bir
-   * kısmi işlem olurdu.
+   * kısmi işlem olurdu. Kanal süzgecine ise BAĞLI: "Meta"yı seçen kişi
+   * Meta hesaplarına workspace açtığını biliyor ve sayı onayda yazıyor.
    *
    * İKİ ADIM: önce kaç workspace açılacağı yazıyor, sonra onay. Açılan
    * workspace geri alınabilir ama tek tek; bir yanlış tık on workspace'lik
@@ -255,194 +178,239 @@ function HavuzModal({
     }
   }
 
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={`${CHANNEL_LABELS[kind]} havuzu`}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      onMouseDown={(e) => {
-        if (!kutuRef.current?.contains(e.target as Node)) onKapat();
-      }}
-    >
-      <div
-        ref={kutuRef}
-        className="flex max-h-[80vh] w-full max-w-lg flex-col rounded-xl border border-line bg-surface shadow-xl"
-      >
-        <div className="border-b border-line px-4 py-3">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="flex items-center gap-2 text-sm font-semibold text-ink">
-              <PlatformLogo kind={kind} className="h-4 w-4" />
-              {CHANNEL_LABELS[kind]} havuzu
-            </h2>
-            <button
-              type="button"
-              onClick={onKapat}
-              className="text-xs text-ink-muted transition hover:text-ink"
-            >
-              Kapat
-            </button>
-          </div>
+  const toplamHavuz = KANALLAR.reduce((n, k) => n + havuzlar[k].length, 0);
 
-          {clients.length === 0 ? (
-            <p className="mt-2 text-[11px] text-danger">
-              Henüz workspace yok — atama yapabilmek için önce bir workspace oluştur.
-            </p>
-          ) : (
-            <label className="mt-2 block">
-              <span className="text-[11px] text-ink-muted">Atanacak workspace</span>
-              <select
-                value={hedef}
-                onChange={(e) => setHedef(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm"
-              >
+  const sutunlar: Array<TabloSutunu<HavuzOgesi>> = [
+    {
+      anahtar: 'hesap',
+      baslik: 'Hesap',
+      hucre: (o) => (
+        <AdHucresi
+          ad={o.name}
+          alt={
+            <>
+              {o.externalId}
+              {/* BAĞLANTI ETİKETİ AD VE KİMLİKTEN SONRA GELİYOR ÇÜNKÜ
+                  İKİSİ DE AYNI OLABİLİYOR: aynı reklam hesabı iki
+                  şirket altında iki satır açabiliyor (tekil anahtar
+                  `[platform, externalId, orgId]`) ve üretimde iki
+                  "Biltaş · 3421122929" yan yana çıktı. Ayıran tek şey
+                  satırın hangi bağlantıdan geldiği. */}
+              {o.baglanti.etiket && ` · ${o.baglanti.etiket}`}
+              {/* KALDIRILMIŞ BAĞLANTININ SATIRI ATANABİLİR AMA VERİ
+                  ÇEKMEZ: token'ı silinmiş bir bağlantıya bağlı. Bunu
+                  söylememek, kullanıcıyı "atadım ama veri gelmiyor"
+                  turuna sokar. */}
+              {o.baglanti.durum === 'revoked' && (
+                <span className="block font-semibold text-danger-strong">
+                  Bağlantısı kaldırılmış, atansa da veri çekmez
+                </span>
+              )}
+            </>
+          }
+        />
+      ),
+    },
+    {
+      anahtar: 'kaynak',
+      baslik: 'Kaynak',
+      ikincil: true,
+      /* SAHİP YAZILI: ajansın hesabı her şirkete, şirketinki yalnızca
+         kendi workspace'lerine atanabiliyor. Bunu atamaya basınca öğrenmek,
+         girişte değil kullanım anında doğrulama olurdu (CLAUDE.md). */
+      hucre: (o) => (
+        <span className="text-13 text-ink-muted">
+          {o.isManager ? 'Yönetici (MCC)' : o.baglanti.sahip === 'ajans' ? 'Ajans bağlantısı' : 'Şirket bağlantısı'}
+        </span>
+      ),
+    },
+    {
+      anahtar: 'eylem',
+      baslik: <span className="sr-only">Eylemler</span>,
+      sayi: true,
+      hucre: (o) =>
+        /* YÖNETİCİ (MCC) HESABI LİSTEDE DURUYOR ama atanamıyor —
+           reklam yayınlamıyor ve sebebi kaynak sütununda yazılı. */
+        o.isManager ? (
+          <span className="text-12 text-ink-soluk">Atanamaz</span>
+        ) : (
+          <Dugme
+            ton="koyu"
+            boyut="kucuk"
+            bekliyor={bekleyen === o.id}
+            disabled={!canManage || bekleyen !== null || clients.length === 0}
+            onClick={() => void ata(o)}
+          >
+            Ata
+          </Dugme>
+        ),
+    },
+  ];
+
+  return (
+    <Kart
+      dolgu={false}
+      baslik="Atanmamış hesaplar"
+      baslikEki={`${toplamHavuz} hesap havuzda`}
+      eylem={
+        workspaceAcabilir &&
+        adaylar.length > 0 &&
+        toplu === null && (
+          <Dugme ton="ikincil" boyut="kucuk" onClick={() => setTopluOnay(true)} disabled={bekleyen !== null}>
+            Her birine workspace aç
+          </Dugme>
+        )
+      }
+    >
+      <div className="grid gap-3 border-b border-line px-4 py-3">
+        {/*
+          HEDEF ÖNCE: hesap satırına "Ata" demeden hangi workspace'e gideceği
+          seçili olmalı. Satır başına seçici koymak 25 seçici demekti ve
+          yanlış satırda yanlış hedef bırakmak kolaylaşıyordu.
+        */}
+        {clients.length === 0 ? (
+          <p className="m-0 text-13 font-semibold text-danger-strong">
+            Henüz workspace yok. Atama yapabilmek için önce bir workspace oluştur.
+          </p>
+        ) : (
+          <label className="flex flex-wrap items-center gap-2 text-13 font-semibold text-ink">
+            Atanacak workspace
+            <span className="w-full max-w-xs">
+              <Secim value={hedef} onChange={(e) => setHedef(e.target.value)}>
                 {clients.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
                   </option>
                 ))}
-              </select>
-            </label>
-          )}
-
-          <input
-            type="search"
-            value={arama}
-            onChange={(e) => setArama(e.target.value)}
-            placeholder="Hesap adı ya da kimliğiyle ara…"
-            className="mt-2 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm"
-          />
-
-          {/* SESSİZ KESME YOK: kaç sonuç gösterildiği ve toplam yazılı. */}
-          <p className="mt-1.5 text-[11px] text-ink-muted">
-            {suzulmus.length} / {ogeler.length} hesap
-          </p>
-
-          {workspaceAcabilir && adaylar.length > 0 && toplu === null && (
-            <div className="mt-2 rounded-lg border border-line bg-surface-muted/50 px-3 py-2">
-              {topluOnay ? (
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-xs text-ink">
-                    {adaylar.length} workspace açılacak, her biri bir hesapla.
-                  </p>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setTopluOnay(false)}
-                      className="rounded-lg border border-line px-2.5 py-1 text-[11px] text-ink transition hover:bg-surface-muted"
-                    >
-                      Vazgeç
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void herBirineWorkspaceAc()}
-                      className="rounded-lg bg-brand px-2.5 py-1 text-[11px] font-semibold text-white transition"
-                    >
-                      Onayla
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-xs text-ink-muted">
-                    Şirketin kendi bağlantısından {adaylar.length} hesap bekliyor.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setTopluOnay(true)}
-                    disabled={bekleyen !== null}
-                    className="rounded-lg bg-brand px-2.5 py-1 text-[11px] font-semibold text-white transition disabled:opacity-40"
-                  >
-                    Her birine workspace aç
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* İLERLEME VE SONUÇ — hangi hesabın açıldığı, hangisinin neden
-              açılamadığı AYRI AYRI. "Tamamlandı" deyip eksiklerini saklamak,
-              eksik workspace'i aylarca fark ettirmezdi. */}
-          {toplu && (
-            <div className="mt-2 rounded-lg border border-line px-3 py-2 text-xs">
-              <p className="text-ink">
-                {toplu.bitti
-                  ? `${toplu.acilan.length} workspace açıldı${toplu.hatalar.length > 0 ? `, ${toplu.hatalar.length} açılamadı` : ''}.`
-                  : `Açılıyor: ${toplu.sira} / ${toplu.toplam}`}
-              </p>
-              {toplu.hatalar.length > 0 && (
-                <ul className="mt-1 space-y-0.5 text-danger">
-                  {toplu.hatalar.map((h) => (
-                    <li key={h.ad}>
-                      {h.ad}: {h.sebep}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-          {hata && <p className="mb-2 text-xs text-danger">{hata}</p>}
-          {bildirim && <p className="mb-2 text-xs text-ink-muted">{bildirim}</p>}
-
-          {suzulmus.length === 0 ? (
-            <p className="py-6 text-center text-sm text-ink-muted">Aramaya uyan hesap yok.</p>
-          ) : (
-            <ul className="space-y-1.5">
-              {suzulmus.map((o) => (
-                <li
-                  key={o.id}
-                  className="flex items-center justify-between gap-2 rounded-lg border border-line px-3 py-2"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm text-ink">{o.name}</p>
-                    <p className="truncate text-[11px] text-ink-muted">
-                      {o.externalId}
-                      {/* BAĞLANTI ETİKETİ AD VE KİMLİKTEN SONRA GELİYOR ÇÜNKÜ
-                          İKİSİ DE AYNI OLABİLİYOR: aynı reklam hesabı iki
-                          şirket altında iki satır açabiliyor (tekil anahtar
-                          `[platform, externalId, orgId]`) ve üretimde iki
-                          "Biltaş · 3421122929" yan yana çıktı. Ayıran tek şey
-                          satırın hangi bağlantıdan geldiği. */}
-                      {o.baglanti.etiket && ` · ${o.baglanti.etiket}`}
-                      {/* SAHİP YAZILI: ajansın hesabı her şirkete, şirketinki
-                          yalnızca kendi workspace'lerine atanabiliyor. Bunu
-                          atamaya basınca öğrenmek, girişte değil kullanım
-                          anında doğrulama olurdu (CLAUDE.md). */}
-                      {` · ${o.baglanti.sahip === 'ajans' ? 'Ajans bağlantısı' : 'Şirket bağlantısı'}`}
-                    </p>
-                    {/* KALDIRILMIŞ BAĞLANTININ SATIRI ATANABİLİR AMA VERİ
-                        ÇEKMEZ: token'ı silinmiş bir bağlantıya bağlı. Bunu
-                        söylememek, kullanıcıyı "atadım ama veri gelmiyor"
-                        turuna sokar. */}
-                    {o.baglanti.durum === 'revoked' && (
-                      <p className="truncate text-[11px] text-warn-strong">
-                        Bağlantısı kaldırılmış — atansa da veri çekmez
-                      </p>
-                    )}
-                  </div>
-                  {/* YÖNETİCİ (MCC) HESABI LİSTEDE DURUYOR ama atanamıyor —
-                      reklam yayınlamıyor ve sebebi yazılı. */}
-                  {o.isManager ? (
-                    <span className="shrink-0 text-[11px] text-ink-muted">Yönetici (MCC)</span>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => void ata(o)}
-                      disabled={bekleyen !== null || clients.length === 0}
-                      className="shrink-0 rounded-lg bg-brand px-2.5 py-1 text-[11px] font-semibold text-white transition disabled:opacity-40"
-                    >
-                      {bekleyen === o.id ? 'Atanıyor…' : 'Ata'}
-                    </button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+              </Secim>
+            </span>
+          </label>
+        )}
+        {!canManage && <p className="m-0 text-12 text-ink-muted">Hesap atamak yöneticinin işi.</p>}
+        {hata && (
+          <Serit ton="hata" baslik="Atanamadı">
+            {hata}
+          </Serit>
+        )}
+        {bildirim && (
+          <Serit ton="bilgi" baslik="Atandı">
+            {bildirim}
+          </Serit>
+        )}
+        {/* İLERLEME VE SONUÇ — hangi hesabın açıldığı, hangisinin neden
+            açılamadığı AYRI AYRI. "Tamamlandı" deyip eksiklerini saklamak,
+            eksik workspace'i aylarca fark ettirmezdi. */}
+        {toplu && (
+          <Serit
+            ton={toplu.hatalar.length > 0 ? 'hata' : 'bilgi'}
+            baslik={
+              toplu.bitti
+                ? `${toplu.acilan.length} workspace açıldı${toplu.hatalar.length > 0 ? `, ${toplu.hatalar.length} açılamadı` : ''}.`
+                : `Açılıyor: ${toplu.sira} / ${toplu.toplam}`
+            }
+          >
+            {toplu.hatalar.length > 0 && (
+              <ul className="m-0 mt-1 list-none p-0">
+                {toplu.hatalar.map((h) => (
+                  <li key={h.ad}>
+                    {h.ad}: {h.sebep}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Serit>
+        )}
       </div>
-    </div>
+
+      <Tablo
+        etiket="Atanmamış hesaplar"
+        sutunlar={sutunlar}
+        satirlar={gorunen}
+        satirAnahtari={(o) => o.id}
+        aracCubugu={
+          <AracCubugu
+            sag={
+              /* SESSİZ KESME YOK: kaç sonuç gösterildiği ve toplam yazılı. */
+              <span className="text-12 text-ink-muted">
+                {suzulmus.length} / {ogeler.length} hesap
+              </span>
+            }
+          >
+            <BolumluSecici
+              etiket="Kanal"
+              secili={kanal}
+              onSec={(k) => {
+                setKanal(k);
+                setSayfa(0);
+              }}
+              secenekler={[
+                { deger: 'tumu' as const, etiket: 'Tümü' },
+                ...KANALLAR.filter((k) => havuzlar[k].length > 0).map((k) => ({
+                  deger: k,
+                  etiket: (
+                    <span className="inline-flex items-center gap-1.5">
+                      <PlatformLogo kind={k} className="h-3.5 w-3.5" />
+                      {CHANNEL_LABELS[k]} {havuzlar[k].length}
+                    </span>
+                  ),
+                })),
+              ]}
+            />
+            <div className="w-full max-w-xs">
+              <Girdi
+                type="search"
+                value={arama}
+                onChange={(e) => {
+                  setArama(e.target.value);
+                  setSayfa(0);
+                }}
+                placeholder="Hesap adı ya da numara"
+                aria-label="Hesap ara"
+              />
+            </div>
+          </AracCubugu>
+        }
+        bos={
+          <BosDurum
+            baslik={ogeler.length === 0 ? 'Havuzda hesap yok' : 'Aramaya uyan hesap yok'}
+            neden={
+              ogeler.length === 0
+                ? 'Bağlı hesapların hepsi bir workspace’e atanmış.'
+                : 'Adın ya da numaranın bir parçasını yaz; aramayı temizleyince bütün liste döner.'
+            }
+          />
+        }
+        sayfalama={{
+          bas: suzulmus.length === 0 ? 0 : gecerliSayfa * SAYFA_BOYU + 1,
+          son: gecerliSayfa * SAYFA_BOYU + gorunen.length,
+          toplam: suzulmus.length,
+          onceki: gecerliSayfa > 0 ? () => setSayfa(gecerliSayfa - 1) : undefined,
+          sonraki: gecerliSayfa < sonSayfa ? () => setSayfa(gecerliSayfa + 1) : undefined,
+        }}
+      />
+      <p className="m-0 border-t border-line px-4 py-2.5 text-12 text-ink-muted">
+        Atama izlemeyi açar ve 90 günlük geçmişi kuyruğa alır.
+      </p>
+
+      <Pencere
+        acik={topluOnay}
+        onKapat={() => setTopluOnay(false)}
+        baslik="Her birine workspace aç"
+        genislik="dar"
+        altEylemler={
+          <>
+            <Dugme ton="ikincil" onClick={() => setTopluOnay(false)}>
+              Vazgeç
+            </Dugme>
+            <Dugme onClick={() => void herBirineWorkspaceAc()}>Onayla</Dugme>
+          </>
+        }
+      >
+        <p className="m-0 text-14 text-ink">
+          Şirketin kendi bağlantısından {adaylar.length} hesap bekliyor. {adaylar.length} workspace açılacak,
+          her biri bir hesapla.
+        </p>
+      </Pencere>
+    </Kart>
   );
 }

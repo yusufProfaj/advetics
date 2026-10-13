@@ -1,11 +1,13 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import type { ManagerAccountTree, UstHesapOzeti } from '@advetics/shared';
 import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import { requireSession } from '@/lib/session';
-import { kapi } from '@/lib/panel-adresleri';
+import { acilisAdresi, kapi } from '@/lib/panel-adresleri';
 import { ayarSekmesiAcik } from '@/lib/ayar-kapilari';
-import { SayfaBasligi } from '@/components/ui/sayfa-basligi';
-import { AyarKapsami, aktifSirketAdi } from '@/components/ayar-kapsam';
+import { dugmeSinifi } from '@/components/ui/dugme';
+import { BosDurum } from '@/components/ui/hal';
+import { AyarKapsami, AyarlarSayfasi, aktifSirketAdi } from '@/components/ayar-kapsam';
 import { UstHesapEkrani } from '@/components/ust-hesap/ust-hesap-ekrani';
 import { UstHesapYonetimi } from '@/components/ust-hesap/ust-hesap-yonetimi';
 import { WorkspaceBolumu } from '@/components/tenancy/workspace-bolumu';
@@ -106,37 +108,52 @@ export default async function SirketlerPage() {
      * (*"bu uyarıyı veriyo"*); metin şirkete tıklamanın ŞİRKETİ
      * DEĞİŞTİRDİĞİNİ söylemek zorunda.
      */
-    <div id="workspaceler" className="px-4 py-10 text-center">
-      <p className="text-sm font-medium text-ink">Workspace’leri görmek için bir şirket seç</p>
-      <p className="mx-auto mt-1 max-w-md text-sm text-ink-muted">
-        Şu an bütün şirketleri birlikte görüyorsun. {sirketYonetir ? 'Soldaki listeden' : 'Üstteki seçiciden'} bir
-        şirkete tıklamak seni o şirkete geçirir.
-      </p>
+    <div id="workspaceler" className="scroll-mt-24">
+      <BosDurum
+        baslik="Workspace’leri görmek için bir şirket seç"
+        neden={`Şu an bütün şirketleri birlikte görüyorsun. ${
+          sirketYonetir ? 'Soldaki listeden' : 'Üstteki seçiciden'
+        } bir şirkete tıklamak seni o şirkete geçirir.`}
+      />
     </div>
   ) : (
     <WorkspaceBolumu session={session} tasiHedefleri={tasiHedefleri} />
   );
 
-  return (
-    <div className="mx-auto w-full max-w-7xl space-y-8">
-      <SayfaBasligi
-        ust={
-          sirketYonetir && session.managerAccount ? (
-            <AyarKapsami duzey="ajans" ad={session.managerAccount.name} />
-          ) : (
-            <AyarKapsami duzey="sirket" ad={aktifSirketAdi(session)} />
-          )
-        }
-        baslik="Şirketler ve workspace’ler"
-        aciklama={
-          sirketYonetir
-            ? 'Soldan bir şirkete geç, sağda o şirketin workspace’lerini yönet. Bir workspace’in hesapları, markası ve bilgileri Marka Merkezi’nde.'
-            : 'Bu şirketin workspace’leri. Bir workspace’in hesapları, markası ve bilgileri Marka Merkezi’nde.'
-        }
-      />
+  /*
+   * BÖLÜMÜN BİRİNCİL EYLEMİ BAŞLIĞIN SAĞINDA (taslak `#ayarlar`): "Yeni
+   * workspace". Yalnız TEK ŞİRKET kapsamında: "tüm şirketler" modunda yeni
+   * workspace EV şirketine kurulurdu ve kimse söylemezdi (sihirbaz o modda
+   * önce şirket soruyor, ama düğmeyi burada göstermek o soruyu davet eder).
+   * Kapı kapalıysa sebebi workspace listesinin altında yazıyor.
+   */
+  const eylemler =
+    sirketKapsami && kapi(session, 'workspace.ekle') ? (
+      <Link href={acilisAdresi('workspace')} className={dugmeSinifi('birincil')}>
+        + Yeni workspace
+      </Link>
+    ) : undefined;
 
+  return (
+    <AyarlarSayfasi
+      session={session}
+      ust={
+        sirketYonetir && session.managerAccount ? (
+          <AyarKapsami duzey="ajans" ad={session.managerAccount.name} />
+        ) : (
+          <AyarKapsami duzey="sirket" ad={aktifSirketAdi(session)} />
+        )
+      }
+      baslik="Şirketler ve workspace’ler"
+      aciklama={
+        sirketYonetir
+          ? 'Soldan bir şirkete geç, sağda o şirketin workspace’lerini yönet. Bir workspace’in hesapları, markası ve bilgileri Marka Merkezi’nde.'
+          : 'Bu şirketin workspace’leri. Bir workspace’in hesapları, markası ve bilgileri Marka Merkezi’nde.'
+      }
+      eylemler={eylemler}
+    >
       {sirketYonetir ? (
-        <div id="sirketler" className="scroll-mt-4">
+        <div id="sirketler" className="scroll-mt-24">
           <UstHesapEkrani
             ilkAgac={agac}
             aktifOrgId={session.activeOrganizationId}
@@ -154,7 +171,7 @@ export default async function SirketlerPage() {
       )}
 
       {ustHesapYonetir && (
-        <section id="ust-hesaplar" className="scroll-mt-4 space-y-3">
+        <section id="ust-hesaplar" className="grid scroll-mt-24 gap-3">
           <UstHesapYonetimi
             hesaplar={ustHesaplar}
             platformAdmin={session.platformAdmin}
@@ -162,6 +179,6 @@ export default async function SirketlerPage() {
           />
         </section>
       )}
-    </div>
+    </AyarlarSayfasi>
   );
 }

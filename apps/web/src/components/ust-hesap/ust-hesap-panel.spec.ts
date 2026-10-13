@@ -327,7 +327,8 @@ describe('ŞİRKET RAYI — kırk şirkette de kullanılabilir', () => {
      */
     const satir = blok(EKRAN, 'function SirketSatiri');
     expect(satir).toContain('aktif ? (');
-    expect(satir).toContain('şu an buradasın — sağdan düzenle');
+    // Uzun tire panel metninde yok (BILESENLER; kullanıcı kararı): virgülle.
+    expect(satir).toContain('şu an buradasın, sağdan düzenle');
     expect(satir).not.toContain('Yönet');
   });
 

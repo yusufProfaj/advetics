@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import type { ArsivWorkspaceSatiri } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { Dugme } from '@/components/ui/dugme';
+import { Serit } from '@/components/ui/hal';
+import { AdHucresi, Tablo } from '@/components/ui/tablo';
 
 /**
  * ═══ ARŞİV — ARŞİVLENEN WORKSPACE GERİ ALINABİLİYOR ═══
@@ -44,34 +46,60 @@ export function ArsivListesi({
   }
 
   if (satirlar.length === 0) {
-    return <p className="px-4 py-3 text-sm text-ink-muted">Arşivde workspace yok.</p>;
+    return <p className="m-0 px-5 py-4 text-13 text-ink-muted">Arşivde workspace yok.</p>;
   }
 
+  const hataSatiri = hata ? (satirlar.find((s) => s.id === hata.id) ?? null) : null;
+
   return (
-    <ul className="divide-y divide-line">
-      {satirlar.map((s) => (
-        <li key={s.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-ink">{s.name}</p>
-            <p className="text-xs text-ink-muted">
-              {s.slug} · {s._count.adAccounts} hesap ·{' '}
-              {s.archivedAt
-                ? `${new Date(s.archivedAt).toLocaleDateString('tr-TR', { timeZone: 'Europe/Istanbul' })} tarihinde arşivlendi`
-                : 'arşiv tarihi kayıtlı değil'}
-            </p>
-            {hata?.id === s.id && (
-              <p role="alert" className="mt-1 text-sm text-danger-strong">
-                {hata.metin}
-              </p>
-            )}
-          </div>
-          {geriAlabilir && (
-            <Dugme ton="ikincil" boyut="kucuk" bekliyor={mesgul === s.id} disabled={mesgul !== null} onClick={() => void geriAl(s)}>
-              Geri al
-            </Dugme>
-          )}
-        </li>
-      ))}
-    </ul>
+    <>
+      {hata && (
+        <div className="px-4 pt-4">
+          <Serit ton="hata" baslik={hataSatiri ? `${hataSatiri.name} arşivden alınamadı` : 'Arşivden alınamadı'}>
+            {hata.metin}
+          </Serit>
+        </div>
+      )}
+      <Tablo
+        etiket="Arşivdeki workspace’ler"
+        satirlar={satirlar}
+        satirAnahtari={(s) => s.id}
+        sutunlar={[
+          {
+            anahtar: 'ad',
+            baslik: 'Workspace',
+            hucre: (s) => <AdHucresi ad={s.name} alt={s.slug} />,
+          },
+          { anahtar: 'hesap', baslik: 'Hesaplar', sayi: true, hucre: (s) => `${s._count.adAccounts} hesap` },
+          {
+            anahtar: 'tarih',
+            baslik: 'Arşivlendi',
+            ikincil: true,
+            hucre: (s) =>
+              s.archivedAt
+                ? new Date(s.archivedAt).toLocaleDateString('tr-TR', { timeZone: 'Europe/Istanbul' })
+                : 'Tarih kayıtlı değil',
+          },
+          {
+            anahtar: 'eylem',
+            baslik: <span className="sr-only">Eylemler</span>,
+            sayi: true,
+            hucre: (s) =>
+              geriAlabilir ? (
+                <Dugme
+                  ton="ikincil"
+                  boyut="kucuk"
+                  bekliyor={mesgul === s.id}
+                  disabled={mesgul !== null}
+                  onClick={() => void geriAl(s)}
+                >
+                  Geri al
+                </Dugme>
+              ) : null,
+          },
+        ]}
+        sayfalama={{ bas: 1, son: satirlar.length, toplam: satirlar.length }}
+      />
+    </>
   );
 }

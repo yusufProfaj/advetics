@@ -94,13 +94,15 @@ describe('RAY — kişi listesi', () => {
 
   it('ARAMA SEÇİMİ DÜŞÜRMÜYOR', () => {
     /*
-     * Aranan kişi listeden çıkınca seçimi sıfırlamak, sağ tarafı
-     * kullanıcıya habersizce boşaltmak olurdu; detay hâlâ o kişiyi
-     * anlatıyor.
+     * Aranan kişi listeden çıkınca seçimi sıfırlamak, açık yan paneli
+     * kullanıcıya habersizce kapatmak olurdu; panel hâlâ o kişiyi
+     * anlatıyor. Kişi SÜZÜLMÜŞ listeden değil `kisiler`den aranıyor.
+     * (2026-10-14: ray + detay → tablo + yan panel; ilk kişi artık
+     * kendiliğinden seçilmiyor, panel satıra tıklayınca açılıyor.)
      */
-    expect(yorumsuz(KAYNAK)).toContain(
-      'const secilen = kisiler.find((k) => k.id === secilenId) ?? suzulmus[0] ?? null',
-    );
+    const kod = yorumsuz(KAYNAK);
+    expect(kod).toContain('const secilen = kisiler.find((k) => k.id === secilenId) ?? null');
+    expect(kod).not.toMatch(/const secilen = suzulmus/);
   });
 });
 
@@ -291,7 +293,9 @@ describe('ÜST BANT — tek ekleme düğmesi', () => {
      * kullanışsız" dediği yerin merkezi.
      */
     const kod = yorumsuz(KAYNAK);
-    expect(kod).toContain('+ Kişi ekle');
+    // 2026-10-14: düğme bölümün birincil eylemi olarak sayfa başlığında (taslak "Kullanıcı ekle").
+    expect(kod).toContain('+ Kullanıcı ekle');
+    expect(yorumsuz(SAYFA)).toContain('<KullaniciEkle clients={clients} />');
     expect(kod).not.toContain('setDanismanEkleAcik');
     expect(kod).not.toContain('DanismanEkleModal');
   });
@@ -329,9 +333,11 @@ describe('eski düzen geri gelmesin', () => {
   });
 
   it('KRİTİK: kullanıcı ekleme POP-UP’ta, sayfada sabit form değil', () => {
+    // Ortak yan panel (`YanPanel`: portal, `role="dialog"`, odak tuzağı); elle modal YOK.
     const kod = yorumsuz(KAYNAK);
     expect(kod).toContain('KullaniciEkleModal');
-    expect(kod).toContain('role="dialog"');
+    expect(kod).toContain('<YanPanel');
+    expect(kod).not.toContain('fixed inset-0');
   });
 });
 

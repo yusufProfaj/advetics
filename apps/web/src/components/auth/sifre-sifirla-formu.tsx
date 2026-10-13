@@ -6,6 +6,9 @@ import { useState } from 'react';
 import { passwordSchema } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { Alan } from '@/components/auth/alan';
+import { Dugme, dugmeSinifi } from '@/components/ui/dugme';
+import { Serit } from '@/components/ui/hal';
+import { KART_BAGLANTISI } from '@/components/ui/kart';
 
 export function SifreSifirlaFormu() {
   const router = useRouter();
@@ -27,15 +30,15 @@ export function SifreSifirlaFormu() {
    */
   if (!token) {
     return (
-      <div className="space-y-3">
-        <p className="text-sm leading-relaxed text-ink">
-          Bu sayfaya sıfırlama bağlantısıyla gelinmesi gerekiyor — adreste bir token yok.
+      <div className="grid gap-3">
+        <p className="m-0 text-14 leading-relaxed text-ink">
+          Bu sayfaya sıfırlama bağlantısıyla gelinmesi gerekiyor; adreste bir token yok.
         </p>
-        <p className="text-sm text-ink-muted">
+        <p className="m-0 text-14 text-ink-muted">
           Bağlantıyı mailden kopyaladıysan tamamını yapıştırdığından emin ol; bazı mail
           istemcileri uzun adresleri satır sonunda kırıyor.
         </p>
-        <Link href="/sifremi-unuttum" className="inline-block text-sm text-brand-strong hover:underline">
+        <Link href="/sifremi-unuttum" className={KART_BAGLANTISI}>
           Yeni bir sıfırlama bağlantısı iste
         </Link>
       </div>
@@ -44,15 +47,12 @@ export function SifreSifirlaFormu() {
 
   if (bitti) {
     return (
-      <div className="space-y-3">
-        <p className="text-sm leading-relaxed text-ink">
-          Şifren değiştirildi. Güvenlik için <strong>tüm oturumların kapatıldı</strong> — yeni
+      <div className="grid gap-3">
+        <p className="m-0 text-14 leading-relaxed text-ink">
+          Şifren değiştirildi. Güvenlik için <strong>tüm oturumların kapatıldı</strong>; yeni
           şifrenle tekrar giriş yapman gerekiyor.
         </p>
-        <Link
-          href="/login"
-          className="inline-block rounded-lg bg-brand px-4 py-2.5 text-sm font-medium text-white transition hover:opacity-90"
-        >
+        <Link href="/login" className={`${dugmeSinifi('birincil')} w-full`}>
           Giriş yap
         </Link>
       </div>
@@ -93,15 +93,8 @@ export function SifreSifirlaFormu() {
   }
 
   return (
-    <form onSubmit={gonder} className="space-y-4" noValidate>
-      {hata && (
-        <div
-          role="alert"
-          className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger-strong"
-        >
-          {hata}
-        </div>
-      )}
+    <form onSubmit={gonder} className="grid gap-4" noValidate>
+      {hata && <Serit ton="hata" baslik={hata} />}
 
       <Alan
         id="sifre"
@@ -126,13 +119,9 @@ export function SifreSifirlaFormu() {
         disabled={pending}
       />
 
-      <button
-        type="submit"
-        disabled={pending}
-        className="w-full rounded-lg bg-brand px-4 py-2.5 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-      >
+      <Dugme type="submit" className="w-full" bekliyor={pending}>
         {pending ? 'Kaydediliyor…' : 'Şifreyi değiştir'}
-      </button>
+      </Dugme>
     </form>
   );
 }
