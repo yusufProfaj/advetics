@@ -10,3 +10,4 @@ export * from './takvim';
 export * from './uclar';
 export * from './detay';
 export * from './aktarim';
+export * from './v2';

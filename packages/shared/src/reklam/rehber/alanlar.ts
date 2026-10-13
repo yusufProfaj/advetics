@@ -241,14 +241,16 @@ export type RehberAlanAdi = keyof RehberAlanlari;
  * ve "Onayla" basılmadan hiçbir şey açılmıyor.
  */
 export const REHBER_IZINLI_KAYNAKLAR: Partial<Record<RehberAlanAdi, readonly AlanKaynagi[]>> = {
-  amac: ['kullanici'],
-  platformlar: ['kullanici', 'derleyici'],
+  // `strateji`: onaylı AdvStrategy kaleminden (müşteri ya da ajans onayladı,
+  // rol kayıtlı). Kararı veren bir insan var; derleyicinin önerisi değil.
+  amac: ['kullanici', 'strateji'],
+  platformlar: ['kullanici', 'derleyici', 'strateji'],
   metaHesabiId: ['kullanici', 'workspace_profili'],
   googleHesabiId: ['kullanici', 'workspace_profili'],
   sayfaId: ['kullanici', 'workspace_profili'],
   instagramId: ['kullanici', 'workspace_profili'],
   youtubeKanaliId: ['kullanici', 'workspace_profili'],
-  konumlar: ['kullanici', 'marka_merkezi'],
+  konumlar: ['kullanici', 'marka_merkezi', 'strateji'],
   enDusukYas: ['kullanici', 'derleyici'],
   ekKategoriler: ['kullanici', 'workspace_profili'],
   hedefAdres: ['kullanici', 'marka_merkezi', 'workspace_profili'],
@@ -264,11 +266,13 @@ export const REHBER_IZINLI_KAYNAKLAR: Partial<Record<RehberAlanAdi, readonly Ala
   // metin boşken oraya da yazılıyor (Dalga 2). "Metin öner" düğmesinin
   // sonucu hâlâ `ai_onerisi` ve onay istiyor: kullanıcı onu İSTEDİ ama
   // okumadan "Kullan"a basmadı.
-  metin: ['kullanici', 'marka_merkezi', 'derleyici'],
-  anahtarKelimeler: ['kullanici'],
-  butce: ['kullanici', 'workspace_profili'],
-  metaPayiYuzde: ['kullanici', 'derleyici'],
-  takvim: ['kullanici', 'derleyici'],
+  // `strateji` yalnız ajansın stratejide "Kullan" dediği metin; denmemişse
+  // aktarım onu `ai_onerisi` olarak yazar ve rehberde onay bekler.
+  metin: ['kullanici', 'marka_merkezi', 'derleyici', 'strateji'],
+  anahtarKelimeler: ['kullanici', 'strateji'],
+  butce: ['kullanici', 'workspace_profili', 'strateji'],
+  metaPayiYuzde: ['kullanici', 'derleyici', 'strateji'],
+  takvim: ['kullanici', 'derleyici', 'strateji'],
   // Para sözü: yalnız kullanıcı (müşteri adına indirim/fiyat vaadi).
   googlePromosyon: ['kullanici'],
   googleFiyatListesi: ['kullanici'],
@@ -307,7 +311,7 @@ export const rehberGuncelleSchema = z.object({
 export type RehberGuncelle = z.infer<typeof rehberGuncelleSchema>;
 
 /** İstemcinin yazamayacağı kaynaklar: platformdan okunan değer yalnız sunucudan gelir. */
-export const ISTEMCI_YAZAMAZ: readonly AlanKaynagi[] = ['meta_okumasi', 'recete'];
+export const ISTEMCI_YAZAMAZ: readonly AlanKaynagi[] = ['meta_okumasi', 'recete', 'strateji'];
 
 /**
  * "AYNI İÇERİKLE YENİDEN KUR" — geri alınan ya da durmuş bir kurulumun

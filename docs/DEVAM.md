@@ -16,6 +16,8 @@ RLS politikası var, platform sahibi yalnız hello@profaj.com.
 bu commit'le deploy ediliyor; migration `20261009100000_iyilestir` (üç
 yeni tablo) + `db:rls`.
 
+**ADVSTRATEGY YENİDEN TASARIM — Ajan 1 iki tur (2026-10-13; taslak kullanıcı onaylı).** Belge `docs/advstrategy/YENIDEN-TASARIM.md` (§ 00 kararlar, § 9 sözleşme turu), taslak `docs/advstrategy/taslak.html`. Kararlar: kapakta yalnız Advetics logosu, renk/yazı Profaj kılavuzu; müşteri onayı girişsiz bağlantıyla da (ad + e-posta kayıtlı, tek plan + tek sürüm, süreli, tek kullanımlık); geçmiş verisi yoksa "tahmin yok" (varsayım aralığı YOK). `ff83c662`: v1'in ölü `aktar`ı (kaldırılmış sohbetin `adv_oturum` tablosuna yazıp "aktarıldı" diyordu) panelde ve sunucuda KAPALI. Sözleşme `packages/shared/src/strateji/v2/` (kalem = rehber, `strateji` alan kaynağı, rehber eşlemesi, onay bağlantısı, adresler, riskler) + `sozlesme-v2.spec.ts`. Ölçüldü: Montserrat 9.000 `₺` dahil tam; Open Sans 3.003'te `₺` YOK → PDF'te tutarlar Montserrat. **Push/deploy YOK.** **Sıradaki:** Ajan 2 (migration M1 + v2 servis + onay bağlantısı + PDF) ‖ Ajan 3 (üç görünüm + `/strateji-onay`), § 9.5 sahiplik.
+
 **AJAN 4 KAPISI — ERİŞİM + DÖNEM ERİŞİMİ (2026-10-13, 80663bd9..3d49be55).**
 Düzeltilenler: (1) Google'da adres çevresi HİÇBİR kurguda kurulmuyor: v25
 `ad_group_criterion.proto` ölçüt oneof'unda `proximity` YOK, Talep Yaratma

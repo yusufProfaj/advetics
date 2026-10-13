@@ -31,6 +31,14 @@ export const ALAN_KAYNAKLARI = [
   'derleyici',
   'ai_onerisi',
   'meta_okumasi',
+  /**
+   * ONAYLI ADVSTRATEGY KALEMİNDEN aktarılan değer (2026-10-13). Yalnız
+   * sunucunun aktarım yolu basar (`ISTEMCI_YAZAMAZ`); kullanıcı rehberde
+   * dokununca `kullanici` olur. Hangi rehber alanının bu kaynağı kabul
+   * ettiği `REHBER_IZINLI_KAYNAKLAR`da; para ve hukuk sözü olan alanlar
+   * (özel kategori, satışsız piksel onayı, promosyon, fiyat) KABUL ETMEZ.
+   */
+  'strateji',
 ] as const;
 export type AlanKaynagi = (typeof ALAN_KAYNAKLARI)[number];
 

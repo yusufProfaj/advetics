@@ -1,0 +1,728 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AdvStrategy Taslağı</title>
+<meta name="description" content="AdvStrategy yeniden tasarım taslağı: strateji oluşturma, kurumsal rapor ve AdvCampaign'e aktarım. Bütün rakamlar örnek.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+/*
+ * YALNIZ KILAVUZ RENKLERİ: #ffffff #000000 #302e2d #ff2400 ve #302e2d'nin
+ * saydam tonları (koyu temada beyazın saydam tonları). Yeşil yalnız durum
+ * noktası (--durum-ok). Montserrat ana başlık ve büyük sayı, Open Sans gövde.
+ */
+:root{
+  --beyaz:#ffffff; --siyah:#000000; --gri:#302e2d; --kirmizi:#ff2400;
+  --bg:#ffffff; --yuzey:#ffffff; --zemin:rgba(48,46,45,.04); --zemin2:rgba(48,46,45,.07);
+  --cizgi:rgba(48,46,45,.12); --cizgi2:rgba(48,46,45,.22);
+  --metin:#000000; --ikincil:rgba(48,46,45,.62); --soluk:rgba(48,46,45,.42);
+  --seri-meta:#302e2d; --seri-google:#ff2400; --vurgu:#ff2400; --vurgu-metin:#ffffff;
+  --kirmizi-zemin:rgba(255,36,0,.07);
+  --durum-ok:#1e8e3e; --golge:0 1px 2px rgba(48,46,45,.06),0 8px 24px rgba(48,46,45,.06);
+  --kagit:#ffffff;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#000000; --yuzey:#0b0b0b; --zemin:rgba(255,255,255,.04); --zemin2:rgba(255,255,255,.08);
+    --cizgi:rgba(255,255,255,.12); --cizgi2:rgba(255,255,255,.24);
+    --metin:#ffffff; --ikincil:rgba(255,255,255,.66); --soluk:rgba(255,255,255,.44);
+    --seri-meta:rgba(255,255,255,.78); --kirmizi-zemin:rgba(255,36,0,.14);
+    --golge:none; --kagit:#0b0b0b; --durum-ok:#34a853;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#000000; --yuzey:#0b0b0b; --zemin:rgba(255,255,255,.04); --zemin2:rgba(255,255,255,.08);
+  --cizgi:rgba(255,255,255,.12); --cizgi2:rgba(255,255,255,.24);
+  --metin:#ffffff; --ikincil:rgba(255,255,255,.66); --soluk:rgba(255,255,255,.44);
+  --seri-meta:rgba(255,255,255,.78); --kirmizi-zemin:rgba(255,36,0,.14);
+  --golge:none; --kagit:#0b0b0b; --durum-ok:#34a853;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--metin);font-family:"Open Sans",system-ui,sans-serif;font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+h1,h2,h3,.mont{font-family:"Montserrat",system-ui,sans-serif}
+a{color:inherit}
+button{font:inherit;color:inherit}
+.sar{max-width:1240px;margin:0 auto;padding:0 16px}
+
+/* Üst çubuk */
+.ust{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--cizgi)}
+.ust .sar{display:flex;align-items:center;gap:16px;height:56px}
+.logo{font-family:Montserrat;font-weight:800;font-size:20px;letter-spacing:-.02em;position:relative;display:inline-block;align-self:flex-start}
+.logo i{position:absolute;width:6px;height:6px;border-radius:50%;background:var(--kirmizi);top:3px;right:-7px}
+.kirinti{color:var(--ikincil);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
+.kirinti b{color:var(--metin);font-weight:600}
+.tema{border:1px solid var(--cizgi);background:transparent;border-radius:999px;padding:4px 10px;cursor:pointer;font-size:12px}
+.not-seridi{background:var(--zemin);border-bottom:1px solid var(--cizgi);font-size:12px;color:var(--ikincil)}
+.not-seridi .sar{padding-top:6px;padding-bottom:6px}
+.not-seridi b{color:var(--kirmizi)}
+
+/* Sekmeler (taslağın ekran seçicisi) */
+.sekmeler{display:flex;gap:4px;overflow-x:auto;padding:12px 0 0}
+.sekme{border:0;background:transparent;padding:10px 14px;border-bottom:3px solid transparent;cursor:pointer;font-weight:600;color:var(--ikincil);white-space:nowrap}
+.sekme[aria-selected="true"]{color:var(--metin);border-bottom-color:var(--kirmizi)}
+.ekran{padding:20px 0 64px;transition:opacity .18s ease}
+.ekran[hidden]{display:none}
+
+/* Ortak kalıp */
+.kart{background:var(--yuzey);border:1px solid var(--cizgi);border-radius:12px;box-shadow:var(--golge)}
+.kart-ic{padding:16px}
+.baslik-sat{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.sayfa-baslik{font-size:22px;font-weight:700;margin:0}
+.alt{color:var(--ikincil);font-size:13px;margin:2px 0 0}
+.dugme{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:8px 16px;border:1px solid var(--cizgi2);background:transparent;cursor:pointer;font-weight:600;font-size:13px;transition:background .15s}
+.dugme:hover{background:var(--zemin2)}
+.dugme.birincil{background:var(--kirmizi);border-color:var(--kirmizi);color:#fff}
+.dugme.birincil:hover{filter:brightness(.95)}
+.dugme.kucuk{padding:4px 10px;font-size:12px}
+.rozet{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;border-radius:999px;padding:2px 8px;border:1px solid var(--cizgi2);color:var(--ikincil);white-space:nowrap}
+.rozet.ai{border-style:solid}
+.rozet.kirmizi{color:var(--kirmizi);border-color:var(--kirmizi)}
+.rozet.dolu{background:var(--gri);color:#fff;border-color:var(--gri)}
+.nokta{width:8px;height:8px;border-radius:50%;display:inline-block;background:var(--soluk);flex:none}
+.nokta.ok{background:var(--durum-ok)}
+.nokta.uyari{background:var(--kirmizi)}
+.ornek{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--kirmizi);border:1px solid var(--kirmizi);border-radius:4px;padding:0 4px;margin-left:4px;vertical-align:2px}
+.ince{font-size:12px;color:var(--ikincil)}
+.kaynak{font-size:11px;color:var(--soluk)}
+hr.ayir{border:0;border-top:1px solid var(--cizgi);margin:14px 0}
+
+/* EKRAN A: iki sütun */
+.a-izgara{display:grid;grid-template-columns:320px 1fr;gap:16px;margin-top:16px}
+.girdi{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
+.girdi label{font-size:12px;font-weight:600;color:var(--ikincil)}
+.girdi input,.girdi select,.girdi textarea{font:inherit;color:var(--metin);background:var(--yuzey);border:1px solid var(--cizgi2);border-radius:8px;padding:8px 10px;width:100%}
+.durum-liste{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:8px}
+.durum-liste li{display:flex;gap:8px;align-items:flex-start;font-size:13px}
+.durum-liste li .nokta{margin-top:6px}
+.durum-liste .sag{margin-left:auto}
+.kutular{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border-bottom:1px solid var(--cizgi)}
+.kutu{padding:14px 16px;border-right:1px solid var(--cizgi)}
+.kutu:last-child{border-right:0}
+.kutu .etiket{font-size:12px;color:var(--ikincil)}
+.kutu .deger{font-family:Montserrat;font-weight:700;font-size:22px;letter-spacing:-.01em}
+.kutu .deger small{font-size:13px;font-weight:600;color:var(--ikincil)}
+.kutu.secili{box-shadow:inset 0 -3px 0 var(--kirmizi)}
+.cubuk{display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--zemin2)}
+.cubuk span{display:block;height:100%}
+.lejant{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--ikincil)}
+.lejant i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.asama-sat{display:grid;grid-template-columns:110px 1fr 110px;gap:10px;align-items:center;margin:8px 0;font-size:13px}
+.asama-sat .tutar{text-align:right;font-variant-numeric:tabular-nums}
+
+table.tablo{width:100%;border-collapse:collapse;font-size:13px}
+.tablo th{font-weight:600;color:var(--ikincil);text-align:left;padding:8px 10px;border-bottom:1px solid var(--cizgi);font-size:12px;white-space:nowrap}
+.tablo td{padding:10px;border-bottom:1px solid var(--cizgi);vertical-align:top}
+.tablo td.sayi,.tablo th.sayi{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tablo tr.satir{cursor:pointer;transition:background .12s}
+.tablo tr.satir:hover{background:var(--zemin)}
+.tablo tr.satir[aria-expanded="true"]{background:var(--zemin2)}
+.tablo-sar{overflow-x:auto}
+.amac{display:flex;gap:10px;align-items:flex-start}
+.ikon{width:30px;height:30px;border-radius:8px;flex:none;display:grid;place-items:center;background:var(--gri);color:#fff;font-family:Montserrat;font-weight:700;font-size:12px}
+.ikon.k{background:var(--kirmizi)}
+.amac b{display:block;font-weight:600}
+.pay{display:flex;flex-direction:column;gap:4px;min-width:120px}
+.pay .cubuk{height:6px}
+
+.duzenleyici{background:var(--zemin);padding:0 10px}
+.duzenleyici > div{display:grid;grid-template-rows:0fr;transition:grid-template-rows .22s ease}
+.duzenleyici.acik > div{grid-template-rows:1fr}
+.duzenleyici > div > div{overflow:hidden}
+.duz-izgara{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;padding:16px 4px}
+.duz-izgara .genis{grid-column:span 3}
+.duz-izgara .iki{grid-column:span 2}
+.cipler{display:flex;flex-wrap:wrap;gap:6px}
+.cip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--cizgi2);border-radius:999px;padding:3px 10px;font-size:12px;background:var(--yuzey)}
+.oneri-kutu{border:1px solid var(--cizgi);border-radius:10px;padding:10px 12px;background:var(--yuzey)}
+.oneri-kutu .ust-s{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px}
+.metin-ornek{font-size:13px}
+.metin-ornek .b{font-weight:700;color:var(--metin)}
+input[type=range]{accent-color:var(--kirmizi);width:100%}
+.risk{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--cizgi);font-size:13px}
+.risk:last-child{border-bottom:0}
+.risk .kod{font-size:11px;color:var(--soluk);font-weight:600;min-width:84px}
+.alt-cubuk{position:sticky;bottom:0;background:var(--bg);border-top:1px solid var(--cizgi);margin-top:16px}
+.alt-cubuk .ic{display:flex;align-items:center;gap:12px;padding:12px 0;flex-wrap:wrap}
+
+/* EKRAN B: belge */
+.belge{max-width:860px;margin:0 auto;background:var(--kagit);border:1px solid var(--cizgi);border-radius:4px;box-shadow:var(--golge)}
+.sayfa{padding:48px 56px;border-bottom:1px dashed var(--cizgi2);position:relative}
+.sayfa:last-child{border-bottom:0}
+.kapak{min-height:620px;display:flex;flex-direction:column}
+.kapak .logo{font-size:26px}
+.kapak .ust-baslik{font-family:"Open Sans";font-size:15px;color:var(--ikincil);margin:auto 0 6px}
+.kapak h1{font-size:44px;line-height:1.06;margin:0;font-weight:800;letter-spacing:-.02em}
+.kapak h1 em{font-style:normal;color:var(--kirmizi)}
+.kapak .cizgi{width:72px;height:5px;background:var(--kirmizi);margin:26px 0 18px}
+.kapak .bilgi{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;font-size:13px;margin-top:8px}
+.kapak .bilgi div span{display:block;color:var(--ikincil);font-size:12px}
+.kapak .bilgi div span.ornek{display:inline-block;color:var(--kirmizi);font-size:10px}
+.filigran{position:absolute;right:56px;top:48px;font-family:Montserrat;font-weight:800;font-size:13px;letter-spacing:.2em;color:var(--soluk);border:1px solid var(--cizgi2);padding:4px 10px;border-radius:4px}
+.bolum-no{font-family:Montserrat;font-weight:800;color:var(--kirmizi);font-size:13px;letter-spacing:.08em}
+.bolum h2{font-size:22px;margin:2px 0 4px}
+.bolum .gir{color:var(--ikincil);margin:0 0 18px}
+.ozet-maddeler{margin:0 0 18px;padding:0;list-style:none;display:flex;flex-direction:column;gap:10px}
+.ozet-maddeler li{display:flex;gap:12px}
+.ozet-maddeler li b{font-family:Montserrat;color:var(--kirmizi);font-size:15px;min-width:18px}
+.kpi4{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--cizgi);border-radius:10px}
+.kpi4 .kutu{border-right:1px solid var(--cizgi)}
+.kpi4 .kutu.dolu{background:var(--gri);color:#fff;border-radius:0 9px 9px 0}
+.kpi4 .kutu.dolu .etiket,.kpi4 .kutu.dolu small{color:rgba(255,255,255,.75)}
+.iki-sutun{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.bilgi-satiri{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--cizgi);font-size:13px}
+.bilgi-satiri span:first-child{color:var(--ikincil)}
+.grafik-sar{display:grid;grid-template-columns:220px 1fr;gap:24px;align-items:center}
+.kalem-kart{border:1px solid var(--cizgi);border-radius:10px;padding:16px;margin-bottom:12px;break-inside:avoid}
+.kalem-kart .ust-s{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+.kalem-kart dl{display:grid;grid-template-columns:repeat(4,1fr);gap:10px 16px;margin:14px 0 0;font-size:13px}
+.kalem-kart dt{font-size:11px;color:var(--ikincil);font-weight:600}
+.kalem-kart dd{margin:0}
+.kalem-kart .yon{margin-top:12px;padding-top:12px;border-top:1px solid var(--cizgi);font-size:13px}
+.gantt{display:grid;grid-template-columns:170px repeat(13,1fr);font-size:11px;align-items:center}
+.gantt .h{color:var(--ikincil);padding:4px 0;border-bottom:1px solid var(--cizgi);text-align:center}
+.gantt .h.ad{text-align:left}
+.gantt .ad{padding:8px 8px 8px 0;font-size:12px;font-weight:600;border-bottom:1px solid var(--cizgi)}
+.gantt .hucre{height:36px;border-bottom:1px solid var(--cizgi);position:relative}
+.gantt .bar{position:absolute;top:11px;height:14px;border-radius:7px}
+.onay-kutu{border:2px solid var(--metin);border-radius:12px;padding:20px}
+.onay-kutu .dugmeler{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+.onay-kutu textarea{width:100%;font:inherit;color:var(--metin);background:var(--yuzey);border:1px solid var(--cizgi2);border-radius:8px;padding:10px;min-height:72px;margin-top:10px}
+.yorum{display:flex;gap:10px;padding:10px 0;border-top:1px solid var(--cizgi);font-size:13px}
+.avatar{width:28px;height:28px;border-radius:50%;background:var(--zemin2);display:grid;place-items:center;font-size:11px;font-weight:700;flex:none}
+.belge-arac{max-width:860px;margin:0 auto 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+/* EKRAN C: aktarım */
+.c-izgara{display:grid;grid-template-columns:1fr 380px;gap:16px;margin-top:16px}
+.esleme td:first-child{color:var(--ikincil);white-space:nowrap}
+.esleme td{padding:7px 8px;font-size:12px}
+.ok-metin{color:var(--durum-ok);font-weight:600}
+.secim{width:16px;height:16px;accent-color:var(--kirmizi)}
+.bildirim{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--cizgi);border-left:4px solid var(--kirmizi);border-radius:10px;padding:12px 14px;background:var(--yuzey)}
+.toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,16px);opacity:0;pointer-events:none;background:var(--gri);color:#fff;padding:10px 16px;border-radius:999px;font-size:13px;transition:opacity .2s,transform .2s;z-index:20}
+.toast.gorunur{opacity:1;transform:translate(-50%,0)}
+
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{transition:none!important;animation:none!important}
+}
+@media (max-width:760px){
+  .a-izgara,.c-izgara,.iki-sutun,.grafik-sar{grid-template-columns:1fr}
+  .kutular,.kpi4{grid-template-columns:1fr 1fr}
+  .kutu{border-bottom:1px solid var(--cizgi)}
+  .kpi4 .kutu.dolu{border-radius:0 0 9px 9px;grid-column:span 2}
+  .duz-izgara{grid-template-columns:1fr}
+  .baglanti-alan{grid-template-columns:1fr!important}
+  .duz-izgara .genis,.duz-izgara .iki{grid-column:auto}
+  .sayfa{padding:28px 18px}
+  .filigran{right:18px;top:18px}
+  .kapak{min-height:480px}
+  .kapak h1{font-size:32px}
+  .kapak .bilgi{grid-template-columns:1fr 1fr}
+  .kalem-kart dl{grid-template-columns:1fr 1fr}
+  .gantt{grid-template-columns:110px repeat(13,1fr)}
+  .tablo .gizle-mobil{display:none}
+  .asama-sat{grid-template-columns:80px 1fr 90px}
+  .kirinti{font-size:12px}
+}
+</style>
+</head>
+<body>
+
+<header class="ust">
+  <div class="sar">
+    <span class="logo">Advetics<i></i></span>
+    <span class="kirinti">Profaj Reklamcılık › <b>Ege Birlik Yapı · Seasight Konutları</b> › Planla › AdvStrategy</span>
+    <button class="tema" id="temaDugme" type="button">Tema</button>
+  </div>
+</header>
+<div class="not-seridi"><div class="sar"><b>TASLAK</b> · Ajan 1 görsel taslağı, kod değil. Bütün rakamlar <b>örnek</b>; gerçek hesap verisi değil. Tasarım: Profaj kılavuzu (4 renk, Montserrat / Open Sans), kullanım mantığı Google Ads planlayıcı.</div></div>
+
+<div class="sar">
+  <div class="sekmeler" role="tablist">
+    <button class="sekme" role="tab" aria-selected="true" data-ekran="a">a · Strateji oluştur (ajans)</button>
+    <button class="sekme" role="tab" aria-selected="false" data-ekran="b">b · Kurumsal rapor (müşteri)</button>
+    <button class="sekme" role="tab" aria-selected="false" data-ekran="c">c · AdvCampaign'e aktar</button>
+  </div>
+
+  <!-- ═════════ EKRAN A ═════════ -->
+  <section class="ekran" id="ekran-a">
+    <div class="baslik-sat">
+      <div>
+        <h1 class="sayfa-baslik">AdvStrategy</h1>
+        <p class="alt">Kasım 2026 – Ocak 2027 stratejisi · <span class="rozet">Taslak · sürüm 3</span> · son kayıt 13 Eki 14:20, Yusuf A.</p>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="dugme" type="button" data-ekran-git="b">Müşterinin göreceği</button>
+        <button class="dugme" type="button">PDF önizle</button>
+      </div>
+    </div>
+
+    <div class="a-izgara">
+      <!-- Sol: girdiler -->
+      <aside style="display:flex;flex-direction:column;gap:16px">
+        <div class="kart kart-ic">
+          <h3 style="margin:0 0 12px;font-size:15px">Plan</h3>
+          <div class="girdi"><label for="g1">Başlangıç</label><select id="g1"><option>Kasım 2026</option></select></div>
+          <div class="girdi"><label for="g2">Süre</label><select id="g2"><option>1 ay</option><option>2 ay</option><option selected>3 ay</option></select></div>
+          <div class="girdi"><label for="g3">Toplam bütçe <span class="ornek">örnek</span></label><input id="g3" value="180.000 ₺"></div>
+          <button class="dugme birincil" type="button" style="width:100%;justify-content:center" id="onerDugme">Strateji öner</button>
+          <p class="ince" style="margin:8px 0 0">Sayılar hesabın verisinden ve Advetics kurallarından; yazılar yapay zekâdan, sayı içermez.</p>
+        </div>
+
+        <div class="kart kart-ic">
+          <h3 style="margin:0 0 4px;font-size:15px">Önerinin dayandığı bilgiler</h3>
+          <p class="ince" style="margin:0 0 12px">Eksik olan öneriyi daraltır; nedeni yazar.</p>
+          <ul class="durum-liste">
+            <li><span class="nokta ok"></span><span>Marka Merkezi: sektör, ürün, vaatler<br><span class="kaynak">Konut · 2+1, 3+1 · deniz manzarası</span></span></li>
+            <li><span class="nokta ok"></span><span>Site taraması<br><span class="kaynak">egebirlikseasight.com · 12 Eki</span></span></li>
+            <li><span class="nokta ok"></span><span>Meta hesap geçmişi<br><span class="kaynak">Son 90 gün · form kampanyaları</span></span></li>
+            <li><span class="nokta ok"></span><span>Google Ads geçmişi<br><span class="kaynak">Son 90 gün · arama kampanyası</span></span></li>
+            <li><span class="nokta uyari"></span><span>Ölçüm: telefon araması sayılmıyor<br><span class="kaynak">Arama amacı riskli · <a href="#">Kurulum › Ölçüm</a></span></span></li>
+            <li><span class="nokta ok"></span><span>Özel kategori: Konut<br><span class="kaynak">Kurulum beyanı · yaş ve bölge daraltılamaz</span></span></li>
+            <li><span class="nokta"></span><span>Özel günler takvimi<br><span class="kaynak">Tablo boş · takvimde gösterilmiyor</span></span></li>
+          </ul>
+        </div>
+      </aside>
+
+      <!-- Sağ: önerilen strateji -->
+      <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+        <div class="kart">
+          <div class="kutular">
+            <div class="kutu secili"><div class="etiket">Toplam bütçe</div><div class="deger">180.000 <small>₺</small></div><div class="kaynak">Plan · 3 ay <span class="ornek">örnek</span></div></div>
+            <div class="kutu"><div class="etiket">Beklenen form</div><div class="deger">160–240</div><div class="kaynak">Hesap verisi · son 3 ay aralığı</div></div>
+            <div class="kutu"><div class="etiket">Beklenen site ziyareti</div><div class="deger">9.000–12.500</div><div class="kaynak">Hesap verisi</div></div>
+            <div class="kutu"><div class="etiket">Kampanya</div><div class="deger">4</div><div class="kaynak">3 aktarılabilir · 1 ölçüm bekliyor</div></div>
+          </div>
+          <div class="kart-ic">
+            <div class="baslik-sat" style="margin-bottom:6px"><b>Bütçe nereye gidiyor</b>
+              <span class="lejant"><span><i style="background:var(--seri-meta)"></i>Meta</span><span><i style="background:var(--seri-google)"></i>Google</span></span></div>
+            <div class="asama-sat"><span>Tanıtım</span><div class="cubuk"><span style="width:6.9%;background:var(--seri-meta)"></span><span style="width:6.4%;background:var(--seri-google)"></span></div><span class="tutar">24.000 ₺</span></div>
+            <div class="asama-sat"><span>İlgi</span><div class="cubuk"><span style="width:12%;background:var(--seri-meta)"></span><span style="width:18%;background:var(--seri-google)"></span></div><span class="tutar">54.000 ₺</span></div>
+            <div class="asama-sat"><span>Dönüşüm</span><div class="cubuk"><span style="width:48.3%;background:var(--seri-meta)"></span><span style="width:8.3%;background:var(--seri-google)"></span></div><span class="tutar">102.000 ₺</span></div>
+            <p class="kaynak" style="margin:6px 0 0">Advetics kuralı: önce dönüşüm kampanyasının öğrenme tabanı (haftada ~50 sonuç), kalan tanıtıma. Meta ve Google sonuçları toplanmaz.</p>
+          </div>
+        </div>
+
+        <div class="kart">
+          <div class="kart-ic baslik-sat" style="padding-bottom:8px">
+            <div><b>Kampanyalar</b><div class="ince">Her satır AdvCampaign'de bir reklam olur. Satıra tıkla, düzenle.</div></div>
+            <button class="dugme kucuk" type="button">+ Kampanya ekle</button>
+          </div>
+          <div class="tablo-sar">
+          <table class="tablo">
+            <thead><tr><th></th><th>Ne istiyoruz</th><th>Nerede</th><th class="sayi">Bütçe</th><th class="gizle-mobil">Tarih</th><th class="gizle-mobil">Bölge</th><th class="sayi">Beklenen</th></tr></thead>
+            <tbody>
+              <tr class="satir" aria-expanded="true" data-kalem="1">
+                <td><span class="nokta ok" title="Hazır"></span></td>
+                <td><div class="amac"><span class="ikon k">F</span><div><b>Form doldursunlar</b><span class="ince">Dönüşüm · Meta anlık form</span></div></div></td>
+                <td><div class="pay"><span class="ince">Yalnız Meta</span><div class="cubuk"><span style="width:100%;background:var(--seri-meta)"></span></div><span class="kaynak">Google'da form henüz yok</span></div></td>
+                <td class="sayi">72.000 ₺</td>
+                <td class="gizle-mobil">1 Kas – 31 Oca</td>
+                <td class="gizle-mobil">İzmir ili</td>
+                <td class="sayi">160–240 form<br><span class="rozet">Veri</span></td>
+              </tr>
+              <tr><td colspan="7" class="duzenleyici acik" id="duz-1"><div><div>
+                <div class="duz-izgara">
+                  <div class="girdi"><label>Ne istiyoruz</label><select><option>Form doldursunlar</option><option>Siteme gelsinler</option><option>WhatsApp'tan yazsınlar</option><option>Beni arasınlar</option><option>Videom izlensin</option><option>Bölgemde çok kişi görsün</option><option disabled>Sitemden satış gelsin (ölçüm yok)</option></select></div>
+                  <div class="girdi"><label>Bütçe (dönem toplamı)</label><input value="72.000 ₺"><span class="kaynak">Günlük ~783 ₺ · Meta asgarisinin üstünde</span></div>
+                  <div class="girdi"><label>Tarih</label><input value="1 Kasım 2026 – 31 Ocak 2027"></div>
+                  <div class="girdi"><label>Platform payı <span class="rozet">Kural</span></label>
+                    <div class="cubuk" style="height:6px;margin:8px 0"><span style="width:100%;background:var(--seri-meta)"></span></div>
+                    <span class="kaynak">Google kapalı: bu amaç için Google'da form yolu yazılmadı.</span></div>
+                  <div class="girdi"><label>Bölge <span class="rozet">Marka Merkezi</span></label><div class="cipler"><span class="cip">İzmir ili ✕</span><span class="cip">+ ekle</span></div><span class="kaynak">Konut kategorisi: adres çevresi kurulamıyor.</span></div>
+                  <div class="girdi"><label>Yaş</label><input value="18 – 65+" disabled><span class="kaynak">Konut kategorisinde daraltılamaz.</span></div>
+                  <div class="iki">
+                    <div class="oneri-kutu">
+                      <div class="ust-s"><b style="font-size:13px">Kreatif yönergesi</b><span class="rozet ai">Yapay zekâ önerisi</span></div>
+                      <p style="margin:0;font-size:13px">Denizi gören salonla açın; ilk karede manzara, ikinci karede kat planı. Metin kısa, fiyat yerine teslim tarihi ve ödeme kolaylığı vurgulansın. Dikey video Reels ve hikâyeler için ayrıca.</p>
+                      <div style="display:flex;gap:6px;margin-top:8px"><button class="dugme kucuk birincil" type="button">Kullan</button><button class="dugme kucuk" type="button">Yeniden yaz</button></div>
+                    </div>
+                  </div>
+                  <div>
+                    <div class="oneri-kutu">
+                      <div class="ust-s"><b style="font-size:13px">Kime anlatıyoruz</b><span class="rozet">Ajans yazdı</span></div>
+                      <p style="margin:0;font-size:13px">İzmir'de oturan, kiradan çıkıp ilk evini almak isteyen aileler ve yatırım için ikinci konut arayanlar.</p>
+                    </div>
+                  </div>
+                  <div class="genis">
+                    <div class="oneri-kutu">
+                      <div class="ust-s"><b style="font-size:13px">Reklam metni önerisi</b><span><span class="rozet ai">AdvCampaign metin motoru</span></span></div>
+                      <div class="metin-ornek"><span class="b">Başlık:</span> Körfeze bakan 2+1 ve 3+1 daireler · Çiğli'de deniz manzaralı yeni yaşam · Teslim 2027 bahar</div>
+                      <div class="metin-ornek"><span class="b">Ana metin:</span> Seasight Konutları'nda manzaralı daireler için formu doldurun, satış danışmanımız sizi arasın.</div>
+                      <div style="display:flex;gap:6px;margin-top:8px"><button class="dugme kucuk birincil" type="button">Kullan</button><button class="dugme kucuk" type="button">Yeniden yaz</button><span class="kaynak" style="align-self:center">"Kullan" denmeyen metin AdvCampaign'e öneri olarak gider.</span></div>
+                    </div>
+                  </div>
+                </div>
+              </div></div></td></tr>
+
+              <tr class="satir" aria-expanded="false" data-kalem="2">
+                <td><span class="nokta ok"></span></td>
+                <td><div class="amac"><span class="ikon">S</span><div><b>Siteme gelsinler</b><span class="ince">İlgi · trafik + arama</span></div></div></td>
+                <td><div class="pay"><span class="ince">Meta %40 · Google %60</span><div class="cubuk"><span style="width:40%;background:var(--seri-meta)"></span><span style="width:60%;background:var(--seri-google)"></span></div><span class="kaynak">Hesap verisi: Google'da ziyaret daha ucuz</span></div></td>
+                <td class="sayi">54.000 ₺</td>
+                <td class="gizle-mobil">1 Kas – 31 Oca</td>
+                <td class="gizle-mobil">İzmir ili</td>
+                <td class="sayi">9.000–12.500 ziyaret<br><span class="rozet">Veri</span></td>
+              </tr>
+              <tr><td colspan="7" class="duzenleyici" id="duz-2"><div><div>
+                <div class="duz-izgara">
+                  <div class="girdi"><label>Meta payı <span class="rozet">Veri</span></label><input type="range" min="10" max="90" value="40" id="paySlider" aria-label="Meta payı"><span class="kaynak" id="payMetni">Meta %40 · Google %60</span></div>
+                  <div class="iki girdi"><label>Google arama kelimeleri <span class="rozet">Veri · Keyword Planner</span></label>
+                    <div class="cipler"><span class="cip">çiğli satılık daire · ~2.900/ay</span><span class="cip">deniz manzaralı daire izmir · ~1.300/ay</span><span class="cip">karşıyaka 3+1 satılık · ~880/ay</span><span class="cip">+ 9 kelime</span></div>
+                    <span class="kaynak">Aylık arama yaklaşık (Google yuvarlıyor). Yakın varyantlar tek satır.</span></div>
+                </div>
+              </div></div></td></tr>
+
+              <tr class="satir" aria-expanded="false" data-kalem="3">
+                <td><span class="nokta uyari" title="Ölçüm yok"></span></td>
+                <td><div class="amac"><span class="ikon">T</span><div><b>Beni arasınlar</b><span class="ince">Dönüşüm · arama düğmesi</span> <span class="rozet">Deneme</span></div></div></td>
+                <td><div class="pay"><span class="ince">Meta %50 · Google %50</span><div class="cubuk"><span style="width:50%;background:var(--seri-meta)"></span><span style="width:50%;background:var(--seri-google)"></span></div><span class="kaynak">Kural: geçmiş yok, eşit başla</span></div></td>
+                <td class="sayi">30.000 ₺</td>
+                <td class="gizle-mobil">15 Kas – 31 Oca</td>
+                <td class="gizle-mobil">İzmir ili</td>
+                <td class="sayi">Tahmin yok<br><span class="rozet kirmizi">Ölçüm yok</span></td>
+              </tr>
+              <tr><td colspan="7" class="duzenleyici" id="duz-3"><div><div><div class="duz-izgara"><div class="genis"><p style="margin:0;font-size:13px"><b>Telefon araması sayılmıyor.</b> Google'da arama dönüşümü tanımlı değil; reklam kişiye değil tıklamaya optimize olur. Kurulum › Ölçüm'den eklenince tahmin çıkar.</p></div></div></div></div></td></tr>
+
+              <tr class="satir" aria-expanded="false" data-kalem="4">
+                <td><span class="nokta ok"></span></td>
+                <td><div class="amac"><span class="ikon">E</span><div><b>Bölgemde çok kişi görsün</b><span class="ince">Tanıtım · erişim</span> <span class="rozet">Deneme</span></div></div></td>
+                <td><div class="pay"><span class="ince">Meta %52 · Google %48</span><div class="cubuk"><span style="width:52%;background:var(--seri-meta)"></span><span style="width:48%;background:var(--seri-google)"></span></div><span class="kaynak">Google payı asgariye yuvarlandı</span></div></td>
+                <td class="sayi">24.000 ₺</td>
+                <td class="gizle-mobil">1 – 30 Kas</td>
+                <td class="gizle-mobil">İzmir ili</td>
+                <td class="sayi">Tahmin yok<br><span class="kaynak">Geçmiş erişim verisi yok</span></td>
+              </tr>
+              <tr><td colspan="7" class="duzenleyici" id="duz-4"><div><div><div class="duz-izgara"><div class="genis"><p style="margin:0;font-size:13px"><b>Tahmin yok.</b> Hesapta daha önce erişim kampanyası yok; beklenen sonuç yalnız hesabın kendi verisinden gösterilir, tahmin uydurulmaz. İlk ayın sonunda "Plan ve gerçekleşen" bölümünde gerçek sayı görünür.</p></div></div></div></div></td></tr>
+            </tbody>
+            <tfoot><tr><td></td><td><b>Toplam: 4 kampanya</b></td><td class="ince">Meta 121.080 ₺ · Google 58.920 ₺</td><td class="sayi"><b>180.000 ₺</b></td><td class="gizle-mobil" colspan="2">Dağıtılmamış: 0 ₺</td><td class="sayi ince">Platformlar toplanmaz</td></tr></tfoot>
+          </table>
+          </div>
+        </div>
+
+        <div class="kart kart-ic">
+          <div class="baslik-sat"><b>Riskler</b><span class="ince">Kurallardan, otomatik</span></div>
+          <div class="risk"><span class="kod">R-OLCUM</span><span>Telefon araması sayılmıyor; "Beni arasınlar" tıklamaya optimize olur.</span></div>
+          <div class="risk"><span class="kod">R-KATEGORI</span><span>Konut kategorisi: yaş 18–65+ sabit, adres çevresi kurulamıyor.</span></div>
+          <div class="risk"><span class="kod">R-DENEME</span><span>İki kampanya ajansın deneme listesinde; ilk kurulum duraklatılmış yapılır.</span></div>
+          <div class="risk"><span class="kod">R-OGRENME</span><span>Telefon kampanyasında haftalık sonuç az kalabilir; öğrenme geç biter.</span></div>
+        </div>
+
+        <div class="kart kart-ic">
+          <div class="baslik-sat"><b>Belgenin yazıları</b><span class="ince">Özet, işletme, kitle, kreatif yön</span></div>
+          <div class="oneri-kutu" style="margin-top:10px">
+            <div class="ust-s"><b style="font-size:13px">Özet</b><span class="rozet">Ajans yazdı · yapay zekâ önerisinden</span></div>
+            <p style="margin:0;font-size:13px">Seasight için ana hedef satış danışmanına ulaşan nitelikli başvuru. Bütçenin çoğu Meta anlık formuna gidiyor, çünkü geçmişte başvuruların büyük kısmı oradan ve daha ucuza geldi. Google aramasıyla daire arayanı siteye çekiyor, kısa bir tanıtım dönemiyle Çiğli çevresinde projeyi duyuruyoruz.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="alt-cubuk"><div class="ic sar" style="padding-left:0;padding-right:0">
+      <span class="rozet">Taslak · sürüm 3</span>
+      <span class="ince">Müşteri onaylayınca kampanyalar tek tıkla AdvCampaign'e taslak olarak açılır.</span>
+      <span style="margin-left:auto;display:flex;gap:8px"><button class="dugme" type="button">Kaydet</button><button class="dugme birincil" type="button" data-toast="Müşteriye gönderildi · panelde onay bekliyor">Müşteriye gönder</button></span>
+    </div></div>
+  </section>
+
+  <!-- ═════════ EKRAN B ═════════ -->
+  <section class="ekran" id="ekran-b" hidden>
+    <div class="belge-arac">
+      <span class="rozet">Müşteri hesabı görünümü</span>
+      <span class="ince">Panelde ve PDF'te aynı sıra, aynı içerik.</span>
+      <span style="margin-left:auto;display:flex;gap:8px"><button class="dugme kucuk" type="button">PDF indir</button></span>
+    </div>
+    <article class="belge">
+      <div class="sayfa kapak">
+        <span class="filigran">ONAY BEKLİYOR</span>
+        <span class="logo">Advetics<i></i></span>
+                <p class="ust-baslik">Ege Birlik Yapı · Seasight Konutları</p>
+        <h1>Dijital Reklam<br><em>Stratejisi</em></h1>
+        <div class="cizgi"></div>
+        <div class="bilgi">
+          <div><span>Dönem</span>Kasım 2026 – Ocak 2027</div>
+          <div><span>Toplam bütçe</span>180.000 ₺ <span class="ornek">örnek</span></div>
+          <div><span>Hazırlayan</span>Profaj Reklamcılık · sürüm 3</div>
+        </div>
+      </div>
+
+      <div class="sayfa bolum">
+        <span class="bolum-no">01</span><h2>Özet</h2>
+        <ul class="ozet-maddeler">
+          <li><b>1</b><span><b>Amaç:</b> satış danışmanına ulaşan nitelikli başvuru. Bütçenin çoğu Meta formuna gidiyor.</span></li>
+          <li><b>2</b><span><b>Neden:</b> geçmişte başvurular en çok ve en ucuza Meta formundan geldi.</span></li>
+          <li><b>3</b><span><b>Ayrıca:</b> Google aramasıyla daire arayanları siteye çekip, Kasım'da Çiğli çevresinde projeyi duyuruyoruz.</span></li>
+        </ul>
+        <div class="kpi4">
+          <div class="kutu"><div class="etiket">Dönem</div><div class="deger" style="font-size:18px">3 ay</div></div>
+          <div class="kutu"><div class="etiket">Kampanya</div><div class="deger">4</div></div>
+          <div class="kutu"><div class="etiket">Beklenen form</div><div class="deger">160–240</div><div class="kaynak">Hesabınızın verisi</div></div>
+          <div class="kutu dolu"><div class="etiket">Toplam bütçe</div><div class="deger">180.000 <small>₺</small></div><div class="kaynak" style="color:rgba(255,255,255,.7)">örnek</div></div>
+        </div>
+      </div>
+
+      <div class="sayfa bolum">
+        <span class="bolum-no">02</span><h2>İşletme ve pazar</h2>
+        <p class="gir">Marka Merkezi ve sitenizden. Boş alanlar uydurulmadı.</p>
+        <div class="iki-sutun">
+          <div>
+            <div class="bilgi-satiri"><span>Ne satıyorsunuz</span><span>2+1 ve 3+1 daire, deniz manzaralı</span></div>
+            <div class="bilgi-satiri"><span>Nerede</span><span>Çiğli, İzmir</span></div>
+            <div class="bilgi-satiri"><span>Öne çıkanlar</span><span>Körfez manzarası, 2027 teslim</span></div>
+            <div class="bilgi-satiri"><span>Fiyat bilgisi</span><span class="ince">Marka Merkezi'nde boş</span></div>
+          </div>
+          <div>
+            <p style="margin:0 0 6px;font-size:13px"><span class="rozet ai">Yapay zekâ · ajans onayladı</span></p>
+            <p style="margin:0;font-size:13px">İzmir'de ilk evini almak isteyen aileler ve yatırım amaçlı ikinci konut arayanlar. Karar uzun sürüyor; reklamın işi tek seferde satmak değil, danışmanla görüşme başlatmak.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="sayfa bolum">
+        <span class="bolum-no">03</span><h2>Bugüne kadar</h2>
+        <p class="gir">Son 90 gün, hesaplarınızın verisi. Meta ve Google sonuçları farklı sayıldığı için toplanmıyor.</p>
+        <div class="tablo-sar"><table class="tablo">
+          <thead><tr><th>Platform · amaç</th><th class="sayi">Harcama</th><th class="sayi">Sonuç</th><th class="sayi">Sonuç başı</th></tr></thead>
+          <tbody>
+            <tr><td>Meta · form</td><td class="sayi">41.200 ₺</td><td class="sayi">118 form</td><td class="sayi">349 ₺</td></tr>
+            <tr><td>Google · arama (site)</td><td class="sayi">18.900 ₺</td><td class="sayi">3.640 tık</td><td class="sayi">5,19 ₺</td></tr>
+            <tr><td>Google · arama (form)</td><td class="sayi">6.300 ₺</td><td class="sayi">9 form</td><td class="sayi">700 ₺</td></tr>
+          </tbody>
+        </table></div>
+        <p class="kaynak">Bütün rakamlar örnek.</p>
+      </div>
+
+      <div class="sayfa bolum">
+        <span class="bolum-no">04</span><h2>Bütçe dağılımı</h2>
+        <p class="gir">Önce başvuru getiren kampanya, kalanı tanıtım.</p>
+        <div class="grafik-sar">
+          <svg viewBox="0 0 200 200" width="200" height="200" role="img" aria-label="Meta yüzde 67, Google yüzde 33">
+            <circle cx="100" cy="100" r="70" fill="none" stroke="var(--zemin2)" stroke-width="28"/>
+            <circle cx="100" cy="100" r="70" fill="none" stroke="var(--seri-meta)" stroke-width="28" stroke-dasharray="295.9 439.8" transform="rotate(-90 100 100)"/>
+            <circle cx="100" cy="100" r="70" fill="none" stroke="var(--seri-google)" stroke-width="28" stroke-dasharray="143.9 439.8" stroke-dashoffset="-295.9" transform="rotate(-90 100 100)"/>
+            <text x="100" y="96" text-anchor="middle" font-family="Montserrat" font-weight="700" font-size="20" fill="var(--metin)">180.000 ₺</text>
+            <text x="100" y="116" text-anchor="middle" font-size="11" fill="var(--ikincil)">3 ay toplam</text>
+          </svg>
+          <div>
+            <div class="lejant" style="margin-bottom:10px"><span><i style="background:var(--seri-meta)"></i>Meta 121.080 ₺</span><span><i style="background:var(--seri-google)"></i>Google 58.920 ₺</span></div>
+            <div class="asama-sat"><span>Tanıtım</span><div class="cubuk"><span style="width:52%;background:var(--seri-meta)"></span><span style="width:48%;background:var(--seri-google)"></span></div><span class="tutar">24.000 ₺</span></div>
+            <div class="asama-sat"><span>İlgi</span><div class="cubuk"><span style="width:40%;background:var(--seri-meta)"></span><span style="width:60%;background:var(--seri-google)"></span></div><span class="tutar">54.000 ₺</span></div>
+            <div class="asama-sat"><span>Dönüşüm</span><div class="cubuk"><span style="width:85.3%;background:var(--seri-meta)"></span><span style="width:14.7%;background:var(--seri-google)"></span></div><span class="tutar">102.000 ₺</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sayfa bolum">
+        <span class="bolum-no">05</span><h2>Kampanyalar</h2>
+        <p class="gir">Onaydan sonra her biri ayrı bir reklam olarak kurulur.</p>
+        <div class="kalem-kart">
+          <div class="ust-s"><div class="amac"><span class="ikon k">F</span><div><b style="font-size:15px">Form doldursunlar</b><span class="ince">Meta anlık form · adını ve telefonunu bırakanlar</span></div></div><span class="mont" style="font-weight:700;font-size:18px">72.000 ₺</span></div>
+          <dl><div><dt>Nerede</dt><dd>Facebook, Instagram</dd></div><div><dt>Tarih</dt><dd>1 Kas – 31 Oca</dd></div><div><dt>Bölge · yaş</dt><dd>İzmir ili · 18–65+</dd></div><div><dt>Beklenen</dt><dd>160–240 form <span class="rozet">Veri</span></dd></div></dl>
+          <div class="yon"><b>Görsel ve mesaj:</b> İlk karede körfez manzarası, ikinci karede kat planı; fiyat yerine teslim tarihi. <span class="ince">Örnek başlık: "Körfeze bakan 2+1 ve 3+1 daireler"</span></div>
+        </div>
+        <div class="kalem-kart">
+          <div class="ust-s"><div class="amac"><span class="ikon">S</span><div><b style="font-size:15px">Siteme gelsinler</b><span class="ince">Meta trafik + Google arama</span></div></div><span class="mont" style="font-weight:700;font-size:18px">54.000 ₺</span></div>
+          <dl><div><dt>Nerede</dt><dd>Meta %40 · Google arama %60</dd></div><div><dt>Tarih</dt><dd>1 Kas – 31 Oca</dd></div><div><dt>Aranan kelimeler</dt><dd>12 kelime, ör. "çiğli satılık daire"</dd></div><div><dt>Beklenen</dt><dd>9.000–12.500 ziyaret <span class="rozet">Veri</span></dd></div></dl>
+        </div>
+        <p class="ince">+ 2 kampanya daha (Beni arasınlar, Bölgemde çok kişi görsün) · tam liste PDF'te</p>
+      </div>
+
+      <div class="sayfa bolum">
+        <span class="bolum-no">06</span><h2>Takvim</h2>
+        <div class="tablo-sar"><div class="gantt" style="min-width:560px">
+          <div class="h ad">Kampanya</div><div class="h">K1</div><div class="h">K2</div><div class="h">K3</div><div class="h">K4</div><div class="h">A1</div><div class="h">A2</div><div class="h">A3</div><div class="h">A4</div><div class="h">O1</div><div class="h">O2</div><div class="h">O3</div><div class="h">O4</div><div class="h">O5</div>
+          <div class="ad">Form doldursunlar</div><div class="hucre" style="grid-column:span 13"><span class="bar" style="left:0;width:100%;background:var(--seri-meta)"></span></div>
+          <div class="ad">Siteme gelsinler</div><div class="hucre" style="grid-column:span 13"><span class="bar" style="left:0;width:100%;background:var(--seri-google)"></span></div>
+          <div class="ad">Beni arasınlar</div><div class="hucre" style="grid-column:span 13"><span class="bar" style="left:15%;width:85%;background:var(--cizgi2)"></span></div>
+          <div class="ad">Bölgemde çok kişi görsün</div><div class="hucre" style="grid-column:span 13"><span class="bar" style="left:0;width:31%;background:var(--seri-meta)"></span></div>
+        </div></div>
+        <p class="kaynak">K: Kasım, A: Aralık, O: Ocak haftaları. Gri çubuk: ölçüm kurulunca başlar.</p>
+      </div>
+
+      <div class="sayfa bolum">
+        <span class="bolum-no">07</span><h2>Ölçüm ve riskler</h2>
+        <div class="iki-sutun">
+          <div>
+            <div class="bilgi-satiri"><span>Meta form</span><span><span class="nokta ok"></span> Sayılıyor</span></div>
+            <div class="bilgi-satiri"><span>Site ziyareti</span><span><span class="nokta ok"></span> Sayılıyor</span></div>
+            <div class="bilgi-satiri"><span>Telefon araması</span><span style="color:var(--kirmizi)">Kurulmalı</span></div>
+          </div>
+          <div style="font-size:13px">
+            <p style="margin:0 0 8px"><b>Telefon araması sayılmıyor.</b> Kurulana kadar o kampanya başlamaz.</p>
+            <p style="margin:0"><b>Konut kategorisi.</b> Yaş ve bölge Meta kuralıyla geniş tutulur.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="sayfa bolum">
+        <span class="bolum-no">08</span><h2>Onay</h2>
+        <div class="onay-kutu">
+          <b class="mont" style="font-size:16px">Bu stratejiyi onaylıyor musunuz?</b>
+          <p class="ince" style="margin:4px 0 0">Onaydan sonra ajans kampanyaları kurar; yayına almadan önce son hâli tekrar kontrol edilir.</p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px" class="baglanti-alan">
+            <div class="girdi" style="margin:0"><label for="oAd">Adınız soyadınız</label><input id="oAd" placeholder="Mehmet Kaya"></div>
+            <div class="girdi" style="margin:0"><label for="oEp">E-posta</label><input id="oEp" placeholder="ornek@firma.com"></div>
+          </div>
+          <p class="kaynak" style="margin:6px 0 0">Onay bağlantısıyla açıldığında sorulur ve kayda alınır. Bağlantı yalnız bu sürüm (3) için geçerli, 14 gün içinde ve bir kez karar verilebilir.</p>
+          <textarea placeholder="Yorumunuz (revizyon isterken zorunlu)" aria-label="Yorum"></textarea>
+          <div class="dugmeler">
+            <button class="dugme birincil" type="button" data-toast="Onaylandı · sürüm 3, müşteri hesabı">Onayla</button>
+            <button class="dugme" type="button" data-toast="Revizyon istendi · ajansa bildirildi">Revizyon iste</button>
+          </div>
+          <div style="margin-top:16px">
+            <div class="yorum"><span class="avatar">MK</span><div><b>Mehmet K.</b> <span class="ince">· müşteri · sürüm 2 · 11 Eki</span><br>Tanıtım bütçesi Aralık'a da uzasın mı?</div></div>
+            <div class="yorum"><span class="avatar">YA</span><div><b>Yusuf A.</b> <span class="ince">· ajans · 12 Eki</span><br>Kasım sonunda sonuçlara bakıp karar verelim; sürüm 3'te Kasım'da bıraktık.</div></div>
+          </div>
+        </div>
+      </div>
+    </article>
+  </section>
+
+  <!-- ═════════ EKRAN C ═════════ -->
+  <section class="ekran" id="ekran-c" hidden>
+    <div class="baslik-sat">
+      <div>
+        <h1 class="sayfa-baslik">AdvCampaign'e aktar</h1>
+        <p class="alt">Kasım 2026 – Ocak 2027 · <span class="rozet dolu">Onaylandı · müşteri · 14 Eki</span> · sürüm 3</p>
+      </div>
+    </div>
+    <div class="bildirim" style="margin-top:14px">
+      <span class="nokta uyari" style="margin-top:6px"></span>
+      <div style="font-size:13px"><b>Aktarım reklam kurmaz, para harcamaz.</b> Her kampanya AdvCampaign'de dolu bir taslak olarak açılır; yayına alma her zamanki gibi orada, son kontrol ve onayla.</div>
+    </div>
+
+    <div class="c-izgara">
+      <div class="kart" style="min-width:0">
+        <div class="tablo-sar">
+        <table class="tablo">
+          <thead><tr><th></th><th>Kampanya</th><th>AdvCampaign'de</th><th class="gizle-mobil">Taşınan</th><th>Durum</th></tr></thead>
+          <tbody>
+            <tr class="satir" data-c="1" aria-expanded="true"><td><input type="checkbox" class="secim" checked aria-label="Seç"></td>
+              <td><b>Form doldursunlar</b><br><span class="ince">72.000 ₺ · Meta</span></td>
+              <td>Form doldursunlar<br><span class="kaynak">Meta açık · Google bu amaçta yok</span></td>
+              <td class="gizle-mobil">9 alan</td>
+              <td><span class="ok-metin">Hazır</span><br><span class="kaynak">Rehberde 1 eksik: form şablonu</span></td></tr>
+            <tr class="satir" data-c="2" aria-expanded="false"><td><input type="checkbox" class="secim" checked aria-label="Seç"></td>
+              <td><b>Siteme gelsinler</b><br><span class="ince">54.000 ₺ · Meta + Google</span></td>
+              <td>Siteme gelsinler<br><span class="kaynak">Meta açık · Google açık</span></td>
+              <td class="gizle-mobil">10 alan + 12 kelime</td>
+              <td><span class="ok-metin">Hazır</span><br><span class="kaynak">Rehberde 1 eksik: görsel</span></td></tr>
+            <tr class="satir" data-c="3" aria-expanded="false"><td><input type="checkbox" class="secim" aria-label="Seç" disabled></td>
+              <td><b>Beni arasınlar</b><br><span class="ince">30.000 ₺</span></td>
+              <td>Beni arasınlar<br><span class="kaynak">Deneme · yalnız ajans yöneticisi</span></td>
+              <td class="gizle-mobil">—</td>
+              <td><span style="color:var(--kirmizi);font-weight:600">Bekliyor</span><br><span class="kaynak">Telefon ölçümü kurulmadı</span></td></tr>
+            <tr class="satir" data-c="4" aria-expanded="false"><td><input type="checkbox" class="secim" checked aria-label="Seç"></td>
+              <td><b>Bölgemde çok kişi görsün</b><br><span class="ince">24.000 ₺ · Meta + Google</span></td>
+              <td>Bölgemde çok kişi görsün<br><span class="kaynak">Deneme · duraklatılmış kurulur</span></td>
+              <td class="gizle-mobil">9 alan</td>
+              <td><span class="ok-metin">Hazır</span><br><span class="kaynak">Başlangıç geçmişteyse yarın yazılır</span></td></tr>
+          </tbody>
+        </table>
+        </div>
+        <div class="kart-ic" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--cizgi)">
+          <span class="ince">3 kampanya aktarılacak · 1 bekliyor (nedeniyle)</span>
+          <button class="dugme birincil" type="button" style="margin-left:auto" data-toast="3 taslak açıldı · AdvCampaign › Taslaklar">3 taslak aç</button>
+        </div>
+      </div>
+
+      <aside class="kart kart-ic">
+        <div class="baslik-sat"><b>Form doldursunlar · ne taşınıyor</b></div>
+        <p class="ince" style="margin:4px 0 10px">"Stratejiden" kaynağıyla yazılır; AdvCampaign'de değiştirirsen senin kararın olur.</p>
+        <table class="tablo esleme">
+          <tbody>
+            <tr><td>Amaç</td><td>Form doldursunlar</td><td><span class="rozet">Stratejiden</span></td></tr>
+            <tr><td>Platformlar</td><td>Meta</td><td><span class="rozet">Stratejiden</span></td></tr>
+            <tr><td>Bütçe</td><td>72.000 ₺ toplam</td><td><span class="rozet">Stratejiden</span></td></tr>
+            <tr><td>Tarih</td><td>1 Kas – 31 Oca</td><td><span class="rozet">Stratejiden</span></td></tr>
+            <tr><td>Bölge</td><td>İzmir ili</td><td><span class="rozet">Stratejiden</span></td></tr>
+            <tr><td>Yaş</td><td>18–65+</td><td><span class="rozet">Stratejiden</span></td></tr>
+            <tr><td>Metin</td><td>3 başlık, ana metin</td><td><span class="rozet">Stratejiden</span></td></tr>
+            <tr><td>Görseller</td><td>4 görsel</td><td><span class="rozet">Base</span></td></tr>
+            <tr><td>Reklam hesabı, sayfa</td><td>Workspace ayarından</td><td><span class="rozet">Workspace</span></td></tr>
+            <tr><td>Form şablonu</td><td style="color:var(--kirmizi)">Rehberde seçilecek</td><td></td></tr>
+            <tr><td>Özel kategori</td><td>Konut (beyan)</td><td><span class="rozet">Workspace</span></td></tr>
+          </tbody>
+        </table>
+        <p class="kaynak" style="margin-top:8px">Kreatif yönergesi ve kitle tarifi AdvCampaign'de "Stratejiden" kutusunda görünür; reklam alanı değildir.</p>
+      </aside>
+    </div>
+
+    <div class="kart" style="margin-top:16px">
+      <div class="kart-ic baslik-sat"><div><b>Plan ve gerçekleşen</b><div class="ince">Aktarımdan sonra raporun son bölümü bunu gösterir. <span class="ornek">örnek</span></div></div></div>
+      <div class="tablo-sar">
+      <table class="tablo">
+        <thead><tr><th>Kampanya</th><th>Durum</th><th class="sayi">Harcanan / plan</th><th class="sayi">Sonuç / beklenen</th><th class="gizle-mobil">Not</th></tr></thead>
+        <tbody>
+          <tr><td>Form doldursunlar</td><td><span class="nokta ok"></span> Yayında</td><td class="sayi">18.400 / 72.000 ₺</td><td class="sayi">61 form / 160–240</td><td class="gizle-mobil ince">Plan tarihinde</td></tr>
+          <tr><td>Siteme gelsinler</td><td><span class="nokta ok"></span> Yayında · Meta<br><span class="nokta"></span> Taslakta · Google</td><td class="sayi">6.100 / 54.000 ₺</td><td class="sayi">1.420 / 9.000–12.500</td><td class="gizle-mobil ince">Google'da bütçe AdvCampaign'de değişti: plan 32.400, kurulan 28.000</td></tr>
+          <tr><td>Bölgemde çok kişi görsün</td><td><span class="nokta"></span> Duraklatılmış (deneme)</td><td class="sayi">0 / 24.000 ₺</td><td class="sayi">—</td><td class="gizle-mobil ince">Ajans açacak</td></tr>
+          <tr><td>Beni arasınlar</td><td><span class="nokta"></span> Aktarılmadı</td><td class="sayi">0 / 30.000 ₺</td><td class="sayi">—</td><td class="gizle-mobil ince">Ölçüm bekliyor</td></tr>
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function(){
+  // Tema: tercih yalnız bu tarayıcıda; depolama kapalıysa sessizce varsayılan.
+  var kok=document.documentElement;
+  try{var t=localStorage.getItem('advstrategy-tema'); if(t) kok.setAttribute('data-theme',t);}catch(e){}
+  document.getElementById('temaDugme').addEventListener('click',function(){
+    var simdi=kok.getAttribute('data-theme');
+    var koyu=simdi? simdi==='dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+    var yeni=koyu?'light':'dark'; kok.setAttribute('data-theme',yeni);
+    try{localStorage.setItem('advstrategy-tema',yeni);}catch(e){}
+  });
+
+  // Ekran sekmeleri: öğe DOM'dan çıkmıyor, yalnız gizleniyor.
+  var sekmeler=document.querySelectorAll('.sekme');
+  function goster(k){
+    sekmeler.forEach(function(s){s.setAttribute('aria-selected', s.dataset.ekran===k?'true':'false');});
+    ['a','b','c'].forEach(function(x){document.getElementById('ekran-'+x).hidden = x!==k;});
+    window.scrollTo({top:0});
+  }
+  sekmeler.forEach(function(s){s.addEventListener('click',function(){goster(s.dataset.ekran);});});
+  document.querySelectorAll('[data-ekran-git]').forEach(function(b){b.addEventListener('click',function(){goster(b.dataset.ekranGit);});});
+
+  // Kalem düzenleyici: satıra tıkla, aç/kapa (grid satırı geçişle).
+  document.querySelectorAll('tr.satir[data-kalem]').forEach(function(tr){
+    tr.addEventListener('click',function(){
+      var d=document.getElementById('duz-'+tr.dataset.kalem);
+      var acik=d.classList.toggle('acik');
+      tr.setAttribute('aria-expanded', acik?'true':'false');
+    });
+  });
+  document.querySelectorAll('tr.satir[data-c]').forEach(function(tr){
+    tr.addEventListener('click',function(e){
+      if(e.target.tagName==='INPUT') return;
+      document.querySelectorAll('tr.satir[data-c]').forEach(function(x){x.setAttribute('aria-expanded','false');});
+      tr.setAttribute('aria-expanded','true');
+    });
+  });
+
+  var s=document.getElementById('paySlider'), m=document.getElementById('payMetni');
+  if(s){ s.addEventListener('input',function(){ m.textContent='Meta %'+s.value+' · Google %'+(100-s.value)+' (elle: kaynak "Ajans" olur)'; }); s.addEventListener('click',function(e){e.stopPropagation();}); }
+
+  var toast=document.getElementById('toast'), zaman;
+  document.querySelectorAll('[data-toast]').forEach(function(b){
+    b.addEventListener('click',function(e){
+      e.stopPropagation(); toast.textContent=b.dataset.toast; toast.classList.add('gorunur');
+      clearTimeout(zaman); zaman=setTimeout(function(){toast.classList.remove('gorunur');},2400);
+    });
+  });
+  document.getElementById('onerDugme').addEventListener('click',function(){
+    toast.textContent='Öneri hazır · 4 kampanya (örnek)'; toast.classList.add('gorunur');
+    clearTimeout(zaman); zaman=setTimeout(function(){toast.classList.remove('gorunur');},2400);
+  });
+})();
+</script>
+</body>
+</html>
