@@ -66,6 +66,15 @@ export function erisimYokCumlesi(platform: Platform): string {
  */
 export const GECMIS_ONBELLEK_MS = 6 * 60 * 60 * 1000;
 export const TAZE_ONBELLEK_MS = 10 * 60 * 1000;
+/**
+ * PLATFORM HATASI KISA SÜRE HATIRLANIYOR (Ajan 4 kapısı). Hata önbelleğe hiç
+ * yazılmıyordu: anonim paylaşım sayfasını yenileyen bir ziyaretçi, Meta'nın
+ * reddettiği (izin, silinmiş hesap) çağrıyı HER yüklemede yeniden yaptırıyor
+ * ve kotayı yalnız %50 tavanı durduruyordu. Bir dakika geçici arızayı
+ * dondurmuyor (saatlerce değil), art arda gelen yüklemeleri tek çağrıya
+ * indiriyor. Kota reddi hatırlanmıyor: zaten maliyetsiz.
+ */
+export const HATA_ONBELLEK_MS = 60 * 1000;
 /** Sınırsız `Map` uzun ömürlü süreçte sessizce büyüyen bir sızıntı olurdu. */
 const ONBELLEK_TAVANI = 500;
 /** Tek istek. Rapor senkron bir PDF isteğinin içinde; 30 sn fazla. */
@@ -86,6 +95,13 @@ export function donemKapandiMi(dateTo: string, simdi: Date): boolean {
 export class DonemErisimiService {
   private readonly log = new Logger(DonemErisimiService.name);
   private readonly onbellek = new Map<string, { satirlar: Map<string, PeriodReachRow>; sonGecerlilik: number }>();
+  private readonly hataOnbellegi = new Map<string, { neden: string; sonGecerlilik: number }>();
+  /**
+   * AYNI ANAHTARDA SÜREN ÇAĞRI PAYLAŞILIYOR: önbellek ancak cevap gelince
+   * doluyor ve aynı anda açılan on paylaşım sekmesi (ya da aynı pencereyi
+   * soran iki kural) on ayrı Meta çağrısı yapıyordu.
+   */
+  private readonly suren = new Map<string, Promise<DonemErisimiSonucu>>();
 
   constructor(
     private readonly providers: ProviderRegistry,
@@ -109,6 +125,24 @@ export class DonemErisimiService {
     const anahtar = `${hesap.id}|${istek.seviye}|${istek.from}|${istek.to}`;
     const kayit = this.onbellek.get(anahtar);
     if (kayit && kayit.sonGecerlilik > simdi.getTime()) return { tur: 'olculdu', satirlar: kayit.satirlar };
+    const hata = this.hataOnbellegi.get(anahtar);
+    if (hata && hata.sonGecerlilik > simdi.getTime()) return { tur: 'okunamadi', neden: hata.neden };
+    const devam = this.suren.get(anahtar);
+    if (devam) return devam;
+    const is = this.platformdanOku(provider, hesap, istek, opts, anahtar, simdi).finally(() => this.suren.delete(anahtar));
+    this.suren.set(anahtar, is);
+    return is;
+  }
+
+  private async platformdanOku(
+    provider: ReturnType<ProviderRegistry['get']>,
+    hesap: ErisimHesabi,
+    istek: { seviye: InsightsLevel; from: string; to: string },
+    opts: { katman: QuotaLayer; etiket: string },
+    anahtar: string,
+    simdi: Date,
+  ): Promise<DonemErisimiSonucu> {
+    if (!provider.fetchPeriodReach) return { tur: 'desteklenmiyor', neden: erisimYokCumlesi(hesap.platform) };
 
     // ÖNCE KOTA, SONRA ÇAĞRI: ret maliyetsiz, yapı taramasına yer bırakıyor.
     const gate = await this.quota.acquire({ platform: hesap.platform, adAccountId: hesap.id, layer: opts.katman });
@@ -149,9 +183,15 @@ export class DonemErisimiService {
       this.onbellegeYaz(anahtar, satirlar, donemKapandiMi(istek.to, simdi) ? GECMIS_ONBELLEK_MS : TAZE_ONBELLEK_MS, simdi);
       return { tur: 'olculdu', satirlar };
     } catch (err) {
-      // HATA ÖNBELLEĞE YAZILMIYOR: geçici bir arıza saatlerce dondurulmamalı.
+      // HATA YALNIZ BİR DAKİKA hatırlanıyor (`HATA_ONBELLEK_MS`): geçici
+      // arıza saatlerce dondurulmuyor, art arda yüklemeler platforma gitmiyor.
       const neden = (err instanceof Error ? err.message : String(err)).slice(0, 300);
       this.log.warn(`Dönem erişimi okunamadı (hesap ${hesap.id}, ${opts.etiket}): ${neden}`);
+      if (this.hataOnbellegi.size >= ONBELLEK_TAVANI) {
+        const enEski = this.hataOnbellegi.keys().next();
+        if (!enEski.done) this.hataOnbellegi.delete(enEski.value);
+      }
+      this.hataOnbellegi.set(anahtar, { neden, sonGecerlilik: simdi.getTime() + HATA_ONBELLEK_MS });
       return { tur: 'okunamadi', neden };
     }
   }

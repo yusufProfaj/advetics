@@ -1,4 +1,6 @@
 import {
+  GOOGLE_YARICAP_KURGULARI,
+  GOOGLE_YARICAP_YOK_MESAJI,
   GOOGLE_ISLETME_ADI_EN_COK,
   GOOGLE_KISA_ACIKLAMA,
   googleGorselOraniMi,
@@ -355,13 +357,15 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
 
   if (g.konumlar.length === 0 && !g.yakinlik) retler.push({ kod: 'KNM-01', mesaj: 'Konum yok: kampanya bütün ülkelere açılırdı.' });
   /*
-   * ADRES ÇEVRESİ YALNIZ TALEP YARATMA'DA (ERİŞİM K4): konum orada reklam
-   * grubunda ve `proximity` ölçütü oraya ekleniyor. Arama ve Maks.
-   * Performans'ta konum kampanyada; yakınlık ölçütü orada yazılmadı. Sessizce
-   * atlamak "konumsuz = bütün ülkeler" demekti; ret.
+   * ADRES ÇEVRESİ GOOGLE'DA HİÇBİR KURGUDA KURULMUYOR (Ajan 4 kapısı):
+   * v25 reklam grubu ölçütünde `proximity` alanı yok, Talep Yaratma konumu
+   * kampanya düzeyinde reddediyor (`GOOGLE_YARICAP_YOK_MESAJI` gerekçesi).
+   * Gövdeyi kurup Google'ın "Unknown name" reddini beklemek yerine giriş
+   * anındaki kuralla (`GOOGLE_YARICAP_KURGULARI`, eksik listesi) AYNI ret.
+   * Sessizce atlamak "konumsuz = bütün ülkeler" demekti.
    */
-  if (g.yakinlik && g.kurgu !== 'TALEP_YARATMA_GORSEL' && g.kurgu !== 'TALEP_YARATMA_VIDEO') {
-    retler.push({ kod: 'G-YARICAP-KURGU', mesaj: 'Bu Google kampanyasında işletme adresinin çevresi kurulamıyor; il/ilçe seç.' });
+  if (g.yakinlik && !GOOGLE_YARICAP_KURGULARI.includes(g.kurgu)) {
+    retler.push({ kod: 'G-YARICAP-KURGU', mesaj: GOOGLE_YARICAP_YOK_MESAJI });
   }
   if (g.yakinlik && g.konumlar.length > 0) {
     // Birleşim: daire + il = il geneli (Meta ile aynı kural, `adresCevresiKarisik`).

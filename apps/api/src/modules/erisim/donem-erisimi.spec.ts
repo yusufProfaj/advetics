@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MetaProvider } from '../connections/providers/meta.provider';
-import { GECMIS_ONBELLEK_MS, TAZE_ONBELLEK_MS, DonemErisimiService, donemKapandiMi, type ErisimHesabi } from './donem-erisimi.service';
+import { GECMIS_ONBELLEK_MS, HATA_ONBELLEK_MS, TAZE_ONBELLEK_MS, DonemErisimiService, donemKapandiMi, type ErisimHesabi } from './donem-erisimi.service';
 
 /**
  * ═══ DÖNEMİN TEKİL ERİŞİMİ (erişim ölçümü düzeltmesi, 2026-10-13) ═══
@@ -138,12 +138,35 @@ describe('DonemErisimiService — kota, önbellek, hata', () => {
     expect(fetchPeriodReach).toHaveBeenCalledTimes(2);
   });
 
-  it('KRİTİK: platform hatası FIRLATILMIYOR, "okunamadı" + mesaj; hata önbelleğe yazılmıyor', async () => {
+  /*
+   * Ajan 4 kapısı: hata hiç hatırlanmıyordu; anonim paylaşım sayfasını
+   * yenileyen ziyaretçi reddedilen çağrıyı her yüklemede tekrarlatıyordu.
+   * Bir dakika hatırlanıyor, sonra yeniden deneniyor (dondurulmuyor).
+   */
+  it('KRİTİK: platform hatası FIRLATILMIYOR, "okunamadı" + mesaj; hata YALNIZ bir dakika hatırlanıyor', async () => {
     const { svc, fetchPeriodReach } = kur({ hata: new Error('(#17) User request limit reached') });
     const r = await svc.oku(HESAP, istek, { katman: 'report_reach', etiket: 't', simdi: SIMDI });
     expect(r).toEqual({ tur: 'okunamadi', neden: '(#17) User request limit reached' });
-    await svc.oku(HESAP, istek, { katman: 'report_reach', etiket: 't', simdi: SIMDI });
+    const sonra = (ms: number) => new Date(SIMDI.getTime() + ms);
+    expect(await svc.oku(HESAP, istek, { katman: 'report_reach', etiket: 't', simdi: sonra(HATA_ONBELLEK_MS - 1) })).toEqual(r);
+    expect(fetchPeriodReach).toHaveBeenCalledTimes(1);
+    await svc.oku(HESAP, istek, { katman: 'report_reach', etiket: 't', simdi: sonra(HATA_ONBELLEK_MS) });
     expect(fetchPeriodReach).toHaveBeenCalledTimes(2);
+    expect(HATA_ONBELLEK_MS).toBeLessThanOrEqual(TAZE_ONBELLEK_MS);
+  });
+  it('KRİTİK: kota reddi hatırlanmıyor (maliyetsiz; kota açılınca hemen okunsun)', async () => {
+    const { svc, iz } = kur({ kota: false });
+    await svc.oku(HESAP, istek, { katman: 'report_reach', etiket: 't', simdi: SIMDI });
+    await svc.oku(HESAP, istek, { katman: 'report_reach', etiket: 't', simdi: SIMDI });
+    expect(iz).toEqual(['kota:report_reach', 'kota:report_reach']);
+  });
+  it('KRİTİK: aynı anahtarda eşzamanlı istekler TEK platform çağrısı paylaşıyor', async () => {
+    const { svc, fetchPeriodReach } = kur();
+    const [a, b, c] = await Promise.all([1, 2, 3].map(() => svc.oku(HESAP, istek, { katman: 'report_reach', etiket: 't', simdi: SIMDI })));
+    expect(fetchPeriodReach).toHaveBeenCalledTimes(1);
+    expect(a!.tur).toBe('olculdu');
+    expect(b).toBe(a);
+    expect(c).toBe(a);
   });
 
   it('sağlayıcı uygulamıyorsa "desteklenmiyor" ve kota bile sorulmuyor', async () => {

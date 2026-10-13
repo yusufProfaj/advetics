@@ -16,9 +16,25 @@ RLS politikası var, platform sahibi yalnız hello@profaj.com.
 bu commit'le deploy ediliyor; migration `20261009100000_iyilestir` (üç
 yeni tablo) + `db:rls`.
 
+**AJAN 4 KAPISI — ERİŞİM + DÖNEM ERİŞİMİ (2026-10-13, 80663bd9..3d49be55).**
+Düzeltilenler: (1) Google'da adres çevresi HİÇBİR kurguda kurulmuyor: v25
+`ad_group_criterion.proto` ölçüt oneof'unda `proximity` YOK, Talep Yaratma
+konumu kampanyada reddediyor; `GOOGLE_YARICAP_KURGULARI` boş, G-YARICAP-KURGU
+girişte engel, karar hücresi "Kurulamaz". Meta adres çevresi duruyor.
+(2) `buying_type` geri okumada HİÇ dönmezse uyarı (N-24, dar), farklı dönerse
+kabul edilemez fark: bütün amaçlara girdiği için ölçülmemiş okuma çalışan
+yedi amacı durdurmasın. (3) Google B12 okumaları (konum kimliği, yaş kitlesi)
+okunamazsa `dogrulanamadi` (fark değil; gerçek farkla birlikte fark).
+Google'da "Yeniden kontrol" yolu YOK (yalnız Meta) — iki durum da açmaz.
+(4) Harita konumu iki sayının da ondalık noktası şart ("38,42" = enlem 38,
+boylam 42 geçiyordu); yazıcı her zaman noktalı. (5) Dönem erişimi: hata 60 sn
+hatırlanıyor, eşzamanlı aynı istek tek çağrı (anonim paylaşım sayfası).
+Kalan: rehber her açılışta `reachestimate` çağırıyor (interactive kota,
+önbellek atlaması yok); `audience.dimensions` GAQL seçilebilirliği ölçülmedi.
+
 **ADVCAMPAIGN "BÖLGEMDE ÇOK KİŞİ GÖRSÜN" (ERISIM) TURU (2026-10-13, Ajan 2+3).**
 Amaç hâlâ `deneme` (canlı kurulmadı, push/deploy YOK; Ajan 4 kapısı
-bekliyor). **Migration var:** `20261016200000_isletme_adresi_konumu`
+bekliyor). **Migration var:** `20261016300000_isletme_adresi_konumu` (damga 3d49be55'te ayrıldı; `20261016200000_google_erisim_bos` erişim ölçümü işinin)
 (`clients.address_latitude/longitude` + iki CHECK). Meta: kampanyaya
 `buying_type: AUCTION` bütün amaçlarda (B14, M-05, geri okumada kabul
 edilemez); N-01 (REACH→IMPRESSIONS kabulü) KALDIRILDI, REACH dışı dönüş

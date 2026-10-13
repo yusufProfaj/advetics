@@ -25,7 +25,7 @@ import { calismaSaatleriOzeti, type CalismaSaatleri } from '../calisma-saatleri'
 import { DEMAND_GEN_VIDEO_KANALLARI, kanalCumlesi } from './google-kanallar';
 import { VIDEO_DUGMESIZ_CUMLESI, metaElleYerlesim, videoDugmesiVar } from '../meta/derle';
 import type { HedefKonum } from '../meta/hedefleme';
-import { GOOGLE_ERISIM_TEKLIF_CUMLESI, GOOGLE_YARICAP_OLCULMEDI_CUMLESI, adresCevresiMi, doygunlukDurumCumlesi, doygunlukUyarisi, type ErisimDoygunlugu } from './erisim';
+import { GOOGLE_ERISIM_TEKLIF_CUMLESI, GOOGLE_YARICAP_YOK_MESAJI, adresCevresiMi, doygunlukDurumCumlesi, doygunlukUyarisi, type ErisimDoygunlugu } from './erisim';
 
 export interface KararHucresi {
   deger: string;
@@ -336,7 +336,7 @@ export function kararTablosu(
       // frequently_in) olarak uyguluyor; canlı tur 1'de geri okundu (N-08).
       // Seyahat edenler dahil değil. "Yalnız bulunanlar" demek abartı olurdu.
       // ADRES ÇEVRESİ (K4): derleyicinin gönderdiği daire (`custom_locations` /
-      // Google `proximity`); Google'da kabulü ölçülmedi ve not söylüyor.
+      // Google'da kurulamıyor: v25 reklam grubu ölçütünde yarıçap yok, not söylüyor.
       meta: m
         ? adresCevresi
           ? hucre(`İşletme adresinin ${adresCevresi.yaricapKm ?? '?'} km çevresi`, 'Bu dairede yaşayan ya da yakın zamanda bulunanlar · Seyahat edenler dahil değil')
@@ -344,7 +344,7 @@ export function kararTablosu(
         : null,
       google: g
         ? adresCevresi
-          ? hucre(`İşletme adresinin ${adresCevresi.yaricapKm ?? '?'} km çevresinde bulunanlar`, GOOGLE_YARICAP_OLCULMEDI_CUMLESI)
+          ? hucre('Kurulamaz', GOOGLE_YARICAP_YOK_MESAJI)
           : hucre('Yalnız bu bölgede bulunanlar', '"İlgilenenler" kapalı; Google kendiliğinden tüm ülkeleri açıyordu')
         : null,
     },

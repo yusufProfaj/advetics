@@ -6,7 +6,7 @@ import {
   ERISIM_HAFTALIK_GOSTERIM,
   ERISIM_SIKLIK_SINIRI,
   GOOGLE_ERISIM_TEKLIF_CUMLESI,
-  GOOGLE_YARICAP_OLCULMEDI_CUMLESI,
+  GOOGLE_YARICAP_YOK_MESAJI,
   ISLETME_ADRESI_KONUM_ANAHTARI,
   META_ERISIM_OLCUM,
   META_ERISIM_TEKLIF,
@@ -22,6 +22,7 @@ import {
   isletmeAdresiKonumu,
   kararTablosu,
   koordinatCoz,
+  koordinatYaz,
   rehberEksikleri,
   rehberdenGoogle,
   updateClientSchema,
@@ -102,6 +103,29 @@ describe('B14 — satın alma türü AÇIKÇA AUCTION (bütün amaçlar)', () =>
     expect(s.sonuc).toBe('fark');
     const satir = (s as { satirlar: Array<{ alanYolu: string; kabulEdilemez: boolean }> }).satirlar.find((x) => x.alanYolu === 'buying_type');
     expect(satir?.kabulEdilemez).toBe(true);
+  });
+  /*
+   * N-24 (Ajan 4 kapısı): buying_type geri okumada döndüğü GÖZLENMEDİ ve
+   * bütün amaçlara girdi. Dönmezse canlıda kanıtlanmış amaçlar "okunamadı"da
+   * durmasın: uyarı. Kampanya hiç okunamadıysa genel kural (okunamadı).
+   */
+  it('KRİTİK: buying_type HİÇ dönmezse yayın durmaz, ekranda UYARI (bütün amaçlar)', () => {
+    for (const g of [{}, { niyet: 'SITE' as const, hedefAdres: 'https://ornek.com.tr' }]) {
+      const r = govde(g);
+      const okunan = ayna(r.govdeler);
+      delete okunan.kampanya!.buying_type;
+      const s = geriOkumaKarsilastir(beklenenYankilar(r.govdeler), okunan, { yasalUyariVar: false, simdi: SIMDI });
+      expect(s.sonuc).toBe('temiz');
+      expect(s.bilgiler.find((b) => b.alanYolu === 'buying_type')?.tur).toBe('uyari');
+    }
+  });
+  it('kampanya nesnesi HİÇ okunamadıysa buying_type uyarıya çevrilmez (okunamadı kalır)', () => {
+    const r = govde();
+    const okunan = ayna(r.govdeler);
+    delete okunan.kampanya;
+    const s = geriOkumaKarsilastir(beklenenYankilar(r.govdeler), okunan, { yasalUyariVar: false, simdi: SIMDI });
+    expect(s.sonuc).toBe('dogrulanamadi');
+    expect((s as { satirlar: Array<{ alanYolu: string; tur: string }> }).satirlar.find((x) => x.alanYolu === 'buying_type')?.tur).toBe('donmedi');
   });
 });
 
@@ -229,8 +253,20 @@ describe('K4 — rehber eksikleri ve Google türetmesi', () => {
     expect(kodlar(rehber({ ekKategoriler: al(['HOUSING' as const]) }))).toContain('OZK-04');
     expect(kodlar(rehber())).not.toEqual(expect.arrayContaining(['KNM-ADRES', 'KNM-YARICAP', 'OZK-04']));
   });
-  it('Google Arama kurgusunda adres çevresi engel (yalnız Talep Yaratma yarıçap alıyor)', () => {
+  it('Google Arama kurgusunda adres çevresi engel', () => {
     expect(kodlar(rehber({ amac: al('SITE' as const) }))).toContain('G-YARICAP-KURGU');
+  });
+  /*
+   * Ajan 4 kapısı: v25 `ad_group_criterion.proto` ölçüt oneof'unda
+   * `proximity` YOK. Talep Yaratma (erişimin Google kurgusu) da GİRİŞTE
+   * engel; gövde kurulup Google'ın "Unknown name" reddi beklenmiyor.
+   */
+  it('KRİTİK: erişimde (Google Talep Yaratma) adres çevresi GİRİŞTE engel, Meta açık', () => {
+    const e = rehberEksikleri(rehber(), baglam()).filter((x) => x.kod === 'G-YARICAP-KURGU');
+    expect(e).toHaveLength(1);
+    expect(e[0]!.metin).toBe(GOOGLE_YARICAP_YOK_MESAJI);
+    expect(e[0]!.seviye).toBe('engel');
+    expect(kodlar(rehber({ platformlar: al({ meta: true, google: false }, 'derleyici') }))).not.toContain('G-YARICAP-KURGU');
   });
 
   describe('K5 — bütçe-kitle doygunluğu', () => {
@@ -284,10 +320,11 @@ describe('B5/B9 — Kontrol sözleri', () => {
     expect(bul(g.govdeler, 'kreatif:1').object_story_spec.link_data.link).toBe('https://facebook.com/111');
     expect(bul(g.govdeler, 'kreatif:1').object_story_spec.link_data.call_to_action.type).toBe('LEARN_MORE');
   });
-  it('KONUM hücresi adres çevresini ve Google ölçülmedi notunu söylüyor', () => {
+  it('KONUM hücresi adres çevresini söylüyor; Google hücresi KURULAMAZ ve sebebini', () => {
     const t = tablo({ konumlar: [ADRES_CEVRESI] });
     expect(t.KONUM!.meta!.deger).toBe('İşletme adresinin 10 km çevresi');
-    expect(t.KONUM!.google!.not).toBe(GOOGLE_YARICAP_OLCULMEDI_CUMLESI);
+    expect(t.KONUM!.google!.deger).toBe('Kurulamaz');
+    expect(t.KONUM!.google!.not).toBe(GOOGLE_YARICAP_YOK_MESAJI);
   });
   it('DOYGUNLUK satırı yalnız erişimde; dört hâl ayrı değer', () => {
     expect(tablo().DOYGUNLUK!.meta!.deger).toBe('Henüz okunmadı');
@@ -344,9 +381,21 @@ describe('B12 — Google geri okuma konumu ve yaşı KİMLİKLE kıyaslıyor', (
     expect(d.beklenen.yakinlik).toBeNull();
     expect(googleGeriOkumaKarsilastir(d.beklenen, temiz).sonuc).toBe('temiz');
   });
-  it('KRİTİK: aynı SAYIDA ama BAŞKA konum → fark (konum.kimlikler); okunamadı da fark', () => {
+  it('KRİTİK: aynı SAYIDA ama BAŞKA konum → fark (konum.kimlikler); okunamadı satırı da yazılır', () => {
     expect(alanlar({ konumKimlikleri: ['geoTargetConstants/1012783'] })).toEqual(['konum.kimlikler']);
     expect(alanlar({ konumKimlikleri: null })).toEqual(['konum.kimlikler']);
+  });
+  /*
+   * Ajan 4 kapısı: okunamayan B12 alanı "fark" değil "okunamadı". Yalnız
+   * okunamayanlar varsa `dogrulanamadi` (açılmaz, ekranda okunamadı);
+   * yanında gerçek bir fark varsa `fark`.
+   */
+  it('KRİTİK: yalnız okunamayan alanlar → dogrulanamadi; gerçek farkla birlikte → fark', () => {
+    const k = (o: Partial<GoogleOkunan>) => googleGeriOkumaKarsilastir(d.beklenen, { ...temiz, ...o }).sonuc;
+    expect(k({ konumKimlikleri: null })).toBe('dogrulanamadi');
+    expect(k({ yasKitlesi: 'okunamadi', yakinlik: 'okunamadi', konumKimlikleri: null })).toBe('dogrulanamadi');
+    expect(k({ konumKimlikleri: null, yasKitlesi: null })).toBe('fark');
+    expect(k({ konumKimlikleri: null, gunlukButceMicros: '1' })).toBe('fark');
   });
   it('KRİTİK: yaş kitlesi farklı, yok ya da okunamadı → fark (yas.kitle)', () => {
     expect(alanlar({ yasKitlesi: { segmentler: [{ minAge: 18 }], belirsizDahil: false } })).toEqual(['yas.kitle']);
@@ -357,15 +406,11 @@ describe('B12 — Google geri okuma konumu ve yaşı KİMLİKLE kıyaslıyor', (
   it('KRİTİK: söz verilmemiş bir daire (yakınlık) dönerse fark', () => {
     expect(alanlar({ yakinlik: { enlemMikro: 1, boylamMikro: 1, yaricap: 5, birim: 'KILOMETERS' } })).toEqual(['konum.adresCevresi']);
   });
-  it('KRİTİK: adres çevresi beklenirken yarıçap ya da birim farklı dönerse fark', () => {
-    const y = derleGoogle({ ...girdi, konumlar: [], yakinlik: { enlem: 38.4237, boylam: 27.1428, yaricapKm: 10 } }, B);
-    if (y.tur !== 'govde') throw new Error(JSON.stringify(y.retler));
-    const tam = { ...temiz, kampanyaAdi: y.beklenen.kampanyaAdi, konumSayisi: 0, konumKimlikleri: [], yakinlik: y.beklenen.yakinlik! };
-    expect(googleGeriOkumaKarsilastir(y.beklenen, tam).sonuc).toBe('temiz');
-    const f = (o: Partial<GoogleOkunan>) => googleGeriOkumaKarsilastir(y.beklenen, { ...tam, ...o }).satirlar.map((s) => s.alan);
-    expect(f({ yakinlik: { ...y.beklenen.yakinlik!, yaricap: 20 } })).toEqual(['konum.adresCevresi']);
-    expect(f({ yakinlik: { ...y.beklenen.yakinlik!, birim: 'MILES' as 'KILOMETERS' } })).toEqual(['konum.adresCevresi']);
-    expect(f({ yakinlik: 'okunamadi' })).toEqual(['konum.adresCevresi']);
+  it('KRİTİK: Talep Yaratma da adres çevresini KURMUYOR → ret (v25 reklam grubunda proximity yok)', () => {
+    for (const kurgu of ['TALEP_YARATMA_GORSEL', 'TALEP_YARATMA_VIDEO'] as const) {
+      const y = derleGoogle({ ...girdi, kurgu, konumlar: [], yakinlik: { enlem: 38.4237, boylam: 27.1428, yaricapKm: 10 } }, B);
+      expect(y.tur === 'ret' ? y.retler.map((x) => x.kod) : []).toContain('G-YARICAP-KURGU');
+    }
   });
   it('KRİTİK: Arama kurgusunda yakınlık → ret (konum kampanyada; daire yazılmadı)', () => {
     const r = derleGoogle({ ...girdi, kurgu: 'ARAMA', ulasma: 'site', konumlar: [], yakinlik: { enlem: 38.4, boylam: 27.1, yaricapKm: 10 } }, B);
@@ -418,8 +463,20 @@ describe('Marka Merkezi harita konumu', () => {
     expect(koordinatCoz('38.4237, 27.1428')).toEqual(IZMIR);
     expect(koordinatCoz(' 38.4237 27.1428 ')).toEqual(IZMIR);
     expect(koordinatCoz('38,4237, 27,1428')).toBe('gecersiz');
-    expect(koordinatCoz('95, 27')).toBe('gecersiz');
-    expect(koordinatCoz('0, 0')).toBe('gecersiz');
+    expect(koordinatCoz('95.1, 27.1')).toBe('gecersiz');
+    expect(koordinatCoz('0.0, 0.0')).toBe('gecersiz');
+  });
+  /*
+   * Ajan 4 kapısı: nokta isteğe bağlıyken Türkçe ondalık virgülle yazılmış
+   * TEK sayı ("38,42") enlem 38 / boylam 42 olarak geçerli sayılıyordu.
+   */
+  it('KRİTİK: ondalık noktasız sayı ret ("38,42" iki sayı değil); yazıcı her zaman noktalı ve geri çözülüyor', () => {
+    expect(koordinatCoz('38,42')).toBe('gecersiz');
+    expect(koordinatCoz('41 29')).toBe('gecersiz');
+    expect(koordinatYaz({ enlem: 38, boylam: 27 })).toBe('38.0, 27.0');
+    expect(koordinatCoz(koordinatYaz({ enlem: 38, boylam: 27 }))).toEqual({ enlem: 38, boylam: 27 });
+    const p = updateClientSchema.parse({ addressCoordinates: '38.0, 27.0' });
+    expect(adresKonumuKolonlari(p.addressCoordinates!)).toEqual({ addressLatitude: 38, addressLongitude: 27 });
     expect(koordinatCoz('')).toBeNull();
   });
   it('KRİTİK: şema bozuk konumu GİRİŞTE reddediyor; servis iki kolonu BİRLİKTE yazıyor', () => {

@@ -718,6 +718,22 @@ function kapsar(dis: unknown, ic: unknown): boolean {
 }
 
 /**
+ * N-24 — ÖLÇÜLMEMİŞ KABUL EDİLEMEZ ALAN DÖNMEZSE UYARI, FARKLI DÖNERSE FARK
+ * (Ajan 4 kapısı, ERİŞİM turu). `buying_type` 1.12.0'da BÜTÜN amaçların
+ * kampanyasına girdi ve kabul edilemez sınıfta; geri okumada döndüğü hiç
+ * GÖZLENMEDİ. "Dönmedi" genel kuralı (kabul edilemez alan dönmezse yayın
+ * açılmaz) burada canlıda kanıtlanmış yedi amacın HEPSİNİ "okunamadı"da
+ * durdurabilirdi; üstelik dönmeyen bir alan Meta'nın değeri DEĞİŞTİRDİĞİNİ
+ * değil, yalnız döndürmediğini söylüyor. Bu yüzden DAR: yalnız bu alan,
+ * yalnız kampanyada, yalnız HİÇ dönmediğinde uyarı (ekranda, sessiz değil).
+ * Farklı bir değer (RESERVED) dönerse genel kural: kabul edilemez FARK.
+ * Canlıda döndüğü görülünce bu satır kaldırılmalı.
+ */
+const DONMEZSE_UYARI: Readonly<Record<string, string>> = {
+  buying_type: 'Meta satın alma türünü geri okumada döndürmedi; açık artırma olarak gönderildi, kontrol edilemedi.',
+};
+
+/**
  * `okunan`: govde adı → Meta'nın döndürdüğü nesne. Bir nesne hiç okunamadıysa
  * anahtarı YOK; o nesnenin bütün alanları `donmedi` olur.
  */
@@ -795,6 +811,11 @@ export function geriOkumaKarsilastir(
       }
       if (semsiye !== null && semsiye !== 'OPT_OUT') {
         satirlar.push(satir('fark'));
+        continue;
+      }
+      const donmezseUyari = DONMEZSE_UYARI[y.alanYolu];
+      if (donmezseUyari && y.nesne === 'kampanya' && nesne !== undefined) {
+        bilgiler.push(satir('uyari', donmezseUyari));
         continue;
       }
       // Kabul edilemez alan dönmediyse yayın açılamaz; diğerleri kayıt.

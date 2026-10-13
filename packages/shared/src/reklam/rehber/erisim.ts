@@ -49,7 +49,15 @@ export interface Koordinat {
 export function koordinatCoz(metin: string | null | undefined): Koordinat | null | 'gecersiz' {
   const t = (metin ?? '').trim();
   if (!t) return null;
-  const m = /^(-?\d{1,2}(?:\.\d+)?)\s*[,;\s]\s*(-?\d{1,3}(?:\.\d+)?)$/.exec(t);
+  /*
+   * İKİ SAYI DA ONDALIK NOKTALI (Ajan 4 kapısı). Nokta isteğe bağlıyken
+   * Türkçe ondalık virgülle yazılmış TEK bir sayı ("38,42") enlem 38, boylam
+   * 42 diye okunuyor ve Bitlis civarında geçerli bir nokta olarak
+   * kaydediliyordu: hata yok, reklam başka bir ilde. Google Haritalar'ın
+   * kopyaladığı biçim her zaman ondalıklı; tam sayı koordinat ~100 km
+   * belirsizlik demek ve bir mahalle reklamı için zaten kullanılamaz.
+   */
+  const m = /^(-?\d{1,2}\.\d+)\s*[,;\s]\s*(-?\d{1,3}\.\d+)$/.exec(t);
   if (!m) return 'gecersiz';
   const enlem = Number(m[1]);
   const boylam = Number(m[2]);
@@ -61,7 +69,18 @@ export function koordinatCoz(metin: string | null | undefined): Koordinat | null
 
 /** Ekranda ve formda AYNI biçim (Google Haritalar'ın kopyaladığı). */
 export function koordinatYaz(k: Koordinat | null | undefined): string {
-  return k ? `${k.enlem}, ${k.boylam}` : '';
+  return k ? `${ondalikYaz(k.enlem)}, ${ondalikYaz(k.boylam)}` : '';
+}
+
+/**
+ * Her zaman ONDALIK NOKTALI: `koordinatCoz` noktasız sayıyı reddediyor ve
+ * bu dizge şemada kanonik biçim olarak yeniden çözülüyor. `String(27)` =
+ * "27" yazılsaydı tam sayı bir boylam (27.0 girilmişti) kaydı 500 ile
+ * düşürürdü; `String(1e-7)` üstel gösterim üretir.
+ */
+function ondalikYaz(n: number): string {
+  const t = String(n);
+  return t.includes('.') && !t.includes('e') ? t : n.toFixed(Number.isInteger(n) ? 1 : 7);
 }
 
 export const KOORDINAT_BICIM_MESAJI = 'Harita konumu "38.4237, 27.1428" biçiminde olmalı (Google Haritalar\'da adrese sağ tıklayıp ilk satırı kopyala).';
@@ -120,14 +139,22 @@ export function bolgeAdi(konumlar: ReadonlyArray<Pick<HedefKonum, 'tur' | 'key' 
 export const GOOGLE_ERISIM_TEKLIF_CUMLESI = 'Google erişime göre teklif vermiyor (API kısıtı); tıklamaya göre';
 
 /**
- * Google'da yarıçap: reklam grubuna `proximity` ölçütü. Belgede var, Talep
- * Yaratma reklam grubunda kabulü ÖLÇÜLMEDİ; prova (validateOnly) reddederse
- * Google'ın mesajı ekranda görünür.
+ * GOOGLE'DA ADRES ÇEVRESİ KURULAMIYOR (Ajan 4 kapısı, v25 şemasından).
+ *
+ * Bu turda Talep Yaratma reklam grubuna `proximity` ölçütü yazılıyordu ve
+ * "kabulü ölçülmedi" deniyordu. Ölçülecek bir şey yok: v25
+ * `resources/ad_group_criterion.proto` ölçüt `oneof`unda `proximity` alanı
+ * YOK (konum için yalnız `location`, LocationInfo). Kampanya düzeyinde
+ * (`campaign_criterion.proximity`) var ama Talep Yaratma konumu kampanya
+ * düzeyinde reddediyor (CLAUDE.md, `requestError=UNKNOWN`). Yani gövde her
+ * seferinde "Unknown name proximity" ile düşerdi; giriş anında söylenir.
+ * Arama ve Maks. Performans'ta kampanya düzeyi daire mümkün ama bu turda
+ * yazılmadı ve geri okuması yok.
  */
-export const GOOGLE_YARICAP_OLCULMEDI_CUMLESI = "Google'ın Talep Yaratma'da yarıçap kabulü ölçülmedi; prova reddederse il/ilçe seç";
+export const GOOGLE_YARICAP_YOK_MESAJI = "Google'da işletme adresinin çevresi kurulamıyor (Talep Yaratma reklam grubu yarıçap kabul etmiyor); Google için il/ilçe seç";
 
-/** Yarıçapı destekleyen Google kurguları: konum reklam grubunda (Talep Yaratma). */
-export const GOOGLE_YARICAP_KURGULARI: readonly string[] = ['TALEP_YARATMA_GORSEL', 'TALEP_YARATMA_VIDEO'];
+/** Yarıçapı destekleyen Google kurguları: BOŞ (yukarıdaki gerekçe). */
+export const GOOGLE_YARICAP_KURGULARI: readonly string[] = [];
 
 // ── Bütçe-kitle doygunluğu (K5) ───────────────────────────────────────────
 

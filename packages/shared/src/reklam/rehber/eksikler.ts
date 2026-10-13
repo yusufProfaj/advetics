@@ -28,7 +28,7 @@ import { GOOGLE_KARE_LOGO_KURGULARI } from './google-kanallar';
 import { googleGorselBulgulari, googleGorselKurgusuMu, googleMetinBulgulari, type GorselOlcusu } from './google-gorsel';
 import { fiyatSorunu, promosyonSorunu } from './google-ogeler';
 import { ACIKLAMA_METNI_SINIRI } from './google-uzanti';
-import { ADRES_CEVRESI_KARISIK_MESAJI, ERISIM_YARICAP, GOOGLE_YARICAP_KURGULARI, adresCevresiKarisik, adresCevresiMi, doygunlukUyarisi } from './erisim';
+import { ADRES_CEVRESI_KARISIK_MESAJI, ERISIM_YARICAP, GOOGLE_YARICAP_KURGULARI, GOOGLE_YARICAP_YOK_MESAJI, adresCevresiKarisik, adresCevresiMi, doygunlukUyarisi } from './erisim';
 import { ORAN_ETIKETI, YERLESIM_GRUPLARI, bannerSetiDestekleniyor, reklamSetiPlani, setlereAyir, type GorselOrani } from '../banner-seti';
 
 export type RehberAdimi = 1 | 2 | 3 | 4 | 5 | 6;
@@ -282,7 +282,7 @@ export function rehberEksikleri(a: RehberAlanlari, b: RehberEksikBaglami): Rehbe
       ekle('konumlar', 'meta', 'OZK-04', 'Konut, iş ilanı ve kredi reklamında adres çevresi kullanılamıyor: Meta noktanın ülkesini istiyor. İl/ilçe seç');
     }
     if (acik.google && (!tanim.google.kurgu || !GOOGLE_YARICAP_KURGULARI.includes(tanim.google.kurgu))) {
-      ekle('konumlar', 'google', 'G-YARICAP-KURGU', 'Bu Google kampanyasında adres çevresi kurulamıyor; il/ilçe seç');
+      ekle('konumlar', 'google', 'G-YARICAP-KURGU', GOOGLE_YARICAP_YOK_MESAJI);
     }
   }
   const yas = a.enDusukYas?.deger ?? 18;

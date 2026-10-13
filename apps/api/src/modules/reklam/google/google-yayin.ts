@@ -233,7 +233,7 @@ export interface GeriOkumaSatiri {
  * açmak, söz verilmemiş bir yere para göndermek demek. Okunamayan alan
  * (`null`) da fark sayılıyor: bilmediğimiz şeyi doğru varsaymıyoruz.
  */
-export function googleGeriOkumaKarsilastir(b: GoogleBeklenen, o: GoogleOkunan): { sonuc: 'temiz' | 'fark'; satirlar: GeriOkumaSatiri[] } {
+export function googleGeriOkumaKarsilastir(b: GoogleBeklenen, o: GoogleOkunan): { sonuc: 'temiz' | 'fark' | 'dogrulanamadi'; satirlar: GeriOkumaSatiri[] } {
   const satirlar: GeriOkumaSatiri[] = [];
   // ANAHTAR SIRASINDAN BAĞIMSIZ: okunan nesneler Google'ın yanıt sırasıyla
   // kuruluyor; `{a,b}` ile `{b,a}`yı fark saymak doğru kampanyayı durdururdu.
@@ -287,17 +287,30 @@ export function googleGeriOkumaKarsilastir(b: GoogleBeklenen, o: GoogleOkunan): 
    * okunamayan (`null` / `'okunamadi'`) FARK: okunamadığı ekranda görünür,
    * "temiz" denmez.
    */
-  if (b.konumKimlikleri) kiyasla('konum.kimlikler', [...b.konumKimlikleri].sort(), o.konumKimlikleri ? [...o.konumKimlikleri].sort() : 'okunamadı');
-  if (b.yakinlik !== undefined) kiyasla('konum.adresCevresi', b.yakinlik, o.yakinlik === undefined || o.yakinlik === 'okunamadi' ? 'okunamadı' : o.yakinlik);
-  if (b.yasKitlesi !== undefined) kiyasla('yas.kitle', b.yasKitlesi, o.yasKitlesi === undefined || o.yasKitlesi === 'okunamadi' ? 'okunamadı' : o.yasKitlesi);
+  if (b.konumKimlikleri) kiyasla('konum.kimlikler', [...b.konumKimlikleri].sort(), o.konumKimlikleri ? [...o.konumKimlikleri].sort() : GOOGLE_OKUNAMADI);
+  if (b.yakinlik !== undefined) kiyasla('konum.adresCevresi', b.yakinlik, o.yakinlik === undefined || o.yakinlik === 'okunamadi' ? GOOGLE_OKUNAMADI : o.yakinlik);
+  if (b.yasKitlesi !== undefined) kiyasla('yas.kitle', b.yasKitlesi, o.yasKitlesi === undefined || o.yasKitlesi === 'okunamadi' ? GOOGLE_OKUNAMADI : o.yasKitlesi);
   if (b.ogeler && !o.ogeOkumaHatasi) {
     const ok = o.ogeler ?? null;
     for (const alan of ['isletmeAdi', 'logo', 'snippet', 'promosyon', 'fiyat'] as const) {
       kiyasla(`oge.${alan}`, b.ogeler[alan], ok ? ok[alan] : null);
     }
   }
-  return { sonuc: satirlar.length ? 'fark' : 'temiz', satirlar };
+  if (satirlar.length === 0) return { sonuc: 'temiz', satirlar };
+  /*
+   * OKUNAMADI ≠ FARK (Ajan 4 kapısı, B12 okumaları). Konum kimliği, adres
+   * çevresi ve yaş kitlesi okumaları canlıda HİÇ koşmadı ve her biri kendi
+   * hata sınırında; düşen okuma bir şeyin YANLIŞ kurulduğunu değil,
+   * BİLİNMEDİĞİNİ söylüyor. Satırların HEPSİ yalnız okunamayan alanlarsa
+   * sonuç `dogrulanamadi` (kampanya yine duraklatılmış kalır, açılmaz);
+   * ekranda "farklı" değil "okunamadı" yazar. Gerçek bir fark varsa `fark`.
+   */
+  if (satirlar.every((x) => x.okunan === GOOGLE_OKUNAMADI)) return { sonuc: 'dogrulanamadi', satirlar };
+  return { sonuc: 'fark', satirlar };
 }
+
+/** Okunamayan B12 alanının satırdaki değeri (tek yer: kıyas ve sınıflama aynı dizgeye bakıyor). */
+export const GOOGLE_OKUNAMADI = 'okunamadı';
 
 /**
  * Uzantıların sıradan bağımsız biçimi. Adres `URL` ile kanonikleştiriliyor
@@ -1174,6 +1187,10 @@ export async function googleYayinIsle(d: GoogleIsleyiciBagimliliklari, yayinId: 
     }
     const k = googleGeriOkumaKarsilastir(y.beklenen_yanki, okunan);
     await geriOkumaYaz(d.tx, y, k.sonuc, k.satirlar, okunan);
+    if (k.sonuc === 'dogrulanamadi') {
+      // Kampanya DURAKLATILMIŞ kaldı; okunamayan alanlar ekranda, "fark" değil.
+      return { tur: 'bitti', durum: await gec(d.tx, yayinId, durum, 'dogrulanamadi', `Google'daki bazı ayarlar okunamadı: ${k.satirlar.map((s) => s.alan).join(', ')}`.slice(0, 2000)) };
+    }
     if (k.sonuc === 'fark') {
       // Kampanya DURAKLATILMIŞ kaldı: para harcamıyor. Ne farklıysa ekranda.
       return { tur: 'bitti', durum: await gec(d.tx, yayinId, durum, 'fark_var', `Google'da duran ayar gönderilenden farklı: ${k.satirlar.map((s) => s.alan).join(', ')}`) };
