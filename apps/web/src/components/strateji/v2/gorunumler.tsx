@@ -13,7 +13,7 @@ import { PdfIndir, pdfDosyaAdi } from './gonder';
 import { GORUNUM_ETIKETI } from './hesap';
 import { PanelOnayKutusu } from './onay-kutusu';
 import { Bildirim, Rozet } from './ortak';
-import type { AktarimOnizlemesi, Gerceklesen, StratejiDetayi, StratejiGirdileri, StratejiYorumu } from './yanit';
+import type { AktarimOnizlemesi, Gerceklesen, StratejiDetayi, StratejiGirdileri, StratejiYorumu } from '@advetics/shared';
 
 type Okuma<T> = { tur: 'veri'; v: T } | { tur: 'hata'; mesaj: string };
 

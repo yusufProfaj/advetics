@@ -29,7 +29,7 @@ import {
 } from '@advetics/shared';
 import { formatDayShort } from '@/lib/format';
 import { microsGirdiMetni, zamanMetni } from '../hesap';
-import type { StratejiOnayKaydi } from './yanit';
+import type { StratejiOnayKaydi } from '@advetics/shared';
 
 /**
  * ═══ ADVSTRATEGY v2 — EKRANIN KARARLARI (SAF) ═══
@@ -430,4 +430,36 @@ export function onaySayfasiHali(status: number | null, govde: { hal: BaglantiHal
   if (status >= 400 || !govde) return { tur: 'mesaj', baslik: GECERSIZ_BAGLANTI_METNI, metin: 'Ajansınızdan yeni bir bağlantı isteyebilirsiniz.' };
   if (!govde.okunabilir || !govde.belge) return { tur: 'mesaj', baslik: baglantiMesaji(govde.hal), metin: 'Ajansınızdan yeni bir bağlantı isteyebilirsiniz.' };
   return { tur: 'belge', kararAcik: govde.karar, not: govde.karar ? null : baglantiMesaji(govde.hal) || null };
+}
+
+/**
+ * `PUT …/bolumler` gövdesi: kayıtlı hâlden FARK. Üç hâl ayrı yazılır:
+ * değişen metin (kaynağıyla), silinen bölüm (`null`), değişmeyen (gönderilmez).
+ *
+ * ESKİ HÂL YALNIZ `kaynak === 'ajans'` OLANLARI GÖNDERİYORDU. İki sessiz
+ * sonuç: (1) "Strateji öner" uygulanıp kaydedildiğinde bölümler `ai`
+ * olduğu için gövde BOŞ kalıyor ve sunucu "En az bir bölüm gönderilmeli"
+ * ile 400 veriyordu — kampanyalar kaydedilmiş, metinler kaydedilmemiş;
+ * (2) kullanıcının sildiği bölüm hiç gönderilmiyor, ekran temizlenip sayfa
+ * yenilenince metin GERİ geliyordu. `ai` kaynağı aynen gider: sunucu onu
+ * saklar ama belgeye "Kullan" denmeden girmez (`BELGEYE_GIREN_METIN_KAYNAKLARI`).
+ * Boş nesne = gönderilecek bir şey yok; çağıran istek atmaz.
+ */
+export function bolumKayitGovdesi<K extends string>(
+  kayitli: Partial<Record<K, { metin: string; kaynak: KaynakliMetin['kaynak'] }>>,
+  taslak: Partial<Record<K, { metin: string; kaynak: KaynakliMetin['kaynak'] }>>,
+  kodlar: readonly K[],
+): Partial<Record<K, { metin: string; kaynak: 'ai' | 'ajans' } | null>> {
+  const govde: Partial<Record<K, { metin: string; kaynak: 'ai' | 'ajans' } | null>> = {};
+  for (const k of kodlar) {
+    const once = kayitli[k];
+    const simdi = taslak[k];
+    if (JSON.stringify(once ?? null) === JSON.stringify(simdi ?? null)) continue;
+    if (!simdi || simdi.metin.trim() === '') {
+      if (once) govde[k] = null;
+      continue;
+    }
+    govde[k] = { metin: simdi.metin, kaynak: simdi.kaynak === 'ajans' ? 'ajans' : 'ai' };
+  }
+  return govde;
 }

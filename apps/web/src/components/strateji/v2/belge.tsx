@@ -35,7 +35,7 @@ import {
 } from './hesap';
 import { Nokta, Rozet } from './ortak';
 import { Tutar } from './tutar';
-import type { Gerceklesen, StratejiBelgeVerisi } from './yanit';
+import type { Gerceklesen, StratejiBelgeVerisi } from '@advetics/shared';
 
 /**
  * ═══ STRATEJİ BELGESİ — MÜŞTERİNİN GÖRDÜĞÜ (panel referans, PDF ikizi) ═══

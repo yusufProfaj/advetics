@@ -20,7 +20,7 @@ import { Dugme } from '@/components/ui/dugme';
 import { tutarCoz } from '../hesap';
 import { kullan, platformDegisti } from './hesap';
 import { GIRDI, Rozet } from './ortak';
-import type { StratejiGirdileri } from './yanit';
+import type { StratejiGirdileri } from '@advetics/shared';
 
 /**
  * ═══ KALEM DÜZENLEYİCİ (taslak a: satıra tıklayınca açılan) ═══

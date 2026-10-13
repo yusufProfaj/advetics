@@ -29,6 +29,7 @@ import {
   amacAdi,
   asamaDagilimi,
   beklenenKutulari,
+  bolumKayitGovdesi,
   dagitilmamis,
   donemMetni,
   kalemGirdisi,
@@ -42,7 +43,7 @@ import {
 import { KalemDuzenleyici } from './kalem-duzenleyici';
 import { Bildirim, GIRDI, Kart, Nokta, Rozet, yaz } from './ortak';
 import { Tutar } from './tutar';
-import type { StratejiDetayi, StratejiGirdileri, StratejiOnerisi } from './yanit';
+import type { StratejiDetayi, StratejiGirdileri, StratejiOnerisi } from '@advetics/shared';
 
 type AiBolum = (typeof AI_METIN_BOLUMLERI)[number];
 type BolumTaslagi = Partial<Record<AiBolum, { metin: string; kaynak: KaynakliMetin['kaynak'] }>>;
@@ -210,8 +211,9 @@ export function StratejiDuzenleyici({
       if (!taze) return setKayit({ tur: 'hata', mesaj: 'Kampanyalar kaydedildi ama strateji yeniden okunamadı; bölüm yazıları kaydedilmedi. Sayfayı yenileyin.' });
       surum = taze.plan.surum;
     }
-    if (bolumKirli) {
-      const govde = { surum, bolumler: Object.fromEntries(AI_METIN_BOLUMLERI.filter((b) => bolumler[b]?.kaynak === 'ajans').map((b) => [b, { metin: bolumler[b]!.metin, kaynak: 'ajans' as const }])) };
+    const bolumFarki = bolumKayitGovdesi(kayitliBolumler, bolumler, AI_METIN_BOLUMLERI);
+    if (bolumKirli && Object.keys(bolumFarki).length > 0) {
+      const govde = { surum, bolumler: bolumFarki };
       const r = await yaz(stratejiUcYolu('/strateji/v2/planlar/:id/bolumler', { id: plan.id }), 'PUT', govde, tazeSurum, surum);
       if (r.tur !== 'tamam') return setKayit({ tur: r.tur, mesaj: r.mesaj });
       await yenile();

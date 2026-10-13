@@ -16,7 +16,7 @@ import { Dugme } from '@/components/ui/dugme';
 import { DURUM_ETIKETI, donemEtiketi, yazmaHatasiSinifla } from '../hesap';
 import { STRATEJI_DURUM_ETIKETI, donemMetni } from './hesap';
 import { Bildirim, GIRDI, Kart } from './ortak';
-import type { StratejiDetayi, StratejiListeSatiri, StratejiListesi } from './yanit';
+import type { StratejiDetayi, StratejiListeSatiri, StratejiListesi } from '@advetics/shared';
 
 /** Liste satırının adı: v2 dönemi, v1 ayı + "eski medya planı" (salt okunur). */
 export function planSatiriAdi(p: StratejiListeSatiri): string {
@@ -77,9 +77,9 @@ export function YeniStrateji({ clientId, varsayilanAy, baslangictaAcik }: { clie
     setHata(null);
     setSuruyor(true);
     try {
-      // Yanıt şekli sözleşmede yok (yanit.ts BULGU): detay ya da özet; kimlik yoksa SÖYLENİR.
-      const r = await apiFetch<StratejiDetayi | { id: string } | undefined>(stratejiUcYolu('/strateji/v2/planlar'), { method: 'POST', body: JSON.stringify(g.data) });
-      const id = r && 'plan' in r ? r.plan.id : r?.id;
+      // Yanıt sözleşmede `StratejiDetayi` (controller aynı tipe bağlı); kimlik yine de yoksa SÖYLENİR.
+      const r = await apiFetch<StratejiDetayi | undefined>(stratejiUcYolu('/strateji/v2/planlar'), { method: 'POST', body: JSON.stringify(g.data) });
+      const id = r?.plan?.id;
       if (!id) {
         setHata('Strateji oluşturuldu ama sunucu kimliğini döndürmedi. Sayfayı yenileyin.');
         router.refresh();

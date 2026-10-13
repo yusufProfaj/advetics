@@ -14,7 +14,7 @@ import { Dugme } from '@/components/ui/dugme';
 import { zamanMetni } from '../hesap';
 import { onayCumlesi } from './hesap';
 import { Bildirim, GIRDI, yaz } from './ortak';
-import type { StratejiOnayKaydi, StratejiYorumu } from './yanit';
+import type { StratejiOnayKaydi, StratejiYorumu } from '@advetics/shared';
 
 /**
  * ═══ ONAY KUTUSU — iki giriş, tek belge ═══

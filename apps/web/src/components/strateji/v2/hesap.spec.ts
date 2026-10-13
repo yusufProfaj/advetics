@@ -6,6 +6,7 @@ import {
   asamaDagilimi,
   beklenenKutulari,
   belgeMetni,
+  bolumKayitGovdesi,
   bolumNumarasi,
   dagitilmamis,
   gorunurBolumler,
@@ -215,5 +216,20 @@ describe('rehber kaynak rozeti', () => {
     expect(kaynakRozeti('kullanici', 'Önerilen')).toBeNull();
     expect(kaynakRozeti(undefined, 'Önerilen')).toBeNull();
     expect(kaynakRozeti('strateji', null)).toBe('Stratejiden');
+  });
+});
+
+
+describe('bölüm kaydı gövdesi (kayıtlı hâlden fark)', () => {
+  const K = ['ozet', 'isletme'] as const;
+  it('KRİTİK: "Strateji öner" uygulanınca ai bölümleri GÖNDERİLİR (gövde boş kalıp 400 almaz)', () => {
+    const g = bolumKayitGovdesi({}, { ozet: { metin: 'Öneri', kaynak: 'ai' } }, K);
+    expect(g).toEqual({ ozet: { metin: 'Öneri', kaynak: 'ai' } });
+  });
+  it('KRİTİK: silinen bölüm null gider; değişmeyen gönderilmez; ajans kaynağı korunur', () => {
+    const kayitli = { ozet: { metin: 'Eski', kaynak: 'ajans' as const }, isletme: { metin: 'Aynı', kaynak: 'ajans' as const } };
+    expect(bolumKayitGovdesi(kayitli, { isletme: { metin: 'Aynı', kaynak: 'ajans' } }, K)).toEqual({ ozet: null });
+    expect(bolumKayitGovdesi(kayitli, { ...kayitli, ozet: { metin: 'Yeni', kaynak: 'ajans' } }, K)).toEqual({ ozet: { metin: 'Yeni', kaynak: 'ajans' } });
+    expect(bolumKayitGovdesi(kayitli, kayitli, K)).toEqual({});
   });
 });

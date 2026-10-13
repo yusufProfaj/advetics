@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { REHBER_AMACLARI, belgeyeGirerMi, stratejiPanelAdresi, stratejiUcYolu } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
-import type { RehberinStratejisi } from '@/components/strateji/v2/yanit';
+import type { RehberinStratejisi } from '@advetics/shared';
 import { donemMetni } from '@/components/strateji/v2/hesap';
 
 type Hal = { tur: 'yukleniyor' } | { tur: 'yok' } | { tur: 'var'; v: RehberinStratejisi } | { tur: 'hata'; mesaj: string };

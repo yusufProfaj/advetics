@@ -18,7 +18,7 @@ import { StratejiGorunumleri } from '@/components/strateji/v2/gorunumler';
 import { Bildirim } from '@/components/strateji/v2/ortak';
 import { STRATEJI_DURUM_ETIKETI, donemMetni, monteGorunumler } from '@/components/strateji/v2/hesap';
 import { PlanSecici, YeniStrateji } from '@/components/strateji/v2/plan-secici';
-import type { AktarimOnizlemesi, Gerceklesen, StratejiDetayi, StratejiGirdileri, StratejiListesi, StratejiYorumlari } from '@/components/strateji/v2/yanit';
+import type { AktarimOnizlemesi, Gerceklesen, StratejiDetayi, StratejiGirdileri, StratejiListesi, StratejiYorumlari } from '@advetics/shared';
 
 export const metadata = { title: 'AdvStrategy · Advetics' };
 export const dynamic = 'force-dynamic';

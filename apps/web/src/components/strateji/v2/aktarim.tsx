@@ -17,7 +17,7 @@ import { PlanGerceklesenTablosu } from './belge';
 import { PLATFORM_ADI, amacAdi, kalemDurumSatirlari, konumOzeti, onayCumlesi, tarihAraligi, yasMetni } from './hesap';
 import { Bildirim, Kart, Nokta, Rozet, yaz } from './ortak';
 import { Tutar } from './tutar';
-import type { AktarimOnizlemesi, AktarimSonucu, Gerceklesen, StratejiDetayi } from './yanit';
+import type { AktarimOnizlemesi, StratejiAktarimSonucu, Gerceklesen, StratejiDetayi } from '@advetics/shared';
 
 type Onizleme = { tur: 'veri'; v: AktarimOnizlemesi } | { tur: 'hata'; mesaj: string } | { tur: 'onaysiz' };
 
@@ -64,7 +64,7 @@ export function AktarimEkrani({
   const [secili, setSecili] = useState<Set<string>>(() => new Set(satirlar.filter((x) => x.s.secilebilir).map((x) => x.k.id)));
   const [odak, setOdak] = useState<string | null>(kalemler[0]?.id ?? null);
   const [suruyor, setSuruyor] = useState(false);
-  const [sonuc, setSonuc] = useState<{ tur: 'veri'; v: AktarimSonucu } | { tur: 'hata'; mesaj: string } | null>(null);
+  const [sonuc, setSonuc] = useState<{ tur: 'veri'; v: StratejiAktarimSonucu } | { tur: 'hata'; mesaj: string } | null>(null);
   const bulkIzni = izinler.includes('bulk.write');
   const seciliSayi = satirlar.filter((x) => x.s.secilebilir && secili.has(x.k.id)).length;
   const bekleyen = satirlar.filter((x) => x.s.durum === 'bekliyor').length;
@@ -74,7 +74,7 @@ export function AktarimEkrani({
     setSuruyor(true);
     setSonuc(null);
     const kalemIdleri = satirlar.filter((x) => x.s.secilebilir && secili.has(x.k.id)).map((x) => x.k.id);
-    const r = await yaz<AktarimSonucu>(stratejiUcYolu('/strateji/v2/planlar/:id/aktar', { id: plan.id }), 'POST', { surum: plan.surum, kalemIdleri }, tazeSurum, plan.surum);
+    const r = await yaz<StratejiAktarimSonucu>(stratejiUcYolu('/strateji/v2/planlar/:id/aktar', { id: plan.id }), 'POST', { surum: plan.surum, kalemIdleri }, tazeSurum, plan.surum);
     setSuruyor(false);
     setSonuc(r.tur === 'tamam' ? { tur: 'veri', v: r.veri } : { tur: 'hata', mesaj: r.mesaj });
     if (r.tur === 'tamam') await yenile();
@@ -271,7 +271,7 @@ function EslemePaneli({ k, notlar, para }: { k: StratejiKalemi; notlar: string[]
   );
 }
 
-function AktarimSonucKutusu({ sonuc, kalemler, rehberAdresi }: { sonuc: { tur: 'veri'; v: AktarimSonucu } | { tur: 'hata'; mesaj: string }; kalemler: StratejiKalemi[]; rehberAdresi: (id: string) => string }) {
+function AktarimSonucKutusu({ sonuc, kalemler, rehberAdresi }: { sonuc: { tur: 'veri'; v: StratejiAktarimSonucu } | { tur: 'hata'; mesaj: string }; kalemler: StratejiKalemi[]; rehberAdresi: (id: string) => string }) {
   if (sonuc.tur === 'hata') {
     return (
       <div className="p-4 pt-0">

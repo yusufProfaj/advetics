@@ -13,7 +13,7 @@ import { API_URL, ApiRequestError, apiFetch } from '@/lib/api';
 import { Dugme } from '@/components/ui/dugme';
 import { okumaHatasi, zamanMetni } from '../hesap';
 import { Bildirim, GIRDI, yaz } from './ortak';
-import type { BaglantiListesi, GonderimSonucu } from './yanit';
+import type { BaglantiListesi, GonderimSonucu } from '@advetics/shared';
 
 /**
  * ═══ PDF İNDİR — adres TEK üreticiden, SÜRÜM ZORUNLU ═══
@@ -138,6 +138,14 @@ export function GonderPaneli({ planId, surum, izinler, tazeSurum }: { planId: st
     setSuruyor(null);
     if (r.tur !== 'tamam') return setHata(r.mesaj);
     setMail(r.veri);
+    // Mail YENİ bir onay bağlantısı ekliyor ve sunucu açık bağlantıyı aynı
+    // transaction'da iptal ediyor: liste tazelenmezse ekran, az önce
+    // kopyalanan ve artık ölü olan bağlantıyı "Açık" diye göstermeye devam
+    // ederdi; müşteri o bağlantıyla geldiğinde "geçersiz" görür.
+    if (r.veri.baglanti) {
+      setYeni(null);
+      void listele();
+    }
   }
 
   async function kopyala() {
@@ -219,7 +227,13 @@ export function GonderPaneli({ planId, surum, izinler, tazeSurum }: { planId: st
             {mail && (
               <Bildirim baslik={`${mail.kabul.length} alıcıya gönderildi${mail.ret.length > 0 ? `, ${mail.ret.length} alıcı reddedildi` : ''}.`} hata={mail.ret.length > 0}>
                 {mail.kabul.length > 0 && <span className="block">Gönderildi: {mail.kabul.join(', ')}</span>}
-                {mail.ret.length > 0 && <span className="block">Reddedildi: {mail.ret.join(', ')}</span>}
+                {/* Ret SEBEBİYLE: adres listesi "neden" sorusunu cevapsız bırakır (rapor gönderiminin deseni). */}
+                {mail.ret.map((x) => (
+                  <span key={x.adres} className="block">
+                    Reddedildi: {x.adres} · {x.sebep}
+                  </span>
+                ))}
+                {mail.baglanti && <span className="block">Maile sürüm {mail.baglanti.surum} için onay bağlantısı eklendi; önceki açık bağlantı iptal edildi.</span>}
               </Bildirim>
             )}
           </>
