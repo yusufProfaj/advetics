@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   ADVANTAGE_VIDEO_YERLESIM_CUMLESI,
+  DUGMESIZ_VIDEO_ETIKETI,
+  geriOkumaKarsilastir,
   MEDYA_SINIRLARI,
   META_THRUPLAY_CUMLESI,
   REHBER_ACILIS,
@@ -102,6 +104,31 @@ describe('S3/B7 — video düğmesi yalnız site adresi varsa', () => {
     const r = govde();
     expect(bul(r.govdeler, 'kreatif:1').object_story_spec.video_data).not.toHaveProperty('call_to_action');
     expect(r.kapattiklarimiz).toContain(VIDEO_DUGMESIZ_CUMLESI);
+  });
+
+  /*
+   * N-22 (Ajan 4): yankılar yalnız GÖNDERİLEN alanlardan kuruluyordu;
+   * düğmesiz videoda Meta varsayılan bir düğme eklese geri okuma "temiz"
+   * derdi ve S3'ün kaldırdığı düğme izsiz geri gelirdi.
+   */
+  it('KRİTİK: düğmesiz videoda Meta düğme EKLERSE geri okuma FARK; eklemezse temiz', () => {
+    const r = govde();
+    const ayna = Object.fromEntries(r.govdeler.map((g) => [g.ad, structuredClone(g.alanlar) as Record<string, unknown>]));
+    const yankilar = beklenenYankilar(r.govdeler).filter((y) => y.govde === 'kreatif:1' && y.alanYolu.startsWith('object_story_spec.video_data'));
+    const n22 = yankilar.find((y) => y.alanYolu === 'object_story_spec.video_data.call_to_action');
+    expect(n22?.karsilastirma).toBe('yok_olmali');
+    expect(geriOkumaKarsilastir(yankilar, ayna, { yasalUyariVar: false }).sonuc).toBe('temiz');
+
+    const ekli = structuredClone(ayna);
+    ((ekli['kreatif:1']!.object_story_spec as any).video_data as any).call_to_action = { type: 'LEARN_MORE', value: { link: 'https://www.facebook.com/111' } };
+    const s = geriOkumaKarsilastir(yankilar, ekli, { yasalUyariVar: false });
+    expect(s.sonuc).toBe('fark');
+    expect(s.sonuc !== 'temiz' && s.satirlar.map((x) => x.ekranEtiketi)).toEqual([DUGMESIZ_VIDEO_ETIKETI]);
+  });
+
+  it('düğmeli videoda N-22 satırı YOK (düğme normal M-25 yankısıyla kıyaslanıyor)', () => {
+    const y = beklenenYankilar(govde({ hedefAdres: 'https://ornek.com.tr/v' }).govdeler);
+    expect(y.some((x) => x.karsilastirma === 'yok_olmali')).toBe(false);
   });
 
   it('KRİTİK: adres VAR → LEARN_MORE ve site; Facebook sayfasına bağlanan düğme hiçbir dalda yok', () => {

@@ -34,7 +34,12 @@ export type KarsilastirmaTuru =
   /** WhatsApp karşılama mesajı: uyuşmazlık UYARI, durdurmaz (N-20). */
   | 'karsilama'
   /** Gönderilmeyen, yalnız okunup ekranda söylenen alan (N-21, Advantage+ durumu). */
-  | 'yalniz_bilgi';
+  | 'yalniz_bilgi'
+  /**
+   * BİLEREK GÖNDERİLMEYEN alan: dönmemesi beklenen; Meta kendisi eklerse
+   * fark (N-22, düğmesiz video).
+   */
+  | 'yok_olmali';
 export type AltKumeYonu = 'donen_icinde_gonderilen' | 'gonderilen_icinde_donen';
 
 export interface BeklenenYanki {
@@ -299,9 +304,34 @@ export function beklenenYankilar(govdeler: MetaGovdesi[]): BeklenenYanki[] {
       }
     };
     gez(gv.alanlar, '');
+    /*
+     * N-22 — DÜĞMESİZ VİDEODA META DÜĞME EKLERSE FARK (Ajan 4, VIDEO
+     * kapısı). Yankılar yalnız GÖNDERİLEN alanlardan kuruluyor; düğme
+     * bilerek gönderilmediğinde (S3, `videoDugmesiVar`) geri okumada ona
+     * bakan hiçbir satır yoktu ve Meta varsayılan bir "Daha fazla bilgi"
+     * (sayfaya) eklese yayın "temiz" açılırdı: S3'ün kaldırdığı, tıklamayı
+     * izlenmeden çalan düğme hiçbir iz bırakmadan geri gelirdi. Meta'nın
+     * düğmesiz video kreatifine ne yaptığı ÖLÇÜLMEDİ; bilinmeyen değişiklikte
+     * açılmaz (kabul edilebilir fark: kullanıcı görür ve onaylayabilir).
+     */
+    const vd = (gv.alanlar.object_story_spec as Record<string, unknown> | undefined)?.video_data as Record<string, unknown> | undefined;
+    if (gv.nesne === 'kreatif' && vd && typeof vd === 'object' && !('call_to_action' in vd)) {
+      sonuc.push({
+        nesne: gv.nesne,
+        govde: gv.ad,
+        alanYolu: 'object_story_spec.video_data.call_to_action',
+        gonderilen: undefined,
+        karsilastirma: 'yok_olmali',
+        kabulEdilemez: false,
+        ekranEtiketi: DUGMESIZ_VIDEO_ETIKETI,
+      });
+    }
   }
   return sonuc;
 }
+
+/** N-22 satırının ekran etiketi (tek yer). */
+export const DUGMESIZ_VIDEO_ETIKETI = 'Düğme: göndermedik, Meta video reklamına kendisi ekledi';
 
 /**
  * Geri okumada istenecek alanlar: her nesne için yankıların üst düzey adları.
@@ -716,6 +746,12 @@ export function geriOkumaKarsilastir(
       } else if (karsilamaOzu(bulunan) !== beklenen) {
         bilgiler.push({ ...satir('uyari', "Meta karşılama mesajını farklı kaydetti; ilk mesaj yazdığından farklı olabilir. Reklamı WhatsApp'tan bir kez deneyerek bak."), donen: bulunan });
       }
+      continue;
+    }
+    if (y.karsilastirma === 'yok_olmali') {
+      // Dönmedi ya da boş = beklenen. Herhangi bir değer = Meta ekledi.
+      if (donen === undefined || donen === null) continue;
+      satirlar.push(satir('fark'));
       continue;
     }
     if (donen === undefined) {
