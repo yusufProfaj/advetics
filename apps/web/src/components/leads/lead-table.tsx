@@ -324,6 +324,7 @@ export function LeadTable({
         canWrite={canWrite}
         busy={busy !== null || isPending}
         onDurum={(s) => paneldeki && void setStatus(paneldeki, s)}
+        durumHatasi={error}
         onKaydedildi={(guncel) => setRows((cur) => cur.map((r) => (r.id === guncel.id ? { ...r, ...guncel } : r)))}
         geriAl={
           paneldeki && sonIsaret?.leadId === paneldeki.id
@@ -452,7 +453,14 @@ function KayitPaneli({
   onDurum,
   onKaydedildi,
   geriAl,
+  durumHatasi,
 }: {
+  /**
+   * DURUM HATASI PANELDE DE. Durum yalnız bu panelden değişiyor ve hata
+   * şeridi tablonun üstündeydi: panelin perdesi onu örtüyor, durum sessizce
+   * geri dönüyor ve kullanıcı sebebi ancak paneli kapatınca görüyordu.
+   */
+  durumHatasi: string | null;
   lead: LeadRecord | null;
   acik: boolean;
   onKapat: () => void;
@@ -543,6 +551,11 @@ function KayitPaneli({
               <small className="text-12 text-ink-muted">
                 {KALITE_SECENEKLERI.find((s) => s.durum === lead.status)?.ipucu ?? `Şu an: ${DURUM_KISA_ADI[lead.status]}`}
               </small>
+              {durumHatasi && (
+                <Serit ton="hata" baslik="Durum kaydedilemedi">
+                  {durumHatasi}
+                </Serit>
+              )}
               {geriAl && kalanDk !== null && (
                 <p role="status" className="m-0 text-12 text-ink-muted">
                   {lead.geriBesleme?.tur === 'bekliyor' ? `${kalanDk} dk içinde Meta’ya iletilecek. ` : ''}

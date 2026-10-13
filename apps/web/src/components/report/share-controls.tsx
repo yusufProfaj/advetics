@@ -34,11 +34,20 @@ export function ShareControls({
   to,
   hasData,
   sablon,
+  paylasabilir,
 }: {
   clientId: string;
   from: string;
   to: string;
   hasData: boolean;
+  /**
+   * `report.share`. Mail, plan ve paylaşım bağlantısının uçları bu yetkiyi
+   * istiyor (`reports.controller.ts`); PDF yalnız `report.read`. Yetkisi
+   * olmayan kullanıcı eskiden "Raporu gönder"i, ⋯ "Planla"yı ve "Paylaşım
+   * bağlantısı"nı görüp açtığı panelde 403 alıyordu: müşteri hesabına
+   * yapamayacağı bir işi vaat etmek. Yetkisizde yalnız "PDF indir" kalır.
+   */
+  paylasabilir: boolean;
   /**
    * Ekranda seçili şablon: ön ayar kodu ya da kayıtlı şablonun UUID'si.
    *
@@ -61,6 +70,65 @@ export function ShareControls({
       */}
       <RaporGonder clientId={clientId} from={from} to={to} hasData={hasData} sablon={sablon} />
 
+      {paylasabilir && (
+        <PaylasimIslemleri
+          hasData={hasData}
+          onPlan={() => setPlanAcik(true)}
+          onBaglanti={() => setBaglantiAcik(true)}
+          onMail={() => setMailAcik(true)}
+        />
+      )}
+
+      {/*
+        PLANLAMA YALNIZCA KAYITLI ŞABLONU ALABİLİYOR. `report_plans.template_id`
+        bir UUID ve ön ayarların UUID'si YOK; ön ayar seçiliyken plana `null`
+        geçiyor ve sunucu müşterinin kendi şablonunu bulup yoksa varsayılanı
+        üretiyor. Paneller de yalnız yetkide çiziliyor: açılışta kendi
+        verilerini (plan listesi, mail taslağı) okuyorlar.
+      */}
+      {paylasabilir && (
+        <>
+          <RaporPlanla clientId={clientId} templateId={kayitliSablonId} acik={planAcik} onKapat={() => setPlanAcik(false)} />
+
+          <PaylasimBaglantisi
+            clientId={clientId}
+            from={from}
+            to={to}
+            sablon={sablon}
+            kayitliSablonId={kayitliSablonId}
+            hasData={hasData}
+            acik={baglantiAcik}
+            onKapat={() => setBaglantiAcik(false)}
+          />
+
+          <MailGonderModal
+            clientId={clientId}
+            from={from}
+            to={to}
+            acik={mailAcik}
+            onKapat={() => setMailAcik(false)}
+            sablon={sablon}
+          />
+        </>
+      )}
+    </>
+  );
+}
+
+/** ⋯ (Planla, Paylaşım bağlantısı) ve birincil "Raporu gönder": üçü de `report.share`. */
+function PaylasimIslemleri({
+  hasData,
+  onPlan,
+  onBaglanti,
+  onMail,
+}: {
+  hasData: boolean;
+  onPlan: () => void;
+  onBaglanti: () => void;
+  onMail: () => void;
+}) {
+  return (
+    <>
       <AcilirMenu
         etiket="Diğer rapor işlemleri"
         hizala="sag"
@@ -79,11 +147,11 @@ export function ShareControls({
           kuruyor. `hasData` ile kapatmak, bu hafta harcaması olmayan bir
           müşteriye plan kurulamaması demek olurdu.
         */}
-        <MenuOgesi onClick={() => setPlanAcik(true)} aciklama="Raporu düzenli olarak otomatik gönder">
+        <MenuOgesi onClick={onPlan} aciklama="Raporu düzenli olarak otomatik gönder">
           Planla
         </MenuOgesi>
         <MenuOgesi
-          onClick={() => setBaglantiAcik(true)}
+          onClick={onBaglanti}
           devreDisi={!hasData}
           aciklama={hasData ? 'Giriş gerektirmeyen gizli sayfa' : 'Bu dönemde veri yok'}
         >
@@ -91,37 +159,9 @@ export function ShareControls({
         </MenuOgesi>
       </AcilirMenu>
 
-      <Dugme onClick={() => setMailAcik(true)} disabled={!hasData} title={hasData ? undefined : 'Bu dönemde veri yok'}>
+      <Dugme onClick={onMail} disabled={!hasData} title={hasData ? undefined : 'Bu dönemde veri yok'}>
         Raporu gönder
       </Dugme>
-
-      {/*
-        PLANLAMA YALNIZCA KAYITLI ŞABLONU ALABİLİYOR. `report_plans.template_id`
-        bir UUID ve ön ayarların UUID'si YOK; ön ayar seçiliyken plana `null`
-        geçiyor ve sunucu müşterinin kendi şablonunu bulup yoksa varsayılanı
-        üretiyor.
-      */}
-      <RaporPlanla clientId={clientId} templateId={kayitliSablonId} acik={planAcik} onKapat={() => setPlanAcik(false)} />
-
-      <PaylasimBaglantisi
-        clientId={clientId}
-        from={from}
-        to={to}
-        sablon={sablon}
-        kayitliSablonId={kayitliSablonId}
-        hasData={hasData}
-        acik={baglantiAcik}
-        onKapat={() => setBaglantiAcik(false)}
-      />
-
-      <MailGonderModal
-        clientId={clientId}
-        from={from}
-        to={to}
-        acik={mailAcik}
-        onKapat={() => setMailAcik(false)}
-        sablon={sablon}
-      />
     </>
   );
 }

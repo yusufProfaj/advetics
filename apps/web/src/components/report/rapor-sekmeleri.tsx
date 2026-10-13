@@ -76,7 +76,11 @@ export function RaporSekmeleri({
 
   function sec(kod: string): void {
     if (kod === aktif) return;
-    startTransition(() => router.replace(adres(kod as RaporSekmesi)));
+    // `push`, `replace` DEĞİL: bölüm adreste taşınıyor ve geri tuşu önceki
+    // bölüme dönmeli (sayfa içi menünün öteki sayfalarında bölümler zaten
+    // bağlantı: Varlıklar, İyileştir, Marka Merkezi). `replace` ile
+    // Faturalar → geri, kullanıcıyı Raporlar'dan tamamen çıkarıyordu.
+    startTransition(() => router.push(adres(kod as RaporSekmesi)));
   }
 
   return (

@@ -267,6 +267,7 @@ export default async function ReportsPage({
                 indiriyordu.
               */
               sablon={sablon}
+              paylasabilir={canShare}
             />
           )}
         </>

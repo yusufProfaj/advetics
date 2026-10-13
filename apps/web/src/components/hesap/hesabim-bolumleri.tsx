@@ -73,9 +73,14 @@ export function HesabimBolumleri({ bolumler, children }: { bolumler: HesabimBolu
       if (h) setSecili(h);
     }
     window.addEventListener('hashchange', capaDegisti);
+    // GERİ/İLERİ: Next `Link` çapayı `pushState` ile yazıyor ve o girdiye
+    // geri dönmek `hashchange` DEĞİL `popstate` atıyor; dinlenmezse adres
+    // `#guvenlik` derken ekran önceki bölümde kalıyordu.
+    window.addEventListener('popstate', capaDegisti);
     document.addEventListener('click', tiklama);
     return () => {
       window.removeEventListener('hashchange', capaDegisti);
+      window.removeEventListener('popstate', capaDegisti);
       document.removeEventListener('click', tiklama);
     };
   }, [anahtar]);

@@ -10,6 +10,7 @@ import { PlatformLogo } from '@/components/platform-logo';
 import { BolumluBaglantilar } from '@/components/suzgec-menusu';
 import { BosDurum, HataDurumu, Serit } from '@/components/ui/hal';
 import { MetrikKutulari } from '@/components/ui/metrik-kutulari';
+import { SayfaBasligi } from '@/components/ui/sayfa-basligi';
 
 
 /**
@@ -36,9 +37,12 @@ import { MetrikKutulari } from '@/components/ui/metrik-kutulari';
 export async function ButceIcerik({
   clientId,
   params,
+  baslik,
 }: {
   clientId: string;
   params: Record<string, string | string[] | undefined>;
+  /** Sayfa başlığı BURADA çiziliyor: birincil eylem ayın verisini istiyor. */
+  baslik: { baslik: string; aciklama: string };
 }) {
   const session = await requireSession();
 
@@ -64,8 +68,33 @@ export async function ButceIcerik({
   const clientName =
     session.availableClients.find((c) => c.id === clientId)?.name ?? 'Workspace';
 
+  /*
+   * BAŞLIKTA BİRİNCİL "Bütçeyi düzenle" (onaylı taslak `#butce`): workspace
+   * geneli (şemsiye) bütçenin yan paneli. Kartın başlığındaki ikinci tetik
+   * kalktı; aynı formu iki yerden açmak "hangisi asıl" sorusunu doğuruyordu.
+   * Veri okunamadıysa düğme YOK: mevcut bütçeyi bilmeden açılan form boş
+   * gelir ve "Kaydet" var olan tutarın üzerine yazar.
+   */
+  const birincil =
+    canWrite && data ? (
+      <BudgetForm
+        clientId={clientId}
+        adAccountId={null}
+        adAccountName={null}
+        month={selected.key}
+        existing={data.overall.budget}
+        currency={data.overall.budget?.currency ?? data.currency}
+        tetik={{
+          ton: 'birincil',
+          boyut: 'orta',
+          metin: data.overall.budget ? 'Bütçeyi düzenle' : 'Bütçe tanımla',
+        }}
+      />
+    ) : undefined;
+
   return (
     <div className="grid gap-5">
+      <SayfaBasligi baslik={baslik.baslik} aciklama={baslik.aciklama} eylemler={birincil} />
       {/*
         AY SEÇİMİ BÖLÜMLÜ SEÇİCİ (onaylı taslak `#butce`): aynı verinin ay ay
         görünümü, sayfa değil. Bağlantı olarak: ay adreste taşınıyor ve
@@ -91,14 +120,7 @@ export async function ButceIcerik({
         <>
           <Warnings pacing={data} />
 
-          <OverallCard
-            pacing={data.overall}
-            clientId={clientId}
-            month={selected.key}
-            currency={data.currency}
-            canWrite={canWrite}
-            future={selected.future}
-          />
+          <OverallCard pacing={data.overall} currency={data.currency} future={selected.future} />
 
           <AccountTable data={data} month={selected.key} canWrite={canWrite} />
         </>
@@ -158,17 +180,11 @@ function Warnings({ pacing }: { pacing: ClientPacing }) {
 
 function OverallCard({
   pacing,
-  clientId,
-  month,
   currency,
-  canWrite,
   future,
 }: {
   pacing: BudgetPacing;
-  clientId: string;
-  month: string;
   currency: string | null;
-  canWrite: boolean;
   future: boolean;
 }) {
   const cur = pacing.budget?.currency ?? currency;
@@ -183,19 +199,7 @@ function OverallCard({
             {!future && <> · {formatDayLong(pacing.throughDate)} tarihine kadar</>}
           </small>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <StatusChip status={pacing.status} />
-          {canWrite && (
-            <BudgetForm
-              clientId={clientId}
-              adAccountId={null}
-              adAccountName={null}
-              month={month}
-              existing={pacing.budget}
-              currency={cur}
-            />
-          )}
-        </div>
+        <StatusChip status={pacing.status} />
       </div>
 
       <div className="grid gap-3.5 p-5">

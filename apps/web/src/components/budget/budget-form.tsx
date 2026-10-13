@@ -5,7 +5,7 @@ import { useState } from 'react';
 import type { BudgetRecord } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { Alan, FormIzgarasi, Girdi } from '@/components/ui/alan';
-import { Dugme } from '@/components/ui/dugme';
+import { Dugme, type DugmeBoyutu, type DugmeTonu } from '@/components/ui/dugme';
 import { Serit } from '@/components/ui/hal';
 import { YanPanel } from '@/components/ui/pencere';
 
@@ -32,7 +32,14 @@ export function BudgetForm({
   month,
   existing,
   currency,
+  tetik,
 }: {
+  /**
+   * TETİK GÖRÜNÜŞÜ. Satırda küçük ikincil ("Düzenle"); Aylık Bütçe başlığında
+   * birincil "Bütçeyi düzenle" (onaylı taslak `#butce`). Form ve kayıt yolu
+   * TEK: iki ayrı form yazmak, ikisinin bir gün farklı alan göndermesi demek.
+   */
+  tetik?: { ton: DugmeTonu; boyut: DugmeBoyutu; metin: string };
   clientId: string;
   adAccountId: string | null;
   adAccountName: string | null;
@@ -104,8 +111,8 @@ export function BudgetForm({
 
   return (
     <>
-      <Dugme ton="ikincil" boyut="kucuk" onClick={() => setOpen(true)}>
-        {existing ? 'Düzenle' : 'Bütçe tanımla'}
+      <Dugme ton={tetik?.ton ?? 'ikincil'} boyut={tetik?.boyut ?? 'kucuk'} onClick={() => setOpen(true)}>
+        {tetik?.metin ?? (existing ? 'Düzenle' : 'Bütçe tanımla')}
       </Dugme>
 
       <YanPanel

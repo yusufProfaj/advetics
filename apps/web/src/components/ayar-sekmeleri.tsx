@@ -22,6 +22,7 @@ import { Ikon } from '@/components/ui/ikon';
 export function DigerMenusu({ etiket, children }: { etiket: string; children: ReactNode }) {
   return (
     <AcilirMenu
+      tasma="portal"
       etiket={etiket}
       hizala="sag"
       genislik="w-64"

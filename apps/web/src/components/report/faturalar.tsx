@@ -210,6 +210,7 @@ export function Faturalar({
       sayi: true,
       hucre: (f) => (
         <AcilirMenu
+          tasma="portal"
           etiket={`${f.fileName}: eylemler`}
           hizala="sag"
           genislik="w-40"

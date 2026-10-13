@@ -157,6 +157,7 @@ export function SablonBolumu({
           </Dugme>
           {r.tur === 'kayitli' && duzenleyebilir && (
             <AcilirMenu
+              tasma="portal"
               etiket={`${r.sablon.name}: diğer eylemler`}
               hizala="sag"
               genislik="w-44"

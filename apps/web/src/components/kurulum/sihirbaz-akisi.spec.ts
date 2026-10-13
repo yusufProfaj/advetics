@@ -408,7 +408,7 @@ describe('KRİTİK: kaynak kuralları', () => {
   });
 
   it('Marka Merkezi › Kurulum "Sihirbazla tamamla" yalnız sayaç bitmemişken', () => {
-    expect(oku('components/marka-merkezi/kurulum-listesi.tsx')).toMatch(/\{!sayac\.bitti && \(\s*<Link href=\{sihirbazAdresi\(clientId\)\}/);
+    expect(oku('components/marka-merkezi/kurulum-listesi.tsx')).toMatch(/\{!sayac\.bitti && \(\s*<Link href=\{sihirbazAdresi\(clientId\)\} className=\{dugmeSinifi\(yazabilir \? 'ikincil' : 'birincil'\)\}/);
   });
 
   it('açılıp kapanan öğe DOM’dan çıkmıyor; hareket `prefers-reduced-motion` altında kapalı', () => {

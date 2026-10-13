@@ -580,6 +580,7 @@ function SatirEylemleri({
       )}
       {menu && (
         <AcilirMenu
+          tasma="portal"
           etiket={`${sinyal.baslik} eylemleri`}
           hizala="sag"
           genislik="w-52"

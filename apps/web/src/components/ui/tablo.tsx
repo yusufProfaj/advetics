@@ -90,8 +90,26 @@ export function Tablo<T>({
               {satirlar.map((satir) => (
                 <tr
                   key={satirAnahtari(satir)}
-                  className={`hover:bg-surface-muted ${onSatir ? 'cursor-pointer' : ''}`}
-                  onClick={onSatir ? () => onSatir(satir) : undefined}
+                  className={`hover:bg-surface-muted ${onSatir ? 'cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand' : ''}`}
+                  /*
+                   * SATIR TIKLAMASI KLAVYEYLE DE (Ajan 4 denetimi): `onSatir`
+                   * yalnız fareyle çalışıyordu (Ekip tablosu satırı yan paneli
+                   * açıyor). Satır odaklanabilir, Enter/Boşluk açar. Hücredeki
+                   * bir düğmeden, bağlantıdan ya da (portal olsa bile React
+                   * ağacından kabaran) ⋯ menü öğesinden gelen olay satırı
+                   * AYRICA tetiklemez: menüde "Sil"e basmak paneli açmamalı.
+                   */
+                  tabIndex={onSatir ? 0 : undefined}
+                  onClick={onSatir ? (e) => satirOlayi(e.target, e.currentTarget) && onSatir(satir) : undefined}
+                  onKeyDown={
+                    onSatir
+                      ? (e) => {
+                          if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return;
+                          e.preventDefault();
+                          onSatir(satir);
+                        }
+                      : undefined
+                  }
                 >
                   {sutunlar.map((s) => (
                     <td key={s.anahtar} className={`border-b border-line px-4 py-3 ${hucreSinifi(s)}`}>
@@ -118,6 +136,13 @@ export function Tablo<T>({
       {sayfalama && <SayfalamaCubugu {...sayfalama} />}
     </div>
   );
+}
+
+/** Olay satırın kendisinden mi (yoksa hücredeki etkileşimli bir öğeden mi) geldi. */
+export function satirOlayi(hedef: EventTarget, satir: Element): boolean {
+  if (!(hedef instanceof Element) || !satir.contains(hedef)) return false;
+  const etkilesimli = hedef.closest('a, button, input, select, textarea, label, [role="menuitem"]');
+  return etkilesimli === null || !satir.contains(etkilesimli);
 }
 
 /** "1 - 10 / 37  ‹ ›" — Google Ads'in sayfalama satırı. */

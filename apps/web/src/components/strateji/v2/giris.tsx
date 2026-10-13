@@ -213,6 +213,7 @@ function StratejiTablosu({
       hucre: (p) => (
         <span onClick={(e) => e.stopPropagation()} className="inline-flex">
           <AcilirMenu
+            tasma="portal"
             etiket={`${planSatiriAdi(p)} eylemleri`}
             hizala="sag"
             genislik="w-52"

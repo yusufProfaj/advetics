@@ -258,15 +258,17 @@ export function WorkspaceSatirlari({
       sayi: true,
       hucre: (s) => (
         <DigerMenusu etiket={`${s.name} için işlemler`}>
-          <MenuOgesi onClick={() => void ac(s)}>Marka Merkezi’nde aç</MenuOgesi>
-          <MenuOgesi onClick={() => void ac(s, 'sihirbaz')}>Kurulumu tamamla</MenuOgesi>
+          {/* İŞ SÜRERKEN KAPALI: eski düğmeler `mesgul` iken pasifti; menüde
+              aynı kapı yoksa geçiş bitmeden ikinci bir geçiş başlıyordu. */}
+          <MenuOgesi devreDisi={mesgul !== null} onClick={() => void ac(s)}>Marka Merkezi’nde aç</MenuOgesi>
+          <MenuOgesi devreDisi={mesgul !== null} onClick={() => void ac(s, 'sihirbaz')}>Kurulumu tamamla</MenuOgesi>
           {tasiAcik && (
-            <MenuOgesi onClick={() => panelAc(s.id, 'tasi')}>Başka şirkete taşı</MenuOgesi>
+            <MenuOgesi devreDisi={mesgul !== null} onClick={() => panelAc(s.id, 'tasi')}>Başka şirkete taşı</MenuOgesi>
           )}
           {arsivleyebilir && (
             <>
               <MenuAyraci />
-              <MenuOgesi tehlike onClick={() => panelAc(s.id, 'arsivle')}>
+              <MenuOgesi tehlike devreDisi={mesgul !== null} onClick={() => panelAc(s.id, 'arsivle')}>
                 Arşivle
               </MenuOgesi>
             </>
@@ -353,6 +355,7 @@ export function WorkspaceSatirlari({
           )
         }
       >
+        {panelSatiri && hata?.id === panelSatiri.id && <PencereHatasi metin={hata.metin} />}
         {panelSatiri && (
           <p className="m-0 text-14 text-ink">
             <strong>{panelSatiri.name}</strong> listeden kalkar. Hesaplar ve geçmiş veri silinmez;
@@ -383,6 +386,7 @@ export function WorkspaceSatirlari({
           )
         }
       >
+        {panelSatiri && hata?.id === panelSatiri.id && <PencereHatasi metin={hata.metin} />}
         {panelSatiri && (
           <Alan etiket={`${panelSatiri.name} şu şirkete taşınsın`} id={`tasi-${panelSatiri.id}`}>
             <Secim
@@ -401,6 +405,21 @@ export function WorkspaceSatirlari({
           </Alan>
         )}
       </Pencere>
+    </div>
+  );
+}
+
+/*
+ * HATA PENCERENİN İÇİNDE DE. Taşı/Arşivle düşünce pencere açık kalıyor ama
+ * hata şeridi sayfada, perdenin ARKASINDA çiziliyordu: kullanıcı "Taşı"ya
+ * basıp hiçbir şey olmadığını görüyor ve tekrar basıyordu (Ajan 4 denetimi).
+ */
+function PencereHatasi({ metin }: { metin: string }) {
+  return (
+    <div className="mb-3">
+      <Serit ton="hata" baslik="İşlem yapılamadı">
+        {metin}
+      </Serit>
     </div>
   );
 }

@@ -120,7 +120,15 @@ export function NavSection({ title, items }: { title?: string; items: NavEntry[]
   const [acik, setAcik] = useState(true);
   useEffect(() => {
     if (!title) return;
-    const kayit = window.localStorage.getItem(bolumAnahtari(title));
+    // try/catch: gizli pencerede ya da site verisi engelliyken depo erişimi
+    // FIRLATIYOR ve bu bileşen her sayfada; katlama hatırlanmasın diye
+    // menünün tamamı düşmemeli.
+    let kayit: string | null = null;
+    try {
+      kayit = window.localStorage.getItem(bolumAnahtari(title));
+    } catch {
+      kayit = null;
+    }
     if (kayit !== null) setAcik(kayit === '1');
   }, [title]);
 
@@ -128,7 +136,11 @@ export function NavSection({ title, items }: { title?: string; items: NavEntry[]
     if (!title) return;
     const yeni = !acik;
     setAcik(yeni);
-    window.localStorage.setItem(bolumAnahtari(title), yeni ? '1' : '0');
+    try {
+      window.localStorage.setItem(bolumAnahtari(title), yeni ? '1' : '0');
+    } catch {
+      // Hatırlanmaz; katlama bu sayfada yine çalışıyor.
+    }
   }
 
   // Başlıksız bölüm katlanmıyor: katlama denetimi başlığın kendisi.

@@ -39,12 +39,11 @@ export default async function ButcePage({
     );
   }
 
-  const baslik = (
-    <SayfaBasligi
-      baslik="Aylık Bütçe"
-      aciklama="Ay ay harcama hedefi ve gidişat. Plan AdvStrategy’de, burada ayın taahhüdü."
-    />
-  );
+  const basliklar = {
+    baslik: 'Aylık Bütçe',
+    aciklama: 'Ay ay harcama hedefi ve gidişat. Plan AdvStrategy’de, burada ayın taahhüdü.',
+  };
+  const baslik = <SayfaBasligi {...basliklar} />;
 
   if (!hasPermission(session, 'budget.read')) {
     return (
@@ -58,10 +57,9 @@ export default async function ButcePage({
   }
 
   return (
-    <div className="space-y-5">
-      {baslik}
-      <ButceIcerik clientId={clientId} params={params} />
-    </div>
+    // Başlık İÇERİKTE çiziliyor: birincil "Bütçeyi düzenle" ayın verisini
+    // (var olan şemsiye bütçe) istiyor ve o veri orada okunuyor.
+    <ButceIcerik clientId={clientId} params={params} baslik={basliklar} />
   );
 }
 

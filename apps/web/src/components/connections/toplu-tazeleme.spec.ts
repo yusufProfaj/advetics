@@ -80,8 +80,28 @@ describe('kutu kapatılabiliyor', () => {
     // Düğme yalnızca yerel kaydı siliyor; sunucuya iptal isteği gitmiyor.
     const i = KAYNAK.indexOf('function takibiBirak');
     const dilim = KAYNAK.slice(i, KAYNAK.indexOf('}', KAYNAK.indexOf('{', i) + 1));
-    expect(dilim).toContain('removeItem');
+    expect(dilim).toContain('partiYaz(null)');
     expect(dilim).not.toContain('apiFetch');
+  });
+});
+
+describe('tarayıcı deposu (Ajan 4 denetimi)', () => {
+  it('KRİTİK: localStorage YALNIZ try/catch içindeki iki yardımcıdan geçiyor', () => {
+    // `setItem` başlatma çağrısının try'ındaydı: depo engelliyse başlamış
+    // parti "başlatılamadı" görünüyor ve kullanıcı ikinci kez başlatıyordu.
+    const kod = KAYNAK.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    const kullanim = kod.match(/localStorage\./g) ?? [];
+    expect(kullanim.length).toBe(3);
+    for (const ad of ['function partiOku(', 'function partiYaz(']) {
+      const i = kod.indexOf(ad);
+      if (i < 0) throw new Error(`${ad} bulunamadı — tarama boşa düştü`);
+      const govde = kod.slice(i, kod.indexOf('\n}\n', i));
+      expect(govde, ad).toContain('try {');
+      expect(govde, ad).toContain('catch');
+      expect(govde, ad).toContain('localStorage');
+    }
+    const baslat = kod.slice(kod.indexOf('async function baslat'), kod.indexOf('async function kurtar'));
+    expect(baslat).toContain('partiYaz(r.batchId)');
   });
 });
 

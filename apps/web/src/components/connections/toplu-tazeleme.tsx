@@ -30,6 +30,36 @@ import { Alan, Secim } from '@/components/ui/alan';
  * ve bu ekran saatlerce açık kalabiliyor. Beş saniyelik yoklama, saatler
  * süren bir iş için fazlasıyla sık.
  */
+/*
+ * TARAYICI DEPOSU YALNIZ KOLAYLIK, HER ERİŞİM try/catch İÇİNDE.
+ *
+ * Gizli pencerede, kapatılmış site verisinde ya da kota dolunca
+ * `localStorage` erişimi FIRLATIYOR. `setItem` başlatma çağrısının `try`
+ * bloğunun İÇİNDEYDİ: parti sunucuda BAŞLAMIŞ olduğu hâlde atılan hata
+ * "Tazeleme başlatılamadı" diye ekrana düşüyor ve kullanıcı ikinci kez
+ * başlatıp aynı işleri iki kez kuyruğa koyuyordu. Okuma da sayfayı
+ * düşürüyordu. Depo yoksa yalnız "sayfadan dönünce ilerlemeyi hatırla"
+ * kaybolur; iş arka planda sürer.
+ */
+const PARTI_ANAHTARI = 'advetics.topluTazeleme';
+
+function partiOku(): string | null {
+  try {
+    return window.localStorage.getItem(PARTI_ANAHTARI);
+  } catch {
+    return null;
+  }
+}
+
+function partiYaz(deger: string | null): void {
+  try {
+    if (deger === null) window.localStorage.removeItem(PARTI_ANAHTARI);
+    else window.localStorage.setItem(PARTI_ANAHTARI, deger);
+  } catch {
+    // Kolaylık kaybı: ilerleme bu sekmede görünmeye devam ediyor.
+  }
+}
+
 export function TopluTazeleme({
   workspaceler,
 }: {
@@ -53,7 +83,7 @@ export function TopluTazeleme({
    * döndüğünde "başlamış mıydı" sorusunu sormamalı.
    */
   useEffect(() => {
-    const kayit = localStorage.getItem('advetics.topluTazeleme');
+    const kayit = partiOku();
     if (kayit) setParti(kayit);
   }, []);
 
@@ -119,7 +149,7 @@ export function TopluTazeleme({
           apply: true,
         }),
       });
-      localStorage.setItem('advetics.topluTazeleme', r.batchId);
+      partiYaz(r.batchId);
       setParti(r.batchId);
       setTahmin(null);
       setAcik(false);
@@ -163,7 +193,7 @@ export function TopluTazeleme({
 
   /** İzlemeyi bırakır — işler arka planda sürüyor, yalnızca kutu kapanıyor. */
   function takibiBirak(): void {
-    localStorage.removeItem('advetics.topluTazeleme');
+    partiYaz(null);
     setParti(null);
     setIlerleme(null);
     setKurtarmaNotu(null);

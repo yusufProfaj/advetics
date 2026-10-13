@@ -301,10 +301,11 @@ export function KitlelerBolumu({
                         Düzenle
                       </Dugme>
                       <AcilirMenu
+                        tasma="portal"
                         etiket={`${k.name}: diğer eylemler`}
                         hizala="sag"
                         genislik="w-44"
-                        tetik={(o) => (
+                        tetik={({ acik: _acik, ...o }) => (
                           <button type="button" {...o} className={IKON_TETIK} aria-label="Diğer eylemler">
                             ⋯
                           </button>

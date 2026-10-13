@@ -53,14 +53,24 @@ export function UyariBandi({ mcc }: { mcc: boolean }) {
   // Oturum boyunca gizlenenler. Kalıcı saklamak, düzelmiş sanılan bir sorunu
   // kalıcı olarak görünmez yapardı; sekme kapanınca uyarı geri geliyor.
   useEffect(() => {
-    const kayit = sessionStorage.getItem('advetics.gizliUyarilar');
-    if (kayit) setGizli(new Set(JSON.parse(kayit) as string[]));
+    // Depo engelliyse ya da kayıt bozuksa gizlenen yok sayılır: uyarı
+    // GÖRÜNÜR kalır, bant düşmez (yanlış yöne hata: fazla uyarı).
+    try {
+      const kayit = window.sessionStorage.getItem('advetics.gizliUyarilar');
+      if (kayit) setGizli(new Set(JSON.parse(kayit) as string[]));
+    } catch {
+      setGizli(new Set());
+    }
   }, []);
 
   function gizle(anahtar: string): void {
     const yeni = new Set(gizli).add(anahtar);
     setGizli(yeni);
-    sessionStorage.setItem('advetics.gizliUyarilar', JSON.stringify([...yeni]));
+    try {
+      window.sessionStorage.setItem('advetics.gizliUyarilar', JSON.stringify([...yeni]));
+    } catch {
+      // Bu sayfada gizli kalır; yenilenince geri gelir.
+    }
     setSayfa(0);
   }
 

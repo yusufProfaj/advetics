@@ -50,10 +50,33 @@ describe('paylaş menüsü', () => {
     expect(menuGovdesi).toContain('Planla');
     expect(menuGovdesi).toContain('Paylaşım bağlantısı');
     // Birincil düğme (ton verilmemiş `Dugme` = birincil) menünün DIŞINDA ve sağında.
-    const gonder = k.indexOf('<Dugme onClick={() => setMailAcik(true)}');
+    const gonder = k.indexOf('<Dugme onClick={onMail}');
     expect(gonder).toBeGreaterThan(menuSonu);
     expect(k.slice(gonder, k.indexOf('</Dugme>', gonder))).toContain('Raporu gönder');
     expect(MENU).toContain('Bağlantıyı kopyala');
+  });
+
+  it('KRİTİK: gönder, planla ve paylaşım bağlantısı YALNIZ `report.share` ile (Ajan 4 denetimi)', () => {
+    // Üç ucun üçü de `report.share` istiyor; yetkisiz kullanıcı düğmeyi
+    // görüp açtığı panelde 403 alıyordu. PDF (`report.read`) kalıyor.
+    const k = kod(MENU);
+    const islemler = k.indexOf('<PaylasimIslemleri');
+    if (islemler < 0) throw new Error('PaylasimIslemleri çağrısı bulunamadı — tarama boşa düştü');
+    expect(k.slice(islemler - 40, islemler)).toContain('{paylasabilir && (');
+    // Üç panel TEK bir `{paylasabilir && (<> … </>)}` bloğunun içinde.
+    const blok = k.search(/\{paylasabilir && \(\s*<>/);
+    if (blok < 0) throw new Error('panel bloğu bulunamadı — tarama boşa düştü');
+    const govde = k.slice(blok, k.indexOf('</>', blok));
+    for (const pano of ['<RaporPlanla', '<PaylasimBaglantisi', '<MailGonderModal']) {
+      expect(govde, pano).toContain(pano);
+      expect(k.split(pano).length - 1, pano).toBe(1);
+    }
+    // PDF koşulsuz.
+    const pdf = k.indexOf('<RaporGonder');
+    expect(k.slice(pdf - 40, pdf)).not.toContain('paylasabilir');
+    const SAYFA = kod(readFileSync(join(__dirname, '../../app/(dashboard)/raporlar/page.tsx'), 'utf8'));
+    expect(SAYFA).toContain('paylasabilir={canShare}');
+    expect(SAYFA).toContain("const canShare = hasPermission(session, 'report.share');");
   });
 
   it('KRİTİK: "Bağlantıyı kopyala" GERÇEKTEN panoya yazıyor', () => {

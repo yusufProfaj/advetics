@@ -144,6 +144,7 @@ export function RehberGirisi({
         </Link>
         {eylemler.length > 0 && (
           <AcilirMenu
+            tasma="portal"
             etiket="Diğer işlemler"
             hizala="sag"
             yon="yukari"

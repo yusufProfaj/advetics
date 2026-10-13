@@ -434,10 +434,10 @@ bölümden).
 - İyileştir ve Kurallar sekmelerinin yerel yardımcıları kendi dosyalarında
   (`KurallarTablosu`, `ModRozeti`, `KuralGecmisi` …).
 
-**Grup 2'ye devir:** taslakta "Eksikleri tamamla" / "Sihirbazla tamamla"
-Marka Merkezi başlığının sağında; düğmeler ve durumları
-`marka-merkezi/kurulum-listesi.tsx` (Grup 2) içinde. Taşınmadı; kurulum
-listesinin tek sayaçlı kontrol satırı görünüşü de o dosyanın işi.
+**Grup 2'ye devir (Ajan 4 kapısında kapandı):** "Eksikleri tamamla"
+(birincil) ve "Sihirbazla tamamla" (ikincil; yazamayan kişide tek ve
+birincil) Marka Merkezi başlığının sağında. Durum `kurulum-listesi.tsx`te
+kaldı; düğmeler başlıktaki yuvaya (`baslik-yuvasi.ts`) portal ile çiziliyor.
 
 **Ölçülmeyen:** "Son çalışma · N eşleşti" (kural kaydı son turun eşleşme
 sayısını taşımıyor; API alanı gerekir). Varlıklar menüsünde bölüm sayıları
@@ -473,14 +473,16 @@ ihtiyaç duyarsa `ui/`a taşınmalı):
   yapmayan menü öğesi çalışmayan bir özelliği vaat eder (§ 4 "Ara/Yardım"
   kararı). Menüde yalnız çalışanlar: alt düzeyi aç, önizlemeyi aç/kapat,
   kampanyanın Galeri'si. "Sütunlar" ve "İndir" düğmeleri de aynı gerekçeyle yok.
-- Aylık Bütçe'de taslaktaki başlık birincil "Bütçeyi düzenle" YOK: başlık
-  `app/(dashboard)/butce/page.tsx`te (Grup 2 dosyası). Workspace geneli
-  bütçenin "Düzenle"si kartın başlığında; yan paneldeki "Hesap" seçici yok,
-  her düğme kendi kapsamını düzenliyor.
+- Aylık Bütçe başlığında birincil "Bütçeyi düzenle" Ajan 4 kapısında
+  eklendi: başlık artık `ButceIcerik`te çiziliyor (eylem ayın verisini
+  istiyor), kartın kendi "Düzenle"si kalktı. Yan paneldeki "Hesap" seçici
+  yok, her düğme kendi kapsamını düzenliyor.
 - Potansiyel Müşteriler yan panelinde durum seçimi TEK TIKLA uygulanıyor
   (eski davranış, 15 dk "Geri al"); "Kaydet" yalnız NOTU yazıyor.
 - Raporlar'da "Planlı: …" çipi yalnız paylaşım yetkisinde (planlar o
-  yetkiyle okunuyor); ⋯ "Planla" eskisi gibi herkese.
+  yetkiyle okunuyor). ~~⋯ "Planla" eskisi gibi herkese.~~ Ajan 4 kapısında
+  düzeltildi: "Raporu gönder", ⋯ "Planla" ve "Paylaşım bağlantısı" yalnız
+  `report.share` ile (üç uç da onu istiyor); yetkisizde yalnız "PDF indir".
 - Boş değer yer tutucusu tabloda `—` kaldı (taslakta `-`): Genel Bakış ve
   `kapsam-tablolari.spec.ts` aynı işareti kullanıyor; iki ekranda iki işaret
   olmasın.
@@ -539,3 +541,18 @@ kalmadı.
   `ust-hesap-yonetimi`, `iki-adim-sirket-ayari`, `team-manager`,
   `danisman-ata` (Ayarlar'da çiziliyor, kendi görünüşleri Grup 2'de);
   `components/report/report-document.tsx` ve `print-button.tsx` Grup 1'de.
+
+## 13. Ajan 4 kapısı (2026-10-14): ortak bileşen davranışları
+
+- **`AcilirMenu tasma="portal"`**: tablo (`overflow-x:auto`) içindeki ⋯
+  menüleri `body`ye çiziliyor, tetiğe `fixed` konuyor, sığmazsa yukarı
+  açılıyor. Tablo ya da kaydırılan kapsayıcı içindeki her yeni ⋯ menüsü bunu
+  taşır (`birlesik-tasarim-kapisi.spec.ts` sayıyor). `DigerMenusu` hep portal.
+- **Esc** menüde yakalama evresinde: yan panelin içindeki menüde Esc yalnız
+  menüyü kapatır. Öğe seçimi odağı tetiğe verir.
+- **Pencere/YanPanel yığını**: tuşları yalnız en üstteki katman işler
+  (panelin üstündeki onay penceresinde Esc ikisini birden kapatıyordu).
+- **`Tablo onSatir`**: satır odaklanabilir, Enter/Boşluk açar; hücredeki
+  düğme, bağlantı ve ⋯ öğesi satırı ayrıca tetiklemez (`satirOlayi`).
+- Raporlar bölümleri `router.push` (geri tuşu bölüme döner); Hesabım
+  `popstate` dinliyor.

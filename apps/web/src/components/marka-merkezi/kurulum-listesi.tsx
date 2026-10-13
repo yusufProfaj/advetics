@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   KURULUM_ADIM_ADI,
   type HazirlamaYaniti,
@@ -30,6 +31,7 @@ import { Uyari } from '@/components/ui/uyari';
 import { YOKLAMA_ARALIGI_MS, YOKLAMA_SINIRI, yoklamaGerekli } from './hazirlama-mantik';
 import { AdimIcerigi, type AdimIcerigiOzellikleri, type AdimYetkileri } from './adim-icerigi';
 import { DurumRozeti } from './kurulum-yardimcilari';
+import { KURULUM_EYLEM_YUVASI } from './baslik-yuvasi';
 import {
   LISTE_DURUMU,
   adimOzeti,
@@ -252,6 +254,37 @@ export function KurulumListesi({
     const s = { kurulum, hazirlama, hazirlik, beyanlar }[k];
     return s.ok ? [] : [{ k, hata: s.hata }];
   });
+  /*
+   * BAŞLIK EYLEMLERİ (onaylı taslak `#marka`): sayfanın TEK birincil düğmesi
+   * başlığın sağında. Yazabilen için birincil "Eksikleri tamamla" (taslak);
+   * sihirbaz ikincil giriş. Yazamayan kişide tek düğme sihirbaz ve birincil:
+   * sihirbaz her adımda kimin yapacağını söylüyor.
+   *
+   * SİHİRBAZ AYNI LİSTENİN ADIM ADIM GÖRÜNÜMÜ (MIMARI § 3a): sayaç
+   * bitmemişse giriş, bitmişse YOK — bitmiş kurulumu "tamamla" demek boş bir
+   * ekran açtırırdı.
+   *
+   * Yuva `undefined` = henüz aranmadı (sunucu çizimi), `null` = sayfada yok.
+   * Aranmadan önce hiçbir yerde çizilmiyor; aksi hâlde düğme önce kartta
+   * görünüp sonra başlığa ZIPLARDI.
+   */
+  const [yuva, setYuva] = useState<HTMLElement | null | undefined>(undefined);
+  useEffect(() => setYuva(document.getElementById(KURULUM_EYLEM_YUVASI)), []);
+  const eylemler = (
+    <>
+      {!sayac.bitti && (
+        <Link href={sihirbazAdresi(clientId)} className={dugmeSinifi(yazabilir ? 'ikincil' : 'birincil')}>
+          Sihirbazla tamamla
+        </Link>
+      )}
+      {yazabilir && (
+        <Dugme ton="birincil" bekliyor={tamamlaniyor || calisiyor} disabled={!kapsam.yapacakVar} onClick={() => void eksikleriTamamla()}>
+          Eksikleri tamamla
+        </Dugme>
+      )}
+    </>
+  );
+
   const hesapAdimiAcik = adimlar.some((a) => (a.kod === 'meta' || a.kod === 'google') && a.durum !== 'tamam' && a.durum !== 'kullanilmiyor');
   const yuzde = Math.round((sayac.tamam / Math.max(sayac.toplam, 1)) * 100);
 
@@ -276,23 +309,10 @@ export function KurulumListesi({
               <div className="h-full rounded-full bg-brand transition-[width] duration-500 motion-reduce:transition-none" style={{ width: `${yuzde}%` }} />
             </div>
           </div>
-          {/*
-            SİHİRBAZ AYNI LİSTENİN ADIM ADIM GÖRÜNÜMÜ (MIMARI § 3a): sayaç
-            bitmemişse birincil giriş, bitmişse YOK — bitmiş kurulumu
-            "tamamla" demek boş bir ekran açtırırdı. Yazamayan kişiye de açık:
-            sihirbaz her adımda kimin yapacağını söylüyor.
-          */}
-          {!sayac.bitti && (
-            <Link href={sihirbazAdresi(clientId)} className={dugmeSinifi('birincil')}>
-              Sihirbazla tamamla
-            </Link>
-          )}
-          {yazabilir && (
-            <Dugme ton={sayac.bitti ? 'birincil' : 'ikincil'} bekliyor={tamamlaniyor || calisiyor} disabled={!kapsam.yapacakVar} onClick={() => void eksikleriTamamla()}>
-              Eksikleri tamamla
-            </Dugme>
-          )}
+          {/* Başlık yuvası yoksa (başka bir sayfada çizilirse) düğmeler burada kalır. */}
+          {yuva === null && eylemler}
         </div>
+        {yuva && createPortal(eylemler, yuva)}
         {kapaliNeden && <p className="mt-2 text-xs text-ink-muted">{kapaliNeden}</p>}
         {yazabilir && kapsam.yapacakVar && (
           <p className="mt-2 text-xs text-ink-muted">Hesap açmaz, ödeme eklemez, site kodunu yerleştirmez; bunlar aşağıda adımında yazıyor.</p>

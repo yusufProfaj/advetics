@@ -381,6 +381,7 @@ function BaglantiSatiri({
    * şey varken; her zaman vurgulu bir düğme, vurgunun kendisini
    * anlamsızlaştırır.
    */
+  const hesaplariTara = () => apiFetch(`/connections/${baglanti.id}/refresh-accounts`, { method: 'POST' });
   const yetkiGerekli =
     baglanti.status === 'needs_reauth' ||
     baglanti.status === 'error' ||
@@ -431,6 +432,17 @@ function BaglantiSatiri({
           {canManage && (
             <MenuOgesi devreDisi={meslul} onClick={() => void calistir('reauth', yenidenYetkilendir)}>
               Yeniden yetkilendir
+            </MenuOgesi>
+          )}
+          {/*
+            "HESAPLARI TARA" MENÜDE DE (Ajan 4 denetimi): kartın görünür
+            düğmesi yeniden yetki gerektiğinde "Yeniden bağlan"a dönüyor ve
+            yalnız İSTEĞE BAĞLI bir izni eksik, çalışan bir bağlantıda hesap
+            listesini yeniden okumanın HİÇBİR yolu kalmıyordu.
+          */}
+          {canManage && (
+            <MenuOgesi devreDisi={meslul} onClick={() => void calistir('refresh', hesaplariTara)}>
+              Hesapları tara
             </MenuOgesi>
           )}
           {kaldirabilir && (
@@ -516,21 +528,18 @@ function BaglantiSatiri({
           >
             Yeniden bağlan
           </Dugme>
-        ) : (
+        ) : canManage ? (
+          /* Uç `connection.write` istiyor: yetkisizde düğme 403'e götüren bir vaatti. */
           <Dugme
             ton="ikincil"
             boyut="kucuk"
             bekliyor={busy === 'refresh'}
             disabled={meslul}
-            onClick={() =>
-              void calistir('refresh', () =>
-                apiFetch(`/connections/${baglanti.id}/refresh-accounts`, { method: 'POST' }),
-              )
-            }
+            onClick={() => void calistir('refresh', hesaplariTara)}
           >
             Hesapları tara
           </Dugme>
-        )}
+        ) : null}
       </div>
 
       <Pencere

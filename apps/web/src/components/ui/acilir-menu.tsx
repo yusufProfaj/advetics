@@ -10,8 +10,10 @@ import {
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
+  type CSSProperties,
   type ReactNode,
 } from 'react';
+import { createPortal } from 'react-dom';
 
 /**
  * ═══ TEK AÇILIR MENÜ (menü kararı 2026-10-14, `docs/marka/menu-sistemi.html`) ═══
@@ -39,6 +41,20 @@ import {
  * DENETİMLİ YA DA DENETİMSİZ: `acik` + `onAcikDegis` verilirse durum
  * çağıranın (kapsam seçici, geçiş sırasında menüyü kendisi kapatıyor);
  * verilmezse bileşen kendi durumunu tutar.
+ *
+ * TABLO İÇİNDE `tasma="portal"` (Ajan 4 denetimi, 2026-10-14): `Tablo` ve
+ * Reklam Yöneticisi tablosu `overflow-x:auto` kapsayıcıda ve CSS'te bir
+ * eksende taşma kesilince ÖBÜR eksen de `auto` oluyor. Son satırlardaki ⋯
+ * menüsü kapsayıcının içinde kırpılıyor ya da iç kaydırma çubuğu açıyordu;
+ * "Sil" gibi öğe hiç görünmüyordu. Portal modunda panel `body`ye çiziliyor
+ * ve tetiğin ekrandaki yerine `fixed` olarak konuyor; aşağıda yer yoksa
+ * yukarı açılıyor, kaydırmada yeniden hesaplanıyor.
+ *
+ * ODAK: Esc ve öğe seçimi odağı TETİĞE geri veriyor. Seçilen öğe kapanınca
+ * `inert` oluyor ve odak `body`ye düşüyordu; öğe bir pencere açtıysa pencere
+ * kapanınca odak iade edilecek yer de kalmıyordu. Esc YAKALAMA evresinde
+ * dinleniyor ve yayılmayı durduruyor: yan panelin içindeki menüde Esc önce
+ * menüyü kapatmalı, paneli değil.
  */
 interface Baglam {
   kapat: () => void;
@@ -65,6 +81,7 @@ export function AcilirMenu({
   acik: disAcik,
   onAcikDegis,
   sinif = '',
+  tasma = 'yerinde',
 }: {
   /** Tetik düğmesini çizer; verilen özellikleri `<button>`a yayar. */
   tetik: (o: TetikOzellikleri & { acik: boolean }) => ReactNode;
@@ -81,6 +98,8 @@ export function AcilirMenu({
   onAcikDegis?: (acik: boolean) => void;
   /** Kap öğesine ek sınıf (`w-full` gibi). */
   sinif?: string;
+  /** `portal`: taşması kesilen kapsayıcının (tablo) içindeki menüler. */
+  tasma?: 'yerinde' | 'portal';
 }) {
   const [icAcik, setIcAcik] = useState(false);
   const acik = disAcik ?? icAcik;
@@ -98,23 +117,54 @@ export function AcilirMenu({
     [disAcik, onAcikDegis],
   );
   const kapat = useCallback(() => degistir(false), [degistir]);
+  /** Öğe seçildi: kapat ve odağı tetiğe ver (seçilen öğe `inert` oluyor). */
+  const secildi = useCallback(() => {
+    degistir(false);
+    tetikRef.current?.focus();
+  }, [degistir]);
+
+  const portal = tasma === 'portal';
+  const [takili, setTakili] = useState(false);
+  useEffect(() => setTakili(true), []);
+  const [konumStil, setKonumStil] = useState<CSSProperties>({});
+  const konumla = useCallback(() => {
+    const t = tetikRef.current;
+    if (!portal || !t) return;
+    const r = t.getBoundingClientRect();
+    const yukseklik = panel.current?.offsetHeight ?? 0;
+    const asagiSigmaz = r.bottom + 6 + yukseklik > window.innerHeight && r.top - 6 - yukseklik > 0;
+    const yukari = yon === 'yukari' || asagiSigmaz;
+    setKonumStil({
+      position: 'fixed',
+      ...(hizala === 'sag' ? { right: Math.max(window.innerWidth - r.right, 8) } : { left: Math.max(r.left, 8) }),
+      ...(yukari ? { bottom: window.innerHeight - r.top + 6 } : { top: r.bottom + 6 }),
+    });
+  }, [portal, hizala, yon]);
 
   const ogeler = () =>
     Array.from(panel.current?.querySelectorAll<HTMLElement>('[role="menuitem"]:not([aria-disabled="true"])') ?? []);
 
   useEffect(() => {
     if (!acik) return;
+    konumla();
     function disari(e: MouseEvent) {
-      if (kutu.current && !kutu.current.contains(e.target as Node)) degistir(false);
+      const hedef = e.target as Node;
+      if (kutu.current?.contains(hedef) || panel.current?.contains(hedef)) return;
+      degistir(false);
     }
     function tus(e: KeyboardEvent) {
       if (e.key === 'Escape') {
+        e.stopPropagation();
         degistir(false);
         tetikRef.current?.focus();
       }
     }
     document.addEventListener('mousedown', disari);
-    document.addEventListener('keydown', tus);
+    document.addEventListener('keydown', tus, true);
+    if (portal) {
+      window.addEventListener('scroll', konumla, true);
+      window.addEventListener('resize', konumla);
+    }
     /*
      * ARAMA KUTUSU VARSA her açılışta oraya (kapsam seçici: açan kişi bir ad
      * yazacak). Yoksa yalnız klavyeyle açılınca ilk öğeye; fareyle açılan
@@ -131,11 +181,22 @@ export function AcilirMenu({
     }
     return () => {
       document.removeEventListener('mousedown', disari);
-      document.removeEventListener('keydown', tus);
+      document.removeEventListener('keydown', tus, true);
+      window.removeEventListener('scroll', konumla, true);
+      window.removeEventListener('resize', konumla);
     };
-  }, [acik, degistir]);
+  }, [acik, degistir, konumla, portal]);
 
   function panelTus(e: ReactKeyboardEvent<HTMLDivElement>) {
+    /*
+     * PORTALDA Tab menüyü kapatıp tetiğe döner: panel `body`nin sonunda ve
+     * Tab'ın doğal sırası kullanıcıyı sayfanın en altına atardı.
+     */
+    if (portal && e.key === 'Tab') {
+      e.preventDefault();
+      secildi();
+      return;
+    }
     if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return;
     const liste = ogeler();
     if (liste.length === 0) return;
@@ -181,6 +242,8 @@ export function AcilirMenu({
         'aria-haspopup': rol,
         'aria-controls': kimlik,
       })}
+      {(() => {
+        const govde = (
       <div
         ref={panel}
         id={kimlik}
@@ -188,12 +251,18 @@ export function AcilirMenu({
         aria-label={etiket}
         inert={!acik}
         onKeyDown={panelTus}
-        className={`absolute z-40 ${konum} ${genislik} max-w-[calc(100vw-1.5rem)] rounded-[14px] border border-line bg-surface p-1.5 text-ink shadow-acilir transition-[opacity,transform,visibility] duration-150 motion-reduce:transition-none ${
+        style={portal ? konumStil : undefined}
+        className={`${portal ? 'z-[60]' : `absolute z-40 ${konum}`} ${genislik} max-w-[calc(100vw-1.5rem)] rounded-[14px] border border-line bg-surface p-1.5 text-ink shadow-acilir transition-[opacity,transform,visibility] duration-150 motion-reduce:transition-none ${
           acik ? 'visible translate-y-0 opacity-100' : `invisible opacity-0 ${yon === 'yukari' ? 'translate-y-1' : '-translate-y-1'}`
         }`}
       >
-        <AcilirBaglam.Provider value={{ kapat }}>{children}</AcilirBaglam.Provider>
+        <AcilirBaglam.Provider value={{ kapat: secildi }}>{children}</AcilirBaglam.Provider>
       </div>
+        );
+        if (!portal) return govde;
+        // SSR'da `document` yok; ilk boyamadan sonra body'ye taşınıyor.
+        return takili ? createPortal(govde, document.body) : null;
+      })()}
     </div>
   );
 }

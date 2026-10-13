@@ -235,10 +235,11 @@ export function CreativeLibrary({
                       Düzenle
                     </Dugme>
                     <AcilirMenu
+                      tasma="portal"
                       etiket={`${c.name}: diğer eylemler`}
                       hizala="sag"
                       genislik="w-48"
-                      tetik={(o) => (
+                      tetik={({ acik: _acik, ...o }) => (
                         <button type="button" {...o} className={IKON_TETIK} aria-label="Diğer eylemler">
                           ⋯
                         </button>

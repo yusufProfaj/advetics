@@ -31,6 +31,7 @@ import { IcMenu, type BolumRozetleri } from '@/components/marka-merkezi/ic-menu'
 import { sirketAdi } from '@/components/marka-merkezi/bolumler';
 import { EskiCapaYonlendirici } from '@/components/marka-merkezi/eski-capa';
 import { KurulumListesi, type Sonuc } from '@/components/marka-merkezi/kurulum-listesi';
+import { KURULUM_EYLEM_YUVASI } from '@/components/marka-merkezi/baslik-yuvasi';
 import { rozetMetni } from '@/components/marka-merkezi/kurulum-listesi-mantik';
 import { VeriKaynaklari } from '@/components/marka-merkezi/veri-kaynaklari';
 import { WorkspaceBilgileri, type WorkspaceDetay } from '@/components/marka-merkezi/workspace-bilgileri';
@@ -192,6 +193,9 @@ export default async function MarkaMerkeziPage({
             {': kurulumu, markası ve bilgileri. Reklamlar, raporlar ve AI asistan buradan okur.'}
           </>
         }
+        // Birincil eylem ("Eksikleri tamamla") Kurulum listesinin durumunu
+        // taşıyor; liste düğmeleri bu yuvaya portal ile çiziyor.
+        eylemler={bolum === 'kurulum' ? <div id={KURULUM_EYLEM_YUVASI} className="flex flex-wrap items-center gap-2" /> : undefined}
       />
 
       <SayfaIcDuzen menu={<IcMenu clientId={clientId} aktif={bolum} rozetler={rozetler} />}>

@@ -619,6 +619,7 @@ export function ReklamYoneticisiTablosu({
                                 )}
                                 {menuVar(r) && (
                                   <AcilirMenu
+                                    tasma="portal"
                                     etiket={`${r.ad}: diğer eylemler`}
                                     hizala="sag"
                                     genislik="w-56"

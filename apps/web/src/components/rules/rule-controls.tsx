@@ -464,6 +464,7 @@ export function RuleControls({
         </Dugme>
       )}
       <AcilirMenu
+        tasma="portal"
         etiket={`${rule.name} eylemleri`}
         hizala="sag"
         genislik="w-52"

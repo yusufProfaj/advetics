@@ -24,12 +24,22 @@ import { createPortal } from 'react-dom';
  * (sağdan, 380-440 piksel); bir kararı ONAYLAMAK ya da kısa bir soru
  * `Pencere` (ortada). Kaydet sağ altta, kapat sağ üstte.
  */
+/*
+ * AÇIK KATMAN YIĞINI. Yan panelin içinden açılan onay penceresinde (Ekip ›
+ * "İki adımlıyı sıfırla", bütçe paneli…) Esc İKİSİNİ BİRDEN kapatıyordu ve
+ * Tab tuzağı iki katmanda aynı anda çalışıp odağı alttaki panele
+ * çekebiliyordu. Tuşları yalnız EN ÜSTTEKİ katman işler.
+ */
+const yigin: object[] = [];
+
 function useKatman(acik: boolean, onKapat: () => void, kutu: RefObject<HTMLDivElement | null>) {
   const kapat = useRef(onKapat);
   kapat.current = onKapat;
 
   useEffect(() => {
     if (!acik) return;
+    const ben = {};
+    yigin.push(ben);
     const onceki = document.activeElement as HTMLElement | null;
     const odaklanabilir = () =>
       Array.from(
@@ -41,6 +51,7 @@ function useKatman(acik: boolean, onKapat: () => void, kutu: RefObject<HTMLDivEl
     (odaklanabilir()[0] ?? kutu.current)?.focus();
 
     function tus(e: KeyboardEvent) {
+      if (yigin[yigin.length - 1] !== ben) return;
       if (e.key === 'Escape') {
         e.stopPropagation();
         kapat.current();
@@ -68,8 +79,17 @@ function useKatman(acik: boolean, onKapat: () => void, kutu: RefObject<HTMLDivEl
     document.body.style.overflow = 'hidden';
     return () => {
       document.removeEventListener('keydown', tus);
+      const i = yigin.indexOf(ben);
+      if (i >= 0) yigin.splice(i, 1);
       document.body.style.overflow = eskiTasma;
-      onceki?.focus?.();
+      /*
+       * ODAK İADESİ yalnız açan öğe hâlâ odaklanabiliyorsa. ⋯ menüsünden
+       * açılan pencerede açan öğe menü maddesiydi; menü kapanınca `inert`
+       * oluyor ve odak sessizce `body`ye düşüyordu. `AcilirMenu` artık
+       * seçimde odağı tetiğe veriyor; tetik de gitmişse (satır silindi)
+       * en azından odak kaybolmuş olmasın diye yalnız bağlıysa deneniyor.
+       */
+      if (onceki?.isConnected && !onceki.closest('[inert]')) onceki.focus?.();
     };
   }, [acik, kutu]);
 }
