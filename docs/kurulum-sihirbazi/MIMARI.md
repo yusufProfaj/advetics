@@ -293,7 +293,7 @@ dışı"), `kurulum-listesi-mantik.spec.ts`, `bolumler.spec.ts` (adım kümesi
 artık listeden türüyor), `panel-adresleri.spec.ts` (10 adım; veri akışı
 artık sayıyor).
 
-### Geçiciler (silinecek — Ajan 2/3 işi bitince)
+### Geçiciler — HEPSİ KAPANDI (entegrasyon 2026-10-13, § 15)
 
 - **`HAZIRLIK_SIHIRBAZ_KODLARI` ayrı liste.** API (`tenancy/hazirlik.ts`)
   bu maddeleri henüz üretmiyor ve `hazirlik.spec.ts` ürettiği kodları
@@ -321,7 +321,7 @@ artık sayıyor).
   tamamını yapar (hesap açmaz; yalnız daha geniş). Gövde biçimi sözleşmede
   YOK — Ajan 1 `kurulumTamamlaSchema` eklemeli.
 
-### Ajan 3'ün sözleşmede bulduğu boşluklar (Ajan 1 / Ajan 2)
+### Ajan 3'ün sözleşmede bulduğu boşluklar (Ajan 1 / Ajan 2) — HEPSİ KAPANDI (§ 15)
 
 - **Beyanların okunuşu iki biçime de hazır** (`lib/kurulum-beyanlari.ts`):
   `/kurulum` yanıtında `beyanlar` dizisi VARSA o, yoksa
@@ -350,7 +350,7 @@ artık sayıyor).
 | Uç | Yeni mi | Kapı | Not |
 |---|---|---|---|
 | `GET /clients/:id/kurulum`, `/hazirlama`, `/hazirlik` | var (hazırlık genişler) | `client.read` | Liste girdisi |
-| `GET /clients/:id/kurulum/beyanlar` | YENİ | `client.read` | Ya da `/kurulum` yanıtına `beyanlar` alanı (Ajan 2 seçer; ikisi birden değil) |
+| `GET /clients/:id/kurulum/beyanlar` | YENİ | `client.read` | TEK biçim (Ajan 2 seçti): yanıt `KurulumBeyani[]`; `/kurulum` yanıtında alan YOK |
 | `PUT /clients/:id/kurulum/beyan` | YENİ | `client.write` | `kurulumBeyaniSchema`; `iki_adim` reddedilir |
 | `GET /kurulum/sirket` | YENİ | `client.read` | `SirketKurulumYaniti`: bağlantı özetleri (sahip ajans/şirket), 2FA, beyanlar, şirketin workspace'leri + her birinin sayacı İÇİN GEREKEN GİRDİ DEĞİL, yalnız ad/id (sayaçlar başlangıçta tembel okunur) |
 | `PUT /kurulum/sirket/beyan` | YENİ | org yöneticisi | `iki_adim` |
@@ -542,3 +542,38 @@ ile yazılıyor; düşerse adım düşmüyor, sebep sonuç cümlesinde.
   kaldırdığı gözle görülmedi (§ 11/6).
 - `erisim`: org geneli `ad_manager` (client_id NULL) sorumlu SAYILMIYOR —
   "workspace'e atanmış" okuması; ürün olarak tersi istenirse tek satır.
+
+## 15. Entegrasyon + Ajan 4 kapısı (2026-10-13)
+
+### Entegrasyon kararları (Ajan 2 ‖ Ajan 3 sözleşme boşlukları)
+
+| # | Boşluk | Karar |
+|---|---|---|
+| E-1 | `tamamla` gövdesi | Panel gövdeyi `KurulumTamamlaIstegi` tipinden kuruyor (`{ kodlar: [...kapsam.kurulumAdimlari] }`); Marka Merkezi'nin "Eksikleri tamamla"sı gövdesiz (bütün otomatikler — bilinçli). "Sunucu tanımıyorsa" yorumu kalktı. |
+| E-2 | Beyan okuma biçimi | TEK biçim: ayrı uç, yanıt DİZİ. `beyanlariOku(getir, clientId)` tek yol (sihirbaz, liste, Genel Bakış şeridi, AdvCampaign); iki biçimi deneyen `beyanlariOkuKurulumsuz` ve `yanittakiBeyanlar` silindi (yerine `beyanDizisi`). `KurulumListesiGirdisi.beyanlar` ZORUNLU; JS çağıranı yine de atlarsa "okunamadı" (`beyanlarOkundu`), eski "undefined = beyan yok" kuralı yok. `HAZIRLIK_SIHIRBAZ_KODLARI` `HAZIRLIK_KODLARI`na katıldı ve silindi. |
+| E-3 | `SirketKurulumYaniti` | Panel `GET /kurulum/sirket`in TAM yanıtını `sirketKurulumuOku` (saf, `sihirbaz-akisi.ts`) ile okuyor: beyanlar, `ikiAdimZorunlu`, `kullanilanPlatformlar`. Biçim doğrulanıyor (eksik alan = okunamadı). Bağlantılar parametresiz `/connections`tan. `/auth/2fa` yalnız 2FA ayar bileşeni için (tamamlama); başlangıç artık okumuyor. |
+| E-4 | Platform beyanında kim/ne zaman | `kurulum_beyanlari`na TAŞINMADI (adımı bütünüyle düşürüyor, dört okuyucusu var, veri göçü olurdu). En küçük değişiklik: `workspace_kurulum.platform_beyan_eden` (FK users, ON DELETE SET NULL) + `platform_beyan_tarihi`, migration `20261017300000_platform_beyani_izi` (eklemeli). Servis beyanla AYNI deyimde yazıyor, beyan kalkınca ikisi NULL; ad `LEFT JOIN users`. `KurulumYaniti.platformBeyani`. **Geriye doldurma YOK**: iz `audit_logs`ta ama o tablo FORCE RLS altında, migration rolünde sessizce sıfır satır yapabilirdi; eski beyanda ekran "tarih kaydı yok" der. |
+| E-5 | 409'un iki anlamı | `KURULUM_HATA_KODLARI` (shared): `KURULUM_SURUYOR` (kilit → panel yoklar), `KURULUM_WORKSPACE_SECILMELI`, `KURULUM_SIRKET_SECILMELI`. `istekSonucu` yalnız koda bakıyor; kodsuz 409 mesajdır. |
+| E-6 | Şirketin kullandığı platformlar | Sunucudan (`kullanilanPlatformlar`, "en az bir workspace"); tamamlama ve başlangıç AYNI kaynak. Okunamazsa `null`: etkin bağlantı yine tamam, olmayan `bilinmiyor` (bağla eylemi yok). |
+
+### Ajan 4 bulguları (düzeltildi)
+
+- **B-1 Okumada tetiklenen AI işi (KAPATAN bulgu).** `GET /hazirlama` imzası değişmiş workspace'te site taraması + AI işi başlatıyor; başlangıç ekranı 12 workspace'in sayacını okuyordu → her açılışta imzası değişmiş HER workspace için iş (kullanıcı hiçbirini açmamışken). Genel Bakış şeridi her panel açılışında aynısını aktif workspace için yapıyordu. Düzeltme: `?tetikle=hayir` (`hazirlamaSayacYolu`, shared tek üretici) satırı olduğu gibi döndürüyor; iki sayaç okuyucusu bunu kullanıyor. Marka Merkezi ve sihirbazın tamamlama ekranı (ilerlemeyi gösteren yerler) tetiklemeye devam ediyor.
+- **B-2 "Tüm şirketler" modunda şirket kararı yanlış şirkete.** `ctx.orgId` ev şirketi; sihirbaz kardeş şirketin workspace'inde açıkken "iki adımlı doğrulamayı zorunlu tutmuyoruz" ev şirketine yazılırdı (RLS de `current_org_id` = ev şirketi, geçiriyordu). Sunucu artık 409 `KURULUM_SIRKET_SECILMELI`; panel o modda ve yanıtın şirketi workspace'in şirketi değilse şirket verisini "okunamadı" sayıyor (başlık ≠ gövde).
+- **B-3 OAuth dönüşü sessiz.** "Ölçüm izinlerini ver" sihirbazın ölçüm adımına dönüyor ama sonuç bandı (`CallbackBanner`) yalnız S1'deydi: izin reddi/hatası ekranda hiçbir şey söylemiyordu. Bant S1 dışındaki her adımda.
+- **B-4 Şirket platform kullanımı aktif workspace'ten** (E-6) — aynı şirkete iki workspace'te iki hüküm.
+
+### Kapı denetimi — ölçülenler (bulgu YOK)
+
+- Yetki: beyan uçları `client.write` + aktif workspace; şirket beyanı `@RequireOrgAdmin` + RLS `current_org_id AND is_org_admin`; `client_viewer` `markaMerkezi.gor` (client.write) kapısında `/dashboard`a yönleniyor (test). RLS SET ROLE + RETURNING: workspace/şirket/seçim katmanı + yeni "tüm şirketler" testi.
+- Migration `20261017200000`: üretim sırası testi var; üç durak (TRUNCATE, 02_rls, `CASCADE_ILE_TASINANLAR`) yerinde. `20261017300000` aynı testte (sonraki migration olarak) sınanıyor; yalnız kolon, yeni tablo yok (durak gerekmiyor).
+- Para/geri dönüşsüz: `OTOMATIK_SIRA`da hesap açan kod yok; sunucu `kodlar`daki hesap kodunu adıyla reddediyor; panel `HESAP_ACAN_KODLAR` sert süzgeci; "Yeni hesap aç" onay penceresinde. GTM ayrı "Advetics" çalışma alanında yazıyor, başkasının yayınlanmamış sürümü varsa ya da yazarken sürüm değişirse yayınlamıyor. Harcamalı hesapta birincil dönüşüm yalnız düğmeyle (onaylı); aynı kategoride birincil varsa yenisi açılmıyor.
+- Site yok: panel (`siteKapisiyla`/`amacSiteSebebi`) ve sunucu (`siteYokEngelleri`, SITE kapısı) AYNI `siteYokRehberKapisi`; beyan okunamazsa ikisi de AÇIK (rehberin adres kuralı duruyor). `tamamla` okunamazsa site işlerini yapmıyor ve söylüyor (zıt yön bilinçli: kurmak pahalı, göstermek ucuz).
+- OAuth dönüş: `sihirbazAdresi` her adım için sunucu regex'inden geçiyor (test); `redirect` `${WEB}${yol}` ile kuruluyor, `//`, mutlak, ters bölü reddediliyor.
+- Mutasyon (13/13 düştü): tetiklemesiz okuma, tüm şirketler kapısı (servis + RLS), iz yazımı, kilit kodu, `beyanlarOkundu`, null platform dönüşümü, `istekSonucu` metinle, panel tüm şirketler/şirket uyuşmazlığı, GTM başkasının sürümü, harcamalı hesapta birincil, hesap açan kod süzgeci. Shared mutasyonları `tsc` ile derlenip koşuldu, geri alınıp yeniden derlendi.
+
+### Ölçülmeyenler
+
+- Canlıda hiçbir şey (push/deploy yok). § 11'in altı maddesi aynen Ajan 5'te.
+- Sayaç okuması tetiklemediği için başlangıçta imzası değişmiş workspace'in hazırlama parçaları ESKİ satırdan sayılıyor (tamamlamaya girince tetikleniyor) — bilinçli.
+- `/kurulum/sirket` "tüm şirketler" modunda hâlâ ev şirketini döndürüyor (panel kullanmıyor); uca `?orgId=` eklemek bilerek yapılmadı (MIMARI § 7: kimlik adresten alınmaz).
