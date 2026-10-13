@@ -188,6 +188,18 @@ class SahteGoogle implements GoogleYayinPortu {
       });
       return (this.ogeBozucu ? this.ogeBozucu(satirlar) : satirlar) as T[];
     }
+    if (sorgu.includes('FROM campaign_conversion_goal')) {
+      // Kampanya hedefleri: gövdedeki GÜNCELLEMELERİN aynası (kaynak adının
+      // son iki parçası kategori ve kaynak; geçici kimlik gerçek kimliğe döner).
+      const satirlar = this.govde
+        .map((o) => (o.campaignConversionGoalOperation as { update?: { resourceName: string; biddable: boolean } } | undefined)?.update)
+        .filter((u): u is { resourceName: string; biddable: boolean } => !!u)
+        .map((u) => {
+          const [, kategori, kaynak] = u.resourceName.slice(u.resourceName.lastIndexOf('/') + 1).split('~');
+          return { campaignConversionGoal: { campaign: `customers/${MUSTERI}/campaigns/555`, category: kategori, origin: kaynak, biddable: u.biddable } };
+        });
+      return boz('campaign_conversion_goal', satirlar);
+    }
     if (sorgu.includes('FROM campaign_criterion')) {
       return c('campaignCriterionOperation').map((x) => ({ campaignCriterion: { type: x.location ? 'LOCATION' : x.language ? 'LANGUAGE' : 'KEYWORD', negative: x.negative === true } })) as T[];
     }
@@ -499,6 +511,11 @@ const G_PMAX: GoogleDerlemeGirdisi = {
   teklif: 'MAKS_DONUSUM',
   uzunBasliklar: ['Kuşadası’nda bahçeli villalar.'],
   aciklamalar: ['Kısa açıklama.', 'İkinci açıklama.'],
+  donusumHedefleri: [
+    { kategori: 'PURCHASE', kaynak: 'WEBSITE' },
+    { kategori: 'SUBMIT_LEAD_FORM', kaynak: 'WEBSITE' },
+    { kategori: 'PHONE_CALL_LEAD', kaynak: 'CALL_FROM_ADS' },
+  ],
 };
 const G_BAGLAM: Partial<GoogleDerlemeBaglami> = {
   logo: { resource: `customers/${MUSTERI}/assets/77` },
@@ -679,6 +696,62 @@ describe('Dalga 3 — Maks. Performans yayını', () => {
       (o.campaign as { biddingStrategyType: string }).biddingStrategyType = 'TARGET_SPEND';
     };
     expect(await isle(g)).toEqual({ tur: 'bitti', durum: 'fark_var' });
+  });
+
+  /*
+   * DÖNÜŞÜM HEDEFLERİ (g-1.4.0): "200 döndü doğrulama değil". Güncelleme
+   * kabul edilse bile Google bir hedefi hesap varsayılanıyla açık
+   * bırakabilir; geri okuma teklife giren kümeyi TAM OLARAK bekliyor.
+   */
+  it('KRİTİK: temiz kurulumda teklife giren küme yalnız PURCHASE~WEBSITE okunur ve kampanya açılır', async () => {
+    await dalga3Kur(G_PMAX);
+    const g = new SahteGoogle();
+    expect(await isle(g)).toEqual({ tur: 'bitti', durum: 'iletildi' });
+    const hedefSorgusu = g.sorgular.find((s) => s.includes('FROM campaign_conversion_goal'));
+    expect(hedefSorgusu).toContain(`campaign_conversion_goal.campaign = 'customers/${MUSTERI}/campaigns/555'`);
+  });
+
+  it('KRİTİK: Google form hedefini AÇIK bırakırsa fark_var (alan kampanya.donusumHedefleri), kampanya AÇILMAZ', async () => {
+    await dalga3Kur(G_PMAX);
+    const g = new SahteGoogle();
+    g.dalga3Bozucu = (tur, s) =>
+      tur === 'campaign_conversion_goal'
+        ? s.map((x) => {
+            const c = x.campaignConversionGoal as { category: string };
+            return c.category === 'SUBMIT_LEAD_FORM' ? { campaignConversionGoal: { ...c, biddable: true } } : x;
+          })
+        : s;
+    expect(await isle(g)).toEqual({ tur: 'bitti', durum: 'fark_var' });
+    expect(g.acilan).toEqual([]);
+    const [r] = await h.q<{ satirlar: Array<{ alan: string; okunan: unknown }> }>('SELECT satirlar FROM geri_okuma');
+    expect(r!.satirlar).toEqual([{ alan: 'kampanya.donusumHedefleri', beklenen: ['PURCHASE~WEBSITE'], okunan: ['PURCHASE~WEBSITE', 'SUBMIT_LEAD_FORM~WEBSITE'] }]);
+  });
+
+  /*
+   * PROTO3 JSON: false değerli alan HİÇ gelmeyebilir. Yalnız `true` teklife
+   * giren sayılır; "false değilse açık" okumak, Google'ın düzgün kapattığı
+   * her hedefi açık sayıp temiz kurulumu durdururdu (ya da tersine).
+   */
+  it('KRİTİK: kapalı hedeflerde biddable alanı hiç gelmezse kapalı sayılır, kurulum temiz', async () => {
+    await dalga3Kur(G_PMAX);
+    const g = new SahteGoogle();
+    g.dalga3Bozucu = (tur, s) =>
+      tur === 'campaign_conversion_goal'
+        ? s.map((x) => {
+            const c = x.campaignConversionGoal as { biddable: boolean };
+            return c.biddable ? x : { campaignConversionGoal: { ...c, biddable: undefined } };
+          })
+        : s;
+    expect(await isle(g)).toEqual({ tur: 'bitti', durum: 'iletildi' });
+  });
+
+  it('satın alma teklife GİRMİYORSA (biddable alanı hiç gelmedi) fark', async () => {
+    await dalga3Kur(G_PMAX);
+    const g = new SahteGoogle();
+    g.dalga3Bozucu = (tur, s) =>
+      tur === 'campaign_conversion_goal' ? s.map((x) => ({ campaignConversionGoal: { ...(x.campaignConversionGoal as object), biddable: undefined } })) : s;
+    expect(await isle(g)).toEqual({ tur: 'bitti', durum: 'fark_var' });
+    expect(g.acilan).toEqual([]);
   });
 });
 

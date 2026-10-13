@@ -1,11 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { HIZLI_SORU_EN_COK, HIZLI_SORU_SINIRI, KARSILAMA_MESAJ_SINIRI, WHATSAPP_VARSAYILAN_MESAJ, type RehberPikselListesi, type WhatsappKarsilama } from '@advetics/shared';
+import { HIZLI_SORU_EN_COK, HIZLI_SORU_SINIRI, KARSILAMA_MESAJ_SINIRI, SATISSIZ_PIKSEL_ONAY_METNI, WHATSAPP_VARSAYILAN_MESAJ, type RehberPikselListesi, type WhatsappKarsilama } from '@advetics/shared';
 import { apiFetch } from '@/lib/api';
 import { sil, yaz, type AdimBaglami } from './adim-ortak';
 import { IKON, Ikon } from './ikonlar';
-import { pikselDurumu, pikselListesiHali, tekPikselOnerisi, whatsappOnerisi } from './meta-dalga3-mantik';
+import { pikselDurumu, pikselListesiHali, satissizOnayGorunur, tekPikselOnerisi, whatsappOnerisi } from './meta-dalga3-mantik';
 import { oneriHatasi, telefonGirdisi, telefonKaydi, type OneriHali } from './rehber-mantik';
 import s from './rehber.module.css';
 
@@ -40,8 +40,12 @@ export function PikselSecici({ b }: { b: AdimBaglami }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hesapId, b.clientId, tur]);
 
-  const eksik = b.kayit.eksikler.find((e) => e.alan === 'pikselId' && e.seviye === 'engel') ?? null;
-  const uyarilar = b.kayit.eksikler.filter((e) => e.alan === 'pikselId' && e.seviye === 'uyari');
+  // Satışsız piksel onayı da bu kartta (alanı `satissizPikselOnayi`): engel
+  // ve uyarı onunla birlikte görünmezse kullanıcı neyi onaylayacağını bilmez.
+  const buKart = (alan: string | null) => alan === 'pikselId' || alan === 'satissizPikselOnayi';
+  const eksik = b.kayit.eksikler.find((e) => buKart(e.alan) && e.seviye === 'engel') ?? null;
+  const uyarilar = b.kayit.eksikler.filter((e) => buKart(e.alan) && e.seviye === 'uyari');
+  const onayli = !!secili && b.a.satissizPikselOnayi?.deger?.pikselId === secili;
 
   return (
     <div className={`${s.kart} ${s.blok}`}>
@@ -82,6 +86,16 @@ export function PikselSecici({ b }: { b: AdimBaglami }) {
         </button>
       )}
       {eksik && hal.tur !== 'isteniyor' && <p className={s.hataMetni}>{eksik.metin}</p>}
+      {secili && satissizOnayGorunur(b.kayit.eksikler) && (
+        <label className={s.ustBosluk} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+          <input
+            type="checkbox"
+            checked={onayli}
+            onChange={(e) => (e.target.checked ? yaz(b, 'satissizPikselOnayi', { pikselId: secili }) : sil(b, 'satissizPikselOnayi'))}
+          />
+          <span>{SATISSIZ_PIKSEL_ONAY_METNI}</span>
+        </label>
+      )}
       {uyarilar.map((u) => (
         <p key={u.kod} className={s.ipucu}>
           {u.metin}

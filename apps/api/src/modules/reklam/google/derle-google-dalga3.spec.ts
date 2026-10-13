@@ -14,6 +14,7 @@ import {
 } from '@advetics/shared';
 import { derleGoogle, type GoogleDerlemeBaglami } from './derle-google';
 import { DEMAND_GEN_GORSEL_KANALLARI, type GoogleGorselKaynagi } from '../../connections/providers/google-demandgen';
+import { PMAX_EN_COK_LOGO, PMAX_EN_COK_VIDEO, pmaxHedefIslemleri, pmaxLogoKareMi, pmaxSinirSorunu } from '../../connections/providers/google-pmax';
 
 /**
  * ═══ DALGA 3 — Talep Yaratma GÖRSEL ve Maks. Performans derleyicisi ═══
@@ -68,7 +69,20 @@ function rehber(amac: RehberAmacKodu, ek: Partial<RehberAlanlari> = {}): RehberA
   };
 }
 
-function turet(amac: RehberAmacKodu, o: { donusum?: boolean | null; satis?: boolean | null; a?: RehberAlanlari } = {}) {
+/**
+ * Hesabın müşteri düzeyi hedefleri: Advetics kurulumunun açtıkları (form,
+ * telefon, WhatsApp/iletişim) ve satın alma. Yalnız PURCHASE~WEBSITE
+ * teklife girmeli.
+ */
+const HEDEFLER = [
+  { kategori: 'SUBMIT_LEAD_FORM', kaynak: 'WEBSITE' },
+  { kategori: 'PURCHASE', kaynak: 'WEBSITE' },
+  { kategori: 'PHONE_CALL_LEAD', kaynak: 'CALL_FROM_ADS' },
+  { kategori: 'CONTACT', kaynak: 'WEBSITE' },
+  { kategori: 'PURCHASE', kaynak: 'GOOGLE_HOSTED' },
+];
+
+function turet(amac: RehberAmacKodu, o: { donusum?: boolean | null; satis?: boolean | null; a?: RehberAlanlari; hedefler?: typeof HEDEFLER | null } = {}) {
   return rehberdenGoogle(o.a ?? rehber(amac), ACIK, {
     musteriId: '123-456-7890',
     paraBirimi: 'TRY',
@@ -77,6 +91,7 @@ function turet(amac: RehberAmacKodu, o: { donusum?: boolean | null; satis?: bool
     son30GunDonusum: 20,
     uzantilar: null,
     satisOlcumu: o.satis === undefined ? true : o.satis,
+    donusumHedefleri: o.hedefler === undefined ? HEDEFLER : o.hedefler,
     medyaOranlari: ORANLAR,
     isletmeAdi: 'Garden Villas',
     logoVarlikId: U(9),
@@ -372,7 +387,10 @@ describe('MAKS. PERFORMANS — altın gövde', () => {
     expect(t.slice(0, 5)).toEqual(['campaignBudgetOperation', 'campaignOperation', 'campaignCriterionOperation', 'campaignCriterionOperation', 'assetGroupOperation']);
     expect(t).not.toContain('adGroupOperation');
     expect(t).not.toContain('adGroupAdOperation');
-    expect(t.at(-1)).toBe('campaignAssetOperation');
+    // Marka bağları varlıklardan sonra, kampanya hedefleri EN SONDA (resmî örnek).
+    const ilkHedef = t.indexOf('campaignConversionGoalOperation');
+    expect(t[ilkHedef - 1]).toBe('campaignAssetOperation');
+    expect(t.slice(ilkHedef).every((x) => x === 'campaignConversionGoalOperation')).toBe(true);
     expect(geciciKimliklerCozuluyor(ops)).toEqual([]);
     expect(d.sira.reklam).toBeNull();
     expect(turler(ops)[d.sira.reklamGrubu]).toBe('assetGroupOperation');
@@ -480,6 +498,96 @@ describe('MAKS. PERFORMANS — altın gövde', () => {
     const r = derleGoogle({ ...girdi('SATIS'), youtubeVideoId: null }, B);
     expect(r.tur === 'govde' && r.notlar.some((n) => /video/.test(n))).toBe(true);
     expect(r.tur === 'govde' && r.beklenen.varlikGrubu!.alanlar.YOUTUBE_VIDEO).toBe(0);
+  });
+});
+
+describe('MAKS. PERFORMANS — yalnız satın almaya bağlı (g-1.4.0)', () => {
+  const d = derle('SATIS');
+  const ops = d.govde.mutateOperations;
+  type Hedef = { update: { resourceName: string; biddable: boolean }; updateMask: string };
+  const hedefOps = ops.filter((o) => o.campaignConversionGoalOperation).map((o) => o.campaignConversionGoalOperation as Hedef);
+
+  it('KRİTİK: hesabın BÜTÜN hedefleri açıkça yazılır; yalnız PURCHASE~WEBSITE biddable', () => {
+    expect(hedefOps.map((h) => [h.update.resourceName, h.update.biddable])).toEqual([
+      [`customers/${MUSTERI}/campaignConversionGoals/-2~SUBMIT_LEAD_FORM~WEBSITE`, false],
+      [`customers/${MUSTERI}/campaignConversionGoals/-2~PURCHASE~WEBSITE`, true],
+      [`customers/${MUSTERI}/campaignConversionGoals/-2~PHONE_CALL_LEAD~CALL_FROM_ADS`, false],
+      [`customers/${MUSTERI}/campaignConversionGoals/-2~CONTACT~WEBSITE`, false],
+      [`customers/${MUSTERI}/campaignConversionGoals/-2~PURCHASE~GOOGLE_HOSTED`, false],
+    ]);
+  });
+
+  it('KRİTİK: güncelleme (create DEĞİL), maskede "biddable"; kaynak adındaki kimlik bu istekteki KAMPANYANIN geçici kimliği', () => {
+    expect(hedefOps.every((h) => h.updateMask === 'biddable' && !(h as unknown as { create?: unknown }).create)).toBe(true);
+    const kampanyaKaynagi = kampanya(ops).resourceName as string;
+    const kimlik = kampanyaKaynagi.slice(kampanyaKaynagi.lastIndexOf('/') + 1);
+    expect(kimlik).toBe('-2');
+    expect(hedefOps.every((h) => h.update.resourceName.split('/').at(-1)!.split('~')[0] === kimlik)).toBe(true);
+    // Hedef işlemleri kampanyayı kuran işlemden SONRA (geçici kimlik çözülsün).
+    const kIdx = ops.findIndex((o) => o.campaignOperation);
+    expect(ops.findIndex((o) => o.campaignConversionGoalOperation)).toBeGreaterThan(kIdx);
+  });
+
+  it('beklenen geri okuma: teklife giren küme yalnız PURCHASE~WEBSITE', () => {
+    expect(d.beklenen.teklifHedefleri).toEqual(['PURCHASE~WEBSITE']);
+  });
+
+  it('karar tablosu ve derleyici notu "yalnız satın almayı hedefler" diyor (eski "bütün birincil dönüşümler" sözü yok)', () => {
+    const t = tablo('SATIS', 'MAKS_PERFORMANS', null);
+    expect(t.TEKLIF?.not).toMatch(/^Google bu kampanyada yalnız satın almayı hedefler/);
+    expect(d.notlar.join(' ')).toMatch(/yalnız satın almayı hedefler/);
+    expect(d.notlar.join(' ')).not.toMatch(/bütün birincil/);
+  });
+
+  it('aynı hedef iki kez gelirse tek işlem; tanınmayan değer FIRLATIR; satın alma yoksa FIRLATIR', () => {
+    expect(pmaxHedefIslemleri('1', '-2', [{ kategori: 'PURCHASE', kaynak: 'WEBSITE' }, { kategori: 'PURCHASE', kaynak: 'WEBSITE' }])).toHaveLength(1);
+    expect(() => pmaxHedefIslemleri('1', '-2', [{ kategori: 'PURCHASE', kaynak: 'WEBSITE' }, { kategori: 'X~Y', kaynak: 'WEBSITE' }])).toThrow(/Tanınmayan/);
+    expect(() => pmaxHedefIslemleri('1', '-2', [{ kategori: 'SUBMIT_LEAD_FORM', kaynak: 'WEBSITE' }])).toThrow(/satın alma hedefi yok/);
+  });
+
+  it('KRİTİK: hedefler okunamadıysa, satın alma hedefi yoksa ya da tanınmayan değer geldiyse RET (Google\'a gitmez)', () => {
+    const kod = (hedefler: typeof HEDEFLER | null) => {
+      const r = derleGoogle(girdi('SATIS', { hedefler }), B);
+      return r.tur === 'ret' ? r.retler.map((x) => x.kod) : [];
+    };
+    expect(kod(null)).toEqual(['G-HEDEF-OKUNAMADI']);
+    expect(kod([{ kategori: 'SUBMIT_LEAD_FORM', kaynak: 'WEBSITE' }, { kategori: 'PURCHASE', kaynak: 'GOOGLE_HOSTED' }])).toEqual(['G-HEDEF-SATIS']);
+    expect(kod([{ kategori: 'PURCHASE', kaynak: 'WEBSITE' }, { kategori: "PURCHASE' OR 1", kaynak: 'WEBSITE' }])).toEqual(['G-HEDEF-TANINMIYOR']);
+    // Eski girdi (alan hiç yok) de okunamadı sayılır.
+    const { donusumHedefleri: _yok, ...eski } = girdi('SATIS');
+    const r = derleGoogle(eski, B);
+    expect(r.tur === 'ret' && r.retler.map((x) => x.kod)).toEqual(['G-HEDEF-OKUNAMADI']);
+  });
+
+  it('türetme: hedefler yalnız Maks. Performans girdisine yazılır (diğer kurguların özeti değişmez)', () => {
+    expect(girdi('SATIS').donusumHedefleri).toEqual(HEDEFLER);
+    expect(girdi('ERISIM')).not.toHaveProperty('donusumHedefleri');
+  });
+});
+
+describe('MAKS. PERFORMANS — logo ve video sınırları (Google belgesi)', () => {
+  it('KRİTİK: logo kare değilse ya da 128 pikselden küçükse RET; ölçü bilinmiyorsa geçer (prova söyler)', () => {
+    const kod = (logoOlcusu: GoogleDerlemeBaglami['logoOlcusu']) => {
+      const r = derleGoogle(girdi('SATIS'), { ...B, logoOlcusu });
+      return r.tur === 'ret' ? r.retler.map((x) => x.kod) : [];
+    };
+    expect(kod({ genislik: 1200, yukseklik: 300 })).toEqual(['G-LOGO-KARE']);
+    expect(kod({ genislik: 100, yukseklik: 100 })).toEqual(['G-LOGO-KARE']);
+    expect(kod({ genislik: 128, yukseklik: 128 })).toEqual([]);
+    expect(kod({ genislik: 1200, yukseklik: 1210 })).toEqual([]);
+    expect(kod(null)).toEqual([]);
+    expect(pmaxLogoKareMi({ genislik: null, yukseklik: 500 })).toBeNull();
+  });
+
+  it('KRİTİK: gövdede en çok 5 logo ve 15 YouTube videosu (fazlası Google\'a gitmez)', () => {
+    expect([PMAX_EN_COK_LOGO, PMAX_EN_COK_VIDEO]).toEqual([5, 15]);
+    const logo = { campaignAssetOperation: { create: { fieldType: 'LOGO' } } };
+    const video = { assetGroupAssetOperation: { create: { fieldType: 'YOUTUBE_VIDEO' } } };
+    expect(pmaxSinirSorunu(Array(5).fill(logo))).toBeNull();
+    expect(pmaxSinirSorunu(Array(6).fill(logo))).toMatch(/en çok 5 logo/);
+    expect(pmaxSinirSorunu(Array(15).fill(video))).toBeNull();
+    expect(pmaxSinirSorunu(Array(16).fill(video))).toMatch(/en çok 15 YouTube/);
+    expect(pmaxSinirSorunu(derle('SATIS').govde.mutateOperations)).toBeNull();
   });
 });
 

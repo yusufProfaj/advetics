@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { RehberPikselListesi } from '@advetics/shared';
-import { medyaKabulu, pikselDurumu, pikselListesiHali, tekPikselOnerisi, whatsappOnerisi } from './meta-dalga3-mantik';
+import { medyaKabulu, pikselDurumu, pikselListesiHali, satissizOnayGorunur, tekPikselOnerisi, whatsappOnerisi } from './meta-dalga3-mantik';
 
 const p = (id: string, ek: Partial<RehberPikselListesi['satirlar'][number]> = {}) => ({
   id, ad: `P${id}`, sonCalisma: '2026-10-10T09:00:00.000Z', kullanilamaz: false, satinAlma7Gun: true as boolean | null, ...ek,
@@ -24,6 +24,7 @@ describe('piksel seçici kararları', () => {
 
   it('durum metni üç hâli ayırıyor', () => {
     expect(pikselDurumu(p('1'))).toBe('Son 7 günde satın alma saydı');
+    expect(pikselDurumu(p('1', { satinAlma7GunSayisi: 12 }))).toBe('Son 7 günde 12 satın alma');
     expect(pikselDurumu(p('1', { satinAlma7Gun: false }))).toBe('Son 7 günde satın alma yok');
     expect(pikselDurumu(p('1', { satinAlma7Gun: null }))).toBe('Satın alma kontrol edilemedi');
     expect(pikselDurumu(p('1', { sonCalisma: null }))).toBe('Hiç çalışmamış');
@@ -53,5 +54,20 @@ describe('WhatsApp önerisi ve medya kabulü', () => {
     expect(r).toContain('/reklam/rehber/pikseller?clientId=');
     // Hata yutulmuyor: dört hâl (CLAUDE.md `.catch(() => setX([]))` yasağı).
     expect(r).toContain('.catch((e: unknown) => !iptal && setHal(oneriHatasi(e)))');
+  });
+});
+
+describe('satışsız piksel onayı', () => {
+  it('KRİTİK: kutu onay engelinde ve verilmiş onayda görünür, başka eksikte görünmez', () => {
+    expect(satissizOnayGorunur([{ kod: 'M-PIKSEL' }])).toBe(true);
+    expect(satissizOnayGorunur([{ kod: 'M-PIKSEL-ONAYLI' }])).toBe(true);
+    expect(satissizOnayGorunur([{ kod: 'M-PIKSEL-SATIS-BILINMIYOR' }, { kod: 'M-PIKSEL-SESSIZ' }])).toBe(false);
+  });
+
+  it('kutu onayı SEÇİLİ piksele yazıyor ve kaldırınca SİLİYOR (kaynak taraması)', () => {
+    const k = readFileSync(join(__dirname, 'meta-dalga3.tsx'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(k).toMatch(/yaz\(b, 'satissizPikselOnayi', \{ pikselId: secili \}\)/);
+    expect(k).toMatch(/sil\(b, 'satissizPikselOnayi'\)/);
+    expect(k).toContain('{SATISSIZ_PIKSEL_ONAY_METNI}');
   });
 });

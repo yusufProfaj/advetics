@@ -59,6 +59,17 @@ export interface RehberOnKosullari {
   metaSatisOlcumu: UcHal;
   /** Google Ads'te birincil satın alma dönüşüm işlemi etkin mi. */
   googleSatisOlcumu: UcHal;
+  /**
+   * Son 30 günde SATIN ALMA kategorisinde sayılan dönüşüm (Maks. Performans
+   * hacim uyarısı). `null` = okunamadı ya da okunmadı; alan yok = eski
+   * istemci/önbellek. Sıfır "okunamadı" ile karışmaz: sıfır bir sayı.
+   */
+  googleSatis30Gun?: number | null;
+  /**
+   * Marka Merkezi logosu Maks. Performans'ın LOGO kuralına uyuyor mu (1:1,
+   * en az 128×128; Google belgesi). `null` = ölçü bilinmiyor.
+   */
+  googleLogoKare?: UcHal;
   /** Google Ads'te herhangi bir birincil dönüşüm işlemi etkin mi (teklif seçimi buna bakar). */
   googleDonusumEtkin: UcHal;
   /** Marka Merkezi'nde logo ve işletme adı (Talep Yaratma zorunlu tutuyor). */
@@ -95,6 +106,11 @@ export interface SeciliPikselHali {
   son7GundeCalisti: boolean;
   /** Son 7 günde satın alma sayıldı mı; okunamadıysa `null`. */
   satinAlma7Gun: UcHal;
+  /**
+   * Son 7 günün satın alma SAYISI (`satinAlma7Gun` ile aynı okumadan);
+   * okunamadıysa `null`. Karar tablosu haftalık hacmi buradan söylüyor.
+   */
+  satinAlma7GunSayisi?: number | null;
 }
 
 /**
@@ -119,6 +135,8 @@ export interface RehberPikseli {
   kullanilamaz: boolean;
   /** Son 7 günde satın alma sayıldı mı (`/{piksel}/stats`); okunamadıysa `null`. */
   satinAlma7Gun: UcHal;
+  /** Son 7 günün satın alma sayısı; okunamadıysa `null`. */
+  satinAlma7GunSayisi?: number | null;
 }
 
 export interface SeciliFormHali {

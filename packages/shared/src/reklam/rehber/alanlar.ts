@@ -139,6 +139,13 @@ export const rehberAlanlariSchema = z
     whatsappKarsilama: alan(whatsappKarsilamaSchema),
     /** Satış amacı: Meta piksel kimliği (sayısal), seçili reklam hesabının pikselleri arasından. */
     pikselId: alan(z.string().regex(/^\d{1,30}$/).nullable()),
+    /**
+     * SATIŞSIZ PİKSEL ONAYI (yönetici kararı, 2026-10-13): seçili piksel son
+     * 7 günde satın alma saymadıysa (okunabildiyse) yayın kullanıcının AÇIK
+     * onayıyla açılıyor. Onay PİKSELE bağlı: başka piksel seçilince geçmez
+     * (eski onay yeni pikselin durumunu görmeden verilmiş olurdu).
+     */
+    satissizPikselOnayi: alan(z.object({ pikselId: z.string().regex(/^\d{1,30}$/) }).nullable()),
     /** Meta form kimliği (sayısal) ya da eski kayıtlarda `lead_forms.id` (`formKimligiSchema`). */
     formSablonuId: alan(formKimligiSchema.nullable()),
     medya: alan(z.array(rehberMedyasiSchema).max(10)),
@@ -217,6 +224,8 @@ export const REHBER_IZINLI_KAYNAKLAR: Partial<Record<RehberAlanAdi, readonly Ala
   whatsappNumarasi: ['kullanici', 'marka_merkezi'],
   // Hesapta TEK piksel varsa panel onu önerir (`derleyici`, "Önerilen").
   pikselId: ['kullanici', 'derleyici', 'workspace_profili'],
+  // Para sözü: yalnız kullanıcı. Önerilemez, önden doldurulamaz.
+  satissizPikselOnayi: ['kullanici'],
   // `derleyici`: görsel bırakıldığında yapay zekânın yazdığı metin ortak
   // metin boşken oraya da yazılıyor (Dalga 2). "Metin öner" düğmesinin
   // sonucu hâlâ `ai_onerisi` ve onay istiyor: kullanıcı onu İSTEDİ ama

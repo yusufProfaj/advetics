@@ -16,7 +16,7 @@ import { YERLESIM_GRUPLARI, niyetYerlesimKisiti, type SetPlani } from '../banner
 import { UZUN_FORM_SORU_SAYISI } from '../../schemas/form.schema';
 import type { SeciliFormHali } from './hazirlik';
 import { REHBER_AMACLARI, type RehberAmacKodu, type RehberPlatformu } from './amaclar';
-import type { GoogleTeklif } from './turet';
+import { GOOGLE_PMAX_SATIS_ESIGI, PMAX_HEDEF_CUMLESI, type GoogleTeklif } from './turet';
 import { metaOptimizasyonHedefi, type SitePikselHali } from '../meta/niyetler';
 import { SITE_BAGLANTISI_YOK_CUMLESI, googleUzantiReddiCumlesi, type GoogleUzantiKaynagi } from './google-uzanti';
 import { GOOGLE_OGE_ADLARI, type GoogleOgeDurumu } from './google-ogeler';
@@ -96,6 +96,39 @@ export interface KararEki {
    * uygulanıyor; Türkiye dışındaysa "09:00" başka bir saate denk gelir.
    */
   googleSaatDilimi?: string | null;
+  /**
+   * SATIŞ (2026-10-13): seçili pikselin son 7 gündeki satın alma sayısı
+   * (`null` = okunamadı) ve Google'ın son 30 gündeki satın alma sayısı.
+   * Alan yoksa hücre sayı söylemez (eski çağıran); `null` "okunamadı" der.
+   */
+  metaSatinAlma7Gun?: number | null;
+  googleSatis30Gun?: number | null;
+}
+
+/**
+ * Meta'nın öğrenme aşaması bir reklam setinde haftada ~50 optimizasyon
+ * olayı istiyor (Meta Business Help, "learning phase"). Altında reklam
+ * yayınlanır ama "öğrenme sınırlı" kalabilir; bu bir ENGEL değil, bilgi.
+ */
+export const META_OGRENME_HAFTALIK = 50;
+
+/** Meta satış ölçümü hücresinin notu: haftalık sayı ve öğrenme bilgisi (üç hâl ayrı). */
+export function metaSatisOlcumNotu(n: number | null | undefined): string {
+  const taban = 'Reklam satın alma için optimize edilir';
+  if (n === undefined) return taban;
+  if (n === null) return `${taban} · Son 7 günün satın alma sayısı okunamadı`;
+  const sayi = Math.floor(n);
+  if (sayi === 0) return `${taban} · Piksel son 7 günde satın alma saymadı; reklam satış yerine rastgele kişilere optimize olabilir`;
+  if (sayi < META_OGRENME_HAFTALIK) return `${taban} · Son 7 günde ${sayi} satın alma; haftada ${META_OGRENME_HAFTALIK}'nin altında öğrenme aşaması bitmeyebilir`;
+  return `${taban} · Son 7 günde ${sayi} satın alma`;
+}
+
+/** Maks. Performans teklif hücresinin notu: yalnız satın alma + son 30 gün. */
+export function pmaxTeklifNotu(n: number | null | undefined): string {
+  if (n === undefined) return PMAX_HEDEF_CUMLESI;
+  if (n === null) return `${PMAX_HEDEF_CUMLESI} · Son 30 günün satış sayısı okunamadı`;
+  const sayi = Math.floor(n);
+  return `${PMAX_HEDEF_CUMLESI} · Son 30 günde ${sayi} satış${sayi < GOOGLE_PMAX_SATIS_ESIGI ? '; az satışla yavaş öğrenir' : ''}`;
 }
 
 /** Saat planının uygulandığı yer Türkiye saati değilse not (tek yer). */
@@ -209,7 +242,7 @@ export function kararTablosu(
       meta: m ? hucre('En çok sonuç', 'Sonuç başına ücret hedefi yok') : null,
       google: g
         ? pmax
-          ? hucre('En çok dönüşüm', 'Satın alma ölçümü etkin; Google hesaptaki bütün birincil dönüşümlerden öğrenir')
+          ? hucre('En çok dönüşüm', pmaxTeklifNotu(ek.googleSatis30Gun))
           : googleTeklif === 'MAKS_DONUSUM'
             ? hucre('En çok dönüşüm', ek.googleTeklifSebebi ?? 'Dönüşüm ölçümü etkin')
             : ty
@@ -273,7 +306,7 @@ export function kararTablosu(
       // sayıldığını gizlerdi.
       meta: m
         ? amac === 'SATIS'
-          ? hucre('Seçtiğin pikselin saydığı satın almalar', 'Reklam satın alma için optimize edilir')
+          ? hucre('Seçtiğin pikselin saydığı satın almalar', metaSatisOlcumNotu(ek.metaSatinAlma7Gun))
           : t.meta.niyet === 'TELEFON'
             ? hucre('Yapılan aramalar', 'Raporda "Arama" ve "20 sn+ arama" sütunları; Meta bu ülkede aramayı vermiyorsa Ara onayı')
             : hucre("Meta'nın saydığı")

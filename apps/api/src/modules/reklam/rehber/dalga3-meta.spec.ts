@@ -8,6 +8,9 @@ import {
   derleMeta,
   geriOkumaKarsilastir,
   kararTablosu,
+  ADVANTAGE_SATIS_YERLESIM_CUMLESI,
+  SATISSIZ_PIKSEL_ONAY_METNI,
+  metaSatisOlcumNotu,
   rehberAlanlariSchema,
   rehberEksikleri,
   rehberdenMeta,
@@ -157,11 +160,38 @@ describe('SATIS · Meta piksel', () => {
     expect(e({ hicCalismadi: true, son7GundeCalisti: false, satinAlma7Gun: false })).toEqual(['M-PIKSEL-CALISMADI']);
   });
 
-  it('KRİTİK: satın alma yok ya da bilinmiyor UYARI (yeni mağaza kilitlenmez)', () => {
-    const u = (p: Partial<SeciliPikselHali>) => eksikler(satis(), baglam({ seciliPiksel: { ...IYI_PIKSEL, ...p } }));
-    expect(u({ satinAlma7Gun: false }).map((x) => [x.kod, x.seviye])).toEqual([['M-PIKSEL', 'uyari']]);
+  /*
+   * YÖNETİCİ KARARI (2026-10-13): okunabilen SIFIR satın alma artık ENGEL ve
+   * yalnız kullanıcının açık onayıyla kalkıyor; okunamayan hâl uyarı kalıyor.
+   */
+  it('KRİTİK: satın alma okunabilen SIFIR ise onaysız ENGEL; onayla uyarıya iner; okunamadıysa uyarı', () => {
+    const u = (p: Partial<SeciliPikselHali>, ek: Partial<RehberAlanlari> = {}) => eksikler(satis(ek), baglam({ seciliPiksel: { ...IYI_PIKSEL, ...p } }));
+    expect(u({ satinAlma7Gun: false }).map((x) => [x.kod, x.seviye, x.alan])).toEqual([['M-PIKSEL', 'engel', 'satissizPikselOnayi']]);
+    expect(u({ satinAlma7Gun: false }, { satissizPikselOnayi: al({ pikselId: PIKSEL }) }).map((x) => [x.kod, x.seviye])).toEqual([['M-PIKSEL-ONAYLI', 'uyari']]);
     expect(u({ satinAlma7Gun: null }).map((x) => [x.kod, x.seviye])).toEqual([['M-PIKSEL-SATIS-BILINMIYOR', 'uyari']]);
+    expect(u({ satinAlma7Gun: true })).toEqual([]);
     expect(u({ son7GundeCalisti: false }).map((x) => [x.kod, x.seviye])).toEqual([['M-PIKSEL-SESSIZ', 'uyari']]);
+  });
+
+  it('KRİTİK: onay PİKSELE bağlı — başka piksel için verilen onay geçmez; onayı yalnız kullanıcı verebilir', () => {
+    const p = { seciliPiksel: { ...IYI_PIKSEL, satinAlma7Gun: false as const } };
+    const baskaPiksel = eksikler(satis({ satissizPikselOnayi: al({ pikselId: '999' }) }), baglam(p));
+    expect(baskaPiksel.find((x) => x.kod === 'M-PIKSEL')?.seviye).toBe('engel');
+    const onerilen = eksikler(satis({ satissizPikselOnayi: al({ pikselId: PIKSEL }, 'derleyici') }), baglam(p));
+    expect(onerilen.some((x) => x.kod === 'KAYNAK' && x.alan === 'satissizPikselOnayi' && x.seviye === 'engel')).toBe(true);
+    expect(rehberAlanlariSchema.safeParse({ satissizPikselOnayi: al({ pikselId: 'abc' }) }).success).toBe(false);
+    expect(SATISSIZ_PIKSEL_ONAY_METNI).toBe('Pikselim satış olayı göndermiyor; reklam satış yerine rastgele kişilere optimize olabilir. Yine de kur');
+  });
+
+  it('karar tablosu haftalık satın alma sayısını söyler; 1-49 öğrenme bilgisi; 0 ve okunamadı ayrı', () => {
+    const not = (n: number | null | undefined) => kararTablosu('SATIS', { meta: true, google: false }, 'MAKS_TIKLAMA', true, null, n === undefined ? {} : { metaSatinAlma7Gun: n }).find((x) => x.kod === 'OLCUM')?.meta?.not;
+    expect(not(undefined)).toBe('Reklam satın alma için optimize edilir');
+    expect(not(0)).toMatch(/satın alma saymadı; reklam satış yerine rastgele kişilere/);
+    expect(not(1)).toMatch(/Son 7 günde 1 satın alma; haftada 50'nin altında öğrenme aşaması bitmeyebilir/);
+    expect(not(49)).toMatch(/öğrenme aşaması bitmeyebilir/);
+    expect(not(50)).toBe('Reklam satın alma için optimize edilir · Son 7 günde 50 satın alma');
+    expect(not(null)).toMatch(/okunamadı/);
+    expect(metaSatisOlcumNotu(12.7)).toMatch(/Son 7 günde 12 satın alma/);
   });
 
   it('KRİTİK: bilinmeyen piksel düzenlemede uyarı, PLATFORMA GİDERKEN engel', () => {
@@ -295,19 +325,23 @@ describe('piksel okuması — saf çözümleyiciler', () => {
 
   it('mapAdPixel: Meta tarih biçimi ISO olur; is_unavailable yalnız true ise', () => {
     expect(mapAdPixel({ id: PIKSEL, name: ' Mağaza ', last_fired_time: '2026-10-10T09:12:44+0000' })).toEqual({
-      id: PIKSEL, ad: 'Mağaza', sonCalisma: '2026-10-10T09:12:44.000Z', kullanilamaz: false, satinAlma7Gun: null,
+      id: PIKSEL, ad: 'Mağaza', sonCalisma: '2026-10-10T09:12:44.000Z', kullanilamaz: false, satinAlma7Gun: null, satinAlma7GunSayisi: null,
     });
     expect(mapAdPixel({ id: PIKSEL, is_unavailable: true })?.kullanilamaz).toBe(true);
     expect(mapAdPixel({ id: PIKSEL })?.sonCalisma).toBeNull();
     expect(mapAdPixel({ id: 'x1' })).toBeNull();
   });
 
-  it('KRİTİK pikselSatinAlmaCoz: satın alma var/yok/biçim tanınmadı ayrı', () => {
-    expect(pikselSatinAlmaCoz({ data: [{ start_time: 't', data: [{ value: 'Purchase', count: 3 }] }] })).toEqual({ bulundu: true, sonraki: null });
-    expect(pikselSatinAlmaCoz({ data: [{ start_time: 't', data: [{ value: 'PageView', count: 90 }] }] })).toEqual({ bulundu: false, sonraki: null });
-    expect(pikselSatinAlmaCoz({ data: [{ data: [{ value: 'Purchase', count: 0 }] }], paging: { next: 'https://n' } })).toEqual({ bulundu: false, sonraki: 'https://n' });
-    expect(pikselSatinAlmaCoz({ error: {} })).toEqual({ bulundu: null, sonraki: null });
-    expect(pikselSatinAlmaCoz({ data: [{ data: 'x' }] })).toEqual({ bulundu: null, sonraki: null });
+  it('KRİTİK pikselSatinAlmaCoz: SAYI toplanır; yok = 0; biçim tanınmadı ya da sayı bozuk = null', () => {
+    expect(pikselSatinAlmaCoz({ data: [{ start_time: 't', data: [{ value: 'Purchase', count: 3 }] }, { start_time: 't2', data: [{ value: 'purchase', count: '4' }] }] })).toEqual({ bulundu: true, sayi: 7, sonraki: null });
+    expect(pikselSatinAlmaCoz({ data: [{ start_time: 't', data: [{ value: 'PageView', count: 90 }] }] })).toEqual({ bulundu: false, sayi: 0, sonraki: null });
+    expect(pikselSatinAlmaCoz({ data: [{ data: [{ value: 'Purchase', count: 0 }] }], paging: { next: 'https://n' } })).toEqual({ bulundu: false, sayi: 0, sonraki: 'https://n' });
+    expect(pikselSatinAlmaCoz({ error: {} })).toEqual({ bulundu: null, sayi: null, sonraki: null });
+    expect(pikselSatinAlmaCoz({ data: [{ data: 'x' }] })).toEqual({ bulundu: null, sayi: null, sonraki: null });
+    // SAVUNMALI: bozuk sayı "0" değil bilinmiyor (sıfır yayını onaya bağlıyor).
+    expect(pikselSatinAlmaCoz({ data: [{ data: [{ value: 'Purchase', count: 'abc' }] }] }).sayi).toBeNull();
+    expect(pikselSatinAlmaCoz({ data: [{ data: [{ value: 'Purchase', count: -1 }] }] }).sayi).toBeNull();
+    expect(pikselSatinAlmaCoz({ data: [{ data: [{ value: 'Purchase' }] }] }).sayi).toBeNull();
   });
 
   it('KRİTİK seciliPikselHali: listede yok / hiç çalışmadı / son 7 gün', () => {
@@ -353,7 +387,7 @@ describe('MetaProvider.fetchAdPixels', () => {
     }) as unknown as typeof fetch;
     const r = await provider().fetchAdPixels({ adAccountPath: 'act_9', accessToken: 'T', simdi: new Date('2026-10-11T00:00:00Z') });
     expect(r.kesildi).toBe(false);
-    expect(r.satirlar.map((p) => [p.id, p.satinAlma7Gun])).toEqual([['1', true], ['2', false]]);
+    expect(r.satirlar.map((p) => [p.id, p.satinAlma7Gun, p.satinAlma7GunSayisi])).toEqual([['1', true, 2], ['2', false, 0]]);
     expect(adresler[0]).toContain('/act_9/adspixels?fields=id%2Cname%2Clast_fired_time%2Cis_unavailable');
     expect(adresler.filter((u) => u.includes('/stats'))).toHaveLength(1);
     expect(adresler[1]).toContain('/1/stats?aggregation=event&event=Purchase&start_time=');

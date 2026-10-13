@@ -8,6 +8,7 @@ import {
   REHBER_AMACLARI,
   WHATSAPP_VARSAYILAN_MESAJ,
   advantageDurumuCumlesi,
+  ADVANTAGE_SATIS_YERLESIM_CUMLESI,
   beklenenYankilar,
   derleMeta,
   geriOkumaKarsilastir,
@@ -273,6 +274,30 @@ describe('geri okuma: karşılama UYARI, durdurmaz (N-20)', () => {
     );
     expect(r.sonuc).toBe('fark');
     expect(uyarilar(r)).toHaveLength(1);
+  });
+});
+
+describe('N-21 SATIŞTA (yönetici kararı 2026-10-13)', () => {
+  const satis = (g: Partial<DerlemeGirdisi> = {}) => derle({ niyet: 'SATIS', pikselId: '424242', hedefAdres: 'https://magaza.com', whatsappNumarasi: null, ...g }).govdeler;
+
+  it('KRİTİK: satış kampanyasında Advantage+ durumu AYRI ikinci okumada; ana okumada yok', () => {
+    const y = beklenenYankilar(satis());
+    expect(okumaAlanlari(y, 'kampanya')).not.toContain('advantage_state_info');
+    expect(ekOkumaAlanlari(y, 'kampanya')).toEqual(['advantage_state_info']);
+    expect(y.find((x) => x.alanYolu === 'advantage_state_info')?.ekBilgi).toBeUndefined();
+  });
+
+  it('KRİTİK: elle yerleşime düşülmüşse "Advantage+ satış koşulu (otomatik yerleşim) sağlanmadı" bilgisi; yayın temiz', () => {
+    const gv = satis({ kavramlar: [kavram({ oran: 'kare', setGorselleri: set('dik45', 'kare') })] });
+    expect(bul(gv, 'reklam_seti').targeting.publisher_platforms).toBeDefined();
+    const y = beklenenYankilar(gv);
+    const r = geriOkumaKarsilastir(y, ayna(gv, (ad, o) => ad === 'kampanya' && (o.advantage_state_info = { advantage_state: 'DISABLED' })), { yasalUyariVar: false });
+    expect(r.bilgiler.find((x) => x.tur === 'bilgi')?.bilgi).toBe(`Meta bu kampanyayı Advantage+ olarak işaretlemedi. ${ADVANTAGE_SATIS_YERLESIM_CUMLESI}`);
+    expect(ADVANTAGE_SATIS_YERLESIM_CUMLESI).toMatch(/^Advantage\+ satış koşulu \(otomatik yerleşim\) sağlanmadı/);
+    // Otomatik yerleşimde ek cümle YOK.
+    const oto = satis();
+    const r2 = geriOkumaKarsilastir(beklenenYankilar(oto), ayna(oto), { yasalUyariVar: false });
+    expect(r2.bilgiler.find((x) => x.tur === 'bilgi')?.bilgi).toBe(advantageDurumuCumlesi(undefined));
   });
 });
 

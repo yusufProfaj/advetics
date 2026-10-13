@@ -13,6 +13,7 @@ import { Prisma } from '@prisma/client';
 import {
   GOOGLE_TURKCE,
   GORU_AYARI,
+  type GoogleDonusumHedefi,
   OZEL_KATEGORILER,
   PROVA_TAZELIK_MS,
   REHBER_AMACLARI,
@@ -115,6 +116,7 @@ import { ReklamYayinService } from '../yayin.service';
 import { googleYazmaAcikMi, metaYazmaAcikMi } from '../yazma-kapisi';
 import { metaSurumuDogrula } from '../meta-graf';
 import { derleGoogle, GOOGLE_DERLEYICI_SURUMU, type GoogleLogo } from '../google/derle-google';
+import { pmaxLogoKareMi } from '../../connections/providers/google-pmax';
 import { googleYayinKaydiOlustur, type GoogleYayinGovdesi } from '../google/google-yayin';
 import { GOOGLE_TY_ASGARI_TRY_MICROS } from '../hazirlik.service';
 import { degisiklikleriUygula, rehberOzeti } from './rehber-kayit';
@@ -185,6 +187,14 @@ interface OnKosulKaydi {
    * Yalnız ölçüm etkinse okunur; okunmadı/okunamadı = `null` = tıklama.
    */
   googleDonusum30Gun: number | null;
+  /**
+   * SATIŞ (2026-10-13): son 30 günde SATIN ALMA kategorisinde sayılan
+   * dönüşüm (`null` = okunamadı/okunmadı) ve hesabın müşteri düzeyi dönüşüm
+   * hedefleri (Maks. Performans yalnız satın almaya bağlanıyor; `null` =
+   * okunamadı → derleyici kurmaz). Yalnız satış ölçümü KESİN etkinse okunur.
+   */
+  googleSatis30Gun: number | null;
+  googleHedefleri: GoogleDonusumHedefi[] | null;
 }
 const ONBELLEK_MS = 15 * 60_000;
 /** Form önizlemesi önbelleği: formu Meta'da değiştiren kullanıcı en geç 10 dk sonra yenisini görür. */
@@ -196,6 +206,20 @@ const FORM_AYRINTI_MS = 10 * 60_000;
  * harcama sorgusuyla aynı biçim (çekirdek tarih segmenti istisnası).
  */
 export const GOOGLE_DONUSUM_SAYISI_SORGUSU = 'SELECT metrics.conversions FROM customer WHERE segments.date DURING LAST_30_DAYS';
+
+/**
+ * Son 30 günün SATIN ALMA dönüşüm sayısı (Maks. Performans hacim uyarısı).
+ * `segments.conversion_action_category` satırı kategoriye göre BÖLÜYOR ve
+ * WHERE ile yalnız PURCHASE kalıyor; süzülen segment SELECT'te (GAQL kuralı).
+ * Sorgu YALNIZ dönüşüm metriği seçiyor: segmentli satıra gösterim ya da
+ * harcama eklemek onu kategori sayısı kadar katlardı (Google dönüşüm
+ * segmenti dersi). CANLIDA ÖLÇÜLMEDİ.
+ */
+export const GOOGLE_SATIS_SAYISI_SORGUSU =
+  "SELECT segments.conversion_action_category, metrics.conversions FROM customer WHERE segments.date DURING LAST_30_DAYS AND segments.conversion_action_category = 'PURCHASE'";
+
+/** Hesabın müşteri düzeyi dönüşüm hedefleri (Google resmî Maks. Performans örneğinin sorgusu). */
+export const GOOGLE_HEDEF_SORGUSU = 'SELECT customer_conversion_goal.category, customer_conversion_goal.origin FROM customer_conversion_goal';
 
 /**
  * SAYFA BAŞINA ön koşullar (Lead Ads koşulları, WhatsApp hattı) ve yayında
@@ -279,6 +303,10 @@ interface BaglamVerisi {
 interface Baglam extends RehberEksikBaglami {
   googleDonusum: boolean | null;
   googleDonusum30Gun: number | null;
+  /** Maks. Performans dönüşüm hedefleri (önbellekten); `null` = okunamadı/okunmadı. */
+  googleHedefleri: GoogleDonusumHedefi[] | null;
+  /** Marka Merkezi logosunun ölçüsü (Maks. Performans kare logo kuralı). */
+  logoOlcusu: { genislik: number | null; yukseklik: number | null } | null;
   /** Marka Merkezi çalışma saatleri; yoksa ya da bozuksa `null` (bilinmiyor). */
   calismaSaatleri: CalismaSaatleri | null;
   /** "Siteme gelsinler" Meta hedefini seçen piksel hâli (`sitePikselHali`). */
@@ -442,6 +470,8 @@ export class RehberService {
       googleDonusum: h.onKosullar.googleDonusumEtkin,
       googleSatis: h.onKosullar.googleSatisOlcumu,
       googleDonusum30Gun: null,
+      googleSatis30Gun: null,
+      googleHedefleri: null,
     });
     const okunan = seciliYoksaIlk(h.sayfalar, secim?.sayfaId)?.id;
     // Karar tablosu prova ÖNCESİ de doğru söylesin: rehberin amacına göre
@@ -450,6 +480,8 @@ export class RehberService {
       const a = alanlariOku(await this.satir(ctx, rehberId));
       await this.sitePikselTazele(ctx, clientId, a);
       await this.googleDonusumTazele(ctx, clientId, a, h.onKosullar.googleDonusumEtkin);
+      // SATIŞ: hacim uyarısı ve karar tablosu prova ÖNCESİ de doğru söylesin.
+      await this.googleSatisTazele(ctx, clientId, a, h.onKosullar.googleSatisOlcumu);
     }
     if (okunan) this.sayfaYaz(clientId, okunan, { formKosullari: h.onKosullar.metaFormKosullari, whatsapp: h.onKosullar.metaWhatsapp });
     return h;
@@ -675,14 +707,36 @@ export class RehberService {
    * "bilinmiyor" engeline düşerdi. Okuma düşerse `null` yazılır (log), engel
    * sebebini söyler.
    */
-  private async googleSatisTazele(ctx: TenantContext, clientId: string, a: RehberAlanlari): Promise<void> {
+  private async googleSatisTazele(ctx: TenantContext, clientId: string, a: RehberAlanlari, satisBilinen?: boolean | null): Promise<void> {
     const hesap = a.googleHesabiId?.deger;
     if (!hesap || a.amac?.deger !== 'SATIS' || !a.platformlar?.deger.google) return;
-    let satis: boolean | null = null;
-    try {
-      satis = await this.platformOkuyucu(ctx).googleSatisOlcumu(hesap);
-    } catch (e) {
-      logger.warn(`Prova öncesi Google satış ölçümü okunamadı (hesap ${hesap}): ${(e as Error).message}`);
+    let satis: boolean | null = satisBilinen ?? null;
+    if (satisBilinen === undefined) {
+      try {
+        satis = await this.platformOkuyucu(ctx).googleSatisOlcumu(hesap);
+      } catch (e) {
+        logger.warn(`Prova öncesi Google satış ölçümü okunamadı (hesap ${hesap}): ${(e as Error).message}`);
+      }
+    }
+    /*
+     * Ölçüm KESİN etkinse: satış sayısı ve dönüşüm hedefleri. İkisi AYRI
+     * hata sınırında: sayı düşerse yalnız uyarı "okunamadı" olur, hedefler
+     * düşerse derleyici kurmaz (sebebiyle). Ölçüm yoksa sorulmaz: G-DONUSUM
+     * zaten engel ve çağrı boşa kota.
+     */
+    let sayi: number | null = null;
+    let hedefler: GoogleDonusumHedefi[] | null = null;
+    if (satis === true) {
+      try {
+        sayi = await this.googleSatisSayisi(ctx, hesap);
+      } catch (e) {
+        logger.warn(`Google satış sayısı okunamadı (hesap ${hesap}): ${(e as Error).message}`);
+      }
+      try {
+        hedefler = await this.googleHedefleri(ctx, hesap);
+      } catch (e) {
+        logger.warn(`Google dönüşüm hedefleri okunamadı (hesap ${hesap}): ${(e as Error).message}`);
+      }
     }
     const o = this.onbellek.get(clientId);
     const taze = o && Date.now() - o.zaman < ONBELLEK_MS ? o : null;
@@ -695,6 +749,33 @@ export class RehberService {
       googleDonusum: taze && taze.googleHesapId === hesap ? taze.googleDonusum : null,
       googleSatis: satis,
       googleDonusum30Gun: taze && taze.googleHesapId === hesap ? taze.googleDonusum30Gun : null,
+      googleSatis30Gun: sayi,
+      googleHedefleri: hedefler,
+    });
+  }
+
+  /** Son 30 günün SATIN ALMA dönüşüm sayısı (kota bekçisinden). Okunamayan değer sıfır SAYILMAZ: fırlatır. */
+  private async googleSatisSayisi(ctx: TenantContext, adAccountId: string): Promise<number> {
+    const { fctx } = await this.googleBaglami(ctx, adAccountId, null);
+    await this.kotaKapisi(adAccountId);
+    const r = await this.google.rehberAra<{ metrics?: { conversions?: number | string } }>(fctx, GOOGLE_SATIS_SAYISI_SORGUSU);
+    return donusumToplami(r);
+  }
+
+  /**
+   * Hesabın müşteri düzeyi dönüşüm hedefleri. Kategori ya da kaynağı
+   * olmayan satır FIRLATIR: eksik bir hedefi atlayıp kalanları yazmak, o
+   * hedefin hesap varsayılanıyla teklife girmesi demek.
+   */
+  private async googleHedefleri(ctx: TenantContext, adAccountId: string): Promise<GoogleDonusumHedefi[]> {
+    const { fctx } = await this.googleBaglami(ctx, adAccountId, null);
+    await this.kotaKapisi(adAccountId);
+    const r = await this.google.rehberAra<{ customerConversionGoal?: { category?: string; origin?: string } }>(fctx, GOOGLE_HEDEF_SORGUSU);
+    return r.map((x) => {
+      const k = x.customerConversionGoal?.category;
+      const o = x.customerConversionGoal?.origin;
+      if (!k || !o) throw new Error('Dönüşüm hedefinde kategori ya da kaynak yok');
+      return { kategori: k, kaynak: o };
     });
   }
 
@@ -755,6 +836,8 @@ export class RehberService {
       googleDonusum: etkin,
       googleSatis: taze && taze.googleHesapId === hesap ? taze.googleSatis : null,
       googleDonusum30Gun: sayi,
+      googleSatis30Gun: taze && taze.googleHesapId === hesap ? taze.googleSatis30Gun : null,
+      googleHedefleri: taze && taze.googleHesapId === hesap ? taze.googleHedefleri : null,
     });
   }
 
@@ -768,15 +851,7 @@ export class RehberService {
     const { fctx } = await this.googleBaglami(ctx, adAccountId, null);
     await this.kotaKapisi(adAccountId);
     const r = await this.google.rehberAra<{ metrics?: { conversions?: number | string } }>(fctx, GOOGLE_DONUSUM_SAYISI_SORGUSU);
-    let toplam = 0;
-    for (const x of r) {
-      const v = x.metrics?.conversions;
-      // Proto3 JSON'da sıfır değerli alan HİÇ gelmeyebilir: eksik = 0.
-      const n = v === undefined ? 0 : Number(v);
-      if (!Number.isFinite(n) || n < 0) throw new Error(`Dönüşüm sayısı çözülemedi: ${String(v)}`);
-      toplam += n;
-    }
-    return toplam;
+    return donusumToplami(r);
   }
 
   /**
@@ -1586,6 +1661,7 @@ export class RehberService {
       uzantilar: b.uzantilar,
       ogeKaynagi: b.ogeKaynagi,
       satisOlcumu: b.onKosullar?.googleSatisOlcumu ?? null,
+      donusumHedefleri: b.googleHedefleri,
       medyaOranlari: b.medyaOranlari ?? new Map(),
       isletmeAdi: b.isletmeAdi,
       logoVarlikId: b.logoVarlikId,
@@ -1603,6 +1679,7 @@ export class RehberService {
       simdi: new Date(),
       validateOnly: true,
       logo,
+      logoOlcusu: b.logoOlcusu,
       youtubeVideoBasligi: a.youtubeVideo?.deger?.baslik ?? null,
       gorselKaynaklari: await this.googleGorselKaynaklari(ctx, s.client_id, t.deger, b.google.id),
     });
@@ -1984,6 +2061,7 @@ export class RehberService {
       simdi: new Date(),
       validateOnly: false,
       logo: await this.googleLogo(ctx, s.client_id, girdi, b.google.id),
+      logoOlcusu: b.logoOlcusu,
       youtubeVideoBasligi: a.youtubeVideo?.deger?.baslik ?? null,
       gorselKaynaklari: await this.googleGorselKaynaklari(ctx, s.client_id, girdi, b.google.id),
     });
@@ -2127,6 +2205,10 @@ export class RehberService {
         // TELEFON: arama öğesinin saatleri (derleyicinin gönderdiği AYNI değer).
         calismaSaatleri: b.calismaSaatleri,
         googleSaatDilimi: b.google?.timezone ?? null,
+        // SATIŞ hacmi: eksik listesinin okuduğu AYNI önbellek değerleri.
+        // Piksel okunmadıysa (`seciliPiksel` yok) sayı söylenmez.
+        ...(b.onKosullar?.seciliPiksel ? { metaSatinAlma7Gun: b.onKosullar.seciliPiksel.satinAlma7GunSayisi ?? null } : {}),
+        ...(b.onKosullar?.googleSatisOlcumu === true ? { googleSatis30Gun: b.onKosullar.googleSatis30Gun ?? null } : {}),
       },
     );
   }
@@ -2207,6 +2289,9 @@ export class RehberService {
     const googleDonusum = taze && google && taze.googleHesapId === google.id ? taze.googleDonusum : null;
     const googleSatis = taze && google && taze.googleHesapId === google.id ? taze.googleSatis : null;
     const googleDonusum30Gun = taze && google && taze.googleHesapId === google.id ? taze.googleDonusum30Gun : null;
+    const googleSatis30Gun = taze && google && taze.googleHesapId === google.id ? taze.googleSatis30Gun : null;
+    const googleHedefleri = taze && google && taze.googleHesapId === google.id ? taze.googleHedefleri : null;
+    const logoOlcusu = r.m?.logo ? { genislik: r.m.logo_genislik ?? null, yukseklik: r.m.logo_yukseklik ?? null } : null;
     const saatlerOkunan = r.m?.calisma_saatleri == null ? null : calismaSaatleriSchema.safeParse(r.m.calisma_saatleri);
     if (saatlerOkunan && !saatlerOkunan.success) logger.warn(`Çalışma saatleri geçersiz (${clientId}), bilinmiyor sayıldı`);
     const calismaSaatleri = saatlerOkunan?.success && saatlerOkunan.data.length ? saatlerOkunan.data : null;
@@ -2265,6 +2350,8 @@ export class RehberService {
       metaSatisOlcumu: seciliPiksel?.satinAlma7Gun ?? null,
       seciliPiksel,
       googleSatisOlcumu: googleSatis,
+      googleSatis30Gun,
+      googleLogoKare: pmaxLogoKareMi(logoOlcusu),
       googleDonusumEtkin: googleDonusum,
       googleLogoVeAd: !!r.m?.logo,
       seciliForm: seciliFormHali(a.formSablonuId?.deger ?? null, r.formKimligi, sayfa?.formlar ?? null),
@@ -2286,6 +2373,8 @@ export class RehberService {
       bugun: new Intl.DateTimeFormat('en-CA', { timeZone: google?.timezone ?? 'Europe/Istanbul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()),
       googleDonusum,
       googleDonusum30Gun,
+      googleHedefleri,
+      logoOlcusu,
       calismaSaatleri,
       sitePikseli,
       uzantilar,
@@ -2555,6 +2644,22 @@ async function aitlikDenetle(t: { $queryRaw<T = unknown>(q: Prisma.Sql): Promise
 }
 
 /** Saklanan Google sürümü → derleyici girdisi (micros dizgeden BigInt'e). */
+/**
+ * `metrics.conversions` satırlarının toplamı. Proto3 JSON'da sıfır değerli
+ * alan HİÇ gelmeyebilir: eksik = 0. Sayı olmayan değer FIRLATIR (okunamayan
+ * sayı sıfır sayılmaz).
+ */
+export function donusumToplami(r: ReadonlyArray<{ metrics?: { conversions?: number | string } }>): number {
+  let toplam = 0;
+  for (const x of r) {
+    const v = x.metrics?.conversions;
+    const n = v === undefined ? 0 : Number(v);
+    if (!Number.isFinite(n) || n < 0) throw new Error(`Dönüşüm sayısı çözülemedi: ${String(v)}`);
+    toplam += n;
+  }
+  return toplam;
+}
+
 function googleGirdisiOku(ham: unknown): GoogleDerlemeGirdisi {
   const g = ham as GoogleDerlemeGirdisi & { butce: { tip: 'gunluk' | 'toplam'; micros: string | bigint } };
   return { ...g, butce: { tip: g.butce.tip, micros: BigInt(g.butce.micros) } };

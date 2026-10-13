@@ -16,6 +16,30 @@ RLS politikası var, platform sahibi yalnız hello@profaj.com.
 bu commit'le deploy ediliyor; migration `20261009100000_iyilestir` (üç
 yeni tablo) + `db:rls`.
 
+**ADVCAMPAIGN "SİTEMDEN SATIŞ GELSİN" TURU (2026-10-13).** Amaç hâlâ
+`deneme` (`amaclar.ts` dokunulmadı), push/deploy YOK. Google Maks.
+Performans artık YALNIZ satın almaya bağlı: atomik isteğin SONUNDA
+hesabın bütün `customer_conversion_goal`ları için `CampaignConversionGoal`
+güncellemesi (`customers/{cid}/campaignConversionGoals/-2~KAT~KAYNAK`,
+`updateMask: biddable`), yalnız `PURCHASE~WEBSITE` true — Google'ın resmî
+`AddPerformanceMaxRetailCampaign` örneği aynı istekte geçici kimlikle
+yapıyor. Hedefler okunamazsa kurulmaz (`G-HEDEF-OKUNAMADI`); geri okuma
+`campaign_conversion_goal` teklife giren kümeyi kıyaslıyor (fark →
+açılmaz). Son 30 gün satın alma sayısı (<15 UYARI, okunamadı ayrı
+cümle); kare logo (1:1, ≥128) girişte ve derleyicide; logo ≤5, video ≤15
+(belge; yönetici "5" demişti). Meta: piksel Purchase SAYISI toplanıyor;
+okunabilen 0 → onaysız ENGEL, "Pikselim satış olayı göndermiyor…"
+kutusu (`satissizPikselOnayi`, piksele bağlı); haftalık sayı karar
+tablosunda, 1-49 öğrenme bilgisi; N-21 SATIŞ'ta da, elle yerleşimde
+"Advantage+ satış koşulu (otomatik yerleşim) sağlanmadı". Google g-1.4.0.
+**Ölç (validateOnly):** hedef güncellemesinin geçici kampanya kimliğiyle
+aynı istekte kabulü (reddedilirse yol: duraklatılmış kur → ayrı mutate →
+geri oku → aç); `segments.conversion_action_category` + `customer`
+sorgusu; `campaign_conversion_goal.campaign` süzgeci; piksel
+`/stats?event=Purchase` sayı biçimi. **Ertelendi:** Meta VALUE/ROAS,
+Google maks. değer/tROAS, AssetGroupSignal, marka hariç tutma, url_tags,
+Merchant feed, katalog/DPA, mağaza CAPI.
+
 **ADVCAMPAIGN "BENİ TELEFONLA ARASINLAR" TURU (2026-10-13).** Amaç hâlâ
 `deneme` (canlı kurulmadı). Yapılanlar: Meta arama sonucu kovası ("Arama",
 "20 sn+"; action adları ÖLÇÜLMEDİ, tanınmayan `call` eylemleri raporda

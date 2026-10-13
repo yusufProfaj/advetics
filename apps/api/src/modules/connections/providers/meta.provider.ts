@@ -1754,9 +1754,12 @@ export class MetaProvider implements IAdPlatformProvider {
       // hiç olay almamış piksel satın alma da saymamıştır.
       if (p.kullanilamaz || !p.sonCalisma) {
         p.satinAlma7Gun = p.sonCalisma ? null : false;
+        p.satinAlma7GunSayisi = p.sonCalisma ? null : 0;
         continue;
       }
-      p.satinAlma7Gun = await this.pikselSatinAlma(p.id, baslangic, auth);
+      const n = await this.pikselSatinAlma(p.id, baslangic, auth);
+      p.satinAlma7GunSayisi = n;
+      p.satinAlma7Gun = n === null ? null : n > 0;
     }
     return { satirlar, kesildi };
   }
@@ -1788,21 +1791,30 @@ export class MetaProvider implements IAdPlatformProvider {
     }
   }
 
-  private async pikselSatinAlma(pikselId: string, baslangic: number, auth: RequestInit): Promise<boolean | null> {
+  /**
+   * Son 7 günün satın alma SAYISI (rehberin onay kapısı ve haftalık hacim,
+   * 2026-10-13). Önceden ilk satın almada duruyordu ("var mı"); artık
+   * sayfalar toplanıyor. Sayfalar bitmeden durursa ya da bir sayfa
+   * tanınmazsa `null`: eksik toplam "bu kadar" diye gösterilemez, sıfır ise
+   * yayın onayı istiyor — yanlış sıfır sağlam mağazayı kilitlerdi.
+   */
+  private async pikselSatinAlma(pikselId: string, baslangic: number, auth: RequestInit): Promise<number | null> {
     const ilk = new URL(`${this.graph}/${pikselId}/stats`);
     ilk.searchParams.set('aggregation', 'event');
     ilk.searchParams.set('event', 'Purchase');
     ilk.searchParams.set('start_time', String(baslangic));
     let url: string | null = ilk.toString();
+    let toplam = 0;
     try {
       for (let i = 0; i < PIKSEL_SAYFA_SINIRI && url; i++) {
         const res: PlatformResponse<unknown> = await platformFetch<unknown>('meta', url, auth, parseMetaRateLimit);
         const c = pikselSatinAlmaCoz(res.data);
-        if (c.bulundu !== false) return c.bulundu;
+        if (c.sayi === null) return null;
+        toplam += c.sayi;
         url = c.sonraki;
       }
-      // Sayfalar bitmeden durduysak "yok" diyemeyiz.
-      return url ? null : false;
+      // Sayfalar bitmeden durduysak toplam eksik: bilinmiyor.
+      return url ? null : toplam;
     } catch (err) {
       this.logger.warn(`Piksel ${pikselId}: satın alma sinyali okunamadı: ${err instanceof Error ? err.message : String(err)}`);
       return null;
@@ -3639,6 +3651,8 @@ export interface MetaPikselSatiri {
   sonCalisma: string | null;
   kullanilamaz: boolean;
   satinAlma7Gun: boolean | null;
+  /** Son 7 günün satın alma sayısı; okunamadıysa `null`. */
+  satinAlma7GunSayisi: number | null;
 }
 
 /**
@@ -3662,32 +3676,42 @@ export function mapAdPixel(row: Record<string, unknown>): MetaPikselSatiri | nul
     sonCalisma: ham ? (Number.isNaN(t) ? ham : new Date(t).toISOString()) : null,
     kullanilamaz: row.is_unavailable === true,
     satinAlma7Gun: null,
+    satinAlma7GunSayisi: null,
   };
 }
 
 /**
- * `/{piksel}/stats?aggregation=event` sayfası → satın alma görüldü mü.
- * Beklenen biçim (Graph `AdsPixelStatsResult`, ÖLÇÜLMEDİ):
+ * `/{piksel}/stats?aggregation=event&event=Purchase` sayfası → bu sayfadaki
+ * satın alma SAYISI. Beklenen biçim (Graph `AdsPixelStatsResult`; olay
+ * toplamları `pikselOlayToplamlariCoz` ile ölçüldü, `event=Purchase`
+ * süzgeçli hâli ÖLÇÜLMEDİ):
  * `{ data: [{ start_time, aggregation, data: [{ value: 'Purchase', count }] }], paging }`.
- * - `true`: sayısı sıfırdan büyük bir `Purchase` satırı var.
- * - `false`: biçim TANINDI ve bu sayfada satın alma yok (sonraki sayfa varsa
- *   çağıran devam eder; sayfa bitince "yok").
- * - `null`: biçim tanınmadı. Tanınmayan yanıtı "satış yok" saymak sağlam
- *   bir mağazaya yanlış uyarı göstermek olurdu.
+ * SAVUNMALI: sayı `null` = bilinmiyor, şu hâllerde:
+ * - gövde ya da kova biçimi tanınmadı;
+ * - bir `Purchase` satırının sayısı sayı DEĞİL (dizge "12" kabul, "abc"
+ *   değil) ya da negatif — onu atlamak toplamı sessizce küçültürdü.
+ * Sıfır YALNIZ biçim tanındı ve satın alma satırı yoksa (ya da sayıları 0).
+ * Sıfır yayını onaya bağlıyor; tanınmayan yanıtı sıfır saymak sağlam bir
+ * mağazayı kilitlerdi. `bulundu` eski çağıranlar için (`sayi > 0`).
  */
-export function pikselSatinAlmaCoz(govde: unknown): { bulundu: boolean | null; sonraki: string | null } {
+export function pikselSatinAlmaCoz(govde: unknown): { bulundu: boolean | null; sayi: number | null; sonraki: string | null } {
+  const bilinmiyor = { bulundu: null, sayi: null, sonraki: null };
   const g = govde as { data?: unknown; paging?: { next?: unknown } } | null;
-  if (!g || !Array.isArray(g.data)) return { bulundu: null, sonraki: null };
+  if (!g || !Array.isArray(g.data)) return bilinmiyor;
   const sonraki = typeof g.paging?.next === 'string' ? g.paging.next : null;
+  let sayi = 0;
   for (const kova of g.data) {
     const ic = (kova as { data?: unknown } | null)?.data;
-    if (!Array.isArray(ic)) return { bulundu: null, sonraki: null };
+    if (!Array.isArray(ic)) return bilinmiyor;
     for (const s of ic) {
       const o = s as { value?: unknown; count?: unknown } | null;
-      if (typeof o?.value === 'string' && o.value.toLowerCase() === 'purchase' && Number(o.count) > 0) return { bulundu: true, sonraki: null };
+      if (typeof o?.value !== 'string' || o.value.toLowerCase() !== 'purchase') continue;
+      const n = typeof o.count === 'number' ? o.count : typeof o.count === 'string' && o.count.trim() !== '' ? Number(o.count) : NaN;
+      if (!Number.isFinite(n) || n < 0) return bilinmiyor;
+      sayi += n;
     }
   }
-  return { bulundu: false, sonraki };
+  return { bulundu: sayi > 0, sayi, sonraki };
 }
 
 /**

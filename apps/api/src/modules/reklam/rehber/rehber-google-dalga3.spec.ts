@@ -27,6 +27,10 @@ let cagrilar: string[];
 let sorgular: string[];
 let mutateGovdeleri: Array<{ mutateOperations: Array<Record<string, unknown>>; validateOnly: boolean }>;
 let satisSatiri: boolean | 'hata';
+/** Hesabın müşteri düzeyi dönüşüm hedefleri (Maks. Performans, g-1.4.0). */
+let hedefSatirlari: Array<{ customerConversionGoal: { category: string; origin: string } }> | 'hata';
+/** Son 30 günün satın alma sayısı (hacim uyarısı). */
+let satisSayisi: number | string | 'hata';
 
 const GHESAP = '44444444-0000-4000-8000-0000000000a1';
 const YATAY = '55555555-0000-4000-8000-0000000000b1';
@@ -53,6 +57,14 @@ const sahteGoogle = {
   rehberAra: async (_c: unknown, q: string) => {
     cagrilar.push('ara');
     sorgular.push(q);
+    if (q.includes('FROM customer_conversion_goal')) {
+      if (hedefSatirlari === 'hata') throw new Error('PERMISSION_DENIED');
+      return hedefSatirlari;
+    }
+    if (q.includes('segments.conversion_action_category')) {
+      if (satisSayisi === 'hata') throw new Error('PERMISSION_DENIED');
+      return [{ segments: { conversionActionCategory: 'PURCHASE' }, metrics: { conversions: satisSayisi } }];
+    }
     if (q.includes("category = 'PURCHASE'")) {
       if (satisSatiri === 'hata') throw new Error('PERMISSION_DENIED');
       return satisSatiri ? [{ conversionAction: { id: '1' } }] : [];
@@ -103,6 +115,11 @@ beforeEach(async () => {
   sorgular = [];
   mutateGovdeleri = [];
   satisSatiri = true;
+  hedefSatirlari = [
+    { customerConversionGoal: { category: 'PURCHASE', origin: 'WEBSITE' } },
+    { customerConversionGoal: { category: 'SUBMIT_LEAD_FORM', origin: 'WEBSITE' } },
+  ];
+  satisSayisi = 40;
   (svc as unknown as { onbellek: Map<string, unknown> }).onbellek.clear();
   await h.reset();
   await seedTenant(h);
@@ -213,6 +230,53 @@ describe('Maks. Performans — satın alma ölçümü kapısı', () => {
     const kayit = await svc.oku(CTX, r.id);
     expect(kayit.eksikler.find((e) => e.kod === 'G-GORSEL-DIKEY')?.seviye).toBe('uyari');
     expect(kayit.kararlar.find((x) => x.kod === 'TEKLIF')?.google?.deger).toBe('En çok dönüşüm');
+  });
+});
+
+describe('Maks. Performans — yalnız satın alma ve satış hacmi (2026-10-13)', () => {
+  const hedefler = () =>
+    mutateGovdeleri[0]!.mutateOperations
+      .filter((o) => o.campaignConversionGoalOperation)
+      .map((o) => (o.campaignConversionGoalOperation as { update: { resourceName: string; biddable: boolean } }).update);
+
+  it('KRİTİK: prova gövdesi hesabın hedeflerini Google\'dan TAZE okur; yalnız PURCHASE~WEBSITE biddable', async () => {
+    const r = await rehber('SATIS', [YATAY, KARE]);
+    const p = await svc.prova(CTX, r.id);
+    expect(p.google).toMatchObject({ tur: 'gecti' });
+    expect(sorgular.some((q) => q.includes('FROM customer_conversion_goal'))).toBe(true);
+    expect(hedefler().map((h) => [h.resourceName.split('/').at(-1), h.biddable])).toEqual([
+      ['-2~PURCHASE~WEBSITE', true],
+      ['-2~SUBMIT_LEAD_FORM~WEBSITE', false],
+    ]);
+    const kayit = await svc.oku(CTX, r.id);
+    expect(kayit.kararlar.find((x) => x.kod === 'TEKLIF')?.google?.not).toMatch(/^Google bu kampanyada yalnız satın almayı hedefler; .* · Son 30 günde 40 satış$/);
+  });
+
+  it('KRİTİK: hedefler OKUNAMAZSA prova Google\'a gitmez (G-HEDEF-OKUNAMADI sebebiyle)', async () => {
+    hedefSatirlari = 'hata';
+    const r = await rehber('SATIS', [YATAY, KARE]);
+    const p = await svc.prova(CTX, r.id);
+    expect(p.google).toMatchObject({ tur: 'reddetti' });
+    expect(JSON.stringify(p.google)).toMatch(/dönüşüm hedefleri okunamadı/);
+    expect(cagrilar.filter((c) => c.startsWith('mutate'))).toEqual([]);
+  });
+
+  it('KRİTİK: satış hacmi uyarısı — 0 ve 14 uyarı, 15 sessiz, okunamadı kendi cümlesiyle; hiçbiri engel değil', async () => {
+    const uyari = async (n: number | string | 'hata') => {
+      satisSayisi = n;
+      (svc as unknown as { onbellek: Map<string, unknown> }).onbellek.clear();
+      cagrilar = [];
+      mutateGovdeleri = [];
+      const r = await rehber('SATIS', [YATAY, KARE]);
+      await svc.prova(CTX, r.id);
+      const e = (await svc.oku(CTX, r.id)).eksikler.filter((x) => x.kod.startsWith('G-SATIS'));
+      expect(e.every((x) => x.seviye === 'uyari')).toBe(true);
+      return e.map((x) => x.metin);
+    };
+    expect(await uyari(0)).toEqual(['Son 30 günde 0 satış; Maks. Performans az satışla yavaş öğrenir']);
+    expect(await uyari('14.6')).toEqual(['Son 30 günde 14 satış; Maks. Performans az satışla yavaş öğrenir']);
+    expect(await uyari(15)).toEqual([]);
+    expect(await uyari('hata')).toEqual(["Son 30 günün satış sayısı Google Ads'ten okunamadı"]);
   });
 });
 

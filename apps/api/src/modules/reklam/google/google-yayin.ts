@@ -180,6 +180,8 @@ export interface GoogleOkunan {
   gorunenYol?: { path1: string | null; path2: string | null } | null;
   gorselReklam?: GoogleGorselReklamBeklentisi | null;
   varlikGrubu?: GoogleVarlikGrubuBeklentisi | null;
+  /** Maks. Performans: teklife giren kampanya dönüşüm hedefleri (`KATEGORI~KAYNAK`, sıralı); yalnız beklenen taşıyorsa okunur. */
+  teklifHedefleri?: string[] | null;
   /**
    * Kampanyaya bağlı site bağlantısı ve açıklama metni öğeleri, İÇERİKLE.
    * Onay durumu (`primary_status`, politika incelemesi) BİLEREK okunmuyor:
@@ -241,6 +243,10 @@ export function googleGeriOkumaKarsilastir(b: GoogleBeklenen, o: GoogleOkunan): 
   if (b.gorunenYol) kiyasla('reklam.gorunenYol', b.gorunenYol, o.gorunenYol ?? null);
   if (b.gorselReklam) kiyasla('gorselReklam', b.gorselReklam, o.gorselReklam ?? null);
   if (b.varlikGrubu) kiyasla('varlikGrubu', b.varlikGrubu, o.varlikGrubu ?? null);
+  // "200 döndü doğrulama değil": hedef güncellemesi kabul edildi diye
+  // uygulandığı anlamına gelmiyor. Teklife giren küme TAM OLARAK beklenen
+  // olmalı; fazladan açık hedef (form, telefon) bütçeyi oraya akıtır.
+  if (b.teklifHedefleri) kiyasla('kampanya.donusumHedefleri', [...b.teklifHedefleri].sort(), o.teklifHedefleri ? [...o.teklifHedefleri].sort() : null);
   // Uzantılar KÜME olarak: Google'ın satır sırası garanti değil. Beklenen
   // boşsa da kıyaslanır (bağlı öğe varsa fark: söz verilmemiş metin).
   if (b.uzantilar) kiyasla('uzantilar', uzantiKumesi(b.uzantilar), o.uzantilar ? uzantiKumesi(o.uzantilar) : null);
@@ -562,6 +568,7 @@ export async function googleGeriOku(port: GoogleYayinPortu, ctx: FetchContext, k
     ...(b?.gorunenYol ? { gorunenYol: await gorunenYolOku(port, ctx, kampanyaId) } : {}),
     ...(b?.gorselReklam ? { gorselReklam: await gorselReklamOku(port, ctx, kampanyaId) } : {}),
     ...(b?.varlikGrubu ? { varlikGrubu: await varlikGrubuOku(port, ctx, kampanyaId) } : {}),
+    ...(b?.teklifHedefleri ? { teklifHedefleri: await teklifHedefleriOku(port, ctx, kampanyaId) } : {}),
     ...(b?.uzantilar ? { uzantilar: await uzantilariOku(port, ctx, kampanyaId) } : {}),
     ...(b?.ogeler ? await ogeleriGuvenli(port, ctx, kampanyaId, b.ogeler) : {}),
   };
@@ -735,6 +742,36 @@ interface VarlikBagiSatiri {
 }
 interface MarkaBagiSatiri {
   campaignAsset?: { fieldType?: string; status?: string };
+}
+
+interface KampanyaHedefSatiri {
+  campaignConversionGoal?: { campaign?: string; category?: string; origin?: string; biddable?: boolean };
+}
+
+/**
+ * Kampanyanın TEKLİFE GİREN dönüşüm hedefleri. Süzgeç kampanyanın KAYNAK
+ * ADIYLA (`campaign_conversion_goal.campaign`) ve o alan SELECT'te: WHERE'de
+ * süzülen alanın seçilmesi GAQL kuralı (canlıda `campaign_asset` ile
+ * öğrenildi). `campaign.id` birleşimi bu kaynakta ÖLÇÜLMEDİ; kaynak adı
+ * kaynağın kendi alanı. CANLIDA ÖLÇÜLMEDİ.
+ *
+ * `biddable` proto3 JSON'da false iken HİÇ gelmeyebilir: yalnız `true`
+ * teklife giren sayılıyor. Hiç satır yoksa boş küme = fark (satın alma da
+ * teklife girmiyor demek).
+ */
+export function teklifHedefleriSorgusu(musteriId: string, kampanyaId: string): string {
+  if (!/^\d+$/.test(musteriId) || !/^\d+$/.test(kampanyaId)) throw new Error('Geçersiz Google Ads hesap ya da kampanya kimliği');
+  return `SELECT campaign_conversion_goal.campaign, campaign_conversion_goal.category, campaign_conversion_goal.origin, campaign_conversion_goal.biddable
+       FROM campaign_conversion_goal
+      WHERE campaign_conversion_goal.campaign = 'customers/${musteriId}/campaigns/${kampanyaId}'`;
+}
+
+async function teklifHedefleriOku(port: GoogleYayinPortu, ctx: FetchContext, kampanyaId: string): Promise<string[]> {
+  const r = await port.ara<KampanyaHedefSatiri>(ctx, teklifHedefleriSorgusu(ctx.accountExternalId, kampanyaId));
+  return r
+    .filter((x) => x.campaignConversionGoal?.biddable === true)
+    .map((x) => `${x.campaignConversionGoal?.category ?? 'BILINMIYOR'}~${x.campaignConversionGoal?.origin ?? 'BILINMIYOR'}`)
+    .sort();
 }
 
 async function varlikGrubuOku(port: GoogleYayinPortu, ctx: FetchContext, kampanyaId: string): Promise<GoogleVarlikGrubuBeklentisi | null> {

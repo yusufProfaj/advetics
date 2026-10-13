@@ -18,6 +18,7 @@ import {
   type GoogleAramaOgeleri,
   type GoogleDerlemeGirdisi,
   type GorselOlcusu,
+  PMAX_HEDEF_CUMLESI,
 } from '@advetics/shared';
 import { aramaAtomikIstek, aramaOgesiTelefonu, nameStamp } from '../../connections/providers/google-write';
 import {
@@ -28,7 +29,15 @@ import {
   type GoogleGorselKaynagi,
 } from '../../connections/providers/google-demandgen';
 import { aramaOgeIslemleriEkle } from '../../connections/providers/google-arama-ogeleri';
-import { PMAX_OTOMASYONU, pmaxAlanSayilari, pmaxAtomikIstek, type PmaxAlani } from '../../connections/providers/google-pmax';
+import {
+  PMAX_HEDEF_DEGERI,
+  PMAX_OTOMASYONU,
+  pmaxAlanSayilari,
+  pmaxAtomikIstek,
+  pmaxLogoKareMi,
+  pmaxTeklifHedefleri,
+  type PmaxAlani,
+} from '../../connections/providers/google-pmax';
 
 /**
  * ═══ GOOGLE DERLEYİCİSİ (AdvCampaign rehberi) ═══
@@ -63,7 +72,11 @@ import { PMAX_OTOMASYONU, pmaxAlanSayilari, pmaxAtomikIstek, type PmaxAlani } fr
 // (`adScheduleTargets`, Marka Merkezi) ve teklif yalnız reklamdan arama
 // dönüşümüyle (`googleTelefonDonusumuMu`). Telefon gövdesi DEĞİŞEBİLİR:
 // g-1.2.0 provaları saatsiz öğeyi ve genel dönüşüm eşiğini kanıtlıyordu.
-export const GOOGLE_DERLEYICI_SURUMU = 'g-1.3.0';
+// g-1.4.0: Maks. Performans kampanya dönüşüm hedefleri (yalnız PURCHASE~WEBSITE
+// teklife giriyor, `pmaxHedefIslemleri`) ve kare logo kuralı. Maks.
+// Performans gövdesi DEĞİŞTİ: g-1.3.0 provaları hedefsiz gövdeyi kanıtlıyordu
+// ve o gövde hesabın bütün dönüşümlerine optimize olurdu.
+export const GOOGLE_DERLEYICI_SURUMU = 'g-1.4.0';
 
 /**
  * Google yayınında `yayin.atif_standardi`. Karar tablosunun "Ölçüm"
@@ -85,6 +98,12 @@ export interface GoogleDerlemeBaglami {
   /** Talep Yaratma için zorunlu; Arama'da kullanılmaz. */
   logo: GoogleLogo | null;
   youtubeVideoBasligi: string | null;
+  /**
+   * Marka Merkezi logosunun piksel ölçüsü (Maks. Performans LOGO kuralı:
+   * 1:1, en az 128×128). Verilmezse ya da bilinmiyorsa kontrol prova'ya
+   * kalır (Google reddeder ve sebebi söyler); bilinen ve uymayan ölçü RET.
+   */
+  logoOlcusu?: { genislik: number | null; yukseklik: number | null } | null;
   /**
    * GÖRSEL KURGULARI (Dalga 3): her görselin Google kaynağı (hesapta kayıtlı
    * kaynak adı ya da yüklenecek bayt) ve ÖLÇÜSÜ. Servis veritabanından
@@ -182,6 +201,13 @@ export interface GoogleBeklenen {
   teklif?: 'TARGET_SPEND' | 'MAXIMIZE_CONVERSIONS';
   gorselReklam?: GoogleGorselReklamBeklentisi;
   varlikGrubu?: GoogleVarlikGrubuBeklentisi;
+  /**
+   * MAKS. PERFORMANS (g-1.4.0): kampanyada TEKLİFE GİREN dönüşüm hedefleri
+   * (`KATEGORI~KAYNAK`, sıralı). Beklenen yalnız `PURCHASE~WEBSITE`; Google
+   * bir hedefi hesap varsayılanıyla açık bırakırsa (yeni hedef, maskesiz
+   * güncelleme) fark. Eski satırlarda YOK = bakılmaz.
+   */
+  teklifHedefleri?: string[];
 }
 
 export type GoogleDerleme =
@@ -603,7 +629,22 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
     else if (!g.aciklamalar.some((x) => karakterSayisi(x) <= GOOGLE_KISA_ACIKLAMA)) {
       retler.push({ kod: 'G-KISA-ACIKLAMA', mesaj: `Maks. Performans için en az bir açıklama ${GOOGLE_KISA_ACIKLAMA} karakteri geçmemeli.` });
     }
-    if (retler.length || !g.isletmeAdi || !b.logo) return { tur: 'ret', retler };
+    /*
+     * DÖNÜŞÜM HEDEFLERİ (g-1.4.0): okunamadıysa KURULMAZ. Hedefleri yazmadan
+     * kurmak, kampanyanın hesap varsayılanıyla form/telefon dönüşümlerine
+     * optimize olması demek — "tahmin etmektense kısıtla".
+     */
+    const hedefler = g.donusumHedefleri;
+    if (!hedefler) {
+      retler.push({ kod: 'G-HEDEF-OKUNAMADI', mesaj: "Google Ads'teki dönüşüm hedefleri okunamadı; Maks. Performans yalnız satın almaya bağlanamadan kurulmaz. Yeniden prova et." });
+    } else if (hedefler.some((h) => !PMAX_HEDEF_DEGERI.test(h.kategori) || !PMAX_HEDEF_DEGERI.test(h.kaynak))) {
+      retler.push({ kod: 'G-HEDEF-TANINMIYOR', mesaj: "Google Ads'ten tanınmayan bir dönüşüm hedefi geldi; kampanya hedefleri güvenle yazılamıyor." });
+    } else if (pmaxTeklifHedefleri(hedefler).length === 0) {
+      retler.push({ kod: 'G-HEDEF-SATIS', mesaj: "Google Ads'te siteden satın alma hedefi yok; Maks. Performans satın almaya bağlanamıyor." });
+    }
+    // LOGO 1:1 ve ≥ 128 (Google belgesi). Bilinmeyen ölçü prova'ya kalır.
+    if (pmaxLogoKareMi(b.logoOlcusu) === false) retler.push({ kod: 'G-LOGO-KARE', mesaj: "Maks. Performans logosu kare (1:1) ve en az 128×128 olmalı; Marka Merkezi'ndeki logoyu değiştir." });
+    if (retler.length || !g.isletmeAdi || !b.logo || !hedefler) return { tur: 'ret', retler };
     const pIstek = {
       basliklar: g.basliklar.slice(0, 15),
       uzunBasliklar: uzun.slice(0, 5),
@@ -626,10 +667,11 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
       businessName: g.isletmeAdi,
       logo: b.logo,
       ...pIstek,
+      donusumHedefleri: hedefler,
       validateOnly: b.validateOnly,
     });
     if (!pIstek.youtubeVideo) notlar.push("YouTube videosu seçmedin: Google görsellerinden kendi videosunu üretip YouTube'da gösterebilir.");
-    notlar.push('Maks. Performans, Google hesabındaki bütün birincil dönüşümlerden öğrenir; yalnız satın almadan değil.');
+    notlar.push(`${PMAX_HEDEF_CUMLESI}.`);
     return {
       tur: 'govde',
       kurgu: g.kurgu,
@@ -655,6 +697,7 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
           markaKurallari: true,
           otomasyon: Object.fromEntries(PMAX_OTOMASYONU.map((x) => [x.assetAutomationType, x.assetAutomationStatus])),
         },
+        teklifHedefleri: pmaxTeklifHedefleri(hedefler),
       },
       atif: GOOGLE_ATIF,
       notlar,

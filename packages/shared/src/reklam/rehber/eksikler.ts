@@ -20,7 +20,7 @@ import type { AlanKaynagi } from '../taslak';
 import { REHBER_AMACLARI, platformGorunurMu, type RehberAmacKodu, type RehberPlatformu } from './amaclar';
 import { REHBER_IZINLI_KAYNAKLAR, VARSAYILAN_META_PAYI, type RehberAlanAdi, type RehberAlanlari } from './alanlar';
 import { METIN_SINIRLARI, karakterSayisi } from './metin';
-import { META_EN_COK_GORSEL } from './turet';
+import { GOOGLE_PMAX_SATIS_ESIGI, META_EN_COK_GORSEL } from './turet';
 import { butceBol, gunlukEsdeger } from './butce';
 import type { RehberOnKosullari } from './hazirlik';
 import { googleGorselBulgulari, googleGorselKurgusuMu, googleMetinBulgulari, type GorselOlcusu } from './google-gorsel';
@@ -81,7 +81,7 @@ export interface RehberEksikBaglami {
 
 const ADIM: Record<RehberAlanAdi, RehberAdimi> = {
   amac: 1,
-  platformlar: 2, metaHesabiId: 2, googleHesabiId: 2, sayfaId: 2, instagramId: 2, youtubeKanaliId: 2, pikselId: 2,
+  platformlar: 2, metaHesabiId: 2, googleHesabiId: 2, sayfaId: 2, instagramId: 2, youtubeKanaliId: 2, pikselId: 2, satissizPikselOnayi: 2,
   konumlar: 3, enDusukYas: 3, yasAraligi: 3, ekKategoriler: 3,
   hedefAdres: 4, telefon: 4, whatsappNumarasi: 4, whatsappKarsilama: 4, formSablonuId: 4, medya: 4, youtubeVideo: 4, metin: 4, anahtarKelimeler: 4,
   butce: 5, metaPayiYuzde: 5, takvim: 5,
@@ -102,6 +102,7 @@ export const REHBER_ALAN_ETIKETI: Record<RehberAlanAdi, string> = {
   instagramId: 'Instagram hesabı',
   youtubeKanaliId: 'YouTube kanalı',
   pikselId: 'Meta pikseli',
+  satissizPikselOnayi: 'Satışsız piksel onayı',
   konumlar: 'Konum',
   enDusukYas: 'En düşük yaş',
   yasAraligi: 'Yaş aralığı',
@@ -210,7 +211,26 @@ export function rehberEksikleri(a: RehberAlanlari, b: RehberEksikBaglami): Rehbe
   }
   if (acik.google) {
     if (!a.googleHesabiId) ekle('googleHesabiId', 'google', 'G-HESAP', 'Google Ads hesabı seçilmedi');
-    if (amac === 'SATIS') onKosul(ok?.googleSatisOlcumu, 'google', 'G-DONUSUM', "Google Ads'te satın alma dönüşümü etkin değil", "Google Ads'teki satın alma dönüşümü kontrol edilemedi");
+    if (amac === 'SATIS') {
+      onKosul(ok?.googleSatisOlcumu, 'google', 'G-DONUSUM', "Google Ads'te satın alma dönüşümü etkin değil", "Google Ads'teki satın alma dönüşümü kontrol edilemedi");
+      /*
+       * SATIŞ HACMİ (yönetici kararı, 2026-10-13): kapı (birincil + etkin +
+       * satın alma) değişmedi; ölçüm VARSA son 30 günün satış sayısı UYARI.
+       * Ölçüm yoksa sayı sorulmuyor (G-DONUSUM zaten engel). Okunamayan
+       * sayı "0 satış" DEĞİL: kendi cümlesi var. Alan hiç yoksa (eski
+       * önbellek) susar: sorulmamış soru "okunamadı" değil.
+       */
+      if (ok?.googleSatisOlcumu === true && ok.googleSatis30Gun !== undefined) {
+        const n = ok.googleSatis30Gun;
+        if (n === null) ekle('platformlar', 'google', 'G-SATIS-SAYI-BILINMIYOR', "Son 30 günün satış sayısı Google Ads'ten okunamadı", 'uyari', 2);
+        else if (n < GOOGLE_PMAX_SATIS_ESIGI) ekle('platformlar', 'google', 'G-SATIS-AZ', googleSatisAzCumlesi(n), 'uyari', 2);
+      }
+    }
+    // Maks. Performans LOGO kuralı (Google belgesi: 1:1, en az 128×128):
+    // giriş anında, Yayınla'da değil. Ölçü bilinmiyorsa susar (derleyici ve prova söyler).
+    if (tanim.google.kurgu === 'MAKS_PERFORMANS' && ok?.googleLogoKare === false) {
+      ekle('googleHesabiId', 'google', 'G-LOGO-KARE', "Marka Merkezi'ndeki logo kare (1:1) ve en az 128×128 olmalı");
+    }
     // Maks. Performans da logo ve işletme adı istiyor (marka kuralları açık:
     // kampanya düzeyinde, `google-pmax.ts`).
     if (tanim.google.kurgu === 'TALEP_YARATMA_VIDEO' || googleGorselKurgusuMu(tanim.google.kurgu)) {
@@ -489,9 +509,30 @@ export function rehberEksikleri(a: RehberAlanlari, b: RehberEksikBaglami): Rehbe
     if (p.kullanilamaz) return ekle('pikselId', 'meta', 'M-PIKSEL-KULLANILAMAZ', "Bu piksel Meta'da kullanılamıyor; başka bir piksel seç");
     if (p.hicCalismadi) return ekle('pikselId', 'meta', 'M-PIKSEL-CALISMADI', 'Piksel sitende hiç çalışmamış; önce pikseli sitene kur');
     if (!p.son7GundeCalisti) ekle('pikselId', 'meta', 'M-PIKSEL-SESSIZ', 'Piksel son 7 günde sitenden hiç veri almadı', 'uyari');
-    if (p.satinAlma7Gun === false) ekle('pikselId', 'meta', 'M-PIKSEL', 'Piksel son 7 günde satın alma saymadı; satışlar ölçülmüyor olabilir', 'uyari');
+    /*
+     * SATIŞ SAYMAYAN PİKSEL ARTIK ONAY İSTİYOR (yönetici kararı, 2026-10-13;
+     * önceki karar "uyarı, yeni mağaza kilitlenmez"di). Satın alma olayı
+     * gelmeyen pikselde Meta'nın optimize edeceği sinyal YOK: reklam yayına
+     * girer, para harcar ve satış yerine rastgele kişilere gider — hata yok.
+     * Yeni mağazayı kilitlememek için engel KULLANICININ AÇIK ONAYIYLA
+     * kalkıyor; onay seçili PİKSELE bağlı. YALNIZ okunabilen sıfırda:
+     * okunamayan (`null`) hâl uyarı (biçim ölçülmedi, `pikselSatinAlmaCoz`).
+     */
+    if (p.satinAlma7Gun === false) {
+      const onayli = a.satissizPikselOnayi?.deger?.pikselId === a.pikselId.deger;
+      if (onayli) ekle('satissizPikselOnayi', 'meta', 'M-PIKSEL-ONAYLI', 'Piksel son 7 günde satın alma saymadı; onayınla kuruluyor', 'uyari', 2);
+      else ekle('satissizPikselOnayi', 'meta', 'M-PIKSEL', 'Piksel son 7 günde satın alma saymadı; yayın için onay gerekiyor', 'engel', 2);
+    }
     else if (p.satinAlma7Gun === null) ekle('pikselId', 'meta', 'M-PIKSEL-SATIS-BILINMIYOR', 'Son 7 günün satın almaları kontrol edilemedi', 'uyari');
   }
+}
+
+/** Onay kutusunun metni (panel ve test aynı cümle). */
+export const SATISSIZ_PIKSEL_ONAY_METNI = 'Pikselim satış olayı göndermiyor; reklam satış yerine rastgele kişilere optimize olabilir. Yine de kur';
+
+/** Google satış hacmi uyarısı (tek cümle; sayı ondalıklı gelebilir, aşağı yuvarlanır). */
+export function googleSatisAzCumlesi(n: number): string {
+  return `Son 30 günde ${Math.floor(n)} satış; Maks. Performans az satışla yavaş öğrenir`;
 }
 
 /** Yayın kapısı: engel seviyesinde eksik var mı. */

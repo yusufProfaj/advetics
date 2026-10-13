@@ -45,6 +45,8 @@ export interface BeklenenYanki {
   gonderilen: unknown;
   karsilastirma: KarsilastirmaTuru;
   altKumeYonu?: AltKumeYonu;
+  /** `yalniz_bilgi`de bilgi cümlesine eklenen sabit cümle (N-21 SATIŞ, elle yerleşim). */
+  ekBilgi?: string;
   /** `normallestir`de kabul edilen ek dönüşler ve tablo satırı. */
   normallestirme?: { satir: string; kabul: unknown[]; bilgi: string };
   kabulEdilemez: boolean;
@@ -167,12 +169,23 @@ const KARSILAMA_YOLLARI = new Set(['object_story_spec.link_data.page_welcome_mes
  * değiştirebiliriz. Yalnız ekranda söylenir.
  *
  * DAR: yalnız WhatsApp ve form niyetlerinde (reklam setinin
- * `destination_type`ından tanınıyor). Okuma ALANI listeye ekleniyor ve
- * bilinmeyen bir alan bütün kampanya okumasını düşürebilir; kapsamı
- * istenen iki niyetle sınırlı tutmak bu riskin yüzeyi. Ölçülünce genişler.
+ * `destination_type`ından tanınıyor) ve SATIŞTA (kampanyanın `objective`i;
+ * satışın `destination_type`ı WEBSITE ve "Siteme gelsinler" ile aynı,
+ * ondan tanınamaz). Okuma AYRI ve isteğe bağlı ikinci istekte
+ * (`ekOkumaAlanlari`): düşerse yalnız bu bilgi satırı "okunamadı" olur.
+ *
+ * SATIŞTA EK CÜMLE (yönetici kararı, 2026-10-13): Meta'nın Advantage+ satış
+ * kampanyası otomatik yerleşim istiyor. Banner setinde bir boyut eksikse
+ * derleyici elle yerleşime düşüyor (`publisher_platforms` yazılıyor) ve
+ * kampanya Advantage+ satış koşulunu sağlamıyor; kullanıcı bunu bilmeli
+ * ama bir fark değil (yerleşimi biz bilerek daralttık).
  */
 const ADVANTAGE_DURUMU_NIYETLERI = ['WHATSAPP', 'FORM'] as const;
 const ADVANTAGE_DURUMU_HEDEFLERI = new Set<string>(ADVANTAGE_DURUMU_NIYETLERI.map((n) => NIYET_KATALOGU[n].meta!.destinationType!));
+const ADVANTAGE_SATIS_HEDEFI = NIYET_KATALOGU.SATIS.meta!.objective;
+
+/** SATIŞTA elle yerleşime düşülmüşse N-21 satırına eklenen cümle. */
+export const ADVANTAGE_SATIS_YERLESIM_CUMLESI = 'Advantage+ satış koşulu (otomatik yerleşim) sağlanmadı: bazı yerleşimler görsel boyutu eksik olduğu için kapalı.';
 
 /** Kampanyanın Advantage+ durumunun ekran cümlesi (tek yer). */
 export function advantageDurumuCumlesi(donen: unknown): string {
@@ -194,8 +207,12 @@ export function beklenenYankilar(govdeler: MetaGovdesi[]): BeklenenYanki[] {
   const kisitli = kategoriler.some((k) => KISITLI_KATEGORILER.includes(k));
   const sonuc: BeklenenYanki[] = [];
   const hedef = govdeler.find((g) => g.nesne === 'reklam_seti')?.alanlar.destination_type;
-  if (kampanya && typeof hedef === 'string' && ADVANTAGE_DURUMU_HEDEFLERI.has(hedef)) {
+  const satis = kampanya?.alanlar.objective === ADVANTAGE_SATIS_HEDEFI;
+  // Banner setinde birden çok reklam seti olabilir: HERHANGİ biri elle yerleşimdeyse koşul sağlanmadı.
+  const elleYerlesim = govdeler.some((g) => g.nesne === 'reklam_seti' && !!(g.alanlar.targeting as Record<string, unknown> | undefined)?.publisher_platforms);
+  if (kampanya && ((typeof hedef === 'string' && ADVANTAGE_DURUMU_HEDEFLERI.has(hedef)) || satis)) {
     sonuc.push({
+      ...(satis && elleYerlesim ? { ekBilgi: ADVANTAGE_SATIS_YERLESIM_CUMLESI } : {}),
       nesne: 'kampanya',
       govde: kampanya.ad,
       alanYolu: 'advantage_state_info',
@@ -658,7 +675,8 @@ export function geriOkumaKarsilastir(
       // İkinci okuma düştüyse SEBEBİYLE "okunamadı"; ana okuma düştüyse ya da
       // alan gelmediyse "döndürmedi". Hiçbiri satır değil: yayın durmaz.
       const hata = secenek.ekOkumaHatalari?.[y.govde];
-      bilgiler.push(satir('bilgi', hata ? `Advantage+ durumu okunamadı: ${hata}` : advantageDurumuCumlesi(donen)));
+      const ana = hata ? `Advantage+ durumu okunamadı: ${hata}` : advantageDurumuCumlesi(donen);
+      bilgiler.push(satir('bilgi', y.ekBilgi ? `${ana} ${y.ekBilgi}` : ana));
       continue;
     }
     if (y.karsilastirma === 'karsilama') {

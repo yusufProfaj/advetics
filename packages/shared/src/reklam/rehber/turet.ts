@@ -385,7 +385,7 @@ export function googleTeklifKarari(
   son30GunDonusum: number | null,
   ulasma: GoogleUlasma | null = null,
 ): { teklif: GoogleTeklif; sebep: string } {
-  if (kurgu === 'MAKS_PERFORMANS') return { teklif: 'MAKS_DONUSUM', sebep: 'Satın alma ölçümü etkin; Google hesaptaki bütün birincil dönüşümlerden öğrenir' };
+  if (kurgu === 'MAKS_PERFORMANS') return { teklif: 'MAKS_DONUSUM', sebep: PMAX_HEDEF_CUMLESI };
   if (kurgu !== 'ARAMA') return { teklif: 'MAKS_TIKLAMA', sebep: "Talep Yaratma'da dönüşüm teklifi kurulmuyor" };
   /*
    * TELEFON: HER ZAMAN tıklama (yönetici kararı Ö-1, 2026-10-13). "En çok
@@ -405,6 +405,49 @@ export function googleTeklifKarari(
     return { teklif: 'MAKS_TIKLAMA', sebep: `Son 30 günde ${sayi} dönüşüm var; dönüşüm teklifi için en az ${GOOGLE_DONUSUM_TEKLIF_ESIGI} gerekiyor` };
   }
   return { teklif: 'MAKS_DONUSUM', sebep: `Dönüşüm ölçümü etkin ve son 30 günde ${sayi} dönüşüm var` };
+}
+
+/**
+ * ═══ MAKS. PERFORMANS YALNIZ SATIN ALMAYA BAĞLI (yönetici kararı, 2026-10-13) ═══
+ *
+ * Google Maks. Performans'ı varsayılan olarak hesabın BÜTÜN müşteri
+ * düzeyi dönüşüm hedeflerine bağlıyor (resmî belge: "Performance Max
+ * campaigns use all customer-level conversion goals unless you explicitly
+ * apply a subset"). Advetics'in kendi kurulumu aynı hesapta form, telefon ve
+ * WhatsApp dönüşümleri açıyor (`ads-kurulum.ts`): "satış gelsin" diyen
+ * kullanıcının bütçesi form doldurana ve tel: tıklayana optimize olurdu —
+ * hata yok, yalnız satış gelmez. Kampanya düzeyinde her hedef AÇIKÇA
+ * yazılıyor: yalnız `PURCHASE~WEBSITE` teklife giriyor, kalanların hepsi
+ * kapalı. Belge, belirtilmeyen hedefin HESAP varsayılanını devraldığını ve
+ * yeni hedeflerde bu varsayılanın açık olabileceğini söylüyor; o yüzden
+ * "yalnız satın almayı aç" yetmiyor, diğerleri tek tek kapatılıyor.
+ */
+export const PMAX_HEDEF_CUMLESI = 'Google bu kampanyada yalnız satın almayı hedefler; form, arama ve diğer dönüşümler teklife girmez';
+
+/** Teklife giren TEK hedef: siteden satın alma (Google resmî örneğiyle aynı). */
+export const PMAX_TEKLIF_HEDEFI = { kategori: 'PURCHASE', kaynak: 'WEBSITE' } as const;
+
+/**
+ * Maks. Performans'ın satın alma hacmi eşiği (son 30 gün). Engel DEĞİL,
+ * uyarı: yeni bir mağazayı kilitlemek sağlam bir kurulumu durdururdu; ama az
+ * satışla Maks. Performans yavaş öğrenir ve kullanıcı bunu bilmeli. Arama
+ * teklif eşiğiyle aynı mertebe (`GOOGLE_DONUSUM_TEKLIF_ESIGI`), ÖLÇÜLMEDİ.
+ */
+export const GOOGLE_PMAX_SATIS_ESIGI = 15;
+
+/**
+ * Hesabın müşteri düzeyi dönüşüm hedefi (`customer_conversion_goal`):
+ * kategori (`PURCHASE`, `SUBMIT_LEAD_FORM`…) ve kaynak (`WEBSITE`,
+ * `CALL_FROM_ADS`…). Kampanya hedefinin kaynak adı bu ikisinden kuruluyor.
+ */
+export interface GoogleDonusumHedefi {
+  kategori: string;
+  kaynak: string;
+}
+
+/** Hedefin anahtarı (`KATEGORI~KAYNAK`): kaynak adının son iki parçası ve geri okumanın kümesi. */
+export function donusumHedefiAnahtari(h: GoogleDonusumHedefi): string {
+  return `${h.kategori}~${h.kaynak}`;
 }
 
 export interface GoogleDerlemeGirdisi {
@@ -472,6 +515,13 @@ export interface GoogleDerlemeGirdisi {
    */
   aramaSaatleri?: CalismaSaatleri;
   /**
+   * MAKS. PERFORMANS: hesabın müşteri düzeyi dönüşüm hedefleri (prova anında
+   * okunan). Girdide duruyor ki prova ile yayın AYNI hedef kümesini yazsın:
+   * hedefler değişirse içerik özeti değişir ve eski prova geçersiz olur.
+   * `null` = okunamadı (derleyici kurmaz). Yalnız Maks. Performans'ta yazılır.
+   */
+  donusumHedefleri?: GoogleDonusumHedefi[] | null;
+  /**
    * Google öğeleri REDDETTİ ve bu girdi öğesiz yeniden prova için türetildi.
    * Derleyici "sitende ayrı sayfa bulunamadı" demesin: bulundu, reddedildi.
    */
@@ -499,6 +549,8 @@ export interface GoogleTuretmeBaglami {
   ogeKaynagi?: GoogleOgeKaynagi | null;
   /** Birincil SATIN ALMA dönüşümü etkin mi; Maks. Performans yalnız `true` ile kurulur. */
   satisOlcumu: boolean | null;
+  /** Hesabın dönüşüm hedefleri (Maks. Performans); okunamadı/okunmadı = `null`. */
+  donusumHedefleri?: GoogleDonusumHedefi[] | null;
   /** Medyadaki görsellerin oranı (sunucuda, varlığın ölçüsünden); görsel kurgularında zorunlu. */
   medyaOranlari?: ReadonlyMap<string, GorselOrani | null>;
   isletmeAdi: string | null;
@@ -609,6 +661,8 @@ export function rehberdenGoogle(a: RehberAlanlari, acik: { meta: boolean; google
       // eski rehberlerin içerik özetini korur, Google'a boş yol gitmez.
       ...(tanim.kurgu === 'ARAMA' && gorunenYolu(m.gorunenYol).length ? { gorunenYol: gorunenYolu(m.gorunenYol) } : {}),
       ...(tanim.kurgu === 'ARAMA' && tanim.ulasma === 'telefon' && b.calismaSaatleri?.length ? { aramaSaatleri: b.calismaSaatleri } : {}),
+      // Yalnız Maks. Performans: diğer kurguların içerik özeti değişmesin.
+      ...(tanim.kurgu === 'MAKS_PERFORMANS' ? { donusumHedefleri: b.donusumHedefleri ?? null } : {}),
     },
   };
 }

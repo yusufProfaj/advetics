@@ -33,7 +33,8 @@ export function tekPikselOnerisi(secili: string | null | undefined, r: RehberPik
 export function pikselDurumu(p: RehberPikselListesi['satirlar'][number]): string {
   if (p.kullanilamaz) return "Meta'da kullanılamıyor";
   if (!p.sonCalisma) return 'Hiç çalışmamış';
-  if (p.satinAlma7Gun === true) return 'Son 7 günde satın alma saydı';
+  // Sayı varsa sayıyla: haftalık hacim öğrenme aşamasının bitip bitmeyeceğini söylüyor.
+  if (p.satinAlma7Gun === true) return typeof p.satinAlma7GunSayisi === 'number' ? `Son 7 günde ${Math.floor(p.satinAlma7GunSayisi)} satın alma` : 'Son 7 günde satın alma saydı';
   if (p.satinAlma7Gun === false) return 'Son 7 günde satın alma yok';
   return 'Satın alma kontrol edilemedi';
 }
@@ -52,4 +53,14 @@ export function whatsappOnerisi(ham: string | null | undefined): string | null {
 /** Medya seçicinin kabul ettiği türler: Meta video amacında YALNIZ video. */
 export function medyaKabulu(yalnizVideo: boolean): string {
   return yalnizVideo ? 'video/mp4,video/quicktime' : 'image/jpeg,image/png,video/mp4,video/quicktime';
+}
+
+/**
+ * Satışsız piksel onay kutusu ne zaman görünür: seçili piksel için eksik
+ * listesinde onay engeli (`M-PIKSEL`) ya da verilmiş onay (`M-PIKSEL-ONAYLI`)
+ * varsa. Kutu engelin kendisinden türüyor: ikinci bir kural yazmak, kutunun
+ * görünmediği bir engel bırakabilirdi.
+ */
+export function satissizOnayGorunur(eksikler: ReadonlyArray<{ kod: string }>): boolean {
+  return eksikler.some((e) => e.kod === 'M-PIKSEL' || e.kod === 'M-PIKSEL-ONAYLI');
 }

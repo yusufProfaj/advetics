@@ -323,6 +323,8 @@ export interface PikselSatiri {
   sonCalisma: string | null;
   kullanilamaz: boolean;
   satinAlma7Gun: boolean | null;
+  /** Son 7 günün satın alma sayısı; okunamadıysa ya da sorulmadıysa `null`/yok. */
+  satinAlma7GunSayisi?: number | null;
 }
 
 const YEDI_GUN_MS = 7 * 86_400_000;
@@ -351,6 +353,7 @@ export function seciliPikselHali(pikselId: string | null, liste: readonly Piksel
     hicCalismadi: p.sonCalisma === null,
     son7GundeCalisti: !Number.isNaN(t) && simdi.getTime() - t <= YEDI_GUN_MS,
     satinAlma7Gun: p.satinAlma7Gun,
+    satinAlma7GunSayisi: p.satinAlma7GunSayisi ?? null,
   };
 }
 

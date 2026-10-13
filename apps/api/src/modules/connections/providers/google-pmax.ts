@@ -1,5 +1,6 @@
 import { AB_SIYASI_BEYAN, campaignBudgetBody, kampanyaDiliBody, kampanyaKonumlariBody, kampanyaTarihleri } from './google-write';
 import { googleGorselVarligi, googleImageAssetBody, type AtomikGovde, type GoogleGorselKaynagi, type KampanyaAcilisi } from './google-demandgen';
+import { PMAX_TEKLIF_HEDEFI, donusumHedefiAnahtari, type GoogleDonusumHedefi } from '@advetics/shared';
 
 /**
  * ═══ MAKS. PERFORMANS (Performance Max) — rehberin "Sitemden satış gelsin" ═══
@@ -55,6 +56,100 @@ import { googleGorselVarligi, googleImageAssetBody, type AtomikGovde, type Googl
  * tekilleştirir).
  */
 
+/**
+ * ═══ KAMPANYA DÖNÜŞÜM HEDEFLERİ — YALNIZ SATIN ALMA (2026-10-13) ═══
+ *
+ * Kaynak: Google Ads API v25 "Performance Max › conversion goals" ve
+ * `campaign_conversion_goal` alan referansı (2026-10-13 okundu).
+ * - Kaynak adı: `customers/{customer_id}/campaignConversionGoals/{campaign_id}~{category}~{origin}`.
+ * - Kampanya hedefleri Google tarafından kampanyayla birlikte KURULUYOR;
+ *   bizim işlemimiz yalnız `update` (create yok). Belge: "biddable" alanı
+ *   belirtilmezse HESAP varsayılanını devralır ve yeni hedeflerde bu
+ *   varsayılan açık olabilir; kapatmak için `biddable: false` AÇIKÇA yazılıp
+ *   `update_mask`e "biddable" konmalı.
+ * - AYNI İSTEKTE GEÇİCİ KAMPANYA KİMLİĞİYLE: Google'ın resmî
+ *   `AddPerformanceMaxRetailCampaign` örneği hedef güncellemelerini kampanya
+ *   oluşturmayla TEK mutate'te, geçici kampanya kimliğiyle
+ *   (`PERFORMANCE_MAX_CAMPAIGN_TEMPORARY_ID`) ve listenin SONUNDA gönderiyor;
+ *   biddable yalnız `PURCHASE` + `WEBSITE`. Burada da aynısı.
+ * CANLIDA ÖLÇÜLMEDİ: ilk sınama validateOnly provası (prova ve yayın aynı
+ * gövde). Reddedilirse ikinci yol devir notunda: kampanya duraklatılmış
+ * kurulur, hedefler AYRI mutate'le yazılır, geri okunur, sonra açılır.
+ *
+ * KÜMENİN TAMAMI yazılıyor: hesabın bütün müşteri düzeyi hedefleri (servis
+ * `customer_conversion_goal`dan okuyor). Yalnız satın almayı açmak yetmez:
+ * Advetics kurulumunun açtığı form/telefon/WhatsApp hedefleri hesap
+ * varsayılanıyla teklife girerdi.
+ */
+export const PMAX_HEDEF_DEGERI = /^[A-Z][A-Z0-9_]{0,63}$/;
+
+/** Teklife giren hedeflerin anahtar kümesi (sıralı) — geri okuma bunu bekliyor. */
+export function pmaxTeklifHedefleri(hedefler: readonly GoogleDonusumHedefi[]): string[] {
+  const k = donusumHedefiAnahtari(PMAX_TEKLIF_HEDEFI);
+  return hedefler.some((h) => donusumHedefiAnahtari(h) === k) ? [k] : [];
+}
+
+/**
+ * Hedef güncelleme işlemleri. Kategori/kaynak Google enum'u olmalı: kaynak
+ * adına giriyor ve tanınmayan bir değer (boş, `~` içeren) başka bir kaynağı
+ * işaret edebilir — sessizce atlamak yerine FIRLATIR (derleyici önce süzer).
+ * Aynı anahtar iki kez gelirse bir kez yazılır (ikinci güncelleme aynı
+ * kaynağı iki kez değiştirmek olurdu).
+ */
+export function pmaxHedefIslemleri(customerId: string, kampanyaGeciciKimlik: string, hedefler: readonly GoogleDonusumHedefi[]): Array<Record<string, unknown>> {
+  const teklif = donusumHedefiAnahtari(PMAX_TEKLIF_HEDEFI);
+  const gorulen = new Set<string>();
+  const ops: Array<Record<string, unknown>> = [];
+  for (const h of hedefler) {
+    if (!PMAX_HEDEF_DEGERI.test(h.kategori) || !PMAX_HEDEF_DEGERI.test(h.kaynak)) throw new Error(`Tanınmayan dönüşüm hedefi: ${String(h.kategori).slice(0, 40)}~${String(h.kaynak).slice(0, 40)}`);
+    const anahtar = donusumHedefiAnahtari(h);
+    if (gorulen.has(anahtar)) continue;
+    gorulen.add(anahtar);
+    ops.push({
+      campaignConversionGoalOperation: {
+        update: { resourceName: `customers/${customerId}/campaignConversionGoals/${kampanyaGeciciKimlik}~${anahtar}`, biddable: anahtar === teklif },
+        // REST'te FieldMask dizge; belge "biddable"ın maskede olmasını şart koşuyor.
+        updateMask: 'biddable',
+      },
+    });
+  }
+  if (!gorulen.has(teklif)) throw new Error('Hesapta siteden satın alma hedefi yok: Maks. Performans satın almaya bağlanamaz.');
+  return ops;
+}
+
+/**
+ * VARLIK SINIRLARI (Google Ads API "Performance Max asset requirements",
+ * 2026-10-13 okundu): LOGO 1:1, en az 128×128, en çok 5120 KB, grupta en çok
+ * 5; YOUTUBE_VIDEO en çok 15 (yönetici notu "5" diyordu; belge 15). Bugün
+ * bir logo ve en çok bir video gidiyor; sınır, alan çoğaldığında sessizce
+ * Google'ın reddine düşmesin diye burada.
+ */
+export const PMAX_EN_COK_LOGO = 5;
+export const PMAX_EN_COK_VIDEO = 15;
+export const PMAX_LOGO_EN_AZ_PIKSEL = 128;
+
+/** Logo ölçüsü Maks. Performans LOGO kuralına uyuyor mu; bilinmiyorsa `null`. */
+export function pmaxLogoKareMi(o: { genislik: number | null; yukseklik: number | null } | null | undefined): boolean | null {
+  if (!o || !o.genislik || !o.yukseklik) return null;
+  // Google oran payı ±%1 (görsel kuralıyla aynı, `google-gorsel.ts`).
+  return Math.abs(o.genislik / o.yukseklik - 1) <= 0.01 && Math.min(o.genislik, o.yukseklik) >= PMAX_LOGO_EN_AZ_PIKSEL;
+}
+
+/**
+ * Derlenmiş gövdede LOGO ve video bağlarını SAYAR (kampanya + varlık grubu):
+ * sınırı aşan gövde Google'a gitmez. Gövdeden sayılıyor, girdiden değil:
+ * bağ kuran ikinci bir yol eklendiğinde de tutsun.
+ */
+export function pmaxSinirSorunu(ops: ReadonlyArray<Record<string, unknown>>): string | null {
+  const alan = (o: Record<string, unknown>) =>
+    ((o.campaignAssetOperation ?? o.assetGroupAssetOperation) as { create?: { fieldType?: string } } | undefined)?.create?.fieldType;
+  const logo = ops.filter((o) => alan(o) === 'LOGO').length;
+  const video = ops.filter((o) => alan(o) === 'YOUTUBE_VIDEO').length;
+  if (logo > PMAX_EN_COK_LOGO) return `Maks. Performans en çok ${PMAX_EN_COK_LOGO} logo alıyor (${logo}).`;
+  if (video > PMAX_EN_COK_VIDEO) return `Maks. Performans en çok ${PMAX_EN_COK_VIDEO} YouTube videosu alıyor (${video}).`;
+  return null;
+}
+
 /** Kampanyanın otomasyon ayarları — geri okuma da bunu bekliyor. */
 export const PMAX_OTOMASYONU = [
   { assetAutomationType: 'FINAL_URL_EXPANSION_TEXT_ASSET_AUTOMATION', assetAutomationStatus: 'OPTED_OUT' },
@@ -95,6 +190,8 @@ export interface AtomikPmaxIstegi {
   uzunBasliklar: string[];
   aciklamalar: string[];
   youtubeVideo: { id: string; baslik: string } | null;
+  /** Hesabın müşteri düzeyi dönüşüm hedefleri: yalnız satın alma teklife girer. */
+  donusumHedefleri: readonly GoogleDonusumHedefi[];
   validateOnly: boolean;
 }
 
@@ -132,7 +229,8 @@ export function pmaxAtomikIstek(p: AtomikPmaxIstegi): { govde: AtomikGovde; sira
   if (p.konumlar.length === 0) throw new Error('Konum listesi boş: kampanya bütün ülkelere açılırdı.');
   const kok = `customers/${p.customerId}`;
   const BUTCE = `${kok}/campaignBudgets/-1`;
-  const KAMPANYA = `${kok}/campaigns/-2`;
+  const KAMPANYA_GECICI = '-2';
+  const KAMPANYA = `${kok}/campaigns/${KAMPANYA_GECICI}`;
   const GRUP = `${kok}/assetGroups/-3`;
   let gecici = -4;
   const yeniVarlik = () => `${kok}/assets/${gecici--}`;
@@ -248,6 +346,12 @@ export function pmaxAtomikIstek(p: AtomikPmaxIstegi): { govde: AtomikGovde; sira
     logoSira = ekle({ assetOperation: { create: { ...ilk(googleImageAssetBody(p.logo.yeniGorsel)), resourceName: logo } } });
   }
   ekle({ campaignAssetOperation: { create: { campaign: KAMPANYA, asset: logo, fieldType: 'LOGO' } } });
+
+  // HEDEFLER EN SONDA (resmî örnekle aynı sıra): kampanya bu istekte
+  // kuruluyor ve geçici kimliği (-2) kaynak adına giriyor.
+  for (const op of pmaxHedefIslemleri(p.customerId, KAMPANYA_GECICI, p.donusumHedefleri)) ekle(op);
+  const sinir = pmaxSinirSorunu(ops);
+  if (sinir) throw new Error(sinir);
 
   return {
     govde: { mutateOperations: ops, partialFailure: false, validateOnly: p.validateOnly },
