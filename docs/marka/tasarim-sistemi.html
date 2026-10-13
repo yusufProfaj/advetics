@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Advetics Tasarım Sistemi</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600;700&display=swap">
+<style>
+/* Düzen: solda gezinti (panel kabuğu), sağda bileşenler ve iki örnek sayfa. Kaynak: Profaj kılavuzu + kullanıcının beğendiği simülasyon dili. */
+:root{
+  --beyaz:#ffffff; --siyah:#000000; --gri:#302e2d; --kirmizi:#ff2400;
+  --bg:#ffffff; --zemin:rgba(48,46,45,.035); --yuzey:#ffffff; --metin:#000000;
+  --ikincil:rgba(48,46,45,.64); --soluk:rgba(48,46,45,.42); --cizgi:rgba(48,46,45,.12); --cizgi2:rgba(48,46,45,.22);
+  --dolgu:rgba(48,46,45,.06); --vurgu:rgba(255,36,0,.07); --ok:#1e8e3e; --seri2:#000000;
+  --r-sm:8px; --r:12px; --r-lg:16px; --r-hap:999px;
+  --baslik:"Montserrat",system-ui,sans-serif; --govde:"Open Sans",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#000000; --zemin:rgba(255,255,255,.03); --yuzey:#0d0d0d; --metin:#ffffff; --ikincil:rgba(255,255,255,.66); --soluk:rgba(255,255,255,.42);
+  --cizgi:rgba(255,255,255,.12); --cizgi2:rgba(255,255,255,.24); --dolgu:rgba(255,255,255,.07); --vurgu:rgba(255,36,0,.15); --ok:#34a853; --seri2:#ffffff; color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#000000; --zemin:rgba(255,255,255,.03); --yuzey:#0d0d0d; --metin:#ffffff; --ikincil:rgba(255,255,255,.66); --soluk:rgba(255,255,255,.42);
+  --cizgi:rgba(255,255,255,.12); --cizgi2:rgba(255,255,255,.24); --dolgu:rgba(255,255,255,.07); --vurgu:rgba(255,36,0,.15); --ok:#34a853; --seri2:#ffffff; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--metin);font:400 14px/1.55 var(--govde);-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--baslik);margin:0;text-wrap:balance}
+button{font:inherit;color:inherit}
+.sayi{font-family:var(--baslik);font-variant-numeric:tabular-nums}
+
+/* ── KABUK ── */
+.kabuk{display:grid;grid-template-columns:248px minmax(0,1fr);min-height:100vh}
+.menu{border-right:1px solid var(--cizgi);padding:18px 12px;display:flex;flex-direction:column;gap:2px;position:sticky;top:0;height:100vh;overflow:auto}
+.logo{font:800 20px/1 var(--baslik);letter-spacing:-.02em;position:relative;display:inline-block;margin:4px 10px 18px}
+.logo i{position:absolute;width:6px;height:6px;border-radius:50%;background:var(--kirmizi);top:0;right:-8px}
+.ws{border:1px solid var(--cizgi);border-radius:var(--r);padding:10px 12px;margin:0 2px 14px;display:grid;gap:2px}
+.ws small{color:var(--ikincil);font-size:12px}
+.ws b{font-weight:600}
+.grup{font:700 11px/1 var(--govde);letter-spacing:.08em;text-transform:uppercase;color:var(--soluk);margin:14px 10px 6px}
+.menu a{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--r-sm);text-decoration:none;color:var(--metin);font-weight:600;font-size:13.5px}
+.menu a:hover{background:var(--dolgu)}
+.menu a.secili{background:var(--vurgu);color:var(--kirmizi)}
+.menu a .ik{width:18px;height:18px;border-radius:5px;background:var(--dolgu);flex:none}
+.menu a.secili .ik{background:var(--kirmizi)}
+.icerik{min-width:0}
+.ust{position:sticky;top:0;z-index:4;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--cizgi);height:56px;display:flex;align-items:center;gap:12px;padding:0 28px}
+.ust .kir{color:var(--ikincil);font-size:13px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ust .kir b{color:var(--metin);font-weight:600}
+.sayfa{max-width:1200px;margin:0 auto;padding:28px 28px 120px;display:grid;gap:40px}
+
+/* ── BÖLÜM BAŞLIKLARI (bu belge için) ── */
+.bolum{display:grid;gap:16px}
+.bolum > header{display:grid;gap:4px;border-top:3px solid var(--metin);padding-top:12px}
+.bolum > header .no{font:800 12px var(--baslik);letter-spacing:.1em;color:var(--kirmizi)}
+.bolum > header h2{font-size:20px}
+.bolum > header p{margin:0;color:var(--ikincil);max-width:72ch}
+.kural{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.kural div{background:var(--zemin);border-radius:var(--r);padding:12px 14px;font-size:13px}
+.kural b{display:block;font-family:var(--baslik);font-size:13px;margin-bottom:2px}
+
+/* ── 1. SAYFA BAŞLIĞI ── */
+.sb{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.sb .ust-y{font:700 12px/1 var(--govde);letter-spacing:.08em;text-transform:uppercase;color:var(--kirmizi)}
+.sb h1{font-size:28px;font-weight:800;letter-spacing:-.015em;margin-top:6px}
+.sb p{margin:4px 0 0;color:var(--ikincil);max-width:62ch}
+.sb .eylem{display:flex;gap:8px;flex-wrap:wrap}
+
+/* ── 2. DÜĞMELER ── */
+.dg{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:40px;padding:0 18px;border-radius:var(--r-hap);font:700 13.5px/1 var(--govde);border:1px solid var(--cizgi2);background:var(--yuzey);color:var(--metin);cursor:pointer;transition:background .15s,border-color .15s,filter .15s;white-space:nowrap}
+.dg:hover{background:var(--dolgu)}
+.dg:focus-visible{outline:2px solid var(--kirmizi);outline-offset:2px}
+.dg.ana{background:var(--kirmizi);border-color:var(--kirmizi);color:#fff}
+.dg.ana:hover{filter:brightness(.94)}
+.dg.koyu{background:var(--metin);border-color:var(--metin);color:var(--bg)}
+.dg.hayalet{border-color:transparent;background:transparent}
+.dg.hayalet:hover{background:var(--dolgu)}
+.dg.tehlike{color:var(--kirmizi);border-color:color-mix(in srgb,var(--kirmizi) 45%,transparent)}
+.dg.kucuk{height:32px;padding:0 14px;font-size:12.5px}
+.dg[disabled]{opacity:.4;cursor:not-allowed}
+.dg .art{font-size:16px;line-height:1}
+.dg-sira{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+
+/* ── 3. KART ── */
+.kart{background:var(--yuzey);border:1px solid var(--cizgi);border-radius:var(--r-lg)}
+.kart-bas{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid var(--cizgi)}
+.kart-bas h3{font-size:15px}
+.kart-bas small{color:var(--ikincil)}
+.kart-ic{padding:20px}
+.kart-alt{padding:12px 20px;border-top:1px solid var(--cizgi);display:flex;justify-content:flex-end}
+.bag{font-weight:700;font-size:13px;text-decoration:none;color:var(--metin)}
+.bag:hover{color:var(--kirmizi)}
+
+/* ── 4. METRİK KUTULARI ── */
+.metrikler{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--cizgi);border-radius:var(--r-lg);overflow:hidden;background:var(--yuzey)}
+.metrik{padding:16px 18px;border-right:1px solid var(--cizgi);cursor:pointer;position:relative;display:grid;gap:4px}
+.metrik:last-child{border-right:0}
+.metrik span{font-size:12.5px;color:var(--ikincil);font-weight:600}
+.metrik b{font:800 26px/1.1 var(--baslik);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.metrik small{font-size:12px;color:var(--ikincil)}
+.metrik small.iyi{color:var(--ok)} .metrik small.kotu{color:var(--kirmizi)}
+.metrik.s1{box-shadow:inset 0 -3px 0 var(--kirmizi)}
+.metrik.s2{box-shadow:inset 0 -3px 0 var(--seri2)}
+
+/* ── 5. GRAFİK ── */
+.grafik{width:100%;height:220px;display:block}
+
+/* ── 6. TABLO ── */
+.arac{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--cizgi)}
+.cip{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:var(--r-hap);background:var(--dolgu);font-size:12.5px;font-weight:600}
+.cip button{border:0;background:none;cursor:pointer;color:var(--ikincil);padding:0}
+.cip.ekle{background:transparent;border:1px dashed var(--cizgi2);color:var(--ikincil);cursor:pointer}
+.tablo-sar{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{text-align:left;font-weight:600;font-size:12px;color:var(--ikincil);padding:10px 16px;border-bottom:1px solid var(--cizgi);white-space:nowrap}
+td{padding:12px 16px;border-bottom:1px solid var(--cizgi)}
+th.s,td.s{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+tbody tr:hover{background:var(--zemin)}
+tfoot td{font-weight:700;background:var(--zemin)}
+td a{color:var(--metin);font-weight:600;text-decoration:none}
+td a:hover{color:var(--kirmizi);text-decoration:underline}
+td small{display:block;color:var(--ikincil);font-size:12px}
+.sayfalama{display:flex;justify-content:flex-end;gap:16px;align-items:center;padding:10px 16px;font-size:12.5px;color:var(--ikincil)}
+
+/* ── 7. DURUM ROZETİ ── */
+.rozet{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:var(--r-hap);font-size:12px;font-weight:700;border:1px solid var(--cizgi2);white-space:nowrap}
+.rozet i{width:7px;height:7px;border-radius:50%;background:var(--soluk)}
+.rozet.ok i{background:var(--ok)}
+.rozet.hata{color:var(--kirmizi);border-color:color-mix(in srgb,var(--kirmizi) 40%,transparent)} .rozet.hata i{background:var(--kirmizi)}
+.rozet.dur i{border-radius:2px}
+
+/* ── 8. SEKMELER ── */
+.sekmeler{display:flex;gap:4px;border-bottom:1px solid var(--cizgi);overflow-x:auto}
+.sekme{border:0;background:none;padding:10px 14px;font-weight:700;font-size:13.5px;color:var(--ikincil);border-bottom:3px solid transparent;cursor:pointer;white-space:nowrap}
+.sekme[aria-selected="true"]{color:var(--metin);border-bottom-color:var(--kirmizi)}
+.bolumlu{display:inline-flex;background:var(--dolgu);border-radius:var(--r-hap);padding:3px}
+.bolumlu button{border:0;background:none;height:30px;padding:0 14px;border-radius:var(--r-hap);font-weight:700;font-size:12.5px;cursor:pointer;color:var(--ikincil)}
+.bolumlu button[aria-pressed="true"]{background:var(--yuzey);color:var(--metin);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+
+/* ── 9. FORM ── */
+.alan{display:grid;gap:6px}
+.alan label{font-weight:600;font-size:13px}
+.alan small{color:var(--ikincil);font-size:12px}
+.alan small.hata{color:var(--kirmizi)}
+.girdi{height:40px;border:1px solid var(--cizgi2);border-radius:var(--r-sm);padding:0 12px;background:var(--yuzey);color:var(--metin);font:inherit}
+.girdi:focus{outline:none;border-color:var(--metin);box-shadow:0 0 0 3px var(--dolgu)}
+.girdi.hatali{border-color:var(--kirmizi)}
+.form-izgara{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+
+/* ── 10. HÂLLER ── */
+.haller{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.hal{border:1px dashed var(--cizgi2);border-radius:var(--r-lg);padding:22px;display:grid;gap:8px;justify-items:start;align-content:start;min-height:170px}
+.hal b{font-family:var(--baslik);font-size:15px}
+.hal p{margin:0;color:var(--ikincil);font-size:13px}
+.hal .ik{width:36px;height:36px;border-radius:10px;background:var(--dolgu);display:grid;place-items:center;font:800 14px var(--baslik)}
+.hal.hata{border-style:solid;border-color:color-mix(in srgb,var(--kirmizi) 40%,transparent);background:var(--vurgu)}
+.hal.hata .ik{background:var(--kirmizi);color:#fff}
+.iskelet{height:12px;border-radius:6px;background:linear-gradient(90deg,var(--dolgu),var(--zemin),var(--dolgu));background-size:200% 100%;animation:akis 1.4s linear infinite;width:100%}
+@keyframes akis{to{background-position:-200% 0}}
+
+/* ── 11. ŞERİT ── */
+.serit{display:flex;gap:12px;align-items:center;border:1px solid var(--cizgi);border-left:4px solid var(--kirmizi);border-radius:var(--r);padding:12px 16px;background:var(--yuzey)}
+.serit div{flex:1;min-width:0}
+.serit b{display:block}
+.serit span{color:var(--ikincil);font-size:13px}
+
+/* ── 12. BÜYÜK SEÇİM + ALT ÇUBUK (sihirbaz) ── */
+.secimler{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.secim{border:1px solid var(--cizgi);border-radius:var(--r-lg);padding:22px;display:grid;gap:10px;background:var(--yuzey);cursor:pointer;text-align:left;transition:border-color .15s,transform .15s}
+.secim:hover{border-color:var(--metin);transform:translateY(-2px)}
+.secim .karo{width:44px;height:44px;border-radius:12px;background:var(--gri);color:#fff;display:grid;place-items:center;font:800 15px var(--baslik)}
+.secim .karo.k{background:var(--kirmizi)}
+.secim h3{font-size:18px}
+.secim p{margin:0;color:var(--ikincil)}
+.ray{display:flex;gap:6px}
+.ray i{flex:1;height:4px;border-radius:4px;background:var(--dolgu)}
+.ray i.b{background:var(--metin)} .ray i.s{background:var(--kirmizi)}
+.altcubuk{display:flex;align-items:center;gap:10px;border:1px solid var(--cizgi);border-radius:var(--r-lg);padding:12px 16px;background:var(--yuzey)}
+.altcubuk span{flex:1;color:var(--ikincil);font-size:13px}
+
+/* ── 13. YAN PANEL ── */
+.yp-ornek{display:grid;grid-template-columns:1fr 380px;border:1px solid var(--cizgi);border-radius:var(--r-lg);overflow:hidden;min-height:300px}
+.yp-ornek .golge{background:var(--zemin)}
+.yp{border-left:1px solid var(--cizgi);background:var(--yuzey);display:flex;flex-direction:column}
+.yp-bas{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--cizgi)}
+.yp-ic{padding:20px;display:grid;gap:14px;flex:1}
+.yp-alt{padding:12px 20px;border-top:1px solid var(--cizgi);display:flex;justify-content:flex-end;gap:8px}
+
+.izgara-2{display:grid;grid-template-columns:2fr 1fr;gap:16px}
+.yatay{display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+
+@media (max-width:900px){
+  .kabuk{grid-template-columns:1fr}
+  .menu{display:none}
+  .ust,.sayfa{padding-left:16px;padding-right:16px}
+  .metrikler{grid-template-columns:1fr 1fr}
+  .metrik:nth-child(2){border-right:0}
+  .metrik:nth-child(-n+2){border-bottom:1px solid var(--cizgi)}
+  .haller,.secimler,.izgara-2,.form-izgara,.yp-ornek{grid-template-columns:1fr}
+  .yp{border-left:0;border-top:1px solid var(--cizgi)}
+  .sb h1{font-size:23px}
+}
+@media (prefers-reduced-motion: reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="kabuk">
+  <nav class="menu" aria-label="Panel menüsü">
+    <span class="logo">Advetics<i></i></span>
+    <div class="ws"><small>Profaj Reklamcılık</small><b>Ege Birlik Yapı ▾</b></div>
+    <a href="#" class="secili"><span class="ik"></span>Genel Bakış</a>
+    <div class="grup">Planla</div><a href="#"><span class="ik"></span>AdvStrategy</a><a href="#"><span class="ik"></span>Aylık Bütçe</a>
+    <div class="grup">Oluştur</div><a href="#"><span class="ik"></span>Akıllı Boost</a><a href="#"><span class="ik"></span>AdvCampaign</a>
+    <div class="grup">Yönet</div><a href="#"><span class="ik"></span>Reklam Yöneticisi</a><a href="#"><span class="ik"></span>Potansiyel Müşteriler</a>
+    <div class="grup">İyileştir</div><a href="#"><span class="ik"></span>Kurallar</a>
+    <a href="#"><span class="ik"></span>Raporlar</a>
+    <div class="grup">Base</div><a href="#"><span class="ik"></span>Marka Merkezi</a><a href="#"><span class="ik"></span>Varlıklar</a>
+    <div style="flex:1"></div><a href="#"><span class="ik"></span>Ayarlar</a>
+  </nav>
+
+  <div class="icerik">
+    <div class="ust"><span class="kir">Profaj Reklamcılık › <b>Ege Birlik Yapı</b> › Tasarım sistemi</span><button class="dg kucuk hayalet" id="tema" type="button">Tema</button></div>
+    <main class="sayfa">
+
+      <section class="bolum">
+        <header><span class="no">00 · İLKE</span><h2>Her sayfa aynı iskelet</h2><p>Başlık, tek birincil eylem, süzgeç, içerik. Düğmenin yeri sayfaya göre değişmez; kullanıcı her ekranda onu aynı yerde arar.</p></header>
+        <div class="kural">
+          <div><b>Birincil eylem: sağ üst</b>Sayfanın tek kırmızı düğmesi başlığın sağında. Sihirbazda alt çubuğun sağında.</div>
+          <div><b>Kırmızı az</b>Bir ekranda en çok bir kırmızı dolu düğme. Seçili sekme ve menü öğesi kırmızı çizgi/zemin.</div>
+          <div><b>Üç yuvarlaklık</b>8 px alan ve küçük öğe, 16 px kart ve panel, tam yuvarlak düğme, çip ve rozet.</div>
+          <div><b>Gölge yok</b>Kartlar çizgiyle ayrılır. Gölge yalnız açılır menü ve yan panelde.</div>
+          <div><b>Sayılar Montserrat</b>Tutar, metrik ve büyük sayı her zaman Montserrat ve hizalı rakam.</div>
+          <div><b>Dört hâl</b>Yükleniyor, boş (nedeniyle), hata (platformun mesajıyla), sonuç. Hiçbiri boş beyaz alan değil.</div>
+        </div>
+      </section>
+
+      <section class="bolum">
+        <header><span class="no">01 · SAYFA BAŞLIĞI</span><h2>Başlık ve eylem alanı</h2><p>Üst başlık bölümün adı (kırmızı küçük harf), başlık menüdeki adın aynısı, bir cümle açıklama. Sağda en çok bir birincil ve iki ikincil düğme.</p></header>
+        <div class="kart kart-ic">
+          <div class="sb"><div><span class="ust-y">Yönet</span><h1>Reklam Yöneticisi</h1><p>Bütün hesaplarının kampanyaları, setleri ve reklamları tek tabloda.</p></div>
+            <div class="eylem"><button class="dg" type="button">Dışa aktar</button><button class="dg ana" type="button"><span class="art">+</span>Yeni reklam</button></div></div>
+        </div>
+      </section>
+
+      <section class="bolum">
+        <header><span class="no">02 · DÜĞMELER</span><h2>Beş tür, iki boy, tek biçim</h2><p>Hepsi hap biçimli. 40 px varsayılan, 32 px tablo ve kart içinde. Simge varsa metnin solunda.</p></header>
+        <div class="kart kart-ic" style="display:grid;gap:14px">
+          <div class="dg-sira"><button class="dg ana" type="button">Birincil</button><button class="dg" type="button">İkincil</button><button class="dg koyu" type="button">Koyu</button><button class="dg hayalet" type="button">Hayalet</button><button class="dg tehlike" type="button">Sil</button><button class="dg ana" type="button" disabled>Kapalı</button></div>
+          <div class="dg-sira"><button class="dg ana kucuk" type="button">Uygula</button><button class="dg kucuk" type="button">Düzenle</button><button class="dg hayalet kucuk" type="button">⋯</button></div>
+        </div>
+      </section>
+
+      <section class="bolum">
+        <header><span class="no">03 · METRİK + GRAFİK</span><h2>Performans kartı</h2><p>Dört kutu, en çok iki seçili seri: birincisi kırmızı, ikincisi siyah. Değişim önceki döneme göre; iyi yeşil değil siyah ok, kötü kırmızı.</p></header>
+        <div class="kart">
+          <div class="metrikler" style="border:0;border-bottom:1px solid var(--cizgi);border-radius:16px 16px 0 0">
+            <div class="metrik s1"><span>Harcama</span><b>48.210 ₺</b><small>▲ %12 önceki 30 gün</small></div>
+            <div class="metrik s2"><span>Potansiyel müşteri</span><b>164</b><small class="iyi">▲ %21</small></div>
+            <div class="metrik"><span>Sonuç başı</span><b>294 ₺</b><small class="kotu">▲ %8</small></div>
+            <div class="metrik"><span>Tıklama</span><b>6.912</b><small>▼ %3</small></div>
+          </div>
+          <div class="kart-ic">
+            <svg class="grafik" viewBox="0 0 800 220" preserveAspectRatio="none" role="img" aria-label="Harcama ve potansiyel müşteri, 30 gün">
+              <g stroke="var(--cizgi)" stroke-width="1"><line x1="0" y1="50" x2="800" y2="50"/><line x1="0" y1="110" x2="800" y2="110"/><line x1="0" y1="170" x2="800" y2="170"/></g>
+              <path d="M0,150 C60,140 100,120 160,125 S260,90 320,100 S420,70 480,82 S600,60 660,64 S760,48 800,52" fill="none" stroke="var(--kirmizi)" stroke-width="2.5"/>
+              <path d="M0,170 C70,165 110,150 170,160 S270,130 330,138 S430,115 490,120 S610,100 670,106 S760,92 800,96" fill="none" stroke="var(--seri2)" stroke-width="2"/>
+              <circle cx="800" cy="52" r="4" fill="var(--kirmizi)"/>
+            </svg>
+          </div>
+          <div class="kart-alt"><a class="bag" href="#">Raporu aç →</a></div>
+        </div>
+      </section>
+
+      <section class="bolum">
+        <header><span class="no">04 · TABLO</span><h2>Süzgeç çubuğu, tablo, toplam, sayfalama</h2><p>Süzgeçler çip olarak tablonun üstünde. Ad sütunu bağlantı ve altında açıklama, sayılar sağa yaslı, toplam satırı ve "1 - 10 / 37" her zaman.</p></header>
+        <div class="kart">
+          <div class="arac"><span class="cip">Platform: Meta <button type="button" aria-label="Kaldır">✕</button></span><span class="cip">Durum: Yayında <button type="button" aria-label="Kaldır">✕</button></span><button class="cip ekle" type="button">+ Süzgeç</button><span style="flex:1"></span><button class="dg kucuk" type="button">Sütunlar</button></div>
+          <div class="tablo-sar"><table>
+            <thead><tr><th>Kampanya</th><th>Durum</th><th class="s">Harcama</th><th class="s">Sonuç</th><th class="s">Sonuç başı</th></tr></thead>
+            <tbody>
+              <tr><td><a href="#">Seasight · Form</a><small>Meta · Form doldursunlar</small></td><td><span class="rozet ok"><i></i>Yayında</span></td><td class="s sayi">18.400 ₺</td><td class="s">61</td><td class="s sayi">302 ₺</td></tr>
+              <tr><td><a href="#">Seasight · Arama</a><small>Google · Siteme gelsinler</small></td><td><span class="rozet dur"><i></i>Duraklatıldı</span></td><td class="s sayi">6.100 ₺</td><td class="s">1.420</td><td class="s sayi">4,30 ₺</td></tr>
+              <tr><td><a href="#">Narlıdere · Erişim</a><small>Meta · Bölgemde çok kişi görsün</small></td><td><span class="rozet hata"><i></i>Ödeme sorunu</span></td><td class="s sayi">0 ₺</td><td class="s">—</td><td class="s">—</td></tr>
+            </tbody>
+            <tfoot><tr><td>Toplam · 3 kampanya</td><td></td><td class="s sayi">24.500 ₺</td><td class="s">Platformlar toplanmaz</td><td></td></tr></tfoot>
+          </table></div>
+          <div class="sayfalama"><span>1 - 3 / 3</span><span>‹ ›</span></div>
+        </div>
+      </section>
+
+      <section class="bolum">
+        <header><span class="no">05 · SEKME, ROZET, FORM</span><h2>Seçim ve giriş</h2><p>Sayfa içi bölümler alt çizgili sekme; iki-dört seçenek için bölümlü düğme. Alanın altında yardım ya da hata, girişte doğrulama.</p></header>
+        <div class="kart kart-ic" style="display:grid;gap:20px">
+          <div class="sekmeler" role="tablist"><button class="sekme" aria-selected="true" type="button">Kampanyalar</button><button class="sekme" aria-selected="false" type="button">Reklam setleri</button><button class="sekme" aria-selected="false" type="button">Reklamlar</button></div>
+          <div class="yatay"><div class="bolumlu"><button aria-pressed="true" type="button">Bu ay</button><button aria-pressed="false" type="button">Son 7 gün</button><button aria-pressed="false" type="button">Özel</button></div>
+            <span class="rozet ok"><i></i>Yayında</span><span class="rozet dur"><i></i>Duraklatıldı</span><span class="rozet"><i></i>Taslak</span><span class="rozet hata"><i></i>Hata</span></div>
+          <div class="form-izgara">
+            <div class="alan"><label for="f1">İşletme adı</label><input class="girdi" id="f1" value="Ege Birlik Yapı"><small>Raporun kapağında görünür.</small></div>
+            <div class="alan"><label for="f2">Web sitesi</label><input class="girdi hatali" id="f2" value="egebirlik"><small class="hata">Adres https:// ile başlamalı.</small></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="bolum">
+        <header><span class="no">06 · HÂLLER</span><h2>Yükleniyor, boş, hata, uyarı</h2><p>Boş liste nedenini ve yapılacak işi söyler; hata platformun kendi mesajını gösterir. Dördü aynı kutu biçiminde.</p></header>
+        <div class="haller">
+          <div class="hal"><div class="iskelet" style="width:60%"></div><div class="iskelet"></div><div class="iskelet" style="width:80%"></div></div>
+          <div class="hal"><span class="ik">0</span><b>Henüz kampanya yok</b><p>Bu workspace'e reklam hesabı atanmadı.</p><button class="dg kucuk" type="button">Hesap ata</button></div>
+          <div class="hal hata"><span class="ik">!</span><b>Kampanyalar okunamadı</b><p>Meta: (#4) Application request limit reached</p><button class="dg kucuk" type="button">Tekrar dene</button></div>
+          <div class="hal"><span class="ik">✓</span><b>Sonuç yok</b><p>Seçili süzgeçlerle eşleşen kampanya yok.</p><button class="dg kucuk hayalet" type="button">Süzgeçleri temizle</button></div>
+        </div>
+        <div class="serit"><div><b>Google bağlantısının ölçüm izni eksik</b><span>Dönüşüm ölçümü kurulamıyor.</span></div><button class="dg kucuk hayalet" type="button">Kapat</button><button class="dg kucuk koyu" type="button">Sorunu çöz</button></div>
+      </section>
+
+      <section class="bolum">
+        <header><span class="no">07 · SİHİRBAZ</span><h2>Simülasyon dili: tek soru, büyük seçim, alt çubuk</h2><p>Oluşturma akışlarının hepsi (AdvStrategy, AdvCampaign, kurulum) bu iskeleti kullanır: üstte ilerleme rayı, ortada tek soru, altta Geri / not / Devam.</p></header>
+        <div class="kart kart-ic" style="display:grid;gap:18px">
+          <div class="ray"><i class="b"></i><i class="b"></i><i class="s"></i><i></i><i></i><i></i><i></i></div>
+          <div><span class="ust-y" style="font:700 12px var(--govde);letter-spacing:.08em;color:var(--kirmizi);text-transform:uppercase">3 / 7 · Bölge</span><h2 style="font-size:26px;margin-top:6px">Reklam nerede görünsün?</h2></div>
+          <div class="secimler"><button class="secim" type="button"><span class="karo">R</span><h3>Raporu incele</h3><p>Hazır stratejiyi oku ve onayla.</p></button><button class="secim" type="button"><span class="karo k">+</span><h3>Strateji oluştur</h3><p>Yedi kısa soru, yaklaşık 5 dakika.</p></button></div>
+          <div class="altcubuk"><button class="dg" type="button">← Geri</button><span>1 bölge seçildi</span><button class="dg ana" type="button">Devam</button></div>
+        </div>
+      </section>
+
+      <section class="bolum">
+        <header><span class="no">08 · YAN PANEL</span><h2>Düzenleme sayfadan çıkmadan</h2><p>Bir satırı düzenlemek yeni sayfa açmaz; sağdan panel açılır. Kaydet sağ altta, kapat sağ üstte.</p></header>
+        <div class="yp-ornek"><div class="golge"></div><aside class="yp"><div class="yp-bas"><h3 style="font-size:16px">Kampanyayı düzenle</h3><button class="dg kucuk hayalet" type="button" aria-label="Kapat">✕</button></div><div class="yp-ic"><div class="alan"><label for="f3">Günlük bütçe</label><input class="girdi sayi" id="f3" value="750 ₺"><small>Meta'nın alt sınırı 34 ₺.</small></div></div><div class="yp-alt"><button class="dg" type="button">Vazgeç</button><button class="dg ana" type="button">Kaydet</button></div></aside></div>
+      </section>
+
+      <section class="bolum">
+        <header><span class="no">09 · ÖRNEK SAYFA</span><h2>Genel Bakış, bu dille</h2><p>Başlık + eylem, uyarı şeridi, performans kartı, iki sütun: bekleyen işler ve en iyi kampanyalar. Her kartın tek eylemi sağ altında.</p></header>
+        <div class="kart kart-ic" style="display:grid;gap:18px;background:var(--zemin)">
+          <div class="sb"><div><span class="ust-y">Ege Birlik Yapı</span><h1 style="font-size:24px">Genel Bakış</h1><p>Bu ay · 1 – 14 Ekim</p></div><div class="eylem"><div class="bolumlu"><button aria-pressed="true" type="button">Bu ay</button><button aria-pressed="false" type="button">30 gün</button></div><button class="dg ana" type="button"><span class="art">+</span>Reklam kur</button></div></div>
+          <div class="serit"><div><b>2 iş seni bekliyor</b><span>Google ödemesi eksik, telefon araması ölçülmüyor.</span></div><button class="dg kucuk koyu" type="button">Kurulumu tamamla</button></div>
+          <div class="izgara-2">
+            <div class="kart"><div class="kart-bas"><h3>Bekleyen işler</h3><small>2 / 2</small></div><div class="kart-ic" style="display:grid;gap:12px">
+              <div class="yatay" style="justify-content:space-between"><span><b>Google Ads ödemesi</b><br><small style="color:var(--ikincil)">Kart eklenmeden reklam yayınlanmaz.</small></span><button class="dg kucuk" type="button">Aç</button></div>
+              <div class="yatay" style="justify-content:space-between"><span><b>Telefon araması ölçümü</b><br><small style="color:var(--ikincil)">"Beni arasınlar" bu olmadan çalışmaz.</small></span><button class="dg kucuk" type="button">Kur</button></div></div></div>
+            <div class="kart"><div class="kart-bas"><h3>En iyi kampanya</h3></div><div class="kart-ic"><span style="color:var(--ikincil);font-size:12.5px">Seasight · Form</span><div class="sayi" style="font-size:28px;font-weight:800">302 ₺</div><small style="color:var(--ikincil)">sonuç başı · 61 potansiyel müşteri</small></div><div class="kart-alt"><a class="bag" href="#">Reklam Yöneticisi →</a></div></div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+<script>
+document.getElementById('tema').onclick=function(){var k=document.documentElement,d=k.dataset.theme?k.dataset.theme==='dark':matchMedia('(prefers-color-scheme: dark)').matches;k.dataset.theme=d?'light':'dark';};
+document.querySelectorAll('.sekme').forEach(function(s){s.onclick=function(){document.querySelectorAll('.sekme').forEach(function(x){x.setAttribute('aria-selected',x===s);});};});
+document.querySelectorAll('.bolumlu').forEach(function(g){g.querySelectorAll('button').forEach(function(b){b.onclick=function(){g.querySelectorAll('button').forEach(function(x){x.setAttribute('aria-pressed',x===b);});};});});
+</script>
+</body>
+</html>
