@@ -19,6 +19,7 @@ import {
   type RehberAlanlari,
   type RehberEksikBaglami,
   type SeciliPikselHali,
+  kopyalanacakAlanlar,
 } from '@advetics/shared';
 import { MetaProvider, mapAdPixel, pikselSatinAlmaCoz } from '../../connections/providers/meta.provider';
 import { hazirlikSatisOlcumu, seciliPikselHali, type PikselSatiri } from './platform-okuma';
@@ -180,6 +181,11 @@ describe('SATIS · Meta piksel', () => {
     const onerilen = eksikler(satis({ satissizPikselOnayi: al({ pikselId: PIKSEL }, 'derleyici') }), baglam(p));
     expect(onerilen.some((x) => x.kod === 'KAYNAK' && x.alan === 'satissizPikselOnayi' && x.seviye === 'engel')).toBe(true);
     expect(rehberAlanlariSchema.safeParse({ satissizPikselOnayi: al({ pikselId: 'abc' }) }).success).toBe(false);
+    // Ajan 4: "aynı içerikle yeniden kur" onayı TAŞIMAZ (eski kişinin para sözü).
+    const kopya = kopyalanacakAlanlar(satis({ satissizPikselOnayi: al({ pikselId: PIKSEL }) }));
+    expect(kopya.satissizPikselOnayi).toBeUndefined();
+    expect(kopya.pikselId?.deger).toBe(PIKSEL);
+    expect(eksikler(kopya, baglam(p)).find((x) => x.kod === 'M-PIKSEL')?.seviye).toBe('engel');
     expect(SATISSIZ_PIKSEL_ONAY_METNI).toBe('Pikselim satış olayı göndermiyor; reklam satış yerine rastgele kişilere optimize olabilir. Yine de kur');
   });
 

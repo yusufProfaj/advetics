@@ -285,7 +285,15 @@ export const ISTEMCI_YAZAMAZ: readonly AlanKaynagi[] = ['meta_okumasi', 'recete'
  * kalan her alan kaynağıyla (kullanıcı / derleyici) birlikte taşınır;
  * hesap ve varlık aitliği sunucuda yeniden denetlenir.
  */
-export const KOPYALANMAYAN_ALANLAR = ['takvim'] as const satisfies ReadonlyArray<keyof RehberAlanlari>;
+/*
+ * SATIŞSIZ PİKSEL ONAYI DA KOPYALANMAZ (Ajan 4, 2026-10-13): o bir PARA
+ * SÖZÜ ve yalnız kullanıcı verebiliyor (`REHBER_IZINLI_KAYNAKLAR`). Kopya
+ * onu `kaynak: kullanici` ile, ESKİ kişinin adı ve zamanıyla taşırdı: yeni
+ * taslağı açan (belki başka bir ekip üyesi) kutuyu hiç görmeden "işaretli"
+ * bulur ve satış saymayan piksele para gider. Onay yeni taslakta yeniden
+ * verilir; kutu engelle birlikte zaten görünüyor.
+ */
+export const KOPYALANMAYAN_ALANLAR = ['takvim', 'satissizPikselOnayi'] as const satisfies ReadonlyArray<keyof RehberAlanlari>;
 export function kopyalanacakAlanlar(a: RehberAlanlari): RehberAlanlari {
   const kopya: Record<string, unknown> = { ...a };
   for (const k of KOPYALANMAYAN_ALANLAR) delete kopya[k];
