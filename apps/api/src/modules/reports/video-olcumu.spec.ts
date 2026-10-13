@@ -270,6 +270,20 @@ describe('B4 — rapor sütunları (paylaşılan karar)', () => {
     expect(COLUMN_TOTALS.costPerView!(t, 'TRY')).toBe(videoHucresi('costPerView', v({ izlenme: 1, harcamaMicros: '1000000' }), 'TRY'));
   });
 
+  /*
+   * Ajan 4 mutasyon boşluğu: null'u 0 sayan bir toplayıcı yukarıdaki testi
+   * GEÇİYORDU (bir satır dolu olunca toplam yine 200). Bütün satırlar
+   * okunamadıysa toplam da okunamadı kalmalı; "0 izlenme" müşteriye
+   * alınamayan ölçümü "kimse izlemedi" diye söyler.
+   */
+  it('KRİTİK: bütün satırlar okunamadıysa TOPLAM da okunamadı, 0 değil', () => {
+    const t = sumRows([satir(v({ izlenme: null, okunamadi: true }), '900000000'), satir(v({ izlenme: null, okunamadi: true }), '100000000')]);
+    expect(t.video.izlenme).toBeNull();
+    expect(t.video.p25).toBeNull();
+    expect(COLUMN_TOTALS.videoViews!(t, 'TRY')).toBe('okunamadı');
+    expect(COLUMN_TOTALS.costPerView!(t, 'TRY')).toBe('okunamadı');
+  });
+
   it('KRİTİK: video sütunları ana tabloya girmez; video tablosu yalnız ölçümü olan kampanyalar ve sayısı yazılı', () => {
     const satirlar = [satir(v({ izlenme: 50 })), satir(v({ izlenme: 0 })), satir(v({ okunamadi: true }))];
     const sutunlar = resolveColumns(undefined, DEFAULT_COLUMNS.meta_campaigns, satirlar);
