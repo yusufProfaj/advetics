@@ -28,6 +28,7 @@ import { GOOGLE_KARE_LOGO_KURGULARI } from './google-kanallar';
 import { googleGorselBulgulari, googleGorselKurgusuMu, googleMetinBulgulari, type GorselOlcusu } from './google-gorsel';
 import { fiyatSorunu, promosyonSorunu } from './google-ogeler';
 import { ACIKLAMA_METNI_SINIRI } from './google-uzanti';
+import { ADRES_CEVRESI_KARISIK_MESAJI, ERISIM_YARICAP, GOOGLE_YARICAP_KURGULARI, adresCevresiKarisik, adresCevresiMi, doygunlukUyarisi } from './erisim';
 import { ORAN_ETIKETI, YERLESIM_GRUPLARI, bannerSetiDestekleniyor, reklamSetiPlani, setlereAyir, type GorselOrani } from '../banner-seti';
 
 export type RehberAdimi = 1 | 2 | 3 | 4 | 5 | 6;
@@ -257,8 +258,32 @@ export function rehberEksikleri(a: RehberAlanlari, b: RehberEksikBaglami): Rehbe
   // ── 3 Kime ──
   const konumlar = a.konumlar?.deger ?? [];
   if (konumlar.length === 0) ekle('konumlar', null, 'KNM-01', 'Konum seçilmedi');
-  if (acik.google && konumlar.some((k) => !k.google)) {
+  // Adres çevresi Google'a `proximity` olarak gidiyor (eşleme gerekmiyor).
+  if (acik.google && konumlar.some((k) => !k.google && !adresCevresiMi(k))) {
     ekle('konumlar', 'google', 'G-KONUM', "Bazı konumlar Google'da eşlenemedi");
+  }
+  /*
+   * İŞLETME ADRESİNİN ÇEVRESİ (ERİŞİM K4) — GİRİŞ ANINDA. Derleyiciler aynı
+   * kuralları ikinci kapı olarak tutuyor (`KNM-ADRES`, `OZK-04`, `OZK-06`);
+   * burada kullanıcı Kime adımındayken öğreniyor.
+   */
+  const adresCevresi = konumlar.find(adresCevresiMi);
+  if (adresCevresi) {
+    if (adresCevresiKarisik(konumlar)) ekle('konumlar', null, 'KNM-ADRES', ADRES_CEVRESI_KARISIK_MESAJI);
+    const r = adresCevresi.yaricapKm;
+    if (r === undefined || !Number.isInteger(r) || r < ERISIM_YARICAP.enAz || r > ERISIM_YARICAP.enCok) {
+      ekle('konumlar', null, 'KNM-YARICAP', `Yarıçap ${ERISIM_YARICAP.enAz} ile ${ERISIM_YARICAP.enCok} km arasında tam sayı olmalı`);
+    }
+    if (adresCevresi.enlem === undefined || adresCevresi.boylam === undefined) ekle('konumlar', null, 'KNM-ADRES-KONUM', "İşletme adresinin harita konumu yok; Marka Merkezi'nde gir ya da il/ilçe seç");
+    // Özel kategoride Meta noktanın ÜLKESİNİ istiyor (kategori ülkesi) ve
+    // koordinattan ülke okumuyoruz (`isletmeAdresiKonumu`): kurulamaz,
+    // sebebiyle söylenir. Bu yüzden 17 km tabanı (OZK-06) buraya hiç düşmez.
+    if (acik.meta && (a.ekKategoriler?.deger ?? []).length > 0) {
+      ekle('konumlar', 'meta', 'OZK-04', 'Konut, iş ilanı ve kredi reklamında adres çevresi kullanılamıyor: Meta noktanın ülkesini istiyor. İl/ilçe seç');
+    }
+    if (acik.google && (!tanim.google.kurgu || !GOOGLE_YARICAP_KURGULARI.includes(tanim.google.kurgu))) {
+      ekle('konumlar', 'google', 'G-YARICAP-KURGU', 'Bu Google kampanyasında adres çevresi kurulamıyor; il/ilçe seç');
+    }
   }
   const yas = a.enDusukYas?.deger ?? 18;
   if (yas < 18 || yas > 25) ekle('enDusukYas', null, 'KTL-01', 'En düşük yaş 18 ile 25 arasında olmalı');
@@ -495,6 +520,17 @@ export function rehberEksikleri(a: RehberAlanlari, b: RehberEksikBaglami): Rehbe
       const g = gunluk(pay.meta);
       if (b.asgariGunluk.meta === null) ekle('butce', 'meta', 'M-ASGARI-BILINMIYOR', "Meta'nın bu hesaptaki asgari bütçesi okunamadı", 'uyari');
       else if (g !== null && g < b.asgariGunluk.meta) ekle('butce', 'meta', 'M-ASGARI', `Meta'ya düşen günlük tutar hesabın asgarisinin altında.${sonEk}`);
+    }
+    /*
+     * ERİŞİMDE BÜTÇE-KİTLE DOYGUNLUĞU (K5) — UYARI, ENGEL DEĞİL. Hesap yalnız
+     * okuma ve BGM varsa (`hesaplandi`); okunamadı/hesaplanamadı hâlleri karar
+     * tablosunda kendi cümlesiyle (sayı uydurulmaz, "0 kişi" yazılmaz).
+     */
+    const doy = ok?.erisimDoygunlugu;
+    if (acik.meta && amac === 'ERISIM' && doy?.tur === 'hesaplandi') {
+      const g = gunluk(pay.meta);
+      const u = g === null ? null : doygunlukUyarisi(doy, g, b.paraBirimi);
+      if (u) ekle('butce', 'meta', 'M-ERISIM-DOYGUN', u, 'uyari');
     }
     const ty = tanim.google.kurgu === 'TALEP_YARATMA_VIDEO' || tanim.google.kurgu === 'TALEP_YARATMA_GORSEL';
     if (acik.google && ty && b.asgariGunluk.googleTalepYaratma !== null) {

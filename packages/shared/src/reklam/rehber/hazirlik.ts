@@ -14,6 +14,7 @@
  */
 import type { ReklamHazirligi } from '../hazirlik';
 import type { RehberAmacKodu, RehberPlatformu } from './amaclar';
+import type { ErisimDoygunlugu, Koordinat } from './erisim';
 
 export type UcHal = boolean | null;
 
@@ -136,6 +137,13 @@ export interface RehberOnKosullari {
    * İsteğe bağlı: eski istemciler alanı tanımıyor.
    */
   seciliPiksel?: SeciliPikselHali | null;
+  /**
+   * ERİŞİM (K5): bölgenin Meta kitle tahmini ve bütçe tavanı. Yalnız
+   * "Bölgemde çok kişi görsün" + Meta açıkken okunur (prova ve hazırlıkta,
+   * kota bekçisinden). Alan yok = sorulmadı (eski önbellek, başka amaç);
+   * `null` = henüz okunmadı. Hâllerin kendisi `ErisimDoygunlugu`nda.
+   */
+  erisimDoygunlugu?: ErisimDoygunlugu | null;
 }
 
 export interface SeciliPikselHali {
@@ -241,7 +249,13 @@ export interface RehberHazirligi extends ReklamHazirligi {
     googleTalepYaratma: string | null;
   };
   /** Marka Merkezi'ndeki telefon ve site adresi (adım 4 önden dolar). */
-  iletisim: { telefon: string | null; siteAdresi: string | null };
+  /**
+   * Marka Merkezi'ndeki telefon, site adresi, ADRES ve adresin HARİTA
+   * KONUMU (ERİŞİM K4: "işletme adresinin çevresi"). Konum Marka Merkezi'ne
+   * elle giriliyor; yoksa `null` ve rehber o seçeneği sebebiyle kapalı
+   * gösteriyor. İsteğe bağlı: eski istemci alanları tanımıyor.
+   */
+  iletisim: { telefon: string | null; siteAdresi: string | null; adres?: string | null; adresKonumu?: Koordinat | null };
   /*
    * Form listesi burada DEĞİL (Dalga 2): liste SEÇİLİ sayfaya bağlı ve
    * Meta'dan okunuyor; hazırlık ilk sayfanın Advetics kayıtlarını okuyordu ve

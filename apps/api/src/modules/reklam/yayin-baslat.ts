@@ -183,7 +183,8 @@ export type TaslakDerlemesi =
       kimlik: string;
       derleme: Extract<ReturnType<typeof derleMeta>, { tur: 'govde' }>;
       hesapId: string;
-      atif: AtifStandardi;
+      /** `tik1`: erişimde ajans standardı seçilmemişken gövdeye giden 1 gün tıklama (B11). */
+      atif: AtifStandardi | 'tik1';
       medya: string[];
       videolar: string[];
     }
@@ -217,7 +218,14 @@ export async function taslakDerle(
        WHERE a.atif_standardi IS NOT NULL AND (a.org_id = c.org_id OR a.org_id = ma.ajans_org_id)
        ORDER BY (a.org_id = c.org_id) DESC LIMIT 1`),
   );
-  if (!a?.atif) retler.push({ kod: 'OK-16', mesaj: 'Atıf standardı henüz seçilmedi. Ajans yöneticisi seçene kadar yeni reklam yayınlanamaz.' });
+  /*
+   * ERİŞİMDE OK-16 YOK (ERİŞİM denetimi B11): REACH hedefinde gövdeye giden
+   * pencere her zaman 1 gün tıklama (`atifSpec`); ajans standardı gövdede
+   * kullanılmıyor ve onu beklemek erişimi sebepsiz kilitliyordu. Derleyici
+   * aynı kuralı tutuyor (`derleMeta`). Diğer niyetlerde politika aynı.
+   */
+  const erisim = alanlar.niyet?.deger === 'ERISIM';
+  if (!a?.atif && !erisim) retler.push({ kod: 'OK-16', mesaj: 'Atıf standardı henüz seçilmedi. Ajans yöneticisi seçene kadar yeni reklam yayınlanamaz.' });
 
   // --- Hesap, sayfa, IG, kategori: derleyicinin girdileri -------------------
   const hesapId = alanlar.reklamHesabiId?.deger;
@@ -358,7 +366,7 @@ export async function taslakDerle(
       baslangic: zamanDamgasi(takvim.baslangic, '00:00:00', h.timezone),
       bitis: takvim.bitis ? zamanDamgasi(takvim.bitis, '23:59:00', h.timezone) : null,
     },
-    atif: a!.atif,
+    atif: a?.atif ?? null,
     // Görsel hash'i yayın sırasında yüklenip yerine konur.
     kavramlar: kavramlar.map((k) => {
       if (k.kapakVarlikId) {
@@ -402,7 +410,8 @@ export async function taslakDerle(
     kimlik,
     derleme,
     hesapId: hesapId!,
-    atif: a!.atif as AtifStandardi,
+    // Yayın satırı gövdede GERÇEKTEN kullanılan pencereyi yazsın (`yayin.atif_standardi` CHECK'siz).
+    atif: a?.atif ?? 'tik1',
     medya: [...new Set(kavramlar.flatMap((k) => [k.kapakVarlikId ?? k.varlikId, ...(k.setGorselleri ?? []).map((x) => x.varlikId)]))],
     videolar: [...new Set(kavramlar.filter((k) => k.kapakVarlikId).map((k) => k.varlikId))],
   };

@@ -60,6 +60,9 @@ interface ClientRow {
   contactPhone: string | null;
   website: string | null;
   address: string | null;
+  /** Adresin harita konumu (ERİŞİM K4); ikisi birlikte dolu ya da boş. */
+  addressLatitude: number | null;
+  addressLongitude: number | null;
   taxOffice: string | null;
   taxNumber: string | null;
   iban: string | null;

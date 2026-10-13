@@ -16,6 +16,7 @@ import type {
   GoogleUzantiBeklentisi,
   GoogleVarlikGrubuBeklentisi,
   GoogleVideoReklamBeklentisi,
+  GoogleYasKitlesi,
 } from './derle-google';
 
 const logger = new Logger('GoogleYayin');
@@ -208,6 +209,16 @@ export interface GoogleOkunan {
    * bütün Arama yayınlarını "okunamadı"da tutmuyor.
    */
   ogeOkumaHatasi?: string;
+  /**
+   * B12 — konumların KİMLİĞİ (sıralı `geoTargetConstants/NNN`; kampanya ve
+   * reklam grubu birlikte). `null` = okunamadı (fark). Yalnız beklenen
+   * taşıyorsa okunur.
+   */
+  konumKimlikleri?: string[] | null;
+  /** Adres çevresi ölçütü; hiç yoksa `null`. Okunamadıysa `'okunamadi'` (fark). */
+  yakinlik?: GoogleBeklenen['yakinlik'] | 'okunamadi';
+  /** Reklam grubunun yaş kitlesi; hiç yoksa `null`. Okunamadıysa `'okunamadi'` (fark). */
+  yasKitlesi?: GoogleYasKitlesi | null | 'okunamadi';
 }
 
 export interface GeriOkumaSatiri {
@@ -270,6 +281,15 @@ export function googleGeriOkumaKarsilastir(b: GoogleBeklenen, o: GoogleOkunan): 
   if (b.uzantilar) kiyasla('uzantilar', uzantiKumesi(b.uzantilar), o.uzantilar ? uzantiKumesi(o.uzantilar) : null);
   // Arama öğeleri ALAN ALAN: hangi öğenin ayrıştığı satırda görünsün.
   // Beklenmeyen ama bağlı öğe (beklenen null, okunan dolu) de fark.
+  /*
+   * B12 — KONUM VE YAŞ KİMLİKLE (bütün kurgular). Sayı tek başına yanlış
+   * şehri yakalamıyordu. Eski satırlarda alan yok (undefined) = bakılmaz;
+   * okunamayan (`null` / `'okunamadi'`) FARK: okunamadığı ekranda görünür,
+   * "temiz" denmez.
+   */
+  if (b.konumKimlikleri) kiyasla('konum.kimlikler', [...b.konumKimlikleri].sort(), o.konumKimlikleri ? [...o.konumKimlikleri].sort() : 'okunamadı');
+  if (b.yakinlik !== undefined) kiyasla('konum.adresCevresi', b.yakinlik, o.yakinlik === undefined || o.yakinlik === 'okunamadi' ? 'okunamadı' : o.yakinlik);
+  if (b.yasKitlesi !== undefined) kiyasla('yas.kitle', b.yasKitlesi, o.yasKitlesi === undefined || o.yasKitlesi === 'okunamadi' ? 'okunamadı' : o.yasKitlesi);
   if (b.ogeler && !o.ogeOkumaHatasi) {
     const ok = o.ogeler ?? null;
     for (const alan of ['isletmeAdi', 'logo', 'snippet', 'promosyon', 'fiyat'] as const) {
@@ -590,7 +610,113 @@ export async function googleGeriOku(port: GoogleYayinPortu, ctx: FetchContext, k
     ...(b?.teklifHedefleri ? { teklifHedefleri: await teklifHedefleriOku(port, ctx, kampanyaId) } : {}),
     ...(b?.uzantilar ? { uzantilar: await uzantilariOku(port, ctx, kampanyaId) } : {}),
     ...(b?.ogeler ? await ogeleriGuvenli(port, ctx, kampanyaId, b.ogeler) : {}),
+    // B12: her biri KENDİ hata sınırında (`guvenliOku`): ölçülmemiş bir GAQL
+    // alanı bütün geri okumayı "kurulamadı"ya düşürmesin; düşen alan fark olur.
+    ...(b?.konumKimlikleri ? { konumKimlikleri: await guvenliOku('konum kimlikleri', kampanyaId, () => konumKimlikleriOku(port, ctx, kampanyaId), null) } : {}),
+    ...(b && b.yakinlik !== undefined
+      ? { yakinlik: await guvenliOku('adres çevresi', kampanyaId, () => yakinlikOku(port, ctx, kampanyaId, say(kampanyaKriteri, 'campaignCriterion', 'PROXIMITY', false) + say(grupKriteri, 'adGroupCriterion', 'PROXIMITY', false)), 'okunamadi' as const) }
+      : {}),
+    ...(b && b.yasKitlesi !== undefined
+      ? { yasKitlesi: await guvenliOku('yaş kitlesi', kampanyaId, () => yasKitlesiOku(port, ctx, kampanyaId, say(grupKriteri, 'adGroupCriterion', 'AUDIENCE', false)), 'okunamadi' as const) }
+      : {}),
   };
+}
+
+/** Ek okuma kendi hata sınırında: düşerse log + verilen "okunamadı" değeri. */
+async function guvenliOku<T, Y>(ad: string, kampanyaId: string, fn: () => Promise<T>, yedek: Y): Promise<T | Y> {
+  try {
+    return await fn();
+  } catch (e) {
+    logger.warn(`kampanya=${kampanyaId}: ${ad} okunamadı: ${e instanceof Error ? e.message : String(e)}`);
+    return yedek;
+  }
+}
+
+/**
+ * Kampanya ve reklam grubu konumlarının KİMLİĞİ (B12). Arama ve Maks.
+ * Performans konumu kampanyaya, Talep Yaratma reklam grubuna yazıyor; ikisi
+ * birleştiriliyor (`konumSayisi` gibi). WHERE'deki her alan SELECT'te (GAQL
+ * kuralı). Alan adları v25 başvurusundan, CANLIDA ÖLÇÜLMEDİ.
+ */
+async function konumKimlikleriOku(port: GoogleYayinPortu, ctx: FetchContext, kampanyaId: string): Promise<string[]> {
+  const k = await port.ara<{ campaignCriterion?: { location?: { geoTargetConstant?: string } } }>(
+    ctx,
+    `SELECT campaign.id, campaign_criterion.type, campaign_criterion.negative, campaign_criterion.location.geo_target_constant
+       FROM campaign_criterion
+      WHERE campaign.id = ${kampanyaId} AND campaign_criterion.type = 'LOCATION' AND campaign_criterion.negative = FALSE`,
+  );
+  const g = await port.ara<{ adGroupCriterion?: { location?: { geoTargetConstant?: string } } }>(
+    ctx,
+    `SELECT campaign.id, ad_group_criterion.type, ad_group_criterion.negative, ad_group_criterion.location.geo_target_constant
+       FROM ad_group_criterion
+      WHERE campaign.id = ${kampanyaId} AND ad_group_criterion.type = 'LOCATION' AND ad_group_criterion.negative = FALSE`,
+  );
+  const kimlikler = [...k.map((x) => x.campaignCriterion?.location?.geoTargetConstant), ...g.map((x) => x.adGroupCriterion?.location?.geoTargetConstant)];
+  // Satır döndü ama kimliği yok: "okunamadı", boş küme DEĞİL.
+  if (kimlikler.some((x) => typeof x !== 'string' || !x)) throw new Error('konum satırında geoTargetConstant yok');
+  return (kimlikler as string[]).sort();
+}
+
+/**
+ * Adres çevresi (`proximity`). `sayi` önceki sorgunun (kampanya + grup)
+ * PROXIMITY satır sayısı: hiç yoksa ek sorgu yok (`null` = daire yok; beklenen
+ * daireyse fark). Birden çok daire ya da kampanya düzeyinde bir daire bu
+ * okuyucuyu FIRLATIR (okunamadı = fark): ilk satırı alıp "tamam" demek ikinci
+ * daireyi görmemek olurdu. Alan adları v25 başvurusundan, CANLIDA ÖLÇÜLMEDİ
+ * (Talep Yaratma'da kabulü de).
+ */
+async function yakinlikOku(port: GoogleYayinPortu, ctx: FetchContext, kampanyaId: string, sayi: number): Promise<GoogleBeklenen['yakinlik']> {
+  if (sayi === 0) return null;
+  const r = await port.ara<{ adGroupCriterion?: { proximity?: { geoPoint?: { latitudeInMicroDegrees?: number | string; longitudeInMicroDegrees?: number | string }; radius?: number | string; radiusUnits?: string } } }>(
+    ctx,
+    `SELECT campaign.id, ad_group_criterion.type, ad_group_criterion.negative,
+            ad_group_criterion.proximity.geo_point.latitude_in_micro_degrees, ad_group_criterion.proximity.geo_point.longitude_in_micro_degrees,
+            ad_group_criterion.proximity.radius, ad_group_criterion.proximity.radius_units
+       FROM ad_group_criterion
+      WHERE campaign.id = ${kampanyaId} AND ad_group_criterion.type = 'PROXIMITY' AND ad_group_criterion.negative = FALSE`,
+  );
+  // Kampanya düzeyindeki daireyi bu sorgu görmez; sayı tutmuyorsa okunamadı.
+  if (r.length !== sayi || r.length !== 1) throw new Error(`beklenen tek adres çevresi, okunan ${sayi} ölçüt / ${r.length} satır`);
+  const p = r[0]!.adGroupCriterion?.proximity;
+  const n = (v: unknown) => (typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN);
+  const enlem = n(p?.geoPoint?.latitudeInMicroDegrees);
+  const boylam = n(p?.geoPoint?.longitudeInMicroDegrees);
+  const yaricap = n(p?.radius);
+  if (![enlem, boylam, yaricap].every(Number.isFinite)) throw new Error('adres çevresi satırı eksik');
+  // Birim OKUNDUĞU GİBİ: mil dönerse daire 1,6 kat büyük ve kıyas fark der.
+  return { enlemMikro: enlem, boylamMikro: boylam, yaricap, birim: (p?.radiusUnits ?? 'BILINMIYOR') as 'KILOMETERS' };
+}
+
+/**
+ * Reklam grubunun yaş kitlesi (B12): AUDIENCE ölçütü → `audience.dimensions`
+ * içindeki yaş aralıkları ve "yaşı bilinmeyenler" bayrağı. Ölçüt yoksa `null`
+ * (kısıtsız). Alan adları v25 başvurusundan (`AudienceDimension.age`),
+ * CANLIDA ÖLÇÜLMEDİ.
+ */
+async function yasKitlesiOku(port: GoogleYayinPortu, ctx: FetchContext, kampanyaId: string, sayi: number): Promise<GoogleYasKitlesi | null> {
+  if (sayi === 0) return null;
+  const baglar = await port.ara<{ adGroupCriterion?: { audience?: { audience?: string } } }>(
+    ctx,
+    `SELECT campaign.id, ad_group_criterion.type, ad_group_criterion.negative, ad_group_criterion.audience.audience
+       FROM ad_group_criterion
+      WHERE campaign.id = ${kampanyaId} AND ad_group_criterion.type = 'AUDIENCE' AND ad_group_criterion.negative = FALSE`,
+  );
+  const kaynaklar = baglar.map((x) => x.adGroupCriterion?.audience?.audience).filter((x): x is string => typeof x === 'string');
+  if (kaynaklar.length !== 1 || !/^customers\/\d+\/audiences\/\d+$/.test(kaynaklar[0]!)) throw new Error(`beklenen tek yaş kitlesi, okunan ${kaynaklar.length}`);
+  const [a] = await port.ara<{ audience?: { dimensions?: Array<{ age?: { ageRanges?: Array<{ minAge?: number | string; maxAge?: number | string }>; includeUndetermined?: boolean } }> } }>(
+    ctx,
+    `SELECT audience.resource_name, audience.dimensions FROM audience WHERE audience.resource_name = '${kaynaklar[0]}'`,
+  );
+  const yas = (a?.audience?.dimensions ?? []).map((d) => d.age).filter((x) => !!x);
+  if (yas.length !== 1) throw new Error('kitlede yaş boyutu okunamadı');
+  const n = (v: unknown) => (typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v) : undefined);
+  const segmentler = (yas[0]!.ageRanges ?? []).map((r) => {
+    const min = n(r.minAge);
+    const max = n(r.maxAge);
+    return max === undefined ? { minAge: min as number } : { minAge: min as number, maxAge: max };
+  });
+  // Proto3 JSON'da `false` hiç gelmeyebilir: yokluğu false sayılıyor (açık = true gelir).
+  return { segmentler, belirsizDahil: (yas[0]!.includeUndetermined === true) as false };
 }
 
 /**

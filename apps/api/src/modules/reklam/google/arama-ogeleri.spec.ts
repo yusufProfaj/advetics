@@ -302,7 +302,7 @@ describe('KRİTİK: öğeler TEK atomik istekte (site ulaşması)', () => {
   const baglar = ops.filter((o) => tur(o) === 'campaignAssetOperation').map((o) => o.campaignAssetOperation!.create!);
 
   it('sürüm artırıldı; partialFailure false; bütün öğe türleri kampanyaya bağlı', () => {
-    expect(GOOGLE_DERLEYICI_SURUMU).toBe('g-1.5.0');
+    expect(GOOGLE_DERLEYICI_SURUMU).toBe('g-1.6.0');
     expect(d.govde.partialFailure).toBe(false);
     expect(baglar.map((b) => b.fieldType)).toEqual(['CALL', 'SITELINK', 'SITELINK', 'CALLOUT', 'BUSINESS_NAME', 'BUSINESS_LOGO', 'STRUCTURED_SNIPPET', 'PROMOTION', 'PRICE']);
     const kampanya = ops.find((o) => tur(o) === 'campaignOperation')!.campaignOperation!.create!.resourceName;
@@ -450,6 +450,8 @@ describe('geri okuma — öğeler', () => {
     aglar: d.beklenen.aglar,
     konumTuru: 'PRESENCE',
     konumSayisi: d.beklenen.konumSayisi,
+    konumKimlikleri: d.beklenen.konumKimlikleri,
+    yakinlik: null,
     anahtarKelimeSayisi: d.beklenen.anahtarKelimeSayisi!,
     negatifSayisi: d.beklenen.negatifSayisi!,
     aramaOgeleri: [{ countryCode: 'TR', phoneNumber: '+90 232 555 12 34' }],

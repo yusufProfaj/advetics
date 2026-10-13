@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { DetaySatiri } from '@/components/tenancy/musteri-detay';
 import { MusteriBilgiFormu, type MusteriBilgileri } from '@/components/tenancy/musteri-bilgi-formu';
 import { Dugme } from '@/components/ui/dugme';
+import { koordinatYaz } from '@advetics/shared';
 
 /**
  * ═══ İLETİŞİM VE FİRMA BİLGİLERİ — MARKA MERKEZİ'NDE ═══
@@ -55,6 +56,11 @@ export function FirmaBilgileri({
           <p className="mb-1 text-xs font-semibold text-ink">Firma</p>
           <div className="rounded-lg border border-line px-3 py-1">
             <DetaySatiri etiket="Adres" deger={bilgi.address} />
+            {/* "Bölgemde çok kişi görsün" reklamının "adresin çevresi" seçeneği bunu okuyor. */}
+            <DetaySatiri
+              etiket="Harita konumu"
+              deger={bilgi.addressLatitude != null && bilgi.addressLongitude != null ? koordinatYaz({ enlem: bilgi.addressLatitude, boylam: bilgi.addressLongitude }) : null}
+            />
             <DetaySatiri etiket="Vergi dairesi" deger={bilgi.taxOffice} />
             <DetaySatiri etiket="Vergi numarası" deger={bilgi.taxNumber} />
             <DetaySatiri etiket="IBAN" deger={bilgi.iban} />

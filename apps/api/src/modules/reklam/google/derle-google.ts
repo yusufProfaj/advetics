@@ -30,7 +30,10 @@ import {
   DEMAND_GEN_GORSEL_OTOMASYONU,
   demandGenAtomikIstek,
   demandGenGorselAtomikIstek,
+  yakinlikOlcutu,
+  yasSegmentleri,
   type GoogleGorselKaynagi,
+  type YasSegmenti,
 } from '../../connections/providers/google-demandgen';
 import { aramaOgeIslemleriEkle } from '../../connections/providers/google-arama-ogeleri';
 import {
@@ -85,7 +88,11 @@ import {
 // açıklamalardan AYRI (`videoUzunBaslik`), kare logo kuralı Talep Yaratma
 // video ve görselde de. Video gövdesi DEĞİŞTİ: g-1.4.0 provaları uzun başlığı
 // açıklamayla aynı ve haritaları belirsiz gövdeyi kanıtlıyordu.
-export const GOOGLE_DERLEYICI_SURUMU = 'g-1.5.0';
+// g-1.6.0: ERİŞİM turu — Talep Yaratma'da "işletme adresinin çevresi"
+// (`proximity`, K4) ve geri okumada konumların KİMLİĞİ ve yaş kitlesi (B12).
+// Talep Yaratma gövdesi adres çevresinde DEĞİŞTİ; il/ilçeli gövde aynı ama
+// beklenen yankı genişledi ve eski provalar bu kıyası görmedi.
+export const GOOGLE_DERLEYICI_SURUMU = 'g-1.6.0';
 
 /**
  * Google yayınında `yayin.atif_standardi`. Karar tablosunun "Ölçüm"
@@ -231,6 +238,36 @@ export interface GoogleBeklenen {
    * güncelleme) fark. Eski satırlarda YOK = bakılmaz.
    */
   teklifHedefleri?: string[];
+  /**
+   * g-1.6.0 (B12) — KONUM KİMLİKLE: `konumSayisi` yalnız sayıyordu ve İzmir
+   * yerine Manisa'ya kurulmuş bir kampanya "1 konum" ile temiz geçerdi.
+   * `geoTargetConstants/NNN` sıralı. Eski satırlarda YOK = bakılmaz.
+   */
+  konumKimlikleri?: string[];
+  /**
+   * Adres çevresi (ERİŞİM K4) Google'ın döndürdüğü birimlerle: mikro-derece
+   * ve yarıçap. `null` = beklenmiyor; kampanyada yakınlık ölçütü VARSA fark
+   * (söz verilmemiş bir daire). Eski satırlarda YOK = bakılmaz.
+   */
+  yakinlik?: { enlemMikro: number; boylamMikro: number; yaricap: number; birim: 'KILOMETERS' } | null;
+  /**
+   * Talep Yaratma YAŞ KİTLESİ (B12): reklam grubuna bağlı kitlenin yaş
+   * aralıkları ve "yaşı bilinmeyenler" bayrağı. `null` = yaş kitlesi YOK
+   * (18+, kısıtsız); bağlı bir kitle dönerse fark. Arama ve Maks. Performans
+   * yaş ölçütü taşımıyor: alan yok. Eski satırlarda YOK = bakılmaz.
+   */
+  yasKitlesi?: GoogleYasKitlesi | null;
+}
+
+export interface GoogleYasKitlesi {
+  segmentler: YasSegmenti[];
+  belirsizDahil: false;
+}
+
+/** Gövdenin kurduğu yaş kitlesinin beklenen hâli (`demandGenYasKitlesiBody` ile aynı kural). */
+export function yasKitlesiBeklenen(kovalar: readonly string[]): GoogleYasKitlesi | null {
+  const segmentler = yasSegmentleri(kovalar);
+  return segmentler.length ? { segmentler, belirsizDahil: false } : null;
 }
 
 export type GoogleDerleme =
@@ -316,7 +353,31 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
   // Google reddeder; tarih yokken kampanya açıldığı anda başlar.
   const startDate = g.takvim.baslangic > bu ? g.takvim.baslangic : undefined;
 
-  if (g.konumlar.length === 0) retler.push({ kod: 'KNM-01', mesaj: 'Konum yok: kampanya bütün ülkelere açılırdı.' });
+  if (g.konumlar.length === 0 && !g.yakinlik) retler.push({ kod: 'KNM-01', mesaj: 'Konum yok: kampanya bütün ülkelere açılırdı.' });
+  /*
+   * ADRES ÇEVRESİ YALNIZ TALEP YARATMA'DA (ERİŞİM K4): konum orada reklam
+   * grubunda ve `proximity` ölçütü oraya ekleniyor. Arama ve Maks.
+   * Performans'ta konum kampanyada; yakınlık ölçütü orada yazılmadı. Sessizce
+   * atlamak "konumsuz = bütün ülkeler" demekti; ret.
+   */
+  if (g.yakinlik && g.kurgu !== 'TALEP_YARATMA_GORSEL' && g.kurgu !== 'TALEP_YARATMA_VIDEO') {
+    retler.push({ kod: 'G-YARICAP-KURGU', mesaj: 'Bu Google kampanyasında işletme adresinin çevresi kurulamıyor; il/ilçe seç.' });
+  }
+  if (g.yakinlik && g.konumlar.length > 0) {
+    // Birleşim: daire + il = il geneli (Meta ile aynı kural, `adresCevresiKarisik`).
+    retler.push({ kod: 'KNM-ADRES', mesaj: 'İşletme adresinin çevresi başka konumlarla birlikte seçilemez.' });
+  }
+  let yakinlikBeklenen: GoogleBeklenen['yakinlik'] = null;
+  if (g.yakinlik) {
+    try {
+      const o = yakinlikOlcutu(g.yakinlik) as { geoPoint: { latitudeInMicroDegrees: number; longitudeInMicroDegrees: number }; radius: number };
+      yakinlikBeklenen = { enlemMikro: o.geoPoint.latitudeInMicroDegrees, boylamMikro: o.geoPoint.longitudeInMicroDegrees, yaricap: o.radius, birim: 'KILOMETERS' };
+    } catch (e) {
+      retler.push({ kod: 'KNM-ADRES-KONUM', mesaj: (e as Error).message });
+    }
+  }
+  // B12: bütün kurgularda konum kimliği (sıralı) beklenir.
+  const konumKimlikleri = [...g.konumlar].sort();
   if (g.basliklar.length === 0) retler.push({ kod: 'METIN-BASLIK', mesaj: 'Başlık yok.' });
 
   // AD BİÇİMİ META İLE AYNI ÜRETİCİDEN (`advKampanyaAdi`, kullanıcı kararı
@@ -480,6 +541,8 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
         aglar: { googleSearch: true, searchNetwork: false, contentNetwork: false, partnerSearchNetwork: false },
         konumTuru: 'PRESENCE',
         konumSayisi: g.konumlar.length,
+        konumKimlikleri,
+        yakinlik: null,
         anahtarKelimeSayisi: g.anahtarKelimeler.length,
         negatifSayisi: g.negatifler.length,
         aramaOgesi: tel ? { countryCode: tel.countryCode, phoneNumber: tel.phoneNumber } : ogeTel ? { countryCode: ogeTel.countryCode, phoneNumber: ogeTel.phoneNumber } : null,
@@ -548,6 +611,7 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
       // "kurulan şey istenen mi" sorusunu cevaplıyor ve o soru açmadan önce.
       acilis: 'PAUSED',
       konumlar: g.konumlar,
+      yakinlik: g.yakinlik ?? null,
       yaslar: yas.kovalar,
       videoId: g.youtubeVideoId,
       videoTitle: b.youtubeVideoBasligi ?? ad,
@@ -577,6 +641,9 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
         aglar: null,
         konumTuru: 'PRESENCE',
         konumSayisi: g.konumlar.length,
+        konumKimlikleri,
+        yakinlik: yakinlikBeklenen,
+        yasKitlesi: yasKitlesiBeklenen(yas.kovalar),
         anahtarKelimeSayisi: null,
         negatifSayisi: null,
         aramaOgesi: null,
@@ -620,6 +687,7 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
         ...(startDate ? { startDate } : {}),
         acilis: 'PAUSED',
         konumlar: g.konumlar,
+        yakinlik: g.yakinlik ?? null,
         yaslar: yas.kovalar,
         logo: b.logo,
         gorseller,
@@ -644,6 +712,9 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
           aglar: null,
           konumTuru: 'PRESENCE',
           konumSayisi: g.konumlar.length,
+          konumKimlikleri,
+          yakinlik: yakinlikBeklenen,
+          yasKitlesi: yasKitlesiBeklenen(yas.kovalar),
           anahtarKelimeSayisi: null,
           negatifSayisi: null,
           aramaOgesi: null,
@@ -734,6 +805,8 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
         aglar: null,
         konumTuru: 'PRESENCE',
         konumSayisi: g.konumlar.length,
+        konumKimlikleri,
+        yakinlik: null,
         anahtarKelimeSayisi: null,
         negatifSayisi: null,
         aramaOgesi: null,

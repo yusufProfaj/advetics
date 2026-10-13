@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import { AliciListesiAlani } from '@/components/alici-listesi-alani';
 import { useRouter } from 'next/navigation';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { KOORDINAT_BICIM_MESAJI, koordinatCoz, koordinatYaz } from '@advetics/shared';
 
 /**
  * ═══ MÜŞTERİ BİLGİLERİ — DÜZENLEME ═══
@@ -46,13 +47,22 @@ export interface MusteriBilgileri {
   contactPhone: string | null;
   website: string | null;
   address: string | null;
+  /**
+   * ADRESİN HARİTA KONUMU (ERİŞİM K4). Uç iki sayı döndürüyor; form TEK alan
+   * gösteriyor ("enlem, boylam", Google Haritalar'ın kopyaladığı biçim) ve
+   * uca `addressCoordinates` dizgesi gidiyor. İsteğe bağlı: eski çağıranlar
+   * (sihirbaz) alanı taşımıyor.
+   */
+  addressLatitude?: number | null;
+  addressLongitude?: number | null;
   taxOffice: string | null;
   taxNumber: string | null;
   iban: string | null;
   notes: string | null;
 }
 
-type Alan = keyof MusteriBilgileri;
+/** Form alanları: uç alanları + iki sayının tek alandaki hâli (`addressCoordinates`). */
+type Alan = Exclude<keyof MusteriBilgileri, 'addressLatitude' | 'addressLongitude'> | 'addressCoordinates';
 
 /*
  * `alicilar` TÜRÜ LİSTEYE EKLENDİ, alan listenin DIŞINA çıkarılmadı.
@@ -65,7 +75,7 @@ type Alan = keyof MusteriBilgileri;
 const ALANLAR: {
   anahtar: Alan;
   etiket: string;
-  tur: 'text' | 'email' | 'tel' | 'uzun' | 'alicilar';
+  tur: 'text' | 'email' | 'tel' | 'uzun' | 'alicilar' | 'konum';
 }[] = [
   // AD İLK SIRADA: formu açan kişinin en sık değiştireceği alan bu.
   { anahtar: 'name', etiket: 'Workspace adı', tur: 'text' },
@@ -77,6 +87,7 @@ const ALANLAR: {
   { anahtar: 'taxNumber', etiket: 'Vergi numarası', tur: 'text' },
   { anahtar: 'iban', etiket: 'IBAN', tur: 'text' },
   { anahtar: 'address', etiket: 'Adres', tur: 'uzun' },
+  { anahtar: 'addressCoordinates', etiket: 'Adresin harita konumu (enlem, boylam)', tur: 'konum' },
   { anahtar: 'notes', etiket: 'Not', tur: 'uzun' },
 ];
 
@@ -98,7 +109,14 @@ export function MusteriBilgiFormu({
     for (const a of ALANLAR) {
       // Liste alanı boş DİZİ ile başlıyor, boş DİZGE ile değil: iki tür aynı
       // sözlükte duruyor ve karıştırmak `map` çağrısını patlatır.
-      d[a.anahtar] = a.tur === 'alicilar' ? (baslangic.contactEmails ?? []) : (baslangic[a.anahtar] ?? '');
+      d[a.anahtar] =
+        a.tur === 'alicilar'
+          ? (baslangic.contactEmails ?? [])
+          : a.anahtar === 'addressCoordinates'
+            ? baslangic.addressLatitude != null && baslangic.addressLongitude != null
+              ? koordinatYaz({ enlem: baslangic.addressLatitude, boylam: baslangic.addressLongitude })
+              : ''
+            : (baslangic[a.anahtar] ?? '');
     }
     return d;
   });
@@ -122,6 +140,12 @@ export function MusteriBilgiFormu({
        * beklemeden alanın yanında söylemek, "Kaydet"e basıp anlaşılmaz bir
        * hata almaktan iyi.
        */
+      // Harita konumu SUNUCUYA GİTMEDEN: alanın altında zaten söylendi.
+      if (koordinatCoz(String(deger.addressCoordinates ?? '')) === 'gecersiz') {
+        setHata(KOORDINAT_BICIM_MESAJI);
+        setKaydediliyor(false);
+        return;
+      }
       const yeniAd = String(deger.name ?? '').trim();
       if (yeniAd.length < 2) {
         setHata('Workspace adı en az 2 karakter olmalı.');
@@ -163,6 +187,8 @@ export function MusteriBilgiFormu({
                 onChange={(yeni) => setDeger({ ...deger, [a.anahtar]: yeni })}
                 yardim="Rapor maili bu adreslerin hepsine gider."
               />
+            ) : a.tur === 'konum' ? (
+              <KonumAlani deger={deger[a.anahtar] as string} degisti={(v) => setDeger({ ...deger, [a.anahtar]: v })} />
             ) : a.tur === 'uzun' ? (
               <textarea
                 rows={2}
@@ -204,5 +230,38 @@ export function MusteriBilgiFormu({
         </button>
       </div>
     </form>
+  );
+}
+
+/**
+ * Harita konumu alanı — GİRİŞ ANINDA doğrulanıyor (alanı bırakınca): bozuk
+ * biçim "Kaydet"e basınca değil hemen söyleniyor. Adres metninden konum
+ * TAHMİN EDİLMİYOR; kullanıcı Google Haritalar'dan kopyalıyor.
+ */
+function KonumAlani({ deger, degisti }: { deger: string; degisti: (v: string) => void }) {
+  const [hata, setHata] = useState<string | null>(null);
+  return (
+    <>
+      <input
+        type="text"
+        inputMode="decimal"
+        placeholder="38.4237, 27.1428"
+        value={deger}
+        aria-invalid={hata ? true : undefined}
+        onChange={(e) => {
+          degisti(e.target.value);
+          if (hata && koordinatCoz(e.target.value) !== 'gecersiz') setHata(null);
+        }}
+        onBlur={(e) => setHata(koordinatCoz(e.target.value) === 'gecersiz' ? KOORDINAT_BICIM_MESAJI : null)}
+        className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-xs focus:border-brand focus:outline-none"
+      />
+      {hata ? (
+        <span className="mt-1 block text-[11px] text-danger">{hata}</span>
+      ) : (
+        <span className="mt-1 block text-[11px] text-ink-muted">
+          &quot;Bölgemde çok kişi görsün&quot; reklamı adresin çevresini buradan alır. Google Haritalar&apos;da adrese sağ tıklayıp ilk satırı kopyala.
+        </span>
+      )}
+    </>
   );
 }

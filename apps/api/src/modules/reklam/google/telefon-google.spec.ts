@@ -208,6 +208,8 @@ describe('çalışma saatleri → arama öğesi', () => {
       aglar: { googleSearch: true, searchNetwork: false, contentNetwork: false, partnerSearchNetwork: false },
       konumTuru: 'PRESENCE',
       konumSayisi: 1,
+      konumKimlikleri: d.beklenen.konumKimlikleri,
+      yakinlik: null,
       anahtarKelimeSayisi: 1,
       negatifSayisi: TABAN_NEGATIFLER.length,
       aramaOgeleri: [{ countryCode: 'TR', phoneNumber: '2325551234' }],

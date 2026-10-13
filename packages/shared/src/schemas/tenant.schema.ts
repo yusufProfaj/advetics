@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { ALICI_UST_SINIRI, gecerliAdres } from '../alici-listesi';
 import { specialAdCategoriesSchema } from './special-category.schema';
 import { ROLES } from '../auth/roles';
+import { KOORDINAT_BICIM_MESAJI, koordinatCoz, koordinatYaz } from '../reklam/rehber/erisim';
 
 const slugSchema = z
   .string()
@@ -74,6 +75,27 @@ export const clientContactSchema = z.object({
   contactPhone: bosDizgeNull(40),
   website: bosDizgeNull(255),
   address: bosDizgeNull(500),
+  /**
+   * ADRESİN HARİTA KONUMU (ERİŞİM K4) — "38.4237, 27.1428". Rehberin
+   * "işletme adresinin çevresi" seçeneği bunu okuyor. Adres metnini
+   * koordinata çeviren bir servis bu depoda YOK ve uydurulmuyor: kullanıcı
+   * Google Haritalar'dan kopyalıyor. `undefined` = değiştirme, boş = temizle
+   * (`null`), bozuk girdi 400 (panel aynı fonksiyonla giriş anında söylüyor).
+   */
+  addressCoordinates: z
+    .string()
+    .trim()
+    .max(60)
+    .refine((v) => koordinatCoz(v) !== 'gecersiz', { message: KOORDINAT_BICIM_MESAJI })
+    .optional()
+    // Çıktı KANONİK dizge ("38.4237, 27.1428") ya da null: diğer iletişim
+    // alanlarıyla aynı desen (girdi/çıktı tipi ayrışmasın); servis
+    // `koordinatCoz` ile iki kolona ayırıyor.
+    .transform((v) => {
+      const k = koordinatCoz(v);
+      return k && k !== 'gecersiz' ? koordinatYaz(k) : null;
+    })
+    .nullable(),
   taxOffice: bosDizgeNull(120),
   taxNumber: bosDizgeNull(40),
   iban: bosDizgeNull(34),

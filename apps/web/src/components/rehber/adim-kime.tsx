@@ -1,8 +1,17 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useId, useState } from 'react';
-import { OZEL_KATEGORI_ETIKETLERI, type GeoLocationOption, type RehberKonumu } from '@advetics/shared';
+import {
+  ERISIM_YARICAP,
+  OZEL_KATEGORI_ETIKETLERI,
+  adresCevresiMi,
+  isletmeAdresiKonumu,
+  type GeoLocationOption,
+  type RehberKonumu,
+} from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { baglanti } from '@/lib/baglanti';
 import { AltCubuk, Soru, Uyari, type AdimBaglami } from './adim-ortak';
 import {
   KATEGORI_SECENEKLERI,
@@ -39,7 +48,17 @@ export function AdimKime({
   const aralik = b.a.yasAraligi?.deger ?? null;
   const yas = kilitli ? 'genis' : yasSecenegi(aralik, ozelYas);
   const kategori = seciliKategori(ek);
-  const eslenemeyen = b.acik.google ? konumlar.filter((k) => !k.google) : [];
+  // Adres çevresi Google'a yarıçap olarak gider; eşleme beklemiyor.
+  const eslenemeyen = b.acik.google ? konumlar.filter((k) => !k.google && !adresCevresiMi(k)) : [];
+  /*
+   * ERİŞİM (K4): "işletme adresinin çevresi" İLK seçenek. Konum Marka
+   * Merkezi'ndeki harita konumundan; yoksa seçenek KAPALI ve sebebi yazıyor
+   * (adres metninden nokta tahmin edilmiyor). İl/ilçe seçimi aynen duruyor.
+   */
+  const erisim = b.a.amac?.deger === 'ERISIM';
+  const adresKonumu = b.h.iletisim.adresKonumu ?? null;
+  const cevre = konumlar.find(adresCevresiMi) ?? null;
+  const konumEksikleri = b.kayit.eksikler.filter((e) => e.adim === 3 && e.alan === 'konumlar' && e.kod !== 'G-KONUM');
   const kategoriUyarilari = b.kayit.eksikler.filter((e) => e.adim === 3 && e.alan === 'ekKategoriler' && e.kod !== 'OZK-SORU');
 
   function konumlariYaz(yeni: RehberKonumu[]) {
@@ -79,59 +98,101 @@ export function AdimKime({
         bulur; ilgi alanı seçmen gerekmiyor.
       </Soru>
       <div className={s.kart}>
-        <div className={s.blok}>
-          <div className={s.blokBaslik}>
-            Konum {b.a.konumlar?.kaynak === 'marka_merkezi' && <span className={s.onerilen}>Marka Merkezi&apos;nden</span>}
-          </div>
-          <div className={s.cipler}>
-            {konumlar.map((k) => (
-              <span key={`${k.tur}:${k.key}`} className={s.cip} aria-pressed="true">
-                {k.etiket}
-                {k.yaricapKm ? <small>+ {k.yaricapKm} km</small> : null}
-                {b.acik.google && !k.google && <small>Google&apos;da eşlenmedi</small>}
-                <button
-                  type="button"
-                  className={s.x}
-                  aria-label={`${k.etiket} konumunu kaldır`}
-                  onClick={() => konumlariYaz(konumlar.filter((x) => !(x.tur === k.tur && x.key === k.key)))}
-                >
-                  ✕
-                </button>
-              </span>
+        {erisim && (
+          <div className={s.blok}>
+            <div className={s.blokBaslik}>Bölge</div>
+            <div className={s.secim}>
+              <button
+                type="button"
+                aria-pressed={!!cevre}
+                disabled={!adresKonumu}
+                onClick={() => adresKonumu && konumlariYaz([isletmeAdresiKonumu(adresKonumu, ERISIM_YARICAP.varsayilan, b.h.iletisim.adres ?? null)])}
+              >
+                İşletme adresinin çevresi
+                <small>{adresKonumu ? (b.h.iletisim.adres ?? 'Marka Merkezi konumu') : "Marka Merkezi'nde harita konumu yok"}</small>
+              </button>
+              <button type="button" aria-pressed={!cevre} onClick={() => cevre && konumlariYaz([])}>
+                İl ya da ilçe seç
+                <small>Bir ya da birkaç bölge</small>
+              </button>
+            </div>
+            {!adresKonumu && (
+              <p className={s.ipucu}>
+                Adresin harita konumunu Marka Merkezi &gt; Workspace ayarları &gt; İletişim ve firma bölümüne gir (Google Haritalar&apos;da adrese sağ
+                tıklayıp ilk satırı kopyala).{' '}
+                <Link href={baglanti('/marka-merkezi', { bolum: 'ayarlar', musteri: b.clientId })} className={s.metinDugme}>
+                  Marka Merkezi&apos;ne git
+                </Link>
+              </p>
+            )}
+            <div className={s.gizlenir} data-acik={!!cevre}>
+              <div>{cevre && <YaricapGirdisi deger={cevre.yaricapKm ?? ERISIM_YARICAP.varsayilan} degisti={(km) => konumlariYaz([{ ...cevre, yaricapKm: km }])} />}</div>
+            </div>
+            {konumEksikleri.map((e) => (
+              <Uyari key={e.kod} className={s.ustBosluk}>
+                {e.metin}
+              </Uyari>
             ))}
-            <button type="button" className={s.cip} aria-expanded={aramaAcik} onClick={() => setAramaAcik((v) => !v)}>
-              + Konum ekle
-            </button>
           </div>
-          <div className={s.gizlenir} data-acik={aramaAcik}>
-            <div>
-              <KonumArama
-                b={b}
-                acik={aramaAcik}
-                ekle={(k) => {
-                  if (!konumlar.some((x) => x.tur === k.tur && x.key === k.key)) konumlariYaz([...konumlar, k]);
-                }}
-              />
+        )}
+        {/* Adres çevresi seçiliyken il/ilçe listesi GİZLENİR ama DOM'dan çıkmaz (geçişle). */}
+        <div className={s.gizlenir} data-acik={!cevre}>
+          <div>
+            <div className={s.blok}>
+              <div className={s.blokBaslik}>
+                Konum {b.a.konumlar?.kaynak === 'marka_merkezi' && <span className={s.onerilen}>Marka Merkezi&apos;nden</span>}
+              </div>
+              <div className={s.cipler}>
+                {konumlar.map((k) => (
+                  <span key={`${k.tur}:${k.key}`} className={s.cip} aria-pressed="true">
+                    {k.etiket}
+                    {k.yaricapKm ? <small>+ {k.yaricapKm} km</small> : null}
+                    {b.acik.google && !k.google && <small>Google&apos;da eşlenmedi</small>}
+                    <button
+                      type="button"
+                      className={s.x}
+                      aria-label={`${k.etiket} konumunu kaldır`}
+                      onClick={() => konumlariYaz(konumlar.filter((x) => !(x.tur === k.tur && x.key === k.key)))}
+                    >
+                      ✕
+                    </button>
+                  </span>
+                ))}
+                <button type="button" className={s.cip} aria-expanded={aramaAcik} onClick={() => setAramaAcik((v) => !v)}>
+                  + Konum ekle
+                </button>
+              </div>
+              <div className={s.gizlenir} data-acik={aramaAcik}>
+                <div>
+                  <KonumArama
+                    b={b}
+                    acik={aramaAcik}
+                    ekle={(k) => {
+                      if (!konumlar.some((x) => x.tur === k.tur && x.key === k.key)) konumlariYaz([...konumlar, k]);
+                    }}
+                  />
+                </div>
+              </div>
+              <p className={s.ipucu}>
+                Yalnız bu bölgelerde <b>bulunan</b> kişilere gösterilir. Google&apos;ın &quot;bu bölgeyle ilgilenenler&quot; seçeneğini kapalı
+                tutuyoruz: o seçenek reklamı yurt dışına da taşıyabiliyor.
+              </p>
+              {eslenemeyen.length > 0 && (
+                <p className={esleme.tur === 'hata' ? s.hataMetni : s.ipucu} role="status">
+                  {esleme.tur === 'esleniyor'
+                    ? "Konumların Google'daki karşılığı aranıyor…"
+                    : esleme.tur === 'hata'
+                      ? `Google karşılığı alınamadı: ${esleme.mesaj} `
+                      : `${eslenemeyen.map((k) => k.etiket).join(', ')} için Google'da birebir karşılık bulunamadı; en yakını tahmin etmiyoruz, reklam başka bir şehre gidebilirdi. Konumu il ya da şehir adıyla yeniden ekle. `}
+                  {esleme.tur !== 'esleniyor' && (
+                    <button type="button" className={s.metinDugme} onClick={yenidenEsle}>
+                      Yeniden dene
+                    </button>
+                  )}
+                </p>
+              )}
             </div>
           </div>
-          <p className={s.ipucu}>
-            Yalnız bu bölgelerde <b>bulunan</b> kişilere gösterilir. Google&apos;ın &quot;bu bölgeyle ilgilenenler&quot; seçeneğini kapalı
-            tutuyoruz: o seçenek reklamı yurt dışına da taşıyabiliyor.
-          </p>
-          {eslenemeyen.length > 0 && (
-            <p className={esleme.tur === 'hata' ? s.hataMetni : s.ipucu} role="status">
-              {esleme.tur === 'esleniyor'
-                ? "Konumların Google'daki karşılığı aranıyor…"
-                : esleme.tur === 'hata'
-                  ? `Google karşılığı alınamadı: ${esleme.mesaj} `
-                  : `${eslenemeyen.map((k) => k.etiket).join(', ')} için Google'da birebir karşılık bulunamadı; en yakını tahmin etmiyoruz, reklam başka bir şehre gidebilirdi. Konumu il ya da şehir adıyla yeniden ekle. `}
-              {esleme.tur !== 'esleniyor' && (
-                <button type="button" className={s.metinDugme} onClick={yenidenEsle}>
-                  Yeniden dene
-                </button>
-              )}
-            </p>
-          )}
         </div>
         <div className={s.blok}>
           <div className={s.blokBaslik}>
@@ -195,6 +256,52 @@ export function AdimKime({
       </div>
       <AltCubuk git={git} adim={3} />
     </>
+  );
+}
+
+/**
+ * Yarıçap, km. GİRİŞ ANINDA doğrulanıyor: aralık dışı ya da kesirli değer
+ * YAZILMIYOR ve alanın altında söyleniyor. Yazılsaydı rehber engelle dolar,
+ * kullanıcı sebebi Kontrol'de öğrenirdi.
+ */
+function YaricapGirdisi({ deger, degisti }: { deger: number; degisti: (v: number) => void }) {
+  const id = useId();
+  const [metin, setMetin] = useState(String(deger));
+  const [hata, setHata] = useState<string | null>(null);
+  useEffect(() => setMetin(String(deger)), [deger]);
+  return (
+    <div className={s.alanlar} style={{ paddingTop: 10 }}>
+      <div className={s.alan}>
+        <label htmlFor={id}>Yarıçap (km)</label>
+        <div className={s.girdi}>
+          <input
+            id={id}
+            type="number"
+            min={ERISIM_YARICAP.enAz}
+            max={ERISIM_YARICAP.enCok}
+            step={1}
+            className={s.num}
+            value={metin}
+            aria-invalid={hata ? true : undefined}
+            onChange={(e) => {
+              setMetin(e.target.value);
+              const v = Number(e.target.value);
+              if (Number.isInteger(v) && v >= ERISIM_YARICAP.enAz && v <= ERISIM_YARICAP.enCok) {
+                setHata(null);
+                if (v !== deger) degisti(v);
+              } else setHata(`${ERISIM_YARICAP.enAz} ile ${ERISIM_YARICAP.enCok} km arasında tam sayı yaz`);
+            }}
+          />
+        </div>
+        {hata ? (
+          <p className={s.hataMetni} role="alert">
+            {hata}
+          </p>
+        ) : (
+          <p className={s.ipucu}>Bu dairede yaşayan ya da yakın zamanda bulunan kişilere gösterilir.</p>
+        )}
+      </div>
+    </div>
   );
 }
 

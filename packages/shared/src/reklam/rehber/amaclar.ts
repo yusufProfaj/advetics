@@ -98,7 +98,11 @@ export const REHBER_AMACLARI: Record<RehberAmacKodu, RehberAmaci> = {
     ekranAdi: 'Bölgemde çok kişi görsün',
     neAlacaksin: 'Bölgendeki en çok kişiye ulaşır.',
     meta: { niyet: 'ERISIM', kurulacak: 'Bilinirlik · erişim, haftada en çok 2 kez' },
-    google: { kurgu: 'TALEP_YARATMA_GORSEL', ulasma: null, kurulacak: 'Talep Yaratma · YouTube, Gmail, Keşfet', nerede: 'YouTube, Gmail, Keşfet' },
+    // GOOGLE VAADİ YUMUŞAK (ERİŞİM denetimi B5, yönetici kararı K3): Talep
+    // Yaratma erişime (gösterim başına) göre teklif kurulamıyor; gövde en çok
+    // tıklama gönderiyor. Kart "en çok kişiye ulaşır" sözünü Google için de
+    // verirse ekran gövdenin tutmadığı bir şey söyler (VIDEO'daki S4 dersi).
+    google: { kurgu: 'TALEP_YARATMA_GORSEL', ulasma: null, kurulacak: 'Talep Yaratma · YouTube, Gmail, Keşfet, tıklamaya göre teklif', nerede: 'YouTube, Gmail, Keşfet' },
   },
   SATIS: {
     kod: 'SATIS',

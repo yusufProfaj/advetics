@@ -24,6 +24,8 @@ import { KARSILAMA_SETTE_YOK_CUMLESI, karsilamaCoz, type WhatsappKarsilama } fro
 import { calismaSaatleriOzeti, type CalismaSaatleri } from '../calisma-saatleri';
 import { DEMAND_GEN_VIDEO_KANALLARI, kanalCumlesi } from './google-kanallar';
 import { VIDEO_DUGMESIZ_CUMLESI, metaElleYerlesim, videoDugmesiVar } from '../meta/derle';
+import type { HedefKonum } from '../meta/hedefleme';
+import { GOOGLE_ERISIM_TEKLIF_CUMLESI, GOOGLE_YARICAP_OLCULMEDI_CUMLESI, adresCevresiMi, doygunlukDurumCumlesi, doygunlukUyarisi, type ErisimDoygunlugu } from './erisim';
 
 export interface KararHucresi {
   deger: string;
@@ -49,7 +51,8 @@ export interface KararSatiri {
     | 'SAAT'
     | 'GORSEL'
     | 'DUGME'
-    | 'DIL';
+    | 'DIL'
+    | 'DOYGUNLUK';
   konu: string;
   meta: KararHucresi | null;
   google: KararHucresi | null;
@@ -113,7 +116,20 @@ export interface KararEki {
    * hücre "Düğme yok" der (derleyici de düğmesiz kurar).
    */
   siteAdresi?: string | null;
+  /**
+   * ERİŞİM (K4/K5): seçili konumlar (adres çevresi hücresi), doygunluk
+   * okuması ve Meta'nın günlük payı (uyarı eşiği). Alan yoksa hücre
+   * genel cümleye düşer; doygunlukta "henüz okunmadı" der, sayı uydurmaz.
+   */
+  konumlar?: ReadonlyArray<Pick<HedefKonum, 'tur' | 'key' | 'yaricapKm'>> | null;
+  erisimDoygunlugu?: ErisimDoygunlugu | null;
+  paraBirimi?: string;
+  metaGunlukMicros?: bigint | null;
 }
+
+/** ERİŞİM sözleri (B9): Kontrol hücreleri; `erisim-turu.spec` gövdeyle eşliyor. */
+export const META_ERISIM_OLCUM = 'Erişilen tekil kişi (Meta)';
+export const META_ERISIM_TEKLIF = 'En çok tekil kişi';
 
 /**
  * VİDEO SÖZLERİ (VIDEO denetimi, yönetici kararları). Sabit ve tek yerde:
@@ -257,6 +273,7 @@ export function kararTablosu(
   const m = acik.meta;
   const metaVideo = m && t.meta.niyet === 'VIDEO_IZLENME';
   const hucre = (deger: string, not?: string): KararHucresi => (not ? { deger, not } : { deger });
+  const adresCevresi = (ek.konumlar ?? []).find(adresCevresiMi) ?? null;
   return [
     {
       kod: 'TUR',
@@ -275,7 +292,9 @@ export function kararTablosu(
     {
       kod: 'TEKLIF',
       konu: 'Teklif',
-      meta: m ? hucre('En çok sonuç', 'Sonuç başına ücret hedefi yok') : null,
+      // ERİŞİM: REACH hedefi = en çok FARKLI kişi; "en çok sonuç" hangi
+      // sonucu sorusunu açık bırakıyordu (B9).
+      meta: m ? (amac === 'ERISIM' ? hucre(META_ERISIM_TEKLIF, 'Bölgedeki en çok farklı kişiye gösterilir · Kişi başına ücret hedefi yok') : hucre('En çok sonuç', 'Sonuç başına ücret hedefi yok')) : null,
       google: g
         ? pmax
           ? hucre('En çok dönüşüm', pmaxTeklifNotu(ek.googleSatis30Gun))
@@ -283,6 +302,8 @@ export function kararTablosu(
             ? hucre('En çok dönüşüm', ek.googleTeklifSebebi ?? 'Dönüşüm ölçümü etkin')
             : tyVideo
               ? hucre('En çok tıklama', GOOGLE_VIDEO_TEKLIF_CUMLESI)
+              : tyGorsel && amac === 'ERISIM'
+              ? hucre('En çok tıklama', GOOGLE_ERISIM_TEKLIF_CUMLESI)
               : ty
               ? hucre('En çok tıklama', 'Talep Yaratma\'da dönüşüm teklifi kurulmuyor')
               : hucre('En çok tıklama', ek.googleTeklifSebebi ?? 'Dönüşüm ölçümü kurulunca değiştirmeyi öneririz')
@@ -314,8 +335,18 @@ export function kararTablosu(
       // Meta konumu "yaşayan ya da yakın zamanda bulunan" (home, recent,
       // frequently_in) olarak uyguluyor; canlı tur 1'de geri okundu (N-08).
       // Seyahat edenler dahil değil. "Yalnız bulunanlar" demek abartı olurdu.
-      meta: m ? hucre('Bu bölgede yaşayan ya da yakın zamanda bulunanlar', 'Seyahat edenler dahil değil') : null,
-      google: g ? hucre('Yalnız bu bölgede bulunanlar', '"İlgilenenler" kapalı; Google kendiliğinden tüm ülkeleri açıyordu') : null,
+      // ADRES ÇEVRESİ (K4): derleyicinin gönderdiği daire (`custom_locations` /
+      // Google `proximity`); Google'da kabulü ölçülmedi ve not söylüyor.
+      meta: m
+        ? adresCevresi
+          ? hucre(`İşletme adresinin ${adresCevresi.yaricapKm ?? '?'} km çevresi`, 'Bu dairede yaşayan ya da yakın zamanda bulunanlar · Seyahat edenler dahil değil')
+          : hucre('Bu bölgede yaşayan ya da yakın zamanda bulunanlar', 'Seyahat edenler dahil değil')
+        : null,
+      google: g
+        ? adresCevresi
+          ? hucre(`İşletme adresinin ${adresCevresi.yaricapKm ?? '?'} km çevresinde bulunanlar`, GOOGLE_YARICAP_OLCULMEDI_CUMLESI)
+          : hucre('Yalnız bu bölgede bulunanlar', '"İlgilenenler" kapalı; Google kendiliğinden tüm ülkeleri açıyordu')
+        : null,
     },
     {
       kod: 'OTOMATIK_METIN',
@@ -347,6 +378,18 @@ export function kararTablosu(
           },
         ]
       : []),
+    // ERİŞİM DÜĞMESİ (B9, K7): bugünkü davranış — site varsa siteye, yoksa
+    // Facebook sayfasına (derle.ts `kreatifBaglantisi`, aynı adres).
+    ...(m && amac === 'ERISIM'
+      ? [
+          {
+            kod: 'DUGME' as const,
+            konu: 'Düğme',
+            meta: ek.siteAdresi ? hucre('Daha fazla bilgi', 'Tıklayan sitene gider') : hucre('Daha fazla bilgi', 'Site adresi verilmedi; tıklayan Facebook sayfana gider'),
+            google: null,
+          },
+        ]
+      : []),
     // DİL (B14a): yalnız Talep Yaratma; Arama ve Maks. Performans dili açıkça gönderiyor.
     ...(ty ? [{ kod: 'DIL' as const, konu: 'Dil', meta: null, google: hucre(GOOGLE_TY_DIL_CUMLESI, 'Talep Yaratma kampanyasına dil ölçütü gönderilmiyor') }] : []),
     // FORM: seçili formun türü ve soru sayısı Meta'dan okunan hâliyle.
@@ -366,7 +409,9 @@ export function kararTablosu(
             ? hucre('Yapılan aramalar', 'Raporda "Arama" ve "20 sn+ arama" sütunları; Meta bu ülkede aramayı vermiyorsa Ara onayı')
             : metaVideo
               ? hucre("Meta'nın saydığı izlenmeler", META_THRUPLAY_CUMLESI)
-              : hucre("Meta'nın saydığı")
+              : amac === 'ERISIM'
+                ? hucre(META_ERISIM_OLCUM, 'Aynı kişi birden çok kez görse de bir kez sayılır')
+                : hucre("Meta'nın saydığı")
         : null,
       google: g ? (g.kurgu === 'ARAMA' && g.ulasma === 'telefon' ? hucre('Arama düğmesi tıklaması', GOOGLE_ARAMA_OLCUM_CUMLESI) : hucre("Google'ın saydığı")) : null,
     },
@@ -386,6 +431,8 @@ export function kararTablosu(
     ...(m && amac === 'ERISIM'
       ? [{ kod: 'SIKLIK' as const, konu: 'Sıklık', meta: hucre('Bir kişiye haftada en çok 2 kez', 'Aynı kişiye tekrar tekrar gösterilmez'), google: null }]
       : []),
+    // DOYGUNLUK (K5): uyarı engel değil; dört hâl ayrı cümle (`doygunlukDurumCumlesi`).
+    ...(m && amac === 'ERISIM' ? [{ kod: 'DOYGUNLUK' as const, konu: 'Bütçe ve bölge', meta: doygunlukHucresi(ek), google: null }] : []),
     // TELEFON SATIRLARI: geri arama (Meta), saat (iki platform), görsel (Meta).
     ...(t.meta.niyet === 'TELEFON' && (m || g)
       ? [
@@ -408,6 +455,19 @@ export function kararTablosu(
         ]
       : []),
   ];
+}
+
+/** Doygunluk hücresi: tavan aşılıyorsa değer uyarı, değilse durum cümlesi. */
+function doygunlukHucresi(ek: KararEki): KararHucresi {
+  const d = ek.erisimDoygunlugu ?? null;
+  const para = ek.paraBirimi ?? 'TRY';
+  if (d?.tur === 'hesaplandi') {
+    if (ek.metaGunlukMicros == null) return { deger: 'Bütçe girilince kontrol edilir', not: doygunlukDurumCumlesi(d, para) };
+    const u = doygunlukUyarisi(d, ek.metaGunlukMicros, para);
+    if (u) return { deger: 'Bütçe tam harcanamayabilir', not: u };
+    return { deger: 'Bütçe bölgeye uygun', not: doygunlukDurumCumlesi(d, para) };
+  }
+  return { deger: d?.tur === 'okunamadi' ? 'Okunamadı' : d?.tur === 'hesaplanamadi' ? 'Hesaplanamadı' : 'Henüz okunmadı', not: doygunlukDurumCumlesi(d, para) };
 }
 
 /**

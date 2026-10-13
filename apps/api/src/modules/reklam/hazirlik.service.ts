@@ -229,9 +229,10 @@ export class ReklamHazirlikService {
           SELECT id::text, name FROM social_profiles
            WHERE client_id = ${clientId}::uuid AND profile_type = 'youtube_channel'
            ORDER BY name`),
-        tx.$queryRaw<Array<{ telefon: string | null; site: string | null; logo: string | null; marka: string | null; ad: string }>>(Prisma.sql`
+        tx.$queryRaw<Array<{ telefon: string | null; site: string | null; logo: string | null; marka: string | null; ad: string; adres: string | null; enlem: number | null; boylam: number | null }>>(Prisma.sql`
           SELECT c.contact_phone AS telefon, c.website AS site, p.logo_asset_id::text AS logo,
-                 p.marka_adi AS marka, c.name AS ad
+                 p.marka_adi AS marka, c.name AS ad,
+                 c.address AS adres, c.address_latitude AS enlem, c.address_longitude AS boylam
             FROM clients c LEFT JOIN client_profiles p ON p.client_id = c.id
            WHERE c.id = ${clientId}::uuid`),
         // Rehber servisiyle AYNI kural, tek yardımcıdan (BULGU-5).
@@ -283,7 +284,14 @@ export class ReklamHazirlikService {
         meta: metaAsgari,
         googleTalepYaratma: googleHesap?.currency === 'TRY' ? GOOGLE_TY_ASGARI_TRY_MICROS.toString() : null,
       },
-      iletisim: { telefon: ek.musteri?.telefon ?? null, siteAdresi: ek.musteri?.site ?? null },
+      // ADRES VE HARİTA KONUMU (ERİŞİM K4): konum yalnız İKİSİ de varsa
+      // (CHECK zaten birlikte tutuyor); rehber yoksa seçeneği sebebiyle kapatır.
+      iletisim: {
+        telefon: ek.musteri?.telefon ?? null,
+        siteAdresi: ek.musteri?.site ?? null,
+        adres: ek.musteri?.adres ?? null,
+        adresKonumu: ek.musteri?.enlem != null && ek.musteri?.boylam != null ? { enlem: Number(ek.musteri.enlem), boylam: Number(ek.musteri.boylam) } : null,
+      },
       ajansYoneticisi: ek.ajansYoneticisi,
       hazirlama: ek.hazirlama
         ? {

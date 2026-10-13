@@ -8,6 +8,19 @@ import type {
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { uniqueSlug } from '../../common/utils/slug';
+import { koordinatCoz } from '@advetics/shared';
+
+/**
+ * Şemanın kanonik konum dizgesi (`38.4237, 27.1428`) → iki kolon. İKİSİ
+ * BİRLİKTE yazılır (CHECK `clients_adres_konumu_birlikte`). Şema bozuk
+ * girdiyi zaten reddetti; burada bozuk çıkarsa (başka bir çağıran) kolonlara
+ * yarım değer yazılmaz, istek düşer.
+ */
+export function adresKonumuKolonlari(v: string | null): { addressLatitude: number | null; addressLongitude: number | null } {
+  const k = koordinatCoz(v);
+  if (k === 'gecersiz') throw new Error('Adres konumu geçersiz');
+  return { addressLatitude: k?.enlem ?? null, addressLongitude: k?.boylam ?? null };
+}
 
 interface Meta {
   ip?: string | null;
@@ -86,6 +99,8 @@ export class ClientsService {
           contactPhone: true,
           website: true,
           address: true,
+          addressLatitude: true,
+          addressLongitude: true,
           taxOffice: true,
           taxNumber: true,
           iban: true,
@@ -229,6 +244,7 @@ export class ClientsService {
           contactPhone: input.contactPhone,
           website: input.website,
           address: input.address,
+          ...adresKonumuKolonlari(input.addressCoordinates ?? null),
           taxOffice: input.taxOffice,
           taxNumber: input.taxNumber,
           iban: input.iban,
@@ -322,6 +338,9 @@ export class ClientsService {
           ...(input.contactPhone !== undefined ? { contactPhone: input.contactPhone } : {}),
           ...(input.website !== undefined ? { website: input.website } : {}),
           ...(input.address !== undefined ? { address: input.address } : {}),
+          // HARİTA KONUMU (ERİŞİM K4): İKİ KOLON BİRLİKTE yazılır (CHECK
+          // `clients_adres_konumu_birlikte`); `null` = temizlendi.
+          ...(input.addressCoordinates !== undefined ? adresKonumuKolonlari(input.addressCoordinates) : {}),
           ...(input.taxOffice !== undefined ? { taxOffice: input.taxOffice } : {}),
           ...(input.taxNumber !== undefined ? { taxNumber: input.taxNumber } : {}),
           ...(input.iban !== undefined ? { iban: input.iban } : {}),

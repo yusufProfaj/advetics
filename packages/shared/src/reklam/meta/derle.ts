@@ -15,6 +15,7 @@
  * Gövdeler arası bağlar yer tutucuyla (`{kampanya}`, `{reklam_seti}`,
  * `{kreatif:1}`): kimlikleri yayın motoru zincir sırasında doldurur.
  */
+import { ADRES_CEVRESI_KARISIK_MESAJI, adresCevresiKarisik } from '../rehber/erisim';
 import { ACILMADI_ONEKI, adlabels, kampanyaAdi, kreatifAdi, reklamAdi, reklamSetiAdi } from './adlandirma';
 import { etkinKategoriler, hedeflemeUret, type HedeflemeGirdisi, type OzelKategori } from './hedefleme';
 import { NIYET_KATALOGU, formCtaTuru, metaOptimizasyonHedefi, type NiyetKodu, type SitePikselHali } from './niyetler';
@@ -55,10 +56,15 @@ import { ORAN_ETIKETI, YERLESIM_GRUPLARI, YERLESIM_SIRASI, bannerSetiDestekleniy
  * 1.11.0: VIDEO_IZLENME yerleşim listesi Meta belgesinden (K1): video
  *        arası, video akışı, profil akışları ve Keşfet ana sayfa AÇIK;
  *        sağ sütun ve arama KAPALI. 1.10.0 gövdesi video arasını kapatıyordu.
+ * 1.12.0: bütün amaçlarda kampanyaya `buying_type: AUCTION` AÇIKÇA (B14);
+ *        ERİŞİMDE atıf seçilmemiş olsa da kurulur (1 gün tıklama, B11);
+ *        "işletme adresinin çevresi" başka konumla birlikte RET (`KNM-ADRES`).
+ *        1.11.0 provaları satın alma türünü hesabın varsayılanına bırakan
+ *        gövdeyi kanıtlıyordu.
  * Sürüm provanın tazeliğine bağlı: eski derleyiciyle geçmiş prova yeni
  * gövdeyi kanıtlamaz.
  */
-export const DERLEYICI_SURUMU = '1.11.0';
+export const DERLEYICI_SURUMU = '1.12.0';
 
 /**
  * CLICK-TO-WHATSAPP SABİTLERİ (CLAUDE.md "CLICK-TO-WHATSAPP"). Bağlantı
@@ -279,8 +285,12 @@ const ATIF_SPEC: Record<AtifStandardi, Array<{ event_type: string; window_days: 
  */
 export const AJANS_STANDARDI_HEDEFLERI: readonly string[] = ['OFFSITE_CONVERSIONS'];
 
-export function atifSpec(optimizationGoal: string, standart: AtifStandardi): Array<{ event_type: string; window_days: number }> {
-  return AJANS_STANDARDI_HEDEFLERI.includes(optimizationGoal) ? ATIF_SPEC[standart] : [{ event_type: 'CLICK_THROUGH', window_days: 1 }];
+export function atifSpec(optimizationGoal: string, standart: AtifStandardi | null): Array<{ event_type: string; window_days: number }> {
+  if (!AJANS_STANDARDI_HEDEFLERI.includes(optimizationGoal)) return [{ event_type: 'CLICK_THROUGH', window_days: 1 }];
+  // Dönüşüm hedefinde standart YOKSA pencere uydurulmaz: OK-16 bu hâli
+  // derlemeden önce reddediyor; buraya düşmek bir kod hatası.
+  if (!standart) throw new Error('Atıf standardı yok: dönüşüm hedefinde pencere seçilmeden gövde kurulmaz');
+  return ATIF_SPEC[standart];
 }
 
 export interface Kavram {
@@ -434,7 +444,16 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
       mesaj: `"${niyet.ekranAdi}" henüz yayınlanamıyor: Meta'daki kurulumu canlıda doğrulanmadı.`,
     });
   }
-  if (g.atif === null) {
+  /*
+   * ERİŞİMDE ATIF SEÇİMİ KURULUMU DURDURMAZ (ERİŞİM denetimi B11). Atıf
+   * standardı yalnız dönüşüm optimizasyonunda gövdeye giriyor
+   * (`atifSpec`: REACH'te her zaman 1 gün tıklama); erişim reklamında
+   * sonuç tıklama değil, kişi. Ajans standardı seçilmedi diye erişimi
+   * kilitlemek, gövdede HİÇ kullanılmayan bir kararı beklemek demekti.
+   * Kapı yalnız REACH'te açık (yönetici kararı): diğer amaçlarda OK-16
+   * politikası ("onaysız uygulanan değer de bir karar") değişmedi.
+   */
+  if (g.atif === null && metaOptimizasyonHedefi(g.niyet, g.sitePikseli) !== 'REACH') {
     retler.push({
       kod: 'OK-16',
       mesaj: 'Atıf standardı henüz seçilmedi. Ajans yöneticisi seçene kadar yeni reklam yayınlanamaz.',
@@ -504,6 +523,8 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
     const yabanci = telefonUlkesiDisindakiKonumlar(g.telefon, g.hedefleme.konumlar);
     if (yabanci.length) retler.push({ kod: 'TEL-ULKE', mesaj: telefonUlkeMesaji(yabanci) });
   }
+  // BİRLEŞİM KURALI (`adresCevresiKarisik`): adres çevresi + il/ülke = il/ülke geneli.
+  if (adresCevresiKarisik(g.hedefleme.konumlar)) retler.push({ kod: 'KNM-ADRES', mesaj: ADRES_CEVRESI_KARISIK_MESAJI });
   if (g.butce.seviye !== 'kampanya') {
     // ABO yalnız Gelişmiş'te ve paylaşım alanı kuralıyla; bu turda yok.
     retler.push({ kod: 'BTC-02', mesaj: 'Reklam seti bütçesi bu sürümde desteklenmiyor.' });
@@ -545,6 +566,14 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
   const kampanya: Record<string, unknown> = {
     name: ACILMADI_ONEKI + kampanyaAdi(adG),
     objective: m.objective,
+    /*
+     * SATIN ALMA TÜRÜ AÇIKÇA (B14): yazılmazsa Meta hesabın varsayılanına
+     * bırakıyor ve "Erişim ve Sıklık" (RESERVED) satın alması açık bir
+     * hesapta erişim reklamı sabit fiyatlı rezervasyona dönebilir; teklif
+     * stratejisi ve günlük bütçe o türde başka anlam taşıyor. Varsayılan
+     * AUCTION olsa bile yazılıyor: varsayılan değişince rakam haber vermeden kayar.
+     */
+    buying_type: 'AUCTION',
     status: 'PAUSED',
     special_ad_categories: kategoriler,
     // CBO: bütçe kampanyada; paylaşım alanı GÖNDERİLMEZ (true → 4834002).
@@ -569,7 +598,8 @@ export function derleMeta(g: DerlemeGirdisi): DerlemeSonucu {
     // (kullanıcı kararı). Dört boyut tamsa ya da oran bilinmiyorsa alanlar
     // yazılmaz ve Advantage+ yerleşim kalır.
     targeting: yerlesim && !yerlesim.otomatik ? { ...hedef.targeting, ...elleYerlesim(yerlesim, !!g.instagramPlatformId, g.niyet) } : hedef.targeting,
-    attribution_spec: atifSpec(optimizasyon, g.atif!),
+    // REACH'te `g.atif` null olabilir (B11); `atifSpec` o hedefte standardı OKUMUYOR.
+    attribution_spec: atifSpec(optimizasyon, g.atif),
     start_time: g.takvim.baslangic,
     adlabels: etiketler,
   };
@@ -980,6 +1010,7 @@ export const MANIFESTO: ReadonlyArray<{ kod: string; nesne: NesneTuru; yol: stri
   { kod: 'M-01', nesne: 'reklam', yol: 'status' },
   { kod: 'M-02', nesne: 'kampanya', yol: 'objective' },
   { kod: 'M-03', nesne: 'kampanya', yol: 'special_ad_categories' },
+  { kod: 'M-05', nesne: 'kampanya', yol: 'buying_type' },
   { kod: 'M-04', nesne: 'kampanya', yol: 'special_ad_category_country', kosul: 'kategori' },
   { kod: 'M-06', nesne: 'kampanya', yol: 'bid_strategy' },
   { kod: 'M-07', nesne: 'reklam_seti', yol: 'billing_event' },

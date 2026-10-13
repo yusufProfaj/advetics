@@ -399,6 +399,11 @@ model Client {
   contactPhone  String?  @map("contact_phone") @db.VarChar(40)
   website       String?  @db.VarChar(255)
   address       String?  @db.VarChar(500)
+  /// ADRESİN HARİTA KONUMU (ERİŞİM K4): rehberin "işletme adresinin çevresi"
+  /// seçeneği. İkisi birlikte NULL ya da dolu (migration CHECK). Elle
+  /// giriliyor; adres metninden türetilmiyor (geocoding servisi yok).
+  addressLatitude  Float? @map("address_latitude")
+  addressLongitude Float? @map("address_longitude")
   taxOffice     String?  @map("tax_office") @db.VarChar(120)
   taxNumber     String?  @map("tax_number") @db.VarChar(40)
   iban          String?  @db.VarChar(34)

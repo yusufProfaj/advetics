@@ -369,3 +369,42 @@ export function hazirlikSatisOlcumu(liste: readonly PikselSatiri[] | null): bool
   if (kullanilir.length === 0) return false;
   return kullanilir.length === 1 ? (kullanilir[0] as PikselSatiri).satinAlma7Gun : null;
 }
+
+/**
+ * ERİŞİM KİTLE TAHMİNİ (K5) — `GET /act_X/reachestimate?targeting_spec=`.
+ *
+ * UÇ SEÇİMİ: Meta'nın iki ucu var. `delivery_estimate` bir optimizasyon
+ * hedefi ve teslim eğrisi istiyor (bütçeye göre tahmini sonuç); bizim
+ * sorumuz daha dar: "bu bölgede KAÇ KİŞİ var". O sorunun belgedeki ucu
+ * `reachestimate` (Reach Estimate, `users_lower_bound`/`users_upper_bound`).
+ * İlgi alanı büyüklüğü (`audience_size_*`) DÜNYA GENELİ olduğu için
+ * kullanılamaz (CLAUDE.md); bu uç hedeflemenin konumuyla daraltıyor.
+ * CANLIDA ÖLÇÜLMEDİ: alan adları belgeden; `optimize_for` gönderilmiyor
+ * (belgede isteğe bağlı, ölçülmemiş bir parametre okumanın tamamını
+ * düşürebilirdi).
+ *
+ * `estimate_ready: false` ya da sınırlar sayı değilse FIRLATIR: "0 kişi"
+ * uydurulmuyor, çağıran "okunamadı" yazar.
+ */
+export function erisimTahminiCoz(govde: unknown): { alt: number; ust: number } {
+  const ham = (govde as { data?: unknown } | null)?.data;
+  const d = (Array.isArray(ham) ? ham[0] : ham) as { users_lower_bound?: unknown; users_upper_bound?: unknown; estimate_ready?: unknown } | undefined;
+  if (!d || typeof d !== 'object') throw new Error('Meta kitle tahmini boş döndü');
+  if (d.estimate_ready === false) throw new Error('Meta kitle tahmini henüz hazır değil');
+  const sayi = (v: unknown) => (typeof v === 'number' ? v : typeof v === 'string' && /^\d{1,12}$/.test(v) ? Number(v) : NaN);
+  const alt = sayi(d.users_lower_bound);
+  const ust = sayi(d.users_upper_bound);
+  if (!Number.isInteger(alt) || !Number.isInteger(ust) || alt < 0 || ust < alt) throw new Error('Meta kitle tahmininde kişi sayısı okunamadı');
+  return { alt, ust };
+}
+
+export async function metaErisimTahminiOku(
+  apiSurumu: string,
+  hesap: string,
+  token: string,
+  targeting: Record<string, unknown>,
+  fetchFn?: typeof fetch,
+): Promise<{ alt: number; ust: number }> {
+  if (!/^act_\d+$/.test(hesap)) throw new Error('Reklam hesabı act_ önekli olmalı');
+  return erisimTahminiCoz(await grafGet(apiSurumu, `${hesap}/reachestimate?targeting_spec=${encodeURIComponent(JSON.stringify(targeting))}`, token, fetchFn));
+}

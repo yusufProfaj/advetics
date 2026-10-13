@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
-import { CHANNEL_KINDS, CHANNEL_LABELS } from '@advetics/shared';
+import { CHANNEL_KINDS, CHANNEL_LABELS, koordinatYaz } from '@advetics/shared';
 import Link from 'next/link';
 import { PlatformLogo, adAccountKanali, profilKanali } from '@/components/platform-logo';
 import type { ChannelKind } from '@advetics/shared';
@@ -49,6 +49,9 @@ export interface MusteriKartiVerisi {
   contactPhone: string | null;
   website: string | null;
   address: string | null;
+  /** Adresin harita konumu (ERİŞİM K4); ikisi birlikte dolu ya da boş. */
+  addressLatitude: number | null;
+  addressLongitude: number | null;
   taxOffice: string | null;
   taxNumber: string | null;
   iban: string | null;
@@ -286,6 +289,10 @@ export function MusteriKarti({
             <DetayBolumu baslik="Firma bilgileri">
               <div className="rounded-lg border border-line px-3 py-1">
                 <DetaySatiri etiket="Adres" deger={client.address} />
+                <DetaySatiri
+                  etiket="Harita konumu"
+                  deger={client.addressLatitude != null && client.addressLongitude != null ? koordinatYaz({ enlem: client.addressLatitude, boylam: client.addressLongitude }) : null}
+                />
                 <DetaySatiri etiket="Vergi dairesi" deger={client.taxOffice} />
                 <DetaySatiri etiket="Vergi numarası" deger={client.taxNumber} />
                 <DetaySatiri etiket="IBAN" deger={client.iban} />

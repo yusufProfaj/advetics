@@ -67,6 +67,8 @@ const KABUL_EDILEMEZ: ReadonlyArray<[string, string]> = [
   ['daily_budget', 'Bütçe'],
   ['lifetime_budget', 'Bütçe'],
   ['bid_strategy', 'Teklif'],
+  // B14: açık artırma dışı (rezervasyon) bir tür bütçenin ve teklifin anlamını değiştirir.
+  ['buying_type', 'Satın alma türü'],
   ['start_time', 'Başlangıç'],
   ['end_time', 'Bitiş'],
   ['special_ad_categories', 'Özel reklam kategorisi'],
@@ -292,14 +294,16 @@ export function beklenenYankilar(govdeler: MetaGovdesi[]): BeklenenYanki[] {
             kabul: [0],
             bilgi: 'Bu reklam türünde Meta otomatik kitleyi kapattı. Reklam seçtiğin kesin sınırlar içinde gösterilecek.',
           };
-        } else if (yol === 'optimization_goal' && v === 'REACH') {
-          y.karsilastirma = 'normallestir';
-          y.normallestirme = {
-            satir: 'N-01',
-            kabul: ['IMPRESSIONS'],
-            bilgi: 'Meta erişim hedefini gösterim olarak kaydetti; bu beklenen bir davranış.',
-          };
         }
+        /*
+         * N-01 KALDIRILDI (ERİŞİM denetimi B8). "REACH gönderilince IMPRESSIONS
+         * döner, kabul" satırı canlıda ölçülmemişti, belgeden yazılmıştı ve
+         * GENİŞTİ: erişim hedefi gösterime dönerse reklam "en çok kişi" değil
+         * "en çok gösterim" için optimize olur, yani aynı kişiye tekrar tekrar
+         * gösterilir ve kartın sözü ("bölgendeki en çok kişiye") sessizce
+         * bozulur. Artık REACH dışındaki her dönüş durduran FARK
+         * (`optimization_goal` kabul edilemez sınıfta).
+         */
         sonuc.push(y);
       }
     };
@@ -455,6 +459,35 @@ function konumEtiketleriniAt(geo: unknown): unknown {
       : v;
   }
   return out;
+}
+
+/**
+ * N-23 — ADRES ÇEVRESİ (custom_locations) KIYASI, ÖLÇÜLMEDİ (ERİŞİM turu K4).
+ * Nokta öğesinde `key` yok; Meta'nın belgesi yanıtta `name`, `country`,
+ * `primary_city_id`, `region_id` ve `address_string` gibi ETİKETLER
+ * ekleyebildiğini söylüyor. Bunlar düşer; KALANLAR kıyaslanır: enlem, boylam,
+ * yarıçap ve birim. Enlem/boylam 4 ondalığa (~11 m) yuvarlanıp kıyaslanıyor:
+ * Meta sayıyı kayan noktadan geri yazabilir ve en küçük yarıçap 1 km iken
+ * 11 m'lik fark hedefi değiştirmiyor. Yarıçap ya da birim farkı (km ↔ mil =
+ * 1,6 kat alan) GERÇEK fark; tanımadığımız bir alan da kalır ve kıyasa girer.
+ */
+const NOKTA_ETIKET_ALANLARI = new Set(['name', 'country', 'country_code', 'primary_city_id', 'region_id', 'region', 'address_string']);
+function noktaKiyasBicimi(geo: unknown): unknown {
+  if (!geo || typeof geo !== 'object' || Array.isArray(geo)) return geo;
+  const g = geo as Record<string, unknown>;
+  if (!Array.isArray(g.custom_locations)) return geo;
+  const yuvarla = (v: unknown) => (typeof v === 'number' || (typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v))) ? Number(Number(v).toFixed(4)) : v);
+  return {
+    ...g,
+    custom_locations: g.custom_locations.map((x) => {
+      if (!x || typeof x !== 'object' || Array.isArray(x) || 'key' in x) return x;
+      const o = Object.fromEntries(Object.entries(x as Record<string, unknown>).filter(([k]) => !NOKTA_ETIKET_ALANLARI.has(k)));
+      if ('latitude' in o) o.latitude = yuvarla(o.latitude);
+      if ('longitude' in o) o.longitude = yuvarla(o.longitude);
+      if ('radius' in o) o.radius = yuvarla(o.radius);
+      return o;
+    }),
+  };
 }
 
 function konumTurleriniAyir(donen: unknown): { kalan: unknown; turler: string[] | null } {
@@ -785,9 +818,13 @@ export function geriOkumaKarsilastir(
           ayni = etiketAdlari(y.gonderilen).every((ad) => d.has(ad));
           break;
         }
-        const k = y.alanYolu === 'targeting.geo_locations' ? konumTurleriniAyir(donen) : { kalan: donen, turler: null };
+        const geo = y.alanYolu === 'targeting.geo_locations';
+        const k = geo ? konumTurleriniAyir(donen) : { kalan: donen, turler: null };
+        // N-23: nokta öğesi her iki tarafta AYNI biçime iner (etiketsiz, yuvarlanmış).
+        const gonderilen = geo ? noktaKiyasBicimi(y.gonderilen) : y.gonderilen;
+        const kalan = geo ? noktaKiyasBicimi(k.kalan) : k.kalan;
         ayni =
-          y.altKumeYonu === 'donen_icinde_gonderilen' ? kapsar(k.kalan, y.gonderilen) : kapsar(y.gonderilen, k.kalan);
+          y.altKumeYonu === 'donen_icinde_gonderilen' ? kapsar(kalan, gonderilen) : kapsar(gonderilen, kalan);
         if (ayni && k.turler) {
           bilgiler.push(satir('normallesti', "Meta konumu 'bu bölgede yaşayan ya da yakın zamanda bulunan' kişilere uyguladı (seyahat edenler dahil değil)."));
           continue;

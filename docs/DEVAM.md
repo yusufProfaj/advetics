@@ -6,7 +6,7 @@
 > İŞ yazılır; her oturum kapanırken, işin kendi commit'inde güncellenir.
 > 16 Ağustos'a kadarki eski devir belgesi: [`arsiv/DEVAM-2026-08.md`](arsiv/DEVAM-2026-08.md).
 
-**Son güncelleme:** 2026-10-13 (VIDEO turu, Ajan 2+3) · 2026-10-13 (Orphex uyarlaması, A-F + 2FA + site) · 2026-10-12 (kurulum rehberi) · 2026-10-12 (hazır workspace Dalga 3) · 2026-10-11 gece (Dalga 3 canlı tur) · 2026-10-11 (Dalga 2 + set kartı) · 2026-10-10 akşam (AdvCampaign canlı tur 2 + banner seti; canlı `55312f6`) · 2026-10-09: **Canlı `6b51390` (11:43, 81 sn); ondan önce 316be15 (10:30):**
+**Son güncelleme:** 2026-10-13 (ERİŞİM turu, Ajan 2+3) · 2026-10-13 (VIDEO turu, Ajan 2+3) · 2026-10-13 (Orphex uyarlaması, A-F + 2FA + site) · 2026-10-12 (kurulum rehberi) · 2026-10-12 (hazır workspace Dalga 3) · 2026-10-11 gece (Dalga 3 canlı tur) · 2026-10-11 (Dalga 2 + set kartı) · 2026-10-10 akşam (AdvCampaign canlı tur 2 + banner seti; canlı `55312f6`) · 2026-10-09: **Canlı `6b51390` (11:43, 81 sn); ondan önce 316be15 (10:30):**
 aşağıda "DEPLOY EDİLMEDİ" yazan işlerin HEPSİ artık canlıda (AdvCampaign
 sohbeti, AdvStrategy ikinci tur, YouTube Boost Aşama 0–1 + kanal bulma, Okuma
 API, Base Aşama 1, LinkedIn para birimi). Ölçüldü: `prisma migrate status`
@@ -15,6 +15,45 @@ RLS politikası var, platform sahibi yalnız hello@profaj.com.
 **Bekleyen deploy:** yok hedefleniyor — Aşama 4 (İyileştir + AI Asistan)
 bu commit'le deploy ediliyor; migration `20261009100000_iyilestir` (üç
 yeni tablo) + `db:rls`.
+
+**ADVCAMPAIGN "BÖLGEMDE ÇOK KİŞİ GÖRSÜN" (ERISIM) TURU (2026-10-13, Ajan 2+3).**
+Amaç hâlâ `deneme` (canlı kurulmadı, push/deploy YOK; Ajan 4 kapısı
+bekliyor). **Migration var:** `20261016200000_isletme_adresi_konumu`
+(`clients.address_latitude/longitude` + iki CHECK). Meta: kampanyaya
+`buying_type: AUCTION` bütün amaçlarda (B14, M-05, geri okumada kabul
+edilemez); N-01 (REACH→IMPRESSIONS kabulü) KALDIRILDI, REACH dışı dönüş
+durduran fark (B8); erişimde atıf seçilmemişse de kurulur, 1 gün tıklama,
+yayın satırına `tik1` (B11). Kime adımında ERİŞİM'in ilk seçeneği
+"işletme adresinin çevresi" (K4): Marka Merkezi > Workspace ayarları'na
+elle girilen harita konumu ("38.4237, 27.1428") + 1-80 km (varsayılan 10);
+Meta `custom_locations` (yalnız o, başka konumla `KNM-ADRES`), Google
+Talep Yaratma reklam grubunda `proximity` (mikro-derece, KILOMETERS);
+konum yoksa seçenek kapalı ve sebebi yazıyor, özel kategoride `OZK-04`
+(ülke okunmuyor). Geri okuma: Meta N-23 (etiket düşer, 4 ondalık; yarıçap/
+birim farkı fark), Google bütün kurgularda konum KİMLİĞİ + adres çevresi +
+Talep Yaratma yaş kitlesi (B12; okunamayan fark). Kontrol: Google TEKLİF
+"erişime göre teklif vermiyor (API kısıtı); tıklamaya göre" (B5), Meta
+TEKLİF "En çok tekil kişi", ÖLÇÜM "Erişilen tekil kişi (Meta)", DÜĞME
+satırı (site yoksa Facebook sayfası, K7), KONUM adres çevresi, DOYGUNLUK
+satırı (B9/K5). Doygunluk (K5): `reachestimate` (kota bekçisinden) üst
+sınırı × haftada 2 / 7 × hesabın son 30 gün BGM'si (önce erişim
+kampanyaları, yoksa genel; 1.000 gösterimin altında hesap YOK ve uyarı
+yok) → Meta payı tavanı aşarsa `M-ERISIM-DOYGUN` UYARI; okunamadı ayrı
+cümle. Metin önerisi istemi ve önbellek anahtarı bölgeyi taşıyor (B13,
+yalnız erişim). DERLEYICI 1.12.0, Google g-1.6.0. K1 (haftada 2) ve K6
+(Advantage+ yerleşim) değişmedi; bütçe paylaştırma değişmedi.
+**Ölç (validate_only / canlı):** `buying_type` geri okuması; REACH'in
+geri okumada REACH döndüğü (N-01 yokken fark çıkarsa yayın durur);
+REACH'te 1 gün tıklama kabulü; `custom_locations` geri okuma biçimi
+(etiketler, yuvarlama, `distance_unit`); `/act_X/reachestimate`
+yanıt alanları (`users_lower_bound/upper_bound`, `estimate_ready`) ve
+izin/kota; Talep Yaratma reklam grubunda `proximity` kabulü (reddederse
+il/ilçe) ve GAQL alanları (`ad_group_criterion.proximity.*`,
+`.location.geo_target_constant`, `.audience.audience`,
+`audience.dimensions`); BGM eşiği (1.000 gösterim) ve tavanın gerçek
+teslimle uyumu. **Bilinen:** adres çevresi özel kategorili reklamda
+kurulamıyor (Meta kategori ülkesi istiyor, koordinattan ülke okunmuyor);
+konum yalnız Marka Merkezi'ne elle girilince var (geocoding yok).
 
 **ADVCAMPAIGN "VİDEOM İZLENSİN" (VIDEO) TURU (2026-10-13, Ajan 2+3).**
 Amaç hâlâ `deneme` (canlı kurulmadı, push/deploy YOK; Ajan 4 kapısı

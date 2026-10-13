@@ -179,7 +179,7 @@ describe('kaynak taraması — derleyici hedefi kataloğdan DEĞİL karardan oku
   it('optimization_goal ve attribution_spec aynı değişkenden; m.optimizationGoal gövdeye GİTMİYOR', () => {
     expect(kaynak).toContain('const optimizasyon = metaOptimizasyonHedefi(g.niyet, g.sitePikseli);');
     expect(kaynak).toContain('optimization_goal: optimizasyon,');
-    expect(kaynak).toContain('attribution_spec: atifSpec(optimizasyon, g.atif!)');
+    expect(kaynak).toContain('attribution_spec: atifSpec(optimizasyon, g.atif)');
     expect(kaynak).not.toContain('m.optimizationGoal');
   });
   it('yayın derlemesi taslaktaki piksel hâlini geçiriyor', () => {

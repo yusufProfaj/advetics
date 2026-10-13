@@ -93,6 +93,15 @@ import {
   type TenantContext,
   type YayinDurumu,
   taslakKanonikIcerik,
+  DOYGUNLUK_BGM_ESIK_GOSTERIM,
+  VARSAYILAN_META_PAYI,
+  adresCevresiMi,
+  bolgeAdi,
+  butceBol,
+  doygunlukTavani,
+  gunlukEsdeger,
+  hedeflemeUret,
+  type ErisimDoygunlugu,
 } from '@advetics/shared';
 import { CONFIG, type AppConfig } from '../../../config/configuration';
 import { ajansYoneticisiMi } from '../ajans-yoneticisi';
@@ -135,6 +144,7 @@ import {
 import {
   hazirlikSatisOlcumu,
   metaAsgariOku,
+  metaErisimTahminiOku,
   metaFormKosuluOku,
   metaFormAyrintisiOku,
   metaSayfaFormlariOku,
@@ -199,6 +209,33 @@ interface OnKosulKaydi {
   googleHedefleri: GoogleDonusumHedefi[] | null;
 }
 const ONBELLEK_MS = 15 * 60_000;
+
+/**
+ * ERİŞİM DOYGUNLUĞUNUN KİTLE TAHMİNİ İÇİN HEDEFLEME (K5). Derleyicinin
+ * kullandığı TEK üreticiden (`hedeflemeUret`): ikinci bir hedefleme nesnesi
+ * kurmak, tahminin reklamın gerçek kitlesinden ayrışması demek (CLAUDE.md
+ * "AYNI ŞEYİ ÜRETEN İKİNCİ FONKSİYON"). Kategori tabanı burada yok: kategori
+ * yaşı 18'e sabitler ve ilgi/cinsiyeti kapatır, yani kitleyi yalnız
+ * genişletir; tahmin bölgenin büyüklüğünü soruyor. Kurulamayan hedefleme
+ * (konum yok, adres çevresi karışık) `null` = okunmaz.
+ */
+export function erisimHedeflemesi(a: RehberAlanlari): Record<string, unknown> | null {
+  if (a.amac?.deger !== 'ERISIM') return null;
+  const konumlar = (a.konumlar?.deger ?? []).map(({ google: _g, ...k }) => k);
+  if (konumlar.length === 0) return null;
+  const h = hedeflemeUret({
+    konumlar,
+    enDusukYas: a.enDusukYas?.deger ?? 18,
+    ipucuYas: a.yasAraligi?.deger ?? null,
+    ipucuCinsiyet: null,
+    advantageAudience: 1,
+    kategoriler: [],
+  });
+  return h.tur === 'tamam' ? h.targeting : null;
+}
+
+/** Erişim reklamı sayılan Meta kampanya amaçları (yeni ve eski adlar). */
+export const ERISIM_KAMPANYA_AMACLARI = ['OUTCOME_AWARENESS', 'REACH', 'BRAND_AWARENESS'];
 /** Form önizlemesi önbelleği: formu Meta'da değiştiren kullanıcı en geç 10 dk sonra yenisini görür. */
 const FORM_AYRINTI_MS = 10 * 60_000;
 
@@ -424,6 +461,12 @@ export class RehberService {
   private readonly sitePikselOnbellek = new Map<string, PikselKaydi>();
   private readonly uzantiOnbellek = new Map<string, UzantiKaydi>();
   /**
+   * ERİŞİM doygunluğu (K5). Anahtar `clientId`; kayıt OKUNDUĞU hesap ve
+   * hedeflemeyle (`anahtar`) birlikte: konum değişince eski bölgenin kitlesi
+   * yeni bölgeye sızmasın. Okunamadı hâli de yazılır (sebebiyle).
+   */
+  private readonly doygunlukOnbellek = new Map<string, { zaman: number; anahtar: string; deger: ErisimDoygunlugu }>();
+  /**
    * Site okuyucu (SSRF korumalı `sayfaHtmlGetir`). Alan olarak duruyor ki
    * testler sahtesini versin: servis testleri prova yolunu koşuyor ve gerçek
    * okuyucu orada müşteri sitesine AĞDAN çıkardı.
@@ -500,6 +543,8 @@ export class RehberService {
       await this.googleDonusumTazele(ctx, clientId, a, h.onKosullar.googleDonusumEtkin);
       // SATIŞ: hacim uyarısı ve karar tablosu prova ÖNCESİ de doğru söylesin.
       await this.googleSatisTazele(ctx, clientId, a, h.onKosullar.googleSatisOlcumu);
+      // ERİŞİM: doygunluk uyarısı Kontrol'e gelmeden Bütçe adımında görünsün.
+      await this.erisimDoygunlukTazele(ctx, clientId, a);
     }
     if (okunan) this.sayfaYaz(clientId, okunan, { formKosullari: h.onKosullar.metaFormKosullari, whatsapp: h.onKosullar.metaWhatsapp });
     return h;
@@ -770,6 +815,82 @@ export class RehberService {
       googleSatis30Gun: sayi,
       googleHedefleri: hedefler,
     });
+  }
+
+  /**
+   * ERİŞİM BÜTÇE-KİTLE DOYGUNLUĞU (K5). İki okuma, ayrı hata sınırlarında:
+   *
+   * 1. Bölgenin kişi sayısı Meta'dan (`reachestimate`, kota bekçisinden).
+   *    Düşerse `okunamadi` + Meta'nın mesajı; "0 kişi" yazılmaz.
+   * 2. 1.000 gösterimin bedeli (BGM) hesabın SON 30 GÜNÜNDEN, veritabanından
+   *    (platform çağrısı yok). Önce hesabın erişim kampanyaları, yoksa
+   *    hesabın tamamı; ikisinde de `DOYGUNLUK_BGM_ESIK_GOSTERIM`ın altında
+   *    gösterim varsa BGM YOK ve uyarı VERİLMEZ (`hesaplanamadi`, sebebiyle):
+   *    BGM uydurmak tavanı uydurmak demek.
+   *
+   * Platform çağrısı transaction DIŞINDA; sorgu kendi kısa transaction'ında.
+   */
+  private async erisimDoygunlukTazele(ctx: TenantContext, clientId: string, a: RehberAlanlari): Promise<void> {
+    const hesapId = a.metaHesabiId?.deger;
+    if (a.amac?.deger !== 'ERISIM' || !a.platformlar?.deger.meta || !hesapId) return;
+    const targeting = erisimHedeflemesi(a);
+    const anahtar = `${hesapId}|${kanonikJson(targeting)}`;
+    const yaz = (deger: ErisimDoygunlugu) => this.doygunlukOnbellek.set(clientId, { zaman: Date.now(), anahtar, deger });
+    if (!targeting) return void yaz({ tur: 'okunamadi', sebep: 'konum seçilmedi ya da seçilen konum kurulamıyor' });
+    let kitle: { alt: number; ust: number };
+    try {
+      if (!this.kota.isEnabled) {
+        logger.warn('Kota bekçisi kapalı (REDIS_URL yok); erişim kitle tahmini kota kontrolsüz gidiyor.');
+      } else {
+        const k = await this.kota.acquire({ platform: 'meta', adAccountId: hesapId, layer: 'interactive' });
+        if (!k.allowed) return void yaz({ tur: 'okunamadi', sebep: `Meta kotası şu an dolu (${k.reason ?? 'kota'})` });
+      }
+      const e = await hesapErisimi(this.tx(ctx), this.crypto, hesapId, clientId);
+      kitle = await metaErisimTahminiOku(this.metaSurumu, e.hesap, e.kullaniciToken, targeting);
+    } catch (err) {
+      const m = err instanceof Error ? err.message : String(err);
+      logger.warn(`Erişim kitle tahmini okunamadı (hesap ${hesapId}): ${m}`);
+      return void yaz({ tur: 'okunamadi', sebep: m });
+    }
+    const [r] = await this.tx(ctx)((t) =>
+      t.$queryRaw<Array<{ e_gosterim: bigint; e_harcama: bigint; gosterim: bigint; harcama: bigint }>>(Prisma.sql`
+        SELECT COALESCE(SUM(i.impressions) FILTER (WHERE c.objective = ANY(${ERISIM_KAMPANYA_AMACLARI}::text[])), 0)::bigint AS e_gosterim,
+               COALESCE(SUM(i.spend_micros) FILTER (WHERE c.objective = ANY(${ERISIM_KAMPANYA_AMACLARI}::text[])), 0)::bigint AS e_harcama,
+               COALESCE(SUM(i.impressions), 0)::bigint AS gosterim,
+               COALESCE(SUM(i.spend_micros), 0)::bigint AS harcama
+          FROM insights_daily i
+          LEFT JOIN campaigns c ON c.id = i.entity_id
+         WHERE i.ad_account_id = ${hesapId}::uuid AND i.entity_level = 'campaign' AND i.breakdown_key = ''
+           AND i.date >= current_date - 30`),
+    );
+    const esik = BigInt(DOYGUNLUK_BGM_ESIK_GOSTERIM);
+    const bgm = (harcama: bigint, gosterim: bigint) => (harcama * 1000n) / gosterim;
+    const kaynak = r && r.e_gosterim >= esik ? 'erisim' : r && r.gosterim >= esik ? 'genel' : null;
+    if (!r || !kaynak) {
+      return void yaz({
+        tur: 'hesaplanamadi',
+        sebep: `hesabın son 30 gününde 1.000 gösterim bedelini hesaplayacak kadar gösterim yok (${(r?.gosterim ?? 0n).toString()} gösterim)`,
+        kitleAlt: kitle.alt,
+        kitleUst: kitle.ust,
+      });
+    }
+    const bgmMicros = kaynak === 'erisim' ? bgm(r.e_harcama, r.e_gosterim) : bgm(r.harcama, r.gosterim);
+    yaz({
+      tur: 'hesaplandi',
+      kitleAlt: kitle.alt,
+      kitleUst: kitle.ust,
+      bgmMicros: bgmMicros.toString(),
+      bgmKaynagi: kaynak,
+      tavanGunlukMicros: doygunlukTavani(kitle.ust, bgmMicros).toString(),
+    });
+  }
+
+  /** Doygunluk kaydı YALNIZ seçili hesap ve bugünkü hedeflemeyle okunduysa (aksi `null` = okunmadı). */
+  private doygunlukKaydi(clientId: string, a: RehberAlanlari): ErisimDoygunlugu | null {
+    const hesapId = a.metaHesabiId?.deger;
+    const k = this.doygunlukOnbellek.get(clientId);
+    if (!hesapId || !k || Date.now() - k.zaman >= ONBELLEK_MS) return null;
+    return k.anahtar === `${hesapId}|${kanonikJson(erisimHedeflemesi(a))}` ? k.deger : null;
   }
 
   /** Son 30 günün SATIN ALMA dönüşüm sayısı (kota bekçisinden). Okunamayan değer sıfır SAYILMAZ: fırlatır. */
@@ -1245,7 +1366,8 @@ export class RehberService {
     const konumlar = a.konumlar;
     if (!konumlar || konumlar.deger.length === 0) throw new BadRequestException('Önce konum seç.');
     const hesapId = a.googleHesabiId?.deger;
-    const eksik = konumlar.deger.filter((k) => !k.google && k.tur !== 'country');
+    // Adres çevresi Google'a `proximity` olarak gider; eşlenecek bir adı yok.
+    const eksik = konumlar.deger.filter((k) => !k.google && k.tur !== 'country' && !adresCevresiMi(k));
     let fctx: FetchContext | null = null;
     if (eksik.length) {
       if (!hesapId) throw new BadRequestException('Önce Google Ads hesabı seç.');
@@ -1253,7 +1375,7 @@ export class RehberService {
     }
     const yeni = [];
     for (const k of konumlar.deger) {
-      if (k.google) {
+      if (k.google || adresCevresiMi(k)) {
         yeni.push(k);
         continue;
       }
@@ -1348,12 +1470,20 @@ export class RehberService {
     // ÜÇÜNÜN özetinden türeyen tek özet (sıra korunur). Karelerden biri
     // okunamadıysa önbellek yok: eksik girdiyle yazılmış öneri tam girdinin
     // yerine geçmesin.
-    const hedefOzeti =
+    const gorselOzeti =
       hedef && gorselOku.gorseller.length > 0 && gorselOku.gorseller.length === secilen.length
         ? gorselOku.gorseller.length === 1
           ? gorselOku.gorseller[0]!.ozet
           : createHash('sha256').update(gorselOku.gorseller.map((g) => g.ozet).join('+')).digest('hex')
         : null;
+    /*
+     * BÖLGE (ERİŞİM B13): yalnız erişimde istem bölgeyi taşıyor; önbellek
+     * anahtarı da taşımalı, yoksa İzmir için yazılmış öneri aynı görsel
+     * Manisa reklamına bırakılınca olduğu gibi dönerdi. Diğer amaçların
+     * anahtarı DEĞİŞMEDİ (eski önbellekleri boşa düşürmesin).
+     */
+    const bolge = amacKodu === 'ERISIM' ? bolgeAdi(a.konumlar?.deger ?? []) : null;
+    const hedefOzeti = gorselOzeti && bolge ? createHash('sha256').update(`${gorselOzeti}|${bolge}`).digest('hex') : gorselOzeti;
 
     // ── Önbellek (yalnız görsele özel) ────────────────────────────────────
     let onceki: MetinOnerisi | null = null;
@@ -1378,8 +1508,15 @@ export class RehberService {
     // ÇAPA YALNIZ "buna göre yeniden yaz"da: görsele özel istekte o görselin
     // metni, ortak istekte ortak metin.
     const mevcut = mod === 'buna_gore' ? (hedef ? hedef.metin : a.metin?.deger) : undefined;
+    /*
+     * BÖLGE (ERİŞİM B13): "bölgemde çok kişi görsün" reklamının metni
+     * bölgeyi bilmeden yazılıyordu ve "Türkiye'nin her yerine" gibi kurulan
+     * daireyle çelişen bir söz verebiliyordu. YALNIZ erişimde: diğer
+     * amaçların istemi değişmesin. (`bolge` önbellek anahtarıyla AYNI değer.)
+     */
     const satirlar = [
       `Amaç: ${amac}`,
+      bolge ? `Reklamın gösterileceği bölge: ${bolge}. Metin bu bölgenin dışına söz vermesin.` : null,
       // B11: model kareleri tek tek görsel sanmasın; sıra anlamlı.
       videoKaresi ? 'Görseller tek bir videodan alınmış kareler: başı, ortası ve 15. saniyesi. Metni videonun anlattığına göre yaz.' : null,
       `İşletme: ${p?.marka ?? p?.ad ?? ''}`,
@@ -1538,6 +1675,8 @@ export class RehberService {
     // Arama: teklif eşiği ve uzantılar provadan ÖNCE taze (gövdeye giriyorlar).
     await this.googleDonusumTazele(ctx, s.client_id, a);
     await this.siteUzantiTazele(s.client_id, a, await this.markaAdi(ctx, s.client_id));
+    // ERİŞİM: bütçe-kitle doygunluğu (uyarı) provadan ÖNCE taze.
+    await this.erisimDoygunlukTazele(ctx, s.client_id, a);
     const b = await this.baglam(ctx, s.client_id, a);
     const engeller = platformaGiderken(rehberEksikleri(a, b)).filter((e) => e.seviye === 'engel');
     if (engeller.length) throw new BadRequestException({ message: 'Önce eksikleri tamamla.', eksikler: engeller });
@@ -2315,8 +2454,26 @@ export class RehberService {
         // Piksel okunmadıysa (`seciliPiksel` yok) sayı söylenmez.
         ...(b.onKosullar?.seciliPiksel ? { metaSatinAlma7Gun: b.onKosullar.seciliPiksel.satinAlma7GunSayisi ?? null } : {}),
         ...(b.onKosullar?.googleSatisOlcumu === true ? { googleSatis30Gun: b.onKosullar.googleSatis30Gun ?? null } : {}),
+        // ERİŞİM (K4/K5): adres çevresi hücresi ve doygunluk. Meta payı eksik
+        // listesiyle AYNI hesapla (`butceBol` + `gunlukEsdeger`).
+        ...(amac === 'ERISIM'
+          ? {
+              konumlar: a.konumlar?.deger ?? [],
+              erisimDoygunlugu: b.onKosullar?.erisimDoygunlugu ?? null,
+              paraBirimi: b.paraBirimi,
+              metaGunlukMicros: this.metaGunlukPayi(a, b),
+            }
+          : {}),
       },
     );
+  }
+
+  /** Meta'ya düşen günlük tutar (eksik listesinin hesabı); bütçe yoksa `null`. */
+  private metaGunlukPayi(a: RehberAlanlari, b: Baglam): bigint | null {
+    const butce = a.butce?.deger;
+    if (!butce || BigInt(butce.micros) <= 0n) return null;
+    const pay = butceBol(BigInt(butce.micros), acikPlatformlar(a, b.ajansYoneticisi), a.metaPayiYuzde?.deger ?? VARSAYILAN_META_PAYI, b.paraBirimi);
+    return gunlukEsdeger(pay.meta, butce.tip, a.takvim?.deger ?? null);
   }
 
   /** Marka adı (site bağlantısı metninden ayıklanır: "Hizmetler | Marka"). */
@@ -2461,6 +2618,8 @@ export class RehberService {
       googleDonusumEtkin: googleDonusum,
       googleLogoVeAd: !!r.m?.logo,
       seciliForm: seciliFormHali(a.formSablonuId?.deger ?? null, r.formKimligi, sayfa?.formlar ?? null),
+      // ERİŞİM (K5): yalnız erişim amacında; başka amaçta alan YOK (sorulmadı).
+      ...(a.amac?.deger === 'ERISIM' ? { erisimDoygunlugu: this.doygunlukKaydi(clientId, a) } : {}),
     };
     const acik = acikPlatformlar(a, r.ajans);
     const paraBirimi = (acik.meta && meta?.currency) || google?.currency || meta?.currency || 'TRY';

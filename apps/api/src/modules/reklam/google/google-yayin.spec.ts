@@ -221,11 +221,39 @@ class SahteGoogle implements GoogleYayinPortu {
         });
       return boz('campaign_conversion_goal', satirlar);
     }
+    // B12: ölçütler KİMLİKLERİYLE (konum, yakınlık, kitle) ve WHERE'deki tür
+    // / olumsuzluk süzgeci taklitte de uygulanıyor: süzgeçsiz taklit, okuyucuya
+    // anahtar kelime satırını konum diye verirdi.
+    const sure = (satirlar: Array<{ type: string; negative: boolean }>) => {
+      const tur = /criterion\.type = '(\w+)'/.exec(sorgu)?.[1];
+      const olumlu = /criterion\.negative = FALSE/.test(sorgu);
+      return satirlar.filter((r) => (!tur || r.type === tur) && (!olumlu || !r.negative));
+    };
+    const kitleGercek = (k: string) => k.replace(/\/audiences\/-(\d+)$/, '/audiences/900$1');
     if (sorgu.includes('FROM campaign_criterion')) {
-      return c('campaignCriterionOperation').map((x) => ({ campaignCriterion: { type: x.location ? 'LOCATION' : x.language ? 'LANGUAGE' : 'KEYWORD', negative: x.negative === true } })) as T[];
+      return sure(
+        c('campaignCriterionOperation').map((x) => ({ type: x.location ? 'LOCATION' : x.proximity ? 'PROXIMITY' : x.language ? 'LANGUAGE' : 'KEYWORD', negative: x.negative === true, location: x.location, proximity: x.proximity })),
+      ).map(({ type, negative, ...r }) => ({ campaignCriterion: { type, negative, ...r } })) as T[];
     }
     if (sorgu.includes('FROM ad_group_criterion')) {
-      return c('adGroupCriterionOperation').map((x) => ({ adGroupCriterion: { type: x.location ? 'LOCATION' : 'KEYWORD', negative: false } })) as T[];
+      return sure(
+        c('adGroupCriterionOperation').map((x) => ({
+          type: x.location ? 'LOCATION' : x.proximity ? 'PROXIMITY' : x.audience ? 'AUDIENCE' : 'KEYWORD',
+          negative: false,
+          location: x.location,
+          proximity: x.proximity,
+          audience: x.audience ? { audience: kitleGercek((x.audience as { audience: string }).audience) } : undefined,
+        })),
+      ).map(({ type, negative, ...r }) => ({ adGroupCriterion: { type, negative, ...r } })) as T[];
+    }
+    if (/FROM audience\s/.test(sorgu)) {
+      const ad = /audience\.resource_name = '([^']+)'/.exec(sorgu)?.[1];
+      return boz(
+        'audience',
+        c('audienceOperation')
+          .filter((a) => kitleGercek(String(a.resourceName)) === ad)
+          .map((a) => ({ audience: { resourceName: ad, dimensions: a.dimensions } })),
+      );
     }
     const k = c('campaignOperation')[0]!;
     const b = c('campaignBudgetOperation')[0]!;
@@ -464,6 +492,9 @@ describe('geri okuma karşılaştırması', () => {
     aramaOgeleri: [],
     // g-1.1.0: Arama'da teklif de geri okunuyor (eşik kararı gövdeye yansıdı mı).
     teklif: 'TARGET_SPEND',
+    // g-1.6.0 (B12): konum KİMLİĞİ ve adres çevresinin yokluğu da okunuyor.
+    konumKimlikleri: [...GIRDI.konumlar],
+    yakinlik: null,
   };
   it('temiz okuma temiz; okunamayan alan (null) FARK sayılır; eksik negatif fark', () => {
     expect(googleGeriOkumaKarsilastir(b.beklenen, temiz)).toEqual({ sonuc: 'temiz', satirlar: [] });

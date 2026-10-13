@@ -28,6 +28,7 @@ import { googleGorselKurgusuMu, pmaxUzunBaslik } from './google-gorsel';
 import type { GoogleUzantiKaynagi, SiteBaglantisi } from './google-uzanti';
 import { googleAramaOgeleri, type GoogleAramaOgeleri, type GoogleOgeDurumu, type GoogleOgeKaynagi } from './google-ogeler';
 import type { SitePikselHali } from '../meta/niyetler';
+import { adresCevresiKarisik, adresCevresiMi } from './erisim';
 
 /**
  * Meta taslak şeması en çok 5 kavram taşıyor. Kavram artık bir BANNER SETİ
@@ -460,6 +461,13 @@ export interface GoogleDerlemeGirdisi {
   saatDilimi: string;
   /** `geoTargetConstants/NNN`; PRESENCE ile yazılır ("ilgilenenler" kapalı). */
   konumlar: string[];
+  /**
+   * İŞLETME ADRESİNİN ÇEVRESİ (ERİŞİM K4): Google'a reklam grubu `proximity`
+   * ölçütü. YALNIZ adres çevresi seçildiyse yazılır (o zaman `konumlar` boş):
+   * boş anahtar eklemek diğer taslakların içerik özetini değiştirip kayıtlı
+   * provaları sebepsiz bayatlatırdı.
+   */
+  yakinlik?: { enlem: number; boylam: number; yaricapKm: number };
   dil: typeof GOOGLE_TURKCE;
   /** Talep Yaratma'da yaş segmenti; Arama'da yaş ölçütü YOK (gözlem, sınır değil). */
   enDusukYas: number;
@@ -579,7 +587,9 @@ export function rehberdenGoogle(a: RehberAlanlari, acik: { meta: boolean; google
   if (!takvim) kodlar.push('TKV');
   if (!adres) kodlar.push('SITE-ADRES');
   if (konumlar.length === 0) kodlar.push('KNM-01');
-  if (konumlar.some((k) => !k.google)) kodlar.push('G-KONUM');
+  // Adres çevresi eşleme istemiyor (`yakinlik`); diğer her konum eşlenmiş olmalı.
+  if (konumlar.some((k) => !k.google && !adresCevresiMi(k))) kodlar.push('G-KONUM');
+  if (adresCevresiKarisik(konumlar)) kodlar.push('KNM-ADRES');
   if (tanim && tanim.kurgu === 'MAKS_PERFORMANS' && b.satisOlcumu !== true) kodlar.push('G-DONUSUM');
   if (kodlar.length || !tanim || tanim.kurgu === null || !m || !butce || !takvim || !adres) return { tur: 'ret', kodlar };
 
@@ -610,6 +620,8 @@ export function rehberdenGoogle(a: RehberAlanlari, acik: { meta: boolean; google
 
   const pay = butceBol(BigInt(butce.micros), acik, a.metaPayiYuzde?.deger ?? VARSAYILAN_META_PAYI, b.paraBirimi);
   const ek = a.ekKategoriler?.deger ?? [];
+  const cevre = konumlar.find(adresCevresiMi);
+  if (cevre && (cevre.enlem === undefined || cevre.boylam === undefined || cevre.yaricapKm === undefined)) return { tur: 'ret', kodlar: ['KNM-ADRES-KONUM'] };
   return {
     tur: 'tamam',
     deger: {
@@ -619,7 +631,8 @@ export function rehberdenGoogle(a: RehberAlanlari, acik: { meta: boolean; google
       musteriId: b.musteriId.replace(/-/g, ''),
       paraBirimi: b.paraBirimi,
       saatDilimi: b.saatDilimi,
-      konumlar: konumlar.map((k) => k.google!.kaynak),
+      konumlar: konumlar.filter((k) => !adresCevresiMi(k)).map((k) => k.google!.kaynak),
+      ...(cevre ? { yakinlik: { enlem: cevre.enlem!, boylam: cevre.boylam!, yaricapKm: cevre.yaricapKm! } } : {}),
       dil: GOOGLE_TURKCE,
       enDusukYas: a.enDusukYas?.deger ?? 18,
       butce: { tip: butce.tip, micros: pay.google },

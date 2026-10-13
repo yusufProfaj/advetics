@@ -311,18 +311,50 @@ export const VARSAYILAN_KONUM = 'geoTargetConstants/2792';
 export function demandGenKonumBody(params: {
   adGroupResource: string;
   konumlar: string[];
+  /** ERİŞİM K4: işletme adresinin çevresi (`proximity`); `konumlar` boşken tek konum. */
+  yakinlik?: GoogleYakinlik | null;
 }): GoogleMutateBody {
-  if (params.konumlar.length === 0) {
+  if (params.konumlar.length === 0 && !params.yakinlik) {
     throw new Error('Konum listesi boş: kampanya bütün ülkelere açılırdı.');
   }
-  return body(
-    params.konumlar.map((geoTargetConstant) => ({
+  return body([
+    ...params.konumlar.map((geoTargetConstant) => ({
       create: {
         adGroup: params.adGroupResource,
         location: { geoTargetConstant },
       },
     })),
-  );
+    ...(params.yakinlik ? [{ create: { adGroup: params.adGroupResource, proximity: yakinlikOlcutu(params.yakinlik) } }] : []),
+  ]);
+}
+
+/** Adres çevresi: derece ve km (rehberin dili). */
+export interface GoogleYakinlik {
+  enlem: number;
+  boylam: number;
+  yaricapKm: number;
+}
+
+/**
+ * Google `ProximityInfo` — işletme adresinin çevresi (ERİŞİM K4).
+ *
+ * KOORDİNAT MİKRO-DERECE TAMSAYI (belge: `latitudeInMicroDegrees` int32):
+ * ondalık derece göndermek ya reddedilir ya da 1e6 kat küçük bir nokta (Gine
+ * Körfezi) olur. Yuvarlanıyor; 1e-6 derece ~11 cm. BİRİM AÇIKÇA
+ * `KILOMETERS`: varsayılanı bilinmeyen bir alan mil olursa daire 1,6 kat
+ * büyür ve hata dönmez. Talep Yaratma reklam grubunda kabulü ÖLÇÜLMEDİ:
+ * prova reddederse Google'ın mesajı alan yoluyla görünür.
+ */
+export function yakinlikOlcutu(y: GoogleYakinlik): Record<string, unknown> {
+  if (!Number.isFinite(y.enlem) || !Number.isFinite(y.boylam) || Math.abs(y.enlem) > 90 || Math.abs(y.boylam) > 180) {
+    throw new Error('Adres konumu geçersiz: enlem/boylam aralık dışında.');
+  }
+  if (!Number.isFinite(y.yaricapKm) || y.yaricapKm <= 0) throw new Error('Yarıçap pozitif olmalı.');
+  return {
+    geoPoint: { latitudeInMicroDegrees: Math.round(y.enlem * 1e6), longitudeInMicroDegrees: Math.round(y.boylam * 1e6) },
+    radius: y.yaricapKm,
+    radiusUnits: 'KILOMETERS',
+  };
 }
 
 /**
@@ -490,6 +522,8 @@ export interface AtomikVideoIstegi {
   /** Kampanya açık mı kurulsun. İlk canlı deneme duraklatılmış (plan K3). */
   acilis: KampanyaAcilisi;
   konumlar: string[];
+  /** ERİŞİM K4: adres çevresi (`proximity`); verilmezse yalnız `konumlar`. */
+  yakinlik?: GoogleYakinlik | null;
   yaslar: readonly string[];
   videoId: string;
   videoTitle: string;
@@ -571,7 +605,7 @@ export function demandGenAtomikIstek(p: AtomikVideoIstegi): { govde: AtomikGovde
   });
   // KONUM GRUPTAN HEMEN SONRA: geçici kimlik (-3) ancak grup işlemi
   // sırada önce geliyorsa çözülüyor.
-  for (const o of demandGenKonumBody({ adGroupResource: GRUP, konumlar: p.konumlar }).operations) {
+  for (const o of demandGenKonumBody({ adGroupResource: GRUP, konumlar: p.konumlar, yakinlik: p.yakinlik ?? null }).operations) {
     ekle({ adGroupCriterionOperation: { create: o.create } });
   }
   if (segmentler.length > 0) {
@@ -769,6 +803,8 @@ export interface AtomikGorselIstegi {
   startDate?: string;
   acilis: KampanyaAcilisi;
   konumlar: string[];
+  /** ERİŞİM K4: adres çevresi (`proximity`); verilmezse yalnız `konumlar`. */
+  yakinlik?: GoogleYakinlik | null;
   yaslar: readonly string[];
   logo: GoogleGorselKaynagi;
   /** Oranına göre ayrılmış görseller; `varlikId` önbellek (asset_platform_refs) için. */
@@ -843,7 +879,7 @@ export function demandGenGorselAtomikIstek(p: AtomikGorselIstegi): { govde: Atom
     },
   });
   // KONUM GRUPTAN HEMEN SONRA: geçici kimlik (-3) ancak grup sırada önceyse çözülüyor.
-  for (const o of demandGenKonumBody({ adGroupResource: GRUP, konumlar: p.konumlar }).operations) {
+  for (const o of demandGenKonumBody({ adGroupResource: GRUP, konumlar: p.konumlar, yakinlik: p.yakinlik ?? null }).operations) {
     ekle({ adGroupCriterionOperation: { create: o.create } });
   }
   if (segmentler.length > 0) {
