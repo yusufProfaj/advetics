@@ -51,8 +51,10 @@ describe('hata görünürlüğü', () => {
   });
 
   it('hata kutusu ekran okuyucuya ACİL olarak duyuruluyor', () => {
+    // 2026-10-14: ortak `HataDurumu` (role="alert" bileşenin kendisinde).
     const i = SAYFA.indexOf('Rapor oluşturulamadı');
-    expect(SAYFA.slice(Math.max(0, i - 300), i)).toContain('role="alert"');
+    expect(SAYFA.slice(Math.max(0, i - 40), i)).toContain('<HataDurumu baslik="');
+    expect(readFileSync(join(__dirname, '..', '..', '..', 'components', 'ui', 'hal.tsx'), 'utf8')).toContain('role="alert"');
   });
 });
 
@@ -127,3 +129,41 @@ describe('rapor klasöründeki PANEL bileşenleri belirteç kullanıyor', () => 
     }
   });
 });
+
+/**
+ * ═══ BİRLEŞİK TASARIM DİLİ (onaylı taslak `#raporlar`, 2026-10-14) ═══
+ *
+ * Kullanıcı kararı: "Raporu gönder" TEK birincil eylem başlığın sağında,
+ * "PDF indir" yanında ikincil, Planla ve Paylaşım bağlantısı ⋯ menüsünde;
+ * bölümler (Rapor · Haftalık özet · Şablonlar · Faturalar) sayfa içi yan
+ * menüde; eksik fatura menüde kırmızı nokta ve raporun üstünde şerit.
+ */
+describe('birleşik tasarım: bölümler ve eksik fatura', () => {
+  const SEKME = BILESEN('rapor-sekmeleri.tsx');
+
+  it('KRİTİK: bölümler sayfa içi yan menüde ve Şablonlar kendi bölümü', () => {
+    expect(SAYFA).toContain('<SayfaIcDuzen');
+    expect(SEKME).toContain('<SayfaIcMenu');
+    for (const kod of ["kod: 'rapor'", "kod: 'ozet'", "kod: 'sablonlar'", "kod: 'faturalar'"]) expect(SEKME).toContain(kod);
+    expect(SAYFA).toContain('<SablonBolumu');
+  });
+
+  it('KRİTİK: eksik fatura SUNUCUDA hesaplanıyor ve OKUNAMAMASI da nokta yakıyor', () => {
+    // "Okunamadı" = "eksik yok" DEĞİL: çağrı düşerse kullanıcı faturasız raporu fark etmezdi.
+    expect(SAYFA).toContain('faturaEksik = odakDonemler.filter((d) => !faturalar.some((f) => f.donem === d));');
+    expect(SAYFA).toContain('faturaEksik={faturaEksik.length > 0 || faturaHatasi !== null}');
+    expect(SEKME).toContain("uyari: s.kod === 'faturalar' && faturaEksik,");
+  });
+
+  it('KRİTİK: rapor bölümünde eksik fatura şeridi Faturalar bölümüne götürüyor, tarih düşmüyor', () => {
+    expect(SAYFA).toContain("const faturaHref = baglanti('/raporlar', mevcut, { sekme: 'faturalar' });");
+    const i = SAYFA.indexOf('{canShare && faturaEksik.length > 0 && (');
+    expect(i, 'fatura şeridi bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
+    expect(SAYFA.slice(i, i + 500)).toContain('href={faturaHref}');
+  });
+
+  it('KRİTİK: belge işlemleri yalnız rapor üretildiyse başlıkta', () => {
+    expect(SAYFA).toMatch(/\{sekme === 'rapor' && report !== null && \(\s*<ShareControls/);
+  });
+});
+

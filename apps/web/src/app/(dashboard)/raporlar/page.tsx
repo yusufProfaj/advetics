@@ -11,7 +11,16 @@ import {
 import { hasPermission, requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
 import { SablonSecici } from '@/components/report/sablon-secici';
+import { SablonBolumu } from '@/components/report/sablon-yonetimi';
+import { PlanCipi } from '@/components/report/rapor-planla';
 import { formatDayLong } from '@/lib/format';
+import Link from 'next/link';
+import { baglanti } from '@/lib/baglanti';
+import { SayfaIskeleti } from '@/components/ui/sayfa-basligi';
+import { SayfaIcDuzen } from '@/components/ui/sayfa-ic-menu';
+import { HataDurumu, Serit } from '@/components/ui/hal';
+import { dugmeSinifi } from '@/components/ui/dugme';
+import { donemMetni, type FaturaOzeti } from '@advetics/shared';
 import { enEskiGunGerekli, gunEkle, resolveRange, today } from '@/lib/date-range';
 import { TarihSecici } from '@/components/tarih-secici';
 import { ReportDocument } from '@/components/report/report-document';
@@ -30,11 +39,14 @@ export const dynamic = 'force-dynamic';
  * müşteriye "Temmuz raporu" gönderiliyor, "son 30 gün raporu" değil. Panelin
  * kayan aralıkları oradaki soru farklı olduğu için doğru — burada yanlış olurdu.
  *
- * ┌─ ÜÇ EKRAN TEK SAYFADA ────────────────────────────────────────────────┐
+ * ┌─ DÖRT BÖLÜM TEK SAYFADA ──────────────────────────────────────────────┐
  * │ Rapor, şablonlar ve faturalar kenar çubuğunda ayrı üç bağlantıydı.    │
- * │ Üçü de aynı belgenin parçası ve ayrılmaları GERÇEK bir hata           │
- * │ üretiyordu — bkz. `sablon-secici.tsx`. Şablon düzenleme seçicinin     │
- * │ içinde, faturalar sekme olarak burada.                                 │
+ * │ Hepsi aynı belgenin parçası ve ayrılmaları GERÇEK bir hata            │
+ * │ üretiyordu (bkz. `sablon-secici.tsx`). Bugün (onaylı taslak           │
+ * │ `#raporlar`, 2026-10-14) Rapor · Haftalık özet · Şablonlar ·          │
+ * │ Faturalar SAYFA İÇİ YAN MENÜDE; eksik fatura menüde kırmızı nokta ve  │
+ * │ raporun üstünde şerit. "Raporu gönder" başlığın sağında tek birincil  │
+ * │ eylem, "PDF indir" yanında ikincil, Planla ve Paylaşım bağlantısı ⋯.  │
  * └────────────────────────────────────────────────────────────────────────┘
  */
 export default async function ReportsPage({
@@ -115,7 +127,14 @@ export default async function ReportsPage({
   const to = devamEden ? dun : secilen.to;
 
   const sekmeParam = first(params.sekme);
-  const sekme: RaporSekmesi = sekmeParam === 'faturalar' && canShare ? 'faturalar' : sekmeParam === 'ozet' ? 'ozet' : 'rapor';
+  const sekme: RaporSekmesi =
+    sekmeParam === 'faturalar' && canShare
+      ? 'faturalar'
+      : sekmeParam === 'ozet'
+        ? 'ozet'
+        : sekmeParam === 'sablonlar'
+          ? 'sablonlar'
+          : 'rapor';
 
   /*
    * ŞABLON LİSTESİ SEÇİCİYE GİDİYOR.
@@ -167,7 +186,7 @@ export default async function ReportsPage({
    * ağır sorgularından biri ve özet sekmesi onu göstermiyor; kendi verisini
    * istemcide kendi ucundan çekiyor.
    */
-  if (sekme !== 'ozet') {
+  if (sekme === 'rapor') {
     try {
       report = await serverApiFetch<ReportData>(`/reports/preview?${qs}`);
     } catch (err) {
@@ -175,41 +194,55 @@ export default async function ReportsPage({
     }
   }
 
+  /*
+   * ═══ EKSİK FATURA: YAN MENÜDE KIRMIZI NOKTA, RAPORDA ŞERİT ═══
+   *
+   * Ajans yüklemeyi unutursa rapor faturasız gider ve kimse fark etmez;
+   * kullanıcı kararı "uyar ama gönder". Uyarı SUNUCUDA hesaplanıyor çünkü
+   * yan menüdeki nokta Faturalar bölümü açılmadan da görünmeli. Dönem başına
+   * bakılıyor (platform başına değil): yalnız Meta'da reklamı olan müşteride
+   * "Google faturası eksik" her ay yanlış bir uyarı olurdu. Okunamadıysa
+   * "eksik yok" DENMİYOR, nedeni yazıyor.
+   */
+  const odakDonemler = kapsananDonemler(from, to);
+  let faturaEksik: string[] = [];
+  let faturaSayisi = 0;
+  let faturaHatasi: string | null = null;
+  if (canShare) {
+    try {
+      const faturalar = await serverApiFetch<FaturaOzeti[]>(`/reports/faturalar?clientId=${clientId}`);
+      faturaEksik = odakDonemler.filter((d) => !faturalar.some((f) => f.donem === d));
+      faturaSayisi = faturalar.filter((f) => odakDonemler.includes(f.donem)).length;
+    } catch (err) {
+      faturaHatasi = err instanceof Error ? err.message : 'Faturalar okunamadı.';
+    }
+  }
+
+  /*
+   * BÖLÜM BAĞLANTILARI MEVCUT PARAMETRELERİ KORUYOR: tarih aralığı ve şablon
+   * düşerse bölüm değiştiren kullanıcı başka bir raporu görürdü (CLAUDE.md
+   * "BAĞLANTIYI ELLE BİRLEŞTİRME").
+   */
+  const mevcut: Record<string, string | undefined> = Object.fromEntries(
+    Object.entries(params).map(([k, v]) => [k, first(v)]),
+  );
+  const faturaHref = baglanti('/raporlar', mevcut, { sekme: 'faturalar' });
+  const donemMetniKisa = sekme === 'ozet' ? 'Haftalık özet' : `${formatDayLong(from)} - ${formatDayLong(to)}`;
+
   return (
-    <div className="space-y-5">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="sayfa-baslik">Raporlar</h1>
-          <p className="mt-0.5 text-sm text-ink-muted">
-            {sekme === 'ozet' ? 'Haftalık özet' : `${formatDayLong(from)} - ${formatDayLong(to)}`}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+    <SayfaIskeleti
+      bolum="Rapor"
+      baslik="Raporlar"
+      aciklama={`Müşteriye giden rapor, şablon ve faturalar. ${donemMetniKisa}.`}
+      eylemler={
+        <>
           {/*
             KARŞILAŞTIRMA KAPALI: rapor belgesi yüzde değişim göstermiyor.
-            Çalışmayan bir düğme koymak olmayan bir özellik vaat etmek olurdu.
-            Takvimde de dünden sonrası seçilemiyor.
+            Takvimde de dünden sonrası seçilemiyor. Haftalık özetin dönemi
+            kendi hafta seçicisinde, şablonların dönemi yok: orada tarih
+            seçici bir şey değiştirmezdi.
           */}
-          {/*
-            ŞABLON SEÇİCİ TARİHİN SOLUNDA: önce "hangi rapor", sonra "hangi
-            dönem". Ters sıra, dönem seçip şablonu değiştirince aralığın
-            sıfırlandığı izlenimi veriyordu.
-
-            YALNIZCA RAPOR SEKMESİNDE. Fatura sekmesinde şablonun hiçbir
-            karşılığı yok; orada da göstermek, hiçbir şeyi değiştirmeyen bir
-            seçici bırakmak olurdu.
-          */}
-          {sekme === 'rapor' && (
-            <SablonSecici
-              secili={sablon}
-              sablonlar={sablonlar}
-              musteriler={session.availableClients.map((c) => ({ id: c.id, name: c.name }))}
-              isOrgAdmin={session.isOrgAdmin}
-              duzenleyebilir={canWriteTemplate}
-            />
-          )}
-          {/* Haftalık özetin dönemi kendi hafta seçicisinde; tarih seçici orada bir şey değiştirmezdi. */}
-          {sekme !== 'ozet' && (
+          {(sekme === 'rapor' || sekme === 'faturalar') && (
             <TarihSecici
               aralik={secilen}
               enEskiGun={kapsam?.earliestDate ?? null}
@@ -217,131 +250,145 @@ export default async function ReportsPage({
               enGecGun={dun}
             />
           )}
-        </div>
-      </header>
-
-      {/*
-        SEKMELER HERKESE: Haftalık özet müşteri hesabına da açık (kendi
-        özeti). Fatura sekmesi yalnız paylaşım yetkisiyle; yetkisizde çubuk
-        Rapor + Haftalık özet olarak kalıyor.
-      */}
-      {/*
-        SEKMELER VE BELGE İŞLEMLERİ TEK SATIRDA. İşlemler (Planla, PDF,
-        Paylaş) belgenin önünde ayrı bir kartta duruyordu; sekme satırının
-        sağı boştu. Aynı satırda olmaları "bu belgeyle ne yapabilirim"
-        sorusunu tek bakışta cevaplıyor ve belge ilk ekrana çıkıyor.
-        İşlemler yalnızca belge üretildiyse: rapor düştüğünde paylaşılacak
-        bir şey yok.
-      */}
-      <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3 border-b border-line">
-        {/* Haftalık özet herkese (report.read), faturalar yalnız paylaşım yetkisiyle. */}
-        <RaporSekmeleri aktif={sekme} faturalar={canShare} />
-        {sekme === 'rapor' && report !== null && (
-          <div className="pb-2">
+          {/*
+            BELGE İŞLEMLERİ YALNIZCA BELGE ÜRETİLDİYSE: rapor düştüğünde
+            paylaşılacak bir şey yok. "Raporu gönder" birincil, "PDF indir"
+            ikincil, Planla ve Paylaşım bağlantısı ⋯ (kullanıcı kararı).
+          */}
+          {sekme === 'rapor' && report !== null && (
             <ShareControls
               clientId={clientId}
               from={from}
               to={to}
               hasData={report.platforms.length > 0}
               /*
-                SEÇİLİ ŞABLON ARTIK GEÇİYOR — düzeltilen hata buydu.
-                Öncesinde `templateId={null}` sabitti: ekranda Google raporunu
-                gören kullanıcı Genel raporu indiriyordu ve bunu ancak PDF'i
-                AÇINCA anlıyordu. Hiçbir hata da vermiyordu, çünkü şablonsuz
-                istek de geçerli bir istek.
+                SEÇİLİ ŞABLON GEÇİYOR: öncesinde `templateId={null}` sabitti
+                ve ekranda Google raporunu gören kullanıcı Genel raporu
+                indiriyordu.
               */
               sablon={sablon}
             />
-          </div>
-        )}
-      </div>
-
-
-
-      {/*
-        ═══ UYARILAR TEK KUTUDA ═══
-        Üçü ayrı ayrı tam genişlikte renkli kutulardı ve aynı anda
-        çıkabiliyorlardı (şablon listesi düştü · dönem bitmedi · harcama yok).
-        Üstelik ikisi belgenin ALTINDA, biri üstünde duruyordu: aynı türden
-        bilgi sayfanın iki ucuna dağılmıştı. Hepsi tek kutuda ve belgeden
-        ÖNCE, çünkü hepsi belgeyi nasıl okuyacağını söylüyor.
-      */}
-      {sekme !== 'ozet' && (
-      <Uyarilar
-        satirlar={[
-          kapsamHatasi !== null ? (
-            <>
-              En eski veri tarihi okunamadı, &ldquo;Tüm zamanlar&rdquo; seçimi varsayılan
-              aralığa düştü.
-            </>
-          ) : null,
-          sablonHatasi !== null ? (
-            <>
-              Şablon listesi alınamadı. Rapor varsayılan şablonla üretiliyor, kayıtlı
-              şablonların listede görünmüyor.
-            </>
-          ) : null,
-          devamEden ? (
-            <>
-              Seçilen dönem <strong>henüz bitmedi</strong>. Rapor {formatDayLong(to)} tarihine
-              kadarki tamamlanmış günleri kapsıyor.
-            </>
-          ) : null,
-          report !== null && report.platforms.length === 0 ? (
-            <>Bu dönemde harcama kaydı yok, rapor boş görünecek.</>
-          ) : null,
-        ]}
-      />
-      )}
-
-      {sekme === 'ozet' ? (
-        <HaftalikOzetSekmesi
-          clientId={clientId}
-          haftaParam={first(params.hafta)}
-          // Ajans görünümü (sinyaller, bekleyen işler) yalnız rule.read ile;
-          // sunucu da ayrıca reddediyor (OZET_AJANS_IZNI).
-          ajansGorur={hasPermission(session, 'rule.read')}
-          planYetkisi={canShare}
-        />
-      ) : sekme === 'faturalar' ? (
-        <FaturaSekmesi clientId={clientId} clientName={musteriAdi(session, clientId)} />
-      ) : report === null ? (
-        <div
-          role="alert"
-          className="rounded-lg border border-danger/30 bg-danger-soft px-3.5 py-2.5 text-sm text-danger-strong"
-        >
-          {/* "API çalışıyor mu?" müşterinin okuduğu ekranda hem anlamsız hem
-              ürkütücü. Sunucunun kendi cümlesi teşhis için yeterli. */}
-          <strong>Rapor oluşturulamadı.</strong>
-          {raporHatasi && <span className="ml-1">{raporHatasi}</span>}
-        </div>
-      ) : (
-        <>
-          {/*
-            FATURA KUTUSU PAYLAŞIM PANELİNİN ALTINDA ve ekrandaki DÖNEMİ
-            biliyor: hangi ayın faturasının gerektiği tarih seçicisinden
-            belli, kullanıcı ayı elle yazmıyor ve yanlış aya yükleme riski
-            düşüyor. Eksikse burada uyarı çıkıyor — rapor gönderilmeden ÖNCE.
-
-            SEKMEDEKİ TOPLU LİSTEYLE ÇAKIŞMIYOR: burası "bu dönemin faturası"
-            için hızlı yol, sekme ise ayın tamamını tek yerden yönetmek için.
-            İkisi AYNI bileşen — ayrı yazılsalardı biri PDF doğrulamasını ya da
-            çoklu yükleme kuralını kaybederdi.
-          */}
-          {canShare && (
-            <Faturalar clientId={clientId} odakDonemler={kapsananDonemler(from, to)} canWrite ozet />
           )}
-
-
-          {/* Önizleme müşterinin göreceğinin BİREBİR aynısı: aynı bileşen,
-              aynı veri. Ayrı bir "önizleme görünümü" yazmak, gönderilen
-              belgeyle ekranda görülenin zamanla ayrışması demek olurdu. */}
-          <div className="overflow-hidden rounded-xl border border-line bg-white shadow-kart">
-            <ReportDocument data={report} />
-          </div>
         </>
-      )}
-    </div>
+      }
+    >
+      <SayfaIcDuzen
+        menu={
+          /* Haftalık özet herkese (report.read), faturalar yalnız paylaşım yetkisiyle. */
+          <RaporSekmeleri
+            aktif={sekme}
+            faturalar={canShare}
+            faturaEksik={faturaEksik.length > 0 || faturaHatasi !== null}
+            sablonSayisi={sablonlar.length}
+          />
+        }
+      >
+        {/*
+          ═══ UYARILAR TEK KUTUDA, BELGEDEN ÖNCE ═══
+          Üçü ayrı ayrı tam genişlikte renkli kutulardı ve aynı anda
+          çıkabiliyorlardı (şablon listesi düştü · dönem bitmedi · harcama
+          yok); ikisi belgenin ALTINDA, biri üstünde duruyordu.
+        */}
+        {sekme === 'rapor' && (
+          <Uyarilar
+            satirlar={[
+              kapsamHatasi !== null ? (
+                <>
+                  En eski veri tarihi okunamadı, &ldquo;Tüm zamanlar&rdquo; seçimi varsayılan aralığa düştü.
+                </>
+              ) : null,
+              sablonHatasi !== null ? (
+                <>
+                  Şablon listesi alınamadı. Rapor varsayılan şablonla üretiliyor, kayıtlı şablonların listede
+                  görünmüyor.
+                </>
+              ) : null,
+              devamEden ? (
+                <>
+                  Seçilen dönem <strong>henüz bitmedi</strong>. Rapor {formatDayLong(to)} tarihine kadarki
+                  tamamlanmış günleri kapsıyor.
+                </>
+              ) : null,
+              report !== null && report.platforms.length === 0 ? (
+                <>Bu dönemde harcama kaydı yok, rapor boş görünecek.</>
+              ) : null,
+            ]}
+          />
+        )}
+
+        {sekme === 'ozet' ? (
+          <HaftalikOzetSekmesi
+            clientId={clientId}
+            haftaParam={first(params.hafta)}
+            // Ajans görünümü (sinyaller, bekleyen işler) yalnız rule.read ile;
+            // sunucu da ayrıca reddediyor (OZET_AJANS_IZNI).
+            ajansGorur={hasPermission(session, 'rule.read')}
+            planYetkisi={canShare}
+          />
+        ) : sekme === 'sablonlar' ? (
+          <SablonBolumu
+            sablonlar={sablonlar}
+            sablonHatasi={sablonHatasi}
+            musteriler={session.availableClients.map((c) => ({ id: c.id, name: c.name }))}
+            isOrgAdmin={session.isOrgAdmin}
+            duzenleyebilir={canWriteTemplate}
+          />
+        ) : sekme === 'faturalar' ? (
+          <FaturaSekmesi clientId={clientId} clientName={musteriAdi(session, clientId)} odakDonemler={odakDonemler} />
+        ) : (
+          <>
+            {/*
+              ŞABLON VE PLAN ÇİP OLARAK, BELGENİN ÜSTÜNDE: önce "hangi rapor",
+              sonra belge. Düzenleme Şablonlar bölümünde; çip yalnız seçiyor.
+            */}
+            <div className="flex flex-wrap items-center gap-2">
+              <SablonSecici secili={sablon} sablonlar={sablonlar} duzenleyebilir={canWriteTemplate} />
+              {canShare && <PlanCipi clientId={clientId} templateId={alanlar.templateId ?? null} />}
+              <span className="flex-1" />
+              <span className="text-12 text-ink-muted">
+                Önizleme müşterinin göreceği PDF ile aynı
+                {canShare && faturaEksik.length === 0 && faturaHatasi === null && faturaSayisi > 0
+                  ? ` · ${faturaSayisi} fatura maile eklenecek`
+                  : ''}
+              </span>
+            </div>
+
+            {canShare && faturaHatasi !== null && (
+              <Serit ton="hata" baslik="Faturalar okunamadı">
+                {`Rapor maili faturasız gidebilir: ${faturaHatasi}`}
+              </Serit>
+            )}
+            {canShare && faturaEksik.length > 0 && (
+              <Serit
+                baslik={`${faturaEksik.map(donemMetni).join(', ')} faturası yüklenmedi`}
+                eylemler={
+                  <Link className={dugmeSinifi('ikincil', 'kucuk')} href={faturaHref}>
+                    Fatura yükle
+                  </Link>
+                }
+              >
+                Rapor maili faturasız gider.
+              </Serit>
+            )}
+
+            {report === null ? (
+              /* "API çalışıyor mu?" müşterinin okuduğu ekranda hem anlamsız hem
+                 ürkütücü. Sunucunun kendi cümlesi teşhis için yeterli. */
+              <HataDurumu baslik="Rapor oluşturulamadı" mesaj={raporHatasi ?? 'Sunucu sebep bildirmedi.'} />
+            ) : (
+              /* Önizleme müşterinin göreceğinin BİREBİR aynısı: aynı bileşen,
+                 aynı veri. Ayrı bir "önizleme görünümü" yazmak, gönderilen
+                 belgeyle ekranda görülenin zamanla ayrışması demek olurdu.
+                 Zemin bilerek beyaz: belge PDF'in aynası ve karanlık temada da
+                 kâğıt gibi okunmalı. */
+              <div className="overflow-hidden rounded-kart border border-line bg-white">
+                <ReportDocument data={report} />
+              </div>
+            )}
+          </>
+        )}
+      </SayfaIcDuzen>
+    </SayfaIskeleti>
   );
 }
 
@@ -352,16 +399,25 @@ export default async function ReportsPage({
  * "Neden otomatik gelmiyor" açıklaması BURADA KALIYOR: kullanıcı sormadan
  * cevabı görmeli, yoksa her ay yükleme yapan kişi bunu bir eksiklik sanar.
  */
-function FaturaSekmesi({ clientId, clientName }: { clientId: string; clientName: string }) {
+function FaturaSekmesi({
+  clientId,
+  clientName,
+  odakDonemler,
+}: {
+  clientId: string;
+  clientName: string;
+  /** Ekrandaki dönemin ayları: o ayın faturası eksikse bölümde de yazıyor. */
+  odakDonemler: string[];
+}) {
   return (
-    <div className="space-y-4">
-      <p className="text-sm text-ink-muted">
+    <div className="grid gap-4">
+      <p className="m-0 text-13 text-ink-muted">
         {clientName} · platform faturaları rapor mailine ayrı ek olarak gider
       </p>
 
-      <div className="rounded-xl border border-line bg-surface-muted px-4 py-3 text-xs text-ink-muted">
-        <p className="font-medium text-ink">Faturalar neden otomatik gelmiyor?</p>
-        <p className="mt-1">
+      <div className="grid gap-1 rounded-kart border border-line bg-surface-muted px-4 py-3 text-12 text-ink-muted">
+        <p className="m-0 text-13 font-semibold text-ink">Faturalar neden otomatik gelmiyor?</p>
+        <p className="m-0">
           Google’ın fatura API’si yalnızca <strong>aylık faturalama</strong> (kredi hattı) olan
           hesaplarda çalışıyor; kartla ödeyen hesaplarda çağrı reddediliyor. Meta’da ise fatura
           PDF’i döndüren bir uç bulunmuyor, yalnızca fatura kaydı okunabiliyor. Bu yüzden belge
@@ -369,7 +425,7 @@ function FaturaSekmesi({ clientId, clientName }: { clientId: string; clientName:
         </p>
       </div>
 
-      <Faturalar clientId={clientId} canWrite baslikGoster={false} />
+      <Faturalar clientId={clientId} odakDonemler={odakDonemler} canWrite />
     </div>
   );
 }

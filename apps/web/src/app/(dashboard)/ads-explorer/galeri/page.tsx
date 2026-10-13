@@ -1,5 +1,9 @@
 import Link from 'next/link';
-import { SuzgecMenusu } from '@/components/suzgec-menusu';
+import { BolumluBaglantilar, SayfalamaBaglantilari, SuzgecMenusu } from '@/components/suzgec-menusu';
+import { SayfaIskeleti } from '@/components/ui/sayfa-basligi';
+import { BosDurum, HataDurumu } from '@/components/ui/hal';
+import { Cip } from '@/components/ui/tablo';
+import { dugmeSinifi } from '@/components/ui/dugme';
 import type { AdsExploreQuery, AdsExploreResult, Platform } from '@advetics/shared';
 import { AD_SORT_FIELDS, AD_STATUSES, PLATFORMS } from '@advetics/shared';
 import { PLATFORM_KISA_ADLARI } from '@advetics/shared';
@@ -148,70 +152,43 @@ export default async function AdsExplorerPage({
     return `/ads-explorer/galeri?${next}`;
   };
 
-  return (
-    <div className="space-y-4">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <Link href="/ads-explorer" className="text-xs font-medium text-ink-muted hover:text-ink">
-            ‹ Reklam Yöneticisi
-          </Link>
-          <h1 className="sayfa-baslik">Reklam Galerisi</h1>
-          <p className="mt-0.5 text-sm text-ink-muted">
-            {formatDayLong(range.from)} - {formatDayLong(range.to)}
-            {result && ` · ${formatNumber(result.total)} reklam`}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {/* PLATFORM ŞERİDİ. Google Ads'te arama reklamlarının görseli yok,
-              Meta'da her reklamın var: ikisini tek listede karıştırmak hem
-              tarama hem de rapora alma işini zorlaştırıyor. */}
-          <nav className="flex gap-1 rounded-lg bg-surface-sunken p-0.5" aria-label="Platform">
-            {/*
-              SEKMELER `PLATFORMS`TAN — elle yazılan liste üçüncü platformu
-              ekranda hiç göstermiyordu.
-            */}
-            {[
-              { key: undefined as Platform | undefined, label: 'Tümü' },
-              ...PLATFORMS.map((pl) => ({
-                key: pl as Platform | undefined,
-                label: PLATFORM_KISA_ADLARI[pl],
-              })),
-            ].map((p) => (
-              <Link
-                key={p.label}
-                href={linkWith({ platform: p.key, kampanya: undefined, sayfa: undefined })}
-                aria-current={platform === p.key ? 'page' : undefined}
-                className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
-                  platform === p.key
-                    ? 'bg-surface text-ink shadow-sm'
-                    : 'text-ink-muted hover:text-ink'
-                }`}
-              >
-                {p.label}
-              </Link>
-            ))}
-          </nav>
-        <TarihSecici aralik={range} enEskiGun={null} />
-        </div>
-      </header>
+  const temizHref = linkWith({ ara: undefined, hesap: undefined, durum: undefined, kampanya: undefined, sorunlu: undefined, sayfa: undefined });
+  const suzgecVar = Boolean(q || adAccountId || status || campaignId || onlyIssues);
 
+  return (
+    <SayfaIskeleti
+      bolum="Yönet"
+      baslik="Reklam Galerisi"
+      ust={
+        <Link href="/ads-explorer" className="text-13 font-semibold text-ink-muted no-underline hover:text-ink">
+          ‹ Reklam Yöneticisi
+        </Link>
+      }
+      aciklama={
+        <>
+          {formatDayLong(range.from)} - {formatDayLong(range.to)}
+          {result && ` · ${formatNumber(result.total)} reklam`}. Görselleri, metinleri ve sorunlu reklamları tek bakışta gör.
+        </>
+      }
+      eylemler={<TarihSecici aralik={range} enEskiGun={null} />}
+    >
       {/*
-        ═══ SÜZGEÇLER TEK ARAÇ ÇUBUĞUNDA ═══
+        ═══ SÜZGEÇLER TEK ARAÇ ÇUBUĞUNDA, KARTIN BAŞINDA ═══
         Arama bir satır, altında hesap/durum/kampanya/sıralama DÖRT satır çip
         vardı; uzun hesap ve kampanya adları satırları ikiye üçe bölüyor ve
-        süzgeçler ilk ekranın yarısını kaplıyordu. Artık tek çubuk: arama +
-        her boyut için etiketli bir açılır menü (`SuzgecMenusu`) + "Sorunlu"
-        düğmesi. Seçili süzgeçler altta, tek tıkla kaldırılan etiketler.
-        Bağlantıların hepsi `linkWith` ile sunucuda kuruluyor: adres
-        süzgeci taşımaya devam ediyor.
+        süzgeçler ilk ekranın yarısını kaplıyordu. Artık tek çubuk (onaylı
+        taslak `#galeri`): arama + platform + her boyut için etiketli bir
+        çip (`SuzgecMenusu`, seçiliyse ✕ ile tek tıkla kalkıyor) + "Sorunlu"
+        çipi + sıralama. Bağlantıların hepsi `linkWith` ile sunucuda
+        kuruluyor: adres süzgeci taşımaya devam ediyor.
 
-        "Sorunlu" MENÜDE DEĞİL, DÜĞME: sayısı sıfırdan büyükse dikkat
-        istiyor ve bir menünün içinde görünmez olurdu.
+        "Sorunlu" MENÜDE DEĞİL, ÇİP: sayısı sıfırdan büyükse dikkat istiyor
+        ve bir menünün içinde görünmez olurdu. Kırmızı YAZI, dolgusuz.
       */}
-      <div className="space-y-2 rounded-xl border border-line bg-surface p-2.5">
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Arama — düz GET formu, istemci JS'i yok. */}
-          <form action="/ads-explorer/galeri" method="get" className="flex min-w-[16rem] flex-1 items-center gap-2">
+      <section className="min-w-0 rounded-kart border border-line bg-surface">
+        <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-3">
+          {/* Arama: düz GET formu, istemci JS'i yok. */}
+          <form action="/ads-explorer/galeri" method="get" className="flex min-w-0 flex-[0_1_280px]">
             {/* TARİH ANAHTARLARI GİZLİ ALAN OLARAK. Form GET ile URL'i baştan
                 kurduğu için burada olmayan her parametre ARAMA YAPINCA düşüyor. */}
             {Object.entries(rangeParams(range)).map(([k, v]) =>
@@ -224,31 +201,47 @@ export default async function AdsExplorerPage({
             {campaignId && <input type="hidden" name="kampanya" value={campaignId} />}
             {onlyIssues && <input type="hidden" name="sorunlu" value="1" />}
             {platform && <input type="hidden" name="platform" value={platform} />}
-            <label className="relative min-w-0 flex-1">
+            {/* ENTER İLE ARANIYOR: ayrı bir kırmızı "Ara" düğmesi ekranın tek
+                birincil eylemi olamaz (BILESENLER § 3). */}
+            <label className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-full border border-line-strong bg-surface px-3">
+              <span aria-hidden className="text-ink-soluk">
+                ⌕
+              </span>
               <span className="sr-only">Reklam ara</span>
-              <svg viewBox="0 0 20 20" fill="none" aria-hidden className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted">
-                <path d="M9 15a6 6 0 1 0 0-12 6 6 0 0 0 0 12ZM17 17l-3.5-3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-              </svg>
               <input
                 type="search"
                 name="ara"
                 defaultValue={q ?? ''}
-                placeholder="Reklam adı, başlık ya da metin ara…"
-                className="w-full rounded-lg border border-line bg-surface py-1.5 pl-8 pr-3 text-sm text-ink placeholder:text-ink-muted"
+                placeholder="Reklam adı, başlık ya da metin ara"
+                className="min-w-0 flex-1 border-0 bg-transparent text-13 text-ink outline-none placeholder:text-ink-soluk"
               />
             </label>
-            <button type="submit" className="rounded-lg bg-brand px-3 py-1.5 text-sm font-medium text-white">
-              Ara
-            </button>
           </form>
 
+          {/* PLATFORM: Google Ads'te arama reklamlarının görseli yok, Meta'da
+              her reklamın var; ikisini tek listede karıştırmak taramayı
+              zorlaştırıyor. Seçenekler `PLATFORMS`tan: elle yazılan liste
+              üçüncü platformu ekranda hiç göstermiyordu. */}
+          <BolumluBaglantilar
+            etiket="Platform"
+            secenekler={[
+              { key: undefined as Platform | undefined, label: 'Tümü' },
+              ...PLATFORMS.map((pl) => ({ key: pl as Platform | undefined, label: PLATFORM_KISA_ADLARI[pl] })),
+            ].map((p) => ({
+              href: linkWith({ platform: p.key, kampanya: undefined, sayfa: undefined }),
+              etiket: p.label,
+              secili: platform === p.key,
+            }))}
+          />
+
           {result !== null && (
-            <div className="flex flex-wrap items-center gap-2">
+            <>
               {result.facets.adAccounts.length > 1 && (
                 <SuzgecMenusu
                   etiket="Hesap"
                   deger={result.facets.adAccounts.find((a) => a.id === adAccountId)?.name ?? (adAccountId ? 'Seçili hesap' : 'Tümü')}
                   secili={Boolean(adAccountId)}
+                  kaldirHref={linkWith({ hesap: undefined, kampanya: undefined, sayfa: undefined })}
                   secenekler={[
                     {
                       href: linkWith({ hesap: undefined, kampanya: undefined, sayfa: undefined }),
@@ -270,6 +263,7 @@ export default async function AdsExplorerPage({
                 etiket="Durum"
                 deger={status ? (STATUS_LABEL[status] ?? status) : 'Tümü'}
                 secili={Boolean(status)}
+                kaldirHref={linkWith({ durum: undefined, sayfa: undefined })}
                 secenekler={[
                   { href: linkWith({ durum: undefined, sayfa: undefined }), ad: 'Tümü', aktif: !status },
                   ...result.facets.statuses.map((st) => ({
@@ -286,6 +280,7 @@ export default async function AdsExplorerPage({
                   etiket="Kampanya"
                   deger={result.facets.campaigns.find((c) => c.id === campaignId)?.name ?? (campaignId ? 'Seçili kampanya' : 'Tümü')}
                   secili={Boolean(campaignId)}
+                  kaldirHref={linkWith({ kampanya: undefined, sayfa: undefined })}
                   secenekler={[
                     { href: linkWith({ kampanya: undefined, sayfa: undefined }), ad: 'Tümü', aktif: !campaignId },
                     ...result.facets.campaigns.map((c) => ({
@@ -298,196 +293,139 @@ export default async function AdsExplorerPage({
                 />
               )}
 
+              {q && (
+                <Cip>
+                  Arama: “{q}”
+                  <Link
+                    href={linkWith({ ara: undefined, sayfa: undefined })}
+                    aria-label="Arama süzgecini kaldır"
+                    className="-mr-1 inline-flex h-5 w-5 items-center justify-center rounded-full text-ink-muted no-underline hover:bg-surface hover:text-ink"
+                  >
+                    ✕
+                  </Link>
+                </Cip>
+              )}
+              {suzgecVar && (
+                <Link href={temizHref} className="text-12 font-semibold text-ink-muted no-underline hover:text-ink hover:underline">
+                  Tümünü temizle
+                </Link>
+              )}
+
+              <span className="flex-1" />
+
+              {result.facets.issueCount > 0 && (
+                <Link
+                  href={linkWith({ sorunlu: onlyIssues ? undefined : '1', durum: undefined, sayfa: undefined })}
+                  aria-current={onlyIssues ? 'true' : undefined}
+                  title={onlyIssues ? 'Sorunlu süzgecini kaldır' : 'Yalnız sorunlu reklamları göster'}
+                  className={`inline-flex h-[30px] items-center gap-1.5 whitespace-nowrap rounded-full px-3 text-[12.5px] font-semibold text-danger-strong no-underline transition-colors ${
+                    onlyIssues ? 'bg-vurgu' : 'bg-surface-sunken hover:bg-vurgu'
+                  }`}
+                >
+                  Sorunlu {result.facets.issueCount}
+                  {onlyIssues && <span aria-hidden>✕</span>}
+                </Link>
+              )}
+
               <SuzgecMenusu
                 etiket="Sırala"
                 deger={`${SORT_LABEL[sort]} ${dir === 'desc' ? '↓' : '↑'}`}
                 secili={false}
                 secenekler={AD_SORT_FIELDS.map((f) => {
                   const active = sort === f;
-                  // Aynı alana tekrar tıklamak yönü çeviriyor — tablo başlığı
+                  // Aynı alana tekrar tıklamak yönü çeviriyor: tablo başlığı
                   // davranışının bilinen karşılığı.
                   const nextDir = active && dir === 'desc' ? 'asc' : 'desc';
                   return {
                     href: linkWith({ sirala: f, yon: nextDir, sayfa: undefined }),
-                    ad: SORT_LABEL[f],
+                    ad: SORT_LABEL[f] ?? f,
                     aktif: active,
                     ek: active ? (dir === 'desc' ? '↓ çoktan aza' : '↑ azdan çoğa') : undefined,
                   };
                 })}
               />
-
-              {result.facets.issueCount > 0 && (
-                <Link
-                  href={linkWith({ sorunlu: onlyIssues ? undefined : '1', durum: undefined, sayfa: undefined })}
-                  aria-current={onlyIssues ? 'true' : undefined}
-                  className={`flex items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
-                    onlyIssues
-                      ? 'border-danger/40 bg-danger-soft text-danger-strong'
-                      : 'border-danger/25 text-danger-strong hover:bg-danger-soft'
-                  }`}
-                >
-                  <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-danger" />
-                  Sorunlu ({result.facets.issueCount})
-                </Link>
-              )}
-            </div>
+            </>
           )}
         </div>
 
-        {/*
-          SEÇİLİ SÜZGEÇLER — ne süzüldüğü tek bakışta ve her biri tek tıkla
-          kalkıyor. Menüde seçili olan düğmenin içinde de yazıyor; ama dört
-          düğmeyi tek tek okumak yerine "şu an neye bakıyorum" burada.
-        */}
-        {(() => {
-          const etiketler: Array<{ ad: string; href: string }> = [];
-          if (q) etiketler.push({ ad: `Arama: “${q}”`, href: linkWith({ ara: undefined, sayfa: undefined }) });
-          if (adAccountId)
-            etiketler.push({
-              ad: `Hesap: ${result?.facets.adAccounts.find((a) => a.id === adAccountId)?.name ?? 'seçili'}`,
-              href: linkWith({ hesap: undefined, kampanya: undefined, sayfa: undefined }),
-            });
-          if (status)
-            etiketler.push({ ad: `Durum: ${STATUS_LABEL[status] ?? status}`, href: linkWith({ durum: undefined, sayfa: undefined }) });
-          if (campaignId)
-            etiketler.push({
-              ad: `Kampanya: ${result?.facets.campaigns.find((c) => c.id === campaignId)?.name ?? 'seçili'}`,
-              href: linkWith({ kampanya: undefined, sayfa: undefined }),
-            });
-          if (onlyIssues) etiketler.push({ ad: 'Yalnızca sorunlu', href: linkWith({ sorunlu: undefined, sayfa: undefined }) });
-          if (etiketler.length === 0) return null;
-          return (
-            <div className="flex flex-wrap items-center gap-1.5 border-t border-line pt-2 text-xs">
-              {etiketler.map((e) => (
-                <Link
-                  key={e.ad}
-                  href={e.href}
-                  title={`${e.ad} süzgecini kaldır`}
-                  className="inline-flex items-center gap-1 rounded-full bg-surface-sunken px-2.5 py-1 text-ink transition hover:bg-danger-soft hover:text-danger-strong"
-                >
-                  <span className="max-w-[16rem] truncate">{e.ad}</span>
-                  <span aria-hidden>×</span>
-                </Link>
-              ))}
-              <Link
-                href={linkWith({ ara: undefined, hesap: undefined, durum: undefined, kampanya: undefined, sorunlu: undefined, sayfa: undefined })}
-                className="ml-1 text-ink-muted underline-offset-2 hover:text-ink hover:underline"
-              >
-                Tümünü temizle
-              </Link>
-            </div>
-          );
-        })()}
-      </div>
-
-      {result === null ? (
-        <Notice>Reklamlar alınamadı. {hata ?? 'Sebep bilinmiyor.'}</Notice>
-      ) : (
-        <>
-          {/*
-            SÜZGEÇ TOPLAMI — SAYFANIN değil, süzgecin tamamının.
-            12 piksellik gri bir satırdı ve dipnot gibi duruyordu; oysa
-            ekrandaki en önemli sayı bloğu bu: seçilen süzgecin toplam
-            harcaması. Rakamlar artık okunur boyutta ve etiketleri üstte.
-          */}
-          <div className="grid grid-cols-2 gap-x-6 gap-y-3 rounded-xl border border-line bg-surface px-4 py-3 sm:grid-cols-3 lg:grid-cols-6">
-            <Total label="Harcama" value={formatMoney(result.totals.spendMicros, result.currency)} />
-            <Total label="Gösterim" value={formatNumber(result.totals.impressions)} />
-            <Total label="Tık" value={formatNumber(result.totals.clicks)} />
-            <Total label="CTR" value={formatPercent(result.totals.ctr)} />
-            <Total label="Dönüşüm" value={formatNumber(result.totals.conversions)} />
-            <Total
-              label="CPA"
-              value={formatMoney(
-                result.totals.cpa === null ? null : String(Math.round(result.totals.cpa * 1_000_000)),
-                result.currency,
-              )}
-            />
+        {result === null ? (
+          <div className="p-4">
+            <HataDurumu baslik="Reklamlar alınamadı" mesaj={hata ?? 'Sebep bilinmiyor.'} />
           </div>
-
-          {result.rows.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-line bg-surface p-10 text-center">
-              <p className="text-sm font-medium text-ink">Bu süzgeçle reklam yok</p>
-              <p className="mt-1 text-sm text-ink-muted">
-                Süzgeçleri kaldır ya da tarih aralığını genişlet.
-              </p>
+        ) : (
+          <>
+            {/*
+              SÜZGEÇ TOPLAMI: SAYFANIN değil, süzgecin tamamının. 12 piksellik
+              gri bir satırdı ve dipnot gibi duruyordu; oysa ekrandaki en
+              önemli sayı bloğu bu: seçilen süzgecin toplam harcaması. Metrik
+              kutularının biçiminde, kartın üst şeridi olarak.
+            */}
+            <div className="grid grid-cols-2 border-b border-line sm:grid-cols-3 lg:grid-cols-6">
+              <Total label="Harcama" value={formatMoney(result.totals.spendMicros, result.currency)} />
+              <Total label="Gösterim" value={formatNumber(result.totals.impressions)} />
+              <Total label="Tık" value={formatNumber(result.totals.clicks)} />
+              <Total label="CTR" value={formatPercent(result.totals.ctr)} />
+              <Total label="Dönüşüm" value={formatNumber(result.totals.conversions)} />
+              <Total
+                label="CPA"
+                value={formatMoney(
+                  result.totals.cpa === null ? null : String(Math.round(result.totals.cpa * 1_000_000)),
+                  result.currency,
+                )}
+              />
             </div>
-          ) : (
-            <div className="space-y-3">
-              {result.rows.map((ad) => (
-                <AdCard key={ad.id} ad={ad} currency={result.currency} />
-              ))}
-            </div>
-          )}
 
-          <Pagination
-            page={result.page}
-            pageSize={result.pageSize}
-            total={result.total}
-            linkWith={linkWith}
-          />
-        </>
-      )}
-    </div>
+            <div className="p-5">
+              {result.rows.length === 0 ? (
+                <BosDurum
+                  baslik="Bu süzgeçle reklam yok"
+                  neden={
+                    suzgecVar
+                      ? 'Seçili süzgeçlere uyan reklam bu dönemde yok. Süzgeçleri kaldır ya da tarih aralığını genişlet.'
+                      : 'Bu dönemde senkronize edilmiş reklam yok. Tarih aralığını genişlet.'
+                  }
+                  eylem={
+                    suzgecVar && (
+                      <Link href={temizHref} className={dugmeSinifi('ikincil', 'kucuk')}>
+                        Süzgeçleri temizle
+                      </Link>
+                    )
+                  }
+                />
+              ) : (
+                <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(230px,1fr))]">
+                  {result.rows.map((ad) => (
+                    <AdCard key={ad.id} ad={ad} currency={result!.currency} bicim="izgara" />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* SESSİZ KESME YOK: "1 - 25 / 118" her zaman, sayfa tek olsa bile. */}
+            <SayfalamaBaglantilari
+              bas={(result.page - 1) * result.pageSize + 1}
+              son={(result.page - 1) * result.pageSize + result.rows.length}
+              toplam={result.total}
+              oncekiHref={result.page > 1 ? linkWith({ sayfa: String(result.page - 1) }) : null}
+              sonrakiHref={
+                result.page < Math.ceil(result.total / result.pageSize) ? linkWith({ sayfa: String(result.page + 1) }) : null
+              }
+            />
+          </>
+        )}
+      </section>
+    </SayfaIskeleti>
   );
 }
 
-function Pagination({
-  page,
-  pageSize,
-  total,
-  linkWith,
-}: {
-  page: number;
-  pageSize: number;
-  total: number;
-  linkWith: (over: Record<string, string | undefined>) => string;
-}) {
-  const pages = Math.ceil(total / pageSize);
-  if (pages <= 1) return null;
-
-  return (
-    <nav className="flex items-center justify-between gap-3 text-sm" aria-label="Sayfalama">
-      <p className="text-ink-muted">
-        Sayfa {page} / {pages}
-      </p>
-      <div className="flex gap-2">
-        {page > 1 && (
-          <Link
-            href={linkWith({ sayfa: String(page - 1) })}
-            className="rounded-lg border border-line px-3 py-1.5 text-ink-muted transition hover:text-ink"
-          >
-            ← Önceki
-          </Link>
-        )}
-        {page < pages && (
-          <Link
-            href={linkWith({ sayfa: String(page + 1) })}
-            className="rounded-lg border border-line px-3 py-1.5 text-ink-muted transition hover:text-ink"
-          >
-            Sonraki →
-          </Link>
-        )}
-      </div>
-    </nav>
-  );
-}
-
-
+/** Süzgeç toplamının tek kutusu: `MetrikKutulari` biçimi, altı sütuna sığsın diye yerel (BILESENLER "Grup 1 sapması"). */
 function Total({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-0">
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-ink-muted">{label}</p>
-      <p className="truncate text-base font-semibold tabular-nums text-ink">{value}</p>
-    </div>
-  );
-}
-
-
-function Notice({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="rounded-lg border border-danger/30 bg-danger-soft px-3.5 py-2.5 text-sm text-danger-strong">
-      {children}
+    <div className="grid min-w-0 content-start gap-1 border-r border-line px-[18px] py-3.5 last:border-r-0">
+      <span className="truncate text-[12.5px] font-semibold text-ink-muted">{label}</span>
+      <b className="truncate font-baslik text-[22px] font-extrabold leading-[1.1] tracking-[-0.02em] tabular-nums text-ink">
+        {value}
+      </b>
     </div>
   );
 }

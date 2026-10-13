@@ -71,19 +71,21 @@ export function ReklamOnizleme({
 
   if (hata) {
     return (
-      <p role="alert" className="px-4 py-4 text-xs text-danger">
+      <p role="alert" className="m-0 border-l-4 border-l-danger py-1 pl-3 text-13 text-ink">
         {hata}
       </p>
     );
   }
 
   if (!reklam) {
-    return <p className="px-4 py-4 text-xs text-ink-muted">Önizleme yükleniyor…</p>;
+    return (
+      <p role="status" className="m-0 animate-pulse text-13 text-ink-muted motion-reduce:animate-none">
+        Önizleme yükleniyor…
+      </p>
+    );
   }
 
   return (
-    <div className="px-4 py-3">
-      <AdCard ad={reklam} currency={currency} />
-    </div>
+    <AdCard ad={reklam} currency={currency} />
   );
 }

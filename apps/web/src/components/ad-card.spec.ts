@@ -61,7 +61,8 @@ describe('AdCard', () => {
     const g = govde();
     expect(g).toContain('<AramaReklamiOnizleme');
     // Görsel kutusu arama reklamı dalında DEĞİL: koşul önizlemeyi seçiyor.
-    expect(g).toContain('{aramaReklami ? (');
+    // 2026-10-14: kart iki biçimde (satır/ızgara) aynı kutuyu kullanıyor; koşul kutuyu seçiyor.
+    expect(g).toContain('const gorselKutusu = aramaReklami ? (');
   });
 
   it('KRİTİK: önizleme GERÇEK arama sonucunun yapısını taşıyor', () => {

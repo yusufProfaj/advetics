@@ -3,86 +3,104 @@
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useTransition } from 'react';
 import { Halka } from '@/components/yukleniyor';
+import { SayfaIcMenu } from '@/components/ui/sayfa-ic-menu';
 
 /**
- * ═══ RAPOR / FATURALAR SEKMELERİ ═══
+ * ═══ RAPORLAR BÖLÜMLERİ: SAYFA İÇİ YAN MENÜ (kullanıcı kararı 2026-10-14) ═══
+ *
+ * Rapor · Haftalık özet · Şablonlar · Faturalar. Üstteki sekme çubuğu
+ * "kontrolü karmaşık" yapıyordu; bölümler artık içeriğin solunda
+ * (`SayfaIcMenu`). Eksik fatura menüde kırmızı nokta.
  *
  * Faturalar kenar çubuğunda ayrı bir bağlantıydı. Ayrı durmasının bir bedeli
  * vardı: fatura rapor mailinin EKİ ve tek tüketicisi bu ekran, ama kullanıcı
- * onu yüklemek için raporu terk edip başka bir sayfaya gidiyordu — döndüğünde
+ * onu yüklemek için raporu terk edip başka bir sayfaya gidiyordu; döndüğünde
  * seçtiği dönem ve şablon sıfırlanmış oluyordu.
  *
- * SEÇİM URL'DE. Sayfa sunucu bileşeni; sekmeyi istemci durumunda tutmak,
- * fatura listesini ikinci kez istemciden çekmek demekti. URL'de olması
- * paylaşılabilir de kılıyor.
+ * SEÇİM URL'DE. Sayfa sunucu bileşeni; bölümü istemci durumunda tutmak,
+ * fatura listesini ikinci kez istemciden çekmek demekti.
  *
- * DİĞER PARAMETRELER KORUNUYOR — ve bu kritik. Bağlantıyı elle kurup yalnızca
+ * DİĞER PARAMETRELER KORUNUYOR ve bu kritik. Bağlantıyı elle kurup yalnızca
  * `sekme` yazmak, tarih aralığını ve şablonu düşürürdü; CLAUDE.md'de kayıtlı
  * "BAĞLANTIYI ELLE BİRLEŞTİRME — SÜZGEÇ DÜŞÜYOR" kuralı bire bir bu. Mevcut
  * arama dizesi kopyalanıp yalnızca `sekme` değiştiriliyor.
  */
-/*
- * HAFTALIK ÖZET (Paket B) raporun yanında: aynı alıcıya giden ikinci belge
- * ve aynı gönderen. Ayrı sayfa olsaydı "rapor planı" ile "özet planı"
- * kullanıcı için iki ayrı yerde dururdu (CLAUDE.md "aynı işin parçası olan
- * ekranı ayrı sayfaya koymak hata üretiyor").
- */
 const SEKMELER = [
   { kod: 'rapor', ad: 'Rapor' },
+  /*
+   * HAFTALIK ÖZET (Paket B) raporun yanında: aynı alıcıya giden ikinci belge
+   * ve aynı gönderen. Ayrı sayfa olsaydı "rapor planı" ile "özet planı"
+   * kullanıcı için iki ayrı yerde dururdu.
+   */
   { kod: 'ozet', ad: 'Haftalık özet' },
+  { kod: 'sablonlar', ad: 'Şablonlar' },
   { kod: 'faturalar', ad: 'Faturalar' },
 ] as const;
 
 export type RaporSekmesi = (typeof SEKMELER)[number]['kod'];
 
 /**
- * `faturalar`: fatura sekmesi yalnız paylaşım yetkisiyle (müşteri hesabı
+ * `faturalar`: fatura bölümü yalnız paylaşım yetkisiyle (müşteri hesabı
  * raporu ve kendi haftalık özetini görür, faturayı yönetmez).
  */
-export function RaporSekmeleri({ aktif, faturalar }: { aktif: RaporSekmesi; faturalar: boolean }) {
+export function RaporSekmeleri({
+  aktif,
+  faturalar,
+  faturaEksik = false,
+  sablonSayisi,
+}: {
+  aktif: RaporSekmesi;
+  faturalar: boolean;
+  /** Ekrandaki dönemin faturası eksik (ya da okunamadı): menüde kırmızı nokta. */
+  faturaEksik?: boolean;
+  /** Kayıtlı şablon sayısı (hazırlar hariç). */
+  sablonSayisi?: number;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
 
-  function sec(kod: RaporSekmesi): void {
-    if (kod === aktif) return;
+  function adres(kod: RaporSekmesi): string {
     const p = new URLSearchParams(searchParams?.toString() ?? '');
     /*
-     * VARSAYILAN SEKME URL'DEN SİLİNİYOR, `?sekme=rapor` yazılmıyor.
+     * VARSAYILAN BÖLÜM URL'DEN SİLİNİYOR, `?sekme=rapor` yazılmıyor.
      * Adres çubuğunda taşınan her parametre paylaşılan bağlantıya da giriyor;
      * varsayılanı yazmak, hiçbir şey söylemeyen bir parametre bırakmak olurdu.
      */
     if (kod === 'rapor') p.delete('sekme');
     else p.set('sekme', kod);
     const dize = p.toString();
-    startTransition(() => router.replace(dize ? `${pathname}?${dize}` : pathname));
+    return dize ? `${pathname}?${dize}` : pathname;
+  }
+
+  function sec(kod: string): void {
+    if (kod === aktif) return;
+    startTransition(() => router.replace(adres(kod as RaporSekmesi)));
   }
 
   return (
-    <div role="tablist" className="-mb-px flex items-center gap-1">
-      {SEKMELER.filter((s) => s.kod !== 'faturalar' || faturalar).map((s) => (
-        <button
-          key={s.kod}
-          type="button"
-          role="tab"
-          aria-selected={s.kod === aktif}
-          onClick={() => sec(s.kod)}
-          className={`-mb-px border-b-2 px-3.5 py-2 text-sm font-medium transition ${
-            s.kod === aktif
-              ? 'border-brand text-ink'
-              : 'border-transparent text-ink-muted hover:text-ink'
-          }`}
-        >
-          {s.ad}
-        </button>
-      ))}
+    <div className="grid gap-2">
+      <SayfaIcMenu
+        etiket="Raporlar bölümleri"
+        secili={aktif}
+        onSec={sec}
+        ogeler={SEKMELER.filter((s) => s.kod !== 'faturalar' || faturalar).map((s) => ({
+          deger: s.kod,
+          etiket: s.ad,
+          sayi: s.kod === 'sablonlar' && sablonSayisi ? sablonSayisi : undefined,
+          uyari: s.kod === 'faturalar' && faturaEksik,
+        }))}
+      />
       {/*
-        BEKLEME GÖSTERGESİ ŞART. Sekme değişimi sunucuda veri çekiyor ve
+        BEKLEME GÖSTERGESİ ŞART. Bölüm değişimi sunucuda veri çekiyor ve
         gecikme fark ediliyor; gösterge olmadan kullanıcı tıklamanın işe
         yaramadığını sanıp tekrar tıklıyor.
       */}
-      {isPending && <Halka className="ml-1 h-3.5 w-3.5" />}
+      <span aria-live="polite" className={`flex items-center gap-2 px-3 text-12 text-ink-muted ${isPending ? '' : 'invisible'}`}>
+        <Halka className="h-3.5 w-3.5" />
+        Açılıyor
+      </span>
     </div>
   );
 }

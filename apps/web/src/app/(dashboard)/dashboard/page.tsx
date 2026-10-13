@@ -56,6 +56,9 @@ import {
   KapsamOzeti,
 } from '@/components/taslak/genel-bakis-kartlari';
 import s from '@/components/taslak/taslak.module.css';
+import { SayfaBasligi } from '@/components/ui/sayfa-basligi';
+import { dugmeSinifi } from '@/components/ui/dugme';
+import { BolumluBaglantilar } from '@/components/suzgec-menusu';
 import { first, hataMetni, resolvePlatform } from '@/lib/sayfa-yardimcilari';
 import { REKLAM_YONETICISI } from '@/lib/reklam-yoneticisi';
 import { kapi } from '@/lib/panel-adresleri';
@@ -276,28 +279,32 @@ export default async function DashboardPage({
       {/*
         BAŞLIK: kırıntı, ad, kapsam ve dönem solda; tarih ve güncelle sağda.
         TAZELİK güncelle düğmesinin içinde: en çok bakılan bilgilerden biri.
+        ORTAK BAŞLIK (`SayfaBasligi`): düzen aynı (kullanıcı Genel Bakış'ın
+        iç düzenini beğendi, 2026-10-14); yalnız başlığın ölçüsü ve kırmızı
+        üst başlık (kapsamın adı) diğer sayfalarla aynı dilde.
       */}
-      <header className={s.ust}>
-        <div>
-          {basamaklar.length > 1 && (
-            <HiyerarsiYolu basamaklar={basamaklar} tasinan={tasinan} gorunum="kirinti" />
-          )}
-          <h1>Genel Bakış</h1>
-          <div className={s.altSatir}>
+      <SayfaBasligi
+        ust={basamaklar.length > 1 ? <HiyerarsiYolu basamaklar={basamaklar} tasinan={tasinan} gorunum="kirinti" /> : undefined}
+        bolum={scopeLabel}
+        baslik="Genel Bakış"
+        aciklama={
+          <>
             {scopeLabel} · {formatDayLong(range.from)} - {formatDayLong(range.to)}
-            {range.incomplete && <span className={s.uyarMetin}> · Gün bitmedi, rakamlar artacak</span>}
-          </div>
-        </div>
-        <div className={s.kontroller}>
-          <TarihSecici aralik={range} enEskiGun={kapsam?.earliestDate ?? null} />
-          <RefreshButton
-            dateFrom={range.from}
-            dateTo={range.to}
-            rangeLabel={range.label}
-            sonGuncelleme={summary?.lastFetchedAt ?? null}
-          />
-        </div>
-      </header>
+            {range.incomplete && <span className="text-danger-strong"> · Gün bitmedi, rakamlar artacak</span>}
+          </>
+        }
+        eylemler={
+          <>
+            <TarihSecici aralik={range} enEskiGun={kapsam?.earliestDate ?? null} />
+            <RefreshButton
+              dateFrom={range.from}
+              dateTo={range.to}
+              rangeLabel={range.label}
+              sonGuncelleme={summary?.lastFetchedAt ?? null}
+            />
+          </>
+        }
+      />
 
       {/*
         KURULUM EKSİK ŞERİDİ (kurulum sihirbazı, MIMARI § 3a): yalnız kurulumu
@@ -309,22 +316,19 @@ export default async function DashboardPage({
       )}
 
       <div className={s.serit2}>
-        <nav className={s.seg} aria-label="Platform">
-          {[null, ...PLATFORMS].map((p) => (
-            <Link
-              key={p ?? 'tumu'}
-              href={baglanti('/dashboard', tasinan, { platform: p ?? undefined })}
-              aria-current={platform === p ? 'page' : undefined}
-            >
-              {p ? PLATFORM_KISA_ADLARI[p] : 'Tümü'}
-            </Link>
-          ))}
-        </nav>
+        <BolumluBaglantilar
+          etiket="Platform"
+          secenekler={[null, ...PLATFORMS].map((p) => ({
+            href: baglanti('/dashboard', tasinan, { platform: p ?? undefined }),
+            etiket: p ? PLATFORM_KISA_ADLARI[p] : 'Tümü',
+            secili: platform === p,
+          }))}
+        />
         {summary !== null && <span className={s.notKucuk}>{summary.accountCount} reklam hesabı</span>}
         {(digerKisayollar.length > 0 || yeniReklam) && (
           <nav className={s.hizli} aria-label="Hızlı erişim">
             {digerKisayollar.map((k) => (
-              <Link key={k.href} className={s.hap} href={k.href}>
+              <Link key={k.href} className={dugmeSinifi('ikincil', 'kucuk')} href={k.href}>
                 {k.etiket}
                 {k.boostRozeti && (
                   <Suspense fallback={null}>
@@ -334,7 +338,7 @@ export default async function DashboardPage({
               </Link>
             ))}
             {yeniReklam && (
-              <Link className={s.birincil} href={yeniReklam.href}>
+              <Link className={dugmeSinifi('birincil', 'kucuk')} href={yeniReklam.href}>
                 ＋ Reklam oluştur
               </Link>
             )}
@@ -505,7 +509,11 @@ async function BoostSayisi({ sonuc }: { sonuc: Promise<BekleyenIslerSonucu> }) {
   const r = boostRozeti(await sonuc);
   if (!r) return null;
   return (
-    <span className={`${s.rozet} ${s.num}`} title={r.baslik} aria-label={r.baslik}>
+    <span
+      className="inline-flex h-[22px] items-center rounded-md bg-surface-sunken px-2 text-[11.5px] font-bold tabular-nums text-ink-muted"
+      title={r.baslik}
+      aria-label={r.baslik}
+    >
       {r.metin}
     </span>
   );

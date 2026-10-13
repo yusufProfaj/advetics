@@ -33,7 +33,9 @@ describe('Reklam Yöneticisi satır içi durdur/başlat (2026-10-10)', () => {
 
   it('KRİTİK: tablo düğmesi yalnız yazabilene; pencere sunucu cevabını yutmuyor', () => {
     const t = readFileSync(join(__dirname, '..', 'components', 'taslak', 'reklam-yoneticisi-tablosu.tsx'), 'utf8');
-    expect(t).toContain('const eylemSutunu = yazabilir && satirlar.some((r) => r.eylemHedefi !== null);');
+    // 2026-10-14: Durdur/Başlat yalnız yazabilene; ⋯ menüsü (gezinme) herkese.
+    expect(t).toContain('const durdurVar = yazabilir && satirlar.some((r) => r.eylemHedefi !== null);');
+    expect(t).toContain('{yazabilir && r.eylemHedefi && (');
     const p = readFileSync(join(__dirname, '..', 'components', 'taslak', 'varlik-eylem-penceresi.tsx'), 'utf8');
     expect(p).toContain("setMesaj(e instanceof ApiRequestError ? e.message : 'İstek gönderilemedi.');");
     expect(p).toContain("`/campaigns/varliklar/${hedef.seviye}/${hedef.id}/eylem`");

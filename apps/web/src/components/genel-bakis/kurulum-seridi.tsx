@@ -7,6 +7,8 @@ import { apiFetch } from '@/lib/api';
 import { beyanGirdisi, beyanlariOku } from '@/lib/kurulum-beyanlari';
 import { kurulumListesi, kurulumSayaci, sihirbazAdresi, type KurulumSayaci } from '@/lib/panel-adresleri';
 import { seritAnahtari, seritGorunur, seritMetni } from '@/components/kurulum/sihirbaz-akisi';
+import { Dugme, dugmeSinifi } from '@/components/ui/dugme';
+import { Serit } from '@/components/ui/hal';
 
 /**
  * ═══ GENEL BAKIŞ — "KURULUM EKSİK" ŞERİDİ (docs/kurulum-sihirbazi/MIMARI.md § 3a) ═══
@@ -75,26 +77,33 @@ export function KurulumSeridi({ clientId }: { clientId: string }) {
   }, [clientId]);
 
   if (gizli || !sayac) return null;
+  /*
+   * ORTAK ŞERİT (onaylı taslak `#genel`): sol kırmızı çizgi, kalın cümle,
+   * sağda "7 gün gizle" (hayalet) ve "Kurulumu tamamla" (koyu). Eski
+   * şeridin kırmızı dolu "!" karosu kılavuzdaki birincil düğmeyle
+   * karışıyordu; ekranın tek kırmızı dolgusu birincil eylem.
+   */
   return (
-    <div role="status" className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-surface px-4 py-3 text-sm text-ink">
-      <span aria-hidden className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-brand font-baslik text-[11px] font-bold text-white">
-        !
-      </span>
-      <span className="min-w-0 flex-1">{seritMetni(sayac)}</span>
-      <Link href={sihirbazAdresi(clientId)} className="font-semibold text-ink underline underline-offset-[3px]">
-        Sihirbazla tamamla →
-      </Link>
-      <button
-        type="button"
-        onClick={() => {
-          gizlendiYaz(clientId);
-          setGizli(true);
-        }}
-        className="rounded-lg px-2 py-1 text-xs font-semibold text-ink-muted hover:text-ink"
-        aria-label="Kurulum uyarısını 7 gün gizle"
-      >
-        Kapat
-      </button>
-    </div>
+    <Serit
+      baslik={seritMetni(sayac)}
+      eylemler={
+        <>
+          <Dugme
+            ton="hayalet"
+            boyut="kucuk"
+            onClick={() => {
+              gizlendiYaz(clientId);
+              setGizli(true);
+            }}
+            aria-label="Kurulum uyarısını 7 gün gizle"
+          >
+            7 gün gizle
+          </Dugme>
+          <Link href={sihirbazAdresi(clientId)} className={dugmeSinifi('koyu', 'kucuk')}>
+            Sihirbazla tamamla
+          </Link>
+        </>
+      }
+    />
   );
 }

@@ -14,6 +14,11 @@ import {
   type FaturaPlatformu,
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch, API_URL } from '@/lib/api';
+import { AcilirMenu, IKON_TETIK, MenuAyraci, MenuOgesi } from '@/components/ui/acilir-menu';
+import { Alan, FormIzgarasi, Girdi, Secim } from '@/components/ui/alan';
+import { Dugme } from '@/components/ui/dugme';
+import { BosDurum, HataDurumu, Serit, Yukleniyor } from '@/components/ui/hal';
+import { AdHucresi, Tablo, type TabloSutunu } from '@/components/ui/tablo';
 
 /**
  * ═══ PLATFORM FATURALARI ═══
@@ -33,33 +38,22 @@ import { ApiRequestError, apiFetch, API_URL } from '@/lib/api';
  * PDF'i döndüren bir uç hiç yok. Gerekçe `packages/shared/.../fatura.schema.ts`
  * başında ayrıntılı yazılı.
  *
- * EKRAN İKİ YERDE KULLANILIYOR: rapor sayfasında (dönem hazır seçili) ve
- * ayrı "Faturalar" sayfasında (toplu yönetim). Tek bileşen, çünkü ikisinde
- * de aynı kararlar veriliyor — ayrı yazılsalar biri PDF kontrolünü ya da
- * eksik uyarısını kaybederdi.
+ * RAPORLAR › FATURALAR BÖLÜMÜ (onaylı taslak `#raporlar`): üstte yükleme
+ * kartı, altında yüklü faturalar tablosu. Rapor bölümündeki eksik fatura
+ * şeridi ve yan menüdeki kırmızı nokta sayfada sunucuda hesaplanıyor; buraya
+ * `odakDonemler` geliyor ve aynı eksik bu bölümde de yazıyor. Tek bileşen:
+ * ayrı yazılsalar biri PDF kontrolünü ya da eksik uyarısını kaybederdi.
  */
 export function Faturalar({
   clientId,
   /** Rapor sayfasından geliyor: o dönem hazır seçili gelsin ve eksikse uyarsın. */
   odakDonemler,
   canWrite,
-  baslikGoster = true,
-  ozet = false,
 }: {
   clientId: string;
   odakDonemler?: string[];
   canWrite: boolean;
-  baslikGoster?: boolean;
-  /**
-   * RAPOR SEKMESİNDEKİ KISA HÂL: tek satır (eksikse uyarı, yüklüyse
-   * sayı) ve form ancak "Fatura ekle"ye basınca açılıyor. Bu kutu raporun
-   * ÖNÜNDE tam bir yükleme formu olarak duruyordu ve belgeyi ekranın altına
-   * itiyordu. Eksik fatura uyarısı KAPANMIYOR: rapor gönderilmeden önce
-   * görülmesi gereken bilgi o, kısa hâlde de ilk satırda.
-   */
-  ozet?: boolean;
 }) {
-  const [formAcik, setFormAcik] = useState(!ozet);
   const [liste, setListe] = useState<FaturaOzeti[] | null>(null);
   const [hata, setHata] = useState<string | null>(null);
   const [yukleniyor, setYukleniyor] = useState(false);
@@ -195,210 +189,157 @@ export function Faturalar({
       ? []
       : odakDonemler.filter((d) => !liste.some((f) => f.donem === d));
 
-  if (ozet && !formAcik) {
-    const buDonem =
-      liste === null || !odakDonemler ? [] : liste.filter((f) => odakDonemler.includes(f.donem));
-    return (
-      <section className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-line bg-surface px-4 py-3 text-sm">
-        <span className="font-medium text-ink">Fatura eki</span>
-        <span className="min-w-0 flex-1 text-ink-muted">
-          {hata !== null ? (
-            <span className="text-danger-strong">{hata}</span>
-          ) : liste === null ? (
-            'Faturalar okunuyor…'
-          ) : eksikOdak.length > 0 ? (
-            <span className="text-warn-strong">
-              <strong>{eksikOdak.map(donemMetni).join(', ')}</strong> için fatura yüklenmemiş. Rapor
-              eksiz gider.
-            </span>
-          ) : (
-            `${buDonem.length} fatura bu dönemin mailine eklenecek.`
+  const sutunlar: Array<TabloSutunu<FaturaOzeti>> = [
+    {
+      anahtar: 'dosya',
+      baslik: 'Dosya',
+      /* TÜR GÖRÜNÜYOR: bir ZIP'in içinde ne olduğu açmadan bilinmiyor ve maile giden şey o. */
+      hucre: (f) => (
+        <AdHucresi
+          ad={f.fileName}
+          alt={[f.mimeType === 'application/zip' ? 'ZIP' : 'PDF', f.aciklama, f.uploadedByName].filter(Boolean).join(' · ')}
+        />
+      ),
+    },
+    { anahtar: 'donem', baslik: 'Dönem', hucre: (f) => donemMetni(f.donem) },
+    { anahtar: 'platform', baslik: 'Platform', hucre: (f) => FATURA_PLATFORM_ETIKETLERI[f.platform] },
+    { anahtar: 'boyut', baslik: 'Boyut', sayi: true, hucre: (f) => `${Math.max(1, Math.round(f.byteSize / 1024))} KB` },
+    {
+      anahtar: 'eylem',
+      baslik: <span className="sr-only">Eylemler</span>,
+      sayi: true,
+      hucre: (f) => (
+        <AcilirMenu
+          etiket={`${f.fileName}: eylemler`}
+          hizala="sag"
+          genislik="w-40"
+          tetik={({ acik: _acik, ...o }) => (
+            <button type="button" {...o} aria-label="Eylemler" className={IKON_TETIK}>
+              <span aria-hidden className="text-15 leading-none">
+                ⋯
+              </span>
+            </button>
           )}
-        </span>
-        {canWrite && (
-          <button
-            type="button"
-            onClick={() => setFormAcik(true)}
-            className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink transition hover:bg-surface-muted"
+        >
+          <MenuOgesi
+            onClick={() =>
+              window.open(`${API_URL}/reports/faturalar/${f.id}/dosya?clientId=${clientId}`, '_blank', 'noreferrer')
+            }
           >
-            Fatura ekle
-          </button>
-        )}
-      </section>
-    );
-  }
+            Aç
+          </MenuOgesi>
+          {canWrite && (
+            <>
+              <MenuAyraci />
+              <MenuOgesi tehlike onClick={() => void sil(f)}>
+                Sil
+              </MenuOgesi>
+            </>
+          )}
+        </AcilirMenu>
+      ),
+    },
+  ];
 
   return (
-    <section className="min-w-0 space-y-3 rounded-xl border border-line bg-surface p-4">
-      {ozet && (
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-sm font-medium text-ink">Fatura eki</p>
-          <button
-            type="button"
-            onClick={() => setFormAcik(false)}
-            className="text-xs text-ink-muted underline-offset-2 hover:text-ink hover:underline"
-          >
-            Kapat
-          </button>
-        </div>
-      )}
-      {baslikGoster && !ozet && (
-        <div>
-          <h2 className="text-sm font-semibold text-ink">Platform faturaları</h2>
-          <p className="mt-0.5 text-xs text-ink-muted">
-            Yüklediğin fatura, o dönemi kapsayan rapor mailine <strong>ayrı ek</strong>{' '}
-            olarak eklenir.
-          </p>
-        </div>
-      )}
-
-      {uyari !== null && (
-        <p className="rounded-lg border border-warn/40 bg-warn/5 px-3 py-2 text-xs text-ink">
-          {uyari}
-        </p>
-      )}
-
-      {hata !== null && (
-        <p className="rounded-lg border border-danger/40 bg-danger/5 px-3 py-2 text-sm text-danger">
-          {hata}
-        </p>
-      )}
-
+    <div className="grid min-w-0 gap-4">
       {eksikOdak.length > 0 && (
-        <p className="rounded-lg border border-warn/40 bg-warn/5 px-3 py-2 text-xs text-ink">
-          <strong>{eksikOdak.map(donemMetni).join(', ')}</strong> dönemi için fatura
-          yüklenmemiş. Rapor yine gönderilir, ama fatura eki olmadan.
-        </p>
+        <Serit baslik={`${eksikOdak.map(donemMetni).join(', ')} için fatura yüklenmemiş`}>
+          Rapor yine gönderilir, ama fatura eki olmadan.
+        </Serit>
       )}
 
       {canWrite && (
-        <div className="rounded-lg border border-line p-3">
-          <div className="grid gap-2 sm:grid-cols-3">
-            <label className="block">
-              <span className="text-[11px] text-ink-muted">Dönem</span>
-              <input
-                type="month"
-                value={donem}
-                onChange={(e) => setDonem(e.target.value)}
-                className="mt-0.5 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm"
-              />
-            </label>
-            <label className="block">
-              <span className="text-[11px] text-ink-muted">Platform</span>
-              <select
-                value={platform}
-                onChange={(e) => setPlatform(e.target.value as FaturaPlatformu)}
-                className="mt-0.5 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm"
-              >
-                {FATURA_PLATFORMLARI.map((p) => (
-                  <option key={p} value={p}>
-                    {FATURA_PLATFORM_ETIKETLERI[p]}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block">
-              <span className="text-[11px] text-ink-muted">Not (isteğe bağlı)</span>
-              <input
-                value={aciklama}
-                onChange={(e) => setAciklama(e.target.value)}
-                placeholder="Fatura no"
-                className="mt-0.5 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm"
-              />
-            </label>
+        <section className="min-w-0 rounded-kart border border-line bg-surface">
+          <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line px-5 py-4">
+            <h3 className="m-0 font-baslik text-15 font-bold text-ink">Platform faturaları</h3>
+            <small className="text-12 text-ink-muted">
+              Rapor mailine <strong>ayrı ek</strong> olarak gider · {FATURA_ETIKETLERI}, en çok{' '}
+              {Math.round(FATURA_MAX_BAYT / 1024 / 1024)} MB
+            </small>
           </div>
-
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            {/* PDF ya da ZIP. Ekran görüntüsü HÂLÂ kabul edilmiyor — fatura
-                resmi bir belge. Sunucu biçimi sihirli baytlardan doğruluyor;
-                buradaki `accept` yalnızca dosya seçiciyi daraltıyor. */}
-            <input
-              ref={dosyaRef}
-              type="file"
-              accept={FATURA_KABUL}
-              className="text-xs text-ink-muted file:mr-2 file:rounded-lg file:border file:border-line file:bg-surface file:px-3 file:py-1.5 file:text-xs"
-            />
-            <button
-              type="button"
-              onClick={() => void gonder()}
-              disabled={yukleniyor}
-              className="rounded-lg bg-brand px-3.5 py-1.5 text-sm font-medium text-white disabled:opacity-50"
-            >
-              {yukleniyor ? 'Yükleniyor…' : 'Yükle'}
-            </button>
-            <span className="text-[11px] text-ink-muted">
-              {FATURA_ETIKETLERI}. Aynı döneme birden çok fatura yükleyebilirsin; hepsi
-              maile eklenir. Aynı dosya iki kez yüklenemez.{' '}
+          <div className="grid gap-3.5 p-5">
+            <FormIzgarasi>
+              <Alan etiket="Dönem">
+                {(id) => <Girdi id={id} type="month" value={donem} onChange={(e) => setDonem(e.target.value)} />}
+              </Alan>
+              <Alan etiket="Platform">
+                {(id) => (
+                  <Secim id={id} value={platform} onChange={(e) => setPlatform(e.target.value as FaturaPlatformu)}>
+                    {FATURA_PLATFORMLARI.map((p) => (
+                      <option key={p} value={p}>
+                        {FATURA_PLATFORM_ETIKETLERI[p]}
+                      </option>
+                    ))}
+                  </Secim>
+                )}
+              </Alan>
+              <Alan etiket="Not (isteğe bağlı)">
+                {(id) => <Girdi id={id} value={aciklama} onChange={(e) => setAciklama(e.target.value)} placeholder="Fatura no" />}
+              </Alan>
+              {/* PDF ya da ZIP. Ekran görüntüsü HÂLÂ kabul edilmiyor: fatura
+                  resmi bir belge. Sunucu biçimi sihirli baytlardan doğruluyor;
+                  buradaki `accept` yalnızca dosya seçiciyi daraltıyor. */}
+              <Alan etiket="Dosya">
+                {(id) => (
+                  <input
+                    id={id}
+                    ref={dosyaRef}
+                    type="file"
+                    accept={FATURA_KABUL}
+                    className="text-13 text-ink-muted file:mr-2 file:h-8 file:rounded-full file:border file:border-line-strong file:bg-surface file:px-3.5 file:text-[12.5px] file:font-bold file:text-ink"
+                  />
+                )}
+              </Alan>
+            </FormIzgarasi>
+            <p className="m-0 text-12 text-ink-muted">
+              Aynı döneme birden çok fatura yükleyebilirsin; hepsi maile eklenir. Aynı dosya iki kez yüklenemez.{' '}
               {/*
                 PAROLA KORUMALI ARŞİV SESSİZ RET ÜRETİYOR: kurumsal mail
                 sunucuları onları koşulsuz engelliyor ve sunucumuz bunu sihirli
-                bayttan AYIRT EDEMİYOR (`PK\x03\x04` ikisinde de aynı).
-                Belirtisi "mail gitti ama müşteriye ulaşmadı" oluyor — bu
-                projenin en pahalı hata türü. Söylemek tek çare.
+                bayttan AYIRT EDEMİYOR. Belirtisi "mail gitti ama müşteriye
+                ulaşmadı". Söylemek tek çare.
               */}
-              <strong>Parola korumalı arşiv yükleme</strong>: mail sunucuları onları
-              engelliyor ve mail sessizce ulaşmıyor.
-            </span>
+              <strong className="text-ink">Parola korumalı arşiv yükleme</strong>: mail sunucuları onları engelliyor ve
+              mail sessizce ulaşmıyor.
+            </p>
+            {uyari !== null && <Serit baslik="Maile sığmayabilir">{uyari}</Serit>}
+            {hata !== null && liste !== null && (
+              <Serit ton="hata" baslik="İşlem yapılamadı">
+                {hata}
+              </Serit>
+            )}
           </div>
-        </div>
+          <div className="flex justify-end border-t border-line px-5 py-3">
+            {/* KART İÇİNDE KIRMIZI DOLU DÜĞME YOK: sayfanın birincil eylemi raporu göndermek. */}
+            <Dugme ton="koyu" boyut="kucuk" onClick={() => void gonder()} bekliyor={yukleniyor}>
+              Yükle
+            </Dugme>
+          </div>
+        </section>
       )}
 
-      {liste === null && hata === null && (
-        <p className="text-xs text-ink-muted">Yükleniyor…</p>
+      {/* DÖRT HÂL AYRI: okunuyor, okunamadı (sunucunun cümlesi), boş, dolu. */}
+      {liste === null && hata === null && <Yukleniyor satir={3} etiket="Faturalar okunuyor" />}
+      {liste === null && hata !== null && <HataDurumu baslik="Faturalar okunamadı" mesaj={hata} onTekrar={yukle} />}
+      {liste !== null && (
+        <section className="min-w-0 rounded-kart border border-line bg-surface">
+          <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line px-5 py-4">
+            <h3 className="m-0 font-baslik text-15 font-bold text-ink">Yüklü faturalar</h3>
+            {/* SAYAÇ KOŞULSUZ: "sessiz kesme yok". */}
+            <small className="text-12 text-ink-muted">{liste.length} fatura yüklü</small>
+          </div>
+          <Tablo
+            etiket="Yüklü faturalar"
+            sutunlar={sutunlar}
+            satirlar={liste}
+            satirAnahtari={(f) => f.id}
+            bos={<BosDurum baslik="Fatura yok" neden="Bu workspace için yüklenmiş fatura yok." />}
+            sayfalama={{ bas: liste.length === 0 ? 0 : 1, son: liste.length, toplam: liste.length }}
+          />
+        </section>
       )}
-
-      {liste !== null && liste.length === 0 && (
-        <p className="rounded-lg border border-dashed border-line px-3 py-3 text-sm text-ink-muted">
-          Bu workspace için yüklenmiş fatura yok.
-        </p>
-      )}
-
-      {liste !== null && liste.length > 0 && (
-        <>
-          <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line">
-            {liste.map((f) => (
-              <li key={f.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
-                <div className="min-w-0">
-                  <p className="text-sm text-ink">
-                    <strong>{donemMetni(f.donem)}</strong> ·{' '}
-                    {FATURA_PLATFORM_ETIKETLERI[f.platform]}
-                    {f.aciklama ? ` · ${f.aciklama}` : ''}
-                  </p>
-                  <p className="text-[11px] text-ink-muted">
-                    {/* TÜR GÖRÜNÜYOR: bir ZIP'in içinde ne olduğu açmadan
-                        bilinmiyor ve maile giden şey o. */}
-                    {f.mimeType === 'application/zip' ? 'ZIP' : 'PDF'} · {f.fileName} ·{' '}
-                    {Math.max(1, Math.round(f.byteSize / 1024))} KB
-                    {f.uploadedByName ? ` · ${f.uploadedByName}` : ''}
-                  </p>
-                </div>
-                <div className="flex shrink-0 gap-1.5">
-                  <a
-                    href={`${API_URL}/reports/faturalar/${f.id}/dosya?clientId=${clientId}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded-md border border-line px-2 py-1 text-xs hover:bg-surface-muted"
-                  >
-                    Aç
-                  </a>
-                  {canWrite && (
-                    <button
-                      type="button"
-                      onClick={() => void sil(f)}
-                      className="rounded-md border border-danger/40 px-2 py-1 text-xs text-danger hover:bg-danger/5"
-                    >
-                      Sil
-                    </button>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
-          {/* SAYAÇ KOŞULSUZ — "sessiz kesme yok". */}
-          <p className="text-[11px] text-ink-muted">{liste.length} fatura yüklü</p>
-        </>
-      )}
-    </section>
+    </div>
   );
 }
 

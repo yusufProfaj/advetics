@@ -117,7 +117,8 @@ describe('satıra tıklayınca kapsam değişiyor', () => {
       const yakala = k.slice(i, k.indexOf('\n    }', i));
       expect(yakala, ad).toContain('setHata(');
       expect(yakala, ad).toContain('e.message');
-      expect(k, ad).toContain('role="alert"');
+      // Reklam Yöneticisi hatayı ortak şeritte (`Serit ton="hata"` = role alert) gösteriyor.
+      expect(k, ad).toMatch(/role="alert"|<Serit ton="hata"/);
     }
   });
 });

@@ -1,6 +1,5 @@
 import { sayfaWorkspaceId, workspaceSecimVerisi } from '@/lib/sayfa-workspace';
 import { WorkspaceGerekli } from '@/components/workspace-gerekli';
-import Link from 'next/link';
 import {
   LEAD_STATUSES,
   type GeriBeslemeAyari,
@@ -14,6 +13,11 @@ import { hasPermission, requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
 import { LeadTable } from '@/components/leads/lead-table';
 import { Son30Gun } from '@/components/leads/son-30-gun';
+import { hataMetni } from '@/lib/sayfa-yardimcilari';
+import { SayfaIskeleti } from '@/components/ui/sayfa-basligi';
+import { SayfaIcDuzen, SayfaIcMenu } from '@/components/ui/sayfa-ic-menu';
+import { BosDurum, HataDurumu, Serit } from '@/components/ui/hal';
+import { dugmeSinifi } from '@/components/ui/dugme';
 
 export const metadata = { title: 'Potansiyel Müşteriler · Advetics' };
 export const dynamic = 'force-dynamic';
@@ -65,9 +69,23 @@ export default async function LeadsPage({
 
   const sekme = first(params.sekme) === 'gonderimler' ? 'gonderimler' : 'kayitlar';
 
+  /*
+   * HATA YUTULMUYOR: kayıt listesi düşerse sunucunun cümlesi ekranda
+   * (`.catch(() => null)` "Kayıtlar yüklenemedi" diyordu ve nedenini
+   * söylemiyordu). Form listesi düşerse süzgeç kaybolmuyor, nedeni şeritte:
+   * boş bir form listesi "hiç form yok" diye okunurdu.
+   */
+  let listeHatasi: string | null = null;
+  let formHatasi: string | null = null;
   const [result, forms, ayar] = await Promise.all([
-    serverApiFetch<LeadListResult>(`/leads?${query.toString()}`).catch(() => null),
-    serverApiFetch<LeadFormRecord[]>(`/lead-forms?clientId=${clientId}`).catch(() => []),
+    serverApiFetch<LeadListResult>(`/leads?${query.toString()}`).catch((e: unknown) => {
+      listeHatasi = hataMetni(e);
+      return null;
+    }),
+    serverApiFetch<LeadFormRecord[]>(`/lead-forms?clientId=${clientId}`).catch((e: unknown): LeadFormRecord[] => {
+      formHatasi = hataMetni(e);
+      return [];
+    }),
     /*
      * META'YA BİLDİRİM AYARI (Paket E). Çağrı düşerse şerit "kapalı" DEMİYOR,
      * sunucunun cümlesini gösteriyor: açık ve çalışan bir gönderimi kapalı
@@ -79,120 +97,108 @@ export default async function LeadsPage({
     ),
   ]);
 
-  if (!result) {
-    return (
-      <div className="rounded-xl bg-danger-soft px-4 py-3 text-sm text-danger-strong ring-1 ring-inset ring-danger/30">
-        Kayıtlar yüklenemedi.
-      </div>
-    );
-  }
-
   const canWrite = hasPermission(session, 'lead.write');
   const canExport = hasPermission(session, 'lead.export');
   const canManage = hasPermission(session, 'connection.manage');
-  const total = Object.values(result.byStatus).reduce((a, b) => a + b, 0);
+  const total = result ? Object.values(result.byStatus).reduce((a, b) => a + b, 0) : 0;
   const sorunlu =
     ayar.durum === 'tamam' ? ayar.ayar.sayilar.reddedildi + ayar.ayar.sayilar.vazgecildi + ayar.ayar.sayilar.suresi_doldu : 0;
 
   return (
-    <div className="space-y-5">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="sayfa-baslik">Potansiyel Müşteriler</h1>
+    <SayfaIskeleti
+      bolum="Yönet"
+      baslik="Potansiyel Müşteriler"
+      /*
+        AÇIKLAMA KAPSAMI DA SÖYLÜYOR: ekran bir süre yalnızca panelde
+        üretilmiş formların kayıtlarını topluyordu ve cümle bunu hiç
+        yazmıyordu; Meta Ads Manager'da kurulmuş formların kayıtları hiç
+        gelmiyor, kullanıcı da sebebini bilmiyordu.
+      */
+      aciklama="Anlık formu dolduran kişiler. Meta’da kurulmuş formlar da dahil; yeni kayıtlar birkaç saniye içinde düşer."
+      eylemler={
+        <>
           {/*
-            AÇIKLAMA KAPSAMI DA SÖYLÜYOR.
-
-            Ekran bir süre yalnızca panelde üretilmiş formların kayıtlarını
-            topluyordu ve cümle bunu hiç yazmıyordu; Meta Ads Manager'da
-            kurulmuş formların kayıtları hiç gelmiyor, kullanıcı da sebebini
-            bilmiyordu.
-          */}
-          <p className="mt-0.5 text-sm text-ink-muted">
-            Anlık formu dolduran kişiler. Meta’da kurulmuş formlar da dahil; yeni
-            kayıtlar birkaç saniye içinde düşer.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-start gap-2">
-          {/*
-            DÜĞME LİSTE BOŞKEN DE DURUYOR — asıl gerekli olduğu an o.
-            Kayıt varken gizlemek, "gelmiyor" diyen kullanıcıya hiçbir şey
+            DÜĞME LİSTE BOŞKEN DE DURUYOR: asıl gerekli olduğu an o. Kayıt
+            varken gizlemek, "gelmiyor" diyen kullanıcıya hiçbir şey
             bırakmamak olurdu.
           */}
           {canWrite && <Son30Gun clientId={clientId} />}
+          {/* CSV BİRİNCİL EYLEM (onaylı taslak `#leads`): ekranın tek kırmızı düğmesi. */}
           {canExport && total > 0 && (
             <a
               href={`${process.env.NEXT_PUBLIC_API_URL ?? ''}/leads/export?${query.toString()}`}
-              className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink transition hover:bg-surface-sunken"
+              className={dugmeSinifi('birincil')}
             >
               CSV indir
             </a>
           )}
-        </div>
-      </header>
-
-      {/* VERİ HATTI SAĞLIĞI — liste boşken de görünüyor. */}
-      {result.reconciledRatio > 0.3 && (
-        <div className="rounded-xl bg-warn-soft px-4 py-3 text-sm text-warn-strong ring-1 ring-inset ring-warn/30">
-          <p className="font-semibold">Anlık bildirim gecikmeli çalışıyor olabilir.</p>
-          <p className="mt-1 text-xs">
-            Kayıtların %{Math.round(result.reconciledRatio * 100)}'i anlık bildirimle değil,
-            periyodik taramayla geldi. Kayıtlar kaybolmuyor ama saatler geç düşüyor —
-            Meta uygulama ayarlarındaki webhook aboneliğini kontrol et.
-          </p>
-        </div>
+        </>
+      }
+    >
+      {/* VERİ HATTI SAĞLIĞI: liste boşken de görünüyor. */}
+      {result && result.reconciledRatio > 0.3 && (
+        <Serit baslik="Anlık bildirim gecikmeli çalışıyor olabilir">
+          Kayıtların %{Math.round(result.reconciledRatio * 100)}'i anlık bildirimle değil, periyodik taramayla
+          geldi. Kayıtlar kaybolmuyor ama saatler geç düşüyor; Meta uygulama ayarlarındaki webhook aboneliğini
+          kontrol et.
+        </Serit>
       )}
 
-      {/* META'YA BİLDİRİM ŞERİDİ — liste boşken de görünüyor (ayar lead'den önce açılabilir). */}
+      {/* META'YA BİLDİRİM ŞERİDİ: liste boşken de görünüyor (ayar lead'den önce açılabilir). */}
       <GeriBeslemeSeridi clientId={clientId} sonuc={ayar} canManage={canManage} />
 
       {/*
-        İKİ SEKME, AYNI SAYFA: gönderim geçmişi lead'in kendisiyle aynı işin
-        parçası; ayrı sayfa "nereye nereden girdiğimi unutuyorum" şikâyetinin
-        sebebiydi. Adres üreticiden (`potansiyelAdresi`).
+        İKİ BÖLÜM, AYNI SAYFA, SAYFA İÇİ YAN MENÜDE (kullanıcı kararı
+        2026-10-14): gönderim geçmişi lead'in kendisiyle aynı işin parçası;
+        ayrı sayfa "nereye nereden girdiğimi unutuyorum" şikâyetinin
+        sebebiydi. Adres üreticiden (`potansiyelAdresi`): geri tuşu çalışsın.
       */}
-      <nav aria-label="Sekmeler" className="flex gap-1 border-b border-line">
-        <Link href={potansiyelAdresi(clientId, 'kayitlar')} aria-current={sekme === 'kayitlar' ? 'page' : undefined} className={sekmeSinifi(sekme === 'kayitlar')}>
-          Kayıtlar <span className="opacity-60">{total}</span>
-        </Link>
-        <Link href={potansiyelAdresi(clientId, 'gonderimler')} aria-current={sekme === 'gonderimler' ? 'page' : undefined} className={sekmeSinifi(sekme === 'gonderimler')}>
-          Meta’ya gönderimler
-          {sorunlu > 0 && <span className="ml-1 rounded-full bg-brand px-1.5 text-[10px] font-semibold text-white">{sorunlu}</span>}
-        </Link>
-      </nav>
-
-      {sekme === 'gonderimler' ? (
-        <GonderimlerSekmesi clientId={clientId} canWrite={canWrite} />
-      ) : total === 0 ? (
-        <div className="rounded-xl border border-dashed border-line bg-surface p-8 text-center">
-          <h2 className="text-sm font-semibold text-ink">Henüz kayıt yok</h2>
-          {/*
+      <SayfaIcDuzen
+        menu={
+          <SayfaIcMenu
+            etiket="Potansiyel Müşteriler bölümleri"
+            secili={sekme}
+            ogeler={[
+              { deger: 'kayitlar', etiket: 'Kayıtlar', sayi: total, href: potansiyelAdresi(clientId, 'kayitlar') },
+              {
+                deger: 'gonderimler',
+                etiket: 'Meta’ya gönderimler',
+                uyari: sorunlu > 0,
+                href: potansiyelAdresi(clientId, 'gonderimler'),
+              },
+            ]}
+          />
+        }
+      >
+        {formHatasi && sekme === 'kayitlar' && (
+          <Serit baslik="Form listesi okunamadı">{`Form süzgeci bu yüzden yok: ${formHatasi}`}</Serit>
+        )}
+        {sekme === 'gonderimler' ? (
+          <GonderimlerSekmesi clientId={clientId} canWrite={canWrite} />
+        ) : !result ? (
+          <HataDurumu baslik="Kayıtlar yüklenemedi" mesaj={listeHatasi ?? 'Sunucu sebep bildirmedi.'} />
+        ) : total === 0 ? (
+          /*
             ═══ BOŞ LİSTE SEBEBİNİ SÖYLÜYOR ═══
-
-            Burada tek bir cümle vardı ve DÖRT ayrı hâli aynı kefeye
-            koyuyordu: sayfa atanmamış · sayfa token'ı yok · tarama hiç
-            koşmamış · gerçekten kayıt yok. Üçünde yanlış, ve kullanıcının
-            bildirdiği belirti tam da buydu: "potansiyel müşteriler gelmiyor".
-            Sebep artık sunucudan geliyor.
-          */}
-          <p className="mx-auto mt-2 max-w-lg text-xs text-ink-muted">{result.emptyReason}</p>
-        </div>
-      ) : (
-        <LeadTable
-          initial={result}
-          clientId={clientId}
-          forms={forms}
-          activeStatus={status ?? null}
-          activeSearch={search ?? ''}
-          activeFormId={formId ?? null}
-          canWrite={canWrite}
-        />
-      )}
-    </div>
+            Burada tek bir cümle vardı ve DÖRT ayrı hâli aynı kefeye koyuyordu:
+            sayfa atanmamış · sayfa token'ı yok · tarama hiç koşmamış ·
+            gerçekten kayıt yok. Sebep artık sunucudan geliyor.
+          */
+          <BosDurum baslik="Henüz kayıt yok" neden={result.emptyReason} />
+        ) : (
+          <LeadTable
+            initial={result}
+            clientId={clientId}
+            forms={forms}
+            activeStatus={status ?? null}
+            activeSearch={search ?? ''}
+            activeFormId={formId ?? null}
+            canWrite={canWrite}
+          />
+        )}
+      </SayfaIcDuzen>
+    </SayfaIskeleti>
   );
-}
-
-function sekmeSinifi(aktif: boolean): string {
-  return `-mb-px border-b-2 px-3 py-2 text-sm font-medium transition ${aktif ? 'border-brand text-ink' : 'border-transparent text-ink-muted hover:text-ink'}`;
 }
 
 function first(v: string | string[] | undefined): string | undefined {

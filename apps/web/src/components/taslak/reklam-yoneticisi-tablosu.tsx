@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { Fragment, useEffect, useMemo, useState, useTransition, type ReactNode } from 'react';
 import type { Platform } from '@advetics/shared';
 import { PLATFORM_KISA_ADLARI, TUM_SIRKETLER } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
@@ -11,20 +11,35 @@ import { ReklamOnizleme } from '@/components/reklam-onizleme';
 import { onizlemeAcikMi } from '@/lib/onizleme-durumu';
 import { degisimHali } from '@/lib/degisim';
 import { TamEkranYukleniyor } from '@/components/yukleniyor';
+import { SuzgecMenusu } from '@/components/suzgec-menusu';
+import { AcilirMenu, IKON_TETIK, MenuOgesi } from '@/components/ui/acilir-menu';
+import { Dugme } from '@/components/ui/dugme';
+import { Serit } from '@/components/ui/hal';
+import { KART_BAGLANTISI } from '@/components/ui/kart';
+import { MetrikKutulari, type MetrikKutusu } from '@/components/ui/metrik-kutulari';
+import { DurumNoktasi } from '@/components/ui/rozet';
+import { SayfaIcDuzen, SayfaIcMenu, type IcMenuOgesi } from '@/components/ui/sayfa-ic-menu';
 import { basHarfler } from './genel-bakis-parcalari';
 import { VarlikEylemPenceresi } from './varlik-eylem-penceresi';
 import type { VarlikEylemHedefi } from '@/lib/varlik-eylemi';
-import s from './taslak.module.css';
 
 /*
  * ═══ REKLAM YÖNETİCİSİ — ONAYLANAN TASLAĞIN TEK TABLOSU ═══
  *
- * Taslakta tek kart: düzey sekmeleri, metrik kutuları, süzgeç çubuğu
- * (platform, durum, arama, "Önizlemeler" anahtarı), tablo, toplam satırı ve
- * sayaç. Her düzey (şirket, workspace, hesap, kampanya, reklam seti,
- * reklam) AYNI tabloyla çiziliyor; sunucu satırları tek biçime çeviriyor.
- * Google Ads'in tutarlılığı buradan geliyor: kullanıcı her düzeyde aynı
- * yerde aynı şeyi buluyor.
+ * Düzeyler (şirket, workspace, hesap, kampanya, reklam seti, reklam) SAYFA
+ * İÇİ YAN MENÜDE, sayılarıyla (kullanıcı kararı 2026-10-14, onaylı taslak
+ * `docs/marka/sayfa-taslaklari.html#yonetici`): üstteki düzey hapları
+ * "kontrolü karmaşık" yapıyordu. Sağda kırıntı hapları, metrik kutuları,
+ * şeritler ve TEK kart: süzgeç çipleri (platform, durum, arama,
+ * "Önizlemeler" anahtarı), tablo, toplam satırı ve sayaç. Her düzey AYNI
+ * tabloyla çiziliyor; sunucu satırları tek biçime çeviriyor. Google Ads'in
+ * tutarlılığı buradan geliyor: kullanıcı her düzeyde aynı yerde aynı şeyi
+ * buluyor.
+ *
+ * TABLO ORTAK `Tablo` BİLEŞENİYLE ÇİZİLMİYOR (BILESENLER "Grup 1 sapması"):
+ * burada sütun başlığı sıralama düğmesi ve reklam satırının altında açılan
+ * bir önizleme satırı var; ortak bileşen ikisini de taşımıyor. Hücre, başlık
+ * ve toplam sınıfları ortak bileşenle AYNI ölçüde yazıldı.
  */
 
 export type YmDuzey = 'sirket' | 'workspace' | 'hesap' | 'campaign' | 'ad_group' | 'ad';
@@ -52,9 +67,11 @@ export interface YmSatir {
     | null;
   /** Satır içi durdur/başlat; `null` = düğme yok (platform yazamıyor ya da durum belirsiz). */
   eylemHedefi: VarlikEylemHedefi | null;
+  /** Kampanya satırının Reklam Galerisi bağlantısı (o kampanyaya süzülmüş). ⋯ menüsünde. */
+  galeriHref?: string;
   /**
    * Paket F1 "Sitede" sütunu: Analytics'in bu kampanyaya bağladığı anahtar
-   * etkinlik ve takip etiketi. `null` = bu satır eşlenmedi (0 değil, "—").
+   * etkinlik ve takip etiketi. `null` = bu satır eşlenmedi (0 değil, "-").
    */
   sitede?: { anahtarEtkinlik: number; etiket: string | null } | null;
 }
@@ -95,6 +112,12 @@ const SUTUN: Record<YmDuzey, string> = {
   ad_group: 'Reklam seti',
   ad: 'Reklam',
 };
+/** Ada tıklayınca inilen düzeyin adı (⋯ menüsündeki "… aç"). */
+const ALT_DUZEY: Partial<Record<YmDuzey, string>> = {
+  hesap: 'Kampanyaları aç',
+  campaign: 'Reklam setlerini aç',
+  ad_group: 'Reklamları aç',
+};
 
 type Siralama = 'harcama' | 'gosterim' | 'tik' | 'to' | 'donusum' | 'dbm';
 const deger = (r: YmSatir, k: Siralama): number | null => {
@@ -115,15 +138,30 @@ const deger = (r: YmSatir, k: Siralama): number | null => {
   }
 };
 
-/** İyi/kötü kararı `degisimHali`nde: Genel Bakış'la tek kural. */
-function Degisim({ d, ters }: { d: number | null; ters?: boolean }) {
-  const h = degisimHali(d, ters);
-  if (!h) return null;
-  return (
-    <div className={`${s.metrikFark} ${h.iyi === null ? '' : h.iyi ? s.iyi : s.kotu}`} title={h.etiket}>
-      {h.metin} önceki döneme göre<span className="sr-only">, {h.etiket}</span>
-    </div>
-  );
+/*
+ * Ortak `Tablo` bileşeniyle aynı ölçüler: başlık 12 piksel ve BÜYÜK HARF
+ * YOK, sayı sağa yaslı ve hizalı rakam, satır hover'ı zemin tonu.
+ */
+const TH = 'whitespace-nowrap border-b border-line px-4 py-2.5 text-left text-12 font-semibold normal-case tracking-normal text-ink-muted';
+const TD = 'border-b border-line px-4 py-3 align-middle';
+const SAYI = 'text-right whitespace-nowrap font-baslik text-13 font-semibold tabular-nums';
+
+/**
+ * Metrik kutusunun fark satırı. İyi/kötü kararı `degisimHali`nde: Genel
+ * Bakış'la tek kural. İYİ YÖN GRİ, KÖTÜ YÖN KIRMIZI (taslak `.metrik
+ * small.kotu`): yeşil yalnız durum noktasında (kılavuz).
+ */
+function metrikKutusu(m: YmMetrik, i: number): MetrikKutusu {
+  const h = degisimHali(m.degisim, m.ters);
+  return {
+    anahtar: m.ad,
+    ad: m.ad,
+    deger: m.deger,
+    seri: i === 0 ? 1 : i === 1 ? 2 : undefined,
+    fark: h
+      ? { metin: `${h.metin} önceki döneme göre`, hal: h.iyi === false ? 'kotu' : 'notr', etiket: h.etiket }
+      : undefined,
+  };
 }
 
 export function ReklamYoneticisiTablosu({
@@ -137,6 +175,9 @@ export function ReklamYoneticisiTablosu({
   galeriHref,
   yazabilir,
   site,
+  kirinti,
+  seritler,
+  yerine,
 }: {
   duzey: YmDuzey;
   sekmeler: YmSekme[];
@@ -151,10 +192,20 @@ export function ReklamYoneticisiTablosu({
   yazabilir: boolean;
   /**
    * Paket F1: GA4 bağlıysa "Sitede" sütunu açılır. `hata` = Analytics
-   * okunamadı (platformun cümlesi); sütun yine açık, satırlar "—" ve
+   * okunamadı (platformun cümlesi); sütun yine açık, satırlar "-" ve
    * neden tablonun altında yazar (boş ile "alınamadı" ayrı).
    */
   site?: { hata: string | null; not: string | null } | null;
+  /** İçerik sütununun başı: kırıntı hapları (`HiyerarsiYolu`). */
+  kirinti?: ReactNode;
+  /** Metrik kutularının altındaki şeritler (izlenmeyen hesap, veri alınamadı). */
+  seritler?: ReactNode;
+  /**
+   * Tablo çizilemiyorsa yerine çizilen hâl (`BosDurum` nedeniyle ya da
+   * `HataDurumu` platformun cümlesiyle). Yan menü yine durur: kullanıcı
+   * başka bir düzeye geçebilmeli.
+   */
+  yerine?: ReactNode;
 }) {
   const router = useRouter();
   const yol = usePathname() ?? '/ads-explorer';
@@ -182,23 +233,6 @@ export function ReklamYoneticisiTablosu({
   const [ara, setAra] = useState('');
   const [durumSuz, setDurumSuz] = useState<'hepsi' | 'yayinda' | 'degil'>('hepsi');
   const [sira, setSira] = useState<{ k: Siralama; artan: boolean }>({ k: 'harcama', artan: false });
-  const [menu, setMenu] = useState<'platform' | 'durum' | null>(null);
-  const aracRef = useRef<HTMLDivElement>(null);
-
-  // Menü dışarı tıklayınca ve Esc ile kapanıyor.
-  useEffect(() => {
-    if (!menu) return;
-    const tik = (e: MouseEvent) => {
-      if (!aracRef.current?.contains(e.target as Node)) setMenu(null);
-    };
-    const tus = (e: KeyboardEvent) => e.key === 'Escape' && setMenu(null);
-    document.addEventListener('mousedown', tik);
-    document.addEventListener('keydown', tus);
-    return () => {
-      document.removeEventListener('mousedown', tik);
-      document.removeEventListener('keydown', tus);
-    };
-  }, [menu]);
 
   /*
    * ÖNİZLEMELER: anahtar KAPALIYKEN tek önizleme açık (kullanıcının eski
@@ -267,11 +301,20 @@ export function ReklamYoneticisiTablosu({
 
   const durumVar = satirlar.some((r) => r.durum !== null);
   /*
-   * EYLEM SÜTUNU yalnız yazabilen kullanıcıda ve en az bir satır eyleme
-   * uygunsa: müşteri hesabında ya da şirket/hesap düzeyinde boş bir sütun
-   * "burada bir şey yapılabilirdi" izlenimi bırakırdı.
+   * ⋯ MENÜSÜNÜN ÖĞELERİ: yalnız ÇALIŞAN eylemler. Taslaktaki "Kopyala",
+   * "Arşivle", "Platformda aç" panelde yazılmadı; hiçbir şey yapmayan bir
+   * menü öğesi çalışmayan bir özelliği vaat eder (BILESENLER § 4 "Ara ve
+   * Yardım" kararıyla aynı gerekçe).
    */
-  const eylemSutunu = yazabilir && satirlar.some((r) => r.eylemHedefi !== null);
+  const menuVar = (r: YmSatir) =>
+    (r.eylem?.tur === 'link' && ALT_DUZEY[duzey] !== undefined) || Boolean(r.galeriHref) || r.eylem?.tur === 'onizle';
+  /*
+   * EYLEM SÜTUNU yalnız yapılacak bir şey varsa: müşteri hesabında ya da
+   * şirket düzeyinde boş bir sütun "burada bir şey yapılabilirdi" izlenimi
+   * bırakırdı. Durdur/Başlat `budget.write` ister; ⋯ gezinmedir, herkese açık.
+   */
+  const durdurVar = yazabilir && satirlar.some((r) => r.eylemHedefi !== null);
+  const eylemSutunu = durdurVar || satirlar.some(menuVar);
   // "Sitede" sütunu YALNIZ GA4 bağlıysa (MIMARI § 3.4): bağlı değilse sütun yok, boş sütun değil.
   const siteSutunu = site !== undefined && site !== null;
   const sutunSayisi = 8 + (eylemSutunu ? 1 : 0) + (siteSutunu ? 1 : 0);
@@ -311,14 +354,14 @@ export function ReklamYoneticisiTablosu({
     d > 0 && b ? formatMoney(((h * 100n) / BigInt(Math.round(d * 100))).toString(), b) : '—';
 
   const Baslik = ({ k, ad }: { k: Siralama; ad: string }) => (
-    <th aria-sort={sira.k === k ? (sira.artan ? 'ascending' : 'descending') : undefined}>
+    <th scope="col" className={`${TH} text-right`} aria-sort={sira.k === k ? (sira.artan ? 'ascending' : 'descending') : undefined}>
       <button
         type="button"
         onClick={() => setSira((x) => ({ k, artan: x.k === k ? !x.artan : k === 'dbm' }))}
-        style={{ fontWeight: 700 }}
+        className={`inline-flex items-center gap-1 font-semibold hover:text-ink ${sira.k === k ? 'text-ink' : ''}`}
       >
         {ad}
-        {sira.k === k && <span className={s.siraOk}>{sira.artan ? '↑' : '↓'}</span>}
+        {sira.k === k && <span aria-hidden>{sira.artan ? '↑' : '↓'}</span>}
       </button>
     </th>
   );
@@ -326,318 +369,360 @@ export function ReklamYoneticisiTablosu({
   const secPlatform = platformSecenekleri.find((p) => p.secili)?.ad ?? 'Tümü';
   const durumAdi = { hepsi: 'Tümü', yayinda: 'Yayında', degil: 'Yayında değil' }[durumSuz];
 
+  /*
+   * DÜZEY YAN MENÜSÜ. Üst düzeyler kapsam değiştiriyor (oturumda), alt
+   * düzeyler adresteki seviyeyi. Gidilemeyen düzey soluk ve NEDENİNİ
+   * `title`da söylüyor (`kapaliNedeni`).
+   */
+  const menuOgeleri: IcMenuOgesi[] = sekmeler.map((t) => ({
+    deger: t.anahtar,
+    etiket: t.ad,
+    sayi: t.sayi ?? undefined,
+    href: t.hedef.tur === 'link' ? t.hedef.href : undefined,
+    kapaliNedeni: t.hedef.tur === 'kapali' ? t.hedef.neden : undefined,
+  }));
+  function duzeySec(anahtar: string) {
+    const t = sekmeler.find((x) => x.anahtar === anahtar);
+    // AJANS KAPSAMI ÖZEL DEĞERLE (`TUM_SIRKETLER`), `null` ile DEĞİL:
+    // `null` hata vermeden kabul edilip hiçbir şey değiştirmiyordu ve
+    // sekme tıklanınca sessizce olduğu yerde kalıyordu (canlı denetim).
+    if (t?.hedef.tur === 'org') void kapsamaGec('org', TUM_SIRKETLER, 'Tüm şirketler');
+    else if (t?.hedef.tur === 'client') void kapsamaGec('client', null, 'Tüm workspace’ler');
+  }
+
   return (
-    <section className={`${s.kart} ${s.gir}`}>
+    <SayfaIcDuzen
+      menu={<SayfaIcMenu etiket="Reklam düzeyi" ogeler={menuOgeleri} secili={duzey} onSec={duzeySec} />}
+    >
       {(gecilen ?? yenileniyor) && (
         <TamEkranYukleniyor mesaj={`${gecilen ?? yenileniyor} görünümüne geçiliyor…`} />
       )}
 
-      <div className={s.duzeyler} role="tablist" aria-label="Düzey">
-        {sekmeler.map((t) => {
-          const secili = t.hedef.tur === 'aktif';
-          const icerik = (
-            <>
-              {t.ad}
-              {t.sayi !== null && <span className={`${s.duzeySayi} ${s.num}`}>{t.sayi}</span>}
-            </>
-          );
-          if (t.hedef.tur === 'link') {
-            return (
-              <Link key={t.anahtar} role="tab" aria-selected={false} className={s.duzey} href={t.hedef.href}>
-                {icerik}
-              </Link>
-            );
-          }
-          const kapali = t.hedef.tur === 'kapali';
-          return (
-            <button
-              key={t.anahtar}
-              type="button"
-              role="tab"
-              aria-selected={secili}
-              aria-disabled={kapali || undefined}
-              title={kapali && t.hedef.tur === 'kapali' ? t.hedef.neden : undefined}
-              className={s.duzey}
-              onClick={() => {
-                // AJANS KAPSAMI ÖZEL DEĞERLE (`TUM_SIRKETLER`), `null` ile DEĞİL:
-                // `null` hata vermeden kabul edilip hiçbir şey değiştirmiyordu ve
-                // sekme tıklanınca sessizce olduğu yerde kalıyordu (canlı denetim).
-                if (t.hedef.tur === 'org') void kapsamaGec('org', TUM_SIRKETLER, 'Tüm şirketler');
-                else if (t.hedef.tur === 'client') void kapsamaGec('client', null, 'Tüm workspace’ler');
-              }}
-            >
-              {icerik}
-            </button>
-          );
-        })}
-      </div>
+      {kirinti}
 
-      {metrikler && (
-        <div className={s.metrikler}>
-          {metrikler.map((m, i) => (
-            <div key={m.ad} className={`${s.metrik} ${i === 0 ? s.metrikVurgu : ''}`}>
-              <div className={s.metrikAd}>{m.ad}</div>
-              <div className={`${s.metrikDeger} ${s.num}`}>{m.deger}</div>
-              <Degisim d={m.degisim} ters={m.ters} />
-            </div>
-          ))}
-        </div>
-      )}
+      {metrikler && <MetrikKutulari kutular={metrikler.map(metrikKutusu)} />}
 
-      <div className={s.arac} ref={aracRef}>
-        <span className={s.cipMenu}>
-          <button
-            type="button"
-            className={s.cip}
-            aria-expanded={menu === 'platform'}
-            onClick={() => setMenu((m) => (m === 'platform' ? null : 'platform'))}
-          >
-            Platform: <b>{secPlatform}</b> ▾
-          </button>
-          <span className={`${s.menu} ${menu === 'platform' ? s.menuAcik : ''}`} inert={menu !== 'platform'}>
-            {platformSecenekleri.map((p) => (
-              <Link key={p.ad} href={p.href} aria-current={p.secili ? 'true' : undefined} onClick={() => setMenu(null)}>
-                {p.ad}
-              </Link>
-            ))}
-          </span>
-        </span>
-        {durumVar && (
-          <span className={s.cipMenu}>
-            <button
-              type="button"
-              className={s.cip}
-              aria-expanded={menu === 'durum'}
-              onClick={() => setMenu((m) => (m === 'durum' ? null : 'durum'))}
-            >
-              Durum: <b>{durumAdi}</b> ▾
-            </button>
-            <span className={`${s.menu} ${menu === 'durum' ? s.menuAcik : ''}`} inert={menu !== 'durum'}>
-              {(['hepsi', 'yayinda', 'degil'] as const).map((d) => (
-                <button
-                  key={d}
-                  type="button"
-                  aria-current={durumSuz === d ? 'true' : undefined}
-                  onClick={() => {
-                    setDurumSuz(d);
-                    setMenu(null);
-                  }}
-                >
-                  {{ hepsi: 'Tümü', yayinda: 'Yayında', degil: 'Yayında değil' }[d]}
-                </button>
-              ))}
-            </span>
-          </span>
-        )}
-        <label className={s.ara}>
-          <span aria-hidden>⌕</span>
-          <input
-            type="search"
-            value={ara}
-            onChange={(e) => setAra(e.target.value)}
-            placeholder="Ada göre ara"
-            aria-label={`${SUTUN[duzey]} adına göre ara`}
-          />
-        </label>
-        <span className={s.bosluk} />
-        <button
-          type="button"
-          role="switch"
-          className={s.anahtar}
-          aria-checked={reklamda && hepsiAcik}
-          aria-disabled={!reklamda || undefined}
-          title={reklamda ? 'Bütün önizlemeleri aç ya da kapat' : 'Reklam düzeyinde açılır'}
-          onClick={hepsiniDegistir}
-        >
-          <span className={s.anahtarRay} aria-hidden />
-          Önizlemeler
-        </button>
-      </div>
+      {seritler}
 
       {hata && (
-        <p role="alert" className={s.hataMetin}>
+        <Serit ton="hata" baslik="Görünüm değiştirilemedi">
           {hata}
-        </p>
+        </Serit>
       )}
 
-      {satirlar.length === 0 ? (
-        <p className={s.bosMetin}>Bu dönemde bu düzeyde veri yok.</p>
-      ) : (
-        <div className={s.tabloSar}>
-          <table className={`${s.tablo} ${s.ymTablo}`}>
-            <thead>
-              <tr>
-                <th>{SUTUN[duzey]}</th>
-                <th>Mecra</th>
-                <Baslik k="harcama" ad="Harcama" />
-                <Baslik k="gosterim" ad="Gösterim" />
-                <Baslik k="tik" ad="Tıklama" />
-                <Baslik k="to" ad="Tıklama oranı" />
-                <Baslik k="donusum" ad="Dönüşüm" />
-                <Baslik k="dbm" ad="Dönüşüm başı maliyet" />
-                {siteSutunu && <th title="Analytics'in bu kampanyaya bağladığı anahtar etkinlik">Sitede</th>}
-                {eylemSutunu && <th>Eylem</th>}
-              </tr>
-            </thead>
-            <tbody key={`${duzey}-${satirlar.length}`} className={s.yenilenen}>
-              {gorunen.length === 0 && (
-                <tr>
-                  <td colSpan={sutunSayisi} className={s.bosMetin} style={{ textAlign: 'center' }}>
-                    Süzgece uyan satır yok.
-                  </td>
-                </tr>
-              )}
-              {gorunen.map((r) => {
-                const acik = reklamda && acikMi(r.id);
-                const adOgesi =
-                  r.eylem?.tur === 'link' ? (
-                    <Link href={r.eylem.href} title={r.ad}>
-                      {r.ad}
-                    </Link>
-                  ) : r.eylem ? (
-                    <button
-                      type="button"
-                      title={r.ad}
-                      aria-expanded={r.eylem.tur === 'onizle' ? acik : undefined}
-                      onClick={() => {
-                        const e = r.eylem!;
-                        if (e.tur === 'onizle') satiriDegistir(r.id);
-                        else if (e.tur === 'org' || e.tur === 'client') void kapsamaGec(e.tur, e.id, r.ad);
-                      }}
-                    >
-                      {r.ad}
-                    </button>
-                  ) : (
-                    <span title={r.ad}>{r.ad}</span>
-                  );
-                return (
-                  <Fragment key={r.id}>
+      {yerine ?? (
+        <section className="min-w-0 rounded-kart border border-line bg-surface">
+          <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-3">
+            <SuzgecMenusu
+              etiket="Platform"
+              deger={secPlatform}
+              secili={secPlatform !== 'Tümü'}
+              kaldirHref={platformSecenekleri[0]?.href}
+              secenekler={platformSecenekleri.map((p) => ({ href: p.href, ad: p.ad, aktif: p.secili }))}
+            />
+            {durumVar && (
+              <SuzgecMenusu
+                etiket="Durum"
+                deger={durumAdi}
+                secili={durumSuz !== 'hepsi'}
+                onKaldir={() => setDurumSuz('hepsi')}
+                secenekler={(['hepsi', 'yayinda', 'degil'] as const).map((d) => ({
+                  ad: { hepsi: 'Tümü', yayinda: 'Yayında', degil: 'Yayında değil' }[d],
+                  aktif: durumSuz === d,
+                  onSec: () => setDurumSuz(d),
+                }))}
+              />
+            )}
+            <label className="flex h-8 min-w-0 flex-[0_1_240px] items-center gap-2 rounded-full border border-line-strong bg-surface px-3">
+              <span aria-hidden className="text-ink-soluk">
+                ⌕
+              </span>
+              <input
+                type="search"
+                value={ara}
+                onChange={(e) => setAra(e.target.value)}
+                placeholder="Ada göre ara"
+                aria-label={`${SUTUN[duzey]} adına göre ara`}
+                className="min-w-0 flex-1 border-0 bg-transparent text-13 text-ink outline-none placeholder:text-ink-soluk"
+              />
+            </label>
+            <span className="flex-1" />
+            <button
+              type="button"
+              role="switch"
+              aria-checked={reklamda && hepsiAcik}
+              aria-disabled={!reklamda || undefined}
+              title={reklamda ? 'Bütün önizlemeleri aç ya da kapat' : 'Reklam düzeyinde açılır'}
+              onClick={hepsiniDegistir}
+              className="inline-flex items-center gap-2.5 text-13 font-semibold text-ink aria-disabled:cursor-not-allowed aria-disabled:opacity-45"
+            >
+              <span
+                aria-hidden
+                className={`relative h-5 w-9 shrink-0 rounded-full transition-colors motion-reduce:transition-none after:absolute after:left-0.5 after:top-0.5 after:h-4 after:w-4 after:rounded-full after:bg-surface after:transition-transform motion-reduce:after:transition-none ${
+                  reklamda && hepsiAcik ? 'bg-ink after:translate-x-4' : 'bg-line-strong'
+                }`}
+              />
+              Önizlemeler
+            </button>
+          </div>
+
+          {satirlar.length === 0 ? (
+            <p className="m-0 px-4 py-8 text-center text-13 text-ink-muted">Bu dönemde bu düzeyde veri yok.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-[13.5px]" aria-label={`${SUTUN[duzey]} tablosu`}>
+                <thead>
+                  <tr>
+                    <th scope="col" className={TH}>
+                      {SUTUN[duzey]}
+                    </th>
+                    <th scope="col" className={TH}>
+                      Mecra
+                    </th>
+                    <Baslik k="harcama" ad="Harcama" />
+                    <Baslik k="gosterim" ad="Gösterim" />
+                    <Baslik k="tik" ad="Tıklama" />
+                    <Baslik k="to" ad="Tıklama oranı" />
+                    <Baslik k="donusum" ad="Dönüşüm" />
+                    <Baslik k="dbm" ad="Dönüşüm başı maliyet" />
+                    {siteSutunu && (
+                      <th scope="col" className={`${TH} text-right`} title="Analytics'in bu kampanyaya bağladığı anahtar etkinlik">
+                        Sitede
+                      </th>
+                    )}
+                    {eylemSutunu && (
+                      <th scope="col" className={`${TH} text-right`}>
+                        Eylem
+                      </th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody key={`${duzey}-${satirlar.length}`}>
+                  {gorunen.length === 0 && (
                     <tr>
-                      <td>
-                        <div className={s.adHucre}>
-                          {reklamda && (
-                            <button
-                              type="button"
-                              className={s.acKapa}
-                              aria-expanded={acik}
-                              aria-label={acik ? 'Önizlemeyi kapat' : 'Önizlemeyi aç'}
-                              onClick={() => satiriDegistir(r.id)}
-                            >
-                              <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden>
-                                <path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                              </svg>
-                            </button>
-                          )}
-                          {r.durum && (
-                            <span
-                              className={`${s.nokta} ${r.durum.tur === 'durdu' ? s.noktaDurdu : r.durum.tur === 'hata' ? s.noktaHata : ''}`}
-                              title={r.durum.ad}
-                            />
-                          )}
-                          {r.karo && <span className={s.karo}>{basHarfler(r.ad)}</span>}
-                          <div className={s.adMetin}>
-                            {adOgesi}
-                            {r.alt && (
-                              <small data-ton={r.altTon} title={r.alt}>
-                                {r.alt}
-                              </small>
-                            )}
-                          </div>
-                        </div>
+                      <td colSpan={sutunSayisi} className={`${TD} py-8 text-center text-13 text-ink-muted`}>
+                        Süzgece uyan satır yok.
                       </td>
-                      <td>
-                        <span className={s.mecra}>
-                          {r.mecralar.map((m) => (
-                            <span key={m}>{PLATFORM_KISA_ADLARI[m]}</span>
-                          ))}
-                        </span>
-                      </td>
-                      <td className={s.num}>{para(r.spendMicros, r.paraBirimi)}</td>
-                      <td className={s.num}>{formatNumber(r.impressions)}</td>
-                      <td className={s.num}>{formatNumber(r.clicks)}</td>
-                      <td className={s.num}>{r.impressions > 0 ? formatPercent((r.clicks / r.impressions) * 100) : '—'}</td>
-                      <td className={s.num}>{formatNumber(r.conversions)}</td>
-                      <td className={s.num}>{dbm(BigInt(r.spendMicros), r.conversions, r.paraBirimi)}</td>
-                      {siteSutunu && (
-                        <td className={s.num}>
-                          {r.sitede ? formatNumber(r.sitede.anahtarEtkinlik) : '—'}
-                          {r.sitede?.etiket && <span className={s.siteEtiketi}>{r.sitede.etiket}</span>}
-                        </td>
-                      )}
-                      {eylemSutunu && (
-                        <td>
-                          {r.eylemHedefi && (
-                            <button
-                              type="button"
-                              className={s.cip}
-                              onClick={() => setEylemHedefi(r.eylemHedefi)}
-                              aria-label={`${r.ad}: ${r.eylemHedefi.yayinda ? 'durdur' : 'başlat'}`}
-                            >
-                              {r.eylemHedefi.yayinda ? 'Durdur' : 'Başlat'}
-                            </button>
-                          )}
-                        </td>
-                      )}
                     </tr>
-                    {reklamda && (acilmis.has(r.id) || acik) && (
-                      <tr className={`${s.onizlemeSatir} ${acik ? s.onizlemeAcik : ''}`}>
-                        <td colSpan={sutunSayisi}>
-                          <div className={`${s.kap} ${acik ? s.kapAcik : ''}`}>
-                            <div inert={!acik}>
-                              <div className={s.onz}>
-                                <ReklamOnizleme
-                                  adId={r.id}
-                                  from={aralik.from}
-                                  to={aralik.to}
-                                  currency={r.paraBirimi ?? 'TRY'}
+                  )}
+                  {gorunen.map((r) => {
+                    const acik = reklamda && acikMi(r.id);
+                    const adSinifi =
+                      'max-w-[22rem] truncate text-left font-semibold text-ink no-underline hover:text-brand-strong hover:underline';
+                    const adOgesi =
+                      r.eylem?.tur === 'link' ? (
+                        <Link href={r.eylem.href} title={r.ad} className={`block ${adSinifi}`}>
+                          {r.ad}
+                        </Link>
+                      ) : r.eylem ? (
+                        <button
+                          type="button"
+                          title={r.ad}
+                          className={`block ${adSinifi}`}
+                          aria-expanded={r.eylem.tur === 'onizle' ? acik : undefined}
+                          onClick={() => {
+                            const e = r.eylem!;
+                            if (e.tur === 'onizle') satiriDegistir(r.id);
+                            else if (e.tur === 'org' || e.tur === 'client') void kapsamaGec(e.tur, e.id, r.ad);
+                          }}
+                        >
+                          {r.ad}
+                        </button>
+                      ) : (
+                        <span title={r.ad} className="block max-w-[22rem] truncate font-semibold text-ink">
+                          {r.ad}
+                        </span>
+                      );
+                    return (
+                      <Fragment key={r.id}>
+                        <tr className="hover:bg-surface-muted">
+                          <td className={TD}>
+                            <div className="flex min-w-[220px] items-center gap-2.5">
+                              {reklamda && (
+                                <button
+                                  type="button"
+                                  aria-expanded={acik}
+                                  aria-label={acik ? 'Önizlemeyi kapat' : 'Önizlemeyi aç'}
+                                  onClick={() => satiriDegistir(r.id)}
+                                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink"
+                                >
+                                  <svg
+                                    width="12"
+                                    height="12"
+                                    viewBox="0 0 12 12"
+                                    aria-hidden
+                                    className={`transition-transform motion-reduce:transition-none ${acik ? 'rotate-90' : ''}`}
+                                  >
+                                    <path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                                  </svg>
+                                </button>
+                              )}
+                              {r.durum && (
+                                <DurumNoktasi
+                                  hal={r.durum.tur === 'yayinda' ? 'ok' : r.durum.tur === 'hata' ? 'hata' : 'dur'}
+                                  etiket={r.durum.ad}
                                 />
+                              )}
+                              {r.karo && (
+                                <span
+                                  aria-hidden
+                                  className="grid h-8 w-8 shrink-0 place-items-center rounded-alan bg-ink font-baslik text-12 font-extrabold text-surface"
+                                >
+                                  {basHarfler(r.ad)}
+                                </span>
+                              )}
+                              <div className="min-w-0">
+                                {adOgesi}
+                                {r.alt && (
+                                  <small
+                                    data-ton={r.altTon}
+                                    title={r.alt}
+                                    className={`block max-w-[22rem] truncate text-12 ${r.altTon ? 'text-danger-strong' : 'text-ink-muted'}`}
+                                  >
+                                    {r.alt}
+                                  </small>
+                                )}
                               </div>
                             </div>
-                          </div>
+                          </td>
+                          <td className={`${TD} whitespace-nowrap text-13 text-ink-muted`}>
+                            {r.mecralar.map((m) => PLATFORM_KISA_ADLARI[m]).join(' · ')}
+                          </td>
+                          <td className={`${TD} ${SAYI}`}>{para(r.spendMicros, r.paraBirimi)}</td>
+                          <td className={`${TD} ${SAYI}`}>{formatNumber(r.impressions)}</td>
+                          <td className={`${TD} ${SAYI}`}>{formatNumber(r.clicks)}</td>
+                          <td className={`${TD} ${SAYI}`}>
+                            {r.impressions > 0 ? formatPercent((r.clicks / r.impressions) * 100) : '—'}
+                          </td>
+                          <td className={`${TD} ${SAYI}`}>{formatNumber(r.conversions)}</td>
+                          <td className={`${TD} ${SAYI}`}>{dbm(BigInt(r.spendMicros), r.conversions, r.paraBirimi)}</td>
+                          {siteSutunu && (
+                            <td className={`${TD} ${SAYI}`}>
+                              {r.sitede ? formatNumber(r.sitede.anahtarEtkinlik) : '—'}
+                              {r.sitede?.etiket && (
+                                <small className="block text-11 font-normal text-ink-muted">{r.sitede.etiket}</small>
+                              )}
+                            </td>
+                          )}
+                          {eylemSutunu && (
+                            <td className={`${TD} whitespace-nowrap text-right`}>
+                              <span className="inline-flex items-center gap-1">
+                                {yazabilir && r.eylemHedefi && (
+                                  <Dugme
+                                    ton="ikincil"
+                                    boyut="kucuk"
+                                    onClick={() => setEylemHedefi(r.eylemHedefi)}
+                                    aria-label={`${r.ad}: ${r.eylemHedefi.yayinda ? 'durdur' : 'başlat'}`}
+                                  >
+                                    {r.eylemHedefi.yayinda ? 'Durdur' : 'Başlat'}
+                                  </Dugme>
+                                )}
+                                {menuVar(r) && (
+                                  <AcilirMenu
+                                    etiket={`${r.ad}: diğer eylemler`}
+                                    hizala="sag"
+                                    genislik="w-56"
+                                    tetik={({ acik: menuAcik, ...o }) => (
+                                      <button type="button" {...o} aria-label="Diğer eylemler" className={IKON_TETIK}>
+                                        <span aria-hidden className="text-15 leading-none">
+                                          ⋯
+                                        </span>
+                                      </button>
+                                    )}
+                                  >
+                                    {r.eylem?.tur === 'link' && ALT_DUZEY[duzey] && (
+                                      <MenuOgesi href={r.eylem.href}>{ALT_DUZEY[duzey]}</MenuOgesi>
+                                    )}
+                                    {r.eylem?.tur === 'onizle' && (
+                                      <MenuOgesi onClick={() => satiriDegistir(r.id)}>
+                                        {acik ? 'Önizlemeyi kapat' : 'Önizlemeyi aç'}
+                                      </MenuOgesi>
+                                    )}
+                                    {r.galeriHref && <MenuOgesi href={r.galeriHref}>Reklam Galerisi'nde gör</MenuOgesi>}
+                                  </AcilirMenu>
+                                )}
+                              </span>
+                            </td>
+                          )}
+                        </tr>
+                        {reklamda && (acilmis.has(r.id) || acik) && (
+                          <tr>
+                            <td colSpan={sutunSayisi} className={`p-0 ${acik ? 'border-b border-line' : ''}`}>
+                              <div
+                                className={`grid transition-[grid-template-rows] duration-300 ease-[var(--ease-out)] motion-reduce:transition-none ${
+                                  acik ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+                                }`}
+                              >
+                                <div className="min-h-0 overflow-hidden">
+                                  <div inert={!acik}>
+                                    <div className="bg-surface-muted px-4 py-4">
+                                      <ReklamOnizleme
+                                        adId={r.id}
+                                        from={aralik.from}
+                                        to={aralik.to}
+                                        currency={r.paraBirimi ?? 'TRY'}
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+                {gorunen.length > 0 && (
+                  <tfoot>
+                    <tr className="bg-surface-muted font-bold">
+                      <td className={TD}>Toplam: mevcut görünüm</td>
+                      <td className={TD} />
+                      <td className={`${TD} ${SAYI}`}>{para(T.h.toString(), tekBirim)}</td>
+                      <td className={`${TD} ${SAYI}`}>{formatNumber(T.g)}</td>
+                      <td className={`${TD} ${SAYI}`}>{formatNumber(T.t)}</td>
+                      <td className={`${TD} ${SAYI}`}>{T.g > 0 ? formatPercent((T.t / T.g) * 100) : '—'}</td>
+                      <td className={`${TD} ${SAYI}`}>{formatNumber(T.d)}</td>
+                      <td className={`${TD} ${SAYI}`}>{dbm(T.h, T.d, tekBirim)}</td>
+                      {siteSutunu && (
+                        <td className={`${TD} ${SAYI}`}>
+                          {formatNumber(gorunen.reduce((a, r) => a + (r.sitede?.anahtarEtkinlik ?? 0), 0))}
                         </td>
-                      </tr>
-                    )}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-            {gorunen.length > 0 && (
-              <tfoot>
-                <tr className={s.toplam}>
-                  <td>Toplam: mevcut görünüm</td>
-                  <td />
-                  <td className={s.num}>{para(T.h.toString(), tekBirim)}</td>
-                  <td className={s.num}>{formatNumber(T.g)}</td>
-                  <td className={s.num}>{formatNumber(T.t)}</td>
-                  <td className={s.num}>{T.g > 0 ? formatPercent((T.t / T.g) * 100) : '—'}</td>
-                  <td className={s.num}>{formatNumber(T.d)}</td>
-                  <td className={s.num}>{dbm(T.h, T.d, tekBirim)}</td>
-                  {siteSutunu && <td className={s.num}>{formatNumber(gorunen.reduce((a, r) => a + (r.sitede?.anahtarEtkinlik ?? 0), 0))}</td>}
-                  {eylemSutunu && <td />}
-                </tr>
-              </tfoot>
-            )}
-          </table>
-        </div>
-      )}
+                      )}
+                      {eylemSutunu && <td className={TD} />}
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          )}
 
-      {siteSutunu && (site.hata || site.not) && (
-        <p className={site.hata ? s.hataMetin : s.notKucuk} role={site.hata ? 'alert' : undefined}>
-          {site.hata ? `Sitede sütunu alınamadı: ${site.hata}` : site.not}
-        </p>
+          {siteSutunu && (site.hata || site.not) && (
+            <p
+              className={`m-0 px-4 pt-3 text-12 ${site.hata ? 'text-danger-strong' : 'text-ink-muted'}`}
+              role={site.hata ? 'alert' : undefined}
+            >
+              {site.hata ? `Sitede sütunu alınamadı: ${site.hata}` : site.not}
+            </p>
+          )}
+
+          <div className="flex flex-wrap items-center justify-end gap-4 px-4 py-2.5 text-[12.5px] text-ink-muted">
+            <Link href={galeriHref} className={`mr-auto ${KART_BAGLANTISI}`}>
+              Reklam Galerisi (arama, sorunlu reklamlar) →
+            </Link>
+            <span className="tabular-nums">
+              {gorunen.length < satirlar.length
+                ? `${gorunen.length} / ${satirlar.length} ${BIRIM[duzey]} (süzgeçli)`
+                : satirlar.length === 0
+                  ? `0 / 0 ${BIRIM[duzey]}`
+                  : `1 - ${satirlar.length} / ${satirlar.length} ${BIRIM[duzey]}`}
+              {kesmeNotu ? ` · ${kesmeNotu}` : ''}
+            </span>
+          </div>
+        </section>
       )}
 
       <VarlikEylemPenceresi hedef={eylemHedefi} onKapat={() => setEylemHedefi(null)} />
-
-      <div className={s.altBilgi}>
-        <Link href={galeriHref}>Reklam Galerisi (arama, sorunlu reklamlar) →</Link>
-        <span className={s.num}>
-          {gorunen.length < satirlar.length
-            ? `${gorunen.length} / ${satirlar.length} ${BIRIM[duzey]} (süzgeçli)`
-            : `1 - ${satirlar.length} / ${satirlar.length} ${BIRIM[duzey]}`}
-          {kesmeNotu ? ` · ${kesmeNotu}` : ''}
-        </span>
-      </div>
-    </section>
+    </SayfaIcDuzen>
   );
 }

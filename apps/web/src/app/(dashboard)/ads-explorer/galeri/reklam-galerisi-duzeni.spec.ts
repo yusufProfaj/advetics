@@ -61,13 +61,15 @@ describe('süzgeçler', () => {
   it('KRİTİK: uzun ad satırı kaplamıyor ama TAM ad duruyor', () => {
     // Kampanya adları 80 karakteri bulabiliyor; kırpmak bilgiyi gizlemek
     // değil, ertelemek. Tam ad `title` ile hem düğmede hem seçenekte.
-    expect(MENU).toContain('min-w-0 truncate font-medium');
-    expect(MENU).toContain('title={deger}');
+    expect(MENU).toContain('<b className="min-w-0 truncate" title={deger}>');
     expect(MENU).toContain('title={s.ad}');
   });
 
   it('seçili seçenek ekran okuyucuya da bildiriliyor', () => {
-    expect(MENU).toContain("aria-current={s.aktif ? 'true' : undefined}");
+    // 2026-10-14: seçenekler ortak `MenuOgesi`; seçili öğe `aria-current` orada.
+    expect(MENU).toContain('secili={s.aktif}');
+    const ortak = yorumsuz(join(__dirname, '..', '..', '..', '..', 'components', 'ui', 'acilir-menu.tsx'));
+    expect(ortak).toContain("aria-current={secili ? 'true' : undefined}");
   });
 
   it('KRİTİK: "Sorunlu" menüye gömülmüyor, görünür bir düğme', () => {
@@ -83,8 +85,11 @@ describe('süzgeçler', () => {
   });
 
   it('menü dışarı tıklayınca ve Esc ile kapanıyor', () => {
-    expect(MENU).toContain("document.addEventListener('pointerdown', disari)");
-    expect(MENU).toContain("e.key === 'Escape'");
+    // 2026-10-14: açılır katman ortak `AcilirMenu` (DOM'da kalır, ok tuşları, Esc).
+    expect(MENU).toContain('<AcilirMenu');
+    const ortak = yorumsuz(join(__dirname, '..', '..', '..', '..', 'components', 'ui', 'acilir-menu.tsx'));
+    expect(ortak).toContain("document.addEventListener('mousedown', disari)");
+    expect(ortak).toContain("e.key === 'Escape'");
   });
 });
 
@@ -98,8 +103,10 @@ describe('süzgeç toplamı', () => {
     expect(SAYFA).toContain('function Total(');
     const bas = SAYFA.indexOf('function Total(');
     const govde = SAYFA.slice(bas, SAYFA.indexOf('\nfunction ', bas + 1));
-    expect(govde).toContain('text-base font-semibold tabular-nums');
-    expect(govde).toContain('uppercase tracking-wider text-ink-muted');
+    // 2026-10-14: metrik kutusu ölçüsü (Montserrat, hizalı rakam); etiket BÜYÜK HARF DEĞİL.
+    expect(govde).toContain('font-baslik text-[22px] font-extrabold');
+    expect(govde).toContain('tabular-nums');
+    expect(govde).not.toMatch(/\buppercase\b/);
   });
 });
 

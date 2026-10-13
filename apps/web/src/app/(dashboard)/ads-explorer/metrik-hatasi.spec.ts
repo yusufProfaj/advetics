@@ -33,7 +33,7 @@ describe('KRİTİK: özet hatası ekranda yazıyor', () => {
 
   it('sebep EKRANA basılıyor', () => {
     // Yakalayıp göstermemek, yakalamamakla aynı şey.
-    expect(KAYNAK).toContain('{ozetHatasi && <span className="ml-1">{ozetHatasi}</span>}');
+    expect(KAYNAK).toContain("{ozetHatasi ?? 'Sunucu sebep bildirmedi.'}");
   });
 
   it('platformun KENDİ cümlesi kullanılıyor', () => {

@@ -202,7 +202,8 @@ describe('ekran bağları (kaynak)', () => {
     expect(SEKME).toContain("tur: 'yukleniyor'");
     expect(SEKME).toContain("tur: 'hata'");
     expect(SEKME).toContain('emptyReason');
-    expect(SEKME).toContain('gönderim gösteriliyor');
+    // SESSİZ KESME YOK: "1 - 50 / 61" ortak sayfalamadan, toplam sunucudan.
+    expect(SEKME).toContain('toplam: hal.y.toplam,');
   });
 
   it('KRİTİK: ayarı yalnız connection.manage değiştiriyor; aydınlatma onayı olmadan "Aç" kapalı', () => {
@@ -217,8 +218,12 @@ describe('ekran bağları (kaynak)', () => {
   });
 
   it('pencere DOM’dan çıkmıyor ve hareket azaltmada geçiş kapalı', () => {
-    expect(SERIT).toContain("acik ? 'visible opacity-100' : 'invisible opacity-0'");
-    expect(SERIT).toContain('motion-reduce:transition-none');
+    // 2026-10-14: ayar ortak `YanPanel`de; DOM'da kalma ve hareket azaltma orada kilitli.
+    expect(SERIT).toContain('<YanPanel');
+    expect(SERIT).not.toContain('fixed inset-0');
+    const yp = readFileSync(join(WEB, 'components/ui/pencere.tsx'), 'utf8');
+    expect(yp).toContain("acik ? 'visible opacity-100' : 'invisible opacity-0'");
+    expect(yp).toContain('motion-reduce:transition-none');
   });
 
   it('ayar okunamazsa şerit hata hâline düşüyor, kapalıya değil', () => {

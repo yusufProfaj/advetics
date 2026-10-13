@@ -24,19 +24,14 @@
  *
  * BİLİNEN KALICI ADAYLAR (sayfa ajanı karar verip gerekçesini yazacak):
  * `components/platform-logo.tsx` (Meta/Google/LinkedIn logolarının kendi
- * renkleri; üçüncü tarafın markası), `components/report/*` belge parçaları
- * (müşteriye giden rapor PDF ile aynı görünmek zorunda), `components/landing/*`
- * (tanıtım sitesi, `.tanitim` kapsamı).
+ * renkleri; üçüncü tarafın markası), `components/landing/*` (tanıtım sitesi,
+ * `.tanitim` kapsamı). Rapor belgesinin parçaları karara bağlandı: dosyanın
+ * sonundaki `KALICI_ISTISNALAR` (Grup 1, 2026-10-14).
  */
 export type IhlalTuru = 'renk' | 'degrade' | 'dugme' | 'modal' | 'h1';
 
 export const ISTISNALAR: Record<string, Partial<Record<IhlalTuru, number>>> = {
-  'app/(dashboard)/ads-explorer/galeri/page.tsx': { dugme: 1, h1: 1 },
-  'app/(dashboard)/ads-explorer/page.tsx': { h1: 1 },
-  'app/(dashboard)/dashboard/page.tsx': { h1: 1 },
   'app/(dashboard)/error.tsx': { dugme: 1 },
-  'app/(dashboard)/potansiyel-musteriler/page.tsx': { dugme: 1, h1: 1 },
-  'app/(dashboard)/raporlar/page.tsx': { h1: 1 },
   'app/(legal)/gizlilik/page.tsx': { h1: 1 },
   'app/(legal)/kosullar/page.tsx': { h1: 1 },
   'app/(legal)/layout.tsx': { dugme: 1 },
@@ -50,33 +45,20 @@ export const ISTISNALAR: Record<string, Partial<Record<IhlalTuru, number>>> = {
   'components/auth/iki-adim-giris.tsx': { dugme: 2 },
   'components/auth/sifre-sifirla-formu.tsx': { dugme: 2 },
   'components/auth/sifremi-unuttum-formu.tsx': { dugme: 1 },
-  'components/budget/budget-form.tsx': { dugme: 1 },
-  'components/budget/pacing-bar.tsx': { degrade: 1 },
-  'components/butce/butce-icerik.tsx': { dugme: 1 },
   'components/connections/havuz-kartlari.tsx': { dugme: 3, modal: 1 },
   'components/connections/kanal-kartlari.tsx': { dugme: 1 },
   'components/connections/toplu-tazeleme.tsx': { dugme: 2 },
   'components/connections/youtube-kanal-ekle.tsx': { dugme: 1 },
   'components/email/eposta-ayarlari.tsx': { dugme: 1 },
-  'components/genel-bakis/kurulum-seridi.tsx': { dugme: 1 },
   'components/hesap/iki-adim-paneli.tsx': { dugme: 1 },
   'components/hesap/iki-adim-parcalari.tsx': { dugme: 1 },
   'components/landing/kaydirma-filmi.tsx': { renk: 2 },
   'components/landing/site-nav.tsx': { dugme: 2 },
   'components/landing/site-parcalari.tsx': { dugme: 2, h1: 1 },
-  'components/leads/geri-besleme-seridi.tsx': { dugme: 2, modal: 1 },
   'components/login-form.tsx': { dugme: 1 },
   'components/mobil-menu.tsx': { modal: 1 },
   'components/okuma-api/okuma-api-paneli.tsx': { dugme: 2 },
   'components/platform-logo.tsx': { renk: 10 },
-  'components/report/conversion-chart.tsx': { renk: 3 },
-  'components/report/faturalar.tsx': { dugme: 1 },
-  'components/report/kitle-ozeti.tsx': { renk: 8 },
-  'components/report/rapor-gonder.tsx': { dugme: 1, modal: 1 },
-  'components/report/rapor-planla.tsx': { dugme: 1, modal: 1 },
-  'components/report/report-document.tsx': { h1: 1 },
-  'components/report/sablon-yonetimi.tsx': { dugme: 1, modal: 1 },
-  'components/report/share-controls.tsx': { dugme: 1 },
   'components/tarih-secici.tsx': { dugme: 1 },
   'components/tenancy/team-screen.tsx': { dugme: 4, modal: 1 },
   'components/tenancy/ust-hesap-ekibi.tsx': { dugme: 2, modal: 1 },
@@ -85,4 +67,27 @@ export const ISTISNALAR: Record<string, Partial<Record<IhlalTuru, number>>> = {
   'components/ust-hesap/ust-hesap-ekrani.tsx': { dugme: 1 },
   'components/workspace-gerekli.tsx': { h1: 1 },
   'components/yukleniyor.tsx': { modal: 1 },
+};
+
+/**
+ * ═══ KALICI İSTİSNALAR — KÜÇÜLMESİ BEKLENMİYOR, GEREKÇESİYLE ═══
+ *
+ * Yukarıdaki liste "henüz geçirilmedi" demek; bu liste "bilerek böyle".
+ * Bekçi ikisini aynı kesinlikle sayıyor (sayı artarsa da azalırsa da
+ * düşer): kalıcı bir istisna sessizce büyüyemez. Buraya yalnız gerekçesi
+ * yazılı dosya girer.
+ *
+ * RAPOR BELGESİNİN PARÇALARI (Grup 1, 2026-10-14): `report-document.tsx`
+ * müşteriye giden raporun panel gösterimi ve PDF'in REFERANSI (CLAUDE.md
+ * "AYNI RAPORUN İKİ GÖSTERİMİ VARSA REFERANS BİRİ OLMALI — ve o panel").
+ * Belge kâğıt gibi okunuyor: kendi kapak başlığı (`h1`) ve PDF çizicisiyle
+ * (`apps/api/.../pdf-cizim.ts`) AYNI gri tonları taşıyor (kitle halkaları,
+ * dönüşüm grafiği ızgarası). Panelin token'larına çevirmek, ekrandaki
+ * belgeyle basılan PDF'i ayrıştırır ve karanlık temada müşteriye gidecek
+ * belgeyi kararmış gösterirdi.
+ */
+export const KALICI_ISTISNALAR: Record<string, Partial<Record<IhlalTuru, number>>> = {
+  'components/report/conversion-chart.tsx': { renk: 3 },
+  'components/report/kitle-ozeti.tsx': { renk: 8 },
+  'components/report/report-document.tsx': { h1: 1 },
 };

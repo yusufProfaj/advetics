@@ -242,7 +242,7 @@ describe('Reklam Yöneticisi tablosu — mecra ve kesme', () => {
     // Kullanıcının istediği şey buydu: aynı listede Meta ve Google
     // kampanyaları yan yana duruyor ve hangi harcamanın hangi mecraya
     // gittiği yalnızca kampanya adından tahmin edilebiliyordu.
-    expect(TABLO).toContain('<span key={m}>{PLATFORM_KISA_ADLARI[m]}</span>');
+    expect(TABLO).toContain("{r.mecralar.map((m) => PLATFORM_KISA_ADLARI[m]).join(' · ')}");
     expect(SAYFA).toContain('mecralar: [b.platform],');
   });
 
@@ -259,8 +259,11 @@ describe('Reklam Yöneticisi tablosu — mecra ve kesme', () => {
   it('KRİTİK: platform ve düzey süzgeçleri BAĞLANTI — paylaşılabiliyor', () => {
     // Platform ve düzey adreste: paylaşılabiliyor, yeni sekmede açılıyor ve
     // sunucuda render ediliyor. Buton + state bunları kaybettirirdi.
-    expect(TABLO).toContain('<Link key={p.ad} href={p.href}');
-    expect(TABLO).toContain('<Link key={t.anahtar} role="tab"');
+    // 2026-10-14: platform çipi `SuzgecMenusu` (seçenekler bağlantı), düzeyler
+    // sayfa içi yan menüde (`SayfaIcMenu`, `href` verilen öğe bağlantı).
+    expect(TABLO).toContain('secenekler={platformSecenekleri.map((p) => ({ href: p.href, ad: p.ad, aktif: p.secili }))}');
+    expect(TABLO).toContain("href: t.hedef.tur === 'link' ? t.hedef.href : undefined,");
+    expect(oku('components/ui/sayfa-ic-menu.tsx')).toContain('<Link key={o.deger} href={o.href}');
   });
 });
 

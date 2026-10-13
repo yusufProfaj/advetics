@@ -24,13 +24,14 @@ function kod(kaynak: string): string {
 }
 
 function modalGovdesi(): string {
-  const bas = KAYNAK.indexOf('function SablonModal(');
+  // 2026-10-14: pencere satır içi düzenleyiciye döndü (Raporlar › Şablonlar bölümü).
+  const bas = KAYNAK.indexOf('function SablonDuzenleyici(');
   if (bas === -1) {
-    throw new Error('SablonModal bulunamadı — tarama boşa düştü, testi güncelle.');
+    throw new Error('SablonDuzenleyici bulunamadı — tarama boşa düştü, testi güncelle.');
   }
   const g = KAYNAK.slice(bas);
   if (!g.includes('/reports/templates')) {
-    throw new Error('SablonModal dilimi kaydetmiyor — tarama boşa düştü.');
+    throw new Error('SablonDuzenleyici dilimi kaydetmiyor — tarama boşa düştü.');
   }
   return g;
 }

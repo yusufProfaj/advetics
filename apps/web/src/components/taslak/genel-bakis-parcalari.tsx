@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { BolumluSecici } from '@/components/ui/sekmeler';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, useTransition, type ReactNode } from 'react';
 import type { MetricsBreakdownRow, MetricsTimeseriesPoint, Platform } from '@advetics/shared';
@@ -754,12 +755,14 @@ export function EnCokHarcayanlarKarti({
     <section className={`${s.kart} ${s.gir}`}>
       <div className={s.kartUst}>
         <h2>En çok harcayan {ad.cogul === 'kampanya' ? 'kampanyalar' : ad.cogul === 'reklam' ? 'reklamlar' : 'reklam setleri'}</h2>
-        <span className={s.seg} role="group" aria-label="Düzey" style={{ marginLeft: 8 }}>
-          {(Object.keys(DUZEY_ADI) as KampanyaDuzeyi[]).map((d) => (
-            <button key={d} type="button" aria-pressed={d === duzey} onClick={() => setDuzey(d)}>
-              {DUZEY_ADI[d].tab}
-            </button>
-          ))}
+        {/* ORTAK BÖLÜMLÜ SEÇİCİ: aynı listenin üç görünümü (kampanya, set, reklam). */}
+        <span style={{ marginLeft: 8 }}>
+          <BolumluSecici
+            etiket="Düzey"
+            secili={duzey}
+            onSec={setDuzey}
+            secenekler={(Object.keys(DUZEY_ADI) as KampanyaDuzeyi[]).map((d) => ({ deger: d, etiket: DUZEY_ADI[d].tab }))}
+          />
         </span>
         <Link className={s.sagBag} href={tumuAdresi}>
           Tümü →

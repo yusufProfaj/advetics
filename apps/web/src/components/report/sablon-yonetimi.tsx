@@ -1,9 +1,11 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useState, useTransition } from 'react';
 import {
   COLUMN_KEYS,
+  SABLON_PARAM,
+  VARSAYILAN_SABLONLAR,
   kovaPlatformu,
   PLATFORM_KISA_ADLARI,
   COLUMN_LABELS,
@@ -15,6 +17,11 @@ import {
   type ReportTemplateSummary,
 } from '@advetics/shared';
 import { apiFetch, ApiRequestError } from '@/lib/api';
+import { AcilirMenu, IKON_TETIK, MenuAyraci, MenuOgesi } from '@/components/ui/acilir-menu';
+import { Alan, Girdi, MetinAlani, Secim } from '@/components/ui/alan';
+import { Dugme } from '@/components/ui/dugme';
+import { BosDurum, Serit } from '@/components/ui/hal';
+import { AdHucresi, Tablo, type TabloSutunu } from '@/components/ui/tablo';
 
 /**
  * ŞABLON YÖNETİMİ — bölüm seçimi ve SIRASI.
@@ -47,25 +54,234 @@ import { apiFetch, ApiRequestError } from '@/lib/api';
  * bir sütun listesi yok; oraya da bir seçici koymak boş bir vaat olurdu.
  */
 /**
- * ŞABLON DÜZENLEME KUTUSU.
+ * ═══ RAPORLAR › ŞABLONLAR BÖLÜMÜ (onaylı taslak `#raporlar`, 2026-10-14) ═══
  *
- * DIŞA AÇIK: rapor ekranındaki şablon seçici de bunu açıyor. Şablonu ayrı bir
- * sayfada düzenleyip rapora dönmek, kullanıcının bildirdiği hatanın kendisiydi
- * — düzenleme yapılıyor, dönüşte seçici bir ön ayara geçiyor ve düzenleme
- * raporda hiç görünmüyordu. İki ekran AYNI bileşeni kullanıyor; ikinci bir
- * düzenleme formu yazmak, birinin sütun seçimini ya da silme onayını
- * kaybetmesi demekti.
+ * Şablon yönetimi kendi bölümünde: solda liste (hazır şablonlar + kayıtlı
+ * şablonlar), sağda seçili şablonun düzenleyicisi. Rapor bölümündeki seçici
+ * çip olarak kalıyor ve yalnız SEÇİYOR. Eski düzende düzenleme seçicinin
+ * açılır listesinden bir pencereyle yapılıyordu: on dört bölümlü bir şablon
+ * pencerede kaydırılıyor ve "Kaydet" ekrana sığmıyordu.
+ *
+ * AYNI SAYFADA, AYRI SAYFADA DEĞİL: şablonu ayrı bir sayfada düzenleyip
+ * rapora dönmek, kullanıcının bildirdiği hatanın kendisiydi (düzenleme
+ * yapılıyor, dönüşte seçici ön ayara geçiyor). "Bu şablonla aç" raporu o
+ * şablonla gösteriyor ve diğer süzgeçleri (tarih) koruyor.
  */
-export function SablonModal({
+export function SablonBolumu({
+  sablonlar,
+  sablonHatasi,
+  musteriler,
+  isOrgAdmin,
+  duzenleyebilir,
+}: {
+  sablonlar: ReportTemplateSummary[];
+  /** Liste alınamadıysa sunucunun cümlesi: "hiç şablon yok" ile "okunamadı" ayrı hâl. */
+  sablonHatasi: string | null;
+  musteriler: Array<{ id: string; name: string }>;
+  isOrgAdmin: boolean;
+  /** `report.write`: müşteri hesabı raporu okuyor, biçimini değiştirmiyor. */
+  duzenleyebilir: boolean;
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [, startTransition] = useTransition();
+  /** Düzenleyicideki şablon: kayıtlı şablonun kimliği, `yeni` ya da hiçbiri. */
+  const [duzenlenen, setDuzenlenen] = useState<string | 'yeni' | null>(null);
+  const [silmeyeAc, setSilmeyeAc] = useState(false);
+
+  function raporaAc(deger: string): void {
+    const p = new URLSearchParams(searchParams?.toString() ?? '');
+    p.set(SABLON_PARAM, deger);
+    // Rapor bölümüne dönüş: varsayılan bölüm adreste yazılmıyor.
+    p.delete('sekme');
+    startTransition(() => router.replace(`${pathname}?${p.toString()}`));
+  }
+
+  type Satir =
+    | { tur: 'hazir'; kod: string; ad: string; aciklama: string; bolum: number }
+    | { tur: 'kayitli'; sablon: ReportTemplateSummary };
+  const satirlar: Satir[] = [
+    ...VARSAYILAN_SABLONLAR.map(
+      (v): Satir => ({ tur: 'hazir', kod: v.kod, ad: v.ad, aciklama: v.aciklama, bolum: v.sections.length }),
+    ),
+    ...sablonlar.map((t): Satir => ({ tur: 'kayitli', sablon: t })),
+  ];
+  const anahtar = (r: Satir) => (r.tur === 'hazir' ? `hazir-${r.kod}` : r.sablon.id);
+
+  const sutunlar: Array<TabloSutunu<Satir>> = [
+    {
+      anahtar: 'ad',
+      baslik: 'Şablon',
+      hucre: (r) =>
+        r.tur === 'hazir' ? (
+          /*
+           * AÇIKLAMA ŞART. "Google Ads Şablonu" tek başına neyin değiştiğini
+           * söylemiyor; kullanıcı seçip raporun yarısının kaybolduğunu görünce
+           * bunu bir arıza sanıyor.
+           */
+          <AdHucresi ad={r.ad} alt={`Hazır şablon · ${r.aciklama}`} />
+        ) : (
+          /* KAPSAM VE BÖLÜM SIRASI GÖRÜNÜYOR: iki şablonun adı benzer olabiliyor. */
+          <AdHucresi
+            ad={r.sablon.name}
+            alt={r.sablon.sections.map((x) => SECTION_LABELS[x]).join(' → ')}
+          />
+        ),
+    },
+    {
+      anahtar: 'kapsam',
+      baslik: 'Kapsam',
+      ikincil: true,
+      hucre: (r) =>
+        r.tur === 'hazir'
+          ? 'Herkes'
+          : r.sablon.clientId === null
+            ? 'Organizasyon varsayılanı'
+            : (r.sablon.clientName ?? 'Workspace'),
+    },
+    {
+      anahtar: 'bolum',
+      baslik: 'Bölüm',
+      sayi: true,
+      hucre: (r) => (r.tur === 'hazir' ? r.bolum : r.sablon.sections.length),
+    },
+    {
+      anahtar: 'eylem',
+      baslik: <span className="sr-only">Eylemler</span>,
+      sayi: true,
+      hucre: (r) => (
+        <span className="inline-flex items-center gap-1">
+          <Dugme ton="ikincil" boyut="kucuk" onClick={() => raporaAc(r.tur === 'hazir' ? r.kod : r.sablon.id)}>
+            Bu şablonla aç
+          </Dugme>
+          {r.tur === 'kayitli' && duzenleyebilir && (
+            <AcilirMenu
+              etiket={`${r.sablon.name}: diğer eylemler`}
+              hizala="sag"
+              genislik="w-44"
+              tetik={({ acik: _acik, ...o }) => (
+                <button type="button" {...o} aria-label="Diğer eylemler" className={IKON_TETIK}>
+                  <span aria-hidden className="text-15 leading-none">
+                    ⋯
+                  </span>
+                </button>
+              )}
+            >
+              <MenuOgesi
+                onClick={() => {
+                  setSilmeyeAc(false);
+                  setDuzenlenen(r.sablon.id);
+                }}
+              >
+                Düzenle
+              </MenuOgesi>
+              <MenuAyraci />
+              {/* SİL ONAYA GİDİYOR: kaç paylaşım bağlantısının gideceği düzenleyicide yazıyor. */}
+              <MenuOgesi
+                tehlike
+                onClick={() => {
+                  setSilmeyeAc(true);
+                  setDuzenlenen(r.sablon.id);
+                }}
+              >
+                Sil
+              </MenuOgesi>
+            </AcilirMenu>
+          )}
+        </span>
+      ),
+    },
+  ];
+
+  const duzenlenenSablon = duzenlenen && duzenlenen !== 'yeni' ? (sablonlar.find((t) => t.id === duzenlenen) ?? null) : null;
+
+  return (
+    <div className="grid items-start gap-4 min-[1100px]:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+      <section className="min-w-0 rounded-kart border border-line bg-surface">
+        {sablonHatasi !== null && (
+          <div className="border-b border-line p-4">
+            <Serit ton="hata" baslik="Kayıtlı şablonlar alınamadı">
+              {`${sablonHatasi}. Hazır şablonlar listede; kayıtlı şablonların görünmüyor.`}
+            </Serit>
+          </div>
+        )}
+        <Tablo
+          etiket="Rapor şablonları"
+          sutunlar={sutunlar}
+          satirlar={satirlar}
+          satirAnahtari={anahtar}
+          sayfalama={{ bas: 1, son: satirlar.length, toplam: satirlar.length }}
+        />
+        {duzenleyebilir && (
+          <div className="flex justify-end border-t border-line px-5 py-3">
+            <Dugme
+              ton="ikincil"
+              boyut="kucuk"
+              onClick={() => {
+                setSilmeyeAc(false);
+                setDuzenlenen('yeni');
+              }}
+            >
+              ＋ Yeni şablon
+            </Dugme>
+          </div>
+        )}
+      </section>
+
+      {duzenlenen === null ? (
+        <BosDurum
+          baslik="Düzenlemek için bir şablon seç"
+          neden={
+            duzenleyebilir
+              ? 'Kayıtlı bir şablonun ⋯ menüsünden "Düzenle"yi seç ya da yeni şablon oluştur. Hazır şablonlar değiştirilemez; kopyalamak için yeni şablon aç.'
+              : 'Şablonları değiştirmek rapor yazma yetkisi istiyor. Listeden bir şablonu raporda açabilirsin.'
+          }
+        />
+      ) : (
+        <SablonDuzenleyici
+          /* ŞABLON DEĞİŞİNCE FORM BAŞTAN KURULUYOR: önceki şablonun alanları yenisine taşınmasın. */
+          key={duzenlenen}
+          sablon={duzenlenenSablon}
+          musteriler={musteriler}
+          isOrgAdmin={isOrgAdmin}
+          silOnayiAcik={silmeyeAc}
+          onKapat={() => setDuzenlenen(null)}
+          /*
+           * KAYDEDİLEN ŞABLON HEMEN RAPORDA AÇILIYOR: kaydedip ekranda hiçbir
+           * şeyin değişmediğini görmek, düzeltilen hatanın ta kendisiydi.
+           */
+          onKaydedildi={(id) => {
+            setDuzenlenen(null);
+            raporaAc(id);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * ŞABLON DÜZENLEYİCİ: Şablonlar bölümünün sağ kartı.
+ *
+ * Eskiden bir pencereydi ve rapor seçicisinden açılıyordu; on dört bölümlü
+ * bir şablonda pencere ekrana sığmıyor, "Kaydet" görünmüyordu. Satır içi kart
+ * sayfayla birlikte kayıyor. Tek düzenleme formu: ikinci bir form yazmak,
+ * birinin sütun seçimini ya da silme onayını kaybetmesi demekti.
+ */
+export function SablonDuzenleyici({
   sablon,
   musteriler,
   isOrgAdmin,
+  silOnayiAcik = false,
   onKapat,
   onKaydedildi,
 }: {
   sablon: ReportTemplateSummary | null;
   musteriler: Array<{ id: string; name: string }>;
   isOrgAdmin: boolean;
+  /** ⋯ menüsündeki "Sil" düzenleyiciyi onay sorusu açık hâlde açıyor. */
+  silOnayiAcik?: boolean;
   onKapat: () => void;
   /**
    * Kaydedilen şablonun kimliği.
@@ -98,7 +314,7 @@ export function SablonModal({
   }
   const [bekleyen, setBekleyen] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
-  const [silOnay, setSilOnay] = useState(false);
+  const [silOnay, setSilOnay] = useState(silOnayiAcik);
 
   const disaridakiler = REPORT_SECTIONS.filter((s) => !secili.includes(s));
 
@@ -202,46 +418,25 @@ export function SablonModal({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:items-center"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onKapat();
-      }}
-    >
-      {/*
-        KART EKRANDAN UZUN OLAMAZ.
-        14 bölümlü bir şablonda kart viewport'u aşıyordu ve dış kapsayıcı
-        `sm:items-center` ile ortaladığı için taşan kısım YUKARIDAN
-        kırpılıyordu — "Kaydet" düğmesi ekrana hiç girmiyor, kullanıcı
-        tarayıcıyı %67'ye küçültmek zorunda kalıyordu.
-        Çözüm: kartı ekran yüksekliğiyle sınırla, GÖVDEYİ kaydır, başlık ve
-        düğmeler sabit kalsın.
-      */}
-      <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-xl flex-col rounded-xl border border-line bg-surface p-5 shadow-xl">
-        <h2 className="shrink-0 text-lg font-semibold">
-          {sablon ? 'Şablonu düzenle' : 'Yeni şablon'}
-        </h2>
+    <section className="min-w-0 rounded-kart border border-line bg-surface" aria-label="Şablon düzenleyici">
+      <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-4">
+        <h3 className="m-0 font-baslik text-15 font-bold text-ink">{sablon ? sablon.name : 'Yeni şablon'}</h3>
+        <small className="text-12 text-ink-muted">sürükle ya da ok tuşları</small>
+      </div>
 
-        <div className="mt-4 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
-          <Alan label="Şablon adı">
-            <input
-              value={ad}
-              onChange={(e) => setAd(e.target.value)}
-              className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm focus:border-brand focus:outline-none"
-            />
-          </Alan>
+      <div className="grid gap-3.5 p-5">
+        <Alan etiket="Şablon adı">
+          {(id) => <Girdi id={id} value={ad} onChange={(e) => setAd(e.target.value)} />}
+        </Alan>
 
-          <Alan label="Kapsam">
-            <select
-              value={clientId ?? ''}
-              onChange={(e) => setClientId(e.target.value || null)}
-              className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm focus:border-brand focus:outline-none"
-            >
-              {/*
-                ORG VARSAYILANINI YALNIZCA YÖNETİCİ DEĞİŞTİREBİLİYOR — RLS bunu
-                zaten uyguluyor ama SESSİZCE (0 satır) ve ekran "kaydedildi"
-                derdi. Seçenek kapalı ve sebebi yazılı.
-              */}
+        {/*
+          ORG VARSAYILANINI YALNIZCA YÖNETİCİ DEĞİŞTİREBİLİYOR: RLS bunu zaten
+          uyguluyor ama SESSİZCE (0 satır) ve ekran "kaydedildi" derdi.
+          Seçenek kapalı ve sebebi yazılı.
+        */}
+        <Alan etiket="Kapsam">
+          {(id) => (
+            <Secim id={id} value={clientId ?? ''} onChange={(e) => setClientId(e.target.value || null)}>
               <option value="" disabled={!isOrgAdmin}>
                 Organizasyon varsayılanı{isOrgAdmin ? '' : ' (yalnızca yönetici)'}
               </option>
@@ -250,195 +445,164 @@ export function SablonModal({
                   {m.name}
                 </option>
               ))}
-            </select>
-          </Alan>
+            </Secim>
+          )}
+        </Alan>
 
-          <Alan label="Rapor başlığı (boşsa varsayılan)">
-            <input
+        <Alan etiket="Rapor başlığı" ipucu="Boşsa varsayılan başlık kullanılır.">
+          {(id, aciklamaId) => (
+            <Girdi
+              id={id}
+              aria-describedby={aciklamaId}
               value={baslik}
               onChange={(e) => setBaslik(e.target.value)}
               placeholder="Dijital Pazarlama Raporu"
-              className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm focus:border-brand focus:outline-none"
             />
-          </Alan>
+          )}
+        </Alan>
 
-          <Alan label="Kapanış metni">
-            <textarea
-              value={kapanis}
-              onChange={(e) => setKapanis(e.target.value)}
-              rows={3}
-              className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm focus:border-brand focus:outline-none"
-            />
-          </Alan>
+        <Alan etiket="Kapanış metni">
+          {(id) => <MetinAlani id={id} value={kapanis} onChange={(e) => setKapanis(e.target.value)} rows={3} />}
+        </Alan>
 
-          <div>
-            <p className="text-sm font-medium">Bölümler ve sıra</p>
-            <p className="mt-0.5 text-xs text-ink-muted">
-              Rapor bu sırayla üretiliyor. Sırayı değiştirmek için bölümü{' '}
-              <strong>sürükle</strong>; klavyeyle taşımak için satıra gel ve{' '}
-              <strong>↑ / ↓</strong> tuşlarını kullan. Hiç bölüm bırakmazsan
-              kaydedilemez. Boş bir rapor müşteriye gönderilecek bir belge değil.
-            </p>
-            {/*
-              LİSTE KENDİ İÇİNDE KAYDIRILIYOR. Bölüm sayısı şablona göre
-              14'e çıkabiliyor; hepsini birden göstermek gövdeyi uzatıp
-              alttaki sütun ayarlarını erişilemez yapıyordu.
-            */}
-            <ul className="mt-2 max-h-64 space-y-1 overflow-y-auto pr-1">
-              {secili.map((s, i) => (
-                <li
-                  key={s}
-                  draggable
-                  tabIndex={0}
-                  aria-label={`${SECTION_LABELS[s]}, sıra ${i + 1} / ${secili.length}. Taşımak için sürükleyin ya da ok tuşlarını kullanın.`}
-                  onDragStart={(e) => {
-                    setSuruklenen(i);
-                    /*
-                     * `setData` ŞART. Firefox, veri taşımayan bir sürüklemeyi
-                     * hiç başlatmıyor ve satır kıpırdamıyordu; taşınan değer
-                     * kullanılmıyor, olayın geçerli sayılması için var.
-                     */
-                    e.dataTransfer.setData('text/plain', s);
-                    e.dataTransfer.effectAllowed = 'move';
-                  }}
-                  onDragOver={(e) => {
-                    // VARSAYILAN ENGELLENMEZSE `drop` HİÇ TETİKLENMİYOR.
-                    e.preventDefault();
-                    e.dataTransfer.dropEffect = 'move';
-                    if (suruklenen !== null && suruklenen !== i) tasiSiraya(suruklenen, i);
-                    setSuruklenen(i);
-                  }}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    setSuruklenen(null);
-                  }}
-                  onDragEnd={() => setSuruklenen(null)}
-                  onKeyDown={(e) => klavyeyle(e, i)}
-                  className={`flex cursor-grab items-center gap-2 rounded-lg border bg-surface-muted px-3 py-1.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-brand/50 ${
-                    suruklenen === i
-                      ? 'border-brand opacity-60'
-                      : 'border-line hover:border-ink-muted/40'
-                  }`}
+        <div className="grid gap-2">
+          <p className="m-0 text-13 font-semibold text-ink">Bölümler ve sıra</p>
+          <p className="m-0 text-12 text-ink-muted">
+            Rapor bu sırayla üretiliyor. Sırayı değiştirmek için bölümü <strong>sürükle</strong>; klavyeyle
+            taşımak için satıra gel ve <strong>↑ / ↓</strong> tuşlarını kullan. Hiç bölüm bırakmazsan
+            kaydedilemez: boş bir rapor müşteriye gönderilecek bir belge değil.
+          </p>
+          <ul className="m-0 grid list-none gap-1 p-0">
+            {secili.map((s, i) => (
+              <li
+                key={s}
+                draggable
+                tabIndex={0}
+                aria-label={`${SECTION_LABELS[s]}, sıra ${i + 1} / ${secili.length}. Taşımak için sürükleyin ya da ok tuşlarını kullanın.`}
+                onDragStart={(e) => {
+                  setSuruklenen(i);
+                  /*
+                   * `setData` ŞART. Firefox, veri taşımayan bir sürüklemeyi
+                   * hiç başlatmıyor ve satır kıpırdamıyordu; taşınan değer
+                   * kullanılmıyor, olayın geçerli sayılması için var.
+                   */
+                  e.dataTransfer.setData('text/plain', s);
+                  e.dataTransfer.effectAllowed = 'move';
+                }}
+                onDragOver={(e) => {
+                  // VARSAYILAN ENGELLENMEZSE `drop` HİÇ TETİKLENMİYOR.
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'move';
+                  if (suruklenen !== null && suruklenen !== i) tasiSiraya(suruklenen, i);
+                  setSuruklenen(i);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setSuruklenen(null);
+                }}
+                onDragEnd={() => setSuruklenen(null)}
+                onKeyDown={(e) => klavyeyle(e, i)}
+                className={`flex cursor-grab items-center gap-2 rounded-alan border px-3 py-1.5 text-13 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand motion-reduce:transition-none ${
+                  suruklenen === i ? 'border-ink bg-surface-sunken opacity-60' : 'border-line bg-surface-muted hover:border-line-strong'
+                }`}
+              >
+                {/*
+                  TUTAMAK GÖRÜNÜYOR. Sürüklenebilir olduğu ekranda hiçbir
+                  işaretle söylenmezse kullanıcı özelliğin gittiğini sanıyor.
+                */}
+                <span aria-hidden="true" className="select-none text-ink-soluk">
+                  ⋮⋮
+                </span>
+                <span className="w-5 text-12 tabular-nums text-ink-muted">{i + 1}.</span>
+                <span className="flex-1 text-ink">{SECTION_LABELS[s]}</span>
+                <button
+                  type="button"
+                  onClick={() => setSecili(secili.filter((x) => x !== s))}
+                  aria-label={`${SECTION_LABELS[s]} bölümünü kaldır`}
+                  className="inline-flex h-6 w-6 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-surface hover:text-danger-strong"
                 >
-                  {/*
-                    TUTAMAK GÖRÜNÜYOR. Sürüklenebilir olduğu ekranda hiçbir
-                    işaretle söylenmezse kullanıcı ↑/↓ düğmelerinin
-                    kaybolduğunu görüp özelliğin gittiğini sanıyor.
-                  */}
-                  <span aria-hidden="true" className="select-none text-ink-muted">
-                    ⠿
-                  </span>
-                  <span className="w-5 text-xs text-ink-muted">{i + 1}.</span>
-                  <span className="flex-1">{SECTION_LABELS[s]}</span>
-                  <button
-                    type="button"
-                    onClick={() => setSecili(secili.filter((x) => x !== s))}
-                    aria-label={`${SECTION_LABELS[s]} bölümünü kaldır`}
-                    className="rounded px-1.5 text-ink-muted transition hover:text-danger"
-                  >
-                    ✕
-                  </button>
-                </li>
-              ))}
-            </ul>
+                  ✕
+                </button>
+              </li>
+            ))}
+          </ul>
 
-            {/* SÜTUN SEÇİMİ — yalnızca tablosu olan bölümlerde. */}
-            {secili
-              .filter((s): s is 'meta_campaigns' | 'google_campaigns' =>
-                s === 'meta_campaigns' || s === 'google_campaigns',
-              )
-              .map((s) => (
-                <SutunSecici
+          {/* SÜTUN SEÇİMİ: yalnızca tablosu olan bölümlerde. */}
+          {secili
+            .filter((s): s is 'meta_campaigns' | 'google_campaigns' =>
+              s === 'meta_campaigns' || s === 'google_campaigns',
+            )
+            .map((s) => (
+              <SutunSecici key={s} bolum={s} secim={ayarlar[s]?.metrics} onDegis={(v) => sutunlariDegistir(s, v)} />
+            ))}
+          {disaridakiler.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {disaridakiler.map((s) => (
+                <button
                   key={s}
-                  bolum={s}
-                  secim={ayarlar[s]?.metrics}
-                  onDegis={(v) => sutunlariDegistir(s, v)}
-                />
+                  type="button"
+                  onClick={() => setSecili([...secili, s])}
+                  className="inline-flex h-[30px] items-center rounded-full border border-dashed border-line-strong px-3 text-[12.5px] font-semibold text-ink-muted transition-colors hover:text-ink"
+                >
+                  + {SECTION_LABELS[s]}
+                </button>
               ))}
-            {disaridakiler.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {disaridakiler.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => setSecili([...secili, s])}
-                    className="rounded-lg border border-dashed border-line px-2.5 py-1 text-xs text-ink-muted transition hover:text-ink"
-                  >
-                    + {SECTION_LABELS[s]}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
         {hata && (
-          <p className="mt-3 rounded border border-danger/40 bg-danger/5 px-3 py-2 text-xs text-danger">
+          <Serit ton="hata" baslik="Şablon kaydedilemedi">
             {hata}
-          </p>
+          </Serit>
         )}
 
         {/*
-          SİLME ONAYI KAÇ LİNKİN GİDECEĞİNİ SÖYLÜYOR.
-          Şablonu silmek ona bağlı bütün paylaşım linklerini de siliyor;
-          müşteriye gönderilmiş bir rapor haber vermeden 404 olur.
+          SİLME ONAYI KAÇ LİNKİN GİDECEĞİNİ SÖYLÜYOR. Şablonu silmek ona
+          bağlı bütün paylaşım linklerini de siliyor; müşteriye gönderilmiş
+          bir rapor haber vermeden 404 olur.
         */}
         {silOnay && sablon && (
-          <div className="mt-3 rounded border border-danger/40 bg-danger/5 px-3 py-2 text-xs">
-            <p className="font-medium text-danger">Bu şablon silinecek.</p>
+          <Serit ton="hata" baslik="Bu şablon silinecek">
             {sablon.shareCount > 0 ? (
-              <p className="mt-1">
-                Bu şablondan üretilmiş <strong>{sablon.shareCount} paylaşım linki</strong> de
-                silinecek. Müşteriye gönderdiğin raporlar çalışmayacak.
-              </p>
+              <>
+                Bu şablondan üretilmiş <strong>{sablon.shareCount} paylaşım linki</strong> de silinecek.
+                Müşteriye gönderdiğin raporlar çalışmayacak.
+              </>
             ) : (
-              <p className="mt-1">Bu şablona bağlı paylaşım linki yok.</p>
+              'Bu şablona bağlı paylaşım linki yok.'
             )}
-          </div>
+          </Serit>
         )}
-
-        <div className="mt-4 flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-line pt-3">
-          {sablon ? (
-            <button
-              type="button"
-              onClick={() => (silOnay ? sil() : setSilOnay(true))}
-              disabled={bekleyen}
-              className="rounded-lg px-3 py-2 text-sm text-danger transition hover:bg-danger/10 disabled:opacity-50"
-            >
-              {silOnay ? 'Evet, sil' : 'Sil'}
-            </button>
-          ) : (
-            <span />
-          )}
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={onKapat}
-              className="rounded-lg px-3 py-2 text-sm text-ink-muted transition hover:text-ink"
-            >
-              Vazgeç
-            </button>
-            <button
-              type="button"
-              onClick={kaydet}
-              disabled={bekleyen || secili.length === 0 || ad.trim().length === 0}
-              className="rounded-lg bg-brand px-3.5 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
-            >
-              {bekleyen ? 'Kaydediliyor…' : 'Kaydet'}
-            </button>
-          </div>
-        </div>
       </div>
-    </div>
-  );
-}
 
-function Alan({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="block">
-      <span className="text-xs text-ink-muted">{label}</span>
-      <span className="mt-0.5 block">{children}</span>
-    </label>
+      <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line px-5 py-3">
+        {sablon && (
+          <Dugme
+            ton="tehlike"
+            boyut="kucuk"
+            className="mr-auto"
+            onClick={() => (silOnay ? sil() : setSilOnay(true))}
+            disabled={bekleyen}
+          >
+            {silOnay ? 'Evet, sil' : 'Sil'}
+          </Dugme>
+        )}
+        <Dugme ton="ikincil" boyut="kucuk" onClick={onKapat}>
+          Vazgeç
+        </Dugme>
+        {/* KART İÇİNDE KIRMIZI DOLU DÜĞME YOK (BILESENLER § 3): Kaydet koyu. */}
+        <Dugme
+          ton="koyu"
+          boyut="kucuk"
+          onClick={kaydet}
+          bekliyor={bekleyen}
+          disabled={secili.length === 0 || ad.trim().length === 0}
+        >
+          Kaydet
+        </Dugme>
+      </div>
+    </section>
   );
 }
 
@@ -485,25 +649,25 @@ function SutunSecici({
   }
 
   return (
-    <div className="mt-3 rounded-lg border border-line bg-surface-muted p-3">
-      <p className="text-xs font-medium">{SECTION_LABELS[bolum]} sütunları</p>
+    <div className="grid gap-1.5 rounded-alan border border-line bg-surface-muted p-3">
+      <p className="m-0 text-12 font-semibold text-ink">{SECTION_LABELS[bolum]} sütunları</p>
       {secili.length === 0 ? (
-        <p className="mt-1 text-[11px] text-ink-muted">
+        <p className="m-0 text-12 text-ink-muted">
           Seçim yok, varsayılan sütunlar kullanılacak.
         </p>
       ) : (
-        <ul className="mt-1.5 flex flex-wrap gap-1.5">
+        <ul className="m-0 flex list-none flex-wrap gap-1.5 p-0">
           {secili.map((k, i) => (
             <li
               key={k}
-              className="flex items-center gap-1 rounded-md border border-line bg-surface px-2 py-1 text-xs"
+              className="flex items-center gap-1 rounded-full border border-line bg-surface px-2.5 py-1 text-12 text-ink"
             >
               <button
                 type="button"
                 onClick={() => tasi(i, -1)}
                 disabled={i === 0}
                 aria-label="Sola al"
-                className="text-ink-muted transition hover:text-ink disabled:opacity-30"
+                className="text-ink-muted transition-colors hover:text-ink disabled:opacity-30"
               >
                 ‹
               </button>
@@ -513,7 +677,7 @@ function SutunSecici({
                 onClick={() => tasi(i, 1)}
                 disabled={i === secili.length - 1}
                 aria-label="Sağa al"
-                className="text-ink-muted transition hover:text-ink disabled:opacity-30"
+                className="text-ink-muted transition-colors hover:text-ink disabled:opacity-30"
               >
                 ›
               </button>
@@ -521,7 +685,7 @@ function SutunSecici({
                 type="button"
                 onClick={() => onDegis(secili.filter((x) => x !== k))}
                 aria-label="Sütunu kaldır"
-                className="ml-0.5 text-ink-muted transition hover:text-danger"
+                className="ml-0.5 text-ink-muted transition-colors hover:text-danger-strong"
               >
                 ✕
               </button>
@@ -531,13 +695,13 @@ function SutunSecici({
       )}
 
       {disaridakiler.length > 0 && (
-        <div className="mt-1.5 flex flex-wrap gap-1">
+        <div className="flex flex-wrap gap-1">
           {disaridakiler.map((k) => (
             <button
               key={k}
               type="button"
               onClick={() => onDegis([...secili, k])}
-              className="rounded-md border border-dashed border-line px-2 py-0.5 text-[11px] text-ink-muted transition hover:text-ink"
+              className="rounded-full border border-dashed border-line-strong px-2.5 py-0.5 text-12 text-ink-muted transition-colors hover:text-ink"
             >
               + {COLUMN_LABELS[k]}
             </button>
@@ -546,7 +710,7 @@ function SutunSecici({
       )}
 
       {kovaUyarisi && (
-        <p className="mt-1.5 rounded border border-warn/40 bg-warn/5 px-2 py-1 text-[11px]">
+        <p className="m-0 border-l-4 border-l-danger pl-2 text-12 text-ink">
           {PLATFORM_KISA_ADLARI[bolumPlatformu]} bu sütunları <strong>vermiyor</strong> (
           {yabanciKovalar.map((k) => COLUMN_LABELS[k]).join(', ')}). Raporda her zaman 0 görünecek.
         </p>

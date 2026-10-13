@@ -1,22 +1,26 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { VarlikEylemSonucu } from '@advetics/shared';
 import { PLATFORM_KISA_ADLARI } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { varlikEylemMetni, type VarlikEylemHedefi } from '@/lib/varlik-eylemi';
-import i from './iyilestir.module.css';
+import { Dugme } from '@/components/ui/dugme';
+import { YanPanel } from '@/components/ui/pencere';
+import { Rozet, DurumNoktasi } from '@/components/ui/rozet';
+import { Serit } from '@/components/ui/hal';
 
 /**
  * ═══ REKLAM YÖNETİCİSİ: DURDUR / BAŞLAT ONAYI (2026-10-10) ═══
  *
- * İyileştir'in onay penceresiyle AYNI görünüş ve aynı üç adım (platforma
- * gönder → platformdan geri oku → kaydet). Sunucu üç adımı tek istekte
- * yapıyor; istek sürerken yalnız ilk adım dönüyor, cevapla üçü kesinleşiyor
- * (zamanlayıcıyla "ilerliyormuş gibi" göstermek yalan olurdu).
+ * İyileştir'in onayıyla aynı üç adım (platforma gönder → platformdan geri
+ * oku → kaydet). Sunucu üç adımı tek istekte yapıyor; istek sürerken yalnız
+ * ilk adım dönüyor, cevapla üçü kesinleşiyor (zamanlayıcıyla
+ * "ilerliyormuş gibi" göstermek yalan olurdu).
  *
- * Pencere DOM'dan çıkmıyor (görünürlük geçişi); hedef `null` iken kapalı.
+ * YAN PANEL (onaylı taslak `#yonetici`, 2026-10-14): satırdan çıkmadan sağdan
+ * açılıyor; Esc, odak tuzağı ve DOM'da kalma ortak bileşenden (`YanPanel`).
  * Sonuç `dogrulandi` ise kısa süre sonra kendiliğinden kapanıp sayfayı
  * yeniliyor; `uyusmadi`da açık kalıyor ki platformun söylediği okunabilsin.
  */
@@ -31,20 +35,23 @@ export function VarlikEylemPenceresi({
   const [asama, setAsama] = useState<'bekliyor' | 'suruyor' | 'bitti' | 'hata'>('bekliyor');
   const [sonuc, setSonuc] = useState<VarlikEylemSonucu | null>(null);
   const [mesaj, setMesaj] = useState<string | null>(null);
-  const onaylaRef = useRef<HTMLButtonElement>(null);
+  /*
+   * SON HEDEF AKLINDA TUTULUYOR: panel kapanırken `hedef` null'a dönüyor ama
+   * panel DOM'da kalıp geçişle kayboluyor. Metin o an "—"ye dönerse kayan
+   * panelde başlık bir karede değişirdi.
+   */
+  const [gosterilen, setGosterilen] = useState<VarlikEylemHedefi | null>(hedef);
   const acik = hedef !== null;
-  const metin = hedef ? varlikEylemMetni(hedef) : null;
 
   useEffect(() => {
-    if (!acik) return;
+    if (!hedef) return;
+    setGosterilen(hedef);
     setAsama('bekliyor');
     setSonuc(null);
     setMesaj(null);
-    onaylaRef.current?.focus();
-    const tus = (e: KeyboardEvent) => e.key === 'Escape' && onKapat();
-    document.addEventListener('keydown', tus);
-    return () => document.removeEventListener('keydown', tus);
-  }, [acik, hedef, onKapat]);
+  }, [hedef]);
+
+  const metin = gosterilen ? varlikEylemMetni(gosterilen) : null;
 
   function kapat() {
     if (asama === 'suruyor') return;
@@ -78,80 +85,94 @@ export function VarlikEylemPenceresi({
     }
   }
 
-  const platform = hedef ? PLATFORM_KISA_ADLARI[hedef.platform] : '';
-  const adimHali = (n: number): string | undefined => {
+  const platform = gosterilen ? PLATFORM_KISA_ADLARI[gosterilen.platform] : '';
+  const adimHali = (n: number): 'suruyor' | 'bitti' | 'uyari' | 'hata' | undefined => {
     if (asama === 'suruyor') return n === 0 ? 'suruyor' : undefined;
     if (asama === 'bitti') return n === 1 && sonuc?.dogrulama === 'uyusmadi' ? 'uyari' : 'bitti';
     if (asama === 'hata') return n === 0 ? 'hata' : undefined;
     return undefined;
   };
+  const once = gosterilen?.yayinda ?? true;
 
   return (
-    <div
-      className={`${i.perde} ${acik ? i.perdeAcik : ''}`}
-      aria-hidden={!acik}
-      onClick={(e) => e.target === e.currentTarget && kapat()}
+    <YanPanel
+      acik={acik}
+      onKapat={kapat}
+      baslik={metin?.baslik ?? 'Onay'}
+      altEylemler={
+        asama === 'bitti' ? (
+          <Dugme ton="ikincil" onClick={kapat}>
+            Kapat
+          </Dugme>
+        ) : (
+          <>
+            <Dugme ton="ikincil" onClick={kapat} disabled={asama === 'suruyor'}>
+              Vazgeç
+            </Dugme>
+            <Dugme onClick={() => void onayla()} bekliyor={asama === 'suruyor'} disabled={!hedef}>
+              {asama === 'hata' ? 'Tekrar dene' : 'Onayla ve uygula'}
+            </Dugme>
+          </>
+        )
+      }
     >
-      <div className={i.pencere} role="dialog" aria-modal="true" aria-labelledby="varlik-eylem-baslik">
-        <h3 id="varlik-eylem-baslik">{metin?.baslik ?? 'Onay'}</h3>
-        <p>{metin?.aciklama ?? ''}</p>
-        <div className={i.degisim}>
-          <div>
-            <small>Şimdi</small>
-            <b>{metin?.once ?? '—'}</b>
-          </div>
-          <span className={i.ok}>→</span>
-          <div>
-            <small>Sonra</small>
-            <b>{metin?.sonra ?? '—'}</b>
-          </div>
+      {gosterilen && (
+        <p className="m-0 text-12 text-ink-muted">
+          {gosterilen.ad} · {platform}
+        </p>
+      )}
+      <div className="flex items-center gap-3 rounded-alan border border-line p-3">
+        <div className="grid gap-1">
+          <small className="text-12 text-ink-muted">Şimdi</small>
+          <Rozet hal={once ? 'ok' : 'dur'}>{metin?.once ?? '—'}</Rozet>
         </div>
-        <ul className={i.adimlar} aria-live="polite">
-          {[`${platform}'a gönder`, `${platform}'dan geri oku ve karşılaştır`, 'Kaydet (kim, ne zaman, eski → yeni)'].map(
-            (a, n) => (
-              <li key={n} data-hal={adimHali(n)}>
-                <i />
-                {a}
-              </li>
-            ),
-          )}
-        </ul>
-        {sonuc && (
-          <div className={`${i.sonuc} ${sonuc.dogrulama === 'dogrulandi' ? i.sonucOk : i.sonucUyari}`} role="status">
-            {sonuc.dogrulama === 'dogrulandi'
-              ? `${platform}'da doğrulandı: ${sonuc.platformDegeri}.`
-              : `${platform} isteği kabul etti ama okunan durum farklı: ${sonuc.platformDegeri}.`}
-          </div>
-        )}
-        {mesaj && (
-          <div className={`${i.sonuc} ${i.sonucHata}`} role="alert">
-            <strong>Uygulanamadı. </strong>
-            {mesaj}
-          </div>
-        )}
-        <div className={i.pencereAlt}>
-          {asama === 'bitti' ? (
-            <button type="button" className={i.ikincil} onClick={kapat}>
-              Kapat
-            </button>
-          ) : (
-            <>
-              <button type="button" className={i.ikincil} onClick={kapat} disabled={asama === 'suruyor'}>
-                Vazgeç
-              </button>
-              <button
-                ref={onaylaRef}
-                type="button"
-                className={i.birincil}
-                onClick={() => void onayla()}
-                disabled={asama === 'suruyor' || !hedef}
-              >
-                {asama === 'hata' ? 'Tekrar dene' : 'Onayla ve uygula'}
-              </button>
-            </>
-          )}
+        <span aria-hidden className="text-ink-muted">
+          →
+        </span>
+        <div className="grid gap-1">
+          <small className="text-12 text-ink-muted">Sonra</small>
+          <Rozet hal={once ? 'dur' : 'ok'}>{metin?.sonra ?? '—'}</Rozet>
         </div>
       </div>
-    </div>
+      <ol className="m-0 grid list-none gap-2 p-0" aria-live="polite">
+        {[`${platform}'a gönder`, `${platform}'dan geri oku ve karşılaştır`, 'Kaydet (kim, ne zaman, eski → yeni)'].map(
+          (a, n) => {
+            const h = adimHali(n);
+            return (
+              <li key={n} data-hal={h} className="flex items-center gap-2.5 text-13 text-ink">
+                <span
+                  aria-hidden
+                  className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border text-11 font-bold ${
+                    h === 'bitti'
+                      ? 'border-ink bg-ink text-surface'
+                      : h === 'hata' || h === 'uyari'
+                        ? 'border-danger text-danger-strong'
+                        : 'border-line-strong text-ink-muted'
+                  } ${h === 'suruyor' ? 'advetics-donus border-r-transparent' : ''}`}
+                >
+                  {h === 'suruyor' ? '' : h === 'bitti' ? '✓' : h === 'hata' || h === 'uyari' ? '!' : n + 1}
+                </span>
+                {a}
+              </li>
+            );
+          },
+        )}
+      </ol>
+      <p className="m-0 text-13 text-ink-muted">{metin?.aciklama ?? ''}</p>
+      {sonuc &&
+        (sonuc.dogrulama === 'dogrulandi' ? (
+          <p role="status" className="m-0 flex items-center gap-2 text-13 text-ink">
+            <DurumNoktasi hal="ok" />
+            {`${platform}'da doğrulandı: ${sonuc.platformDegeri}.`}
+          </p>
+        ) : (
+          <Serit baslik={`${platform} isteği kabul etti ama okunan durum farklı`}>{sonuc.platformDegeri}</Serit>
+        ))}
+      {mesaj && (
+        <Serit ton="hata" baslik="Uygulanamadı">
+          {mesaj}
+        </Serit>
+      )}
+    </YanPanel>
   );
 }

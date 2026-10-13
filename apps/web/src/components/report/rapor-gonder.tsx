@@ -5,17 +5,21 @@ import { raporSorgusu, sablonAlanlari, type ReportMailDraft } from '@advetics/sh
 import { AliciListesiAlani } from '@/components/alici-listesi-alani';
 import { MailGovdeEditoru } from './mail-govde-editoru';
 import { ApiRequestError, apiFetch, API_URL } from '@/lib/api';
+import { Alan, Girdi } from '@/components/ui/alan';
+import { Dugme, dugmeSinifi } from '@/components/ui/dugme';
+import { Serit, Yukleniyor } from '@/components/ui/hal';
+import { YanPanel } from '@/components/ui/pencere';
+import { DurumNoktasi } from '@/components/ui/rozet';
 
 /**
  * ═══ PDF İNDİR ═══
  *
  * Belgeyi kendin göndermek ya da arşivlemek için.
  *
- * MÜŞTERİYE ULAŞTIRMANIN İKİ YOLU BURADAN ÇIKTI. Öncesinde "Müşteriye
- * gönder" burada ayrı bir düğmeydi ve altta da ayrı bir paylaşım paneli
- * vardı: aynı iş için ekranda İKİ giriş noktası. İkisi tek bir "Paylaş"
- * menüsünde toplandı (`share-controls.tsx`); mail akışı buradaki
- * `MailGonderModal`da duruyor ve açılışını o menü belirliyor.
+ * İKİNCİL DÜĞME, "Raporu gönder"in SOLUNDA (kullanıcı kararı 2026-10-14):
+ * ekranın tek kırmızı düğmesi müşteriye göndermek; indirmek kendine almak.
+ * Mail akışı buradaki `MailGonderModal`da duruyor ve açılışını rapor
+ * başlığındaki "Raporu gönder" belirliyor (`share-controls.tsx`).
  */
 export function RaporGonder({
   clientId,
@@ -53,9 +57,8 @@ export function RaporGonder({
     */
     <a
       href={`${API_URL}/reports/pdf?${qs}`}
-      className={`inline-block rounded-lg border border-line px-3.5 py-2 text-sm transition hover:bg-surface-muted ${
-        hasData ? '' : 'pointer-events-none opacity-50'
-      }`}
+      aria-disabled={hasData ? undefined : true}
+      className={`${dugmeSinifi('ikincil')} ${hasData ? '' : 'pointer-events-none opacity-40'}`}
       title={hasData ? undefined : 'Bu dönemde veri yok'}
     >
       PDF indir
@@ -64,9 +67,11 @@ export function RaporGonder({
 }
 
 /**
- * ═══ MAİLLE GÖNDER — KONTROLLÜ MODAL ═══
+ * ═══ RAPORU GÖNDER: KONTROLLÜ YAN PANEL ═══
  *
- * Kendi düğmesi YOK: açılışını "Paylaş" menüsü belirliyor.
+ * Kendi düğmesi YOK: açılışını rapor başlığındaki birincil "Raporu gönder"
+ * belirliyor. Yan panel (onaylı taslak `#raporlar`): rapor ekranından
+ * çıkmadan sağdan açılıyor, sonuç da panelin içinde kalıyor.
  *
  * MAİL TASLAĞI DÜZENLENEBİLİR ve bu kasıtlı. Sayılar rapordan geliyor ama
  * anlatı ("Urla bölgesindeki konut aramalarında...") veriden çıkarılamıyor;
@@ -194,7 +199,6 @@ export function MailGonderModal({
           ? `Rapor ${r.to.length} adrese gönderildi: ${r.to.join(', ')}`
           : 'Hiçbir adrese gönderilemedi.',
       );
-      onKapat();
     } catch (err) {
       // Sunucunun KENDİ mesajı: "kimlik doğrulanamadı" ile "alıcı reddedildi"
       // farklı işler ve ikisini tek cümleye çevirmek kullanıcıyı tahmine
@@ -205,153 +209,150 @@ export function MailGonderModal({
     }
   }
 
+  /*
+   * SONUÇ PANELİN İÇİNDE KALIYOR. Eski pencere başarılı gönderimde
+   * kapanıyor ve onay cümlesini sayfanın başka bir yerine basıyordu;
+   * kullanıcı gönderip göndermediğini aramak zorunda kalıyordu. Panel
+   * açık kalıyor, düğme "Kapat"a dönüyor.
+   */
+  const bitti = sonuc !== null;
+  function kapat() {
+    if (bekleyen === 'gonder') return;
+    onKapat();
+    if (bitti) {
+      setSonuc(null);
+      setReddedilen([]);
+    }
+  }
+
   return (
-    <>
-      {/*
-        SONUÇ MODAL KAPANDIKTAN SONRA DA DURUYOR. Gönderim başarılıysa modal
-        kapanıyor; onaylama cümlesi kapanan bir kutuda kalsaydı kullanıcı
-        gönderip göndermediğini bilemezdi.
-      */}
+    <YanPanel
+      acik={acik}
+      onKapat={kapat}
+      genislik={600}
+      baslik="Raporu müşteriye gönder"
+      altEylemler={
+        bitti ? (
+          <Dugme ton="ikincil" onClick={kapat}>
+            Kapat
+          </Dugme>
+        ) : (
+          <>
+            <Dugme ton="ikincil" onClick={kapat}>
+              Vazgeç
+            </Dugme>
+            <Dugme
+              onClick={() => void gonder()}
+              bekliyor={bekleyen === 'gonder'}
+              disabled={
+                bekleyen !== null ||
+                !taslak?.senderReady ||
+                /*
+                 * BOŞ LİSTE DÜĞMEYİ KAPATMIYOR ARTIK: müşterinin kayıtlı
+                 * alıcıları varsa gönderim geçerli. Kapalı tutmak,
+                 * çoğunlukla hiçbir adres yazmayacak kullanıcıyı her
+                 * seferinde adres yazmaya zorlardı.
+                 */
+                (alici.length === 0 && (taslak?.defaultTo.length ?? 0) === 0) ||
+                konu.trim().length === 0
+              }
+            >
+              Gönder
+            </Dugme>
+          </>
+        )
+      }
+    >
       {sonuc && (
-        <p className="rounded border border-ok/40 bg-ok/5 px-3 py-2 text-sm">{sonuc}</p>
+        <p role="status" className="m-0 flex items-start gap-2 text-13 text-ink">
+          <DurumNoktasi hal={sonuc.startsWith('Rapor ') ? 'ok' : 'hata'} />
+          {sonuc}
+        </p>
       )}
       {reddedilen.length > 0 && (
         /*
-         * REDDEDİLEN ALICILAR AYRI VE UYARI RENGİNDE. Yeşil "gönderildi"
-         * kutusunun içine sıkıştırmak, kısmi bir arızayı başarı gibi
-         * gösterirdi — ve bu projede en pahalı hata türü tam olarak o.
+         * REDDEDİLEN ALICILAR AYRI VE UYARI ŞERİDİNDE. "Gönderildi"
+         * cümlesinin içine sıkıştırmak, kısmi bir arızayı başarı gibi
+         * gösterirdi: ve bu projede en pahalı hata türü tam olarak o.
          */
-        <p className="rounded border border-warn/40 bg-warn/5 px-3 py-2 text-sm text-ink">
-          <strong>{reddedilen.length} adres reddedildi</strong>, bu kişilere ulaşmadı:{' '}
-          {reddedilen.map((r) => `${r.adres} (${r.sebep})`).join(' · ')}
+        <Serit baslik={`${reddedilen.length} adres reddedildi`}>
+          Bu kişilere ulaşmadı: {reddedilen.map((r) => `${r.adres} (${r.sebep})`).join(' · ')}
+        </Serit>
+      )}
+
+      {bekleyen === 'taslak' && <Yukleniyor satir={4} etiket="Taslak hazırlanıyor" />}
+
+      {taslak && !taslak.senderReady && (
+        /*
+          DOĞRULANMAMIŞ HESAPLA GÖNDERİM KAPALI: ve sebebi burada yazıyor.
+          Sunucu da reddediyor; ekranda söylemek, kullanıcıyı bir hata
+          mesajıyla karşılaşmadan doğru yere yönlendiriyor.
+        */
+        <Serit baslik="E-posta ayarların doğrulanmamış.">
+          Ayarlar › Hesabım › E-posta bölümünden kendine test maili gönder. Doğrulanmamış bir hesapla
+          müşteriye mail atmak, ilk hatanın müşteriye gitmesi demek.
+        </Serit>
+      )}
+
+      {taslak && taslak.senderReady && (
+        <p className="m-0 text-12 text-ink-muted">
+          Gönderen: <strong className="text-ink">{taslak.senderEmail}</strong> · yanıtlar sana gelir
         </p>
       )}
-      {hata && !acik && (
-        <p className="rounded border border-danger/40 bg-danger/5 px-3 py-2 text-sm text-danger">
+
+      {!bitti && (
+        <>
+          {/*
+           * ALICI LİSTE. Bileşen paylaşılıyor (plan ekranı ve müşteri formu da
+           * onu kullanıyor): ayrıştırma kuralı üç yerde ayrı yazılsaydı biri
+           * virgülü ayırıcı sayarken diğeri saymaz, biri tekilleştirirken
+           * diğeri aynı adrese iki kez gönderirdi.
+           */}
+          <AliciListesiAlani
+            etiket="Alıcılar"
+            degerler={alici}
+            onChange={setAlici}
+            bosVarsayilan={taslak?.defaultTo ?? []}
+          />
+
+          <Alan etiket="Konu">
+            {(id) => <Girdi id={id} value={konu} onChange={(e) => setKonu(e.target.value)} />}
+          </Alan>
+
+          {/*
+            HAM HTML YERİNE ÖNİZLEME. Kullanıcı burada "değerlendirme"
+            paragrafını yazıyor ve bunu etiketlerin arasından yapmak hem yavaş
+            hem hataya açıktı: kapanmayan bir etiket müşteriye bozuk bir mail
+            göndermek demek.
+          */}
+          <MailGovdeEditoru
+            deger={govde}
+            onChange={setGovde}
+            /*
+             * TASLAK ANAHTARI: hangi müşteri/dönem için taslak çekildiğini
+             * temsil ediyor. Kullanıcı başka bir dönem seçip taslağı
+             * yenilediğinde editör yeniden dolmalı; her tuş vuruşunda değil.
+             */
+            taslakAnahtari={taslakAnahtari}
+          />
+
+          <label className="flex items-center gap-2 text-13 text-ink">
+            <input
+              type="checkbox"
+              checked={ekPdf}
+              onChange={(e) => setEkPdf(e.target.checked)}
+              className="accent-[var(--text)]"
+            />
+            PDF raporu ekle
+          </label>
+        </>
+      )}
+
+      {hata && (
+        <Serit ton="hata" baslik="Gönderilemedi">
           {hata}
-        </p>
+        </Serit>
       )}
-
-      {acik && (
-        <div
-          className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/40 p-4"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) onKapat();
-          }}
-        >
-          <div className="w-full max-w-2xl rounded-xl border border-line bg-surface p-5 shadow-xl">
-            <h2 className="text-lg font-semibold">Raporu müşteriye gönder</h2>
-
-            {taslak && !taslak.senderReady && (
-              /*
-                DOĞRULANMAMIŞ HESAPLA GÖNDERİM KAPALI — ve sebebi burada
-                yazıyor. Sunucu da reddediyor; ekranda söylemek, kullanıcıyı
-                bir hata mesajıyla karşılaşmadan doğru yere yönlendiriyor.
-              */
-              <div className="mt-3 rounded border border-warn/40 bg-warn/5 px-3 py-2 text-sm">
-                <p className="font-medium">E-posta ayarların doğrulanmamış.</p>
-                <p className="mt-1 text-ink-muted">
-                  Ayarlar › Hesabım › E-posta bölümünden kendine test maili gönder.
-                  Doğrulanmamış bir hesapla müşteriye mail atmak, ilk hatanın
-                  müşteriye gitmesi demek.
-                </p>
-              </div>
-            )}
-
-            {taslak && taslak.senderReady && (
-              <p className="mt-1 text-xs text-ink-muted">
-                Gönderen: <strong>{taslak.senderEmail}</strong> · yanıtlar sana gelir
-              </p>
-            )}
-
-            <div className="mt-3 space-y-3">
-              {/*
-                * ALICI ARTIK LİSTE. Bileşen paylaşılıyor (plan ekranı ve
-                * müşteri formu da onu kullanıyor): ayrıştırma kuralı üç yerde
-                * ayrı yazılsaydı biri virgülü ayırıcı sayarken diğeri saymaz,
-                * biri tekilleştirirken diğeri aynı adrese iki kez gönderirdi.
-                */}
-              <AliciListesiAlani
-                etiket="Alıcılar"
-                degerler={alici}
-                onChange={setAlici}
-                bosVarsayilan={taslak?.defaultTo ?? []}
-              />
-
-              <label className="block">
-                <span className="text-xs text-ink-muted">Konu</span>
-                <input
-                  value={konu}
-                  onChange={(e) => setKonu(e.target.value)}
-                  className="mt-0.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm focus:border-brand focus:outline-none"
-                />
-              </label>
-
-              {/*
-                HAM HTML YERİNE ÖNİZLEME. Kullanıcı burada "değerlendirme"
-                paragrafını yazıyor ve bunu etiketlerin arasından yapmak hem
-                yavaş hem hataya açıktı — kapanmayan bir etiket müşteriye bozuk
-                bir mail göndermek demek.
-              */}
-              <MailGovdeEditoru
-                deger={govde}
-                onChange={setGovde}
-                /*
-                 * TASLAK ANAHTARI: hangi müşteri/dönem için taslak çekildiğini
-                 * temsil ediyor. Kullanıcı başka bir dönem seçip taslağı
-                 * yenilediğinde editör yeniden dolmalı; her tuş vuruşunda
-                 * değil.
-                 */
-                taslakAnahtari={taslakAnahtari}
-              />
-
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={ekPdf}
-                  onChange={(e) => setEkPdf(e.target.checked)}
-                />
-                PDF raporu ekle
-              </label>
-            </div>
-
-            {hata && (
-              <p className="mt-3 rounded border border-danger/40 bg-danger/5 px-3 py-2 text-xs text-danger">
-                {hata}
-              </p>
-            )}
-
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={onKapat}
-                className="rounded-lg px-3 py-2 text-sm text-ink-muted transition hover:text-ink"
-              >
-                Vazgeç
-              </button>
-              <button
-                type="button"
-                onClick={gonder}
-                disabled={
-                  bekleyen !== null ||
-                  !taslak?.senderReady ||
-                  /*
-                   * BOŞ LİSTE DÜĞMEYİ KAPATMIYOR ARTIK — müşterinin kayıtlı
-                   * alıcıları varsa gönderim geçerli. Kapalı tutmak,
-                   * çoğunlukla hiçbir adres yazmayacak kullanıcıyı her
-                   * seferinde adres yazmaya zorlardı.
-                   */
-                  (alici.length === 0 && (taslak?.defaultTo.length ?? 0) === 0) ||
-                  konu.trim().length === 0
-                }
-                className="rounded-lg bg-brand px-3.5 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
-              >
-                {bekleyen === 'gonder' ? 'Gönderiliyor…' : 'Gönder'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
+    </YanPanel>
   );
 }
