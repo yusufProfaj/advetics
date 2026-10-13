@@ -32,6 +32,8 @@ hatırlanıyor, eşzamanlı aynı istek tek çağrı (anonim paylaşım sayfası
 Kalan: rehber her açılışta `reachestimate` çağırıyor (interactive kota,
 önbellek atlaması yok); `audience.dimensions` GAQL seçilebilirliği ölçülmedi.
 
+**AYARLAR VE MARKA MERKEZİ SADELEŞTİRME (2026-10-13, beş ajan; kullanıcı onaylı yapı, Varlıklar = B).** Ayarlar dört sekme: Şirketler ve workspace'ler · Platform bağlantıları · Ekip ve güvenlik · menü dışı Hesabım (`/ayarlar/hesabim`). Workspace penceresi kalktı; satırda Marka Merkezi'nde aç · Taşı · Arşivle; arşivden geri alma (`POST /clients/:id/geri-al`), `PATCH status` arka kapısı 403. Marka Merkezi yalnız seçili workspace (başlık Şirket › Workspace): Kurulum (7 adım, tek sayaç, "kullanmadığım platform" beyanı, migration `20261016400000`) · Marka · Workspace bilgileri (veri durumu dahil). Base › Varlıklar ayrı satır (Görseller, Kreatifler, Formlar, Kitleler). Bütün panel adresleri tek üreticiden (`packages/shared/src/panel`), eski adresler yönleniyor, istisna listeleri boş. Adresteki workspace seçiliden farklıysa sayfa okumuyor, tek tıkla geçiş kutusu çıkıyor. Ayrıntı ve sapmalar `docs/panel-sadelestirme/MIMARI.md` §14. **Ölçülmedi:** `#çapa`nın redirect sonrası korunması; sihirbazdaki AI doldurmanın başka workspace seçiliyken RLS reddi; ekranlar (Ajan 6 denetimi bekliyor). **Sıradaki:** tasarım denetimi, sonra AdvStrategy raporu.
+
 **ADVCAMPAIGN "BÖLGEMDE ÇOK KİŞİ GÖRSÜN" (ERISIM) TURU (2026-10-13, Ajan 2+3).**
 Amaç hâlâ `deneme` (canlı kurulmadı, push/deploy YOK; Ajan 4 kapısı
 bekliyor). **Migration var:** `20261016300000_isletme_adresi_konumu` (damga 3d49be55'te ayrıldı; `20261016200000_google_erisim_bos` erişim ölçümü işinin)
