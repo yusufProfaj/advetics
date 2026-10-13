@@ -52,15 +52,17 @@ describe('satırın kısa sonucu', () => {
 
 describe('sayaç', () => {
   it('KRİTİK: okunamayan adım AYRI yazılır, "bitti" denmez', () => {
-    expect(sayacMetni({ tamam: 5, toplam: 7, bilinmiyor: 1, bitti: false })).toBe('5 / 7 adım tamam · 1 okunamadı');
-    expect(sayacMetni({ tamam: 7, toplam: 7, bilinmiyor: 0, bitti: true })).toBe('7 / 7 adım tamam');
-    expect(sayacMetni({ tamam: 0, toplam: 0, bilinmiyor: 0, bitti: false })).toBe('Sayılacak adım yok');
+    expect(sayacMetni({ tamam: 5, toplam: 7, kapsamDisi: 0, bilinmiyor: 1, bitti: false })).toBe('5 / 7 adım tamam · 1 okunamadı');
+    expect(sayacMetni({ tamam: 7, toplam: 7, kapsamDisi: 0, bilinmiyor: 0, bitti: true })).toBe('7 / 7 adım tamam');
+    expect(sayacMetni({ tamam: 0, toplam: 0, kapsamDisi: 0, bilinmiyor: 0, bitti: false })).toBe('Sayılacak adım yok');
+    // Kapsam dışı adım da AYRI yazılır: "9 / 9" tek başına bir adımın beyanla kapandığını saklar.
+    expect(sayacMetni({ tamam: 9, toplam: 9, kapsamDisi: 1, bilinmiyor: 0, bitti: true })).toBe('9 / 9 adım tamam · 1 kapsam dışı');
   });
 
   it('iç menü rozeti: bitince "tamam" tonu, okunamayanla kalan "eksik" değil nötr', () => {
-    expect(rozetMetni({ tamam: 7, toplam: 7, bilinmiyor: 0, bitti: true })).toEqual({ metin: '7 / 7', ton: 'tamam' });
-    expect(rozetMetni({ tamam: 4, toplam: 7, bilinmiyor: 0, bitti: false }).ton).toBe('eksik');
-    expect(rozetMetni({ tamam: 6, toplam: 7, bilinmiyor: 1, bitti: false }).ton).toBe('notr');
+    expect(rozetMetni({ tamam: 7, toplam: 7, kapsamDisi: 0, bilinmiyor: 0, bitti: true })).toEqual({ metin: '7 / 7', ton: 'tamam' });
+    expect(rozetMetni({ tamam: 4, toplam: 7, kapsamDisi: 0, bilinmiyor: 0, bitti: false }).ton).toBe('eksik');
+    expect(rozetMetni({ tamam: 6, toplam: 7, kapsamDisi: 0, bilinmiyor: 1, bitti: false }).ton).toBe('notr');
   });
 });
 

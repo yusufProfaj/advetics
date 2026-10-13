@@ -10,3 +10,4 @@ export * from './adresler';
 export * from './eski-adresler';
 export * from './kapilar';
 export * from './kurulum-listesi';
+export * from './sirket-kurulum-listesi';

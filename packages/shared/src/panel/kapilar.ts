@@ -109,6 +109,14 @@ export const PANEL_KAPILARI = {
    * `connection.manage`i ekleyecek. Yeni hesap açmak GERÇEK hesap açar.
    */
   'kurulum.hesap': { izinler: ['client.write', 'connection.write', 'connection.manage'], neden: 'Hesap atamak yöneticinin.' },
+  /**
+   * `PUT /clients/:id/kurulum/beyan` — "adresimiz yok", "web sitemiz yok"…
+   * (YENİ, kurulum sihirbazı; uç Ajan 2'de). Beyan bir KAPSAM kararı, kurulum
+   * yazmasıyla aynı kapı.
+   */
+  'kurulum.beyan': { izinler: ['client.write'], neden: 'Kurulum kapsamını değiştirme yetkin yok.' },
+  /** `PUT /kurulum/sirket/beyan` — iki adımlı doğrulama kararı (YENİ, Ajan 2). */
+  'sirketKurulum.beyan': { izinler: [], orgYoneticisi: true, neden: 'Şirketin güvenlik kararını yönetici verir.' },
   /** `POST /veri-kaynaklari` (bağla/kaldır). */
   'veriKaynagi.yonet': { izinler: ['connection.manage'], neden: 'Veri kaynağı bağlamak yöneticinin.' },
   /** `POST /veri-kaynaklari/:id/yenile|duraklat`, `GET .../secenekler`. */

@@ -4,6 +4,7 @@ import { butceAdresi } from '@/lib/butce-adresi';
 import { describe, expect, it } from 'vitest';
 import { ROLE_PERMISSIONS } from '@advetics/shared';
 import {
+  KURULUM_LISTESI,
   MARKA_MERKEZI_BOLUMLERI,
   MARKA_MERKEZI_CAPALARI,
   markaMerkeziBolumu,
@@ -47,9 +48,10 @@ describe('bölümler', () => {
     const kaynak = ['../../app/(dashboard)/marka-merkezi/page.tsx', 'workspace-bilgileri.tsx', 'kurulum-listesi.tsx']
       .map(yorumsuz)
       .join('\n');
-    // Kurulum'un yedi adımı listeden üretiliyor: satır `id={a.kod}`.
+    // Kurulum'un adımları listeden üretiliyor: satır `id={a.kod}`. Küme de
+    // listeden TÜRÜYOR — elle yazılmış küme sihirbazın üç yeni adımını bilmiyordu.
     expect(kaynak).toContain('<li id={a.kod} className="scroll-mt-24">');
-    const kurulumAdimlari = new Set(['meta', 'sayfa', 'piksel', 'google', 'olcum', 'marka', 'varsayilanlar']);
+    const kurulumAdimlari = new Set<string>(KURULUM_LISTESI.map((a) => a.kod));
     for (const [, capalar] of Object.entries(MARKA_MERKEZI_CAPALARI)) {
       for (const c of capalar) {
         if (kurulumAdimlari.has(c)) continue;

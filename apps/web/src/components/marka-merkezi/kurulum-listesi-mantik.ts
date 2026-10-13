@@ -31,6 +31,8 @@ export const LISTE_DURUMU: Record<KurulumListesiDurumu, { etiket: string; sinif:
   bilinmiyor: { etiket: 'Okunamadı', sinif: 'bg-surface-sunken text-ink-muted' },
   bekliyor: { etiket: 'Bekliyor', sinif: 'bg-surface-sunken text-ink-muted' },
   kullanilmiyor: { etiket: 'Kullanılmıyor', sinif: 'bg-surface-sunken text-ink-muted' },
+  // Kurulum sihirbazı sözleşmesi (2026-10-13): beyanla kapanan parça/adım. Görünüş Ajan 3'ün.
+  kapsam_disi: { etiket: 'Kapsam dışı', sinif: 'bg-surface-sunken text-ink-muted' },
 };
 
 /** Parça kodunun ekrandaki adı — kurulum adımları sözleşmede, hazırlama/hazırlık burada. */
@@ -44,6 +46,14 @@ export const PARCA_ADI: Record<string, string> = {
   butce: 'Varsayılan günlük bütçe',
   marka_bilgisi: 'Marka alanları',
   logo: 'Logo',
+  // Sihirbazın yeni hazırlık maddeleri (HAZIRLIK_SIHIRBAZ_KODLARI).
+  site_adresi: 'Web sitesi',
+  iletisim: 'İletişim kişisi ve telefon',
+  rapor_alicisi: 'Rapor alıcıları',
+  adres: 'Adres ve harita konumu',
+  bildirim: 'Bildirim kanalı',
+  erisim: 'Sorumlu kişi',
+  veri_akisi: 'Veri akışı',
 };
 
 /**
@@ -56,6 +66,7 @@ export const PARCA_ADI: Record<string, string> = {
  */
 export function adimOzeti(a: KurulumListesiAdimi): string {
   if (a.durum === 'kullanilmiyor') return 'Bu platformu kullanmadığını söyledin; sayaca girmiyor.';
+  if (a.durum === 'kapsam_disi') return 'Kapsam dışı bırakıldı; sayaca girmiyor.';
   if (a.durum === 'tamam') {
     const basliklar = a.parcalar.map((p) => p.baslik).filter((b): b is string => !!b);
     return basliklar.length > 0 ? basliklar.join(' · ') : 'Tamam.';
@@ -73,7 +84,8 @@ export function adimOzeti(a: KurulumListesiAdimi): string {
 export function sayacMetni(s: KurulumSayaci): string {
   if (s.toplam === 0) return 'Sayılacak adım yok';
   const temel = s.bitti ? `${s.toplam} / ${s.toplam} adım tamam` : `${s.tamam} / ${s.toplam} adım tamam`;
-  return s.bilinmiyor > 0 ? `${temel} · ${s.bilinmiyor} okunamadı` : temel;
+  const ekler = [s.kapsamDisi > 0 ? `${s.kapsamDisi} kapsam dışı` : null, s.bilinmiyor > 0 ? `${s.bilinmiyor} okunamadı` : null].filter(Boolean);
+  return ekler.length > 0 ? `${temel} · ${ekler.join(' · ')}` : temel;
 }
 
 /** İç menü rozeti: kısa ve aynı fonksiyondan (`kurulumSayaci`). */

@@ -1,0 +1,560 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kurulum Sihirbazı Taslağı</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+/*
+ * TASLAK — docs/kurulum-sihirbazi/MIMARI.md. Kılavuzun dört rengi dışında renk
+ * YOK: beyaz, siyah, gri #302e2d, kırmızı #ff2400; zemin ve çizgi yalnız
+ * grinin (koyu temada beyazın) saydam tonları. Yeşil kullanılmadı: "tamam"
+ * siyah dolu daire + beyaz tik.
+ */
+:root {
+  --beyaz: #ffffff; --siyah: #000000; --gri: #302e2d; --kirmizi: #ff2400;
+  --bg: var(--beyaz); --ink: var(--siyah); --ink2: rgba(48,46,45,.62);
+  --zemin: rgba(48,46,45,.04); --zemin2: rgba(48,46,45,.08); --cizgi: rgba(48,46,45,.14);
+  --kart: var(--beyaz); --ust: var(--gri); --ust-ink: var(--beyaz);
+  --vurgu-zemin: rgba(255,36,0,.06); --vurgu-cizgi: rgba(255,36,0,.45);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: var(--siyah); --ink: var(--beyaz); --ink2: rgba(255,255,255,.64);
+    --zemin: rgba(255,255,255,.04); --zemin2: rgba(255,255,255,.08); --cizgi: rgba(255,255,255,.16);
+    --kart: var(--gri); --ust: var(--gri); --ust-ink: var(--beyaz);
+    --vurgu-zemin: rgba(255,36,0,.12); --vurgu-cizgi: rgba(255,36,0,.6);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: var(--siyah); --ink: var(--beyaz); --ink2: rgba(255,255,255,.64);
+  --zemin: rgba(255,255,255,.04); --zemin2: rgba(255,255,255,.08); --cizgi: rgba(255,255,255,.16);
+  --kart: var(--gri); --ust: var(--gri); --ust-ink: var(--beyaz);
+  --vurgu-zemin: rgba(255,36,0,.12); --vurgu-cizgi: rgba(255,36,0,.6);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 400 14px/1.5 "Open Sans", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+h1, h2, h3, .mont { font-family: Montserrat, "Open Sans", sans-serif; letter-spacing: -.01em; }
+a { color: inherit; }
+button { font: inherit; color: inherit; }
+
+/* ── Sayfa çerçevesi ───────────────────────────────────────────── */
+.belge { max-width: 1240px; margin: 0 auto; padding: 32px 16px 80px; }
+.belge-ust { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; justify-content: space-between; margin-bottom: 28px; }
+.belge-ust h1 { font-size: 26px; font-weight: 800; margin: 0; }
+.belge-ust h1 em { font-style: normal; color: var(--kirmizi); }
+.belge-ust p { margin: 4px 0 0; color: var(--ink2); max-width: 70ch; }
+.tema { border: 1px solid var(--cizgi); background: var(--kart); border-radius: 999px; padding: 6px 14px; cursor: pointer; font-weight: 600; font-size: 13px; }
+.etiket { display: inline-flex; gap: 8px; align-items: center; font: 700 12px/1 Montserrat, sans-serif; text-transform: uppercase; letter-spacing: .08em; color: var(--ink2); margin: 48px 0 12px; }
+.etiket b { color: var(--kirmizi); }
+.ekran { border: 1px solid var(--cizgi); border-radius: 14px; overflow: hidden; background: var(--bg); box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.05); }
+
+/* ── Uygulama üst çubuğu ───────────────────────────────────────── */
+.ust { display: flex; align-items: center; gap: 14px; background: var(--ust); color: var(--ust-ink); padding: 10px 18px; min-height: 52px; }
+.logo { font: 800 18px/1 Montserrat, sans-serif; letter-spacing: -.02em; }
+.logo i { font-style: normal; color: var(--kirmizi); }
+.kirinti { font-size: 13px; opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.kirinti b { font-weight: 600; opacity: 1; }
+.ust .sag { margin-left: auto; font-size: 13px; opacity: .85; white-space: nowrap; }
+
+/* ── İki sütun: ray + adım ─────────────────────────────────────── */
+.govde { display: grid; grid-template-columns: 300px minmax(0, 1fr); min-height: 560px; }
+.ray { border-right: 1px solid var(--cizgi); background: var(--zemin); padding: 20px 14px 20px 16px; }
+.ray-baslik { display: flex; justify-content: space-between; align-items: baseline; margin: 0 6px 14px; }
+.ray-baslik h3 { margin: 0; font-size: 15px; font-weight: 700; }
+.sayac { font: 700 13px/1 Montserrat, sans-serif; }
+.sayac small { font: 400 12px "Open Sans", sans-serif; color: var(--ink2); }
+.cubuk { height: 4px; border-radius: 4px; background: var(--zemin2); margin: 0 6px 18px; overflow: hidden; }
+.cubuk span { display: block; height: 100%; background: var(--ink); border-radius: 4px; }
+.grup { font: 700 11px/1 Montserrat, sans-serif; text-transform: uppercase; letter-spacing: .08em; color: var(--ink2); margin: 16px 6px 6px; }
+.grup span { text-transform: none; letter-spacing: 0; font-weight: 600; font-family: "Open Sans", sans-serif; }
+.ray ol { list-style: none; margin: 0; padding: 0; }
+.ray li a { display: grid; grid-template-columns: 22px 1fr; gap: 10px; align-items: start; padding: 8px 8px; border-radius: 10px; text-decoration: none; transition: background-color .15s ease; }
+.ray li a:hover { background: var(--zemin2); }
+.ray li a[aria-current="step"] { background: var(--kart); box-shadow: inset 3px 0 0 var(--kirmizi), 0 0 0 1px var(--cizgi); }
+.ray .ad { font-weight: 600; font-size: 13.5px; line-height: 1.3; display: block; }
+.ray .alt { font-size: 12px; color: var(--ink2); display: block; margin-top: 1px; }
+.ray li.soluk .ad { color: var(--ink2); font-weight: 400; text-decoration: line-through; text-decoration-color: var(--cizgi); }
+.ray .son { margin-top: 10px; border-top: 1px solid var(--cizgi); padding-top: 10px; }
+.ray-mobil { display: none; }
+
+/* Durum ikonları — şekil + ad birlikte; renk tek başına anlam taşımıyor. */
+.d { width: 20px; height: 20px; border-radius: 50%; display: inline-grid; place-items: center; flex: none; margin-top: 1px; }
+.d svg { width: 12px; height: 12px; }
+.d-tamam { background: var(--ink); color: var(--bg); }
+.d-eksik { border: 2px solid var(--ink2); }
+.d-kul { border: 2px solid var(--ink); position: relative; }
+.d-kul::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--ink); }
+.d-hata { background: var(--kirmizi); color: #fff; font: 800 12px/1 Montserrat, sans-serif; }
+.d-bek { border: 2px dashed var(--ink2); }
+.d-dis { border: 2px solid var(--cizgi); position: relative; overflow: hidden; }
+.d-dis::after { content: ""; position: absolute; width: 2px; height: 22px; background: var(--ink2); transform: rotate(45deg); }
+.d-simdi { border: 2px solid var(--kirmizi); }
+.d-simdi::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--kirmizi); }
+.d-yap { border: 2px solid var(--zemin2); border-top-color: var(--kirmizi); animation: don 0.9s linear infinite; }
+.d-no { border: 1.5px solid var(--cizgi); font: 700 11px/1 Montserrat, sans-serif; color: var(--ink2); }
+@keyframes don { to { transform: rotate(360deg); } }
+
+/* ── Sağ: geçerli adım ─────────────────────────────────────────── */
+.adim { padding: 28px 32px 0; display: flex; flex-direction: column; min-width: 0; }
+.ust-baslik { font: 600 12px/1.2 "Open Sans", sans-serif; color: var(--ink2); text-transform: uppercase; letter-spacing: .06em; }
+.adim h2 { font-size: 24px; font-weight: 800; margin: 6px 0 6px; }
+.on { color: var(--ink2); max-width: 66ch; margin: 0 0 18px; }
+.ozet { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+.hap { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--cizgi); background: var(--kart); }
+.hap .d { width: 14px; height: 14px; margin: 0; }
+.hap .d svg { width: 8px; height: 8px; }
+.hap .d-hata { font-size: 9px; }
+
+.parcalar { border: 1px solid var(--cizgi); border-radius: 12px; background: var(--kart); }
+.parca { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 12px; padding: 14px 16px; border-top: 1px solid var(--cizgi); align-items: start; }
+.parca:first-child { border-top: 0; }
+.parca .ad { font-weight: 600; }
+.parca .sonuc { font-size: 12.5px; color: var(--ink2); }
+.parca .sonuc code, .kod { font: 500 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.parca .neden { margin: 6px 0 0; font-size: 13px; }
+.parca.vurgulu { background: var(--vurgu-zemin); }
+.platform-mesaji { margin: 8px 0 0; border-left: 3px solid var(--kirmizi); padding: 8px 12px; background: var(--zemin); border-radius: 0 8px 8px 0; font-size: 13px; }
+.platform-mesaji b { display: block; font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink2); margin-bottom: 2px; }
+.kod-kutu { margin: 10px 0 0; background: var(--zemin2); border-radius: 8px; padding: 10px 12px; overflow-x: auto; white-space: pre; }
+.eylemler { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.durum-metni { font-size: 12px; font-weight: 600; white-space: nowrap; color: var(--ink2); }
+.durum-metni.k { color: var(--kirmizi); }
+.isleniyor { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--ink2); margin-top: 8px; }
+.isleniyor .d { width: 14px; height: 14px; }
+
+.dg { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border-radius: 999px; padding: 8px 16px; font-weight: 600; font-size: 13.5px; border: 1px solid var(--cizgi); background: var(--kart); cursor: pointer; text-decoration: none; transition: background-color .15s ease, border-color .15s ease; white-space: nowrap; }
+.dg:hover { background: var(--zemin2); }
+.dg.birincil { background: var(--kirmizi); border-color: var(--kirmizi); color: #fff; }
+.dg.birincil:hover { background: #e62000; }
+.dg.koyu { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+.dg.kucuk { padding: 5px 12px; font-size: 12.5px; }
+.dg.duz { border-color: transparent; background: transparent; text-decoration: underline; text-underline-offset: 3px; padding-inline: 6px; }
+.dg:focus-visible, .ray a:focus-visible, .secenek:focus-within { outline: 2px solid var(--kirmizi); outline-offset: 2px; }
+
+.alt-cubuk { position: sticky; bottom: 0; margin: 24px -32px 0; padding: 14px 32px; border-top: 1px solid var(--cizgi); background: var(--bg); display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.alt-cubuk .bosluk { flex: 1; }
+.alt-cubuk .not { font-size: 12.5px; color: var(--ink2); }
+
+/* ── Başlangıç kartları ─────────────────────────────────────────── */
+.secenekler { display: grid; gap: 12px; }
+.secenek { border: 1px solid var(--cizgi); border-radius: 12px; background: var(--kart); padding: 16px 18px; display: grid; grid-template-columns: 22px 1fr; gap: 12px; transition: border-color .15s ease; }
+.secenek.secili { border-color: var(--vurgu-cizgi); box-shadow: 0 0 0 1px var(--vurgu-cizgi); }
+.secenek .radyo { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--ink2); margin-top: 2px; display: grid; place-items: center; }
+.secenek.secili .radyo { border-color: var(--kirmizi); }
+.secenek.secili .radyo::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--kirmizi); }
+.secenek h3 { margin: 0; font-size: 15px; font-weight: 700; }
+.secenek p { margin: 2px 0 0; color: var(--ink2); font-size: 13px; }
+.ws-liste { margin: 14px 0 0; border: 1px solid var(--cizgi); border-radius: 10px; overflow: hidden; }
+.ws { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 14px; align-items: center; padding: 12px 14px; border-top: 1px solid var(--cizgi); }
+.ws:first-child { border-top: 0; }
+.ws .ad { font-weight: 600; }
+.ws .alt { font-size: 12.5px; color: var(--ink2); }
+.mini-cubuk { width: 90px; height: 4px; border-radius: 4px; background: var(--zemin2); overflow: hidden; }
+.mini-cubuk span { display: block; height: 100%; background: var(--ink); }
+.ws .s { font: 700 13px/1 Montserrat, sans-serif; text-align: right; }
+.ws .s small { display: block; font: 400 11.5px "Open Sans", sans-serif; color: var(--ink2); margin-top: 3px; }
+.platform-sor { margin-top: 14px; padding: 12px 14px; border-radius: 10px; background: var(--zemin); font-size: 13px; }
+.platform-sor b { display: block; margin-bottom: 8px; }
+.tik { display: inline-flex; align-items: center; gap: 8px; margin-right: 16px; font-weight: 600; }
+.tik .kutu { width: 16px; height: 16px; border-radius: 4px; background: var(--ink); color: var(--bg); display: grid; place-items: center; }
+.tik .kutu svg { width: 10px; height: 10px; }
+.bilgi { font-size: 12.5px; color: var(--ink2); margin: 10px 0 0; }
+
+/* ── Son kontrol ───────────────────────────────────────────────── */
+.hukum { display: flex; gap: 16px; align-items: center; padding: 18px 20px; border-radius: 12px; background: var(--kart); border: 1px solid var(--cizgi); margin-bottom: 20px; }
+.hukum .buyuk { width: 48px; height: 48px; border-radius: 50%; background: var(--ink); color: var(--bg); display: grid; place-items: center; flex: none; }
+.hukum .buyuk svg { width: 24px; height: 24px; }
+.hukum h2 { margin: 0; }
+.hukum p { margin: 2px 0 0; color: var(--ink2); }
+.tablo-baslik { display: flex; justify-content: space-between; align-items: baseline; margin: 20px 0 8px; }
+.tablo-baslik h3 { margin: 0; font-size: 14px; font-weight: 700; }
+.tablo-baslik span { font-size: 12.5px; color: var(--ink2); }
+.kontrol { border: 1px solid var(--cizgi); border-radius: 12px; background: var(--kart); }
+.kontrol .satir { display: grid; grid-template-columns: 22px minmax(140px, 220px) minmax(0, 1fr) auto; gap: 12px; padding: 11px 16px; border-top: 1px solid var(--cizgi); align-items: start; font-size: 13.5px; }
+.kontrol .satir:first-child { border-top: 0; }
+.kontrol .satir .ad { font-weight: 600; }
+.kontrol .satir .sonuc { color: var(--ink2); }
+.beyan { font-size: 12.5px; }
+.beyan b { color: var(--ink); }
+.disari { margin-top: 20px; border: 1px dashed var(--cizgi); border-radius: 12px; padding: 14px 16px; }
+.disari h3 { margin: 0 0 8px; font-size: 13px; font-weight: 700; }
+.disari ul { margin: 0; padding-left: 18px; color: var(--ink2); font-size: 13px; }
+.disari li { margin: 3px 0; }
+
+/* ── Mobil: tek sütun, ray katlanır özet ──────────────────────── */
+@media (max-width: 860px) {
+  .govde { grid-template-columns: minmax(0, 1fr); }
+  .ray { display: none; }
+  .ray-mobil { display: block; border-bottom: 1px solid var(--cizgi); background: var(--zemin); }
+  .ray-mobil summary { list-style: none; cursor: pointer; padding: 12px 16px; display: flex; align-items: center; gap: 10px; font-weight: 600; }
+  .ray-mobil summary::-webkit-details-marker { display: none; }
+  .ray-mobil summary .sayac { margin-left: auto; }
+  .ray-mobil .icerik { padding: 0 10px 12px; }
+  .ray-mobil .icerik ol { list-style: none; margin: 0; padding: 0; }
+  .ray-mobil .icerik li a { display: grid; grid-template-columns: 22px 1fr; gap: 10px; padding: 7px 6px; text-decoration: none; border-radius: 8px; }
+  .ray-mobil .icerik li a[aria-current="step"] { background: var(--kart); box-shadow: inset 3px 0 0 var(--kirmizi); }
+  .ray-mobil .ad { font-weight: 600; font-size: 13.5px; display: block; }
+  .ray-mobil .alt { font-size: 12px; color: var(--ink2); display: block; }
+  .ray-mobil li.soluk .ad { color: var(--ink2); font-weight: 400; text-decoration: line-through; }
+  .ray-mobil .grup { margin: 10px 6px 4px; }
+  .adim { padding: 20px 16px 0; }
+  .adim h2 { font-size: 20px; }
+  .alt-cubuk { margin: 20px -16px 0; padding: 12px 16px; }
+  .alt-cubuk .bosluk { display: none; }
+  .alt-cubuk .dg.birincil { flex: 1; }
+  .parca { grid-template-columns: 22px minmax(0, 1fr); }
+  .parca .durum-metni { grid-column: 2; }
+  .ws { grid-template-columns: minmax(0, 1fr) auto; }
+  .ws .mini-cubuk { display: none; }
+  .kontrol .satir { grid-template-columns: 22px minmax(0, 1fr); }
+  .kontrol .satir .sonuc, .kontrol .satir > :last-child { grid-column: 2; }
+  .kirinti .uzun { display: none; }
+  .ust .sag { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="tik" viewBox="0 0 12 12"><path d="M2.5 6.3l2.3 2.3 4.7-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="dis" viewBox="0 0 12 12"><path d="M5 2h5v5M10 2L4.5 7.5M8 7.5V10H2V4h2.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
+
+<main class="belge">
+  <div class="belge-ust">
+    <div>
+      <h1>Kurulum sihirbazı · <em>taslak</em></h1>
+      <p>Tek sihirbaz: yeni şirket ve workspace açar, var olanı kaldığı yerden tamamlar. Solda adım listesi Marka Merkezi › Kurulum'daki listenin AYNISI (tek tanım, tek sayaç). Üç örnek ekran alt alta.</p>
+    </div>
+    <button class="tema" type="button" id="tema">Temayı değiştir</button>
+  </div>
+
+  <!-- ═══════════════════════ EKRAN 1 · BAŞLANGIÇ ═══════════════════════ -->
+  <div class="etiket"><b>1</b> Başlangıç · yeni mi, var olan mı</div>
+  <section class="ekran" aria-label="Başlangıç ekranı">
+    <div class="ust">
+      <span class="logo">adv<i>e</i>tics</span>
+      <span class="kirinti"><span class="uzun">Profaj Reklamcılık › </span><b>Ege Birlik Yapı</b></span>
+      <span class="sag">Kurulum sihirbazı</span>
+    </div>
+    <div class="govde">
+      <aside class="ray" data-ray>
+        <div class="ray-baslik"><h3>Adımlar</h3><span class="sayac"><small>workspace seçilmedi</small></span></div>
+        <div class="grup">Şirket <span>· Ege Birlik Yapı</span></div>
+        <ol>
+          <li><a href="#"><span class="d d-tamam"><svg><use href="#tik"/></svg></span><span><span class="ad">Platform bağlantıları</span><span class="alt">Ajansın Meta ve Google bağlantısı</span></span></a></li>
+          <li><a href="#"><span class="d d-tamam"><svg><use href="#tik"/></svg></span><span><span class="ad">Ekip ve güvenlik</span><span class="alt">İki adımlı doğrulama zorunlu</span></span></a></li>
+        </ol>
+        <div class="grup">Workspace</div>
+        <ol>
+          <li><a href="#"><span class="d d-no">3</span><span><span class="ad">Workspace bilgileri</span></span></a></li>
+          <li><a href="#"><span class="d d-no">4</span><span><span class="ad">Meta reklam hesabı ve ödeme</span></span></a></li>
+          <li><a href="#"><span class="d d-no">5</span><span><span class="ad">Facebook sayfası ve Instagram</span></span></a></li>
+          <li><a href="#"><span class="d d-no">6</span><span><span class="ad">Meta pikseli</span></span></a></li>
+          <li><a href="#"><span class="d d-no">7</span><span><span class="ad">Google Ads hesabı ve ödeme</span></span></a></li>
+          <li><a href="#"><span class="d d-no">8</span><span><span class="ad">Dönüşüm ölçümü</span></span></a></li>
+          <li><a href="#"><span class="d d-no">9</span><span><span class="ad">Marka bilgileri ve logo</span></span></a></li>
+          <li><a href="#"><span class="d d-no">10</span><span><span class="ad">Reklam varsayılanları</span></span></a></li>
+          <li><a href="#"><span class="d d-no">11</span><span><span class="ad">Bildirimler ve erişim</span></span></a></li>
+          <li><a href="#"><span class="d d-no">12</span><span><span class="ad">Veri akışı</span></span></a></li>
+        </ol>
+        <div class="son"><ol><li><a href="#"><span class="d d-no">✓</span><span><span class="ad">Son kontrol</span></span></a></li></ol></div>
+      </aside>
+      <details class="ray-mobil" data-ray-mobil><summary><span class="d d-no">·</span> Adımlar <span class="sayac"><small>workspace seçilmedi</small></span></summary><div class="icerik"></div></details>
+
+      <div class="adim">
+        <span class="ust-baslik">Kurulum sihirbazı</span>
+        <h2>Ne yapmak istiyorsun?</h2>
+        <p class="on">Sihirbaz bir şirketin ve workspace'in reklam vermeye hazır olması için gereken her şeyi sırayla tamamlar. Bitmiş adımları atlar ama gösterir; kalan her işin nedenini yazar.</p>
+
+        <div class="secenekler" role="radiogroup" aria-label="Sihirbaz türü">
+          <div class="secenek secili" role="radio" aria-checked="true" tabindex="0">
+            <span class="radyo"></span>
+            <div>
+              <h3>Var olan bir workspace'i tamamla</h3>
+              <p>Ege Birlik Yapı'nın workspace'leri, en çok eksiği olan üstte.</p>
+              <div class="ws-liste">
+                <div class="ws">
+                  <div><div class="ad">Narlıdere Konutları</div><div class="alt">Eksik: Google Ads ödemesi, ölçüm etiketleri, varsayılanlar, bildirimler</div></div>
+                  <div class="mini-cubuk" aria-hidden="true"><span style="width:67%"></span></div>
+                  <div class="s">8 / 12<small>4 iş kaldı</small></div>
+                </div>
+                <div class="ws">
+                  <div><div class="ad">Kurumsal</div><div class="alt">İlk veri çekiliyor, 18 dk önce başladı</div></div>
+                  <div class="mini-cubuk" aria-hidden="true"><span style="width:92%"></span></div>
+                  <div class="s">11 / 12<small>veri bekleniyor</small></div>
+                </div>
+                <div class="ws">
+                  <div><div class="ad">Bornova Ofis</div><div class="alt">Hiç eksik yok · Google Ads kullanılmıyor</div></div>
+                  <div class="mini-cubuk" aria-hidden="true"><span style="width:100%"></span></div>
+                  <div class="s">11 / 11<small>hazır</small></div>
+                </div>
+              </div>
+              <div class="platform-sor">
+                <b>Narlıdere Konutları'nda hangi platformlarda reklam vereceğiz?</b>
+                <span class="tik"><span class="kutu"><svg><use href="#tik"/></svg></span>Meta (Facebook, Instagram)</span>
+                <span class="tik"><span class="kutu"><svg><use href="#tik"/></svg></span>Google Ads</span>
+                <p class="bilgi">Kullanmadığın platformun adımları listede soluk kalır ve sayılmaz. Sonradan açabilirsin.</p>
+              </div>
+              <div class="eylemler">
+                <a class="dg birincil" href="#ekran-2">Narlıdere Konutları'na geç ve tamamla</a>
+              </div>
+              <p class="bilgi">Üst çubukta seçili workspace de Narlıdere Konutları olur; açık diğer sekmeler de ona geçer.</p>
+            </div>
+          </div>
+          <div class="secenek" role="radio" aria-checked="false" tabindex="0">
+            <span class="radyo"></span>
+            <div><h3>Yeni workspace aç</h3><p>Ege Birlik Yapı'ya yeni bir proje ekler. Önce adı ve web sitesi, sonra hesaplar; aynı sihirbaz sonuna kadar götürür.</p></div>
+          </div>
+          <div class="secenek" role="radio" aria-checked="false" tabindex="0">
+            <span class="radyo"></span>
+            <div><h3>Yeni şirket aç</h3><p>Profaj Reklamcılık'a yeni bir müşteri şirketi. Ajansın Meta ve Google bağlantısı yeni şirkette de kullanılır; yeniden bağlanmaz.</p></div>
+          </div>
+        </div>
+        <div class="alt-cubuk">
+          <span class="not">Şirket adımları tamam: 2 / 2</span>
+          <span class="bosluk"></span>
+          <a class="dg" href="#">Vazgeç</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════ EKRAN 2 · DÖNÜŞÜM ÖLÇÜMÜ ═══════════════════════ -->
+  <div class="etiket" id="ekran-2"><b>2</b> Ortadaki bir adım · Dönüşüm ölçümü (hata, kullanıcı işi ve bekleme bir arada)</div>
+  <section class="ekran" aria-label="Dönüşüm ölçümü adımı">
+    <div class="ust">
+      <span class="logo">adv<i>e</i>tics</span>
+      <span class="kirinti"><span class="uzun">Profaj Reklamcılık › Ege Birlik Yapı › </span><b>Narlıdere Konutları</b></span>
+      <span class="sag">Kurulum sihirbazı</span>
+    </div>
+    <div class="govde">
+      <aside class="ray" data-ray>
+        <div class="ray-baslik"><h3>Adımlar</h3><span class="sayac">8 / 12 <small>tamam</small></span></div>
+        <div class="cubuk" aria-hidden="true"><span style="width:67%"></span></div>
+        <div class="grup">Şirket <span>· Ege Birlik Yapı</span></div>
+        <ol>
+          <li><a href="#"><span class="d d-tamam" title="Tamam"><svg><use href="#tik"/></svg></span><span><span class="ad">Platform bağlantıları</span><span class="alt">Ajansın bağlantısı kullanılıyor</span></span></a></li>
+          <li><a href="#"><span class="d d-tamam" title="Tamam"><svg><use href="#tik"/></svg></span><span><span class="ad">Ekip ve güvenlik</span><span class="alt">İki adımlı doğrulama zorunlu</span></span></a></li>
+        </ol>
+        <div class="grup">Workspace <span>· Narlıdere Konutları</span></div>
+        <ol>
+          <li><a href="#"><span class="d d-tamam" title="Tamam"><svg><use href="#tik"/></svg></span><span><span class="ad">Workspace bilgileri</span><span class="alt">egebirlikyapi.com.tr · 2 rapor alıcısı</span></span></a></li>
+          <li><a href="#"><span class="d d-tamam" title="Tamam"><svg><use href="#tik"/></svg></span><span><span class="ad">Meta reklam hesabı ve ödeme</span><span class="alt">Narlıdere Konutları · kart ekli</span></span></a></li>
+          <li><a href="#"><span class="d d-tamam" title="Tamam"><svg><use href="#tik"/></svg></span><span><span class="ad">Facebook sayfası ve Instagram</span><span class="alt">Ege Birlik Yapı · @egebirlikyapi</span></span></a></li>
+          <li><a href="#"><span class="d d-tamam" title="Tamam"><svg><use href="#tik"/></svg></span><span><span class="ad">Meta pikseli</span><span class="alt">Narlıdere Pikseli</span></span></a></li>
+          <li><a href="#"><span class="d d-kul" title="Senin işin"></span><span><span class="ad">Google Ads hesabı ve ödeme</span><span class="alt">Ödeme yöntemi bekleniyor</span></span></a></li>
+          <li><a href="#" aria-current="step"><span class="d d-hata" title="Sorun var">!</span><span><span class="ad">Dönüşüm ölçümü</span><span class="alt">Etiketler yayınlanamadı</span></span></a></li>
+          <li><a href="#"><span class="d d-tamam" title="Tamam"><svg><use href="#tik"/></svg></span><span><span class="ad">Marka bilgileri ve logo</span><span class="alt">Siteden dolduruldu, onaylandı</span></span></a></li>
+          <li><a href="#"><span class="d d-eksik" title="Eksik"></span><span><span class="ad">Reklam varsayılanları</span><span class="alt">Günlük bütçe seçilmedi</span></span></a></li>
+          <li><a href="#"><span class="d d-eksik" title="Eksik"></span><span><span class="ad">Bildirimler ve erişim</span><span class="alt">Bildirim kanalı yok</span></span></a></li>
+          <li><a href="#"><span class="d d-tamam" title="Tamam"><svg><use href="#tik"/></svg></span><span><span class="ad">Veri akışı</span><span class="alt">Son güncelleme 14:10</span></span></a></li>
+        </ol>
+        <div class="son"><ol><li><a href="#ekran-3"><span class="d d-no">✓</span><span><span class="ad">Son kontrol</span><span class="alt">4 iş kaldı</span></span></a></li></ol></div>
+      </aside>
+      <details class="ray-mobil" data-ray-mobil><summary><span class="d d-hata">!</span> Adım 8 / 12 · Dönüşüm ölçümü <span class="sayac">8 / 12</span></summary><div class="icerik"></div></details>
+
+      <div class="adim">
+        <span class="ust-baslik">Adım 8 / 12 · Workspace</span>
+        <h2>Dönüşüm ölçümü</h2>
+        <p class="on">Reklamdan gelen formları, telefon aramalarını ve WhatsApp mesajlarını sayabilmemiz için. Sayılmayan sonucu Meta ve Google da iyileştiremez: reklam tıklamaya göre çalışır, müşteriye göre değil.</p>
+
+        <div class="ozet">
+          <span class="hap"><span class="d d-tamam"><svg><use href="#tik"/></svg></span>5 hazır</span>
+          <span class="hap"><span class="d d-hata">!</span>1 sorun</span>
+          <span class="hap"><span class="d d-kul"></span>1 senin işin</span>
+          <span class="hap"><span class="d d-bek"></span>1 sırada</span>
+        </div>
+
+        <div class="parcalar">
+          <div class="parca">
+            <span class="d d-tamam"><svg><use href="#tik"/></svg></span>
+            <div><div class="ad">Ölçüm izinleri</div><div class="sonuc">Google bağlantısına Tag Manager ve Analytics izni verildi</div></div>
+            <span class="durum-metni">Hazır</span>
+          </div>
+          <div class="parca">
+            <span class="d d-tamam"><svg><use href="#tik"/></svg></span>
+            <div><div class="ad">Tag Manager konteyneri</div><div class="sonuc"><code>GTM-K7X2P9Q</code> · sitende bu konteyner görüldü, o kullanıldı</div></div>
+            <span class="durum-metni">Hazır</span>
+          </div>
+          <div class="parca">
+            <span class="d d-tamam"><svg><use href="#tik"/></svg></span>
+            <div><div class="ad">Google Analytics mülkü</div><div class="sonuc"><code>G-4QX8T2LM7Z</code> · Narlıdere Konutları</div></div>
+            <span class="durum-metni">Hazır</span>
+          </div>
+          <div class="parca">
+            <span class="d d-tamam"><svg><use href="#tik"/></svg></span>
+            <div><div class="ad">Google Ads dönüşümleri</div><div class="sonuc">Form gönderimi, telefon tıklaması, WhatsApp tıklaması · birincil</div></div>
+            <span class="durum-metni">Hazır</span>
+          </div>
+          <div class="parca">
+            <span class="d d-tamam"><svg><use href="#tik"/></svg></span>
+            <div><div class="ad">Analytics ile Google Ads bağlantısı</div><div class="sonuc">Bağlı · form gönderimi anahtar etkinlik</div></div>
+            <span class="durum-metni">Hazır</span>
+          </div>
+
+          <div class="parca vurgulu">
+            <span class="d d-hata">!</span>
+            <div>
+              <div class="ad">Ölçüm etiketleri</div>
+              <div class="sonuc">7 etiket hazırlandı (Google etiketi, Meta pikseli, 3 dönüşüm, form ve WhatsApp olayları) · yayınlanmadı</div>
+              <div class="platform-mesaji"><b>Tag Manager</b>Bu konteynerde başka birinin yayınlamadığı 3 değişiklik var (çalışma alanı: Default Workspace, son düzenleyen: web@egebirlikyapi.com.tr).</div>
+              <p class="neden">Onları biz yayınlamıyoruz: kimin olduğunu bilmeden yayınlamak sitedeki çalışan bir şeyi bozabilir. Değişikliğin sahibi onları yayınlasın ya da silsin, sonra "Tekrar dene".</p>
+              <div class="eylemler">
+                <a class="dg kucuk" href="#">Tag Manager'da aç <svg width="12" height="12"><use href="#dis"/></svg></a>
+                <button class="dg kucuk koyu" type="button">Tekrar dene</button>
+              </div>
+            </div>
+            <span class="durum-metni k">Sorun var</span>
+          </div>
+
+          <div class="parca">
+            <span class="d d-kul"></span>
+            <div>
+              <div class="ad">Sitedeki kod</div>
+              <div class="sonuc">egebirlikyapi.com.tr sayfalarında <code>GTM-K7X2P9Q</code> kodu bulunamadı · son tarama 14:02</div>
+              <p class="neden">Kodu sitenin her sayfasına sitenin geliştiricisi ekler; Advetics siteye yazamaz. Eklendiğinde taramayla kendimiz anlarız.</p>
+<div class="kod-kutu kod">&lt;!-- Google Tag Manager --&gt;
+&lt;script&gt;(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+new Date().getTime(),event:'gtm.js'});… })(window,document,'script','dataLayer','GTM-K7X2P9Q');&lt;/script&gt;</div>
+              <div class="eylemler">
+                <button class="dg kucuk" type="button">Kodu kopyala</button>
+                <button class="dg kucuk" type="button">Geliştiriciye e-postayla gönder</button>
+                <button class="dg kucuk koyu" type="button">Siteyi tekrar tara</button>
+              </div>
+              <div class="isleniyor" role="status"><span class="d d-yap"></span>Taranıyor… genelde 10 saniye sürer</div>
+            </div>
+            <span class="durum-metni">Senin işin</span>
+          </div>
+
+          <div class="parca">
+            <span class="d d-bek"></span>
+            <div>
+              <div class="ad">Ölçüm doğrulaması</div>
+              <div class="sonuc">Etiketler yayınlanıp kod sitede görülünce</div>
+              <p class="neden">Sitendeki iletişim formunu bir kez doldur; formun Analytics'e ve Meta'ya ulaştığını burada görürüz. Ölçümün çalıştığını söylemenin tek kesin yolu bu.</p>
+            </div>
+            <span class="durum-metni">Sırada</span>
+          </div>
+        </div>
+
+        <div class="alt-cubuk">
+          <a class="dg" href="#">← Geri</a>
+          <button class="dg" type="button" disabled title="Sistemin kendi yapabileceği parça kalmadı">Otomatik yap</button>
+          <span class="not">Kalan iki iş sistemin değil: Tag Manager'daki yabancı değişiklik ve sitedeki kod.</span>
+          <span class="bosluk"></span>
+          <a class="dg duz" href="#">Sonra yapacağım</a>
+          <a class="dg birincil" href="#">Devam →</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════ EKRAN 3 · SON KONTROL ═══════════════════════ -->
+  <div class="etiket" id="ekran-3"><b>3</b> Son kontrol · hiç eksik yok</div>
+  <section class="ekran" aria-label="Son kontrol ekranı">
+    <div class="ust">
+      <span class="logo">adv<i>e</i>tics</span>
+      <span class="kirinti"><span class="uzun">Profaj Reklamcılık › Ege Birlik Yapı › </span><b>Bornova Ofis</b></span>
+      <span class="sag">Kurulum sihirbazı</span>
+    </div>
+    <div class="govde">
+      <aside class="ray" data-ray>
+        <div class="ray-baslik"><h3>Adımlar</h3><span class="sayac">11 / 11 <small>tamam</small></span></div>
+        <div class="cubuk" aria-hidden="true"><span style="width:100%"></span></div>
+        <div class="grup">Şirket <span>· Ege Birlik Yapı</span></div>
+        <ol>
+          <li><a href="#"><span class="d d-tamam"><svg><use href="#tik"/></svg></span><span><span class="ad">Platform bağlantıları</span><span class="alt">Ajansın bağlantısı kullanılıyor</span></span></a></li>
+          <li><a href="#"><span class="d d-tamam"><svg><use href="#tik"/></svg></span><span><span class="ad">Ekip ve güvenlik</span><span class="alt">İki adımlı doğrulama zorunlu</span></span></a></li>
+        </ol>
+        <div class="grup">Workspace <span>· Bornova Ofis</span></div>
+        <ol>
+          <li><a href="#"><span class="d d-tamam"><svg><use href="#tik"/></svg></span><span><span class="ad">Workspace bilgileri</span></span></a></li>
+          <li><a href="#"><span class="d d-tamam"><svg><use href="#tik"/></svg></span><span><span class="ad">Meta reklam hesabı ve ödeme</span></span></a></li>
+          <li><a href="#"><span class="d d-tamam"><svg><use href="#tik"/></svg></span><span><span class="ad">Facebook sayfası ve Instagram</span></span></a></li>
+          <li><a href="#"><span class="d d-tamam"><svg><use href="#tik"/></svg></span><span><span class="ad">Meta pikseli</span></span></a></li>
+          <li class="soluk"><a href="#"><span class="d d-dis" title="Kullanılmıyor"></span><span><span class="ad">Google Ads hesabı ve ödeme</span><span class="alt">Kullanılmıyor</span></span></a></li>
+          <li><a href="#"><span class="d d-tamam"><svg><use href="#tik"/></svg></span><span><span class="ad">Dönüşüm ölçümü</span></span></a></li>
+          <li><a href="#"><span class="d d-tamam"><svg><use href="#tik"/></svg></span><span><span class="ad">Marka bilgileri ve logo</span></span></a></li>
+          <li><a href="#"><span class="d d-tamam"><svg><use href="#tik"/></svg></span><span><span class="ad">Reklam varsayılanları</span></span></a></li>
+          <li><a href="#"><span class="d d-tamam"><svg><use href="#tik"/></svg></span><span><span class="ad">Bildirimler ve erişim</span></span></a></li>
+          <li><a href="#"><span class="d d-tamam"><svg><use href="#tik"/></svg></span><span><span class="ad">Veri akışı</span></span></a></li>
+        </ol>
+        <div class="son"><ol><li><a href="#" aria-current="step"><span class="d d-simdi"></span><span><span class="ad">Son kontrol</span><span class="alt">Hiç eksik yok</span></span></a></li></ol></div>
+      </aside>
+      <details class="ray-mobil" data-ray-mobil><summary><span class="d d-tamam"><svg><use href="#tik"/></svg></span> Son kontrol <span class="sayac">11 / 11</span></summary><div class="icerik"></div></details>
+
+      <div class="adim">
+        <span class="ust-baslik">Son kontrol</span>
+        <div class="hukum" style="margin-top:10px">
+          <span class="buyuk"><svg viewBox="0 0 12 12"><use href="#tik"/></svg></span>
+          <div>
+            <h2>Hiç eksik yok</h2>
+            <p>Bornova Ofis reklam vermeye hazır. Sayılan 11 adımın 11'i tamam; 1 adım bilerek kullanılmıyor.</p>
+          </div>
+        </div>
+
+        <div class="tablo-baslik"><h3>Şirket · Ege Birlik Yapı</h3><span>2 / 2</span></div>
+        <div class="kontrol">
+          <div class="satir"><span class="d d-tamam"><svg><use href="#tik"/></svg></span><span class="ad">Platform bağlantıları</span><span class="sonuc">Meta ve Google: ajansın bağlantısı (Profaj Reklamcılık), ikisi de etkin</span><span></span></div>
+          <div class="satir"><span class="d d-tamam"><svg><use href="#tik"/></svg></span><span class="ad">Ekip ve güvenlik</span><span class="sonuc">İki adımlı doğrulama zorunlu · 4 kişi</span><span></span></div>
+        </div>
+
+        <div class="tablo-baslik"><h3>Workspace · Bornova Ofis</h3><span>9 / 9 · 1 kullanılmıyor</span></div>
+        <div class="kontrol">
+          <div class="satir"><span class="d d-tamam"><svg><use href="#tik"/></svg></span><span class="ad">Workspace bilgileri</span><span class="sonuc">egebirlikyapi.com.tr · 2 rapor alıcısı · Bornova, İzmir (haritada işaretli)</span><span></span></div>
+          <div class="satir"><span class="d d-tamam"><svg><use href="#tik"/></svg></span><span class="ad">Meta reklam hesabı ve ödeme</span><span class="sonuc">Bornova Ofis · act_1029384756 · kart ekli, hesap etkin</span><span></span></div>
+          <div class="satir"><span class="d d-tamam"><svg><use href="#tik"/></svg></span><span class="ad">Facebook sayfası ve Instagram</span><span class="sonuc">Ege Birlik Yapı · @egebirlikyapi</span><span></span></div>
+          <div class="satir"><span class="d d-tamam"><svg><use href="#tik"/></svg></span><span class="ad">Meta pikseli</span><span class="sonuc">Bornova Ofis Pikseli</span><span></span></div>
+          <div class="satir"><span class="d d-dis"></span><span class="ad">Google Ads hesabı ve ödeme</span><span class="sonuc beyan"><b>Kullanılmıyor.</b> Yusuf Algan, 13 Eki 2026: "Bu proje yalnız Meta'da."</span><a class="dg kucuk duz" href="#">Geri al</a></div>
+          <div class="satir"><span class="d d-tamam"><svg><use href="#tik"/></svg></span><span class="ad">Dönüşüm ölçümü</span><span class="sonuc">Form gönderimi 13 Eki 15:42'de Analytics'te ve Meta'da görüldü</span><span></span></div>
+          <div class="satir"><span class="d d-tamam"><svg><use href="#tik"/></svg></span><span class="ad">Marka bilgileri ve logo</span><span class="sonuc">Konut · kime satıyoruz dolu · logo yüklü</span><span></span></div>
+          <div class="satir"><span class="d d-tamam"><svg><use href="#tik"/></svg></span><span class="ad">Reklam varsayılanları</span><span class="sonuc">Konut kategorisi beyan edildi · İzmir +20 km · günlük 750 ₺</span><span></span></div>
+          <div class="satir"><span class="d d-tamam"><svg><use href="#tik"/></svg></span><span class="ad">Bildirimler ve erişim</span><span class="sonuc beyan">E-posta kanalı etkin · Erişim: <b>yalnız şirket yöneticileri</b> (Yusuf Algan'ın beyanı)</span><a class="dg kucuk duz" href="#">Değiştir</a></div>
+          <div class="satir"><span class="d d-tamam"><svg><use href="#tik"/></svg></span><span class="ad">Veri akışı</span><span class="sonuc">Son 90 gün çekildi · 4.312 satır · son güncelleme 15:10</span><span></span></div>
+        </div>
+
+        <div class="disari">
+          <h3>Sayaca girmeyenler</h3>
+          <ul>
+            <li>Senin rapor gönderen e-postan doğrulanmış. (Yalnız kendi hesabını görebiliyoruz.)</li>
+            <li>Bu ayın bütçesi planlanmadı. İstersen Planla › Aylık Bütçe.</li>
+            <li>Müşteriye panel girişi verilmedi. İsteğe bağlı.</li>
+          </ul>
+        </div>
+
+        <div class="alt-cubuk">
+          <a class="dg" href="#">Marka Merkezi'ne dön</a>
+          <span class="bosluk"></span>
+          <a class="dg birincil" href="#">İlk reklamı kur</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+  // Mobilde ray: masaüstü listesinin kopyası katlanır özetin içine (taslakta tek kaynak).
+  document.querySelectorAll('.govde').forEach(function (g) {
+    var ray = g.querySelector('[data-ray]'), mobil = g.querySelector('[data-ray-mobil] .icerik');
+    if (!ray || !mobil) return;
+    ray.querySelectorAll('.grup, ol').forEach(function (el) { mobil.appendChild(el.cloneNode(true)); });
+  });
+  document.getElementById('tema').addEventListener('click', function () {
+    var kok = document.documentElement;
+    var koyuMu = kok.dataset.theme ? kok.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    kok.dataset.theme = koyuMu ? 'light' : 'dark';
+  });
+</script>
+</body>
+</html>

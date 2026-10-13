@@ -348,7 +348,11 @@ function hazirlik(ozel: Partial<Record<string, 'tamam' | 'eksik' | 'bilinmiyor'>
     clientId: 'ws-1',
     clientName: 'Ege',
     hazir: true,
-    maddeler: (['reklam_hesabi', 'veri_akisi', 'marka_bilgisi', 'logo', 'aylik_butce', 'sosyal_kanal', 'reklam_hazirligi'] as const).map(
+    maddeler: ([
+      'reklam_hesabi', 'veri_akisi', 'marka_bilgisi', 'logo', 'aylik_butce', 'sosyal_kanal', 'reklam_hazirligi',
+      // Sihirbazın yeni maddeleri (HAZIRLIK_SIHIRBAZ_KODLARI).
+      'site_adresi', 'iletisim', 'rapor_alicisi', 'adres', 'bildirim', 'erisim',
+    ] as const).map(
       (kod) => ({ kod, zorunlu: false, durum: ozel[kod] ?? 'tamam', aciklama: `${kod} açıklaması` }),
     ),
   };
@@ -363,17 +367,19 @@ const tamGirdi = (ek: Partial<KurulumListesiGirdisi> = {}): KurulumListesiGirdis
 });
 
 describe('KURULUM — tek sıralı liste', () => {
-  it('KRİTİK: yedi adım, kullanıcının onayladığı sırayla', () => {
-    expect(KURULUM_LISTESI.map((a) => a.kod)).toEqual(['meta', 'sayfa', 'piksel', 'google', 'olcum', 'marka', 'varsayilanlar']);
+  it('KRİTİK: on adım — onaylı yedi + sihirbazın üçü (bilgiler başta, bildirimler ve veri sonda)', () => {
+    expect(KURULUM_LISTESI.map((a) => a.kod)).toEqual([
+      'bilgiler', 'meta', 'sayfa', 'piksel', 'google', 'olcum', 'marka', 'varsayilanlar', 'bildirimler', 'veri',
+    ]);
   });
 
   it('her adımın çapası Marka Merkezi çapa listesinde (Kurulum kartları bu kimliklerle)', () => {
     for (const a of KURULUM_LISTESI) expect(MARKA_MERKEZI_CAPALARI.kurulum).toContain(a.kod);
   });
 
-  it('her şey tamamsa 7 / 7 ve bitti', () => {
+  it('her şey tamamsa 10 / 10 ve bitti', () => {
     const s = kurulumSayaci(kurulumListesi(tamGirdi()));
-    expect(s).toEqual({ tamam: 7, toplam: 7, bilinmiyor: 0, bitti: true });
+    expect(s).toEqual({ tamam: 10, toplam: 10, kapsamDisi: 0, bilinmiyor: 0, bitti: true });
   });
 
   it('KRİTİK: bir kaynak okunamazsa "eksik" DEĞİL "bilinmiyor" ve bitti ASLA true değil', () => {
@@ -394,7 +400,7 @@ describe('KURULUM — tek sıralı liste', () => {
     const olcum = adimlar.find((a) => a.kod === 'olcum')!;
     expect(olcum.parcalar.map((p) => p.kod)).not.toContain('ads_donusum');
     expect(olcum.durum).toBe('tamam');
-    expect(kurulumSayaci(adimlar)).toEqual({ tamam: 6, toplam: 6, bilinmiyor: 0, bitti: true });
+    expect(kurulumSayaci(adimlar)).toEqual({ tamam: 9, toplam: 9, kapsamDisi: 0, bilinmiyor: 0, bitti: true });
   });
 
   it('öncelik: hata > soru > eksik > kullanıcıda > bilinmiyor > bekliyor', () => {
@@ -420,9 +426,16 @@ describe('KURULUM — tek sıralı liste', () => {
     expect(v.parcalar.find((p) => p.kod === 'logo')?.neden).toBe('logo açıklaması');
   });
 
-  it('KRİTİK: aylık bütçe ve veri akışı sayaca GİRMİYOR (her ayın 1’inde "eksik" dememek için)', () => {
-    const g = tamGirdi({ hazirlik: hazirlik({ aylik_butce: 'eksik', veri_akisi: 'eksik' }) });
+  it('KRİTİK: aylık bütçe sayaca GİRMİYOR (her ayın 1’inde "eksik" dememek için)', () => {
+    const g = tamGirdi({ hazirlik: hazirlik({ aylik_butce: 'eksik' }) });
     expect(kurulumSayaci(kurulumListesi(g)).bitti).toBe(true);
+  });
+
+  it('KRİTİK: veri akışı ARTIK sayaca giriyor (kurulum-sihirbazi Ç-5): hesap atanmış ama veri yoksa bitmedi', () => {
+    const g = tamGirdi({ hazirlik: hazirlik({ veri_akisi: 'eksik' }) });
+    const adimlar = kurulumListesi(g);
+    expect(adimlar.find((a) => a.kod === 'veri')?.durum).toBe('eksik');
+    expect(kurulumSayaci(adimlar).bitti).toBe(false);
   });
 });
 

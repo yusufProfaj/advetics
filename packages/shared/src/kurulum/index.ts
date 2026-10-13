@@ -288,3 +288,7 @@ export function kurulumOzeti(adimlar: readonly KurulumAdimi[]): KurulumYaniti['o
     kullanicida: adimlar.filter((a) => a.durum === 'kullanicida').length,
   };
 }
+
+// Birleşik kurulum sihirbazı (docs/kurulum-sihirbazi/MIMARI.md): beyanlar ve "site yok".
+export * from './beyan';
+export * from './site-yok';

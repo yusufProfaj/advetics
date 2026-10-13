@@ -25,9 +25,41 @@ export const HAZIRLIK_KODLARI = [
   'sosyal_kanal',
   'reklam_hazirligi',
 ] as const;
-export type HazirlikKodu = (typeof HAZIRLIK_KODLARI)[number];
+/**
+ * SİHİRBAZIN YENİ MADDELERİ (docs/kurulum-sihirbazi/MIMARI.md § 2b) —
+ * "Workspace bilgileri" ve "Bildirimler ve erişim" adımlarının parçaları.
+ *
+ * GEÇİCİ AYRI LİSTE: API (`tenancy/hazirlik.ts`) bunları henüz üretmiyor ve
+ * `hazirlik.spec.ts` ürettiği kodları `HAZIRLIK_KODLARI` ile birebir
+ * karşılaştırıyor. Ajan 2 maddeleri yazınca bu liste `HAZIRLIK_KODLARI`na
+ * katılır ve bu sabit silinir. O güne kadar kurulum listesi bu parçaları
+ * "Sunucu bu parçayı döndürmedi" (bilinmiyor) olarak gösterir — yani bu
+ * sözleşme commit'i API'siz CANLIYA ALINMAZ.
+ */
+export const HAZIRLIK_SIHIRBAZ_KODLARI = [
+  /** `clients.website` dolu ve https. */
+  'site_adresi',
+  /** `contact_name` ve `contact_phone` dolu. */
+  'iletisim',
+  /** `contact_emails` en az bir adres. */
+  'rapor_alicisi',
+  /** `address` + `address_coordinates` dolu (beyan: `adres`). */
+  'adres',
+  /** En az bir ETKİN bildirim kanalı (beyan: `bildirim`). */
+  'bildirim',
+  /** Org yöneticisi dışında en az bir sorumlu kişi (beyan: `erisim`). */
+  'erisim',
+] as const;
 
-export type HazirlikDurumu = 'tamam' | 'eksik' | 'bilinmiyor';
+export type HazirlikKodu = (typeof HAZIRLIK_KODLARI)[number] | (typeof HAZIRLIK_SIHIRBAZ_KODLARI)[number];
+
+/**
+ * `bekliyor` (YENİ, sihirbaz): iş başladı ama henüz bitmedi — ilk veri
+ * çekimi sürüyor. "Eksik" DEĞİL: yapılacak bir şey yok, beklemek gerekiyor;
+ * eksik demek kullanıcıyı "Şimdi güncelle"ye bastırıp kuyruğa ikinci iş
+ * koydurur. Bugün yalnız `veri_akisi` üretebilir (Ajan 2).
+ */
+export type HazirlikDurumu = 'tamam' | 'eksik' | 'bilinmiyor' | 'bekliyor';
 
 export interface HazirlikMaddesi {
   kod: HazirlikKodu;

@@ -207,7 +207,7 @@ export type MarkaMerkeziBolumKodu = (typeof MARKA_MERKEZI_BOLUMLERI)[number]['ko
  * istemcide çeviriyor.
  */
 export const MARKA_MERKEZI_CAPALARI = {
-  kurulum: ['meta', 'sayfa', 'piksel', 'google', 'olcum', 'marka', 'varsayilanlar', 'kanallar', 'veri-kaynaklari'],
+  kurulum: ['bilgiler', 'meta', 'sayfa', 'piksel', 'google', 'olcum', 'marka', 'varsayilanlar', 'bildirimler', 'veri', 'kanallar', 'veri-kaynaklari'],
   marka: ['marka-bilgileri', 'markayi-anlat', 'kime-satiyoruz', 'logo'],
   workspace: ['firma', 'erisim', 'bildirimler', 'veri-durumu'],
 } as const satisfies Record<MarkaMerkeziBolumKodu, readonly string[]>;
@@ -327,6 +327,36 @@ export function acilisAdresi(tur: AcilisTuru, adim?: string): string {
   return kur(PANEL_YOLLARI.acilis, [
     ['tur', tur],
     ['adim', adim],
+  ]);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KURULUM SİHİRBAZI — açılış + tamamlama (docs/kurulum-sihirbazi/MIMARI.md)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * `/kurulum` sayfasının ADI (2026-10-13). "Yeni şirket / workspace aç"
+ * (`ACILIS_ADI`) adı Marka Merkezi › Kurulum ile karışmasın diye
+ * konmuştu; artık iki ekran AYNI listenin iki görünümü (liste ve adım adım)
+ * ve karışma sebebi kalktı. `ACILIS_ADI` başlangıç ekranındaki kartın adı
+ * olarak duruyor. Adres DEĞİŞMEDİ (yer imleri).
+ */
+export const SIHIRBAZ_ADI = 'Kurulum sihirbazı';
+
+/**
+ * Var olan bir workspace'i tamamlayan sihirbazın adresi — TEK ÜRETİCİ.
+ *
+ * Üç yerde kuruluyor: Şirketler satırındaki "Kurulumu tamamla", Marka
+ * Merkezi'nin "Sihirbazla tamamla"sı ve OAuth/ödeme dönüşü (`redirectTo`).
+ * Birinde `musteri` düşerse kullanıcı platformu bağlayıp başlangıç ekranına
+ * döner ve kaldığı adımı arar (CLAUDE.md "bağlantıyı elle birleştirme").
+ * `adim` verilmezse sihirbaz `ilkEksikAdim` ile kendisi seçer; `son`
+ * son kontrol ekranı.
+ */
+export function sihirbazAdresi(musteri: string, adim?: string | null): string {
+  return kur(PANEL_YOLLARI.acilis, [
+    ['musteri', musteri],
+    ['adim', adim ?? undefined],
   ]);
 }
 
