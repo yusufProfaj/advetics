@@ -101,10 +101,19 @@ export function hedeflemeOzeti(settings: AutoBoostPresetSettings): HedeflemeSati
  */
 export function konumMetni(locations: Array<{ key: string; label?: string }>): string {
   if (locations.length === 0) return 'Türkiye geneli';
-  const adlar = locations.map((l) => l.label ?? l.key);
-  if (adlar.length <= 3) return adlar.join(', ');
-  // SESSİZ KESME YOK: kaçının gizlendiği yazıyor.
-  return `${adlar.slice(0, 3).join(', ')} +${adlar.length - 3}`;
+  /*
+   * ADI OLMAYAN KONUM HAM ANAHTARLA GÖSTERİLMEZ (2026-10-14 canlı denetim).
+   * Ad alanı ön ayara sonradan eklendi; eski ön ayarlarda yalnız Meta
+   * anahtarı var ve kart "Konum 3684" yazıyordu: kullanıcı için anlamsız,
+   * üstelik bir posta kodu ya da hata kodu sanılabilir. Adsız olanlar
+   * SAYILIYOR (sessiz düşürme yok) ve nasıl düzeleceği söyleniyor.
+   */
+  const adlar = locations.flatMap((l) => (l.label ? [l.label] : []));
+  const adsiz = locations.length - adlar.length;
+  const gorunen = adlar.length <= 3 ? adlar.join(', ') : `${adlar.slice(0, 3).join(', ')} +${adlar.length - 3}`;
+  if (adsiz === 0) return gorunen;
+  const adsizMetni = `${adsiz} konum (adı kayıtlı değil; ön ayarı yeniden kaydet)`;
+  return gorunen ? `${gorunen} · ${adsizMetni}` : adsizMetni;
 }
 
 /**

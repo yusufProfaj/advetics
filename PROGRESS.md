@@ -46,7 +46,7 @@
 ## 2 · Akıllı Boost (`/auto-boost`)
 
 - [x] Araştırma → `docs/pazar/akilli-boost.md` (gönderi öne çıkarma otomasyonu: Meta boost API, IG Partnership/Trial Reels, YouTube Demand Gen; Madgicx/Revealbot otomatik boost)
-- [ ] Bilinen açık: kartta "Konum 3684" ham kimlik; konum adını göster
+- [x] Bilinen açık: kartta "Konum 3684" ham kimlik (adsız konum artık sayılıyor + "ön ayarı yeniden kaydet"; adı Meta'dan çözmek ayrı iş)
 - [ ] Bilinen açık: sayfa ilk yüklemede başka workspace'in kuyruğunu (`fd82…`) sorguluyor; teşhis ve tek kaynak
 - [ ] (onay bekliyor) 12 Facebook kartı: 2026-09-30 kararı yalnız IG + YouTube; eski mi yeni mi ölç, kullanıcıya sor
 - [ ] Öneri 1: kartta organik performans karşılaştırması (son 10 gönderinin ortalamasına göre erişim/etkileşim; altındaysa "boostlamak genelde verimsiz" notu)
