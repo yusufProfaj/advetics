@@ -58,7 +58,7 @@
 ## 3 · İyileştir (`/iyilestir`)
 
 - [x] Araştırma → `docs/pazar/iyilestir.md` (kural motorları: Revealbot, Madgicx, Optmyzr; Meta/Google otomatik kurallar ve öneri API'leri)
-- [ ] Öneri 1: bütçe değişikliğinde 7 günlük kayan bekleme (ISO-hafta anahtarı pazar→pazartesi ikinci +%20'ye izin veriyor); bekleyen sayısı söylenir
+- [x] Öneri 1: bütçe değişikliğinde 7 günlük kayan bekleme (ISO-hafta anahtarı pazar→pazartesi ikinci +%20'ye izin veriyor); bekleyen sayısı söylenir
 - [ ] Öneri 2: öğrenmedeki Meta reklam setine bütçe önerisi yok (`learning_stage_info`; önce canlıda alan biçimi ölçülür — ölçülemezse madde "kullanıcıda" kalır)
 - [ ] (onay bekliyor) Öneri 3: Meta `/act_X/recommendations` önerilerini İyileştir'de göstermek (okuma onaysız; uygulamak platforma yazar)
 

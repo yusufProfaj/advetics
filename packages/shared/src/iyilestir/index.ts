@@ -131,6 +131,11 @@ export interface OneriListesi {
   hatalar: string[];
   /** Bu ay uygulanan (karar tablosundan). */
   buAyUygulanan: number;
+  /**
+   * Son 7 günde bütçesi değiştiği için GÖSTERİLMEYEN bütçe önerisi sayısı
+   * (öğrenme aşaması birikimli değişiklikle sıfırlanıyor). Sessiz değil.
+   */
+  beklemede: number;
 }
 
 // ─── Uygula ──────────────────────────────────────────────────────────────────

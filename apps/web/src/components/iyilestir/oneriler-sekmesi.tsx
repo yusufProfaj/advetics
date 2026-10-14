@@ -118,6 +118,7 @@ export function OnerilerSekmesi({
   const sayac = [
     kesildi ? `${liste.toplam} öneriden ${liste.oneriler.length} tanesi gösteriliyor` : `${suzulen.length} öneri gösteriliyor`,
     gizli > 0 ? `${gizli} yoksayılan öneri gizli` : null,
+    liste.beklemede > 0 ? `${liste.beklemede} bütçe önerisi bekliyor (son 7 günde bütçesi değişti)` : null,
   ]
     .filter(Boolean)
     .join(' · ');

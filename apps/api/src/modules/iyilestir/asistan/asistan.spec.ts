@@ -38,7 +38,7 @@ describe('araç listesi', () => {
 
   it('uygula_karti öneriyi KART olarak döndürür, uygulanamazı reddeder', async () => {
     const oneri = { anahtar: 'a', durum: 'acik', eylem: { tur: 'durdur' }, kisit: null } as unknown as Oneri;
-    const ortam = { oneriler: async () => ({ oneriler: [oneri, { ...oneri, anahtar: 'b', eylem: null, kisit: 'paylaşılıyor' }], toplam: 2, hatalar: [], buAyUygulanan: 0 }) } as unknown as AsistanOrtami;
+    const ortam = { oneriler: async () => ({ oneriler: [oneri, { ...oneri, anahtar: 'b', eylem: null, kisit: 'paylaşılıyor' }], toplam: 2, hatalar: [], buAyUygulanan: 0, beklemede: 0 }) } as unknown as AsistanOrtami;
     const r = await ASISTAN_ARAC_TANIMLARI.uygula_karti.calistir({ anahtar: 'a' }, ortam);
     expect(r).toMatchObject({ hal: 'tamam', kart: oneri });
     expect(await ASISTAN_ARAC_TANIMLARI.uygula_karti.calistir({ anahtar: 'b' }, ortam)).toMatchObject({ hal: 'reddedildi', neden: 'paylaşılıyor' });
@@ -78,7 +78,7 @@ function adim(parcalar: GeminiParcasi[], sebep: GeminiSonucu['sebep']): GeminiSo
 }
 
 function dongu(model: ModelAdimi | null, ortamEk: Partial<AsistanOrtami> = {}) {
-  const oneriler = vi.fn(async (): Promise<OneriListesi> => ({ oneriler: [ONERI], toplam: 1, hatalar: [], buAyUygulanan: 0 }));
+  const oneriler = vi.fn(async (): Promise<OneriListesi> => ({ oneriler: [ONERI], toplam: 1, hatalar: [], buAyUygulanan: 0, beklemede: 0 }));
   const d = new AsistanDongusu({
     tx: (fn) => fn(h.db as never),
     model,

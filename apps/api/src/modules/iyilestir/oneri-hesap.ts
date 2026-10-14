@@ -264,6 +264,43 @@ export interface AylikButceKapisi {
 }
 
 /** Bütçe adımı sınırı (kullanıcı kararı: tek öneride en fazla %20). */
+/**
+ * ═══ BÜTÇEDE 7 GÜNLÜK BEKLEME (pazar araştırması 2026-10-15) ═══
+ *
+ * Karar anahtarı ISO haftası taşıyor; yani pazar günü uygulanan +%20'nin
+ * ardından pazartesi YENİ bir anahtar doğuyor ve aynı varlığa ikinci +%20
+ * önerilebiliyordu: iki günde ~%44. Sektörün ortak uyarısı küçük
+ * artışların BİRİKEREK öğrenme aşamasını sıfırladığı
+ * (`docs/pazar/iyilestir.md` § 3). Bekleme KAYAN pencere: son 7 günde
+ * uygulanmış bir bütçe kararı olan varlığa yeni bütçe önerisi yok.
+ *
+ * Aynı anahtarın kendi kararı istisna: o öneri listede kararın kopyasıyla
+ * görünüyor ve Uygula'nın "karar zaten verildi" kapısı onu kendisi
+ * karşılıyor; burada atmak o kapıyı "öneri artık geçerli değil"e çevirirdi.
+ *
+ * SESSİZ DEĞİL: kaç öneri beklemede, sayaç söylüyor.
+ */
+export const BUTCE_BEKLEME_GUN = 7;
+
+export function butceBeklemesi<T extends { oneri: Oneri }>(
+  liste: T[],
+  sonButceKararlari: string[],
+): { kalan: T[]; beklemede: number } {
+  const kararAnahtari = new Set(sonButceKararlari);
+  const bekleyenId = new Set(sonButceKararlari.map((a) => a.split(':')[2]));
+  const kalan: T[] = [];
+  let beklemede = 0;
+  for (const h of liste) {
+    const butce = h.oneri.tur === 'butce_artir' || h.oneri.tur === 'butce_azalt';
+    if (butce && bekleyenId.has(h.oneri.varlik.id) && !kararAnahtari.has(h.oneri.anahtar)) {
+      beklemede++;
+      continue;
+    }
+    kalan.push(h);
+  }
+  return { kalan, beklemede };
+}
+
 export function adimSinirIcinde(onceki: bigint, yeni: bigint): boolean {
   if (onceki <= 0n || yeni <= 0n) return false;
   const fark = yeni > onceki ? yeni - onceki : onceki - yeni;

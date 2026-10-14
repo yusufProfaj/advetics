@@ -199,6 +199,49 @@ describe('liste', () => {
     expect(o?.varlik.seviye).toBe('ad_group');
     expect(o!.eylem).toMatchObject({ tur: 'butce', butceSeviyesi: 'ad_group', oncekiMikros: '100000000', yeniMikros: '120000000' });
   });
+
+  /*
+   * 7 GÜNLÜK BEKLEME (docs/pazar/iyilestir.md): karar anahtarı ISO haftası
+   * taşıdığı için GEÇEN haftanın anahtarıyla uygulanmış bir artış bu
+   * haftanın önerisini engellemiyordu (pazar +%20, pazartesi +%20).
+   */
+  async function abo() {
+    for (let i = 0; i < 7; i++) {
+      await gunluk('ad_group', SET, 'g-1', gunEkle(P.buBas, i), { g: 100, t: 1, e: 90, s: 95_000_000n, d: i === 0 ? 10 : 0 });
+    }
+    for (let i = 0; i < 14; i++) await gunluk('ad_group', SET, 'g-1', gunEkle(P.gecenBas, i - 7), { g: 1, t: 0, e: 1, s: 0n });
+    await gunluk('campaign', KAMPANYA, 'c-1', P.buBas, { g: 1, t: 0, e: 1, s: 5_000_000_000n, d: 10 });
+  }
+  async function eskiKarar(gunOnce: number, durum = 'uygulandi') {
+    await h.q(
+      `INSERT INTO iyilestir_oneri_karar (org_id, client_id, anahtar, tur, platform, durum, eylem, sonuc, user_id, created_at)
+       VALUES ($1, $2, $3, 'butce_artir', 'meta', $4::text, '{}'::jsonb,
+               CASE WHEN $4::text = 'uygulandi' THEN '{}'::jsonb END, $5, now() - ($6::int * interval '1 day'))`,
+      [IDS.org, IDS.client, `butce_artir:ad_group:${SET}:2026-W40`, durum, IDS.user, gunOnce],
+    );
+  }
+
+  it('KRİTİK: son 7 günde bütçesi uygulanan varlığa yeni bütçe önerisi YOK ve sayısı söyleniyor', async () => {
+    await abo();
+    await eskiKarar(2);
+    const { svc } = kur();
+    const l = await svc.liste(CTX, IDS.client);
+    expect(l.oneriler.filter((x) => x.tur === 'butce_artir' && x.durum !== 'uygulandi')).toEqual([]);
+    expect(l.beklemede).toBe(1);
+  });
+
+  it('bekleme 7 günle sınırlı; yoksayılan karar beklemeye sokmuyor', async () => {
+    await abo();
+    await eskiKarar(8);
+    const { svc } = kur();
+    let l = await svc.liste(CTX, IDS.client);
+    expect(l.beklemede).toBe(0);
+    expect(l.oneriler.some((x) => x.tur === 'butce_artir' && x.durum !== 'uygulandi')).toBe(true);
+    await h.q(`DELETE FROM iyilestir_oneri_karar`);
+    await eskiKarar(1, 'yoksayildi');
+    l = await svc.liste(CTX, IDS.client);
+    expect(l.beklemede).toBe(0);
+  });
 });
 
 describe('uygula', () => {
@@ -268,6 +311,7 @@ describe('uygula', () => {
     vi.spyOn(svc, 'hesapla').mockResolvedValue({
       oneriler: [{ adAccountId: IDS.adAccount, oneri: { anahtar, eylem, ozet, varlik: { seviye: 'ad_group', id: SET, ad: 'Set', ustAd: null } } as unknown as Oneri }],
       hatalar: [],
+      beklemede: 0,
     });
     await expect(svc.uygula(CTX, 'Test', IDS.client, anahtar, ozet)).rejects.toBeInstanceOf(BadRequestException);
     expect(uygula).not.toHaveBeenCalled();

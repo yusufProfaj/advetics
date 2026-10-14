@@ -20,6 +20,8 @@ import { CampaignActionsService, type UygulamaEylemi } from '../campaign-actions
 import { GeriBeslemeService } from '../geri-besleme/geri-besleme.service';
 import {
   adimSinirIcinde,
+  BUTCE_BEKLEME_GUN,
+  butceBeklemesi,
   butceOnerisi,
   donusumOptimizasyonuKapisi,
   donusumOptimizasyonuOnerisi,
@@ -98,7 +100,7 @@ export class IyilestirService {
   async liste(ctx: TenantContext, clientId: string): Promise<OneriListesi> {
     erisim(ctx, clientId);
     const bugun = this.bugun();
-    const { oneriler, hatalar } = await this.hesapla(ctx, clientId, bugun);
+    const { oneriler, hatalar, beklemede } = await this.hesapla(ctx, clientId, bugun);
     const kararlar = await this.kararlar(ctx, clientId, isoHafta(bugun));
 
     const kararHaritasi = new Map(kararlar.map((k) => [k.anahtar, k]));
@@ -136,6 +138,7 @@ export class IyilestirService {
       toplam: acik.length + karara.length,
       hatalar,
       buAyUygulanan,
+      beklemede,
     };
   }
 
@@ -147,7 +150,7 @@ export class IyilestirService {
     ctx: TenantContext,
     clientId: string,
     bugun: string,
-  ): Promise<{ oneriler: HesaplananOneri[]; hatalar: string[] }> {
+  ): Promise<{ oneriler: HesaplananOneri[]; hatalar: string[]; beklemede: number }> {
     erisim(ctx, clientId);
     const scoped: TenantContext = { ...ctx, activeClientId: clientId };
     const hatalar: string[] = [];
@@ -231,7 +234,25 @@ export class IyilestirService {
       hatalar.push(`Form optimizasyonu önerisi hesaplanamadı: ${mesaj(e)}`);
     }
 
-    return { oneriler: sonuc, hatalar };
+    // ── 7 günlük bütçe beklemesi (`butceBeklemesi`) ──
+    // Uygula da BURADAN geçiyor: ekranda görünmeyen bir öneri asistandan da
+    // uygulanamamalı. Sorgu düşerse bekleme uygulanmadan devam edilmiyor —
+    // bütçe önerileri atılıyor ve söyleniyor (birikimli artış riskini
+    // bilmeden önermek, hiç önermemekten pahalı).
+    try {
+      const son = await this.prisma.withTenant(scoped, (tx) =>
+        tx.$queryRaw<Array<{ anahtar: string }>>(Prisma.sql`
+          SELECT anahtar FROM iyilestir_oneri_karar
+           WHERE client_id = ${clientId}::uuid AND durum = 'uygulandi'
+             AND (anahtar LIKE 'butce_artir:%' OR anahtar LIKE 'butce_azalt:%')
+             AND created_at >= now() - make_interval(days => ${BUTCE_BEKLEME_GUN}::int)`),
+      );
+      const { kalan, beklemede } = butceBeklemesi(sonuc, son.map((r) => r.anahtar));
+      return { oneriler: kalan, hatalar, beklemede };
+    } catch (e) {
+      hatalar.push(`Son bütçe değişiklikleri okunamadı, bütçe önerisi gösterilmedi: ${mesaj(e)}`);
+      return { oneriler: sonuc.filter((h) => h.oneri.tur !== 'butce_artir' && h.oneri.tur !== 'butce_azalt'), hatalar, beklemede: 0 };
+    }
   }
 
   // ── Uygula / yoksay ─────────────────────────────────────────────────────
