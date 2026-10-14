@@ -117,7 +117,13 @@ export class AutoBoostReadService {
       tx.$queryRaw<QueueRow[]>(Prisma.sql`
         SELECT * FROM (
         SELECT q.id::text AS id, q.client_id::text AS client_id, cl.name AS client_name,
-               q.platform::text AS platform, q.external_id, q.title, q.thumbnail_url,
+               q.platform::text AS platform, q.external_id, q.title,
+               -- KART ADRESİ KOPYA VE ÖLÜYOR: kart oluşturulurken gönderinin
+               -- CDN adresi kopyalanıyor ve imzası birkaç günde doluyor.
+               -- Organik senkron aynı gönderinin adresini 15 dakikada bir
+               -- tazeliyor (son 45 gün); varsa o kullanılıyor. Daha eskisi
+               -- panelde kırılınca kart görsel ucuna düşüyor.
+               COALESCE(op.thumbnail_url, q.thumbnail_url) AS thumbnail_url,
                q.permalink, q.media_type, q.published_at, q.status,
                q.error, q.external_campaign_id, q.created_at, q.launched_at,
                q.signature_state,
@@ -146,6 +152,7 @@ export class AutoBoostReadService {
         -- kullanıcısı KENDİ kartlarının TAMAMINI kaybederdi — kartlar
         -- duruyor, sadece süsleme alanı görünmüyor.
         LEFT JOIN social_profiles sp ON sp.id = q.social_profile_id
+        LEFT JOIN organic_posts op ON op.social_profile_id = q.social_profile_id AND op.external_id = q.external_id
         -- KANALA BAĞLI HESABIN PLATFORMU VE SAHİBİ: YouTube kartında bağlı
         -- hesap Meta ya da başka workspace'inse yok sayılıyor. Karar
         -- youtubeHesabiSec içinde; burada yalnızca girdileri okunuyor.

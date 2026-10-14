@@ -143,13 +143,17 @@ export function AdCard({
           : 'relative aspect-[4/5] w-full shrink-0 overflow-hidden rounded-alan bg-surface-sunken sm:w-36'
       }
     >
-      {image ? (
-        <KreatifGorsel src={image} alt={ad.creative?.headline ?? ad.name} bosMetin="görsel alınamadı" />
-      ) : (
-        <div className="flex h-full items-center justify-center px-2 text-center text-11 text-ink-muted">
-          görsel alınamadı
-        </div>
-      )}
+      {/*
+        YEDEK UÇ: saklanan Meta adresi birkaç günde ölüyor; düşünce (ya da
+        hiç yoksa) sunucu görseli o anda tazeleyip veriyor. Kreatifi olmayan
+        reklamda gidilecek bir şey yok, yedek verilmiyor.
+      */}
+      <KreatifGorsel
+        src={image ?? null}
+        alt={ad.creative?.headline ?? ad.name}
+        bosMetin="görsel alınamadı"
+        yedekYol={ad.creative ? `/ads/${encodeURIComponent(ad.id)}/gorsel` : undefined}
+      />
       {/* Birden fazla görsel varsa (karusel / dinamik kreatif) sayısı
           belirtiliyor: tek kare tüm varyasyonları temsil etmiyor. */}
       {(ad.creative?.assetUrls.length ?? 0) > 1 && (

@@ -156,8 +156,37 @@ describe('KreatifGorsel', () => {
     expect(KAYNAK.trimStart().startsWith("'use client'")).toBe(true);
   });
 
-  it('onError yer tutucuya düşürüyor', () => {
-    expect(KAYNAK).toContain('onError');
-    expect(KAYNAK).toContain('setDustu(true)');
+  const YORUMSUZ = KAYNAK.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+  it('onError önce yedek uca BİR KEZ, sonra cümleye düşürüyor (kırık resim ikonu yok)', () => {
+    expect(YORUMSUZ).toContain('onError={dustu}');
+    // Yalnız saklanan adres düşünce yedek; blob da düşerse yeniden istek yok (döngü olmasın).
+    expect(YORUMSUZ).toContain("if (hal.tur === 'adres' && yedekYol) void tazele(yedekYol);");
+    expect(YORUMSUZ).toMatch(/else setHal\(\{ tur: 'hata'/);
+  });
+
+  it('KRİTİK: yedek uç hatasında SUNUCUNUN cümlesi yazıyor; geç gelen yanıt yeni kartı ezmiyor', () => {
+    expect(YORUMSUZ).toContain('if (g?.message) mesaj = g.message;');
+    expect(YORUMSUZ).toContain('if (nesil.current !== benim)');
+  });
+});
+
+describe('Reklam kartı önizleme görselini tazeleyen uca bağlı (2026-10-14)', () => {
+  const KART = readFileSync(join(__dirname, 'ad-card.tsx'), 'utf8').replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
+  it('KRİTİK: KreatifGorsel yedekYol = /ads/:id/gorsel ile çağrılıyor; saklanan adres yoksa da', () => {
+    expect(KART).toContain('src={image ?? null}');
+    expect(KART).toContain('yedekYol={ad.creative ? `/ads/${encodeURIComponent(ad.id)}/gorsel` : undefined}');
+  });
+});
+
+describe('Akıllı Boost kartı görseli tazeleyen uca bağlı (2026-10-14)', () => {
+  const HAVUZ = readFileSync(join(__dirname, 'autoboost/bildirim-havuzu.tsx'), 'utf8')
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '');
+  it('KRİTİK: Meta kartında yedek uç var, YouTube kartında yok; img onError hook’a gidiyor', () => {
+    expect(HAVUZ).toContain("kayit.platform === 'meta' ? `/autoboost/queue/${encodeURIComponent(kayit.id)}/gorsel` : undefined");
+    expect(HAVUZ).toContain('onError={gorsel.dustu}');
+    // Eski tek bayrak kalmadı: düşen görsel ile hiç olmayan görsel aynı cümle değil.
+    expect(HAVUZ).not.toContain('setGorselDustu');
   });
 });

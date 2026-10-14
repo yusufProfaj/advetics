@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
+import { useTazeGorsel } from '@/components/kreatif-gorsel';
 import type {
   AutoBoostMecra,
   AutoBoostPlatform,
@@ -527,7 +528,19 @@ function Kart({
   clientId: string;
   onDegisti: () => void;
 }) {
-  const [gorselDustu, setGorselDustu] = useState(false);
+  /*
+   * KART GÖRSELİ TAZELENİR (2026-10-14): kart gönderinin imzalı CDN
+   * adresini oluşturulduğu an kopyalıyor ve adres birkaç günde ölüyor;
+   * yayınlanıp eskiyen kartlar "görsel yok" diyordu. Meta kartında saklanan
+   * adres düşünce (ya da hiç yoksa) sunucu görseli o anda Meta'dan alıyor.
+   * YouTube küçük resmi kalıcı: yedek yok, adres yoksa "görsel yok" DOĞRU.
+   */
+  const gorsel = useTazeGorsel(
+    kayit.thumbnailUrl,
+    kayit.platform === 'meta' ? `/autoboost/queue/${encodeURIComponent(kayit.id)}/gorsel` : undefined,
+    'görsel yok',
+  );
+  const gorselAdresi = gorsel.hal.tur === 'adres' || gorsel.hal.tur === 'blob' ? gorsel.hal.src : null;
   /*
    * ═══ DÜZENLEME KARTIN ÜSTÜNDE, AYRI PENCEREDE DEĞİL ═══
    *
@@ -764,7 +777,7 @@ function Kart({
         için bu yeterli — ayrıntı için "Gönderiyi aç" var.
       */}
       <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-alan bg-surface-sunken sm:h-28 sm:w-28">
-        {kayit.thumbnailUrl && !gorselDustu ? (
+        {gorselAdresi ? (
           <>
             {/*
               BULANIK ZEMİN — yalnızca kutuya sığdırılan görsellerde.
@@ -775,7 +788,7 @@ function Kart({
             {bicim.bulanikZemin && (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={kayit.thumbnailUrl}
+                src={gorselAdresi}
                 alt=""
                 aria-hidden="true"
                 loading="lazy"
@@ -802,11 +815,11 @@ function Kart({
             */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={kayit.thumbnailUrl}
+              src={gorselAdresi}
               alt=""
               loading="lazy"
               referrerPolicy="no-referrer"
-              onError={() => setGorselDustu(true)}
+              onError={gorsel.dustu}
               className={`relative h-full w-full ${bicim.oturtma} ${
                 yayinda ? 'scale-105 blur-[3px]' : ''
               }`}
@@ -815,8 +828,14 @@ function Kart({
         ) : (
           /* Görsel yoksa kutu AYNI ORANDA duruyor: satırların yüksekliği
              ayrışırsa göz taraması satır satır yapılamıyor. */
-          <div className="grid h-full w-full place-items-center px-1 text-center text-[11px] text-ink-muted">
-            görsel yok
+          /* ÜÇ HÂL AYRI: yenileniyor, sunucunun cümlesi ("Görsel alınamadı: …"),
+             gerçekten yok. Kutu dar; uzun cümle kırpılıyor, tamamı başlıkta. */
+          <div
+            className="grid h-full w-full place-items-center px-1 text-center text-[11px] text-ink-muted"
+            aria-busy={gorsel.hal.tur === 'tazeleniyor'}
+            title={gorsel.hal.tur === 'hata' ? gorsel.hal.mesaj : undefined}
+          >
+            <span className="line-clamp-4">{gorsel.hal.tur === 'tazeleniyor' ? 'Görsel yenileniyor' : gorsel.hal.tur === 'hata' ? gorsel.hal.mesaj : 'görsel yok'}</span>
           </div>
         )}
 

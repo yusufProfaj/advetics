@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
 import {
-  BadGatewayException,
   ForbiddenException,
   HttpException,
   HttpStatus,
@@ -16,8 +15,6 @@ import { Prisma } from '@prisma/client';
 import {
   AMAC_GRUBU_ADI,
   ETIKET_SINIRI,
-  GORU_AYARI,
-  GORU_MIME,
   ICERIK_DURUMLARI,
   ISTATISTIK,
   KREATIF_SAYFA_BOYUTU,
@@ -26,8 +23,6 @@ import {
   briefCevabiSchema,
   briefIstemi,
   briefMetniDenetle,
-  goruBicimi,
-  gorselAdresleri,
   harcamaEsigiMicros,
   type AmacGrubu,
   type BekciRetNedeni,
@@ -56,7 +51,7 @@ import { YAPAY_ZEKA } from '../../yapay-zeka/yapay-zeka.module';
 import { metinIsteOlcumlu, type GeminiIstemcisi } from '../../yapay-zeka/gemini';
 import { oneriAnahtari, isoHafta, pencereler, yorgunlukOnerisi } from '../iyilestir/oneri-hesap';
 import { KreatifAdresiService } from '../reports/kreatif-adresi.service';
-import { goruIcinIndir } from '../reports/kreatif-gorseli';
+import { kreatifGorseliAkit } from '../reports/kreatif-gorsel-akisi';
 import { analiz, type IcerikBilgisi, type KumeAnalizi } from './analiz';
 import { BRIEF_SISTEM_ISTEMI, briefIstemMetni, briefJsonSemasi } from './istemler';
 import { GUNCEL_SEMA } from './kaynak';
@@ -64,7 +59,6 @@ import { ilkGosterimler, pencereKreatifleri, tryKuru, type PencereSatiri } from 
 import { briefAyir, istanbulGunu, sayacDurumu, sayacSonuc, type TxLike } from './sayac';
 
 /** Görsel ucunun toplam süresi: kullanıcı bir kart açıyor, beklememeli. */
-const GORSEL_BUTCESI_MS = 8_000;
 
 /** `POST /kreatif-zeka/etiketle` yanıtı (sözleşmede tipi yok; panel aynı alanları okuyor). */
 export interface EtiketleYaniti {
@@ -353,44 +347,8 @@ export class KreatifZekaService {
   // ── Görsel (kullanım anında tazelenir) ──────────────────────────────────
 
   async gorsel(ctx: TenantContext, creativeId: string): Promise<{ bytes: Uint8Array; mime: string }> {
-    const [k] = await this.prisma.withTenant(ctx, (tx) =>
-      (tx as unknown as TxLike).$queryRaw<
-        Array<{ external_id: string; asset_urls: unknown; hesap_id: string; client_id: string | null; platform: Platform; hesap_ext: string; connection_id: string; manager_external_id: string | null }>
-      >(Prisma.sql`
-        SELECT c.external_id, c.asset_urls, a.id::text AS hesap_id, a.client_id::text AS client_id, a.platform::text AS platform,
-               a.external_id AS hesap_ext, a.connection_id::text AS connection_id, a.manager_external_id
-          FROM creatives c JOIN ad_accounts a ON a.id = c.ad_account_id
-         WHERE c.id = ${creativeId}::uuid`),
-    );
-    if (!k || !k.client_id || !ctx.clientIds.includes(k.client_id)) throw new NotFoundException('Kreatif bulunamadı');
-
-    let url: string | null;
-    if (k.platform === 'meta') {
-      /*
-       * PLATFORM ÇAĞRISI TRANSACTION DIŞINDA (yukarıdaki okuma bitti) ve
-       * rapordakiyle AYNI çekirdekten: önbellek, `report_creative` kotası
-       * (%50, yapı taramasını kilitleyemez), süre bütçesi.
-       */
-      const r = await this.adres.hesapAdresleri(
-        { id: k.hesap_id, clientId: k.client_id, platform: k.platform, externalId: k.hesap_ext, connectionId: k.connection_id, managerExternalId: k.manager_external_id },
-        [k.external_id],
-        { katman: 'report_creative', bitis: Date.now() + GORSEL_BUTCESI_MS, etiket: 'kreatif_zeka_gorsel' },
-      );
-      const a = r?.adresler.get(k.external_id);
-      if (!a || 'hata' in a) throw new BadGatewayException(`Görsel alınamadı: ${a && 'hata' in a ? a.hata : 'platform adres döndürmedi'}`);
-      url = a.url;
-    } else {
-      url = gorselAdresleri(k.asset_urls)[0] ?? null;
-      if (!url) throw new BadGatewayException('Görsel alınamadı: platform bu reklam için görsel adresi vermiyor');
-    }
-    const ind = await goruIcinIndir(url, {
-      maxBayt: GORU_AYARI.maxBayt,
-      zamanAsimiMs: GORU_AYARI.indirmeZamanAsimiMs,
-      bicimAnla: goruBicimi,
-      bicimHatasi: 'desteklenmeyen biçim (yalnızca JPEG/PNG/WebP)',
-    });
-    if (!ind.ok) throw new BadGatewayException(`Görsel alınamadı: ${ind.sebep}`);
-    return { bytes: ind.bytes, mime: GORU_MIME[ind.tur] };
+    // Gövde ortak (Reklam Yöneticisi önizlemesi de kullanıyor): kreatif-gorsel-akisi.ts.
+    return kreatifGorseliAkit(this.prisma, this.adres, ctx, { creativeId }, 'kreatif_zeka_gorsel');
   }
 
   // ── Elle etiketleme ─────────────────────────────────────────────────────

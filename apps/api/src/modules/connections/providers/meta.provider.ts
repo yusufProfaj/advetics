@@ -1931,6 +1931,43 @@ export class MetaProvider implements IAdPlatformProvider {
     }
   }
 
+  /**
+   * ═══ TEK ORGANİK GÖNDERİNİN TAZE GÖRSEL ADRESİ (Akıllı Boost kartı) ═══
+   *
+   * Instagram/Facebook CDN adresi imzalı ve birkaç günde ölüyor; kart onu
+   * oluşturulduğu an kopyalıyordu ve yayınlanıp eskiyen kartların görseli
+   * "görsel yok" oluyordu (2026-10-14). Organik senkron yalnız son 45 günü
+   * tazeliyor; daha eski kart için adres KULLANILACAĞI ANDA soruluyor.
+   *
+   * ALAN SEÇİMİ `organikSatir` eşlemesiyle AYNI: Instagram'da
+   * `thumbnail_url ?? media_url` (videoda kapak, görselde kendisi),
+   * Facebook'ta `full_picture`. Ayrışırsa kart senkrondan gelen ile buradan
+   * gelen arasında başka kare gösterir.
+   */
+  async organikGorselAdresi(params: {
+    pageAccessToken: string;
+    externalId: string;
+    profileType: 'facebook_page' | 'instagram_business';
+    timeoutMs?: number;
+    onRateLimit?: (snapshot: RateLimitSnapshot) => void | Promise<void>;
+  }): Promise<string | null> {
+    const ig = params.profileType === 'instagram_business';
+    const url = new URL(`${this.graph}/${params.externalId}`);
+    url.searchParams.set('fields', ig ? 'id,thumbnail_url,media_url' : 'id,full_picture');
+    const res = await platformFetch<Record<string, unknown>>(
+      'meta',
+      url.toString(),
+      {
+        headers: { Authorization: `Bearer ${params.pageAccessToken}` },
+        ...(params.timeoutMs !== undefined ? { timeoutMs: params.timeoutMs } : {}),
+      },
+      parseMetaRateLimit,
+    );
+    if (res.rateLimit) await params.onRateLimit?.(res.rateLimit);
+    const d = res.data;
+    return (ig ? (text(d.thumbnail_url) ?? text(d.media_url)) : text(d.full_picture)) ?? null;
+  }
+
   async fetchOrganicPosts(params: {
     pageAccessToken: string;
     profileExternalId: string;

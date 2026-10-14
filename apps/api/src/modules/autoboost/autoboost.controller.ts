@@ -9,7 +9,10 @@ import {
   Put,
   Query,
   Req,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
+import { BoostGorseliService } from './boost-gorseli.service';
 import { z } from 'zod';
 import {
   tekrarBoostSchema,
@@ -127,7 +130,27 @@ export class AutoBoostController {
     private readonly kanalBul: YoutubeKanalBulService,
     /** YouTube ön ayarının otomatik dolan bilgileri — yayınla aynı çözümleyici. */
     private readonly youtubeOtomatik: YoutubeOtomatikService,
+    /** Kart görseli kullanım anında tazelenir (saklanan CDN adresi ölüyor). */
+    private readonly gorselServisi: BoostGorseliService,
   ) {}
+
+  /**
+   * KART GÖRSELİ — saklanan Instagram/Facebook adresi düşünce panel buraya
+   * geliyor (yalnız kırık kart başına). 200 + boş görsel DEĞİL: 502 ve
+   * nedeni, panel kartta yazıyor. Kalıcı adresli kart (YouTube) 404.
+   */
+  @Get('queue/:id/gorsel')
+  @RequirePermissions('boost.read')
+  async kartGorseli(
+    @CurrentTenant() ctx: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const g = await this.gorselServisi.akit(ctx, id);
+    res.setHeader('Content-Type', g.mime);
+    res.setHeader('Cache-Control', 'private, max-age=600');
+    res.send(Buffer.from(g.bytes));
+  }
 
   /**
    * YouTube aboneliklerinin sağlığı — ölü adam düğmesi.

@@ -23,6 +23,7 @@ import { YoutubeKanalBulService } from './youtube-kanal-bul.service';
  * onu çağırıyor ve Instagram'da "yeni gönderi" webhook'u olmadığı için kart
  * oradan besleniyor.
  */
+import { BoostGorseliService } from './boost-gorseli.service';
 @Module({
   // BoostsModule: yayın mevcut ve DOĞRULANMIŞ yürütücüden geçiyor.
   // İkinci bir yayın yolu yazmak, canlıda öğrenilmiş her dersi ikinci kez
@@ -35,6 +36,7 @@ import { YoutubeKanalBulService } from './youtube-kanal-bul.service';
     AutoBoostLaunchService,
     AutoBoostPresetService,
     AutoBoostReadService,
+    BoostGorseliService,
     BoostKontrolService,
     GecmisIcerikService,
     YouTubeApiService,
