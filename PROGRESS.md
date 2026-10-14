@@ -80,8 +80,8 @@
 ## 6 · Reklam Yöneticisi (`/ads-explorer`)
 
 - [x] Araştırma → `docs/pazar/reklam-yoneticisi.md` (Meta Ads Manager / Google Ads arayüz mantığı, çok hesaplı ajans görünümleri)
-- [ ] Bilinen açık: telefonda sayfa 147 px yana taşıyor
-- [ ] Öneri 2: durum sütununda TESLİMAT durumu (`effective_status` + üstten gelen engel: "Duraklatıldı (kampanya)", "Reddedildi"); bugün yalnız kendi `status`ü, set "Yayında" görünüp harcamıyor
+- [ ] (onay bekliyor: canlı ölçüm, oturum gerekiyor) Bilinen açık: telefonda sayfa 147 px yana taşıyor. Koddan teşhis edilemedi: tablo `overflow-x-auto` içinde, sayfa içi düzen `grid-cols-1` + `min-w-0`, şeritler `flex-wrap`. Tek aday tarih seçici düğmesi (`whitespace-nowrap`, ~380 px tahmini), ama 147 px'i açıklamıyor. Panelde oturum açıkken tarayıcıda taşan öğe ölçülmeli (betik hazır: genişliği aşan ve kırpılmayan öğeleri listeler).
+- [x] Öneri 2: durum sütununda TESLİMAT durumu (`effective_status` + üstten gelen engel: "Duraklatıldı (kampanya)", "Reddedildi"); bugün yalnız kendi `status`ü, set "Yayında" görünüp harcamıyor
 - [ ] Öneri 3: Google "Bütçeyle sınırlı" — önce yapı taramasının hangi durum alanını okuduğuna bak; yeni alan gerekiyorsa canlı ölçüm (onay kapısı)
 
 ## 7 · Raporlar (`/raporlar`)

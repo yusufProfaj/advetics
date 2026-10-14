@@ -757,9 +757,11 @@ function varlikSatiri(
     // Üst varlığın adı ZORUNLU: reklam adları setler arasında tekrar ediyor
     // ve üst ad olmadan hangi satırın hangisi olduğu ayırt edilemiyor.
     alt: [b.campaignType, b.parentName].filter(Boolean).join(' · ') || null,
+    // TESLİMAT, kendi durumu değil: kampanyası duraklatılmış set "Yayında"
+    // görünüp harcamıyordu (`teslimatDurumu`, sunucuda hesaplanıyor).
     durum: {
-      tur: b.status === 'active' ? 'yayinda' : 'durdu',
-      ad: DURUM_ADI[b.status] ?? DURUM_ADI.unknown!,
+      tur: b.teslimat.yayinda ? 'yayinda' : 'durdu',
+      ad: b.teslimat.ad,
     },
     karo: false,
     mecralar: [b.platform],

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { seviyeLiterali } from './seviye-literali';
-import { deriveRoas, donusumToplami, kampanyaTipi } from '@advetics/shared';
+import { deriveRoas, donusumToplami, kampanyaTipi, teslimatDurumu, type TeslimatGirdisi } from '@advetics/shared';
 import type {
   HierarchyPathQuery,
   MetricsConversionDetail,
@@ -572,6 +572,9 @@ export class MetricsService {
             name: string | null;
             parent_name: string | null;
             status: string | null;
+            effective_status: string | null;
+            ust_durum: string | null;
+            kok_durum: string | null;
             objective: string | null;
             kampanya_kanali: string | null;
           }
@@ -607,6 +610,10 @@ export class MetricsService {
                  COALESCE(c.name, g.name, a.name, acc.name) AS name,
                  COALESCE(gc.name, ag.name) AS parent_name,
                  COALESCE(c.status::text, g.status::text, a.status::text, acc.status::text) AS status,
+                 COALESCE(c.effective_status, g.effective_status, a.effective_status) AS effective_status,
+                 -- UST ENGEL: setin kampanyasi, reklamin seti ve kampanyasi (teslimatDurumu).
+                 COALESCE(gc.status::text, ag.status::text) AS ust_durum,
+                 agc.status::text AS kok_durum,
                  c.objective,
                  COALESCE(c.objective, gc.objective, agc.objective) AS kampanya_kanali
           FROM insights_daily i
@@ -625,7 +632,8 @@ export class MetricsService {
             ${filters}
           GROUP BY i.entity_id, i.entity_external_id, i.platform, i.currency,
                    c.name, g.name, a.name, acc.name, gc.name, ag.name,
-                   c.status, g.status, a.status, acc.status, c.objective, gc.objective, agc.objective
+                   c.status, g.status, a.status, acc.status, c.objective, gc.objective, agc.objective,
+                   c.effective_status, g.effective_status, a.effective_status, gc.status, ag.status, agc.status
           -- SIRALAMA CARİ DÖNEME BAĞLI ve bu ŞART: aksi hâlde yalnızca
           -- ÖNCEKİ dönemde harcama yapmış varlıklar LIMIT'in içine girip
           -- listeyi kaydırır ve "bu kampanya neden burada, hiç harcaması
@@ -676,6 +684,13 @@ export class MetricsService {
         parentName: r.parent_name === r.name ? null : r.parent_name,
         platform: r.platform,
         status: r.status ?? 'unknown',
+        teslimat: teslimatDurumu({
+          status: r.status ?? 'unknown',
+          effectiveStatus: r.effective_status,
+          ustDurum: r.ust_durum,
+          kokDurum: r.kok_durum,
+          seviye: query.level as TeslimatGirdisi['seviye'],
+        }),
         currency: r.currency,
         campaignType:
           query.level === 'campaign'

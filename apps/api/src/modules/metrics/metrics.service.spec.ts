@@ -728,6 +728,30 @@ describe('MetricsService', () => {
       expect(set!.campaignType).toBeNull();
     });
 
+    /*
+     * TESLİMAT DURUMU (docs/pazar/reklam-yoneticisi.md): kampanyası
+     * duraklatılmış set ve reklam "Yayında" görünüp harcamıyordu.
+     */
+    it('KRİTİK: üst kampanya duraklatılınca set ve reklam "Kampanya duraklatıldı"; Meta reddi reklamda görünüyor', async () => {
+      await seedMetrics({ date: '2026-08-05', spendMicros: '1000000', impressions: 100, clicks: 5, conversions: 1 });
+      const seviye = async (level: 'campaign' | 'ad_group' | 'ad') =>
+        (await svc.breakdown(CTX, { from: '2026-08-05', to: '2026-08-05', level, limit: 50 }))[0]!.teslimat;
+      expect(await seviye('ad_group')).toEqual({ yayinda: true, ad: 'Yayında' });
+
+      await h.q(`UPDATE campaigns SET status = 'paused' WHERE id = $1`, [CAMPAIGN_ID]);
+      expect(await seviye('campaign')).toEqual({ yayinda: false, ad: 'Duraklatıldı' });
+      expect(await seviye('ad_group')).toEqual({ yayinda: false, ad: 'Kampanya duraklatıldı' });
+      expect(await seviye('ad')).toEqual({ yayinda: false, ad: 'Kampanya duraklatıldı' });
+
+      await h.q(`UPDATE campaigns SET status = 'active' WHERE id = $1`, [CAMPAIGN_ID]);
+      await h.q(`UPDATE ad_groups SET status = 'paused' WHERE id = $1`, [GROUP_ID]);
+      expect(await seviye('ad')).toEqual({ yayinda: false, ad: 'Reklam seti duraklatıldı' });
+
+      await h.q(`UPDATE ad_groups SET status = 'active' WHERE id = $1`, [GROUP_ID]);
+      await h.q(`UPDATE ads SET effective_status = 'DISAPPROVED' WHERE id = $1`, [AD_ID]);
+      expect(await seviye('ad')).toEqual({ yayinda: false, ad: 'Reddedildi' });
+    });
+
     it('reklam seviyesinde ÜST ad set adı da döner', async () => {
       // Reklam adları ad set'ler arasında tekrar ediyor; üst varlık olmadan
       // tabloda hangi satırın hangisi olduğu ayırt edilemiyor.

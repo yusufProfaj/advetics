@@ -543,6 +543,12 @@ export interface MetricsBreakdownRow extends MetricTotals {
   parentName: string | null;
   platform: (typeof PLATFORMS)[number];
   status: string;
+  /**
+   * Teslimat durumu (`teslimatDurumu`): kendi durumu açık olsa bile üstten
+   * gelen engel ya da platformun reddi. Durum sütunu ve "Yayında" süzgeci
+   * bunu okuyor; durdur/başlat düğmesi KENDİ `status`ünü.
+   */
+  teslimat: { yayinda: boolean; ad: string };
   currency: string;
   /**
    * Kampanya tipi ("Form", "YouTube"...) — `kampanyaTipi()` ile çözülmüş.
