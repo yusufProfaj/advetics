@@ -143,6 +143,8 @@ export class AutoBoostReadService {
                p.id::text AS preset_id, p.enabled AS preset_enabled,
                p.budget_mode, p.daily_budget_micros, p.total_budget_micros,
                p.duration_days, p.settings,
+               op.reach::float8 AS org_erisim, op.engagements::float8 AS org_etkilesim,
+               ort.erisim AS ort_erisim, ort.etkilesim AS ort_etkilesim, COALESCE(ort.n, 0) AS ort_n,
                COUNT(*) OVER () AS total
         FROM auto_boost_queue_items q
         JOIN clients cl ON cl.id = q.client_id
@@ -153,6 +155,15 @@ export class AutoBoostReadService {
         -- duruyor, sadece süsleme alanı görünmüyor.
         LEFT JOIN social_profiles sp ON sp.id = q.social_profile_id
         LEFT JOIN organic_posts op ON op.social_profile_id = q.social_profile_id AND op.external_id = q.external_id
+        -- KIYAS: aynı hesabın son on gönderisi (kartın kendisi hariç). Kart
+        -- organikte ortalamanın altındaysa boostlamak genelde verimsiz
+        -- (pazar araştırması); karar panelde, burada yalnız sayılar.
+        LEFT JOIN LATERAL (
+          SELECT avg(s.reach)::float8 AS erisim, avg(s.engagements)::float8 AS etkilesim, count(*)::int AS n
+            FROM (SELECT o2.reach, o2.engagements FROM organic_posts o2
+                   WHERE o2.social_profile_id = q.social_profile_id AND o2.external_id <> q.external_id
+                   ORDER BY o2.published_at DESC LIMIT 10) s
+        ) ort ON true
         -- KANALA BAĞLI HESABIN PLATFORMU VE SAHİBİ: YouTube kartında bağlı
         -- hesap Meta ya da başka workspace'inse yok sayılıyor. Karar
         -- youtubeHesabiSec içinde; burada yalnızca girdileri okunuyor.
@@ -387,6 +398,11 @@ export class AutoBoostReadService {
       performance: this.performans(r),
       performanceNote: this.performansNotu(r),
       reBoostBlockedReason: this.tekrarEngeli(r),
+      // Organik satır yoksa (YouTube ya da henüz çekilmedi) null: "sıfır erişim" değil.
+      organik:
+        r.org_erisim === null && r.org_etkilesim === null
+          ? null
+          : { erisim: r.org_erisim, etkilesim: r.org_etkilesim, ortalamaErisim: r.ort_erisim, ortalamaEtkilesim: r.ort_etkilesim, ornek: Number(r.ort_n) },
       createdAt: r.created_at.toISOString(),
     };
   }
@@ -577,5 +593,10 @@ interface QueueRow {
   total_budget_micros: bigint | null;
   duration_days: number | null;
   settings: unknown;
+  org_erisim: number | null;
+  org_etkilesim: number | null;
+  ort_erisim: number | null;
+  ort_etkilesim: number | null;
+  ort_n: number;
   total: bigint;
 }

@@ -49,7 +49,7 @@
 - [x] Bilinen açık: kartta "Konum 3684" ham kimlik (adsız konum artık sayılıyor + "ön ayarı yeniden kaydet"; adı Meta'dan çözmek ayrı iş)
 - [x] Bilinen açık: sayfa ilk yüklemede başka workspace'in kuyruğunu (`fd82…`) sorguluyor → TEŞHİS: hata değil. `clientId` sunucuda tek kaynaktan (`sayfaWorkspaceId`), kuyruk yalnız onunla isteniyor; denetimdeki sıra birkaç gezinmeyi kapsıyordu ve arada workspace Ege Birlik (`fd82`) → Deneme (`1f97`) değişmişti. Kod değişmedi.
 - [ ] (onay bekliyor) 12 Facebook kartı: 2026-09-30 kararı yalnız IG + YouTube; eski mi yeni mi ölç, kullanıcıya sor
-- [ ] Öneri 1: kartta organik performans karşılaştırması (son 10 gönderinin ortalamasına göre erişim/etkileşim; altındaysa "boostlamak genelde verimsiz" notu)
+- [x] Öneri 1: kartta organik performans karşılaştırması (son 10 gönderinin ortalamasına göre erişim/etkileşim; altındaysa "boostlamak genelde verimsiz" notu)
 - [ ] Öneri 2: kartta boost hedefinin ne ölçtüğü ("etkileşim için; satış/form için AdvCampaign")
 - [ ] (onay bekliyor) Öneri 3: organik eşikle otomatik sıralama / otomatik onay (otomatik onay para harcar)
 - [ ] (onay bekliyor) Öneri 4: aynı anda boostlu gönderi sınırı

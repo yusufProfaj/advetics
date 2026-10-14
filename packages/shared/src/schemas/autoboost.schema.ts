@@ -535,7 +535,58 @@ export interface AutoBoostQueueItemRecord {
    * hatası göstermek olurdu.
    */
   reBoostBlockedReason: string | null;
+  /**
+   * Gönderinin ORGANİK performansı ve aynı hesabın son 10 gönderisinin
+   * ortalaması (pazar araştırması 2026-10-15). `null` = organik satır yok
+   * (YouTube ya da gönderi henüz çekilmedi). Karar `organikKarsilastirma`.
+   */
+  organik: AutoBoostOrganik | null;
   createdAt: string;
+}
+
+export interface AutoBoostOrganik {
+  erisim: number | null;
+  etkilesim: number | null;
+  ortalamaErisim: number | null;
+  ortalamaEtkilesim: number | null;
+  /** Ortalamaya giren gönderi sayısı (en çok 10). */
+  ornek: number;
+}
+
+/** Bu saatten genç gönderiyi "düşük" sayma: erişim zamanla birikiyor. */
+export const ORGANIK_KIYAS_MIN_SAAT = 48;
+/** Bundan az kıyas gönderisiyle ortalama anlamsız. */
+export const ORGANIK_KIYAS_MIN_ORNEK = 3;
+/** Ortalamanın bu oranının altı "düşük". */
+export const ORGANIK_DUSUK_ORAN = 0.7;
+
+/**
+ * ═══ KARTTA ORGANİK PERFORMANS (pazar araştırması 2026-10-15) ═══
+ *
+ * Kaynakların ortak tavsiyesi: organikte zaten iyi gideni boostla;
+ * ortalamanın altındakini boostlamak "aynı başarısızlığın büyüğünü satın
+ * almak" (docs/pazar/akilli-boost.md). Kart her yeni gönderiyi aynı
+ * görünüşle sunuyordu ve kullanıcı hangisinin onaylanmaya değer olduğunu
+ * bilemiyordu. Bu satır KARAR VERMİYOR, bilgi veriyor: onay kullanıcıda.
+ *
+ * İKİ ADALET KURALI: yeni gönderinin erişimi zamanla birikiyor, 48 saatten
+ * genç gönderi "düşük" sayılmaz; 3'ten az kıyas gönderisi varsa ortalama
+ * yazılmaz. Sayı yoksa (istatistik alınamadı) satır yok, tahmin yok.
+ */
+export function organikKarsilastirma(
+  o: AutoBoostOrganik | null,
+  publishedAt: string | null,
+  simdi: number = Date.now(),
+): { metin: string; dusuk: boolean } | null {
+  if (!o || o.erisim === null || o.ornek < ORGANIK_KIYAS_MIN_ORNEK || !o.ortalamaErisim) return null;
+  const oran = o.erisim / o.ortalamaErisim;
+  const yuzde = Math.round((oran - 1) * 100);
+  const yon = yuzde === 0 ? 'ortalamasıyla aynı' : yuzde > 0 ? `ortalamasının %${yuzde} üstünde` : `ortalamasının %${-yuzde} altında`;
+  const saat = publishedAt ? (simdi - Date.parse(publishedAt)) / 3_600_000 : null;
+  const genc = saat !== null && saat < ORGANIK_KIYAS_MIN_SAAT;
+  const dusuk = !genc && oran < ORGANIK_DUSUK_ORAN;
+  const metin = `Organik erişim son ${o.ornek} gönderinin ${yon}${genc ? ' (gönderi yeni, erişim artabilir)' : ''}`;
+  return { metin: dusuk ? `${metin} · Organikte zayıf giden gönderiyi boostlamak genelde verimsiz` : metin, dusuk };
 }
 
 export interface AutoBoostQueueList {

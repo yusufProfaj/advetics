@@ -13,6 +13,7 @@ import type {
   ChannelKind,
   YoutubeProvaSonucu,
 } from '@advetics/shared';
+import { organikKarsilastirma } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { AUTOBOOST_TEKRAR_ACIK_DURUMLAR, PLATFORM_LABELS, hedeflemeOzeti } from '@advetics/shared';
 import { formatMoney, formatNumber, formatPercent, formatTarih } from '@/lib/format';
@@ -949,6 +950,21 @@ function Kart({
             </a>
           )}
         </p>
+
+        {/*
+          ORGANİK KIYAS (pazar araştırması 2026-10-15): organikte zayıf giden
+          gönderiyi boostlamak genelde verimsiz. Karar vermiyor, bilgi veriyor;
+          yalnız onay bekleyen kartta (yayındakinde harcama zaten yapıldı).
+        */}
+        {kayit.status === 'pending' &&
+          (() => {
+            const k = organikKarsilastirma(kayit.organik, kayit.publishedAt);
+            return k ? (
+              <p className={`text-[11px] ${k.dusuk ? 'font-semibold text-ink' : 'text-ink-muted'}`} data-organik={k.dusuk ? 'dusuk' : 'normal'}>
+                {k.metin}
+              </p>
+            ) : null;
+          })()}
 
         {/*
           ═══ AYNI YER, İKİ HÂL ═══
