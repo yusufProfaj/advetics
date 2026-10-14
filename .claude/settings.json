@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Read",
+      "Edit",
+      "Write",
+      "Grep",
+      "Glob",
+      "Bash(./scripts/dogrula.sh)",
+      "Bash(./scripts/dogrula.sh --derle)",
+      "Bash(npx --no-install vitest run:*)",
+      "Bash(npx --no-install tsc:*)",
+      "Bash(npx --no-install prisma generate)",
+      "Bash(npx --no-install nest build)",
+      "Bash(npx --no-install next build)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(ls:*)",
+      "Bash(wc:*)"
+    ],
+    "deny": [
+      "Bash(git push:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git clean:*)",
+      "Bash(git rebase:*)",
+      "Bash(ssh:*)",
+      "Bash(scp:*)",
+      "Bash(curl:*)",
+      "Bash(wget:*)",
+      "Bash(rm -rf:*)",
+      "Bash(./scripts/deploy.sh:*)",
+      "Bash(npx prisma migrate:*)",
+      "Bash(npx prisma db:*)",
+      "Bash(npx --no-install prisma migrate:*)",
+      "Bash(npx --no-install prisma db:*)",
+      "Bash(npm install:*)",
+      "Bash(npm publish:*)",
+      "Bash(pnpm install:*)",
+      "Bash(pnpm db:*)"
+    ]
+  }
+}

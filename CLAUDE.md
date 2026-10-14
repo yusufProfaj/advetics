@@ -3,6 +3,31 @@
 Bu dosya her oturumda otomatik yükleniyor. Projeye dair **durum** bilgisi burada
 değil, [`docs/DURUM.md`](docs/DURUM.md) içinde; burası **nasıl çalışılacağı**.
 
+## Özet — döngü için (2026-10-14)
+
+**Amaç.** Advetics, Profaj ajansının beyaz etiketli reklam paneli: Meta,
+Google ve LinkedIn hesaplarını tek yerde izler, raporlar ve reklam
+bilmeyen kullanıcıya strateji (AdvStrategy) ve kurulum (AdvCampaign) yaptırır.
+Hedef: sessiz hata olmadan, ölçülmüş platform davranışıyla çalışan bir panel.
+
+**Başarı ölçütü.** `./scripts/dogrula.sh` yeşil (GitHub `dogrula.yml` ile aynı
+adımlar: shared derlemesi → prisma generate → tip kontrolü api+web → panel
+testleri → API testleri tek başına; `--derle` ile derleme de). Kritik testte
+mutasyon: satırı boz, düştüğünü gör, geri al (§3 "Test"). Arayüz işi ayrıca
+canlıda masaüstü + mobil görülmeden bitmiş sayılmaz (§3 "Tasarım").
+
+**Kendini geliştirme kuralı.**
+- Bir hata yaptığında ya da bir şeyi zor yoldan öğrendiğinde aşağıdaki
+  "Öğrenilenler"e TEK SATIR ekle. Kalıcı ve ayrıntılı ders §3'e gider.
+- Aynı türde işi 2. kez yapıyorsan onu `.claude/skills/` altında skill yap.
+- Bu özeti kısa tut; eskiyen ya da yanlış çıkan maddeyi sil. Dosyanın geri
+  kalanı İKİ GELİŞTİRİCİNİN ORTAK kuralları: kısaltma, öbür tarafın yazdığını
+  silme (§3 "İKİ GELİŞTİRİCİ VAR").
+- Döngü sırası `PROGRESS.md`; push, deploy, veri silme ve platforma yazma
+  döngünün işi DEĞİL, kullanıcıya sorulur.
+
+**Öğrenilenler.**
+
 ## 0. "advetics projesine devam et" denince
 
 Hafızaya değil DEPOYA bak: iki geliştirici var ve hafıza paylaşılmıyor.
