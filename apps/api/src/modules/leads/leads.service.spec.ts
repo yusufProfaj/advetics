@@ -278,13 +278,43 @@ describe('boş listenin sebebi', () => {
     expect(await sebep()).toContain('token');
   });
 
+  async function izinVer() {
+    await h.q(`UPDATE platform_connections SET granted_scopes = '{leads_retrieval}'`);
+  }
+
+  it('KRİTİK: TOKEN VAR AMA BAĞLANTI leads_retrieval ALMAMIŞSA bunu söylüyor', async () => {
+    await h.q(`UPDATE social_profiles SET page_access_token_enc = $1`, [Buffer.from('x')]);
+    // Tarama da koşmuş olsa "kayıt bulunamadı" DEMİYOR: sebep izin.
+    await h.q(
+      `INSERT INTO lead_sync_cursors (id, org_id, client_id, social_profile_id, external_form_id, last_run_at, updated_at)
+       VALUES (gen_random_uuid(),$1,$2,$3,'meta-form-1', now(), now())`,
+      [IDS.org, IDS.client, PROFILE],
+    );
+    const s = await sebep();
+    expect(s).toContain('leads_retrieval');
+    expect(s).not.toContain('kayıt bulunamadı');
+  });
+
+  it('KRİTİK: SON TARAMA HATA VERDİYSE platformun cümlesini yazıyor', async () => {
+    await h.q(`UPDATE social_profiles SET page_access_token_enc = $1`, [Buffer.from('x')]);
+    await izinVer();
+    await h.q(
+      `INSERT INTO lead_sync_cursors (id, org_id, client_id, social_profile_id, external_form_id, last_run_at, last_error, updated_at)
+       VALUES (gen_random_uuid(),$1,$2,$3,'meta-form-1', now(), '(#200) Requires pages_manage_ads permission', now())`,
+      [IDS.org, IDS.client, PROFILE],
+    );
+    expect(await sebep()).toBe('Son form taraması hata verdi: (#200) Requires pages_manage_ads permission');
+  });
+
   it('KRİTİK: TOKEN VAR TARAMA HİÇ KOŞMAMIŞSA DÜĞMEYE YÖNLENDİRİYOR', async () => {
     await h.q(`UPDATE social_profiles SET page_access_token_enc = $1`, [Buffer.from('x')]);
+    await izinVer();
     expect(await sebep()).toContain('Son 30 günü getir');
   });
 
   it('KRİTİK: HER ŞEY YERİNDEYSE DOĞRU CÜMLE', async () => {
     await h.q(`UPDATE social_profiles SET page_access_token_enc = $1`, [Buffer.from('x')]);
+    await izinVer();
     await h.q(
       `INSERT INTO lead_sync_cursors (id, org_id, client_id, social_profile_id,
          external_form_id, last_run_at, updated_at)

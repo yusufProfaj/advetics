@@ -153,7 +153,7 @@ export class LeadsService {
    */
   private async bosSebep(tx: TxLike, clientId: string): Promise<string> {
     const [durum] = await tx.$queryRaw<
-      Array<{ sayfa: number; tokenli: number; imlec: number }>
+      Array<{ sayfa: number; tokenli: number; izinsiz: number; imlec: number; son_hata: string | null }>
     >(Prisma.sql`
       SELECT
         (SELECT count(*)::int FROM social_profiles
@@ -161,8 +161,17 @@ export class LeadsService {
         (SELECT count(*)::int FROM social_profiles
           WHERE client_id = ${clientId}::uuid AND profile_type = 'facebook_page'
             AND page_access_token_enc IS NOT NULL) AS tokenli,
+        -- Token var ama bağlantı leads_retrieval iznini hiç almamış.
+        (SELECT count(*)::int FROM social_profiles sp
+           JOIN platform_connections pc ON pc.id = sp.connection_id
+          WHERE sp.client_id = ${clientId}::uuid AND sp.profile_type = 'facebook_page'
+            AND sp.page_access_token_enc IS NOT NULL
+            AND NOT ('leads_retrieval' = ANY(pc.granted_scopes))) AS izinsiz,
         (SELECT count(*)::int FROM lead_sync_cursors
-          WHERE client_id = ${clientId}::uuid AND last_run_at IS NOT NULL) AS imlec
+          WHERE client_id = ${clientId}::uuid AND last_run_at IS NOT NULL) AS imlec,
+        (SELECT last_error FROM lead_sync_cursors
+          WHERE client_id = ${clientId}::uuid AND last_error IS NOT NULL
+          ORDER BY last_run_at DESC NULLS LAST LIMIT 1) AS son_hata
     `);
 
     if (!durum || durum.sayfa === 0) {
@@ -177,6 +186,21 @@ export class LeadsService {
         'Sayfa atanmış ama sayfa token’ı yok. Meta bağlantısını leads_retrieval ' +
         'izniyle yeniden kur — kayıtlar sayfa token’ı olmadan çekilemiyor.'
       );
+    }
+    /*
+     * İZİN YOK ve SON TARAMA HATA VERDİ, "kayıt yok"tan ÖNCE. Eskiden ikisi de
+     * "tarama koştu ve kayıt bulunamadı"ya düşüyordu: kullanıcı formu Ads
+     * Manager'da arıyordu, oysa sorun bağlantının izniydi ve platformun
+     * kendi cümlesi `lead_sync_cursors.last_error`ta duruyordu.
+     */
+    if (durum.izinsiz > 0) {
+      return (
+        'Meta bağlantısı potansiyel müşteri kayıtlarını okuma iznini (leads_retrieval) ' +
+        'almamış. Bağlantıyı bu izinle yeniden kur; izin olmadan form kayıtları çekilemiyor.'
+      );
+    }
+    if (durum.son_hata) {
+      return `Son form taraması hata verdi: ${durum.son_hata}`;
     }
     if (durum.imlec === 0) {
       return (

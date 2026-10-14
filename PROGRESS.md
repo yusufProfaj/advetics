@@ -91,11 +91,11 @@
 - [x] Bilinen açık: rapor önizlemesi kılavuz dışı slate renkleri ve ikinci `h1` taşıyor. KOD DEĞİŞMEDİ: 33887fb5 (2026-10-14) bunu bilerek KALICI istisna yaptı (`tasarim-sistemi.istisnalar.ts`): önizleme PDF'in aynası, gri tonlar PDF çizicisiyle aynı, panel token'ına çevirmek ekranla PDF'i ayrıştırır ve karanlık temada belgeyi karartırdı.
 - [x] Bilinen açık: önizleme telefonda sağdan kesik (dar kenar, kapak başlığı ekrana göre küçülüyor, kapak/bölüm satırları sarılıyor, kap artık kesmiyor kaydırıyor; canlıda telefonla GÖRÜLMEDİ)
 - [x] Öneri 2 (ay sonu öngörüsü bu satırda YOK; yalnız bütçe ve dönemde harcanan): özet bölümünde "Aylık bütçe" satırı (tek takvim ayı + bütçe tanımlıysa; `budgets.pacing` ile aynı hesap)
-- [ ] Öneri 3: ajans yorumu ve sonraki adımlar alanı (dönem başına düz metin, PDF'te özetin altında; migration var, deploy kullanıcıda)
+- [ ] (onay bekliyor: yeni tablo = veri modeli değişikliği, döngü sözleşmesi "veri modeli olduğu gibi kalır") Öneri 3: ajans yorumu ve sonraki adımlar alanı (dönem başına düz metin, PDF'te özetin altında; migration var, deploy kullanıcıda)
 
 ## 8 · Potansiyel Müşteriler (`/potansiyel-musteriler`)
 
-- [ ] Bilinen açık: boş liste yanlış sebep söylüyor; Meta'da `leads_retrieval` izni yoksa bunu yaz (emptyReason + test)
+- [x] Bilinen açık: boş liste yanlış sebep söylüyor; Meta'da `leads_retrieval` izni yoksa bunu yaz (emptyReason + test). Ayrıca son taramanın hatası (`lead_sync_cursors.last_error`) artık "kayıt bulunamadı"dan önce, platformun cümlesiyle.
 - [ ] Araştırma → `docs/pazar/potansiyel-musteriler.md` (lead form CRM akışları, Meta Conversions API for CRM, Google lead form, Türkiye'de WhatsApp takibi)
 - [ ] Araştırmanın 1. önerisi
 
