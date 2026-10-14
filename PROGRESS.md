@@ -71,9 +71,11 @@
 
 ## 5 · Aylık Bütçe (`/butce`)
 
-- [ ] Araştırma → `docs/pazar/butce.md` (bütçe ve tempo araçları, hesap harcama limiti, Meta kampanya bütçesi / Google paylaşılan bütçe)
+- [x] Araştırma → `docs/pazar/butce.md` (bütçe ve tempo araçları, hesap harcama limiti, Meta kampanya bütçesi / Google paylaşılan bütçe)
 - [ ] Bilinen açık: "13 günün 11 günü senkronize" uyarısının sebebini teşhis et (hangi günler, hangi hesap)
-- [ ] Araştırmanın 1. önerisi
+- [ ] Öneri 2: yayındaki günlük bütçelerle ay sonu öngörüsü ("bugünkü günlük bütçelerle ay sonunda X, bütçeyi Y aşar")
+- [ ] Öneri 4: "hızlı" uyarısının yanında platform esnekliği notu (Meta günde %75'e, Google 2 katına kadar)
+- [ ] (onay bekliyor) Öneri 5: aylık bütçeyi Meta'da sert tavana çevirmek (`spend_cap`; platforma yazar)
 
 ## 6 · Reklam Yöneticisi (`/ads-explorer`)
 
