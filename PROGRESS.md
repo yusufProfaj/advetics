@@ -96,8 +96,11 @@
 ## 8 · Potansiyel Müşteriler (`/potansiyel-musteriler`)
 
 - [x] Bilinen açık: boş liste yanlış sebep söylüyor; Meta'da `leads_retrieval` izni yoksa bunu yaz (emptyReason + test). Ayrıca son taramanın hatası (`lead_sync_cursors.last_error`) artık "kayıt bulunamadı"dan önce, platformun cümlesiyle.
-- [ ] Araştırma → `docs/pazar/potansiyel-musteriler.md` (lead form CRM akışları, Meta Conversions API for CRM, Google lead form, Türkiye'de WhatsApp takibi)
-- [ ] Araştırmanın 1. önerisi
+- [x] Araştırma → `docs/pazar/potansiyel-musteriler.md` (lead form CRM akışları, Meta Conversions API for CRM, Google lead form, Türkiye'de WhatsApp takibi)
+- [ ] Öneri 1: "Yeni" kaydın bekleme süresi ("3 saattir aranmadı", 1 saati geçen işaretli, sayaç)
+- [ ] Öneri 2: kayıttan `tel:` ve WhatsApp (`wa.me`) bağlantısı (E.164)
+- [ ] (onay bekliyor) Öneri 3: yeni kayıt e-posta bildirimi (dışarı giden mesaj + ayar)
+- [ ] (onay bekliyor) Öneri 4: form oluşturucuda varsayılan "Daha yüksek niyet" + telefon doğrulaması (Meta'ya yazar)
 
 ## 9 · Genel Bakış (`/dashboard`)
 
