@@ -7,6 +7,8 @@
       "Write",
       "Grep",
       "Glob",
+      "WebFetch",
+      "WebSearch",
       "Bash(./scripts/dogrula.sh)",
       "Bash(./scripts/dogrula.sh --derle)",
       "Bash(npx --no-install vitest run:*)",
