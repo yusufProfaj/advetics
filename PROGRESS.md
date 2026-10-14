@@ -50,7 +50,8 @@
 - [x] Bilinen açık: sayfa ilk yüklemede başka workspace'in kuyruğunu (`fd82…`) sorguluyor → TEŞHİS: hata değil. `clientId` sunucuda tek kaynaktan (`sayfaWorkspaceId`), kuyruk yalnız onunla isteniyor; denetimdeki sıra birkaç gezinmeyi kapsıyordu ve arada workspace Ege Birlik (`fd82`) → Deneme (`1f97`) değişmişti. Kod değişmedi.
 - [ ] (onay bekliyor) 12 Facebook kartı: 2026-09-30 kararı yalnız IG + YouTube; eski mi yeni mi ölç, kullanıcıya sor
 - [x] Öneri 1: kartta organik performans karşılaştırması (son 10 gönderinin ortalamasına göre erişim/etkileşim; altındaysa "boostlamak genelde verimsiz" notu)
-- [ ] Öneri 2: kartta boost hedefinin ne ölçtüğü ("etkileşim için; satış/form için AdvCampaign")
+- [x] Öneri 2: kartta boost hedefinin ne ölçtüğü ("etkileşim için; satış/form için AdvCampaign"). BULGU: ön ayardaki "Amaç" (Erişim/Profil ziyareti) Meta'ya HİÇ gitmiyor, boost her zaman `POST_ENGAGEMENT`; kart yazılan hedefi ve farkı söylüyor, form ipucu düzeltildi
+- [ ] (onay bekliyor) Ön ayar amacını yayına bağla (Erişim → `REACH`, Profil ziyareti → `PROFILE_VISIT`; Meta'ya yazan değişiklik, canlı prova ister) YA DA iki seçeneği formdan kaldır
 - [ ] (onay bekliyor) Öneri 3: organik eşikle otomatik sıralama / otomatik onay (otomatik onay para harcar)
 - [ ] (onay bekliyor) Öneri 4: aynı anda boostlu gönderi sınırı
 

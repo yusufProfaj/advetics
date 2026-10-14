@@ -141,3 +141,49 @@ export function hedeflemeLokasyonu(l: { key: string; type: string; label?: strin
   }
   throw new Error(`Tanınmayan lokasyon türü: ${l.type}`);
 }
+
+/**
+ * ═══ BOOST NEYİ ÖLÇÜYOR (pazar araştırması 2026-10-15) ═══
+ *
+ * Kullanıcı boost'tan satış ya da form bekliyordu; boost bunu ölçmüyor.
+ * Kart artık neye göre kurulduğunu ve satış/form için yolun AdvCampaign
+ * olduğunu söylüyor.
+ *
+ * ÖN AYARDAKİ AMAÇ META'YA GİTMİYOR. Form "Erişim" ve "Profil ziyareti"
+ * sunuyor ama yayın yolu (`meta.provider.ts`, boost reklam seti) her
+ * zaman `POST_ENGAGEMENT` yazıyor ve `settings.goal`u okuyan hiçbir kod
+ * yok. Kartın seçilen amacı göstermesi, olmayan bir kurulumu anlatmak
+ * olurdu: yazılan GERÇEK hedef, fark varsa açıkça söyleniyor. Seçeneği
+ * yayına bağlamak platforma yazmak demek, ayrı karar (PROGRESS.md).
+ *
+ * Google (YouTube Demand Gen) teklifi `TARGET_SPEND` = tıklamayı
+ * artırmak (`google-demandgen.ts`); dönüşüm takibi gerektirmiyor.
+ */
+export const BOOST_AMAC_ETIKETI: Record<string, string> = {
+  engagement: 'Etkileşim',
+  reach: 'Erişim',
+  profile_visits: 'Profil ziyareti',
+};
+
+export const BOOST_ADVCAMPAIGN_NOTU = 'Satış ya da form için AdvCampaign';
+
+export interface BoostHedefi {
+  /** Platforma GERÇEKTEN yazılan optimizasyonun okunabilir hâli. */
+  deger: string;
+  /** Ön ayarda seçilen amaç yazılandan farklıysa; yoksa null. */
+  fark: string | null;
+}
+
+export function boostHedefi(settings: AutoBoostPresetSettings): BoostHedefi {
+  if (settings.platform === 'google') {
+    return { deger: 'Tıklama (YouTube izleyicisi)', fark: null };
+  }
+  const secilen = settings.goal ?? 'engagement';
+  return {
+    deger: 'Etkileşim (beğeni, yorum, kaydetme)',
+    fark:
+      secilen === 'engagement'
+        ? null
+        : `Ön ayarda “${BOOST_AMAC_ETIKETI[secilen] ?? secilen}” seçili ama boost bugün etkileşime göre kuruluyor`,
+  };
+}

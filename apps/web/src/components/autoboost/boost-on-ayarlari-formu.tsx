@@ -337,7 +337,7 @@ function MetaForm({
 
       <Alan
         etiket="Amaç"
-        ipucu="Etkileşim: beğeni ve yorum. Erişim: en çok kişiye ulaşmak."
+        ipucu="Boost bugün her seçimde etkileşime (beğeni, yorum, kaydetme) göre kuruluyor. Satış ya da form için AdvCampaign."
       >
         <select
           value={goal}

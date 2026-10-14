@@ -13,7 +13,7 @@ import type {
   ChannelKind,
   YoutubeProvaSonucu,
 } from '@advetics/shared';
-import { organikKarsilastirma } from '@advetics/shared';
+import { BOOST_ADVCAMPAIGN_NOTU, boostHedefi, organikKarsilastirma } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { AUTOBOOST_TEKRAR_ACIK_DURUMLAR, PLATFORM_LABELS, hedeflemeOzeti } from '@advetics/shared';
 import { formatMoney, formatNumber, formatPercent, formatTarih } from '@/lib/format';
@@ -964,6 +964,23 @@ function Kart({
                 {k.metin}
               </p>
             ) : null;
+          })()}
+
+        {/*
+          BOOST NEYİ ÖLÇÜYOR: kullanıcı boost'tan satış bekliyordu. Seçilen
+          değil YAZILAN hedef gösteriliyor (ön ayardaki amaç Meta'ya gitmiyor,
+          `boostHedefi`); fark varsa ayrıca söyleniyor.
+        */}
+        {kayit.status === 'pending' &&
+          kayit.preset &&
+          (() => {
+            const h = boostHedefi(kayit.preset.settings);
+            return (
+              <p className="text-[11px] text-ink-muted" data-boost-hedefi>
+                Hedef: <span className="font-medium text-ink">{h.deger}</span> · {BOOST_ADVCAMPAIGN_NOTU}
+                {h.fark && <span className="block font-semibold text-ink">{h.fark}</span>}
+              </p>
+            );
           })()}
 
         {/*
