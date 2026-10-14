@@ -223,6 +223,17 @@ describe('durum makinesi', () => {
     expect(y.yorumlar.map((x) => [x.rol, x.tur])).toEqual([['musteri', 'revizyon']]);
   });
 
+  it('KRİTİK: revizyon KAMPANYAYA bağlanabiliyor; not o kampanyanın sırasıyla okunuyor, başka planın kalemi reddediliyor', async () => {
+    const p = await planAc();
+    const d = await svc.kalemleriKaydet(AJANS, p.plan.id, { surum: 1, kalemler: [kalem({ butce: '10.000' }), kalem({ butce: '10.000' })] });
+    await svc.eylem(AJANS, p.plan.id, { eylem: 'onaya_gonder', surum: d.plan.surum });
+    const ikinci = d.kalemler.find((k) => k.sira === 2)!;
+    await expect(svc.revizyon(MUSTERI, p.plan.id, { surum: d.plan.surum, yorum: 'x', kalemId: '00000000-0000-4000-8000-000000000000' })).rejects.toThrow(/stratejide yok/);
+    await svc.revizyon(MUSTERI, p.plan.id, { surum: d.plan.surum, yorum: 'Bunun bütçesi az', kalemId: ikinci.id });
+    const y = await svc.yorumlar(AJANS, p.plan.id);
+    expect(y.yorumlar.map((x) => [x.tur, x.kalemSira])).toEqual([['revizyon', 2]]);
+  });
+
   it('KRİTİK: müşteri hesabının onayı rolüyle kaydedilir; onaylanan sürüm planın sürümü', async () => {
     const d = await onayliPlan();
     expect(d.plan.durum).toBe('onaylandi');

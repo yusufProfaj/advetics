@@ -155,7 +155,7 @@ export function RaporEkrani({
         veri={detay}
         gerceklesen={gerceklesen}
         onayYuvasi={
-          <PanelOnayKutusu planId={plan.id} surum={plan.surum} durum={plan.durum} izinler={izinler} onay={plan.onay} yorumlar={yorumlar} yenile={() => void yenile()} tazeSurum={tazeSurum} />
+          <PanelOnayKutusu kalemler={detay.kalemler} planId={plan.id} surum={plan.surum} durum={plan.durum} izinler={izinler} onay={plan.onay} yorumlar={yorumlar} yenile={() => void yenile()} tazeSurum={tazeSurum} />
         }
       />
     </div>

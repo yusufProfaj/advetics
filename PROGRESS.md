@@ -66,7 +66,7 @@
 
 - [x] Araştırma → `docs/pazar/advstrategy.md` (medya planı araçları, Meta Reach Planner / Google Performance Planner, müşteri onay akışları)
 - [x] Bilinen açık: onay bekleyen strateji varken kart başlığı hâlâ "Strateji oluştur"; "Onay bekleyen strateji var" + "Raporu aç"
-- [ ] Öneri 3: müşteri revizyon isterken kalemi seçebilsin, not kalemin yanında görünsün (önce mevcut revizyon akışı incelenir)
+- [x] Öneri 3 (panel; girişsiz bağlantı kutusu henüz bütün strateji için): müşteri revizyon isterken kalemi seçebilsin, not kalemin yanında görünsün (önce mevcut revizyon akışı incelenir)
 - [ ] (onay bekliyor) Öneri 2: geçmişi olmayan hesapta "tahmin yok" yerine Meta `delivery_estimate` eğrisi, kaynağı "Meta'nın tahmini" (K-3 kararını genişletir; canlı ölçüm ister)
 
 ## 5 · Aylık Bütçe (`/butce`)

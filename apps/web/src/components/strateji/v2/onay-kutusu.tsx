@@ -12,9 +12,9 @@ import {
 import { API_URL, ApiRequestError } from '@/lib/api';
 import { Dugme } from '@/components/ui/dugme';
 import { zamanMetni } from '../hesap';
-import { onayCumlesi } from './hesap';
+import { kalemSecenekleri, onayCumlesi, yorumKalemEtiketi } from './hesap';
 import { Bildirim, GIRDI, yaz } from './ortak';
-import type { StratejiOnayKaydi, StratejiYorumu } from '@advetics/shared';
+import type { StratejiKalemi, StratejiOnayKaydi, StratejiYorumu } from '@advetics/shared';
 
 /**
  * ═══ ONAY KUTUSU — iki giriş, tek belge ═══
@@ -56,6 +56,7 @@ export function YorumListesi({ yorumlar }: { yorumlar: readonly StratejiYorumu[]
               · {y.rol === 'ajans' ? 'ajans' : y.rol === 'baglanti' ? 'onay bağlantısı' : 'müşteri hesabı'} · sürüm {y.surum} · {zamanMetni(y.zaman)}
               {y.tur === 'revizyon' ? ' · revizyon istedi' : y.tur === 'onay' ? ' · onayladı' : ''}
             </span>
+            {yorumKalemEtiketi(y.kalemSira) && <span className="block text-xs font-semibold">{yorumKalemEtiketi(y.kalemSira)}</span>}
             <p className="m-0 whitespace-pre-line break-words">{y.metin}</p>
           </div>
         </div>
@@ -74,7 +75,9 @@ export function PanelOnayKutusu({
   yorumlar,
   yenile,
   tazeSurum,
+  kalemler,
 }: {
+  kalemler: ReadonlyArray<Pick<StratejiKalemi, 'id' | 'sira' | 'amac'>>;
   planId: string;
   surum: number;
   durum: StratejiDurumu;
@@ -85,6 +88,8 @@ export function PanelOnayKutusu({
   tazeSurum: () => Promise<number | null>;
 }) {
   const [yorum, setYorum] = useState('');
+  /** '' = bütün strateji. */
+  const [kalemId, setKalemId] = useState('');
   const [suruyor, setSuruyor] = useState<'onayla' | 'revizyon_iste' | 'yorum' | null>(null);
   const [sonuc, setSonuc] = useState<{ hata: boolean; metin: string } | null>(null);
   const yapilabilir = stratejiYapilabilir(durum, izinler).filter((e) => e === 'onayla' || e === 'revizyon_iste');
@@ -97,11 +102,12 @@ export function PanelOnayKutusu({
     const r =
       eylem === 'onayla'
         ? await yaz(stratejiUcYolu('/strateji/v2/planlar/:id/onayla', { id: planId }), 'POST', { surum }, tazeSurum, surum)
-        : await yaz(stratejiUcYolu('/strateji/v2/planlar/:id/revizyon', { id: planId }), 'POST', { surum, yorum: yorum.trim() }, tazeSurum, surum);
+        : await yaz(stratejiUcYolu('/strateji/v2/planlar/:id/revizyon', { id: planId }), 'POST', { surum, yorum: yorum.trim(), kalemId: kalemId || null }, tazeSurum, surum);
     setSuruyor(null);
     if (r.tur === 'tamam') {
       setSonuc({ hata: false, metin: eylem === 'onayla' ? `Onaylandı · sürüm ${surum}.` : 'Revizyon istendi; ajansa iletildi.' });
       setYorum('');
+      setKalemId('');
       yenile();
     } else setSonuc({ hata: true, metin: r.mesaj });
   }
@@ -109,7 +115,7 @@ export function PanelOnayKutusu({
   async function yorumGonder() {
     setSuruyor('yorum');
     setSonuc(null);
-    const r = await yaz(stratejiUcYolu('/strateji/v2/planlar/:id/yorumlar', { id: planId }), 'POST', { surum, metin: yorum.trim() }, tazeSurum, surum);
+    const r = await yaz(stratejiUcYolu('/strateji/v2/planlar/:id/yorumlar', { id: planId }), 'POST', { surum, metin: yorum.trim(), kalemId: kalemId || null }, tazeSurum, surum);
     setSuruyor(null);
     if (r.tur === 'tamam') {
       setYorum('');
@@ -123,6 +129,16 @@ export function PanelOnayKutusu({
         <p className="m-0 mt-3 text-[13px] text-[var(--gri)]/70">
           {durum === 'onayda' ? 'Bu hesap karar veremiyor; onay yetkisi olan biri karar verir.' : 'Strateji şu an onay beklemiyor.'}
         </p>
+      )}
+      {(yapilabilir.length > 0 || yorumYazabilir) && kalemler.length > 0 && (
+        <select className={`${GIRDI} mt-3 bg-white text-black`} aria-label="Yorum hangi kampanya hakkında" value={kalemId} onChange={(e) => setKalemId(e.target.value)}>
+          <option value="">Bütün strateji</option>
+          {kalemSecenekleri(kalemler).map((k) => (
+            <option key={k.id} value={k.id}>
+              {k.etiket}
+            </option>
+          ))}
+        </select>
       )}
       {(yapilabilir.length > 0 || yorumYazabilir) && (
         <textarea

@@ -508,3 +508,17 @@ export const KALEM_KELIME_METNI: Record<'eksik' | 'bos_grup', string> = {
   eksik: 'Google Arama kampanyası kelimesiz; AdvCampaign’e kelimesiz gider.',
   bos_grup: 'Bağlı kelime grubunda seçili kelime yok; AdvCampaign’e kelimesiz gider.',
 };
+
+/**
+ * ═══ YORUM HANGİ KAMPANYA HAKKINDA ═══
+ * Kalem kimliği sunucuda saklanıyordu ama yorum listesi onu HİÇ
+ * göstermiyordu: müşteri bir kampanya için yazdığında ajans hangisi
+ * olduğunu bilemiyordu. Sıra belgedeki numaralamayla aynı (1'den).
+ */
+export function yorumKalemEtiketi(kalemSira: number | null): string | null {
+  return kalemSira === null ? null : `${kalemSira}. kampanya hakkında`;
+}
+
+export function kalemSecenekleri(kalemler: ReadonlyArray<Pick<StratejiKalemi, 'id' | 'sira' | 'amac'>>): Array<{ id: string; etiket: string }> {
+  return [...kalemler].sort((a, b) => a.sira - b.sira).map((k) => ({ id: k.id, etiket: `${k.sira}. ${amacAdi(k.amac)}` }));
+}

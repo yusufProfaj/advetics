@@ -995,13 +995,17 @@ export class StratejiV2Service {
       const p = await planOku(tx, ctx, id, true);
       if (!stratejiGecisMumkunMu(p.durum as StratejiDurumu, 'revizyon_iste')) throw new ConflictException(gecisMesaji(p.durum as StratejiDurumu));
       if (p.surum !== girdi.surum) throw new ConflictException(SURUM_MESAJI);
+      // Başka bir planın kalemi bu plana not olarak yazılamaz (yorumYaz ile aynı kapı).
+      if (girdi.kalemId && !(await kalemSatirlari(tx, p.id, p.client_id)).some((k) => k.id === girdi.kalemId)) {
+        throw new BadRequestException('Kampanya bu stratejide yok');
+      }
       await tx.$queryRaw(Prisma.sql`
         UPDATE strateji_planlari SET durum = 'revizyon', revizyon_notu = ${girdi.yorum}, updated_at = now()
          WHERE id = ${p.id}::uuid RETURNING id`);
       await tx.$queryRaw(Prisma.sql`
         UPDATE strateji_onay_baglantilari SET iptal_at = now()
          WHERE plan_id = ${p.id}::uuid AND iptal_at IS NULL AND kullanildi_at IS NULL RETURNING id`);
-      await yorumEkle(tx, p, { surum: p.surum, userId: ctx.userId, rol: v2Rol(ctx), tur: 'revizyon', metin: girdi.yorum, yazanAd: null, kalemId: null });
+      await yorumEkle(tx, p, { surum: p.surum, userId: ctx.userId, rol: v2Rol(ctx), tur: 'revizyon', metin: girdi.yorum, yazanAd: null, kalemId: girdi.kalemId ?? null });
       await this.audit.record(tx as never, ctx, { action: 'strateji.revizyon_iste', targetType: 'strateji_plani', targetId: p.id, clientId: p.client_id });
       return this.detayKur(tx, ctx, await planOku(tx, ctx, p.id, false));
     });

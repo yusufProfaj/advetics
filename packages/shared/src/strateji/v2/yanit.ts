@@ -40,6 +40,12 @@ export const stratejiOnaySchema = z.object({ surum: z.number().int().positive() 
 export const stratejiRevizyonSchema = z.object({
   surum: z.number().int().positive(),
   yorum: z.string().trim().min(1, 'Ne değişmesi gerektiğini yazın').max(2000),
+  /**
+   * Revizyon HANGİ KAMPANYA için (pazar araştırması 2026-10-15): müşteri
+   * "şunu değiştirin" derken kalemi seçebiliyor; ajans notu o kalemin
+   * yanında görüyor. Boş = bütün strateji.
+   */
+  kalemId: z.string().uuid().nullable().optional(),
 });
 export type StratejiRevizyonGirdisi = z.infer<typeof stratejiRevizyonSchema>;
 
