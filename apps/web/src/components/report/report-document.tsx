@@ -104,7 +104,10 @@ export function ReportDocument({ data }: { data: ReportData }) {
         }}
       />
 
-      <div className="rpt mx-auto max-w-[880px] bg-white px-8 py-10 text-slate-900 print:px-0 print:py-0">
+      {/* TELEFONDA DAR KENAR: 32 px iç boşluk 375 px ekranda belgeye ~280 px
+          bırakıyordu ve kapak satırı, başlık sağdan KESİLİYORDU (kap
+          overflow-hidden). Baskı ölçüsü değişmiyor (print:px-0). */}
+      <div className="rpt mx-auto max-w-[880px] bg-white px-4 py-6 text-slate-900 sm:px-8 sm:py-10 print:px-0 print:py-0">
         {data.sections.map((section) => {
           /*
             Kitle bölümlerinin kaderi — altı bölüm için TEK karar.
@@ -201,7 +204,7 @@ export function ReportDocument({ data }: { data: ReportData }) {
 function Cover({ data }: { data: ReportData }) {
   return (
     <section className="rpt-page flex min-h-[70vh] flex-col justify-between print:min-h-[240mm]">
-      <div className="flex items-start justify-between gap-6">
+      <div className="flex flex-wrap items-start justify-between gap-6">
         <DateBadge from={data.from} to={data.to} />
         {/*
           ADVETICS LOGOSU — ajansın kendi logosu DEĞİL.
@@ -218,7 +221,7 @@ function Cover({ data }: { data: ReportData }) {
       </div>
 
       <div className="py-16">
-        <h1 className="text-[52px] font-bold uppercase leading-[0.95] tracking-tight text-slate-900">
+        <h1 className="text-[clamp(2rem,11vw,52px)] font-bold uppercase leading-[0.95] tracking-tight text-slate-900 [overflow-wrap:anywhere]">
           {data.title.split(' ').map((word, i) => (
             <span key={i} className="block">
               {word}
@@ -1388,7 +1391,7 @@ function PageHead({
   data?: ReportData;
 }) {
   return (
-    <header className="flex items-end justify-between gap-4 border-b border-slate-200 pb-3">
+    <header className="flex flex-wrap items-end justify-between gap-4 border-b border-slate-200 pb-3">
       <div>
         <h2 className="text-2xl font-bold uppercase tracking-tight">{title}</h2>
         <p

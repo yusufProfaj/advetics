@@ -88,8 +88,8 @@
 ## 7 · Raporlar (`/raporlar`)
 
 - [x] Araştırma → `docs/pazar/raporlar.md` (AgencyAnalytics, Whatagraph, DashThis, Looker Studio şablonları; beyaz etiket rapor beklentileri)
-- [ ] Bilinen açık: rapor önizlemesi kılavuz dışı slate renkleri ve ikinci `h1` taşıyor
-- [ ] Bilinen açık: önizleme telefonda sağdan kesik; genişliğe ölçeklensin
+- [x] Bilinen açık: rapor önizlemesi kılavuz dışı slate renkleri ve ikinci `h1` taşıyor. KOD DEĞİŞMEDİ: 33887fb5 (2026-10-14) bunu bilerek KALICI istisna yaptı (`tasarim-sistemi.istisnalar.ts`): önizleme PDF'in aynası, gri tonlar PDF çizicisiyle aynı, panel token'ına çevirmek ekranla PDF'i ayrıştırır ve karanlık temada belgeyi karartırdı.
+- [x] Bilinen açık: önizleme telefonda sağdan kesik (dar kenar, kapak başlığı ekrana göre küçülüyor, kapak/bölüm satırları sarılıyor, kap artık kesmiyor kaydırıyor; canlıda telefonla GÖRÜLMEDİ)
 - [ ] Öneri 2: özet bölümünde "Aylık bütçe" satırı (tek takvim ayı + bütçe tanımlıysa; `budgets.pacing` ile aynı hesap)
 - [ ] Öneri 3: ajans yorumu ve sonraki adımlar alanı (dönem başına düz metin, PDF'te özetin altında; migration var, deploy kullanıcıda)
 

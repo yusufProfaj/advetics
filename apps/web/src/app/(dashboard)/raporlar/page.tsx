@@ -382,7 +382,9 @@ export default async function ReportsPage({
                  belgeyle ekranda görülenin zamanla ayrışması demek olurdu.
                  Zemin bilerek beyaz: belge PDF'in aynası ve karanlık temada da
                  kâğıt gibi okunmalı. */
-              <div className="overflow-hidden rounded-kart border border-line bg-white">
+              /* overflow-x-auto, hidden DEĞİL: taşan bir parça (uzun kampanya adı,
+                 geniş tablo) sessizce kesilmek yerine kaydırılarak okunur. */
+              <div className="overflow-x-auto rounded-kart border border-line bg-white">
                 <ReportDocument data={report} />
               </div>
             )}
