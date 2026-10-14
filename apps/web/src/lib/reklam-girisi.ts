@@ -224,3 +224,37 @@ export function butceMetni(b: RehberOzeti['butce'], para: (micros: string, birim
   if (!b) return null;
   return b.tip === 'gunluk' ? `${para(b.micros, b.paraBirimi)} / gün` : `${para(b.micros, b.paraBirimi)} toplam`;
 }
+
+/**
+ * Taslağın "eksik" sözü: tabloda rozet, telefonda özet satırı AYNI metni
+ * okuyor. İki yerde elle yazılırsa biri değiştiğinde öbürü eski sözü taşır.
+ */
+export function eksikEtiketi(r: Pick<RehberOzeti, 'amac' | 'eksikSayisi'>): { metin: string; hata: boolean } {
+  if (r.amac === null) return { metin: 'Amaç yok', hata: false };
+  if (r.eksikSayisi > 0) return { metin: `${r.eksikSayisi} eksik`, hata: true };
+  return { metin: 'Eksik yok', hata: false };
+}
+
+/**
+ * ═══ TELEFONDA SATIR ÖZETİ (2026-10-14 canlı denetim) ═══
+ *
+ * 375 px'te taslak tablosu dört sütunla ekranı taşıyor ve satırın TEK
+ * eylemi ("Devam et") ekran dışına düşüyordu. Bütçe, eksik ve platform
+ * sütunları telefonda gizleniyor (`ikincil`); gizlenen bilgi KAYBOLMASIN
+ * diye ad hücresinin altına tek satır olarak geliyor. Yalnız telefonda
+ * görünür; masaüstünde sütunlar zaten var ve aynı bilgiyi iki kez yazmak
+ * gürültü olurdu.
+ */
+export function telefonOzeti(
+  r: Pick<RehberOzeti, 'amac' | 'eksikSayisi' | 'butce' | 'durum' | 'platformlar' | 'yayinlar'>,
+  sekme: GirisSekmesi,
+  para: (micros: string, birim: string) => string,
+): string | null {
+  const parcalar =
+    sekme === 'taslaklar'
+      ? [eksikEtiketi(r).metin, butceMetni(r.butce, para)]
+      : [...platformRozetleri(r).map((z) => z.etiket), butceMetni(r.butce, para)];
+  const dolu = parcalar.filter((p): p is string => Boolean(p));
+  return dolu.length ? dolu.join(' · ') : null;
+}
+

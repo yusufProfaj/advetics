@@ -7,6 +7,7 @@ import {
   aktifSekme,
   birincilEylem,
   butceMetni,
+  eksikEtiketi,
   eskiTaslakMi,
   kisaSebep,
   platformRozetleri,
@@ -15,6 +16,7 @@ import {
   satirSekmesi,
   sekmeyeAyir,
   taslaklariAyir,
+  telefonOzeti,
   topluSonucMetni,
 } from './reklam-girisi';
 
@@ -249,3 +251,49 @@ describe('giriş bileşeni (kaynak bekçileri)', () => {
     expect(KAYNAK).toMatch(/\$?\{liste\.satirlar\.length\} \/ \$?\{liste\.toplam\} kayıt gösteriliyor/);
   });
 });
+
+/*
+ * TELEFONDA "DEVAM ET" EKRAN DIŞINA DÜŞÜYORDU (2026-10-14 canlı denetim,
+ * 375 px). Bütçe/eksik/platform sütunları telefonda gizleniyor, bilgileri
+ * ad hücresinin altındaki özet satırına geçiyor.
+ */
+describe('telefon satır özeti', () => {
+  const para = (m: string, b: string) => `${Number(m) / 1_000_000} ${b}`;
+  const butce = { tip: 'gunluk', micros: '500000000', paraBirimi: 'TRY' } as RehberOzeti['butce'];
+
+  it('KRİTİK: taslakta eksik sözü ve bütçe, gizlenen iki sütunun yerine', () => {
+    expect(telefonOzeti(satir({ amac: null, butce }), 'taslaklar', para)).toBe('Amaç yok · 500 TRY / gün');
+    expect(telefonOzeti(satir({ eksikSayisi: 3 }), 'taslaklar', para)).toBe('3 eksik');
+  });
+
+  it('yayındakilerde platform durumu ve bütçe', () => {
+    const r = satir({ durum: 'yayinda', butce, yayinlar: [yayin('meta', 'yayinda')] });
+    const o = telefonOzeti(r, 'yayindakiler', para)!;
+    expect(o).toContain('Meta: ');
+    expect(o.endsWith('500 TRY / gün')).toBe(true);
+  });
+
+  it('gösterecek bir şey yoksa null (boş satır çizilmez)', () => {
+    expect(telefonOzeti(satir(), 'yayindakiler', para)).toBeNull();
+  });
+
+  it('eksik sözü rozetle aynı kaynaktan', () => {
+    expect(eksikEtiketi({ amac: 'SITE', eksikSayisi: 2 })).toEqual({ metin: '2 eksik', hata: true });
+    expect(eksikEtiketi({ amac: 'SITE', eksikSayisi: 0 })).toEqual({ metin: 'Eksik yok', hata: false });
+  });
+
+  it('KRİTİK: tabloda bütçe/eksik/platform telefonda gizli, ad hücresi özeti yalnız telefonda çiziyor', () => {
+    const k = readFileSync(join(__dirname, '../components/rehber/rehber-girisi.tsx'), 'utf8')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+    for (const anahtar of ['butce', 'platform', 'eksik']) {
+      const i = k.indexOf(`anahtar: '${anahtar}'`);
+      if (i < 0) throw new Error(`${anahtar} sütunu bulunamadı: tarama boşa düştü`);
+      expect(k.slice(i, k.indexOf('hucre:', i)), anahtar).toContain('ikincil: true');
+    }
+    expect(k).toContain("const ozet = telefonOzeti(r, sekme, (m, b) => formatMoney(m, b));");
+    expect(k).toContain('<span className="block sm:hidden">{ozet}</span>');
+  });
+});
+

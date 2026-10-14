@@ -16,12 +16,14 @@ import {
   aktifSekme,
   birincilEylem,
   butceMetni,
+  eksikEtiketi,
   platformRozetleri,
   satirAdi,
   satirEylemleri,
   sekmeyeAyir,
   taslakPlatformlari,
   taslaklariAyir,
+  telefonOzeti,
   topluSonucMetni,
   type GirisSekmesi,
   type RozetTonu,
@@ -175,11 +177,18 @@ export function RehberGirisi({
         <AdHucresi
           ad={<Link href={satirAdresi(r)}>{satirAdi(r, formatTarih)}</Link>}
           alt={
-            r.durum === 'taslak'
-              ? ['Taslak', taslakPlatformlari(r)].filter(Boolean).join(' · ')
-              : r.durum === 'arsivlendi'
-                ? 'Listeden kaldırıldı'
-                : undefined
+            <>
+              {r.durum === 'taslak'
+                ? ['Taslak', taslakPlatformlari(r)].filter(Boolean).join(' · ')
+                : r.durum === 'arsivlendi'
+                  ? 'Listeden kaldırıldı'
+                  : null}
+              {/* Telefonda gizlenen bütçe/eksik/platform sütunlarının yerine (telefonOzeti). */}
+              {(() => {
+                const ozet = telefonOzeti(r, sekme, (m, b) => formatMoney(m, b));
+                return ozet ? <span className="block sm:hidden">{ozet}</span> : null;
+              })()}
+            </>
           }
         />
       </span>
@@ -189,6 +198,8 @@ export function RehberGirisi({
     anahtar: 'butce',
     baslik: 'Bütçe',
     sayi: true,
+    // Telefonda ad hücresinin özet satırında (telefonOzeti): "Devam et" ekrana sığsın.
+    ikincil: true,
     hucre: (r) => <span className="tutar">{butceMetni(r.butce, (m, b) => formatMoney(m, b)) ?? '-'}</span>,
   };
   const zamanSutunu = (baslik: string): TabloSutunu<RehberOzeti> => ({
@@ -201,6 +212,7 @@ export function RehberGirisi({
   const platformSutunu: TabloSutunu<RehberOzeti> = {
     anahtar: 'platform',
     baslik: 'Platform',
+    ikincil: true,
     hucre: (r) => {
       const rozetler = platformRozetleri(r);
       if (rozetler.length === 0) return <span className="text-ink-muted">-</span>;
@@ -221,14 +233,11 @@ export function RehberGirisi({
   const eksikSutunu: TabloSutunu<RehberOzeti> = {
     anahtar: 'eksik',
     baslik: 'Eksik',
-    hucre: (r) =>
-      r.amac === null ? (
-        <Rozet hal="taslak">Amaç yok</Rozet>
-      ) : r.eksikSayisi > 0 ? (
-        <Rozet hal="hata">{r.eksikSayisi} eksik</Rozet>
-      ) : (
-        <Rozet hal="taslak">Eksik yok</Rozet>
-      ),
+    ikincil: true,
+    hucre: (r) => {
+      const e = eksikEtiketi(r);
+      return <Rozet hal={e.hata ? 'hata' : 'taslak'}>{e.metin}</Rozet>;
+    },
   };
   const sutunlar: Record<GirisSekmesi, Array<TabloSutunu<RehberOzeti>>> = {
     yayindakiler: [adSutunu('Reklam'), platformSutunu, butceSutunu, zamanSutunu('Son değişiklik'), eylemSutunu],
