@@ -5,7 +5,7 @@ import { formatDayLong, formatMoney } from '@/lib/format';
 import { BudgetForm } from '@/components/budget/budget-form';
 import { PaceDelta, PacingBar, StatusChip } from '@/components/budget/pacing-bar';
 import { butceAdresi } from '@/lib/butce-adresi';
-import { PLATFORMS, PLATFORM_KISA_ADLARI, platformKanali } from '@advetics/shared';
+import { PLATFORMS, PLATFORM_ESNEKLIK_NOTU, PLATFORM_KISA_ADLARI, platformKanali } from '@advetics/shared';
 import { PlatformLogo } from '@/components/platform-logo';
 import { BolumluBaglantilar } from '@/components/suzgec-menusu';
 import { BosDurum, HataDurumu, Serit } from '@/components/ui/hal';
@@ -166,8 +166,7 @@ function Warnings({ pacing }: { pacing: ClientPacing }) {
     const cur = o.budget.currency;
     notices.push(
       <Serit key="aysonu" ton="uyari" baslik={`Bugünkü günlük bütçelerle ay sonunda yaklaşık ${formatMoney(as.aySonuMicros, cur)} harcanır; aylık bütçe ${formatMoney(as.asimMicros, cur)} aşılır`}>
-        Yayındaki günlük bütçelerin toplamı {formatMoney(as.gunlukToplamMicros, cur)}. Meta bir günde %75&apos;e, Google 2 katına kadar fazla
-        harcayabilir; ay toplamı yine de bu bütçelere bağlı.
+        Yayındaki günlük bütçelerin toplamı {formatMoney(as.gunlukToplamMicros, cur)}. {PLATFORM_ESNEKLIK_NOTU}
         {as.omurBoyuSayisi > 0 && ` Ömür boyu bütçeli ${as.omurBoyuSayisi} kampanya bu hesaba katılmadı.`}
       </Serit>,
     );
@@ -231,6 +230,10 @@ function OverallCard({
           </div>
         </div>
         <PacingBar pacing={pacing} />
+        {/* "HIZLI" HATA DEĞİL OLABİLİR: platformlar tek günde günlük bütçeyi
+            aşabiliyor (belgeli). Yalnız hızlıyken; dolduysa artık söylenecek
+            olan bu değil. */}
+        {pacing.status === 'over' && <p className="m-0 text-12 text-ink-muted" data-esneklik-notu>{PLATFORM_ESNEKLIK_NOTU}</p>}
         {pacing.budget?.note && <p className="m-0 text-12 text-ink-muted">{pacing.budget.note}</p>}
       </div>
 

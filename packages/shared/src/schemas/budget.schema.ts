@@ -114,6 +114,17 @@ export type PacingQuery = z.infer<typeof pacingQuerySchema>;
 export const PACING_STATUSES = ['under', 'on_track', 'over', 'exhausted', 'no_budget'] as const;
 export type PacingStatus = (typeof PACING_STATUSES)[number];
 
+/**
+ * PLATFORM ESNEKLİĞİ (pazar araştırması 2026-10-15, docs/pazar/butce.md).
+ * "Günlük bütçemi aştı" en sık şikâyet ve iki platformda da BELGELİ
+ * davranış: Google günde 2 katına (ayda 30,4 katla sınırlı), Meta günde %75
+ * fazlasına (haftada 7 katla sınırlı) çıkabiliyor. "Hızlı" rozeti bunu
+ * söylemezse kullanıcı tek günlük sıçramayı arıza sanıp bütçeyi kısıyor.
+ * Tek metin: ay sonu şeridi ve genel kart aynı cümleyi kullanıyor.
+ */
+export const PLATFORM_ESNEKLIK_NOTU =
+  'Meta bir günde günlük bütçenin %75 fazlasını, Google 2 katını harcayabilir; ay toplamı yine bütçelere bağlıdır. Tek günlük sıçrama arıza değildir.';
+
 export const PACING_STATUS_LABELS: Record<PacingStatus, string> = {
   under: 'Yavaş',
   on_track: 'Hedefte',
