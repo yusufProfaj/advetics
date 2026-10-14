@@ -603,6 +603,46 @@ describe('pacing', () => {
     expect(p.overall.daysWithData).toBe(1);
   });
 
+  /*
+   * BUGÜNKÜ GÜNLÜK BÜTÇELERLE AY SONU (docs/pazar/butce.md): geçmiş hız ay
+   * ortasında artırılan bütçeyi görmüyor. Paylaşımlı Google bütçesi BİR KEZ
+   * sayılıyor; ömür boyu bütçe toplama girmiyor ama sayılıyor.
+   */
+  let kno = 0;
+  async function kampanya(o: { mod: 'daily' | 'lifetime' | 'none'; m: string | null; durum?: string; kaynak?: string; platform?: 'meta' | 'google' }) {
+    kno++;
+    await h.q(
+      `INSERT INTO campaigns (id, ad_account_id, client_id, platform, external_id, name, status, budget_mode, budget_amount_micros, raw, updated_at)
+       VALUES (gen_random_uuid(), $1, $2, $3::"Platform", $4, 'K', $5::"EntityStatus", $6::"BudgetMode", $7, $8::jsonb, now())`,
+      [IDS.adAccount, IDS.client, o.platform ?? 'meta', `k-${kno}`, o.durum ?? 'active', o.mod, o.m,
+       o.kaynak ? JSON.stringify({ campaignBudget: { resourceName: o.kaynak } }) : null],
+    );
+  }
+
+  it('KRİTİK: yayındaki günlük bütçelerle ay sonu aşımı; paylaşımlı Google bütçesi bir kez', async () => {
+    // 1-6 Ağustos 6.000 TL harcandı; bugün 7'si, bugün dahil 25 gün kaldı.
+    await seedSpend({ date: '2026-08-03', spendMicros: '6000000000' });
+    await kampanya({ mod: 'daily', m: '1000000000' });
+    await kampanya({ mod: 'daily', m: '500000000', platform: 'google', kaynak: 'customers/1/campaignBudgets/9' });
+    await kampanya({ mod: 'daily', m: '500000000', platform: 'google', kaynak: 'customers/1/campaignBudgets/9' });
+    await kampanya({ mod: 'daily', m: '9000000000', durum: 'paused' });
+    await kampanya({ mod: 'lifetime', m: '9000000000' });
+    await svc.upsert(CTX, { clientId: IDS.client, month: '2026-08', amount: '30000', alertThresholdPct: 80 });
+    const p = await svc.pacing(CTX, { clientId: IDS.client, month: '2026-08' }, new Date('2026-08-07T10:00:00Z'));
+    expect(p.gunlukButceAySonu).toEqual({
+      gunlukToplamMicros: '1500000000',
+      aySonuMicros: String(6_000_000_000 + 1_500_000_000 * 25),
+      asimMicros: String(6_000_000_000 + 1_500_000_000 * 25 - 30_000_000_000),
+      omurBoyuSayisi: 1,
+    });
+  });
+
+  it('geçmiş ayda ay sonu öngörüsü yok', async () => {
+    await kampanya({ mod: 'daily', m: '1000000000' });
+    const p = await svc.pacing(CTX, { clientId: IDS.client, month: '2026-07' }, new Date('2026-08-07T10:00:00Z'));
+    expect(p.gunlukButceAySonu).toBeNull();
+  });
+
   it('bütçe hiç yoksa da harcama dönüyor', async () => {
     await seedSpend({ date: '2026-08-04', spendMicros: '3000000000' });
     const p = await svc.pacing(CTX, { clientId: IDS.client, month: '2026-08' }, new Date('2026-08-07T10:00:00Z'));

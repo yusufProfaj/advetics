@@ -167,3 +167,27 @@ function resolveStatus(spentRatio: number, paceDelta: number): PacingStatus {
   if (paceDelta < -TOLERANCE) return 'under';
   return 'on_track';
 }
+
+/**
+ * ═══ BUGÜNKÜ GÜNLÜK BÜTÇELERLE AY SONU ═══
+ *
+ * `projectedMicros` geçmiş hızı uzatıyor; ay ortasında bütçe artırılınca
+ * ay sonunu düşük gösteriyor. Ay sonunu belirleyen şey yayındaki günlük
+ * bütçeler (docs/pazar/butce.md). Bugün dahil kalan gün: bugünün harcaması
+ * `spentMicros`e girmiyor. Platformlar tek günde günlük bütçeyi aşabiliyor
+ * (Meta %75, Google 2 kat) ama ay toplamı sınırlı; bu bir BEKLENTİ, tavan
+ * değil.
+ */
+export function gunlukButceIleAySonu(g: {
+  spentMicros: bigint;
+  gunlukToplamMicros: bigint;
+  today: string;
+  month: string;
+  budgetMicros: bigint | null;
+}): { aySonuMicros: bigint; asimMicros: bigint | null } | null {
+  if (g.today.slice(0, 7) !== g.month) return null;
+  const kalanGun = inclusiveDays(g.today, monthEnd(g.month));
+  const aySonu = g.spentMicros + g.gunlukToplamMicros * BigInt(kalanGun);
+  const asim = g.budgetMicros !== null && aySonu > g.budgetMicros ? aySonu - g.budgetMicros : null;
+  return { aySonuMicros: aySonu, asimMicros: asim };
+}

@@ -158,6 +158,21 @@ function Warnings({ pacing }: { pacing: ClientPacing }) {
     );
   }
 
+  // BUGÜNKÜ GÜNLÜK BÜTÇELERLE AY SONU: geçmiş hız ay ortasında artırılan
+  // bütçeyi görmüyor. Uyarı yalnız aşımda; ömür boyu bütçeler toplamda yok
+  // ve bu da söyleniyor.
+  const as = pacing.gunlukButceAySonu;
+  if (as?.asimMicros && o.budget) {
+    const cur = o.budget.currency;
+    notices.push(
+      <Serit key="aysonu" ton="uyari" baslik={`Bugünkü günlük bütçelerle ay sonunda yaklaşık ${formatMoney(as.aySonuMicros, cur)} harcanır; aylık bütçe ${formatMoney(as.asimMicros, cur)} aşılır`}>
+        Yayındaki günlük bütçelerin toplamı {formatMoney(as.gunlukToplamMicros, cur)}. Meta bir günde %75&apos;e, Google 2 katına kadar fazla
+        harcayabilir; ay toplamı yine de bu bütçelere bağlı.
+        {as.omurBoyuSayisi > 0 && ` Ömür boyu bütçeli ${as.omurBoyuSayisi} kampanya bu hesaba katılmadı.`}
+      </Serit>,
+    );
+  }
+
   if (o.alertTriggered && o.budget) {
     notices.push(
       <Serit

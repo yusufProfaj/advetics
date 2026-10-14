@@ -215,4 +215,21 @@ export interface ClientPacing {
    * duruyordu, yani bütçesi olmayan hesabın mecrası hiç bilinmiyordu.
    */
   accounts: Array<BudgetPacing & { adAccountId: string; adAccountName: string; platform: Platform }>;
+  /**
+   * BUGÜNKÜ GÜNLÜK BÜTÇELERLE AY SONU (pazar araştırması 2026-10-15).
+   * Geçmiş hız (`projectedMicros`) dünü anlatıyor; ay sonunu yayındaki günlük
+   * bütçeler belirliyor. Yalnız İÇİNDE BULUNULAN ayda dolu, başka ayda null.
+   */
+  gunlukButceAySonu: GunlukButceAySonu | null;
+}
+
+export interface GunlukButceAySonu {
+  /** Yayındaki kampanya/set günlük bütçelerinin toplamı (bütçe para biriminde). */
+  gunlukToplamMicros: string;
+  /** Harcanan + günlük toplam × bugün dahil kalan gün. */
+  aySonuMicros: string;
+  /** Aylık bütçeyi aşan kısım; bütçe yoksa ya da aşmıyorsa null. */
+  asimMicros: string | null;
+  /** Ömür boyu bütçeli yayındaki kampanya/set: toplama GİRMEDİ, sayısı söyleniyor. */
+  omurBoyuSayisi: number;
 }

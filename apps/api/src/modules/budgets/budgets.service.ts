@@ -12,7 +12,7 @@ import {
   type TenantContext,
 } from '@advetics/shared';
 import { PrismaService } from '../../prisma/prisma.service';
-import { computePacing } from './budget-pacing';
+import { computePacing, gunlukButceIleAySonu } from './budget-pacing';
 
 /**
  * Modül 5 — Aylık bütçe yönetimi ve pacing.
@@ -321,6 +321,36 @@ export class BudgetsService {
                GROUP BY a.id
             `);
 
+      /**
+       * YAYINDAKİ GÜNLÜK BÜTÇELER (ay sonu öngörüsü). Bütçe durduğu seviyede:
+       * kampanya bütçesi (Meta CBO / Google) ya da set bütçesi (Meta ABO).
+       * PAYLAŞIMLI GOOGLE BÜTÇESİ BİR KEZ: aynı `campaignBudget` kaynağına bağlı
+       * kampanyalar tek bütçeyi paylaşıyor; her birini toplamak bütçeyi
+       * kampanya sayısı kadar katlardı (İyileştir'deki tespitle aynı kaynak).
+       * Ömür boyu bütçe günlüğe çevrilemez (kalan süre bilinmiyor): toplama
+       * girmiyor, SAYISI söyleniyor.
+       */
+      const gunlukButceler = await tx.$queryRaw<Array<{ ad_account_id: string; toplam: string; omur: number }>>(Prisma.sql`
+        WITH kampanya AS (
+          SELECT DISTINCT ON (COALESCE(c.raw -> 'campaignBudget' ->> 'resourceName', c.id::text))
+                 c.ad_account_id, c.budget_mode::text AS mod, c.budget_amount_micros AS m
+            FROM campaigns c
+           WHERE c.client_id = ${query.clientId}::uuid AND c.deleted_at IS NULL
+             AND c.status = 'active'::"EntityStatus" AND c.budget_mode <> 'none'::"BudgetMode"
+             AND (c.stop_time IS NULL OR c.stop_time > ${now}::timestamptz)
+        ), setler AS (
+          SELECT g.ad_account_id, g.budget_mode::text AS mod, g.budget_amount_micros AS m
+            FROM ad_groups g JOIN campaigns c ON c.id = g.campaign_id
+           WHERE g.client_id = ${query.clientId}::uuid AND g.deleted_at IS NULL AND c.deleted_at IS NULL
+             AND g.status = 'active'::"EntityStatus" AND c.status = 'active'::"EntityStatus"
+             AND g.budget_mode <> 'none'::"BudgetMode"
+             AND (g.stop_time IS NULL OR g.stop_time > ${now}::timestamptz)
+        ), hepsi AS (SELECT * FROM kampanya UNION ALL SELECT * FROM setler)
+        SELECT ad_account_id::text AS ad_account_id,
+               COALESCE(sum(m) FILTER (WHERE mod = 'daily'), 0)::text AS toplam,
+               count(*) FILTER (WHERE mod = 'lifetime')::int AS omur
+          FROM hepsi GROUP BY ad_account_id`);
+
       // Bütçesi olmayan ama harcaması olan hesaplar da görünsün diye
       // hesap listesi bütçelerden DEĞİL, iki kaynağın birleşiminden geliyor.
       const accountNames = await tx.$queryRaw<
@@ -338,6 +368,7 @@ export class BudgetsService {
         budgets: budgetRows.map((r) => this.toRecord(r)),
         spend: spendRows,
         kapsam,
+        gunlukButceler,
         accounts: accountNames,
       });
     });
@@ -357,6 +388,7 @@ export class BudgetsService {
     spend: SpendRow[];
     /** Hesap başına senkronize gün (veri ∪ başarılı çekim). Yoksa satır sayısına düşülür. */
     kapsam?: Array<{ ad_account_id: string; gun: number }>;
+    gunlukButceler?: Array<{ ad_account_id: string; toplam: string; omur: number }>;
     accounts: Array<{ id: string; name: string; currency: string | null; platform: Platform }>;
   }): ClientPacing {
     const { clientId, month, today, budgets, spend, accounts } = input;
@@ -433,7 +465,35 @@ export class BudgetsService {
         return Number(BigInt(b.spentMicros) - BigInt(a.spentMicros));
       });
 
-    return { clientId, month, currency: clientCurrency ?? null, overall, accounts: accountPacing };
+    // Toplam, şemsiye harcamayla AYNI para birimi süzgecinden geçiyor:
+    // farklı birimdeki bir hesabın bütçesini eklemek anlamsız bir sayı olurdu.
+    const hesapBirimi = new Map(accounts.map((a) => [a.id, a.currency]));
+    let gunlukToplam = 0n;
+    let omurBoyu = 0;
+    for (const g of input.gunlukButceler ?? []) {
+      const birim = hesapBirimi.get(g.ad_account_id) ?? null;
+      if (targetCurrency && birim && birim !== targetCurrency) continue;
+      gunlukToplam += BigInt(g.toplam);
+      omurBoyu += Number(g.omur);
+    }
+    const aySonu = gunlukButceIleAySonu({
+      spentMicros: overallMicros,
+      gunlukToplamMicros: gunlukToplam,
+      today,
+      month,
+      budgetMicros: overallBudget ? BigInt(overallBudget.amountMicros) : null,
+    });
+    const gunlukButceAySonu =
+      aySonu === null || (gunlukToplam === 0n && omurBoyu === 0)
+        ? null
+        : {
+            gunlukToplamMicros: gunlukToplam.toString(),
+            aySonuMicros: aySonu.aySonuMicros.toString(),
+            asimMicros: aySonu.asimMicros === null ? null : aySonu.asimMicros.toString(),
+            omurBoyuSayisi: omurBoyu,
+          };
+
+    return { clientId, month, currency: clientCurrency ?? null, overall, accounts: accountPacing, gunlukButceAySonu };
   }
 
   private toRecord(row: BudgetRow): BudgetRecord {

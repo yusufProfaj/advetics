@@ -73,7 +73,7 @@
 
 - [x] Araştırma → `docs/pazar/butce.md` (bütçe ve tempo araçları, hesap harcama limiti, Meta kampanya bütçesi / Google paylaşılan bütçe)
 - [x] Bilinen açık: "13 günün 11 günü senkronize" uyarısının sebebini teşhis et (hangi günler, hangi hesap). TEŞHİS (koddan): gün sayısı yalnız metrik SATIRI olan günlerdi; harcamasız günde platform satır döndürmüyor → veri tamken uyarı. Artık başarılı ve satır atlamayan çekimin kapsadığı gün de sayılıyor. Hangi hesap/gün olduğu canlıda ÖLÇÜLMEDİ; düzeltmeden sonra uyarı sürüyorsa gerçek eksik gündür.
-- [ ] Öneri 2: yayındaki günlük bütçelerle ay sonu öngörüsü ("bugünkü günlük bütçelerle ay sonunda X, bütçeyi Y aşar")
+- [x] Öneri 2 (müşteri geneli; hesap satırı ayrı adım): yayındaki günlük bütçelerle ay sonu öngörüsü ("bugünkü günlük bütçelerle ay sonunda X, bütçeyi Y aşar")
 - [ ] Öneri 4: "hızlı" uyarısının yanında platform esnekliği notu (Meta günde %75'e, Google 2 katına kadar)
 - [ ] (onay bekliyor) Öneri 5: aylık bütçeyi Meta'da sert tavana çevirmek (`spend_cap`; platforma yazar)
 
