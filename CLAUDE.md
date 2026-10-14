@@ -28,6 +28,8 @@ canlıda masaüstü + mobil görülmeden bitmiş sayılmaz (§3 "Tasarım").
 
 **Öğrenilenler.**
 
+- `derleMeta` rehber amaç kodunu değil kendi niyet kodunu alır (`VIDEO` değil `VIDEO_IZLENME`; liste `DERLEYICI_NIYETLERI`); yanlış kod `ret` değil TypeError fırlatır.
+
 ## 0. "advetics projesine devam et" denince
 
 Hafızaya değil DEPOYA bak: iki geliştirici var ve hafıza paylaşılmıyor.

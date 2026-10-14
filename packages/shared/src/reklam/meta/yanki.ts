@@ -212,6 +212,34 @@ const ADVANTAGE_VIDEO_HEDEFI = NIYET_KATALOGU.VIDEO_IZLENME.meta!.destinationTyp
 /** SATIŞTA elle yerleşime düşülmüşse N-21 satırına eklenen cümle. */
 export const ADVANTAGE_SATIS_YERLESIM_CUMLESI = 'Advantage+ satış koşulu (otomatik yerleşim) sağlanmadı: bazı yerleşimler görsel boyutu eksik olduğu için kapalı.';
 
+/**
+ * Form ve WhatsApp'ta elle yerleşim. Sebep çoğunlukla eksik banner boyutu
+ * (o yerleşim kapanıyor), bazen amacın yerleşim kısıtı; gövde ikisini
+ * ayırt etmiyor, cümle ikisini de söylüyor (yanlış sebep söylemektense).
+ */
+export const ADVANTAGE_YERLESIM_CUMLESI = 'Bazı yerleşimler kapalı (görsel boyutu eksik ya da amaç gereği); kampanya Advantage+ yerleşimli değil.';
+
+/**
+ * ═══ ADVANTAGE+ NEDEN KAPALI (pazar araştırması 2026-10-15) ═══
+ *
+ * Meta'da Advantage+ artık tür değil, üç kaldıracın DURUMU: kampanya
+ * bütçesi, kitle otomasyonu ve yerleşim kısıtı olmaması
+ * (docs/pazar/advcampaign.md). Geri okuma yalnız satış ve video için
+ * "yerleşim elle seçildi" diyordu; Form ve WhatsApp'ta yerleşim
+ * daraldığında (eksik banner boyutu) "Meta bu kampanyayı Advantage+ olarak
+ * işaretlemedi" yazıp NEDENİ söylemiyordu. Sebep gönderdiğimiz gövdeden.
+ * Bütçe ve kitle burada YOK: derleyici bütçeyi her zaman kampanyaya
+ * (CBO), `advantage_audience`ı her zaman 1 yazıyor; kategoride kitleyi
+ * daraltan Meta'nın kendisi ve o bilgi gövdede değil okumada (N-06).
+ * Gövdeden "kitle kapalı" demek bugün hiç tetiklenmeyecek ölü bir dal olurdu.
+ */
+export function advantageEkBilgisi(govdeler: MetaGovdesi[], amac: 'satis' | 'video' | 'diger'): string | null {
+  // Banner setinde birden çok reklam seti olabilir: HERHANGİ biri elle yerleşimdeyse kaldıraç kapalı.
+  const elleYerlesim = govdeler.some((g) => g.nesne === 'reklam_seti' && !!(g.alanlar.targeting as Record<string, unknown> | undefined)?.publisher_platforms);
+  if (!elleYerlesim) return null;
+  return amac === 'satis' ? ADVANTAGE_SATIS_YERLESIM_CUMLESI : amac === 'video' ? ADVANTAGE_VIDEO_YERLESIM_CUMLESI : ADVANTAGE_YERLESIM_CUMLESI;
+}
+
 /** Kampanyanın Advantage+ durumunun ekran cümlesi (tek yer). */
 export function advantageDurumuCumlesi(donen: unknown): string {
   if (!donen || typeof donen !== 'object') return "Meta bu kampanyanın Advantage+ durumunu döndürmedi.";
@@ -233,12 +261,10 @@ export function beklenenYankilar(govdeler: MetaGovdesi[]): BeklenenYanki[] {
   const sonuc: BeklenenYanki[] = [];
   const hedef = govdeler.find((g) => g.nesne === 'reklam_seti')?.alanlar.destination_type;
   const satis = kampanya?.alanlar.objective === ADVANTAGE_SATIS_HEDEFI;
-  // Banner setinde birden çok reklam seti olabilir: HERHANGİ biri elle yerleşimdeyse koşul sağlanmadı.
-  const elleYerlesim = govdeler.some((g) => g.nesne === 'reklam_seti' && !!(g.alanlar.targeting as Record<string, unknown> | undefined)?.publisher_platforms);
   if (kampanya && ((typeof hedef === 'string' && ADVANTAGE_DURUMU_HEDEFLERI.has(hedef)) || satis)) {
+    const ek = advantageEkBilgisi(govdeler, satis ? 'satis' : hedef === ADVANTAGE_VIDEO_HEDEFI ? 'video' : 'diger');
     sonuc.push({
-      ...(satis && elleYerlesim ? { ekBilgi: ADVANTAGE_SATIS_YERLESIM_CUMLESI } : {}),
-      ...(hedef === ADVANTAGE_VIDEO_HEDEFI && elleYerlesim ? { ekBilgi: ADVANTAGE_VIDEO_YERLESIM_CUMLESI } : {}),
+      ...(ek ? { ekBilgi: ek } : {}),
       nesne: 'kampanya',
       govde: kampanya.ad,
       alanYolu: 'advantage_state_info',
