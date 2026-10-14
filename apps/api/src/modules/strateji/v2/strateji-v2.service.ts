@@ -863,6 +863,57 @@ export class StratejiV2Service {
   }
 
   /**
+   * ═══ STRATEJİ SİLME (kullanıcı kararı 2026-10-14: "Hepsi") ═══
+   *
+   * Eski karar "plan silinmez, iptal edilir" idi; gerekçe müşterinin neye
+   * onay verdiğinin izi. Kullanıcı her stratejinin silinebilmesini istedi.
+   * İz bu yüzden SİLMEDEN ÖNCE denetim kaydına yazılıyor: dönem, durum,
+   * sürüm, onaylanan sürüm, onaylayan ve zamanı, toplam bütçe, kurulmuş
+   * kampanya sayısı. Satır gidince geri getirilemez; kayıt "ne vardı"
+   * sorusunu cevaplar.
+   *
+   * Alt tablolar (kalem, matris, dağılım, kelime, yorum, onay bağlantısı)
+   * `ON DELETE CASCADE`; stratejiden kurulmuş rehber/oturum bağı
+   * `SET NULL` ile kopuyor ve kurulmuş kampanyalara DOKUNULMUYOR. Eski
+   * biçimdeki planlar (v1) da silinebiliyor (`v1Olur`).
+   *
+   * RETURNING ile satır sayılıyor: DELETE politikası tutmazsa silme hata
+   * vermeden sıfır satır etkiler ve ekran "silindi" der (CLAUDE.md).
+   */
+  async sil(ctx: TenantContext, id: string): Promise<{ id: string }> {
+    return this.tx(ctx, async (tx) => {
+      const p = await planOku(tx, ctx, id, true, true);
+      const [kurulan] = await tx.$queryRaw<Array<{ n: number }>>(Prisma.sql`
+        SELECT count(*)::int AS n FROM strateji_kalemleri
+         WHERE plan_id = ${p.id}::uuid AND client_id = ${p.client_id}::uuid AND rehber_id IS NOT NULL`);
+      await this.audit.record(tx as never, ctx, {
+        action: 'strateji.sil',
+        targetType: 'strateji_plani',
+        targetId: p.id,
+        clientId: p.client_id,
+        before: {
+          bicim: p.bicim,
+          donem: p.donem,
+          baslangic: p.baslangic,
+          bitis: p.bitis,
+          durum: p.durum,
+          surum: p.surum,
+          onaylananSurum: p.onaylanan_surum,
+          onaylayan: p.onaylayan_ad ?? p.onaylayan_eposta ?? p.onaylayan_user_id,
+          onayZamani: p.onay_zamani ? new Date(p.onay_zamani).toISOString() : null,
+          toplamButceMicros: p.toplam_butce_micros,
+          paraBirimi: p.para_birimi,
+          kurulanKampanya: kurulan?.n ?? 0,
+        },
+      });
+      const r = await tx.$queryRaw<unknown[]>(Prisma.sql`
+        DELETE FROM strateji_planlari WHERE id = ${p.id}::uuid AND client_id = ${p.client_id}::uuid RETURNING id`);
+      if (r.length !== 1) throw new ForbiddenException('Strateji silinemedi: bu workspace’i değiştirme yetkin yok.');
+      return { id: p.id };
+    });
+  }
+
+  /**
    * Onaya gönderim: kalem yoksa ve bir kalemin amacı bu kullanıcıya açık
    * değilse ya da hiçbir platformu kurulamıyorsa (site yok) RET. Riskler ve
    * ölçüm bu anda tazelenir: müşterinin onaylayacağı belge BU hâl.

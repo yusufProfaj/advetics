@@ -2524,11 +2524,12 @@ CREATE POLICY adv_adv_onay_update ON adv_onay
 -- strateji_kelimeleri, ozel_gunler (docs/advstrategy/MIMARI.md § 1)
 -- ============================================================================
 --
--- strateji_planlari: MÜŞTERİ KAPSAMLI; SELECT, INSERT, UPDATE. DELETE YOK:
--- plan silinmez, iptal edilir (son durum). Silinen plan, müşterinin neye
--- onay verdiğinin izini götürürdü. Kimin yazabileceği (strategy.write) ve
--- onaylayabileceği (strategy.approve) servis katmanında; RLS workspace
--- sınırını tutuyor.
+-- strateji_planlari: MÜŞTERİ KAPSAMLI; dört işlem. DELETE 2026-10-14'e
+-- kadar YOKTU (plan silinmez, iptal edilir; gerekçe müşterinin neye onay
+-- verdiğinin izi). Kullanıcı her stratejinin silinebilmesini istedi; iz
+-- artık SİLMEDEN ÖNCE denetim kaydına yazılıyor (strateji-v2.service.ts
+-- sil). Kimin yazabileceği (strategy.write) ve onaylayabileceği
+-- (strategy.approve) servis katmanında; RLS workspace sınırını tutuyor.
 CREATE POLICY adv_strateji_planlari_select ON strateji_planlari
   FOR SELECT USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 CREATE POLICY adv_strateji_planlari_insert ON strateji_planlari
@@ -2536,6 +2537,8 @@ CREATE POLICY adv_strateji_planlari_insert ON strateji_planlari
 CREATE POLICY adv_strateji_planlari_update ON strateji_planlari
   FOR UPDATE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id))
   WITH CHECK (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
+CREATE POLICY adv_strateji_planlari_delete ON strateji_planlari
+  FOR DELETE USING (app.org_kapsaminda(org_id) AND app.can_access_client(client_id));
 
 -- Dağılım, matris, kelimeler: aynı sınır + DELETE. Üçü de "tek seferde yaz"
 -- deseniyle (DELETE + INSERT aynı transaction'da) güncelleniyor; DELETE

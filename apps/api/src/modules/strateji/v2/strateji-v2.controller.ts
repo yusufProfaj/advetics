@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Param, ParseIntPipe, ParseUUIDPipe, Patch, Post, Put, Query, Req, Res } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, ParseIntPipe, ParseUUIDPipe, Patch, Post, Put, Query, Req, Res } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import {
   kelimeAraSchema,
@@ -168,6 +168,16 @@ export class StratejiV2Controller {
   @RequirePermissions('strategy.write')
   kelimeler(@CurrentTenant() ctx: TenantContext, @Param('id', ParseUUIDPipe) id: string, @Body(zodBody(kelimeGuncelleSchema)) dto: KelimeGuncelleGirdisi): Promise<StratejiDetayi> {
     return this.svc.kelimeGuncelle(ctx, id, dto);
+  }
+
+  /**
+   * SİLME (2026-10-14). `strategy.write`: oluşturan yetki silebilir; müşteri
+   * hesabı (`client_viewer`) bu yetkiyi taşımıyor. İz denetim kaydında.
+   */
+  @Delete('planlar/:id')
+  @RequirePermissions('strategy.write')
+  sil(@CurrentTenant() ctx: TenantContext, @Param('id', ParseUUIDPipe) id: string): Promise<{ id: string }> {
+    return this.svc.sil(ctx, id);
   }
 
   @Post('planlar/:id/eylem')

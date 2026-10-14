@@ -691,3 +691,41 @@ describe('adım adım akış (sihirbaz)', () => {
     expect((await svc.onayla(AJANS, p.plan.id, g.plan.surum)).plan.onay?.rol).toBe('ajans');
   });
 });
+
+/*
+ * ═══ SİLME (kullanıcı kararı 2026-10-14: "Hepsi") ═══
+ * Onaylı strateji dahil silinebilir; müşterinin neye onay verdiğinin izi
+ * SİLMEDEN ÖNCE denetim kaydına yazılıyor. Silinen plan yeni oluşturmayı
+ * artık engellemiyor (kullanıcının şikâyeti: "iptal ettiğimde hâlâ
+ * oluşturamıyorum").
+ */
+describe('sil', () => {
+  it('KRİTİK: onaylı strateji silinir, kalemleri gider, onay izi denetim kaydında', async () => {
+    const o = await onayliPlan();
+    await svc.sil(AJANS, o.plan.id);
+    expect(await h.q('SELECT id FROM strateji_planlari WHERE id = $1', [o.plan.id])).toEqual([]);
+    expect(await h.q('SELECT id FROM strateji_kalemleri WHERE plan_id = $1', [o.plan.id])).toEqual([]);
+    const kayit = audit.record.mock.calls.map((c) => c[2]).find((e) => e.action === 'strateji.sil');
+    expect(kayit).toMatchObject({ targetId: o.plan.id, clientId: IDS.client, before: { durum: 'onaylandi', onaylananSurum: o.plan.surum, donem: '2026-11' } });
+  });
+
+  it('KRİTİK: açık strateji silinince yenisi oluşturulabiliyor', async () => {
+    const p = await planAc();
+    await expect(planAc()).rejects.toThrow(/açık bir strateji zaten var/);
+    await svc.sil(AJANS, p.plan.id);
+    await expect(planAc()).resolves.toMatchObject({ plan: { durum: 'taslak' } });
+  });
+
+  it('iptal edilen strateji de yeni oluşturmayı engellemiyor', async () => {
+    const p = await planAc();
+    await svc.eylem(AJANS, p.plan.id, { eylem: 'iptal', surum: p.plan.surum });
+    await expect(planAc()).resolves.toMatchObject({ plan: { durum: 'taslak' } });
+  });
+
+  it('başka workspace’e erişimi olmayan bulamaz; plan yerinde kalır', async () => {
+    const p = await planAc();
+    const yabanci = { ...AJANS, clientIds: ['99999999-0000-4000-8000-000000000000'] } as TenantContext;
+    await expect(svc.sil(yabanci, p.plan.id)).rejects.toThrow('Strateji bulunamadı');
+    expect(await h.q('SELECT id FROM strateji_planlari WHERE id = $1', [p.plan.id])).toHaveLength(1);
+  });
+});

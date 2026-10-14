@@ -145,6 +145,7 @@ export const STRATEJI_V2_UCLARI = [
   { yontem: 'POST', yol: '/strateji/v2/planlar/:id/kelime-ara', izin: 'strategy.write', ne: 'Keyword Planner araması (v1 ile aynı kuyruk)' },
   { yontem: 'PATCH', yol: '/strateji/v2/planlar/:id/kelimeler', izin: 'strategy.write', ne: 'Kelime seçimi ve grubu (sürüm, 409)' },
   { yontem: 'POST', yol: '/strateji/v2/planlar/:id/eylem', izin: 'strategy.write', ne: 'onaya_gonder | geri_cek | kapat | iptal' },
+  { yontem: 'DELETE', yol: '/strateji/v2/planlar/:id', izin: 'strategy.write', ne: 'Stratejiyi sil (2026-10-14; iz denetim kaydında)' },
   { yontem: 'POST', yol: '/strateji/v2/planlar/:id/onayla', izin: 'strategy.approve', ne: 'Panel içi onay (rol kaydı)' },
   { yontem: 'POST', yol: '/strateji/v2/planlar/:id/revizyon', izin: 'strategy.approve', ne: 'Revizyon iste (yorum zorunlu)' },
   { yontem: 'GET', yol: '/strateji/v2/planlar/:id/yorumlar', izin: 'strategy.read', ne: 'Yorumlar' },

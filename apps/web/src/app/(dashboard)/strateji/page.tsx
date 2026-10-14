@@ -87,6 +87,8 @@ export default async function StratejiPage({ searchParams }: { searchParams: Pro
   const ws = workspaceAdi ? <strong className="font-medium text-ink">{workspaceAdi}</strong> : null;
   // ⋯ menüsündeki "Kampanyaları kur" yalnız kurma ekranına girebilene: kapı AYNI fonksiyon.
   const kurabilir = stratejiEkranKapisi(session.permissions, 'kur') === 'kur';
+  // İptal ve silme oluşturma yetkisiyle aynı kapı; müşteri hesabında yok.
+  const yonetebilir = session.permissions.includes('strategy.write');
 
   // ── Strateji oluştur (yedi adım) ──
   if (olusturmaAdimiMi(ekran)) {
@@ -148,6 +150,7 @@ export default async function StratejiPage({ searchParams }: { searchParams: Pro
         planlar={liste.v.planlar}
         toplam={liste.v.toplam}
         kurabilir={kurabilir}
+        yonetebilir={yonetebilir}
         aciklama={ws ? <>{ws} için reklam stratejisi: hedef, bütçe, bölge ve kampanyalar.</> : undefined}
         devamAdimi={acikDetay?.tur === 'veri' ? (acikDetay.v.sihirbaz?.adim ?? null) : null}
       />
@@ -161,7 +164,7 @@ export default async function StratejiPage({ searchParams }: { searchParams: Pro
       <div className="space-y-5">
         {baslik(ws)}
         {planParam && !secili && <Bildirim baslik="Bağlantıdaki strateji bu workspace'te bulunamadı.">Listeden seç.</Bildirim>}
-        <StratejiListesiEkrani clientId={clientId} planlar={liste.v.planlar} toplam={liste.v.toplam} kurabilir={kurabilir} />
+        <StratejiListesiEkrani clientId={clientId} planlar={liste.v.planlar} toplam={liste.v.toplam} kurabilir={kurabilir} yonetebilir={yonetebilir} />
       </div>
     );
   }

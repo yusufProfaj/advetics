@@ -14,6 +14,7 @@ import { durumTonu, kurulabilirMi } from './akis';
 import { StratejiBelgesi } from './belge';
 import { GonderPaneli, PdfIndir, pdfDosyaAdi } from './gonder';
 import { STRATEJI_DURUM_ETIKETI, donemMetni } from './hesap';
+import { KapatmaPenceresi, iptalEdilebilirMi, type KapatmaHedefi } from './kapatma';
 import { PanelOnayKutusu } from './onay-kutusu';
 import { Bildirim, durumHali, yaz } from './ortak';
 
@@ -46,6 +47,7 @@ export function RaporEkrani({
   const [detay, setDetay] = useState(ilkDetay);
   const [hata, setHata] = useState<string | null>(null);
   const [geriCekiliyor, setGeriCekiliyor] = useState(false);
+  const [kapatma, setKapatma] = useState<KapatmaHedefi | null>(null);
   useEffect(() => setDetay(ilkDetay), [ilkDetay]);
   const { plan } = detay;
   const yazabilir = izinler.includes('strategy.write');
@@ -80,6 +82,18 @@ export function RaporEkrani({
 
   return (
     <div className="space-y-4">
+      <KapatmaPenceresi
+        hedef={kapatma}
+        onKapat={() => setKapatma(null)}
+        onBitti={(tur) => {
+          setKapatma(null);
+          // Silinen stratejinin raporu yok: listeye dön. İptalde rapor kalır, durum tazelenir.
+          if (tur === 'sil') {
+            router.push(stratejiPanelAdresi({ musteri: clientId, adim: 'raporlar' }));
+            router.refresh();
+          } else void yenile();
+        }}
+      />
       <div className="mx-auto flex max-w-[860px] flex-wrap items-center gap-2">
         <Link href={stratejiPanelAdresi({ musteri: clientId, adim: 'raporlar' })} className={dugmeSinifi('ikincil', 'kucuk')}>
           ← Stratejiler
@@ -99,6 +113,17 @@ export function RaporEkrani({
           </Dugme>
         )}
         <PdfIndir planId={plan.id} surum={plan.surum} dosyaAdi={pdfDosyaAdi(plan.baslangic, plan.surum)} />
+        {/* İPTAL VE SİL (2026-10-14): yeni stratejiyi panelde kapatmanın yolu yoktu; onay bekleyen strateji yenisini kilitliyordu. */}
+        {yazabilir && iptalEdilebilirMi({ bicim: 2, durum: plan.durum }) && (
+          <Dugme ton="ikincil" boyut="kucuk" onClick={() => setKapatma({ tur: 'iptal', id: plan.id, surum: plan.surum, ad: donemMetni(plan.baslangic, plan.bitis), durum: plan.durum, bicim: 2 })}>
+            İptal et
+          </Dugme>
+        )}
+        {yazabilir && (
+          <Dugme ton="ikincil" boyut="kucuk" onClick={() => setKapatma({ tur: 'sil', id: plan.id, surum: plan.surum, ad: donemMetni(plan.baslangic, plan.bitis), durum: plan.durum, bicim: 2 })}>
+            Sil
+          </Dugme>
+        )}
         {kurulabilirMi(plan) &&
           (kurabilir ? (
             <Link href={stratejiPanelAdresi({ musteri: clientId, plan: plan.id, adim: 'kur' })} className={dugmeSinifi('birincil', 'kucuk')}>

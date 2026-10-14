@@ -107,9 +107,18 @@ describe('strateji_planlari RLS', () => {
     expect(r).toHaveLength(1);
   });
 
-  it('plan SİLİNEMEZ — DELETE politikası yok, iptal edilir (kendi planında bile 0 satır)', async () => {
-    const r = await kullaniciOlarak(`DELETE FROM strateji_planlari WHERE id = $1 RETURNING id`, [benim]);
-    expect(r).toHaveLength(0);
+  /*
+   * 2026-10-14'e kadar plan SİLİNEMEZDİ (DELETE politikası yoktu). Kullanıcı
+   * her stratejinin silinebilmesini istedi; iz denetim kaydında
+   * (strateji-v2.service.ts sil). Sınır aynı: yalnız erişilen workspace.
+   */
+  it('KRİTİK: kendi planı SİLİNİR (1 satır, çocuklar CASCADE), başkasınınki SIFIR satır', async () => {
+    const a = await kullaniciOlarak(`DELETE FROM strateji_planlari WHERE id = $1 RETURNING id`, [benim]);
+    expect(a).toHaveLength(1);
+    const b = await kullaniciOlarak(`DELETE FROM strateji_planlari WHERE id = $1 RETURNING id`, [otekinin]);
+    expect(b).toHaveLength(0);
+    const kalan = await h.q<{ plan_id: string }>('SELECT plan_id::text FROM strateji_dagilimlari ORDER BY plan_id');
+    expect(kalan.map((r) => r.plan_id)).toEqual([otekinin]);
   });
 });
 
@@ -127,7 +136,8 @@ describe('çocuk tablolar RLS', () => {
       expect(r.map((x) => x.cmd), t).toEqual(['DELETE', 'INSERT', 'SELECT', 'UPDATE']);
     }
     const p = await h.q<{ cmd: string }>(`SELECT DISTINCT cmd FROM pg_policies WHERE tablename = 'strateji_planlari' ORDER BY 1`);
-    expect(p.map((x) => x.cmd)).toEqual(['INSERT', 'SELECT', 'UPDATE']);
+    // Plan da dört işlem (2026-10-14'ten beri silinebiliyor; iz denetim kaydında).
+    expect(p.map((x) => x.cmd)).toEqual(['DELETE', 'INSERT', 'SELECT', 'UPDATE']);
   });
 });
 

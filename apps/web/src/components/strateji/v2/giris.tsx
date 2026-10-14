@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { stratejiPanelAdresi, type PlanDurumu, type StratejiDurumu, type StratejiListeSatiri, type StratejiOlusturmaAdimi } from '@advetics/shared';
 import { AcilirMenu, IKON_TETIK, MenuOgesi } from '@/components/ui/acilir-menu';
 import { dugmeSinifi } from '@/components/ui/dugme';
@@ -15,6 +15,7 @@ import { AdHucresi, Tablo, type TabloSutunu } from '@/components/ui/tablo';
 import { DURUM_ETIKETI, donemEtiketi } from '../hesap';
 import { durumTonu, olusturKarti } from './akis';
 import { STRATEJI_DURUM_ETIKETI, donemMetni, tarihAraligi } from './hesap';
+import { KapatmaPenceresi, iptalEdilebilirMi, type KapatmaHedefi } from './kapatma';
 import { StratejiIkonu, durumHali } from './ortak';
 import { Tutar } from './tutar';
 
@@ -51,6 +52,7 @@ export function StratejiGirisi({
   devamAdimi,
   aciklama,
   kurabilir,
+  yonetebilir,
 }: {
   clientId: string;
   planlar: StratejiListeSatiri[];
@@ -58,6 +60,8 @@ export function StratejiGirisi({
   devamAdimi: StratejiOlusturmaAdimi | null;
   aciklama?: ReactNode;
   kurabilir: boolean;
+  /** `strategy.write`: ⋯ menüsünde iptal ve sil. */
+  yonetebilir: boolean;
 }) {
   const router = useRouter();
   const son = planlar[0] ?? null;
@@ -109,7 +113,7 @@ export function StratejiGirisi({
           baslik={olusturEtiketi}
           aciklama={
             kart.tur === 'onayda'
-              ? 'Açık bir strateji onay bekliyor. Yenisi için önce onu raporundan geri çek ya da sonuçlanmasını bekle.'
+              ? 'Açık bir strateji onay bekliyor. Yenisi için önce onu iptal et ya da sil (aşağıdaki listede ⋯) ya da sonuçlanmasını bekle.'
               : kart.tur === 'devam'
                 ? kart.revizyon
                   ? 'Müşteri değişiklik istedi. Planı düzeltip yeniden gönder.'
@@ -136,6 +140,7 @@ export function StratejiGirisi({
         planlar={planlar}
         toplam={toplam}
         kurabilir={kurabilir}
+        yonetebilir={yonetebilir}
         bosNeden="Bu workspace için henüz strateji yok. Strateji oluştur ile başla."
       />
     </div>
@@ -151,14 +156,16 @@ export function StratejiListesiEkrani({
   planlar,
   toplam,
   kurabilir,
+  yonetebilir,
 }: {
   clientId: string;
   planlar: StratejiListeSatiri[];
   toplam: number;
   kurabilir: boolean;
+  yonetebilir: boolean;
 }) {
   // BOŞ LİSTE NEDENİNİ SÖYLÜYOR: okuyan hesabın yapacağı iş beklemek.
-  return <StratejiTablosu clientId={clientId} planlar={planlar} toplam={toplam} kurabilir={kurabilir} bosNeden="Bu workspace için henüz strateji yok. Ajans hazırlayınca burada görünür." />;
+  return <StratejiTablosu clientId={clientId} planlar={planlar} toplam={toplam} kurabilir={kurabilir} yonetebilir={yonetebilir} bosNeden="Bu workspace için henüz strateji yok. Ajans hazırlayınca burada görünür." />;
 }
 
 /**
@@ -176,15 +183,19 @@ function StratejiTablosu({
   planlar,
   toplam,
   kurabilir,
+  yonetebilir,
   bosNeden,
 }: {
   clientId: string;
   planlar: StratejiListeSatiri[];
   toplam: number;
   kurabilir: boolean;
+  yonetebilir: boolean;
   bosNeden: string;
 }) {
   const router = useRouter();
+  const [hedef, setHedef] = useState<KapatmaHedefi | null>(null);
+  const kapatma = (p: StratejiListeSatiri, tur: 'iptal' | 'sil') => setHedef({ tur, id: p.id, surum: p.surum, ad: planSatiriAdi(p), durum: p.durum, bicim: p.bicim });
   const rapor = (p: StratejiListeSatiri) => stratejiPanelAdresi({ musteri: clientId, plan: p.id, adim: 'rapor' });
   const sutunlar: Array<TabloSutunu<StratejiListeSatiri>> = [
     {
@@ -227,22 +238,39 @@ function StratejiTablosu({
             {kurabilir && p.bicim === 2 && p.durum === 'onaylandi' && (
               <MenuOgesi href={stratejiPanelAdresi({ musteri: clientId, plan: p.id, adim: 'kur' })}>Kampanyaları kur</MenuOgesi>
             )}
+            {yonetebilir && iptalEdilebilirMi(p) && <MenuOgesi onClick={() => kapatma(p, 'iptal')}>İptal et</MenuOgesi>}
+            {yonetebilir && (
+              <MenuOgesi tehlike onClick={() => kapatma(p, 'sil')}>
+                Sil
+              </MenuOgesi>
+            )}
           </AcilirMenu>
         </span>
       ),
     },
   ];
   return (
-    <Kart baslik="Stratejiler" baslikEki={planlar.length < toplam ? `${planlar.length} / ${toplam} gösteriliyor` : `${toplam} strateji`} dolgu={false}>
-      <Tablo
-        etiket="Stratejiler"
-        sutunlar={sutunlar}
-        satirlar={planlar}
-        satirAnahtari={(p) => p.id}
-        onSatir={(p) => router.push(rapor(p))}
-        bos={<BosDurum baslik="Strateji yok" neden={bosNeden} />}
-        sayfalama={{ bas: planlar.length === 0 ? 0 : 1, son: planlar.length, toplam }}
+    <>
+      <KapatmaPenceresi
+        hedef={hedef}
+        onKapat={() => setHedef(null)}
+        onBitti={() => {
+          setHedef(null);
+          // Liste sunucu bileşeninden geliyor: tazelenmezse silinen satır ve "onay bekliyor" kartı ekranda kalır.
+          router.refresh();
+        }}
       />
-    </Kart>
+      <Kart baslik="Stratejiler" baslikEki={planlar.length < toplam ? `${planlar.length} / ${toplam} gösteriliyor` : `${toplam} strateji`} dolgu={false}>
+        <Tablo
+          etiket="Stratejiler"
+          sutunlar={sutunlar}
+          satirlar={planlar}
+          satirAnahtari={(p) => p.id}
+          onSatir={(p) => router.push(rapor(p))}
+          bos={<BosDurum baslik="Strateji yok" neden={bosNeden} />}
+          sayfalama={{ bas: planlar.length === 0 ? 0 : 1, son: planlar.length, toplam }}
+        />
+      </Kart>
+    </>
   );
 }

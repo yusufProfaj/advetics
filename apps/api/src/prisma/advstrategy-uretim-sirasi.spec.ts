@@ -119,7 +119,8 @@ describe('advstrategy migration üretim sırasında', () => {
       { tablename: 'strateji_dagilimlari', n: 4 },
       { tablename: 'strateji_kelimeleri', n: 4 },
       { tablename: 'strateji_matrisi', n: 4 },
-      { tablename: 'strateji_planlari', n: 3 },
+      // 4: DELETE politikası 2026-10-14'te eklendi (strateji silme, kullanıcı kararı).
+      { tablename: 'strateji_planlari', n: 4 },
     ]);
   });
 
