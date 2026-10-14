@@ -37,7 +37,7 @@
 
 - [x] Araştırma → `docs/pazar/advcampaign.md` (Meta Advantage+ kampanya yapısı 2026, Google AI Max/PMax/Demand Gen, LinkedIn amaçları; rehberli kurulum sunan rakipler)
 - [x] Bilinen açık: taslak tablosu telefonda "Devam et"i ekran dışına itiyor (bütçe/eksik/platform telefonda gizli, ad hücresinde özet; canlıda görülmedi)
-- [ ] Öneri 1: bekçi testi, derleyici ASC/AAC alanı (`smart_promotion_type`, `AUTOMATED_SHOPPING_ADS`) üretmesin (Meta v26 bunları duraklatıyor)
+- [x] Öneri 1: bekçi testi, derleyici ASC/AAC alanı (`smart_promotion_type`, `AUTOMATED_SHOPPING_ADS`) üretmesin (Meta v26 bunları duraklatıyor)
 - [ ] Öneri 2: Kontrol ekranında Advantage+ durumu ve eksik kaldıraç (bütçe/kitle/yerleşim), `advantage_state_info`ten sade dille
 - [ ] Öneri 3: Google Arama kontrolünde "AI Max kapalı" kararının gerekçesi tek cümleyle
 - [ ] (onay bekliyor) Öneri 4: Form amacında CRM'e dayalı optimizasyon (Meta Conversion Leads; "müşteri oldu" geri beslemesiyle)
