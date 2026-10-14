@@ -14,6 +14,7 @@ import { describe, expect, it } from 'vitest';
  * Bu tam olarak yaşandı: hero filmi `public/hero/hero.mp4` olarak eklendi,
  * `mp4` listede yoktu ve poster (`.jpg`) listede olduğu için ÇALIŞTI. Yani
  * belirti "görsel yok" bile değildi; sayfa doğru görünüyor, film donuyordu.
+ * (Film 2026-10-14'te kaldırıldı, yerini sahneler aldı; ders geçerli.)
  *
  * Test iki listeyi karşılaştırıyor, sayıyı elle sabitlemiyor: `public/`
  * altına yeni bir tür dosya konduğunda kapsam kendiliğinden genişliyor ve
@@ -80,23 +81,4 @@ describe('KRİTİK: statik varlıklar middleware’e girmiyor', () => {
       ).toBe(false);
     });
   }
-});
-
-describe('KRİTİK: hero filmi ve posteri yerinde', () => {
-  /*
-   * Bileşen bu iki yolu sabit yazıyor. Dosya adı değişirse video sessizce
-   * yüklenmiyor; poster de yoksa kutu bomboş kalıyor ve hiçbir hata düşmüyor.
-   */
-  const BILESEN = readFileSync(
-    join(KOK, 'src', 'components', 'landing', 'kaydirma-filmi.tsx'),
-    'utf8',
-  );
-
-  it('bileşendeki yollar public altında gerçekten var', () => {
-    const yollar = [...BILESEN.matchAll(/'(\/hero\/[^']+)'|"(\/hero\/[^"]+)"/g)]
-      .map((m) => m[1] ?? m[2])
-      .filter((y): y is string => Boolean(y));
-    expect(yollar.length, 'bileşende /hero/ yolu bulunamadı — tarama boşa düştü').toBeGreaterThan(1);
-    for (const y of new Set(yollar)) expect(DOSYALAR).toContain(y);
-  });
 });

@@ -18,6 +18,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { path: '/gizlilik', priority: 0.3 },
     { path: '/kosullar', priority: 0.3 },
     { path: '/veri-silme', priority: 0.3 },
+    { path: '/cerez-politikasi', priority: 0.3 },
   ].map(({ path, priority }) => ({
     url: `${origin}${path}`,
     lastModified: now,

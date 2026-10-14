@@ -57,7 +57,7 @@ export default function DemoSayfasi() {
       </Bolum>
 
       <Bolum baslik="Bize ulaşın">
-        <div className="flex flex-col gap-6 rounded-xl border border-line bg-surface p-6 sm:flex-row sm:items-center sm:justify-between sm:p-8">
+        <div className="kart flex flex-col gap-6 p-6 sm:flex-row sm:items-center sm:justify-between sm:p-8">
           <div>
             <p className="text-sm text-ink-muted">E-posta</p>
             <p className="mt-1 font-baslik text-xl font-bold text-ink">{DEMO_EPOSTA}</p>

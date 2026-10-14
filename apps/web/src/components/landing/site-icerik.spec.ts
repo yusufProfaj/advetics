@@ -4,16 +4,22 @@ import { describe, expect, it } from 'vitest';
 
 import sitemap from '@/app/sitemap';
 
+import { AJANS, usd } from './fiyat';
 import {
+  BAGLANDIGI_YERLER,
   COZUMLER,
   ENTEGRASYON_GRUPLARI,
   FIYAT_SORULARI,
   GUVENLIK,
+  GUVENLIK_OZETI,
+  MODUL_BOLUMLERI,
+  NASIL_CALISIR,
   OZELLIKLER,
   SENARYOLAR,
   SITE_SAYFALARI,
   UST_MENU,
   YAKINDA_ENTEGRASYONLAR,
+  YASAL_BELGELER,
 } from './site-icerik';
 
 /**
@@ -68,15 +74,39 @@ function publicPaths(): string[] {
   return [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]);
 }
 
-/** Sitenin kendi yazdığı kaynaklar. `kaydirma-filmi.tsx` renk taraması dışında (aşağıda). */
+const SIM = join(__dirname, 'simulasyon');
+
+/**
+ * İSTEMCİ BİLEŞENLERİ (`'use client'`), adıyla. Sayfanın geri kalanı sunucuda
+ * statik üretiliyor; buraya yazılmayan bir dosyada istemci işareti görülürse
+ * test düşüyor, yani bir sayfa ya da ortak parça sessizce istemciye taşınamaz.
+ */
+const ISTEMCI_DOSYALARI = [
+  join(SIM, 'sahne.tsx'),
+  join(SIM, 'simulasyonlar.tsx'),
+  join(__dirname, 'fiyat-paketleri.tsx'),
+  join(__dirname, 'cerez-bildirimi.tsx'),
+  join(__dirname, 'gorunurlukte.tsx'),
+];
+
+/** Sitenin kendi yazdığı kaynaklar (yasal METİNLER hariç: onların dili hukuki ve korunuyor). */
 const SITE_KAYNAKLARI = [
   ...sayfaDosyalari(SITE),
   join(SITE, 'layout.tsx'),
+  join(APP, '(legal)', 'layout.tsx'),
   join(__dirname, 'site-icerik.ts'),
   join(__dirname, 'site-parcalari.tsx'),
   join(__dirname, 'site-nav.tsx'),
   join(__dirname, 'site-footer.tsx'),
+  join(__dirname, 'yasal-duzen.tsx'),
+  join(__dirname, 'fiyat-tablosu.tsx'),
+  join(SIM, 'index.ts'),
+  join(SIM, 'sahneler.ts'),
+  join(SIM, 'motor.ts'),
+  ...ISTEMCI_DOSYALARI,
 ];
+
+const TANITIM_CSS = join(__dirname, 'tanitim.css');
 
 /** Ziyaretçinin okuyacağı bütün metin, veri olarak. */
 const METIN = JSON.stringify({
@@ -87,6 +117,10 @@ const METIN = JSON.stringify({
   SENARYOLAR,
   GUVENLIK,
   FIYAT_SORULARI,
+  MODUL_BOLUMLERI,
+  BAGLANDIGI_YERLER,
+  NASIL_CALISIR,
+  GUVENLIK_OZETI,
 });
 
 describe('tanıtım sitesi: sayfalar, middleware ve site haritası', () => {
@@ -122,6 +156,19 @@ describe('tanıtım sitesi: sayfalar, middleware ve site haritası', () => {
     expect(eksik).toEqual([]);
   });
 
+  it('KRİTİK: her yasal belge var, oturumsuz açılıyor ve site haritasında', () => {
+    const izinli = publicPaths();
+    const haritada = sitemap().map((s) => new URL(s.url).pathname);
+    expect(YASAL_BELGELER.length).toBeGreaterThanOrEqual(4);
+    for (const y of YASAL_BELGELER) {
+      expect(existsSync(join(APP, '(legal)', y.href.slice(1), 'page.tsx')), y.href).toBe(true);
+      expect(izinli, y.href).toContain(y.href);
+      expect(haritada, y.href).toContain(y.href);
+    }
+    // KVKK aydınlatma metni hukukçu yazmadan menüye girmiyor (site-icerik.ts yorumu).
+    expect(JSON.stringify(YASAL_BELGELER)).not.toMatch(/KVKK/);
+  });
+
   it('kökteki eski tek sayfa kalmadı (iki `/` sayfası derlemeyi bozar)', () => {
     expect(existsSync(join(APP, 'page.tsx'))).toBe(false);
   });
@@ -146,6 +193,22 @@ describe('tanıtım sitesi: aynı ad menüde ve sayfada', () => {
     }
   });
 
+  it('ana sayfanın sekiz bölümü özelliklerle aynı sırada ve üst başlık özelliğin ADIYLA başlıyor', () => {
+    expect(MODUL_BOLUMLERI.map((m) => m.slug)).toEqual(OZELLIKLER.map((o) => o.slug));
+    for (const m of MODUL_BOLUMLERI) {
+      const o = OZELLIKLER.find((x) => x.slug === m.slug)!;
+      expect(m.ust.startsWith(o.ad), m.slug).toBe(true);
+    }
+  });
+
+  it('çözümler: üç okur, eski adresler duruyor', () => {
+    expect(COZUMLER.map((c) => c.slug)).toEqual(['isletmeler', 'sirketler', 'ajanslar']);
+  });
+
+  it('bağlandığı yerler şeridinde yakında olan bir şey yok', () => {
+    for (const y of YAKINDA_ENTEGRASYONLAR) expect(BAGLANDIGI_YERLER).not.toContain(y);
+  });
+
   it('slug tekil, çapraz bağlar var olan sayfaya gidiyor', () => {
     const sluglar = OZELLIKLER.map((o) => o.slug);
     expect(new Set(sluglar).size).toBe(sluglar.length);
@@ -162,20 +225,40 @@ describe('tanıtım sitesi: söz ve kimlik', () => {
 
   it('uzun tire yok (kullanıcı kararı: kısa, sade dil)', () => {
     expect(METIN).not.toContain('—');
-    for (const d of [...SITE_KAYNAKLARI, join(__dirname, 'kaydirma-filmi.tsx')]) {
+    for (const d of SITE_KAYNAKLARI) {
       expect(yorumsuz(readFileSync(d, 'utf8')), d).not.toContain('—');
     }
   });
 
-  it('KRİTİK: uydurulabilecek sözler yok (fiyat rakamı, sertifika, müşteri sayısı)', () => {
+  it('KRİTİK: uydurulabilecek sözler yok (elle yazılmış fiyat, sertifika, müşteri sayısı)', () => {
+    /*
+     * FİYAT ARTIK VAR (kullanıcı kararı 2026-10-14) ama YALNIZ `fiyat.ts`te;
+     * bu dosyalarda elle yazılmış bir dolar ya da TL tutarı, sabit
+     * değişince eski rakamı söylemeye devam eden bir sayfa demek. Sahnelerin
+     * ₺ tutarları ÖRNEK veri ve sayfada öyle yazıyor; ₺ serbest.
+     */
     for (const d of SITE_KAYNAKLARI) {
       const k = yorumsuz(readFileSync(d, 'utf8'));
       // `\b` Türkçe harfi kelime saymıyor: "kayıtlı" içindeki "tl" eşleşiyordu.
       // Sınır Unicode harf sınıfıyla (`\p{L}`) çiziliyor.
       expect(k, d).not.toMatch(
-        /₺|(?<!\p{L})TL(?!\p{L})|\$\s?\d|ISO\s?\d|[Ss]ertifika|\d+\+?\s*(müşteri|ajans|marka)/u,
+        /\$\s?\d|\d\s*(?:TL|USD|dolar)(?!\p{L})|ISO\s?\d|[Ss]ertifika|\d+\+?\s*(müşteri|ajans|marka)(?!\p{L})/u,
       );
     }
+  });
+
+  it('KRİTİK: sık sorulanlardaki ajans rakamları fiyat sabitinden', () => {
+    const ajans = FIYAT_SORULARI.find((s) => s.baslik.startsWith('Ajans paketinde'));
+    expect(ajans?.metin).toContain(usd(AJANS.kademeBirSent));
+    expect(ajans?.metin).toContain(usd(AJANS.kademeIkiSent));
+    expect(ajans?.metin).toContain(`${AJANS.dahilWorkspace} workspace dahil`);
+    // Kaynakta elle yazılmış dolar yok (test yukarıda); şablon gerçekten sabiti okuyor.
+    expect(readFileSync(join(__dirname, 'site-icerik.ts'), 'utf8')).toContain('usd(AJANS.kademeBirSent)');
+  });
+
+  it('ana sayfa: sahnelerin örnek olduğu yazıyor', () => {
+    expect(readFileSync(join(SITE, 'page.tsx'), 'utf8')).toContain('Ekrandaki rakamlar örnektir.');
+    expect(readFileSync(join(__dirname, 'site-parcalari.tsx'), 'utf8')).toContain('Ekrandaki rakamlar örnektir.');
   });
 
   it('KRİTİK: PDF raporda ajans LOGOSU vaat edilmiyor (kapakta Advetics logosu basılıyor)', () => {
@@ -191,7 +274,7 @@ describe('tanıtım sitesi: söz ve kimlik', () => {
 
   it('KRİTİK: renk yalnız kılavuzun dördü (beyaz, siyah, gri, kırmızı)', () => {
     const izinli = new Set(['#ffffff', '#fff', '#000000', '#000', '#302e2d', '#ff2400']);
-    for (const d of SITE_KAYNAKLARI) {
+    for (const d of [...SITE_KAYNAKLARI, TANITIM_CSS]) {
       const renkler = yorumsuz(readFileSync(d, 'utf8')).match(/#[0-9a-f]{3,8}\b/gi) ?? [];
       expect(renkler.filter((r) => !izinli.has(r.toLowerCase())), d).toEqual([]);
     }
@@ -204,9 +287,20 @@ describe('tanıtım sitesi: söz ve kimlik', () => {
     expect(renkler.filter((r) => !izinli.has(r.toLowerCase()))).toEqual([]);
   });
 
-  it('istemci JavaScript yalnız kahraman filminde', () => {
-    for (const d of SITE_KAYNAKLARI) {
-      expect(readFileSync(d, 'utf8'), d).not.toMatch(/^['"]use client['"]/m);
-    }
+  it('KRİTİK: istemci JavaScript yalnız adı yazılı küçük parçalarda (sayfalar ve düzenler statik)', () => {
+    const istemci = SITE_KAYNAKLARI.filter((d) => /^['"]use client['"]/m.test(readFileSync(d, 'utf8')));
+    expect(istemci.sort()).toEqual([...ISTEMCI_DOSYALARI].sort());
+  });
+
+  it('tanıtım stilleri `.tanitim` kapsamında (panele sızmıyor) ve hareket azaltmada kapanıyor', () => {
+    const css = readFileSync(TANITIM_CSS, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const seciciler = [...css.matchAll(/(^|})\s*([^{}@]+)\{/g)]
+      .map((m) => m[2]!.trim())
+      .filter((x) => x && !/^(from|to|\d+%)$/.test(x));
+    expect(seciciler.length, 'tarama boşa düştü').toBeGreaterThan(100);
+    const kapsamsiz = seciciler.flatMap((x) => x.split(',').map((y) => y.trim())).filter((y) => !y.startsWith('.tanitim'));
+    expect(kapsamsiz).toEqual([]);
+    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\) \{\s*\.tanitim \*,\s*\.tanitim \*::before,\s*\.tanitim \*::after \{\s*transition: none !important;\s*animation: none !important;/);
+    expect(css).not.toMatch(/linear-gradient|radial-gradient/);
   });
 });

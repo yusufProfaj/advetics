@@ -13,6 +13,9 @@ import { COZUMLER, DEMO_MAILTO, OZELLIKLER, UST_MENU, cozumAdresi, ozellikAdresi
  * doğrudan SEO. Oturumu olan kullanıcı yine de kaybolmuyor: middleware
  * oturumlu bir /login isteğini /dashboard'a çeviriyor (middleware.ts).
  *
+ * Düğmeler tanıtım sitesinin düğme sınıflarıyla (`dg b` / `dg i`,
+ * `tanitim.css`): taslakta "Giriş Yap" çerçeveli, "Demo Talep Et" kırmızı.
+ *
  * İSTEMCİ JAVASCRIPT'İ YOK. Açılır menüler CSS ile açılıyor
  * (`group-hover` + `group-focus-within`, klavyeyle de çalışıyor), telefon
  * menüsü yerleşik `<details>` öğesi. Menü DOM'dan hiç çıkmıyor, yalnız
@@ -68,7 +71,7 @@ export function SiteNav() {
               Çözümler
             </button>
             <div className={ACILIR}>
-              <ul className="w-72 rounded-xl border border-line bg-surface p-3 shadow-acilir">
+              <ul className="w-80 rounded-xl border border-line bg-surface p-3 shadow-acilir">
                 {COZUMLER.map((c) => (
                   <li key={c.slug}>
                     <a
@@ -93,13 +96,10 @@ export function SiteNav() {
         </ul>
 
         <div className="hidden items-center gap-3 lg:flex">
-          <Link href="/login" className={UST_BAG}>
+          <Link href="/login" className="dg i">
             Giriş Yap
           </Link>
-          <a
-            href={DEMO_MAILTO}
-            className="rounded-lg bg-brand px-4 py-2 text-sm font-bold text-white motion-safe:transition-opacity hover:opacity-90"
-          >
+          <a href={DEMO_MAILTO} className="dg b">
             Demo Talep Et
           </a>
         </div>
@@ -149,16 +149,10 @@ export function SiteNav() {
               ))}
             </ul>
             <div className="mt-5 grid gap-3">
-              <a
-                href={DEMO_MAILTO}
-                className="rounded-lg bg-brand px-4 py-3 text-center text-sm font-bold text-white"
-              >
+              <a href={DEMO_MAILTO} className="dg b">
                 Demo Talep Et
               </a>
-              <a
-                href="/login"
-                className="rounded-lg border border-line px-4 py-3 text-center text-sm font-semibold text-ink"
-              >
+              <a href="/login" className="dg i">
                 Giriş Yap
               </a>
             </div>

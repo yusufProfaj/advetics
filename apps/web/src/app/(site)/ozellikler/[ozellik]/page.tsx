@@ -11,11 +11,16 @@ import {
   SayfaGirisi,
   SinirKutusu,
 } from '@/components/landing/site-parcalari';
+import { OZELLIK_SAHNELERI } from '@/components/landing/simulasyon';
 
 /**
  * Özellik sayfası. Sekiz sayfa TEK şablondan üretiliyor; içerik
  * `site-icerik.ts#OZELLIKLER`te. Sekiz ayrı dosya sekiz ayrı düzen demekti
  * ve sonradan eklenen bir bölüm yalnız birinde kalırdı.
+ *
+ * Girişte ana sayfadaki bölümün AYNI sahnesi oynuyor (`OZELLIK_SAHNELERI`):
+ * ziyaretçi menüden ya da ana sayfadaki "Ayrıntılar"dan geldiğinde gördüğü
+ * canlandırma değişmesin.
  *
  * `dynamicParams = false`: listede olmayan adres derlemede bilinen bir 404.
  * Sayfalar derlemede statik üretiliyor.
@@ -55,6 +60,7 @@ export default async function OzellikSayfasi({ params }: Props) {
         baslik={o.baslik}
         ozet={o.ozet}
         ikincil={{ href: '/ozellikler', etiket: 'Bütün Özellikler' }}
+        Sahne={OZELLIK_SAHNELERI[o.slug]}
       />
 
       <Bolum baslik="Size ne kazandırır" aciklama={`Paneldeki adı: ${o.panelAdi}.`}>

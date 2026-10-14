@@ -1,31 +1,62 @@
 import type { Metadata } from 'next';
 
+import {
+  IngilizceBaslik,
+  YasalAltBolum,
+  YasalBolum,
+  YasalDuzen,
+  type YasalBaslik,
+} from '@/components/landing/yasal-duzen';
+
 export const metadata: Metadata = {
   title: 'Kullanım Koşulları · Advetics',
   description: 'Advetics reklam yönetim platformunun kullanım koşulları.',
   robots: { index: true, follow: true },
 };
 
+const B = {
+  hizmet: { id: 'hizmetin-tanimi', baslik: '1. Hizmetin tanımı' },
+  hesap: { id: 'hesap-ve-yetkilendirme', baslik: '2. Hesap ve yetkilendirme' },
+  otomatik: { id: 'otomatik-aksiyonlar', baslik: '3. Otomatik aksiyonlar ve sorumluluk' },
+  uyum: { id: 'platform-kurallari', baslik: '4. Platform kurallarına uyum' },
+  dogruluk: { id: 'veri-dogrulugu', baslik: '5. Veri doğruluğu' },
+  sureklilik: { id: 'hizmet-surekliligi', baslik: '6. Hizmet sürekliliği' },
+  fesih: { id: 'fesih', baslik: '7. Fesih' },
+  kisisel: { id: 'kisisel-veriler', baslik: '8. Kişisel veriler' },
+  iletisim: { id: 'iletisim', baslik: '9. İletişim' },
+} satisfies Record<string, YasalBaslik>;
+
 /**
  * Google OAuth Verification, gizlilik politikasının yanında bir kullanım
  * koşulları adresi de istiyor. Meta App Review'da zorunlu değil ama başvuruyu
  * güçlendiriyor.
+ *
+ * 2026-10-14: platform listesine LinkedIn Ads eklendi (gizlilikle aynı
+ * düzeltme). Başka cümleye dokunulmadı; "toplu kampanya oluşturma" ve
+ * "kuru çalıştırma" ifadelerinin bugünkü ürünle örtüşüp örtüşmediği ayrıca
+ * gözden geçirilmeli (devir notunda).
  */
 export default function TermsPage() {
   return (
-    <>
-      <h1 className="text-2xl font-semibold">Kullanım Koşulları</h1>
-      <p className="mt-1 text-sm text-ink-muted">Son güncelleme: 5 Ağustos 2026</p>
-
-      <Section title="1. Hizmetin tanımı">
+    <YasalDuzen
+      yol="/kosullar"
+      baslik="Kullanım Koşulları"
+      guncelleme="14 Ekim 2026"
+      bolumler={Object.values(B)}
+      ozet={
+        'Otomatik kurallar gerçek reklam harcamasını etkiler; tanımladığınız kuralların sonucundan ' +
+        'siz sorumlusunuz. Faturada bağlayıcı olan, platformların kendi raporlarıdır.'
+      }
+    >
+      <YasalBolum b={B.hizmet}>
         <p>
-          Advetics, Meta (Facebook, Instagram) ve Google Ads reklam hesaplarının tek panelden
-          yönetilmesini sağlayan bir yazılım hizmetidir. Hizmet; veri birleştirme, raporlama,
-          kural tabanlı otomasyon ve toplu kampanya oluşturma işlevleri sunar.
+          Advetics, Meta (Facebook, Instagram), Google Ads ve LinkedIn Ads reklam hesaplarının tek
+          panelden yönetilmesini sağlayan bir yazılım hizmetidir. Hizmet; veri birleştirme,
+          raporlama, kural tabanlı otomasyon ve toplu kampanya oluşturma işlevleri sunar.
         </p>
-      </Section>
+      </YasalBolum>
 
-      <Section title="2. Hesap ve yetkilendirme">
+      <YasalBolum b={B.hesap}>
         <p>
           Hizmeti kullanmak için bir kullanıcı hesabı ve en az bir reklam platformu bağlantısı
           gerekir. Bağlantı, ilgili platformun kendi OAuth izin ekranı üzerinden kurulur.
@@ -35,9 +66,9 @@ export default function TermsPage() {
           Hesap güvenliğinden ve hesabınız üzerinden yapılan işlemlerden siz sorumlusunuz. Yetkisiz
           erişim şüphesinde şifrenizi değiştirin — bu işlem tüm aktif oturumları sonlandırır.
         </p>
-      </Section>
+      </YasalBolum>
 
-      <Section title="3. Otomatik aksiyonlar ve sorumluluk">
+      <YasalBolum b={B.otomatik}>
         <p>
           Hizmet, sizin tanımladığınız kurallara göre reklam bütçelerini değiştirebilir,
           kampanyaları durdurabilir veya başlatabilir. Bu işlemler{' '}
@@ -54,18 +85,18 @@ export default function TermsPage() {
           sorumlusunuz. Hizmet, reklam performansı veya yatırım getirisi konusunda hiçbir garanti
           vermez.
         </p>
-      </Section>
+      </YasalBolum>
 
-      <Section title="4. Platform kurallarına uyum">
+      <YasalBolum b={B.uyum}>
         <p>
           Hizmeti kullanırken Meta Platform Terms, Meta Advertising Policies ve Google Ads
           Politikaları dâhil olmak üzere ilgili platformların kurallarına uymayı kabul edersiniz.
           Bu kuralların ihlali, ilgili platformun reklam hesabınızı askıya almasına yol açabilir;
           bu durumdan Advetics sorumlu tutulamaz.
         </p>
-      </Section>
+      </YasalBolum>
 
-      <Section title="5. Veri doğruluğu">
+      <YasalBolum b={B.dogruluk}>
         <p>
           Gösterilen metrikler, reklam platformlarının API&apos;lerinden alınan verilere dayanır.
           Bu platformlar, atıf pencereleri nedeniyle geçmiş günlerin verilerini sonradan
@@ -76,69 +107,56 @@ export default function TermsPage() {
           Faturalandırma ve muhasebe açısından bağlayıcı olan kaynak, reklam platformlarının kendi
           raporlarıdır.
         </p>
-      </Section>
+      </YasalBolum>
 
-      <Section title="6. Hizmet sürekliliği">
+      <YasalBolum b={B.sureklilik}>
         <p>
           Hizmet, üçüncü taraf API&apos;lerine bağımlıdır. Platformların kota sınırları, API sürüm
           değişiklikleri veya kesintileri hizmetin geçici olarak sınırlı çalışmasına yol
           açabilir. Kesintisiz erişim garantisi verilmez.
         </p>
-      </Section>
+      </YasalBolum>
 
-      <Section title="7. Fesih">
+      <YasalBolum b={B.fesih}>
         <p>
           Hesabınızı ve bağlantılarınızı dilediğiniz zaman kaldırabilirsiniz. Verilerin silinmesi
-          için{' '}
-          <a href="/veri-silme" className="underline">
-            Veri Silme Talimatları
-          </a>{' '}
-          sayfasına bakın. Platform kurallarının veya bu koşulların ihlali hâlinde hizmete erişim
-          askıya alınabilir.
+          için <a href="/veri-silme">Veri Silme Talimatları</a> sayfasına bakın. Platform
+          kurallarının veya bu koşulların ihlali hâlinde hizmete erişim askıya alınabilir.
         </p>
-      </Section>
+      </YasalBolum>
 
-      <Section title="8. Kişisel veriler">
+      <YasalBolum b={B.kisisel}>
         <p>
           Kişisel verilerin işlenmesine ilişkin esaslar{' '}
-          <a href="/gizlilik" className="underline">
-            Gizlilik Politikası
-          </a>{' '}
-          sayfasında açıklanmıştır.
+          <a href="/gizlilik">Gizlilik Politikası</a> sayfasında açıklanmıştır.
         </p>
-      </Section>
+      </YasalBolum>
 
-      <Section title="9. İletişim">
+      <YasalBolum b={B.iletisim}>
         <p>
-          <a href="mailto:hello@profaj.com" className="underline">
-            hello@profaj.com
-          </a>
+          <a href="mailto:hello@profaj.com">hello@profaj.com</a>
         </p>
-      </Section>
+      </YasalBolum>
 
-      <hr className="my-10 border-line" />
+      <IngilizceBaslik>Terms of Service (English)</IngilizceBaslik>
 
-      <h2 className="text-xl font-semibold" id="english">
-        Terms of Service (English)
-      </h2>
-
-      <Section title="Service">
+      <YasalAltBolum baslik="Service">
         <p>
-          Advetics is a software service for managing Meta (Facebook, Instagram) and Google Ads
-          advertising accounts from a single dashboard, including reporting, rule-based automation
-          and bulk campaign creation.
+          Advetics is a software service for managing Meta (Facebook, Instagram), Google Ads and
+          LinkedIn Ads advertising accounts from a single dashboard, including reporting,
+          rule-based automation and bulk campaign creation.
         </p>
-      </Section>
+      </YasalAltBolum>
 
-      <Section title="Authorisation">
+      <YasalAltBolum baslik="Authorisation">
         <p>
           You connect your advertising accounts through each platform&apos;s own OAuth consent
           screen and confirm that you are authorised to manage the accounts you connect. You are
           responsible for the security of your account.
         </p>
-      </Section>
+      </YasalAltBolum>
 
-      <Section title="Automated actions">
+      <YasalAltBolum baslik="Automated actions">
         <p>
           Rules you define can change budgets and pause or resume campaigns, which{' '}
           <strong>affects real advertising spend</strong>. Every rule is therefore created in{' '}
@@ -147,9 +165,9 @@ export default function TermsPage() {
           of the rules you define and for the resulting spend. No guarantee is made regarding
           advertising performance or return on investment.
         </p>
-      </Section>
+      </YasalAltBolum>
 
-      <Section title="Data accuracy and availability">
+      <YasalAltBolum baslik="Data accuracy and availability">
         <p>
           Metrics come from the advertising platforms&apos; APIs and may be revised retroactively
           due to attribution windows. The platforms&apos; own reports are authoritative for
@@ -157,41 +175,24 @@ export default function TermsPage() {
           outages may temporarily limit functionality. Uninterrupted availability is not
           guaranteed.
         </p>
-      </Section>
+      </YasalAltBolum>
 
-      <Section title="Platform compliance">
+      <YasalAltBolum baslik="Platform compliance">
         <p>
           You agree to comply with the Meta Platform Terms, Meta Advertising Policies and Google
           Ads Policies. Advetics is not liable for account suspensions resulting from violations of
           those policies.
         </p>
-      </Section>
+      </YasalAltBolum>
 
-      <Section title="Termination and contact">
+      <YasalAltBolum baslik="Termination and contact">
         <p>
           You may remove your connections and account at any time — see the{' '}
-          <a href="/veri-silme" className="underline">
-            Data Deletion Instructions
-          </a>
-          . Personal data handling is described in our{' '}
-          <a href="/gizlilik" className="underline">
-            Privacy Policy
-          </a>
-          . Contact:{' '}
-          <a href="mailto:hello@profaj.com" className="underline">
-            hello@profaj.com
-          </a>
+          <a href="/veri-silme">Data Deletion Instructions</a>. Personal data handling is described
+          in our <a href="/gizlilik">Privacy Policy</a>. Contact:{' '}
+          <a href="mailto:hello@profaj.com">hello@profaj.com</a>
         </p>
-      </Section>
-    </>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="mt-7">
-      <h2 className="text-base font-semibold">{title}</h2>
-      <div className="mt-2 space-y-2 text-sm leading-relaxed text-ink">{children}</div>
-    </section>
+      </YasalAltBolum>
+    </YasalDuzen>
   );
 }

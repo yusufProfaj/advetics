@@ -1,39 +1,77 @@
 import Link from 'next/link';
-import type { ReactNode } from 'react';
+import type { ComponentType, ReactNode } from 'react';
 
-import { DEMO_MAILTO, OZELLIKLER, ozellikAdresi, type Madde } from './site-icerik';
+import { Gorunurlukte } from './gorunurlukte';
+import { DEMO_MAILTO, FIYAT_SORULARI, OZELLIKLER, ozellikAdresi, type Madde } from './site-icerik';
 
 /**
  * ═══ TANITIM SİTESİNİN ORTAK PARÇALARI ═══
  *
  * Bütün sayfalar bu parçalardan kuruluyor. Her sayfa kendi başlığını, kart
- * gölgesini ve düğmesini yazsaydı on dört sayfada on dört ayrı görünüş
- * doğardı; panelde aynı şey "PANEL TASARIM KATMANI" ile çözüldü (globals.css).
+ * gölgesini ve düğmesini yazsaydı on beş sayfada on beş ayrı görünüş
+ * doğardı; panelde aynı şey "PANEL TASARIM KATMANI" ile çözüldü.
  *
- * Hepsi SUNUCU bileşeni. İstemci JavaScript'i yok: tanıtım sitesinde ilk
- * boyama hızı doğrudan arama sıralaması ve dönüşüm.
+ * Görünüş onaylı taslaktan (`docs/site/taslak.html`), sınıflar
+ * `tanitim.css`te. Hepsi SUNUCU bileşeni; istemci parçaları (sahneler,
+ * fiyat kartları, çerez kartı) ayrı küçük dosyalarda.
  *
- * RENK: yalnız kılavuzun dört rengi (`.tanitim` belirteçleri, globals.css).
- * Kırmızı METİN olarak yalnız büyük başlıkta kullanılıyor: #ff2400 beyazda
- * 3,8 kontrast veriyor, küçük yazıda eşik 4,5. Küçük vurgular kırmızı bir
- * işaret + koyu metinle yapılıyor.
+ * SAYFA BAŞLIĞI (`h1`) YALNIZ BU DOSYADA, `TanitimBasligi` içinde. Panelin
+ * `SayfaBasligi` bileşeni panelin ölçüsüyle (`.panel` katmanı) çiziliyor;
+ * tanıtım başlığı 68 piksele kadar büyüyen bir vitrin başlığı. Tek bir
+ * bileşen olması, tasarım sistemi bekçisinde tek bir gerekçeli kalıcı
+ * istisna demek (`tasarim-sistemi.istisnalar.ts`).
  */
 
 /** Birincil ve ikincil düğme sınıfları. Tek tanım: iki sayfada iki ayrı kırmızı düğme olmasın. */
-export const BIRINCIL =
-  'inline-flex items-center justify-center rounded-lg bg-brand px-6 py-3 text-sm font-bold text-white ' +
-  'motion-safe:transition-opacity hover:opacity-90';
-export const IKINCIL =
-  'inline-flex items-center justify-center rounded-lg border border-line bg-surface px-6 py-3 text-sm ' +
-  'font-semibold text-ink motion-safe:transition-colors hover:bg-surface-muted';
+export const BIRINCIL = 'dg b';
+export const IKINCIL = 'dg i';
 
-/** Küçük üst başlık: kırmızı kare işaret + koyu metin. */
+/**
+ * Latin marka adları. Üst başlık büyük harfe çevriliyor ve sayfa `lang="tr"`:
+ * tarayıcı Türkçe kuralıyla "i"yi "İ" yapıyor ve "LinkedIn" ekranda
+ * "LİNKEDİN", "AdvCampaign" "ADVCAMPAİGN" oluyordu. Bu adlar `lang="en"`
+ * içinde büyütülüyor; Türkçe kelimeler ("için") doğru "İÇİN" kalıyor.
+ */
+const LATIN_ADLAR = /(LinkedIn|AdvCampaign|AdvStrategy)/;
+
+/** Küçük üst başlık: kırmızı çizgi + büyük harf. Renk okunabilir kırmızı tonda (`tanitim.css`). */
 export function UstBaslik({ children }: { children: ReactNode }) {
+  const icerik =
+    typeof children === 'string'
+      ? children.split(LATIN_ADLAR).map((p, i) =>
+          i % 2 === 1 ? (
+            <span key={i} lang="en">
+              {p}
+            </span>
+          ) : (
+            p
+          ),
+        )
+      : children;
+  // İç sarmalayıcı şart: kutu `inline-flex` ve `gap` taşıyor; parçalar doğrudan
+  // çocuk olsa her `lang` parçasının iki yanına 8 piksel boşluk giriyordu.
   return (
-    <p className="flex items-center gap-2 text-sm font-semibold text-ink">
-      <span aria-hidden className="h-2 w-2 rounded-[2px] bg-brand" />
+    <span className="ust-baslik">
+      <span>{icerik}</span>
+    </span>
+  );
+}
+
+/** Sayfanın tek `h1`i. `boy`: ana sayfa büyük, fiyat ve yasal sayfalar daha küçük. */
+export function TanitimBasligi({
+  children,
+  boy = 'buyuk',
+  id,
+}: {
+  children: ReactNode;
+  boy?: 'buyuk' | 'orta' | 'yasal';
+  id?: string;
+}) {
+  const sinif = boy === 'orta' ? 't-h1 orta-boy' : boy === 'yasal' ? 't-h1 yasal-boy' : 't-h1';
+  return (
+    <h1 id={id} className={sinif}>
       {children}
-    </p>
+    </h1>
   );
 }
 
@@ -46,39 +84,52 @@ export function YakindaRozeti() {
   );
 }
 
-/** Sayfa girişi: üst başlık, ana başlık, özet ve iki düğme. */
+/**
+ * Sayfa girişi: üst başlık, ana başlık, özet ve iki düğme. `Sahne`
+ * verilirse yanında sahnesi (özellik sayfası): ana sayfadaki bölümle AYNI
+ * canlandırma, ziyaretçi menüden geldiğinde de aynı şeyi görüyor.
+ */
 export function SayfaGirisi({
   ust,
   baslik,
   ozet,
   ikincil,
+  Sahne,
 }: {
   ust: string;
   baslik: string;
   ozet: string;
   ikincil?: { href: string; etiket: string };
+  Sahne?: ComponentType;
 }) {
-  return (
-    <section className="border-b border-line bg-surface">
-      <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
-        <div className="max-w-3xl">
-          <UstBaslik>{ust}</UstBaslik>
-          <h1 className="mt-5 font-baslik text-4xl font-extrabold leading-[1.1] tracking-tight text-ink sm:text-5xl">
-            {baslik}
-          </h1>
-          <p className="mt-6 max-w-2xl text-lg leading-relaxed text-ink-muted">{ozet}</p>
-          <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-            <a href={DEMO_MAILTO} className={BIRINCIL}>
-              Demo Talep Et
-            </a>
-            {ikincil && (
-              <Link href={ikincil.href} className={IKINCIL}>
-                {ikincil.etiket}
-              </Link>
-            )}
-          </div>
-        </div>
+  const yazi = (
+    <div className="yazi">
+      <UstBaslik>{ust}</UstBaslik>
+      <TanitimBasligi boy="orta">{baslik}</TanitimBasligi>
+      <p className="alt">{ozet}</p>
+      <div className="dgler">
+        <a href={DEMO_MAILTO} className={BIRINCIL}>
+          Demo Talep Et
+        </a>
+        {ikincil && (
+          <Link href={ikincil.href} className={IKINCIL}>
+            {ikincil.etiket}
+          </Link>
+        )}
       </div>
+      {Sahne && <p className="hero-notu">Ekrandaki rakamlar örnektir.</p>}
+    </div>
+  );
+  return (
+    <section className={`giris${Sahne ? '' : ' tek'}`}>
+      {Sahne ? (
+        <div className="kap modul">
+          {yazi}
+          <Sahne />
+        </div>
+      ) : (
+        <div className="kap">{yazi}</div>
+      )}
     </section>
   );
 }
@@ -98,13 +149,11 @@ export function Bolum({
   children: ReactNode;
 }) {
   return (
-    <section id={id} className={`scroll-mt-20 ${koyu ? 'bg-surface-muted' : 'bg-surface'}`}>
-      <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
+    <section id={id} className={`bolum${koyu ? ' gri' : ''}`}>
+      <div className="kap">
         <div className="max-w-2xl">
-          <h2 className="font-baslik text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">
-            {baslik}
-          </h2>
-          {aciklama && <p className="mt-3 text-base leading-relaxed text-ink-muted">{aciklama}</p>}
+          <h2 className="t-h2">{baslik}</h2>
+          {aciklama && <p className="alt">{aciklama}</p>}
         </div>
         <div className="mt-10">{children}</div>
       </div>
@@ -117,32 +166,34 @@ export function MaddeIzgarasi({ maddeler, yakinda = false }: { maddeler: Madde[]
   return (
     <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
       {maddeler.map((m) => (
-        <li key={m.baslik} className="rounded-xl border border-line bg-surface p-6">
+        <li key={m.baslik} className="kart p-6">
           <div className="flex items-start justify-between gap-3">
-            <h3 className="font-baslik text-base font-bold text-ink">{m.baslik}</h3>
+            <h3 className="mont text-base font-bold">{m.baslik}</h3>
             {yakinda && <YakindaRozeti />}
           </div>
-          <p className="mt-2.5 text-sm leading-relaxed text-ink-muted">{m.metin}</p>
+          <p className="soluk mt-2.5 text-sm leading-relaxed">{m.metin}</p>
         </li>
       ))}
     </ul>
   );
 }
 
-/** Numaralı adımlar. Numara kırmızı zeminde beyaz: kılavuzun "kırmızı zemin + beyaz" kullanımı. */
+/**
+ * Numaralı adımlar (taslaktaki "Nasıl çalışır" kartları). Kartların
+ * altındaki kırmızı çizgi ekrana girince sırayla doluyor; o davranış
+ * `Gorunurlukte` istemci parçasında, kartların kendisi sunucuda.
+ */
 export function AdimListesi({ adimlar }: { adimlar: Madde[] }) {
   return (
-    <ol className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+    <Gorunurlukte className="adimlar">
       {adimlar.map((a, i) => (
-        <li key={a.baslik} className="rounded-xl border border-line bg-surface p-6">
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand font-baslik text-sm font-extrabold text-white">
-            {i + 1}
-          </span>
-          <h3 className="mt-4 font-baslik text-base font-bold text-ink">{a.baslik}</h3>
-          <p className="mt-2 text-sm leading-relaxed text-ink-muted">{a.metin}</p>
+        <li key={a.baslik}>
+          <span className="no">{i + 1}</span>
+          <h3>{a.baslik}</h3>
+          <p>{a.metin}</p>
         </li>
       ))}
-    </ol>
+    </Gorunurlukte>
   );
 }
 
@@ -151,23 +202,19 @@ export function AdimListesi({ adimlar }: { adimlar: Madde[] }) {
  * küçük bir "Devamı" yazısına nişan almak telefonda zor.
  */
 export function OzellikKartlari({ sluglar }: { sluglar?: string[] }) {
-  const liste = sluglar
-    ? OZELLIKLER.filter((o) => sluglar.includes(o.slug))
-    : OZELLIKLER;
+  const liste = sluglar ? OZELLIKLER.filter((o) => sluglar.includes(o.slug)) : OZELLIKLER;
   return (
     <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
       {liste.map((o) => (
         <li key={o.slug}>
           <Link
             href={ozellikAdresi(o.slug)}
-            className="group flex h-full flex-col rounded-xl border border-line bg-surface p-6 motion-safe:transition-[border-color,transform] motion-safe:duration-200 hover:border-ink motion-safe:hover:-translate-y-0.5"
+            className="kart flex h-full flex-col p-6 motion-safe:transition-[border-color,transform] motion-safe:duration-200 hover:border-ink motion-safe:hover:-translate-y-0.5"
           >
-            <span className="text-xs font-semibold text-ink-muted">{o.panelAdi}</span>
-            <h3 className="mt-2 font-baslik text-lg font-bold text-ink">{o.ad}</h3>
-            <p className="mt-2 flex-1 text-sm leading-relaxed text-ink-muted">{o.kisa}</p>
-            <span className="mt-5 text-sm font-semibold text-ink underline decoration-brand decoration-2 underline-offset-4">
-              Nasıl çalışır
-            </span>
+            <span className="soluk text-xs font-semibold">{o.panelAdi}</span>
+            <h3 className="mont mt-2 text-lg font-bold">{o.ad}</h3>
+            <p className="soluk mt-2 flex-1 text-sm leading-relaxed">{o.kisa}</p>
+            <span className="bag self-start">Nasıl çalışır →</span>
           </Link>
         </li>
       ))}
@@ -178,11 +225,11 @@ export function OzellikKartlari({ sluglar }: { sluglar?: string[] }) {
 /** "Bilmeniz gerekenler": ürünün yapmadığı şeyler. Gizlenen sınır, ilk denemede çıkan hayal kırıklığı. */
 export function SinirKutusu({ sinirlar }: { sinirlar: string[] }) {
   return (
-    <div className="rounded-xl border border-line bg-surface p-6">
-      <h3 className="font-baslik text-base font-bold text-ink">Bilmeniz gerekenler</h3>
+    <div className="ozet-kutu">
+      <h3 className="mont text-base font-bold">Bilmeniz gerekenler</h3>
       <ul className="mt-3 space-y-2">
         {sinirlar.map((s) => (
-          <li key={s} className="flex gap-3 text-sm leading-relaxed text-ink-muted">
+          <li key={s} className="flex gap-3 text-sm leading-relaxed">
             <span aria-hidden className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-ink-muted" />
             {s}
           </li>
@@ -193,38 +240,55 @@ export function SinirKutusu({ sinirlar }: { sinirlar: string[] }) {
 }
 
 /**
- * Kapanış bandı. Zemin kılavuzun gri zemini (#302e2d) ve yazı beyaz: bu bir
- * MARKA öğesi, tema yüzeyi değil, o yüzden belirteç değil sabit renk.
- * Karanlık temada sayfa siyaha döndüğü için gri bant yine ayrışıyor.
+ * Sık sorulanlar. `<details>`: istemci JavaScript'i yok, klavyeyle ve ekran
+ * okuyucuyla kendiliğinden çalışıyor, cevap DOM'dan çıkmadığı için arama
+ * motoru da okuyor.
+ */
+export function SikSorulanlar({ sorular = FIYAT_SORULARI }: { sorular?: Madde[] }) {
+  return (
+    <div className="sss mt-6">
+      {sorular.map((s) => (
+        <details key={s.baslik}>
+          <summary>{s.baslik}</summary>
+          <p>{s.metin}</p>
+        </details>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Kapanış bandı. Zemin SİYAH (taslak); karanlık temada sayfa da siyah
+ * olduğu için bant kılavuzun grisine dönüyor (`tanitim.css`). Bu bir marka
+ * öğesi, tema yüzeyi değil.
  */
 export function KapanisBandi({
   baslik = 'Kendi hesaplarınızla görün',
   metin = 'Kısa bir görüşmede hesaplarınızı bağlayıp kendi rakamlarınızla gösterelim.',
+  giris = true,
 }: {
   baslik?: string;
   metin?: string;
+  giris?: boolean;
 }) {
   return (
-    <section className="bg-surface">
-      <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
-        <div className="rounded-2xl bg-[#302e2d] px-6 py-12 text-center sm:px-12">
-          <h2 className="font-baslik text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
-            {baslik}
-          </h2>
-          <p className="mx-auto mt-3 max-w-xl text-base leading-relaxed text-white/80">{metin}</p>
-          <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <a href={DEMO_MAILTO} className={BIRINCIL}>
-              Demo Talep Et
-            </a>
-            <Link
-              href="/login"
-              className="inline-flex items-center justify-center rounded-lg border border-white/30 px-6 py-3 text-sm font-semibold text-white motion-safe:transition-colors hover:bg-white/10"
-            >
+    <div className="kap kapanis-kap">
+      <div className="kapanis">
+        <div>
+          <h2 className="t-h2">{baslik}</h2>
+          <p>{metin}</p>
+        </div>
+        <div className="dgler">
+          <a href={DEMO_MAILTO} className={BIRINCIL}>
+            Demo Talep Et
+          </a>
+          {giris && (
+            <Link href="/login" className="dg i beyaz-cerceve">
               Giriş Yap
             </Link>
-          </div>
+          )}
         </div>
       </div>
-    </section>
+    </div>
   );
 }

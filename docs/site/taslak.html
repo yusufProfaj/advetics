@@ -1,0 +1,862 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Advetics Site Taslağı</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+/* KILAVUZ: yalnız dört renk. Açık zeminler gri #302e2d'nin şeffaf tonu —
+   ayrı bir pastel renk tanımlanmıyor. */
+:root{
+  --beyaz:#ffffff; --siyah:#000000; --gri:#302e2d; --kirmizi:#ff2400;
+  --zemin:#ffffff; --zemin2:rgba(48,46,45,.045); --cizgi:rgba(48,46,45,.14);
+  --metin:#000000; --soluk:rgba(48,46,45,.72); --kart:#ffffff;
+  --golge:0 1px 2px rgba(0,0,0,.05),0 12px 32px -12px rgba(0,0,0,.18);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --zemin:#000; --zemin2:rgba(255,255,255,.05); --cizgi:rgba(255,255,255,.14);
+  --metin:#fff; --soluk:rgba(255,255,255,.66); --kart:#302e2d;
+  --golge:0 12px 32px -12px rgba(0,0,0,.6);
+}}
+:root[data-theme="dark"]{
+  --zemin:#000; --zemin2:rgba(255,255,255,.05); --cizgi:rgba(255,255,255,.14);
+  --metin:#fff; --soluk:rgba(255,255,255,.66); --kart:#302e2d;
+  --golge:0 12px 32px -12px rgba(0,0,0,.6);
+}
+*{box-sizing:border-box;margin:0}
+html{scroll-behavior:smooth}
+body{background:var(--zemin);color:var(--metin);font:15px/1.6 "Open Sans",system-ui,sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+h1,h2,h3,.mont{font-family:Montserrat,system-ui,sans-serif;letter-spacing:-.02em;line-height:1.12}
+a{color:inherit}
+.kap{max-width:1160px;margin:0 auto;padding:0 24px}
+@media(max-width:600px){.kap{padding:0 16px}}
+
+/* ── Taslak gezinme (yalnız taslakta) ── */
+.taslak-cubuk{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:90;display:flex;gap:4px;padding:5px;border-radius:999px;background:var(--siyah);box-shadow:var(--golge);max-width:calc(100% - 24px);overflow-x:auto}
+.taslak-cubuk a{color:#fff;text-decoration:none;font:600 12px "Open Sans";padding:7px 12px;border-radius:999px;white-space:nowrap}
+.taslak-cubuk a.acik{background:var(--kirmizi)}
+
+/* ── Menü ── */
+.ust{position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--zemin) 88%,transparent);backdrop-filter:saturate(1.4) blur(10px);border-bottom:1px solid transparent;transition:border-color .2s}
+.ust.kaydi{border-color:var(--cizgi)}
+.ust .kap{display:flex;align-items:center;height:64px;gap:28px}
+.logo{display:flex;align-items:center;gap:8px;font:800 19px Montserrat;text-decoration:none}
+.logo i{width:26px;height:26px;border-radius:7px;background:var(--kirmizi);display:grid;place-items:center;color:#fff;font-style:normal;font-size:14px}
+.menu{display:flex;gap:4px;flex:1}
+.menu>div{position:relative}
+.menu button,.menu>a{background:none;border:0;font:600 14px "Open Sans";color:var(--soluk);padding:8px 12px;border-radius:8px;cursor:pointer;text-decoration:none;display:inline-flex;gap:4px;align-items:center}
+.menu button:hover,.menu>a:hover{color:var(--metin);background:var(--zemin2)}
+.acilir{position:absolute;top:calc(100% + 6px);left:0;min-width:480px;background:var(--kart);border:1px solid var(--cizgi);border-radius:14px;box-shadow:var(--golge);padding:8px;display:grid;grid-template-columns:1fr 1fr;gap:2px;opacity:0;visibility:hidden;transform:translateY(-4px);transition:.18s}
+.menu>div:hover .acilir,.menu>div:focus-within .acilir{opacity:1;visibility:visible;transform:none}
+.acilir a{display:block;padding:10px 12px;border-radius:9px;text-decoration:none}
+.acilir a:hover{background:var(--zemin2)}
+.acilir b{display:block;font:700 13.5px Montserrat}
+.acilir span{font-size:12.5px;color:var(--soluk)}
+.sag{display:flex;gap:8px;align-items:center}
+.dg{display:inline-flex;align-items:center;justify-content:center;gap:8px;font:700 14px "Open Sans";padding:10px 18px;border-radius:10px;text-decoration:none;border:1px solid transparent;cursor:pointer;transition:transform .15s,background .15s}
+.dg:active{transform:scale(.97)}
+.dg.b{background:var(--kirmizi);color:#fff}
+.dg.b:hover{background:#e02000}
+.dg.i{background:transparent;color:var(--metin);border-color:var(--cizgi)}
+.dg.i:hover{background:var(--zemin2)}
+.dg.k{background:var(--metin);color:var(--zemin)}
+@media(max-width:900px){.menu,.sag .dg.i{display:none}}
+
+/* ── Bölümler ── */
+section{padding:96px 0}
+section.gri{background:var(--zemin2)}
+.ust-baslik{display:inline-flex;align-items:center;gap:8px;font:700 12px "Open Sans";letter-spacing:.08em;text-transform:uppercase;color:var(--kirmizi);margin-bottom:14px}
+.ust-baslik::before{content:"";width:18px;height:2px;background:var(--kirmizi)}
+h1{font-size:clamp(38px,6vw,68px);font-weight:800}
+h2{font-size:clamp(28px,3.6vw,44px);font-weight:800}
+.alt{font-size:17px;color:var(--soluk);max-width:520px;margin-top:16px}
+.modul{display:grid;grid-template-columns:5fr 7fr;gap:64px;align-items:center}
+.modul.ters{grid-template-columns:7fr 5fr}
+.modul.ters .yazi{order:2}
+@media(max-width:900px){.modul,.modul.ters{grid-template-columns:1fr;gap:36px}.modul.ters .yazi{order:0}section{padding:72px 0}}
+.maddeler{list-style:none;padding:0;margin-top:22px;display:grid;gap:10px}
+.maddeler li{display:flex;gap:10px;font-size:14.5px}
+.maddeler li::before{content:"";flex:none;width:18px;height:18px;margin-top:2px;border-radius:50%;background:var(--kirmizi) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12l5 5L20 7'/%3E%3C/svg%3E") center/11px no-repeat}
+.bag{display:inline-flex;gap:6px;align-items:center;margin-top:22px;font:700 14px "Open Sans";color:var(--metin);text-decoration:none;border-bottom:2px solid var(--kirmizi);padding-bottom:2px}
+
+/* ── Simülasyon sahnesi ── */
+.sahne{position:relative;min-height:400px;display:grid;place-items:center}
+.pencere{width:100%;max-width:620px;background:var(--kart);border:1px solid var(--cizgi);border-radius:16px;box-shadow:var(--golge);overflow:hidden}
+.pencere .bas{display:flex;align-items:center;gap:8px;padding:11px 14px;border-bottom:1px solid var(--cizgi);font:700 12.5px "Open Sans"}
+.pencere .bas .nokta{display:flex;gap:5px}
+.pencere .bas .nokta i{width:9px;height:9px;border-radius:50%;background:var(--cizgi)}
+.pencere .bas .yer{margin-left:6px;color:var(--soluk);font-weight:600}
+.pencere .ic{padding:18px}
+.kart{background:var(--kart);border:1px solid var(--cizgi);border-radius:12px}
+.etiket{font:700 11px "Open Sans";color:var(--soluk);text-transform:uppercase;letter-spacing:.05em}
+.alan{border:1px solid var(--cizgi);border-radius:9px;padding:9px 11px;font-size:13.5px;min-height:38px;display:flex;align-items:center;gap:6px;background:var(--zemin)}
+.imlec::after{content:"";width:1.5px;height:15px;background:var(--metin);display:inline-block;margin-left:1px;animation:yanip 1s steps(1) infinite}
+@keyframes yanip{50%{opacity:0}}
+.cip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--cizgi);border-radius:999px;padding:6px 12px;font:600 12.5px "Open Sans";transition:.25s;background:var(--kart)}
+.cip.sec{background:var(--metin);color:var(--zemin);border-color:var(--metin)}
+.mini-dg{background:var(--kirmizi);color:#fff;border-radius:9px;padding:9px 14px;font:700 13px "Open Sans";display:inline-flex;align-items:center;justify-content:center;transition:transform .15s,opacity .3s}
+.mini-dg.basildi{transform:scale(.93)}
+.mini-dg.pasif{opacity:.35}
+.rozet{display:inline-flex;align-items:center;gap:5px;font:700 11px "Open Sans";padding:3px 8px;border-radius:999px;background:var(--zemin2);color:var(--soluk)}
+.rozet.canli::before{content:"";width:6px;height:6px;border-radius:50%;background:#1a9a4a}  /* yeşil yalnız durum noktası */
+.rozet.k{background:var(--kirmizi);color:#fff}
+.bildirim{position:absolute;z-index:3;display:flex;gap:10px;align-items:flex-start;background:var(--siyah);color:#fff;border-radius:12px;padding:11px 14px;box-shadow:0 18px 40px -12px rgba(0,0,0,.45);font-size:13px;max-width:280px;opacity:0;transform:translateY(10px) scale(.97);transition:.4s cubic-bezier(.2,.8,.2,1);pointer-events:none}
+.bildirim.gor{opacity:1;transform:none}
+.bildirim b{display:block;font:700 13px Montserrat}
+.bildirim span{color:rgba(255,255,255,.7);font-size:12px}
+.bildirim .n{flex:none;width:8px;height:8px;border-radius:50%;background:var(--kirmizi);margin-top:5px}
+.belir{opacity:0;transform:translateY(8px);transition:.45s cubic-bezier(.2,.8,.2,1)}
+.belir.gor{opacity:1;transform:none}
+.imlec-fare{position:absolute;z-index:4;width:22px;height:22px;pointer-events:none;transition:left .7s cubic-bezier(.5,0,.2,1),top .7s cubic-bezier(.5,0,.2,1),opacity .3s;opacity:0}
+.imlec-fare.gor{opacity:1}
+.imlec-fare svg{filter:drop-shadow(0 2px 3px rgba(0,0,0,.35))}
+.imlec-fare.tik::after{content:"";position:absolute;left:-6px;top:-6px;width:20px;height:20px;border-radius:50%;border:2px solid var(--kirmizi);animation:tik .5s ease-out forwards}
+@keyframes tik{from{transform:scale(.3);opacity:1}to{transform:scale(1.6);opacity:0}}
+.telefon{width:250px;border:8px solid var(--siyah);border-radius:34px;background:var(--kart);overflow:hidden;box-shadow:var(--golge)}
+.telefon .cerceve{height:450px;overflow:hidden;position:relative}
+.cubuk-grafik{display:flex;align-items:flex-end;gap:6px;height:110px}
+.cubuk-grafik i{flex:1;background:var(--gri);border-radius:4px 4px 0 0;height:4%;transition:height .8s cubic-bezier(.2,.8,.2,1)}
+:root[data-theme="dark"] .cubuk-grafik i{background:#fff}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .cubuk-grafik i{background:#fff}}
+.cubuk-grafik i.son{background:var(--kirmizi)}
+.tekrar{position:absolute;right:0;bottom:-34px;background:none;border:0;font:600 12px "Open Sans";color:var(--soluk);cursor:pointer;display:flex;gap:5px;align-items:center}
+.tekrar:hover{color:var(--metin)}
+
+/* hero */
+.hero{padding:72px 0 88px}
+.hero .modul{grid-template-columns:5fr 7fr}
+.hero h1 em{font-style:normal;color:var(--kirmizi)}
+.hero .dgler{display:flex;gap:10px;flex-wrap:wrap;margin-top:28px}
+.hero .not{margin-top:18px;font-size:12.5px;color:var(--soluk)}
+.platformlar{display:flex;gap:10px 28px;flex-wrap:wrap;align-items:center;justify-content:center;padding:26px 0;border-top:1px solid var(--cizgi);border-bottom:1px solid var(--cizgi);font:700 15px Montserrat;color:var(--soluk)}
+.platformlar small{font:600 12px "Open Sans";text-transform:uppercase;letter-spacing:.08em}
+
+/* modül sekmeli özet (hero altı) */
+.modul-seridi{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:28px}
+.modul-seridi a{text-decoration:none}
+
+/* nasıl çalışır */
+.adimlar{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:44px;counter-reset:a}
+.adimlar>div{padding:22px;border-radius:14px;background:var(--kart);border:1px solid var(--cizgi);position:relative;overflow:hidden}
+.adimlar>div::before{counter-increment:a;content:counter(a);font:800 13px Montserrat;width:28px;height:28px;border-radius:8px;display:grid;place-items:center;background:var(--metin);color:var(--zemin);margin-bottom:16px}
+.adimlar>div::after{content:"";position:absolute;left:0;bottom:0;height:3px;width:0;background:var(--kirmizi);transition:width 1.2s ease}
+.adimlar.gor>div::after{width:100%}
+.adimlar>div:nth-child(2)::after{transition-delay:.4s}.adimlar>div:nth-child(3)::after{transition-delay:.8s}.adimlar>div:nth-child(4)::after{transition-delay:1.2s}
+.adimlar h3{font-size:17px;margin-bottom:6px}
+.adimlar p{font-size:13.5px;color:var(--soluk)}
+@media(max-width:900px){.adimlar{grid-template-columns:1fr 1fr}}
+@media(max-width:560px){.adimlar{grid-template-columns:1fr}}
+
+/* fiyat */
+.donem{display:inline-flex;padding:4px;border-radius:999px;border:1px solid var(--cizgi);margin-top:24px}
+.donem button{border:0;background:none;font:700 13px "Open Sans";padding:8px 16px;border-radius:999px;cursor:pointer;color:var(--soluk)}
+.donem button.acik{background:var(--metin);color:var(--zemin)}
+.donem small{color:var(--kirmizi);font-weight:700}
+.paketler{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:36px;align-items:stretch}
+@media(max-width:960px){.paketler{grid-template-columns:1fr}}
+.paket{background:var(--kart);border:1px solid var(--cizgi);border-radius:18px;padding:28px;display:flex;flex-direction:column;position:relative}
+.paket.one{border:2px solid var(--kirmizi)}
+.paket .one-rozet{position:absolute;top:-12px;left:28px}
+.paket h3{font-size:20px}
+.paket .kim{font-size:13.5px;color:var(--soluk);margin-top:6px;min-height:42px}
+.paket .fiyat{margin:22px 0 4px;display:flex;align-items:baseline;gap:4px}
+.paket .fiyat b{font:800 42px Montserrat;letter-spacing:-.03em}
+.paket .fiyat span{color:var(--soluk);font-size:14px}
+.paket .vergi{font-size:12px;color:var(--soluk)}
+.paket .dg{margin-top:20px;width:100%}
+.paket ul{list-style:none;padding:0;margin-top:22px;display:grid;gap:9px;font-size:13.5px}
+.paket li{display:flex;gap:9px}
+.paket li::before{content:"✓";color:var(--kirmizi);font-weight:800}
+.paket li.yok{color:var(--soluk);text-decoration:line-through}
+.paket li.yok::before{content:"–";color:var(--soluk)}
+.hesap{margin-top:20px;padding:16px;border-radius:12px;background:var(--zemin2)}
+.hesap label{display:flex;justify-content:space-between;font:700 13px "Open Sans"}
+.hesap input[type=range]{width:100%;accent-color:var(--kirmizi);margin:10px 0 4px}
+.hesap .kirilim{font-size:12px;color:var(--soluk);display:grid;gap:3px}
+.hesap .kirilim div{display:flex;justify-content:space-between}
+.karsilastir{width:100%;border-collapse:collapse;margin-top:40px;font-size:14px}
+.karsilastir th,.karsilastir td{padding:12px 10px;border-bottom:1px solid var(--cizgi);text-align:center}
+.karsilastir th:first-child,.karsilastir td:first-child{text-align:left}
+.karsilastir thead th{font:700 13px Montserrat}
+.karsilastir .g{color:var(--soluk)}
+.tablo-sar{overflow-x:auto}
+
+/* sss */
+.sss details{border-bottom:1px solid var(--cizgi);padding:18px 0}
+.sss summary{cursor:pointer;list-style:none;font:700 16px Montserrat;display:flex;justify-content:space-between;gap:16px}
+.sss summary::after{content:"+";font-size:22px;color:var(--kirmizi);transition:transform .2s}
+.sss details[open] summary::after{transform:rotate(45deg)}
+.sss p{margin-top:10px;color:var(--soluk);max-width:760px}
+
+/* kapanış + alt bilgi */
+.kapanis{background:var(--siyah);color:#fff;border-radius:24px;padding:56px;display:flex;justify-content:space-between;align-items:center;gap:24px;flex-wrap:wrap}
+.kapanis p{color:rgba(255,255,255,.7);margin-top:10px}
+footer{padding:64px 0 96px;border-top:1px solid var(--cizgi);margin-top:96px}
+.alt-bilgi{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:32px}
+.alt-bilgi h4{font:700 13px Montserrat;margin-bottom:12px}
+.alt-bilgi a{display:block;text-decoration:none;color:var(--soluk);font-size:13.5px;padding:3px 0}
+.alt-bilgi a:hover{color:var(--metin)}
+@media(max-width:800px){.alt-bilgi{grid-template-columns:1fr 1fr}}
+
+/* çerez bandı */
+.cerez{position:fixed;left:16px;bottom:72px;z-index:80;width:min(420px,calc(100% - 32px));background:var(--kart);border:1px solid var(--cizgi);border-radius:16px;box-shadow:var(--golge);padding:18px;transform:translateY(20px);opacity:0;visibility:hidden;transition:.35s}
+.cerez.gor{transform:none;opacity:1;visibility:visible}
+.cerez h4{font:700 15px Montserrat}
+.cerez p{font-size:13px;color:var(--soluk);margin-top:6px}
+.cerez .sec{display:grid;gap:8px;margin:14px 0}
+.cerez .sec label{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px;padding:10px 12px;border:1px solid var(--cizgi);border-radius:10px}
+.cerez .sec small{display:block;color:var(--soluk);font-size:11.5px}
+.anahtar{appearance:none;width:36px;height:20px;border-radius:999px;background:var(--cizgi);position:relative;cursor:pointer;flex:none;transition:.2s}
+.anahtar::after{content:"";position:absolute;left:2px;top:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:.2s}
+.anahtar:checked{background:var(--kirmizi)}
+.anahtar:checked::after{left:18px}
+.anahtar:disabled{opacity:.55;cursor:not-allowed}
+.cerez .dgler{display:flex;gap:8px;flex-wrap:wrap}
+.cerez .dgler .dg{padding:9px 12px;font-size:13px;flex:1}
+
+/* yasal sayfa */
+.yasal{display:grid;grid-template-columns:230px minmax(0,1fr);gap:56px;padding:56px 0 0}
+.yasal nav{position:sticky;top:88px;align-self:start}
+.yasal nav .etiket{margin-bottom:10px;display:block}
+.yasal nav a{display:block;text-decoration:none;font-size:13.5px;color:var(--soluk);padding:7px 12px;border-left:2px solid var(--cizgi)}
+.yasal nav a:hover,.yasal nav a.acik{color:var(--metin);border-color:var(--kirmizi);font-weight:600}
+.yasal nav .belgeler{margin-top:22px;display:grid;gap:4px}
+.yasal nav .belgeler a{border:0;padding:8px 12px;border-radius:9px}
+.yasal nav .belgeler a.acik{background:var(--zemin2)}
+.yasal article h1{font-size:clamp(32px,4vw,46px)}
+.yasal article .tarih{color:var(--soluk);font-size:13px;margin-top:10px}
+.yasal article h2{font-size:21px;margin:40px 0 10px;scroll-margin-top:90px}
+.yasal article p,.yasal article li{color:var(--soluk);font-size:15px}
+.yasal article p+p{margin-top:10px}
+.yasal article ul{padding-left:20px;margin-top:8px;display:grid;gap:5px}
+.yasal table{width:100%;border-collapse:collapse;margin-top:14px;font-size:13.5px}
+.yasal th,.yasal td{text-align:left;padding:10px;border-bottom:1px solid var(--cizgi);vertical-align:top}
+.yasal th{font:700 12.5px Montserrat}
+.yasal code{font-size:12.5px;background:var(--zemin2);padding:1px 6px;border-radius:5px}
+.ozet-kutu{margin-top:24px;padding:18px 20px;border-radius:14px;border:1px solid var(--cizgi);border-left:3px solid var(--kirmizi)}
+.ozet-kutu b{font-family:Montserrat}
+@media(max-width:900px){.yasal{grid-template-columns:1fr;gap:24px}.yasal nav{position:static}}
+
+.gorunum{display:none}.gorunum.acik{display:block}
+
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{transition:none!important;animation:none!important}
+  html{scroll-behavior:auto}
+}
+</style>
+</head>
+<body>
+
+<header class="ust" id="ust">
+  <div class="kap">
+    <a class="logo" href="#ana"><i>A</i>Advetics</a>
+    <nav class="menu" aria-label="Ana menü">
+      <div>
+        <button aria-haspopup="true">Özellikler <span aria-hidden="true">▾</span></button>
+        <div class="acilir">
+          <a href="#tek-panel"><b>Tek Panel</b><span>Meta, Google, LinkedIn bir ekranda</span></a>
+          <a href="#reklam-kurma"><b>Reklam Kurma</b><span>Anlatın, kurulumu o yapsın</span></a>
+          <a href="#planlama"><b>Planlama</b><span>Strateji raporu ve onay</span></a>
+          <a href="#akilli-boost"><b>Akıllı Boost</b><span>Gönderiyi kendiliğinden öne çıkarır</span></a>
+          <a href="#iyilestirme"><b>İyileştirme</b><span>Kurallar sizin yerinize izler</span></a>
+          <a href="#raporlama"><b>Raporlama</b><span>Markalı PDF, otomatik mail</span></a>
+          <a href="#olcum"><b>Ölçüm Kurulumu</b><span>Piksel, GTM, GA4 tek listede</span></a>
+          <a href="#asistan"><b>Yapay Zekâ Asistanı</b><span>Sorun, rakamla cevaplasın</span></a>
+        </div>
+      </div>
+      <div>
+        <button aria-haspopup="true">Çözümler <span aria-hidden="true">▾</span></button>
+        <div class="acilir" style="min-width:300px;grid-template-columns:1fr">
+          <a href="#fiyat"><b>Küçük işletmeler</b><span>Tek hesap, ajanssız reklam</span></a>
+          <a href="#fiyat"><b>Şirketler</b><span>Birden çok proje ve ekip</span></a>
+          <a href="#fiyat"><b>Ajanslar</b><span>Müşteri başına workspace, beyaz etiket</span></a>
+        </div>
+      </div>
+      <a href="#entegrasyon">Entegrasyonlar</a>
+      <a href="#fiyat" data-git="fiyat">Fiyatlandırma</a>
+      <a href="#guvenlik">Güvenlik</a>
+    </nav>
+    <div class="sag">
+      <a class="dg i" href="#">Giriş Yap</a>
+      <a class="dg b" href="#">Demo Talep Et</a>
+    </div>
+  </div>
+</header>
+
+<!-- ═════════════ ANA SAYFA ═════════════ -->
+<div class="gorunum acik" id="v-ana">
+
+<section class="hero">
+  <div class="kap modul">
+    <div class="yazi">
+      <span class="ust-baslik">Meta · Google · LinkedIn için tek panel</span>
+      <h1>Ne yapılacağını söyler.<br><em>Onaylarsanız yapar.</em></h1>
+      <p class="alt">Reklamcılık bilmeniz gerekmez. Advetics hesaplarınızı izler, kampanyayı kurar, bütçeyi korur ve raporu müşterinize kendisi gönderir. Siz yalnız onaylarsınız.</p>
+      <div class="dgler">
+        <a class="dg b" href="#">Demo Talep Et</a>
+        <a class="dg i" href="#tek-panel">Nasıl çalıştığını gör ↓</a>
+      </div>
+      <p class="not">Ekrandaki rakamlar örnektir.</p>
+    </div>
+    <div class="sahne" data-sim="hero">
+      <div class="pencere">
+        <div class="bas"><span class="nokta"><i></i><i></i><i></i></span><span class="yer">Genel Bakış · Ege Yapı</span><span style="margin-left:auto" class="rozet canli">Canlı</span></div>
+        <div class="ic" style="display:grid;gap:14px">
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+            <div class="kart" style="padding:12px"><div class="etiket">Harcama</div><div class="mont" style="font-size:22px;font-weight:800" data-say="48250" data-on="₺">0 ₺</div></div>
+            <div class="kart" style="padding:12px"><div class="etiket">Form</div><div class="mont" style="font-size:22px;font-weight:800" data-say="312">0</div></div>
+            <div class="kart" style="padding:12px"><div class="etiket">Form başı</div><div class="mont" style="font-size:22px;font-weight:800" data-say="154" data-on="₺">0 ₺</div></div>
+          </div>
+          <div class="kart" style="padding:14px">
+            <div style="display:flex;justify-content:space-between"><span class="etiket">Son 14 gün</span><span class="rozet">Günlük form</span></div>
+            <div class="cubuk-grafik" style="margin-top:12px" data-cubuk="18,26,22,31,28,36,33,40,38,47,44,52,49,63"></div>
+          </div>
+          <div class="kart belir" data-adim="oneri" style="padding:14px;display:flex;gap:12px;align-items:center;border-left:3px solid var(--kirmizi)">
+            <div style="flex:1"><b class="mont" style="font-size:14px">Öneri: bütçeyi Instagram'a kaydır</b><div style="font-size:12.5px;color:var(--soluk)">Instagram'da form başı 118 ₺, Facebook'ta 212 ₺.</div></div>
+            <span class="mini-dg" data-dg="onayla">Onayla</span>
+          </div>
+        </div>
+      </div>
+      <div class="bildirim" style="right:-12px;top:22px" data-bildirim="1"><i class="n"></i><div><b>Bütçe güncellendi</b><span>Meta'da kaydedildi ve geri okundu.</span></div></div>
+      <div class="imlec-fare"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M4 2l16 9-7 2-3 7z" fill="#000" stroke="#fff" stroke-width="1.5"/></svg></div>
+    </div>
+  </div>
+</section>
+
+<div class="kap" id="entegrasyon"><div class="platformlar"><small>Bağlandığı yerler</small><span>Meta</span><span>Instagram</span><span>Google Ads</span><span>YouTube</span><span>LinkedIn Ads</span><span>GA4</span><span>Tag Manager</span></div></div>
+
+<!-- 1 Tek panel -->
+<section id="tek-panel">
+  <div class="kap modul ters">
+    <div class="yazi">
+      <span class="ust-baslik">Tek Panel</span>
+      <h2>Üç platform, tek tablo. Aynı dilde.</h2>
+      <p class="alt">Meta "sonuç", Google "dönüşüm", LinkedIn "lead" der. Advetics hepsini aynı adla, aynı tarih aralığında gösterir; hangi kampanyanın para kazandırdığını tek bakışta görürsünüz.</p>
+      <ul class="maddeler"><li>Şirket → proje → kampanya → reklam inişi</li><li>Her listede gösterilen ve toplam sayı yazar</li><li>Satırdan durdur, bütçe değiştir</li></ul>
+    </div>
+    <div class="sahne" data-sim="tablo">
+      <div class="pencere">
+        <div class="bas"><span class="nokta"><i></i><i></i><i></i></span><span class="yer">Reklam Yöneticisi</span></div>
+        <div class="ic" style="padding:0">
+          <div style="display:flex;gap:6px;padding:12px 14px;border-bottom:1px solid var(--cizgi)"><span class="cip sec" data-sekme>Tümü</span><span class="cip" data-sekme>Meta</span><span class="cip" data-sekme>Google</span><span class="cip" data-sekme>LinkedIn</span></div>
+          <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <thead><tr style="color:var(--soluk);font-size:11.5px;text-align:left"><th style="padding:10px 14px">Kampanya</th><th>Platform</th><th style="text-align:right">Harcama</th><th style="text-align:right;padding-right:14px">Sonuç</th></tr></thead>
+            <tbody data-satirlar></tbody>
+          </table>
+          <div style="padding:10px 14px;font-size:12px;color:var(--soluk);border-top:1px solid var(--cizgi)" data-sayac>4 / 4 kampanya</div>
+        </div>
+      </div>
+      <div class="imlec-fare"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M4 2l16 9-7 2-3 7z" fill="#000" stroke="#fff" stroke-width="1.5"/></svg></div>
+    </div>
+  </div>
+</section>
+
+<!-- 2 Reklam kurma -->
+<section id="reklam-kurma" class="gri">
+  <div class="kap modul">
+    <div class="yazi">
+      <span class="ust-baslik">Reklam Kurma · AdvCampaign</span>
+      <h2>Ne istediğinizi söyleyin. Kurulumu o seçsin.</h2>
+      <p class="alt">Hedef, yerleşim, teklif stratejisi sorulmaz. "Bölgemde çok kişi görsün" ya da "WhatsApp'tan yazsınlar" demeniz yeter; en uygun kurulum seçilir, önizleme onayınıza gelir.</p>
+      <ul class="maddeler"><li>Satış, form, mesaj, video, erişim amaçları</li><li>Kurulumdan sonra platformdan geri okur, farkı söyler</li><li>Kurulum duraklatılmış başlar, siz açarsınız</li></ul>
+    </div>
+    <div class="sahne" data-sim="kurma">
+      <div style="display:flex;gap:22px;align-items:center;width:100%;justify-content:center">
+        <div class="pencere" style="max-width:330px">
+          <div class="bas"><span class="yer" style="margin:0">Yeni reklam</span><span class="rozet" style="margin-left:auto" data-durum>Taslak</span></div>
+          <div class="ic" style="display:grid;gap:12px">
+            <div><div class="etiket">Ne istiyorsunuz?</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px"><span class="cip" data-amac>Satış</span><span class="cip" data-amac="1">WhatsApp mesajı</span><span class="cip" data-amac>Form</span></div></div>
+            <div><div class="etiket">Günlük bütçe</div><div class="alan" style="margin-top:6px" data-yaz="butce"></div></div>
+            <div><div class="etiket">Bölge</div><div class="alan" style="margin-top:6px" data-yaz="bolge"></div></div>
+            <span class="mini-dg pasif" data-dg="kur">Önizlemeyi hazırla</span>
+          </div>
+        </div>
+        <div class="telefon belir" data-adim="tel" style="flex:none">
+          <div class="cerceve" style="padding:14px;display:grid;align-content:start;gap:10px">
+            <div style="display:flex;gap:8px;align-items:center"><i style="width:30px;height:30px;border-radius:50%;background:var(--gri)"></i><div style="font-size:12px;line-height:1.3"><b>Ege Yapı</b><br><span style="color:var(--soluk)">Sponsorlu</span></div></div>
+            <div style="font-size:12px">Hayalinizdeki daire Bornova'da. Fiyat ve plan için yazın.</div>
+            <div style="aspect-ratio:4/5;border-radius:8px;background:linear-gradient(0deg,rgba(0,0,0,.0),rgba(0,0,0,0)),var(--zemin2);display:grid;place-items:center;color:var(--soluk);font-size:11px">4:5 görsel</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;border-top:1px solid var(--cizgi);padding-top:8px"><span>api.whatsapp.com</span><span class="mini-dg" style="padding:6px 10px;font-size:11.5px">WhatsApp'tan yaz</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="bildirim" style="right:0;bottom:-6px" data-bildirim="1"><i class="n"></i><div><b>Kurulum hazır, duraklatılmış</b><span>1 kampanya · 1 set · 2 reklam. Açmak sizde.</span></div></div>
+      <div class="imlec-fare"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M4 2l16 9-7 2-3 7z" fill="#000" stroke="#fff" stroke-width="1.5"/></svg></div>
+    </div>
+  </div>
+</section>
+
+<!-- 3 Planlama -->
+<section id="planlama">
+  <div class="kap modul ters">
+    <div class="yazi">
+      <span class="ust-baslik">Planlama · AdvStrategy</span>
+      <h2>Strateji raporu adım adım kurulur, müşteri bağlantıdan onaylar.</h2>
+      <p class="alt">Hedef, bütçe, bölge ve kitle seçilir; bütçe platformlara bölünür ve kurumsal kimlikli bir rapor çıkar. Müşteri girişsiz bağlantıyla onaylar, plan tek tıkla kampanyaya döner.</p>
+      <ul class="maddeler"><li>Geçmiş veri yoksa tahmin uydurmaz</li><li>Onay kaydı ad ve e-postayla saklanır</li><li>Her kalem tek kurulum rehberine aktarılır</li></ul>
+    </div>
+    <div class="sahne" data-sim="plan">
+      <div class="pencere">
+        <div class="bas"><span class="yer" style="margin:0">Strateji oluştur</span><span class="rozet" style="margin-left:auto" data-adimno>1 / 4</span></div>
+        <div class="ic" style="display:grid;gap:16px">
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px" data-ilerleme><i style="height:4px;border-radius:2px;background:var(--kirmizi)"></i><i style="height:4px;border-radius:2px;background:var(--cizgi)"></i><i style="height:4px;border-radius:2px;background:var(--cizgi)"></i><i style="height:4px;border-radius:2px;background:var(--cizgi)"></i></div>
+          <div><div style="display:flex;justify-content:space-between"><span class="etiket">Aylık bütçe</span><b class="mont" data-butce>20.000 ₺</b></div>
+            <div style="height:6px;border-radius:3px;background:var(--cizgi);margin-top:10px;position:relative"><i data-kaydir style="position:absolute;left:0;top:0;bottom:0;width:20%;background:var(--kirmizi);border-radius:3px;transition:width 1.2s cubic-bezier(.4,0,.2,1)"></i></div></div>
+          <div style="display:grid;gap:9px" data-dagilim>
+            <div><div style="display:flex;justify-content:space-between;font-size:12.5px"><span>Meta · Form</span><b>%55</b></div><div style="height:8px;border-radius:4px;background:var(--zemin2)"><i style="display:block;height:100%;width:0;border-radius:4px;background:var(--gri);transition:width 1s .1s" data-w="55"></i></div></div>
+            <div><div style="display:flex;justify-content:space-between;font-size:12.5px"><span>Google · Arama</span><b>%35</b></div><div style="height:8px;border-radius:4px;background:var(--zemin2)"><i style="display:block;height:100%;width:0;border-radius:4px;background:var(--gri);transition:width 1s .3s" data-w="35"></i></div></div>
+            <div><div style="display:flex;justify-content:space-between;font-size:12.5px"><span>Meta · Yeniden hedefleme</span><b>%10</b></div><div style="height:8px;border-radius:4px;background:var(--zemin2)"><i style="display:block;height:100%;width:0;border-radius:4px;background:var(--kirmizi);transition:width 1s .5s" data-w="10"></i></div></div>
+          </div>
+          <div style="display:flex;gap:8px;justify-content:flex-end"><span class="mini-dg" style="background:transparent;color:var(--metin);border:1px solid var(--cizgi)">PDF</span><span class="mini-dg" data-dg="gonder">Müşteriye gönder</span></div>
+        </div>
+      </div>
+      <div class="bildirim" style="left:-10px;bottom:-10px" data-bildirim="1"><i class="n"></i><div><b>Müşteri planı onayladı</b><span>Ayşe K. · 14:32 · 3 kalem kuruluma hazır</span></div></div>
+      <div class="imlec-fare"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M4 2l16 9-7 2-3 7z" fill="#000" stroke="#fff" stroke-width="1.5"/></svg></div>
+    </div>
+  </div>
+</section>
+
+<!-- 4 Akıllı boost -->
+<section id="akilli-boost" class="gri">
+  <div class="kap modul">
+    <div class="yazi">
+      <span class="ust-baslik">Akıllı Boost</span>
+      <h2>Gönderiyi paylaşın. Öne çıkarmayı o hazırlasın.</h2>
+      <p class="alt">Instagram ve YouTube'a yeni içerik düştüğünde kart hazırlanır: hedef kitle, bütçe ve süre önerilir. Onaylarsanız reklam olur; tek tıkla.</p>
+      <ul class="maddeler"><li>Aynı içerik iki kez öne çıkarılmaz</li><li>Ön ayarla tamamen otomatik de çalışır</li><li>Bitince kendiliğinden kapanır</li></ul>
+    </div>
+    <div class="sahne" data-sim="boost">
+      <div style="display:flex;gap:22px;align-items:center;justify-content:center;width:100%">
+        <div class="telefon" style="flex:none">
+          <div class="cerceve" style="padding:12px;display:grid;align-content:start;gap:8px">
+            <div style="font:800 15px Montserrat">Instagram</div>
+            <div class="belir" data-adim="gonderi" style="display:grid;gap:6px">
+              <div style="display:flex;gap:8px;align-items:center;font-size:12px"><i style="width:26px;height:26px;border-radius:50%;background:var(--gri)"></i><b>egeyapi</b><span style="color:var(--soluk)">· şimdi</span></div>
+              <div style="aspect-ratio:1;border-radius:8px;background:var(--zemin2);display:grid;place-items:center;font-size:11px;color:var(--soluk)">Yeni gönderi</div>
+              <div style="font-size:11.5px">Teslim tarihi açıklandı 🎉</div>
+            </div>
+          </div>
+        </div>
+        <div class="pencere belir" data-adim="kart" style="max-width:300px">
+          <div class="bas"><span class="yer" style="margin:0">Öne çıkarma önerisi</span><span class="rozet k" style="margin-left:auto">Yeni</span></div>
+          <div class="ic" style="display:grid;gap:10px;font-size:13px">
+            <div style="display:flex;justify-content:space-between"><span style="color:var(--soluk)">Kitle</span><b>İzmir · 25-54</b></div>
+            <div style="display:flex;justify-content:space-between"><span style="color:var(--soluk)">Bütçe</span><b>250 ₺ / gün</b></div>
+            <div style="display:flex;justify-content:space-between"><span style="color:var(--soluk)">Süre</span><b>5 gün</b></div>
+            <span class="mini-dg" data-dg="boost">Öne çıkar</span>
+            <div class="rozet canli belir" data-adim="yayinda" style="justify-self:center">Yayında · Meta</div>
+          </div>
+        </div>
+      </div>
+      <div class="bildirim" style="left:0;top:4px" data-bildirim="0"><i class="n"></i><div><b>Yeni gönderi algılandı</b><span>@egeyapi · öne çıkarmaya uygun</span></div></div>
+      <div class="imlec-fare"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M4 2l16 9-7 2-3 7z" fill="#000" stroke="#fff" stroke-width="1.5"/></svg></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5 İyileştirme -->
+<section id="iyilestirme">
+  <div class="kap modul ters">
+    <div class="yazi">
+      <span class="ust-baslik">İyileştirme · Kurallar</span>
+      <h2>Kuralı bir kez yazın. Gece de çalışsın.</h2>
+      <p class="alt">"Form başı 250 ₺'yi geçerse durdur", "aylık bütçenin %90'ı bittiyse uyar". Kurallar her saat kontrol eder, yaptığı her şeyi gerekçesiyle kaydeder.</p>
+      <ul class="maddeler"><li>Önce ne yapacağını gösterir, sonra açarsınız</li><li>Aylık bütçe tavanını aşan kararı reddeder</li><li>Her işlem geri alınabilir ve kayıtlıdır</li></ul>
+    </div>
+    <div class="sahne" data-sim="kural">
+      <div class="pencere">
+        <div class="bas"><span class="yer" style="margin:0">Yeni kural</span></div>
+        <div class="ic" style="display:grid;gap:12px">
+          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:13.5px">
+            <b>Eğer</b><span class="cip" data-kural="0">Form başı maliyet</span><span class="cip" data-kural="1">büyükse</span><span class="alan" style="min-height:32px;padding:5px 10px" data-yaz="esik"></span>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:13.5px"><b>Yap</b><span class="cip" data-kural="2">Reklam setini durdur</span><span class="mini-dg" data-dg="kaydet" style="margin-left:auto">Kuralı aç</span></div>
+          <table style="width:100%;border-collapse:collapse;font-size:12.5px;margin-top:4px">
+            <tr style="color:var(--soluk);text-align:left;font-size:11px"><th style="padding:8px 0">Reklam seti</th><th>Form başı</th><th style="text-align:right">Durum</th></tr>
+            <tr style="border-top:1px solid var(--cizgi)"><td style="padding:9px 0">İzmir · 25-44</td><td>142 ₺</td><td style="text-align:right"><span class="rozet canli">Yayında</span></td></tr>
+            <tr style="border-top:1px solid var(--cizgi)" data-hedef-satir><td style="padding:9px 0">Manisa · geniş</td><td data-cpa>231 ₺</td><td style="text-align:right" data-satir-durum><span class="rozet canli">Yayında</span></td></tr>
+          </table>
+        </div>
+      </div>
+      <div class="bildirim" style="right:-8px;bottom:-14px" data-bildirim="1"><i class="n"></i><div><b>Kural çalıştı · 03:00</b><span>Manisa · geniş durduruldu. Form başı 268 ₺ &gt; 250 ₺</span></div></div>
+      <div class="imlec-fare"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M4 2l16 9-7 2-3 7z" fill="#000" stroke="#fff" stroke-width="1.5"/></svg></div>
+    </div>
+  </div>
+</section>
+
+<!-- 6 Raporlama -->
+<section id="raporlama" class="gri">
+  <div class="kap modul">
+    <div class="yazi">
+      <span class="ust-baslik">Raporlama</span>
+      <h2>Ay başında rapor müşterinin posta kutusunda.</h2>
+      <p class="alt">Şablonu bir kez seçin: kapak, özet, kampanyalar, öne çıkan reklamlar, kitle. PDF kurumsal kimliğinizle üretilir, faturalarla birlikte planlanan günde gider.</p>
+      <ul class="maddeler"><li>Ekrandaki rapor ile PDF aynı belge</li><li>Türkçe karakter ve ₺ sorunsuz</li><li>Hangi alıcıya gitmediği ayrıca yazılır</li></ul>
+    </div>
+    <div class="sahne" data-sim="rapor">
+      <div style="display:flex;gap:20px;align-items:center;justify-content:center;width:100%">
+        <div class="kart" style="width:250px;aspect-ratio:1/1.414;padding:18px;display:grid;align-content:start;gap:10px;box-shadow:var(--golge)">
+          <div class="belir" data-adim="r0" style="display:flex;justify-content:space-between;align-items:center"><b class="mont" style="font-size:12px">ADVETICS</b><span style="font-size:9px;color:var(--soluk)">Eylül 2026</span></div>
+          <div class="belir" data-adim="r1"><i style="display:block;width:24px;height:3px;background:var(--kirmizi)"></i><b class="mont" style="font-size:15px;display:block;margin-top:6px">Aylık Performans Raporu</b></div>
+          <div class="belir" data-adim="r2" style="display:grid;grid-template-columns:1fr 1fr;gap:6px"><div style="border:1px solid var(--cizgi);border-radius:6px;padding:6px;font-size:9px">Harcama<br><b style="font-size:12px">48.250 ₺</b></div><div style="border-radius:6px;padding:6px;font-size:9px;background:var(--kirmizi);color:#fff">Form<br><b style="font-size:12px">312</b></div></div>
+          <div class="belir cubuk-grafik" data-adim="r3" style="height:56px;gap:3px"><i style="height:30%"></i><i style="height:45%"></i><i style="height:38%"></i><i style="height:60%"></i><i style="height:52%"></i><i style="height:74%"></i><i class="son" style="height:88%"></i></div>
+          <div class="belir" data-adim="r4" style="display:grid;gap:4px">
+            <i style="height:6px;border-radius:3px;background:var(--zemin2)"></i><i style="height:6px;border-radius:3px;background:var(--zemin2);width:80%"></i><i style="height:6px;border-radius:3px;background:var(--zemin2);width:90%"></i>
+          </div>
+        </div>
+        <div class="pencere belir" data-adim="mail" style="max-width:270px">
+          <div class="bas"><span class="yer" style="margin:0">Planlı gönderim</span></div>
+          <div class="ic" style="display:grid;gap:8px;font-size:12.5px">
+            <div><span class="etiket">Alıcılar</span><div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:5px"><span class="cip" style="padding:3px 9px">ayse@egeyapi</span><span class="cip" style="padding:3px 9px">mehmet@egeyapi</span></div></div>
+            <div><span class="etiket">Ekler</span><div style="margin-top:4px">rapor-eylul.pdf · 2 fatura</div></div>
+            <div><span class="etiket">Gün</span><div style="margin-top:4px">Her ayın 1'i · 09:00</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="bildirim" style="right:0;top:0" data-bildirim="1"><i class="n"></i><div><b>Rapor gönderildi</b><span>2 alıcı · 3 ek · 1 Ekim 09:00</span></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 7 Ölçüm -->
+<section id="olcum">
+  <div class="kap modul ters">
+    <div class="yazi">
+      <span class="ust-baslik">Ölçüm Kurulumu</span>
+      <h2>Piksel, Tag Manager, Analytics. Tek liste, tek sayaç.</h2>
+      <p class="alt">Sihirbaz şirketin ve her projenin eksiğini çıkarır: hangi hesap bağlı değil, hangi dönüşüm ölçülmüyor. "Eksikleri tamamla" dediğinizde kurulabilen her şeyi kurar.</p>
+      <ul class="maddeler"><li>Var olan dönüşümü ikinci kez açmaz</li><li>Hesap açan adımları asla kendiliğinden yapmaz</li><li>"Sitemiz yok" diyene site adımı sormaz</li></ul>
+    </div>
+    <div class="sahne" data-sim="olcum">
+      <div class="pencere" style="max-width:460px">
+        <div class="bas"><span class="yer" style="margin:0">Kurulum · Ege Yapı</span><b class="mont" style="margin-left:auto" data-kurulum-sayac>6 / 10</b></div>
+        <div class="ic" style="display:grid;gap:4px" data-liste>
+          <div class="ol" data-tamam="1">Meta reklam hesabı atandı</div>
+          <div class="ol" data-tamam="1">Google Ads hesabı atandı</div>
+          <div class="ol" data-tamam="1">Facebook sayfası ve Instagram</div>
+          <div class="ol" data-tamam="1">Marka bilgileri</div>
+          <div class="ol" data-tamam="1">Rapor alıcıları</div>
+          <div class="ol" data-tamam="1">Özel reklam kategorisi</div>
+          <div class="ol" data-tamam="0">Meta Pixel</div>
+          <div class="ol" data-tamam="0">Tag Manager konteyneri</div>
+          <div class="ol" data-tamam="0">GA4 mülkü</div>
+          <div class="ol" data-tamam="0">Google Ads dönüşümü</div>
+          <span class="mini-dg" data-dg="tamamla" style="margin-top:10px">Eksikleri tamamla</span>
+        </div>
+      </div>
+      <div class="imlec-fare"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M4 2l16 9-7 2-3 7z" fill="#000" stroke="#fff" stroke-width="1.5"/></svg></div>
+    </div>
+  </div>
+</section>
+<style>
+.ol{display:flex;align-items:center;gap:10px;font-size:13px;padding:7px 4px;border-bottom:1px solid var(--cizgi)}
+.ol::before{content:"";flex:none;width:18px;height:18px;border-radius:50%;border:1.5px solid var(--cizgi);transition:.3s}
+.ol.ok::before{background:var(--metin) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12l5 5L20 7'/%3E%3C/svg%3E") center/11px no-repeat;border-color:var(--metin)}
+.ol.calisiyor::before{border-color:var(--kirmizi);border-top-color:transparent;animation:don .7s linear infinite}
+.ol.ok{color:var(--soluk)}
+@keyframes don{to{transform:rotate(360deg)}}
+</style>
+
+<!-- 8 Asistan -->
+<section id="asistan" class="gri">
+  <div class="kap modul">
+    <div class="yazi">
+      <span class="ust-baslik">Yapay Zekâ Asistanı</span>
+      <h2>Sorun. Rakamla cevaplasın.</h2>
+      <p class="alt">"Geçen ay neden pahalandı?" diye sorun; asistan kendi verinize bakar, sebebi rakamla söyler ve ne yapılacağını önerir. Yapmak yine sizin onayınızla.</p>
+      <ul class="maddeler"><li>Yalnız okuma yetkisiyle çalışır</li><li>Uydurmaz: veri yoksa "veri yok" der</li><li>Claude ve diğer asistanlara MCP ile bağlanır</li></ul>
+    </div>
+    <div class="sahne" data-sim="asistan">
+      <div class="pencere" style="max-width:520px">
+        <div class="bas"><span class="yer" style="margin:0">Asistan</span></div>
+        <div class="ic" style="display:grid;gap:12px;min-height:300px;align-content:end" data-sohbet>
+          <div class="belir" data-adim="s1" style="justify-self:end;background:var(--metin);color:var(--zemin);padding:10px 14px;border-radius:14px 14px 4px 14px;font-size:13.5px;max-width:80%">Eylülde form başı neden arttı?</div>
+          <div class="belir" data-adim="s2" style="justify-self:start;border:1px solid var(--cizgi);padding:12px 14px;border-radius:14px 14px 14px 4px;font-size:13.5px;max-width:88%">
+            <span data-yaz="cevap"></span>
+            <div class="belir" data-adim="s3" style="margin-top:10px;display:grid;gap:6px">
+              <div style="display:flex;justify-content:space-between;font-size:12px"><span>Manisa · geniş</span><b style="color:var(--kirmizi)">268 ₺ ↑ %74</b></div>
+              <div style="display:flex;justify-content:space-between;font-size:12px"><span>İzmir · 25-44</span><b>142 ₺ ↓ %6</b></div>
+            </div>
+          </div>
+          <div class="belir" data-adim="s4" style="display:flex;gap:6px"><span class="cip">Manisa'yı durdur</span><span class="cip">Bütçeyi İzmir'e kaydır</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Nasıl çalışır -->
+<section>
+  <div class="kap">
+    <span class="ust-baslik">Nasıl çalışır</span>
+    <h2>Dört adımda yayında.</h2>
+    <div class="adimlar" data-gozle>
+      <div><h3>Bağlayın</h3><p>Meta, Google ve LinkedIn hesaplarınızı bir kez yetkilendirin. Parola istemeyiz.</p></div>
+      <div><h3>Anlatın</h3><p>İşinizi ve ne istediğinizi yazın; sihirbaz eksikleri tek listede çıkarır.</p></div>
+      <div><h3>Onaylayın</h3><p>Kurulum önizlemesi gelir. Kontrol eder, açarsınız.</p></div>
+      <div><h3>İzleyin</h3><p>Kurallar korur, rapor ayda bir kendiliğinden gider.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- Güvenlik -->
+<section id="guvenlik" class="gri">
+  <div class="kap modul">
+    <div class="yazi">
+      <span class="ust-baslik">Güvenlik</span>
+      <h2>Verileriniz sizde, ayrı ve korunuyor.</h2>
+      <p class="alt">Her müşterinin verisi veritabanı düzeyinde ayrılır; bir müşterinin kullanıcısı diğerinin tek satırını göremez.</p>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="kart" style="padding:18px"><b class="mont">Parola istemeyiz</b><p style="font-size:13.5px;color:var(--soluk);margin-top:6px">Bağlantı platformun kendi yetkilendirmesiyle.</p></div>
+      <div class="kart" style="padding:18px"><b class="mont">Anahtarlar şifreli</b><p style="font-size:13.5px;color:var(--soluk);margin-top:6px">Erişim anahtarları şifreli saklanır.</p></div>
+      <div class="kart" style="padding:18px"><b class="mont">Rol bazlı erişim</b><p style="font-size:13.5px;color:var(--soluk);margin-top:6px">Müşteri yalnız kendi raporunu görür.</p></div>
+      <div class="kart" style="padding:18px"><b class="mont">Her işlem kayıtlı</b><p style="font-size:13.5px;color:var(--soluk);margin-top:6px">Kim neyi ne zaman değiştirdi, yazılı.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- Fiyat özeti -->
+<section id="fiyat">
+  <div class="kap" style="text-align:center">
+    <span class="ust-baslik">Fiyatlandırma</span>
+    <h2>Üç paket. Taahhüt yok.</h2>
+    <p class="alt" style="margin:16px auto 0">Reklam bütçeniz platforma doğrudan ödenir; Advetics'e yalnız abonelik ödersiniz.</p>
+    <div class="donem" role="group" aria-label="Ödeme dönemi"><button class="acik" data-donem="ay">Aylık</button><button data-donem="yil">Yıllık <small data-yillik-indirim></small></button></div>
+  </div>
+  <div class="kap"><div class="paketler" data-paketler></div>
+    <p style="text-align:center;margin-top:22px"><a class="bag" href="#fiyatlandirma" data-git="fiyat">Bütün özellikleri karşılaştır →</a></p>
+  </div>
+</section>
+
+<section class="gri sss">
+  <div class="kap" style="max-width:860px">
+    <span class="ust-baslik">Sık sorulanlar</span>
+    <h2>Merak edilenler</h2>
+    <div style="margin-top:24px" data-sss></div>
+  </div>
+</section>
+
+<div class="kap" style="margin-top:96px">
+  <div class="kapanis"><div><h2 style="color:#fff">İlk raporunuz bu ay gitsin.</h2><p>30 dakikalık demoda hesabınızı birlikte bağlayalım.</p></div><a class="dg b" href="#">Demo Talep Et</a></div>
+</div>
+</div>
+
+<!-- ═════════════ FİYATLANDIRMA SAYFASI ═════════════ -->
+<div class="gorunum" id="v-fiyat">
+<section>
+  <div class="kap" style="text-align:center">
+    <span class="ust-baslik">Fiyatlandırma</span>
+    <h1 style="font-size:clamp(34px,5vw,56px)">Büyüklüğünüze göre üç paket.</h1>
+    <p class="alt" style="margin:16px auto 0">Fiyatlar ABD doları cinsindendir, ödeme günün kuruyla TL alınır. KDV hariç.</p>
+    <div class="donem" role="group" aria-label="Ödeme dönemi"><button class="acik" data-donem="ay">Aylık</button><button data-donem="yil">Yıllık <small data-yillik-indirim></small></button></div>
+  </div>
+  <div class="kap"><div class="paketler" data-paketler></div></div>
+  <div class="kap">
+    <div class="tablo-sar"><table class="karsilastir" data-karsilastir></table></div>
+  </div>
+</section>
+<section class="gri sss"><div class="kap" style="max-width:860px"><h2>Fiyat soruları</h2><div style="margin-top:24px" data-sss></div></div></section>
+</div>
+
+<!-- ═════════════ ÇEREZ POLİTİKASI ═════════════ -->
+<div class="gorunum" id="v-cerez">
+<div class="kap yasal">
+  <nav aria-label="Bu sayfada">
+    <span class="etiket">Bu sayfada</span>
+    <a href="#c1">Çerez nedir</a><a href="#c2">Kullandığımız çerezler</a><a href="#c3">Tarayıcı depolaması</a><a href="#c4">Üçüncü taraflar</a><a href="#c5">Tercihinizi değiştirme</a><a href="#c6">İletişim</a>
+    <div class="belgeler"><span class="etiket">Yasal belgeler</span><a href="#" data-git="gizlilik">Gizlilik Politikası</a><a href="#" class="acik" data-git="cerez">Çerez Politikası</a><a href="#">Kullanım Koşulları</a><a href="#">KVKK Aydınlatma Metni</a><a href="#">Veri Silme</a></div>
+  </nav>
+  <article>
+    <span class="ust-baslik">Yasal</span>
+    <h1>Çerez Politikası</h1>
+    <p class="tarih">Son güncelleme: 14 Ekim 2026 · <a href="#">English</a></p>
+    <div class="ozet-kutu"><b>Kısaca:</b> Advetics yalnız oturumunuzu açık tutmak için zorunlu çerez kullanır. Reklam, izleme ya da analitik çerezi yoktur; bu yüzden onayınızı istemeyi gerektiren bir çerez de yoktur.</div>
+    <h2 id="c1">1. Çerez nedir</h2>
+    <p>Çerez, ziyaret ettiğiniz sitenin tarayıcınıza bıraktığı küçük bir metin dosyasıdır. Site sizi bir sonraki istekte tanımak için onu okur.</p>
+    <h2 id="c2">2. Kullandığımız çerezler</h2>
+    <p>Aşağıdaki çerezlerin hepsi <b>zorunludur</b>: olmadan giriş yapamazsınız. KVKK ve 5809 sayılı Elektronik Haberleşme Kanunu uyarınca zorunlu çerezler için açık rıza aranmaz.</p>
+    <table><thead><tr><th>Ad</th><th>Amaç</th><th>Süre</th><th>Tür</th></tr></thead><tbody>
+      <tr><td><code>adv_at</code></td><td>Oturum erişim anahtarı; kim olduğunuzu her istekte doğrular.</td><td>15 dakika</td><td>Zorunlu · birinci taraf</td></tr>
+      <tr><td><code>adv_rt</code></td><td>Oturum yenileme anahtarı; erişim süresi dolunca tekrar giriş istemeden yeniler.</td><td>30 gün</td><td>Zorunlu · birinci taraf</td></tr>
+      <tr><td><code>adv_client</code></td><td>Panelde seçtiğiniz workspace.</td><td>Oturum</td><td>Zorunlu · birinci taraf</td></tr>
+    </tbody></table>
+    <p style="margin-top:12px">Üçü de <code>HttpOnly</code> ve <code>Secure</code> olarak ayarlanır: sayfadaki betikler okuyamaz, yalnız şifreli bağlantıda gönderilir.</p>
+    <h2 id="c3">3. Tarayıcı depolaması</h2>
+    <p>Panel, kenar menüsünün açık/kapalı olması ve kapattığınız uyarılar gibi görünüm tercihlerini tarayıcınızın yerel depolamasında tutar. Bu bilgiler sunucumuza gönderilmez ve sizi tanımlamaz.</p>
+    <h2 id="c4">4. Üçüncü taraflar</h2>
+    <p>Sitede ve panelde üçüncü taraf izleme betiği (Google Analytics, Meta Pixel vb.) <b>yoktur</b>. Meta, Google veya LinkedIn hesabınızı bağlarken açılan yetkilendirme sayfaları o platformların kendi çerez politikalarına tabidir.</p>
+    <h2 id="c5">5. Tercihinizi değiştirme</h2>
+    <p>Zorunlu çerezleri tarayıcı ayarlarından silebilirsiniz; bu durumda oturumunuz kapanır. İleride isteğe bağlı bir çerez eklenirse bu sayfa güncellenir ve kullanmadan önce onayınız istenir.</p>
+    <h2 id="c6">6. İletişim</h2>
+    <p>Sorularınız için: hello@profaj.com · Veri sorumlusu: Profaj.</p>
+  </article>
+</div>
+</div>
+
+<!-- ═════════════ GİZLİLİK (yeni düzen örneği) ═════════════ -->
+<div class="gorunum" id="v-gizlilik">
+<div class="kap yasal">
+  <nav aria-label="Bu sayfada">
+    <span class="etiket">Bu sayfada</span>
+    <a href="#g1">Veri sorumlusu</a><a href="#g2">Advetics ne yapar</a><a href="#g3">İşlenen veriler</a><a href="#g4">Amaç ve hukuki dayanak</a><a href="#g5">Aktarım</a><a href="#g6">Saklama</a><a href="#g7">Haklarınız</a>
+    <div class="belgeler"><span class="etiket">Yasal belgeler</span><a href="#" class="acik" data-git="gizlilik">Gizlilik Politikası</a><a href="#" data-git="cerez">Çerez Politikası</a><a href="#">Kullanım Koşulları</a><a href="#">KVKK Aydınlatma Metni</a><a href="#">Veri Silme</a></div>
+  </nav>
+  <article>
+    <span class="ust-baslik">Yasal</span>
+    <h1>Gizlilik Politikası</h1>
+    <p class="tarih">Son güncelleme: 14 Ekim 2026 · <a href="#">English</a></p>
+    <div class="ozet-kutu"><b>Taslak notu:</b> Metin bugünkü sayfadan taşınacak; yalnız düzen değişiyor. Bir düzeltme var: bugünkü metin "yalnız Meta ve Google Ads" diyor, LinkedIn Ads ve YouTube eklenecek.</div>
+    <h2 id="g1">1. Veri sorumlusu</h2><p>Profaj · hello@profaj.com</p>
+    <h2 id="g2">2. Advetics ne yapar</h2><p>Meta, Google Ads ve LinkedIn Ads reklam hesaplarınızı tek panelde yönetmenizi sağlar…</p>
+    <h2 id="g3">3. İşlenen veriler</h2><p>…</p>
+    <h2 id="g4">4. Amaç ve hukuki dayanak</h2><p>…</p>
+    <h2 id="g5">5. Aktarım</h2><p>…</p>
+    <h2 id="g6">6. Saklama</h2><p>…</p>
+    <h2 id="g7">7. Haklarınız</h2><p>KVKK m.11 ve GDPR kapsamındaki haklar…</p>
+  </article>
+</div>
+</div>
+
+<footer>
+  <div class="kap alt-bilgi">
+    <div><a class="logo" href="#ana"><i>A</i>Advetics</a><p style="font-size:13.5px;color:var(--soluk);margin-top:12px;max-width:280px">Meta, Google ve LinkedIn reklamları için tek panel. Profaj tarafından geliştirildi.</p></div>
+    <div><h4>Ürün</h4><a href="#tek-panel">Tek Panel</a><a href="#reklam-kurma">Reklam Kurma</a><a href="#planlama">Planlama</a><a href="#akilli-boost">Akıllı Boost</a><a href="#raporlama">Raporlama</a></div>
+    <div><h4>Advetics</h4><a href="#" data-git="fiyat">Fiyatlandırma</a><a href="#guvenlik">Güvenlik</a><a href="#">Demo</a><a href="#">Giriş Yap</a></div>
+    <div><h4>Yasal</h4><a href="#" data-git="gizlilik">Gizlilik</a><a href="#" data-git="cerez">Çerez Politikası</a><a href="#">Kullanım Koşulları</a><a href="#">KVKK Aydınlatma</a><a href="#">Veri Silme</a><a href="#" data-cerez-ac>Çerez tercihleri</a></div>
+  </div>
+</footer>
+
+<div class="cerez" id="cerez" role="dialog" aria-label="Çerez tercihleri">
+  <h4>Çerezler</h4>
+  <p>Yalnız oturumunuz için zorunlu çerez kullanıyoruz. İzleme ya da reklam çerezi yok. <a href="#" data-git="cerez">Çerez Politikası</a></p>
+  <div class="sec">
+    <label><span>Zorunlu<small>Giriş ve oturum. Kapatılamaz.</small></span><input type="checkbox" class="anahtar" checked disabled></label>
+    <label><span>Analitik<small>Şu an kullanılmıyor.</small></span><input type="checkbox" class="anahtar" disabled></label>
+  </div>
+  <div class="dgler"><button class="dg i" data-cerez-kapat>Anladım</button></div>
+</div>
+
+<nav class="taslak-cubuk" aria-label="Taslak görünümleri">
+  <a href="#" class="acik" data-git="ana">Ana sayfa</a><a href="#" data-git="fiyat">Fiyatlandırma</a><a href="#" data-git="cerez">Çerez Politikası</a><a href="#" data-git="gizlilik">Gizlilik (düzen)</a><a href="#" id="tema">Tema</a>
+</nav>
+
+<script>
+/* ═══ FİYAT VERİSİ — pazar araştırması ve kullanıcı kararıyla dolacak ═══ */
+const FIYAT = {
+  yillikIndirim: 0.20,
+  paketler: [
+    { ad:'Küçük İşletme', kim:'Kendi reklamını yöneten tek işletme.', ay:49,
+      sinir:'1 workspace · 2 reklam hesabı · 2 kullanıcı',
+      ozellik:['Tek panel: Meta, Google, LinkedIn','AdvCampaign ile reklam kurma','Akıllı Boost (ayda 10 öneri)','Aylık PDF rapor','Ölçüm kurulum sihirbazı'],
+      yok:['Kurallar ile otomatik iyileştirme','Beyaz etiketli rapor'] },
+    { ad:'Şirket', kim:'Birden çok projesi ve pazarlama ekibi olan şirket.', ay:149, one:true,
+      sinir:'5 workspace · 10 reklam hesabı · 10 kullanıcı',
+      ozellik:['Küçük İşletme\'nin tamamı','AdvStrategy strateji raporu ve onay','Kurallar ile otomatik iyileştirme','Sınırsız Akıllı Boost','Planlı rapor + fatura maili','Yapay zekâ asistanı'],
+      yok:['Beyaz etiketli rapor'] },
+    { ad:'Ajans', kim:'Müşterilerini Advetics\'ten yöneten ajans.', ay:null, taban:299, dahilWs:10, wsBasi:19, wsBasi2:12, kademe:50,
+      sinir:'Taban 10 workspace · sınırsız kullanıcı',
+      ozellik:['Şirket paketinin tamamı','Müşteri başına workspace','Beyaz etiketli rapor ve mail','Müşteriye salt okunur panel','Ajans havuzu: hesap atama','Öncelikli destek'],
+      yok:[] },
+  ],
+};
+const SSS = [
+  ['Reklam bütçem Advetics üzerinden mi ödeniyor?','Hayır. Bütçe Meta, Google ve LinkedIn\'e kendi ödeme yönteminizle doğrudan ödenir. Advetics\'e yalnız abonelik ödersiniz.'],
+  ['Fiyat neden dolar?','Altyapı ve yapay zekâ maliyetlerimiz dolar cinsinden. Ödeme günün kuruyla TL alınır, faturada KDV ayrıca yazar.'],
+  ['Ajans paketinde fiyat nasıl hesaplanıyor?','Taban fiyata 10 workspace dahil. Her ek müşteri workspace\'i aylık sabit bir ücret ekler; kullanıcı sayısı sınırsızdır.'],
+  ['Hesaplarım bana mı ait kalıyor?','Evet. Advetics hesaplarınıza yetkiyle bağlanır; aboneliği bitirdiğinizde bağlantı kalkar, hesaplarınız olduğu gibi kalır.'],
+  ['Önce görebilir miyim?','Demo talep edin; 30 dakikada kendi hesabınızla birlikte bakalım.'],
+];
+let donem='ay';
+const para=n=>'$'+(Math.round(n*100)/100).toLocaleString('en-US',{maximumFractionDigits:0});
+function ajansEk(p,ws){const a=Math.max(0,Math.min(ws,p.kademe)-p.dahilWs), b=Math.max(0,ws-p.kademe);return a*p.wsBasi+b*p.wsBasi2;}
+function ajansFiyat(p,ws){return p.taban+ajansEk(p,ws);}
+function carp(n){return donem==='yil'? n*(1-FIYAT.yillikIndirim):n;}
+function paketCiz(){
+  document.querySelectorAll('[data-yillik-indirim]').forEach(e=>e.textContent='−%'+Math.round(FIYAT.yillikIndirim*100));
+  document.querySelectorAll('[data-paketler]').forEach(kap=>{
+    kap.innerHTML=FIYAT.paketler.map((p,i)=>`
+      <div class="paket ${p.one?'one':''}">
+        ${p.one?'<span class="rozet k one-rozet">En çok seçilen</span>':''}
+        <h3>${p.ad}</h3><p class="kim">${p.kim}</p>
+        <div class="fiyat">${p.ay!=null?`<b>${para(carp(p.ay))}</b><span>/ ay</span>`:`<b data-ajans-fiyat>${para(carp(p.taban))}</b><span>/ ay'dan</span>`}</div>
+        <div class="vergi">${donem==='yil'?'Yıllık faturalanır · ':''}KDV hariç</div>
+        <div style="font-size:12.5px;margin-top:10px;font-weight:600">${p.sinir}</div>
+        ${p.ay==null?`<div class="hesap"><label>Müşteri workspace'i <span data-ws-deger>10</span></label><input type="range" min="1" max="100" value="10" data-ws aria-label="Workspace sayısı"><div class="kirilim"><div><span>Taban (${p.dahilWs} dahil)</span><span>${para(carp(p.taban))}</span></div><div><span>Ek workspace (11-50: ${para(carp(p.wsBasi))}, 51+: ${para(carp(p.wsBasi2))})</span><span data-ek>$0</span></div></div></div>`:''}
+        <a class="dg ${p.one?'b':'i'}" href="#">${p.ay==null?'Teklif al':'14 gün dene'}</a>
+        <ul>${p.ozellik.map(o=>`<li>${o}</li>`).join('')}${p.yok.map(o=>`<li class="yok">${o}</li>`).join('')}</ul>
+      </div>`).join('');
+    const r=kap.querySelector('[data-ws]');
+    if(r){const p=FIYAT.paketler[2];const g=()=>{const ws=+r.value;kap.querySelector('[data-ws-deger]').textContent=ws;kap.querySelector('[data-ajans-fiyat]').textContent=para(carp(ajansFiyat(p,ws)));kap.querySelector('[data-ek]').textContent=para(carp(ajansEk(p,ws)));};r.addEventListener('input',g);g();}
+  });
+  const t=document.querySelector('[data-karsilastir]');
+  if(t){
+    const satir=[['Workspace','1','5','10 + ek'],['Reklam hesabı','2','10','Sınırsız'],['Kullanıcı','2','10','Sınırsız'],['Tek panel (Meta, Google, LinkedIn)','✓','✓','✓'],['AdvCampaign reklam kurma','✓','✓','✓'],['Akıllı Boost','Ayda 10','Sınırsız','Sınırsız'],['AdvStrategy','–','✓','✓'],['Kurallar','–','✓','✓'],['Planlı rapor maili','–','✓','✓'],['Yapay zekâ asistanı','–','✓','✓'],['Beyaz etiket','–','–','✓'],['Müşteriye salt okunur panel','–','–','✓']];
+    t.innerHTML='<thead><tr><th></th>'+FIYAT.paketler.map(p=>`<th>${p.ad}</th>`).join('')+'</tr></thead><tbody>'+satir.map(s=>'<tr>'+s.map((h,i)=>`<td class="${h==='–'?'g':''}">${h}</td>`).join('')+'</tr>').join('')+'</tbody>';
+  }
+  document.querySelectorAll('[data-sss]').forEach(k=>k.innerHTML=SSS.map(([s,c])=>`<details><summary>${s}</summary><p>${c}</p></details>`).join(''));
+}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-donem]');if(!b)return;donem=b.dataset.donem;document.querySelectorAll('[data-donem]').forEach(x=>x.classList.toggle('acik',x.dataset.donem===donem));paketCiz();});
+paketCiz();
+
+/* ═══ GÖRÜNÜMLER (yalnız taslak) ═══ */
+function git(ad){document.querySelectorAll('.gorunum').forEach(v=>v.classList.toggle('acik',v.id==='v-'+ad));document.querySelectorAll('.taslak-cubuk [data-git]').forEach(a=>a.classList.toggle('acik',a.dataset.git===ad));window.scrollTo({top:0});}
+document.addEventListener('click',e=>{const a=e.target.closest('[data-git]');if(a){e.preventDefault();git(a.dataset.git);return;}
+  const h=e.target.closest('a[href^="#"]');if(h&&h.getAttribute('href').length>1&&!document.getElementById('v-ana').classList.contains('acik')){const id=h.getAttribute('href').slice(1);if(document.querySelector('#v-ana #'+CSS.escape(id))){git('ana');setTimeout(()=>document.getElementById(id)?.scrollIntoView(),30);}}});
+document.getElementById('tema').addEventListener('click',e=>{e.preventDefault();const r=document.documentElement;const koyu=r.dataset.theme?r.dataset.theme==='dark':matchMedia('(prefers-color-scheme:dark)').matches;r.dataset.theme=koyu?'light':'dark';});
+addEventListener('scroll',()=>document.getElementById('ust').classList.toggle('kaydi',scrollY>8),{passive:true});
+setTimeout(()=>document.getElementById('cerez').classList.add('gor'),1200);
+document.querySelector('[data-cerez-kapat]').onclick=()=>document.getElementById('cerez').classList.remove('gor');
+document.querySelector('[data-cerez-ac]').onclick=e=>{e.preventDefault();document.getElementById('cerez').classList.add('gor');};
+
+/* ═══ SİMÜLASYONLAR ═══
+   Her sahne ekrana girince baştan oynar, çıkınca durur. Açılıp kapanan
+   öğe DOM'dan çıkmaz, görünürlüğü sınıfla değişir. Hareket azaltma
+   tercihinde sahne doğrudan SON hâlinde çizilir. */
+const AZ = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const bekle = ms => new Promise(r=>setTimeout(r, AZ?0:ms));
+function sahneKur(el, oyna, sifirla){
+  let tur=0, calisiyor=false;
+  const ctx={ el, iptal:()=>false,
+    q:s=>el.querySelector(s), qa:s=>[...el.querySelectorAll(s)],
+    async bekle(ms){ await bekle(ms); },
+    goster(s,v=true){ el.querySelectorAll(s).forEach(x=>x.classList.toggle('gor',v)); },
+    async yaz(s,metin,hiz=45){ const a=el.querySelector(s); a.classList.add('imlec'); a.textContent=''; for(const h of metin){ if(this.iptal())return; a.textContent+=h; await bekle(hiz);} a.classList.remove('imlec'); },
+    async fare(hedef,tikla=true){ const f=el.querySelector('.imlec-fare'); const t=typeof hedef==='string'?el.querySelector(hedef):hedef; if(!f||!t)return; const a=el.getBoundingClientRect(), b=t.getBoundingClientRect(); f.classList.add('gor'); f.style.left=(b.left-a.left+b.width*.6)+'px'; f.style.top=(b.top-a.top+b.height*.55)+'px'; await bekle(750); if(tikla){ f.classList.remove('tik'); void f.offsetWidth; f.classList.add('tik'); t.classList.add('basildi'); await bekle(160); t.classList.remove('basildi'); } },
+    async say(s){ el.querySelectorAll(s).forEach(x=>{ const hedef=+x.dataset.say, on=x.dataset.on||''; const t0=performance.now(); const adim=n=>{ const p=AZ?1:Math.min(1,(n-t0)/1300); x.textContent=Math.round(hedef*(1-Math.pow(1-p,3))).toLocaleString('tr-TR')+(on?' '+on:''); if(p<1)requestAnimationFrame(adim); }; requestAnimationFrame(adim); }); },
+  };
+  async function bas(){ const benim=++tur; ctx.iptal=()=>benim!==tur; sifirla(ctx); const f=el.querySelector('.imlec-fare'); if(f){f.classList.remove('gor');f.style.left='70%';f.style.top='90%';} await bekle(250); if(ctx.iptal())return; await oyna(ctx); if(ctx.iptal())return; const fe=el.querySelector('.imlec-fare'); if(fe) fe.classList.remove('gor'); }
+  const tk=document.createElement('button'); tk.className='tekrar'; tk.type='button'; tk.innerHTML='↻ Tekrar oynat'; tk.onclick=bas; el.appendChild(tk);
+  new IntersectionObserver(([g])=>{ if(g.isIntersecting && !calisiyor){ calisiyor=true; bas(); } else if(!g.isIntersecting){ calisiyor=false; tur++; } },{threshold:.45}).observe(el);
+}
+const sahneler = {
+  hero:[c=>{ c.goster('.belir,.bildirim',false); c.qa('.cubuk-grafik i').forEach(i=>i.style.height='4%'); c.qa('[data-say]').forEach(x=>x.textContent='0'); },
+    async c=>{ c.say('[data-say]'); const v=c.q('[data-cubuk]').dataset.cubuk.split(',').map(Number); const m=Math.max(...v); c.q('[data-cubuk]').innerHTML=v.map((x,i)=>`<i class="${i===v.length-1?'son':''}"></i>`).join(''); await c.bekle(60); c.qa('[data-cubuk] i').forEach((i,k)=>setTimeout(()=>i.style.height=(v[k]/m*100)+'%',AZ?0:k*60)); await c.bekle(1500); c.goster('[data-adim="oneri"]'); await c.bekle(1200); await c.fare('[data-dg="onayla"]'); c.q('[data-dg="onayla"]').textContent='Onaylandı ✓'; await c.bekle(300); c.goster('[data-bildirim]'); }],
+  tablo:[c=>{ c.qa('[data-sekme]').forEach((x,i)=>x.classList.toggle('sec',i===0)); c.q('[data-satirlar]').innerHTML=''; },
+    async c=>{ const S=[['Bornova daire · form','Meta','18.420 ₺','124 form'],['Marka araması','Google','9.880 ₺','61 dönüşüm'],['Instagram mesaj','Meta','11.240 ₺','96 mesaj'],['Yönetici kitlesi','LinkedIn','8.710 ₺','31 lead']];
+      const ciz=f=>{ const l=S.filter(s=>!f||s[1]===f); c.q('[data-satirlar]').innerHTML=l.map((s,i)=>`<tr class="belir" style="border-top:1px solid var(--cizgi)"><td style="padding:11px 14px;font-weight:600">${s[0]}</td><td><span class="rozet">${s[1]}</span></td><td style="text-align:right">${s[2]}</td><td style="text-align:right;padding-right:14px">${s[3]}</td></tr>`).join(''); c.q('[data-sayac]').textContent=`${l.length} / ${S.length} kampanya`; c.qa('[data-satirlar] tr').forEach((t,i)=>setTimeout(()=>t.classList.add('gor'),AZ?0:i*120)); };
+      ciz(); await c.bekle(1600); const m=c.qa('[data-sekme]')[1]; await c.fare(m); c.qa('[data-sekme]').forEach(x=>x.classList.toggle('sec',x===m)); ciz('Meta'); await c.bekle(1800); const g=c.qa('[data-sekme]')[2]; await c.fare(g); c.qa('[data-sekme]').forEach(x=>x.classList.toggle('sec',x===g)); ciz('Google'); await c.bekle(1800); const t=c.qa('[data-sekme]')[0]; await c.fare(t); c.qa('[data-sekme]').forEach(x=>x.classList.toggle('sec',x===t)); ciz(); }],
+  kurma:[c=>{ c.goster('.belir,.bildirim',false); c.qa('[data-amac]').forEach(x=>x.classList.remove('sec')); c.q('[data-yaz="butce"]').textContent=''; c.q('[data-yaz="bolge"]').textContent=''; c.q('[data-dg="kur"]').classList.add('pasif'); c.q('[data-dg="kur"]').textContent='Önizlemeyi hazırla'; c.q('[data-durum]').textContent='Taslak'; },
+    async c=>{ const a=c.q('[data-amac="1"]'); await c.fare(a); a.classList.add('sec'); await c.bekle(300); await c.fare('[data-yaz="butce"]',true); await c.yaz('[data-yaz="butce"]','300 ₺'); await c.fare('[data-yaz="bolge"]',true); await c.yaz('[data-yaz="bolge"]','İzmir, 30 km'); c.q('[data-dg="kur"]').classList.remove('pasif'); await c.bekle(300); await c.fare('[data-dg="kur"]'); c.q('[data-dg="kur"]').textContent='Hazırlanıyor…'; await c.bekle(900); c.goster('[data-adim="tel"]'); c.q('[data-dg="kur"]').textContent='Kur'; c.q('[data-durum]').textContent='Önizleme'; await c.bekle(1300); await c.fare('[data-dg="kur"]'); c.q('[data-durum]').textContent='Kuruldu'; c.goster('[data-bildirim]'); }],
+  plan:[c=>{ c.goster('.bildirim',false); c.q('[data-kaydir]').style.width='20%'; c.q('[data-butce]').textContent='20.000 ₺'; c.qa('[data-w]').forEach(i=>i.style.width='0'); c.qa('[data-ilerleme] i').forEach((i,k)=>i.style.background=k===0?'var(--kirmizi)':'var(--cizgi)'); c.q('[data-adimno]').textContent='1 / 4'; c.q('[data-dg="gonder"]').textContent='Müşteriye gönder'; },
+    async c=>{ await c.fare('[data-kaydir]',false); c.q('[data-kaydir]').style.width='60%'; const t0=performance.now(); await new Promise(r=>{ const f=n=>{ const p=AZ?1:Math.min(1,(n-t0)/1200); c.q('[data-butce]').textContent=(Math.round((20000+p*40000)/1000)*1000).toLocaleString('tr-TR')+' ₺'; if(p<1)requestAnimationFrame(f); else r(); }; requestAnimationFrame(f); });
+      for(let k=1;k<4;k++){ await c.bekle(450); c.qa('[data-ilerleme] i')[k].style.background='var(--kirmizi)'; c.q('[data-adimno]').textContent=(k+1)+' / 4'; }
+      c.qa('[data-w]').forEach(i=>i.style.width=i.dataset.w+'%'); await c.bekle(1600); await c.fare('[data-dg="gonder"]'); c.q('[data-dg="gonder"]').textContent='Gönderildi ✓'; await c.bekle(1500); c.goster('[data-bildirim]'); }],
+  boost:[c=>{ c.goster('.belir,.bildirim',false); c.q('[data-dg="boost"]').textContent='Öne çıkar'; },
+    async c=>{ await c.bekle(300); c.goster('[data-adim="gonderi"]'); await c.bekle(700); c.goster('[data-bildirim]'); await c.bekle(1300); c.goster('[data-bildirim]',false); c.goster('[data-adim="kart"]'); await c.bekle(1200); await c.fare('[data-dg="boost"]'); c.q('[data-dg="boost"]').textContent='Kuruluyor…'; await c.bekle(900); c.q('[data-dg="boost"]').textContent='Öne çıkarıldı ✓'; c.goster('[data-adim="yayinda"]'); }],
+  kural:[c=>{ c.goster('.bildirim',false); c.qa('[data-kural]').forEach(x=>x.classList.remove('sec')); c.q('[data-yaz="esik"]').textContent=''; c.q('[data-cpa]').textContent='231 ₺'; c.q('[data-satir-durum]').innerHTML='<span class="rozet canli">Yayında</span>'; c.q('[data-dg="kaydet"]').textContent='Kuralı aç'; },
+    async c=>{ for(const i of [0,1]){ const x=c.q(`[data-kural="${i}"]`); await c.fare(x); x.classList.add('sec'); } await c.fare('[data-yaz="esik"]'); await c.yaz('[data-yaz="esik"]','250 ₺'); const x=c.q('[data-kural="2"]'); await c.fare(x); x.classList.add('sec'); await c.fare('[data-dg="kaydet"]'); c.q('[data-dg="kaydet"]').textContent='Açık ✓'; await c.bekle(1100); c.q('[data-cpa]').textContent='268 ₺'; await c.bekle(800); c.q('[data-satir-durum]').innerHTML='<span class="rozet k">Durduruldu</span>'; c.goster('[data-bildirim]'); }],
+  rapor:[c=>{ c.goster('.belir,.bildirim',false); },
+    async c=>{ for(const k of ['r0','r1','r2','r3','r4']){ c.goster(`[data-adim="${k}"]`); await c.bekle(420); } await c.bekle(400); c.goster('[data-adim="mail"]'); await c.bekle(1500); c.goster('[data-bildirim]'); }],
+  olcum:[c=>{ c.qa('.ol').forEach(o=>{o.classList.remove('calisiyor');o.classList.toggle('ok',o.dataset.tamam==='1');}); c.q('[data-kurulum-sayac]').textContent='6 / 10'; c.q('[data-dg="tamamla"]').textContent='Eksikleri tamamla'; },
+    async c=>{ await c.bekle(600); await c.fare('[data-dg="tamamla"]'); c.q('[data-dg="tamamla"]').textContent='Kuruluyor…'; let n=6; for(const o of c.qa('.ol[data-tamam="0"]')){ o.classList.add('calisiyor'); await c.bekle(800); o.classList.remove('calisiyor'); o.classList.add('ok'); c.q('[data-kurulum-sayac]').textContent=(++n)+' / 10'; } c.q('[data-dg="tamamla"]').textContent='Hepsi tamam ✓'; }],
+  asistan:[c=>{ c.goster('.belir',false); c.q('[data-yaz="cevap"]').textContent=''; },
+    async c=>{ await c.bekle(300); c.goster('[data-adim="s1"]'); await c.bekle(900); c.goster('[data-adim="s2"]'); await c.yaz('[data-yaz="cevap"]','Artışın tamamı tek reklam setinden geliyor. Manisa · geniş setinde form başı 154 ₺\'den 268 ₺\'ye çıktı; diğerleri düştü.',18); c.goster('[data-adim="s3"]'); await c.bekle(900); c.goster('[data-adim="s4"]'); }],
+};
+document.querySelectorAll('[data-sim]').forEach(el=>{ const s=sahneler[el.dataset.sim]; if(s) sahneKur(el, s[1], s[0]); });
+new IntersectionObserver(es=>es.forEach(e=>e.isIntersecting&&e.target.classList.add('gor')),{threshold:.3}).observe(document.querySelector('[data-gozle]'));
+</script>
+</body>
+</html>

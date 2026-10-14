@@ -36,7 +36,7 @@ export default function EntegrasyonlarSayfasi() {
         <Bolum key={g.baslik} baslik={g.baslik} aciklama={g.aciklama} koyu={i % 2 === 1}>
           <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {g.ogeler.map((o) => (
-              <li key={o.ad} className="flex flex-col rounded-xl border border-line bg-surface p-6">
+              <li key={o.ad} className="kart flex flex-col p-6">
                 <h3 className="font-baslik text-lg font-bold text-ink">{o.ad}</h3>
                 {o.alt && <p className="mt-1 text-xs font-semibold text-ink-muted">{o.alt}</p>}
                 <p className="mt-3 text-sm leading-relaxed text-ink-muted">{o.ne}</p>
@@ -55,7 +55,7 @@ export default function EntegrasyonlarSayfasi() {
           {YAKINDA_ENTEGRASYONLAR.map((ad) => (
             <li
               key={ad}
-              className="flex items-center gap-3 rounded-lg border border-line bg-surface px-4 py-2.5 text-sm font-semibold text-ink"
+              className="kart flex items-center gap-3 px-4 py-2.5 text-sm font-semibold"
             >
               {ad}
               <YakindaRozeti />

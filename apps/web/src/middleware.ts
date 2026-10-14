@@ -7,7 +7,7 @@ const ROOT_DOMAIN = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? 'localhost:3000';
 /**
  * Oturum gerektirmeyen yollar.
  *
- * Yasal sayfalar (`/gizlilik`, `/kosullar`, `/veri-silme`) burada olmak
+ * Yasal sayfalar (`/gizlilik`, `/kosullar`, `/veri-silme`, `/cerez-politikasi`) burada olmak
  * ZORUNDA: Meta App Review ve Google OAuth Verification bu adresleri kendi
  * crawler'larıyla ziyaret ediyor. Login'e yönlendirilirlerse başvuru
  * reddedilir — "privacy policy not publicly accessible".
@@ -30,6 +30,10 @@ const PUBLIC_PATHS = [
   '/gizlilik',
   '/kosullar',
   '/veri-silme',
+  // Çerez politikası (2026-10-14): çerez bildirimi ve alt bilgi buraya
+  // bağlanıyor; oturumsuz ziyaretçi /login'e atılırsa bildirimin "Çerez
+  // Politikası" bağlantısı onu giriş ekranına götürürdü.
+  '/cerez-politikasi',
   // Tanıtım sitesi (2026-10-12). Liste elle yazılı, `site-icerik.ts`ten
   // okunmuyor: o dosya sitenin bütün metnini taşıyor ve middleware her
   // istekte koşan Edge paketine girer. `site-icerik.spec.ts` iki listeyi

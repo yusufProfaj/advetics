@@ -38,9 +38,13 @@ const DISARIDA = [
    * dili. "Workspace" panelin iç kavramı ve sitenin okuru (reklam bilmeyen
    * işletme sahibi, ajans) onu tanımıyor; ajansın müşterisi orada "müşteri".
    * Panele geçen kişi "Workspace"i panelde öğreniyor.
+   *
+   * 2026-10-14: bütün `components/landing/` (sahneler, fiyat). Sahnedeki
+   * "Müşteriye gönder", "Müşteri planı onayladı" panelin değil vitrinin
+   * cümlesi; fiyat paketlerinde ajansın müşterisi yine "müşteri".
    */
   'app/(site)/',
-  'components/landing/site-',
+  'components/landing/',
   'ai-assistant/',
   'providers/',
   'google-check.ts',

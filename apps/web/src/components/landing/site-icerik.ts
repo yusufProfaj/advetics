@@ -16,23 +16,29 @@
  *  · Uzun tire yok, kısa cümle.
  *  · YALNIZCA ÜRÜNÜN BUGÜN YAPTIĞI ŞEY anlatılıyor. Yapılmayan iş `yakinda`
  *    alanında ve sayfada "Yakında" rozetiyle duruyor. Müşteri sayısı, logo,
- *    yorum, sertifika, fiyat rakamı YOK: hiçbiri elimizde değil ve uydurulmuş
- *    bir güven işareti, ilk görüşmede çürüyen bir söz.
+ *    yorum, sertifika YOK: hiçbiri elimizde değil ve uydurulmuş bir güven
+ *    işareti, ilk görüşmede çürüyen bir söz.
+ *  · FİYAT RAKAMI YALNIZ `fiyat.ts`TEN (kullanıcı kararı 2026-10-14). Bu
+ *    dosyada elle yazılmış bir dolar tutarı yok; sık sorulanlar da rakamı
+ *    oradan okuyor (`site-icerik.spec.ts`).
  *  · Rapor PDF'inin kapağında ajansın değil Advetics'in logosu basılıyor
  *    (CLAUDE.md). O yüzden "kendi logonuzla PDF" YAZILMIYOR; doğru cümle
  *    "panel logonuz ve renginizle açılır, PDF markanızın rengini taşır".
  */
 
-/** Demo talebi. Form yazmak sunucuya yeni bir uç demekti; mailto bugün çalışıyor. */
-export const DEMO_EPOSTA = 'hello@profaj.com';
-export const DEMO_MAILTO =
-  `mailto:${DEMO_EPOSTA}?subject=${encodeURIComponent('Advetics demo talebi')}` +
-  `&body=${encodeURIComponent(
-    'Merhaba,\n\nAdvetics demosu istiyorum.\n\n' +
-      'Şirket adı:\n' +
-      'Reklam verdiğimiz yerler (Meta, Google, LinkedIn):\n' +
-      'Ajans mıyız, işletme mi:\n',
-  )}`;
+import { AJANS, DENEME_GUN, YILLIK_INDIRIM_YUZDE, donemFiyatiSent, usd } from './fiyat';
+import { DEMO_EPOSTA, talepAdresi } from './iletisim';
+
+export { DEMO_EPOSTA };
+
+/** Demo talebi. Form yazmak sunucuya yeni bir uç demekti; mailto bugün çalışıyor (`iletisim.ts`). */
+export const DEMO_MAILTO = talepAdresi(
+  'Advetics demo talebi',
+  'Merhaba,\n\nAdvetics demosu istiyorum.\n\n' +
+    'Şirket adı:\n' +
+    'Reklam verdiğimiz yerler (Meta, Google, LinkedIn):\n' +
+    'Ajans mıyız, işletme mi:\n',
+);
 
 export interface Madde {
   baslik: string;
@@ -479,9 +485,107 @@ export interface Cozum {
 
 export const COZUMLER: Cozum[] = [
   {
+    slug: 'isletmeler',
+    ad: 'Küçük işletmeler',
+    kisa: 'Tek hesap, ajanssız reklam',
+    baslik: 'Reklamdan anlamasanız da reklam verin',
+    ozet:
+      'Reklamınızı kendiniz görmek ve yönetmek istiyorsanız Advetics size teknik terimler ' +
+      'yerine sade sorular sorar ve her önerisini sizin onayınıza sunar.',
+    maddeler: [
+      {
+        baslik: 'Teknik ayar yok',
+        metin:
+          'Hedefleme, yerleşim, teklif gibi ayarları Advetics seçer. Size yalnızca işinizle ' +
+          'ilgili sorular sorulur.',
+      },
+      {
+        baslik: 'Ne kadar harcadığınızı bilin',
+        metin:
+          'Bu ay ne kadar harcandığını ve karşılığında kaç form, mesaj ya da satış geldiğini ' +
+          'tek ekranda görürsünüz.',
+      },
+      {
+        baslik: 'Size ne yapılacağını söyler',
+        metin:
+          'Sonuç getirmeyen reklamı durdurmayı, iyi gideni büyütmeyi önerir. Siz "Uygula" ' +
+          'derseniz yapar.',
+      },
+      {
+        baslik: 'Hesaplarınız sizde kalır',
+        metin:
+          'Reklam hesaplarınız sizin. Advetics onlara sizin izninizle bağlanır ve bağlantıyı ' +
+          'istediğiniz zaman kaldırabilirsiniz.',
+      },
+    ],
+    ozellikler: ['reklam-kurma', 'akilli-boost', 'iyilestirme', 'olcum-kurulumu'],
+    senaryo: {
+      baslik: 'Örnek: bir kafe sahibinin haftası',
+      adimlar: [
+        'Instagram hesabını Advetics\'e bağlar.',
+        'Yeni menüsünü paylaşır. Akıllı Boost paylaşımı öne çıkarmayı önerir, o da onaylar.',
+        'Hafta sonu kahvaltısını AdvCampaign\'e anlatır: "Kafeme yakın oturanlara hafta sonu kahvaltısını göster."',
+        'Birkaç gün sonra İyileştir, sonuç getirmeyen bir reklamı durdurmayı önerir. Tek tıkla uygular.',
+      ],
+    },
+  },
+  {
+    slug: 'sirketler',
+    ad: 'Şirketler',
+    kisa: 'Birden çok proje ve ekip',
+    baslik: 'Her projenin reklamı ayrı, hepsi tek panelde',
+    ozet:
+      'Birden çok markası ya da projesi olan şirketler için. Her projenin reklam hesapları, ' +
+      'ölçümü ve raporu ayrı tutulur; pazarlama ekibiniz hepsini tek yerden yönetir.',
+    maddeler: [
+      {
+        baslik: 'Her proje kendi alanında',
+        metin:
+          'Her projenin kendi Meta ve Google Ads hesabı, Tag Manager konteyneri ve Analytics ' +
+          'mülkü olur. Bir projenin rakamı diğerine karışmaz.',
+      },
+      {
+        baslik: 'Bütün projeler tek bakışta',
+        metin:
+          'Genel Bakış ve Reklam Yöneticisi şirketten başlar: önce bütün projeler, sonra ' +
+          'seçtiğiniz projenin kampanyaları.',
+      },
+      {
+        baslik: 'Ekip ve yetkiler',
+        metin:
+          'Ekibinize rol verirsiniz. Kimin neyi ne zaman değiştirdiği kayıtlı kalır.',
+      },
+      {
+        baslik: 'Plan önce onaya',
+        metin:
+          'AdvStrategy ile ayın planı hazırlanır ve onaylanmadan kampanyaya dönmez. Onay ' +
+          'giriş gerektirmeyen bir bağlantıyla da verilebilir.',
+      },
+      {
+        baslik: 'Bütçe tavanı korunur',
+        metin:
+          'Kurallar her saat kontrol eder. Aylık bütçeyi aşacak bir değişikliği uygulamaz.',
+      },
+      {
+        baslik: 'Rapor kendiliğinden gider',
+        metin: 'Her projenin raporu planlanan günde, faturalarla birlikte ilgili kişilere mail ile gider.',
+      },
+    ],
+    ozellikler: ['tek-panel', 'planlama', 'olcum-kurulumu', 'raporlama'],
+    senaryo: {
+      baslik: 'Örnek: üç konut projesi olan bir inşaat şirketinin ayı',
+      adimlar: [
+        'Her proje için ayrı workspace açılır; reklam hesapları ve ölçüm her projeye ayrı bağlanır.',
+        "Ay başında AdvStrategy'de üç projenin planı hazırlanır, genel müdür bağlantıdan onaylar.",
+        'Kampanyalar AdvCampaign ile kurulur; kurallar bütçe tavanını ve form başı maliyeti izler.',
+        'Ay sonunda her projenin raporu kendi alıcılarına kendiliğinden gider.',
+      ],
+    },
+  },
+  {
     slug: 'ajanslar',
     ad: 'Ajanslar',
-    kisa: 'Bütün müşterileriniz tek panelde. Her müşteri yalnızca kendi alanını görür.',
+    kisa: 'Müşteri başına workspace, beyaz etiket',
     baslik: 'Bütün müşterileriniz tek panelde, her biri kendi alanında',
     ozet:
       'Advetics ajansınızın markasıyla açılan bir reklam paneli. Müşterilerinizin ' +
@@ -528,51 +632,6 @@ export const COZUMLER: Cozum[] = [
         'Onaylanan planın kampanyaları AdvCampaign ile kurulur.',
         'Ay boyunca İyileştir önerileri ve kurallar hesapları izler. Ekip yalnızca önerileri onaylar.',
         'Ay sonunda raporlar faturalarla birlikte müşterilere kendiliğinden mail ile gider.',
-      ],
-    },
-  },
-  {
-    slug: 'isletmeler',
-    ad: 'İşletmeler',
-    kisa: 'Reklamdan anlamasanız da reklam verin. Teknik ayar yok, onay sizde.',
-    baslik: 'Reklamdan anlamasanız da reklam verin',
-    ozet:
-      'Reklamınızı kendiniz görmek ve yönetmek istiyorsanız Advetics size teknik terimler ' +
-      'yerine sade sorular sorar ve her önerisini sizin onayınıza sunar.',
-    maddeler: [
-      {
-        baslik: 'Teknik ayar yok',
-        metin:
-          'Hedefleme, yerleşim, teklif gibi ayarları Advetics seçer. Size yalnızca işinizle ' +
-          'ilgili sorular sorulur.',
-      },
-      {
-        baslik: 'Ne kadar harcadığınızı bilin',
-        metin:
-          'Bu ay ne kadar harcandığını ve karşılığında kaç form, mesaj ya da satış geldiğini ' +
-          'tek ekranda görürsünüz.',
-      },
-      {
-        baslik: 'Size ne yapılacağını söyler',
-        metin:
-          'Sonuç getirmeyen reklamı durdurmayı, iyi gideni büyütmeyi önerir. Siz "Uygula" ' +
-          'derseniz yapar.',
-      },
-      {
-        baslik: 'Hesaplarınız sizde kalır',
-        metin:
-          'Reklam hesaplarınız sizin. Advetics onlara sizin izninizle bağlanır ve bağlantıyı ' +
-          'istediğiniz zaman kaldırabilirsiniz.',
-      },
-    ],
-    ozellikler: ['reklam-kurma', 'akilli-boost', 'iyilestirme', 'olcum-kurulumu'],
-    senaryo: {
-      baslik: 'Örnek: bir kafe sahibinin haftası',
-      adimlar: [
-        'Instagram hesabını Advetics\'e bağlar.',
-        'Yeni menüsünü paylaşır. Akıllı Boost paylaşımı öne çıkarmayı önerir, o da onaylar.',
-        'Hafta sonu kahvaltısını AdvCampaign\'e anlatır: "Kafeme yakın oturanlara hafta sonu kahvaltısını göster."',
-        'Birkaç gün sonra İyileştir, sonuç getirmeyen bir reklamı durdurmayı önerir. Tek tıkla uygular.',
       ],
     },
   },
@@ -705,30 +764,227 @@ export const GUVENLIK: GuvenlikMaddesi[] = [
   },
 ];
 
+/**
+ * Fiyat soruları: ana sayfanın "Sık sorulanlar"ı ve fiyatlandırma sayfası
+ * AYNI listeyi okuyor (onaylı taslakta da tek liste). Rakamlar `fiyat.ts`ten.
+ */
 export const FIYAT_SORULARI: Madde[] = [
-  {
-    baslik: 'Fiyat neye göre değişiyor?',
-    metin:
-      'Kaç şirketi ve reklam hesabını yöneteceğinize, ajans mı işletme mi olduğunuza ve ne ' +
-      'kadar destek istediğinize göre. Kısa bir görüşmede ihtiyacınızı anlayıp teklif veriyoruz.',
-  },
   {
     baslik: 'Reklam bütçem Advetics üzerinden mi ödeniyor?',
     metin:
-      'Hayır. Reklam harcamanızı Meta, Google ve LinkedIn\'e kendi hesabınızdan ödersiniz. ' +
-      'Advetics bu ödemeye aracılık etmez.',
+      "Hayır. Bütçe Meta, Google ve LinkedIn'e kendi ödeme yönteminizle doğrudan ödenir. " +
+      "Advetics'e yalnız abonelik ödersiniz.",
+  },
+  {
+    baslik: 'Fiyat neden dolar?',
+    metin:
+      'Altyapı ve yapay zekâ maliyetlerimiz dolar cinsinden. Ödeme günün kuruyla TL alınır, ' +
+      'faturada KDV ayrıca yazar.',
+  },
+  {
+    baslik: 'Ajans paketinde fiyat nasıl hesaplanıyor?',
+    metin:
+      `Taban fiyata ${AJANS.dahilWorkspace} workspace dahil. ` +
+      `${AJANS.dahilWorkspace + 1}-${AJANS.kademeUst} arası her ek müşteri workspace'i aylık ` +
+      `${usd(AJANS.kademeBirSent)}, ${AJANS.kademeUst + 1}. workspace'ten sonrası ` +
+      `${usd(AJANS.kademeIkiSent)} ekler. Kullanıcı sayısı sınırsızdır.`,
+  },
+  {
+    baslik: 'Yıllık ödemede ne değişiyor?',
+    metin:
+      `Yıllık ödemede bütün paketlerde %${YILLIK_INDIRIM_YUZDE} indirim var: Ajans tabanı ` +
+      `aylık ${usd(donemFiyatiSent(AJANS.tabanSent, 'yil'))} karşılığına düşer. Tutar yıllık faturalanır.`,
+  },
+  {
+    baslik: `${DENEME_GUN} günlük ücretsiz deneme nasıl işliyor?`,
+    metin:
+      `Küçük İşletme ve Şirket paketlerini ${DENEME_GUN} gün ücretsiz deneyebilirsiniz. Düğme ` +
+      'bize bir e-posta açar; hesabınızı biz açarız. Ajans paketi için ihtiyacınıza göre teklif veriyoruz.',
   },
   {
     baslik: 'Hesaplarım bana mı ait kalıyor?',
     metin:
-      'Evet. Reklam hesaplarınız sizin. Bağlantıyı kaldırdığınızda Advetics hesaplarınıza ' +
-      'erişemez.',
+      'Evet. Advetics hesaplarınıza yetkiyle bağlanır; aboneliği bitirdiğinizde bağlantı kalkar, ' +
+      'hesaplarınız olduğu gibi kalır.',
   },
   {
     baslik: 'Önce görebilir miyim?',
-    metin:
-      'Evet. Demo görüşmesinde mevcut hesaplarınızı bağlayıp kendi rakamlarınızla gösteriyoruz.',
+    metin: 'Demo talep edin; 30 dakikada kendi hesabınızla birlikte bakalım.',
   },
+];
+
+/**
+ * ═══ ANA SAYFA ═══ (onaylı taslak, `docs/site/taslak.html`)
+ *
+ * Sekiz modül bölümü, her biri kendi sahnesiyle ve sağ/sol dönüşümlü.
+ * Üst başlık özelliğin ADIYLA başlıyor (menüdeki ad; ayrışmasın diye
+ * `site-icerik.spec.ts`); "Ayrıntılar" özelliğin kendi sayfasına gidiyor.
+ *
+ * Taslaktan iki sapma, ikisi de ürünün bugün yaptığı şeye çekildi:
+ *  · Raporlama: "PDF kurumsal kimliğinizle üretilir" → "markanızın
+ *    rengiyle". PDF kapağında ajansın değil Advetics'in logosu basılıyor
+ *    (CLAUDE.md); "kurumsal kimlik" logoyu da vaat ediyordu.
+ *  · Planlama: "kurumsal kimlikli bir rapor" → "PDF olarak da inen bir
+ *    rapor". Strateji raporunun markalı olduğu doğrulanmadı.
+ */
+export interface ModulBolumu {
+  slug: string;
+  ust: string;
+  baslik: string;
+  metin: string;
+  maddeler: string[];
+}
+
+export const MODUL_BOLUMLERI: ModulBolumu[] = [
+  {
+    slug: 'tek-panel',
+    ust: 'Tek Panel',
+    baslik: 'Üç platform, tek tablo. Aynı dilde.',
+    metin:
+      'Meta "sonuç", Google "dönüşüm", LinkedIn "lead" der. Advetics hepsini aynı adla, aynı ' +
+      'tarih aralığında gösterir; hangi kampanyanın para kazandırdığını tek bakışta görürsünüz.',
+    maddeler: [
+      'Şirket → proje → kampanya → reklam inişi',
+      'Her listede gösterilen ve toplam sayı yazar',
+      'Satırdan durdur, bütçe değiştir',
+    ],
+  },
+  {
+    slug: 'reklam-kurma',
+    ust: 'Reklam Kurma · AdvCampaign',
+    baslik: 'Ne istediğinizi söyleyin. Kurulumu o seçsin.',
+    metin:
+      'Hedef, yerleşim, teklif stratejisi sorulmaz. "Bölgemde çok kişi görsün" ya da ' +
+      '"WhatsApp\'tan yazsınlar" demeniz yeter; en uygun kurulum seçilir, önizleme onayınıza gelir.',
+    maddeler: [
+      'Satış, form, mesaj, video, erişim amaçları',
+      'Kurulumdan sonra platformdan geri okur, farkı söyler',
+      'Kurulum duraklatılmış başlar, siz açarsınız',
+    ],
+  },
+  {
+    slug: 'planlama',
+    ust: 'Planlama · AdvStrategy',
+    baslik: 'Strateji raporu adım adım kurulur, müşteri bağlantıdan onaylar.',
+    metin:
+      'Hedef, bütçe, bölge ve kitle seçilir; bütçe platformlara bölünür ve PDF olarak da inen ' +
+      'bir rapor çıkar. Müşteri girişsiz bağlantıyla onaylar, plan tek tıkla kampanyaya döner.',
+    maddeler: [
+      'Geçmiş veri yoksa tahmin uydurmaz',
+      'Onay kaydı ad ve e-postayla saklanır',
+      'Her kalem tek kurulum rehberine aktarılır',
+    ],
+  },
+  {
+    slug: 'akilli-boost',
+    ust: 'Akıllı Boost',
+    baslik: 'Gönderiyi paylaşın. Öne çıkarmayı o hazırlasın.',
+    metin:
+      "Instagram ve YouTube'a yeni içerik düştüğünde kart hazırlanır: hedef kitle, bütçe ve " +
+      'süre önerilir. Onaylarsanız reklam olur; tek tıkla.',
+    maddeler: [
+      'Aynı içerik iki kez öne çıkarılmaz',
+      'Ön ayarla tamamen otomatik de çalışır',
+      'Bitince kendiliğinden kapanır',
+    ],
+  },
+  {
+    slug: 'iyilestirme',
+    ust: 'İyileştirme · Kurallar',
+    baslik: 'Kuralı bir kez yazın. Gece de çalışsın.',
+    metin:
+      '"Form başı 250 ₺\'yi geçerse durdur", "aylık bütçenin %90\'ı bittiyse uyar". Kurallar her ' +
+      'saat kontrol eder, yaptığı her şeyi gerekçesiyle kaydeder.',
+    maddeler: [
+      'Önce ne yapacağını gösterir, sonra açarsınız',
+      'Aylık bütçe tavanını aşan kararı reddeder',
+      'Her işlem geri alınabilir ve kayıtlıdır',
+    ],
+  },
+  {
+    slug: 'raporlama',
+    ust: 'Raporlama',
+    baslik: 'Ay başında rapor müşterinin posta kutusunda.',
+    metin:
+      'Şablonu bir kez seçin: kapak, özet, kampanyalar, öne çıkan reklamlar, kitle. PDF ' +
+      'markanızın rengiyle üretilir, faturalarla birlikte planlanan günde gider.',
+    maddeler: [
+      'Ekrandaki rapor ile PDF aynı belge',
+      'Türkçe karakter ve ₺ sorunsuz',
+      'Hangi alıcıya gitmediği ayrıca yazılır',
+    ],
+  },
+  {
+    slug: 'olcum-kurulumu',
+    ust: 'Ölçüm Kurulumu',
+    baslik: 'Piksel, Tag Manager, Analytics. Tek liste, tek sayaç.',
+    metin:
+      'Sihirbaz şirketin ve her projenin eksiğini çıkarır: hangi hesap bağlı değil, hangi ' +
+      'dönüşüm ölçülmüyor. "Eksikleri tamamla" dediğinizde kurulabilen her şeyi kurar.',
+    maddeler: [
+      'Var olan dönüşümü ikinci kez açmaz',
+      'Hesap açan adımları asla kendiliğinden yapmaz',
+      '"Sitemiz yok" diyene site adımı sormaz',
+    ],
+  },
+  {
+    slug: 'yapay-zeka-asistani',
+    ust: 'Yapay Zekâ Asistanı',
+    baslik: 'Sorun. Rakamla cevaplasın.',
+    metin:
+      '"Geçen ay neden pahalandı?" diye sorun; asistan kendi verinize bakar, sebebi rakamla ' +
+      'söyler ve ne yapılacağını önerir. Yapmak yine sizin onayınızla.',
+    maddeler: [
+      'Yalnız okuma yetkisiyle çalışır',
+      'Uydurmaz: veri yoksa "veri yok" der',
+      'Claude ve diğer asistanlara MCP ile bağlanır',
+    ],
+  },
+];
+
+/** Ana sayfadaki "Bağlandığı yerler" şeridi. Logo değil ad: başka markanın logosu izin işi. */
+export const BAGLANDIGI_YERLER: string[] = [
+  'Meta',
+  'Instagram',
+  'Google Ads',
+  'YouTube',
+  'LinkedIn Ads',
+  'GA4',
+  'Tag Manager',
+];
+
+export const NASIL_CALISIR: Madde[] = [
+  {
+    baslik: 'Bağlayın',
+    metin: 'Meta, Google ve LinkedIn hesaplarınızı bir kez yetkilendirin. Parola istemeyiz.',
+  },
+  {
+    baslik: 'Anlatın',
+    metin: 'İşinizi ve ne istediğinizi yazın; sihirbaz eksikleri tek listede çıkarır.',
+  },
+  { baslik: 'Onaylayın', metin: 'Kurulum önizlemesi gelir. Kontrol eder, açarsınız.' },
+  { baslik: 'İzleyin', metin: 'Kurallar korur, rapor ayda bir kendiliğinden gider.' },
+];
+
+/** Ana sayfanın güvenlik özeti (taslaktaki dört kart). Ayrıntı `/guvenlik`te, `GUVENLIK`ten. */
+export const GUVENLIK_OZETI: Madde[] = [
+  { baslik: 'Parola istemeyiz', metin: 'Bağlantı platformun kendi yetkilendirmesiyle.' },
+  { baslik: 'Anahtarlar şifreli', metin: 'Erişim anahtarları şifreli saklanır.' },
+  { baslik: 'Rol bazlı erişim', metin: 'Müşteri yalnız kendi raporunu görür.' },
+  { baslik: 'Her işlem kayıtlı', metin: 'Kim neyi ne zaman değiştirdi, yazılı.' },
+];
+
+/**
+ * Yasal belgeler: alt bilgi ve yasal sayfaların "Yasal belgeler" menüsü
+ * aynı listeden. KVKK AYDINLATMA METNİ BİLEREK YOK: hukuki metni bir hukukçu
+ * yazmalı; uydurulmuş bir aydınlatma metni, hiç olmamasından daha büyük bir
+ * risk. Yazıldığında buraya eklenir.
+ */
+export const YASAL_BELGELER: { href: string; etiket: string }[] = [
+  { href: '/gizlilik', etiket: 'Gizlilik Politikası' },
+  { href: '/cerez-politikasi', etiket: 'Çerez Politikası' },
+  { href: '/kosullar', etiket: 'Kullanım Koşulları' },
+  { href: '/veri-silme', etiket: 'Veri Silme' },
 ];
 
 /** Adres yardımcıları: bağlantılar elle birleştirilmesin (CLAUDE.md, "BAĞLANTIYI ELLE BİRLEŞTİRME"). */

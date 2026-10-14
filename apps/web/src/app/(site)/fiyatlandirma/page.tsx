@@ -1,79 +1,64 @@
 import type { Metadata } from 'next';
 
-import { DEMO_MAILTO, FIYAT_SORULARI } from '@/components/landing/site-icerik';
-import { BIRINCIL, Bolum, KapanisBandi, SayfaGirisi } from '@/components/landing/site-parcalari';
+import { DENEME_GUN, PAKETLER, YILLIK_INDIRIM_YUZDE, paketBul, usd } from '@/components/landing/fiyat';
+import { FiyatPaketleri } from '@/components/landing/fiyat-paketleri';
+import { KarsilastirmaTablosu } from '@/components/landing/fiyat-tablosu';
+import { KapanisBandi, SikSorulanlar, TanitimBasligi, UstBaslik } from '@/components/landing/site-parcalari';
 
 /**
- * Fiyatlandırma. RAKAM YOK, bilerek: fiyat listesi henüz belirlenmedi ve
- * sayfaya yazılan bir rakam müşteriye verilmiş bir söz olur.
+ * Fiyatlandırma (onaylı taslak, kullanıcı kararı 2026-10-14).
  *
- * Sorular `<details>` ile açılıyor: istemci JavaScript'i yok, klavyeyle ve
- * ekran okuyucuyla kendiliğinden çalışıyor, içerik DOM'dan çıkmadığı için
- * arama motoru da okuyor.
+ * Rakamların tamamı `fiyat.ts`ten; bu sayfada elle yazılmış tutar yok.
+ * Sıra: başlık ve not (dolar, TL, KDV), dönem anahtarı, üç paket kartı
+ * (ajans kartında workspace kaydırıcısı ve kırılım), karşılaştırma
+ * tablosu, fiyat soruları.
+ *
+ * ÜYE OLMA VE ÖDEME YOK: "14 gün ücretsiz dene" ve "Teklif al" e-posta açıyor,
+ * paketin adı konu satırında (`iletisim.ts`).
  */
+const KUCUK = paketBul('kucuk-isletme');
+
 export const metadata: Metadata = {
   title: 'Fiyatlandırma | Advetics',
   description:
-    'Advetics fiyatı yöneteceğiniz şirket ve hesap sayısına göre belirlenir. Reklam bütçeniz ' +
-    'doğrudan platformlara ödenir. Teklif için demo talep edin.',
+    `Advetics üç paket: ${PAKETLER.map((p) => p.ad).join(', ')}. ${usd(KUCUK.aylikSent)}/ay'dan başlar, ` +
+    `yıllık ödemede %${YILLIK_INDIRIM_YUZDE} indirim, ${DENEME_GUN} gün ücretsiz deneme. ` +
+    'Reklam bütçeniz doğrudan platformlara ödenir.',
   alternates: { canonical: '/fiyatlandirma' },
 };
-
-const NELERE_BAKIYORUZ = [
-  'Kaç şirketi ve kaç reklam hesabını yöneteceğiniz',
-  'Ajans mı, kendi reklamını yöneten bir işletme mi olduğunuz',
-  'Kurulumda ve sonrasında ne kadar destek istediğiniz',
-];
 
 export default function FiyatlandirmaSayfasi() {
   return (
     <>
-      <SayfaGirisi
-        ust="Fiyatlandırma"
-        baslik="İhtiyacınıza göre teklif"
-        ozet={
-          'Her işletmenin ve ajansın ihtiyacı farklı. Kısa bir görüşmede ne yapmak ' +
-          'istediğinizi dinleyip size uygun bir teklif hazırlıyoruz.'
-        }
-        ikincil={{ href: '/demo', etiket: 'Demo Nasıl İşler' }}
-      />
-
-      <Bolum baslik="Teklif neye göre hazırlanır">
-        <div className="grid gap-8 lg:grid-cols-[1fr_auto] lg:items-end">
-          <ul className="space-y-3">
-            {NELERE_BAKIYORUZ.map((m) => (
-              <li key={m} className="flex gap-3 text-base leading-relaxed text-ink">
-                <span aria-hidden className="mt-2.5 h-2 w-2 shrink-0 rounded-[2px] bg-brand" />
-                {m}
-              </li>
-            ))}
-          </ul>
-          <a href={DEMO_MAILTO} className={BIRINCIL}>
-            Teklif İste
-          </a>
+      <section className="bolum">
+        <div className="kap ortali">
+          <FiyatGirisi ust="Fiyatlandırma" />
         </div>
-      </Bolum>
-
-      <Bolum baslik="Sık sorulanlar" koyu>
-        <div className="divide-y divide-line rounded-xl border border-line bg-surface">
-          {FIYAT_SORULARI.map((s) => (
-            <details key={s.baslik} className="group px-6 py-5">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-baslik text-base font-bold text-ink [&::-webkit-details-marker]:hidden">
-                {s.baslik}
-                <span
-                  aria-hidden
-                  className="text-xl leading-none text-ink-muted motion-safe:transition-transform group-open:rotate-45"
-                >
-                  +
-                </span>
-              </summary>
-              <p className="mt-3 text-sm leading-relaxed text-ink-muted">{s.metin}</p>
-            </details>
-          ))}
+        <div className="kap">
+          <FiyatPaketleri />
+          <KarsilastirmaTablosu />
         </div>
-      </Bolum>
+      </section>
+
+      <section className="bolum gri">
+        <div className="kap sss">
+          <h2 className="t-h2">Fiyat soruları</h2>
+          <SikSorulanlar />
+        </div>
+      </section>
 
       <KapanisBandi />
+    </>
+  );
+}
+
+/** Üst başlık sayfa sekmesindeki ve menüdeki adla aynı (`site-icerik.spec.ts`). */
+function FiyatGirisi({ ust }: { ust: string }) {
+  return (
+    <>
+      <UstBaslik>{ust}</UstBaslik>
+      <TanitimBasligi boy="orta">Büyüklüğünüze göre üç paket.</TanitimBasligi>
+      <p className="alt">Fiyatlar ABD doları cinsindendir, ödeme günün kuruyla TL alınır. KDV hariç.</p>
     </>
   );
 }

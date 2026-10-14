@@ -16,6 +16,11 @@
  * 2026-10-14 Grup 2 (Planla ve Oluştur) geçişi: 25 dosya listeden çıktı;
  * Grup 2'de istisnalı dosya KALMADI.
  *
+ * 2026-10-14 tanıtım sitesi ve yasal sayfalar (onaylı taslak): dokuz satır
+ * çıktı. Kaydırma filmi kaldırıldı, düğmeler `tanitim.css`in `dg` sınıfına
+ * geçti, yasal sayfalar ortak `YasalDuzen`e ve `h1` tek bileşene
+ * (`TanitimBasligi`) toplandı; o tek `h1` aşağıda KALICI.
+ *
  * KURAL: bir dosyayı düzelttiğinde sayısını DÜŞÜR, sıfırlandıysa satırı SİL.
  * Bekçi iki yönlü: sayı artarsa da azalıp burada eski sayı kalırsa da düşer.
  * Buraya YENİ satır ya da daha BÜYÜK sayı yazmak bu listenin amacını iptal
@@ -24,23 +29,14 @@
  *
  * BİLİNEN KALICI ADAYLAR (sayfa ajanı karar verip gerekçesini yazacak):
  * `components/platform-logo.tsx` (Meta/Google/LinkedIn logolarının kendi
- * renkleri; üçüncü tarafın markası), `components/landing/*` (tanıtım sitesi,
- * `.tanitim` kapsamı). Rapor belgesinin parçaları karara bağlandı: dosyanın
- * sonundaki `KALICI_ISTISNALAR` (Grup 1, 2026-10-14).
+ * renkleri; üçüncü tarafın markası). Tanıtım sitesi ve rapor belgesinin
+ * parçaları karara bağlandı: dosyanın sonundaki `KALICI_ISTISNALAR`
+ * (2026-10-14).
  */
 export type IhlalTuru = 'renk' | 'degrade' | 'dugme' | 'modal' | 'h1';
 
 export const ISTISNALAR: Record<string, Partial<Record<IhlalTuru, number>>> = {
-  'app/(legal)/gizlilik/page.tsx': { h1: 1 },
-  'app/(legal)/kosullar/page.tsx': { h1: 1 },
-  'app/(legal)/layout.tsx': { dugme: 1 },
-  'app/(legal)/veri-silme/page.tsx': { h1: 1 },
-  'app/(site)/cozumler/[cozum]/page.tsx': { dugme: 1 },
-  'app/(site)/page.tsx': { h1: 1 },
   'app/marka-isareti.tsx': { renk: 1 },
-  'components/landing/kaydirma-filmi.tsx': { renk: 2 },
-  'components/landing/site-nav.tsx': { dugme: 2 },
-  'components/landing/site-parcalari.tsx': { dugme: 2, h1: 1 },
   'components/mobil-menu.tsx': { modal: 1 },
   'components/platform-logo.tsx': { renk: 10 },
   'components/tarih-secici.tsx': { dugme: 1 },
@@ -63,9 +59,18 @@ export const ISTISNALAR: Record<string, Partial<Record<IhlalTuru, number>>> = {
  * dönüşüm grafiği ızgarası). Panelin token'larına çevirmek, ekrandaki
  * belgeyle basılan PDF'i ayrıştırır ve karanlık temada müşteriye gidecek
  * belgeyi kararmış gösterirdi.
+ *
+ * TANITIM SİTESİNİN BAŞLIĞI (2026-10-14): `site-parcalari.tsx` →
+ * `TanitimBasligi`, sitenin ve yasal sayfaların TEK `h1`i. `SayfaBasligi`
+ * panelin bileşeni: ölçüsünü `.panel` katmanı veriyor ve tanıtım sayfaları
+ * `.panel` altında değil `.tanitim` altında (onaylı taslakta başlık 68
+ * piksele kadar büyüyor, Montserrat 800). Bütün tanıtım ve yasal sayfalar
+ * bu bileşenden geçtiği için istisna tek dosyada, tek sayı; yeni bir
+ * sayfanın elle `h1` yazması yine düşer.
  */
 export const KALICI_ISTISNALAR: Record<string, Partial<Record<IhlalTuru, number>>> = {
   'components/report/conversion-chart.tsx': { renk: 3 },
   'components/report/kitle-ozeti.tsx': { renk: 8 },
   'components/report/report-document.tsx': { h1: 1 },
+  'components/landing/site-parcalari.tsx': { h1: 1 },
 };

@@ -47,6 +47,7 @@ describe('middleware — oturumsuz erişim', () => {
     '/gizlilik',
     '/kosullar',
     '/veri-silme',
+    '/cerez-politikasi',
     '/login',
     '/r/abc123',
   ])('%s oturumsuz açılır', (path) => {

@@ -39,7 +39,7 @@ export default function GuvenlikSayfasi() {
       <Bolum baslik="Nasıl koruyoruz">
         <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {GUVENLIK.map((g) => (
-            <li key={g.baslik} className="flex flex-col rounded-xl border border-line bg-surface p-6">
+            <li key={g.baslik} className="kart flex flex-col p-6">
               <h3 className="font-baslik text-base font-bold text-ink">{g.baslik}</h3>
               <p className="mt-2.5 flex-1 text-sm leading-relaxed text-ink-muted">{g.metin}</p>
               <p className="mt-4 border-t border-line pt-3 text-xs text-ink-muted">{g.teknik}</p>
@@ -52,7 +52,7 @@ export default function GuvenlikSayfasi() {
         <div className="grid gap-5 md:grid-cols-2">
           <Link
             href="/veri-silme"
-            className="rounded-xl border border-line bg-surface p-6 motion-safe:transition-colors hover:border-ink"
+            className="kart p-6 motion-safe:transition-colors"
           >
             <h3 className="font-baslik text-base font-bold text-ink">Verilerinizi silin</h3>
             <p className="mt-2.5 text-sm leading-relaxed text-ink-muted">
@@ -61,7 +61,7 @@ export default function GuvenlikSayfasi() {
           </Link>
           <Link
             href="/gizlilik"
-            className="rounded-xl border border-line bg-surface p-6 motion-safe:transition-colors hover:border-ink"
+            className="kart p-6 motion-safe:transition-colors"
           >
             <h3 className="font-baslik text-base font-bold text-ink">Gizlilik politikası</h3>
             <p className="mt-2.5 text-sm leading-relaxed text-ink-muted">

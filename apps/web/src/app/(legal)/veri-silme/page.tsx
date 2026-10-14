@@ -1,11 +1,25 @@
 import type { Metadata } from 'next';
 
+import {
+  IngilizceBaslik,
+  YasalAltBolum,
+  YasalBolum,
+  YasalDuzen,
+  type YasalBaslik,
+} from '@/components/landing/yasal-duzen';
+
 export const metadata: Metadata = {
   title: 'Veri Silme Talimatları · Advetics',
   description:
     'Advetics üzerindeki reklam hesabı bağlantınızı ve kişisel verilerinizi nasıl sileceğiniz.',
   robots: { index: true, follow: true },
 };
+
+const B = {
+  bir: { id: 'baglantiyi-kaldir', baslik: 'Seçenek 1 — Reklam hesabı bağlantısını kaldır' },
+  iki: { id: 'platformdan-iptal', baslik: 'Seçenek 2 — Meta / Google tarafından erişimi iptal et' },
+  uc: { id: 'tum-veriler', baslik: 'Seçenek 3 — Tüm verilerin silinmesini talep et' },
+} satisfies Record<string, YasalBaslik>;
 
 /**
  * Meta, veri işleyen uygulamalardan bir "Data Deletion Instructions URL" veya
@@ -49,9 +63,16 @@ export default async function DataDeletionPage({
   const status = talep ? await fetchStatus(talep) : null;
 
   return (
-    <>
-      <h1 className="text-2xl font-semibold">Veri Silme Talimatları</h1>
-      <p className="mt-1 text-sm text-ink-muted">Son güncelleme: 5 Ağustos 2026</p>
+    <YasalDuzen
+      yol="/veri-silme"
+      baslik="Veri Silme Talimatları"
+      guncelleme="14 Ekim 2026"
+      bolumler={Object.values(B)}
+      ozet={
+        'Bağlantıyı panelden kaldırdığınızda erişim jetonları anında silinir. Bütün verilerinizin ' +
+        'silinmesini e-postayla isteyebilirsiniz; talep en geç 30 günde yerine getirilir.'
+      }
+    >
 
       {talep && (
         <div
@@ -104,7 +125,7 @@ export default async function DataDeletionPage({
         </div>
       )}
 
-      <Section title="Seçenek 1 — Reklam hesabı bağlantısını kaldır">
+      <YasalBolum b={B.bir}>
         <p>
           Panele giriş yapın, <strong>Ayarlar › Platform bağlantıları</strong> sayfasına gidin ve
           ilgili bağlantının yanındaki <strong>Kaldır</strong> düğmesine basın.
@@ -122,9 +143,9 @@ export default async function DataDeletionPage({
           Reklam performans geçmişi, hesap sahibinin raporlama ve muhasebe ihtiyacı nedeniyle
           korunur. Bunun da silinmesini istiyorsanız 3. seçeneği kullanın.
         </p>
-      </Section>
+      </YasalBolum>
 
-      <Section title="Seçenek 2 — Meta / Google tarafından erişimi iptal et">
+      <YasalBolum b={B.iki}>
         <p>Uygulamanın erişimini doğrudan platform üzerinden de kaldırabilirsiniz:</p>
         <ul className="mt-2 list-disc space-y-1 pl-5">
           <li>
@@ -157,9 +178,9 @@ export default async function DataDeletionPage({
           <em>yeniden yetkilendirme gerekli</em> durumuna geçer. Saklanan şifreli jetonun
           silinmesi için 1. veya 3. seçeneği de uygulamanızı öneririz.
         </p>
-      </Section>
+      </YasalBolum>
 
-      <Section title="Seçenek 3 — Tüm verilerin silinmesini talep et">
+      <YasalBolum b={B.uc}>
         <p>
           Hesabınıza ve workspace kaydınıza ait <strong>tüm verilerin</strong> silinmesi için{' '}
           <a href="mailto:hello@profaj.com?subject=Veri%20Silme%20Talebi" className="underline">
@@ -182,24 +203,20 @@ export default async function DataDeletionPage({
           hesap verebilirlik yükümlülüğü nedeniyle kimliksizleştirilerek 2 yıl daha saklanır. Bu
           kayıtlarda kişisel veri bulunmaz.
         </p>
-      </Section>
+      </YasalBolum>
 
-      <hr className="my-10 border-line" />
+      <IngilizceBaslik>Data Deletion Instructions (English)</IngilizceBaslik>
 
-      <h2 className="text-xl font-semibold" id="english">
-        Data Deletion Instructions (English)
-      </h2>
-
-      <Section title="Option 1 — Remove the connection in the app">
+      <YasalAltBolum baslik="Option 1 — Remove the connection in the app">
         <p>
           Sign in and go to <strong>Settings → Platform Connections</strong>, then click{' '}
           <strong>Remove</strong> next to the connection. This immediately and irreversibly deletes
           the stored Meta / Google access and refresh tokens, clears all granted scopes, and stops
           all data synchronisation and automation for that account.
         </p>
-      </Section>
+      </YasalAltBolum>
 
-      <Section title="Option 2 — Revoke access from the platform">
+      <YasalAltBolum baslik="Option 2 — Revoke access from the platform">
         <p>
           Remove Advetics from{' '}
           <a
@@ -221,9 +238,9 @@ export default async function DataDeletionPage({
           </a>
           .
         </p>
-      </Section>
+      </YasalAltBolum>
 
-      <Section title="Option 3 — Request full deletion">
+      <YasalAltBolum baslik="Option 3 — Request full deletion">
         <p>
           Email{' '}
           <a href="mailto:hello@profaj.com?subject=Data%20Deletion%20Request" className="underline">
@@ -238,16 +255,8 @@ export default async function DataDeletionPage({
           <strong>Exception:</strong> anonymised audit records of automated budget changes are
           retained for a further 2 years for accountability. They contain no personal data.
         </p>
-      </Section>
-    </>
+      </YasalAltBolum>
+    </YasalDuzen>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="mt-7">
-      <h2 className="text-base font-semibold">{title}</h2>
-      <div className="mt-2 space-y-2 text-sm leading-relaxed text-ink">{children}</div>
-    </section>
-  );
-}

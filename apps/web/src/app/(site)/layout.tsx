@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 
+import '@/components/landing/tanitim.css';
+import { CerezBildirimi } from '@/components/landing/cerez-bildirimi';
 import { SiteFooter } from '@/components/landing/site-footer';
 import { SiteNav } from '@/components/landing/site-nav';
 
@@ -8,19 +10,22 @@ import { SiteNav } from '@/components/landing/site-nav';
  * entegrasyonlar, fiyatlandırma, güvenlik, demo).
  *
  * Grup parantezi adrese girmiyor: `/`, `/ozellikler/...` olarak açılıyor.
- * Yasal sayfalar bu grubun DIŞINDA kaldı: onların kendi düzeni Meta App
- * Review için sade tutuluyor ((legal)/layout.tsx).
+ * Yasal sayfaların düzeni ayrı ((legal)/layout.tsx) ama AYNI üst çubuk, alt
+ * bilgi ve çerez kartıyla: ziyaretçi alt bilgiden gizliliğe geçince başka
+ * bir siteye düşmüş gibi olmasın.
  *
  * `tanitim` sınıfı renk belirteçlerini kılavuzun dört rengine sabitliyor
- * (globals.css). Panelin karanlık teması mavi-gri tonlar taşıyor; tanıtım
- * sitesi markanın vitrini ve orada kılavuz dışı ton olmamalı.
+ * (globals.css) ve `tanitim.css`teki bütün seçiciler onun altında. Panelin
+ * karanlık teması mavi-gri tonlar taşıyor; tanıtım sitesi markanın vitrini
+ * ve orada kılavuz dışı ton olmamalı.
  */
 export default function SiteLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="tanitim min-h-screen bg-surface text-ink">
+    <div className="tanitim min-h-screen">
       <SiteNav />
       <main>{children}</main>
       <SiteFooter />
+      <CerezBildirimi />
     </div>
   );
 }
