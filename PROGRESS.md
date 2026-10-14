@@ -45,12 +45,14 @@
 
 ## 2 · Akıllı Boost (`/auto-boost`)
 
-- [ ] Araştırma → `docs/pazar/akilli-boost.md` (gönderi öne çıkarma otomasyonu: Meta boost API, IG Partnership/Trial Reels, YouTube Demand Gen; Madgicx/Revealbot otomatik boost)
+- [x] Araştırma → `docs/pazar/akilli-boost.md` (gönderi öne çıkarma otomasyonu: Meta boost API, IG Partnership/Trial Reels, YouTube Demand Gen; Madgicx/Revealbot otomatik boost)
 - [ ] Bilinen açık: kartta "Konum 3684" ham kimlik; konum adını göster
 - [ ] Bilinen açık: sayfa ilk yüklemede başka workspace'in kuyruğunu (`fd82…`) sorguluyor; teşhis ve tek kaynak
 - [ ] (onay bekliyor) 12 Facebook kartı: 2026-09-30 kararı yalnız IG + YouTube; eski mi yeni mi ölç, kullanıcıya sor
-- [ ] Araştırmanın 1. önerisi
-- [ ] Araştırmanın 2. önerisi
+- [ ] Öneri 1: kartta organik performans karşılaştırması (son 10 gönderinin ortalamasına göre erişim/etkileşim; altındaysa "boostlamak genelde verimsiz" notu)
+- [ ] Öneri 2: kartta boost hedefinin ne ölçtüğü ("etkileşim için; satış/form için AdvCampaign")
+- [ ] (onay bekliyor) Öneri 3: organik eşikle otomatik sıralama / otomatik onay (otomatik onay para harcar)
+- [ ] (onay bekliyor) Öneri 4: aynı anda boostlu gönderi sınırı
 
 ## 3 · İyileştir (`/iyilestir`)
 
