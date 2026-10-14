@@ -1532,6 +1532,34 @@
   font-size: 13px;
   flex: 1;
 }
+/* TELEFONDA KART BANT OLUR. Canlı denetimde (375 px) kart ekranın yarısını
+   kaplıyor ve hero'yu örtüyordu; oysa yalnız zorunlu çerez var, ziyaretçinin
+   seçebileceği bir şey yok. Seçenek kutuları gizlenir (DOM'da kalır), metin
+   ve "Anladım" tek sırada durur. Ayrıntı politikada. */
+@media (max-width: 600px) {
+  .tanitim .cerez {
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    width: auto;
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .tanitim .cerez-baslik,
+  .tanitim .cerez-secenekler {
+    display: none;
+  }
+  .tanitim .cerez p {
+    margin: 0;
+    font-size: 12.5px;
+    flex: 1;
+  }
+  .tanitim .cerez-dugmeler {
+    flex: none;
+  }
+}
 
 /* ── Yasal sayfa ── */
 .tanitim .yasal {
