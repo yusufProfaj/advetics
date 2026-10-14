@@ -574,6 +574,35 @@ describe('pacing', () => {
     expect(p.overall.daysWithData).toBe(1);
   });
 
+  /*
+   * HARCAMASIZ GÜN EKSİK GÜN DEĞİL. Platform harcama olmayan günde satır
+   * döndürmüyor; çekim başarıyla koştuysa o gün senkronize. Uyarı veri tamken
+   * çıkıyor ve kullanıcıyı olmayan bir arızayı aramaya gönderiyordu.
+   */
+  async function cekim(from: string, to: string, atlanan: number | null = 0) {
+    await h.q(
+      `INSERT INTO sync_jobs (client_id, ad_account_id, job_type, status, date_from, date_to, rows_skipped)
+       VALUES ($1, $2, 'insights_daily', 'succeeded', $3::date, $4::date, $5)`,
+      [IDS.client, IDS.adAccount, from, to, atlanan],
+    );
+  }
+
+  it('KRİTİK: başarılı çekimin kapsadığı harcamasız günler senkronize sayılıyor', async () => {
+    await seedSpend({ date: '2026-08-02', spendMicros: '1000000000' });
+    await cekim('2026-08-01', '2026-08-06');
+    const p = await svc.pacing(CTX, { clientId: IDS.client, month: '2026-08' }, new Date('2026-08-07T10:00:00Z'));
+    expect(p.overall.daysWithData).toBe(6);
+    expect(p.accounts.find((a) => a.adAccountId === IDS.adAccount)?.daysWithData).toBe(6);
+  });
+
+  it('KRİTİK: satır ATLAYAN "başarılı" iş kapsam saymıyor; ay dışı çekim de saymıyor', async () => {
+    await seedSpend({ date: '2026-08-02', spendMicros: '1000000000' });
+    await cekim('2026-08-03', '2026-08-06', 12);
+    await cekim('2026-07-20', '2026-07-31');
+    const p = await svc.pacing(CTX, { clientId: IDS.client, month: '2026-08' }, new Date('2026-08-07T10:00:00Z'));
+    expect(p.overall.daysWithData).toBe(1);
+  });
+
   it('bütçe hiç yoksa da harcama dönüyor', async () => {
     await seedSpend({ date: '2026-08-04', spendMicros: '3000000000' });
     const p = await svc.pacing(CTX, { clientId: IDS.client, month: '2026-08' }, new Date('2026-08-07T10:00:00Z'));

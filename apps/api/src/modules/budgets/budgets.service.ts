@@ -286,6 +286,41 @@ export class BudgetsService {
               GROUP BY i.ad_account_id, a.currency
             `);
 
+      /**
+       * ═══ SENKRONİZE GÜN = VERİSİ OLAN GÜN ∪ BAŞARILI ÇEKİMİN KAPSADIĞI GÜN ═══
+       *
+       * "Eksik veri: 13 günün 11 günü senkronize" yalnızca metrik SATIRI olan
+       * günleri sayıyordu. Platform harcamasız günde (duraklatılmış kampanya,
+       * ay ortasında başlayan hesap) satır döndürmüyor; o gün eksik değil,
+       * gerçekten SIFIR. Uyarı veri tamken çıkıyor ve kullanıcıyı olmayan bir
+       * senkronizasyon arızasını aramaya gönderiyordu.
+       *
+       * Başarılı bir metrik işinin aralığına giren gün de senkronize sayılıyor.
+       * "Başarılı + atlanmış satır" BU PROJEDE HATA TÜRÜ (CLAUDE.md §3): satır
+       * atan iş kapsam saymıyor, uyarı orada çıkmaya devam ediyor.
+       */
+      const kapsam =
+        throughDate < start
+          ? []
+          : await tx.$queryRaw<Array<{ ad_account_id: string; gun: number }>>(Prisma.sql`
+              SELECT a.id::text AS ad_account_id, count(*)::int AS gun
+                FROM ad_accounts a
+                CROSS JOIN generate_series(${start}::date, ${throughDate}::date, interval '1 day') AS g(d)
+               WHERE a.client_id = ${query.clientId}::uuid
+                 AND (
+                   EXISTS (SELECT 1 FROM insights_daily i
+                            WHERE i.client_id = ${query.clientId}::uuid AND i.ad_account_id = a.id
+                              AND i.entity_level = ${SPEND_LEVEL}::"EntityLevel" AND i.date = g.d::date)
+                   OR EXISTS (SELECT 1 FROM sync_jobs j
+                            WHERE j.client_id = ${query.clientId}::uuid AND j.ad_account_id = a.id
+                              AND j.status = 'succeeded'::"SyncJobStatus"
+                              AND j.job_type IN ('insights_daily'::"SyncJobType", 'insights_backfill'::"SyncJobType", 'initial_backfill'::"SyncJobType")
+                              AND COALESCE(j.rows_skipped, 0) = 0
+                              AND g.d::date BETWEEN j.date_from AND j.date_to)
+                 )
+               GROUP BY a.id
+            `);
+
       // Bütçesi olmayan ama harcaması olan hesaplar da görünsün diye
       // hesap listesi bütçelerden DEĞİL, iki kaynağın birleşiminden geliyor.
       const accountNames = await tx.$queryRaw<
@@ -302,6 +337,7 @@ export class BudgetsService {
         today,
         budgets: budgetRows.map((r) => this.toRecord(r)),
         spend: spendRows,
+        kapsam,
         accounts: accountNames,
       });
     });
@@ -319,15 +355,18 @@ export class BudgetsService {
     today: string;
     budgets: BudgetRecord[];
     spend: SpendRow[];
+    /** Hesap başına senkronize gün (veri ∪ başarılı çekim). Yoksa satır sayısına düşülür. */
+    kapsam?: Array<{ ad_account_id: string; gun: number }>;
     accounts: Array<{ id: string; name: string; currency: string | null; platform: Platform }>;
   }): ClientPacing {
     const { clientId, month, today, budgets, spend, accounts } = input;
+    const kapsamGun = new Map((input.kapsam ?? []).map((k) => [k.ad_account_id, Number(k.gun)]));
 
     const spendByAccount = new Map<string, { micros: bigint; days: number; currency: string | null }>();
     for (const row of spend) {
       spendByAccount.set(row.ad_account_id, {
         micros: toBigInt(row.spend_micros),
-        days: Number(row.day_count ?? 0),
+        days: Math.max(Number(row.day_count ?? 0), kapsamGun.get(row.ad_account_id) ?? 0),
         currency: row.currency,
       });
     }
@@ -383,7 +422,7 @@ export class BudgetsService {
           spentMicros: s?.micros ?? 0n,
           month,
           today,
-          daysWithData: s?.days ?? 0,
+          daysWithData: s?.days ?? kapsamGun.get(acc.id) ?? 0,
         });
         return { ...pacing, adAccountId: acc.id, adAccountName: acc.name, platform: acc.platform };
       })
