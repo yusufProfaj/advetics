@@ -79,10 +79,10 @@
 
 ## 6 · Reklam Yöneticisi (`/ads-explorer`)
 
-- [ ] Araştırma → `docs/pazar/reklam-yoneticisi.md` (Meta Ads Manager / Google Ads arayüz mantığı, çok hesaplı ajans görünümleri)
+- [x] Araştırma → `docs/pazar/reklam-yoneticisi.md` (Meta Ads Manager / Google Ads arayüz mantığı, çok hesaplı ajans görünümleri)
 - [ ] Bilinen açık: telefonda sayfa 147 px yana taşıyor
-- [ ] Araştırmanın 1. önerisi
-- [ ] Araştırmanın 2. önerisi
+- [ ] Öneri 2: durum sütununda TESLİMAT durumu (`effective_status` + üstten gelen engel: "Duraklatıldı (kampanya)", "Reddedildi"); bugün yalnız kendi `status`ü, set "Yayında" görünüp harcamıyor
+- [ ] Öneri 3: Google "Bütçeyle sınırlı" — önce yapı taramasının hangi durum alanını okuduğuna bak; yeni alan gerekiyorsa canlı ölçüm (onay kapısı)
 
 ## 7 · Raporlar (`/raporlar`)
 
