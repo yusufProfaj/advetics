@@ -14,12 +14,14 @@ import { ApiRequestError, apiFetch } from '@/lib/api';
 import { PANEL_KAPILARI } from '@/lib/panel-adresleri';
 import { Dugme, dugmeSinifi } from '@/components/ui/dugme';
 import { Girdi, Secim } from '@/components/ui/alan';
+import { AramaliSecim } from '@/components/ui/aramali-secim';
 import { Uyari } from '@/components/ui/uyari';
 import { Serit } from '@/components/ui/hal';
 import { HESAP_ADIMLARI } from './kurulum-listesi-mantik';
 import { DurumRozeti } from './kurulum-yardimcilari';
 import {
   AD_ISTEYEN,
+  DEGISIM_SONUCU,
   DURUM_GOSTERIMI,
   KONTROL_ISTEGI,
   gelistiriciEpostasi,
@@ -155,7 +157,7 @@ export function AdimSatiri({
                 ) : null;
               })()}
             {(e.tur === 'secim' || e.tur === 'girdi') && (
-              <Dugme boyut="kucuk" ton={acik ? 'ikincil' : 'koyu'} onClick={() => setAcik((x) => !x)} aria-expanded={acik}>
+              <Dugme boyut="kucuk" ton={acik || a.durum === 'tamam' ? 'ikincil' : 'koyu'} onClick={() => setAcik((x) => !x)} aria-expanded={acik}>
                 {acik ? 'Vazgeç' : e.etiket}
               </Dugme>
             )}
@@ -172,23 +174,46 @@ export function AdimSatiri({
           {bilgi}
         </p>
       )}
-      {acik && e?.tur === 'secim' && <SecimPaneli kod={a.kod} clientId={clientId} workspaceAdi={v.workspaceAdi} gonderiliyor={gonderiliyor} gonder={(i) => void gonder(i)} />}
+      {acik && e?.tur === 'secim' && (
+        <SecimPaneli
+          kod={a.kod}
+          clientId={clientId}
+          workspaceAdi={v.workspaceAdi}
+          simdiki={a.durum === 'tamam' ? a.baslik : null}
+          gonderiliyor={gonderiliyor}
+          gonder={(i) => void gonder(i)}
+        />
+      )}
       {acik && e?.tur === 'girdi' && a.kod === 'gtm_etiket' && <TetikFormu mevcut={v.donusumTetigi} gonderiliyor={gonderiliyor} gonder={(t) => void gonder({ kod: 'gtm_etiket', tetik: t })} />}
       {a.kod === 'site_kodu' && v.siteKodu && a.durum !== 'tamam' && <SiteKodu kod={v.siteKodu} site={v.site} />}
     </li>
   );
 }
 
+// Arama kutusunun neyi aradığı; listede olmayan adımda genel ad.
+const ARAMA_NESNESI: Partial<Record<KurulumAdimi['kod'], string>> = {
+  meta_hesap: 'Reklam hesabı',
+  google_hesap: 'Reklam hesabı',
+  sayfa: 'Sayfa',
+  gtm_konteyner: 'Konteyner',
+  ga4_mulk: 'Mülk',
+  meta_piksel: 'Piksel',
+};
+const aramaNesnesi = (kod: KurulumAdimi['kod']) => ARAMA_NESNESI[kod] ?? 'Seçenek';
+
 function SecimPaneli({
   kod,
   clientId,
   workspaceAdi,
+  simdiki,
   gonderiliyor,
   gonder,
 }: {
   kod: KurulumAdimi['kod'];
   clientId: string;
   workspaceAdi: string;
+  /** Tamamlanmış adım değiştiriliyorsa şu anki seçim (`a.baslik`); değilse null. */
+  simdiki: string | null;
   gonderiliyor: boolean;
   gonder: (i: KurulumIstegi) => void;
 }) {
@@ -241,6 +266,13 @@ function SecimPaneli({
 
   return (
     <div className="mt-3 grid gap-3 rounded-alan border border-line p-3 md:grid-cols-2">
+      {simdiki && (
+        <div className="md:col-span-2">
+          <Serit ton="uyari" baslik={`Şu an: ${simdiki}`}>
+            {DEGISIM_SONUCU[kod] ?? 'Yeni seçim eskisinin yerine geçer.'}
+          </Serit>
+        </div>
+      )}
       {v.not && <p className="text-xs text-ink-muted md:col-span-2">{v.not}</p>}
       <div className="space-y-2">
         <p className="text-xs font-semibold text-ink">Mevcut olanı kullan</p>
@@ -248,15 +280,12 @@ function SecimPaneli({
           <p className="text-xs text-ink-muted">Seçilebilecek bir şey yok.</p>
         ) : (
           <>
-            <Secim value={mevcut} onChange={(e) => setMevcut(e.target.value)} aria-label="Mevcut seçenekler">
-              <option value="">Seç ({v.mevcut.length})</option>
-              {v.mevcut.map((o) => (
-                <option key={o.deger} value={o.deger}>
-                  {o.etiket}
-                  {o.not ? ` · ${o.not}` : ''}
-                </option>
-              ))}
-            </Secim>
+            {/*
+              ARAMALI: ajansın tek kimliği yüzlerce mülk/hesap/sayfa görüyor ve
+              düz açılır listede doğru satır bulunamıyordu. Yazılan metin adın,
+              notun ya da kimliğin İÇİNDE geçiyorsa satır listede.
+            */}
+            <AramaliSecim secenekler={v.mevcut} deger={mevcut} onDegis={setMevcut} etiket={`Mevcut ${aramaNesnesi(kod).toLocaleLowerCase('tr')} ara`} yerTutucu={`${aramaNesnesi(kod)} adı, hesabı ya da numarasıyla ara`} />
             <Dugme ton="koyu" boyut="kucuk" bekliyor={gonderiliyor} disabled={!mevcut} onClick={() => istek({ tur: 'mevcut', deger: mevcut })}>
               Bunu kullan
             </Dugme>

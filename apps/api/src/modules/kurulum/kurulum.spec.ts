@@ -158,6 +158,32 @@ describe('adım durumları', () => {
   });
   const bul = (a: KurulumAnlik, k: string) => kurulumAdimlari(a).find((x) => x.kod === k)!;
 
+  /*
+   * TAMAMLANMIŞ ÖLÇÜM SEÇİMİ DEĞİŞTİRİLEBİLİR (2026-10-14): konteyner, mülk
+   * ve piksel "tamam" olunca eylem null dönüyordu ve yanlış seçimi düzeltmenin
+   * panelde yolu yoktu. Hesap ve sayfa BİLEREK değiştirilemez (atama ekranı).
+   */
+  it('KRİTİK: tamam konteyner, mülk ve piksel "Değiştir" taşır; hesap ve sayfa taşımaz', () => {
+    const a = anlik({ satir: satir({ gtmKimligi: 'GTM-ABC', gtmKonteynerYolu: 'accounts/1/containers/2', ga4MulkId: '41', ga4OlcumKimligi: 'G-XYZ' }) });
+    for (const k of ['gtm_konteyner', 'ga4_mulk', 'meta_piksel']) {
+      expect(bul(a, k).durum, k).toBe('tamam');
+      expect(bul(a, k).eylem, k).toEqual({ tur: 'secim', etiket: 'Değiştir' });
+      expect(bul(a, k).otomatik, k).toBe(false);
+    }
+    for (const k of ['meta_hesap', 'google_hesap', 'sayfa']) {
+      expect(bul(a, k).durum, k).toBe('tamam');
+      expect(bul(a, k).eylem, k).toBeNull();
+    }
+  });
+
+  it('ölçüm izni yoksa konteyner/mülk "Değiştir" çıkmaz (liste okunamazdı); site yoksa mülk de çıkmaz', () => {
+    const s = satir({ gtmKimligi: 'GTM-ABC', gtmKonteynerYolu: 'accounts/1/containers/2', ga4MulkId: '41', ga4OlcumKimligi: 'G-XYZ' });
+    const izinsiz = anlik({ satir: s, googleBaglanti: { id: 'g', olcumIzni: false } });
+    expect(bul(izinsiz, 'gtm_konteyner').eylem).toBeNull();
+    expect(bul(izinsiz, 'ga4_mulk').eylem).toBeNull();
+    expect(bul(anlik({ satir: s, site: null }), 'ga4_mulk').eylem).toBeNull();
+  });
+
   it('her kod tam bir kez, sabitteki sırayla; nedeni boş adım yok', () => {
     for (const a of [anlik(), anlik({ meta: null, google: null, googleBaglanti: null, metaBaglanti: null, satir: null, hazirlama: null, site: null, pikselId: null })]) {
       const l = kurulumAdimlari(a);

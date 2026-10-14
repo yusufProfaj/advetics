@@ -63,6 +63,23 @@ export function secimIstegi(kod: KurulumAdimKodu, f: SecimFormu): KurulumIstegi 
 /** Yeni açılırken ad isteyen adımlar (Meta/Google hesabı); diğerleri workspace adını kullanır. */
 export const AD_ISTEYEN: ReadonlySet<KurulumAdimKodu> = new Set(['meta_hesap', 'google_hesap']);
 
+/**
+ * TAMAMLANMIŞ ADIMI DEĞİŞTİRMENİN SONUCU — seçmeden ÖNCE okunur. Konteyner
+ * değişince sitedeki kod da değişmek zorunda; bunu söylemeden değiştirmek,
+ * sitede eski kod kalıp etiketlerin boş konteynere yazılması (ya da iki
+ * konteynerin birlikte çalışıp dönüşümü İKİ KEZ sayması) demek ve ikisi de
+ * sessiz. Metinler sunucunun gerçekten yaptığını anlatıyor
+ * (`kurulum.service.ts` konteyner/mulk/piksel), fazlasını vaat etmiyor.
+ */
+export const DEGISIM_SONUCU: Partial<Record<KurulumAdimKodu, string>> = {
+  gtm_konteyner:
+    'Sitedeki kod değişir: yeni konteynerin kodunu siteye ekle ve eskisini kaldır, ikisi birlikte kalırsa dönüşümler iki kez sayılır. Ölçüm etiketleri yeni konteynere yeniden yazılıp yayınlanır; eski konteynerdeki etiketlere dokunulmaz.',
+  ga4_mulk:
+    'Etiketler yeni ölçüm kimliğiyle yeniden yayınlanmalı (Ölçüm etiketleri adımı "Güncellenmeli" olur) ve Google Ads bağlantısı yeni mülk için yeniden kurulur. Eski mülkte toplanan veri orada kalır.',
+  meta_piksel:
+    'Etiketler yeni pikselle yeniden yayınlanmalı (Ölçüm etiketleri adımı "Güncellenmeli" olur). Bundan sonra kurulan reklamlar yeni pikseli kullanır; yayındaki reklamlar eskisinde kalır.',
+};
+
 /** Geliştiriciye gidecek e-posta: kod + nereye ekleneceği. `mailto:` gövdesi 2.000 karakteri aşmasın diye kısa. */
 export function gelistiriciEpostasi(site: string | null, gtmKimligi: string, head: string, body: string): string {
   const konu = `Siteye Google Tag Manager kodu (${gtmKimligi})`;

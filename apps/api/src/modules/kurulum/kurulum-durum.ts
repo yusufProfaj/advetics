@@ -86,6 +86,21 @@ type Hucre = Omit<KurulumAdimi, 'kod' | 'grup'>;
 const metaOdemeAdresi = (act: string) => `https://business.facebook.com/billing_hub/accounts/details?asset_id=${act.replace(/^act_/, '')}`;
 const googleFaturaAdresi = (no: string) => `https://ads.google.com/aw/billing/summary?__e=${no.replace(/-/g, '')}`;
 
+/*
+ * TAMAMLANMIŞ ÖLÇÜM SEÇİMİ DEĞİŞTİRİLEBİLİR (kullanıcı, 2026-10-14: *"bunu
+ * ben değiştiremiyorum, değiştirebileceğim yer neresi"*). Konteyner, mülk ve
+ * piksel "tamam" olunca eylem `null` dönüyordu ve yanlış seçilen bir
+ * konteyneri düzeltmenin panelde hiçbir yolu yoktu. Sunucu yolu zaten üzerine
+ * yazıyor ve bağımlıları düşürüyor: konteyner `gtm_yayin` + `site_kodu`yu
+ * sıfırlıyor, mülk/piksel etiket imzasını bozup "Ölçüm etiketleri"ni
+ * "Güncellenmeli"ye çeviriyor, mülk `ga4_ads_bagli`yı kapatıyor.
+ * Hesap ve sayfa BİLEREK yok: hesabı değiştirmek veri taşıma ve atama
+ * demek, onun evi Platform bağlantıları'ndaki atama.
+ * Konteyner ve mülk listesi ölçüm izni istiyor; izin yoksa düğme çıkmıyor
+ * (tıklayınca "seçenekler alınamadı" görmek yerine).
+ */
+const DEGISTIR = { tur: 'secim', etiket: 'Değiştir' } as const;
+
 export function kurulumAdimlari(a: KurulumAnlik): KurulumAdimi[] {
   const s = a.satir;
   const not = (k: KurulumAdimKodu) => s?.adimNotlari[k];
@@ -166,19 +181,19 @@ export function kurulumAdimlari(a: KurulumAnlik): KurulumAdimi[] {
           };
     },
     gtm_konteyner: () => {
-      if (s?.gtmKimligi) return { durum: 'tamam', baslik: s.gtmKimligi, neden: 'Bu projenin Tag Manager konteyneri.', eylem: null, otomatik: false };
+      if (s?.gtmKimligi) return { durum: 'tamam', baslik: s.gtmKimligi, neden: 'Bu projenin Tag Manager konteyneri.', eylem: izinVar ? DEGISTIR : null, otomatik: false };
       if (!izinVar) return izinYok;
       return { durum: 'eksik', baslik: 'Kurulmadı', neden: 'Sitede erişebildiğimiz bir konteyner varsa o kullanılır, yoksa yeni açılır.', eylem: { tur: 'secim', etiket: 'Konteyner seç ya da aç' }, otomatik: true };
     },
     ga4_mulk: () => {
-      if (s?.ga4OlcumKimligi) return { durum: 'tamam', baslik: `${s.ga4OlcumKimligi} · mülk ${s.ga4MulkId ?? '?'}`, neden: 'Bu projenin Analytics mülkü ve web akışı.', eylem: null, otomatik: false };
+      if (s?.ga4OlcumKimligi) return { durum: 'tamam', baslik: `${s.ga4OlcumKimligi} · mülk ${s.ga4MulkId ?? '?'}`, neden: 'Bu projenin Analytics mülkü ve web akışı.', eylem: izinVar && a.site ? DEGISTIR : null, otomatik: false };
       if (!izinVar) return izinYok;
       if (!a.site) return { durum: 'eksik', baslik: 'Site adresi yok', neden: `Web akışı site adresi istiyor; ${PANEL_YERLERI.workspaceBilgileri}’nden gir.`, eylem: null, otomatik: false };
       return { durum: 'eksik', baslik: 'Kurulmadı', neden: 'Sitede erişebildiğimiz bir mülk varsa o kullanılır, yoksa yeni açılır.', eylem: { tur: 'secim', etiket: 'Mülk seç ya da aç' }, otomatik: true };
     },
     meta_piksel: () => {
       if (!a.meta) return { durum: 'atlandi', baslik: 'Hesap yok', neden: 'Önce Meta reklam hesabı.', eylem: null, otomatik: false };
-      if (a.pikselId) return { durum: 'tamam', baslik: `Piksel ${a.pikselId}`, neden: 'Reklamlar ve etiketler bu pikseli kullanır.', eylem: null, otomatik: false };
+      if (a.pikselId) return { durum: 'tamam', baslik: `Piksel ${a.pikselId}`, neden: 'Reklamlar ve etiketler bu pikseli kullanır.', eylem: DEGISTIR, otomatik: false };
       return { durum: 'eksik', baslik: 'Seçilmedi', neden: 'Hesaptaki pikseli seç ya da yeni piksel aç.', eylem: { tur: 'secim', etiket: 'Piksel seç ya da aç' }, otomatik: true };
     },
     ads_donusum: () => {

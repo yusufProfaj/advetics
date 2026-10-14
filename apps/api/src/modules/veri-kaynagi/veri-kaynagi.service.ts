@@ -455,23 +455,85 @@ export class VeriKaynagiService {
   }
 
   /**
+   * Kurulumun mülk geçişinde kaynak durumu. `kaldir` ile aynı kalıp:
+   * RETURNING ile satır sayılıyor (politikası tutmayan UPDATE hata vermez,
+   * sıfır satır etkiler — CLAUDE.md) ve denetim kaydı düşüyor.
+   */
+  private async durumYaz(ctx: TenantContext, clientId: string, id: string, durum: KaynakDurumu, onceki: Record<string, string>): Promise<void> {
+    await this.prisma.withTenant(ctx, async (t) => {
+      const r = await t.$queryRaw<unknown[]>(Prisma.sql`
+        UPDATE veri_kaynaklari SET durum = ${durum}, updated_at = now() WHERE id = ${id}::uuid RETURNING id`);
+      if (r.length !== 1) throw new ForbiddenException('Veri kaynağı güncellenemedi: bu workspace’i değiştirme yetkin yok.');
+      await this.audit.record(t as never, ctx, {
+        action: durum === 'kaldirildi' ? 'veri_kaynagi.kaldir' : 'veri_kaynagi.geri_al',
+        targetType: 'veri_kaynagi',
+        targetId: id,
+        clientId,
+        before: onceki,
+        after: { durum },
+        ip: null,
+        userAgent: null,
+      });
+    });
+  }
+
+  /**
    * KURULUM REHBERİ MÜLKÜ KURUNCA OTOMATİK BAĞLAMA (MIMARI Ç-5). Salt okuma
    * ve geri alınabilir (kartta "Kaldır"). Workspace'te zaten bir GA4 kaynağı
    * varsa DOKUNULMAZ: farklıysa kartta `kurulumUyusmazligi` yazar, sessizce
    * biri seçilmez. Hata rehber adımını DÜŞÜRMEZ: kurulum başarılı, yalnız
    * okuma bağlanamadı ve sebebi döndürülüyor.
+   *
+   * MÜLK DEĞİŞTİRİLİNCE OKUMA DA GEÇER — ama yalnız KURULUMU İZLİYORSA
+   * (2026-10-14, Kurulum'a "Değiştir" eklendi). `oncekiKurulumMulku`
+   * kurulumun eski mülkü; okunan kaynak tam O mülkse kullanıcı onu kurulum
+   * yoluyla bağlamıştı ve yeni seçimle birlikte gitmesi bekleniyor. Yoksa
+   * kurulum yeni mülkü yazar, raporlar ESKİ mülkü okumaya devam eder ve
+   * kullanıcı "değiştirdim" sandığı veriyi raporda görür. Okunan kaynak BAŞKA
+   * bir mülkse biri onu bilerek bağlamıştır: dokunulmaz, uyuşmazlık yazar.
+   * Eski kaynak SİLİNMEZ, `kaldirildi` olur (çekilmiş veri raporda kalır);
+   * yeni kayıt düşerse eski geri açılır: okumasız kalmak, iki mülk arasında
+   * kalmaktan kötü.
    */
-  async kurulumdanBagla(ctx: TenantContext, clientId: string, mulkId: string): Promise<string | null> {
+  async kurulumdanBagla(ctx: TenantContext, clientId: string, mulkId: string, oncekiKurulumMulku: string | null = null): Promise<string | null> {
     try {
       const g = await this.prisma.withTenant(ctx, (t) => this.googleBaglami(t as unknown as TxLike, clientId));
       const [var_] = await this.prisma.withTenant(ctx, (t) =>
-        t.$queryRaw<Array<{ dis_kimlik: string }>>(Prisma.sql`
-          SELECT dis_kimlik FROM veri_kaynaklari WHERE client_id = ${clientId}::uuid AND tur = 'ga4' AND durum <> 'kaldirildi'`),
+        t.$queryRaw<Array<{ id: string; dis_kimlik: string; durum: KaynakDurumu }>>(Prisma.sql`
+          SELECT id::text, dis_kimlik, durum FROM veri_kaynaklari WHERE client_id = ${clientId}::uuid AND tur = 'ga4' AND durum <> 'kaldirildi'`),
       );
-      if (var_) return var_.dis_kimlik === mulkId ? null : `Okunan Analytics mülkü (${var_.dis_kimlik}) kurulumdakinden farklı; ${PANEL_YERLERI.kurulum} › Dönüşüm ölçümü adımında kontrol et.`;
-      if (!g.baglanti || eksikKaynakIzni('ga4', g.baglanti.scopes)) return 'Analytics okuması bağlanmadı: Google bağlantısında okuma izni yok.';
-      await this.kaydet(ctx, clientId, g, { mulkId, ad: mulkId, saatDilimi: null, paraBirimi: null }, null, {});
-      return 'Analytics okuması bağlandı.';
+      if (var_ && var_.dis_kimlik === mulkId) return null;
+      const gecis = var_ !== undefined && oncekiKurulumMulku !== null && var_.dis_kimlik === oncekiKurulumMulku;
+      if (var_ && !gecis) return `Okunan Analytics mülkü (${var_.dis_kimlik}) kurulumdakinden farklı; ${PANEL_YERLERI.kurulum} › Dönüşüm ölçümü adımında kontrol et.`;
+      if (!g.baglanti || eksikKaynakIzni('ga4', g.baglanti.scopes)) {
+        return gecis ? `Analytics okuması hâlâ eski mülkte (${var_!.dis_kimlik}): Google bağlantısında okuma izni yok.` : 'Analytics okuması bağlanmadı: Google bağlantısında okuma izni yok.';
+      }
+      if (!gecis) {
+        await this.kaydet(ctx, clientId, g, { mulkId, ad: mulkId, saatDilimi: null, paraBirimi: null }, null, {});
+        return 'Analytics okuması bağlandı.';
+      }
+      // ÖNCE UCUZ ENGEL: yeni mülk başka workspace'te okunuyorsa eskiyi kaldırmadan dur.
+      const baskasi = (await this.bagliMulkler(g.orgId)).get(mulkId);
+      if (baskasi && baskasi.clientId !== clientId && baskasi.durum !== 'kaldirildi') {
+        return `Analytics okuması hâlâ eski mülkte (${var_!.dis_kimlik}): ${mulkId} "${baskasi.ad}" workspace’inde okunuyor, bir mülk yalnız bir workspace’te okunur.`;
+      }
+      const eski = var_!;
+      await this.durumYaz(ctx, clientId, eski.id, 'kaldirildi', { durum: eski.durum, sebep: 'kurulum_mulk_degisti', yeniMulk: mulkId });
+      try {
+        await this.kaydet(ctx, clientId, g, { mulkId, ad: mulkId, saatDilimi: null, paraBirimi: null }, null, {});
+      } catch (e) {
+        // YARIM GEÇİŞ YOK: `kaydet` satırı yazıp SONRA kuyrukta düşebiliyor.
+        // Yalnız eskiyi geri açmak workspace'te İKİ etkin GA4 kaynağı bırakır
+        // (ajans toplamında çift sayım); yeni satır da kapatılıyor.
+        await this.prisma.withTenant(ctx, (t) =>
+          t.$queryRaw(Prisma.sql`
+            UPDATE veri_kaynaklari SET durum = 'kaldirildi', updated_at = now()
+             WHERE client_id = ${clientId}::uuid AND tur = 'ga4' AND dis_kimlik = ${mulkId} AND durum <> 'kaldirildi' RETURNING id`),
+        );
+        await this.durumYaz(ctx, clientId, eski.id, eski.durum, { durum: 'kaldirildi', sebep: 'kurulum_mulk_degisimi_geri_alindi' });
+        throw e;
+      }
+      return `Analytics okuması ${eski.dis_kimlik} yerine ${mulkId} mülküne geçti; eski mülkten çekilmiş veri raporlarda kalır.`;
     } catch (e) {
       const m = e instanceof Error ? e.message : String(e);
       logger.warn(`Kurulum mülkü veri kaynağına bağlanamadı (${clientId}): ${m}`);

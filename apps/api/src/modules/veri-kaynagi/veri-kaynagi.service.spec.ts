@@ -144,6 +144,48 @@ describe('kurulumdanBagla (Ç-5)', () => {
     expect(await svc.kurulumdanBagla(ctx, IDS.client, '555555555')).toMatch(/farklı/);
     expect(await h.q(`SELECT dis_kimlik, created_by FROM veri_kaynaklari`)).toEqual([{ dis_kimlik: '312845771', created_by: null }]);
   });
+
+  /*
+   * KURULUMDA MÜLK DEĞİŞTİ (2026-10-14, "Değiştir"): okuma kurulumun ESKİ
+   * mülkünü izliyorsa yenisine geçer. Geçmezse kurulum yeni mülkü yazar,
+   * raporlar eskisini okur ve kullanıcı değiştirdiğini sandığı veriyi görür.
+   */
+  it('KRİTİK: okuma eski kurulum mülkündeyse yenisine geçer; eski satır silinmez, kaldırıldı olur', async () => {
+    expect(await svc.kurulumdanBagla(ctx, IDS.client, '312845771')).toBe('Analytics okuması bağlandı.');
+    expect(await svc.kurulumdanBagla(ctx, IDS.client, '555555555', '312845771')).toMatch(/312845771 yerine 555555555/);
+    expect(await h.q(`SELECT dis_kimlik, durum FROM veri_kaynaklari ORDER BY dis_kimlik`)).toEqual([
+      { dis_kimlik: '312845771', durum: 'kaldirildi' },
+      { dis_kimlik: '555555555', durum: 'etkin' },
+    ]);
+  });
+
+  it('okunan mülk kurulumun eski mülkü DEĞİLSE (bilerek bağlanmış) dokunmaz', async () => {
+    await svc.kurulumdanBagla(ctx, IDS.client, '312845771');
+    expect(await svc.kurulumdanBagla(ctx, IDS.client, '555555555', '999000111')).toMatch(/farklı/);
+    expect(await h.q(`SELECT dis_kimlik, durum FROM veri_kaynaklari`)).toEqual([{ dis_kimlik: '312845771', durum: 'etkin' }]);
+  });
+
+  it('yeni mülk başka workspace\'te okunuyorsa eskiyi KALDIRMADAN durur (okumasız kalmaz)', async () => {
+    await svc.kurulumdanBagla(ctx, IDS.client, '312845771');
+    await svc.kurulumdanBagla({ ...ctx, activeClientId: B } as TenantContext, B, '555555555');
+    expect(await svc.kurulumdanBagla(ctx, IDS.client, '555555555', '312845771')).toMatch(/hâlâ eski mülkte \(312845771\)/);
+    expect(await h.q(`SELECT client_id::text AS c, dis_kimlik, durum FROM veri_kaynaklari ORDER BY dis_kimlik`)).toEqual([
+      { c: IDS.client, dis_kimlik: '312845771', durum: 'etkin' },
+      { c: B, dis_kimlik: '555555555', durum: 'etkin' },
+    ]);
+  });
+
+  it('KRİTİK: yeni kayıt düşerse eski kaynak geri açılır, yarım yazılan yeni kapanır', async () => {
+    await svc.kurulumdanBagla(ctx, IDS.client, '312845771');
+    enqueue.mockRejectedValueOnce(new Error('kuyruk düştü'));
+    // kaydet INSERT'ten sonra kuyruğa atıyor; kuyruk düşünce kaydet fırlatıyor.
+    expect(await svc.kurulumdanBagla(ctx, IDS.client, '555555555', '312845771')).toMatch(/bağlanamadı: kuyruk düştü/);
+    // Tam geri dönüş: eski etkin, yarım yazılan yeni satır kapalı (iki etkin kaynak = çift sayım).
+    expect(await h.q(`SELECT dis_kimlik, durum FROM veri_kaynaklari ORDER BY dis_kimlik`)).toEqual([
+      { dis_kimlik: '312845771', durum: 'etkin' },
+      { dis_kimlik: '555555555', durum: 'kaldirildi' },
+    ]);
+  });
 });
 
 describe('rapor uçları: boş listenin NEDENİ', () => {

@@ -146,6 +146,13 @@ describe('gizli kimlik ve kurulum bağı', () => {
     expect(bagla).toBeGreaterThan(yaz);
   });
 
+  it('KRİTİK: mülk değişince ESKİ kurulum mülkü okumaya geçiriliyor (Değiştir, 2026-10-14)', () => {
+    // Parametre varsayılanı null: unutulursa derleme de servis testi de susar,
+    // okuma eski mülkte kalır ve raporlar değiştirilmemiş veriyi gösterir.
+    const src = yorumsuz(oku('../kurulum/kurulum.service.ts'));
+    expect(src).toContain('this.veriKaynagi.kurulumdanBagla(ctx, clientId, mulkId, b.satir?.ga4MulkId ?? null)');
+  });
+
   it('baglantiSec TEK yerde: kurulum ve veri kaynağı aynı fonksiyonu çağırıyor', () => {
     const kurulum = yorumsuz(oku('../kurulum/kurulum.service.ts'));
     expect(kurulum).toMatch(/from '\.\.\/connections\/baglanti-sec'/);

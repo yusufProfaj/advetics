@@ -803,7 +803,8 @@ export class KurulumService {
      * ama kullanıcı ikinci kez seçmek zorunda kalmamalı. Bağlama hatası
      * ADIMI DÜŞÜRMEZ (mülk kuruldu); sebebi adımın sonucuna ekleniyor.
      */
-    const okuma = await this.veriKaynagi.kurulumdanBagla(ctx, clientId, mulkId);
+    // Eski kurulum mülkü: okuma onu izliyorsa yenisine geçsin (Kurulum'da "Değiştir").
+    const okuma = await this.veriKaynagi.kurulumdanBagla(ctx, clientId, mulkId, b.satir?.ga4MulkId ?? null);
     const sonuc = akislar.length > 1 ? `Mülk ${mulkId}: ${akislar.length} web akışından ilki (${akis.olcumKimligi}) kullanılıyor.` : `Mülk ${mulkId}, ölçüm kimliği ${akis.olcumKimligi}.`;
     return okuma ? `${sonuc} ${okuma}` : sonuc;
   }
