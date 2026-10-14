@@ -752,6 +752,16 @@ describe('MetricsService', () => {
       expect(await seviye('ad')).toEqual({ yayinda: false, ad: 'Reddedildi' });
     });
 
+    it('Google serving_status: bitiş tarihi geçmiş kampanya açık olsa da "Bitti"', async () => {
+      await seedMetrics({ date: '2026-08-05', spendMicros: '1000000', impressions: 100, clicks: 5, conversions: 1 });
+      await h.q(`UPDATE campaigns SET effective_status = 'ENDED' WHERE id = $1`, [CAMPAIGN_ID]);
+      const [k] = await svc.breakdown(CTX, { from: '2026-08-05', to: '2026-08-05', level: 'campaign', limit: 50 });
+      expect(k!.teslimat).toEqual({ yayinda: false, ad: 'Bitti (bitiş tarihi geçti)' });
+      await h.q(`UPDATE campaigns SET effective_status = 'SERVING' WHERE id = $1`, [CAMPAIGN_ID]);
+      const [k2] = await svc.breakdown(CTX, { from: '2026-08-05', to: '2026-08-05', level: 'campaign', limit: 50 });
+      expect(k2!.teslimat).toEqual({ yayinda: true, ad: 'Yayında' });
+    });
+
     it('reklam seviyesinde ÜST ad set adı da döner', async () => {
       // Reklam adları ad set'ler arasında tekrar ediyor; üst varlık olmadan
       // tabloda hangi satırın hangisi olduğu ayırt edilemiyor.

@@ -50,6 +50,17 @@ const META_KODU: Record<string, TeslimatDurumu> = {
   PENDING_BILLING_INFO: { yayinda: false, ad: 'Ödeme bilgisi bekliyor' },
   CAMPAIGN_PAUSED: { yayinda: false, ad: 'Kampanya duraklatıldı' },
   ADSET_PAUSED: { yayinda: false, ad: 'Reklam seti duraklatıldı' },
+  /*
+   * GOOGLE `campaign.serving_status` — yapı taraması kampanya satırında
+   * `effective_status`a bunu yazıyor (`google.provider.ts`). Kampanya kendi
+   * durumunda ENABLED (bizde `active`) olup bitiş tarihi geçmiş, başlangıcı
+   * gelmemiş ya da askıya alınmış olabiliyor; üçü de harcamıyor. "Bütçeyle
+   * sınırlı" BURADA DEĞİL: o `campaign.primary_status_reasons`ta ve o alan
+   * okunmuyor (yeni GAQL alanı, canlıda ölçülmeli; PROGRESS.md).
+   */
+  ENDED: { yayinda: false, ad: 'Bitti (bitiş tarihi geçti)' },
+  PENDING: { yayinda: false, ad: 'Başlamadı (başlangıç tarihi gelmedi)' },
+  SUSPENDED: { yayinda: false, ad: 'Askıya alındı' },
 };
 
 export function teslimatDurumu(g: TeslimatGirdisi): TeslimatDurumu {
