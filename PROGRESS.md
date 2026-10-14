@@ -87,10 +87,11 @@
 
 ## 7 · Raporlar (`/raporlar`)
 
-- [ ] Araştırma → `docs/pazar/raporlar.md` (AgencyAnalytics, Whatagraph, DashThis, Looker Studio şablonları; beyaz etiket rapor beklentileri)
+- [x] Araştırma → `docs/pazar/raporlar.md` (AgencyAnalytics, Whatagraph, DashThis, Looker Studio şablonları; beyaz etiket rapor beklentileri)
 - [ ] Bilinen açık: rapor önizlemesi kılavuz dışı slate renkleri ve ikinci `h1` taşıyor
 - [ ] Bilinen açık: önizleme telefonda sağdan kesik; genişliğe ölçeklensin
-- [ ] Araştırmanın 1. önerisi
+- [ ] Öneri 2: özet bölümünde "Aylık bütçe" satırı (tek takvim ayı + bütçe tanımlıysa; `budgets.pacing` ile aynı hesap)
+- [ ] Öneri 3: ajans yorumu ve sonraki adımlar alanı (dönem başına düz metin, PDF'te özetin altında; migration var, deploy kullanıcıda)
 
 ## 8 · Potansiyel Müşteriler (`/potansiyel-musteriler`)
 
