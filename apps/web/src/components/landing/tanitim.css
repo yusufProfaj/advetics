@@ -222,6 +222,24 @@
 .tanitim .hero {
   padding: 72px 0 88px;
 }
+/*
+ * HERO BAŞLIĞI İKİ SATIR: iki cümle, iki satır ("Ne yapılacağını söyler." /
+ * "Onaylarsanız yapar."). Taslağın 5fr sütunu (~437 px) ve 68 px başlığıyla
+ * masaüstünde BEŞ satıra kırılıyordu: "Onaylarsanız" tek başına bir satır,
+ * cümleler ortasından bölünmüş. Ölçüldü (1440 px, Montserrat 800, -0,02em):
+ * ilk cümle 48 px'te ~552 px, 6fr sütun ~572 px. Bu yüzden hero yazı
+ * sütunu 6fr ve başlık en çok 48 px; 901-1160 px arasında vw ile birlikte
+ * küçülüyor, oran korunuyor. Yalnız iki sütunlu düzende: tek sütunda
+ * (≤900 px) başlık genel `.t-h1` ölçüsünde kalıyor.
+ */
+@media (min-width: 901px) {
+  .tanitim .hero .modul {
+    grid-template-columns: 6fr 5fr;
+  }
+  .tanitim .hero .t-h1 {
+    font-size: clamp(36px, 3.6vw, 48px);
+  }
+}
 .tanitim .hero .dgler {
   display: flex;
   gap: 10px;
@@ -1361,8 +1379,10 @@
 }
 
 /* ── Kapanış bandı ── */
+/* Yalnız ÜST boşluk: kısaltma `.kap`ın yan boşluğunu da sıfırlıyordu ve
+   601-1160 px arasında siyah bant ekranın iki kenarına yapışıyordu. */
 .tanitim .kapanis-kap {
-  padding: 96px 0 0;
+  padding-top: 96px;
 }
 .tanitim .kapanis {
   background: #000000;
@@ -1714,8 +1734,16 @@
   }
 }
 @media (max-width: 600px) {
+  /* Yalnız YAN boşluk. Kısaltma (`padding: 0 16px`) aynı öğedeki `.yasal`ın
+     üst ve alt boşluğunu da sıfırlıyordu: telefonda içindekiler üst çubuğa
+     yapışıyor, sayfa alt bilgiye boşluksuz iniyordu (375 px, ölçüldü). */
   .tanitim .kap {
-    padding: 0 16px;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  /* Telefonda bant bir önceki bölümün alt boşluğuna yaslanıyor (önceki görünüş). */
+  .tanitim .kapanis-kap {
+    padding-top: 0;
   }
   .tanitim .adimlar,
   .tanitim .guvenlik-kartlari {

@@ -1,5 +1,5 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { CEREZLER, CEREZ_ANAHTARI, CEREZ_SURUMU, DEPOLAMA, bildirimGorunsunMu } from './cerez';
@@ -96,10 +96,20 @@ describe('KRİTİK: çerez politikası API\'nin yazdığı çerezlerle aynı', (
 
   it('süreler koddan: 30 günlük seçimler, süresiz üst hesap, 5 dakikalık iki adım, varsayılan TTL', () => {
     const sure = (ad: string) => CEREZLER.find((c) => c.ad === ad)!.sure;
+    /*
+     * HER YAZIM BİR DALA DÜŞMEK ZORUNDA. İlk sürüm yalnız `parseTtl('30d')`
+     * ve "maxAge yok" hâllerini soruyordu: API'de 30d → 7d yapınca ya da
+     * `adv_mgr`e süre eklenince hiçbir iddia çalışmıyor ve test yeşil
+     * kalıyordu (Ajan 4, mutasyonla görüldü). Tanınmayan biçim artık düşüyor.
+     */
     for (const { sabit, ad } of sabitler) {
       const yazim = cerezYazimi(sabit);
-      if (/maxAge: parseTtl\('30d'\)/.test(yazim)) expect(sure(ad), ad).toBe('30 gün');
+      const gun = yazim.match(/maxAge: parseTtl\('(\d+)d'\)/);
+      if (gun) expect(sure(ad), ad).toBe(`${gun[1]} gün`);
+      else if (/tokens\.persistent \? \{ maxAge: parseTtl\(config\.jwt\.(access|refresh)Ttl\) \}/.test(yazim)) continue; // aşağıda
+      else if (/maxAge: IKI_ADIM_BEKLEME_DK \* 60_000/.test(yazim)) continue; // aşağıda
       else if (!/maxAge/.test(yazim)) expect(sure(ad), ad).toMatch(/tarayıcı kapanınca silinir/i);
+      else throw new Error(`${ad}: tanınmayan süre biçimi, politika satırı elle doğrulanmalı`);
     }
     expect(cerezYazimi('IKI_ADIM_COOKIE')).toContain('IKI_ADIM_BEKLEME_DK * 60_000');
     const dk = readFileSync(join(KOK, 'packages/shared/src/iki-adim/index.ts'), 'utf8').match(
@@ -131,5 +141,39 @@ describe('KRİTİK: çerez politikası API\'nin yazdığı çerezlerle aynı', (
       const onek = ad.replace('.*', '.');
       expect(readFileSync(join(WEB, dosya), 'utf8'), `${ad} ${dosya} içinde yok`).toContain(onek);
     }
+  });
+
+  /*
+   * Yukarıdaki test listedeki anahtarların VAR olduğunu soruyor, listenin
+   * EKSİKSİZ olduğunu değil: panele yeni bir `localStorage` anahtarı
+   * eklenince politika onu hiç saymadan yeşil kalırdı. Depoya dokunan her
+   * dosya burada adıyla; yeni bir dosya görülürse politika tablosuna bakılıp
+   * buraya eklenmeli.
+   */
+  it('KRİTİK: tarayıcı deposuna dokunan her panel dosyası bilinen bir anahtarın evi', () => {
+    const WEB = join(KOK, 'apps/web/src');
+    const BILINEN = [
+      'components/connections/toplu-tazeleme.tsx',
+      'components/genel-bakis/kurulum-seridi.tsx',
+      'components/landing/cerez-bildirimi.tsx',
+      'components/nav.tsx',
+      'components/oturum-tazeleyici.tsx',
+      'components/tema.tsx',
+      'components/uyari-bandi.tsx',
+      'lib/tema.ts',
+    ];
+    const bulunan: string[] = [];
+    (function tara(d: string) {
+      for (const ad of readdirSync(d)) {
+        const yol = join(d, ad);
+        if (statSync(yol).isDirectory()) tara(yol);
+        else if (/\.tsx?$/.test(ad) && !/\.spec\.tsx?$/.test(ad)) {
+          const k = readFileSync(yol, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+          if (/(local|session)Storage\.(getItem|setItem)/.test(k)) bulunan.push(relative(WEB, yol));
+        }
+      }
+    })(WEB);
+    expect(bulunan.length, 'tarama boşa düştü').toBeGreaterThan(4);
+    expect(bulunan.sort()).toEqual(BILINEN);
   });
 });

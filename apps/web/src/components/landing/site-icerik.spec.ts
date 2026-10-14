@@ -169,6 +169,65 @@ describe('tanıtım sitesi: sayfalar, middleware ve site haritası', () => {
     expect(JSON.stringify(YASAL_BELGELER)).not.toMatch(/KVKK/);
   });
 
+  /*
+   * ═══ HER İÇ BAĞLANTININ BİR SAYFASI VAR ═══
+   *
+   * Bağlantılar dört yerde elle ya da listeden yazılıyor (menü, alt bilgi,
+   * yasal menü, sayfa içi düğmeler). Var olmayan bir adrese giden bağlantı
+   * derlemede hiçbir şey demiyor: ziyaretçi 404 görüyor; oturumsuz
+   * açılmayan bir adrese giden bağlantı ise ziyaretçiyi giriş ekranına
+   * atıyor. İkisini de yalnız müşteri görür. Adresler `app/` altındaki
+   * GERÇEK `page.tsx` dosyalarından çözülüyor (yol grupları atlanıyor,
+   * `[x]` bir parça).
+   */
+  it('KRİTİK: tanıtım ve yasal sayfalardaki her iç bağlantı var olan, oturumsuz açılan bir sayfaya gidiyor', () => {
+    const rotalar = (function tara(dizin: string): RegExp[] {
+      return readdirSync(dizin).flatMap((ad) => {
+        const yol = join(dizin, ad);
+        if (statSync(yol).isDirectory()) return tara(yol);
+        if (ad !== 'page.tsx') return [];
+        const parcalar = relative(APP, dizin)
+          .split('/')
+          .filter((p) => p && !/^\(.*\)$/.test(p))
+          .map((p) => (/^\[.*\]$/.test(p) ? '[^/]+' : p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+        return [new RegExp(`^/${parcalar.join('/')}$`)];
+      });
+    })(APP);
+    expect(rotalar.length, 'rota taraması boşa düştü').toBeGreaterThan(20);
+
+    const kaynaklar = [...SITE_KAYNAKLARI, ...sayfaDosyalari(join(APP, '(legal)'))];
+    const baglantilar = new Set<string>();
+    for (const d of kaynaklar) {
+      const k = yorumsuz(readFileSync(d, 'utf8'));
+      for (const m of k.matchAll(/(?:href=|href:\s*)\{?\s*['"`](\/[^'"`#?$]*)/g)) baglantilar.add(m[1]!);
+    }
+    // Listeden üretilenler: menü, alt bilgi, yasal menü, site haritası, özellik ve çözüm adresleri.
+    for (const y of [...UST_MENU, ...YASAL_BELGELER]) baglantilar.add(y.href);
+    for (const s of SITE_SAYFALARI) baglantilar.add(s.yol);
+    // Tarama gerçekten JSX'teki elle yazılmış bağlantıları buldu mu (yalnız listeler değil).
+    expect([...baglantilar]).toContain('/login');
+    expect([...baglantilar]).toContain('/cerez-politikasi');
+    expect(baglantilar.size).toBeGreaterThan(20);
+
+    const izinli = publicPaths();
+    const sayfasiz = [...baglantilar].filter((b) => !rotalar.some((r) => r.test(b.replace(/\/$/, '') || '/')));
+    expect(sayfasiz, 'sayfası olmayan bağlantı').toEqual([]);
+    const kapali = [...baglantilar].filter(
+      (b) => b !== '/' && !izinli.some((p) => b === p || b.startsWith(`${p}/`)),
+    );
+    expect(kapali, 'oturumsuz açılmayan bağlantı').toEqual([]);
+  });
+
+  it('ana sayfanın çapa bağlantıları sayfadaki bir bölüme gidiyor', () => {
+    const k = yorumsuz(readFileSync(join(SITE, 'page.tsx'), 'utf8'));
+    const capalar = [...k.matchAll(/href="#([^"]+)"/g)].map((m) => m[1]!);
+    expect(capalar.length, 'tarama boşa düştü').toBeGreaterThan(0);
+    const idler = [...k.matchAll(/id="([^"]+)"/g)].map((m) => m[1]!);
+    // Modül bölümlerinin id'si slug (`id={m.slug}`).
+    if (k.includes('id={m.slug}')) idler.push(...MODUL_BOLUMLERI.map((m) => m.slug));
+    for (const c of capalar) expect(idler, `#${c}`).toContain(c);
+  });
+
   it('kökteki eski tek sayfa kalmadı (iki `/` sayfası derlemeyi bozar)', () => {
     expect(existsSync(join(APP, 'page.tsx'))).toBe(false);
   });
@@ -302,5 +361,65 @@ describe('tanıtım sitesi: söz ve kimlik', () => {
     expect(kapsamsiz).toEqual([]);
     expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\) \{\s*\.tanitim \*,\s*\.tanitim \*::before,\s*\.tanitim \*::after \{\s*transition: none !important;\s*animation: none !important;/);
     expect(css).not.toMatch(/linear-gradient|radial-gradient/);
+  });
+
+  it('hero başlığı iki sütunlu düzende iki satıra sığacak ölçüde (tanitim.css yorumu, 1440 px ölçümü)', () => {
+    const css = readFileSync(TANITIM_CSS, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const i = css.indexOf('@media (min-width: 901px)');
+    if (i === -1) throw new Error('hero medya bloğu bulunamadı');
+    const blok = css.slice(i, css.indexOf('\n}', i));
+    expect(blok).toMatch(/\.tanitim \.hero \.modul \{\s*grid-template-columns: 6fr 5fr;/);
+    const enCok = blok.match(/\.tanitim \.hero \.t-h1 \{\s*font-size: clamp\(\d+px, [\d.]+vw, (\d+)px\);/)?.[1];
+    // 6fr sütun ~572 px; ilk cümle 48 px'te ~552 px. Büyütmek cümleyi yine ortasından böler.
+    expect(Number(enCok)).toBeLessThanOrEqual(48);
+  });
+
+  /*
+   * `.kap` başka bir sınıfla AYNI öğede duruyor (`kap yasal`, `kap
+   * kapanis-kap`, `kap modul`…). Bu ikililerden birine sonradan yazılan
+   * `padding:` kısaltması diğerinin boşluğunu sessizce sıfırlıyordu:
+   * telefonda yasal sayfanın üst/alt boşluğu (`.kap` 600 px kuralı) ve
+   * 601-1160 px'te kapanış bandının yan boşluğu (`.kapanis-kap`) gitmişti.
+   * Kısaltma yalnız `.kap`ın kendi temel kuralında serbest.
+   */
+  it('KRİTİK: `.kap` ile aynı öğedeki sınıflarda padding kısaltması yok', () => {
+    const css = readFileSync(TANITIM_CSS, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const ikililer = new Set<string>();
+    for (const d of [...SITE_KAYNAKLARI, ...sayfaDosyalari(join(APP, '(legal)'))]) {
+      for (const m of readFileSync(d, 'utf8').matchAll(/className=["'`{]*["'`]?([^"'`}]*\bkap\b[^"'`}]*)/g)) {
+        for (const s of m[1]!.split(/\s+/)) if (s && s !== 'kap' && /^[a-z-]+$/.test(s)) ikililer.add(s);
+      }
+    }
+    expect([...ikililer], 'tarama boşa düştü').toEqual(expect.arrayContaining(['yasal', 'kapanis-kap', 'modul']));
+    const kurallar = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({
+      seciciler: m[1]!.split(',').map((s) => s.trim()),
+      govde: m[2]!,
+    }));
+    const hedef = (s: string) => s === '.tanitim .kap' || [...ikililer].some((c) => s === `.tanitim .${c}`);
+    const kisaltmali = kurallar.filter((k) => k.seciciler.some(hedef) && /(^|;|\s)padding:/.test(k.govde));
+    // Yalnız temel `.kap` kuralı (dosyadaki ilk `.tanitim .kap`).
+    expect(kisaltmali.map((k) => k.seciciler.join(', '))).toEqual(['.tanitim .kap']);
+    expect(kisaltmali[0]!.govde).toMatch(/padding: 0 24px/);
+  });
+
+  /*
+   * TANITIMIN KARANLIK TONU TEK KAYNAKTAN: İŞLETİM SİSTEMİ. globals.css'teki
+   * `.tanitim` belirteçleri (`--surface`, `--text`) yalnız
+   * `prefers-color-scheme`e bakıyor, panelin `data-theme` seçimine değil.
+   * tanitim.css'in karanlık blokları da AYNI koşulu kullanmalı. Ajan 4 bu
+   * blokları panelin deseniyle (`:root:not([data-theme='light'])`) korumayı
+   * denedi ve ölçünce tersini gördü: panelde "koyu" seçip açık sistemde
+   * gelen ziyaretçide zemin ve yazı açık temada kalırken kart #302e2d oluyor,
+   * koyu yazı koyu kartta okunmuyordu. İki dosyadan biri tema seçimine
+   * bağlanacaksa ikisi birlikte bağlanmalı.
+   */
+  it('KRİTİK: tanitim.css ve globals.css karanlık tonda aynı koşula bakıyor', () => {
+    const css = readFileSync(TANITIM_CSS, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const globals = readFileSync(join(APP, 'globals.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const i = globals.indexOf('@media (prefers-color-scheme: dark) {\n  .tanitim {');
+    if (i === -1) throw new Error('globals.css karanlık .tanitim bloğu bulunamadı (koşul değiştiyse bu test de değişmeli)');
+    expect(globals).not.toMatch(/data-theme[^{]*\.tanitim/);
+    expect((css.match(/prefers-color-scheme: dark/g) ?? []).length, 'tarama boşa düştü').toBeGreaterThanOrEqual(4);
+    expect(css).not.toMatch(/data-theme/);
   });
 });

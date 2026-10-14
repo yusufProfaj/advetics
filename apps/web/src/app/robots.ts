@@ -21,7 +21,7 @@ export default function robots(): MetadataRoute.Robots {
         userAgent: '*',
         // `/` her şeyi zaten kapsıyor; tanıtım sayfaları ayrıca yazılmıyor,
         // listeleri site haritasında (`SITE_SAYFALARI`).
-        allow: ['/', '/gizlilik', '/kosullar', '/veri-silme'],
+        allow: ['/', '/gizlilik', '/kosullar', '/veri-silme', '/cerez-politikasi'],
         disallow: ['/dashboard', '/ayarlar/', '/api/'],
       },
     ],
