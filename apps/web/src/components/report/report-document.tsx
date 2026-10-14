@@ -29,7 +29,7 @@ import {
   PLATFORMS,
   PLATFORM_LABELS,
 } from '@advetics/shared';
-import { kitleBolumuKarari } from '@advetics/shared';
+import { kitleBolumuKarari, raporButceCumlesi } from '@advetics/shared';
 import { SITE_DONUSUM_SUTUNLARI, siteDonusumuBosSebebi, siteDonusumuCizilir, siteDonusumuDipnotlari } from '@advetics/shared';
 import { donusumBosSebebi, PLATFORM_KISA_ADLARI, platformKisaAdi, tabloNotlari } from '@advetics/shared';
 import type { ReactNode } from 'react';
@@ -268,6 +268,9 @@ function Summary({ data }: { data: ReportData }) {
           değiştiği için dâhil edilmemiştir.
         </Note>
       )}
+
+      {/* AYLIK BÜTÇE — PDF ile aynı cümle (`raporButceCumlesi`). */}
+      {data.aylikButce && <Note>{raporButceCumlesi(data.aylikButce)}</Note>}
 
       {data.currency === null && data.platforms.length > 1 && (
         <Note>

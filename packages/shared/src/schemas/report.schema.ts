@@ -1175,6 +1175,13 @@ export interface ReportData {
    * (`takip-hesap.ts#takipAcigiYaniti`): ekran ile PDF ayrışmasın.
    */
   siteConversion: TakipAcigiYaniti | null;
+  /**
+   * AYLIK BÜTÇE DURUMU (pazar araştırması 2026-10-15): müşterinin raporda
+   * istediği ilk şeylerden biri "planda mıyız". Yalnız dönem TEK takvim
+   * ayının içindeyse, workspace geneli aylık bütçe tanımlıysa ve para birimi
+   * raporla aynıysa dolu; aksi hâlde null ve satır çizilmiyor.
+   */
+  aylikButce: RaporAylikButce | null;
   generatedAt: string;
 }
 
@@ -1525,4 +1532,25 @@ export function sablonPlatformu(kod: string | undefined | null): Platform | null
    */
   const eslesen = PLATFORMS.find((p) => p === kod);
   return eslesen ?? null;
+}
+
+export interface RaporAylikButce {
+  /** `YYYY-MM` */
+  ay: string;
+  tutarMicros: string;
+  /** Raporun döneminde harcanan (ay tamamlanmadıysa kısmi). */
+  harcananMicros: string;
+  paraBirimi: string;
+}
+
+/**
+ * Panel ve PDF AYNI cümleyi yazıyor (iki gösterim ayrışmasın, CLAUDE.md
+ * "AYNI RAPORUN İKİ GÖSTERİMİ").
+ */
+export function raporButceCumlesi(b: RaporAylikButce): string {
+  const tutar = BigInt(b.tutarMicros);
+  const harcanan = BigInt(b.harcananMicros);
+  const yuzde = tutar > 0n ? Number((harcanan * 1000n) / tutar) / 10 : 0;
+  const yuzdeMetni = yuzde.toLocaleString('tr-TR', { maximumFractionDigits: 1 });
+  return `Aylık bütçe ${formatMoney(b.tutarMicros, b.paraBirimi)} · bu dönemde harcanan ${formatMoney(b.harcananMicros, b.paraBirimi)} (%${yuzdeMetni})`;
 }

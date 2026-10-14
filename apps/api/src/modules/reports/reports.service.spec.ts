@@ -1105,3 +1105,33 @@ describe('ReportsService — arama kovaları', () => {
     expect(tabloNotlari(data, 'meta_campaigns')).toEqual([]);
   });
 });
+
+/*
+ * AYLIK BÜTÇE SATIRI (docs/pazar/raporlar.md): yalnız tek takvim ayı +
+ * workspace geneli bütçe + aynı para birimi. Aksi hâlde null.
+ */
+describe('ReportsService — aylık bütçe', () => {
+  async function butce(currency = 'TRY', ay = '2026-08-01') {
+    await h.q(
+      `INSERT INTO monthly_budgets (id, org_id, client_id, month, amount_micros, currency, updated_at)
+       VALUES (gen_random_uuid(), $1, $2, $3::date, 10000000000, $4, now())`,
+      [IDS.org, IDS.client, ay, currency],
+    );
+  }
+
+  it('KRİTİK: tek ay + aynı birim → bütçe ve dönemde harcanan', async () => {
+    await seedRow({ entityId: CAMP_A, date: '2026-08-01', spendMicros: '2500000000' });
+    await butce();
+    const data = await svc.build(CTX, RANGE);
+    expect(data.aylikButce).toEqual({ ay: '2026-08', tutarMicros: '10000000000', harcananMicros: '2500000000', paraBirimi: 'TRY' });
+  });
+
+  it('iki aya yayılan dönemde ve farklı para biriminde satır yok', async () => {
+    await seedRow({ entityId: CAMP_A, date: '2026-08-01', spendMicros: '2500000000' });
+    await butce('USD');
+    expect((await svc.build(CTX, RANGE)).aylikButce).toBeNull();
+    await h.q(`DELETE FROM monthly_budgets`);
+    await butce('TRY');
+    expect((await svc.build(CTX, { ...RANGE, from: '2026-07-30' })).aylikButce).toBeNull();
+  });
+});

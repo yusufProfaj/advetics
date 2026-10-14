@@ -165,6 +165,7 @@ const VERI: ReportData = {
       ctr: 4.83,
     },
   ],
+  aylikButce: null,
   generatedAt: '2026-08-22T00:00:00.000Z',
 };
 
@@ -558,6 +559,19 @@ describe('öne çıkan reklamlar', () => {
     }) as unknown as typeof fetch;
     await svc.uret(veri({ sections: ['summary'] }), { getir: sayan });
     expect(cagri).toBe(0);
+  });
+
+  /*
+   * AYLIK BÜTÇE SATIRI (docs/pazar/raporlar.md): panelle AYNI cümle
+   * (`raporButceCumlesi`); bütçe yoksa satır yok.
+   */
+  it('KRİTİK: özet sayfası aylık bütçe satırını panelle aynı cümleyle yazıyor', async () => {
+    const b = { ay: '2026-08', tutarMicros: '10000000000', harcananMicros: '8000000000', paraBirimi: 'TRY' };
+    const t = metinler(await svc.uret({ ...VERI, aylikButce: b })).join(' ');
+    expect(t).toContain('Aylık bütçe');
+    expect(t).toContain('(%80)');
+    const yok = metinler(await svc.uret(VERI)).join(' ');
+    expect(yok).not.toContain('Aylık bütçe');
   });
 
   it('KRİTİK: METİN REKLAMI önizlemesi çiziliyor — boş kutu değil', async () => {

@@ -627,6 +627,23 @@ export class ReportsService {
         ? await takipAcigiYaniti(tx as unknown as Parameters<typeof takipAcigiYaniti>[0], { clientId: params.clientId, from: params.from, to: params.to }, new Date())
         : null;
 
+      /*
+       * AYLIK BÜTÇE: yalnız dönem tek takvim ayının içindeyse ve workspace
+       * geneli bütçe raporla AYNI para birimindeyse. Farklı birimi
+       * karşılaştırmak anlamsız bir yüzde üretirdi; o hâlde satır yok.
+       */
+      let aylikButce: ReportData['aylikButce'] = null;
+      if (params.from.slice(0, 7) === params.to.slice(0, 7) && currency) {
+        const [b] = await tx.$queryRaw<Array<{ amount_micros: bigint; currency: string }>>(Prisma.sql`
+          SELECT amount_micros, currency FROM monthly_budgets
+           WHERE client_id = ${params.clientId}::uuid AND ad_account_id IS NULL
+             AND month = ${`${params.from.slice(0, 7)}-01`}::date`);
+        if (b && b.currency.trim() === currency) {
+          const harcanan = platformBlocks.reduce((t, p) => t + BigInt(p.spendMicros), 0n);
+          aylikButce = { ay: params.from.slice(0, 7), tutarMicros: b.amount_micros.toString(), harcananMicros: harcanan.toString(), paraBirimi: currency };
+        }
+      }
+
       const data: ReportData = {
         client,
         branding,
@@ -661,6 +678,7 @@ export class ReportsService {
         searchTerms,
         conversionDetail,
         siteConversion,
+        aylikButce,
         generatedAt: new Date().toISOString(),
       };
       return {

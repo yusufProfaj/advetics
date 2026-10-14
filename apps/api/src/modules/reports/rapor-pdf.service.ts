@@ -8,6 +8,7 @@ import {
   CONVERSION_BUCKETS,
   DEFAULT_COLUMNS,
   formatMoney,
+  raporButceCumlesi,
   formatNumber,
   formatPercent,
   resolveColumns,
@@ -412,6 +413,9 @@ export class RaporPdfService {
 
       y -= KART_Y + 10;
     }
+
+    // AYLIK BÜTÇE — panelle aynı cümle (`raporButceCumlesi`).
+    if (ctx.data.aylikButce) y = this.notSatiri(ctx, s, y, raporButceCumlesi(ctx.data.aylikButce));
   }
 
   /** Bölüm alt başlığı: hangi platformlar var. Panelde `platformNames`. */
