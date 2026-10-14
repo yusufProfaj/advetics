@@ -15,6 +15,7 @@ import {
   GOOGLE_TY_DIL_CUMLESI,
   GOOGLE_VIDEO_OTOMASYON_CUMLESI,
   type DemandGenKanali,
+  GOOGLE_AI_MAX_GEREKCESI,
 } from '@advetics/shared';
 import { derleGoogle, googleYasKovalari, GOOGLE_ATIF, type GoogleDerlemeBaglami } from './derle-google';
 
@@ -151,6 +152,9 @@ describe('ARAMA (Siteme gelsinler) — karar tablosu ile gövde', () => {
 
   it('OTOMATIK_METIN: "AI Max ve otomatik metin kapalı" ↔ AI Max + metin özelleştirme + URL genişletme kapalı', () => {
     expect(google('SITE', 'MAKS_TIKLAMA').OTOMATIK_METIN?.deger).toBe('AI Max ve otomatik metin kapalı');
+    // Gerekçe (pazar araştırması 2026-10-15): asıl etki bütçenin nereye gittiği; söz gövdeyle AYNI testte.
+    expect(google('SITE', 'MAKS_TIKLAMA').OTOMATIK_METIN?.not).toBe(GOOGLE_AI_MAX_GEREKCESI);
+    expect(GOOGLE_AI_MAX_GEREKCESI).toMatch(/seçtiğin kelimelere yakın/);
     const k = kampanya(derle('SITE').govde.mutateOperations);
     expect(k.aiMaxSetting).toEqual({ enableAiMax: false });
     expect(k.assetAutomationSettings).toEqual([

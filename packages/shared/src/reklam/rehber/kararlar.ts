@@ -149,6 +149,17 @@ export const GOOGLE_TY_DIL_CUMLESI = 'Google varsayılanı (ölçülmedi)';
 export const GOOGLE_VIDEO_OTOMASYON_CUMLESI = "Google'ın video otomasyonları varsayılanda (ölçülmedi)";
 
 /**
+ * AI MAX NEDEN KAPALI (pazar araştırması 2026-10-15, docs/pazar/advcampaign.md).
+ * AI Max Google'ın en çok öne çıkardığı Arama özelliği: sorgu eşleşmesini
+ * genişletiyor, metni ve açılış sayfasını kendisi seçiyor. Bizde bilerek
+ * kapalı (canlıda gözle doğrulandı 2026-10-10) ve kelimeler öbek eşlemeyle
+ * kuruluyor. Ekran yalnız "metin değişmeden çıkar" diyordu; asıl etki olan
+ * BÜTÇENİN NEREYE GİTTİĞİ söylenmiyordu. Reklam bilmeyen kullanıcı Google'ın
+ * önerdiği bir özelliğin neden kapalı olduğunu görmeli.
+ */
+export const GOOGLE_AI_MAX_GEREKCESI = 'Bütçe yalnız seçtiğin kelimelere yakın aramalara gider · Yazdığın metin ve sayfa değişmeden çıkar';
+
+/**
  * Meta'nın öğrenme aşaması bir reklam setinde haftada ~50 optimizasyon
  * olayı istiyor (Meta Business Help, "learning phase"). Altında reklam
  * yayınlanır ama "öğrenme sınırlı" kalabilir; bu bir ENGEL değil, bilgi.
@@ -361,7 +372,7 @@ export function kararTablosu(
             ? hucre('Görsellerinden video ve yeni tasarım üretme kapalı', 'Google başlık ve açıklamaları farklı sıralarda dener')
             : ty
               ? hucre(GOOGLE_VIDEO_OTOMASYON_CUMLESI, 'Google başlık ve açıklamaları farklı sıralarda dener')
-              : hucre('AI Max ve otomatik metin kapalı', 'Yazdığın metin değişmeden çıkar')
+              : hucre('AI Max ve otomatik metin kapalı', GOOGLE_AI_MAX_GEREKCESI)
         : null,
     },
     { kod: 'SAYFA', konu: 'Sayfa', meta: m ? hucre('Seçtiğin Facebook sayfası, açıkça') : null, google: null },

@@ -39,7 +39,7 @@
 - [x] Bilinen açık: taslak tablosu telefonda "Devam et"i ekran dışına itiyor (bütçe/eksik/platform telefonda gizli, ad hücresinde özet; canlıda görülmedi)
 - [x] Öneri 1: bekçi testi, derleyici ASC/AAC alanı (`smart_promotion_type`, `AUTOMATED_SHOPPING_ADS`) üretmesin (Meta v26 bunları duraklatıyor)
 - [x] Öneri 2 (yalnız yerleşim kaldıracı; bütçe hep CBO, kitle hep 1 yazılıyor, gövdeden söylenecek başka sebep yok): Kontrol ekranında Advantage+ durumu ve eksik kaldıraç (bütçe/kitle/yerleşim), `advantage_state_info`ten sade dille
-- [ ] Öneri 3: Google Arama kontrolünde "AI Max kapalı" kararının gerekçesi tek cümleyle
+- [x] Öneri 3: Google Arama kontrolünde "AI Max kapalı" kararının gerekçesi tek cümleyle
 - [ ] (onay bekliyor) Öneri 4: Form amacında CRM'e dayalı optimizasyon (Meta Conversion Leads; "müşteri oldu" geri beslemesiyle)
 - [ ] (onay bekliyor) Öneri 5: Form amacında 65+ yaş yoğunlaşma koruması (varsayılan üst sınır ya da kurulum sonrası uyarı)
 
