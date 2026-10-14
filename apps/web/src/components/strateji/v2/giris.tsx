@@ -13,7 +13,7 @@ import { SayfaBasligi } from '@/components/ui/sayfa-basligi';
 import { BuyukSecim, SecimKarti } from '@/components/ui/sihirbaz';
 import { AdHucresi, Tablo, type TabloSutunu } from '@/components/ui/tablo';
 import { DURUM_ETIKETI, donemEtiketi } from '../hesap';
-import { durumTonu, olusturKarti } from './akis';
+import { durumTonu, olusturEtiketi, olusturKarti } from './akis';
 import { STRATEJI_DURUM_ETIKETI, donemMetni, tarihAraligi } from './hesap';
 import { KapatmaPenceresi, iptalEdilebilirMi, type KapatmaHedefi } from './kapatma';
 import { StratejiIkonu, durumHali } from './ortak';
@@ -72,7 +72,7 @@ export function StratejiGirisi({
       : kart.tur === 'devam'
         ? stratejiPanelAdresi({ musteri: clientId, plan: kart.planId, adim: kart.revizyon ? 'plan' : (devamAdimi ?? 'plan') })
         : stratejiPanelAdresi({ musteri: clientId, plan: kart.planId, adim: 'rapor' });
-  const olusturEtiketi = kart.tur === 'devam' ? 'Taslağa devam et' : 'Strateji oluştur';
+  const kartBasligi = olusturEtiketi(kart);
   return (
     <div className="grid gap-6">
       <SayfaBasligi
@@ -82,7 +82,7 @@ export function StratejiGirisi({
         eylemler={
           kart.tur !== 'onayda' && (
             <Link href={olusturAdresi} className={dugmeSinifi('birincil')}>
-              {olusturEtiketi}
+              {kartBasligi}
             </Link>
           )
         }
@@ -110,7 +110,7 @@ export function StratejiGirisi({
         <SecimKarti
           ikon={<StratejiIkonu ad="yeni" />}
           kirmizi
-          baslik={olusturEtiketi}
+          baslik={kartBasligi}
           aciklama={
             kart.tur === 'onayda'
               ? 'Açık bir strateji onay bekliyor. Yenisi için önce onu iptal et ya da sil (aşağıdaki listede ⋯) ya da sonuçlanmasını bekle.'

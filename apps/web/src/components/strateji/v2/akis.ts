@@ -216,6 +216,16 @@ export function olusturKarti(planlar: readonly StratejiListeSatiri[]): OlusturKa
   return { tur: 'devam', planId: acik.id, revizyon: acik.durum === 'revizyon' };
 }
 
+/**
+ * KARTIN BAŞLIĞI DURUMU SÖYLER. Onay bekleyen bir strateji varken kart
+ * "Strateji oluştur" yazıyor ama yeni oluşturmaya izin vermiyordu: başlık
+ * bir şey vaat ediyor, tıklama başka bir yere (rapora) götürüyordu.
+ */
+export function olusturEtiketi(kart: OlusturKarti): string {
+  if (kart.tur === 'onayda') return 'Onay bekleyen strateji var';
+  return kart.tur === 'devam' ? 'Taslağa devam et' : 'Strateji oluştur';
+}
+
 // ─── Kampanyaları kur (tek tek) ──────────────────────────────────────────────
 
 export type KurulumHali = 'acildi' | 'hazir' | 'bekliyor' | 'bilinmiyor';

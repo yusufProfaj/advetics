@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { StratejiKalemi, StratejiListeSatiri, StratejiSihirbazGirdileri } from '@advetics/shared';
 import {
@@ -12,6 +14,7 @@ import {
   kurulabilirMi,
   kurulumSirasi,
   kurulumSatiri,
+  olusturEtiketi,
   olusturKarti,
   rayParcalari,
   siradakiKalem,
@@ -136,6 +139,16 @@ describe('giriş', () => {
     expect(olusturKarti([satir({ durum: 'revizyon' })])).toEqual({ tur: 'devam', planId: 'p1', revizyon: true });
     expect(olusturKarti([satir({ durum: 'onayda' })])).toEqual({ tur: 'onayda', planId: 'p1' });
     expect(olusturKarti([satir({ bicim: 1, durum: 'taslak' })])).toEqual({ tur: 'yeni' });
+  });
+  it('KRİTİK: onay bekleyen strateji varken kart başlığı "Strateji oluştur" DEMİYOR', () => {
+    expect(olusturEtiketi({ tur: 'onayda', planId: 'p1' })).toBe('Onay bekleyen strateji var');
+    expect(olusturEtiketi({ tur: 'devam', planId: 'p1', revizyon: false })).toBe('Taslağa devam et');
+    expect(olusturEtiketi({ tur: 'yeni' })).toBe('Strateji oluştur');
+  });
+  it('kart başlığı ortak fonksiyondan (giriş ekranı kendi dizgesini kurmuyor)', () => {
+    const k = readFileSync(join(__dirname, 'giris.tsx'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(k).toContain('const kartBasligi = olusturEtiketi(kart);');
+    expect(k).toContain('baslik={kartBasligi}');
   });
 });
 
