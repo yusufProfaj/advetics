@@ -12,6 +12,7 @@ import {
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { formatRelative, formatTarih } from '@/lib/format';
+import { bekleyenKayit } from '@/lib/lead-bekleme';
 import {
   DURUM_KISA_ADI,
   KALITE_SECENEKLERI,
@@ -201,6 +202,8 @@ export function LeadTable({
   }
 
   const toplamHepsi = Object.values(initial.byStatus).reduce((a, b) => a + b, 0);
+  // Yalnız GÖSTERİLEN satırlardan: sayaç aynı satırda "N kayıt gösteriliyor" diyor.
+  const gecikenSayisi = rows.filter((l) => bekleyenKayit(l.status, l.submittedAt)?.gecikti).length;
   const secilenForm = forms.find((f) => f.id === activeFormId);
   const paneldeki = rows.find((r) => r.id === gosterilen) ?? null;
 
@@ -314,6 +317,7 @@ export function LeadTable({
         <span className="tabular-nums">
           {rows.length} kayıt gösteriliyor
           {initial.total > rows.length && ` · toplam ${initial.total}. Aramayı daralt.`}
+          {gecikenSayisi > 0 && <strong className="font-semibold text-danger-strong"> · {gecikenSayisi} yeni kayıt 1 saati geçti</strong>}
         </span>
       </div>
 
@@ -418,6 +422,15 @@ function Satir({
               {rozet.metin}
             </small>
           )}
+          {/* BEKLEME: ilk temas hızı kaydın değerini belirliyor; bir saati geçen kırmızı. */}
+          {(() => {
+            const b = bekleyenKayit(lead.status, lead.submittedAt);
+            return b ? (
+              <small className={`text-12 ${b.gecikti ? 'font-semibold text-danger-strong' : 'text-ink-muted'}`} data-bekleme={b.gecikti ? 'gecikti' : 'yeni'}>
+                {b.metin}
+              </small>
+            ) : null;
+          })()}
           {/* KAYIT NEREDEN GELDİ: teşhis için, meraktan değil. */}
           {lead.source === 'reconcile' && <small className="text-12 text-ink-muted">taramayla geldi</small>}
         </span>
