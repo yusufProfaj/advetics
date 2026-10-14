@@ -162,9 +162,10 @@ describe('boost yönlendirme metinleri', () => {
      * (`indexOf(...) + 400`) komşu öğeye taşıyor ve etiket silinse bile
      * modaldaki başlık metnine eşleşip testi yeşil bırakırdı.
      */
-    const acilis = panel.indexOf('onClick={() => setAcik(true)}');
+    // Düğme birleşik tasarımda ortak `Dugme` oldu (10f85a4c); açan işleyici `ac`.
+    const acilis = panel.indexOf('onClick={ac}>');
     expect(acilis, 'modalı açan düğme bulunamadı').toBeGreaterThan(-1);
-    const kapanis = panel.indexOf('</button>', acilis);
+    const kapanis = panel.indexOf('</Dugme>', acilis);
     expect(kapanis, 'düğme kapanışı bulunamadı').toBeGreaterThan(acilis);
 
     expect(panel.slice(acilis, kapanis)).toContain(DUGME_ETIKETI);
