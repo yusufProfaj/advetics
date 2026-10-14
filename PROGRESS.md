@@ -59,15 +59,15 @@
 
 - [x] Araştırma → `docs/pazar/iyilestir.md` (kural motorları: Revealbot, Madgicx, Optmyzr; Meta/Google otomatik kurallar ve öneri API'leri)
 - [x] Öneri 1: bütçe değişikliğinde 7 günlük kayan bekleme (ISO-hafta anahtarı pazar→pazartesi ikinci +%20'ye izin veriyor); bekleyen sayısı söylenir
-- [ ] Öneri 2: öğrenmedeki Meta reklam setine bütçe önerisi yok (`learning_stage_info`; önce canlıda alan biçimi ölçülür — ölçülemezse madde "kullanıcıda" kalır)
+- [ ] (onay bekliyor: canlı Meta okuması) Öneri 2: öğrenmedeki Meta reklam setine bütçe önerisi yok (`learning_stage_info`; önce canlıda alan biçimi ölçülür — ölçülemezse madde "kullanıcıda" kalır)
 - [ ] (onay bekliyor) Öneri 3: Meta `/act_X/recommendations` önerilerini İyileştir'de göstermek (okuma onaysız; uygulamak platforma yazar)
 
 ## 4 · AdvStrategy (`/strateji`)
 
-- [ ] Araştırma → `docs/pazar/advstrategy.md` (medya planı araçları, Meta Reach Planner / Google Performance Planner, müşteri onay akışları)
+- [x] Araştırma → `docs/pazar/advstrategy.md` (medya planı araçları, Meta Reach Planner / Google Performance Planner, müşteri onay akışları)
 - [ ] Bilinen açık: onay bekleyen strateji varken kart başlığı hâlâ "Strateji oluştur"; "Onay bekleyen strateji var" + "Raporu aç"
-- [ ] Araştırmanın 1. önerisi
-- [ ] Araştırmanın 2. önerisi
+- [ ] Öneri 3: müşteri revizyon isterken kalemi seçebilsin, not kalemin yanında görünsün (önce mevcut revizyon akışı incelenir)
+- [ ] (onay bekliyor) Öneri 2: geçmişi olmayan hesapta "tahmin yok" yerine Meta `delivery_estimate` eğrisi, kaynağı "Meta'nın tahmini" (K-3 kararını genişletir; canlı ölçüm ister)
 
 ## 5 · Aylık Bütçe (`/butce`)
 
