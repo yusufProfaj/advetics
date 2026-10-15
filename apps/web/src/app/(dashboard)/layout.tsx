@@ -6,7 +6,7 @@ import { BildirimSaglayici } from '@/components/bildirim/bildirim-verisi';
 import { BildirimZili } from '@/components/bildirim/bildirim-zili';
 import { OturumTazeleyici } from '@/components/oturum-tazeleyici';
 import { visibleSections } from '@/lib/nav-sections';
-import { kapi } from '@/lib/panel-adresleri';
+import { ayarlarYolu, kapi } from '@/lib/panel-adresleri';
 import { ayarSekmesiAcik } from '@/lib/ayar-kapilari';
 import { KenarIcerigi } from '@/components/kenar-cubugu';
 import { MobilMenu } from '@/components/mobil-menu';
@@ -153,9 +153,19 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const kirintiKapsami = session.tumSirketler
     ? [session.managerAccount?.name ?? 'Tüm şirketler']
     : [session.organization.name, ...(aktifWorkspaceAdi ? [aktifWorkspaceAdi] : [])];
-  const kirintiSayfalari = kenarVerisi.bolumler.flatMap((b) =>
+  /*
+   * HESABIM KIRINTIDA DA. Hesabım menü satırı değil (kapısı kullanıcı kartı)
+   * ve kırıntı sayfa adını menüden buluyordu: Hesabım'da üst yol yalnız
+   * "Şirket ›" yazıp sayfa adını göstermiyordu (canlı denetim). Menüde
+   * zaten varsa ikinci kez eklenmiyor.
+   */
+  const menudenSayfalar = kenarVerisi.bolumler.flatMap((b) =>
     b.items.map((i) => ({ href: i.href, label: i.label, ekYollar: i.ekYollar })),
   );
+  const hesabimYolu = ayarlarYolu('hesabim');
+  const kirintiSayfalari = menudenSayfalar.some((x) => x.href === hesabimYolu)
+    ? menudenSayfalar
+    : [...menudenSayfalar, { href: hesabimYolu, label: 'Hesabım', ekYollar: [] as string[] }];
 
   /* Seçici iki yerde çiziliyor (masaüstü menü, telefonda üst bar); tek kaynak. */
   const kapsam = {

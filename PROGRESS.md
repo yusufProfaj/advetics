@@ -131,7 +131,7 @@
 
 - [x] Bilinen açık: `/ayarlar` markasız İngilizce 404; `/ayarlar/sirketler`e yönlendir + Türkçe markalı `not-found.tsx` (oturumun açabildiği ilk sekmeye; canlıda GÖRÜLMEDİ)
 - [x] Bilinen açık: Bağlantılar'da yedi platform sekmesi 1280 px'te sayfayı 214 px taşırıyor (ortak `BolumluSecici` kabını aşmıyor, kendi içinde kayıyor; canlıda GÖRÜLMEDİ)
-- [ ] Bilinen açık: Hesabım üst yolunda sayfa adı eksik
+- [x] Bilinen açık: Hesabım üst yolunda sayfa adı eksik (kırıntı adı menüden buluyordu; Hesabım menüde değil, listeye eklendi; canlıda GÖRÜLMEDİ)
 - [ ] Araştırma → `docs/pazar/ayarlar.md` (ajans çoklu müşteri yönetimi, rol modelleri, 2FA zorunluluğu)
 
 ## Ortak (her modülde rastlanırsa)
