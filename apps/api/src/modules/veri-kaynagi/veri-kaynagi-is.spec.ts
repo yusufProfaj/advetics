@@ -100,7 +100,15 @@ function bagimlilik(o: Ga4Okuyucu, ek: Partial<KaynakIsBagimliliklari> = {}) {
   return { b, kuyruk, kaydet };
 }
 
-const yapiTaze = () => h.q(`UPDATE veri_kaynaklari SET yapi_zamani = $1, saat_dilimi = 'Europe/Istanbul', para_birimi = 'TRY'`, [SIMDI.toISOString()]);
+/**
+ * `zaman` VARSAYILANI SIMDI (sabit). Servisin worker girişi (`isle`) sabit
+ * saati değil GERÇEK saati kullanıyor (`simdi: new Date()`); o yoldan geçen
+ * test yapıyı gerçek saatle damgalamalı. Sabit saatle damgalanınca test
+ * 36 saatlik tazelik penceresi kapanana kadar geçti, 2026-10-16'da kendi
+ * kendine kırmızıya döndü (kod değişmeden).
+ */
+const yapiTaze = (zaman: Date = SIMDI) =>
+  h.q(`UPDATE veri_kaynaklari SET yapi_zamani = $1, saat_dilimi = 'Europe/Istanbul', para_birimi = 'TRY'`, [zaman.toISOString()]);
 const gun = (g: string) => g.replace(/-/g, '');
 
 describe('kaynak_yapi', () => {
@@ -333,7 +341,7 @@ describe('kaynak_gecmis', () => {
 
 describe('worker girişi: GA4 429 Google Ads platform kesicisini AÇMAZ', () => {
   it('KRİTİK (mutasyon M5): rate_limited yalnız kaynağın kesicisini açar, satır throttled', async () => {
-    await yapiTaze();
+    await yapiTaze(new Date());
     const [job] = await h.q<{ id: string }>(
       `INSERT INTO sync_jobs (client_id, veri_kaynagi_id, job_type, status, date_from, date_to) VALUES ($1, $2, 'kaynak_gunluk', 'queued', '2026-10-11', '2026-10-13') RETURNING id::text`,
       [IDS.client, KAYNAK],
