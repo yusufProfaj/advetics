@@ -12,7 +12,8 @@ import {
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { formatRelative, formatTarih } from '@/lib/format';
-import { bekleyenKayit } from '@/lib/lead-bekleme';
+import { bekleyenKayit, whatsappAdresi } from '@/lib/lead-bekleme';
+import { telefonE164 } from '@advetics/shared';
 import {
   DURUM_KISA_ADI,
   KALITE_SECENEKLERI,
@@ -385,6 +386,11 @@ function Satir({
               {lead.phone}
             </a>
           )}
+          {whatsappAdresi(lead.phone, telefonE164) && (
+            <a href={whatsappAdresi(lead.phone, telefonE164)!} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className={ILETISIM_BAGI}>
+              WhatsApp
+            </a>
+          )}
           {lead.email && (
             <a href={`mailto:${lead.email}`} onClick={(e) => e.stopPropagation()} className={`truncate ${ILETISIM_BAGI}`}>
               {lead.email}
@@ -593,6 +599,14 @@ function KayitPaneli({
                   <a href={`tel:${lead.phone.replace(/\s/g, '')}`} className={ILETISIM_BAGI}>
                     {lead.phone}
                   </a>
+                  {whatsappAdresi(lead.phone, telefonE164) && (
+                    <>
+                      {' · '}
+                      <a href={whatsappAdresi(lead.phone, telefonE164)!} target="_blank" rel="noreferrer" className={ILETISIM_BAGI}>
+                        WhatsApp
+                      </a>
+                    </>
+                  )}
                 </dd>
               </>
             )}

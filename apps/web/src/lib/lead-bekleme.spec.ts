@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { bekleyenKayit } from './lead-bekleme';
+import { telefonE164 } from '@advetics/shared';
+import { bekleyenKayit, whatsappAdresi } from './lead-bekleme';
 
 const SIMDI = Date.parse('2026-10-15T12:00:00Z');
 const once = (dk: number) => new Date(SIMDI - dk * 60_000).toISOString();
@@ -25,5 +26,22 @@ describe('yeni kaydın beklemesi', () => {
     const k = readFileSync(join(__dirname, '../components/leads/lead-table.tsx'), 'utf8').replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
     expect(k).toContain('const b = bekleyenKayit(lead.status, lead.submittedAt);');
     expect(k).toContain('{gecikenSayisi} yeni kayıt 1 saati geçti');
+  });
+});
+
+describe('WhatsApp bağlantısı', () => {
+  it('KRİTİK: Türkiye numarası E.164 üzerinden wa.me’ye çevriliyor', () => {
+    expect(whatsappAdresi('0532 123 45 67', telefonE164)).toBe('https://wa.me/905321234567');
+    expect(whatsappAdresi('+90 532 123 45 67', telefonE164)).toBe('https://wa.me/905321234567');
+  });
+
+  it('KRİTİK: tanınmayan numarada bağlantı YOK (tahmin başka birini açar)', () => {
+    expect(whatsappAdresi('12345', telefonE164)).toBeNull();
+    expect(whatsappAdresi(null, telefonE164)).toBeNull();
+  });
+
+  it('satır ve yan panel aynı yardımcıyı kullanıyor', () => {
+    const k = readFileSync(join(__dirname, '../components/leads/lead-table.tsx'), 'utf8');
+    expect(k.split('whatsappAdresi(lead.phone, telefonE164)!').length - 1).toBe(2);
   });
 });

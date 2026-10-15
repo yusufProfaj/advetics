@@ -24,3 +24,17 @@ export function bekleyenKayit(
     dk < 60 ? `${dk} dakikadır aranmadı` : dk < 1440 ? `${Math.floor(dk / 60)} saattir aranmadı` : `${Math.floor(dk / 1440)} gündür aranmadı`;
   return { metin, gecikti: dk >= GECIKME_DAKIKA };
 }
+
+/**
+ * ═══ KAYITTAN WHATSAPP'A TEK TIK ═══
+ * Türkiye'de form kaydından sonra ilk temas çoğunlukla WhatsApp'tan
+ * (docs/pazar/potansiyel-musteriler.md). Numara E.164'e paylaşılan
+ * çeviriciyle (`telefonE164`, geri besleme hash'iyle AYNI kural) çevriliyor;
+ * tanınmayan biçimde bağlantı YOK: tahmin edilen numara başka birinin
+ * WhatsApp'ını açar.
+ */
+export function whatsappAdresi(telefon: string | null, e164: (ham: string) => string | null): string | null {
+  if (!telefon) return null;
+  const n = e164(telefon);
+  return n ? `https://wa.me/${n.slice(1)}` : null;
+}
