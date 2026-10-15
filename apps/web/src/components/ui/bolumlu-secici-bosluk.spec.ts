@@ -15,6 +15,12 @@ describe('BolumluSecici düğmesi', () => {
     const i = K.indexOf('export function BolumluSecici');
     expect(i).toBeGreaterThan(-1);
     const govde = K.slice(i, K.indexOf('\nexport function', i + 10) === -1 ? undefined : K.indexOf('\nexport function', i + 10));
-    expect(govde).toContain('inline-flex h-[30px] items-center gap-1.5 whitespace-nowrap');
+    expect(govde).toContain('inline-flex h-[30px] shrink-0 items-center gap-1.5 whitespace-nowrap');
+  });
+
+  it('KRİTİK: sığmazsa kendi içinde kayıyor (sayfayı taşırmıyor)', () => {
+    const i = K.indexOf('export function BolumluSecici');
+    const govde = K.slice(i);
+    expect(govde).toContain('inline-flex min-w-0 max-w-full overflow-x-auto rounded-full');
   });
 });

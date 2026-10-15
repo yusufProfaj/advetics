@@ -116,7 +116,13 @@ export function BolumluSecici<D extends string>({
   etiket: string;
 }) {
   return (
-    <div role="group" aria-label={etiket} className="inline-flex rounded-full bg-surface-sunken p-[3px]">
+    /*
+      SIĞMAZSA KENDİ İÇİNDE KAYAR: seçici inline-flex ve seçenekler nowrap;
+      Bağlantılar'da yedi kanal 1280 px'te sayfayı 214 px taşırıyordu (canlı
+      denetim). max-w-full + min-w-0 kabın genişliğini aşmasını engelliyor,
+      kalan kısım yana kayıyor.
+    */
+    <div role="group" aria-label={etiket} className="inline-flex min-w-0 max-w-full overflow-x-auto rounded-full bg-surface-sunken p-[3px] [scrollbar-width:none]">
       {secenekler.map((s) => {
         const acik = s.deger === secili;
         return (
@@ -130,7 +136,7 @@ export function BolumluSecici<D extends string>({
             type="button"
             aria-pressed={acik}
             onClick={() => onSec(s.deger)}
-            className={`inline-flex h-[30px] items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 text-[12.5px] font-bold transition-colors ${
+            className={`inline-flex h-[30px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 text-[12.5px] font-bold transition-colors ${
               acik ? 'bg-surface text-ink shadow-[0_1px_2px_rgb(0_0_0/0.08)]' : 'text-ink-muted hover:text-ink'
             }`}
           >
