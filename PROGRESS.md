@@ -106,8 +106,9 @@
 
 - [x] Bilinen açık: 1035–1280 px'te sağ sütun sıkışıyor; `xl` altında alta insin (kesme noktası 980 → 1279 px; canlıda bu genişlikte GÖRÜLMEDİ)
 - [x] Bilinen açık: Hesaplar ve Kampanyalar tablolarında ad sütunu kesiliyor; en az genişlik (ad hücresi en az 12,5 rem, tablo 640 px; sığmazsa yana kayıyor; tam ad üzerine gelince; canlıda GÖRÜLMEDİ)
-- [ ] Araştırma → `docs/pazar/genel-bakis.md` (ajans çok müşterili özet ekranları, anomali uyarıları)
-- [ ] Araştırmanın 1. önerisi
+- [x] Araştırma → `docs/pazar/genel-bakis.md` (ajans çok müşterili özet ekranları, anomali uyarıları)
+- [ ] Öneri 1: yasaklı Meta kırılımı bekçisi (`impression_device`, `frequency_value`, kitle saat dilimi saat kırılımı Ağustos 2026'dan beri hesap izni istiyor ve izinsiz SESSİZCE boş dönüyor)
+- [ ] (onay bekliyor: canlı ölçüm) Öneri 2: reklamveren saat dilimi saat kırılımı da izin istiyor mu, bir hesapta ölç
 
 ## 10 · Marka Merkezi ve Kurulum (`/marka-merkezi`, `/kurulum`)
 
