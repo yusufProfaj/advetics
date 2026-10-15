@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { AssetListResult, AssetRecord, AssetUploadResult, ClientProfileRecord } from '@advetics/shared';
+import { googleLogoBoyutUyarisi, type AssetListResult, type AssetRecord, type AssetUploadResult, type ClientProfileRecord } from '@advetics/shared';
 import { API_URL, ApiRequestError, apiFetch, onizlemeAdresi } from '@/lib/api';
 import { Kart } from '@/components/ui/kart';
 import { dugmeSinifi } from '@/components/ui/dugme';
@@ -160,6 +160,14 @@ export function LogoSekmesi({ clientId, canWrite }: { clientId: string; canWrite
             ))}
           </div>
         )}
+
+        {/* GİRİŞ ANINDA: seçili logo Google'ın 150 KB sınırını aşıyorsa şimdi söyle,
+            YouTube boost'u kurulurken değil (`googleLogoBoyutUyarisi`). */}
+        {(() => {
+          const secili = assets.find((a) => a.id === seciliId);
+          const uyari = secili ? googleLogoBoyutUyarisi(secili.byteSize) : null;
+          return uyari ? <Serit ton="uyari" baslik={uyari} /> : null;
+        })()}
 
         {error && (
           <Serit ton="hata" baslik="Logo kaydedilemedi ya da okunamadı.">

@@ -402,3 +402,18 @@ export function ogeDurumlariGovdeyle(durumlar: readonly GoogleOgeDurumu[], ogele
 export function ogeDurumuCumlesi(d: GoogleOgeDurumu): string {
   return `${GOOGLE_OGE_ADLARI[d.kod]}: ${d.eklendi ? 'eklendi' : 'eklenmedi'} · ${d.metin}`;
 }
+
+/**
+ * ═══ GOOGLE LOGO DOSYA BOYUTU (pazar araştırması 2026-10-15) ═══
+ * Google'ın Demand Gen görsel öğeleri sayfası logo dosyasını 150 KB ile
+ * sınırlıyor (başka rehberler 5 MB diyor; dar olanı esas). Logo kuralımız
+ * yalnız piksel ve oran bakıyordu; YouTube boost'u (Demand Gen) logoyu
+ * `logoImages`e gönderiyor ve sınır aşılırsa hata ancak kurulum anında
+ * çıkardı. ENGEL DEĞİL UYARI: reddi canlıda ölçmedik (PROGRESS.md).
+ */
+export const GOOGLE_LOGO_MAKS_BAYT = 150 * 1024;
+
+export function googleLogoBoyutUyarisi(byteSize: number): string | null {
+  if (byteSize <= GOOGLE_LOGO_MAKS_BAYT) return null;
+  return `Logo dosyası ${Math.round(byteSize / 1024)} KB. Google YouTube (Demand Gen) reklamında logo en çok 150 KB olmalı; boost reddedilebilir. Logoyu sıkıştırıp yeniden yükle.`;
+}
