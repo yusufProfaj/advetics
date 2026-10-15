@@ -60,7 +60,10 @@ describe('mobil gezinme', () => {
     expect(LAYOUT).toContain('<MobilMenu veri={kenarVerisi} stil={themeStyle} ust={<KapsamSecici');
     expect(MOBIL).toContain('ust={ust}');
     expect(KENAR.indexOf('{ust &&')).toBeGreaterThan(KENAR.indexOf('AdveticsLogo />'));
-    expect(KENAR.indexOf('{ust &&')).toBeLessThan(KENAR.indexOf('<nav'));
+    // Menü `<KaydirilanMenu>` ile çiziliyor (etkin satırı görünür tutan
+    // istemci sarmalayıcı; çıktısı yine `<nav aria-label="Ana menü">`).
+    expect(KENAR.indexOf('<KaydirilanMenu')).toBeGreaterThan(-1);
+    expect(KENAR.indexOf('{ust &&')).toBeLessThan(KENAR.indexOf('<KaydirilanMenu'));
   });
 
   it('KRİTİK: sayfa değişince çekmece kapanıyor', () => {

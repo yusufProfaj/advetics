@@ -9,6 +9,7 @@ import { KullaniciMenusu, OlusturMenusu } from '@/components/kabuk-menuleri';
 import { TemaOgesi } from '@/components/tema';
 import { MenuAyraci, MenuOgesi } from '@/components/ui/acilir-menu';
 import { Ikon } from '@/components/ui/ikon';
+import { KaydirilanMenu } from '@/components/kaydirilan-menu';
 
 export interface KenarVerisi {
   bolumler: Array<{ title?: string; items: NavEntry[] }>;
@@ -73,9 +74,8 @@ export function KenarIcerigi({
         <OlusturMenusu secenekler={veri.olustur} onGezinme={onGezinme} />
       </div>
 
-      <nav
-        aria-label="Ana menü"
-        className="flex-1 overflow-y-auto px-2.5 pb-2.5 [mask-image:linear-gradient(to_bottom,black_calc(100%-1.5rem),transparent)]"
+      <KaydirilanMenu
+        className="flex-1 scroll-pb-8 overflow-y-auto px-2.5 pb-2.5 [mask-image:linear-gradient(to_bottom,black_calc(100%-1.5rem),transparent)]"
         onClick={onGezinme}
       >
         {/*
@@ -91,7 +91,7 @@ export function KenarIcerigi({
         {bolumler.map((section, i) => (
           <NavSection key={section.title ?? `bolum-${i}`} title={section.title} items={section.items} />
         ))}
-      </nav>
+      </KaydirilanMenu>
 
       {/*
         AYARLAR MENÜNÜN ALTINDA, TEK SATIR. Yedi ayar ekranı menünün yarısını
