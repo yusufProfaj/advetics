@@ -11,6 +11,7 @@ import {
   type Role,
 } from '@advetics/shared';
 import { apiFetch } from '@/lib/api';
+import { erisimYasi } from '@/lib/erisim-yasi';
 import { Dugme } from '@/components/ui/dugme';
 import { Girdi, Secim } from '@/components/ui/alan';
 import { Serit } from '@/components/ui/hal';
@@ -359,7 +360,18 @@ export function TeamManager({
                   </p>
                   <p className="truncate text-sm text-ink-muted">{member.email}</p>
                 </div>
-                <p className="text-xs text-ink-muted">Son giriş: {formatDate(member.lastLoginAt)}</p>
+                <div className="grid justify-items-end gap-0.5 text-right">
+                  <p className="text-xs text-ink-muted">Son giriş: {formatDate(member.lastLoginAt)}</p>
+                  {/* AYRILANIN ERİŞİMİ: 90 gün işaretli, hiç girmeyen ayrı (`erisimYasi`). */}
+                  {(() => {
+                    const y = erisimYasi(member.lastLoginAt);
+                    return y ? (
+                      <p className={`text-xs ${y.tur === 'uzun' ? 'font-semibold text-danger-strong' : 'text-ink-muted'}`} data-erisim={y.tur}>
+                        {y.metin}
+                      </p>
+                    ) : null;
+                  })()}
+                </div>
               </div>
 
               <div className="mt-4 space-y-2">
