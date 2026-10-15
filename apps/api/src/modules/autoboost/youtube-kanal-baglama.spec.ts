@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createHarness, seedTenant, IDS, type Harness } from '../../../test/pglite-harness';
+import { AJANS_UST_HESAP, createHarness, seedAjans, seedTenant, IDS, type Harness } from '../../../test/pglite-harness';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { PrismaAdminService } from '../../prisma/prisma-admin.service';
 import type { CryptoService } from '../../crypto/crypto.service';
@@ -272,14 +272,17 @@ describe('kanal ekleme: Google bağlantısı ATANMIŞ HESAPTAN bulunuyor', () =>
   const CLIENT_MUSTERI = 'ffffffff-4444-4444-4444-ffffffffffff';
   const GOOGLE_BAGLANTI = '99999999-4444-4444-4444-999999999999';
   const GOOGLE_HESAP = '88888888-4444-4444-4444-888888888888';
+  // AJANS KULLANICISI müşteri şirketinde: üst hesabın üyesi.
   const MUSTERI_CTX = {
     ...CTX,
     orgId: ORG_MUSTERI,
     clientIds: [CLIENT_MUSTERI],
     activeClientId: CLIENT_MUSTERI,
+    managerAccountId: AJANS_UST_HESAP,
   } as TenantContext;
 
   async function musteriKur(opts: { hesap: boolean; baglantiDurumu?: string }): Promise<void> {
+    await seedAjans(h);
     await h.q(
       `INSERT INTO organizations (id, name, slug, updated_at) VALUES ($1, 'Coordinat', 'coordinat', now())`,
       [ORG_MUSTERI],
@@ -333,7 +336,7 @@ describe('kanal ekleme: Google bağlantısı ATANMIŞ HESAPTAN bulunuyor', () =>
 
     // CTX.orgId = ajans (ev şirketi), workspace müşteri şirketinde.
     const sonuc = await svc.addChannel(
-      { ...CTX, clientIds: [IDS.client, CLIENT_MUSTERI] } as TenantContext,
+      { ...CTX, clientIds: [IDS.client, CLIENT_MUSTERI], managerAccountId: AJANS_UST_HESAP } as TenantContext,
       { clientId: CLIENT_MUSTERI, channelInput: '@coordinat.xyz1' },
     );
     const [profil] = await h.q<{ org_id: string }>(
@@ -346,6 +349,55 @@ describe('kanal ekleme: Google bağlantısı ATANMIŞ HESAPTAN bulunuyor', () =>
     );
     expect(profil?.org_id).toBe(ORG_MUSTERI);
     expect(abonelik?.org_id).toBe(ORG_MUSTERI);
+  });
+
+  it('KRİTİK: PANELİN GERÇEK AKIŞI — havuza eklemede bağlam workspace’i bağlantıyı buluyor, atama yapılmıyor', async () => {
+    /*
+     * Kanal bulucu önce clientId'siz havuza ekliyor, sonra ayrı istekle
+     * atıyor. Yalnız clientId'li yolu düzeltmek kullanıcının bastığı düğmeyi
+     * düzeltmiyordu; bağlam alanı olmadan bu çağrı yine reddedilirdi.
+     */
+    await musteriKur({ hesap: true });
+
+    const sonuc = await svc.addChannel(MUSTERI_CTX, {
+      clientId: null,
+      baglamClientId: CLIENT_MUSTERI,
+      channelInput: '@coordinat.xyz1',
+    });
+
+    const [profil] = await h.q<{ connection_id: string; client_id: string | null }>(
+      `SELECT connection_id, client_id FROM social_profiles WHERE id = $1`,
+      [sonuc.socialProfileId],
+    );
+    expect(profil?.connection_id).toBe(GOOGLE_BAGLANTI);
+    // Bağlam ATAMA DEĞİL: kanal havuzda, abonelik yok.
+    expect(profil?.client_id).toBeNull();
+    expect(sonuc.assigned).toBe(false);
+    const [abonelik] = await h.q<{ n: number }>(
+      `SELECT count(*)::int AS n FROM auto_boost_subscriptions WHERE social_profile_id = $1`,
+      [sonuc.socialProfileId],
+    );
+    expect(abonelik?.n).toBe(0);
+  });
+
+  it('KRİTİK: üst hesap üyeliği OLMAYAN şirket admini ajansın bağlantısına kanal iliştiremiyor (K4)', async () => {
+    await musteriKur({ hesap: true });
+    const sirketAdmini = { ...MUSTERI_CTX, managerAccountId: null } as unknown as TenantContext;
+    await expect(
+      svc.addChannel(sirketAdmini, { clientId: null, baglamClientId: CLIENT_MUSTERI, channelInput: '@coordinat.xyz1' }),
+    ).rejects.toThrow(/ajansın bağlantısından geliyor/);
+    await expect(
+      svc.addChannel(sirketAdmini, { clientId: CLIENT_MUSTERI, channelInput: '@coordinat.xyz1' }),
+    ).rejects.toThrow(/ajansın bağlantısından geliyor/);
+    const [n] = await h.q<{ n: number }>(`SELECT count(*)::int AS n FROM social_profiles WHERE external_id = $1`, [YENI_KANAL]);
+    expect(n?.n).toBe(0);
+  });
+
+  it('bağlamsız havuz eklemesi (Ayarlar ekranı) eski kuralla reddediliyor', async () => {
+    await musteriKur({ hesap: true });
+    await expect(
+      svc.addChannel(MUSTERI_CTX, { clientId: null, channelInput: '@coordinat.xyz1' }),
+    ).rejects.toThrow(/Önce Google Ads bağlantısı kurulmalı/);
   });
 
   it('workspace’e Google hesabı atanmamışsa sebep workspace cümlesiyle söyleniyor', async () => {

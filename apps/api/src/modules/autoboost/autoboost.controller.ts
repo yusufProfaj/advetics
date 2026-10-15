@@ -102,6 +102,15 @@ const kanalEkleSchema = z.object({
    */
   clientId: z.string().uuid().nullable().default(null),
   /**
+   * KANAL HANGİ WORKSPACE'İN EKRANINDAN EKLENİYOR — YALNIZ BAĞLANTIYI BULMAK
+   * İÇİN. Panel kanalı önce havuza ekleyip sonra ayrı istekle atıyor; havuz
+   * eklemesi Google bağlantısını yalnız aktif şirkette arıyordu ve ajans
+   * havuzundan hesap almış şirkette "Önce Google Ads bağlantısı kurulmalı"
+   * diyordu. Bu alan ATAMA DEĞİL: abonelik kurulmaz, kanal havuzda kalır.
+   * Workspace'in hesabını RLS göstermiyorsa (başka şirket) yok sayılır.
+   */
+  baglamClientId: z.string().uuid().nullable().default(null),
+  /**
    * Kullanıcının yapıştırdığı şey — kanal kimliği, @tanıtıcı ya da adres.
    * Hangi biçim olduğu sunucuda çözülüyor; kullanıcıya "kanal kimliğini gir"
    * demek, o kavramı bilmesini beklemek olurdu.

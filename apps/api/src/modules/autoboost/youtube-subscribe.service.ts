@@ -77,7 +77,7 @@ export class YouTubeSubscribeService {
    */
   async addChannel(
     ctx: TenantContext,
-    input: { clientId: string | null; channelInput: string },
+    input: { clientId: string | null; channelInput: string; baglamClientId?: string | null },
   ): Promise<{ socialProfileId: string; channelId: string; title: string; assigned: boolean }> {
     // --- 1. Girdiyi çöz
     const girdi = parseChannelInput(input.channelInput);
@@ -113,10 +113,20 @@ export class YouTubeSubscribeService {
        * iliştiriliyor. Yoksa reddediliyor: Google Ads bağlı değilse o kanal
        * için reklam da yayınlanamaz.
        */
-      const baglantiId = await this.googleBaglantisi(tx, { orgId, clientId: input.clientId });
-      if (!baglantiId) {
+      const baglanti = await this.googleBaglantisi(tx, ctx, {
+        orgId,
+        // Havuza eklemede atanacağı workspace'in hesabı da bağlantıyı söyler.
+        clientId: input.clientId ?? input.baglamClientId ?? null,
+      });
+      if (baglanti.tur === 'ajansin') {
         throw new BadRequestException(
-          input.clientId === null
+          'Bu workspace’in Google Ads hesabı ajansın bağlantısından geliyor. ' +
+            'YouTube kanalını o bağlantıya ajans ekleyebilir; ajansınızdan kanalı bağlamasını isteyin.',
+        );
+      }
+      if (baglanti.tur === 'yok') {
+        throw new BadRequestException(
+          (input.clientId ?? input.baglamClientId ?? null) === null
             ? 'Önce Google Ads bağlantısı kurulmalı: YouTube kanalı o bağlantının ' +
                 'altında yaşıyor ve reklam da oradan yayınlanıyor.'
             : 'Bu workspace’e atanmış etkin bir Google Ads hesabı yok. YouTube ' +
@@ -138,7 +148,7 @@ export class YouTubeSubscribeService {
           name, picture_url, sync_enabled, updated_at
         ) VALUES (
           gen_random_uuid(), ${orgId}::uuid, ${input.clientId}::uuid,
-          ${baglantiId}::uuid, 'youtube_channel', ${kanal.channelId},
+          ${baglanti.id}::uuid, 'youtube_channel', ${kanal.channelId},
           ${kanal.title.slice(0, 200)}, ${kanal.thumbnailUrl},
           -- SÜPÜRME KAPALI: YouTube içeriği süpürmeyle değil bildirimle
           -- geliyor. Açık bırakmak, Meta organik uçlarına kanal kimliğiyle
@@ -238,8 +248,10 @@ export class YouTubeSubscribeService {
    */
   private async googleBaglantisi(
     tx: Prisma.TransactionClient,
+    ctx: TenantContext,
     p: { orgId: string; clientId: string | null },
-  ): Promise<string | null> {
+  ): Promise<{ tur: 'bulundu'; id: string } | { tur: 'ajansin' } | { tur: 'yok' }> {
+    let ajansinkiVar = false;
     if (p.clientId !== null) {
       const hesaplar = await tx.$queryRaw<Array<{ connection_id: string }>>(Prisma.sql`
         SELECT connection_id::text AS connection_id FROM ad_accounts
@@ -248,13 +260,26 @@ export class YouTubeSubscribeService {
       `);
       const adaylar = [...new Set(hesaplar.map((h) => h.connection_id))];
       if (adaylar.length > 0) {
-        const etkin = await this.db.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-          SELECT id::text AS id FROM platform_connections
-          WHERE id = ANY(${adaylar}::uuid[]) AND status = 'active'
+        /*
+         * SAHİPLİK KURALI (`hesap-sahipligi.ts` K4): ajansın bağlantısına
+         * yalnız AJANS iliştirir. Üst hesap üyeliği olmayan şirket admini
+         * buradan ajansın bağlantısına kanal bağlayabilseydi, atama ekranının
+         * ona kapattığı kapı kanal eklemede açık kalırdı. Bağlantı ya
+         * şirketin KENDİSİNİN ya da kullanıcının üst hesabının ajansının.
+         */
+        const etkin = await this.db.$queryRaw<Array<{ id: string; uygun: boolean }>>(Prisma.sql`
+          SELECT c.id::text AS id,
+                 (c.org_id = ${p.orgId}::uuid OR c.org_id = (
+                    SELECT m.ajans_org_id FROM manager_accounts m
+                     WHERE m.id = ${ctx.managerAccountId ?? null}::uuid
+                 )) IS TRUE AS uygun
+            FROM platform_connections c
+           WHERE c.id = ANY(${adaylar}::uuid[]) AND c.status = 'active'
         `);
-        const etkinler = new Set(etkin.map((e) => e.id));
-        const secilen = adaylar.find((a) => etkinler.has(a));
-        if (secilen) return secilen;
+        const uygun = new Set(etkin.filter((e) => e.uygun).map((e) => e.id));
+        const secilen = adaylar.find((a) => uygun.has(a));
+        if (secilen) return { tur: 'bulundu', id: secilen };
+        ajansinkiVar = etkin.length > 0;
       }
     }
     const [kendi] = await this.db.$queryRaw<Array<{ id: string }>>(Prisma.sql`
@@ -263,7 +288,8 @@ export class YouTubeSubscribeService {
       ORDER BY created_at
       LIMIT 1
     `);
-    return kendi?.id ?? null;
+    if (kendi) return { tur: 'bulundu', id: kendi.id };
+    return ajansinkiVar ? { tur: 'ajansin' } : { tur: 'yok' };
   }
 
   /**

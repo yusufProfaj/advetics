@@ -108,7 +108,10 @@ export function YouTubeKanalBul({
       if (!profilId) {
         const r = await apiFetch<{ socialProfileId: string; title: string }>('/autoboost/youtube/channels', {
           method: 'POST',
-          body: JSON.stringify({ channelInput: k.channelId }),
+          // Havuza ekleniyor ama workspace bağlam olarak gidiyor: sunucu Google
+          // bağlantısını o workspace'e atanmış hesaptan buluyor (ajansın
+          // bağlantısı başka şirkette durabiliyor). Atama aşağıda ayrı istek.
+          body: JSON.stringify({ channelInput: k.channelId, baglamClientId: clientId }),
         });
         profilId = r.socialProfileId;
       }
