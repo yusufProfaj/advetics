@@ -16,6 +16,8 @@ import { REKLAM_YAYIN_KUYRUGU, type ReklamIsi } from './modules/reklam/reklam-ku
 import { redisKilidi, reklamIsiniIsle } from './modules/reklam/yayin-isleyici';
 import { STRATEJI_KELIME_KUYRUGU, type KelimeAramaIsi } from './modules/strateji/kelime-kuyrugu';
 import { BEKLENMEYEN_HATA, kelimeIsiniIsle } from './modules/strateji/kelime-isleyici';
+import { GTM_ENVANTER_HIZI, GTM_ENVANTER_KUYRUGU, envanterYaz, gtmEnvanterIsle, type GtmEnvanterIsi } from './modules/kurulum/gtm-envanter';
+import { GtmIstemcisi } from './modules/kurulum/gtm';
 import { ProviderRegistry } from './modules/connections/provider.registry';
 import { TokenVaultService } from './modules/connections/token-vault.service';
 import type { GoogleProvider } from './modules/connections/providers/google.provider';
@@ -320,7 +322,31 @@ async function bootstrap(): Promise<void> {
     logger.error(`strateji-kelime ${job.id} düştü: ${err.message}`);
   });
 
-  logger.log('Worker hazır — kuyruk: sync (4), reklam-yayin (2), strateji-kelime (1, 1 QPS)');
+  /*
+   * TAG MANAGER ENVANTERİ — hesap başına konteyner listesi (`gtm-envanter.ts`).
+   * Tag Manager kotası PROJE başına saniyede 0,25 istek; sınır kuyruk
+   * düzeyinde saniyede 0,2 (kurulumun kendi Tag Manager çağrılarına pay).
+   * İşleyici hatayı satıra yazıyor, fırlatmıyor.
+   */
+  const gtmWorker = new Worker<GtmEnvanterIsi>(
+    GTM_ENVANTER_KUYRUGU,
+    async (job) =>
+      gtmEnvanterIsle(
+        {
+          tokenAl: (connectionId) => kasa.getAccessToken(connectionId, googleSaglayici),
+          konteynerler: (token, hesapId) => new GtmIstemcisi(token).konteynerler(hesapId),
+          yaz: (is, satir) => envanterYaz(connection, config.redis.keyPrefix, is, satir),
+          simdi: () => new Date(),
+        },
+        job.data,
+      ),
+    { connection, prefix: config.redis.keyPrefix, concurrency: 1, limiter: { ...GTM_ENVANTER_HIZI } },
+  );
+  gtmWorker.on('failed', (job, err) => {
+    logger.error(`gtm-envanter ${job?.id ?? '?'} düştü: ${err.message}`);
+  });
+
+  logger.log('Worker hazır — kuyruk: sync (4), reklam-yayin (2), strateji-kelime (1, 1 QPS), gtm-envanter (1, 0,2 QPS)');
 
   const shutdown = async (signal: string): Promise<void> => {
     logger.log(`${signal} alındı, işler tamamlanıyor…`);
@@ -329,6 +355,7 @@ async function bootstrap(): Promise<void> {
     await worker.close();
     await reklamWorker.close();
     await kelimeWorker.close();
+    await gtmWorker.close();
     await connection.quit().catch(() => connection.disconnect());
     await app.close();
     logger.log('Worker kapandı.');

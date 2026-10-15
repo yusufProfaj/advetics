@@ -34,6 +34,8 @@ const ctx = {
   permissions: ['client.read', 'client.write', 'connection.write', 'connection.manage'],
 } as unknown as TenantContext;
 
+const envanter = { oku: vi.fn(), ekle: vi.fn() };
+
 const tarandi = (x: Partial<{ tagManager: string[]; analytics: string[]; metaPiksel: string[]; tagManagerOkunamayan: string[] }> = {}) => ({
   site: { durum: 'tarandi', adres: 'https://ornek.com', hata: null, tagManager: [], analytics: [], metaPiksel: [], altyapi: null, tagManagerOkunamayan: [], ...x },
 });
@@ -62,6 +64,8 @@ beforeEach(async () => {
     [GOOGLE_HESAP, IDS.org, IDS.client, GOOGLE_BAGLANTI],
   );
   olcumDurum.mockReset().mockResolvedValue(tarandi());
+  envanter.oku.mockReset().mockResolvedValue(new Map());
+  envanter.ekle.mockReset();
   const prisma = { withTenant: <T>(_c: TenantContext, fn: (tx: unknown) => Promise<T>) => fn(h.db) } as unknown as PrismaService;
   svc = new KurulumService(
     prisma,
@@ -72,6 +76,7 @@ beforeEach(async () => {
     { record: vi.fn() } as never,
     { platforms: { google: { developerToken: 'dev', apiVersion: 'v25' }, meta: { apiVersion: 'v25.0' } } } as never,
     { kurulumdanBagla: vi.fn().mockResolvedValue(null) } as never,
+    envanter as never,
   );
 });
 
@@ -283,5 +288,46 @@ describe('küçük kilitler', () => {
     expect(regex.test('//evil.com')).toBe(false);
     expect(regex.test('https://evil.com')).toBe(false);
     expect(regex.test('/\\evil.com')).toBe(false);
+  });
+});
+
+describe('Tag Manager: 30 hesap sınırı kalktı (2026-10-15)', () => {
+  const hesaplar = Array.from({ length: 155 }, (_, i) => ({ accountId: String(6000000001 + i), name: `Hesap ${i + 1}` }));
+
+  it('KRİTİK: sitedeki konteyner 31. hesaptan sonra olsa da KİMLİKLE bulunuyor', async () => {
+    olcumDurum.mockResolvedValue(tarandi({ tagManager: ['GTM-UZAK1'] }));
+    vi.spyOn(GtmIstemcisi.prototype, 'hesaplar').mockResolvedValue(hesaplar);
+    const liste = vi.spyOn(GtmIstemcisi.prototype, 'konteynerler');
+    const ara = vi.spyOn(GtmIstemcisi.prototype, 'ara').mockResolvedValue({
+      path: 'accounts/6000000120/containers/77', accountId: '6000000120', containerId: '77', name: 'Uzak', publicId: 'GTM-UZAK1',
+    });
+    vi.spyOn(GtmIstemcisi.prototype, 'konteyner').mockResolvedValue({ path: 'accounts/6000000120/containers/77', containerId: '77', name: 'Uzak', publicId: 'GTM-UZAK1' });
+    await svc.tamamla(ctx, IDS.client, {});
+    expect(ara).toHaveBeenCalledWith('GTM-UZAK1');
+    // Hesap hesap gezilmiyor: kota başına 0,25 istekte 155 çağrı dakikalar sürerdi.
+    expect(liste).not.toHaveBeenCalled();
+    expect((await kurulum())?.gtm_kimligi).toBe('GTM-UZAK1');
+  });
+
+  it('KRİTİK: seçici envanterdeki BÜTÜN hesapların konteynerlerini veriyor, eksikleri kuyruğa atıyor', async () => {
+    vi.spyOn(GtmIstemcisi.prototype, 'hesaplar').mockResolvedValue(hesaplar);
+    const liste = vi.spyOn(GtmIstemcisi.prototype, 'konteynerler');
+    // 100 hesap taranmış (ilk 30'un çok ötesi), 55'i henüz değil.
+    envanter.oku.mockResolvedValue(
+      new Map(
+        hesaplar.slice(0, 100).map((h) => [
+          h.accountId,
+          { hesapAdi: h.name, konteynerler: [{ path: `accounts/${h.accountId}/containers/1`, name: h.name, publicId: `GTM-${h.accountId}` }], taranma: new Date().toISOString(), hata: null },
+        ]),
+      ),
+    );
+    const s = await svc.secenekler(ctx, IDS.client, 'gtm_konteyner');
+    expect(s.mevcut).toHaveLength(100);
+    expect(s.mevcut.some((m) => m.not === 'Hesap 100')).toBe(true);
+    expect(s.not).toContain('100 / 155');
+    expect(liste).not.toHaveBeenCalled();
+    const [baglanti, kuyruga] = envanter.ekle.mock.calls[0]!;
+    expect(baglanti).toBe(GOOGLE_BAGLANTI);
+    expect((kuyruga as unknown[]).length).toBe(55);
   });
 });

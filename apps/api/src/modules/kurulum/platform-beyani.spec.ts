@@ -71,6 +71,7 @@ beforeEach(async () => {
     { record: kayit } as never,
     { platforms: { google: { developerToken: 'dev', apiVersion: 'v25' }, meta: { apiVersion: 'v25.0' } } } as never,
     { kurulumdanBagla: vi.fn().mockResolvedValue(null) } as never,
+    { oku: vi.fn().mockResolvedValue(new Map()), ekle: vi.fn() } as never,
   );
 });
 

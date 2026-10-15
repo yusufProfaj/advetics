@@ -1,3 +1,4 @@
+import { PlatformApiError } from '../connections/provider.types';
 import { platformFetch } from '../connections/providers/http';
 
 /**
@@ -271,14 +272,54 @@ export class GtmIstemcisi {
     return data;
   }
 
+  /**
+   * SAYFALAR SONUNA KADAR OKUNUYOR. Liste yanıtı `nextPageToken` taşıyabiliyor
+   * ve yalnız ilk sayfayı okumak, kalan hesapları/konteynerleri hiçbir uyarı
+   * vermeden düşürürdü. Üst sınır sonsuz döngüye karşı: 50 sayfadan sonrası
+   * bir arıza.
+   */
+  private async hepsi<T>(yol: string, alan: string): Promise<T[]> {
+    const sonuc: T[] = [];
+    let sayfa: string | undefined;
+    for (let i = 0; i < 50; i++) {
+      const ek = sayfa ? `${yol.includes('?') ? '&' : '?'}pageToken=${encodeURIComponent(sayfa)}` : '';
+      const r = await this.istek<Record<string, unknown> & { nextPageToken?: string }>(`${yol}${ek}`);
+      sonuc.push(...((r[alan] as T[] | undefined) ?? []));
+      if (!r.nextPageToken) return sonuc;
+      sayfa = r.nextPageToken;
+    }
+    throw new Error(`Tag Manager listesi 50 sayfayı aştı (${yol}); liste eksik kalmasın diye durduruldu.`);
+  }
+
   async hesaplar(): Promise<Array<{ accountId: string; name: string }>> {
-    const r = await this.istek<{ account?: Array<{ accountId: string; name: string }> }>('accounts');
-    return r.account ?? [];
+    return this.hepsi<{ accountId: string; name: string }>('accounts', 'account');
   }
 
   async konteynerler(hesapId: string): Promise<GtmKonteyner[]> {
-    const r = await this.istek<{ container?: Array<GtmKonteyner & { usageContext?: string[] }> }>(`accounts/${hesapId}/containers`);
-    return (r.container ?? []).filter((c) => !c.usageContext || c.usageContext.includes('web'));
+    const r = await this.hepsi<GtmKonteyner & { usageContext?: string[] }>(`accounts/${hesapId}/containers`, 'container');
+    return r.filter((c) => !c.usageContext || c.usageContext.includes('web'));
+  }
+
+  /**
+   * KİMLİKLE BUL — `GTM-XXXX` tek çağrıda, BÜTÜN hesaplarda
+   * (`accounts.containers.lookup`). Hesap hesap konteyner listelemek kota
+   * başına 0,25 istekle dakikalar sürüyor; sitede görülen kimlik zaten
+   * elimizde. Bulunamadı ya da erişim yoksa `null` (404/403); kalan hatalar
+   * (kota, ağ) fırlıyor: "yok" sanılırsa sitede kod varken yeni konteyner
+   * açılır ve veri ikiye bölünürdü.
+   */
+  async ara(publicId: string): Promise<(GtmKonteyner & { accountId: string }) | null> {
+    try {
+      return await this.istek<GtmKonteyner & { accountId: string }>(`accounts/containers:lookup?tagId=${encodeURIComponent(publicId)}`);
+    } catch (e) {
+      const durum = e instanceof PlatformApiError ? e.detail?.httpStatus : undefined;
+      // KOTA DA 403 DÖNÜYOR (Tag Manager belgesi: kota aşımı "403 Forbidden").
+      // Kotayı "erişim yok" saymak, kullanıcıya olmayan bir izin sorununu
+      // aratırdı; mesajında kota/hız geçen 403 fırlıyor.
+      const kota = /rate|quota|limit|exhausted/i.test(e instanceof Error ? e.message : '');
+      if (durum === 404 || (durum === 403 && !kota)) return null;
+      throw e;
+    }
   }
 
   async konteyner(yol: string): Promise<GtmKonteyner> {

@@ -26,6 +26,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CONFIG, type AppConfig } from '../../config/configuration';
 import { ConnectionsService } from '../connections/connections.service';
 import { TokenVaultService } from '../connections/token-vault.service';
+import { GtmEnvanterKuyrugu, envanterNotu, envanterOzeti } from './gtm-envanter';
 import { baglantiSec } from '../connections/baglanti-sec';
 import { ProviderRegistry } from '../connections/provider.registry';
 import { GOOGLE_OLCUM_SCOPES } from '../connections/providers/google.provider';
@@ -133,6 +134,7 @@ export class KurulumService {
     private readonly audit: AuditService,
     @Inject(CONFIG) private readonly config: AppConfig,
     private readonly veriKaynagi: VeriKaynagiService,
+    private readonly gtmEnvanteri: GtmEnvanterKuyrugu,
   ) {}
 
   /**
@@ -419,11 +421,31 @@ export class KurulumService {
         };
       }
       if (kod === 'gtm_konteyner') {
+        /*
+         * BÜTÜN HESAPLAR, ENVANTERDEN (`gtm-envanter.ts`). Konteynerler hesap
+         * başına listeleniyor ve Tag Manager kotası saniyede 0,25 istek; istek
+         * anında yalnız ilk 30 hesap okunuyordu ve 155 hesaplı ajansta
+         * konteynerlerin çoğu listede hiç görünmüyordu. Burada tek çağrı
+         * (hesap listesi); konteynerler arka planda taranıp saklanıyor ve not
+         * kaçının tarandığını söylüyor.
+         */
+        const baglanti = this.baglantiSec(b, 'google');
         const gtm = new GtmIstemcisi(await this.googleOlcumTokeni(b));
         const hesaplar = await gtm.hesaplar();
-        const mevcut: KurulumSecenekleri['mevcut'] = [];
-        for (const h of hesaplar.slice(0, 30)) for (const c of await gtm.konteynerler(h.accountId)) mevcut.push({ deger: c.path, etiket: `${c.name} · ${c.publicId}`, not: h.name });
-        return { kod, mevcut, ustler: hesaplar.map((h) => ({ deger: h.accountId, etiket: h.name })), not: hesaplar.length > 30 ? `İlk 30 Tag Manager hesabının konteynerleri gösteriliyor (toplam ${hesaplar.length}).` : hesaplar.length === 0 ? 'Erişilebilen Tag Manager hesabı yok: tagmanager.google.com’da bir hesap aç, sonra yenile.' : null };
+        const ustler = hesaplar.map((h) => ({ deger: h.accountId, etiket: h.name }));
+        const satirlar = baglanti ? await this.gtmEnvanteri.oku(baglanti.id) : null;
+        if (!baglanti || satirlar === null) {
+          return { kod, mevcut: [], ustler, not: 'Konteyner listesi şu an okunamıyor (önbellek kapalı). Sitedeki konteyner otomatik bulunur; ya da yeni konteyner aç.' };
+        }
+        const simdi = new Date();
+        const ozet = envanterOzeti(hesaplar, satirlar, simdi);
+        await this.gtmEnvanteri.ekle(baglanti.id, ozet.kuyruga, simdi);
+        return {
+          kod,
+          mevcut: ozet.konteynerler.map((c) => ({ deger: c.path, etiket: `${c.name} · ${c.publicId}`, not: c.hesapAdi })),
+          ustler,
+          not: envanterNotu({ toplam: hesaplar.length, taranan: ozet.taranan, hatali: ozet.hatali }),
+        };
       }
       // ga4_mulk
       const ga = new Ga4Istemcisi(await this.googleOlcumTokeni(b));
@@ -751,10 +773,16 @@ export class KurulumService {
       if (t.durum !== 'okundu') throw new KullaniciGerekli(`Site okunamadı (${t.neden}); sitede konteyner olup olmadığını bilmiyoruz. Konteyneri seç ya da yeni aç.`);
       const hesaplar = await gtm.hesaplar();
       if (t.tagManager.length > 0) {
-        for (const h of hesaplar.slice(0, 30)) {
-          const c = (await gtm.konteynerler(h.accountId)).find((x) => t.tagManager.includes(x.publicId));
+        /*
+         * KİMLİKLE BUL, HESAP HESAP GEZME. İlk 30 hesabın konteynerlerine
+         * bakılıyordu: sitedeki konteyner 31. hesaptaysa "Google hesabımız
+         * erişemiyor" deniyordu — erişim varken. `lookup` tek çağrıda bütün
+         * hesaplara bakıyor.
+         */
+        for (const kimlik of t.tagManager) {
+          const c = await gtm.ara(kimlik);
           if (c) {
-            k = { path: c.path, publicId: c.publicId, hesap: h.accountId };
+            k = { path: c.path, publicId: c.publicId, hesap: c.accountId };
             break;
           }
         }

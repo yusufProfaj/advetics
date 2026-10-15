@@ -272,7 +272,7 @@ describe('servis (PGlite)', () => {
     await h.reset();
     await seedTenant(h, { platform: 'meta' });
     const prisma = { withTenant: <T>(_c: TenantContext, fn: (tx: unknown) => Promise<T>) => fn(h.db) } as unknown as PrismaService;
-    svc = new KurulumService(prisma, {} as never, { getAccessToken: vi.fn() } as never, { get: vi.fn() } as never, { durum: vi.fn() } as never, { record: vi.fn() } as never, { platforms: { google: {}, meta: {} } } as never, { kurulumdanBagla: vi.fn().mockResolvedValue(null) } as never);
+    svc = new KurulumService(prisma, {} as never, { getAccessToken: vi.fn() } as never, { get: vi.fn() } as never, { durum: vi.fn() } as never, { record: vi.fn() } as never, { platforms: { google: {}, meta: {} } } as never, { kurulumdanBagla: vi.fn().mockResolvedValue(null) } as never, { oku: vi.fn().mockResolvedValue(new Map()), ekle: vi.fn() } as never);
   });
 
   it('kurulum satırı yokken okuma çalışır; Meta hesabı atanmış, Google bağlantısı yok', async () => {

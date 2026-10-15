@@ -342,6 +342,7 @@ describe('KRİTİK: kurulum izin sonrası "İzin verildi" der', () => {
       { record: vi.fn() } as never,
       { platforms: { google: { developerToken: 'dev', apiVersion: 'v25' }, meta: { apiVersion: 'v25.0' } } } as never,
       { kurulumdanBagla: vi.fn() } as never,
+      { oku: vi.fn().mockResolvedValue(new Map()), ekle: vi.fn() } as never,
     );
     const ctx = {
       orgId: MUSTERI_ORG,
