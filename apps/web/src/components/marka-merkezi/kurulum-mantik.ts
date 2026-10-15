@@ -1,4 +1,4 @@
-import type { KurulumAdimDurumu, KurulumAdimKodu, KurulumIstegi } from '@advetics/shared';
+import type { DonusumTetigi, KurulumAdimDurumu, KurulumAdimKodu, KurulumIstegi } from '@advetics/shared';
 import { markaMerkeziAdresi } from '@/lib/panel-adresleri';
 
 /**
@@ -25,7 +25,7 @@ export const KONTROL_ISTEGI: Partial<Record<KurulumAdimKodu, KurulumIstegi>> = {
 };
 
 /** Otomatik eylemin isteği. `gtm_etiket` kayıtlı tetikle gider (yoksa null: önce seçilmeli). */
-export function otomatikIstek(kod: KurulumAdimKodu, tetik: { formYolu: string | null; telefon: boolean; whatsapp: boolean } | null): KurulumIstegi | null {
+export function otomatikIstek(kod: KurulumAdimKodu, tetik: DonusumTetigi | null): KurulumIstegi | null {
   if (kod === 'gtm_etiket') return tetik ? { kod: 'gtm_etiket', tetik } : null;
   if (kod === 'ads_donusum' || kod === 'ga4_ads_bag' || kod === 'site_kodu' || kod === 'dogrulama') return { kod };
   return null;

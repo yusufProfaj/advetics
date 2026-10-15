@@ -9,6 +9,8 @@ import {
   type KurulumIstegi,
   type KurulumSecenekleri,
   type KurulumYaniti,
+  FORM_DINLEYICI_EKLENTILERI,
+  formOlculuyor,
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { PANEL_KAPILARI } from '@/lib/panel-adresleri';
@@ -363,29 +365,42 @@ function SecimPaneli({
   );
 }
 
+/*
+ * FORM ÖLÇÜMÜ TEŞEKKÜR SAYFASINA BAĞLI DEĞİL (2026-10-15). Kutu bir süre
+ * "teşekkür sayfası açılıyor" diyordu ve sayfa yoksa form hiç ölçülmüyordu:
+ * Elementor gibi sayfayı değiştirmeyen formlarda dönüşüm kaybı. Artık form
+ * dinleyiciyle ölçülüyor; teşekkür sayfası yalnız yönlendiren ya da listede
+ * olmayan formlar için ek yol.
+ */
 function TetikFormu({ mevcut, gonderiliyor, gonder }: { mevcut: DonusumTetigi | null; gonderiliyor: boolean; gonder: (t: DonusumTetigi) => void }) {
-  const [formVar, setFormVar] = useState(mevcut ? mevcut.formYolu !== null : true);
+  const [formVar, setFormVar] = useState(mevcut ? formOlculuyor(mevcut) : true);
   const [yol, setYol] = useState(mevcut?.formYolu ?? '');
   const [telefon, setTelefon] = useState(mevcut?.telefon ?? true);
   const [whatsapp, setWhatsapp] = useState(mevcut?.whatsapp ?? true);
+  const yolBos = yol.trim() === '';
   const yolGecerli = /^(https?:\/\/[^/]+)?\/[^\s]+$/.test(yol.trim()) && !/^(https?:\/\/[^/]+)?\/?$/.test(yol.trim());
   return (
     <div className="mt-3 space-y-3 rounded-alan border border-line p-3">
       <label className="flex items-start gap-2">
         <input type="checkbox" checked={formVar} onChange={(e) => setFormVar(e.target.checked)} className="mt-1" />
         <span>
-          <span className="block text-sm text-ink">Form gönderilince teşekkür sayfası açılıyor</span>
-          <span className="block text-xs text-ink-muted">Form dönüşümü bu sayfanın açılmasıyla sayılır. Teşekkür sayfası yoksa form dönüşümü kurulmaz.</span>
+          <span className="block text-sm text-ink">Form gönderimleri dönüşüm sayılsın</span>
+          <span className="block text-xs text-ink-muted">
+            {FORM_DINLEYICI_EKLENTILERI.join(', ')} formları sayfa değişmeden yakalanır. Yalnız başarılı gönderim sayılır.
+          </span>
         </span>
       </label>
       {formVar && (
-        <Girdi
-          className="max-w-md"
-          value={yol}
-          onChange={(e) => setYol(e.target.value)}
-          placeholder="/tesekkurler ya da sayfanın tam adresi"
-          aria-label="Teşekkür sayfası"
-        />
+        <div className="ml-6 space-y-1">
+          <Girdi
+            className="max-w-md"
+            value={yol}
+            onChange={(e) => setYol(e.target.value)}
+            placeholder="Teşekkür sayfası (isteğe bağlı): /tesekkurler"
+            aria-label="Teşekkür sayfası (isteğe bağlı)"
+          />
+          <p className="text-xs text-ink-muted">Form gönderilince başka bir sayfa açılıyorsa yaz; listede olmayan formlar da böylece sayılır. Aynı gönderim iki kez sayılmaz.</p>
+        </div>
       )}
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={telefon} onChange={(e) => setTelefon(e.target.checked)} /> Telefon numarasına tıklama dönüşüm sayılsın
@@ -397,8 +412,8 @@ function TetikFormu({ mevcut, gonderiliyor, gonder }: { mevcut: DonusumTetigi | 
         ton="koyu"
         boyut="kucuk"
         bekliyor={gonderiliyor}
-        disabled={(formVar && !yolGecerli) || (!formVar && !telefon && !whatsapp)}
-        onClick={() => gonder({ formYolu: formVar ? yol.trim() : null, telefon, whatsapp })}
+        disabled={(formVar && !yolBos && !yolGecerli) || (!formVar && !telefon && !whatsapp)}
+        onClick={() => gonder({ form: formVar, formYolu: formVar && !yolBos ? yol.trim() : null, telefon, whatsapp })}
       >
         Kaydet, etiketleri yaz ve yayınla
       </Dugme>

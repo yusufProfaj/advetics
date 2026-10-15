@@ -3,6 +3,7 @@ import {
   PANEL_YERLERI,
   KURULUM_ADIM_GRUBU,
   KURULUM_ADIM_KODLARI,
+  formOlculuyor,
   type DonusumTetigi,
   type HesapSahibi,
   type KurulumAdimDurumu,
@@ -10,6 +11,7 @@ import {
   type KurulumAdimi,
   type KurulumEylemi,
 } from '@advetics/shared';
+import { ETIKET_PLANI_SURUMU } from './gtm';
 
 /**
  * ÇEREZ ONAYI (pazar araştırması 2026-10-15, docs/pazar/kurulum.md).
@@ -89,7 +91,8 @@ export interface KurulumAnlik {
 /** Tetik + kimliklerin imzası: değişince etiketler yeniden yazılmalı. */
 export function etiketImzasi(a: { ga4: string | null; piksel: string | null; tetik: DonusumTetigi | null; ads: KurulumSatiri['adsDonusumleri'] }): string {
   const ads = (['form', 'telefon', 'whatsapp'] as const).map((t) => a.ads[t]?.gonder?.conversionLabel ?? '-').join(',');
-  return JSON.stringify([a.ga4 ?? '', a.piksel ?? '', a.tetik ?? null, ads]);
+  // ETİKET PLANI SÜRÜMÜ: plan değişince yayındaki kurulum "Güncellenmeli" olur.
+  return JSON.stringify([a.ga4 ?? '', a.piksel ?? '', a.tetik ?? null, ads, ETIKET_PLANI_SURUMU]);
 }
 
 type Hucre = Omit<KurulumAdimi, 'kod' | 'grup'>;
@@ -232,7 +235,7 @@ export function kurulumAdimlari(a: KurulumAnlik): KurulumAdimi[] {
     },
     gtm_etiket: () => {
       if (!s?.gtmKonteynerYolu) return { durum: 'atlandi', baslik: 'Önce konteyner', neden: 'Etiketler Tag Manager konteynerine yazılıyor.', eylem: null, otomatik: false };
-      if (!s.donusumTetigi) return { durum: 'eksik', baslik: 'Tetikler seçilmedi', neden: 'Form gönderilince hangi sayfa açılıyor, telefon ve WhatsApp tıklamaları sayılsın mı?', eylem: { tur: 'girdi', etiket: 'Tetikleri seç' }, otomatik: false };
+      if (!s.donusumTetigi) return { durum: 'eksik', baslik: 'Tetikler seçilmedi', neden: 'Form gönderimleri, telefon ve WhatsApp tıklamaları dönüşüm sayılsın mı?', eylem: { tur: 'girdi', etiket: 'Tetikleri seç' }, otomatik: false };
       if (s.gtmYayin && s.gtmYayin.imza === imzaSimdi)
         return {
           durum: 'tamam',
@@ -246,7 +249,7 @@ export function kurulumAdimlari(a: KurulumAnlik): KurulumAdimi[] {
         {
           durum: 'eksik',
           baslik: s.gtmYayin ? 'Güncellenmeli' : 'Yayınlanmadı',
-          neden: s.gtmYayin ? 'Piksel, mülk, dönüşüm ya da tetik değişti; etiketler yeniden yazılıp yayınlanmalı.' : 'Etiketler yazılıp yayınlanacak.',
+          neden: s.gtmYayin ? 'Piksel, mülk, dönüşüm, tetik ya da etiket yapısı değişti (form dinleyici, ADV / adları); etiketler yeniden yazılıp yayınlanmalı.' : 'Etiketler yazılıp yayınlanacak.',
           eylem: { tur: 'otomatik', etiket: 'Yaz ve yayınla' },
           otomatik: true,
         }
@@ -301,7 +304,7 @@ export function kurulumAdimlari(a: KurulumAnlik): KurulumAdimi[] {
 }
 
 export function gerekenDonusumler(t: DonusumTetigi): Array<'form' | 'telefon' | 'whatsapp'> {
-  return [...(t.formYolu ? (['form'] as const) : []), ...(t.telefon ? (['telefon'] as const) : []), ...(t.whatsapp ? (['whatsapp'] as const) : [])];
+  return [...(formOlculuyor(t) ? (['form'] as const) : []), ...(t.telefon ? (['telefon'] as const) : []), ...(t.whatsapp ? (['whatsapp'] as const) : [])];
 }
 
 export interface Beklenen {
@@ -315,7 +318,7 @@ export function dogrulamaBeklenenleri(a: { ga4: boolean; piksel: boolean; tetik:
   const b: Beklenen[] = [];
   if (a.ga4) b.push({ ad: 'Analytics sayfa görüntüleme', kaynak: 'ga4', olay: 'page_view' });
   if (a.piksel) b.push({ ad: 'Meta PageView', kaynak: 'meta', olay: 'PageView' });
-  if (a.tetik?.formYolu) {
+  if (a.tetik && formOlculuyor(a.tetik)) {
     if (a.ga4) b.push({ ad: 'Analytics form (generate_lead)', kaynak: 'ga4', olay: 'generate_lead' });
     if (a.piksel) b.push({ ad: 'Meta Lead', kaynak: 'meta', olay: 'Lead' });
   }
@@ -333,9 +336,10 @@ export function dogrulamaSonucu(b: readonly Beklenen[], d: NonNullable<KurulumSa
 }
 
 function dogrulamaTalimati(t: DonusumTetigi | null): string {
-  return t?.formYolu
-    ? `Siteyi aç, formu bir kez doldur (teşekkür sayfası ${t.formYolu} açılmalı), 1-2 dakika sonra "Kontrol et".`
-    : 'Siteyi bir kez aç, 1-2 dakika sonra "Kontrol et".';
+  if (!t || !formOlculuyor(t)) return 'Siteyi bir kez aç, 1-2 dakika sonra "Kontrol et".';
+  return t.formYolu
+    ? `Siteyi aç, formu bir kez gönder (ya da teşekkür sayfası ${t.formYolu} açılsın), 1-2 dakika sonra "Kontrol et".`
+    : 'Siteyi aç, formu bir kez gönder (başarı mesajı görünmeli), 1-2 dakika sonra "Kontrol et".';
 }
 
 function musteriNo(no: string): string {

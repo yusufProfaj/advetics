@@ -202,13 +202,44 @@ export const tesekkurYoluSchema = z
   })
   .refine((s) => s.startsWith('/') && s !== '/', 'Teşekkür sayfasının yolunu yaz (örn. /tesekkurler). Ana sayfa olamaz: her ziyaret dönüşüm sayılırdı.');
 
+/**
+ * SAYFA DEĞİŞMEDEN GÖNDERİLEN FORMLARIN YAKALANDIĞI EKLENTİLER (2026-10-15).
+ * Form ölçümü bir süre YALNIZ teşekkür sayfasına bağlıydı: Elementor gibi
+ * sayfayı değiştirmeyen formlarda dönüşüm hiç sayılmıyordu. Tag Manager'daki
+ * `ADV / Form Dinleyici` bu eklentilerin "gönderildi" olayını dinliyor
+ * (`apps/api/.../gtm.ts#formDinleyiciKodu`). Panel metni bu listeden türüyor:
+ * elle yazılan bir liste, dinleyiciye eklenti eklendiğinde yalan söylerdi.
+ */
+export const FORM_DINLEYICI_EKLENTILERI = [
+  'Elementor',
+  'Contact Form 7',
+  'WPForms',
+  'Gravity Forms',
+  'Fluent Forms',
+  'Ninja Forms',
+  'Formidable',
+  'Forminator',
+  'HubSpot',
+] as const;
+
 export const donusumTetigiSchema = z.object({
-  /** null = sitede form yok ya da teşekkür sayfası yok; form dönüşümü kurulmaz (nedeni yazar). */
+  /**
+   * Form gönderimleri dönüşüm sayılsın mı (dinleyiciyle, sayfa değişmeden).
+   * ESKİ KAYITLARDA YOK: o kayıtlarda form ölçümü teşekkür sayfasının
+   * varlığıyla belirleniyordu; `formOlculuyor` bu anlamı koruyor.
+   */
+  form: z.boolean().optional(),
+  /** İsteğe bağlı: form gönderilince açılan teşekkür sayfası (yönlendiren formlar için ek yol). */
   formYolu: tesekkurYoluSchema.nullable(),
   telefon: z.boolean(),
   whatsapp: z.boolean(),
 });
 export type DonusumTetigi = z.infer<typeof donusumTetigiSchema>;
+
+/** Form dönüşümü kurulacak mı. Eski kayıtta `form` yok: teşekkür sayfası varsa evet. */
+export function formOlculuyor(t: Pick<DonusumTetigi, 'form' | 'formYolu'>): boolean {
+  return t.form ?? t.formYolu !== null;
+}
 
 export const kurulumIstegiSchema = z.discriminatedUnion('kod', [
   z.object({ kod: z.literal('hesap_sahibi'), deger: z.enum(HESAP_SAHIPLERI) }),

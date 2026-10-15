@@ -36,7 +36,7 @@ import { AuditService } from '../audit/audit.service';
 import { VeriKaynagiService } from '../veri-kaynagi/veri-kaynagi.service';
 import { AdsKurulumIstemcisi, DONUSUM_ADI, DONUSUM_KATEGORISI, type DonusumTuru } from './ads-kurulum';
 import { Ga4Istemcisi } from '../connections/providers/ga4';
-import { GtmIstemcisi, ON_EK, SURUM_ADI, TUM_SAYFALAR_TETIGI, gtmPlani, konteynerdeYuklu } from './gtm';
+import { GtmIstemcisi, ON_EK, SURUM_ADI, TUM_SAYFALAR_TETIGI, bizimMi, gtmPlani, konteynerdeYuklu } from './gtm';
 import { MetaKurulumIstemcisi } from './meta-kurulum';
 import { siteYokBeyaniVarMi, type SorguCalistirici } from './kurulum-beyan';
 import {
@@ -974,7 +974,7 @@ export class KurulumService {
       if (yabanciOkunamayan.length > 0) throw new KullaniciGerekli(`Sitedeki ${yabanciOkunamayan.join(', ')} konteynerinin içeriği okunamadı; içinde Analytics ya da piksel olabilir. Okunamayan konteyner varken yayınlamıyoruz.`);
     }
     const alan = await gtm.calismaAlani(yol);
-    const [varEtiket, varTetik] = await Promise.all([gtm.etiketler(alan), gtm.tetikler(alan)]);
+    const [varEtiket, varTetik, varDegisken] = await Promise.all([gtm.etiketler(alan), gtm.tetikler(alan), gtm.ozelDegiskenler(alan)]);
     const konteyner = konteynerdeYuklu(varEtiket, s.ga4OlcumKimligi, b.pikselId);
     const siteGa4 = tarama.durum === 'okundu' && !kendiKodumuzSitede ? tarama.analytics : [];
     const sitePiksel = tarama.durum === 'okundu' && !kendiKodumuzSitede ? tarama.metaPiksel : [];
@@ -989,6 +989,8 @@ export class KurulumService {
     if (plan.etiketler.length === 0) throw new KullaniciGerekli(plan.atlananlar.join(' '));
 
     await gtm.yerlesikDegiskenleriAc(alan, plan.degiskenler);
+    // SIRA: değişken → tetik → etiket (tetik değişkene, etiket tetiğe bakıyor).
+    for (const d of plan.ozelDegiskenler) await gtm.degiskenYaz(alan, d, varDegisken.find((x) => x.name === d.name));
     const tetikKimligi = new Map<string, string>([[TUM_SAYFALAR_TETIGI, TUM_SAYFALAR_TETIGI]]);
     for (const t of plan.tetikler) tetikKimligi.set(t.name, await gtm.tetikYaz(alan, t, varTetik.find((x) => x.name === t.name)));
     for (const e of plan.etiketler) {
@@ -996,7 +998,7 @@ export class KurulumService {
         name: e.name,
         type: e.type,
         parameter: e.parameter,
-        firingTriggerId: [tetikKimligi.get(e.tetik)!],
+        firingTriggerId: [tetikKimligi.get(e.tetik)!, ...(e.ekTetik ? [tetikKimligi.get(e.ekTetik)!] : [])],
         ...(e.birKez ? { tagFiringOption: 'oncePerLoad' } : {}),
         ...(e.onceki ? { setupTag: [{ tagName: e.onceki, stopOnSetupFailure: false }] } : {}),
       };
@@ -1007,6 +1009,11 @@ export class KurulumService {
     // YALNIZ ön ekli etiketler: kullanıcının kendi etiketine asla dokunulmaz.
     const planAdlari = new Set(plan.etiketler.map((e) => e.name));
     for (const e of silinecekEtiketler(varEtiket, planAdlari)) await gtm.etiketSil(e.path);
+    // TETİK VE DEĞİŞKEN DE: ad düzeni değişince ("Advetics · " → "ADV / ")
+    // eskileri konteynerde sahipsiz kalırdı. SIRA ters: kullanılan bir tetik
+    // ya da değişken silinemiyor; önce etiketler gitti, sonra tetik, sonra değişken.
+    for (const t of silinecekEtiketler(varTetik, new Set(plan.tetikler.map((x) => x.name)))) await gtm.sil(t.path);
+    for (const d of silinecekEtiketler(varDegisken, new Set(plan.ozelDegiskenler.map((x) => x.name)))) await gtm.sil(d.path);
     // Yazarken başkası yayınladıysa ya da yeni sürüm açtıysa DURUR: bizim
     // sürümümüz onun değişikliğini geri alır ya da onunkini de yayınlardı.
     const sonTekrar = await gtm.sonSurum(yol);
@@ -1270,7 +1277,10 @@ export function kullanilmayanAdimlar(kullanilmayanlar: readonly KurulumPlatformu
   return atla;
 }
 
-/** Silinecek etiketler: YALNIZ bizim ön ekli ve planda olmayanlar. */
+/**
+ * Silinecekler (etiket, tetik, değişken): YALNIZ bizim ön ekli (eskiler dahil,
+ * `bizimMi`) ve planda olmayanlar. Kullanıcının kendi öğesine asla dokunulmaz.
+ */
 export function silinecekEtiketler<T extends { name: string }>(varolan: readonly T[], plan: ReadonlySet<string>): T[] {
-  return varolan.filter((x) => x.name.startsWith(ON_EK) && !plan.has(x.name));
+  return varolan.filter((x) => bizimMi(x.name) && !plan.has(x.name));
 }

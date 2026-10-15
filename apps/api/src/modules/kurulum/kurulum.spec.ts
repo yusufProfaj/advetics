@@ -1,14 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { KURULUM_ADIM_KODLARI, gtmKodu, kurulumIstegiSchema, tesekkurYoluSchema, type TenantContext } from '@advetics/shared';
+import { FORM_DINLEYICI_EKLENTILERI, KURULUM_ADIM_KODLARI, gtmKodu, kurulumIstegiSchema, tesekkurYoluSchema, type TenantContext } from '@advetics/shared';
 import { createHarness, IDS, seedTenant, type Harness } from '../../../test/pglite-harness';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { GOOGLE_OLCUM_SCOPES } from '../connections/providers/google.provider';
 import { gonderAdresi } from './ads-kurulum';
-import { TUM_SAYFALAR_TETIGI, gtmPlani, konteynerdeYuklu, metaPikselKodu } from './gtm';
+import { ETIKET_PLANI_SURUMU, FORM_OLAYI, FORM_TEKRAR_PENCERESI_MS, TUM_SAYFALAR_TETIGI, bizimMi, formAzOnceSayildiKodu, formDinleyiciKodu, gtmPlani, konteynerdeYuklu, metaPikselKodu } from './gtm';
 import { CEREZ_ONAYI_NOTU, dogrulamaBeklenenleri, dogrulamaSonucu, etiketImzasi, kurulumAdimlari, type KurulumAnlik, type KurulumSatiri } from './kurulum-durum';
-import { KurulumService, satirOku } from './kurulum.service';
+import { KurulumService, satirOku, silinecekEtiketler } from './kurulum.service';
 import { istanbulSaatKimligi, odemeHazirMi } from './meta-kurulum';
 
 /**
@@ -26,61 +26,173 @@ describe('Tag Manager planı', () => {
     ga4OlcumKimligi: 'G-ABC1234',
     metaPikselId: '123456789',
     ads: { form: { conversionId: '111', conversionLabel: 'LBL' } },
-    tetik: { formYolu: '/tesekkurler', telefon: true, whatsapp: false },
+    tetik: { form: true, formYolu: '/tesekkurler', telefon: true, whatsapp: false },
     mevcut: { ga4Yuklu: false, pikselYuklu: false },
   };
+  const filtre = (t: { filter?: Array<{ parameter: Array<{ value?: string }> }> }, i = 0) => t.filter![i]!.parameter[1]!.value!;
 
-  it('KRİTİK: temel etiketler tüm sayfalarda; form olayı teşekkür sayfasının TAM yolunda (içerir değil)', () => {
+  it('KRİTİK: adlar "ADV / <Dönüşüm> · <Hedef>" — Tag Manager’da neyin bizim olduğu ve neyi saydığı okunuyor', () => {
+    const ad = gtmPlani(temel).etiketler.map((e) => e.name);
+    expect(ad).toEqual(
+      expect.arrayContaining([
+        'ADV / Google Etiketi · GA4',
+        'ADV / Meta Pikseli',
+        'ADV / Dönüşüm Bağlayıcı · Google Ads',
+        'ADV / Form Dinleyici',
+        'ADV / Form Gönderimi · GA4',
+        'ADV / Form Gönderimi · Meta Lead',
+        'ADV / Form Gönderimi · Google Ads',
+        'ADV / Telefon Tıklaması · GA4',
+        'ADV / Telefon Tıklaması · Meta Contact',
+      ]),
+    );
+    expect(ad.every((x) => x.startsWith('ADV / '))).toBe(true);
+    expect(gtmPlani(temel).tetikler.map((t) => t.name).every((x) => x.startsWith('ADV / Tetik · '))).toBe(true);
+  });
+
+  it('KRİTİK: form TEŞEKKÜR SAYFASI OLMADAN da ölçülüyor (Elementor gibi sayfa değişmeyen formlar)', () => {
+    const p = gtmPlani({ ...temel, tetik: { form: true, formYolu: null, telefon: false, whatsapp: false } });
+    const dinleyici = p.etiketler.find((e) => e.name === 'ADV / Form Dinleyici')!;
+    expect(dinleyici.tetik).toBe(TUM_SAYFALAR_TETIGI);
+    expect(dinleyici.birKez).toBe(true);
+    const olay = p.tetikler.find((t) => t.type === 'customEvent')!;
+    expect(olay.customEventFilter![0]!.parameter.map((x) => x.value)).toEqual(['{{_event}}', FORM_OLAYI]);
+    const ga4 = p.etiketler.find((e) => e.name === 'ADV / Form Gönderimi · GA4')!;
+    expect(ga4.tetik).toBe(olay.name);
+    expect(ga4.ekTetik).toBeUndefined();
+    expect(p.tetikler.some((t) => t.type === 'pageview')).toBe(false);
+  });
+
+  it('KRİTİK: teşekkür sayfası EK yol; dinleyici az önce saydıysa sayfa ikinci kez saymıyor', () => {
     const p = gtmPlani(temel);
-    const ad = p.etiketler.map((e) => e.name);
-    expect(ad).toContain('Advetics · Google etiketi');
-    expect(ad).toContain('Advetics · Meta pikseli');
-    expect(ad).toContain('Advetics · Dönüşüm bağlayıcı');
-    expect(ad).toContain('Advetics · Google Ads form');
-    expect(p.etiketler.find((e) => e.type === 'googtag')!.tetik).toBe(TUM_SAYFALAR_TETIGI);
-    const form = p.tetikler.find((t) => t.type === 'pageview')!;
-    const regex = new RegExp(form.filter[0]!.parameter[1]!.value!);
+    const sayfa = p.tetikler.find((t) => t.type === 'pageview')!;
+    const regex = new RegExp(filtre(sayfa));
     expect(regex.test('/tesekkurler')).toBe(true);
     expect(regex.test('/tesekkurler/')).toBe(true);
     expect(regex.test('/tesekkurler-blog')).toBe(false);
+    // İkinci süzgeç: özel değişken "false" olmalı.
+    const degisken = p.ozelDegiskenler[0]!;
+    expect(sayfa.filter![1]).toMatchObject({ type: 'equals' });
+    expect(filtre(sayfa, 1)).toBe('false');
+    expect(sayfa.filter![1]!.parameter[0]!.value).toBe(`{{${degisken.name}}}`);
+    // Form etiketleri iki tetikten biriyle çalışıyor.
+    for (const ad of ['ADV / Form Gönderimi · GA4', 'ADV / Form Gönderimi · Meta Lead', 'ADV / Form Gönderimi · Google Ads']) {
+      expect(p.etiketler.find((e) => e.name === ad)!.ekTetik, ad).toBe(sayfa.name);
+    }
     expect(p.degiskenler.sort()).toEqual(['clickUrl', 'pagePath']);
+  });
+
+  it('KRİTİK: "az önce sayıldı" değişkeni pencere içinde true, dışında ve depolama yokken false', () => {
+    const calistir = (deger: string | null, atar = false) => {
+      const pencere = {
+        sessionStorage: {
+          getItem: () => {
+            if (atar) throw new Error('engelli');
+            return deger;
+          },
+        },
+      };
+      // eslint-disable-next-line @typescript-eslint/no-implied-eval
+      return new Function('window', `return (${formAzOnceSayildiKodu()})();`)(pencere) as boolean;
+    };
+    expect(calistir(String(Date.now() - 1000))).toBe(true);
+    expect(calistir(String(Date.now() - FORM_TEKRAR_PENCERESI_MS - 1000))).toBe(false);
+    expect(calistir(null)).toBe(false);
+    expect(calistir('x', true)).toBe(false);
+  });
+
+  it('KRİTİK: dinleyici listedeki HER eklentinin başarı olayını dinliyor ve ES5', () => {
+    const kod = formDinleyiciKodu();
+    const olaylar: Record<(typeof FORM_DINLEYICI_EKLENTILERI)[number], string> = {
+      Elementor: "'submit_success'",
+      'Contact Form 7': "'wpcf7mailsent'",
+      WPForms: "'wpformsAjaxSubmitSuccess'",
+      'Gravity Forms': "'gform_confirmation_loaded'",
+      'Fluent Forms': "'fluentform_submission_success'",
+      'Ninja Forms': "'nfFormSubmitResponse'",
+      Formidable: "'frmFormComplete'",
+      Forminator: "'forminator:form:submit:success'",
+      HubSpot: "'onFormSubmitted'",
+    };
+    for (const e of FORM_DINLEYICI_EKLENTILERI) expect(kod, e).toContain(olaylar[e]);
+    expect(kod).toContain(`event: '${FORM_OLAYI}'`);
+    const govde = kod.replace(/^<script>/, '').replace(/<\/script>$/, '');
+    expect(() => new Function(govde)).not.toThrow();
+    expect(govde).not.toMatch(/=>|\blet\b|\bconst\b|`/);
+  });
+
+  it('KRİTİK: dinleyici çalışınca dataLayer’a TEK olay; aynı formun 3 sn içindeki tekrarı yutuluyor', () => {
+    const dinleyiciler: Record<string, (e: unknown) => void> = {};
+    const pencere: Record<string, unknown> = {
+      sessionStorage: { setItem: () => undefined },
+      addEventListener: () => undefined,
+    };
+    const belge = { addEventListener: (ad: string, f: (e: unknown) => void) => (dinleyiciler[ad] = f) };
+    const govde = formDinleyiciKodu().replace(/^<script>/, '').replace(/<\/script>$/, '');
+    new Function('window', 'document', 'setInterval', 'clearInterval', govde)(pencere, belge, () => 0, () => undefined);
+    dinleyiciler['wpcf7mailsent']!({ detail: { contactFormId: 42 } });
+    dinleyiciler['wpcf7mailsent']!({ detail: { contactFormId: 42 } });
+    expect(pencere.dataLayer).toEqual([{ event: FORM_OLAYI, adv_form_kaynagi: 'contact_form_7', adv_form_kimligi: '42' }]);
+  });
+
+  it('ESKİ KAYIT: `form` alanı yok ve teşekkür sayfası yoksa form kurulmaz (eski anlam korunuyor)', () => {
+    const p = gtmPlani({ ...temel, tetik: { formYolu: null, telefon: false, whatsapp: true } });
+    expect(p.etiketler.some((e) => e.name.includes('Form'))).toBe(false);
+    expect(p.atlananlar.join(' ')).toContain('form ölçümü kapalı');
+  });
+
+  it('form açık ama gönderilecek hedef yoksa dinleyici de eklenmiyor ve sebep yazılıyor', () => {
+    const p = gtmPlani({ ...temel, ga4OlcumKimligi: null, metaPikselId: null, ads: {}, tetik: { form: true, formYolu: null, telefon: false, whatsapp: false } });
+    expect(p.etiketler).toEqual([]);
+    expect(p.atlananlar.join(' ')).toContain('Form dönüşümü kurulmadı');
   });
 
   it('KRİTİK: sitede/konteynerde zaten yüklü GA4 ve piksel TEKRAR eklenmez; olaylar yine eklenir ve neden yazılır', () => {
     const p = gtmPlani({ ...temel, mevcut: { ga4Yuklu: true, pikselYuklu: true } });
     expect(p.etiketler.some((e) => e.type === 'googtag')).toBe(false);
-    expect(p.etiketler.some((e) => e.name === 'Advetics · Meta pikseli')).toBe(false);
-    expect(p.etiketler.some((e) => e.name === 'Advetics · GA4 form')).toBe(true);
-    expect(p.etiketler.find((e) => e.name === 'Advetics · Meta form')!.onceki).toBeUndefined();
+    expect(p.etiketler.some((e) => e.name === 'ADV / Meta Pikseli')).toBe(false);
+    expect(p.etiketler.some((e) => e.name === 'ADV / Form Gönderimi · GA4')).toBe(true);
+    expect(p.etiketler.find((e) => e.name === 'ADV / Form Gönderimi · Meta Lead')!.onceki).toBeUndefined();
     expect(p.atlananlar.join(' ')).toContain('zaten yüklü');
   });
 
-  it('Meta olayı piksel başlatıldıktan SONRA (sıralı); teşekkür sayfası yoksa form kurulmaz ve söylenir', () => {
-    expect(gtmPlani(temel).etiketler.find((e) => e.name === 'Advetics · Meta form')!.onceki).toBe('Advetics · Meta pikseli');
-    const p = gtmPlani({ ...temel, tetik: { formYolu: null, telefon: false, whatsapp: true } });
-    expect(p.etiketler.some((e) => e.name.includes('form'))).toBe(false);
-    expect(p.atlananlar.join(' ')).toContain('teşekkür sayfası seçilmedi');
+  it('Meta olayı piksel başlatıldıktan SONRA (sıralı); WhatsApp regex’i yalnız WhatsApp adresleri', () => {
+    expect(gtmPlani(temel).etiketler.find((e) => e.name === 'ADV / Form Gönderimi · Meta Lead')!.onceki).toBe('ADV / Meta Pikseli');
+    const p = gtmPlani({ ...temel, tetik: { form: false, formYolu: null, telefon: false, whatsapp: true } });
     const wa = p.tetikler.find((t) => t.name.includes('WhatsApp'))!;
-    const r = new RegExp(wa.filter[0]!.parameter[1]!.value!);
+    const r = new RegExp(filtre(wa));
     expect(r.test('https://wa.me/905551112233')).toBe(true);
     expect(r.test('https://example.com/wa.me')).toBe(false);
   });
 
   it('teşekkür yolundaki nokta her karakteri eşlemez (regex kaçışı)', () => {
-    const p = gtmPlani({ ...temel, tetik: { formYolu: '/tesekkur.html', telefon: false, whatsapp: false } });
-    const r = new RegExp(p.tetikler[0]!.filter[0]!.parameter[1]!.value!);
+    const p = gtmPlani({ ...temel, tetik: { form: true, formYolu: '/tesekkur.html', telefon: false, whatsapp: false } });
+    const r = new RegExp(filtre(p.tetikler.find((t) => t.type === 'pageview')!));
     expect(r.test('/tesekkur.html')).toBe(true);
     expect(r.test('/tesekkurXhtml')).toBe(false);
   });
 
-  it('konteynerde BAŞKASININ etiketi aynı kimliği yüklüyorsa "yüklü"; bizim etiketimiz sayılmaz', () => {
+  it('konteynerde BAŞKASININ etiketi aynı kimliği yüklüyorsa "yüklü"; bizim etiketimiz (ESKİ ad dahil) sayılmaz', () => {
     const yabanci = [
       { name: 'GA4 config', type: 'googtag', parameter: [{ type: 'template' as const, key: 'tagId', value: 'G-ABC1234' }] },
       { name: 'Piksel', type: 'html', parameter: [{ type: 'template' as const, key: 'html', value: "fbq('init', '123456789');" }] },
     ];
     expect(konteynerdeYuklu(yabanci, 'G-ABC1234', '123456789')).toMatchObject({ ga4Yuklu: true, pikselYuklu: true });
-    const bizim = yabanci.map((e) => ({ ...e, name: `Advetics · ${e.name}` }));
-    expect(konteynerdeYuklu(bizim, 'G-ABC1234', '123456789')).toMatchObject({ ga4Yuklu: false, pikselYuklu: false });
+    for (const onEk of ['ADV / ', 'Advetics · ']) {
+      const bizim = yabanci.map((e) => ({ ...e, name: `${onEk}${e.name}` }));
+      expect(konteynerdeYuklu(bizim, 'G-ABC1234', '123456789'), onEk).toMatchObject({ ga4Yuklu: false, pikselYuklu: false });
+    }
+  });
+
+  it('KRİTİK: ESKİ ADLI etiket, tetik ve değişkenler yeniden yayında siliniyor; kullanıcınınkine dokunulmuyor', () => {
+    const varolan = [{ name: 'Advetics · GA4 form' }, { name: 'Advetics · Teşekkür sayfası' }, { name: 'ADV / Form Gönderimi · GA4' }, { name: 'Sitenin kendi etiketi' }];
+    expect(silinecekEtiketler(varolan, new Set(['ADV / Form Gönderimi · GA4'])).map((x) => x.name)).toEqual(['Advetics · GA4 form', 'Advetics · Teşekkür sayfası']);
+    expect(bizimMi('Sitenin kendi etiketi')).toBe(false);
+  });
+
+  it('KRİTİK: yayın imzası etiket planı sürümünü taşıyor (plan değişince yayındaki kurulum "Güncellenmeli")', () => {
+    const imza = etiketImzasi({ ga4: 'G-1', piksel: null, tetik: null, ads: {} });
+    expect(JSON.parse(imza)).toContain(ETIKET_PLANI_SURUMU);
   });
 
   it('piksel kodu yalnız sayısal kimlik kabul eder (HTML enjeksiyonu yok)', () => {

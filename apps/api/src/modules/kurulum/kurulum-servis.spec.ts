@@ -165,6 +165,9 @@ describe('Tag Manager yayın kapısı', () => {
     vi.spyOn(GtmIstemcisi.prototype, 'calismaAlani').mockResolvedValue(`${KONTEYNER}/workspaces/7`);
     vi.spyOn(GtmIstemcisi.prototype, 'etiketler').mockResolvedValue([]);
     vi.spyOn(GtmIstemcisi.prototype, 'tetikler').mockResolvedValue([]);
+    vi.spyOn(GtmIstemcisi.prototype, 'ozelDegiskenler').mockResolvedValue([]);
+    vi.spyOn(GtmIstemcisi.prototype, 'degiskenYaz').mockResolvedValue();
+    vi.spyOn(GtmIstemcisi.prototype, 'sil').mockResolvedValue();
     vi.spyOn(GtmIstemcisi.prototype, 'yerlesikDegiskenleriAc').mockResolvedValue();
     vi.spyOn(GtmIstemcisi.prototype, 'tetikYaz').mockResolvedValue('31');
     vi.spyOn(GtmIstemcisi.prototype, 'etiketYaz').mockResolvedValue();
@@ -207,6 +210,32 @@ describe('Tag Manager yayın kapısı', () => {
     olcumDurum.mockResolvedValue({ site: { durum: 'ulasilamadi', hata: 'zaman aşımı', tagManager: [], analytics: [], metaPiksel: [], tagManagerOkunamayan: [] } });
     await expect(svc.adim(ctx, IDS.client, { kod: 'gtm_etiket', tetik: { formYolu: null, telefon: true, whatsapp: false } }, {})).rejects.toThrow(/okunamadı/);
     expect(yayinla).not.toHaveBeenCalled();
+  });
+
+  it('KRİTİK: ESKİ ADLI kurulum yeniden yayında temizleniyor: eski etiket ve tetik siliniyor, form iki tetikle yazılıyor', async () => {
+    const yayinla = await kur();
+    vi.spyOn(GtmIstemcisi.prototype, 'sonSurum').mockResolvedValue({ id: '7', ad: 'x', silinmis: false });
+    vi.spyOn(GtmIstemcisi.prototype, 'canliSurum').mockResolvedValue('7');
+    vi.spyOn(GtmIstemcisi.prototype, 'etiketler').mockResolvedValue([
+      { path: 'e/1', tagId: '1', name: 'Advetics · GA4 form', type: 'gaawe' },
+      { path: 'e/2', tagId: '2', name: 'Sitenin kendi etiketi', type: 'html' },
+    ]);
+    vi.spyOn(GtmIstemcisi.prototype, 'tetikler').mockResolvedValue([
+      { path: 't/1', triggerId: '1', name: 'Advetics · Teşekkür sayfası' },
+      { path: 't/2', triggerId: '2', name: 'Sitenin kendi tetiği' },
+    ]);
+    let n = 30;
+    vi.spyOn(GtmIstemcisi.prototype, 'tetikYaz').mockImplementation(async () => String(++n));
+    await svc.adim(ctx, IDS.client, { kod: 'gtm_etiket', tetik: { form: true, formYolu: '/tesekkurler', telefon: false, whatsapp: false } }, {});
+    expect(yayinla).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(GtmIstemcisi.prototype.etiketSil).mock.calls.map((c) => c[0])).toEqual(['e/1']);
+    expect(vi.mocked(GtmIstemcisi.prototype.sil).mock.calls.map((c) => c[0])).toEqual(['t/1']);
+    const govdeler = vi.mocked(GtmIstemcisi.prototype.etiketYaz).mock.calls.map((c) => c[1] as { name: string; firingTriggerId: string[] });
+    expect(govdeler.find((g) => g.name === 'ADV / Form Gönderimi · GA4')!.firingTriggerId).toHaveLength(2);
+    expect(govdeler.some((g) => g.name === 'ADV / Form Dinleyici')).toBe(true);
+    // Değişken tetikten ÖNCE yazıldı (tetik ona bakıyor).
+    const degiskenSirasi = vi.mocked(GtmIstemcisi.prototype.degiskenYaz).mock.invocationCallOrder[0]!;
+    expect(degiskenSirasi).toBeLessThan(vi.mocked(GtmIstemcisi.prototype.tetikYaz).mock.invocationCallOrder[0]!);
   });
 
   it('KRİTİK: yalnız bizim ön ekli etiketlerimiz silinir', () => {

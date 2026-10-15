@@ -19,18 +19,56 @@ const GTM = 'https://tagmanager.googleapis.com/tagmanager/v2';
 /** Tag Manager'ın yerleşik "All Pages" tetiğinin sabit kimliği. */
 export const TUM_SAYFALAR_TETIGI = '2147479553';
 
-/** Etiket ve tetik adlarının öneki: yeniden koşunca bulunup GÜNCELLENİYOR, çoğaltılmıyor. */
-export const ON_EK = 'Advetics · ';
+/**
+ * Etiket, tetik ve değişken adlarının öneki: yeniden koşunca bulunup
+ * GÜNCELLENİYOR, çoğaltılmıyor. "ADV / Form Gönderimi · GA4" biçimi
+ * (kullanıcı, 2026-10-15): Tag Manager'da neyin bizim kurduğumuz, neyin
+ * güncellendiği ve hangi dönüşümü saydığı adından okunsun.
+ */
+export const ON_EK = 'ADV / ';
+
+/**
+ * ESKİ ÖNEKLER DE BİZİM. 2026-10-15'e kadar "Advetics · " yazılıyordu.
+ * Tanınmasalardı ilk yeniden yayında yeni adlı etiketler açılır, eskiler
+ * "başkasının" sayılıp kalırdı: her dönüşüm İKİ KEZ sayılırdı. Tanındıkları
+ * için aynı sürümde siliniyorlar (`silinecekler`).
+ */
+export const ESKI_ON_EKLER = ['Advetics · '] as const;
+
+export function bizimMi(ad: string): boolean {
+  return ad.startsWith(ON_EK) || ESKI_ON_EKLER.some((o) => ad.startsWith(o));
+}
+
+/** Form dinleyicinin dataLayer olayı. Tetik ve dinleyici bu sabiti paylaşıyor. */
+export const FORM_OLAYI = 'adv_form_gonderimi';
+
+/** Dinleyicinin son sayımı yazdığı sessionStorage anahtarı (teşekkür sayfası tekrarını engeller). */
+const FORM_ZAMANI_ANAHTARI = 'adv_form_zamani';
+
+/** Bu süre içinde dinleyici saydıysa teşekkür sayfası ikinci kez saymıyor. */
+export const FORM_TEKRAR_PENCERESI_MS = 120_000;
+
+/**
+ * ETİKET PLANININ SÜRÜMÜ — yayın imzasına giriyor. Plan değişince (ad
+ * düzeni, form dinleyici) yayındaki her kurulum "Güncellenmeli" görünür ve
+ * tek tıkla yeni yapıya geçer. Sürüm olmasaydı eski kurulumlar eski adlarla
+ * ve teşekkür sayfasına bağlı form ölçümüyle sessizce kalırdı.
+ */
+export const ETIKET_PLANI_SURUMU = 2;
 
 /** Bizim sürümlerimizin adı: yayını yarım kalan kendi sürümümüzü "başkasının taslağı" sanmamak için. */
 export const SURUM_ADI = 'Advetics kurulumu';
 
 type Parametre = { type: 'template' | 'boolean' | 'list' | 'map'; key: string; value?: string; list?: Parametre[]; map?: Parametre[] };
 
+type Suzgec = { type: 'matchRegex' | 'startsWith' | 'equals'; parameter: Parametre[] };
+
 export interface TetikTanimi {
   name: string;
-  type: 'pageview' | 'linkClick';
-  filter: Array<{ type: 'matchRegex' | 'startsWith'; parameter: Parametre[] }>;
+  type: 'pageview' | 'linkClick' | 'customEvent';
+  filter?: Suzgec[];
+  /** Yalnız `customEvent`: olay adı eşleşmesi. */
+  customEventFilter?: Suzgec[];
   waitForTags?: Parametre;
   checkValidation?: Parametre;
 }
@@ -41,6 +79,8 @@ export interface EtiketTanimi {
   parameter: Parametre[];
   /** Tetik ADI (planda) ya da yerleşik kimlik; uygulayıcı kimliğe çevirir. */
   tetik: string;
+  /** İkinci tetik (form olayı + teşekkür sayfası): ikisinden biri etiketi çalıştırır. */
+  ekTetik?: string;
   /** Önce çalışması gereken etiketin adı (Meta olayı, piksel başlatıldıktan sonra). */
   onceki?: string;
   /**
@@ -56,7 +96,8 @@ export interface GtmPlanGirdisi {
   metaPikselId: string | null;
   /** Google Ads dönüşümleri: `send_to` parçaları. */
   ads: { form?: AdsGonder; telefon?: AdsGonder; whatsapp?: AdsGonder };
-  tetik: { formYolu: string | null; telefon: boolean; whatsapp: boolean };
+  /** `form` yoksa eski anlam: teşekkür sayfası varsa form ölçülür (`formOlculuyor`). */
+  tetik: { form?: boolean; formYolu: string | null; telefon: boolean; whatsapp: boolean };
   /** Sitede ya da konteynerde ZATEN yüklü olanlar: eklenirse çift sayılırdı. */
   mevcut: Mevcut;
 }
@@ -74,9 +115,17 @@ export interface AdsGonder {
   conversionLabel: string;
 }
 
+export interface DegiskenTanimi {
+  name: string;
+  type: 'jsm';
+  parameter: Parametre[];
+}
+
 export interface GtmPlani {
   /** Etkinleştirilecek yerleşik değişkenler. */
-  degiskenler: Array<'pagePath' | 'clickUrl'>;
+  degiskenler: Array<'pagePath' | 'clickUrl' | 'event'>;
+  /** Bizim yazdığımız özel değişkenler (önce bunlar yazılıyor: tetikler onlara bakıyor). */
+  ozelDegiskenler: DegiskenTanimi[];
   tetikler: TetikTanimi[];
   etiketler: EtiketTanimi[];
   /** Neyin neden eklenmediği; adımın nedeninde kullanıcıya yazılır. */
@@ -128,24 +177,111 @@ export function metaPikselKodu(pikselId: string): string {
 }
 
 /**
+ * FORM DİNLEYİCİ — sayfa değişmeden gönderilen formları yakalar.
+ *
+ * Form ölçümü bir süre YALNIZ teşekkür sayfasına bağlıydı. Elementor ve
+ * benzerleri formu AJAX ile gönderip sayfayı değiştirmiyor: o sitelerde form
+ * dönüşümü HİÇ sayılmıyordu ve hiçbir yerde hata görünmüyordu. Tag Manager'ın
+ * yerleşik "Form gönderimi" tetiği de çözüm değil: AJAX formlar varsayılan
+ * gönderimi engelliyor (tetik çalışmıyor), çalıştığı yerde ise arama ve giriş
+ * formlarını da, doğrulamadan geçemeyen denemeleri de dönüşüm sayıyor.
+ *
+ * Bu yüzden eklentilerin KENDİ "başarıyla gönderildi" olayları dinleniyor
+ * (liste shared `FORM_DINLEYICI_EKLENTILERI`; buradaki dallar onunla aynı
+ * sırada). Her başarı `adv_form_gonderimi` olarak dataLayer'a gidiyor.
+ *
+ * - Aynı formun 3 saniye içindeki tekrarı yutuluyor: bazı eklentiler başarıyı
+ *   iki kez bildiriyor.
+ * - Sayım zamanı sessionStorage'a yazılıyor: form ardından teşekkür sayfasına
+ *   yönlendiriyorsa o sayfa ikinci kez saymıyor.
+ * - ES5: Tag Manager'ın özel HTML derleyicisi yeni sözdizimini reddedebiliyor.
+ * - jQuery sonradan yüklenebiliyor: 10 saniye boyunca bekleniyor.
+ *
+ * CANLIDA ÖLÇÜLMEDİ: olay adları eklentilerin belgelerinden; her eklentide
+ * bir gönderimle Tag Manager önizlemesinde görülmeli.
+ */
+export function formDinleyiciKodu(): string {
+  return `<script>
+(function () {
+  if (window.__advFormDinleyici) return;
+  window.__advFormDinleyici = true;
+  var son = {};
+  function say(kaynak, kimlik) {
+    var anahtar = kaynak + ':' + (kimlik || '');
+    var simdi = new Date().getTime();
+    if (son[anahtar] && simdi - son[anahtar] < 3000) return;
+    son[anahtar] = simdi;
+    try { window.sessionStorage.setItem('${FORM_ZAMANI_ANAHTARI}', String(simdi)); } catch (e) {}
+    window.dataLayer = window.dataLayer || [];
+    window.dataLayer.push({ event: '${FORM_OLAYI}', adv_form_kaynagi: kaynak, adv_form_kimligi: kimlik || '' });
+  }
+  function kimlik(el) {
+    if (!el || !el.getAttribute) return '';
+    return el.getAttribute('id') || el.getAttribute('name') || el.getAttribute('data-form-id') || '';
+  }
+  function jqBagla() {
+    var $ = window.jQuery;
+    if (!$) return false;
+    $(document).on('submit_success', function (e) { say('elementor', kimlik(e.target)); });
+    $(document).on('wpformsAjaxSubmitSuccess', function (e) { say('wpforms', kimlik(e.target)); });
+    $(document).on('gform_confirmation_loaded', function (e, id) { say('gravity_forms', String(id || '')); });
+    $(document).on('fluentform_submission_success', function (e) { say('fluent_forms', kimlik(e.target)); });
+    $(document).on('nfFormSubmitResponse', function (e, r) { say('ninja_forms', r && r.id ? String(r.id) : ''); });
+    $(document).on('frmFormComplete', function (e, form) { say('formidable', kimlik(form)); });
+    $(document).on('forminator:form:submit:success', function (e) { say('forminator', kimlik(e.target)); });
+    return true;
+  }
+  document.addEventListener('wpcf7mailsent', function (e) {
+    say('contact_form_7', e.detail && e.detail.contactFormId ? String(e.detail.contactFormId) : kimlik(e.target));
+  }, false);
+  window.addEventListener('message', function (e) {
+    var d = e.data;
+    if (d && d.type === 'hsFormCallback' && d.eventName === 'onFormSubmitted') say('hubspot', d.id || '');
+  });
+  if (!jqBagla()) {
+    var n = 0;
+    var t = setInterval(function () { if (jqBagla() || ++n > 40) clearInterval(t); }, 250);
+  }
+})();
+</script>`;
+}
+
+/** "Dinleyici bu formu az önce saydı mı" — teşekkür sayfası tetiğinin süzgeci. */
+export function formAzOnceSayildiKodu(): string {
+  return `function () {
+  try {
+    var t = Number(window.sessionStorage.getItem('${FORM_ZAMANI_ANAHTARI}')) || 0;
+    return new Date().getTime() - t < ${FORM_TEKRAR_PENCERESI_MS};
+  } catch (e) {
+    return false;
+  }
+}`;
+}
+
+/**
  * HANGİ ETİKET, HANGİ TETİK. Kurallar:
  * - Sitede ya da konteynerde aynı GA4 kimliği / aynı piksel zaten yüklüyse
  *   TEMEL etiket eklenmez (sayfa görüntüleme iki kez sayılırdı); olaylar yine
  *   eklenir, çünkü onlar mevcut yükleyiciyle de çalışır.
- * - Form tetiği teşekkür sayfasının TAM yolu (regex, sondaki / isteğe bağlı):
- *   "içerir" yazmak "/tesekkurler-blog"u da dönüşüm sayardı.
+ * - Form: dinleyicinin olayı (sayfa değişmeden) + varsa teşekkür sayfası.
+ *   Teşekkür sayfası TAM yol (regex, sondaki / isteğe bağlı): "içerir"
+ *   yazmak "/tesekkurler-blog"u da dönüşüm sayardı. Dinleyici az önce
+ *   saydıysa teşekkür sayfası saymıyor (çift sayım).
  * - Meta olayı, piksel başlatıldıktan sonra çalışsın diye sıralı (`onceki`).
+ * - Ad düzeni "ADV / <Dönüşüm> · <Hedef>": Tag Manager'da hangi etiketin
+ *   hangi dönüşümü nereye gönderdiği adından okunuyor.
  */
 export function gtmPlani(g: GtmPlanGirdisi): GtmPlani {
-  const degiskenler = new Set<'pagePath' | 'clickUrl'>();
+  const degiskenler = new Set<'pagePath' | 'clickUrl' | 'event'>();
+  const ozelDegiskenler: DegiskenTanimi[] = [];
   const tetikler: TetikTanimi[] = [];
   const etiketler: EtiketTanimi[] = [];
   const atlananlar: string[] = [];
-  const pikselEtiketi = `${ON_EK}Meta pikseli`;
+  const pikselEtiketi = `${ON_EK}Meta Pikseli`;
 
   if (g.ga4OlcumKimligi) {
     if (g.mevcut.ga4Yuklu) atlananlar.push(`${g.ga4OlcumKimligi} sitede zaten yüklü; Google etiketi eklenmedi (sayfa görüntüleme iki kez sayılırdı).`);
-    else etiketler.push({ name: `${ON_EK}Google etiketi`, type: 'googtag', parameter: [tpl('tagId', g.ga4OlcumKimligi)], tetik: TUM_SAYFALAR_TETIGI, birKez: true });
+    else etiketler.push({ name: `${ON_EK}Google Etiketi · GA4`, type: 'googtag', parameter: [tpl('tagId', g.ga4OlcumKimligi)], tetik: TUM_SAYFALAR_TETIGI, birKez: true });
   }
   const pikselVar = Boolean(g.metaPikselId);
   if (g.metaPikselId) {
@@ -162,45 +298,77 @@ export function gtmPlani(g: GtmPlanGirdisi): GtmPlani {
   const adsVar = Boolean(g.ads.form || g.ads.telefon || g.ads.whatsapp);
   // Dönüşüm bağlayıcı: Google Ads tıklama kimliğini (gclid) çerezde tutar;
   // yoksa farklı sayfada olan dönüşüm reklama bağlanamaz.
-  if (adsVar) etiketler.push({ name: `${ON_EK}Dönüşüm bağlayıcı`, type: 'gclidw', parameter: [], tetik: TUM_SAYFALAR_TETIGI });
+  if (adsVar) etiketler.push({ name: `${ON_EK}Dönüşüm Bağlayıcı · Google Ads`, type: 'gclidw', parameter: [], tetik: TUM_SAYFALAR_TETIGI });
 
-  const olay = (ad: string, tetikAdi: string, ga4Olay: string, metaOlay: string, ads: AdsGonder | undefined, atla: { ga4?: boolean; meta?: boolean } = {}) => {
+  const olay = (
+    ad: string,
+    tetikAdi: string,
+    ga4Olay: string,
+    metaOlay: string,
+    ads: AdsGonder | undefined,
+    atla: { ga4?: boolean; meta?: boolean } = {},
+    ekTetik?: string,
+  ) => {
+    const ek = ekTetik ? { ekTetik } : {};
     if (atla.ga4) atlananlar.push(`Konteynerde zaten bir GA4 ${ga4Olay} etiketi var; ${ad} için ikincisi eklenmedi.`);
     if (atla.meta) atlananlar.push(`Konteynerde zaten bir Meta ${metaOlay} etiketi var; ${ad} için ikincisi eklenmedi.`);
     if (g.ga4OlcumKimligi && !atla.ga4)
-      etiketler.push({ name: `${ON_EK}GA4 ${ad}`, type: 'gaawe', parameter: [tpl('eventName', ga4Olay), tpl('measurementIdOverride', g.ga4OlcumKimligi)], tetik: tetikAdi });
+      etiketler.push({ name: `${ON_EK}${ad} · GA4`, type: 'gaawe', parameter: [tpl('eventName', ga4Olay), tpl('measurementIdOverride', g.ga4OlcumKimligi)], tetik: tetikAdi, ...ek });
     if (pikselVar && !atla.meta)
       etiketler.push({
-        name: `${ON_EK}Meta ${ad}`,
+        name: `${ON_EK}${ad} · Meta ${metaOlay}`,
         type: 'html',
         parameter: [tpl('html', `<script>if (window.fbq) fbq('track', '${metaOlay}');</script>`), bool('supportDocumentWrite', false)],
         tetik: tetikAdi,
+        ...ek,
         ...(g.mevcut.pikselYuklu ? {} : { onceki: pikselEtiketi }),
       });
     if (ads)
       etiketler.push({
-        name: `${ON_EK}Google Ads ${ad}`,
+        name: `${ON_EK}${ad} · Google Ads`,
         type: 'awct',
         parameter: [tpl('conversionId', ads.conversionId), tpl('conversionLabel', ads.conversionLabel)],
         tetik: tetikAdi,
+        ...ek,
       });
   };
 
-  if (g.tetik.formYolu) {
-    degiskenler.add('pagePath');
-    const ad = `${ON_EK}Teşekkür sayfası`;
+  const formVar = g.tetik.form ?? g.tetik.formYolu !== null;
+  // Gönderilecek hedef yoksa dinleyici tek başına bir şey saymaz; yalnız kod yükü olurdu.
+  const formHedefi = Boolean(g.ga4OlcumKimligi || pikselVar || g.ads.form);
+  if (formVar && formHedefi) {
+    // Dinleyici sayfa başına bir kez; olay tetiği onun gönderdiği olayı yakalıyor.
+    etiketler.push({ name: `${ON_EK}Form Dinleyici`, type: 'html', parameter: [tpl('html', formDinleyiciKodu()), bool('supportDocumentWrite', false)], tetik: TUM_SAYFALAR_TETIGI, birKez: true });
+    const olayTetigi = `${ON_EK}Tetik · Form Gönderimi`;
     tetikler.push({
-      name: ad,
-      type: 'pageview',
-      filter: [{ type: 'matchRegex', parameter: [tpl('arg0', '{{Page Path}}'), tpl('arg1', yolRegex(g.tetik.formYolu))] }],
+      name: olayTetigi,
+      type: 'customEvent',
+      customEventFilter: [{ type: 'equals', parameter: [tpl('arg0', '{{_event}}'), tpl('arg1', FORM_OLAYI)] }],
     });
-    olay('form', ad, 'generate_lead', 'Lead', g.ads.form, { ga4: g.mevcut.ga4FormYuklu, meta: g.mevcut.metaFormYuklu });
+    let sayfaTetigi: string | undefined;
+    if (g.tetik.formYolu) {
+      degiskenler.add('pagePath');
+      const sayildi = `${ON_EK}Değişken · Form Az Önce Sayıldı`;
+      ozelDegiskenler.push({ name: sayildi, type: 'jsm', parameter: [tpl('javascript', formAzOnceSayildiKodu())] });
+      sayfaTetigi = `${ON_EK}Tetik · Teşekkür Sayfası`;
+      tetikler.push({
+        name: sayfaTetigi,
+        type: 'pageview',
+        filter: [
+          { type: 'matchRegex', parameter: [tpl('arg0', '{{Page Path}}'), tpl('arg1', yolRegex(g.tetik.formYolu))] },
+          { type: 'equals', parameter: [tpl('arg0', `{{${sayildi}}}`), tpl('arg1', 'false')] },
+        ],
+      });
+    }
+    olay('Form Gönderimi', olayTetigi, 'generate_lead', 'Lead', g.ads.form, { ga4: g.mevcut.ga4FormYuklu, meta: g.mevcut.metaFormYuklu }, sayfaTetigi);
+  } else if (formVar) {
+    atlananlar.push('Form dönüşümü kurulmadı: Analytics mülkü, Meta pikseli ya da Google Ads form dönüşümü yok.');
   } else {
-    atlananlar.push('Form dönüşümü kurulmadı: teşekkür sayfası seçilmedi.');
+    atlananlar.push('Form dönüşümü kurulmadı: form ölçümü kapalı.');
   }
   if (g.tetik.telefon) {
     degiskenler.add('clickUrl');
-    const ad = `${ON_EK}Telefon tıklaması`;
+    const ad = `${ON_EK}Tetik · Telefon Tıklaması`;
     tetikler.push({
       name: ad,
       type: 'linkClick',
@@ -208,11 +376,11 @@ export function gtmPlani(g: GtmPlanGirdisi): GtmPlani {
       waitForTags: bool('waitForTags', false),
       checkValidation: bool('checkValidation', false),
     });
-    olay('telefon', ad, 'click_to_call', 'Contact', g.ads.telefon);
+    olay('Telefon Tıklaması', ad, 'click_to_call', 'Contact', g.ads.telefon);
   }
   if (g.tetik.whatsapp) {
     degiskenler.add('clickUrl');
-    const ad = `${ON_EK}WhatsApp tıklaması`;
+    const ad = `${ON_EK}Tetik · WhatsApp Tıklaması`;
     tetikler.push({
       name: ad,
       type: 'linkClick',
@@ -220,10 +388,10 @@ export function gtmPlani(g: GtmPlanGirdisi): GtmPlani {
       waitForTags: bool('waitForTags', false),
       checkValidation: bool('checkValidation', false),
     });
-    olay('whatsapp', ad, 'whatsapp_click', 'Contact', g.ads.whatsapp);
+    olay('WhatsApp Tıklaması', ad, 'whatsapp_click', 'Contact', g.ads.whatsapp);
   }
   if (etiketler.length === 0) atlananlar.push('Yazılacak etiket yok: Analytics mülkü, Meta pikseli ya da Google Ads dönüşümü bağlı değil.');
-  return { degiskenler: [...degiskenler], tetikler, etiketler, atlananlar };
+  return { degiskenler: [...degiskenler], ozelDegiskenler, tetikler, etiketler, atlananlar };
 }
 
 /**
@@ -237,7 +405,7 @@ export function konteynerdeYuklu(
   ga4: string | null,
   piksel: string | null,
 ): Required<Mevcut> {
-  const bizim = (e: { name?: string }) => (e.name ?? '').startsWith(ON_EK);
+  const bizim = (e: { name?: string }) => bizimMi(e.name ?? '');
   const deger = (e: { parameter?: Parametre[] }, k: string) => e.parameter?.find((p) => p.key === k)?.value ?? '';
   const tumDegerler = (e: { parameter?: Parametre[] }): string => JSON.stringify(e.parameter ?? []);
   const yabanci = etiketler.filter((e) => !bizim(e));
@@ -363,6 +531,20 @@ export class GtmIstemcisi {
     const eksik = turler.filter((t) => !acik.has(t));
     if (eksik.length === 0) return;
     await this.istek(`${alan}/built_in_variables?${eksik.map((t) => `type=${t}`).join('&')}`, { method: 'POST' });
+  }
+
+  async ozelDegiskenler(alan: string): Promise<Array<{ path: string; name: string }>> {
+    const r = await this.istek<{ variable?: Array<{ path: string; name: string }> }>(`${alan}/variables`);
+    return r.variable ?? [];
+  }
+
+  async degiskenYaz(alan: string, d: DegiskenTanimi, var_?: { path: string }): Promise<void> {
+    await this.istek(var_ ? var_.path : `${alan}/variables`, { method: var_ ? 'PUT' : 'POST', govde: d });
+  }
+
+  /** Etiket/tetik/değişken silme: yol türü kendisi taşıyor. */
+  async sil(yol: string): Promise<void> {
+    await this.istek(yol, { method: 'DELETE' });
   }
 
   async tetikYaz(alan: string, t: TetikTanimi, var_?: { path: string }): Promise<string> {
