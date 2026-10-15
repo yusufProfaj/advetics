@@ -282,3 +282,30 @@ export function baglantiKaldirmaKarari(p: {
   }
   return { ok: true };
 }
+
+/**
+ * İZLEMEYİ GERİ AÇMAK DA SAHİBİN İŞİ — kaldırmanın simetriği.
+ *
+ * `resumeSync` güncellemeyi kullanıcının RLS bağlamında yapıyordu: ajans
+ * şirketinden basılan "İzlemeyi geri aç" kardeş şirketlere ödünç verilmiş
+ * hesapları GÖREMİYOR ve onları kapalı bırakıp "açıldı" diyordu; kardeş
+ * şirketten basılan yalnız o şirketinkini açıyordu. İki yarım cevap, sıfır
+ * hata. Bağlantının bütün satırlarına sahibi karar veriyor; başka şirketin
+ * ekranından basılınca kısmi açmak yerine nereye gidileceği söyleniyor.
+ */
+export function izlemeAcmaKarari(p: {
+  baglantiOrgId: string;
+  sahipSirketAdi: string;
+  aktifOrgId: string;
+  workspaceSayisi: number;
+}): { ok: true } | { ok: false; mesaj: string } {
+  if (p.baglantiOrgId !== p.aktifOrgId) {
+    return {
+      ok: false,
+      mesaj:
+        `Bu bağlantı ${p.sahipSirketAdi} şirketinin ve ${p.workspaceSayisi} workspace'i besliyor. ` +
+        `İzlemeyi yalnızca ${p.sahipSirketAdi} şirketinden geri açabilirsin.`,
+    };
+  }
+  return { ok: true };
+}

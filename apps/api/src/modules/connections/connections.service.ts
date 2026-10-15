@@ -35,7 +35,13 @@ import { AuditService } from '../audit/audit.service';
 import { ProviderRegistry } from './provider.registry';
 import { SyncQueueService } from '../../queue/sync-queue.service';
 import { PLATFORM_ADI, decideConnectionOwnership } from './connection-ownership';
-import { baglantiKaldirmaKarari, baglantiKorunsunMu, cakismaKarari, sahiplikKarari } from './hesap-sahipligi';
+import {
+  baglantiKaldirmaKarari,
+  baglantiKorunsunMu,
+  cakismaKarari,
+  izlemeAcmaKarari,
+  sahiplikKarari,
+} from './hesap-sahipligi';
 import {
   PlatformApiError,
   type FetchContext,
@@ -3093,40 +3099,46 @@ export class ConnectionsService {
     meta: Meta,
   ): Promise<{ adAccounts: number; socialProfiles: number }> {
     /*
-     * `activeClientId` KAPATILIYOR. Bağlantı ajansa ait ve altındaki hesaplar
-     * birden çok workspace'e dağılmış olabiliyor; aktif müşteri seçiliyken
-     * sorgu yalnızca onunkileri görür ve geri kalanı SESSİZCE kapalı bırakır.
-     * Belirtisi "bir müşteride düzeldi, diğerinde düzelmedi" olurdu.
+     * ═══ KAPI SERVİSTE, YAZMA YÖNETİM İSTEMCİSİYLE ═══
+     *
+     * Eskiden güncelleme `withTenant` altında koşuyordu ve `activeClientId`i
+     * kapatmak yetmiyordu: atanmış satır KENDİ ŞİRKETİNE çivili, yani ajans
+     * şirketinin bağlamından kardeş şirketlere ödünç verilmiş hesaplar hiç
+     * görünmüyor. 2026-10-15'teki onarımda 56 hesabın açılması bu yüzden
+     * bağlama bağlıydı; sıradan bir basış ajansın kendi şirketindekileri
+     * açıp gerisini sessizce kapalı bırakırdı. Okuma `disconnect` ile ORTAK
+     * (`baglantiDurumu`): ikisi ayrı okursa kapı ve sayı ayrışır.
      */
-    const kapsam: TenantContext = { ...ctx, activeClientId: null };
+    const { conn, girdi } = await this.baglantiDurumu(ctx, connectionId);
+    const karar = izlemeAcmaKarari(girdi);
+    if (!karar.ok) throw new ForbiddenException(karar.mesaj);
 
-    const conn = await this.prisma.withTenant(kapsam, (tx) =>
-      tx.platformConnection.findFirst({
-        where: { id: connectionId },
-        select: { id: true, platform: true },
-      }),
-    );
-    if (!conn) throw new NotFoundException('Bağlantı bulunamadı');
+    /*
+     * NE AÇILACAĞI TAHMİN DEĞİL: yalnızca atanmış (`client_id` dolu) satır.
+     * Havuz satırının kapalı olması keşfin kasıtlı varsayılanı; açmak
+     * ajansın yüzlerce hesabını kotaya sokardı. Sayı RETURNING'den.
+     */
+    const sonuc = await this.admin.$transaction(async (a) => {
+      const hesaplar = await a.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        UPDATE ad_accounts SET sync_enabled = true, updated_at = now()
+         WHERE connection_id = ${connectionId}::uuid AND client_id IS NOT NULL AND NOT sync_enabled
+        RETURNING id::text AS id
+      `);
+      const profiller = await a.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        UPDATE social_profiles SET sync_enabled = true, updated_at = now()
+         WHERE connection_id = ${connectionId}::uuid AND client_id IS NOT NULL AND NOT sync_enabled
+        RETURNING id::text AS id
+      `);
 
-    const sonuc = await this.prisma.withTenant(kapsam, async (tx) => {
-      const hesaplar = await tx.adAccount.updateMany({
-        where: { connectionId, clientId: { not: null }, syncEnabled: false },
-        data: { syncEnabled: true },
-      });
-      const profiller = await tx.socialProfile.updateMany({
-        where: { connectionId, clientId: { not: null }, syncEnabled: false },
-        data: { syncEnabled: true },
-      });
-
-      await this.audit.record(tx, ctx, {
+      await this.audit.record(a as unknown as TenantClient, ctx, {
         action: 'connection.sync_resumed',
         targetType: 'platform_connection',
         targetId: connectionId,
-        after: { adAccounts: hesaplar.count, socialProfiles: profiller.count },
+        after: { adAccounts: hesaplar.length, socialProfiles: profiller.length, workspaceSayisi: girdi.workspaceSayisi },
         ...meta,
       });
 
-      return { adAccounts: hesaplar.count, socialProfiles: profiller.count };
+      return { adAccounts: hesaplar.length, socialProfiles: profiller.length };
     });
 
     /*
@@ -3134,19 +3146,18 @@ export class ConnectionsService {
      * transaction ve Prisma'nın sınırı 5 saniye; Redis yavaşladığında yüz
      * hesaplık bir döngü transaction'ı öldürür ve AÇILAN İZLEME DE GERİ
      * ALINIRDI — yani düzeltme, düzeltmeye çalıştığı arızayı geri getirirdi.
+     * Liste de yönetim istemcisinden: RLS'li okuma ödünç verilmiş hesapları
+     * yine düşürürdü ve açılan hesabın yapı taraması hiç kuyruğa girmezdi.
      */
-    const acilanlar = await this.prisma.withTenant(kapsam, (tx) =>
-      tx.adAccount.findMany({
-        where: { connectionId, clientId: { not: null }, syncEnabled: true },
-        select: { id: true, clientId: true },
-      }),
-    );
+    const acilanlar = await this.admin.$queryRaw<Array<{ id: string; clientId: string }>>(Prisma.sql`
+      SELECT id::text AS id, client_id::text AS "clientId" FROM ad_accounts
+       WHERE connection_id = ${connectionId}::uuid AND client_id IS NOT NULL AND sync_enabled
+    `);
 
     for (const a of acilanlar) {
-      if (!a.clientId) continue;
       await this.queue.enqueue({
         clientId: a.clientId,
-        platform: conn.platform as Platform,
+        platform: conn.platform,
         jobType: 'structure',
         adAccountId: a.id,
         // Kullanıcı ekranda bekliyor: kotaya takılıp `delayed`e düşmüş eski
@@ -3168,7 +3179,7 @@ export class ConnectionsService {
    * sayısını öğrenemez.
    */
   async disconnectOnizleme(ctx: TenantContext, connectionId: string): Promise<BaglantiKaldirmaOnizlemesi> {
-    const d = await this.kaldirmaDurumu(ctx, connectionId);
+    const d = await this.baglantiDurumu(ctx, connectionId);
     const karar = baglantiKaldirmaKarari({ ...d.girdi, onaylananWorkspaceSayisi: d.girdi.workspaceSayisi });
     return {
       kaldirabilir: karar.ok,
@@ -3179,8 +3190,8 @@ export class ConnectionsService {
     };
   }
 
-  /** Önizleme ve kaldırmanın ORTAK okuması: ikisi ayrı sayarsa onay sayısı tutmaz. */
-  private async kaldirmaDurumu(ctx: TenantContext, connectionId: string) {
+  /** Önizleme, kaldırma ve izlemeyi geri açmanın ORTAK okuması: ayrı okusalar kapı ve sayı ayrışır. */
+  private async baglantiDurumu(ctx: TenantContext, connectionId: string) {
     /*
      * `activeClientId` KAPALI: seçili workspace bağlantıyı gizlememeli
      * (`resumeSync` ile aynı gerekçe). Kapsam yine kullanıcının şirketi;
@@ -3231,7 +3242,7 @@ export class ConnectionsService {
     meta: Meta,
     onayWorkspaceSayisi: number | null = null,
   ): Promise<{ ok: true; adAccounts: number; socialProfiles: number }> {
-    const { conn, girdi } = await this.kaldirmaDurumu(ctx, connectionId);
+    const { conn, girdi } = await this.baglantiDurumu(ctx, connectionId);
     const karar = baglantiKaldirmaKarari({ ...girdi, onaylananWorkspaceSayisi: onayWorkspaceSayisi });
     if (!karar.ok) {
       throw karar.kod === 'sahip_degil' ? new ForbiddenException(karar.mesaj) : new ConflictException(karar.mesaj);

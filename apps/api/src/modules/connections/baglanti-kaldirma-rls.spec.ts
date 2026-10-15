@@ -28,6 +28,7 @@ import { ConnectionsService } from './connections.service';
 let h: Harness;
 let svc: ConnectionsService;
 const iptal = vi.fn(async () => undefined);
+const kuyruk = vi.fn(async (_is: { adAccountId: string; jobType: string }) => ({ enqueued: true }));
 
 const UST = 'aaaa0000-0000-0000-0000-0000000000aa';
 const ORG_AJANS = '11111111-1111-1111-1111-111111111111';
@@ -147,7 +148,7 @@ beforeAll(async () => {
     new AuditService(admin),
     { get: () => ({}) } as never,
     null as never,
-    { enqueue: () => Promise.resolve({ enqueued: true }) } as never,
+    { enqueue: kuyruk } as never,
     {} as never,
     { degerlendir: () => { throw new Error('ödeme tetiği beklenmiyor'); } } as never,
     { gonder: vi.fn() } as never,
@@ -162,6 +163,7 @@ afterAll(async () => {
 beforeEach(async () => {
   await h.reset();
   iptal.mockClear();
+  kuyruk.mockClear();
   await h.q(
     `INSERT INTO manager_accounts (id, name, slug, status, updated_at)
      VALUES ($1, 'Profaj', 'profaj', 'active', now())`,
@@ -310,5 +312,38 @@ describe('KRİTİK: izleme TEK KARARLA kapanıyor — başka şirkete ödünç v
       org_id: ORG_AJANS,
       after: { workspaceSayisi: 2, kapananHesap: 2, kapananSayfa: 1 },
     });
+  });
+});
+
+describe('KRİTİK: izlemeyi geri açmak da TEK KARARLA (resumeSync)', () => {
+  const kapat = () =>
+    h.q(`UPDATE ad_accounts SET sync_enabled = false WHERE connection_id = $1`, [CONN_AJANS]).then(() =>
+      h.q(`UPDATE social_profiles SET sync_enabled = false WHERE connection_id = $1`, [CONN_AJANS]),
+    );
+
+  it('ajans şirketinden: iki şirkete ödünç verilmiş iki hesap ve sayfa açılıyor, havuz kapalı kalıyor', async () => {
+    await kapat();
+    const r = await svc.resumeSync(AJANSTA, CONN_AJANS, META);
+    expect(r).toEqual({ adAccounts: 2, socialProfiles: 1 });
+    expect(await acikHesaplar()).toEqual([ACC_PROFAJ, ACC_BILTAS]);
+    const [s] = await h.q<{ sync_enabled: boolean }>('SELECT sync_enabled FROM social_profiles WHERE id = $1', [SAYFA_BILTAS]);
+    expect(s?.sync_enabled).toBe(true);
+    const [h1] = await h.q<{ sync_enabled: boolean }>('SELECT sync_enabled FROM ad_accounts WHERE id = $1', [ACC_HAVUZ]);
+    expect(h1?.sync_enabled).toBe(false);
+  });
+
+  it('açılan HER hesabın yapı taraması kuyruğa giriyor (ödünç verilenler dahil)', async () => {
+    await kapat();
+    await svc.resumeSync(AJANSTA, CONN_AJANS, META);
+    expect(kuyruk.mock.calls.map(([i]) => i.adAccountId).sort()).toEqual([ACC_PROFAJ, ACC_BILTAS].sort());
+  });
+
+  it('kardeş şirketten yarım açmak yerine REDDEDİLİYOR ve nereye gidileceği söyleniyor', async () => {
+    await kapat();
+    await expect(svc.resumeSync(KARDESTE, CONN_AJANS, META)).rejects.toThrow(
+      /Yalnızca Advetics şirketinden|yalnızca Advetics şirketinden geri açabilirsin/,
+    );
+    expect(await acikHesaplar()).toEqual([]);
+    expect(kuyruk).not.toHaveBeenCalled();
   });
 });

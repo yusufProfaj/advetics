@@ -34,12 +34,14 @@ function govde(): string {
 describe('izlemeyi toplu geri açma', () => {
   it('KRİTİK: yalnızca ATANMIŞ satırlara dokunuyor — havuz dışarıda', () => {
     const g = govde();
-    // İki `updateMany` var (reklam hesabı + sosyal profil) ve İKİSİ de
-    // süzgeci taşımak zorunda; birini atlamak o tabloyu havuza açardı.
-    const guncellemeler = g.match(/updateMany\(\{[\s\S]*?\}\)/g) ?? [];
-    expect(guncellemeler.length, 'updateMany bulunamadı — tarama boşa düştü').toBe(2);
+    // İki UPDATE var (reklam hesabı + sosyal profil) ve İKİSİ de süzgeci
+    // taşımak zorunda; birini atlamak o tabloyu havuza açardı. 2026-10-15'ten
+    // beri yönetim istemcisiyle ham SQL (RLS ödünç verilmiş hesapları
+    // gizliyordu); davranış `baglanti-kaldirma-rls.spec.ts`te de sınanıyor.
+    const guncellemeler = g.match(/UPDATE (ad_accounts|social_profiles) SET sync_enabled = true[\s\S]*?RETURNING/g) ?? [];
+    expect(guncellemeler.length, 'UPDATE bulunamadı — tarama boşa düştü').toBe(2);
     for (const u of guncellemeler) {
-      expect(u).toContain('clientId: { not: null }');
+      expect(u).toContain('client_id IS NOT NULL');
     }
   });
 
@@ -54,13 +56,14 @@ describe('izlemeyi toplu geri açma', () => {
 
   it('kuyruğa alma transaction DIŞINDA', () => {
     /*
-      `withTenant` etkileşimli bir transaction ve Prisma'nın sınırı 5 saniye.
+      Etkileşimli transaction'ın Prisma sınırı 5 saniye.
       Yüz hesaplık bir `enqueue` döngüsü içeride koşarsa transaction ölür ve
       AÇILAN İZLEME DE GERİ ALINIR — düzeltme, düzeltmeye çalıştığı arızayı
       geri getirir.
     */
     const g = govde();
-    const sonTransaction = g.lastIndexOf('withTenant');
+    const sonTransaction = g.lastIndexOf('$transaction');
+    expect(sonTransaction, 'transaction bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
     const ilkEnqueue = g.indexOf('this.queue.enqueue');
     expect(ilkEnqueue, 'enqueue bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
     expect(ilkEnqueue).toBeGreaterThan(sonTransaction);
