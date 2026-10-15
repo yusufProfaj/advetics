@@ -120,12 +120,17 @@ export function BolumluSecici<D extends string>({
       {secenekler.map((s) => {
         const acik = s.deger === secili;
         return (
+          /*
+            gap-1.5: düğme inline-flex ve etiketteki her düğüm AYRI flex öğesi;
+            flex öğesinin sonundaki boşluk atılıyor. "Tümü <span>21</span>"
+            ekranda "Tümü21" çıkıyordu (canlı denetim, Varlıklar).
+          */
           <button
             key={s.deger}
             type="button"
             aria-pressed={acik}
             onClick={() => onSec(s.deger)}
-            className={`inline-flex h-[30px] items-center whitespace-nowrap rounded-full px-3.5 text-[12.5px] font-bold transition-colors ${
+            className={`inline-flex h-[30px] items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 text-[12.5px] font-bold transition-colors ${
               acik ? 'bg-surface text-ink shadow-[0_1px_2px_rgb(0_0_0/0.08)]' : 'text-ink-muted hover:text-ink'
             }`}
           >

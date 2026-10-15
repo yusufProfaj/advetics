@@ -121,7 +121,7 @@
 
 ## 11 · Varlıklar (`/varliklar`)
 
-- [ ] Bilinen açık: süzgeç çiplerinde sayı etikete bitişik ("Tümü21")
+- [x] Bilinen açık: süzgeç çiplerinde sayı etikete bitişik ("Tümü21") (ortak `BolumluSecici` düğmesine gap; flex öğesinin sondaki boşluğu atılıyordu; canlıda GÖRÜLMEDİ)
 - [ ] Araştırma → `docs/pazar/varliklar.md` (kreatif kütüphaneleri, otomatik boyutlandırma, Meta/Google varlık gereksinimleri 2026)
 - [ ] Araştırmanın 1. önerisi
 
