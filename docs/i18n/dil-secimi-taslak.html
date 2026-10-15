@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dil seçimi taslağı</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600;700&display=swap">
+<style>
+:root{--beyaz:#fff;--siyah:#000;--gri:#302e2d;--kirmizi:#ff2400;--bg:#fff;--zemin:rgba(48,46,45,.035);--yuzey:#fff;--metin:#000;--ikincil:rgba(48,46,45,.64);--soluk:rgba(48,46,45,.42);--cizgi:rgba(48,46,45,.12);--cizgi2:rgba(48,46,45,.22);--dolgu:rgba(48,46,45,.06);--vurgu:rgba(255,36,0,.07);--r-sm:8px;--r:12px;--r-lg:16px;--r-hap:999px;--baslik:"Montserrat",system-ui,sans-serif;--govde:"Open Sans",system-ui,sans-serif}
+*{box-sizing:border-box}
+body{margin:0;background:var(--zemin);color:var(--metin);font:400 14px/1.55 var(--govde)}
+h1,h2,h3{font-family:var(--baslik);margin:0}
+.sayfa{max-width:1180px;margin:0 auto;padding:32px 16px 64px}
+.ust-y{font:700 12px/1 var(--govde);letter-spacing:.08em;text-transform:uppercase;color:var(--kirmizi)}
+.sayfa>h1{font-size:28px;font-weight:800;margin:6px 0 8px}
+.sayfa>p{color:var(--ikincil);max-width:720px;margin:0 0 28px}
+.bolum{margin:0 0 40px}
+.bolum>header{display:flex;gap:12px;align-items:baseline;margin-bottom:6px}
+.bolum>header .no{font:800 12px var(--baslik);letter-spacing:.1em;color:var(--kirmizi)}
+.bolum>header h2{font-size:20px}
+.bolum>p{color:var(--ikincil);margin:0 0 16px;max-width:760px}
+.ikili{display:grid;grid-template-columns:1fr 340px;gap:20px;align-items:start}
+@media(max-width:900px){.ikili{grid-template-columns:1fr}}
+.cerceve{border:1px solid var(--cizgi);border-radius:var(--r-lg);background:var(--bg);overflow:hidden}
+.cerceve .bar{display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid var(--cizgi);font-size:12px;color:var(--soluk)}
+.cerceve .bar i{width:9px;height:9px;border-radius:50%;background:var(--cizgi2)}
+.cerceve .bar span{margin-left:10px}
+.telefon{max-width:340px;border-radius:28px}
+.logo{display:inline-flex;align-items:center;gap:8px;font:800 20px/1 var(--baslik);letter-spacing:-.02em}
+.logo b{width:22px;height:22px;border:3px solid var(--kirmizi);border-radius:4px;border-right-color:var(--metin);border-bottom-color:var(--metin)}
+.dg{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:40px;padding:0 18px;border-radius:var(--r-hap);font:700 13.5px/1 var(--govde);border:1px solid var(--cizgi2);background:var(--yuzey);color:var(--metin);cursor:pointer}
+.dg.birincil{background:var(--kirmizi);border-color:var(--kirmizi);color:#fff}
+.dg.tam{width:100%}
+/* A — ilk ziyaret seçim ekranı */
+.secim{min-height:460px;display:flex;align-items:center;justify-content:center;padding:40px 16px;background:var(--zemin)}
+.secim .ic{width:100%;max-width:400px;display:grid;gap:20px}
+.secim h3{font-size:22px;font-weight:800;line-height:1.25}
+.secim h3 small{display:block;font:600 14px/1.4 var(--govde);color:var(--ikincil);margin-top:4px}
+.secenek{display:flex;align-items:center;gap:14px;padding:16px;border:1px solid var(--cizgi2);border-radius:var(--r);background:var(--yuzey);cursor:pointer;text-align:left;width:100%;font:inherit;transition:border-color .15s,background .15s}
+.secenek:hover{border-color:var(--metin)}
+.secenek[aria-checked=true]{border-color:var(--kirmizi);box-shadow:inset 3px 0 0 var(--kirmizi);background:var(--vurgu)}
+.secenek .kod{width:40px;height:40px;border-radius:var(--r-sm);display:grid;place-items:center;font:800 13px var(--baslik);background:var(--dolgu)}
+.secenek[aria-checked=true] .kod{background:var(--kirmizi);color:#fff}
+.secenek b{display:block;font-family:var(--baslik);font-size:15px}
+.secenek small{color:var(--ikincil);font-size:12.5px}
+.secenek .nokta{margin-left:auto;width:18px;height:18px;border-radius:50%;border:2px solid var(--cizgi2)}
+.secenek[aria-checked=true] .nokta{border:5px solid var(--kirmizi)}
+.dipnot{font-size:12px;color:var(--soluk);margin:0}
+/* B — giriş */
+.giris{min-height:520px;display:flex;align-items:center;justify-content:center;padding:40px 16px;background:var(--zemin);position:relative}
+.giris .ust{position:absolute;top:16px;right:16px}
+.giris .ic{width:100%;max-width:360px;display:grid;gap:18px}
+.anahtar{display:inline-flex;padding:3px;border-radius:var(--r-hap);background:var(--dolgu);gap:2px}
+.anahtar button{border:0;background:none;height:28px;padding:0 12px;border-radius:var(--r-hap);font:700 12px var(--govde);color:var(--ikincil);cursor:pointer}
+.anahtar button[aria-pressed=true]{background:var(--yuzey);color:var(--metin);box-shadow:0 0 0 1px var(--cizgi2)}
+.kart{border:1px solid var(--cizgi);border-radius:var(--r);background:var(--yuzey);padding:20px;display:grid;gap:14px}
+.alan label{display:block;font-weight:600;font-size:13px;margin-bottom:6px}
+.alan div{height:40px;border:1px solid var(--cizgi2);border-radius:var(--r-sm);background:var(--yuzey)}
+.giris h3{font-size:22px;font-weight:800}
+.giris p{margin:0;color:var(--ikincil)}
+/* C — Hesabım */
+.hesabim{padding:20px}
+.satir{display:flex;align-items:center;gap:16px;padding:14px 0;border-top:1px solid var(--cizgi)}
+.satir:first-of-type{border-top:0}
+.satir .sol{flex:1}
+.satir b{display:block;font-weight:600}
+.satir small{color:var(--ikincil)}
+select{height:36px;border:1px solid var(--cizgi2);border-radius:var(--r-sm);padding:0 10px;font:600 13px var(--govde);background:var(--yuzey)}
+.not{border-left:3px solid var(--gri);background:var(--zemin);padding:10px 14px;border-radius:0 var(--r-sm) var(--r-sm) 0;font-size:13px;color:var(--ikincil);margin-top:14px}
+.kural{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:12px}
+.kural div{background:var(--yuzey);border:1px solid var(--cizgi);border-radius:var(--r);padding:12px 14px;font-size:13px}
+.kural b{display:block;font-family:var(--baslik);font-size:13px;margin-bottom:2px}
+</style>
+</head>
+<body>
+<div class="sayfa">
+  <div class="ust-y">Taslak · i18n · D0</div>
+  <h1>Dil seçimi</h1>
+  <p>Üç yer: ilk ziyarette tek seferlik seçim (A), giriş ekranında her zaman görünen TR · EN anahtarı (B), Hesabım'da kalıcı ayar (C). Seçenekler tıklanabilir.</p>
+
+  <section class="bolum">
+    <header><span class="no">A</span><h2>İlk ziyaret: dil seçimi</h2></header>
+    <p>Çerezi olmayan herkes siteye ya da giriş ekranına gelmeden önce bunu bir kez görür. Tarayıcı dili İngilizceyse English ön seçili gelir. Başlık iki dilde birden yazılı, çünkü kişinin hangisini okuduğunu henüz bilmiyoruz.</p>
+    <div class="ikili">
+      <div class="cerceve"><div class="bar"><i></i><i></i><i></i><span>advetics.com</span></div>
+        <div class="secim"><div class="ic" data-grup="a1">
+          <span class="logo"><b></b>Advetics</span>
+          <h3>Dilinizi seçin<small>Choose your language</small></h3>
+          <div role="radiogroup" style="display:grid;gap:10px">
+            <button class="secenek" role="radio" aria-checked="true"><span class="kod">TR</span><span><b>Türkçe</b><small>Türkiye</small></span><span class="nokta"></span></button>
+            <button class="secenek" role="radio" aria-checked="false"><span class="kod">EN</span><span><b>English</b><small>International</small></span><span class="nokta"></span></button>
+          </div>
+          <button class="dg birincil tam" data-devam>Devam et</button>
+          <p class="dipnot" data-dipnot>Daha sonra Hesabım'dan değiştirebilirsiniz.</p>
+        </div></div>
+      </div>
+      <div class="cerceve telefon"><div class="bar"><span>Mobil · 375</span></div>
+        <div class="secim" style="min-height:560px;align-items:flex-start;padding-top:56px"><div class="ic" data-grup="a2">
+          <span class="logo"><b></b>Advetics</span>
+          <h3>Dilinizi seçin<small>Choose your language</small></h3>
+          <div role="radiogroup" style="display:grid;gap:10px">
+            <button class="secenek" role="radio" aria-checked="true"><span class="kod">TR</span><span><b>Türkçe</b><small>Türkiye</small></span><span class="nokta"></span></button>
+            <button class="secenek" role="radio" aria-checked="false"><span class="kod">EN</span><span><b>English</b><small>International</small></span><span class="nokta"></span></button>
+          </div>
+          <button class="dg birincil tam" data-devam>Devam et</button>
+          <p class="dipnot" data-dipnot>Daha sonra Hesabım'dan değiştirebilirsiniz.</p>
+        </div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="bolum">
+    <header><span class="no">B</span><h2>Giriş ekranı: TR · EN anahtarı</h2></header>
+    <p>Her girişte görünür ama soru olarak sorulmaz (her gün bir tıklama angarya olur). Anahtara basınca ekran o anda çevrilir; giriş yapınca seçim profile yazılır ve başka cihazda da geçerli olur.</p>
+    <div class="ikili">
+      <div class="cerceve"><div class="bar"><i></i><i></i><i></i><span>advetics.com/login</span></div>
+        <div class="giris" data-giris>
+          <div class="ust"><div class="anahtar" role="group" aria-label="Dil"><button aria-pressed="true" data-dil="tr">TR</button><button aria-pressed="false" data-dil="en">EN</button></div></div>
+          <div class="ic">
+            <span class="logo"><b></b>Advetics</span>
+            <div><h3 data-t="baslik">Giriş yap</h3><p data-t="aciklama">Reklam hesaplarınız tek panelde.</p></div>
+            <div class="kart">
+              <div class="alan"><label data-t="eposta">E-posta</label><div></div></div>
+              <div class="alan"><label data-t="parola">Parola</label><div></div></div>
+              <button class="dg birincil tam" data-t="gir">Giriş yap</button>
+            </div>
+            <p style="font-size:13px"><b data-t="unuttum">Şifremi unuttum</b></p>
+          </div>
+        </div>
+      </div>
+      <div class="kural" style="margin-top:0;grid-template-columns:1fr">
+        <div><b>Neden soru değil anahtar</b>Kullanıcı isteğinde "her girişte sorsun" geçiyor. Önerim ilk ziyarette bir kez sormak (A), girişte anahtarı hep göstermek. Her girişte engelleyici pencere istenirse A ekranı giriş öncesine de konur.</div>
+        <div><b>Tanıtım sitesinde</b>Aynı anahtar üst menünün sağında, "Giriş" düğmesinin solunda.</div>
+        <div><b>Paylaşılabilir bağlantı</b><code>advetics.com/?dil=en</code> seçimi atlayıp İngilizce açar (Google incelemecisi için).</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="bolum">
+    <header><span class="no">C</span><h2>Hesabım: dil ayarı</h2></header>
+    <p>Profil bilgilerinin altında tek satır. Değişiklik anında uygulanır, ayrı "Kaydet" yok.</p>
+    <div class="cerceve" style="max-width:720px"><div class="bar"><i></i><i></i><i></i><span>advetics.com/hesabim</span></div>
+      <div class="hesabim">
+        <div class="satir"><div class="sol"><b>Ad soyad</b><small>Yusuf Algan</small></div></div>
+        <div class="satir"><div class="sol"><b>Arayüz dili</b><small>Menü, ekranlar, hata mesajları ve size gelen mailler.</small></div>
+          <select aria-label="Arayüz dili"><option>Türkçe</option><option>English</option></select></div>
+        <div class="not">Müşteriye giden rapor PDF'i ve rapor maili bu ayarı DEĞİL, workspace'in rapor dilini kullanır (Marka Merkezi › Workspace bilgileri). Reklam metinleri de workspace'in reklam dilinde yazılır.</div>
+      </div>
+    </div>
+  </section>
+</div>
+<script>
+const M={tr:{baslik:'Giriş yap',aciklama:'Reklam hesaplarınız tek panelde.',eposta:'E-posta',parola:'Parola',gir:'Giriş yap',unuttum:'Şifremi unuttum'},
+en:{baslik:'Sign in',aciklama:'All your ad accounts in one panel.',eposta:'Email',parola:'Password',gir:'Sign in',unuttum:'Forgot password'}};
+document.querySelectorAll('[data-grup]').forEach(g=>{
+  const dev=g.querySelector('[data-devam]'),dip=g.querySelector('[data-dipnot]');
+  g.querySelectorAll('.secenek').forEach((s,i)=>s.addEventListener('click',()=>{
+    g.querySelectorAll('.secenek').forEach(x=>x.setAttribute('aria-checked','false'));s.setAttribute('aria-checked','true');
+    dev.textContent=i?'Continue':'Devam et';dip.textContent=i?'You can change this later in My account.':"Daha sonra Hesabım'dan değiştirebilirsiniz.";
+  }));
+});
+const gr=document.querySelector('[data-giris]');
+gr.querySelectorAll('[data-dil]').forEach(b=>b.addEventListener('click',()=>{
+  gr.querySelectorAll('[data-dil]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));
+  const m=M[b.dataset.dil];gr.querySelectorAll('[data-t]').forEach(e=>e.textContent=m[e.dataset.t]);
+}));
+</script>
+</body>
+</html>
