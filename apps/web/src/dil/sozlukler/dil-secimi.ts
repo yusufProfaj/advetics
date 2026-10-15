@@ -15,7 +15,7 @@ export const dilSecimiSozlugu = ikiDil(
     hesabimAciklama: 'Menü, ekranlar, hata mesajları ve size gelen mailler.',
     hesabimRaporNotu:
       "Müşteriye giden rapor PDF'i ve rapor maili bu ayarı değil, workspace'in rapor dilini kullanır.",
-    kaydedilemedi: 'Dil profilinize kaydedilemedi; bu cihazda geçerli.',
+    kaydedilemedi: 'Dil kaydedilemedi, değişiklik yapılmadı. Tekrar deneyin.',
   },
   {
     devam: 'Continue',
@@ -25,7 +25,7 @@ export const dilSecimiSozlugu = ikiDil(
     hesabimAciklama: 'Menus, screens, error messages and the emails sent to you.',
     hesabimRaporNotu:
       "Report PDFs and report emails sent to clients use the workspace's report language, not this setting.",
-    kaydedilemedi: 'Could not save the language to your profile; it applies on this device.',
+    kaydedilemedi: 'Could not save the language; nothing was changed. Please try again.',
   },
 );
 

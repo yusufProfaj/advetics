@@ -10,10 +10,10 @@ import { Serit } from '@/components/ui/hal';
 
 /**
  * HESABIM › ARAYÜZ DİLİ (taslak C). Değişiklik ANINDA uygulanır, ayrı
- * "Kaydet" yok: seçim kutusunun kendisi karar. Profil yazılamazsa çerez
- * yine de yazılmış olur (bu cihazda geçerli) ve bu AÇIKÇA söylenir;
- * sessizce geçmek, kişinin diğer cihazında eski dili görüp nedenini
- * bilmemesi demek. Rapor dili ayrı (workspace ayarı, kullanıcı kararı Ç8)
+ * "Kaydet" yok: seçim kutusunun kendisi karar. Profil yazılamazsa HİÇBİR
+ * ŞEY değişmiyor (çerez de yazılmıyor, kutu kontrollü olduğu için eski
+ * dile döner) ve hata AÇIKÇA söyleniyor; bu cihazda değişip diğerinde
+ * eski kalan bir dil, kişinin nedenini bilemeyeceği bir ayrışma. Rapor dili ayrı (workspace ayarı, kullanıcı kararı Ç8)
  * ve karışmasın diye notu burada.
  */
 export function DilAyari() {

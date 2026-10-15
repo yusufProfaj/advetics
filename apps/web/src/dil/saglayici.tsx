@@ -1,7 +1,6 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
-import { useRouter } from 'next/navigation';
 import {
   DIL_CEREZI,
   DIL_CEREZI_SURESI_SN,
@@ -30,12 +29,10 @@ export function dilCereziYaz(dil: Dil): void {
 /**
  * KÖK SAĞLAYICI. Değer sunucunun okuduğu çerezden gelir (`dilDurumu`), yani
  * ilk boyamada sunucu ile istemci AYNI dili çizer. Değiştirince sayfa
- * `router.refresh()` ile yeniden çiziliyor: sunucu bileşenleri de yeni dili
- * görmeli, yalnız istemci durumunu çevirmek ekranı yarı yarıya iki dilde
- * bırakırdı.
+ * TAM yükleniyor (`degistir` içindeki yorum): yalnız istemci durumunu
+ * çevirmek ekranı yarı yarıya iki dilde bırakırdı ve canlıda bıraktı.
  */
 export function DilSaglayici({ dil: ilk, children }: { dil: Dil; children: ReactNode }) {
-  const router = useRouter();
   const [dil, setDil] = useState<Dil>(ilk);
 
   // Sunucu başka bir dil çizdiyse (başka sekmede değişti, Hesabım'dan geldi) ona uy.
@@ -49,13 +46,20 @@ export function DilSaglayici({ dil: ilk, children }: { dil: Dil; children: React
 
   const degistir = useCallback<DilBaglami['degistir']>(
     async (yeni, secenek) => {
-      dilCereziYaz(yeni);
-      setDil(yeni);
+      /*
+       * ÖNCE PROFİL, SONRA ÇEREZ, SONRA TAM YÜKLEME — istemci durumu ARA
+       * ADIMDA DEĞİŞMİYOR. Canlıda (2026-10-16) önce `setDil(yeni)` yapılıyordu:
+       * istemci parçaları hemen yeni dile dönüyor, sunucu parçaları (menü,
+       * başlık) eski dilde kalıyor ve `DilEsitle` o arada eski profili görüp
+       * dili GERİ ÇEVİRİYORDU. Telefonda Hesabım'da English seçen kişi
+       * sayfayı Türkçe ve seçiciyi "Türkçe" gördü. Profil yazılamazsa HATA
+       * FIRLATILIYOR ve hiçbir şey değişmiyor (çağıran gösterir); yarım
+       * değişmiş bir ekran bırakılmıyor.
+       */
       if (secenek?.profileYaz) {
-        // HATA YUTULMUYOR: profil yazılamazsa çağıran gösterir; çerez yine de
-        // yazıldı, yani bu cihazda seçim geçerli.
         await apiFetch('/auth/locale', { method: 'PATCH', body: JSON.stringify({ locale: yeni }) });
       }
+      dilCereziYaz(yeni);
       // SİTE SAYFASINDA KARŞI DİLDEKİ ADRESE GİT: `/gizlilik`te English
       // seçen kişi `/en/privacy`ye. Yalnız yenilemek Türkçe adreste kalmak,
       // middleware'in onu bir sonraki tıklamada yönlendirmesini beklemek ve
@@ -64,13 +68,13 @@ export function DilSaglayici({ dil: ilk, children }: { dil: Dil; children: React
       // TAM SAYFA YÜKLEMESİ, `router.replace` DEĞİL: istemci tarafı geçişte
       // Next ortak yerleşimi (üst menü, alt bilgi) YENİDEN ÇİZMİYOR; `/`dan
       // `/en`e geçen kişi İngilizce sayfayı Türkçe menüyle görüyordu
-      // (yerelde gözle, D1). `router.refresh()` ise bütün ağacı yeniden
-      // çiziyor, aynı adreste kalınca o yeterli.
+      // (yerelde gözle, D1). Aynı adreste de TAM YÜKLEME: `router.refresh()`
+      // sunucu parçalarını gecikmeli çiziyordu ve ara durum iki dilliydi.
       const hedef = dilDegisinceYol(location.pathname, yeni);
       if (hedef !== location.pathname) location.assign(hedef + location.search + location.hash);
-      else router.refresh();
+      else location.reload();
     },
-    [router],
+    [],
   );
 
   return <Baglam.Provider value={{ dil, degistir }}>{children}</Baglam.Provider>;
