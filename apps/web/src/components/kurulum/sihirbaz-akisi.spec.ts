@@ -62,7 +62,7 @@ describe('gezinme', () => {
   });
 
   it('KRİTİK: "Devam" bir sonraki bitmemiş adıma, kalmadıysa son kontrole', () => {
-    const d = { piksel: 'tamam', google: 'kullanilmiyor', olcum: 'kapsam_disi', marka: 'eksik' } as const;
+    const d = { piksel: 'tamam', google: 'kullanilmiyor', youtube: 'kullanilmiyor', olcum: 'kapsam_disi', marka: 'eksik' } as const;
     expect(sonrakiAdim('sayfa', d)).toBe('marka');
     expect(sonrakiAdim('veri', {})).toBe('son');
     expect(sonrakiAdim('son', {})).toBe('son');

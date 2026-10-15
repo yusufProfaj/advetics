@@ -35,6 +35,7 @@ import { Serit } from '@/components/ui/hal';
 import { LISTE_DURUMU, PARCA_ADI } from './kurulum-listesi-mantik';
 import { FirmaBilgileri } from './firma-bilgileri';
 import { BildirimlerBolumu } from './bildirimler-bolumu';
+import { YouTubeKanalBul } from '@/components/connections/youtube-kanal-bul';
 import { BeyanAlani } from './beyan-alani';
 
 /**
@@ -71,6 +72,8 @@ export interface AdimYetkileri {
   veriGor: boolean;
   /** `marka.yaz` */
   markaYaz: boolean;
+  /** `youtube.ekle` */
+  youtubeEkle: boolean;
 }
 
 export interface AdimIcerigiOzellikleri {
@@ -254,6 +257,21 @@ export function AdimIcerigi(o: AdimIcerigiOzellikleri) {
               Ayarlar › Ekip ve güvenlik’te kişi ekle
             </Link>
           </p>
+        </div>
+      )}
+
+      {/*
+        YOUTUBE: kanal bulucunun AYNISI (Marka Merkezi › Bağlı kanallar). Tamam
+        ya da beyanla kapalıysa bulucu gizli; ikinci bir form yazılmıyor.
+      */}
+      {a.kod === 'youtube' && a.durum !== 'tamam' && a.durum !== 'kapsam_disi' && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-ink">YouTube kanalını bul</p>
+          {yetki.youtubeEkle ? (
+            <YouTubeKanalBul clientId={clientId} workspaceAdi={o.workspaceAdi} baglandi={o.tazele} />
+          ) : (
+            <p className="text-xs text-ink-muted">{PANEL_KAPILARI['youtube.ekle'].neden}</p>
+          )}
         </div>
       )}
 

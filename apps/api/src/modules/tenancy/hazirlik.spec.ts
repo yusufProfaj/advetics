@@ -4,7 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { HAZIRLIK_KODLARI, type TenantContext } from '@advetics/shared';
 
 /** Sihirbazın altı maddesi (MIMARI § 2b) — artık `HAZIRLIK_KODLARI`nın parçası. */
-const SIHIRBAZ_MADDELERI = ['site_adresi', 'iletisim', 'rapor_alicisi', 'adres', 'bildirim', 'erisim'] as const;
+const SIHIRBAZ_MADDELERI = ['site_adresi', 'iletisim', 'rapor_alicisi', 'adres', 'bildirim', 'erisim', 'youtube_kanali'] as const;
 import { createHarness, seedTenant, IDS, type Harness } from '../../../test/pglite-harness';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { ILK_CEKIM_BEKLEME_SINIRI_MS, hazirlikMaddeleri, type HazirlikGirdisi, type HazirlikHesabi } from './hazirlik';
@@ -34,6 +34,7 @@ const SAGLAM: HazirlikHesabi = {
 const TAM: HazirlikGirdisi = {
   hesaplar: [SAGLAM],
   sosyalKanalSayisi: 1,
+  youtubeKanalSayisi: 1,
   profil: {
     markaBilgileri: 'm',
     hedefKitle: 'h',
@@ -76,6 +77,7 @@ describe('karar', () => {
     const bosGirdi: HazirlikGirdisi = {
       hesaplar: [],
       sosyalKanalSayisi: 0,
+      youtubeKanalSayisi: 0,
       profil: null,
       buAyButceVar: null,
       hazirlama: null,
@@ -287,6 +289,22 @@ beforeEach(async () => {
 });
 
 describe('servis', () => {
+  it('KRİTİK: YouTube maddesi YALNIZ YouTube kanalını sayıyor — Facebook sayfası onu tamam yapmıyor', async () => {
+    /*
+     * `sosyal_kanal` üç türü birlikte sayıyor; YouTube maddesi aynı sayıyı
+     * kullansaydı sayfası bağlı her workspace'te "kanal bağlı" der ve
+     * sihirbazın YouTube adımı hiç açılmazdı.
+     */
+    await h.q(
+      `INSERT INTO social_profiles (id, org_id, client_id, connection_id, profile_type, external_id, name, updated_at)
+       VALUES (gen_random_uuid(), $1, $2, $3, 'facebook_page', 'p1', 'Sayfa', now())`,
+      [IDS.org, IDS.client, IDS.connection],
+    );
+    const r = await svc.get(CTX(), IDS.client, SIMDI);
+    expect(r.maddeler.find((m) => m.kod === 'sosyal_kanal')?.durum).toBe('tamam');
+    expect(r.maddeler.find((m) => m.kod === 'youtube_kanali')?.durum).toBe('eksik');
+  });
+
   it('başka bir workspace\'in listesi sorulamıyor', async () => {
     await expect(svc.get(CTX(), 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', SIMDI)).rejects.toThrow(
       'Workspace bulunamadı',
@@ -343,6 +361,11 @@ describe('servis', () => {
     await h.q(
       `INSERT INTO social_profiles (id, org_id, client_id, connection_id, profile_type, external_id, name, updated_at)
        VALUES (gen_random_uuid(), $1, $2, $3, 'facebook_page', 'p1', 'Sayfa', now())`,
+      [IDS.org, IDS.client, IDS.connection],
+    );
+    await h.q(
+      `INSERT INTO social_profiles (id, org_id, client_id, connection_id, profile_type, external_id, name, updated_at)
+       VALUES (gen_random_uuid(), $1, $2, $3, 'youtube_channel', 'UCtest', 'Kanal', now())`,
       [IDS.org, IDS.client, IDS.connection],
     );
     await h.q(`INSERT INTO workspace_hazirlama (client_id, org_id, durum) VALUES ($1, $2, 'hazir')`, [IDS.client, IDS.org]);

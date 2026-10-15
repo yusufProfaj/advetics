@@ -63,6 +63,8 @@ const SURUYOR: ReadonlySet<string> = new Set(['queued', 'running', 'throttled'])
 export interface HazirlikGirdisi {
   hesaplar: HazirlikHesabi[];
   sosyalKanalSayisi: number;
+  /** Workspace'e bağlı YouTube kanalı sayısı (`social_profiles.profile_type = 'youtube_channel'`). */
+  youtubeKanalSayisi: number;
   profil: {
     markaBilgileri: string | null;
     hedefKitle: string | null;
@@ -473,6 +475,25 @@ function sihirbazMaddeleri(g: HazirlikGirdisi): HazirlikMaddesi[] {
             aciklama:
               'Bu workspace’e özel atanmış kimse yok (şirket yöneticileri dışında). Yalnız yöneticiler yönetiyorsa bunu beyan et.',
           },
+  );
+
+  // YouTube kanalı — sihirbazın YouTube adımı. Beyan ("kanalımız yok") burada
+  // uygulanmıyor, kurulum listesi uyguluyor (yukarıdaki kural).
+  m.push(
+    g.youtubeKanalSayisi > 0
+      ? {
+          kod: 'youtube_kanali',
+          zorunlu: false,
+          durum: 'tamam',
+          aciklama: `${g.youtubeKanalSayisi} YouTube kanalı bağlı; yeni videolar Akıllı Boost'a kart olarak düşüyor.`,
+        }
+      : {
+          kod: 'youtube_kanali',
+          zorunlu: false,
+          durum: 'eksik',
+          aciklama:
+            'YouTube kanalı bağlı değil. Bağlanınca yeni videolar Akıllı Boost’a kart olarak düşer ve YouTube reklamı kurulabilir; kanalınız yoksa bunu beyan et.',
+        },
   );
 
   return m;

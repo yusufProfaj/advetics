@@ -43,6 +43,13 @@ export const HAZIRLIK_KODLARI = [
   'bildirim',
   /** Workspace'e atanmış en az bir sorumlu kişi (beyan: `erisim`). */
   'erisim',
+  /**
+   * Workspace'e bağlı en az bir YouTube kanalı (beyan: `youtube_yok`).
+   * `sosyal_kanal` YouTube'u Instagram ve Facebook'la birlikte sayıyor; Meta
+   * sayfası bağlı bir workspace'te kanal hiç bağlanmamışken o madde "tamam"
+   * der ve Akıllı Boost'un video kartları hiç gelmez.
+   */
+  'youtube_kanali',
 ] as const;
 
 export type HazirlikKodu = (typeof HAZIRLIK_KODLARI)[number];

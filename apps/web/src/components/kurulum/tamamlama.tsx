@@ -134,6 +134,7 @@ const NEDEN: Record<SihirbazAdimi, string> = {
   sayfa: 'Reklam bir Facebook sayfası ve Instagram hesabı adına görünür.',
   piksel: 'Sitendeki ziyaretleri ve formları Meta’nın görebilmesi için.',
   google: 'Google aramalarında ve YouTube’da reklam bu hesaptan yayınlanır; ödeme yöntemi olmadan reklam yayına çıkmaz.',
+  youtube: 'Kanalın yeni videoları Akıllı Boost’a kart olarak düşer; YouTube reklamı bu kanalın videolarıyla kurulur.',
   olcum:
     'Reklamdan gelen formları, telefon aramalarını ve WhatsApp mesajlarını sayabilmemiz için. Sayılmayan sonucu Meta ve Google da iyileştiremez.',
   marka: 'Reklam metinleri ve yapay zekâ markanı buradan tanır; bir kez doldurulur, bir daha sorulmaz.',

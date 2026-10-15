@@ -20,5 +20,6 @@ export function adimYetkileri(session: SessionResponse): AdimYetkileri {
     ekipYonet: kapi(session, 'ekip.yonet'),
     veriGor: kapi(session, 'veriDurumu.gor'),
     markaYaz: kapi(session, 'marka.yaz'),
+    youtubeEkle: kapi(session, 'youtube.ekle'),
   };
 }

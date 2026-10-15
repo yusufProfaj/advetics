@@ -109,8 +109,10 @@ export class HazirlikService {
          WHERE client_id = ${clientId}::uuid AND role IN ('admin', 'ad_manager')
       `);
 
-      const [sosyal] = await tx.$queryRaw<Array<{ n: number }>>(Prisma.sql`
-        SELECT COUNT(*)::int AS n FROM social_profiles WHERE client_id = ${clientId}::uuid
+      const [sosyal] = await tx.$queryRaw<Array<{ n: number; youtube: number }>>(Prisma.sql`
+        SELECT COUNT(*)::int AS n,
+               COUNT(*) FILTER (WHERE profile_type = 'youtube_channel')::int AS youtube
+          FROM social_profiles WHERE client_id = ${clientId}::uuid
       `);
 
       const [profil] = await tx.$queryRaw<
@@ -160,6 +162,7 @@ export class HazirlikService {
           sonIs: h.is_durum && h.is_zaman ? { durum: h.is_durum, zaman: new Date(h.is_zaman), hata: h.is_hata } : null,
         })),
         sosyalKanalSayisi: sosyal?.n ?? 0,
+        youtubeKanalSayisi: sosyal?.youtube ?? 0,
         profil: profil
           ? {
               markaBilgileri: profil.marka_bilgileri,

@@ -34,6 +34,12 @@ export const WORKSPACE_BEYAN_OGELERI = [
   'bildirim',
   /** "Bu workspace'i yalnız şirket yöneticileri yönetiyor" — sorumlu kişi parçası. */
   'erisim',
+  /**
+   * "YouTube kanalımız yok" (2026-10-15). Kanalı olmayan işletme meşru;
+   * beyan olmasaydı YouTube adımı Google kullanan her workspace'te sonsuza
+   * kadar "eksik" derdi.
+   */
+  'youtube_yok',
 ] as const;
 export type WorkspaceBeyanOgesi = (typeof WORKSPACE_BEYAN_OGELERI)[number];
 
@@ -60,6 +66,7 @@ export const KURULUM_BEYAN_OGESI_ADI: Record<KurulumBeyanOgesi, string> = {
   adres: 'Fiziksel adresimiz yok',
   bildirim: 'Bildirim istemiyoruz',
   erisim: 'Bu workspace’i yalnız şirket yöneticileri yönetiyor',
+  youtube_yok: 'YouTube kanalımız yok',
   iki_adim: 'İki adımlı doğrulamayı zorunlu tutmuyoruz',
 };
 

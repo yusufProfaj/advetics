@@ -133,6 +133,18 @@ export const KURULUM_LISTESI = [
   },
   {
     /*
+     * YOUTUBE KANALI (2026-10-15, kullanıcı isteği). Google hesabından HEMEN
+     * SONRA: kanal o hesabın Google bağlantısına iliştiriliyor, hesap yokken
+     * eklenemiyor. Google kullanılmıyorsa adım düşer; kanalı olmayan
+     * işletme "YouTube kanalımız yok" beyanıyla kapatır.
+     */
+    kod: 'youtube',
+    ad: 'YouTube kanalı',
+    platform: 'google',
+    parcalar: [{ kaynak: 'hazirlik', kod: 'youtube_kanali', beyan: 'youtube_yok' }],
+  },
+  {
+    /*
      * BUGÜNKÜ "ÖLÇÜM" BÖLÜMÜ BURAYA KATLANIYOR. Analytics (GA4) TEK KAYIT:
      * kurulumun `ga4_mulk`ü. Veri kaynaklarındaki GA4 bağlantısı ayrı bir
      * form olarak GÖSTERİLMEZ — kurulum mülkü seçince `kurulumdanBagla`

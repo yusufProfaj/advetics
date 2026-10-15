@@ -352,7 +352,7 @@ function hazirlik(ozel: Partial<Record<string, 'tamam' | 'eksik' | 'bilinmiyor'>
     maddeler: ([
       'reklam_hesabi', 'veri_akisi', 'marka_bilgisi', 'logo', 'aylik_butce', 'sosyal_kanal', 'reklam_hazirligi',
       // Sihirbazın maddeleri (HAZIRLIK_KODLARI'nın parçası).
-      'site_adresi', 'iletisim', 'rapor_alicisi', 'adres', 'bildirim', 'erisim',
+      'site_adresi', 'iletisim', 'rapor_alicisi', 'adres', 'bildirim', 'erisim', 'youtube_kanali',
     ] as const).map(
       (kod) => ({ kod, zorunlu: false, durum: ozel[kod] ?? 'tamam', aciklama: `${kod} açıklaması` }),
     ),
@@ -369,9 +369,9 @@ const tamGirdi = (ek: Partial<KurulumListesiGirdisi> = {}): KurulumListesiGirdis
 });
 
 describe('KURULUM — tek sıralı liste', () => {
-  it('KRİTİK: on adım — onaylı yedi + sihirbazın üçü (bilgiler başta, bildirimler ve veri sonda)', () => {
+  it('KRİTİK: on bir adım — onaylı yedi + sihirbazın üçü + YouTube (bilgiler başta, YouTube Google’dan hemen sonra, bildirimler ve veri sonda)', () => {
     expect(KURULUM_LISTESI.map((a) => a.kod)).toEqual([
-      'bilgiler', 'meta', 'sayfa', 'piksel', 'google', 'olcum', 'marka', 'varsayilanlar', 'bildirimler', 'veri',
+      'bilgiler', 'meta', 'sayfa', 'piksel', 'google', 'youtube', 'olcum', 'marka', 'varsayilanlar', 'bildirimler', 'veri',
     ]);
   });
 
@@ -379,9 +379,9 @@ describe('KURULUM — tek sıralı liste', () => {
     for (const a of KURULUM_LISTESI) expect(MARKA_MERKEZI_CAPALARI.kurulum).toContain(a.kod);
   });
 
-  it('her şey tamamsa 10 / 10 ve bitti', () => {
+  it('her şey tamamsa 11 / 11 ve bitti', () => {
     const s = kurulumSayaci(kurulumListesi(tamGirdi()));
-    expect(s).toEqual({ tamam: 10, toplam: 10, kapsamDisi: 0, bilinmiyor: 0, bitti: true });
+    expect(s).toEqual({ tamam: 11, toplam: 11, kapsamDisi: 0, bilinmiyor: 0, bitti: true });
   });
 
   it('KRİTİK: bir kaynak okunamazsa "eksik" DEĞİL "bilinmiyor" ve bitti ASLA true değil', () => {

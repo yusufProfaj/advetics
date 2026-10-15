@@ -40,10 +40,16 @@ const KAYNAK_ETIKETI: Record<YoutubeKanalOnerisi['kaynaklar'][number]['tur'], st
 export function YouTubeKanalBul({
   clientId,
   workspaceAdi,
+  baglandi,
 }: {
   clientId: string | null;
   /** Arama kutusunun ilk değeri ve onay cümlesindeki ad. */
   workspaceAdi: string | null;
+  /**
+   * Kanal workspace'e bağlanınca. Sihirbaz durumunu istemcide okuyor;
+   * `router.refresh()` onu tazelemiyor ve adım "eksik" kalırdı.
+   */
+  baglandi?: () => void;
 }) {
   const router = useRouter();
   const [durum, setDurum] = useState<Durum>({ tur: 'bos' });
@@ -133,6 +139,7 @@ export function YouTubeKanalBul({
       });
       setBildirim({ ton: 'ok', metin: `${k.title} bu workspace'e bağlandı. Yeni videolar Akıllı Boost'a kart olarak düşecek.` });
       router.refresh();
+      baglandi?.();
       void onerileriGetir();
     } catch (err) {
       setBildirim({

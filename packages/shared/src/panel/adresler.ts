@@ -207,7 +207,7 @@ export type MarkaMerkeziBolumKodu = (typeof MARKA_MERKEZI_BOLUMLERI)[number]['ko
  * istemcide çeviriyor.
  */
 export const MARKA_MERKEZI_CAPALARI = {
-  kurulum: ['bilgiler', 'meta', 'sayfa', 'piksel', 'google', 'olcum', 'marka', 'varsayilanlar', 'bildirimler', 'veri', 'kanallar', 'veri-kaynaklari'],
+  kurulum: ['bilgiler', 'meta', 'sayfa', 'piksel', 'google', 'youtube', 'olcum', 'marka', 'varsayilanlar', 'bildirimler', 'veri', 'kanallar', 'veri-kaynaklari'],
   marka: ['marka-bilgileri', 'markayi-anlat', 'kime-satiyoruz', 'logo'],
   workspace: ['firma', 'erisim', 'bildirimler', 'veri-durumu'],
 } as const satisfies Record<MarkaMerkeziBolumKodu, readonly string[]>;

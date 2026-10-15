@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { adimBeyanlari } from '@/components/kurulum/sihirbaz-akisi';
 import {
   KURULUM_BEYAN_OGELERI,
   REHBER_AMAC_KODLARI,
@@ -91,7 +92,7 @@ function hazirlik(ozel: Partial<Record<string, 'tamam' | 'eksik' | 'bilinmiyor' 
     hazir: true,
     maddeler: ([
       'reklam_hesabi', 'veri_akisi', 'marka_bilgisi', 'logo', 'aylik_butce', 'sosyal_kanal', 'reklam_hazirligi',
-      'site_adresi', 'iletisim', 'rapor_alicisi', 'adres', 'bildirim', 'erisim',
+      'site_adresi', 'iletisim', 'rapor_alicisi', 'adres', 'bildirim', 'erisim', 'youtube_kanali',
     ] as const).map((kod) => ({ kod, zorunlu: false, durum: ozel[kod] ?? 'tamam', aciklama: `${kod} açıklaması` })),
   };
 }
@@ -154,7 +155,7 @@ describe('beyanlar — parça kapsam dışı', () => {
     const g = girdi({ hazirlik: hazirlik({ bildirim: 'eksik', erisim: 'eksik' }), beyanlar: [beyan('bildirim'), beyan('erisim')] });
     const adimlar = kurulumListesi(g);
     expect(adimlar.find((a) => a.kod === 'bildirimler')?.durum).toBe('kapsam_disi');
-    expect(kurulumSayaci(adimlar)).toEqual({ tamam: 9, toplam: 9, kapsamDisi: 1, bilinmiyor: 0, bitti: true });
+    expect(kurulumSayaci(adimlar)).toEqual({ tamam: 10, toplam: 10, kapsamDisi: 1, bilinmiyor: 0, bitti: true });
   });
 });
 
@@ -181,7 +182,7 @@ describe('"web sitemiz yok" beyanı', () => {
     const adimlar = kurulumListesi(siteYok());
     expect(adimlar.find((a) => a.kod === 'bilgiler')?.durum).toBe('tamam');
     expect(adimlar.find((a) => a.kod === 'marka')?.parcalar.find((p) => p.kod === 'site')?.durum).toBe('kapsam_disi');
-    expect(kurulumSayaci(adimlar)).toMatchObject({ tamam: 8, toplam: 8, kapsamDisi: 2, bitti: true });
+    expect(kurulumSayaci(adimlar)).toMatchObject({ tamam: 9, toplam: 9, kapsamDisi: 2, bitti: true });
   });
 
   it('KRİTİK: "Eksikleri tamamla" site isteyen kurulum adımlarına DOKUNMAZ (konteyner, piksel)', () => {
@@ -408,5 +409,29 @@ describe('sihirbaz adresi', () => {
     expect(sihirbazAdresi('ws-1')).toBe('/kurulum?musteri=ws-1');
     expect(sihirbazAdresi('ws-1', null)).toBe('/kurulum?musteri=ws-1');
     expect(SIHIRBAZ_ADI).toBe('Kurulum sihirbazı');
+  });
+});
+
+describe('YouTube adımı (2026-10-15)', () => {
+  it('KRİTİK: kanal yoksa eksik; Google hesabından hemen sonra geliyor', () => {
+    const adimlar = kurulumListesi(girdi({ hazirlik: hazirlik({ youtube_kanali: 'eksik' }) }));
+    const kodlar = adimlar.map((a) => a.kod);
+    expect(kodlar.indexOf('youtube')).toBe(kodlar.indexOf('google') + 1);
+    expect(adimlar.find((a) => a.kod === 'youtube')?.durum).toBe('eksik');
+  });
+
+  it('KRİTİK: "YouTube kanalımız yok" beyanı adımı kapatıyor ve sayaçtan düşürüyor', () => {
+    const adimlar = kurulumListesi(girdi({ hazirlik: hazirlik({ youtube_kanali: 'eksik' }), beyanlar: [beyan('youtube_yok')] }));
+    expect(adimlar.find((a) => a.kod === 'youtube')?.durum).toBe('kapsam_disi');
+    expect(kurulumSayaci(adimlar).bitti).toBe(true);
+  });
+
+  it('Google kullanılmıyorsa adım düşüyor', () => {
+    const adimlar = kurulumListesi(girdi({ hazirlik: hazirlik({ youtube_kanali: 'eksik' }), kullanilmayanlar: ['google'] }));
+    expect(adimlar.find((a) => a.kod === 'youtube')?.durum).toBe('kullanilmiyor');
+  });
+
+  it('beyan seçeneği adımda sunuluyor', () => {
+    expect(adimBeyanlari('youtube')).toContainEqual({ tur: 'oge', oge: 'youtube_yok' });
   });
 });
