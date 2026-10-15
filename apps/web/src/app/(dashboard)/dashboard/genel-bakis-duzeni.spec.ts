@@ -49,6 +49,8 @@ describe('taslağın düzeni', () => {
     expect(perf).toBeGreaterThan(izgara);
     expect(bekleyen).toBeGreaterThan(perf);
     expect(CSS).toMatch(/\.izgara \{[^}]*grid-template-columns: minmax\(0, 2fr\) minmax\(0, 1fr\)/);
+    // SAĞ SÜTUN xl ALTINDA ALTA İNİYOR: yan menüyle 1035-1280 px'te sıkışıyordu.
+    expect(CSS).toMatch(/@media \(max-width: 1279px\) \{\s*\.izgara \{\s*grid-template-columns: minmax\(0, 1fr\);/);
   });
 
   it('KRİTİK: ajans görünümünde sağ sütun boş kalmıyor — mecra dağılımı ve kapsam', () => {

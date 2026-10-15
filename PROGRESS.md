@@ -104,7 +104,7 @@
 
 ## 9 · Genel Bakış (`/dashboard`)
 
-- [ ] Bilinen açık: 1035–1280 px'te sağ sütun sıkışıyor; `xl` altında alta insin
+- [x] Bilinen açık: 1035–1280 px'te sağ sütun sıkışıyor; `xl` altında alta insin (kesme noktası 980 → 1279 px; canlıda bu genişlikte GÖRÜLMEDİ)
 - [ ] Bilinen açık: Hesaplar ve Kampanyalar tablolarında ad sütunu kesiliyor; en az genişlik
 - [ ] Araştırma → `docs/pazar/genel-bakis.md` (ajans çok müşterili özet ekranları, anomali uyarıları)
 - [ ] Araştırmanın 1. önerisi

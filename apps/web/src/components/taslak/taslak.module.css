@@ -808,7 +808,14 @@ button.metrik:hover {
 }
 
 /* ── Dar ekran ── */
-@media (max-width: 980px) {
+/*
+ * İKİ SÜTUN YALNIZ xl (1280 px) VE ÜSTÜNDE. Kesme noktası 980 px'ti ama
+ * görüntü alanına bakıyor; yan menü ~260 px yediği için 1035-1280 px
+ * arasında içerik ~775-1020 px kalıyor ve sağ sütunun üçte biri ~260-340
+ * px'e sıkışıp tablolarını kesiyordu (canlı denetim). Sağ sütun bu aralıkta
+ * alta iniyor.
+ */
+@media (max-width: 1279px) {
   .izgara {
     grid-template-columns: minmax(0, 1fr);
   }
