@@ -112,7 +112,7 @@
 
 ## 10 · Marka Merkezi ve Kurulum (`/marka-merkezi`, `/kurulum`)
 
-- [ ] Bilinen açık: workspace seçicisinde "şirket geneli" kesiliyor; Marka Merkezi "workspace seçili değil" uyarısıyla çelişiyor
+- [x] Bilinen açık: workspace seçicisinde "şirket geneli" kesiliyor; Marka Merkezi "workspace seçili değil" uyarısıyla çelişiyor ("Şirket geneli · N workspace" sırası, tam metin title'da, ajans öneki kararı korundu; uyarı "Üstte şirket geneli seçili, tek bir workspace değil"; canlıda GÖRÜLMEDİ)
 - [ ] Bilinen açık: "bu workspace'e geç" uyarısı telefonda 12 satır; düğme alta
 - [ ] Araştırma → `docs/pazar/kurulum.md` (onboarding sihirbazları, GTM/GA4/CAPI kurulum araçları, Stape, Meta Events Manager kurulum rehberleri)
 - [ ] Araştırmanın 1. önerisi

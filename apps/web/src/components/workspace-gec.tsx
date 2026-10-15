@@ -60,7 +60,10 @@ export function WorkspaceGec({
     <div className="space-y-2">
       {uyum === 'secimYok' ? (
         <Uyari ton="uyari" baslik="Değişiklik yapmak için bu workspace’e geç." eylem={dugme}>
-          Üstte bir workspace seçili değil. {hedef} bilgileri görünüyor; kaydetmek için seçimin bu workspace olmalı.
+          {/* SEÇİCİYLE AYNI DİL: üstte "Şirket geneli" yazıyor; "workspace seçili
+              değil" demek, seçicide şirket adını gören kullanıcıya çelişki
+              gibi okunuyordu (canlı denetim). */}
+          Üstte şirket geneli seçili, tek bir workspace değil. {hedef} bilgileri görünüyor; kaydetmek için bu workspace’e geç.
         </Uyari>
       ) : (
         <Uyari ton="uyari" baslik={`${ekran} ${workspaceAdi ? `“${workspaceAdi}”` : 'başka bir workspace'} için açıldı.`} eylem={dugme}>

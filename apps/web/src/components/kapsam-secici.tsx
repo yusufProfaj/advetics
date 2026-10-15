@@ -305,7 +305,10 @@ export function KapsamSecici({
     ? `Tüm şirketler · ${sirketler.length} şirket`
     : aktifWorkspace
       ? (aktifSirket?.name ?? 'Workspace')
-      : `${aktifSirket?.workspaces.length ?? 0} workspace · şirket geneli`;
+      : // KAPSAM ÖNCE, SAYI SONRA: alt başlık dar düğmede kesiliyor ve
+        // "N workspace · şirket geneli" sırasıyla kesilen kısım tam da
+        // kapsamın kendisiydi (canlı denetim). Kesilirse sayı gitsin.
+        `Şirket geneli · ${aktifSirket?.workspaces.length ?? 0} workspace`;
   /*
    * BİRDEN ÇOK ÜST HESAPTA AJANS ADI DÜĞMEDE YAZIYOR.
    *
@@ -317,6 +320,8 @@ export function KapsamSecici({
    * TEK HESAPTA BASILMIYOR: her zaman aynı değeri yazan bir önek, bir
    * bilgi değil bir dekor.
    */
+  // Ajans adı ÖNDE kalıyor (yanlış ağaçta iş yapmayı önleyen karar, test
+  // kilitli); kesilen kısmın tamamı düğmenin `title`ında.
   const altBaslik =
     ajans && ustHesaplar.length > 1 && !tumSirketler
       ? `${ajans} · ${altBaslikGovdesi}`
@@ -377,7 +382,7 @@ export function KapsamSecici({
           {baslik.slice(0, 2)}
         </span>
         <span className="min-w-0">
-          <span className="block truncate text-[11.5px] leading-tight text-ink-muted">{altBaslik}</span>
+          <span className="block truncate text-[11.5px] leading-tight text-ink-muted" title={altBaslik}>{altBaslik}</span>
           <span className="block truncate text-[13.5px] font-bold leading-tight">{baslik}</span>
         </span>
         {bekliyor ? (
