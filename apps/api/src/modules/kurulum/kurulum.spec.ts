@@ -7,7 +7,7 @@ import type { PrismaService } from '../../prisma/prisma.service';
 import { GOOGLE_OLCUM_SCOPES } from '../connections/providers/google.provider';
 import { gonderAdresi } from './ads-kurulum';
 import { TUM_SAYFALAR_TETIGI, gtmPlani, konteynerdeYuklu, metaPikselKodu } from './gtm';
-import { dogrulamaBeklenenleri, dogrulamaSonucu, etiketImzasi, kurulumAdimlari, type KurulumAnlik, type KurulumSatiri } from './kurulum-durum';
+import { CEREZ_ONAYI_NOTU, dogrulamaBeklenenleri, dogrulamaSonucu, etiketImzasi, kurulumAdimlari, type KurulumAnlik, type KurulumSatiri } from './kurulum-durum';
 import { KurulumService, satirOku } from './kurulum.service';
 import { istanbulSaatKimligi, odemeHazirMi } from './meta-kurulum';
 
@@ -190,6 +190,15 @@ describe('adım durumları', () => {
       expect(l.map((x) => x.kod)).toEqual([...KURULUM_ADIM_KODLARI]);
       for (const x of l) expect(x.neden.length, x.kod).toBeGreaterThan(5);
     }
+  });
+
+  it('KRİTİK: site kodu adımı çerez onayını söylüyor (bekliyor da, görüldü de)', () => {
+    const s = satir({ gtmKimligi: 'GTM-ABC', gtmKonteynerYolu: 'accounts/1/containers/2' });
+    expect(bul(anlik({ satir: s }), 'site_kodu').neden).toContain(CEREZ_ONAYI_NOTU);
+    const goruldu = satir({ gtmKimligi: 'GTM-ABC', gtmKonteynerYolu: 'accounts/1/containers/2', siteKodu: { zaman: '2026-10-15T00:00:00Z', gorundu: true, hata: null } });
+    expect(bul(anlik({ satir: goruldu }), 'site_kodu').neden).toContain(CEREZ_ONAYI_NOTU);
+    expect(CEREZ_ONAYI_NOTU).toContain('Consent Mode v2');
+    expect(CEREZ_ONAYI_NOTU).not.toContain('—');
   });
 
   it('KRİTİK: gerçek hesap açan adımlar ve kullanıcı işleri ASLA otomatik değil', () => {

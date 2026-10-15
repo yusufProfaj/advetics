@@ -12,6 +12,17 @@ import {
 } from '@advetics/shared';
 
 /**
+ * ÇEREZ ONAYI (pazar araştırması 2026-10-15, docs/pazar/kurulum.md).
+ * Kurulum etiketi ve site kodunu kuruyor ama rıza hakkında hiçbir şey
+ * söylemiyordu. Türkiye'de reklam çerezleri açık rıza istiyor (KVKK 2022
+ * çerez rehberi) ve Consent Mode v2 sinyali (`ad_user_data`) yoksa Google
+ * gelişmiş dönüşümleri HATA VERMEDEN çalışmıyor. Yalnız bilgi; onay aracını
+ * biz kurmuyoruz ve hukuki tavsiye vermiyoruz.
+ */
+export const CEREZ_ONAYI_NOTU =
+  "Sitede Consent Mode v2 destekli bir çerez onayı aracı olmalı: Türkiye'de reklam çerezleri açık rıza ister ve onay sinyali yoksa Google gelişmiş dönüşümleri çalışmaz.";
+
+/**
  * ═══ KURULUM ADIMLARININ DURUMU — SAF (docs/kurulum/MIMARI.md) ═══
  *
  * Durum SAKLANMIYOR, her okumada buradan türetiliyor: saklanan durum biri
@@ -245,11 +256,11 @@ export function kurulumAdimlari(a: KurulumAnlik): KurulumAdimi[] {
       if (!s?.gtmKimligi) return { durum: 'atlandi', baslik: 'Önce konteyner', neden: 'Siteye eklenecek kod konteynerden geliyor.', eylem: null, otomatik: false };
       if (!a.site) return { durum: 'eksik', baslik: 'Site adresi yok', neden: `${PANEL_YERLERI.workspaceBilgileri}’nden site adresini gir.`, eylem: null, otomatik: false };
       const k = s.siteKodu;
-      if (k?.gorundu) return { durum: 'tamam', baslik: `Sitede görüldü`, neden: `${s.gtmKimligi} sitede yükleniyor (kontrol: ${tarih(k.zaman)}).`, eylem: null, otomatik: false };
+      if (k?.gorundu) return { durum: 'tamam', baslik: `Sitede görüldü`, neden: `${s.gtmKimligi} sitede yükleniyor (kontrol: ${tarih(k.zaman)}). ${CEREZ_ONAYI_NOTU}`, eylem: null, otomatik: false };
       return {
         durum: 'kullanicida',
         baslik: k ? 'Sitede görülmedi' : 'Kontrol edilmedi',
-        neden: k?.hata ? `Site okunamadı: ${k.hata}` : `Kodu sitenin <head> ve <body> bölümüne ekle (ya da geliştiriciye gönder), sonra "Kontrol et".`,
+        neden: k?.hata ? `Site okunamadı: ${k.hata}` : `Kodu sitenin <head> ve <body> bölümüne ekle (ya da geliştiriciye gönder), sonra "Kontrol et". ${CEREZ_ONAYI_NOTU}`,
         eylem: { tur: 'otomatik', etiket: 'Kontrol et' },
         otomatik: false,
       };

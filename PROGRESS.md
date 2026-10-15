@@ -115,7 +115,7 @@
 - [x] Bilinen açık: workspace seçicisinde "şirket geneli" kesiliyor; Marka Merkezi "workspace seçili değil" uyarısıyla çelişiyor ("Şirket geneli · N workspace" sırası, tam metin title'da, ajans öneki kararı korundu; uyarı "Üstte şirket geneli seçili, tek bir workspace değil"; canlıda GÖRÜLMEDİ)
 - [x] Bilinen açık: "bu workspace'e geç" uyarısı telefonda 12 satır; düğme alta (ortak `Uyari` bileşeninde metne 16 rem taban: bütün uyarılar düzeldi; canlıda GÖRÜLMEDİ)
 - [x] Araştırma → `docs/pazar/kurulum.md` (onboarding sihirbazları, GTM/GA4/CAPI kurulum araçları, Stape, Meta Events Manager kurulum rehberleri)
-- [ ] Öneri 1: Kurulumda "Çerez onayı" bilgi satırı (KVKK açık rıza + Consent Mode v2 yoksa gelişmiş dönüşümler sessizce çalışmaz; yalnız bilgi)
+- [x] Öneri 1: Kurulumda "Çerez onayı" bilgi satırı (KVKK açık rıza + Consent Mode v2 yoksa gelişmiş dönüşümler sessizce çalışmaz; yalnız bilgi)
 - [ ] (onay bekliyor: yeni Meta okuma, canlı ölçüm) Öneri 2: Dataset Quality API ile EMQ'yu doğrulama adımında göstermek
 - [ ] (onay bekliyor) Öneri 3: Meta tek tıkla CAPI'yi Kurulum'da önermek (Events Manager'a yönlendirme)
 
