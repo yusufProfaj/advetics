@@ -30,6 +30,7 @@ canlıda masaüstü + mobil görülmeden bitmiş sayılmaz (§3 "Tasarım").
 
 - `derleMeta` rehber amaç kodunu değil kendi niyet kodunu alır (`VIDEO` değil `VIDEO_IZLENME`; liste `DERLEYICI_NIYETLERI`); yanlış kod `ret` değil TypeError fırlatır.
 - Bir ekranı ya da "panelde yok" iddiasını değiştirmeden önce menünün açtığı GERÇEK bileşeni bul: `team-manager.tsx` yalnız workspace erişim listesi, asıl Ekip ekranı `team-screen.tsx` (route `page.tsx`'ten izle, dosya adından tahmin etme).
+- CSS modülündeki eleman sıfırlaması (`:where(.kok a)`) `@layer base` içinde olmalı: katmansız kural, özgüllüğü sıfır olsa bile bütün Tailwind sınıflarını eziyor (koyu düğme siyah üstüne siyah çıktı; `css-modul-katmani.spec.ts`).
 
 ## 0. "advetics projesine devam et" denince
 

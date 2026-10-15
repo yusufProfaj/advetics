@@ -44,20 +44,31 @@
  * SIFIRLAMA SIFIR ÖZGÜLLÜKTE (`:where` dışta): `.kok :where(button)` bir
  * sınıf kadar ağırdı ve Genel Bakış'ta `.birincil`in kırmızısını eziyordu.
  */
-:where(.kok button) {
-  font: inherit;
-  color: inherit;
-  background: none;
-  border: 0;
-  cursor: pointer;
-}
-:where(.kok input, .kok select, .kok textarea) {
-  font: inherit;
-  color: inherit;
-}
-:where(.kok a) {
-  color: inherit;
-  text-decoration: none;
+/*
+ * KATMANDA, KATMANSIZ DEĞİL: `:where` özgüllüğü sıfırlıyor ama katmansız
+ * bir kural `@layer utilities` içindeki HER Tailwind sınıfını özgüllükten
+ * bağımsız eziyor. `color: inherit` koyu düğme bağlantısının (`bg-ink
+ * text-surface`) yazısını zeminle aynı renge çekiyordu: Genel Bakış'taki
+ * "Sihirbazla tamamla" siyah üstüne siyah, okunmaz bir hap oldu (canlı,
+ * 2026-10-15). `base` katmanında modülün kendi katmansız sınıfları da,
+ * Tailwind yardımcıları da sıfırlamayı yeniyor.
+ */
+@layer base {
+  :where(.kok button) {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: 0;
+    cursor: pointer;
+  }
+  :where(.kok input, .kok select, .kok textarea) {
+    font: inherit;
+    color: inherit;
+  }
+  :where(.kok a) {
+    color: inherit;
+    text-decoration: none;
+  }
 }
 .kok :focus-visible {
   outline: 2px solid var(--t-brand);
