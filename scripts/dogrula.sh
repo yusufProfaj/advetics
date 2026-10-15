@@ -27,6 +27,22 @@ DERLE=0
 [[ "${1:-}" == "--derle" ]] && DERLE=1
 
 adim() { printf '\n\033[1;34m▸ %s\033[0m\n' "$1"; }
+
+# TESTİ KOŞ, ÖZETİ VE DÜŞENİN ADINI YAZ. Eskiden yalnız `tail -5` vardı:
+# bir test ara sıra düştüğünde (2026-10-15 gecesi iki kez, tekrarında
+# yeşil) HANGİSİ olduğu hiçbir yerde görünmüyordu ve iz kayboluyordu.
+# Tam çıktı geçici dosyada; düşen dosya/test satırları ve hata başlıkları
+# özetin üstüne basılıyor. Çıkış kodu vitest'in kendisi (pipefail).
+test_kos() {
+  local cikti
+  cikti="$(mktemp -t dogrula-test.XXXXXX)"
+  local kod=0
+  $NPX vitest run >"$cikti" 2>&1 || kod=$?
+  grep -aE '^ FAIL |^ +× |AssertionError|Error: ' "$cikti" | head -20 || true
+  tail -5 "$cikti"
+  [[ $kod -ne 0 ]] && echo "Tam çıktı: $cikti"
+  return $kod
+}
 trap 'printf "\n\033[0;31m✗ Doğrulama düştü: %s\033[0m\n" "${SON_ADIM:-?}"' ERR
 
 SON_ADIM="shared derlemesi"; adim "$SON_ADIM"
@@ -41,10 +57,10 @@ SON_ADIM="tip kontrolü (web)"; adim "$SON_ADIM"
 (cd "$KOK/apps/web" && $NPX tsc --noEmit -p tsconfig.json)
 
 SON_ADIM="panel testleri"; adim "$SON_ADIM"
-(cd "$KOK/apps/web" && $NPX vitest run 2>&1 | tail -5)
+(cd "$KOK/apps/web" && test_kos)
 
 SON_ADIM="API testleri (tek başına)"; adim "$SON_ADIM"
-(cd "$KOK/apps/api" && $NPX vitest run 2>&1 | tail -5)
+(cd "$KOK/apps/api" && test_kos)
 
 if [[ $DERLE -eq 1 ]]; then
   SON_ADIM="derleme (api)"; adim "$SON_ADIM"

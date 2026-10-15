@@ -139,6 +139,7 @@
 
 ## Ortak (her modülde rastlanırsa)
 
+- [x] API paketinde ara sıra TEK test düşüyor (bu gece iki kez, tekrarında yeşil): tek başına dört koşuda (4 × 6.639) TEKRARLANMADI; en yavaş iki test (strateji PDF 6-12,5 sn, Nest grafiği 7-8 sn) zaten 90/120 sn açık süre sınırlı, yani zaman aşımı değil. Kök sebep bulunamadı; `dogrula.sh` artık düşen testin dosya ve adını + tam çıktı yolunu basıyor (eskiden yalnız `tail -5`), bir dahaki düşüşte iz kalacak. Düşerse buraya yeniden aç.
 - [x] Boş durum kutularında ikon yerine "0" yazıyor; `BosDurum` ikonu (varsayılan çizgi "boş kutu" ikonu; canlıda GÖRÜLMEDİ)
 - [x] Kenar menüsü 800 px yükseklikte Base bölümünü göstermiyor; etkin satır solmanın altında (adres değişince etkin satır görünür alana kaydırılıyor, solma payı scroll-pb-8; Base'e menü kaydırılarak ulaşılıyor; canlıda GÖRÜLMEDİ)
 
