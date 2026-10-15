@@ -40,8 +40,8 @@ ekip listesinde "Son giriş" var.
 ## 3 · Bizde
 
 - Rol + izin modeli ve şirket başına 2FA zorunluluğu var (pazarın
-  önünde). Eksik: (a) ekip listesinde kişinin 2FA'sı AÇIK MI görünmüyor,
-  yani zorunluluk açılmadan önce kimin kilitleneceği bilinmiyor; (b)
+  önünde). Eksik: (a) [DÜZELTME: yanlıştı, asıl Ekip ekranı "İki adımlı" sütununu
+  zaten gösteriyor]; (b)
   uzun süredir giriş yapmamış kişiler işaretlenmiyor (ayrılan çalışan
   erişimi); (c) `audit_logs` okunabilir değil.
 

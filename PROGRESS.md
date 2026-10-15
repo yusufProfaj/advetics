@@ -134,7 +134,7 @@
 - [x] Bilinen açık: Hesabım üst yolunda sayfa adı eksik (kırıntı adı menüden buluyordu; Hesabım menüde değil, listeye eklendi; canlıda GÖRÜLMEDİ)
 - [x] Araştırma → `docs/pazar/ayarlar.md` (ajans çoklu müşteri yönetimi, rol modelleri, 2FA zorunluluğu)
 - [x] Öneri 1: ekip listesinde "uzun süredir giriş yok" işareti (90 gün; hiç giriş yapmamış ayrı)
-- [ ] Öneri 2: ekip listesinde kişinin iki adımı açık mı (zorunluluk açılmadan kimin takılacağı)
+- [x] Öneri 2: ekip listesinde kişinin iki adımı açık mı (zorunluluk açılmadan kimin takılacağı). ARAŞTIRMA YANLIŞTI: asıl Ekip ekranı (`team-screen.tsx`) "İki adımlı" sütununu zaten gösteriyor. Bunun yerine o ekranda HİÇ olmayan "Son giriş" sütunu + 90 gün işareti eklendi (önceki tur yalnız workspace erişim listesine eklemişti).
 - [ ] (onay bekliyor: yeni ekran bölümü + yetki kararı) Öneri 3: Ekip ve güvenlik altında "Son değişiklikler" (audit_logs)
 
 ## Ortak (her modülde rastlanırsa)

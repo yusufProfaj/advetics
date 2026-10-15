@@ -29,6 +29,7 @@ canlıda masaüstü + mobil görülmeden bitmiş sayılmaz (§3 "Tasarım").
 **Öğrenilenler.**
 
 - `derleMeta` rehber amaç kodunu değil kendi niyet kodunu alır (`VIDEO` değil `VIDEO_IZLENME`; liste `DERLEYICI_NIYETLERI`); yanlış kod `ret` değil TypeError fırlatır.
+- Bir ekranı ya da "panelde yok" iddiasını değiştirmeden önce menünün açtığı GERÇEK bileşeni bul: `team-manager.tsx` yalnız workspace erişim listesi, asıl Ekip ekranı `team-screen.tsx` (route `page.tsx`'ten izle, dosya adından tahmin etme).
 
 ## 0. "advetics projesine devam et" denince
 

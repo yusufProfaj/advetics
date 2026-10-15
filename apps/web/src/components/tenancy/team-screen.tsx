@@ -10,6 +10,8 @@ import {
   type UstHesapUyesi,
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { erisimYasi } from '@/lib/erisim-yasi';
+import { formatDayShort } from '@/lib/format';
 import { ROLE_TR, kapsamRolleri, type MemberRow } from '@/components/tenancy/team-manager';
 import { RolAciklamasi, RolMatrisi } from '@/components/tenancy/rol-matrisi';
 import { UstHesapEkibi } from '@/components/tenancy/ust-hesap-ekibi';
@@ -207,6 +209,30 @@ export function TeamScreen({
         ) : (
           <Rozet hal={k.mfaEnabled ? 'ok' : 'hata'}>{k.mfaEnabled ? 'Açık' : 'Kapalı'}</Rozet>
         ),
+    },
+    {
+      anahtar: 'giris',
+      baslik: 'Son giriş',
+      ikincil: true,
+      /*
+       * AYRILANIN ERİŞİMİ (pazar araştırması 2026-10-15): asıl Ekip ekranı
+       * son girişi HİÇ göstermiyordu. 90 gündür girmeyen kırmızı, hiç
+       * girmemiş ayrı (`erisimYasi`; daveti yenilemek ile erişimi
+       * kaldırmak farklı iş).
+       */
+      hucre: (k) => {
+        const y = erisimYasi(k.lastLoginAt);
+        return (
+          <span className="grid gap-0.5 text-13">
+            {k.lastLoginAt && <span className="tabular-nums">{formatDayShort(k.lastLoginAt.slice(0, 10))}</span>}
+            {y && (
+              <span className={`text-12 ${y.tur === 'uzun' ? 'font-semibold text-danger-strong' : 'text-ink-muted'}`} data-erisim={y.tur}>
+                {y.metin}
+              </span>
+            )}
+          </span>
+        );
+      },
     },
     {
       anahtar: 'eylem',
