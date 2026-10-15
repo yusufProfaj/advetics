@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Advetics logo taslakları</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root { --beyaz:#ffffff; --siyah:#000000; --gri:#302e2d; --kirmizi:#ff2400; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:#fff; color:#000; font-family:'Open Sans',sans-serif; }
+  main { max-width:1080px; margin:0 auto; padding:32px 16px 64px; }
+  h1 { font-family:Montserrat,sans-serif; font-weight:800; font-size:28px; margin:0 0 6px; }
+  .alt { color:var(--gri); margin:0 0 32px; font-size:15px; }
+  section { border-top:1px solid #e5e5e5; padding:28px 0; }
+  h2 { font-family:Montserrat,sans-serif; font-weight:700; font-size:20px; margin:0 0 4px; }
+  h2 span { color:var(--kirmizi); }
+  .aciklama { font-size:14px; color:var(--gri); margin:0 0 20px; max-width:720px; }
+  .satir { display:flex; flex-wrap:wrap; gap:16px; align-items:center; margin-bottom:16px; }
+  .zemin { width:120px; height:120px; display:flex; align-items:center; justify-content:center; box-shadow:0 2px 8px rgba(0,0,0,.12); }
+  .zemin svg { width:72px; height:72px; }
+  .z-beyaz { background:var(--beyaz); } .z-gri { background:var(--gri); } .z-kirmizi { background:var(--kirmizi); }
+  .kucuk { display:flex; gap:14px; align-items:flex-end; padding:0 8px; }
+  .kucuk div { display:flex; flex-direction:column; align-items:center; gap:4px; font-size:11px; color:var(--gri); }
+  .kilit { display:flex; align-items:center; gap:14px; padding:18px 24px; box-shadow:0 2px 8px rgba(0,0,0,.12); }
+  .kilit svg { width:48px; height:48px; }
+  .kilit b { font-family:Montserrat,sans-serif; font-weight:700; font-size:40px; letter-spacing:-.5px; line-height:1; }
+  .kilit.z-gri b, .kilit.z-kirmizi b { color:#fff; }
+  .not { background:#f5f5f5; border-left:3px solid var(--gri); padding:12px 16px; font-size:14px; margin-top:8px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Advetics logo taslakları · 2. tur</h1>
+  <p class="alt">Profaj kılavuzunun çizgi dili: kalın, köşeli, sivri kenarlı biçimler; yalnız beyaz, siyah, gri ve kırmızı; kılavuzdaki üç zemin. Yuvarlak köşe ve yan yana çubuk yok, çünkü Google Analytics simgesine benziyordu.</p>
+  <div id="secenekler"></div>
+  <p class="not">Her seçenek 120 px (Google onay ekranı), 32 px ve 16 px (tarayıcı sekmesi) boyutlarında ve yazıyla birlikte gösteriliyor. Seçtiğiniz işaret sekme ikonunu, iOS ikonunu ve paylaşım görselini değiştirecek ve Google'a yüklenecek.</p>
+</main>
+<script>
+/* Her işaret 100×100 ızgarada; "ana" çerçeve/harf rengi, "vurgu" nokta/ok rengi.
+   Zemin değişince renkler kılavuzdaki gibi dönüyor: beyazda siyah+kırmızı,
+   gride beyaz+kırmızı, kırmızıda tamamen beyaz. */
+const isaretler = [
+  {
+    ad: '4 · Kare sinyal',
+    aciklama: 'Sol altta kırmızı kare bir nokta ve ondan sağ üste doğru genişleyen iki köşeli halka: reklamın bir noktadan çıkıp kitleye ulaşması. Profaj\'ın kalın köşeli çizgisi, yazı logosunun kırmızı noktası.',
+    svg: (a, v) => `<svg viewBox="0 0 100 100"><rect fill="${v}" x="8" y="70" width="22" height="22"/><path fill="${a}" d="M8 40H60V92H46V54H8Z"/><path fill="${a}" d="M8 8H92V92H78V22H8Z"/></svg>`
+  },
+  {
+    ad: '5 · Kenetlenen köşeler',
+    aciklama: 'İki köşebent birbirine kenetlenip bir kare kuruyor: biri siyah, biri kırmızı. Ajans ile müşterinin, ya da veri ile kararın bir araya gelmesi. Profaj çerçevesinin iki parçaya ayrılmış hâli.',
+    svg: (a, v) => `<svg viewBox="0 0 100 100"><path fill="${a}" d="M8 8H64V24H24V64H8Z"/><path fill="${v}" d="M92 92H36V76H76V36H92Z"/></svg>`
+  },
+  {
+    ad: '6 · A ve ok',
+    aciklama: 'Köşeli bir "A"nın içinden sağ üste çıkan kırmızı ok: Advetics\'in baş harfi ile Profaj okunun hareketi tek işarette. Ara çizgi yerine ok.',
+    svg: (a, v) => `<svg viewBox="0 0 100 100"><path fill="${a}" d="M4 92L34 14H50L20 92Z"/><path fill="${a}" d="M44 44L52 24L80 92H63Z"/><path fill="${v}" d="M30 72L66 34H56V22H88V54H76V44L40 82Z"/></svg>`
+  },
+  {
+    ad: '7 · Köşeli v',
+    aciklama: 'Adın ortasındaki "v" sivri kesimlerle; sağ üstte kırmızı kare nokta. Onay ve doğrulama işaretini çağrıştırıyor: ölçülmüş, doğrulanmış reklam.',
+    svg: (a, v) => `<svg viewBox="0 0 100 100"><path fill="${a}" d="M6 30H26L50 72L74 30H94L60 92H40Z"/><rect fill="${v}" x="70" y="6" width="22" height="22"/></svg>`
+  }
+];
+const renk = { beyaz:['#000000','#ff2400'], gri:['#ffffff','#ff2400'], kirmizi:['#ffffff','#ffffff'] };
+const kucukBoy = [32, 16];
+document.getElementById('secenekler').innerHTML = isaretler.map(i => `
+  <section>
+    <h2>${i.ad.replace(/^(\d)/,'<span>$1</span>')}</h2>
+    <p class="aciklama">${i.aciklama}</p>
+    <div class="satir">
+      ${Object.keys(renk).map(z => `<div class="zemin z-${z}">${i.svg(...renk[z])}</div>`).join('')}
+      <div class="kucuk">
+        ${kucukBoy.map(b => `<div><span style="width:${b}px;height:${b}px;display:block;background:#ff2400;padding:${Math.round(b*.15)}px">${i.svg('#ffffff','#ffffff').replace('<svg','<svg width="100%" height="100%"')}</span>${b} px</div>`).join('')}
+        ${kucukBoy.map(b => `<div><span style="width:${b}px;height:${b}px;display:block">${i.svg('#000000','#ff2400').replace('<svg','<svg width="100%" height="100%"')}</span>${b} px</div>`).join('')}
+      </div>
+    </div>
+    <div class="satir">
+      ${Object.keys(renk).map(z => `<div class="kilit z-${z}">${i.svg(...renk[z])}<b>Advetics</b></div>`).join('')}
+    </div>
+  </section>`).join('');
+</script>
+</body>
+</html>

@@ -1,5 +1,5 @@
 import { ImageResponse } from 'next/og';
-import { ADVETICS_KIRMIZI } from './marka-isareti';
+import { ADVETICS_KIRMIZI, markaIsareti } from './marka-isareti';
 
 /**
  * Open Graph görseli — çalışma anında üretiliyor.
@@ -40,21 +40,12 @@ export default function OpengraphImage() {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: '76px',
-              height: '76px',
-              borderRadius: '20px',
-              background: ADVETICS_KIRMIZI,
-              fontSize: '40px',
-              fontWeight: 700,
-            }}
-          >
-            A
-          </div>
+          {/*
+            Sekme ikonuyla AYNI işaret (`markaIsareti`). Burada elle çizilmiş
+            kırmızı bir "A" kutusu vardı; işaret değişince unutulmuştu ve
+            paylaşım önizlemesi sitedekinden farklı bir logo gösteriyordu.
+          */}
+          <div style={{ display: 'flex', width: '76px', height: '76px' }}>{markaIsareti(76)}</div>
           <div style={{ fontSize: '52px', fontWeight: 700, letterSpacing: '-1px' }}>
             Advetics
           </div>

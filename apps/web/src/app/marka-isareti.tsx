@@ -24,20 +24,47 @@ import type { ReactElement } from 'react';
 export const ADVETICS_KIRMIZI = '#ff2500';
 
 /**
- * NEDEN YAZI MARKASI DEĞİL, "A" HARFİ.
+ * ═══ İŞARET: KENETLENEN İKİ KÖŞEBENT (2026-10-15) ═══
  *
- * `advetics-logo.png` 670×139, yani ~4,8:1 bir yazı markası. Sekme ikonu
- * 16×16 çiziliyor: o oranı kareye sıkıştırmak harfleri 3 piksel yüksekliğe
- * indirir ve okunmaz bir lekeye dönüştürür. Logoyu "yerleştirmek" teknik
- * olarak mümkün ama sonucu logo GÖSTERMEMEK olurdu.
+ * Siyah köşebent sol üstte, kırmızı köşebent sağ altta; birbirine kenetlenip
+ * bir kare kuruyor. Profaj kılavuzunun çizgi dili: kalın, köşeli, sivri
+ * kenarlı, yuvarlak köşe YOK. Kullanıcı yedi taslak arasından seçti
+ * (`docs/marka/taslaklar/advetics-logo-taslak.html`, seçenek 5).
  *
- * DOLGU KIRMIZI, HARF BEYAZ — logonun tersi (siyah harf, kırmızı nokta)
- * değil. Sebep tarayıcı: sekme şeridi açık temada beyaz, koyu temada
- * neredeyse siyah. Siyah bir harf koyu temada kayboluyor; dolu bir renk
- * lekesi ikisinde de görünüyor. Aynı gerekçeyle logonun kırmızı noktası
- * eklenmedi: 16 pikselde iki piksel kalıyor ve yalnızca gürültü yapıyor.
+ * NEDEN DEĞİŞTİ: önceki işaret kırmızı karede yükselen ÜÇ YUVARLAK ÇUBUKTU
+ * ve Google Analytics simgesinin neredeyse aynısıydı. Google'ın OAuth marka
+ * incelemesi *"Your logo does not uniquely identify your brand"* ile iki kez
+ * reddetti; inceleme ana sayfayı açıyor ve menüde bu işareti görüyordu.
+ * Yeni bir işaret çizerken tanınmış bir markaya (özellikle Google'ın
+ * ürünlerine) benzemediğini kontrol et — ret sebebi kodda değil o benzerlikte.
+ *
+ * KOORDİNATLAR TEK YERDE. Sekme ikonu (satori) ve menüdeki logo
+ * (`components/advetics-logo.tsx`) aynı yolları buradan okuyor; ayrı
+ * yazılsalardı sekme ile menü farklı logo gösterirdi ve bu bir kez oldu.
+ * `viewBox` 100×100, yani ölçü kenar uzunluğundan bağımsız.
  */
-export function markaIsareti(kenar: number): ReactElement {
+export const ISARET_VIEWBOX = '0 0 100 100';
+export const ISARET_SIYAH_YOL = 'M8 8H64V24H24V64H8Z';
+export const ISARET_KIRMIZI_YOL = 'M92 92H36V76H76V36H92Z';
+
+/**
+ * ZEMİN BEYAZ, İŞARET SİYAH + KIRMIZI — kılavuzdaki ilk kullanım.
+ *
+ * Google onay ekranına yüklenen logo da bu (`docs/marka/google-oauth/`):
+ * incelemenin baktığı üç yer (onay ekranı, sekme, menü) aynı işareti
+ * göstermeli. Beyaz kare, koyu temalı sekme şeridinde de görünüyor; açık
+ * şeritte zemin kaybolsa bile siyah ve kırmızı parça kalıyor. Önceki
+ * sürümün kırmızı dolgusu bu yüzden gerekmiyor.
+ *
+ * KÖŞE SİVRİ. Kılavuzun kutuları keskin; iOS ana ekran ikonunu kendisi
+ * yuvarlatıyor, buradan yuvarlamak ikinci kez kırpmak olurdu.
+ */
+/*
+ * `_kenar` İMZADA KALDI: çağıranlar (`icon.tsx`, `apple-icon.tsx`) boyutu
+ * geçiriyor ve `marka-isareti.spec.ts` bunu kilitliyor. Çizim yüzde ve
+ * `viewBox` ile ölçeklendiği için artık kullanılmıyor.
+ */
+export function markaIsareti(_kenar: number): ReactElement {
   return (
     <div
       style={{
@@ -46,29 +73,17 @@ export function markaIsareti(kenar: number): ReactElement {
         justifyContent: 'center',
         width: '100%',
         height: '100%',
-        background: ADVETICS_KIRMIZI,
-        /*
-         * YUVARLAKLIK KENARA ORANLI. Sabit bir piksel değeri 32'lik ikonda
-         * doğru görünüp 180'likte neredeyse kare bırakırdı.
-         */
-        borderRadius: `${Math.round(kenar * 0.22)}px`,
+        background: '#ffffff',
       }}
     >
       {/*
-        ═══ İŞARET HARF DEĞİL, VERİ (2026-10-06) ═══
-
-        Kullanıcının isteği: "veri ile ilgili bir ikon". Yükselen üç çubuk —
-        Advetics'in işi ölçmek ve büyütmek. Yazı logosu (`advetics-logo.png`)
-        aynı kaldı; değişen yalnızca kare işaretin içi.
-
-        ÇUBUKLAR KALIN ve ARALARI GENİŞ: 16 piksellik sekme ikonunda ince
-        çubuklar birbirine yapışıp tek bir blok gibi görünüyor. Koordinatlar
-        100×100 `viewBox`ta, kenardan bağımsız.
+        DOLGU KENARA ORANLI. %78: 16 piksellik sekmede çizgiler ~2 piksel
+        kalınlığında kalıyor ve kenetlenme seçilebiliyor; daha küçük çizim
+        iki köşebenti tek bir lekeye çeviriyor.
       */}
-      <svg width="64%" height="64%" viewBox="0 0 100 100" fill="none">
-        <rect x="6" y="56" width="22" height="38" rx="5" fill="#ffffff" />
-        <rect x="39" y="32" width="22" height="62" rx="5" fill="#ffffff" />
-        <rect x="72" y="6" width="22" height="88" rx="5" fill="#ffffff" />
+      <svg width="78%" height="78%" viewBox={ISARET_VIEWBOX} fill="none">
+        <path d={ISARET_SIYAH_YOL} fill="#000000" />
+        <path d={ISARET_KIRMIZI_YOL} fill={ADVETICS_KIRMIZI} />
       </svg>
     </div>
   );

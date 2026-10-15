@@ -152,32 +152,43 @@ describe('işaret rengi — logodan ÖLÇÜLÜYOR', () => {
 });
 
 describe('işaretin çizimi', () => {
-  it('KRİTİK: işaret METİN değil ÇİZİM — veri çubukları', () => {
+  it('KRİTİK: işaret METİN değil ÇİZİM — kenetlenen iki köşebent', () => {
     /*
      * Önce `fontWeight: 700` ile metin olarak yazıldı ve üretilen ikona
      * BAKILDIĞINDA harf ince çıkıyordu: `ImageResponse`un gömülü varsayılan
      * fontu kalın kesimi taşımıyor ve ağırlık SESSİZCE yok sayılıyor.
-     * Logonun ayırt edici özelliği ağır geometrik harfleri.
      */
     const k = kod(ISARET);
     expect(k).toContain('<svg');
-    // 2026-10-06'dan beri harf değil yükselen üç çubuk (kullanıcı isteği:
-    // "veri ile ilgili bir ikon"). Kenar çubuğundaki logo aynı çizimi taşıyor.
-    expect(k.match(/<rect /g)?.length).toBe(3);
+    // Siyah ve kırmızı iki parça, ortak sabitlerden.
+    expect(k).toContain('d={ISARET_SIYAH_YOL}');
+    expect(k).toContain('d={ISARET_KIRMIZI_YOL}');
+    expect(k).toContain('fill={ADVETICS_KIRMIZI}');
     expect(k, 'font ağırlığına geri dönülmüş — satori onu yok sayıyor').not.toContain(
       'fontWeight',
     );
   });
 
-  it('KRİTİK: ölçüler KENARA ORANLI — 32 ve 180 aynı çizimi veriyor', () => {
+  it('KRİTİK: Google Analytics\'e benzeyen yuvarlak çubuklar GERİ GELMEDİ', () => {
     /*
-     * Sabit piksel değeri 32'lik ikonda doğru görünüp 180'likte neredeyse
-     * kare bırakırdı. `viewBox` da bu yüzden 100×100: koordinatlar kenar
-     * uzunluğundan bağımsız.
+     * Önceki işaret yükselen üç yuvarlak çubuktu ve Google'ın OAuth marka
+     * incelemesi onu "markanızı benzersiz tanımlamıyor" diye iki kez
+     * reddetti. Sekme ikonu da menü logosu da çubuk çizmemeli.
      */
-    const k = kod(ISARET);
-    expect(k).toContain('kenar * 0.22');
-    expect(k).toContain('viewBox="0 0 100 100"');
+    const menu = kod(readFileSync(join(APP, '..', 'components', 'advetics-logo.tsx'), 'utf8'));
+    for (const [ad, k] of [['marka-isareti.tsx', kod(ISARET)], ['advetics-logo.tsx', menu]] as const) {
+      expect(k, `${ad} yeniden çubuk çiziyor`).not.toMatch(/<rect /);
+      expect(k, `${ad} yuvarlak köşe taşıyor`).not.toMatch(/\brx=/);
+    }
+  });
+
+  it('KRİTİK: ölçüler ORANLI — 32 ve 180 aynı çizimi veriyor', () => {
+    /*
+     * Sabit piksel değeri 32'lik ikonda doğru görünüp 180'likte bozulurdu.
+     * `viewBox` bu yüzden 100×100 ve çizim yüzdeyle yerleşiyor.
+     */
+    expect(ISARET).toContain("ISARET_VIEWBOX = '0 0 100 100'");
+    expect(kod(ISARET)).toContain('width="78%" height="78%"');
   });
 
   it('bu renk AJANSIN `--brand-primary` rengi DEĞİL', () => {
@@ -193,19 +204,18 @@ describe('işaretin çizimi', () => {
 });
 
 describe('kenar çubuğu logosu ile sekme ikonu AYNI işaret', () => {
-  it('KRİTİK: üç çubuğun koordinatları birebir aynı', () => {
+  it('KRİTİK: menü logosu yolları ORTAK sabitten okuyor', () => {
     /*
      * İki ayrı dosya, iki ayrı çizim (biri satori için, biri panel için).
-     * Biri güncellenip diğeri unutulursa sekmede bir logo, menüde başka bir
-     * logo görünür ve kimse fark etmez — `marka-logosu.spec.ts`in iki dosya
-     * için verdiği kararın aynısı.
+     * Koordinatlar elle kopyalansaydı biri güncellenip diğeri unutulunca
+     * sekmede bir logo, menüde başka bir logo görünürdü — önceki sürümde
+     * bu yüzden koordinatlar test ediliyordu; artık tek kaynak var.
      */
-    const cubuklar = (k: string) =>
-      [...k.matchAll(/<rect x="(\d+)" y="(\d+)" width="(\d+)" height="(\d+)"/g)].map((m) => m.slice(1).join(','));
-    const ikon = cubuklar(readFileSync(join(APP, 'marka-isareti.tsx'), 'utf8'));
-    const menu = cubuklar(readFileSync(join(APP, '..', 'components', 'advetics-logo.tsx'), 'utf8'));
-    expect(ikon).toHaveLength(3);
-    expect(menu).toEqual(ikon);
+    const menu = kod(readFileSync(join(APP, '..', 'components', 'advetics-logo.tsx'), 'utf8'));
+    expect(menu).toContain('d={ISARET_SIYAH_YOL}');
+    expect(menu).toContain('d={ISARET_KIRMIZI_YOL}');
+    expect(menu).toContain('viewBox={ISARET_VIEWBOX}');
+    expect(menu, 'menüde elle yazılmış yol var').not.toMatch(/d="M/);
   });
 
   it('KRİTİK: giriş ekranı da aynı logo bileşenini kullanıyor', () => {
