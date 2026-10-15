@@ -129,7 +129,7 @@
 
 ## 12 · Ayarlar (`/ayarlar/*`)
 
-- [ ] Bilinen açık: `/ayarlar` markasız İngilizce 404; `/ayarlar/sirketler`e yönlendir + Türkçe markalı `not-found.tsx`
+- [x] Bilinen açık: `/ayarlar` markasız İngilizce 404; `/ayarlar/sirketler`e yönlendir + Türkçe markalı `not-found.tsx` (oturumun açabildiği ilk sekmeye; canlıda GÖRÜLMEDİ)
 - [ ] Bilinen açık: Bağlantılar'da yedi platform sekmesi 1280 px'te sayfayı 214 px taşırıyor
 - [ ] Bilinen açık: Hesabım üst yolunda sayfa adı eksik
 - [ ] Araştırma → `docs/pazar/ayarlar.md` (ajans çoklu müşteri yönetimi, rol modelleri, 2FA zorunluluğu)
