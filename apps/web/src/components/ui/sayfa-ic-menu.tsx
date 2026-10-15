@@ -1,5 +1,7 @@
 'use client';
 
+import { useSozluk } from '@/dil/saglayici';
+import { uiSozlugu } from '@/dil/sozlukler/ui';
 import Link from 'next/link';
 import { useRef, type KeyboardEvent, type ReactNode } from 'react';
 
@@ -52,6 +54,7 @@ export function SayfaIcMenu({
   /** Ekran okuyucu adı: "Marka Merkezi bölümleri". */
   etiket: string;
 }) {
+  const d = useSozluk(uiSozlugu);
   const ref = useRef<HTMLDivElement>(null);
   function tus(e: KeyboardEvent<HTMLDivElement>) {
     const ileri = e.key === 'ArrowDown' || e.key === 'ArrowRight';
@@ -84,7 +87,7 @@ export function SayfaIcMenu({
           <>
             <span className="min-w-0">{o.etiket}</span>
             {o.uyari ? (
-              <span aria-label="Eksik var" className="h-2 w-2 shrink-0 rounded-full bg-brand" />
+              <span aria-label={d.eksikVar} className="h-2 w-2 shrink-0 rounded-full bg-brand" />
             ) : o.sayi !== undefined ? (
               <span className="shrink-0 rounded-full bg-surface-sunken px-1.5 text-11 font-bold tabular-nums text-ink-muted">
                 {o.sayi}

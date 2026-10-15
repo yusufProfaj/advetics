@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { ayarlarSozlugu } from '@/dil/sozlukler/ayarlar';
 
 /**
  * PAYLAŞ VE GÖNDER EKRANI.
@@ -10,6 +11,12 @@ import { describe, expect, it } from 'vitest';
  * mesajıyla karşılaşmadan doğru yere yönlendiriyor.
  */
 const KAYNAK = readFileSync(join(__dirname, 'rapor-gonder.tsx'), 'utf8');
+/** Alıcı alanı, yorumsuz: iddia kodu anlatan yoruma eşleşmesin. */
+const alanKodu = (): string =>
+  readFileSync(join(__dirname, '../alici-listesi-alani.tsx'), 'utf8')
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
 
 describe('RaporGonder', () => {
   it('KRİTİK: DOĞRULANMAMIŞ gönderende "Gönder" KAPALI', () => {
@@ -31,8 +38,12 @@ describe('RaporGonder', () => {
     expect(KAYNAK).toContain('alici.length === 0 && (taslak?.defaultTo.length ?? 0) === 0');
     // Ve sebebi ekranda yazıyor — "gönder"e basınca hata almak yetmez.
     expect(KAYNAK).toContain('bosVarsayilan');
-    const alan = readFileSync(join(__dirname, '../alici-listesi-alani.tsx'), 'utf8');
-    expect(alan).toContain('Workspace’in kayıtlı rapor alıcısı yok');
+    const alan = alanKodu();
+    // Cümle sözlükte (D2); alan onu yalnız kayıtlı adres de yokken basıyor.
+    expect(alan).toContain('<span className="text-danger-strong">{d.aliciYok}</span>');
+    expect(ayarlarSozlugu.tr.alici.aliciYok).toContain('Workspace’in kayıtlı rapor alıcısı yok');
+    expect(ayarlarSozlugu.en.alici.aliciYok).toBeTruthy();
+    expect(ayarlarSozlugu.en.alici.aliciYok).not.toBe(ayarlarSozlugu.tr.alici.aliciYok);
   });
 
   it('KRİTİK: alıcıların birbirini GÖRECEĞİ ekranda yazılı', () => {
@@ -42,8 +53,10 @@ describe('RaporGonder', () => {
      * bilmesi gerekiyor: danışman + müşteri karışık bir listede sürpriz
      * olurdu.
      */
-    const alan = readFileSync(join(__dirname, '../alici-listesi-alani.tsx'), 'utf8');
-    expect(alan).toContain('hepsi birbirinin adresini görecek');
+    const alan = alanKodu();
+    expect(alan).toContain('{d.sayac(degerler.length)}');
+    expect(ayarlarSozlugu.tr.alici.sayac(3)).toBe('3 alıcı · hepsi birbirinin adresini görecek');
+    expect(ayarlarSozlugu.en.alici.sayac(3)).toContain('see each other');
   });
 
   it('mail metni DÜZENLENEBİLİR — anlatı veriden üretilemiyor', () => {

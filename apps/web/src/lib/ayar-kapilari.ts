@@ -1,4 +1,5 @@
-import type { SessionResponse } from '@advetics/shared';
+import { sec, type Dil, type SessionResponse } from '@advetics/shared';
+import { ayarlarSozlugu } from '@/dil/sozlukler/ayarlar';
 import {
   AYARLAR_SEKMELERI,
   hesaplarAdresi,
@@ -38,5 +39,13 @@ export function hesaplarHedefi(session: SessionResponse, musteri: string | null 
   return acik ? hesaplarAdresi(musteri) : null;
 }
 
-/** Kapı kapalıyken bağlantının yerine yazan cümle — iki ekranda aynı. */
-export const HESAP_AJANSTA = 'Hesap bağlamak için ajansınıza yazın.';
+/** Kapı kapalıyken bağlantının yerine yazan cümle — iki ekranda aynı, ekranın dilinde. */
+export function hesapAjansta(dil: Dil): string {
+  return sec(ayarlarSozlugu, dil).ortak.hesapAjansta;
+}
+
+/**
+ * TÜRKÇE SABİT — Genel Bakış ve Reklam Yöneticisi sözlüğe geçene kadar
+ * (D3). Yeni kod `hesapAjansta(dil)` kullanır; bu ad o iki ekran geçince silinir.
+ */
+export const HESAP_AJANSTA = hesapAjansta('tr');

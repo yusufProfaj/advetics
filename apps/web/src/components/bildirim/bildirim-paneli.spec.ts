@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { sureMetni } from './bildirim-zili';
+import { bildirimSozlugu } from '@/dil/sozlukler/bildirim';
 
 /**
  * ═══ BİLDİRİM PANELİ — PANEL KARARLARI ═══
@@ -81,9 +82,19 @@ describe('KRİTİK: boş liste SEBEBİNİ söylüyor', () => {
      * "istenmedi", "kapsam dışı", "hata" ve "gerçekten boş" dördü ayrı iş.
      * Aynı boş alana çevirmek, bekleyen bir onayın "yok" sanılması demek.
      */
-    expect(ZIL).toContain('Boost kuyruğu alınamadı');
-    expect(ZIL).toContain('Boost kuyruğu workspace bazlı');
+    // Cümleler sözlükte (D2); bileşen dört dalda dört AYRI anahtarı kullanıyor.
+    expect(ZIL).toContain('<BosSatir>{z.boostAlinamadi(hata)}</BosSatir>');
+    expect(ZIL).toContain('<BosSatir>{z.boostKapsamDisi}</BosSatir>');
+    expect(ZIL).toContain('<BosSatir>{z.yukleniyor}</BosSatir>');
     expect(ZIL).toContain('bosSebebi ?? ');
+    const tr = bildirimSozlugu.tr.zil;
+    const en = bildirimSozlugu.en.zil;
+    expect(tr.boostAlinamadi('x')).toContain('Boost kuyruğu alınamadı');
+    expect(tr.boostAlinamadi('x')).toContain('x');
+    expect(tr.boostKapsamDisi).toContain('Boost kuyruğu workspace bazlı');
+    expect(en.boostAlinamadi('x')).not.toBe(tr.boostAlinamadi('x'));
+    expect(en.boostKapsamDisi).toBeTruthy();
+    expect(en.boostKapsamDisi).not.toBe(tr.boostKapsamDisi);
   });
 
   it('KRİTİK: sağlayıcı "istenmedi" ile "boş"u AYIRIYOR', () => {

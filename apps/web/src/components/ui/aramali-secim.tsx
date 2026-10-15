@@ -1,5 +1,7 @@
 'use client';
 
+import { useSozluk } from '@/dil/saglayici';
+import { uiSozlugu } from '@/dil/sozlukler/ui';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { gosterilenKimlik, secenekSuz, vurguParcalari, type AranabilirSecenek } from '@/lib/secenek-arama';
 import { Girdi } from './alan';
@@ -26,7 +28,7 @@ export function AramaliSecim({
   deger,
   onDegis,
   etiket,
-  yerTutucu = 'Ad, hesap ya da kimlikle ara',
+  yerTutucu,
 }: {
   secenekler: readonly AranabilirSecenek[];
   /** Seçili satırın `deger`i; seçim yoksa ''. */
@@ -37,6 +39,7 @@ export function AramaliSecim({
   yerTutucu?: string;
 }) {
   const [arama, setArama] = useState('');
+  const d = useSozluk(uiSozlugu);
   const [etkin, setEtkin] = useState(0);
   const liste = useId();
   const listeRef = useRef<HTMLUListElement>(null);
@@ -79,11 +82,11 @@ export function AramaliSecim({
         value={arama}
         onChange={(e) => setArama(e.target.value)}
         onKeyDown={tus}
-        placeholder={yerTutucu}
+        placeholder={yerTutucu ?? d.aramaYerTutucu}
         autoComplete="off"
       />
       <p className="m-0 text-12 text-ink-muted" aria-live="polite">
-        {arama.trim() ? `${gorunen.length} / ${secenekler.length} sonuç` : `${secenekler.length} seçenek`}
+        {arama.trim() ? d.sonucSayisi(gorunen.length, secenekler.length) : d.secenekSayisi(secenekler.length)}
         {secili && (
           <>
             {' · '}Seçili: <b className="text-ink">{secili.etiket}</b>
@@ -91,7 +94,7 @@ export function AramaliSecim({
         )}
       </p>
       {gorunen.length === 0 ? (
-        <p className="m-0 rounded-alan border border-line px-3 py-2 text-12 text-ink-muted">“{arama.trim()}” geçen bir seçenek yok.</p>
+        <p className="m-0 rounded-alan border border-line px-3 py-2 text-12 text-ink-muted">{d.secenekYok(arama.trim())}</p>
       ) : (
         <ul
           ref={listeRef}

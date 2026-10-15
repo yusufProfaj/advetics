@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { genelBakisSozlugu } from '@/dil/sozlukler/genel-bakis';
 import type { BudgetPacing, BudgetRecord } from '@advetics/shared';
 import { asimYuzdesi, sayiEki, tempoCumleleri } from './butce-temposu';
 
@@ -169,7 +170,8 @@ describe('Genel Bakış bütçe kartı tempo kurallarını taşıyor', () => {
   it('KRİTİK: ayın ilk günü tahmin yerine nedeni yazılıyor', () => {
     // Pacing dünde duruyor; 1'inde tahmin boş ya da anlamsız.
     expect(KART).toContain('const yeniBasladi = o.daysElapsed === 0;');
-    expect(KART).toContain('Ay yeni başladı, tempo yarın hesaplanır');
+    expect(KART).toContain('<span>{b.yeniBasladi}</span>');
+    expect(genelBakisSozlugu.tr.butce.yeniBasladi).toBe('Ay yeni başladı, tempo yarın hesaplanır');
     expect(KART).toContain('{!yeniBasladi && birim && tahmin !== null && (');
   });
 
@@ -180,6 +182,7 @@ describe('Genel Bakış bütçe kartı tempo kurallarını taşıyor', () => {
   });
 
   it('karışık para biriminde tutar yazılmıyor', () => {
-    expect(KART).toContain('Hesaplarda farklı para birimi var; toplam gösterilemiyor.');
+    expect(KART).toContain('<p className={s.uyarMetin}>{b.karisik}</p>');
+    expect(genelBakisSozlugu.tr.butce.karisik).toBe('Hesaplarda farklı para birimi var; toplam gösterilemiyor.');
   });
 });

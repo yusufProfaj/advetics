@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import {
   MANAGER_PAKETLERI,
   PAKET_SINIRLARI,
+  paketEtiketi,
   updateManagerAccountSchema,
   type ManagerPaket,
   type UstHesapOzeti,
@@ -19,6 +20,8 @@ import { Girdi } from '@/components/ui/alan';
 import { Rozet } from '@/components/ui/rozet';
 import { Uyari } from '@/components/ui/uyari';
 import { dolulukMetni } from './ust-hesap-karti';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { sirketlerSozlugu } from '@/dil/sozlukler/ayarlar-sirketler';
 
 /**
  * ÜST HESAPLAR KARTI ŞİRKETLER SEKMESİNİN İÇİNDE (2026-10-13, kullanıcı
@@ -55,6 +58,7 @@ export function UstHesapYonetimi({
   yuklemeHatasi: string | null;
 }) {
   const [acikPanel, setAcikPanel] = useState<string | null>(null);
+  const d = useSozluk(sirketlerSozlugu).yonetim;
 
   return (
     <div className="space-y-4">
@@ -62,16 +66,16 @@ export function UstHesapYonetimi({
         <header className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-4 py-3">
           <div className="min-w-0">
             <h2 className="text-sm font-semibold text-ink">
-              Üst hesaplar
+              {d.ustHesaplar}
               {/* SESSİZ KESME YOK: kaç hesap listelendiği yazılı. */}
               <span className="ml-2 text-xs font-normal text-ink-muted">
-                {hesaplar.length} hesap
+                {d.hesapSayisi(hesaplar.length)}
               </span>
             </h2>
             <p className="mt-0.5 max-w-prose text-[11px] text-ink-muted">
               {platformAdmin
-                ? 'Advetics’in açtığı bütün üst hesaplar. Her biri ayrı bir alıcıya satılıyor ve altındaki şirketleri tek girişle yönetiyor.'
-                : 'Yönetici olduğun üst hesaplar. Adını değiştirebilirsin; paketi yalnızca Advetics değiştirir.'}
+                ? d.aciklamaSahip
+                : d.aciklama}
             </p>
           </div>
           {platformAdmin && (
@@ -85,20 +89,20 @@ export function UstHesapYonetimi({
               href={acilisAdresi('ust-hesap')}
               className={dugmeSinifi('koyu', 'kucuk')}
             >
-              + Yeni üst hesap
+              {d.yeni}
             </Link>
           )}
         </header>
 
         {yuklemeHatasi && (
           <p role="alert" className="border-b border-line px-4 py-2 text-xs text-danger-strong">
-            Üst hesaplar yüklenemedi: {yuklemeHatasi}
+            {d.yuklenemedi(yuklemeHatasi)}
           </p>
         )}
 
         {hesaplar.length === 0 && !yuklemeHatasi ? (
           <p className="px-4 py-6 text-sm text-ink-muted">
-            Yönetebildiğin bir üst hesap yok.
+            {d.hicYok}
           </p>
         ) : (
           <ul className="divide-y divide-line/60">
@@ -133,6 +137,9 @@ function HesapSatiri({
   onPanel: (p: Panel | null) => void;
 }) {
   const sinir = PAKET_SINIRLARI[hesap.paket];
+  const { dil } = useDil();
+  const t = useSozluk(sirketlerSozlugu);
+  const d = t.yonetim;
 
   return (
     <div className="px-4 py-3">
@@ -144,21 +151,22 @@ function HesapSatiri({
                 barındırıyor. İkincisi silinemez olmasının sebebi. */}
             {hesap.aktif && (
               <span className="rounded-full bg-vurgu px-2 py-0.5 text-11 font-semibold text-brand-strong">
-                şu an buradasın
+                {d.buradasin}
               </span>
             )}
             {hesap.evHesabi && (
               <span className="rounded-full bg-surface-sunken px-2 py-0.5 text-11 font-semibold text-ink-muted">
-                kendi hesabın
+                {d.kendiHesabin}
               </span>
             )}
             {hesap.status !== 'active' && (
-              <Rozet hal="dur">askıda</Rozet>
+              <Rozet hal="dur">{d.askida}</Rozet>
             )}
           </p>
           <p className="mt-0.5 text-[11px] text-ink-muted">
-            {sinir.etiket} paketi · {dolulukMetni(hesap.sirketSayisi, sinir.maxSirket, 'şirket')} ·{' '}
-            {hesap.workspaceSayisi} workspace · {hesap.uyeSayisi} kişi
+            {t.ortak.paketi(paketEtiketi(hesap.paket, dil).etiket)} ·{' '}
+            {dolulukMetni(hesap.sirketSayisi, sinir.maxSirket, t.ortak.sirketBirim)} ·{' '}
+            {t.ortak.workspaceSayisi(hesap.workspaceSayisi)} · {t.ortak.kisiSayisi(hesap.uyeSayisi)}
           </p>
         </div>
 
@@ -171,7 +179,7 @@ function HesapSatiri({
           */}
           {!hesap.aktif && <GecisDugmesi id={hesap.id} />}
           <SatirDugmesi aktif={acik === 'duzenle'} onClick={() => onPanel(acik === 'duzenle' ? null : 'duzenle')}>
-            Düzenle
+            {d.duzenle}
           </SatirDugmesi>
           {platformAdmin && (
             <SatirDugmesi
@@ -179,7 +187,7 @@ function HesapSatiri({
               tehlike
               onClick={() => onPanel(acik === 'sil' ? null : 'sil')}
             >
-              Sil
+              {d.sil}
             </SatirDugmesi>
           )}
         </div>
@@ -207,6 +215,7 @@ function HesapSatiri({
 function GecisDugmesi({ id }: { id: string }) {
   const [pending, setPending] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
+  const d = useSozluk(sirketlerSozlugu).yonetim;
 
   async function gec(): Promise<void> {
     setPending(true);
@@ -218,7 +227,7 @@ function GecisDugmesi({ id }: { id: string }) {
       });
       window.location.assign(UST_HESAPLAR_ADRESI);
     } catch (e) {
-      setHata(e instanceof ApiRequestError ? e.message : 'Geçilemedi.');
+      setHata(e instanceof ApiRequestError ? e.message : d.gecilemedi);
       setPending(false);
     }
   }
@@ -226,7 +235,7 @@ function GecisDugmesi({ id }: { id: string }) {
   return (
     <>
       <Dugme ton="ikincil" boyut="kucuk" bekliyor={pending} onClick={() => void gec()}>
-        Bu hesaba geç
+        {d.bunaGec}
       </Dugme>
       {hata && (
         <span role="alert" className="text-12 text-danger-strong">
@@ -266,11 +275,15 @@ export function PaketSecici({
   onChange: (p: ManagerPaket) => void;
   disabled: boolean;
 }) {
+  const { dil } = useDil();
+  const t = useSozluk(sirketlerSozlugu);
+  const d = t.yonetim;
   return (
     <fieldset className="grid gap-2 sm:grid-cols-3">
-      <legend className="mb-1 text-[11px] text-ink-muted">Paket</legend>
+      <legend className="mb-1 text-[11px] text-ink-muted">{d.paket}</legend>
       {MANAGER_PAKETLERI.map((p) => {
         const s = PAKET_SINIRLARI[p];
+        const e = paketEtiketi(p, dil);
         const secili = p === deger;
         return (
           <label
@@ -288,14 +301,12 @@ export function PaketSecici({
               onChange={() => onChange(p)}
               className="sr-only"
             />
-            <span className="block text-sm font-semibold text-ink">{s.etiket}</span>
-            <span className="mt-0.5 block text-[11px] leading-snug text-ink-muted">{s.aciklama}</span>
+            <span className="block text-sm font-semibold text-ink">{e.etiket}</span>
+            <span className="mt-0.5 block text-[11px] leading-snug text-ink-muted">{e.aciklama}</span>
             {/* SINIR SAYIYLA: "1 şirket · 2 reklam hesabı" — açıklama cümlesi yetmez. */}
             <span className="mt-1 block text-[11px] text-ink">
-              {s.maxSirket === null ? 'Sınırsız şirket' : `${s.maxSirket} şirket`} ·{' '}
-              {s.maxReklamHesabi === null
-                ? 'sınırsız reklam hesabı'
-                : `${s.maxReklamHesabi} reklam hesabı`}
+              {s.maxSirket === null ? d.sinirsizSirket : d.sirketler(s.maxSirket)} ·{' '}
+              {s.maxReklamHesabi === null ? d.sinirsizHesap : t.ortak.reklamHesabi(s.maxReklamHesabi)}
             </span>
           </label>
         );
@@ -320,6 +331,9 @@ function UstHesapDuzenle({
   const [pending, setPending] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
   const degisti = ad !== hesap.name || paket !== hesap.paket;
+  const { dil } = useDil();
+  const t = useSozluk(sirketlerSozlugu);
+  const d = t.yonetim;
 
   async function kaydet(): Promise<void> {
     /*
@@ -333,7 +347,7 @@ function UstHesapDuzenle({
     };
     const parsed = updateManagerAccountSchema.safeParse(govde);
     if (!parsed.success) {
-      setHata(parsed.error.issues[0]?.message ?? 'Geçersiz değer');
+      setHata(parsed.error.issues[0]?.message ?? t.ortak.gecersizDeger);
       return;
     }
     setPending(true);
@@ -352,7 +366,7 @@ function UstHesapDuzenle({
        */
       window.location.assign(UST_HESAPLAR_ADRESI);
     } catch (e) {
-      setHata(e instanceof ApiRequestError ? e.message : 'Kaydedilemedi.');
+      setHata(e instanceof ApiRequestError ? e.message : t.ortak.kaydedilemedi);
       setPending(false);
     }
   }
@@ -360,7 +374,7 @@ function UstHesapDuzenle({
   return (
     <div className="space-y-3">
       <label className="block max-w-md">
-        <span className="mb-1.5 block text-13 font-semibold text-ink">Üst hesap adı</span>
+        <span className="mb-1.5 block text-13 font-semibold text-ink">{d.ad}</span>
         <Girdi value={ad} onChange={(e) => setAd(e.target.value)} disabled={pending} />
       </label>
 
@@ -369,8 +383,9 @@ function UstHesapDuzenle({
       ) : (
         // PAKET GÖRÜNÜYOR AMA DEĞİŞMİYOR — ve neden değişmediği yazılı.
         <p className="text-xs text-ink-muted">
-          Paket: <strong>{PAKET_SINIRLARI[hesap.paket].etiket}</strong>. Paketi yalnızca Advetics
-          değiştirebilir.
+          {d.paketBilgiOnce}
+          <strong>{paketEtiketi(hesap.paket, dil).etiket}</strong>
+          {d.paketBilgiSonra}
         </p>
       )}
 
@@ -381,7 +396,7 @@ function UstHesapDuzenle({
       )}
       <div className="flex items-center gap-2">
         <Dugme ton="koyu" boyut="kucuk" bekliyor={pending} disabled={!degisti} onClick={() => void kaydet()}>
-          Kaydet
+          {t.ortak.kaydet}
         </Dugme>
         <Dugme
           ton="hayalet"
@@ -391,7 +406,7 @@ function UstHesapDuzenle({
             onVazgec();
           }}
         >
-          Vazgeç
+          {t.ortak.vazgec}
         </Dugme>
       </div>
     </div>
@@ -413,6 +428,8 @@ function UstHesapSil({ hesap, onVazgec }: { hesap: UstHesapOzeti; onVazgec: () =
   const [onay, setOnay] = useState('');
   const [pending, setPending] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
+  const t = useSozluk(sirketlerSozlugu);
+  const d = t.yonetim;
 
   /*
    * PANEL AÇILINCA ÇEKİLİYOR — kullanıcı düğmeye basmadan ne kaybedeceğini
@@ -427,7 +444,7 @@ function UstHesapSil({ hesap, onVazgec }: { hesap: UstHesapOzeti; onVazgec: () =
         const o = await apiFetch<UstHesapSilmeOzeti>(`/manager-account/${hesap.id}/silme-ozeti`);
         if (!iptal) setOzet(o);
       } catch (e) {
-        if (!iptal) setHata(e instanceof ApiRequestError ? e.message : 'Özet alınamadı.');
+        if (!iptal) setHata(e instanceof ApiRequestError ? e.message : t.ortak.ozetAlinamadi);
       } finally {
         if (!iptal) setYukleniyor(false);
       }
@@ -435,6 +452,8 @@ function UstHesapSil({ hesap, onVazgec }: { hesap: UstHesapOzeti; onVazgec: () =
     return () => {
       iptal = true;
     };
+    // `t` dile bağlı, dil değişimi tam sayfa yenilemesi: bağımlılık gereksiz.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hesap.id]);
 
   async function sil(): Promise<void> {
@@ -452,7 +471,7 @@ function UstHesapSil({ hesap, onVazgec }: { hesap: UstHesapOzeti; onVazgec: () =
        */
       window.location.assign(sonuc.aktifti ? '/dashboard' : UST_HESAPLAR_ADRESI);
     } catch (e) {
-      setHata(e instanceof ApiRequestError ? e.message : 'Silinemedi.');
+      setHata(e instanceof ApiRequestError ? e.message : t.ortak.silinemedi);
       setPending(false);
     }
   }
@@ -460,7 +479,8 @@ function UstHesapSil({ hesap, onVazgec }: { hesap: UstHesapOzeti; onVazgec: () =
   if (yukleniyor) {
     return (
       <p className="flex items-center gap-2 text-xs text-ink-muted">
-        <Halka /> Ne silineceği hesaplanıyor…
+        <Halka />
+        {d.hesaplaniyor}
       </p>
     );
   }
@@ -469,10 +489,10 @@ function UstHesapSil({ hesap, onVazgec }: { hesap: UstHesapOzeti; onVazgec: () =
     return (
       <div className="space-y-2">
         <p role="alert" className="text-xs text-danger-strong">
-          {hata ?? 'Özet alınamadı.'}
+          {hata ?? t.ortak.ozetAlinamadi}
         </p>
         <Dugme ton="hayalet" boyut="kucuk" onClick={onVazgec}>
-          Kapat
+          {t.ortak.kapat}
         </Dugme>
       </div>
     );
@@ -495,8 +515,8 @@ function UstHesapSil({ hesap, onVazgec }: { hesap: UstHesapOzeti; onVazgec: () =
           ton="tehlike"
           baslik={
             bosHesap
-              ? 'Bu hesap boş; silmek geri alınamaz ama kaybedilecek veri yok.'
-              : 'Bu hesapla birlikte ALTINDAKİ HER ŞEY silinir ve geri alınamaz:'
+              ? d.bos
+              : d.herSey
           }
         >
           {!bosHesap && (
@@ -504,21 +524,19 @@ function UstHesapSil({ hesap, onVazgec }: { hesap: UstHesapOzeti; onVazgec: () =
               {/* SAYI DEĞİL AD: "3 şirket" kimseye ne kaybedeceğini söylemiyor. */}
               {ozet.sirketAdlari.length > 0 && (
                 <li>
-                  <strong>{ozet.sirketAdlari.length} şirket</strong>: {ozet.sirketAdlari.join(', ')}
+                  <strong>{d.sirketler(ozet.sirketAdlari.length)}</strong>: {ozet.sirketAdlari.join(', ')}
                 </li>
               )}
-              {ozet.workspaceSayisi > 0 && <li>{ozet.workspaceSayisi} workspace</li>}
-              {ozet.reklamHesabi > 0 && <li>{ozet.reklamHesabi} reklam hesabı</li>}
+              {ozet.workspaceSayisi > 0 && <li>{t.ortak.workspaceSayisi(ozet.workspaceSayisi)}</li>}
+              {ozet.reklamHesabi > 0 && <li>{t.ortak.reklamHesabi(ozet.reklamHesabi)}</li>}
               {ozet.kullanici > 0 && (
                 <li>
-                  <strong>{ozet.kullanici} kullanıcı</strong>: silinince giriş yapamazlar
+                  <strong>{d.kullanici(ozet.kullanici)}</strong>
+                  {d.girisYapamaz}
                 </li>
               )}
               {ozet.metrikGunu > 0 && (
-                <li>
-                  {ozet.metrikGunu} günlük ölçüm: Meta 37 aydan eskisini vermiyor, Google&apos;da
-                  yeniden çekmek kota harcıyor
-                </li>
+                <li>{d.olcum(ozet.metrikGunu)}</li>
               )}
             </ul>
           )}
@@ -528,7 +546,8 @@ function UstHesapSil({ hesap, onVazgec }: { hesap: UstHesapOzeti; onVazgec: () =
       {ozet.engel === null && ozet.adOnayiGerekli && (
         <label className="block max-w-md">
           <span className="mb-1.5 block text-13 text-ink-muted">
-            Onaylamak için üst hesap adını birebir yaz: <strong className="text-ink">{ozet.name}</strong>
+            {d.onayYaz}
+            <strong className="text-ink">{ozet.name}</strong>
           </span>
           <Girdi value={onay} onChange={(e) => setOnay(e.target.value)} disabled={pending} />
         </label>
@@ -552,10 +571,10 @@ function UstHesapSil({ hesap, onVazgec }: { hesap: UstHesapOzeti; onVazgec: () =
           }
           onClick={() => void sil()}
         >
-          Kalıcı olarak sil
+          {t.ortak.kaliciSil}
         </Dugme>
         <Dugme ton="hayalet" boyut="kucuk" onClick={onVazgec}>
-          Vazgeç
+          {t.ortak.vazgec}
         </Dugme>
       </div>
     </div>

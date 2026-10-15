@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { genelBakisSozlugu } from '@/dil/sozlukler/genel-bakis';
 import { TERIMLER, yonCumlesi } from './terimler';
 
 /**
@@ -58,8 +59,19 @@ describe('kartlar iş dilinde', () => {
 
   it('KRİTİK: Genel Bakış kartlarında kısaltma etiketi kalmadı', () => {
     // Hedef kullanıcı reklamcılık bilmiyor: kısaltma değil iş dilinde ad.
+    // D2: adlar sözlükte. Türkçe dal iş dilinde; İngilizce dal Google Ads'in
+    // kendi etiketlerini kullanıyor (SOZLUK.md: "Cost / conv.", "CTR", "ROAS")
+    // çünkü İngilizce ekranın okuru o arayüzün dilini tanıyor.
     expect(SAYFA).not.toMatch(/ad: '(CPA|ROAS|CTR|CPC|CPM|TO)'/);
-    for (const t of ["ad: 'Dönüşüm başı maliyet'", "ad: 'Reklam getirisi'", "ad: 'Tıklama oranı'", "ad: 'Tıklama başı maliyet'", "ad: 'Bin gösterim maliyeti'"]) {
+    const m = genelBakisSozlugu.tr.metrik;
+    expect([m.dbm, m.roas, m.tiklamaOrani, m.tbm, m.bgbm]).toEqual([
+      'Dönüşüm başı maliyet',
+      'Reklam getirisi',
+      'Tıklama oranı',
+      'Tıklama başı maliyet',
+      'Bin gösterim maliyeti',
+    ]);
+    for (const t of ['ad: m.dbm,', 'ad: m.roas,', 'ad: m.tiklamaOrani,', 'ad: m.tbm,', 'ad: m.bgbm,']) {
       expect(SAYFA).toContain(t);
     }
   });
@@ -80,8 +92,12 @@ describe('kartlar iş dilinde', () => {
      */
     // Etiketin KENDİSİ "Günlük ortalama erişim" (erişim ölçümü düzeltmesi):
     // ipucu küçük yazıyla kayboluyordu ve sayı dönemin kitlesi gibi okunuyordu.
-    expect(SAYFA).toContain("'Günlük ortalama erişim'");
-    expect(SAYFA).toContain("'dönemin tekil kişi sayısı değil, hesaplar arası mükerrer olabilir'");
+    expect(genelBakisSozlugu.tr.metrik.gunlukErisim).toBe('Günlük ortalama erişim');
+    expect(genelBakisSozlugu.tr.metrik.tekilDegilMukerrer).toBe(
+      'dönemin tekil kişi sayısı değil, hesaplar arası mükerrer olabilir',
+    );
+    expect(SAYFA).toContain("summary.reachKind === 'daily_average' ? m.gunlukErisim : m.erisim");
+    expect(SAYFA).toContain('? m.tekilDegilMukerrer');
     const i = SAYFA.indexOf("anahtar: 'erisim'");
     expect(i).toBeGreaterThan(-1);
     const dilim = SAYFA.slice(i, SAYFA.indexOf('}\n      : {', i));

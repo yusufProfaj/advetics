@@ -20,10 +20,13 @@
  * İkisini karıştırmamak önemli: iskelet eklenip gecikme durursa "düzelttik
  * ama hâlâ yavaş" olur.
  */
-export default function Loading() {
+import { sozluk } from '@/dil/sunucu';
+import { kabukSozlugu } from '@/dil/sozlukler/kabuk';
+export default async function Loading() {
+  const d = (await sozluk(kabukSozlugu)).hata;
   return (
     <div className="mx-auto max-w-7xl space-y-6" aria-busy="true" aria-live="polite">
-      <span className="sr-only">Sayfa yükleniyor…</span>
+      <span className="sr-only">{d.yukleniyor}</span>
 
       <div className="space-y-2">
         <div className="h-7 w-56 animate-pulse rounded-lg bg-surface-sunken" />

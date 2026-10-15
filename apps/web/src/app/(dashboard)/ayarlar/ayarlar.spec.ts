@@ -1,7 +1,13 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { AYARLAR_CAPALARI, AYARLAR_SEKMELERI, ROLE_PERMISSIONS, type AyarlarSekmeKodu } from '@advetics/shared';
+import {
+  AYARLAR_CAPALARI,
+  AYARLAR_SEKMELERI,
+  ROLE_PERMISSIONS,
+  ayarSekmesiAdi,
+  type AyarlarSekmeKodu,
+} from '@advetics/shared';
 import { ayarSekmesiAcik, hesaplarHedefi } from '@/lib/ayar-kapilari';
 import type { SessionResponse } from '@/lib/session';
 
@@ -85,9 +91,17 @@ describe('KRİTİK: ÇAPALAR sözleşmeyle birebir — kırık bağlantı yok', 
 describe('KRİTİK: SEKME BAŞLIĞI = sözleşmedeki ad, KAPSAM başlıkta, kapı sözleşmeden', () => {
   it.each(AYARLAR_SEKMELERI.map((s) => [s.kod, s.ad] as const))('%s', (kod, ad) => {
     const sayfa = yorumsuz(oku(SEKME_KAYNAKLARI[kod][0]!));
-    // Menü etiketi = sayfa başlığı = sekme başlığı (`nav-sections.spec.ts`).
-    expect(sayfa).toContain(`metadata = { title: '${ad} · Advetics' }`);
-    expect(sayfa).toContain(`baslik="${ad}"`);
+    /*
+     * Menü etiketi = sayfa başlığı = sekme başlığı (`nav-sections.spec.ts`).
+     * D2: üçü de AYNI yardımcıdan, ekranın dilinde (`ayarSekmesiAdi`); Türkçe
+     * karşılığı sözleşmedeki ad. Elle yazılmış bir başlık İngilizce ekranda
+     * menüden ayrışırdı.
+     */
+    expect(ayarSekmesiAdi(kod, 'tr')).toBe(ad);
+    expect(ayarSekmesiAdi(kod, 'en')).not.toBe(ad);
+    expect(sayfa).toContain(`title: \`\${ayarSekmesiAdi('${kod}', await dilAl())} · Advetics\``);
+    expect(sayfa).toContain(`baslik={ayarSekmesiAdi('${kod}', dil)}`);
+    expect(sayfa).not.toMatch(/metadata\s*=\s*\{\s*title:\s*'/);
     // Kapsam satırı: ajans / şirket / kişi.
     expect(sayfa).toMatch(/<AyarKapsami duzey="(ajans|sirket|kisi)"/);
     // Hesabım herkese açık; diğerleri sekme kapısını sözleşmeden okuyor.

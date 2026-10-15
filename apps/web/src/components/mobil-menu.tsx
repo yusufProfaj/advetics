@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { usePathname } from 'next/navigation';
 import { KenarIcerigi, type KenarVerisi } from '@/components/kenar-cubugu';
+import { useSozluk } from '@/dil/saglayici';
+import { kabukSozlugu } from '@/dil/sozlukler/kabuk';
 
 /**
  * ═══ MOBİL MENÜ — PANELİN TELEFONDA HİÇ GEZİLEMİYOR OLMASI ═══
@@ -43,6 +45,7 @@ export function MobilMenu({
   stil?: React.CSSProperties;
 }) {
   const [acik, setAcik] = useState(false);
+  const d = useSozluk(kabukSozlugu).mobil;
   /*
    * ÇEKMECE DOM'DA KALIYOR (menü kararı 2026-10-14, CLAUDE.md §3): kapalıyken
    * görünmez ve etkisiz (`inert`), açılıp kapanma kaymayla. Önce yalnız
@@ -89,7 +92,7 @@ export function MobilMenu({
         ref={dugmeRef}
         type="button"
         onClick={() => setAcik(true)}
-        aria-label="Menüyü aç"
+        aria-label={d.ac}
         aria-expanded={acik}
         className="-ml-1.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink transition-colors hover:bg-surface-sunken lg:hidden"
       >
@@ -124,7 +127,7 @@ export function MobilMenu({
           >
             <button
               type="button"
-              aria-label="Menüyü kapat"
+              aria-label={d.kapat}
               tabIndex={-1}
               onClick={() => setAcik(false)}
               className={`absolute inset-0 bg-black/35 transition-opacity duration-200 motion-reduce:transition-none ${
@@ -136,7 +139,7 @@ export function MobilMenu({
               tabIndex={-1}
               role="dialog"
               aria-modal="true"
-              aria-label="Menü"
+              aria-label={d.menu}
               data-cekmece
               className={`absolute inset-y-0 left-0 flex w-[300px] max-w-[86vw] flex-col border-r border-line bg-surface shadow-acilir outline-none transition-transform duration-[220ms] ease-[var(--ease-out)] motion-reduce:transition-none ${
                 acik ? 'translate-x-0' : '-translate-x-full'

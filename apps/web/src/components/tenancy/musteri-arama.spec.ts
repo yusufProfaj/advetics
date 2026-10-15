@@ -1,6 +1,11 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { kapsamSozlugu } from '@/dil/sozlukler/kapsam';
+import { sirketlerSozlugu } from '@/dil/sozlukler/ayarlar-sirketler';
+
+/* D2: ekran metni sözlükte; iddia Türkçe değer + bileşenin anahtarı çizmesi. */
+const TR = sirketlerSozlugu.tr;
 
 /**
  * ═══ WORKSPACE ARAMA — ŞİRKETLER SEKMESİ VE ÜST BARDAKİ SEÇİCİ ═══
@@ -70,7 +75,9 @@ describe('workspace arama', () => {
      * Bir kapsam SEÇMİYOR, başka bir ekran açıyor; listenin DIŞINDA, üst
      * kenarlıklı ayrı bir alt satırda. Kapsam satırlarıyla karışmamalı.
      */
-    const i = kod(SECICI).indexOf('Şirketleri yönet');
+    // D2: seçici metni `kapsam.ts` sözlüğünde; çapa anahtarın kullanımı.
+    expect(kapsamSozlugu.tr.sirketleriYonet).toBe('Şirketleri yönet');
+    const i = kod(SECICI).indexOf('{d.sirketleriYonet}');
     expect(i, 'yönetim bağlantısı bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
     const satir = kod(SECICI).lastIndexOf('<div className="flex border-t border-line', i);
     expect(satir, 'alt satır kabı bulunamadı').toBeGreaterThan(-1);
@@ -84,12 +91,15 @@ describe('workspace arama', () => {
 
   it('KRİTİK: boş sonuç SEBEBİYLE yazılıyor', () => {
     // Sessiz boş liste "workspace yok" ile "arama tutmadı" hâllerini aynı ekrana çevirir.
-    expect(kod(SECICI)).toContain('ile eşleşen');
-    expect(kod(SATIRLAR)).toContain('ile eşleşen workspace yok.');
+    expect(kod(SECICI)).toContain('{d.eslesmeYok(arama)}');
+    expect(kapsamSozlugu.tr.eslesmeYok('x')).toContain('ile eşleşen');
+    expect(kod(SATIRLAR)).toContain('baslik={d.eslesenYok(arama)}');
+    expect(TR.workspace.eslesenYok('x')).toBe('“x” ile eşleşen workspace yok.');
   });
 
   it('KRİTİK: süzülen tabloda kaçının gösterildiği yazılı — sessiz kesme yok', () => {
-    expect(kod(SATIRLAR)).toContain('workspace’ten ${suzulmus.length} tanesi gösteriliyor');
+    expect(kod(SATIRLAR)).toContain('d.gosteriliyor(satirlar.length, suzulmus.length)');
+    expect(TR.workspace.gosteriliyor(9, 2)).toBe('9 workspace’ten 2 tanesi gösteriliyor');
   });
 });
 

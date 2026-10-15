@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { kabukSozlugu } from '@/dil/sozlukler/kabuk';
 
 /**
  * GEZİNME GERİ BİLDİRİMİ — "tıklıyorum, gitmiyor" arızasının kilidi.
@@ -33,9 +34,14 @@ describe('yükleme sınırı', () => {
   });
 
   it('ekran okuyucuya da bildiriliyor', () => {
-    const kod = readFileSync(join(DASH, 'loading.tsx'), 'utf8');
+    const kod = yorumsuz(readFileSync(join(DASH, 'loading.tsx'), 'utf8'));
     expect(kod).toContain('aria-busy');
-    expect(kod).toContain('Sayfa yükleniyor');
+    // Metin sözlükte (D2); yalnız ekran okuyucuya giden span onu yazıyor.
+    expect(kod).toContain('<span className="sr-only">{d.yukleniyor}</span>');
+    expect(kod).toContain('(await sozluk(kabukSozlugu)).hata');
+    expect(kabukSozlugu.tr.hata.yukleniyor).toContain('Sayfa yükleniyor');
+    expect(kabukSozlugu.en.hata.yukleniyor).toBeTruthy();
+    expect(kabukSozlugu.en.hata.yukleniyor).not.toBe(kabukSozlugu.tr.hata.yukleniyor);
   });
 });
 

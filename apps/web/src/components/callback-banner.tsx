@@ -3,6 +3,8 @@
 import { useSearchParams } from 'next/navigation';
 import { PLATFORM_LABELS, type Platform } from '@advetics/shared';
 import { Serit } from '@/components/ui/hal';
+import { useSozluk } from '@/dil/saglayici';
+import { baglantilarSozlugu } from '@/dil/sozlukler/ayarlar-baglantilar';
 
 /**
  * OAuth dönüşünde sonucu gösterir.
@@ -12,6 +14,7 @@ import { Serit } from '@/components/ui/hal';
  */
 export function CallbackBanner() {
   const params = useSearchParams();
+  const d = useSozluk(baglantilarSozlugu).donus;
   const result = params.get('connection');
   if (!result) return null;
 
@@ -29,25 +32,23 @@ export function CallbackBanner() {
   const variants: Record<string, { ton: 'uyari' | 'hata' | 'bilgi'; title: string; body: string }> = {
     basarili: {
       ton: 'bilgi',
-      title: `${platform} bağlantısı kuruldu`,
-      body: accounts
-        ? `${accounts} reklam hesabı bulundu. İzlemek istediklerini aşağıdan aç; hepsi kapalı başlar.`
-        : 'Reklam hesabı bulunamadı. "Hesapları yenile" ile tekrar dene.',
+      title: d.kuruldu(platform),
+      body: accounts ? d.hesapBulundu(accounts) : d.hesapBulunamadi,
     },
     eksik_izin: {
       ton: 'uyari',
-      title: 'Bağlantı kuruldu ama izinler eksik',
-      body: 'Bazı zorunlu izinler verilmedi. Aşağıdaki karttan "Yeniden yetkilendir" ile eksik izinleri tamamla.',
+      title: d.izinEksikBaslik,
+      body: d.izinEksikGovde,
     },
     iptal: {
       ton: 'bilgi',
-      title: 'Yetkilendirme iptal edildi',
-      body: 'İzin ekranında iptal ettin, hiçbir şey değişmedi.',
+      title: d.iptalBaslik,
+      body: d.iptalGovde,
     },
     hata: {
       ton: 'hata',
-      title: 'Bağlantı kurulamadı',
-      body: message ?? 'Bilinmeyen bir hata oluştu.',
+      title: d.hataBaslik,
+      body: message ?? d.bilinmeyen,
     },
   };
 
@@ -62,23 +63,23 @@ export function CallbackBanner() {
   const olcumVaryantlari: Record<string, { ton: 'uyari' | 'hata' | 'bilgi'; title: string; body: string }> = {
     basarili: {
       ton: variants.basarili!.ton,
-      title: 'Ölçüm izinleri verildi',
-      body: 'Tag Manager ve Analytics adımları artık kurulabilir.',
+      title: d.olcumVerildi,
+      body: d.olcumVerildiGovde,
     },
     eksik_izin: {
       ton: variants.eksik_izin!.ton,
-      title: 'Ölçüm izinleri eksik',
-      body: 'Google izin ekranında Tag Manager ya da Analytics kutularından biri işaretsiz bırakıldı. "Ölçüm izinlerini ver" ile tekrar dene ve bütün kutuları işaretli bırak.',
+      title: d.olcumEksik,
+      body: d.olcumEksikGovde,
     },
     iptal: {
       ton: variants.iptal!.ton,
-      title: 'Ölçüm izni iptal edildi',
-      body: 'İzin ekranında iptal ettin, hiçbir şey değişmedi.',
+      title: d.olcumIptal,
+      body: d.iptalGovde,
     },
     hata: {
       ton: variants.hata!.ton,
-      title: 'Ölçüm izni verilemedi',
-      body: message ?? 'Bilinmeyen bir hata oluştu.',
+      title: d.olcumHata,
+      body: message ?? d.bilinmeyen,
     },
   };
   const tablo = params.get('izin') === 'olcum' ? olcumVaryantlari : variants;

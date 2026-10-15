@@ -1,7 +1,10 @@
 import type { ReactNode } from 'react';
 import type { ConnectionSummary, SessionResponse } from '@advetics/shared';
 import { serverApiFetch } from '@/lib/api';
-import { kenarBolumleri, visibleSections } from '@/lib/nav-sections';
+import { kenarBolumleri, menuyuCevir, visibleSections } from '@/lib/nav-sections';
+import { dilAl } from '@/dil/sunucu';
+import { ayarlarSozlugu } from '@/dil/sozlukler/ayarlar';
+import { sec } from '@advetics/shared';
 import { ayarlarYolu } from '@/lib/panel-adresleri';
 import { SayfaBasligi } from '@/components/ui/sayfa-basligi';
 import { SayfaIcDuzen } from '@/components/ui/sayfa-ic-menu';
@@ -23,22 +26,15 @@ import { AyarSekmeleri } from '@/components/ayar-sekmeleri';
  */
 export type AyarDuzeyi = 'ajans' | 'sirket' | 'kisi';
 
-const DUZEY_ADI: Record<AyarDuzeyi, string> = {
-  ajans: 'Ajans',
-  sirket: 'Şirket',
-  kisi: 'Kişisel',
-};
-
-const DUZEY_ACIKLAMASI: Record<AyarDuzeyi, string> = {
-  ajans: 'Bu ekrandaki değişiklik ajansın altındaki şirketleri etkiler.',
-  sirket: 'Bu ekrandaki değişiklik şirketin tamamını etkiler.',
-  kisi: 'Bu ekrandaki değişiklik yalnız seni etkiler.',
-};
-
-export function AyarKapsami({ duzey, ad }: { duzey: AyarDuzeyi; ad: string }) {
+/** Düzey adı ve açıklaması sözlükte (`ayarlar.ts` › `kapsam`). */
+export async function AyarKapsami({ duzey, ad }: { duzey: AyarDuzeyi; ad: string }) {
+  const d = sec(ayarlarSozlugu, await dilAl()).kapsam;
   return (
     <p className="m-0 flex flex-wrap items-center gap-x-1.5 text-12 text-ink-muted">
-      <span title={DUZEY_ACIKLAMASI[duzey]}>Kapsam: {DUZEY_ADI[duzey]}</span>
+      <span title={d.aciklama[duzey]}>
+        {d.onek}
+        {d.duzey[duzey]}
+      </span>
       <span aria-hidden>·</span>
       <span className="font-semibold text-ink">{ad}</span>
     </p>
@@ -108,11 +104,22 @@ export async function AyarlarSayfasi({
   baglantilar?: ConnectionSummary[] | null;
   children: ReactNode;
 }) {
+  const dil = await dilAl();
+  const d = sec(ayarlarSozlugu, dil).kapsam;
+  /*
+   * MENÜYLE AYNI SÜZGEÇ, EKRANIN DİLİNDE (`menuyuCevir`). `ayarSekmeleri`
+   * KISA adı veriyor ve Hesabım'ı ekliyor; buradaki yan menü bugüne kadar
+   * TAM adı gösteriyordu, Türkçe ekran değişmesin diye etiket menü
+   * satırının kendisi (`a.label`, çevrilmiş).
+   */
   const { ayarlar } = kenarBolumleri(
-    visibleSections(session.permissions, {
-      ustHesapGorunur: session.platformAdmin || session.managerAccount !== null,
-      platformSahibi: session.platformAdmin,
-    }),
+    menuyuCevir(
+      visibleSections(session.permissions, {
+        ustHesapGorunur: session.platformAdmin || session.managerAccount !== null,
+        platformSahibi: session.platformAdmin,
+      }),
+      dil,
+    ),
   );
   const hesabimYolu = ayarlarYolu('hesabim');
   const baglantilarYolu = ayarlarYolu('baglantilar');
@@ -140,9 +147,9 @@ export async function AyarlarSayfasi({
 
   return (
     <div className="grid w-full gap-6">
-      <SayfaBasligi ust={ust} bolum="Ayarlar" baslik={baslik} aciklama={aciklama} eylemler={eylemler} />
+      <SayfaBasligi ust={ust} bolum={d.bolum} baslik={baslik} aciklama={aciklama} eylemler={eylemler} />
       {sekmeler.length > 1 ? (
-        <SayfaIcDuzen menu={<AyarSekmeleri sekmeler={sekmeler} uyarili={sorunlu ? [baglantilarYolu] : []} />}>
+        <SayfaIcDuzen menu={<AyarSekmeleri sekmeler={sekmeler} uyarili={sorunlu ? [baglantilarYolu] : []} etiket={d.bolumler} />}>
           {children}
         </SayfaIcDuzen>
       ) : (

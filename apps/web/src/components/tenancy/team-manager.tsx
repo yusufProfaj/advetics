@@ -4,10 +4,12 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import {
   ORG_SCOPED_ROLES,
-  ROL_ACIKLAMASI,
-  ROL_ETIKETI,
   SIRKET_ROLLERI,
   WORKSPACE_ROLLERI,
+  bicimKodu,
+  rolAciklamasi,
+  rolEtiketi,
+  type Dil,
   type Role,
 } from '@advetics/shared';
 import { apiFetch } from '@/lib/api';
@@ -16,6 +18,8 @@ import { Dugme } from '@/components/ui/dugme';
 import { Girdi, Secim } from '@/components/ui/alan';
 import { Serit } from '@/components/ui/hal';
 import { Uyari } from '@/components/ui/uyari';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { ekipSozlugu } from '@/dil/sozlukler/ayarlar-ekip';
 
 /**
  * Ekip yönetimi — kullanıcı ekleme, rol değiştirme, yetki kaldırma.
@@ -25,15 +29,12 @@ import { Uyari } from '@/components/ui/uyari';
  * değil, kullanıcı × müşteri eşleşmesi (membership).
  */
 
-/**
- * ROL ETİKETLERİ VE AÇIKLAMALARI `@advetics/shared`TAN.
- *
- * Burada iki elle yazılmış kopya vardı (`ROLE_TR`, `ROLE_HINT`) ve roller
- * yediden üçe inince ikisi de bayatlayacaktı. Kopya değil TAKMA AD: eski
- * adları kullanan dosyalar çalışmaya devam ediyor, metin tek kaynaktan.
+/*
+ * ROL ETİKETLERİ VE AÇIKLAMALARI `@advetics/shared`TAN, EKRANIN DİLİNDE
+ * (`rolEtiketi(r, dil)`, `rolAciklamasi(r, dil)`). Eski takma adlar
+ * (`ROLE_TR`, `ROLE_HINT`) Türkçe tabloyu doğrudan veriyordu; İngilizce
+ * ekranda Türkçe rol adı görünürdü, kaldırıldılar.
  */
-export const ROLE_TR = ROL_ETIKETI;
-export const ROLE_HINT = ROL_ACIKLAMASI;
 
 /**
  * Kapsama göre seçilebilir roller — `roles.ts`teki listelerden.
@@ -84,9 +85,9 @@ export interface MemberRow {
   managerMemberships?: Array<{ id: string; role: Role }>;
 }
 
-function formatDate(value: string | null): string {
-  if (!value) return 'hiç giriş yapmadı';
-  return new Date(value).toLocaleDateString('tr-TR', {
+function formatDate(value: string | null, dil: Dil, hic: string): string {
+  if (!value) return hic;
+  return new Date(value).toLocaleDateString(bicimKodu(dil), {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
@@ -110,6 +111,9 @@ export function TeamManager({
   ekleKapali?: boolean;
 }) {
   const router = useRouter();
+  const { dil } = useDil();
+  const t = useSozluk(ekipSozlugu);
+  const d = t.yonetici;
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -129,7 +133,7 @@ export function TeamManager({
       await fn();
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'İşlem tamamlanamadı.');
+      setError(err instanceof Error ? err.message : d.islemTamamlanamadi);
     } finally {
       setBusy(null);
     }
@@ -140,24 +144,24 @@ export function TeamManager({
     setNotice(null);
     const trimmed = email.trim().toLowerCase();
     if (!trimmed.includes('@')) {
-      setError('Geçerli bir e-posta adresi girin.');
+      setError(d.gecersizEposta);
       return;
     }
     if (fullName.trim().length < 2) {
-      setError('Ad soyad girin.');
+      setError(d.adSoyadGirin);
       return;
     }
     // Sunucudaki kuralın AYNISI. Formu gönderip 400 almak yerine burada
     // durmak, kullanıcıya parolayı yeniden yazdırmıyor.
     if (password.length < 12 || !/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) {
-      setError('Parola en az 12 karakter olmalı ve harf ile rakam içermeli.');
+      setError(d.parolaKurali);
       return;
     }
     // Org geneli seçimi yalnızca izin veren rollerde gönderilir; diğerlerinde
     // müşteri seçilmesi ZORUNLU, çünkü müşterisiz bir manager hiçbir şey
     // göremez ve bu sessizce "çalışmıyor" gibi görünür.
     if (!clientId && !orgWideAllowed) {
-      setError('Bu rol için bir workspace seçin.');
+      setError(d.workspaceSecin);
       return;
     }
 
@@ -176,10 +180,7 @@ export function TeamManager({
       setFullName('');
       setPassword('');
       if (!res.created) {
-        setNotice(
-          `${trimmed} zaten kayıtlıydı; yalnızca yeni yetki eklendi. ` +
-            'Yazdığın parola KULLANILMADI, kullanıcı eski parolasıyla giriyor.',
-        );
+        setNotice(d.zatenKayitli(trimmed));
       }
     });
   }
@@ -187,7 +188,7 @@ export function TeamManager({
   return (
     <div className="space-y-6">
       {error && (
-        <Serit ton="hata" baslik="İşlem tamamlanamadı">
+        <Serit ton="hata" baslik={d.islemTamamlanamadiBaslik}>
           {error}
         </Serit>
       )}
@@ -205,7 +206,7 @@ export function TeamManager({
       {ekleKapali && (
         <details className="rounded-kart border border-line bg-surface">
           <summary className="cursor-pointer px-4 py-2.5 text-sm font-medium text-brand-strong">
-            + Kullanıcı ekle
+            {d.kullaniciEkle}
           </summary>
           <div className="border-t border-line p-1">{ekleFormu()}</div>
         </details>
@@ -216,28 +217,25 @@ export function TeamManager({
   function ekleFormu() {
     return (
       <form onSubmit={addMember} className="rounded-kart border border-line bg-surface p-5">
-        <h2 className="text-sm font-semibold text-ink">Kullanıcı ekle</h2>
-        <p className="mt-1 text-xs text-ink-muted">
-          Kullanıcı ANINDA oluşur; davet gönderilmiyor. Parolayı sen belirliyorsun ve
-          kullanıcıya kendin iletiyorsun.
-        </p>
+        <h2 className="text-sm font-semibold text-ink">{d.kullaniciEkleBaslik}</h2>
+        <p className="mt-1 text-xs text-ink-muted">{d.anindaOlusur}</p>
 
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <Girdi
             type="text"
-            aria-label="Ad Soyad"
+            aria-label={d.adSoyad}
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
-            placeholder="Ad Soyad"
+            placeholder={d.adSoyad}
             disabled={busy !== null}
           />
 
           <Girdi
             type="email"
-            aria-label="E-posta"
+            aria-label={t.ortak.eposta}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="ornek@sirket.com"
+            placeholder={d.ornekEposta}
             disabled={busy !== null}
           />
         </div>
@@ -254,16 +252,16 @@ export function TeamManager({
           */}
           <Girdi
             type="text"
-            aria-label="Parola"
+            aria-label={t.ortak.parola}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="Parola (en az 12 karakter)"
+            placeholder={d.parolaYer}
             autoComplete="off"
             disabled={busy !== null}
           />
 
           <Secim
-            aria-label="Rol"
+            aria-label={t.ortak.rol}
             value={role}
             onChange={(e) => {
               const next = e.target.value as Role;
@@ -277,7 +275,7 @@ export function TeamManager({
           >
             {kapsamRolleri(clientId).map((r) => (
               <option key={r} value={r}>
-                {ROLE_TR[r]}
+                {rolEtiketi(r, dil)}
               </option>
             ))}
           </Secim>
@@ -297,8 +295,8 @@ export function TeamManager({
           >
             {/* Uyumsuz seçenek HİÇ GÖSTERİLMİYOR. Gösterip sonra reddetmek,
                 kullanıcının o hatayı yapmasına izin vermek demek. */}
-            {orgWideAllowed && <option value="">Tüm workspace’ler</option>}
-            {!orgWideAllowed && <option value="">Workspace seçin…</option>}
+            {orgWideAllowed && <option value="">{t.ortak.tumWorkspaceler}</option>}
+            {!orgWideAllowed && <option value="">{t.ortak.workspaceSecin}</option>}
             {clients.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -307,16 +305,13 @@ export function TeamManager({
           </Secim>
         </div>
 
-        <p className="mt-2 text-xs text-ink-muted">{ROLE_HINT[role]}</p>
+        <p className="mt-2 text-xs text-ink-muted">{rolAciklamasi(role, dil)}</p>
 
         <div className="mt-3 flex items-center gap-3">
           <Dugme type="submit" ton="koyu" disabled={busy !== null || email.trim().length === 0}>
-            {busy === 'add' ? 'Ekleniyor…' : 'Kullanıcıyı Ekle'}
+            {busy === 'add' ? d.ekleniyor : d.kullaniciyiEkle}
           </Dugme>
-          <span className="text-xs text-ink-muted">
-            İlk girişte parola değiştirme ZORLANMIYOR; belirlediğin parola sen
-            söylemedikçe geçerli kalır.
-          </span>
+          <span className="text-xs text-ink-muted">{d.zorlanmiyor}</span>
         </div>
 
         {/*
@@ -356,15 +351,15 @@ export function TeamManager({
                 <div className="min-w-0">
                   <p className="truncate font-semibold text-ink">
                     {member.fullName ?? member.email}
-                    {isSelf && <span className="ml-2 text-xs text-ink-muted">(siz)</span>}
+                    {isSelf && <span className="ml-2 text-xs text-ink-muted">{d.siz}</span>}
                   </p>
                   <p className="truncate text-sm text-ink-muted">{member.email}</p>
                 </div>
                 <div className="grid justify-items-end gap-0.5 text-right">
-                  <p className="text-xs text-ink-muted">Son giriş: {formatDate(member.lastLoginAt)}</p>
+                  <p className="text-xs text-ink-muted">{d.sonGiris(formatDate(member.lastLoginAt, dil, t.ortak.hicGirisYapmadi))}</p>
                   {/* AYRILANIN ERİŞİMİ: 90 gün işaretli, hiç girmeyen ayrı (`erisimYasi`). */}
                   {(() => {
-                    const y = erisimYasi(member.lastLoginAt);
+                    const y = erisimYasi(member.lastLoginAt, undefined, dil);
                     return y ? (
                       <p className={`text-xs ${y.tur === 'uzun' ? 'font-semibold text-danger-strong' : 'text-ink-muted'}`} data-erisim={y.tur}>
                         {y.metin}
@@ -381,11 +376,11 @@ export function TeamManager({
                     className="flex flex-wrap items-center gap-2 rounded-alan border border-line bg-surface-muted px-3 py-2"
                   >
                     <span className="flex-1 text-sm font-medium text-ink">
-                      {m.client?.name ?? 'Tüm workspace’ler'}
+                      {m.client?.name ?? t.ortak.tumWorkspaceler}
                     </span>
 
                     <Secim
-                      aria-label={`${m.client?.name ?? 'Tüm workspace’ler'} rolü`}
+                      aria-label={t.ortak.rolEtiketi(m.client?.name ?? t.ortak.tumWorkspaceler)}
                       value={m.role}
                       disabled={busy !== null || isSelf}
                       onChange={(e) =>
@@ -400,7 +395,7 @@ export function TeamManager({
                     >
                       {kapsamRolleri(m.clientId ?? '').map((r) => (
                         <option key={r} value={r}>
-                          {ROLE_TR[r]}
+                          {rolEtiketi(r, dil)}
                         </option>
                       ))}
                     </Secim>
@@ -415,7 +410,7 @@ export function TeamManager({
                         )
                       }
                     >
-                      Kaldır
+                      {t.ortak.kaldir}
                     </Dugme>
                   </div>
                 ))}
@@ -427,17 +422,11 @@ export function TeamManager({
                   sunucuda SQL çalıştırmak gerekir.
                 */}
                 {isSelf && (
-                  <p className="text-xs text-ink-muted">
-                    Kendi yetkinizi bu ekrandan değiştiremezsiniz; yanlışlıkla erişiminizi
-                    kapatmanız hâlinde geri almanın panelden yolu olmazdı.
-                  </p>
+                  <p className="text-xs text-ink-muted">{d.kendiYetkiniz}</p>
                 )}
 
                 {member.memberships.length === 0 && (
-                  <p className="rounded-alan bg-surface-muted px-3 py-2 text-xs text-ink-muted">
-                    Hiçbir workspace’e yetkisi yok; giriş yapabilir ama panelde hiçbir veri
-                    göremez.
-                  </p>
+                  <p className="rounded-alan bg-surface-muted px-3 py-2 text-xs text-ink-muted">{d.hicbirWorkspace}</p>
                 )}
 
                 {/*
@@ -504,13 +493,16 @@ function GrantAccess({
   const [saving, setSaving] = useState(false);
   const [clientId, setClientId] = useState('');
   const [role, setRole] = useState<Role>('ad_manager');
+  const { dil } = useDil();
+  const t = useSozluk(ekipSozlugu);
+  const d = t.yonetici;
 
   const orgWideAllowed = ORG_WIDE_ROLES.includes(role);
   const nothingLeft = clients.length === 0 && (hasOrgWide || !orgWideAllowed);
 
   async function submit() {
     if (!clientId && !orgWideAllowed) {
-      onError('Bu rol için bir workspace seçin.');
+      onError(d.workspaceSecin);
       return;
     }
     setSaving(true);
@@ -523,7 +515,7 @@ function GrantAccess({
       setClientId('');
       onDone();
     } catch (err) {
-      onError(err instanceof Error ? err.message : 'Yetki eklenemedi.');
+      onError(err instanceof Error ? err.message : d.yetkiEklenemedi);
     } finally {
       setSaving(false);
     }
@@ -536,9 +528,9 @@ function GrantAccess({
         boyut="kucuk"
         onClick={() => setOpen(true)}
         disabled={disabled || nothingLeft}
-        title={nothingLeft ? 'Bu kullanıcının tüm workspace’lerde yetkisi var' : undefined}
+        title={nothingLeft ? d.tumundeYetki : undefined}
       >
-        + Yetki ekle
+        {d.yetkiEkle}
       </Dugme>
     );
   }
@@ -547,7 +539,7 @@ function GrantAccess({
     <div className="rounded-alan border border-line bg-surface-muted p-3">
       <div className="flex flex-wrap items-center gap-2">
         <Secim
-          aria-label="Rol"
+          aria-label={t.ortak.rol}
           value={role}
           onChange={(e) => {
             const next = e.target.value as Role;
@@ -559,7 +551,7 @@ function GrantAccess({
         >
           {kapsamRolleri(clientId).map((r) => (
             <option key={r} value={r}>
-              {ROLE_TR[r]}
+              {rolEtiketi(r, dil)}
             </option>
           ))}
         </Secim>
@@ -576,8 +568,8 @@ function GrantAccess({
           disabled={saving}
           className="!h-8 !w-auto min-w-0 flex-1 text-13"
         >
-          {orgWideAllowed && !hasOrgWide && <option value="">Tüm workspace’ler</option>}
-          {(!orgWideAllowed || hasOrgWide) && <option value="">Workspace seçin…</option>}
+          {orgWideAllowed && !hasOrgWide && <option value="">{t.ortak.tumWorkspaceler}</option>}
+          {(!orgWideAllowed || hasOrgWide) && <option value="">{t.ortak.workspaceSecin}</option>}
           {clients.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
@@ -586,22 +578,19 @@ function GrantAccess({
         </Secim>
 
         <Dugme ton="koyu" boyut="kucuk" onClick={() => void submit()} bekliyor={saving}>
-          Ekle
+          {t.ortak.ekle}
         </Dugme>
         <Dugme ton="hayalet" boyut="kucuk" onClick={() => setOpen(false)} disabled={saving}>
-          Vazgeç
+          {t.ortak.vazgec}
         </Dugme>
       </div>
 
-      <p className="mt-2 text-[11px] text-ink-muted">{ROLE_HINT[role]}</p>
+      <p className="mt-2 text-[11px] text-ink-muted">{rolAciklamasi(role, dil)}</p>
 
       {/* MÜŞTERİ YOKSA SEBEBİ YAZILI. Boş bir seçici, "yetki veremiyorum"
           sorusunun cevabını hiçbir yerde bırakmazdı. */}
       {clients.length === 0 && (
-        <p className="mt-1.5 text-[11px] text-warn-strong">
-          Atanabilecek workspace yok: ya hepsinde yetkisi var ya da henüz workspace
-          oluşturulmamış.
-        </p>
+        <p className="mt-1.5 text-[11px] text-warn-strong">{d.atanabilecekYok}</p>
       )}
     </div>
   );

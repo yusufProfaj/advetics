@@ -2,11 +2,13 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { ArsivWorkspaceSatiri } from '@advetics/shared';
+import { bicimKodu, type ArsivWorkspaceSatiri } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { Dugme } from '@/components/ui/dugme';
 import { Serit } from '@/components/ui/hal';
 import { AdHucresi, Tablo } from '@/components/ui/tablo';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { sirketlerSozlugu } from '@/dil/sozlukler/ayarlar-sirketler';
 
 /**
  * ═══ ARŞİV — ARŞİVLENEN WORKSPACE GERİ ALINABİLİYOR ═══
@@ -29,6 +31,9 @@ export function ArsivListesi({
   geriAlabilir: boolean;
 }) {
   const router = useRouter();
+  const { dil } = useDil();
+  const t = useSozluk(sirketlerSozlugu);
+  const d = t.arsiv;
   const [mesgul, setMesgul] = useState<string | null>(null);
   const [hata, setHata] = useState<{ id: string; metin: string } | null>(null);
 
@@ -39,14 +44,14 @@ export function ArsivListesi({
       await apiFetch(`/clients/${s.id}/geri-al`, { method: 'POST' });
       router.refresh();
     } catch (e) {
-      setHata({ id: s.id, metin: e instanceof ApiRequestError ? e.message : 'Arşivden alınamadı.' });
+      setHata({ id: s.id, metin: e instanceof ApiRequestError ? e.message : d.alinamadi });
     } finally {
       setMesgul(null);
     }
   }
 
   if (satirlar.length === 0) {
-    return <p className="m-0 px-5 py-4 text-13 text-ink-muted">Arşivde workspace yok.</p>;
+    return <p className="m-0 px-5 py-4 text-13 text-ink-muted">{d.bos}</p>;
   }
 
   const hataSatiri = hata ? (satirlar.find((s) => s.id === hata.id) ?? null) : null;
@@ -55,13 +60,13 @@ export function ArsivListesi({
     <>
       {hata && (
         <div className="px-4 pt-4">
-          <Serit ton="hata" baslik={hataSatiri ? `${hataSatiri.name} arşivden alınamadı` : 'Arşivden alınamadı'}>
+          <Serit ton="hata" baslik={hataSatiri ? d.satirAlinamadi(hataSatiri.name) : d.alinamadiBaslik}>
             {hata.metin}
           </Serit>
         </div>
       )}
       <Tablo
-        etiket="Arşivdeki workspace’ler"
+        etiket={d.tablo}
         satirlar={satirlar}
         satirAnahtari={(s) => s.id}
         sutunlar={[
@@ -70,19 +75,19 @@ export function ArsivListesi({
             baslik: 'Workspace',
             hucre: (s) => <AdHucresi ad={s.name} alt={s.slug} />,
           },
-          { anahtar: 'hesap', baslik: 'Hesaplar', sayi: true, hucre: (s) => `${s._count.adAccounts} hesap` },
+          { anahtar: 'hesap', baslik: d.hesaplar, sayi: true, hucre: (s) => d.hesap(s._count.adAccounts) },
           {
             anahtar: 'tarih',
-            baslik: 'Arşivlendi',
+            baslik: d.arsivlendi,
             ikincil: true,
             hucre: (s) =>
               s.archivedAt
-                ? new Date(s.archivedAt).toLocaleDateString('tr-TR', { timeZone: 'Europe/Istanbul' })
-                : 'Tarih kayıtlı değil',
+                ? new Date(s.archivedAt).toLocaleDateString(bicimKodu(dil), { timeZone: 'Europe/Istanbul' })
+                : d.tarihYok,
           },
           {
             anahtar: 'eylem',
-            baslik: <span className="sr-only">Eylemler</span>,
+            baslik: <span className="sr-only">{t.ortak.eylemler}</span>,
             sayi: true,
             hucre: (s) =>
               geriAlabilir ? (
@@ -93,7 +98,7 @@ export function ArsivListesi({
                   disabled={mesgul !== null}
                   onClick={() => void geriAl(s)}
                 >
-                  Geri al
+                  {d.geriAl}
                 </Dugme>
               ) : null,
           },

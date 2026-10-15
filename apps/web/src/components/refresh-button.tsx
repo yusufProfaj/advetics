@@ -8,6 +8,10 @@ import { ApiRequestError, apiFetch } from '@/lib/api';
 import { formatRelative, isStale } from '@/lib/format';
 import { veriDurumuAdresi } from '@/lib/panel-adresleri';
 import { dugmeHali, type DugmeHali } from './guncelleme-hali';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { ayarlarSozlugu } from '@/dil/sozlukler/ayarlar';
+
+type GuncelleSozlugu = (typeof ayarlarSozlugu)['tr']['guncelle'];
 
 /** İlerleme kaç saniyede bir soruluyor. */
 const YOKLAMA_MS = 4000;
@@ -54,6 +58,8 @@ export function RefreshButton({
   sonGuncelleme: string | null;
 }) {
   const router = useRouter();
+  const { dil } = useDil();
+  const d = useSozluk(ayarlarSozlugu).guncelle;
   const [hal, setHal] = useState<DugmeHali>({ tur: 'bos' });
   const zamanlayici = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -100,7 +106,7 @@ export function RefreshButton({
          */
         setHal({
           tur: 'bilinmiyor',
-          mesaj: err instanceof ApiRequestError ? err.message : 'İlerleme okunamadı.',
+          mesaj: err instanceof ApiRequestError ? err.message : d.ilerlemeOkunamadi,
         });
         router.refresh();
       }
@@ -132,7 +138,7 @@ export function RefreshButton({
     } catch (err) {
       setHal({
         tur: 'hata',
-        mesaj: err instanceof ApiRequestError ? err.message : 'Güncelleme başlatılamadı.',
+        mesaj: err instanceof ApiRequestError ? err.message : d.baslatilamadi,
       });
     }
   }
@@ -140,8 +146,8 @@ export function RefreshButton({
   const bayat = isStale(sonGuncelleme);
   const calisiyor = hal.tur === 'baslatiliyor' || hal.tur === 'guncelleniyor';
   const tazelikCumlesi = sonGuncelleme
-    ? `Veriler ${formatRelative(sonGuncelleme)} güncellendi.${bayat ? ' Güncelleme durmuş olabilir.' : ''}`
-    : 'Veri henüz hiç çekilmedi.';
+    ? d.tazelik(formatRelative(sonGuncelleme, dil), bayat)
+    : d.hicCekilmedi;
 
   return (
     <div className="flex flex-col items-end gap-1">
@@ -151,7 +157,7 @@ export function RefreshButton({
         renginde ve ekran okuyucu tam cümleyi duyuyor; renk tek başına anlam
         taşımıyor, `title` da söylüyor.
       */}
-      <div title={calisiyor ? `${rangeLabel} güncelleniyor` : tazelikCumlesi}>
+      <div title={calisiyor ? d.araliGuncelleniyor(rangeLabel) : tazelikCumlesi}>
         <button
           type="button"
           onClick={() => void guncelle()}
@@ -178,10 +184,10 @@ export function RefreshButton({
               />
             )}
           </svg>
-          {dugmeMetni(hal)}
+          {dugmeMetni(hal, d)}
           {!calisiyor && (
             <small aria-hidden className={`text-[11.5px] font-normal ${bayat ? 'text-warn-strong' : 'text-ink-muted'}`}>
-              {sonGuncelleme ? formatRelative(sonGuncelleme) : 'hiç güncellenmedi'}
+              {sonGuncelleme ? formatRelative(sonGuncelleme, dil) : d.hicGuncellenmedi}
             </small>
           )}
         </button>
@@ -189,38 +195,39 @@ export function RefreshButton({
 
       {hal.tur === 'guncellendi' && hal.dusen > 0 && (
         <span className="max-w-xs text-right text-[11px] text-warn-strong">
-          {hal.dusen} iş tamamlanamadı{hal.sonHata ? `: ${hal.sonHata}` : '.'}{' '}
+          {d.tamamlanamadi(hal.dusen)}
+          {hal.sonHata ? `: ${hal.sonHata}` : '.'}{' '}
           {/* Veri durumu artık workspace'in Marka Merkezi'nde; `null` = sayfa aktif workspace'i çözer (düğme de onu tazeliyor). */}
           <Link href={veriDurumuAdresi(null)} className="underline underline-offset-2">
-            Ayrıntı
+            {d.ayrinti}
           </Link>
         </span>
       )}
       {hal.tur === 'uzun' && (
         <span className="max-w-xs text-right text-[11px] text-ink-muted">
-          Hâlâ sürüyor. Veriler geldikçe bu ekrana yansır.
+          {d.halaSuruyor}
         </span>
       )}
       {(hal.tur === 'hata' || hal.tur === 'bilinmiyor') && (
         <span role="alert" className="max-w-xs text-right text-[11px] text-danger-strong">
-          {hal.tur === 'bilinmiyor' ? `Güncelleme sürüyor, ilerleme okunamadı: ${hal.mesaj}` : hal.mesaj}
+          {hal.tur === 'bilinmiyor' ? d.surerOkunamadi(hal.mesaj) : hal.mesaj}
         </span>
       )}
     </div>
   );
 }
 
-function dugmeMetni(hal: DugmeHali): string {
+function dugmeMetni(hal: DugmeHali, d: GuncelleSozlugu): string {
   switch (hal.tur) {
     case 'baslatiliyor':
-      return 'Güncelleniyor…';
+      return d.guncelleniyor;
     case 'guncelleniyor':
-      return `Güncelleniyor ${hal.biten}/${hal.toplam}`;
+      return d.guncelleniyorSayac(hal.biten, hal.toplam);
     case 'guncellendi':
-      return hal.dusen > 0 ? 'Kısmen güncellendi' : 'Güncellendi';
+      return hal.dusen > 0 ? d.kismen : d.guncellendi;
     case 'uzun':
-      return 'Güncelle';
+      return d.guncelle;
     default:
-      return 'Güncelle';
+      return d.guncelle;
   }
 }

@@ -4,8 +4,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { dugmeSinifi } from '@/components/ui/dugme';
+import { bicimKodu, type Dil } from '@advetics/shared';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { tarihSozlugu } from '@/dil/sozlukler/tarih';
 import {
   KARSILASTIRMA_SECENEKLERI,
+  karsilastirmaEtiketi,
+  onAyarEtiketi,
   MAX_GUN,
   RANGE_PRESETS,
   gunEkle,
@@ -64,6 +69,8 @@ export function TarihSecici({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { dil } = useDil();
+  const d = useSozluk(tarihSozlugu).secici;
 
   const [acik, setAcik] = useState(false);
   const kutuRef = useRef<HTMLDivElement>(null);
@@ -151,7 +158,7 @@ export function TarihSecici({
       return r.earliestDate;
     } catch (e) {
       setKapsamHatasi(
-        e instanceof ApiRequestError ? e.message : 'En eski veri günü alınamadı.',
+        e instanceof ApiRequestError ? e.message : d.enEskiAlinamadi,
       );
       return null;
     } finally {
@@ -233,12 +240,14 @@ export function TarihSecici({
           bu da yazıyor; kapalıyken rakamların yanında değişim yok ve
           sebebi burada görünmeli.
         */}
-        <small className="text-xs text-ink-muted">{aralik.label}</small>
+        {/* Ad ANAHTARDAN, sunucunun yazdığı `label`dan değil: sayfa
+            `resolveRange`e dil geçirmese de seçici ekranın dilinde konuşur. */}
+        <small className="text-xs text-ink-muted">{onAyarEtiketi(aralik.key, dil)}</small>
         <b className="font-semibold">
-          {gunAdi(aralik.from)} - {gunAdi(aralik.to)}
+          {gunAdi(aralik.from, dil)} - {gunAdi(aralik.to, dil)}
         </b>
         {aralik.karsilastirma !== 'yok' && (
-          <small className="text-[11px] text-ink-muted">· karşılaştırmalı</small>
+          <small className="text-[11px] text-ink-muted">{d.karsilastirmali}</small>
         )}
         <span aria-hidden className="text-xs text-ink-muted">
           ▾
@@ -248,7 +257,7 @@ export function TarihSecici({
       {acik && (
         <div
           role="dialog"
-          aria-label="Tarih aralığı"
+          aria-label={d.pencere}
           className="absolute right-0 top-full z-30 mt-1.5 flex w-[min(46rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-lg sm:flex-row"
         >
           {/* Ön ayarlar */}
@@ -262,7 +271,7 @@ export function TarihSecici({
                     taslakKey === p.key ? 'bg-brand-soft font-medium text-brand-strong' : ''
                   }`}
                 >
-                  {p.label}
+                  {onAyarEtiketi(p.key, dil)}
                 </button>
               </li>
             ))}
@@ -274,20 +283,23 @@ export function TarihSecici({
                   taslakKey === 'ozel' ? 'bg-brand-soft font-medium text-brand-strong' : ''
                 }`}
               >
-                Özel
+                {onAyarEtiketi('ozel', dil)}
               </button>
             </li>
           </ul>
 
           <div className="min-w-0 flex-1 p-4">
             <div className="flex flex-wrap items-end gap-2">
-              <GunAlani label="Başlangıç" value={taslakFrom} onChange={(v) => { setTaslakKey('ozel'); setTaslakFrom(v); }} />
+              <GunAlani label={d.baslangic} value={taslakFrom} onChange={(v) => { setTaslakKey('ozel'); setTaslakFrom(v); }} />
               <span className="pb-2 text-ink-muted">—</span>
-              <GunAlani label="Bitiş" value={taslakTo} onChange={(v) => { setTaslakKey('ozel'); setTaslakTo(v); }} />
+              <GunAlani label={d.bitis} value={taslakTo} onChange={(v) => { setTaslakKey('ozel'); setTaslakTo(v); }} />
             </div>
 
             <Takvim
               ay={takvimAy}
+              dil={dil}
+              oncekiAy={d.oncekiAy}
+              sonrakiAy={d.sonrakiAy}
               from={taslakFrom}
               to={taslakTo}
               enGec={enGecGun}
@@ -306,26 +318,27 @@ export function TarihSecici({
               veri bu" diye okunması demekti.
             */}
             {kapsamAraniyor && (
-              <p className="mt-2 text-[11px] text-ink-muted">En eski veri günü aranıyor…</p>
+              <p className="mt-2 text-[11px] text-ink-muted">{d.enEskiAraniyor}</p>
             )}
             {kapsamHatasi && (
               <p role="alert" className="mt-2 rounded-alan border border-l-4 border-line border-l-danger bg-surface px-2.5 py-1.5 text-[11px] text-ink">
-                {kapsamHatasi} “Tüm zamanlar” şimdilik son 90 günü gösteriyor.
+                {kapsamHatasi}
+                {d.tumZamanlarYedek(onAyarEtiketi('tum_zamanlar', dil))}
               </p>
             )}
 
             {asiyor && (
               <p className="mt-2 rounded-alan border border-l-4 border-line border-l-danger bg-surface px-2.5 py-1.5 text-[11px] leading-snug">
-                Seçilen aralık {taslakGun} gün. Sunucu en fazla {MAX_GUN} gün tarıyor —
-                uygulandığında <strong>{gunAdi(gunEkle(taslakTo, -(MAX_GUN - 1)))}</strong>{' '}
-                tarihinden başlatılacak.
+                {d.asimOnce(taslakGun, MAX_GUN)}
+                <strong>{gunAdi(gunEkle(taslakTo, -(MAX_GUN - 1)), dil)}</strong>
+                {d.asimSonra}
               </p>
             )}
 
             {karsilastirmaVar && (
             <div className="mt-3 border-t border-line pt-3">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-medium">Karşılaştır</span>
+                <span className="text-sm font-medium">{d.karsilastir}</span>
                 <button
                   type="button"
                   role="switch"
@@ -342,18 +355,18 @@ export function TarihSecici({
                   />
                 </button>
                 {taslakKars !== 'yok' &&
-                  KARSILASTIRMA_SECENEKLERI.map((s) => (
+                  KARSILASTIRMA_SECENEKLERI.map((k) => (
                     <button
-                      key={s.key}
+                      key={k}
                       type="button"
-                      onClick={() => setTaslakKars(s.key)}
+                      onClick={() => setTaslakKars(k)}
                       className={`rounded-md px-2 py-1 text-xs transition ${
-                        taslakKars === s.key
+                        taslakKars === k
                           ? 'bg-brand-soft font-medium text-brand-strong'
                           : 'text-ink-muted hover:text-ink'
                       }`}
                     >
-                      {s.label}
+                      {karsilastirmaEtiketi(k, dil)}
                     </button>
                   ))}
               </div>
@@ -361,8 +374,7 @@ export function TarihSecici({
                 // HANGİ DÖNEMLE karşılaştırıldığı yazılı. "%12 arttı" tek
                 // başına "neye göre" sorusunu cevaplamıyor.
                 <p className="mt-1.5 text-[11px] text-ink-muted">
-                  {gunAdi(taslakKarsPencere.from)} – {gunAdi(taslakKarsPencere.to)} ile
-                  karşılaştırılacak.
+                  {d.karsilastirilacak(gunAdi(taslakKarsPencere.from, dil), gunAdi(taslakKarsPencere.to, dil))}
                 </p>
               )}
             </div>
@@ -377,14 +389,14 @@ export function TarihSecici({
                 }}
                 className={dugmeSinifi('hayalet', 'kucuk')}
               >
-                İptal
+                {d.iptal}
               </button>
               <button
                 type="button"
                 onClick={uygula}
                 className={dugmeSinifi('birincil', 'kucuk')}
               >
-                Uygula
+                {d.uygula}
               </button>
             </div>
           </div>
@@ -426,6 +438,9 @@ function GunAlani({
  */
 function Takvim({
   ay,
+  dil,
+  oncekiAy,
+  sonrakiAy,
   from,
   to,
   enGec,
@@ -433,6 +448,9 @@ function Takvim({
   onGunSec,
 }: {
   ay: string;
+  dil: Dil;
+  oncekiAy: string;
+  sonrakiAy: string;
   from: IsoDay;
   to: IsoDay;
   enGec?: IsoDay;
@@ -448,16 +466,16 @@ function Takvim({
         <button
           type="button"
           onClick={() => onAyDegis(ayKaydir(ay, -1))}
-          aria-label="Önceki ay"
+          aria-label={oncekiAy}
           className="rounded px-2 py-1 text-ink-muted transition hover:text-ink"
         >
           ‹
         </button>
-        <span className="text-sm font-medium">{ayAdi(ay)}</span>
+        <span className="text-sm font-medium">{ayAdi(ay, dil)}</span>
         <button
           type="button"
           onClick={() => onAyDegis(ayKaydir(ay, 1))}
-          aria-label="Sonraki ay"
+          aria-label={sonrakiAy}
           className="rounded px-2 py-1 text-ink-muted transition hover:text-ink"
         >
           ›
@@ -465,7 +483,7 @@ function Takvim({
       </div>
 
       <div className="mt-1.5 grid grid-cols-7 gap-0.5 text-center text-[11px] text-ink-muted">
-        {['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'].map((g) => (
+        {haftaGunleri(dil).map((g) => (
           <span key={g} className="py-1">
             {g}
           </span>
@@ -518,17 +536,34 @@ function ayKaydir(ay: string, n: number): string {
   return t.toISOString().slice(0, 7);
 }
 
-const AY_ADLARI = [
-  'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
-  'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık',
-];
-
-function ayAdi(ay: string): string {
-  const [y, m] = ay.split('-').map(Number) as [number, number];
-  return `${AY_ADLARI[m - 1]} ${y}`;
+/*
+ * AY VE GÜN ADLARI `Intl`DEN, elle yazılmış liste değil: iki dilde iki
+ * liste tutmak, birinin unutulup İngilizce takvimde Türkçe ay adı kalması
+ * demekti. Saat dilimi UTC (gün aritmetiğiyle aynı; yerel saat gece
+ * yarısına yakın bir günlük kayma üretiyor).
+ */
+function ayAdi(ay: string, dil: Dil): string {
+  const ad = new Date(`${ay}-01T00:00:00Z`).toLocaleDateString(bicimKodu(dil), {
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+  return ad.charAt(0).toLocaleUpperCase(bicimKodu(dil)) + ad.slice(1);
 }
 
-function gunAdi(gun: IsoDay): string {
-  const [y, m, d] = gun.split('-');
-  return `${Number(d)} ${AY_ADLARI[Number(m) - 1]!.slice(0, 3)} ${y}`;
+/** "5 Eki 2026" / "Oct 5, 2026". */
+function gunAdi(gun: IsoDay, dil: Dil): string {
+  return new Date(`${gun}T00:00:00Z`).toLocaleDateString(bicimKodu(dil), {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
+/** Pazartesiden başlayan kısa gün adları; 2024-01-01 bir pazartesi. */
+function haftaGunleri(dil: Dil): string[] {
+  return Array.from({ length: 7 }, (_, i) =>
+    new Date(Date.UTC(2024, 0, 1 + i)).toLocaleDateString(bicimKodu(dil), { weekday: 'short', timeZone: 'UTC' }),
+  );
 }

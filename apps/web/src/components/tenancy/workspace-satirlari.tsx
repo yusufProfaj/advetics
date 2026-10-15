@@ -15,6 +15,8 @@ import { Rozet } from '@/components/ui/rozet';
 import { Pencere } from '@/components/ui/pencere';
 import { MenuAyraci, MenuOgesi } from '@/components/ui/acilir-menu';
 import { DigerMenusu } from '@/components/ayar-sekmeleri';
+import { useSozluk } from '@/dil/saglayici';
+import { sirketlerSozlugu } from '@/dil/sozlukler/ayarlar-sirketler';
 
 /**
  * ═══ ŞİRKETİN WORKSPACE'LERİ — SATIR, PENCERE DEĞİL ═══
@@ -45,11 +47,7 @@ export interface WorkspaceSatiri {
   socialProfiles: Array<{ id: string; profileType: string }>;
 }
 
-const DURUM_ETIKET: Record<string, string> = {
-  active: 'Aktif',
-  paused: 'Duraklatıldı',
-  archived: 'Arşivde',
-};
+/* Durum etiketi sözlükte (`workspace.durum`); tanınmayan durum ham adıyla yazılıyor. */
 
 type Panel = { id: string; tur: 'tasi' | 'arsivle' } | null;
 
@@ -74,6 +72,8 @@ export function WorkspaceSatirlari({
   tasiHedefleri: Array<{ id: string; name: string }>;
 }) {
   const router = useRouter();
+  const t = useSozluk(sirketlerSozlugu);
+  const d = t.workspace;
   const [arama, setArama] = useState('');
   const [panel, setPanel] = useState<Panel>(null);
   const [mesgul, setMesgul] = useState<string | null>(null);
@@ -114,7 +114,7 @@ export function WorkspaceSatirlari({
        */
       router.push(hedef === 'marka' ? markaMerkeziAdresi('kurulum', s.id) : sihirbazAdresi(s.id));
     } catch (e) {
-      hataYaz(s.id, e, 'Workspace’e geçilemedi.');
+      hataYaz(s.id, e, d.gecilemedi);
       setMesgul(null);
     }
   }
@@ -128,7 +128,7 @@ export function WorkspaceSatirlari({
       setPanel(null);
       router.refresh();
     } catch (e) {
-      hataYaz(s.id, e, 'Arşivlenemedi.');
+      hataYaz(s.id, e, d.arsivlenemedi);
     } finally {
       setMesgul(null);
     }
@@ -152,7 +152,7 @@ export function WorkspaceSatirlari({
       setHedefSirket('');
       router.refresh();
     } catch (e) {
-      hataYaz(s.id, e, 'Workspace taşınamadı.');
+      hataYaz(s.id, e, d.tasinamadi);
     } finally {
       setMesgul(null);
     }
@@ -195,13 +195,13 @@ export function WorkspaceSatirlari({
               {s.name}
             </button>
           }
-          alt={mesgul === `ac:${s.id}` || mesgul === `kurulum:${s.id}` ? 'Açılıyor…' : s.slug}
+          alt={mesgul === `ac:${s.id}` || mesgul === `kurulum:${s.id}` ? d.aciliyor : s.slug}
         />
       ),
     },
     {
       anahtar: 'hesaplar',
-      baslik: 'Hesaplar',
+      baslik: d.hesaplar,
       hucre: (s) => {
         const izlemede = s.adAccounts.filter((a) => a.syncEnabled).length;
         const kanallar = CHANNEL_KINDS.filter(
@@ -217,19 +217,20 @@ export function WorkspaceSatirlari({
               gelmemesinin AYRI bir sebebi ve ayrı yazılıyor.
             */}
             {s._count.adAccounts === 0 && s.socialProfiles.length === 0 ? (
-              <span className="text-13 text-ink-muted">Hesap atanmamış</span>
+              <span className="text-13 text-ink-muted">{d.hesapAtanmamis}</span>
             ) : (
               <span className="flex flex-wrap items-center gap-1.5">
                 {kanallar.map((k) => (
                   <PlatformLogo key={k} kind={k} className="h-4 w-4" />
                 ))}
                 <span className="text-13 text-ink-muted">
-                  <strong className="text-ink">{s._count.adAccounts}</strong> hesap · {izlemede} izlemede
+                  <strong className="text-ink">{s._count.adAccounts}</strong>
+                  {d.hesapIzlemede(izlemede)}
                 </span>
               </span>
             )}
             {s._count.adAccounts > 0 && izlemede === 0 && (
-              <span className="mt-0.5 block text-12 font-semibold text-danger-strong">Veri çekilmiyor</span>
+              <span className="mt-0.5 block text-12 font-semibold text-danger-strong">{d.veriCekilmiyor}</span>
             )}
           </>
         );
@@ -237,39 +238,39 @@ export function WorkspaceSatirlari({
     },
     {
       anahtar: 'ekip',
-      baslik: 'Ekip',
+      baslik: d.ekip,
       sayi: true,
       ikincil: true,
-      hucre: (s) => `${s._count.memberships} kişi`,
+      hucre: (s) => t.ortak.kisiSayisi(s._count.memberships),
     },
     {
       anahtar: 'durum',
-      baslik: 'Durum',
+      baslik: d.durumBaslik,
       /* YEŞİL YALNIZ DURUM GÖSTERGESİ (TASARIM-DILI) — `Rozet` bunu taşıyor. */
       hucre: (s) => (
         <Rozet hal={s.status === 'active' ? 'ok' : s.status === 'paused' ? 'dur' : 'taslak'}>
-          {DURUM_ETIKET[s.status] ?? s.status}
+          {d.durum[s.status] ?? s.status}
         </Rozet>
       ),
     },
     {
       anahtar: 'eylem',
-      baslik: <span className="sr-only">Eylemler</span>,
+      baslik: <span className="sr-only">{t.ortak.eylemler}</span>,
       sayi: true,
       hucre: (s) => (
-        <DigerMenusu etiket={`${s.name} için işlemler`}>
+        <DigerMenusu etiket={t.ortak.islemler(s.name)}>
           {/* İŞ SÜRERKEN KAPALI: eski düğmeler `mesgul` iken pasifti; menüde
               aynı kapı yoksa geçiş bitmeden ikinci bir geçiş başlıyordu. */}
-          <MenuOgesi devreDisi={mesgul !== null} onClick={() => void ac(s)}>Marka Merkezi’nde aç</MenuOgesi>
-          <MenuOgesi devreDisi={mesgul !== null} onClick={() => void ac(s, 'sihirbaz')}>Kurulumu tamamla</MenuOgesi>
+          <MenuOgesi devreDisi={mesgul !== null} onClick={() => void ac(s)}>{d.markaMerkezindeAc}</MenuOgesi>
+          <MenuOgesi devreDisi={mesgul !== null} onClick={() => void ac(s, 'sihirbaz')}>{d.kurulumuTamamla}</MenuOgesi>
           {tasiAcik && (
-            <MenuOgesi devreDisi={mesgul !== null} onClick={() => panelAc(s.id, 'tasi')}>Başka şirkete taşı</MenuOgesi>
+            <MenuOgesi devreDisi={mesgul !== null} onClick={() => panelAc(s.id, 'tasi')}>{d.baskaSirketeTasi}</MenuOgesi>
           )}
           {arsivleyebilir && (
             <>
               <MenuAyraci />
               <MenuOgesi tehlike devreDisi={mesgul !== null} onClick={() => panelAc(s.id, 'arsivle')}>
-                Arşivle
+                {d.arsivle}
               </MenuOgesi>
             </>
           )}
@@ -282,18 +283,18 @@ export function WorkspaceSatirlari({
     <div className="grid gap-3">
       {/* TOPLAM HER ZAMAN YAZILI: hesabı olup izlenmeyen workspace "veri gelmiyor" diye okunur. */}
       <p className="m-0 text-13 text-ink-muted">
-        {satirlar.length} workspace · {toplamHesap} reklam hesabı · {toplamIzlenen} tanesi izlemede
+        {d.toplam(satirlar.length, toplamHesap, toplamIzlenen)}
       </p>
 
       {hata && (
-        <Serit ton="hata" baslik={hataSatiri ? `${hataSatiri.name}: işlem yapılamadı` : 'İşlem yapılamadı'}>
+        <Serit ton="hata" baslik={hataSatiri ? d.satirHatasi(hataSatiri.name) : t.ortak.islemYapilamadi}>
           {hata.metin}
         </Serit>
       )}
 
       <Kart dolgu={false}>
         <Tablo
-          etiket="Workspace’ler"
+          etiket={d.tablo}
           sutunlar={sutunlar}
           satirlar={suzulmus}
           satirAnahtari={(s) => s.id}
@@ -303,8 +304,8 @@ export function WorkspaceSatirlari({
                 /* SESSİZ KESME YOK: süzülmüş listede kaçının göründüğü yazılı. */
                 <span className="text-12 text-ink-muted">
                   {q === ''
-                    ? `${satirlar.length} workspace`
-                    : `${satirlar.length} workspace’ten ${suzulmus.length} tanesi gösteriliyor`}
+                    ? t.ortak.workspaceSayisi(satirlar.length)
+                    : d.gosteriliyor(satirlar.length, suzulmus.length)}
                 </span>
               }
             >
@@ -313,16 +314,16 @@ export function WorkspaceSatirlari({
                   type="search"
                   value={arama}
                   onChange={(e) => setArama(e.target.value)}
-                  placeholder="Workspace adı ya da kısa adı"
-                  aria-label="Workspace ara"
+                  placeholder={d.araYer}
+                  aria-label={d.ara}
                 />
               </div>
             </AracCubugu>
           }
           bos={
             <BosDurum
-              baslik={`“${arama}” ile eşleşen workspace yok.`}
-              neden="Ad ya da kısa adın bir parçasını yaz; aramayı temizleyince bütün liste döner."
+              baslik={d.eslesenYok(arama)}
+              neden={d.eslesenYokNeden}
             />
           }
           sayfalama={{ bas: suzulmus.length === 0 ? 0 : 1, son: suzulmus.length, toplam: suzulmus.length }}
@@ -336,20 +337,20 @@ export function WorkspaceSatirlari({
       <Pencere
         acik={panel?.tur === 'arsivle' && panelSatiri !== null}
         onKapat={() => setPanel(null)}
-        baslik="Workspace’i arşivle"
+        baslik={d.arsivleBaslik}
         genislik="dar"
         altEylemler={
           panelSatiri && (
             <>
               <Dugme ton="ikincil" onClick={() => setPanel(null)}>
-                Vazgeç
+                {t.ortak.vazgec}
               </Dugme>
               <Dugme
                 ton="tehlike"
                 bekliyor={mesgul === `arsiv:${panelSatiri.id}`}
                 onClick={() => void arsivle(panelSatiri)}
               >
-                Arşivle
+                {d.arsivle}
               </Dugme>
             </>
           )
@@ -358,8 +359,8 @@ export function WorkspaceSatirlari({
         {panelSatiri && hata?.id === panelSatiri.id && <PencereHatasi metin={hata.metin} />}
         {panelSatiri && (
           <p className="m-0 text-14 text-ink">
-            <strong>{panelSatiri.name}</strong> listeden kalkar. Hesaplar ve geçmiş veri silinmez;
-            aşağıdaki Arşiv’den geri alabilirsin.
+            <strong>{panelSatiri.name}</strong>
+            {d.arsivleGovde}
           </p>
         )}
       </Pencere>
@@ -367,20 +368,20 @@ export function WorkspaceSatirlari({
       <Pencere
         acik={panel?.tur === 'tasi' && panelSatiri !== null}
         onKapat={() => setPanel(null)}
-        baslik="Başka şirkete taşı"
-        aciklama="Reklam hesapları, kampanyalar ve geçmiş veri birlikte taşınır."
+        baslik={d.baskaSirketeTasi}
+        aciklama={d.tasiAciklama}
         altEylemler={
           panelSatiri && (
             <>
               <Dugme ton="ikincil" onClick={() => setPanel(null)}>
-                Vazgeç
+                {t.ortak.vazgec}
               </Dugme>
               <Dugme
                 disabled={hedefSirket === ''}
                 bekliyor={mesgul === `tasi:${panelSatiri.id}`}
                 onClick={() => void tasi(panelSatiri)}
               >
-                Taşı
+                {d.tasi}
               </Dugme>
             </>
           )
@@ -388,14 +389,14 @@ export function WorkspaceSatirlari({
       >
         {panelSatiri && hata?.id === panelSatiri.id && <PencereHatasi metin={hata.metin} />}
         {panelSatiri && (
-          <Alan etiket={`${panelSatiri.name} şu şirkete taşınsın`} id={`tasi-${panelSatiri.id}`}>
+          <Alan etiket={d.tasinsin(panelSatiri.name)} id={`tasi-${panelSatiri.id}`}>
             <Secim
               id={`tasi-${panelSatiri.id}`}
               value={hedefSirket}
               onChange={(e) => setHedefSirket(e.target.value)}
               disabled={mesgul !== null}
             >
-              <option value="">Şirket seç</option>
+              <option value="">{d.sirketSec}</option>
               {tasiHedefleri.map((h) => (
                 <option key={h.id} value={h.id}>
                   {h.name}
@@ -415,9 +416,10 @@ export function WorkspaceSatirlari({
  * basıp hiçbir şey olmadığını görüyor ve tekrar basıyordu (Ajan 4 denetimi).
  */
 function PencereHatasi({ metin }: { metin: string }) {
+  const t = useSozluk(sirketlerSozlugu);
   return (
     <div className="mb-3">
-      <Serit ton="hata" baslik="İşlem yapılamadı">
+      <Serit ton="hata" baslik={t.ortak.islemYapilamadi}>
         {metin}
       </Serit>
     </div>

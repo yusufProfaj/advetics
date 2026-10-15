@@ -6,6 +6,8 @@ import { ApiRequestError, apiFetch } from '@/lib/api';
 import { Alan, Girdi } from '@/components/ui/alan';
 import { Dugme } from '@/components/ui/dugme';
 import { Serit, Yukleniyor } from '@/components/ui/hal';
+import { useSozluk } from '@/dil/saglayici';
+import { sirketlerSozlugu } from '@/dil/sozlukler/ayarlar-sirketler';
 
 /**
  * ═══ ŞİRKET SİLME — NE GİDECEĞİ ÖNCE YAZILIYOR ═══
@@ -44,6 +46,8 @@ export function SirketSil({
   const [hata, setHata] = useState<string | null>(null);
   const [onayAdi, setOnayAdi] = useState('');
   const [pending, setPending] = useState(false);
+  const t = useSozluk(sirketlerSozlugu);
+  const d = t.sirketSil;
 
   useEffect(() => {
     let iptal = false;
@@ -58,11 +62,13 @@ export function SirketSil({
          * ÖZET ALINAMAZSA SİLME DE AÇILMIYOR. Sessizce boş bir onay kutusu
          * göstermek, kullanıcının NE gideceğini bilmeden onaylaması demekti.
          */
-        if (!iptal) setHata(e instanceof ApiRequestError ? e.message : 'Özet alınamadı.');
+        if (!iptal) setHata(e instanceof ApiRequestError ? e.message : t.ortak.ozetAlinamadi);
       });
     return () => {
       iptal = true;
     };
+    // `t` dile bağlı, dil değişimi tam sayfa yenilemesi: bağımlılık gereksiz.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [organizationId]);
 
   async function sil(): Promise<void> {
@@ -75,7 +81,7 @@ export function SirketSil({
       );
       onSilindi(sonuc.name);
     } catch (e) {
-      setHata(e instanceof ApiRequestError ? e.message : 'Silinemedi.');
+      setHata(e instanceof ApiRequestError ? e.message : t.ortak.silinemedi);
       setPending(false);
     }
   }
@@ -88,7 +94,7 @@ export function SirketSil({
   if (hata !== null && ozet === null) {
     return (
       <div className="grid gap-4">
-        <Serit ton="hata" baslik="Silme özeti alınamadı">
+        <Serit ton="hata" baslik={d.ozetAlinamadi}>
           {hata}
         </Serit>
         <Eylemler>
@@ -98,7 +104,7 @@ export function SirketSil({
     );
   }
   if (ozet === null) {
-    return <Yukleniyor satir={3} etiket="Ne silineceği hesaplanıyor" />;
+    return <Yukleniyor satir={3} etiket={t.ortak.hesaplananlar} />;
   }
 
   if (ozet.engel !== null) {
@@ -106,7 +112,7 @@ export function SirketSil({
       <div className="grid gap-4">
         {/* SEBEP YAZILIYOR: kapalı bir düğme "neden" sorusunu ekranda
             bırakıyor ve kullanıcı onu aramaya gidiyor. */}
-        <Serit ton="uyari" baslik="Bu şirket silinemez">
+        <Serit ton="uyari" baslik={d.silinemez}>
           {ozet.engel}
         </Serit>
         <Eylemler>
@@ -120,10 +126,8 @@ export function SirketSil({
 
   return (
     <div className="grid gap-4">
-      <Serit ton="hata" baslik={`“${ozet.name}” kalıcı olarak silinecek`}>
-        {bosSirket
-          ? 'Bu şirkette workspace, reklam hesabı, kullanıcı ve ölçüm yok. Silinecek bir veri bulunmuyor.'
-          : 'Aşağıdakilerle birlikte gider ve geri getirilemez.'}
+      <Serit ton="hata" baslik={d.silinecek(ozet.name)}>
+        {bosSirket ? d.bos : d.birlikte}
       </Serit>
 
       {!bosSirket && (
@@ -136,21 +140,21 @@ export function SirketSil({
           <ul className="m-0 grid list-none gap-1.5 p-0 text-14 text-ink">
             {ozet.workspaceAdlari.length > 0 && (
               <Satir>
-                {ozet.workspaceAdlari.length} workspace: {ozet.workspaceAdlari.join(', ')}
+                {d.workspaceler(ozet.workspaceAdlari.length, ozet.workspaceAdlari.join(', '))}
               </Satir>
             )}
-            {ozet.reklamHesabi > 0 && <Satir>{ozet.reklamHesabi} reklam hesabı</Satir>}
+            {ozet.reklamHesabi > 0 && <Satir>{t.ortak.reklamHesabi(ozet.reklamHesabi)}</Satir>}
             {ozet.kullanici > 0 && (
               <Satir>
-                {ozet.kullanici} kullanıcı: giriş hesapları da silinir, bir daha giriş yapamazlar
+                {d.kullanici(ozet.kullanici)}
               </Satir>
             )}
             {ozet.metrikGunu > 0 && (
-              <Satir>{ozet.metrikGunu} günlük ölçüm geçmişi: platformdan yeniden çekilemez</Satir>
+              <Satir>{d.olcum(ozet.metrikGunu)}</Satir>
             )}
           </ul>
 
-          <Alan etiket="Onaylamak için şirket adını birebir yaz">
+          <Alan etiket={d.onayYaz}>
             <Girdi
               value={onayAdi}
               onChange={(e) => setOnayAdi(e.target.value)}
@@ -162,7 +166,7 @@ export function SirketSil({
       )}
 
       {hata && (
-        <Serit ton="hata" baslik="Silinemedi">
+        <Serit ton="hata" baslik={t.ortak.silinemediBaslik}>
           {hata}
         </Serit>
       )}
@@ -179,7 +183,7 @@ export function SirketSil({
           bekliyor={pending}
           onClick={() => void sil()}
         >
-          {bosSirket ? 'Şirketi sil' : 'Kalıcı olarak sil'}
+          {bosSirket ? d.sirketiSil : t.ortak.kaliciSil}
         </Dugme>
       </Eylemler>
     </div>
@@ -201,9 +205,10 @@ function Satir({ children }: { children: React.ReactNode }) {
 }
 
 function Vazgec({ onVazgec }: { onVazgec: () => void }) {
+  const t = useSozluk(sirketlerSozlugu);
   return (
     <Dugme ton="ikincil" onClick={onVazgec}>
-      Vazgeç
+      {t.ortak.vazgec}
     </Dugme>
   );
 }

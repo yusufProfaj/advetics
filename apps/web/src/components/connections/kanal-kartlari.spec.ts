@@ -1,6 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { baglantilarSozlugu } from '@/dil/sozlukler/ayarlar-baglantilar';
+
+/*
+ * D2 (iki dil): ekran metni sözlükte. İddialar iki yere bölündü: Türkçe
+ * değer sözlükte DEĞİŞMEDEN duruyor ve bileşen o anahtarı kullanıyor.
+ */
+const TR = baglantilarSozlugu.tr.kanal;
 
 /**
  * ═══ KANAL KARTLARI: BAĞLANMAK VE DURUM AYNI YERDE ═══
@@ -31,7 +38,7 @@ describe('tarama boşa düşmüyor', () => {
   it('kaynaklar okundu', () => {
     expect(KANAL).toContain('export function KanalKartlari');
     expect(KANAL.length).toBeGreaterThan(3000);
-    expect(SAYFA).toContain('Platform bağlantıları');
+    expect(SAYFA).toContain("ayarSekmesiAdi('baglantilar', dil)");
   });
 });
 
@@ -70,7 +77,8 @@ describe('bağlanma kanalın İÇİNDE', () => {
     // Sebepsiz kapalı bir düğme, kullanıcıyı olmayan bir arızayı aramaya
     // gönderiyor.
     expect(KANAL).toContain('disabled={!canManage || pending}');
-    expect(KANAL).toContain('Bağlantı kurmak yöneticinin işi.');
+    expect(TR.yoneticininIsi).toBe('Bağlantı kurmak yöneticinin işi.');
+    expect(KANAL).toContain('{canManage ? d.henuzBaglanmadi : d.yoneticininIsi}');
   });
 });
 
@@ -81,9 +89,10 @@ describe('sayılar', () => {
      * ("keşfedildi", "boşta", "izlenen") ve hangisinin hangisini kapsadığı
      * hiçbir yerde yazmıyordu; kullanıcı sayıları topluyordu.
      */
-    expect(KANAL).toContain('reklam hesabı');
-    expect(KANAL).toContain('atanmış,');
-    expect(KANAL).toContain('veri çekiyor');
+    expect(TR.reklamHesabi(12)).toBe('12 reklam hesabı');
+    expect(TR.atanmisCekiyor(8, 6)).toBe('8 atanmış, 6 veri çekiyor · ');
+    expect(KANAL).toContain('{d.reklamHesabi(hesap.length)}');
+    expect(KANAL).toContain('d.atanmisCekiyor(atanmis, izlenen)');
   });
 
   it('KRİTİK: atanmış ama veri çekmeyen hesap AYRICA söyleniyor', () => {
@@ -94,7 +103,8 @@ describe('sayılar', () => {
      */
     const i = KANAL.indexOf('{atanmis > izlenen && (');
     expect(i, 'kapalı hesap uyarısı yok').toBeGreaterThan(-1);
-    expect(KANAL.slice(i, i + 400)).toContain('veri çekmiyor');
+    expect(KANAL.slice(i, i + 400)).toContain('d.atanmisVeriCekmiyor(atanmis - izlenen)');
+    expect(TR.atanmisVeriCekmiyor(2)).toContain('veri çekmiyor');
   });
 });
 
@@ -107,7 +117,9 @@ describe('iki "yenile" birbirine karışmıyor', () => {
      * kelime iki farklı işi anlatınca kullanıcı hangisine basacağını
      * bilemiyordu.
      */
-    expect(KANAL).toContain('Hesapları tara');
+    expect(TR.hesaplariTara).toBe('Hesapları tara');
+    expect(KANAL).toContain('{d.hesaplariTara}');
+    expect(JSON.stringify(TR)).not.toContain('Hesapları yenile');
     expect(KANAL).not.toContain('Hesapları yenile');
   });
 });

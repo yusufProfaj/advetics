@@ -7,6 +7,8 @@ import { ApiRequestError, apiFetch } from '@/lib/api';
 import { profilAtamaYolu } from '@/lib/havuz';
 import { formatNumber } from '@/lib/format';
 import { Dugme } from '@/components/ui/dugme';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { baglantilarSozlugu } from '@/dil/sozlukler/ayarlar-baglantilar';
 
 /**
  * ═══ YOUTUBE KANALINI BUL ═══
@@ -35,11 +37,13 @@ type Durum =
   | { tur: 'sonuc'; ne: 'oneri' | 'arama'; veri: YoutubeKanalOnerileri }
   | { tur: 'hata'; ne: 'oneri' | 'arama'; mesaj: string };
 
-const KAYNAK_ETIKETI: Record<YoutubeKanalOnerisi['kaynaklar'][number]['tur'], string> = {
-  site: 'Sitede',
-  google_ads: 'Google Ads',
-  arama: 'Arama',
-};
+/** Kaynak rozeti. "Google Ads" ürün adı, iki dilde aynı; diğer ikisi sözlükten. */
+function kaynakEtiketi(
+  tur: YoutubeKanalOnerisi['kaynaklar'][number]['tur'],
+  d: (typeof baglantilarSozlugu)['tr']['ytBul'],
+): string {
+  return tur === 'google_ads' ? 'Google Ads' : d.kaynak[tur];
+}
 
 export function YouTubeKanalBul({
   clientId,
@@ -56,6 +60,7 @@ export function YouTubeKanalBul({
   baglandi?: () => void;
 }) {
   const router = useRouter();
+  const d = useSozluk(baglantilarSozlugu).ytBul;
   const [durum, setDurum] = useState<Durum>({ tur: 'bos' });
   const [q, setQ] = useState(workspaceAdi ?? '');
   const [ekleniyor, setEkleniyor] = useState<string | null>(null);
@@ -73,10 +78,10 @@ export function YouTubeKanalBul({
       setDurum({
         tur: 'hata',
         ne: 'oneri',
-        mesaj: err instanceof ApiRequestError ? err.message : 'Öneriler alınamadı.',
+        mesaj: err instanceof ApiRequestError ? err.message : d.onerilerAlinamadi,
       });
     }
-  }, [clientId]);
+  }, [clientId, d]);
 
   useEffect(() => {
     void onerileriGetir();
@@ -95,7 +100,7 @@ export function YouTubeKanalBul({
       setDurum({
         tur: 'hata',
         ne: 'arama',
-        mesaj: err instanceof ApiRequestError ? err.message : 'Arama yapılamadı.',
+        mesaj: err instanceof ApiRequestError ? err.message : d.aramaYapilamadi,
       });
     }
   }
@@ -107,9 +112,7 @@ export function YouTubeKanalBul({
    * değil görünür bir ara hâl ve bildirim tam olarak bunu söylüyor.
    */
   async function sec(k: YoutubeKanalOnerisi): Promise<void> {
-    const hedef = clientId
-      ? `"${k.title}" kanalı ${workspaceAdi ? `"${workspaceAdi}"` : 'bu'} workspace'ine bağlansın mı? Yeni videoları Akıllı Boost'a kart olarak düşecek.`
-      : `"${k.title}" kanalı havuza eklensin mi?`;
+    const hedef = clientId ? d.onayWorkspace(k.title, workspaceAdi) : d.onayHavuz(k.title);
     if (!window.confirm(hedef)) return;
     setEkleniyor(k.channelId);
     setBildirim(null);
@@ -126,12 +129,12 @@ export function YouTubeKanalBul({
         profilId = r.socialProfileId;
       }
     } catch (err) {
-      setBildirim({ ton: 'hata', metin: err instanceof ApiRequestError ? err.message : 'Kanal eklenemedi.' });
+      setBildirim({ ton: 'hata', metin: err instanceof ApiRequestError ? err.message : d.kanalEklenemedi });
       setEkleniyor(null);
       return;
     }
     if (!clientId) {
-      setBildirim({ ton: 'ok', metin: `${k.title} havuza eklendi. Aşağıdan bir workspace'e ata.` });
+      setBildirim({ ton: 'ok', metin: d.havuzaEklendi(k.title) });
       setEkleniyor(null);
       router.refresh();
       return;
@@ -142,16 +145,14 @@ export function YouTubeKanalBul({
         body: JSON.stringify({ clientId }),
       });
       // Sunucunun notu: kaç kart açıldı, logo alındı mı ya da neden alınamadı.
-      setBildirim({ ton: 'ok', metin: `${k.title} bu workspace'e bağlandı. ${r.note}` });
+      setBildirim({ ton: 'ok', metin: d.baglandi(k.title, r.note) });
       router.refresh();
       baglandi?.();
       void onerileriGetir();
     } catch (err) {
       setBildirim({
         ton: 'hata',
-        metin: `${k.title} havuza eklendi ama bu workspace'e atanamadı: ${
-          err instanceof ApiRequestError ? err.message : 'bilinmeyen hata'
-        }. Havuzdan ekleyerek tekrar dene.`,
+        metin: d.atanamadi(k.title, err instanceof ApiRequestError ? err.message : d.bilinmeyenHata),
       });
     } finally {
       setEkleniyor(null);
@@ -168,12 +169,12 @@ export function YouTubeKanalBul({
         }}
       >
         <label className="min-w-0 flex-1">
-          <span className="sr-only">YouTube’da kanal ara</span>
+          <span className="sr-only">{d.kanalAra}</span>
           <input
             type="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Firma ya da kanal adı"
+            placeholder={d.aramaYer}
             maxLength={80}
             className="h-8 w-full rounded-alan border border-line-strong bg-surface px-2.5 text-13 text-ink placeholder:text-ink-soluk"
           />
@@ -185,13 +186,11 @@ export function YouTubeKanalBul({
           bekliyor={durum.tur === 'yukleniyor' && durum.ne === 'arama'}
           disabled={q.trim().length < 2 || durum.tur === 'yukleniyor'}
         >
-          YouTube’da ara
+          {d.ara}
         </Dugme>
       </form>
       <p className="text-12 text-ink-muted">
-        {clientId
-          ? 'Öneriler workspace sitesinden ve Google Ads geçmişinden gelir. İsimle arama YouTube kotasını kullanır; aynı arama 24 saat önbellekte tutulur.'
-          : 'İsimle arama YouTube kotasını kullanır; aynı arama 24 saat önbellekte tutulur.'}
+        {clientId ? d.notWorkspace : d.notHavuz}
       </p>
 
       {bildirim && (
@@ -209,19 +208,19 @@ export function YouTubeKanalBul({
 
       {durum.tur === 'yukleniyor' && (
         <p className="text-sm text-ink-muted" aria-live="polite">
-          {durum.ne === 'oneri' ? 'Site ve Google Ads geçmişi taranıyor…' : 'YouTube aranıyor…'}
+          {durum.ne === 'oneri' ? d.taraniyor : d.araniyor}
         </p>
       )}
       {durum.tur === 'hata' && (
         <p role="alert" className="m-0 rounded-alan border border-l-4 border-line border-l-danger bg-surface px-3 py-2 text-13 text-ink">
-          {durum.ne === 'oneri' ? 'Öneriler alınamadı: ' : 'Arama yapılamadı: '}
+          {durum.ne === 'oneri' ? d.onerilerAlinamadiOnek : d.aramaYapilamadiOnek}
           {durum.mesaj}
         </p>
       )}
       {durum.tur === 'sonuc' && (
         <div className="space-y-2">
           <p className="text-xs font-medium text-ink">
-            {durum.ne === 'oneri' ? 'Önerilen kanallar' : 'Arama sonuçları'} ({durum.veri.oneriler.length})
+            {durum.ne === 'oneri' ? d.onerilen : d.sonuclar} ({durum.veri.oneriler.length})
           </p>
           {durum.veri.oneriler.length > 0 && (
             <ul className="max-h-96 space-y-1.5 overflow-y-auto overscroll-contain">
@@ -264,13 +263,15 @@ function OneriSatiri({
   kapali: boolean;
   onSec: () => void;
 }) {
+  const { dil } = useDil();
+  const d = useSozluk(baglantilarSozlugu).ytBul;
   const engel =
     k.mevcut?.durum === 'baska_workspacete'
-      ? `${k.mevcut.workspaceAdi ?? 'Başka bir'} workspace'ine bağlı. Önce oradan kaldır.`
+      ? d.baskaWorkspacete(k.mevcut.workspaceAdi ?? null)
       : k.mevcut?.durum === 'bu_workspacete'
-        ? 'Bu workspace’e zaten bağlı.'
+        ? d.buWorkspacete
         : !workspaceVar && k.mevcut?.durum === 'havuzda'
-          ? 'Zaten havuzda.'
+          ? d.zatenHavuzda
           : null;
   return (
     <li className="flex items-start gap-3 rounded-alan border border-line bg-surface p-2.5">
@@ -294,8 +295,8 @@ function OneriSatiri({
         <p className="text-xs text-ink-muted">
           {[
             k.handle,
-            k.aboneSayisi === null ? 'abone sayısı gizli' : `${formatNumber(k.aboneSayisi)} abone`,
-            k.videoSayisi === null ? null : `${formatNumber(k.videoSayisi)} video`,
+            k.aboneSayisi === null ? d.aboneGizli : d.abone(formatNumber(k.aboneSayisi, dil)),
+            k.videoSayisi === null ? null : d.video(formatNumber(k.videoSayisi, dil)),
           ]
             .filter(Boolean)
             .join(' · ')}
@@ -308,7 +309,7 @@ function OneriSatiri({
                   x.tur === 'arama' ? 'bg-surface-sunken text-ink-muted' : 'bg-ink text-surface'
                 }`}
               >
-                {KAYNAK_ETIKETI[x.tur]}
+                {kaynakEtiketi(x.tur, d)}
               </span>
               {x.aciklama}
             </li>
@@ -317,7 +318,7 @@ function OneriSatiri({
         {engel && <p className="mt-1 text-12 font-medium text-ink-muted">{engel}</p>}
       </div>
       <Dugme ton="koyu" boyut="kucuk" bekliyor={bekliyor} disabled={kapali || engel !== null} onClick={onSec}>
-        {workspaceVar ? 'Bu kanal' : 'Havuza ekle'}
+        {workspaceVar ? d.buKanal : d.havuzaEkle}
       </Dugme>
     </li>
   );

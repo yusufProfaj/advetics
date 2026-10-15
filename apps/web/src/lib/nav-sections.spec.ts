@@ -1,3 +1,4 @@
+import { AYARLAR_SEKMELERI } from '@advetics/shared';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -185,6 +186,22 @@ describe('MENÜDEKİ AD İLE SAYFANIN ADI AYNI', () => {
           .replace(/\/\*[\s\S]*?\*\//g, '')
           .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
           .replace(/^\s*\/\/.*$/gm, '');
+        /*
+         * İKİ DİL (D2): sözlüğe geçen sayfa adını düz dize olarak değil
+         * menünün KENDİ çevirisinden alıyor: menü satırı için
+         * `menuEtiketiCevir('satir', '<etiket>', …)`, Ayarlar sekmesi için
+         * `ayarSekmesiAdi('<kod>', …)` (menü de onu okuyor). O zaman ad iki
+         * dilde de menüyle aynı ve iddia "aynı kaynak hem sayfa başlığında
+         * hem sekme başlığında (generateMetadata) kullanılıyor" oluyor.
+         */
+        const sekme = AYARLAR_SEKMELERI.find((s) => s.yol === oge.href);
+        const tekKaynak = sekme ? `ayarSekmesiAdi('${sekme.kod}'` : `menuSatiriEtiketi('${oge.href}'`;
+        if (kod.includes(tekKaynak)) {
+          const metaBlok = /export async function generateMetadata[\s\S]*?\n}/.exec(kod)?.[0] ?? '';
+          if (!metaBlok.includes(tekKaynak)) eksik.push(`${oge.href}: generateMetadata başlığı ${tekKaynak}… kullanmıyor`);
+          if (kod.split(tekKaynak).length - 1 < 2) eksik.push(`${oge.href}: ${tekKaynak}… yalnız bir yerde (sayfa başlığında yok)`);
+          continue;
+        }
         if (!kod.includes(oge.label)) {
           eksik.push(`${oge.href}: sayfada "${oge.label}" geçmiyor`);
           continue;

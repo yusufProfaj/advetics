@@ -3,7 +3,9 @@
 import Link from 'next/link';
 import { type ReactNode, useMemo, useState, useTransition } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { PAKET_SINIRLARI, TUM_SIRKETLER, type ManagerPaket } from '@advetics/shared';
+import { TUM_SIRKETLER, paketEtiketi, type ManagerPaket } from '@advetics/shared';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { kapsamSozlugu } from '@/dil/sozlukler/kapsam';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { baglanti } from '@/lib/baglanti';
 import { gecisHedefi } from '@/lib/kapsam-hedefi';
@@ -120,6 +122,8 @@ export function KapsamSecici({
   /** Kenar çubuğunda: düğme sütunu doldurur, sabit asgari genişlik taşmasın. */
   tamGenislik?: boolean;
 }) {
+  const d = useSozluk(kapsamSozlugu);
+  const { dil } = useDil();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -240,14 +244,14 @@ export function KapsamSecici({
     } catch (e) {
       // HATA YUTULMUYOR: sessizce eski kapsamda kalmak "tıkladım ama
       // değişmedi" hâli demek (CLAUDE.md).
-      setHata(e instanceof ApiRequestError ? e.message : 'Kapsam değiştirilemedi.');
+      setHata(e instanceof ApiRequestError ? e.message : d.degistirilemedi);
       setPending(false);
       setGecilen(null);
     }
   }
 
   const ajansaGec = () =>
-    void git('Tüm şirketler', '/auth/switch-org', { organizationId: TUM_SIRKETLER }, true);
+    void git(d.tumSirketler, '/auth/switch-org', { organizationId: TUM_SIRKETLER }, true);
 
   /*
    * ÜST HESAP DEĞİŞİMİ HER ZAMAN TAM SAYFA.
@@ -299,16 +303,16 @@ export function KapsamSecici({
     });
 
   const baslik = tumSirketler
-    ? (ajans ?? 'Tüm şirketler')
-    : (aktifWorkspace?.name ?? aktifSirket?.name ?? 'Kapsam');
+    ? (ajans ?? d.tumSirketler)
+    : (aktifWorkspace?.name ?? aktifSirket?.name ?? d.kapsam);
   const altBaslikGovdesi = tumSirketler
-    ? `Tüm şirketler · ${sirketler.length} şirket`
+    ? d.tumSirketlerSayi(sirketler.length)
     : aktifWorkspace
       ? (aktifSirket?.name ?? 'Workspace')
       : // KAPSAM ÖNCE, SAYI SONRA: alt başlık dar düğmede kesiliyor ve
         // "N workspace · şirket geneli" sırasıyla kesilen kısım tam da
         // kapsamın kendisiydi (canlı denetim). Kesilirse sayı gitsin.
-        `Şirket geneli · ${aktifSirket?.workspaces.length ?? 0} workspace`;
+        d.sirketGeneliSayi(aktifSirket?.workspaces.length ?? 0);
   /*
    * BİRDEN ÇOK ÜST HESAPTA AJANS ADI DÜĞMEDE YAZIYOR.
    *
@@ -345,7 +349,7 @@ export function KapsamSecici({
 
   return (
     <div className="relative">
-      {bekliyor && <TamEkranYukleniyor mesaj={`${gecilen ?? 'Kapsam'} görünümüne geçiliyor…`} />}
+      {bekliyor && <TamEkranYukleniyor mesaj={d.geciliyor(gecilen ?? d.kapsam)} />}
 
       {hata && (
         <p
@@ -357,7 +361,7 @@ export function KapsamSecici({
       )}
 
       <AcilirMenu
-        etiket="Şirket ve workspace seçici"
+        etiket={d.seciciEtiketi}
         rol="dialog"
         genislik="w-[min(21rem,calc(100vw-1.5rem))]"
         sinif={tamGenislik ? 'w-full min-w-0' : ''}
@@ -417,7 +421,7 @@ export function KapsamSecici({
                   setOpen(false);
                 }
               }}
-              placeholder="Şirket ya da workspace ara…"
+              placeholder={d.ara}
               className="w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-brand"
             />
           </div>
@@ -439,7 +443,7 @@ export function KapsamSecici({
             >
               <span className="min-w-0 truncate">{ajans}</span>
               <span className="shrink-0 text-[11px] text-ink-muted">
-                {tumSirketler ? 'seçili' : 'tüm şirketler'}
+                {tumSirketler ? d.secili : d.tumSirketlerKucuk}
               </span>
             </button>
           )}
@@ -449,15 +453,15 @@ export function KapsamSecici({
               // BOŞ SONUÇ SEBEBİYLE yazılıyor: sessiz boş liste "hiç yok"
               // ile "arama tutmadı" hâllerini aynı ekrana çeviriyor.
               <p className="px-3 py-4 text-center text-xs text-ink-muted">
-                “{arama}” ile eşleşen şirket ya da workspace yok.
+                {d.eslesmeYok(arama)}
               </p>
             ) : (
               <>
                 {once.length > 0 && (
                   <>
-                    <BolumBasligi>Şu an buradasın</BolumBasligi>
+                    <BolumBasligi>{d.buradasin}</BolumBasligi>
                     {once.map(sirketDugumu)}
-                    {digerleri.length > 0 && <BolumBasligi>Diğer şirketler</BolumBasligi>}
+                    {digerleri.length > 0 && <BolumBasligi>{d.digerSirketler}</BolumBasligi>}
                   </>
                 )}
                 {digerleri.map(sirketDugumu)}
@@ -472,7 +476,7 @@ export function KapsamSecici({
                 */}
                 {digerUstHesaplar.length > 0 && (
                   <>
-                    <BolumBasligi>Diğer üst hesaplar</BolumBasligi>
+                    <BolumBasligi>{d.digerUstHesaplar}</BolumBasligi>
                     {digerUstHesaplar.map((h) => (
                       <button
                         key={h.id}
@@ -489,7 +493,7 @@ export function KapsamSecici({
                           göstermek, yanlış hesaba girip fark etmemek demekti.
                         */}
                         <span className="shrink-0 text-[11px] text-ink-muted">
-                          {PAKET_SINIRLARI[h.paket].etiket} · {h.sirketSayisi} şirket
+                          {paketEtiketi(h.paket, dil).etiket} · {d.sirketSayisi(h.sirketSayisi)}
                         </span>
                       </button>
                     ))}
@@ -516,13 +520,13 @@ export function KapsamSecici({
           */}
           <p className="border-t border-line px-3 py-1.5 text-[11px] text-ink-muted">
             {aramaVar
-              ? `${sirketler.length} şirketten ${suzulmus.length} tanesi gösteriliyor`
-              : `${sirketler.length} şirket`}
+              ? d.gosteriliyor(sirketler.length, suzulmus.length)
+              : d.sirketSayisi(sirketler.length)}
             {ajans && digerUstHesaplar.length > 0 && (
               <span className="mt-0.5 block">
                 {aramaVar
-                  ? `Arama ${ajans} ağacında yapıldı. Diğer üst hesapların şirketleri için önce o hesaba geç.`
-                  : `${ustHesaplar.length} üst hesap`}
+                  ? d.aramaKapsami(ajans)
+                  : d.ustHesapSayisi(ustHesaplar.length)}
               </span>
             )}
           </p>
@@ -551,7 +555,7 @@ export function KapsamSecici({
                 <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden>
                   <path d="M4.5 16V6l4-2.5V16M4.5 16h11V9l-7-3M11 11h2M11 13.5h2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
-                Şirketleri yönet
+                {d.sirketleriYonet}
               </Link>
               {ustHesaplarGorunur && ustHesaplar.length > 1 && (
                 <Link
@@ -562,7 +566,7 @@ export function KapsamSecici({
                   <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden>
                     <path d="M3 7.5 10 4l7 3.5-7 3.5-7-3.5ZM3 12l7 3.5 7-3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
-                  Üst hesaplar
+                  {d.ustHesaplar}
                 </Link>
               )}
             </div>
@@ -608,6 +612,7 @@ function SirketDugumu({
   onSirket: () => void;
   onWorkspace: (w: { id: string; name: string }) => void;
 }) {
+  const d = useSozluk(kapsamSozlugu);
   const workspaceVar = sirket.workspaces.length > 0;
   const sirketGeneli = aktif && aktifWorkspaceId === null;
 
@@ -619,7 +624,7 @@ function SirketDugumu({
             type="button"
             onClick={onAcKapa}
             aria-expanded={acik}
-            aria-label={`${sirket.name} workspace’leri`}
+            aria-label={d.workspaceleri(sirket.name)}
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-ink-muted transition hover:bg-surface-muted"
           >
             <svg
@@ -647,16 +652,16 @@ function SirketDugumu({
           <span className="min-w-0 truncate">{sirket.name}</span>
           <span className="shrink-0 text-[11px] font-normal text-ink-muted">
             {sirketGeneli
-              ? 'şirket geneli'
+              ? d.sirketGeneli
               : workspaceVar
-                ? `${sirket.workspaces.length} workspace`
+                ? d.workspaceSayisi(sirket.workspaces.length)
                 : /*
                      "YOK" DEĞİL "ERİŞİMİN YOK".
                      Liste kullanıcının ERİŞTİĞİ workspace'leri taşıyor;
                      şirkette başkaları olabilir. "Workspace yok" demek,
                      görmediği şeyi var olmayan diye göstermekti.
                    */
-                  'erişimin yok'}
+                  d.erisiminYok}
           </span>
         </button>
       </div>

@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { genelBakisSozlugu } from '@/dil/sozlukler/genel-bakis';
 
 /**
  * ═══ UYARI BANDI — PANEL KARARLARI ═══
@@ -77,7 +78,8 @@ describe('iki görünüm', () => {
   it('toplanmış bantta ETKİLENEN SAYI yazılı', () => {
     // "ödeme sorunu var" kaç hesabı etkilediğini söylemiyor ve ajans hangi
     // ölçekte bir sorunla karşı karşıya olduğunu bilemiyordu.
-    expect(BANT_KOD).toContain('<strong>{grup.length}</strong> hesapta');
+    expect(BANT_KOD).toContain('<strong>{grup.length}</strong> {d.hesapta(grup.length)} {d.kisa[ilk.kod]}');
+    expect(genelBakisSozlugu.tr.uyari.hesapta(2)).toBe('hesapta');
   });
 });
 
@@ -89,7 +91,8 @@ describe('sessizliğe karşı', () => {
      */
     const i = BANT_KOD.indexOf('if (hata !== null)');
     expect(i).toBeGreaterThan(-1);
-    expect(BANT_KOD.slice(i, i + 400)).toContain('Uyarılar alınamadı');
+    expect(BANT_KOD.slice(i, i + 400)).toContain('{d.alinamadi(hata)}');
+    expect(genelBakisSozlugu.tr.uyari.alinamadi('x')).toContain('Uyarılar alınamadı');
   });
 
   it('KRİTİK: kesilen liste TOPLAMI yazıyor', () => {
@@ -99,7 +102,8 @@ describe('sessizliğe karşı', () => {
 
   it('hata bandı kullanıcının asıl işini engellemiyor', () => {
     // Uyarı ucu düşerse panel çalışmaya devam etmeli.
-    expect(BANT_KOD).toContain('Panelin geri kalanı çalışmaya devam ediyor');
+    expect(genelBakisSozlugu.tr.uyari.alinamadi('x')).toContain('Panelin geri kalanı çalışmaya devam ediyor');
+    expect(genelBakisSozlugu.en.uyari.alinamadi('x')).toContain('The rest of the panel keeps working');
   });
 });
 
@@ -136,7 +140,7 @@ describe('eylem ve bayatlık', () => {
      * düzeltilmiş bir sorunu haftalarca ekranda tutar.
      */
     expect(BANT_KOD).toContain('{uyari.veriZamani && (');
-    expect(BANT_KOD).toContain('formatRelative(uyari.veriZamani)');
+    expect(BANT_KOD).toContain('formatRelative(uyari.veriZamani, dil)');
   });
 
   it('ortak istemciden geçiyor — ham fetch yok', () => {

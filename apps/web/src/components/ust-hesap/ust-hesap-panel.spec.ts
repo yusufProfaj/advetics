@@ -3,6 +3,11 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ROLE_PERMISSIONS } from '@advetics/shared';
 import { SECTIONS, visibleSections } from '@/lib/nav-sections';
+import { kapsamSozlugu } from '@/dil/sozlukler/kapsam';
+import { sirketlerSozlugu } from '@/dil/sozlukler/ayarlar-sirketler';
+
+/* D2: ekran metni sözlükte; iddia Türkçe değer + bileşenin anahtarı çizmesi. */
+const TR = sirketlerSozlugu.tr;
 
 /**
  * ═══ ÜST HESAP (MCC) — PANEL TARAFI ═══
@@ -145,8 +150,11 @@ describe('SEÇİCİ — üst hesabı OLMAYAN kullanıcı', () => {
      * olabilir.
      */
     expect(LAYOUT).not.toContain('o.id === session.activeOrganizationId');
-    expect(SECICI).toContain("'erişimin yok'");
+    // D2: metin `kapsam.ts` sözlüğünde; seçici anahtarı çiziyor.
+    expect(kapsamSozlugu.tr.erisiminYok).toBe('erişimin yok');
+    expect(SECICI).toContain('d.erisiminYok');
     expect(SECICI).not.toContain("'workspace yok'");
+    expect(JSON.stringify(kapsamSozlugu.tr)).not.toContain('"workspace yok"');
   });
 
   it('KRİTİK: "Yönetim paneli" YETKİSİ OLMAYANA basılmıyor', () => {
@@ -290,7 +298,8 @@ describe('ŞİRKET RAYI — kırk şirkette de kullanılabilir', () => {
   it('KRİTİK: SÜZÜLEN LİSTE kaç şirketten kaçı olduğunu SÖYLÜYOR', () => {
     // CLAUDE.md: "Sessiz kesme yok."
     const ray = blok(EKRAN, 'function SirketRayi');
-    expect(ray).toContain('şirketten {suzulmus.length} tanesi gösteriliyor');
+    expect(ray).toContain('{d.gosteriliyor(agac.organizations.length, suzulmus.length)}');
+    expect(TR.ustHesap.gosteriliyor(40, 3)).toBe('40 şirketten 3 tanesi gösteriliyor');
   });
 
   it('KRİTİK: liste KENDİ KABINDA kayıyor — detay ekrandan çıkmasın', () => {
@@ -328,7 +337,8 @@ describe('ŞİRKET RAYI — kırk şirkette de kullanılabilir', () => {
     const satir = blok(EKRAN, 'function SirketSatiri');
     expect(satir).toContain('aktif ? (');
     // Uzun tire panel metninde yok (BILESENLER; kullanıcı kararı): virgülle.
-    expect(satir).toContain('şu an buradasın, sağdan düzenle');
+    expect(satir).toContain('{d.buradasin}');
+    expect(TR.ustHesap.buradasin).toBe('şu an buradasın, sağdan düzenle');
     expect(satir).not.toContain('Yönet');
   });
 
@@ -341,7 +351,8 @@ describe('ŞİRKET RAYI — kırk şirkette de kullanılabilir', () => {
 
   it('boş workspace listesi SEBEBİNİ söylüyor', () => {
     // "Henüz yok" ile "yüklenemedi" aynı boş alana çevrilmemeli (CLAUDE.md).
-    expect(EKRAN).toContain('Bu şirkette henüz workspace yok');
+    expect(EKRAN).toContain('{d.workspaceYok}');
+    expect(TR.ustHesap.workspaceYok).toContain('Bu şirkette henüz workspace yok');
   });
 
   it('KRİTİK: AÇILIŞTA seçili satır görüş alanına alınıyor', () => {
@@ -376,7 +387,8 @@ describe('ŞİRKET RAYI — kırk şirkette de kullanılabilir', () => {
      */
     const ray = blok(EKRAN, 'function SirketRayi');
     expect(ray).toContain("href={acilisAdresi('sirket')}");
-    expect(ray).toContain('+ Şirket ekle');
+    expect(ray).toContain('{d.sirketEkle}');
+    expect(TR.ustHesap.sirketEkle).toBe('+ Şirket ekle');
     expect(EKRAN).not.toContain("'/manager-account/organizations'");
     expect(EKRAN).not.toContain('function SirketEkle');
   });

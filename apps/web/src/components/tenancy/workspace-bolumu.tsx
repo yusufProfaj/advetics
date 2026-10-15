@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { PANEL_KAPILARI, type ArsivWorkspaceSatiri } from '@advetics/shared';
+import { kapiNedeni, sec, type ArsivWorkspaceSatiri } from '@advetics/shared';
 import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import { acilisAdresi, kapi } from '@/lib/panel-adresleri';
 import type { SessionResponse } from '@/lib/session';
@@ -8,6 +8,9 @@ import { Kart } from '@/components/ui/kart';
 import { BosDurum, Serit } from '@/components/ui/hal';
 import { WorkspaceSatirlari, type WorkspaceSatiri } from '@/components/tenancy/workspace-satirlari';
 import { ArsivListesi } from '@/components/tenancy/arsiv-listesi';
+import { dilAl } from '@/dil/sunucu';
+import { ayarlarSozlugu } from '@/dil/sozlukler/ayarlar';
+import { sirketlerSozlugu } from '@/dil/sozlukler/ayarlar-sirketler';
 
 /**
  * ═══ ŞİRKETİN WORKSPACE'LERİ (Ayarlar › Şirketler ve workspace'ler) ═══
@@ -35,8 +38,8 @@ import { ArsivListesi } from '@/components/tenancy/arsiv-listesi';
  */
 type ClientRow = WorkspaceSatiri;
 
-function hataMetni(e: unknown): string {
-  return e instanceof ApiRequestError ? e.message : 'Bağlantı kurulamadı';
+function hataMetni(e: unknown, yedek: string): string {
+  return e instanceof ApiRequestError ? e.message : yedek;
 }
 
 export async function WorkspaceBolumu({
@@ -47,6 +50,10 @@ export async function WorkspaceBolumu({
   /** Workspace'in taşınabileceği DİĞER şirketler (üst hesap ağacından). */
   tasiHedefleri: Array<{ id: string; name: string }>;
 }) {
+  const dil = await dilAl();
+  const t = sec(sirketlerSozlugu, dil);
+  const d = t.bolum;
+  const yedek = sec(ayarlarSozlugu, dil).ortak.baglantiKurulamadi;
   const geriAlabilir = kapi(session, 'workspace.geriAl');
 
   /*
@@ -70,7 +77,7 @@ export async function WorkspaceBolumu({
   const arsiv = arsivSonuc.status === 'fulfilled' ? (arsivSonuc.value ?? []) : [];
 
   const yuklemeHatalari = [
-    musteriSonuc.status === 'rejected' ? `Workspace listesi: ${hataMetni(musteriSonuc.reason)}` : null,
+    musteriSonuc.status === 'rejected' ? d.workspaceListesi(hataMetni(musteriSonuc.reason, yedek)) : null,
   ].filter((x): x is string => x !== null);
 
   const workspaceAcabilir = kapi(session, 'workspace.ekle');
@@ -83,18 +90,18 @@ export async function WorkspaceBolumu({
           bölümün adı (terminoloji: "Müşteriler"e geri dönmüyor) ve
           satır sayısıyla toplamlar tablonun kendi kartında.
         */}
-        <h2 className="font-baslik m-0 text-15 font-bold text-ink">Workspace’ler</h2>
+        <h2 className="font-baslik m-0 text-15 font-bold text-ink">{d.workspaceler}</h2>
 
         {yuklemeHatalari.length > 0 && (
-          <Serit ton="hata" baslik="Workspace listesi okunamadı">
+          <Serit ton="hata" baslik={d.listeOkunamadi}>
             {yuklemeHatalari.join(' · ')}
           </Serit>
         )}
 
         {musteriSonuc.status === 'fulfilled' && clients.length === 0 ? (
           <BosDurum
-            baslik="Bu şirkette henüz workspace yok"
-            neden="Reklam hesapları workspace’e bağlanıyor. Önce bir workspace aç."
+            baslik={d.henuzYok}
+            neden={d.henuzYokNeden}
             eylem={
               /*
                 YENİ WORKSPACE SİHİRBAZDA KURULUYOR: platform bağlantısını,
@@ -104,10 +111,10 @@ export async function WorkspaceBolumu({
               */
               workspaceAcabilir ? (
                 <Link href={acilisAdresi('workspace')} className={dugmeSinifi('ikincil', 'kucuk')}>
-                  Workspace aç
+                  {d.workspaceAc}
                 </Link>
               ) : (
-                <span className="text-12 text-ink-muted">{PANEL_KAPILARI['workspace.ekle'].neden}</span>
+                <span className="text-12 text-ink-muted">{kapiNedeni('workspace.ekle', dil)}</span>
               )
             }
           />
@@ -115,7 +122,7 @@ export async function WorkspaceBolumu({
           <WorkspaceSatirlari
             satirlar={clients}
             arsivleyebilir={kapi(session, 'workspace.arsivle')}
-            arsivNedeni={PANEL_KAPILARI['workspace.arsivle'].neden}
+            arsivNedeni={kapiNedeni('workspace.arsivle', dil)}
             tasiyabilir={kapi(session, 'workspace.tasi')}
             tasiHedefleri={tasiHedefleri}
           />
@@ -123,25 +130,25 @@ export async function WorkspaceBolumu({
 
         {/* KAPI KAPALIYSA SEBEBİ YAZIYOR: başlıktaki düğme sessizce yok olmuyor. */}
         {!workspaceAcabilir && clients.length > 0 && (
-          <p className="m-0 text-12 text-ink-muted">{PANEL_KAPILARI['workspace.ekle'].neden}</p>
+          <p className="m-0 text-12 text-ink-muted">{kapiNedeni('workspace.ekle', dil)}</p>
         )}
       </section>
 
       <section id="arsiv" className="scroll-mt-24">
         <Kart
-          baslik="Arşiv"
-          baslikEki={geriAlabilir && arsivSonuc.status === 'fulfilled' ? `${arsiv.length} workspace` : undefined}
+          baslik={d.arsiv}
+          baslikEki={geriAlabilir && arsivSonuc.status === 'fulfilled' ? t.ortak.workspaceSayisi(arsiv.length) : undefined}
           dolgu={false}
         >
           <p className="m-0 border-b border-line px-5 py-3 text-13 text-ink-muted">
-            Arşivlenen workspace silinmez; hesapları ve geçmişi durur.
+            {d.arsivAciklama}
           </p>
           {!geriAlabilir ? (
-            <p className="m-0 px-5 py-4 text-13 text-ink-muted">{PANEL_KAPILARI['workspace.geriAl'].neden}</p>
+            <p className="m-0 px-5 py-4 text-13 text-ink-muted">{kapiNedeni('workspace.geriAl', dil)}</p>
           ) : arsivSonuc.status === 'rejected' ? (
             <div className="p-4">
-              <Serit ton="hata" baslik="Arşiv okunamadı">
-                {hataMetni(arsivSonuc.reason)}
+              <Serit ton="hata" baslik={d.arsivOkunamadi}>
+                {hataMetni(arsivSonuc.reason, yedek)}
               </Serit>
             </div>
           ) : (

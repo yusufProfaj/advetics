@@ -19,6 +19,12 @@ export interface KenarVerisi {
   rolEtiketi: string;
   /** "+ Oluştur" seçenekleri, yetkiye göre süzülmüş; boşsa düğme yok. */
   olustur: OlusturSecenegi[];
+  /**
+   * Kullanıcı menüsünün metni, ekranın dilinde. Bileşen hem sunucuda hem
+   * mobil çekmecede (istemci) çiziliyor; sözlüğü kendisi okuyamıyor, metin
+   * veriyle geliyor.
+   */
+  etiketler: { hesabim: string; ikiAdim: string };
 }
 
 /**
@@ -114,14 +120,14 @@ export function KenarIcerigi({
       <div className="border-t border-line p-2.5">
         <KullaniciMenusu ad={veri.kullaniciAdi} rol={veri.rolEtiketi}>
           <MenuOgesi ikon={<Ikon ad="kisi" />} href={ayarlarAdresi('hesabim')} onClick={onGezinme}>
-            Hesabım
+            {veri.etiketler.hesabim}
           </MenuOgesi>
           <MenuOgesi
             ikon={<Ikon ad="kalkan" />}
             href={ayarlarAdresi('hesabim', { capa: 'guvenlik' })}
             onClick={onGezinme}
           >
-            İki adımlı giriş
+            {veri.etiketler.ikiAdim}
           </MenuOgesi>
           <TemaOgesi />
           <MenuAyraci />

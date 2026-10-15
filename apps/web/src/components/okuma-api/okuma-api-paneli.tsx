@@ -5,6 +5,8 @@ import { useEffect, useState } from 'react';
 import {
   OKUMA_ANAHTARI_SURELERI,
   OKUMA_ANAHTARI_UST_SINIR,
+  bicimKodu,
+  type Dil,
   type OkumaAnahtariOlusturmaYaniti,
   type OkumaAnahtariOzeti,
   type OkumaAraciTanimi,
@@ -18,16 +20,19 @@ import { BosDurum, Serit } from '@/components/ui/hal';
 import { Rozet, type DurumHali } from '@/components/ui/rozet';
 import { AdHucresi, Tablo } from '@/components/ui/tablo';
 import { Pencere } from '@/components/ui/pencere';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { hesabimSozlugu } from '@/dil/sozlukler/ayarlar-hesabim';
 
 /* Durum rozeti: yeşil YALNIZ etkin anahtarda (kılavuz: yeşil yalnız durum göstergesi). */
-const DURUM_ETIKETI: Record<OkumaAnahtariOzeti['durum'], { ad: string; hal: DurumHali }> = {
-  etkin: { ad: 'Etkin', hal: 'ok' },
-  suresi_doldu: { ad: 'Süresi doldu', hal: 'taslak' },
-  iptal: { ad: 'İptal', hal: 'dur' },
+/* Etiketi sözlükten (`okuma.durum`). */
+const DURUM_HALI: Record<OkumaAnahtariOzeti['durum'], DurumHali> = {
+  etkin: 'ok',
+  suresi_doldu: 'taslak',
+  iptal: 'dur',
 };
 
-function tarih(iso: string | null): string {
-  return iso === null ? '-' : new Date(iso).toLocaleString('tr-TR', { dateStyle: 'medium', timeStyle: 'short' });
+function tarih(iso: string | null, dil: Dil): string {
+  return iso === null ? '-' : new Date(iso).toLocaleString(bicimKodu(dil), { dateStyle: 'medium', timeStyle: 'short' });
 }
 
 /**
@@ -50,6 +55,8 @@ export function OkumaApiPaneli({
   araclar: OkumaAraciTanimi[];
 }) {
   const router = useRouter();
+  const { dil } = useDil();
+  const d = useSozluk(hesabimSozlugu).okuma;
   const [ad, setAd] = useState('Claude');
   const [sure, setSure] = useState<string>('90');
   const [bekleyen, setBekleyen] = useState<string | null>(null);
@@ -78,7 +85,7 @@ export function OkumaApiPaneli({
       setYeni(r);
       router.refresh();
     } catch (err) {
-      setHata(err instanceof ApiRequestError ? err.message : 'Anahtar oluşturulamadı.');
+      setHata(err instanceof ApiRequestError ? err.message : d.olusturulamadi);
     } finally {
       setBekleyen(null);
     }
@@ -93,7 +100,7 @@ export function OkumaApiPaneli({
       setIptalEdilecek(null);
       router.refresh();
     } catch (err) {
-      setHata(err instanceof ApiRequestError ? err.message : 'İptal edilemedi.');
+      setHata(err instanceof ApiRequestError ? err.message : d.iptalEdilemedi);
       setIptalEdilecek(null);
     } finally {
       setBekleyen(null);
@@ -107,31 +114,30 @@ export function OkumaApiPaneli({
       setTimeout(() => setKopyalanan((k) => (k === anahtar ? null : k)), 2000);
     } catch {
       // Pano izni yoksa kullanıcı metni elle seçebiliyor; hatayı söyle.
-      setHata('Panoya kopyalanamadı. Metni seçip elle kopyala.');
+      setHata(d.panoyaKopyalanamadi);
     }
   }
 
-  const ornekler = baglantiOrnekleri(mcpUrl, yeni?.anahtar ?? null);
+  const ornekler = baglantiOrnekleri(mcpUrl, yeni?.anahtar ?? null, dil);
 
   return (
     <div className="grid gap-5">
       {hata && (
-        <Serit ton="hata" baslik="İşlem yapılamadı">
+        <Serit ton="hata" baslik={d.islemYapilamadi}>
           {hata}
         </Serit>
       )}
 
       {yeni && (
         <Serit
-          baslik={`Yeni anahtar: ${yeni.ozet.ad}`}
+          baslik={d.yeniAnahtar(yeni.ozet.ad)}
           eylemler={
             <Dugme ton="koyu" boyut="kucuk" onClick={() => kopyala('anahtar', yeni.anahtar)}>
-              {kopyalanan === 'anahtar' ? 'Kopyalandı' : 'Kopyala'}
+              {kopyalanan === 'anahtar' ? d.kopyalandi : d.kopyala}
             </Dugme>
           }
         >
-          Bu anahtar yalnızca şimdi görünüyor. Sayfadan çıkınca bir daha gösterilemez; kaybedersen iptal edip
-          yenisini oluştur.
+          {d.birKez}
           <code className="mt-2 block break-all rounded-alan border border-line bg-surface-muted px-3 py-2 font-mono text-12 text-ink">
             {yeni.anahtar}
           </code>
@@ -140,44 +146,44 @@ export function OkumaApiPaneli({
 
       <Kart
         dolgu={false}
-        baslik="Anahtarlar"
-        baslikEki={`${etkinSayisi} etkin · en çok ${OKUMA_ANAHTARI_UST_SINIR}`}
+        baslik={d.anahtarlar}
+        baslikEki={d.etkinSayisi(etkinSayisi, OKUMA_ANAHTARI_UST_SINIR)}
       >
         <Tablo
-          etiket="Okuma API anahtarları"
+          etiket={d.tabloEtiketi}
           satirlar={anahtarlar}
           satirAnahtari={(a) => a.id}
           sutunlar={[
             {
               anahtar: 'ad',
-              baslik: 'Anahtar',
+              baslik: d.anahtar,
               hucre: (a) => <AdHucresi ad={a.ad} alt={<span className="font-mono">{a.gorunenOnek}…</span>} />,
             },
             {
               anahtar: 'durum',
-              baslik: 'Durum',
-              hucre: (a) => <Rozet hal={DURUM_ETIKETI[a.durum].hal}>{DURUM_ETIKETI[a.durum].ad}</Rozet>,
+              baslik: d.durumBaslik,
+              hucre: (a) => <Rozet hal={DURUM_HALI[a.durum]}>{d.durum[a.durum]}</Rozet>,
             },
             {
               anahtar: 'bitis',
-              baslik: 'Bitiş',
+              baslik: d.bitis,
               ikincil: true,
-              hucre: (a) => <span className="text-13">{a.bitis === null ? 'Süresiz' : tarih(a.bitis)}</span>,
+              hucre: (a) => <span className="text-13">{a.bitis === null ? d.suresiz : tarih(a.bitis, dil)}</span>,
             },
             {
               anahtar: 'son',
-              baslik: 'Son kullanım',
+              baslik: d.sonKullanim,
               ikincil: true,
               hucre: (a) => (
                 <span className="text-13">
-                  {a.sonKullanim === null ? 'Hiç kullanılmadı' : tarih(a.sonKullanim)}
+                  {a.sonKullanim === null ? d.hicKullanilmadi : tarih(a.sonKullanim, dil)}
                   {a.sonKullanimIp && <span className="block text-12 text-ink-muted">{a.sonKullanimIp}</span>}
                 </span>
               ),
             },
             {
               anahtar: 'eylem',
-              baslik: <span className="sr-only">Eylemler</span>,
+              baslik: <span className="sr-only">{d.eylemler}</span>,
               sayi: true,
               hucre: (a) =>
                 a.durum === 'etkin' ? (
@@ -187,34 +193,31 @@ export function OkumaApiPaneli({
                     disabled={bekleyen !== null}
                     onClick={() => setIptalEdilecek(a)}
                   >
-                    İptal et
+                    {d.iptalEt}
                   </Dugme>
                 ) : null,
             },
           ]}
-          bos={<BosDurum baslik="Henüz anahtar yok" neden="Aşağıdan bir tane oluştur; her araç için ayrı anahtar önerilir." />}
+          bos={<BosDurum baslik={d.bosBaslik} neden={d.bosNeden} />}
           sayfalama={{ bas: anahtarlar.length === 0 ? 0 : 1, son: anahtarlar.length, toplam: anahtarlar.length }}
         />
       </Kart>
 
-      <Kart baslik="Yeni anahtar">
+      <Kart baslik={d.yeniAnahtarBaslik}>
         <div className="grid gap-4">
-          <p className="m-0 text-13 text-ink-muted">
-            Her araç için ayrı anahtar oluştur; biri sızarsa yalnızca onu iptal edersin. En çok{' '}
-            {OKUMA_ANAHTARI_UST_SINIR} etkin anahtar olabilir ({etkinSayisi} etkin).
-          </p>
+          <p className="m-0 text-13 text-ink-muted">{d.yeniAciklama(OKUMA_ANAHTARI_UST_SINIR, etkinSayisi)}</p>
           <div className="grid gap-4 sm:grid-cols-[1fr_12rem_auto] sm:items-end">
-            <Alan etiket="Ad">
-              <Girdi value={ad} onChange={(e) => setAd(e.target.value)} maxLength={80} placeholder="Örn. Claude Desktop, dizüstü" />
+            <Alan etiket={d.ad}>
+              <Girdi value={ad} onChange={(e) => setAd(e.target.value)} maxLength={80} placeholder={d.adYer} />
             </Alan>
-            <Alan etiket="Geçerlilik">
+            <Alan etiket={d.gecerlilik}>
               <Secim value={sure} onChange={(e) => setSure(e.target.value)}>
                 {OKUMA_ANAHTARI_SURELERI.map((g) => (
                   <option key={g} value={String(g)}>
-                    {g} gün
+                    {d.gun(g)}
                   </option>
                 ))}
-                <option value="suresiz">Süresiz</option>
+                <option value="suresiz">{d.suresiz}</option>
               </Secim>
             </Alan>
             <Dugme
@@ -223,24 +226,25 @@ export function OkumaApiPaneli({
               bekliyor={bekleyen === 'olustur'}
               disabled={bekleyen !== null || ad.trim() === '' || etkinSayisi >= OKUMA_ANAHTARI_UST_SINIR}
             >
-              Anahtar oluştur
+              {d.olustur}
             </Dugme>
           </div>
         </div>
       </Kart>
 
-      <Kart baslik="Bağlan">
+      <Kart baslik={d.baglan}>
         <div className="grid gap-4">
           <p className="m-0 text-13 text-ink-muted">
-            MCP adresi: <code className="font-mono">{mcpUrl}</code>.{' '}
-            {yeni ? 'Örnekler yeni anahtarla dolduruldu.' : 'Anahtar oluşturunca örnekler anahtarla dolar.'}
+            {d.mcpAdresi}
+            <code className="font-mono">{mcpUrl}</code>.{' '}
+            {yeni ? d.ornekDolu : d.ornekBos}
           </p>
           {ornekler.map((o) => (
             <div key={o.baslik} className="grid gap-1">
               <div className="flex items-center justify-between gap-2">
                 <p className="m-0 text-14 font-bold text-ink">{o.baslik}</p>
                 <Dugme ton="ikincil" boyut="kucuk" onClick={() => kopyala(o.baslik, o.metin)}>
-                  {kopyalanan === o.baslik ? 'Kopyalandı' : 'Kopyala'}
+                  {kopyalanan === o.baslik ? d.kopyalandi : d.kopyala}
                 </Dugme>
               </div>
               <p className="m-0 text-12 text-ink-muted">{o.aciklama}</p>
@@ -252,9 +256,9 @@ export function OkumaApiPaneli({
         </div>
       </Kart>
 
-      <Kart baslik="Araçlar" baslikEki={`${araclar.length} araç`}>
+      <Kart baslik={d.araclar} baslikEki={d.aracSayisi(araclar.length)}>
         <div className="grid gap-3">
-          <p className="m-0 text-13 text-ink-muted">Yapay zekânın kullanabildiği okuma araçları. Hiçbiri veri değiştirmez.</p>
+          <p className="m-0 text-13 text-ink-muted">{d.araclarAciklama}</p>
           <ul className="m-0 grid list-none gap-2 p-0 text-14">
             {araclar.map((a) => (
               <li key={a.ad}>
@@ -269,27 +273,27 @@ export function OkumaApiPaneli({
       <Pencere
         acik={iptalEdilecek !== null}
         onKapat={() => setIptalEdilecek(null)}
-        baslik="Anahtarı iptal et"
+        baslik={d.iptalBaslik}
         genislik="dar"
         altEylemler={
           <>
             <Dugme ton="ikincil" onClick={() => setIptalEdilecek(null)}>
-              Vazgeç
+              {d.vazgec}
             </Dugme>
             <Dugme
               ton="tehlike"
               bekliyor={iptalEdilecek !== null && bekleyen === iptalEdilecek.id}
               onClick={() => iptalEdilecek && void iptalEt(iptalEdilecek)}
             >
-              İptal et
+              {d.iptalEt}
             </Dugme>
           </>
         }
       >
         {iptalEdilecek && (
           <p className="m-0 text-14 text-ink">
-            <strong>{iptalEdilecek.ad}</strong> anahtarı iptal edilsin mi? Bu anahtarı kullanan bağlantılar hemen
-            durur.
+            <strong>{iptalEdilecek.ad}</strong>
+            {d.iptalSoru}
           </p>
         )}
       </Pencere>

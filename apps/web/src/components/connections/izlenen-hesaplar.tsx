@@ -4,6 +4,8 @@ import { markaMerkeziAdresi } from '@/lib/panel-adresleri';
 import { Kart } from '@/components/ui/kart';
 import { BosDurum, Serit } from '@/components/ui/hal';
 import { AdHucresi, Tablo } from '@/components/ui/tablo';
+import { sozluk } from '@/dil/sunucu';
+import { baglantilarSozlugu } from '@/dil/sozlukler/ayarlar-baglantilar';
 
 /**
  * İZLENEN HESAPLAR — ÖZET KART, tam liste DEĞİL.
@@ -18,13 +20,14 @@ import { AdHucresi, Tablo } from '@/components/ui/tablo';
  * toplamak, "atadım ama veri gelmiyor" hâlini görünmez yapardı — bu üründe
  * en sık çıkan sessiz arıza.
  */
-export function IzlenenHesaplar({
+export async function IzlenenHesaplar({
   connections,
   clients,
 }: {
   connections: ConnectionSummary[];
   clients: Array<{ id: string; name: string }>;
 }) {
+  const d = (await sozluk(baglantilarSozlugu)).izlenen;
   const hesaplar = connections.flatMap((c) => c.adAccounts);
   const profiller = connections.flatMap((c) => c.socialProfiles);
 
@@ -48,8 +51,8 @@ export function IzlenenHesaplar({
   return (
     <Kart
       dolgu={false}
-      baslik="İzlenen hesaplar"
-      baslikEki={`${izlenenHesap.length} reklam hesabı · ${izlenenProfil.length} sayfa / kanal`}
+      baslik={d.baslik}
+      baslikEki={d.baslikEki(izlenenHesap.length, izlenenProfil.length)}
     >
       {/* SESSİZ KALMASI EN KOLAY DURUM: atanmış ama izlemesi kapalı hesap
           panelde "bağlı" görünür ve hiç veri getirmez. */}
@@ -58,19 +61,20 @@ export function IzlenenHesaplar({
           <Serit
             baslik={
               <>
-                {kapaliHesap > 0 && <>{kapaliHesap} reklam hesabı</>}
-                {kapaliHesap > 0 && kapaliProfil > 0 && ' ve '}
-                {kapaliProfil > 0 && <>{kapaliProfil} sayfa</>} atanmış ama izlemesi KAPALI
+                {kapaliHesap > 0 && d.kapaliHesap(kapaliHesap)}
+                {kapaliHesap > 0 && kapaliProfil > 0 && d.ve}
+                {kapaliProfil > 0 && d.kapaliProfil(kapaliProfil)}
+                {d.kapaliSon}
               </>
             }
           >
-            Bunlardan veri çekilmiyor. Workspace’i aşağıdan aç ve Kurulum’daki hesaplar bölümünden izlemeyi aç.
+            {d.kapaliGovde}
           </Serit>
         </div>
       )}
 
       <Tablo
-        etiket="İzlenen hesaplar"
+        etiket={d.baslik}
         satirlar={musteriBasina}
         satirAnahtari={(c) => c.id}
         sutunlar={[
@@ -81,13 +85,13 @@ export function IzlenenHesaplar({
               <AdHucresi ad={<Link href={markaMerkeziAdresi('kurulum', c.id, 'kanallar')}>{c.name}</Link>} />
             ),
           },
-          { anahtar: 'hesap', baslik: 'Reklam hesabı', sayi: true, hucre: (c) => c.hesap },
-          { anahtar: 'profil', baslik: 'Sayfa / kanal', sayi: true, hucre: (c) => c.profil },
+          { anahtar: 'hesap', baslik: d.reklamHesabi, sayi: true, hucre: (c) => c.hesap },
+          { anahtar: 'profil', baslik: d.sayfaKanal, sayi: true, hucre: (c) => c.profil },
         ]}
         bos={
           <BosDurum
-            baslik="Henüz atanmış hesap yok"
-            neden="Hiçbir workspace’e hesap atanmamış. Yukarıdaki Atanmamış hesaplar tablosundan ata."
+            baslik={d.bosBaslik}
+            neden={d.bosNeden}
           />
         }
         sayfalama={{ bas: musteriBasina.length === 0 ? 0 : 1, son: musteriBasina.length, toplam: musteriBasina.length }}

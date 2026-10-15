@@ -3,16 +3,17 @@
 import { useMemo, useState, useTransition, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  ROL_ETIKETI,
   SIRKET_ROLLERI,
   isOrgScopedRole,
+  rolEtiketi,
+  type Dil,
   type Role,
   type UstHesapUyesi,
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { erisimYasi } from '@/lib/erisim-yasi';
 import { formatDayShort } from '@/lib/format';
-import { ROLE_TR, kapsamRolleri, type MemberRow } from '@/components/tenancy/team-manager';
+import { kapsamRolleri, type MemberRow } from '@/components/tenancy/team-manager';
 import { RolAciklamasi, RolMatrisi } from '@/components/tenancy/rol-matrisi';
 import { UstHesapEkibi } from '@/components/tenancy/ust-hesap-ekibi';
 import { atamalariYurut, type AtamaSonucu } from '@/components/tenancy/danisman-atama';
@@ -26,6 +27,10 @@ import { BolumluSecici } from '@/components/ui/sekmeler';
 import { Pencere, YanPanel } from '@/components/ui/pencere';
 import { MenuOgesi } from '@/components/ui/acilir-menu';
 import { DigerMenusu } from '@/components/ayar-sekmeleri';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { ekipSozlugu } from '@/dil/sozlukler/ayarlar-ekip';
+
+type EkipSozlugu = (typeof ekipSozlugu)['tr'];
 
 interface ClientOption {
   id: string;
@@ -104,6 +109,9 @@ export function TeamScreen({
    */
   ustHesap: UstHesapEkipVerisi | null;
 }) {
+  const { dil } = useDil();
+  const t = useSozluk(ekipSozlugu);
+  const d = t.ekran;
   const [duzenlenen, setDuzenlenen] = useState<MemberRow | null>(null);
   const [atananKisi, setAtananKisi] = useState<MemberRow | null>(null);
   const [sifirlanan, setSifirlanan] = useState<MemberRow | null>(null);
@@ -174,29 +182,29 @@ export function TeamScreen({
   const sutunlar: Array<TabloSutunu<KisiSatiri>> = [
     {
       anahtar: 'kisi',
-      baslik: 'Kişi',
+      baslik: d.kisi,
       hucre: (k) => (
         <AdHucresi
           ad={
             <>
               {k.fullName ?? k.email}
-              {k.id === currentUserId && <span className="ml-1.5 text-12 font-normal text-ink-muted">(sen)</span>}
+              {k.id === currentUserId && <span className="ml-1.5 text-12 font-normal text-ink-muted">{t.ortak.sen}</span>}
             </>
           }
           alt={k.email}
         />
       ),
     },
-    { anahtar: 'rol', baslik: 'Rol', hucre: (k) => <span className="text-13">{rolOzeti(k)}</span> },
+    { anahtar: 'rol', baslik: d.rol, hucre: (k) => <span className="text-13">{rolOzeti(k, dil, t)}</span> },
     {
       anahtar: 'kapsam',
-      baslik: 'Kapsam',
+      baslik: d.kapsam,
       ikincil: true,
-      hucre: (k) => <span className="text-13 text-ink-muted">{ozet(k)}</span>,
+      hucre: (k) => <span className="text-13 text-ink-muted">{ozet(k, t)}</span>,
     },
     {
       anahtar: 'iki',
-      baslik: 'İki adımlı',
+      baslik: d.ikiAdimli,
       ikincil: true,
       /*
        * `mfaEnabled` gelmediyse (eski yanıt) "Kapalı" YAZILMIYOR:
@@ -205,14 +213,14 @@ export function TeamScreen({
        */
       hucre: (k) =>
         k.mfaEnabled === undefined ? (
-          <span className="text-12 text-ink-soluk">Bilinmiyor</span>
+          <span className="text-12 text-ink-soluk">{d.bilinmiyor}</span>
         ) : (
-          <Rozet hal={k.mfaEnabled ? 'ok' : 'hata'}>{k.mfaEnabled ? 'Açık' : 'Kapalı'}</Rozet>
+          <Rozet hal={k.mfaEnabled ? 'ok' : 'hata'}>{k.mfaEnabled ? t.ortak.acik : t.ortak.kapali}</Rozet>
         ),
     },
     {
       anahtar: 'giris',
-      baslik: 'Son giriş',
+      baslik: d.sonGiris,
       ikincil: true,
       /*
        * AYRILANIN ERİŞİMİ (pazar araştırması 2026-10-15): asıl Ekip ekranı
@@ -221,10 +229,10 @@ export function TeamScreen({
        * kaldırmak farklı iş).
        */
       hucre: (k) => {
-        const y = erisimYasi(k.lastLoginAt);
+        const y = erisimYasi(k.lastLoginAt, undefined, dil);
         return (
           <span className="grid gap-0.5 text-13">
-            {k.lastLoginAt && <span className="tabular-nums">{formatDayShort(k.lastLoginAt.slice(0, 10))}</span>}
+            {k.lastLoginAt && <span className="tabular-nums">{formatDayShort(k.lastLoginAt.slice(0, 10), dil)}</span>}
             {y && (
               <span className={`text-12 ${y.tur === 'uzun' ? 'font-semibold text-danger-strong' : 'text-ink-muted'}`} data-erisim={y.tur}>
                 {y.metin}
@@ -236,20 +244,20 @@ export function TeamScreen({
     },
     {
       anahtar: 'eylem',
-      baslik: <span className="sr-only">Eylemler</span>,
+      baslik: <span className="sr-only">{t.ortak.eylemler}</span>,
       sayi: true,
       hucre: (k) => (
         /* SATIR TIKLAMASI PANELİ AÇIYOR; menünün tıklaması satıra taşmasın. */
         <span className="inline-flex" onClick={(e) => e.stopPropagation()}>
-          <DigerMenusu etiket={`${k.fullName ?? k.email} için işlemler`}>
-            <MenuOgesi onClick={() => setSecilenId(k.id)}>Erişimleri yönet</MenuOgesi>
-            {canManage && <MenuOgesi onClick={() => setDuzenlenen(k)}>Bilgileri düzenle</MenuOgesi>}
+          <DigerMenusu etiket={d.islemler(k.fullName ?? k.email)}>
+            <MenuOgesi onClick={() => setSecilenId(k.id)}>{d.erisimleriYonet}</MenuOgesi>
+            {canManage && <MenuOgesi onClick={() => setDuzenlenen(k)}>{d.bilgileriDuzenle}</MenuOgesi>}
             {canManage && k.ajans && (
-              <MenuOgesi onClick={() => setAtananKisi(k)}>Şirkete yetki ver</MenuOgesi>
+              <MenuOgesi onClick={() => setAtananKisi(k)}>{d.sirketeYetkiVer}</MenuOgesi>
             )}
             {canManage && k.id !== currentUserId && k.mfaEnabled === true && (
               <MenuOgesi tehlike onClick={() => setSifirlanan(k)}>
-                İki adımlıyı sıfırla
+                {d.ikiAdimSifirla}
               </MenuOgesi>
             )}
           </DigerMenusu>
@@ -267,12 +275,12 @@ export function TeamScreen({
       <div id="kisiler" className="scroll-mt-24">
         <Kart
           dolgu={false}
-          baslik="Kişiler"
+          baslik={d.kisiler}
           /* SESSİZ KESME YOK: kaç kişi ve kaçının ajans personeli olduğu yazılı. */
-          baslikEki={`${kisiler.length} kişi · ${ajansSayisi} ajans personeli · ${kisiler.length - ajansSayisi} müşteri hesabı`}
+          baslikEki={d.kisilerEki(kisiler.length, ajansSayisi, kisiler.length - ajansSayisi)}
         >
           <Tablo
-            etiket="Kişiler"
+            etiket={d.kisiler}
             sutunlar={sutunlar}
             satirlar={suzulmus}
             satirAnahtari={(k) => k.id}
@@ -283,7 +291,7 @@ export function TeamScreen({
                   (q !== '' || tur !== 'tumu') &&
                   kisiler.length > 0 && (
                     <span className="text-12 text-ink-muted">
-                      {kisiler.length} kişiden {suzulmus.length} tanesi gösteriliyor
+                      {d.gosteriliyor(kisiler.length, suzulmus.length)}
                     </span>
                   )
                 }
@@ -293,30 +301,26 @@ export function TeamScreen({
                     type="search"
                     value={arama}
                     onChange={(e) => setArama(e.target.value)}
-                    placeholder="Ad ya da e-posta ara"
-                    aria-label="Kişi ara"
+                    placeholder={d.araYer}
+                    aria-label={d.kisiAra}
                   />
                 </div>
                 <BolumluSecici
-                  etiket="Kişi türü"
+                  etiket={d.kisiTuru}
                   secili={tur}
                   onSec={setTur}
                   secenekler={[
-                    { deger: 'tumu', etiket: 'Tümü' },
-                    { deger: 'ajans', etiket: 'Ajans' },
-                    { deger: 'musteri', etiket: 'Müşteri hesabı' },
+                    { deger: 'tumu', etiket: d.tumu },
+                    { deger: 'ajans', etiket: d.ajans },
+                    { deger: 'musteri', etiket: d.musteriHesabi },
                   ]}
                 />
               </AracCubugu>
             }
             bos={
               <BosDurum
-                baslik={kisiler.length === 0 ? 'Henüz kimse eklenmemiş' : 'Eşleşen kişi yok'}
-                neden={
-                  kisiler.length === 0
-                    ? 'Başlıktaki “Kullanıcı ekle” ile ilk kişiyi aç.'
-                    : `“${arama}” ve seçili tür ile eşleşen kişi yok. Süzgeci temizleyince bütün liste döner.`
-                }
+                baslik={kisiler.length === 0 ? d.henuzKimseYok : d.eslesenYok}
+                neden={kisiler.length === 0 ? d.ilkKisi : d.eslesmedi(arama)}
               />
             }
             sayfalama={{ bas: suzulmus.length === 0 ? 0 : 1, son: suzulmus.length, toplam: suzulmus.length }}
@@ -347,7 +351,7 @@ export function TeamScreen({
       <YanPanel
         acik={panelAcik}
         onKapat={() => setSecilenId(null)}
-        baslik={secilen ? (secilen.fullName ?? secilen.email) : 'Kişi'}
+        baslik={secilen ? (secilen.fullName ?? secilen.email) : d.kisi}
         genislik={480}
       >
         {secilen && (
@@ -367,12 +371,12 @@ export function TeamScreen({
       <YanPanel
         acik={duzenlenen !== null}
         onKapat={() => setDuzenlenen(null)}
-        baslik={duzenlenen ? `${duzenlenen.fullName ?? duzenlenen.email} · bilgileri` : 'Bilgiler'}
+        baslik={duzenlenen ? d.bilgileriBaslik(duzenlenen.fullName ?? duzenlenen.email) : d.bilgiler}
       >
         {duzenlenen && <UyeDuzenleModal member={duzenlenen} onKapat={() => setDuzenlenen(null)} />}
       </YanPanel>
 
-      <Pencere acik={atananKisi !== null} onKapat={() => setAtananKisi(null)} baslik="Şirkete yetki ver">
+      <Pencere acik={atananKisi !== null} onKapat={() => setAtananKisi(null)} baslik={d.sirketeYetkiVer}>
         {atananKisi && (
           <DanismanAtaModal
             danismanlar={[atananKisi]}
@@ -397,10 +401,11 @@ export function TeamScreen({
  */
 export function KullaniciEkle({ clients }: { clients: ClientOption[] }) {
   const [acik, setAcik] = useState(false);
+  const d = useSozluk(ekipSozlugu).ekran;
   return (
     <>
-      <Dugme onClick={() => setAcik(true)}>+ Kullanıcı ekle</Dugme>
-      <YanPanel acik={acik} onKapat={() => setAcik(false)} baslik="Kullanıcı ekle" genislik={440}>
+      <Dugme onClick={() => setAcik(true)}>{d.kullaniciEkle}</Dugme>
+      <YanPanel acik={acik} onKapat={() => setAcik(false)} baslik={d.kullaniciEkleBaslik} genislik={440}>
         {acik && <KullaniciEkleModal clients={clients} onKapat={() => setAcik(false)} />}
       </YanPanel>
     </>
@@ -408,24 +413,24 @@ export function KullaniciEkle({ clients }: { clients: ClientOption[] }) {
 }
 
 /** Rol sütunu: kişinin rolleri TEK satırda. */
-function rolOzeti(k: KisiSatiri): string {
+function rolOzeti(k: KisiSatiri, dil: Dil, t: EkipSozlugu): string {
   const ust = k.managerMemberships?.[0];
-  if (ust) return `Üst hesap · ${ROL_ETIKETI[ust.role]}`;
-  if (k.memberships.length === 0) return 'Yetkisi yok';
-  return [...new Set(k.memberships.map((m) => ROLE_TR[m.role]))].join(', ');
+  if (ust) return t.ekran.ustHesapRol(rolEtiketi(ust.role, dil));
+  if (k.memberships.length === 0) return t.ekran.yetkisiYok;
+  return [...new Set(k.memberships.map((m) => rolEtiketi(m.role, dil)))].join(', ');
 }
 
 /** Kapsam sütunu: kişinin erişimi TEK CÜMLEDE. */
-function ozet(k: KisiSatiri): string {
+function ozet(k: KisiSatiri, t: EkipSozlugu): string {
   const ust = k.managerMemberships?.[0];
-  if (ust) return 'Bütün şirketler';
-  if (k.memberships.length === 0) return 'Hiçbir yer';
+  if (ust) return t.ekran.butunSirketler;
+  if (k.memberships.length === 0) return t.ekran.hicbirYer;
   const sirket = k.memberships.filter((m) => m.clientId === null).length;
   const workspace = k.memberships.length - sirket;
   const parcalar: string[] = [];
-  if (sirket > 0) parcalar.push(`${sirket} şirket`);
-  if (workspace > 0) parcalar.push(`${workspace} workspace`);
-  return `${k.ajans ? 'Ajans' : 'Müşteri hesabı'} · ${parcalar.join(' · ')}`;
+  if (sirket > 0) parcalar.push(t.ekran.sirketSayisi(sirket));
+  if (workspace > 0) parcalar.push(t.ekran.workspaceSayisi(workspace));
+  return `${k.ajans ? t.ekran.ajans : t.ekran.musteriHesabi} · ${parcalar.join(' · ')}`;
 }
 
 /**
@@ -455,6 +460,9 @@ function KisiDetayi({
   onSirketYetkisi: () => void;
   onIkiAdimSifirla: () => void;
 }) {
+  const { dil } = useDil();
+  const t = useSozluk(ekipSozlugu);
+  const d = t.detay;
   const sirketYetkileri = kisi.memberships.filter((m) => m.clientId === null);
   const workspaceYetkileri = kisi.memberships.filter((m) => m.clientId !== null);
 
@@ -464,13 +472,13 @@ function KisiDetayi({
         <p className="m-0 break-all text-13 text-ink-muted">{kisi.email}</p>
         <p className="m-0 text-13 text-ink-muted">
           {kisi.ajans
-            ? 'Ajans personeli. Şirketlere ve workspace’lere yetkilendirilebilir.'
-            : 'Müşteri hesabı. Yalnızca tek bir workspace’e bağlı kalır.'}
+            ? d.ajansAciklama
+            : d.musteriAciklama}
         </p>
         {canManage && (
           <div>
             <Dugme ton="ikincil" boyut="kucuk" onClick={onDuzenle}>
-              Bilgileri düzenle
+              {t.ekran.bilgileriDuzenle}
             </Dugme>
           </div>
         )}
@@ -486,37 +494,37 @@ function KisiDetayi({
         şirketleri yöneten kişi için en yanlış cümle ve bu ekranda yaşandı.
       */}
       {kisi.managerMemberships && kisi.managerMemberships.length > 0 ? (
-        <Serit ton="bilgi" baslik={`Üst hesapta ${ROL_ETIKETI[kisi.managerMemberships[0].role]}`}>
-          Bu üst hesabın altındaki bütün şirketlere erişiyor. Değiştirmek için “Üst hesap ekibi” bölümünü kullan.
+        <Serit ton="bilgi" baslik={d.ustHesaptaRol(rolEtiketi(kisi.managerMemberships[0].role, dil))}>
+          {d.ustHesapGovde}
         </Serit>
       ) : (
         kisi.memberships.length === 0 && (
-          <Serit baslik="Bu hesabın hiçbir yetkisi yok">
-            Bu hesap giriş yapabiliyor ama panelde hiçbir şey göremiyor.
+          <Serit baslik={d.hicYetkiYok}>
+            {d.hicYetkiGovde}
           </Serit>
         )
       )}
 
       <YetkiBolumu
-        baslik="Şirket yetkileri"
-        aciklama="Bir şirkete verilen yetki o şirketin BÜTÜN workspace’lerini açar; tek tek atama gerekmiyor."
+        baslik={d.sirketYetkileri}
+        aciklama={d.sirketYetkiAciklama}
         uyelikler={sirketYetkileri}
-        etiket={(m) => sirketler.find((o) => o.id === m.orgId)?.name ?? 'Şirket'}
+        etiket={(m) => sirketler.find((o) => o.id === m.orgId)?.name ?? d.sirket}
         kendisi={kendisi}
         canManage={canManage}
-        bos="Şirket geneli yetkisi yok."
+        bos={d.sirketYetkisiYok}
         eylem={
           canManage && kisi.ajans ? (
             <Dugme ton="ikincil" boyut="kucuk" onClick={onSirketYetkisi}>
-              + Şirkete yetki ver
+              {d.sirketeYetkiVer}
             </Dugme>
           ) : null
         }
       />
 
       <YetkiBolumu
-        baslik="Workspace yetkileri"
-        aciklama="Tek bir workspace’e verilen erişim. Müşteri hesapları yalnızca burada bulunur."
+        baslik={d.workspaceYetkileri}
+        aciklama={d.workspaceYetkiAciklama}
         uyelikler={workspaceYetkileri}
         /*
          * AD ÖNCE ÜYELİĞİN KENDİSİNDEN. `client` ilişkisi uçtan geliyor ve
@@ -530,7 +538,7 @@ function KisiDetayi({
         }
         kendisi={kendisi}
         canManage={canManage}
-        bos="Tek bir workspace’e verilmiş yetki yok."
+        bos={d.workspaceYetkisiYok}
         eylem={null}
       />
     </div>
@@ -565,6 +573,8 @@ function YetkiBolumu({
   eylem: ReactNode;
 }) {
   const router = useRouter();
+  const { dil } = useDil();
+  const t = useSozluk(ekipSozlugu);
   const [busy, setBusy] = useState<string | null>(null);
   const [hata, setHata] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -578,7 +588,7 @@ function YetkiBolumu({
     } catch (e) {
       // HATA YUTULMUYOR: sessizce başarısız olan bir yetki değişikliği,
       // kullanıcının verdiğini sandığı bir erişim demek.
-      setHata(e instanceof ApiRequestError ? e.message : 'İşlem başarısız oldu.');
+      setHata(e instanceof ApiRequestError ? e.message : t.ortak.islemBasarisiz);
     } finally {
       setBusy(null);
     }
@@ -598,7 +608,7 @@ function YetkiBolumu({
       </div>
 
       {hata && (
-        <Serit ton="hata" baslik="Yetki değişmedi">
+        <Serit ton="hata" baslik={t.ortak.yetkiDegismedi}>
           {hata}
         </Serit>
       )}
@@ -613,7 +623,7 @@ function YetkiBolumu({
 
               <span className="w-44">
                 <Secim
-                  aria-label={`${etiket(m)} rolü`}
+                  aria-label={t.ortak.rolEtiketi(etiket(m))}
                   value={m.role}
                   disabled={!canManage || busy !== null || isPending || kendisi}
                   onChange={(e) =>
@@ -629,7 +639,7 @@ function YetkiBolumu({
                       satırında Yönetici yok (gerekçe `roles.ts`). */}
                   {kapsamRolleri(m.clientId ?? '').map((r) => (
                     <option key={r} value={r}>
-                      {ROLE_TR[r]}
+                      {rolEtiketi(r, dil)}
                     </option>
                   ))}
                 </Secim>
@@ -647,7 +657,7 @@ function YetkiBolumu({
                     )
                   }
                 >
-                  Kaldır
+                  {t.ortak.kaldir}
                 </Dugme>
               )}
             </li>
@@ -658,7 +668,7 @@ function YetkiBolumu({
       {/* KENDİ YETKİNİ DEĞİŞTİREMİYORSUN: tek yöneticinin kendini
           düşürmesi, panelden geri alınamayan bir kilitlenme. */}
       {kendisi && uyelikler.length > 0 && (
-        <p className="m-0 text-12 text-ink-muted">Kendi yetkini bu ekrandan değiştiremezsin.</p>
+        <p className="m-0 text-12 text-ink-muted">{t.detay.kendiYetkin}</p>
       )}
     </section>
   );
@@ -679,6 +689,9 @@ function KullaniciEkleModal({
   onKapat: () => void;
 }) {
   const router = useRouter();
+  const { dil } = useDil();
+  const t = useSozluk(ekipSozlugu);
+  const d = t.ekle;
   const [ad, setAd] = useState('');
   const [eposta, setEposta] = useState('');
   const [parola, setParola] = useState('');
@@ -715,7 +728,7 @@ function KullaniciEkleModal({
       router.refresh();
       onKapat();
     } catch (e) {
-      setHata(e instanceof ApiRequestError ? e.message : 'Kullanıcı eklenemedi.');
+      setHata(e instanceof ApiRequestError ? e.message : d.eklenemedi);
     } finally {
       setBusy(false);
     }
@@ -725,21 +738,21 @@ function KullaniciEkleModal({
     <div className="grid gap-4">
       {/* DAVET GÖNDERİLMİYOR ve bu bir kısıt: e-posta altyapısı yok.
           Kullanıcıya söylenmezse parolayı nasıl ileteceğini bilemez. */}
-      <Serit ton="bilgi" baslik="Kullanıcı anında oluşur">
-        Kullanıcı anında oluşur, davet gönderilmiyor. Parolayı sen belirliyorsun ve kullanıcıya kendin iletiyorsun.
+      <Serit ton="bilgi" baslik={d.anindaBaslik}>
+        {d.anindaGovde}
       </Serit>
 
-      <Alan etiket="Ad soyad">
+      <Alan etiket={t.ortak.adSoyad}>
         <Girdi value={ad} onChange={(e) => setAd(e.target.value)} />
       </Alan>
-      <Alan etiket="E-posta">
+      <Alan etiket={t.ortak.eposta}>
         <Girdi type="email" value={eposta} onChange={(e) => setEposta(e.target.value)} />
       </Alan>
-      <Alan etiket="Parola" ipucu="En az 12 karakter.">
+      <Alan etiket={t.ortak.parola} ipucu={d.enAz12}>
         <Girdi type="password" value={parola} onChange={(e) => setParola(e.target.value)} />
       </Alan>
 
-      <Alan etiket="Rol" ipucu={<RolAciklamasi rol={rol} />}>
+      <Alan etiket={t.ortak.rol} ipucu={<RolAciklamasi rol={rol} />}>
         <Secim
           value={rol}
           onChange={(e) => {
@@ -756,13 +769,13 @@ function KullaniciEkleModal({
         >
           {kapsamRolleri(clientId).map((r) => (
             <option key={r} value={r}>
-              {ROLE_TR[r]}
+              {rolEtiketi(r, dil)}
             </option>
           ))}
         </Secim>
       </Alan>
 
-      <Alan etiket="Kapsam">
+      <Alan etiket={d.kapsam}>
         <Secim
           value={clientId}
           onChange={(e) => {
@@ -775,8 +788,8 @@ function KullaniciEkleModal({
           }}
         >
           <option value="" disabled={!orgGeneliOlabilir}>
-            Şirket geneli, bütün workspace’ler
-            {orgGeneliOlabilir ? '' : ' (müşteri hesabı için kapalı)'}
+            {d.sirketGeneli}
+            {orgGeneliOlabilir ? '' : d.musteriIcinKapali}
           </option>
           {clients.map((c) => (
             <option key={c.id} value={c.id}>
@@ -787,14 +800,14 @@ function KullaniciEkleModal({
       </Alan>
 
       {hata && (
-        <Serit ton="hata" baslik="Kullanıcı eklenemedi">
+        <Serit ton="hata" baslik={d.eklenemediBaslik}>
           {hata}
         </Serit>
       )}
 
       <div className="flex justify-end gap-2 border-t border-line pt-4">
         <Dugme ton="ikincil" onClick={onKapat}>
-          Vazgeç
+          {t.ortak.vazgec}
         </Dugme>
         <Dugme
           onClick={() => void gonder()}
@@ -806,7 +819,7 @@ function KullaniciEkleModal({
             (clientId === '' && !orgGeneliOlabilir)
           }
         >
-          Kullanıcıyı ekle
+          {d.kullaniciyiEkle}
         </Dugme>
       </div>
     </div>
@@ -842,6 +855,9 @@ function DanismanAtaModal({
   onKapat: () => void;
 }) {
   const router = useRouter();
+  const { dil } = useDil();
+  const t = useSozluk(ekipSozlugu);
+  const d = t.sirketYetkisi;
   /*
    * TEK KİŞİYLE AÇILIYORSA ÖNCEDEN SEÇİLİ. Pencere satırın ⋯ menüsünden ya
    * da kişinin panelinden açılıyor; ikisinde de kişi belli ve ilk adımı boş
@@ -877,13 +893,13 @@ function DanismanAtaModal({
         );
         return {
           ...o,
-          engel: mevcut ? `Zaten şirket geneli yetkisi var (${ROLE_TR[mevcut.role]})` : null,
+          engel: mevcut ? d.zatenVar(rolEtiketi(mevcut.role, dil)) : null,
         };
       })
       // Türkçe küçültme açıkça veriliyor: varsayılan `toLowerCase()` "İ"yi
       // "i̇" yapıyor ve "İkon" araması "ikon" ile eşleşmiyor.
       .filter((o) => q === '' || o.name.toLocaleLowerCase('tr').includes(q));
-  }, [sirketler, secilen, arama]);
+  }, [sirketler, secilen, arama, d, dil]);
 
   const atanabilir = secilebilirSirketler.filter((o) => o.engel === null);
 
@@ -906,12 +922,15 @@ function DanismanAtaModal({
       ad: sirketler.find((o) => o.id === id)?.name ?? id,
     }));
 
-    const r = await atamalariYurut(hedefler, (organizationId) =>
+    const r = await atamalariYurut(
+      hedefler,
+      (organizationId) =>
       apiFetch('/memberships', {
         method: 'POST',
         /* `clientId: null` — ŞİRKET GENELİ. */
         body: JSON.stringify({ userId, clientId: null, role: rol, organizationId }),
       }),
+      dil,
     );
 
     setBusy(false);
@@ -925,12 +944,9 @@ function DanismanAtaModal({
 
   return (
     <div className="grid gap-4">
-      <p className="m-0 text-13 text-ink-muted">
-        Ajans ekibinden birini bir ya da daha çok ŞİRKETE bağlar. Yetki verilen danışman o şirketin BÜTÜN
-        workspace’lerini görür. Müşteri hesapları buradan yetkilendirilemez; onların sınırı tek bir workspace.
-      </p>
+      <p className="m-0 text-13 text-ink-muted">{d.aciklama}</p>
 
-      <Alan etiket="1 · Danışman">
+      <Alan etiket={d.danisman}>
         <Secim
           value={userId}
           onChange={(e) => {
@@ -941,7 +957,7 @@ function DanismanAtaModal({
             setSonuc(null);
           }}
         >
-          <option value="">Seç</option>
+          <option value="">{d.sec}</option>
           {danismanlar.map((d) => (
             <option key={d.id} value={d.id}>
               {d.fullName ?? d.email} · {d.email}
@@ -953,7 +969,7 @@ function DanismanAtaModal({
       <div className="grid gap-1.5">
         <div className="flex items-center justify-between gap-2">
           <span className="text-13 font-semibold text-ink">
-            2 · Şirket{secili.size > 0 ? ` (${secili.size} seçildi)` : ''}
+            {d.sirket(secili.size)}
           </span>
           {/* TOPLU SEÇİM YALNIZCA ATANABİLİR OLANLARI kapsıyor: engelli
               satırı da işaretlemek, gönderilir gönderilmez 409 yiyecek
@@ -970,15 +986,13 @@ function DanismanAtaModal({
                 )
               }
             >
-              {secili.size === atanabilir.length ? 'Seçimi kaldır' : 'Hepsini seç'}
+              {secili.size === atanabilir.length ? t.ortak.seciminiKaldir : t.ortak.hepsiniSec}
             </Dugme>
           )}
         </div>
 
         {!secilen ? (
-          <p className="m-0 text-12 text-ink-muted">
-            Önce danışman seç. Hangi şirketlerin uygun olduğu kişiye bağlı.
-          </p>
+          <p className="m-0 text-12 text-ink-muted">{d.onceDanisman}</p>
         ) : (
           <>
             {/* ARAMA YALNIZCA LİSTE UZUNSA: dört şirkette arama kutusu
@@ -988,8 +1002,8 @@ function DanismanAtaModal({
                 type="search"
                 value={arama}
                 onChange={(e) => setArama(e.target.value)}
-                placeholder="Şirket ara"
-                aria-label="Şirket ara"
+                placeholder={d.sirketAra}
+                aria-label={d.sirketAra}
               />
             )}
 
@@ -1018,22 +1032,20 @@ function DanismanAtaModal({
             {/* SESSİZ KESME YOK ve ÜÇ HÂL AYRI: hiç şirket yok · arama
                 eşleşmedi · hepsinde zaten yetkisi var. */}
             {sirketler.length === 0 && (
-              <p className="m-0 text-12 font-semibold text-danger-strong">Henüz şirket açılmamış.</p>
+              <p className="m-0 text-12 font-semibold text-danger-strong">{d.sirketYok}</p>
             )}
             {sirketler.length > 0 && secilebilirSirketler.length === 0 && (
-              <p className="m-0 text-12 text-ink-muted">“{arama}” ile eşleşen şirket yok.</p>
+              <p className="m-0 text-12 text-ink-muted">{d.eslesenSirketYok(arama)}</p>
             )}
             {secilebilirSirketler.length > 0 && atanabilir.length === 0 && (
-              <p className="m-0 text-12 font-semibold text-danger-strong">
-                Bu kişinin listedeki şirketlerin hepsinde zaten yetkisi var.
-              </p>
+              <p className="m-0 text-12 font-semibold text-danger-strong">{d.hepsindeVar}</p>
             )}
           </>
         )}
       </div>
 
       <Alan
-        etiket="3 · Rol"
+        etiket={d.rol}
         ipucu={
           <>
             <RolAciklamasi rol={rol} />
@@ -1041,9 +1053,7 @@ function DanismanAtaModal({
                 iki müşteride farklı rolü olabiliyor; toplu atama o ayrımı
                 yapamıyor ve söylenmezse kullanıcı yaptığını sanır. */}
             {secili.size > 1 && (
-              <span className="mt-1 block">
-                Seçilen {secili.size} şirketin hepsinde bu rol verilecek. Farklı rol gerekiyorsa ayrı ayrı ata.
-              </span>
+              <span className="mt-1 block">{d.hepsindeBuRol(secili.size)}</span>
             )}
           </>
         }
@@ -1057,14 +1067,14 @@ function DanismanAtaModal({
           */}
           {SIRKET_ROLLERI.map((r) => (
             <option key={r} value={r}>
-              {ROLE_TR[r]}
+              {rolEtiketi(r, dil)}
             </option>
           ))}
         </Secim>
       </Alan>
 
       {hata && (
-        <Serit ton="hata" baslik="Yetki verilemedi">
+        <Serit ton="hata" baslik={d.verilemedi}>
           {hata}
         </Serit>
       )}
@@ -1074,7 +1084,7 @@ function DanismanAtaModal({
       {sonuc && (
         <Serit
           ton={sonuc.hatalar.length > 0 ? 'hata' : 'bilgi'}
-          baslik={`${sonuc.basarili} şirkete yetki verildi.`}
+          baslik={d.verildi(sonuc.basarili)}
         >
           {sonuc.hatalar.length > 0 && (
             <ul className="m-0 mt-1 list-none p-0">
@@ -1088,10 +1098,10 @@ function DanismanAtaModal({
 
       <div className="flex justify-end gap-2 border-t border-line pt-4">
         <Dugme ton="ikincil" onClick={onKapat}>
-          Vazgeç
+          {t.ortak.vazgec}
         </Dugme>
         <Dugme onClick={() => void ata()} bekliyor={busy} disabled={userId === '' || secili.size === 0}>
-          {`Yetkilendir${secili.size > 0 ? ` (${secili.size})` : ''}`}
+          {d.yetkilendir(secili.size)}
         </Dugme>
       </div>
     </div>
@@ -1121,14 +1131,15 @@ function IkiAdimSatiri({
   canManage: boolean;
   onSifirla: () => void;
 }) {
+  const t = useSozluk(ekipSozlugu);
   if (kisi.mfaEnabled === undefined) return null;
   return (
     <div className="flex flex-wrap items-center gap-2 text-13">
-      <span className="text-ink-muted">İki adımlı doğrulama:</span>
-      <Rozet hal={kisi.mfaEnabled ? 'ok' : 'hata'}>{kisi.mfaEnabled ? 'Açık' : 'Kapalı'}</Rozet>
+      <span className="text-ink-muted">{t.detay.ikiAdimEtiket}</span>
+      <Rozet hal={kisi.mfaEnabled ? 'ok' : 'hata'}>{kisi.mfaEnabled ? t.ortak.acik : t.ortak.kapali}</Rozet>
       {canManage && !kendisi && kisi.mfaEnabled && (
         <Dugme ton="tehlike" boyut="kucuk" onClick={onSifirla}>
-          Sıfırla
+          {t.detay.sifirla}
         </Dugme>
       )}
     </div>
@@ -1142,6 +1153,8 @@ function IkiAdimSatiri({
  */
 function IkiAdimSifirla({ kisi, onKapat }: { kisi: MemberRow | null; onKapat: () => void }) {
   const router = useRouter();
+  const t = useSozluk(ekipSozlugu);
+  const d = t.sifirlama;
   const [busy, setBusy] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
 
@@ -1154,7 +1167,7 @@ function IkiAdimSifirla({ kisi, onKapat }: { kisi: MemberRow | null; onKapat: ()
       router.refresh();
       onKapat();
     } catch (e) {
-      setHata(e instanceof ApiRequestError ? e.message : 'Sıfırlanamadı.');
+      setHata(e instanceof ApiRequestError ? e.message : d.sifirlanamadi);
     } finally {
       setBusy(false);
     }
@@ -1167,15 +1180,15 @@ function IkiAdimSifirla({ kisi, onKapat }: { kisi: MemberRow | null; onKapat: ()
         setHata(null);
         onKapat();
       }}
-      baslik="İki adımlı doğrulamayı sıfırla"
+      baslik={d.baslik}
       genislik="dar"
       altEylemler={
         <>
           <Dugme ton="ikincil" onClick={onKapat}>
-            Vazgeç
+            {t.ortak.vazgec}
           </Dugme>
           <Dugme ton="tehlike" bekliyor={busy} onClick={() => void sifirla()}>
-            Sıfırla
+            {t.detay.sifirla}
           </Dugme>
         </>
       }
@@ -1183,11 +1196,11 @@ function IkiAdimSifirla({ kisi, onKapat }: { kisi: MemberRow | null; onKapat: ()
       {kisi && (
         <div className="grid gap-3">
           <p className="m-0 text-14 text-ink">
-            <strong>{kisi.fullName ?? kisi.email}</strong> için iki adımlı doğrulama sıfırlansın mı? Bir sonraki
-            girişte yalnızca şifresi sorulur.
+            <strong>{kisi.fullName ?? kisi.email}</strong>
+            {d.soru}
           </p>
           {hata && (
-            <Serit ton="hata" baslik="Sıfırlanamadı">
+            <Serit ton="hata" baslik={d.sifirlanamadiBaslik}>
               {hata}
             </Serit>
           )}
@@ -1206,6 +1219,8 @@ function IkiAdimSifirla({ kisi, onKapat }: { kisi: MemberRow | null; onKapat: ()
  */
 function UyeDuzenleModal({ member, onKapat }: { member: MemberRow; onKapat: () => void }) {
   const router = useRouter();
+  const t = useSozluk(ekipSozlugu);
+  const d = t.duzenle;
   const [ad, setAd] = useState(member.fullName ?? '');
   const [eposta, setEposta] = useState(member.email);
   const [parola, setParola] = useState('');
@@ -1236,7 +1251,7 @@ function UyeDuzenleModal({ member, onKapat }: { member: MemberRow; onKapat: () =
       router.refresh();
       onKapat();
     } catch (e) {
-      setHata(e instanceof ApiRequestError ? e.message : 'Güncellenemedi.');
+      setHata(e instanceof ApiRequestError ? e.message : d.guncellenemedi);
     } finally {
       setBusy(false);
     }
@@ -1244,40 +1259,39 @@ function UyeDuzenleModal({ member, onKapat }: { member: MemberRow; onKapat: () =
 
   return (
     <div className="grid gap-4">
-      <Alan etiket="Ad soyad">
+      <Alan etiket={t.ortak.adSoyad}>
         <Girdi value={ad} onChange={(e) => setAd(e.target.value)} />
       </Alan>
-      <Alan etiket="E-posta">
+      <Alan etiket={t.ortak.eposta}>
         <Girdi type="email" value={eposta} onChange={(e) => setEposta(e.target.value)} />
       </Alan>
-      <Alan etiket="Yeni parola" ipucu="Boş bırakırsan değişmez. En az 10 karakter.">
+      <Alan etiket={d.yeniParola} ipucu={d.parolaIpucu}>
         <Girdi type="password" value={parola} onChange={(e) => setParola(e.target.value)} />
       </Alan>
 
       {/* PAROLA DEĞİŞİNCE AÇIK OTURUM DÜŞMÜYOR — bilinen eksik, gizlenmiyor. */}
       {parola !== '' && (
-        <Serit baslik="Açık oturum kapanmaz">
-          Parola değişse de kullanıcının açık oturumu düşmüyor; çalışmaya devam eder. Erişimi hemen kesmek
-          gerekiyorsa yetkisini kaldır.
+        <Serit baslik={d.oturumBaslik}>
+          {d.oturumGovde}
         </Serit>
       )}
 
       {hata && (
-        <Serit ton="hata" baslik="Güncellenemedi">
+        <Serit ton="hata" baslik={d.guncellenemediBaslik}>
           {hata}
         </Serit>
       )}
 
       <div className="flex justify-end gap-2 border-t border-line pt-4">
         <Dugme ton="ikincil" onClick={onKapat}>
-          Vazgeç
+          {t.ortak.vazgec}
         </Dugme>
         <Dugme
           onClick={() => void kaydet()}
           bekliyor={busy}
           disabled={!degisti || (parola !== '' && parola.length < 10)}
         >
-          Kaydet
+          {t.ortak.kaydet}
         </Dugme>
       </div>
     </div>

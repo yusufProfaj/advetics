@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { ENGEL_KISI, ENGEL_WORKSPACE, atamaEngeli, atamalariYurut } from './danisman-atama';
+import { DILLER } from '@advetics/shared';
+import { atamaEngeli, atamalariYurut, engelKisi, engelWorkspace } from './danisman-atama';
 
 const CLIENT = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
 const BASKA = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
@@ -32,14 +33,19 @@ describe('atamaEngeli', () => {
     expect(atamaEngeli([{ clientId: null }], CLIENT)).toBe('org_geneli');
   });
 
-  it('her engel kodunun İKİ ekranda da bir cümlesi var', () => {
+  it('her engel kodunun İKİ ekranda ve İKİ dilde bir cümlesi var', () => {
     // Kod eklenip cümlelerden biri unutulursa ekranda `undefined` yazardı.
-    for (const kod of ['zaten_uye', 'org_geneli'] as const) {
-      expect(ENGEL_KISI[kod]).toBeTruthy();
-      expect(ENGEL_WORKSPACE[kod]).toBeTruthy();
+    for (const dil of DILLER) {
+      for (const kod of ['zaten_uye', 'org_geneli'] as const) {
+        expect(engelKisi(kod, dil), `${dil} ${kod}`).toBeTruthy();
+        expect(engelWorkspace(kod, dil), `${dil} ${kod}`).toBeTruthy();
+      }
+      // İKİ CÜMLE AYNI OLAMAZ: biri kişiyi, diğeri workspace’i anlatıyor.
+      expect(engelKisi('zaten_uye', dil)).not.toBe(engelWorkspace('zaten_uye', dil));
     }
-    // İKİ CÜMLE AYNI OLAMAZ: biri kişiyi, diğeri workspace’i anlatıyor.
-    expect(ENGEL_KISI.zaten_uye).not.toBe(ENGEL_WORKSPACE.zaten_uye);
+    // Türkçe metin dalga öncesiyle aynı (sözlüğe taşındı, değişmedi).
+    expect(engelKisi('zaten_uye', 'tr')).toBe('Bu workspace’e zaten erişiyor');
+    expect(engelKisi('zaten_uye', 'en')).toBe('Already has access to this workspace');
   });
 
   it('bu workspace yetkisi org geneli yetkiden ÖNCE bildiriliyor', () => {

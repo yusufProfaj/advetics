@@ -2,15 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { WORKSPACE_ROLLERI, type Role } from '@advetics/shared';
+import { WORKSPACE_ROLLERI, rolAciklamasi, rolEtiketi, type Role } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { Dugme } from '@/components/ui/dugme';
 import { Girdi, Secim } from '@/components/ui/alan';
 import { Serit } from '@/components/ui/hal';
 import { Uyari } from '@/components/ui/uyari';
 import { MusteriDetay } from './musteri-detay';
-import { ENGEL_KISI, atamaEngeli, atamalariYurut, type AtamaSonucu } from './danisman-atama';
-import { ROLE_TR, ROLE_HINT, type MemberRow } from './team-manager';
+import { atamaEngeli, atamalariYurut, engelKisi, type AtamaSonucu } from './danisman-atama';
+import { type MemberRow } from './team-manager';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { ekipSozlugu } from '@/dil/sozlukler/ayarlar-ekip';
 
 /**
  * ═══ DANIŞMAN ATA ═══
@@ -46,6 +48,9 @@ export function DanismanAta({
   mevcutUyeIdleri: string[];
 }) {
   const router = useRouter();
+  const { dil } = useDil();
+  const t = useSozluk(ekipSozlugu);
+  const d = t.danismanAta;
   const [, startTransition] = useTransition();
   const [acik, setAcik] = useState(false);
   const [yukleniyor, setYukleniyor] = useState(false);
@@ -68,11 +73,11 @@ export function DanismanAta({
        */
       setEkip(await apiFetch<MemberRow[]>('/members'));
     } catch (err) {
-      setHata(err instanceof ApiRequestError ? err.message : 'Ajans ekibi getirilemedi.');
+      setHata(err instanceof ApiRequestError ? err.message : d.getirilemedi);
     } finally {
       setYukleniyor(false);
     }
-  }, []);
+  }, [d]);
 
   useEffect(() => {
     if (acik && ekip === null && !yukleniyor && hata === null) void yukle();
@@ -82,9 +87,9 @@ export function DanismanAta({
     () =>
       (ekip ?? []).map((u) => {
         const kod = atamaEngeli(u.memberships, clientId);
-        return { ...u, engel: kod === null ? null : ENGEL_KISI[kod] };
+        return { ...u, engel: kod === null ? null : engelKisi(kod, dil) };
       }),
-    [ekip, clientId],
+    [ekip, clientId, dil],
   );
 
   const suzulmus = useMemo(() => {
@@ -125,11 +130,14 @@ export function DanismanAta({
       return { id, ad: kisi?.fullName ?? kisi?.email ?? id };
     });
 
-    const sonuclar = await atamalariYurut(hedefler, (id) =>
-      apiFetch('/memberships', {
-        method: 'POST',
-        body: JSON.stringify({ userId: id, role: rol, clientId }),
-      }),
+    const sonuclar = await atamalariYurut(
+      hedefler,
+      (id) =>
+        apiFetch('/memberships', {
+          method: 'POST',
+          body: JSON.stringify({ userId: id, role: rol, clientId }),
+        }),
+      dil,
     );
 
     setAtiyor(false);
@@ -143,24 +151,24 @@ export function DanismanAta({
   return (
     <>
       <Dugme ton="ikincil" boyut="kucuk" onClick={() => setAcik(true)}>
-        + Danışman ata
+        {d.ata}
       </Dugme>
 
       <MusteriDetay
         acik={acik}
         onKapat={kapat}
         baslik={clientName}
-        altBaslik="Ajans ekibinden bu workspace’e danışman ata"
+        altBaslik={d.altBaslik}
         altEylemler={
           <>
             <span className="mr-auto self-center text-xs text-ink-muted">
-              {mevcutUyeIdleri.length} kişinin erişimi var
+              {d.erisimVar(mevcutUyeIdleri.length)}
             </span>
             <Dugme ton="ikincil" onClick={kapat} disabled={atiyor}>
-              Kapat
+              {t.ortak.kapat}
             </Dugme>
             <Dugme onClick={() => void ata()} disabled={secili.size === 0 || atiyor}>
-              {atiyor ? 'Atanıyor…' : `Ata${secili.size > 0 ? ` (${secili.size})` : ''}`}
+              {atiyor ? d.atiyor : d.ataSayac(secili.size)}
             </Dugme>
           </>
         }
@@ -168,14 +176,14 @@ export function DanismanAta({
         <div className="flex flex-wrap items-center gap-2">
           <Girdi
             type="search"
-            aria-label="Ajans ekibinde ara"
+            aria-label={d.ekipteAra}
             value={arama}
             onChange={(e) => setArama(e.target.value)}
-            placeholder="Ad ya da e-posta ile ara…"
+            placeholder={d.araYer}
             className="!w-auto min-w-0 flex-1"
           />
           <Secim
-            aria-label="Rol"
+            aria-label={t.ortak.rol}
             value={rol}
             onChange={(e) => setRol(e.target.value as Role)}
             className="!w-auto"
@@ -183,14 +191,14 @@ export function DanismanAta({
             {/* TEK WORKSPACE'E ATAMA: Yönetici yok (bkz. WORKSPACE_ROLLERI). */}
             {WORKSPACE_ROLLERI.map((r) => (
               <option key={r} value={r}>
-                {ROLE_TR[r]}
+                {rolEtiketi(r, dil)}
               </option>
             ))}
           </Secim>
         </div>
         {/* ROL AÇIKLAMASI SEÇİCİNİN ALTINDA: rolün ne yapabildiğini tahmin
             ettirmek, yanlış yetkiyi sessizce vermenin en kolay yolu. */}
-        <p className="-mt-2 text-xs text-ink-muted">{ROLE_HINT[rol]}</p>
+        <p className="-mt-2 text-xs text-ink-muted">{rolAciklamasi(rol, dil)}</p>
 
         {/*
           DÖRT HÂL AYRI YAZILI: yükleniyor · çağrı düştü · ekip boş ·
@@ -199,17 +207,17 @@ export function DanismanAta({
         */}
         {yukleniyor && (
           <p role="status" className="text-sm text-ink-muted">
-            Ajans ekibi getiriliyor…
+            {d.getiriliyor}
           </p>
         )}
 
         {hata && (
           <Serit
             ton="hata"
-            baslik="Ajans ekibi getirilemedi"
+            baslik={d.getirilemediBaslik}
             eylemler={
               <Dugme ton="ikincil" boyut="kucuk" onClick={() => void yukle()}>
-                Tekrar dene
+                {d.tekrarDene}
               </Dugme>
             }
           >
@@ -218,16 +226,11 @@ export function DanismanAta({
         )}
 
         {ekip !== null && ekip.length === 0 && (
-          <p className="rounded-alan bg-surface-muted px-3 py-2 text-xs text-ink-muted">
-            Ajans ekibinde hiç kullanıcı yok. Önce “Kullanıcı ekle” formundan bir
-            danışman oluşturun.
-          </p>
+          <p className="rounded-alan bg-surface-muted px-3 py-2 text-xs text-ink-muted">{d.ekipBos}</p>
         )}
 
         {ekip !== null && ekip.length > 0 && atanabilir.length === 0 && (
-          <p className="rounded-alan bg-surface-muted px-3 py-2 text-xs text-ink-muted">
-            Ajans ekibindeki herkesin bu workspace’e zaten erişimi var.
-          </p>
+          <p className="rounded-alan bg-surface-muted px-3 py-2 text-xs text-ink-muted">{d.herkesVar}</p>
         )}
 
         {suzulmus.length > 0 && (
@@ -266,14 +269,14 @@ export function DanismanAta({
         {/* Sessiz kesme yok: kaç kişinin süzüldüğü ve toplamın kaç olduğu yazılı. */}
         {ekip !== null && arama.trim() !== '' && (
           <p className="text-xs text-ink-muted">
-            {suzulmus.length} / {adaylar.length} kişi
+            {t.ortak.kisiSayaci(suzulmus.length, adaylar.length)}
           </p>
         )}
 
         {sonuc && (
           <Uyari
             ton={sonuc.hatalar.length > 0 ? 'tehlike' : 'basari'}
-            baslik={`${sonuc.basarili} kişi bu workspace’e atandı.`}
+            baslik={d.atandi(sonuc.basarili)}
           >
             {/* KISMİ BAŞARI TEK TEK YAZILI. "3 kişi atandı" deyip dördüncüsünü
                 yutmak, atandığı sanılan birinin panelde hiçbir şey görememesi

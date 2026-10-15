@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { AYARLAR_SEKMELERI, ROLE_PERMISSIONS } from '@advetics/shared';
 import { ayarSekmesiAcik } from '@/lib/ayar-kapilari';
+import { kabukSozlugu } from '@/dil/sozlukler/kabuk';
 
 /*
  * ═══ /ayarlar 404 DEĞİL, AÇILABİLEN İLK SEKME ═══
@@ -27,7 +28,9 @@ describe('/ayarlar kökü', () => {
 
   it('Türkçe markalı bulunamadı sayfası var', () => {
     const nf = readFileSync(join(__dirname, '../../not-found.tsx'), 'utf8');
-    expect(nf).toContain('Sayfa bulunamadı');
+    // D2: metin sözlükte (`kabuk.ts` › `hata.bulunamadi`), sayfa anahtarı çiziyor.
+    expect(nf).toContain('{d.bulunamadi}');
+    expect(kabukSozlugu.tr.hata.bulunamadi).toBe('Sayfa bulunamadı');
     expect(nf).toContain('/advetics-logo.png');
   });
 });

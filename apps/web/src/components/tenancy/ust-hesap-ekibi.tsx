@@ -3,8 +3,10 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  ROL_ETIKETI,
   UST_HESAP_ROLLERI,
+  bicimKodu,
+  rolEtiketi,
+  type Dil,
   type Role,
   type UstHesapUyesi,
   type UstHesapUyesiEklemeYaniti,
@@ -17,6 +19,8 @@ import { Alan, Girdi, Secim } from '@/components/ui/alan';
 import { BosDurum, Serit } from '@/components/ui/hal';
 import { AdHucresi, Tablo } from '@/components/ui/tablo';
 import { YanPanel } from '@/components/ui/pencere';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { ekipSozlugu } from '@/dil/sozlukler/ayarlar-ekip';
 
 /**
  * ═══ ÜST HESAP EKİBİ — bütün şirketleri kim yönetiyor ═══
@@ -48,6 +52,9 @@ export function UstHesapEkibi({
   yuklemeHatasi: string | null;
 }) {
   const router = useRouter();
+  const { dil } = useDil();
+  const t = useSozluk(ekipSozlugu);
+  const d = t.ustEkip;
   const [ekleAcik, setEkleAcik] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [hata, setHata] = useState<string | null>(null);
@@ -62,7 +69,7 @@ export function UstHesapEkibi({
     } catch (e) {
       // HATA YUTULMUYOR: sessizce başarısız olan bir yetki değişikliği,
       // kullanıcının verdiğini sandığı bir erişim demek.
-      setHata(e instanceof ApiRequestError ? e.message : 'İşlem başarısız oldu.');
+      setHata(e instanceof ApiRequestError ? e.message : t.ortak.islemBasarisiz);
     } finally {
       setBusy(null);
     }
@@ -73,31 +80,28 @@ export function UstHesapEkibi({
   return (
     <Kart
       dolgu={false}
-      baslik={`Üst hesap ekibi: ${hesapAdi}`}
+      baslik={d.baslik(hesapAdi)}
       /* SESSİZ KESME YOK: kaç kişi ve kaçının Yönetici olduğu yazılı. */
-      baslikEki={`${uyeler.length} kişi · ${yoneticiSayisi} Yönetici`}
+      baslikEki={d.baslikEki(uyeler.length, yoneticiSayisi, rolEtiketi('admin', dil))}
       eylem={
         yonetebilir && (
           <Dugme ton="ikincil" boyut="kucuk" onClick={() => setEkleAcik(true)}>
-            + Üst hesaba kişi ekle
+            {d.kisiEkle}
           </Dugme>
         )
       }
     >
-      <p className="m-0 border-b border-line px-5 py-3 text-13 text-ink-muted">
-        Buradaki kişiler üst hesabın ALTINDAKİ BÜTÜN şirketlere erişir. Yönetici hesabı yönetir ve kişi ekler;
-        Reklam Yöneticisi her şirkette reklam işi yapar. Başka bir üst hesabı hiçbiri göremez.
-      </p>
+      <p className="m-0 border-b border-line px-5 py-3 text-13 text-ink-muted">{d.aciklama}</p>
 
       {(yuklemeHatasi || hata) && (
         <div className="grid gap-2 border-b border-line p-4">
           {yuklemeHatasi && (
-            <Serit ton="hata" baslik="Üst hesap ekibi yüklenemedi">
+            <Serit ton="hata" baslik={d.yuklenemedi}>
               {yuklemeHatasi}
             </Serit>
           )}
           {hata && (
-            <Serit ton="hata" baslik="Yetki değişmedi">
+            <Serit ton="hata" baslik={t.ortak.yetkiDegismedi}>
               {hata}
             </Serit>
           )}
@@ -107,38 +111,38 @@ export function UstHesapEkibi({
       {uyeler.length === 0 && !yuklemeHatasi ? (
         <div className="p-4">
           <BosDurum
-            baslik="Üst hesabın henüz ekibi yok"
-            neden="Hesabı yalnızca platform sahibi açabiliyor; ekibe kişiyi o ya da üst hesabın Yöneticisi ekler."
+            baslik={d.ekipYok}
+            neden={d.ekipYokNeden}
           />
         </div>
       ) : (
         <Tablo
-          etiket="Üst hesap ekibi"
+          etiket={d.tablo}
           satirlar={uyeler}
           satirAnahtari={(u) => u.id}
           sutunlar={[
             {
               anahtar: 'kisi',
-              baslik: 'Kişi',
+              baslik: t.ekran.kisi,
               hucre: (u) => (
                 <AdHucresi
                   ad={
                     <>
                       {u.fullName}
-                      {u.kendisi && <span className="ml-1.5 text-12 font-normal text-ink-muted">(sen)</span>}
+                      {u.kendisi && <span className="ml-1.5 text-12 font-normal text-ink-muted">{t.ortak.sen}</span>}
                     </>
                   }
-                  alt={`${u.email} · ${u.lastLoginAt ? `son giriş ${tarih(u.lastLoginAt)}` : 'hiç giriş yapmadı'}`}
+                  alt={`${u.email} · ${u.lastLoginAt ? d.sonGiris(tarih(u.lastLoginAt, dil)) : t.ortak.hicGirisYapmadi}`}
                 />
               ),
             },
             {
               anahtar: 'rol',
-              baslik: 'Rol',
+              baslik: t.ortak.rol,
               hucre: (u) => (
                 <span className="block w-48">
                   <Secim
-                    aria-label={`${u.fullName} rolü`}
+                    aria-label={t.ortak.rolEtiketi(u.fullName)}
                     value={u.role}
                     disabled={!yonetebilir || busy !== null || isPending || u.kendisi}
                     onChange={(e) =>
@@ -152,7 +156,7 @@ export function UstHesapEkibi({
                   >
                     {UST_HESAP_ROLLERI.map((r) => (
                       <option key={r} value={r}>
-                        {ROL_ETIKETI[r]}
+                        {rolEtiketi(r, dil)}
                       </option>
                     ))}
                   </Secim>
@@ -161,7 +165,7 @@ export function UstHesapEkibi({
             },
             {
               anahtar: 'eylem',
-              baslik: <span className="sr-only">Eylemler</span>,
+              baslik: <span className="sr-only">{t.ortak.eylemler}</span>,
               sayi: true,
               hucre: (u) =>
                 yonetebilir ? (
@@ -176,7 +180,7 @@ export function UstHesapEkibi({
                       )
                     }
                   >
-                    Kaldır
+                    {t.ortak.kaldir}
                   </Dugme>
                 ) : null,
             },
@@ -185,15 +189,15 @@ export function UstHesapEkibi({
         />
       )}
 
-      <YanPanel acik={ekleAcik} onKapat={() => setEkleAcik(false)} baslik="Üst hesaba kişi ekle" genislik={440}>
+      <YanPanel acik={ekleAcik} onKapat={() => setEkleAcik(false)} baslik={d.kisiEkleBaslik} genislik={440}>
         {ekleAcik && <UstHesabaKisiEkleModal onKapat={() => setEkleAcik(false)} />}
       </YanPanel>
     </Kart>
   );
 }
 
-function tarih(iso: string): string {
-  return new Date(iso).toLocaleDateString('tr-TR', { day: '2-digit', month: 'short', year: 'numeric' });
+function tarih(iso: string, dil: Dil): string {
+  return new Date(iso).toLocaleDateString(bicimKodu(dil), { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 /**
@@ -207,6 +211,9 @@ function tarih(iso: string): string {
  */
 function UstHesabaKisiEkleModal({ onKapat }: { onKapat: () => void }) {
   const router = useRouter();
+  const { dil } = useDil();
+  const t = useSozluk(ekipSozlugu);
+  const d = t.ustEkip;
   const [eposta, setEposta] = useState('');
   const [ad, setAd] = useState('');
   const [parola, setParola] = useState('');
@@ -231,7 +238,7 @@ function UstHesabaKisiEkleModal({ onKapat }: { onKapat: () => void }) {
       setSonuc(r);
       router.refresh();
     } catch (e) {
-      setHata(e instanceof ApiRequestError ? e.message : 'Kişi eklenemedi.');
+      setHata(e instanceof ApiRequestError ? e.message : d.eklenemedi);
     } finally {
       setBusy(false);
     }
@@ -242,15 +249,13 @@ function UstHesabaKisiEkleModal({ onKapat }: { onKapat: () => void }) {
       <div className="grid gap-4">
         <Serit
           ton="bilgi"
-          baslik={`${sonuc.uyelik.fullName} üst hesaba ${ROL_ETIKETI[sonuc.uyelik.role]} olarak eklendi`}
+          baslik={d.eklendi(sonuc.uyelik.fullName, rolEtiketi(sonuc.uyelik.role, dil))}
         >
-          {sonuc.created
-            ? `${sonuc.uyelik.email} yeni oluşturuldu. Parolayı kendin iletiyorsun, davet gönderilmiyor.`
-            : `${sonuc.uyelik.email} zaten kayıtlıydı; yalnızca üst hesap yetkisi eklendi, yazdığın parola KULLANILMADI.`}
+          {sonuc.created ? d.yeniOlusturuldu(sonuc.uyelik.email) : d.zatenKayitli(sonuc.uyelik.email)}
         </Serit>
         <div className="flex justify-end border-t border-line pt-4">
           <Dugme ton="ikincil" onClick={onKapat}>
-            Tamam
+            {d.tamam}
           </Dugme>
         </div>
       </div>
@@ -259,46 +264,46 @@ function UstHesabaKisiEkleModal({ onKapat }: { onKapat: () => void }) {
 
   return (
     <div className="grid gap-4">
-      <Serit ton="bilgi" baslik="Bütün şirketlere erişir">
-        E-posta kayıtlıysa yalnızca yetki eklenir; değilse ad soyad ve parola ile yeni kullanıcı açılır.
+      <Serit ton="bilgi" baslik={d.butunSirketler}>
+        {d.butunSirketlerGovde}
       </Serit>
 
-      <Alan etiket="E-posta">
+      <Alan etiket={t.ortak.eposta}>
         <Girdi type="email" value={eposta} onChange={(e) => setEposta(e.target.value)} />
       </Alan>
-      <Alan etiket="Ad soyad" ipucu="Yeni kullanıcı için.">
+      <Alan etiket={t.ortak.adSoyad} ipucu={d.yeniKullaniciIcin}>
         <Girdi value={ad} onChange={(e) => setAd(e.target.value)} />
       </Alan>
-      <Alan etiket="Parola" ipucu="Yeni kullanıcı için, en az 12 karakter.">
+      <Alan etiket={t.ortak.parola} ipucu={d.parolaIpucu}>
         <Girdi type="password" value={parola} onChange={(e) => setParola(e.target.value)} />
       </Alan>
 
-      <Alan etiket="Rol" ipucu={<RolAciklamasi rol={rol} />}>
+      <Alan etiket={t.ortak.rol} ipucu={<RolAciklamasi rol={rol} />}>
         <Secim value={rol} onChange={(e) => setRol(e.target.value as Role)}>
           {UST_HESAP_ROLLERI.map((r) => (
             <option key={r} value={r}>
-              {ROL_ETIKETI[r]}
+              {rolEtiketi(r, dil)}
             </option>
           ))}
         </Secim>
       </Alan>
 
       {hata && (
-        <Serit ton="hata" baslik="Kişi eklenemedi">
+        <Serit ton="hata" baslik={d.eklenemediBaslik}>
           {hata}
         </Serit>
       )}
 
       <div className="flex justify-end gap-2 border-t border-line pt-4">
         <Dugme ton="ikincil" onClick={onKapat}>
-          Vazgeç
+          {t.ortak.vazgec}
         </Dugme>
         <Dugme
           onClick={() => void gonder()}
           bekliyor={busy}
           disabled={!eposta.includes('@') || (parola !== '' && parola.length < 12)}
         >
-          Üst hesaba ekle
+          {d.ustHesabaEkle}
         </Dugme>
       </div>
     </div>

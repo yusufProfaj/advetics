@@ -1,6 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { baglantilarSozlugu } from '@/dil/sozlukler/ayarlar-baglantilar';
+
+/* D2: ekran metni sözlükte; iddia değer + bileşenin anahtarı kullanması. */
+const TR = baglantilarSozlugu.tr.toplu;
 
 /**
  * ═══ DURAN ÇUBUK EKRANDA AÇIKLANIYOR ═══
@@ -36,7 +40,8 @@ describe('takılma görünüyor', () => {
      * bloğun içinde duruyor, çizilip çizilmediğini söylemiyor.
      */
     expect(KAYNAK).toContain('{ilerleme.tani && (');
-    expect(KAYNAK).toContain('{ilerleme.tani.kayip} iş kuyrukta yok');
+    expect(KAYNAK).toContain('{d.kuyruktaYok(ilerleme.tani.kayip)}');
+    expect(TR.kuyruktaYok(3)).toBe('3 iş kuyrukta yok.');
   });
 
   it('KRİTİK: kuyrukta bekleyen iş ile KAYIP iş ayrı cümle', () => {
@@ -47,12 +52,14 @@ describe('takılma görünüyor', () => {
      */
     const i = KAYNAK.indexOf('ilerleme.tani.kayip > 0 ?');
     expect(i, 'kayıp/bekleyen dallanması yok').toBeGreaterThan(-1);
-    expect(KAYNAK).toContain('kendiliğinden sürecek');
+    expect(KAYNAK).toContain('d.siradaBekliyor(ilerleme.tani.kuyrukta)');
+    expect(TR.siradaBekliyor(2)).toContain('kendiliğinden sürecek');
   });
 
   it('KRİTİK: takılan işler için DÜĞME var', () => {
     expect(KAYNAK).toContain('/kurtar');
-    expect(KAYNAK).toContain('Takılan işleri yeniden başlat');
+    expect(KAYNAK).toContain('{d.yenidenBaslat}');
+    expect(TR.yenidenBaslat).toBe('Takılan işleri yeniden başlat');
   });
 
   it('KRİTİK: kurtarma sonucu tek tek yazılıyor', () => {

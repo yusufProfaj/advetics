@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { BekleyenIs, ClientPacing, MetricsConversionDetail, PacingStatus } from '@advetics/shared';
-import { donusumBosSebebi } from '@advetics/shared';
+import { donusumBosSebebi, sec, type Dil } from '@advetics/shared';
+import { genelBakisSozlugu } from '@/dil/sozlukler/genel-bakis';
 import {
   BEKLEYEN_ILK_SATIR,
   bekleyenIsAdresi,
@@ -11,7 +12,8 @@ import {
   kesmeMetni,
   type BekleyenIslerSonucu,
 } from '@/lib/bekleyen-isler';
-import { formatMoney, formatNumber } from '@/lib/format';
+import { formatDayShort, formatMoney, formatNumber } from '@/lib/format';
+import { yuzdeMetni } from '@/lib/degisim';
 import { asimYuzdesi } from '@/components/budget/butce-temposu';
 import { IslerKap } from './genel-bakis-parcalari';
 import s from './taslak.module.css';
@@ -35,9 +37,9 @@ const TUR_HARFI: Record<BekleyenIs['tur'], { harf: string; gri: boolean }> = {
   butce_yok: { harf: '₺', gri: true },
 };
 
-function IsSatiri({ is, onayYetkisi }: { is: BekleyenIs; onayYetkisi: boolean }) {
-  const yas = bekleyenIsYasi(is.enEski);
-  const cumle = bekleyenIsCumlesi(is, onayYetkisi);
+function IsSatiri({ is, onayYetkisi, dil }: { is: BekleyenIs; onayYetkisi: boolean; dil: Dil }) {
+  const yas = bekleyenIsYasi(is.enEski, new Date(), dil);
+  const cumle = bekleyenIsCumlesi(is, onayYetkisi, dil);
   const t = TUR_HARFI[is.tur];
   return (
     <Link className={s.is} href={bekleyenIsAdresi(is)} title={`${is.clientAdi} · ${cumle}`}>
@@ -64,10 +66,14 @@ function IsSatiri({ is, onayYetkisi }: { is: BekleyenIs; onayYetkisi: boolean })
 export async function BekleyenIslerKarti({
   sonuc,
   onayYetkisi,
+  dil,
 }: {
   sonuc: Promise<BekleyenIslerSonucu>;
   onayYetkisi: boolean;
+  /** Sunucu bileşeni: dil sayfadan geliyor (sayfa zaten okudu; ikinci çerez okuması yok). */
+  dil: Dil;
 }) {
+  const d = sec(genelBakisSozlugu, dil).isler;
   const r = await sonuc;
   const hal = bekleyenKutuHali(r);
 
@@ -75,31 +81,31 @@ export async function BekleyenIslerKarti({
     return (
       <section className={`${s.kart} ${s.gir}`} aria-labelledby="bekleyen-isler-baslik">
         <div className={s.kartUst}>
-          <h2 id="bekleyen-isler-baslik">Bekleyen işler</h2>
+          <h2 id="bekleyen-isler-baslik">{d.baslik}</h2>
         </div>
         <p role="alert" className={s.hataMetin}>
-          Bekleyen işler alınamadı. {r.mesaj}
+          {d.alinamadi} {r.mesaj}
         </p>
       </section>
     );
   }
 
   const { yanit } = r;
-  const kesme = kesmeMetni(yanit);
+  const kesme = kesmeMetni(yanit, dil);
   const isler = yanit.isler;
 
   return (
     <section className={`${s.kart} ${s.gir}`} aria-labelledby="bekleyen-isler-baslik">
       <div className={s.kartUst}>
-        <h2 id="bekleyen-isler-baslik">Bekleyen işler</h2>
+        <h2 id="bekleyen-isler-baslik">{d.baslik}</h2>
         {hal === 'dolu' && <span className={`${s.rozet} ${s.num}`}>{isler.length}</span>}
       </div>
-      {hal === 'bos' && <p className={s.bosMetin}>Bekleyen iş yok</p>}
+      {hal === 'bos' && <p className={s.bosMetin}>{d.yok}</p>}
       {hal === 'dolu' && (
         <>
           <div>
             {isler.slice(0, BEKLEYEN_ILK_SATIR).map((is) => (
-              <IsSatiri key={`${is.tur}:${is.clientId}`} is={is} onayYetkisi={onayYetkisi} />
+              <IsSatiri key={`${is.tur}:${is.clientId}`} is={is} onayYetkisi={onayYetkisi} dil={dil} />
             ))}
           </div>
           <IslerKap
@@ -107,7 +113,7 @@ export async function BekleyenIslerKarti({
             gelen={isler.length}
             toplam={yanit.toplam}
             kalan={isler.slice(BEKLEYEN_ILK_SATIR).map((is) => (
-              <IsSatiri key={`${is.tur}:${is.clientId}`} is={is} onayYetkisi={onayYetkisi} />
+              <IsSatiri key={`${is.tur}:${is.clientId}`} is={is} onayYetkisi={onayYetkisi} dil={dil} />
             ))}
           />
         </>
@@ -123,32 +129,30 @@ export async function BekleyenIslerKarti({
   );
 }
 
-export function BekleyenIskelet() {
+export function BekleyenIskelet({ dil }: { dil: Dil }) {
+  const d = sec(genelBakisSozlugu, dil).isler;
   return (
     <section className={s.kart} aria-busy="true">
       <div className={s.kartUst}>
-        <h2>Bekleyen işler</h2>
+        <h2>{d.baslik}</h2>
       </div>
-      <p className={s.bosMetin}>Yükleniyor…</p>
+      <p className={s.bosMetin}>{d.yukleniyor}</p>
     </section>
   );
 }
 
 // ─── Bütçe ───────────────────────────────────────────────────────────────────
 
-const DURUM: Record<PacingStatus, { ad: string; ton: 'ok' | 'uyari' | 'tehlike' | 'notr' }> = {
-  under: { ad: 'Yavaş', ton: 'uyari' },
-  on_track: { ad: 'Yolunda', ton: 'ok' },
-  over: { ad: 'Hızlı', ton: 'uyari' },
-  exhausted: { ad: 'Doldu', ton: 'tehlike' },
-  no_budget: { ad: 'Bütçe yok', ton: 'notr' },
+/** Durumun tonu; adı sözlükte (`butce.durum`), anahtar kümesi `PacingStatus`. */
+const DURUM_TONU: Record<PacingStatus, 'ok' | 'uyari' | 'tehlike' | 'notr'> = {
+  under: 'uyari',
+  on_track: 'ok',
+  over: 'uyari',
+  exhausted: 'tehlike',
+  no_budget: 'notr',
 };
 
-const yuzde = (r: number) => `%${Math.round(r * 100)}`;
-
-function gunAdi(iso: string): string {
-  return new Date(`${iso}T00:00:00Z`).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', timeZone: 'UTC' });
-}
+const yuzde = (r: number, dil: Dil) => yuzdeMetni(Math.round(r * 100), dil);
 
 /**
  * Bu ayın bütçesi: harcanan / bütçe, doluluk çubuğu ve ayın neresinde
@@ -161,7 +165,9 @@ export function ButceKarti({
   href,
   ayAdi,
   secimGerekli = false,
+  dil,
 }: {
+  dil: Dil;
   veri: ClientPacing | null;
   hata: string | null;
   /** Şirket geneli + birden çok workspace: bütçe workspace başına (`butceKapsami`). */
@@ -169,9 +175,12 @@ export function ButceKarti({
   href: string;
   ayAdi: string;
 }) {
+  const b = sec(genelBakisSozlugu, dil).butce;
+  const durum = (k: PacingStatus) => ({ ad: b.durum[k], ton: DURUM_TONU[k] });
+  const gunAdi = (iso: string) => formatDayShort(iso, dil);
   const ust = (hap?: { ad: string; ton: string }) => (
     <div className={s.kartUst}>
-      <h2>{ayAdi} bütçesi</h2>
+      <h2>{b.baslik(ayAdi)}</h2>
       {hap && (
         <span className={s.durumHap} data-ton={hap.ton} style={{ marginLeft: 'auto' }}>
           {hap.ad}
@@ -181,7 +190,7 @@ export function ButceKarti({
   );
   const alt = (etiket: string) => (
     <div className={s.kartAlt}>
-      <span>Planla › Aylık Bütçe</span>
+      <span>{b.yol}</span>
       <Link href={href}>{etiket} →</Link>
     </div>
   );
@@ -190,8 +199,8 @@ export function ButceKarti({
     return (
       <section className={`${s.kart} ${s.gir}`}>
         {ust()}
-        <p className={s.bosMetin}>Bütçe workspace başına tutuluyor. Görmek için üstten bir workspace seç.</p>
-        {alt('Bütçelere git')}
+        <p className={s.bosMetin}>{b.secimGerekli}</p>
+        {alt(b.butcelereGit)}
       </section>
     );
   }
@@ -200,9 +209,10 @@ export function ButceKarti({
       <section className={`${s.kart} ${s.gir}`}>
         {ust()}
         <p role="alert" className={s.hataMetin}>
-          Bütçe alınamadı{hata ? `: ${hata}` : '.'}
+          {b.alinamadi}
+          {hata ? `: ${hata}` : '.'}
         </p>
-        {alt('Bütçeye git')}
+        {alt(b.butceyeGit)}
       </section>
     );
   }
@@ -210,9 +220,9 @@ export function ButceKarti({
   if (o.status === 'no_budget' || !o.budget) {
     return (
       <section className={`${s.kart} ${s.gir}`}>
-        {ust(DURUM.no_budget)}
-        <p className={s.bosMetin}>Bu ay için bütçe tanımlı değil.</p>
-        {alt('Bütçe tanımla')}
+        {ust(durum('no_budget'))}
+        <p className={s.bosMetin}>{b.tanimsiz}</p>
+        {alt(b.tanimla)}
       </section>
     );
   }
@@ -235,60 +245,60 @@ export function ButceKarti({
 
   return (
     <section className={`${s.kart} ${s.gir}`}>
-      {ust(DURUM[o.status])}
+      {ust(durum(o.status))}
       <div className={s.butce}>
         {birim ? (
           <div className={s.butceUst}>
             <span className={`${s.tutar} ${s.num}`}>
-              {formatMoney(o.spentMicros, birim, { decimals: 0 })}{' '}
-              <small>/ {formatMoney(o.budget.amountMicros, birim, { decimals: 0 })}</small>
+              {formatMoney(o.spentMicros, birim, { decimals: 0, dil })}{' '}
+              <small>/ {formatMoney(o.budget.amountMicros, birim, { decimals: 0, dil })}</small>
             </span>
-            <span className={`${s.notKucuk} ${s.num}`}>{o.spentRatio === null ? '' : yuzde(o.spentRatio)}</span>
+            <span className={`${s.notKucuk} ${s.num}`}>{o.spentRatio === null ? '' : yuzde(o.spentRatio, dil)}</span>
           </div>
         ) : (
-          <p className={s.uyarMetin}>Hesaplarda farklı para birimi var; toplam gösterilemiyor.</p>
+          <p className={s.uyarMetin}>{b.karisik}</p>
         )}
         <div className={s.cubuk}>
           <span className={s.cubukDolu} style={{ width: `${doluluk * 100}%` }} />
           <span
             className={s.cubukBugun}
             style={{ left: `${Math.min(100, o.elapsedRatio * 100)}%` }}
-            title={`Ayın ${yuzde(o.elapsedRatio)} geçti`}
+            title={b.ayGecti(yuzde(o.elapsedRatio, dil))}
           />
         </div>
         <div className={s.cubukEtiket}>
           <span>{gunAdi(o.monthStart)}</span>
-          <span>Bugün</span>
+          <span>{b.bugun}</span>
           <span>{gunAdi(o.monthEnd)}</span>
         </div>
         <ul className={s.tempo}>
           <li>
-            <span>Ayın geçen kısmı</span>
-            <b className={s.num}>{yuzde(o.elapsedRatio)}</b>
+            <span>{b.gecenKisim}</span>
+            <b className={s.num}>{yuzde(o.elapsedRatio, dil)}</b>
           </li>
           {yeniBasladi && (
             <li>
-              <span>Ay yeni başladı, tempo yarın hesaplanır</span>
+              <span>{b.yeniBasladi}</span>
             </li>
           )}
           {!yeniBasladi && birim && tahmin !== null && (
             <li>
-              <span>Bu tempoyla ay sonu</span>
-              <b className={s.num}>≈ {formatMoney(o.projectedMicros, birim, { decimals: 0 })}</b>
+              <span>{b.aySonu}</span>
+              <b className={s.num}>≈ {formatMoney(o.projectedMicros, birim, { decimals: 0, dil })}</b>
             </li>
           )}
           {!yeniBasladi && birim && gunlukVar && (
             <li>
-              <span>Kalan günlük bütçe</span>
-              <b className={s.num}>{formatMoney(o.suggestedDailyMicros, birim, { decimals: 0 })} / gün</b>
+              <span>{b.kalanGunluk}</span>
+              <b className={s.num}>{b.gunluk(formatMoney(o.suggestedDailyMicros, birim, { decimals: 0, dil }))}</b>
             </li>
           )}
         </ul>
         {!yeniBasladi && asim !== null && (
-          <p className={s.tempoUyari}>Bu hızla bütçe %{asim.toString()} aşılır.</p>
+          <p className={s.tempoUyari}>{b.asim(yuzdeMetni(Number(asim), dil))}</p>
         )}
       </div>
-      {alt('Bütçeyi düzenle')}
+      {alt(b.duzenle)}
     </section>
   );
 }
@@ -300,30 +310,33 @@ export function ButceKarti({
  * üreticiden (`donusumBosSebebi`): üretimde bu kutu "kayıtlı dönüşüm yok"
  * derken kampanya tablosu 49 dönüşüm gösteriyordu.
  */
-export function DonusumKarti({ detay }: { detay: MetricsConversionDetail }) {
+export function DonusumKarti({ detay, dil }: { detay: MetricsConversionDetail; dil: Dil }) {
+  const g = sec(genelBakisSozlugu, dil);
+  const d = g.donusum;
   const toplam = detay.satirlar.reduce((a, r) => a + r.sayi, 0);
+  const bosParam = { hataVar: detay.hatalar.length > 0, toplamDonusum: detay.toplamDonusum };
   return (
     <section className={`${s.kart} ${s.gir}`}>
       <div className={s.kartUst}>
-        <h2>Dönüşümler neydi?</h2>
+        <h2>{d.baslik}</h2>
       </div>
       {detay.hatalar.map((h) => (
         <p key={h} role="alert" className={s.kaynakHata}>
-          Dönüşüm detayı alınamadı: {h}
+          {d.detayAlinamadi(h)}
         </p>
       ))}
       {detay.satirlar.length === 0 ? (
         <p className={s.bosMetin}>
-          {donusumBosSebebi({ hataVar: detay.hatalar.length > 0, toplamDonusum: detay.toplamDonusum })}
+          {dil === 'tr' ? donusumBosSebebi(bosParam) : donusumBosIngilizce(bosParam, d.bos)}
         </p>
       ) : (
         <div className={s.tabloSar}>
           <table className={s.tablo}>
             <thead>
               <tr>
-                <th>Eylem</th>
-                <th>Adet</th>
-                <th>Pay</th>
+                <th>{d.eylem}</th>
+                <th>{d.adet}</th>
+                <th>{g.metrik.pay}</th>
               </tr>
             </thead>
             <tbody>
@@ -336,13 +349,13 @@ export function DonusumKarti({ detay }: { detay: MetricsConversionDetail }) {
                         {r.ad}
                       </span>
                     </td>
-                    <td className={s.num}>{formatNumber(r.sayi)}</td>
+                    <td className={s.num}>{formatNumber(r.sayi, dil)}</td>
                     <td>
                       <span className={s.pay}>
                         <span className={s.payIz} style={{ width: 64 }}>
                           <i style={{ width: `${pay}%` }} />
                         </span>
-                        <span className={s.num}>%{Math.round(pay)}</span>
+                        <span className={s.num}>{yuzdeMetni(Math.round(pay), dil)}</span>
                       </span>
                     </td>
                   </tr>
@@ -359,7 +372,7 @@ export function DonusumKarti({ detay }: { detay: MetricsConversionDetail }) {
       */}
       {detay.satirlar.some((r) => r.platform === 'meta') && (
         <p className={s.notKucuk} style={{ padding: '0 16px 10px', margin: 0 }}>
-          Meta satırları gruplanmış olarak gelir: platform özel dönüşümün adını vermiyor.
+          {d.metaNotu}
         </p>
       )}
       {/*
@@ -370,8 +383,8 @@ export function DonusumKarti({ detay }: { detay: MetricsConversionDetail }) {
       <div className={s.kartAlt}>
         <span className={s.num}>
           {toplam === detay.toplamDonusum
-            ? `Toplam ${formatNumber(detay.toplamDonusum)} dönüşüm`
-            : `Adlandırılmış ${formatNumber(toplam)} / toplam ${formatNumber(detay.toplamDonusum)} dönüşüm`}
+            ? d.toplam(formatNumber(detay.toplamDonusum, dil))
+            : d.adlandirilmis(formatNumber(toplam, dil), formatNumber(detay.toplamDonusum, dil))}
         </span>
       </div>
     </section>
@@ -388,13 +401,15 @@ export function DonusumKarti({ detay }: { detay: MetricsConversionDetail }) {
  */
 export function KapsamOzeti({
   satirlar,
+  baslik,
 }: {
   satirlar: Array<{ etiket: string; deger: string; uyari?: boolean; href?: string }>;
+  baslik: string;
 }) {
   return (
     <section className={`${s.kart} ${s.gir}`}>
       <div className={s.kartUst}>
-        <h2>Kapsam</h2>
+        <h2>{baslik}</h2>
       </div>
       <ul className={s.tempo} style={{ padding: '4px 16px 14px', margin: 0 }}>
         {satirlar.map((r) => (
@@ -414,4 +429,18 @@ export function KapsamOzeti({
       </ul>
     </section>
   );
+}
+
+/**
+ * `donusumBosSebebi`nin (shared) İNGİLİZCE KARŞILIĞI, AYNI üç hâl ve aynı
+ * sıra. Shared'da henüz dil alan bir sürümü yok (D2 devir notunda); Türkçe
+ * yol hâlâ tek üreticiyi çağırıyor. Shared'a dil gelince bu fonksiyon silinir.
+ */
+function donusumBosIngilizce(
+  p: { hataVar: boolean; toplamDonusum: number },
+  m: (typeof genelBakisSozlugu)['en']['donusum']['bos'],
+): string {
+  if (p.hataVar) return m.hata;
+  if (p.toplamDonusum > 0) return m.adYok(p.toplamDonusum);
+  return m.yok;
 }

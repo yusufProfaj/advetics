@@ -49,9 +49,19 @@ function yapraklar(a: Agac, onek = ''): Map<string, unknown> {
   return m;
 }
 
-function deger(v: unknown): string {
-  if (typeof v === 'function') return (v as (...a: unknown[]) => string)(...Array(v.length).fill(7));
-  return v as string;
+/**
+ * Fonksiyon değer örnek argümanla çağrılıyor (7). Nesne ya da dizi bekleyen
+ * bir fonksiyon 7 ile patlayabilir: o yaprak için değer kıyası YAPILAMIYOR
+ * (`null`), anahtar kümesi kıyası yine yapılıyor. Kaçırılan şey yalnız
+ * "çevrilmemiş kopya" kontrolü ve sayısı testte görünür (`kiyaslanamayan`).
+ */
+function deger(v: unknown): string | null {
+  if (typeof v !== 'function') return v as string;
+  try {
+    return (v as (...a: unknown[]) => string)(...Array(v.length).fill(7));
+  } catch {
+    return null;
+  }
 }
 
 async function sozlukler(): Promise<{ ad: string; tr: Agac; en: Agac }[]> {
@@ -86,6 +96,7 @@ describe('sözlükler: her anahtar iki dilde, dolu ve çevrilmiş', () => {
         if (!t.has(k)) continue;
         const ev = deger(v);
         const tv = deger(t.get(k));
+        if (ev === null || tv === null) continue;
         if (typeof ev !== 'string' || ev.trim() === '') hatalar.push(`${ad}: "${k}" İngilizcesi BOŞ`);
         if (typeof tv !== 'string' || tv.trim() === '') hatalar.push(`${ad}: "${k}" Türkçesi BOŞ`);
         const yol = `${ad}:${k}`;

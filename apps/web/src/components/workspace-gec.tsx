@@ -5,6 +5,8 @@ import { ApiRequestError, apiFetch } from '@/lib/api';
 import type { WorkspaceUyumu } from '@/lib/sayfa-workspace';
 import { Dugme } from '@/components/ui/dugme';
 import { Uyari } from '@/components/ui/uyari';
+import { useSozluk } from '@/dil/saglayici';
+import { genelBakisSozlugu } from '@/dil/sozlukler/genel-bakis';
 
 /**
  * ═══ ADRESTEKİ WORKSPACE'E TEK TIKLA GEÇ ═══ (`workspaceUyumu`, lib/sayfa-workspace.ts)
@@ -36,7 +38,8 @@ export function WorkspaceGec({
 }) {
   const [bekliyor, setBekliyor] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
-  const hedef = workspaceAdi ? `“${workspaceAdi}”` : 'Bu workspace';
+  const d = useSozluk(genelBakisSozlugu).workspace;
+  const hedef = workspaceAdi ? `“${workspaceAdi}”` : d.buWorkspace;
 
   async function gec(): Promise<void> {
     setBekliyor(true);
@@ -45,34 +48,34 @@ export function WorkspaceGec({
       await apiFetch('/auth/switch-client', { method: 'POST', body: JSON.stringify({ clientId }) });
       window.location.reload();
     } catch (e) {
-      setHata(e instanceof ApiRequestError ? e.message : 'Workspace’e geçilemedi.');
+      setHata(e instanceof ApiRequestError ? e.message : d.gecilemedi);
       setBekliyor(false);
     }
   }
 
   const dugme = (
     <Dugme bekliyor={bekliyor} onClick={() => void gec()}>
-      Bu workspace’e geç
+      {d.gec}
     </Dugme>
   );
 
   return (
     <div className="space-y-2">
       {uyum === 'secimYok' ? (
-        <Uyari ton="uyari" baslik="Değişiklik yapmak için bu workspace’e geç." eylem={dugme}>
+        <Uyari ton="uyari" baslik={d.secimYokBaslik} eylem={dugme}>
           {/* SEÇİCİYLE AYNI DİL: üstte "Şirket geneli" yazıyor; "workspace seçili
               değil" demek, seçicide şirket adını gören kullanıcıya çelişki
               gibi okunuyordu (canlı denetim). */}
-          Üstte şirket geneli seçili, tek bir workspace değil. {hedef} bilgileri görünüyor; kaydetmek için bu workspace’e geç.
+          {d.secimYokMetin(hedef)}
         </Uyari>
       ) : (
-        <Uyari ton="uyari" baslik={`${ekran} ${workspaceAdi ? `“${workspaceAdi}”` : 'başka bir workspace'} için açıldı.`} eylem={dugme}>
-          {aktifAdi ? `Üstte “${aktifAdi}” seçili.` : 'Bu workspace şu anki şirketin listesinde değil.'} Bilgiler seçili
-          workspace’e göre okunuyor; doğru veriyi görmek ve değiştirmek için geç.
+        <Uyari ton="uyari" baslik={d.baskaBaslik(ekran, workspaceAdi)} eylem={dugme}>
+          {aktifAdi ? d.ustteSecili(aktifAdi) : d.listedeDegil}
+          {d.baskaDevam}
         </Uyari>
       )}
       {hata && (
-        <Uyari ton="tehlike" baslik="Workspace’e geçilemedi.">
+        <Uyari ton="tehlike" baslik={d.gecilemedi}>
           {hata}
         </Uyari>
       )}

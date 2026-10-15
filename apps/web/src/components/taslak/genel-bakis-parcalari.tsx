@@ -7,8 +7,10 @@ import { useEffect, useRef, useState, useTransition, type ReactNode } from 'reac
 import type { MetricsBreakdownRow, MetricsTimeseriesPoint, Platform } from '@advetics/shared';
 import { PLATFORM_KISA_ADLARI } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
-import { formatMoney, formatNumber, microsOf } from '@/lib/format';
-import { degisimHali } from '@/lib/degisim';
+import { formatDayShort, formatMoney, formatNumber, microsOf } from '@/lib/format';
+import { degisimHali, yuzdeMetni } from '@/lib/degisim';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { genelBakisSozlugu } from '@/dil/sozlukler/genel-bakis';
 import { TamEkranYukleniyor } from '@/components/yukleniyor';
 import s from './taslak.module.css';
 
@@ -38,6 +40,7 @@ export interface Bildirim {
 export function BildirimSeridi({ bildirimler }: { bildirimler: Bildirim[] }) {
   const [i, setI] = useState(0);
   const [gorunur, setGorunur] = useState(true);
+  const d = useSozluk(genelBakisSozlugu).bildirim;
   if (bildirimler.length === 0) return null;
   const b = bildirimler[Math.min(i, bildirimler.length - 1)]!;
 
@@ -64,13 +67,13 @@ export function BildirimSeridi({ bildirimler }: { bildirimler: Bildirim[] }) {
       )}
       {bildirimler.length > 1 && (
         <span className={s.sira}>
-          <button type="button" aria-label="Önceki uyarı" onClick={() => git(-1)}>
+          <button type="button" aria-label={d.onceki} onClick={() => git(-1)}>
             ‹
           </button>
           <span className={s.num}>
             {i + 1} / {bildirimler.length}
           </span>
-          <button type="button" aria-label="Sonraki uyarı" onClick={() => git(1)}>
+          <button type="button" aria-label={d.sonraki} onClick={() => git(1)}>
             ›
           </button>
         </span>
@@ -109,13 +112,17 @@ export interface IkincilMetrik {
  * İyi/kötü kararı `degisimHali`nde (Reklam Yöneticisi de onu kullanıyor).
  */
 function Degisim({ d, ters, uzun }: { d: number | null; ters?: boolean; uzun?: boolean }) {
-  const h = degisimHali(d, ters);
+  const { dil } = useDil();
+  const metin = useSozluk(genelBakisSozlugu).degisim;
+  const h = degisimHali(d, ters, dil);
   if (!h) return null;
   const sinif = h.iyi === null ? '' : h.iyi ? s.iyi : s.kotu;
   if (uzun) {
     return (
       <div className={`${s.metrikFark} ${sinif}`} title={h.etiket}>
-        {h.metin} önceki döneme göre<span className="sr-only">, {h.etiket}</span>
+        {h.metin}
+        {metin.oncekiyeGore}
+        <span className="sr-only">, {h.etiket}</span>
       </div>
     );
   }
@@ -173,6 +180,8 @@ export function PerformansKarti({
   seriHatasi: boolean;
 }) {
   const [secili, setSecili] = useState<MetrikAnahtari[]>(['harcama', 'donusum']);
+  const { dil } = useDil();
+  const d = useSozluk(genelBakisSozlugu).performans;
 
   function sec(k: MetrikAnahtari) {
     if (k === 'erisim') return;
@@ -188,8 +197,8 @@ export function PerformansKarti({
   return (
     <section aria-labelledby="performans-baslik" className={`${s.kart} ${s.gir}`}>
       <div className={s.kartUst}>
-        <h2 id="performans-baslik">Performans</h2>
-        <span className={s.ipucu}>Grafikte görmek için en çok iki metrik seç</span>
+        <h2 id="performans-baslik">{d.baslik}</h2>
+        <span className={s.ipucu}>{d.ipucu}</span>
       </div>
       <div className={s.metrikler}>
         {metrikler.map((m) => {
@@ -203,7 +212,7 @@ export function PerformansKarti({
               data-seri={sira >= 0 ? sira + 1 : undefined}
               aria-pressed={sira >= 0}
               aria-disabled={secilemez || undefined}
-              title={secilemez ? 'Erişimin günlük serisi yok, grafikte çizilemiyor' : undefined}
+              title={secilemez ? d.erisimCizilemez : undefined}
               style={secilemez ? { cursor: 'default' } : undefined}
               onClick={() => sec(m.anahtar)}
             >
@@ -220,10 +229,10 @@ export function PerformansKarti({
       </div>
 
       {tekGun ? (
-        <p className={s.bosMetin}>Tek günlük aralıkta grafik çizilmiyor; rakamlar yukarıda.</p>
+        <p className={s.bosMetin}>{d.tekGun}</p>
       ) : seriHatasi ? (
         <p role="alert" className={s.hataMetin}>
-          Grafik verisi alınamadı.
+          {d.seriHatasi}
         </p>
       ) : noktalar.length === 0 ? (
         /*
@@ -233,12 +242,19 @@ export function PerformansKarti({
          */
         <p className={s.bosMetin}>
           {onceki !== null && onceki.length > 0
-            ? 'Bu aralıkta veri yok, önceki dönemde vardı. Kampanyalar durmuş olabilir.'
-            : 'Bu aralıkta veri yok.'}
+            ? d.oncekindeVardi
+            : d.veriYok}
         </p>
       ) : (
         <>
-          <Grafik noktalar={noktalar} onceki={onceki} secili={secili} adlar={efsane} />
+          <Grafik
+            noktalar={noktalar}
+            onceki={onceki}
+            secili={secili}
+            adlar={efsane}
+            etiket={d.grafikEtiketi(efsane.join(d.ve))}
+            gunAdi={(iso) => formatDayShort(iso, dil)}
+          />
           <div className={s.efsane}>
             {efsane.map((ad, i) => (
               <span key={ad}>
@@ -249,7 +265,7 @@ export function PerformansKarti({
             {onceki && onceki.length > 0 && (
               <span>
                 <i style={{ background: 'var(--t-brand)', opacity: 0.45 }} />
-                {efsane[0]} · önceki dönem (kesikli)
+                {d.oncekiDonem(efsane[0] ?? '')}
               </span>
             )}
           </div>
@@ -269,10 +285,6 @@ export function PerformansKarti({
   );
 }
 
-function kisaGun(iso: string): string {
-  return new Date(`${iso}T00:00:00Z`).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', timeZone: 'UTC' });
-}
-
 /**
  * Çizgi grafik. Çizgi soldan sağa ÇİZİLEREK geliyor (stroke-dashoffset);
  * seçim değişince yalnız değişen seri yeniden çiziliyor (anahtar seriye
@@ -283,11 +295,17 @@ function Grafik({
   onceki,
   secili,
   adlar,
+  etiket,
+  gunAdi,
 }: {
   noktalar: MetricsTimeseriesPoint[];
   onceki: MetricsTimeseriesPoint[] | null;
   secili: MetrikAnahtari[];
   adlar: string[];
+  /** Ekran okuyucu etiketi ("Günlük Harcama ve Dönüşüm"), sözlükten. */
+  etiket: string;
+  /** Eksen günü ("5 Eki" / "Oct 5"), ekranın dilinde. */
+  gunAdi: (iso: string) => string;
 }) {
   const W = 760;
   const H = 230;
@@ -332,7 +350,7 @@ function Grafik({
 
   return (
     <div className={s.grafik}>
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Günlük ${adlar.join(' ve ')}`}>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={etiket}>
         <defs>
           <linearGradient id="gb-alan" x1="0" x2="0" y1="0" y2="1">
             <stop offset="0" stopColor="var(--brand-primary)" stopOpacity="0.1" />
@@ -345,7 +363,7 @@ function Grafik({
         })}
         {etiketler.map((i) => (
           <text key={i} x={x(i)} y={H - 6} textAnchor={i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'}>
-            {kisaGun(noktalar[i]!.date)}
+            {gunAdi(noktalar[i]!.date)}
           </text>
         ))}
         {seriler.map((sr, si) => {
@@ -411,6 +429,8 @@ export function MecraDagilimi({
 }) {
   const toplam = dilimler.reduce((a, d) => a + BigInt(d.spendMicros), 0n);
   const [cizildi, setCizildi] = useState(false);
+  const { dil } = useDil();
+  const m = useSozluk(genelBakisSozlugu).mecra;
   useEffect(() => {
     const t = requestAnimationFrame(() => requestAnimationFrame(() => setCizildi(true)));
     return () => cancelAnimationFrame(t);
@@ -431,13 +451,13 @@ export function MecraDagilimi({
   return (
     <section aria-labelledby="mecra-baslik" className={`${s.kart} ${s.gir}`}>
       <div className={s.kartUst}>
-        <h2 id="mecra-baslik">Harcamanın mecralara dağılımı</h2>
+        <h2 id="mecra-baslik">{m.baslik}</h2>
       </div>
       {parcalar.length === 0 ? (
-        <p className={s.bosMetin}>Bu dönemde harcama yok.</p>
+        <p className={s.bosMetin}>{m.harcamaYok}</p>
       ) : (
         <div style={{ display: 'flex', alignItems: 'center', gap: 18, padding: '16px' }}>
-          <svg viewBox="0 0 140 140" width="132" height="132" role="img" aria-label="Mecra dağılımı" style={{ flex: 'none' }}>
+          <svg viewBox="0 0 140 140" width="132" height="132" role="img" aria-label={m.halka} style={{ flex: 'none' }}>
             <circle cx="70" cy="70" r={R} fill="none" stroke="var(--surface-sunken)" strokeWidth="16" />
             {parcalar.map((p) => (
               <circle
@@ -455,10 +475,10 @@ export function MecraDagilimi({
               />
             ))}
             <text x="70" y="66" textAnchor="middle" style={{ fontSize: 11, fill: 'var(--text-muted)' }}>
-              Toplam
+              {m.toplam}
             </text>
             <text x="70" y="84" textAnchor="middle" style={{ fontSize: 13, fontWeight: 700, fill: 'var(--text)' }}>
-              {paraBirimi ? formatMoney(toplam.toString(), paraBirimi, { compact: true }) : '—'}
+              {paraBirimi ? formatMoney(toplam.toString(), paraBirimi, { compact: true, dil }) : '—'}
             </text>
           </svg>
           <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0, flex: 1 }}>
@@ -467,10 +487,10 @@ export function MecraDagilimi({
                 <i style={{ width: 10, height: 10, borderRadius: 3, background: MECRA_RENGI[p.platform], flex: 'none' }} />
                 <span style={{ fontWeight: 600 }}>{PLATFORM_KISA_ADLARI[p.platform]}</span>
                 <span className={s.num} style={{ marginLeft: 'auto', color: 'var(--text-muted)', fontSize: 12 }}>
-                  %{(p.pay * 100).toLocaleString('tr-TR', { maximumFractionDigits: 1 })}
+                  {yuzdeMetni(p.pay * 100, dil)}
                 </span>
                 <b className={s.num} style={{ fontSize: 12.5, whiteSpace: 'nowrap' }}>
-                  {paraBirimi ? formatMoney(p.spendMicros, paraBirimi, { compact: true }) : '—'}
+                  {paraBirimi ? formatMoney(p.spendMicros, paraBirimi, { compact: true, dil }) : '—'}
                 </b>
               </li>
             ))}
@@ -479,7 +499,7 @@ export function MecraDagilimi({
       )}
       {paraBirimi === null && (
         <div className={s.kartAlt}>
-          <span>Birden fazla para birimi var; tutarlar toplanmadı, paylar yaklaşık.</span>
+          <span>{m.karisik}</span>
         </div>
       )}
     </section>
@@ -515,21 +535,27 @@ export function OzetListeKarti({
   baslik,
   sutunAdi,
   satirlar,
-  toplam,
   tumuHref,
-  tumuEtiket,
+  sayac,
   altNot,
 }: {
   baslik: string;
   sutunAdi: string;
   satirlar: OzetSatiri[];
-  toplam: number;
   tumuHref: string;
-  tumuEtiket: string;
+  /**
+   * "5 / 48 şirket": SUNUCUDA kuruluyor (sayı ve çoğul eki dile bağlı;
+   * sunucu bileşeninden istemciye fonksiyon geçmiyor). Kesme yine
+   * söyleniyor, yalnız cümle tek yerde.
+   */
+  sayac: string;
   altNot?: string;
 }) {
   const router = useRouter();
   const yol = usePathname() ?? '/dashboard';
+  const { dil } = useDil();
+  const g = useSozluk(genelBakisSozlugu);
+  const o = g.ozet;
   const [bekleyen, setBekleyen] = useState<string | null>(null);
   const [hata, setHata] = useState<string | null>(null);
   // Katman istek + yenileme boyunca; ikisi bitince kalkıyor (bkz. Reklam Yöneticisi tablosu).
@@ -562,7 +588,7 @@ export function OzetListeKarti({
         router.refresh();
       });
     } catch (e) {
-      setHata(e instanceof ApiRequestError ? e.message : 'Geçilemedi.');
+      setHata(e instanceof ApiRequestError ? e.message : o.gecilemedi);
       setBekleyen(null);
     }
   }
@@ -570,13 +596,13 @@ export function OzetListeKarti({
   return (
     <section className={`${s.kart} ${s.gir}`}>
       {(bekleyen ?? yenileniyor) && (
-        <TamEkranYukleniyor mesaj={`${bekleyen ?? yenileniyor} görünümüne geçiliyor…`} />
+        <TamEkranYukleniyor mesaj={o.geciliyor(bekleyen ?? yenileniyor ?? '')} />
       )}
       <div className={s.kartUst}>
         <h2>{baslik}</h2>
-        <span className={s.ipucu}>harcamaya göre</span>
+        <span className={s.ipucu}>{o.harcamayaGore}</span>
         <Link className={s.sagBag} href={tumuHref}>
-          Reklam Yöneticisi’nde aç →
+          {o.reklamYoneticisindeAc}
         </Link>
       </div>
       {hata && (
@@ -585,17 +611,17 @@ export function OzetListeKarti({
         </p>
       )}
       {satirlar.length === 0 ? (
-        <p className={s.bosMetin}>Bu dönemde gösterilecek satır yok.</p>
+        <p className={s.bosMetin}>{o.satirYok}</p>
       ) : (
         <div className={s.tabloSar}>
           <table className={s.tablo} style={{ minWidth: 640 }}>
             <thead>
               <tr>
                 <th>{sutunAdi}</th>
-                <th>Harcama</th>
-                <th>Pay</th>
-                <th>Dönüşüm</th>
-                <th>Dönüşüm başı maliyet</th>
+                <th>{g.metrik.harcama}</th>
+                <th>{g.metrik.pay}</th>
+                <th>{g.metrik.donusum}</th>
+                <th>{g.metrik.dbm}</th>
               </tr>
             </thead>
             <tbody>
@@ -612,7 +638,7 @@ export function OzetListeKarti({
                       ) : (
                         <span
                           className={`${s.nokta} ${r.gosterge === 'durdu' ? s.noktaDurdu : ''}`}
-                          title={r.gosterge === 'yayinda' ? 'İzleniyor' : 'İzlenmiyor'}
+                          title={r.gosterge === 'yayinda' ? o.izleniyor : o.izlenmiyor}
                         />
                       )}
                       <span style={{ minWidth: 0 }}>
@@ -635,17 +661,17 @@ export function OzetListeKarti({
                       </span>
                     </div>
                   </td>
-                  <td className={s.num}>{r.paraBirimi ? formatMoney(r.spendMicros, r.paraBirimi) : 'karışık'}</td>
+                  <td className={s.num}>{r.paraBirimi ? formatMoney(r.spendMicros, r.paraBirimi, { dil }) : o.karisik}</td>
                   <td>
                     <span className={s.pay}>
                       <span className={s.payIz}>
                         <i style={{ width: `${Math.min(100, r.pay)}%` }} />
                       </span>
-                      <span className={s.num}>%{r.pay.toLocaleString('tr-TR', { maximumFractionDigits: 1 })}</span>
+                      <span className={s.num}>{yuzdeMetni(r.pay, dil)}</span>
                     </span>
                   </td>
-                  <td className={s.num}>{formatNumber(r.donusum)}</td>
-                  <td className={s.num}>{r.dbmMicros && r.paraBirimi ? formatMoney(r.dbmMicros, r.paraBirimi) : '—'}</td>
+                  <td className={s.num}>{formatNumber(r.donusum, dil)}</td>
+                  <td className={s.num}>{r.dbmMicros && r.paraBirimi ? formatMoney(r.dbmMicros, r.paraBirimi, { dil }) : '—'}</td>
                 </tr>
               ))}
             </tbody>
@@ -654,10 +680,10 @@ export function OzetListeKarti({
       )}
       <div className={s.kartAlt}>
         <span>
-          {satirlar.length < toplam ? `${satirlar.length} / ${toplam}` : toplam} {tumuEtiket}
+          {sayac}
           {altNot ? ` · ${altNot}` : ''}
         </span>
-        <Link href={tumuHref}>Tümü →</Link>
+        <Link href={tumuHref}>{o.tumuOk}</Link>
       </div>
     </section>
   );
@@ -676,12 +702,9 @@ export function basHarfler(ad: string): string {
 // En çok harcayanlar (kampanya / reklam seti / reklam)
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Düzeyler ve sırası; adları sözlükte (`enCok.duzeyler`), anahtar kümesi buradan. */
 type KampanyaDuzeyi = 'campaign' | 'ad_group' | 'ad';
-const DUZEY_ADI: Record<KampanyaDuzeyi, { tab: string; sutun: string; cogul: string }> = {
-  campaign: { tab: 'Kampanya', sutun: 'Kampanya', cogul: 'kampanya' },
-  ad_group: { tab: 'Reklam seti', sutun: 'Reklam seti', cogul: 'reklam seti' },
-  ad: { tab: 'Reklam', sutun: 'Reklam', cogul: 'reklam' },
-};
+const DUZEYLER: KampanyaDuzeyi[] = ['campaign', 'ad_group', 'ad'];
 /** Kart kaç satır gösteriyor; pay ise GELEN bütün satırların toplamından. */
 export const OZET_SATIR_SAYISI = 5;
 
@@ -708,11 +731,14 @@ export function EnCokHarcayanlarKarti({
   tasinanSorgu: string;
 }) {
   const [duzey, setDuzey] = useState<KampanyaDuzeyi>('campaign');
+  const { dil } = useDil();
+  const g = useSozluk(genelBakisSozlugu);
+  const e = g.enCok;
   const [veri, setVeri] = useState<Partial<Record<KampanyaDuzeyi, MetricsBreakdownRow[]>>>(
     ilk ? { campaign: ilk } : {},
   );
   const [hata, setHata] = useState<Partial<Record<KampanyaDuzeyi, string>>>(
-    ilk ? {} : { campaign: 'Kampanya listesi alınamadı.' },
+    ilk ? {} : { campaign: e.kampanyaListesiAlinamadi },
   );
 
   useEffect(() => {
@@ -720,17 +746,18 @@ export function EnCokHarcayanlarKarti({
     let iptal = false;
     apiFetch<MetricsBreakdownRow[]>(`/metrics/breakdown?${sorgu}&level=${duzey}&limit=${sinir}`).then(
       (r) => !iptal && setVeri((v) => ({ ...v, [duzey]: r })),
-      (e: unknown) =>
+      (err: unknown) =>
         !iptal &&
-        setHata((h) => ({ ...h, [duzey]: e instanceof ApiRequestError ? e.message : 'Liste alınamadı.' })),
+        setHata((h) => ({ ...h, [duzey]: err instanceof ApiRequestError ? err.message : e.listeAlinamadi })),
     );
     return () => {
       iptal = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `e` metin; dil değişince sayfa zaten yeniden çiziliyor
   }, [duzey, veri, hata, sorgu, sinir]);
 
   const satirlar = veri[duzey];
-  const ad = DUZEY_ADI[duzey];
+  const ad = e.duzeyler[duzey];
   const gosterilen = (satirlar ?? []).slice(0, OZET_SATIR_SAYISI);
 
   const satirAdresi = (r: MetricsBreakdownRow) => {
@@ -755,18 +782,18 @@ export function EnCokHarcayanlarKarti({
   return (
     <section className={`${s.kart} ${s.gir}`}>
       <div className={s.kartUst}>
-        <h2>En çok harcayan {ad.cogul === 'kampanya' ? 'kampanyalar' : ad.cogul === 'reklam' ? 'reklamlar' : 'reklam setleri'}</h2>
+        <h2>{ad.baslik}</h2>
         {/* ORTAK BÖLÜMLÜ SEÇİCİ: aynı listenin üç görünümü (kampanya, set, reklam). */}
         <span style={{ marginLeft: 8 }}>
           <BolumluSecici
-            etiket="Düzey"
+            etiket={e.duzey}
             secili={duzey}
             onSec={setDuzey}
-            secenekler={(Object.keys(DUZEY_ADI) as KampanyaDuzeyi[]).map((d) => ({ deger: d, etiket: DUZEY_ADI[d].tab }))}
+            secenekler={DUZEYLER.map((d) => ({ deger: d, etiket: e.duzeyler[d].tab }))}
           />
         </span>
         <Link className={s.sagBag} href={tumuAdresi}>
-          Tümü →
+          {g.ozet.tumuOk}
         </Link>
       </div>
 
@@ -776,20 +803,20 @@ export function EnCokHarcayanlarKarti({
         </p>
       ) : !satirlar ? (
         <p className={s.bosMetin} aria-busy="true">
-          Yükleniyor…
+          {e.yukleniyor}
         </p>
       ) : gosterilen.length === 0 ? (
-        <p className={s.bosMetin}>Bu dönemde harcaması olan {ad.cogul} yok.</p>
+        <p className={s.bosMetin}>{ad.bos}</p>
       ) : (
         <div className={s.tabloSar}>
           <table className={s.tablo} style={{ minWidth: 640 }}>
             <thead>
               <tr>
-                <th>{ad.sutun}</th>
-                <th>Mecra</th>
-                <th>Harcama</th>
-                <th>Dönüşüm</th>
-                <th>Dönüşüm başı maliyet</th>
+                <th>{ad.tab}</th>
+                <th>{g.metrik.mecra}</th>
+                <th>{g.metrik.harcama}</th>
+                <th>{g.metrik.donusum}</th>
+                <th>{g.metrik.dbm}</th>
               </tr>
             </thead>
             <tbody key={duzey} className={s.yenilenen}>
@@ -801,7 +828,7 @@ export function EnCokHarcayanlarKarti({
                       <div className={s.adHucre}>
                         <span
                           className={`${s.nokta} ${r.status === 'active' ? '' : s.noktaDurdu}`}
-                          title={r.status === 'active' ? 'Yayında' : 'Yayında değil'}
+                          title={r.status === 'active' ? e.yayinda : e.yayindaDegil}
                         />
                         <span style={{ minWidth: 0 }}>
                           <Link
@@ -818,10 +845,10 @@ export function EnCokHarcayanlarKarti({
                     <td>
                       <span className={s.etiket}>{PLATFORM_KISA_ADLARI[r.platform]}</span>
                     </td>
-                    <td className={s.num}>{formatMoney(r.spendMicros, birim)}</td>
-                    <td className={s.num}>{formatNumber(r.conversions)}</td>
+                    <td className={s.num}>{formatMoney(r.spendMicros, birim, { dil })}</td>
+                    <td className={s.num}>{formatNumber(r.conversions, dil)}</td>
                     <td className={s.num}>
-                      {r.cpa === null ? '—' : formatMoney(microsOf(r.cpa), birim)}
+                      {r.cpa === null ? '—' : formatMoney(microsOf(r.cpa), birim, { dil })}
                     </td>
                   </tr>
                 );
@@ -835,10 +862,10 @@ export function EnCokHarcayanlarKarti({
         <div className={s.kartAlt}>
           <span>
             {satirlar.length >= sinir
-              ? `${gosterilen.length} ${ad.cogul} gösteriliyor · en az ${satirlar.length} ${ad.cogul} harcadı`
-              : `${gosterilen.length} / ${satirlar.length} ${ad.cogul} gösteriliyor`}
+              ? ad.kesik(gosterilen.length, satirlar.length)
+              : ad.sayac(gosterilen.length, satirlar.length)}
           </span>
-          <Link href={tumuAdresi}>Reklam Yöneticisi →</Link>
+          <Link href={tumuAdresi}>{e.reklamYoneticisi}</Link>
         </div>
       )}
     </section>
@@ -867,15 +894,16 @@ export function IslerKap({
   kalan: ReactNode;
 }) {
   const [acik, setAcik] = useState(false);
+  const d = useSozluk(genelBakisSozlugu).isler;
   if (gelen <= ilkSayisi) return null;
   // TEK SAYAÇ: "3 / 50" ve altında ayrıca "50 / 69" iki ayrı satırdı ve
   // hangisinin neyi saydığı anlaşılmıyordu (canlı denetim, 2026-10-09).
   // Gerçek toplam her zaman paydada; sunucu sınırı açıkken de söyleniyor.
   const sayac = acik
     ? gelen < toplam
-      ? `${gelen} / ${toplam} gösteriliyor · en eski ${gelen} iş`
-      : `${toplam} iş`
-    : `${ilkSayisi} / ${toplam} gösteriliyor`;
+      ? d.acikSayac(gelen, toplam)
+      : d.tumSayac(toplam)
+    : d.kapaliSayac(ilkSayisi, toplam);
   return (
     <>
       <div className={`${s.kap} ${acik ? s.kapAcik : ''}`}>
@@ -886,7 +914,7 @@ export function IslerKap({
       <div className={s.kartAlt}>
         <span className={s.num}>{sayac}</span>
         <button type="button" aria-expanded={acik} onClick={() => setAcik((v) => !v)}>
-          {acik ? 'Daha az göster' : gelen < toplam ? `${gelen} işi göster` : `Tümünü göster (${toplam})`}
+          {acik ? d.dahaAz : gelen < toplam ? d.isleriGoster(gelen) : d.tumunuGoster(toplam)}
         </button>
       </div>
     </>

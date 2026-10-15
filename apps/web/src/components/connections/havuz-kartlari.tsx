@@ -26,6 +26,8 @@ import { BosDurum, Serit } from '@/components/ui/hal';
 import { AdHucresi, AracCubugu, Tablo, type TabloSutunu } from '@/components/ui/tablo';
 import { BolumluSecici } from '@/components/ui/sekmeler';
 import { Pencere } from '@/components/ui/pencere';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { baglantilarSozlugu } from '@/dil/sozlukler/ayarlar-baglantilar';
 
 interface Musteri {
   id: string;
@@ -64,6 +66,8 @@ export function HavuzKartlari({
   workspaceAcabilir: boolean;
 }) {
   const router = useRouter();
+  const { dil } = useDil();
+  const d = useSozluk(baglantilarSozlugu).havuz;
   const havuzlar = useMemo(() => havuzlariCikar(connections), [connections]);
   const [kanal, setKanal] = useState<ChannelKind | 'tumu'>('tumu');
   const [arama, setArama] = useState('');
@@ -136,10 +140,10 @@ export function HavuzKartlari({
          * dönüyor; onu yutmak "açtım ama boş" workspace'i sessiz bırakırdı.
          */
         const atanamadi = r?.failures.find((f) => f.kind === 'adAccount');
-        if (atanamadi) hatalar.push({ ad, sebep: `workspace açıldı, hesap atanamadı: ${atanamadi.reason}` });
+        if (atanamadi) hatalar.push({ ad, sebep: d.workspaceAcildiHesapAtanamadi(atanamadi.reason) });
         else acilan.push(ad);
       } catch (e) {
-        hatalar.push({ ad, sebep: e instanceof ApiRequestError ? e.message : 'İstek başarısız oldu.' });
+        hatalar.push({ ad, sebep: e instanceof ApiRequestError ? e.message : d.istekBasarisiz });
       }
       setToplu({ sira: i + 1, toplam: liste.length, acilan: [...acilan], hatalar: [...hatalar], bitti: false });
     }
@@ -149,7 +153,7 @@ export function HavuzKartlari({
 
   async function ata(oge: HavuzOgesi): Promise<void> {
     if (!hedef) {
-      setHata('Önce bir workspace seç.');
+      setHata(d.onceWorkspaceSec);
       return;
     }
     setBekleyen(oge.id);
@@ -168,11 +172,11 @@ export function HavuzKartlari({
        * olabilir. O hâlde eski müşterinin kampanya ve metrik satırları hâlâ
        * duruyor ve bu atama onları taşıyor — sayı burada da yazılmalı.
        */
-      setBildirim(atamaBildirimi(res ?? {}, true));
+      setBildirim(atamaBildirimi(res ?? {}, true, dil));
       // ATAMA İZLEMEYİ AÇIP 90 GÜNLÜK GEÇMİŞİ KUYRUĞA ALIYOR.
       router.refresh();
     } catch (e) {
-      setHata(e instanceof ApiRequestError ? e.message : 'Atama başarısız oldu.');
+      setHata(e instanceof ApiRequestError ? e.message : d.atamaBasarisiz);
     } finally {
       setBekleyen(null);
     }
@@ -183,7 +187,7 @@ export function HavuzKartlari({
   const sutunlar: Array<TabloSutunu<HavuzOgesi>> = [
     {
       anahtar: 'hesap',
-      baslik: 'Hesap',
+      baslik: d.hesap,
       hucre: (o) => (
         <AdHucresi
           ad={o.name}
@@ -203,7 +207,7 @@ export function HavuzKartlari({
                   turuna sokar. */}
               {o.baglanti.durum === 'revoked' && (
                 <span className="block font-semibold text-danger-strong">
-                  Bağlantısı kaldırılmış, atansa da veri çekmez
+                  {d.baglantiKaldirilmis}
                 </span>
               )}
             </>
@@ -213,26 +217,26 @@ export function HavuzKartlari({
     },
     {
       anahtar: 'kaynak',
-      baslik: 'Kaynak',
+      baslik: d.kaynak,
       ikincil: true,
       /* SAHİP YAZILI: ajansın hesabı her şirkete, şirketinki yalnızca
          kendi workspace'lerine atanabiliyor. Bunu atamaya basınca öğrenmek,
          girişte değil kullanım anında doğrulama olurdu (CLAUDE.md). */
       hucre: (o) => (
         <span className="text-13 text-ink-muted">
-          {o.isManager ? 'Yönetici (MCC)' : o.baglanti.sahip === 'ajans' ? 'Ajans bağlantısı' : 'Şirket bağlantısı'}
+          {o.isManager ? d.yonetici : o.baglanti.sahip === 'ajans' ? d.ajansBaglantisi : d.sirketBaglantisi}
         </span>
       ),
     },
     {
       anahtar: 'eylem',
-      baslik: <span className="sr-only">Eylemler</span>,
+      baslik: <span className="sr-only">{d.eylemler}</span>,
       sayi: true,
       hucre: (o) =>
         /* YÖNETİCİ (MCC) HESABI LİSTEDE DURUYOR ama atanamıyor —
            reklam yayınlamıyor ve sebebi kaynak sütununda yazılı. */
         o.isManager ? (
-          <span className="text-12 text-ink-soluk">Atanamaz</span>
+          <span className="text-12 text-ink-soluk">{d.atanamaz}</span>
         ) : (
           <Dugme
             ton="koyu"
@@ -241,7 +245,7 @@ export function HavuzKartlari({
             disabled={!canManage || bekleyen !== null || clients.length === 0}
             onClick={() => void ata(o)}
           >
-            Ata
+            {d.ata}
           </Dugme>
         ),
     },
@@ -250,14 +254,14 @@ export function HavuzKartlari({
   return (
     <Kart
       dolgu={false}
-      baslik="Atanmamış hesaplar"
-      baslikEki={`${toplamHavuz} hesap havuzda`}
+      baslik={d.baslik}
+      baslikEki={d.havuzda(toplamHavuz)}
       eylem={
         workspaceAcabilir &&
         adaylar.length > 0 &&
         toplu === null && (
           <Dugme ton="ikincil" boyut="kucuk" onClick={() => setTopluOnay(true)} disabled={bekleyen !== null}>
-            Her birine workspace aç
+            {d.herBirineAc}
           </Dugme>
         )
       }
@@ -269,12 +273,10 @@ export function HavuzKartlari({
           yanlış satırda yanlış hedef bırakmak kolaylaşıyordu.
         */}
         {clients.length === 0 ? (
-          <p className="m-0 text-13 font-semibold text-danger-strong">
-            Henüz workspace yok. Atama yapabilmek için önce bir workspace oluştur.
-          </p>
+          <p className="m-0 text-13 font-semibold text-danger-strong">{d.workspaceYok}</p>
         ) : (
           <label className="flex flex-wrap items-center gap-2 text-13 font-semibold text-ink">
-            Atanacak workspace
+            {d.atanacakWorkspace}
             <span className="w-full max-w-xs">
               <Secim value={hedef} onChange={(e) => setHedef(e.target.value)}>
                 {clients.map((c) => (
@@ -286,14 +288,14 @@ export function HavuzKartlari({
             </span>
           </label>
         )}
-        {!canManage && <p className="m-0 text-12 text-ink-muted">Hesap atamak yöneticinin işi.</p>}
+        {!canManage && <p className="m-0 text-12 text-ink-muted">{d.yoneticininIsi}</p>}
         {hata && (
-          <Serit ton="hata" baslik="Atanamadı">
+          <Serit ton="hata" baslik={d.atanamadi}>
             {hata}
           </Serit>
         )}
         {bildirim && (
-          <Serit ton="bilgi" baslik="Atandı">
+          <Serit ton="bilgi" baslik={d.atandi}>
             {bildirim}
           </Serit>
         )}
@@ -305,8 +307,8 @@ export function HavuzKartlari({
             ton={toplu.hatalar.length > 0 ? 'hata' : 'bilgi'}
             baslik={
               toplu.bitti
-                ? `${toplu.acilan.length} workspace açıldı${toplu.hatalar.length > 0 ? `, ${toplu.hatalar.length} açılamadı` : ''}.`
-                : `Açılıyor: ${toplu.sira} / ${toplu.toplam}`
+                ? d.topluBitti(toplu.acilan.length, toplu.hatalar.length)
+                : d.aciliyor(toplu.sira, toplu.toplam)
             }
           >
             {toplu.hatalar.length > 0 && (
@@ -323,7 +325,7 @@ export function HavuzKartlari({
       </div>
 
       <Tablo
-        etiket="Atanmamış hesaplar"
+        etiket={d.baslik}
         sutunlar={sutunlar}
         satirlar={gorunen}
         satirAnahtari={(o) => o.id}
@@ -332,19 +334,19 @@ export function HavuzKartlari({
             sag={
               /* SESSİZ KESME YOK: kaç sonuç gösterildiği ve toplam yazılı. */
               <span className="text-12 text-ink-muted">
-                {suzulmus.length} / {ogeler.length} hesap
+                {d.sayac(suzulmus.length, ogeler.length)}
               </span>
             }
           >
             <BolumluSecici
-              etiket="Kanal"
+              etiket={d.kanal}
               secili={kanal}
               onSec={(k) => {
                 setKanal(k);
                 setSayfa(0);
               }}
               secenekler={[
-                { deger: 'tumu' as const, etiket: 'Tümü' },
+                { deger: 'tumu' as const, etiket: d.tumu },
                 ...KANALLAR.filter((k) => havuzlar[k].length > 0).map((k) => ({
                   deger: k,
                   etiket: (
@@ -364,19 +366,19 @@ export function HavuzKartlari({
                   setArama(e.target.value);
                   setSayfa(0);
                 }}
-                placeholder="Hesap adı ya da numara"
-                aria-label="Hesap ara"
+                placeholder={d.aramaYer}
+                aria-label={d.hesapAra}
               />
             </div>
           </AracCubugu>
         }
         bos={
           <BosDurum
-            baslik={ogeler.length === 0 ? 'Havuzda hesap yok' : 'Aramaya uyan hesap yok'}
+            baslik={ogeler.length === 0 ? d.havuzBos : d.aramayaUyanYok}
             neden={
               ogeler.length === 0
-                ? 'Bağlı hesapların hepsi bir workspace’e atanmış.'
-                : 'Adın ya da numaranın bir parçasını yaz; aramayı temizleyince bütün liste döner.'
+                ? d.havuzBosNeden
+                : d.aramaNeden
             }
           />
         }
@@ -389,27 +391,24 @@ export function HavuzKartlari({
         }}
       />
       <p className="m-0 border-t border-line px-4 py-2.5 text-12 text-ink-muted">
-        Atama izlemeyi açar ve 90 günlük geçmişi kuyruğa alır.
+        {d.atamaNotu}
       </p>
 
       <Pencere
         acik={topluOnay}
         onKapat={() => setTopluOnay(false)}
-        baslik="Her birine workspace aç"
+        baslik={d.herBirineAc}
         genislik="dar"
         altEylemler={
           <>
             <Dugme ton="ikincil" onClick={() => setTopluOnay(false)}>
-              Vazgeç
+              {d.vazgec}
             </Dugme>
-            <Dugme onClick={() => void herBirineWorkspaceAc()}>Onayla</Dugme>
+            <Dugme onClick={() => void herBirineWorkspaceAc()}>{d.onayla}</Dugme>
           </>
         }
       >
-        <p className="m-0 text-14 text-ink">
-          Şirketin kendi bağlantısından {adaylar.length} hesap bekliyor. {adaylar.length} workspace açılacak,
-          her biri bir hesapla.
-        </p>
+        <p className="m-0 text-14 text-ink">{d.topluOnay(adaylar.length)}</p>
       </Pencere>
     </Kart>
   );

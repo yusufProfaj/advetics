@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { ALICI_UST_SINIRI, aliciAyristir, gecerliAdres } from '@advetics/shared';
+import { useSozluk } from '@/dil/saglayici';
+import { ayarlarSozlugu } from '@/dil/sozlukler/ayarlar';
 
 /**
  * ═══ ALICI LİSTESİ ALANI — ÜÇ EKRANDA TEK BİLEŞEN ═══
@@ -36,6 +38,7 @@ export function AliciListesiAlani({
   yardim?: string;
   bosVarsayilan?: string[];
 }) {
+  const d = useSozluk(ayarlarSozlugu).alici;
   const [taslak, setTaslak] = useState('');
   const [hata, setHata] = useState<string | null>(null);
 
@@ -51,13 +54,13 @@ export function AliciListesiAlani({
      * yeniden yazmak zorunda kalırdı.
      */
     if (gecersiz.length > 0) {
-      setHata(`Geçerli bir e-posta değil: ${gecersiz.join(', ')}`);
+      setHata(d.gecersiz(gecersiz.join(', ')));
       setTaslak(gecersiz.join(', '));
       if (adresler.length > 0) birlestir(adresler);
       return;
     }
     if (atilan.length > 0) {
-      setHata(`En fazla ${ALICI_UST_SINIRI} alıcı. Eklenmeyen: ${atilan.join(', ')}`);
+      setHata(d.enFazla(ALICI_UST_SINIRI, atilan.join(', ')));
     } else {
       setHata(null);
     }
@@ -68,7 +71,7 @@ export function AliciListesiAlani({
   function birlestir(yeniler: string[]): void {
     const birlesik = aliciAyristir([...degerler, ...yeniler]);
     if (birlesik.atilan.length > 0) {
-      setHata(`En fazla ${ALICI_UST_SINIRI} alıcı. Eklenmeyen: ${birlesik.atilan.join(', ')}`);
+      setHata(d.enFazla(ALICI_UST_SINIRI, birlesik.atilan.join(', ')));
     }
     onChange(birlesik.adresler);
   }
@@ -86,7 +89,7 @@ export function AliciListesiAlani({
             {adres}
             <button
               type="button"
-              aria-label={`${adres} adresini çıkar`}
+              aria-label={d.cikar(adres)}
               onClick={() => onChange(degerler.filter((d) => d !== adres))}
               className="text-ink-muted hover:text-danger-strong"
             >
@@ -122,7 +125,7 @@ export function AliciListesiAlani({
             }
           }}
           onBlur={() => ekle(taslak)}
-          placeholder={degerler.length === 0 ? 'ornek@firma.com' : 'ekle…'}
+          placeholder={degerler.length === 0 ? d.ornek : d.ekle}
           className="min-w-[140px] flex-1 bg-transparent text-14 text-ink outline-none placeholder:text-ink-soluk"
         />
       </div>
@@ -132,7 +135,7 @@ export function AliciListesiAlani({
       {/* SAYAÇ KOŞULSUZ — kaç kişiye gideceği her zaman görünür olmalı. */}
       {degerler.length > 0 && (
         <p className="m-0 text-12 text-ink-muted">
-          {degerler.length} alıcı · hepsi birbirinin adresini görecek
+          {d.sayac(degerler.length)}
         </p>
       )}
 
@@ -140,12 +143,12 @@ export function AliciListesiAlani({
         <p className="m-0 text-12 text-ink-muted">
           {bosVarsayilan.length > 0 ? (
             <>
-              Boş bırakılırsa <strong>{bosVarsayilan.join(', ')}</strong> adresine gönderilir.
+              {d.bosOnce}
+              <strong>{bosVarsayilan.join(', ')}</strong>
+              {d.bosSonra}
             </>
           ) : (
-            <span className="text-danger-strong">
-              Workspace’in kayıtlı rapor alıcısı yok: en az bir adres eklemelisin.
-            </span>
+            <span className="text-danger-strong">{d.aliciYok}</span>
           )}
         </p>
       )}

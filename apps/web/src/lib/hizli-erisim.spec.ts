@@ -35,3 +35,14 @@ describe('hızlı erişim', () => {
     expect(hizliErisim([])).toEqual([]);
   });
 });
+
+describe('hızlı erişim iki dilde', () => {
+  it('İngilizcede kısayol adları çevrili, ürün adı aynı, adresler aynı', () => {
+    const bolumler = visibleSections([...ROLE_PERMISSIONS.admin], { ustHesapGorunur: true, platformSahibi: false });
+    const tr = hizliErisim(bolumler, 'tr');
+    const en = hizliErisim(bolumler, 'en');
+    expect(en.map((k) => k.href)).toEqual(tr.map((k) => k.href));
+    expect(en.map((k) => k.etiket)).toEqual(expect.arrayContaining(['Smart Boost', 'New ad', 'Reports', 'AdvStrategy']));
+    expect(tr.map((k) => k.etiket)).toEqual(expect.arrayContaining(['Akıllı Boost', 'Yeni reklam', 'Raporlar']));
+  });
+});

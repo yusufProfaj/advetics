@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   PLATFORM_LABELS,
+  bicimKodu,
   type BaglantiKaldirmaOnizlemesi,
   type ConnectionSummary,
   type Platform,
@@ -20,6 +21,10 @@ import { Serit } from '@/components/ui/hal';
 import { Pencere } from '@/components/ui/pencere';
 import { AcilirMenu, MenuAyraci, MenuOgesi } from '@/components/ui/acilir-menu';
 import { DigerMenusu } from '@/components/ayar-sekmeleri';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { baglantilarSozlugu } from '@/dil/sozlukler/ayarlar-baglantilar';
+
+type KanalSozlugu = (typeof baglantilarSozlugu)['tr']['kanal'];
 
 /**
  * ═══ KANAL KARTLARI — BAĞLANMAK VE BAĞLANTININ DURUMU AYNI YERDE ═══
@@ -70,15 +75,14 @@ export function KanalKartlari({
   kaldirabilir: boolean;
 }) {
   const [hata, setHata] = useState<string | null>(null);
+  const d = useSozluk(baglantilarSozlugu).kanal;
 
   return (
     <section className="grid gap-3">
-      <p className="m-0 text-13 text-ink-muted">
-        Her platformu bir kez bağlıyorsun. Bağlantı ajansa ait, workspace ayrımı hesap atamasıyla yapılıyor.
-      </p>
+      <p className="m-0 text-13 text-ink-muted">{d.giris}</p>
 
       {hata && (
-        <Serit ton="hata" baslik="İşlem yapılamadı">
+        <Serit ton="hata" baslik={d.islemYapilamadi}>
           {hata}
         </Serit>
       )}
@@ -143,12 +147,13 @@ export function PlatformBaglaMenusu({
 }) {
   const [bekleyen, setBekleyen] = useState<Platform | null>(null);
   const [hata, setHata] = useState<string | null>(null);
+  const d = useSozluk(baglantilarSozlugu).kanal;
 
   function bagla(platform: Platform): void {
     setBekleyen(platform);
     setHata(null);
     baglantiBaslat(platform).catch((err: unknown) => {
-      setHata(err instanceof ApiRequestError ? err.message : 'Bağlantı başlatılamadı.');
+      setHata(err instanceof ApiRequestError ? err.message : d.baslatilamadi);
       setBekleyen(null);
     });
   }
@@ -156,12 +161,12 @@ export function PlatformBaglaMenusu({
   return (
     <>
       <AcilirMenu
-        etiket="Bağlanacak platform"
+        etiket={d.baglanacakPlatform}
         hizala="sag"
         genislik="w-72"
         tetik={({ acik: _acik, ...o }) => (
           <button type="button" className={dugmeSinifi('birincil')} aria-busy={bekleyen !== null || undefined} {...o}>
-            + Platform bağla
+            {d.platformBagla}
           </button>
         )}
       >
@@ -174,11 +179,11 @@ export function PlatformBaglaMenusu({
               devreDisi={!a.configured || bekleyen !== null}
               aciklama={
                 !a.configured
-                  ? 'Sunucu ayarları eksik'
+                  ? d.sunucuAyarEksik
                   : bekleyen === a.platform
-                    ? 'Yönlendiriliyor…'
+                    ? d.yonlendiriliyor
                     : bagli
-                      ? 'Bağlı. Başka bir kimlikle ikinci bağlantı'
+                      ? d.bagliIkinci
                       : undefined
               }
               onClick={() => bagla(a.platform)}
@@ -192,11 +197,11 @@ export function PlatformBaglaMenusu({
       <Pencere
         acik={hata !== null}
         onKapat={() => setHata(null)}
-        baslik="Bağlantı başlatılamadı"
+        baslik={d.baslatilamadiBaslik}
         genislik="dar"
         altEylemler={
           <Dugme ton="ikincil" onClick={() => setHata(null)}>
-            Kapat
+            {d.kapat}
           </Dugme>
         }
       >
@@ -207,11 +212,12 @@ export function PlatformBaglaMenusu({
   );
 }
 
-const DURUM: Record<ConnectionSummary['status'], { etiket: string; hal: DurumHali }> = {
-  active: { etiket: 'Bağlı', hal: 'ok' },
-  needs_reauth: { etiket: 'Yeniden yetki gerekli', hal: 'hata' },
-  error: { etiket: 'Hata', hal: 'hata' },
-  revoked: { etiket: 'Kaldırıldı', hal: 'taslak' },
+/** Rozet rengi; etiketi sözlükten (`kanal.durum`). */
+const DURUM_HALI: Record<ConnectionSummary['status'], DurumHali> = {
+  active: 'ok',
+  needs_reauth: 'hata',
+  error: 'hata',
+  revoked: 'taslak',
 };
 
 function KanalKarti({
@@ -229,6 +235,7 @@ function KanalKarti({
   kaldirabilir: boolean;
   onHata: (m: string | null) => void;
 }) {
+  const d = useSozluk(baglantilarSozlugu).kanal;
   const bagli = baglantilar.length > 0;
   /*
    * ROZET EN KÖTÜ DURUMU GÖSTERİYOR. İki bağlantıdan biri yeniden yetki
@@ -236,7 +243,8 @@ function KanalKarti({
    * çekmediğini rozetten gizlerdi.
    */
   const sorunlu = baglantilar.find((c) => c.status === 'needs_reauth' || c.status === 'error');
-  const durum = sorunlu ? DURUM[sorunlu.status] : bagli ? DURUM[baglantilar[0].status] : null;
+  const durumKodu = sorunlu ? sorunlu.status : bagli ? baglantilar[0].status : null;
+  const durum = durumKodu ? { etiket: d.durum[durumKodu], hal: DURUM_HALI[durumKodu] } : null;
 
   return (
     <Kart
@@ -249,12 +257,12 @@ function KanalKarti({
       }
       eylem={
         durum ? (
-          <Rozet hal={durum.hal}>{baglantilar.length > 1 ? `${baglantilar.length} bağlantı` : durum.etiket}</Rozet>
+          <Rozet hal={durum.hal}>{baglantilar.length > 1 ? d.baglantiSayisi(baglantilar.length) : durum.etiket}</Rozet>
         ) : kaldirilmis.length > 0 ? (
           /* Kaldırılmış bağlantının hesapları veri ÇEKMİYOR: "taslak" değil hata. */
-          <Rozet hal="hata">Kaldırıldı</Rozet>
+          <Rozet hal="hata">{d.kaldirildi}</Rozet>
         ) : (
-          <Rozet hal="taslak">Bağlı değil</Rozet>
+          <Rozet hal="taslak">{d.bagliDegil}</Rozet>
         )
       }
     >
@@ -296,6 +304,7 @@ function BaglanmaAlani({
   onHata: (m: string | null) => void;
 }) {
   const [pending, setPending] = useState(false);
+  const d = useSozluk(baglantilarSozlugu).kanal;
 
   async function bagla(): Promise<void> {
     onHata(null);
@@ -303,7 +312,7 @@ function BaglanmaAlani({
     try {
       await baglantiBaslat(uygunluk.platform);
     } catch (err) {
-      onHata(err instanceof ApiRequestError ? err.message : 'Bağlantı başlatılamadı.');
+      onHata(err instanceof ApiRequestError ? err.message : d.baslatilamadi);
       setPending(false);
     }
   }
@@ -317,9 +326,7 @@ function BaglanmaAlani({
     return (
       <div className="grid gap-1 p-5">
         <b className="font-baslik text-[22px] leading-none text-ink">-</b>
-        <p className="m-0 text-13 text-ink-muted">
-          Bu kanal için sunucu ayarları tamamlanmamış. Advetics ekibine bildir.
-        </p>
+        <p className="m-0 text-13 text-ink-muted">{d.sunucuTamamlanmamis}</p>
         <p className="m-0 font-mono text-11 text-ink-muted">{uygunluk.missingConfig.join(', ')}</p>
       </div>
     );
@@ -334,12 +341,12 @@ function BaglanmaAlani({
           kullanıcıyı olmayan bir arızayı aramaya gönderiyor.
         */}
         <p className="m-0 text-13 text-ink-muted">
-          {canManage ? 'Henüz bağlanmadı.' : 'Bağlantı kurmak yöneticinin işi.'}
+          {canManage ? d.henuzBaglanmadi : d.yoneticininIsi}
         </p>
       </div>
       <div className="flex justify-end">
         <Dugme ton="ikincil" boyut="kucuk" onClick={() => void bagla()} disabled={!canManage || pending}>
-          {pending ? 'Yönlendiriliyor…' : 'Bağlan'}
+          {pending ? d.yonlendiriliyor : d.baglan}
         </Dugme>
       </div>
     </div>
@@ -378,6 +385,7 @@ function KaldirilmisSatir({
   onHata: (m: string | null) => void;
 }) {
   const [pending, setPending] = useState(false);
+  const d = useSozluk(baglantilarSozlugu).kanal;
 
   async function yenidenBaglan(): Promise<void> {
     onHata(null);
@@ -385,7 +393,7 @@ function KaldirilmisSatir({
     try {
       await yenidenYetkilendirBaslat(baglanti);
     } catch (err) {
-      onHata(err instanceof ApiRequestError ? err.message : 'Yeniden bağlantı başlatılamadı.');
+      onHata(err instanceof ApiRequestError ? err.message : d.yenidenBaslatilamadi);
       setPending(false);
     }
   }
@@ -394,10 +402,11 @@ function KaldirilmisSatir({
     <div className="grid gap-3 p-5">
       <div className="grid min-w-0 gap-1">
         <b className="font-baslik text-[22px] leading-none tabular-nums text-ink">
-          {baglanti.adAccounts.length} reklam hesabı
+          {d.reklamHesabi(baglanti.adAccounts.length)}
         </b>
         <p className="m-0 text-13 text-ink-muted">
-          {baglanti.sahip === 'ajans' ? 'Ajans bağlantısı' : 'Şirket bağlantısı'} · kaldırıldı
+          {baglanti.sahip === 'ajans' ? d.ajansBaglantisi : d.sirketBaglantisi}
+          {d.kaldirildiEki}
         </p>
         {baglanti.accountLabel && (
           <p className="m-0 truncate text-12 text-ink-soluk" title={baglanti.accountLabel}>
@@ -405,11 +414,11 @@ function KaldirilmisSatir({
           </p>
         )}
       </div>
-      <Serit ton="hata" baslik="Bağlantı kaldırıldı, veri akışı durdu.">
-        Atamalar duruyor. Bağlantıyı kuran hesapla yeniden bağlan, sonra izlemeyi geri aç.
+      <Serit ton="hata" baslik={d.kaldirildiBaslik}>
+        {d.kaldirildiGovde}
       </Serit>
       <div className="flex flex-wrap items-center justify-end gap-2">
-        {!canManage && <span className="text-12 text-ink-muted">Bağlantı kurmak yöneticinin işi.</span>}
+        {!canManage && <span className="text-12 text-ink-muted">{d.yoneticininIsi}</span>}
         <Dugme
           ton="koyu"
           boyut="kucuk"
@@ -417,7 +426,7 @@ function KaldirilmisSatir({
           disabled={!canManage || pending}
           onClick={() => void yenidenBaglan()}
         >
-          Yeniden bağlan
+          {d.yenidenBaglan}
         </Dugme>
       </div>
     </div>
@@ -443,6 +452,8 @@ function BaglantiSatiri({
   onHata: (m: string | null) => void;
 }) {
   const router = useRouter();
+  const { dil } = useDil();
+  const d = useSozluk(baglantilarSozlugu).kanal;
   const [isPending, startTransition] = useTransition();
   const [busy, setBusy] = useState<string | null>(null);
   const [kaldirOnay, setKaldirOnay] = useState(false);
@@ -470,13 +481,15 @@ function BaglantiSatiri({
         if (!iptal) {
           setOnizleme({
             durum: 'hata',
-            mesaj: err instanceof ApiRequestError ? err.message : 'Bağlantının durumu okunamadı.',
+            mesaj: err instanceof ApiRequestError ? err.message : d.durumOkunamadi,
           });
         }
       });
     return () => {
       iptal = true;
     };
+    // `d` dile göre değişir ama pencere açıkken dil değişmiyor (değişim tam sayfa yenilemesi).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kaldirOnay, baglanti.id]);
 
   async function calistir(anahtar: string, fn: () => Promise<unknown>): Promise<void> {
@@ -486,7 +499,7 @@ function BaglantiSatiri({
       await fn();
       startTransition(() => router.refresh());
     } catch (err) {
-      onHata(err instanceof ApiRequestError ? err.message : 'İşlem başarısız oldu.');
+      onHata(err instanceof ApiRequestError ? err.message : d.islemBasarisiz);
     } finally {
       setBusy(null);
     }
@@ -524,12 +537,12 @@ function BaglantiSatiri({
             bunu anlatmıyordu ve kullanıcı sayıları topluyordu.
           */}
           <b className="font-baslik text-[22px] leading-none tabular-nums text-ink">
-            {hesap.length} reklam hesabı
+            {d.reklamHesabi(hesap.length)}
           </b>
           <p className="m-0 text-13 text-ink-muted">
-            {hesap.length > 0 && <>{atanmis} atanmış, {izlenen} veri çekiyor · </>}
-            {profil.length > 0 && <>{profil.length} sayfa · </>}
-            {baglanti.sahip === 'ajans' ? 'Ajans bağlantısı' : 'Şirket bağlantısı'}
+            {hesap.length > 0 && d.atanmisCekiyor(atanmis, izlenen)}
+            {profil.length > 0 && d.sayfaSayisi(profil.length)}
+            {baglanti.sahip === 'ajans' ? d.ajansBaglantisi : d.sirketBaglantisi}
           </p>
           {baglanti.accountLabel && (
             <p className="m-0 truncate text-12 text-ink-soluk" title={baglanti.accountLabel}>
@@ -537,14 +550,14 @@ function BaglantiSatiri({
             </p>
           )}
         </div>
-        <DigerMenusu etiket={`${PLATFORM_LABELS[baglanti.platform]} bağlantısı için işlemler`}>
+        <DigerMenusu etiket={d.islemlerEtiketi(PLATFORM_LABELS[baglanti.platform])}>
           <MenuOgesi
             devreDisi={meslul}
             onClick={() =>
               void calistir('verify', () => apiFetch(`/connections/${baglanti.id}/verify`, { method: 'POST' }))
             }
           >
-            Durumu kontrol et
+            {d.durumuKontrolEt}
           </MenuOgesi>
           {/*
             KOŞULSUZ GÖRÜNÜYOR — eskiden yalnızca eksik izin ya da
@@ -557,7 +570,7 @@ function BaglantiSatiri({
           */}
           {canManage && (
             <MenuOgesi devreDisi={meslul} onClick={() => void calistir('reauth', yenidenYetkilendir)}>
-              Yeniden yetkilendir
+              {d.yenidenYetkilendir}
             </MenuOgesi>
           )}
           {/*
@@ -568,14 +581,14 @@ function BaglantiSatiri({
           */}
           {canManage && (
             <MenuOgesi devreDisi={meslul} onClick={() => void calistir('refresh', hesaplariTara)}>
-              Hesapları tara
+              {d.hesaplariTara}
             </MenuOgesi>
           )}
           {kaldirabilir && (
             <>
               <MenuAyraci />
               <MenuOgesi tehlike devreDisi={meslul} onClick={() => setKaldirOnay(true)}>
-                Bağlantıyı kaldır
+                {d.baglantiyiKaldir}
               </MenuOgesi>
             </>
           )}
@@ -591,7 +604,7 @@ function BaglantiSatiri({
           ve kullanıcı 131 hesabı tek tek açmak zorunda kalıyor. */}
       {atanmis > izlenen && (
         <Serit
-          baslik={`${atanmis - izlenen} hesap atanmış ama veri çekmiyor.`}
+          baslik={d.atanmisVeriCekmiyor(atanmis - izlenen)}
           eylemler={
             canManage && (
               <Dugme
@@ -605,7 +618,7 @@ function BaglantiSatiri({
                   )
                 }
               >
-                İzlemeyi geri aç
+                {d.izlemeyiGeriAc}
               </Dugme>
             )
           }
@@ -620,23 +633,21 @@ function BaglantiSatiri({
       )}
 
       {baglanti.missingScopes.length > 0 && (
-        <p className="m-0 text-13 font-semibold text-danger-strong">
-          Eksik izinler yüzünden veri çekilemiyor. Yeniden yetkilendirmen gerekiyor.
-        </p>
+        <p className="m-0 text-13 font-semibold text-danger-strong">{d.eksikIzinler}</p>
       )}
 
       {baglanti.missingScopes.length === 0 && baglanti.missingOptionalScopes.length > 0 && (
         /* Bağlantı ÇALIŞIYOR, yalnızca bir özellik kapalı. Bunu hata gibi
            göstermek kullanıcıyı olmayan bir arızayı aramaya gönderir.
            HANGİ özelliğin kapalı olduğu yazılıyor. */
-        <p className="m-0 text-12 text-ink-muted">{eksikIzinMetni(baglanti.missingOptionalScopes)}</p>
+        <p className="m-0 text-12 text-ink-muted">{eksikIzinMetni(baglanti.missingOptionalScopes, dil)}</p>
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-11 text-ink-soluk">
           {baglanti.lastVerifiedAt
-            ? `Son kontrol ${new Date(baglanti.lastVerifiedAt).toLocaleString('tr-TR')}`
-            : 'Henüz kontrol edilmedi'}
+            ? d.sonKontrol(new Date(baglanti.lastVerifiedAt).toLocaleString(bicimKodu(dil)))
+            : d.henuzKontrolYok}
         </span>
         {/*
           "HESAPLARI YENİLE" DEĞİL "HESAPLARI TARA". Sayfanın altında bir de
@@ -652,7 +663,7 @@ function BaglantiSatiri({
             disabled={meslul}
             onClick={() => void calistir('reauth', yenidenYetkilendir)}
           >
-            Yeniden bağlan
+            {d.yenidenBaglan}
           </Dugme>
         ) : canManage ? (
           /* Uç `connection.write` istiyor: yetkisizde düğme 403'e götüren bir vaatti. */
@@ -663,7 +674,7 @@ function BaglantiSatiri({
             disabled={meslul}
             onClick={() => void calistir('refresh', hesaplariTara)}
           >
-            Hesapları tara
+            {d.hesaplariTara}
           </Dugme>
         ) : null}
       </div>
@@ -671,11 +682,11 @@ function BaglantiSatiri({
       <Pencere
         acik={kaldirOnay}
         onKapat={() => setKaldirOnay(false)}
-        baslik="Bağlantıyı kaldır"
+        baslik={d.baglantiyiKaldir}
         altEylemler={
           <>
             <Dugme ton="ikincil" onClick={() => setKaldirOnay(false)}>
-              Vazgeç
+              {d.vazgec}
             </Dugme>
             <Dugme
               ton="tehlike"
@@ -695,12 +706,12 @@ function BaglantiSatiri({
                 );
               }}
             >
-              Kaldır
+              {d.kaldir}
             </Dugme>
           </>
         }
       >
-        <KaldirmaOzeti onizleme={onizleme} />
+        <KaldirmaOzeti onizleme={onizleme} d={d} />
       </Pencere>
     </div>
   );
@@ -716,13 +727,13 @@ type Onizleme =
  * "okunamadı", "bu şirketten kaldırılamaz" ve "N workspace durur" aynı
  * boş pencereye düşerse kullanıcı neye onay verdiğini bilemez.
  */
-function KaldirmaOzeti({ onizleme }: { onizleme: Onizleme }) {
+function KaldirmaOzeti({ onizleme, d }: { onizleme: Onizleme; d: KanalSozlugu }) {
   if (onizleme.durum === 'yukleniyor') {
-    return <p className="m-0 text-14 text-ink-muted">Bu bağlantının beslediği workspace’ler sayılıyor…</p>;
+    return <p className="m-0 text-14 text-ink-muted">{d.sayiliyor}</p>;
   }
   if (onizleme.durum === 'hata') {
     return (
-      <Serit ton="hata" baslik="Bağlantının durumu okunamadı">
+      <Serit ton="hata" baslik={d.durumOkunamadiBaslik}>
         {onizleme.mesaj}
       </Serit>
     );
@@ -730,23 +741,23 @@ function KaldirmaOzeti({ onizleme }: { onizleme: Onizleme }) {
   const { veri } = onizleme;
   if (!veri.kaldirabilir) {
     return (
-      <Serit ton="hata" baslik="Bu şirketten kaldırılamaz">
+      <Serit ton="hata" baslik={d.buSirkettenKaldirilamaz}>
         {veri.sebep}
       </Serit>
     );
   }
   if (veri.workspaceSayisi === 0) {
     return (
-      <p className="m-0 text-14 text-ink">
-        Bu bağlantıdan hiçbir workspace’e hesap atanmamış. Kaldırılırsa platformdaki izin de iptal edilir.
-      </p>
+      <p className="m-0 text-14 text-ink">{d.hicAtamaYok}</p>
     );
   }
   return (
     <p className="m-0 text-14 text-ink">
-      Bu bağlantı <b className="tabular-nums">{veri.workspaceSayisi} workspace’i</b> besliyor,{' '}
-      <span className="tabular-nums">{veri.izlenenHesapSayisi}</span> reklam hesabı veri çekiyor. Kaldırılırsa
-      hepsinin veri akışı durur. Atamalar ve geçmiş veriler korunur.
+      {d.besliyorOnce}
+      <b className="tabular-nums">{d.besliyorWorkspace(veri.workspaceSayisi)}</b>
+      {d.besliyorOrta}
+      <span className="tabular-nums">{veri.izlenenHesapSayisi}</span>
+      {d.besliyorSon}
     </p>
   );
 }

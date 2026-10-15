@@ -133,7 +133,7 @@ sayılır (`>Kaydet<`); ikisi birlikte istisna listesine girer.
 |---|---|---|
 | D0 ✅ | Altyapı: sözlük tipi, `DilSaglayici`, çerez, `?dil=`, `<html lang>`, bekçiler (istisna listesi bugünkü hâlin TAMAMI), **dil seçim ekranı**, Hesabım'da dil, giriş ekranında TR·EN | Her şey buna bağlı |
 | D1 ✅ | Tanıtım sitesi + yasal 4 sayfa + giriş/şifre/iki adım ekranları + çerez bildirimi (2026-10-15) | Google OAuth incelemesi bunlara bakıyor |
-| D2 | Panel kabuğu: menü (`nav-sections`), üst çubuk, `components/ui/*`, boş/hata durumları, Genel Bakış, Ayarlar (bağlantı ekranı — OAuth demosunun gösterdiği yer) | Her sayfada görünen yüzey |
+| D2 ✅ | Panel kabuğu: menü (`nav-sections`), üst çubuk, `components/ui/*`, boş/hata durumları, Genel Bakış, Ayarlar (bağlantı ekranı — OAuth demosunun gösterdiği yer) | Her sayfada görünen yüzey |
 | D3 | Modül modül: Reklam Yöneticisi → Raporlar → Marka Merkezi/Varlıklar → AdvStrategy → AdvCampaign → Akıllı Boost → Kurallar/İyileştir → Bütçe → Potansiyel Müşteriler | Kullanım sıklığına göre |
 | D4 | Shared etiketleri + Zod hata haritası + API hata mesajları (`AllExceptionsFilter` ve servisler) | Panel ekranları hazırken hata cümleleri hâlâ Türkçe kalmasın |
 | D5 | Rapor PDF'i + rapor maili + işlem mailleri + `rapor_dili`/`reklam_dili` migration'ı + AI istemleri | Migration ve müşteriye giden belge: en riskli, en son |
@@ -162,6 +162,25 @@ küçülmüş, iki dilde masaüstü + mobil ekran görüntüsü.
   (yasal metin) için; çift tamsa tarama ikisini de atlar.
 - **Yasal sayfaların eski İngilizce özet bölümü kalktı**, yerini tam çeviri
   aldı (`/en/...`, üstte "Türkçe sürüm esastır" notu).
+
+## 6b. D2 kararları (2026-10-16)
+
+- **Menü tanımı Türkçe kalıyor**, ekrana çizilmeden `menuyuCevir(bolumler,
+  dil)` çeviriyor (`lib/nav-sections.ts`, sözlük `dil/sozlukler/menu.ts`).
+  Sözlükte olmayan satır ÇEVİRİDE PATLIYOR, sessizce Türkçe kalmıyor.
+- **Shared etiketleri** (rol, Ayarlar sekmesi, kapı nedeni, paket, Marka
+  Merkezi bölümü, Varlıklar sekmesi) Türkçe sabit yerinde, İngilizcesi
+  `packages/shared/src/dil/etiketler.ts`, yardımcıyla okunuyor
+  (`rolEtiketi(rol, dil)` …). Anahtar kümesi Türkçe tablonun tipinden.
+- **Biçimleyiciler `dil` parametresi alıyor**, varsayılan Türkçe (çıktı
+  bayt bayt aynı): `formatMoney(x, cur, { dil })` → `₺1,234.50`.
+- **Direktifsiz ortak bileşen** (`hal.tsx`, `tablo.tsx`, `sihirbaz.tsx`
+  sunucuda da çiziliyor, kanca çağıramıyor) metni `UiMetni` istemci
+  yaprağıyla basıyor; öznitelik yerine `sr-only` metin.
+- Kenar içeriği hem sunucuda hem mobil çekmecede çiziliyor; metni
+  `kenarVerisi.etiketler` ile geliyor.
+- Panel ekranlarının BAŞLIĞI (D3 modülleri) henüz Türkçe: İngilizce menüde
+  "Ads Manager" yazarken sayfa "Reklam Yöneticisi" açılır. D3 bunu kapatır.
 
 ## 7. ÖLÇÜLMEYEN / açık
 

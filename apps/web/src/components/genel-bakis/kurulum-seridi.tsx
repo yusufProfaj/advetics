@@ -9,6 +9,8 @@ import { kurulumListesi, kurulumSayaci, sihirbazAdresi, type KurulumSayaci } fro
 import { seritAnahtari, seritGorunur, seritMetni } from '@/components/kurulum/sihirbaz-akisi';
 import { Dugme, dugmeSinifi } from '@/components/ui/dugme';
 import { Serit } from '@/components/ui/hal';
+import { useSozluk } from '@/dil/saglayici';
+import { genelBakisSozlugu } from '@/dil/sozlukler/genel-bakis';
 
 /**
  * ═══ GENEL BAKIŞ — "KURULUM EKSİK" ŞERİDİ (docs/kurulum-sihirbazi/MIMARI.md § 3a) ═══
@@ -48,6 +50,7 @@ function gizlendiYaz(clientId: string): void {
 export function KurulumSeridi({ clientId }: { clientId: string }) {
   const [sayac, setSayac] = useState<KurulumSayaci | null>(null);
   const [gizli, setGizli] = useState(true);
+  const d = useSozluk(genelBakisSozlugu).kurulum;
 
   useEffect(() => {
     const gizlendi = gizlendiOku(clientId);
@@ -55,7 +58,9 @@ export function KurulumSeridi({ clientId }: { clientId: string }) {
     if (!seritGorunur({ yazabilir: true, sayac: { tamam: 0, toplam: 1, kapsamDisi: 0, bilinmiyor: 0, bitti: false }, gizlendi, simdi: Date.now() })) return;
     let iptal = false;
     void (async () => {
-      const oku = async <T,>(yol: string): Promise<T | null> => apiFetch<T>(yol).catch((): null => null);
+      const oku = async <T,>(yol: string): Promise<T | null> => {
+        return apiFetch<T>(yol).catch((): null => null);
+      };
       // Hazırlama TETİKLEMEDEN (`hazirlamaSayacYolu`): Genel Bakış her açılışta
       // bu sayacı okuyor; tetikleseydi panelin ana sayfası AI işi başlatırdı.
       const [k, hz, hk, by] = await Promise.all([
@@ -95,12 +100,12 @@ export function KurulumSeridi({ clientId }: { clientId: string }) {
               gizlendiYaz(clientId);
               setGizli(true);
             }}
-            aria-label="Kurulum uyarısını 7 gün gizle"
+            aria-label={d.gizleEtiket}
           >
-            7 gün gizle
+            {d.gizle}
           </Dugme>
           <Link href={sihirbazAdresi(clientId)} className={dugmeSinifi('koyu', 'kucuk')}>
-            Sihirbazla tamamla
+            {d.tamamla}
           </Link>
         </>
       }

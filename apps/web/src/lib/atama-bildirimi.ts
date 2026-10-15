@@ -1,3 +1,5 @@
+import { sec, type Dil } from '@advetics/shared';
+import { baglantilarSozlugu } from '@/dil/sozlukler/ayarlar-baglantilar';
 import { formatNumber } from './format';
 
 /**
@@ -45,28 +47,27 @@ export type AtamaYaniti = {
   ajansaBildirildi?: boolean;
 };
 
-function adetler(kalan: Record<string, number>): string {
+/** Etiketler SUNUCUDAN geliyor (`leftBehind` anahtarları); onların dili D4'te. */
+function adetler(kalan: Record<string, number>, dil: Dil): string {
   return Object.entries(kalan)
-    .map(([etiket, n]) => `${formatNumber(n)} ${etiket}`)
+    .map(([etiket, n]) => `${formatNumber(n, dil)} ${etiket}`)
     .join(', ');
 }
 
-export function atamaBildirimi(res: AtamaYaniti, atandiMi: boolean): string | null {
+export function atamaBildirimi(res: AtamaYaniti, atandiMi: boolean, dil: Dil = 'tr'): string | null {
+  const d = sec(baglantilarSozlugu, dil).atama;
   const parcalar: string[] = [];
 
   if (res.note) parcalar.push(res.note);
-  if (res.ajansaBildirildi === true) parcalar.push('Ajansına e-postayla haber verildi.');
+  if (res.ajansaBildirildi === true) parcalar.push(d.ajansaBildirildi);
   if (res.ajansaBildirildi === false) {
-    parcalar.push('Ajansına e-posta gönderilemedi. Kaldırdığını ajansına ayrıca bildir.');
+    parcalar.push(d.ajansaGidemedi);
   }
   if (res.poolNote) parcalar.push(res.poolNote);
 
   if (atandiMi) {
     if ((res.movedRows ?? 0) > 0) {
-      parcalar.push(
-        `${formatNumber(res.movedRows!)} kayıt bu workspace’e taşındı — kampanyalar, ` +
-          'kreatifler ve geçmiş metrikler dahil.',
-      );
+      parcalar.push(d.tasindi(formatNumber(res.movedRows!, dil)));
     }
   } else if ((res.stayingRows ?? 0) > 0) {
     /*
@@ -75,18 +76,12 @@ export function atamaBildirimi(res: AtamaYaniti, atandiMi: boolean): string | nu
      * KALIYOR. Söylenmezse "hesabı kaldırdım, geçmişim gitti mi" sorusu
      * doğuyor ve cevabı hiçbir ekranda yok.
      */
-    parcalar.push(
-      `Hesabın ${formatNumber(res.stayingRows!)} kaydı eski workspace’te kaldı — silinmedi. ` +
-        'Başka bir workspace’e atadığında taşınacak.',
-    );
+    parcalar.push(d.kaldi(formatNumber(res.stayingRows!, dil)));
   }
 
   const kalan = res.leftBehind ?? {};
   if (Object.keys(kalan).length > 0) {
-    parcalar.push(
-      `Eski workspace’te kalanlar: ${adetler(kalan)}. Bunlar birinin kararı ` +
-        '(bütçe, kural, taslak) ve taşınmıyor.',
-    );
+    parcalar.push(d.kalanlar(adetler(kalan, dil)));
   }
 
   const genel = res.clientWide ?? {};
@@ -98,10 +93,7 @@ export function atamaBildirimi(res: AtamaYaniti, atandiMi: boolean): string | nu
      * hesaplar" kuralı ve ay geneli bütçe. Ayrı bir cümle olmasaydı,
      * taşımadan en çok etkilenen şey hakkında hiçbir şey söylenmezdi.
      */
-    parcalar.push(
-      `Eski workspace’in ${adetler(genel)} kaydı bu hesabı artık kapsamıyor — ` +
-        'bütçe oranı ve kural kapsamı kayacak, gözden geçir.',
-    );
+    parcalar.push(d.genel(adetler(genel, dil)));
   }
 
   if ((res.unlinkedBoostPages ?? 0) > 0) {
@@ -110,10 +102,7 @@ export function atamaBildirimi(res: AtamaYaniti, atandiMi: boolean): string | nu
      * gönderiler boostlanmayı bırakıyor ve sebebi hiçbir ekranda yazmıyor.
      * Koparmamak ise daha kötüydü — başka müşterinin hesabından fatura.
      */
-    parcalar.push(
-      `${formatNumber(res.unlinkedBoostPages!)} sayfanın boost faturalandırma bağı koparıldı — ` +
-        'hesap ve sayfa artık farklı workspace’lerde. Akıllı Boost için yeniden eşleştir.',
-    );
+    parcalar.push(d.boost(formatNumber(res.unlinkedBoostPages!, dil)));
   }
 
   return parcalar.length > 0 ? parcalar.join(' ') : null;

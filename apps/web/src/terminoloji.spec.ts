@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { sirketlerSozlugu } from '@/dil/sozlukler/ayarlar-sirketler';
 
 /**
  * ═══ "MÜŞTERİ" → "WORKSPACE" — TERMİNOLOJİ BEKÇİSİ ═══
@@ -193,7 +194,13 @@ describe('terminoloji: workspace ↔ müşteri', () => {
       join(KOK, 'apps/web/src/components/tenancy/workspace-bolumu.tsx'),
       'utf8',
     );
-    expect(bolum).toContain('Workspace’ler</h2>');
+    // Kelime sözlükte (D2); başlık o anahtarı basıyor (yorumsuz kaynakta).
+    expect(bolum.replace(BLOK, '').replace(SATIR, '')).toContain('{d.workspaceler}</h2>');
+    expect(bolum).toContain('const d = t.bolum;');
+    expect(sirketlerSozlugu.tr.bolum.workspaceler).toBe('Workspace’ler');
+    expect(sirketlerSozlugu.tr.bolum.workspaceler).not.toContain('Müşteri');
+    expect(sirketlerSozlugu.en.bolum.workspaceler).toBe('Workspaces');
+    expect(sirketlerSozlugu.en.bolum.workspaceler).not.toContain('Client');
 
     // "Potansiyel Müşteriler" AYRI bir ekran ve adı DEĞİŞMEDİ; onu da
     // yanlışlıkla yeniden adlandırmadığımızı burada kilitliyoruz.

@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { genelBakisSozlugu } from '@/dil/sozlukler/genel-bakis';
 
 /**
  * ═══ KAPSAM TABLOLARI — ŞİRKET / WORKSPACE / HESAP SATIRLARI ═══
@@ -40,7 +41,7 @@ describe('tarama boşa düşmüyor', () => {
   it('kaynaklar okundu', () => {
     expect(OZET.length).toBeGreaterThan(1500);
     expect(YONETICI).toContain('export function ReklamYoneticisiTablosu');
-    expect(GB).toContain('workspaceSatirlari(musteriler)');
+    expect(GB).toContain('workspaceSatirlari(musteriler, d)');
   });
 });
 
@@ -126,7 +127,8 @@ describe('satıra tıklayınca kapsam değişiyor', () => {
 describe('sayılar yalan söylemiyor', () => {
   it('KRİTİK: karışık para biriminde TUTAR değil "karışık" yazılıyor', () => {
     // 1 USD + 1 TRY = 2 ne? Kur çevrimi yok.
-    expect(OZET).toContain("r.paraBirimi ? formatMoney(r.spendMicros, r.paraBirimi) : 'karışık'");
+    expect(OZET).toContain('r.paraBirimi ? formatMoney(r.spendMicros, r.paraBirimi, { dil }) : o.karisik');
+    expect(genelBakisSozlugu.tr.ozet.karisik).toBe('karışık');
     expect(YONETICI).toContain("(b ? formatMoney(m, b) : 'karışık')");
   });
 
@@ -137,7 +139,7 @@ describe('sayılar yalan söylemiyor', () => {
 
   it('KRİTİK: dönüşüm başı maliyet hesaplanamazsa "0" değil "—"', () => {
     // `null` "hesaplanamaz" demek; "0,00 ₺" bedava dönüşüm getirdiğini söyler.
-    expect(OZET).toContain("r.dbmMicros && r.paraBirimi ? formatMoney(r.dbmMicros, r.paraBirimi) : '—'");
+    expect(OZET).toContain("r.dbmMicros && r.paraBirimi ? formatMoney(r.dbmMicros, r.paraBirimi, { dil }) : '—'");
     expect(EN_COK).toContain("r.cpa === null ? '—'");
     expect(YONETICI).toMatch(/d > 0 && b \? formatMoney\([^\n]*: '—'/);
   });
@@ -150,7 +152,8 @@ describe('sayılar yalan söylemiyor', () => {
   });
 
   it('sessiz kesme yok: kaç workspace ve kaçının harcadığı yazılı', () => {
-    expect(GB).toContain('tanesi bu dönemde harcadı');
+    expect(GB).toContain("altNot={d.liste.harcayan(musteriler.filter((r) => r.spendMicros !== '0').length)}");
+    expect(genelBakisSozlugu.tr.liste.harcayan(3)).toBe('3 tanesi bu dönemde harcadı');
   });
 
   it('KRİTİK: boş satırın SEBEBİ yazılı', () => {
@@ -158,11 +161,16 @@ describe('sayılar yalan söylemiyor', () => {
     // görünüyordu ve ikisinin yapılacak işi farklı.
     // İDDİA WORKSPACE SATIRINA ÇAPALI: aynı cümle şirket satırında da geçiyor
     // ve dosya geneline bakan bir arama workspace dalı silinince de geçiyordu.
-    for (const [k, ad] of [[GB, 'workspaceSatirlari'], [YM, 'workspaceSatiri']] as const) {
+    // Genel Bakış metni sözlükten okuyor (D2): değer + anahtar birlikte.
+    for (const [k, ad, beklenen] of [
+      [GB, 'workspaceSatirlari', 'r.adAccountCount === 0 ? d.liste.izlemedeHesapYok'],
+      [YM, 'workspaceSatiri', "r.adAccountCount === 0 ? 'izlemede hesap yok'"],
+    ] as const) {
       const i = k.indexOf(`function ${ad}(`);
       expect(i, `${ad} bulunamadı`).toBeGreaterThan(-1);
       const f = k.slice(i, k.indexOf('\nfunction ', i + 1));
-      expect(f, ad).toContain("r.adAccountCount === 0 ? 'izlemede hesap yok'");
+      expect(f, ad).toContain(beklenen);
     }
+    expect(genelBakisSozlugu.tr.liste.izlemedeHesapYok).toBe('izlemede hesap yok');
   });
 });

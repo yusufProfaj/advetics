@@ -1,3 +1,8 @@
+'use client';
+
+import { useSozluk } from '@/dil/saglayici';
+import { kabukSozlugu } from '@/dil/sozlukler/kabuk';
+
 /**
  * Dar ekranda tablonun yana kaydığını söyleyen satır.
  *
@@ -9,9 +14,10 @@
  * `sm:hidden`: geniş ekranda sütunlar zaten sığıyor ve cümle yalan olurdu.
  */
 export function KaydirmaIpucu() {
+  const d = useSozluk(kabukSozlugu).genel;
   return (
     <p className="border-t border-line px-4 py-1.5 text-[11px] text-ink-muted sm:hidden">
-      Tabloyu yana kaydırabilirsin
+      {d.kaydirma}
     </p>
   );
 }

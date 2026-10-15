@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import { useSozluk } from '@/dil/saglayici';
+import { kabukSozlugu } from '@/dil/sozlukler/kabuk';
 import { useRouter } from 'next/navigation';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 
@@ -24,6 +26,7 @@ export function WorkspaceSecici({
   const router = useRouter();
   const [bekleyen, setBekleyen] = useState<string | null>(null);
   const [hata, setHata] = useState<string | null>(null);
+  const g = useSozluk(kabukSozlugu).genel;
 
   async function sec(clientId: string): Promise<void> {
     setBekleyen(clientId);
@@ -36,7 +39,7 @@ export function WorkspaceSecici({
       router.refresh();
     } catch (e) {
       setHata(
-        e instanceof ApiRequestError ? e.message : 'Workspace seçilemedi.',
+        e instanceof ApiRequestError ? e.message : g.workspaceSecilemedi,
       );
       setBekleyen(null);
     }
@@ -65,7 +68,7 @@ export function WorkspaceSecici({
               {c.name}
             </span>
             {bekleyen === c.id && (
-              <span className="shrink-0 text-[11px] text-ink-muted">açılıyor…</span>
+              <span className="shrink-0 text-[11px] text-ink-muted">{g.aciliyor}</span>
             )}
           </button>
         ))}

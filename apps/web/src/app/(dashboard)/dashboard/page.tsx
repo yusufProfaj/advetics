@@ -13,7 +13,9 @@ import type {
   MetricsTimeseries,
   Platform,
 } from '@advetics/shared';
-import { PLATFORMS, PLATFORM_KISA_ADLARI } from '@advetics/shared';
+import { PLATFORMS, PLATFORM_KISA_ADLARI, bicimKodu, sec, type Dil } from '@advetics/shared';
+import { dilAl } from '@/dil/sunucu';
+import { genelBakisSozlugu } from '@/dil/sozlukler/genel-bakis';
 import { requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
 import { enEskiGunGerekli, rangeParams, resolveRange } from '@/lib/date-range';
@@ -35,7 +37,7 @@ import { butceAdresi, butceKapsami } from '@/lib/butce-adresi';
 import { HiyerarsiYolu, type YolBasamagi } from '@/components/hiyerarsi-yolu';
 import { bekleyenIslerYolu, boostRozeti, type BekleyenIslerSonucu } from '@/lib/bekleyen-isler';
 import { hizliErisim } from '@/lib/hizli-erisim';
-import { visibleSections } from '@/lib/nav-sections';
+import { menuSatiriEtiketi, visibleSections } from '@/lib/nav-sections';
 import { HESAP_AJANSTA, hesaplarHedefi } from '@/lib/ayar-kapilari';
 import {
   BildirimSeridi,
@@ -65,7 +67,15 @@ import { kapi } from '@/lib/panel-adresleri';
 import { KurulumSeridi } from '@/components/genel-bakis/kurulum-seridi';
 import { HaftalikOzetBaglantisi } from '@/components/report/haftalik-ozet-baglantisi';
 
-export const metadata = { title: 'Genel Bakış · Advetics' };
+/** Başlık istek anında: dil çerezden okunuyor (CEVIRI-REHBERI §2). */
+export async function generateMetadata() {
+  // SAYFA ADI MENÜNÜN KENDİ ÇEVİRİSİNDEN: ayrı bir sözlük girdisi iki dilde
+  // menüden ayrışabilirdi (`nav-sections.spec.ts` "MENÜDEKİ AD İLE SAYFANIN ADI AYNI").
+  return { title: `${menuSatiriEtiketi('/dashboard', await dilAl())} · Advetics` };
+}
+
+/** Sayfanın sözlüğü; yardımcılar dili ve metni parametreyle alıyor (modül düzeyinde dil yok). */
+type GB = (typeof genelBakisSozlugu)['tr'];
 
 /**
  * ═══ GENEL BAKIŞ — ONAYLANAN TASLAĞIN BİREBİR HÂLİ (2026-10-09) ═══
@@ -111,6 +121,8 @@ export default async function DashboardPage({
 }) {
   const session = await requireSession();
   const params = await searchParams;
+  const dil = await dilAl();
+  const d = sec(genelBakisSozlugu, dil);
 
   if (INIS_PARAMETRELERI.some((k) => first(params[k]) !== undefined)) {
     const tasi = new URLSearchParams();
@@ -140,6 +152,7 @@ export default async function DashboardPage({
       ustHesapGorunur: session.platformAdmin || session.managerAccount !== null,
       platformSahibi: session.platformAdmin,
     }),
+    dil,
   );
 
   /*
@@ -163,8 +176,11 @@ export default async function DashboardPage({
     bitis: first(params.bitis),
     karsilastir: first(params.karsilastir),
     enEskiGun: kapsam?.earliestDate ?? null,
+    dil,
   });
   const platform = resolvePlatform(first(params.platform));
+  /* Tek günde günlük seri istenmiyor (grafik çizilmiyor, kart nedenini yazıyor). */
+  const tekGun = range.days <= 1;
 
   /*
    * TAŞINAN SÜZGEÇLER: tarih ve platform. Buradan Reklam Yöneticisi'ne
@@ -217,9 +233,9 @@ export default async function DashboardPage({
         ozetHatasi = hataMetni(e);
         return null;
       }),
-      range.days > 1
-        ? serverApiFetch<MetricsTimeseries>(`/metrics/timeseries?${base}`).catch(() => null)
-        : Promise.resolve<MetricsTimeseries>({ points: [], previous: null }),
+      tekGun
+        ? Promise.resolve<MetricsTimeseries>({ points: [], previous: null })
+        : serverApiFetch<MetricsTimeseries>(`/metrics/timeseries?${base}`).catch(() => null),
       mcc
         ? serverApiFetch<MetricsClientRow[]>(`/metrics/clients?${base}`).catch(() => null)
         : Promise.resolve(null),
@@ -251,9 +267,7 @@ export default async function DashboardPage({
     ]);
 
   const activeClient = session.availableClients.find((c) => c.id === session.activeClientId);
-  const scopeLabel = ajansGorunumu
-    ? 'Tüm şirketler'
-    : (activeClient?.name ?? 'Tüm workspace’ler');
+  const scopeLabel = ajansGorunumu ? d.tumSirketler : (activeClient?.name ?? d.tumWorkspaceler);
 
   /* KAPSAM ŞERİDİ: ajans › şirket › workspace; üst basamak kapsamı değiştiriyor. */
   const basamaklar: YolBasamagi[] = [];
@@ -286,11 +300,11 @@ export default async function DashboardPage({
       <SayfaBasligi
         ust={basamaklar.length > 1 ? <HiyerarsiYolu basamaklar={basamaklar} tasinan={tasinan} gorunum="kirinti" /> : undefined}
         bolum={scopeLabel}
-        baslik="Genel Bakış"
+        baslik={menuSatiriEtiketi('/dashboard', dil)}
         aciklama={
           <>
-            {scopeLabel} · {formatDayLong(range.from)} - {formatDayLong(range.to)}
-            {range.incomplete && <span className="text-danger-strong"> · Gün bitmedi, rakamlar artacak</span>}
+            {scopeLabel} · {formatDayLong(range.from, dil)} - {formatDayLong(range.to, dil)}
+            {range.incomplete && <span className="text-danger-strong"> · {d.gunBitmedi}</span>}
           </>
         }
         eylemler={
@@ -320,26 +334,26 @@ export default async function DashboardPage({
           etiket="Platform"
           secenekler={[null, ...PLATFORMS].map((p) => ({
             href: baglanti('/dashboard', tasinan, { platform: p ?? undefined }),
-            etiket: p ? PLATFORM_KISA_ADLARI[p] : 'Tümü',
+            etiket: p ? PLATFORM_KISA_ADLARI[p] : d.tumu,
             secili: platform === p,
           }))}
         />
-        {summary !== null && <span className={s.notKucuk}>{summary.accountCount} reklam hesabı</span>}
+        {summary !== null && <span className={s.notKucuk}>{d.reklamHesabi(summary.accountCount)}</span>}
         {(digerKisayollar.length > 0 || yeniReklam) && (
-          <nav className={s.hizli} aria-label="Hızlı erişim">
+          <nav className={s.hizli} aria-label={d.hizliErisim}>
             {digerKisayollar.map((k) => (
               <Link key={k.href} className={dugmeSinifi('ikincil', 'kucuk')} href={k.href}>
                 {k.etiket}
                 {k.boostRozeti && (
                   <Suspense fallback={null}>
-                    <BoostSayisi sonuc={bekleyenler} />
+                    <BoostSayisi sonuc={bekleyenler} dil={dil} />
                   </Suspense>
                 )}
               </Link>
             ))}
             {yeniReklam && (
               <Link className={dugmeSinifi('birincil', 'kucuk')} href={yeniReklam.href}>
-                ＋ Reklam oluştur
+                {d.reklamOlustur}
               </Link>
             )}
           </nav>
@@ -352,7 +366,7 @@ export default async function DashboardPage({
             !
           </span>
           <span className={s.bildirimMetin}>
-            <strong>Veriler alınamadı.</strong>
+            <strong>{d.verilerAlinamadi}</strong>
             {ozetHatasi && <span> {ozetHatasi}</span>}
           </span>
         </div>
@@ -362,28 +376,28 @@ export default async function DashboardPage({
             !
           </span>
           <span className={s.bildirimMetin}>
-            <strong>Henüz veri yok.</strong>{' '}
-            {hesapHedefi ? 'Bir platform bağlayıp reklam hesabını bir workspace’e ata.' : HESAP_AJANSTA}
+            <strong>{d.henuzVeriYok}</strong>{' '}
+            {hesapHedefi ? d.hesapAta : HESAP_AJANSTA}
           </span>
           {hesapHedefi && (
             <Link className={s.cozum} href={hesapHedefi}>
-              Hesaplara git →
+              {d.hesaplaraGit}
             </Link>
           )}
         </div>
       ) : (
-        <BildirimSeridi bildirimler={bildirimler(summary, hesapHedefi)} />
+        <BildirimSeridi bildirimler={bildirimler(summary, hesapHedefi, d)} />
       )}
 
       <div className={s.izgara}>
         <div className={s.sutun}>
           {veriVar && (
             <PerformansKarti
-              metrikler={performansMetrikleri(summary!, karsilastir)}
-              ikincil={ikincilMetrikler(summary!, karsilastir)}
+              metrikler={performansMetrikleri(summary!, karsilastir, d, dil)}
+              ikincil={ikincilMetrikler(summary!, karsilastir, d, dil)}
               noktalar={series?.points ?? []}
               onceki={karsilastir ? (series?.previous ?? null) : null}
-              tekGun={range.days <= 1}
+              tekGun={tekGun}
               seriHatasi={series === null}
             />
           )}
@@ -391,45 +405,42 @@ export default async function DashboardPage({
           {veriVar &&
             (ajansGorunumu ? (
               sirketler === null ? (
-                <HataKarti metin="Şirket dağılımı alınamadı." />
+                <HataKarti metin={d.dagilimAlinamadi.sirket} />
               ) : (
                 <OzetListeKarti
-                  baslik="Şirketler"
-                  sutunAdi="Şirket"
-                  satirlar={sirketSatirlari(sirketler)}
-                  toplam={sirketler.length}
+                  baslik={d.liste.sirketler}
+                  sutunAdi={d.liste.sirket}
+                  satirlar={sirketSatirlari(sirketler, d)}
                   tumuHref={REKLAM_YONETICISI}
-                  tumuEtiket="şirket"
-                  altNot={`${sirketler.filter((r) => r.spendMicros !== '0').length} tanesi bu dönemde harcadı`}
+                  sayac={d.liste.sayac(Math.min(OZET_SATIR, sirketler.length), sirketler.length, 'sirket')}
+                  altNot={d.liste.harcayan(sirketler.filter((r) => r.spendMicros !== '0').length)}
                 />
               )
             ) : mcc ? (
               musteriler === null ? (
-                <HataKarti metin="Workspace dağılımı alınamadı." />
+                <HataKarti metin={d.dagilimAlinamadi.workspace} />
               ) : (
                 <OzetListeKarti
-                  baslik="Workspace’ler"
+                  baslik={d.liste.workspaceler}
                   sutunAdi="Workspace"
-                  satirlar={workspaceSatirlari(musteriler)}
-                  toplam={musteriler.length}
+                  satirlar={workspaceSatirlari(musteriler, d)}
                   tumuHref={REKLAM_YONETICISI}
-                  tumuEtiket="workspace"
-                  altNot={`${musteriler.filter((r) => r.spendMicros !== '0').length} tanesi bu dönemde harcadı`}
+                  sayac={d.liste.sayac(Math.min(OZET_SATIR, musteriler.length), musteriler.length, 'workspace')}
+                  altNot={d.liste.harcayan(musteriler.filter((r) => r.spendMicros !== '0').length)}
                 />
               )
             ) : (
               <>
                 {hesaplar === null ? (
-                  <HataKarti metin="Hesap dağılımı alınamadı." />
+                  <HataKarti metin={d.dagilimAlinamadi.hesap} />
                 ) : (
                   <OzetListeKarti
-                    baslik="Hesaplar"
-                    sutunAdi="Hesap"
-                    satirlar={hesapSatirlari(hesaplar, tasinan)}
-                    toplam={hesaplar.accounts.length}
+                    baslik={d.liste.hesaplar}
+                    sutunAdi={d.liste.hesap}
+                    satirlar={hesapSatirlari(hesaplar, tasinan, d)}
                     tumuHref={baglanti(REKLAM_YONETICISI, tasinan, {})}
-                    tumuEtiket="hesap"
-                    altNot={izlenmeyenNotu(hesaplar)}
+                    sayac={d.liste.sayac(Math.min(OZET_SATIR, hesaplar.accounts.length), hesaplar.accounts.length, 'hesap')}
+                    altNot={izlenmeyenNotu(hesaplar, d)}
                   />
                 )}
                 <EnCokHarcayanlarKarti
@@ -445,10 +456,11 @@ export default async function DashboardPage({
         </div>
 
         <div className={s.sutun}>
-          <Suspense fallback={<BekleyenIskelet />}>
+          <Suspense fallback={<BekleyenIskelet dil={dil} />}>
             <BekleyenIslerKarti
               sonuc={bekleyenler}
               onayYetkisi={session.permissions.includes('strategy.approve')}
+              dil={dil}
             />
           </Suspense>
 
@@ -464,7 +476,8 @@ export default async function DashboardPage({
               hata={butceHatasi}
               secimGerekli={butceK.tur === 'secimGerekli'}
               href={butceAdresi(butceWorkspaceId)}
-              ayAdi={buAyAdi()}
+              ayAdi={buAyAdi(dil)}
+              dil={dil}
             />
           )}
 
@@ -478,16 +491,17 @@ export default async function DashboardPage({
           {/* Her görünümde: sağ sütun soldan kısa kalıp boşluk bırakmasın (kullanıcı: "boşlukları doldur"). */}
           {veriVar && (
             <KapsamOzeti
-              satirlar={kapsamSatirlari({ summary: summary!, sirketler, musteriler, kampanyalar, donusum, hesapHedefi })}
+              satirlar={kapsamSatirlari({ summary: summary!, sirketler, musteriler, kampanyalar, donusum, hesapHedefi }, d, dil)}
+              baslik={d.kapsam.baslik}
             />
           )}
 
-          {donusum !== null && <DonusumKarti detay={donusum} />}
+          {donusum !== null && <DonusumKarti detay={donusum} dil={dil} />}
         </div>
       </div>
 
       {/* Aralığın sınırı YALNIZCA bugün dâhil değilken; dâhilken başlık zaten söylüyor. */}
-      {!range.incomplete && <p className={s.notKucuk}>Bugün dâhil değil.</p>}
+      {!range.incomplete && <p className={s.notKucuk}>{d.bugunDahilDegil}</p>}
     </div>
   );
 }
@@ -505,8 +519,8 @@ function HataKarti({ metin }: { metin: string }) {
 }
 
 /** Akıllı Boost kısayolundaki bekleyen sayısı; sıfırsa rozet yok. */
-async function BoostSayisi({ sonuc }: { sonuc: Promise<BekleyenIslerSonucu> }) {
-  const r = boostRozeti(await sonuc);
+async function BoostSayisi({ sonuc, dil }: { sonuc: Promise<BekleyenIslerSonucu>; dil: Dil }) {
+  const r = boostRozeti(await sonuc, dil);
   if (!r) return null;
   return (
     <span
@@ -524,25 +538,25 @@ async function BoostSayisi({ sonuc }: { sonuc: Promise<BekleyenIslerSonucu> }) {
  * izlenmeyen hesabın harcaması toplamdan çıkıyor ve söylenmezse "harcama
  * neden azaldı" sorulur.
  */
-function bildirimler(summary: MetricsSummary, hesapHedefi: string | null): Bildirim[] {
+function bildirimler(summary: MetricsSummary, hesapHedefi: string | null, d: GB): Bildirim[] {
   const out: Bildirim[] = [];
   if (summary.hiddenAccounts > 0) {
     out.push({
       icerik: (
         <>
-          <strong>{summary.hiddenAccounts} hesap izlenmiyor</strong> ve bu rakamlara dâhil değil. Verileri
-          duruyor.
+          <strong>{d.bildirim.izlenmiyor(summary.hiddenAccounts)}</strong>
+          {d.bildirim.izlenmiyorDevam}
         </>
       ),
-      ...(hesapHedefi ? { eylem: { etiket: 'Hesaplarda aç', href: hesapHedefi } } : {}),
+      ...(hesapHedefi ? { eylem: { etiket: d.bildirim.hesaplardaAc, href: hesapHedefi } } : {}),
     });
   }
   if (summary.currency === null && summary.byCurrency.length > 1) {
     out.push({
       icerik: (
         <>
-          <strong>Birden fazla para birimi var</strong> ({summary.byCurrency.map((c) => c.currency).join(', ')}).
-          Tutarlar ayrı gösteriliyor.
+          <strong>{d.bildirim.paraBirimi}</strong> ({summary.byCurrency.map((c) => c.currency).join(', ')}).{' '}
+          {d.bildirim.paraBirimiDevam}
         </>
       ),
     });
@@ -556,13 +570,14 @@ function bildirimler(summary: MetricsSummary, hesapHedefi: string | null): Bildi
  * Erişim çok günlü aralıkta GÜNLÜK ORTALAMA ve bu yazılıyor; dönemin tekil
  * kişi sayısı gibi okunmamalı.
  */
-function performansMetrikleri(summary: MetricsSummary, karsilastir: boolean): PerformansMetrigi[] {
+function performansMetrikleri(summary: MetricsSummary, karsilastir: boolean, d: GB, dil: Dil): PerformansMetrigi[] {
+  const m = d.metrik;
   const prev = karsilastir ? summary.previous : null;
   const currency = summary.currency;
   const harcama =
     currency === null && summary.byCurrency.length > 1
-      ? summary.byCurrency.map((c) => formatMoney(c.spendMicros, c.currency, { compact: true })).join(' + ')
-      : formatMoney(summary.spendMicros, currency);
+      ? summary.byCurrency.map((c) => formatMoney(c.spendMicros, c.currency, { compact: true, dil })).join(' + ')
+      : formatMoney(summary.spendMicros, currency, { dil });
   const dorduncu: PerformansMetrigi =
     summary.roas === null
       ? {
@@ -575,62 +590,63 @@ function performansMetrikleri(summary: MetricsSummary, karsilastir: boolean): Pe
            * tekil erişimi raporda Meta'dan okunuyor; panelde her sayfa
            * yüklemesinde platforma çıkmak kota demek (DEVAM notu).
            */
-          ad: summary.reach !== null && summary.reachKind === 'daily_average' ? 'Günlük ortalama erişim' : 'Erişim',
-          deger: formatNumber(summary.reach),
+          ad: summary.reach !== null && summary.reachKind === 'daily_average' ? m.gunlukErisim : m.erisim,
+          deger: formatNumber(summary.reach, dil),
           degisim: null,
           ipucu:
             summary.reach === null
-              ? 'platform bildirmiyor'
+              ? m.bildirmiyor
               : summary.reachKind === 'daily_average'
                 ? summary.reachAcrossAccounts
-                  ? 'dönemin tekil kişi sayısı değil, hesaplar arası mükerrer olabilir'
-                  : 'dönemin tekil kişi sayısı değil'
+                  ? m.tekilDegilMukerrer
+                  : m.tekilDegil
                 : summary.reachAcrossAccounts
-                  ? 'hesaplar arası mükerrer olabilir'
+                  ? m.mukerrer
                   : undefined,
         }
       : {
           anahtar: 'roas',
-          ad: 'Reklam getirisi',
-          deger: formatRoas(summary.roas),
+          ad: m.roas,
+          deger: formatRoas(summary.roas, dil),
           degisim: changePercent(summary.roas, prev?.roas),
         };
   return [
     {
       anahtar: 'harcama',
-      ad: 'Harcama',
+      ad: m.harcama,
       deger: harcama,
       degisim: prev ? changePercentMicros(summary.spendMicros, prev.spendMicros) : null,
     },
     {
       anahtar: 'donusum',
-      ad: 'Dönüşüm',
-      deger: formatNumber(summary.conversions),
+      ad: m.donusum,
+      deger: formatNumber(summary.conversions, dil),
       degisim: prev ? changePercent(summary.conversions, prev.conversions) : null,
     },
     {
       anahtar: 'dbm',
-      ad: 'Dönüşüm başı maliyet',
-      deger: formatMoney(microsOf(summary.cpa), currency),
+      ad: m.dbm,
+      deger: formatMoney(microsOf(summary.cpa), currency, { dil }),
       degisim: summary.cpa === null || !prev ? null : changePercent(summary.cpa, prev.cpa),
       ters: true,
-      ipucu: summary.cpa === null ? 'henüz sonuç yok' : undefined,
+      ipucu: summary.cpa === null ? m.sonucYok : undefined,
     },
     dorduncu,
   ];
 }
 
-function ikincilMetrikler(summary: MetricsSummary, karsilastir: boolean): IkincilMetrik[] {
+function ikincilMetrikler(summary: MetricsSummary, karsilastir: boolean, dk: GB, dil: Dil): IkincilMetrik[] {
+  const m = dk.metrik;
   const prev = karsilastir ? summary.previous : null;
   const c = summary.currency;
   const d = (a: number | null, b: number | null | undefined) =>
     a === null || !prev ? null : changePercent(a, b);
   return [
-    { ad: 'Gösterim', deger: formatNumber(summary.impressions), degisim: d(summary.impressions, prev?.impressions) },
-    { ad: 'Tıklama', deger: formatNumber(summary.clicks), degisim: d(summary.clicks, prev?.clicks) },
-    { ad: 'Tıklama oranı', deger: formatPercent(summary.ctr), degisim: d(summary.ctr, prev?.ctr) },
-    { ad: 'Tıklama başı maliyet', deger: formatMoney(microsOf(summary.cpc), c), degisim: d(summary.cpc, prev?.cpc), ters: true },
-    { ad: 'Bin gösterim maliyeti', deger: formatMoney(microsOf(summary.cpm), c), degisim: d(summary.cpm, prev?.cpm), ters: true },
+    { ad: m.gosterim, deger: formatNumber(summary.impressions, dil), degisim: d(summary.impressions, prev?.impressions) },
+    { ad: m.tiklama, deger: formatNumber(summary.clicks, dil), degisim: d(summary.clicks, prev?.clicks) },
+    { ad: m.tiklamaOrani, deger: formatPercent(summary.ctr, 2, dil), degisim: d(summary.ctr, prev?.ctr) },
+    { ad: m.tbm, deger: formatMoney(microsOf(summary.cpc), c, { dil }), degisim: d(summary.cpc, prev?.cpc), ters: true },
+    { ad: m.bgbm, deger: formatMoney(microsOf(summary.cpm), c, { dil }), degisim: d(summary.cpm, prev?.cpm), ters: true },
   ];
 }
 
@@ -642,7 +658,7 @@ function paylar<T extends { spendMicros: string }>(rows: T[]): Array<T & { pay: 
     .map((r) => ({ ...r, pay: toplam === 0n ? 0 : Number((BigInt(r.spendMicros) * 1000n) / toplam) / 10 }));
 }
 
-function sirketSatirlari(rows: MetricsOrganizationRow[]): OzetSatiri[] {
+function sirketSatirlari(rows: MetricsOrganizationRow[], d: GB): OzetSatiri[] {
   return paylar(rows)
     .slice(0, OZET_SATIR)
     .map((r) => ({
@@ -650,8 +666,8 @@ function sirketSatirlari(rows: MetricsOrganizationRow[]): OzetSatiri[] {
       ad: r.name,
       alt:
         r.clientCount === 0
-          ? 'workspace yok'
-          : `${r.clientCount} workspace · ${r.adAccountCount === 0 ? 'izlemede hesap yok' : `${r.adAccountCount} hesap`}`,
+          ? d.liste.workspaceYok
+          : `${d.liste.workspaceSayisi(r.clientCount)} · ${r.adAccountCount === 0 ? d.liste.izlemedeHesapYok : d.liste.hesapSayisi(r.adAccountCount)}`,
       gosterge: 'karo',
       spendMicros: r.spendMicros,
       pay: r.pay,
@@ -662,13 +678,13 @@ function sirketSatirlari(rows: MetricsOrganizationRow[]): OzetSatiri[] {
     }));
 }
 
-function workspaceSatirlari(rows: MetricsClientRow[]): OzetSatiri[] {
+function workspaceSatirlari(rows: MetricsClientRow[], d: GB): OzetSatiri[] {
   return paylar(rows)
     .slice(0, OZET_SATIR)
     .map((r) => ({
       id: r.clientId,
       ad: r.name,
-      alt: r.adAccountCount === 0 ? 'izlemede hesap yok' : `${r.adAccountCount} hesap`,
+      alt: r.adAccountCount === 0 ? d.liste.izlemedeHesapYok : d.liste.hesapSayisi(r.adAccountCount),
       gosterge: 'karo',
       spendMicros: r.spendMicros,
       pay: r.pay,
@@ -682,13 +698,14 @@ function workspaceSatirlari(rows: MetricsClientRow[]): OzetSatiri[] {
 function hesapSatirlari(
   veri: MetricsAccountBreakdown,
   tasinan: Record<string, string | undefined>,
+  d: GB,
 ): OzetSatiri[] {
   return paylar(veri.accounts)
     .slice(0, OZET_SATIR)
     .map((a) => ({
       id: a.adAccountId,
       ad: a.name,
-      alt: `${PLATFORM_KISA_ADLARI[a.platform]} · ${a.externalId}${a.syncEnabled ? '' : ' · izlenmiyor'}`,
+      alt: `${PLATFORM_KISA_ADLARI[a.platform]} · ${a.externalId}${a.syncEnabled ? '' : d.liste.izlenmiyorEki}`,
       gosterge: a.syncEnabled ? 'yayinda' : 'durdu',
       spendMicros: a.spendMicros,
       pay: a.pay,
@@ -709,9 +726,9 @@ function hesapSatirlari(
     }));
 }
 
-function izlenmeyenNotu(veri: MetricsAccountBreakdown): string | undefined {
+function izlenmeyenNotu(veri: MetricsAccountBreakdown, d: GB): string | undefined {
   const n = veri.accounts.filter((a) => !a.syncEnabled).length;
-  return n > 0 ? `${n} hesap izlenmiyor` : undefined;
+  return n > 0 ? d.liste.izlenmeyenNotu(n) : undefined;
 }
 
 /** Mecra dağılımı: hangi katmandaysak onun satırlarının platform kırılımı toplanıyor. */
@@ -736,39 +753,41 @@ function kapsamSatirlari(v: {
   donusum: MetricsConversionDetail | null;
   /** İzlenmeyen hesapların evi — kapı kapalıysa `null` ve satır bağlantısız. */
   hesapHedefi: string | null;
-}): Array<{ etiket: string; deger: string; uyari?: boolean; href?: string }> {
+}, d: GB, dil: Dil): Array<{ etiket: string; deger: string; uyari?: boolean; href?: string }> {
+  const k = d.kapsam;
+  const sayi = (n: number) => formatNumber(n, dil);
   const out: Array<{ etiket: string; deger: string; uyari?: boolean; href?: string }> = [];
   if (v.sirketler) {
-    out.push({ etiket: 'Şirket', deger: formatNumber(v.sirketler.length) });
+    out.push({ etiket: k.sirket, deger: sayi(v.sirketler.length) });
     out.push({
-      etiket: 'Bu dönemde harcayan şirket',
-      deger: formatNumber(v.sirketler.filter((r) => r.spendMicros !== '0').length),
+      etiket: k.harcayanSirket,
+      deger: sayi(v.sirketler.filter((r) => r.spendMicros !== '0').length),
     });
-    out.push({ etiket: 'Workspace', deger: formatNumber(v.sirketler.reduce((a, r) => a + r.clientCount, 0)) });
+    out.push({ etiket: k.workspace, deger: sayi(v.sirketler.reduce((a, r) => a + r.clientCount, 0)) });
   }
   if (v.musteriler) {
-    out.push({ etiket: 'Workspace', deger: formatNumber(v.musteriler.length) });
+    out.push({ etiket: k.workspace, deger: sayi(v.musteriler.length) });
     out.push({
-      etiket: 'Bu dönemde harcayan workspace',
-      deger: formatNumber(v.musteriler.filter((r) => r.spendMicros !== '0').length),
+      etiket: k.harcayanWorkspace,
+      deger: sayi(v.musteriler.filter((r) => r.spendMicros !== '0').length),
     });
   }
-  out.push({ etiket: 'İzlenen reklam hesabı', deger: formatNumber(v.summary.accountCount) });
+  out.push({ etiket: k.izlenenHesap, deger: sayi(v.summary.accountCount) });
   if (v.kampanyalar) {
     // Sınıra ulaştıysa sayı "en az": kesilen liste toplam gibi okunmasın.
     const n = v.kampanyalar.filter((r) => r.spendMicros !== '0').length;
     out.push({
-      etiket: 'Bu dönemde harcayan kampanya',
-      deger: v.kampanyalar.length >= KAMPANYA_SINIRI ? `en az ${formatNumber(n)}` : formatNumber(n),
+      etiket: k.harcayanKampanya,
+      deger: v.kampanyalar.length >= KAMPANYA_SINIRI ? k.enAz(sayi(n)) : sayi(n),
     });
   }
   if (v.donusum && v.donusum.satirlar.length > 0) {
-    out.push({ etiket: 'Dönüşüm eylemi', deger: formatNumber(v.donusum.satirlar.length) });
+    out.push({ etiket: k.donusumEylemi, deger: sayi(v.donusum.satirlar.length) });
   }
   if (v.summary.hiddenAccounts > 0) {
     out.push({
-      etiket: 'İzlenmeyen hesap',
-      deger: formatNumber(v.summary.hiddenAccounts),
+      etiket: k.izlenmeyenHesap,
+      deger: sayi(v.summary.hiddenAccounts),
       uyari: true,
       ...(v.hesapHedefi ? { href: v.hesapHedefi } : {}),
     });
@@ -777,7 +796,8 @@ function kapsamSatirlari(v: {
 }
 
 /** "Ekim" — bütçe kartının başlığı; ay anahtarıyla aynı saat dilimi (UTC). */
-function buAyAdi(): string {
-  const ad = new Date().toLocaleDateString('tr-TR', { month: 'long', timeZone: 'UTC' });
-  return ad.charAt(0).toLocaleUpperCase('tr-TR') + ad.slice(1);
+function buAyAdi(dil: Dil): string {
+  const kod = bicimKodu(dil);
+  const ad = new Date().toLocaleDateString(kod, { month: 'long', timeZone: 'UTC' });
+  return ad.charAt(0).toLocaleUpperCase(kod) + ad.slice(1);
 }

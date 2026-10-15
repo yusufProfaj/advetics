@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { genelBakisSozlugu } from '@/dil/sozlukler/genel-bakis';
 
 /**
  * ═══ GENEL BAKIŞ › BEKLEYEN İŞLER VE HIZLI ERİŞİM: SAYFAYA BAĞLANMA ═══
@@ -92,7 +93,7 @@ describe('çağrı', () => {
 describe('yerleşim', () => {
   it('KRİTİK: kart kendi Suspense sınırında, yedeği "yükleniyor" iskeleti', () => {
     expect(SAYFA).toMatch(
-      /<Suspense fallback=\{<BekleyenIskelet \/>\}>\s*<BekleyenIslerKarti\s+sonuc=\{bekleyenler\}/,
+      /<Suspense fallback=\{<BekleyenIskelet dil=\{dil\} \/>\}>\s*<BekleyenIslerKarti\s+sonuc=\{bekleyenler\}/,
     );
   });
 
@@ -108,7 +109,8 @@ describe('yerleşim', () => {
   });
 
   it('KRİTİK: Boost rozeti kartla AYNI sözden', () => {
-    expect(SAYFA).toContain('<BoostSayisi sonuc={bekleyenler} />');
+    expect(SAYFA).toContain('<BoostSayisi sonuc={bekleyenler} dil={dil} />');
+    expect(SAYFA).toContain('const r = boostRozeti(await sonuc, dil);');
   });
 
   it('KRİTİK: kısayollar menünün süzgecinden, layout ile aynı bağlam', () => {
@@ -119,9 +121,9 @@ describe('yerleşim', () => {
   });
 
   it('şirket/workspace/hesap özetleri ve uyarı şeridi yerinde', () => {
-    expect(SAYFA).toContain('satirlar={sirketSatirlari(sirketler)}');
-    expect(SAYFA).toContain('satirlar={workspaceSatirlari(musteriler)}');
-    expect(SAYFA).toContain('satirlar={hesapSatirlari(hesaplar, tasinan)}');
+    expect(SAYFA).toContain('satirlar={sirketSatirlari(sirketler, d)}');
+    expect(SAYFA).toContain('satirlar={workspaceSatirlari(musteriler, d)}');
+    expect(SAYFA).toContain('satirlar={hesapSatirlari(hesaplar, tasinan, d)}');
     expect(SAYFA).toContain('<BildirimSeridi');
   });
 });
@@ -132,19 +134,20 @@ describe('kutunun dört hâli', () => {
     expect(KUTU_GOVDE).toContain("r.durum === 'hata'");
     expect(KUTU_GOVDE).toContain('{r.mesaj}');
     expect(KUTU_GOVDE).toContain("hal === 'bos' &&");
-    expect(KUTU_GOVDE).toContain('Bekleyen iş yok');
+    expect(KUTU_GOVDE).toContain("{hal === 'bos' && <p className={s.bosMetin}>{d.yok}</p>}");
+    expect(genelBakisSozlugu.tr.isler.yok).toBe('Bekleyen iş yok');
     expect(KUTU_GOVDE).toContain("hal === 'dolu' &&");
   });
 
   it('KRİTİK: kısmi hata ve kesme metni çiziliyor', () => {
     expect(KUTU_GOVDE).toContain('kaynakHataMetni(h)');
-    expect(KUTU_GOVDE).toContain('kesmeMetni(yanit)');
+    expect(KUTU_GOVDE).toContain('kesmeMetni(yanit, dil)');
     expect(KUTU_GOVDE).toContain('{kesme && ');
   });
 
   it('satır cümlesi, yaşı ve adresi saf fonksiyonlardan', () => {
-    expect(KUTU).toContain('bekleyenIsCumlesi(is, onayYetkisi)');
-    expect(KUTU).toContain('bekleyenIsYasi(is.enEski)');
+    expect(KUTU).toContain('bekleyenIsCumlesi(is, onayYetkisi, dil)');
+    expect(KUTU).toContain('bekleyenIsYasi(is.enEski, new Date(), dil)');
     expect(KUTU).toContain('href={bekleyenIsAdresi(is)}');
   });
 

@@ -8,6 +8,8 @@ import { Kart } from '@/components/ui/kart';
 import { Girdi } from '@/components/ui/alan';
 import { Dugme } from '@/components/ui/dugme';
 import { Serit } from '@/components/ui/hal';
+import { useSozluk } from '@/dil/saglayici';
+import { baglantilarSozlugu } from '@/dil/sozlukler/ayarlar-baglantilar';
 
 /**
  * YOUTUBE KANALINI HAVUZA EKLER.
@@ -32,6 +34,7 @@ import { Serit } from '@/components/ui/hal';
  */
 export function YouTubeKanalEkle({ canManage, children }: { canManage: boolean; children?: ReactNode }) {
   const router = useRouter();
+  const d = useSozluk(baglantilarSozlugu).ytEkle;
   const [girdi, setGirdi] = useState('');
   const [bekliyor, setBekliyor] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -53,7 +56,7 @@ export function YouTubeKanalEkle({ canManage, children }: { canManage: boolean; 
         },
       );
       setGirdi('');
-      setSonuc(`${r.title} havuza eklendi. Atanmamış hesaplar tablosundan bir workspace'e ata.`);
+      setSonuc(d.havuzaEklendi(r.title));
       // Havuz sayacı sunucu tarafında hesaplanıyor; yenilemeden kanal
       // listede görünmez ve kullanıcı ekleme başarısız sanır.
       startTransition(() => router.refresh());
@@ -64,7 +67,7 @@ export function YouTubeKanalEkle({ canManage, children }: { canManage: boolean; 
        * doğrudan söylüyor (Google Ads bağlantısı yok, kanal bulunamadı,
        * API anahtarı tanımsız).
        */
-      setHata(err instanceof ApiRequestError ? err.message : 'Kanal eklenemedi.');
+      setHata(err instanceof ApiRequestError ? err.message : d.kanalEklenemedi);
     } finally {
       setBekliyor(false);
     }
@@ -75,15 +78,12 @@ export function YouTubeKanalEkle({ canManage, children }: { canManage: boolean; 
       baslik={
         <span className="flex items-center gap-2">
           <PlatformLogo kind="youtube" className="h-5 w-5" />
-          YouTube kanalı bağla
+          {d.baslik}
         </span>
       }
     >
       <div className="grid gap-3">
-        <p className="m-0 text-13 text-ink-muted">
-          Kanal adresini ya da @tanıtıcısını yapıştır. Kanal havuza düşer, workspace atamasını yukarıdaki
-          tablodan yaparsın.
-        </p>
+        <p className="m-0 text-13 text-ink-muted">{d.aciklama}</p>
 
         <div className="flex flex-wrap gap-2">
           <div className="min-w-0 flex-1">
@@ -96,8 +96,8 @@ export function YouTubeKanalEkle({ canManage, children }: { canManage: boolean; 
                 if (e.key === 'Enter') void ekle();
               }}
               disabled={!canManage || bekliyor}
-              placeholder="@kanaladi"
-              aria-label="YouTube kanal adresi"
+              placeholder={d.adresYer}
+              aria-label={d.adresEtiketi}
             />
           </div>
           <Dugme
@@ -106,18 +106,18 @@ export function YouTubeKanalEkle({ canManage, children }: { canManage: boolean; 
             disabled={!canManage || girdi.trim() === ''}
             bekliyor={bekliyor || isPending}
           >
-            Ekle
+            {d.ekle}
           </Dugme>
         </div>
 
-        {!canManage && <p className="m-0 text-12 text-ink-muted">Kanal bağlamak yöneticinin işi.</p>}
+        {!canManage && <p className="m-0 text-12 text-ink-muted">{d.yoneticininIsi}</p>}
         {hata && (
-          <Serit ton="hata" baslik="Kanal eklenemedi">
+          <Serit ton="hata" baslik={d.kanalEklenemediBaslik}>
             {hata}
           </Serit>
         )}
         {sonuc && (
-          <Serit ton="bilgi" baslik="Eklendi">
+          <Serit ton="bilgi" baslik={d.eklendi}>
             {sonuc}
           </Serit>
         )}
@@ -127,9 +127,7 @@ export function YouTubeKanalEkle({ canManage, children }: { canManage: boolean; 
           bilmek zorunda değil ve bilmediğinde yapıştırdığı şey genelde video
           adresi oluyor.
         */}
-        <p className="m-0 text-12 text-ink-muted">
-          Kanal sayfasını aç, adres çubuğundakini kopyala. Video adresi değil, kanal adresi olmalı.
-        </p>
+        <p className="m-0 text-12 text-ink-muted">{d.ipucu}</p>
 
         {/* Adresi bilmeyen için isimle arama (sayfa veriyor): aynı işin ikinci yolu, aynı kartta. */}
         {children && <div className="grid gap-2 border-t border-line pt-4">{children}</div>}

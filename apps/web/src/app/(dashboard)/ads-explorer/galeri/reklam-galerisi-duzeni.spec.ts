@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { kabukSozlugu } from '@/dil/sozlukler/kabuk';
 
 /**
  * ═══ REKLAM KEŞFİ: DÜZEN VE DİL KARARLARI ═══
@@ -53,9 +54,14 @@ describe('süzgeçler', () => {
     const kampanya = SAYFA.slice(SAYFA.indexOf('etiket="Kampanya"'), SAYFA.indexOf('etiket="Sırala"'));
     expect(kampanya, 'kampanya menüsü bulunamadı').toContain('result.facets.campaigns.map(');
     expect(kampanya).not.toMatch(/campaigns\.slice\(/);
-    expect(MENU).toContain('{gorunen.length} / {secenekler.length} gösteriliyor');
+    // Metin sözlükte (D2); menü anahtarı GÖRÜNEN ve TOPLAM sayıyla çağırıyor.
+    expect(MENU).toContain('{s.gosteriliyor(gorunen.length, secenekler.length)}');
+    expect(kabukSozlugu.tr.suzgec.gosteriliyor(3, 12)).toBe('3 / 12 gösteriliyor');
+    expect(kabukSozlugu.en.suzgec.gosteriliyor(3, 12)).toBe('Showing 3 / 12');
     // Boş arama sonucu SEBEBİYLE yazılıyor, boş liste olarak değil.
-    expect(MENU).toContain('ile eşleşen yok.');
+    expect(MENU).toContain('{s.eslesmeYok(ara)}');
+    expect(kabukSozlugu.tr.suzgec.eslesmeYok('x')).toContain('ile eşleşen yok.');
+    expect(kabukSozlugu.en.suzgec.eslesmeYok('x')).not.toBe(kabukSozlugu.tr.suzgec.eslesmeYok('x'));
   });
 
   it('KRİTİK: uzun ad satırı kaplamıyor ama TAM ad duruyor', () => {

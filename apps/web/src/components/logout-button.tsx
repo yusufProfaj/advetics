@@ -4,6 +4,8 @@ import { useRouter } from 'next/navigation';
 import { apiFetch } from '@/lib/api';
 import { MenuOgesi } from '@/components/ui/acilir-menu';
 import { Ikon } from '@/components/ui/ikon';
+import { useSozluk } from '@/dil/saglayici';
+import { kabukSozlugu } from '@/dil/sozlukler/kabuk';
 
 /**
  * Kullanıcı menüsündeki "Çıkış yap" (menü kararı 2026-10-14): tehlikeli
@@ -15,6 +17,7 @@ import { Ikon } from '@/components/ui/ikon';
  * yutulmuyor, konsola yazılıyor.
  */
 export function CikisOgesi() {
+  const d = useSozluk(kabukSozlugu).kullanici;
   const router = useRouter();
   return (
     <MenuOgesi
@@ -32,7 +35,7 @@ export function CikisOgesi() {
           });
       }}
     >
-      Çıkış yap
+      {d.cikis}
     </MenuOgesi>
   );
 }

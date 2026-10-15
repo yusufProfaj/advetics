@@ -1,6 +1,8 @@
 'use client';
 
 import Link from 'next/link';
+import { useSozluk } from '@/dil/saglayici';
+import { kabukSozlugu } from '@/dil/sozlukler/kabuk';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { TUM_SIRKETLER } from '@advetics/shared';
@@ -63,6 +65,7 @@ export function HiyerarsiYolu({
   const [isPending, startTransition] = useTransition();
   const [bekleyen, setBekleyen] = useState<number | null>(null);
   const [hata, setHata] = useState<string | null>(null);
+  const g = useSozluk(kabukSozlugu).genel;
 
   async function kapsamaGec(i: number, kapsam: NonNullable<YolBasamagi['kapsam']>): Promise<void> {
     setBekleyen(i);
@@ -103,7 +106,7 @@ export function HiyerarsiYolu({
     } catch (e) {
       // HATA YUTULMUYOR: geçiş sessizce düşerse kullanıcı tıklıyor, hiçbir
       // şey olmuyor ve sebebi hiçbir ekranda yazmıyor.
-      setHata(e instanceof ApiRequestError ? e.message : 'Kapsam değiştirilemedi.');
+      setHata(e instanceof ApiRequestError ? e.message : g.kapsamDegistirilemedi);
       setBekleyen(null);
     }
   }

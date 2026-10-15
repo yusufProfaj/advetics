@@ -6,6 +6,8 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useBildirimVerisiVarsa } from '@/components/bildirim/bildirim-verisi';
 import { SayiRozeti } from '@/components/ui/rozet';
+import { useSozluk } from '@/dil/saglayici';
+import { kabukSozlugu } from '@/dil/sozlukler/kabuk';
 
 /**
  * Kenar çubuğu gezinmesi.
@@ -114,6 +116,7 @@ function bolumAnahtari(title: string): string {
 
 export function NavSection({ title, items }: { title?: string; items: NavEntry[] }) {
   const pathname = usePathname();
+  const k = useSozluk(kabukSozlugu).kenar;
 
   const icinde = items.some((i) => aktifMi(i, pathname));
 
@@ -213,7 +216,7 @@ export function NavSection({ title, items }: { title?: string; items: NavEntry[]
                 </Link>
               ) : (
                 <span
-                  title={`Modül ${item.module} kapsamında gelecek`}
+                  title={k.modulKapsami(item.module)}
                   className="flex cursor-not-allowed items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-ink-muted opacity-55"
                 >
                   <Icon name={item.icon} />
@@ -246,6 +249,7 @@ export function NavSection({ title, items }: { title?: string; items: NavEntry[]
  */
 function AltMenu({ item, ready }: { item: NavEntry; ready: boolean }) {
   const pathname = usePathname();
+  const k = useSozluk(kabukSozlugu).kenar;
   const params = useSearchParams();
   const icinde = aktifMi(item, pathname);
   const [acik, setAcik] = useState(false);
@@ -258,7 +262,7 @@ function AltMenu({ item, ready }: { item: NavEntry; ready: boolean }) {
     return (
       <li>
         <span
-          title={`Modül ${item.module} kapsamında gelecek`}
+          title={k.modulKapsami(item.module)}
           className="flex cursor-not-allowed items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-ink-muted opacity-55"
         >
           <Icon name={item.icon} />
@@ -339,6 +343,7 @@ function AltMenu({ item, ready }: { item: NavEntry; ready: boolean }) {
  */
 export function AyarlarSatiri({ sayfalar }: { sayfalar: NavEntry[] }) {
   const pathname = usePathname();
+  const k = useSozluk(kabukSozlugu).kenar;
   const ilk = sayfalar[0];
   if (!ilk) return null;
   const active = sayfalar.some((s) => aktifMi(s, pathname));
@@ -349,7 +354,7 @@ export function AyarlarSatiri({ sayfalar }: { sayfalar: NavEntry[] }) {
       className={satirSinifi(active, false)}
     >
       <Icon name="settings" active={active} />
-      <span className="truncate">Ayarlar</span>
+      <span className="truncate">{k.ayarlar}</span>
     </Link>
   );
 }

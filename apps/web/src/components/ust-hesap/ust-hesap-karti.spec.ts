@@ -2,6 +2,10 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { dolulukMetni } from './ust-hesap-karti';
+import { sirketlerSozlugu } from '@/dil/sozlukler/ayarlar-sirketler';
+
+/* D2: ekran metni sözlükte; iddia Türkçe değer + bileşenin anahtarı çizmesi. */
+const TR = sirketlerSozlugu.tr;
 
 /**
  * ═══ ÜST HESAP: ŞERİT (Şirketler) + YÖNETİM (Üst Hesaplar) ═══
@@ -100,7 +104,8 @@ describe('KRİTİK: şerit SALT OKUNUR', () => {
      * başkasına bağlantı göstermek var olmayan bir ayarı aratırdı.
      */
     expect(KART).toContain("href={ayarlarAdresi('sirketler', { capa: 'ust-hesaplar' })}");
-    expect(KART).toContain('Üst hesap ayarları');
+    expect(KART).toContain('{d.ustHesap.ayarlar}');
+    expect(TR.ustHesap.ayarlar).toBe('Üst hesap ayarları');
     const bag = KART.indexOf("href={ayarlarAdresi('sirketler', { capa: 'ust-hesaplar' })}");
     expect(KART.lastIndexOf('{platformSahibi && (', bag)).toBeGreaterThan(-1);
   });
@@ -141,7 +146,8 @@ describe('KRİTİK: yetki yüzeyi', () => {
 
   it('paket seçici düzenlemede YALNIZCA platform sahibinde; diğerleri sebebi okuyor', () => {
     expect(YONETIM).toContain('{platformAdmin ? (');
-    expect(YONETIM).toContain('Paketi yalnızca Advetics');
+    expect(YONETIM).toContain('{d.paketBilgiSonra}');
+    expect(TR.yonetim.paketBilgiSonra).toContain('Paketi yalnızca Advetics');
   });
 
   it('KRİTİK: paket yalnızca DEĞİŞTİYSE gönderiliyor', () => {
@@ -195,7 +201,8 @@ describe('KRİTİK: silme ÖNCE ne gideceğini söylüyor', () => {
   });
 
   it('kullanıcı kaybı AYRICA vurgulanıyor — giriş yapamayacaklar', () => {
-    expect(YONETIM).toContain('silinince giriş yapamazlar');
+    expect(YONETIM).toContain('{d.girisYapamaz}');
+    expect(TR.yonetim.girisYapamaz).toContain('silinince giriş yapamazlar');
   });
 });
 

@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { sirketlerSozlugu } from '@/dil/sozlukler/ayarlar-sirketler';
 
 /*
  * ERİŞİM TURU (K4) — panelin "işletme adresinin çevresi" seçeneği ve Marka
@@ -38,7 +39,12 @@ describe('Kime adımı — adres çevresi (ERİŞİM)', () => {
 
 describe('Marka Merkezi — harita konumu alanı', () => {
   it('alan TEK LİSTEDE ve giriş anında (alanı bırakınca) doğrulanıyor', () => {
-    expect(FORM).toContain("{ anahtar: 'addressCoordinates', etiket: 'Adresin harita konumu (enlem, boylam)', tur: 'konum' }");
+    expect(FORM).toContain("{ anahtar: 'addressCoordinates', tur: 'konum' }");
+    // Etiket sözlükte, anahtarla (D2); satır onu ALANLAR'dan okuyor.
+    expect(FORM).toContain('{alanEtiketi(a.anahtar, d)}');
+    expect(sirketlerSozlugu.tr.bilgi.alanlar.addressCoordinates).toBe('Adresin harita konumu (enlem, boylam)');
+    expect(sirketlerSozlugu.en.bilgi.alanlar.addressCoordinates).toBeTruthy();
+    expect(sirketlerSozlugu.en.bilgi.alanlar.addressCoordinates).not.toBe(sirketlerSozlugu.tr.bilgi.alanlar.addressCoordinates);
     expect(FORM).toContain("onBlur={(e) => setHata(koordinatCoz(e.target.value) === 'gecersiz' ? KOORDINAT_BICIM_MESAJI : null)}");
   });
   it('KRİTİK: bozuk konum sunucuya GİTMEDEN durduruluyor', () => {

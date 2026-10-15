@@ -1,6 +1,15 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { ekipSozlugu } from '@/dil/sozlukler/ayarlar-ekip';
+
+/*
+ * D2 (iki dil): ekran metni sözlükte (`ayarlar-ekip.ts`). Metin iddiaları
+ * iki yere bölündü: Türkçe değer sözlükte DEĞİŞMEDEN duruyor ve bileşen o
+ * anahtarı çiziyor. Yalnız sözlüğe bakmak, bileşenin metni bırakıp
+ * bırakmadığını görmezdi; yalnız bileşene bakmak cümlenin içeriğini.
+ */
+const TR = ekipSozlugu.tr;
 
 /**
  * EKİP EKRANININ KARARLARI.
@@ -89,7 +98,8 @@ describe('RAY — kişi listesi', () => {
   });
 
   it('KRİTİK: SESSİZ KESME YOK — süzülen liste sayıyı söylüyor', () => {
-    expect(yorumsuz(KAYNAK)).toContain('kişiden {suzulmus.length} tanesi gösteriliyor');
+    expect(yorumsuz(KAYNAK)).toContain('{d.gosteriliyor(kisiler.length, suzulmus.length)}');
+    expect(TR.ekran.gosteriliyor(12, 3)).toBe('12 kişiden 3 tanesi gösteriliyor');
   });
 
   it('ARAMA SEÇİMİ DÜŞÜRMÜYOR', () => {
@@ -117,8 +127,10 @@ describe('DETAY — "bu kişi nerelere erişiyor"', () => {
     const kod = yorumsuz(KAYNAK);
     expect(kod).toContain('const sirketYetkileri = kisi.memberships.filter((m) => m.clientId === null)');
     expect(kod).toContain('const workspaceYetkileri = kisi.memberships.filter((m) => m.clientId !== null)');
-    expect(kod).toContain('baslik="Şirket yetkileri"');
-    expect(kod).toContain('baslik="Workspace yetkileri"');
+    expect(kod).toContain('baslik={d.sirketYetkileri}');
+    expect(kod).toContain('baslik={d.workspaceYetkileri}');
+    expect(TR.detay.sirketYetkileri).toBe('Şirket yetkileri');
+    expect(TR.detay.workspaceYetkileri).toBe('Workspace yetkileri');
   });
 
   it('KRİTİK: rol değiştirme ve kaldırma SATIRIN yanında', () => {
@@ -149,7 +161,8 @@ describe('DETAY — "bu kişi nerelere erişiyor"', () => {
 
   it('YETKİSİZ hesap detayda SÖYLENİYOR', () => {
     // Giriş yapabiliyor ama panelde hiçbir veri göremiyor.
-    expect(yorumsuz(KAYNAK)).toContain('giriş yapabiliyor ama panelde hiçbir');
+    expect(yorumsuz(KAYNAK)).toContain('{d.hicYetkiGovde}');
+    expect(TR.detay.hicYetkiGovde).toContain('giriş yapabiliyor ama panelde hiçbir');
   });
 });
 
@@ -202,7 +215,8 @@ describe('DANIŞMAN ATA', () => {
      */
     const g = ATA();
     expect(g).toContain('m.orgId === o.id && m.clientId === null');
-    expect(g).toContain('Zaten şirket geneli yetkisi var');
+    expect(g).toContain('d.zatenVar(rolEtiketi(mevcut.role, dil))');
+    expect(TR.sirketYetkisi.zatenVar('Yönetici')).toBe('Zaten şirket geneli yetkisi var (Yönetici)');
     expect(g).toContain('disabled={c.engel !== null || busy}');
   });
 
@@ -215,9 +229,12 @@ describe('DANIŞMAN ATA', () => {
      * harcamayan ama erişim açan bir işlemde de kabul edilemez.
      */
     const g = ATA();
-    expect(g).toContain('1 · Danışman');
-    expect(g).toContain('2 · Şirket');
-    expect(g).toContain('3 · Rol');
+    expect(g).toContain('etiket={d.danisman}');
+    expect(g).toContain('{d.sirket(secili.size)}');
+    expect(g).toContain('etiket={d.rol}');
+    expect(TR.sirketYetkisi.danisman).toBe('1 · Danışman');
+    expect(TR.sirketYetkisi.sirket(0)).toBe('2 · Şirket');
+    expect(TR.sirketYetkisi.rol).toBe('3 · Rol');
     // Danışman listesi bileşene DIŞARIDAN geliyor — tek kişiye sabitlenmiş
     // bir modal bu akışı kuramaz.
     expect(g).toContain('danismanlar');
@@ -227,7 +244,8 @@ describe('DANIŞMAN ATA', () => {
     // Uygun müşteriler KİME atadığına bağlı; önce hepsini gösterip sonra
     // kısaltmak, seçimi kullanıcının gözü önünde geri almak olurdu.
     const g = ATA();
-    expect(g).toContain('Önce danışman seç');
+    expect(g).toContain('{d.onceDanisman}');
+    expect(TR.sirketYetkisi.onceDanisman).toContain('Önce danışman seç');
   });
 
   it('üyelik ucuna gidiyor, kullanıcı ucuna değil', () => {
@@ -246,7 +264,8 @@ describe('DANIŞMAN ATA', () => {
     const g = ATA();
     expect(g).toContain('useState<Set<string>>(new Set())');
     expect(g).toContain('type="checkbox"');
-    expect(g).toContain('Hepsini seç');
+    expect(g).toContain('t.ortak.hepsiniSec');
+    expect(TR.ortak.hepsiniSec).toBe('Hepsini seç');
   });
 
   it('KRİTİK: gönderim ortak yürütücüden geçiyor', () => {
@@ -274,7 +293,8 @@ describe('DANIŞMAN ATA', () => {
      * Aynı kişinin iki müşteride farklı rolü olabiliyor; toplu atama o
      * ayrımı yapamıyor. Söylenmezse kullanıcı yaptığını sanır.
      */
-    expect(ATA()).toContain('Farklı');
+    expect(ATA()).toContain('d.hepsindeBuRol(secili.size)');
+    expect(TR.sirketYetkisi.hepsindeBuRol(3)).toContain('Farklı');
   });
 
   it('"Hepsini seç" yalnızca ATANABİLİR olanları kapsıyor', () => {
@@ -294,7 +314,8 @@ describe('ÜST BANT — tek ekleme düğmesi', () => {
      */
     const kod = yorumsuz(KAYNAK);
     // 2026-10-14: düğme bölümün birincil eylemi olarak sayfa başlığında (taslak "Kullanıcı ekle").
-    expect(kod).toContain('+ Kullanıcı ekle');
+    expect(kod).toContain('{d.kullaniciEkle}</Dugme>');
+    expect(TR.ekran.kullaniciEkle).toBe('+ Kullanıcı ekle');
     expect(yorumsuz(SAYFA)).toContain('<KullaniciEkle clients={clients} />');
     expect(kod).not.toContain('setDanismanEkleAcik');
     expect(kod).not.toContain('DanismanEkleModal');
@@ -307,7 +328,8 @@ describe('ÜST BANT — tek ekleme düğmesi', () => {
      * kişiyi zaten seçmiş oluyor.
      */
     const kod = yorumsuz(KAYNAK);
-    expect(kod).toContain('+ Şirkete yetki ver');
+    expect(kod).toContain('{d.sirketeYetkiVer}');
+    expect(TR.detay.sirketeYetkiVer).toBe('+ Şirkete yetki ver');
     expect(kod).toContain('onSirketYetkisi={() => setAtananKisi(secilen)}');
     expect(kod).not.toContain('setAtamaAcik');
   });
@@ -390,12 +412,14 @@ describe('yetki kararları', () => {
 
 describe('sessiz kalmayan yerler', () => {
   it('davet gönderilmediği yazılı', () => {
-    expect(yorumsuz(KAYNAK)).toContain('davet gönderilmiyor');
+    expect(yorumsuz(KAYNAK)).toContain('{d.anindaGovde}');
+    expect(TR.ekle.anindaGovde).toContain('davet gönderilmiyor');
   });
 
   it('KRİTİK: parola değişince oturumun düşmediği yazılı', () => {
     // Bilinen eksik; gizlemek, erişimi kestiğini sanan birine yanlış
     // güven verirdi.
-    expect(yorumsuz(KAYNAK)).toContain('açık oturumu düşmüyor');
+    expect(yorumsuz(KAYNAK)).toContain('{d.oturumGovde}');
+    expect(TR.duzenle.oturumGovde).toContain('açık oturumu düşmüyor');
   });
 });

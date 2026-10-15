@@ -9,6 +9,8 @@ import {
   type Permission,
 } from '@advetics/shared';
 import type { NavEntry } from '@/components/nav';
+import { ayarSekmesiAdi, sec, type Dil } from '@advetics/shared';
+import { menuSozlugu } from '@/dil/sozlukler/menu';
 
 /**
  * Kenar çubuğu — KATLANABİLİR bölümler.
@@ -353,13 +355,17 @@ export const AYAR_KISA_AD: Record<string, string> = AYAR_KISA_AD_YENI;
  */
 export function ayarSekmeleri(
   ayarlar: NavEntry[],
+  dil: Dil = 'tr',
 ): Array<{ href: string; ekYollar: readonly string[]; ad: string }> {
   const satirlar = GECIS.ayarlar ? [...ayarlar, HESABIM_SATIRI] : ayarlar;
-  return satirlar.map((a) => ({
-    href: a.href,
-    ekYollar: a.ekYollar ?? [],
-    ad: AYAR_KISA_AD[a.href] ?? a.label,
-  }));
+  return satirlar.map((a) => {
+    const sekme = AYARLAR_SEKMELERI.find((s) => s.yol === a.href);
+    return {
+      href: a.href,
+      ekYollar: a.ekYollar ?? [],
+      ad: sekme ? ayarSekmesiAdi(sekme.kod, dil, true) : (AYAR_KISA_AD[a.href] ?? a.label),
+    };
+  });
 }
 
 /**
@@ -423,6 +429,60 @@ function bolumleriSuz(
  * (müşteri hesabı) satır hiç çizilmiyor: tıklayınca 403 veren bir kapı
  * göstermek, rol matrisinin önlemek istediği şeyin ta kendisi.
  */
+/**
+ * MENÜYÜ EKRANIN DİLİNE ÇEVİRİR (D2). Tanım Türkçe kalıyor; ekrana giden
+ * her bölüm/satır buradan geçer. Sözlükte karşılığı olmayan Türkçe etiket
+ * HATA VERİR: menüye yeni satır ekleyip sözlüğü unutmak İngilizce menüde
+ * sessizce Türkçe satır demekti. Ürün adları (`AYNI_KALANLAR`) olduğu gibi.
+ * Ayarlar satırları shared'daki sekme adından (`ayarSekmesiAdi`).
+ */
+const AYNI_KALANLAR = new Set(['AdvStrategy', 'AdvCampaign', 'Base']);
+
+export function menuEtiketiCevir(
+  tur: 'bolum' | 'satir' | 'vurgu',
+  etiket: string,
+  dil: Dil,
+  href?: string,
+): string {
+  if (dil === 'tr' || AYNI_KALANLAR.has(etiket)) return etiket;
+  const sekme = href ? AYARLAR_SEKMELERI.find((s) => s.yol === href) : undefined;
+  if (tur === 'satir' && sekme) return ayarSekmesiAdi(sekme.kod, dil);
+  const tablo = sec(menuSozlugu, dil)[tur] as Record<string, string>;
+  const ceviri = tablo[etiket];
+  if (ceviri === undefined) throw new Error(`menu sozlugunde yok: ${tur} "${etiket}"`);
+  return ceviri;
+}
+
+/**
+ * Menüdeki satırın ADI, adresinden bulunarak ve ekranın dilinde. Sayfa
+ * kendi başlığını buradan alırsa ad iki dilde de menüyle aynı olur ve
+ * sayfa dosyasında Türkçe bir anahtar dize durmaz. Menüde olmayan adres
+ * PATLAR (sessizce boş başlık çizmek yerine).
+ */
+export function menuSatiriEtiketi(href: string, dil: Dil): string {
+  const satir = [...SECTIONS_HEDEF.flatMap((b) => b.items), HESABIM_SATIRI].find((i) => i.href === href);
+  if (!satir) throw new Error(`menude yok: ${href}`);
+  return menuEtiketiCevir('satir', satir.label, dil, href);
+}
+
+export function menuyuCevir(
+  bolumler: Array<{ title?: string; items: NavEntry[] }>,
+  dil: Dil,
+): Array<{ title?: string; items: NavEntry[] }> {
+  if (dil === 'tr') return bolumler;
+  const satir = (i: NavEntry): NavEntry => ({
+    ...i,
+    label: menuEtiketiCevir('satir', i.label, dil, i.href),
+    ...(i.vurgu ? { vurgu: menuEtiketiCevir('vurgu', i.vurgu, dil) } : {}),
+    ...(i.children ? { children: i.children.map(satir) } : {}),
+  });
+  return bolumler.map((b) => ({
+    // Başlık AYARLAR_BOLUMU olarak kalmalı: `kenarBolumleri` Ayarlar'ı başlığından buluyor.
+    title: b.title && b.title !== AYARLAR_BOLUMU ? menuEtiketiCevir('bolum', b.title, dil) : b.title,
+    items: b.items.map(satir),
+  }));
+}
+
 export function kenarBolumleri(bolumler: Array<{ title?: string; items: NavEntry[] }>): {
   bolumler: Array<{ title?: string; items: NavEntry[] }>;
   ayarlar: NavEntry[];

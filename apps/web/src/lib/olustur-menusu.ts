@@ -1,4 +1,5 @@
-import type { Permission, SessionResponse } from '@advetics/shared';
+import { sec, type Dil, type Permission, type SessionResponse } from '@advetics/shared';
+import { kabukSozlugu } from '@/dil/sozlukler/kabuk';
 import type { IkonAdi } from '@/components/ui/ikon';
 
 /**
@@ -28,23 +29,24 @@ export interface OlusturSecenegi {
   ayracOnce?: boolean;
 }
 
-const SECENEKLER: Array<OlusturSecenegi & { izin: Permission }> = [
-  { ad: 'Reklam', aciklama: 'Yedi amaçtan biriyle, adım adım', href: '/reklam', ikon: 'roket', izin: 'bulk.write' },
-  { ad: 'Strateji', aciklama: 'Plan, rapor ve müşteri onayı', href: '/strateji', ikon: 'hedef', izin: 'strategy.write' },
-  {
-    ad: 'Gönderi öne çıkar',
-    aciklama: 'Instagram gönderisini boostla',
-    href: '/auto-boost',
-    ikon: 'resim',
-    izin: 'boost.write',
-  },
-  { ad: 'Kural', href: '/iyilestir', ikon: 'kural', izin: 'rule.write', ayracOnce: true },
-  { ad: 'Rapor', href: '/raporlar', ikon: 'rapor', izin: 'report.write' },
-];
+/** Metin sözlükten (`kabuk.ts#olustur`), dile göre. */
+function secenekler(dil: Dil): Array<OlusturSecenegi & { izin: Permission }> {
+  const d = sec(kabukSozlugu, dil).olustur;
+  return [
+    { ad: d.reklam, aciklama: d.reklamAciklama, href: '/reklam', ikon: 'roket', izin: 'bulk.write' },
+    { ad: d.strateji, aciklama: d.stratejiAciklama, href: '/strateji', ikon: 'hedef', izin: 'strategy.write' },
+    { ad: d.gonderi, aciklama: d.gonderiAciklama, href: '/auto-boost', ikon: 'resim', izin: 'boost.write' },
+    { ad: d.kural, href: '/iyilestir', ikon: 'kural', izin: 'rule.write', ayracOnce: true },
+    { ad: d.rapor, href: '/raporlar', ikon: 'rapor', izin: 'report.write' },
+  ];
+}
 
-export function olusturSecenekleri(session: Pick<SessionResponse, 'permissions' | 'rol'>): OlusturSecenegi[] {
+export function olusturSecenekleri(
+  session: Pick<SessionResponse, 'permissions' | 'rol'>,
+  dil: Dil = 'tr',
+): OlusturSecenegi[] {
   if (session.rol === 'client_viewer') return [];
-  const acik = SECENEKLER.filter((s) => session.permissions.includes(s.izin));
+  const acik = secenekler(dil).filter((s) => session.permissions.includes(s.izin));
   /*
    * AYRAÇ YALNIZ İKİ TARAF DA DOLUYSA: ana üçlüden hiçbiri yoksa ilk satırın
    * üstünde boşa bir çizgi kalırdı.

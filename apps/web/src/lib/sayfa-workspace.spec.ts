@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { genelBakisSozlugu } from '@/dil/sozlukler/genel-bakis';
 import type { SessionResponse } from '@advetics/shared';
 import { sayfaWorkspaceId, workspaceSecimVerisi, workspaceUyumu } from './sayfa-workspace';
 
@@ -160,13 +161,15 @@ describe('bileşen', () => {
     expect(i).toBeGreaterThan(-1);
     // Dal, seçim dalının ilk cümlesinde bitiyor; iç ternary'nin `) : (`
     // dizesi dalın ORTASINDA ve oraya çapalamak dalı yarıda kesiyordu.
-    const son = BILESEN.indexOf('Hangi workspace ile', i);
+    const son = BILESEN.indexOf('{d.hangisi}', i);
     expect(son).toBeGreaterThan(i);
     const dal = BILESEN.slice(i, son);
     expect(dal).toContain('kurulumGorunur ?');
     // Doğrudan workspace formu: türsüz /kurulum artık yönlendiriyor.
     expect(dal).toContain("href={acilisAdresi('workspace')}");
-    expect(dal).toContain('Yöneticinden');
+    expect(dal).toContain('{d.yetkiYok}');
+    expect(genelBakisSozlugu.tr.workspace.yetkiYok).toContain('Yöneticinden');
+    expect(genelBakisSozlugu.tr.workspace.hangisi).toContain('Hangi workspace ile');
   });
 
   it('seçim hatası yutulmuyor', () => {
@@ -235,7 +238,8 @@ describe('KRİTİK: Marka Merkezi ve Varlıklar adres ≠ seçimde içerik OKUMU
     const g = yorumsuz(join(SRC, 'components/marka-merkezi/kurulum-listesi.tsx'));
     expect(g).not.toContain('üstten bu workspace');
     expect(g).toContain('Bu workspace’e geç');
-    expect(yorumsuz(join(SRC, 'components/workspace-gec.tsx'))).toContain('Bu workspace’e geç');
+    expect(yorumsuz(join(SRC, 'components/workspace-gec.tsx'))).toContain('{d.gec}');
+    expect(genelBakisSozlugu.tr.workspace.gec).toBe('Bu workspace’e geç');
   });
 
   it('geçiş hatası yutulmuyor', () => {

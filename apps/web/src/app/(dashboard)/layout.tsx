@@ -6,7 +6,9 @@ import { UyariBandi } from '@/components/uyari-bandi';
 import { BildirimSaglayici } from '@/components/bildirim/bildirim-verisi';
 import { BildirimZili } from '@/components/bildirim/bildirim-zili';
 import { OturumTazeleyici } from '@/components/oturum-tazeleyici';
-import { visibleSections } from '@/lib/nav-sections';
+import { menuyuCevir, visibleSections } from '@/lib/nav-sections';
+import { dilAl } from '@/dil/sunucu';
+import { kabukSozlugu } from '@/dil/sozlukler/kabuk';
 import { ayarlarYolu, kapi } from '@/lib/panel-adresleri';
 import { ayarSekmesiAcik } from '@/lib/ayar-kapilari';
 import { KenarIcerigi } from '@/components/kenar-cubugu';
@@ -15,7 +17,7 @@ import { Kirinti } from '@/components/kirinti';
 import { YenileIkonu } from '@/components/kabuk-menuleri';
 import { olusturSecenekleri } from '@/lib/olustur-menusu';
 
-import { ROL_ETIKETI, SAHIP_ETIKETI, type ManagerAccountTree } from '@advetics/shared';
+import { rolEtiketi, sahipEtiketi, sec, type ManagerAccountTree } from '@advetics/shared';
 
 interface Branding {
   logoUrl: string | null;
@@ -126,22 +128,29 @@ export default async function DashboardLayout({ children }: { children: React.Re
       } as React.CSSProperties)
     : undefined;
 
+  const dil = await dilAl();
+  const k = sec(kabukSozlugu, dil).kenar;
   const kenarVerisi = {
     /*
      * "Üst Hesaplar" üyelikle açılıyor, yetkiyle değil: müşteri şirketinin
      * admini `org.write` taşıyor ama üst hesaba üye değil.
      */
-    bolumler: visibleSections(session.permissions, {
-      ustHesapGorunur: session.platformAdmin || session.managerAccount !== null,
-      platformSahibi: session.platformAdmin,
-    }),
+    bolumler: menuyuCevir(
+      visibleSections(session.permissions, {
+        ustHesapGorunur: session.platformAdmin || session.managerAccount !== null,
+        platformSahibi: session.platformAdmin,
+      }),
+      dil,
+    ),
     sirketAdi: session.organization.name,
     logoUrl: branding?.logoUrl ?? null,
     kullaniciAdi: session.user.fullName,
     /* ROZET ETKİN ROLDEN, Sahip bayrağı önce. */
-    rolEtiketi: session.platformAdmin ? SAHIP_ETIKETI : ROL_ETIKETI[session.rol],
+    rolEtiketi: session.platformAdmin ? sahipEtiketi(dil) : rolEtiketi(session.rol, dil),
     /* "+ Oluştur": yetkiye göre süzülür, müşteri hesabına hiç çıkmaz. */
-    olustur: olusturSecenekleri(session),
+    olustur: olusturSecenekleri(session, dil),
+    /* Kenar içeriği sunucuda da istemcide (mobil çekmece) de çiziliyor; metni buradan alıyor. */
+    etiketler: { hesabim: k.hesabim, ikiAdim: k.ikiAdim },
   };
 
   /*
@@ -152,7 +161,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const aktifWorkspaceAdi =
     kirintiSirketi?.workspaces.find((w) => w.id === session.activeClientId)?.name ?? null;
   const kirintiKapsami = session.tumSirketler
-    ? [session.managerAccount?.name ?? 'Tüm şirketler']
+    ? [session.managerAccount?.name ?? k.tumSirketler]
     : [session.organization.name, ...(aktifWorkspaceAdi ? [aktifWorkspaceAdi] : [])];
   /*
    * HESABIM KIRINTIDA DA. Hesabım menü satırı değil (kapısı kullanıcı kartı)
@@ -166,7 +175,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const hesabimYolu = ayarlarYolu('hesabim');
   const kirintiSayfalari = menudenSayfalar.some((x) => x.href === hesabimYolu)
     ? menudenSayfalar
-    : [...menudenSayfalar, { href: hesabimYolu, label: 'Hesabım', ekYollar: [] as string[] }];
+    : [...menudenSayfalar, { href: hesabimYolu, label: k.hesabim, ekYollar: [] as string[] }];
 
   /* Seçici iki yerde çiziliyor (masaüstü menü, telefonda üst bar); tek kaynak. */
   const kapsam = {
@@ -290,7 +299,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
         {!branding?.hidePoweredBy && (
           <footer className="border-t border-line px-5 py-3 text-center text-xs text-ink-muted">
-            {branding?.footerText ?? 'Advetics ile güçlendirilmiştir'}
+            {branding?.footerText ?? k.guclendirildi}
           </footer>
         )}
       </div>

@@ -2,6 +2,8 @@
 
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
+import { useSozluk } from '@/dil/saglayici';
+import { kabukSozlugu } from '@/dil/sozlukler/kabuk';
 import { AcilirMenu, MenuOgesi } from '@/components/ui/acilir-menu';
 
 export interface SuzgecSecenegi {
@@ -67,6 +69,7 @@ export function SuzgecMenusu({
   ton?: 'tehlike';
 }) {
   const [ara, setAra] = useState('');
+  const s = useSozluk(kabukSozlugu).suzgec;
   const aramali = secenekler.length > aramaEsigi;
   const gorunen = useMemo(() => {
     const q = ara.trim().toLocaleLowerCase('tr-TR');
@@ -109,18 +112,18 @@ export function SuzgecMenusu({
               type="search"
               value={ara}
               onChange={(e) => setAra(e.target.value)}
-              placeholder={`${etiket} ara`}
-              aria-label={`${etiket} ara`}
+              placeholder={s.ara(etiket)}
+              aria-label={s.ara(etiket)}
               className="h-8 w-full rounded-alan border border-line-strong bg-surface px-2.5 text-13 text-ink placeholder:text-ink-soluk"
             />
             <p className="mt-1 px-0.5 text-11 text-ink-muted">
-              {gorunen.length} / {secenekler.length} gösteriliyor
+              {s.gosteriliyor(gorunen.length, secenekler.length)}
             </p>
           </div>
         )}
         <div className="max-h-[20rem] overflow-y-auto pt-1">
           {gorunen.length === 0 ? (
-            <p className="m-0 px-2.5 py-2 text-12 text-ink-muted">“{ara}” ile eşleşen yok.</p>
+            <p className="m-0 px-2.5 py-2 text-12 text-ink-muted">{s.eslesmeYok(ara)}</p>
           ) : (
             gorunen.map((s) => (
               <MenuOgesi
@@ -138,12 +141,12 @@ export function SuzgecMenusu({
         </div>
       </AcilirMenu>
       {secili && kaldirHref && (
-        <Link href={kaldirHref} aria-label={`${etiket} süzgecini kaldır`} className={kaldirSinifi}>
+        <Link href={kaldirHref} aria-label={s.kaldir(etiket)} className={kaldirSinifi}>
           ✕
         </Link>
       )}
       {secili && !kaldirHref && onKaldir && (
-        <button type="button" onClick={onKaldir} aria-label={`${etiket} süzgecini kaldır`} className={kaldirSinifi}>
+        <button type="button" onClick={onKaldir} aria-label={s.kaldir(etiket)} className={kaldirSinifi}>
           ✕
         </button>
       )}
@@ -243,10 +246,11 @@ export function SayfalamaBaglantilari({
   /** Solda duran not ya da bağlantı. */
   sol?: React.ReactNode;
 }) {
+  const s = useSozluk(kabukSozlugu).suzgec;
   const ok =
     'inline-flex h-8 w-8 items-center justify-center rounded-full text-ink no-underline transition-colors hover:bg-surface-sunken';
   return (
-    <nav aria-label="Sayfalama" className="flex flex-wrap items-center justify-end gap-4 px-4 py-2.5 text-[12.5px] text-ink-muted">
+    <nav aria-label={s.sayfalama} className="flex flex-wrap items-center justify-end gap-4 px-4 py-2.5 text-[12.5px] text-ink-muted">
       {sol && <span className="mr-auto">{sol}</span>}
       <span className="tabular-nums">
         {toplam === 0 ? '0' : `${bas} - ${son}`} / {toplam}
@@ -254,7 +258,7 @@ export function SayfalamaBaglantilari({
       {(oncekiHref || sonrakiHref) && (
         <span className="flex items-center gap-1">
           {oncekiHref ? (
-            <Link href={oncekiHref} className={ok} aria-label="Önceki sayfa">
+            <Link href={oncekiHref} className={ok} aria-label={s.onceki}>
               ‹
             </Link>
           ) : (
@@ -263,7 +267,7 @@ export function SayfalamaBaglantilari({
             </span>
           )}
           {sonrakiHref ? (
-            <Link href={sonrakiHref} className={ok} aria-label="Sonraki sayfa">
+            <Link href={sonrakiHref} className={ok} aria-label={s.sonraki}>
               ›
             </Link>
           ) : (

@@ -8,6 +8,18 @@ import { Dugme } from '@/components/ui/dugme';
 import { Girdi, MetinAlani } from '@/components/ui/alan';
 import { Serit } from '@/components/ui/hal';
 import { KOORDINAT_BICIM_MESAJI, koordinatCoz, koordinatYaz } from '@advetics/shared';
+import { useSozluk } from '@/dil/saglayici';
+import { sirketlerSozlugu } from '@/dil/sozlukler/ayarlar-sirketler';
+
+type BilgiSozlugu = (typeof sirketlerSozlugu)['tr']['bilgi'];
+
+/**
+ * ALANIN ETİKETİ — sözlükten (`bilgi.alanlar`), anahtarla. "IBAN" iki dilde
+ * aynı (kısaltma) ve sözlüğe girmiyor; tek kaynak hâlâ `ALANLAR` listesi.
+ */
+function alanEtiketi(anahtar: Alan, d: BilgiSozlugu): string {
+  return anahtar === 'iban' ? 'IBAN' : d.alanlar[anahtar];
+}
 
 /**
  * ═══ MÜŞTERİ BİLGİLERİ — DÜZENLEME ═══
@@ -77,21 +89,20 @@ type Alan = Exclude<keyof MusteriBilgileri, 'addressLatitude' | 'addressLongitud
  */
 const ALANLAR: {
   anahtar: Alan;
-  etiket: string;
   tur: 'text' | 'email' | 'tel' | 'uzun' | 'alicilar' | 'konum';
 }[] = [
   // AD İLK SIRADA: formu açan kişinin en sık değiştireceği alan bu.
-  { anahtar: 'name', etiket: 'Workspace adı', tur: 'text' },
-  { anahtar: 'contactName', etiket: 'Yetkili kişi', tur: 'text' },
-  { anahtar: 'contactEmails', etiket: 'Rapor alıcıları', tur: 'alicilar' },
-  { anahtar: 'contactPhone', etiket: 'Telefon', tur: 'tel' },
-  { anahtar: 'website', etiket: 'İnternet sitesi', tur: 'text' },
-  { anahtar: 'taxOffice', etiket: 'Vergi dairesi', tur: 'text' },
-  { anahtar: 'taxNumber', etiket: 'Vergi numarası', tur: 'text' },
-  { anahtar: 'iban', etiket: 'IBAN', tur: 'text' },
-  { anahtar: 'address', etiket: 'Adres', tur: 'uzun' },
-  { anahtar: 'addressCoordinates', etiket: 'Adresin harita konumu (enlem, boylam)', tur: 'konum' },
-  { anahtar: 'notes', etiket: 'Not', tur: 'uzun' },
+  { anahtar: 'name', tur: 'text' },
+  { anahtar: 'contactName', tur: 'text' },
+  { anahtar: 'contactEmails', tur: 'alicilar' },
+  { anahtar: 'contactPhone', tur: 'tel' },
+  { anahtar: 'website', tur: 'text' },
+  { anahtar: 'taxOffice', tur: 'text' },
+  { anahtar: 'taxNumber', tur: 'text' },
+  { anahtar: 'iban', tur: 'text' },
+  { anahtar: 'address', tur: 'uzun' },
+  { anahtar: 'addressCoordinates', tur: 'konum' },
+  { anahtar: 'notes', tur: 'uzun' },
 ];
 
 export function MusteriBilgiFormu({
@@ -104,6 +115,8 @@ export function MusteriBilgiFormu({
   onBitti: () => void;
 }) {
   const router = useRouter();
+  const t = useSozluk(sirketlerSozlugu);
+  const d = t.bilgi;
   const [isPending, startTransition] = useTransition();
   const [kaydediliyor, setKaydediliyor] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
@@ -151,7 +164,7 @@ export function MusteriBilgiFormu({
       }
       const yeniAd = String(deger.name ?? '').trim();
       if (yeniAd.length < 2) {
-        setHata('Workspace adı en az 2 karakter olmalı.');
+        setHata(d.adKisa);
         setKaydediliyor(false);
         return;
       }
@@ -167,7 +180,7 @@ export function MusteriBilgiFormu({
        * yazıyor; onu gizlemek kullanıcıya "kaydedilmedi" bile demezdi.
        */
       setHata(
-        err instanceof ApiRequestError ? err.message : 'Bilgiler kaydedilemedi.',
+        err instanceof ApiRequestError ? err.message : d.kaydedilemedi,
       );
     } finally {
       setKaydediliyor(false);
@@ -182,16 +195,20 @@ export function MusteriBilgiFormu({
             key={a.anahtar}
             className={`block ${a.tur === 'uzun' ? 'sm:col-span-2' : ''}`}
           >
-            <span className="mb-1.5 block text-13 font-semibold text-ink">{a.etiket}</span>
+            <span className="mb-1.5 block text-13 font-semibold text-ink">{alanEtiketi(a.anahtar, d)}</span>
             {a.tur === 'alicilar' ? (
               <AliciListesiAlani
                 etiket=""
                 degerler={(deger[a.anahtar] as string[]) ?? []}
                 onChange={(yeni) => setDeger({ ...deger, [a.anahtar]: yeni })}
-                yardim="Rapor maili bu adreslerin hepsine gider."
+                yardim={d.alicilarYardim}
               />
             ) : a.tur === 'konum' ? (
-              <KonumAlani deger={deger[a.anahtar] as string} degisti={(v) => setDeger({ ...deger, [a.anahtar]: v })} />
+              <KonumAlani
+                deger={deger[a.anahtar] as string}
+                degisti={(v) => setDeger({ ...deger, [a.anahtar]: v })}
+                ipucu={d.konumIpucu}
+              />
             ) : a.tur === 'uzun' ? (
               <MetinAlani
                 rows={2}
@@ -210,17 +227,17 @@ export function MusteriBilgiFormu({
       </div>
 
       {hata && (
-        <Serit ton="hata" baslik="Kaydedilemedi">
+        <Serit ton="hata" baslik={t.ortak.kaydedilemediBaslik}>
           {hata}
         </Serit>
       )}
 
       <div className="flex items-center gap-2">
         <Dugme type="submit" ton="koyu" boyut="kucuk" disabled={kaydediliyor || isPending}>
-          {kaydediliyor ? 'Kaydediliyor…' : 'Kaydet'}
+          {kaydediliyor ? t.ortak.kaydediliyor : t.ortak.kaydet}
         </Dugme>
         <Dugme ton="hayalet" boyut="kucuk" onClick={onBitti} disabled={kaydediliyor}>
-          Vazgeç
+          {t.ortak.vazgec}
         </Dugme>
       </div>
     </form>
@@ -232,7 +249,7 @@ export function MusteriBilgiFormu({
  * biçim "Kaydet"e basınca değil hemen söyleniyor. Adres metninden konum
  * TAHMİN EDİLMİYOR; kullanıcı Google Haritalar'dan kopyalıyor.
  */
-function KonumAlani({ deger, degisti }: { deger: string; degisti: (v: string) => void }) {
+function KonumAlani({ deger, degisti, ipucu }: { deger: string; degisti: (v: string) => void; ipucu: string }) {
   const [hata, setHata] = useState<string | null>(null);
   return (
     <>
@@ -253,9 +270,7 @@ function KonumAlani({ deger, degisti }: { deger: string; degisti: (v: string) =>
           {hata}
         </span>
       ) : (
-        <span className="mt-1 block text-12 text-ink-muted">
-          &quot;Bölgemde çok kişi görsün&quot; reklamı adresin çevresini buradan alır. Google Haritalar&apos;da adrese sağ tıklayıp ilk satırı kopyala.
-        </span>
+        <span className="mt-1 block text-12 text-ink-muted">{ipucu}</span>
       )}
     </>
   );

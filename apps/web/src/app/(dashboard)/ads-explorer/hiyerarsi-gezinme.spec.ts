@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { kabukSozlugu } from '@/dil/sozlukler/kabuk';
 
 /**
  * ═══ GENEL BAKIŞ HİYERARŞİSİ ═══
@@ -176,7 +177,11 @@ describe('EKMEK KIRINTISI', () => {
 
   it('KRİTİK: kapsam hatası YUTULMUYOR', () => {
     expect(SERIT).toContain('ApiRequestError');
-    expect(SERIT).toContain('Kapsam değiştirilemedi.');
+    // Platformun mesajı önce; yalnız ApiRequestError DEĞİLSE sözlükteki genel cümle.
+    expect(SERIT).toContain('e instanceof ApiRequestError ? e.message : g.kapsamDegistirilemedi');
+    expect(kabukSozlugu.tr.genel.kapsamDegistirilemedi).toBe('Kapsam değiştirilemedi.');
+    expect(kabukSozlugu.en.genel.kapsamDegistirilemedi).toBeTruthy();
+    expect(kabukSozlugu.en.genel.kapsamDegistirilemedi).not.toBe(kabukSozlugu.tr.genel.kapsamDegistirilemedi);
   });
 
   it('ad YAPIDAN okunuyor — kırılım satırından değil', () => {

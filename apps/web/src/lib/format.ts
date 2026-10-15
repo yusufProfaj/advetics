@@ -23,6 +23,9 @@ export {
 } from '@advetics/shared';
 
 const TR = 'tr-TR';
+/** İki dil (Ç12): `dil` verilmezse Türkçe; ekran sözlüğe geçince dili geçirir. */
+type BicimDili = 'tr' | 'en';
+const kod = (dil: BicimDili) => (dil === 'en' ? 'en-US' : TR);
 
 /**
  * Yüzde değişim.
@@ -56,15 +59,15 @@ export function changePercentMicros(
 }
 
 /** "2026-08-05" → "5 Ağu" */
-export function formatDayShort(iso: string): string {
+export function formatDayShort(iso: string, dil: BicimDili = 'tr'): string {
   const d = new Date(`${iso}T00:00:00Z`);
-  return d.toLocaleDateString(TR, { day: 'numeric', month: 'short', timeZone: 'UTC' });
+  return d.toLocaleDateString(kod(dil), { day: 'numeric', month: 'short', timeZone: 'UTC' });
 }
 
 /** "2026-08-05" → "5 Ağustos 2026" */
-export function formatDayLong(iso: string): string {
+export function formatDayLong(iso: string, dil: BicimDili = 'tr'): string {
   const d = new Date(`${iso}T00:00:00Z`);
-  return d.toLocaleDateString(TR, {
+  return d.toLocaleDateString(kod(dil), {
     day: 'numeric',
     month: 'long',
     year: 'numeric',
@@ -83,11 +86,12 @@ export function formatDayLong(iso: string): string {
  * eski"); burada sorulan şey gönderinin TARİHİ ve "47 gün önce" bir takvim
  * günü değil.
  */
-export function formatTarih(iso: string | null): string {
-  if (!iso) return 'tarih yok';
+export function formatTarih(iso: string | null, dil: BicimDili = 'tr'): string {
+  const yok = dil === 'en' ? 'no date' : 'tarih yok';
+  if (!iso) return yok;
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return 'tarih yok';
-  return d.toLocaleDateString(TR, { day: 'numeric', month: 'short', year: 'numeric' });
+  if (Number.isNaN(d.getTime())) return yok;
+  return d.toLocaleDateString(kod(dil), { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 /**
@@ -96,16 +100,17 @@ export function formatTarih(iso: string | null): string {
  * Mutlak zaman yerine göreli: kullanıcının sorusu "veri ne kadar taze" ve
  * cevabı bir saat damgasından çıkarmak zihinsel iş yükü.
  */
-export function formatRelative(iso: string | null): string {
-  if (!iso) return 'hiç';
+export function formatRelative(iso: string | null, dil: BicimDili = 'tr'): string {
+  const en = dil === 'en';
+  if (!iso) return en ? 'never' : 'hiç';
   const diff = Date.now() - new Date(iso).getTime();
   const minutes = Math.floor(diff / 60_000);
-  if (minutes < 1) return 'az önce';
-  if (minutes < 60) return `${minutes} dk önce`;
+  if (minutes < 1) return en ? 'just now' : 'az önce';
+  if (minutes < 60) return en ? `${minutes} min ago` : `${minutes} dk önce`;
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} sa önce`;
+  if (hours < 24) return en ? `${hours} h ago` : `${hours} sa önce`;
   const days = Math.floor(hours / 24);
-  return `${days} gün önce`;
+  return en ? `${days} ${days === 1 ? 'day' : 'days'} ago` : `${days} gün önce`;
 }
 
 /** Veri bayat mı — mimari dokümandaki eşik 2 saat. */

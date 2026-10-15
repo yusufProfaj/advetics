@@ -2,6 +2,8 @@
 
 import { useEffect } from 'react';
 import { HataDurumu } from '@/components/ui/hal';
+import { useSozluk } from '@/dil/saglayici';
+import { kabukSozlugu } from '@/dil/sozlukler/kabuk';
 
 /**
  * PANEL HATA SINIRI.
@@ -22,6 +24,7 @@ export default function Error({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const d = useSozluk(kabukSozlugu).hata;
   useEffect(() => {
     // Tarayıcı konsoluna yazılıyor: sunucu tarafı zaten kendi log'unu
     // tutuyor ama kullanıcıdan gelen bir raporda `digest` tek eşleşme
@@ -38,17 +41,16 @@ export default function Error({
   return (
     <div className="mx-auto w-full max-w-4xl">
       <HataDurumu
-        baslik="Bu ekran yüklenemedi"
+        baslik={d.baslik}
         mesaj={
           <>
-            Sunucudan veri alınırken bir hata oluştu. Menüden başka bir ekrana geçebilir ya da tekrar
-            deneyebilirsin.
+            {d.metin}
             {/* HATA KİMLİĞİ GÖSTERİLİYOR: kullanıcı "çalışmıyor" derken elinde
                 sunucu log'uyla eşleşen bir anahtar olsun. Mesajın kendisi
                 gösterilmiyor — sunucu hataları tablo ve kolon adı sızdırabiliyor. */}
             {error.digest && (
               <span className="mt-2 block text-12">
-                Hata kimliği: <code>{error.digest}</code>
+                {d.kimlik} <code>{error.digest}</code>
               </span>
             )}
           </>

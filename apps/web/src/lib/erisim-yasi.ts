@@ -9,14 +9,19 @@
  * HİÇ GİRİŞ YAPMAMIŞ AYRI: davet edilmiş ama hesabını açmamış biri ile
  * 90 gündür gelmeyen biri farklı iş (daveti yenile / erişimi kaldır).
  */
+import { sec, type Dil } from '@advetics/shared';
+import { ayarlarSozlugu } from '@/dil/sozlukler/ayarlar';
+
 export const ETKISIZ_GUN = 90;
 
 export function erisimYasi(
   lastLoginAt: string | null,
   simdi: number = Date.now(),
+  dil: Dil = 'tr',
 ): { tur: 'hic' | 'uzun'; metin: string } | null {
-  if (!lastLoginAt) return { tur: 'hic', metin: 'Hiç giriş yapmadı' };
+  const d = sec(ayarlarSozlugu, dil).ortak;
+  if (!lastLoginAt) return { tur: 'hic', metin: d.hicGirisYok };
   const gun = Math.floor((simdi - Date.parse(lastLoginAt)) / 86_400_000);
   if (Number.isNaN(gun) || gun < ETKISIZ_GUN) return null;
-  return { tur: 'uzun', metin: `${gun} gündür giriş yok; ayrıldıysa erişimini kaldır` };
+  return { tur: 'uzun', metin: d.uzunSuredir(gun) };
 }

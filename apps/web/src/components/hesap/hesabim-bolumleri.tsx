@@ -2,6 +2,8 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 import { SayfaIcDuzen, SayfaIcMenu } from '@/components/ui/sayfa-ic-menu';
+import { useSozluk } from '@/dil/saglayici';
+import { hesabimSozlugu } from '@/dil/sozlukler/ayarlar-hesabim';
 
 /**
  * ═══ HESABIM BÖLÜMLERİ — SAYFA İÇİ YAN MENÜ (taslak `#hesabim`) ═══
@@ -48,6 +50,7 @@ const GIZLE =
   'data-[secili=okuma-api]:[&>section:not(#okuma-api)]:hidden';
 
 export function HesabimBolumleri({ bolumler, children }: { bolumler: HesabimBolumu[]; children: ReactNode }) {
+  const d = useSozluk(hesabimSozlugu).sayfa;
   const [secili, setSecili] = useState(bolumler[0]?.deger ?? '');
   const anahtar = bolumler.map((b) => b.deger).join('|');
 
@@ -97,7 +100,7 @@ export function HesabimBolumleri({ bolumler, children }: { bolumler: HesabimBolu
 
   return (
     <SayfaIcDuzen
-      menu={<SayfaIcMenu etiket="Hesabım bölümleri" secili={secili} onSec={sec} ogeler={bolumler} />}
+      menu={<SayfaIcMenu etiket={d.bolumler} secili={secili} onSec={sec} ogeler={bolumler} />}
     >
       <div data-secili={secili} className={`grid min-w-0 content-start gap-5 ${GIZLE}`}>
         {children}

@@ -6,6 +6,8 @@ import { AcilirMenu, IKON_TETIK, MenuAyraci, MenuBasligi, MenuOgesi } from '@/co
 import { Ikon } from '@/components/ui/ikon';
 import { dugmeSinifi } from '@/components/ui/dugme';
 import type { OlusturSecenegi } from '@/lib/olustur-menusu';
+import { useSozluk } from '@/dil/saglayici';
+import { kabukSozlugu } from '@/dil/sozlukler/kabuk';
 
 /**
  * ═══ KABUĞUN AÇILIR MENÜLERİ (menü kararı 2026-10-14) ═══
@@ -23,10 +25,11 @@ import type { OlusturSecenegi } from '@/lib/olustur-menusu';
  * "burada bir şey vardı" izlenimi bırakırdı.
  */
 export function OlusturMenusu({ secenekler, onGezinme }: { secenekler: OlusturSecenegi[]; onGezinme?: () => void }) {
+  const d = useSozluk(kabukSozlugu).olustur;
   if (secenekler.length === 0) return null;
   return (
     <AcilirMenu
-      etiket="Oluştur"
+      etiket={d.etiket}
       genislik="w-[280px]"
       sinif="w-full"
       tetik={({ acik: _acik, ...o }) => (
@@ -36,11 +39,11 @@ export function OlusturMenusu({ secenekler, onGezinme }: { secenekler: OlusturSe
           className={`${dugmeSinifi('birincil', 'orta')} w-full`}
         >
           <Ikon ad="arti" />
-          Oluştur
+          {d.etiket}
         </button>
       )}
     >
-      <MenuBasligi>Ne oluşturalım?</MenuBasligi>
+      <MenuBasligi>{d.baslik}</MenuBasligi>
       {secenekler.map((s) => (
         <div key={s.href + s.ad} className="contents">
           {s.ayracOnce && <MenuAyraci />}
@@ -58,9 +61,10 @@ export function OlusturMenusu({ secenekler, onGezinme }: { secenekler: OlusturSe
  * çıkış. Öğeler çağırandan geliyor (adresler sunucuda kuruluyor).
  */
 export function KullaniciMenusu({ ad, rol, children }: { ad: string; rol: string; children: ReactNode }) {
+  const d = useSozluk(kabukSozlugu).kullanici;
   return (
     <AcilirMenu
-      etiket="Kullanıcı menüsü"
+      etiket={d.menu}
       yon="yukari"
       genislik="w-[240px]"
       sinif="w-full"
@@ -97,11 +101,12 @@ export function KullaniciMenusu({ ad, rol, children }: { ad: string; rol: string
 export function YenileIkonu() {
   const router = useRouter();
   const [bekliyor, baslat] = useTransition();
+  const d = useSozluk(kabukSozlugu).kullanici;
   return (
     <button
       type="button"
-      aria-label="Verileri yenile"
-      title="Verileri yenile"
+      aria-label={d.verileriYenile}
+      title={d.verileriYenile}
       disabled={bekliyor}
       aria-busy={bekliyor || undefined}
       onClick={() => baslat(() => router.refresh())}

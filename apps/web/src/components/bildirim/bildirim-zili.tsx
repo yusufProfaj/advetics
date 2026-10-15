@@ -9,6 +9,9 @@ import { useBildirimVerisi } from './bildirim-verisi';
 import { AcilirMenu, IKON_TETIK, useAcilirMenuKapat } from '@/components/ui/acilir-menu';
 import { Ikon } from '@/components/ui/ikon';
 import { SayiRozeti } from '@/components/ui/rozet';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { bildirimSozlugu } from '@/dil/sozlukler/bildirim';
+import { sec, type Dil } from '@advetics/shared';
 
 /**
  * ═══ BİLDİRİM PANELİ ═══
@@ -49,6 +52,7 @@ export function BildirimZili() {
    * sayacıyla aynı hata.
    */
   const sayac = bekleyenBoost.length + sorunlar.length;
+  const z = useSozluk(bildirimSozlugu).zil;
 
   /*
    * TEK AÇILIR MENÜ BİLEŞENİ (menü kararı 2026-10-14): panel DOM'da kalıyor,
@@ -59,7 +63,7 @@ export function BildirimZili() {
    */
   return (
     <AcilirMenu
-      etiket="Bildirimler"
+      etiket={z.etiket}
       rol="dialog"
       hizala="sag"
       genislik="w-[24rem]"
@@ -67,7 +71,7 @@ export function BildirimZili() {
         <button
           type="button"
           {...o}
-          aria-label={sayac > 0 ? `Bildirimler (${sayac})` : 'Bildirimler'}
+          aria-label={sayac > 0 ? z.etiketSayili(sayac) : z.etiket}
           className={IKON_TETIK}
         >
           <Ikon ad="zil" />
@@ -158,6 +162,7 @@ function BoostBolumu({
   istendi: boolean;
   onGit: () => void;
 }) {
+  const z = useSozluk(bildirimSozlugu).zil;
   return (
     <section>
       <Baslik
@@ -168,12 +173,12 @@ function BoostBolumu({
               onClick={onGit}
               className="text-[11px] font-medium text-brand-strong hover:underline"
             >
-              Tümünü aç
+              {z.tumunuAc}
             </Link>
           ) : undefined
         }
       >
-        Onay bekleyen boostlar
+        {z.onayBekleyen}
       </Baslik>
 
       {/*
@@ -182,16 +187,13 @@ function BoostBolumu({
         kullanıcı bekleyen bir onayı "yok" sanarak kaçırır.
       */}
       {hata !== null ? (
-        <BosSatir>Boost kuyruğu alınamadı ({hata}).</BosSatir>
+        <BosSatir>{z.boostAlinamadi(hata)}</BosSatir>
       ) : kapsamDisi ? (
-        <BosSatir>
-          Boost kuyruğu workspace bazlı. Üstteki seçiciden bir workspace seçtiğinde onay
-          bekleyen gönderiler burada görünür.
-        </BosSatir>
+        <BosSatir>{z.boostKapsamDisi}</BosSatir>
       ) : !istendi ? (
-        <BosSatir>Yükleniyor…</BosSatir>
+        <BosSatir>{z.yukleniyor}</BosSatir>
       ) : kartlar.length === 0 ? (
-        <BosSatir>{bosSebebi ?? 'Onay bekleyen gönderi yok.'}</BosSatir>
+        <BosSatir>{bosSebebi ?? z.onayBekleyenYok}</BosSatir>
       ) : (
         <ul>
           {kartlar.slice(0, 5).map((k) => (
@@ -210,7 +212,7 @@ function BoostBolumu({
                 />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm leading-tight">
-                    {k.title ?? 'Başlıksız gönderi'}
+                    {k.title ?? z.basliksiz}
                   </span>
                   <span className="block truncate text-[11px] leading-tight text-ink-muted">
                     {k.clientName}
@@ -222,7 +224,7 @@ function BoostBolumu({
           {kartlar.length > 5 && (
             // SESSİZ KESME YOK.
             <li className="px-3 py-1.5 text-[11px] text-ink-muted">
-              {kartlar.length} gönderiden 5 tanesi gösteriliyor.
+              {z.gonderiKesme(kartlar.length)}
             </li>
           )}
         </ul>
@@ -244,15 +246,17 @@ function SorunBolumu({
   yukleniyor: boolean;
   onGit: () => void;
 }) {
+  const z = useSozluk(bildirimSozlugu).zil;
+  const { dil } = useDil();
   return (
     <section>
-      <Baslik>Sorunlar</Baslik>
+      <Baslik>{z.sorunlar}</Baslik>
       {hata !== null ? (
-        <BosSatir>Uyarılar alınamadı ({hata}). Panelin geri kalanı çalışmaya devam ediyor.</BosSatir>
+        <BosSatir>{z.uyariAlinamadi(hata)}</BosSatir>
       ) : yukleniyor ? (
-        <BosSatir>Yükleniyor…</BosSatir>
+        <BosSatir>{z.yukleniyor}</BosSatir>
       ) : uyarilar.length === 0 ? (
-        <BosSatir>Açık bir sorun yok.</BosSatir>
+        <BosSatir>{z.sorunYok}</BosSatir>
       ) : (
         <ul>
           {uyarilar.map((u) => (
@@ -267,10 +271,10 @@ function SorunBolumu({
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium leading-tight">{u.baslik}</p>
                   <p className="mt-0.5 text-[11px] leading-snug text-ink-muted">
-                    {u.clientName ?? 'Ajans geneli'}
+                    {u.clientName ?? z.ajansGeneli}
                     {/* BAYATLIK GÖRÜNÜR: tarihi göstermeyen bir uyarı,
                         düzeltilmiş bir sorunu haftalarca ekranda tutar. */}
-                    {u.veriZamani !== null && ` · ${formatRelative(u.veriZamani)}`}
+                    {u.veriZamani !== null && ` · ${formatRelative(u.veriZamani, dil)}`}
                   </p>
                   {u.eylem !== null && (
                     <Link
@@ -287,7 +291,7 @@ function SorunBolumu({
           ))}
           {toplam > uyarilar.length && (
             <li className="px-3 py-1.5 text-[11px] text-ink-muted">
-              {toplam} sorundan {uyarilar.length} tanesi gösteriliyor.
+              {z.sorunKesme(toplam, uyarilar.length)}
             </li>
           )}
         </ul>
@@ -313,6 +317,8 @@ function DurumBolumu({
   baglantilar: BaglantiDurumu[];
   onGit: () => void;
 }) {
+  const z = useSozluk(bildirimSozlugu).zil;
+  const { dil } = useDil();
   return (
     <section>
       <Baslik
@@ -322,14 +328,14 @@ function DurumBolumu({
             onClick={onGit}
             className="text-[11px] font-medium text-brand-strong hover:underline"
           >
-            Bağlantılar
+            {z.baglantilar}
           </Link>
         }
       >
-        Yetkilendirme durumu
+        {z.yetkiDurumu}
       </Baslik>
       {baglantilar.length === 0 ? (
-        <BosSatir>Bu kapsamda hesabı atanmış bir platform bağlantısı yok.</BosSatir>
+        <BosSatir>{z.baglantiYok}</BosSatir>
       ) : (
         <ul className="pb-1">
           {baglantilar.map((b) => (
@@ -337,9 +343,9 @@ function DurumBolumu({
               <PlatformLogo kind={platformKanali(b.platform)} className="h-4 w-4 shrink-0" />
               <span className="min-w-0 flex-1 truncate text-xs">
                 {b.etiket ?? b.platform}
-                <span className="text-ink-muted"> · {b.etkilenenHesap} hesap</span>
+                <span className="text-ink-muted"> · {z.hesapSayisi(b.etkilenenHesap)}</span>
               </span>
-              <span className={`shrink-0 text-[11px] font-medium ${renk(b)}`}>{sureMetni(b)}</span>
+              <span className={`shrink-0 text-[11px] font-medium ${renk(b)}`}>{sureMetni(b, dil)}</span>
             </li>
           ))}
         </ul>
@@ -356,12 +362,13 @@ function DurumBolumu({
  * "hiç dokunmam gerekmeyecek" diye anlıyor, oysa iptal edilen bir yetki
  * her platformda mümkün.
  */
-export function sureMetni(b: Pick<BaglantiDurumu, 'durum' | 'kalanGun'>): string {
-  if (b.durum !== 'active') return 'yetki gerekiyor';
-  if (b.kalanGun === null) return 'otomatik';
-  if (b.kalanGun < 0) return `${Math.abs(b.kalanGun)} gün önce doldu`;
-  if (b.kalanGun === 0) return 'bugün doluyor';
-  return `${b.kalanGun} gün`;
+export function sureMetni(b: Pick<BaglantiDurumu, 'durum' | 'kalanGun'>, dil: Dil = 'tr'): string {
+  const z = sec(bildirimSozlugu, dil).zil;
+  if (b.durum !== 'active') return z.yetkiGerekiyor;
+  if (b.kalanGun === null) return z.otomatik;
+  if (b.kalanGun < 0) return z.dolduGunOnce(Math.abs(b.kalanGun));
+  if (b.kalanGun === 0) return z.bugunDoluyor;
+  return z.gunKaldi(b.kalanGun);
 }
 
 /** Eşikler `uyari-kurallari.ts` içindeki `TOKEN_UYARI_GUNU` ile aynı fikirde. */

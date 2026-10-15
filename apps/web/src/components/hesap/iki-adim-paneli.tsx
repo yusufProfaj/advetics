@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   IKI_ADIM_KURTARMA_SAYISI,
+  bicimKodu,
   ikiAdimKodTuru,
   type IkiAdimDurumu,
   type IkiAdimKurtarmaKodlari,
@@ -16,9 +17,12 @@ import { Kart } from '@/components/ui/kart';
 import { Dugme } from '@/components/ui/dugme';
 import { Rozet } from '@/components/ui/rozet';
 import { Serit } from '@/components/ui/hal';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { ikiAdimSozlugu } from '@/dil/sozlukler/iki-adim';
+import { hesabimSozlugu } from '@/dil/sozlukler/ayarlar-hesabim';
 
-function hataMetni(err: unknown): string {
-  return err instanceof ApiRequestError ? err.message : 'Bağlantı kurulamadı. Tekrar dene.';
+function hataMetni(err: unknown, yedek: string): string {
+  return err instanceof ApiRequestError ? err.message : yedek;
 }
 
 /** Kurtarma kodu bu sayıya inince uyarı: biri kaldığında uyarmak geç. */
@@ -52,6 +56,9 @@ export function IkiAdimPaneli({
   kurtarmaIleGirdi: boolean;
 }) {
   const router = useRouter();
+  const { dil } = useDil();
+  const ortak = useSozluk(ikiAdimSozlugu);
+  const d = useSozluk(hesabimSozlugu).ikiAdim;
   const [mod, setMod] = useState<Mod>({ tur: 'bos' });
   const [kod, setKod] = useState('');
   /*
@@ -78,7 +85,7 @@ export function IkiAdimPaneli({
     try {
       await fn();
     } catch (err) {
-      setHata(hataMetni(err));
+      setHata(hataMetni(err, ortak.baglantiYok));
     } finally {
       setBekliyor(false);
     }
@@ -92,8 +99,8 @@ export function IkiAdimPaneli({
 
   const onayla = (e: React.FormEvent) => {
     e.preventDefault();
-    if (ikiAdimKodTuru(kod) !== 'totp') return setHata('Uygulamadaki 6 haneli kodu yaz.');
-    if (parola === '') return setHata('Onaylamak için şifreni yaz.');
+    if (ikiAdimKodTuru(kod) !== 'totp') return setHata(d.kodYaz);
+    if (parola === '') return setHata(d.sifreYaz);
     void calistir(async () => {
       const r = await apiFetch<IkiAdimKurtarmaKodlari>('/auth/2fa/kurulum/onay', {
         method: 'POST',
@@ -105,18 +112,18 @@ export function IkiAdimPaneli({
 
   const kapat = (e: React.FormEvent) => {
     e.preventDefault();
-    if (ikiAdimKodTuru(kod) === null) return setHata('6 haneli kodu ya da bir kurtarma kodunu yaz.');
+    if (ikiAdimKodTuru(kod) === null) return setHata(d.kodYaDaKurtarma);
     void calistir(async () => {
       await apiFetch('/auth/2fa/kapat', { method: 'POST', body: JSON.stringify({ kod }) });
       sifirla();
-      setBilgi('İki adımlı doğrulama kapatıldı.');
+      setBilgi(d.kapatildi);
       router.refresh();
     });
   };
 
   const yenile = (e: React.FormEvent) => {
     e.preventDefault();
-    if (ikiAdimKodTuru(kod) !== 'totp') return setHata('Uygulamadaki 6 haneli kodu yaz.');
+    if (ikiAdimKodTuru(kod) !== 'totp') return setHata(d.kodYaz);
     void calistir(async () => {
       const r = await apiFetch<IkiAdimKurtarmaKodlari>('/auth/2fa/kurtarma-kodlari', {
         method: 'POST',
@@ -135,15 +142,12 @@ export function IkiAdimPaneli({
    */
   return (
     <Kart
-      baslik="İki adımlı doğrulama"
+      baslik={ortak.baslik}
       /* Yeşil yalnız durum göstergesinde (kılavuz): `Rozet`. */
-      eylem={<Rozet hal={durum.acik ? 'ok' : 'hata'}>{durum.acik ? 'Açık' : 'Kapalı'}</Rozet>}
+      eylem={<Rozet hal={durum.acik ? 'ok' : 'hata'}>{durum.acik ? d.acik : d.kapali}</Rozet>}
     >
       <div className="grid gap-4">
-        <p className="m-0 text-14 text-ink-muted">
-          Girişte şifrenin yanında telefonundaki kodu da sorar. Şifren başkasının eline geçse bile hesabına
-          giremez.
-        </p>
+        <p className="m-0 text-14 text-ink-muted">{d.aciklama}</p>
 
         {bilgi && (
           <Serit ton="bilgi" baslik={bilgi} />
@@ -153,8 +157,8 @@ export function IkiAdimPaneli({
           <Serit
             baslik={
               durum.kalanKurtarmaKodu === 0
-                ? 'Hiç kurtarma kodun kalmadı. Yeni kodlar oluştur.'
-                : `${durum.kalanKurtarmaKodu} kurtarma kodun kaldı. Yeni kodlar oluşturman iyi olur.`
+                ? d.hicKodYok
+                : d.kodKaldi(durum.kalanKurtarmaKodu)
             }
           />
         )}
@@ -162,12 +166,12 @@ export function IkiAdimPaneli({
         {mod.tur === 'bos' && !durum.acik && (
           <div className="grid gap-3">
             {durum.sirketteZorunlu && (
-              <Serit baslik="Şirketin bu korumayı zorunlu tutuyor." />
+              <Serit baslik={d.sirketZorunlu} />
             )}
             <HataKutusu mesaj={hata} />
             <div className="flex justify-end">
               <Dugme ton="koyu" onClick={() => void baslat()} bekliyor={bekliyor}>
-                Aç
+                {d.ac}
               </Dugme>
             </div>
           </div>
@@ -176,29 +180,27 @@ export function IkiAdimPaneli({
         {mod.tur === 'bos' && durum.acik && (
           <div className="grid gap-4">
             <dl className="m-0 grid gap-x-6 gap-y-2 text-14 sm:grid-cols-[10rem_1fr]">
-              <dt className="text-ink-muted">Açıldığı tarih</dt>
+              <dt className="text-ink-muted">{d.acildigiTarih}</dt>
               <dd className="m-0 text-ink">
                 {durum.acilis
-                  ? new Date(durum.acilis).toLocaleDateString('tr-TR', { dateStyle: 'medium' })
+                  ? new Date(durum.acilis).toLocaleDateString(bicimKodu(dil), { dateStyle: 'medium' })
                   : '-'}
               </dd>
-              <dt className="text-ink-muted">Kurtarma kodları</dt>
+              <dt className="text-ink-muted">{d.kurtarmaKodlari}</dt>
               <dd className="m-0 text-ink">
-                {durum.kalanKurtarmaKodu} / {IKI_ADIM_KURTARMA_SAYISI} kullanılmadı
+                {d.kullanilmadi(durum.kalanKurtarmaKodu, IKI_ADIM_KURTARMA_SAYISI)}
               </dd>
             </dl>
             <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line pt-4">
               {durum.sirketteZorunlu ? (
-                <p className="m-0 mr-auto text-12 text-ink-muted">
-                  Şirketin zorunlu tuttuğu için kapatılamaz. Telefonunu değiştirdiysen yöneticine sıfırlat.
-                </p>
+                <p className="m-0 mr-auto text-12 text-ink-muted">{d.kapatilamaz}</p>
               ) : (
                 <Dugme ton="ikincil" boyut="kucuk" onClick={() => sifirla({ tur: 'kapat' })}>
-                  Kapat
+                  {d.kapat}
                 </Dugme>
               )}
               <Dugme ton="koyu" boyut="kucuk" onClick={() => sifirla({ tur: 'yenile' })}>
-                Yeni kurtarma kodları oluştur
+                {d.yeniKodlar}
               </Dugme>
             </div>
           </div>
@@ -214,21 +216,21 @@ export function IkiAdimPaneli({
             <div className="max-w-xs">
               <Alan
                 id="hesapKurulumParola"
-                label="Şifren"
+                label={d.sifren}
                 type="password"
                 autoComplete="current-password"
                 value={parola}
                 onChange={setParola}
                 disabled={bekliyor}
-                ipucu="Güvenliğin için şifreni bir kez daha soruyoruz."
+                ipucu={d.sifreIpucu}
               />
             </div>
             <div className="flex justify-end gap-2 border-t border-line pt-4">
               <Dugme ton="ikincil" onClick={() => sifirla()}>
-                Vazgeç
+                {d.vazgec}
               </Dugme>
               <Dugme type="submit" ton="koyu" bekliyor={bekliyor}>
-                Aç
+                {d.ac}
               </Dugme>
             </div>
           </form>
@@ -238,8 +240,8 @@ export function IkiAdimPaneli({
           <form onSubmit={mod.tur === 'kapat' ? kapat : yenile} className="grid gap-3" noValidate>
             <p className="m-0 text-14 text-ink">
               {mod.tur === 'kapat'
-                ? 'Kapatmak için uygulamadaki kodu ya da bir kurtarma kodunu yaz.'
-                : 'Yeni kodlar oluşunca eski kurtarma kodların çalışmaz. Onaylamak için uygulamadaki kodu yaz.'}
+                ? d.kapatAciklama
+                : d.yenileAciklama}
             </p>
             <HataKutusu mesaj={hata} />
             <div className="max-w-xs">
@@ -254,10 +256,10 @@ export function IkiAdimPaneli({
             </div>
             <div className="flex justify-end gap-2 border-t border-line pt-4">
               <Dugme ton="ikincil" onClick={() => sifirla()}>
-                Vazgeç
+                {d.vazgec}
               </Dugme>
               <Dugme type="submit" ton={mod.tur === 'kapat' ? 'tehlike' : 'koyu'} bekliyor={bekliyor}>
-                {mod.tur === 'kapat' ? 'Kapat' : 'Oluştur'}
+                {mod.tur === 'kapat' ? d.kapat : d.olustur}
               </Dugme>
             </div>
           </form>
@@ -266,7 +268,7 @@ export function IkiAdimPaneli({
         {mod.tur === 'kodlar' && (
           <KurtarmaKodlari
             kodlar={mod.kodlar}
-            devamEtiketi="Tamam"
+            devamEtiketi={d.tamam}
             onDevam={() => {
               sifirla();
               router.refresh();

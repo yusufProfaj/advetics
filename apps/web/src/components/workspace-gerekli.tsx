@@ -12,6 +12,8 @@ import { Uyari } from '@/components/ui/uyari';
 import { SayfaIskeleti } from '@/components/ui/sayfa-basligi';
 import { Kart } from '@/components/ui/kart';
 import { Girdi } from '@/components/ui/alan';
+import { useSozluk } from '@/dil/saglayici';
+import { genelBakisSozlugu } from '@/dil/sozlukler/genel-bakis';
 
 /**
  * ═══ WORKSPACE SEÇİLMEDEN AÇILAMAYAN SAYFA — SEÇİM YERİNDE ═══
@@ -51,6 +53,7 @@ export function WorkspaceGerekli({
   const [bekleyen, setBekleyen] = useState<string | null>(null);
   const [hata, setHata] = useState<string | null>(null);
   const [ara, setAra] = useState('');
+  const d = useSozluk(genelBakisSozlugu).workspace;
 
   async function sec(id: string): Promise<void> {
     setBekleyen(id);
@@ -69,7 +72,7 @@ export function WorkspaceGerekli({
       window.location.assign(baglanti(pathname, kalan, {}));
     } catch (e) {
       // HATA YUTULMUYOR: "tıkladım ama değişmedi" hâli sessiz kalmamalı.
-      setHata(e instanceof ApiRequestError ? e.message : 'Workspace seçilemedi.');
+      setHata(e instanceof ApiRequestError ? e.message : d.secilemedi);
       setBekleyen(null);
     }
   }
@@ -97,45 +100,44 @@ export function WorkspaceGerekli({
          */
         <>
           <p className="m-0 text-14 text-ink-muted">
-            {neden} {sirketAdi} altında henüz workspace yok.
+            {neden} {d.henuzYok(sirketAdi)}
           </p>
           {kurulumGorunur ? (
             <Link href={acilisAdresi('workspace')} className={`mt-5 ${dugmeSinifi('koyu')}`}>
-              Workspace oluştur
+              {d.olustur}
             </Link>
           ) : (
             <p className="m-0 mt-4 text-14 text-ink">
-              Workspace açma yetkin yok. Yöneticinden bir workspace oluşturmasını ya da seni
-              birine eklemesini iste.
+              {d.yetkiYok}
             </p>
           )}
         </>
       ) : (
         <>
           <p className="m-0 text-14 text-ink-muted">
-            {neden} Hangi workspace ile çalışmak istiyorsun?
+            {neden} {d.hangisi}
           </p>
           <p className="m-0 mt-1 text-12 text-ink-muted">
-            Seçimin üst bara da yansır ve diğer ekranlarda da geçerli olur.
+            {d.ustBar}
           </p>
 
           {workspaceler.length > 6 && (
             <label className="mt-4 block max-w-sm">
-              <span className="sr-only">Workspace ara</span>
+              <span className="sr-only">{d.ara}</span>
               <Girdi
                 type="search"
                 name="workspace-ara"
                 autoComplete="off"
                 value={ara}
                 onChange={(e) => setAra(e.target.value)}
-                placeholder="Workspace ara"
+                placeholder={d.ara}
               />
             </label>
           )}
 
           {suzulmus.length === 0 ? (
             <p className="m-0 mt-4 text-14 text-ink-muted">
-              Aramaya uyan workspace yok ({workspaceler.length} workspace var).
+              {d.aramaBos(workspaceler.length)}
             </p>
           ) : (
             <ul className="m-0 mt-4 grid list-none gap-2 p-0 sm:grid-cols-2">
@@ -150,7 +152,7 @@ export function WorkspaceGerekli({
                   >
                     <span className="min-w-0 truncate">{w.name}</span>
                     <span aria-hidden="true" className="shrink-0 text-ink-muted">
-                      {bekleyen === w.id ? 'Açılıyor…' : '→'}
+                      {bekleyen === w.id ? d.aciliyor : '→'}
                     </span>
                   </button>
                 </li>
@@ -161,7 +163,7 @@ export function WorkspaceGerekli({
           {/* SESSİZ KESME YOK: arama süzdüyse kaç tanesinin göründüğü yazıyor. */}
           {suzulmus.length > 0 && suzulmus.length < workspaceler.length && (
             <p className="m-0 mt-2 text-12 text-ink-muted">
-              {suzulmus.length} / {workspaceler.length} workspace gösteriliyor.
+              {d.gosteriliyor(suzulmus.length, workspaceler.length)}
             </p>
           )}
 

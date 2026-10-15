@@ -6,6 +6,10 @@ import { Kart } from '@/components/ui/kart';
 import { Dugme } from '@/components/ui/dugme';
 import { Secim } from '@/components/ui/alan';
 import { BosDurum, Serit } from '@/components/ui/hal';
+import { sec } from '@advetics/shared';
+import { dilAl } from '@/dil/sunucu';
+import { ayarlarSozlugu } from '@/dil/sozlukler/ayarlar';
+import { ekipSozlugu } from '@/dil/sozlukler/ayarlar-ekip';
 
 /**
  * ═══ BİR WORKSPACE'İN ERİŞİM LİSTESİ — EKİBİN İÇİNDE, AYRI SAYFADA DEĞİL ═══
@@ -36,6 +40,8 @@ export async function WorkspaceErisimi({
   /** Kapı kapalıyken yazan cümle. */
   neden: string;
 }) {
+  const dil = await dilAl();
+  const d = sec(ekipSozlugu, dil).erisim;
   const workspace = secili ? (workspaceler.find((w) => w.id === secili) ?? null) : null;
 
   /*
@@ -49,15 +55,15 @@ export async function WorkspaceErisimi({
     try {
       uyeler = (await serverApiFetch<MemberRow[]>(`/members?clientId=${encodeURIComponent(workspace.id)}`)) ?? [];
     } catch (e) {
-      hata = e instanceof ApiRequestError ? e.message : 'Bağlantı kurulamadı';
+      hata = e instanceof ApiRequestError ? e.message : sec(ayarlarSozlugu, dil).ortak.baglantiKurulamadi;
     }
   }
 
   return (
     <section id="workspace-erisimi" className="scroll-mt-24">
       <Kart
-        baslik="Workspace erişimi"
-        baslikEki="Workspace’in kendi giriş hesapları dahil"
+        baslik={d.baslik}
+        baslikEki={d.baslikEki}
         eylem={
           /*
             SÜZGEÇ BİR FORM, İSTEMCİ DURUMU DEĞİL: seçim adreste duruyor
@@ -67,11 +73,11 @@ export async function WorkspaceErisimi({
           */
           <form method="get" action={ayarlarYolu('ekip')} className="flex flex-wrap items-center gap-2">
             <label htmlFor="ekip-workspace" className="sr-only">
-              Workspace seç
+              {d.workspaceSec}
             </label>
             <span className="w-56">
               <Secim id="ekip-workspace" name="workspace" defaultValue={workspace?.id ?? ''}>
-                <option value="">Workspace seç</option>
+                <option value="">{d.workspaceSec}</option>
                 {workspaceler.map((w) => (
                   <option key={w.id} value={w.id}>
                     {w.name}
@@ -80,7 +86,7 @@ export async function WorkspaceErisimi({
               </Secim>
             </span>
             <Dugme type="submit" ton="ikincil" boyut="kucuk">
-              Göster
+              {d.goster}
             </Dugme>
           </form>
         }
@@ -88,13 +94,13 @@ export async function WorkspaceErisimi({
         {secili && !workspace ? (
           /* Erişimi olmayan ya da arşivlenmiş bir kimlik: listede yok. Sebep yazılıyor. */
           <BosDurum
-            baslik="Bu workspace bulunamadı"
-            neden="Arşivlenmiş olabilir ya da görme yetkin yok. Listeden başka bir workspace seç."
+            baslik={d.bulunamadi}
+            neden={d.bulunamadiNeden}
           />
         ) : !workspace ? (
-          <p className="m-0 text-13 text-ink-muted">Erişimini görmek istediğin workspace’i sağ üstten seç.</p>
+          <p className="m-0 text-13 text-ink-muted">{d.sagUsttenSec}</p>
         ) : hata !== null ? (
-          <Serit ton="hata" baslik="Erişim listesi okunamadı">
+          <Serit ton="hata" baslik={d.okunamadi}>
             {hata}
           </Serit>
         ) : (
@@ -102,7 +108,10 @@ export async function WorkspaceErisimi({
             {/* SESSİZ KESME YOK: kaç kişi listelendiği yazılı. */}
             <div className="flex flex-wrap items-center justify-between gap-3 text-14">
               <span>
-                <strong>{uyeler.length}</strong> kişinin <strong>{workspace.name}</strong> workspace’ine erişimi var
+                <strong>{uyeler.length}</strong>
+                {d.erisimiVarOnce}
+                <strong>{workspace.name}</strong>
+                {d.erisimiVarSon}
               </span>
               {yonetebilir ? (
                 <DanismanAta clientId={workspace.id} clientName={workspace.name} mevcutUyeIdleri={uyeler.map((m) => m.id)} />

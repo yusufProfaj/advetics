@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { eksikIzinMetni, eksikIzinOzellikleri } from './izin-etiketleri';
+import { baglantilarSozlugu } from '@/dil/sozlukler/ayarlar-baglantilar';
 
 /**
  * EKSİK İZİN UYARISI GERÇEĞİ SÖYLÜYOR MU — iki paket arası kaynak taraması.
@@ -67,9 +68,12 @@ describe('eksik izin uyarısı', () => {
       Türkçe ve iş dilinde; hedef kullanıcı reklamcılık bilmiyor, kapsam adı
       hiç bilmiyor.
     */
-    for (const izin of isteneIzinler()) {
-      const [etiket] = eksikIzinOzellikleri([izin]);
-      expect(etiket, `\`${izin}\` için etiket yok — izin-etiketleri.ts'e ekle`).not.toBe(izin);
+    // İKİ DİLDE: İngilizce ekranda etiketsiz izin ham kapsam adıyla yazılırdı.
+    for (const dil of ['tr', 'en'] as const) {
+      for (const izin of isteneIzinler()) {
+        const [etiket] = eksikIzinOzellikleri([izin], dil);
+        expect(etiket, `${dil}: \`${izin}\` için etiket yok — ayarlar-baglantilar.ts izin.etiketler'e ekle`).not.toBe(izin);
+      }
     }
   });
 
@@ -87,7 +91,7 @@ describe('eksik izin uyarısı', () => {
   it('panel artık tek bir özelliğin adını sabit yazmıyor', () => {
     // Sabit cümle listeye ikinci bir izin girdiği anda yanlış özelliği söyler.
     expect(yorumsuz(KART)).not.toContain('Akıllı Boost için ek izin bekliyor');
-    expect(yorumsuz(KART)).toContain('eksikIzinMetni(baglanti.missingOptionalScopes)');
+    expect(yorumsuz(KART)).toContain('eksikIzinMetni(baglanti.missingOptionalScopes, dil)');
   });
 
   it('eksik izin yoksa cümle hiç kurulmuyor', () => {
@@ -186,7 +190,9 @@ function dugmeMetniKonumu(kaynak: string): number {
    * `MenuOgesi` oldu; kartın görünür TEK eylemi gerektiğinde "Yeniden
    * bağlan". İddialar aynı kaldı, çapa yeni etikete taşındı.
    */
-  const m = /Yeniden yetkilendir\s*<\/MenuOgesi>/.exec(kaynak);
+  // D2: metin sözlükte (`kanal.yenidenYetkilendir`); çapa anahtarın kullanımı.
+  expect(baglantilarSozlugu.tr.kanal.yenidenYetkilendir).toBe('Yeniden yetkilendir');
+  const m = /\{d\.yenidenYetkilendir\}\s*<\/MenuOgesi>/.exec(kaynak);
   expect(m, 'düğme metin düğümü bulunamadı — tarama boşa düştü').not.toBeNull();
   return m!.index;
 }
@@ -239,6 +245,7 @@ describe('yeniden yetkilendirme çaresi erişilebilir mi', () => {
     expect(kosul).toContain('missingScopes');
     const dal = kaynak.indexOf('{yetkiGerekli && canManage ? (');
     expect(dal, 'vurgulu dal bulunamadı').toBeGreaterThan(-1);
-    expect(kaynak.slice(dal, kaynak.indexOf(') : (', dal))).toContain('Yeniden bağlan');
+    expect(kaynak.slice(dal, kaynak.indexOf(') : (', dal))).toContain('{d.yenidenBaglan}');
+    expect(baglantilarSozlugu.tr.kanal.yenidenBaglan).toBe('Yeniden bağlan');
   });
 });

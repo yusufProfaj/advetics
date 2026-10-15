@@ -8,6 +8,8 @@ import { useBildirimVerisi } from '@/components/bildirim/bildirim-verisi';
 import { PlatformLogo } from '@/components/platform-logo';
 import { formatRelative } from '@/lib/format';
 import { dugmeSinifi } from '@/components/ui/dugme';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { genelBakisSozlugu } from '@/dil/sozlukler/genel-bakis';
 
 /**
  * ═══ UYARI BANDI ═══
@@ -49,6 +51,7 @@ export function UyariBandi({ mcc }: { mcc: boolean }) {
   const { uyarilar: veri, uyariHatasi: hata } = useBildirimVerisi();
   const [gizli, setGizli] = useState<Set<string>>(new Set());
   const [sayfa, setSayfa] = useState(0);
+  const d = useSozluk(genelBakisSozlugu).uyari;
 
   // Oturum boyunca gizlenenler. Kalıcı saklamak, düzelmiş sanılan bir sorunu
   // kalıcı olarak görünmez yapardı; sekme kapanınca uyarı geri geliyor.
@@ -93,7 +96,7 @@ export function UyariBandi({ mcc }: { mcc: boolean }) {
   if (hata !== null) {
     return (
       <p className="border-b border-line bg-surface-muted px-4 py-1.5 text-[11px] text-ink-muted">
-        Uyarılar alınamadı ({hata}). Panelin geri kalanı çalışmaya devam ediyor.
+        {d.alinamadi(hata)}
       </p>
     );
   }
@@ -134,6 +137,7 @@ function ToplananBant({
   onGizle: (anahtar: string) => void;
 }) {
   const [acik, setAcik] = useState<string | null>(null);
+  const d = useSozluk(genelBakisSozlugu).uyari;
 
   const gruplar = useMemo(() => {
     const m = new Map<string, Uyari[]>();
@@ -170,9 +174,9 @@ function ToplananBant({
                 olduğunu bilemiyordu.
               */}
               <span>
-                <strong>{grup.length}</strong> hesapta {kisaBaslik(ilk)}
+                <strong>{grup.length}</strong> {d.hesapta(grup.length)} {d.kisa[ilk.kod]}
               </span>
-              <span className="text-[10px] opacity-70">{acik === kod ? 'Gizle' : 'Görüntüle'}</span>
+              <span className="text-[10px] opacity-70">{acik === kod ? d.gizle : d.goruntule}</span>
             </button>
           );
         })}
@@ -180,7 +184,7 @@ function ToplananBant({
         {/* SESSİZ KESME YOK: liste kesilmişse toplam yazılı. */}
         {toplam > uyarilar.length && (
           <span className="text-[11px] text-ink-muted">
-            gösterilen {uyarilar.length}, toplam {toplam}
+            {d.gosterilen(uyarilar.length, toplam)}
           </span>
         )}
       </div>
@@ -198,7 +202,7 @@ function ToplananBant({
                   />
                 )}
                 <span className="min-w-0 flex-1 text-xs">
-                  <strong className="text-ink">{u.clientName ?? 'Ajans'}</strong>
+                  <strong className="text-ink">{u.clientName ?? d.ajans}</strong>
                   {u.adAccountName && (
                     <span className="text-ink-muted"> · {u.adAccountName}</span>
                   )}
@@ -234,6 +238,7 @@ function TekTekBant({
 }) {
   const u = uyarilar[sayfa]!;
   const hata = u.siddet === 'error';
+  const g = useSozluk(genelBakisSozlugu);
 
   return (
     /* Referans şerit: beyaz zemin, sol kırmızı çizgi, metin siyah (2026-10-14). */
@@ -244,7 +249,7 @@ function TekTekBant({
             type="button"
             onClick={() => setSayfa((sayfa - 1 + uyarilar.length) % uyarilar.length)}
             className="rounded px-1.5 py-0.5 transition hover:bg-surface-sunken"
-            aria-label="Önceki uyarı"
+            aria-label={g.bildirim.onceki}
           >
             ‹
           </button>
@@ -253,7 +258,7 @@ function TekTekBant({
             type="button"
             onClick={() => setSayfa((sayfa + 1) % uyarilar.length)}
             className="rounded px-1.5 py-0.5 transition hover:bg-surface-sunken"
-            aria-label="Sonraki uyarı"
+            aria-label={g.bildirim.sonraki}
           >
             ›
           </button>
@@ -276,7 +281,7 @@ function TekTekBant({
 
       {/* SESSİZ KESME YOK. */}
       {toplam > uyarilar.length && (
-        <span className="text-[11px] text-ink-muted">toplam {toplam}</span>
+        <span className="text-[11px] text-ink-muted">{g.uyari.toplam(toplam)}</span>
       )}
     </div>
   );
@@ -289,6 +294,8 @@ function TekTekBant({
  * düğmesi göstermek, tıklayınca hiçbir şey yapmayan bir düğme demekti.
  */
 function Eylem({ uyari, onGizle }: { uyari: Uyari; onGizle: (anahtar: string) => void }) {
+  const { dil } = useDil();
+  const d = useSozluk(genelBakisSozlugu).uyari;
   return (
     <span className="flex shrink-0 items-center gap-2">
       {/*
@@ -298,8 +305,8 @@ function Eylem({ uyari, onGizle }: { uyari: Uyari; onGizle: (anahtar: string) =>
         ekranda tutar ve kullanıcı bütün uyarılara güvenmeyi bırakır.
       */}
       {uyari.veriZamani && (
-        <span className="text-[10px] text-ink-muted" title="Bu bilginin son okunma anı">
-          {formatRelative(uyari.veriZamani)}
+        <span className="text-[10px] text-ink-muted" title={d.okunmaAni}>
+          {formatRelative(uyari.veriZamani, dil)}
         </span>
       )}
       {uyari.eylem && (
@@ -315,36 +322,8 @@ function Eylem({ uyari, onGizle }: { uyari: Uyari; onGizle: (anahtar: string) =>
         onClick={() => onGizle(anahtarOf(uyari))}
         className="rounded px-1.5 py-1 text-[11px] text-ink-muted transition hover:text-ink"
       >
-        Gizle
+        {d.gizle}
       </button>
     </span>
   );
-}
-
-/** Toplanmış bantta kullanılan kısa hâl — başlık orada tek satıra sığmıyor. */
-function kisaBaslik(u: Uyari): string {
-  switch (u.kod) {
-    case 'hesap_odeme_sorunu':
-      return 'ödeme sorunu var';
-    case 'hesap_platformda_kapali':
-      return 'hesap platformda kapalı';
-    case 'hesap_risk_incelemesi':
-      return 'risk incelemesi var';
-    case 'baglanti_yetki_istiyor':
-      return 'bağlantı yeniden yetki istiyor';
-    case 'baglanti_token_suresi':
-      return 'bağlantı yetkisi doluyor';
-    case 'hesap_izleme_kapali':
-      return 'izleme kapalı';
-    case 'musteride_hesap_yok':
-      return 'reklam hesabı atanmamış';
-    case 'veri_hic_gelmedi':
-      return 'hiç veri gelmedi';
-    case 'veri_bayat':
-      return 'veri güncellenmiyor';
-    case 'is_dusuyor':
-      return 'senkronizasyon düşüyor';
-    case 'geri_besleme_dusuyor':
-      return 'lead sonuçları Meta’ya gitmiyor';
-  }
 }

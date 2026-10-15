@@ -8,6 +8,8 @@ import { butceAdresi } from '@/lib/butce-adresi';
 import { stratejiAdresi } from '@/components/strateji/hesap';
 import { sinyallerAdresi } from '@/lib/sinyal';
 import { gonderimlerAdresi } from '@/lib/geri-besleme';
+import { sec, type Dil } from '@advetics/shared';
+import { bildirimSozlugu } from '@/dil/sozlukler/bildirim';
 
 /**
  * ═══ GENEL BAKIŞ › BEKLEYEN İŞLER: SAF KARARLAR ═══
@@ -78,27 +80,26 @@ export function bekleyenKutuHali(sonuc: BekleyenIslerSonucu): BekleyenKutuHali {
  * de onaylayabiliyor, yani "müşteri" yanlış kişiyi söylerdi; ayrıca kelime
  * terminoloji bekçisine takılıyor. Kısa ve doğru olan: "onayda".
  */
-export function bekleyenIsCumlesi(is: BekleyenIs, onayYetkisi: boolean): string {
-  const cogul = is.sayi > 1;
-  switch (is.tur) {
-    case 'boost_onay':
-      return `${is.sayi} Akıllı Boost kartı onay bekliyor`;
-    case 'sinyal_acik':
+export function bekleyenIsCumlesi(is: BekleyenIs, onayYetkisi: boolean, dil: Dil = 'tr'): string {
       // Önem dağılımı satırda YOK (sözleşme yalnız sayıyı taşıyor); "2'si
       // yüksek önemli" uydurulmuyor, ayrıntı Sinyaller sekmesinde.
-      return `${is.sayi} sinyal açık`;
-    case 'geri_besleme_sorunu':
       // Sayı "yapılacak iş": tekrar denenebilir sonuç ya da ayar hatası (sunucu).
-      return cogul ? `${is.sayi} lead sonucu Meta’ya gönderilemedi` : 'Lead sonuçları Meta’ya gitmiyor';
+  const cogul = is.sayi > 1;
+  const d = sec(bildirimSozlugu, dil).is;
+  switch (is.tur) {
+    case 'boost_onay':
+      return d.boostOnay(is.sayi);
+    case 'sinyal_acik':
+      return d.sinyalAcik(is.sayi);
+    case 'geri_besleme_sorunu':
+      return cogul ? d.geriBeslemeCok(is.sayi) : d.geriBeslemeTek;
     case 'strateji_onay':
-      if (onayYetkisi) return cogul ? `${is.sayi} medya planı onayını bekliyor` : 'Medya planı onayını bekliyor';
-      return cogul ? `${is.sayi} medya planı onayda` : 'Medya planı onayda';
+      if (onayYetkisi) return cogul ? d.stratejiOnayBekliyorCok(is.sayi) : d.stratejiOnayBekliyorTek;
+      return cogul ? d.stratejiOnaydaCok(is.sayi) : d.stratejiOnaydaTek;
     case 'strateji_aktar':
-      return cogul
-        ? `${is.sayi} onaylanan plan AdvCampaign’e aktarılmadı`
-        : 'Onaylanan plan AdvCampaign’e aktarılmadı';
+      return cogul ? d.aktarCok(is.sayi) : d.aktarTek;
     case 'butce_yok':
-      return 'Bu ay harcama var, bütçe tanımlı değil';
+      return d.butceYok;
   }
 }
 
@@ -107,12 +108,13 @@ export function bekleyenIsCumlesi(is: BekleyenIs, onayYetkisi: boolean): string 
  * önce okunmalı. `enEski` yoksa (`butce_yok`, beklemenin başlangıcı ay başı)
  * yaş yazılmıyor; uydurulmuş bir yaş, yanlış bir öncelik demek.
  */
-export function bekleyenIsYasi(enEski: string | null, simdi: Date = new Date()): string | null {
+export function bekleyenIsYasi(enEski: string | null, simdi: Date = new Date(), dil: Dil = 'tr'): string | null {
   if (!enEski) return null;
   const t = Date.parse(enEski);
   if (Number.isNaN(t)) return null;
   const gun = Math.floor((simdi.getTime() - t) / 86_400_000);
-  return gun < 1 ? 'bugün' : `${gun} gündür`;
+  const d = sec(bildirimSozlugu, dil).is;
+  return gun < 1 ? d.bugun : d.gundur(gun);
 }
 
 /**
@@ -159,8 +161,8 @@ export function kaynakHataMetni(h: BekleyenIsKaynakHatasi): string {
 }
 
 /** Sessiz kesme yok: sunucu satırı kestiyse ekranda "50 / 73 gösteriliyor". */
-export function kesmeMetni(yanit: BekleyenIslerYaniti): string | null {
-  return yanit.toplam > yanit.isler.length ? `${yanit.isler.length} / ${yanit.toplam} gösteriliyor` : null;
+export function kesmeMetni(yanit: BekleyenIslerYaniti, dil: Dil = 'tr'): string | null {
+  return yanit.toplam > yanit.isler.length ? sec(bildirimSozlugu, dil).is.kesme(yanit.isler.length, yanit.toplam) : null;
 }
 
 /**
@@ -173,9 +175,9 @@ export function kesmeMetni(yanit: BekleyenIslerYaniti): string | null {
  *   kesilen satırlar da boost olabilir ve toplam gerçekten büyük olabilir.
  *   O zaman "50+" yazılıyor, eksik bir sayı kesin gibi gösterilmiyor.
  */
-export function boostRozeti(sonuc: BekleyenIslerSonucu): { metin: string; baslik: string } | null {
+export function boostRozeti(sonuc: BekleyenIslerSonucu, dil: Dil = 'tr'): { metin: string; baslik: string } | null {
   if (sonuc.durum === 'hata' || sonuc.yanit.hatalar.some((h) => h.tur === 'boost_onay')) {
-    return { metin: '?', baslik: 'Onay bekleyen sayısı alınamadı' };
+    return { metin: '?', baslik: sec(bildirimSozlugu, dil).is.rozetAlinamadi };
   }
   const { isler, toplam } = sonuc.yanit;
   const sayi = isler.filter((i) => i.tur === 'boost_onay').reduce((t, i) => t + i.sayi, 0);

@@ -1,5 +1,11 @@
 import { redirect } from 'next/navigation';
-import { PANEL_KAPILARI, type ConnectionSummary, type ProviderAvailability } from '@advetics/shared';
+import {
+  ayarSekmesiAdi,
+  kapiNedeni,
+  sec,
+  type ConnectionSummary,
+  type ProviderAvailability,
+} from '@advetics/shared';
 import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import { requireSession } from '@/lib/session';
 import { kapi } from '@/lib/panel-adresleri';
@@ -13,8 +19,13 @@ import { YouTubeKanalEkle } from '@/components/connections/youtube-kanal-ekle';
 import { YouTubeKanalBul } from '@/components/connections/youtube-kanal-bul';
 import { IzlenenHesaplar } from '@/components/connections/izlenen-hesaplar';
 import { CallbackBanner } from '@/components/callback-banner';
+import { dilAl } from '@/dil/sunucu';
+import { baglantilarSozlugu } from '@/dil/sozlukler/ayarlar-baglantilar';
 
-export const metadata = { title: 'Platform bağlantıları · Advetics' };
+/** Sekme başlığı = menü satırı = sayfa başlığı, hepsi `ayarSekmesiAdi`ndan (`ayarlar.spec.ts`). */
+export async function generateMetadata() {
+  return { title: `${ayarSekmesiAdi('baglantilar', await dilAl())} · Advetics` };
+}
 
 /**
  * ═══ PLATFORM BAĞLANTILARI ═══
@@ -50,6 +61,8 @@ export const metadata = { title: 'Platform bağlantıları · Advetics' };
 export default async function PlatformBaglantilariSayfasi() {
   const session = await requireSession();
   if (!ayarSekmesiAcik(session, 'baglantilar')) redirect('/dashboard');
+  const dil = await dilAl();
+  const d = sec(baglantilarSozlugu, dil).sayfa;
 
   const yetkilendirir = kapi(session, 'baglanti.yetkilendir');
   const atayabilir = kapi(session, 'hesap.ata');
@@ -79,17 +92,17 @@ export default async function PlatformBaglantilariSayfasi() {
   const kaldirilanlar = tumu.filter((c) => c.status === 'revoked');
   const yuklemeHatasi =
     uygunlukSonuc.status === 'rejected'
-      ? hataMetni(uygunlukSonuc.reason)
+      ? hataMetni(uygunlukSonuc.reason, d.baglantiKurulamadi)
       : baglantiSonuc.status === 'rejected'
-        ? hataMetni(baglantiSonuc.reason)
+        ? hataMetni(baglantiSonuc.reason, d.baglantiKurulamadi)
         : null;
 
   return (
     <AyarlarSayfasi
       session={session}
       ust={<AyarKapsami duzey="sirket" ad={aktifSirketAdi(session)} />}
-      baslik="Platform bağlantıları"
-      aciklama="Reklam hesaplarını buradan bağlıyorsun. Bir hesabı workspace’e atadığında veri akışı kendiliğinden başlar."
+      baslik={ayarSekmesiAdi('baglantilar', dil)}
+      aciklama={d.baslikAciklama}
       /*
         BÖLÜMÜN BİRİNCİL EYLEMİ BAŞLIĞIN SAĞINDA: "Platform bağla". Kapı
         kapalıysa düğme yok ve sebebi kartların altında yazıyor.
@@ -109,7 +122,7 @@ export default async function PlatformBaglantilariSayfasi() {
       <CallbackBanner />
 
       {yuklemeHatasi && (
-        <Serit ton="hata" baslik="Bağlantılar okunamadı">
+        <Serit ton="hata" baslik={d.okunamadi}>
           {yuklemeHatasi}
         </Serit>
       )}
@@ -124,7 +137,7 @@ export default async function PlatformBaglantilariSayfasi() {
           kaldirabilir={kapi(session, 'baglanti.kaldir')}
         />
         {!yetkilendirir && (
-          <p className="m-0 text-12 text-ink-muted">{PANEL_KAPILARI['baglanti.yetkilendir'].neden}</p>
+          <p className="m-0 text-12 text-ink-muted">{kapiNedeni('baglanti.yetkilendir', dil)}</p>
         )}
       </div>
 
@@ -138,7 +151,7 @@ export default async function PlatformBaglantilariSayfasi() {
               canManage={atayabilir}
               workspaceAcabilir={kapi(session, 'workspace.ekle')}
             />
-            {!atayabilir && <p className="m-0 text-12 text-ink-muted">{PANEL_KAPILARI['hesap.ata'].neden}</p>}
+            {!atayabilir && <p className="m-0 text-12 text-ink-muted">{kapiNedeni('hesap.ata', dil)}</p>}
           </section>
 
           {/*
@@ -151,7 +164,7 @@ export default async function PlatformBaglantilariSayfasi() {
             <YouTubeKanalEkle canManage={kanalEkler}>
               {kanalEkler && (
                 <>
-                  <p className="m-0 text-13 font-semibold text-ink">Adresi bilmiyor musun? İsimle ara</p>
+                  <p className="m-0 text-13 font-semibold text-ink">{d.isimleAra}</p>
                   <YouTubeKanalBul clientId={null} workspaceAdi={null} />
                 </>
               )}
@@ -179,6 +192,6 @@ export default async function PlatformBaglantilariSayfasi() {
 }
 
 /** Hata mesajını çıkarır — platformun kendi cümlesi ekranda görünmeli. */
-function hataMetni(e: unknown): string {
-  return e instanceof ApiRequestError ? e.message : 'Bağlantı kurulamadı.';
+function hataMetni(e: unknown, yedek: string): string {
+  return e instanceof ApiRequestError ? e.message : yedek;
 }

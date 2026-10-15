@@ -16,6 +16,8 @@ import { DigerMenusu } from '@/components/ayar-sekmeleri';
 import { SirketDuzenle } from './sirket-duzenle';
 import { SirketSil } from './sirket-sil';
 import { UstHesapKarti } from './ust-hesap-karti';
+import { useSozluk } from '@/dil/saglayici';
+import { sirketlerSozlugu } from '@/dil/sozlukler/ayarlar-sirketler';
 
 type Sirket = ManagerAccountTree['organizations'][number];
 
@@ -116,6 +118,8 @@ export function UstHesapEkrani({
    * yönden ("başka şirketten buraya çek") soruyordu.
    */
   const [panel, setPanel] = useState<'yok' | 'duzenle' | 'sil'>('yok');
+  const t = useSozluk(sirketlerSozlugu);
+  const d = t.ustHesap;
 
   /*
    * ═══ ÜST HESAP KATMANI DÜŞSE DE DETAY ÇİZİLİYOR ═══
@@ -136,7 +140,7 @@ export function UstHesapEkrani({
     return (
       <div className="grid gap-5">
         {yuklemeHatasi ? (
-          <Serit ton="hata" baslik="Üst hesap bilgisi alınamadı">
+          <Serit ton="hata" baslik={d.bilgiAlinamadi}>
             {yuklemeHatasi}
           </Serit>
         ) : ustHesapKurabilir ? (
@@ -148,8 +152,8 @@ export function UstHesapEkrani({
            * görmesin. Ajansın adı da yazmıyor: oturum ona yalnızca "bağlı"
            * olgusunu taşıyor.
            */
-          <Serit ton="bilgi" baslik="Bu şirket bir ajansın üst hesabına bağlı">
-            Şirketinin workspace&apos;lerini aşağıdan yönetebilirsin.
+          <Serit ton="bilgi" baslik={d.ajansaBagli}>
+            {d.ajansaBagliGovde}
           </Serit>
         )}
         {children}
@@ -187,7 +191,7 @@ export function UstHesapEkrani({
           {sirketHatasi !== null ? (
             /* SEBEBİ EKRANDA: form olmadan boş bırakmak, "düzenleyemiyorum"
                ile "yüklenemedi" hâllerini aynı gösterirdi. */
-            <Serit ton="hata" baslik="Şirket bilgisi alınamadı">
+            <Serit ton="hata" baslik={d.sirketBilgisiAlinamadi}>
               {sirketHatasi}
             </Serit>
           ) : sirket ? (
@@ -195,11 +199,11 @@ export function UstHesapEkrani({
               baslik={sirket.name}
               baslikEki={sirket.slug}
               eylem={
-                <DigerMenusu etiket={`${sirket.name} için işlemler`}>
-                  <MenuOgesi onClick={() => setPanel('duzenle')}>Şirket bilgilerini düzenle</MenuOgesi>
+                <DigerMenusu etiket={t.ortak.islemler(sirket.name)}>
+                  <MenuOgesi onClick={() => setPanel('duzenle')}>{d.sirketBilgileriniDuzenle}</MenuOgesi>
                   <MenuAyraci />
                   <MenuOgesi tehlike onClick={() => setPanel('sil')}>
-                    Şirketi sil
+                    {d.sirketiSil}
                   </MenuOgesi>
                 </DigerMenusu>
               }
@@ -218,13 +222,13 @@ export function UstHesapEkrani({
             isteği atmak gereksiz yük; düzenleme formu da her açılışta kayıtlı
             değerden başlamalı.
           */}
-          <YanPanel acik={panel === 'duzenle'} onKapat={() => setPanel('yok')} baslik="Şirket bilgileri">
+          <YanPanel acik={panel === 'duzenle'} onKapat={() => setPanel('yok')} baslik={d.sirketBilgileri}>
             {panel === 'duzenle' && (
               <SirketDuzenle sirketAdi={sirket.name} sirketSlug={sirket.slug} />
             )}
           </YanPanel>
 
-          <Pencere acik={panel === 'sil'} onKapat={() => setPanel('yok')} baslik="Şirketi sil">
+          <Pencere acik={panel === 'sil'} onKapat={() => setPanel('yok')} baslik={d.sirketiSil}>
             {panel === 'sil' && (
               <SirketSil
                 organizationId={sirket.id}
@@ -272,6 +276,7 @@ function SirketRayi({
   agac: ManagerAccountTree;
   aktifOrgId: string;
 }) {
+  const d = useSozluk(sirketlerSozlugu).ustHesap;
   const [arama, setArama] = useState('');
   const listeRef = useRef<HTMLUListElement>(null);
 
@@ -330,7 +335,7 @@ function SirketRayi({
         dolgu={false}
         baslik={agac.name}
         /* SESSİZ KESME YOK: kaç şirket ve kaç workspace olduğu yazılı. */
-        baslikEki={`${agac.organizations.length} şirket · ${toplamWorkspace} workspace`}
+        baslikEki={d.rayEki(agac.organizations.length, toplamWorkspace)}
         altEylem={
           /*
             ŞİRKET SİHİRBAZLA AÇILIYOR, BURADAKİ SATIR İÇİ FORMLA DEĞİL.
@@ -342,7 +347,7 @@ function SirketRayi({
             aynı adımları sırayla yürütüyor.
           */
           <Link href={acilisAdresi('sirket')} className={dugmeSinifi('ikincil', 'kucuk')}>
-            + Şirket ekle
+            {d.sirketEkle}
           </Link>
         }
       >
@@ -355,8 +360,8 @@ function SirketRayi({
             type="search"
             value={arama}
             onChange={(e) => setArama(e.target.value)}
-            placeholder="Şirket ya da workspace ara"
-            aria-label="Şirket ya da workspace ara"
+            placeholder={d.ara}
+            aria-label={d.ara}
           />
         </div>
 
@@ -370,8 +375,8 @@ function SirketRayi({
             /* ÜÇ HÂL AYRI: hiç şirket yok · arama eşleşmedi. */
             <li className="px-2 py-6 text-center text-13 text-ink-muted">
               {agac.organizations.length === 0
-                ? 'Bu üst hesaba bağlı şirket yok.'
-                : `“${arama}” ile eşleşen şirket ya da workspace yok.`}
+                ? d.sirketYok
+                : d.eslesenYok(arama)}
             </li>
           ) : (
             suzulmus.map(({ sirket, eslesen }) => (
@@ -388,7 +393,7 @@ function SirketRayi({
         {/* KESME EKRANDA YAZILI — kaç şirketin süzülüp kaçının kaldığı. */}
         {q !== '' && agac.organizations.length > 0 && (
           <p className="m-0 border-t border-line px-4 py-2 text-12 text-ink-muted">
-            {agac.organizations.length} şirketten {suzulmus.length} tanesi gösteriliyor
+            {d.gosteriliyor(agac.organizations.length, suzulmus.length)}
           </p>
         )}
       </Kart>
@@ -414,6 +419,8 @@ function SirketSatiri({
   /** Aramanın bu şirkette eşleştirdiği workspace adları. */
   eslesen: string[];
 }) {
+  const t = useSozluk(sirketlerSozlugu);
+  const d = t.ustHesap;
   const [acik, setAcik] = useState(false);
   const [gecis, setGecis] = useState(false);
   const [gecisHatasi, setGecisHatasi] = useState<string | null>(null);
@@ -447,7 +454,7 @@ function SirketSatiri({
          * satırın altında.
          */
         setGecis(false);
-        setGecisHatasi(e instanceof ApiRequestError ? e.message : 'Şirkete geçilemedi.');
+        setGecisHatasi(e instanceof ApiRequestError ? e.message : d.gecilemedi);
       });
   }
 
@@ -473,7 +480,7 @@ function SirketSatiri({
         {aktif ? (
           <span className="min-w-0 flex-1 px-2 py-2" aria-current="true">
             <span className="block truncate text-13 font-bold text-ink">{sirket.name}</span>
-            <span className="block truncate text-12 text-brand-strong">şu an buradasın, sağdan düzenle</span>
+            <span className="block truncate text-12 text-brand-strong">{d.buradasin}</span>
           </span>
         ) : (
           <button
@@ -487,8 +494,8 @@ function SirketSatiri({
               {gecis && <Halka />}
             </span>
             <span className="block truncate text-12 text-ink-muted">
-              {sirket.workspaces.length} workspace
-              {sirket.isHome && ' · kendi şirketin'}
+              {t.ortak.workspaceSayisi(sirket.workspaces.length)}
+              {sirket.isHome && d.kendiSirketin}
             </span>
           </button>
         )}
@@ -502,7 +509,7 @@ function SirketSatiri({
           type="button"
           onClick={() => setAcik((v) => !v)}
           aria-expanded={acik}
-          aria-label={`${sirket.name} workspace’leri`}
+          aria-label={d.workspaceleri(sirket.name)}
           className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-surface hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"
         >
           <svg
@@ -543,8 +550,7 @@ function SirketSatiri({
             /* BOŞ LİSTE NEDENİNİ SÖYLÜYOR (CLAUDE.md): "henüz eklenmedi" ile
                "yüklenemedi" aynı boş alana çevrilmemeli. */
             <li className="py-0.5 text-12 text-ink-muted">
-              Bu şirkette henüz workspace yok. Şirkete geçince sayfa başlığındaki
-              &quot;Yeni workspace&quot; ile ekleyebilirsin.
+              {d.workspaceYok}
             </li>
           ) : (
             sirket.workspaces.map((w) => (
@@ -562,9 +568,10 @@ function SirketSatiri({
 // ---------------------------------------------------------------------------
 
 function UstHesapKur() {
+  const d = useSozluk(sirketlerSozlugu).ustHesap;
   return (
     <Kart
-      baslik="Üst hesap oluştur"
+      baslik={d.olustur}
       altEylem={
         /*
           SİHİRBAZA GİDİYOR. Buradaki form yalnızca adı soruyordu; sonraki
@@ -573,14 +580,11 @@ function UstHesapKur() {
           sayfanın birincil eylemi başlıkta.
         */
         <Link href={acilisAdresi('ust-hesap')} className={dugmeSinifi('koyu', 'kucuk')}>
-          Kurulumu başlat
+          {d.kurulumuBaslat}
         </Link>
       }
     >
-      <p className="m-0 max-w-prose text-14 text-ink-muted">
-        Birden çok şirketi tek girişle yönetmek için. Şu anki şirketin bu üst hesabın altına
-        bağlanır, sonra yanına yenilerini ekleyebilirsin.
-      </p>
+      <p className="m-0 max-w-prose text-14 text-ink-muted">{d.olusturGovde}</p>
     </Kart>
   );
 }

@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { baglantilarSozlugu } from '@/dil/sozlukler/ayarlar-baglantilar';
 
 /**
  * ═══ YOUTUBE KANALI BAĞLANTILAR EKRANINDA ═══
@@ -74,6 +75,7 @@ describe('kanal ekleme yüzeyi', () => {
 
   it('yetkisi olmayan kullanıcıya SEBEBİ yazılı', () => {
     // Düğmeyi kapatıp sebebini söylememek "çalışmıyor" göstermek olurdu.
-    expect(yorumsuz(EKLE)).toContain('yöneticinin işi');
+    expect(yorumsuz(EKLE)).toContain('{!canManage && <p className="m-0 text-12 text-ink-muted">{d.yoneticininIsi}</p>}');
+    expect(baglantilarSozlugu.tr.ytEkle.yoneticininIsi).toContain('yöneticinin işi');
   });
 });

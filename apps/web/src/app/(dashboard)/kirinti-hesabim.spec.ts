@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { aktifMi } from '@/components/nav';
+import { kabukSozlugu } from '@/dil/sozlukler/kabuk';
 
 /*
  * ═══ HESABIM KIRINTIDA ADIYLA GÖRÜNÜYOR ═══
@@ -13,7 +14,12 @@ const K = readFileSync(join(__dirname, 'layout.tsx'), 'utf8').replace(/\/\*[\s\S
 describe('kırıntıda Hesabım', () => {
   it('KRİTİK: menüde yoksa Hesabım sayfa listesine ekleniyor', () => {
     expect(K).toContain("const hesabimYolu = ayarlarYolu('hesabim');");
-    expect(K).toContain("[...menudenSayfalar, { href: hesabimYolu, label: 'Hesabım', ekYollar: [] as string[] }]");
+    // Ad sözlükte (D2): kırıntı menünün diliyle aynı anahtarı okuyor.
+    expect(K).toContain('[...menudenSayfalar, { href: hesabimYolu, label: k.hesabim, ekYollar: [] as string[] }]');
+    expect(K).toContain('const k = sec(kabukSozlugu, dil).kenar;');
+    expect(kabukSozlugu.tr.kenar.hesabim).toBe('Hesabım');
+    expect(kabukSozlugu.en.kenar.hesabim).toBeTruthy();
+    expect(kabukSozlugu.en.kenar.hesabim).not.toBe('Hesabım');
     expect(K).toContain('<Kirinti kapsam={kirintiKapsami} sayfalar={kirintiSayfalari} />');
   });
 

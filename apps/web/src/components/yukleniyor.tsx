@@ -1,6 +1,8 @@
 'use client';
 
 import { createPortal } from 'react-dom';
+import { useSozluk } from '@/dil/saglayici';
+import { kabukSozlugu } from '@/dil/sozlukler/kabuk';
 
 /**
  * ═══ YÜKLENİYOR GÖSTERGELERİ ═══
@@ -22,10 +24,11 @@ import { createPortal } from 'react-dom';
 
 /** Düğme içi gösterge — metnin yanında, satır yüksekliğini bozmadan. */
 export function Nokta({ className = '' }: { className?: string }) {
+  const g = useSozluk(kabukSozlugu).genel;
   return (
     <span
       role="status"
-      aria-label="Yükleniyor"
+      aria-label={g.yukleniyor}
       className={`inline-flex items-center gap-0.5 align-middle ${className}`}
     >
       {/*
@@ -47,10 +50,11 @@ export function Nokta({ className = '' }: { className?: string }) {
 
 /** Dönen halka — nokta üçlüsünün sığmadığı dar yerlerde (ikon düğmeleri). */
 export function Halka({ className = 'h-4 w-4' }: { className?: string }) {
+  const g = useSozluk(kabukSozlugu).genel;
   return (
     <span
       role="status"
-      aria-label="Yükleniyor"
+      aria-label={g.yukleniyor}
       className={`advetics-donus inline-block shrink-0 rounded-full border-2 border-[var(--brand-primary)] border-t-transparent ${className}`}
     />
   );

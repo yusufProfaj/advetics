@@ -60,16 +60,19 @@ export function DigerMenusu({ etiket, children }: { etiket: string; children: Re
 export function AyarSekmeleri({
   sekmeler,
   uyarili = [],
+  etiket,
 }: {
   sekmeler: Array<{ href: string; ekYollar: readonly string[]; ad: string }>;
   /** Kırmızı nokta taşıyacak bölümlerin adresleri. */
   uyarili?: string[];
+  /** Menünün erişilebilir adı ("Ayarlar bölümleri"), çağıranın dilinde. */
+  etiket: string;
 }) {
   const pathname = usePathname();
   const secili = sekmeler.find((s) => aktifMi(s, pathname))?.href ?? '';
   return (
     <SayfaIcMenu
-      etiket="Ayarlar bölümleri"
+      etiket={etiket}
       secili={secili}
       ogeler={sekmeler.map((s) => ({
         deger: s.href,

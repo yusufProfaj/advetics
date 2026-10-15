@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { genelBakisSozlugu } from '@/dil/sozlukler/genel-bakis';
+import { kapsamSozlugu } from '@/dil/sozlukler/kapsam';
 
 /**
  * ═══ BEKLEME GÖSTERGESİ ═══
@@ -131,8 +133,11 @@ describe('göstergenin kendisi', () => {
      * tıklandığını hemen gösteriyor.
      */
     expect(kod(YUK)).toContain('{ mesaj }');
-    expect(SECICI_KOD).toContain('görünümüne geçiliyor…');
-    expect(OZET_KOD).toContain('görünümüne geçiliyor…');
+    expect(SECICI_KOD).toContain('<TamEkranYukleniyor mesaj={d.geciliyor(gecilen ?? d.kapsam)} />');
+    expect(kapsamSozlugu.tr.geciliyor('A')).toBe('A görünümüne geçiliyor…');
+    expect(kapsamSozlugu.en.geciliyor('A')).toBe('Switching to A…');
+    expect(OZET_KOD).toContain('o.geciliyor(bekleyen ?? yenileniyor');
+    expect(genelBakisSozlugu.tr.ozet.geciliyor('A')).toBe('A görünümüne geçiliyor…');
     expect(YONETICI_KOD).toContain('görünümüne geçiliyor…');
   });
 

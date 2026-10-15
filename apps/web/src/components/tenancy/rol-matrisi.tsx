@@ -3,17 +3,26 @@
 import { useState } from 'react';
 import {
   ROLES,
-  ROL_ACIKLAMASI,
-  ROL_ETIKETI,
   ROL_SUTUNLARI,
-  SAHIP_ACIKLAMASI,
   YETKI_GRUPLARI,
-  sutunEtiketi,
+  rolAciklamasi,
+  rolEtiketi,
+  sahipAciklamasi,
+  sahipEtiketi,
   yetkiVar,
+  type Dil,
   type Role,
+  type RolSutunu,
 } from '@advetics/shared';
 import { Kart } from '@/components/ui/kart';
 import { Dugme } from '@/components/ui/dugme';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { ekipSozlugu } from '@/dil/sozlukler/ayarlar-ekip';
+
+/** Sütun adı ekranın dilinde (shared'daki `sutunEtiketi` yalnız Türkçe). */
+function sutunEtiketi(s: RolSutunu, dil: Dil): string {
+  return s === 'sahip' ? sahipEtiketi(dil) : rolEtiketi(s, dil);
+}
 
 /**
  * ═══ ROL KARŞILAŞTIRMA TABLOSU ═══
@@ -33,26 +42,25 @@ import { Dugme } from '@/components/ui/dugme';
  */
 export function RolMatrisi({ baslangictaAcik = false }: { baslangictaAcik?: boolean }) {
   const [acik, setAcik] = useState(baslangictaAcik);
+  const { dil } = useDil();
+  const d = useSozluk(ekipSozlugu).roller;
 
   return (
     <Kart
       dolgu={false}
-      baslik="Roller: kim ne yapabilir"
+      baslik={d.baslik}
       eylem={
         <Dugme ton="hayalet" boyut="kucuk" onClick={() => setAcik((a) => !a)} aria-expanded={acik}>
-          {acik ? 'Ayrıntılı karşılaştırmayı gizle' : 'Ayrıntılı karşılaştırmayı göster'}
+          {acik ? d.gizle : d.goster}
         </Dugme>
       }
     >
-      <p className="m-0 border-b border-line px-5 py-3 text-13 text-ink-muted">
-        Yetki KİŞİYE değil, kişi × kapsam eşleşmesine veriliyor: aynı kişi bir şirkette Yönetici, başka bir
-        workspace’te yalnızca izleyici olabilir.
-      </p>
+      <p className="m-0 border-b border-line px-5 py-3 text-13 text-ink-muted">{d.aciklama}</p>
 
       <div className="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-4">
-        <RolKarti etiket={sutunEtiketi('sahip')} aciklama={SAHIP_ACIKLAMASI} sahip />
+        <RolKarti etiket={sutunEtiketi('sahip', dil)} aciklama={sahipAciklamasi(dil)} sahip />
         {ROLES.map((r) => (
-          <RolKarti key={r} etiket={ROL_ETIKETI[r]} aciklama={ROL_ACIKLAMASI[r]} />
+          <RolKarti key={r} etiket={rolEtiketi(r, dil)} aciklama={rolAciklamasi(r, dil)} />
         ))}
       </div>
 
@@ -66,7 +74,7 @@ export function RolMatrisi({ baslangictaAcik = false }: { baslangictaAcik?: bool
           <thead>
             <tr>
               <th scope="col" className="border-b border-line px-4 py-2.5 text-12 font-semibold text-ink-muted">
-                Ne yapabilir
+                {d.neYapabilir}
               </th>
               {ROL_SUTUNLARI.map((s) => (
                 <th
@@ -74,7 +82,7 @@ export function RolMatrisi({ baslangictaAcik = false }: { baslangictaAcik?: bool
                   scope="col"
                   className="border-b border-line px-3 py-2.5 text-center text-12 font-semibold text-ink-muted"
                 >
-                  {sutunEtiketi(s)}
+                  {sutunEtiketi(s, dil)}
                 </th>
               ))}
             </tr>
@@ -85,16 +93,19 @@ export function RolMatrisi({ baslangictaAcik = false }: { baslangictaAcik?: bool
             ))}
           </tbody>
         </table>
-        <p className="m-0 px-4 py-3 text-12 text-ink-muted">
-          Yönetici yetkisi verildiği kapsamda geçerli: üst hesapta verilirse bütün şirketler, tek şirkette
-          verilirse yalnızca o şirket. Sahip yetkisi panelden verilemez.
-        </p>
+        <p className="m-0 px-4 py-3 text-12 text-ink-muted">{d.dipnot}</p>
       </div>
     </Kart>
   );
 }
 
+/*
+ * GRUP VE SATIR BAŞLIKLARI SHARED'DA (`YETKI_GRUPLARI`) VE HENÜZ YALNIZ
+ * TÜRKÇE: İngilizcesi D4'te shared etiketleriyle birlikte. Burada
+ * çevrilmeleri ikinci bir liste doğurur ve matris değişince ayrışırdı.
+ */
 function GrupSatirlari({ grup }: { grup: (typeof YETKI_GRUPLARI)[number] }) {
+  const d = useSozluk(ekipSozlugu).roller;
   return (
     <>
       <tr className="bg-surface-muted">
@@ -115,7 +126,7 @@ function GrupSatirlari({ grup }: { grup: (typeof YETKI_GRUPLARI)[number] }) {
             return (
               <td key={s} className="px-3 py-2 text-center">
                 {/* İşaret metin olarak da okunuyor — ekran okuyucu ve kopyala-yapıştır için. */}
-                <span aria-label={var_ ? 'evet' : 'hayır'} className={var_ ? 'font-bold text-ink' : 'text-ink-soluk'}>
+                <span aria-label={var_ ? d.evet : d.hayir} className={var_ ? 'font-bold text-ink' : 'text-ink-soluk'}>
                   {var_ ? '✓' : '-'}
                 </span>
               </td>
@@ -155,5 +166,6 @@ function RolKarti({
  * ipucu kutusu bir `small` ve içine `p` koymak geçersiz HTML.
  */
 export function RolAciklamasi({ rol }: { rol: Role }) {
-  return <span className="block text-12 text-ink-muted">{ROL_ACIKLAMASI[rol]}</span>;
+  const { dil } = useDil();
+  return <span className="block text-12 text-ink-muted">{rolAciklamasi(rol, dil)}</span>;
 }

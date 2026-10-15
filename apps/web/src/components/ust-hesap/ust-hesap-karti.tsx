@@ -3,7 +3,9 @@
 import Link from 'next/link';
 import { ayarlarAdresi } from '@/lib/panel-adresleri';
 import { dugmeSinifi } from '@/components/ui/dugme';
-import { PAKET_SINIRLARI, type ManagerAccountTree } from '@advetics/shared';
+import { PAKET_SINIRLARI, paketEtiketi, type ManagerAccountTree } from '@advetics/shared';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { sirketlerSozlugu } from '@/dil/sozlukler/ayarlar-sirketler';
 
 /**
  * ═══ ÜST HESAP ŞERİDİ — "hangi hesaptasın, ne kadarını doldurdun" ═══
@@ -27,6 +29,8 @@ import { PAKET_SINIRLARI, type ManagerAccountTree } from '@advetics/shared';
  * takılan kullanıcı sebebi yalnızca hata mesajından öğrenirdi.
  */
 export function UstHesapKarti({ agac, platformSahibi }: { agac: ManagerAccountTree; platformSahibi: boolean }) {
+  const { dil } = useDil();
+  const d = useSozluk(sirketlerSozlugu);
   const sinir = PAKET_SINIRLARI[agac.paket];
   const sirketSayisi = agac.organizations.length;
 
@@ -34,12 +38,12 @@ export function UstHesapKarti({ agac, platformSahibi }: { agac: ManagerAccountTr
     <section className="flex flex-wrap items-center justify-between gap-3 rounded-kart border border-line bg-surface px-4 py-3">
       <div className="min-w-0">
         <p className="text-11 font-semibold text-brand-strong">
-          Üst hesap
+          {d.ustHesap.ustHesap}
         </p>
         <h2 className="truncate text-base font-semibold text-ink">{agac.name}</h2>
         <p className="text-xs text-ink-muted">
-          {sinir.etiket} paketi ·{' '}
-          <DolulukMetni mevcut={sirketSayisi} sinir={sinir.maxSirket} birim="şirket" />
+          {d.ortak.paketi(paketEtiketi(agac.paket, dil).etiket)} ·{' '}
+          <DolulukMetni mevcut={sirketSayisi} sinir={sinir.maxSirket} birim={d.ortak.sirketBirim} />
         </p>
       </div>
       {/*
@@ -52,7 +56,7 @@ export function UstHesapKarti({ agac, platformSahibi }: { agac: ManagerAccountTr
           href={ayarlarAdresi('sirketler', { capa: 'ust-hesaplar' })}
           className={dugmeSinifi('ikincil', 'kucuk')}
         >
-          Üst hesap ayarları
+          {d.ustHesap.ayarlar}
         </Link>
       )}
     </section>

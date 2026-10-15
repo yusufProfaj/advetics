@@ -9,6 +9,8 @@
  * saymak) ve JSX'in içinde kaldıklarında sınanacak bir yüzeyleri yok —
  * mutasyon testi de yapılamıyor.
  */
+import { sec, type Dil } from '@advetics/shared';
+import { ekipSozlugu } from '@/dil/sozlukler/ayarlar-ekip';
 
 export interface UyelikOzeti {
   /** NULL = organizasyon geneli erişim (owner/admin). */
@@ -43,17 +45,15 @@ export function atamaEngeli(uyelikler: UyelikOzeti[], clientId: string): AtamaEn
   return null;
 }
 
-/** KİŞİ listeleyen ekran için (bir workspace’e kimler atanabilir). */
-export const ENGEL_KISI: Record<AtamaEngeli, string> = {
-  zaten_uye: 'Bu workspace’e zaten erişiyor',
-  org_geneli: 'Tüm workspace’lere erişiyor — ayrıca atanması gerekmiyor',
-};
+/** KİŞİ listeleyen ekran için (bir workspace’e kimler atanabilir). Cümle sözlükte (`engel.kisi`). */
+export function engelKisi(kod: AtamaEngeli, dil: Dil): string {
+  return sec(ekipSozlugu, dil).engel.kisi[kod];
+}
 
-/** WORKSPACE listeleyen ekran için (bir danışman nerelere atanabilir). */
-export const ENGEL_WORKSPACE: Record<AtamaEngeli, string> = {
-  zaten_uye: 'Zaten yetkisi var',
-  org_geneli: 'Tüm workspace’lere erişiyor',
-};
+/** WORKSPACE listeleyen ekran için (bir danışman nerelere atanabilir). Cümle sözlükte (`engel.workspace`). */
+export function engelWorkspace(kod: AtamaEngeli, dil: Dil): string {
+  return sec(ekipSozlugu, dil).engel.workspace[kod];
+}
 
 export interface AtamaSonucu {
   basarili: number;
@@ -78,6 +78,7 @@ export interface AtamaSonucu {
 export async function atamalariYurut(
   hedefler: { id: string; ad: string }[],
   gonder: (id: string) => Promise<unknown>,
+  dil: Dil = 'tr',
 ): Promise<AtamaSonucu> {
   const hatalar: string[] = [];
   let basarili = 0;
@@ -87,7 +88,7 @@ export async function atamalariYurut(
       await gonder(hedef.id);
       basarili += 1;
     } catch (err) {
-      hatalar.push(`${hedef.ad}: ${err instanceof Error ? err.message : 'atanamadı'}`);
+      hatalar.push(`${hedef.ad}: ${err instanceof Error ? err.message : sec(ekipSozlugu, dil).engel.atanamadi}`);
     }
   }
 

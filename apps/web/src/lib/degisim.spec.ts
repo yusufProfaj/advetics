@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { degisimHali } from './degisim';
+import { degisimHali, yuzdeMetni } from './degisim';
+import { genelBakisSozlugu } from '@/dil/sozlukler/genel-bakis';
 
 /**
  * ═══ DEĞİŞİM: İYİ Mİ KÖTÜ MÜ — TEK TANIM ═══
@@ -51,6 +52,23 @@ const yorumsuz = (yol: string): string =>
     .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
     .replace(/^\s*\/\/.*$/gm, '');
 
+describe('degisimHali iki dilde', () => {
+  it('KRİTİK: İngilizcede yüzde işareti sonda, ondalık nokta, etiket sözlükten', () => {
+    const h = degisimHali(-12.34, false, 'en')!;
+    expect(h.metin).toBe('↓ 12.3%');
+    expect(h.etiket).toBe(genelBakisSozlugu.en.degisim.kotu);
+    expect(degisimHali(0.01, true, 'en')!.etiket).toBe(genelBakisSozlugu.en.degisim.sabit);
+    // Karar dile bağlı DEĞİL: aynı sayı iki dilde aynı iyi/kötü.
+    expect(degisimHali(12, true, 'en')!.iyi).toBe(degisimHali(12, true, 'tr')!.iyi);
+  });
+
+  it('yuzdeMetni: Türkçede işaret önde, İngilizcede sonda', () => {
+    expect(yuzdeMetni(12.5)).toBe('%12,5');
+    expect(yuzdeMetni(12.5, 'en')).toBe('12.5%');
+    expect(yuzdeMetni(1234, 'en')).toBe('1,234%');
+  });
+});
+
 describe('iki ekran da ortak kararı kullanıyor', () => {
   const BILESENLER = ['components/taslak/genel-bakis-parcalari.tsx'];
   /*
@@ -63,7 +81,8 @@ describe('iki ekran da ortak kararı kullanıyor', () => {
   it('KRİTİK: bileşenler KENDİ kopyasını tutmuyor', () => {
     for (const yol of BILESENLER) {
       const k = yorumsuz(yol);
-      expect(k, yol).toContain('const h = degisimHali(d, ters);');
+      // Dil de geçiyor: geçmezse İngilizce ekranda "%12,5" ve "kötü yönde" kalırdı.
+      expect(k, yol).toContain('const h = degisimHali(d, ters, dil);');
       expect(k, yol).not.toMatch(/!==\s*Boolean\(ters\)/);
     }
     const t = yorumsuz(YM_TABLO);

@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { MenuOgesi } from '@/components/ui/acilir-menu';
 import { Ikon } from '@/components/ui/ikon';
 import { TEMA_ANAHTARI } from '@/lib/tema';
+import { useSozluk } from '@/dil/saglayici';
+import { kabukSozlugu } from '@/dil/sozlukler/kabuk';
 
 /**
  * ═══ TEMA SEÇİMİ (menü kararı 2026-10-14: kullanıcı kartında "Tema") ═══
@@ -23,7 +25,6 @@ import { TEMA_ANAHTARI } from '@/lib/tema';
 export type Tema = 'sistem' | 'acik' | 'koyu';
 
 const SIRADAKI: Record<Tema, Tema> = { sistem: 'acik', acik: 'koyu', koyu: 'sistem' };
-const AD: Record<Tema, string> = { sistem: 'Sistem', acik: 'Açık', koyu: 'Koyu' };
 
 function uygula(t: Tema): void {
   const kok = document.documentElement;
@@ -39,6 +40,8 @@ function uygula(t: Tema): void {
 
 export function TemaOgesi() {
   const [tema, setTema] = useState<Tema>('sistem');
+  const d = useSozluk(kabukSozlugu).kullanici;
+  const AD: Record<Tema, string> = { sistem: d.temaSistem, acik: d.temaAcik, koyu: d.temaKoyu };
   useEffect(() => {
     const d = document.documentElement.dataset.theme;
     setTema(d === 'light' ? 'acik' : d === 'dark' ? 'koyu' : 'sistem');
@@ -53,7 +56,7 @@ export function TemaOgesi() {
         setTema(yeni);
       }}
     >
-      Tema
+      {d.tema}
     </MenuOgesi>
   );
 }

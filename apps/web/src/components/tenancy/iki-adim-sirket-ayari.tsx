@@ -8,6 +8,8 @@ import type { IkiAdimDurumu } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { Dugme } from '@/components/ui/dugme';
 import { Kart } from '@/components/ui/kart';
+import { useSozluk } from '@/dil/saglayici';
+import { ekipSozlugu } from '@/dil/sozlukler/ayarlar-ekip';
 
 /**
  * ═══ ŞİRKETTE İKİ ADIMLI DOĞRULAMA ZORUNLULUĞU (yönetici) ═══
@@ -24,15 +26,14 @@ export function IkiAdimSirketAyari({ durum }: { durum: IkiAdimDurumu }) {
   const router = useRouter();
   const [bekliyor, setBekliyor] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
+  const d = useSozluk(ekipSozlugu).sirket2fa;
   const sirket = durum.secilenSirket;
   if (!sirket) return null;
 
   async function degistir(zorunlu: boolean) {
     if (
       zorunlu &&
-      !window.confirm(
-        `${sirket!.ad} için zorunlu olsun mu? Kurmamış kişiler 15 dakika içinde oturumdan çıkar ve yeniden girişte kurmaları istenir.`,
-      )
+      !window.confirm(d.onay(sirket!.ad))
     ) {
       return;
     }
@@ -42,7 +43,7 @@ export function IkiAdimSirketAyari({ durum }: { durum: IkiAdimDurumu }) {
       await apiFetch('/auth/2fa/sirket', { method: 'PATCH', body: JSON.stringify({ zorunlu }) });
       router.refresh();
     } catch (err) {
-      setHata(err instanceof ApiRequestError ? err.message : 'Kaydedilemedi.');
+      setHata(err instanceof ApiRequestError ? err.message : d.kaydedilemedi);
     } finally {
       setBekliyor(false);
     }
@@ -52,11 +53,9 @@ export function IkiAdimSirketAyari({ durum }: { durum: IkiAdimDurumu }) {
     <Kart>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="font-semibold text-ink">İki adımlı doğrulama</h2>
+          <h2 className="font-semibold text-ink">{d.baslik}</h2>
           <p className="mt-0.5 text-sm text-ink-muted">
-            {sirket.zorunlu
-              ? `${sirket.ad} şirketinin kullanıcıları girişte telefon kodu kullanıyor.`
-              : `${sirket.ad} şirketinde isteğe bağlı. Zorunlu yaparsan kurmamış kişiler bir sonraki girişte kurar.`}
+            {sirket.zorunlu ? d.zorunlu(sirket.ad) : d.istegeBagli(sirket.ad)}
           </p>
           {/*
             KAPSAM AÇIKÇA YAZIYOR (Ö-2). Zorunluluk kullanıcının EV şirketinden
@@ -65,10 +64,7 @@ export function IkiAdimSirketAyari({ durum }: { durum: IkiAdimDurumu }) {
             yönetici "zorunlu yaptım" deyip ajans personelini de korunuyor
             sanırdı.
           */}
-          <p className="mt-1 text-xs text-ink-muted">
-            Zorunluluk yalnız bu şirketin kendi kullanıcılarına uygulanır. Başka şirketten erişen
-            ajans personeli kendi şirketinin ayarına tabidir.
-          </p>
+          <p className="mt-1 text-xs text-ink-muted">{d.kapsam}</p>
         </div>
         {sirket.degistirebilir && (
           <Dugme
@@ -77,7 +73,7 @@ export function IkiAdimSirketAyari({ durum }: { durum: IkiAdimDurumu }) {
             disabled={bekliyor}
             onClick={() => void degistir(!sirket.zorunlu)}
           >
-            {bekliyor ? 'Kaydediliyor…' : sirket.zorunlu ? 'Zorunluluğu kaldır' : 'Zorunlu yap'}
+            {bekliyor ? d.kaydediliyor : sirket.zorunlu ? d.kaldir : d.yap}
           </Dugme>
         )}
       </div>
@@ -86,7 +82,7 @@ export function IkiAdimSirketAyari({ durum }: { durum: IkiAdimDurumu }) {
           {hata}{' '}
           {!durum.acik && (
             <Link href={ayarlarAdresi('hesabim', { capa: 'guvenlik' })} className="font-medium text-brand-strong hover:underline">
-              Hesabım
+              {d.hesabim}
             </Link>
           )}
         </p>

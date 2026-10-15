@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { CHANNEL_KINDS } from '@advetics/shared';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { baglantilarSozlugu } from '@/dil/sozlukler/ayarlar-baglantilar';
 
 /**
  * HAVUZ EKRANININ KARARLARI — kaynak taramasıyla.
@@ -148,7 +149,9 @@ describe('pop-up sözleşmesi', () => {
   });
 
   it('kaç sonuç gösterildiği YAZILI — sessiz kesme yok', () => {
-    expect(yorumsuz(KART)).toContain('{suzulmus.length} / {ogeler.length}');
+    // D2: sayaç sözlükte; iki sayı da AYNI çağrıda gidiyor.
+    expect(yorumsuz(KART)).toContain('{d.sayac(suzulmus.length, ogeler.length)}');
+    expect(baglantilarSozlugu.tr.havuz.sayac(3, 374)).toBe('3 / 374 hesap');
   });
 });
 
@@ -184,8 +187,9 @@ describe('bağlantı ekranı hesapları SATIR SATIR listelemiyor', () => {
      * üç ayrı kelimeyle ("keşfedildi", "boşta", "izlenen") sayıyordu.
      */
     const kanal = yorumsuz(readFileSync(join(DIR, 'kanal-kartlari.tsx'), 'utf8'));
-    expect(kanal).toContain('atanmış,');
-    expect(kanal).toContain('veri çekiyor');
+    // D2: cümle sözlükte (`kanal.atanmisCekiyor`), kart onu çağırıyor.
+    expect(kanal).toContain('d.atanmisCekiyor(atanmis, izlenen)');
+    expect(baglantilarSozlugu.tr.kanal.atanmisCekiyor(8, 6)).toBe('8 atanmış, 6 veri çekiyor · ');
     /*
      * İDDİA HESAP LİSTESİNE ÇAPALI, GENEL BİR DESENE DEĞİL. İlk yazdığımda
      * `.map((a) => (` yazmıştım ve bileşen PLATFORMLARI gezerken aynı desene

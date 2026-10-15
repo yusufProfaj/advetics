@@ -1,6 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { sirketlerSozlugu } from '@/dil/sozlukler/ayarlar-sirketler';
+
+/* D2: ekran metni sözlükte; iddia Türkçe değer + bileşenin anahtarı çizmesi. */
+const TR = sirketlerSozlugu.tr;
 
 /**
  * ═══ SİLME EKRANI — NE GİDECEĞİ YAZILMADAN ONAY İSTENMİYOR ═══
@@ -58,8 +62,10 @@ describe('KRİTİK: onaydan ÖNCE özet', () => {
      * geniş ve eksik yazılan bir uyarı, kullanıcının kaybedeceğini
      * bilmediği şeyi silmesi demek.
      */
-    expect(SIL).toContain('giriş hesapları da silinir');
-    expect(SIL).toContain('platformdan yeniden çekilemez');
+    expect(SIL).toContain('{d.kullanici(ozet.kullanici)}');
+    expect(TR.sirketSil.kullanici(2)).toContain('giriş hesapları da silinir');
+    expect(SIL).toContain('{d.olcum(ozet.metrikGunu)}');
+    expect(TR.sirketSil.olcum(30)).toContain('platformdan yeniden çekilemez');
   });
 });
 
@@ -96,7 +102,9 @@ describe('KRİTİK: workspace adı düzenlenebiliyor', () => {
     const bas = FORM.indexOf('const ALANLAR');
     const dilim = FORM.slice(bas, FORM.indexOf('];', bas));
     expect(dilim.length, 'liste bulunamadı — tarama boşa düştü').toBeGreaterThan(100);
-    expect(dilim).toContain("{ anahtar: 'name', etiket: 'Workspace adı', tur: 'text' }");
+    // D2: etiket sözlükte (`bilgi.alanlar`), anahtarla; liste hâlâ tek kaynak.
+    expect(dilim).toContain("{ anahtar: 'name', tur: 'text' }");
+    expect(TR.bilgi.alanlar.name).toBe('Workspace adı');
   });
 
   it('KRİTİK: ad BOŞ gönderilemiyor', () => {

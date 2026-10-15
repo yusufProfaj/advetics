@@ -5,6 +5,7 @@ import { CHANNEL_KINDS, type ChannelGroup, type ChannelItem } from '@advetics/sh
 import { havuzdaAra } from '../tenancy/bagli-kanallar';
 import { visibleSections } from '@/lib/nav-sections';
 import { ROLE_PERMISSIONS } from '@advetics/shared';
+import { sirketlerSozlugu } from '@/dil/sozlukler/ayarlar-sirketler';
 
 /**
  * ═══ MARKA MERKEZİ — SAYFA, KURULUM, KANALLAR, WORKSPACE BİLGİLERİ ═══
@@ -170,7 +171,8 @@ describe('ajansın atadığı kalemi kaldırma', () => {
 
   it('onay kutusu bu metni kullanıyor ve iki sayfa da üyeliği geçiriyor', () => {
     const govde = KANAL.slice(KANAL.indexOf('function BagliKart('), KANAL.indexOf('function SecilebilirSatir('));
-    expect(govde).toContain('kaldirmaOnayMetni(item.ajansAtadi === true, ajansUyesi)');
+    // Dil de geçiriliyor (D2): geçmezse varsayılan 'tr' ve İngilizce panelde Türkçe onay çıkar.
+    expect(govde).toContain('kaldirmaOnayMetni(item.ajansAtadi === true, ajansUyesi, dil)');
     expect(SAYFA).toContain('ajansUyesi={session.managerAccount !== null}');
     // Eski "Bağlı kanallar" sayfası 2026-10-13'ten beri Kurulum'a YÖNLENİYOR
     // (Ajan 2); bileşeni çizen tek sayfa Marka Merkezi.
@@ -219,7 +221,11 @@ describe('Bağlantılar düzeni (2026-10-06)', () => {
 
   it('KRİTİK: izleme kapalı hesap özet satırında da sayılıyor', () => {
     expect(KANAL).toContain('tum.filter((i) => !i.syncEnabled).length');
-    expect(KANAL).toContain('hesapta izleme kapalı');
+    // Cümle sözlükte (D2); özet satırı sayıyla o anahtarı basıyor.
+    expect(KANAL).toContain('{d.izlemeKapali(izlemeKapali)}');
+    expect(sirketlerSozlugu.tr.kanallar.izlemeKapali(3)).toContain('3 hesapta izleme kapalı');
+    expect(sirketlerSozlugu.en.kanallar.izlemeKapali(3)).toContain('3');
+    expect(sirketlerSozlugu.en.kanallar.izlemeKapali(3)).not.toBe(sirketlerSozlugu.tr.kanallar.izlemeKapali(3));
   });
 });
 

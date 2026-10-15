@@ -14,6 +14,11 @@ import { Kart } from '@/components/ui/kart';
 import { Dugme } from '@/components/ui/dugme';
 import { Serit } from '@/components/ui/hal';
 import { Alan, Secim } from '@/components/ui/alan';
+import { bicimKodu, type Dil } from '@advetics/shared';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { baglantilarSozlugu } from '@/dil/sozlukler/ayarlar-baglantilar';
+
+type TopluSozlugu = (typeof baglantilarSozlugu)['tr']['toplu'];
 
 /**
  * ═══ TÜM VERİLERİ GÜNCELLE ═══
@@ -66,6 +71,8 @@ export function TopluTazeleme({
   workspaceler: Array<{ id: string; name: string }>;
 }) {
   const router = useRouter();
+  const { dil } = useDil();
+  const d = useSozluk(baglantilarSozlugu).toplu;
   const [acik, setAcik] = useState(false);
   const [secili, setSecili] = useState<Set<string>>(new Set());
   const [yil, setYil] = useState(2);
@@ -95,9 +102,9 @@ export function TopluTazeleme({
        * YOKLAMA HATASI YUTULMUYOR ama çubuğu da SİLMİYOR: geçici bir ağ
        * hatası, saatlerdir izlenen bir ilerlemeyi ekrandan kaldırmamalı.
        */
-      setHata(e instanceof ApiRequestError ? e.message : 'İlerleme okunamadı.');
+      setHata(e instanceof ApiRequestError ? e.message : d.ilerlemeOkunamadi);
     }
-  }, []);
+  }, [d]);
 
   useEffect(() => {
     if (!parti) return;
@@ -130,7 +137,7 @@ export function TopluTazeleme({
         }),
       );
     } catch (e) {
-      setHata(e instanceof ApiRequestError ? e.message : 'Tahmin alınamadı.');
+      setHata(e instanceof ApiRequestError ? e.message : d.tahminAlinamadi);
     } finally {
       setBusy(false);
     }
@@ -154,7 +161,7 @@ export function TopluTazeleme({
       setTahmin(null);
       setAcik(false);
     } catch (e) {
-      setHata(e instanceof ApiRequestError ? e.message : 'Tazeleme başlatılamadı.');
+      setHata(e instanceof ApiRequestError ? e.message : d.baslatilamadi);
     } finally {
       setBusy(false);
     }
@@ -177,15 +184,15 @@ export function TopluTazeleme({
         method: 'POST',
       });
       const parcalar = [
-        r.yenidenKuyruklanan > 0 ? `${r.yenidenKuyruklanan} iş yeniden başlatıldı` : null,
-        r.kuyrukta > 0 ? `${r.kuyrukta} iş zaten sırada` : null,
-        r.vazgecilen > 0 ? `${r.vazgecilen} iş kapatıldı` : null,
-        r.kalan > 0 ? `${r.kalan} iş kaldı, tekrar bas` : null,
+        r.yenidenKuyruklanan > 0 ? d.yenidenBaslatildi(r.yenidenKuyruklanan) : null,
+        r.kuyrukta > 0 ? d.zatenSirada(r.kuyrukta) : null,
+        r.vazgecilen > 0 ? d.kapatildi(r.vazgecilen) : null,
+        r.kalan > 0 ? d.kaldiTekrarBas(r.kalan) : null,
       ].filter((x): x is string => x !== null);
-      setKurtarmaNotu(parcalar.length > 0 ? parcalar.join(' · ') : 'Takılan iş bulunamadı.');
+      setKurtarmaNotu(parcalar.length > 0 ? parcalar.join(' · ') : d.takilanYok);
       await yokla(parti);
     } catch (e) {
-      setHata(e instanceof ApiRequestError ? e.message : 'Takılan işler geri konulamadı.');
+      setHata(e instanceof ApiRequestError ? e.message : d.geriKonulamadi);
     } finally {
       setBusy(false);
     }
@@ -201,23 +208,20 @@ export function TopluTazeleme({
 
   return (
     <Kart
-      baslik="Tüm verileri güncelle"
+      baslik={d.baslik}
       eylem={
         !parti && (
           <Dugme ton="ikincil" boyut="kucuk" aria-expanded={acik} onClick={() => setAcik((v) => !v)}>
-            {acik ? 'Kapat' : 'Workspace seç'}
+            {acik ? d.kapat : d.workspaceSec}
           </Dugme>
         )
       }
     >
-      <p className="m-0 text-13 text-ink-muted">
-        Seçtiğin workspace’lerin geçmiş verisini tek seferde çeker: kampanya yapısı ve günlük metrikler.
-        Saatler sürebilir ve platform kotası harcar.
-      </p>
+      <p className="m-0 text-13 text-ink-muted">{d.aciklama}</p>
 
       {hata && (
         <div className="mt-3">
-          <Serit ton="hata" baslik="İşlem yapılamadı">
+          <Serit ton="hata" baslik={d.islemYapilamadi}>
             {hata}
           </Serit>
         </div>
@@ -233,14 +237,14 @@ export function TopluTazeleme({
             */}
             <span className="font-medium text-ink">{ilerleme.asama}</span>
             <span className="text-ink-muted">
-              {ilerleme.tamamlanan + ilerleme.dusen} / {ilerleme.toplam} iş
-              {ilerleme.kalanSaniye !== null && ` · tahmini ${sureMetni(ilerleme.kalanSaniye)}`}
+              {d.isSayaci(ilerleme.tamamlanan + ilerleme.dusen, ilerleme.toplam)}
+              {ilerleme.kalanSaniye !== null && d.tahmini(sureMetni(ilerleme.kalanSaniye, d))}
               {/*
                 TAHMİN YOKKEN "hesaplanıyor" YAZILIYOR, boş bırakılmıyor.
                 Boş alan "tahmin yok" ile "tahmin sıfır" arasında ayrım
                 yapmıyor ve kullanıcı ikincisini bekliyor.
               */}
-              {ilerleme.kalanSaniye === null && !ilerleme.bitti && ' · süre hesaplanıyor'}
+              {ilerleme.kalanSaniye === null && !ilerleme.bitti && d.sureHesaplaniyor}
             </span>
           </div>
 
@@ -258,7 +262,7 @@ export function TopluTazeleme({
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-12 text-ink-muted">
             <span>
               %{ilerleme.yuzde} · {ilerleme.dateFrom} / {ilerleme.dateTo} ·{' '}
-              {ilerleme.clientCount} workspace
+              {d.workspaceSayisi(ilerleme.clientCount)}
             </span>
             <span className="flex items-center gap-3">
               {/*
@@ -267,12 +271,12 @@ export function TopluTazeleme({
                 sayılıyor, yoksa çubuk kalıcı olarak takılırdı.
               */}
               {ilerleme.dusen > 0 && (
-                <span className="font-semibold text-danger-strong">{ilerleme.dusen} iş düştü</span>
+                <span className="font-semibold text-danger-strong">{d.isDustu(ilerleme.dusen)}</span>
               )}
               {ilerleme.atlanan > 0 && (
-                <span>{ilerleme.atlanan} iş zaten kuyruktaydı</span>
+                <span>{d.zatenKuyruktaydi(ilerleme.atlanan)}</span>
               )}
-              {ilerleme.iptal > 0 && <span>{ilerleme.iptal} iş kapatıldı</span>}
+              {ilerleme.iptal > 0 && <span>{d.kapatildi(ilerleme.iptal)}</span>}
               {!ilerleme.bitti && ilerleme.tani === null && <Nokta />}
               {/*
                 KAPATMA DÜĞMESİ HER ZAMAN AÇIK.
@@ -282,7 +286,7 @@ export function TopluTazeleme({
                 kapanan yalnızca takip.
               */}
               <Dugme ton="hayalet" boyut="kucuk" onClick={takibiBirak}>
-                {ilerleme.bitti ? 'Kapat' : 'Takibi bırak'}
+                {ilerleme.bitti ? d.kapat : d.takibiBirak}
               </Dugme>
             </span>
           </div>
@@ -300,26 +304,24 @@ export function TopluTazeleme({
               {ilerleme.tani.kayip > 0 ? (
                 <>
                   <p className="m-0 text-13 text-ink">
-                    <strong>{ilerleme.tani.kayip} iş kuyrukta yok.</strong> Bu işler
-                    kendiliğinden başlamıyor, yeniden kuyruğa konması gerekiyor.
+                    <strong>{d.kuyruktaYok(ilerleme.tani.kayip)}</strong>
+                    {d.kendiliginden}
                   </p>
                   <Dugme ton="koyu" boyut="kucuk" className="mt-2" onClick={() => void kurtar()} bekliyor={busy}>
-                    Takılan işleri yeniden başlat
+                    {d.yenidenBaslat}
                   </Dugme>
                 </>
               ) : (
                 <p className="m-0 text-13 text-ink">
-                  {ilerleme.tani.kuyrukta} iş sırada bekliyor. Kota penceresi açılınca
-                  kendiliğinden sürecek
-                  {ilerleme.tani.enYakinDeneme &&
-                    `, en erken ${saatMetni(ilerleme.tani.enYakinDeneme)}`}
+                  {d.siradaBekliyor(ilerleme.tani.kuyrukta)}
+                  {ilerleme.tani.enYakinDeneme && d.enErken(saatMetni(ilerleme.tani.enYakinDeneme, dil))}
                   .
                 </p>
               )}
               <p className="mt-1.5 text-12 text-ink-muted">
-                Son hareket {gecenSure(ilerleme.tani.sonHareket)}
+                {d.sonHareket(gecenSure(ilerleme.tani.sonHareket, d))}
                 {ilerleme.tani.acikToplam > ilerleme.tani.bakilan &&
-                  ` · ${ilerleme.tani.acikToplam} açık işin ${ilerleme.tani.bakilan} tanesine bakıldı`}
+                  d.bakildi(ilerleme.tani.acikToplam, ilerleme.tani.bakilan)}
               </p>
               {kurtarmaNotu && <p className="mt-1.5 text-12 text-ink">{kurtarmaNotu}</p>}
             </div>
@@ -327,7 +329,7 @@ export function TopluTazeleme({
 
           {ilerleme.dusen > 0 && (
             <p className="mt-2 text-12 text-ink-muted">
-              Düşen işlerin sebebi her workspace’in Marka Merkezi › Workspace bilgileri › Veri durumu bölümünde iş bazında yazılı.
+              {d.dusenSebep}
             </p>
           )}
         </div>
@@ -338,7 +340,7 @@ export function TopluTazeleme({
         <div className="mt-4 grid gap-3">
           <div className="flex items-center justify-between">
             <span className="text-12 text-ink-muted">
-              {secili.size} / {workspaceler.length} workspace seçildi
+              {d.secildi(secili.size, workspaceler.length)}
             </span>
             <Dugme
               ton="hayalet"
@@ -347,7 +349,7 @@ export function TopluTazeleme({
                 setSecili(hepsiSecili ? new Set() : new Set(workspaceler.map((w) => w.id)))
               }
             >
-              {hepsiSecili ? 'Seçimi kaldır' : 'Hepsini seç'}
+              {hepsiSecili ? d.secimiKaldir : d.hepsiniSec}
             </Dugme>
           </div>
 
@@ -375,7 +377,7 @@ export function TopluTazeleme({
 
           <div className="flex flex-wrap items-end gap-4">
             <div className="w-40">
-              <Alan etiket="Geriye">
+              <Alan etiket={d.geriye}>
                 <Secim
                   value={yil}
                   onChange={(e) => {
@@ -383,9 +385,9 @@ export function TopluTazeleme({
                     setTahmin(null);
                   }}
                 >
-                  <option value={1}>1 yıl</option>
-                  <option value={2}>2 yıl</option>
-                  <option value={3}>3 yıl</option>
+                  <option value={1}>{d.yil(1)}</option>
+                  <option value={2}>{d.yil(2)}</option>
+                  <option value={3}>{d.yil(3)}</option>
                 </Secim>
               </Alan>
             </div>
@@ -405,7 +407,7 @@ export function TopluTazeleme({
                 beş ek platform çağrısı demek; sessizce açık gelmesi kotayı
                 iki katına çıkarırdı.
               */}
-              Kitle kırılımları da çekilsin (yaş, cinsiyet, şehir…). Kotayı ~2× artırır.
+              {d.kirilimlar}
             </label>
           </div>
 
@@ -421,21 +423,18 @@ export function TopluTazeleme({
                 disabled={secili.size === 0}
                 bekliyor={busy}
               >
-                Ne kadar sürecek?
+                {d.neKadar}
               </Dugme>
             </div>
           ) : (
             <Serit
               baslik={
-                <>
-                  {tahmin.accountCount} reklam hesabı için {tahmin.jobCount} iş açılacak: {tahmin.dateFrom} ile{' '}
-                  {tahmin.dateTo} arası, {tahmin.windowCount} pencere.
-                </>
+                <>{d.tahminBaslik(tahmin.accountCount, tahmin.jobCount, tahmin.dateFrom, tahmin.dateTo, tahmin.windowCount)}</>
               }
               eylemler={
                 <>
                   <Dugme ton="hayalet" boyut="kucuk" onClick={() => setTahmin(null)} disabled={busy}>
-                    Vazgeç
+                    {d.vazgec}
                   </Dugme>
                   <Dugme
                     ton="koyu"
@@ -444,7 +443,7 @@ export function TopluTazeleme({
                     disabled={tahmin.accountCount === 0}
                     bekliyor={busy}
                   >
-                    Başlat
+                    {d.baslat}
                   </Dugme>
                 </>
               }
@@ -453,9 +452,8 @@ export function TopluTazeleme({
                 YAPI TARAMASI OLMAYAN HESAP SAYISI YAZILI ama iş ATLANMIYOR:
                 yapı işi planın ilk adımı ve aynı turda koşuyor.
               */}
-              {tahmin.noStructure > 0 &&
-                `${tahmin.noStructure} hesabın yapı taraması hiç koşmamış. Önce o çekilecek, metrikler ondan sonra yazılabiliyor. `}
-              Bu işlem platform kotası harcıyor ve geri alınamıyor. Kotaya takılan işler düşmüyor, bekliyor.
+              {tahmin.noStructure > 0 && d.yapiYok(tahmin.noStructure)}
+              {d.kotaUyari}
             </Serit>
           )}
         </div>
@@ -470,18 +468,18 @@ export function TopluTazeleme({
  * "8400 saniye" hiçbir şey söylemiyor; "2 sa 20 dk" kullanıcının bekleyip
  * beklemeyeceğine karar vermesini sağlıyor.
  */
-function sureMetni(saniye: number): string {
-  if (saniye < 60) return 'bir dakikadan az';
+function sureMetni(saniye: number, d: TopluSozlugu): string {
+  if (saniye < 60) return d.birDakikadanAz;
   const dk = Math.round(saniye / 60);
-  if (dk < 60) return `${dk} dk`;
+  if (dk < 60) return d.dk(dk);
   const sa = Math.floor(dk / 60);
   const kalan = dk % 60;
-  return kalan === 0 ? `${sa} sa` : `${sa} sa ${kalan} dk`;
+  return kalan === 0 ? d.sa(sa) : d.saDk(sa, kalan);
 }
 
 /** ISO zamanı saat:dakika olarak yazar — "14:20". */
-function saatMetni(iso: string): string {
-  return new Date(iso).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+function saatMetni(iso: string, dil: Dil): string {
+  return new Date(iso).toLocaleTimeString(bicimKodu(dil), { hour: '2-digit', minute: '2-digit' });
 }
 
 /**
@@ -490,8 +488,8 @@ function saatMetni(iso: string): string {
  * Mutlak saat yazmak kullanıcıya çıkarma yaptırıyor; asıl soru "ne kadardır
  * duruyor".
  */
-function gecenSure(iso: string | null): string {
-  if (iso === null) return 'yok';
+function gecenSure(iso: string | null, d: TopluSozlugu): string {
+  if (iso === null) return d.yok;
   const saniye = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
-  return `${sureMetni(saniye)} önce`;
+  return d.once(sureMetni(saniye, d));
 }

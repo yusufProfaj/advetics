@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { PAKET_SINIRLARI, paketEtiketi } from '@advetics/shared';
+import { kapsamSozlugu } from '@/dil/sozlukler/kapsam';
 
 /**
  * ═══ TEK KAPSAM SEÇİCİ — ÜST HESAP › ŞİRKET › WORKSPACE ═══
@@ -94,8 +96,13 @@ describe('KRİTİK: üst hesap geçişi', () => {
   });
 
   it('PAKET ve ŞİRKET SAYISI satırda yazıyor', () => {
-    expect(SECICI).toContain('PAKET_SINIRLARI[h.paket].etiket');
-    expect(SECICI).toContain('{h.sirketSayisi} şirket');
+    // Etiketler dile göre (D2): paket adı shared'daki çevirmenden, sayı sözlükten.
+    expect(SECICI).toContain('{paketEtiketi(h.paket, dil).etiket} · {d.sirketSayisi(h.sirketSayisi)}');
+    // Türkçe paket adı hâlâ TEK kaynaktan (PAKET_SINIRLARI) geliyor.
+    const paket = Object.keys(PAKET_SINIRLARI)[0] as keyof typeof PAKET_SINIRLARI;
+    expect(paketEtiketi(paket, 'tr').etiket).toBe(PAKET_SINIRLARI[paket].etiket);
+    expect(kapsamSozlugu.tr.sirketSayisi(4)).toBe('4 şirket');
+    expect(kapsamSozlugu.en.sirketSayisi(4)).toBe('4 companies');
   });
 });
 
@@ -107,14 +114,21 @@ describe('KRİTİK: aramanın kapsamı EKRANDA yazıyor', () => {
      * yazmazsa o şirketin silindiğini sanar. Sessiz boş liste bu depoda
      * yasak (CLAUDE.md).
      */
-    expect(SECICI).toContain('ağacında yapıldı');
+    // Cümle sözlükte (D2); aramada bu anahtar basılıyor.
+    expect(SECICI).toContain('? d.aramaKapsami(ajans)');
+    expect(kapsamSozlugu.tr.aramaKapsami('Profaj')).toContain('Profaj ağacında yapıldı');
+    expect(kapsamSozlugu.en.aramaKapsami('Profaj')).toContain('Profaj');
+    expect(kapsamSozlugu.en.aramaKapsami('Profaj')).not.toBe(kapsamSozlugu.tr.aramaKapsami('Profaj'));
     // İDDİA ŞARTA ÇAPALI: cümle her zaman basılsaydı tek hesaplı
     // kullanıcıya hiçbir işe yaramayan bir uyarı gösterilirdi.
     expect(SECICI).toContain('{ajans && digerUstHesaplar.length > 0 && (');
   });
 
   it('şirket sayacı duruyor', () => {
-    expect(SECICI).toContain('şirketten ${suzulmus.length} tanesi gösteriliyor');
+    // Sıra (toplam, görünen) — tersine çağrılırsa "6 şirketten 49 tanesi" yazar.
+    expect(SECICI).toContain('d.gosteriliyor(sirketler.length, suzulmus.length)');
+    expect(kapsamSozlugu.tr.gosteriliyor(49, 6)).toBe('49 şirketten 6 tanesi gösteriliyor');
+    expect(kapsamSozlugu.en.gosteriliyor(49, 6)).toBe('Showing 6 of 49 companies');
   });
 
   it('BOŞ SONUÇ üst hesap eşleşmesini de sayıyor', () => {
@@ -141,7 +155,10 @@ describe('KRİTİK: menü kapalıyken hangi ağaçta olduğu görünüyor', () =
 describe('KRİTİK: alttaki sabit sekmeler', () => {
   it('yönetim paneli duruyor ve yetkisize basılmıyor', () => {
     expect(SECICI).toContain("href={ayarlarAdresi('sirketler')}");
-    expect(SECICI).toContain('Şirketleri yönet');
+    expect(SECICI).toContain('{d.sirketleriYonet}');
+    expect(kapsamSozlugu.tr.sirketleriYonet).toBe('Şirketleri yönet');
+    expect(kapsamSozlugu.en.sirketleriYonet).toBeTruthy();
+    expect(kapsamSozlugu.en.sirketleriYonet).not.toBe('Şirketleri yönet');
     expect(SECICI).toContain('{yonetimGorunur && (');
   });
 

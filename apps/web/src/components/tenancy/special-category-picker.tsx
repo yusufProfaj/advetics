@@ -10,6 +10,8 @@ import {
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { Dugme } from '@/components/ui/dugme';
 import { Uyari } from '@/components/ui/uyari';
+import { useSozluk } from '@/dil/saglayici';
+import { sirketlerSozlugu } from '@/dil/sozlukler/ayarlar-sirketler';
 
 /**
  * Özel reklam kategorisi beyanı — MÜŞTERİ KARTINDA.
@@ -33,6 +35,8 @@ export function SpecialCategoryPicker({
   canManage: boolean;
 }) {
   const router = useRouter();
+  const t = useSozluk(sirketlerSozlugu);
+  const d = t.kategori;
   const [secili, setSecili] = useState<SpecialAdCategory[]>(value);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,7 +56,7 @@ export function SpecialCategoryPicker({
       setKaydedildi(true);
       router.refresh();
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Kaydedilemedi');
+      setError(err instanceof ApiRequestError ? err.message : d.kaydedilemedi);
     } finally {
       setBusy(false);
     }
@@ -74,7 +78,7 @@ export function SpecialCategoryPicker({
 
   const ozet =
     secili.length === 0
-      ? 'beyan yok'
+      ? d.beyanYok
       : secili.map((k) => SPECIAL_AD_CATEGORY_META[k].label).join(', ');
 
   return (
@@ -86,7 +90,7 @@ export function SpecialCategoryPicker({
         className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition hover:bg-surface-sunken"
       >
         <span className="min-w-0">
-          <span className="block text-xs font-semibold text-ink">Özel reklam kategorisi</span>
+          <span className="block text-xs font-semibold text-ink">{d.baslik}</span>
           <span
             className={`block truncate text-[11px] ${
               secili.length > 0 ? 'text-danger-strong' : 'text-ink-muted'
@@ -95,16 +99,16 @@ export function SpecialCategoryPicker({
             {ozet}
           </span>
         </span>
-        <span className="shrink-0 text-[11px] text-ink-muted">{acik ? 'kapat' : 'düzenle'}</span>
+        <span className="shrink-0 text-[11px] text-ink-muted">{acik ? d.kapat : d.duzenle}</span>
       </button>
 
       {/* Açılır bölüm DOM'da kalıyor (görünürlük sınıfla): kapatıp açmak
           seçilmiş ama kaydedilmemiş kategorileri sıfırlamasın. */}
       <div className={`border-t border-line p-3 ${acik ? '' : 'hidden'}`}>
       <p className="text-[11px] text-ink-muted">
-        Konut, istihdam ve kredi reklamları düzenlemeye tabi. Beyan edilmeden yayınlanan
-        reklam politika ihlali ve ceza <strong>hesap seviyesinde</strong>: o hesaptaki
-        bütün kampanyaları etkiliyor.
+        {d.aciklamaOnce}
+        <strong>{d.aciklamaVurgu}</strong>
+        {d.aciklamaSon}
       </p>
 
       <div className="mt-2 flex flex-wrap gap-1.5">
@@ -142,9 +146,9 @@ export function SpecialCategoryPicker({
       {secili.length > 0 && (
         <div className="mt-2">
           <Uyari ton="uyari">
-            Bu workspace’in kampanyalarında Meta <strong>yaş ve cinsiyet daraltmasına izin
-            vermiyor</strong>; o alanlar gönderilmeyecek. Beyan her kampanyaya otomatik
-            ekleniyor.
+            {d.uyariOnce}
+            <strong>{d.uyariVurgu}</strong>
+            {d.uyariSon}
           </Uyari>
         </div>
       )}
@@ -157,12 +161,12 @@ export function SpecialCategoryPicker({
 
       {canManage && degisti && (
         <Dugme ton="koyu" boyut="kucuk" className="mt-2" onClick={kaydet} disabled={busy}>
-          {busy ? 'Kaydediliyor…' : 'Beyanı kaydet'}
+          {busy ? t.ortak.kaydediliyor : d.kaydet}
         </Dugme>
       )}
       {kaydedildi && !degisti && (
         <p role="status" className="mt-2 text-12 text-ink">
-          Beyan kaydedildi.
+          {d.kaydedildi}
         </p>
       )}
       </div>

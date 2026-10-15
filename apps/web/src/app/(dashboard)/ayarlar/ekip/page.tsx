@@ -1,8 +1,15 @@
 import { redirect } from 'next/navigation';
-import type { IkiAdimDurumu, ManagerAccountTree, UstHesapUyesi } from '@advetics/shared';
+import {
+  ayarSekmesiAdi,
+  kapiNedeni,
+  sec,
+  type IkiAdimDurumu,
+  type ManagerAccountTree,
+  type UstHesapUyesi,
+} from '@advetics/shared';
 import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import { requireSession } from '@/lib/session';
-import { PANEL_KAPILARI, kapi } from '@/lib/panel-adresleri';
+import { kapi } from '@/lib/panel-adresleri';
 import { ayarSekmesiAcik } from '@/lib/ayar-kapilari';
 import { Serit } from '@/components/ui/hal';
 import { AyarKapsami, AyarlarSayfasi, aktifSirketAdi } from '@/components/ayar-kapsam';
@@ -10,8 +17,13 @@ import type { MemberRow } from '@/components/tenancy/team-manager';
 import { KullaniciEkle, TeamScreen } from '@/components/tenancy/team-screen';
 import { WorkspaceErisimi } from '@/components/tenancy/workspace-erisimi';
 import { IkiAdimSirketAyari } from '@/components/tenancy/iki-adim-sirket-ayari';
+import { dilAl } from '@/dil/sunucu';
+import { ayarlarSozlugu } from '@/dil/sozlukler/ayarlar';
 
-export const metadata = { title: 'Ekip ve güvenlik · Advetics' };
+/** Sekme başlığı = menü satırı = sayfa başlığı, hepsi `ayarSekmesiAdi`ndan (`ayarlar.spec.ts`). */
+export async function generateMetadata() {
+  return { title: `${ayarSekmesiAdi('ekip', await dilAl())} · Advetics` };
+}
 
 interface ClientRow {
   id: string;
@@ -19,8 +31,8 @@ interface ClientRow {
 }
 
 /** Hata mesajını çıkarır — platformun kendi cümlesi ekranda görünmeli. */
-function hataMetni(e: unknown): string {
-  return e instanceof ApiRequestError ? e.message : 'Bağlantı kurulamadı';
+function hataMetni(e: unknown, yedek: string): string {
+  return e instanceof ApiRequestError ? e.message : yedek;
 }
 
 /**
@@ -48,6 +60,10 @@ export default async function EkipSayfasi({
 }) {
   const session = await requireSession();
   if (!ayarSekmesiAcik(session, 'ekip')) redirect('/dashboard');
+  const dil = await dilAl();
+  const t = sec(ayarlarSozlugu, dil);
+  const d = t.ekipSayfasi;
+  const yedek = t.ortak.baglantiKurulamadi;
   const p = await searchParams;
   const secili = (Array.isArray(p.workspace) ? p.workspace[0] : p.workspace) ?? null;
 
@@ -88,28 +104,28 @@ export default async function EkipSayfasi({
         hesapAdi: session.managerAccount.name,
         uyeler: ustEkipSonuc.status === 'fulfilled' ? ustEkipSonuc.value : [],
         yonetebilir: kapi(session, 'ustHesapEkibi.yonet'),
-        yuklemeHatasi: ustEkipSonuc.status === 'rejected' ? hataMetni(ustEkipSonuc.reason) : null,
+        yuklemeHatasi: ustEkipSonuc.status === 'rejected' ? hataMetni(ustEkipSonuc.reason, yedek) : null,
       }
     : null;
 
   const yuklemeHatalari = [
-    uyeSonuc.status === 'rejected' ? `Ekip listesi: ${hataMetni(uyeSonuc.reason)}` : null,
-    workspaceSonuc.status === 'rejected' ? `Workspace listesi: ${hataMetni(workspaceSonuc.reason)}` : null,
-    agacSonuc.status === 'rejected' ? `Şirket listesi: ${hataMetni(agacSonuc.reason)}` : null,
-    ikiAdimSonuc.status === 'rejected' ? `İki adımlı doğrulama ayarı: ${hataMetni(ikiAdimSonuc.reason)}` : null,
+    uyeSonuc.status === 'rejected' ? d.ekipListesi(hataMetni(uyeSonuc.reason, yedek)) : null,
+    workspaceSonuc.status === 'rejected' ? d.workspaceListesi(hataMetni(workspaceSonuc.reason, yedek)) : null,
+    agacSonuc.status === 'rejected' ? d.sirketListesi(hataMetni(agacSonuc.reason, yedek)) : null,
+    ikiAdimSonuc.status === 'rejected' ? d.ikiAdimAyari(hataMetni(ikiAdimSonuc.reason, yedek)) : null,
   ].filter((x): x is string => x !== null);
 
   return (
     <AyarlarSayfasi
       session={session}
       ust={<AyarKapsami duzey="sirket" ad={aktifSirketAdi(session)} />}
-      baslik="Ekip ve güvenlik"
-      aciklama="Danışmanlar şirketlere yetkilendirilir ve o şirketin bütün workspace’lerini görür. Müşteri hesapları tek bir workspace’e bağlı kalır."
+      baslik={ayarSekmesiAdi('ekip', dil)}
+      aciklama={d.aciklama}
       /* BÖLÜMÜN BİRİNCİL EYLEMİ BAŞLIĞIN SAĞINDA; kapı kapalıysa sebebi listenin altında. */
       eylemler={ekipYonetir ? <KullaniciEkle clients={clients} /> : undefined}
     >
       {yuklemeHatalari.length > 0 && (
-        <Serit ton="hata" baslik="Bazı bölümler okunamadı">
+        <Serit ton="hata" baslik={d.bazilariOkunamadi}>
           {yuklemeHatalari.join(' · ')}
         </Serit>
       )}
@@ -123,20 +139,20 @@ export default async function EkipSayfasi({
         canManage={ekipYonetir}
         ustHesap={ustHesap}
       />
-      {!ekipYonetir && <p className="m-0 text-12 text-ink-muted">{PANEL_KAPILARI['ekip.yonet'].neden}</p>}
+      {!ekipYonetir && <p className="m-0 text-12 text-ink-muted">{kapiNedeni('ekip.yonet', dil)}</p>}
 
       <WorkspaceErisimi
         workspaceler={clients}
         secili={secili}
         currentUserId={session.user.id}
         yonetebilir={ekipYonetir}
-        neden={PANEL_KAPILARI['ekip.yonet'].neden}
+        neden={kapiNedeni('ekip.yonet', dil)}
       />
 
       <section id="iki-adim-zorunlulugu" className="scroll-mt-24">
         {!sirket2fa ? (
-          <Serit ton="bilgi" baslik="İki adımlı doğrulama">
-            {PANEL_KAPILARI['ikiAdim.sirketZorunlulugu'].neden}
+          <Serit ton="bilgi" baslik={d.ikiAdim}>
+            {kapiNedeni('ikiAdim.sirketZorunlulugu', dil)}
           </Serit>
         ) : ikiAdimSonuc.status === 'fulfilled' && ikiAdimSonuc.value ? (
           <IkiAdimSirketAyari durum={ikiAdimSonuc.value} />

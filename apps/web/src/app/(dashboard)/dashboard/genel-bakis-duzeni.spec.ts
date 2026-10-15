@@ -1,6 +1,15 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { genelBakisSozlugu } from '@/dil/sozlukler/genel-bakis';
+
+/*
+ * İKİ DİL (D2): ekran metni sözlükte. Metne bakan iddialar sözlüğün
+ * DEĞERİNİ (Türkçe aynen) ve bileşenin o ANAHTARI kullandığını birlikte
+ * sınıyor; yalnız biri, metin silinse ya da bileşen başka anahtar okusa
+ * yeşil kalırdı.
+ */
+const TR = genelBakisSozlugu.tr;
 
 /**
  * ═══ GENEL BAKIŞ DÜZENİ — ONAYLANAN TASLAK (2026-10-09) ═══
@@ -28,7 +37,8 @@ const tablo = (ad: string): string => yorumsuz(join(WEB, 'components', ad));
 
 describe('tarama boşa düşmüyor', () => {
   it('kaynaklar okundu', () => {
-    expect(SAYFA).toContain('Genel Bakış');
+    // Başlık menünün kendi çevirisinden (tek kaynak, iki dilde menüyle aynı).
+    expect(SAYFA).toContain("baslik={menuSatiriEtiketi('/dashboard', dil)}");
     expect(PARCA).toContain('export function PerformansKarti');
     expect(KART).toContain('export async function BekleyenIslerKarti');
     expect(CSS.length).toBeGreaterThan(5000);
@@ -76,13 +86,14 @@ describe('taslağın düzeni', () => {
   });
 
   it('tamamlanmamış gün uyarısı YAZILI', () => {
-    expect(SAYFA).toContain('Gün bitmedi');
+    expect(TR.gunBitmedi).toContain('Gün bitmedi');
+    expect(SAYFA).toContain('{range.incomplete && <span className="text-danger-strong"> · {d.gunBitmedi}</span>}');
   });
 });
 
 describe('uyarılar', () => {
   it('KRİTİK: hepsi TEK şeritte ve hiç yoksa şerit çizilmiyor', () => {
-    expect(SAYFA).toContain('<BildirimSeridi bildirimler={bildirimler(summary, hesapHedefi)} />');
+    expect(SAYFA).toContain('<BildirimSeridi bildirimler={bildirimler(summary, hesapHedefi, d)} />');
     expect(PARCA).toContain('if (bildirimler.length === 0) return null;');
   });
 
@@ -104,14 +115,15 @@ describe('Performans kartı', () => {
 
   it('KRİTİK: erişimin günlük serisi yok — seçilemiyor ve nedenini söylüyor', () => {
     expect(PARCA).toContain("if (k === 'erisim') return;");
-    expect(PARCA).toContain('Erişimin günlük serisi yok, grafikte çizilemiyor');
+    expect(TR.performans.erisimCizilemez).toBe('Erişimin günlük serisi yok, grafikte çizilemiyor');
+    expect(PARCA).toContain('title={secilemez ? d.erisimCizilemez : undefined}');
   });
 
   it('KRİTİK: maliyet metriklerinde düşüş İYİ', () => {
     const i = SAYFA.indexOf("anahtar: 'dbm'");
     expect(SAYFA.slice(i, SAYFA.indexOf('},', i))).toContain('ters: true');
     // Karar ortak fonksiyonda (`lib/degisim.spec.ts` çalıştırarak sınıyor).
-    expect(PARCA).toContain('const h = degisimHali(d, ters);');
+    expect(PARCA).toContain('const h = degisimHali(d, ters, dil);');
     const h = SAYFA.indexOf("anahtar: 'harcama'");
     expect(SAYFA.slice(h, SAYFA.indexOf('},', h))).not.toContain('ters');
   });
@@ -143,12 +155,15 @@ describe('Performans kartı', () => {
     expect(i, 'boş grafik dalı bulunamadı').toBeGreaterThan(-1);
     const dilim = PARCA.slice(i, PARCA.indexOf('</p>', i));
     expect(dilim).toContain('onceki !== null && onceki.length > 0');
-    expect(dilim).toContain('Kampanyalar durmuş olabilir');
+    expect(dilim).toContain('d.oncekindeVardi');
+    expect(TR.performans.oncekindeVardi).toContain('Kampanyalar durmuş olabilir');
   });
 
   it('tek günlük aralıkta grafik yerine açıklama', () => {
-    expect(SAYFA).toContain('tekGun={range.days <= 1}');
-    expect(PARCA).toContain('Tek günlük aralıkta grafik çizilmiyor');
+    expect(SAYFA).toContain('const tekGun = range.days <= 1;');
+    expect(SAYFA).toContain('tekGun={tekGun}');
+    expect(PARCA).toContain('<p className={s.bosMetin}>{d.tekGun}</p>');
+    expect(TR.performans.tekGun).toContain('Tek günlük aralıkta grafik çizilmiyor');
   });
 });
 
@@ -162,7 +177,13 @@ describe('iniş Reklam Yöneticisi’nde', () => {
 
   it('KRİTİK: liste KESİLİYOR ama söyleniyor', () => {
     expect(SAYFA).toContain('.slice(0, OZET_SATIR)');
-    expect(PARCA).toContain('{satirlar.length < toplam ? `${satirlar.length} / ${toplam}` : toplam} {tumuEtiket}');
+    // Sayaç SUNUCUDA, dilin çoğul kuralıyla kuruluyor; kesilen listede "5 / 48".
+    expect(SAYFA).toContain("sayac={d.liste.sayac(Math.min(OZET_SATIR, sirketler.length), sirketler.length, 'sirket')}");
+    expect(SAYFA).toContain("sayac={d.liste.sayac(Math.min(OZET_SATIR, hesaplar.accounts.length), hesaplar.accounts.length, 'hesap')}");
+    expect(PARCA).toContain('{sayac}');
+    expect(TR.liste.sayac(5, 48, 'sirket')).toBe('5 / 48 şirket');
+    expect(TR.liste.sayac(3, 3, 'hesap')).toBe('3 hesap');
+    expect(genelBakisSozlugu.en.liste.sayac(5, 48, 'sirket')).toBe('5 / 48 companies');
   });
 
   it('KRİTİK: pay GELEN bütün satırların toplamından', () => {
@@ -182,7 +203,7 @@ describe('iniş Reklam Yöneticisi’nde', () => {
     expect(k).toContain('hata[duzey] ? (');
     expect(k).toContain('!satirlar ? (');
     expect(k).toContain('gosterilen.length === 0 ? (');
-    expect(k).toContain("e instanceof ApiRequestError ? e.message : 'Liste alınamadı.'");
+    expect(k).toContain('err instanceof ApiRequestError ? err.message : e.listeAlinamadi');
   });
 });
 

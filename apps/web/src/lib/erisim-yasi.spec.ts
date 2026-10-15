@@ -16,14 +16,21 @@ describe('erişim yaşı', () => {
     expect(erisimYasi(null, SIMDI)).toEqual({ tur: 'hic', metin: 'Hiç giriş yapmadı' });
   });
 
+  it('İngilizce ekranda da aynı iki hâl, kendi cümlesiyle', () => {
+    expect(erisimYasi(null, SIMDI, 'en')).toEqual({ tur: 'hic', metin: 'Never signed in' });
+    expect(erisimYasi(once(ETKISIZ_GUN), SIMDI, 'en')?.metin).toBe(
+      'No sign-in for 90 days; if they left, remove their access',
+    );
+  });
+
   it('workspace erişim listesi ortak fonksiyonu kullanıyor', () => {
     const k = readFileSync(join(__dirname, '../components/tenancy/team-manager.tsx'), 'utf8');
-    expect(k).toContain('const y = erisimYasi(member.lastLoginAt);');
+    expect(k).toContain('const y = erisimYasi(member.lastLoginAt, undefined, dil);');
   });
 
   it('KRİTİK: asıl Ekip ekranında Son giriş sütunu ve işaret var', () => {
     const k = readFileSync(join(__dirname, '../components/tenancy/team-screen.tsx'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     expect(k).toContain("anahtar: 'giris',");
-    expect(k).toContain('const y = erisimYasi(k.lastLoginAt);');
+    expect(k).toContain('const y = erisimYasi(k.lastLoginAt, undefined, dil);');
   });
 });

@@ -3,6 +3,8 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { AutoBoostQueueList, UyariYaniti } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { useSozluk } from '@/dil/saglayici';
+import { bildirimSozlugu } from '@/dil/sozlukler/bildirim';
 
 /**
  * ═══ BİLDİRİM VERİSİ TEK YERDEN ÇEKİLİYOR ═══
@@ -56,7 +58,7 @@ export function useBildirimVerisi(): BildirimVerisi {
   if (v === null) {
     // Sağlayıcısız kullanım SESSİZ bir boş panel üretirdi — "bildirim yok"
     // ile "bileşen yanlış yere kondu" aynı görünürdü.
-    throw new Error('useBildirimVerisi bir <BildirimSaglayici> içinde çağrılmalı');
+    throw new Error('useBildirimVerisi: BildirimSaglayici yok (dashboard layout)');
   }
   return v;
 }
@@ -73,6 +75,7 @@ export function BildirimSaglayici({
   children: ReactNode;
 }) {
   const [uyarilar, setUyarilar] = useState<UyariYaniti | null>(null);
+  const z = useSozluk(bildirimSozlugu).zil;
   const [uyariHatasi, setUyariHatasi] = useState<string | null>(null);
   const [boostKuyrugu, setBoostKuyrugu] = useState<AutoBoostQueueList | null>(null);
   const [boostHatasi, setBoostHatasi] = useState<string | null>(null);
@@ -90,7 +93,7 @@ export function BildirimSaglayici({
          * "hiç uyarı yok" ile "uyarılar gelmedi"yi aynı gösterirdi.
          */
         if (!iptal) {
-          setUyariHatasi(e instanceof ApiRequestError ? e.message : 'bağlantı kurulamadı');
+          setUyariHatasi(e instanceof ApiRequestError ? e.message : z.baglantiKurulamadi);
         }
       });
     return () => {
@@ -123,7 +126,7 @@ export function BildirimSaglayici({
       })
       .catch((e: unknown) => {
         if (!iptal) {
-          setBoostHatasi(e instanceof ApiRequestError ? e.message : 'bağlantı kurulamadı');
+          setBoostHatasi(e instanceof ApiRequestError ? e.message : z.baglantiKurulamadi);
         }
       });
     return () => {

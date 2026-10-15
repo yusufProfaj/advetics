@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { UiMetni } from './ui-metni';
 
 /**
  * ═══ TABLO (referans "04 · Tablo") ═══
@@ -156,11 +157,17 @@ export function SayfalamaCubugu({ bas, son, toplam, onceki, sonraki }: Sayfalama
       </span>
       {(onceki || sonraki) && (
         <span className="flex items-center gap-1">
-          <button type="button" className={ok} onClick={onceki} disabled={!onceki} aria-label="Önceki sayfa">
-            ‹
+          <button type="button" className={ok} onClick={onceki} disabled={!onceki}>
+            <span aria-hidden>‹</span>
+            <span className="sr-only">
+              <UiMetni k="oncekiSayfa" />
+            </span>
           </button>
-          <button type="button" className={ok} onClick={sonraki} disabled={!sonraki} aria-label="Sonraki sayfa">
-            ›
+          <button type="button" className={ok} onClick={sonraki} disabled={!sonraki}>
+            <span aria-hidden>›</span>
+            <span className="sr-only">
+              <UiMetni k="sonrakiSayfa" />
+            </span>
           </button>
         </span>
       )}
@@ -192,10 +199,12 @@ export function Cip({ children, onKaldir }: { children: ReactNode; onKaldir?: ()
         <button
           type="button"
           onClick={onKaldir}
-          aria-label="Süzgeci kaldır"
           className="-mr-1 inline-flex h-5 w-5 items-center justify-center rounded-full text-ink-muted hover:bg-surface hover:text-ink"
         >
-          ✕
+          <span aria-hidden>✕</span>
+          <span className="sr-only">
+            <UiMetni k="suzgeciKaldir" />
+          </span>
         </button>
       )}
     </span>
@@ -203,7 +212,7 @@ export function Cip({ children, onKaldir }: { children: ReactNode; onKaldir?: ()
 }
 
 /** "+ Süzgeç" — kesikli kenarlı çip düğmesi. */
-export function CipEkle({ children = '+ Süzgeç', onClick }: { children?: ReactNode; onClick: () => void }) {
+export function CipEkle({ children = <UiMetni k="suzgecEkle" />, onClick }: { children?: ReactNode; onClick: () => void }) {
   return (
     <button
       type="button"

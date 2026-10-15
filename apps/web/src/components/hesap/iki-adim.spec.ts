@@ -1,6 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { ayarSekmesiAdi } from '@advetics/shared';
+import { ekipSozlugu } from '@/dil/sozlukler/ayarlar-ekip';
+import { kabukSozlugu } from '@/dil/sozlukler/kabuk';
 
 /**
  * ═══ İKİ ADIMLI DOĞRULAMA — PANEL KAYNAK TARAMALARI ═══
@@ -67,12 +70,16 @@ describe('Hesabım kapısı', () => {
   it('sayfa başlığı ve menü dışı kapı (ad kartı) aynı adı taşıyor', () => {
     // 2026-10-13'ten beri Ayarlar'ın dördüncü sekmesi (`/ayarlar/hesabim`); eski adres yönleniyor.
     const sayfa = yorumsuz(oku('app/(dashboard)/ayarlar/hesabim/page.tsx'));
-    expect(sayfa).toContain("title: 'Hesabım · Advetics'");
-    expect(sayfa).toContain('baslik="Hesabım"');
+    // D2: başlık ve sekme başlığı sözleşmedeki addan (`ayarSekmesiAdi`), Türkçesi "Hesabım".
+    expect(sayfa).toContain("title: `${ayarSekmesiAdi('hesabim', await dilAl())} · Advetics`");
+    expect(sayfa).toContain("baslik={ayarSekmesiAdi('hesabim', dil)}");
+    expect(ayarSekmesiAdi('hesabim', 'tr')).toBe('Hesabım');
     const kenar = yorumsuz(oku('components/kenar-cubugu.tsx'));
     expect(kenar).toContain("href={ayarlarAdresi('hesabim')}");
     expect(yorumsuz(oku('app/(dashboard)/hesabim/page.tsx'))).toContain("redirect(eskiAdresYonu('hesabim', { sorgu: { kurtarma } }));");
-    expect(kenar).toContain('Hesabım');
+    // D2: kart etiketi kabuk sözlüğünden (`kabuk.ts`), menüyle aynı ad.
+    expect(kenar).toContain('{veri.etiketler.hesabim}');
+    expect(kabukSozlugu.tr.kenar.hesabim).toBe(ayarSekmesiAdi('hesabim', 'tr'));
   });
 
   it('KRİTİK: /hesabim oturum isteyen yol (public listede değil)', () => {
@@ -121,7 +128,9 @@ describe('Ajan 4 düzeltmeleri', () => {
 
   it('Ö-2: zorunluluğun kapsamı ekranda yazıyor', () => {
     const s = yorumsuz(oku('components/tenancy/iki-adim-sirket-ayari.tsx'));
-    expect(s).toContain('Zorunluluk yalnız bu şirketin kendi kullanıcılarına uygulanır.');
-    expect(s).toContain('kendi şirketinin ayarına tabidir');
+    // D2: metin sözlükte (`sirket2fa.kapsam`), bileşen anahtarı çiziyor.
+    expect(s).toContain('{d.kapsam}');
+    expect(ekipSozlugu.tr.sirket2fa.kapsam).toContain('Zorunluluk yalnız bu şirketin kendi kullanıcılarına uygulanır.');
+    expect(ekipSozlugu.tr.sirket2fa.kapsam).toContain('kendi şirketinin ayarına tabidir');
   });
 });

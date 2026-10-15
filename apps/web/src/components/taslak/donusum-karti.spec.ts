@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { genelBakisSozlugu } from '@/dil/sozlukler/genel-bakis';
+import { donusumBosSebebi } from '@advetics/shared';
 
 /**
  * ═══ DÖNÜŞÜM DETAYI — PANEL, RAPOR VE PDF ═══
@@ -63,22 +65,42 @@ describe('genel bakışta', () => {
      * elle yazmak üretimde görülen hatanın kapısıydı: kutu "kayıtlı dönüşüm
      * yok" derken kampanya tablosu 49 dönüşüm gösteriyordu.
      */
-    expect(PANEL).toContain('Dönüşüm detayı alınamadı:');
-    expect(PANEL).toContain('donusumBosSebebi({');
+    expect(PANEL).toContain('{d.detayAlinamadi(h)}');
+    expect(genelBakisSozlugu.tr.donusum.detayAlinamadi('x')).toBe('Dönüşüm detayı alınamadı: x');
+    expect(PANEL).toContain("dil === 'tr' ? donusumBosSebebi(bosParam) : donusumBosIngilizce(bosParam, d.bos)");
     expect(PANEL).toContain('toplamDonusum: detay.toplamDonusum');
+  });
+
+  it('KRİTİK: İngilizce boş-liste cümlesi ortak üreticinin AYNI üç hâlini taşıyor', () => {
+    /*
+     * Shared'daki üretici henüz dil almıyor; İngilizcesi sözlükte ve
+     * kartta küçük bir aynası var. Sözlüğün TÜRKÇE dalı shared'ın
+     * cümleleriyle birebir eşit olmak zorunda: üretici bir hâl ekler ya da
+     * cümlesini değiştirirse burada düşer ve İngilizce sessizce eskimez.
+     */
+    const b = genelBakisSozlugu.tr.donusum.bos;
+    expect(b.hata).toBe(donusumBosSebebi({ hataVar: true, toplamDonusum: 49 }));
+    expect(b.adYok(49)).toBe(donusumBosSebebi({ hataVar: false, toplamDonusum: 49 }));
+    expect(b.yok).toBe(donusumBosSebebi({ hataVar: false, toplamDonusum: 0 }));
+    const ayna = KARTLAR.slice(KARTLAR.indexOf('function donusumBosIngilizce'));
+    expect(ayna.indexOf('m.hata')).toBeGreaterThan(-1);
+    expect(ayna.indexOf('m.hata')).toBeLessThan(ayna.indexOf('m.adYok(p.toplamDonusum)'));
+    expect(ayna).toContain('if (p.toplamDonusum > 0) return m.adYok(p.toplamDonusum);');
   });
 
   it('KRİTİK: SAYAÇ adlandırılmış ile TOPLAMI ayrıştığında ikisini de yazıyor', () => {
     // Yalnızca birini yazmak, kampanya tablosuyla çelişen bir sayı demekti.
     expect(PANEL).toContain('toplam === detay.toplamDonusum');
-    expect(PANEL).toContain('`Adlandırılmış ${formatNumber(toplam)} / toplam ${formatNumber(detay.toplamDonusum)} dönüşüm`');
+    expect(PANEL).toContain('d.adlandirilmis(formatNumber(toplam, dil), formatNumber(detay.toplamDonusum, dil))');
+    expect(genelBakisSozlugu.tr.donusum.adlandirilmis('3', '5')).toBe('Adlandırılmış 3 / toplam 5 dönüşüm');
   });
 
   it('KRİTİK: META SATIRLARININ neden gruplanmış olduğu yazılı', () => {
     // Kullanıcı Google'da kendi adlarını görüp Meta'da "Form/Mesaj" görünce
     // "benim adlarım nerede" diye arar; cevap ekranın kendisinde olmalı.
     expect(PANEL).toContain("detay.satirlar.some((r) => r.platform === 'meta') && (");
-    expect(PANEL).toContain('Meta satırları gruplanmış olarak gelir');
+    expect(PANEL).toContain('{d.metaNotu}');
+    expect(genelBakisSozlugu.tr.donusum.metaNotu).toContain('Meta satırları gruplanmış olarak gelir');
   });
 });
 

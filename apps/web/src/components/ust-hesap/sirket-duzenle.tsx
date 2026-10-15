@@ -7,6 +7,8 @@ import { ApiRequestError, apiFetch } from '@/lib/api';
 import { Alan, Girdi } from '@/components/ui/alan';
 import { Dugme } from '@/components/ui/dugme';
 import { Serit } from '@/components/ui/hal';
+import { useSozluk } from '@/dil/saglayici';
+import { sirketlerSozlugu } from '@/dil/sozlukler/ayarlar-sirketler';
 
 /**
  * ŞİRKET DÜZENLEME — ad ve kısa ad.
@@ -35,6 +37,8 @@ export function SirketDuzenle({
   sirketSlug: string;
 }) {
   const router = useRouter();
+  const t = useSozluk(sirketlerSozlugu);
+  const d = t.sirketDuzenle;
   const [ad, setAd] = useState(sirketAdi);
   const [slug, setSlug] = useState(sirketSlug);
   /*
@@ -74,7 +78,7 @@ export function SirketDuzenle({
     if (!parsed.success) {
       // ŞEMA PANELDE DE KOŞUYOR: sunucunun cevabını beklemeden hatayı
       // alanın yanında göstermek, kaydet düğmesine basıp 400 yemekten iyi.
-      setHata(parsed.error.issues[0]?.message ?? 'Geçersiz değer');
+      setHata(parsed.error.issues[0]?.message ?? t.ortak.gecersizDeger);
       return;
     }
     setPending(true);
@@ -102,7 +106,7 @@ export function SirketDuzenle({
        */
       router.refresh();
     } catch (e) {
-      setHata(e instanceof ApiRequestError ? e.message : 'Kaydedilemedi.');
+      setHata(e instanceof ApiRequestError ? e.message : t.ortak.kaydedilemedi);
     } finally {
       setPending(false);
     }
@@ -110,11 +114,9 @@ export function SirketDuzenle({
 
   return (
     <section className="grid gap-4">
-      <p className="m-0 text-13 text-ink-muted">
-        Bu ad seçicide, raporlarda ve müşteriye giden maillerde görünüyor.
-      </p>
+      <p className="m-0 text-13 text-ink-muted">{d.aciklama}</p>
 
-      <Alan etiket="Şirket adı">
+      <Alan etiket={d.ad}>
         <Girdi
           value={ad}
           onChange={(e) => {
@@ -132,7 +134,7 @@ export function SirketDuzenle({
           aria-expanded={gelismis}
           className="justify-self-start text-13 font-semibold text-ink-muted underline-offset-2 transition-colors hover:text-ink hover:underline"
         >
-          {gelismis ? 'Gelişmiş ayarları gizle' : 'Gelişmiş'}
+          {gelismis ? d.gelismisGizle : d.gelismis}
         </button>
         {gelismis && (
           /*
@@ -141,8 +143,8 @@ export function SirketDuzenle({
             değiştirmek onları kırar.
           */
           <Alan
-            etiket="Kısa ad"
-            ipucu="Adreslerde ve dosya adlarında kullanılıyor. Değiştirmek, daha önce paylaşılmış rapor bağlantılarını bozabilir."
+            etiket={d.kisaAd}
+            ipucu={d.kisaAdIpucu}
           >
             <Girdi
               value={slug}
@@ -157,13 +159,13 @@ export function SirketDuzenle({
       </div>
 
       {hata && (
-        <Serit ton="hata" baslik="Kaydedilemedi">
+        <Serit ton="hata" baslik={t.ortak.kaydedilemediBaslik}>
           {hata}
         </Serit>
       )}
 
       <div className="flex items-center justify-end gap-3">
-        {kaydedildi && !degisti && <span className="text-13 text-ink-muted">Kaydedildi.</span>}
+        {kaydedildi && !degisti && <span className="text-13 text-ink-muted">{d.kaydedildi}</span>}
         <Dugme
           /*
            * DEĞİŞİKLİK YOKSA KAPALI. Açık bırakmak, hiçbir şeyi
@@ -174,7 +176,7 @@ export function SirketDuzenle({
           bekliyor={pending}
           onClick={() => void kaydet()}
         >
-          Kaydet
+          {t.ortak.kaydet}
         </Dugme>
       </div>
     </section>

@@ -31,7 +31,27 @@
 export type { IsoDay } from '@advetics/shared';
 export { gunEkle, gunSayisi } from '@advetics/shared';
 
-import { PENCERE, ayBasi, bugunUtc, gunEkle, gunSayisi, type IsoDay } from '@advetics/shared';
+import { PENCERE, ayBasi, bugunUtc, gunEkle, gunSayisi, sec, type Dil, type IsoDay } from '@advetics/shared';
+import { tarihSozlugu } from '@/dil/sozlukler/tarih';
+
+/** Ön ayar kodları sözlükten: sözlüğe girmemiş ön ayar derlenmez. */
+export type OnAyarKodu = keyof typeof tarihSozlugu.tr.onAyarlar;
+
+/**
+ * Ön ayarın EKRAN ADI. Adlar `RANGE_PRESETS`te değil sözlükte: liste hem
+ * sunucuda hem istemcide okunuyor ve modül düzeyinde "şu anki dil" tutmak
+ * eşzamanlı isteklerde başkasının dilini çizerdi. `'ozel'` de buradan.
+ */
+export function onAyarEtiketi(key: string, dil: Dil = 'tr'): string {
+  const d = sec(tarihSozlugu, dil);
+  if (key === 'ozel') return d.ozel;
+  return (d.onAyarlar as Record<string, string>)[key] ?? d.onAyarlar[DEFAULT_RANGE];
+}
+
+/** Karşılaştırma seçeneğinin ekran adı. */
+export function karsilastirmaEtiketi(kip: Exclude<KarsilastirmaKipi, 'yok'>, dil: Dil = 'tr'): string {
+  return sec(tarihSozlugu, dil).karsilastirma[kip];
+}
 
 /** Bugün, UTC. */
 export function today(): IsoDay {
@@ -49,8 +69,7 @@ export function today(): IsoDay {
  * Bu, hiçbir hata üretmeyen ama yanlış karar aldıran bir gösterim.
  */
 export interface OnAyar {
-  key: string;
-  label: string;
+  key: OnAyarKodu;
   bugunDahil: boolean;
   /** `enEskiGun` yalnızca "Tüm zamanlar" için gerekli; yoksa bugüne düşüyor. */
   pencere: (bugun: IsoDay, enEskiGun: IsoDay | null) => { from: IsoDay; to: IsoDay };
@@ -72,31 +91,28 @@ export interface OnAyar {
 }
 
 export const RANGE_PRESETS: OnAyar[] = [
-  { key: 'bugun', label: 'Bugün', bugunDahil: true, pencere: (b) => PENCERE.bugun(b) },
-  { key: 'dun', label: 'Dün', bugunDahil: false, pencere: (b) => PENCERE.dun(b) },
+  { key: 'bugun', bugunDahil: true, pencere: (b) => PENCERE.bugun(b) },
+  { key: 'dun', bugunDahil: false, pencere: (b) => PENCERE.dun(b) },
   {
     key: 'bu_hafta',
-    label: 'Bu hafta (Pzt–Bugün)',
     bugunDahil: true,
     pencere: (b) => PENCERE.bu_hafta(b),
   },
-  { key: '7g', label: 'Son 7 gün', bugunDahil: false, pencere: (b) => PENCERE.sonGun(b, 7) },
+  { key: '7g', bugunDahil: false, pencere: (b) => PENCERE.sonGun(b, 7) },
   {
     key: 'gecen_hafta',
-    label: 'Geçen hafta (Pzt–Paz)',
     bugunDahil: false,
     pencere: (b) => PENCERE.gecen_hafta(b),
   },
-  { key: '14g', label: 'Son 14 gün', bugunDahil: false, pencere: (b) => PENCERE.sonGun(b, 14) },
-  { key: 'bu_ay', label: 'Bu ay', bugunDahil: true, pencere: (b) => PENCERE.bu_ay(b) },
-  { key: '30g', label: 'Son 30 gün', bugunDahil: false, pencere: (b) => PENCERE.sonGun(b, 30) },
+  { key: '14g', bugunDahil: false, pencere: (b) => PENCERE.sonGun(b, 14) },
+  { key: 'bu_ay', bugunDahil: true, pencere: (b) => PENCERE.bu_ay(b) },
+  { key: '30g', bugunDahil: false, pencere: (b) => PENCERE.sonGun(b, 30) },
   {
     key: 'gecen_ay',
-    label: 'Geçen ay',
     bugunDahil: false,
     pencere: (b) => PENCERE.gecen_ay(b),
   },
-  { key: '90g', label: 'Son 90 gün', bugunDahil: false, pencere: (b) => PENCERE.sonGun(b, 90) },
+  { key: '90g', bugunDahil: false, pencere: (b) => PENCERE.sonGun(b, 90) },
   {
     /*
      * TÜM ZAMANLAR ELİMİZDEKİ EN ESKİ GÜNDEN BAŞLIYOR — sabit bir yıldan
@@ -109,7 +125,6 @@ export const RANGE_PRESETS: OnAyar[] = [
      * göstermektense bilinen bir pencere vermek daha dürüst.
      */
     key: 'tum_zamanlar',
-    label: 'Tüm zamanlar',
     bugunDahil: false,
     enEskiGunGerekir: true,
     pencere: (b, enEski) => ({ from: enEski ?? gunEkle(b, -90), to: gunEkle(b, -1) }),
@@ -117,7 +132,7 @@ export const RANGE_PRESETS: OnAyar[] = [
 ];
 
 export type RangeKey = string;
-export const DEFAULT_RANGE = '30g';
+export const DEFAULT_RANGE = '30g' satisfies OnAyarKodu;
 
 /**
  * Bu aralık için `/metrics/coverage` çağrılmalı mı?
@@ -163,10 +178,10 @@ export const MAX_GUN = 400;
 
 export type KarsilastirmaKipi = 'yok' | 'onceki_donem' | 'onceki_yil';
 
-export const KARSILASTIRMA_SECENEKLERI: Array<{ key: KarsilastirmaKipi; label: string }> = [
-  { key: 'onceki_donem', label: 'Önceki dönem' },
-  { key: 'onceki_yil', label: 'Önceki yıl' },
-];
+/** Seçicideki sıra; adları `karsilastirmaEtiketi`. */
+export const KARSILASTIRMA_SECENEKLERI = ['onceki_donem', 'onceki_yil'] as const satisfies ReadonlyArray<
+  Exclude<KarsilastirmaKipi, 'yok'>
+>;
 
 export interface ResolvedRange {
   key: RangeKey;
@@ -207,6 +222,8 @@ export interface RangeParams {
   karsilastir?: string;
   /** `/metrics/coverage`ten gelen en eski gün. "Tüm zamanlar" buna dayanıyor. */
   enEskiGun?: IsoDay | null;
+  /** `label` ve `hata` bu dilde yazılır; verilmezse Türkçe. */
+  dil?: Dil;
 }
 
 /**
@@ -222,6 +239,8 @@ export function resolveRange(params: RangeParams | string | undefined): Resolved
   // Eski çağrı biçimi (`resolveRange(params.aralik)`) korunuyor.
   const p: RangeParams = typeof params === 'string' || params === undefined ? { aralik: params } : params;
   const bugun = today();
+  const dil = p.dil ?? 'tr';
+  const hm = sec(tarihSozlugu, dil).hata;
   let hata: string | null = null;
 
   let key: string;
@@ -232,24 +251,24 @@ export function resolveRange(params: RangeParams | string | undefined): Resolved
 
   if (p.aralik === 'ozel') {
     if (!gecerliGun(p.baslangic) || !gecerliGun(p.bitis)) {
-      hata = 'Özel aralıktaki tarih geçersiz — son 30 güne dönüldü.';
+      hata = hm.gecersiz;
       const on = RANGE_PRESETS.find((x) => x.key === DEFAULT_RANGE)!;
       ({ from, to } = on.pencere(bugun, p.enEskiGun ?? null));
       key = DEFAULT_RANGE;
-      label = on.label;
+      label = onAyarEtiketi(on.key, dil);
       bugunDahil = on.bugunDahil;
     } else if (p.baslangic > p.bitis) {
-      hata = 'Başlangıç bitişten sonra — tarihler yer değiştirdi.';
+      hata = hm.ters;
       from = p.bitis;
       to = p.baslangic;
       key = 'ozel';
-      label = 'Özel';
+      label = onAyarEtiketi('ozel', dil);
       bugunDahil = to >= bugun;
     } else {
       from = p.baslangic;
       to = p.bitis;
       key = 'ozel';
-      label = 'Özel';
+      label = onAyarEtiketi('ozel', dil);
       bugunDahil = to >= bugun;
     }
   } else {
@@ -258,7 +277,7 @@ export function resolveRange(params: RangeParams | string | undefined): Resolved
       RANGE_PRESETS.find((x) => x.key === DEFAULT_RANGE)!;
     ({ from, to } = on.pencere(bugun, p.enEskiGun ?? null));
     key = on.key;
-    label = on.label;
+    label = onAyarEtiketi(on.key, dil);
     bugunDahil = on.bugunDahil;
   }
 

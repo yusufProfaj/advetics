@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_RANGE,
+  KARSILASTIRMA_SECENEKLERI,
   MAX_GUN,
   RANGE_PRESETS,
+  karsilastirmaEtiketi,
+  onAyarEtiketi,
   gunEkle,
   gunSayisi,
   karsilastirmaPenceresi,
@@ -10,6 +13,7 @@ import {
   resolveRange,
   today,
 } from './date-range';
+import { tarihSozlugu } from '@/dil/sozlukler/tarih';
 
 /**
  * Tarih aralığı çözümlemesi.
@@ -246,5 +250,48 @@ describe('rangeParams', () => {
     expect(rangeParams(resolveRange({ aralik: '7g', karsilastir: 'onceki_yil' })).karsilastir).toBe(
       'onceki_yil',
     );
+  });
+});
+
+/**
+ * ═══ İKİ DİL: ÖN AYAR ADLARI SÖZLÜKTEN ═══
+ *
+ * Adlar `RANGE_PRESETS`te değil `tarihSozlugu`nda; liste ile sözlük
+ * ayrışırsa İngilizce seçicide Türkçe ya da boş satır kalır ve hiçbir
+ * derleme hatası gelmezdi (vitest tip denetimi yapmıyor). Burada
+ * ÇALIŞTIRARAK: her ön ayarın iki dilde dolu ve FARKLI adı var, ve
+ * `resolveRange` istenen dilin adını ve hatasını yazıyor.
+ */
+describe('ön ayar adları iki dilde', () => {
+  it('KRİTİK: her ön ayarın (ve "Özel"in) iki dilde dolu, birbirinden farklı adı var', () => {
+    for (const k of [...RANGE_PRESETS.map((p) => p.key), 'ozel']) {
+      const tr = onAyarEtiketi(k, 'tr');
+      const en = onAyarEtiketi(k, 'en');
+      expect(tr, `${k} tr`).toBeTruthy();
+      expect(en, `${k} en`).toBeTruthy();
+      expect(en, `${k} çevrilmemiş`).not.toBe(tr);
+      // Bilinmeyen anahtara düşüş (varsayılanın adı) burada SAYILMAZ: her ön ayar KENDİ adını taşımalı.
+      if (k !== DEFAULT_RANGE) expect(tr, `${k} kendi adı yok`).not.toBe(onAyarEtiketi(DEFAULT_RANGE, 'tr'));
+    }
+    // Sözlükte listede olmayan fazladan ön ayar da yok (ölü çeviri, ya da silinmiş ön ayar).
+    expect(Object.keys(tarihSozlugu.en.onAyarlar).sort()).toEqual(RANGE_PRESETS.map((p) => p.key).sort());
+  });
+
+  it('KRİTİK: resolveRange etiketi ve hatayı istenen dilde yazıyor, varsayılan Türkçe', () => {
+    expect(resolveRange({ aralik: '7g', dil: 'en' }).label).toBe('Last 7 days');
+    expect(resolveRange({ aralik: '7g' }).label).toBe('Son 7 gün');
+    const ters = resolveRange({ aralik: 'ozel', baslangic: '2026-07-31', bitis: '2026-07-01', dil: 'en' });
+    expect(ters.label).toBe(tarihSozlugu.en.ozel);
+    expect(ters.hata).toBe(tarihSozlugu.en.hata.ters);
+    expect(resolveRange({ aralik: 'ozel', baslangic: 'x', bitis: 'y', dil: 'en' }).hata).toBe(
+      tarihSozlugu.en.hata.gecersiz,
+    );
+  });
+
+  it('karşılaştırma seçeneklerinin iki dilde adı var', () => {
+    for (const k of KARSILASTIRMA_SECENEKLERI) {
+      expect(karsilastirmaEtiketi(k, 'en')).not.toBe(karsilastirmaEtiketi(k, 'tr'));
+      expect(karsilastirmaEtiketi(k, 'en')).toBeTruthy();
+    }
   });
 });

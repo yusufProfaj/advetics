@@ -2,6 +2,8 @@
 
 import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
+import { useSozluk } from '@/dil/saglayici';
+import { uiSozlugu } from '@/dil/sozlukler/ui';
 
 /**
  * ═══ PENCERE VE YAN PANEL (referans "08 · Yan panel") ═══
@@ -111,11 +113,12 @@ function usePortalHedefi(): HTMLElement | null {
 }
 
 function KapatDugmesi({ onKapat }: { onKapat: () => void }) {
+  const d = useSozluk(uiSozlugu);
   return (
     <button
       type="button"
       onClick={onKapat}
-      aria-label="Kapat"
+      aria-label={d.kapat}
       className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
     >
       ✕

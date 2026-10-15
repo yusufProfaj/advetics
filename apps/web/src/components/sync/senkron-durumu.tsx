@@ -1,41 +1,41 @@
+'use client';
+
+/*
+ * İSTEMCİ BİLEŞENİ (D2): metin sözlükten `useSozluk` ile geliyor ve iki
+ * çağıran da (Marka Merkezi'nin sunucu ve istemci parçaları) yalnız düz
+ * veri veriyor. Sunucu bileşeni kalsaydı istemci çağıranda dil bağlamı
+ * okunamazdı.
+ */
 import type {
   SyncAccountStatus,
   SyncExcludedCounts,
   SyncJobStatusRow,
   SyncStatusResponse,
 } from '@advetics/shared';
-import { PLATFORM_LABELS, SENKRON_SAYAC_GUNU } from '@advetics/shared';
+import { PLATFORM_LABELS, SENKRON_SAYAC_GUNU, bicimKodu, type Dil } from '@advetics/shared';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { ayarlarSozlugu } from '@/dil/sozlukler/ayarlar';
 import { Kart } from '@/components/ui/kart';
 import { BosDurum } from '@/components/ui/hal';
 import { Rozet, type DurumHali } from '@/components/ui/rozet';
 import { Uyari } from '@/components/ui/uyari';
 
-/** Elenen kategorilerin Türkçe karşılığı — sayaç anlamsız kalmasın. */
-const ELENME_ETIKETLERI: Record<keyof SyncExcludedCounts, string> = {
-  syncDisabled: 'izleme kapalı',
-  clientInactive: 'workspace aktif değil',
-  connectionInactive: 'bağlantı yeniden yetki istiyor',
-  accountStatus: 'hesabın platform durumu uygun değil',
-};
-
-const IS_ADLARI: Record<string, string> = {
-  structure: 'Yapı taraması',
-  insights_realtime: 'Metrik (bugün)',
-  insights_backfill: 'Metrik (geçmiş)',
-  initial_backfill: 'İlk geçmiş çekimi',
-  organic_posts: 'Organik gönderiler',
-  keyword_insights: 'Anahtar kelimeler',
-  leads_reconcile: 'Potansiyel Müşteriler',
-};
+/*
+ * Elenen kategorilerin ve iş türlerinin adları sözlükte (`senkron.elenme`,
+ * `senkron.isAdlari`) — sayaç anlamsız kalmasın. Tanınmayan iş türü ham
+ * adıyla yazılıyor.
+ */
+type SenkronSozlugu = (typeof ayarlarSozlugu)['tr']['senkron'];
 
 export function SenkronDurumu({ data }: { data: SyncStatusResponse }) {
+  const d = useSozluk(ayarlarSozlugu).senkron;
   const elenen = Object.entries(data.excluded).filter(([, n]) => n > 0) as Array<
     [keyof SyncExcludedCounts, number]
   >;
 
   return (
     <div className="space-y-6">
-      <OzetSeridi data={data} />
+      <OzetSeridi data={data} d={d} />
 
       {/*
         SESSİZ KESME YOK: kaç hesabın kaçının izlendiği ve elenenlerin
@@ -43,13 +43,11 @@ export function SenkronDurumu({ data }: { data: SyncStatusResponse }) {
         aynı ekrana düşmemeli.
       */}
       <Kart
-        baslik="Reklam hesapları"
+        baslik={d.reklamHesaplari}
         baslikEki={
           <>
-            {data.accounts.length} atanmış hesap · {data.accountCount} tanesi izleniyor
-            {elenen.length > 0 && (
-              <> · elenen: {elenen.map(([k, n]) => `${n} ${ELENME_ETIKETLERI[k]}`).join(', ')}</>
-            )}
+            {d.hesapOzeti(data.accounts.length, data.accountCount)}
+            {elenen.length > 0 && d.elenen(elenen.map(([k, n]) => `${n} ${d.elenme[k]}`).join(', '))}
           </>
         }
         dolgu={false}
@@ -57,8 +55,8 @@ export function SenkronDurumu({ data }: { data: SyncStatusResponse }) {
         {data.accounts.length === 0 ? (
           <div className="p-4">
             <BosDurum
-              baslik="Atanmış reklam hesabı yok"
-              neden="Bu workspace’e hiç reklam hesabı atanmamış. Kurulum’daki hesaplar bloğundan ata; atama izlemeyi de açıyor ve 90 günlük geçmişi kuyruğa alıyor."
+              baslik={d.hesapYok}
+              neden={d.hesapYokNeden}
             />
           </div>
         ) : (
@@ -73,21 +71,15 @@ export function SenkronDurumu({ data }: { data: SyncStatusResponse }) {
       {/* PENCERE SABİTTEN: etiket elle yazılsaydı pencere değişince
           ekran yanlış süreyi söylerdi. */}
       <Kart
-        baslik={<>Son {SENKRON_SAYAC_GUNU} günün senkronizasyon işleri</>}
-        baslikEki={`${data.recentJobs.length} / ${data.recentJobsTotal} iş gösteriliyor`}
+        baslik={d.isler(SENKRON_SAYAC_GUNU)}
+        baslikEki={d.gosteriliyor(data.recentJobs.length, data.recentJobsTotal)}
         dolgu={false}
       >
         {data.recentJobs.length === 0 ? (
           <div className="p-4">
             <BosDurum
-              baslik="Senkronizasyon işi yok"
-              neden={
-                <>
-                  Son {SENKRON_SAYAC_GUNU} günde hiç senkronizasyon işi kaydedilmemiş. Hesap yeni
-                  atandıysa işler birkaç dakika içinde görünür; görünmüyorsa
-                  senkronizasyon worker&apos;ı çalışmıyor olabilir.
-                </>
-              }
+              baslik={d.isYok}
+              neden={d.isYokNeden(SENKRON_SAYAC_GUNU)}
             />
           </div>
         ) : (
@@ -95,11 +87,11 @@ export function SenkronDurumu({ data }: { data: SyncStatusResponse }) {
             <table className="w-full min-w-[46rem] text-sm">
               <thead className="text-left text-12 text-ink-muted">
                 <tr className="border-b border-line">
-                  <th className="px-4 py-2 font-medium">İş</th>
-                  <th className="px-4 py-2 font-medium">Hesap</th>
-                  <th className="px-4 py-2 font-medium">Durum</th>
-                  <th className="px-4 py-2 text-right font-medium">Yazılan satır</th>
-                  <th className="px-4 py-2 font-medium">Zaman</th>
+                  <th className="px-4 py-2 font-medium">{d.is}</th>
+                  <th className="px-4 py-2 font-medium">{d.hesap}</th>
+                  <th className="px-4 py-2 font-medium">{d.durum}</th>
+                  <th className="px-4 py-2 text-right font-medium">{d.yazilanSatir}</th>
+                  <th className="px-4 py-2 font-medium">{d.zaman}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
@@ -115,7 +107,7 @@ export function SenkronDurumu({ data }: { data: SyncStatusResponse }) {
   );
 }
 
-function OzetSeridi({ data }: { data: SyncStatusResponse }) {
+function OzetSeridi({ data, d }: { data: SyncStatusResponse; d: SenkronSozlugu }) {
   const engelli = data.accounts.filter((a) => a.blockedReason !== null).length;
   /*
    * SAYAÇLAR API'DEN GELİYOR, GÖSTERİLEN 25 SATIRDAN DEĞİL.
@@ -128,17 +120,17 @@ function OzetSeridi({ data }: { data: SyncStatusResponse }) {
 
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      <Kutu baslik="İzlenen hesap" deger={String(data.accountCount)} />
+      <Kutu baslik={d.izlenenHesap} deger={String(data.accountCount)} />
       <Kutu
-        baslik="Engelli hesap"
+        baslik={d.engelliHesap}
         deger={String(engelli)}
         vurgu={engelli > 0 ? 'warn' : undefined}
       />
       <Kutu
-        baslik={`Düşen iş · son ${SENKRON_SAYAC_GUNU} gün`}
+        baslik={d.dusenIs(SENKRON_SAYAC_GUNU)}
         deger={String(dusen)}
         vurgu={dusen > 0 ? 'danger' : undefined}
-        ipucu={koşan > 0 ? `${koşan} iş hâlâ kuyrukta ya da koşuyor.` : undefined}
+        ipucu={koşan > 0 ? d.kuyrukta(koşan) : undefined}
       />
       {/*
         "BAŞARILI AMA SIFIR SATIR" AYRI BİR KUTU. Bu, "atadım veri gelmiyor"
@@ -147,10 +139,10 @@ function OzetSeridi({ data }: { data: SyncStatusResponse }) {
         gizlerdi.
       */}
       <Kutu
-        baslik={`Başarılı ama boş iş · son ${SENKRON_SAYAC_GUNU} gün`}
+        baslik={d.bosIs(SENKRON_SAYAC_GUNU)}
         deger={String(bosBiten)}
         vurgu={bosBiten > 0 ? 'warn' : undefined}
-        ipucu="İş hatasız bitti ama tek satır yazmadı; genellikle yapı taraması metriklerden sonra koştuğu için."
+        ipucu={d.bosIsIpucu}
       />
     </div>
   );
@@ -179,6 +171,8 @@ function Kutu({
 }
 
 function HesapSatiri({ hesap }: { hesap: SyncAccountStatus }) {
+  const { dil } = useDil();
+  const d = useSozluk(ayarlarSozlugu).senkron;
   return (
     <li className="px-4 py-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -189,8 +183,8 @@ function HesapSatiri({ hesap }: { hesap: SyncAccountStatus }) {
           </span>
         </div>
         <div className="flex gap-3 text-xs text-ink-muted">
-          <span>Yapı: {zaman(hesap.lastStructureSyncAt)}</span>
-          <span>Metrik: {zaman(hesap.lastInsightsSyncAt)}</span>
+          <span>{d.yapi(zaman(hesap.lastStructureSyncAt, dil, d))}</span>
+          <span>{d.metrik(zaman(hesap.lastInsightsSyncAt, dil, d))}</span>
         </div>
       </div>
 
@@ -206,9 +200,7 @@ function HesapSatiri({ hesap }: { hesap: SyncAccountStatus }) {
       )}
 
       {hesap.blockedReason === null && !hesap.inScheduledSweep && (
-        <p className="mt-2 text-xs text-ink-muted">
-          Zamanlanmış güncellemeye girmiyor.
-        </p>
+        <p className="mt-2 text-xs text-ink-muted">{d.zamanlanmisDegil}</p>
       )}
 
       {/*
@@ -229,6 +221,8 @@ function HesapSatiri({ hesap }: { hesap: SyncAccountStatus }) {
 
 /** Hesap satırının altında tek bir işin özeti. */
 function IsOzeti({ is, hata }: { is: SyncJobStatusRow; hata?: boolean }) {
+  const { dil } = useDil();
+  const d = useSozluk(ayarlarSozlugu).senkron;
   return (
     <div
       className={`mt-2 rounded-alan border px-3 py-2 text-xs ${
@@ -236,10 +230,10 @@ function IsOzeti({ is, hata }: { is: SyncJobStatusRow; hata?: boolean }) {
       }`}
     >
       <p className="text-ink-muted">
-        <span className="text-ink">{IS_ADLARI[is.jobType] ?? is.jobType}</span> · {is.status} ·{' '}
-        {is.rowsUpserted} satır
-        {is.rowsSkipped !== null && is.rowsSkipped > 0 && <> · {is.rowsSkipped} atıldı</>}
-        {is.attempts > 1 && <> · {is.attempts}. deneme</>} · {zaman(is.finishedAt ?? is.createdAt)}
+        <span className="text-ink">{d.isAdlari[is.jobType] ?? is.jobType}</span> · {is.status} ·{' '}
+        {d.satir(is.rowsUpserted)}
+        {is.rowsSkipped !== null && is.rowsSkipped > 0 && <> · {d.atildi(is.rowsSkipped)}</>}
+        {is.attempts > 1 && <> · {d.deneme(is.attempts)}</>} · {zaman(is.finishedAt ?? is.createdAt, dil, d)}
       </p>
       {is.errorMessage && (
         <p className="mt-1 leading-snug text-danger-strong">
@@ -253,16 +247,18 @@ function IsOzeti({ is, hata }: { is: SyncJobStatusRow; hata?: boolean }) {
 }
 
 function IsSatiri({ is }: { is: SyncJobStatusRow }) {
+  const { dil } = useDil();
+  const d = useSozluk(ayarlarSozlugu).senkron;
   const bosBasari = is.status === 'succeeded' && is.rowsUpserted === 0;
   return (
     <tr>
       <td className="px-4 py-2">
-        <span className="font-medium">{IS_ADLARI[is.jobType] ?? is.jobType}</span>
+        <span className="font-medium">{d.isAdlari[is.jobType] ?? is.jobType}</span>
         {is.entityLevel && <span className="ml-1 text-xs text-ink-muted">({is.entityLevel})</span>}
       </td>
       <td className="px-4 py-2 text-ink-muted">{is.adAccountName ?? '—'}</td>
       <td className="px-4 py-2">
-        <DurumRozeti status={is.status} bosBasari={bosBasari} />
+        <DurumRozeti status={is.status} bosBasari={bosBasari} bosEtiket={d.bosBasari} />
         {/*
           PLATFORMUN KENDİ MESAJI. Bu alan tabloya bugüne kadar da yazılıyordu
           (Meta'da subcode ve fbtrace dahil) ama okuyan hiçbir uç nokta yoktu:
@@ -285,11 +281,11 @@ function IsSatiri({ is }: { is: SyncJobStatusRow }) {
           log'undaydı ve log rotasyonuyla kayboluyordu.
         */}
         {is.rowsSkipped !== null && is.rowsSkipped > 0 && (
-          <span className="block text-xs text-danger-strong">{is.rowsSkipped} atıldı</span>
+          <span className="block text-xs text-danger-strong">{d.atildi(is.rowsSkipped)}</span>
         )}
       </td>
       <td className="px-4 py-2 text-xs text-ink-muted">
-        {zaman(is.finishedAt ?? is.createdAt)}
+        {zaman(is.finishedAt ?? is.createdAt, dil, d)}
         {is.note && <span className="block text-[11px] opacity-80">{is.note}</span>}
       </td>
     </tr>
@@ -300,17 +296,17 @@ function IsSatiri({ is }: { is: SyncJobStatusRow }) {
  * İş durumu ortak rozetle. "Başarılı ama 0 satır" KIRMIZI: bu projede bir
  * hata türü (CLAUDE.md "succeeded + rows = 0"), yeşil göstermek onu gizlerdi.
  */
-function DurumRozeti({ status, bosBasari }: { status: string; bosBasari: boolean }) {
-  if (bosBasari) return <Rozet hal="hata">başarılı · 0 satır</Rozet>;
+function DurumRozeti({ status, bosBasari, bosEtiket }: { status: string; bosBasari: boolean; bosEtiket: string }) {
+  if (bosBasari) return <Rozet hal="hata">{bosEtiket}</Rozet>;
   const hal: DurumHali =
     status === 'failed' || status === 'throttled' ? 'hata' : status === 'succeeded' ? 'ok' : 'taslak';
   return <Rozet hal={hal}>{status}</Rozet>;
 }
 
 /** ISO damgasını okunur hâle getirir. `null` = hiç koşmadı, ve bu bir bilgi. */
-function zaman(iso: string | null): string {
-  if (iso === null) return 'hiç';
-  return new Date(iso).toLocaleString('tr-TR', {
+function zaman(iso: string | null, dil: Dil, d: SenkronSozlugu): string {
+  if (iso === null) return d.hic;
+  return new Date(iso).toLocaleString(bicimKodu(dil), {
     day: '2-digit',
     month: '2-digit',
     hour: '2-digit',

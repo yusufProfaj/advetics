@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { kabukSozlugu } from '@/dil/sozlukler/kabuk';
 
 /**
  * ═══ PANEL YERLEŞİMİ: MOBİL GEZİNME VE GENİŞLİK ═══
@@ -120,7 +121,11 @@ describe('mobil gezinme', () => {
 
   it('çekmece erişilebilir: rol, etiket ve odak', () => {
     expect(MOBIL).toContain('aria-modal="true"');
-    expect(MOBIL).toContain('aria-label="Menüyü aç"');
+    // Etiket sözlükte (D2); düğme anahtarı kullanıyor (yorumsuz kaynakta).
+    expect(MOBIL.replace(/\/\*[\s\S]*?\*\//g, '')).toContain('aria-label={d.ac}');
+    expect(kabukSozlugu.tr.mobil.ac).toBe('Menüyü aç');
+    expect(kabukSozlugu.en.mobil.ac).toBeTruthy();
+    expect(kabukSozlugu.en.mobil.ac).not.toBe('Menüyü aç');
     expect(MOBIL).toContain('panelRef.current?.focus()');
   });
 });

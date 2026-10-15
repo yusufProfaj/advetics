@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { UiMetni } from './ui-metni';
 
 /**
  * ═══ DÖRT HÂL (referans "06 · Hâller") ═══
@@ -13,7 +14,7 @@ import type { ReactNode } from 'react';
  */
 
 /** İskelet satırları: verinin geleceği yerin kabaca şekli. */
-export function Yukleniyor({ satir = 3, etiket = 'Yükleniyor' }: { satir?: number; etiket?: string }) {
+export function Yukleniyor({ satir = 3, etiket }: { satir?: number; etiket?: string }) {
   const genislik = ['60%', '100%', '80%', '90%', '70%'];
   return (
     <div
@@ -21,6 +22,12 @@ export function Yukleniyor({ satir = 3, etiket = 'Yükleniyor' }: { satir?: numb
       aria-label={etiket}
       className="grid min-h-[170px] content-start gap-2 rounded-kart border border-dashed border-line-strong p-[22px]"
     >
+      {/* Etiket verilmediyse ad ekranın dilinde (`aria-label` yerine görünmez metin). */}
+      {etiket === undefined && (
+        <span className="sr-only">
+          <UiMetni k="yukleniyor" />
+        </span>
+      )}
       {Array.from({ length: satir }, (_, i) => (
         <span
           key={i}
@@ -119,7 +126,7 @@ export function HataDurumu({
           onClick={onTekrar}
           className="inline-flex h-8 items-center rounded-full border border-line-strong bg-surface px-3.5 text-[12.5px] font-bold text-ink transition-colors hover:bg-surface-sunken"
         >
-          Tekrar dene
+          <UiMetni k="tekrarDene" />
         </button>
       )}
       {eylem}

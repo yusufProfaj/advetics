@@ -10,7 +10,7 @@ import {
   type ChannelKind,
   type ClientChannels,
 } from '@advetics/shared';
-import { CHANNEL_KINDS, kanalReklamHesabiMi } from '@advetics/shared';
+import { CHANNEL_KINDS, kanalReklamHesabiMi, sec, type Dil } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { atamaBildirimi, type AtamaYaniti } from '@/lib/atama-bildirimi';
 import { PlatformLogo } from '@/components/platform-logo';
@@ -19,6 +19,8 @@ import { Kart } from '@/components/ui/kart';
 import { Girdi } from '@/components/ui/alan';
 import { DurumNoktasi } from '@/components/ui/rozet';
 import { YouTubeKanalBul } from '@/components/connections/youtube-kanal-bul';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { sirketlerSozlugu } from '@/dil/sozlukler/ayarlar-sirketler';
 
 /**
  * BAĞLI KANALLAR — bir workspace’in kanalları, kart düzeninde.
@@ -45,10 +47,11 @@ export function BagliKanallar({
    */
   ajansUyesi?: boolean;
 }) {
+  const d = useSozluk(sirketlerSozlugu).kanallar;
   if (data.emptyReason) {
     return (
       <div className="rounded-xl border border-dashed border-line p-8 text-center">
-        <p className="text-sm font-medium text-ink">Bağlanabilecek kanal yok</p>
+        <p className="text-sm font-medium text-ink">{d.kanalYok}</p>
         <p className="mx-auto mt-1.5 max-w-lg text-sm text-ink-muted">{data.emptyReason}</p>
       </div>
     );
@@ -80,17 +83,17 @@ export function BagliKanallar({
         <span className="font-semibold text-ink">
           {bagliKanal} / {data.groups.length}
         </span>{' '}
-        kanal bağlı · {tum.length} hesap
+        {d.ozetSon(tum.length)}
         {izlemeKapali > 0 && (
-          <span className="font-semibold text-danger-strong"> · {izlemeKapali} hesapta izleme kapalı</span>
+          <span className="font-semibold text-danger-strong">{d.izlemeKapali(izlemeKapali)}</span>
         )}
       </p>
       {reklam.length > 0 && (
-        <KanalKarti baslik="Reklam hesapları" clientId={data.clientId} gruplar={reklam} ajansUyesi={ajansUyesi} boost={boost} />
+        <KanalKarti baslik={d.reklamHesaplari} clientId={data.clientId} gruplar={reklam} ajansUyesi={ajansUyesi} boost={boost} />
       )}
       {sosyal.length > 0 && (
         <KanalKarti
-          baslik="Sayfalar ve kanallar"
+          baslik={d.sayfalarKanallar}
           clientId={data.clientId}
           workspaceAdi={data.clientName}
           gruplar={sosyal}
@@ -193,6 +196,7 @@ function KanalGrubu({
   ajansUyesi: boolean;
   boost: BoostSecenekleri;
 }) {
+  const d = useSozluk(sirketlerSozlugu).kanallar;
   const [acik, setAcik] = useState(false);
   /*
    * YOUTUBE KANALI HAVUZDA OLMAK ZORUNDA DEĞİL: "Kanalı bul" siteden,
@@ -223,10 +227,10 @@ function KanalGrubu({
               {/* YEŞİL YALNIZ DURUM NOKTASINDA (kılavuz): bağlı = yeşil, değil = gri. */}
               <DurumNoktasi hal={bagli ? 'ok' : 'taslak'} />
               {bagli
-                ? `${grup.connected.length} hesap bağlı`
+                ? d.hesapBagli(grup.connected.length)
                 : eklenebilir
-                  ? 'Bağlı değil'
-                  : 'Bağlı değil · havuzda boşta hesap yok'}
+                  ? d.bagliDegil
+                  : d.bagliDegilBos}
             </p>
           </div>
         </div>
@@ -245,7 +249,7 @@ function KanalGrubu({
               }}
               aria-expanded={bulAcik}
             >
-              {bulAcik ? 'Kapat' : 'Kanalı bul'}
+              {bulAcik ? d.kapat : d.kanaliBul}
             </Dugme>
           )}
           <Dugme
@@ -258,7 +262,7 @@ function KanalGrubu({
             disabled={!eklenebilir}
             aria-expanded={acik}
           >
-            {acik ? 'Kapat' : `+ Ekle (${grup.available.length})`}
+            {acik ? d.kapat : d.ekleSayac(grup.available.length)}
           </Dugme>
         </div>
       </div>
@@ -266,7 +270,7 @@ function KanalGrubu({
       {youtube && (
         <Acilir acik={bulAcik}>
           <div className="ml-12 mt-3 rounded-alan border border-line bg-surface-muted p-3">
-            <p className="m-0 text-12 font-bold text-ink">YouTube kanalını bul</p>
+            <p className="m-0 text-12 font-bold text-ink">{d.ytBul}</p>
             <div className="mt-2">
               <YouTubeKanalBul clientId={clientId} workspaceAdi={workspaceAdi} />
             </div>
@@ -293,14 +297,14 @@ function KanalGrubu({
 
       <Acilir acik={acik}>
         <div className="ml-12 mt-3 rounded-alan border border-line bg-surface-muted p-3">
-          <p className="m-0 text-12 font-bold text-ink">Havuzdan seç</p>
+          <p className="m-0 text-12 font-bold text-ink">{d.havuzdanSec}</p>
           <p className="m-0 mt-0.5 text-12 text-ink-muted">{CHANNEL_HINTS[grup.kind]}</p>
           {/* SEÇİCİNİN YÜKSEKLİĞİ SINIRLI: havuzda onlarca hesap olabiliyor
               ve sınırsız liste, kartı sayfa boyunca uzatıp altındaki
               kanalları ekrandan atıyordu. */}
           {grup.available.length > ARAMA_ESIGI && (
             <label className="mt-2 block">
-              <span className="sr-only">{CHANNEL_LABELS[grup.kind]} havuzunda ara</span>
+              <span className="sr-only">{d.havuzdaAra(CHANNEL_LABELS[grup.kind])}</span>
               <Girdi
                 type="search"
                 name={`havuz-ara-${grup.kind}`}
@@ -308,7 +312,7 @@ function KanalGrubu({
                 spellCheck={false}
                 value={ara}
                 onChange={(e) => setAra(e.target.value)}
-                placeholder="Ad ya da hesap numarası…"
+                placeholder={d.araYer}
               />
             </label>
           )}
@@ -316,8 +320,8 @@ function KanalGrubu({
           {ara.trim() && (
             <p className="m-0 mt-1.5 text-12 text-ink-muted" aria-live="polite">
               {gorunen.length === 0
-                ? `Aramaya uyan hesap yok (havuzda ${grup.available.length} hesap var).`
-                : `${gorunen.length} / ${grup.available.length} hesap gösteriliyor.`}
+                ? d.uyanYok(grup.available.length)
+                : d.gosteriliyor(gorunen.length, grup.available.length)}
             </p>
           )}
           <ul className="m-0 mt-2 grid max-h-80 list-none gap-1.5 overflow-y-auto overscroll-contain p-0">
@@ -334,6 +338,8 @@ function KanalGrubu({
 /** Atama ve kaldırma — ikisi de aynı uçtan, `clientId` null ise kaldırma. */
 function useAtama(kind: ChannelKind, itemId: string) {
   const router = useRouter();
+  const { dil } = useDil();
+  const t = useSozluk(sirketlerSozlugu);
   const [busy, setBusy] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
   const [bildirim, setBildirim] = useState<string | null>(null);
@@ -370,12 +376,12 @@ function useAtama(kind: ChannelKind, itemId: string) {
        * `router.refresh()` bildirimi silmiyor: bileşen aynı kalıyor, yalnızca
        * sunucu verisi tazeleniyor.
        */
-      setBildirim(atamaBildirimi(res ?? {}, clientId !== null));
+      setBildirim(atamaBildirimi(res ?? {}, clientId !== null, dil));
       // ATAMA İZLEMEYİ AÇIP GEÇMİŞİ KUYRUĞA ALIYOR; sayfa yenilenince
       // "izleme açık" rozeti görünmeli.
       router.refresh();
     } catch (e) {
-      setHata(e instanceof ApiRequestError ? e.message : 'İşlem başarısız oldu.');
+      setHata(e instanceof ApiRequestError ? e.message : t.ortak.islemBasarisiz);
     } finally {
       setBusy(false);
     }
@@ -399,6 +405,8 @@ function BagliKart({
   boostSecenekleri: ChannelItem[] | null;
 }) {
   const { ata, busy, hata, bildirim } = useAtama(kind, item.id);
+  const { dil } = useDil();
+  const d = useSozluk(sirketlerSozlugu).kanallar;
   /*
    * KALDIRMA İKİ ADIMLI. Tek tıkla çalışıyordu ve geri dönüşü pahalı:
    * izleme kapanıyor, hesabın geçmiş verisi workspace'ten ayrılıyor ve
@@ -422,7 +430,7 @@ function BagliKart({
               <span className="truncate">{item.name}</span>
               {item.ajansAtadi && (
                 <span className="shrink-0 rounded bg-surface-sunken px-1.5 py-0.5 text-[11px] font-medium text-ink-muted">
-                  Ajans atadı
+                  {d.ajansAtadi}
                 </span>
               )}
             </p>
@@ -433,7 +441,7 @@ function BagliKart({
         </div>
         {!onay && (
           <Dugme ton="sade" boyut="kucuk" onClick={() => setOnay(true)} disabled={busy}>
-            Kaldır
+            {d.kaldir}
           </Dugme>
         )}
       </div>
@@ -441,14 +449,14 @@ function BagliKart({
       {onay && (
         <div className="mt-2 rounded-alan border border-l-4 border-line border-l-danger bg-surface p-2.5">
           <p className="m-0 text-12 text-ink">
-            {kaldirmaOnayMetni(item.ajansAtadi === true, ajansUyesi)}
+            {kaldirmaOnayMetni(item.ajansAtadi === true, ajansUyesi, dil)}
           </p>
           <div className="mt-2 flex gap-2">
             <Dugme ton="tehlike" boyut="kucuk" bekliyor={busy} onClick={() => void ata(null)}>
-              Evet, kaldır
+              {d.evetKaldir}
             </Dugme>
             <Dugme ton="ikincil" boyut="kucuk" disabled={busy} onClick={() => setOnay(false)}>
-              Vazgeç
+              {d.vazgec}
             </Dugme>
           </div>
         </div>
@@ -464,9 +472,7 @@ function BagliKart({
         <ProfilAyarlari item={item} kind={kind} secenekler={boostSecenekleri} />
       ) : (
         !item.syncEnabled && (
-          <p className="m-0 mt-1.5 text-12 font-semibold text-danger-strong">
-            İzleme kapalı, bu hesaptan veri çekilmiyor. Kaldırıp yeniden ekle.
-          </p>
+          <p className="m-0 mt-1.5 text-12 font-semibold text-danger-strong">{d.izlemeKapaliSatir}</p>
         )
       )}
       {hata && (
@@ -493,6 +499,7 @@ function SecilebilirSatir({
   item: ChannelItem;
 }) {
   const { ata, busy, hata, bildirim } = useAtama(kind, item.id);
+  const d = useSozluk(sirketlerSozlugu).kanallar;
 
   return (
     <li>
@@ -507,11 +514,11 @@ function SecilebilirSatir({
             aradığı hesabı bulamayan kullanıcı senkronizasyonun bozuk
             olduğunu sanıyor. */}
         {item.isManager ? (
-          <span className="shrink-0 text-12 text-ink-muted">Yönetici (MCC), atanamaz</span>
+          <span className="shrink-0 text-12 text-ink-muted">{d.yoneticiAtanamaz}</span>
         ) : (
           /* KOYU, KIRMIZI DEĞİL: kart içinde kırmızı dolu düğme yok (BILESENLER § 3). */
           <Dugme ton="koyu" boyut="kucuk" bekliyor={busy} onClick={() => void ata(clientId)}>
-            Ekle
+            {d.ekle}
           </Dugme>
         )}
       </div>
@@ -536,11 +543,9 @@ function SecilebilirSatir({
  * Ajansın atadığı kalemi ajans DIŞINDAN biri kaldırıyorsa ek cümle: kaldırma
  * ajansa e-posta gönderiyor ve bu, tıklamadan ÖNCE söylenmeli.
  */
-export function kaldirmaOnayMetni(ajansAtadi: boolean, ajansUyesi: boolean): string {
-  const taban = 'Kaldırınca bu hesaptan veri gelmesi durur ve hesap havuza döner.';
-  return ajansAtadi && !ajansUyesi
-    ? `${taban} Bu hesabı ajansın atadı; kaldırırsan ajansına e-posta gider. Emin misin?`
-    : `${taban} Emin misin?`;
+export function kaldirmaOnayMetni(ajansAtadi: boolean, ajansUyesi: boolean, dil: Dil = 'tr'): string {
+  const d = sec(sirketlerSozlugu, dil).kanallar;
+  return ajansAtadi && !ajansUyesi ? `${d.kaldirmaTaban}${d.kaldirmaAjans}` : `${d.kaldirmaTaban}${d.eminMisin}`;
 }
 
 /**
@@ -590,6 +595,8 @@ function ProfilAyarlari({
   secenekler: ChannelItem[];
 }) {
   const router = useRouter();
+  const t = useSozluk(sirketlerSozlugu);
+  const d = t.kanallar;
   const [busy, setBusy] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
 
@@ -600,7 +607,7 @@ function ProfilAyarlari({
       await apiFetch(yol, { method: 'PATCH', body: JSON.stringify(govde) });
       router.refresh();
     } catch (e) {
-      setHata(e instanceof ApiRequestError ? e.message : 'İşlem başarısız oldu.');
+      setHata(e instanceof ApiRequestError ? e.message : t.ortak.islemBasarisiz);
     } finally {
       setBusy(false);
     }
@@ -618,10 +625,10 @@ function ProfilAyarlari({
   return (
     <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
       <label className="flex items-center gap-2">
-        <span className="text-ink-muted">{youtube ? 'Google Ads hesabı' : 'Boost hesabı'}</span>
+        <span className="text-ink-muted">{youtube ? d.googleAdsHesabi : d.boostHesabi}</span>
         {secenekler.length === 0 ? (
           <span className="text-warn-strong">
-            Önce bu workspace’e {youtube ? 'bir Google Ads' : 'bir Meta reklam'} hesabı ekle
+            {youtube ? d.onceGoogle : d.onceMeta}
           </span>
         ) : (
           <select
@@ -636,7 +643,7 @@ function ProfilAyarlari({
               secili ? 'text-ink' : 'text-warn-strong'
             }`}
           >
-            <option value="">Seçilmedi</option>
+            <option value="">{d.secilmedi}</option>
             {secenekler.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.name}
@@ -648,7 +655,7 @@ function ProfilAyarlari({
 
       <span className="flex items-center gap-2">
         <span className={item.syncEnabled ? 'text-ink-muted' : 'text-warn-strong'}>
-          {item.syncEnabled ? 'Gönderiler çekiliyor' : 'Gönderiler çekilmiyor'}
+          {item.syncEnabled ? d.cekiliyor : d.cekilmiyor}
         </span>
         <Dugme
           ton="sade"
@@ -658,7 +665,7 @@ function ProfilAyarlari({
             void gonder(`/connections/social-profiles/${item.id}/sync`, { syncEnabled: !item.syncEnabled })
           }
         >
-          {item.syncEnabled ? 'Durdur' : 'Başlat'}
+          {item.syncEnabled ? d.durdur : d.baslat}
         </Dugme>
       </span>
 

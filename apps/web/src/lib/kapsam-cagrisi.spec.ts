@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_RANGE, RANGE_PRESETS, enEskiGunGerekli, resolveRange } from './date-range';
+import { tarihSozlugu } from '@/dil/sozlukler/tarih';
 
 /**
  * ═══ EN PAHALI İSTEK YALNIZCA GEREKİYORSA ATILIYOR ═══
@@ -43,7 +44,7 @@ describe('enEskiGunGerekli', () => {
      * aralık boşuna 17 saniyelik sorguyu tetikler.
      */
     expect(enEskiGunGerekli('ozel')).toBe(false);
-    expect(RANGE_PRESETS.some((p) => p.key === 'ozel')).toBe(false);
+    expect(RANGE_PRESETS.some((p) => (p.key as string) === 'ozel')).toBe(false);
   });
 
   it('KRİTİK: BİLİNMEYEN anahtar `resolveRange` ile AYNI ön ayara düşüyor', () => {
@@ -138,7 +139,9 @@ describe('KRİTİK: seçici değeri TIKLANDIĞINDA arıyor', () => {
   });
 
   it('KRİTİK: arama ve hata EKRANDA — sessiz düşüş yok', () => {
-    expect(SECICI).toContain('En eski veri günü aranıyor…');
+    // Metin sözlükte (iki dil); seçici onu KULLANIYOR ve değer dolu.
+    expect(tarihSozlugu.tr.secici.enEskiAraniyor).toBe('En eski veri günü aranıyor…');
+    expect(SECICI).toContain('{d.enEskiAraniyor}');
     expect(SECICI).toContain('setKapsamHatasi(');
     // `.catch(() => null)` ile sessizce 90 güne düşmek, "arıyorum",
     // "bulamadım" ve "veri yok" hâllerini aynı ekrana çevirirdi.

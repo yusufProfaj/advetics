@@ -1,6 +1,8 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
+import { useSozluk } from '@/dil/saglayici';
+import { kabukSozlugu } from '@/dil/sozlukler/kabuk';
 import { useEffect, useRef, type ReactNode } from 'react';
 
 /**
@@ -20,12 +22,13 @@ export function etkinSatiriGoster(kap: HTMLElement | null): void {
 
 export function KaydirilanMenu({ className, onClick, children }: { className: string; onClick?: () => void; children: ReactNode }) {
   const ref = useRef<HTMLElement>(null);
+  const k = useSozluk(kabukSozlugu).kenar;
   const yol = usePathname();
   useEffect(() => {
     etkinSatiriGoster(ref.current);
   }, [yol]);
   return (
-    <nav ref={ref} aria-label="Ana menü" className={className} onClick={onClick}>
+    <nav ref={ref} aria-label={k.anaMenu} className={className} onClick={onClick}>
       {children}
     </nav>
   );

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import type { ManagerAccountTree, UstHesapOzeti } from '@advetics/shared';
+import { ayarSekmesiAdi, sec, type ManagerAccountTree, type UstHesapOzeti } from '@advetics/shared';
 import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import { requireSession } from '@/lib/session';
 import { acilisAdresi, kapi } from '@/lib/panel-adresleri';
@@ -11,8 +11,13 @@ import { AyarKapsami, AyarlarSayfasi, aktifSirketAdi } from '@/components/ayar-k
 import { UstHesapEkrani } from '@/components/ust-hesap/ust-hesap-ekrani';
 import { UstHesapYonetimi } from '@/components/ust-hesap/ust-hesap-yonetimi';
 import { WorkspaceBolumu } from '@/components/tenancy/workspace-bolumu';
+import { dilAl } from '@/dil/sunucu';
+import { ayarlarSozlugu } from '@/dil/sozlukler/ayarlar';
 
-export const metadata = { title: 'Şirketler ve workspace’ler · Advetics' };
+/** Sekme başlığı = menü satırı = sayfa başlığı, hepsi `ayarSekmesiAdi`ndan (`ayarlar.spec.ts`). */
+export async function generateMetadata() {
+  return { title: `${ayarSekmesiAdi('sirketler', await dilAl())} · Advetics` };
+}
 
 interface OrganizationRow {
   id: string;
@@ -20,8 +25,8 @@ interface OrganizationRow {
   slug: string;
 }
 
-function hataMetni(e: unknown): string {
-  return e instanceof ApiRequestError ? e.message : 'Bağlantı kurulamadı';
+function hataMetni(e: unknown, yedek: string): string {
+  return e instanceof ApiRequestError ? e.message : yedek;
 }
 
 /**
@@ -44,6 +49,10 @@ function hataMetni(e: unknown): string {
 export default async function SirketlerPage() {
   const session = await requireSession();
   if (!ayarSekmesiAcik(session, 'sirketler')) redirect('/dashboard');
+  const dil = await dilAl();
+  const t = sec(ayarlarSozlugu, dil);
+  const d = t.sirketlerSayfasi;
+  const yedek = t.ortak.baglantiKurulamadi;
 
   const sirketYonetir = kapi(session, 'sirket.yonet');
   const ustHesapYonetir = kapi(session, 'ustHesap.yonet');
@@ -60,7 +69,7 @@ export default async function SirketlerPage() {
     try {
       agac = (await serverApiFetch<ManagerAccountTree | null>('/manager-account')) ?? null;
     } catch (e) {
-      agacHatasi = hataMetni(e);
+      agacHatasi = hataMetni(e, yedek);
     }
   }
 
@@ -78,7 +87,7 @@ export default async function SirketlerPage() {
     try {
       sirket = (await serverApiFetch<OrganizationRow | null>('/organization')) ?? null;
     } catch (e) {
-      sirketHatasi = hataMetni(e);
+      sirketHatasi = hataMetni(e, yedek);
     }
   }
 
@@ -93,7 +102,7 @@ export default async function SirketlerPage() {
     try {
       ustHesaplar = (await serverApiFetch<UstHesapOzeti[]>('/manager-account/liste')) ?? [];
     } catch (e) {
-      ustHesaplarHatasi = hataMetni(e);
+      ustHesaplarHatasi = hataMetni(e, yedek);
     }
   }
 
@@ -110,10 +119,8 @@ export default async function SirketlerPage() {
      */
     <div id="workspaceler" className="scroll-mt-24">
       <BosDurum
-        baslik="Workspace’leri görmek için bir şirket seç"
-        neden={`Şu an bütün şirketleri birlikte görüyorsun. ${
-          sirketYonetir ? 'Soldaki listeden' : 'Üstteki seçiciden'
-        } bir şirkete tıklamak seni o şirkete geçirir.`}
+        baslik={d.sirketSec}
+        neden={d.tumSirketler(sirketYonetir)}
       />
     </div>
   ) : (
@@ -130,7 +137,7 @@ export default async function SirketlerPage() {
   const eylemler =
     sirketKapsami && kapi(session, 'workspace.ekle') ? (
       <Link href={acilisAdresi('workspace')} className={dugmeSinifi('birincil')}>
-        + Yeni workspace
+        {d.yeniWorkspace}
       </Link>
     ) : undefined;
 
@@ -144,11 +151,11 @@ export default async function SirketlerPage() {
           <AyarKapsami duzey="sirket" ad={aktifSirketAdi(session)} />
         )
       }
-      baslik="Şirketler ve workspace’ler"
+      baslik={ayarSekmesiAdi('sirketler', dil)}
       aciklama={
         sirketYonetir
-          ? 'Soldan bir şirkete geç, sağda o şirketin workspace’lerini yönet. Bir workspace’in hesapları, markası ve bilgileri Marka Merkezi’nde.'
-          : 'Bu şirketin workspace’leri. Bir workspace’in hesapları, markası ve bilgileri Marka Merkezi’nde.'
+          ? d.aciklamaYonetici
+          : d.aciklama
       }
       eylemler={eylemler}
     >

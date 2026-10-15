@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { UiMetni } from './ui-metni';
 import { Dugme } from './dugme';
 
 /**
@@ -24,10 +25,15 @@ export interface RayParcasi {
  * Parçalı ilerleme rayı: biten adım SİYAH, şimdiki KIRMIZI, sıradaki gri.
  * Kullanıcı hangi adımda olduğunu ve kaç adım kaldığını her an görür.
  */
-export function IlerlemeRayi({ parcalar, etiket = 'Adımlar' }: { parcalar: RayParcasi[]; etiket?: string }) {
+export function IlerlemeRayi({ parcalar, etiket }: { parcalar: RayParcasi[]; etiket?: string }) {
   const simdi = parcalar.findIndex((p) => p.hal === 'simdi');
   return (
     <nav aria-label={etiket}>
+      {etiket === undefined && (
+        <span className="sr-only">
+          <UiMetni k="adimlar" />
+        </span>
+      )}
       <ol className="m-0 flex list-none gap-1.5 p-0">
         {parcalar.map((p, i) => (
           <li key={p.anahtar} className="min-w-0 flex-1" aria-current={p.hal === 'simdi' ? 'step' : undefined}>
