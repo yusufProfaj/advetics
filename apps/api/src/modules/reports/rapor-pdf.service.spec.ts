@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { inflateSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import type { ReportData } from '@advetics/shared';
+import { PDFDocument } from 'pdf-lib';
 import { RaporPdfService } from './rapor-pdf.service';
 
 /**
@@ -1362,7 +1363,13 @@ describe('DÖNÜŞÜM DETAYI bölümü', () => {
 
 describe('RaporPdfService — Site ve Dönüşüm (Paket F1)', () => {
   const svc = new RaporPdfService();
-  const boyut = async (d: ReportData) => (await svc.uret(d)).byteLength;
+  /*
+   * SAYFA SAYISI, BAYT BOYUTU DEĞİL. İddia "sayfa hiç açılmaz" ve bir süre
+   * bayt boyutu karşılaştırılıyordu: CI'da aynı içerik 43014 / 43016 bayt
+   * çıktı (2026-10-15) ve ilgisiz bir push'u kırmızı yaptı. PDF baytları
+   * kararlı değil (üretim zamanı, alt küme yazı tipi); sayfa sayısı kararlı.
+   */
+  const boyut = async (d: ReportData) => (await PDFDocument.load(await svc.uret(d))).getPageCount();
 
   it('KRİTİK: bölüm kodu PDF döngüsünde ÇİZİLİYOR (PLATFORM_SIRASI tuzağı: GA4 bir platform değil)', async () => {
     const m = metinler(await svc.uret({ ...VERI, sections: ['site_conversion'] })).join(' ');
