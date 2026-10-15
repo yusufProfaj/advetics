@@ -1,4 +1,4 @@
-import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { TenantContext } from '@advetics/shared';
 import { CONFIG, type AppConfig } from '../../config/configuration';
@@ -99,26 +99,29 @@ export class YouTubeSubscribeService {
 
     const sonucKayit = await this.prisma.withTenant(ctx, async (tx) => {
       /*
-       * BAĞLANTI ZORUNLU. `social_profiles.connection_id` NOT NULL ve elle
-       * eklenen kanalın kendi OAuth bağlantısı yok — ajansın Google
-       * bağlantısına iliştiriliyor.
-       *
-       * BAĞLANTI YOKSA REDDEDİLİYOR ve bu bir kısıtlama değil gerçeğin
-       * kendisi: Google Ads bağlı değilse o kanal için reklam da
-       * yayınlanamaz. Şimdi söylemek, kullanıcının kanalı ekleyip "neden
-       * yayınlanmıyor" diye aramasından iyi.
+       * ŞİRKET WORKSPACE'TEN OKUNUYOR, `ctx.orgId`DEN DEĞİL. "Tüm şirketler"
+       * modunda `ctx.orgId` ev şirketi kalıyor; onu yazmak profili
+       * workspace'in şirketinden başka bir şirkete koyardı (`kanaliBagla`daki
+       * kuralın aynısı). Havuza eklemede workspace yok, şirket aktif şirket.
        */
-      const [baglanti] = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-        SELECT id::text AS id FROM platform_connections
-        WHERE org_id = ${ctx.orgId}::uuid AND platform = 'google'
-          AND status = 'active'
-        ORDER BY created_at
-        LIMIT 1
-      `);
-      if (!baglanti) {
+      const orgId =
+        input.clientId === null ? ctx.orgId : await this.workspaceSirketi(tx, input.clientId);
+
+      /*
+       * BAĞLANTI ZORUNLU. `social_profiles.connection_id` NOT NULL ve elle
+       * eklenen kanalın kendi OAuth bağlantısı yok — Google bağlantısına
+       * iliştiriliyor. Yoksa reddediliyor: Google Ads bağlı değilse o kanal
+       * için reklam da yayınlanamaz.
+       */
+      const baglantiId = await this.googleBaglantisi(tx, { orgId, clientId: input.clientId });
+      if (!baglantiId) {
         throw new BadRequestException(
-          'Önce Google Ads bağlantısı kurulmalı: YouTube kanalı o bağlantının ' +
-            'altında yaşıyor ve reklam da oradan yayınlanıyor.',
+          input.clientId === null
+            ? 'Önce Google Ads bağlantısı kurulmalı: YouTube kanalı o bağlantının ' +
+                'altında yaşıyor ve reklam da oradan yayınlanıyor.'
+            : 'Bu workspace’e atanmış etkin bir Google Ads hesabı yok. YouTube ' +
+                'kanalı o hesabın bağlantısı altında yaşıyor ve reklam da oradan ' +
+                'yayınlanıyor; önce Google Ads hesabını bu workspace’e ata.',
         );
       }
 
@@ -134,8 +137,8 @@ export class YouTubeSubscribeService {
           id, org_id, client_id, connection_id, profile_type, external_id,
           name, picture_url, sync_enabled, updated_at
         ) VALUES (
-          gen_random_uuid(), ${ctx.orgId}::uuid, ${input.clientId}::uuid,
-          ${baglanti.id}::uuid, 'youtube_channel', ${kanal.channelId},
+          gen_random_uuid(), ${orgId}::uuid, ${input.clientId}::uuid,
+          ${baglantiId}::uuid, 'youtube_channel', ${kanal.channelId},
           ${kanal.title.slice(0, 200)}, ${kanal.thumbnailUrl},
           -- SÜPÜRME KAPALI: YouTube içeriği süpürmeyle değil bildirimle
           -- geliyor. Açık bırakmak, Meta organik uçlarına kanal kimliğiyle
@@ -169,7 +172,7 @@ export class YouTubeSubscribeService {
         input.clientId === null
           ? null
           : await this.abonelikKur(tx, {
-              orgId: ctx.orgId,
+              orgId,
               clientId: input.clientId,
               socialProfileId: profil.id,
               channelId: kanal.channelId,
@@ -204,6 +207,63 @@ export class YouTubeSubscribeService {
       title: sonucKayit.title,
       assigned: sonucKayit.assigned,
     };
+  }
+
+  /** Workspace'in şirketi; kompozit `(client_id, org_id)` anahtarı bu çifti istiyor. */
+  private async workspaceSirketi(tx: Prisma.TransactionClient, clientId: string): Promise<string> {
+    const [row] = await tx.$queryRaw<Array<{ org_id: string }>>(Prisma.sql`
+      SELECT org_id::text AS org_id FROM clients WHERE id = ${clientId}::uuid
+    `);
+    if (!row) throw new NotFoundException('Workspace bulunamadı');
+    return row.org_id;
+  }
+
+  /**
+   * KANALIN İLİŞTİRİLECEĞİ GOOGLE BAĞLANTISI.
+   *
+   * ÖNCE WORKSPACE'E ATANMIŞ GOOGLE ADS HESABININ BAĞLANTISI. Ajansın Google
+   * kimliği bir kez bağlanıyor ve hesaplar şirketlere ATANIYOR; bağlantı
+   * satırı AJANS şirketinde duruyor. Yalnızca workspace'in şirketinde
+   * bağlantı aramak, ajans havuzundan hesap almış her müşteride "Önce Google
+   * Ads bağlantısı kurulmalı" diyordu — öneri kartı aynı ekranda o hesabın
+   * videolarını sayarken (canlı, Coordinat Yapı, 2026-10-15). Reklam da o
+   * hesaptan yayınlanacağı için doğru bağlantı zaten bu.
+   *
+   * Bağlantının durumu ADMİN istemcisiyle okunuyor: RLS altında müşteri
+   * şirketi ajansın bağlantı satırını göremiyor (doğrusu bu). Kimlik, RLS'in
+   * gösterdiği hesap satırından geldiği için yetki genişlemiyor.
+   *
+   * Sonra şirketin kendi etkin Google bağlantısı (müşteri kendi Google'ını
+   * bağladıysa ya da kanal havuza ekleniyorsa).
+   */
+  private async googleBaglantisi(
+    tx: Prisma.TransactionClient,
+    p: { orgId: string; clientId: string | null },
+  ): Promise<string | null> {
+    if (p.clientId !== null) {
+      const hesaplar = await tx.$queryRaw<Array<{ connection_id: string }>>(Prisma.sql`
+        SELECT connection_id::text AS connection_id FROM ad_accounts
+        WHERE client_id = ${p.clientId}::uuid AND platform = 'google'
+        ORDER BY sync_enabled DESC, created_at
+      `);
+      const adaylar = [...new Set(hesaplar.map((h) => h.connection_id))];
+      if (adaylar.length > 0) {
+        const etkin = await this.db.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+          SELECT id::text AS id FROM platform_connections
+          WHERE id = ANY(${adaylar}::uuid[]) AND status = 'active'
+        `);
+        const etkinler = new Set(etkin.map((e) => e.id));
+        const secilen = adaylar.find((a) => etkinler.has(a));
+        if (secilen) return secilen;
+      }
+    }
+    const [kendi] = await this.db.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT id::text AS id FROM platform_connections
+      WHERE org_id = ${p.orgId}::uuid AND platform = 'google' AND status = 'active'
+      ORDER BY created_at
+      LIMIT 1
+    `);
+    return kendi?.id ?? null;
   }
 
   /**

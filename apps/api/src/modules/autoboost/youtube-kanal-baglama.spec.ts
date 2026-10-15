@@ -29,6 +29,7 @@ let fetchCagrilari: string[];
 
 const PROFIL = 'aaaaaaaa-2222-2222-2222-aaaaaaaaaaaa';
 const KANAL = 'UCaaaaaaaaaaaaaaaaaaaaaa';
+const YENI_KANAL = 'UCbbbbbbbbbbbbbbbbbbbbbb';
 
 const CTX = {
   orgId: IDS.org,
@@ -71,6 +72,10 @@ beforeAll(async () => {
 
   const youtube = {
     listRecentVideos: async () => videolar,
+    getChannel: async () => ({
+      durum: 'bulundu',
+      kanal: { channelId: YENI_KANAL, title: 'COORDINAT', thumbnailUrl: null },
+    }),
   } as unknown as YouTubeApiService;
 
   svc = new YouTubeSubscribeService(
@@ -252,5 +257,108 @@ describe('şirketler arası atama', () => {
     );
     expect(abonelik?.org_id).toBe(ORG_KARDES);
     expect(kart?.org_id).toBe(ORG_KARDES);
+  });
+});
+
+describe('kanal ekleme: Google bağlantısı ATANMIŞ HESAPTAN bulunuyor', () => {
+  /*
+   * Ajansın Google kimliği ajans şirketinde bir kez bağlanıyor, hesaplar
+   * müşteri şirketlerine ATANIYOR. Kanal ekleme bağlantıyı yalnız aktif
+   * şirkette arıyordu ve ajans havuzundan hesap almış her müşteride
+   * "Önce Google Ads bağlantısı kurulmalı" diyordu; aynı ekrandaki öneri
+   * kartı o hesabın videolarını sayarken (canlı, Coordinat Yapı, 2026-10-15).
+   */
+  const ORG_MUSTERI = 'eeeeeeee-4444-4444-4444-eeeeeeeeeeee';
+  const CLIENT_MUSTERI = 'ffffffff-4444-4444-4444-ffffffffffff';
+  const GOOGLE_BAGLANTI = '99999999-4444-4444-4444-999999999999';
+  const GOOGLE_HESAP = '88888888-4444-4444-4444-888888888888';
+  const MUSTERI_CTX = {
+    ...CTX,
+    orgId: ORG_MUSTERI,
+    clientIds: [CLIENT_MUSTERI],
+    activeClientId: CLIENT_MUSTERI,
+  } as TenantContext;
+
+  async function musteriKur(opts: { hesap: boolean; baglantiDurumu?: string }): Promise<void> {
+    await h.q(
+      `INSERT INTO organizations (id, name, slug, updated_at) VALUES ($1, 'Coordinat', 'coordinat', now())`,
+      [ORG_MUSTERI],
+    );
+    await h.q(
+      `INSERT INTO clients (id, org_id, name, slug, updated_at)
+       VALUES ($1, $2, 'Coordinat Yapı', 'coordinat-ws', now())`,
+      [CLIENT_MUSTERI, ORG_MUSTERI],
+    );
+    // AJANSIN Google bağlantısı: ajans şirketinde (IDS.org), müşteride DEĞİL.
+    await h.q(
+      `INSERT INTO platform_connections
+         (id, org_id, platform, status, external_user_id, account_label,
+          access_token_enc, granted_scopes, connected_by_user_id, updated_at)
+       VALUES ($1, $2, 'google', $3, 'g1', 'Ajans Google', '\\x00', '{}', $4, now())`,
+      [GOOGLE_BAGLANTI, IDS.org, opts.baglantiDurumu ?? 'active', IDS.user],
+    );
+    if (opts.hesap) {
+      await h.q(
+        `INSERT INTO ad_accounts
+           (id, org_id, client_id, connection_id, platform, external_id, name, currency,
+            timezone, sync_enabled, updated_at)
+         VALUES ($1, $2, $3, $4, 'google', '5161746317', 'Coordinat Ads', 'TRY',
+                 'Europe/Istanbul', true, now())`,
+        [GOOGLE_HESAP, ORG_MUSTERI, CLIENT_MUSTERI, GOOGLE_BAGLANTI],
+      );
+    }
+  }
+
+  it('KRİTİK: workspace’in şirketinde bağlantı yokken atanmış hesabın bağlantısına iliştiriliyor', async () => {
+    await musteriKur({ hesap: true });
+
+    const sonuc = await svc.addChannel(MUSTERI_CTX, {
+      clientId: CLIENT_MUSTERI,
+      channelInput: '@coordinat.xyz1',
+    });
+
+    const [profil] = await h.q<{ connection_id: string; org_id: string; client_id: string }>(
+      `SELECT connection_id, org_id, client_id FROM social_profiles WHERE id = $1`,
+      [sonuc.socialProfileId],
+    );
+    expect(profil?.connection_id).toBe(GOOGLE_BAGLANTI);
+    // Şirket WORKSPACE'İN şirketi; ev şirketi değil.
+    expect(profil?.org_id).toBe(ORG_MUSTERI);
+    expect(profil?.client_id).toBe(CLIENT_MUSTERI);
+    expect(sonuc.assigned).toBe(true);
+  });
+
+  it('KRİTİK: "tüm şirketler" modunda (ctx ev şirketi) profil yine workspace’in şirketine yazılıyor', async () => {
+    await musteriKur({ hesap: true });
+
+    // CTX.orgId = ajans (ev şirketi), workspace müşteri şirketinde.
+    const sonuc = await svc.addChannel(
+      { ...CTX, clientIds: [IDS.client, CLIENT_MUSTERI] } as TenantContext,
+      { clientId: CLIENT_MUSTERI, channelInput: '@coordinat.xyz1' },
+    );
+    const [profil] = await h.q<{ org_id: string }>(
+      `SELECT org_id FROM social_profiles WHERE id = $1`,
+      [sonuc.socialProfileId],
+    );
+    const [abonelik] = await h.q<{ org_id: string }>(
+      `SELECT org_id FROM auto_boost_subscriptions WHERE social_profile_id = $1`,
+      [sonuc.socialProfileId],
+    );
+    expect(profil?.org_id).toBe(ORG_MUSTERI);
+    expect(abonelik?.org_id).toBe(ORG_MUSTERI);
+  });
+
+  it('workspace’e Google hesabı atanmamışsa sebep workspace cümlesiyle söyleniyor', async () => {
+    await musteriKur({ hesap: false });
+    await expect(
+      svc.addChannel(MUSTERI_CTX, { clientId: CLIENT_MUSTERI, channelInput: '@coordinat.xyz1' }),
+    ).rejects.toThrow(/atanmış etkin bir Google Ads hesabı yok/);
+  });
+
+  it('atanmış hesabın bağlantısı kopmuşsa ona iliştirilmiyor', async () => {
+    await musteriKur({ hesap: true, baglantiDurumu: 'revoked' });
+    await expect(
+      svc.addChannel(MUSTERI_CTX, { clientId: CLIENT_MUSTERI, channelInput: '@coordinat.xyz1' }),
+    ).rejects.toThrow(/atanmış etkin bir Google Ads hesabı yok/);
   });
 });
