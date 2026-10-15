@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import type { YoutubeKanalOnerileri, YoutubeKanalOnerisi } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { profilAtamaYolu } from '@/lib/havuz';
 import { formatNumber } from '@/lib/format';
 import { Dugme } from '@/components/ui/dugme';
 
@@ -17,8 +18,11 @@ import { Dugme } from '@/components/ui/dugme';
  * İKİ KİP:
  *   · WORKSPACE İÇİNDE (`clientId` var): pencere açılınca kanıtlı öneriler
  *     (site + Google Ads) kendiliğinden geliyor; "Bu kanal" havuza ekleyip
- *     BU workspace'e atıyor. Atama mevcut uçtan (`social-profiles/:id/client`)
- *     geçiyor: denetim kaydı ve abonelik orada.
+ *     BU workspace'e atıyor. Atama YOUTUBE UCUNDAN (`profilAtamaYolu`):
+ *     sahiplik, hub aboneliği, son videoların kartı ve kanal görselinin
+ *     marka logosu olması orada. Bir süre genel uç (`social-profiles/:id/
+ *     client`) kullanılıyordu: kanal "bağlandı" görünüyor ama abonelik hiç
+ *     kurulmuyor, Akıllı Boost'a tek kart düşmüyordu (2026-10-15).
  *   · HAVUZ EKRANINDA (`clientId` yok): yalnızca arama; "Havuza ekle".
  *     Workspace seçimi bugünkü gibi ayrı adım.
  *
@@ -133,11 +137,12 @@ export function YouTubeKanalBul({
       return;
     }
     try {
-      await apiFetch(`/connections/social-profiles/${profilId}/client`, {
+      const r = await apiFetch<{ note: string }>(profilAtamaYolu('youtube_channel', profilId), {
         method: 'PATCH',
         body: JSON.stringify({ clientId }),
       });
-      setBildirim({ ton: 'ok', metin: `${k.title} bu workspace'e bağlandı. Yeni videolar Akıllı Boost'a kart olarak düşecek.` });
+      // Sunucunun notu: kaç kart açıldı, logo alındı mı ya da neden alınamadı.
+      setBildirim({ ton: 'ok', metin: `${k.title} bu workspace'e bağlandı. ${r.note}` });
       router.refresh();
       baglandi?.();
       void onerileriGetir();

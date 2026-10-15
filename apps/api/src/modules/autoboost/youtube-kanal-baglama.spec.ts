@@ -7,6 +7,7 @@ import type { AppConfig } from '../../config/configuration';
 import type { TenantContext } from '@advetics/shared';
 import { AutoBoostQueueService } from './autoboost-queue.service';
 import { YouTubeSubscribeService } from './youtube-subscribe.service';
+import type { AssetsService } from '../assets/assets.service';
 import type { YouTubeApiService, YouTubeSonVideolarSonucu } from './youtube-api.service';
 
 /**
@@ -26,6 +27,27 @@ let h: Harness;
 let svc: YouTubeSubscribeService;
 let videolar: YouTubeSonVideolarSonucu;
 let fetchCagrilari: string[];
+
+/**
+ * VARLIK YÜKLEME TAKLİDİ — gerçek `assets` satırı yazıyor: marka profilinin
+ * `logo_asset_id` yabancı anahtarı gerçekten sınansın. Biçim ve boyut
+ * doğrulaması `AssetsService`in kendi testlerinde; burada sınanan kanal
+ * görselinin o yola GİTTİĞİ ve sonucun logoya yazıldığı.
+ */
+const varliklar = {
+  upload: vi.fn(async (c: TenantContext, p: { clientId: string; kind: string; fileName: string; mimeType: string; bytes: Buffer; name?: string }) => {
+    const [r] = await h.q<{ id: string }>(
+      `INSERT INTO assets (id, org_id, client_id, kind, name, file_name, mime_type, byte_size, width, height, storage_key, content_hash, updated_at)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, 800, 800, 'k', md5(random()::text) || md5(random()::text), now()) RETURNING id::text AS id`,
+      [c.orgId, p.clientId, p.kind, p.name ?? p.fileName, p.fileName, p.mimeType, p.bytes.length],
+    );
+    return { asset: { id: r!.id }, duplicate: false };
+  }),
+};
+
+/** JPEG sihirli baytları: `turuAnla` biçimi gövdeden okuyor. */
+const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46, 0x49, 0x46]);
+const KANAL_GORSELI = 'https://yt3.ggpht.com/kanal-gorseli=s800-c-k-c0x00ffffff-no-rj';
 
 const PROFIL = 'aaaaaaaa-2222-2222-2222-aaaaaaaaaaaa';
 const KANAL = 'UCaaaaaaaaaaaaaaaaaaaaaa';
@@ -84,6 +106,7 @@ beforeAll(async () => {
     h.db as unknown as PrismaAdminService,
     youtube,
     kuyruk,
+    varliklar as unknown as AssetsService,
   );
 });
 
@@ -412,5 +435,73 @@ describe('kanal ekleme: Google bağlantısı ATANMIŞ HESAPTAN bulunuyor', () =>
     await expect(
       svc.addChannel(MUSTERI_CTX, { clientId: CLIENT_MUSTERI, channelInput: '@coordinat.xyz1' }),
     ).rejects.toThrow(/atanmış etkin bir Google Ads hesabı yok/);
+  });
+});
+
+describe('kanal görseli marka logosu oluyor (2026-10-15)', () => {
+  /*
+   * Kullanıcı: "youtube kanalını eklediğim halde logoyu çekmedi". Marka
+   * logosu yalnız elle yükleniyordu; Google'ın YouTube reklamı logosuz
+   * kurulmuyor. Logo boşsa kanalın görseli logo yapılıyor.
+   */
+  beforeEach(async () => {
+    varliklar.upload.mockClear();
+    await h.q(`UPDATE social_profiles SET picture_url = $1 WHERE id = $2`, [KANAL_GORSELI, PROFIL]);
+    vi.stubGlobal('fetch', async (url: unknown) => {
+      fetchCagrilari.push(String(url));
+      return String(url).startsWith('https://yt3.ggpht.com/') ? new Response(JPEG, { status: 200 }) : new Response('ok', { status: 202 });
+    });
+  });
+
+  const logo = async () =>
+    (await h.q<{ logo_asset_id: string | null }>(`SELECT logo_asset_id::text FROM client_profiles WHERE client_id = $1`, [IDS.client]))[0]?.logo_asset_id ?? null;
+
+  it('KRİTİK: logo boşsa kanal görseli LOGO türünde yükleniyor ve marka logosu oluyor', async () => {
+    const r = await svc.kanaliBagla(CTX, PROFIL, IDS.client);
+    expect(varliklar.upload).toHaveBeenCalledTimes(1);
+    const [, girdi] = varliklar.upload.mock.calls[0]!;
+    expect(girdi).toMatchObject({ clientId: IDS.client, kind: 'logo', mimeType: 'image/jpeg' });
+    const asset = (await varliklar.upload.mock.results[0]!.value) as { asset: { id: string } };
+    expect(await logo()).toBe(asset.asset.id);
+    expect(r.note).toContain('Kanal görseli marka logosu yapıldı.');
+    // Atama da tam: abonelik kuruldu.
+    expect(await abonelikSayisi()).toBe(1);
+  });
+
+  it('KRİTİK: VAR OLAN LOGOYA DOKUNULMUYOR (kullanıcının seçtiği ezilmez)', async () => {
+    const [eski] = await h.q<{ id: string }>(
+      `INSERT INTO assets (id, org_id, client_id, kind, name, file_name, mime_type, byte_size, width, height, storage_key, content_hash, updated_at)
+       VALUES (gen_random_uuid(), $1, $2, 'logo', 'Elle', 'elle.png', 'image/png', 1, 512, 512, 'k', md5('a') || md5('b'), now()) RETURNING id::text AS id`,
+      [IDS.org, IDS.client],
+    );
+    await h.q(`INSERT INTO client_profiles (id, org_id, client_id, logo_asset_id, updated_at) VALUES (gen_random_uuid(), $1, $2, $3, now())`, [IDS.org, IDS.client, eski!.id]);
+    const r = await svc.kanaliBagla(CTX, PROFIL, IDS.client);
+    expect(varliklar.upload).not.toHaveBeenCalled();
+    expect(await logo()).toBe(eski!.id);
+    expect(r.note).not.toContain('logo');
+  });
+
+  it('KRİTİK: beyaz liste dışındaki adres İNDİRİLMİYOR; atama yine tamam ve sebep yazılıyor', async () => {
+    await h.q(`UPDATE social_profiles SET picture_url = 'https://kotu.example.com/a.jpg' WHERE id = $1`, [PROFIL]);
+    const r = await svc.kanaliBagla(CTX, PROFIL, IDS.client);
+    expect(fetchCagrilari.some((u) => u.includes('kotu.example.com'))).toBe(false);
+    expect(varliklar.upload).not.toHaveBeenCalled();
+    expect(r.note).toContain('logo olarak alınamadı');
+    expect(await abonelikSayisi()).toBe(1);
+  });
+
+  it('yükleme reddederse (ör. çok küçük görsel) atama bozulmuyor, sebep nota giriyor', async () => {
+    varliklar.upload.mockRejectedValueOnce(new Error('Logo en az 128 piksel olmalı (yüklenen: 88×88).'));
+    const r = await svc.kanaliBagla(CTX, PROFIL, IDS.client);
+    expect(r.note).toContain('128 piksel');
+    expect(await logo()).toBeNull();
+    expect(await abonelikSayisi()).toBe(1);
+  });
+
+  it('videolar çekilemese de logo deneniyor (üç dönüşün hepsinde)', async () => {
+    videolar = { durum: 'hata', message: 'kota doldu' };
+    const r = await svc.kanaliBagla(CTX, PROFIL, IDS.client);
+    expect(r.note).toContain('kota doldu');
+    expect(r.note).toContain('marka logosu yapıldı');
   });
 });

@@ -26,8 +26,15 @@ describe('YouTube kanalını bul', () => {
     expect(BUL).toContain("tur: 'hata'");
   });
 
-  it('KRİTİK: atama MEVCUT uçtan — denetim kaydı ve abonelik orada', () => {
-    expect(BUL).toContain('/connections/social-profiles/${profilId}/client');
+  it('KRİTİK: atama YOUTUBE UCUNDAN — abonelik, son videolar ve logo orada', () => {
+    /*
+     * Bu test bir süre GENEL ucu (`/connections/social-profiles/…/client`)
+     * kilitliyordu ve yanlıştı: o uç yalnız sahipliği yazıyor. Bulucuyla
+     * bağlanan kanalda hub aboneliği hiç kurulmuyor, Akıllı Boost'a kart
+     * düşmüyordu; hata yok (2026-10-15). Uç panelin tek üreticisinden.
+     */
+    expect(BUL).toContain("profilAtamaYolu('youtube_channel', profilId)");
+    expect(BUL).not.toContain('/connections/social-profiles/');
     expect(BUL).toContain("'/autoboost/youtube/channels'");
   });
 

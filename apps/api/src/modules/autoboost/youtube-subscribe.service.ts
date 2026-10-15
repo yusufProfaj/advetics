@@ -11,6 +11,8 @@ import {
   newTokenNonce,
 } from './websub-token';
 import { parseChannelInput } from './youtube-channel';
+import { gorselIndir } from '../reports/kreatif-gorseli';
+import { AssetsService } from '../assets/assets.service';
 import { YouTubeApiService } from './youtube-api.service';
 import { AutoBoostQueueService } from './autoboost-queue.service';
 import {
@@ -66,6 +68,8 @@ export class YouTubeSubscribeService {
      * mükerrer engellemesini ve alan listesini ikiye ayırmak olurdu.
      */
     private readonly kuyruk: AutoBoostQueueService,
+    /** Kanal görselini marka logosu yapmak için (`kanalLogosu`). En sonda: testler konumla geçiriyor. */
+    private readonly assets: AssetsService,
   ) {}
 
   /**
@@ -377,10 +381,10 @@ export class YouTubeSubscribeService {
   ): Promise<{ kartlar: number; note: string }> {
     const belirtec = await this.prisma.withTenant(ctx, async (tx) => {
       const [profil] = await tx.$queryRaw<
-        Array<{ external_id: string; profile_type: string; name: string; org_id: string }>
+        Array<{ external_id: string; profile_type: string; name: string; org_id: string; picture_url: string | null }>
       >(Prisma.sql`
         SELECT external_id, profile_type::text AS profile_type, name,
-               org_id::text AS org_id
+               org_id::text AS org_id, picture_url
         FROM social_profiles WHERE id = ${socialProfileId}::uuid
       `);
       if (!profil) throw new BadRequestException('Kanal bulunamadı');
@@ -412,6 +416,7 @@ export class YouTubeSubscribeService {
         channelId: profil.external_id,
         name: profil.name,
         orgId: profil.org_id,
+        gorsel: profil.picture_url,
       };
     });
 
@@ -423,17 +428,22 @@ export class YouTubeSubscribeService {
       mode: 'subscribe',
     });
 
+    // LOGO ABONELİKTEN SONRA, VİDEOLARDAN ÖNCE: aşağıdaki üç dönüşün hepsinde
+    // denensin (video çekilemese de logo alınabilir).
+    const logoNotu = await this.kanalLogosu({ ...ctx, orgId: belirtec.orgId }, clientId, belirtec.gorsel, belirtec.name);
+    const ek = (n: string): string => (logoNotu ? `${n} ${logoNotu}` : n);
+
     const sonuc = await this.youtube.listRecentVideos(
       belirtec.channelId,
       ATAMADA_CEKILEN_VIDEO,
     );
     if (sonuc.durum === 'hata') {
-      return { kartlar: 0, note: `Bildirimler kuruldu. Son videolar çekilemedi: ${sonuc.message}` };
+      return { kartlar: 0, note: ek(`Bildirimler kuruldu. Son videolar çekilemedi: ${sonuc.message}`) };
     }
     if (sonuc.durum === 'bulunamadi') {
       return {
         kartlar: 0,
-        note: 'Bildirimler kuruldu. Kanalda henüz yüklenmiş video yok.',
+        note: ek('Bildirimler kuruldu. Kanalda henüz yüklenmiş video yok.'),
       };
     }
 
@@ -459,12 +469,67 @@ export class YouTubeSubscribeService {
     this.logger.log(`YouTube kanalı atandı: ${belirtec.name} — ${kartlar} kart açıldı.`);
     return {
       kartlar,
-      note:
+      note: ek(
         kartlar > 0
           ? `Bildirimler kuruldu, son ${kartlar} video Akıllı Boost'a düştü.`
           : 'Bildirimler kuruldu. Son videolar zaten listede.',
+      ),
     };
   }
+  /**
+   * ═══ KANAL GÖRSELİ → MARKA LOGOSU (kullanıcı, 2026-10-15) ═══
+   *
+   * Kanal eklenince logo boş kalıyordu: marka logosu yalnız elle
+   * yükleniyordu ve Google'ın YouTube (Demand Gen) reklamı logosuz
+   * kurulmuyor. Workspace'in logosu BOŞSA kanalın görseli logo yapılıyor.
+   *
+   * - VAR OLAN LOGOYA DOKUNULMAZ: kullanıcının seçtiğini ezmek, onun
+   *   kararını sessizce geri almak olurdu. Yazım `COALESCE` ile, aynı
+   *   deyimde: arada elle yüklenen logo da ezilmez.
+   * - İndirme rapordaki korumalarla (`gorselIndir`): yalnız https, yalnız
+   *   YouTube'un görsel sunucuları (`.ggpht.com`, `.googleusercontent.com`),
+   *   yönlendirme izlenmez, boyut ve süre sınırı var.
+   * - Kayıt varlık yüklemesinin AYNI yolundan (`AssetsService.upload`):
+   *   biçim ve "logo en az 128 px" doğrulaması orada; ikinci bir yol
+   *   doğrulamayı atlardı.
+   * - ATAMAYI BOZMAZ: logo alınamazsa sebep nota yazılır, kanal bağlı kalır.
+   */
+  private async kanalLogosu(ctx: TenantContext, clientId: string, gorsel: string | null, kanalAdi: string): Promise<string | null> {
+    const [mevcut] = await this.prisma.withTenant(ctx, (tx) =>
+      tx.$queryRaw<Array<{ logo_asset_id: string | null }>>(Prisma.sql`
+        SELECT logo_asset_id::text AS logo_asset_id FROM client_profiles WHERE client_id = ${clientId}::uuid
+      `),
+    );
+    if (mevcut?.logo_asset_id) return null;
+    const yerine = 'Marka logosunu Marka Merkezi › Marka’dan yükle.';
+    if (!gorsel) return `Kanalın görseli yok; logo alınamadı. ${yerine}`;
+    const indirilen = await gorselIndir(gorsel);
+    if (!indirilen.ok) return `Kanal görseli logo olarak alınamadı (${indirilen.sebep}). ${yerine}`;
+    try {
+      const { asset } = await this.assets.upload(ctx, {
+        clientId,
+        kind: 'logo',
+        fileName: `youtube-kanal-gorseli.${indirilen.tur}`,
+        mimeType: indirilen.tur === 'png' ? 'image/png' : 'image/jpeg',
+        bytes: Buffer.from(indirilen.bytes),
+        name: `${kanalAdi} · YouTube kanal görseli`.slice(0, 200),
+      });
+      const [yazim] = await this.prisma.withTenant(ctx, (tx) =>
+        tx.$queryRaw<Array<{ bizim: boolean }>>(Prisma.sql`
+          INSERT INTO client_profiles (id, org_id, client_id, logo_asset_id, updated_at)
+          VALUES (gen_random_uuid(), ${ctx.orgId}::uuid, ${clientId}::uuid, ${asset.id}::uuid, now())
+          ON CONFLICT (client_id) DO UPDATE SET
+            logo_asset_id = COALESCE(client_profiles.logo_asset_id, EXCLUDED.logo_asset_id),
+            updated_at = now()
+          RETURNING logo_asset_id = ${asset.id}::uuid AS bizim
+        `),
+      );
+      return yazim?.bizim ? 'Kanal görseli marka logosu yapıldı.' : null;
+    } catch (e) {
+      return `Kanal görseli logo olarak alınamadı (${e instanceof Error ? e.message : String(e)}). ${yerine}`;
+    }
+  }
+
 
   /**
    * KANAL WORKSPACE'TEN ÇIKARILDI — abonelik KAPATILIR.
