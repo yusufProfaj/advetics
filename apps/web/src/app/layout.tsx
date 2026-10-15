@@ -2,6 +2,9 @@ import type { Metadata } from 'next';
 import { Montserrat, Open_Sans } from 'next/font/google';
 import './globals.css';
 import { TEMA_BETIGI } from '@/lib/tema';
+import { dilDurumu } from '@/dil/sunucu';
+import { DilSaglayici } from '@/dil/saglayici';
+import { DilSecimEkrani } from '@/components/ui/dil-secimi';
 
 /*
  * YAZI TİPİ GERÇEKTEN YÜKLENİYOR. `--brand-font` uzun süre 'Inter' diyordu
@@ -78,7 +81,11 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // DİL ÇEREZDEN (docs/i18n/MIMARI.md §2). `lang` ekran okuyucunun telaffuzu
+  // ve tarayıcının çeviri önerisi için; sabit `tr` iken İngilizce sayfa
+  // Türkçe okunuyordu.
+  const { dil, dilSecildi, oneri } = await dilDurumu();
   return (
     /*
       TEMA İLK BOYAMADAN ÖNCE: kullanıcı kartındaki "Tema" seçimi
@@ -86,11 +93,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       React'ten önce koştuğu için sunucunun bastığı `<html>` ile istemcinin
       gördüğü ayrışıyor; `suppressHydrationWarning` YALNIZ bu öğe için.
     */
-    <html lang="tr" className={`${govde.variable} ${baslik.variable}`} suppressHydrationWarning>
+    <html lang={dil} className={`${govde.variable} ${baslik.variable}`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: TEMA_BETIGI }} />
       </head>
-      <body>{children}</body>
+      <body>
+        <DilSaglayici dil={dil}>
+          {children}
+          <DilSecimEkrani dilSecildi={dilSecildi} oneri={oneri} />
+        </DilSaglayici>
+      </body>
     </html>
   );
 }

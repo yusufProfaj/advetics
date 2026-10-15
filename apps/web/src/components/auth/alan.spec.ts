@@ -1,3 +1,4 @@
+import { girisSozlugu } from '@/dil/sozlukler/giris';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -64,7 +65,10 @@ describe('şifre alanı', () => {
      * kullanıcıya göre değişiyor; bu ekranda yanlış tahmin, şifreyi
      * okunur bırakıyor.
      */
-    expect(ALAN).toContain("{gorunur ? 'Gizle' : 'Göster'}");
+    // Metin sözlükten (iki dil, D0); iki dalda da METİN.
+    expect(ALAN).toContain('{gorunur ? d.gizle : d.goster}');
+    expect(girisSozlugu.tr.gizle).toBe('Gizle');
+    expect(girisSozlugu.en.goster).toBe('Show');
     expect(ALAN).toContain('aria-pressed={gorunur}');
   });
 

@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import { useSozluk } from '@/dil/saglayici';
+import { girisSozlugu } from '@/dil/sozlukler/giris';
 
 /**
  * Oturum ekranlarının metin alanı.
@@ -34,6 +36,7 @@ export function Alan({
 }) {
   const yardimId = error ? `${id}-error` : ipucu ? `${id}-ipucu` : undefined;
   const [gorunur, setGorunur] = useState(false);
+  const d = useSozluk(girisSozlugu);
 
   /*
    * ═══ ŞİFREYİ GÖSTER — HER ŞİFRE ALANINDA, İSTEĞE BAĞLI DEĞİL ═══
@@ -98,7 +101,7 @@ export function Alan({
           aria-controls={id}
           className="absolute inset-y-0 right-0 px-3 text-12 font-bold text-ink-muted transition-colors hover:text-ink disabled:opacity-60"
         >
-          {gorunur ? 'Gizle' : 'Göster'}
+          {gorunur ? d.gizle : d.goster}
         </button>
       )}
       </div>

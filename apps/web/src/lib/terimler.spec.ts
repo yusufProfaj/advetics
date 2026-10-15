@@ -100,9 +100,11 @@ describe('platform listesi', () => {
   it('KRİTİK: giriş ekranı platformları sabitten türetiyor, elle yazmıyor', async () => {
     const { platformListesi } = await import('./platform-listesi');
     expect(platformListesi()).toBe('Meta Ads, Google Ads ve LinkedIn Ads');
+    // İki dil (D0): bağlaç dile göre, liste yine sabitten.
+    expect(platformListesi('en')).toBe('Meta Ads, Google Ads, and LinkedIn Ads');
     for (const yol of ['app/(auth)/login/page.tsx', 'components/auth/auth-kabuk.tsx']) {
       const kod = yorumsuz(yol);
-      expect(kod, yol).toContain('platformListesi()');
+      expect(kod, yol).toContain('platformListesi(dil)');
       expect(kod, yol).not.toContain('Meta ve Google');
     }
   });

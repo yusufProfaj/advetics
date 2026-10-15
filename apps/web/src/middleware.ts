@@ -1,6 +1,10 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
 const ACCESS_COOKIE = 'adv_at';
+/** shared `DIL_CEREZI`, `DIL_SORGU_ANAHTARI`, `DILLER` ile aynı (middleware.spec.ts). */
+const DIL_CEREZI_EDGE = 'adv_dil';
+const DIL_SORGU_ANAHTARI = 'dil';
+const DILLER_EDGE: string[] = ['tr', 'en'];
 const ROOT_DOMAIN = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? 'localhost:3000';
 
 /** Oturum gerektirmeyen yollar. */
@@ -118,6 +122,31 @@ export function middleware(req: NextRequest): NextResponse {
   // ajans paneline erişilmesini istemiyoruz.
   if (isCustomDomain && !pathname.startsWith('/r/')) {
     return NextResponse.redirect(new URL('/r/bulunamadi', origin));
+  }
+
+  /**
+   * PAYLAŞILABİLİR DİL BAĞLANTISI (`?dil=en`, docs/i18n/MIMARI.md §2):
+   * çerezi yazar ve AYNI adrese parametresiz döner. Parametre adreste
+   * kalsaydı kişi Hesabım'dan dili değiştirdiğinde yer imindeki `?dil=en`
+   * seçimini her açılışta geri alırdı. Oturum kararından ÖNCE: girişsiz
+   * kişi panel adresine `?dil=en` ile gelirse giriş ekranı da İngilizce
+   * açılsın. Sabitler shared'dan değil elle (Edge paketi, yukarıdaki
+   * PUBLIC_PATHS ile aynı gerekçe); `middleware.spec.ts` karşılaştırıyor.
+   */
+  const dilSorgusu = req.nextUrl.searchParams.get(DIL_SORGU_ANAHTARI);
+  if (dilSorgusu !== null) {
+    const temiz = new URL(req.nextUrl.pathname + req.nextUrl.search, origin);
+    temiz.searchParams.delete(DIL_SORGU_ANAHTARI);
+    const yon = NextResponse.redirect(temiz);
+    if (DILLER_EDGE.includes(dilSorgusu)) {
+      yon.cookies.set(DIL_CEREZI_EDGE, dilSorgusu, {
+        path: '/',
+        maxAge: 365 * 24 * 60 * 60,
+        sameSite: 'lax',
+        secure: origin.startsWith('https:'),
+      });
+    }
+    return yon;
   }
 
   /**

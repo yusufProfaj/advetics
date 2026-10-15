@@ -1552,7 +1552,16 @@ Detay: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md),
   onaya kalıyor. Eski backend'in Akıllı Boost, varlıklar ve raporların
   kullandığı parçaları (`draft-tree`, `ad-builder`) duruyor.
 - **Arayüz Türkçe ve iş dilinde.** "CENTRAL", "OPTIMISE" gibi mimari terimler
-  panelde geçmiyor.
+  panelde geçmiyor. **2026-10-15'ten beri İKİ DİLLİ (TR/EN, kullanıcı
+  kararı):** kaynak dil Türkçe; yorumlar, kod içi adlar ve commit Türkçe
+  kalır, ekran metni `apps/web/src/dil/sozlukler/` altındaki sözlükten
+  gelir (`useSozluk` / `sozluk()`). Yeni ekran iki dili birden yazar:
+  `dil-tarama.spec.ts` elle yazılmış metni dosya dosya sayıyor ve istisna
+  listesi YALNIZ KÜÇÜLÜR; `sozluk-anahtarlari.spec.ts` her anahtarın iki
+  dilde dolu ve çevrilmiş olduğunu kilitliyor. Dil çerezde (`adv_dil`) ve
+  profilde (`users.locale`); ilk ziyarette bir kez sorulur. Rapor ve reklam
+  dili kullanıcının değil WORKSPACE'in ayarı. Mimari ve dalgalar
+  `docs/i18n/MIMARI.md`, terimler `docs/i18n/SOZLUK.md`.
 - Bir müşteri = bir **şirket**; şirketin birden çok projesi/reklam hesabı
   olabilir. Panelde ve raporlarda reklam hesabı süzgeci **her zaman** bulunmalı.
 - **WORKSPACE BAŞINA PLATFORM BAĞLANTISI MÜMKÜN DEĞİL — denendi, çürüdü.**

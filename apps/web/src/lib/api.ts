@@ -10,6 +10,8 @@
  * en yaygın kaynağıdır.
  */
 
+import { DIL_CEREZI } from '@advetics/shared';
+
 /** Tarayıcıdan görünen adres. Build anında koda gömülür. */
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api';
 
@@ -166,6 +168,20 @@ export function mesajaKodEkle(mesaj: string, status: number, requestId: string |
 // Tarayıcı tarafı
 // -----------------------------------------------------------------------------
 
+/**
+ * API'NİN CEVAP DİLİ (docs/i18n/MIMARI.md Ç6). Dil çerezi panelin alan
+ * adında; API başka bir alt alan adında olabildiği için çerez oraya
+ * gitmiyor, dil başlıkla taşınıyor. Tarayıcının kendi `Accept-Language`ı
+ * (işletim sisteminin dili) KULLANILMAZ: Türkçe Windows'ta İngilizce
+ * seçmiş kişiye Türkçe hata dönerdi. Çerez yoksa başlık yok, API
+ * varsayılanına (profil, sonra Türkçe) düşer.
+ */
+function istemciDilBasligi(): Record<string, string> {
+  if (typeof document === 'undefined') return {};
+  const m = document.cookie.match(new RegExp(`(?:^|; )${DIL_CEREZI}=(tr|en)(?:;|$)`));
+  return m ? { 'Accept-Language': m[1]! } : {};
+}
+
 export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
@@ -173,6 +189,7 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
+      ...istemciDilBasligi(),
       ...(init.headers ?? {}),
     },
   });
@@ -195,12 +212,14 @@ export async function serverApiFetch<T>(path: string, init: RequestInit = {}): P
     .getAll()
     .map((c) => `${c.name}=${c.value}`)
     .join('; ');
+  const dil = cookieStore.get(DIL_CEREZI)?.value;
 
   const res = await fetch(`${INTERNAL_API_URL}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
       ...(cookieHeader ? { Cookie: cookieHeader } : {}),
+      ...(dil ? { 'Accept-Language': dil } : {}),
       ...(init.headers ?? {}),
     },
     // Oturuma bağlı veri asla önbelleğe alınmamalı — bir müşterinin verisi

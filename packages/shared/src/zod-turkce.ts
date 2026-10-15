@@ -48,4 +48,56 @@ export const turkceZodHatalari: ZodErrorMap = (issue, ctx) => {
   }
 };
 
+/**
+ * İNGİLİZCE KARŞILIK (i18n, docs/i18n/MIMARI.md). Dallar Türkçe haritayla
+ * BİRE BİR aynı sırada; biri bir dala eklenip diğerine eklenmezse o hata
+ * türü İngilizce ekranda Zod'un ham mesajıyla görünür.
+ * `zod-hata-dili.spec.ts` iki haritayı her dalda karşılaştırıyor.
+ */
+export const ingilizceZodHatalari: ZodErrorMap = (issue, ctx) => {
+  switch (issue.code) {
+    case ZodIssueCode.invalid_type:
+      return {
+        message: issue.received === 'undefined' ? 'This field is required' : 'Invalid value type',
+      };
+    case ZodIssueCode.invalid_string:
+      if (issue.validation === 'email') return { message: 'Not a valid email address' };
+      if (issue.validation === 'uuid') return { message: 'Invalid ID' };
+      if (issue.validation === 'url') return { message: 'Not a valid URL' };
+      return { message: 'Invalid format' };
+    case ZodIssueCode.too_small:
+      if (issue.type === 'string') {
+        return {
+          message: Number(issue.minimum) <= 1 ? 'Cannot be empty' : `Must be at least ${issue.minimum} characters`,
+        };
+      }
+      if (issue.type === 'array') return { message: `Must have at least ${issue.minimum} items` };
+      return { message: `Must be at least ${issue.minimum}` };
+    case ZodIssueCode.too_big:
+      if (issue.type === 'string') return { message: `Must be at most ${issue.maximum} characters` };
+      if (issue.type === 'array') return { message: `Must have at most ${issue.maximum} items` };
+      return { message: `Must be at most ${issue.maximum}` };
+    case ZodIssueCode.invalid_enum_value:
+      return { message: `Invalid option (valid options: ${issue.options.join(', ')})` };
+    default:
+      return { message: ctx.defaultError };
+  }
+};
+
+export function zodHataHaritasi(dil: 'tr' | 'en'): ZodErrorMap {
+  return dil === 'en' ? ingilizceZodHatalari : turkceZodHatalari;
+}
+
+/**
+ * Tarayıcıda dile göre küresel haritayı kurar. Panelde ÇAĞRI BURADAN
+ * yapılmalı: `z` shared'ın kendi zod kopyası; panel kendi `zod` içe
+ * aktarımıyla `setErrorMap` çağırırsa iki kopya ayrıştığında shared
+ * şemaları (giriş formu) haritayı HİÇ görmez ve Türkçe kalır. API'de
+ * küresel harita KULLANILMAZ (eşzamanlı istekler farklı dilde): orada
+ * `safeParse(x, { errorMap: zodHataHaritasi(dil) })`.
+ */
+export function zodHataDiliniAyarla(dil: 'tr' | 'en'): void {
+  z.setErrorMap(zodHataHaritasi(dil));
+}
+
 z.setErrorMap(turkceZodHatalari);

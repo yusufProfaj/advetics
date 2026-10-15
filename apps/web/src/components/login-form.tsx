@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ikiAdimBekleniyor, loginSchema, type GirisYaniti } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
@@ -10,11 +10,16 @@ import { IkiAdimGiris } from '@/components/auth/iki-adim-giris';
 import { Dugme } from '@/components/ui/dugme';
 import { Serit } from '@/components/ui/hal';
 import { KART_BAGLANTISI } from '@/components/ui/kart';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { girisSozlugu } from '@/dil/sozlukler/giris';
+import { dilProfileYaz } from '@/dil/profil';
 
 export function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
   const nextPath = params.get('next') ?? '/dashboard';
+  const { dil } = useDil();
+  const d = useSozluk(girisSozlugu);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -35,6 +40,16 @@ export function LoginForm() {
    * attığı bir döngüye sokardı (erişim çerezi yok).
    */
   const [ikiAdim, setIkiAdim] = useState<'dogrula' | 'kurulum' | null>(null);
+
+  /*
+   * DİL DEĞİŞİNCE ESKİ HATALAR SİLİNİR. Hata cümleleri gönderim anındaki
+   * dilde durumda saklanıyor; silinmezse TR'ye geçen kişi Türkçe ekranda
+   * "Not a valid email address" görüyordu (canlı denetim, D0).
+   */
+  useEffect(() => {
+    setError(null);
+    setFieldErrors({});
+  }, [dil]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -63,6 +78,7 @@ export function LoginForm() {
         setIkiAdim(yanit.ikiAdim);
         return;
       }
+      await dilProfileYaz(dil);
       // Cookie'ler API tarafından set edildi; sunucu tarafı oturumu görsün diye
       // tam yenileme yapıyoruz.
       router.replace(nextPath);
@@ -74,7 +90,7 @@ export function LoginForm() {
           setFieldErrors(Object.fromEntries(err.fieldErrors.map((f) => [f.field, f.message])));
         }
       } else {
-        setError('Bağlantı kurulamadı. API çalışıyor mu?');
+        setError(d.baglantiYok);
       }
     } finally {
       setPending(false);
@@ -101,7 +117,7 @@ export function LoginForm() {
 
       <Alan
         id="email"
-        label="E-posta"
+        label={d.eposta}
         type="email"
         autoComplete="username"
         value={email}
@@ -112,7 +128,7 @@ export function LoginForm() {
 
       <Alan
         id="password"
-        label="Şifre"
+        label={d.sifre}
         type="password"
         autoComplete="current-password"
         value={password}
@@ -132,11 +148,11 @@ export function LoginForm() {
             onChange={(e) => setRememberMe(e.target.checked)}
             className="h-4 w-4 accent-[var(--brand-primary)]"
           />
-          Beni hatırla
+          {d.beniHatirla}
         </label>
 
         <Link href="/sifremi-unuttum" className={KART_BAGLANTISI}>
-          Şifremi unuttum
+          {d.sifremiUnuttum}
         </Link>
       </div>
 
@@ -147,13 +163,13 @@ export function LoginForm() {
       */}
       {!rememberMe && (
         <p className="m-0 text-12 text-ink-muted">
-          Tarayıcıyı kapattığında oturumun kapanacak.
+          {d.hatirlamaNotu}
         </p>
       )}
 
       {/* EKRANIN TEK BİRİNCİL EYLEMİ: tam genişlik, ortak düğme. */}
       <Dugme type="submit" className="w-full" bekliyor={pending}>
-        {pending ? 'Giriş yapılıyor…' : 'Giriş yap'}
+        {pending ? d.girisYapiliyor : d.girisYap}
       </Dugme>
     </form>
   );

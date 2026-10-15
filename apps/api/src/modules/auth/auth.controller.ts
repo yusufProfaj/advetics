@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Patch,
   Get,
   HttpCode,
   HttpStatus,
@@ -13,6 +14,8 @@ import {
 import type { Response } from 'express';
 import {
   changePasswordSchema,
+  dilGuncelleSchema,
+  type DilGuncelleInput,
   confirmPasswordResetSchema,
   loginSchema,
   registerOrganizationSchema,
@@ -317,5 +320,22 @@ export class AuthController {
     // Şifre değişince tüm oturumlar düşer — bu isteğin oturumu dahil.
     clearAuthCookies(res, this.config);
     return { ok: true, message: 'Şifre değiştirildi. Lütfen tekrar giriş yapın.' };
+  }
+
+  /**
+   * ARAYÜZ DİLİ (docs/i18n/MIMARI.md §2). Kişinin KENDİ satırı: yetki
+   * gerekmez, başkasının dilini değiştiren bir yol yok. Çağıranlar: giriş
+   * anı (giriş ekranında seçilen dil profile yazılır, başka cihazda da
+   * geçerli olsun) ve Hesabım. `users.locale` 2026-08'den beri vardı ve
+   * hiç okunmuyordu.
+   */
+  @HttpCode(HttpStatus.OK)
+  @Patch('locale')
+  async dilGuncelle(
+    @CurrentTenant() ctx: TenantContext,
+    @Body(zodBody(dilGuncelleSchema)) dto: DilGuncelleInput,
+  ) {
+    await this.auth.dilGuncelle(ctx, dto.locale);
+    return { locale: dto.locale };
   }
 }

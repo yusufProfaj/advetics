@@ -19,12 +19,15 @@ export const emailSchema = z
   .string()
   .trim()
   .toLowerCase()
-  .email('Geçerli bir e-posta adresi girin')
+  // MESAJ YOK, BİLEREK: dile göre hata haritası yazıyor (`zod-turkce.ts`).
+  // Buraya sabit Türkçe cümle yazmak, İngilizce giriş ekranında Türkçe hata
+  // göstermek demek ve haritanın onu ezme yolu yok.
+  .email()
   .max(255);
 
 export const loginSchema = z.object({
   email: emailSchema,
-  password: z.string().min(1, 'Şifre gerekli').max(128),
+  password: z.string().min(1).max(128),
   /**
    * "Beni hatırla".
    *

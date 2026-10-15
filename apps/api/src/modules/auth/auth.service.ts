@@ -23,7 +23,7 @@ import { AuditService } from '../audit/audit.service';
 import { TenantContextService } from './tenant-context.service';
 import { TokenService, type IssuedTokens } from './token.service';
 import { ARGON_OPTIONS } from '../../common/utils/password-hash';
-import { TUM_SIRKETLER, isOrgScopedRole } from '@advetics/shared';
+import { TUM_SIRKETLER, isOrgScopedRole, type Dil } from '@advetics/shared';
 import { ilkSirketAc } from '../manager-account/ilk-sirket';
 import { CONFIG, type AppConfig } from '../../config/configuration';
 import { mailGonder } from '../email/mail-gonderici';
@@ -770,6 +770,16 @@ export class AuthService {
       actorId: record.userId,
       ...meta,
     });
+  }
+
+  /**
+   * Yönetim istemcisi + `ctx.userId`: `users` politikası ajans yöneticisi
+   * kardeş şirkete geçtiğinde kişinin KENDİ satırını bile göstermiyor
+   * (CLAUDE.md "RLS'Lİ BİR TABLOYA YAPILAN INNER JOIN"), `withTenant` altında
+   * UPDATE sessizce sıfır satır etkilerdi. Kapsam `where`de: yalnız kendi id.
+   */
+  async dilGuncelle(ctx: TenantContext, locale: Dil): Promise<void> {
+    await this.admin.user.update({ where: { id: ctx.userId }, data: { locale } });
   }
 
   async changePassword(

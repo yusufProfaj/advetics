@@ -1,4 +1,5 @@
 import { hasPermission, requireSession } from '@/lib/session';
+import { DilEsitle } from '@/dil/dil-esitle';
 import { serverApiFetch } from '@/lib/api';
 import { KapsamSecici, type KapsamSirketi } from '@/components/kapsam-secici';
 import { UyariBandi } from '@/components/uyari-bandi';
@@ -190,6 +191,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       aktifWorkspaceId={session.activeClientId}
       boostGorunur={hasPermission(session, 'boost.read')}
     >
+    <DilEsitle profil={session.user.locale} />
     <div style={themeStyle} className="panel flex min-h-screen">
       {/* Kenar çubuğu */}
       {/*

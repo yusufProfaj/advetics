@@ -125,3 +125,34 @@ describe('middleware — white-label workspace alan adı', () => {
     );
   });
 });
+
+describe('middleware — paylaşılabilir dil bağlantısı (?dil=)', () => {
+  it('?dil=en çerezi yazar ve AYNI adrese parametresiz döner (diğer parametreler kalır)', () => {
+    const res = middleware(request('/gizlilik?dil=en&x=1'));
+    const yer = new URL(res.headers.get('location')!);
+    expect(yer.pathname).toBe('/gizlilik');
+    expect(yer.searchParams.get('dil')).toBeNull();
+    expect(yer.searchParams.get('x')).toBe('1');
+    expect(res.cookies.get('adv_dil')?.value).toBe('en');
+  });
+
+  it('oturumsuz panel adresinde de önce dil: giriş ekranı İngilizce açılsın', () => {
+    const res = middleware(request('/dashboard?dil=en'));
+    expect(redirectPath(res)).toBe('/dashboard');
+    expect(res.cookies.get('adv_dil')?.value).toBe('en');
+  });
+
+  it('bilinmeyen dil çerez YAZMAZ ama parametreyi yine temizler', () => {
+    const res = middleware(request('/?dil=de'));
+    expect(redirectPath(res)).toBe('/');
+    expect(res.cookies.get('adv_dil')).toBeUndefined();
+  });
+
+  it('Edge sabitleri shared ile aynı (middleware shared içe aktaramıyor)', async () => {
+    const shared = await import('@advetics/shared');
+    const kaynak = (await import('node:fs')).readFileSync(require.resolve('./middleware.ts'), 'utf8');
+    expect(kaynak).toContain(`const DIL_CEREZI_EDGE = '${shared.DIL_CEREZI}'`);
+    expect(kaynak).toContain(`const DIL_SORGU_ANAHTARI = '${shared.DIL_SORGU_ANAHTARI}'`);
+    expect(kaynak).toContain(`const DILLER_EDGE: string[] = [${shared.DILLER.map((d) => `'${d}'`).join(', ')}]`);
+  });
+});

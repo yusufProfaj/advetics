@@ -1,3 +1,4 @@
+import { DIL_CEREZI, DIL_CEREZI_SURESI_SN } from '@advetics/shared';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -81,8 +82,10 @@ describe('KRİTİK: çerez politikası API\'nin yazdığı çerezlerle aynı', (
     );
   });
 
-  it('API\'nin her çerezi politikada, politikada fazladan çerez yok', () => {
-    expect(CEREZLER.map((c) => c.ad).sort()).toEqual(sabitler.map((s) => s.ad).sort());
+  it('API\'nin her çerezi ve panelin dil çerezi politikada, politikada fazladan çerez yok', () => {
+    // Dil çerezi API'nin değil panelin (tarayıcıda yazılıyor, `dil/saglayici.tsx`).
+    expect(CEREZLER.map((c) => c.ad).sort()).toEqual([...sabitler.map((s) => s.ad), DIL_CEREZI].sort());
+    expect(CEREZLER.find((c) => c.ad === DIL_CEREZI)!.sure).toBe(`${DIL_CEREZI_SURESI_SN / 86400 / 365} yıl`);
   });
 
   it('HttpOnly yazılan çerezler politikada HttpOnly, panelin okuduğu seçim çerezleri değil', () => {

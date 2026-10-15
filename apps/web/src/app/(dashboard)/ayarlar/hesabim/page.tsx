@@ -14,6 +14,7 @@ import { HataDurumu, Serit } from '@/components/ui/hal';
 import { AyarKapsami } from '@/components/ayar-kapsam';
 import { HesabimBolumleri, type HesabimBolumu } from '@/components/hesap/hesabim-bolumleri';
 import { IkiAdimPaneli } from '@/components/hesap/iki-adim-paneli';
+import { DilAyari } from '@/components/hesap/dil-ayari';
 import { EpostaAyarlari } from '@/components/email/eposta-ayarlari';
 import { OkumaApiPaneli } from '@/components/okuma-api/okuma-api-paneli';
 
@@ -139,6 +140,9 @@ export default async function HesabimSayfasi({
               <dt className="text-ink-muted">Rol</dt>
               <dd className="m-0 text-ink">{session.platformAdmin ? SAHIP_ETIKETI : ROL_ETIKETI[session.rol]}</dd>
             </dl>
+          </Kart>
+          <Kart>
+            <DilAyari />
           </Kart>
           {ikiAdim.status === 'fulfilled' ? (
             <IkiAdimPaneli durum={ikiAdim.value} kurtarmaIleGirdi={params.kurtarma === '1'} />

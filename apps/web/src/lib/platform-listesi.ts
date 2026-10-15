@@ -1,4 +1,4 @@
-import { PLATFORMS, PLATFORM_KISA_ADLARI } from '@advetics/shared';
+import { PLATFORMS, PLATFORM_KISA_ADLARI, type Dil } from '@advetics/shared';
 
 /**
  * ═══ "META VE GOOGLE ADS" CÜMLESİ SABİTTEN TÜRÜYOR ═══
@@ -12,8 +12,8 @@ import { PLATFORMS, PLATFORM_KISA_ADLARI } from '@advetics/shared';
  * `Intl.ListFormat` Türkçe bağlacı ("A, B ve C") doğru kuruyor; elle
  * `join(', ')` yazmak son bağlacı kaybederdi.
  */
-export function platformListesi(): string {
-  return new Intl.ListFormat('tr', { style: 'long', type: 'conjunction' }).format(
+export function platformListesi(dil: Dil = 'tr'): string {
+  return new Intl.ListFormat(dil, { style: 'long', type: 'conjunction' }).format(
     PLATFORMS.map((p) => PLATFORM_KISA_ADLARI[p]),
   );
 }

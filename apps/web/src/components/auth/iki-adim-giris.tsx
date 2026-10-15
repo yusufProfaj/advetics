@@ -13,6 +13,8 @@ import { ayarlarAdresi } from '@/lib/panel-adresleri';
 import { HataKutusu, KodAlani, KurtarmaKodlari, QrKurulumu } from '@/components/hesap/iki-adim-parcalari';
 import { Dugme } from '@/components/ui/dugme';
 import { KART_BAGLANTISI } from '@/components/ui/kart';
+import { useDil } from '@/dil/saglayici';
+import { dilProfileYaz } from '@/dil/profil';
 
 function hataMetni(err: unknown): string {
   return err instanceof ApiRequestError ? err.message : 'Bağlantı kurulamadı. Tekrar dene.';
@@ -50,6 +52,7 @@ export function IkiAdimGiris({
 }
 
 function KodDogrula({ sonraki, onGeri }: { sonraki: string; onGeri: () => void }) {
+  const { dil } = useDil();
   const router = useRouter();
   const [kurtarma, setKurtarma] = useState(false);
   const [kod, setKod] = useState('');
@@ -72,6 +75,7 @@ function KodDogrula({ sonraki, onGeri }: { sonraki: string; onGeri: () => void }
         method: 'POST',
         body: JSON.stringify({ kod }),
       });
+      await dilProfileYaz(dil);
       // KURTARMA KODUYLA GİRDİYSE Hesabım'a: kalan kod sayısını ve yeni
       // kod üretme yolunu görsün. Panele gitseydi kodların azaldığını
       // ancak sonuncusu bittiğinde öğrenirdi.
@@ -126,6 +130,7 @@ function KodDogrula({ sonraki, onGeri }: { sonraki: string; onGeri: () => void }
 }
 
 function GiristeKurulum({ sonraki, onGeri }: { sonraki: string; onGeri: () => void }) {
+  const { dil } = useDil();
   const router = useRouter();
   /*
    * DÖRT HÂL AYRI: yükleniyor, yüklenemedi, QR hazır, kodlar gösteriliyor.
@@ -166,6 +171,7 @@ function GiristeKurulum({ sonraki, onGeri }: { sonraki: string; onGeri: () => vo
         method: 'POST',
         body: JSON.stringify({ kod }),
       });
+      await dilProfileYaz(dil);
       setKodlar(r.kurtarmaKodlari);
     } catch (err) {
       setHata(hataMetni(err));

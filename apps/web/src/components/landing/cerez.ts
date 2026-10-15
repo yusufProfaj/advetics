@@ -34,6 +34,8 @@ export function bildirimGorunsunMu(kayit: string | null): boolean {
  *    okuyor. Değerleri SIR değil SEÇİM; yetki her istekte sunucuda
  *    yeniden hesaplanıyor.
  *  · `adv_mfa` iki adımlı girişte 5 dakika (`IKI_ADIM_BEKLEME_DK`).
+ *  · `adv_dil` 1 yıl (`DIL_CEREZI_SURESI_SN`), HttpOnly DEĞİL: dil seçimi
+ *    tarayıcıda yazılıyor (seçim ekranı, TR·EN anahtarı) ve sır değil.
  *  · Üretimde hepsi `Secure` (`AUTH_COOKIE_SECURE=true` olmadan API açılmıyor,
  *    `configuration.ts`) ve `SameSite=Lax`.
  * Bir çerez eklenir ya da süresi değişirse bu tablo da değişmeli; beyan ile
@@ -60,6 +62,12 @@ export const CEREZLER: { ad: string; amac: string; sure: string; tur: string }[]
     amac: 'İki adımlı girişte parola doğrulandıktan sonra kod beklenirken tutulur.',
     sure: '5 dakika',
     tur: 'Zorunlu · birinci taraf · HttpOnly',
+  },
+  {
+    ad: 'adv_dil',
+    amac: 'Seçtiğiniz arayüz dili (Türkçe ya da English). Dil seçim ekranının her ziyarette yeniden çıkmaması için.',
+    sure: '1 yıl',
+    tur: 'Zorunlu · birinci taraf',
   },
   {
     ad: 'adv_client',
