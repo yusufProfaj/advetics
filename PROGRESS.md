@@ -122,8 +122,10 @@
 ## 11 · Varlıklar (`/varliklar`)
 
 - [x] Bilinen açık: süzgeç çiplerinde sayı etikete bitişik ("Tümü21") (ortak `BolumluSecici` düğmesine gap; flex öğesinin sondaki boşluğu atılıyordu; canlıda GÖRÜLMEDİ)
-- [ ] Araştırma → `docs/pazar/varliklar.md` (kreatif kütüphaneleri, otomatik boyutlandırma, Meta/Google varlık gereksinimleri 2026)
-- [ ] Araştırmanın 1. önerisi
+- [x] Araştırma → `docs/pazar/varliklar.md` (kreatif kütüphaneleri, otomatik boyutlandırma, Meta/Google varlık gereksinimleri 2026)
+- [ ] Öneri 1: Google logo dosya boyutu (150 KB, Demand Gen) uyarısı giriş anında; engel değil uyarı
+- [ ] Öneri 2: 9:16 önizlemede güvenli alan katmanı (üst ~%14, alt ~%35)
+- [ ] (onay bekliyor: platform çağrısı) 150 KB üstü logonun Demand Gen'de reddini validateOnly provasıyla ölç
 
 ## 12 · Ayarlar (`/ayarlar/*`)
 
