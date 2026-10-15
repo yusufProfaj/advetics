@@ -124,7 +124,7 @@
 - [x] Bilinen açık: süzgeç çiplerinde sayı etikete bitişik ("Tümü21") (ortak `BolumluSecici` düğmesine gap; flex öğesinin sondaki boşluğu atılıyordu; canlıda GÖRÜLMEDİ)
 - [x] Araştırma → `docs/pazar/varliklar.md` (kreatif kütüphaneleri, otomatik boyutlandırma, Meta/Google varlık gereksinimleri 2026)
 - [x] Öneri 1: Google logo dosya boyutu (150 KB, Demand Gen) uyarısı giriş anında; engel değil uyarı (Marka › Logo sekmesinde seçili logo için)
-- [ ] Öneri 2: 9:16 önizlemede güvenli alan katmanı (üst ~%14, alt ~%35)
+- [x] Öneri 2: 9:16 önizlemede güvenli alan katmanı (üst ~%14, alt ~%35) (küçük resim 32 px olduğu için katman yerine reklam adımında tek satır not; Meta açık + dikey görsel varken)
 - [ ] (onay bekliyor: platform çağrısı) 150 KB üstü logonun Demand Gen'de reddini validateOnly provasıyla ölç
 
 ## 12 · Ayarlar (`/ayarlar/*`)

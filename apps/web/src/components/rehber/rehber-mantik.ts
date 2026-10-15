@@ -1565,3 +1565,20 @@ export function uretimPlani(g: {
   });
   return { isler, sigmayan };
 }
+
+/**
+ * ═══ 9:16 GÜVENLİ ALAN (pazar araştırması 2026-10-15, docs/pazar/varliklar.md) ═══
+ * Meta Mart 2026'da Facebook/Instagram Hikâye ve Reels'i tek 9:16 güvenli
+ * alanda birleştirdi: üstte hesap adı, altta açıklama ve düğmeler duruyor.
+ * Oralara konan metin ya da logo arayüzün altında kalıyor. Rakamlar
+ * kaynaklarda çelişiyor (üst ~%14, alt ~%35); en tutucusu esas. 32 piksellik
+ * küçük resimde katman okunmaz, cümle söylüyor.
+ */
+export const DIKEY_GUVENLI_ALAN_NOTU =
+  'Dikey görselde metni ve logoyu üstten yaklaşık %14, alttan %35 uzak tut: Reels ve Hikâyede orası hesap adı, açıklama ve düğmelerin altında kalır.';
+
+export function dikeyNotuGerekli(metaAcik: boolean, oranlar: Iterable<string | null | undefined>): boolean {
+  if (!metaAcik) return false;
+  for (const o of oranlar) if (o === 'dikey') return true;
+  return false;
+}

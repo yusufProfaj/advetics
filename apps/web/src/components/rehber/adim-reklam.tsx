@@ -91,6 +91,8 @@ import {
   kapakSec,
   sureGoster,
   uretimPlani,
+  DIKEY_GUVENLI_ALAN_NOTU,
+  dikeyNotuGerekli,
   type EkranNo,
   type MedyaOgesi,
   type MetinKurali,
@@ -650,6 +652,12 @@ function MedyaBlogu({
                     {g.cakisan.map((x) => satir(x, 'Aynı sette bu boyuttan bir görsel daha var; ⋯ menüsünden başka sete taşı ya da kaldır.'))}
                     {g.bilinmeyen.map((x) => satir(x, null))}
                   </div>
+                )}
+                {/* 9:16 GÜVENLİ ALAN: Meta açıkken ve dikey görsel varken tek satır. */}
+                {dikeyNotuGerekli(b.acik.meta, medya.map((x) => oranlar.get(x.varlikId))) && (
+                  <p className={s.ipucu} data-guvenli-alan>
+                    {DIKEY_GUVENLI_ALAN_NOTU}
+                  </p>
                 )}
                 {setli && (g.setler.length > 0 || medya.length === 0) && (
                   <SetKartlari
