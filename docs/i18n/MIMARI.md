@@ -1,7 +1,14 @@
 # İki dilli Advetics (Türkçe / English) — MİMARİ
 
-Durum: **Ajan 1 taslağı, 2026-10-15. Çelişki tablosu kullanıcıyla
-kapanmadan koda geçilmez.**
+Durum: **Ajan 1, 2026-10-15. Çelişki tablosu KAPANDI (kullanıcı, aynı gün).**
+
+| # | Karar |
+|---|---|
+| Ç1 | İlk ziyarette bir kez tam ekran seçim; girişte TR·EN anahtarı hep görünür, sormaz; Hesabım'dan değişir. Taslak A+B+C seçildi (`dil-secimi-taslak.html`). |
+| Ç2/Ç3 | **Yalnız tanıtım sitesi ve yasal sayfalarda `/en` öneki** (İngilizce slug: `/en`, `/en/features`, `/en/privacy`, `/en/terms`, `/en/cookies`, `/en/data-deletion`…), `hreflang` ile eşli. Türkçe adresler DEĞİŞMEZ (OAuth başvurusundaki adresler). Panel öneksiz, çerez + profil. |
+| Ç8/Ç10 | Workspace'te `rapor_dili` ve `reklam_dili` (varsayılan `tr`, migration D5). |
+| Ç13 | Yasal metinleri Claude çeviriyor, üstte "Türkçe sürüm esastır" notu; hukukçu kontrolü kullanıcıda. |
+| Diğerleri | Öneri sütunu kabul (kullanıcı itiraz etmedi; arayüz kararı yetkisi, CLAUDE.md §5). Ç14 sözlüğü D0'da `SOZLUK.md` olarak kullanıcıya gösterilir. |
 
 Kullanıcının isteği (verbatim): *"advetics in ingilizceye dönen halini
 yapacağız baştan sona her giriş yaparken siteye girerken dil soracak
@@ -54,7 +61,8 @@ zaten `{ code, message }` taşıyor (`all-exceptions.filter.ts`).
 
 ## 2. Dil nasıl belirlenir (sıra)
 
-1. `?dil=tr|en` sorgusu → çerezi yazar, adresten silinir (yönlendirme).
+0. Site/yasal sayfada yol öneki: `/en/...` = en, öneksiz = tr (Ç2 kararı). Önek çerezi de yazar.
+1. `?dil=tr|en` sorgusu (panel için paylaşılabilir bağlantı) → çerezi yazar, adresten silinir.
 2. Giriş yapmış kullanıcı → `users.locale` (giriş anında çereze kopyalanır;
    başka cihazdaki seçim taşınır).
 3. `adv_dil` çerezi (1 yıl, birinci taraf, zorunlu kategori — çerez
