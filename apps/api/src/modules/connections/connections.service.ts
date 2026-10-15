@@ -12,6 +12,7 @@ import { Platform as PrismaPlatform, Prisma } from '@prisma/client';
 import { createHash, randomBytes } from 'node:crypto';
 import type {
   AdAccountSummary,
+  BaglantiKaldirmaOnizlemesi,
   ConnectionSummary,
   GeoLocationOption,
   InterestOption,
@@ -34,7 +35,7 @@ import { AuditService } from '../audit/audit.service';
 import { ProviderRegistry } from './provider.registry';
 import { SyncQueueService } from '../../queue/sync-queue.service';
 import { PLATFORM_ADI, decideConnectionOwnership } from './connection-ownership';
-import { baglantiKorunsunMu, cakismaKarari, sahiplikKarari } from './hesap-sahipligi';
+import { baglantiKaldirmaKarari, baglantiKorunsunMu, cakismaKarari, sahiplikKarari } from './hesap-sahipligi';
 import {
   PlatformApiError,
   type FetchContext,
@@ -348,7 +349,16 @@ export class ConnectionsService {
    * org geneline çıkınca bu örtük daraltma kayboldu: `kutuphane/formlar`
    * ekranı, süzgeç olmadan başka müşterilerin Facebook sayfalarını listelerdi.
    */
-  async list(ctx: TenantContext, clientId: string | null): Promise<ConnectionSummary[]> {
+  async list(
+    ctx: TenantContext,
+    clientId: string | null,
+    /**
+     * KALDIRILMIŞ BAĞLANTILAR YALNIZ İSTENİNCE (Ayarlar › Platform
+     * bağlantıları). Kurulum, hedefleme ve sorun rozeti aynı ucu okuyor ve
+     * kaldırılmış bir satırı "bağlı" saymamalı; onlara dokunulmadı.
+     */
+    kaldirilanlar = false,
+  ): Promise<ConnectionSummary[]> {
     if (clientId && !ctx.clientIds.includes(clientId)) {
       throw new NotFoundException('Workspace bulunamadı');
     }
@@ -411,7 +421,22 @@ export class ConnectionsService {
                 { socialProfiles: { some: { clientId } } },
               ],
             }
-          : { status: { not: 'revoked' } },
+          : kaldirilanlar
+            ? {
+                /*
+                 * 2026-10-15: ajansın kaldırılan bağlantısı listeden düştü ve
+                 * kart "Bağlı değil · Bağlan" gösterdi; "Bağlan" ikinci satır
+                 * açıyordu. Kaldırılmış satır, altında hesabı ya da sayfası
+                 * kaldıysa listede: çaresi kendi `reauthorize`u. Altı boş
+                 * kaldırılmış satırın geri getirecek bir şeyi yok.
+                 */
+                OR: [
+                  { status: { not: 'revoked' } },
+                  { adAccounts: { some: {} } },
+                  { socialProfiles: { some: {} } },
+                ],
+              }
+            : { status: { not: 'revoked' } },
         orderBy: { createdAt: 'asc' },
         /*
          * ═══ `select`, `include` DEĞİL — VE FARK ÜRETİMDE ÖLÇÜLDÜ ═══
@@ -866,7 +891,10 @@ export class ConnectionsService {
        * başlatılan bağlantı tazelenir ya da açık bir sebeple reddedilir.
        */
       const connectionId = state.targetConnectionId
-        ? await this.hedefBaglantiyiTazele(state.targetConnectionId, platform, tokens)
+        ? await this.hedefBaglantiyiTazele(state.targetConnectionId, platform, tokens, {
+            userId: state.createdByUserId,
+            orgId: state.orgId,
+          })
         : await this.persistConnection(state.orgId, state.clientId, state.createdByUserId, platform, tokens);
 
       // Hesap keşfi bağlantıyı bozmamalı: token kaydedildi, kullanıcı zaten
@@ -1017,7 +1045,12 @@ export class ConnectionsService {
    * Sahiplik (`org_id`, `client_id`) ve `external_user_id` DEĞİŞMİYOR: bu bir
    * token tazelemesi, taşıma değil.
    */
-  private async hedefBaglantiyiTazele(hedefId: string, platform: Platform, tokens: OAuthTokens): Promise<string> {
+  private async hedefBaglantiyiTazele(
+    hedefId: string,
+    platform: Platform,
+    tokens: OAuthTokens,
+    baslatan: { userId: string; orgId: string },
+  ): Promise<string> {
     const hedef = await this.admin.platformConnection.findUnique({
       where: { id: hedefId },
       select: {
@@ -1026,6 +1059,8 @@ export class ConnectionsService {
         clientId: true,
         platform: true,
         externalUserId: true,
+        status: true,
+        grantedScopes: true,
         organization: { select: { name: true } },
         connectedBy: { select: { fullName: true } },
       },
@@ -1092,30 +1127,54 @@ export class ConnectionsService {
             SELECT refresh_token_enc IS NOT NULL AS var FROM platform_connections WHERE id = ${hedefId}::uuid`)
         )[0]?.var === true;
 
-    await this.admin.platformConnection.update({
-      where: { id: hedefId },
-      data: {
-        accessTokenEnc: access.data,
-        // Google yenileme yanıtında refresh token göndermeyebilir; eskisini
-        // null ile ezmek bağlantıyı kurtarılamaz yapar.
-        ...(refresh ? { refreshTokenEnc: refresh.data } : {}),
-        keyVersion: access.keyVersion,
-        tokenExpiresAt: tokens.expiresAt ?? null,
-        authorizationExpiresAt: yetkiBitisi({
-          yenilemeVar: refresh !== null || eskiYenileme,
-          erisimBitisi: tokens.expiresAt,
-          yenilemeBitisi: tokens.refreshTokenExpiresAt,
-        }),
-        // Google `include_granted_scopes=true` ile BİRLEŞİK izni döndürüyor:
-        // önceki `adwords` + yeni ölçüm kapsamları.
-        grantedScopes: tokens.grantedScopes,
-        status: 'active',
-        failureCount: 0,
-        lastErrorCode: null,
-        lastErrorAt: null,
-        lastVerifiedAt: new Date(),
-        revokedAt: null,
-      },
+    /*
+     * GERİ GETİRME DE İZ BIRAKIR. Kaldırma `connection.revoked` olarak
+     * yazılıyordu, geri getirme hiç yazılmıyordu: 2026-10-15'te ajansın
+     * kaldırılan Google bağlantısı bu yolla onarıldı ve denetim kaydında
+     * bağlantı hâlâ "kaldırıldı" görünüyordu. Kayıt güncelleme ile AYNI
+     * transaction'da: biri yazılıp diğeri düşerse iz yalan söyler.
+     * Kayıt BAĞLANTININ şirketinde (kaldırma kaydıyla yan yana okunsun);
+     * akışı hangi şirketten başlatıldığı `after` içinde.
+     */
+    await this.admin.$transaction(async (a) => {
+      await a.platformConnection.update({
+        where: { id: hedefId },
+        data: {
+          accessTokenEnc: access.data,
+          // Google yenileme yanıtında refresh token göndermeyebilir; eskisini
+          // null ile ezmek bağlantıyı kurtarılamaz yapar.
+          ...(refresh ? { refreshTokenEnc: refresh.data } : {}),
+          keyVersion: access.keyVersion,
+          tokenExpiresAt: tokens.expiresAt ?? null,
+          authorizationExpiresAt: yetkiBitisi({
+            yenilemeVar: refresh !== null || eskiYenileme,
+            erisimBitisi: tokens.expiresAt,
+            yenilemeBitisi: tokens.refreshTokenExpiresAt,
+          }),
+          // Google `include_granted_scopes=true` ile BİRLEŞİK izni döndürüyor:
+          // önceki `adwords` + yeni ölçüm kapsamları.
+          grantedScopes: tokens.grantedScopes,
+          status: 'active',
+          failureCount: 0,
+          lastErrorCode: null,
+          lastErrorAt: null,
+          lastVerifiedAt: new Date(),
+          revokedAt: null,
+        },
+      });
+      await a.auditLog.create({
+        data: {
+          orgId: hedef.orgId,
+          clientId: hedef.clientId,
+          actorType: 'user',
+          actorId: baslatan.userId,
+          action: 'connection.reauthorized',
+          targetType: 'platform_connection',
+          targetId: hedef.id,
+          before: { status: hedef.status, grantedScopes: hedef.grantedScopes },
+          after: { status: 'active', grantedScopes: tokens.grantedScopes, baslatanOrgId: baslatan.orgId },
+        },
+      });
     });
     return hedef.id;
   }
@@ -1143,13 +1202,30 @@ export class ConnectionsService {
     const orgler = ajansOrgId && ajansOrgId !== orgId ? [orgId, ajansOrgId] : [orgId];
 
     const adaylar = await this.admin.platformConnection.findMany({
-      where: { orgId: { in: orgler }, platform: platform as PrismaPlatform, revokedAt: null, status: { not: 'revoked' } },
-      select: { orgId: true, externalUserId: true, organization: { select: { name: true } } },
+      /*
+       * KALDIRILMIŞ SATIRLAR DA ADAY (2026-10-15). Eskiden dışarıdaydı ve
+       * ajansın kaldırılan Google bağlantısı için "Bağlan" yeni bir satır
+       * açıyordu (Google'da kimlik başka uzaydan yazılınca tekil anahtar
+       * eşleşmiyor): 56 atanmış hesap ESKİ satırda kaldı, yeni satır yalnız
+       * havuz kopyası getirdi ve ekran "bağlı" dedi. Kaldırılmış satırın
+       * çaresi o satırın kendisini yeniden yetkilendirmek; yeni satır değil.
+       */
+      where: { orgId: { in: orgler }, platform: platform as PrismaPlatform },
+      select: { orgId: true, externalUserId: true, status: true, organization: { select: { name: true } } },
     });
-    const eslesen = adaylar.find((c) => kimlikKarari(c.externalUserId, tokens).ayni);
+    // CANLI SATIR ÖNCE: aynı kimliğin hem canlı hem kaldırılmış satırı varsa
+    // kullanıcıyı çalışan bağlantıya göndermek doğru cevap.
+    const eslesenler = adaylar.filter((c) => kimlikKarari(c.externalUserId, tokens).ayni);
+    const eslesen = eslesenler.find((c) => c.status !== 'revoked') ?? eslesenler[0];
     if (!eslesen) return null;
 
     const ad = PLATFORM_ADI[platform];
+    if (eslesen.status === 'revoked') {
+      return (
+        `Bu ${ad} hesabının bağlantısı ${eslesen.organization.name} şirketinde kaldırılmış ve atanmış hesaplar o bağlantıda duruyor. ` +
+        `Yeni bağlantı açılmadı: Ayarlar › Platform bağlantıları’nda kaldırılmış bağlantının "Yeniden bağlan" düğmesini kullan.`
+      );
+    }
     // Ölçüm izni yalnız Google'da ayrı bir akış; diğerlerinde not yok.
     const olcumNotu = OLCUM_IZNI_NOTU[platform] ?? '';
     if (eslesen.orgId !== orgId) {
@@ -3082,7 +3158,85 @@ export class ConnectionsService {
     return sonuc;
   }
 
-  async disconnect(ctx: TenantContext, connectionId: string, meta: Meta) {
+  /**
+   * KALDIRMADAN ÖNCE NE DURACAĞI — panel onay penceresini bununla çiziyor.
+   *
+   * SAYILAR BÜTÜN ŞİRKETLERDEN (yönetim istemcisi). Ekranın kendi listesi
+   * başka şirkete atanmış hesapları RLS yüzünden göremiyor; oradan sayılan
+   * bir "N workspace" ajansın bağlantısında hep eksik çıkardı. Bağlantının
+   * kendisi ise kullanıcının bağlamında okunuyor: göremediği bağlantının
+   * sayısını öğrenemez.
+   */
+  async disconnectOnizleme(ctx: TenantContext, connectionId: string): Promise<BaglantiKaldirmaOnizlemesi> {
+    const d = await this.kaldirmaDurumu(ctx, connectionId);
+    const karar = baglantiKaldirmaKarari({ ...d.girdi, onaylananWorkspaceSayisi: d.girdi.workspaceSayisi });
+    return {
+      kaldirabilir: karar.ok,
+      sebep: karar.ok ? null : karar.mesaj,
+      sahipSirketAdi: d.girdi.sahipSirketAdi,
+      workspaceSayisi: d.girdi.workspaceSayisi,
+      izlenenHesapSayisi: d.izlenenHesapSayisi,
+    };
+  }
+
+  /** Önizleme ve kaldırmanın ORTAK okuması: ikisi ayrı sayarsa onay sayısı tutmaz. */
+  private async kaldirmaDurumu(ctx: TenantContext, connectionId: string) {
+    /*
+     * `activeClientId` KAPALI: seçili workspace bağlantıyı gizlememeli
+     * (`resumeSync` ile aynı gerekçe). Kapsam yine kullanıcının şirketi;
+     * göremediği bağlantı "bulunamadı".
+     */
+    const [conn] = await this.prisma.withTenant({ ...ctx, activeClientId: null }, (tx) =>
+      tx.$queryRaw<
+        Array<{ platform: Platform; orgId: string; clientId: string | null; accountLabel: string; status: string }>
+      >(Prisma.sql`
+        SELECT platform::text AS platform, org_id::text AS "orgId", client_id::text AS "clientId",
+               account_label AS "accountLabel", status::text AS status
+          FROM platform_connections
+         WHERE id = ${connectionId}::uuid
+      `),
+    );
+    if (!conn) throw new NotFoundException('Bağlantı bulunamadı');
+
+    const [sayim] = await this.admin.$queryRaw<
+      Array<{ ws: number; izlenen: number; sahip: string }>
+    >(Prisma.sql`
+      SELECT
+        (SELECT count(DISTINCT w.client_id)::int FROM (
+           SELECT client_id FROM ad_accounts
+            WHERE connection_id = ${connectionId}::uuid AND client_id IS NOT NULL
+           UNION
+           SELECT client_id FROM social_profiles
+            WHERE connection_id = ${connectionId}::uuid AND client_id IS NOT NULL
+         ) w) AS ws,
+        (SELECT count(*)::int FROM ad_accounts
+          WHERE connection_id = ${connectionId}::uuid AND sync_enabled) AS izlenen,
+        (SELECT name FROM organizations WHERE id = ${conn.orgId}::uuid) AS sahip
+    `);
+    return {
+      conn,
+      izlenenHesapSayisi: sayim?.izlenen ?? 0,
+      girdi: {
+        baglantiOrgId: conn.orgId,
+        sahipSirketAdi: sayim?.sahip ?? 'başka bir şirket',
+        aktifOrgId: ctx.orgId,
+        workspaceSayisi: sayim?.ws ?? 0,
+      },
+    };
+  }
+
+  async disconnect(
+    ctx: TenantContext,
+    connectionId: string,
+    meta: Meta,
+    onayWorkspaceSayisi: number | null = null,
+  ): Promise<{ ok: true; adAccounts: number; socialProfiles: number }> {
+    const { conn, girdi } = await this.kaldirmaDurumu(ctx, connectionId);
+    const karar = baglantiKaldirmaKarari({ ...girdi, onaylananWorkspaceSayisi: onayWorkspaceSayisi });
+    if (!karar.ok) {
+      throw karar.kod === 'sahip_degil' ? new ForbiddenException(karar.mesaj) : new ConflictException(karar.mesaj);
+    }
+
     // Token'ı PLATFORM TARAFINDA iptal et — kendi kaydımızı silmek yetmez.
     //
     // Sıra önemli: iptal önce yapılır, çünkü şifreli token'a hâlâ ihtiyacımız
@@ -3090,53 +3244,69 @@ export class ConnectionsService {
     // zaten geçersiz olabilir ya da platform erişilemez olabilir. İptal en iyi
     // çabadır, kaydı silmek kesindir. Aksi hâlde kullanıcı bir platform
     // kesintisi yüzünden bağlantısını kaldıramaz hâle gelirdi.
-    const target = await this.prisma.withTenant(ctx, (tx) =>
-      tx.platformConnection.findUnique({
-        where: { id: connectionId },
-        select: { platform: true },
-      }),
-    );
-    if (!target) throw new NotFoundException('Bağlantı bulunamadı');
-    await this.vault.revokeOnPlatform(connectionId, this.provider(target.platform as Platform));
+    //
+    // İPTAL YETKİ KAPISINDAN SONRA: eskiden önce iptal ediliyordu ve
+    // reddedilecek bir istek bile platformdaki token'ı öldürebilirdi.
+    await this.vault.revokeOnPlatform(connectionId, this.provider(conn.platform as Platform));
 
-    return this.prisma.withTenant(ctx, async (tx) => {
-      const conn = await tx.platformConnection.findUnique({ where: { id: connectionId } });
-      if (!conn) throw new NotFoundException('Bağlantı bulunamadı');
+    /*
+     * ═══ YAZMA YÖNETİM İSTEMCİSİYLE — TEK KARAR, BÜTÜN SATIRLAR ═══
+     *
+     * 2026-10-15 üretim: bu güncelleme `withTenant` altında koşuyordu ve RLS
+     * yalnızca kullanıcının şirketindeki satırları gösterdi. Ajansın
+     * bağlantısındaki 56 atanmış hesabın 1'i kapandı, 55'i açık kaldı:
+     * bağlantı "kaldırıldı", token iptal edildi, ama izleme listesi yarım.
+     * Bu satırlar her gece ölü bir token'la kuyruğa giriyor ve düşüyordu.
+     * Kapı yukarıda (`baglantiKaldirmaKarari`): sahibi olan şirket bağlantının
+     * HER satırına karar verir, başka şirkete ödünç verilmiş hesaplar dahil.
+     * Satırlar SİLİNMİYOR ve ATAMALAR KALIYOR; yeniden bağlanınca
+     * `resumeSync` aynı izlemeyi geri açıyor.
+     */
+    return this.admin.$transaction(async (a) => {
+      // RETURNING İLE SAYILIYOR: sayı denetim kaydına ve yanıta gidiyor ve
+      // "kaç satır gerçekten kapandı" sorusunun tek dürüst cevabı bu.
+      const hesaplar = await a.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        UPDATE ad_accounts SET sync_enabled = false, updated_at = now()
+         WHERE connection_id = ${connectionId}::uuid AND sync_enabled
+        RETURNING id::text AS id
+      `);
+      const profiller = await a.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        UPDATE social_profiles SET sync_enabled = false, updated_at = now()
+         WHERE connection_id = ${connectionId}::uuid AND sync_enabled
+        RETURNING id::text AS id
+      `);
+      /*
+       * Token kolonları okunamaz hâle getiriliyor: boş bayt dizisi "şifreli
+       * veri bozuk" hatası verir ve kazara kullanım imkânsızlaşır.
+       */
+      const kapanan = await a.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        UPDATE platform_connections
+           SET status = 'revoked', revoked_at = now(), updated_at = now(),
+               access_token_enc = ''::bytea, refresh_token_enc = NULL,
+               token_expires_at = NULL, authorization_expires_at = NULL,
+               granted_scopes = ARRAY[]::text[]
+         WHERE id = ${connectionId}::uuid
+        RETURNING id::text AS id
+      `);
+      if (kapanan.length !== 1) throw new NotFoundException('Bağlantı bulunamadı');
 
-      await tx.adAccount.updateMany({
-        where: { connectionId },
-        data: { syncEnabled: false },
-      });
-      await tx.socialProfile.updateMany({
-        where: { connectionId },
-        data: { syncEnabled: false },
-      });
-
-      await tx.platformConnection.update({
-        where: { id: connectionId },
-        data: {
-          status: 'revoked',
-          revokedAt: new Date(),
-          // Token'lar okunamaz hale getirilir. Boş buffer, "şifreli veri bozuk"
-          // hatası verir ve kazara kullanım imkânsızlaşır.
-          accessTokenEnc: new Uint8Array(0),
-          refreshTokenEnc: null,
-          tokenExpiresAt: null,
-          authorizationExpiresAt: null,
-          grantedScopes: [],
-        },
-      });
-
-      await this.audit.record(tx, ctx, {
+      await this.audit.record(a as unknown as TenantClient, ctx, {
         action: 'connection.revoked',
         targetType: 'platform_connection',
         targetId: connectionId,
         clientId: conn.clientId,
-        before: { platform: conn.platform, accountLabel: conn.accountLabel },
+        before: { platform: conn.platform, accountLabel: conn.accountLabel, status: conn.status },
+        // KAÇ SATIRIN DURDUĞU İZDE: "kaldırıldı" tek başına neyin durduğunu
+        // söylemiyor ve geri getiren kişi neyi açacağını buradan okuyor.
+        after: {
+          workspaceSayisi: girdi.workspaceSayisi,
+          kapananHesap: hesaplar.length,
+          kapananSayfa: profiller.length,
+        },
         ...meta,
       });
 
-      return { ok: true };
+      return { ok: true as const, adAccounts: hesaplar.length, socialProfiles: profiller.length };
     });
   }
 

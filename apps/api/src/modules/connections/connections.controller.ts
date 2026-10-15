@@ -19,6 +19,8 @@ import type { Response } from 'express';
 import {
   PLATFORMS,
   assignToClientSchema,
+  baglantiKaldirSchema,
+  type BaglantiKaldirInput,
   geoSearchQuerySchema,
   interestSearchQuerySchema,
   customAudienceQuerySchema,
@@ -86,8 +88,12 @@ export class ConnectionsController {
 
   @Get()
   @RequirePermissions('connection.read')
-  list(@CurrentTenant() ctx: TenantContext, @Query('clientId') clientId?: string) {
-    return this.connections.list(ctx, clientId ?? null);
+  list(
+    @CurrentTenant() ctx: TenantContext,
+    @Query('clientId') clientId?: string,
+    @Query('kaldirilanlar') kaldirilanlar?: string,
+  ) {
+    return this.connections.list(ctx, clientId ?? null, kaldirilanlar === '1');
   }
 
   /**
@@ -390,9 +396,21 @@ export class ConnectionsController {
   disconnect(
     @CurrentTenant() ctx: TenantContext,
     @Param('id', ParseUUIDPipe) id: string,
+    @Body(zodBody(baglantiKaldirSchema)) dto: BaglantiKaldirInput,
     @Req() req: AuthedRequest,
   ) {
-    return this.connections.disconnect(ctx, id, this.meta(req));
+    return this.connections.disconnect(ctx, id, this.meta(req), dto.onayWorkspaceSayisi ?? null);
+  }
+
+  /**
+   * Kaldırma penceresinin sayısı ve kapısı. Kaldırmayla AYNI yetki: kimin
+   * kaldırabileceğini söyleyen uç, kaldıramayacak birine açık olmamalı.
+   */
+  @Get(':id/disconnect-onizleme')
+  @RequirePermissions('connection.write', 'connection.manage')
+  @RequireOrgAdmin()
+  disconnectOnizleme(@CurrentTenant() ctx: TenantContext, @Param('id', ParseUUIDPipe) id: string) {
+    return this.connections.disconnectOnizleme(ctx, id);
   }
 
   // ---------------------------------------------------------------------------

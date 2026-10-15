@@ -84,8 +84,10 @@ function yonetimIstemcisi(hh: Harness) {
     clientId: r.client_id,
     platform: r.platform,
     externalUserId: r.external_user_id,
+    status: r.status,
+    grantedScopes: r.granted_scopes,
   });
-  return {
+  const istemci = {
     $queryRaw: hh.db.$queryRaw,
     $executeRaw: hh.db.$executeRaw,
     oAuthState: {
@@ -136,10 +138,16 @@ function yonetimIstemcisi(hh: Harness) {
         return baglanti(r);
       },
       findMany: async ({ where }: { where: { orgId: { in: string[] }; platform: string } }) => {
-        if (!where.orgId?.in) throw new Error('beklenmeyen platformConnection.findMany biçimi');
+        // YALNIZ BU İKİ ANAHTAR: servis bir durum süzgeci eklerse (ör. kaldırılmışları
+        // yeniden dışlarsa) taklit onu sessizce yok saymasın.
+        const fazla = Object.keys(where).filter((k) => k !== 'orgId' && k !== 'platform');
+        if (!where.orgId?.in || fazla.length > 0) {
+          throw new Error(`beklenmeyen platformConnection.findMany biçimi (${fazla.join(', ')})`);
+        }
         const rows = await q<Record<string, unknown>>(
+          // KALDIRILMIŞ SATIRLAR DA: servis 2026-10-15'ten beri onları da aday sayıyor.
           `SELECT c.*, o.name AS org_name FROM platform_connections c JOIN organizations o ON o.id = c.org_id
-            WHERE c.org_id = ANY($1::uuid[]) AND c.platform = $2::"Platform" AND c.revoked_at IS NULL AND c.status <> 'revoked'`,
+            WHERE c.org_id = ANY($1::uuid[]) AND c.platform = $2::"Platform"`,
           [where.orgId.in, where.platform],
         );
         return rows.map((r) => ({ ...baglanti(r), organization: { name: r.org_name } }));
@@ -162,7 +170,21 @@ function yonetimIstemcisi(hh: Harness) {
         return { id: r!.id };
       },
     },
+    auditLog: {
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        await q(
+          `INSERT INTO audit_logs (org_id, client_id, actor_type, actor_id, action, target_type, target_id, before, after)
+           VALUES ($1, $2, $3::"ActorType", $4, $5, $6, $7, $8, $9)`,
+          [data.orgId, data.clientId ?? null, data.actorType, data.actorId, data.action, data.targetType, data.targetId,
+           JSON.stringify(data.before ?? null), JSON.stringify(data.after ?? null)],
+        );
+        return {};
+      },
+    },
+    // Yazmalar sırayla gerçek SQL'e gidiyor; transaction sınırını sınamıyor.
+    $transaction: async <T>(fn: (a: unknown) => Promise<T>) => fn(istemci),
   };
+  return istemci;
 }
 
 const envanter = { izinleBaslat: vi.fn() };
@@ -348,6 +370,63 @@ describe('KRİTİK: ajansın kimliği başka şirkette ikinci bağlantı olamaz'
     const { redirectPath } = await svc.handleCallback('google', { code: 'k', state: await state({ hedef: null, olcum: false }) }, META);
     expect(sorgu(redirectPath).get('connection')).toBe('basarili');
     expect(await sayi(`SELECT count(*)::int AS n FROM platform_connections WHERE org_id = $1`, [MUSTERI_ORG])).toBe(1);
+  });
+});
+
+const denetim = () =>
+  h.q<{ action: string; org_id: string; actor_id: string; before: { status: string }; after: { baslatanOrgId: string } }>(
+    `SELECT action, org_id::text, actor_id::text, before, after FROM audit_logs WHERE target_id = $1 ORDER BY id`,
+    [IDS.connection],
+  );
+
+describe('KRİTİK: geri getirme iz bırakıyor (2026-10-15 üretimi)', () => {
+  it('başarılı yeniden yetki connection.reauthorized yazıyor — bağlantının şirketinde, başlatan kişiyle', async () => {
+    await h.q(`UPDATE platform_connections SET status = 'revoked', revoked_at = now() WHERE id = $1`, [IDS.connection]);
+    await svc.handleCallback('google', { code: 'k', state: await state({ hedef: IDS.connection, olcum: false }) }, META);
+
+    const [satir] = await h.q<{ status: string; revoked_at: string | null }>(
+      `SELECT status, revoked_at FROM platform_connections WHERE id = $1`,
+      [IDS.connection],
+    );
+    expect(satir).toEqual({ status: 'active', revoked_at: null });
+    const kayit = await denetim();
+    expect(kayit).toHaveLength(1);
+    expect(kayit[0]).toMatchObject({
+      action: 'connection.reauthorized',
+      org_id: IDS.org,
+      actor_id: IDS.user,
+      before: { status: 'revoked' },
+      after: { baslatanOrgId: MUSTERI_ORG },
+    });
+  });
+
+  it('reddedilen yeniden yetki iz YAZMIYOR (satır değişmedi)', async () => {
+    tokenlar = ajansKisisi({ externalUserId: '111111111111111111111', kisiKimligi: '111111111111111111111', erisilebilirHesaplar: ['7778889999'] });
+    await svc.handleCallback('google', { code: 'k', state: await state({ hedef: IDS.connection, olcum: false }) }, META);
+    expect(await denetim()).toEqual([]);
+  });
+});
+
+describe('KRİTİK: kaldırılmış ajans bağlantısı ikinci satırla "onarılmaz"', () => {
+  it('hedefsiz "Bağlan" aynı kimlikte yeni satır AÇMIYOR, kaldırılmış satıra yönlendiriyor', async () => {
+    await h.q(`UPDATE platform_connections SET status = 'revoked', revoked_at = now() WHERE id = $1`, [IDS.connection]);
+    const { redirectPath } = await svc.handleCallback('google', { code: 'k', state: await state({ hedef: null, olcum: false }) }, META);
+
+    expect(await sayi(`SELECT count(*)::int AS n FROM platform_connections`)).toBe(1);
+    const q = sorgu(redirectPath);
+    expect(q.get('connection')).toBe('hata');
+    expect(q.get('mesaj')).toContain('kaldırılmış');
+    expect(q.get('mesaj')).toContain('Yeniden bağlan');
+  });
+
+  it('aynı kimliğin canlı satırı varsa ona yönlendiriyor (kaldırılmış eski satır öne geçmiyor)', async () => {
+    await h.q(
+      `INSERT INTO platform_connections (id, org_id, client_id, platform, status, revoked_at, external_user_id, account_label, access_token_enc, granted_scopes, connected_by_user_id, updated_at)
+       VALUES (gen_random_uuid(), $1, NULL, 'google', 'revoked', now(), '103389823382444834376', 'Eski', '\\x00', '{}', $2, now())`,
+      [IDS.org, IDS.user],
+    );
+    const { redirectPath } = await svc.handleCallback('google', { code: 'k', state: await state({ hedef: null, olcum: false }) }, META);
+    expect(sorgu(redirectPath).get('mesaj')).toContain('zaten ajansın bağlantısı');
   });
 });
 

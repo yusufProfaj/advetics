@@ -226,3 +226,59 @@ export function baglantiKorunsunMu(p: {
   if (p.mevcutConnectionId === p.yeniConnectionId) return false;
   return p.mevcutBaglantiDurumu !== 'revoked' && p.mevcutBaglantiDurumu !== 'needs_reauth';
 }
+
+/**
+ * ═══ BAĞLANTIYI YALNIZCA SAHİBİ KALDIRIR — VE SAYIYI GÖREREK ═══
+ *
+ * 2026-10-15 üretim: ajansın Google bağlantısı (Advetics şirketi, 191 hesap,
+ * 56 workspace) kardeş bir müşteri şirketinin (Profaj Reklam Hesabı)
+ * bağlamından kaldırıldı. Veritabanı buna izin veriyordu ve vermeye devam
+ * ediyor: havuz bağlantısının yazma politikası `app.havuz_kapsaminda`, yani
+ * AJANSIN havuzu her kardeş şirketten yazılabilir (atama ekranı buna
+ * dayanıyor). Kapı politikada değil, burada.
+ *
+ * Kural yukarıdaki dört kuralın devamı: SAHİPLİK BAĞLANTIDAN GELİR. Atama
+ * hesabı bir workspace'e ödünç veriyor, bağlantıyı değil; bir şirketin
+ * ekranından başka bir şirketin bağlantısını koparmak, o şirketin bütün
+ * workspace'lerini durdurmak demek ve kullanıcı bunu ekranın adından
+ * anlayamıyor. K4 ile aynı yön: ajansın kurduğunu ajans söker.
+ *
+ * İKİNCİ KAPI SAYI. Bağlantı N workspace'i besliyorsa onay AYNI N ile
+ * gelmek zorunda (`baglantiKaldirSchema`). Sayı her istekte yeniden
+ * sayılıyor; aradaki bir atama sayıyı değiştirirse kullanıcı eski sayıyla
+ * onay vermiş olur ve reddediliyor.
+ */
+export type KaldirmaKarari =
+  | { ok: true }
+  | { ok: false; kod: 'sahip_degil' | 'onay_gerekli'; mesaj: string };
+
+export function baglantiKaldirmaKarari(p: {
+  /** Bağlantının şirketi — SAHİP. */
+  baglantiOrgId: string;
+  sahipSirketAdi: string;
+  /** `ctx.orgId`. "Tüm şirketler" modunda ev şirketi; ajans kullanıcısı için ajans. */
+  aktifOrgId: string;
+  workspaceSayisi: number;
+  /** `null` = yalnızca önizleme soruluyor ya da onay gönderilmedi. */
+  onaylananWorkspaceSayisi: number | null;
+}): KaldirmaKarari {
+  if (p.baglantiOrgId !== p.aktifOrgId) {
+    return {
+      ok: false,
+      kod: 'sahip_degil',
+      mesaj:
+        `Bu bağlantı ${p.sahipSirketAdi} şirketinin ve ${p.workspaceSayisi} workspace'i besliyor. ` +
+        `Yalnızca ${p.sahipSirketAdi} şirketinden kaldırılabilir.`,
+    };
+  }
+  if (p.workspaceSayisi > 0 && p.onaylananWorkspaceSayisi !== p.workspaceSayisi) {
+    return {
+      ok: false,
+      kod: 'onay_gerekli',
+      mesaj:
+        `Bu bağlantı ${p.workspaceSayisi} workspace'i besliyor; kaldırılırsa hepsinin veri akışı durur. ` +
+        `Sayı değişmiş olabilir, pencereyi kapatıp yeniden aç.`,
+    };
+  }
+  return { ok: true };
+}

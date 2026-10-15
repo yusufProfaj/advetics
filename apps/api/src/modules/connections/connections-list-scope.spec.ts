@@ -35,6 +35,7 @@ const CTX: TenantContext = {
 } as TenantContext;
 
 interface FindManyArgs {
+  where: Record<string, unknown>;
   select: {
     adAccounts: { where?: { clientId?: string } };
     socialProfiles: { where?: { clientId?: string } };
@@ -129,5 +130,25 @@ describe('list — kapsam', () => {
     // ile düşüyordu ve o model bağlantıların kopmasının sebebiydi.
     const withoutSelection = { ...CTX, activeClientId: null };
     await expect(svc.list(withoutSelection, null)).resolves.toEqual([]);
+  });
+});
+
+describe('list — kaldırılmış bağlantılar (2026-10-15 üretimi)', () => {
+  it('KRİTİK: varsayılan çağrı kaldırılmışı DIŞARIDA bırakıyor (kurulum, rozet onu bağlı saymasın)', async () => {
+    await svc.list(CTX, null);
+    expect(seenArgs!.where).toEqual({ status: { not: 'revoked' } });
+  });
+
+  it('KRİTİK: Ayarlar çağrısı altında hesap/sayfa kalan kaldırılmışı GETİRİYOR', async () => {
+    // Gelmezse kart "Bağlı değil · Bağlan" der ve "Bağlan" ikinci satır açar.
+    await svc.list(CTX, null, true);
+    expect(seenArgs!.where).toEqual({
+      OR: [{ status: { not: 'revoked' } }, { adAccounts: { some: {} } }, { socialProfiles: { some: {} } }],
+    });
+  });
+
+  it('workspace süzgeci kaldırılmışı hiç getirmiyor', async () => {
+    await svc.list(CTX, CLIENT_B, true);
+    expect(seenArgs!.where).toMatchObject({ status: { not: 'revoked' } });
   });
 });

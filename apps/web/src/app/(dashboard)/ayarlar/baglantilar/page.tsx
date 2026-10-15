@@ -61,14 +61,22 @@ export default async function PlatformBaglantilariSayfasi() {
    * da boş görünürse kullanıcı var olan bağlantısını kaybettiğini sanır.
    *
    * `/connections` müşteri parametresi OLMADAN: havuzun tamamı görünmeli.
+   *
+   * KALDIRILMIŞ BAĞLANTILAR DA İSTENİYOR ve HEMEN AYRILIYOR (2026-10-15):
+   * ajansın kaldırılan bağlantısı listeden düşünce kart "Bağlı değil ·
+   * Bağlan" dedi ve "Bağlan" ikinci bir satır açıyordu. Kaldırılmış satır
+   * yalnız kanal kartına gidiyor; havuz, menü ve sorun rozeti onu
+   * "bağlı" saymasın.
    */
   const [uygunlukSonuc, baglantiSonuc] = await Promise.allSettled([
     serverApiFetch<ProviderAvailability[]>('/connections/availability'),
-    serverApiFetch<ConnectionSummary[]>('/connections'),
+    serverApiFetch<ConnectionSummary[]>('/connections?kaldirilanlar=1'),
   ]);
 
   const availability = uygunlukSonuc.status === 'fulfilled' ? uygunlukSonuc.value : [];
-  const connections = baglantiSonuc.status === 'fulfilled' ? baglantiSonuc.value : [];
+  const tumu = baglantiSonuc.status === 'fulfilled' ? baglantiSonuc.value : [];
+  const connections = tumu.filter((c) => c.status !== 'revoked');
+  const kaldirilanlar = tumu.filter((c) => c.status === 'revoked');
   const yuklemeHatasi =
     uygunlukSonuc.status === 'rejected'
       ? hataMetni(uygunlukSonuc.reason)
@@ -111,6 +119,7 @@ export default async function PlatformBaglantilariSayfasi() {
         <KanalKartlari
           availability={availability}
           connections={connections}
+          kaldirilanlar={kaldirilanlar}
           canManage={yetkilendirir}
           kaldirabilir={kapi(session, 'baglanti.kaldir')}
         />

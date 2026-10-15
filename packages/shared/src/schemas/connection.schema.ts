@@ -35,6 +35,39 @@ export const toggleAccountSyncSchema = z.object({
 export type ToggleAccountSyncInput = z.infer<typeof toggleAccountSyncSchema>;
 
 /**
+ * ═══ BAĞLANTIYI KALDIRMA — ONAY SAYIYLA ═══
+ *
+ * 2026-10-15 üretim: ajansın Google bağlantısı (56 workspace'i besliyordu)
+ * bir müşteri şirketinin ekranından, "bu bağlantı tüm workspace'leri
+ * besliyor" diyen SABİT bir cümleyle kaldırıldı. Cümle kaç workspace
+ * olduğunu söylemiyordu ve ekran sayıyı bilemezdi: başka şirkete atanmış
+ * hesaplar RLS yüzünden listede görünmüyor.
+ *
+ * Panel önce önizlemeyi okuyor (sayı sunucudan, bütün şirketler sayılarak),
+ * kullanıcıya o sayıyı gösteriyor ve onayı AYNI SAYIYLA gönderiyor. Sunucu
+ * sayıyı yeniden sayıp eşleşmezse reddediyor: kullanıcının gördüğü sayı ile
+ * durdurulan sayı ayrışamaz. Sayı 0 ise onay gerekmiyor.
+ */
+export const baglantiKaldirSchema = z
+  .object({
+    onayWorkspaceSayisi: z.number().int().min(0).optional(),
+  })
+  .default({});
+export type BaglantiKaldirInput = z.infer<typeof baglantiKaldirSchema>;
+
+export interface BaglantiKaldirmaOnizlemesi {
+  /** `false` ise `sebep` dolu ve kaldırma düğmesi kapalı çizilmeli. */
+  kaldirabilir: boolean;
+  sebep: string | null;
+  /** Bağlantının şirketi — "Advetics şirketinden kaldırılabilir" cümlesi için. */
+  sahipSirketAdi: string;
+  /** Bu bağlantıdan hesap ya da sayfa atanmış FARKLI workspace sayısı, bütün şirketlerde. */
+  workspaceSayisi: number;
+  /** Bu bağlantıda veri çeken (izlemesi açık) reklam hesabı sayısı, bütün şirketlerde. */
+  izlenenHesapSayisi: number;
+}
+
+/**
  * Havuzdaki bir kaydı (reklam hesabı ya da sayfa) müşteriye atama gövdesi.
  *
  * İkisi için TEK şema: alan da kural da aynı ve ayrı iki şema, birine eklenen

@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   PLATFORM_LABELS,
+  type BaglantiKaldirmaOnizlemesi,
   type ConnectionSummary,
   type Platform,
   type ProviderAvailability,
@@ -47,11 +48,18 @@ import { DigerMenusu } from '@/components/ayar-sekmeleri';
 export function KanalKartlari({
   availability,
   connections,
+  kaldirilanlar,
   canManage,
   kaldirabilir,
 }: {
   availability: ProviderAvailability[];
+  /** CANLI bağlantılar (`revoked` olmayan). */
   connections: ConnectionSummary[];
+  /**
+   * KALDIRILMIŞ ama altında hesap/sayfa duran bağlantılar. Çaresi kendi
+   * satırını yeniden yetkilendirmek; "Bağlan" ikinci satır açardı.
+   */
+  kaldirilanlar: ConnectionSummary[];
   /** Bağla / yeniden yetkilendir — `PANEL_KAPILARI['baglanti.yetkilendir']`. */
   canManage: boolean;
   /**
@@ -87,6 +95,7 @@ export function KanalKartlari({
              * varsayıp `find` demek, ikincisini ekrandan sessizce düşürürdü.
              */
             baglantilar={connections.filter((c) => c.platform === a.platform)}
+            kaldirilmis={kaldirilanlar.filter((c) => c.platform === a.platform)}
             canManage={canManage}
             kaldirabilir={kaldirabilir}
             onHata={setHata}
@@ -208,12 +217,14 @@ const DURUM: Record<ConnectionSummary['status'], { etiket: string; hal: DurumHal
 function KanalKarti({
   uygunluk,
   baglantilar,
+  kaldirilmis,
   canManage,
   kaldirabilir,
   onHata,
 }: {
   uygunluk: ProviderAvailability;
   baglantilar: ConnectionSummary[];
+  kaldirilmis: ConnectionSummary[];
   canManage: boolean;
   kaldirabilir: boolean;
   onHata: (m: string | null) => void;
@@ -239,12 +250,20 @@ function KanalKarti({
       eylem={
         durum ? (
           <Rozet hal={durum.hal}>{baglantilar.length > 1 ? `${baglantilar.length} bağlantı` : durum.etiket}</Rozet>
+        ) : kaldirilmis.length > 0 ? (
+          /* Kaldırılmış bağlantının hesapları veri ÇEKMİYOR: "taslak" değil hata. */
+          <Rozet hal="hata">Kaldırıldı</Rozet>
         ) : (
           <Rozet hal="taslak">Bağlı değil</Rozet>
         )
       }
     >
-      {!bagli ? (
+      {/*
+        "BAĞLAN" YALNIZ HİÇBİR ŞEY YOKKEN. Kaldırılmış bir bağlantı varken
+        "Bağlan" yeni bir satır açıyordu ve atanmış hesaplar eski satırda
+        kalıyordu (2026-10-15); doğru eylem o satırın "Yeniden bağlan"ı.
+      */}
+      {!bagli && kaldirilmis.length === 0 ? (
         <BaglanmaAlani uygunluk={uygunluk} canManage={canManage} onHata={onHata} />
       ) : (
         <div className="divide-y divide-line">
@@ -256,6 +275,9 @@ function KanalKarti({
               kaldirabilir={kaldirabilir}
               onHata={onHata}
             />
+          ))}
+          {kaldirilmis.map((c) => (
+            <KaldirilmisSatir key={c.id} baglanti={c} canManage={canManage} onHata={onHata} />
           ))}
         </div>
       )}
@@ -325,6 +347,84 @@ function BaglanmaAlani({
 }
 
 /**
+ * AYNI SATIRI yeniden yetkilendirir: dönüş yeni satır açmaz, bu bağlantıyı
+ * tazeler (API `hedefBaglantiyiTazele`). Canlı ve kaldırılmış satır aynı
+ * yolu kullanıyor; iki yazım, dönüşü bir gün iki farklı yere götürürdü.
+ */
+async function yenidenYetkilendirBaslat(baglanti: Pick<ConnectionSummary, 'id' | 'platform'>): Promise<void> {
+  const { authorizeUrl } = await apiFetch<{ authorizeUrl: string }>(
+    `/connections/${baglanti.id}/reauthorize?platform=${baglanti.platform}`,
+    { method: 'POST' },
+  );
+  window.location.href = authorizeUrl;
+}
+
+/**
+ * ═══ KALDIRILMIŞ BAĞLANTI — KAYBOLMUYOR, ONARILIYOR ═══
+ *
+ * 2026-10-15 üretim: ajansın Google bağlantısı kaldırılınca kart "Bağlı
+ * değil · Bağlan" gösterdi. "Bağlan" yeni bir satır açıyordu (Google
+ * kimliği başka uzaydan yazılınca tekil anahtar eşleşmiyor) ve atanmış
+ * hesaplar eski satırda kaldı. Onarım üretimde elle, bu satırın
+ * `reauthorize` ucuyla yapıldı; düğme artık o ucu çağırıyor.
+ */
+function KaldirilmisSatir({
+  baglanti,
+  canManage,
+  onHata,
+}: {
+  baglanti: ConnectionSummary;
+  canManage: boolean;
+  onHata: (m: string | null) => void;
+}) {
+  const [pending, setPending] = useState(false);
+
+  async function yenidenBaglan(): Promise<void> {
+    onHata(null);
+    setPending(true);
+    try {
+      await yenidenYetkilendirBaslat(baglanti);
+    } catch (err) {
+      onHata(err instanceof ApiRequestError ? err.message : 'Yeniden bağlantı başlatılamadı.');
+      setPending(false);
+    }
+  }
+
+  return (
+    <div className="grid gap-3 p-5">
+      <div className="grid min-w-0 gap-1">
+        <b className="font-baslik text-[22px] leading-none tabular-nums text-ink">
+          {baglanti.adAccounts.length} reklam hesabı
+        </b>
+        <p className="m-0 text-13 text-ink-muted">
+          {baglanti.sahip === 'ajans' ? 'Ajans bağlantısı' : 'Şirket bağlantısı'} · kaldırıldı
+        </p>
+        {baglanti.accountLabel && (
+          <p className="m-0 truncate text-12 text-ink-soluk" title={baglanti.accountLabel}>
+            {baglanti.accountLabel}
+          </p>
+        )}
+      </div>
+      <Serit ton="hata" baslik="Bağlantı kaldırıldı, veri akışı durdu.">
+        Atamalar duruyor. Bağlantıyı kuran hesapla yeniden bağlan, sonra izlemeyi geri aç.
+      </Serit>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {!canManage && <span className="text-12 text-ink-muted">Bağlantı kurmak yöneticinin işi.</span>}
+        <Dugme
+          ton="koyu"
+          boyut="kucuk"
+          bekliyor={pending}
+          disabled={!canManage || pending}
+          onClick={() => void yenidenBaglan()}
+        >
+          Yeniden bağlan
+        </Dugme>
+      </div>
+    </div>
+  );
+}
+
+/**
  * Kurulu bir bağlantı: kim yetkilendirmiş, ne getirdi, ne yapılabilir.
  *
  * SAYILAR TEK CÜMLEDE VE AYNI KELİMELERLE. Önceki ekranda aynı hesaplar üç
@@ -346,6 +446,38 @@ function BaglantiSatiri({
   const [isPending, startTransition] = useTransition();
   const [busy, setBusy] = useState<string | null>(null);
   const [kaldirOnay, setKaldirOnay] = useState(false);
+  const [onizleme, setOnizleme] = useState<Onizleme>({ durum: 'yukleniyor' });
+
+  /*
+   * ═══ SAYI SUNUCUDAN — EKRANDAN SAYILAMAZ ═══
+   *
+   * Pencere eskiden SABİT bir cümle gösteriyordu ("tüm workspace’leri
+   * besliyor") ve 2026-10-15'te ajansın 56 workspace'i besleyen bağlantısı
+   * bir müşteri şirketinin ekranından o cümleyle kaldırıldı. Ekrandaki liste
+   * başka şirketlere atanmış hesapları RLS yüzünden göremiyor, yani sayıyı
+   * burada saymak ajans bağlantısında hep eksik çıkardı. Pencere her
+   * açıldığında yeniden okunuyor: aradaki bir atama sayıyı değiştirebilir.
+   */
+  useEffect(() => {
+    if (!kaldirOnay) return;
+    let iptal = false;
+    setOnizleme({ durum: 'yukleniyor' });
+    apiFetch<BaglantiKaldirmaOnizlemesi>(`/connections/${baglanti.id}/disconnect-onizleme`)
+      .then((veri) => {
+        if (!iptal) setOnizleme({ durum: 'hazir', veri });
+      })
+      .catch((err: unknown) => {
+        if (!iptal) {
+          setOnizleme({
+            durum: 'hata',
+            mesaj: err instanceof ApiRequestError ? err.message : 'Bağlantının durumu okunamadı.',
+          });
+        }
+      });
+    return () => {
+      iptal = true;
+    };
+  }, [kaldirOnay, baglanti.id]);
 
   async function calistir(anahtar: string, fn: () => Promise<unknown>): Promise<void> {
     onHata(null);
@@ -360,13 +492,7 @@ function BaglantiSatiri({
     }
   }
 
-  async function yenidenYetkilendir(): Promise<void> {
-    const { authorizeUrl } = await apiFetch<{ authorizeUrl: string }>(
-      `/connections/${baglanti.id}/reauthorize?platform=${baglanti.platform}`,
-      { method: 'POST' },
-    );
-    window.location.href = authorizeUrl;
-  }
+  const yenidenYetkilendir = () => yenidenYetkilendirBaslat(baglanti);
 
   const hesap = baglanti.adAccounts;
   const profil = baglanti.socialProfiles;
@@ -554,10 +680,18 @@ function BaglantiSatiri({
             <Dugme
               ton="tehlike"
               bekliyor={busy === 'disconnect'}
+              disabled={onizleme.durum !== 'hazir' || !onizleme.veri.kaldirabilir}
               onClick={() => {
+                if (onizleme.durum !== 'hazir') return;
+                const onayWorkspaceSayisi = onizleme.veri.workspaceSayisi;
                 setKaldirOnay(false);
                 void calistir('disconnect', () =>
-                  apiFetch(`/connections/${baglanti.id}/disconnect`, { method: 'POST' }),
+                  apiFetch(`/connections/${baglanti.id}/disconnect`, {
+                    method: 'POST',
+                    // ONAY, KULLANICININ GÖRDÜĞÜ SAYIYLA: sunucu yeniden sayıyor
+                    // ve tutmazsa reddediyor.
+                    body: JSON.stringify({ onayWorkspaceSayisi }),
+                  }),
                 );
               }}
             >
@@ -566,16 +700,53 @@ function BaglantiSatiri({
           </>
         }
       >
-        {/*
-          UYARI BÜTÜN WORKSPACE'LERİ SÖYLÜYOR: bağlantı ajansa ait ve
-          kaldırmak tek bir workspace'i değil, o bağlantıya bağlı HER
-          hesabın veri akışını durduruyor.
-        */}
-        <p className="m-0 text-14 text-ink">
-          Bu bağlantı ajansa ait ve altındaki tüm workspace’lerin hesaplarını besliyor. Kaldırılırsa
-          hepsinin veri akışı durur. Geçmiş veriler korunur.
-        </p>
+        <KaldirmaOzeti onizleme={onizleme} />
       </Pencere>
     </div>
+  );
+}
+
+type Onizleme =
+  | { durum: 'yukleniyor' }
+  | { durum: 'hazir'; veri: BaglantiKaldirmaOnizlemesi }
+  | { durum: 'hata'; mesaj: string };
+
+/**
+ * Kaldırma penceresinin metni. Dört hâl ayrı ayrı yazılıyor: "okunuyor",
+ * "okunamadı", "bu şirketten kaldırılamaz" ve "N workspace durur" aynı
+ * boş pencereye düşerse kullanıcı neye onay verdiğini bilemez.
+ */
+function KaldirmaOzeti({ onizleme }: { onizleme: Onizleme }) {
+  if (onizleme.durum === 'yukleniyor') {
+    return <p className="m-0 text-14 text-ink-muted">Bu bağlantının beslediği workspace’ler sayılıyor…</p>;
+  }
+  if (onizleme.durum === 'hata') {
+    return (
+      <Serit ton="hata" baslik="Bağlantının durumu okunamadı">
+        {onizleme.mesaj}
+      </Serit>
+    );
+  }
+  const { veri } = onizleme;
+  if (!veri.kaldirabilir) {
+    return (
+      <Serit ton="hata" baslik="Bu şirketten kaldırılamaz">
+        {veri.sebep}
+      </Serit>
+    );
+  }
+  if (veri.workspaceSayisi === 0) {
+    return (
+      <p className="m-0 text-14 text-ink">
+        Bu bağlantıdan hiçbir workspace’e hesap atanmamış. Kaldırılırsa platformdaki izin de iptal edilir.
+      </p>
+    );
+  }
+  return (
+    <p className="m-0 text-14 text-ink">
+      Bu bağlantı <b className="tabular-nums">{veri.workspaceSayisi} workspace’i</b> besliyor,{' '}
+      <span className="tabular-nums">{veri.izlenenHesapSayisi}</span> reklam hesabı veri çekiyor. Kaldırılırsa
+      hepsinin veri akışı durur. Atamalar ve geçmiş veriler korunur.
+    </p>
   );
 }

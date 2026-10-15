@@ -31,6 +31,7 @@ canlıda masaüstü + mobil görülmeden bitmiş sayılmaz (§3 "Tasarım").
 - `derleMeta` rehber amaç kodunu değil kendi niyet kodunu alır (`VIDEO` değil `VIDEO_IZLENME`; liste `DERLEYICI_NIYETLERI`); yanlış kod `ret` değil TypeError fırlatır.
 - Bir ekranı ya da "panelde yok" iddiasını değiştirmeden önce menünün açtığı GERÇEK bileşeni bul: `team-manager.tsx` yalnız workspace erişim listesi, asıl Ekip ekranı `team-screen.tsx` (route `page.tsx`'ten izle, dosya adından tahmin etme).
 - CSS modülündeki eleman sıfırlaması (`:where(.kok a)`) `@layer base` içinde olmalı: katmansız kural, özgüllüğü sıfır olsa bile bütün Tailwind sınıflarını eziyor (koyu düğme siyah üstüne siyah çıktı; `css-modul-katmani.spec.ts`).
+- Bir bağlantının BÜTÜN satırlarına karar veren yazma (`disconnect`) `withTenant` altında koşamaz: RLS başka şirkete ödünç verilmiş hesapları gizler ve UPDATE sessizce yarım kalır (2026-10-15: 56 hesabın 1'i kapandı); kapı servis kararında, yazma yönetim istemcisiyle ve RETURNING ile sayılır (`baglanti-kaldirma-rls.spec.ts`).
 - PDF'in BAYT boyutunu testte karşılaştırma: aynı içerik CI'da 2 bayt farklı çıktı (43014/43016) ve ilgisiz push kırmızı oldu; "sayfa açılmadı" iddiası sayfa sayısıyla (`PDFDocument.load(...).getPageCount()`).
 
 ## 0. "advetics projesine devam et" denince

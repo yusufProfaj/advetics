@@ -51,7 +51,7 @@ describe('bağlanma kanalın İÇİNDE', () => {
   it('KRİTİK: bağlanma düğmesi YALNIZCA bağlı olmayan kanalda', () => {
     // Bağlıyken de "Bağlan" göstermek, kullanıcıya ikinci bir yetkilendirme
     // yaptırıp platformda ilk token'ı geçersiz kıldırırdı.
-    const i = KANAL.indexOf('{!bagli ? (');
+    const i = KANAL.indexOf('{!bagli && kaldirilmis.length === 0 ? (');
     expect(i, 'bağlı/bağlı değil dallanması yok').toBeGreaterThan(-1);
     const dilim = KANAL.slice(i, KANAL.indexOf(') : (', i));
     expect(dilim).toContain('BaglanmaAlani');
@@ -175,5 +175,44 @@ describe('hata görünürlüğü', () => {
     expect(SAYFA).not.toContain('.catch(() => [])');
     expect(SAYFA).toContain('allSettled');
     expect(SAYFA).toContain('yuklemeHatasi');
+  });
+});
+
+describe('KRİTİK: kaldırılmış bağlantı (2026-10-15 üretimi)', () => {
+  it('sayfa kaldırılmışları İSTİYOR ve canlı listeden AYIRIYOR', () => {
+    /*
+     * İstenmezse kart "Bağlı değil · Bağlan" der ve "Bağlan" ikinci satır
+     * açar; ayrılmazsa havuz, menü ve sorun rozeti onu bağlı sayar.
+     */
+    expect(SAYFA).toContain("'/connections?kaldirilanlar=1'");
+    expect(SAYFA).toContain("const connections = tumu.filter((c) => c.status !== 'revoked')");
+    expect(SAYFA).toContain('kaldirilanlar={kaldirilanlar}');
+  });
+
+  it('KRİTİK: kaldırılmış satır kartta ÇİZİLİYOR ve "Bağlan"ın yerini alıyor', () => {
+    const i = KANAL.indexOf('{!bagli && kaldirilmis.length === 0 ? (');
+    expect(i).toBeGreaterThan(-1);
+    const sonra = KANAL.slice(KANAL.indexOf(') : (', i), KANAL.indexOf('</Kart>', i));
+    expect(sonra).toContain('kaldirilmis.map((c) => (');
+    expect(sonra).toContain('<KaldirilmisSatir');
+  });
+
+  it('kaldırılmış satırın eylemi AYNI satırın reauthorize ucu, "Bağlan" değil', () => {
+    const i = KANAL.indexOf('function KaldirilmisSatir(');
+    expect(i, 'KaldirilmisSatir yok').toBeGreaterThan(-1);
+    const govde = KANAL.slice(i, KANAL.indexOf('\nfunction ', i + 10));
+    expect(govde).toContain('yenidenYetkilendirBaslat(baglanti)');
+    expect(govde).not.toContain('baglantiBaslat(');
+    const j = KANAL.indexOf('async function yenidenYetkilendirBaslat(');
+    expect(KANAL.slice(j, KANAL.indexOf('\n}', j))).toContain('/reauthorize?platform=');
+  });
+
+  it('kaldırma onayı sunucudan okunan sayıyla gidiyor', () => {
+    expect(KANAL).toContain('/disconnect-onizleme');
+    const i = KANAL.indexOf("void calistir('disconnect'");
+    expect(i).toBeGreaterThan(-1);
+    expect(KANAL.slice(i, i + 400)).toContain('JSON.stringify({ onayWorkspaceSayisi })');
+    // Kaldırılamaz ya da sayı okunmamışken düğme kapalı.
+    expect(KANAL).toContain("disabled={onizleme.durum !== 'hazir' || !onizleme.veri.kaldirabilir}");
   });
 });
