@@ -71,7 +71,13 @@ export function Uyari({
       }`}
     >
       <UyariIkonu ton={ton} />
-      <div className="min-w-0 flex-1 space-y-0.5">
+      {/*
+        METNİN TABANI 16 rem. `flex-1` (tabanı 0) metni düğmenin yanında
+        istediği kadar daraltıyordu: telefonda "bu workspace'e geç" uyarısı
+        150 px'lik sütunda 12 satır oldu ve sarma hiç tetiklenmedi (canlı
+        denetim). Taban sığmazsa düğme alt satıra iniyor.
+      */}
+      <div className="min-w-0 flex-[1_1_16rem] space-y-0.5">
         {baslik && <p className="font-semibold">{baslik}</p>}
         {children && <div className={`break-words ${baslik ? 'text-ink-muted' : ''}`}>{children}</div>}
       </div>
