@@ -2,14 +2,12 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 
 import { FiyatPaketleri } from '@/components/landing/fiyat-paketleri';
-import {
-  BAGLANDIGI_YERLER,
-  DEMO_MAILTO,
-  GUVENLIK_OZETI,
-  MODUL_BOLUMLERI,
-  NASIL_CALISIR,
-  ozellikAdresi,
-} from '@/components/landing/site-icerik';
+import { sec } from '@advetics/shared';
+import { ozellikAdresi, siteIcerigi } from '@/components/landing/site-icerik';
+import { dilAl } from '@/dil/sunucu';
+import { siteArayuzSozlugu } from '@/dil/sozlukler/site-arayuz';
+import { dilBaglantilari } from '@/lib/site-metadata';
+import { yerelYol } from '@/lib/site-yollari';
 import {
   AdimListesi,
   BIRINCIL,
@@ -44,48 +42,49 @@ import { HeroSahnesi, OZELLIK_SAHNELERI } from '@/components/landing/simulasyon'
  * logo elimizde değil ve uydurulmuş bir güven işareti ilk görüşmede çürür.
  * Sahnelerdeki adlar ve rakamlar ÖRNEK ve sayfada bu yazıyor.
  */
-export const metadata: Metadata = {
-  title: 'Advetics | Meta, Google ve LinkedIn reklamlarınız tek panelde',
-  description:
-    'Reklamcılık bilmeden reklam verin. Advetics hesaplarınızı izler, kampanyayı kurar, ' +
-    'bütçeyi korur ve raporu kendisi gönderir. Siz yalnız onaylarsınız.',
-  alternates: { canonical: '/' },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const dil = await dilAl();
+  const d = sec(siteArayuzSozlugu, dil).ana;
+  return { title: d.metaBaslik, description: d.metaAciklama, alternates: dilBaglantilari('/', dil) };
+}
 
-export default function HomePage() {
+export default async function HomePage() {
+  const dil = await dilAl();
+  const d = sec(siteArayuzSozlugu, dil);
+  const a = d.ana;
+  const { BAGLANDIGI_YERLER, DEMO_MAILTO, GUVENLIK_OZETI, MODUL_BOLUMLERI, NASIL_CALISIR } = siteIcerigi(dil);
   return (
     <>
       <section className="hero">
         <div className="kap modul">
           <div className="yazi">
-            <UstBaslik>Meta · Google · LinkedIn için tek panel</UstBaslik>
+            <UstBaslik>{a.ust}</UstBaslik>
             <TanitimBasligi>
-              Ne yapılacağını söyler.
+              {a.baslik1}
               <br />
-              <em>Onaylarsanız yapar.</em>
+              <em>{a.baslik2}</em>
             </TanitimBasligi>
             <p className="alt">
-              {'Reklamcılık bilmeniz gerekmez. Advetics hesaplarınızı izler, kampanyayı kurar, ' +
-                'bütçeyi korur ve raporu müşterinize kendisi gönderir. Siz yalnız onaylarsınız.'}
+              {a.alt}
             </p>
             <div className="dgler">
               <a className={BIRINCIL} href={DEMO_MAILTO}>
-                Demo Talep Et
+                {d.ortak.demoTalep}
               </a>
               <a className={IKINCIL} href="#tek-panel">
-                Nasıl çalıştığını gör ↓
+                {a.nasilGor}
               </a>
             </div>
-            <p className="not">Ekrandaki rakamlar örnektir.</p>
+            <p className="not">{d.ortak.rakamlarOrnek}</p>
           </div>
           <HeroSahnesi />
         </div>
       </section>
 
       <div className="kap" id="entegrasyon">
-        <ul className="platformlar" aria-label="Bağlandığı yerler">
+        <ul className="platformlar" aria-label={a.baglandigiYerler}>
           <li>
-            <small>Bağlandığı yerler</small>
+            <small>{a.baglandigiYerler}</small>
           </li>
           {BAGLANDIGI_YERLER.map((ad) => (
             <li key={ad}>{ad}</li>
@@ -109,8 +108,8 @@ export default function HomePage() {
                     <li key={x}>{x}</li>
                   ))}
                 </ul>
-                <Link className="bag" href={ozellikAdresi(m.slug)}>
-                  Ayrıntılar →
+                <Link className="bag" href={ozellikAdresi(m.slug, dil)}>
+                  {d.ortak.ayrintilar}
                 </Link>
               </div>
               {Sahne && <Sahne />}
@@ -121,8 +120,8 @@ export default function HomePage() {
 
       <section className="bolum" id="nasil-calisir">
         <div className="kap">
-          <UstBaslik>Nasıl çalışır</UstBaslik>
-          <h2 className="t-h2">Dört adımda yayında.</h2>
+          <UstBaslik>{a.nasilCalisir}</UstBaslik>
+          <h2 className="t-h2">{a.dortAdim}</h2>
           <AdimListesi adimlar={NASIL_CALISIR} />
         </div>
       </section>
@@ -130,14 +129,11 @@ export default function HomePage() {
       <section className="bolum gri" id="guvenlik">
         <div className="kap modul">
           <div className="yazi">
-            <UstBaslik>Güvenlik</UstBaslik>
-            <h2 className="t-h2">Verileriniz sizde, ayrı ve korunuyor.</h2>
-            <p className="alt">
-              Her müşterinin verisi veritabanı düzeyinde ayrılır; bir müşterinin kullanıcısı diğerinin tek satırını
-              göremez.
-            </p>
-            <Link className="bag" href="/guvenlik">
-              Ayrıntılar →
+            <UstBaslik>{a.guvenlik}</UstBaslik>
+            <h2 className="t-h2">{a.guvenlikBaslik}</h2>
+            <p className="alt">{a.guvenlikMetin}</p>
+            <Link className="bag" href={yerelYol('/guvenlik', dil)}>
+              {d.ortak.ayrintilar}
             </Link>
           </div>
           <ul className="guvenlik-kartlari">
@@ -153,15 +149,15 @@ export default function HomePage() {
 
       <section className="bolum" id="fiyat">
         <div className="kap ortali">
-          <UstBaslik>Fiyatlandırma</UstBaslik>
-          <h2 className="t-h2">Üç paket. Taahhüt yok.</h2>
-          <p className="alt">{"Reklam bütçeniz platforma doğrudan ödenir; Advetics'e yalnız abonelik ödersiniz."}</p>
+          <UstBaslik>{a.fiyat}</UstBaslik>
+          <h2 className="t-h2">{a.ucPaket}</h2>
+          <p className="alt">{a.fiyatAlt}</p>
         </div>
         <div className="kap">
           <FiyatPaketleri />
           <p className="fiyat-notu">
-            <Link className="bag" href="/fiyatlandirma">
-              Bütün özellikleri karşılaştır →
+            <Link className="bag" href={yerelYol('/fiyatlandirma', dil)}>
+              {a.karsilastir}
             </Link>
           </p>
         </div>
@@ -169,15 +165,15 @@ export default function HomePage() {
 
       <section className="bolum gri">
         <div className="kap sss">
-          <UstBaslik>Sık sorulanlar</UstBaslik>
-          <h2 className="t-h2">Merak edilenler</h2>
+          <UstBaslik>{a.sss}</UstBaslik>
+          <h2 className="t-h2">{a.merakEdilenler}</h2>
           <SikSorulanlar />
         </div>
       </section>
 
       <KapanisBandi
-        baslik="İlk raporunuz bu ay gitsin."
-        metin="30 dakikalık demoda hesabınızı birlikte bağlayalım."
+        baslik={a.kapanisBaslik}
+        metin={a.kapanisMetin}
         giris={false}
       />
     </>

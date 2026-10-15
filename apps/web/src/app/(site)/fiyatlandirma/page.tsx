@@ -1,6 +1,11 @@
 import type { Metadata } from 'next';
 
-import { DENEME_GUN, PAKETLER, YILLIK_INDIRIM_YUZDE, paketBul, usd } from '@/components/landing/fiyat';
+import { sec } from '@advetics/shared';
+import { dilAl } from '@/dil/sunucu';
+import { siteArayuzSozlugu } from '@/dil/sozlukler/site-arayuz';
+import { dilBaglantilari } from '@/lib/site-metadata';
+import { menuEtiketi } from '@/components/landing/site-icerik';
+import { DENEME_GUN, YILLIK_INDIRIM_YUZDE, paketBul, paketler, usd } from '@/components/landing/fiyat';
 import { FiyatPaketleri } from '@/components/landing/fiyat-paketleri';
 import { KarsilastirmaTablosu } from '@/components/landing/fiyat-tablosu';
 import { KapanisBandi, SikSorulanlar, TanitimBasligi, UstBaslik } from '@/components/landing/site-parcalari';
@@ -16,49 +21,48 @@ import { KapanisBandi, SikSorulanlar, TanitimBasligi, UstBaslik } from '@/compon
  * ÜYE OLMA VE ÖDEME YOK: "14 gün ücretsiz dene" ve "Teklif al" e-posta açıyor,
  * paketin adı konu satırında (`iletisim.ts`).
  */
-const KUCUK = paketBul('kucuk-isletme');
 
-export const metadata: Metadata = {
-  title: 'Fiyatlandırma | Advetics',
-  description:
-    `Advetics üç paket: ${PAKETLER.map((p) => p.ad).join(', ')}. ${usd(KUCUK.aylikSent)}/ay'dan başlar, ` +
-    `yıllık ödemede %${YILLIK_INDIRIM_YUZDE} indirim, ${DENEME_GUN} gün ücretsiz deneme. ` +
-    'Reklam bütçeniz doğrudan platformlara ödenir.',
-  alternates: { canonical: '/fiyatlandirma' },
-};
 
-export default function FiyatlandirmaSayfasi() {
+export async function generateMetadata(): Promise<Metadata> {
+  const dil = await dilAl();
+  const d = sec(siteArayuzSozlugu, dil).fiyat;
+  return {
+    title: `${menuEtiketi(dil, '/fiyatlandirma')} | Advetics`,
+    description: d.metaAciklama(
+      paketler(dil).map((p) => p.ad).join(', '),
+      usd(paketBul('kucuk-isletme').aylikSent),
+      YILLIK_INDIRIM_YUZDE,
+      DENEME_GUN,
+    ),
+    alternates: dilBaglantilari('/fiyatlandirma', dil),
+  };
+}
+
+export default async function FiyatlandirmaSayfasi() {
+  const dil = await dilAl();
+  const d = sec(siteArayuzSozlugu, dil).fiyat;
   return (
     <>
       <section className="bolum">
         <div className="kap ortali">
-          <FiyatGirisi ust="Fiyatlandırma" />
+          <UstBaslik>{menuEtiketi(dil, '/fiyatlandirma')}</UstBaslik>
+          <TanitimBasligi boy="orta">{d.baslik}</TanitimBasligi>
+          <p className="alt">{d.alt}</p>
         </div>
         <div className="kap">
           <FiyatPaketleri />
-          <KarsilastirmaTablosu />
+          <KarsilastirmaTablosu dil={dil} />
         </div>
       </section>
 
       <section className="bolum gri">
         <div className="kap sss">
-          <h2 className="t-h2">Fiyat soruları</h2>
+          <h2 className="t-h2">{d.sorular}</h2>
           <SikSorulanlar />
         </div>
       </section>
 
       <KapanisBandi />
-    </>
-  );
-}
-
-/** Üst başlık sayfa sekmesindeki ve menüdeki adla aynı (`site-icerik.spec.ts`). */
-function FiyatGirisi({ ust }: { ust: string }) {
-  return (
-    <>
-      <UstBaslik>{ust}</UstBaslik>
-      <TanitimBasligi boy="orta">Büyüklüğünüze göre üç paket.</TanitimBasligi>
-      <p className="alt">Fiyatlar ABD doları cinsindendir, ödeme günün kuruyla TL alınır. KDV hariç.</p>
     </>
   );
 }

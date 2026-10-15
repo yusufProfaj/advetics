@@ -1,8 +1,18 @@
 import Link from 'next/link';
 import type { ComponentType, ReactNode } from 'react';
 
+import { yerelYol } from '@/lib/site-yollari';
 import { Gorunurlukte } from './gorunurlukte';
-import { DEMO_MAILTO, FIYAT_SORULARI, OZELLIKLER, ozellikAdresi, type Madde } from './site-icerik';
+import { sec } from '@advetics/shared';
+import { dilAl } from '@/dil/sunucu';
+import { siteArayuzSozlugu } from '@/dil/sozlukler/site-arayuz';
+import { siteIcerigi, ozellikAdresi, type Madde } from './site-icerik';
+
+/** Sunucu parçalarının dili ve metni tek çağrıda. */
+async function dilVeMetin() {
+  const dil = await dilAl();
+  return { dil, d: sec(siteArayuzSozlugu, dil), icerik: siteIcerigi(dil) };
+}
 
 /**
  * ═══ TANITIM SİTESİNİN ORTAK PARÇALARI ═══
@@ -76,10 +86,11 @@ export function TanitimBasligi({
 }
 
 /** "Yakında" rozeti. Yapılmamış işi yapılmış gibi göstermemenin tek yolu. */
-export function YakindaRozeti() {
+export async function YakindaRozeti() {
+  const { d } = await dilVeMetin();
   return (
     <span className="inline-flex shrink-0 items-center rounded-full border border-line px-2.5 py-0.5 text-xs font-semibold text-ink-muted">
-      Yakında
+      {d.ortak.yakinda}
     </span>
   );
 }
@@ -89,7 +100,7 @@ export function YakindaRozeti() {
  * verilirse yanında sahnesi (özellik sayfası): ana sayfadaki bölümle AYNI
  * canlandırma, ziyaretçi menüden geldiğinde de aynı şeyi görüyor.
  */
-export function SayfaGirisi({
+export async function SayfaGirisi({
   ust,
   baslik,
   ozet,
@@ -102,22 +113,23 @@ export function SayfaGirisi({
   ikincil?: { href: string; etiket: string };
   Sahne?: ComponentType;
 }) {
+  const { dil, d, icerik } = await dilVeMetin();
   const yazi = (
     <div className="yazi">
       <UstBaslik>{ust}</UstBaslik>
       <TanitimBasligi boy="orta">{baslik}</TanitimBasligi>
       <p className="alt">{ozet}</p>
       <div className="dgler">
-        <a href={DEMO_MAILTO} className={BIRINCIL}>
-          Demo Talep Et
+        <a href={icerik.DEMO_MAILTO} className={BIRINCIL}>
+          {d.ortak.demoTalep}
         </a>
         {ikincil && (
-          <Link href={ikincil.href} className={IKINCIL}>
+          <Link href={yerelYol(ikincil.href, dil)} className={IKINCIL}>
             {ikincil.etiket}
           </Link>
         )}
       </div>
-      {Sahne && <p className="hero-notu">Ekrandaki rakamlar örnektir.</p>}
+      {Sahne && <p className="hero-notu">{d.ortak.rakamlarOrnek}</p>}
     </div>
   );
   return (
@@ -201,20 +213,22 @@ export function AdimListesi({ adimlar }: { adimlar: Madde[] }) {
  * Özellik kartları. `sluglar` verilmezse hepsi. Kart bütünüyle bağlantı:
  * küçük bir "Devamı" yazısına nişan almak telefonda zor.
  */
-export function OzellikKartlari({ sluglar }: { sluglar?: string[] }) {
-  const liste = sluglar ? OZELLIKLER.filter((o) => sluglar.includes(o.slug)) : OZELLIKLER;
+export async function OzellikKartlari({ sluglar }: { sluglar?: string[] }) {
+  const { dil, d, icerik } = await dilVeMetin();
+  const tumu = icerik.OZELLIKLER;
+  const liste = sluglar ? tumu.filter((o) => sluglar.includes(o.slug)) : tumu;
   return (
     <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
       {liste.map((o) => (
         <li key={o.slug}>
           <Link
-            href={ozellikAdresi(o.slug)}
+            href={ozellikAdresi(o.slug, dil)}
             className="kart flex h-full flex-col p-6 motion-safe:transition-[border-color,transform] motion-safe:duration-200 hover:border-ink motion-safe:hover:-translate-y-0.5"
           >
             <span className="soluk text-xs font-semibold">{o.panelAdi}</span>
             <h3 className="mont mt-2 text-lg font-bold">{o.ad}</h3>
             <p className="soluk mt-2 flex-1 text-sm leading-relaxed">{o.kisa}</p>
-            <span className="bag self-start">Nasıl çalışır →</span>
+            <span className="bag self-start">{d.ortak.nasilCalisirOk}</span>
           </Link>
         </li>
       ))}
@@ -223,10 +237,11 @@ export function OzellikKartlari({ sluglar }: { sluglar?: string[] }) {
 }
 
 /** "Bilmeniz gerekenler": ürünün yapmadığı şeyler. Gizlenen sınır, ilk denemede çıkan hayal kırıklığı. */
-export function SinirKutusu({ sinirlar }: { sinirlar: string[] }) {
+export async function SinirKutusu({ sinirlar }: { sinirlar: string[] }) {
+  const { d } = await dilVeMetin();
   return (
     <div className="ozet-kutu">
-      <h3 className="mont text-base font-bold">Bilmeniz gerekenler</h3>
+      <h3 className="mont text-base font-bold">{d.ortak.bilmenizGerekenler}</h3>
       <ul className="mt-3 space-y-2">
         {sinirlar.map((s) => (
           <li key={s} className="flex gap-3 text-sm leading-relaxed">
@@ -244,10 +259,11 @@ export function SinirKutusu({ sinirlar }: { sinirlar: string[] }) {
  * okuyucuyla kendiliğinden çalışıyor, cevap DOM'dan çıkmadığı için arama
  * motoru da okuyor.
  */
-export function SikSorulanlar({ sorular = FIYAT_SORULARI }: { sorular?: Madde[] }) {
+export async function SikSorulanlar({ sorular }: { sorular?: Madde[] }) {
+  const { icerik } = await dilVeMetin();
   return (
     <div className="sss mt-6">
-      {sorular.map((s) => (
+      {(sorular ?? icerik.FIYAT_SORULARI).map((s) => (
         <details key={s.baslik}>
           <summary>{s.baslik}</summary>
           <p>{s.metin}</p>
@@ -262,29 +278,30 @@ export function SikSorulanlar({ sorular = FIYAT_SORULARI }: { sorular?: Madde[] 
  * olduğu için bant kılavuzun grisine dönüyor (`tanitim.css`). Bu bir marka
  * öğesi, tema yüzeyi değil.
  */
-export function KapanisBandi({
-  baslik = 'Kendi hesaplarınızla görün',
-  metin = 'Kısa bir görüşmede hesaplarınızı bağlayıp kendi rakamlarınızla gösterelim.',
+export async function KapanisBandi({
+  baslik,
+  metin,
   giris = true,
 }: {
   baslik?: string;
   metin?: string;
   giris?: boolean;
 }) {
+  const { d, icerik } = await dilVeMetin();
   return (
     <div className="kap kapanis-kap">
       <div className="kapanis">
         <div>
-          <h2 className="t-h2">{baslik}</h2>
-          <p>{metin}</p>
+          <h2 className="t-h2">{baslik ?? d.ortak.kapanisBaslik}</h2>
+          <p>{metin ?? d.ortak.kapanisMetin}</p>
         </div>
         <div className="dgler">
-          <a href={DEMO_MAILTO} className={BIRINCIL}>
-            Demo Talep Et
+          <a href={icerik.DEMO_MAILTO} className={BIRINCIL}>
+            {d.ortak.demoTalep}
           </a>
           {giris && (
             <Link href="/login" className="dg i beyaz-cerceve">
-              Giriş Yap
+              {d.ortak.girisYap}
             </Link>
           )}
         </div>

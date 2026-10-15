@@ -2,7 +2,12 @@ import Link from 'next/link';
 
 import { AdveticsLogo } from '@/components/advetics-logo';
 
-import { COZUMLER, DEMO_MAILTO, OZELLIKLER, UST_MENU, cozumAdresi, ozellikAdresi } from './site-icerik';
+import { sec } from '@advetics/shared';
+import { DilAnahtari } from '@/components/ui/dil-secimi';
+import { dilAl } from '@/dil/sunucu';
+import { siteArayuzSozlugu } from '@/dil/sozlukler/site-arayuz';
+import { yerelYol } from '@/lib/site-yollari';
+import { cozumAdresi, ozellikAdresi, siteIcerigi } from './site-icerik';
 
 /**
  * Tanıtım sitesinin üst çubuğu.
@@ -36,25 +41,28 @@ const ACILIR =
 
 const UST_BAG = 'text-sm font-semibold text-ink-muted motion-safe:transition-colors hover:text-ink';
 
-export function SiteNav() {
+export async function SiteNav() {
+  const dil = await dilAl();
+  const d = sec(siteArayuzSozlugu, dil);
+  const { COZUMLER, DEMO_MAILTO, OZELLIKLER, UST_MENU } = siteIcerigi(dil);
   return (
     <header className="sticky top-0 z-50 border-b border-line bg-surface">
-      <nav aria-label="Ana menü" className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
-        <Link href="/" aria-label="Advetics ana sayfa">
+      <nav aria-label={d.nav.anaMenu} className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
+        <Link href={yerelYol('/', dil)} aria-label={d.nav.anaSayfa} className="shrink-0">
           <AdveticsLogo />
         </Link>
 
-        <ul className="hidden items-center gap-7 lg:flex">
+        <ul className="hidden items-center gap-5 whitespace-nowrap lg:flex xl:gap-7">
           <li className="group relative">
-            <a href="/ozellikler" className={UST_BAG}>
-              Özellikler
+            <a href={yerelYol('/ozellikler', dil)} className={UST_BAG}>
+              {d.nav.ozellikler}
             </a>
             <div className={ACILIR}>
               <ul className="grid w-[36rem] grid-cols-2 gap-1 rounded-xl border border-line bg-surface p-3 shadow-acilir">
                 {OZELLIKLER.map((o) => (
                   <li key={o.slug}>
                     <a
-                      href={ozellikAdresi(o.slug)}
+                      href={ozellikAdresi(o.slug, dil)}
                       className="block rounded-lg px-3 py-2.5 motion-safe:transition-colors hover:bg-surface-muted"
                     >
                       <span className="block text-sm font-bold text-ink">{o.ad}</span>
@@ -68,14 +76,14 @@ export function SiteNav() {
           <li className="group relative">
             {/* Çözümlerin kendi özet sayfası yok; düğme odak alsın diye etiket bir düğme. */}
             <button type="button" className={UST_BAG}>
-              Çözümler
+              {d.nav.cozumler}
             </button>
             <div className={ACILIR}>
               <ul className="w-80 rounded-xl border border-line bg-surface p-3 shadow-acilir">
                 {COZUMLER.map((c) => (
                   <li key={c.slug}>
                     <a
-                      href={cozumAdresi(c.slug)}
+                      href={cozumAdresi(c.slug, dil)}
                       className="block rounded-lg px-3 py-2.5 motion-safe:transition-colors hover:bg-surface-muted"
                     >
                       <span className="block text-sm font-bold text-ink">{c.ad}</span>
@@ -88,19 +96,29 @@ export function SiteNav() {
           </li>
           {UST_MENU.map((m) => (
             <li key={m.href}>
-              <Link href={m.href} className={UST_BAG}>
+              <Link href={yerelYol(m.href, dil)} className={UST_BAG}>
                 {m.etiket}
               </Link>
             </li>
           ))}
         </ul>
 
-        <div className="hidden items-center gap-3 lg:flex">
+        <div className="hidden shrink-0 items-center gap-3 whitespace-nowrap lg:flex">
+          {/*
+            TR · EN anahtarı (Ç1, taslak B): karşı dildeki sayfaya gider.
+            Üst çubukta YALNIZ GENİŞ EKRANDA (xl): 1024 pikselde anahtar
+            eklenince logo iki satıra bölünüyor ve düğmeler sarıyordu
+            (yerelde ölçüldü). 1024-1279 aralığında anahtar alt bilgide ve
+            menü çekmecesinde; ilk ziyarette zaten seçim ekranı soruyor.
+          */}
+          <div className="hidden xl:block">
+            <DilAnahtari />
+          </div>
           <Link href="/login" className="dg i">
-            Giriş Yap
+            {d.ortak.girisYap}
           </Link>
           <a href={DEMO_MAILTO} className="dg b">
-            Demo Talep Et
+            {d.ortak.demoTalep}
           </a>
         </div>
 
@@ -116,24 +134,27 @@ export function SiteNav() {
         */}
         <details className="lg:hidden">
           <summary className="flex cursor-pointer list-none items-center rounded-lg border border-line px-3 py-2 text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden">
-            Menü
+            {d.nav.menu}
           </summary>
           <div className="fixed inset-x-0 top-16 max-h-[calc(100dvh-4rem)] overflow-y-auto border-b border-line bg-surface px-4 pb-6 pt-2 shadow-acilir">
-            <p className="mt-3 text-xs font-semibold text-ink-muted">Özellikler</p>
+            <div className="mt-3 flex justify-end">
+              <DilAnahtari />
+            </div>
+            <p className="mt-3 text-xs font-semibold text-ink-muted">{d.nav.ozellikler}</p>
             <ul className="mt-1">
               {OZELLIKLER.map((o) => (
                 <li key={o.slug}>
-                  <a href={ozellikAdresi(o.slug)} className="block py-2 text-sm font-semibold text-ink">
+                  <a href={ozellikAdresi(o.slug, dil)} className="block py-2 text-sm font-semibold text-ink">
                     {o.ad}
                   </a>
                 </li>
               ))}
             </ul>
-            <p className="mt-4 text-xs font-semibold text-ink-muted">Çözümler</p>
+            <p className="mt-4 text-xs font-semibold text-ink-muted">{d.nav.cozumler}</p>
             <ul className="mt-1">
               {COZUMLER.map((c) => (
                 <li key={c.slug}>
-                  <a href={cozumAdresi(c.slug)} className="block py-2 text-sm font-semibold text-ink">
+                  <a href={cozumAdresi(c.slug, dil)} className="block py-2 text-sm font-semibold text-ink">
                     {c.ad}
                   </a>
                 </li>
@@ -142,7 +163,7 @@ export function SiteNav() {
             <ul className="mt-4 border-t border-line pt-3">
               {UST_MENU.map((m) => (
                 <li key={m.href}>
-                  <a href={m.href} className="block py-2 text-sm font-semibold text-ink">
+                  <a href={yerelYol(m.href, dil)} className="block py-2 text-sm font-semibold text-ink">
                     {m.etiket}
                   </a>
                 </li>
@@ -150,10 +171,10 @@ export function SiteNav() {
             </ul>
             <div className="mt-5 grid gap-3">
               <a href={DEMO_MAILTO} className="dg b">
-                Demo Talep Et
+                {d.ortak.demoTalep}
               </a>
               <a href="/login" className="dg i">
-                Giriş Yap
+                {d.ortak.girisYap}
               </a>
             </div>
           </div>

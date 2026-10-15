@@ -1,31 +1,28 @@
 import type { Metadata } from 'next';
 
-import {
-  IngilizceBaslik,
-  YasalAltBolum,
-  YasalBolum,
-  YasalDuzen,
-  type YasalBaslik,
-} from '@/components/landing/yasal-duzen';
-
-export const metadata: Metadata = {
-  title: 'Veri Silme Talimatları · Advetics',
-  description:
-    'Advetics üzerindeki reklam hesabı bağlantınızı ve kişisel verilerinizi nasıl sileceğiniz.',
-  robots: { index: true, follow: true },
-};
-
-const B = {
-  bir: { id: 'baglantiyi-kaldir', baslik: 'Seçenek 1 — Reklam hesabı bağlantısını kaldır' },
-  iki: { id: 'platformdan-iptal', baslik: 'Seçenek 2 — Meta / Google tarafından erişimi iptal et' },
-  uc: { id: 'tum-veriler', baslik: 'Seçenek 3 — Tüm verilerin silinmesini talep et' },
-} satisfies Record<string, YasalBaslik>;
+import { sec } from '@advetics/shared';
+import { YasalDuzen, yasalMeta } from '@/components/landing/yasal-duzen';
+import { veriSilmeEn } from '@/components/yasal/veri-silme.en';
+import { veriSilmeTr } from '@/components/yasal/veri-silme.tr';
+import { yasalSozlugu } from '@/dil/sozlukler/yasal';
+import { dilAl } from '@/dil/sunucu';
 
 /**
- * Meta, veri işleyen uygulamalardan bir "Data Deletion Instructions URL" veya
- * geri arama uç noktası istiyor. Bu sayfa o gereksinimi karşılar ve App Review
- * formunda bu adres verilir.
+ * Sayfa İNCE: metin `components/yasal/veri-silme.{tr,en}.tsx` çiftinde.
+ * Türkçe adres (`/veri-silme`) Meta App Review formunda "Data Deletion
+ * Instructions URL" olarak kayıtlı ve DEĞİŞMİYOR; `/en/data-deletion`
+ * middleware ile buraya yeniden yazılıyor, dil `dilAl()`den.
  */
+const YOL = '/veri-silme';
+
+async function icerik() {
+  return (await dilAl()) === 'en' ? veriSilmeEn() : veriSilmeTr();
+}
+
+export async function generateMetadata(): Promise<Metadata> {
+  return yasalMeta(await icerik(), YOL, await dilAl());
+}
+
 interface DeletionStatus {
   confirmationCode: string;
   platform: string;
@@ -61,19 +58,15 @@ export default async function DataDeletionPage({
 }) {
   const { talep } = await searchParams;
   const status = talep ? await fetchStatus(talep) : null;
+  const dil = await dilAl();
+  const i = dil === 'en' ? veriSilmeEn() : veriSilmeTr();
+  // Talep kutusu belgenin değil sayfanın parçası: Meta kullanıcıyı `?talep=` ile
+  // hangi dilde yönlendirirse o dilde okunmalı, tarih de o dilin biçiminde.
+  const d = sec(yasalSozlugu, dil).talep;
+  const tarih = (t: string) => new Date(t).toLocaleString(d.yerel);
 
   return (
-    <YasalDuzen
-      yol="/veri-silme"
-      baslik="Veri Silme Talimatları"
-      guncelleme="14 Ekim 2026"
-      bolumler={Object.values(B)}
-      ozet={
-        'Bağlantıyı panelden kaldırdığınızda erişim jetonları anında silinir. Bütün verilerinizin ' +
-        'silinmesini e-postayla isteyebilirsiniz; talep en geç 30 günde yerine getirilir.'
-      }
-    >
-
+    <YasalDuzen yol={YOL} baslik={i.baslik} guncelleme={i.guncelleme} ozet={i.ozet} bolumler={i.bolumler}>
       {talep && (
         <div
           className={`mt-5 rounded-xl border p-4 ${
@@ -84,179 +77,40 @@ export default async function DataDeletionPage({
                 : 'border-warn/30 bg-warn-soft/70 text-warn-strong'
           }`}
         >
-          <p className="text-sm font-semibold">Silme talebi durumu</p>
+          <p className="text-sm font-semibold">{d.baslik}</p>
           {status ? (
             <div className="mt-2 space-y-1 text-sm">
               <p>
-                Onay kodu: <code className="text-xs">{status.confirmationCode}</code>
+                {d.onayKodu} <code className="text-xs">{status.confirmationCode}</code>
               </p>
               <p>
-                Durum:{' '}
+                {d.durum}{' '}
                 <strong>
                   {status.status === 'completed'
-                    ? 'Tamamlandı'
+                    ? d.tamamlandi
                     : status.status === 'failed'
-                      ? 'Başarısız — lütfen bizimle iletişime geçin'
-                      : 'Alındı, işleniyor'}
+                      ? d.basarisiz
+                      : d.isleniyor}
                 </strong>
               </p>
-              {status.status === 'completed' && (
-                <p>
-                  {status.deletedConnections} platform bağlantısı ve bunlara bağlı tüm reklam
-                  hesabı kayıtları silindi.
-                </p>
-              )}
+              {status.status === 'completed' && <p>{d.silinenler(status.deletedConnections)}</p>}
               <p className="text-xs opacity-80">
-                Talep tarihi: {new Date(status.requestedAt).toLocaleString('tr-TR')}
-                {status.completedAt
-                  ? ` · Tamamlanma: ${new Date(status.completedAt).toLocaleString('tr-TR')}`
-                  : ''}
+                {d.talepTarihi} {tarih(status.requestedAt)}
+                {status.completedAt ? ` · ${d.tamamlanma} ${tarih(status.completedAt)}` : ''}
               </p>
             </div>
           ) : (
             <p className="mt-1 text-sm">
-              Bu koda ait bir talep bulunamadı. Kodu doğru kopyaladığından emin ol veya{' '}
+              {d.bulunamadi}{' '}
               <a href="mailto:hello@profaj.com" className="underline">
                 hello@profaj.com
               </a>{' '}
-              adresine yaz.
+              {d.adreseYaz}
             </p>
           )}
         </div>
       )}
-
-      <YasalBolum b={B.bir}>
-        <p>
-          Panele giriş yapın, <strong>Ayarlar › Platform bağlantıları</strong> sayfasına gidin ve
-          ilgili bağlantının yanındaki <strong>Kaldır</strong> düğmesine basın.
-        </p>
-        <p>Bu işlem anında şunları yapar:</p>
-        <ul className="mt-2 list-disc space-y-1 pl-5">
-          <li>
-            Meta / Google erişim ve yenileme jetonlarını{' '}
-            <strong>geri döndürülemez biçimde siler</strong>
-          </li>
-          <li>Verilen tüm yetkileri (scope) kayıttan düşer</li>
-          <li>O hesaba ait tüm veri senkronizasyonunu ve otomasyonu durdurur</li>
-        </ul>
-        <p className="mt-3">
-          Reklam performans geçmişi, hesap sahibinin raporlama ve muhasebe ihtiyacı nedeniyle
-          korunur. Bunun da silinmesini istiyorsanız 3. seçeneği kullanın.
-        </p>
-      </YasalBolum>
-
-      <YasalBolum b={B.iki}>
-        <p>Uygulamanın erişimini doğrudan platform üzerinden de kaldırabilirsiniz:</p>
-        <ul className="mt-2 list-disc space-y-1 pl-5">
-          <li>
-            <strong>Meta:</strong>{' '}
-            <a
-              href="https://www.facebook.com/settings?tab=business_tools"
-              className="underline"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Facebook → Ayarlar → İş Araçları
-            </a>{' '}
-            bölümünden Advetics&apos;i kaldırın.
-          </li>
-          <li>
-            <strong>Google:</strong>{' '}
-            <a
-              href="https://myaccount.google.com/permissions"
-              className="underline"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Google Hesabı → Üçüncü taraf erişimi
-            </a>{' '}
-            bölümünden Advetics erişimini kaldırın.
-          </li>
-        </ul>
-        <p className="mt-3">
-          Bu durumda jetonlarımız geçersiz hâle gelir ve bağlantı{' '}
-          <em>yeniden yetkilendirme gerekli</em> durumuna geçer. Saklanan şifreli jetonun
-          silinmesi için 1. veya 3. seçeneği de uygulamanızı öneririz.
-        </p>
-      </YasalBolum>
-
-      <YasalBolum b={B.uc}>
-        <p>
-          Hesabınıza ve workspace kaydınıza ait <strong>tüm verilerin</strong> silinmesi için{' '}
-          <a href="mailto:hello@profaj.com?subject=Veri%20Silme%20Talebi" className="underline">
-            hello@profaj.com
-          </a>{' '}
-          adresine, kayıtlı e-posta adresinizden talep gönderin.
-        </p>
-        <p className="mt-2">
-          Kimlik doğrulamasının ardından talep <strong>en geç 30 gün içinde</strong> yerine
-          getirilir ve size yazılı olarak bildirilir. Silinenler:
-        </p>
-        <ul className="mt-2 list-disc space-y-1 pl-5">
-          <li>Kullanıcı hesabı ve profil bilgileri</li>
-          <li>Tüm platform bağlantıları ve şifreli jetonlar</li>
-          <li>Reklam hesabı kayıtları, kampanya yapıları ve performans geçmişi</li>
-          <li>Otomasyon kuralları ve raporlar</li>
-        </ul>
-        <p className="mt-3">
-          <strong>İstisna:</strong> Bütçe değiştiren otomatik aksiyonlara ait denetim kayıtları,
-          hesap verebilirlik yükümlülüğü nedeniyle kimliksizleştirilerek 2 yıl daha saklanır. Bu
-          kayıtlarda kişisel veri bulunmaz.
-        </p>
-      </YasalBolum>
-
-      <IngilizceBaslik>Data Deletion Instructions (English)</IngilizceBaslik>
-
-      <YasalAltBolum baslik="Option 1 — Remove the connection in the app">
-        <p>
-          Sign in and go to <strong>Settings → Platform Connections</strong>, then click{' '}
-          <strong>Remove</strong> next to the connection. This immediately and irreversibly deletes
-          the stored Meta / Google access and refresh tokens, clears all granted scopes, and stops
-          all data synchronisation and automation for that account.
-        </p>
-      </YasalAltBolum>
-
-      <YasalAltBolum baslik="Option 2 — Revoke access from the platform">
-        <p>
-          Remove Advetics from{' '}
-          <a
-            href="https://www.facebook.com/settings?tab=business_tools"
-            className="underline"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Facebook Settings → Business Integrations
-          </a>{' '}
-          or{' '}
-          <a
-            href="https://myaccount.google.com/permissions"
-            className="underline"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Google Account → Third-party access
-          </a>
-          .
-        </p>
-      </YasalAltBolum>
-
-      <YasalAltBolum baslik="Option 3 — Request full deletion">
-        <p>
-          Email{' '}
-          <a href="mailto:hello@profaj.com?subject=Data%20Deletion%20Request" className="underline">
-            hello@profaj.com
-          </a>{' '}
-          from your registered address. After identity verification we delete your account,
-          connections, encrypted tokens, ad account records, campaign structures, performance
-          history, automation rules and reports within <strong>30 days</strong> and confirm in
-          writing.
-        </p>
-        <p className="mt-2">
-          <strong>Exception:</strong> anonymised audit records of automated budget changes are
-          retained for a further 2 years for accountability. They contain no personal data.
-        </p>
-      </YasalAltBolum>
+      {i.govde}
     </YasalDuzen>
   );
 }
-

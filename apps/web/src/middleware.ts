@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { ONEK_BASLIGI, enOnekliMi, ingilizceYolu, turkceYolu } from '@/lib/site-yollari';
 
 const ACCESS_COOKIE = 'adv_at';
 /** shared `DIL_CEREZI`, `DIL_SORGU_ANAHTARI`, `DILLER` ile aynı (middleware.spec.ts). */
@@ -106,6 +107,29 @@ function publicOrigin(req: NextRequest): string {
   return `${proto}://${host}`;
 }
 
+function dilCereziYaz(res: NextResponse, dil: string, origin: string): void {
+  res.cookies.set(DIL_CEREZI_EDGE, dil, {
+    path: '/',
+    maxAge: 365 * 24 * 60 * 60,
+    sameSite: 'lax',
+    secure: origin.startsWith('https:'),
+  });
+}
+
+/**
+ * HREFLANG HTTP BAŞLIĞIYLA (Google bunu `<link rel=alternate>` ile eş
+ * sayıyor). Sayfa başına metadata yazmak 16 sayfada aynı satırı tekrar
+ * etmek ve birinin unutulması demekti; yol tablosu zaten burada.
+ * `x-default` Türkçe: önek yok = Türkçe (Ç2).
+ */
+function hreflangBasligi(origin: string, tr: string, en: string): string {
+  return [
+    `<${origin}${tr}>; rel="alternate"; hreflang="tr"`,
+    `<${origin}${en}>; rel="alternate"; hreflang="en"`,
+    `<${origin}${tr}>; rel="alternate"; hreflang="x-default"`,
+  ].join(', ');
+}
+
 export function middleware(req: NextRequest): NextResponse {
   const { pathname } = req.nextUrl;
   const host = req.headers.get('host') ?? '';
@@ -138,15 +162,47 @@ export function middleware(req: NextRequest): NextResponse {
     const temiz = new URL(req.nextUrl.pathname + req.nextUrl.search, origin);
     temiz.searchParams.delete(DIL_SORGU_ANAHTARI);
     const yon = NextResponse.redirect(temiz);
-    if (DILLER_EDGE.includes(dilSorgusu)) {
-      yon.cookies.set(DIL_CEREZI_EDGE, dilSorgusu, {
-        path: '/',
-        maxAge: 365 * 24 * 60 * 60,
-        sameSite: 'lax',
-        secure: origin.startsWith('https:'),
-      });
-    }
+    if (DILLER_EDGE.includes(dilSorgusu)) dilCereziYaz(yon, dilSorgusu, origin);
     return yon;
+  }
+
+  /**
+   * İKİ DİLLİ SİTE (`lib/site-yollari.ts`, kullanıcı kararı Ç2).
+   *
+   * İSTEMCİNİN GÖNDERDİĞİ ÖNEK BAŞLIĞI HER ZAMAN SİLİNİR: başlık yalnız
+   * buradaki yeniden yazımın işareti; dışarıdan gelirse Türkçe adres
+   * İngilizce çizilir ve önbellek/arama motoru iki dili karıştırır.
+   *
+   * `/en/...` → Türkçe sayfaya YENİDEN YAZILIR (adres çubuğu `/en` kalır),
+   * dil çereze de yazılır: İngilizce sayfadan girişe geçen kişi giriş
+   * ekranını da İngilizce görsün. Eşlemesi olmayan `/en/x` olduğu gibi
+   * geçer ve 404 olur (sessizce Türkçe sayfaya düşmek yanlış dilde içerik).
+   *
+   * Öneksiz site sayfası + `en` çerezi → `/en` karşılığına YÖNLENİR. Çerezi
+   * olmayan (arama motoru, OAuth doğrulayıcısı) Türkçe sayfayı görür;
+   * öneksiz adres çerez YAZMAZ, yoksa ilk ziyaret sorusu hiç çıkmazdı (Ç1).
+   */
+  const istekBasliklari = new Headers(req.headers);
+  istekBasliklari.delete(ONEK_BASLIGI);
+  if (enOnekliMi(pathname)) {
+    const tr = turkceYolu(pathname);
+    if (tr === null) return NextResponse.next({ request: { headers: istekBasliklari } });
+    istekBasliklari.set(ONEK_BASLIGI, 'en');
+    const hedef = req.nextUrl.clone();
+    hedef.pathname = tr;
+    const yaz = NextResponse.rewrite(hedef, { request: { headers: istekBasliklari } });
+    dilCereziYaz(yaz, 'en', origin);
+    yaz.headers.set('Link', hreflangBasligi(origin, tr, pathname));
+    return yaz;
+  }
+  const enKarsiligi = ingilizceYolu(pathname);
+  if (enKarsiligi !== null) {
+    if (req.cookies.get(DIL_CEREZI_EDGE)?.value === 'en') {
+      return NextResponse.redirect(new URL(enKarsiligi + req.nextUrl.search, origin));
+    }
+    const devam = NextResponse.next({ request: { headers: istekBasliklari } });
+    devam.headers.set('Link', hreflangBasligi(origin, pathname, enKarsiligi));
+    return devam;
   }
 
   /**
@@ -174,7 +230,7 @@ export function middleware(req: NextRequest): NextResponse {
     return NextResponse.redirect(new URL('/dashboard', origin));
   }
 
-  const res = NextResponse.next();
+  const res = NextResponse.next({ request: { headers: istekBasliklari } });
   if (isCustomDomain) res.headers.set('x-advetics-domain', host);
   return res;
 }

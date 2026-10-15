@@ -2,6 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 
+import { bicimKodu } from '@advetics/shared';
+
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { simulasyonSozlugu } from '@/dil/sozlukler/simulasyon';
 import { sayacDegeri, zamanCizelgesi, type Kare, type Sahne } from './motor';
 
 /**
@@ -36,12 +40,14 @@ export interface SahneDurumu<D> {
   yaziyor: (alan: string) => boolean;
 }
 
-interface Ic<D> extends SahneDurumu<D> {
+// Kesişim tipi, `interface … extends`: dil taraması `<D> extends Sahne…<`
+// parçasını JSX metni sanıp ekran metni olarak sayıyordu.
+type Ic<D> = SahneDurumu<D> & {
   kok: React.RefObject<HTMLDivElement | null>;
   fareKonum: { x: number; y: number } | null;
   tekrar: () => void;
   az: boolean;
-}
+};
 
 export function useSahne<D>(sahne: Sahne<D>): Ic<D> {
   const kareler = useMemo(() => zamanCizelgesi(sahne), [sahne]);
@@ -156,6 +162,7 @@ export function SahneCercevesi<D>({
   /** Ekran okuyucu için sahnenin ne gösterdiği (canlandırma okunmuyor). */
   etiket: string;
 }) {
+  const m = useSozluk(simulasyonSozlugu);
   const konum: CSSProperties = s.fareKonum
     ? { left: s.fareKonum.x, top: s.fareKonum.y }
     : { left: '70%', top: '90%' };
@@ -176,7 +183,7 @@ export function SahneCercevesi<D>({
       )}
       {!s.az && (
         <button type="button" className="tekrar" onClick={s.tekrar}>
-          <span aria-hidden="true">↻</span> Tekrar oynat
+          <span aria-hidden="true">↻</span> {m.tekrarOynat}
         </button>
       )}
     </div>
@@ -193,7 +200,7 @@ export function Sayac({
   baslangic = 0,
   sure = 1300,
   yuvarla = 1,
-  son = '',
+  bicim,
 }: {
   calis: boolean;
   hedef: number;
@@ -201,8 +208,14 @@ export function Sayac({
   sure?: number;
   /** Değer bu adıma yuvarlanır (bütçe kaydırıcısı binlik atlar). */
   yuvarla?: number;
-  son?: string;
+  /**
+   * Ekrana yazım. Verilmezse dilin sayı biçimi (`312`, `1,250`); para için
+   * sözlüğün `para`sı verilir. Biçim DİLDEN: sabit `tr-TR` İngilizce
+   * sayfada "48.250" yazardı ve İngilizce okuyan onu kırk sekiz sanır.
+   */
+  bicim?: (n: number) => string;
 }) {
+  const { dil } = useDil();
   const [deger, setDeger] = useState(calis ? hedef : baslangic);
   useEffect(() => {
     if (!calis) {
@@ -227,10 +240,5 @@ export function Sayac({
     };
   }, [calis, hedef, baslangic, sure]);
   const g = Math.round(deger / yuvarla) * yuvarla;
-  return (
-    <>
-      {g.toLocaleString('tr-TR')}
-      {son}
-    </>
-  );
+  return <>{bicim ? bicim(g) : g.toLocaleString(bicimKodu(dil))}</>;
 }

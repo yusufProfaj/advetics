@@ -45,6 +45,12 @@ const DISARIDA = [
    */
   'app/(site)/',
   'components/landing/',
+  // Tanıtım sitesinin METNİ 2026-10-15'te sözlüğe taşındı (iki dil); kapsam
+  // aynı kaldı: sitede "müşteri" ajansın müşterisi anlamında serbest.
+  'dil/sozlukler/site.',
+  'dil/sozlukler/site-arayuz.ts',
+  'dil/sozlukler/fiyat.ts',
+  'dil/sozlukler/simulasyon.ts',
   'ai-assistant/',
   'providers/',
   'google-check.ts',

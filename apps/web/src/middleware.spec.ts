@@ -156,3 +156,34 @@ describe('middleware — paylaşılabilir dil bağlantısı (?dil=)', () => {
     expect(kaynak).toContain(`const DILLER_EDGE: string[] = [${shared.DILLER.map((d) => `'${d}'`).join(', ')}]`);
   });
 });
+
+describe('middleware — /en öneki (Ç2)', () => {
+  it('/en/privacy Türkçe sayfaya YENİDEN YAZILIR, dil başlığı ve çerezi en', () => {
+    const res = middleware(request('/en/privacy'));
+    expect(new URL(res.headers.get('x-middleware-rewrite')!).pathname).toBe('/gizlilik');
+    expect(res.headers.get('x-middleware-request-x-advetics-onek')).toBe('en');
+    expect(res.cookies.get('adv_dil')?.value).toBe('en');
+    expect(res.headers.get('Link')).toMatch(/\/en\/privacy>; rel="alternate"; hreflang="en"/);
+  });
+
+  it('KRİTİK: istemcinin gönderdiği önek başlığı silinir (Türkçe adres İngilizce çizilmez)', () => {
+    const req = request('/gizlilik');
+    req.headers.set('x-advetics-onek', 'en');
+    const res = middleware(req);
+    expect(res.headers.get('x-middleware-request-x-advetics-onek')).toBeNull();
+    expect(res.headers.get('x-middleware-override-headers') ?? '').not.toContain('x-advetics-onek');
+  });
+
+  it('öneksiz site sayfası + en çerezi → /en karşılığına yönlenir; çerezsiz ziyaret çerez yazmaz', () => {
+    expect(redirectPath(middleware(request('/kosullar', { cookie: 'adv_dil=en' })))).toBe('/en/terms');
+    const res = middleware(request('/kosullar'));
+    expect(redirectPath(res)).toBeNull();
+    expect(res.cookies.get('adv_dil')).toBeUndefined();
+  });
+
+  it('eşlemesi olmayan /en adresi Türkçe sayfaya düşmez (404 kalır)', () => {
+    const res = middleware(request('/en/dashboard'));
+    expect(res.headers.get('x-middleware-rewrite')).toBeNull();
+    expect(redirectPath(res)).toBeNull();
+  });
+});

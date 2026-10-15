@@ -1,8 +1,13 @@
 import Link from 'next/link';
 
 import { AdveticsLogo } from '@/components/advetics-logo';
+import { DilAnahtari } from '@/components/ui/dil-secimi';
 
-import { COZUMLER, DEMO_EPOSTA, OZELLIKLER, UST_MENU, YASAL_BELGELER, cozumAdresi, ozellikAdresi } from './site-icerik';
+import { sec } from '@advetics/shared';
+import { dilAl } from '@/dil/sunucu';
+import { siteArayuzSozlugu } from '@/dil/sozlukler/site-arayuz';
+import { yerelYol } from '@/lib/site-yollari';
+import { DEMO_EPOSTA, cozumAdresi, ozellikAdresi, siteIcerigi } from './site-icerik';
 
 /**
  * Tanıtım sitesinin ve yasal sayfaların alt bilgisi.
@@ -23,7 +28,11 @@ import { COZUMLER, DEMO_EPOSTA, OZELLIKLER, UST_MENU, YASAL_BELGELER, cozumAdres
 const SUTUN_BASLIGI = 'mont text-[13px] font-bold';
 const BAG = 'text-[13.5px] text-ink-muted motion-safe:transition-colors hover:text-ink';
 
-export function SiteFooter() {
+export async function SiteFooter() {
+  const dil = await dilAl();
+  const d = sec(siteArayuzSozlugu, dil).altBilgi;
+  const g = sec(siteArayuzSozlugu, dil).ortak;
+  const { COZUMLER, OZELLIKLER, UST_MENU, YASAL_BELGELER } = siteIcerigi(dil);
   return (
     <footer className="mt-24 border-t border-line">
       {/* `.kap` dolguyu kısa yazımla veriyor ve katmansız; dikey dolgu iç kutuda, yoksa eziliyordu. */}
@@ -32,7 +41,7 @@ export function SiteFooter() {
         <div>
           <AdveticsLogo />
           <p className="soluk mt-3 max-w-[280px] text-[13.5px] leading-relaxed">
-            {'Meta, Google ve LinkedIn reklamları için tek panel. Profaj tarafından geliştirildi.'}
+            {d.tanim}
           </p>
           <a href={`mailto:${DEMO_EPOSTA}`} className={`mt-4 inline-block ${BAG}`}>
             {DEMO_EPOSTA}
@@ -40,11 +49,11 @@ export function SiteFooter() {
         </div>
 
         <div>
-          <p className={SUTUN_BASLIGI}>Ürün</p>
+          <p className={SUTUN_BASLIGI}>{d.urun}</p>
           <ul className="mt-3 space-y-1.5">
             {OZELLIKLER.map((o) => (
               <li key={o.slug}>
-                <Link href={ozellikAdresi(o.slug)} className={BAG}>
+                <Link href={ozellikAdresi(o.slug, dil)} className={BAG}>
                   {o.ad}
                 </Link>
               </li>
@@ -53,11 +62,11 @@ export function SiteFooter() {
         </div>
 
         <div>
-          <p className={SUTUN_BASLIGI}>Çözümler</p>
+          <p className={SUTUN_BASLIGI}>{d.cozumler}</p>
           <ul className="mt-3 space-y-1.5">
             {COZUMLER.map((c) => (
               <li key={c.slug}>
-                <Link href={cozumAdresi(c.slug)} className={BAG}>
+                <Link href={cozumAdresi(c.slug, dil)} className={BAG}>
                   {c.ad}
                 </Link>
               </li>
@@ -70,37 +79,37 @@ export function SiteFooter() {
           <ul className="mt-3 space-y-1.5">
             {UST_MENU.map((m) => (
               <li key={m.href}>
-                <Link href={m.href} className={BAG}>
+                <Link href={yerelYol(m.href, dil)} className={BAG}>
                   {m.etiket}
                 </Link>
               </li>
             ))}
             <li>
-              <Link href="/demo" className={BAG}>
+              <Link href={yerelYol('/demo', dil)} className={BAG}>
                 Demo
               </Link>
             </li>
             <li>
               <Link href="/login" className={BAG}>
-                Giriş Yap
+                {g.girisYap}
               </Link>
             </li>
           </ul>
         </div>
 
         <div>
-          <p className={SUTUN_BASLIGI}>Yasal</p>
+          <p className={SUTUN_BASLIGI}>{d.yasal}</p>
           <ul className="mt-3 space-y-1.5">
             {YASAL_BELGELER.map((y) => (
               <li key={y.href}>
-                <Link href={y.href} className={BAG}>
+                <Link href={yerelYol(y.href, dil)} className={BAG}>
                   {y.etiket}
                 </Link>
               </li>
             ))}
             <li>
-              <a href="/cerez-politikasi" data-cerez-ac className={BAG}>
-                Çerez tercihleri
+              <a href={yerelYol('/cerez-politikasi', dil)} data-cerez-ac className={BAG}>
+                {d.cerezTercihleri}
               </a>
             </li>
           </ul>
@@ -111,8 +120,10 @@ export function SiteFooter() {
       <div className="border-t border-line">
         <div className="kap">
           <div className="soluk flex flex-col gap-1 py-6 text-xs sm:flex-row sm:items-center sm:justify-between">
-            <p>© 2026 Advetics. Tüm hakları saklıdır.</p>
-            <p>Meta, Google Ads ve LinkedIn Ads reklam yönetim platformu</p>
+            <p>{d.haklar}</p>
+            {/* Dil anahtarı her genişlikte burada da (üst çubukta yalnız xl'de). */}
+            <DilAnahtari />
+            <p>{d.platform}</p>
           </div>
         </div>
       </div>

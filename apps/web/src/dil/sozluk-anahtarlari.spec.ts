@@ -15,7 +15,27 @@ import { describe, expect, it } from 'vitest';
  *     Aynı olması meşru olanlar (marka adı, kısaltma) `AYNI_OLABILIR`de.
  */
 const DIZIN = join(__dirname, 'sozlukler');
-const AYNI_OLABILIR = new Set<string>([]);
+/**
+ * İki dilde AYNI olması GEREKEN ya da meşru olan yapraklar (yol deseni,
+ * `<dosya>#<sabit>:<anahtar.yolu>` üzerinde). Kısa ad, bağlantı ve özellik
+ * kimliği metin değil KİMLİK: aşağıdaki ikinci test onların iki dilde
+ * EŞİT olduğunu ayrıca kilitliyor. Marka ve ürün adları çevrilmez.
+ */
+// Site sözlüğüne SINIRLI: `ozellik` adı fiyat sözlüğünde METİN taşıyor ("Özellik"
+// sütun başlığı, paketin özellik satırları) ve genel desen onları kimlik sayıyordu.
+const KIMLIK = [
+  /#siteSozlugu:.*\.slug$/,
+  /#siteSozlugu:.*\.href$/,
+  /#siteSozlugu:.*\.ozellik$/,
+  /#siteSozlugu:.*\.ozellikler\.\d+$/,
+];
+const AYNI_OLABILIR: RegExp[] = [
+  ...KIMLIK,
+  /site\.ts#siteSozlugu:ENTEGRASYON_GRUPLARI\.\d+\.ogeler\.\d+\.ad$/,
+  /site\.ts#siteSozlugu:BAGLANDIGI_YERLER\.\d+$/,
+  /site\.ts#siteSozlugu:YAKINDA_ENTEGRASYONLAR\.\d+$/,
+  /site\.ts#siteSozlugu:OZELLIKLER\.\d+\.panelAdi$/,
+];
 
 type Agac = Record<string, unknown>;
 
@@ -68,7 +88,11 @@ describe('sözlükler: her anahtar iki dilde, dolu ve çevrilmiş', () => {
         const tv = deger(t.get(k));
         if (typeof ev !== 'string' || ev.trim() === '') hatalar.push(`${ad}: "${k}" İngilizcesi BOŞ`);
         if (typeof tv !== 'string' || tv.trim() === '') hatalar.push(`${ad}: "${k}" Türkçesi BOŞ`);
-        if (ev === tv && !AYNI_OLABILIR.has(`${ad}:${k}`)) hatalar.push(`${ad}: "${k}" ÇEVRİLMEMİŞ ("${ev}")`);
+        const yol = `${ad}:${k}`;
+        const ayniOlabilir = AYNI_OLABILIR.some((d) => d.test(yol));
+        if (ev === tv && !ayniOlabilir) hatalar.push(`${ad}: "${k}" ÇEVRİLMEMİŞ ("${ev}")`);
+        // Kimlik iki dilde FARKLIYSA bağlantı kırılır (İngilizce kart başka özelliğe gider).
+        if (KIMLIK.some((d) => d.test(yol)) && ev !== tv) hatalar.push(`${ad}: "${k}" KİMLİK iki dilde farklı ("${tv}" / "${ev}")`);
       }
     }
     expect(hatalar).toEqual([]);

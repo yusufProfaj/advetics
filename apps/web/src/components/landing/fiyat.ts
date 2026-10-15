@@ -1,3 +1,5 @@
+import { sec, type Dil } from '@advetics/shared';
+import { fiyatSozlugu } from '@/dil/sozlukler/fiyat';
 import { talepAdresi } from './iletisim';
 
 /**
@@ -64,62 +66,41 @@ export interface Paket {
   yok: string[];
 }
 
-export const PAKETLER: Paket[] = [
-  {
-    kod: 'kucuk-isletme',
-    ad: 'Küçük İşletme',
-    kim: 'Kendi reklamını yöneten tek işletme.',
-    aylikSent: 4_900,
-    eylem: 'deneme',
-    sinir: { workspace: 1, reklamHesabi: 2, kullanici: 2 },
-    ozellikler: [
-      'Tek panel: Meta, Google, LinkedIn',
-      'AdvCampaign ile reklam kurma',
-      `Akıllı Boost (ayda ${AKILLI_BOOST_AYLIK_ONERI} öneri)`,
-      'Aylık PDF rapor',
-      'Ölçüm kurulum sihirbazı',
-    ],
-    yok: ['Kurallar ile otomatik iyileştirme', 'Beyaz etiketli rapor'],
-  },
-  {
-    kod: 'sirket',
-    ad: 'Şirket',
-    kim: 'Birden çok projesi ve pazarlama ekibi olan şirket.',
-    aylikSent: 14_900,
-    one: true,
-    eylem: 'deneme',
-    sinir: { workspace: 5, reklamHesabi: 10, kullanici: 10 },
-    ozellikler: [
-      "Küçük İşletme'nin tamamı",
-      'AdvStrategy strateji raporu ve onay',
-      'Kurallar ile otomatik iyileştirme',
-      'Sınırsız Akıllı Boost',
-      'Planlı rapor + fatura maili',
-      'Yapay zekâ asistanı',
-    ],
-    yok: ['Beyaz etiketli rapor'],
-  },
+/**
+ * PAKETLER: rakam ve sınır BURADA, metin sözlükte (`dil/sozlukler/fiyat.ts`,
+ * iki dil). `PAKETLER` Türkçe metinli liste (testler ve eski çağıranlar);
+ * ekran `paketler(dil)` okur.
+ */
+const PAKET_RAKAMLARI: Omit<Paket, 'ad' | 'kim' | 'ozellikler' | 'yok'>[] = [
+  { kod: 'kucuk-isletme', aylikSent: 4_900, eylem: 'deneme', sinir: { workspace: 1, reklamHesabi: 2, kullanici: 2 } },
+  { kod: 'sirket', aylikSent: 14_900, one: true, eylem: 'deneme', sinir: { workspace: 5, reklamHesabi: 10, kullanici: 10 } },
   {
     kod: 'ajans',
-    ad: 'Ajans',
-    kim: "Müşterilerini Advetics'ten yöneten ajans.",
     aylikSent: AJANS.tabanSent,
     eylem: 'teklif',
     sinir: { workspace: AJANS.dahilWorkspace, reklamHesabi: null, kullanici: null },
-    ozellikler: [
-      'Şirket paketinin tamamı',
-      'Müşteri başına workspace',
-      'Beyaz etiketli rapor ve mail',
-      'Müşteriye salt okunur panel',
-      'Ajans havuzu: hesap atama',
-      'Öncelikli destek',
-    ],
-    yok: [],
   },
 ];
 
-export function paketBul(kod: PaketKodu): Paket {
-  const p = PAKETLER.find((x) => x.kod === kod);
+export function paketler(dil: Dil = 'tr'): Paket[] {
+  const d = sec(fiyatSozlugu, dil);
+  return PAKET_RAKAMLARI.map((r) => {
+    const m = d.paket[r.kod];
+    return {
+      ...r,
+      ad: m.ad,
+      kim: m.kim,
+      // `{n}` yalnız Akıllı Boost satırında: aylık öneri sayısı rakamın evinden.
+      ozellikler: m.ozellikler.map((o) => o.replace('{n}', String(AKILLI_BOOST_AYLIK_ONERI))),
+      yok: 'yok' in m ? [...m.yok] : [],
+    };
+  });
+}
+
+export const PAKETLER: Paket[] = paketler('tr');
+
+export function paketBul(kod: PaketKodu, dil: Dil = 'tr'): Paket {
+  const p = paketler(dil).find((x) => x.kod === kod);
   if (!p) throw new Error(`Bilinmeyen paket: ${kod}`);
   return p;
 }
@@ -185,83 +166,63 @@ export function usd(sent: number): string {
 }
 
 /** Kartın altındaki sınır satırı. Rakamlar paketin kendi sınırından. */
-export function sinirMetni(p: Paket): string {
-  if (p.kod === 'ajans') return `Taban ${p.sinir.workspace} workspace · sınırsız kullanıcı`;
-  const parca = (n: number | null, ad: string) => (n === null ? `sınırsız ${ad}` : `${n} ${ad}`);
+export function sinirMetni(p: Paket, dil: Dil = 'tr'): string {
+  const d = sec(fiyatSozlugu, dil);
+  if (p.kod === 'ajans') return d.ajansSiniri(p.sinir.workspace);
+  const parca = (n: number | null, ad: string) => (n === null ? d.sinirsiz(ad) : `${n} ${ad}`);
   return [
-    parca(p.sinir.workspace, 'workspace'),
-    parca(p.sinir.reklamHesabi, 'reklam hesabı'),
-    parca(p.sinir.kullanici, 'kullanıcı'),
+    parca(p.sinir.workspace, d.birimWorkspace),
+    parca(p.sinir.reklamHesabi, d.birimReklamHesabi),
+    parca(p.sinir.kullanici, d.birimKullanici),
   ].join(' · ');
 }
 
-/** Ajans kırılımının açıklama satırı: "Ek workspace (11-50: $19, 51+: $12)". */
-export function ajansKademeMetni(donem: Donem): string {
+export function ajansKademeMetni(donem: Donem, dil: Dil = 'tr'): string {
   const ilk = AJANS.dahilWorkspace + 1;
-  return (
-    `Ek workspace (${ilk}-${AJANS.kademeUst}: ${usd(donemFiyatiSent(AJANS.kademeBirSent, donem))}, ` +
-    `${AJANS.kademeUst + 1}+: ${usd(donemFiyatiSent(AJANS.kademeIkiSent, donem))})`
+  return sec(fiyatSozlugu, dil).ekWorkspace(
+    `${ilk}-${AJANS.kademeUst}`,
+    usd(donemFiyatiSent(AJANS.kademeBirSent, donem)),
+    `${AJANS.kademeUst + 1}+`,
+    usd(donemFiyatiSent(AJANS.kademeIkiSent, donem)),
   );
 }
 
-export function eylemMetni(p: Paket): string {
-  return p.eylem === 'teklif' ? 'Teklif al' : `${DENEME_GUN} gün ücretsiz dene`;
+export function eylemMetni(p: Paket, dil: Dil = 'tr'): string {
+  const d = sec(fiyatSozlugu, dil);
+  return p.eylem === 'teklif' ? d.teklifAl : d.ucretsizDene(DENEME_GUN);
 }
 
-/**
- * Paket düğmesinin e-posta adresi. Konuda paketin adı; ajansta seçilen
- * workspace sayısı ve dönem gövdede (bkz. `iletisim.ts`).
- */
-export function paketTalepAdresi(p: Paket, secim: { donem: Donem; workspace?: number }): string {
-  const donemAdi = secim.donem === 'yil' ? 'Yıllık' : 'Aylık';
+export function paketTalepAdresi(p: Paket, secim: { donem: Donem; workspace?: number }, dil: Dil = 'tr'): string {
+  const d = sec(fiyatSozlugu, dil);
+  const donemAdi = secim.donem === 'yil' ? d.donemYillik : d.donemAylik;
   if (p.eylem === 'teklif') {
     const ws = secim.workspace ?? AJANS.dahilWorkspace;
-    return talepAdresi(
-      `Advetics ${p.ad} paketi teklif talebi`,
-      'Merhaba,\n\n' +
-        `Advetics ${p.ad} paketi için teklif istiyoruz.\n\n` +
-        `Yaklaşık workspace (müşteri) sayısı: ${ws}\n` +
-        `Ödeme dönemi: ${donemAdi}\n` +
-        'Ajans adı:\n' +
-        'Reklam verdiğimiz yerler (Meta, Google, LinkedIn):\n',
-    );
+    return talepAdresi(d.teklifKonu(p.ad), d.teklifGovde(p.ad, ws, donemAdi));
   }
-  return talepAdresi(
-    `Advetics ${p.ad} paketi ${DENEME_GUN} günlük ücretsiz deneme`,
-    'Merhaba,\n\n' +
-      `Advetics ${p.ad} paketini ${DENEME_GUN} gün ücretsiz denemek istiyorum.\n\n` +
-      `Ödeme dönemi: ${donemAdi}\n` +
-      'Şirket adı:\n' +
-      'Reklam verdiğimiz yerler (Meta, Google, LinkedIn):\n',
-  );
+  return talepAdresi(d.denemeKonu(p.ad, DENEME_GUN), d.denemeGovde(p.ad, DENEME_GUN, donemAdi));
 }
 
-/**
- * Karşılaştırma tablosu. Sınır satırları paketlerin KENDİ sınırından
- * türüyor; özellik satırları paket listesiyle aynı sırayla (Küçük İşletme,
- * Şirket, Ajans). `true` = var, `false` = yok, dize = ayrıntı.
- */
 export type Hucre = boolean | string;
 
-export function karsilastirmaSatirlari(): { ad: string; degerler: Hucre[] }[] {
-  const sinirHucresi = (n: number | null) => (n === null ? 'Sınırsız' : String(n));
+export function karsilastirmaSatirlari(dil: Dil = 'tr'): { ad: string; degerler: Hucre[] }[] {
+  const t = sec(fiyatSozlugu, dil).tablo;
+  const liste = paketler(dil);
+  const sinirHucresi = (n: number | null) => (n === null ? t.sinirsizHucre : String(n));
   return [
     {
       ad: 'Workspace',
-      degerler: PAKETLER.map((p) =>
-        p.kod === 'ajans' ? `${p.sinir.workspace} + ek` : sinirHucresi(p.sinir.workspace),
-      ),
+      degerler: liste.map((p) => (p.kod === 'ajans' ? t.ek(p.sinir.workspace) : sinirHucresi(p.sinir.workspace))),
     },
-    { ad: 'Reklam hesabı', degerler: PAKETLER.map((p) => sinirHucresi(p.sinir.reklamHesabi)) },
-    { ad: 'Kullanıcı', degerler: PAKETLER.map((p) => sinirHucresi(p.sinir.kullanici)) },
-    { ad: 'Tek panel (Meta, Google, LinkedIn)', degerler: [true, true, true] },
-    { ad: 'AdvCampaign reklam kurma', degerler: [true, true, true] },
-    { ad: 'Akıllı Boost', degerler: [`Ayda ${AKILLI_BOOST_AYLIK_ONERI}`, 'Sınırsız', 'Sınırsız'] },
+    { ad: t.reklamHesabi, degerler: liste.map((p) => sinirHucresi(p.sinir.reklamHesabi)) },
+    { ad: t.kullanici, degerler: liste.map((p) => sinirHucresi(p.sinir.kullanici)) },
+    { ad: t.tekPanel, degerler: [true, true, true] },
+    { ad: t.advCampaign, degerler: [true, true, true] },
+    { ad: t.akilliBoost, degerler: [t.ayda(AKILLI_BOOST_AYLIK_ONERI), t.sinirsizHucre, t.sinirsizHucre] },
     { ad: 'AdvStrategy', degerler: [false, true, true] },
-    { ad: 'Kurallar', degerler: [false, true, true] },
-    { ad: 'Planlı rapor maili', degerler: [false, true, true] },
-    { ad: 'Yapay zekâ asistanı', degerler: [false, true, true] },
-    { ad: 'Beyaz etiket', degerler: [false, false, true] },
-    { ad: 'Müşteriye salt okunur panel', degerler: [false, false, true] },
+    { ad: t.kurallar, degerler: [false, true, true] },
+    { ad: t.planliRapor, degerler: [false, true, true] },
+    { ad: t.asistan, degerler: [false, true, true] },
+    { ad: t.beyazEtiket, degerler: [false, false, true] },
+    { ad: t.saltOkunur, degerler: [false, false, true] },
   ];
 }

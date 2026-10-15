@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from 'react';
 
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { siteArayuzSozlugu } from '@/dil/sozlukler/site-arayuz';
+import { yerelYol } from '@/lib/site-yollari';
 import { CEREZ_ANAHTARI, CEREZ_SURUMU, bildirimGorunsunMu } from './cerez';
 
 /**
@@ -28,6 +31,8 @@ import { CEREZ_ANAHTARI, CEREZ_SURUMU, bildirimGorunsunMu } from './cerez';
  */
 export function CerezBildirimi() {
   const [gor, setGor] = useState(false);
+  const { dil } = useDil();
+  const d = useSozluk(siteArayuzSozlugu).cerez;
 
   useEffect(() => {
     let kayit: string | null = null;
@@ -71,29 +76,30 @@ export function CerezBildirimi() {
       inert={!gor}
     >
       <h2 id="cerez-baslik" className="cerez-baslik">
-        Çerezler
+        {d.baslik}
       </h2>
       <p>
-        Yalnız oturumunuz için zorunlu çerez kullanıyoruz. İzleme ya da reklam çerezi yok.{' '}
-        <a href="/cerez-politikasi">Çerez Politikası</a>
+        {d.metin} <a href={yerelYol('/cerez-politikasi', dil)}>{d.politika}</a>
       </p>
       <div className="cerez-secenekler">
         <label>
           <span>
-            Zorunlu<small>Giriş ve oturum. Kapatılamaz.</small>
+            {d.zorunlu}
+            <small>{d.zorunluAlt}</small>
           </span>
           <input type="checkbox" className="anahtar" checked disabled readOnly />
         </label>
         <label>
           <span>
-            Analitik<small>Şu an kullanılmıyor.</small>
+            {d.analitik}
+            <small>{d.analitikAlt}</small>
           </span>
           <input type="checkbox" className="anahtar" checked={false} disabled readOnly />
         </label>
       </div>
       <div className="cerez-dugmeler">
         <button type="button" className="dg i" onClick={kapat}>
-          Anladım
+          {d.anladim}
         </button>
       </div>
     </div>

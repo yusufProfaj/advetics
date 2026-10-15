@@ -9,11 +9,15 @@ import { Alan } from '@/components/auth/alan';
 import { Dugme, dugmeSinifi } from '@/components/ui/dugme';
 import { Serit } from '@/components/ui/hal';
 import { KART_BAGLANTISI } from '@/components/ui/kart';
+import { useSozluk } from '@/dil/saglayici';
+import { girisSozlugu } from '@/dil/sozlukler/giris';
 
 export function SifreSifirlaFormu() {
   const router = useRouter();
   const token = useSearchParams()?.get('token') ?? '';
 
+  const g = useSozluk(girisSozlugu);
+  const d = g.sifirla;
   const [sifre, setSifre] = useState('');
   const [tekrar, setTekrar] = useState('');
   const [hata, setHata] = useState<string | null>(null);
@@ -32,14 +36,13 @@ export function SifreSifirlaFormu() {
     return (
       <div className="grid gap-3">
         <p className="m-0 text-14 leading-relaxed text-ink">
-          Bu sayfaya sıfırlama bağlantısıyla gelinmesi gerekiyor; adreste bir token yok.
+          {d.tokenYok}
         </p>
         <p className="m-0 text-14 text-ink-muted">
-          Bağlantıyı mailden kopyaladıysan tamamını yapıştırdığından emin ol; bazı mail
-          istemcileri uzun adresleri satır sonunda kırıyor.
+          {d.kopyala}
         </p>
         <Link href="/sifremi-unuttum" className={KART_BAGLANTISI}>
-          Yeni bir sıfırlama bağlantısı iste
+          {d.yeniIste}
         </Link>
       </div>
     );
@@ -49,11 +52,12 @@ export function SifreSifirlaFormu() {
     return (
       <div className="grid gap-3">
         <p className="m-0 text-14 leading-relaxed text-ink">
-          Şifren değiştirildi. Güvenlik için <strong>tüm oturumların kapatıldı</strong>; yeni
-          şifrenle tekrar giriş yapman gerekiyor.
+          {d.bittiOnce}
+          <strong>{d.bittiVurgu}</strong>
+          {d.bittiSonra}
         </p>
         <Link href="/login" className={`${dugmeSinifi('birincil')} w-full`}>
-          Giriş yap
+          {d.girisYap}
         </Link>
       </div>
     );
@@ -66,11 +70,13 @@ export function SifreSifirlaFormu() {
 
     const parsed = passwordSchema.safeParse(sifre);
     if (!parsed.success) {
-      setAlanHatalari({ sifre: parsed.error.issues[0]?.message ?? 'Geçersiz şifre' });
+      // Şemanın mesajı sabit Türkçe (shared, D4'te dile geçecek); ekranda kuralın
+      // tamamı dilin cümlesiyle yazılıyor, ipucu da aynı cümle.
+      setAlanHatalari({ sifre: d.kural });
       return;
     }
     if (sifre !== tekrar) {
-      setAlanHatalari({ tekrar: 'Şifreler eşleşmiyor' });
+      setAlanHatalari({ tekrar: d.eslesmiyor });
       return;
     }
 
@@ -85,7 +91,7 @@ export function SifreSifirlaFormu() {
       router.refresh();
     } catch (err) {
       setHata(
-        err instanceof ApiRequestError ? err.message : 'Bağlantı kurulamadı. API çalışıyor mu?',
+        err instanceof ApiRequestError ? err.message : g.baglantiYok,
       );
     } finally {
       setPending(false);
@@ -98,19 +104,19 @@ export function SifreSifirlaFormu() {
 
       <Alan
         id="sifre"
-        label="Yeni şifre"
+        label={d.yeniSifre}
         type="password"
         autoComplete="new-password"
         value={sifre}
         onChange={setSifre}
         error={alanHatalari.sifre}
         disabled={pending}
-        ipucu="En az 12 karakter, en az bir harf ve bir rakam."
+        ipucu={d.kural}
       />
 
       <Alan
         id="tekrar"
-        label="Yeni şifre (tekrar)"
+        label={d.tekrar}
         type="password"
         autoComplete="new-password"
         value={tekrar}
@@ -120,7 +126,7 @@ export function SifreSifirlaFormu() {
       />
 
       <Dugme type="submit" className="w-full" bekliyor={pending}>
-        {pending ? 'Kaydediliyor…' : 'Şifreyi değiştir'}
+        {pending ? d.kaydediliyor : d.degistir}
       </Dugme>
     </form>
   );

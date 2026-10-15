@@ -1,3 +1,6 @@
+import { DILLER, sec, type Dil } from '@advetics/shared';
+
+import { simulasyonSozlugu, type SimulasyonMetni } from '@/dil/sozlukler/simulasyon';
 import type { Sahne } from './motor';
 
 /**
@@ -8,9 +11,18 @@ import type { Sahne } from './motor';
  * düz veri: `simulasyon.spec.ts` her sahneyi `zamanCizelgesi` ile çalıştırıp
  * son hâlini sınıyor.
  *
- * SAHNE İÇİNDEKİ RAKAMLAR VE ADLAR ÖRNEKTİR ("Ege Yapı", "48.250 ₺").
+ * SAHNE İÇİNDEKİ RAKAMLAR VE ADLAR ÖRNEKTİR (Ege Yapı, 48.250 TL).
  * Sayfada "Ekrandaki rakamlar örnektir." notu duruyor; gerçek bir müşteri
  * verisi gibi okunmamalı (`site-icerik.ts`, yazım kuralları).
+ *
+ * İKİ DİL: yazılan metin (bütçe, bölge, eşik, asistan cevabı) ve düğme
+ * etiketleri DURUMUN içinde, yani sahne dile göre ayrı kuruluyor
+ * (`sahneKur`). İki dilin sahnesi BİR KEZ, modül yüklenirken kuruluyor
+ * (`SAHNELER`): oynatıcı kareleri sahnenin KİMLİĞİNE göre önbelleğe alıyor
+ * (`useMemo([sahne])`) ve her çizimde yeni nesne vermek her çizimde
+ * zaman çizelgesini yeniden kurup oynatmayı baştan başlatırdı. Adım listesi
+ * ve süreler dilden BAĞIMSIZ; `simulasyon.spec.ts` iki dilin aynı adım
+ * sayısını taşıdığını kilitliyor.
  */
 
 export interface HeroDurumu {
@@ -21,7 +33,7 @@ export interface HeroDurumu {
   bildirim: boolean;
 }
 
-export const HERO: Sahne<HeroDurumu> = {
+const HERO: Sahne<HeroDurumu> = {
   ilk: { sayac: false, cubuk: false, oneri: false, onaylandi: false, bildirim: false },
   adimlar: [
     { degis: { sayac: true, cubuk: true } },
@@ -32,22 +44,27 @@ export const HERO: Sahne<HeroDurumu> = {
   ],
 };
 
-export type TabloSekmesi = 'Tümü' | 'Meta' | 'Google' | 'LinkedIn';
-export const TABLO_SEKMELERI: TabloSekmesi[] = ['Tümü', 'Meta', 'Google', 'LinkedIn'];
+/**
+ * Sekme KİMLİK, etiket değil: imleç hedefi ve süzgeç kimlikle çalışıyor,
+ * ekrandaki "Tümü"/"All" bileşende sözlükten. Etiketi kimlik yapmak
+ * İngilizcede süzgeci kırardı (satırın platformu "All" olamaz).
+ */
+export type TabloSekmesi = 'tumu' | 'Meta' | 'Google' | 'LinkedIn';
+export const TABLO_SEKMELERI: TabloSekmesi[] = ['tumu', 'Meta', 'Google', 'LinkedIn'];
 
 export interface TabloDurumu {
   sekme: TabloSekmesi;
 }
 
-export const TABLO: Sahne<TabloDurumu> = {
-  ilk: { sekme: 'Tümü' },
+const TABLO: Sahne<TabloDurumu> = {
+  ilk: { sekme: 'tumu' },
   adimlar: [
     { bekle: 1600, fare: 'Meta' },
     { degis: { sekme: 'Meta' } },
     { bekle: 1800, fare: 'Google' },
     { degis: { sekme: 'Google' } },
-    { bekle: 1800, fare: 'Tümü' },
-    { degis: { sekme: 'Tümü' } },
+    { bekle: 1800, fare: 'tumu' },
+    { degis: { sekme: 'tumu' } },
   ],
 };
 
@@ -57,31 +74,32 @@ export interface KurmaDurumu {
   bolge: string;
   hazir: boolean;
   dugme: string;
-  durum: 'Taslak' | 'Önizleme' | 'Kuruldu';
+  /** Sözlükteki taslak / önizleme / kuruldu etiketi. */
+  durum: string;
   telefon: boolean;
   bildirim: boolean;
 }
 
-export const KURMA: Sahne<KurmaDurumu> = {
+const kurma = (m: SimulasyonMetni): Sahne<KurmaDurumu> => ({
   ilk: {
     amac: false,
     butce: '',
     bolge: '',
     hazir: false,
-    dugme: 'Önizlemeyi hazırla',
-    durum: 'Taslak',
+    dugme: m.kurma.dugmeHazirla,
+    durum: m.kurma.durumTaslak,
     telefon: false,
     bildirim: false,
   },
   adimlar: [
     { fare: 'amac', degis: { amac: true } },
-    { bekle: 300, fare: 'butce', yaz: { alan: 'butce', metin: '300 ₺' } },
-    { fare: 'bolge', yaz: { alan: 'bolge', metin: 'İzmir, 30 km' }, degis: { hazir: true } },
-    { bekle: 300, fare: 'kur', degis: { dugme: 'Hazırlanıyor…' } },
-    { bekle: 900, degis: { telefon: true, dugme: 'Kur', durum: 'Önizleme' } },
-    { bekle: 1300, fare: 'kur', degis: { durum: 'Kuruldu', bildirim: true } },
+    { bekle: 300, fare: 'butce', yaz: { alan: 'butce', metin: m.para(300) } },
+    { fare: 'bolge', yaz: { alan: 'bolge', metin: m.ornek.bolge }, degis: { hazir: true } },
+    { bekle: 300, fare: 'kur', degis: { dugme: m.kurma.dugmeHazirlaniyor } },
+    { bekle: 900, degis: { telefon: true, dugme: m.kurma.dugmeKur, durum: m.kurma.durumOnizleme } },
+    { bekle: 1300, fare: 'kur', degis: { durum: m.kurma.durumKuruldu, bildirim: true } },
   ],
-};
+});
 
 export interface PlanDurumu {
   kaydir: boolean;
@@ -94,7 +112,7 @@ export interface PlanDurumu {
 /** Plan sahnesinde bütçe kaydırıcısı (₺): başlangıç, varılan değer, adım ve kaydırıcının üst ucu. */
 export const PLAN_BUTCE = { baslangic: 20_000, hedef: 60_000, adim: 1_000, ust: 100_000 } as const;
 
-export const PLAN: Sahne<PlanDurumu> = {
+const PLAN: Sahne<PlanDurumu> = {
   ilk: { kaydir: false, adim: 1, dagilim: false, gonderildi: false, bildirim: false },
   adimlar: [
     { fare: 'kaydir', tikla: false, degis: { kaydir: true } },
@@ -114,16 +132,16 @@ export interface BoostDurumu {
   yayinda: boolean;
 }
 
-export const BOOST: Sahne<BoostDurumu> = {
-  ilk: { gonderi: false, bildirim: false, kart: false, dugme: 'Öne çıkar', yayinda: false },
+const boost = (m: SimulasyonMetni): Sahne<BoostDurumu> => ({
+  ilk: { gonderi: false, bildirim: false, kart: false, dugme: m.boost.dugme, yayinda: false },
   adimlar: [
     { bekle: 300, degis: { gonderi: true } },
     { bekle: 700, degis: { bildirim: true } },
     { bekle: 1300, degis: { bildirim: false, kart: true } },
-    { bekle: 1200, fare: 'boost', degis: { dugme: 'Kuruluyor…' } },
-    { bekle: 900, degis: { dugme: 'Öne çıkarıldı ✓', yayinda: true } },
+    { bekle: 1200, fare: 'boost', degis: { dugme: m.boost.dugmeKuruluyor } },
+    { bekle: 900, degis: { dugme: m.boost.dugmeBitti, yayinda: true } },
   ],
-};
+});
 
 export interface KuralDurumu {
   kosul: boolean;
@@ -136,27 +154,27 @@ export interface KuralDurumu {
   bildirim: boolean;
 }
 
-export const KURAL: Sahne<KuralDurumu> = {
+const kural = (m: SimulasyonMetni): Sahne<KuralDurumu> => ({
   ilk: {
     kosul: false,
     karsilastirma: false,
     esik: '',
     eylem: false,
     acik: false,
-    cpa: '231 ₺',
+    cpa: m.para(231),
     durduruldu: false,
     bildirim: false,
   },
   adimlar: [
     { fare: 'kosul', degis: { kosul: true } },
     { fare: 'karsilastirma', degis: { karsilastirma: true } },
-    { fare: 'esik', yaz: { alan: 'esik', metin: '250 ₺' } },
+    { fare: 'esik', yaz: { alan: 'esik', metin: m.para(250) } },
     { fare: 'eylem', degis: { eylem: true } },
     { fare: 'kaydet', degis: { acik: true } },
-    { bekle: 1100, degis: { cpa: '268 ₺' } },
+    { bekle: 1100, degis: { cpa: m.para(268) } },
     { bekle: 800, degis: { durduruldu: true, bildirim: true } },
   ],
-};
+});
 
 export interface RaporDurumu {
   /** PDF'te görünen satır sayısı (0..5). */
@@ -167,7 +185,7 @@ export interface RaporDurumu {
 
 export const RAPOR_SATIRI = 5;
 
-export const RAPOR: Sahne<RaporDurumu> = {
+const RAPOR: Sahne<RaporDurumu> = {
   ilk: { satir: 0, mail: false, bildirim: false },
   adimlar: [
     ...Array.from({ length: RAPOR_SATIRI }, (_, i) => ({ bekle: i === 0 ? 0 : 420, degis: { satir: i + 1 } })),
@@ -176,18 +194,14 @@ export const RAPOR: Sahne<RaporDurumu> = {
   ],
 };
 
-export const OLCUM_LISTESI: string[] = [
-  'Meta reklam hesabı atandı',
-  'Google Ads hesabı atandı',
-  'Facebook sayfası ve Instagram',
-  'Marka bilgileri',
-  'Rapor alıcıları',
-  'Özel reklam kategorisi',
-  'Meta Pixel',
-  'Tag Manager konteyneri',
-  'GA4 mülkü',
-  'Google Ads dönüşümü',
-];
+/**
+ * Kurulum listesi. "Meta Pixel" iki dilde aynı ürün adı: sözlük yaprağı
+ * olsa sözlük bekçisi onu "çevrilmemiş" sayardı, o yüzden burada sabit.
+ */
+export function olcumListesi(m: SimulasyonMetni): string[] {
+  const o = m.olcum;
+  return [o.metaHesap, o.googleHesap, o.sayfa, o.marka, o.alicilar, o.kategori, 'Meta Pixel', o.tagManager, o.ga4, o.googleDonusum];
+}
 /** Sahne başında tamamlanmış adım sayısı. */
 export const OLCUM_BASLANGIC = 6;
 
@@ -198,22 +212,22 @@ export interface OlcumDurumu {
   dugme: string;
 }
 
-export const OLCUM: Sahne<OlcumDurumu> = {
-  ilk: { tamam: OLCUM_BASLANGIC, calisan: null, dugme: 'Eksikleri tamamla' },
+const olcum = (m: SimulasyonMetni): Sahne<OlcumDurumu> => ({
+  ilk: { tamam: OLCUM_BASLANGIC, calisan: null, dugme: m.olcum.dugme },
   adimlar: [
-    { bekle: 600, fare: 'tamamla', degis: { dugme: 'Kuruluyor…', calisan: OLCUM_BASLANGIC } },
-    ...OLCUM_LISTESI.slice(OLCUM_BASLANGIC).map((_, i, eksik) => {
+    { bekle: 600, fare: 'tamamla', degis: { dugme: m.olcum.dugmeKuruluyor, calisan: OLCUM_BASLANGIC } },
+    ...olcumListesi(m).slice(OLCUM_BASLANGIC).map((_, i, eksik) => {
       const sira = OLCUM_BASLANGIC + i;
       const sonuncu = i === eksik.length - 1;
       return {
         bekle: 800,
         degis: sonuncu
-          ? { tamam: sira + 1, calisan: null, dugme: 'Hepsi tamam ✓' }
+          ? { tamam: sira + 1, calisan: null, dugme: m.olcum.dugmeBitti }
           : { tamam: sira + 1, calisan: sira + 1 },
       };
     }),
   ],
-};
+});
 
 export interface AsistanDurumu {
   soru: boolean;
@@ -223,15 +237,34 @@ export interface AsistanDurumu {
   oneriler: boolean;
 }
 
-export const ASISTAN_CEVABI =
-  "Artışın tamamı tek reklam setinden geliyor. Manisa · geniş setinde form başı 154 ₺'den 268 ₺'ye çıktı; diğerleri düştü.";
-
-export const ASISTAN: Sahne<AsistanDurumu> = {
+const asistan = (m: SimulasyonMetni): Sahne<AsistanDurumu> => ({
   ilk: { soru: false, cevapKutusu: false, cevap: '', rakamlar: false, oneriler: false },
   adimlar: [
     { bekle: 300, degis: { soru: true } },
     { bekle: 900, degis: { cevapKutusu: true } },
-    { yaz: { alan: 'cevap', metin: ASISTAN_CEVABI, hiz: 18 }, degis: { rakamlar: true } },
+    { yaz: { alan: 'cevap', metin: m.asistan.cevap, hiz: 18 }, degis: { rakamlar: true } },
     { bekle: 900, degis: { oneriler: true } },
   ],
-};
+});
+
+/** Bir dilin bütün sahneleri. Metin taşımayan sahneler iki dilde AYNI nesne. */
+export function sahneKur(m: SimulasyonMetni) {
+  return {
+    HERO,
+    TABLO,
+    KURMA: kurma(m),
+    PLAN,
+    BOOST: boost(m),
+    KURAL: kural(m),
+    RAPOR,
+    OLCUM: olcum(m),
+    ASISTAN: asistan(m),
+  };
+}
+
+export type DilinSahneleri = ReturnType<typeof sahneKur>;
+
+/** İki dilin sahneleri, modül yüklenirken BİR KEZ (kimlik kararlı; yukarıya bkz.). */
+export const SAHNELER = Object.fromEntries(
+  DILLER.map((dil) => [dil, sahneKur(sec(simulasyonSozlugu, dil))]),
+) as Record<Dil, DilinSahneleri>;

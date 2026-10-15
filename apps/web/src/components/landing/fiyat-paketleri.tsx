@@ -2,12 +2,15 @@
 
 import { useState } from 'react';
 
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { fiyatSozlugu } from '@/dil/sozlukler/fiyat';
+
 import {
   AJANS,
-  PAKETLER,
   YILLIK_INDIRIM_YUZDE,
   ajansKademeMetni,
   ajansKirilimi,
+  paketler,
   donemFiyatiSent,
   eylemMetni,
   paketTalepAdresi,
@@ -31,40 +34,42 @@ export function FiyatPaketleri() {
   const [donem, setDonem] = useState<Donem>('ay');
   const [workspace, setWorkspace] = useState<number>(AJANS.dahilWorkspace);
   const kirilim = ajansKirilimi(workspace, donem);
+  const { dil } = useDil();
+  const k = useSozluk(fiyatSozlugu).kart;
 
   return (
     <>
       <div className="ortali">
         {/* İki düğmeli anahtar: `aria-pressed` hangisinin seçili olduğunu ekran okuyucuya da söylüyor. */}
-        <div className="donem" role="group" aria-label="Ödeme dönemi">
+        <div className="donem" role="group" aria-label={k.odemeDonemi}>
           <button type="button" aria-pressed={donem === 'ay'} onClick={() => setDonem('ay')}>
-            Aylık
+            {k.aylik}
           </button>
           <button type="button" aria-pressed={donem === 'yil'} onClick={() => setDonem('yil')}>
-            Yıllık <small>−%{YILLIK_INDIRIM_YUZDE}</small>
+            {k.yillik} <small>−%{YILLIK_INDIRIM_YUZDE}</small>
           </button>
         </div>
       </div>
       <div className="paketler">
-        {PAKETLER.map((p) => {
+        {paketler(dil).map((p) => {
           const ajans = p.kod === 'ajans';
           const fiyat = ajans ? kirilim.toplamSent : donemFiyatiSent(p.aylikSent, donem);
           return (
             <div key={p.kod} className={`paket${p.one ? ' one' : ''}`}>
-              {p.one && <span className="rozet k one-rozet">En çok seçilen</span>}
+              {p.one && <span className="rozet k one-rozet">{k.enCok}</span>}
               <h3>{p.ad}</h3>
               <p className="kim">{p.kim}</p>
               <div className="fiyat">
                 {/* Canlı bölge: kaydırıcı ya da dönem değişince yeni fiyat okunuyor. */}
                 <b aria-live="polite">{usd(fiyat)}</b>
-                <span>{ajans ? "/ ay'dan" : '/ ay'}</span>
+                <span>{ajans ? k.aydan : k.ay}</span>
               </div>
-              <div className="vergi">{donem === 'yil' ? 'Yıllık faturalanır · KDV hariç' : 'KDV hariç'}</div>
-              <div className="sinir">{sinirMetni(p)}</div>
+              <div className="vergi">{donem === 'yil' ? k.yillikFatura : k.kdvHaric}</div>
+              <div className="sinir">{sinirMetni(p, dil)}</div>
               {ajans && (
                 <div className="hesap">
                   <label htmlFor="ajans-workspace">
-                    {"Müşteri workspace'i"} <span>{workspace}</span>
+                    {k.musteriWorkspace} <span>{workspace}</span>
                   </label>
                   <input
                     id="ajans-workspace"
@@ -76,11 +81,11 @@ export function FiyatPaketleri() {
                   />
                   <div className="kirilim">
                     <div>
-                      <span>Taban ({AJANS.dahilWorkspace} dahil)</span>
+                      <span>{k.taban(AJANS.dahilWorkspace)}</span>
                       <span>{usd(kirilim.tabanSent)}</span>
                     </div>
                     <div>
-                      <span>{ajansKademeMetni(donem)}</span>
+                      <span>{ajansKademeMetni(donem, dil)}</span>
                       <span>{usd(kirilim.kademeBir.tutarSent + kirilim.kademeIki.tutarSent)}</span>
                     </div>
                   </div>
@@ -88,9 +93,9 @@ export function FiyatPaketleri() {
               )}
               <a
                 className={`dg ${p.one ? 'b' : 'i'}`}
-                href={paketTalepAdresi(p, { donem, workspace: ajans ? workspace : undefined })}
+                href={paketTalepAdresi(p, { donem, workspace: ajans ? workspace : undefined }, dil)}
               >
-                {eylemMetni(p)}
+                {eylemMetni(p, dil)}
               </a>
               <ul>
                 {p.ozellikler.map((o) => (
@@ -98,7 +103,7 @@ export function FiyatPaketleri() {
                 ))}
                 {p.yok.map((o) => (
                   <li key={o} className="yok">
-                    <span className="sr-only">Yok: </span>
+                    <span className="sr-only">{k.yokOn}</span>
                     {o}
                   </li>
                 ))}

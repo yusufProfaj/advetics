@@ -1,6 +1,10 @@
 import type { Metadata } from 'next';
 
-import { ENTEGRASYON_GRUPLARI, YAKINDA_ENTEGRASYONLAR } from '@/components/landing/site-icerik';
+import { sec } from '@advetics/shared';
+import { dilAl } from '@/dil/sunucu';
+import { siteArayuzSozlugu } from '@/dil/sozlukler/site-arayuz';
+import { dilBaglantilari } from '@/lib/site-metadata';
+import { menuEtiketi, siteIcerigi } from '@/components/landing/site-icerik';
 import { Bolum, KapanisBandi, SayfaGirisi, YakindaRozeti } from '@/components/landing/site-parcalari';
 
 /**
@@ -11,25 +15,27 @@ import { Bolum, KapanisBandi, SayfaGirisi, YakindaRozeti } from '@/components/la
  * destekleniyor" yazmak, LinkedIn'de reklam kurulabildiği izlenimini verirdi;
  * kurulamıyor, yalnız izleniyor. "Yakında" olanlar ayrı başlık altında.
  */
-export const metadata: Metadata = {
-  title: 'Entegrasyonlar | Advetics',
-  description:
-    'Advetics Meta (Facebook, Instagram), Google Ads, LinkedIn Ads ve YouTube ile çalışır; ' +
-    'Meta Pixel, Google Tag Manager ve Google Analytics 4 kurulumunu kontrol eder.',
-  alternates: { canonical: '/entegrasyonlar' },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const dil = await dilAl();
+  return {
+    title: `${menuEtiketi(dil, '/entegrasyonlar')} | Advetics`,
+    description: sec(siteArayuzSozlugu, dil).entegrasyonlar.metaAciklama,
+    alternates: dilBaglantilari('/entegrasyonlar', dil),
+  };
+}
 
-export default function EntegrasyonlarSayfasi() {
+export default async function EntegrasyonlarSayfasi() {
+  const dil = await dilAl();
+  const g = sec(siteArayuzSozlugu, dil);
+  const d = g.entegrasyonlar;
+  const { ENTEGRASYON_GRUPLARI, YAKINDA_ENTEGRASYONLAR } = siteIcerigi(dil);
   return (
     <>
       <SayfaGirisi
-        ust="Entegrasyonlar"
-        baslik="Reklam verdiğiniz yerlere bağlanır"
-        ozet={
-          'Advetics reklam hesaplarınıza platformların kendi izin ekranıyla bağlanır. ' +
-          'Aşağıda her bağlantıyla bugün neler yapılabildiği yazıyor.'
-        }
-        ikincil={{ href: '/guvenlik', etiket: 'Güvenlik' }}
+        ust={menuEtiketi(dil, '/entegrasyonlar')}
+        baslik={d.baslik}
+        ozet={d.ozet}
+        ikincil={{ href: '/guvenlik', etiket: menuEtiketi(dil, '/guvenlik') }}
       />
 
       {ENTEGRASYON_GRUPLARI.map((g, i) => (
@@ -47,8 +53,8 @@ export default function EntegrasyonlarSayfasi() {
       ))}
 
       <Bolum
-        baslik="Yakında"
-        aciklama="Üzerinde çalıştığımız ama henüz panelde olmayan bağlantılar."
+        baslik={g.ortak.yakinda}
+        aciklama={d.yakindaAciklama}
         koyu={ENTEGRASYON_GRUPLARI.length % 2 === 1}
       >
         <ul className="flex flex-wrap gap-3">

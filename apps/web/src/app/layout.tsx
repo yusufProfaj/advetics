@@ -3,6 +3,8 @@ import { Montserrat, Open_Sans } from 'next/font/google';
 import './globals.css';
 import { TEMA_BETIGI } from '@/lib/tema';
 import { dilDurumu } from '@/dil/sunucu';
+import { kokSozlugu } from '@/dil/sozlukler/kok';
+import { sec } from '@advetics/shared';
 import { DilSaglayici } from '@/dil/saglayici';
 import { DilSecimEkrani } from '@/components/ui/dil-secimi';
 
@@ -51,35 +53,41 @@ const ORIGIN = ROOT_DOMAIN.startsWith('localhost')
  * Modül 6'da rapor paylaşım sayfaları bu metadata'yı müşteri markasıyla
  * override edecek; kök değerler ajansın kendi tanıtımı için.
  */
-export const metadata: Metadata = {
-  metadataBase: new URL(ORIGIN),
-  title: {
-    default: 'Advetics — Reklam Otomasyon Paneli',
-    template: '%s',
-  },
-  description:
-    'Meta (Facebook, Instagram), Google Ads ve LinkedIn reklamlarınız tek panelde. ' +
-    'Ne yapılacağını söyler, onayınızla yapar.',
-  applicationName: 'Advetics',
-  openGraph: {
-    type: 'website',
-    siteName: 'Advetics',
-    locale: 'tr_TR',
-    url: ORIGIN,
-    title: 'Advetics | Meta, Google ve LinkedIn reklamlarınız tek panelde',
-    description:
-      'Reklamcılık bilmeden reklam verin. Ne yapılacağını söyler, onayınızla yapar.',
-  },
-  twitter: {
-    card: 'summary_large_image',
-    title: 'Advetics | Meta, Google ve LinkedIn reklamlarınız tek panelde',
-    description:
-      'Reklamcılık bilmeden reklam verin. Ne yapılacağını söyler, onayınızla yapar.',
-  },
-  // Panel oturum gerektiriyor; kök varsayılan olarak indekslenebilir kalıyor
-  // ama korumalı yollar robots.ts içinde Disallow edildi.
-  robots: { index: true, follow: true },
-};
+/*
+ * İKİ DİL: Open Graph ve açıklama sayfanın dilinde (`/en` sayfasının
+ * paylaşım kartı Türkçe çıkmasın). Sayfalar kendi başlığını ezer; buradaki
+ * değerler ezmeyenler için.
+ */
+
+export async function generateMetadata(): Promise<Metadata> {
+  const m = sec(kokSozlugu, (await dilDurumu()).dil);
+  return {
+    metadataBase: new URL(ORIGIN),
+    title: {
+      default: m.baslik,
+      template: '%s',
+    },
+    description: m.aciklama,
+    applicationName: 'Advetics',
+    openGraph: {
+      type: 'website',
+      siteName: 'Advetics',
+      locale: m.yerel,
+      alternateLocale: m.digerYerel,
+      url: ORIGIN,
+      title: m.ogBaslik,
+      description: m.ogAciklama,
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: m.ogBaslik,
+      description: m.ogAciklama,
+    },
+    // Panel oturum gerektiriyor; kök varsayılan olarak indekslenebilir kalıyor
+    // ama korumalı yollar robots.ts içinde Disallow edildi.
+    robots: { index: true, follow: true },
+  };
+}
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   // DİL ÇEREZDEN (docs/i18n/MIMARI.md §2). `lang` ekran okuyucunun telaffuzu

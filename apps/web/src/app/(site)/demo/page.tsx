@@ -1,6 +1,10 @@
 import type { Metadata } from 'next';
 
-import { DEMO_EPOSTA, DEMO_MAILTO } from '@/components/landing/site-icerik';
+import { sec } from '@advetics/shared';
+import { dilAl } from '@/dil/sunucu';
+import { siteArayuzSozlugu } from '@/dil/sozlukler/site-arayuz';
+import { dilBaglantilari } from '@/lib/site-metadata';
+import { DEMO_EPOSTA, siteIcerigi } from '@/components/landing/site-icerik';
 import { AdimListesi, BIRINCIL, Bolum, SayfaGirisi } from '@/components/landing/site-parcalari';
 
 /**
@@ -12,58 +16,41 @@ import { AdimListesi, BIRINCIL, Bolum, SayfaGirisi } from '@/components/landing/
  * Adres sayfada düz metin olarak da duruyor: mail istemcisi kurulu olmayan
  * bilgisayarda bağlantı hiçbir şey açmıyor ve ziyaretçi bunu bilemiyor.
  */
-export const metadata: Metadata = {
-  title: 'Demo | Advetics',
-  description:
-    'Advetics demosu için bize yazın. Kısa bir görüşmede hesaplarınızı bağlayıp kendi ' +
-    'rakamlarınızla gösterelim.',
-  alternates: { canonical: '/demo' },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const dil = await dilAl();
+  return {
+    title: 'Demo | Advetics',
+    description: sec(siteArayuzSozlugu, dil).demo.metaAciklama,
+    alternates: dilBaglantilari('/demo', dil),
+  };
+}
 
-const ADIMLAR = [
-  {
-    baslik: 'Bize yazın',
-    metin: 'Şirketinizi ve reklam verdiğiniz yerleri kısaca anlatın. Şablon mailin içinde hazır.',
-  },
-  {
-    baslik: 'Görüşme ayarlayalım',
-    metin: 'Size uygun bir zamanda kısa bir görüşme yapıyoruz. Ne yapmak istediğinizi dinliyoruz.',
-  },
-  {
-    baslik: 'Kendi rakamlarınızla görün',
-    metin: 'İsterseniz hesaplarınızı birlikte bağlıyor, paneli kendi verinizle gösteriyoruz.',
-  },
-  {
-    baslik: 'Teklif',
-    metin: 'İhtiyacınıza göre hazırlanmış teklifi size gönderiyoruz.',
-  },
-];
-
-export default function DemoSayfasi() {
+export default async function DemoSayfasi() {
+  const dil = await dilAl();
+  const g = sec(siteArayuzSozlugu, dil);
+  const d = g.demo;
+  const { DEMO_MAILTO } = siteIcerigi(dil);
   return (
     <>
       <SayfaGirisi
         ust="Demo"
-        baslik="Kendi hesaplarınızla görün"
-        ozet={
-          'Ekran görüntüsü yerine kendi reklamlarınızı görmek daha çok şey anlatır. ' +
-          'Bize yazın, kısa bir görüşmede gösterelim.'
-        }
-        ikincil={{ href: '/ozellikler', etiket: 'Özellikler' }}
+        baslik={d.baslik}
+        ozet={d.ozet}
+        ikincil={{ href: '/ozellikler', etiket: g.nav.ozellikler }}
       />
 
-      <Bolum baslik="Nasıl ilerliyoruz" koyu>
-        <AdimListesi adimlar={ADIMLAR} />
+      <Bolum baslik={d.nasilIlerliyoruz} koyu>
+        <AdimListesi adimlar={d.adimlar} />
       </Bolum>
 
-      <Bolum baslik="Bize ulaşın">
+      <Bolum baslik={d.bizeUlasin}>
         <div className="kart flex flex-col gap-6 p-6 sm:flex-row sm:items-center sm:justify-between sm:p-8">
           <div>
-            <p className="text-sm text-ink-muted">E-posta</p>
+            <p className="text-sm text-ink-muted">{d.eposta}</p>
             <p className="mt-1 font-baslik text-xl font-bold text-ink">{DEMO_EPOSTA}</p>
           </div>
           <a href={DEMO_MAILTO} className={BIRINCIL}>
-            Demo Talep Et
+            {g.ortak.demoTalep}
           </a>
         </div>
       </Bolum>

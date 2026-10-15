@@ -1,9 +1,20 @@
+import { siteArayuzSozlugu } from '@/dil/sozlukler/site-arayuz';
 import { DIL_CEREZI, DIL_CEREZI_SURESI_SN } from '@advetics/shared';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { CEREZLER, CEREZ_ANAHTARI, CEREZ_SURUMU, DEPOLAMA, bildirimGorunsunMu } from './cerez';
+import {
+  CEREZLER,
+  CEREZLER_EN,
+  CEREZ_ANAHTARI,
+  CEREZ_SURUMU,
+  DEPOLAMA,
+  DEPOLAMA_EN,
+  bildirimGorunsunMu,
+  cerezler,
+  depolama,
+} from './cerez';
 
 /**
  * Çerez bildirimi: kararın kendisi ve depo erişiminin korunduğu.
@@ -35,9 +46,11 @@ describe('çerez bildirimi', () => {
     const k = readFileSync(join(__dirname, 'cerez-bildirimi.tsx'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     expect(k).toContain("className={`cerez${gor ? ' gor' : ''}`}");
     expect(k).not.toMatch(/\{gor &&|if \(!gor\) return null/);
-    // Yalnız "Anladım": zorunlu çerez onay istemiyor.
-    expect(k).toContain('Anladım');
-    expect(k).not.toMatch(/Kabul|Reddet/);
+    // Yalnız "Anladım": zorunlu çerez onay istemiyor. Metin sözlükte (iki dil).
+    expect(k).toContain('{d.anladim}');
+    expect(siteArayuzSozlugu.tr.cerez.anladim).toBe('Anladım');
+    const metinler = JSON.stringify([siteArayuzSozlugu.tr.cerez, siteArayuzSozlugu.en.cerez]);
+    expect(metinler).not.toMatch(/Kabul|Reddet|Accept|Reject|Decline/);
   });
 });
 
@@ -178,5 +191,74 @@ describe('KRİTİK: çerez politikası API\'nin yazdığı çerezlerle aynı', (
     })(WEB);
     expect(bulunan.length, 'tarama boşa düştü').toBeGreaterThan(4);
     expect(bulunan.sort()).toEqual(BILINEN);
+  });
+});
+
+/**
+ * ═══ İNGİLİZCE POLİTİKA TÜRKÇEYLE AYNI SÖZÜ VERİYOR ═══
+ *
+ * Yukarıdaki testler yalnız Türkçe listeyi koda bağlıyor. İngilizce liste
+ * ayrı yazıldığı için bir çerez Türkçede eklenip İngilizcede unutulursa ya
+ * da bir süre yalnız bir dilde değişirse `/en/cookies` yalan söyler ve
+ * hiçbir şey düşmez. Burada İngilizce liste Türkçeye bağlanıyor: aynı ad,
+ * aynı sıra, dolu alanlar, aynı HttpOnly beyanı ve aynı süre (sayı + birim,
+ * "Beni hatırla" koşulu, "tarayıcı kapanınca" hâli).
+ */
+const BIRIM: Record<string, string> = { dakika: 'minute', gün: 'day', yıl: 'year' };
+
+/** "30 gün" → ["30 day"]; İngilizcede çoğul eki atılıyor ("30 days" → "30 day"). */
+function sureler(metin: string, dil: 'tr' | 'en'): string[] {
+  if (dil === 'tr') {
+    return [...metin.matchAll(/(\d+) (dakika|gün|yıl)/g)].map((m) => `${m[1]} ${BIRIM[m[2]!]}`);
+  }
+  return [...metin.matchAll(/(\d+) (minute|day|year)s?\b/g)].map((m) => `${m[1]} ${m[2]}`);
+}
+
+describe('KRİTİK: İngilizce çerez politikası Türkçe listeyle aynı', () => {
+  it('dil seçici doğru listeyi veriyor', () => {
+    expect(cerezler('tr')).toBe(CEREZLER);
+    expect(cerezler('en')).toBe(CEREZLER_EN);
+    expect(depolama('tr')).toBe(DEPOLAMA);
+    expect(depolama('en')).toBe(DEPOLAMA_EN);
+  });
+
+  it('aynı çerezler, aynı sırada; hiçbir alan boş değil ve Türkçe harf taşımıyor', () => {
+    expect(CEREZLER_EN.map((c) => c.ad)).toEqual(CEREZLER.map((c) => c.ad));
+    expect(DEPOLAMA_EN.map((d) => d.ad)).toEqual(DEPOLAMA.map((d) => d.ad));
+    for (const satir of [...CEREZLER_EN, ...DEPOLAMA_EN]) {
+      for (const [alan, deger] of Object.entries(satir)) {
+        expect(deger.trim(), `${satir.ad}.${alan}`).not.toBe('');
+        if (alan !== 'ad') expect(deger, `${satir.ad}.${alan} çevrilmemiş`).not.toMatch(/[çğıöşüÇĞİÖŞÜ]/);
+      }
+    }
+  });
+
+  it('süreler iki dilde aynı: sayı ve birim, "Beni hatırla" koşulu, tarayıcı kapanınca silinme', () => {
+    let sayili = 0;
+    CEREZLER.forEach((tr, i) => {
+      const en = CEREZLER_EN[i]!;
+      const trSure = sureler(tr.sure, 'tr');
+      sayili += trSure.length;
+      expect(sureler(en.sure, 'en'), tr.ad).toEqual(trSure);
+      expect(/Beni hatırla/.test(tr.sure), `${tr.ad} "Remember me"`).toBe(/Remember me/.test(en.sure));
+      expect(/tarayıcı kapanınca silinir/i.test(tr.sure), `${tr.ad} tarayıcı`).toBe(
+        /deleted when the browser closes/i.test(en.sure),
+      );
+      expect(tr.tur.includes('HttpOnly'), `${tr.ad} HttpOnly`).toBe(en.tur.includes('HttpOnly'));
+    });
+    // Tarama boşa düşmesin: adv_at, adv_rt, adv_mfa, adv_dil, adv_client, adv_org süre taşıyor.
+    expect(sayili).toBe(6);
+  });
+
+  it('depolama süreleri iki dilde aynı hâli söylüyor', () => {
+    const ESLEME: Record<string, string> = {
+      'Siz silene kadar': 'Until you delete it',
+      'İş bitince silinir': 'Deleted when the job finishes',
+      'Sekme kapanınca silinir': 'Deleted when the tab closes',
+    };
+    DEPOLAMA.forEach((tr, i) => {
+      expect(ESLEME[tr.sure], `${tr.ad}: Türkçe süre eşlemede yok`).toBeDefined();
+      expect(DEPOLAMA_EN[i]!.sure, tr.ad).toBe(ESLEME[tr.sure]);
+    });
   });
 });

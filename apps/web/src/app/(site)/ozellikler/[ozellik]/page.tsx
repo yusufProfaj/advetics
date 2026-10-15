@@ -1,7 +1,11 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
-import { OZELLIKLER, ozellikAdresi, ozellikBul } from '@/components/landing/site-icerik';
+import { sec } from '@advetics/shared';
+import { dilAl } from '@/dil/sunucu';
+import { siteArayuzSozlugu } from '@/dil/sozlukler/site-arayuz';
+import { dilBaglantilari } from '@/lib/site-metadata';
+import { OZELLIKLER, ozellikBul, siteIcerigi } from '@/components/landing/site-icerik';
 import {
   AdimListesi,
   Bolum,
@@ -34,21 +38,25 @@ export function generateStaticParams() {
 type Props = { params: Promise<{ ozellik: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const o = ozellikBul((await params).ozellik);
-  if (!o) return {};
+  const dil = await dilAl();
   // Menü etiketi (`o.ad`) sekme başlığında da: menüde ve sekmede aynı ad.
+  const o = ozellikBul((await params).ozellik, dil);
+  if (!o) return {};
   return {
     title: `${o.ad} | Advetics`,
     description: o.ozet,
-    alternates: { canonical: ozellikAdresi(o.slug) },
+    alternates: dilBaglantilari(`/ozellikler/${o.slug}`, dil),
   };
 }
 
 export default async function OzellikSayfasi({ params }: Props) {
-  const o = ozellikBul((await params).ozellik);
+  const dil = await dilAl();
+  const g = sec(siteArayuzSozlugu, dil);
+  const d = g.ozellik;
+  const o = ozellikBul((await params).ozellik, dil);
   if (!o) notFound();
 
-  const digerleri = OZELLIKLER.filter((x) => x.slug !== o.slug)
+  const digerleri = siteIcerigi(dil).OZELLIKLER.filter((x) => x.slug !== o.slug)
     .slice(0, 4)
     .map((x) => x.slug);
   const yakindaVar = Boolean(o.yakinda && o.yakinda.length > 0);
@@ -59,11 +67,11 @@ export default async function OzellikSayfasi({ params }: Props) {
         ust={o.ad}
         baslik={o.baslik}
         ozet={o.ozet}
-        ikincil={{ href: '/ozellikler', etiket: 'Bütün Özellikler' }}
+        ikincil={{ href: '/ozellikler', etiket: g.ortak.tumOzellikler }}
         Sahne={OZELLIK_SAHNELERI[o.slug]}
       />
 
-      <Bolum baslik="Size ne kazandırır" aciklama={`Paneldeki adı: ${o.panelAdi}.`}>
+      <Bolum baslik={d.neKazandirir} aciklama={d.panelAdi(o.panelAdi)}>
         <MaddeIzgarasi maddeler={o.faydalar} />
         {o.sinirlar && o.sinirlar.length > 0 && (
           <div className="mt-8">
@@ -72,17 +80,17 @@ export default async function OzellikSayfasi({ params }: Props) {
         )}
       </Bolum>
 
-      <Bolum baslik="Nasıl çalışır" koyu>
+      <Bolum baslik={d.nasilCalisir} koyu>
         <AdimListesi adimlar={o.adimlar} />
       </Bolum>
 
       {yakindaVar && o.yakinda && (
-        <Bolum baslik="Yakında" aciklama="Üzerinde çalıştığımız ama henüz panelde olmayan parçalar.">
+        <Bolum baslik={g.ortak.yakinda} aciklama={d.yakindaAciklama}>
           <MaddeIzgarasi maddeler={o.yakinda} yakinda />
         </Bolum>
       )}
 
-      <Bolum baslik="Diğer özellikler" koyu={yakindaVar}>
+      <Bolum baslik={d.digerleri} koyu={yakindaVar}>
         <OzellikKartlari sluglar={digerleri} />
       </Bolum>
 

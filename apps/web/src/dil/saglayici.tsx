@@ -11,6 +11,7 @@ import {
   type IkiDil,
 } from '@advetics/shared';
 import { apiFetch } from '@/lib/api';
+import { dilDegisinceYol } from '@/lib/site-yollari';
 
 type DilBaglami = {
   dil: Dil;
@@ -55,7 +56,19 @@ export function DilSaglayici({ dil: ilk, children }: { dil: Dil; children: React
         // yazıldı, yani bu cihazda seçim geçerli.
         await apiFetch('/auth/locale', { method: 'PATCH', body: JSON.stringify({ locale: yeni }) });
       }
-      router.refresh();
+      // SİTE SAYFASINDA KARŞI DİLDEKİ ADRESE GİT: `/gizlilik`te English
+      // seçen kişi `/en/privacy`ye. Yalnız yenilemek Türkçe adreste kalmak,
+      // middleware'in onu bir sonraki tıklamada yönlendirmesini beklemek ve
+      // paylaştığı bağlantının yanlış dilde açılması demekti.
+      //
+      // TAM SAYFA YÜKLEMESİ, `router.replace` DEĞİL: istemci tarafı geçişte
+      // Next ortak yerleşimi (üst menü, alt bilgi) YENİDEN ÇİZMİYOR; `/`dan
+      // `/en`e geçen kişi İngilizce sayfayı Türkçe menüyle görüyordu
+      // (yerelde gözle, D1). `router.refresh()` ise bütün ağacı yeniden
+      // çiziyor, aynı adreste kalınca o yeterli.
+      const hedef = dilDegisinceYol(location.pathname, yeni);
+      if (hedef !== location.pathname) location.assign(hedef + location.search + location.hash);
+      else router.refresh();
     },
     [router],
   );

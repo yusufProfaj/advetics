@@ -115,3 +115,96 @@ export const DEPOLAMA: { ad: string; ne: string; sure: string }[] = [
   },
 ];
 
+
+/*
+ * ═══ İNGİLİZCE TABLOLAR (`/en/cookies`) ═══
+ *
+ * Aynı çerezler, AYNI SIRADA, aynı adlarla. Ayrı bir liste olmasının bedeli
+ * ayrışma riski: Türkçe süre değişip İngilizcesi unutulursa iki dildeki
+ * politika farklı söz verir. `cerez.spec.ts` adları, sırayı ve süreleri
+ * (sayı + birim) iki liste arasında karşılaştırıyor. Bu yüzden İngilizce
+ * süre metni Türkçenin YAPISINI izliyor: "1 yıl" ↔ "1 year".
+ */
+type CerezSatiri = (typeof CEREZLER)[number];
+type DepolamaSatiri = (typeof DEPOLAMA)[number];
+
+export const CEREZLER_EN: CerezSatiri[] = [
+  {
+    ad: 'adv_at',
+    amac: 'Session access key; verifies who you are on every request.',
+    sure: 'If "Remember me" is selected, 15 minutes (then renewed automatically); otherwise deleted when the browser closes.',
+    tur: 'Strictly necessary · first-party · HttpOnly',
+  },
+  {
+    ad: 'adv_rt',
+    amac: 'Session refresh key; renews your session when access expires without asking you to sign in again. Sent only to the sign-in endpoints.',
+    sure: 'If "Remember me" is selected, 30 days; otherwise deleted when the browser closes.',
+    tur: 'Strictly necessary · first-party · HttpOnly',
+  },
+  {
+    ad: 'adv_mfa',
+    amac: 'Kept during two-step sign-in while the code is awaited after your password has been verified.',
+    sure: '5 minutes',
+    tur: 'Strictly necessary · first-party · HttpOnly',
+  },
+  {
+    ad: 'adv_dil',
+    amac: 'The interface language you chose (Turkish or English), so that the language selection screen does not appear again on every visit.',
+    sure: '1 year',
+    tur: 'Strictly necessary · first-party',
+  },
+  {
+    ad: 'adv_client',
+    amac: 'The workspace you selected in the panel.',
+    sure: '30 days',
+    tur: 'Strictly necessary · first-party',
+  },
+  {
+    ad: 'adv_org',
+    amac: 'The company you selected in the panel.',
+    sure: '30 days',
+    tur: 'Strictly necessary · first-party',
+  },
+  {
+    ad: 'adv_mgr',
+    amac: 'The parent account you selected in the panel (agency accounts).',
+    sure: 'Deleted when the browser closes.',
+    tur: 'Strictly necessary · first-party',
+  },
+];
+
+export const DEPOLAMA_EN: DepolamaSatiri[] = [
+  { ad: CEREZ_ANAHTARI, ne: 'That you dismissed the cookie notice on this site.', sure: 'Until you delete it' },
+  { ad: 'advetics.tema', ne: 'The light or dark theme you chose in the panel.', sure: 'Until you delete it' },
+  { ad: 'advetics.nav.*', ne: 'Whether the sections of the side menu are expanded or collapsed.', sure: 'Until you delete it' },
+  {
+    ad: 'advetics.kurulumSeridi.*',
+    ne: 'When you dismissed the setup strip on the Overview page.',
+    sure: 'Until you delete it',
+  },
+  {
+    ad: 'advetics.oturum.sonYenileme',
+    ne: 'When the session was last renewed, so that open tabs do not renew it at the same time.',
+    sure: 'Until you delete it',
+  },
+  {
+    ad: 'advetics.topluTazeleme',
+    ne: 'The ID of a bulk data refresh you started, to show its progress when you return to the page.',
+    sure: 'Deleted when the job finishes',
+  },
+  {
+    ad: 'advetics.gizliUyarilar',
+    ne: 'Warnings you dismissed in the panel (session storage).',
+    sure: 'Deleted when the tab closes',
+  },
+];
+
+/** Çerez tablosu, sayfanın dilinde. Ekran kodu öneksiz `CEREZLER`i değil bunu okur. */
+export function cerezler(dil: 'tr' | 'en'): CerezSatiri[] {
+  return dil === 'en' ? CEREZLER_EN : CEREZLER;
+}
+
+/** Tarayıcı depolaması tablosu, sayfanın dilinde. */
+export function depolama(dil: 'tr' | 'en'): DepolamaSatiri[] {
+  return dil === 'en' ? DEPOLAMA_EN : DEPOLAMA;
+}

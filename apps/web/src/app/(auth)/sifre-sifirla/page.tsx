@@ -1,15 +1,20 @@
 import { Suspense } from 'react';
 import { AuthKabuk } from '@/components/auth/auth-kabuk';
 import { SifreSifirlaFormu } from '@/components/auth/sifre-sifirla-formu';
+import { sozluk } from '@/dil/sunucu';
+import { girisSozlugu } from '@/dil/sozlukler/giris';
 
-export const metadata = { title: 'Yeni şifre · Advetics' };
+export async function generateMetadata() {
+  return { title: (await sozluk(girisSozlugu)).sifirla.sayfaBasligi };
+}
 
-export default function SifreSifirlaPage() {
+export default async function SifreSifirlaPage() {
+  const d = await sozluk(girisSozlugu);
   return (
     <AuthKabuk
-      baslik="Yeni şifre belirle"
-      aciklama="Bağlantı bir kez kullanılabilir ve 60 dakika geçerli."
-      altBaglanti={{ href: '/login', metin: '← Giriş ekranına dön' }}
+      baslik={d.sifirla.baslik}
+      aciklama={d.sifirla.aciklama}
+      altBaglanti={{ href: '/login', metin: d.girisEkraninaDon }}
     >
       {/* `useSearchParams` Suspense sınırı istiyor — `login/page.tsx` ile aynı desen. */}
       <Suspense fallback={<div className="h-48" />}>

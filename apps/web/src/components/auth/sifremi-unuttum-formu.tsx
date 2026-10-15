@@ -6,6 +6,8 @@ import { ApiRequestError, apiFetch } from '@/lib/api';
 import { Alan } from '@/components/auth/alan';
 import { Dugme } from '@/components/ui/dugme';
 import { Serit } from '@/components/ui/hal';
+import { useSozluk } from '@/dil/saglayici';
+import { girisSozlugu } from '@/dil/sozlukler/giris';
 
 /** API yanıtı. `devToken` YALNIZCA geliştirme ortamında dolu gelir. */
 interface SifirlamaYaniti {
@@ -14,6 +16,8 @@ interface SifirlamaYaniti {
 }
 
 export function SifremiUnuttumFormu() {
+  const g = useSozluk(girisSozlugu);
+  const d = g.unuttum;
   const [email, setEmail] = useState('');
   const [gonderildi, setGonderildi] = useState(false);
   const [devToken, setDevToken] = useState<string | null>(null);
@@ -28,7 +32,7 @@ export function SifremiUnuttumFormu() {
 
     const parsed = requestPasswordResetSchema.safeParse({ email });
     if (!parsed.success) {
-      setAlanHatasi(parsed.error.issues[0]?.message ?? 'Geçersiz e-posta');
+      setAlanHatasi(parsed.error.issues[0]?.message ?? d.gecersizEposta);
       return;
     }
 
@@ -48,7 +52,7 @@ export function SifremiUnuttumFormu() {
        * teşhis edilemez hâle getirirdi (CLAUDE.md: sessiz hata).
        */
       setHata(
-        err instanceof ApiRequestError ? err.message : 'Bağlantı kurulamadı. API çalışıyor mu?',
+        err instanceof ApiRequestError ? err.message : g.baglantiYok,
       );
     } finally {
       setPending(false);
@@ -59,16 +63,16 @@ export function SifremiUnuttumFormu() {
     return (
       <div className="grid gap-3">
         <p className="m-0 text-14 leading-relaxed text-ink">
-          Bu adres kayıtlıysa şifre sıfırlama bağlantısı <strong>{email}</strong> adresine
-          gönderildi. Bağlantı 60 dakika geçerli.
+          {d.gonderildiOnce}
+          <strong>{email}</strong>
+          {d.gonderildiSonra}
         </p>
         <p className="m-0 text-12 leading-relaxed text-ink-muted">
-          Mail birkaç dakika içinde gelmezse spam klasörünü kontrol et. Yine yoksa yöneticine
-          başvur; gönderim hatası sunucu kayıtlarına yazılıyor.
+          {d.spam}
         </p>
 
         {devToken && (
-          <Serit baslik="Geliştirme ortamı: bağlantı mail yerine burada">
+          <Serit baslik={d.gelistirme}>
             <a
               href={`/sifre-sifirla?token=${encodeURIComponent(devToken)}`}
               className="mt-1 block break-all text-12 font-semibold text-ink underline"
@@ -87,18 +91,18 @@ export function SifremiUnuttumFormu() {
 
       <Alan
         id="email"
-        label="E-posta"
+        label={g.eposta}
         type="email"
         autoComplete="username"
         value={email}
         onChange={setEmail}
         error={alanHatasi}
         disabled={pending}
-        ipucu="Hesabına kayıtlı adresi yaz; sıfırlama bağlantısını oraya gönderiyoruz."
+        ipucu={d.ipucu}
       />
 
       <Dugme type="submit" className="w-full" bekliyor={pending}>
-        {pending ? 'Gönderiliyor…' : 'Sıfırlama bağlantısı gönder'}
+        {pending ? d.gonderiliyor : d.gonder}
       </Dugme>
     </form>
   );

@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import type { MetinTuru } from './dil-tarama.istisnalar';
 
@@ -53,10 +53,26 @@ function dosyalar(dizin: string, biriktir: string[] = []): string[] {
     const yol = join(dizin, g.name);
     if (g.isDirectory()) dosyalar(yol, biriktir);
     else if (/\.tsx?$/.test(g.name) && !/\.spec\.tsx?$/.test(g.name) && !g.name.includes('.istisnalar.')) {
+      if (kaynakDilCiftiMi(yol)) continue;
       biriktir.push(yol);
     }
   }
   return biriktir;
+}
+
+/**
+ * İÇERİK DOSYASI ÇİFTİ: uzun düzyazı (yasal metin) sözlük anahtarına
+ * bölünemiyor; o zaman iki dosya yazılır: `<ad>.tr.tsx` ve `<ad>.en.tsx`.
+ * Çift TAMSA ikisi de taranmaz: Türkçesi kaynak dilin kendisi, İngilizcesi
+ * zaten çeviri (onu saymak her İngilizce cümleyi "elle metin" sayardı).
+ * Eşi olmayan tek dosya SAYILIR: yalnız bir dilde yazılmış içerik
+ * istisnasız görünür.
+ */
+export function kaynakDilCiftiMi(yol: string): boolean {
+  const m = yol.match(/^(.*)\.(tr|en)\.(tsx?)$/);
+  if (!m) return false;
+  const karsi = m[2] === 'tr' ? 'en' : 'tr';
+  return existsSync(`${m[1]}.${karsi}.${m[3]}`);
 }
 
 export const TARANAN = KOKLER.flatMap((k) => dosyalar(k));

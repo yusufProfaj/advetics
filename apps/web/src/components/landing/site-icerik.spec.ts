@@ -20,7 +20,9 @@ import {
   UST_MENU,
   YAKINDA_ENTEGRASYONLAR,
   YASAL_BELGELER,
+  siteIcerigi,
 } from './site-icerik';
+import { siteArayuzSozlugu } from '@/dil/sozlukler/site-arayuz';
 
 /**
  * ═══ TANITIM SİTESİ BEKÇİSİ ═══
@@ -75,6 +77,11 @@ function publicPaths(): string[] {
 }
 
 const SIM = join(__dirname, 'simulasyon');
+const DIL = join(__dirname, '../../dil/sozlukler');
+/** Yasal sayfaların gövdesi (iki dilli içerik çifti); bağlantı taraması bunları da okur. */
+const YASAL_GOVDE = readdirSync(join(__dirname, '../yasal'))
+  .filter((f) => f.endsWith('.tsx'))
+  .map((f) => join(__dirname, '../yasal', f));
 
 /**
  * İSTEMCİ BİLEŞENLERİ (`'use client'`), adıyla. Sayfanın geri kalanı sunucuda
@@ -95,6 +102,12 @@ const SITE_KAYNAKLARI = [
   join(SITE, 'layout.tsx'),
   join(APP, '(legal)', 'layout.tsx'),
   join(__dirname, 'site-icerik.ts'),
+  // Metin 2026-10-15'ten beri sözlükte (iki dil); söz ve kimlik kuralları ikisine de.
+  join(DIL, 'site.tr.ts'),
+  join(DIL, 'site.en.ts'),
+  join(DIL, 'site-arayuz.ts'),
+  join(DIL, 'fiyat.ts'),
+  join(DIL, 'simulasyon.ts'),
   join(__dirname, 'site-parcalari.tsx'),
   join(__dirname, 'site-nav.tsx'),
   join(__dirname, 'site-footer.tsx'),
@@ -110,6 +123,9 @@ const TANITIM_CSS = join(__dirname, 'tanitim.css');
 
 /** Ziyaretçinin okuyacağı bütün metin, veri olarak. */
 const METIN = JSON.stringify({
+  // İKİ DİL: İngilizce metin de aynı sözleri vermemeli (uzun tire, PDF logosu, uydurma rakam).
+  en: siteIcerigi('en'),
+  arayuz: siteArayuzSozlugu,
   OZELLIKLER,
   COZUMLER,
   ENTEGRASYON_GRUPLARI,
@@ -195,7 +211,8 @@ describe('tanıtım sitesi: sayfalar, middleware ve site haritası', () => {
     })(APP);
     expect(rotalar.length, 'rota taraması boşa düştü').toBeGreaterThan(20);
 
-    const kaynaklar = [...SITE_KAYNAKLARI, ...sayfaDosyalari(join(APP, '(legal)'))];
+    const kaynaklar = [...SITE_KAYNAKLARI, ...sayfaDosyalari(join(APP, '(legal)')), ...YASAL_GOVDE];
+    expect(YASAL_GOVDE.length, 'yasal gövde taraması boşa düştü').toBeGreaterThanOrEqual(8);
     const baglantilar = new Set<string>();
     for (const d of kaynaklar) {
       const k = yorumsuz(readFileSync(d, 'utf8'));
@@ -244,12 +261,20 @@ describe('tanıtım sitesi: aynı ad menüde ve sayfada', () => {
   });
 
   it('üst menüdeki her bağlantının sayfası aynı etiketle açılıyor', () => {
+    /*
+     * İki dil (2026-10-15): etiket artık düz dize değil, sayfa onu menünün
+     * KENDİ listesinden okuyor (`menuEtiketi`). İddia aynı: sekme başlığı ve
+     * üst başlık menüdeki etiketten, iki dilde de.
+     */
     expect(UST_MENU.length).toBeGreaterThanOrEqual(3);
     for (const m of UST_MENU) {
       const kaynak = yorumsuz(readFileSync(join(SITE, m.href.slice(1), 'page.tsx'), 'utf8'));
-      expect(kaynak, m.href).toContain(`title: '${m.etiket} | Advetics'`);
-      expect(kaynak, m.href).toContain(`ust="${m.etiket}"`);
+      const ifade = `menuEtiketi(dil, '${m.href}')`;
+      expect(kaynak, m.href).toContain(`title: \`\${${ifade}} | Advetics\``);
+      expect(kaynak.includes(`ust={${ifade}}`) || kaynak.includes(`<UstBaslik>{${ifade}}</UstBaslik>`), m.href).toBe(true);
     }
+    // İki dilde menü aynı sayfalara aynı sırayla gidiyor.
+    expect(siteIcerigi('en').UST_MENU.map((m) => m.href)).toEqual(UST_MENU.map((m) => m.href));
   });
 
   it('ana sayfanın sekiz bölümü özelliklerle aynı sırada ve üst başlık özelliğin ADIYLA başlıyor', () => {
@@ -306,18 +331,26 @@ describe('tanıtım sitesi: söz ve kimlik', () => {
     }
   });
 
-  it('KRİTİK: sık sorulanlardaki ajans rakamları fiyat sabitinden', () => {
+  it('KRİTİK: sık sorulanlardaki ajans rakamları fiyat sabitinden (iki dilde)', () => {
     const ajans = FIYAT_SORULARI.find((s) => s.baslik.startsWith('Ajans paketinde'));
     expect(ajans?.metin).toContain(usd(AJANS.kademeBirSent));
     expect(ajans?.metin).toContain(usd(AJANS.kademeIkiSent));
     expect(ajans?.metin).toContain(`${AJANS.dahilWorkspace} workspace dahil`);
-    // Kaynakta elle yazılmış dolar yok (test yukarıda); şablon gerçekten sabiti okuyor.
-    expect(readFileSync(join(__dirname, 'site-icerik.ts'), 'utf8')).toContain('usd(AJANS.kademeBirSent)');
+    const en = siteIcerigi('en').FIYAT_SORULARI.find((s) => s.baslik.startsWith('How is the Agency plan'));
+    expect(en?.metin).toContain(usd(AJANS.kademeBirSent));
+    expect(en?.metin).toContain(usd(AJANS.kademeIkiSent));
+    expect(en?.metin).toContain(`${AJANS.dahilWorkspace} workspaces`);
+    // Kaynakta elle yazılmış dolar yok (test yukarıda); iki şablon da gerçekten sabiti okuyor.
+    for (const f of ['site.tr.ts', 'site.en.ts']) {
+      expect(readFileSync(join(DIL, f), 'utf8'), f).toContain('usd(AJANS.kademeBirSent)');
+    }
   });
 
-  it('ana sayfa: sahnelerin örnek olduğu yazıyor', () => {
-    expect(readFileSync(join(SITE, 'page.tsx'), 'utf8')).toContain('Ekrandaki rakamlar örnektir.');
-    expect(readFileSync(join(__dirname, 'site-parcalari.tsx'), 'utf8')).toContain('Ekrandaki rakamlar örnektir.');
+  it('ana sayfa: sahnelerin örnek olduğu yazıyor (iki dilde)', () => {
+    expect(siteArayuzSozlugu.tr.ortak.rakamlarOrnek).toBe('Ekrandaki rakamlar örnektir.');
+    expect(siteArayuzSozlugu.en.ortak.rakamlarOrnek).toMatch(/examples/);
+    expect(yorumsuz(readFileSync(join(SITE, 'page.tsx'), 'utf8'))).toContain('{d.ortak.rakamlarOrnek}');
+    expect(yorumsuz(readFileSync(join(__dirname, 'site-parcalari.tsx'), 'utf8'))).toContain('{d.ortak.rakamlarOrnek}');
   });
 
   it('KRİTİK: PDF raporda ajans LOGOSU vaat edilmiyor (kapakta Advetics logosu basılıyor)', () => {

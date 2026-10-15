@@ -131,8 +131,8 @@ sayılır (`>Kaydet<`); ikisi birlikte istisna listesine girer.
 
 | Dalga | Kapsam | Neden bu sırada |
 |---|---|---|
-| D0 | Altyapı: sözlük tipi, `DilSaglayici`, çerez, `?dil=`, `<html lang>`, bekçiler (istisna listesi bugünkü hâlin TAMAMI), **dil seçim ekranı**, Hesabım'da dil, giriş ekranında TR·EN | Her şey buna bağlı |
-| D1 | Tanıtım sitesi + yasal 4 sayfa + giriş/şifre ekranları + çerez bildirimi | Google OAuth incelemesi bunlara bakıyor |
+| D0 ✅ | Altyapı: sözlük tipi, `DilSaglayici`, çerez, `?dil=`, `<html lang>`, bekçiler (istisna listesi bugünkü hâlin TAMAMI), **dil seçim ekranı**, Hesabım'da dil, giriş ekranında TR·EN | Her şey buna bağlı |
+| D1 ✅ | Tanıtım sitesi + yasal 4 sayfa + giriş/şifre/iki adım ekranları + çerez bildirimi (2026-10-15) | Google OAuth incelemesi bunlara bakıyor |
 | D2 | Panel kabuğu: menü (`nav-sections`), üst çubuk, `components/ui/*`, boş/hata durumları, Genel Bakış, Ayarlar (bağlantı ekranı — OAuth demosunun gösterdiği yer) | Her sayfada görünen yüzey |
 | D3 | Modül modül: Reklam Yöneticisi → Raporlar → Marka Merkezi/Varlıklar → AdvStrategy → AdvCampaign → Akıllı Boost → Kurallar/İyileştir → Bütçe → Potansiyel Müşteriler | Kullanım sıklığına göre |
 | D4 | Shared etiketleri + Zod hata haritası + API hata mesajları (`AllExceptionsFilter` ve servisler) | Panel ekranları hazırken hata cümleleri hâlâ Türkçe kalmasın |
@@ -140,6 +140,28 @@ sayılır (`>Kaydet<`); ikisi birlikte istisna listesine girer.
 
 Her dalganın sonunda: `./scripts/dogrula.sh` yeşil, istisna listesi
 küçülmüş, iki dilde masaüstü + mobil ekran görüntüsü.
+
+## 6a. D1 sonrası kararlar ve dersler (2026-10-15)
+
+- **Sayfalar iki kez yazılmadı.** Middleware `/en/privacy` → `/gizlilik`
+  yeniden yazıyor, dil `x-advetics-onek` istek başlığıyla geliyor
+  (istemcinin gönderdiği siliniyor). Yol tablosu `lib/site-yollari.ts`
+  (Edge paketinde, site metnini içe aktarmıyor). Detay sayfalarının kısa
+  adı iki dilde aynı: `/en/features/akilli-boost`.
+- **Kanonik ve hreflang:** sayfa metadata'sı `dilBaglantilari()`
+  (`lib/site-metadata.ts`), ayrıca middleware her site yanıtına `Link`
+  başlığıyla hreflang ekliyor; site haritasında iki dil `alternates` ile.
+- **Dil değişince TAM SAYFA YÜKLEMESİ** (`location.assign`): istemci
+  geçişinde Next ortak yerleşimi (menü, alt bilgi) yeniden çizmiyor ve
+  İngilizce sayfa Türkçe menüyle açılıyordu.
+- **Kök yerleşim çerez okuyor, yani site sayfaları artık istek anında
+  çiziliyor** (statik değil). Derleme `dogrula.sh --derle` ile denendi.
+- **Üst menüde TR·EN yalnız xl (≥1280)**: 1024'te logo ikiye bölünüyordu;
+  1024-1279'da anahtar alt bilgide ve mobil menüde.
+- **İçerik dosyası çifti** (`x.tr.tsx` + `x.en.tsx`): uzun düzyazı
+  (yasal metin) için; çift tamsa tarama ikisini de atlar.
+- **Yasal sayfaların eski İngilizce özet bölümü kalktı**, yerini tam çeviri
+  aldı (`/en/...`, üstte "Türkçe sürüm esastır" notu).
 
 ## 7. ÖLÇÜLMEYEN / açık
 

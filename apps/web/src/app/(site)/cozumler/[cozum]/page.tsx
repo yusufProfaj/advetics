@@ -2,7 +2,12 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
-import { COZUMLER, cozumAdresi, cozumBul } from '@/components/landing/site-icerik';
+import { sec } from '@advetics/shared';
+import { dilAl } from '@/dil/sunucu';
+import { siteArayuzSozlugu } from '@/dil/sozlukler/site-arayuz';
+import { dilBaglantilari } from '@/lib/site-metadata';
+import { yerelYol } from '@/lib/site-yollari';
+import { COZUMLER, cozumAdresi, cozumBul, siteIcerigi } from '@/components/landing/site-icerik';
 import {
   Bolum,
   KapanisBandi,
@@ -27,19 +32,22 @@ export function generateStaticParams() {
 type Props = { params: Promise<{ cozum: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const c = cozumBul((await params).cozum);
+  const dil = await dilAl();
+  const c = cozumBul((await params).cozum, dil);
   if (!c) return {};
   return {
     title: `${c.ad} | Advetics`,
     description: c.ozet,
-    alternates: { canonical: cozumAdresi(c.slug) },
+    alternates: dilBaglantilari(`/cozumler/${c.slug}`, dil),
   };
 }
 
 export default async function CozumSayfasi({ params }: Props) {
-  const c = cozumBul((await params).cozum);
+  const dil = await dilAl();
+  const g = sec(siteArayuzSozlugu, dil);
+  const c = cozumBul((await params).cozum, dil);
   if (!c) notFound();
-  const diger = COZUMLER.find((x) => x.slug !== c.slug);
+  const diger = siteIcerigi(dil).COZUMLER.find((x) => x.slug !== c.slug);
 
   return (
     <>
@@ -50,13 +58,13 @@ export default async function CozumSayfasi({ params }: Props) {
         ikincil={diger ? { href: cozumAdresi(diger.slug), etiket: diger.ad } : undefined}
       />
 
-      <Bolum baslik="Neden Advetics">
+      <Bolum baslik={g.cozum.nedenAdvetics}>
         <MaddeIzgarasi maddeler={c.maddeler} />
       </Bolum>
 
       <Bolum
         baslik={c.senaryo.baslik}
-        aciklama="Bu bir örnek senaryodur, gerçek bir müşteri hikâyesi değildir."
+        aciklama={g.cozum.ornekNotu}
         koyu
       >
         <ol className="adimlar gor">
@@ -69,10 +77,10 @@ export default async function CozumSayfasi({ params }: Props) {
         </ol>
       </Bolum>
 
-      <Bolum baslik="En çok kullanacağınız özellikler">
+      <Bolum baslik={g.cozum.enCok}>
         <OzellikKartlari sluglar={c.ozellikler} />
-        <Link href="/ozellikler" className="bag">
-          Bütün Özellikler →
+        <Link href={yerelYol('/ozellikler', dil)} className="bag">
+          {g.ortak.tumOzelliklerOk}
         </Link>
       </Bolum>
 

@@ -29,3 +29,6 @@ bütün sözlük dosyalarında aynı commit'te değişir.
 | izleme (senkronizasyon) | tracking (sync) | |
 | bağlantı | connection | |
 | onay bekliyor | pending approval | |
+| Tek Panel / Reklam Kurma / Planlama / İyileştirme / Raporlama / Ölçüm Kurulumu | One Panel / Ad Creation / Planning / Optimization / Reporting / Tracking Setup | tanıtım sitesindeki özellik adları |
+| Küçük İşletme / Şirket / Ajans (paket) | Small Business / Company / Agency | |
+| Demo Talep Et / Giriş Yap | Request a Demo / Sign In | |

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
+  IKI_ADIM_HANE,
   ikiAdimKodTuru,
   type IkiAdimGirisSonucu,
   type IkiAdimKurtarmaKodlari,
@@ -15,9 +16,11 @@ import { Dugme } from '@/components/ui/dugme';
 import { KART_BAGLANTISI } from '@/components/ui/kart';
 import { useDil } from '@/dil/saglayici';
 import { dilProfileYaz } from '@/dil/profil';
+import { useSozluk } from '@/dil/saglayici';
+import { ikiAdimSozlugu } from '@/dil/sozlukler/iki-adim';
 
-function hataMetni(err: unknown): string {
-  return err instanceof ApiRequestError ? err.message : 'Bağlantı kurulamadı. Tekrar dene.';
+function hataMetni(err: unknown, baglantiYok: string): string {
+  return err instanceof ApiRequestError ? err.message : baglantiYok;
 }
 
 /**
@@ -53,6 +56,7 @@ export function IkiAdimGiris({
 
 function KodDogrula({ sonraki, onGeri }: { sonraki: string; onGeri: () => void }) {
   const { dil } = useDil();
+  const d = useSozluk(ikiAdimSozlugu);
   const router = useRouter();
   const [kurtarma, setKurtarma] = useState(false);
   const [kod, setKod] = useState('');
@@ -66,7 +70,7 @@ function KodDogrula({ sonraki, onGeri }: { sonraki: string; onGeri: () => void }
     // hakkı yemiyor (sunucu da aynı kuralla reddediyor, sayaç artmıyor).
     const tur = ikiAdimKodTuru(kod);
     if (tur === null || (kurtarma && tur !== 'kurtarma') || (!kurtarma && tur !== 'totp')) {
-      setHata(kurtarma ? 'Kurtarma kodu xxxx-xxxx-xxxx biçiminde olmalı.' : '6 haneli kodu yaz.');
+      setHata(kurtarma ? d.kodBicimiKurtarma : d.kodBicimi(IKI_ADIM_HANE));
       return;
     }
     setBekliyor(true);
@@ -82,7 +86,7 @@ function KodDogrula({ sonraki, onGeri }: { sonraki: string; onGeri: () => void }
       router.replace(r.kurtarmaKoduKullanildi ? ayarlarAdresi('hesabim', { kurtarma: true }) : sonraki);
       router.refresh();
     } catch (err) {
-      setHata(hataMetni(err));
+      setHata(hataMetni(err, d.baglantiYok));
       setBekliyor(false);
     }
   }
@@ -90,11 +94,9 @@ function KodDogrula({ sonraki, onGeri }: { sonraki: string; onGeri: () => void }
   return (
     <form onSubmit={gonder} className="grid gap-4" noValidate>
       <div>
-        <p className="m-0 font-bold text-ink">İki adımlı doğrulama</p>
+        <p className="m-0 font-bold text-ink">{d.baslik}</p>
         <p className="m-0 mt-0.5 text-14 text-ink-muted">
-          {kurtarma
-            ? 'Kaydettiğin kurtarma kodlarından birini yaz.'
-            : 'Telefonundaki doğrulama uygulamasını aç ve gösterdiği kodu yaz.'}
+          {kurtarma ? d.kurtarmaYaz : d.uygulamaYaz}
         </p>
       </div>
       <HataKutusu mesaj={hata} />
@@ -107,7 +109,7 @@ function KodDogrula({ sonraki, onGeri }: { sonraki: string; onGeri: () => void }
         autoFocus
       />
       <Dugme type="submit" className="w-full" bekliyor={bekliyor}>
-        {bekliyor ? 'Doğrulanıyor…' : 'Doğrula'}
+        {bekliyor ? d.dogrulaniyor : d.dogrula}
       </Dugme>
       <div className="flex items-center justify-between gap-3 text-14">
         <button
@@ -119,10 +121,10 @@ function KodDogrula({ sonraki, onGeri }: { sonraki: string; onGeri: () => void }
           }}
           className={`${KART_BAGLANTISI} text-left`}
         >
-          {kurtarma ? 'Uygulamadaki kodu kullan' : 'Telefonun yanında değil mi? Kurtarma kodu kullan'}
+          {kurtarma ? d.uygulamaKoduKullan : d.kurtarmaKullan}
         </button>
         <Dugme ton="hayalet" boyut="kucuk" onClick={onGeri}>
-          Geri
+          {d.geri}
         </Dugme>
       </div>
     </form>
@@ -131,6 +133,7 @@ function KodDogrula({ sonraki, onGeri }: { sonraki: string; onGeri: () => void }
 
 function GiristeKurulum({ sonraki, onGeri }: { sonraki: string; onGeri: () => void }) {
   const { dil } = useDil();
+  const d = useSozluk(ikiAdimSozlugu);
   const router = useRouter();
   /*
    * DÖRT HÂL AYRI: yükleniyor, yüklenemedi, QR hazır, kodlar gösteriliyor.
@@ -151,7 +154,7 @@ function GiristeKurulum({ sonraki, onGeri }: { sonraki: string; onGeri: () => vo
         if (!iptal) setBilgi(b);
       })
       .catch((err: unknown) => {
-        if (!iptal) setYuklemeHatasi(hataMetni(err));
+        if (!iptal) setYuklemeHatasi(hataMetni(err, d.baglantiYok));
       });
     return () => {
       iptal = true;
@@ -174,7 +177,7 @@ function GiristeKurulum({ sonraki, onGeri }: { sonraki: string; onGeri: () => vo
       await dilProfileYaz(dil);
       setKodlar(r.kurtarmaKodlari);
     } catch (err) {
-      setHata(hataMetni(err));
+      setHata(hataMetni(err, d.baglantiYok));
     } finally {
       setBekliyor(false);
     }
@@ -184,7 +187,7 @@ function GiristeKurulum({ sonraki, onGeri }: { sonraki: string; onGeri: () => vo
     return (
       <KurtarmaKodlari
         kodlar={kodlar}
-        devamEtiketi="Panele geç"
+        devamEtiketi={d.paneleGec}
         onDevam={() => {
           router.replace(sonraki);
           router.refresh();
@@ -196,10 +199,9 @@ function GiristeKurulum({ sonraki, onGeri }: { sonraki: string; onGeri: () => vo
   return (
     <div className="grid gap-4">
       <div>
-        <p className="m-0 font-bold text-ink">İki adımlı doğrulamayı kur</p>
+        <p className="m-0 font-bold text-ink">{d.kurBaslik}</p>
         <p className="m-0 mt-0.5 text-14 text-ink-muted">
-          Şirketin bu korumayı zorunlu tutuyor. Bir kez kurarsın, sonraki girişlerde telefonundaki
-          kodu yazarsın.
+          {d.kurAciklama}
         </p>
       </div>
 
@@ -207,12 +209,12 @@ function GiristeKurulum({ sonraki, onGeri }: { sonraki: string; onGeri: () => vo
         <>
           <HataKutusu mesaj={yuklemeHatasi} />
           <button type="button" onClick={onGeri} className={`${KART_BAGLANTISI} text-left`}>
-            Giriş ekranına dön
+            {d.girisEkraninaDon}
           </button>
         </>
       ) : !bilgi ? (
         <p className="m-0 text-14 text-ink-muted" aria-live="polite">
-          QR kodu hazırlanıyor…
+          {d.qrHazirlaniyor}
         </p>
       ) : (
         <form onSubmit={onayla} className="grid gap-4" noValidate>
@@ -220,11 +222,11 @@ function GiristeKurulum({ sonraki, onGeri }: { sonraki: string; onGeri: () => vo
           <HataKutusu mesaj={hata} />
           <KodAlani id="kurulumKod" value={kod} onChange={setKod} disabled={bekliyor} />
           <Dugme type="submit" className="w-full" bekliyor={bekliyor}>
-            {bekliyor ? 'Kontrol ediliyor…' : 'Kur ve devam et'}
+            {bekliyor ? d.kontrolEdiliyor : d.kurVeDevam}
           </Dugme>
           <div>
             <Dugme ton="hayalet" boyut="kucuk" onClick={onGeri}>
-              Geri
+              {d.geri}
             </Dugme>
           </div>
         </form>

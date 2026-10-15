@@ -1,4 +1,5 @@
 import { cookies, headers } from 'next/headers';
+import { ONEK_BASLIGI } from '@/lib/site-yollari';
 import { DIL_CEREZI, VARSAYILAN_DIL, dilBelirle, sec, tarayiciDili, type Dil, type IkiDil } from '@advetics/shared';
 
 /**
@@ -9,7 +10,10 @@ import { DIL_CEREZI, VARSAYILAN_DIL, dilBelirle, sec, tarayiciDili, type Dil, ty
  */
 export async function dilDurumu(): Promise<{ dil: Dil; dilSecildi: boolean; oneri: Dil }> {
   const [c, h] = await Promise.all([cookies(), headers()]);
-  const secilen = dilBelirle({ cerez: c.get(DIL_CEREZI)?.value });
+  // Önek başlığını yalnız middleware yazıyor (istemcinin gönderdiği siliniyor).
+  // Yeniden yazılan `/en/...` isteğinde çerez henüz YANITTA, istekte değil:
+  // ilk ziyarette dil bu başlıktan okunmasa sayfa Türkçe çizilirdi.
+  const secilen = dilBelirle({ onek: h.get(ONEK_BASLIGI), cerez: c.get(DIL_CEREZI)?.value });
   return {
     dil: secilen ?? VARSAYILAN_DIL,
     dilSecildi: secilen !== null,
