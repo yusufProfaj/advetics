@@ -234,7 +234,7 @@ describe('"Eksikleri tamamla": kodlar ve "site yok"', () => {
       { record: kayit } as never,
       { platforms: { google: { developerToken: 'dev', apiVersion: 'v25' }, meta: { apiVersion: 'v25.0' } } } as never,
       { kurulumdanBagla: vi.fn().mockResolvedValue(null) } as never,
-      { oku: vi.fn().mockResolvedValue(new Map()), ekle: vi.fn() } as never,
+      { oku: vi.fn().mockResolvedValue(new Map()), ekle: vi.fn(), konteynerEkle: vi.fn().mockResolvedValue(undefined) } as never,
     );
   const GOOGLE_BAGLANTI = '77777777-7777-4777-8777-777777777777';
 
@@ -319,7 +319,7 @@ describe('sayfa adımı boost hesabını bağlıyor (sihirbaz Ç-7)', () => {
       { record: kayit } as never,
       { platforms: { google: {}, meta: {} } } as never,
       { kurulumdanBagla: vi.fn() } as never,
-      { oku: vi.fn().mockResolvedValue(new Map()), ekle: vi.fn() } as never,
+      { oku: vi.fn().mockResolvedValue(new Map()), ekle: vi.fn(), konteynerEkle: vi.fn().mockResolvedValue(undefined) } as never,
     );
 
   beforeEach(async () => {

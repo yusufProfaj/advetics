@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GtmIstemcisi } from './gtm';
 import {
+  GtmEnvanterKuyrugu,
   GTM_ENVANTER_HIZI,
   GTM_ENVANTER_TAZELIK_MS,
   envanterNotu,
@@ -193,5 +194,69 @@ describe('kaynak bekçileri', () => {
     expect(ISCI.slice(bas, ISCI.indexOf('gtmWorker.on(', bas))).toContain('limiter: { ...GTM_ENVANTER_HIZI }');
     // 0,25 istek/sn proje sınırı; kurulum çağrılarına pay kalsın.
     expect(GTM_ENVANTER_HIZI.max / (GTM_ENVANTER_HIZI.duration / 1000)).toBeLessThan(0.25);
+  });
+});
+
+describe('bir kez tara, hep göster (2026-10-15)', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  /** Redis ve kuyruk bellek içi; sınıfın kendi bağlantı kurucusu atlanıyor. */
+  function kuyruk() {
+    const hash = new Map<string, string>();
+    const addBulk = vi.fn();
+    const k = Object.create(GtmEnvanterKuyrugu.prototype) as GtmEnvanterKuyrugu;
+    Object.assign(k, {
+      onEk: 'advetics',
+      baglanti: {
+        hget: async (_a: string, f: string) => hash.get(f) ?? null,
+        hset: async (_a: string, f: string, v: string) => void hash.set(f, v),
+        hgetall: async () => Object.fromEntries(hash),
+      },
+      kuyruk: { addBulk },
+    });
+    return { k, hash, addBulk };
+  }
+
+  it('KRİTİK: izin anında BÜTÜN hesaplar kuyruğa giriyor', async () => {
+    const { k, addBulk } = kuyruk();
+    vi.spyOn(GtmIstemcisi.prototype, 'hesaplar').mockResolvedValue(hesaplar(155));
+    const n = await k.izinleBaslat('c1', 'tok', ['https://www.googleapis.com/auth/tagmanager.edit.containers'], SIMDI);
+    expect(n).toBe(155);
+    expect(addBulk.mock.calls[0]![0]).toHaveLength(155);
+  });
+
+  it('Tag Manager izni yoksa hiçbir çağrı yapmıyor', async () => {
+    const { k, addBulk } = kuyruk();
+    const h = vi.spyOn(GtmIstemcisi.prototype, 'hesaplar');
+    expect(await k.izinleBaslat('c1', 'tok', ['https://www.googleapis.com/auth/adwords'], SIMDI)).toBe(0);
+    expect(h).not.toHaveBeenCalled();
+    expect(addBulk).not.toHaveBeenCalled();
+  });
+
+  it('KRİTİK: açılan konteyner hemen listede; satırı yoksa BAYAT açılıyor (hesabın öbür konteynerleri düşmesin)', async () => {
+    const { k } = kuyruk();
+    await k.konteynerEkle('c1', '1000', '', { path: 'accounts/1000/containers/5', name: 'Yeni', publicId: 'GTM-YENI' });
+    const m = (await k.oku('c1'))!;
+    const o = envanterOzeti(hesaplar(1), m, SIMDI);
+    expect(o.konteynerler.map((c) => c.publicId)).toEqual(['GTM-YENI']);
+    // Bayat: hesap yine taranacak.
+    expect(o.kuyruga).toHaveLength(1);
+  });
+
+  it('var olan satıra ekliyor, aynı konteyneri iki kez yazmıyor', async () => {
+    const { k, hash } = kuyruk();
+    hash.set('1000', JSON.stringify(satir('a')));
+    const yeni = { path: 'accounts/1000/containers/5', name: 'Yeni', publicId: 'GTM-YENI' };
+    await k.konteynerEkle('c1', '1000', '', yeni);
+    await k.konteynerEkle('c1', '1000', '', yeni);
+    const s = JSON.parse(hash.get('1000')!) as GtmEnvanterSatiri;
+    expect(s.konteynerler.map((c) => c.publicId)).toEqual(['GTM-1', 'GTM-YENI']);
+    expect(s.taranma).toBe(SIMDI.toISOString());
+  });
+
+  it('KRİTİK: envanter anahtarının ÖMRÜ YOK (bir hafta açılmayan seçici baştan taratmasın)', () => {
+    const kod = readFileSync(join(__dirname, 'gtm-envanter.ts'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    expect(kod).toContain('envanterAnahtari(onEk, is.connectionId)');
+    expect(kod).not.toMatch(/\.expire\(|EX'|'PX'/);
   });
 });

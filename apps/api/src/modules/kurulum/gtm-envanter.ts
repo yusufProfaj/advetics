@@ -2,7 +2,7 @@ import { Inject, Injectable, OnModuleDestroy } from '@nestjs/common';
 import { Queue } from 'bullmq';
 import Redis from 'ioredis';
 import { CONFIG, type AppConfig } from '../../config/configuration';
-import type { GtmKonteyner } from './gtm';
+import { GtmIstemcisi, type GtmKonteyner } from './gtm';
 
 /**
  * ═══ TAG MANAGER ENVANTERİ — BÜTÜN HESAPLARIN KONTEYNERLERİ ═══
@@ -19,8 +19,17 @@ import type { GtmKonteyner } from './gtm';
  * istekle (işçide `limiter`, kuyruk düzeyinde) taranıyor ve REDIS'te
  * bağlantı başına bir hash olarak duruyor. Tablo DEĞİL: yeniden üretilebilir
  * bir önbellek (hesap ve konteyner adları), gizli bilgi taşımıyor; tablo
- * migration, RLS ve üretim sırası yükü getirirdi. Anahtar 7 gün yaşıyor;
- * seçici 24 saatten eski hesabı yeniden kuyruğa atıyor.
+ * migration, RLS ve üretim sırası yükü getirirdi.
+ *
+ * BİR KEZ TARA, HEP GÖSTER (kullanıcı, 2026-10-15): tam tarama Tag Manager
+ * İZNİ VERİLDİĞİ ANDA başlıyor (`izinleBaslat`), seçici açılınca değil;
+ * kullanıcı seçiciye geldiğinde liste büyük ihtimalle hazır. Anahtarın
+ * ÖMRÜ YOK: süreli olsaydı bir hafta açılmayan seçici 13 dakikalık taramayı
+ * baştan yaptırırdı. Yenileme yine var ama görünmez: seçici 24 saatten eski
+ * hesabı arka planda yeniden kuyruğa atıyor, eski liste bu sırada ekranda
+ * kalıyor. Hiç yenilememek, ajansa eklenen yeni hesabı sessizce listeden
+ * düşürmek olurdu. Panelden açılan konteyner taramayı beklemeden yazılıyor
+ * (`konteynerEkle`).
  *
  * TEK DENEME, HATA SATIRA YAZILIYOR: bir hesap düşerse ("izin yok", 403
  * kota) envanterde `hata` ile duruyor ve seçici onu sayıyor. Sessizce
@@ -33,7 +42,6 @@ export const GTM_ENVANTER_HIZI = { max: 1, duration: 5_000 } as const;
 
 /** Bu süreden eski hesap taraması seçici açıldığında yenileniyor. */
 export const GTM_ENVANTER_TAZELIK_MS = 24 * 60 * 60 * 1000;
-const ANAHTAR_OMRU_SN = 7 * 24 * 60 * 60;
 
 export interface GtmEnvanterIsi {
   connectionId: string;
@@ -161,22 +169,52 @@ export class GtmEnvanterKuyrugu implements OnModuleDestroy {
     );
   }
 
+  /**
+   * İZİN VERİLDİĞİ ANDA TAM TARAMA. Bağlantı akışının sonundan çağrılıyor;
+   * tek çağrı (hesap listesi) burada, konteynerler kuyrukta. Tag Manager
+   * kapsamı yoksa hiçbir şey yapmıyor.
+   */
+  async izinleBaslat(connectionId: string, accessToken: string, kapsamlar: readonly string[], simdi: Date): Promise<number> {
+    if (!this.kuyruk || !kapsamlar.some((k) => k.includes('/auth/tagmanager'))) return 0;
+    const hesaplar = await new GtmIstemcisi(accessToken).hesaplar();
+    await this.ekle(connectionId, hesaplar.map((h) => ({ hesapId: h.accountId, hesapAdi: h.name })), simdi);
+    return hesaplar.length;
+  }
+
+  /**
+   * PANELDEN AÇILAN KONTEYNER HEMEN LİSTEDE. Yoksa bir sonraki taramaya
+   * kadar (24 saate kadar) seçicide görünmezdi. Hesabın satırı yoksa satır
+   * BAYAT tarihle açılıyor: yalnız bu konteyneri taşıyan satır "tarandı"
+   * sayılsaydı hesabın öbür konteynerleri bir gün listeden düşerdi.
+   */
+  async konteynerEkle(connectionId: string, hesapId: string, hesapAdi: string, k: Pick<GtmKonteyner, 'path' | 'name' | 'publicId'>): Promise<void> {
+    if (!this.baglanti) return;
+    const anahtar = envanterAnahtari(this.onEk, connectionId);
+    const ham = await this.baglanti.hget(anahtar, hesapId);
+    let satir: GtmEnvanterSatiri;
+    try {
+      satir = ham ? (JSON.parse(ham) as GtmEnvanterSatiri) : { hesapAdi, konteynerler: [], taranma: new Date(0).toISOString(), hata: null };
+    } catch {
+      satir = { hesapAdi, konteynerler: [], taranma: new Date(0).toISOString(), hata: null };
+    }
+    if (!satir.konteynerler.some((c) => c.path === k.path)) satir.konteynerler.push({ path: k.path, name: k.name, publicId: k.publicId });
+    await this.baglanti.hset(anahtar, hesapId, JSON.stringify(satir));
+  }
+
   async onModuleDestroy(): Promise<void> {
     await this.kuyruk?.close();
     await this.baglanti?.quit().catch(() => this.baglanti?.disconnect());
   }
 }
 
-/** İşçinin yazımı — envanter satırı. Anahtarın ömrü her yazımda uzuyor. */
+/** İşçinin yazımı — envanter satırı. Ömür YOK (yukarıda: "bir kez tara, hep göster"). */
 export async function envanterYaz(
-  redis: Pick<Redis, 'hset' | 'expire'>,
+  redis: Pick<Redis, 'hset'>,
   onEk: string,
   is: GtmEnvanterIsi,
   satir: GtmEnvanterSatiri,
 ): Promise<void> {
-  const anahtar = envanterAnahtari(onEk, is.connectionId);
-  await redis.hset(anahtar, is.hesapId, JSON.stringify(satir));
-  await redis.expire(anahtar, ANAHTAR_OMRU_SN);
+  await redis.hset(envanterAnahtari(onEk, is.connectionId), is.hesapId, JSON.stringify(satir));
 }
 
 /**

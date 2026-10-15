@@ -149,6 +149,7 @@ beforeAll(async () => {
     {} as never,
     { degerlendir: () => { throw new Error('ödeme tetiği beklenmiyor'); } } as never,
     { gonder: mail } as never,
+    { izinleBaslat: vi.fn().mockResolvedValue(0) } as never,
   );
 });
 

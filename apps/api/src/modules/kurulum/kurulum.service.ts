@@ -759,12 +759,15 @@ export class KurulumService {
     if (b.satir?.gtmKimligi && secim === 'oto') return `${b.satir.gtmKimligi} zaten kurulu.`;
     const gtm = new GtmIstemcisi(await this.googleOlcumTokeni(b));
     let k: { path: string; publicId: string; hesap: string } | null = null;
+    /** Bu çağrıda AÇILAN konteyner (seçilen değil): envantere yalnız o yazılıyor. */
+    let acilan: { name: string } | null = null;
     if (secim !== 'oto' && secim.tur === 'mevcut') {
       const c = await gtm.konteyner(secim.konteynerYolu);
       k = { path: c.path, publicId: c.publicId, hesap: secim.konteynerYolu.split('/')[1]! };
     } else if (secim !== 'oto' && secim.tur === 'yeni') {
       const c = await gtm.konteynerAc(secim.gtmHesapId, b.ad);
       k = { path: c.path, publicId: c.publicId, hesap: secim.gtmHesapId };
+      acilan = c;
     } else {
       // OKUNAMAYAN SİTE "KOD YOK" DEĞİL (Ajan 4, B5): site okunamadıysa ya
       // da sitedeki konteynerin dosyası okunamadıysa yeni konteyner açmak
@@ -790,11 +793,20 @@ export class KurulumService {
       } else if (hesaplar.length === 1) {
         const c = await gtm.konteynerAc(hesaplar[0]!.accountId, b.ad);
         k = { path: c.path, publicId: c.publicId, hesap: hesaplar[0]!.accountId };
+        acilan = c;
       } else {
         throw new KullaniciGerekli(hesaplar.length === 0 ? 'Erişilebilen Tag Manager hesabı yok; tagmanager.google.com’da bir hesap aç.' : `${hesaplar.length} Tag Manager hesabı var; konteynerin hangisinde açılacağını seç.`);
       }
     }
     await this.yaz(ctx, clientId, { gtm_hesap_id: k.hesap, gtm_konteyner_yolu: k.path, gtm_kimligi: k.publicId, gtm_yayin: null, site_kodu: null });
+    // AÇILAN konteyner seçicide hemen görünsün (taramayı beklemesin).
+    // Envanter yalnız bir önbellek: yazılamazsa bağlama başarılı kalıyor.
+    const gb = this.baglantiSec(b, 'google');
+    if (gb && acilan) {
+      await this.gtmEnvanteri
+        .konteynerEkle(gb.id, k.hesap, '', { path: k.path, name: acilan.name, publicId: k.publicId })
+        .catch((e: unknown) => logger.warn(`Tag Manager envanterine yazılamadı: ${e instanceof Error ? e.message : String(e)}`));
+    }
     return `Konteyner ${k.publicId} bağlandı.`;
   }
 

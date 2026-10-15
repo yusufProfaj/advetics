@@ -129,6 +129,7 @@ function servis(
     tetikKaydedici as never,
     // AJANSA MAİL — yalnızca müşteri ajans atamasını kaldırınca; bu testte o yol koşmuyor.
     { gonder: async () => ({ alici: 'test' }) } as never,
+    { izinleBaslat: async () => 0 } as never,
   );
   return { svc, c };
 }

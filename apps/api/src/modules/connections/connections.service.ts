@@ -1,3 +1,4 @@
+import { GtmEnvanterKuyrugu } from '../kurulum/gtm-envanter';
 import {
   BadRequestException,
   ConflictException,
@@ -211,6 +212,11 @@ export class ConnectionsService {
      * zaten bağlı ve sağlayıcıyı dışa veriyor; yeni modül kaydı yok.
      */
     private readonly odemeMaili: OdemeMailiGonderici,
+    /**
+     * TAG MANAGER ENVANTERİ — ölçüm izni gelince tam tarama. En sonda,
+     * aynı gerekçe: testler konumla geçiriyor.
+     */
+    private readonly gtmEnvanteri: GtmEnvanterKuyrugu,
   ) {}
 
   /**
@@ -901,6 +907,20 @@ export class ConnectionsService {
       // İZİN AKIŞININ SONU — TEK YER (Paket F1, Ajan 4 N): izin yüzünden duran
       // veri kaynakları kendiliğinden yeniden denensin.
       await this.izinBekleyenKaynaklariKuyrukla(connectionId);
+
+      /*
+       * TAG MANAGER ENVANTERİ İZİN ANINDA (kullanıcı, 2026-10-15: "yetkiyi
+       * aldığında 1 kez tarasa"). Kurulum seçicisi açılana kadar beklemek,
+       * ilk açılışı yarım listeyle karşılamaktı. Düşerse bağlantı BOZULMAZ:
+       * seçici ilk açılışta eksik hesapları zaten kuyruğa atıyor.
+       */
+      if (platform === 'google') {
+        await this.gtmEnvanteri
+          .izinleBaslat(connectionId, tokens.accessToken, tokens.grantedScopes, new Date())
+          .catch((e: unknown) =>
+            this.logger.warn(`Tag Manager envanteri başlatılamadı (bağlantı ${connectionId}): ${e instanceof Error ? e.message : String(e)}`),
+          );
+      }
 
       await this.audit.recordUnauthenticated(state.orgId, {
         action: 'connection.created',

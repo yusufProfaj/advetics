@@ -72,6 +72,7 @@ function servis(
     {} as never,
     // AJANSA MAİL — yalnızca müşteri ajans atamasını kaldırınca; bu testte o yol koşmuyor.
     { gonder: async () => ({ alici: 'test' }) } as never,
+    { izinleBaslat: async () => 0 } as never,
   );
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

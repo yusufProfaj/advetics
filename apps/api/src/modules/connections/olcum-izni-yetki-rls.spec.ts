@@ -81,7 +81,7 @@ beforeAll(async () => {
       }
     },
   } as unknown as PrismaService;
-  svc = new ConnectionsService(prisma, {} as never, {} as never, {} as never, {} as never, {} as never, {} as never, {} as never, {} as never, {} as never);
+  svc = new ConnectionsService(prisma, {} as never, {} as never, {} as never, {} as never, {} as never, {} as never, {} as never, {} as never, {} as never, { izinleBaslat: async () => 0 } as never);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (svc as any).startOAuth = (_c: unknown, _p: unknown, opts: { hedefBaglantiId?: string }) => {
     gecen = opts;

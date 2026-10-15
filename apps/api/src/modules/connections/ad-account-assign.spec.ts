@@ -89,6 +89,7 @@ beforeAll(async () => {
     { degerlendir: () => { throw new Error('ödeme tetiği bu testte beklenmiyor'); } } as never,
     // AJANSA MAİL — yalnızca müşteri ajans atamasını kaldırınca; bu testte o yol koşmuyor.
     { gonder: async () => ({ alici: 'test' }) } as never,
+    { izinleBaslat: async () => 0 } as never,
   );
 });
 

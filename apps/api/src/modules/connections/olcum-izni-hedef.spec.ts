@@ -165,6 +165,8 @@ function yonetimIstemcisi(hh: Harness) {
   };
 }
 
+const envanter = { izinleBaslat: vi.fn() };
+
 beforeAll(async () => {
   h = await createHarness();
   const saglayici = {
@@ -190,6 +192,7 @@ beforeAll(async () => {
     {} as never,
     { degerlendir: () => Promise.resolve() } as never,
     { gonder: async () => ({ alici: 'test' }) } as never,
+    envanter as never,
   );
 });
 
@@ -200,6 +203,7 @@ afterAll(async () => {
 beforeEach(async () => {
   await h.reset();
   tokenlar = ajansKisisi();
+  envanter.izinleBaslat.mockReset().mockResolvedValue(155);
   await seedTenant(h, { platform: 'google', externalId: '5550000001' });
   await seedAjans(h);
   // AJANSIN BAĞLANTISI: havuz, ajans şirketinde, yalnız adwords, kimlik müşteri uzayında.
@@ -221,6 +225,22 @@ beforeEach(async () => {
     MUSTERI_WS,
     AJANS_KIMLIK,
   ]);
+});
+
+describe('Tag Manager envanteri izin anında başlıyor (2026-10-15)', () => {
+  it('KRİTİK: ölçüm izni gelince tam tarama ajansın bağlantısı için başlıyor', async () => {
+    await svc.handleCallback('google', { code: 'k', state: await state({ hedef: IDS.connection, olcum: true }) }, META);
+    expect(envanter.izinleBaslat).toHaveBeenCalledTimes(1);
+    const [baglanti, , kapsamlar] = envanter.izinleBaslat.mock.calls[0]!;
+    expect(baglanti).toBe(IDS.connection);
+    expect(kapsamlar).toEqual(expect.arrayContaining([...GOOGLE_OLCUM_SCOPES]));
+  });
+
+  it('KRİTİK: tarama düşerse bağlantı BOZULMUYOR (envanter yalnız önbellek)', async () => {
+    envanter.izinleBaslat.mockRejectedValue(new Error('Quota exceeded'));
+    const { redirectPath } = await svc.handleCallback('google', { code: 'k', state: await state({ hedef: IDS.connection, olcum: true }) }, META);
+    expect(sorgu(redirectPath).get('connection')).toBe('basarili');
+  });
 });
 
 describe('KRİTİK: hedefli dönüş (Ölçüm izinlerini ver)', () => {
@@ -342,7 +362,7 @@ describe('KRİTİK: kurulum izin sonrası "İzin verildi" der', () => {
       { record: vi.fn() } as never,
       { platforms: { google: { developerToken: 'dev', apiVersion: 'v25' }, meta: { apiVersion: 'v25.0' } } } as never,
       { kurulumdanBagla: vi.fn() } as never,
-      { oku: vi.fn().mockResolvedValue(new Map()), ekle: vi.fn() } as never,
+      { oku: vi.fn().mockResolvedValue(new Map()), ekle: vi.fn(), konteynerEkle: vi.fn().mockResolvedValue(undefined) } as never,
     );
     const ctx = {
       orgId: MUSTERI_ORG,

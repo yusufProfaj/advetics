@@ -8,6 +8,7 @@ import { LinkedInProvider } from './providers/linkedin.provider';
 import { MetaProvider } from './providers/meta.provider';
 import { TokenVaultService } from './token-vault.service';
 import { OdemeTetigiModule } from '../alerts/odeme-tetigi.module';
+import { GtmEnvanterKuyrugu } from '../kurulum/gtm-envanter';
 
 /**
  * Modül 2 — Platform bağlantıları.
@@ -15,6 +16,10 @@ import { OdemeTetigiModule } from '../alerts/odeme-tetigi.module';
  * Provider'lar dışa AÇILIR: Modül 3'ün sync worker'ları ve Modül 5'in kural
  * motoru aynı adapter'ları kullanacak. TokenVaultService de dışa açık —
  * token'a ihtiyaç duyan her katman oradan geçmek zorunda.
+ *
+ * TAG MANAGER ENVANTERİ BURADA: tam tarama ölçüm izni verildiği anda,
+ * bağlantı akışının sonunda başlıyor (`izinleBaslat`); kurulum seçicisi aynı
+ * örneği okuyor.
  */
 @Module({
   // ÖDEME TETİĞİ: hesap durumu yazılan her yol sorunu o an bildiriyor.
@@ -29,7 +34,8 @@ import { OdemeTetigiModule } from '../alerts/odeme-tetigi.module';
     MetaProvider,
     GoogleProvider,
     LinkedInProvider,
+    GtmEnvanterKuyrugu,
   ],
-  exports: [ConnectionsService, TokenVaultService, ProviderRegistry],
+  exports: [ConnectionsService, TokenVaultService, ProviderRegistry, GtmEnvanterKuyrugu],
 })
 export class ConnectionsModule {}

@@ -34,7 +34,7 @@ const ctx = {
   permissions: ['client.read', 'client.write', 'connection.write', 'connection.manage'],
 } as unknown as TenantContext;
 
-const envanter = { oku: vi.fn(), ekle: vi.fn() };
+const envanter = { oku: vi.fn(), ekle: vi.fn(), konteynerEkle: vi.fn() };
 
 const tarandi = (x: Partial<{ tagManager: string[]; analytics: string[]; metaPiksel: string[]; tagManagerOkunamayan: string[] }> = {}) => ({
   site: { durum: 'tarandi', adres: 'https://ornek.com', hata: null, tagManager: [], analytics: [], metaPiksel: [], altyapi: null, tagManagerOkunamayan: [], ...x },
@@ -66,6 +66,7 @@ beforeEach(async () => {
   olcumDurum.mockReset().mockResolvedValue(tarandi());
   envanter.oku.mockReset().mockResolvedValue(new Map());
   envanter.ekle.mockReset();
+  envanter.konteynerEkle.mockReset().mockResolvedValue(undefined);
   const prisma = { withTenant: <T>(_c: TenantContext, fn: (tx: unknown) => Promise<T>) => fn(h.db) } as unknown as PrismaService;
   svc = new KurulumService(
     prisma,
@@ -329,5 +330,19 @@ describe('Tag Manager: 30 hesap sınırı kalktı (2026-10-15)', () => {
     const [baglanti, kuyruga] = envanter.ekle.mock.calls[0]!;
     expect(baglanti).toBe(GOOGLE_BAGLANTI);
     expect((kuyruga as unknown[]).length).toBe(55);
+  });
+});
+
+describe('Tag Manager: açılan konteyner envantere (2026-10-15)', () => {
+  it('KRİTİK: "Yeni konteyner aç" seçicide taramayı beklemeden görünüyor', async () => {
+    vi.spyOn(GtmIstemcisi.prototype, 'konteynerAc').mockResolvedValue({ path: 'accounts/6000000001/containers/55', containerId: '55', name: 'Workspace', publicId: 'GTM-YENI1' });
+    await svc.adim(ctx, IDS.client, { kod: 'gtm_konteyner', secim: { tur: 'yeni', gtmHesapId: '6000000001' } }, {}).catch(() => undefined);
+    expect(envanter.konteynerEkle).toHaveBeenCalledWith(GOOGLE_BAGLANTI, '6000000001', '', { path: 'accounts/6000000001/containers/55', name: 'Workspace', publicId: 'GTM-YENI1' });
+  });
+
+  it('MEVCUT konteyner seçilince envantere yazılmıyor (adını bilmiyoruz; tarama zaten getirir)', async () => {
+    vi.spyOn(GtmIstemcisi.prototype, 'konteyner').mockResolvedValue({ path: KONTEYNER, containerId: '9000001', name: 'X', publicId: 'GTM-X1' });
+    await svc.adim(ctx, IDS.client, { kod: 'gtm_konteyner', secim: { tur: 'mevcut', konteynerYolu: KONTEYNER } }, {}).catch(() => undefined);
+    expect(envanter.konteynerEkle).not.toHaveBeenCalled();
   });
 });
