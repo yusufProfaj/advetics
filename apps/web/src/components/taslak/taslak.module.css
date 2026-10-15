@@ -654,7 +654,14 @@ button.metrik:hover {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-width: 0;
+  /*
+   * AD SÜTUNUNUN TABANI. Hücre `max-width: 0` ile kalan alanı alıyordu ve
+   * para sütunları `nowrap` olduğu için dar kartta ada 60-80 px kalıp
+   * kampanya adı tek kelimeye iniyordu (canlı denetim). En az genişlik
+   * sütunun min-content'ine giriyor; sığmazsa tablo `.tabloSar` içinde
+   * yana kayıyor, ad kesilmiyor.
+   */
+  min-width: 12.5rem;
 }
 .nokta {
   width: 8px;

@@ -588,7 +588,7 @@ export function OzetListeKarti({
         <p className={s.bosMetin}>Bu dönemde gösterilecek satır yok.</p>
       ) : (
         <div className={s.tabloSar}>
-          <table className={s.tablo} style={{ minWidth: 560 }}>
+          <table className={s.tablo} style={{ minWidth: 640 }}>
             <thead>
               <tr>
                 <th>{sutunAdi}</th>
@@ -623,6 +623,7 @@ export function OzetListeKarti({
                               e.stopPropagation();
                               void tikla(r);
                             }}
+                            title={r.ad}
                             style={{ fontWeight: 600, textAlign: 'left', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}
                           >
                             {r.ad}
@@ -781,7 +782,7 @@ export function EnCokHarcayanlarKarti({
         <p className={s.bosMetin}>Bu dönemde harcaması olan {ad.cogul} yok.</p>
       ) : (
         <div className={s.tabloSar}>
-          <table className={s.tablo} style={{ minWidth: 560 }}>
+          <table className={s.tablo} style={{ minWidth: 640 }}>
             <thead>
               <tr>
                 <th>{ad.sutun}</th>
