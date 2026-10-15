@@ -51,11 +51,26 @@ function Karo({ children, hata = false }: { children: ReactNode; hata?: boolean 
  * farklı. `neden` ZORUNLU: nedeni olmayan bir boş kutu bu bileşenle
  * yazılamasın.
  */
+/*
+ * VARSAYILAN İKON BOŞ KUTU, "0" KARAKTERİ DEĞİL. Eski varsayılan "0" idi ve
+ * boş durum kutusunda sayı gibi okunuyordu ("0 ne?"; canlı denetim).
+ * Çizgi ikon `currentColor`: kılavuz dışı renk taşımıyor.
+ */
+// MODÜL DÜZEYİNDE JSX DEĞİL, BİLEŞEN: dosyayı yalnız içe aktaran spec'ler
+// (panelde React'i kapsamda tutmayan JSX dönüşümü) yükleme anında düşüyordu.
+export function BosIkonu() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden className="h-4 w-4" data-bos-ikonu>
+      <path d="M3 11h4l1.5 2h3L13 11h4M3 11l2-6h10l2 6v4H3v-4Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export function BosDurum({
   baslik,
   neden,
   eylem,
-  ikon = '0',
+  ikon = <BosIkonu />,
 }: {
   baslik: ReactNode;
   neden: ReactNode;

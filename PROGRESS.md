@@ -139,7 +139,7 @@
 
 ## Ortak (her modülde rastlanırsa)
 
-- [ ] Boş durum kutularında ikon yerine "0" yazıyor; `BosDurum` ikonu
+- [x] Boş durum kutularında ikon yerine "0" yazıyor; `BosDurum` ikonu (varsayılan çizgi "boş kutu" ikonu; canlıda GÖRÜLMEDİ)
 - [ ] Kenar menüsü 800 px yükseklikte Base bölümünü göstermiyor; etkin satır solmanın altında
 
 ## Kullanıcıda (döngü dışı)
