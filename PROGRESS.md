@@ -132,7 +132,10 @@
 - [x] Bilinen açık: `/ayarlar` markasız İngilizce 404; `/ayarlar/sirketler`e yönlendir + Türkçe markalı `not-found.tsx` (oturumun açabildiği ilk sekmeye; canlıda GÖRÜLMEDİ)
 - [x] Bilinen açık: Bağlantılar'da yedi platform sekmesi 1280 px'te sayfayı 214 px taşırıyor (ortak `BolumluSecici` kabını aşmıyor, kendi içinde kayıyor; canlıda GÖRÜLMEDİ)
 - [x] Bilinen açık: Hesabım üst yolunda sayfa adı eksik (kırıntı adı menüden buluyordu; Hesabım menüde değil, listeye eklendi; canlıda GÖRÜLMEDİ)
-- [ ] Araştırma → `docs/pazar/ayarlar.md` (ajans çoklu müşteri yönetimi, rol modelleri, 2FA zorunluluğu)
+- [x] Araştırma → `docs/pazar/ayarlar.md` (ajans çoklu müşteri yönetimi, rol modelleri, 2FA zorunluluğu)
+- [ ] Öneri 1: ekip listesinde "uzun süredir giriş yok" işareti (90 gün; hiç giriş yapmamış ayrı)
+- [ ] Öneri 2: ekip listesinde kişinin iki adımı açık mı (zorunluluk açılmadan kimin takılacağı)
+- [ ] (onay bekliyor: yeni ekran bölümü + yetki kararı) Öneri 3: Ekip ve güvenlik altında "Son değişiklikler" (audit_logs)
 
 ## Ortak (her modülde rastlanırsa)
 
