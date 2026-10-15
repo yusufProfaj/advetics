@@ -26,13 +26,9 @@
       "Bash(wc:*)"
     ],
     "deny": [
-      "Bash(git push:*)",
       "Bash(git reset --hard:*)",
       "Bash(git clean:*)",
-      "Bash(git rebase:*)",
-      "Bash(ssh:*)",
       "Bash(scp:*)",
-      "Bash(curl:*)",
       "Bash(wget:*)",
       "Bash(rm -rf:*)",
       "Bash(./scripts/deploy.sh:*)",
