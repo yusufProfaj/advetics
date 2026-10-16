@@ -569,6 +569,45 @@ export class GoogleProvider implements IAdPlatformProvider {
   }
 
   /**
+   * ═══ GOOGLE'IN HAZIR KİTLELERİ — `user_interest` (Base › Kitleler) ═══
+   *
+   * İlgi (AFFINITY) ve satın alma niyeti (IN_MARKET) kategorileri. Liste
+   * Google'ın sabit sözlüğü, hesaba göre değişmiyor; SALT OKUNUR, tek
+   * sorgu. Adlar İNGİLİZCE geliyor ve iç içe yol taşıyor
+   * ("/Sports & Fitness/Golf Enthusiasts"): eşleme çağıranda, kelime
+   * içinde geçme ile yapılıyor (`googleIlgiEsle`, shared).
+   *
+   * CANLIDA ÖLÇÜLMEDİ (2026-10-16): alan adları belgeden (v25
+   * `UserInterest`). Hata yutulmuyor; öneri ekranı "Google'dan okunamadı"
+   * diye platformun cümlesini yazıyor. `launched_to_all` YALNIZ okunuyor:
+   * Google kapalı kategoriyi de listeliyor ve kapalı kategoriyi önermek
+   * kurulumda reddedilen bir kitle demekti.
+   */
+  async kullaniciIlgileri(
+    accessToken: string,
+    customerId: string,
+    loginCustomerId?: string,
+  ): Promise<Array<{ id: string; ad: string; tur: 'affinity' | 'in_market' }>> {
+    const satirlar = await this.searchGaql<{
+      userInterest?: { userInterestId?: string; name?: string; taxonomyType?: string; launchedToAll?: boolean };
+    }>(
+      accessToken,
+      customerId,
+      `SELECT user_interest.user_interest_id, user_interest.name, user_interest.taxonomy_type, user_interest.launched_to_all
+       FROM user_interest
+       WHERE user_interest.taxonomy_type IN ('AFFINITY', 'IN_MARKET')`,
+      loginCustomerId,
+    );
+    const out: Array<{ id: string; ad: string; tur: 'affinity' | 'in_market' }> = [];
+    for (const r of satirlar) {
+      const u = r.userInterest;
+      if (!u?.userInterestId || !u.name || u.launchedToAll === false) continue;
+      out.push({ id: String(u.userInterestId), ad: u.name, tur: u.taxonomyType === 'IN_MARKET' ? 'in_market' : 'affinity' });
+    }
+    return out;
+  }
+
+  /**
    * ANAHTAR KELİME FİKİRLERİ — `KeywordPlanIdeaService.GenerateKeywordIdeas`.
    *
    * SALT OKUNUR: hesapta hiçbir şey oluşturmuyor, para harcamıyor. AdvStrategy

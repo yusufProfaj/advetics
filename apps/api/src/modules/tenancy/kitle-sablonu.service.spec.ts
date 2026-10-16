@@ -169,3 +169,73 @@ describe('şema kuralları', () => {
     ).rejects.toThrow(/audience_templates_yas/);
   });
 });
+
+describe('Google karşılığı (2026-10-16)', () => {
+  const GOOGLE = { ilgiler: [{ id: '80432', ad: '/Sports & Fitness/Golf Enthusiasts', tur: 'affinity' as const }], kelimeler: ['golf sopası', 'golf kulübü'] };
+
+  it('KRİTİK: kaydediliyor, geri okunuyor, güncellemede değişiyor', async () => {
+    const s = await svc.create(CTX, girdi({ google: GOOGLE }), {});
+    expect(s.google).toEqual(GOOGLE);
+    expect((await svc.list(CTX, IDS.client)).items[0]!.google).toEqual(GOOGLE);
+    const g = await svc.update(CTX, s.id, girdi({ google: { ilgiler: [], kelimeler: ['golf'] } }), {});
+    expect(g.google).toEqual({ ilgiler: [], kelimeler: ['golf'] });
+  });
+
+  it('alanı göndermeyen eski istemci boş karşılık yazar; Meta tarafı etkilenmez', async () => {
+    const s = await svc.create(CTX, girdi(), {});
+    expect(s.google).toEqual({ ilgiler: [], kelimeler: [] });
+    expect(s.locations).toEqual([IZMIR]);
+  });
+
+  it('bozuk Google kaydı şablonu düşürmüyor, boş okunuyor', async () => {
+    const s = await svc.create(CTX, girdi(), {});
+    await h.q(`UPDATE audience_templates SET google_hedefleri = '{"ilgiler":[{"id":"x"}]}'::jsonb WHERE id = $1`, [s.id]);
+    const okunan = (await svc.list(CTX, IDS.client)).items[0]!;
+    expect(okunan.google).toEqual({ ilgiler: [], kelimeler: [] });
+    expect(okunan.name).toBe('İzmir kadın');
+  });
+});
+
+describe('reklam setinin kitlesini kütüphaneye almak', () => {
+  const KAMPANYA = '66666666-6666-4666-8666-666666666662';
+  const SET = '77777777-7777-4777-8777-777777777779';
+  async function setKur(targeting: unknown, clientId: string = IDS.client, platform = 'meta') {
+    await h.q(
+      `INSERT INTO campaigns (id, ad_account_id, client_id, platform, external_id, name, status, budget_mode, updated_at)
+       VALUES ($1, $2, $3, $4::"Platform", 'c9', 'K', 'active', 'daily', now())`,
+      [KAMPANYA, IDS.adAccount, clientId, platform],
+    );
+    await h.q(
+      `INSERT INTO ad_groups (id, campaign_id, ad_account_id, client_id, platform, external_id, name, status, budget_mode, targeting, updated_at)
+       VALUES ($1, $2, $3, $4, $5::"Platform", 'g9', 'Set', 'active', 'none', $6::jsonb, now())`,
+      [SET, KAMPANYA, IDS.adAccount, clientId, platform, JSON.stringify(targeting)],
+    );
+  }
+
+  it('KRİTİK: hedefleme şablona çevriliyor; taşınamayan parça SÖYLENİYOR', async () => {
+    await setKur({
+      geo_locations: { regions: [{ key: '2622', name: 'İzmir', country: 'TR' }], custom_locations: [{ latitude: 38.4, longitude: 27.1, radius: 5 }] },
+      age_min: 25,
+      age_max: 44,
+      genders: [2],
+      flexible_spec: [{ interests: [{ id: '6003', name: 'Golf' }], behaviors: [{ id: '1', name: 'Sık seyahat' }] }],
+      custom_audiences: [{ id: '238', name: 'Site ziyaretçileri' }],
+    });
+    const r = await svc.settenOlustur(CTX, { clientId: IDS.client, adGroupId: SET, name: 'Golf İzmir' }, {});
+    expect(r.kayit).toMatchObject({ name: 'Golf İzmir', ageMin: 25, ageMax: 44, genders: 'female', interests: [{ id: '6003', name: 'Golf' }] });
+    expect(r.kayit.locations).toEqual([{ key: '2622', type: 'region', label: 'İzmir', countryCode: 'TR' }]);
+    expect(r.kayit.ozelKitleler).toMatchObject([{ id: '238', mod: 'dahil', hesapId: IDS.adAccount }]);
+    expect(r.atilanlar.join(' ')).toMatch(/adres çevresi/);
+    expect(r.atilanlar.join(' ')).toMatch(/davranış/);
+  });
+
+  it('KRİTİK: başka workspace’in seti kopyalanamaz (404)', async () => {
+    await setKur({ geo_locations: { countries: ['TR'] } }, BASKA);
+    await expect(svc.settenOlustur(CTX, { clientId: IDS.client, adGroupId: SET, name: 'X' }, {})).rejects.toThrow(/bulunamadı/);
+  });
+
+  it('Google setinin hedeflemesi okunmuyor: nedeniyle reddediliyor', async () => {
+    await setKur(null, IDS.client, 'google');
+    await expect(svc.settenOlustur(CTX, { clientId: IDS.client, adGroupId: SET, name: 'X' }, {})).rejects.toThrow(/yalnız Meta/);
+  });
+});

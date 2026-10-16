@@ -18,7 +18,7 @@ import { Serit } from '@/components/ui/hal';
 import { KART_BAGLANTISI } from '@/components/ui/kart';
 import { MetrikKutulari, type MetrikKutusu } from '@/components/ui/metrik-kutulari';
 import { DurumNoktasi } from '@/components/ui/rozet';
-import { SayfaIcDuzen, SayfaIcMenu, type IcMenuOgesi } from '@/components/ui/sayfa-ic-menu';
+import { Sekmeler, type SekmeSecenegi } from '@/components/ui/sekmeler';
 import { basHarfler } from './genel-bakis-parcalari';
 import { VarlikEylemPenceresi } from './varlik-eylem-penceresi';
 import type { VarlikEylemHedefi } from '@/lib/varlik-eylemi';
@@ -26,10 +26,11 @@ import type { VarlikEylemHedefi } from '@/lib/varlik-eylemi';
 /*
  * ═══ REKLAM YÖNETİCİSİ — ONAYLANAN TASLAĞIN TEK TABLOSU ═══
  *
- * Düzeyler (şirket, workspace, hesap, kampanya, reklam seti, reklam) SAYFA
- * İÇİ YAN MENÜDE, sayılarıyla (kullanıcı kararı 2026-10-14, onaylı taslak
- * `docs/marka/sayfa-taslaklari.html#yonetici`): üstteki düzey hapları
- * "kontrolü karmaşık" yapıyordu. Sağda kırıntı hapları, metrik kutuları,
+ * Düzeyler (şirket, workspace, hesap, kampanya, reklam seti, reklam,
+ * hedef kitleler) TABLONUN ÜSTÜNDE SEKME, sayılarıyla. 2026-10-14'te sayfa
+ * içi yan menüye alınmıştı; kullanıcı 2026-10-16'da geri istedi: *"sekmeler
+ * solda değil, tabloların üzerinde olsun; solda yer kazanırız"* — 212 px'lik
+ * sütun geniş tabloyu daraltıyordu. Üstte kırıntı hapları, metrik kutuları,
  * şeritler ve TEK kart: süzgeç çipleri (platform, durum, arama,
  * "Önizlemeler" anahtarı), tablo, toplam satırı ve sayaç. Her düzey AYNI
  * tabloyla çiziliyor; sunucu satırları tek biçime çeviriyor. Google Ads'in
@@ -43,6 +44,8 @@ import type { VarlikEylemHedefi } from '@/lib/varlik-eylemi';
  */
 
 export type YmDuzey = 'sirket' | 'workspace' | 'hesap' | 'campaign' | 'ad_group' | 'ad';
+/** Sekme: bir düzey ya da düzey olmayan "Hedef kitleler" görünümü (kendi tablosu, `yerine`). */
+export type YmSekmeAnahtari = YmDuzey | 'kitle';
 
 export interface YmSatir {
   id: string;
@@ -77,7 +80,7 @@ export interface YmSatir {
 }
 
 export interface YmSekme {
-  anahtar: YmDuzey;
+  anahtar: YmSekmeAnahtari;
   ad: string;
   /** Yalnız aktif düzeyde biliniyor; ötekilerde sayı uydurulmuyor. */
   sayi: number | null;
@@ -166,6 +169,7 @@ function metrikKutusu(m: YmMetrik, i: number): MetrikKutusu {
 
 export function ReklamYoneticisiTablosu({
   duzey,
+  seciliSekme,
   sekmeler,
   metrikler,
   satirlar,
@@ -180,6 +184,8 @@ export function ReklamYoneticisiTablosu({
   yerine,
 }: {
   duzey: YmDuzey;
+  /** Seçili sekme; verilmezse `duzey`. "Hedef kitleler"de tablo `yerine` ile geliyor. */
+  seciliSekme?: YmSekmeAnahtari;
   sekmeler: YmSekme[];
   metrikler: YmMetrik[] | null;
   satirlar: YmSatir[];
@@ -370,11 +376,11 @@ export function ReklamYoneticisiTablosu({
   const durumAdi = { hepsi: 'Tümü', yayinda: 'Yayında', degil: 'Yayında değil' }[durumSuz];
 
   /*
-   * DÜZEY YAN MENÜSÜ. Üst düzeyler kapsam değiştiriyor (oturumda), alt
+   * DÜZEY SEKMELERİ. Üst düzeyler kapsam değiştiriyor (oturumda), alt
    * düzeyler adresteki seviyeyi. Gidilemeyen düzey soluk ve NEDENİNİ
    * `title`da söylüyor (`kapaliNedeni`).
    */
-  const menuOgeleri: IcMenuOgesi[] = sekmeler.map((t) => ({
+  const sekmeSecenekleri: SekmeSecenegi[] = sekmeler.map((t) => ({
     deger: t.anahtar,
     etiket: t.ad,
     sayi: t.sayi ?? undefined,
@@ -391,9 +397,7 @@ export function ReklamYoneticisiTablosu({
   }
 
   return (
-    <SayfaIcDuzen
-      menu={<SayfaIcMenu etiket="Reklam düzeyi" ogeler={menuOgeleri} secili={duzey} onSec={duzeySec} />}
-    >
+    <div className="grid min-w-0 gap-4">
       {(gecilen ?? yenileniyor) && (
         <TamEkranYukleniyor mesaj={`${gecilen ?? yenileniyor} görünümüne geçiliyor…`} />
       )}
@@ -409,6 +413,10 @@ export function ReklamYoneticisiTablosu({
           {hata}
         </Serit>
       )}
+
+      {/* SEKMELER TABLONUN HEMEN ÜSTÜNDE: kırıntı ve metrikler sayfanın
+          özeti, sekme ise altındaki tablonun ne olduğunu seçiyor. */}
+      <Sekmeler etiket="Reklam düzeyi" secenekler={sekmeSecenekleri} secili={seciliSekme ?? duzey} onSec={duzeySec} />
 
       {yerine ?? (
         <section className="min-w-0 rounded-kart border border-line bg-surface">
@@ -724,6 +732,6 @@ export function ReklamYoneticisiTablosu({
       )}
 
       <VarlikEylemPenceresi hedef={eylemHedefi} onKapat={() => setEylemHedefi(null)} />
-    </SayfaIcDuzen>
+    </div>
   );
 }

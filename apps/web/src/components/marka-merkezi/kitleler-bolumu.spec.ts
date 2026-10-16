@@ -42,7 +42,8 @@ describe('Kitleler bölümü', () => {
     expect(pencere.slice(0, pencere.indexOf('/>'))).toContain("method: 'DELETE'");
     expect(K.match(/method: 'DELETE'/g)?.length).toBe(1);
     expect(K).toContain('onClick={() => setSilinecek(k.id)}');
-    expect(K).toContain('yalnızca Meta reklamlarında');
+    // 2026-10-16: kısıt değişti, Google karşılığı da tutuluyor; cümle sözlükte.
+    expect(K).toContain('{dk.kullanimNotu}');
   });
 
   it('Tarif et önerisi FORMA dolduruluyor, KAYDEDİLMİYOR; bulunamayan ve kurulamayan yazıyor', () => {
@@ -68,5 +69,19 @@ describe('Kitleler bölümü', () => {
     expect(O).toContain('hesapId: hesap.id, hesapAdi: hesap.name');
     expect(O).not.toMatch(/\.catch\(\(\) => set/);
     expect(K).toContain('ozelKitleler: form.ozelKitleler');
+  });
+});
+
+describe('Google karşılığı (2026-10-16)', () => {
+  it('KRİTİK: form Google bölümünü çiziyor, kayıt ve öneri onu taşıyor', () => {
+    expect(K).toContain('<GoogleKarsiligi google={f.google} degis={(g) => degis({ google: g })} />');
+    expect(K).toContain('google: form.google,');
+    expect(K).toContain('google: { ilgiler: o.google.ilgiler.map((g) => ({ id: g.id, ad: g.ad, tur: g.tur })), kelimeler: o.google.kelimeler },');
+    // Okunamayan Google karşılığı NEDENİYLE yazıyor (boş liste ile ayrı).
+    expect(K).toContain('{dk.googleOkunamadi}: {oneri.google.hata}');
+  });
+
+  it('Reklam Yöneticisi’nden gelen "Hedef kitle" yeni kitle formunu açık getiriyor', () => {
+    expect(K).toContain('if (yeniAc && !yeniAcildi && yazabilir && durum.tur === \'hazir\')');
   });
 });

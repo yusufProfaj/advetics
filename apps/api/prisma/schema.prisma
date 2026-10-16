@@ -623,6 +623,8 @@ model AudienceTemplate {
   interests       Json     @default("[]")
   /// Meta özel/benzer kitleleri — her öğe kendi reklam hesabını taşıyor.
   ozelKitleler    Json     @default("[]") @map("ozel_kitleler")
+  /// Google karşılığı: { ilgiler: [{id, ad, tur}], kelimeler: string[] } (Base › Kitleler).
+  googleHedefleri Json     @default("{\"ilgiler\":[],\"kelimeler\":[]}") @map("google_hedefleri")
   createdByUserId String?  @map("created_by_user_id") @db.Uuid
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)

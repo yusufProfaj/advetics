@@ -140,6 +140,15 @@ async function main() {
       eksik.push(`OzetService → IyilestirService çözülemedi: ${e.message}`);
     }
   }
+  // Kitle önerisinin Google karşılığı (2026-10-16): kasa ve sağlayıcılar
+  // yoksa öneri "Google bağlantısı bu ortamda kurulu değil" der, hata vermez.
+  const { KitleOnerisiService } = require(path.join(SRC, 'modules/ai-assistant/kitle-onerisi.service.ts'));
+  const oneriler = ornekler(KitleOnerisiService);
+  if (oneriler.length === 0) eksik.push('KitleOnerisiService hiç örneklenmedi');
+  for (const o of oneriler) {
+    if (!o.kasa) eksik.push('KitleOnerisiService.kasa (TokenVaultService) yok');
+    if (!o.saglayicilar) eksik.push('KitleOnerisiService.saglayicilar (ProviderRegistry) yok');
+  }
   if (eksik.length > 0) throw new Error(`İsteğe bağlı bağımlılık eksik: ${eksik.join('; ')}`);
 
   const moduller = [...container.getModules().values()].map((m) => m.metatype?.name).filter(Boolean);

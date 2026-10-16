@@ -72,3 +72,4 @@ export * from './panel';
 export * from './teslimat-durumu';
 export * from './dil';
 export * from './dil/etiketler';
+export * from './kitle-performansi';

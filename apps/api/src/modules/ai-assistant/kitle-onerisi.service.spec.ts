@@ -1,10 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, vi, describe, expect, it } from 'vitest';
 import type { GeoLocationOption, InterestOption, TenantContext } from '@advetics/shared';
 import type { AppConfig } from '../../config/configuration';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { ConnectionsService } from '../connections/connections.service';
 import type { GeminiIstegi, MetinUretici } from '../../yapay-zeka/gemini';
-import { KitleOnerisiService } from './kitle-onerisi.service';
+import { KitleOnerisiService, kategoriOnbelleginiSifirla } from './kitle-onerisi.service';
 
 /**
  * ═══ DOĞAL DİLDEN KİTLE ÖNERİSİ ═══
@@ -25,6 +25,8 @@ function kur(p: {
   hesap?: boolean;
   geo?: Record<string, GeoLocationOption[]>;
   ilgi?: Record<string, InterestOption[]>;
+  /** Google hesabı + kategori listesi (verilmezse workspace'te Google yok). */
+  google?: { kategoriler?: Array<{ id: string; ad: string; tur: 'affinity' | 'in_market' }>; hata?: string };
 }) {
   const istekler: GeminiIstegi[] = [];
   const yz: MetinUretici = {
@@ -43,14 +45,29 @@ function kur(p: {
   };
   const prisma = {
     withTenant: async (_c: unknown, fn: (tx: unknown) => Promise<unknown>) =>
-      fn({ $queryRaw: async () => (p.hesap === false ? [] : [{ id: 'acc', name: 'Meta Hesap' }]) }),
+      fn({
+        $queryRaw: async (sql: { strings?: readonly string[] }) =>
+          (sql.strings ?? []).join('?').includes("platform = 'google'")
+            ? p.google
+              ? [{ id: 'g', name: 'Google Hesap', connection_id: 'bag', external_id: '123-456-7890', manager_external_id: null }]
+              : []
+            : p.hesap === false
+              ? []
+              : [{ id: 'acc', name: 'Meta Hesap' }],
+      }),
   } as unknown as PrismaService;
   const connections = {
     searchGeoLocations: async (_c: unknown, _a: string, q: string) => p.geo?.[q] ?? [],
     searchInterests: async (_c: unknown, _a: string, q: string) => p.ilgi?.[q] ?? [],
   } as unknown as ConnectionsService;
-  const svc = new KitleOnerisiService(yz, { yapayZeka: { model: 'm' } } as AppConfig, prisma, connections);
-  return { svc, istekler };
+  const kullaniciIlgileri = vi.fn(async () => {
+    if (p.google?.hata) throw new Error(p.google.hata);
+    return p.google?.kategoriler ?? [];
+  });
+  const kasa = { getAccessToken: async () => 'tok' } as never;
+  const saglayicilar = { get: () => ({ kullaniciIlgileri }) } as never;
+  const svc = new KitleOnerisiService(yz, { yapayZeka: { model: 'm' } } as AppConfig, prisma, connections, kasa, saglayicilar);
+  return { svc, istekler, kullaniciIlgileri };
 }
 
 const cevap = (patch: Record<string, unknown> = {}) =>
@@ -216,5 +233,55 @@ describe('konum yalnızca Türkiye’de ya da adı geçen ülkede', () => {
     const { svc, istekler } = kur({ cevap: cevap({ konumlar: [], ilgiler: [] }) });
     await svc.oner(CTX, 'c', 'x');
     expect(String(istekler[0]!.sistem)).toContain('virgülle il ya da ülke ekleme');
+  });
+
+  describe('Google karşılığı (2026-10-16)', () => {
+    beforeEach(() => kategoriOnbelleginiSifirla());
+    const KATEGORI = [
+      { id: '80432', ad: '/Sports & Fitness/Golf Enthusiasts', tur: 'affinity' as const },
+      { id: '80510', ad: '/Autos & Vehicles/Motor Vehicles/Luxury Vehicles', tur: 'in_market' as const },
+      { id: '80999', ad: '/Apparel/Scarves', tur: 'affinity' as const },
+    ];
+
+    it('KRİTİK: İngilizce aday Google kategorisiyle eşleşiyor, hangi terimle eşleştiği yazıyor; kelimeler geçiyor', async () => {
+      const { svc } = kur({
+        cevap: cevap({ ilgiler: [{ kavram: 'lüks araç', aramalar: ['lüks araç', 'luxury vehicle'] }, { kavram: 'atkı', aramalar: ['car'] }], anahtarKelimeler: ['Satılık Lüks Araç', 'lüks araç fiyatları'] }),
+        ilgi: {},
+        google: { kategoriler: KATEGORI },
+      });
+      const r = await svc.oner(CTX, 'c', 'lüks araç arayanlar');
+      expect(r.google.hata).toBeNull();
+      expect(r.google.ilgiler).toEqual([{ ...KATEGORI[1], terim: 'lüks araç → luxury vehicle' }]);
+      // "car" KELİME olarak aranıyor: "Scarves" içinde geçmesi eşleşme sayılmıyor.
+      expect(r.google.ilgiler.some((g) => g.id === '80999')).toBe(false);
+      expect(r.google.kelimeler).toEqual(['satılık lüks araç', 'lüks araç fiyatları']);
+    });
+
+    it('Google hesabı yoksa NEDENİ yazıyor, Meta önerisi yine geliyor', async () => {
+      const { svc } = kur({ cevap: cevap(), ilgi: { yat: [LUKS] } });
+      const r = await svc.oner(CTX, 'c', 'lüks araç');
+      expect(r.google.hata).toMatch(/Google Ads hesabı atanmamış/);
+      expect(r.interests.length).toBeGreaterThan(0);
+    });
+
+    it('Google okuması düşerse öneri DÜŞMÜYOR, platformun cümlesi yazıyor', async () => {
+      const { svc } = kur({ cevap: cevap(), google: { hata: 'PERMISSION_DENIED' } });
+      const r = await svc.oner(CTX, 'c', 'lüks araç');
+      expect(r.google.hata).toMatch(/PERMISSION_DENIED/);
+    });
+
+    it('yalnız Google’ı olan workspace de öneri alıyor (Meta tarafı nedeniyle boş)', async () => {
+      const { svc } = kur({ cevap: cevap({ ilgiler: [{ kavram: 'golf', aramalar: ['golf'] }] }), hesap: false, google: { kategoriler: KATEGORI } });
+      const r = await svc.oner(CTX, 'c', 'golf oynayanlar');
+      expect(r.google.ilgiler.map((g) => g.id)).toEqual(['80432']);
+      expect(r.uygulanamayan.map((u) => u.sebep).join(' ')).toMatch(/Meta reklam hesabı atanmamış/);
+    });
+
+    it('kategori listesi önbellekte: ikinci öneri Google’a yeniden gitmiyor', async () => {
+      const { svc, kullaniciIlgileri } = kur({ cevap: cevap(), google: { kategoriler: KATEGORI } });
+      await svc.oner(CTX, 'c', 'a b c d e');
+      await svc.oner(CTX, 'c', 'a b c d e');
+      expect(kullaniciIlgileri).toHaveBeenCalledTimes(1);
+    });
   });
 });

@@ -8,7 +8,9 @@ import type {
   MetricsAccountRow,
   MetricsSummary,
 } from '@advetics/shared';
-import { PLATFORMS, PLATFORM_KISA_ADLARI, type TakipAcigiYaniti } from '@advetics/shared';
+import { PLATFORMS, PLATFORM_KISA_ADLARI, type KitlePerformansi, type TakipAcigiYaniti } from '@advetics/shared';
+import { kapi } from '@/lib/panel-adresleri';
+import { KitlePerformansTablosu } from '@/components/taslak/kitle-performans-tablosu';
 import { requireSession } from '@/lib/session';
 import { HESAP_AJANSTA, hesaplarHedefi } from '@/lib/ayar-kapilari';
 import { serverApiFetch } from '@/lib/api';
@@ -29,6 +31,7 @@ import {
   type YmMetrik,
   type YmSatir,
   type YmSekme,
+  type YmSekmeAnahtari,
 } from '@/components/taslak/reklam-yoneticisi-tablosu';
 import { SayfaIskeleti } from '@/components/ui/sayfa-basligi';
 import { dugmeSinifi } from '@/components/ui/dugme';
@@ -36,7 +39,7 @@ import { BosDurum, HataDurumu, Serit } from '@/components/ui/hal';
 import { HiyerarsiYolu, type YolBasamagi } from '@/components/hiyerarsi-yolu';
 import { kirilimSirala, siralamaCoz } from '@/lib/kirilim-siralama';
 import { first, hataMetni, resolvePlatform } from '@/lib/sayfa-yardimcilari';
-import { REKLAM_YONETICISI } from '@/lib/reklam-yoneticisi';
+import { REKLAM_YONETICISI, olusturDugmesi } from '@/lib/reklam-yoneticisi';
 import { eylemHedefiCoz } from '@/lib/varlik-eylemi';
 import { siteSutunuKarari, sitedeHaritasi } from '@/lib/veri-kaynagi';
 
@@ -444,6 +447,20 @@ export default async function DashboardPage({
   const sitede = siteYaniti && !('hata' in siteYaniti) ? sitedeHaritasi(siteYaniti) : null;
 
   const duzey: YmDuzey = ajansGorunumu ? 'sirket' : mcc ? 'workspace' : varlik === null ? 'hesap' : varlik;
+  /*
+   * ═══ HEDEF KİTLELER SEKMESİ (2026-10-16) ═══
+   * "Hangi kitleden ne dönüş geldi": aynı hedeflemeli reklam setleri tek
+   * satırda (`/metrics/kitleler`). Yalnız tek workspace seçiliyken: kitle
+   * bir workspace'in hedeflemesi, ajans/şirket toplamında anlamsız. Hata
+   * yutulmuyor, tablonun yerinde platformun/sunucunun cümlesi yazıyor.
+   */
+  const kitleGorunumu = first(params.seviye) === 'kitle' && !ajansGorunumu && !mcc;
+  const kitleYaniti: { tur: 'veri'; v: KitlePerformansi } | { tur: 'hata'; mesaj: string } | null = kitleGorunumu
+    ? await serverApiFetch<KitlePerformansi>(`/metrics/kitleler?${base}`)
+        .then((v) => ({ tur: 'veri' as const, v }))
+        .catch((e: unknown) => ({ tur: 'hata' as const, mesaj: hataMetni(e) }))
+    : null;
+  const seciliSekme: YmSekmeAnahtari = kitleGorunumu ? 'kitle' : duzey;
   const satirlar: YmSatir[] | null = ajansGorunumu
     ? sirketler && sirketler.map(sirketSatiri)
     : mcc
@@ -474,6 +491,8 @@ export default async function DashboardPage({
 
   const sekmeler = duzeySekmeleri({
     duzey,
+    kitleAktif: kitleGorunumu,
+    kitleSayisi: kitleYaniti?.tur === 'veri' ? kitleYaniti.v.satirlar.length : null,
     sayi: satirlar?.length ?? null,
     ajansVar: session.managerAccount !== null,
     workspaceSecili: !ajansGorunumu && !mcc,
@@ -524,6 +543,21 @@ export default async function DashboardPage({
       <HataDurumu baslik={yuklenemedi} mesaj="Sunucu bu düzeyin satırlarını döndürmedi. Sayfayı yenileyip tekrar dene." />
     ) : undefined;
 
+  const tabloYerine =
+    kitleYaniti !== null ? (
+      <KitlePerformansTablosu
+        yanit={kitleYaniti}
+        kitleKaydedebilir={kapi(session, 'kitle.yaz')}
+        clientId={session.activeClientId}
+      />
+    ) : (
+      yerine
+    );
+  const olustur = olusturDugmesi(seciliSekme, session.activeClientId, {
+    reklam: session.permissions.includes('bulk.write'),
+    kitle: kapi(session, 'kitle.yaz'),
+  });
+
   return (
     <SayfaIskeleti
       bolum="Yönet"
@@ -543,9 +577,9 @@ export default async function DashboardPage({
             rangeLabel={range.label}
             sonGuncelleme={summary?.lastFetchedAt ?? null}
           />
-          {session.permissions.includes('bulk.write') && (
-            <Link className={dugmeSinifi('birincil')} href="/reklam">
-              ＋ Reklam oluştur
+          {olustur && (
+            <Link className={dugmeSinifi('birincil')} href={olustur.href}>
+              ＋ {olustur.etiket}
             </Link>
           )}
         </>
@@ -553,12 +587,13 @@ export default async function DashboardPage({
     >
       <ReklamYoneticisiTablosu
         duzey={duzey}
+        seciliSekme={seciliSekme}
         sekmeler={sekmeler}
         metrikler={summary === null ? null : ymMetrikleri(summary, range.karsilastirma !== 'yok')}
         satirlar={satirlar ?? []}
         kirinti={<HiyerarsiYolu basamaklar={basamaklar} tasinan={tasinan} gorunum="hap" />}
         seritler={seritler}
-        yerine={yerine}
+        yerine={tabloYerine}
         platformSecenekleri={[null, ...PLATFORMS].map((p) => ({
           ad: p ? PLATFORM_KISA_ADLARI[p] : 'Tümü',
           href: baglanti(
@@ -614,6 +649,9 @@ function ymMetrikleri(summary: MetricsSummary, karsilastir: boolean): YmMetrik[]
  */
 function duzeySekmeleri(v: {
   duzey: YmDuzey;
+  /** "Hedef kitleler" seçiliyse düzey sekmeleri bağlantı olur (aktif değil). */
+  kitleAktif: boolean;
+  kitleSayisi: number | null;
   sayi: number | null;
   ajansVar: boolean;
   workspaceSecili: boolean;
@@ -636,10 +674,10 @@ function duzeySekmeleri(v: {
     ad_group: { reklamSeti: undefined },
     ad: {},
   };
-  return sira
+  const duzeyler = sira
     .filter((d) => d !== 'sirket' || v.ajansVar)
     .map((d): YmSekme => {
-      const aktif = d === v.duzey;
+      const aktif = d === v.duzey && !v.kitleAktif;
       const sayi = aktif ? v.sayi : null;
       if (aktif) return { anahtar: d, ad: ad[d], sayi, hedef: { tur: 'aktif' } };
       if (d === 'sirket') return { anahtar: d, ad: ad[d], sayi, hedef: { tur: 'org' } };
@@ -658,6 +696,17 @@ function duzeySekmeleri(v: {
         hedef: { tur: 'link', href: baglanti(REKLAM_YONETICISI, v.tasinan, { seviye: d, ...dusen[d] }) },
       };
     });
+  /*
+   * HEDEF KİTLELER: düzey değil görünüm. Kampanya odağı taşınıyor (o
+   * kampanyanın setlerinin kitleleri), reklam seti odağı düşüyor (tek setin
+   * tek kitlesi tablo değil).
+   */
+  const kitle: YmSekme = v.kitleAktif
+    ? { anahtar: 'kitle', ad: 'Hedef kitleler', sayi: v.kitleSayisi, hedef: { tur: 'aktif' } }
+    : !v.workspaceSecili
+      ? { anahtar: 'kitle', ad: 'Hedef kitleler', sayi: null, hedef: { tur: 'kapali', neden: 'Bu görünüm için bir workspace seç' } }
+      : { anahtar: 'kitle', ad: 'Hedef kitleler', sayi: null, hedef: { tur: 'link', href: baglanti(REKLAM_YONETICISI, v.tasinan, { seviye: 'kitle', reklamSeti: undefined }) } };
+  return [...duzeyler, kitle];
 }
 
 function sirketSatiri(r: MetricsOrganizationRow): YmSatir {

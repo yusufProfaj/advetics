@@ -1,7 +1,12 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
+  BOS_GOOGLE_KITLE,
+  kitleSablonuInputSchema,
+  settenKitleSablonu,
+  type SettenKitleIstegi,
   KITLE_CINSIYETLERI,
+  kitleGoogleSchema,
   kitleIlgiSchema,
   kitleKonumuSchema,
   kitleOzelSchema,
@@ -32,6 +37,7 @@ interface Satir {
   genders: string;
   interests: unknown;
   ozel_kitleler: unknown;
+  google_hedefleri: unknown;
   updated_at: Date;
 }
 
@@ -58,7 +64,7 @@ export class KitleSablonuService {
   async list(ctx: TenantContext, clientId: string): Promise<KitleSablonuListesi> {
     return this.prisma.withTenant(ctx, async (tx) => {
       const satirlar = await tx.$queryRaw<Satir[]>(Prisma.sql`
-        SELECT id, client_id, name, locations, age_min, age_max, genders, interests, ozel_kitleler, updated_at
+        SELECT id, client_id, name, locations, age_min, age_max, genders, interests, ozel_kitleler, google_hedefleri, updated_at
           FROM audience_templates
          WHERE client_id = ${clientId}::uuid
          ORDER BY name
@@ -79,12 +85,13 @@ export class KitleSablonuService {
         tx.$queryRaw<Satir[]>(Prisma.sql`
           INSERT INTO audience_templates
             (org_id, client_id, name, locations, age_min, age_max, genders, interests,
-             ozel_kitleler, created_by_user_id, updated_at)
+             ozel_kitleler, google_hedefleri, created_by_user_id, updated_at)
           VALUES (${orgId}::uuid, ${input.clientId}::uuid, ${input.name},
                   ${JSON.stringify(input.locations)}::jsonb, ${input.ageMin}, ${input.ageMax},
                   ${input.genders}, ${JSON.stringify(input.interests)}::jsonb,
-                  ${JSON.stringify(input.ozelKitleler)}::jsonb, ${ctx.userId}::uuid, now())
-          RETURNING id, client_id, name, locations, age_min, age_max, genders, interests, ozel_kitleler, updated_at
+                  ${JSON.stringify(input.ozelKitleler)}::jsonb, ${JSON.stringify(input.google ?? BOS_GOOGLE_KITLE)}::jsonb,
+                  ${ctx.userId}::uuid, now())
+          RETURNING id, client_id, name, locations, age_min, age_max, genders, interests, ozel_kitleler, google_hedefleri, updated_at
         `),
       );
       await this.audit.record(tx, ctx, {
@@ -99,6 +106,38 @@ export class KitleSablonuService {
     });
   }
 
+  /**
+   * ═══ REKLAM SETİNİN KİTLESİNİ KÜTÜPHANEYE AL ═══
+   *
+   * Reklam Yöneticisi › Hedef kitleler: "bu kitle iyi dönüş getirdi, sonra
+   * da kullanayım". Setin senkronize hedeflemesi şablona çevriliyor
+   * (`settenKitleSablonu`, shared); şablona TAŞINAMAYAN parçalar
+   * (davranış, adres çevresi, VE grupları) kullanıcıya dönüyor. Set bu
+   * workspace'in değilse 404: başka müşterinin hedeflemesini kopyalamak
+   * sızıntı olurdu (RLS de göstermez; burada açıkça soruluyor).
+   */
+  async settenOlustur(
+    ctx: TenantContext,
+    girdi: SettenKitleIstegi,
+    meta: Meta,
+  ): Promise<{ kayit: KitleSablonuRecord; atilanlar: string[] }> {
+    const [set] = await this.prisma.withTenant(ctx, (tx) =>
+      tx.$queryRaw<Array<{ targeting: unknown; platform: string; hesap_id: string; hesap_adi: string }>>(Prisma.sql`
+        SELECT g.targeting, g.platform::text AS platform, a.id::text AS hesap_id, a.name AS hesap_adi
+          FROM ad_groups g JOIN ad_accounts a ON a.id = g.ad_account_id
+         WHERE g.id = ${girdi.adGroupId}::uuid AND g.client_id = ${girdi.clientId}::uuid AND g.deleted_at IS NULL
+      `),
+    );
+    if (!set) throw new NotFoundException('Reklam seti bu workspace’te bulunamadı.');
+    if (set.platform !== 'meta' || !set.targeting) {
+      throw new BadRequestException('Bu setin hedeflemesi okunamıyor; yalnız Meta reklam setlerinin kitlesi kütüphaneye alınabiliyor.');
+    }
+    const { alanlar, atilanlar } = settenKitleSablonu(set.targeting, { id: set.hesap_id, ad: set.hesap_adi });
+    const r = kitleSablonuInputSchema.safeParse({ clientId: girdi.clientId, name: girdi.name, ...alanlar });
+    if (!r.success) throw new BadRequestException(r.error.issues[0]?.message ?? 'Setin hedeflemesi kitle şablonuna çevrilemedi.');
+    return { kayit: await this.create(ctx, r.data, meta), atilanlar };
+  }
+
   async update(
     ctx: TenantContext,
     id: string,
@@ -107,7 +146,7 @@ export class KitleSablonuService {
   ): Promise<KitleSablonuRecord> {
     return this.prisma.withTenant(ctx, async (tx) => {
       const [once] = await tx.$queryRaw<Satir[]>(Prisma.sql`
-        SELECT id, client_id, name, locations, age_min, age_max, genders, interests, ozel_kitleler, updated_at
+        SELECT id, client_id, name, locations, age_min, age_max, genders, interests, ozel_kitleler, google_hedefleri, updated_at
           FROM audience_templates WHERE id = ${id}::uuid AND client_id = ${input.clientId}::uuid
       `);
       if (!once) throw new NotFoundException('Kitle şablonu bulunamadı.');
@@ -118,9 +157,10 @@ export class KitleSablonuService {
              SET name = ${input.name}, locations = ${JSON.stringify(input.locations)}::jsonb,
                  age_min = ${input.ageMin}, age_max = ${input.ageMax}, genders = ${input.genders},
                  interests = ${JSON.stringify(input.interests)}::jsonb,
-                 ozel_kitleler = ${JSON.stringify(input.ozelKitleler)}::jsonb, updated_at = now()
+                 ozel_kitleler = ${JSON.stringify(input.ozelKitleler)}::jsonb,
+                 google_hedefleri = ${JSON.stringify(input.google ?? BOS_GOOGLE_KITLE)}::jsonb, updated_at = now()
            WHERE id = ${id}::uuid
-          RETURNING id, client_id, name, locations, age_min, age_max, genders, interests, ozel_kitleler, updated_at
+          RETURNING id, client_id, name, locations, age_min, age_max, genders, interests, ozel_kitleler, google_hedefleri, updated_at
         `),
       );
       await this.audit.record(tx, ctx, {
@@ -140,7 +180,7 @@ export class KitleSablonuService {
     await this.prisma.withTenant(ctx, async (tx) => {
       const silinen = await tx.$queryRaw<Satir[]>(Prisma.sql`
         DELETE FROM audience_templates WHERE id = ${id}::uuid AND client_id = ${clientId}::uuid
-        RETURNING id, client_id, name, locations, age_min, age_max, genders, interests, ozel_kitleler, updated_at
+        RETURNING id, client_id, name, locations, age_min, age_max, genders, interests, ozel_kitleler, google_hedefleri, updated_at
       `);
       // SIFIR SATIR = BULUNAMADI, başarı değil. Politikasız ya da yanlış
       // kiracıdaki bir DELETE hata vermeden sıfır satır etkiliyor.
@@ -246,7 +286,7 @@ async function adCakismasi<T>(fn: () => Promise<T>): Promise<T> {
 function denetim(
   k: Pick<
     KitleSablonuInput,
-    'name' | 'locations' | 'ageMin' | 'ageMax' | 'genders' | 'interests' | 'ozelKitleler'
+    'name' | 'locations' | 'ageMin' | 'ageMax' | 'genders' | 'interests' | 'ozelKitleler' | 'google'
   >,
 ) {
   return {
@@ -257,6 +297,7 @@ function denetim(
     genders: k.genders,
     interests: k.interests,
     ozelKitleler: k.ozelKitleler,
+    google: k.google ?? BOS_GOOGLE_KITLE,
   };
 }
 
@@ -283,6 +324,10 @@ function kayit(s: Satir, varsayilanId: string | null): KitleSablonuRecord {
     if (r.success) ozelKitleler.push(r.data);
     else logger.warn(`audience_templates(${s.id}).ozel_kitleler: geçersiz öğe atlandı — ${JSON.stringify(o).slice(0, 200)}`);
   }
+  // Google karşılığı bozuksa BOŞ okunuyor ve log'a yazılıyor: bir alanın
+  // bozukluğu şablonun Meta tarafını kullanılamaz yapmamalı.
+  const g = kitleGoogleSchema.safeParse(s.google_hedefleri ?? BOS_GOOGLE_KITLE);
+  if (!g.success) logger.warn(`audience_templates(${s.id}).google_hedefleri: geçersiz, boş okundu — ${JSON.stringify(s.google_hedefleri).slice(0, 200)}`);
   const genders = (KITLE_CINSIYETLERI as readonly string[]).includes(s.genders)
     ? (s.genders as KitleSablonuRecord['genders'])
     : 'all';
@@ -296,6 +341,7 @@ function kayit(s: Satir, varsayilanId: string | null): KitleSablonuRecord {
     genders,
     interests,
     ozelKitleler,
+    google: g.success ? g.data : BOS_GOOGLE_KITLE,
     varsayilan: varsayilanId === s.id,
     updatedAt: new Date(s.updated_at).toISOString(),
   };

@@ -18,6 +18,7 @@ import {
   type TenantContext,
 } from '@advetics/shared';
 import type {
+  KitlePerformansi,
   HierarchyPathQuery,
   MetricsConversionDetail,
   MetricsHierarchyPath,
@@ -158,6 +159,16 @@ export class MetricsController {
     @Query(zodQuery(hierarchyPathQuerySchema)) query: HierarchyPathQuery,
   ): Promise<MetricsHierarchyPath> {
     return this.metrics.hierarchyPath(ctx, query);
+  }
+
+  /** Hedef kitle performansı: aynı hedeflemeyi taşıyan reklam setleri tek satırda. */
+  @Get('kitleler')
+  @RequirePermissions('insights.read')
+  kitleler(
+    @CurrentTenant() ctx: TenantContext,
+    @Query(zodQuery(metricsQuerySchema)) query: MetricsQuery,
+  ): Promise<KitlePerformansi> {
+    return this.metrics.kitleler(ctx, query);
   }
 
   @Get('breakdown')

@@ -6,6 +6,7 @@ import {
   kitleOzeti,
   kitleSablonuInputSchema,
   type GeoLocationOption,
+  type KitleGoogle,
   type KitleIlgi,
   type KitleOzel,
   type KitleKonumu,
@@ -26,6 +27,8 @@ import { useVarlikYeni } from './varliklar/birincil-eylem';
 import { HedeflemeSecici } from '@/components/autoboost/hedefleme-secici';
 import { IlgiSecici, kitleBuyuklugu } from './ilgi-secici';
 import { OzelKitleSecici } from './ozel-kitle-secici';
+import { useSozluk } from '@/dil/saglayici';
+import { kitleSozlugu } from '@/dil/sozlukler/kitle';
 
 /**
  * ═══ VARLIKLAR → KİTLELER (Bölüm 4; 2026-10-13'ten beri Varlıklar'ın 4. sekmesi) ═══
@@ -65,6 +68,7 @@ interface Form {
   genders: 'all' | 'male' | 'female';
   interests: KitleIlgi[];
   ozelKitleler: KitleOzel[];
+  google: KitleGoogle;
 }
 
 const BOS_FORM: Form = {
@@ -76,6 +80,7 @@ const BOS_FORM: Form = {
   genders: 'all',
   interests: [],
   ozelKitleler: [],
+  google: { ilgiler: [], kelimeler: [] },
 };
 const YASLAR = Array.from({ length: 48 }, (_, i) => 18 + i);
 
@@ -83,9 +88,16 @@ export function KitlelerBolumu({
   clientId,
   yazabilir,
   varsayilanAdresi,
+  yeniAc = false,
 }: {
   clientId: string;
   yazabilir: boolean;
+  /**
+   * Adreste `yeni=1`: Reklam Yöneticisi'nin "＋ Hedef kitle" düğmesi buraya
+   * geliyor ve kullanıcı yeni kitle formunu açık bulmalı (bir tık daha
+   * istemek, düğmenin sözünü yarım bırakırdı). Liste geldikten sonra BİR KEZ.
+   */
+  yeniAc?: boolean;
   /** Varsayılan kitlenin evi (Kurulum › Reklam varsayılanları); görme yetkisi yoksa null. */
   varsayilanAdresi: string | null;
 }) {
@@ -124,6 +136,15 @@ export function KitlelerBolumu({
     void yukle();
   }, [yukle]);
 
+  const [yeniAcildi, setYeniAcildi] = useState(false);
+  useEffect(() => {
+    if (yeniAc && !yeniAcildi && yazabilir && durum.tur === 'hazir') {
+      setYeniAcildi(true);
+      formAc(BOS_FORM);
+    }
+  }, [yeniAc, yeniAcildi, yazabilir, durum.tur]);
+  const dk = useSozluk(kitleSozlugu);
+
   async function islem(fn: () => Promise<unknown>): Promise<boolean> {
     setBusy(true);
     setHata(null);
@@ -151,6 +172,7 @@ export function KitlelerBolumu({
       genders: form.genders,
       interests: form.interests,
       ozelKitleler: form.ozelKitleler,
+      google: form.google,
     };
     // Sunucuyla AYNI şema: "Türkiye + İzmir" kaydederken reddediliyor, yayında değil.
     const k = kitleSablonuInputSchema.safeParse(govde);
@@ -180,8 +202,8 @@ export function KitlelerBolumu({
   return (
     <section id="kitleler" aria-label="Kitleler" className="grid scroll-mt-24 gap-3">
       <p className="m-0 text-13 text-ink-muted">
-        Kime gösterileceği: konum, yaş, cinsiyet. Varsayılan kitle reklam kurarken kendiliğinden seçilir ve Kurulum’da
-        değişir. Şimdilik yalnızca Meta reklamlarında kullanılır.
+        Kime gösterileceği: konum, yaş, cinsiyet, ilgi. Varsayılan kitle reklam kurarken kendiliğinden seçilir ve Kurulum’da
+        değişir. {dk.kullanimNotu}
       </p>
 
       {hata && form === null && (
@@ -291,6 +313,12 @@ export function KitlelerBolumu({
               },
               { anahtar: 'tanim', baslik: 'Tanım', hucre: (k) => <span className="text-13 text-ink-muted">{kitleOzeti(k)}</span> },
               {
+                anahtar: 'google',
+                baslik: 'Google',
+                ikincil: true,
+                hucre: (k) => <span className="text-13 text-ink-muted">{googleOzeti(k.google, dk)}</span>,
+              },
+              {
                 anahtar: 'eylem',
                 baslik: <span className="sr-only">Eylem</span>,
                 sayi: true,
@@ -338,6 +366,7 @@ function formdan(k: KitleSablonuRecord): Form {
     genders: k.genders,
     interests: k.interests,
     ozelKitleler: k.ozelKitleler,
+    google: k.google,
   };
 }
 
@@ -433,6 +462,8 @@ function KitleFormu(p: { clientId: string; form: Form; setForm: (f: Form) => voi
         degis={(v) => degis({ ozelKitleler: v })}
       />
 
+      <GoogleKarsiligi google={f.google} degis={(g) => degis({ google: g })} />
+
       <p className="m-0 rounded-alan bg-surface-muted px-3 py-2 text-12 text-ink-muted">Özet: {kitleOzeti(f)}</p>
     </div>
   );
@@ -451,12 +482,13 @@ function TarifEt({
   uygula,
 }: {
   clientId: string;
-  uygula: (o: Pick<Form, 'locations' | 'ageMin' | 'ageMax' | 'genders' | 'interests'>) => void;
+  uygula: (o: Pick<Form, 'locations' | 'ageMin' | 'ageMax' | 'genders' | 'interests' | 'google'>) => void;
 }) {
   const [metin, setMetin] = useState('');
   const [busy, setBusy] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
   const [oneri, setOneri] = useState<KitleOnerisi | null>(null);
+  const dk = useSozluk(kitleSozlugu);
 
   async function oner(): Promise<void> {
     setBusy(true);
@@ -473,6 +505,7 @@ function TarifEt({
         ageMax: o.ageMax,
         genders: o.genders,
         interests: o.interests.map((i) => ({ id: i.id, name: i.name })),
+        google: { ilgiler: o.google.ilgiler.map((g) => ({ id: g.id, ad: g.ad, tur: g.tur })), kelimeler: o.google.kelimeler },
       });
     } catch (err) {
       setHata(err instanceof ApiRequestError ? err.message : 'Öneri alınamadı.');
@@ -483,7 +516,7 @@ function TarifEt({
 
   return (
     <div className="grid gap-2 rounded-alan bg-surface-muted p-3">
-      <Alan etiket="Kitleyi tarif et (isteğe bağlı)">
+      <Alan etiket={dk.tarifEtiketi}>
         {(id) => (
           <MetinAlani
             id={id}
@@ -511,7 +544,7 @@ function TarifEt({
       )}
       {oneri && (
         <div className="grid gap-1 text-12">
-          <p className="m-0 text-ink-muted">Meta’da arandı: {oneri.hesapAdi}</p>
+          {oneri.hesapAdi && <p className="m-0 text-ink-muted">Meta’da arandı: {oneri.hesapAdi}</p>}
           {oneri.interests.length > 0 && (
             <ul className="m-0 list-none p-0 text-ink">
               {oneri.interests.map((i) => (
@@ -525,6 +558,21 @@ function TarifEt({
             <p className="m-0 text-danger-strong">
               Meta’da bulunamadı:{' '}
               {oneri.eslesmeyen.map((e) => `“${e.terim}” (${e.tur === 'konum' ? 'konum' : 'ilgi'})`).join(', ')}
+            </p>
+          )}
+          {oneri.google.hesapAdi && <p className="m-0 text-ink-muted">{dk.googleArandi(oneri.google.hesapAdi)}</p>}
+          {oneri.google.ilgiler.length > 0 && (
+            <ul className="m-0 list-none p-0 text-ink">
+              {oneri.google.ilgiler.map((g) => (
+                <li key={g.id}>
+                  “{g.terim}” → {kategoriAdi(g.ad)} <span className="text-ink-muted">({g.tur === 'in_market' ? dk.ilgiTuruInMarket : dk.ilgiTuruAffinity})</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {oneri.google.hata && (
+            <p className="m-0 text-danger-strong">
+              {dk.googleOkunamadi}: {oneri.google.hata}
             </p>
           )}
           {oneri.uygulanamayan.length > 0 && (
@@ -542,3 +590,78 @@ function TarifEt({
   );
 }
 
+/** Google kategori adı yol taşıyor ("/Sports & Fitness/Golf Enthusiasts"): ekranda son parça. */
+function kategoriAdi(ad: string): string {
+  return ad.split('/').filter(Boolean).at(-1) ?? ad;
+}
+
+function googleOzeti(g: KitleGoogle, dk: { googleKelime: (n: number) => string }): string {
+  const parcalar: string[] = [];
+  if (g.ilgiler.length > 0) parcalar.push(g.ilgiler.slice(0, 2).map((x) => kategoriAdi(x.ad)).join(', ') + (g.ilgiler.length > 2 ? ` +${g.ilgiler.length - 2}` : ''));
+  if (g.kelimeler.length > 0) parcalar.push(dk.googleKelime(g.kelimeler.length));
+  return parcalar.length > 0 ? parcalar.join(' · ') : '—';
+}
+
+/**
+ * ═══ GOOGLE KARŞILIĞI (2026-10-16) ═══
+ *
+ * Kategoriler yalnız "Öner"den geliyor (Google kimliğiyle); burada
+ * kaldırılabiliyor ama elle ad yazılarak eklenmiyor: adla uydurulmuş bir
+ * kategori Google'da karşılık bulmaz. Kelimeler serbest, her satır bir
+ * arama terimi (özel segment).
+ */
+function GoogleKarsiligi({ google, degis }: { google: KitleGoogle; degis: (g: KitleGoogle) => void }) {
+  const dk = useSozluk(kitleSozlugu);
+  const [metin, setMetin] = useState(google.kelimeler.join('\n'));
+  // "Öner" kelimeleri DIŞARIDAN değiştirince kutu da güncellenmeli; yazarken
+  // ayrıştırılmış metin zaten listeye eşit olduğu için imleç oynamıyor.
+  useEffect(() => {
+    if (kelimeleriAyir(metin).join('\n') !== google.kelimeler.join('\n')) setMetin(google.kelimeler.join('\n'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [google.kelimeler]);
+  return (
+    <fieldset className="grid gap-2 rounded-alan border border-line p-3">
+      <legend className="px-1 text-13 font-semibold text-ink">{dk.googleBaslik}</legend>
+      <p className="m-0 text-12 text-ink-muted">{dk.googleAciklama}</p>
+      {google.ilgiler.length === 0 ? (
+        <p className="m-0 text-12 text-ink-muted">{dk.googleKategoriYok}</p>
+      ) : (
+        <ul className="m-0 flex list-none flex-wrap gap-1.5 p-0">
+          {google.ilgiler.map((g) => (
+            <li key={g.id} className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-2.5 py-1 text-12 text-ink">
+              {kategoriAdi(g.ad)}
+              <span className="text-ink-muted">· {g.tur === 'in_market' ? dk.ilgiTuruInMarket : dk.ilgiTuruAffinity}</span>
+              <button
+                type="button"
+                aria-label={`${dk.kaldir}: ${kategoriAdi(g.ad)}`}
+                className="text-ink-muted hover:text-ink"
+                onClick={() => degis({ ...google, ilgiler: google.ilgiler.filter((x) => x.id !== g.id) })}
+              >
+                ×
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <Alan etiket={dk.kelimelerEtiketi}>
+        {(id) => (
+          <MetinAlani
+            id={id}
+            value={metin}
+            rows={3}
+            placeholder={dk.kelimelerYerTutucu}
+            onChange={(e) => {
+              setMetin(e.target.value);
+              degis({ ...google, kelimeler: kelimeleriAyir(e.target.value) });
+            }}
+          />
+        )}
+      </Alan>
+    </fieldset>
+  );
+}
+
+/** Kutudaki metin → tekil, boş olmayan arama terimleri (sunucu şeması 2-80 karakter, en çok 50). */
+export function kelimeleriAyir(metin: string): string[] {
+  return [...new Set(metin.split('\n').map((x) => x.trim()).filter((x) => x.length >= 2))].slice(0, 50);
+}

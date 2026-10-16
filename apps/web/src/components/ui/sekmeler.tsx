@@ -26,6 +26,12 @@ export interface SekmeSecenegi {
   href?: string;
   /** Etiketin yanında küçük sayı: "Reklamlar 12". */
   sayi?: number;
+  /**
+   * Kullanılamayan sekme: soluk, tıklanmaz, NEDENİ `title`da (Reklam
+   * Yöneticisi "Kampanyalar" sekmesi workspace seçilmeden). Gizlemek,
+   * kullanıcıya düzeyin varlığını saklardı.
+   */
+  kapaliNedeni?: string;
 }
 
 const SEKME =
@@ -74,6 +80,20 @@ export function Sekmeler({
             )}
           </>
         );
+        if (s.kapaliNedeni) {
+          return (
+            <span
+              key={s.deger}
+              role="tab"
+              aria-selected={false}
+              aria-disabled
+              title={s.kapaliNedeni}
+              className={`${SEKME} cursor-not-allowed border-transparent text-ink-muted opacity-50`}
+            >
+              {ic}
+            </span>
+          );
+        }
         return s.href ? (
           <Link
             key={s.deger}

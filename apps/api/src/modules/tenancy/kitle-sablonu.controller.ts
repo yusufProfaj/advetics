@@ -13,6 +13,8 @@ import {
 } from '@nestjs/common';
 import {
   kitleSablonuInputSchema,
+  settenKitleIstegiSchema,
+  type SettenKitleIstegi,
   varsayilanKitleInputSchema,
   type KitleSablonuInput,
   type KitleSablonuListesi,
@@ -62,6 +64,17 @@ export class KitleSablonuController {
    * eşliyor ve `:id` önce gelseydi "varsayilan" bir kimlik sanılıp
    * ParseUUIDPipe'ta 400 dönerdi.
    */
+  /** Reklam Yöneticisi › Hedef kitleler: setin kitlesini kütüphaneye al. */
+  @Post('setten')
+  @RequirePermissions('client.write')
+  setten(
+    @CurrentTenant() ctx: TenantContext,
+    @Body(zodBody(settenKitleIstegiSchema)) dto: SettenKitleIstegi,
+    @Req() req: AuthedRequest,
+  ): Promise<{ kayit: KitleSablonuRecord; atilanlar: string[] }> {
+    return this.svc.settenOlustur(ctx, dto, meta(req));
+  }
+
   @Put('varsayilan')
   @HttpCode(204)
   @RequirePermissions('client.write')

@@ -174,6 +174,7 @@ export default async function VarliklarPage({
               clientId={clientId}
               yazabilir={kapi(session, 'kitle.yaz')}
               varsayilanAdresi={kapi(session, 'markaMerkezi.gor') ? markaMerkeziAdresi('kurulum', clientId, 'varsayilanlar') : null}
+              yeniAc={first(params.yeni) === '1'}
             />
           )}
         </div>

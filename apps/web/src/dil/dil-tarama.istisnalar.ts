@@ -20,7 +20,7 @@ export type MetinTuru = 'turkce' | 'jsx';
 
 export const ISTISNALAR: Record<string, Partial<Record<MetinTuru, number>>> = {
   'app/(dashboard)/ads-explorer/galeri/page.tsx': { turkce: 32, jsx: 4 },
-  'app/(dashboard)/ads-explorer/page.tsx': { turkce: 34, jsx: 5 },
+  'app/(dashboard)/ads-explorer/page.tsx': { turkce: 34, jsx: 4 },
   'app/(dashboard)/auto-boost/page.tsx': { turkce: 22, jsx: 10 },
   'app/(dashboard)/butce/page.tsx': { turkce: 7, jsx: 1 },
   'app/(dashboard)/error.tsx': { turkce: 1 },
@@ -97,7 +97,7 @@ export const ISTISNALAR: Record<string, Partial<Record<MetinTuru, number>>> = {
   'components/marka-merkezi/hazirlama-mantik.ts': { turkce: 8 },
   'components/marka-merkezi/ic-menu.tsx': { turkce: 2 },
   'components/marka-merkezi/ilgi-secici.tsx': { turkce: 7, jsx: 3 },
-  'components/marka-merkezi/kitleler-bolumu.tsx': { turkce: 31, jsx: 18 },
+  'components/marka-merkezi/kitleler-bolumu.tsx': { turkce: 29, jsx: 17 },
   'components/marka-merkezi/kurulum-bolumu.tsx': { turkce: 37, jsx: 15 },
   'components/marka-merkezi/kurulum-listesi-mantik.ts': { turkce: 24 },
   'components/marka-merkezi/kurulum-listesi.tsx': { turkce: 24, jsx: 12 },

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { seviyeLiterali } from './seviye-literali';
-import { deriveRoas, donusumToplami, kampanyaTipi, teslimatDurumu, type TeslimatGirdisi } from '@advetics/shared';
+import { deriveRoas, donusumToplami, kampanyaTipi, kitlelereGoreTopla, teslimatDurumu, type KitlePerformansi, type TeslimatGirdisi } from '@advetics/shared';
 import type {
   HierarchyPathQuery,
   MetricsConversionDetail,
@@ -104,6 +104,8 @@ const ERISIM_SEVIYESI = seviyeLiterali('account');
  * SADECE OKUMA YOLLARINDA. Yazma yolları bu sabiti kullanmıyor.
  */
 const OKUMA_SURESI_MS = 20_000;
+/** Hedef kitle tablosunun okuduğu en çok set (harcamaya göre). */
+const KITLE_SET_SINIRI = 2000;
 
 interface RawTotals {
   impressions: string | number | null;
@@ -705,6 +707,83 @@ export class MetricsService {
          */
         previous: karsilastir && this.hasData(oncekiSatir(r)) ? this.totals(oncekiSatir(r)) : null,
       }));
+    }, { timeoutMs: OKUMA_SURESI_MS });
+  }
+
+  /**
+   * ═══ HEDEF KİTLE PERFORMANSI (Reklam Yöneticisi › Hedef kitleler) ═══
+   *
+   * Meta Insights'ın ilgi alanı kırılımı yok; kitle, reklam SETİNİN
+   * hedeflemesinden okunuyor ve aynı hedeflemeyi taşıyan setler tek satırda
+   * toplanıyor (`kitlelereGoreTopla`, shared). Burada yalnız set başına
+   * metrik + hedefleme okunuyor; gruplama saf fonksiyonda ve orada sınanıyor.
+   *
+   * SET SINIRI: en çok harcayan `KITLE_SET_SINIRI` set. Sınıra ulaşılırsa
+   * yanıt bunu söylüyor (`setSiniri`); toplam sessizce eksik kalmıyor.
+   * Hedefleme GROUP BY'a girmiyor: set kimliği zaten tekil, JSONB eşitliği
+   * planlayıcıya gereksiz iş.
+   */
+  async kitleler(ctx: TenantContext, query: MetricsQuery): Promise<KitlePerformansi> {
+    return this.prisma.withTenant(ctx, async (tx) => {
+      const filters = this.filters(ctx, query, await this.izlenenHesapIdleri(tx), 'i');
+      const kampanyaFiltresi = query.campaignId
+        ? Prisma.sql`AND g.campaign_id = ${query.campaignId}::uuid`
+        : Prisma.empty;
+      const satirlar = await tx.$queryRaw<
+        Array<{
+          set_id: string;
+          set_adi: string | null;
+          dis_kimlik: string;
+          kampanya_adi: string | null;
+          platform: Platform;
+          targeting: unknown;
+          currency: string;
+          impressions: string | number | null;
+          clicks: string | number | null;
+          spend_micros: string | number | bigint | null;
+          conversions: string | number | null;
+          conversion_value_micros: string | number | bigint | null;
+        }>
+      >(Prisma.sql`
+        WITH s AS (
+          SELECT i.entity_id, i.currency,
+                 SUM(i.impressions) AS impressions, SUM(i.clicks) AS clicks,
+                 SUM(i.spend_micros) AS spend_micros, SUM(i.conversions) AS conversions,
+                 SUM(i.conversion_value_micros) AS conversion_value_micros
+          FROM insights_daily i
+          JOIN ad_groups g ON g.id = i.entity_id
+          WHERE i.entity_level = 'ad_group'
+            AND i.date BETWEEN ${query.from}::date AND ${query.to}::date
+            ${kampanyaFiltresi}
+            ${filters}
+          GROUP BY i.entity_id, i.currency
+          ORDER BY SUM(i.spend_micros) DESC NULLS LAST
+          LIMIT ${Prisma.raw(String(KITLE_SET_SINIRI))}
+        )
+        SELECT s.entity_id::text AS set_id, g.name AS set_adi, g.external_id AS dis_kimlik,
+               c.name AS kampanya_adi, g.platform, g.targeting, s.currency,
+               s.impressions, s.clicks, s.spend_micros, s.conversions, s.conversion_value_micros
+        FROM s
+        JOIN ad_groups g ON g.id = s.entity_id
+        LEFT JOIN campaigns c ON c.id = g.campaign_id
+      `);
+      const sayi = (v: string | number | bigint | null) => (v === null ? 0 : Number(v));
+      const sonuc = kitlelereGoreTopla(
+        satirlar.map((r) => ({
+          setId: r.set_id,
+          setAdi: r.set_adi ?? r.dis_kimlik,
+          kampanyaAdi: r.kampanya_adi,
+          platform: r.platform,
+          targeting: r.targeting,
+          currency: r.currency,
+          impressions: sayi(r.impressions),
+          clicks: sayi(r.clicks),
+          spend: sayi(r.spend_micros) / 1_000_000,
+          conversions: sayi(r.conversions),
+          conversionValue: sayi(r.conversion_value_micros) / 1_000_000,
+        })),
+      );
+      return { ...sonuc, setSiniri: satirlar.length >= KITLE_SET_SINIRI ? KITLE_SET_SINIRI : null };
     }, { timeoutMs: OKUMA_SURESI_MS });
   }
 

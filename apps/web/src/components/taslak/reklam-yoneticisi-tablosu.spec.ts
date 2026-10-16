@@ -73,3 +73,35 @@ describe('düzeyler ve satırlar', () => {
     expect(TABLO).toContain("(b ? formatMoney(m, b) : 'karışık')");
   });
 });
+
+/*
+ * ═══ SEKMELER TABLONUN ÜSTÜNDE, OLUŞTUR SEKMEYE GÖRE (kullanıcı, 2026-10-16) ═══
+ * "Sekmeler solda değil, tabloların üzerinde olsun; solda yer kazanırız."
+ * "Oluştur bulunduğu sekmeye göre değişsin: Kampanyalar › Yeni kampanya,
+ * Reklamlar › Reklam, Hedef kitleler › Hedef kitle."
+ */
+describe('sekmeler ve Oluştur', () => {
+  it('KRİTİK: düzeyler yan menüde DEĞİL, tablonun hemen üstünde yatay sekme', () => {
+    expect(TABLO).not.toContain('SayfaIcMenu');
+    expect(TABLO).not.toContain('SayfaIcDuzen');
+    const sekme = TABLO.indexOf('<Sekmeler etiket="Reklam düzeyi"');
+    const tablo = TABLO.indexOf('{yerine ?? (');
+    expect(sekme).toBeGreaterThan(-1);
+    // Sekme, tablo kartının (ya da onun yerine çizilen hâlin) HEMEN önünde.
+    expect(tablo).toBeGreaterThan(sekme);
+    expect(TABLO.slice(sekme, tablo)).not.toContain('<MetrikKutulari');
+  });
+
+  it('KRİTİK: Hedef kitleler sekmesi var; workspace seçilmeden kapalı ve nedenini söylüyor', () => {
+    expect(SAYFA).toContain("anahtar: 'kitle', ad: 'Hedef kitleler'");
+    expect(SAYFA).toContain("'Bu görünüm için bir workspace seç'");
+    expect(SAYFA).toContain("{ seviye: 'kitle', reklamSeti: undefined }");
+    expect(SAYFA).toContain('`/metrics/kitleler?${base}`');
+  });
+
+  it('KRİTİK: sayfa başlığındaki düğme sekmenin eşlemesinden', () => {
+    expect(SAYFA).toContain('const olustur = olusturDugmesi(seciliSekme, session.activeClientId,');
+    expect(SAYFA).toContain('＋ {olustur.etiket}');
+    expect(SAYFA).not.toContain('＋ Reklam oluştur');
+  });
+});

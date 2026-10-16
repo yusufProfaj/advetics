@@ -53,6 +53,38 @@ export type KitleOzel = z.infer<typeof kitleOzelSchema>;
 
 export const KITLE_CINSIYETLERI = ['all', 'male', 'female'] as const;
 
+/**
+ * ═══ GOOGLE KARŞILIĞI (Base › Kitleler, 2026-10-16) ═══
+ *
+ * Kullanıcı: kütüphane "anahtar kelimelere ve hedeflere göre Google ve
+ * Meta'daki hedefleme karşılıklarını bulsun". Meta tarafı yukarıda (konum,
+ * yaş, ilgi, özel kitle). Google'da iki karşılık var:
+ *   - `ilgiler`: Google'ın hazır İLGİ (affinity) ve SATIN ALMA NİYETİ
+ *     (in-market) kategorileri, `user_interest` kimliğiyle. Kimlik Google'dan
+ *     okunuyor; adla uydurulmuş bir kategori Google'da hiçbir şeye karşılık
+ *     gelmez.
+ *   - `kelimeler`: özel segmentin (custom segment) arama terimleri: "bu
+ *     kelimeleri arayan kişiler".
+ * Konum ve yaş iki platformda ortak alanlardan okunuyor; Google'ın konum
+ * uzayı ayrı ve çevirisi kurulum anında yapılıyor (burada saklanmıyor).
+ */
+export const kitleGoogleIlgiSchema = z.object({
+  id: z.string().regex(/^\d{1,20}$/, 'Geçersiz Google kategori kimliği'),
+  ad: z.string().trim().min(1).max(300),
+  tur: z.enum(['affinity', 'in_market']),
+});
+export type KitleGoogleIlgi = z.infer<typeof kitleGoogleIlgiSchema>;
+
+export const kitleGoogleSchema = z.object({
+  ilgiler: z.array(kitleGoogleIlgiSchema).max(KITLE_SINIRLARI.ilgi, `En fazla ${KITLE_SINIRLARI.ilgi} Google kategorisi`).default([]),
+  kelimeler: z
+    .array(z.string().trim().min(2, 'Kelime en az 2 karakter').max(80))
+    .max(50, 'En fazla 50 arama kelimesi')
+    .default([]),
+});
+export type KitleGoogle = z.infer<typeof kitleGoogleSchema>;
+export const BOS_GOOGLE_KITLE: KitleGoogle = { ilgiler: [], kelimeler: [] };
+
 const kitleAlanlari = {
   name: z.string().trim().min(1, 'Şablon adı boş olamaz').max(KITLE_SINIRLARI.ad),
   locations: z
@@ -71,6 +103,8 @@ const kitleAlanlari = {
     .array(kitleOzelSchema)
     .max(KITLE_SINIRLARI.ozelKitle, `En fazla ${KITLE_SINIRLARI.ozelKitle} özel kitle`)
     .default([]),
+  /** Verilmezse boş (eski istemciler ve Meta'dan alınan setler alanı göndermiyor). */
+  google: kitleGoogleSchema.optional(),
 };
 
 /**
@@ -179,6 +213,7 @@ export interface KitleSablonuRecord {
   genders: (typeof KITLE_CINSIYETLERI)[number];
   interests: KitleIlgi[];
   ozelKitleler: KitleOzel[];
+  google: KitleGoogle;
   varsayilan: boolean;
   updatedAt: string;
 }
@@ -245,5 +280,40 @@ export interface KitleOnerisi {
   uygulanamayan: Array<{ ifade: string; sebep: string }>;
   /** Aramanın yapıldığı reklam hesabı. */
   hesapAdi: string;
+  /**
+   * Google karşılığı. `hata` = okunamadı (hesap yok ya da Google reddetti);
+   * "eşleşme yok" ile ayrı: ilgiler boş ama hata null.
+   */
+  google: {
+    ilgiler: Array<KitleGoogleIlgi & { terim: string }>;
+    kelimeler: string[];
+    hesapAdi: string | null;
+    hata: string | null;
+  };
+}
+
+/**
+ * ═══ GOOGLE KATEGORİSİ EŞLEME ═══
+ *
+ * Google'ın kategori adları İngilizce ve yol taşıyor ("/Sports &
+ * Fitness/Golf Enthusiasts"). Terim (modelin İngilizce adayı) adın SON
+ * parçasında KELİME olarak aranıyor: "car" "Cars" ile eşleşir, "Scarves"
+ * ile eşleşmez. Terim başına en fazla `enCok` kategori; satın alma niyeti
+ * önce (dönüşüme daha yakın). Tahmin yok: eşleşmeyen terim boş döner ve
+ * çağıran onu "eşleşmeyen" listesine yazar.
+ */
+export function googleIlgiEsle(
+  liste: readonly KitleGoogleIlgi[],
+  terim: string,
+  enCok = 3,
+): KitleGoogleIlgi[] {
+  const t = terim.trim().toLocaleLowerCase('en');
+  if (t.length < 3) return [];
+  const kacis = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const desen = new RegExp(`(^|[^a-z])${kacis}(s|es)?($|[^a-z])`);
+  return liste
+    .filter((g) => desen.test((g.ad.split('/').filter(Boolean).at(-1) ?? g.ad).toLocaleLowerCase('en')))
+    .sort((a, b) => (a.tur === b.tur ? a.ad.length - b.ad.length : a.tur === 'in_market' ? -1 : 1))
+    .slice(0, enCok);
 }
 
