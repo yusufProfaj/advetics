@@ -1,9 +1,17 @@
+import { markaBolumuAdi, sec, type Dil } from '@advetics/shared';
 import { MARKA_MERKEZI_BOLUMLERI, markaMerkeziAdresi, type MarkaMerkeziBolumKodu } from '@/lib/panel-adresleri';
 import { SayfaIcMenu } from '@/components/ui/sayfa-ic-menu';
 import { MM_ALT_BASLIKLARI } from './bolumler';
+import { markaMerkeziSozlugu } from '@/dil/sozlukler/marka-merkezi';
 
 export type RozetTonu = 'tamam' | 'eksik' | 'notr';
 export type BolumRozetleri = Partial<Record<MarkaMerkeziBolumKodu, { metin: string; ton: RozetTonu }>>;
+
+/** Adı iki dilde aynı kalan çapalar (Meta, Google, YouTube, Logo) sözlükte tutulmuyor. */
+const SABIT_AD: Record<string, string> = { meta: 'Meta', google: 'Google', youtube: 'YouTube', logo: 'Logo' };
+function altBaslikAdi(sozluk: Record<string, string>, capa: string): string {
+  return sozluk[capa] ?? SABIT_AD[capa] ?? capa;
+}
 
 /**
  * ═══ MARKA MERKEZİ'NİN İÇ MENÜSÜ — ÜÇ BÖLÜM, "NEREDEYİM" HER AN GÖRÜNÜR ═══
@@ -32,39 +40,44 @@ export function IcMenu({
   clientId,
   aktif,
   rozetler,
+  dil,
 }: {
   clientId: string;
   aktif: MarkaMerkeziBolumKodu;
   rozetler: BolumRozetleri;
+  /** Zorunlu: sunucu sayfası çiziyor, kanca yok; varsayılan Türkçeye sessizce düşmesin. */
+  dil: Dil;
 }) {
+  const d = sec(markaMerkeziSozlugu, dil).ic;
   return (
     <>
       <SayfaIcMenu
-        etiket="Marka Merkezi bölümleri"
+        etiket={d.menuEtiketi}
         secili={aktif}
         ogeler={MARKA_MERKEZI_BOLUMLERI.map((b) => {
           const rozet = rozetler[b.kod];
+          const ad = markaBolumuAdi(b.kod, dil);
           return {
             deger: b.kod,
             href: markaMerkeziAdresi(b.kod, clientId),
             uyari: rozet?.ton === 'eksik',
             etiket: (
-              <span title={rozet ? `${b.ad}: ${rozet.metin}` : undefined}>
-                {b.ad}
+              <span title={rozet ? `${ad}: ${rozet.metin}` : undefined}>
+                {ad}
                 {rozet && <span className="sr-only"> ({rozet.metin})</span>}
               </span>
             ),
           };
         })}
       />
-      <ul aria-label="Bu bölümde" className="mt-3 hidden border-l border-line pl-2 min-[900px]:block">
-        {(MM_ALT_BASLIKLARI[aktif] as ReadonlyArray<{ capa: string; ad: string }>).map((a) => (
+      <ul aria-label={d.buBolumde} className="mt-3 hidden border-l border-line pl-2 min-[900px]:block">
+        {(MM_ALT_BASLIKLARI[aktif] as ReadonlyArray<{ capa: string }>).map((a) => (
           <li key={a.capa}>
             <a
               href={`#${a.capa}`}
               className="block rounded-alan px-2 py-1.5 text-12 text-ink-muted no-underline transition-colors hover:bg-surface-sunken hover:text-ink motion-reduce:transition-none"
             >
-              {a.ad}
+              {altBaslikAdi(d.altBaslik, a.capa)}
             </a>
           </li>
         ))}

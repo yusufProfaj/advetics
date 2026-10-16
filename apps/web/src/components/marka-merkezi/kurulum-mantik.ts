@@ -1,5 +1,6 @@
-import type { DonusumTetigi, KurulumAdimDurumu, KurulumAdimKodu, KurulumIstegi } from '@advetics/shared';
+import { sec, type Dil, type DonusumTetigi, type KurulumAdimDurumu, type KurulumAdimKodu, type KurulumIstegi } from '@advetics/shared';
 import { markaMerkeziAdresi } from '@/lib/panel-adresleri';
+import { markaMerkeziKurulumSozlugu } from '@/dil/sozlukler/marka-merkezi-kurulum';
 
 /**
  * Kurulum parçası satırının saf kararları (`kurulum-bolumu.tsx`). Panelde
@@ -10,13 +11,18 @@ import { markaMerkeziAdresi } from '@/lib/panel-adresleri';
  * yerini adımlar aldı.
  */
 
-export const DURUM_GOSTERIMI: Record<KurulumAdimDurumu, { etiket: string; sinif: string }> = {
-  tamam: { etiket: 'Tamam', sinif: 'bg-ok-soft text-ok-strong' },
-  eksik: { etiket: 'Eksik', sinif: 'bg-warn-soft text-warn-strong' },
-  kullanicida: { etiket: 'Sizde', sinif: 'bg-info-soft text-info-strong' },
-  hata: { etiket: 'Hata', sinif: 'bg-danger-soft text-danger-strong' },
-  atlandi: { etiket: 'Bekliyor', sinif: 'bg-surface-sunken text-ink-muted' },
+const DURUM_SINIFI: Record<KurulumAdimDurumu, string> = {
+  tamam: 'bg-ok-soft text-ok-strong',
+  eksik: 'bg-warn-soft text-warn-strong',
+  kullanicida: 'bg-info-soft text-info-strong',
+  hata: 'bg-danger-soft text-danger-strong',
+  atlandi: 'bg-surface-sunken text-ink-muted',
 };
+
+/** Etiket sözlükten, sınıf burada: dil modül düzeyinde tutulmuyor, çağıran verir. */
+export function durumGosterimi(durum: KurulumAdimDurumu, dil: Dil = 'tr'): { etiket: string; sinif: string } {
+  return { etiket: sec(markaMerkeziKurulumSozlugu, dil).durum[durum], sinif: DURUM_SINIFI[durum] };
+}
 
 /** Ödeme adımlarının "Kontrol et" isteği; diğer dış eylemlerde kontrol yok. */
 export const KONTROL_ISTEGI: Partial<Record<KurulumAdimKodu, KurulumIstegi>> = {
@@ -71,32 +77,32 @@ export const AD_ISTEYEN: ReadonlySet<KurulumAdimKodu> = new Set(['meta_hesap', '
  * sessiz. Metinler sunucunun gerçekten yaptığını anlatıyor
  * (`kurulum.service.ts` konteyner/mulk/piksel), fazlasını vaat etmiyor.
  */
-export const DEGISIM_SONUCU: Partial<Record<KurulumAdimKodu, string>> = {
-  gtm_konteyner:
-    'Sitedeki kod değişir: yeni konteynerin kodunu siteye ekle ve eskisini kaldır, ikisi birlikte kalırsa dönüşümler iki kez sayılır. Ölçüm etiketleri yeni konteynere yeniden yazılıp yayınlanır; eski konteynerdeki etiketlere dokunulmaz.',
-  ga4_mulk:
-    'Etiketler yeni ölçüm kimliğiyle yeniden yayınlanmalı (Ölçüm etiketleri adımı "Güncellenmeli" olur) ve Google Ads bağlantısı yeni mülk için yeniden kurulur. Eski mülkte toplanan veri orada kalır.',
-  meta_piksel:
-    'Etiketler yeni pikselle yeniden yayınlanmalı (Ölçüm etiketleri adımı "Güncellenmeli" olur). Bundan sonra kurulan reklamlar yeni pikseli kullanır; yayındaki reklamlar eskisinde kalır.',
-};
+export function degisimSonucu(kod: KurulumAdimKodu, dil: Dil = 'tr'): string | null {
+  const d = sec(markaMerkeziKurulumSozlugu, dil);
+  if (kod === 'gtm_konteyner') return d.degisimGtm;
+  if (kod === 'ga4_mulk') return d.degisimGa4;
+  if (kod === 'meta_piksel') return d.degisimPiksel;
+  return null;
+}
 
 /** Geliştiriciye gidecek e-posta: kod + nereye ekleneceği. `mailto:` gövdesi 2.000 karakteri aşmasın diye kısa. */
-export function gelistiriciEpostasi(site: string | null, gtmKimligi: string, head: string, body: string): string {
-  const konu = `Siteye Google Tag Manager kodu (${gtmKimligi})`;
+export function gelistiriciEpostasi(site: string | null, gtmKimligi: string, head: string, body: string, dil: Dil = 'tr'): string {
+  const d = sec(markaMerkeziKurulumSozlugu, dil);
+  const konu = d.epostaKonu(gtmKimligi);
   const govde = [
-    `Merhaba,`,
+    d.epostaMerhaba,
     ``,
-    `${site ?? 'Sitemize'} aşağıdaki iki kodu ekleyebilir misiniz? Reklam ölçümü için gerekiyor.`,
+    site ? d.epostaIstekSiteli(site) : d.epostaIstekSitesiz,
     ``,
-    `1) Her sayfanın <head> bölümüne, olabildiğince yukarıya:`,
+    d.epostaHead,
     head,
     ``,
-    `2) <body> etiketinin hemen ardına:`,
+    d.epostaBody,
     body,
     ``,
-    `WordPress kullanıyorsanız "Site Kit by Google" ya da "GTM4WP" eklentisine yalnız ${gtmKimligi} kimliğini yazmanız yeterli.`,
+    d.epostaWordpress(gtmKimligi),
     ``,
-    `Teşekkürler.`,
+    d.epostaTesekkur,
   ].join('\n');
   return `mailto:?subject=${encodeURIComponent(konu)}&body=${encodeURIComponent(govde)}`;
 }

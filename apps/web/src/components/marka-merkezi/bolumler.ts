@@ -1,7 +1,6 @@
-import type { SessionResponse } from '@advetics/shared';
+import { markaBolumuAdi, varlikSekmesiAdi, type Dil, type SessionResponse } from '@advetics/shared';
 import {
   KURULUM_LISTESI,
-  MARKA_MERKEZI_BOLUMLERI,
   VARLIKLAR_SEKMELERI,
   type MarkaMerkeziBolumKodu,
   type MarkaMerkeziCapasi,
@@ -25,7 +24,7 @@ import {
  * yanlış bölüme açılıyordu.
  */
 
-type AltBaslik<B extends MarkaMerkeziBolumKodu> = { capa: MarkaMerkeziCapasi<B>; ad: string };
+type AltBaslik<B extends MarkaMerkeziBolumKodu> = { capa: MarkaMerkeziCapasi<B> };
 
 /**
  * İÇ MENÜDE SEÇİLİ BÖLÜMÜN ALTINDAKİ KARTLAR — sayfadaki `id`lere çapa.
@@ -33,32 +32,24 @@ type AltBaslik<B extends MarkaMerkeziBolumKodu> = { capa: MarkaMerkeziCapasi<B>;
  * `bolumler.spec.ts` her çapanın burada da bulunduğunu kilitliyor (çapa
  * sözleşmede var, menüde yok = kullanıcı karta yolu bilmiyor).
  *
- * KURULUM'UN YEDİ ADIMI `KURULUM_LISTESI`NDEN türüyor: adım adı iki yerde
- * yazılırsa menü ile liste ayrışır.
+ * ADLAR BURADA DEĞİL: iki dilli ekran adı sözlükten (`ic.altBaslik[capa]`,
+ * `marka-merkezi.ts`); burada yalnız hangi çapaların hangi sırayla
+ * listeleneceği. KURULUM'UN YEDİ ADIMI `KURULUM_LISTESI`NDEN türüyor: adım
+ * kodu iki yerde yazılırsa menü ile liste ayrışır.
  */
 export const MM_ALT_BASLIKLARI: { [B in MarkaMerkeziBolumKodu]: ReadonlyArray<AltBaslik<B>> } = {
   kurulum: [
-    ...KURULUM_LISTESI.map((a) => ({ capa: a.kod, ad: a.ad })),
-    { capa: 'kanallar', ad: 'Hesaplar ve kanallar' },
-    { capa: 'veri-kaynaklari', ad: 'Diğer veri kaynakları' },
+    ...KURULUM_LISTESI.map((a) => ({ capa: a.kod })),
+    { capa: 'kanallar' },
+    { capa: 'veri-kaynaklari' },
   ],
-  marka: [
-    { capa: 'marka-bilgileri', ad: 'Marka bilgileri' },
-    { capa: 'markayi-anlat', ad: 'Markayı anlat' },
-    { capa: 'kime-satiyoruz', ad: 'Kime satıyoruz' },
-    { capa: 'logo', ad: 'Logo' },
-  ],
-  workspace: [
-    { capa: 'firma', ad: 'İletişim ve firma' },
-    { capa: 'erisim', ad: 'Erişim' },
-    { capa: 'bildirimler', ad: 'Bildirimler' },
-    { capa: 'veri-durumu', ad: 'Veri durumu' },
-  ],
+  marka: [{ capa: 'marka-bilgileri' }, { capa: 'markayi-anlat' }, { capa: 'kime-satiyoruz' }, { capa: 'logo' }],
+  workspace: [{ capa: 'firma' }, { capa: 'erisim' }, { capa: 'bildirimler' }, { capa: 'veri-durumu' }],
 };
 
 /** Bölümün görünen adı (kırıntı ve iç menü aynı yerden). */
-export function bolumAdi(kod: MarkaMerkeziBolumKodu): string {
-  return MARKA_MERKEZI_BOLUMLERI.find((b) => b.kod === kod)!.ad;
+export function bolumAdi(kod: MarkaMerkeziBolumKodu, dil: Dil = 'tr'): string {
+  return markaBolumuAdi(kod, dil);
 }
 
 /**
@@ -100,6 +91,6 @@ export function varlikSekmesiCoz(
 }
 
 /** Varlıklar sekmesinin görünen adı. */
-export function varlikSekmeAdi(kod: VarliklarSekmeKodu): string {
-  return VARLIKLAR_SEKMELERI.find((s) => s.kod === kod)!.ad;
+export function varlikSekmeAdi(kod: VarliklarSekmeKodu, dil: Dil = 'tr'): string {
+  return varlikSekmesiAdi(kod, dil);
 }

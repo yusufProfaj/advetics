@@ -1,4 +1,5 @@
-import type { KurulumBeyani } from '@advetics/shared';
+import { sec, type Dil, type KurulumBeyani } from '@advetics/shared';
+import { markaMerkeziKurulumSozlugu } from '@/dil/sozlukler/marka-merkezi-kurulum';
 import { ApiRequestError } from '@/lib/api';
 import { beyanDizisi } from '@/components/kurulum/sihirbaz-akisi';
 
@@ -24,16 +25,17 @@ export function beyanlarYolu(clientId: string): string {
   return `/clients/${encodeURIComponent(clientId)}/kurulum/beyanlar`;
 }
 
-export async function beyanlariOku(getir: <T>(yol: string) => Promise<T>, clientId: string): Promise<BeyanOkumasi> {
+export async function beyanlariOku(getir: <T>(yol: string) => Promise<T>, clientId: string, dil: Dil = 'tr'): Promise<BeyanOkumasi> {
+  const d = sec(markaMerkeziKurulumSozlugu, dil);
   try {
     const dizi = beyanDizisi(await getir<unknown>(beyanlarYolu(clientId)));
     /*
      * BOŞ GÖVDE = BEYAN YOK değil, BİÇİM BİLİNMİYOR. Uç dizi döndürmezse
      * okunamadı sayılır; `[]` sanmak verilmiş bir kararı "eksik" gösterirdi.
      */
-    return dizi ? { ok: true, v: dizi } : { ok: false, hata: 'Kurulum beyanları beklenmeyen biçimde geldi.' };
+    return dizi ? { ok: true, v: dizi } : { ok: false, hata: d.beyanBicim };
   } catch (e) {
-    return { ok: false, hata: e instanceof ApiRequestError ? e.message : 'Kurulum beyanları okunamadı.' };
+    return { ok: false, hata: e instanceof ApiRequestError ? e.message : d.beyanOkunamadi };
   }
 }
 

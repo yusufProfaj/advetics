@@ -49,6 +49,9 @@ describe('kaynak kartı durumu', () => {
     expect(kaynakDurumMetni({ durum: 'etkin' })).toEqual({ metin: 'Bağlı', ton: 'yesil' });
     expect(kaynakDurumMetni({ durum: 'izin_eksik' }).ton).toBe('kirmizi');
     expect(kaynakDurumMetni({ durum: 'duraklatildi' }).ton).toBe('gri');
+    // İngilizce: ton dilden bağımsız, metin çevrilmiş.
+    expect(kaynakDurumMetni({ durum: 'etkin' }, 'en')).toEqual({ metin: 'Connected', ton: 'yesil' });
+    expect(kaynakDurumMetni({ durum: 'izin_eksik' }, 'en').ton).toBe('kirmizi');
   });
 
   it('kart grubu Kurulum bölümünün İÇİNDE (ayrı bölüm değil) ve hatayı yutmuyor', () => {

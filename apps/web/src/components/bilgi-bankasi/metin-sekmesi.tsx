@@ -7,6 +7,8 @@ import { Kart } from '@/components/ui/kart';
 import { Dugme } from '@/components/ui/dugme';
 import { Alan, MetinAlani } from '@/components/ui/alan';
 import { Serit, Yukleniyor } from '@/components/ui/hal';
+import { useSozluk } from '@/dil/saglayici';
+import { markaMerkeziSozlugu } from '@/dil/sozlukler/marka-merkezi';
 
 /**
  * Bilgi Bankası / Hedef Kitle / Marka Bilgileri sekmeleri — ÜÇÜ DE
@@ -38,6 +40,7 @@ export function MetinSekmesi({
   aciklama: string;
   placeholder: string;
 }) {
+  const d = useSozluk(markaMerkeziSozlugu).metin;
   const [deger, setDeger] = useState('');
   const [yukleniyor, setYukleniyor] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -53,7 +56,7 @@ export function MetinSekmesi({
         if (!iptal) setDeger(profil[alan] ?? '');
       })
       .catch((err) => {
-        if (!iptal) setError(err instanceof ApiRequestError ? err.message : 'Profil yüklenemedi');
+        if (!iptal) setError(err instanceof ApiRequestError ? err.message : d.profilYuklenemedi);
       })
       .finally(() => {
         if (!iptal) setYukleniyor(false);
@@ -63,7 +66,7 @@ export function MetinSekmesi({
     };
     // `alan` DEĞİŞTİĞİNDE (sekme geçişinde bileşen yeniden monte oluyor
     // ama emin olmak için) yeniden çekiliyor.
-  }, [clientId, alan]);
+  }, [clientId, alan, d.profilYuklenemedi]);
 
   async function kaydet(): Promise<void> {
     setBusy(true);
@@ -76,7 +79,7 @@ export function MetinSekmesi({
       });
       setKaydedildi(true);
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Kaydedilemedi');
+      setError(err instanceof ApiRequestError ? err.message : d.kaydedilemedi);
     } finally {
       setBusy(false);
     }
@@ -90,7 +93,7 @@ export function MetinSekmesi({
   if (yukleniyor) {
     return (
       <Kart baslik={baslik}>
-        <Yukleniyor satir={3} etiket={`${baslik} yükleniyor`} />
+        <Yukleniyor satir={3} etiket={d.yukleniyor(baslik)} />
       </Kart>
     );
   }
@@ -103,11 +106,11 @@ export function MetinSekmesi({
           <div className="flex items-center gap-3">
             {kaydedildi && (
               <span role="status" className="text-12 text-ink-muted">
-                Kaydedildi
+                {d.kaydedildi}
               </span>
             )}
             <Dugme ton="koyu" boyut="kucuk" onClick={kaydet} bekliyor={busy}>
-              Kaydet
+              {d.kaydet}
             </Dugme>
           </div>
         ) : undefined
@@ -132,7 +135,7 @@ export function MetinSekmesi({
           )}
         </Alan>
         {error && (
-          <Serit ton="hata" baslik="Kaydedilemedi ya da okunamadı.">
+          <Serit ton="hata" baslik={d.seritBaslik}>
             {error}
           </Serit>
         )}

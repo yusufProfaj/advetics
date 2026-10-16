@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { markaMerkeziVeriSozlugu } from '@/dil/sozlukler/marka-merkezi-veri';
 
 /**
  * ═══ MARKA MERKEZİ › ÖLÇÜM — PANEL DENETİMİ (Ajan 4, 2026-10-11) ═══
@@ -23,7 +24,7 @@ function dilim(baslangic: string, bitis: string): string {
 describe('Ölçüm bölümü', () => {
   it('KRİTİK: hata yutulmuyor — `.catch(() => set…)` yok; çağrı hatası ayrı hâl ve mesajıyla', () => {
     expect(yorumsuz).not.toMatch(/\.catch\(\s*\(\)\s*=>\s*set/);
-    expect(yorumsuz).toContain("setHal({ tur: 'hata', mesaj: hataMetni(e) })");
+    expect(yorumsuz).toContain("setHal({ tur: 'hata', mesaj: hataMetni(e, dil) })");
     expect(yorumsuz).toContain("hal.tur === 'okunuyor'");
   });
 
@@ -37,11 +38,15 @@ describe('Ölçüm bölümü', () => {
     const onayla = yorumsuz.slice(yorumsuz.lastIndexOf('<Dugme', yorumsuz.indexOf('birincilYap(e.donusumId)')), yorumsuz.indexOf('Onayla'));
     expect(onayla).toContain('onClick={() => void birincilYap(e.donusumId)}');
     // İlk düğme yalnız onayı açıyor.
-    expect(blok).toContain('<Dugme onClick={() => setOnay(true)}>Birincil yap</Dugme>');
+    expect(blok).toContain('<Dugme onClick={() => setOnay(true)}>{d.birincilYap}</Dugme>');
+    expect(markaMerkeziVeriSozlugu.tr.olcum.birincilYap).toBe('Birincil yap');
   });
 
   it('Google işlem listesi toplamı söylüyor (sessiz kesme yok)', () => {
-    expect(yorumsuz).toContain("{g.toplam} işlemin {g.satirlar.length}'i");
+    expect(yorumsuz).toContain('{d.googleGosterilen(g.toplam, g.satirlar.length)}');
+    // Toplam VE gösterilen iki dilde de cümlede (sayıdan biri düşerse kesme sessizleşir).
+    expect(markaMerkeziVeriSozlugu.tr.olcum.googleGosterilen(30, 12)).toBe("30 işlemin 12'i");
+    expect(markaMerkeziVeriSozlugu.en.olcum.googleGosterilen(30, 12)).toBe('12 of 30 actions');
   });
 
   /*

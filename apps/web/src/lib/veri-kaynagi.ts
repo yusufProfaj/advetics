@@ -1,5 +1,6 @@
 import { TAKIP_ETIKET_METNI, sec, type Dil, type TakipAcigiYaniti, type VeriKaynagiOzeti } from '@advetics/shared';
 import { reklamYoneticisiSozlugu } from '@/dil/sozlukler/reklam-yoneticisi';
+import { markaMerkeziVeriSozlugu } from '@/dil/sozlukler/marka-merkezi-veri';
 
 /**
  * ═══ VERİ KAYNAKLARI — PANEL KARARLARI (saf, test edilebilir) ═══
@@ -52,19 +53,23 @@ export function siteSutunuKarari(
 }
 
 /** Kartın durum metni ve noktası. Yeşil YALNIZ durum noktası (kılavuz). */
-export function kaynakDurumMetni(k: Pick<VeriKaynagiOzeti, 'durum'>): { metin: string; ton: 'yesil' | 'kirmizi' | 'gri' } {
+export function kaynakDurumMetni(
+  k: Pick<VeriKaynagiOzeti, 'durum'>,
+  dil: Dil = 'tr',
+): { metin: string; ton: 'yesil' | 'kirmizi' | 'gri' } {
+  const d = sec(markaMerkeziVeriSozlugu, dil).veriKaynaklari.durum;
   switch (k.durum) {
     case 'etkin':
-      return { metin: 'Bağlı', ton: 'yesil' };
+      return { metin: d.etkin, ton: 'yesil' };
     case 'izin_eksik':
-      return { metin: 'İzin gerekiyor', ton: 'kirmizi' };
+      return { metin: d.izin_eksik, ton: 'kirmizi' };
     case 'erisim_yok':
-      return { metin: 'Erişim yok', ton: 'kirmizi' };
+      return { metin: d.erisim_yok, ton: 'kirmizi' };
     case 'hata':
-      return { metin: 'Son çekim başarısız', ton: 'kirmizi' };
+      return { metin: d.hata, ton: 'kirmizi' };
     case 'duraklatildi':
-      return { metin: 'Duraklatıldı', ton: 'gri' };
+      return { metin: d.duraklatildi, ton: 'gri' };
     case 'kaldirildi':
-      return { metin: 'Kaldırıldı', ton: 'gri' };
+      return { metin: d.kaldirildi, ton: 'gri' };
   }
 }

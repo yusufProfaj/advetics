@@ -5,7 +5,6 @@ import {
   CAMPAIGN_GOALS,
   CALISMA_GUNLERI,
   GOAL_META,
-  GUN_ADI,
   calismaAraligiSchema,
   type CalismaAraligi,
   type CalismaSaatleri,
@@ -23,6 +22,8 @@ import { Dugme } from '@/components/ui/dugme';
 import { Kart } from '@/components/ui/kart';
 import { Alan, Girdi, MetinAlani } from '@/components/ui/alan';
 import { HataDurumu, Serit, Yukleniyor } from '@/components/ui/hal';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { markaMerkeziSozlugu } from '@/dil/sozlukler/marka-merkezi';
 
 /**
  * ═══ MARKA SEKMESİ — YAPILANDIRILMIŞ ALANLAR ═══
@@ -79,6 +80,7 @@ const BOS: Form = {
 
 
 export function MarkaSekmesi({ clientId, canWrite }: { clientId: string; canWrite: boolean }) {
+  const d = useSozluk(markaMerkeziSozlugu).marka;
   const [durum, setDurum] = useState<Durum>({ tur: 'yukleniyor' });
   const [form, setForm] = useState<Form>(BOS);
   const [busy, setBusy] = useState(false);
@@ -112,14 +114,14 @@ export function MarkaSekmesi({ clientId, canWrite }: { clientId: string; canWrit
         if (!iptal) {
           setDurum({
             tur: 'hata',
-            mesaj: err instanceof ApiRequestError ? err.message : 'Marka bilgileri yüklenemedi.',
+            mesaj: err instanceof ApiRequestError ? err.message : d.yuklenemedi,
           });
         }
       });
     return () => {
       iptal = true;
     };
-  }, [clientId]);
+  }, [clientId, d.yuklenemedi]);
 
   const degis = <K extends keyof Form>(k: K, v: Form[K]): void => {
     setKaydedildi(false);
@@ -145,7 +147,7 @@ export function MarkaSekmesi({ clientId, canWrite }: { clientId: string; canWrit
     // Sunucuyla AYNI şema: burada geçen gövde orada reddedilmez.
     const kontrol = upsertClientProfileSchema.safeParse(govde);
     if (!kontrol.success) {
-      setKayitHatasi(kontrol.error.issues[0]?.message ?? 'Alanlardan biri geçersiz.');
+      setKayitHatasi(kontrol.error.issues[0]?.message ?? d.gecersizAlan);
       return;
     }
     setBusy(true);
@@ -153,7 +155,7 @@ export function MarkaSekmesi({ clientId, canWrite }: { clientId: string; canWrit
       await apiFetch('/client-profile', { method: 'POST', body: JSON.stringify(govde) });
       setKaydedildi(true);
     } catch (err) {
-      setKayitHatasi(err instanceof ApiRequestError ? err.message : 'Kaydedilemedi.');
+      setKayitHatasi(err instanceof ApiRequestError ? err.message : d.kaydedilemedi);
     } finally {
       setBusy(false);
     }
@@ -161,13 +163,13 @@ export function MarkaSekmesi({ clientId, canWrite }: { clientId: string; canWrit
 
   if (durum.tur === 'yukleniyor') {
     return (
-      <Kart baslik="Marka bilgileri">
-        <Yukleniyor satir={4} etiket="Marka bilgileri yükleniyor" />
+      <Kart baslik={d.baslik}>
+        <Yukleniyor satir={4} etiket={d.yukleniyor} />
       </Kart>
     );
   }
   if (durum.tur === 'hata') {
-    return <HataDurumu baslik="Marka bilgileri yüklenemedi." mesaj={durum.mesaj} />;
+    return <HataDurumu baslik={d.yuklenemedi} mesaj={durum.mesaj} />;
   }
 
   const kapali = !canWrite || busy;
@@ -181,29 +183,29 @@ export function MarkaSekmesi({ clientId, canWrite }: { clientId: string; canWrit
       Marka Merkezi artık bu bileşeni yalnız bir çapa kabına (`Capa`) koyuyor.
     */
     <Kart
-      baslik="Marka bilgileri"
+      baslik={d.baslik}
       altEylem={
         canWrite ? (
           <div className="flex items-center gap-3">
             {kaydedildi && (
               <span role="status" className="text-12 text-ink-muted">
-                Kaydedildi.
+                {d.kaydedildi}
               </span>
             )}
             <Dugme ton="koyu" boyut="kucuk" onClick={() => void kaydet()} bekliyor={busy}>
-              Kaydet
+              {d.kaydet}
             </Dugme>
           </div>
         ) : (
-          <span className="text-12 text-ink-muted">Bu bilgileri düzenleme yetkin yok.</span>
+          <span className="text-12 text-ink-muted">{d.yetkiYok}</span>
         )
       }
     >
     <div className="grid gap-5">
-      <p className="m-0 text-13 text-ink-muted">Marka adı, amaç, üslup ve öne çıkan vaatler.</p>
+      <p className="m-0 text-13 text-ink-muted">{d.ozet}</p>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Alan etiket="Marka adı" ipucu="Boşsa workspace adı kullanılır.">
+        <Alan etiket={d.markaAdi} ipucu={d.markaAdiIpucu}>
           {(id, aciklamaId) => (
             <Girdi
               id={id}
@@ -215,7 +217,7 @@ export function MarkaSekmesi({ clientId, canWrite }: { clientId: string; canWrit
             />
           )}
         </Alan>
-        <Alan etiket="Sektör" ipucu="Örn. Konut inşaatı, Diş kliniği">
+        <Alan etiket={d.sektor} ipucu={d.sektorIpucu}>
           {(id, aciklamaId) => (
             <Girdi
               id={id}
@@ -229,7 +231,7 @@ export function MarkaSekmesi({ clientId, canWrite }: { clientId: string; canWrit
         </Alan>
       </div>
 
-      <Grup etiket="Ana amaç" ipucu="AdvCampaign bu amaçla açılır; istersen orada değiştirirsin.">
+      <Grup etiket={d.anaAmac} ipucu={d.anaAmacIpucu}>
         <div className="grid gap-2 sm:grid-cols-3">
           {CAMPAIGN_GOALS.map((g) => (
             <button
@@ -250,8 +252,8 @@ export function MarkaSekmesi({ clientId, canWrite }: { clientId: string; canWrit
       </Grup>
 
       <ListeAlani
-        etiket="Ürün ve hizmet kategorileri"
-        ipucu="Örn. Daire, Villa, Ofis"
+        etiket={d.kategoriler}
+        ipucu={d.kategorilerIpucu}
         degerler={form.urunKategorileri}
         sinir={MARKA_SINIRLARI.kategori}
         kapali={kapali}
@@ -264,7 +266,7 @@ export function MarkaSekmesi({ clientId, canWrite }: { clientId: string; canWrit
         degis={(v) => degis('sikSayfalar', v)}
       />
 
-      <Alan etiket="Üslup" ipucu="Reklam metninin tonu. Örn. Güven veren, sade, kurumsal">
+      <Alan etiket={d.uslup} ipucu={d.uslupIpucu}>
         {(id, aciklamaId) => (
           <Girdi
             id={id}
@@ -278,8 +280,8 @@ export function MarkaSekmesi({ clientId, canWrite }: { clientId: string; canWrit
       </Alan>
 
       <ListeAlani
-        etiket="Öne çıkan vaatler"
-        ipucu="Seni rakiplerinden ayıran, doğruluğu kanıtlanabilir cümleler. AI yalnızca bunlara dayanır."
+        etiket={d.vaatler}
+        ipucu={d.vaatlerIpucu}
         degerler={form.vaatler}
         sinir={MARKA_SINIRLARI.vaat}
         kapali={kapali}
@@ -287,8 +289,8 @@ export function MarkaSekmesi({ clientId, canWrite }: { clientId: string; canWrit
       />
 
       <ListeAlani
-        etiket="Metin şablonları"
-        ipucu="Sık kullandığın cümleler. AdvCampaign’de tek tıkla metne eklenir. Örn. Hemen arayın, ücretsiz keşif."
+        etiket={d.sablonlar}
+        ipucu={d.sablonlarIpucu}
         degerler={form.metinSablonlari}
         sinir={MARKA_SINIRLARI.sablon}
         kapali={kapali}
@@ -296,8 +298,8 @@ export function MarkaSekmesi({ clientId, canWrite }: { clientId: string; canWrit
       />
 
       <Alan
-        etiket="Zorunlu yasal uyarı"
-        ipucu="Doluysa her Meta reklamının ana metninin sonuna eklenir ve metinde yoksa reklam yayınlanmaz. Örn. sağlık, finans, konut sektörlerindeki zorunlu cümle."
+        etiket={d.yasalUyari}
+        ipucu={d.yasalUyariIpucu}
       >
         {(id, aciklamaId) => (
           <MetinAlani
@@ -315,7 +317,7 @@ export function MarkaSekmesi({ clientId, canWrite }: { clientId: string; canWrit
 
       <CalismaSaatleriAlani saatler={form.calismaSaatleri} kapali={kapali} degis={(v) => degis('calismaSaatleri', v)} />
 
-      <Alan etiket="Ek notlar" ipucu="Kaçınılacak ifadeler, dikkat edilecek şeyler.">
+      <Alan etiket={d.ekNotlar} ipucu={d.ekNotlarIpucu}>
         {(id, aciklamaId) => (
           <MetinAlani
             id={id}
@@ -330,7 +332,7 @@ export function MarkaSekmesi({ clientId, canWrite }: { clientId: string; canWrit
       </Alan>
 
       {kayitHatasi && (
-        <Serit ton="hata" baslik="Kaydedilemedi.">
+        <Serit ton="hata" baslik={d.kaydedilemedi}>
           {kayitHatasi}
         </Serit>
       )}
@@ -375,6 +377,8 @@ function ListeAlani({
   kapali: boolean;
   degis: (v: string[]) => void;
 }) {
+  const d = useSozluk(markaMerkeziSozlugu).marka;
+  const { dil } = useDil();
   const [yeni, setYeni] = useState('');
   const [uyari, setUyari] = useState<string | null>(null);
   const dolu = degerler.length >= sinir.adet;
@@ -382,8 +386,8 @@ function ListeAlani({
   function ekle(): void {
     const v = yeni.trim();
     if (!v) return;
-    if (degerler.some((d) => d.toLocaleLowerCase('tr') === v.toLocaleLowerCase('tr'))) {
-      setUyari(`"${v}" zaten listede.`);
+    if (degerler.some((x) => x.toLocaleLowerCase(dil) === v.toLocaleLowerCase(dil))) {
+      setUyari(d.zatenListede(v));
       return;
     }
     degis([...degerler, v]);
@@ -395,17 +399,17 @@ function ListeAlani({
     <Grup etiket={`${etiket} (${degerler.length}/${sinir.adet})`} ipucu={ipucu}>
       {degerler.length > 0 && (
         <ul className="flex flex-wrap gap-1.5">
-          {degerler.map((d) => (
+          {degerler.map((o) => (
             <li
-              key={d}
+              key={o}
               className="inline-flex h-[30px] items-center gap-1.5 rounded-full bg-surface-sunken px-3 text-[12.5px] font-semibold text-ink"
             >
-              {d}
+              {o}
               {!kapali && (
                 <button
                   type="button"
-                  onClick={() => degis(degerler.filter((x) => x !== d))}
-                  aria-label={`${d} kaldır`}
+                  onClick={() => degis(degerler.filter((x) => x !== o))}
+                  aria-label={d.kaldirOge(o)}
                   className="-mr-1 inline-flex h-5 w-5 items-center justify-center rounded-full text-ink-muted hover:bg-surface hover:text-ink"
                 >
                   ✕
@@ -427,16 +431,16 @@ function ListeAlani({
               }
             }}
             maxLength={sinir.uzunluk}
-            placeholder="Yaz ve Enter’a bas"
-            aria-label={`${etiket}: yeni öğe`}
+            placeholder={d.yazVeEnter}
+            aria-label={d.yeniOge(etiket)}
           />
           <Dugme ton="ikincil" boyut="kucuk" onClick={ekle} disabled={!yeni.trim()}>
-            Ekle
+            {d.ekle}
           </Dugme>
         </div>
       )}
       {dolu && !kapali && (
-        <span className="block text-12 text-ink-muted">Sınıra ulaşıldı: en fazla {sinir.adet}.</span>
+        <span className="block text-12 text-ink-muted">{d.sinirDoldu(sinir.adet)}</span>
       )}
       {uyari && (
         <span role="alert" className="block text-12 text-danger-strong">
@@ -460,6 +464,8 @@ function SayfaListesi({
   kapali: boolean;
   degis: (v: SikSayfa[]) => void;
 }) {
+  const d = useSozluk(markaMerkeziSozlugu).marka;
+  const { dil } = useDil();
   const [ad, setAd] = useState('');
   const [url, setUrl] = useState('');
   const [hata, setHata] = useState<string | null>(null);
@@ -469,11 +475,11 @@ function SayfaListesi({
   function denetle(): SikSayfa | null {
     const r = sikSayfaSchema.safeParse({ ad, url });
     if (!r.success) {
-      setHata(r.error.issues[0]?.message ?? 'Geçersiz sayfa.');
+      setHata(r.error.issues[0]?.message ?? d.gecersizSayfa);
       return null;
     }
-    if (sayfalar.some((p) => p.url.toLocaleLowerCase('tr') === r.data.url.toLocaleLowerCase('tr'))) {
-      setHata('Bu adres zaten listede.');
+    if (sayfalar.some((p) => p.url.toLocaleLowerCase(dil) === r.data.url.toLocaleLowerCase(dil))) {
+      setHata(d.adresZatenVar);
       return null;
     }
     setHata(null);
@@ -490,8 +496,8 @@ function SayfaListesi({
 
   return (
     <Grup
-      etiket={`Sık kullanılan sayfalar (${sayfalar.length}/${s.adet})`}
-      ipucu="Reklamın gideceği sayfalar. AdvCampaign hedef adresi bu listeden seçer."
+      etiket={`${d.sayfalar} (${sayfalar.length}/${s.adet})`}
+      ipucu={d.sayfalarIpucu}
     >
       {sayfalar.length > 0 && (
         <ul className="m-0 list-none divide-y divide-line rounded-alan border border-line p-0">
@@ -508,7 +514,7 @@ function SayfaListesi({
               </a>
               {!kapali && (
                 <Dugme ton="hayalet" boyut="kucuk" onClick={() => degis(sayfalar.filter((x) => x.url !== p.url))}>
-                  Kaldır
+                  {d.kaldir}
                 </Dugme>
               )}
             </li>
@@ -521,11 +527,11 @@ function SayfaListesi({
             value={ad}
             onChange={(e) => setAd(e.target.value)}
             maxLength={s.ad}
-            placeholder="Ad (örn. Projeler)"
-            aria-label="Sayfa adı"
+            placeholder={d.sayfaAdiOrnek}
+            aria-label={d.sayfaAdi}
           />
           <Girdi
-            aria-label="Sayfa adresi"
+            aria-label={d.sayfaAdresi}
             hatali={hata !== null}
             value={url}
             onChange={(e) => setUrl(e.target.value)}
@@ -537,7 +543,7 @@ function SayfaListesi({
             inputMode="url"
           />
           <Dugme ton="ikincil" boyut="kucuk" onClick={ekle} disabled={!ad.trim() || !url.trim()}>
-            Ekle
+            {d.ekle}
           </Dugme>
         </div>
       )}
@@ -567,6 +573,9 @@ function CalismaSaatleriAlani({
   kapali: boolean;
   degis: (v: CalismaSaatleri) => void;
 }) {
+  const d = useSozluk(markaMerkeziSozlugu);
+  const m = d.marka;
+  const gunAdi = (g: HaftaGunu): string => d.gunAdi[g] ?? g;
   const gunun = (g: HaftaGunu): CalismaAraligi | undefined => saatler.find((x) => x.gun === g);
   const yaz = (g: HaftaGunu, a: CalismaAraligi | null): void => {
     const digerleri = saatler.filter((x) => x.gun !== g);
@@ -575,8 +584,8 @@ function CalismaSaatleriAlani({
   };
   return (
     <Grup
-      etiket="Çalışma saatleri"
-      ipucu="Telefonla aranmak istediğin saatler. Google arama düğmesini yalnız bu saatlerde gösterir; boş bırakırsan her saatte gösterir. Meta'da saat sınırı uygulanamıyor."
+      etiket={m.calisma}
+      ipucu={m.calismaIpucu}
     >
       <ul className="m-0 list-none divide-y divide-line rounded-alan border border-line p-0">
         {CALISMA_GUNLERI.map((g) => {
@@ -591,7 +600,7 @@ function CalismaSaatleriAlani({
                   disabled={kapali}
                   onChange={(e) => yaz(g, e.target.checked ? { gun: g, acilis: '09:00', kapanis: '18:00' } : null)}
                 />
-                {GUN_ADI[g]}
+                {gunAdi(g)}
               </label>
               {a ? (
                 <span className="flex items-center gap-2">
@@ -601,7 +610,7 @@ function CalismaSaatleriAlani({
                     value={a.acilis}
                     disabled={kapali}
                     onChange={(e) => yaz(g, { ...a, acilis: e.target.value })}
-                    aria-label={`${GUN_ADI[g]} açılış`}
+                    aria-label={m.acilis(gunAdi(g))}
                     className="w-28"
                   />
                   <span className="text-ink-muted">-</span>
@@ -611,12 +620,12 @@ function CalismaSaatleriAlani({
                     value={a.kapanis === '24:00' ? '23:59' : a.kapanis}
                     disabled={kapali}
                     onChange={(e) => yaz(g, { ...a, kapanis: e.target.value === '23:59' ? '24:00' : e.target.value })}
-                    aria-label={`${GUN_ADI[g]} kapanış`}
+                    aria-label={m.kapanis(gunAdi(g))}
                     className="w-28"
                   />
                 </span>
               ) : (
-                <span className="text-12 text-ink-muted">Kapalı</span>
+                <span className="text-12 text-ink-muted">{m.kapali}</span>
               )}
               {hata && !hata.success && (
                 <span role="alert" className="basis-full text-12 text-danger-strong">

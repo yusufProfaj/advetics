@@ -1,8 +1,10 @@
 import Link from 'next/link';
-import { ROL_ETIKETI, type SyncStatusResponse } from '@advetics/shared';
+import { kapiNedeni, rolEtiketi, sec, type Dil, type SyncStatusResponse } from '@advetics/shared';
 import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import type { SessionResponse } from '@/lib/session';
-import { PANEL_KAPILARI, ayarlarAdresi, hesaplarAdresi, kapi } from '@/lib/panel-adresleri';
+import { ayarlarAdresi, hesaplarAdresi, kapi } from '@/lib/panel-adresleri';
+import { dilAl } from '@/dil/sunucu';
+import { markaMerkeziBildirimSozlugu } from '@/dil/sozlukler/marka-merkezi-bildirim';
 import { Uyari } from '@/components/ui/uyari';
 import { Kart as OrtakKart } from '@/components/ui/kart';
 import type { MemberRow } from '@/components/tenancy/team-manager';
@@ -59,6 +61,9 @@ export async function WorkspaceBilgileri({
   session: SessionResponse;
   detay: { ok: true; v: WorkspaceDetay } | { ok: false; hata: string };
 }) {
+  const dil = await dilAl();
+  const d = sec(markaMerkeziBildirimSozlugu, dil).workspace;
+  const hataMetni = (e: unknown) => hataCumlesi(e, dil);
   const erisimGorunur = kapi(session, 'erisim.gor');
   const veriGorunur = kapi(session, 'veriDurumu.gor');
 
@@ -79,9 +84,9 @@ export async function WorkspaceBilgileri({
 
   return (
     <div className="space-y-4">
-      <Kart id="firma" baslik="İletişim ve firma">
+      <Kart id="firma" baslik={d.firmaBaslik}>
         {!detay.ok ? (
-          <Uyari ton="tehlike" baslik="Workspace bilgileri alınamadı.">
+          <Uyari ton="tehlike" baslik={d.alinamadi}>
             {detay.hata}
           </Uyari>
         ) : (
@@ -95,29 +100,29 @@ export async function WorkspaceBilgileri({
         )}
       </Kart>
 
-      <Kart id="erisim" baslik="Erişim">
+      <Kart id="erisim" baslik={d.erisimBaslik}>
         {uyeler === null ? (
-          <p className="text-sm text-ink-muted">{PANEL_KAPILARI['erisim.gor'].neden}</p>
+          <p className="text-sm text-ink-muted">{kapiNedeni('erisim.gor', dil)}</p>
         ) : !uyeler.ok ? (
-          <Uyari ton="tehlike" baslik="Erişim listesi alınamadı.">
+          <Uyari ton="tehlike" baslik={d.erisimAlinamadi}>
             {uyeler.hata}
           </Uyari>
         ) : (
           <div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
               <span className="text-ink-muted">
-                <strong className="text-ink">{uyeler.v.length}</strong> kişi bu workspace’i görüyor.
+                <strong className="text-ink">{uyeler.v.length}</strong>{d.goruyor(uyeler.v.length)}
               </span>
               <Link
                 href={ayarlarAdresi('ekip', { workspace: clientId, capa: 'workspace-erisimi' })}
                 className="text-sm font-semibold text-ink underline-offset-2 hover:underline"
               >
-                Ayarlar › Ekip ve güvenlik’te yönet
+                {d.ekipteYonet}
               </Link>
             </div>
             {uyeler.v.length === 0 ? (
               <p className="rounded-alan border border-dashed border-line p-4 text-sm text-ink-muted">
-                Bu workspace’e atanmış kimse yok. Şirket yöneticileri yine de görür; kişi eklemek Ayarlar › Ekip ve güvenlik’te.
+                {d.kimseYok}
               </p>
             ) : (
               <ul className="divide-y divide-line rounded-alan border border-line">
@@ -127,7 +132,7 @@ export async function WorkspaceBilgileri({
                       <span className="block truncate font-medium text-ink">{m.fullName ?? m.email}</span>
                       {m.fullName && <span className="block truncate text-xs text-ink-muted">{m.email}</span>}
                     </span>
-                    <span className="shrink-0 text-xs text-ink-muted">{rolMetni(m, clientId)}</span>
+                    <span className="shrink-0 text-xs text-ink-muted">{rolMetni(m, clientId, dil)}</span>
                   </li>
                 ))}
               </ul>
@@ -136,35 +141,33 @@ export async function WorkspaceBilgileri({
         )}
       </Kart>
 
-      <Kart id="bildirimler" baslik="Bildirimler">
+      <Kart id="bildirimler" baslik={d.bildirimlerBaslik}>
         {kapi(session, 'bildirim.gor') ? (
           <>
-            <p className="mb-3 text-xs text-ink-muted">
-              Sinyaller ve kural bildirimleri bu kanallara gider. Bir kanal, deneme mesajı gelene kadar doğrulanmamış sayılır.
-            </p>
+            <p className="mb-3 text-xs text-ink-muted">{d.bildirimlerNotu}</p>
             <BildirimlerBolumu clientId={clientId} yazabilir={kapi(session, 'bildirim.yaz')} ajansAdresi={session.user.email} />
           </>
         ) : (
-          <p className="text-sm text-ink-muted">{PANEL_KAPILARI['bildirim.gor'].neden}</p>
+          <p className="text-sm text-ink-muted">{kapiNedeni('bildirim.gor', dil)}</p>
         )}
       </Kart>
 
-      <Kart id="veri-durumu" baslik="Veri durumu">
+      <Kart id="veri-durumu" baslik={d.veriDurumuBaslik}>
         {veri === null ? (
-          <p className="text-sm text-ink-muted">{PANEL_KAPILARI['veriDurumu.gor'].neden}</p>
+          <p className="text-sm text-ink-muted">{kapiNedeni('veriDurumu.gor', dil)}</p>
         ) : !veri.ok ? (
-          <Uyari ton="tehlike" baslik="Veri durumu alınamadı.">
+          <Uyari ton="tehlike" baslik={d.veriDurumuAlinamadi}>
             {veri.hata}
           </Uyari>
         ) : (
           <div className="space-y-3">
             <p className="text-xs text-ink-muted">
-              Bu workspace’in reklam hesapları, veri çekme işlerinin sonucu ve bir hesap için veri gelmiyorsa nedeni.
+              {d.veriNotu}
               {veri.v.accounts.length === 0 && (
                 <>
                   {' '}
                   <Link href={hesaplarAdresi(clientId)} className="font-semibold text-ink underline-offset-2 hover:underline">
-                    Kurulum’da hesap ata
+                    {d.hesapAta}
                   </Link>
                 </>
               )}
@@ -178,11 +181,11 @@ export async function WorkspaceBilgileri({
 }
 
 /** Kişinin BU workspace'teki rolü; workspace'e özel üyelik yoksa şirket rolü. */
-function rolMetni(m: MemberRow, clientId: string): string {
+function rolMetni(m: MemberRow, clientId: string, dil: Dil): string {
   const ozel = m.memberships.find((u) => u.clientId === clientId);
-  if (ozel) return ROL_ETIKETI[ozel.role];
+  if (ozel) return rolEtiketi(ozel.role, dil);
   const genel = m.memberships.find((u) => u.clientId === null);
-  return genel ? `${ROL_ETIKETI[genel.role]} (şirket geneli)` : '—';
+  return genel ? sec(markaMerkeziBildirimSozlugu, dil).workspace.sirketGeneli(rolEtiketi(genel.role, dil)) : '—';
 }
 
 /*
@@ -197,6 +200,6 @@ function Kart({ id, baslik, children }: { id: string; baslik: string; children: 
   );
 }
 
-function hataMetni(e: unknown): string {
-  return e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.';
+function hataCumlesi(e: unknown, dil: Dil): string {
+  return e instanceof ApiRequestError ? e.message : sec(markaMerkeziBildirimSozlugu, dil).sunucuUlasilamadi;
 }

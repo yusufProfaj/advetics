@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { kitleBuyuklugu } from './ilgi-secici';
+import { markaMerkeziVeriSozlugu } from '@/dil/sozlukler/marka-merkezi-veri';
 
 const K = readFileSync(resolve(__dirname, 'ilgi-secici.tsx'), 'utf8')
   .replace(/\/\*[\s\S]*?\*\//g, '')
@@ -17,6 +18,9 @@ describe('İlgi seçici', () => {
 
   it('KRİTİK: sayı "dünya geneli" etiketi olmadan gösterilmiyor (Meta sayısı ülkeye göre değil)', () => {
     expect(kitleBuyuklugu({ audienceMin: 264_000_000, audienceMax: 310_000_000 })).toMatch(/^dünya geneli /);
+    // İngilizcede de aynı kural: "worldwide" etiketi olmadan sayı gösterilmez.
+    expect(kitleBuyuklugu({ audienceMin: 1000, audienceMax: 2500 }, 'en')).toBe('worldwide ~1,000–2,500 people');
+    expect(kitleBuyuklugu({ audienceMin: null, audienceMax: null }, 'en')).toBe('size unknown');
   });
 
   it('hesap kararı TEK yerde — konum seçicisiyle aynı hook', () => {
@@ -34,7 +38,8 @@ describe('İlgi seçici', () => {
   });
 
   it('çağrı düştüğünde hata yutulmuyor', () => {
-    expect(K).toContain("setHata(err instanceof ApiRequestError ? err.message : 'İlgi alanı araması düştü.')");
+    expect(K).toContain('setHata(err instanceof ApiRequestError ? err.message : t.aramaDustu)');
+    expect(markaMerkeziVeriSozlugu.tr.ilgi.aramaDustu).toBe('İlgi alanı araması düştü.');
     expect(K).not.toMatch(/\.catch\(\(\) => set/);
   });
 });

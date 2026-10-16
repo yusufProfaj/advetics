@@ -11,6 +11,8 @@ describe('hazırlama kartı', () => {
     expect(butceGirdisi('0').tur).toBe('hata');
     expect(butceGirdisi('12a').tur).toBe('hata');
     expect(butceGirdisi('1,234').tur).toBe('hata');
+    // Hata cümlesi dile uyuyor.
+    expect(butceGirdisi('12a', 'en')).toEqual({ tur: 'hata', mesaj: 'Enter the amount as a number (e.g. 750 or 750,50).' });
   });
 
   it('KRİTİK: yalnız çalışırken yoklanır (hesapsız workspace boşa istek atmaz)', () => {

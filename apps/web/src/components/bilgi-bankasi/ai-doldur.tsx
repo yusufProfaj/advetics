@@ -8,6 +8,8 @@ import { Dugme } from '@/components/ui/dugme';
 import { Kart } from '@/components/ui/kart';
 import { Alan, Girdi, MetinAlani } from '@/components/ui/alan';
 import { Serit } from '@/components/ui/hal';
+import { useSozluk } from '@/dil/saglayici';
+import { markaMerkeziSozlugu } from '@/dil/sozlukler/marka-merkezi';
 
 /**
  * ═══ TEK TUŞLA BİLGİ BANKASI ═══
@@ -29,6 +31,7 @@ import { Serit } from '@/components/ui/hal';
  */
 export function AiDoldur({ clientId, canWrite }: { clientId: string; canWrite: boolean }) {
   const router = useRouter();
+  const d = useSozluk(markaMerkeziSozlugu).ai;
   const [busy, setBusy] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
   const [taslak, setTaslak] = useState<BilgiBankasiTaslak | null>(null);
@@ -53,7 +56,7 @@ export function AiDoldur({ clientId, canWrite }: { clientId: string; canWrite: b
        * site JavaScript ile çiziliyor, site yönlendirme döndürdü) ve her biri
        * farklı bir iş.
        */
-      setHata(err instanceof ApiRequestError ? err.message : 'Taslak üretilemedi.');
+      setHata(err instanceof ApiRequestError ? err.message : d.taslakUretilemedi);
     } finally {
       setBusy(false);
     }
@@ -82,7 +85,7 @@ export function AiDoldur({ clientId, canWrite }: { clientId: string; canWrite: b
       // hata kaydederken görünsün.
       const kontrol = upsertClientProfileSchema.safeParse(govde);
       if (!kontrol.success) {
-        setHata(kontrol.error.issues[0]?.message ?? 'Alanlardan biri geçersiz.');
+        setHata(kontrol.error.issues[0]?.message ?? d.gecersizAlan);
         return;
       }
       await apiFetch('/client-profile', { method: 'POST', body: JSON.stringify(govde) });
@@ -92,7 +95,7 @@ export function AiDoldur({ clientId, canWrite }: { clientId: string; canWrite: b
       // ikisini de güncel hâle getiriyor.
       router.refresh();
     } catch (err) {
-      setHata(err instanceof ApiRequestError ? err.message : 'Kaydedilemedi.');
+      setHata(err instanceof ApiRequestError ? err.message : d.kaydedilemedi);
     } finally {
       setBusy(false);
     }
@@ -113,22 +116,20 @@ export function AiDoldur({ clientId, canWrite }: { clientId: string; canWrite: b
 
   return (
     <Kart
-      baslik="Yapay zekâ ile doldur"
+      baslik={d.baslik}
       eylem={
         <Dugme ton={taslak ? 'ikincil' : 'koyu'} boyut="kucuk" onClick={() => void uret()} disabled={busy}>
-          {busy && !taslak ? 'Araştırılıyor…' : taslak ? 'Yeniden üret' : 'Araştır ve doldur'}
+          {busy && !taslak ? d.araniyor : taslak ? d.yenidenUret : d.arastir}
         </Dugme>
       }
     >
       <p className="m-0 text-13 text-ink-muted">
-        Workspace’in site adresini okuyup bilgi bankası, hedef kitle ve marka
-        alanlarını reklam stratejisine göre önerir. Kaydetmeden önce
-        düzenleyebilirsin.
+        {d.aciklama}
       </p>
 
       {hata && (
         <div className="mt-3">
-          <Serit ton="hata" baslik="İşlem tamamlanamadı">
+          <Serit ton="hata" baslik={d.islemBasarisiz}>
             {hata}
           </Serit>
         </div>
@@ -136,21 +137,21 @@ export function AiDoldur({ clientId, canWrite }: { clientId: string; canWrite: b
 
       {kaydedildi && (
         <p role="status" className="mt-3 text-13 text-ink">
-          Kaydedildi. Sekmelerde güncel hâli görebilirsin.
+          {d.kaydedildi}
         </p>
       )}
 
       {taslak && (
         <div className="mt-4 space-y-4">
           <p className="text-12 text-ink-muted">
-            Kaynak: <span className="text-ink">{taslak.kaynak}</span>
+            {d.kaynak} <span className="text-ink">{taslak.kaynak}</span>
           </p>
 
           {(
             [
-              ['bilgiBankasi', 'Markayı anlat'],
-              ['hedefKitle', 'Kime satıyoruz'],
-              ['markaBilgileri', 'Marka: ek notlar'],
+              ['bilgiBankasi', d.markayiAnlat],
+              ['hedefKitle', d.kimeSatiyoruz],
+              ['markaBilgileri', d.ekNotlar],
             ] as const
           ).map(([alan, etiket]) => (
             <Alan key={alan} etiket={etiket}>
@@ -166,7 +167,7 @@ export function AiDoldur({ clientId, canWrite }: { clientId: string; canWrite: b
                   onChange={(e) => alanDegistir(alan, e.target.value)}
                   rows={taslak[alan] ? 5 : 2}
                   maxLength={2000}
-                  placeholder="Bu bölüm üretilemedi; elle yazabilirsin."
+                  placeholder={d.bolumUretilemedi}
                 />
               )}
             </Alan>
@@ -175,9 +176,9 @@ export function AiDoldur({ clientId, canWrite }: { clientId: string; canWrite: b
           <div className="grid gap-4 sm:grid-cols-2">
             {(
               [
-                ['markaAdi', 'Marka adı', MARKA_SINIRLARI.markaAdi],
-                ['sektor', 'Sektör', MARKA_SINIRLARI.sektor],
-                ['uslup', 'Üslup', MARKA_SINIRLARI.uslup],
+                ['markaAdi', d.markaAdi, MARKA_SINIRLARI.markaAdi],
+                ['sektor', d.sektor, MARKA_SINIRLARI.sektor],
+                ['uslup', d.uslup, MARKA_SINIRLARI.uslup],
               ] as const
             ).map(([alan, etiket, sinir]) => (
               <Alan key={alan} etiket={etiket}>
@@ -187,7 +188,7 @@ export function AiDoldur({ clientId, canWrite }: { clientId: string; canWrite: b
                     value={taslak[alan]}
                     onChange={(e) => alanDegistir(alan, e.target.value)}
                     maxLength={sinir}
-                    placeholder="Sitede bulunamadı; elle yazabilirsin."
+                    placeholder={d.sitedeYok}
                   />
                 )}
               </Alan>
@@ -195,11 +196,11 @@ export function AiDoldur({ clientId, canWrite }: { clientId: string; canWrite: b
           </div>
           {(
             [
-              ['urunKategorileri', 'Ürün ve hizmet kategorileri', MARKA_SINIRLARI.kategori.adet],
-              ['vaatler', 'Öne çıkan vaatler', MARKA_SINIRLARI.vaat.adet],
+              ['urunKategorileri', d.kategoriler(MARKA_SINIRLARI.kategori.adet)],
+              ['vaatler', d.vaatler(MARKA_SINIRLARI.vaat.adet)],
             ] as const
-          ).map(([alan, etiket, adet]) => (
-            <Alan key={alan} etiket={`${etiket} (her satır bir öğe, en fazla ${adet})`}>
+          ).map(([alan, etiket]) => (
+            <Alan key={alan} etiket={etiket}>
               {/*
                 `defaultValue` + `onBlur`: kontrollü bir textarea'da satır
                 satır ayırıp birleştirmek, boş satır yazmaya çalışan
@@ -211,25 +212,24 @@ export function AiDoldur({ clientId, canWrite }: { clientId: string; canWrite: b
                   defaultValue={taslak[alan].join('\n')}
                   onBlur={(e) => listeDegistir(alan, e.target.value)}
                   rows={Math.max(2, taslak[alan].length)}
-                  placeholder="Sitede bulunamadı; elle yazabilirsin."
+                  placeholder={d.sitedeYok}
                 />
               )}
             </Alan>
           ))}
           <p className="text-12 text-ink-muted">
-            Ana amaç ve sık kullanılan sayfalar önerilmez: ilki senin kararın, ikincisi gerçek adres ister.
-            Marka sekmesinden ekle.
+            {d.onerilmeyenler}
           </p>
 
           <div className="flex flex-wrap items-center gap-2">
             <Dugme ton="koyu" boyut="kucuk" onClick={() => void kaydet()} disabled={busy}>
-              {busy ? 'Kaydediliyor…' : 'Kaydet'}
+              {busy ? d.kaydediliyor : d.kaydet}
             </Dugme>
             <Dugme ton="hayalet" boyut="kucuk" onClick={() => setTaslak(null)} disabled={busy}>
-              Vazgeç
+              {d.vazgec}
             </Dugme>
             <span className="text-12 text-ink-muted">
-              Dolu gelen alanlar sekmelerdeki değerin üzerine yazar; boş olanlar dokunulmaz.
+              {d.ustuneYazar}
             </span>
           </div>
         </div>

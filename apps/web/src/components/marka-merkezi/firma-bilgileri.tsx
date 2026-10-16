@@ -4,7 +4,9 @@ import { useState } from 'react';
 import { DetaySatiri } from '@/components/tenancy/musteri-detay';
 import { MusteriBilgiFormu, type MusteriBilgileri } from '@/components/tenancy/musteri-bilgi-formu';
 import { Dugme } from '@/components/ui/dugme';
-import { koordinatYaz } from '@advetics/shared';
+import { koordinatYaz, sec } from '@advetics/shared';
+import { useDil } from '@/dil/saglayici';
+import { markaMerkeziBildirimSozlugu } from '@/dil/sozlukler/marka-merkezi-bildirim';
 
 /**
  * ═══ İLETİŞİM VE FİRMA BİLGİLERİ — MARKA MERKEZİ'NDE ═══
@@ -39,6 +41,8 @@ export function FirmaBilgileri({
    */
   kompakt?: boolean;
 }) {
+  const { dil } = useDil();
+  const d = sec(markaMerkeziBildirimSozlugu, dil).firma;
   const [duzenle, setDuzenle] = useState(false);
 
   if (duzenle) {
@@ -51,16 +55,16 @@ export function FirmaBilgileri({
     return (
       <div className="space-y-3">
         <div className="rounded-alan border border-line px-3 py-1">
-          <DetaySatiri etiket="İnternet sitesi" deger={bilgi.website} />
-          <DetaySatiri etiket="Yetkili kişi" deger={bilgi.contactName} />
-          <DetaySatiri etiket="Telefon" deger={bilgi.contactPhone} />
-          <DetaySatiri etiket="Rapor alıcıları" deger={bilgi.contactEmails.length > 0 ? bilgi.contactEmails.join(', ') : null} />
-          <DetaySatiri etiket="Adres" deger={bilgi.address} />
-          <DetaySatiri etiket="Harita konumu" deger={konum} />
+          <DetaySatiri etiket={d.internetSitesi} deger={bilgi.website} />
+          <DetaySatiri etiket={d.yetkiliKisi} deger={bilgi.contactName} />
+          <DetaySatiri etiket={d.telefon} deger={bilgi.contactPhone} />
+          <DetaySatiri etiket={d.raporAlicilari} deger={bilgi.contactEmails.length > 0 ? bilgi.contactEmails.join(', ') : null} />
+          <DetaySatiri etiket={d.adres} deger={bilgi.address} />
+          <DetaySatiri etiket={d.haritaKonumu} deger={konum} />
         </div>
         {canManage && (
           <Dugme ton="koyu" boyut="kucuk" onClick={() => setDuzenle(true)}>
-            Bilgileri düzenle
+            {d.bilgileriDuzenle}
           </Dugme>
         )}
       </div>
@@ -71,37 +75,37 @@ export function FirmaBilgileri({
     <div className="space-y-4">
       <div className="grid gap-4 md:grid-cols-2">
         <div>
-          <p className="mb-1 text-xs font-semibold text-ink">İletişim</p>
+          <p className="mb-1 text-xs font-semibold text-ink">{d.iletisim}</p>
           <div className="rounded-alan border border-line px-3 py-1">
-            <DetaySatiri etiket="Yetkili kişi" deger={bilgi.contactName} />
+            <DetaySatiri etiket={d.yetkiliKisi} deger={bilgi.contactName} />
             <DetaySatiri
-              etiket="Rapor alıcıları"
+              etiket={d.raporAlicilari}
               deger={bilgi.contactEmails.length > 0 ? bilgi.contactEmails.join(', ') : null}
             />
-            <DetaySatiri etiket="Telefon" deger={bilgi.contactPhone} />
-            <DetaySatiri etiket="İnternet sitesi" deger={bilgi.website} />
+            <DetaySatiri etiket={d.telefon} deger={bilgi.contactPhone} />
+            <DetaySatiri etiket={d.internetSitesi} deger={bilgi.website} />
           </div>
         </div>
         <div>
-          <p className="mb-1 text-xs font-semibold text-ink">Firma</p>
+          <p className="mb-1 text-xs font-semibold text-ink">{d.firma}</p>
           <div className="rounded-alan border border-line px-3 py-1">
-            <DetaySatiri etiket="Adres" deger={bilgi.address} />
+            <DetaySatiri etiket={d.adres} deger={bilgi.address} />
             {/* "Bölgemde çok kişi görsün" reklamının "adresin çevresi" seçeneği bunu okuyor. */}
             <DetaySatiri
-              etiket="Harita konumu"
+              etiket={d.haritaKonumu}
               deger={bilgi.addressLatitude != null && bilgi.addressLongitude != null ? koordinatYaz({ enlem: bilgi.addressLatitude, boylam: bilgi.addressLongitude }) : null}
             />
-            <DetaySatiri etiket="Vergi dairesi" deger={bilgi.taxOffice} />
-            <DetaySatiri etiket="Vergi numarası" deger={bilgi.taxNumber} />
+            <DetaySatiri etiket={d.vergiDairesi} deger={bilgi.taxOffice} />
+            <DetaySatiri etiket={d.vergiNumarasi} deger={bilgi.taxNumber} />
             <DetaySatiri etiket="IBAN" deger={bilgi.iban} />
-            <DetaySatiri etiket="Saat dilimi" deger={saatDilimi} />
-            <DetaySatiri etiket="Raporlama para birimi" deger={paraBirimi} />
+            <DetaySatiri etiket={d.saatDilimi} deger={saatDilimi} />
+            <DetaySatiri etiket={d.paraBirimi} deger={paraBirimi} />
           </div>
           {/*
             SALT OKUNUR (MIMARI Ç-16 ⚠): metrik günleri ve tutarlar bu dilim ve
             birimle yazıldı; değiştirmek geçmiş raporları sessizce kaydırırdı.
           */}
-          <p className="mt-1 text-[11px] text-ink-muted">Saat dilimi ve para birimi reklam hesabının ayarından gelir, burada değişmez.</p>
+          <p className="mt-1 text-[11px] text-ink-muted">{d.saltOkunur}</p>
         </div>
       </div>
       {bilgi.notes && (
@@ -112,11 +116,11 @@ export function FirmaBilgileri({
       {/* RAPOR ALICISI YOKSA SÖYLENİYOR: boş liste, planlanan rapor mailinin
           kimseye gitmemesi demek ve bunu ilk fark eden müşteri olur. */}
       {bilgi.contactEmails.length === 0 && (
-        <p className="text-xs text-warn-strong">Rapor alıcısı yok. Rapor maili bu workspace için kimseye gitmez.</p>
+        <p className="text-xs text-warn-strong">{d.raporAlicisiYok}</p>
       )}
       {canManage && (
         <Dugme ton="ikincil" boyut="kucuk" onClick={() => setDuzenle(true)}>
-          Bilgileri düzenle
+          {d.bilgileriDuzenle}
         </Dugme>
       )}
     </div>

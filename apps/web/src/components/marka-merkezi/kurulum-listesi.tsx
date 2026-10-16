@@ -6,6 +6,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom';
 import {
   KURULUM_ADIM_ADI,
+  kapiNedeni,
   type HazirlamaYaniti,
   type HesapSahibi,
   type KurulumAdimSonucu,
@@ -17,7 +18,6 @@ import { ApiRequestError, apiFetch } from '@/lib/api';
 import { beyanGirdisi, beyanlariOku, type BeyanOkumasi } from '@/lib/kurulum-beyanlari';
 import {
   KURULUM_PLATFORMLARI,
-  PANEL_KAPILARI,
   eksikleriTamamlaKapsami,
   kurulumListesi,
   kurulumSayaci,
@@ -28,12 +28,14 @@ import {
 import { CallbackBanner } from '@/components/callback-banner';
 import { Dugme, dugmeSinifi } from '@/components/ui/dugme';
 import { Uyari } from '@/components/ui/uyari';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { markaMerkeziKurulumSozlugu } from '@/dil/sozlukler/marka-merkezi-kurulum';
 import { YOKLAMA_ARALIGI_MS, YOKLAMA_SINIRI, yoklamaGerekli } from './hazirlama-mantik';
 import { AdimIcerigi, type AdimIcerigiOzellikleri, type AdimYetkileri } from './adim-icerigi';
 import { DurumRozeti } from './kurulum-yardimcilari';
 import { KURULUM_EYLEM_YUVASI } from './baslik-yuvasi';
 import {
-  LISTE_DURUMU,
+  listeDurumu,
   adimOzeti,
   beyanDegistir,
   dugmeNedeni,
@@ -65,9 +67,7 @@ const HAP =
  */
 export type Sonuc<T> = { ok: true; v: T } | { ok: false; hata: string };
 
-const hataMetni = (e: unknown) => (e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.');
-
-const KAYNAK_ADI = { kurulum: 'Kurulum adımları', hazirlama: 'Reklam hazırlığı', hazirlik: 'Hazırlık maddeleri', beyanlar: 'Kurulum beyanları' } as const;
+const hataMetniDil = (e: unknown, yedek: string) => (e instanceof ApiRequestError ? e.message : yedek);
 
 const PLATFORM_ADI: Record<KurulumPlatformu, string> = { meta: 'Meta', google: 'Google Ads' };
 
@@ -101,6 +101,10 @@ export function KurulumListesi({
   aktifDegil: boolean;
 }) {
   const { yazabilir, hesapYazabilir } = yetki;
+  const d = useSozluk(markaMerkeziKurulumSozlugu);
+  const { dil } = useDil();
+  const hataMetni = useCallback((e: unknown) => hataMetniDil(e, d.sunucuyaUlasilamadi), [d]);
+  const kaynakAdi = { kurulum: d.kaynakKurulum, hazirlama: d.kaynakHazirlama, hazirlik: d.kaynakHazirlik, beyanlar: d.kaynakBeyanlar } as const;
   const router = useRouter();
   const [kurulum, setKurulum] = useState(ilk.kurulum);
   const [hazirlama, setHazirlama] = useState(ilk.hazirlama);
@@ -131,7 +135,7 @@ export function KurulumListesi({
   const adimlar = useMemo(() => kurulumListesi(girdi), [girdi]);
   const sayac = kurulumSayaci(adimlar);
   const kapsam = eksikleriTamamlaKapsami(girdi);
-  const kapaliNeden = dugmeNedeni(kapsam, yazabilir);
+  const kapaliNeden = dugmeNedeni(kapsam, yazabilir, dil);
 
   /** Üç kaynağı yeniden okur; her biri kendi hatasıyla. Sonra sunucu rozetini tazeler. */
   const tazele = useCallback(async () => {
@@ -147,13 +151,13 @@ export function KurulumListesi({
       oku<HazirlamaYaniti>(`/clients/${clientId}/hazirlama`),
       oku<WorkspaceHazirlik>(`/clients/${clientId}/hazirlik`),
     ]);
-    const by = await beyanlariOku(apiFetch, clientId);
+    const by = await beyanlariOku(apiFetch, clientId, dil);
     setKurulum(k);
     setHazirlama(hz);
     setHazirlik(hk);
     setBeyanlar(by);
     router.refresh();
-  }, [clientId, router]);
+  }, [clientId, router, hataMetni, dil]);
 
   /*
    * HAZIRLAMA ARKA PLANDA ÇALIŞIRKEN YOKLANIR, sınırda durur ve bunu söyler
@@ -274,12 +278,12 @@ export function KurulumListesi({
     <>
       {!sayac.bitti && (
         <Link href={sihirbazAdresi(clientId)} className={dugmeSinifi(yazabilir ? 'ikincil' : 'birincil')}>
-          Sihirbazla tamamla
+          {d.sihirbazlaTamamla}
         </Link>
       )}
       {yazabilir && (
         <Dugme ton="birincil" bekliyor={tamamlaniyor || calisiyor} disabled={!kapsam.yapacakVar} onClick={() => void eksikleriTamamla()}>
-          Eksikleri tamamla
+          {d.eksikleriTamamla}
         </Dugme>
       )}
     </>
@@ -294,14 +298,14 @@ export function KurulumListesi({
           olmadan dönüş sessiz bir 302'ydi ve düğme aynı kalınca kullanıcı
           neyin olmadığını bilmiyordu. */}
       <CallbackBanner />
-      <section aria-label="Kurulum özeti" className="rounded-kart border border-line bg-surface p-5">
+      <section aria-label={d.kurulumOzeti} className="rounded-kart border border-line bg-surface p-5">
         <div className="flex flex-wrap items-center gap-4">
           <div className="min-w-0 flex-1">
-            <p className="font-baslik text-base font-semibold text-ink">{sayacMetni(sayac)}</p>
+            <p className="font-baslik text-base font-semibold text-ink">{sayacMetni(sayac, dil)}</p>
             <div
               className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-sunken"
               role="progressbar"
-              aria-label="Tamamlanan kurulum adımları"
+              aria-label={d.ilerlemeEtiketi}
               aria-valuemin={0}
               aria-valuemax={sayac.toplam}
               aria-valuenow={sayac.tamam}
@@ -315,30 +319,30 @@ export function KurulumListesi({
         {yuva && createPortal(eylemler, yuva)}
         {kapaliNeden && <p className="mt-2 text-xs text-ink-muted">{kapaliNeden}</p>}
         {yazabilir && kapsam.yapacakVar && (
-          <p className="mt-2 text-xs text-ink-muted">Hesap açmaz, ödeme eklemez, site kodunu yerleştirmez; bunlar aşağıda adımında yazıyor.</p>
+          <p className="mt-2 text-xs text-ink-muted">{d.tamamlaAciklama}</p>
         )}
         {aktifDegil && yazabilir && (
-          <p className="mt-2 text-xs text-warn-strong">Kurulumu değiştirmek için önce yukarıdaki “Bu workspace’e geç” düğmesine bas.</p>
+          <p className="mt-2 text-xs text-warn-strong">{d.aktifDegil}</p>
         )}
         {calisiyor && (
-          <p className="mt-2 text-xs text-ink-muted">Site, marka bilgileri ve piksel okunuyor. Sayfadan ayrılabilirsin, iş arka planda sürer.</p>
+          <p className="mt-2 text-xs text-ink-muted">{d.okunuyorAciklama}</p>
         )}
         {yoklamaBitti && calisiyor && (
-          <p className="mt-2 text-xs text-warn-strong">Hazırlık beklenenden uzun sürüyor. Sayfayı yenileyerek durumu tekrar okuyabilirsin.</p>
+          <p className="mt-2 text-xs text-warn-strong">{d.yoklamaBitti}</p>
         )}
 
         {dusenler.length > 0 && (
           <div className="mt-3">
-            <Uyari ton="uyari" baslik="Bazı bilgiler okunamadı; ilgili adımlar “Okunamadı” diyor.">
+            <Uyari ton="uyari" baslik={d.okunamayanBaslik}>
               <ul className="mt-1 space-y-0.5">
-                {dusenler.map((d) => (
-                  <li key={d.k}>
-                    <b>{KAYNAK_ADI[d.k]}:</b> {d.hata}
+                {dusenler.map((x) => (
+                  <li key={x.k}>
+                    <b>{kaynakAdi[x.k]}:</b> {x.hata}
                   </li>
                 ))}
               </ul>
               <Dugme ton="ikincil" boyut="kucuk" className="mt-2" onClick={() => void tazele()}>
-                Yeniden dene
+                {d.yenidenDene}
               </Dugme>
             </Uyari>
           </div>
@@ -346,7 +350,7 @@ export function KurulumListesi({
 
         {sonuc && 'hata' in sonuc && (
           <div className="mt-3">
-            <Uyari ton="tehlike" baslik="Eksikler tamamlanamadı.">
+            <Uyari ton="tehlike" baslik={d.tamamlanamadi}>
               {sonuc.hata}
             </Uyari>
           </div>
@@ -354,21 +358,21 @@ export function KurulumListesi({
         {sonuc && 'sonuclar' in sonuc && (
           <div className="mt-3 space-y-2 border-t border-line pt-3 text-sm">
             <ul className="space-y-1">
-              {sonuc.sonuclar.length === 0 && !sonuc.hazirlamaYeniden && <li className="text-ink-muted">Sistemin kendi yapabileceği eksik kalmadı.</li>}
+              {sonuc.sonuclar.length === 0 && !sonuc.hazirlamaYeniden && <li className="text-ink-muted">{d.eksikKalmadi}</li>}
               {sonuc.sonuclar.map((s) => (
                 <li key={s.kod} className={s.durum === 'hata' ? 'text-danger-strong' : s.durum === 'atlandi' ? 'text-ink-muted' : 'text-ink'}>
-                  <b>{KURULUM_ADIM_ADI[s.kod]}:</b> {s.durum === 'yapildi' ? '' : s.durum === 'atlandi' ? 'atlandı, ' : 'hata, '}
+                  <b>{KURULUM_ADIM_ADI[s.kod]}:</b> {s.durum === 'yapildi' ? '' : s.durum === 'atlandi' ? d.sonucAtlandi : d.sonucHata}
                   {s.mesaj}
                 </li>
               ))}
-              {sonuc.hazirlamaYeniden && <li className="text-ink">Reklam hazırlığı yeniden başlatıldı.</li>}
+              {sonuc.hazirlamaYeniden && <li className="text-ink">{d.hazirlikYenidenBasladi}</li>}
             </ul>
           </div>
         )}
         {/* DÜĞMENİN YAPAMADIĞI: "neden hâlâ eksik" sorusunun cevabı, nedeniyle. */}
         {kapsam.kullaniciyaKalan.length > 0 && (
           <div className="mt-3 border-t border-line pt-3">
-            <p className="text-xs font-semibold text-ink">Size kalan</p>
+            <p className="text-xs font-semibold text-ink">{d.sizeKalan}</p>
             <ul className="mt-1 space-y-0.5 text-xs text-ink-muted">
               {kapsam.kullaniciyaKalan.map((k) => (
                 <li key={k.adim}>
@@ -383,7 +387,7 @@ export function KurulumListesi({
         )}
 
         <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-4 text-sm">
-          <span className="text-ink-muted">Kullanmadığım platform:</span>
+          <span className="text-ink-muted">{d.kullanmadigimPlatform}</span>
           {KURULUM_PLATFORMLARI.map((p) => {
             const kapali = kullanilmayanlar.includes(p);
             const olmaz = beyanDegistir(kullanilmayanlar, p) === null;
@@ -399,21 +403,22 @@ export function KurulumListesi({
                 }`}
               >
                 {PLATFORM_ADI[p]}
-                {kapali ? ' kullanılmıyor' : ''}
+                {kapali ? d.kullanilmiyorEki : ''}
               </button>
             ) : (
               kapali && (
                 <span key={p} className="rounded-full bg-surface-sunken px-3 py-1.5 text-xs font-semibold text-ink">
-                  {PLATFORM_ADI[p]} kullanılmıyor
+                  {PLATFORM_ADI[p]}
+                  {d.kullanilmiyorEki}
                 </span>
               )
             );
           })}
-          {kullanilmayanlar.length === 0 && !yazabilir && <span className="text-xs text-ink-muted">Beyan yok; iki platform da sayılıyor.</span>}
+          {kullanilmayanlar.length === 0 && !yazabilir && <span className="text-xs text-ink-muted">{d.beyanYok}</span>}
           <span className="basis-full text-xs text-ink-muted">
             {kullanilmayanlar.length > 0
-              ? 'Kullanılmayan platformun adımları sayılmaz ve “Eksikleri tamamla” onlara dokunmaz. Hesap ve veri silinmez.'
-              : 'Bu workspace bir platformda hiç reklam vermeyecekse işaretle; o platformun adımları sayaçtan düşer. İkisi birden kapatılamaz.'}
+              ? d.beyanAciklamaVar
+              : d.beyanAciklamaYok}
           </span>
           {beyanHatasi && (
             <span role="alert" className="basis-full text-xs text-danger-strong">
@@ -424,12 +429,12 @@ export function KurulumListesi({
 
         {hesapAdimiAcik && kurulum.ok && (
           <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-4 text-sm">
-            <span className="text-ink-muted">Yeni hesaplar kimin adına açılsın?</span>
+            <span className="text-ink-muted">{d.hesapSahibiSoru}</span>
             {hesapYazabilir ? (
               (
                 [
-                  ['ajans', 'Ajansın hesapları altında'],
-                  ['sirket', 'Şirketin kendi hesaplarında'],
+                  ['ajans', d.sahipAjans],
+                  ['sirket', d.sahipSirket],
                 ] as const
               ).map(([d, e]) => (
                 <button
@@ -445,7 +450,7 @@ export function KurulumListesi({
                 </button>
               ))
             ) : (
-              <span className="text-xs text-ink-muted">{PANEL_KAPILARI['kurulum.hesap'].neden}</span>
+              <span className="text-xs text-ink-muted">{kapiNedeni('kurulum.hesap', dil)}</span>
             )}
           </div>
         )}
@@ -493,13 +498,15 @@ export function KurulumListesi({
  * kaydırmak kullanıcıyı aradığı içeriğin önüne bırakırdı.
  */
 function AdimSatirlari({ sira, ilkAcik, icerik }: { sira: number; ilkAcik: boolean; icerik: AdimIcerigiOzellikleri }) {
+  const d = useSozluk(markaMerkeziKurulumSozlugu);
+  const { dil } = useDil();
   const { a, clientId } = icerik;
   const [acik, setAcik] = useState(ilkAcik);
   // İçerik İLK açılışta monte edilir ve sonra DOM'da kalır: ölçüm tablosu
   // siteyi tarıyor; her Kurulum açılışında yedi adımın hepsini okumak boşa iş.
   const [monte, setMonte] = useState(ilkAcik);
   const panelId = useId();
-  const d = LISTE_DURUMU[a.durum];
+  const dg = listeDurumu(a.durum, dil);
   // Kullanılmayan ve kapsam dışı adım da AÇILIYOR: içinde "Geri al" var.
 
   useEffect(() => {
@@ -533,17 +540,17 @@ function AdimSatirlari({ sira, ilkAcik, icerik }: { sira: number; ilkAcik: boole
         <div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
           <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-ink">
             {a.ad}
-            <DurumRozeti durum={a.durum} etiket={d.etiket} />
+            <DurumRozeti durum={a.durum} etiket={dg.etiket} />
           </p>
-          <p className="mt-0.5 text-xs text-ink-muted">{adimOzeti(a)}</p>
+          <p className="mt-0.5 text-xs text-ink-muted">{adimOzeti(a, dil)}</p>
         </div>
         {a.kod === 'marka' ? (
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             <Dugme ton="hayalet" boyut="kucuk" aria-expanded={acik} aria-controls={panelId} onClick={ac}>
-              {acik ? 'Kapat' : 'Ayrıntı'}
+              {acik ? d.kapat : d.ayrinti}
             </Dugme>
             <Link href={markaMerkeziAdresi('marka', clientId)} className={dugmeSinifi('ikincil', 'kucuk')}>
-              Marka’ya git
+              {d.markayaGit}
             </Link>
           </div>
         ) : (
@@ -557,7 +564,7 @@ function AdimSatirlari({ sira, ilkAcik, icerik }: { sira: number; ilkAcik: boole
               aria-controls={panelId}
               onClick={ac}
             >
-              {acik ? 'Kapat' : a.durum === 'tamam' ? 'Ayrıntı' : 'Tamamla'}
+              {acik ? d.kapat : a.durum === 'tamam' ? d.ayrinti : d.tamamla}
             </Dugme>
           )
         )}

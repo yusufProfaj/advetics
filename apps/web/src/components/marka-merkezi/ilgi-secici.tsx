@@ -1,9 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { KITLE_SINIRLARI, type InterestOption, type KitleIlgi } from '@advetics/shared';
+import { KITLE_SINIRLARI, sec, type Dil, type InterestOption, type KitleIlgi } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { useIzlenenMetaHesabi } from '@/components/autoboost/hedefleme-secici';
+import { useDil } from '@/dil/saglayici';
+import { markaMerkeziVeriSozlugu } from '@/dil/sozlukler/marka-merkezi-veri';
 
 /**
  * ═══ İLGİ ALANI SEÇİCİ (Marka Merkezi Bölüm 4c) ═══
@@ -25,6 +27,9 @@ export function IlgiSecici({
   degis: (v: KitleIlgi[]) => void;
 }) {
   const { hesap, hesapHata } = useIzlenenMetaHesabi(clientId);
+  const { dil } = useDil();
+  const d = sec(markaMerkeziVeriSozlugu, dil);
+  const t = d.ilgi;
   const [arama, setArama] = useState('');
   const [sonuc, setSonuc] = useState<InterestOption[]>([]);
   const [durum, setDurum] = useState<'bos' | 'kisa' | 'araniyor' | 'bitti'>('bos');
@@ -46,7 +51,7 @@ export function IlgiSecici({
     }
     setDurum('araniyor');
     // 350 ms bekleme: her tuşa bir Meta çağrısı kotayı yakar.
-    const t = setTimeout(() => {
+    const zamanlayici = setTimeout(() => {
       void apiFetch<InterestOption[]>(
         `/connections/targeting/interests?adAccountId=${hesap.id}&q=${encodeURIComponent(q)}`,
       )
@@ -57,21 +62,19 @@ export function IlgiSecici({
         .catch((err: unknown) => {
           setSonuc([]);
           setDurum('bitti');
-          setHata(err instanceof ApiRequestError ? err.message : 'İlgi alanı araması düştü.');
+          setHata(err instanceof ApiRequestError ? err.message : t.aramaDustu);
         });
     }, 350);
-    return () => clearTimeout(t);
-  }, [arama, hesap]);
+    return () => clearTimeout(zamanlayici);
+  }, [arama, hesap, t]);
 
   if (hesapHata) {
-    return <p className="text-12 text-danger-strong">Reklam hesabı okunamadı: {hesapHata}</p>;
+    return <p className="text-12 text-danger-strong">{d.ozelKitle.hesapOkunamadi(hesapHata)}</p>;
   }
-  if (hesap === undefined) return <p className="text-12 text-ink-muted">Reklam hesabı aranıyor…</p>;
+  if (hesap === undefined) return <p className="text-12 text-ink-muted">{d.ozelKitle.hesapAraniyor}</p>;
   if (hesap === null) {
     return (
-      <p className="text-12 text-ink-muted">
-        İlgi alanı araması izlenen bir Meta reklam hesabı istiyor; bu workspace’e atanmış hesap yok.
-      </p>
+      <p className="text-12 text-ink-muted">{t.hesapIstiyor}</p>
     );
   }
 
@@ -80,14 +83,13 @@ export function IlgiSecici({
   return (
     <div className="grid gap-2 rounded-alan border border-line p-3">
       <p className="m-0 text-13 font-semibold text-ink">
-        İlgi alanları ({secili.length}/{KITLE_SINIRLARI.ilgi})
+        {t.baslik(secili.length, KITLE_SINIRLARI.ilgi)}
       </p>
       <p className="text-12 text-ink-muted">
-        Birden çok ilgi “bunlardan biriyle ilgilenen” demek; kitleyi daraltmaz, genişletir. Boş
-        bırakırsan ilgi daraltması yapılmaz.
+        {t.aciklama}
         {/* CANLI ÖLÇÜM (2026-09-29): Meta araması kısa terimlerle eşleşiyor;
             "lüks otomobil" 0 sonuç, "otomobil" ve "luxury car" sonuç veriyor. */}
-        {' '}Tek ya da iki kelime yaz; uzun ifadeler çoğu zaman sonuç vermez.
+        {' '}{t.aciklamaKisa}
       </p>
       {secili.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
@@ -101,7 +103,7 @@ export function IlgiSecici({
                 type="button"
                 onClick={() => degis(secili.filter((x) => x.id !== i.id))}
                 className="text-ink-muted hover:text-danger"
-                aria-label={`${i.name} kaldır`}
+                aria-label={t.kaldirAd(i.name)}
               >
                 ×
               </button>
@@ -113,18 +115,15 @@ export function IlgiSecici({
         <input
           value={arama}
           onChange={(e) => setArama(e.target.value)}
-          placeholder="Örn. otomobil"
+          placeholder={t.yerTutucu}
           className="h-10 w-full rounded-alan border border-line-strong bg-surface px-3 text-14 text-ink placeholder:text-ink-soluk"
         />
       )}
-      {durum === 'kisa' && <p className="text-12 text-ink-muted">En az iki harf yaz.</p>}
-      {durum === 'araniyor' && <p className="text-12 text-ink-muted">Aranıyor…</p>}
+      {durum === 'kisa' && <p className="text-12 text-ink-muted">{t.enAzIki}</p>}
+      {durum === 'araniyor' && <p className="text-12 text-ink-muted">{t.araniyor}</p>}
       {hata && <p className="text-12 text-danger-strong">{hata}</p>}
       {durum === 'bitti' && !hata && sonuc.length === 0 && (
-        <p className="text-12 text-ink-muted">
-          Meta’da bu terimle ilgi alanı bulunamadı. Daha kısa ya da İngilizce dene (örn. “otomobil”,
-          “luxury car”).
-        </p>
+        <p className="text-12 text-ink-muted">{t.bulunamadi}</p>
       )}
       {sonuc.length > 0 && (
         <ul className="max-h-48 space-y-1 overflow-y-auto">
@@ -140,7 +139,7 @@ export function IlgiSecici({
                 className="w-full rounded-alan px-2 py-1 text-left text-xs hover:bg-surface-muted disabled:opacity-50"
               >
                 <span className="text-ink">{o.name}</span>
-                <span className="ml-2 text-ink-muted">{kitleBuyuklugu(o)}</span>
+                <span className="ml-2 text-ink-muted">{kitleBuyuklugu(o, dil)}</span>
                 {o.path.length > 1 && (
                   <span className="block text-11 text-ink-muted">{o.path.join(' › ')}</span>
                 )}
@@ -162,8 +161,9 @@ export function IlgiSecici({
  * kitle yeterince geniş" diye yanlış karar veriyor. Ülkeye göre sayı ayrı bir
  * çağrı (`delivery_estimate`) istiyor; o yazılana kadar dürüst olan etiket.
  */
-export function kitleBuyuklugu(o: { audienceMin: number | null; audienceMax: number | null }): string {
-  if (o.audienceMin === null || o.audienceMax === null) return 'büyüklük bilinmiyor';
-  const f = (n: number) => n.toLocaleString('tr-TR');
-  return `dünya geneli ~${f(o.audienceMin)}–${f(o.audienceMax)} kişi`;
+export function kitleBuyuklugu(o: { audienceMin: number | null; audienceMax: number | null }, dil: Dil = 'tr'): string {
+  const t = sec(markaMerkeziVeriSozlugu, dil).ilgi;
+  if (o.audienceMin === null || o.audienceMax === null) return t.buyuklukBilinmiyor;
+  const f = (n: number) => n.toLocaleString(dil === 'en' ? 'en-US' : 'tr-TR');
+  return t.dunyaGeneli(f(o.audienceMin), f(o.audienceMax));
 }

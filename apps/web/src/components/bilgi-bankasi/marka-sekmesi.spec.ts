@@ -1,3 +1,4 @@
+import { markaMerkeziSozlugu } from '@/dil/sozlukler/marka-merkezi';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -52,7 +53,8 @@ describe('Marka sekmesi', () => {
   });
 
   it('eski "Marka Bilgileri" metni "Ek notlar" olarak aynı alana yazılıyor', () => {
-    expect(K).toContain('etiket="Ek notlar"');
+    expect(K).toContain('etiket={d.ekNotlar}');
+    expect(markaMerkeziSozlugu.tr.marka.ekNotlar).toBe('Ek notlar');
     expect(govde('kaydet')).toContain('markaBilgileri: form.markaBilgileri.trim() || null');
   });
 

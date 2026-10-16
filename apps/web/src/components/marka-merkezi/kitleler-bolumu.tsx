@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   KITLE_SINIRLARI,
   kitleOzeti,
+  sec,
   kitleSablonuInputSchema,
   type GeoLocationOption,
   type KitleGoogle,
@@ -27,8 +28,9 @@ import { useVarlikYeni } from './varliklar/birincil-eylem';
 import { HedeflemeSecici } from '@/components/autoboost/hedefleme-secici';
 import { IlgiSecici, kitleBuyuklugu } from './ilgi-secici';
 import { OzelKitleSecici } from './ozel-kitle-secici';
-import { useSozluk } from '@/dil/saglayici';
+import { useDil, useSozluk } from '@/dil/saglayici';
 import { kitleSozlugu } from '@/dil/sozlukler/kitle';
+import { markaMerkeziVeriSozlugu } from '@/dil/sozlukler/marka-merkezi-veri';
 
 /**
  * ═══ VARLIKLAR → KİTLELER (Bölüm 4; 2026-10-13'ten beri Varlıklar'ın 4. sekmesi) ═══
@@ -101,6 +103,8 @@ export function KitlelerBolumu({
   /** Varsayılan kitlenin evi (Kurulum › Reklam varsayılanları); görme yetkisi yoksa null. */
   varsayilanAdresi: string | null;
 }) {
+  const { dil } = useDil();
+  const m = sec(markaMerkeziVeriSozlugu, dil).kitleler;
   const [durum, setDurum] = useState<Durum>({ tur: 'yukleniyor' });
   const [form, setForm] = useState<Form | null>(null);
   const [silinecek, setSilinecek] = useState<string | null>(null);
@@ -127,9 +131,9 @@ export function KitlelerBolumu({
       const veri = await apiFetch<KitleSablonuListesi>(`/audience-templates?clientId=${clientId}`);
       setDurum({ tur: 'hazir', veri });
     } catch (err) {
-      setDurum({ tur: 'hata', mesaj: err instanceof ApiRequestError ? err.message : 'Kitleler yüklenemedi.' });
+      setDurum({ tur: 'hata', mesaj: err instanceof ApiRequestError ? err.message : m.yuklenemedi });
     }
-  }, [clientId]);
+  }, [clientId, m]);
 
   useEffect(() => {
     setDurum({ tur: 'yukleniyor' });
@@ -154,7 +158,7 @@ export function KitlelerBolumu({
       return true;
     } catch (err) {
       // SUNUCUNUN KENDİ CÜMLESİ: "bu adla şablon var", "ülke + il" gibi.
-      setHata(err instanceof ApiRequestError ? err.message : 'İşlem tamamlanamadı.');
+      setHata(err instanceof ApiRequestError ? err.message : m.islemTamamlanamadi);
       return false;
     } finally {
       setBusy(false);
@@ -177,7 +181,7 @@ export function KitlelerBolumu({
     // Sunucuyla AYNI şema: "Türkiye + İzmir" kaydederken reddediliyor, yayında değil.
     const k = kitleSablonuInputSchema.safeParse(govde);
     if (!k.success) {
-      setHata(k.error.issues[0]?.message ?? 'Alanlardan biri geçersiz.');
+      setHata(k.error.issues[0]?.message ?? m.alanGecersiz);
       return;
     }
     const tamam = await islem(() =>
@@ -200,14 +204,14 @@ export function KitlelerBolumu({
   const silinecekKitle = durum.tur === 'hazir' ? durum.veri.items.find((k) => k.id === silinecek) : undefined;
 
   return (
-    <section id="kitleler" aria-label="Kitleler" className="grid scroll-mt-24 gap-3">
+    <section id="kitleler" aria-label={m.ariaEtiketi} className="grid scroll-mt-24 gap-3">
       <p className="m-0 text-13 text-ink-muted">
         Kime gösterileceği: konum, yaş, cinsiyet, ilgi. Varsayılan kitle reklam kurarken kendiliğinden seçilir ve Kurulum’da
         değişir. {dk.kullanimNotu}
       </p>
 
       {hata && form === null && (
-        <Serit ton="hata" baslik="İşlem tamamlanamadı.">
+        <Serit ton="hata" baslik={m.islemTamamlanamadi}>
           {hata}
         </Serit>
       )}
@@ -216,14 +220,14 @@ export function KitlelerBolumu({
         acik={form !== null}
         onKapat={vazgec}
         genislik={560}
-        baslik={panelFormu.id ? 'Kitleyi düzenle' : 'Yeni kitle'}
+        baslik={panelFormu.id ? m.kitleyiDuzenle : m.yeniKitle}
         altEylemler={
           <>
             <Dugme ton="ikincil" onClick={vazgec} disabled={busy}>
-              Vazgeç
+              {dk.vazgec}
             </Dugme>
             <Dugme onClick={() => void kaydet()} bekliyor={busy} disabled={!panelFormu.name.trim()}>
-              Kaydet
+              {m.kaydet}
             </Dugme>
           </>
         }
@@ -231,7 +235,7 @@ export function KitlelerBolumu({
         <KitleFormu key={acilis} clientId={clientId} form={panelFormu} setForm={formuGuncelle} />
         {/* SUNUCUNUN KENDİ CÜMLESİ panelin içinde: "bu adla şablon var". */}
         {hata && form !== null && (
-          <Serit ton="hata" baslik="Kaydedilemedi.">
+          <Serit ton="hata" baslik={m.kaydedilemedi}>
             {hata}
           </Serit>
         )}
@@ -241,12 +245,12 @@ export function KitlelerBolumu({
         acik={silinecek !== null}
         onKapat={() => setSilinecek(null)}
         genislik="dar"
-        baslik="Kitle silinsin mi?"
-        aciklama={silinecekKitle ? `“${silinecekKitle.name}” silinir. Bu geri alınamaz.` : undefined}
+        baslik={m.silBaslik}
+        aciklama={silinecekKitle ? m.silAciklama(silinecekKitle.name) : undefined}
         altEylemler={
           <>
             <Dugme ton="ikincil" onClick={() => setSilinecek(null)} disabled={busy}>
-              Vazgeç
+              {dk.vazgec}
             </Dugme>
             <Dugme
               ton="tehlike"
@@ -259,21 +263,22 @@ export function KitlelerBolumu({
                 );
               }}
             >
-              Sil
+              {m.sil}
             </Dugme>
           </>
         }
       />
 
-      {durum.tur === 'yukleniyor' && <Yukleniyor satir={3} etiket="Kitleler yükleniyor" />}
-      {durum.tur === 'hata' && <HataDurumu baslik="Kitleler yüklenemedi." mesaj={durum.mesaj} onTekrar={() => void yukle()} />}
+      {durum.tur === 'yukleniyor' && <Yukleniyor satir={3} etiket={m.yukleniyor} />}
+      {durum.tur === 'hata' && <HataDurumu baslik={m.yuklenemedi} mesaj={durum.mesaj} onTekrar={() => void yukle()} />}
       {durum.tur === 'hazir' && durum.veri.items.length === 0 && (
         <BosDurum
-          baslik="Kayıtlı kitle yok"
+          baslik={m.bosBaslik}
           neden={
             <>
-              Kitle olmadan reklam <strong>Türkiye geneli, 18 yaş ve üzeri</strong> gösterilir. Varsayılan konum
-              Kurulum’da seçilir.
+              {m.bosNedenOnce}
+              <strong>{m.bosNedenVurgu}</strong>
+              {m.bosNedenSonra}
             </>
           }
         />
@@ -281,13 +286,13 @@ export function KitlelerBolumu({
       {durum.tur === 'hazir' && durum.veri.items.length > 0 && (
         <Kart dolgu={false}>
           <Tablo<KitleSablonuRecord>
-            etiket="Kitleler"
+            etiket={m.ariaEtiketi}
             satirlar={durum.veri.items}
             satirAnahtari={(k) => k.id}
             sutunlar={[
               {
                 anahtar: 'ad',
-                baslik: 'Kitle',
+                baslik: dk.kitle,
                 hucre: (k) => (
                   <AdHucresi
                     ad={
@@ -296,7 +301,7 @@ export function KitlelerBolumu({
                         {/* SALT OKUNUR ROZET: değiştirmenin tek yeri Kurulum (Ç-9). */}
                         {k.varsayilan && (
                           <span className="rounded-full bg-vurgu px-2 py-0.5 text-11 font-bold text-brand-strong">
-                            Varsayılan
+                            {m.varsayilan}
                           </span>
                         )}
                       </span>
@@ -304,14 +309,14 @@ export function KitlelerBolumu({
                     alt={
                       k.varsayilan && varsayilanAdresi ? (
                         <Link href={varsayilanAdresi} className="text-ink-muted underline-offset-2 hover:text-ink hover:underline">
-                          Kurulum’da değiştir
+                          {m.kurulumdaDegistir}
                         </Link>
                       ) : undefined
                     }
                   />
                 ),
               },
-              { anahtar: 'tanim', baslik: 'Tanım', hucre: (k) => <span className="text-13 text-ink-muted">{kitleOzeti(k)}</span> },
+              { anahtar: 'tanim', baslik: m.kolonTanim, hucre: (k) => <span className="text-13 text-ink-muted">{kitleOzeti(k)}</span> },
               {
                 anahtar: 'google',
                 baslik: 'Google',
@@ -320,28 +325,28 @@ export function KitlelerBolumu({
               },
               {
                 anahtar: 'eylem',
-                baslik: <span className="sr-only">Eylem</span>,
+                baslik: <span className="sr-only">{m.kolonEylem}</span>,
                 sayi: true,
                 hucre: (k) =>
                   yazabilir ? (
                     <span className="inline-flex items-center gap-1">
                       <Dugme ton="ikincil" boyut="kucuk" onClick={() => formAc(formdan(k))} disabled={busy}>
-                        Düzenle
+                        {m.duzenle}
                       </Dugme>
                       <AcilirMenu
                         tasma="portal"
-                        etiket={`${k.name}: diğer eylemler`}
+                        etiket={m.digerEylemlerAd(k.name)}
                         hizala="sag"
                         genislik="w-44"
                         tetik={({ acik: _acik, ...o }) => (
-                          <button type="button" {...o} className={IKON_TETIK} aria-label="Diğer eylemler">
+                          <button type="button" {...o} className={IKON_TETIK} aria-label={m.digerEylemler}>
                             ⋯
                           </button>
                         )}
                       >
                         {/* İKİ ADIMLI SİLME (Bölüm 1 deseni): menü + onay penceresi. */}
                         <MenuOgesi tehlike devreDisi={busy} onClick={() => setSilinecek(k.id)}>
-                          Sil
+                          {m.sil}
                         </MenuOgesi>
                       </AcilirMenu>
                     </span>
@@ -371,6 +376,9 @@ function formdan(k: KitleSablonuRecord): Form {
 }
 
 function KitleFormu(p: { clientId: string; form: Form; setForm: (f: Form) => void }) {
+  const { dil } = useDil();
+  const m = sec(markaMerkeziVeriSozlugu, dil).kitleler;
+  const dk = useSozluk(kitleSozlugu);
   const f = p.form;
   const degis = (patch: Partial<Form>) => p.setForm({ ...f, ...patch });
   // Seçici `GeoLocationOption` konuşuyor, şablon `KitleKonumu`; ikisi aynı
@@ -387,14 +395,14 @@ function KitleFormu(p: { clientId: string; form: Form; setForm: (f: Form) => voi
     <div className="grid gap-4">
       <TarifEt clientId={p.clientId} uygula={(o) => degis(o)} />
 
-      <Alan etiket="Kitle adı">
+      <Alan etiket={dk.kitleAdi}>
         {(id) => (
           <Girdi
             id={id}
             value={f.name}
             onChange={(e) => degis({ name: e.target.value })}
             maxLength={KITLE_SINIRLARI.ad}
-            placeholder="Örn. İzmir, 25-45 kadın"
+            placeholder={m.kitleAdiYerTutucu}
           />
         )}
       </Alan>
@@ -421,7 +429,7 @@ function KitleFormu(p: { clientId: string; form: Form; setForm: (f: Form) => voi
       />
 
       <FormIzgarasi>
-        <Alan etiket="En küçük yaş">
+        <Alan etiket={m.enKucukYas}>
           {(id) => (
             <Secim id={id} value={f.ageMin} onChange={(e) => degis({ ageMin: Number(e.target.value) })}>
               {YASLAR.map((y) => (
@@ -432,23 +440,23 @@ function KitleFormu(p: { clientId: string; form: Form; setForm: (f: Form) => voi
             </Secim>
           )}
         </Alan>
-        <Alan etiket="En büyük yaş">
+        <Alan etiket={m.enBuyukYas}>
           {(id) => (
             <Secim id={id} value={f.ageMax} onChange={(e) => degis({ ageMax: Number(e.target.value) })}>
               {YASLAR.map((y) => (
                 <option key={y} value={y}>
-                  {y === 65 ? '65 ve üzeri' : y}
+                  {y === 65 ? m.yasUstu : y}
                 </option>
               ))}
             </Secim>
           )}
         </Alan>
-        <Alan etiket="Cinsiyet">
+        <Alan etiket={m.cinsiyet}>
           {(id) => (
             <Secim id={id} value={f.genders} onChange={(e) => degis({ genders: e.target.value as Form['genders'] })}>
-              <option value="all">Tümü</option>
-              <option value="female">Kadın</option>
-              <option value="male">Erkek</option>
+              <option value="all">{m.tumu}</option>
+              <option value="female">{m.kadin}</option>
+              <option value="male">{m.erkek}</option>
             </Secim>
           )}
         </Alan>
@@ -464,7 +472,7 @@ function KitleFormu(p: { clientId: string; form: Form; setForm: (f: Form) => voi
 
       <GoogleKarsiligi google={f.google} degis={(g) => degis({ google: g })} />
 
-      <p className="m-0 rounded-alan bg-surface-muted px-3 py-2 text-12 text-ink-muted">Özet: {kitleOzeti(f)}</p>
+      <p className="m-0 rounded-alan bg-surface-muted px-3 py-2 text-12 text-ink-muted">{m.ozet} {kitleOzeti(f)}</p>
     </div>
   );
 }
@@ -489,6 +497,8 @@ function TarifEt({
   const [hata, setHata] = useState<string | null>(null);
   const [oneri, setOneri] = useState<KitleOnerisi | null>(null);
   const dk = useSozluk(kitleSozlugu);
+  const { dil } = useDil();
+  const m = sec(markaMerkeziVeriSozlugu, dil).kitleler;
 
   async function oner(): Promise<void> {
     setBusy(true);
@@ -508,7 +518,7 @@ function TarifEt({
         google: { ilgiler: o.google.ilgiler.map((g) => ({ id: g.id, ad: g.ad, tur: g.tur })), kelimeler: o.google.kelimeler },
       });
     } catch (err) {
-      setHata(err instanceof ApiRequestError ? err.message : 'Öneri alınamadı.');
+      setHata(err instanceof ApiRequestError ? err.message : m.oneriAlinamadi);
     } finally {
       setBusy(false);
     }
@@ -524,18 +534,16 @@ function TarifEt({
             onChange={(e) => setMetin(e.target.value)}
             rows={2}
             maxLength={500}
-            placeholder="Örn. İzmir’de lüks araçlarla ilgilenen 30-55 yaş erkekler"
+            placeholder={m.tarifYerTutucu}
             className="min-h-0"
           />
         )}
       </Alan>
       <div className="flex items-center gap-2">
         <Dugme ton="ikincil" boyut="kucuk" onClick={() => void oner()} bekliyor={busy} disabled={metin.trim().length < 5}>
-          Öner
+          {m.oner}
         </Dugme>
-        <span className="text-12 text-ink-muted">
-          Öneri aşağıdaki alanları doldurur; kaydetmeden önce kontrol et.
-        </span>
+        <span className="text-12 text-ink-muted">{m.oneriNotu}</span>
       </div>
       {hata && (
         <p role="alert" className="m-0 text-12 text-danger-strong">
@@ -544,20 +552,20 @@ function TarifEt({
       )}
       {oneri && (
         <div className="grid gap-1 text-12">
-          {oneri.hesapAdi && <p className="m-0 text-ink-muted">Meta’da arandı: {oneri.hesapAdi}</p>}
+          {oneri.hesapAdi && <p className="m-0 text-ink-muted">{m.metaArandi(oneri.hesapAdi)}</p>}
           {oneri.interests.length > 0 && (
             <ul className="m-0 list-none p-0 text-ink">
               {oneri.interests.map((i) => (
                 <li key={i.id}>
-                  “{i.terim}” → {i.name} <span className="text-ink-muted">({kitleBuyuklugu(i)})</span>
+                  “{i.terim}” → {i.name} <span className="text-ink-muted">({kitleBuyuklugu(i, dil)})</span>
                 </li>
               ))}
             </ul>
           )}
           {oneri.eslesmeyen.length > 0 && (
             <p className="m-0 text-danger-strong">
-              Meta’da bulunamadı:{' '}
-              {oneri.eslesmeyen.map((e) => `“${e.terim}” (${e.tur === 'konum' ? 'konum' : 'ilgi'})`).join(', ')}
+              {m.metaBulunamadi}{' '}
+              {oneri.eslesmeyen.map((e) => `“${e.terim}” (${e.tur === 'konum' ? m.terimKonum : m.terimIlgi})`).join(', ')}
             </p>
           )}
           {oneri.google.hesapAdi && <p className="m-0 text-ink-muted">{dk.googleArandi(oneri.google.hesapAdi)}</p>}
@@ -582,7 +590,7 @@ function TarifEt({
             <ul className="m-0 list-none p-0 text-danger-strong">
               {oneri.uygulanamayan.map((u) => (
                 <li key={u.ifade}>
-                  Uygulanamadı: “{u.ifade}”, {u.sebep}
+                  {m.uygulanamadi(u.ifade, u.sebep)}
                 </li>
               ))}
             </ul>

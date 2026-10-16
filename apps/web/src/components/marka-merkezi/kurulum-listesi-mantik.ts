@@ -6,7 +6,8 @@ import type {
   KurulumPlatformu,
   KurulumSayaci,
 } from '@/lib/panel-adresleri';
-import type { KurulumAdimKodu } from '@advetics/shared';
+import { sec, type Dil, type KurulumAdimKodu } from '@advetics/shared';
+import { markaMerkeziKurulumSozlugu } from '@/dil/sozlukler/marka-merkezi-kurulum';
 
 /**
  * ═══ KURULUM LİSTESİ — EKRANIN SAF KARARLARI ═══
@@ -22,39 +23,33 @@ import type { KurulumAdimKodu } from '@advetics/shared';
  * Durum rozeti. SÖZLÜK, dallanma değil: sözleşmeye yeni bir durum eklenince
  * derleme kırılsın. Yeşil YALNIZ durumda (kılavuz).
  */
-export const LISTE_DURUMU: Record<KurulumListesiDurumu, { etiket: string; sinif: string }> = {
-  tamam: { etiket: 'Tamam', sinif: 'bg-ok-soft text-ok-strong' },
-  hata: { etiket: 'Hata', sinif: 'bg-danger-soft text-danger-strong' },
-  soru: { etiket: 'Cevap bekliyor', sinif: 'bg-brand-soft text-brand-strong' },
-  eksik: { etiket: 'Eksik', sinif: 'bg-warn-soft text-warn-strong' },
-  kullanicida: { etiket: 'Sizde', sinif: 'bg-info-soft text-info-strong' },
-  bilinmiyor: { etiket: 'Okunamadı', sinif: 'bg-surface-sunken text-ink-muted' },
-  bekliyor: { etiket: 'Bekliyor', sinif: 'bg-surface-sunken text-ink-muted' },
-  kullanilmiyor: { etiket: 'Kullanılmıyor', sinif: 'bg-surface-sunken text-ink-muted' },
+const LISTE_SINIFI: Record<KurulumListesiDurumu, string> = {
+  tamam: 'bg-ok-soft text-ok-strong',
+  hata: 'bg-danger-soft text-danger-strong',
+  soru: 'bg-brand-soft text-brand-strong',
+  eksik: 'bg-warn-soft text-warn-strong',
+  kullanicida: 'bg-info-soft text-info-strong',
+  bilinmiyor: 'bg-surface-sunken text-ink-muted',
+  bekliyor: 'bg-surface-sunken text-ink-muted',
+  kullanilmiyor: 'bg-surface-sunken text-ink-muted',
   // Kurulum sihirbazı sözleşmesi (2026-10-13): beyanla kapanan parça/adım. Görünüş Ajan 3'ün.
-  kapsam_disi: { etiket: 'Kapsam dışı', sinif: 'bg-surface-sunken text-ink-muted' },
+  kapsam_disi: 'bg-surface-sunken text-ink-muted',
 };
 
-/** Parça kodunun ekrandaki adı — kurulum adımları sözleşmede, hazırlama/hazırlık burada. */
-export const PARCA_ADI: Record<string, string> = {
-  site: 'Site',
-  marka: 'Marka bilgileri',
-  olcum: 'Sitedeki ölçüm',
-  piksel: 'Piksel seçimi',
-  kategori: 'Özel reklam kategorisi',
-  konum: 'Varsayılan konum',
-  butce: 'Varsayılan günlük bütçe',
-  marka_bilgisi: 'Marka alanları',
-  logo: 'Logo',
-  // Sihirbazın hazırlık maddeleri (HAZIRLIK_KODLARI sonundaki altı madde).
-  site_adresi: 'Web sitesi',
-  iletisim: 'İletişim kişisi ve telefon',
-  rapor_alicisi: 'Rapor alıcıları',
-  adres: 'Adres ve harita konumu',
-  bildirim: 'Bildirim kanalı',
-  erisim: 'Sorumlu kişi',
-  veri_akisi: 'Veri akışı',
-};
+/** Sözlükte anahtar `kapsamDisi` (kod `kapsam_disi`); sınıf tablosu Record: yeni durum derlemede yakalanır. */
+export function listeDurumu(durum: KurulumListesiDurumu, dil: Dil = 'tr'): { etiket: string; sinif: string } {
+  const e = sec(markaMerkeziKurulumSozlugu, dil).listeDurumu;
+  const etiket = durum === 'kapsam_disi' ? e.kapsamDisi : e[durum];
+  return { etiket, sinif: LISTE_SINIFI[durum] };
+}
+
+/** Parça kodunun ekrandaki adı; tanınmayan kod olduğu gibi (`?? kod`). */
+export function parcaAdi(kod: string, dil: Dil = 'tr'): string {
+  // "Site" ve "Logo" iki dilde aynı yazılıyor: sözlükte tutulursa çevrilmemiş sayılır.
+  if (kod === 'site') return 'Site';
+  if (kod === 'logo') return 'Logo';
+  return (sec(markaMerkeziKurulumSozlugu, dil).parcaAdi as Record<string, string>)[kod] ?? kod;
+}
 
 /**
  * SATIRIN KISA SONUCU — kapalı satırda tek cümle.
@@ -64,16 +59,17 @@ export const PARCA_ADI: Record<string, string> = {
  * söylemiyor. Tamam adımda parçaların kısa sonuçları (hesap adı, piksel
  * kimliği) — boş başlıklar atlanıyor.
  */
-export function adimOzeti(a: KurulumListesiAdimi): string {
-  if (a.durum === 'kullanilmiyor') return 'Bu platformu kullanmadığını söyledin; sayaca girmiyor.';
-  if (a.durum === 'kapsam_disi') return 'Kapsam dışı bırakıldı; sayaca girmiyor.';
+export function adimOzeti(a: KurulumListesiAdimi, dil: Dil = 'tr'): string {
+  const d = sec(markaMerkeziKurulumSozlugu, dil);
+  if (a.durum === 'kullanilmiyor') return d.ozetKullanilmiyor;
+  if (a.durum === 'kapsam_disi') return d.ozetKapsamDisi;
   if (a.durum === 'tamam') {
     // AYNI BAŞLIK TEKRARLANMAZ: iki platform da ajansın bağlantısıysa "Ajansın bağlantısı · Ajansın bağlantısı" yazıyordu.
     const basliklar = [...new Set(a.parcalar.map((p) => p.baslik).filter((b): b is string => !!b))];
-    return basliklar.length > 0 ? basliklar.join(' · ') : 'Tamam.';
+    return basliklar.length > 0 ? basliklar.join(' · ') : d.ozetTamam;
   }
   const ilk = a.parcalar.find((p) => p.durum !== 'tamam');
-  if (!ilk) return 'Tamam.';
+  if (!ilk) return d.ozetTamam;
   return ilk.baslik ? `${ilk.baslik}: ${ilk.neden}` : ilk.neden;
 }
 
@@ -82,10 +78,11 @@ export function adimOzeti(a: KurulumListesiAdimi): string {
  * yazılır: sayacın eksik görünmesinin sebebi "yapılacak iş" değil "bilgi
  * yok" olabilir ve ikisinin yapılacak işi farklı.
  */
-export function sayacMetni(s: KurulumSayaci): string {
-  if (s.toplam === 0) return 'Sayılacak adım yok';
-  const temel = s.bitti ? `${s.toplam} / ${s.toplam} adım tamam` : `${s.tamam} / ${s.toplam} adım tamam`;
-  const ekler = [s.kapsamDisi > 0 ? `${s.kapsamDisi} kapsam dışı` : null, s.bilinmiyor > 0 ? `${s.bilinmiyor} okunamadı` : null].filter(Boolean);
+export function sayacMetni(s: KurulumSayaci, dil: Dil = 'tr'): string {
+  const d = sec(markaMerkeziKurulumSozlugu, dil);
+  if (s.toplam === 0) return d.sayacYok;
+  const temel = d.sayacTamam(s.bitti ? s.toplam : s.tamam, s.toplam);
+  const ekler = [s.kapsamDisi > 0 ? d.sayacKapsamDisi(s.kapsamDisi) : null, s.bilinmiyor > 0 ? d.sayacOkunamadi(s.bilinmiyor) : null].filter(Boolean);
   return ekler.length > 0 ? `${temel} · ${ekler.join(' · ')}` : temel;
 }
 
@@ -100,12 +97,11 @@ export function rozetMetni(s: KurulumSayaci): { metin: string; ton: 'tamam' | 'e
  * "EKSİKLERİ TAMAMLA" NEDEN KAPALI. Pasif düğmenin sebebi yazılı olmalı:
  * sebepsiz gri düğme "bozuk" diye okunur.
  */
-export function dugmeNedeni(k: EksikleriTamamlaKapsami, yazabilir: boolean): string | null {
-  if (!yazabilir) return 'Kurulumu değiştirme yetkin yok.';
+export function dugmeNedeni(k: EksikleriTamamlaKapsami, yazabilir: boolean, dil: Dil = 'tr'): string | null {
+  const d = sec(markaMerkeziKurulumSozlugu, dil);
+  if (!yazabilir) return d.yetkiYok;
   if (k.yapacakVar) return null;
-  return k.kullaniciyaKalan.length > 0
-    ? 'Sistemin kendi yapabileceği eksik yok; kalan adımlar aşağıda nedeniyle yazıyor.'
-    : 'Sistemin kendi yapabileceği eksik yok.';
+  return k.kullaniciyaKalan.length > 0 ? d.sistemYapamazKalanVar : d.sistemYapamaz;
 }
 
 /**

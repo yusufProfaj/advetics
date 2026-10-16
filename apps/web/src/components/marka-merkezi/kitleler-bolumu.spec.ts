@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { markaMerkeziVeriSozlugu } from '@/dil/sozlukler/marka-merkezi-veri';
 
 /** Marka Merkezi → Kitleler. Render altyapısı yok; YORUMSUZ kaynak taranıyor. */
 const K = readFileSync(resolve(__dirname, 'kitleler-bolumu.tsx'), 'utf8')
@@ -22,8 +23,10 @@ describe('Kitleler bölümü', () => {
     expect(K).toContain("durum.tur === 'hata'");
     // Boş liste NEDENİNİ söylüyor: kitle yoksa reklamın kime gideceği.
     expect(K).toContain('<BosDurum');
-    expect(K).toContain('Kitle olmadan reklam');
-    expect(K).toContain('Türkiye geneli, 18 yaş ve üzeri');
+    expect(K).toContain('{m.bosNedenOnce}');
+    expect(K).toContain('{m.bosNedenVurgu}');
+    expect(markaMerkeziVeriSozlugu.tr.kitleler.bosNedenOnce).toContain('Kitle olmadan reklam');
+    expect(markaMerkeziVeriSozlugu.tr.kitleler.bosNedenVurgu).toBe('Türkiye geneli, 18 yaş ve üzeri');
     expect(K).not.toMatch(/\.catch\(\(\) => set/);
   });
 
@@ -37,8 +40,9 @@ describe('Kitleler bölümü', () => {
   it('silme iki adımlı; ekran "yalnızca Meta" kısıtını söylüyor', () => {
     // 2026-10-14: ⋯ menüsü (1. adım) + onay penceresi (2. adım); silme
     // çağrısı YALNIZ pencerenin tehlike düğmesinde.
-    expect(K).toContain('baslik="Kitle silinsin mi?"');
-    const pencere = K.slice(K.indexOf('baslik="Kitle silinsin mi?"'));
+    expect(K).toContain('baslik={m.silBaslik}');
+    expect(markaMerkeziVeriSozlugu.tr.kitleler.silBaslik).toBe('Kitle silinsin mi?');
+    const pencere = K.slice(K.indexOf('baslik={m.silBaslik}'));
     expect(pencere.slice(0, pencere.indexOf('/>'))).toContain("method: 'DELETE'");
     expect(K.match(/method: 'DELETE'/g)?.length).toBe(1);
     expect(K).toContain('onClick={() => setSilinecek(k.id)}');

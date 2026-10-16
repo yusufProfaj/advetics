@@ -7,6 +7,11 @@ import { Kart } from '@/components/ui/kart';
 import { dugmeSinifi } from '@/components/ui/dugme';
 import { BosDurum, Serit, Yukleniyor } from '@/components/ui/hal';
 import { KreatifGorsel } from '@/components/kreatif-gorsel';
+import { useSozluk } from '@/dil/saglayici';
+import { markaMerkeziSozlugu } from '@/dil/sozlukler/marka-merkezi';
+
+/** "Logo" iki dilde aynı yazılıyor; sözlükte tr == en anahtar tutulmaz. */
+const LOGO = 'Logo';
 
 /**
  * Logo sekmesi — müşterinin KENDİ marka logosu.
@@ -20,6 +25,7 @@ import { KreatifGorsel } from '@/components/kreatif-gorsel';
  * KENDİ logosu.
  */
 export function LogoSekmesi({ clientId, canWrite }: { clientId: string; canWrite: boolean }) {
+  const d = useSozluk(markaMerkeziSozlugu).logo;
   const [assets, setAssets] = useState<AssetRecord[]>([]);
   const [seciliId, setSeciliId] = useState<string | null>(null);
   const [yukleniyor, setYukleniyor] = useState(true);
@@ -41,7 +47,7 @@ export function LogoSekmesi({ clientId, canWrite }: { clientId: string; canWrite
         setSeciliId(profil.logoAssetId);
       })
       .catch((err) => {
-        if (!iptal) setError(err instanceof ApiRequestError ? err.message : 'Yüklenemedi');
+        if (!iptal) setError(err instanceof ApiRequestError ? err.message : d.yuklenemedi);
       })
       .finally(() => {
         if (!iptal) setYukleniyor(false);
@@ -49,7 +55,7 @@ export function LogoSekmesi({ clientId, canWrite }: { clientId: string; canWrite
     return () => {
       iptal = true;
     };
-  }, [clientId]);
+  }, [clientId, d.yuklenemedi]);
 
   async function sec(assetId: string): Promise<void> {
     setSeciliId(assetId);
@@ -63,7 +69,7 @@ export function LogoSekmesi({ clientId, canWrite }: { clientId: string; canWrite
       });
       setKaydedildi(true);
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Kaydedilemedi');
+      setError(err instanceof ApiRequestError ? err.message : d.kaydedilemedi);
     } finally {
       setBusy(null);
     }
@@ -86,13 +92,13 @@ export function LogoSekmesi({ clientId, canWrite }: { clientId: string; canWrite
       });
       if (!res.ok) {
         const b = (await res.json().catch(() => null)) as { message?: string } | null;
-        throw new Error(b?.message ?? 'Logo yüklenemedi');
+        throw new Error(b?.message ?? d.logoYuklenemedi);
       }
       const result = (await res.json()) as AssetUploadResult;
       setAssets((cur) => (result.duplicate ? cur : [result.asset, ...cur]));
       await sec(result.asset.id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Logo yüklenemedi');
+      setError(err instanceof Error ? err.message : d.logoYuklenemedi);
     } finally {
       setBusy(null);
     }
@@ -100,15 +106,15 @@ export function LogoSekmesi({ clientId, canWrite }: { clientId: string; canWrite
 
   if (yukleniyor) {
     return (
-      <Kart baslik="Logo">
-        <Yukleniyor satir={2} etiket="Logo yükleniyor" />
+      <Kart baslik={LOGO}>
+        <Yukleniyor satir={2} etiket={d.yukleniyor} />
       </Kart>
     );
   }
 
   return (
     <Kart
-      baslik="Logo"
+      baslik={LOGO}
       altEylem={
         canWrite ? (
           /*
@@ -117,7 +123,7 @@ export function LogoSekmesi({ clientId, canWrite }: { clientId: string; canWrite
            * ortak düğme sınıfından (`dugmeSinifi`), kendi kopyası değil.
            */
           <label className={`${dugmeSinifi('ikincil', 'kucuk')} cursor-pointer ${busy !== null ? 'pointer-events-none opacity-40' : ''}`}>
-            {busy === 'yukle' ? 'Yükleniyor…' : 'Yeni logo yükle'}
+            {busy === 'yukle' ? d.yukleniyorEylem : d.yeniLogo}
             <input
               type="file"
               accept="image/png,image/jpeg"
@@ -130,15 +136,15 @@ export function LogoSekmesi({ clientId, canWrite }: { clientId: string; canWrite
       }
     >
       <div className="grid max-w-2xl gap-3">
-        <p className="m-0 text-13 text-ink-muted">Reklam kreatifinde ve AI üretiminde kullanılacak marka logosu.</p>
+        <p className="m-0 text-13 text-ink-muted">{d.aciklama}</p>
 
         {assets.length === 0 ? (
           <BosDurum
-            baslik="Henüz logo yüklenmedi."
+            baslik={d.bosBaslik}
             neden={
               canWrite
-                ? 'Google Performance Max logosuz kampanya kurmuyor. Sağ alttan yükle.'
-                : 'Logo yükleme yetkin yok; yöneticine sor.'
+                ? d.bosYazabilir
+                : d.bosYazamaz
             }
           />
         ) : (
@@ -150,12 +156,12 @@ export function LogoSekmesi({ clientId, canWrite }: { clientId: string; canWrite
                 disabled={!canWrite || busy !== null}
                 onClick={() => sec(a.id)}
                 aria-pressed={seciliId === a.id}
-                aria-label={`${a.name}${seciliId === a.id ? ' (seçili)' : ''}`}
+                aria-label={`${a.name}${seciliId === a.id ? d.secili : ''}`}
                 className={`aspect-square overflow-hidden rounded-alan border-2 transition-colors motion-reduce:transition-none ${
                   seciliId === a.id ? 'border-brand' : 'border-line hover:border-line-strong'
                 }`}
               >
-                <KreatifGorsel src={onizlemeAdresi(a.previewUrl)} alt={a.name} bosMetin="Görsel yok" />
+                <KreatifGorsel src={onizlemeAdresi(a.previewUrl)} alt={a.name} bosMetin={d.gorselYok} />
               </button>
             ))}
           </div>
@@ -170,13 +176,13 @@ export function LogoSekmesi({ clientId, canWrite }: { clientId: string; canWrite
         })()}
 
         {error && (
-          <Serit ton="hata" baslik="Logo kaydedilemedi ya da okunamadı.">
+          <Serit ton="hata" baslik={d.seritBaslik}>
             {error}
           </Serit>
         )}
         {kaydedildi && !error && (
           <p role="status" className="m-0 text-12 text-ink-muted">
-            Kaydedildi
+            {d.kaydedildi}
           </p>
         )}
       </div>

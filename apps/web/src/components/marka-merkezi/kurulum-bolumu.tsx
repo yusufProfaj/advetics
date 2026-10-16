@@ -3,6 +3,7 @@
 import { useEffect, useId, useState } from 'react';
 import {
   KURULUM_ADIM_ADI,
+  kapiNedeni,
   type DonusumTetigi,
   type KurulumAdimSonucu,
   type KurulumAdimi,
@@ -13,7 +14,8 @@ import {
   formOlculuyor,
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
-import { PANEL_KAPILARI } from '@/lib/panel-adresleri';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { markaMerkeziKurulumSozlugu } from '@/dil/sozlukler/marka-merkezi-kurulum';
 import { Dugme, dugmeSinifi } from '@/components/ui/dugme';
 import { Girdi, Secim } from '@/components/ui/alan';
 import { AramaliSecim } from '@/components/ui/aramali-secim';
@@ -23,8 +25,8 @@ import { HESAP_ADIMLARI } from './kurulum-listesi-mantik';
 import { DurumRozeti } from './kurulum-yardimcilari';
 import {
   AD_ISTEYEN,
-  DEGISIM_SONUCU,
-  DURUM_GOSTERIMI,
+  degisimSonucu,
+  durumGosterimi,
   KONTROL_ISTEGI,
   gelistiriciEpostasi,
   izinDonusu,
@@ -50,7 +52,7 @@ import {
  * Bir adımın isteği düşerse o adımın altında platformun mesajı yazar
  * (`.catch(() => setX([]))` yasağı).
  */
-const hataMetni = (e: unknown) => (e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.');
+const hataMetniDil = (e: unknown, yedek: string) => (e instanceof ApiRequestError ? e.message : yedek);
 
 export function AdimSatiri({
   a,
@@ -76,12 +78,15 @@ export function AdimSatiri({
    */
   izinDonusAdresi?: string;
 }) {
+  const d = useSozluk(markaMerkeziKurulumSozlugu);
+  const { dil } = useDil();
+  const hataMetni = (e: unknown) => hataMetniDil(e, d.sunucuyaUlasilamadi);
   const eylemYetkisi = HESAP_ADIMLARI.has(a.kod) ? hesapYazabilir : yazabilir;
   const [acik, setAcik] = useState(false);
   const [gonderiliyor, setGonderiliyor] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
   const [bilgi, setBilgi] = useState<string | null>(null);
-  const d = DURUM_GOSTERIMI[a.durum];
+  const dg = durumGosterimi(a.durum, dil);
 
   async function gonder(istek: KurulumIstegi) {
     setGonderiliyor(true);
@@ -120,7 +125,7 @@ export function AdimSatiri({
     <li className="px-4 py-3 text-sm">
       <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
         <span className="mt-0.5 shrink-0">
-          <DurumRozeti durum={a.durum} etiket={d.etiket} />
+          <DurumRozeti durum={a.durum} etiket={dg.etiket} />
         </span>
         <div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
           <p className="font-medium text-ink">
@@ -129,7 +134,7 @@ export function AdimSatiri({
           <p className="text-xs text-ink-muted">{a.neden}</p>
           {/* Kapı kapalıysa düğme yerine NEDEN (boş alan değil, MIMARI § 6). */}
           {!eylemYetkisi && e && (
-            <p className="text-xs text-ink-muted">{HESAP_ADIMLARI.has(a.kod) ? PANEL_KAPILARI['kurulum.hesap'].neden : PANEL_KAPILARI['kurulum.yaz'].neden}</p>
+            <p className="text-xs text-ink-muted">{kapiNedeni(HESAP_ADIMLARI.has(a.kod) ? 'kurulum.hesap' : 'kurulum.yaz', dil)}</p>
           )}
         </div>
         {eylemYetkisi && e && (
@@ -141,7 +146,7 @@ export function AdimSatiri({
             )}
             {kontrol && (
               <Dugme boyut="kucuk" ton="ikincil" bekliyor={gonderiliyor} onClick={() => void gonder(kontrol)}>
-                Kontrol et
+                {d.kontrolEt}
               </Dugme>
             )}
             {e.tur === 'izin' && (
@@ -160,7 +165,7 @@ export function AdimSatiri({
               })()}
             {(e.tur === 'secim' || e.tur === 'girdi') && (
               <Dugme boyut="kucuk" ton={acik || a.durum === 'tamam' ? 'ikincil' : 'koyu'} onClick={() => setAcik((x) => !x)} aria-expanded={acik}>
-                {acik ? 'Vazgeç' : e.etiket}
+                {acik ? d.vazgec : e.etiket}
               </Dugme>
             )}
           </div>
@@ -193,15 +198,23 @@ export function AdimSatiri({
 }
 
 // Arama kutusunun neyi aradığı; listede olmayan adımda genel ad.
-const ARAMA_NESNESI: Partial<Record<KurulumAdimi['kod'], string>> = {
-  meta_hesap: 'Reklam hesabı',
-  google_hesap: 'Reklam hesabı',
-  sayfa: 'Sayfa',
-  gtm_konteyner: 'Konteyner',
-  ga4_mulk: 'Mülk',
-  meta_piksel: 'Piksel',
-};
-const aramaNesnesi = (kod: KurulumAdimi['kod']) => ARAMA_NESNESI[kod] ?? 'Seçenek';
+function aramaNesnesi(kod: KurulumAdimi['kod'], d: { aramaReklamHesabi: string; aramaSayfa: string; aramaKonteyner: string; aramaMulk: string; aramaPiksel: string; aramaSecenek: string }): string {
+  switch (kod) {
+    case 'meta_hesap':
+    case 'google_hesap':
+      return d.aramaReklamHesabi;
+    case 'sayfa':
+      return d.aramaSayfa;
+    case 'gtm_konteyner':
+      return d.aramaKonteyner;
+    case 'ga4_mulk':
+      return d.aramaMulk;
+    case 'meta_piksel':
+      return d.aramaPiksel;
+    default:
+      return d.aramaSecenek;
+  }
+}
 
 function SecimPaneli({
   kod,
@@ -219,6 +232,9 @@ function SecimPaneli({
   gonderiliyor: boolean;
   gonder: (i: KurulumIstegi) => void;
 }) {
+  const d = useSozluk(markaMerkeziKurulumSozlugu);
+  const { dil } = useDil();
+  const hataMetni = (e: unknown) => hataMetniDil(e, d.sunucuyaUlasilamadi);
   const [s, setS] = useState<{ tur: 'yukleniyor' } | { tur: 'hata'; mesaj: string } | { tur: 'geldi'; v: KurulumSecenekleri }>({ tur: 'yukleniyor' });
   const [mevcut, setMevcut] = useState('');
   const [ust, setUst] = useState('');
@@ -248,11 +264,11 @@ function SecimPaneli({
     };
   }, [clientId, kod]);
 
-  if (s.tur === 'yukleniyor') return <p className="mt-3 text-xs text-ink-muted">Seçenekler platformdan okunuyor…</p>;
+  if (s.tur === 'yukleniyor') return <p className="mt-3 text-xs text-ink-muted">{d.seceneklerOkunuyor}</p>;
   if (s.tur === 'hata') {
     return (
       <div className="mt-3">
-        <Serit ton="hata" baslik="Seçenekler alınamadı">
+        <Serit ton="hata" baslik={d.seceneklerAlinamadi}>
           {s.mesaj}
         </Serit>
       </div>
@@ -263,23 +279,23 @@ function SecimPaneli({
     const i = secimIstegi(kod, f);
     if (i) gonder(i);
   };
-  const yeniEtiket = kod === 'meta_piksel' ? 'Yeni piksel aç' : kod === 'gtm_konteyner' ? 'Yeni konteyner aç' : kod === 'ga4_mulk' ? 'Yeni mülk aç' : 'Yeni hesap aç';
+  const yeniEtiket = kod === 'meta_piksel' ? d.yeniPiksel : kod === 'gtm_konteyner' ? d.yeniKonteyner : kod === 'ga4_mulk' ? d.yeniMulk : d.yeniHesap;
   const pikselYeni = kod === 'meta_piksel';
 
   return (
     <div className="mt-3 grid gap-3 rounded-alan border border-line p-3 md:grid-cols-2">
       {simdiki && (
         <div className="md:col-span-2">
-          <Serit ton="uyari" baslik={`Şu an: ${simdiki}`}>
-            {DEGISIM_SONUCU[kod] ?? 'Yeni seçim eskisinin yerine geçer.'}
+          <Serit ton="uyari" baslik={d.suAn(simdiki)}>
+            {degisimSonucu(kod, dil) ?? d.degisimGenel}
           </Serit>
         </div>
       )}
       {v.not && <p className="text-xs text-ink-muted md:col-span-2">{v.not}</p>}
       <div className="space-y-2">
-        <p className="text-xs font-semibold text-ink">Mevcut olanı kullan</p>
+        <p className="text-xs font-semibold text-ink">{d.mevcutuKullan}</p>
         {v.mevcut.length === 0 ? (
-          <p className="text-xs text-ink-muted">Seçilebilecek bir şey yok.</p>
+          <p className="text-xs text-ink-muted">{d.secilecekYok}</p>
         ) : (
           <>
             {/*
@@ -287,9 +303,9 @@ function SecimPaneli({
               düz açılır listede doğru satır bulunamıyordu. Yazılan metin adın,
               notun ya da kimliğin İÇİNDE geçiyorsa satır listede.
             */}
-            <AramaliSecim secenekler={v.mevcut} deger={mevcut} onDegis={setMevcut} etiket={`Mevcut ${aramaNesnesi(kod).toLocaleLowerCase('tr')} ara`} yerTutucu={`${aramaNesnesi(kod)} adı, hesabı ya da numarasıyla ara`} />
+            <AramaliSecim secenekler={v.mevcut} deger={mevcut} onDegis={setMevcut} etiket={d.mevcutAra(aramaNesnesi(kod, d).toLocaleLowerCase(dil === 'en' ? 'en-US' : 'tr'))} yerTutucu={d.aramaYerTutucu(aramaNesnesi(kod, d))} />
             <Dugme ton="koyu" boyut="kucuk" bekliyor={gonderiliyor} disabled={!mevcut} onClick={() => istek({ tur: 'mevcut', deger: mevcut })}>
-              Bunu kullan
+              {d.bunuKullan}
             </Dugme>
           </>
         )}
@@ -298,7 +314,7 @@ function SecimPaneli({
         <div className="space-y-2">
           <p className="text-xs font-semibold text-ink">{yeniEtiket}</p>
           {!pikselYeni && (
-            <Secim value={ust} onChange={(e) => setUst(e.target.value)} aria-label="Nerede açılsın">
+            <Secim value={ust} onChange={(e) => setUst(e.target.value)} aria-label={d.neredeAcilsin}>
               {v.ustler.map((o) => (
                 <option key={o.deger} value={o.deger}>
                   {o.etiket}
@@ -306,7 +322,7 @@ function SecimPaneli({
               ))}
             </Secim>
           )}
-          {AD_ISTEYEN.has(kod) && <Girdi value={ad} onChange={(e) => setAd(e.target.value)} maxLength={100} aria-label="Hesap adı" placeholder="Proje adı" />}
+          {AD_ISTEYEN.has(kod) && <Girdi value={ad} onChange={(e) => setAd(e.target.value)} maxLength={100} aria-label={d.hesapAdi} placeholder={d.projeAdi} />}
           {/*
             GERÇEK HESAP AÇAN DÜĞME ONAYSIZ ÇALIŞMAZ (MIMARI Ç-20 ⚠). Bir kez
             açılan reklam hesabı platformda kalıyor, para birimi ve saat
@@ -331,34 +347,32 @@ function SecimPaneli({
               className={`space-y-2 rounded-alan border border-brand/40 p-3 transition-opacity duration-200 motion-reduce:transition-none ${yeniOnay ? 'opacity-100' : 'pointer-events-none hidden opacity-0'}`}
             >
               <p id={onayBaslik} className="text-xs font-semibold text-ink">
-                “{ad.trim()}” adıyla gerçek bir reklam hesabı açılsın mı?
+                {d.hesapAcilsinMi(ad.trim())}
               </p>
-              <p className="text-[11px] text-ink-muted">
-                Hesap platformda kalır ve silinemez. Para birimi TRY, saat dilimi İstanbul; ikisi de sonradan değiştirilemez. Ödeme yöntemini şirket ekler.
-              </p>
+              <p className="text-[11px] text-ink-muted">{d.hesapAcUyari}</p>
               <div className="flex flex-wrap gap-2">
                 <Dugme id={onayDugmesi} ton="koyu" boyut="kucuk" bekliyor={gonderiliyor} onClick={() => istek({ tur: 'yeni', ust, ad })}>
-                  Hesabı aç
+                  {d.hesabiAc}
                 </Dugme>
                 <Dugme boyut="kucuk" ton="ikincil" disabled={gonderiliyor} onClick={() => setYeniOnay(false)}>
-                  Vazgeç
+                  {d.vazgec}
                 </Dugme>
               </div>
             </div>
           )}
-          {AD_ISTEYEN.has(kod) && !yeniOnay && <p className="text-[11px] text-ink-muted">Gerçek bir reklam hesabı açılır; açmadan önce onay istenir.</p>}
+          {AD_ISTEYEN.has(kod) && !yeniOnay && <p className="text-[11px] text-ink-muted">{d.gercekHesapNotu}</p>}
         </div>
       )}
       {kod === 'google_hesap' && v.ustler.length > 0 && (
         <div className="space-y-2 md:col-span-2">
-          <p className="text-xs font-semibold text-ink">Şirketin mevcut Google Ads hesabına bağlantı daveti</p>
+          <p className="text-xs font-semibold text-ink">{d.davetBaslik}</p>
           <div className="flex flex-wrap gap-2">
-            <Girdi className="max-w-48" value={musteriNo} onChange={(e) => setMusteriNo(e.target.value)} placeholder="123-456-7890" aria-label="Google Ads hesap numarası" />
+            <Girdi className="max-w-48" value={musteriNo} onChange={(e) => setMusteriNo(e.target.value)} placeholder="123-456-7890" aria-label={d.googleHesapNo} />
             <Dugme boyut="kucuk" ton="ikincil" bekliyor={gonderiliyor} disabled={!/^\d{3}-?\d{3}-?\d{4}$/.test(musteriNo.trim()) || !ust} onClick={() => istek({ tur: 'davet', ust, musteriNo: musteriNo.trim() })}>
-              Davet gönder
+              {d.davetGonder}
             </Dugme>
           </div>
-          <p className="text-[11px] text-ink-muted">Şirket Google Ads › Yönetici hesaplar’dan daveti kabul eder; sonra hesap burada seçilebilir.</p>
+          <p className="text-[11px] text-ink-muted">{d.davetAciklama}</p>
         </div>
       )}
     </div>
@@ -373,6 +387,7 @@ function SecimPaneli({
  * olmayan formlar için ek yol.
  */
 function TetikFormu({ mevcut, gonderiliyor, gonder }: { mevcut: DonusumTetigi | null; gonderiliyor: boolean; gonder: (t: DonusumTetigi) => void }) {
+  const d = useSozluk(markaMerkeziKurulumSozlugu);
   const [formVar, setFormVar] = useState(mevcut ? formOlculuyor(mevcut) : true);
   const [yol, setYol] = useState(mevcut?.formYolu ?? '');
   const [telefon, setTelefon] = useState(mevcut?.telefon ?? true);
@@ -384,9 +399,9 @@ function TetikFormu({ mevcut, gonderiliyor, gonder }: { mevcut: DonusumTetigi | 
       <label className="flex items-start gap-2">
         <input type="checkbox" checked={formVar} onChange={(e) => setFormVar(e.target.checked)} className="mt-1" />
         <span>
-          <span className="block text-sm text-ink">Form gönderimleri dönüşüm sayılsın</span>
+          <span className="block text-sm text-ink">{d.formGonderimi}</span>
           <span className="block text-xs text-ink-muted">
-            {FORM_DINLEYICI_EKLENTILERI.join(', ')} formları sayfa değişmeden yakalanır. Yalnız başarılı gönderim sayılır.
+            {d.formDinleyiciAciklama(FORM_DINLEYICI_EKLENTILERI.join(', '))}
           </span>
         </span>
       </label>
@@ -396,17 +411,17 @@ function TetikFormu({ mevcut, gonderiliyor, gonder }: { mevcut: DonusumTetigi | 
             className="max-w-md"
             value={yol}
             onChange={(e) => setYol(e.target.value)}
-            placeholder="Teşekkür sayfası (isteğe bağlı): /tesekkurler"
-            aria-label="Teşekkür sayfası (isteğe bağlı)"
+            placeholder={d.tesekkurSayfasi}
+            aria-label={d.tesekkurSayfasiEtiket}
           />
-          <p className="text-xs text-ink-muted">Form gönderilince başka bir sayfa açılıyorsa yaz; listede olmayan formlar da böylece sayılır. Aynı gönderim iki kez sayılmaz.</p>
+          <p className="text-xs text-ink-muted">{d.tesekkurAciklama}</p>
         </div>
       )}
       <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" checked={telefon} onChange={(e) => setTelefon(e.target.checked)} /> Telefon numarasına tıklama dönüşüm sayılsın
+        <input type="checkbox" checked={telefon} onChange={(e) => setTelefon(e.target.checked)} /> {d.telefonDonusum}
       </label>
       <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" checked={whatsapp} onChange={(e) => setWhatsapp(e.target.checked)} /> WhatsApp bağlantısına tıklama dönüşüm sayılsın
+        <input type="checkbox" checked={whatsapp} onChange={(e) => setWhatsapp(e.target.checked)} /> {d.whatsappDonusum}
       </label>
       <Dugme
         ton="koyu"
@@ -415,13 +430,15 @@ function TetikFormu({ mevcut, gonderiliyor, gonder }: { mevcut: DonusumTetigi | 
         disabled={(formVar && !yolBos && !yolGecerli) || (!formVar && !telefon && !whatsapp)}
         onClick={() => gonder({ form: formVar, formYolu: formVar && !yolBos ? yol.trim() : null, telefon, whatsapp })}
       >
-        Kaydet, etiketleri yaz ve yayınla
+        {d.kaydetYayinla}
       </Dugme>
     </div>
   );
 }
 
 function SiteKodu({ kod, site }: { kod: NonNullable<KurulumYaniti['siteKodu']>; site: string | null }) {
+  const d = useSozluk(markaMerkeziKurulumSozlugu);
+  const { dil } = useDil();
   const [kopyalandi, setKopyalandi] = useState<string | null>(null);
   const [kopyaHatasi, setKopyaHatasi] = useState<string | null>(null);
   const kopyala = (ad: string, metin: string) =>
@@ -430,31 +447,31 @@ function SiteKodu({ kod, site }: { kod: NonNullable<KurulumYaniti['siteKodu']>; 
         setKopyaHatasi(null);
         setKopyalandi(ad);
       },
-      () => setKopyaHatasi('Tarayıcı panoya yazmaya izin vermedi; kodu seçip kopyala.'),
+      () => setKopyaHatasi(d.kopyaYasak),
     );
   return (
     <div className="mt-3 space-y-3 rounded-alan border border-line p-3">
       {(
         [
-          ['head', '1. Her sayfanın <head> bölümüne', kod.head],
-          ['body', '2. <body> etiketinin hemen ardına', kod.body],
+          ['head', d.headBaslik, kod.head],
+          ['body', d.bodyBaslik, kod.body],
         ] as const
       ).map(([ad, baslik, metin]) => (
         <div key={ad} className="space-y-1">
           <div className="flex items-center justify-between gap-2">
             <p className="text-xs font-semibold text-ink">{baslik}</p>
             <button type="button" className="text-xs font-semibold text-brand-strong hover:underline" onClick={() => void kopyala(ad, metin)}>
-              {kopyalandi === ad ? 'Kopyalandı' : 'Kopyala'}
+              {kopyalandi === ad ? d.kopyalandi : d.kopyala}
             </button>
           </div>
           <pre className="max-h-40 overflow-auto rounded-alan bg-surface-sunken p-2 text-[11px] leading-relaxed text-ink">{metin}</pre>
         </div>
       ))}
       {kopyaHatasi && <p className="text-xs text-danger-strong">{kopyaHatasi}</p>}
-      <a href={gelistiriciEpostasi(site, kod.gtmKimligi, kod.head, kod.body)} className="inline-block text-xs font-semibold text-brand-strong hover:underline">
-        Geliştiriciye e-postayla gönder
+      <a href={gelistiriciEpostasi(site, kod.gtmKimligi, kod.head, kod.body, dil)} className="inline-block text-xs font-semibold text-brand-strong hover:underline">
+        {d.gelistiriciyeGonder}
       </a>
-      <p className="text-[11px] text-ink-muted">WordPress’te "Site Kit by Google" ya da "GTM4WP" eklentisine yalnız {kod.gtmKimligi} yazmak yeterli.</p>
+      <p className="text-[11px] text-ink-muted">{d.wordpressNotu(kod.gtmKimligi)}</p>
     </div>
   );
 }

@@ -10,6 +10,8 @@ import {
   KANAL_TURLERI,
   KANAL_TURU_ADI,
   aliciAyristir,
+  sec,
+  type Dil,
   type BildirimGonderimleriYaniti,
   type BildirimKanali,
   type BildirimKanallariYaniti,
@@ -34,6 +36,8 @@ import { Uyari } from '@/components/ui/uyari';
 import { DurumNoktasi, type DurumHali } from '@/components/ui/rozet';
 import { Alan, Girdi, MetinAlani } from '@/components/ui/alan';
 import { BosDurum } from '@/components/ui/hal';
+import { useDil } from '@/dil/saglayici';
+import { markaMerkeziBildirimSozlugu } from '@/dil/sozlukler/marka-merkezi-bildirim';
 
 /**
  * ═══ MARKA MERKEZİ › BİLDİRİMLER (Paket A, taslak ekran 3) ═══
@@ -56,7 +60,11 @@ import { BosDurum } from '@/components/ui/hal';
  */
 type Hal<T> = { tur: 'okunuyor' } | { tur: 'hata'; mesaj: string } | { tur: 'geldi'; veri: T };
 
-const hataMetni = (e: unknown) => (e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.');
+const hataMetni = (e: unknown, dil: Dil) => (e instanceof ApiRequestError ? e.message : sec(markaMerkeziBildirimSozlugu, dil).sunucuUlasilamadi);
+
+/** Gönderim ve teslim zamanı: dilin kendi yerel biçimi. */
+const zamanYaz = (iso: string, dil: Dil) =>
+  new Date(iso).toLocaleString(dil === 'en' ? 'en-US' : 'tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
 // Kanal durumu ortak durum noktasıyla: yeşil yalnız doğrulanmış kanalda.
 const NOKTA_HALI: Record<Nokta, DurumHali> = {
@@ -83,6 +91,9 @@ export function BildirimlerBolumu({
   /** Oturumdaki kullanıcının adresi; gönderen kimliği yoksa ajans alan adı buradan. */
   ajansAdresi: string;
 }) {
+  const { dil } = useDil();
+  const m = sec(markaMerkeziBildirimSozlugu, dil);
+  const d = m.bildirim;
   const [kanallar, setKanallar] = useState<Hal<BildirimKanallariYaniti>>({ tur: 'okunuyor' });
   const [gonderimler, setGonderimler] = useState<Hal<BildirimGonderimleriYaniti>>({ tur: 'okunuyor' });
   const [formAcik, setFormAcik] = useState(false);
@@ -95,17 +106,17 @@ export function BildirimlerBolumu({
     try {
       setKanallar({ tur: 'geldi', veri: await apiFetch<BildirimKanallariYaniti>(baglanti('/bildirim/kanallar', { clientId })) });
     } catch (e) {
-      setKanallar({ tur: 'hata', mesaj: hataMetni(e) });
+      setKanallar({ tur: 'hata', mesaj: hataMetni(e, dil) });
     }
-  }, [clientId]);
+  }, [clientId, dil]);
 
   const gonderimleriOku = useCallback(async () => {
     try {
       setGonderimler({ tur: 'geldi', veri: await apiFetch<BildirimGonderimleriYaniti>(baglanti('/bildirim/gonderimler', { clientId })) });
     } catch (e) {
-      setGonderimler({ tur: 'hata', mesaj: hataMetni(e) });
+      setGonderimler({ tur: 'hata', mesaj: hataMetni(e, dil) });
     }
-  }, [clientId]);
+  }, [clientId, dil]);
 
   useEffect(() => {
     void kanallariOku();
@@ -117,16 +128,16 @@ export function BildirimlerBolumu({
     setMesgul(k.id);
     setSatirHatasi(null);
     try {
-      const r = denemeSonucuCoz(await apiFetch<unknown>(`/bildirim/kanallar/${encodeURIComponent(k.id)}/dene`, { method: 'POST', body: '{}' }));
+      const r = denemeSonucuCoz(await apiFetch<unknown>(`/bildirim/kanallar/${encodeURIComponent(k.id)}/dene`, { method: 'POST', body: '{}' }), dil);
       if (r.tur === 'gonderildi') {
         setSoru({ kanal: k, hal: 'soruluyor' });
         return null;
       }
-      const mesaj = r.tur === 'dustu' ? `Deneme mesajı gönderilemedi: ${r.mesaj}` : 'Deneme isteği gitti ama teslim sonucu okunamadı. Son gönderimler tablosuna bakın.';
+      const mesaj = r.tur === 'dustu' ? d.denemeGonderilemedi(r.mesaj) : d.denemeOkunamadi;
       setSatirHatasi({ id: k.id, mesaj });
       return mesaj;
     } catch (e) {
-      const mesaj = `Deneme mesajı gönderilemedi: ${hataMetni(e)}`;
+      const mesaj = d.denemeGonderilemedi(hataMetni(e, dil));
       setSatirHatasi({ id: k.id, mesaj });
       return mesaj;
     } finally {
@@ -146,7 +157,7 @@ export function BildirimlerBolumu({
       void kanallariOku();
     } catch (e) {
       setSoru({ kanal: k, hal: 'soruluyor' });
-      setSatirHatasi({ id: k.id, mesaj: `Cevap kaydedilemedi: ${hataMetni(e)}` });
+      setSatirHatasi({ id: k.id, mesaj: d.cevapKaydedilemedi(hataMetni(e, dil)) });
     }
   }
 
@@ -157,7 +168,7 @@ export function BildirimlerBolumu({
       await apiFetch(`/bildirim/kanallar/${encodeURIComponent(k.id)}`, { method: 'PATCH', body: JSON.stringify(govde) });
       await kanallariOku();
     } catch (e) {
-      setSatirHatasi({ id: k.id, mesaj: `Değiştirilemedi: ${hataMetni(e)}` });
+      setSatirHatasi({ id: k.id, mesaj: d.degistirilemedi(hataMetni(e, dil)) });
     } finally {
       setMesgul(null);
     }
@@ -172,7 +183,7 @@ export function BildirimlerBolumu({
       if (soru?.kanal.id === k.id) setSoru(null);
       await kanallariOku();
     } catch (e) {
-      setSatirHatasi({ id: k.id, mesaj: `Silinemedi: ${hataMetni(e)}` });
+      setSatirHatasi({ id: k.id, mesaj: d.silinemedi(hataMetni(e, dil)) });
     } finally {
       setMesgul(null);
     }
@@ -185,25 +196,25 @@ export function BildirimlerBolumu({
       <section className="rounded-kart border border-line bg-surface" aria-labelledby="kanallar-baslik">
         <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-3">
           <h3 id="kanallar-baslik" className="text-sm font-semibold text-ink">
-            Bildirim kanalları
+            {d.baslik}
           </h3>
-          {veri && <span className="text-xs text-ink-muted">{veri.toplam} kanal</span>}
+          {veri && <span className="text-xs text-ink-muted">{d.kanalSayisi(veri.toplam)}</span>}
           {yazabilir && (
             <Dugme className="ml-auto" ton="ikincil" boyut="kucuk" onClick={() => setFormAcik(true)} disabled={formAcik}>
-              + Kanal ekle
+              {d.kanalEkle}
             </Dugme>
           )}
         </div>
 
-        {kanallar.tur === 'okunuyor' && <p className="px-4 py-5 text-sm text-ink-muted">Kanallar okunuyor…</p>}
+        {kanallar.tur === 'okunuyor' && <p className="px-4 py-5 text-sm text-ink-muted">{d.okunuyor}</p>}
         {kanallar.tur === 'hata' && (
           <div className="p-4">
             <Uyari
               ton="tehlike"
-              baslik="Kanallar alınamadı."
+              baslik={d.alinamadi}
               eylem={
                 <Dugme ton="ikincil" boyut="kucuk" onClick={() => void kanallariOku()}>
-                  Yeniden dene
+                  {m.yenidenDene}
                 </Dugme>
               }
             >
@@ -214,11 +225,11 @@ export function BildirimlerBolumu({
         {veri && veri.kanallar.length === 0 && (
           <div className="p-4">
             <BosDurum
-              baslik="Bu workspace’te bildirim kanalı yok"
+              baslik={d.bosBaslik}
               neden={
                 <>
-                  Sinyaller ve kurallar çalışıyor, ama kimseye haber gitmiyor: her şey yalnız panelde ve kural geçmişinde duruyor.
-                  {!yazabilir && ' Kanal eklemek için workspace yazma yetkisi gerekiyor.'}
+                  {d.bosNeden}
+                  {!yazabilir && d.bosYetki}
                 </>
               }
             />
@@ -241,43 +252,39 @@ export function BildirimlerBolumu({
                     </span>
                     {yazabilir && (k.durum === 'dogrulanmadi' || k.durum === 'hata') && (
                       <Dugme ton="ikincil" boyut="kucuk" bekliyor={mesgul === k.id} onClick={() => void dene(k)}>
-                        Deneme mesajı gönder
+                        {d.denemeGonder}
                       </Dugme>
                     )}
                     {yazabilir && (
                       <Dugme ton="sade" boyut="kucuk" disabled={mesgul === k.id} onClick={() => void guncelle(k, { etkin: !k.etkin })}>
-                        {k.etkin ? 'Kapat' : 'Aç'}
+                        {k.etkin ? d.kapat : d.ac}
                       </Dugme>
                     )}
                     {yazabilir &&
                       (silinecek === k.id ? (
                         <>
                           <Dugme ton="tehlike" boyut="kucuk" bekliyor={mesgul === k.id} onClick={() => void sil(k)}>
-                            Sil
+                            {m.sil}
                           </Dugme>
                           <Dugme ton="sade" boyut="kucuk" onClick={() => setSilinecek(null)}>
-                            Vazgeç
+                            {m.vazgec}
                           </Dugme>
                         </>
                       ) : (
                         <Dugme ton="sade" boyut="kucuk" onClick={() => setSilinecek(k.id)}>
-                          Sil
+                          {m.sil}
                         </Dugme>
                       ))}
                   </div>
                 </div>
                 {silinecek === k.id && (
-                  <p className="px-4 pb-3 text-xs text-ink-muted">Kanal silinir; gönderim geçmişi tabloda kalır. Bu kanalı seçen kurallar kanalsız kalır.</p>
+                  <p className="px-4 pb-3 text-xs text-ink-muted">{d.silNotu}</p>
                 )}
                 {k.durum === 'hata' && k.sonTeslim && (
                   <div className="mx-4 mb-3 border-l-[3px] border-brand pl-3 text-sm">
-                    <b className="text-ink">Son gönderim düştü ({new Date(k.sonTeslim.zaman).toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}):</b>{' '}
-                    {k.sonTeslim.hata ? `"${k.sonTeslim.hata}"` : 'platform nedenini bildirmedi.'}{' '}
-                    {k.tur === 'teams'
-                      ? 'Teams kanalında Workflows ile yeni bir adres oluşturup kanalı yeniden ekleyin.'
-                      : k.tur === 'slack'
-                        ? 'Slack’te webhook’un hâlâ kanala bağlı olduğunu kontrol edin.'
-                        : 'Alıcı adreslerini kontrol edin.'}
+                    <b className="text-ink">{d.sonGonderimDustu(zamanYaz(k.sonTeslim.zaman, dil))}</b>{' '}
+                    {k.sonTeslim.hata ? `"${k.sonTeslim.hata}"` : d.nedenYok}{' '}
+                    {k.tur === 'teams' ? d.teamsIpucu : k.tur === 'slack' ? d.slackIpucu : d.epostaIpucu}
                   </div>
                 )}
                 {satirHatasi?.id === k.id && (
@@ -313,64 +320,51 @@ export function BildirimlerBolumu({
 }
 
 function DenemeSorusu({ soru, onCevap }: { soru: NonNullable<Soru>; onCevap: (geldi: boolean) => void }) {
+  const { dil } = useDil();
+  const d = sec(markaMerkeziBildirimSozlugu, dil).bildirim;
   const k = soru.kanal;
   if (soru.hal === 'evet') {
     return (
       <p role="status" className="mx-4 mb-3 flex items-center gap-2 rounded-alan border border-line px-3 py-2 text-sm">
         <NoktaIsareti nokta="yesil" />
-        <b className="text-ink">Kanal doğrulandı.</b>
+        <b className="text-ink">{d.dogrulandi}</b>
         <span className="text-ink-muted">{k.olaylar.includes('sinyal')
-            ? 'Sıradaki sinyal özeti buraya gelecek.'
+            ? d.sinyalGelecek
             : k.olaylar.includes('kural')
-              ? 'Kural bildirimleri buraya gelecek.'
-              : 'Pazartesi sabahı haftalık özet buraya gelecek.'}</span>
+              ? d.kuralGelecek
+              : d.haftalikGelecek}</span>
       </p>
     );
   }
   if (soru.hal === 'hayir') {
     return (
       <p role="status" className="mx-4 mb-3 rounded-alan border border-line px-3 py-2 text-sm text-ink">
-        <b>Mesaj görünmediyse</b> adres başka bir kanala ait olabilir.{' '}
-        {k.tur === 'eposta'
-          ? 'Alıcıların istenmeyen posta klasörüne bakın, adresleri kontrol edin.'
-          : 'Webhook’un bağlı olduğu kanalı kontrol edip kanalı doğru adresle yeniden ekleyin.'}
+        <b>{d.hayirOnce}</b> {d.hayirSonra}{' '}
+        {k.tur === 'eposta' ? d.hayirEposta : d.hayirWebhook}
       </p>
     );
   }
   return (
     <div role="status" className="mx-4 mb-3 flex flex-wrap items-center gap-3 rounded-alan border border-ink px-3 py-2.5 text-sm">
       <span>
-        <b className="text-ink">Deneme mesajı {KANAL_TURU_ADI[k.tur]} kanalına gönderildi.</b> {k.ad} {k.tur === 'eposta' ? 'alıcılarına ulaştı mı?' : 'kanalında göründü mü?'}
+        <b className="text-ink">{d.denemeGitti(KANAL_TURU_ADI[k.tur])}</b> {k.ad} {k.tur === 'eposta' ? d.ulastiEposta : d.gorunduMu}
       </span>
       <span className="ml-auto flex gap-2">
         <Dugme ton="koyu" boyut="kucuk" bekliyor={soru.hal === 'gonderiliyor'} onClick={() => onCevap(true)}>
-          Evet, geldi
+          {d.evetGeldi}
         </Dugme>
         <Dugme ton="ikincil" boyut="kucuk" disabled={soru.hal === 'gonderiliyor'} onClick={() => onCevap(false)}>
-          Hayır
+          {d.hayir}
         </Dugme>
       </span>
     </div>
   );
 }
 
-const ADRES_IPUCU: Record<'slack' | 'teams', { yer: string; ipucu: string }> = {
-  slack: {
-    yer: 'https://hooks.slack.com/services/…',
-    ipucu:
-      'Slack’te "Incoming Webhooks" uygulamasını kanala ekleyin ve verdiği adresi buraya yapıştırın. Adres şifreli saklanır; kaydettikten sonra yalnız son dört karakteri görünür.',
-  },
-  teams: {
-    yer: 'https://…logic.azure.com/workflows/…',
-    ipucu:
-      'Teams kanalında "Workflows" ile "Bir web kancası isteği alındığında kanala gönder" akışını oluşturun ve adresi yapıştırın. Adres şifreli saklanır.',
-  },
-};
-
-const TUR_ALT: Record<KanalTuru, string> = {
-  slack: 'Bir kanala mesaj',
-  teams: 'Bir kanala mesaj',
-  eposta: 'Bir ya da daha çok kişiye',
+// Adres örneği iki dilde aynı; ipucu cümlesi sözlükte (`slackAdresIpucu`, `teamsAdresIpucu`).
+const ADRES_ORNEGI: Record<'slack' | 'teams', string> = {
+  slack: 'https://hooks.slack.com/services/…',
+  teams: 'https://…logic.azure.com/workflows/…',
 };
 
 /**
@@ -393,6 +387,8 @@ function KanalEkleFormu({
   onVazgec: () => void;
   onKaydedildi: (k: BildirimKanali) => Promise<string | null>;
 }) {
+  const { dil } = useDil();
+  const d = sec(markaMerkeziBildirimSozlugu, dil).bildirim;
   const [tur, setTur] = useState<KanalTuru>('slack');
   const [ad, setAd] = useState('');
   const [adres, setAdres] = useState('');
@@ -405,7 +401,7 @@ function KanalEkleFormu({
   const [kaydediliyor, setKaydediliyor] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
 
-  const denetim = kanalFormuDenetle({ tur, clientId, ad, adres, alicilarHam: alicilar, olaylar });
+  const denetim = kanalFormuDenetle({ tur, clientId, ad, adres, alicilarHam: alicilar, olaylar }, dil);
 
   function turSec(t: KanalTuru) {
     setTur(t);
@@ -432,7 +428,7 @@ function KanalEkleFormu({
     try {
       kanal = await apiFetch<BildirimKanali>('/bildirim/kanallar', { method: 'POST', body: JSON.stringify(denetim.girdi) });
     } catch (e) {
-      setHata(`Kanal kaydedilemedi: ${hataMetni(e)}`);
+      setHata(d.kanalKaydedilemedi(hataMetni(e, dil)));
       setKaydediliyor(false);
       return;
     }
@@ -447,7 +443,7 @@ function KanalEkleFormu({
     await onKaydedildi(kanal);
   }
 
-  const adresIpucu = tur === 'eposta' ? null : ADRES_IPUCU[tur];
+  const adresIpucu = tur === 'eposta' ? null : { yer: ADRES_ORNEGI[tur], ipucu: tur === 'slack' ? d.slackAdresIpucu : d.teamsAdresIpucu };
 
   return (
     <div
@@ -461,10 +457,10 @@ function KanalEkleFormu({
         <section className="rounded-kart border border-line bg-surface" aria-labelledby="kanal-ekle-baslik">
           <div className="border-b border-line px-4 py-3">
             <h3 id="kanal-ekle-baslik" className="text-sm font-semibold text-ink">
-              Kanal ekle
+              {d.kanalEkleBaslik}
             </h3>
           </div>
-          <div role="group" aria-label="Kanal türü" className="grid gap-2.5 p-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div role="group" aria-label={d.kanalTuru} className="grid gap-2.5 p-4 sm:grid-cols-2 xl:grid-cols-4">
             {KANAL_TURLERI.map((t) => (
               <button
                 key={t}
@@ -476,25 +472,25 @@ function KanalEkleFormu({
                 }`}
               >
                 <b className="text-sm text-ink">{KANAL_TURU_ADI[t]}</b>
-                <small className="text-xs text-ink-muted">{TUR_ALT[t]}</small>
+                <small className="text-xs text-ink-muted">{t === 'eposta' ? d.turAltEposta : d.turAltMesaj}</small>
               </button>
             ))}
-            {KANAL_DISARIDA.map((d) => (
+            {KANAL_DISARIDA.map((disari) => (
               <button
-                key={d.kod}
+                key={disari.kod}
                 type="button"
                 disabled
-                title="İlk sürümde yok"
+                title={d.ilkSurumdeYok}
                 className="flex cursor-not-allowed flex-col gap-1 rounded-alan border border-line p-3 text-left opacity-50"
               >
-                <b className="text-sm text-ink">{d.ad}</b>
-                <small className="text-xs text-ink-muted">{d.neden}</small>
+                <b className="text-sm text-ink">{disari.ad}</b>
+                <small className="text-xs text-ink-muted">{disari.neden}</small>
               </button>
             ))}
           </div>
 
           <div className="space-y-3 px-4 pb-4">
-            <Alan etiket="Kanal adı">
+            <Alan etiket={d.kanalAdi}>
               {(id) => (
                 <Girdi
                   id={id}
@@ -502,7 +498,7 @@ function KanalEkleFormu({
                   value={ad}
                   maxLength={80}
                   onChange={(e) => setAd(e.target.value)}
-                  placeholder={tur === 'eposta' ? 'Ajans ekibi' : '#reklam-uyarilari'}
+                  placeholder={tur === 'eposta' ? d.kanalAdiEposta : d.kanalAdiSlack}
                 />
               )}
             </Alan>
@@ -510,7 +506,7 @@ function KanalEkleFormu({
             {adresIpucu && tur !== 'eposta' && (
               /* Hata ipucunun YERİNİ alıyor ve alan kırmızı kenarlı (`Alan`); hata
                  `role="alert"` ile duyuruluyor, eskiden olduğu gibi. */
-              <Alan etiket="Webhook adresi" ipucu={adresIpucu.ipucu} hata={adresHatasi}>
+              <Alan etiket={d.webhookAdresi} ipucu={adresIpucu.ipucu} hata={adresHatasi}>
                 {(id, aciklamaId, hatali) => (
                   <Girdi
                     id={id}
@@ -535,18 +531,13 @@ function KanalEkleFormu({
             {tur === 'eposta' && (
               <div className="space-y-2">
                 {gonderen && !gonderen.tanimli && (
-                  <Uyari ton="uyari" baslik="E-posta kanalı şu an gönderemez.">
+                  <Uyari ton="uyari" baslik={d.epostaGonderemez}>
                     {gonderen.neden}
                   </Uyari>
                 )}
                 <Alan
-                  etiket="Alıcılar"
-                  ipucu={
-                    <>
-                      Virgülle ayırın, en çok {ALICI_UST_SINIRI}.{' '}
-                      {gonderen?.tanimli ? `Gönderen: ${gonderen.adres}.` : ''} Sinyaller ajansın iç bilgisidir; ajans dışı bir adres yazarsanız uyarırız.
-                    </>
-                  }
+                  etiket={d.alicilar}
+                  ipucu={d.aliciIpucu(ALICI_UST_SINIRI, gonderen?.tanimli ? gonderen.adres : '')}
                 >
                   {(id, aciklamaId) => (
                     <MetinAlani
@@ -556,25 +547,25 @@ function KanalEkleFormu({
                       value={alicilar}
                       onChange={(e) => setAlicilar(e.target.value)}
                       onBlur={alicilariDenetle}
-                      placeholder="ad@ajans.com, ikinci@ajans.com"
+                      placeholder={d.aliciYerTutucu}
                     />
                   )}
                 </Alan>
                 {aliciUyarisi.gecersiz.length > 0 && (
                   <p role="alert" className="text-xs font-semibold text-brand-strong">
-                    Geçersiz adres: {aliciUyarisi.gecersiz.join(', ')}
+                    {d.gecersizAdres(aliciUyarisi.gecersiz.join(', '))}
                   </p>
                 )}
                 {aliciUyarisi.disarida.length > 0 && (
-                  <Uyari ton="uyari" baslik="Ajans dışı adres var.">
-                    {aliciUyarisi.disarida.join(', ')} ajansın alan adında değil. Sinyaller ajansın iç bilgisi; bilerek yazdıysanız kaydedebilirsiniz.
+                  <Uyari ton="uyari" baslik={d.ajansDisiBaslik}>
+                    {d.ajansDisiMetin(aliciUyarisi.disarida.join(', '))}
                   </Uyari>
                 )}
               </div>
             )}
 
             <fieldset>
-              <legend className="mb-1 text-xs font-semibold text-ink">Neler gelsin</legend>
+              <legend className="mb-1 text-xs font-semibold text-ink">{d.neler}</legend>
               {BILDIRIM_OLAYLARI.map((o) => (
                 <label key={o} className="my-1.5 flex items-start gap-2 text-sm">
                   <input
@@ -586,9 +577,7 @@ function KanalEkleFormu({
                   <span>
                     <b className="font-semibold text-ink">{BILDIRIM_OLAYI_ADI[o]}</b>
                     <small className="block text-xs text-ink-muted">
-                      {o === 'sinyal'
-                        ? 'Her sabah 09:00’da yeni açılanların özeti. Yeni sinyal yoksa mesaj gitmez.'
-                        : '"Yalnızca bildir" kuralı eşleşince ya da bir kural platformda uygulanamayınca, anında.'}
+                      {o === 'sinyal' ? d.sinyalAlt : d.kuralAlt}
                     </small>
                   </span>
                 </label>
@@ -603,10 +592,10 @@ function KanalEkleFormu({
 
             <div className="flex flex-wrap justify-end gap-2">
               <Dugme ton="ikincil" onClick={onVazgec} disabled={kaydediliyor}>
-                Vazgeç
+                {sec(markaMerkeziBildirimSozlugu, dil).vazgec}
               </Dugme>
               <Dugme onClick={() => void kaydet()} bekliyor={kaydediliyor} disabled={!denetim.gecerli || adresHatasi !== null}>
-                Kaydet ve deneme mesajı gönder
+                {d.kaydetVeDene}
               </Dugme>
             </div>
             {!denetim.gecerli && (ad.trim() !== '' || adres.trim() !== '' || alicilar.trim() !== '') && (
@@ -620,27 +609,30 @@ function KanalEkleFormu({
 }
 
 function SonGonderimler({ hal, onYenile }: { hal: Hal<BildirimGonderimleriYaniti>; onYenile: () => void }) {
+  const { dil } = useDil();
+  const m = sec(markaMerkeziBildirimSozlugu, dil);
+  const d = m.bildirim;
   return (
     <section className="rounded-kart border border-line bg-surface" aria-labelledby="gonderimler-baslik">
       <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-3">
         <h3 id="gonderimler-baslik" className="text-sm font-semibold text-ink">
-          Son gönderimler
+          {d.sonGonderimler}
         </h3>
         {hal.tur === 'geldi' && (
           <span className="ml-auto text-xs text-ink-muted">
-            Gösterilen {hal.veri.gonderimler.length} / {hal.veri.toplam}
+            {d.gosterilen(hal.veri.gonderimler.length, hal.veri.toplam)}
           </span>
         )}
       </div>
-      {hal.tur === 'okunuyor' && <p className="px-4 py-5 text-sm text-ink-muted">Gönderimler okunuyor…</p>}
+      {hal.tur === 'okunuyor' && <p className="px-4 py-5 text-sm text-ink-muted">{d.gonderimlerOkunuyor}</p>}
       {hal.tur === 'hata' && (
         <div className="p-4">
           <Uyari
             ton="tehlike"
-            baslik="Gönderim geçmişi alınamadı."
+            baslik={d.gonderimlerAlinamadi}
             eylem={
               <Dugme ton="ikincil" boyut="kucuk" onClick={onYenile}>
-                Yeniden dene
+                {m.yenidenDene}
               </Dugme>
             }
           >
@@ -649,40 +641,35 @@ function SonGonderimler({ hal, onYenile }: { hal: Hal<BildirimGonderimleriYaniti
         </div>
       )}
       {hal.tur === 'geldi' && hal.veri.gonderimler.length === 0 && (
-        <p className="px-4 py-5 text-sm text-ink-muted">Henüz gönderim yok. Kanal ekleyip deneme mesajı gönderince burada görünür.</p>
+        <p className="px-4 py-5 text-sm text-ink-muted">{d.gonderimYok}</p>
       )}
       {hal.tur === 'geldi' && hal.veri.gonderimler.length > 0 && (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line text-left text-xs text-ink-muted">
-                <th className="px-4 py-2 font-semibold">Zaman</th>
-                <th className="px-4 py-2 font-semibold">Kanal</th>
-                <th className="px-4 py-2 font-semibold">İçerik</th>
-                <th className="px-4 py-2 font-semibold">Durum</th>
+                <th className="px-4 py-2 font-semibold">{d.kolonZaman}</th>
+                <th className="px-4 py-2 font-semibold">{d.kolonKanal}</th>
+                <th className="px-4 py-2 font-semibold">{d.kolonIcerik}</th>
+                <th className="px-4 py-2 font-semibold">{d.kolonDurum}</th>
               </tr>
             </thead>
             <tbody>
               {hal.veri.gonderimler.map((g) => {
-                const d = gonderimDurumu(g);
+                const durum = gonderimDurumu(g, dil);
                 return (
                   <tr key={g.id} className="border-b border-line align-top last:border-b-0">
                     <td className="whitespace-nowrap px-4 py-2 tabular-nums">
-                      {new Date(g.gonderildi ?? g.olusturuldu).toLocaleString('tr-TR', {
-                        day: 'numeric',
-                        month: 'short',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
+                      {zamanYaz(g.gonderildi ?? g.olusturuldu, dil)}
                     </td>
-                    <td className="px-4 py-2">{g.kanalAdi ?? 'Silinmiş kanal'}</td>
-                    <td className="px-4 py-2">{gonderimIcerigi(g)}</td>
+                    <td className="px-4 py-2">{g.kanalAdi ?? d.silinmisKanal}</td>
+                    <td className="px-4 py-2">{gonderimIcerigi(g, dil)}</td>
                     <td className="px-4 py-2">
-                      <span className={`inline-flex items-center gap-1.5 font-semibold ${d.nokta === 'kirmizi' ? 'text-brand-strong' : 'text-ink'}`}>
-                        <NoktaIsareti nokta={d.nokta} />
-                        {d.etiket}
+                      <span className={`inline-flex items-center gap-1.5 font-semibold ${durum.nokta === 'kirmizi' ? 'text-brand-strong' : 'text-ink'}`}>
+                        <NoktaIsareti nokta={durum.nokta} />
+                        {durum.etiket}
                       </span>
-                      {d.ayrinti && <span className="block text-xs text-ink-muted">{d.ayrinti}</span>}
+                      {durum.ayrinti && <span className="block text-xs text-ink-muted">{durum.ayrinti}</span>}
                     </td>
                   </tr>
                 );

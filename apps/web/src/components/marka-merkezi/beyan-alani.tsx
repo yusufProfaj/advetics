@@ -3,12 +3,15 @@
 import { useId, useState } from 'react';
 import {
   KURULUM_BEYAN_OGESI_ADI,
+  kapiNedeni,
+  type Dil,
   type KurulumBeyani,
   type KurulumBeyanOgesi,
   type KurulumPlatformu,
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
-import { PANEL_KAPILARI } from '@/lib/panel-adresleri';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { markaMerkeziKurulumSozlugu } from '@/dil/sozlukler/marka-merkezi-kurulum';
 import { Dugme } from '@/components/ui/dugme';
 import { Girdi } from '@/components/ui/alan';
 import { adimBeyanlari, type BeyanSecenegi } from '@/components/kurulum/sihirbaz-akisi';
@@ -30,7 +33,7 @@ import type { KurulumListesiKodu } from '@/lib/panel-adresleri';
  * GEREKÇE ALANI DOM'DAN ÇIKMAZ: görünürlük sınıfla değişiyor, yazılan
  * gerekçe kapatıp açınca kaybolmuyor (CLAUDE.md tasarım kuralı).
  */
-const hataMetni = (e: unknown) => (e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.');
+const hataMetniDil = (e: unknown, yedek: string) => (e instanceof ApiRequestError ? e.message : yedek);
 
 const PLATFORM_ADI: Record<KurulumPlatformu, string> = { meta: 'Meta', google: 'Google Ads' };
 
@@ -51,6 +54,8 @@ export function BeyanAlani({
   yazabilir: boolean;
   tazele: () => void;
 }) {
+  const d = useSozluk(markaMerkeziKurulumSozlugu);
+  const { dil } = useDil();
   const secenekler = adimBeyanlari(adim);
   const baslikId = useId();
   if (secenekler.length === 0) return null;
@@ -58,11 +63,11 @@ export function BeyanAlani({
   return (
     <section id={`beyan-${adim}`} aria-labelledby={baslikId} className="scroll-mt-24 rounded-alan border border-dashed border-line px-3 py-2.5">
       <p id={baslikId} className="text-xs font-semibold text-ink">
-        Bunu kullanmıyorum
+        {d.bunuKullanmiyorum}
       </p>
-      <p className="text-[11px] text-ink-muted">Kapsam dışı bırakılan parça sayaca girmez. Kim, ne zaman dediği son kontrolde yazar; geri alınabilir.</p>
-      {beyanlar === null && <p className="mt-1 text-xs text-danger-strong">Beyanlar okunamadı; değiştirmeden önce sayfayı yenile.</p>}
-      {!yazabilir && <p className="mt-1 text-xs text-ink-muted">{PANEL_KAPILARI['kurulum.beyan'].neden}</p>}
+      <p className="text-[11px] text-ink-muted">{d.beyanAciklama}</p>
+      {beyanlar === null && <p className="mt-1 text-xs text-danger-strong">{d.beyanlarOkunamadi}</p>}
+      {!yazabilir && <p className="mt-1 text-xs text-ink-muted">{kapiNedeni('kurulum.beyan', dil)}</p>}
       <ul className="mt-2 space-y-2">
         {secenekler.map((s) => (
           <BeyanSatiri
@@ -95,6 +100,9 @@ function BeyanSatiri({
   yazabilir: boolean;
   tazele: () => void;
 }) {
+  const d = useSozluk(markaMerkeziKurulumSozlugu);
+  const { dil } = useDil();
+  const hataMetni = (e: unknown) => hataMetniDil(e, d.sunucuyaUlasilamadi);
   const [acik, setAcik] = useState(false);
   const [gerekce, setGerekce] = useState('');
   const [bekliyor, setBekliyor] = useState(false);
@@ -120,15 +128,15 @@ function BeyanSatiri({
     return (
       <li className="flex flex-wrap items-center gap-2 text-xs">
         <span className="min-w-0 flex-1 text-ink">
-          {kapali ? `${PLATFORM_ADI[s.platform]} bu workspace’te kullanılmıyor; adımları sayılmıyor.` : `Bu workspace ${PLATFORM_ADI[s.platform]}’da reklam vermeyecek.`}
+          {kapali ? d.platformKullanilmiyor(PLATFORM_ADI[s.platform]) : d.platformVermeyecek(PLATFORM_ADI[s.platform])}
         </span>
         {yazabilir && (
           <Dugme boyut="kucuk" ton="ikincil" bekliyor={bekliyor} disabled={!yeni} onClick={() => void platform()}>
-            {kapali ? 'Geri al' : `${PLATFORM_ADI[s.platform]} kullanılmıyor`}
+            {kapali ? d.geriAl : `${PLATFORM_ADI[s.platform]}${d.kullanilmiyorEki}`}
           </Dugme>
         )}
         {/* İKİSİ BİRDEN KAPATILAMAZ (sözleşme şeması): düğme kapalı ve NEDENİ yazıyor. */}
-        {yazabilir && !yeni && <span className="basis-full text-[11px] text-ink-muted">İki platform birden kapatılamaz; ikisi de kullanılmıyorsa workspace’i arşivle.</span>}
+        {yazabilir && !yeni && <span className="basis-full text-[11px] text-ink-muted">{d.ikisiBirdenKapatilamaz}</span>}
         {hata && (
           <span role="alert" className="basis-full text-danger-strong">
             {hata}
@@ -168,7 +176,7 @@ function BeyanSatiri({
               <b>{KURULUM_BEYAN_OGESI_ADI[oge]}.</b>{' '}
               <span className="text-ink-muted">
                 {var_.beyanEden ? `${var_.beyanEden.ad}, ` : ''}
-                {tarihYaz(var_.tarih)}
+                {tarihYaz(var_.tarih, dil)}
                 {var_.gerekce ? `: “${var_.gerekce}”` : ''}
               </span>
             </>
@@ -179,11 +187,11 @@ function BeyanSatiri({
         {yazabilir &&
           (var_ ? (
             <Dugme boyut="kucuk" ton="sade" bekliyor={bekliyor} onClick={() => void yaz(false)}>
-              Geri al
+              {d.geriAl}
             </Dugme>
           ) : (
             <Dugme boyut="kucuk" ton="ikincil" aria-expanded={acik} aria-controls={alanId} onClick={() => setAcik((x) => !x)}>
-              {acik ? 'Vazgeç' : 'Böyle de'}
+              {acik ? d.vazgec : d.boyleDe}
             </Dugme>
           ))}
       </div>
@@ -192,12 +200,12 @@ function BeyanSatiri({
           value={gerekce}
           onChange={(e) => setGerekce(e.target.value)}
           maxLength={300}
-          placeholder="Gerekçe (isteğe bağlı)"
-          aria-label="Gerekçe"
+          placeholder={d.gerekceYerTutucu}
+          aria-label={d.gerekce}
           className="!h-8 !w-auto min-w-0 flex-1"
         />
         <Dugme ton="koyu" boyut="kucuk" bekliyor={bekliyor} onClick={() => void yaz(true)}>
-          Kapsam dışı bırak
+          {d.kapsamDisiBirak}
         </Dugme>
       </div>
       {hata && (
@@ -209,10 +217,14 @@ function BeyanSatiri({
   );
 }
 
-/** "13 Eki 2026" — tarih ISO; saat dilimi kaymasın diye yalnız gün kısmı okunur. */
-export function tarihYaz(iso: string): string {
+/** "13 Eki 2026" / "Oct 13, 2026": tarih ISO; saat dilimi kaymasın diye yalnız gün kısmı okunur, biçim UTC'de. */
+export function tarihYaz(iso: string, dil: Dil = 'tr'): string {
   const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
   if (!y || !m || !d) return iso.slice(0, 10);
-  const AY = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
-  return `${d} ${AY[m - 1]} ${y}`;
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString(dil === 'en' ? 'en-US' : 'tr-TR', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
 }

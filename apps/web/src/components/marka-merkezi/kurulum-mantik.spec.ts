@@ -2,11 +2,14 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { KURULUM_ADIM_DURUMLARI, kurulumIstegiSchema } from '@advetics/shared';
-import { DURUM_GOSTERIMI, gelistiriciEpostasi, izinDonusu, otomatikIstek, secimIstegi } from './kurulum-mantik';
+import { durumGosterimi, gelistiriciEpostasi, izinDonusu, otomatikIstek, secimIstegi } from './kurulum-mantik';
 
 describe('kurulum bölümü', () => {
   it('her durumun gösterimi var', () => {
-    for (const d of KURULUM_ADIM_DURUMLARI) expect(DURUM_GOSTERIMI[d].etiket.length).toBeGreaterThan(2);
+    for (const d of KURULUM_ADIM_DURUMLARI) {
+      expect(durumGosterimi(d, 'tr').etiket.length).toBeGreaterThan(2);
+      expect(durumGosterimi(d, 'en').etiket.length).toBeGreaterThan(2);
+    }
   });
 
   it('KRİTİK: seçim formundan kurulan her istek sunucunun şemasından geçer', () => {
@@ -39,6 +42,9 @@ describe('kurulum bölümü', () => {
     expect(m.startsWith('mailto:?subject=')).toBe(true);
     expect(decodeURIComponent(m)).toContain('GTM-ABC123');
     expect(decodeURIComponent(m)).toContain('<script>h</script>');
+    // Dil verilince e-posta o dilde yazılıyor (İngilizce arayüzde Türkçe mail gitmesin).
+    expect(decodeURIComponent(gelistiriciEpostasi(null, 'GTM-ABC123', 'h', 'b', 'en'))).toContain('Could you add the two codes');
+    expect(decodeURIComponent(gelistiriciEpostasi(null, 'GTM-ABC123', 'h', 'b'))).toContain('Sitemize aşağıdaki');
     // Sözleşmenin üreticisinden ve ÇAPASIZ: OAuth dönüş denetimi `#` kabul etmiyor.
     expect(izinDonusu('abc')).toBe('/marka-merkezi?musteri=abc&bolum=kurulum');
   });

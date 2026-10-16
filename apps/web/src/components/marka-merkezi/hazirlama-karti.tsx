@@ -15,6 +15,8 @@ import { ApiRequestError, apiFetch } from '@/lib/api';
 import { Dugme } from '@/components/ui/dugme';
 import { Girdi } from '@/components/ui/alan';
 import { HedeflemeSecici } from '@/components/autoboost/hedefleme-secici';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { markaMerkeziKurulumSozlugu } from '@/dil/sozlukler/marka-merkezi-kurulum';
 import { butceGirdisi } from './hazirlama-mantik';
 
 /**
@@ -29,13 +31,15 @@ import { butceGirdisi } from './hazirlama-mantik';
  * (piksel → Meta pikseli, kategori/konum/bütçe → Reklam varsayılanları) ve
  * sayaç tek (`kurulum-listesi.tsx`, docs/panel-sadelestirme/MIMARI.md § 7).
  */
-const hataMetni = (e: unknown) => (e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.');
+const hataMetniDil = (e: unknown, yedek: string) => (e instanceof ApiRequestError ? e.message : yedek);
 
 export async function cevapla(clientId: string, c: HazirlamaCevabi): Promise<HazirlamaYaniti> {
   return apiFetch<HazirlamaYaniti>(`/clients/${clientId}/hazirlama/cevap`, { method: 'POST', body: JSON.stringify(c) });
 }
 
 export function Soru({ clientId, soru, guncelle }: { clientId: string; soru: HazirlamaSorusu; guncelle: (y: HazirlamaYaniti) => void }) {
+  const d = useSozluk(markaMerkeziKurulumSozlugu);
+  const hataMetni = (e: unknown) => hataMetniDil(e, d.sunucuyaUlasilamadi);
   const [gonderiliyor, setGonderiliyor] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
   const [piksel, setPiksel] = useState<string | null>(null);
@@ -68,13 +72,13 @@ export function Soru({ clientId, soru, guncelle }: { clientId: string; soru: Haz
             ))}
           </div>
           <Dugme ton="koyu" boyut="kucuk" disabled={!piksel} bekliyor={gonderiliyor} onClick={() => piksel && void gonder({ kod: 'piksel', pikselId: piksel })}>
-            Bu pikseli kullan
+            {d.pikseliKullan}
           </Dugme>
         </>
       )}
       {soru.kod === 'kategori' && (
         <>
-          <p className="text-xs text-ink-muted">Yasal bir beyan; Meta bu reklamlarda hedeflemeyi kısıtlıyor. Bir kez cevaplanır.</p>
+          <p className="text-xs text-ink-muted">{d.kategoriAciklama}</p>
           <div className="flex flex-wrap gap-x-4 gap-y-1">
             {SPECIAL_AD_CATEGORIES.map((k) => (
               <label key={k} className="flex items-center gap-2 text-sm">
@@ -89,10 +93,10 @@ export function Soru({ clientId, soru, guncelle }: { clientId: string; soru: Haz
           </div>
           <div className="flex flex-wrap gap-2">
             <Dugme boyut="kucuk" ton="ikincil" bekliyor={gonderiliyor} disabled={kategoriler.length > 0} onClick={() => void gonder({ kod: 'kategori', kategoriler: [] })}>
-              Hiçbiri
+              {d.hicbiri}
             </Dugme>
             <Dugme ton="koyu" boyut="kucuk" bekliyor={gonderiliyor} disabled={kategoriler.length === 0} onClick={() => void gonder({ kod: 'kategori', kategoriler })}>
-              Seçilenleri kaydet
+              {d.secilenleriKaydet}
             </Dugme>
           </div>
         </>
@@ -106,7 +110,7 @@ export function Soru({ clientId, soru, guncelle }: { clientId: string; soru: Haz
             kitleId={null}
             setKitleId={() => undefined}
             kayitliKitle={false}
-            bosMetni="Hizmet verdiğin şehir ya da bölgeleri seç; tüm Türkiye için Türkiye'yi seç."
+            bosMetni={d.konumBos}
           />
           <Dugme
             ton="koyu"
@@ -122,7 +126,7 @@ export function Soru({ clientId, soru, guncelle }: { clientId: string; soru: Haz
               })
             }
           >
-            Varsayılan konum yap
+            {d.varsayilanKonumYap}
           </Dugme>
         </>
       )}
@@ -132,13 +136,16 @@ export function Soru({ clientId, soru, guncelle }: { clientId: string; soru: Haz
 }
 
 export function ButceDegistir({ clientId, guncelle }: { clientId: string; guncelle: (y: HazirlamaYaniti) => void }) {
+  const d = useSozluk(markaMerkeziKurulumSozlugu);
+  const { dil } = useDil();
+  const hataMetni = (e: unknown) => hataMetniDil(e, d.sunucuyaUlasilamadi);
   const [acik, setAcik] = useState(false);
   const [metin, setMetin] = useState('');
   const [hata, setHata] = useState<string | null>(null);
   const [gonderiliyor, setGonderiliyor] = useState(false);
 
   async function kaydet() {
-    const r = butceGirdisi(metin);
+    const r = butceGirdisi(metin, dil);
     if (r.tur === 'hata') return setHata(r.mesaj);
     setGonderiliyor(true);
     setHata(null);
@@ -155,7 +162,7 @@ export function ButceDegistir({ clientId, guncelle }: { clientId: string; guncel
   if (!acik) {
     return (
       <button type="button" className="shrink-0 text-xs font-semibold text-brand-strong hover:underline" onClick={() => setAcik(true)}>
-        Değiştir
+        {d.degistir}
       </button>
     );
   }
@@ -163,7 +170,7 @@ export function ButceDegistir({ clientId, guncelle }: { clientId: string; guncel
     <span className="flex shrink-0 flex-col items-end gap-1">
       <span className="flex items-center gap-2">
         <Girdi
-          aria-label="Günlük bütçe"
+          aria-label={d.gunlukButceEtiketi}
           inputMode="decimal"
           value={metin}
           onChange={(e) => setMetin(e.target.value)}
@@ -171,7 +178,7 @@ export function ButceDegistir({ clientId, guncelle }: { clientId: string; guncel
           className="!h-8 !w-24"
         />
         <Dugme ton="koyu" boyut="kucuk" bekliyor={gonderiliyor} onClick={() => void kaydet()}>
-          Kaydet
+          {d.kaydet}
         </Dugme>
       </span>
       {hata && <span className="text-xs text-danger-strong">{hata}</span>}

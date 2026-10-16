@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { useCallback, useEffect, useId, useState } from 'react';
 import {
   OLCUM_TURU_ADLARI,
+  sec,
+  type Dil,
   REHBER_AMACLARI,
   type OlcumDurumuYaniti,
   type OlcumHucreDurumu,
@@ -16,6 +18,8 @@ import { Dugme } from '@/components/ui/dugme';
 import { Uyari } from '@/components/ui/uyari';
 import { DurumNoktasi, type DurumHali } from '@/components/ui/rozet';
 import { eskiMarkaMerkeziYonu, markaMerkeziAdresi } from '@/lib/panel-adresleri';
+import { useDil } from '@/dil/saglayici';
+import { markaMerkeziVeriSozlugu } from '@/dil/sozlukler/marka-merkezi-veri';
 
 /**
  * ═══ MARKA MERKEZİ › KURULUM › DÖNÜŞÜM ÖLÇÜMÜ (docs/olcum/MIMARI.md) ═══
@@ -39,9 +43,11 @@ const KAYNAK_ADI: Record<OlcumOkumaHatasi['kaynak'], string> = { site: 'Site', g
 
 const HESAP_PLATFORMU: Record<OlcumDurumuYaniti['ekHesaplar'][number]['platform'], string> = { google: 'Google Ads', meta: 'Meta' };
 
-const hataMetni = (e: unknown) => (e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.');
+const hataMetni = (e: unknown, dil: Dil) => (e instanceof ApiRequestError ? e.message : sec(markaMerkeziVeriSozlugu, dil).sunucuUlasilamadi);
 
 export function OlcumBolumu({ clientId, yazabilir }: { clientId: string; yazabilir: boolean }) {
+  const { dil } = useDil();
+  const d = sec(markaMerkeziVeriSozlugu, dil).olcum;
   const [hal, setHal] = useState<Hal>({ tur: 'okunuyor' });
   const [taraniyor, setTaraniyor] = useState(false);
 
@@ -51,10 +57,10 @@ export function OlcumBolumu({ clientId, yazabilir }: { clientId: string; yazabil
         const veri = await apiFetch<OlcumDurumuYaniti>(`/olcum?clientId=${encodeURIComponent(clientId)}${yenile ? '&yenile=1' : ''}`);
         setHal({ tur: 'geldi', veri });
       } catch (e) {
-        setHal({ tur: 'hata', mesaj: hataMetni(e) });
+        setHal({ tur: 'hata', mesaj: hataMetni(e, dil) });
       }
     },
-    [clientId],
+    [clientId, dil],
   );
 
   useEffect(() => {
@@ -68,16 +74,16 @@ export function OlcumBolumu({ clientId, yazabilir }: { clientId: string; yazabil
   }
 
   if (hal.tur === 'okunuyor') {
-    return <p role="status" className="rounded-kart border border-line bg-surface p-5 text-sm text-ink-muted">Site, Google Ads ve Meta okunuyor…</p>;
+    return <p role="status" className="rounded-kart border border-line bg-surface p-5 text-sm text-ink-muted">{d.okunuyor}</p>;
   }
   if (hal.tur === 'hata') {
     return (
       <Uyari
         ton="tehlike"
-        baslik="Ölçüm durumu alınamadı."
+        baslik={d.alinamadi}
         eylem={
           <Dugme ton="ikincil" boyut="kucuk" onClick={() => void yenidenTara()}>
-            Yeniden dene
+            {d.yenidenDene}
           </Dugme>
         }
       >
@@ -89,14 +95,14 @@ export function OlcumBolumu({ clientId, yazabilir }: { clientId: string; yazabil
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-end gap-3">
-        <span className="text-xs text-ink-muted">Son tarama: {zamanGoster(v.zaman)}</span>
+        <span className="text-xs text-ink-muted">{d.sonTarama} {zamanGoster(v.zaman, dil)}</span>
         <Dugme ton="ikincil" boyut="kucuk" bekliyor={taraniyor} onClick={() => void yenidenTara()}>
-          Siteyi yeniden tara
+          {d.yenidenTara}
         </Dugme>
       </div>
 
       {v.okumaHatalari.length > 0 && (
-        <Uyari ton="uyari" baslik="Bazı kaynaklar okunamadı; tablodaki ilgili hücre bunu söylüyor.">
+        <Uyari ton="uyari" baslik={d.okumaHatasi}>
           <ul className="mt-1 space-y-0.5">
             {v.okumaHatalari.map((h) => (
               <li key={h.kaynak}>
@@ -108,15 +114,15 @@ export function OlcumBolumu({ clientId, yazabilir }: { clientId: string; yazabil
       )}
 
       {v.ekHesaplar.length > 0 && (
-        <Uyari ton="bilgi" baslik={`Bu workspace'te ${v.ekHesaplar.length} hesap daha var; yalnız ilki okundu.`}>
+        <Uyari ton="bilgi" baslik={d.ekHesap(v.ekHesaplar.length)}>
           {v.ekHesaplar.map((h) => `${HESAP_PLATFORMU[h.platform]} · ${h.ad}`).join(', ')}
         </Uyari>
       )}
 
-      <Ozet v={v} />
-      <Oneri clientId={clientId} oneri={v.oneri} yazabilir={yazabilir} guncelle={(y) => setHal({ tur: 'geldi', veri: y })} />
-      <Tablo v={v} />
-      <GoogleIslemleri v={v} />
+      <Ozet v={v} dil={dil} />
+      <Oneri clientId={clientId} oneri={v.oneri} yazabilir={yazabilir} dil={dil} guncelle={(y) => setHal({ tur: 'geldi', veri: y })} />
+      <Tablo v={v} dil={dil} />
+      <GoogleIslemleri v={v} dil={dil} />
     </div>
   );
 }
@@ -134,26 +140,28 @@ export function alanAdi(adres: string | null): string {
   }
 }
 
-function zamanGoster(iso: string): string {
+function zamanGoster(iso: string, dil: Dil): string {
+  const t = sec(markaMerkeziVeriSozlugu, dil).olcum;
   const d = new Date(iso);
   const dk = Math.round((Date.now() - d.getTime()) / 60_000);
-  if (dk < 1) return 'az önce';
-  if (dk < 60) return `${dk} dakika önce`;
-  return d.toLocaleString('tr-TR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+  if (dk < 1) return t.azOnce;
+  if (dk < 60) return t.dakikaOnce(dk);
+  return d.toLocaleString(dil === 'en' ? 'en-US' : 'tr-TR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
 }
 
 // ── Özet şeridi: dört kutu ───────────────────────────────────────────────────
 
-function Ozet({ v }: { v: OlcumDurumuYaniti }) {
+function Ozet({ v, dil }: { v: OlcumDurumuYaniti; dil: Dil }) {
+  const d = sec(markaMerkeziVeriSozlugu, dil).olcum;
   const s = v.site;
   const siteAlt =
     s.durum === 'adres_yok'
-      ? "Site adresi girilmemiş"
+      ? d.siteAdresYok
       : s.durum === 'ulasilamadi'
-        ? `Okunamadı: ${s.hata ?? ''}`
+        ? d.siteOkunamadi(s.hata ?? '')
         : s.tagManager.length
-          ? `Tag Manager: ${s.tagManager.join(', ')}${s.tagManagerOkunamayan.length ? ` (${s.tagManagerOkunamayan.length} okunamadı)` : ''}`
-          : 'Tag Manager bulunamadı';
+          ? `Tag Manager: ${s.tagManager.join(', ')}${s.tagManagerOkunamayan.length ? d.tagManagerOkunamayan(s.tagManagerOkunamayan.length) : ''}`
+          : d.tagManagerYok;
   const gIslem = v.googleIslemleri;
   const kaydeden = gIslem ? gIslem.satirlar.filter((i) => i.durum === 'ENABLED' && i.birincil && i.sayim30Gun > 0).length : null;
   const meta = v.metaPikselleri;
@@ -161,25 +169,25 @@ function Ozet({ v }: { v: OlcumDurumuYaniti }) {
   const hazir = v.satirlar.flatMap((r) => [r.meta, r.google]).filter((h) => h.durum === 'kaydediliyor' || h.durum === 'platform_sayiyor').length;
   const olcululebilir = v.satirlar.flatMap((r) => [r.meta, r.google]).filter((h) => h.durum !== 'platformda_yok').length;
   return (
-    <section className="grid overflow-hidden rounded-kart border border-line bg-surface sm:grid-cols-2 xl:grid-cols-4" aria-label="Ölçüm özeti">
+    <section className="grid overflow-hidden rounded-kart border border-line bg-surface sm:grid-cols-2 xl:grid-cols-4" aria-label={d.ozetEtiketi}>
       <Kutu baslik="Site" deger={alanAdi(s.adres)} alt={siteAlt} kucukDeger />
       <Kutu
-        baslik="Google Ads dönüşümü"
-        deger={v.googleHesabi === null ? 'Hesap yok' : kaydeden === null ? 'Okunamadı' : `${kaydeden} kaydediliyor`}
+        baslik={d.googleDonusumu}
+        deger={v.googleHesabi === null ? d.hesapYok : kaydeden === null ? d.okunamadiKisa : d.kaydediliyor(kaydeden)}
         alt={
           v.googleHesabi === null
-            ? "Bu workspace'e Google Ads hesabı atanmamış"
+            ? d.googleHesapAtanmamis
             : gIslem
-              ? `${gIslem.satirlar.filter((i) => i.durum !== 'REMOVED').length} işlem tanımlı${v.analyticsBagli ? ' · Analytics bağlı' : ''}`
-              : 'Dönüşüm listesi okunamadı'
+              ? `${d.islemTanimli(gIslem.satirlar.filter((i) => i.durum !== 'REMOVED').length)}${v.analyticsBagli ? d.analyticsBagli : ''}`
+              : d.donusumListesiOkunamadi
         }
       />
       <Kutu
-        baslik="Meta pikseli"
-        deger={v.metaHesabi === null ? 'Hesap yok' : meta === null ? 'Okunamadı' : `${etkinPiksel} / ${meta.toplam} çalışıyor`}
-        alt={v.metaHesabi === null ? "Bu workspace'e Meta reklam hesabı atanmamış" : s.metaPiksel.length ? `Sitede görülen: ${s.metaPiksel.join(', ')}` : 'Sitede piksel kodu görülmedi'}
+        baslik={d.metaPikseli}
+        deger={v.metaHesabi === null ? d.hesapYok : meta === null ? d.okunamadiKisa : d.calisiyor(etkinPiksel ?? 0, meta.toplam)}
+        alt={v.metaHesabi === null ? d.metaHesapAtanmamis : s.metaPiksel.length ? d.sitedeGorulen(s.metaPiksel.join(', ')) : d.pikselGorulmedi}
       />
-      <Kutu baslik="Ölçülen sonuçlar" deger={`${hazir} / ${olcululebilir}`} alt="Platform başına; platformda olmayan sayılmadı" />
+      <Kutu baslik={d.olculenSonuclar} deger={`${hazir} / ${olcululebilir}`} alt={d.platformBasina} />
     </section>
   );
 }
@@ -223,25 +231,24 @@ export function DurumIsareti({ h }: { h: OlcumHucresi }) {
 
 // ── Tablo ────────────────────────────────────────────────────────────────────
 
-function Tablo({ v }: { v: OlcumDurumuYaniti }) {
+function Tablo({ v, dil }: { v: OlcumDurumuYaniti; dil: Dil }) {
+  const d = sec(markaMerkeziVeriSozlugu, dil).olcum;
   return (
     <section className="overflow-hidden rounded-kart border border-line bg-surface" aria-labelledby="olcum-tablo">
       <div className="flex flex-wrap items-baseline gap-2 border-b border-line px-4 py-3">
         <h3 id="olcum-tablo" className="text-sm font-semibold text-ink">
-          Neyi ölçüyoruz
+          {d.neyiOlcuyoruz}
         </h3>
-        <span className="text-xs text-ink-muted">
-          {v.satirlar.length} ölçüm · {v.satirlar.length}'i gösteriliyor
-        </span>
+        <span className="text-xs text-ink-muted">{d.olcumSayisi(v.satirlar.length)}</span>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[720px] text-sm">
           <thead>
             <tr className="bg-surface-muted text-left text-xs text-ink-muted">
-              <th className="px-4 py-2 font-semibold">Ölçüm</th>
+              <th className="px-4 py-2 font-semibold">{d.kolonOlcum}</th>
               <th className="px-4 py-2 font-semibold">Meta{v.metaHesabi ? ` · ${v.metaHesabi.ad}` : ''}</th>
               <th className="px-4 py-2 font-semibold">Google Ads{v.googleHesabi ? ` · ${v.googleHesabi.ad}` : ''}</th>
-              <th className="px-4 py-2 font-semibold">Kullanan reklam amaçları</th>
+              <th className="px-4 py-2 font-semibold">{d.kolonAmaclar}</th>
             </tr>
           </thead>
           <tbody>
@@ -274,7 +281,7 @@ function Tablo({ v }: { v: OlcumDurumuYaniti }) {
         </table>
       </div>
       <p className="border-t border-line bg-surface-muted px-4 py-2 text-xs text-ink-muted">
-        Google sayımı son 30 gün, Meta olayları son 7 gün. &quot;Platform sayıyor&quot;: sonuç platformun kendi uygulamasında oluşuyor, sitede kod gerekmez.
+        {d.altNot}
       </p>
     </section>
   );
@@ -282,23 +289,24 @@ function Tablo({ v }: { v: OlcumDurumuYaniti }) {
 
 // ── Google işlem listesi (sessiz kesme yok: tamamı) ─────────────────────────
 
-function GoogleIslemleri({ v }: { v: OlcumDurumuYaniti }) {
+function GoogleIslemleri({ v, dil }: { v: OlcumDurumuYaniti; dil: Dil }) {
+  const d = sec(markaMerkeziVeriSozlugu, dil).olcum;
   const g = v.googleIslemleri;
   if (!g || g.toplam === 0) return null;
   return (
     <details className="group rounded-kart border border-line bg-surface">
       <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-ink">
-        Google Ads dönüşüm işlemleri <span className="font-normal text-ink-muted">· {g.toplam} işlemin {g.satirlar.length}'i</span>
-        {v.googleHesabi?.donusumKimligi && <span className="ml-2 text-xs font-normal text-ink-muted">Dönüşüm kimliği {v.googleHesabi.donusumKimligi}</span>}
+        {d.googleIslemleri} <span className="font-normal text-ink-muted">· {d.googleGosterilen(g.toplam, g.satirlar.length)}</span>
+        {v.googleHesabi?.donusumKimligi && <span className="ml-2 text-xs font-normal text-ink-muted">{d.donusumKimligi} {v.googleHesabi.donusumKimligi}</span>}
       </summary>
       <div className="overflow-x-auto border-t border-line">
         <table className="w-full min-w-[640px] text-sm">
           <thead>
             <tr className="bg-surface-muted text-left text-xs text-ink-muted">
-              <th className="px-4 py-2 font-semibold">İşlem</th>
-              <th className="px-4 py-2 font-semibold">Durum</th>
-              <th className="px-4 py-2 font-semibold">Hedef</th>
-              <th className="px-4 py-2 text-right font-semibold">30 gün sayım</th>
+              <th className="px-4 py-2 font-semibold">{d.kolonIslem}</th>
+              <th className="px-4 py-2 font-semibold">{d.kolonDurum}</th>
+              <th className="px-4 py-2 font-semibold">{d.kolonHedef}</th>
+              <th className="px-4 py-2 text-right font-semibold">{d.kolonSayim}</th>
             </tr>
           </thead>
           <tbody>
@@ -308,9 +316,9 @@ function GoogleIslemleri({ v }: { v: OlcumDurumuYaniti }) {
                   <p className="text-ink">{i.ad}</p>
                   <p className="text-xs text-ink-muted">{i.kategori}</p>
                 </td>
-                <td className="px-4 py-2 text-xs">{i.durum === 'ENABLED' ? 'Etkin' : i.durum === 'HIDDEN' ? 'Gizli (içe aktarılmamış)' : i.durum === 'REMOVED' ? 'Kaldırılmış' : i.durum}</td>
-                <td className="px-4 py-2 text-xs">{i.birincil ? 'Birincil' : 'İkincil'}</td>
-                <td className="px-4 py-2 text-right tabular-nums">{Math.round(i.sayim30Gun).toLocaleString('tr-TR')}</td>
+                <td className="px-4 py-2 text-xs">{i.durum === 'ENABLED' ? d.islemEtkin : i.durum === 'HIDDEN' ? d.islemGizli : i.durum === 'REMOVED' ? d.islemKaldirilmis : i.durum}</td>
+                <td className="px-4 py-2 text-xs">{i.birincil ? d.birincil : d.ikincil}</td>
+                <td className="px-4 py-2 text-right tabular-nums">{Math.round(i.sayim30Gun).toLocaleString(dil === 'en' ? 'en-US' : 'tr-TR')}</td>
               </tr>
             ))}
           </tbody>
@@ -322,10 +330,11 @@ function GoogleIslemleri({ v }: { v: OlcumDurumuYaniti }) {
 
 // ── Tek en uygun öneri ──────────────────────────────────────────────────────
 
+// `site` adı sözlükten (`yerAdi`); diğerleri iki dilde aynı marka adı.
 const YER: Record<OlcumOnerisi['adimlar'][number]['yer'], { ad: string; site: boolean }> = {
   google_ads: { ad: 'Google Ads', site: false },
   tag_manager: { ad: 'Tag Manager', site: true },
-  site: { ad: 'Sitende değişiklik', site: true },
+  site: { ad: '', site: true },
   meta: { ad: 'Meta', site: false },
   advetics: { ad: 'Advetics', site: false },
 };
@@ -334,13 +343,16 @@ function Oneri({
   clientId,
   oneri,
   yazabilir,
+  dil,
   guncelle,
 }: {
   clientId: string;
   oneri: OlcumOnerisi;
   yazabilir: boolean;
+  dil: Dil;
   guncelle: (v: OlcumDurumuYaniti) => void;
 }) {
+  const d = sec(markaMerkeziVeriSozlugu, dil).olcum;
   const [onay, setOnay] = useState(false);
   const [gonderiliyor, setGonderiliyor] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
@@ -359,7 +371,7 @@ function Oneri({
       setOnay(false);
       guncelle(y);
     } catch (e) {
-      setHata(hataMetni(e));
+      setHata(hataMetni(e, dil));
     } finally {
       setGonderiliyor(false);
     }
@@ -368,7 +380,7 @@ function Oneri({
   const e = oneri.eylem;
   return (
     <section className={`rounded-kart border bg-surface p-4 ${tamam ? 'border-line' : 'border-brand/40'}`} aria-labelledby="olcum-oneri">
-      <p className={`text-xs font-semibold ${tamam ? 'text-ink-muted' : 'text-brand-strong'}`}>{tamam ? 'Durum' : 'Sizin için en uygun öneri'}</p>
+      <p className={`text-xs font-semibold ${tamam ? 'text-ink-muted' : 'text-brand-strong'}`}>{tamam ? d.oneriDurum : d.oneriEnUygun}</p>
       <h3 id="olcum-oneri" className="mt-1 font-baslik text-base font-semibold text-ink">
         {oneri.baslik}
       </h3>
@@ -382,7 +394,7 @@ function Oneri({
                 <span className="text-ink">{a.metin}</span>
                 {a.ayrinti && <span className="block text-xs text-ink-muted">{a.ayrinti}</span>}
               </span>
-              <span className={`rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${YER[a.yer].site ? 'bg-vurgu text-brand-strong' : 'bg-surface-sunken text-ink'}`}>{YER[a.yer].ad}</span>
+              <span className={`rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${YER[a.yer].site ? 'bg-vurgu text-brand-strong' : 'bg-surface-sunken text-ink'}`}>{a.yer === 'site' ? d.yerSite : YER[a.yer].ad}</span>
             </li>
           ))}
         </ol>
@@ -396,27 +408,27 @@ function Oneri({
       {e?.tur === 'birincil_yap' && (
         <div className="mt-3">
           {!yazabilir ? (
-            <p className="text-xs text-ink-muted">Bu değişikliği yapma yetkin yok; workspace yöneticisine ilet.</p>
+            <p className="text-xs text-ink-muted">{d.yetkiYok}</p>
           ) : (
             /* Onay SATIR İÇİNDE ve öğe DOM'dan çıkmıyor: görünürlük geçişle. */
             <div className="space-y-2">
               <div className={onay ? 'hidden' : ''}>
-                <Dugme onClick={() => setOnay(true)}>Birincil yap</Dugme>
+                <Dugme onClick={() => setOnay(true)}>{d.birincilYap}</Dugme>
               </div>
               <div
                 className={`rounded-alan border border-line p-3 transition-opacity duration-200 motion-reduce:transition-none ${onay ? 'opacity-100' : 'pointer-events-none hidden opacity-0'}`}
                 role="group"
-                aria-label="Onay"
+                aria-label={d.onayEtiketi}
               >
                 <p className="text-sm text-ink">
-                  Google Ads&apos;te &quot;{e.donusumAdi}&quot; birincil olacak. Bu hedefi kullanan kampanyaların teklifi bu sayıma göre çalışır. Sitende değişiklik yok; Google Ads&apos;ten geri alınabilir.
+                  {d.onayMetni(e.donusumAdi)}
                 </p>
                 <div className="mt-2 flex gap-2">
                   <Dugme id={onayId} bekliyor={gonderiliyor} onClick={() => void birincilYap(e.donusumId)}>
-                    Onayla
+                    {d.onayla}
                   </Dugme>
                   <Dugme ton="ikincil" disabled={gonderiliyor} onClick={() => setOnay(false)}>
-                    Vazgeç
+                    {sec(markaMerkeziVeriSozlugu, dil).vazgec}
                   </Dugme>
                 </div>
               </div>
@@ -440,7 +452,7 @@ function Oneri({
             href={eskiMarkaMerkeziYonu(e.bolum, { musteri: clientId }) ?? markaMerkeziAdresi('kurulum', clientId)}
             className="text-sm font-semibold text-ink underline-offset-2 hover:text-brand-strong hover:underline"
           >
-            {e.bolum === 'baglantilar' ? 'Kurulum’daki hesaplara git' : 'Workspace bilgileri’ne git'} →
+            {e.bolum === 'baglantilar' ? d.kurulumHesaplar : d.workspaceBilgileri} →
           </Link>
         </div>
       )}

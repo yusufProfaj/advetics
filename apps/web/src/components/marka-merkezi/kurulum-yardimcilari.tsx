@@ -11,6 +11,8 @@ import {
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { formatDayLong } from '@/lib/format';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { markaMerkeziKurulumSozlugu } from '@/dil/sozlukler/marka-merkezi-kurulum';
 import { kaynakDurumMetni } from '@/lib/veri-kaynagi';
 import { varliklarAdresi } from '@/lib/panel-adresleri';
 import { Dugme } from '@/components/ui/dugme';
@@ -24,7 +26,7 @@ import { Rozet, type DurumHali } from '@/components/ui/rozet';
  * varsayılanları). İkisi de DÖRT HÂLİ ayrı yazıyor: okunuyor, çağrı düştü
  * (sunucunun cümlesi), boş + neden, dolu.
  */
-const hataMetni = (e: unknown) => (e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.');
+const hataMetniDil = (e: unknown, yedek: string) => (e instanceof ApiRequestError ? e.message : yedek);
 
 type Hal<T> = { tur: 'okunuyor' } | { tur: 'hata'; mesaj: string } | { tur: 'geldi'; veri: T };
 
@@ -37,29 +39,31 @@ type Hal<T> = { tur: 'okunuyor' } | { tur: 'hata'; mesaj: string } | { tur: 'gel
  * yazılıyor; hangisinin doğru olduğu sessizce seçilmiyor.
  */
 export function Ga4KaynakDurumu({ clientId }: { clientId: string }) {
+  const d = useSozluk(markaMerkeziKurulumSozlugu);
+  const { dil } = useDil();
   const [hal, setHal] = useState<Hal<VeriKaynaklariYaniti>>({ tur: 'okunuyor' });
 
   const oku = useCallback(async () => {
     try {
       setHal({ tur: 'geldi', veri: await apiFetch<VeriKaynaklariYaniti>(`/veri-kaynaklari?clientId=${encodeURIComponent(clientId)}`) });
     } catch (e) {
-      setHal({ tur: 'hata', mesaj: hataMetni(e) });
+      setHal({ tur: 'hata', mesaj: hataMetniDil(e, d.sunucuyaUlasilamadi) });
     }
-  }, [clientId]);
+  }, [clientId, d]);
 
   useEffect(() => {
     void oku();
   }, [oku]);
 
-  if (hal.tur === 'okunuyor') return <p className="text-xs text-ink-muted">Analytics veri kaynağı okunuyor…</p>;
+  if (hal.tur === 'okunuyor') return <p className="text-xs text-ink-muted">{d.ga4Okunuyor}</p>;
   if (hal.tur === 'hata') {
     return (
       <Serit
         ton="hata"
-        baslik="Analytics veri kaynağı okunamadı"
+        baslik={d.ga4Okunamadi}
         eylemler={
           <Dugme ton="ikincil" boyut="kucuk" onClick={() => void oku()}>
-            Yeniden dene
+            {d.yenidenDene}
           </Dugme>
         }
       >
@@ -72,24 +76,21 @@ export function Ga4KaynakDurumu({ clientId }: { clientId: string }) {
     const engel = hal.veri.baglanabilir.find((b) => b.tur === 'ga4')?.engel;
     return (
       <p className="text-xs text-ink-muted">
-        Analytics verisi henüz okunmuyor. Yukarıda Analytics mülkü seçilince bağlanır.
+        {d.ga4Henuz}
         {engel ? ` ${engel}` : ''}
       </p>
     );
   }
-  const d = kaynakDurumMetni(k);
+  const kd = kaynakDurumMetni(k, dil);
   return (
     <div className="space-y-1 rounded-alan border border-line px-3 py-2 text-xs text-ink-muted">
       <p>
-        <span className="font-semibold text-ink">Analytics verisi:</span> {d.metin} · mülk {k.disKimlik} · son çekim{' '}
-        <b className="text-ink">{k.sonBasariliCekim ? formatDayLong(k.sonBasariliCekim.slice(0, 10)) : 'henüz yok'}</b>
+        <span className="font-semibold text-ink">{d.ga4Verisi}</span> {kd.metin} · {d.ga4Mulk} {k.disKimlik} · {d.ga4SonCekim}{' '}
+        <b className="text-ink">{k.sonBasariliCekim ? formatDayLong(k.sonBasariliCekim.slice(0, 10), dil) : d.ga4Yok}</b>
       </p>
-      {k.sonHata && <p className="text-ink">Google’ın cevabı: {k.sonHata}</p>}
+      {k.sonHata && <p className="text-ink">{d.ga4GoogleCevabi} {k.sonHata}</p>}
       {k.kurulumUyusmazligi && (
-        <p className="text-danger-strong">
-          Kurulumdaki mülk ({k.kurulumUyusmazligi.kurulumMulkId}) ile okunan mülk ({k.disKimlik}) farklı. Raporlar okunan mülkü kullanır;
-          doğrusu kurulumdakiyse aşağıdaki veri kaynaklarından bu mülkü kaldır, kurulumdaki mülk yeniden seçilince bağlanır.
-        </p>
+        <p className="text-danger-strong">{d.ga4Uyusmazlik(k.kurulumUyusmazligi.kurulumMulkId, k.disKimlik)}</p>
       )}
     </div>
   );
@@ -104,6 +105,7 @@ export function Ga4KaynakDurumu({ clientId }: { clientId: string }) {
  * aynı adlı bir "Varsayılan" şablon biriktirirdi (MIMARI § 13).
  */
 export function VarsayilanKitleSecici({ clientId, yazabilir }: { clientId: string; yazabilir: boolean }) {
+  const d = useSozluk(markaMerkeziKurulumSozlugu);
   const [hal, setHal] = useState<Hal<KitleSablonuListesi>>({ tur: 'okunuyor' });
   const [secili, setSecili] = useState('');
   const [gonderiliyor, setGonderiliyor] = useState(false);
@@ -116,9 +118,9 @@ export function VarsayilanKitleSecici({ clientId, yazabilir }: { clientId: strin
       setHal({ tur: 'geldi', veri });
       setSecili(veri.varsayilanId ?? '');
     } catch (e) {
-      setHal({ tur: 'hata', mesaj: hataMetni(e) });
+      setHal({ tur: 'hata', mesaj: hataMetniDil(e, d.sunucuyaUlasilamadi) });
     }
-  }, [clientId]);
+  }, [clientId, d]);
 
   useEffect(() => {
     void oku();
@@ -134,17 +136,17 @@ export function VarsayilanKitleSecici({ clientId, yazabilir }: { clientId: strin
       });
       await oku();
     } catch (e) {
-      setHata(hataMetni(e));
+      setHata(hataMetniDil(e, d.sunucuyaUlasilamadi));
     } finally {
       setGonderiliyor(false);
     }
   }
 
   const kitlelerAdresi = varliklarAdresi('kitleler', clientId);
-  if (hal.tur === 'okunuyor') return <p className="text-xs text-ink-muted">Kayıtlı kitleler okunuyor…</p>;
+  if (hal.tur === 'okunuyor') return <p className="text-xs text-ink-muted">{d.kitleOkunuyor}</p>;
   if (hal.tur === 'hata') {
     return (
-      <Serit ton="hata" baslik="Kitleler okunamadı">
+      <Serit ton="hata" baslik={d.kitleOkunamadi}>
         {hal.mesaj}
       </Serit>
     );
@@ -156,24 +158,24 @@ export function VarsayilanKitleSecici({ clientId, yazabilir }: { clientId: strin
       <p className="text-xs text-ink-muted">
         {mevcut ? (
           <>
-            Şu an: <b className="text-ink">{mevcut.name}</b> · {kitleOzeti(mevcut)}
+            {d.kitleSuAn} <b className="text-ink">{mevcut.name}</b> · {kitleOzeti(mevcut)}
           </>
         ) : (
-          'Varsayılan kitle yok: reklam Türkiye geneli, 18 yaş ve üzeri gösterir.'
+          d.kitleYok
         )}
       </p>
       {v.items.length === 0 ? (
         <p className="text-xs text-ink-muted">
-          Kayıtlı kitle yok.{' '}
+          {d.kayitliKitleYok}{' '}
           <Link href={kitlelerAdresi} className="font-semibold text-ink underline-offset-2 hover:underline">
-            Varlıklar › Kitleler’de kitle oluştur
+            {d.kitleOlustur}
           </Link>
-          , sonra burada varsayılan yap.
+          {d.sonraVarsayilanYap}
         </p>
       ) : yazabilir ? (
         <div className="flex flex-wrap items-end gap-2">
           <label htmlFor={etiket} className="sr-only">
-            Varsayılan kitle
+            {d.varsayilanKitle}
           </label>
           <Secim
             id={etiket}
@@ -181,7 +183,7 @@ export function VarsayilanKitleSecici({ clientId, yazabilir }: { clientId: strin
             value={secili}
             onChange={(e) => setSecili(e.target.value)}
           >
-            <option value="">Varsayılan yok</option>
+            <option value="">{d.varsayilanYok}</option>
             {v.items.map((k) => (
               <option key={k.id} value={k.id}>
                 {k.name}
@@ -189,10 +191,10 @@ export function VarsayilanKitleSecici({ clientId, yazabilir }: { clientId: strin
             ))}
           </Secim>
           <Dugme ton="koyu" boyut="kucuk" bekliyor={gonderiliyor} disabled={secili === (v.varsayilanId ?? '')} onClick={() => void kaydet()}>
-            Kaydet
+            {d.kaydet}
           </Dugme>
           <Link href={kitlelerAdresi} className="text-xs font-semibold text-ink underline-offset-2 hover:underline">
-            Yeni kitle
+            {d.yeniKitle}
           </Link>
         </div>
       ) : null}

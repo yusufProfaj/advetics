@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { KURULUM_LISTESI_DURUMLARI, type KurulumListesiAdimi } from '@/lib/panel-adresleri';
-import { HESAP_ADIMLARI, LISTE_DURUMU, adimOzeti, beyanDegistir, dugmeNedeni, rozetMetni, sayacMetni } from './kurulum-listesi-mantik';
+import { HESAP_ADIMLARI, adimOzeti, beyanDegistir, dugmeNedeni, listeDurumu, rozetMetni, sayacMetni } from './kurulum-listesi-mantik';
 
 /**
  * ═══ KURULUM LİSTESİ — EKRANIN KARARLARI, ÇALIŞTIRILARAK ═══
@@ -13,12 +13,15 @@ const adim = (p: Partial<KurulumListesiAdimi>): KurulumListesiAdimi => ({ kod: '
 
 describe('rozet', () => {
   it('her durumun etiketi var (sözlük, dallanma değil)', () => {
-    for (const d of KURULUM_LISTESI_DURUMLARI) expect(LISTE_DURUMU[d].etiket.length, d).toBeGreaterThan(2);
+    for (const d of KURULUM_LISTESI_DURUMLARI) {
+      expect(listeDurumu(d, 'tr').etiket.length, d).toBeGreaterThan(2);
+      expect(listeDurumu(d, 'en').etiket.length, d).toBeGreaterThan(2);
+    }
   });
 
   it('YEŞİL YALNIZ "tamam" (kılavuz: yeşil yalnız durum göstergesi)', () => {
     for (const d of KURULUM_LISTESI_DURUMLARI) {
-      expect(LISTE_DURUMU[d].sinif.includes('ok-'), d).toBe(d === 'tamam');
+      expect(listeDurumu(d).sinif.includes('ok-'), d).toBe(d === 'tamam');
     }
   });
 });
@@ -45,8 +48,9 @@ describe('satırın kısa sonucu', () => {
     expect(adimOzeti(a)).toBe('act_1 · Proje');
   });
 
-  it('kullanılmayan adım sayaca girmediğini söylüyor', () => {
+  it('kullanılmayan adım sayaca girmediğini söylüyor (iki dilde)', () => {
     expect(adimOzeti(adim({ durum: 'kullanilmiyor' }))).toContain('sayaca girmiyor');
+    expect(adimOzeti(adim({ durum: 'kullanilmiyor' }), 'en')).toContain('not counted');
   });
 });
 
@@ -57,6 +61,7 @@ describe('sayaç', () => {
     expect(sayacMetni({ tamam: 0, toplam: 0, kapsamDisi: 0, bilinmiyor: 0, bitti: false })).toBe('Sayılacak adım yok');
     // Kapsam dışı adım da AYRI yazılır: "9 / 9" tek başına bir adımın beyanla kapandığını saklar.
     expect(sayacMetni({ tamam: 9, toplam: 9, kapsamDisi: 1, bilinmiyor: 0, bitti: true })).toBe('9 / 9 adım tamam · 1 kapsam dışı');
+    expect(sayacMetni({ tamam: 5, toplam: 7, kapsamDisi: 0, bilinmiyor: 1, bitti: false }, 'en')).toBe('5 / 7 steps complete · 1 could not be read');
   });
 
   it('iç menü rozeti: bitince "tamam" tonu, okunamayanla kalan "eksik" değil nötr', () => {
@@ -73,6 +78,7 @@ describe('"Eksikleri tamamla" düğmesi', () => {
     expect(dugmeNedeni(kapsam, true)).toBe('Sistemin kendi yapabileceği eksik yok.');
     expect(dugmeNedeni({ ...kapsam, kullaniciyaKalan: [{ adim: 'meta', neden: 'x' }] }, true)).toContain('kalan adımlar aşağıda');
     expect(dugmeNedeni(kapsam, false)).toBe('Kurulumu değiştirme yetkin yok.');
+    expect(dugmeNedeni(kapsam, false, 'en')).toBe('You do not have permission to change the setup.');
     expect(dugmeNedeni({ ...kapsam, kurulumAdimlari: ['gtm_konteyner'], yapacakVar: true }, true)).toBeNull();
   });
 });

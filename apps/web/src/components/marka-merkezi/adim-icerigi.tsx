@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
+import { kapiNedeni } from '@advetics/shared';
 import type {
   HazirlamaSorusu,
   HazirlamaYaniti,
@@ -13,7 +14,6 @@ import type {
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import {
-  PANEL_KAPILARI,
   ayarlarAdresi,
   markaMerkeziAdresi,
   veriDurumuAdresi,
@@ -32,7 +32,9 @@ import { OlcumBolumu } from './olcum-bolumu';
 import { DurumRozeti, Ga4KaynakDurumu, VarsayilanKitleSecici } from './kurulum-yardimcilari';
 import { Dugme } from '@/components/ui/dugme';
 import { Serit } from '@/components/ui/hal';
-import { LISTE_DURUMU, PARCA_ADI } from './kurulum-listesi-mantik';
+import { listeDurumu, parcaAdi } from './kurulum-listesi-mantik';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { markaMerkeziKurulumSozlugu } from '@/dil/sozlukler/marka-merkezi-kurulum';
 import { FirmaBilgileri } from './firma-bilgileri';
 import { BildirimlerBolumu } from './bildirimler-bolumu';
 import { YouTubeKanalBul } from '@/components/connections/youtube-kanal-bul';
@@ -101,9 +103,11 @@ export interface AdimIcerigiOzellikleri {
   izinDonusu?: string;
 }
 
-const hataMetni = (e: unknown) => (e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.');
+const hataMetniDil = (e: unknown, yedek: string) => (e instanceof ApiRequestError ? e.message : yedek);
 
 export function AdimIcerigi(o: AdimIcerigiOzellikleri) {
+  const d = useSozluk(markaMerkeziKurulumSozlugu);
+  const { dil } = useDil();
   const { a, clientId, kurulum, sorular, yetki } = o;
   const soru = (kod: HazirlamaSorusu['kod']) => sorular.find((q) => q.kod === kod) ?? null;
   const beyan = (
@@ -126,7 +130,7 @@ export function AdimIcerigi(o: AdimIcerigiOzellikleri) {
     return (
       <div className="space-y-3">
         <p className="text-sm text-ink-muted">
-          {a.durum === 'kullanilmiyor' ? 'Bu platformu bu workspace’te kullanmadığını söyledin; adım sayılmıyor.' : 'Bu adım bir beyanla kapsam dışı; sayılmıyor.'}
+          {a.durum === 'kullanilmiyor' ? d.kullanilmiyorAdim : d.kapsamDisiAdim}
         </p>
         {beyan}
       </div>
@@ -157,9 +161,9 @@ export function AdimIcerigi(o: AdimIcerigiOzellikleri) {
 
       {a.kod === 'bilgiler' && (
         <div className="space-y-2">
-          <p className="text-xs font-semibold text-ink">İletişim ve firma</p>
+          <p className="text-xs font-semibold text-ink">{d.iletisimFirma}</p>
           {o.detay === null ? (
-            <p className="text-xs text-danger-strong">Workspace bilgileri okunamadı; sayfayı yenile.</p>
+            <p className="text-xs text-danger-strong">{d.workspaceBilgisiOkunamadi}</p>
           ) : (
             <FirmaBilgileri
               clientId={clientId}
@@ -179,7 +183,7 @@ export function AdimIcerigi(o: AdimIcerigiOzellikleri) {
         <div className="space-y-3">
           <Ga4KaynakDurumu clientId={clientId} />
           <div>
-            <p className="mb-2 text-xs font-semibold text-ink">Neyi ölçüyoruz</p>
+            <p className="mb-2 text-xs font-semibold text-ink">{d.neyiOlcuyoruz}</p>
             <OlcumBolumu clientId={clientId} yazabilir={yetki.yazabilir} />
           </div>
         </div>
@@ -191,10 +195,10 @@ export function AdimIcerigi(o: AdimIcerigiOzellikleri) {
           {o.kip === 'sihirbaz' && <AiDoldur clientId={clientId} canWrite={yetki.markaYaz} />}
           <p className="flex flex-wrap gap-3 text-xs">
             <Link href={markaMerkeziAdresi('marka', clientId, 'marka-bilgileri')} className="font-semibold text-ink underline-offset-2 hover:underline">
-              Marka bilgilerini doldur
+              {d.markaBilgileriniDoldur}
             </Link>
             <Link href={markaMerkeziAdresi('marka', clientId, 'logo')} className="font-semibold text-ink underline-offset-2 hover:underline">
-              Logo yükle
+              {d.logoYukle}
             </Link>
           </p>
         </div>
@@ -203,7 +207,7 @@ export function AdimIcerigi(o: AdimIcerigiOzellikleri) {
       {a.kod === 'varsayilanlar' && (
         <div className="space-y-4">
           <div className="space-y-2">
-            <p className="text-xs font-semibold text-ink">Özel reklam kategorisi</p>
+            <p className="text-xs font-semibold text-ink">{d.ozelKategori}</p>
             {/*
               İLK BEYAN hazırlama sorusuyla (beyan + "cevaplandı" bayrağı +
               denetim kaydı birlikte). Beyan verildikten sonra DEĞİŞTİRMEK
@@ -213,13 +217,13 @@ export function AdimIcerigi(o: AdimIcerigiOzellikleri) {
             {soru('kategori') ? (
               <SoruAlani yazabilir={yetki.yazabilir} clientId={clientId} soru={soru('kategori')!} guncelle={o.hazirlamaGuncelle} />
             ) : o.kategoriler === null ? (
-              <p className="text-xs text-danger-strong">Kayıtlı kategori okunamadı; sayfayı yenile.</p>
+              <p className="text-xs text-danger-strong">{d.kategoriOkunamadi}</p>
             ) : (
               <SpecialCategoryPicker clientId={clientId} value={o.kategoriler} canManage={yetki.yazabilir} />
             )}
           </div>
           <div className="space-y-2">
-            <p className="text-xs font-semibold text-ink">Varsayılan konum ve kitle</p>
+            <p className="text-xs font-semibold text-ink">{d.konumVeKitle}</p>
             {soru('konum') ? (
               <SoruAlani yazabilir={yetki.yazabilir} clientId={clientId} soru={soru('konum')!} guncelle={o.hazirlamaGuncelle} />
             ) : (
@@ -227,13 +231,13 @@ export function AdimIcerigi(o: AdimIcerigiOzellikleri) {
             )}
           </div>
           <div className="space-y-1">
-            <p className="text-xs font-semibold text-ink">Varsayılan günlük bütçe</p>
+            <p className="text-xs font-semibold text-ink">{d.gunlukButce}</p>
             {!o.hazirlamaVar ? (
-              <p className="text-xs text-ink-muted">Reklam hazırlığı henüz koşmadı; bir reklam hesabı atanınca başlar, bütçe ondan sonra belirlenir.</p>
+              <p className="text-xs text-ink-muted">{d.hazirlikKosmadi}</p>
             ) : yetki.yazabilir ? (
               <ButceDegistir clientId={clientId} guncelle={o.hazirlamaGuncelle} />
             ) : (
-              <p className="text-xs text-ink-muted">{PANEL_KAPILARI['kurulum.yaz'].neden}</p>
+              <p className="text-xs text-ink-muted">{kapiNedeni('kurulum.yaz', dil)}</p>
             )}
           </div>
         </div>
@@ -242,19 +246,19 @@ export function AdimIcerigi(o: AdimIcerigiOzellikleri) {
       {a.kod === 'bildirimler' && (
         <div className="space-y-4">
           <div className="space-y-2">
-            <p className="text-xs font-semibold text-ink">Bildirim kanalları</p>
+            <p className="text-xs font-semibold text-ink">{d.bildirimKanallari}</p>
             {yetki.bildirimGor ? (
               <BildirimlerBolumu clientId={clientId} yazabilir={yetki.bildirimYaz} ajansAdresi={o.ajansAdresi} />
             ) : (
-              <p className="text-xs text-ink-muted">{PANEL_KAPILARI['bildirim.gor'].neden}</p>
+              <p className="text-xs text-ink-muted">{kapiNedeni('bildirim.gor', dil)}</p>
             )}
           </div>
           <ErisimParcasi clientId={clientId} workspaceAdi={o.workspaceAdi} gor={yetki.erisimGor} yonet={yetki.ekipYonet} />
           {/* MÜŞTERİYE PANEL GİRİŞİ SAYILMAZ (MIMARI § 2b); evi Ayarlar › Ekip, ikinci form yazılmıyor. */}
           <p className="text-xs text-ink-muted">
-            Müşteri hesabı (panel girişi) isteğe bağlı, sayaca girmez:{' '}
+            {d.musteriHesabi}{' '}
             <Link href={ayarlarAdresi('ekip', { workspace: clientId, capa: 'kisiler' })} className="font-semibold text-ink underline-offset-2 hover:underline">
-              Ayarlar › Ekip ve güvenlik’te kişi ekle
+              {d.kisiEkle}
             </Link>
           </p>
         </div>
@@ -266,11 +270,11 @@ export function AdimIcerigi(o: AdimIcerigiOzellikleri) {
       */}
       {a.kod === 'youtube' && a.durum !== 'tamam' && a.durum !== 'kapsam_disi' && (
         <div className="space-y-2">
-          <p className="text-xs font-semibold text-ink">YouTube kanalını bul</p>
+          <p className="text-xs font-semibold text-ink">{d.youtubeKanalBul}</p>
           {yetki.youtubeEkle ? (
             <YouTubeKanalBul clientId={clientId} workspaceAdi={o.workspaceAdi} baglandi={o.tazele} />
           ) : (
-            <p className="text-xs text-ink-muted">{PANEL_KAPILARI['youtube.ekle'].neden}</p>
+            <p className="text-xs text-ink-muted">{kapiNedeni('youtube.ekle', dil)}</p>
           )}
         </div>
       )}
@@ -284,7 +288,8 @@ export function AdimIcerigi(o: AdimIcerigiOzellikleri) {
 
 /** Kurulum kaynaklı olmayan parçanın satırı: durum ve NEDEN. */
 export function ParcaSatiri({ p }: { p: KurulumListesiParcasi }) {
-  const d = LISTE_DURUMU[p.durum];
+  const { dil } = useDil();
+  const d = listeDurumu(p.durum, dil);
   return (
     <li className="flex flex-wrap items-start gap-x-3 gap-y-1 px-4 py-2.5 text-sm">
       <span className="mt-0.5 shrink-0">
@@ -292,7 +297,7 @@ export function ParcaSatiri({ p }: { p: KurulumListesiParcasi }) {
       </span>
       <div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
         <p className="font-medium text-ink">
-          {PARCA_ADI[p.kod] ?? p.kod}
+          {parcaAdi(p.kod, dil)}
           {p.baslik && <span className="font-normal text-ink-muted"> · {p.baslik}</span>}
         </p>
         <p className="text-xs text-ink-muted">{p.neden}</p>
@@ -312,10 +317,11 @@ function SoruAlani({
   soru: HazirlamaSorusu;
   guncelle: (v: HazirlamaYaniti) => void;
 }) {
+  const d = useSozluk(markaMerkeziKurulumSozlugu);
   if (!yazabilir) {
     return (
       <p className="text-xs text-ink-muted">
-        {soru.soru} Cevabı workspace’i düzenleme yetkisi olan kişi verecek.
+        {soru.soru} {d.soruYetkisiz}
       </p>
     );
   }
@@ -330,14 +336,16 @@ type Hal<T> = { tur: 'okunuyor' } | { tur: 'hata'; mesaj: string } | { tur: 'gel
  * yok" ile "liste okunamadı"yı aynı boş alana çevirirdi.
  */
 function ErisimParcasi({ clientId, workspaceAdi, gor, yonet }: { clientId: string; workspaceAdi: string; gor: boolean; yonet: boolean }) {
+  const d = useSozluk(markaMerkeziKurulumSozlugu);
+  const { dil } = useDil();
   const [uyeler, setUyeler] = useState<Hal<MemberRow[]>>({ tur: 'okunuyor' });
   const oku = useCallback(async () => {
     try {
       setUyeler({ tur: 'geldi', v: await apiFetch<MemberRow[]>(`/members?clientId=${encodeURIComponent(clientId)}`) });
     } catch (e) {
-      setUyeler({ tur: 'hata', mesaj: hataMetni(e) });
+      setUyeler({ tur: 'hata', mesaj: hataMetniDil(e, d.sunucuyaUlasilamadi) });
     }
-  }, [clientId]);
+  }, [clientId, d]);
   useEffect(() => {
     if (gor) void oku();
   }, [gor, oku]);
@@ -345,22 +353,22 @@ function ErisimParcasi({ clientId, workspaceAdi, gor, yonet }: { clientId: strin
   if (!gor) {
     return (
       <div className="space-y-1">
-        <p className="text-xs font-semibold text-ink">Sorumlu kişi</p>
-        <p className="text-xs text-ink-muted">{PANEL_KAPILARI['erisim.gor'].neden}</p>
+        <p className="text-xs font-semibold text-ink">{d.sorumluKisi}</p>
+        <p className="text-xs text-ink-muted">{kapiNedeni('erisim.gor', dil)}</p>
       </div>
     );
   }
   return (
     <div className="space-y-2">
-      <p className="text-xs font-semibold text-ink">Sorumlu kişi</p>
-      {uyeler.tur === 'okunuyor' && <p className="text-xs text-ink-muted">Ekip okunuyor…</p>}
+      <p className="text-xs font-semibold text-ink">{d.sorumluKisi}</p>
+      {uyeler.tur === 'okunuyor' && <p className="text-xs text-ink-muted">{d.ekipOkunuyor}</p>}
       {uyeler.tur === 'hata' && (
         <Serit
           ton="hata"
-          baslik="Ekip okunamadı"
+          baslik={d.ekipOkunamadi}
           eylemler={
             <Dugme ton="ikincil" boyut="kucuk" onClick={() => void oku()}>
-              Tekrar dene
+              {d.tekrarDene}
             </Dugme>
           }
         >
@@ -371,16 +379,19 @@ function ErisimParcasi({ clientId, workspaceAdi, gor, yonet }: { clientId: strin
         <>
           <p className="text-xs text-ink-muted">
             {uyeler.v.length === 0
-              ? 'Bu workspace’e atanmış kimse yok. Şirket yöneticileri yine de görür.'
-              : `${uyeler.v.length} kişi bu workspace’i görüyor: ${uyeler.v
-                  .slice(0, 5)
-                  .map((m) => m.fullName ?? m.email)
-                  .join(', ')}${uyeler.v.length > 5 ? ` ve ${uyeler.v.length - 5} kişi daha` : ''}.`}
+              ? d.kimseAtanmamis
+              : d.kisiGoruyor(
+                  uyeler.v.length,
+                  `${uyeler.v
+                    .slice(0, 5)
+                    .map((m) => m.fullName ?? m.email)
+                    .join(', ')}${uyeler.v.length > 5 ? d.veKisiDaha(uyeler.v.length - 5) : ''}`,
+                )}
           </p>
           {yonet ? (
             <DanismanAta clientId={clientId} clientName={workspaceAdi} mevcutUyeIdleri={uyeler.v.map((m) => m.id)} />
           ) : (
-            <p className="text-xs text-ink-muted">{PANEL_KAPILARI['ekip.yonet'].neden}</p>
+            <p className="text-xs text-ink-muted">{kapiNedeni('ekip.yonet', dil)}</p>
           )}
         </>
       )}
@@ -390,35 +401,37 @@ function ErisimParcasi({ clientId, workspaceAdi, gor, yonet }: { clientId: strin
 
 /** VERİ AKIŞI — Veri durumu kartının AYNISI (`SenkronDurumu`), adresteki workspace için. */
 function VeriParcasi({ clientId, gor }: { clientId: string; gor: boolean }) {
+  const d = useSozluk(markaMerkeziKurulumSozlugu);
+  const { dil } = useDil();
   const [veri, setVeri] = useState<Hal<SyncStatusResponse>>({ tur: 'okunuyor' });
   const oku = useCallback(async () => {
     try {
       setVeri({ tur: 'geldi', v: await apiFetch<SyncStatusResponse>(`/sync/status?clientId=${encodeURIComponent(clientId)}`) });
     } catch (e) {
-      setVeri({ tur: 'hata', mesaj: hataMetni(e) });
+      setVeri({ tur: 'hata', mesaj: hataMetniDil(e, d.sunucuyaUlasilamadi) });
     }
-  }, [clientId]);
+  }, [clientId, d]);
   useEffect(() => {
     if (gor) void oku();
   }, [gor, oku]);
 
-  if (!gor) return <p className="text-xs text-ink-muted">{PANEL_KAPILARI['veriDurumu.gor'].neden}</p>;
+  if (!gor) return <p className="text-xs text-ink-muted">{kapiNedeni('veriDurumu.gor', dil)}</p>;
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs font-semibold text-ink">Hesapların veri durumu</p>
+        <p className="text-xs font-semibold text-ink">{d.hesaplarinVeriDurumu}</p>
         <Link href={veriDurumuAdresi(clientId)} className="text-xs font-semibold text-ink underline-offset-2 hover:underline">
-          Veri durumunu ayrıntılı aç
+          {d.veriDurumunuAc}
         </Link>
       </div>
-      {veri.tur === 'okunuyor' && <p className="text-xs text-ink-muted">Veri durumu okunuyor…</p>}
+      {veri.tur === 'okunuyor' && <p className="text-xs text-ink-muted">{d.veriOkunuyor}</p>}
       {veri.tur === 'hata' && (
         <Serit
           ton="hata"
-          baslik="Veri durumu okunamadı"
+          baslik={d.veriOkunamadi}
           eylemler={
             <Dugme ton="ikincil" boyut="kucuk" onClick={() => void oku()}>
-              Tekrar dene
+              {d.tekrarDene}
             </Dugme>
           }
         >

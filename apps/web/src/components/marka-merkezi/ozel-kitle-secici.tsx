@@ -5,10 +5,14 @@ import {
   KITLE_SINIRLARI,
   type CustomAudienceList,
   type CustomAudienceOption,
+  type Dil,
+  sec as dilSec,
   type KitleOzel,
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { useIzlenenMetaHesabi } from '@/components/autoboost/hedefleme-secici';
+import { useDil } from '@/dil/saglayici';
+import { markaMerkeziVeriSozlugu } from '@/dil/sozlukler/marka-merkezi-veri';
 
 /**
  * ═══ META ÖZEL VE BENZER KİTLELER (Marka Merkezi Bölüm 4b) ═══
@@ -33,6 +37,8 @@ export function OzelKitleSecici({
   degis: (v: KitleOzel[]) => void;
 }) {
   const { hesap, hesapHata } = useIzlenenMetaHesabi(clientId);
+  const { dil } = useDil();
+  const t = dilSec(markaMerkeziVeriSozlugu, dil).ozelKitle;
   const [liste, setListe] = useState<CustomAudienceList | null>(null);
   const [hata, setHata] = useState<string | null>(null);
 
@@ -43,14 +49,14 @@ export function OzelKitleSecici({
       .then(setListe)
       .catch((err: unknown) => {
         setListe(null);
-        setHata(err instanceof ApiRequestError ? err.message : 'Özel kitleler alınamadı.');
+        setHata(err instanceof ApiRequestError ? err.message : t.alinamadi);
       });
-  }, [hesap]);
+  }, [hesap, t]);
 
-  if (hesapHata) return <p className="text-12 text-danger-strong">Reklam hesabı okunamadı: {hesapHata}</p>;
-  if (hesap === undefined) return <p className="text-12 text-ink-muted">Reklam hesabı aranıyor…</p>;
+  if (hesapHata) return <p className="text-12 text-danger-strong">{t.hesapOkunamadi(hesapHata)}</p>;
+  if (hesap === undefined) return <p className="text-12 text-ink-muted">{t.hesapAraniyor}</p>;
   if (hesap === null) {
-    return <p className="text-12 text-ink-muted">Özel kitleler izlenen bir Meta reklam hesabı istiyor.</p>;
+    return <p className="text-12 text-ink-muted">{t.hesapIstiyor}</p>;
   }
 
   // Şablonda BAŞKA hesabın kitlesi varsa (hesap değişmiş) açıkça söyleniyor.
@@ -66,22 +72,18 @@ export function OzelKitleSecici({
   return (
     <div className="grid gap-2 rounded-alan border border-line p-3">
       <p className="m-0 text-13 font-semibold text-ink">
-        Meta’daki kitleler ({secili.length}/{KITLE_SINIRLARI.ozelKitle}) · <strong>{hesap.name}</strong>
+        {t.baslik(secili.length, KITLE_SINIRLARI.ozelKitle)}<strong>{hesap.name}</strong>
       </p>
-      <p className="text-12 text-ink-muted">
-        Ads Manager’da kurulmuş özel ve benzer kitleler. Yalnızca bu hesapta çalışır. “Hariç” seçilen kitleye
-        reklam gösterilmez (örn. zaten satın almış kişiler).
-      </p>
+      <p className="text-12 text-ink-muted">{t.aciklama}</p>
       {yabanci.length > 0 && (
         <p className="text-12 text-warn-strong">
-          Bu kitlede başka hesabın özel kitleleri var ({yabanci.map((o) => `${o.name} · ${o.hesapAdi}`).join(', ')}).
-          Yalnızca kendi hesaplarında çalışırlar; kaldırıp buradan yeniden seç.
+          {t.yabanci(yabanci.map((o) => `${o.name} · ${o.hesapAdi}`).join(', '))}
         </p>
       )}
       {hata && <p className="text-12 text-danger-strong">{hata}</p>}
-      {!hata && liste === null && <p className="text-12 text-ink-muted">Kitleler yükleniyor…</p>}
+      {!hata && liste === null && <p className="text-12 text-ink-muted">{t.yukleniyor}</p>}
       {liste && liste.items.length === 0 && (
-        <p className="text-12 text-ink-muted">Bu hesapta Ads Manager’da kurulmuş özel ya da benzer kitle yok.</p>
+        <p className="text-12 text-ink-muted">{t.yok}</p>
       )}
       {liste && liste.items.length > 0 && (
         <ul className="max-h-56 divide-y divide-line overflow-y-auto rounded-alan border border-line">
@@ -94,13 +96,13 @@ export function OzelKitleSecici({
                 <span className="min-w-0 flex-1">
                   <span className="text-ink">{o.name}</span>
                   <span className="ml-2 text-ink-muted">
-                    {o.tip === 'benzer' ? 'Benzer' : 'Özel'} · {boyut(o)}
+                    {o.tip === 'benzer' ? t.benzer : t.ozel} · {boyut(o, dil)}
                   </span>
                   {(kapali || o.hazir === null) && (
                     <span className={`block text-11 ${kapali ? 'text-danger-strong' : 'text-ink-muted'}`}>
                       {kapali
-                        ? `Yayına hazır değil${o.durum ? `: ${o.durum}` : ''}`
-                        : 'Meta hazır olup olmadığını bildirmedi'}
+                        ? `${t.yayinaHazirDegil}${o.durum ? `: ${o.durum}` : ''}`
+                        : t.metaBildirmedi}
                     </span>
                   )}
                 </span>
@@ -110,9 +112,9 @@ export function OzelKitleSecici({
                   onChange={(e) => sec(o, (e.target.value || null) as KitleOzel['mod'] | null)}
                   className="h-8 rounded-alan border border-line-strong bg-surface px-2 text-12 text-ink"
                 >
-                  <option value="">Kullanma</option>
-                  <option value="dahil">Dahil et</option>
-                  <option value="haric">Hariç tut</option>
+                  <option value="">{t.kullanma}</option>
+                  <option value="dahil">{t.dahilEt}</option>
+                  <option value="haric">{t.haricTut}</option>
                 </select>
               </li>
             );
@@ -124,8 +126,9 @@ export function OzelKitleSecici({
 }
 
 /** -1 → null (ölçülmemiş) sunucuda çevrildi; burada "bilinmiyor" diye yazılıyor. */
-function boyut(o: CustomAudienceOption): string {
-  if (o.sizeMin === null || o.sizeMax === null) return 'büyüklük bilinmiyor';
-  const f = (n: number) => n.toLocaleString('tr-TR');
-  return `~${f(o.sizeMin)}–${f(o.sizeMax)} kişi`;
+function boyut(o: CustomAudienceOption, dil: Dil): string {
+  const t = dilSec(markaMerkeziVeriSozlugu, dil).ozelKitle;
+  if (o.sizeMin === null || o.sizeMax === null) return t.boyutBilinmiyor;
+  const f = (n: number) => n.toLocaleString(dil === 'en' ? 'en-US' : 'tr-TR');
+  return t.boyut(f(o.sizeMin), f(o.sizeMax));
 }

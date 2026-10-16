@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { redirect } from 'next/navigation';
-import type { ClientChannels, HazirlamaYaniti, KurulumYaniti, SpecialAdCategory, WorkspaceHazirlik } from '@advetics/shared';
+import { ayarSekmesiAdi, kapiNedeni, markaBolumuAdi, sec, type ClientChannels, HazirlamaYaniti, KurulumYaniti, SpecialAdCategory, WorkspaceHazirlik } from '@advetics/shared';
 import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import { beyanGirdisi, beyanlariOku } from '@/lib/kurulum-beyanlari';
 import { adimYetkileri } from '@/lib/kurulum-yetkileri';
@@ -9,7 +9,7 @@ import { requireSession } from '@/lib/session';
 import { sayfaWorkspaceId, workspaceSecimVerisi, workspaceUyumu } from '@/lib/sayfa-workspace';
 import { butceAdresi } from '@/lib/butce-adresi';
 import {
-  PANEL_KAPILARI,
+  PANEL_YOLLARI,
   eskiMarkaMerkeziYonu,
   kapi,
   kurulumListesi,
@@ -39,8 +39,13 @@ import { AiDoldur } from '@/components/bilgi-bankasi/ai-doldur';
 import { MarkaSekmesi } from '@/components/bilgi-bankasi/marka-sekmesi';
 import { MetinSekmesi } from '@/components/bilgi-bankasi/metin-sekmesi';
 import { LogoSekmesi } from '@/components/bilgi-bankasi/logo-sekmesi';
+import { dilAl } from '@/dil/sunucu';
+import { markaMerkeziSozlugu } from '@/dil/sozlukler/marka-merkezi';
+import { menuSatiriEtiketi } from '@/lib/nav-sections';
 
-export const metadata = { title: 'Marka Merkezi · Advetics' };
+export async function generateMetadata() {
+  return { title: `${menuSatiriEtiketi(PANEL_YOLLARI.markaMerkezi, await dilAl())} · Advetics` };
+}
 export const dynamic = 'force-dynamic';
 
 /**
@@ -68,6 +73,10 @@ export default async function MarkaMerkeziPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const session = await requireSession();
+  const dil = await dilAl();
+  const d = sec(markaMerkeziSozlugu, dil).sayfa;
+  // Sayfa adı menünün kendi çevirisinden: iki dilde de menüyle aynı.
+  const sayfaAdi = menuSatiriEtiketi(PANEL_YOLLARI.markaMerkezi, dil);
   const params = await searchParams;
   const hamBolum = first(params.bolum);
   const musteriParam = first(params.musteri);
@@ -85,10 +94,8 @@ export default async function MarkaMerkeziPage({
   if (!kapi(session, 'markaMerkezi.gor')) {
     return (
       <div className="space-y-5">
-        <SayfaBasligi bolum="Base" baslik="Marka Merkezi" />
-        <Uyari ton="uyari" baslik={PANEL_KAPILARI['markaMerkezi.gor'].neden}>
-          Workspace’in kurulumu ve marka bilgileri ajans tarafında düzenleniyor. Yöneticine sor.
-        </Uyari>
+        <SayfaBasligi bolum="Base" baslik={sayfaAdi} />
+        <Uyari ton="uyari" baslik={kapiNedeni('markaMerkezi.gor', dil)}>{d.yoneticineSor}</Uyari>
       </div>
     );
   }
@@ -97,8 +104,8 @@ export default async function MarkaMerkeziPage({
   if (!clientId) {
     return (
       <WorkspaceGerekli
-        ekran="Marka Merkezi"
-        neden="Marka Merkezi bir workspace’in kurulumunu, markasını ve bilgilerini gösteriyor."
+        ekran={sayfaAdi}
+        neden={d.workspaceNedeni}
         {...workspaceSecimVerisi(session)}
       />
     );
@@ -121,14 +128,14 @@ export default async function MarkaMerkeziPage({
         clientId={clientId}
         workspaceAdi={hedefAdi}
         aktifAdi={session.availableClients.find((c) => c.id === session.activeClientId)?.name ?? null}
-        ekran="Marka Merkezi"
+        ekran={sayfaAdi}
         uyum={uyum}
       />
     );
   if (uyum === 'farkli') {
     return (
       <div className="space-y-5">
-        <SayfaBasligi bolum="Base" baslik="Marka Merkezi" />
+        <SayfaBasligi bolum="Base" baslik={sayfaAdi} />
         {gecis}
       </div>
     );
@@ -140,11 +147,11 @@ export default async function MarkaMerkeziPage({
    * yazmak, eski üç ayrışan sayının birini geri getirmek olurdu.
    */
   const [kurulum, hazirlama, hazirlik, detay, kanallar] = await Promise.all([
-    oku<KurulumYaniti>(`/clients/${clientId}/kurulum`),
-    oku<HazirlamaYaniti>(`/clients/${clientId}/hazirlama`),
-    oku<WorkspaceHazirlik>(`/clients/${clientId}/hazirlik`),
-    oku<WorkspaceDetay>(`/clients/${clientId}`),
-    bolum === 'kurulum' ? oku<ClientChannels>(`/clients/${clientId}/channels`) : Promise.resolve(null),
+    oku<KurulumYaniti>(`/clients/${clientId}/kurulum`, d.sunucuyaUlasilamadi),
+    oku<HazirlamaYaniti>(`/clients/${clientId}/hazirlama`, d.sunucuyaUlasilamadi),
+    oku<WorkspaceHazirlik>(`/clients/${clientId}/hazirlik`, d.sunucuyaUlasilamadi),
+    oku<WorkspaceDetay>(`/clients/${clientId}`, d.sunucuyaUlasilamadi),
+    bolum === 'kurulum' ? oku<ClientChannels>(`/clients/${clientId}/channels`, d.sunucuyaUlasilamadi) : Promise.resolve(null),
   ]);
   /*
    * BEYANLAR ROZETE DE GİRİYOR (kurulum sihirbazı, MIMARI § 6 "geçiciler"):
@@ -186,11 +193,11 @@ export default async function MarkaMerkeziPage({
       */}
       <SayfaBasligi
         bolum="Base"
-        baslik="Marka Merkezi"
+        baslik={sayfaAdi}
         aciklama={
           <>
             <strong className="font-semibold text-ink">{sirket ? `${sirket} › ${workspaceAdi}` : workspaceAdi}</strong>
-            {': kurulumu, markası ve bilgileri. Reklamlar, raporlar ve AI asistan buradan okur.'}
+            {d.aciklama}
           </>
         }
         // Birincil eylem ("Eksikleri tamamla") Kurulum listesinin durumunu
@@ -198,15 +205,15 @@ export default async function MarkaMerkeziPage({
         eylemler={bolum === 'kurulum' ? <div id={KURULUM_EYLEM_YUVASI} className="flex flex-wrap items-center gap-2" /> : undefined}
       />
 
-      <SayfaIcDuzen menu={<IcMenu clientId={clientId} aktif={bolum} rozetler={rozetler} />}>
+      <SayfaIcDuzen menu={<IcMenu clientId={clientId} aktif={bolum} rozetler={rozetler} dil={dil} />}>
         {/* `key` BÖLÜMDEN: aynı ağaç korunursa geçiş animasyonu bir daha oynamaz. */}
         <div key={bolum} className="bolum-gecis grid min-w-0 content-start gap-5">
           {bolum === 'kurulum' && (
             <section aria-labelledby="kurulum-baslik" className="grid gap-4">
               <BolumBasligi
                 id="kurulum-baslik"
-                baslik="Kurulum"
-                aciklama="Reklam hesapları, ölçüm, marka ve varsayılanlar tek listede. Sistem yapabileceğini tek düğmeyle tamamlar; size kalanı nedeniyle yazar."
+                baslik={markaBolumuAdi('kurulum', dil)}
+                aciklama={d.kurulumAciklama}
               />
               <KurulumListesi
                 clientId={clientId}
@@ -222,29 +229,29 @@ export default async function MarkaMerkeziPage({
               <section id="kanallar" aria-labelledby="kanallar-baslik" className="grid scroll-mt-24 gap-3">
                 <BolumBasligi
                   id="kanallar-baslik"
-                  baslik="Bu workspace’in hesapları ve kanalları"
-                  aciklama="Atanmış reklam hesapları, sayfalar ve kanallar; izleme buradan açılır. Sayaca girmez."
+                  baslik={d.kanallarBaslik}
+                  aciklama={d.kanallarAciklama}
                   altBaslik
                 />
                 {kanallar === null ? null : !kanallar.ok ? (
-                  <Serit ton="hata" baslik="Hesaplar ve kanallar alınamadı.">
+                  <Serit ton="hata" baslik={d.kanallarAlinamadi}>
                     {kanallar.hata}
                   </Serit>
                 ) : kapi(session, 'hesap.ata') ? (
                   <BagliKanallar data={kanallar.v} ajansUyesi={session.managerAccount !== null} />
                 ) : (
-                  <SaltOkunurKanallar data={kanallar.v} neden={PANEL_KAPILARI['hesap.ata'].neden} />
+                  <SaltOkunurKanallar data={kanallar.v} neden={kapiNedeni('hesap.ata', dil)} bos={d.salt.bos} baslik={d.salt.baslik} />
                 )}
                 <p className="text-12 text-ink-muted">
-                  Platform bağlantısı yoksa ya da yetkisi düştüyse:{' '}
+                  {d.baglantiYoksa}{' '}
                   <Link href={platformBaglantilariAdresi()} className={KART_BAGLANTISI}>
-                    Ayarlar › Platform bağlantıları
+                    {d.ayarlar} › {ayarSekmesiAdi('baglantilar', dil)}
                   </Link>
                 </p>
               </section>
 
               <section id="veri-kaynaklari" className="grid scroll-mt-24 gap-2">
-                <p className="text-12 text-ink-muted">İsteğe bağlı; sayaca girmez.</p>
+                <p className="text-12 text-ink-muted">{d.istegeBagli}</p>
                 <VeriKaynaklari
                   clientId={clientId}
                   yonetebilir={kapi(session, 'veriKaynagi.yonet')}
@@ -259,8 +266,8 @@ export default async function MarkaMerkeziPage({
             <section aria-labelledby="marka-baslik" className="grid gap-4">
               <BolumBasligi
                 id="marka-baslik"
-                baslik="Marka"
-                aciklama="AdvCampaign ve AI asistan bu alanları okur. Doldurduğun bilgi bir daha sorulmaz."
+                baslik={markaBolumuAdi('marka', dil)}
+                aciklama={d.markaAciklama}
               />
               {/* DOLDUR KARTLARIN ÜSTÜNDE: taslak dört kartı birden dolduruyor. */}
               <AiDoldur clientId={clientId} canWrite={kapi(session, 'marka.yaz')} />
@@ -272,9 +279,9 @@ export default async function MarkaMerkeziPage({
                   clientId={clientId}
                   canWrite={kapi(session, 'marka.yaz')}
                   alan="bilgiBankasi"
-                  baslik="Markayı anlat"
-                  aciklama="Ne satıyor, hangi hizmetleri veriyor, sık sorulan sorular. Reklam metni ve AI bu metni bağlam olarak okuyor."
-                  placeholder="Örn. 20 yıllık emlak ofisiyiz. Konut satışı ve kiralama yapıyoruz; İzmir Bornova ve Karşıyaka'da ofisimiz var."
+                  baslik={d.markayiAnlatBaslik}
+                  aciklama={d.markayiAnlatAciklama}
+                  placeholder={d.markayiAnlatOrnek}
                 />
               </Capa>
               <Capa id="kime-satiyoruz">
@@ -282,9 +289,9 @@ export default async function MarkaMerkeziPage({
                   clientId={clientId}
                   canWrite={kapi(session, 'marka.yaz')}
                   alan="hedefKitle"
-                  baslik="Kime satıyoruz"
-                  aciklama="Düz dille. Konum, yaş ve ilgi gibi teknik hedefleme Varlıklar › Kitleler’de."
-                  placeholder="Örn. İzmir ve çevresinde, 25-45 yaş arası, ev almayı düşünen aileler."
+                  baslik={d.kimeSatiyoruzBaslik}
+                  aciklama={d.kimeSatiyoruzAciklama}
+                  placeholder={d.kimeSatiyoruzOrnek}
                 />
               </Capa>
               <Capa id="logo">
@@ -292,7 +299,7 @@ export default async function MarkaMerkeziPage({
                   <LogoSekmesi clientId={clientId} canWrite={kapi(session, 'logo.yaz')} />
                 ) : (
                   <UiKart baslik="Logo">
-                    <p className="m-0 text-13 text-ink-muted">{PANEL_KAPILARI['varliklar.gor'].neden}</p>
+                    <p className="m-0 text-13 text-ink-muted">{kapiNedeni('varliklar.gor', dil)}</p>
                   </UiKart>
                 )}
               </Capa>
@@ -303,8 +310,8 @@ export default async function MarkaMerkeziPage({
             <section aria-labelledby="workspace-baslik" className="grid gap-4">
               <BolumBasligi
                 id="workspace-baslik"
-                baslik="Workspace bilgileri"
-                aciklama="İletişim ve firma bilgileri, bu workspace’i görenler, bildirim kanalları ve veri durumu."
+                baslik={markaBolumuAdi('workspace', dil)}
+                aciklama={d.workspaceAciklama}
               />
               <WorkspaceBilgileri clientId={clientId} session={session} detay={detay} />
             </section>
@@ -315,10 +322,10 @@ export default async function MarkaMerkeziPage({
   );
 }
 
-async function oku<T>(yol: string): Promise<Sonuc<T>> {
+async function oku<T>(yol: string, ulasilamadi: string): Promise<Sonuc<T>> {
   return serverApiFetch<T>(yol).then(
     (v) => ({ ok: true as const, v }),
-    (e: unknown) => ({ ok: false as const, hata: e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.' }),
+    (e: unknown) => ({ ok: false as const, hata: e instanceof ApiRequestError ? e.message : ulasilamadi }),
   );
 }
 
@@ -354,13 +361,13 @@ function Capa({ id, children }: { id: string; children: ReactNode }) {
 }
 
 /** Atama yetkisi olmayan için liste: ne bağlı, neden değiştiremiyor. */
-function SaltOkunurKanallar({ data, neden }: { data: ClientChannels; neden: string }) {
+function SaltOkunurKanallar({ data, neden, bos, baslik }: { data: ClientChannels; neden: string; bos: string; baslik: string }) {
   const bagli = data.groups.flatMap((g) => g.connected.map((i) => ({ ...i, kind: g.kind })));
   if (bagli.length === 0) {
-    return <BosDurum baslik="Bu workspace’e bağlı hesap ya da kanal yok." neden={neden} />;
+    return <BosDurum baslik={bos} neden={neden} />;
   }
   return (
-    <UiKart dolgu={false} baslik="Bağlı hesaplar ve kanallar" baslikEki={`${bagli.length}`}>
+    <UiKart dolgu={false} baslik={baslik} baslikEki={`${bagli.length}`}>
       <ul className="m-0 list-none divide-y divide-line p-0">
         {bagli.map((i) => (
           <li key={i.id} className="flex items-center justify-between gap-3 px-5 py-3 text-13">
