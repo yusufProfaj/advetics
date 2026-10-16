@@ -4,6 +4,8 @@ import { useEffect, useId, useState } from 'react';
 import type { Sinyal, SinyalUygulamaSonucu } from '@advetics/shared';
 import { PLATFORM_KISA_ADLARI } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { sinyalSozlugu } from '@/dil/sozlukler/iyilestir-sinyal';
 import { adimHalleri, adimMetinleri, uygulaHatasi, type UygulamaAsamasi } from '@/lib/iyilestir';
 import { sinyalEylemYolu, sinyalUygulamaCoz } from '@/lib/sinyal';
 import { varlikEylemMetni } from '@/lib/varlik-eylemi';
@@ -45,6 +47,8 @@ export function SinyalDurdurPenceresi({
   onSonuc: (sonuc: SinyalUygulamaSonucu) => void;
   onYenile: () => void;
 }) {
+  const { dil } = useDil();
+  const d = useSozluk(sinyalSozlugu).pencere;
   const [gosterilen, setGosterilen] = useState<Sinyal | null>(sinyal);
   const [asama, setAsama] = useState<UygulamaAsamasi>('hazir');
   const [mesaj, setMesaj] = useState<string | null>(null);
@@ -68,8 +72,8 @@ export function SinyalDurdurPenceresi({
     s && s.eylem?.tur === 'durdur'
       ? { seviye: s.eylem.seviye, id: s.eylem.varlikId, ad: s.varlik.ad, platform: s.platform, yayinda: true }
       : null;
-  const metin = hedef ? varlikEylemMetni(hedef) : null;
-  const adimlar = s ? adimMetinleri(s.platform) : ['', '', ''];
+  const metin = hedef ? varlikEylemMetni(hedef, dil) : null;
+  const adimlar = s ? adimMetinleri(s.platform, dil) : ['', '', ''];
   const haller = adimHalleri(asama);
 
   async function onayla() {
@@ -86,7 +90,7 @@ export function SinyalDurdurPenceresi({
         // İstek başarılı ama sonuç okunamadı: platformda değişiklik OLMUŞ
         // olabilir. "Durdurulamadı" yanlış, "doğrulandı" yalan.
         setAsama('degisti');
-        setMesaj('Sunucu yanıt verdi ama geri okuma sonucu okunamadı. Listeyi yenileyip sinyalin durumuna bakın.');
+        setMesaj(d.sonucOkunamadi);
         return;
       }
       setSonuc(r);
@@ -95,7 +99,7 @@ export function SinyalDurdurPenceresi({
       // Uyuşmadıysa AÇIK KALIYOR: platformun söylediği değer okunmalı.
       if (r.dogrulama === 'dogrulandi') setTimeout(onKapat, 900);
     } catch (e) {
-      const h = uygulaHatasi(e instanceof ApiRequestError ? e : null);
+      const h = uygulaHatasi(e instanceof ApiRequestError ? e : null, dil);
       setAsama(h.asama);
       setMesaj(h.mesaj);
     }
@@ -114,7 +118,7 @@ export function SinyalDurdurPenceresi({
     <Pencere
       acik={acik}
       onKapat={kapatGuvenli}
-      baslik={metin?.baslik ?? 'Onay'}
+      baslik={metin?.baslik ?? d.onay}
       aciklama={
         <>
           {s ? `${s.varlik.ad} · ${s.clientAdi} · ${platform}. ` : ''}
@@ -130,19 +134,19 @@ export function SinyalDurdurPenceresi({
               onYenile();
             }}
           >
-            Yenile
+            {d.yenile}
           </Dugme>
         ) : sonuc ? (
           <Dugme ton="ikincil" onClick={onKapat}>
-            Kapat
+            {d.kapat}
           </Dugme>
         ) : (
           <>
             <Dugme ton="ikincil" onClick={onKapat} disabled={suruyor}>
-              Vazgeç
+              {d.vazgec}
             </Dugme>
             <Dugme id={onaylaId} ton="koyu" onClick={() => void onayla()} disabled={!metin} bekliyor={suruyor}>
-              {asama === 'hata' ? 'Tekrar dene' : 'Durdur'}
+              {asama === 'hata' ? d.tekrarDene : d.durdur}
             </Dugme>
           </>
         )
@@ -150,17 +154,17 @@ export function SinyalDurdurPenceresi({
     >
       <div className="grid gap-4">
         <DegisimKutusu once={metin?.once ?? null} sonra={metin?.sonra ?? null} />
-        <AdimListesi adimlar={[adimlar[0], adimlar[1], 'Kaydet ve sinyali kapat']} haller={haller} />
+        <AdimListesi adimlar={[adimlar[0], adimlar[1], d.kaydetKapat]} haller={haller} />
         {sonuc && (
           <SonucKutusu ton={sonuc.dogrulama === 'dogrulandi' ? 'ok' : 'uyari'}>
             {sonuc.dogrulama === 'dogrulandi'
-              ? `Durduruldu · ${platform} tarafında doğrulandı: ${sonuc.platformDegeri}. Sinyal kapatıldı.`
-              : `${platform} isteği kabul etti ama okunan durum farklı: ${sonuc.platformDegeri}.`}
+              ? d.durduruldu(platform, sonuc.platformDegeri)
+              : d.uyusmadi(platform, sonuc.platformDegeri)}
           </SonucKutusu>
         )}
         {mesaj && (
           <SonucKutusu ton="hata">
-            {asama === 'degisti' ? <strong>Sinyal değişti, yenile. </strong> : <strong>Durdurulamadı. </strong>}
+            {asama === 'degisti' ? <strong>{d.sinyalDegisti}</strong> : <strong>{d.durdurulamadi}</strong>}
             {mesaj}
           </SonucKutusu>
         )}
@@ -188,6 +192,8 @@ export function SinyalKapatPenceresi({
   onKapandi: (id: string) => void;
   onYenile: () => void;
 }) {
+  const { dil } = useDil();
+  const d = useSozluk(sinyalSozlugu).pencere;
   const [not, setNot] = useState('');
   const [gonderiliyor, setGonderiliyor] = useState(false);
   const [hata, setHata] = useState<{ mesaj: string; degisti: boolean } | null>(null);
@@ -217,7 +223,7 @@ export function SinyalKapatPenceresi({
       onKapandi(sinyal.id);
       onKapat();
     } catch (e) {
-      const h = uygulaHatasi(e instanceof ApiRequestError ? e : null);
+      const h = uygulaHatasi(e instanceof ApiRequestError ? e : null, dil);
       setHata({ mesaj: h.mesaj, degisti: h.asama === 'degisti' });
     } finally {
       setGonderiliyor(false);
@@ -234,8 +240,8 @@ export function SinyalKapatPenceresi({
       acik={acik}
       onKapat={kapatGuvenli}
       genislik="dar"
-      baslik="Sinyali kapat"
-      aciklama="Bu olay sürdükçe tekrar açılmaz. Daha kötüye giderse yeniden açılır ve haber verilir."
+      baslik={d.kapatBaslik}
+      aciklama={d.kapatAciklama}
       altEylemler={
         hata?.degisti ? (
           <Dugme
@@ -245,22 +251,22 @@ export function SinyalKapatPenceresi({
               onYenile();
             }}
           >
-            Yenile
+            {d.yenile}
           </Dugme>
         ) : (
           <>
             <Dugme ton="ikincil" onClick={onKapat} disabled={gonderiliyor}>
-              Vazgeç
+              {d.vazgec}
             </Dugme>
             <Dugme ton="koyu" onClick={() => void kapat()} bekliyor={gonderiliyor}>
-              {gonderiliyor ? 'Kapatılıyor' : 'Kapat'}
+              {gonderiliyor ? d.kapatiliyor : d.kapat}
             </Dugme>
           </>
         )
       }
     >
       <div className="grid gap-4">
-        <Alan etiket="Not (isteğe bağlı)" id={alanId}>
+        <Alan etiket={d.notEtiketi} id={alanId}>
           {(id, aciklamaId) => (
             <MetinAlani
               id={id}
@@ -268,13 +274,13 @@ export function SinyalKapatPenceresi({
               value={not}
               maxLength={300}
               onChange={(e) => setNot(e.target.value)}
-              placeholder="ör. kampanya bilerek yavaşlatıldı"
+              placeholder={d.notYeri}
             />
           )}
         </Alan>
         {hata && (
           <SonucKutusu ton="hata">
-            {hata.degisti ? <strong>Sinyal değişti, yenile. </strong> : <strong>Kapatılamadı. </strong>}
+            {hata.degisti ? <strong>{d.sinyalDegisti}</strong> : <strong>{d.kapatilamadi}</strong>}
             {hata.mesaj}
           </SonucKutusu>
         )}

@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Oneri, OneriListesi, UygulamaSonucu } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { iyilestirSozlugu } from '@/dil/sozlukler/iyilestir';
 import {
   gorunenOneriler,
   oneriEylemAdresi,
@@ -47,6 +49,9 @@ export function OnerilerSekmesi({
   /** Uygulanmış kartların altındaki etki satırı (Paket C); `null` = istenmedi. */
   etki: EtkiSonucu | null;
 }) {
+  const { dil } = useDil();
+  const t = useSozluk(iyilestirSozlugu);
+  const d = t.oneriler;
   const [oneriler, setOneriler] = useState<Oneri[]>(sonuc.durum === 'tamam' ? sonuc.liste.oneriler : []);
   const [buAyEk, setBuAyEk] = useState(0);
   const [secili, setSecili] = useState('hepsi');
@@ -75,13 +80,13 @@ export function OnerilerSekmesi({
   }, []);
 
   if (sonuc.durum === 'hata') {
-    return <HataDurumu baslik="Öneriler alınamadı." mesaj={sonuc.mesaj} />;
+    return <HataDurumu baslik={d.alinamadi} mesaj={sonuc.mesaj} />;
   }
 
   const liste = sonuc.liste;
-  const ozet = ozetSayilari({ oneriler, buAyUygulanan: liste.buAyUygulanan + buAyEk });
+  const ozet = ozetSayilari({ oneriler, buAyUygulanan: liste.buAyUygulanan + buAyEk }, dil);
   const gorunen = gorunenOneriler(oneriler);
-  const cipler = turCipleri(gorunen);
+  const cipler = turCipleri(gorunen, dil);
   // Seçili türün son kartı yoksayılınca çip kayboluyor; ekran boş kalmasın, Tümü'ye dön.
   const etkinSecim = cipler.some((c) => c.anahtar === secili) ? secili : 'hepsi';
   const suzulen = turaGoreSuz(gorunen, etkinSecim);
@@ -97,7 +102,7 @@ export function OnerilerSekmesi({
     } catch (e) {
       setKartHatalari((h) => ({
         ...h,
-        [o.anahtar]: `Yoksayılamadı: ${e instanceof ApiRequestError ? e.message : 'Bağlantı kurulamadı.'}`,
+        [o.anahtar]: d.yoksayilamadi(e instanceof ApiRequestError ? e.message : t.hata.baglanti),
       }));
     } finally {
       setYoksayilanlar((x) => {
@@ -116,9 +121,9 @@ export function OnerilerSekmesi({
    */
   const kesildi = liste.toplam > liste.oneriler.length;
   const sayac = [
-    kesildi ? `${liste.toplam} öneriden ${liste.oneriler.length} tanesi gösteriliyor` : `${suzulen.length} öneri gösteriliyor`,
-    gizli > 0 ? `${gizli} yoksayılan öneri gizli` : null,
-    liste.beklemede > 0 ? `${liste.beklemede} bütçe önerisi bekliyor (son 7 günde bütçesi değişti)` : null,
+    kesildi ? d.sayacKesildi(liste.toplam, liste.oneriler.length) : d.sayacGosteriliyor(suzulen.length),
+    gizli > 0 ? d.sayacGizli(gizli) : null,
+    liste.beklemede > 0 ? d.sayacBeklemede(liste.beklemede) : null,
   ]
     .filter(Boolean)
     .join(' · ');
@@ -132,15 +137,15 @@ export function OnerilerSekmesi({
        */}
       <MetrikKutulari
         kutular={[
-          { anahtar: 'uygulanabilir', ad: 'Uygulanabilir öneri', deger: ozet.uygulanabilir, ipucu: 'tek tıkla, onaylı' },
-          { anahtar: 'harcama', ad: 'Etkilenen harcama', deger: ozet.harcama.replace('—', '-'), ipucu: 'son 7 günde bu öğelere giden' },
-          { anahtar: 'bilgi', ad: 'Yalnız bilgi', deger: ozet.yalnizBilgi, ipucu: 'platformda elle yapılmalı' },
-          { anahtar: 'buay', ad: 'Bu ay uygulanan', deger: ozet.buAyUygulanan, ipucu: 'platformdan geri okunarak' },
+          { anahtar: 'uygulanabilir', ad: d.kutular.uygulanabilir, deger: ozet.uygulanabilir, ipucu: d.kutular.uygulanabilirIpucu },
+          { anahtar: 'harcama', ad: d.kutular.harcama, deger: ozet.harcama.replace('—', '-'), ipucu: d.kutular.harcamaIpucu },
+          { anahtar: 'bilgi', ad: d.kutular.bilgi, deger: ozet.yalnizBilgi, ipucu: d.kutular.bilgiIpucu },
+          { anahtar: 'buay', ad: d.kutular.buAy, deger: ozet.buAyUygulanan, ipucu: d.kutular.buAyIpucu },
         ]}
       />
 
       {liste.hatalar.length > 0 && (
-        <Serit ton="hata" baslik="Bazı kaynaklar okunamadı; liste eksik olabilir.">
+        <Serit ton="hata" baslik={d.kaynakHatasi}>
           {liste.hatalar.join(' · ')}
         </Serit>
       )}
@@ -149,7 +154,7 @@ export function OnerilerSekmesi({
         <div className="flex flex-wrap items-center gap-3">
           {/* Tür süzgeci aynı listenin GÖRÜNÜMÜ: bölümlü seçici (BILESENLER §3.5). */}
           <BolumluSecici
-            etiket="Öneri türü"
+            etiket={d.turEtiketi}
             secili={etkinSecim}
             onSec={setSecili}
             secenekler={cipler.map((c) => ({
@@ -168,14 +173,8 @@ export function OnerilerSekmesi({
 
       {gorunen.length === 0 ? (
         <BosDurum
-          baslik="Açık öneri yok"
-          neden={
-            liste.hatalar.length > 0
-              ? 'Okunabilen hesaplarda öneri yok. Okunamayan kaynaklar yukarıda.'
-              : gizli > 0
-                ? `Açık öneri yok; ${gizli} öneri yoksayıldı.`
-                : 'Şu an öneri yok. Reklamlar yoruldukça ve bütçeler dolup boşaldıkça burada belirir.'
-          }
+          baslik={d.bosBaslik}
+          neden={liste.hatalar.length > 0 ? d.bosHata : gizli > 0 ? d.bosYoksayilan(gizli) : d.bosGenel}
         />
       ) : (
         <div className="grid items-start gap-4 min-[1100px]:grid-cols-2">
@@ -187,7 +186,7 @@ export function OnerilerSekmesi({
               gidiyor={gidenler.has(o.anahtar)}
               hata={kartHatalari[o.anahtar] ?? null}
               yoksayiliyor={yoksayilanlar.has(o.anahtar)}
-              etkiSatiri={o.durum === 'uygulandi' ? kartEtkiSatiri(etki, o.anahtar) : null}
+              etkiSatiri={o.durum === 'uygulandi' ? kartEtkiSatiri(etki, o.anahtar, dil) : null}
               onUygula={() => setOnayda(o)}
               onYoksay={() => void yoksay(o)}
             />

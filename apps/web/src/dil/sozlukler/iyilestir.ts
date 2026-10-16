@@ -1,0 +1,300 @@
+import { ikiDil } from '@advetics/shared';
+
+/**
+ * İYİLEŞTİR (Optimize): sayfa iskeleti, sekme adları, Öneriler sekmesi, öneri
+ * kartı, onay penceresi (`lib/iyilestir.ts`, `app/(dashboard)/iyilestir`,
+ * `components/iyilestir/{oneriler-sekmesi,oneri-karti,onay-penceresi}`).
+ * Sinyaller, Etkisi, Kreatifler ve AI Asistan kendi dosyalarında
+ * (`iyilestir-sinyal.ts`, `iyilestir-etki.ts`, `iyilestir-kreatif.ts`,
+ * `iyilestir-asistan.ts`).
+ *
+ * Öneri tipi adları ve platform adları shared'dan (`ONERI_TURU_ETIKETI`,
+ * `PLATFORM_KISA_ADLARI`) ve sunucunun cümleleri (başlık, neden, kanıt) D4'te.
+ * İngilizcede "öneri" = recommendation (Google Ads'in terimi).
+ */
+export const iyilestirSozlugu = ikiDil(
+  {
+    sayfa: {
+      /** Sekme başlığı: "İyileştir" menü sözlüğünden (`menuSatiriEtiketi`), burada yalnız alt başlıklar. */
+      yetkiYok: 'Bu ekranı görme yetkin yok.',
+      yoneticineSor: 'Yöneticine sor.',
+      workspaceGerekliNeden: 'Öneriler, asistan ve kurallar bir workspace’in reklam hesaplarına bakıyor.',
+      bolumlerEtiketi: 'İyileştir bölümleri',
+      yeniKural: 'Yeni kural',
+      kuralYetkiYok: 'Kural yazma yetkin yok.',
+      altSatir: {
+        oneriler: (ad: string, bas: string, son: string) => `${ad} · Son 7 gün · ${bas} - ${son}`,
+        sinyaller: (ad: string) => `${ad} · her gece, dünün verisi beklenen aralıkla karşılaştırılıyor`,
+        kreatifler: (ad: string) => `${ad} · son 90 gün · aynı amaçtaki kreatifler birbiriyle karşılaştırılıyor`,
+        etki: (ad: string) => `${ad} · Advetics’ten yapılan durdurma ve bütçe değişiklikleri, değişmeyenlerle kıyaslanarak`,
+        kurallar: (ad: string) => `${ad} · otomatik kurallar saatte bir değerlendiriliyor`,
+        asistan: (ad: string) => `${ad} · okur, önerir, onayınla uygular`,
+      },
+    },
+    sekme: {
+      oneriler: 'Öneriler',
+      sinyaller: 'Sinyaller',
+      kreatifler: 'Kreatifler',
+      etki: 'Etkisi',
+      asistan: 'AI Asistan',
+      kurallar: 'Kurallar',
+    },
+    /*
+     * Türkçe ek platforma göre değişiyor ("Meta’ya", "Google’a", "LinkedIn’e");
+     * İngilizcede edat ("to Meta"). Tablo Platform anahtarlı: yeni platform
+     * eklenince derleme burayı ister.
+     */
+    platformEki: {
+      meta: { yonelme: 'Meta’ya', ayrilma: 'Meta’dan', bulunma: 'Meta’da' },
+      google: { yonelme: 'Google’a', ayrilma: 'Google’dan', bulunma: 'Google’da' },
+      linkedin: { yonelme: 'LinkedIn’e', ayrilma: 'LinkedIn’den', bulunma: 'LinkedIn’de' },
+    },
+    /** Seviye adı platformun kendi diliyle; LinkedIn'de bizim `ad_group` onların "Campaign"ı. */
+    seviye: {
+      meta: {
+        campaign: { ad: 'Kampanya', belirtme: 'kampanyayı' },
+        ad_group: { ad: 'Reklam seti', belirtme: 'reklam setini' },
+        ad: { ad: 'Reklam', belirtme: 'reklamı' },
+      },
+      google: {
+        campaign: { ad: 'Kampanya', belirtme: 'kampanyayı' },
+        ad_group: { ad: 'Reklam grubu', belirtme: 'reklam grubunu' },
+        ad: { ad: 'Reklam', belirtme: 'reklamı' },
+      },
+      linkedin: {
+        campaign: { ad: 'Kampanya grubu', belirtme: 'kampanya grubunu' },
+        ad_group: { ad: 'Kampanya', belirtme: 'kampanyayı' },
+        ad: { ad: 'Reklam', belirtme: 'reklamı' },
+      },
+    },
+    eylem: {
+      /** `nesne`: seviyenin belirtme hâli (TR) ya da adı (EN). */
+      durdurDugme: (nesne: string) => `${nesne} durdur`,
+      kapsamReklam: 'Yalnız bu reklam durur; üst seviyeler çalışmaya devam eder.',
+      kapsamGrup: (seviye: string) => `Bu ${seviye} içindeki bütün reklamlar durur; kampanya çalışmaya devam eder.`,
+      kapsamKampanya: 'Kampanyanın bütün reklamları durur.',
+      onay: (dugme: string) => `${dugme}: onay`,
+      yayinda: 'Yayında',
+      duraklatildi: 'Duraklatıldı',
+      durdurAciklama: (kapsam: string) => `${kapsam} İstediğin zaman Reklam Yöneticisi’nden yeniden başlatabilirsin.`,
+      butceArtir: 'Bütçeyi artır',
+      butceDusur: 'Bütçeyi düşür',
+      gunluk: 'Günlük',
+      toplam: 'Toplam',
+      gunBasi: (t: string) => `${t} / gün`,
+      toplamTutar: (t: string) => `${t} (toplam)`,
+      butceAciklama: (tip: string, once: string, sonra: string, seviye: string) =>
+        `${tip} bütçe ${once} yerine ${sonra} olur. Değişiklik bütçenin durduğu ${seviye} seviyesinde yapılır.`,
+    },
+    adim: {
+      gonder: (yonelme: string) => `${yonelme} gönder`,
+      geriOku: (ayrilma: string) => `${ayrilma} geri oku ve karşılaştır`,
+      kaydet: 'Kaydet (kim, ne zaman, eski → yeni)',
+    },
+    hata: {
+      baglanti: 'Bağlantı kurulamadı.',
+      sonucOkunamadi: 'Sunucu yanıt verdi ama geri okuma sonucu okunamadı. Sayfayı yenileyip kartın durumuna bak.',
+    },
+    sonuc: {
+      uygulandiDogrulandi: (bulunma: string, zaman: string) => `Uygulandı · ${bulunma} doğrulandı · ${zaman}`,
+      uyusmadi: (platform: string, deger: string) => `${platform} değişikliği kabul etti ama geri okunan değer farklı: ${deger}`,
+      istenen: (deger: string) => ` (istenen: ${deger})`,
+    },
+    tumu: 'Tümü',
+    azOnce: 'az önce',
+    arac: {
+      metrik_ozeti: 'Metrik özeti okundu',
+      gunluk_seri: 'Günlük seri okundu',
+      varlik_kirilimi: 'Kırılım okundu',
+      donusum_detayi: 'Dönüşümler okundu',
+      butce_temposu: 'Bütçe temposu okundu',
+      oneriler: 'Öneriler hesaplandı',
+      uygula_karti: 'Uygula kartı hazırlandı',
+      advcampaign_devret: 'AdvCampaign’e aktarıldı',
+    },
+    oneriler: {
+      alinamadi: 'Öneriler alınamadı.',
+      yoksayilamadi: (neden: string) => `Yoksayılamadı: ${neden}`,
+      kutular: {
+        uygulanabilir: 'Uygulanabilir öneri',
+        uygulanabilirIpucu: 'tek tıkla, onaylı',
+        harcama: 'Etkilenen harcama',
+        harcamaIpucu: 'son 7 günde bu öğelere giden',
+        bilgi: 'Yalnız bilgi',
+        bilgiIpucu: 'platformda elle yapılmalı',
+        buAy: 'Bu ay uygulanan',
+        buAyIpucu: 'platformdan geri okunarak',
+      },
+      kaynakHatasi: 'Bazı kaynaklar okunamadı; liste eksik olabilir.',
+      turEtiketi: 'Öneri türü',
+      sayacKesildi: (toplam: number, gosterilen: number) => `${toplam} öneriden ${gosterilen} tanesi gösteriliyor`,
+      sayacGosteriliyor: (n: number) => `${n} öneri gösteriliyor`,
+      sayacGizli: (n: number) => `${n} yoksayılan öneri gizli`,
+      sayacBeklemede: (n: number) => `${n} bütçe önerisi bekliyor (son 7 günde bütçesi değişti)`,
+      bosBaslik: 'Açık öneri yok',
+      bosHata: 'Okunabilen hesaplarda öneri yok. Okunamayan kaynaklar yukarıda.',
+      bosYoksayilan: (n: number) => `Açık öneri yok; ${n} öneri yoksayıldı.`,
+      bosGenel: 'Şu an öneri yok. Reklamlar yoruldukça ve bütçeler dolup boşaldıkça burada belirir.',
+    },
+    kart: {
+      uygulandiKayitsiz: 'Uygulandı · geri okuma sonucu kayıtta yok',
+      yalnizBilgi: 'Bu öneri yalnız bilgi; panelden uygulanamıyor.',
+      yetkisiz: 'Uygulamak için bütçe yazma yetkisi gerekiyor. Yöneticine sor.',
+      yoksayiliyor: 'Yoksayılıyor',
+      yoksay: 'Yoksay',
+      yeniKreatif: 'Yeni kreatif için AdvCampaign’e geç',
+      reklamYoneticisindeGor: 'Reklam Yöneticisi’nde gör',
+      etkisindeGor: 'Etkisi sekmesinde gör',
+    },
+    onay: {
+      baslik: 'Onay',
+      yenile: 'Yenile',
+      kapat: 'Kapat',
+      vazgec: 'Vazgeç',
+      tekrarDene: 'Tekrar dene',
+      onaylaUygula: 'Onayla ve uygula',
+      oneriDegisti: 'Öneri değişti, yenile. ',
+      uygulanamadi: 'Uygulanamadı. ',
+      simdi: 'Şimdi',
+      sonra: 'Sonra',
+    },
+  },
+  {
+    sayfa: {
+      yetkiYok: 'You do not have permission to view this screen.',
+      yoneticineSor: 'Ask your administrator.',
+      workspaceGerekliNeden: 'Recommendations, the assistant and rules look at the ad accounts of one workspace.',
+      bolumlerEtiketi: 'Optimize sections',
+      yeniKural: 'New rule',
+      kuralYetkiYok: 'You do not have permission to write rules.',
+      altSatir: {
+        oneriler: (ad: string, bas: string, son: string) => `${ad} · Last 7 days · ${bas} - ${son}`,
+        sinyaller: (ad: string) => `${ad} · every night, yesterday’s data is compared with the expected range`,
+        kreatifler: (ad: string) => `${ad} · last 90 days · creatives with the same objective are compared with each other`,
+        etki: (ad: string) => `${ad} · pauses and budget changes made from Advetics, compared with unchanged ones`,
+        kurallar: (ad: string) => `${ad} · automatic rules are evaluated every hour`,
+        asistan: (ad: string) => `${ad} · reads, recommends, applies with your approval`,
+      },
+    },
+    sekme: {
+      oneriler: 'Recommendations',
+      sinyaller: 'Signals',
+      kreatifler: 'Creatives',
+      etki: 'Impact',
+      asistan: 'AI Assistant',
+      kurallar: 'Rules',
+    },
+    platformEki: {
+      meta: { yonelme: 'to Meta', ayrilma: 'from Meta', bulunma: 'on Meta' },
+      google: { yonelme: 'to Google', ayrilma: 'from Google', bulunma: 'on Google' },
+      linkedin: { yonelme: 'to LinkedIn', ayrilma: 'from LinkedIn', bulunma: 'on LinkedIn' },
+    },
+    seviye: {
+      meta: {
+        campaign: { ad: 'Campaign', belirtme: 'campaign' },
+        ad_group: { ad: 'Ad set', belirtme: 'ad set' },
+        ad: { ad: 'Ad', belirtme: 'ad' },
+      },
+      google: {
+        campaign: { ad: 'Campaign', belirtme: 'campaign' },
+        ad_group: { ad: 'Ad group', belirtme: 'ad group' },
+        ad: { ad: 'Ad', belirtme: 'ad' },
+      },
+      linkedin: {
+        campaign: { ad: 'Campaign group', belirtme: 'campaign group' },
+        ad_group: { ad: 'Campaign', belirtme: 'campaign' },
+        ad: { ad: 'Ad', belirtme: 'ad' },
+      },
+    },
+    eylem: {
+      durdurDugme: (nesne: string) => `Pause ${nesne}`,
+      kapsamReklam: 'Only this ad stops; higher levels keep running.',
+      kapsamGrup: (seviye: string) => `All ads in this ${seviye} stop; the campaign keeps running.`,
+      kapsamKampanya: 'All ads in the campaign stop.',
+      onay: (dugme: string) => `${dugme}: confirm`,
+      yayinda: 'Enabled',
+      duraklatildi: 'Paused',
+      durdurAciklama: (kapsam: string) => `${kapsam} You can enable it again any time from Ads Manager.`,
+      butceArtir: 'Increase budget',
+      butceDusur: 'Decrease budget',
+      gunluk: 'Daily',
+      toplam: 'Total',
+      gunBasi: (t: string) => `${t} / day`,
+      toplamTutar: (t: string) => `${t} (total)`,
+      butceAciklama: (tip: string, once: string, sonra: string, seviye: string) =>
+        `${tip} budget changes from ${once} to ${sonra}. The change is made at the ${seviye} level, where the budget sits.`,
+    },
+    adim: {
+      gonder: (yonelme: string) => `Send ${yonelme}`,
+      geriOku: (ayrilma: string) => `Read back ${ayrilma} and compare`,
+      kaydet: 'Save (who, when, old → new)',
+    },
+    hata: {
+      baglanti: 'Could not connect.',
+      sonucOkunamadi: 'The server responded but the read-back result could not be read. Refresh the page and check the card status.',
+    },
+    sonuc: {
+      uygulandiDogrulandi: (bulunma: string, zaman: string) => `Applied · verified ${bulunma} · ${zaman}`,
+      uyusmadi: (platform: string, deger: string) => `${platform} accepted the change but the value read back is different: ${deger}`,
+      istenen: (deger: string) => ` (requested: ${deger})`,
+    },
+    tumu: 'All',
+    azOnce: 'just now',
+    arac: {
+      metrik_ozeti: 'Metric summary read',
+      gunluk_seri: 'Daily series read',
+      varlik_kirilimi: 'Breakdown read',
+      donusum_detayi: 'Conversions read',
+      butce_temposu: 'Budget pacing read',
+      oneriler: 'Recommendations calculated',
+      uygula_karti: 'Apply card prepared',
+      advcampaign_devret: 'Handed off to AdvCampaign',
+    },
+    oneriler: {
+      alinamadi: 'Recommendations could not be loaded.',
+      yoksayilamadi: (neden: string) => `Could not dismiss: ${neden}`,
+      kutular: {
+        uygulanabilir: 'Actionable recommendations',
+        uygulanabilirIpucu: 'one click, with approval',
+        harcama: 'Cost affected',
+        harcamaIpucu: 'spent on these items in the last 7 days',
+        bilgi: 'Info only',
+        bilgiIpucu: 'must be done manually on the platform',
+        buAy: 'Applied this month',
+        buAyIpucu: 'verified by reading back from the platform',
+      },
+      kaynakHatasi: 'Some sources could not be read; the list may be incomplete.',
+      turEtiketi: 'Recommendation type',
+      sayacKesildi: (toplam: number, gosterilen: number) => `Showing ${gosterilen} of ${toplam} recommendations`,
+      sayacGosteriliyor: (n: number) => `Showing ${n} ${n === 1 ? 'recommendation' : 'recommendations'}`,
+      sayacGizli: (n: number) => `${n} dismissed ${n === 1 ? 'recommendation is' : 'recommendations are'} hidden`,
+      sayacBeklemede: (n: number) => `${n} budget ${n === 1 ? 'recommendation is' : 'recommendations are'} waiting (budget changed in the last 7 days)`,
+      bosBaslik: 'No open recommendations',
+      bosHata: 'No recommendations in the accounts that could be read. Sources that could not be read are above.',
+      bosYoksayilan: (n: number) => `No open recommendations; ${n} dismissed.`,
+      bosGenel: 'No recommendations right now. They appear here as ads wear out and budgets fill and empty.',
+    },
+    kart: {
+      uygulandiKayitsiz: 'Applied · no read-back result on record',
+      yalnizBilgi: 'This recommendation is info only; it cannot be applied from the panel.',
+      yetkisiz: 'Applying needs budget write permission. Ask your administrator.',
+      yoksayiliyor: 'Dismissing',
+      yoksay: 'Dismiss',
+      yeniKreatif: 'Go to AdvCampaign for a new creative',
+      reklamYoneticisindeGor: 'View in Ads Manager',
+      etkisindeGor: 'See on the Impact tab',
+    },
+    onay: {
+      baslik: 'Confirm',
+      yenile: 'Refresh',
+      kapat: 'Close',
+      vazgec: 'Cancel',
+      tekrarDene: 'Try again',
+      onaylaUygula: 'Confirm and apply',
+      oneriDegisti: 'The recommendation changed, refresh. ',
+      uygulanamadi: 'Could not apply. ',
+      simdi: 'Now',
+      sonra: 'After',
+    },
+  },
+);

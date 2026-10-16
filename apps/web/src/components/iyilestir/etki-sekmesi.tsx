@@ -5,9 +5,11 @@ import type { Etki, EtkiAyrintisi, EtkiListesi } from '@advetics/shared';
 import { ETKI_SAYFA_BOYUTU } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { formatRelative } from '@/lib/format';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { etkiSozlugu } from '@/dil/sozlukler/iyilestir-etki';
 import {
   ETKI_GRAFIK,
-  GORUNUM_ETIKETI,
+  gorunumEtiketi,
   ayrintiVar,
   bosMetni,
   dipnot,
@@ -76,6 +78,8 @@ const AYRINTI_KAP =
  * okunamazsa kanıt yine görünür ve grafik yerinde sunucunun cümlesi yazar.
  */
 export function EtkiSekmesi({ clientId, ilk }: { clientId: string; ilk: EtkiSonucu }) {
+  const { dil } = useDil();
+  const d = useSozluk(etkiSozlugu).sekme;
   const [gorunum, setGorunum] = useState<EtkiGorunumu>('hepsi');
   const [sayfa, setSayfa] = useState(1);
   const [sonuc, setSonuc] = useState<EtkiSonucu | null>(ilk);
@@ -108,10 +112,10 @@ export function EtkiSekmesi({ clientId, ilk }: { clientId: string; ilk: EtkiSonu
         setSonListe(liste);
       } catch (e) {
         if (benim !== sira.current) return;
-        setSonuc({ durum: 'hata', mesaj: e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.' });
+        setSonuc({ durum: 'hata', mesaj: e instanceof ApiRequestError ? e.message : d.sunucuyaUlasilamadi });
       }
     },
-    [clientId],
+    [clientId, d],
   );
 
   function suz(degisim: Partial<typeof sorgu.current>) {
@@ -139,7 +143,7 @@ export function EtkiSekmesi({ clientId, ilk }: { clientId: string; ilk: EtkiSonu
     } catch (err) {
       setAyrintilar((a) => ({
         ...a,
-        [e.id]: { durum: 'hata', mesaj: err instanceof ApiRequestError ? err.message : 'Sunucuya ulaşılamadı.' },
+        [e.id]: { durum: 'hata', mesaj: err instanceof ApiRequestError ? err.message : d.sunucuyaUlasilamadi },
       }));
     }
   }
@@ -149,7 +153,7 @@ export function EtkiSekmesi({ clientId, ilk }: { clientId: string; ilk: EtkiSonu
   return (
     <>
       {sonuc?.durum === 'tamam' && sonuc.liste.hatalar.length > 0 && (
-        <Serit ton="hata" baslik="Bazı kaynaklar okunamadı; liste eksik olabilir.">
+        <Serit ton="hata" baslik={d.kaynakHatasi}>
           {sonuc.liste.hatalar.map((h) => `${h.kaynak}: ${h.mesaj}`).join(' · ')}
         </Serit>
       )}
@@ -161,31 +165,30 @@ export function EtkiSekmesi({ clientId, ilk }: { clientId: string; ilk: EtkiSonu
           sag={
             sonuc?.durum === 'tamam' && (
               <span className="text-12 text-ink-muted">
-                Son hesaplama {formatRelative(sonuc.liste.sonHesaplama)} · {sonuc.liste.toplam} değişiklikten{' '}
-                {sonuc.liste.etkiler.length} tanesi gösteriliyor
+                {d.sonHesaplama(formatRelative(sonuc.liste.sonHesaplama, dil), sonuc.liste.toplam, sonuc.liste.etkiler.length)}
               </span>
             )
           }
         >
           <BolumluSecici
-            etiket="Süzgeç"
+            etiket={d.suzgec}
             secili={gorunum}
             onSec={(g) => suz({ gorunum: g })}
-            secenekler={(['hepsi', 'acik', 'kapali'] as const).map((g) => ({ deger: g, etiket: GORUNUM_ETIKETI[g] }))}
+            secenekler={(['hepsi', 'acik', 'kapali'] as const).map((g) => ({ deger: g, etiket: gorunumEtiketi(g, dil) }))}
           />
         </AracCubugu>
 
         {hal === 'yukleniyor' && (
           <div className="p-4">
-            <Yukleniyor etiket="Etkiler yükleniyor" />
+            <Yukleniyor etiket={d.yukleniyor} />
           </div>
         )}
 
         {sonuc?.durum === 'hata' && (
           <div className="p-4">
             <HataDurumu
-              baslik="Etkiler okunamadı."
-              mesaj={<>Sunucunun cevabı: {sonuc.mesaj}</>}
+              baslik={d.okunamadi}
+              mesaj={<>{d.sunucuCevabi} {sonuc.mesaj}</>}
               onTekrar={() => void yukle(sorgu.current)}
             />
           </div>
@@ -197,21 +200,21 @@ export function EtkiSekmesi({ clientId, ilk }: { clientId: string; ilk: EtkiSonu
          */}
         {(hal === 'bos' || hal === 'dolu') && sonuc?.durum === 'tamam' && (
           <Tablo<Etki>
-            etiket="Değişikliklerin etkisi"
+            etiket={d.tabloEtiketi}
             satirlar={hal === 'dolu' ? sonuc.liste.etkiler : []}
             satirAnahtari={(e) => e.id}
             bos={hal === 'bos' ? <BosKutu neden={sonuc.liste.emptyReason} onHepsi={() => suz({ gorunum: 'hepsi' })} /> : undefined}
             sutunlar={[
               {
                 anahtar: 'degisiklik',
-                baslik: 'Değişiklik',
+                baslik: d.sutunDegisiklik,
                 hucre: (e) => (
                   <EtkiHucresi etki={e} acik={acik.has(e.id)} ayrinti={ayrintilar[e.id] ?? null} />
                 ),
               },
               {
                 anahtar: 'sonuc',
-                baslik: 'Sonuç',
+                baslik: d.sutunSonuc,
                 hucre: (e) => {
                   const r = sonucRozeti(e);
                   return <Rozet hal={NOKTA_HALI[r.nokta]}>{r.metin}</Rozet>;
@@ -219,7 +222,7 @@ export function EtkiSekmesi({ clientId, ilk }: { clientId: string; ilk: EtkiSonu
               },
               {
                 anahtar: 'ayrinti',
-                baslik: <span className="sr-only">Ayrıntı</span>,
+                baslik: <span className="sr-only">{d.sutunAyrinti}</span>,
                 sayi: true,
                 hucre: (e) =>
                   ayrintiVar(e) ? (
@@ -230,7 +233,7 @@ export function EtkiSekmesi({ clientId, ilk }: { clientId: string; ilk: EtkiSonu
                       aria-controls={`etki-ayrinti-${e.id}`}
                       onClick={() => void ayrintiAc(e)}
                     >
-                      {acik.has(e.id) ? 'Kapat' : 'Ayrıntı'}
+                      {acik.has(e.id) ? d.kapat : d.sutunAyrinti}
                     </Dugme>
                   ) : null,
               },
@@ -241,7 +244,7 @@ export function EtkiSekmesi({ clientId, ilk }: { clientId: string; ilk: EtkiSonu
 
         {sonListe && (
           <details className="group border-t border-line px-4 py-3 text-13 text-ink-muted">
-            <summary className="cursor-pointer font-semibold text-ink">Ölçülmeyen değişiklikler</summary>
+            <summary className="cursor-pointer font-semibold text-ink">{d.olculmeyenler}</summary>
             <ul className="m-0 mt-2 grid list-disc gap-1 pl-5">
               {sonListe.olculmeyen.map((o) => (
                 <li key={o.kod}>
@@ -257,33 +260,35 @@ export function EtkiSekmesi({ clientId, ilk }: { clientId: string; ilk: EtkiSonu
 }
 
 function OzetKutulari({ liste, gorunum }: { liste: EtkiListesi; gorunum: EtkiGorunumu }) {
+  const { dil } = useDil();
+  const d = useSozluk(etkiSozlugu).sekme.ozet;
   const o = etkiOzeti(liste, gorunum);
   return (
     <MetrikKutulari
       kutular={[
         {
           anahtar: 'sonuclanan',
-          ad: 'Sonuçlanan',
+          ad: d.sonuclanan,
           deger: o.sonuclanan,
-          ipucu: o.olculemedi > 0 ? `${o.olculemedi} tanesi ölçülemedi` : 'son 60 gün',
+          ipucu: o.olculemedi > 0 ? d.olculemedi(o.olculemedi) : d.son60,
         },
         {
           anahtar: 'iyilesen',
-          ad: 'İyileşen',
+          ad: d.iyilesen,
           deger: o.iyilesen ?? '-',
-          ipucu: o.iyilesen === null ? 'listenin tamamı görünmüyor' : 'değişmeyenlere göre',
+          ipucu: o.iyilesen === null ? d.listeEksik : d.degismeyenlereGore,
         },
         {
           anahtar: 'kotulesen',
-          ad: 'Kötüleşen',
+          ad: d.kotulesen,
           deger: o.kotulesen ?? '-',
-          ipucu: o.kotulesen === null ? 'listenin tamamı görünmüyor' : 'hepsi gösteriliyor',
+          ipucu: o.kotulesen === null ? d.listeEksik : d.hepsiGosteriliyor,
         },
         {
           anahtar: 'olculuyor',
-          ad: 'Ölçülüyor',
+          ad: d.olculuyor,
           deger: o.olculuyor,
-          ipucu: o.siradaki ? `sıradaki ${gunKisa(o.siradaki)}` : 'bekleyen ölçüm yok',
+          ipucu: o.siradaki ? d.siradaki(gunKisa(o.siradaki, dil)) : d.bekleyenYok,
         },
       ]}
     />
@@ -291,7 +296,9 @@ function OzetKutulari({ liste, gorunum }: { liste: EtkiListesi; gorunum: EtkiGor
 }
 
 function BosKutu({ neden, onHepsi }: { neden: EtkiListesi['emptyReason']; onHepsi: () => void }) {
-  const b = bosMetni(neden);
+  const { dil } = useDil();
+  const d = useSozluk(etkiSozlugu).sekme;
+  const b = bosMetni(neden, dil);
   return (
     <BosDurum
       baslik={b.baslik}
@@ -299,7 +306,7 @@ function BosKutu({ neden, onHepsi }: { neden: EtkiListesi['emptyReason']; onHeps
       eylem={
         b.suzgec && (
           <Dugme ton="ikincil" boyut="kucuk" onClick={onHepsi}>
-            Hepsine bak
+            {d.hepsineBak}
           </Dugme>
         )
       }
@@ -314,11 +321,12 @@ function BosKutu({ neden, onHepsi }: { neden: EtkiListesi['emptyReason']; onHeps
  * olurdu (Grup 3 sapması). İlk sütun tablonun en geniş sütunu.
  */
 function EtkiHucresi({ etki, acik, ayrinti }: { etki: Etki; acik: boolean; ayrinti: AyrintiHali | null }) {
-  const ekler = ekCumleler(etki);
+  const { dil } = useDil();
+  const ekler = ekCumleler(etki, dil);
   const ayrintiId = `etki-ayrinti-${etki.id}`;
   return (
     <div className="min-w-0">
-      <AdHucresi ad={satirBasligi(etki)} alt={satirYolu(etki)} />
+      <AdHucresi ad={satirBasligi(etki)} alt={satirYolu(etki, dil)} />
       <p className="m-0 mt-1 text-13 text-ink">
         {etki.cumle}
         {ekler.length > 0 && ` ${ekler.join(' ')}`}
@@ -329,7 +337,7 @@ function EtkiHucresi({ etki, acik, ayrinti }: { etki: Etki; acik: boolean; ayrin
             <div className="grid gap-4 pt-3 min-[1000px]:grid-cols-[minmax(0,1fr)_300px]">
               <div className="grid content-start gap-2">
                 <div className="grid grid-cols-[repeat(auto-fit,minmax(120px,1fr))] gap-2">
-                  {kanitKutulari(etki).map((k) => (
+                  {kanitKutulari(etki, dil).map((k) => (
                     <div key={k.baslik} className="grid gap-0.5 rounded-alan border border-line px-3 py-2">
                       <small className="text-12 text-ink-muted">{k.baslik}</small>
                       <b className="font-baslik text-14 font-bold tabular-nums text-ink">{k.deger}</b>
@@ -337,7 +345,7 @@ function EtkiHucresi({ etki, acik, ayrinti }: { etki: Etki; acik: boolean; ayrin
                     </div>
                   ))}
                 </div>
-                <p className="m-0 text-12 text-ink-muted">{dipnot(etki)}</p>
+                <p className="m-0 text-12 text-ink-muted">{dipnot(etki, dil)}</p>
               </div>
               <Grafik etki={etki} ayrinti={ayrinti} />
             </div>
@@ -349,33 +357,35 @@ function EtkiHucresi({ etki, acik, ayrinti }: { etki: Etki; acik: boolean; ayrin
 }
 
 function Grafik({ etki, ayrinti }: { etki: Etki; ayrinti: AyrintiHali | null }) {
+  const d = useSozluk(etkiSozlugu).sekme;
+  const t = useSozluk(etkiSozlugu).dipnot;
   const not = 'm-0 self-center text-12 text-ink-muted';
   if (!ayrinti || ayrinti.durum === 'yukleniyor') {
-    return <p className={not}>Grafik yükleniyor.</p>;
+    return <p className={not}>{d.grafikYukleniyor}</p>;
   }
   if (ayrinti.durum === 'hata') {
     return (
       <p className="m-0 self-center text-12 text-danger-strong" role="alert">
-        Grafik alınamadı: {ayrinti.mesaj}
+        {d.grafikAlinamadi} {ayrinti.mesaj}
       </p>
     );
   }
   const seri = ayrinti.ayrinti.seri;
   const yollar = seri ? etkiGrafikYollari(seri) : null;
   if (!seri || !yollar) {
-    return <p className={not}>Bu ölçümün günlük grafiği yok (günlük metrik hesaplanamadı).</p>;
+    return <p className={not}>{d.grafikYok}</p>;
   }
   const { W, H, ALT } = ETKI_GRAFIK;
-  const metrik = etki.metrik === 'tiklama_basi_maliyet' ? 'tıklama başı maliyet' : 'dönüşüm başı maliyet';
+  const metrik = etki.metrik === 'tiklama_basi_maliyet' ? t.metrikTiklama : t.metrikDonusum;
   return (
     <figure className="m-0 grid gap-1.5">
-      <svg className="h-auto w-full" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Günlük ${metrik}: ${etki.kapsam.ad} ve değişmeyenler`}>
+      <svg className="h-auto w-full" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={d.grafikEtiketi(metrik, etki.kapsam.ad)}>
         <line x1={0} y1={ALT} x2={W} y2={ALT} className="stroke-line" />
         {yollar.degisiklikX !== null && (
           <>
             <line x1={yollar.degisiklikX} y1={6} x2={yollar.degisiklikX} y2={ALT} className="stroke-ink" strokeDasharray="3 3" />
             <text x={yollar.degisiklikX + 4} y={14} fontSize={9} className="fill-ink-muted">
-              değişiklik
+              {d.degisiklik}
             </text>
           </>
         )}

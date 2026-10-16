@@ -8,6 +8,8 @@ import { REKLAM_YONETICISI } from '@/lib/reklam-yoneticisi';
 import type { Oneri } from '@advetics/shared';
 import { ONERI_TURU_ETIKETI, PLATFORM_KISA_ADLARI } from '@advetics/shared';
 import { formatRelative } from '@/lib/format';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { iyilestirSozlugu } from '@/dil/sozlukler/iyilestir';
 import { etkiAdresi, type KartEtkiSatiri } from '@/lib/etki';
 import { NOKTA_HALI } from './etki-sekmesi';
 import { eylemMetni, kartHali, miniYollar, MINI, seviyeAdi, sonucMetni } from '@/lib/iyilestir';
@@ -63,8 +65,10 @@ export function OneriKarti({
    */
   etkiSatiri?: KartEtkiSatiri | null;
 }) {
+  const { dil } = useDil();
+  const d = useSozluk(iyilestirSozlugu).kart;
   const hal = kartHali(oneri, yazabilir);
-  const metin = eylemMetni(oneri);
+  const metin = eylemMetni(oneri, dil);
   const yol = oneri.varlik.ustAd ? `${oneri.varlik.ustAd} › ${oneri.varlik.ad}` : oneri.varlik.ad;
 
   /*
@@ -75,7 +79,7 @@ export function OneriKarti({
   const eylemler =
     hal === 'dogrulandi' || hal === 'uyusmadi' ? (
       (() => {
-        const t = sonucMetni(oneri.uygulama!, oneri.platform, metin?.sonra ?? null, formatRelative(oneri.uygulama!.zaman));
+        const t = sonucMetni(oneri.uygulama!, oneri.platform, metin?.sonra ?? null, formatRelative(oneri.uygulama!.zaman, dil), dil);
         return (
           <span className="mr-auto inline-flex items-center gap-2 text-[12.5px] font-semibold text-ink">
             <DurumNoktasi hal={t.ton === 'uyari' ? 'hata' : 'ok'} />
@@ -86,12 +90,12 @@ export function OneriKarti({
     ) : hal === 'uygulandi' ? (
       <span className="mr-auto inline-flex items-center gap-2 text-[12.5px] font-semibold text-ink">
         <DurumNoktasi hal="ok" />
-        Uygulandı · geri okuma sonucu kayıtta yok
+        {d.uygulandiKayitsiz}
       </span>
     ) : (
       <>
-        {hal === 'bilgi' && <span className={KISIT}>{oneri.kisit ?? 'Bu öneri yalnız bilgi; panelden uygulanamıyor.'}</span>}
-        {hal === 'yetkisiz' && <span className={KISIT}>Uygulamak için bütçe yazma yetkisi gerekiyor. Yöneticine sor.</span>}
+        {hal === 'bilgi' && <span className={KISIT}>{oneri.kisit ?? d.yalnizBilgi}</span>}
+        {hal === 'yetkisiz' && <span className={KISIT}>{d.yetkisiz}</span>}
         {hata && (
           <span className="mr-auto basis-full text-12 text-danger-strong" role="alert">
             {hata}
@@ -99,19 +103,19 @@ export function OneriKarti({
         )}
         {yazabilir && (
           <Dugme ton="hayalet" boyut="kucuk" onClick={onYoksay} bekliyor={yoksayiliyor}>
-            {yoksayiliyor ? 'Yoksayılıyor' : 'Yoksay'}
+            {yoksayiliyor ? d.yoksayiliyor : d.yoksay}
           </Dugme>
         )}
         {oneri.tur === 'kreatif_yorgunlugu' && (
           <Link className={dugmeSinifi('ikincil', 'kucuk')} href={`/reklam?musteri=${encodeURIComponent(oneri.clientId)}`}>
-            Yeni kreatif için AdvCampaign’e geç
+            {d.yeniKreatif}
           </Link>
         )}
         {oneri.tur === 'donusum_optimizasyonu' && (
           // YAZMA YOK (bu tur): kart yalnız bilgi; reklam setini görmek
           // için Reklam Yöneticisi'ne bağlanıyor.
           <Link className={dugmeSinifi('ikincil', 'kucuk')} href={baglanti(REKLAM_YONETICISI, {}, { seviye: 'ad_group' })}>
-            Reklam Yöneticisi’nde gör
+            {d.reklamYoneticisindeGor}
           </Link>
         )}
         {hal === 'uygulanabilir' && metin && (
@@ -134,7 +138,7 @@ export function OneriKarti({
         <div className="flex flex-wrap items-center gap-1.5">
           <span className={ETIKET}>{ONERI_TURU_ETIKETI[oneri.tur]}</span>
           <span className={ETIKET}>{PLATFORM_KISA_ADLARI[oneri.platform]}</span>
-          <span className={ETIKET}>{seviyeAdi(oneri.platform, oneri.varlik.seviye)}</span>
+          <span className={ETIKET}>{seviyeAdi(oneri.platform, oneri.varlik.seviye, dil)}</span>
         </div>
         <div>
           <h3 className="font-baslik m-0 text-15 font-bold leading-snug text-ink">{oneri.baslik}</h3>
@@ -184,7 +188,7 @@ export function OneriKarti({
             <span>{etkiSatiri.metin}</span>
             {etkiSatiri.bagli && (
               <Link className={`${KART_BAGLANTISI} ml-auto`} href={etkiAdresi(oneri.clientId)}>
-                Etkisi sekmesinde gör
+                {d.etkisindeGor}
               </Link>
             )}
           </div>

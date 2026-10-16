@@ -1,4 +1,4 @@
-import { YORGUNLUK } from '@advetics/shared';
+import { YORGUNLUK, sec } from '@advetics/shared';
 import type { AsistanOturumu, EtkiListesi, KreatifZekaYaniti, OneriListesi, RuleRecord, SinyalListesi } from '@advetics/shared';
 import { hasPermission, requireSession } from '@/lib/session';
 import { serverApiFetch } from '@/lib/api';
@@ -6,7 +6,10 @@ import { sayfaWorkspaceId, workspaceSecimVerisi } from '@/lib/sayfa-workspace';
 import { first, hataMetni } from '@/lib/sayfa-yardimcilari';
 import { formatDayLong } from '@/lib/format';
 import { baglanti } from '@/lib/baglanti';
-import { SEKMELER, SEKME_ETIKETI, ozetSayilari, sekmeCoz, type Sekme } from '@/lib/iyilestir';
+import { SEKMELER, ozetSayilari, sekmeCoz, sekmeEtiketi, type Sekme } from '@/lib/iyilestir';
+import { dilAl } from '@/dil/sunucu';
+import { iyilestirSozlugu } from '@/dil/sozlukler/iyilestir';
+import { menuSatiriEtiketi } from '@/lib/nav-sections';
 import { sinyalListeYolu, type SinyalSonucu } from '@/lib/sinyal';
 import { etkiListeYolu, type EtkiSonucu } from '@/lib/etki';
 import { kreatifZekaYolu, rozetSayisi, type KreatifSonucu } from '@/lib/kreatif-zeka';
@@ -22,7 +25,10 @@ import { KreatiflerSekmesi } from '@/components/iyilestir/kreatifler-sekmesi';
 import { KurallarIcerik, type HesapSonucu, type KurallarSonucu } from '@/components/rules/kurallar-icerik';
 import { NewRuleButton } from '@/components/rules/rule-controls';
 
-export const metadata = { title: 'İyileştir · Advetics' };
+/** Sekme başlığı istek anında: dil çerezden okunuyor, ad menünün kendi çevirisinden. */
+export async function generateMetadata() {
+  return { title: `${menuSatiriEtiketi('/iyilestir', await dilAl())} · Advetics` };
+}
 export const dynamic = 'force-dynamic';
 
 /**
@@ -66,14 +72,17 @@ export default async function IyilestirPage({
 }) {
   const session = await requireSession();
   const params = await searchParams;
+  const dil = await dilAl();
+  const d = sec(iyilestirSozlugu, dil).sayfa;
+  const baslik = menuSatiriEtiketi('/iyilestir', dil);
 
   // SESSİZCE İLK WORKSPACE'E DÜŞÜLMÜYOR — gerekçe `lib/sayfa-workspace.ts`.
   const clientId = sayfaWorkspaceId(session, first(params.musteri));
   if (!clientId) {
     return (
       <WorkspaceGerekli
-        ekran="İyileştir"
-        neden="Öneriler, asistan ve kurallar bir workspace’in reklam hesaplarına bakıyor."
+        ekran={baslik}
+        neden={d.workspaceGerekliNeden}
         {...workspaceSecimVerisi(session)}
       />
     );
@@ -82,9 +91,9 @@ export default async function IyilestirPage({
   if (!hasPermission(session, 'rule.read')) {
     return (
       <div className="space-y-5">
-        <SayfaBasligi bolum="İyileştir" baslik="İyileştir" />
-        <Uyari ton="uyari" baslik="Bu ekranı görme yetkin yok.">
-          Yöneticine sor.
+        <SayfaBasligi bolum={baslik} baslik={baslik} />
+        <Uyari ton="uyari" baslik={d.yetkiYok}>
+          {d.yoneticineSor}
         </Uyari>
       </div>
     );
@@ -192,16 +201,8 @@ export default async function IyilestirPage({
 
   const altSatir =
     sekme === 'oneriler'
-      ? `${clientAdi} · Son 7 gün · ${formatDayLong(range.from)} - ${formatDayLong(range.to)}`
-      : sekme === 'sinyaller'
-        ? `${clientAdi} · her gece, dünün verisi beklenen aralıkla karşılaştırılıyor`
-        : sekme === 'kreatifler'
-          ? `${clientAdi} · son 90 gün · aynı amaçtaki kreatifler birbiriyle karşılaştırılıyor`
-        : sekme === 'etki'
-          ? `${clientAdi} · Advetics’ten yapılan durdurma ve bütçe değişiklikleri, değişmeyenlerle kıyaslanarak`
-        : sekme === 'kurallar'
-        ? `${clientAdi} · otomatik kurallar saatte bir değerlendiriliyor`
-        : `${clientAdi} · okur, önerir, onayınla uygular`;
+      ? d.altSatir.oneriler(clientAdi, formatDayLong(range.from, dil), formatDayLong(range.to, dil))
+      : d.altSatir[sekme](clientAdi);
 
   /*
    * BÖLÜMLER SAYFA İÇİ YAN MENÜDE (kullanıcı kararı 2026-10-14, BILESENLER
@@ -214,8 +215,8 @@ export default async function IyilestirPage({
   return (
     <div className="grid gap-6">
       <SayfaBasligi
-        bolum="İyileştir"
-        baslik="İyileştir"
+        bolum={baslik}
+        baslik={baslik}
         aciklama={altSatir}
         eylemler={
           /*
@@ -227,8 +228,8 @@ export default async function IyilestirPage({
             clientId={clientId}
             accounts={hesapSonucu.durum === 'tamam' ? hesapSonucu.liste : []}
             hesapHatasi={hesapSonucu.durum === 'hata' ? hesapSonucu.mesaj : null}
-            etiket="Yeni kural"
-            kapaliNedeni={kuralYazabilir ? undefined : 'Kural yazma yetkin yok.'}
+            etiket={d.yeniKural}
+            kapaliNedeni={kuralYazabilir ? undefined : d.kuralYetkiYok}
           />
         }
       />
@@ -236,11 +237,11 @@ export default async function IyilestirPage({
       <SayfaIcDuzen
         menu={
           <SayfaIcMenu
-            etiket="İyileştir bölümleri"
+            etiket={d.bolumlerEtiketi}
             secili={sekme}
             ogeler={SIRA.map((k) => ({
               deger: k,
-              etiket: SEKME_ETIKETI[k],
+              etiket: sekmeEtiketi(k, dil),
               href: baglanti('/iyilestir', tasinan, { sekme: k }),
               // Rozet yalnız sayı GELDİYSE: düşen çağrının "0"ı yalan olurdu.
               sayi: rozet[k] !== null && rozet[k]! > 0 ? rozet[k]! : undefined,

@@ -1,4 +1,5 @@
 import type {
+  Dil,
   BildirimGonderimi,
   BildirimKanali,
   BildirimOlayi,
@@ -29,8 +30,10 @@ import {
   aliciAyristir,
   kanalOlusturSchema,
   sinyalGecisi,
+  sec,
   webhookDenetle,
 } from '@advetics/shared';
+import { sinyalSozlugu } from '@/dil/sozlukler/iyilestir-sinyal';
 import { baglanti } from '@/lib/baglanti';
 import { REKLAM_YONETICISI } from '@/lib/reklam-yoneticisi';
 import { markaMerkeziAdresi } from '@/lib/panel-adresleri';
@@ -128,58 +131,39 @@ function enUzunGecmis(hesaplar: readonly HesapSinyalOzeti[]): number {
  * Sunucu `emptyReason` göndermediyse (sözleşme ihlali) "sinyal yok"
  * DENMİYOR: neden bilinmiyor ve bilinmeyeni olumlu cümleye çevirmek yalan.
  */
-export function bosMetni(liste: SinyalListesi, gorunum: SinyalGorunumu): BosMetni {
+export function bosMetni(liste: SinyalListesi, gorunum: SinyalGorunumu, dil: Dil = 'tr'): BosMetni {
+  const d = sec(sinyalSozlugu, dil).bos;
   const neden = liste.emptyReason;
   if (neden === null) {
-    return { baslik: 'Liste boş geldi', metin: 'Sunucu boş listenin nedenini bildirmedi. Sayfayı yenileyin.', eylem: null };
+    return { baslik: d.bilinmeyenBaslik, metin: d.bilinmeyen, eylem: null };
   }
   if (gorunum === 'kapali' && neden === 'sinyal_yok') {
-    return {
-      baslik: 'Kapalı sinyal yok',
-      metin: 'Kapatılan ve kendiliğinden kapanan sinyaller burada durur.',
-      eylem: null,
-    };
+    return { baslik: d.kapaliYokBaslik, metin: d.kapaliYok, eylem: null };
   }
   const degerlendirilen = liste.hesaplar.filter((h) => h.durum === 'hesaplandi').length;
   const kapali = liste.sayilar.kapatildi + liste.sayilar.kendiliginden_kapandi;
   const metinler: Record<SinyalBosNedeni, BosMetni> = {
-    hesap_yok: {
-      baslik: 'Bu workspace’e reklam hesabı atanmamış',
-      metin: 'Sinyaller atanmış hesapların günlük verisinden hesaplanır. Hesabı Marka Merkezi › Kurulum’da atayın.',
-      eylem: 'hesap_ata',
-    },
-    hesaplanmadi: {
-      baslik: 'Henüz değerlendirilmedi',
-      metin: 'İlk değerlendirme, hesabın dünkü verisi geldikten sonra gece yapılır.',
-      eylem: null,
-    },
+    hesap_yok: { baslik: d.hesapYokBaslik, metin: d.hesapYok, eylem: 'hesap_ata' },
+    hesaplanmadi: { baslik: d.hesaplanmadiBaslik, metin: d.hesaplanmadi, eylem: null },
     gecmis_yetersiz: {
-      baslik: 'Performans karşılaştırması için geçmiş yetersiz',
-      metin: `Hesapların ${enUzunGecmis(liste.hesaplar)} haftalık verisi var; beklenen aralık için en az ${ANOMALI.enAzGecmisNokta} hafta gerekiyor. Sağlık kontrolleri çalışıyor ve sorun bulmadı.`,
+      baslik: d.gecmisYetersizBaslik,
+      metin: d.gecmisYetersiz(enUzunGecmis(liste.hesaplar), ANOMALI.enAzGecmisNokta),
       eylem: null,
     },
     sinyal_yok: {
-      baslik: 'Açık sinyal yok',
-      metin:
-        `${degerlendirilen} hesap değerlendirildi. Maliyet, gösterim, tıklama ve dönüşüm beklenen aralıkta; sağlık kontrollerinde sorun yok.` +
-        (kapali > 0 ? ` ${kapali} kapalı sinyal Kapalı sekmesinde.` : ''),
+      baslik: d.sinyalYokBaslik,
+      metin: d.sinyalYok(degerlendirilen) + (kapali > 0 ? d.sinyalYokKapali(kapali) : ''),
       eylem: kapali > 0 ? 'kapaliya_bak' : null,
     },
-    suzgec_bos: {
-      baslik: 'Bu süzgeçte sinyal yok',
-      metin: 'Seçili tür ya da platformda sinyal yok.',
-      eylem: 'suzgeci_temizle',
-    },
+    suzgec_bos: { baslik: d.suzgecBosBaslik, metin: d.suzgecBos, eylem: 'suzgeci_temizle' },
   };
   return metinler[neden];
 }
 
 /** Sessiz koşum (MIMARI Ç-14): org yöneticisi listeyi görür, bant ona da söyler. */
-export const OLCUM_DONEMI_METNI = {
-  baslik: 'Ölçüm döneminde',
-  bos: 'Sinyaller arka planda hesaplanıyor ve yanlış alarm oranı ölçülüyor. Bu sürede gösterilmiyor ve bildirim gönderilmiyor.',
-  bant: 'Ölçüm dönemi: bu sinyaller yalnız yöneticiye görünüyor ve hiçbir kanala gönderilmiyor. Yanlış alarmı kapatırken notla işaretleyin.',
-} as const;
+export function olcumDonemiMetni(dil: Dil = 'tr'): { baslik: string; bos: string; bant: string } {
+  return sec(sinyalSozlugu, dil).olcum;
+}
 
 // ─── Hesap durumu satırı ────────────────────────────────────────────────────
 
@@ -191,29 +175,18 @@ export type Nokta = 'yesil' | 'gri' | 'kirmizi';
  * SUSTU (MIMARI Ç-3) ve boş görünen liste orada bir şeyi kaçırıyor olabilir.
  * `Record`: yeni bir durum eklenince derleme buraya getirir.
  */
-export function hesapDurumu(h: HesapSinyalOzeti, zaman: (iso: string) => string): { nokta: Nokta; metin: string } {
+export function hesapDurumu(h: HesapSinyalOzeti, zaman: (iso: string) => string, dil: Dil = 'tr'): { nokta: Nokta; metin: string } {
+  const d = sec(sinyalSozlugu, dil).hesap;
   const not = h.not ? ` ${h.not}` : '';
   const tablo: Record<HesapSinyalDurumu, { nokta: Nokta; metin: string }> = {
     hesaplandi: {
       nokta: 'yesil',
-      metin: `Hesaplandı${h.sonHesaplama ? ` ${zaman(h.sonHesaplama)}` : ''} · ${h.gecmisHafta} haftalık geçmiş`,
+      metin: d.hesaplandi(h.sonHesaplama ? ` ${zaman(h.sonHesaplama)}` : '', h.gecmisHafta),
     },
-    hic_hesaplanmadi: {
-      nokta: 'gri',
-      metin: `Henüz hesaplanmadı. İlk değerlendirme, dünün verisi geldikten sonra gece yapılır.${not}`,
-    },
-    gecmis_yetersiz: {
-      nokta: 'gri',
-      metin: `Geçmiş yetersiz: ${h.gecmisHafta} hafta var, performans karşılaştırması için en az ${ANOMALI.enAzGecmisNokta} hafta gerekiyor. Sağlık kontrolleri çalışıyor.`,
-    },
-    veri_bayat: {
-      nokta: 'kirmizi',
-      metin: `Veri bayat: günlük metrik çekimi gecikmiş, bu hesapta sinyaller hesaplanmıyor.${not}`,
-    },
-    hesaplama_dustu: {
-      nokta: 'kirmizi',
-      metin: `Hesaplama düştü${h.not ? `: ${h.not}` : '. Sunucu nedenini bildirmedi.'}`,
-    },
+    hic_hesaplanmadi: { nokta: 'gri', metin: d.hicHesaplanmadi(not) },
+    gecmis_yetersiz: { nokta: 'gri', metin: d.gecmisYetersiz(h.gecmisHafta, ANOMALI.enAzGecmisNokta) },
+    veri_bayat: { nokta: 'kirmizi', metin: d.veriBayat(not) },
+    hesaplama_dustu: { nokta: 'kirmizi', metin: h.not ? d.dustuNedenli(h.not) : d.dustuNedensiz },
   };
   return tablo[h.durum];
 }
@@ -225,18 +198,15 @@ export function hesapDurumu(h: HesapSinyalOzeti, zaman: (iso: string) => string)
  * dışarıda kalan kontrol eklenince derleme buraya getirir, sessizce adsız
  * satır çizilmez.
  */
-export const KONTROL_EDILMEYEN_METNI: Record<SaglikDisaridaKodu, string> = {
-  meta_kitle_kucuk: 'kitle listesi saklanmıyor, yalnız Meta’dan anlık okunuyor.',
-  donusum_islemi_pasif: 'Ölçüm ekranında anlık okunuyor. Yerine "dönüşümler kesildi" kontrolü çalışıyor.',
-  pmax_varlik_eksik: 'öğe grupları senkronize edilmiyor.',
-  utm_eksik_meta: 'Meta reklamları kampanya etiketi olmadan gidiyor (ayar kapalı).',
-};
-
-export function kontrolEdilmeyenler(kodlar: readonly SaglikDisaridaKodu[]): Array<{ kod: SaglikDisaridaKodu; ad: string; neden: string }> {
+export function kontrolEdilmeyenler(
+  kodlar: readonly SaglikDisaridaKodu[],
+  dil: Dil = 'tr',
+): Array<{ kod: SaglikDisaridaKodu; ad: string; neden: string }> {
+  const metin = sec(sinyalSozlugu, dil).kontrolEdilmeyen;
   return kodlar.map((kod) => ({
     kod,
     ad: [...SAGLIK_DISARIDA, ...SAGLIK_KOSULLU_DISARIDA].find((d) => d.kod === kod)?.ad ?? kod,
-    neden: KONTROL_EDILMEYEN_METNI[kod],
+    neden: metin[kod],
   }));
 }
 
@@ -282,26 +252,27 @@ function anomaliMetrigiMi(kod: Sinyal['kod']): kod is keyof typeof ANOMALI_METRI
  * metrikleri 3 gün geriden değerlendiriliyor (MIMARI Ç-10) ve kart bunu
  * SÖYLÜYOR: "dün dönüşüm düştü" sanılmasın.
  */
-export function sinyalRozetleri(s: Sinyal): Array<{ metin: string; vurgu: boolean }> {
+export function sinyalRozetleri(s: Sinyal, dil: Dil = 'tr'): Array<{ metin: string; vurgu: boolean }> {
+  const d = sec(sinyalSozlugu, dil).rozet;
   const r: Array<{ metin: string; vurgu: boolean }> = [];
-  if (s.durum === 'acik' && s.acilmaSayisi > 1) r.push({ metin: 'Yeniden açıldı', vurgu: true });
+  if (s.durum === 'acik' && s.acilmaSayisi > 1) r.push({ metin: d.yenidenAcildi, vurgu: true });
   if (s.tur === 'anomali' && anomaliMetrigiMi(s.kod) && ANOMALI_METRIK_TANIMI[s.kod].gecikmeli) {
-    r.push({ metin: `${ANOMALI.donusumGecikmesiGun} gün önceki veri`, vurgu: false });
+    r.push({ metin: d.gunOnceki(ANOMALI.donusumGecikmesiGun), vurgu: false });
   }
-  if (s.tur === 'saglik') r.push({ metin: 'Sağlık', vurgu: false });
+  if (s.tur === 'saglik') r.push({ metin: d.saglik, vurgu: false });
   if (s.durum !== 'acik') {
     const k = s.kapatma;
-    if (k?.neden === 'kullanici') r.push({ metin: `Kapatıldı${k.kim ? ` · ${k.kim}` : ''}`, vurgu: false });
-    else if (k?.neden === 'uygulandi') r.push({ metin: `Durduruldu${k.kim ? ` · ${k.kim}` : ''}`, vurgu: false });
-    else r.push({ metin: 'Kendiliğinden kapandı', vurgu: false });
+    if (k?.neden === 'kullanici') r.push({ metin: `${d.kapatildi}${k.kim ? ` · ${k.kim}` : ''}`, vurgu: false });
+    else if (k?.neden === 'uygulandi') r.push({ metin: `${d.durduruldu}${k.kim ? ` · ${k.kim}` : ''}`, vurgu: false });
+    else r.push({ metin: d.kendiligindenKapandi, vurgu: false });
   }
   return r;
 }
 
 /** Workspace › platform › (üst) › varlık. Hesap seviyesinde varlık adı yerine hesap adı. */
-export function sinyalYolu(s: Sinyal): string[] {
+export function sinyalYolu(s: Sinyal, dil: Dil = 'tr'): string[] {
   const ust = s.varlik.seviye === 'account' ? [] : s.varlik.ustAd ? [s.varlik.ustAd] : [];
-  const son = s.varlik.seviye === 'account' ? `${s.adAccountAdi} · hesap geneli` : s.varlik.ad;
+  const son = s.varlik.seviye === 'account' ? sec(sinyalSozlugu, dil).yol.hesapGeneli(s.adAccountAdi) : s.varlik.ad;
   return [s.clientAdi, PLATFORM_KISA_ADLARI[s.platform], ...ust, son];
 }
 
@@ -312,19 +283,23 @@ function yerelGun(d: Date): string {
   return `${y}-${m}-${g}`;
 }
 
-/** `YYYY-MM-DD` → "pazartesi". UTC ile okunuyor: gün dizesi Date'e çevrilince saat dilimi kaydırmasın. */
-export function haftaGunu(gun: string): string {
-  return new Date(`${gun}T00:00:00Z`).toLocaleDateString('tr-TR', { weekday: 'long', timeZone: 'UTC' }).toLocaleLowerCase('tr-TR');
+const yerel = (dil: Dil) => (dil === 'en' ? 'en-US' : 'tr-TR');
+
+/** `YYYY-MM-DD` → "pazartesi" / "Monday". UTC ile okunuyor: gün dizesi Date'e çevrilince saat dilimi kaydırmasın. */
+export function haftaGunu(gun: string, dil: Dil = 'tr'): string {
+  const ad = new Date(`${gun}T00:00:00Z`).toLocaleDateString(yerel(dil), { weekday: 'long', timeZone: 'UTC' });
+  return dil === 'en' ? ad : ad.toLocaleLowerCase('tr-TR');
 }
 
 /** "Dün (pazartesi)" ya da "9 Ekim (perşembe)". */
-export function gunEtiketi(gun: string, simdi: Date = new Date()): string {
+export function gunEtiketi(gun: string, simdi: Date = new Date(), dil: Dil = 'tr'): string {
+  const d = sec(sinyalSozlugu, dil).gun;
   const dun = new Date(simdi);
   dun.setDate(dun.getDate() - 1);
-  const hg = haftaGunu(gun);
-  if (gun === yerelGun(dun)) return `Dün (${hg})`;
-  if (gun === yerelGun(simdi)) return `Bugün (${hg})`;
-  const tarih = new Date(`${gun}T00:00:00Z`).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', timeZone: 'UTC' });
+  const hg = haftaGunu(gun, dil);
+  if (gun === yerelGun(dun)) return d.dun(hg);
+  if (gun === yerelGun(simdi)) return d.bugun(hg);
+  const tarih = new Date(`${gun}T00:00:00Z`).toLocaleDateString(yerel(dil), { day: 'numeric', month: 'long', timeZone: 'UTC' });
   return `${tarih} (${hg})`;
 }
 
@@ -341,13 +316,13 @@ export interface SinyalKaniti {
  * ekranda iki farklı sayı çıkar). Sağlık sinyalinde gözlenen yok; kanıt
  * `neden` cümlesinde.
  */
-export function sinyalKaniti(s: Sinyal, simdi: Date = new Date()): SinyalKaniti | null {
+export function sinyalKaniti(s: Sinyal, simdi: Date = new Date(), dil: Dil = 'tr'): SinyalKaniti | null {
   if (!s.gozlenen) return null;
   return {
-    gun: gunEtiketi(s.gun, simdi),
+    gun: gunEtiketi(s.gun, simdi, dil),
     gozlenen: s.gozlenen.metin,
     beklenen: s.beklenen ? { alt: s.beklenen.alt.metin, ust: s.beklenen.ust.metin } : null,
-    dipnot: s.beklenen ? `son ${s.beklenen.nokta} ${haftaGunu(s.gun)}` : null,
+    dipnot: s.beklenen ? sec(sinyalSozlugu, dil).gun.dipnot(s.beklenen.nokta, haftaGunu(s.gun, dil)) : null,
   };
 }
 
@@ -392,24 +367,25 @@ export interface SatirEylemi {
  * izin); yetkisi olmayana düğme gösterilmiyor, nedeni yazılıyor ve inceleme
  * bağlantısı birincil oluyor.
  */
-export function satirEylemi(s: Sinyal, yetki: { butce: boolean; kural: boolean }): SatirEylemi {
+export function satirEylemi(s: Sinyal, yetki: { butce: boolean; kural: boolean }, dil: Dil = 'tr'): SatirEylemi {
+  const d = sec(sinyalSozlugu, dil).eylem;
   const kapatilabilir = yetki.kural && sinyalGecisi(s.durum, 'kullanici_kapatti') !== null;
   const geriAcilabilir = yetki.kural && s.durum !== 'acik' && sinyalGecisi(s.durum, 'kullanici_geri_acti') !== null;
   const bos: SatirEylemi = { birincil: null, incele: null, kapatilabilir, geriAcilabilir, kisit: s.kisit };
   if (s.durum !== 'acik') return { ...bos, kisit: null };
   const e = s.eylem;
   if (!e) return bos;
-  const inceleBag = { tur: 'bag' as const, href: sinyalIncelemeAdresi(s), etiket: 'Reklam Yöneticisi’nde aç' };
+  const inceleBag = { tur: 'bag' as const, href: sinyalIncelemeAdresi(s), etiket: d.reklamYoneticisindeAc };
   switch (e.tur) {
     case 'durdur':
       if (!yetki.butce) {
-        return { ...bos, birincil: inceleBag, kisit: s.kisit ?? 'Durdurmak için bütçe yazma yetkisi gerekiyor. Yöneticine sor.' };
+        return { ...bos, birincil: inceleBag, kisit: s.kisit ?? d.butceYetkisi };
       }
       return { ...bos, birincil: { tur: 'durdur' }, incele: sinyalIncelemeAdresi(s) };
     case 'incele':
       return { ...bos, birincil: inceleBag };
     case 'olcum':
-      return { ...bos, birincil: { tur: 'bag', href: markaMerkeziAdresi('kurulum', e.clientId, 'olcum'), etiket: 'Ölçümü aç' } };
+      return { ...bos, birincil: { tur: 'bag', href: markaMerkeziAdresi('kurulum', e.clientId, 'olcum'), etiket: d.olcumuAc } };
   }
 }
 
@@ -523,12 +499,13 @@ export type KanalFormuSonucu = { gecerli: true; girdi: KanalOlusturGirdisi } | {
  * rapor alıcılarıyla aynı ayırıcılar ve aynı üst sınır; geçersiz parça ve
  * sınırı aşan adres SESSİZCE atılmıyor, adıyla söyleniyor.
  */
-export function kanalFormuDenetle(f: KanalFormu): KanalFormuSonucu {
+export function kanalFormuDenetle(f: KanalFormu, dil: Dil = 'tr'): KanalFormuSonucu {
+  const d = sec(sinyalSozlugu, dil).kanal;
   let ham: unknown;
   if (f.tur === 'eposta') {
     const a = aliciAyristir(f.alicilarHam);
-    if (a.gecersiz.length > 0) return { gecerli: false, neden: `Geçersiz adres: ${a.gecersiz.join(', ')}` };
-    if (a.atilan.length > 0) return { gecerli: false, neden: `En çok ${ALICI_UST_SINIRI} alıcı yazılabilir; ${a.atilan.length} adres fazla.` };
+    if (a.gecersiz.length > 0) return { gecerli: false, neden: d.gecersizAdres(a.gecersiz.join(', ')) };
+    if (a.atilan.length > 0) return { gecerli: false, neden: d.aliciFazla(ALICI_UST_SINIRI, a.atilan.length) };
     ham = { tur: 'eposta', clientId: f.clientId, ad: f.ad, olaylar: f.olaylar, alicilar: a.adresler };
   } else {
     ham = { tur: f.tur, clientId: f.clientId, ad: f.ad, olaylar: f.olaylar, adres: f.adres.trim() };
@@ -537,8 +514,8 @@ export function kanalFormuDenetle(f: KanalFormu): KanalFormuSonucu {
   if (r.success) return { gecerli: true, girdi: r.data };
   const ilk = r.error.issues[0];
   const alan = ilk?.path[0];
-  const onEk = alan === 'ad' ? 'Kanal adı: ' : alan === 'alicilar' ? 'Alıcılar: ' : '';
-  return { gecerli: false, neden: `${onEk}${ilk?.message ?? 'Form geçersiz.'}` };
+  const onEk = alan === 'ad' ? d.alanKanalAdi : alan === 'alicilar' ? d.alanAlicilar : '';
+  return { gecerli: false, neden: `${onEk}${ilk?.message ?? d.formGecersiz}` };
 }
 
 /**
@@ -574,39 +551,33 @@ export function ajansDisiAlicilar(alicilar: readonly string[], ajansAdresi: stri
  */
 export type DenemeSonucu = { tur: 'gonderildi' } | { tur: 'dustu'; mesaj: string } | { tur: 'okunamadi' };
 
-export function denemeSonucuCoz(yanit: unknown): DenemeSonucu {
+export function denemeSonucuCoz(yanit: unknown, dil: Dil = 'tr'): DenemeSonucu {
   const y = yanit as { durum?: unknown; hata?: unknown; httpDurum?: unknown; gonderim?: unknown } | null;
   const ic = y && typeof y.gonderim === 'object' && y.gonderim !== null ? (y.gonderim as typeof y) : y;
   const durum = ic?.durum;
   if (typeof durum !== 'string' || !(TESLIM_DURUMLARI as readonly string[]).includes(durum)) return { tur: 'okunamadi' };
   if (durum === 'gonderildi') return { tur: 'gonderildi' };
   const http = typeof ic?.httpDurum === 'number' ? `${ic.httpDurum} · ` : '';
-  const hata = typeof ic?.hata === 'string' && ic.hata ? ic.hata : 'Platform nedenini bildirmedi.';
+  const hata = typeof ic?.hata === 'string' && ic.hata ? ic.hata : sec(sinyalSozlugu, dil).kanal.platformNedenYok;
   return { tur: 'dustu', mesaj: `${http}${hata}` };
 }
 
 /** Son gönderimler tablosundaki durum hücresi. `Record`: dört teslim durumu dört AYRI cümle. */
-export function gonderimDurumu(g: BildirimGonderimi): { nokta: Nokta; etiket: string; ayrinti: string | null } {
-  const http = g.httpDurum !== null ? String(g.httpDurum) : 'Bağlantı hatası';
+export function gonderimDurumu(g: BildirimGonderimi, dil: Dil = 'tr'): { nokta: Nokta; etiket: string; ayrinti: string | null } {
+  const d = sec(sinyalSozlugu, dil).kanal;
+  const http = g.httpDurum !== null ? String(g.httpDurum) : d.baglantiHatasi;
+  const hata = g.hata ? ` · ${g.hata}` : '';
   const tablo: Record<TeslimDurumu, { nokta: Nokta; etiket: string; ayrinti: string | null }> = {
-    gonderildi: { nokta: 'yesil', etiket: 'Gönderildi', ayrinti: g.hata },
-    bekliyor: { nokta: 'gri', etiket: 'Bekliyor', ayrinti: null },
-    basarisiz: {
-      nokta: 'gri',
-      etiket: 'Tekrar denenecek',
-      ayrinti: `${http} · ${g.deneme}. deneme${g.hata ? ` · ${g.hata}` : ''}`,
-    },
-    vazgecildi: {
-      nokta: 'kirmizi',
-      etiket: 'Vazgeçildi',
-      ayrinti: `${http} · ${g.deneme} deneme${g.hata ? ` · ${g.hata}` : ''}`,
-    },
+    gonderildi: { nokta: 'yesil', etiket: d.gonderildi, ayrinti: g.hata },
+    bekliyor: { nokta: 'gri', etiket: d.bekliyor, ayrinti: null },
+    basarisiz: { nokta: 'gri', etiket: d.tekrarDenenecek, ayrinti: d.denemeAyrinti(http, g.deneme, hata) },
+    vazgecildi: { nokta: 'kirmizi', etiket: d.vazgecildi, ayrinti: d.vazgecAyrinti(http, g.deneme, hata) },
   };
   return tablo[g.durum];
 }
 
-export function gonderimIcerigi(g: Pick<BildirimGonderimi, 'olay' | 'ozet'>): string {
-  return g.olay === 'deneme' ? `Deneme mesajı${g.ozet ? ` · ${g.ozet}` : ''}` : g.ozet;
+export function gonderimIcerigi(g: Pick<BildirimGonderimi, 'olay' | 'ozet'>, dil: Dil = 'tr'): string {
+  return g.olay === 'deneme' ? `${sec(sinyalSozlugu, dil).kanal.denemeMesaji}${g.ozet ? ` · ${g.ozet}` : ''}` : g.ozet;
 }
 
 // ─── Kural: "Yalnızca bildir" ───────────────────────────────────────────────
@@ -617,14 +588,19 @@ export function gonderimIcerigi(g: Pick<BildirimGonderimi, 'olay' | 'ozet'>): st
  * gitmiyordu ve kullanıcı bunu bilmeliydi. Kanal listesi okunamadıysa ad
  * UYDURULMUYOR, sayı söyleniyor; silinmiş kanal "silinmiş kanal" diye.
  */
-export function kuralBildirimMetni(kanalIdleri: readonly string[] | undefined, kanallar: readonly BildirimKanali[] | null): string {
-  if (!kanalIdleri || kanalIdleri.length === 0) return 'yalnızca bildir (kanal seçilmemiş, yalnız kural geçmişine yazılır)';
-  if (kanallar === null) return `yalnızca bildir (${kanalIdleri.length} kanala; kanal adları alınamadı)`;
+export function kuralBildirimMetni(
+  kanalIdleri: readonly string[] | undefined,
+  kanallar: readonly BildirimKanali[] | null,
+  dil: Dil = 'tr',
+): string {
+  const d = sec(sinyalSozlugu, dil).kanal;
+  if (!kanalIdleri || kanalIdleri.length === 0) return d.kuralKanalsiz;
+  if (kanallar === null) return d.kuralAdlarYok(kanalIdleri.length);
   const adlar = kanalIdleri.map((id) => {
     const k = kanallar.find((x) => x.id === id);
-    return k ? kanalAdi(k) : 'silinmiş kanal';
+    return k ? kanalAdi(k) : d.silinmisKanal;
   });
-  return `yalnızca bildir: ${adlar.join(', ')}`;
+  return d.kuralBildir(adlar.join(', '));
 }
 
 /**
@@ -638,18 +614,22 @@ export function kuralBildirimMetni(kanalIdleri: readonly string[] | undefined, k
  * kanal yetkisi farklı: `rule.write` / `client.write`). Kanalın olayı
  * Marka Merkezi'nde açılıyor.
  */
-export function kanalSecimi(k: Pick<BildirimKanali, 'durum' | 'olaylar' | 'sonTeslim' | 'etkin'>): { secilebilir: boolean; not: string | null } {
+export function kanalSecimi(
+  k: Pick<BildirimKanali, 'durum' | 'olaylar' | 'sonTeslim' | 'etkin'>,
+  dil: Dil = 'tr',
+): { secilebilir: boolean; not: string | null } {
+  const d = sec(sinyalSozlugu, dil).kanal;
   if (k.durum === 'hata') {
     return {
       secilebilir: false,
-      not: `Son gönderim düştü${k.sonTeslim?.hata ? ` (${k.sonTeslim.hata})` : ''}. Önce kanalı Marka Merkezi’nde düzeltin.`,
+      not: d.sonGonderimDustu(k.sonTeslim?.hata ? ` (${k.sonTeslim.hata})` : ''),
     };
   }
-  if (!k.etkin) return { secilebilir: false, not: 'Kanal kapalı. Marka Merkezi’nde açın.' };
+  if (!k.etkin) return { secilebilir: false, not: d.kapali };
   if (!k.olaylar.includes('kural')) {
-    return { secilebilir: false, not: 'Bu kanal kural bildirimlerini almıyor. Marka Merkezi › Bildirimler’de açılmalı.' };
+    return { secilebilir: false, not: d.kuralAlmiyor };
   }
-  return { secilebilir: true, not: k.durum === 'dogrulanmadi' ? 'Henüz doğrulanmadı: deneme mesajı onaylanmadı.' : null };
+  return { secilebilir: true, not: k.durum === 'dogrulanmadi' ? d.dogrulanmadi : null };
 }
 
 /**

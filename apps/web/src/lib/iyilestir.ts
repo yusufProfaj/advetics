@@ -1,5 +1,4 @@
 import type {
-  AsistanAraci,
   AsistanMesaji,
   AsistanParcasi,
   Oneri,
@@ -9,7 +8,9 @@ import type {
   Platform,
   UygulamaSonucu,
 } from '@advetics/shared';
-import { ASISTAN_ARACLARI, ONERI_TURU_ETIKETI, PLATFORM_KISA_ADLARI, formatMoney } from '@advetics/shared';
+import type { Dil } from '@advetics/shared';
+import { ASISTAN_ARACLARI, ONERI_TURU_ETIKETI, PLATFORM_KISA_ADLARI, formatMoney, sec } from '@advetics/shared';
+import { iyilestirSozlugu } from '@/dil/sozlukler/iyilestir';
 
 /**
  * ═══ İYİLEŞTİR EKRANININ SAF KARARLARI (Ajan 3, 2026-10-09) ═══
@@ -45,14 +46,9 @@ import { ASISTAN_ARACLARI, ONERI_TURU_ETIKETI, PLATFORM_KISA_ADLARI, formatMoney
 export const SEKMELER = ['oneriler', 'sinyaller', 'etki', 'kreatifler', 'asistan', 'kurallar'] as const;
 export type Sekme = (typeof SEKMELER)[number];
 
-export const SEKME_ETIKETI: Record<Sekme, string> = {
-  oneriler: 'Öneriler',
-  sinyaller: 'Sinyaller',
-  kreatifler: 'Kreatifler',
-  etki: 'Etkisi',
-  asistan: 'AI Asistan',
-  kurallar: 'Kurallar',
-};
+export function sekmeEtiketi(sekme: Sekme, dil: Dil = 'tr'): string {
+  return sec(iyilestirSozlugu, dil).sekme[sekme];
+}
 
 /**
  * Adresteki sekme. Bilinmeyen değer Öneriler'e düşüyor, hata vermiyor:
@@ -66,39 +62,20 @@ export function sekmeCoz(raw: string | undefined): Sekme {
 
 // ─── Platform adının ekleri ──────────────────────────────────────────────────
 
-/**
+/*
  * TÜRKÇE EK PLATFORMA GÖRE DEĞİŞİYOR: "Meta'ya", "Google'a", "LinkedIn'e".
- * Tek bir `${ad}'ya` kalıbı Google için yanlış Türkçe üretirdi. `Record`
- * olduğu için yeni platform eklenince derleme burayı ister.
- */
-export const PLATFORM_EKLERI: Record<Platform, { yonelme: string; ayrilma: string; bulunma: string }> = {
-  meta: { yonelme: 'Meta’ya', ayrilma: 'Meta’dan', bulunma: 'Meta’da' },
-  google: { yonelme: 'Google’a', ayrilma: 'Google’dan', bulunma: 'Google’da' },
-  linkedin: { yonelme: 'LinkedIn’e', ayrilma: 'LinkedIn’den', bulunma: 'LinkedIn’de' },
-};
-
-/**
- * Seviyenin BELİRTME hâli, platformun kendi adıyla. LinkedIn'de bizim
- * `ad_group` seviyemiz LinkedIn'in "Campaign"ı (CLAUDE.md, seviye eşlemesi):
+ * Tek bir `${ad}'ya` kalıbı Google için yanlış Türkçe üretirdi; tablo
+ * sözlükte ve `Platform` anahtarlı, yeni platform eklenince derleme ister.
+ * Seviyenin belirtme hâli de platformun kendi adıyla: LinkedIn'de bizim
+ * `ad_group` seviyemiz LinkedIn'in "Campaign"ı (CLAUDE.md, seviye eşlemesi);
  * orada "reklam setini" yazmak kullanıcıya olmayan bir nesneyi gösterirdi.
  */
-const SEVIYE_BELIRTME: Record<Platform, Record<OneriSeviyesi, string>> = {
-  meta: { campaign: 'kampanyayı', ad_group: 'reklam setini', ad: 'reklamı' },
-  google: { campaign: 'kampanyayı', ad_group: 'reklam grubunu', ad: 'reklamı' },
-  linkedin: { campaign: 'kampanya grubunu', ad_group: 'kampanyayı', ad: 'reklamı' },
-};
-
-const SEVIYE_ADI: Record<Platform, Record<OneriSeviyesi, string>> = {
-  meta: { campaign: 'Kampanya', ad_group: 'Reklam seti', ad: 'Reklam' },
-  google: { campaign: 'Kampanya', ad_group: 'Reklam grubu', ad: 'Reklam' },
-  linkedin: { campaign: 'Kampanya grubu', ad_group: 'Kampanya', ad: 'Reklam' },
-};
-
-export function seviyeAdi(platform: Platform, seviye: OneriSeviyesi): string {
-  return SEVIYE_ADI[platform][seviye];
+export function seviyeAdi(platform: Platform, seviye: OneriSeviyesi, dil: Dil = 'tr'): string {
+  return sec(iyilestirSozlugu, dil).seviye[platform][seviye].ad;
 }
 
-const buyukHarf = (s: string): string => s.charAt(0).toLocaleUpperCase('tr') + s.slice(1);
+const buyukHarf = (s: string, dil: Dil): string => s.charAt(0).toLocaleUpperCase(dil === 'en' ? 'en' : 'tr') + s.slice(1);
+const kucukHarf = (s: string, dil: Dil): string => s.toLocaleLowerCase(dil === 'en' ? 'en' : 'tr');
 
 // ─── Kart hâli ───────────────────────────────────────────────────────────────
 
@@ -160,7 +137,7 @@ export interface OzetSayilari {
  * olabiliyor ve ikisini tek sayıda toplamak anlamsız bir rakam üretir.
  * Micros BigInt ile toplanıyor (CLAUDE.md: para micros, Number'a çevrilmez).
  */
-export function ozetSayilari(liste: Pick<OneriListesi, 'oneriler' | 'buAyUygulanan'>): OzetSayilari {
+export function ozetSayilari(liste: Pick<OneriListesi, 'oneriler' | 'buAyUygulanan'>, dil: Dil = 'tr'): OzetSayilari {
   const acik = liste.oneriler.filter((o) => o.durum === 'acik');
   const birimler = new Map<string, bigint>();
   for (const o of acik) {
@@ -175,7 +152,7 @@ export function ozetSayilari(liste: Pick<OneriListesi, 'oneriler' | 'buAyUygulan
   const harcama =
     birimler.size === 0
       ? '—'
-      : [...birimler.entries()].map(([birim, t]) => formatMoney(t.toString(), birim, { decimals: 0 })).join(' + ');
+      : [...birimler.entries()].map(([birim, t]) => formatMoney(t.toString(), birim, { decimals: 0, dil })).join(' + ');
   return {
     uygulanabilir: acik.filter((o) => o.eylem !== null).length,
     harcama,
@@ -198,14 +175,14 @@ export interface TurCipi {
  * ("Bütçe"); iki ayrı çip, aynı ada sahip iki düğme demek olurdu. Etiket
  * sözleşmeden (`ONERI_TURU_ETIKETI`), ekranda ayrıca yazılmıyor.
  */
-export function turCipleri(oneriler: readonly Oneri[]): TurCipi[] {
+export function turCipleri(oneriler: readonly Oneri[], dil: Dil = 'tr'): TurCipi[] {
   const sayac = new Map<string, number>();
   for (const o of oneriler) {
     const e = ONERI_TURU_ETIKETI[o.tur];
     sayac.set(e, (sayac.get(e) ?? 0) + 1);
   }
   return [
-    { anahtar: 'hepsi', etiket: 'Tümü', sayi: oneriler.length },
+    { anahtar: 'hepsi', etiket: sec(iyilestirSozlugu, dil).tumu, sayi: oneriler.length },
     ...[...sayac.entries()].map(([etiket, sayi]) => ({ anahtar: etiket, etiket, sayi })),
   ];
 }
@@ -225,9 +202,10 @@ export interface EylemMetni {
   aciklama: string;
 }
 
-function butceMetni(mikros: string, birim: string, tip: 'daily' | 'lifetime'): string {
-  const t = formatMoney(mikros, birim, { decimals: 0 });
-  return tip === 'daily' ? `${t} / gün` : `${t} (toplam)`;
+function butceMetni(mikros: string, birim: string, tip: 'daily' | 'lifetime', dil: Dil): string {
+  const t = formatMoney(mikros, birim, { decimals: 0, dil });
+  const e = sec(iyilestirSozlugu, dil).eylem;
+  return tip === 'daily' ? e.gunBasi(t) : e.toplamTutar(t);
 }
 
 /**
@@ -235,23 +213,26 @@ function butceMetni(mikros: string, birim: string, tip: 'daily' | 'lifetime'): s
  * içindeki micros'tan biçimleniyor; kartta yazan bir cümleden ayrıştırmak,
  * sunucunun uygulayacağı sayı ile pencerenin gösterdiği sayıyı ayırabilirdi.
  */
-export function eylemMetni(o: Pick<Oneri, 'eylem' | 'platform' | 'varlik' | 'paraBirimi'>): EylemMetni | null {
+export function eylemMetni(o: Pick<Oneri, 'eylem' | 'platform' | 'varlik' | 'paraBirimi'>, dil: Dil = 'tr'): EylemMetni | null {
   const e = o.eylem;
   if (e === null) return null;
+  const d = sec(iyilestirSozlugu, dil);
   if (e.tur === 'durdur') {
-    const dugme = buyukHarf(`${SEVIYE_BELIRTME[o.platform][o.varlik.seviye]} durdur`);
+    // Türkçede belirtme hâli ("kampanyayı durdur"), İngilizcede nesnenin adı ("Pause campaign").
+    const nesne = d.seviye[o.platform][o.varlik.seviye].belirtme;
+    const dugme = buyukHarf(d.eylem.durdurDugme(nesne), dil);
     const kapsam =
       o.varlik.seviye === 'ad'
-        ? 'Yalnız bu reklam durur; üst seviyeler çalışmaya devam eder.'
+        ? d.eylem.kapsamReklam
         : o.varlik.seviye === 'ad_group'
-          ? `Bu ${seviyeAdi(o.platform, 'ad_group').toLocaleLowerCase('tr')} içindeki bütün reklamlar durur; kampanya çalışmaya devam eder.`
-          : 'Kampanyanın bütün reklamları durur.';
+          ? d.eylem.kapsamGrup(kucukHarf(seviyeAdi(o.platform, 'ad_group', dil), dil))
+          : d.eylem.kapsamKampanya;
     return {
       dugme,
-      baslik: `${dugme}: onay`,
-      once: 'Yayında',
-      sonra: 'Duraklatıldı',
-      aciklama: `${kapsam} İstediğin zaman Reklam Yöneticisi’nden yeniden başlatabilirsin.`,
+      baslik: d.eylem.onay(dugme),
+      once: d.eylem.yayinda,
+      sonra: d.eylem.duraklatildi,
+      aciklama: d.eylem.durdurAciklama(kapsam),
     };
   }
   let artis: boolean;
@@ -260,16 +241,16 @@ export function eylemMetni(o: Pick<Oneri, 'eylem' | 'platform' | 'varlik' | 'par
   } catch {
     return null;
   }
-  const dugme = artis ? 'Bütçeyi artır' : 'Bütçeyi düşür';
-  const once = butceMetni(e.oncekiMikros, o.paraBirimi, e.butceTipi);
-  const sonra = butceMetni(e.yeniMikros, o.paraBirimi, e.butceTipi);
-  const seviye = seviyeAdi(o.platform, e.butceSeviyesi).toLocaleLowerCase('tr');
+  const dugme = artis ? d.eylem.butceArtir : d.eylem.butceDusur;
+  const once = butceMetni(e.oncekiMikros, o.paraBirimi, e.butceTipi, dil);
+  const sonra = butceMetni(e.yeniMikros, o.paraBirimi, e.butceTipi, dil);
+  const seviye = kucukHarf(seviyeAdi(o.platform, e.butceSeviyesi, dil), dil);
   return {
     dugme,
-    baslik: `${dugme}: onay`,
+    baslik: d.eylem.onay(dugme),
     once,
     sonra,
-    aciklama: `${e.butceTipi === 'daily' ? 'Günlük' : 'Toplam'} bütçe ${once} yerine ${sonra} olur. Değişiklik bütçenin durduğu ${seviye} seviyesinde yapılır.`,
+    aciklama: d.eylem.butceAciklama(e.butceTipi === 'daily' ? d.eylem.gunluk : d.eylem.toplam, once, sonra, seviye),
   };
 }
 
@@ -278,9 +259,10 @@ export function eylemMetni(o: Pick<Oneri, 'eylem' | 'platform' | 'varlik' | 'par
 export type UygulamaAsamasi = 'hazir' | 'gonderiliyor' | 'dogrulandi' | 'uyusmadi' | 'degisti' | 'hata';
 export type AdimHali = 'bos' | 'suruyor' | 'bitti' | 'uyari' | 'hata';
 
-export function adimMetinleri(platform: Platform): [string, string, string] {
-  const ek = PLATFORM_EKLERI[platform];
-  return [`${ek.yonelme} gönder`, `${ek.ayrilma} geri oku ve karşılaştır`, 'Kaydet (kim, ne zaman, eski → yeni)'];
+export function adimMetinleri(platform: Platform, dil: Dil = 'tr'): [string, string, string] {
+  const d = sec(iyilestirSozlugu, dil);
+  const ek = d.platformEki[platform];
+  return [d.adim.gonder(ek.yonelme), d.adim.geriOku(ek.ayrilma), d.adim.kaydet];
 }
 
 /**
@@ -313,11 +295,14 @@ export function adimHalleri(asama: UygulamaAsamasi): [AdimHali, AdimHali, AdimHa
  * tarafından değişti ya da öneri kalktı). Aynı düğmeye tekrar basmak yine
  * 409 alır; tek doğru eylem sayfayı yenilemek.
  */
-export function uygulaHatasi(e: { status?: number; message?: string } | null | undefined): {
+export function uygulaHatasi(
+  e: { status?: number; message?: string } | null | undefined,
+  dil: Dil = 'tr',
+): {
   asama: 'degisti' | 'hata';
   mesaj: string;
 } {
-  const mesaj = e?.message?.trim() || 'Bağlantı kurulamadı.';
+  const mesaj = e?.message?.trim() || sec(iyilestirSozlugu, dil).hata.baglanti;
   return e?.status === 409 ? { asama: 'degisti', mesaj } : { asama: 'hata', mesaj };
 }
 
@@ -349,16 +334,19 @@ export function sonucMetni(
   platform: Platform,
   istenen: string | null,
   zamanMetni: string,
+  dil: Dil = 'tr',
 ): { ton: 'ok' | 'uyari'; metin: string } {
+  const d = sec(iyilestirSozlugu, dil).sonuc;
   if (sonuc.durum === 'dogrulandi') {
-    return { ton: 'ok', metin: `Uygulandı · ${PLATFORM_EKLERI[platform].bulunma} doğrulandı · ${zamanMetni}` };
+    return {
+      ton: 'ok',
+      metin: d.uygulandiDogrulandi(sec(iyilestirSozlugu, dil).platformEki[platform].bulunma, zamanMetni),
+    };
   }
   return {
     ton: 'uyari',
     metin:
-      `${PLATFORM_KISA_ADLARI[platform]} değişikliği kabul etti ama geri okunan değer farklı: ${sonuc.platformDegeri}` +
-      (istenen ? ` (istenen: ${istenen})` : '') +
-      ` · ${zamanMetni}`,
+      d.uyusmadi(PLATFORM_KISA_ADLARI[platform], sonuc.platformDegeri) + (istenen ? d.istenen(istenen) : '') + ` · ${zamanMetni}`,
   };
 }
 
@@ -496,22 +484,11 @@ export function parcaEkle(mesajlar: readonly AsistanMesaji[], p: AsistanParcasi)
   return [...mesajlar.slice(0, -1), { ...son, parcalar }];
 }
 
-export const ARAC_ETIKETI: Record<AsistanAraci, string> = {
-  metrik_ozeti: 'Metrik özeti okundu',
-  gunluk_seri: 'Günlük seri okundu',
-  varlik_kirilimi: 'Kırılım okundu',
-  donusum_detayi: 'Dönüşümler okundu',
-  butce_temposu: 'Bütçe temposu okundu',
-  oneriler: 'Öneriler hesaplandı',
-  uygula_karti: 'Uygula kartı hazırlandı',
-  advcampaign_devret: 'AdvCampaign’e aktarıldı',
-};
-
 /** Araç izinin etiketi: sunucunun özeti varsa o, yoksa sabit ad. */
-export function aracIziMetni(p: Extract<AsistanParcasi, { tur: 'arac' }>): string {
+export function aracIziMetni(p: Extract<AsistanParcasi, { tur: 'arac' }>, dil: Dil = 'tr'): string {
   const ozet = p.ozet?.trim();
   if (ozet) return ozet;
-  return (ASISTAN_ARACLARI as readonly string[]).includes(p.arac) ? ARAC_ETIKETI[p.arac] : p.arac;
+  return (ASISTAN_ARACLARI as readonly string[]).includes(p.arac) ? sec(iyilestirSozlugu, dil).arac[p.arac] : p.arac;
 }
 
 /**

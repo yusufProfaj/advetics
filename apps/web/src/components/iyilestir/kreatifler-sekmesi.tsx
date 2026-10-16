@@ -7,6 +7,8 @@ import type { KreatifBrief, KreatifSatiri, KreatifZekaYaniti, Kova } from '@adve
 import { KOVA_ADI, KREATIF_SAYFA_BOYUTU, formatMoney, formatNumber } from '@advetics/shared';
 import { API_URL, ApiRequestError, apiFetch } from '@/lib/api';
 import { formatRelative } from '@/lib/format';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { kreatifSozlugu } from '@/dil/sozlukler/iyilestir-kreatif';
 import { hesaplarAdresi } from '@/lib/panel-adresleri';
 import {
   advcampaignAdresi,
@@ -48,7 +50,8 @@ import { BosDurum, HataDurumu, Serit, Yukleniyor } from '@/components/ui/hal';
 
 type BriefHali = { durum: 'bos' } | { durum: 'yukleniyor' } | { durum: 'hata'; mesaj: string };
 
-const hataMesaji = (e: unknown) => (e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.');
+const hataMesaji = (e: unknown, yedek: string) => (e instanceof ApiRequestError ? e.message : yedek);
+const kucuk = (s: string, dil: 'tr' | 'en') => s.toLocaleLowerCase(dil === 'en' ? 'en' : 'tr');
 
 /** Kova → durum noktası. Yeşil YALNIZ "iyi gidiyor" (kılavuz: yeşil yalnız durum noktası). */
 const KOVA_HALI: Record<Kova, DurumHali> = { iyi_gidiyor: 'ok', dikkat: 'hata', veri_yetersiz: 'taslak' };
@@ -87,6 +90,8 @@ export function KreatiflerSekmesi({
   yetki: { yaz: boolean; aktar: boolean };
 }) {
   const router = useRouter();
+  const { dil } = useDil();
+  const d = useSozluk(kreatifSozlugu).sekme;
   const [sonuc, setSonuc] = useState<KreatifSonucu | null>(ilk);
   const [son, setSon] = useState<KreatifZekaYaniti | null>(ilk.durum === 'tamam' ? ilk.yanit : null);
   const [q, setQ] = useState<KreatifSorgusu>({ clientId, kume: null, gorunum: 'yeni', kova: null, sayfa: 1 });
@@ -117,11 +122,11 @@ export function KreatiflerSekmesi({
       setBriefHali({ durum: 'bos' });
     } catch (e) {
       if (benim !== sira.current) return;
-      setSonuc({ durum: 'hata', mesaj: hataMesaji(e) });
+      setSonuc({ durum: 'hata', mesaj: hataMesaji(e, d.sunucuyaUlasilamadi) });
     }
-  }, []);
+  }, [d]);
 
-  const suz = (d: Partial<KreatifSorgusu>) => void yukle({ ...q, sayfa: 1, ...d });
+  const suz = (degisim: Partial<KreatifSorgusu>) => void yukle({ ...q, sayfa: 1, ...degisim });
 
   async function etiketleBaslat() {
     setEtiketle({ durum: 'gidiyor' });
@@ -129,7 +134,7 @@ export function KreatiflerSekmesi({
       const r = await apiFetch<EtiketleYaniti>('/kreatif-zeka/etiketle', { method: 'POST', body: JSON.stringify({ clientId }) });
       setEtiketle({ durum: 'tamam', mesaj: r.mesaj });
     } catch (e) {
-      setEtiketle({ durum: 'hata', mesaj: hataMesaji(e) });
+      setEtiketle({ durum: 'hata', mesaj: hataMesaji(e, d.sunucuyaUlasilamadi) });
     }
   }
 
@@ -140,7 +145,7 @@ export function KreatiflerSekmesi({
       setBrief(b);
       setBriefHali({ durum: 'bos' });
     } catch (e) {
-      setBriefHali({ durum: 'hata', mesaj: hataMesaji(e) });
+      setBriefHali({ durum: 'hata', mesaj: hataMesaji(e, d.sunucuyaUlasilamadi) });
     }
   }
 
@@ -150,7 +155,7 @@ export function KreatiflerSekmesi({
       const r = await apiFetch<{ oturumId: string; clientId: string }>(`/kreatif-zeka/brief/${encodeURIComponent(b.id)}/advcampaign`, { method: 'POST' });
       router.push(advcampaignAdresi(r.clientId, r.oturumId));
     } catch (e) {
-      setAktarim({ durum: 'hata', mesaj: hataMesaji(e) });
+      setAktarim({ durum: 'hata', mesaj: hataMesaji(e, d.sunucuyaUlasilamadi) });
     }
   }
 
@@ -161,7 +166,7 @@ export function KreatiflerSekmesi({
     } catch {
       // Pano izni yoksa metin seçilebilir hâlde zaten ekranda; düğme bunu söylüyor.
       setKopyalandi(false);
-      setAktarim({ durum: 'hata', mesaj: 'Panoya kopyalanamadı; metni ekrandan seçip kopyala.' });
+      setAktarim({ durum: 'hata', mesaj: d.panoHatasi });
     }
   }
 
@@ -172,7 +177,7 @@ export function KreatiflerSekmesi({
   return (
     <>
       {son && son.hatalar.length > 0 && (
-        <Serit ton="hata" baslik="Bazı kaynaklar okunamadı; ekran eksik olabilir.">
+        <Serit ton="hata" baslik={d.kaynakHatasi}>
           {son.hatalar.map((h) => `${h.kaynak}: ${h.mesaj}`).join(' · ')}
         </Serit>
       )}
@@ -181,10 +186,10 @@ export function KreatiflerSekmesi({
       {son && (
         <Kart dolgu={false}>
           {son.kumeler.length > 0 && (
-            <AracCubugu sag={<span className="text-12 text-ink-muted">Aynı amaçtaki kreatifler birbiriyle karşılaştırılır</span>}>
-              <span className="text-12 font-semibold text-ink-muted">Karşılaştır:</span>
+            <AracCubugu sag={<span className="text-12 text-ink-muted">{d.ayniAmac}</span>}>
+              <span className="text-12 font-semibold text-ink-muted">{d.karsilastir}</span>
               <BolumluSecici
-                etiket="Karşılaştırma kümesi"
+                etiket={d.kumeEtiketi}
                 secili={secili ?? ''}
                 onSec={(k) => suz({ kume: k })}
                 secenekler={son.kumeler.map((x) => ({
@@ -209,22 +214,22 @@ export function KreatiflerSekmesi({
           sag={
             kumeOzet && (
               <span className="text-12 text-ink-muted">
-                {q.gorunum === 'yeni' ? `İlk 14 gün · karar için en az ${esikMetni(son!.paraBirimi)} harcama · ` : 'Puana göre · '}
-                {metrikAdi(kumeOzet.anaMetrik).toLocaleLowerCase('tr')}
-                {kumeOzet.metrikDusus ? ' (dönüşüm az, tıklama oranına göre)' : ''}
+                {q.gorunum === 'yeni' ? d.ilk14(esikMetni(son!.paraBirimi, dil)) : d.puanaGore}
+                {kucuk(metrikAdi(kumeOzet.anaMetrik, dil), dil)}
+                {kumeOzet.metrikDusus ? d.metrikDusus : ''}
               </span>
             )
           }
         >
           <BolumluSecici
-            etiket="Görünüm"
+            etiket={d.gorunum}
             secili={q.gorunum}
             onSec={(g: KreatifGorunumu) => suz({ gorunum: g, kova: null })}
-            secenekler={(['yeni', 'tumu'] as KreatifGorunumu[]).map((g) => ({ deger: g, etiket: g === 'yeni' ? 'Yeni kreatifler' : 'Tümü' }))}
+            secenekler={(['yeni', 'tumu'] as KreatifGorunumu[]).map((g) => ({ deger: g, etiket: g === 'yeni' ? d.yeniKreatifler : d.tumu }))}
           />
           {q.gorunum === 'yeni' && son && (
             <BolumluSecici
-              etiket="Kova"
+              etiket={d.kova}
               secili={q.kova ?? 'hepsi'}
               onSec={(kv) => suz({ kova: kv === 'hepsi' ? null : kv })}
               secenekler={[
@@ -232,7 +237,7 @@ export function KreatiflerSekmesi({
                   deger: 'hepsi' as const,
                   etiket: (
                     <>
-                      Hepsi
+                      {d.hepsi}
                       <Sayi n={son.kovaSayilari.iyi_gidiyor + son.kovaSayilari.dikkat + son.kovaSayilari.veri_yetersiz} />
                     </>
                   ),
@@ -254,12 +259,12 @@ export function KreatiflerSekmesi({
 
         {hal === 'yukleniyor' && (
           <div className="p-4">
-            <Yukleniyor etiket="Kreatifler yükleniyor" />
+            <Yukleniyor etiket={d.yukleniyor} />
           </div>
         )}
         {sonuc?.durum === 'hata' && (
           <div className="p-4">
-            <HataDurumu baslik="Kreatifler okunamadı." mesaj={<>Sunucunun cevabı: {sonuc.mesaj}</>} onTekrar={() => void yukle(q)} />
+            <HataDurumu baslik={d.okunamadi} mesaj={<>{d.sunucuCevabi} {sonuc.mesaj}</>} onTekrar={() => void yukle(q)} />
           </div>
         )}
         {hal === 'bos' && sonuc?.durum === 'tamam' && (
@@ -317,7 +322,9 @@ function EtiketlemeSeridi({
   etiketle: { durum: 'yok' } | { durum: 'gidiyor' } | { durum: 'tamam'; mesaj: string } | { durum: 'hata'; mesaj: string };
   onEtiketle: () => void;
 }) {
-  const d = etiketlemeSeridi(yanit.etiketleme);
+  const { dil } = useDil();
+  const t = useSozluk(kreatifSozlugu).sekme;
+  const d = etiketlemeSeridi(yanit.etiketleme, dil);
   return (
     <>
       <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5 px-4 py-2.5 text-[12.5px] text-ink">
@@ -334,7 +341,7 @@ function EtiketlemeSeridi({
           {d.sonIs && d.hesaplar.length <= 1 && <span className="text-12 text-ink-muted">{d.sonIs}</span>}
           {yazabilir && (
             <Dugme ton="ikincil" boyut="kucuk" bekliyor={etiketle.durum === 'gidiyor'} onClick={onEtiketle}>
-              {etiketle.durum === 'gidiyor' ? 'Başlatılıyor' : 'Şimdi incele'}
+              {etiketle.durum === 'gidiyor' ? t.baslatiliyor : t.simdiIncele}
             </Dugme>
           )}
         </span>
@@ -347,14 +354,14 @@ function EtiketlemeSeridi({
       )}
       {etiketle.durum === 'hata' && (
         <div className="px-4 pb-3">
-          <Serit ton="hata" baslik="İnceleme başlatılamadı.">
+          <Serit ton="hata" baslik={t.incelemeBaslatilamadi}>
             {etiketle.mesaj}
           </Serit>
         </div>
       )}
       {d.hesaplar.length > 1 && (
         <details className={AYRINTI} open={d.hesaplar.some((x) => x.sorunlu)}>
-          <summary className={AYRINTI_OZET}>Hesap başına son inceleme</summary>
+          <summary className={AYRINTI_OZET}>{t.hesapBasinaInceleme}</summary>
           <ul className={AYRINTI_LISTE}>
             {d.hesaplar.map((x) => (
               <li key={x.ad}>
@@ -366,14 +373,14 @@ function EtiketlemeSeridi({
       )}
       {d.dokum.length > 0 && (
         <details className={AYRINTI}>
-          <summary className={AYRINTI_OZET}>Neden incelenemiyor</summary>
+          <summary className={AYRINTI_OZET}>{t.nedenIncelenemiyor}</summary>
           <ul className={AYRINTI_LISTE}>
             {d.dokum.map((x) => (
               <li key={x.cumle}>
                 <b className="font-baslik tabular-nums text-ink">{x.sayi}</b> {x.cumle}
               </li>
             ))}
-            <li>Performance Max kreatifleri henüz incelenmiyor.</li>
+            <li>{t.pmaxIncelenmiyor}</li>
           </ul>
         </details>
       )}
@@ -382,7 +389,9 @@ function EtiketlemeSeridi({
 }
 
 function BosKutu({ clientId, neden, onTumu }: { clientId: string; neden: KreatifZekaYaniti['emptyReason']; onTumu: () => void }) {
-  const b = bosMetni(neden);
+  const { dil } = useDil();
+  const t = useSozluk(kreatifSozlugu).sekme;
+  const b = bosMetni(neden, dil);
   return (
     <BosDurum
       baslik={b.baslik}
@@ -391,12 +400,12 @@ function BosKutu({ clientId, neden, onTumu }: { clientId: string; neden: Kreatif
         <>
           {b.suzgec && (
             <Dugme ton="ikincil" boyut="kucuk" onClick={onTumu}>
-              Tümüne bak
+              {t.tumuneBak}
             </Dugme>
           )}
           {b.baglanti === 'baglantilar' && (
             <Link className={dugmeSinifi('ikincil', 'kucuk')} href={hesaplarAdresi(clientId)}>
-              Marka Merkezi › Kurulum
+              {t.kurulum}
             </Link>
           )}
         </>
@@ -411,6 +420,7 @@ function BosKutu({ clientId, neden, onTumu }: { clientId: string; neden: Kreatif
  * Nesne adresi bileşen kalkınca bırakılıyor (bellek).
  */
 function useGorsel(creativeId: string): GorselHali {
+  const d = useSozluk(kreatifSozlugu).sekme;
   const [hal, setHal] = useState<GorselHali>({ durum: 'yukleniyor' });
   useEffect(() => {
     let iptal = false;
@@ -422,7 +432,7 @@ function useGorsel(creativeId: string): GorselHali {
         if (!r.ok) {
           // Sunucunun cümlesi gövdede ("Görsel alınamadı: sunucu 403"); gövde
           // okunamazsa en azından HTTP durumu söyleniyor, boş kutu değil.
-          let mesaj = `Görsel alınamadı (HTTP ${r.status})`;
+          let mesaj = d.gorselHttp(r.status);
           try {
             const g = (await r.json()) as { message?: string };
             if (g?.message) mesaj = g.message;
@@ -435,33 +445,35 @@ function useGorsel(creativeId: string): GorselHali {
         adres = URL.createObjectURL(await r.blob());
         if (!iptal) setHal({ durum: 'tamam', adres });
       } catch {
-        if (!iptal) setHal({ durum: 'hata', mesaj: 'Görsel alınamadı: sunucuya ulaşılamadı' });
+        if (!iptal) setHal({ durum: 'hata', mesaj: d.gorselUlasilamadi });
       }
     })();
     return () => {
       iptal = true;
       if (adres) URL.revokeObjectURL(adres);
     };
-  }, [creativeId]);
+  }, [creativeId, d]);
   return hal;
 }
 
 function Gorsel({ creativeId, alt }: { creativeId: string; alt: string }) {
+  const d = useSozluk(kreatifSozlugu).sekme;
   const g = useGorsel(creativeId);
   if (g.durum === 'tamam') return <img className="block h-full w-full object-cover" src={g.adres} alt={alt} />;
   if (g.durum === 'hata') return <span className="p-3 text-center text-12 text-ink-muted">{g.mesaj}</span>;
   return (
     <span className="p-3 text-center text-12 text-ink-muted" aria-busy="true">
-      Görsel yükleniyor
+      {d.gorselYukleniyor}
     </span>
   );
 }
 
 /** Puan halkası: gri çember + siyah dolu yay; puan yoksa "yok" ve nedeni başlıkta. */
 function Halka({ puan }: { puan: number | null }) {
+  const d = useSozluk(kreatifSozlugu).sekme;
   const c = halkaCizgisi(puan);
   return (
-    <div className="relative h-11 w-11 shrink-0" title={puan === null ? 'Puan yok' : `Puan ${puan} / 100`}>
+    <div className="relative h-11 w-11 shrink-0" title={puan === null ? d.puanYok : d.puanBaslik(puan)}>
       <svg className="h-11 w-11 -rotate-90" viewBox="0 0 44 44" aria-hidden="true">
         <circle cx="22" cy="22" r="19" className="fill-none stroke-line" strokeWidth="4" />
         {puan !== null && (
@@ -473,18 +485,20 @@ function Halka({ puan }: { puan: number | null }) {
           puan === null ? 'text-11 font-normal text-ink-muted' : 'font-baslik text-14 text-ink'
         }`}
       >
-        {puan === null ? 'yok' : puan}
+        {puan === null ? d.yok : puan}
       </b>
     </div>
   );
 }
 
 function KreatifKarti({ satir: x, clientId }: { satir: KreatifSatiri; clientId: string }) {
-  const kova = kovaMetni(x);
-  const kismi = kismiNotu(x.kismiEtiket);
+  const { dil } = useDil();
+  const d = useSozluk(kreatifSozlugu).sekme;
+  const kova = kovaMetni(x, dil);
+  const kismi = kismiNotu(x.kismiEtiket, dil);
   const cipler = etiketCipleri(x.etiketler);
-  const durum = etiketDurumMetni(x);
-  const puanYok = puanYokCumlesi(x.puan, x.paraBirimi);
+  const durum = etiketDurumMetni(x, dil);
+  const puanYok = puanYokCumlesi(x.puan, x.paraBirimi, dil);
   return (
     <article className="flex min-w-0 flex-col overflow-hidden rounded-kart border border-line bg-surface">
       <div
@@ -492,7 +506,7 @@ function KreatifKarti({ satir: x, clientId }: { satir: KreatifSatiri; clientId: 
           x.etiketler?.en_boy === 'dikey' ? 'aspect-[4/5]' : 'aspect-square'
         }`}
       >
-        <Gorsel creativeId={x.creativeId} alt={x.adAdi ?? 'Kreatif'} />
+        <Gorsel creativeId={x.creativeId} alt={x.adAdi ?? d.kreatif} />
         <span className="absolute right-2 top-2 rounded-full border border-line bg-surface px-2 py-0.5 text-11 font-bold text-ink">
           {platformAdi(x)}
         </span>
@@ -502,7 +516,7 @@ function KreatifKarti({ satir: x, clientId }: { satir: KreatifSatiri; clientId: 
         <div className="flex items-center gap-2.5">
           <Halka puan={x.puan.puan} />
           <div className="min-w-0" title={puanYok ?? undefined}>
-            <b className="block truncate text-13 text-ink">{x.adAdi ?? 'Adsız reklam'}</b>
+            <b className="block truncate text-13 text-ink">{x.adAdi ?? d.adsiz}</b>
             <small className="block truncate text-12 text-ink-muted">{x.kampanyaAdi ?? ''}</small>
           </div>
         </div>
@@ -540,13 +554,13 @@ function KreatifKarti({ satir: x, clientId }: { satir: KreatifSatiri; clientId: 
         {durum && <div className="text-12 text-ink-muted">{durum}</div>}
         <div className="flex flex-wrap gap-x-3 gap-y-1 border-t border-line pt-2 text-12 text-ink-muted">
           <span>
-            Harcama <b className="font-baslik tabular-nums text-ink">{formatMoney(x.harcamaMicros, x.paraBirimi, { decimals: 0 })}</b>
+            {d.harcama} <b className="font-baslik tabular-nums text-ink">{formatMoney(x.harcamaMicros, x.paraBirimi, { decimals: 0, dil })}</b>
           </span>
           <span>
-            Dönüşüm <b className="font-baslik tabular-nums text-ink">{formatNumber(x.donusum)}</b>
+            {d.donusum} <b className="font-baslik tabular-nums text-ink">{formatNumber(x.donusum, dil)}</b>
           </span>
           <span>
-            {metrikAdi(x.anaMetrik)} <b className="font-baslik tabular-nums text-ink">{metrikMetni(x.anaMetrik, x.anaDeger, x.paraBirimi)}</b>
+            {metrikAdi(x.anaMetrik, dil)} <b className="font-baslik tabular-nums text-ink">{metrikMetni(x.anaMetrik, x.anaDeger, x.paraBirimi, dil)}</b>
           </span>
         </div>
       </div>
@@ -555,13 +569,14 @@ function KreatifKarti({ satir: x, clientId }: { satir: KreatifSatiri; clientId: 
 }
 
 function KucukGorsel({ creativeId }: { creativeId: string }) {
+  const { dil } = useDil();
   const g = useGorsel(creativeId);
   const kap = 'grid h-10 w-10 place-items-center overflow-hidden rounded-alan bg-surface-sunken';
   // HATA HÂLİ BOŞ KUTU DEĞİL (Ajan 4 N): nedeni kısa yazılıyor, tamamı başlıkta.
   if (g.durum === 'hata') {
     return (
       <span className={kap} title={g.mesaj}>
-        <span className="break-words p-0.5 text-center text-[9px] leading-tight text-ink-muted">{kisaNeden(g.mesaj)}</span>
+        <span className="break-words p-0.5 text-center text-[9px] leading-tight text-ink-muted">{kisaNeden(g.mesaj, dil)}</span>
       </span>
     );
   }
@@ -570,29 +585,31 @@ function KucukGorsel({ creativeId }: { creativeId: string }) {
 
 /** "Tümü" görünümü: puan tablosu. Sütunlar TEK listeden (`Tablo`), sayılar sağa yaslı. */
 function PuanTablosu({ yanit }: { yanit: KreatifZekaYaniti }) {
+  const { dil } = useDil();
+  const d = useSozluk(kreatifSozlugu).sekme;
   const metrik = yanit.satirlar[0]?.anaMetrik ?? null;
   return (
     <Tablo<KreatifSatiri>
-      etiket="Kreatif puanları"
+      etiket={d.tabloEtiketi}
       satirlar={yanit.satirlar}
       satirAnahtari={(x) => x.creativeId}
       sutunlar={[
-        { anahtar: 'gorsel', baslik: <span className="sr-only">Görsel</span>, hucre: (x) => <KucukGorsel creativeId={x.creativeId} /> },
-        { anahtar: 'reklam', baslik: 'Reklam', hucre: (x) => <AdHucresi ad={x.adAdi ?? 'Adsız reklam'} alt={x.kampanyaAdi ?? undefined} /> },
+        { anahtar: 'gorsel', baslik: <span className="sr-only">{d.sutunGorsel}</span>, hucre: (x) => <KucukGorsel creativeId={x.creativeId} /> },
+        { anahtar: 'reklam', baslik: d.sutunReklam, hucre: (x) => <AdHucresi ad={x.adAdi ?? d.adsiz} alt={x.kampanyaAdi ?? undefined} /> },
         {
           anahtar: 'puan',
-          baslik: 'Puan',
+          baslik: d.sutunPuan,
           sayi: true,
           hucre: (x) => (
-            <span className="font-baslik font-bold" title={puanYokCumlesi(x.puan, x.paraBirimi) ?? undefined}>
+            <span className="font-baslik font-bold" title={puanYokCumlesi(x.puan, x.paraBirimi, dil) ?? undefined}>
               {x.puan.puan ?? '-'}
             </span>
           ),
         },
-        { anahtar: 'ozellik', baslik: 'Özellikler', ikincil: true, hucre: (x) => etiketCipleri(x.etiketler).join(' · ') || etiketDurumMetni(x) },
-        { anahtar: 'harcama', baslik: 'Harcama', sayi: true, hucre: (x) => formatMoney(x.harcamaMicros, x.paraBirimi, { decimals: 0 }) },
-        { anahtar: 'donusum', baslik: 'Dönüşüm', sayi: true, hucre: (x) => formatNumber(x.donusum) },
-        { anahtar: 'metrik', baslik: metrikAdi(metrik), sayi: true, hucre: (x) => metrikMetni(x.anaMetrik, x.anaDeger, x.paraBirimi) },
+        { anahtar: 'ozellik', baslik: d.sutunOzellik, ikincil: true, hucre: (x) => etiketCipleri(x.etiketler).join(' · ') || etiketDurumMetni(x, dil) },
+        { anahtar: 'harcama', baslik: d.harcama, sayi: true, hucre: (x) => formatMoney(x.harcamaMicros, x.paraBirimi, { decimals: 0, dil }) },
+        { anahtar: 'donusum', baslik: d.donusum, sayi: true, hucre: (x) => formatNumber(x.donusum, dil) },
+        { anahtar: 'metrik', baslik: metrikAdi(metrik, dil), sayi: true, hucre: (x) => metrikMetni(x.anaMetrik, x.anaDeger, x.paraBirimi, dil) },
       ]}
     />
   );
@@ -612,20 +629,22 @@ function sayfalamaBilgisi(yanit: KreatifZekaYaniti, sayfa: number, onSayfa: (n: 
 }
 
 function NeIseYariyor({ yanit }: { yanit: KreatifZekaYaniti }) {
+  const { dil } = useDil();
+  const d = useSozluk(kreatifSozlugu).sekme;
   const { anlamli, diger } = farkGruplari(yanit.farklar);
   const eksen = aralikEkseni(anlamli);
   const kume = yanit.kumeler.find((x) => x.anahtar === yanit.kume);
   return (
     <Kart
       dolgu={false}
-      baslik="Ne işe yarıyor"
-      baslikEki={kume ? `${kume.ad} · ${kume.kreatif} kreatif · ${metrikAdi(kume.anaMetrik).toLocaleLowerCase('tr')}` : undefined}
+      baslik={d.neIseYariyor}
+      baslikEki={kume ? d.neIseYariyorEki(kume.ad, kume.kreatif, kucuk(metrikAdi(kume.anaMetrik, dil), dil)) : undefined}
     >
       {anlamli.length === 0 && (
         <div className="p-4">
           <BosDurum
-            baslik="Henüz belirgin bir fark yok"
-            neden="İncelenmiş ve yeterli harcamalı kreatiflerde hiçbir özellik ötekinden belirgin biçimde ayrışmıyor."
+            baslik={d.farkYokBaslik}
+            neden={d.farkYok}
           />
         </div>
       )}
@@ -640,7 +659,7 @@ function NeIseYariyor({ yanit }: { yanit: KreatifZekaYaniti }) {
           >
             <div>
               {f.cumle}
-              <small className="mt-0.5 block text-12 text-ink-muted">{orneklemMetni(f)}</small>
+              <small className="mt-0.5 block text-12 text-ink-muted">{orneklemMetni(f, dil)}</small>
             </div>
             {/* Güven aralığı çubuğu: gri eksen, siyah sıfır çizgisi ve bant, kırmızı orta nokta. */}
             {c && (
@@ -656,7 +675,7 @@ function NeIseYariyor({ yanit }: { yanit: KreatifZekaYaniti }) {
       })}
       {diger.length > 0 && (
         <details className={AYRINTI}>
-          <summary className={AYRINTI_OZET}>Belirgin fark yok ya da veri yetersiz ({diger.length} karşılaştırma)</summary>
+          <summary className={AYRINTI_OZET}>{d.digerFarklar(diger.length)}</summary>
           <ul className={AYRINTI_LISTE}>
             {diger.map((f) => (
               <li key={`${f.alan}:${f.deger}:${f.karsi}`}>{f.cumle}</li>
@@ -665,7 +684,7 @@ function NeIseYariyor({ yanit }: { yanit: KreatifZekaYaniti }) {
         </details>
       )}
       <p className="m-0 border-t border-line px-4 py-2.5 text-12 text-ink-muted">
-        <b className="text-ink">Bu bir ilişki, garanti değil.</b> Aynı amaçtaki kreatiflerin geçmişinden; yeni görselle sınayın.
+        <b className="text-ink">{d.iliskiBaslik}</b>{d.iliski}
       </p>
     </Kart>
   );
@@ -694,26 +713,28 @@ function BriefKarti({
   onKur: (b: KreatifBrief) => void;
   onKopyala: (b: KreatifBrief) => void;
 }) {
+  const { dil } = useDil();
+  const d = useSozluk(kreatifSozlugu).sekme;
   return (
-    <Kart baslik="Üretim brief’i" baslikEki="Yalnız belirgin farklardan">
+    <Kart baslik={d.briefBaslik} baslikEki={d.briefEki}>
       <div className="grid gap-3">
-        {hali.durum === 'yukleniyor' && <Yukleniyor etiket="Brief hazırlanıyor" />}
-        {hali.durum === 'hata' && <HataDurumu baslik="Brief hazırlanamadı." mesaj={hali.mesaj} />}
+        {hali.durum === 'yukleniyor' && <Yukleniyor etiket={d.briefHazirlaniyor} />}
+        {hali.durum === 'hata' && <HataDurumu baslik={d.briefHazirlanamadi} mesaj={hali.mesaj} />}
         {!brief &&
           hali.durum !== 'yukleniyor' &&
           (bosNeden ? (
-            <BosDurum baslik={briefBosMetni(bosNeden).baslik} neden={briefBosMetni(bosNeden).metin} />
+            <BosDurum baslik={briefBosMetni(bosNeden, dil).baslik} neden={briefBosMetni(bosNeden, dil).metin} />
           ) : (
             <BosDurum
-              baslik="Bir sonraki görsel için brief"
-              neden={`Belirgin farklardan tasarımcıya ya da AdvCampaign’e verilecek kısa bir yönerge hazırlar (${kumeAdi(kume)}).`}
+              baslik={d.briefSonrakiBaslik}
+              neden={d.briefSonrakiNeden(kumeAdi(kume))}
               eylem={
                 yetki.yaz ? (
                   <Dugme ton="koyu" boyut="kucuk" onClick={onHazirla}>
-                    Brief hazırla
+                    {d.briefHazirla}
                   </Dugme>
                 ) : (
-                  <p className="m-0 text-12 text-ink-muted">Brief hazırlama yetkin yok.</p>
+                  <p className="m-0 text-12 text-ink-muted">{d.briefYetkiYok}</p>
                 )
               }
             />
@@ -722,13 +743,13 @@ function BriefKarti({
           <>
             <div className="grid gap-3">
               <div className="font-baslik text-15 font-bold text-ink">{brief.cevap.yon}</div>
-              <div className="text-12 text-ink-muted">Bulgular (Advetics verisi)</div>
+              <div className="text-12 text-ink-muted">{d.bulgular}</div>
               {brief.bulgular.map((b) => (
                 <div key={`${b.alan}:${b.deger}`} className="border-l-[3px] border-ink py-0.5 pl-2.5 text-[12.5px] text-ink">
                   {b.cumle}
                 </div>
               ))}
-              <div className="text-12 text-ink-muted">Yönerge (yapay zekâ)</div>
+              <div className="text-12 text-ink-muted">{d.yonerge}</div>
               <ol className="m-0 grid list-decimal gap-1.5 pl-[18px] text-13 text-ink">
                 {brief.cevap.talimatlar.map((t) => (
                   <li key={t.alan}>{t.talimat}</li>
@@ -736,20 +757,20 @@ function BriefKarti({
               </ol>
               {brief.cevap.kacin.length > 0 && (
                 <div className="text-[12.5px] text-ink">
-                  <b>Kaçın:</b> {brief.cevap.kacin.join('; ')}
+                  <b>{d.kacin}</b> {brief.cevap.kacin.join('; ')}
                 </div>
               )}
             </div>
             <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3">
               <span className="mr-auto text-12 text-ink-muted">
-                {formatRelative(brief.uretildi)} · aynı bulgularla tekrar istenirse yeniden hazırlanmaz
+                {d.tekrarYok(formatRelative(brief.uretildi, dil))}
               </span>
               <Dugme ton="ikincil" boyut="kucuk" onClick={() => onKopyala(brief)}>
-                {kopyalandi ? 'Kopyalandı' : 'Kopyala'}
+                {kopyalandi ? d.kopyalandi : d.kopyala}
               </Dugme>
               {yetki.aktar && (
                 <Dugme ton="koyu" boyut="kucuk" bekliyor={aktarim.durum === 'gidiyor'} onClick={() => onKur(brief)}>
-                  {aktarim.durum === 'gidiyor' ? 'Açılıyor' : 'Bu brief ile reklam kur'}
+                  {aktarim.durum === 'gidiyor' ? d.aciliyor : d.reklamKur}
                 </Dugme>
               )}
             </div>

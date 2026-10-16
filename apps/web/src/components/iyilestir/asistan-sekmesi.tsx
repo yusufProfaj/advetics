@@ -5,6 +5,9 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AsistanMesaji, AsistanOturumu, AsistanParcasi, Oneri, UygulamaSonucu } from '@advetics/shared';
 import { API_URL, ApiRequestError, apiFetch } from '@/lib/api';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { asistanSozlugu } from '@/dil/sozlukler/iyilestir-asistan';
+import { iyilestirSozlugu } from '@/dil/sozlukler/iyilestir';
 import {
   aracIziMetni,
   devretAdresi,
@@ -52,12 +55,6 @@ export type OturumSonucu =
   | { durum: 'tamam'; oturum: OkunanOturum }
   | { durum: 'hata'; mesaj: string };
 
-/** Taslaktaki üç soru; ekranda değişmiyor, metinleri olduğu gibi gönderiliyor. */
-const SIK_SORULANLAR = [
-  'Bu hafta en çok para nereye boşa gitti?',
-  'Hangi reklamlar yoruldu?',
-  'Yeni bir kampanya açmak istiyorum',
-] as const;
 
 /**
  * ═══ AI ASİSTAN SEKMESİ ═══
@@ -88,6 +85,10 @@ export function AsistanSekmesi({
 }) {
   const pathname = usePathname();
   const params = useSearchParams();
+  const { dil } = useDil();
+  const d = useSozluk(asistanSozlugu);
+  /** Taslaktaki üç soru; metinleri olduğu gibi gönderiliyor (arayüz dilinde). */
+  const sikSorulanlar = [d.sorular.bosaGiden, d.sorular.yorulan, d.sorular.yeniKampanya];
   const [oturumId, setOturumId] = useState<string | null>(ilk.durum === 'tamam' ? ilk.oturum.id : null);
   const [mesajlar, setMesajlar] = useState<AsistanMesaji[]>(ilk.durum === 'tamam' ? ilk.oturum.mesajlar : []);
   const [okumaHatasi, setOkumaHatasi] = useState<string | null>(ilk.durum === 'hata' ? ilk.mesaj : null);
@@ -112,9 +113,9 @@ export function AsistanSekmesi({
       setMesajlar(o.mesajlar);
       setOkumaHatasi(null);
     } catch (e) {
-      setOkumaHatasi(e instanceof ApiRequestError ? e.message : 'Bağlantı kurulamadı.');
+      setOkumaHatasi(e instanceof ApiRequestError ? e.message : d.baglantiKurulamadi);
     }
-  }, []);
+  }, [d]);
 
   function adreseYaz(id: string | null) {
     const p = new URLSearchParams(params.toString());
@@ -154,7 +155,7 @@ export function AsistanSekmesi({
         setBagliDegil(o.asistanBagli === false);
         adreseYaz(id);
       } catch (e) {
-        setAkisSorunu(`Sohbet açılamadı: ${e instanceof ApiRequestError ? e.message : 'Bağlantı kurulamadı.'}`);
+        setAkisSorunu(d.sohbetAcilamadi(e instanceof ApiRequestError ? e.message : d.baglantiKurulamadi));
         return;
       }
     }
@@ -177,14 +178,14 @@ export function AsistanSekmesi({
       });
     } catch {
       setAkis(false);
-      setAkisSorunu('Bağlantı koptu; mesaj gönderilemedi.');
+      setAkisSorunu(d.baglantiKoptu);
       void kayitliOku(id);
       return;
     }
     if (!res.ok || !res.body) {
       const g = (await res.json().catch(() => null)) as { message?: string } | null;
       setAkis(false);
-      setAkisSorunu(g?.message ?? `Mesaj gönderilemedi (HTTP ${res.status}).`);
+      setAkisSorunu(g?.message ?? d.mesajGonderilemedi(res.status));
       void kayitliOku(id);
       return;
     }
@@ -208,7 +209,7 @@ export function AsistanSekmesi({
         if (bitti) setMesajlar((l) => turuBitir(l, bitti));
       }
     } catch {
-      setAkisSorunu('Akış yarıda kesildi; kayıtlı hâl okunuyor.');
+      setAkisSorunu(d.akisKesildi);
     } finally {
       setAkis(false);
     }
@@ -216,7 +217,7 @@ export function AsistanSekmesi({
      * OKUNAMAYAN PARÇA SESSİZCE ATILMIYOR: sayısı yazılıyor ve kayıtlı hâl
      * okunuyor. Kayıt da okunamazsa üstteki hata kutusu çıkıyor.
      */
-    if (sorun > 0) setAkisSorunu(`${sorun} parça okunamadı; kayıtlı hâl gösteriliyor.`);
+    if (sorun > 0) setAkisSorunu(d.parcaOkunamadi(sorun));
     void kayitliOku(id);
   }
 
@@ -238,12 +239,12 @@ export function AsistanSekmesi({
     <div className="grid items-start gap-4 min-[1100px]:grid-cols-[minmax(0,1fr)_300px]">
       <Kart
         dolgu={false}
-        baslik="AI Asistan"
+        baslik={d.baslik}
         baslikEki={clientAdi}
         eylem={
           mesajlar.length > 0 && (
             <Dugme ton="hayalet" boyut="kucuk" onClick={yeniSohbet} disabled={akis}>
-              Yeni sohbet
+              {d.yeniSohbet}
             </Dugme>
           )
         }
@@ -258,36 +259,34 @@ export function AsistanSekmesi({
             <Girdi
               value={metin}
               onChange={(e) => setMetin(e.target.value)}
-              placeholder="Bir şey sor: “Bu hafta en çok para nereye boşa gitti?”"
+              placeholder={d.soruYeri}
               autoComplete="off"
               maxLength={2000}
-              aria-label="Asistana soru"
+              aria-label={d.soruEtiketi}
               className="min-w-0 flex-1"
             />
             <Dugme ton="koyu" type="submit" disabled={metin.trim() === ''} bekliyor={akis}>
-              Sor
+              {d.sor}
             </Dugme>
           </form>
         }
       >
-        <p className="m-0 border-b border-line px-5 py-2.5 text-12 text-ink-muted">Okur, önerir, onayınla uygular. Reklam kurmaz.</p>
+        <p className="m-0 border-b border-line px-5 py-2.5 text-12 text-ink-muted">{d.ozet}</p>
         <div className="flex h-[560px] flex-col gap-3.5 overflow-y-auto p-4" ref={kutu} aria-live="polite">
           <div className={BALON_O}>
-            Merhaba. {clientAdi} reklam verilerine bakabilirim: nereye para gidiyor, ne çalışıyor, ne yoruldu. Bir
-            şey değiştirmem gerekirse önce ne yapacağımı kart olarak gösteririm, sen onaylamadan hiçbir şey değişmez.
+            {d.selam(clientAdi)}
           </div>
           {bagliDegil && (
             <div className={BALON_HATA} role="alert">
-              Asistan şu an bağlı değil: sunucuda yapay zekâ anahtarı tanımlı değil. Sorular cevaplanamaz; öneriler
-              ve kurallar çalışmaya devam ediyor.
+              {d.bagliDegil}
             </div>
           )}
           {okumaHatasi && (
             <div className={BALON_HATA} role="alert">
-              Sohbet okunamadı: {okumaHatasi}{' '}
+              {d.sohbetOkunamadi(okumaHatasi)}{' '}
               {oturumId && (
                 <button type="button" className={KART_BAGLANTISI} onClick={() => void kayitliOku(oturumId)}>
-                  Yeniden dene
+                  {d.yenidenDene}
                 </button>
               )}
             </div>
@@ -311,7 +310,7 @@ export function AsistanSekmesi({
             ),
           )}
           {yaziyor && (
-            <div className={BALON_O} aria-label="Asistan yazıyor">
+            <div className={BALON_O} aria-label={d.yaziyor}>
               {/* Üç nokta yalnız hareket serbestse nabız atıyor; değilse durağan. */}
               <span className="inline-flex gap-1" aria-hidden>
                 {[0, 150, 300].map((g) => (
@@ -324,7 +323,7 @@ export function AsistanSekmesi({
               </span>
               {uzunSuruyor && (
                 <span className="mt-1.5 block text-12 text-ink-muted">
-                  Model bu sefer yavaş cevap veriyor; en fazla 3 dakika bekleniyor.
+                  {d.yavas}
                 </span>
               )}
             </div>
@@ -338,14 +337,14 @@ export function AsistanSekmesi({
       </Kart>
 
       <div className="grid min-w-0 content-start gap-4">
-        <Kart baslik="Sık sorulanlar">
+        <Kart baslik={d.sikSorulanlarBaslik}>
           {/*
            * Hazır sorular BAĞLANTI görünüşünde (kartın eylemi bağlantıdır,
            * BILESENLER §3.3): `Dugme` tek satırlık hap ve uzun soru metni
            * taşıp kesilirdi.
            */}
           <ul className="m-0 grid list-none gap-2.5 p-0">
-            {SIK_SORULANLAR.map((soru) => (
+            {sikSorulanlar.map((soru) => (
               <li key={soru}>
                 <button
                   type="button"
@@ -359,13 +358,13 @@ export function AsistanSekmesi({
             ))}
           </ul>
         </Kart>
-        <Kart baslik="Asistan ne yapabilir?">
+        <Kart baslik={d.neYapabilir}>
           <p className="m-0 text-13 leading-relaxed text-ink-muted">
-            <b className="text-ink">Okur:</b> özet, günlük seri, kampanya → reklam kırılımı, dönüşümler, bütçe temposu.
+            <b className="text-ink">{d.okurBaslik}</b> {d.okur}
             <br />
-            <b className="text-ink">Önerir ve uygular (onayla):</b> Meta ve Google’da reklam veya kampanya durdurma, bütçe değişikliği.
+            <b className="text-ink">{d.uygularBaslik}</b> {d.uygular}
             <br />
-            <b className="text-ink">Yapmaz:</b> reklam kurmaz (AdvCampaign’e devreder), LinkedIn’e yazmaz.
+            <b className="text-ink">{d.yapmazBaslik}</b> {d.yapmaz}
           </p>
         </Kart>
       </div>
@@ -400,6 +399,9 @@ function AsistanParcalari({
   onUygula: (o: Oneri) => void;
   onVazgec: (anahtar: string) => void;
 }) {
+  const { dil } = useDil();
+  const d = useSozluk(asistanSozlugu);
+  const iy = useSozluk(iyilestirSozlugu);
   // Ardışık araç parçalarını tek iz satırında topla.
   const gruplar: Array<{ tur: 'iz'; izler: string[] } | { tur: 'parca'; parca: AsistanParcasi }> = [];
   for (const p of mesaj.parcalar) {
@@ -409,8 +411,8 @@ function AsistanParcalari({
     if (p.tur === 'metin' && p.metin.trim() === '') continue;
     const son = gruplar.at(-1);
     if (p.tur === 'arac') {
-      if (son?.tur === 'iz') son.izler.push(aracIziMetni(p));
-      else gruplar.push({ tur: 'iz', izler: [aracIziMetni(p)] });
+      if (son?.tur === 'iz') son.izler.push(aracIziMetni(p, dil));
+      else gruplar.push({ tur: 'iz', izler: [aracIziMetni(p, dil)] });
     } else {
       gruplar.push({ tur: 'parca', parca: p });
     }
@@ -449,14 +451,14 @@ function AsistanParcalari({
           return (
             <div key={n} className={IC_KART}>
               <div className="flex items-center gap-2 border-b border-line px-3 py-2.5">
-                <span className={ETIKET}>AdvCampaign’e devret</span>
+                <span className={ETIKET}>{d.devret}</span>
               </div>
               <p className="m-0 px-3 py-2.5 text-13 leading-normal text-ink">
-                “{p.istem}” için AdvCampaign’de yeni bir reklam aç; rehber amaçtan bütçeye adım adım kurar.
+                {d.devretCumle(p.istem)}
               </p>
               <div className="flex justify-end border-t border-line px-3 py-2.5">
                 <Link className={dugmeSinifi('koyu', 'kucuk')} href={devretAdresi(clientId, p.oturumId)}>
-                  AdvCampaign’de aç
+                  {d.devretAc}
                 </Link>
               </div>
             </div>
@@ -465,13 +467,13 @@ function AsistanParcalari({
         if (p.tur !== 'uygula_karti') return null;
         // uygula_karti
         const o = p.oneri;
-        const metin = eylemMetni(o);
+        const metin = eylemMetni(o, dil);
         const sonuc = sonuclar[o.anahtar] ?? (o.durum === 'uygulandi' ? o.uygulama : null);
         const vazgecildi = vazgecilen.has(`${mesaj.id}:${o.anahtar}`);
         return (
           <div key={n} className={IC_KART}>
             <div className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2.5 text-[12.5px] font-bold text-ink">
-              <span className={ETIKET}>Uygula kartı</span> {metin?.dugme ?? o.baslik}
+              <span className={ETIKET}>{d.uygulaKarti}</span> {metin?.dugme ?? o.baslik}
             </div>
             <p className="m-0 px-3 py-2.5 text-13 leading-normal text-ink">
               {o.baslik}. {metin ? `${metin.once} → ${metin.sonra}.` : ''} {o.neden}
@@ -479,7 +481,7 @@ function AsistanParcalari({
             <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line px-3 py-2.5">
               {sonuc ? (
                 (() => {
-                  const t = sonucMetni(sonuc, o.platform, metin?.sonra ?? null, 'az önce');
+                  const t = sonucMetni(sonuc, o.platform, metin?.sonra ?? null, iy.azOnce, dil);
                   return (
                     <span className="mr-auto inline-flex items-center gap-2 text-[12.5px] font-semibold text-ink">
                       <DurumNoktasi hal={t.ton === 'uyari' ? 'hata' : 'ok'} />
@@ -488,20 +490,20 @@ function AsistanParcalari({
                   );
                 })()
               ) : o.durum === 'yoksayildi' ? (
-                <span className={`${KISIT} mr-auto`}>Bu öneri yoksayılmış.</span>
+                <span className={`${KISIT} mr-auto`}>{d.yoksayilmis}</span>
               ) : o.eylem === null ? (
-                <span className={`${KISIT} mr-auto`}>{o.kisit ?? 'Bu öneri yalnız bilgi; panelden uygulanamıyor.'}</span>
+                <span className={`${KISIT} mr-auto`}>{o.kisit ?? iy.kart.yalnizBilgi}</span>
               ) : !yazabilir ? (
-                <span className={`${KISIT} mr-auto`}>Uygulamak için bütçe yazma yetkisi gerekiyor. Yöneticine sor.</span>
+                <span className={`${KISIT} mr-auto`}>{iy.kart.yetkisiz}</span>
               ) : vazgecildi ? (
-                <span className={`${KISIT} mr-auto`}>Vazgeçildi; hiçbir şey değişmedi.</span>
+                <span className={`${KISIT} mr-auto`}>{d.vazgecildi}</span>
               ) : (
                 <>
                   <Dugme ton="hayalet" boyut="kucuk" onClick={() => onVazgec(o.anahtar)}>
-                    Vazgeç
+                    {iy.onay.vazgec}
                   </Dugme>
                   <Dugme ton="koyu" boyut="kucuk" onClick={() => onUygula(o)}>
-                    Onayla ve uygula
+                    {iy.onay.onaylaUygula}
                   </Dugme>
                 </>
               )}

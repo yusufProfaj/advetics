@@ -19,7 +19,8 @@ import {
   satirYolu,
   sonucRozeti,
 } from './etki';
-import { SEKMELER, SEKME_ETIKETI, sekmeCoz } from './iyilestir';
+import { SEKMELER, sekmeEtiketi, sekmeCoz } from './iyilestir';
+import { etkiSozlugu } from '../dil/sozlukler/iyilestir-etki';
 
 /**
  * İYİLEŞTİR › ETKİSİ — saf kararlar ÇALIŞTIRILARAK, bağlar yorumsuz kaynak
@@ -86,7 +87,7 @@ describe('adresler', () => {
 
   it('KRİTİK: sekme Sinyaller’den sonra, adı "Etkisi", adresten çözülüyor', () => {
     expect(SEKMELER.slice(0, 3)).toEqual(['oneriler', 'sinyaller', 'etki']);
-    expect(SEKME_ETIKETI.etki).toBe('Etkisi');
+    expect(sekmeEtiketi('etki')).toBe('Etkisi');
     expect(sekmeCoz('etki')).toBe('etki');
   });
 });
@@ -201,7 +202,9 @@ describe('kaynak: bağlar', () => {
   it('KRİTİK: hata boş listeye çevrilmiyor; dört hâl de çiziliyor', () => {
     expect(SEKME).not.toMatch(/\.catch\(\s*\(\)\s*=>\s*set\w+\(\s*\[\s*\]\s*\)/);
     for (const h of ["hal === 'yukleniyor'", "sonuc?.durum === 'hata'", "hal === 'bos'", "hal === 'dolu'"]) expect(SEKME).toContain(h);
-    expect(SEKME).toContain('Sunucunun cevabı: {sonuc.mesaj}');
+    // Metin sözlükte; kaynak o anahtarı kullanıyor (D3).
+    expect(SEKME).toContain('{d.sunucuCevabi} {sonuc.mesaj}');
+    expect(etkiSozlugu.tr.sekme.sunucuCevabi).toBe('Sunucunun cevabı:');
   });
 
   it('KRİTİK: ayrıntı DOM’dan ÇIKMIYOR (görünürlük data-acik ile), ölçülmeyenler her zaman', () => {
@@ -222,7 +225,7 @@ describe('kaynak: bağlar', () => {
     expect(SAYFA).toContain("{sekme === 'etki' && etkiSonucu && <EtkiSekmesi clientId={clientId} ilk={etkiSonucu} />}");
     expect(SAYFA).toContain('etki={etkiSonucu}');
     expect(SAYFA).toContain("yol: sekme === 'oneriler' ? 'iyilestir' : undefined");
-    expect(ONERILER).toContain("etkiSatiri={o.durum === 'uygulandi' ? kartEtkiSatiri(etki, o.anahtar) : null}");
+    expect(ONERILER).toContain("etkiSatiri={o.durum === 'uygulandi' ? kartEtkiSatiri(etki, o.anahtar, dil) : null}");
     expect(KART).toContain('{etkiSatiri && (');
   });
 

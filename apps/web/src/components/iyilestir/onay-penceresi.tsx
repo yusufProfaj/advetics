@@ -4,6 +4,8 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useId, useState, type ReactNode } from 'react';
 import type { Oneri, UygulamaSonucu } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { iyilestirSozlugu } from '@/dil/sozlukler/iyilestir';
 import {
   adimHalleri,
   adimMetinleri,
@@ -48,6 +50,8 @@ export function OnayPenceresi({
   onSonuc: (anahtar: string, sonuc: UygulamaSonucu) => void;
 }) {
   const router = useRouter();
+  const { dil } = useDil();
+  const t = useSozluk(iyilestirSozlugu);
   const [gosterilen, setGosterilen] = useState<Oneri | null>(oneri);
   const [asama, setAsama] = useState<UygulamaAsamasi>('hazir');
   const [mesaj, setMesaj] = useState<string | null>(null);
@@ -75,8 +79,8 @@ export function OnayPenceresi({
   const suruyor = asama === 'gonderiliyor';
 
   const o = gosterilen;
-  const metin = o ? eylemMetni(o) : null;
-  const adimlar = o ? adimMetinleri(o.platform) : null;
+  const metin = o ? eylemMetni(o, dil) : null;
+  const adimlar = o ? adimMetinleri(o.platform, dil) : null;
   const haller = adimHalleri(asama);
 
   async function onayla() {
@@ -96,7 +100,7 @@ export function OnayPenceresi({
          * doğrusu kayıtlı hâle bakmak (sayfayı yenilemek).
          */
         setAsama('degisti');
-        setMesaj('Sunucu yanıt verdi ama geri okuma sonucu okunamadı. Sayfayı yenileyip kartın durumuna bak.');
+        setMesaj(t.hata.sonucOkunamadi);
         return;
       }
       setSonuc(r);
@@ -110,7 +114,7 @@ export function OnayPenceresi({
        */
       if (r.durum === 'dogrulandi') setTimeout(onKapat, 900);
     } catch (e) {
-      const h = uygulaHatasi(e instanceof ApiRequestError ? e : null);
+      const h = uygulaHatasi(e instanceof ApiRequestError ? e : null, dil);
       setAsama(h.asama);
       setMesaj(h.mesaj);
     }
@@ -129,7 +133,7 @@ export function OnayPenceresi({
     <Pencere
       acik={acik}
       onKapat={kapatGuvenli}
-      baslik={metin?.baslik ?? 'Onay'}
+      baslik={metin?.baslik ?? t.onay.baslik}
       aciklama={metin?.aciklama ?? ''}
       altEylemler={
         asama === 'degisti' ? (
@@ -140,19 +144,19 @@ export function OnayPenceresi({
               router.refresh();
             }}
           >
-            Yenile
+            {t.onay.yenile}
           </Dugme>
         ) : sonuc ? (
           <Dugme ton="ikincil" onClick={onKapat}>
-            Kapat
+            {t.onay.kapat}
           </Dugme>
         ) : (
           <>
             <Dugme ton="ikincil" onClick={onKapat} disabled={suruyor}>
-              Vazgeç
+              {t.onay.vazgec}
             </Dugme>
             <Dugme id={onaylaId} ton="koyu" onClick={onayla} disabled={!metin} bekliyor={suruyor}>
-              {asama === 'hata' ? 'Tekrar dene' : 'Onayla ve uygula'}
+              {asama === 'hata' ? t.onay.tekrarDene : t.onay.onaylaUygula}
             </Dugme>
           </>
         )
@@ -164,12 +168,12 @@ export function OnayPenceresi({
 
         {sonuc && o && (
           <SonucKutusu ton={sonuc.durum === 'dogrulandi' ? 'ok' : 'uyari'}>
-            {sonucMetni(sonuc, o.platform, metin?.sonra ?? null, 'az önce').metin}
+            {sonucMetni(sonuc, o.platform, metin?.sonra ?? null, t.azOnce, dil).metin}
           </SonucKutusu>
         )}
         {mesaj && (
           <SonucKutusu ton="hata">
-            {asama === 'degisti' ? <strong>Öneri değişti, yenile. </strong> : <strong>Uygulanamadı. </strong>}
+            {asama === 'degisti' ? <strong>{t.onay.oneriDegisti}</strong> : <strong>{t.onay.uygulanamadi}</strong>}
             {mesaj}
           </SonucKutusu>
         )}
@@ -190,17 +194,18 @@ export function OnayPenceresi({
 
 /** "Şimdi → Sonra" kutusu. Değer yoksa uzun tire DEĞİL kısa çizgi (panel metin dili). */
 export function DegisimKutusu({ once, sonra }: { once: string | null; sonra: string | null }) {
+  const d = useSozluk(iyilestirSozlugu).onay;
   return (
     <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2.5 rounded-alan border border-line p-3">
       <div className="min-w-0">
-        <small className="block text-12 text-ink-muted">Şimdi</small>
+        <small className="block text-12 text-ink-muted">{d.simdi}</small>
         <b className="font-baslik text-15 tabular-nums text-ink">{once ?? '-'}</b>
       </div>
       <span aria-hidden className="text-18 text-ink-muted">
         →
       </span>
       <div className="min-w-0">
-        <small className="block text-12 text-ink-muted">Sonra</small>
+        <small className="block text-12 text-ink-muted">{d.sonra}</small>
         <b className="font-baslik text-15 tabular-nums text-ink">{sonra ?? '-'}</b>
       </div>
     </div>

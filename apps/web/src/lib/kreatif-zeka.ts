@@ -25,8 +25,13 @@ import {
   type KreatifZekaYaniti,
   type Kova,
   type PuanSonucu,
+  type Dil,
+  sec,
 } from '@advetics/shared';
 import { baglanti } from '@/lib/baglanti';
+import { kreatifSozlugu } from '@/dil/sozlukler/iyilestir-kreatif';
+
+const yerel = (dil: Dil) => (dil === 'en' ? 'en-US' : 'tr-TR');
 
 /**
  * ═══ İYİLEŞTİR › KREATİFLER: SAF KARARLAR (Paket D, taslak `docs/kreatif-zeka/taslak.html`) ═══
@@ -103,54 +108,40 @@ export function rozetSayisi(sonuc: KreatifSonucu): number | null {
 }
 
 /** Boş listenin cümlesi NEDENİYLE; nedeni bilinmiyorsa (null) bunu da söylüyor. */
-export function bosMetni(neden: KreatifBosNedeni | null): { baslik: string; metin: string; baglanti: 'baglantilar' | null; suzgec: boolean } {
+export function bosMetni(
+  neden: KreatifBosNedeni | null,
+  dil: Dil = 'tr',
+): { baslik: string; metin: string; baglanti: 'baglantilar' | null; suzgec: boolean } {
+  const d = sec(kreatifSozlugu, dil).bos;
   switch (neden) {
     case 'hesap_yok':
-      return { baslik: 'Bu workspace’e reklam hesabı atanmamış', metin: 'Hesap atandığında kreatifler kendiliğinden incelenir.', baglanti: 'baglantilar', suzgec: false };
+      return { baslik: d.hesapYokBaslik, metin: d.hesapYok, baglanti: 'baglantilar', suzgec: false };
     case 'kreatif_yok':
-      return { baslik: 'Son 90 günde harcaması olan kreatif yok', metin: 'Görsel ya da video reklam yayınlandığında burada görünür.', baglanti: null, suzgec: false };
+      return { baslik: d.kreatifYokBaslik, metin: d.kreatifYok, baglanti: null, suzgec: false };
     case 'yalniz_metin':
-      return {
-        baslik: 'Bu workspace’te incelenecek görsel yok',
-        metin: 'Son 90 günde harcaması olan reklamların hepsi metin reklamı (Google Arama). Görsel ya da video reklam yayınlandığında burada görünür.',
-        baglanti: null,
-        suzgec: false,
-      };
+      return { baslik: d.yalnizMetinBaslik, metin: d.yalnizMetin, baglanti: null, suzgec: false };
     case 'etiket_bekliyor':
-      return { baslik: 'Kreatifler inceleniyor', metin: 'İnceleme her gün sınır kadar ilerliyor; en çok harcayanlar önce.', baglanti: null, suzgec: false };
+      return { baslik: d.etiketBekliyorBaslik, metin: d.etiketBekliyor, baglanti: null, suzgec: false };
     case 'suzgec_bos':
-      return { baslik: 'Bu süzgeçte kreatif yok', metin: 'Başka bir kova ya da "Tümü" görünümüne bak.', baglanti: null, suzgec: true };
+      return { baslik: d.suzgecBosBaslik, metin: d.suzgecBos, baglanti: null, suzgec: true };
     case null:
-      return { baslik: 'Liste boş', metin: 'Sunucu boş listenin nedenini söylemedi.', baglanti: null, suzgec: false };
+      return { baslik: d.bilinmeyenBaslik, metin: d.bilinmeyen, baglanti: null, suzgec: false };
   }
 }
 
 // ─── Etiketleme durumu şeridi ────────────────────────────────────────────────
-
-const GECICI_CUMLESI: Record<GeciciNeden, string> = {
-  gemini_kota: 'yapay zekâ kotası dolu',
-  gemini_ulasilamadi: 'yapay zekâya ulaşılamadı',
-  adres_alinamadi: 'platform görsel adresini vermedi',
-  indirme_dustu: 'görsel indirilemedi',
-  platform_kotasi: 'platform kotası dolu',
-};
-
-const BEKCI_CUMLESI: Record<BekciRetNedeni, string> = {
-  workspace_gunluk: 'bugünkü sınır doldu, yarın devam',
-  workspace_aylik: 'bu ayın sınırı doldu, gelecek ay devam',
-  kuresel_gunluk: 'günlük toplam sınır doldu, yarın devam',
-};
 
 /**
  * HESAP BAŞINA son inceleme işi (Ajan 4 N): tek "son iş" bir hesabın
  * arızasını ötekinin başarısının arkasına gizlerdi. Hiç koşmamış hesap da
  * yazılıyor ("hiç incelenmedi" bir cevap). Sorunlu = başarısız ya da beklemede.
  */
-export function hesapSatirlari(o: EtiketlemeOzeti): Array<{ ad: string; cumle: string; sorunlu: boolean }> {
+export function hesapSatirlari(o: EtiketlemeOzeti, dil: Dil = 'tr'): Array<{ ad: string; cumle: string; sorunlu: boolean }> {
+  const d = sec(kreatifSozlugu, dil).serit;
   return o.hesapIsleri.map((h) => {
-    if (h.durum === null) return { ad: h.hesapAdi, cumle: 'hiç incelenmedi', sorunlu: true };
+    if (h.durum === null) return { ad: h.hesapAdi, cumle: d.hicIncelenmedi, sorunlu: true };
     const sorunlu = h.durum === 'failed' || h.durum === 'throttled';
-    const etiket = h.durum === 'succeeded' ? 'tamam' : h.durum === 'failed' ? 'başarısız' : h.durum === 'throttled' ? 'beklemede' : 'sürüyor';
+    const etiket = h.durum === 'succeeded' ? d.tamam : h.durum === 'failed' ? d.basarisiz : h.durum === 'throttled' ? d.beklemede : d.suruyor;
     return { ad: h.hesapAdi, cumle: `${etiket}${h.not ? `: ${h.not}` : ''}`, sorunlu };
   });
 }
@@ -170,7 +161,10 @@ function bekciSayisi(o: EtiketlemeOzeti, n: BekciRetNedeni): string {
  * incelenemiyor" ve açılır döküm. SESSİZ KESME YOK: bekleyen ve
  * incelenemeyen ayrı sayılıyor, nedenleriyle.
  */
-export function etiketlemeSeridi(o: EtiketlemeOzeti): {
+export function etiketlemeSeridi(
+  o: EtiketlemeOzeti,
+  dil: Dil = 'tr',
+): {
   incelendi: string;
   sirada: string | null;
   incelenemiyor: string | null;
@@ -178,34 +172,36 @@ export function etiketlemeSeridi(o: EtiketlemeOzeti): {
   sonIs: string | null;
   hesaplar: Array<{ ad: string; cumle: string; sorunlu: boolean }>;
 } {
+  const k = sec(kreatifSozlugu, dil);
+  const d = k.serit;
   const bekleyen = o.sayilar.bekliyor;
   const neden =
     o.bekci !== null
-      ? `${BEKCI_CUMLESI[o.bekci]}${bekciSayisi(o, o.bekci)}`
+      ? `${k.bekci[o.bekci]}${bekciSayisi(o, o.bekci)}`
       : Object.entries(o.bekleyenNedenleri)
           .filter(([, n]) => (n ?? 0) > 0)
-          .map(([k, n]) => `${n} tanesinde ${GECICI_CUMLESI[k as GeciciNeden]}`)
-          .join(', ') || 'sırada';
+          .map(([kod, n]) => d.nedenSayisi(n!, k.gecici[kod as GeciciNeden]))
+          .join(', ') || d.sirada;
   const dokum = Object.entries(o.etiketlenemez)
     .filter(([, n]) => (n ?? 0) > 0)
-    .map(([k, n]) => ({ sayi: n!, cumle: ETIKETLENEMEZ_CUMLESI[k as keyof typeof ETIKETLENEMEZ_CUMLESI] }))
+    .map(([kod, n]) => ({ sayi: n!, cumle: ETIKETLENEMEZ_CUMLESI[kod as keyof typeof ETIKETLENEMEZ_CUMLESI] }))
     .sort((a, b) => b.sayi - a.sayi);
   return {
-    incelendi: `${o.sayilar.etiketlendi} / ${o.toplam} kreatif incelendi`,
-    sirada: bekleyen > 0 ? `${bekleyen} sırada · ${neden}` : null,
-    incelenemiyor: o.sayilar.etiketlenemez > 0 ? `${o.sayilar.etiketlenemez} incelenemiyor` : null,
+    incelendi: d.incelendi(o.sayilar.etiketlendi, o.toplam),
+    sirada: bekleyen > 0 ? d.siradaSayi(bekleyen, neden) : null,
+    incelenemiyor: o.sayilar.etiketlenemez > 0 ? d.incelenemiyor(o.sayilar.etiketlenemez) : null,
     dokum,
-    sonIs: o.sonIs ? `Son inceleme: ${o.sonIs.not ?? o.sonIs.durum}` : null,
-    hesaplar: hesapSatirlari(o),
+    sonIs: o.sonIs ? d.sonIs(o.sonIs.not ?? o.sonIs.durum) : null,
+    hesaplar: hesapSatirlari(o, dil),
   };
 }
 
 // ─── Kart ────────────────────────────────────────────────────────────────────
 
 /** Eşik metni: TL'de "1.000 ₺"; başka para biriminde TL KARŞILIĞI (eşik TL'den çevriliyor, Ç-8). */
-export function esikMetni(paraBirimi: string): string {
-  const tl = formatMoney(String(HARCAMA_ESIGI_TRY * 1_000_000), 'TRY', { decimals: 0 });
-  return paraBirimi === 'TRY' ? tl : `${tl} karşılığı`;
+export function esikMetni(paraBirimi: string, dil: Dil = 'tr'): string {
+  const tl = formatMoney(String(HARCAMA_ESIGI_TRY * 1_000_000), 'TRY', { decimals: 0, dil });
+  return paraBirimi === 'TRY' ? tl : sec(kreatifSozlugu, dil).esik.karsiligi(tl);
 }
 
 /**
@@ -213,26 +209,27 @@ export function esikMetni(paraBirimi: string): string {
  * önerisi varsa cümle Öneriler'e bağlanıyor ve aynı olay iki ekranda iki
  * dille anlatılmıyor (MIMARI Ç-10).
  */
-export function kovaMetni(s: KreatifSatiri): { kova: Kova; ad: string; cumle: string; oneriye: boolean } | null {
+export function kovaMetni(s: KreatifSatiri, dil: Dil = 'tr'): { kova: Kova; ad: string; cumle: string; oneriye: boolean } | null {
   if (!s.kova) return null;
   return {
     kova: s.kova.kova,
     ad: KOVA_ADI[s.kova.kova],
-    cumle: kovaCumlesi(s.kova, s.puan, formatMoney(s.harcamaMicros, s.paraBirimi, { decimals: 0 }), esikMetni(s.paraBirimi)),
+    cumle: kovaCumlesi(s.kova, s.puan, formatMoney(s.harcamaMicros, s.paraBirimi, { decimals: 0, dil }), esikMetni(s.paraBirimi, dil)),
     oneriye: s.kova.yorgunlukOnerisi,
   };
 }
 
 /** Puan yoksa NEDENİ (halka "yok" yazıyor, başlıkta bu cümle). */
-export function puanYokCumlesi(p: PuanSonucu, paraBirimi: string): string | null {
+export function puanYokCumlesi(p: PuanSonucu, paraBirimi: string, dil: Dil = 'tr'): string | null {
   if (p.puan !== null) return null;
+  const d = sec(kreatifSozlugu, dil).puanYok;
   switch (p.neden) {
     case 'harcama_az':
-      return `Puan için en az ${esikMetni(paraBirimi)} harcama gerekiyor`;
+      return d.harcamaAz(esikMetni(paraBirimi, dil));
     case 'benzer_az':
-      return `Karşılaştırılacak ${p.benzer} benzer var, en az 5 gerekiyor`;
+      return d.benzerAz(p.benzer);
     case 'metrik_yok':
-      return 'Bu amaçta ölçülecek sonuç henüz yok';
+      return d.metrikYok;
   }
 }
 
@@ -246,16 +243,16 @@ export function halkaCizgisi(puan: number | null): { dolu: number; cevre: number
  * Ana metriğin ekrandaki değeri. VERİM ÖLÇEĞİ TERSİNE ÇEVRİLİYOR: sunucu
  * "dönüşüm / ₺" taşıyor (yüksek iyi), ekran "dönüşüm başı maliyet" yazıyor.
  */
-export function metrikMetni(metrik: KreatifMetrigi | null, deger: number | null, paraBirimi: string): string {
+export function metrikMetni(metrik: KreatifMetrigi | null, deger: number | null, paraBirimi: string, dil: Dil = 'tr'): string {
   if (metrik === null || deger === null || !(deger > 0)) return '-';
   const g = METRIK_GOSTERIMI[metrik];
-  if (g.gosterim === 'yuzde') return `%${(deger * 100).toLocaleString('tr-TR', { maximumFractionDigits: 2 })}`;
+  if (g.gosterim === 'yuzde') return `%${(deger * 100).toLocaleString(yerel(dil), { maximumFractionDigits: 2 })}`;
   // tl_ters: 1 / verim = birim başı TL.
-  return formatMoney(String(Math.round((1 / deger) * 1_000_000)), paraBirimi, { decimals: 0 });
+  return formatMoney(String(Math.round((1 / deger) * 1_000_000)), paraBirimi, { decimals: 0, dil });
 }
 
-export function metrikAdi(metrik: KreatifMetrigi | null): string {
-  return metrik ? METRIK_GOSTERIMI[metrik].ad : 'Metrik';
+export function metrikAdi(metrik: KreatifMetrigi | null, dil: Dil = 'tr'): string {
+  return metrik ? METRIK_GOSTERIMI[metrik].ad : sec(kreatifSozlugu, dil).metrik;
 }
 
 /**
@@ -275,18 +272,22 @@ export function etiketCipleri(e: KreatifEtiketleri | null): string[] {
   return cikti;
 }
 
-export function kismiNotu(k: KreatifSatiri['kismiEtiket']): string | null {
-  return k === 'video_kapagi' ? 'Yalnız video kapağı' : k === 'ilk_kart' ? 'Yalnız ilk kart' : null;
+export function kismiNotu(k: KreatifSatiri['kismiEtiket'], dil: Dil = 'tr'): string | null {
+  const d = sec(kreatifSozlugu, dil).kismi;
+  return k === 'video_kapagi' ? d.video_kapagi : k === 'ilk_kart' ? d.ilk_kart : null;
 }
 
 /** Etiketsiz kartın durumu (ekranda "neden etiket yok" boş kalmasın). */
-export function etiketDurumMetni(s: KreatifSatiri): string | null {
-  if (s.etiketDurumu === 'etiketlendi') return s.etiketler ? null : 'İncelendi, özellikler bu ekranda gösterilemiyor';
+export function etiketDurumMetni(s: KreatifSatiri, dil: Dil = 'tr'): string | null {
+  const d = sec(kreatifSozlugu, dil);
+  if (s.etiketDurumu === 'etiketlendi') return s.etiketler ? null : d.etiketDurum.gosterilemiyor;
   if (s.etiketDurumu === 'etiketlenemez') {
     const n = s.etiketNedeni;
-    return n && n in ETIKETLENEMEZ_CUMLESI ? ETIKETLENEMEZ_CUMLESI[n as keyof typeof ETIKETLENEMEZ_CUMLESI] : 'İncelenemiyor';
+    return n && n in ETIKETLENEMEZ_CUMLESI ? ETIKETLENEMEZ_CUMLESI[n as keyof typeof ETIKETLENEMEZ_CUMLESI] : d.etiketDurum.incelenemiyor;
   }
-  return s.etiketNedeni ? `İnceleme bekliyor: ${GECICI_CUMLESI[s.etiketNedeni as GeciciNeden] ?? s.etiketNedeni}` : 'İnceleme bekliyor';
+  return s.etiketNedeni
+    ? d.etiketDurum.bekliyorNeden(d.gecici[s.etiketNedeni as GeciciNeden] ?? s.etiketNedeni)
+    : d.etiketDurum.bekliyor;
 }
 
 export function platformAdi(s: KreatifSatiri): string {
@@ -304,8 +305,8 @@ export function platformAdi(s: KreatifSatiri): string {
  * Küçük kutu (tablo) için kısa neden: "Görsel alınamadı: sunucu 403" →
  * "sunucu 403". Tamamı başlıkta (title) kalıyor; boş kutu hiçbir şey söylemezdi.
  */
-export function kisaNeden(mesaj: string): string {
-  const kisa = mesaj.replace(/^Görsel alınamadı:?\s*/i, '').trim() || 'alınamadı';
+export function kisaNeden(mesaj: string, dil: Dil = 'tr'): string {
+  const kisa = mesaj.replace(/^Görsel alınamadı:?\s*/i, '').trim() || sec(kreatifSozlugu, dil).kisaNedenYok;
   return kisa.length > 18 ? `${kisa.slice(0, 17)}…` : kisa;
 }
 
@@ -325,11 +326,11 @@ export function farkGruplari(farklar: readonly EtiketFarkSatiri[]): { anlamli: E
 }
 
 /** "23 ve 41 kreatif (etkin 15 ve 22)". Örneklem ve aralık HER ZAMAN birlikte. */
-export function orneklemMetni(f: EtiketFarkSatiri): string {
+export function orneklemMetni(f: EtiketFarkSatiri, dil: Dil = 'tr'): string {
   const a = f.fark.a;
   const b = f.fark.b;
   if (!a || !b) return '';
-  return `${a.kreatif} ve ${b.kreatif} kreatif (etkin ${Math.round(a.etkinOrneklem)} ve ${Math.round(b.etkinOrneklem)})`;
+  return sec(kreatifSozlugu, dil).orneklem(a.kreatif, b.kreatif, Math.round(a.etkinOrneklem), Math.round(b.etkinOrneklem));
 }
 
 /**
@@ -353,16 +354,17 @@ export function aralikEkseni(farklar: readonly EtiketFarkSatiri[]): (f: EtiketFa
 
 // ─── Brief ───────────────────────────────────────────────────────────────────
 
-export function briefBosMetni(neden: BriefBosNedeni): { baslik: string; metin: string } {
+export function briefBosMetni(neden: BriefBosNedeni, dil: Dil = 'tr'): { baslik: string; metin: string } {
+  const d = sec(kreatifSozlugu, dil).brief;
   switch (neden) {
     case 'etiket_yok':
-      return { baslik: 'Kreatifler henüz incelenmedi', metin: 'Brief için önce bu kümedeki görsellerin incelenmesi gerekiyor.' };
+      return { baslik: d.etiketYokBaslik, metin: d.etiketYok };
     case 'kume_kucuk':
-      return { baslik: 'Karşılaştırma için kreatif az', metin: 'Brief için en az 10 incelenmiş ve yeterli harcamalı kreatif gerekiyor.' };
+      return { baslik: d.kumeKucukBaslik, metin: d.kumeKucuk };
     case 'anlamli_fark_yok':
-      return { baslik: 'Henüz belirgin bir fark yok', metin: 'Bu kümede hiçbir özellik ötekinden belirgin biçimde iyi değil. Brief için en az bir belirgin fark gerekiyor.' };
+      return { baslik: d.farkYokBaslik, metin: d.farkYok };
     case 'gunluk_sinir':
-      return { baslik: 'Bugünkü brief sınırı doldu', metin: 'Yarın yeniden hazırlanabilir. Aynı bulgularla hazırlanan brief zaten kayıtlı.' };
+      return { baslik: d.gunlukSinirBaslik, metin: d.gunlukSinir };
   }
 }
 

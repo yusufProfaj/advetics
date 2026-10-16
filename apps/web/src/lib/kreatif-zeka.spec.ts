@@ -26,7 +26,7 @@ import {
   puanYokCumlesi,
   rozetSayisi,
 } from './kreatif-zeka';
-import { SEKMELER, SEKME_ETIKETI, sekmeCoz } from './iyilestir';
+import { SEKMELER, sekmeEtiketi, sekmeCoz } from './iyilestir';
 
 /**
  * ═══ İYİLEŞTİR › KREATİFLER: SAF KARARLAR — ÇALIŞTIRILARAK ═══
@@ -70,7 +70,7 @@ const SATIR: KreatifSatiri = {
 describe('sekme', () => {
   it('Kreatifler sekmesi Öneriler, Sinyaller ve Etkisi’nden sonra ve adresle çözülüyor', () => {
     expect(SEKMELER.indexOf('kreatifler')).toBe(SEKMELER.indexOf('etki') + 1);
-    expect(SEKME_ETIKETI.kreatifler).toBe('Kreatifler');
+    expect(sekmeEtiketi('kreatifler')).toBe('Kreatifler');
     expect(sekmeCoz('kreatifler')).toBe('kreatifler');
   });
 
