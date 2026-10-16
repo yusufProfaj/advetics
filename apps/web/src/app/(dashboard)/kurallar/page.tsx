@@ -1,7 +1,13 @@
 import { redirect } from 'next/navigation';
+import { sec } from '@advetics/shared';
 import { iyilestirKurallarAdresi } from '@/lib/iyilestir';
+import { dilAl } from '@/dil/sunucu';
+import { kurallarSozlugu } from '@/dil/sozlukler/kurallar';
 
-export const metadata = { title: 'Kurallar · Advetics' };
+/** Başlık istek anında: dil çerezden okunuyor (CEVIRI-REHBERI §2). */
+export async function generateMetadata() {
+  return { title: `${sec(kurallarSozlugu, await dilAl()).sayfaBasligi} · Advetics` };
+}
 export const dynamic = 'force-dynamic';
 
 /**

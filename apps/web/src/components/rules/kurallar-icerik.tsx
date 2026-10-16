@@ -5,7 +5,9 @@ import {
   OUTCOME_LABELS,
   RULE_LEVEL_LABELS,
   WINDOW_LABELS,
+  sec,
   type ActionOutcome,
+  type Dil,
   type BildirimKanali,
   type BildirimKanallariYaniti,
   type RuleActionRecord,
@@ -14,6 +16,8 @@ import {
 } from '@advetics/shared';
 import { serverApiFetch } from '@/lib/api';
 import { formatRelative } from '@/lib/format';
+import { dilAl } from '@/dil/sunucu';
+import { kurallarSozlugu } from '@/dil/sozlukler/kurallar';
 import { hataMetni } from '@/lib/sayfa-yardimcilari';
 import { baglanti } from '@/lib/baglanti';
 import { kuralBildirimMetni } from '@/lib/sinyal';
@@ -75,6 +79,8 @@ export async function KurallarIcerik({
   /** Geçmişi aç/kapa bağlantısı; sekme ve workspace parametresini taşıyan tek üretici. */
   adres: (kural: string | undefined) => string;
 }) {
+  const dil = await dilAl();
+  const d = sec(kurallarSozlugu, dil);
   /*
    * "YALNIZCA BİLDİR" KURALININ KANAL ADLARI. Yalnız kanal seçmiş bir kural
    * varsa soruluyor; düşerse `null` ve satır ad UYDURMADAN "N kanala; adlar
@@ -119,9 +125,9 @@ export async function KurallarIcerik({
           rule,
           // KURALIN NE YAPTIĞI DÜZ TÜRKÇE. JSON koşul dizisini göstermek,
           // kuralı canlıya alacak kişiden onu okuyabilmesini beklemek olurdu.
-          aciklama: describe(rule, kanallar),
-          sonCalisma: rule.lastRunAt ? formatRelative(rule.lastRunAt) : 'henüz çalışmadı',
-          sonAksiyon: rule.lastTriggeredAt ? `son aksiyon ${formatRelative(rule.lastTriggeredAt)}` : null,
+          aciklama: describe(rule, kanallar, dil),
+          sonCalisma: rule.lastRunAt ? formatRelative(rule.lastRunAt, dil) : d.henuzCalismadi,
+          sonAksiyon: rule.lastTriggeredAt ? d.sonAksiyon(formatRelative(rule.lastTriggeredAt, dil)) : null,
         }))
       : [];
 
@@ -137,23 +143,19 @@ export async function KurallarIcerik({
          * yok" gibi boş açılıyordu ve kullanıcı kuralı istemeden "Tüm
          * hesaplar" için kuruyordu. Şimdi sebep listenin üstünde yazıyor.
          */
-        <Serit ton="hata" baslik="Reklam hesapları okunamadı.">
-          {hesaplar.mesaj} Yeni kuralda hesap seçilemez; kural bütün hesaplara uygulanır.
+        <Serit ton="hata" baslik={d.hesapOkunamadi}>
+          {d.hesapOkunamadiGovde(hesaplar.mesaj)}
         </Serit>
       )}
       {sonuc.durum === 'hata' ? (
-        <HataDurumu baslik="Kurallar alınamadı." mesaj={sonuc.mesaj} />
+        <HataDurumu baslik={d.kurallarAlinamadi} mesaj={sonuc.mesaj} />
       ) : sonuc.kurallar.length === 0 ? (
         <BosDurum
-          baslik="Bu workspace’te kural yok"
+          baslik={d.bosBaslik}
           neden={
             <>
-              Kurallar {clientAdi} hesabını sürekli izler ve tanımladığın eşikler aşıldığında kampanyayı duraklatır,
-              yeniden başlatır ya da bütçesini değiştirir. Yeni kurallar <strong>prova modunda</strong> başlar: ne
-              yapacaklarını gösterir ama hiçbir şeye dokunmazlar.{' '}
-              {canWrite
-                ? 'Başlıktaki “Yeni kural” ile ilkini kur.'
-                : 'Kural oluşturmak için yetkin yok; yöneticinden rule.write izni isteyebilirsin.'}
+              {d.bosNeden1(clientAdi)} <strong>{d.provaModu}</strong>
+              {d.bosNeden2} {canWrite ? d.bosYazabilir : d.bosYazamaz}
             </>
           }
         />
@@ -171,7 +173,7 @@ export async function KurallarIcerik({
             kapatAdresi={adres(undefined)}
             gecmis={
               acikKural && turlar
-                ? { kuralId: acikKural, icerik: <KuralGecmisi turlar={turlar} kararlar={kararlar} /> }
+                ? { kuralId: acikKural, icerik: <KuralGecmisi turlar={turlar} kararlar={kararlar} dil={dil} /> }
                 : null
             }
           />
@@ -189,16 +191,19 @@ export async function KurallarIcerik({
 function KuralGecmisi({
   turlar,
   kararlar,
+  dil,
 }: {
   turlar: Sonuc<RuleRunRecord[]>;
   kararlar: Sonuc<RuleActionRecord[]> | null;
+  dil: Dil;
 }) {
-  if (turlar.durum === 'hata') return <HataDurumu baslik="Geçmiş alınamadı." mesaj={turlar.mesaj} />;
+  const d = sec(kurallarSozlugu, dil);
+  if (turlar.durum === 'hata') return <HataDurumu baslik={d.gecmisAlinamadi} mesaj={turlar.mesaj} />;
   if (turlar.veri.length === 0) {
     return (
       <BosDurum
-        baslik="Bu kural henüz hiç çalışmadı"
-        neden="Kurallar saatte bir değerlendiriliyor; ilk tur bittiğinde burada görünür. Beklemeden görmek için “Şimdi çalıştır”."
+        baslik={d.hicCalismadiBaslik}
+        neden={d.hicCalismadiNeden}
       />
     );
   }
@@ -207,66 +212,66 @@ function KuralGecmisi({
   return (
     <div className="grid gap-4">
       <section className="grid gap-2">
-        <h3 className="font-baslik m-0 text-14 font-bold text-ink">Son turlar</h3>
+        <h3 className="font-baslik m-0 text-14 font-bold text-ink">{d.sonTurlar}</h3>
         <ul className="m-0 grid list-none gap-0 p-0">
           {runs.slice(0, 5).map((run) => (
             <li key={run.id} className="flex items-center justify-between gap-3 border-b border-line py-2.5 last:border-0">
               <span className="min-w-0">
                 <b className="block text-13 text-ink">
-                  {formatRelative(run.startedAt)}
-                  {run.dryRun && <span className="font-normal text-ink-muted"> (prova)</span>}
+                  {formatRelative(run.startedAt, dil)}
+                  {run.dryRun && <span className="font-normal text-ink-muted"> {d.prova}</span>}
                 </b>
                 <small className="block text-12 text-ink-muted">
                   {run.error ? (
-                    <span className="text-danger-strong">hata: {run.error}</span>
+                    <span className="text-danger-strong">{d.hataOn} {run.error}</span>
                   ) : (
                     <>
-                      <span className="font-baslik tabular-nums">{run.evaluatedCount}</span> varlık incelendi ·{' '}
-                      <span className="font-baslik tabular-nums">{run.matchedCount}</span> eşleşti
+                      <span className="font-baslik tabular-nums">{run.evaluatedCount}</span> {d.varlikIncelendi} ·{' '}
+                      <span className="font-baslik tabular-nums">{run.matchedCount}</span> {d.eslesti}
                     </>
                   )}
                 </small>
               </span>
               <Rozet hal={run.error ? 'hata' : run.actionCount > 0 ? 'ok' : 'taslak'}>
-                {run.error ? 'Hata' : run.actionCount > 0 ? `${run.actionCount} aksiyon` : 'Aksiyon yok'}
+                {run.error ? d.rozetHata : run.actionCount > 0 ? d.aksiyonSayisi(run.actionCount) : d.aksiyonYok}
               </Rozet>
             </li>
           ))}
         </ul>
         {/* SESSİZ KESME YOK: beşten fazla tur varsa kaç tane olduğu yazıyor. */}
         {runs.length > 5 && (
-          <small className="text-12 text-ink-muted">Son 5 tur gösteriliyor, toplam {runs.length}.</small>
+          <small className="text-12 text-ink-muted">{d.turSiniri(runs.length)}</small>
         )}
       </section>
 
       <section className="grid gap-2">
-        <h3 className="font-baslik m-0 text-14 font-bold text-ink">Son turdaki kararlar</h3>
+        <h3 className="font-baslik m-0 text-14 font-bold text-ink">{d.sonTurdakiKararlar}</h3>
         {kararlar === null || kararlar.durum === 'hata' ? (
           <HataDurumu
-            baslik="Son turun kararları alınamadı."
-            mesaj={kararlar?.durum === 'hata' ? kararlar.mesaj : 'Son tur bulunamadı.'}
+            baslik={d.kararlarAlinamadi}
+            mesaj={kararlar?.durum === 'hata' ? kararlar.mesaj : d.sonTurYok}
           />
         ) : kararlar.veri.length === 0 ? (
           <BosDurum
-            baslik="Hiçbir varlık koşulu sağlamadı"
-            neden="Kural çalıştı, yapacak bir şey bulamadı."
+            baslik={d.kararYokBaslik}
+            neden={d.kararYokNeden}
           />
         ) : (
           <div className="rounded-alan border border-line">
             <Tablo
-              etiket="Son turdaki kararlar"
+              etiket={d.sonTurdakiKararlar}
               satirlar={kararlar.veri}
               satirAnahtari={(a) => a.id}
               sutunlar={[
-                { anahtar: 'varlik', baslik: 'Varlık', hucre: (a) => <b className="text-ink">{a.entityName}</b> },
+                { anahtar: 'varlik', baslik: d.kolonVarlik, hucre: (a) => <b className="text-ink">{a.entityName}</b> },
                 {
                   anahtar: 'sonuc',
-                  baslik: 'Sonuç',
+                  baslik: d.kolonSonuc,
                   hucre: (a) => <Rozet hal={SONUC_HALI[a.outcome]}>{OUTCOME_LABELS[a.outcome]}</Rozet>,
                 },
                 // GEREKÇE HER SATIRDA. "Kuralım neden bunu durdurdu" ve "neden
                 // bunu atladı" aynı yerde cevaplanıyor.
-                { anahtar: 'gerekce', baslik: 'Gerekçe', hucre: (a) => <span className="text-ink-muted">{a.error ?? a.reason}</span> },
+                { anahtar: 'gerekce', baslik: d.kolonGerekce, hucre: (a) => <span className="text-ink-muted">{a.error ?? a.reason}</span> },
               ]}
             />
           </div>
@@ -300,17 +305,18 @@ const SONUC_HALI: Record<ActionOutcome, DurumHali> = {
 };
 
 /** Kuralı düz Türkçeye çevirir; tablo satırının altındaki cümle. */
-function describe(rule: RuleRecord, kanallar: BildirimKanali[] | null): string {
+function describe(rule: RuleRecord, kanallar: BildirimKanali[] | null, dil: Dil): string {
+  const d = sec(kurallarSozlugu, dil);
   const parts = rule.conditions.map(
     (c) =>
       `${METRIC_META[c.metric].label} ${OPERATOR_LABELS[c.operator]} ${c.value} (${WINDOW_LABELS[c.window].toLowerCase()})`,
   );
-  const joined = parts.join(rule.combinator === 'and' ? ' VE ' : ' VEYA ');
+  const joined = parts.join(rule.combinator === 'and' ? d.ve : d.veya);
   const action =
     rule.action.type === 'adjust_budget'
-      ? `bütçesini %${Math.abs(rule.action.percent)} ${rule.action.percent < 0 ? 'azalt' : 'artır'}`
+      ? (rule.action.percent < 0 ? d.butceAzalt : d.butceArtir)(Math.abs(rule.action.percent))
       : rule.action.type === 'notify'
-        ? kuralBildirimMetni(rule.action.kanalIdleri, kanallar)
+        ? kuralBildirimMetni(rule.action.kanalIdleri, kanallar, dil)
         : ACTION_LABELS[rule.action.type].toLowerCase();
-  return `${RULE_LEVEL_LABELS[rule.level]} bazında, ${joined} olanları ${action}.`;
+  return d.aciklamaCumlesi(RULE_LEVEL_LABELS[rule.level], joined, action);
 }

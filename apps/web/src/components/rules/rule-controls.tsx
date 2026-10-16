@@ -4,6 +4,8 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useId, useState, type ReactNode } from 'react';
 import type { RuleRecord } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { useSozluk } from '@/dil/saglayici';
+import { kurallarSozlugu } from '@/dil/sozlukler/kurallar';
 import { Dugme } from '@/components/ui/dugme';
 import { AcilirMenu, IKON_TETIK, MenuAyraci, MenuOgesi } from '@/components/ui/acilir-menu';
 import { Ikon } from '@/components/ui/ikon';
@@ -39,9 +41,10 @@ function modu(r: RuleRecord): Mod {
 
 /** Taslaktaki rozet: Canlı yeşil (durum göstergesi), Prova gri, Kapalı gri kare. */
 function ModRozeti({ rule }: { rule: RuleRecord }) {
+  const d = useSozluk(kurallarSozlugu);
   const m = modu(rule);
-  if (m === 'kapali') return <Rozet hal="dur">Kapalı</Rozet>;
-  return m === 'prova' ? <Rozet hal="taslak">Prova</Rozet> : <Rozet hal="ok">Canlı</Rozet>;
+  if (m === 'kapali') return <Rozet hal="dur">{d.modKapali}</Rozet>;
+  return m === 'prova' ? <Rozet hal="taslak">{d.modProva}</Rozet> : <Rozet hal="ok">{d.modCanli}</Rozet>;
 }
 
 type Onay = { tur: 'canli' | 'sil'; rule: RuleRecord };
@@ -93,6 +96,7 @@ export function KurallarTablosu({
 }) {
   const router = useRouter();
   const formId = useId();
+  const d = useSozluk(kurallarSozlugu);
 
   const [suzgec, setSuzgec] = useState<Suzgec>('tumu');
   const [panel, setPanel] = useState<{ id: string; sekme: 'kural' | 'gecmis' } | null>(
@@ -141,7 +145,7 @@ export function KurallarTablosu({
       router.refresh();
       return true;
     } catch (err) {
-      const metin = err instanceof ApiRequestError ? err.message : 'İşlem başarısız.';
+      const metin = err instanceof ApiRequestError ? err.message : d.islemBasarisiz;
       setBildirim({ kuralAdi: rule.name, ton: 'hata', metin });
       setOnayHatasi(metin);
       return false;
@@ -155,21 +159,19 @@ export function KurallarTablosu({
       const res = await apiFetch<{ matchedCount: number; actionCount: number }>(`/rules/${rule.id}/run`, {
         method: 'POST',
       });
-      return `${res.matchedCount} varlık koşulu sağladı · ${res.actionCount} aksiyon${
-        rule.dryRun ? ' (prova: hiçbir şeye dokunulmadı)' : ' uygulandı'
-      }`;
+      return d.calistirSonucu(res.matchedCount, res.actionCount, rule.dryRun);
     });
 
   const modDegistir = (rule: RuleRecord, dryRun: boolean) =>
     islem(rule, 'mode', async () => {
       await apiFetch(`/rules/${rule.id}/mode`, { method: 'PATCH', body: JSON.stringify({ dryRun }) });
-      return dryRun ? 'Kural provaya alındı.' : 'Kural canlıya alındı.';
+      return dryRun ? d.provayaAlindi : d.canliyaAlindi;
     });
 
   const sil = (rule: RuleRecord) =>
     islem(rule, 'delete', async () => {
       await apiFetch(`/rules/${rule.id}`, { method: 'DELETE' });
-      return 'Kural silindi.';
+      return d.silindi;
     });
 
   async function onayla() {
@@ -190,7 +192,7 @@ export function KurallarTablosu({
   const sutunlar: Array<TabloSutunu<KuralSatiri>> = [
     {
       anahtar: 'kural',
-      baslik: 'Kural',
+      baslik: d.kural,
       hucre: (s) => (
         <AdHucresi
           ad={
@@ -208,11 +210,11 @@ export function KurallarTablosu({
         />
       ),
     },
-    { anahtar: 'mod', baslik: 'Mod', hucre: (s) => <ModRozeti rule={s.rule} /> },
-    { anahtar: 'hesap', baslik: 'Hesap', ikincil: true, hucre: (s) => s.rule.adAccountName ?? 'Tüm hesaplar' },
+    { anahtar: 'mod', baslik: d.kolonMod, hucre: (s) => <ModRozeti rule={s.rule} /> },
+    { anahtar: 'hesap', baslik: d.kolonHesap, ikincil: true, hucre: (s) => s.rule.adAccountName ?? d.tumHesaplar },
     {
       anahtar: 'son',
-      baslik: 'Son çalışma',
+      baslik: d.kolonSonCalisma,
       ikincil: true,
       hucre: (s) => (
         <span className="block whitespace-nowrap">
@@ -223,7 +225,7 @@ export function KurallarTablosu({
     },
     {
       anahtar: 'eylem',
-      baslik: <span className="sr-only">Eylemler</span>,
+      baslik: <span className="sr-only">{d.kolonEylemler}</span>,
       hucre: (s) => (
         <RuleControls
           rule={s.rule}
@@ -254,23 +256,23 @@ export function KurallarTablosu({
   return (
     <>
       <Tablo
-        etiket="Otomatik kurallar"
+        etiket={d.tabloEtiketi}
         sutunlar={sutunlar}
         satirlar={gorunen}
         satirAnahtari={(s) => s.rule.id}
         aracCubugu={
           <>
-            <AracCubugu sag={<span className="text-12 text-ink-muted">Saatte bir değerlendiriliyor</span>}>
+            <AracCubugu sag={<span className="text-12 text-ink-muted">{d.saatteBir}</span>}>
               <BolumluSecici<Suzgec>
-                etiket="Kural modu"
+                etiket={d.modEtiketi}
                 secili={suzgec}
                 onSec={setSuzgec}
                 secenekler={(
                   [
-                    ['tumu', 'Tümü'],
-                    ['canli', 'Canlı'],
-                    ['prova', 'Prova'],
-                    ['kapali', 'Kapalı'],
+                    ['tumu', d.modTumu],
+                    ['canli', d.modCanli],
+                    ['prova', d.modProva],
+                    ['kapali', d.modKapali],
                   ] as const
                 ).map(([deger, ad]) => ({
                   deger,
@@ -291,7 +293,7 @@ export function KurallarTablosu({
                   baslik={bildirim.kuralAdi}
                   eylemler={
                     <Dugme ton="hayalet" boyut="kucuk" onClick={() => setBildirim(null)}>
-                      Kapat
+                      {d.kapat}
                     </Dugme>
                   }
                 >
@@ -303,11 +305,11 @@ export function KurallarTablosu({
         }
         bos={
           <BosDurum
-            baslik="Bu süzgeçte kural yok"
-            neden={`${satirlar.length} kuralın hiçbiri bu modda değil. “Tümü”ne dönünce hepsi görünür.`}
+            baslik={d.suzgecBosBaslik}
+            neden={d.suzgecBosNeden(satirlar.length)}
             eylem={
               <Dugme ton="ikincil" boyut="kucuk" onClick={() => setSuzgec('tumu')}>
-                Tümünü göster
+                {d.tumunuGoster}
               </Dugme>
             }
           />
@@ -315,7 +317,7 @@ export function KurallarTablosu({
       />
       {/* SESSİZ KESME YOK: süzgeçte kaç kural göründüğü her zaman yazıyor. */}
       <div className="flex flex-wrap items-center">
-        <span className="px-4 text-12 text-ink-muted">Yeni kurallar prova modunda başlar; hiçbir şeye dokunmaz.</span>
+        <span className="px-4 text-12 text-ink-muted">{d.yeniKuralNotu}</span>
         <div className="ml-auto">
           <SayfalamaCubugu bas={gorunen.length === 0 ? 0 : 1} son={gorunen.length} toplam={gorunen.length} />
         </div>
@@ -324,7 +326,7 @@ export function KurallarTablosu({
       <YanPanel
         acik={Boolean(secili)}
         onKapat={kapat}
-        baslik={secili?.rule.name ?? 'Kural'}
+        baslik={secili?.rule.name ?? d.kural}
         genislik={PANEL_GENISLIGI}
         altEylemler={
           secili && canWrite && sekme === 'kural' ? (
@@ -335,12 +337,12 @@ export function KurallarTablosu({
         {secili && (
           <>
             <Sekmeler
-              etiket="Kural paneli"
+              etiket={d.panelEtiketi}
               secili={sekme}
               onSec={(d) => (d === 'kural' ? setPanel({ id: secili.rule.id, sekme: 'kural' }) : gecmisAc(secili.rule.id))}
               secenekler={[
-                ...(canWrite ? [{ deger: 'kural', etiket: 'Kural' }] : []),
-                { deger: 'gecmis', etiket: 'Geçmiş' },
+                ...(canWrite ? [{ deger: 'kural', etiket: d.kural }] : []),
+                { deger: 'gecmis', etiket: d.gecmis },
               ]}
             />
             {/* İki sekme de DOM'da kalıyor: sekme değiştirmek yarım düzenlemeyi silmemeli. */}
@@ -360,7 +362,7 @@ export function KurallarTablosu({
             )}
             <div hidden={sekme !== 'gecmis'}>
               {/* Adres değişti, sunucu henüz bu kuralın geçmişini çizmedi: yükleniyor. */}
-              {gecmisHazir ? gecmis!.icerik : <Yukleniyor etiket="Geçmiş yükleniyor" />}
+              {gecmisHazir ? gecmis!.icerik : <Yukleniyor etiket={d.gecmisYukleniyor} />}
             </div>
           </>
         )}
@@ -370,19 +372,19 @@ export function KurallarTablosu({
         acik={onay !== null}
         onKapat={() => setOnay(null)}
         genislik="dar"
-        baslik={onay?.tur === 'sil' ? 'Kural silinsin mi?' : 'Kural canlıya alınsın mı?'}
+        baslik={onay?.tur === 'sil' ? d.silBaslik : d.canliBaslik}
         altEylemler={
           <>
             <Dugme ton="ikincil" onClick={() => setOnay(null)}>
-              Vazgeç
+              {d.vazgec}
             </Dugme>
             {onay?.tur === 'sil' ? (
               <Dugme ton="tehlike" onClick={() => void onayla()} bekliyor={mesgul?.tur === 'delete'}>
-                Sil
+                {d.sil}
               </Dugme>
             ) : (
               <Dugme onClick={() => void onayla()} bekliyor={mesgul?.tur === 'mode'}>
-                Anladım, canlıya al
+                {d.canliyaAlOnay}
               </Dugme>
             )}
           </>
@@ -392,28 +394,20 @@ export function KurallarTablosu({
           <div className="grid gap-3 text-14 text-ink">
             {onay.tur === 'sil' ? (
               <p className="m-0">
-                <strong>{onay.rule.name}</strong> silinecek ve bir daha çalışmayacak. Bu geri alınamaz.
+                <strong>{onay.rule.name}</strong> {d.silGovde}
               </p>
             ) : (
               <>
-                <p className="m-0 font-semibold">Bu kural workspace’in hesabında gerçekten çalışacak.</p>
+                <p className="m-0 font-semibold">{d.canliUyari}</p>
                 <p className="m-0 text-ink-muted">
-                  Bundan sonra saatlik değerlendirmede eşleşen varlıklara{' '}
-                  <strong className="text-ink">
-                    {onay.rule.action.type === 'pause'
-                      ? 'duraklatma'
-                      : onay.rule.action.type === 'resume'
-                        ? 'yeniden başlatma'
-                        : onay.rule.action.type === 'adjust_budget'
-                          ? 'bütçe değişikliği'
-                          : 'bildirim'}
-                  </strong>{' '}
-                  uygulanacak. Önce &quot;Şimdi çalıştır&quot; ile provada ne olacağını görmeni öneririm.
+                  {d.canliYon1}{' '}
+                  <strong className="text-ink">{d.eylemAdi[onay.rule.action.type]}</strong>
+                  {d.canliYon2}
                 </p>
               </>
             )}
             {onayHatasi && (
-              <Serit ton="hata" baslik="İşlem yapılamadı.">
+              <Serit ton="hata" baslik={d.islemYapilamadi}>
                 {onayHatasi}
               </Serit>
             )}
@@ -456,42 +450,43 @@ export function RuleControls({
   onCanli: () => void;
   onSil: () => void;
 }) {
+  const d = useSozluk(kurallarSozlugu);
   return (
     <span className="flex items-center justify-end gap-1.5">
       {canWrite && (
         <Dugme ton="ikincil" boyut="kucuk" onClick={onCalistir} disabled={kilitli} bekliyor={mesgul === 'run'}>
-          Şimdi çalıştır
+          {d.simdiCalistir}
         </Dugme>
       )}
       <AcilirMenu
         tasma="portal"
-        etiket={`${rule.name} eylemleri`}
+        etiket={d.eylemleriMenu(rule.name)}
         hizala="sag"
         genislik="w-52"
         tetik={({ acik: _acik, ...o }) => (
-          <button type="button" {...o} aria-label={`${rule.name}: diğer eylemler`} className={IKON_TETIK}>
+          <button type="button" {...o} aria-label={d.digerEylemler(rule.name)} className={IKON_TETIK}>
             <Ikon ad="nokta3" />
           </button>
         )}
       >
-        {canWrite && <MenuOgesi onClick={onDuzenle}>Düzenle</MenuOgesi>}
-        <MenuOgesi onClick={onGecmis}>Geçmiş</MenuOgesi>
+        {canWrite && <MenuOgesi onClick={onDuzenle}>{d.duzenle}</MenuOgesi>}
+        <MenuOgesi onClick={onGecmis}>{d.gecmis}</MenuOgesi>
         {canWrite &&
           canActivate &&
           (rule.dryRun ? (
             <MenuOgesi onClick={onCanli} devreDisi={kilitli}>
-              Canlıya al
+              {d.canliyaAl}
             </MenuOgesi>
           ) : (
             <MenuOgesi onClick={onProva} devreDisi={kilitli}>
-              Provaya al
+              {d.provayaAl}
             </MenuOgesi>
           ))}
         {canWrite && (
           <>
             <MenuAyraci />
             <MenuOgesi tehlike onClick={onSil} devreDisi={kilitli}>
-              Sil
+              {d.sil}
             </MenuOgesi>
           </>
         )}
@@ -509,7 +504,7 @@ export function RuleControls({
 export function NewRuleButton({
   clientId,
   accounts,
-  etiket = 'Yeni kural',
+  etiket,
   hesapHatasi = null,
   kapaliNedeni,
 }: {
@@ -522,6 +517,8 @@ export function NewRuleButton({
   kapaliNedeni?: string;
 }) {
   const formId = useId();
+  const d = useSozluk(kurallarSozlugu);
+  const dugmeEtiketi = etiket ?? d.yeniKural;
   const [acik, setAcik] = useState(false);
   const [acilis, setAcilis] = useState(0);
   const [formDurumu, setFormDurumu] = useState<KuralFormDurumu>(BOS_FORM);
@@ -530,7 +527,7 @@ export function NewRuleButton({
     return (
       <span className="inline-flex items-center gap-2">
         <small className="text-12 text-ink-muted">{kapaliNedeni}</small>
-        <Dugme disabled>{etiket}</Dugme>
+        <Dugme disabled>{dugmeEtiketi}</Dugme>
       </span>
     );
   }
@@ -546,12 +543,12 @@ export function NewRuleButton({
           setAcik(true);
         }}
       >
-        {etiket}
+        {dugmeEtiketi}
       </Dugme>
       <YanPanel
         acik={acik}
         onKapat={() => setAcik(false)}
-        baslik="Yeni kural"
+        baslik={d.yeniKural}
         genislik={PANEL_GENISLIGI}
         altEylemler={<KuralKaydetEylemleri formId={formId} durum={formDurumu} onVazgec={() => setAcik(false)} />}
       >

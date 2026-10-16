@@ -15,11 +15,15 @@ import {
   RULE_WINDOWS,
   WINDOW_LABELS,
   KANAL_DURUM_ADI,
+  sec,
+  type Dil,
   type BildirimKanallariYaniti,
   type RuleCondition,
   type RuleRecord,
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { kurallarSozlugu } from '@/dil/sozlukler/kurallar';
 import { baglanti } from '@/lib/baglanti';
 import { kaydedilecekKanallar, kanalAdi, kanalSecimi } from '@/lib/sinyal';
 import { markaMerkeziAdresi } from '@/lib/panel-adresleri';
@@ -78,6 +82,8 @@ export function RuleEditor({
   hesapHatasi?: string | null;
 }) {
   const router = useRouter();
+  const d = useSozluk(kurallarSozlugu);
+  const { dil } = useDil();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -131,7 +137,7 @@ export function RuleEditor({
     setKanallar({ tur: 'okunuyor' });
     apiFetch<BildirimKanallariYaniti>(baglanti('/bildirim/kanallar', { clientId })).then(
       (veri) => setKanallar({ tur: 'geldi', veri }),
-      (e: unknown) => setKanallar({ tur: 'hata', mesaj: e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.' }),
+      (e: unknown) => setKanallar({ tur: 'hata', mesaj: e instanceof ApiRequestError ? e.message : d.sunucuyaUlasilamadi }),
     );
   }, [actionType, kanallar.tur, clientId]);
 
@@ -155,7 +161,7 @@ export function RuleEditor({
    */
   const hesapSecenekleri =
     existing?.adAccountId && !accounts.some((a) => a.id === existing.adAccountId)
-      ? [...accounts, { id: existing.adAccountId, name: existing.adAccountName ?? 'Kayıtlı hesap' }]
+      ? [...accounts, { id: existing.adAccountId, name: existing.adAccountName ?? d.kayitliHesap }]
       : accounts;
 
   async function save() {
@@ -204,7 +210,7 @@ export function RuleEditor({
       onDone();
       router.refresh();
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Kural kaydedilemedi.');
+      setError(err instanceof ApiRequestError ? err.message : d.kaydedilemedi);
     } finally {
       setBusy(false);
     }
@@ -227,13 +233,11 @@ export function RuleEditor({
         // CANLI BİR KURALI DÜZENLEMEK ONU PROVAYA DÖNDÜRÜYOR. Sunucu bunu
         // koşul ya da aksiyon değiştiğinde yapıyor; kullanıcı bunu kaydettikten
         // SONRA öğrenmemeli.
-        <Serit baslik="Bu kural canlı.">
-          Koşulu ya da aksiyonu değiştirirsen kural provaya döner ve yeniden canlıya alman gerekir.
-        </Serit>
+        <Serit baslik={d.canliKuralBaslik}>{d.canliKuralGovde}</Serit>
       )}
 
-      <Alan etiket="Kural adı">
-        <Girdi value={name} onChange={(e) => setName(e.target.value)} placeholder="EBM koruması" />
+      <Alan etiket={d.kuralAdi}>
+        <Girdi value={name} onChange={(e) => setName(e.target.value)} placeholder={d.kuralAdiOrnek} />
       </Alan>
 
       <FormIzgarasi>
@@ -242,8 +246,8 @@ export function RuleEditor({
           kullanıcı "hiç hesap yok" sanıp kuralı bütün hesaplar için kuruyordu.
         */}
         <Alan
-          etiket="Reklam hesabı"
-          hata={hesapHatasi ? `Reklam hesapları okunamadı: ${hesapHatasi} Kural bütün hesaplara uygulanır.` : undefined}
+          etiket={d.reklamHesabi}
+          hata={hesapHatasi ? d.hesapOkunamadiAlan(hesapHatasi) : undefined}
         >
           {(id, aciklamaId, hatali) => (
             <Secim
@@ -253,7 +257,7 @@ export function RuleEditor({
               value={adAccountId}
               onChange={(e) => setAdAccountId(e.target.value)}
             >
-              <option value="">Tüm hesaplar</option>
+              <option value="">{d.tumHesaplar}</option>
               {hesapSecenekleri.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name}
@@ -263,7 +267,7 @@ export function RuleEditor({
           )}
         </Alan>
 
-        <Alan etiket="Seviye">
+        <Alan etiket={d.seviye}>
           <Secim value={level} onChange={(e) => setLevel(e.target.value as RuleRecord['level'])}>
             {RULE_LEVELS.map((l) => (
               <option key={l} value={l}>
@@ -274,20 +278,20 @@ export function RuleEditor({
         </Alan>
       </FormIzgarasi>
 
-      <Alan etiket="Koşullar nasıl birleşsin">
+      <Alan etiket={d.birlesim}>
         <Secim value={combinator} onChange={(e) => setCombinator(e.target.value as 'and' | 'or')}>
-          <option value="and">Hepsi sağlanmalı (VE)</option>
-          <option value="or">Biri yeterli (VEYA)</option>
+          <option value="and">{d.birlesimVe}</option>
+          <option value="or">{d.birlesimVeya}</option>
         </Secim>
       </Alan>
 
       {/* Koşullar */}
       <fieldset className="grid gap-2">
-        <legend className="mb-1.5 text-13 font-semibold text-ink">Koşullar</legend>
+        <legend className="mb-1.5 text-13 font-semibold text-ink">{d.kosullar}</legend>
         {conditions.map((c, i) => (
           <div key={i} className="grid grid-cols-2 gap-2 rounded-alan border border-line p-2.5">
             <Secim
-              aria-label={`Koşul ${i + 1} metriği`}
+              aria-label={d.kosulMetrik(i + 1)}
               value={c.metric}
               onChange={(e) => patchCondition(i, { metric: e.target.value as RuleCondition['metric'] })}
               title={METRIC_META[c.metric].hint}
@@ -300,7 +304,7 @@ export function RuleEditor({
             </Secim>
 
             <Secim
-              aria-label={`Koşul ${i + 1} karşılaştırması`}
+              aria-label={d.kosulKarsilastirma(i + 1)}
               value={c.operator}
               onChange={(e) => patchCondition(i, { operator: e.target.value as RuleCondition['operator'] })}
             >
@@ -312,7 +316,7 @@ export function RuleEditor({
             </Secim>
 
             <Girdi
-              aria-label={`Koşul ${i + 1} değeri`}
+              aria-label={d.kosulDeger(i + 1)}
               type="text"
               inputMode="decimal"
               className="font-baslik tabular-nums"
@@ -321,7 +325,7 @@ export function RuleEditor({
             />
 
             <Secim
-              aria-label={`Koşul ${i + 1} zaman penceresi`}
+              aria-label={d.kosulPencere(i + 1)}
               value={c.window}
               onChange={(e) => patchCondition(i, { window: e.target.value as RuleCondition['window'] })}
             >
@@ -339,7 +343,7 @@ export function RuleEditor({
                 className="col-span-2 justify-self-end"
                 onClick={() => setConditions((cs) => cs.filter((_, j) => j !== i))}
               >
-                Kaldır
+                {d.kaldir}
               </Dugme>
             )}
           </div>
@@ -347,20 +351,19 @@ export function RuleEditor({
 
         {conditions.length < 5 && (
           <span className="justify-self-start">
-            <CipEkle onClick={() => setConditions((cs) => [...cs, EMPTY_CONDITION])}>+ Koşul ekle</CipEkle>
+            <CipEkle onClick={() => setConditions((cs) => [...cs, EMPTY_CONDITION])}>{d.kosulEkle}</CipEkle>
           </span>
         )}
 
         {budgetConditionAtWrongLevel && (
           <p role="alert" className="m-0 text-12 text-danger-strong">
-            Bütçe tüketimi koşulu yalnızca kampanya seviyesinde kullanılabilir: bütçe kampanya/hesap seviyesinde
-            tanımlı, tek bir reklamın bütçe tüketimi yok.
+            {d.butceSeviyeHatasi}
           </p>
         )}
       </fieldset>
 
       {/* Aksiyon */}
-      <Alan etiket="Aksiyon">
+      <Alan etiket={d.aksiyon}>
         <Secim value={actionType} onChange={(e) => setActionType(e.target.value as RuleRecord['action']['type'])}>
           {RULE_ACTIONS.map((a) => (
             <option key={a} value={a}>
@@ -372,7 +375,7 @@ export function RuleEditor({
 
       {actionType === 'adjust_budget' && (
         <FormIzgarasi>
-          <Alan etiket="Değişim (%)">
+          <Alan etiket={d.degisim}>
             <Girdi
               className="font-baslik tabular-nums"
               value={percent}
@@ -383,8 +386,8 @@ export function RuleEditor({
           {/* Yüzdesel artışın bileşik etkisi hızlı: günde %20 artan bir
               bütçe bir haftada 3,5 katına çıkıyor. */}
           <Alan
-            etiket="Bütçe tavanı (opsiyonel)"
-            ipucu="Artış kuralında tavan koymazsan bütçe her turda büyümeye devam eder."
+            etiket={d.butceTavani}
+            ipucu={d.butceTavaniIpucu}
           >
             {(id, aciklamaId) => (
               <Girdi
@@ -393,7 +396,7 @@ export function RuleEditor({
                 className="font-baslik tabular-nums"
                 value={maxBudget}
                 onChange={(e) => setMaxBudget(e.target.value)}
-                placeholder="boş = tavan yok"
+                placeholder={d.tavanYok}
               />
             )}
           </Alan>
@@ -402,31 +405,30 @@ export function RuleEditor({
 
       {actionType === 'notify' && (
         <div className="rounded-alan border border-line">
-          <p className="m-0 border-b border-line px-3 py-2 text-13 font-semibold text-ink">Bildirim nereye gitsin?</p>
+          <p className="m-0 border-b border-line px-3 py-2 text-13 font-semibold text-ink">{d.bildirimNereye}</p>
           {kanallar.tur === 'okunuyor' && (
             <p role="status" className="m-0 px-3 py-2.5 text-12 text-ink-muted">
-              Kanallar okunuyor…
+              {d.kanallarOkunuyor}
             </p>
           )}
           {kanallar.tur === 'hata' && (
             <p role="alert" className="m-0 px-3 py-2.5 text-12 text-danger-strong">
-              Bildirim kanalları alınamadı: {kanallar.mesaj} Kuralın kayıtlı kanal seçimi ({kanalIdleri.length}) değiştirilmeden korunur.
+              {d.kanalOkunamadi(kanallar.mesaj, kanalIdleri.length)}
             </p>
           )}
           {kanallar.tur === 'geldi' && kanallar.veri.kanallar.length === 0 && (
             <div className="px-3 py-2.5 text-12">
               <p className="m-0 text-ink">
-                <strong>Bu workspace’te bildirim kanalı yok.</strong> Kural çalışır ve eşleşmeleri kural geçmişine yazar, ama
-                kimseye haber gitmez.
+                <strong>{d.kanalYokBaslik}</strong> {d.kanalYokGovde}
               </p>
               <Link href={markaMerkeziAdresi('workspace', clientId, 'bildirimler')} className={`${KART_BAGLANTISI} mt-1.5 inline-block`}>
-                Kanal ekle
+                {d.kanalEkle}
               </Link>
             </div>
           )}
           {kanallar.tur === 'geldi' &&
             kanallar.veri.kanallar.map((k) => {
-              const sec = kanalSecimi(k);
+              const sec = kanalSecimi(k, dil);
               const secili = kanalIdleri.includes(k.id);
               return (
                 <label
@@ -455,12 +457,12 @@ export function RuleEditor({
             })}
           {kanalKaydi.kayip > 0 && (
             <p className="m-0 border-t border-line px-3 py-2 text-12 text-danger-strong">
-              {kanalKaydi.kayip} seçili kanal artık yok (silinmiş); kaydedince kuraldan çıkar.
+              {d.kanalKayip(kanalKaydi.kayip)}
             </p>
           )}
           {kanallar.tur === 'geldi' && kanallar.veri.kanallar.length > 0 && kanalIdleri.length === 0 && (
             <p className="m-0 border-t border-line px-3 py-2 text-12 text-ink-muted">
-              Kanal seçilmedi: eşleşmeler yalnız kural geçmişine yazılır.
+              {d.kanalSecilmedi}
             </p>
           )}
         </div>
@@ -468,47 +470,45 @@ export function RuleEditor({
 
       {/* Korumalar. `<details>` kapanınca içeriği DOM'da tutuyor (CLAUDE.md §3 Tasarım). */}
       <details className="rounded-alan border border-line">
-        <summary className="cursor-pointer px-3 py-2.5 text-13 font-semibold text-ink">Güvenlik eşikleri</summary>
+        <summary className="cursor-pointer px-3 py-2.5 text-13 font-semibold text-ink">{d.guvenlikEsikleri}</summary>
         <div className="border-t border-line p-3">
           <FormIzgarasi>
-            <Alan etiket="En az gösterim">
+            <Alan etiket={d.enAzGosterim}>
               <Girdi type="number" className="font-baslik tabular-nums" value={minImpressions} onChange={(e) => setMinImpressions(e.target.value)} />
             </Alan>
-            <Alan etiket="En az tıklama">
+            <Alan etiket={d.enAzTiklama}>
               <Girdi type="number" className="font-baslik tabular-nums" value={minClicks} onChange={(e) => setMinClicks(e.target.value)} />
             </Alan>
-            <Alan etiket="Pencerede en az kaç gün veri">
+            <Alan etiket={d.enAzGun}>
               <Girdi type="number" className="font-baslik tabular-nums" value={minDaysWithData} onChange={(e) => setMinDaysWithData(e.target.value)} />
             </Alan>
-            <Alan etiket="Bekleme süresi (dk)">
+            <Alan etiket={d.beklemeSuresi}>
               <Girdi type="number" className="font-baslik tabular-nums" value={cooldownMinutes} onChange={(e) => setCooldownMinutes(e.target.value)} />
             </Alan>
-            <Alan etiket="Tek turda azami aksiyon">
+            <Alan etiket={d.azamiAksiyon}>
               <Girdi type="number" className="font-baslik tabular-nums" value={maxActionsPerRun} onChange={(e) => setMaxActionsPerRun(e.target.value)} />
             </Alan>
           </FormIzgarasi>
         </div>
         <p className="m-0 border-t border-line px-3 py-2 text-12 text-ink-muted">
-          Örneklem eşikleri kuralın gürültüyle tetiklenmesini engelliyor: 3 tıklama almış bir reklamın EBM&apos;si
-          sonsuzdur ve eşik olmadan durdurulur. Bekleme süresi aynı varlığın açılıp kapanmasını engelliyor; Meta böyle
-          bir reklamı öğrenme aşamasına geri atıyor.
+          {d.esikAciklamasi}
         </p>
       </details>
 
       {/* Kuralın düz Türkçe özeti */}
-      <Serit ton="bilgi" baslik="Bu kural şunu yapacak">
-        {summarize({ level, conditions, combinator, actionType, percent })}
+      <Serit ton="bilgi" baslik={d.ozetBaslik}>
+        {summarize({ level, conditions, combinator, actionType, percent }, dil)}
       </Serit>
 
       {error && (
-        <Serit ton="hata" baslik="Kural kaydedilemedi.">
+        <Serit ton="hata" baslik={d.kaydedilemediBaslik}>
           {error}
         </Serit>
       )}
 
       <p className="m-0 text-12 text-ink-muted">
-        Yeni kurallar <strong>prova modunda</strong> başlar: ne yapacaklarını gösterir ama hiçbir şeye dokunmazlar.
-        Canlıya almak ayrı bir yetki gerektiriyor.
+        {d.provaNotu1} <strong>{d.provaModu}</strong>
+        {d.provaNotu2}
       </p>
     </form>
   );
@@ -527,13 +527,14 @@ export function KuralKaydetEylemleri({
   durum: KuralFormDurumu;
   onVazgec: () => void;
 }) {
+  const d = useSozluk(kurallarSozlugu);
   return (
     <>
       <Dugme ton="ikincil" onClick={onVazgec} disabled={durum.bekliyor}>
-        Vazgeç
+        {d.vazgec}
       </Dugme>
       <Dugme type="submit" form={formId} disabled={!durum.kaydedilebilir} bekliyor={durum.bekliyor}>
-        Kaydet
+        {d.kaydet}
       </Dugme>
     </>
   );
@@ -546,27 +547,31 @@ export function KuralKaydetEylemleri({
  * kullanıcının yazdığını okumasını sağlıyor; canlıya alma kararı bunun
  * üzerine veriliyor.
  */
-function summarize(p: {
+function summarize(
+  p: {
   level: RuleRecord['level'];
   conditions: RuleCondition[];
   combinator: 'and' | 'or';
   actionType: RuleRecord['action']['type'];
   percent: string;
-}): string {
+  },
+  dil: Dil,
+): string {
+  const d = sec(kurallarSozlugu, dil);
   const parts = p.conditions.map(
     (c) =>
       `${METRIC_META[c.metric].label} ${OPERATOR_LABELS[c.operator]} ${c.value} (${WINDOW_LABELS[c.window].toLowerCase()})`,
   );
-  const joined = parts.join(p.combinator === 'and' ? ' VE ' : ' VEYA ');
+  const joined = parts.join(p.combinator === 'and' ? d.ve : d.veya);
 
   const action =
     p.actionType === 'adjust_budget'
-      ? `bütçesini %${Math.abs(Number(p.percent) || 0)} ${Number(p.percent) < 0 ? 'azalt' : 'artır'}`
+      ? (Number(p.percent) < 0 ? d.butceAzalt : d.butceArtir)(Math.abs(Number(p.percent) || 0))
       : p.actionType === 'pause'
-        ? 'duraklat'
+        ? d.ozetDuraklat
         : p.actionType === 'resume'
-          ? 'yeniden başlat'
-          : 'yalnızca bildir';
+          ? d.ozetBaslat
+          : d.ozetBildir;
 
-  return `${RULE_LEVEL_LABELS[p.level]} bazında, ${joined} olan varlıkları ${action}.`;
+  return d.ozetCumlesi(RULE_LEVEL_LABELS[p.level], joined, action);
 }
