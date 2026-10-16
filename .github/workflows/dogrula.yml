@@ -32,6 +32,13 @@ env:
 jobs:
   verify:
     name: Doğrula (tip + test + derleme + RLS)
+    # YALNIZ ASIL DEPODA. `origin` her push'u ikinci kopyaya da
+    # (Profajai/advetics, özel depo) gönderiyor ve iş orada da tetikleniyordu;
+    # özel depoda Actions dakikası olmadığı için iş kod koşmadan 3 saniyede
+    # düşüyor ve HER push bir "All jobs have failed" maili üretiyordu
+    # (2026-10-16, kullanıcı: "sürekli run failed maili geliyor"). Bekçinin
+    # işi asıl depoda yapılıyor; kopyada iş atlanır (skipped, mail yok).
+    if: github.repository == 'yusufProfaj/advetics'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
