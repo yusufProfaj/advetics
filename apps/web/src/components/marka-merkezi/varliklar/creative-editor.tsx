@@ -18,6 +18,8 @@ import { YanPanel } from '@/components/ui/pencere';
 import { Dugme } from '@/components/ui/dugme';
 import { Alan, Girdi, MetinAlani } from '@/components/ui/alan';
 import { Serit } from '@/components/ui/hal';
+import { useSozluk } from '@/dil/saglayici';
+import { varliklarSozlugu } from '@/dil/sozlukler/varliklar';
 
 /**
  * Kreatif düzenleyici — metin havuzu + görsel havuzu.
@@ -53,6 +55,7 @@ export function CreativeEditor({
   onDone: () => void;
   onCancel: () => void;
 }) {
+  const d = useSozluk(varliklarSozlugu).duzenleyici;
   const router = useRouter();
 
   const [name, setName] = useState(creative?.name ?? '');
@@ -85,7 +88,7 @@ export function CreativeEditor({
       router.refresh();
       onDone();
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Kreatif kaydedilemedi');
+      setError(err instanceof ApiRequestError ? err.message : d.kaydedilemedi);
     } finally {
       setBusy(false);
     }
@@ -96,33 +99,33 @@ export function CreativeEditor({
       acik={acik}
       onKapat={onCancel}
       genislik={720}
-      baslik={creative ? 'Kreatifi düzenle' : 'Yeni kreatif'}
+      baslik={creative ? d.duzenleBaslik : d.yeniBaslik}
       altEylemler={
         <>
           <Dugme ton="ikincil" onClick={onCancel}>
-            Vazgeç
+            {d.vazgec}
           </Dugme>
           <Dugme onClick={kaydet} bekliyor={busy} disabled={!name.trim()}>
-            {creative ? 'Değişiklikleri kaydet' : 'Kreatifi oluştur'}
+            {creative ? d.kaydetDuzenle : d.kaydetYeni}
           </Dugme>
         </>
       }
     >
-      <p className="m-0 text-13 text-ink-muted">Metinler bir havuz: her platform kendi paketini buradan kuruyor.</p>
+      <p className="m-0 text-13 text-ink-muted">{d.giris}</p>
 
       <div className="grid gap-5">
         <div className="grid gap-4">
-          <Alan etiket="Kreatif adı">
+          <Alan etiket={d.ad}>
             {(id) => (
-              <Girdi id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="Yaz indirimi, genel" />
+              <Girdi id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder={d.adYerTutucu} />
             )}
           </Alan>
 
           {/* ANA METİN TEK, diğerleri LİSTE. Meta'nın birincil metni tek bir
               alan; Google'da karşılığı yok ve paketleme bunu söylüyor. */}
           <Alan
-            etiket={`Ana metin (${(texts.primaryText ?? '').length}/${CREATIVE_TEXT_CAPS.primaryText})`}
-            ipucu="Yalnızca Meta kullanıyor. Google arama reklamında karşılığı yok."
+            etiket={d.anaMetin((texts.primaryText ?? '').length, CREATIVE_TEXT_CAPS.primaryText)}
+            ipucu={d.anaMetinIpucu}
           >
             {(id, aciklamaId) => (
               <MetinAlani
@@ -136,8 +139,9 @@ export function CreativeEditor({
           </Alan>
 
           <MetinListesi
-            baslik="Başlıklar"
-            ipucu="Meta ilkini kullanıyor; Google en az 3 istiyor ve 30 karakterle sınırlıyor."
+            tur="headline"
+            baslik={d.basliklar}
+            ipucu={d.basliklarIpucu}
             items={texts.headlines}
             max={CREATIVE_TEXT_CAPS.maxHeadlines}
             maxLength={CREATIVE_TEXT_CAPS.headline}
@@ -146,8 +150,9 @@ export function CreativeEditor({
           />
 
           <MetinListesi
-            baslik="Açıklamalar"
-            ipucu="Meta ilkini kullanıyor; Google en az 2 istiyor ve 90 karakterle sınırlıyor."
+            tur="description"
+            baslik={d.aciklamalar}
+            ipucu={d.aciklamalarIpucu}
             items={texts.descriptions}
             max={CREATIVE_TEXT_CAPS.maxDescriptions}
             maxLength={CREATIVE_TEXT_CAPS.description}
@@ -158,12 +163,12 @@ export function CreativeEditor({
           {/* Görseller */}
           <div>
             <p className="m-0 mb-1.5 text-13 font-semibold text-ink">
-              Görseller
-              <span className="ml-1.5 text-12 font-normal text-ink-muted">{assetIds.length} seçili</span>
+              {d.gorseller}
+              <span className="ml-1.5 text-12 font-normal text-ink-muted">{d.secili(assetIds.length)}</span>
             </p>
             {libraryAssets.length === 0 ? (
               <p className="m-0 rounded-alan bg-surface-sunken px-3 py-2 text-12 text-ink-muted">
-                Arşivde görsel yok. Google arama kampanyası görsel kullanmıyor; Meta için gerekiyor.
+                {d.arsivdeYok}
               </p>
             ) : (
               <ul className="m-0 grid list-none grid-cols-4 gap-2 p-0 sm:grid-cols-6">
@@ -200,7 +205,7 @@ export function CreativeEditor({
                           loading="lazy"
                         />
                         <span className="block truncate px-1 pb-0.5 text-11 text-ink-muted">
-                          {sira >= 0 ? `✓ ${sira + 1}.` : oran ? a.name : 'oran uymuyor'}
+                          {sira >= 0 ? `✓ ${sira + 1}.` : oran ? a.name : d.oranUymuyor}
                         </span>
                       </button>
                     </li>
@@ -224,15 +229,15 @@ export function CreativeEditor({
 
               <dl className="m-0 mt-2 grid gap-1 text-12">
                 {FORMAT_TEXT_SPEC[format].usesPrimaryText && (
-                  <Satir etiket="Ana metin" deger={packed.primaryText ? '✓' : 'yok'} />
+                  <Satir etiket={d.anaMetinSatir} deger={packed.primaryText ? '✓' : d.yok} />
                 )}
                 <Satir
-                  etiket="Başlık"
-                  deger={`${packed.headlines.length} / en az ${FORMAT_TEXT_SPEC[format].headlines.min}`}
+                  etiket={d.baslikSatir}
+                  deger={d.enAz(packed.headlines.length, FORMAT_TEXT_SPEC[format].headlines.min)}
                 />
                 <Satir
-                  etiket="Açıklama"
-                  deger={`${packed.descriptions.length} / en az ${FORMAT_TEXT_SPEC[format].descriptions.min}`}
+                  etiket={d.aciklamaSatir}
+                  deger={d.enAz(packed.descriptions.length, FORMAT_TEXT_SPEC[format].descriptions.min)}
                 />
               </dl>
 
@@ -248,7 +253,7 @@ export function CreativeEditor({
                 </p>
               ))}
               {packed.blockers.length === 0 && packed.warnings.length === 0 && (
-                <p className="m-0 mt-1.5 text-12 font-semibold text-ink">Bu platform için hazır.</p>
+                <p className="m-0 mt-1.5 text-12 font-semibold text-ink">{d.hazirPlatform}</p>
               )}
             </section>
           ))}
@@ -256,7 +261,7 @@ export function CreativeEditor({
       </div>
 
       {error && (
-        <Serit ton="hata" baslik="Kreatif kaydedilemedi.">
+        <Serit ton="hata" baslik={d.kaydedilemediBaslik}>
           {error}
         </Serit>
       )}
@@ -266,7 +271,7 @@ export function CreativeEditor({
           kaydedememek, `ad_drafts`'ta yaşanan "3. adım hiç çalışmıyor"
           hatasının aynısı olurdu. Eksikler yayın kontrolünde de duruyor. */}
       <p className="m-0 text-12 text-ink-muted">
-        Eksik bir kreatifi kaydedebilirsin; yayın kontrolü hangi platformda neyin eksik olduğunu tekrar söyler.
+        {d.eksikKaydet}
       </p>
     </YanPanel>
   );
@@ -290,6 +295,7 @@ function Satir({ etiket, deger }: { etiket: string; deger: string }) {
  * başlığı olurdu.
  */
 function MetinListesi({
+  tur,
   baslik,
   ipucu,
   items,
@@ -298,6 +304,7 @@ function MetinListesi({
   uyariUzunlugu,
   onChange,
 }: {
+  tur: 'headline' | 'description';
   baslik: string;
   ipucu: string;
   items: string[];
@@ -307,6 +314,8 @@ function MetinListesi({
   uyariUzunlugu: number;
   onChange: (items: string[]) => void;
 }) {
+  const d = useSozluk(varliklarSozlugu).duzenleyici;
+  const baslikTur = tur === 'headline';
   return (
     <div>
       <p className="m-0 mb-1.5 flex items-baseline justify-between">
@@ -322,7 +331,7 @@ function MetinListesi({
             <span className="mt-2.5 w-4 shrink-0 text-12 text-ink-muted">{i + 1}.</span>
             <div className="min-w-0 flex-1">
               <Girdi
-                aria-label={`${baslik} ${i + 1}`}
+                aria-label={baslikTur ? d.baslikAria(i + 1) : d.aciklamaAria(i + 1)}
                 hatali={item.length > uyariUzunlugu}
                 value={item}
                 onChange={(e) => {
@@ -337,7 +346,7 @@ function MetinListesi({
                   karar versin. */}
               {item.length > uyariUzunlugu && (
                 <span className="mt-0.5 block text-12 text-danger-strong">
-                  {item.length} karakter: Google paketine giremiyor (sınır {uyariUzunlugu}).
+                  {d.googleSinir(item.length, uyariUzunlugu)}
                 </span>
               )}
             </div>
@@ -350,8 +359,8 @@ function MetinListesi({
                   [next[i - 1], next[i]] = [next[i]!, next[i - 1]!];
                   onChange(next);
                 }}
-                title="Yukarı taşı: Meta ilk sıradakini kullanıyor"
-                aria-label={`${baslik} ${i + 1}: yukarı taşı`}
+                title={d.yukariTasi}
+                aria-label={baslikTur ? d.baslikYukariAria(i + 1) : d.aciklamaYukariAria(i + 1)}
                 className="mt-1 w-8 px-0"
               >
                 ↑
@@ -361,10 +370,10 @@ function MetinListesi({
               ton="hayalet"
               boyut="kucuk"
               onClick={() => onChange(items.filter((_, j) => j !== i))}
-              aria-label={`${baslik} ${i + 1}: sil`}
+              aria-label={baslikTur ? d.baslikSilAria(i + 1) : d.aciklamaSilAria(i + 1)}
               className="mt-1 text-danger-strong"
             >
-              Sil
+              {d.sil}
             </Dugme>
           </li>
         ))}
@@ -372,7 +381,7 @@ function MetinListesi({
 
       {items.length < max && (
         <Dugme ton="ikincil" boyut="kucuk" onClick={() => onChange([...items, ''])} className="mt-2">
-          + {baslik.toLocaleLowerCase('tr')} ekle
+          {baslikTur ? d.baslikEkle : d.aciklamaEkle}
         </Dugme>
       )}
       <p className="m-0 mt-1 text-12 text-ink-muted">{ipucu}</p>

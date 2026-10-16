@@ -1,9 +1,9 @@
 import Link from 'next/link';
+import { PANEL_YOLLARI, kapiNedeni, sec, varlikSekmesiAdi } from '@advetics/shared';
 import { redirect } from 'next/navigation';
 import { requireSession } from '@/lib/session';
 import { sayfaWorkspaceId, workspaceSecimVerisi, workspaceUyumu } from '@/lib/sayfa-workspace';
 import {
-  PANEL_KAPILARI,
   kapi,
   markaMerkeziAdresi,
   varliklarAdresi,
@@ -16,13 +16,19 @@ import { Uyari } from '@/components/ui/uyari';
 import { dugmeSinifi } from '@/components/ui/dugme';
 import { SayfaIcDuzen, SayfaIcMenu } from '@/components/ui/sayfa-ic-menu';
 import { VarlikBirincilEylem } from '@/components/marka-merkezi/varliklar/birincil-eylem';
-import { gorunurVarlikSekmeleri, varlikSekmeAdi, varlikSekmesiCoz } from '@/components/marka-merkezi/bolumler';
+import { gorunurVarlikSekmeleri, varlikSekmesiCoz } from '@/components/marka-merkezi/bolumler';
 import { GorsellerIcerik } from '@/components/marka-merkezi/varliklar/gorseller';
 import { KreatiflerIcerik } from '@/components/marka-merkezi/varliklar/kreatifler';
 import { FormlarIcerik } from '@/components/marka-merkezi/varliklar/formlar';
 import { KitlelerBolumu } from '@/components/marka-merkezi/kitleler-bolumu';
+import { dilAl } from '@/dil/sunucu';
+import { varliklarSozlugu } from '@/dil/sozlukler/varliklar';
+import { menuBolumuEtiketi, menuSatiriEtiketi } from '@/lib/nav-sections';
 
-export const metadata = { title: 'Varlıklar · Advetics' };
+/** Başlık istek anında: dil çerezden okunuyor; ad menüden (tek kaynak). */
+export async function generateMetadata() {
+  return { title: `${menuSatiriEtiketi(PANEL_YOLLARI.varliklar, await dilAl())} · Advetics` };
+}
 export const dynamic = 'force-dynamic';
 
 /**
@@ -48,6 +54,10 @@ export default async function VarliklarPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const session = await requireSession();
+  const dil = await dilAl();
+  const d = sec(varliklarSozlugu, dil);
+  const sayfaAdi = menuSatiriEtiketi(PANEL_YOLLARI.varliklar, dil);
+  const bolumAdi = menuBolumuEtiketi(PANEL_YOLLARI.varliklar, dil);
   const params = await searchParams;
   const musteriParam = first(params.musteri);
 
@@ -57,9 +67,9 @@ export default async function VarliklarPage({
   if (!kapi(session, 'varliklar.gor')) {
     return (
       <div className="space-y-5">
-        <SayfaBasligi bolum="Base" baslik="Varlıklar" />
-        <Uyari ton="uyari" baslik={PANEL_KAPILARI['varliklar.gor'].neden}>
-          Görseller, kreatifler ve formlar ajans tarafında yönetiliyor. Yöneticine sor.
+        <SayfaBasligi bolum={bolumAdi} baslik={sayfaAdi} />
+        <Uyari ton="uyari" baslik={kapiNedeni('varliklar.gor', dil)}>
+          {d.sayfa.yetkiYok}
         </Uyari>
       </div>
     );
@@ -69,8 +79,8 @@ export default async function VarliklarPage({
   if (!clientId) {
     return (
       <WorkspaceGerekli
-        ekran="Varlıklar"
-        neden="Görseller, kreatifler, formlar ve kitleler bir workspace’e ait."
+        ekran={sayfaAdi}
+        neden={d.sayfa.workspaceNedeni}
         {...workspaceSecimVerisi(session)}
       />
     );
@@ -86,12 +96,12 @@ export default async function VarliklarPage({
   if (uyum === 'farkli') {
     return (
       <div className="space-y-5">
-        <SayfaBasligi bolum="Base" baslik="Varlıklar" />
+        <SayfaBasligi bolum={bolumAdi} baslik={sayfaAdi} />
         <WorkspaceGec
           clientId={clientId}
           workspaceAdi={session.availableClients.find((c) => c.id === clientId)?.name ?? null}
           aktifAdi={session.availableClients.find((c) => c.id === session.activeClientId)?.name ?? null}
-          ekran="Varlıklar"
+          ekran={sayfaAdi}
           uyum={uyum}
         />
       </div>
@@ -112,34 +122,34 @@ export default async function VarliklarPage({
    * `form` parametresiyle düzenlemeye açılıyordu; yeni form da aynı yol.
    * Geri tuşu oluşturucuyu kapatıyor, yer imi doğrudan oraya götürüyor.
    */
-  const yazmaNedeni = (k: 'varlik.yaz' | 'kitle.yaz') => (kapi(session, k) ? null : PANEL_KAPILARI[k].neden);
+  const yazmaNedeni = (k: 'varlik.yaz' | 'kitle.yaz') => (kapi(session, k) ? null : kapiNedeni(k, dil));
   const eylem =
     sekme === 'gorseller' ? (
-      <VarlikBirincilEylem bolum="gorseller" etiket="Görsel yükle" kapaliNedeni={yazmaNedeni('varlik.yaz')} />
+      <VarlikBirincilEylem bolum="gorseller" etiket={d.sayfa.gorselYukle} kapaliNedeni={yazmaNedeni('varlik.yaz')} />
     ) : sekme === 'kreatifler' ? (
-      <VarlikBirincilEylem bolum="kreatifler" etiket="Yeni kreatif" kapaliNedeni={yazmaNedeni('varlik.yaz')} />
+      <VarlikBirincilEylem bolum="kreatifler" etiket={d.sayfa.yeniKreatif} kapaliNedeni={yazmaNedeni('varlik.yaz')} />
     ) : sekme === 'formlar' ? (
       yazmaNedeni('varlik.yaz') ? (
-        <VarlikBirincilEylem bolum="formlar" etiket="Yeni form" kapaliNedeni={yazmaNedeni('varlik.yaz')} />
+        <VarlikBirincilEylem bolum="formlar" etiket={d.sayfa.yeniForm} kapaliNedeni={yazmaNedeni('varlik.yaz')} />
       ) : (
         <Link href={varliklarAdresi('formlar', clientId, { form: 'yeni' })} className={dugmeSinifi('birincil')} scroll={false}>
-          <span aria-hidden="true">＋</span> Yeni form
+          <span aria-hidden="true">＋</span> {d.sayfa.yeniForm}
         </Link>
       )
     ) : sekme === 'kitleler' ? (
-      <VarlikBirincilEylem bolum="kitleler" etiket="Yeni kitle" kapaliNedeni={yazmaNedeni('kitle.yaz')} />
+      <VarlikBirincilEylem bolum="kitleler" etiket={d.sayfa.yeniKitle} kapaliNedeni={yazmaNedeni('kitle.yaz')} />
     ) : null;
 
   return (
     <div className="grid gap-6">
       <SayfaBasligi
-        bolum="Base"
-        baslik="Varlıklar"
+        bolum={bolumAdi}
+        baslik={sayfaAdi}
         aciklama={
           <>
             {workspaceAdi && <strong className="font-semibold text-ink">{workspaceAdi}</strong>}
             {workspaceAdi && ' · '}
-            Reklamlarda kullanılan görseller, kreatifler, formlar ve kitleler.
+            {d.sayfa.aciklama}
           </>
         }
         eylemler={eylem}
@@ -153,17 +163,17 @@ export default async function VarliklarPage({
       <SayfaIcDuzen
         menu={
           <SayfaIcMenu
-            etiket="Varlık türü"
+            etiket={d.sayfa.varlikTuru}
             secili={sekme ?? ''}
-            ogeler={sekmeler.map((k) => ({ deger: k, etiket: varlikSekmeAdi(k), href: varliklarAdresi(k, clientId) }))}
+            ogeler={sekmeler.map((k) => ({ deger: k, etiket: varlikSekmesiAdi(k, dil), href: varliklarAdresi(k, clientId) }))}
           />
         }
       >
         {/* `key` SEKMEDEN: içerik değiştiği hissedilsin (geçiş animasyonu). */}
         <div key={sekme ?? 'yok'} className="bolum-gecis grid min-w-0 content-start gap-4">
           {sekme === null && (
-            <Uyari ton="uyari" baslik="Görebileceğin bir varlık sekmesi yok.">
-              Yöneticine sor.
+            <Uyari ton="uyari" baslik={d.sayfa.sekmeYok}>
+              {d.sayfa.yoneticineSor}
             </Uyari>
           )}
           {sekme === 'gorseller' && <GorsellerIcerik clientId={clientId} params={params} />}

@@ -1,5 +1,7 @@
 import {
   FORM_YAYIN_BELIRSIZ_NOTU,
+  sec,
+  type Dil,
   PREFILL_LABELS,
   TESEKKUR_DUGME_ETIKETI,
   tesekkurDugmesiTuru,
@@ -7,6 +9,7 @@ import {
   type LeadFormRecord,
   type RehberFormListesi,
 } from '@advetics/shared';
+import { varliklarSozlugu } from '@/dil/sozlukler/varliklar';
 
 /**
  * ANLIK FORM ÖNİZLEMESİ VE REHBERDEKİ FORM AKIŞI — saf karar katmanı.
@@ -29,8 +32,6 @@ export interface OnizlemeEkrani {
   not: string | null;
 }
 
-const OKUNAMADI = "Meta'dan okunamadı.";
-
 /**
  * Önizlemenin ekran listesi, Meta'daki SIRAYLA: giriş → sorular → gizlilik →
  * teşekkür.
@@ -40,40 +41,41 @@ const OKUNAMADI = "Meta'dan okunamadı.";
  * göstermek olurdu). Diğer üçü her formda var: Meta'dan gelmediyse
  * `okunamadi` (boş kutu DEĞİL), Advetics taslağında henüz yazılmadıysa `yok`.
  */
-export function onizlemeEkranlari(o: FormOnizlemesi): OnizlemeEkrani[] {
+export function onizlemeEkranlari(o: FormOnizlemesi, dil: Dil = 'tr'): OnizlemeEkrani[] {
+  const d = sec(varliklarSozlugu, dil).onizleme;
   const okunamadi = (b: FormOnizlemesi['okunamayanlar'][number]) => o.okunamayanlar.includes(b);
   const ekranlar: OnizlemeEkrani[] = [];
-  if (o.giris) ekranlar.push({ tur: 'giris', ad: 'Giriş', hal: 'var', not: null });
+  if (o.giris) ekranlar.push({ tur: 'giris', ad: d.ekranGiris, hal: 'var', not: null });
 
   ekranlar.push(
     okunamadi('sorular')
-      ? { tur: 'sorular', ad: 'Sorular', hal: 'okunamadi', not: `Sorular ${OKUNAMADI}` }
+      ? { tur: 'sorular', ad: d.ekranSorular, hal: 'okunamadi', not: d.sorularOkunamadi }
       : o.sorular.length > 0
-        ? { tur: 'sorular', ad: 'Sorular', hal: 'var', not: null }
-        : { tur: 'sorular', ad: 'Sorular', hal: 'yok', not: 'Henüz soru seçilmedi.' },
+        ? { tur: 'sorular', ad: d.ekranSorular, hal: 'var', not: null }
+        : { tur: 'sorular', ad: d.ekranSorular, hal: 'yok', not: d.soruYok },
   );
 
   ekranlar.push(
     o.gizlilik
       ? {
           tur: 'gizlilik',
-          ad: 'Gizlilik',
+          ad: d.ekranGizlilik,
           hal: 'var',
           // Onay kutuları Meta'dan İSTENMİYOR (alt alanları doğrulanmadı):
           // "yok" demek yanlış olurdu, "okunmuyor" diyoruz.
-          not: o.onaylar === null ? "Ek onay kutuları burada gösterilmiyor; varsa Meta'da görünür." : null,
+          not: o.onaylar === null ? d.onayGosterilmiyor : null,
         }
       : okunamadi('gizlilik')
-        ? { tur: 'gizlilik', ad: 'Gizlilik', hal: 'okunamadi', not: `Gizlilik politikası adresi ${OKUNAMADI}` }
-        : { tur: 'gizlilik', ad: 'Gizlilik', hal: 'yok', not: 'Gizlilik politikası adresi henüz yazılmadı. Meta bu adres olmadan formu kabul etmiyor.' },
+        ? { tur: 'gizlilik', ad: d.ekranGizlilik, hal: 'okunamadi', not: d.gizlilikOkunamadi }
+        : { tur: 'gizlilik', ad: d.ekranGizlilik, hal: 'yok', not: d.gizlilikYok },
   );
 
   ekranlar.push(
     o.tesekkur
-      ? { tur: 'tesekkur', ad: 'Teşekkür', hal: 'var', not: null }
+      ? { tur: 'tesekkur', ad: d.ekranTesekkur, hal: 'var', not: null }
       : okunamadi('tesekkur')
-        ? { tur: 'tesekkur', ad: 'Teşekkür', hal: 'okunamadi', not: `Teşekkür ekranı ${OKUNAMADI}` }
-        : { tur: 'tesekkur', ad: 'Teşekkür', hal: 'yok', not: 'Teşekkür ekranı henüz yazılmadı.' },
+        ? { tur: 'tesekkur', ad: d.ekranTesekkur, hal: 'okunamadi', not: d.tesekkurOkunamadi }
+        : { tur: 'tesekkur', ad: d.ekranTesekkur, hal: 'yok', not: d.tesekkurYok },
   );
   return ekranlar;
 }
@@ -111,7 +113,7 @@ const dolu = (v: string | null | undefined): string | null => (v && v.trim() ? v
  * kural yazmak, önizlemenin yayınlanacak formdan farklı bir şey göstermesi
  * demek.
  */
-export function kayittanOnizleme(f: FormTaslagi): FormOnizlemesi {
+export function kayittanOnizleme(f: FormTaslagi, dil: Dil = 'tr'): FormOnizlemesi {
   const baslik = dolu(f.headline);
   const aciklama = dolu(f.intro);
   const adres = dolu(f.privacyPolicyUrl);
@@ -125,7 +127,7 @@ export function kayittanOnizleme(f: FormTaslagi): FormOnizlemesi {
   };
   return {
     kaynak: 'advetics',
-    ad: dolu(f.name) ?? 'Adsız form',
+    ad: dolu(f.name) ?? sec(varliklarSozlugu, dil).onizleme.adsizForm,
     durum: f.status ?? null,
     giris: baslik || aciklama ? { baslik: baslik ?? dolu(f.name), maddeler: aciklama ? [aciklama] : [], dugme: 'Devam' } : null,
     soruBasligi: null,
@@ -182,9 +184,13 @@ export function yayinSonrasiSecim(
  * YAYIN gerekiyor (`bulk.publish`). Yayınlayamayan kullanıcıya düğmeyi
  * göstermek, seçemeyeceği bir taslak ürettirmek olurdu.
  */
-export function formOlusturmaDurumu(p: { sayfaId: string | null; yayinIzni: boolean }): { goster: true } | { goster: false; sebep: string } {
-  if (!p.sayfaId) return { goster: false, sebep: 'Form oluşturmak için önce Nerede adımında Facebook sayfasını seç.' };
-  if (!p.yayinIzni) return { goster: false, sebep: 'Form yayınlama yetkin yok; yeni form için workspace yöneticine danış.' };
+export function formOlusturmaDurumu(
+  p: { sayfaId: string | null; yayinIzni: boolean },
+  dil: Dil = 'tr',
+): { goster: true } | { goster: false; sebep: string } {
+  const d = sec(varliklarSozlugu, dil).onizleme;
+  if (!p.sayfaId) return { goster: false, sebep: d.sayfaSec };
+  if (!p.yayinIzni) return { goster: false, sebep: d.yayinYetkisiYok };
   return { goster: true };
 }
 
@@ -201,11 +207,12 @@ export function formOlusturmaDurumu(p: { sayfaId: string | null; yayinIzni: bool
 const YARIM_DURUMLAR: readonly LeadFormRecord['status'][] = ['draft', 'failed', 'publishing', 'uncertain'];
 
 /** Rehberin "Yarım kalan formlar" satırındaki durum cümlesi. */
-export function yarimFormDurumu(k: Pick<LeadFormRecord, 'status' | 'error'>): string {
-  if (k.status === 'publishing') return 'Yayınlanıyor; birkaç dakika sonra listeyi yenile';
-  if (k.status === 'uncertain') return `${FORM_YAYIN_BELIRSIZ_NOTU} Yeniden deneme Formlar'da, onayla.`;
-  if (k.status === 'failed') return `Yayınlanamadı${k.error ? `: ${k.error}` : ''}`;
-  return 'Taslak';
+export function yarimFormDurumu(k: Pick<LeadFormRecord, 'status' | 'error'>, dil: Dil = 'tr'): string {
+  const d = sec(varliklarSozlugu, dil).onizleme;
+  if (k.status === 'publishing') return d.yayinlaniyor;
+  if (k.status === 'uncertain') return `${FORM_YAYIN_BELIRSIZ_NOTU} ${d.yenidenDeneme}`;
+  if (k.status === 'failed') return `${d.yayinlanamadi}${k.error ? `: ${k.error}` : ''}`;
+  return d.taslak;
 }
 
 export function sayfaTaslaklari(kayitlar: readonly LeadFormRecord[], sayfaId: string | null): LeadFormRecord[] {

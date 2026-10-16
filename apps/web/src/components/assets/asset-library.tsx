@@ -19,6 +19,8 @@ import { BolumluSecici } from '@/components/ui/sekmeler';
 import { AracCubugu, SayfalamaCubugu } from '@/components/ui/tablo';
 import { BosDurum, Serit } from '@/components/ui/hal';
 import { useVarlikYeni } from '@/components/marka-merkezi/varliklar/birincil-eylem';
+import { useSozluk } from '@/dil/saglayici';
+import { varliklarSozlugu } from '@/dil/sozlukler/varliklar';
 
 /**
  * Varlık arşivi — ızgara, yükleme, silme.
@@ -51,6 +53,7 @@ export function AssetLibrary({
   /** Marka › Logo — logo kayıtlarının evi. */
   logoAdresi: string;
 }) {
+  const d = useSozluk(varliklarSozlugu).gorseller;
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
@@ -93,7 +96,7 @@ export function AssetLibrary({
         );
         if (!res.ok) {
           const b = (await res.json().catch(() => null)) as { message?: string } | null;
-          throw new Error(b?.message ?? `${file.name} yüklenemedi`);
+          throw new Error(b?.message ?? d.dosyaYuklenemedi(file.name));
         }
         const result = (await res.json()) as AssetUploadResult;
         if (result.duplicate) duplicates++;
@@ -104,15 +107,15 @@ export function AssetLibrary({
       } catch (err) {
         // TEK DOSYA PATLASA DA DİĞERLERİ DEVAM EDİYOR. Yirmi dosyalık bir
         // seçimde biri bozuk diye hepsini kaybetmek kabul edilemez.
-        setError(err instanceof Error ? err.message : 'Yükleme başarısız');
+        setError(err instanceof Error ? err.message : d.yuklemeBasarisiz);
       }
     }
 
     if (duplicates > 0) {
       setNotice(
         added > 0
-          ? `${added} görsel eklendi, ${duplicates} tanesi zaten arşivde vardı.`
-          : `${duplicates} görsel zaten arşivde vardı, tekrar eklenmedi.`,
+          ? d.mukerrerKarisik(added, duplicates)
+          : d.mukerrerHepsi(duplicates),
       );
     }
     setBusy(false);
@@ -126,7 +129,7 @@ export function AssetLibrary({
       setRows((cur) => cur.filter((r) => r.id !== asset.id));
       startTransition(() => router.refresh());
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Silinemedi.');
+      setError(err instanceof ApiRequestError ? err.message : d.silinemedi);
     }
   }
 
@@ -160,13 +163,13 @@ export function AssetLibrary({
 
       {notice && <Serit ton="bilgi" baslik={notice} />}
       {error && (
-        <Serit ton="hata" baslik="Yüklenemedi ya da silinemedi.">
+        <Serit ton="hata" baslik={d.yuklenemediyaSilinemedi}>
           {error}
         </Serit>
       )}
       {busy && (
         <p role="status" className="m-0 text-12 text-ink-muted">
-          Yükleniyor…
+          {d.yukleniyor}
         </p>
       )}
 
@@ -175,7 +178,7 @@ export function AssetLibrary({
           sag={
             canWrite ? (
               <label className="flex items-center gap-2 text-12 text-ink-muted">
-                Yüklenecek tür
+                {d.yuklenecekTur}
                 <Secim
                   value={kind}
                   onChange={(e) => setKind(e.target.value as GorselTuru)}
@@ -194,11 +197,11 @@ export function AssetLibrary({
         >
           {/* GÖRÜNÜM DEĞİŞİMİ = BÖLÜMLÜ SEÇİCİ (BILESENLER § 3.5); sayılar her seçenekte. */}
           <BolumluSecici
-            etiket="Görsel türü"
+            etiket={d.turEtiketi}
             secili={activeKind ?? 'hepsi'}
             onSec={(d) => navigate(d === 'hepsi' ? null : (d as GorselTuru))}
             secenekler={[
-              { deger: 'hepsi', etiket: <>Tümü <span className="text-ink-muted">{gorselToplami}</span></> },
+              { deger: 'hepsi', etiket: <>{d.tumu} <span className="text-ink-muted">{gorselToplami}</span></> },
               ...GORSEL_TURLERI.map((k) => ({
                 deger: k as string,
                 etiket: (
@@ -216,11 +219,9 @@ export function AssetLibrary({
         {rows.length === 0 ? (
           <div className="p-4">
             <BosDurum
-              baslik="Arşiv boş"
+              baslik={d.arsivBos}
               neden={
-                canWrite
-                  ? 'Buraya yüklediğin görselleri her kampanyada yeniden kullanırsın; bir daha yüklemen gerekmez. Sağ üstteki “Görsel yükle” ile başla.'
-                  : 'Bu workspace’e henüz görsel yüklenmemiş. Yükleme yetkin yok; yöneticine sor.'
+                canWrite ? d.bosYazar : d.bosOkur
               }
             />
           </div>
@@ -247,7 +248,7 @@ export function AssetLibrary({
                   <div className="mt-1 flex items-center justify-between gap-2">
                     {/* KULLANIM SAYISI — silme kararının dayanağı. */}
                     <span className="text-12 text-ink-muted">
-                      {a.usageCount > 0 ? `${a.usageCount} reklamda` : 'kullanılmıyor'}
+                      {a.usageCount > 0 ? d.reklamda(a.usageCount) : d.kullanilmiyor}
                     </span>
                     {canWrite && (
                       <Dugme
@@ -257,12 +258,12 @@ export function AssetLibrary({
                         disabled={a.usageCount > 0}
                         title={
                           a.usageCount > 0
-                            ? 'Kullanımdaki görsel silinemez; yayındaki reklamların kaydı kopar'
+                            ? d.silmeEngeli
                             : undefined
                         }
                         className="-mr-2"
                       >
-                        Sil
+                        {d.sil}
                       </Dugme>
                     )}
                   </div>
@@ -270,7 +271,7 @@ export function AssetLibrary({
                   {/* PLATFORM YÜKLEMELERİ. Aynı görselin hesap başına ayrı bir
                       Meta kimliği var; bu satır onu görünür kılıyor. */}
                   {a.platformRefs.length > 0 && (
-                    <p className="m-0 text-12 text-ink-muted">{a.platformRefs.length} hesaba yüklendi</p>
+                    <p className="m-0 text-12 text-ink-muted">{d.hesabaYuklendi(a.platformRefs.length)}</p>
                   )}
                 </div>
               </li>
@@ -283,7 +284,7 @@ export function AssetLibrary({
           <span className="px-4 text-12 text-ink-muted">
             {logoSayisi > 0 && (
               <Link href={logoAdresi} className={KART_BAGLANTISI}>
-                {logoSayisi} logo Marka’da
+                {d.logoMarkada(logoSayisi)}
               </Link>
             )}
           </span>

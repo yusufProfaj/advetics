@@ -5,6 +5,8 @@ import { kapi, markaMerkeziAdresi } from '@/lib/panel-adresleri';
 import { AssetLibrary } from '@/components/assets/asset-library';
 import { gorselTuru } from '@/components/assets/gorsel-turleri';
 import { Uyari } from '@/components/ui/uyari';
+import { sozluk } from '@/dil/sunucu';
+import { varliklarSozlugu } from '@/dil/sozlukler/varliklar';
 
 /**
  * Varlık arşivi — Base › Varlıklar › Görseller.
@@ -28,6 +30,7 @@ export async function GorsellerIcerik({
   params: Record<string, string | string[] | undefined>;
 }) {
   const session = await requireSession();
+  const d = await sozluk(varliklarSozlugu);
   const kind = gorselTuru(first(params.tur));
 
   const query = new URLSearchParams({ clientId, limit: '60', offset: '0' });
@@ -35,12 +38,12 @@ export async function GorsellerIcerik({
 
   const sonuc = await serverApiFetch<AssetListResult>(`/assets?${query.toString()}`).then(
     (v) => ({ ok: true as const, v }),
-    (e: unknown) => ({ ok: false as const, hata: e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.' }),
+    (e: unknown) => ({ ok: false as const, hata: e instanceof ApiRequestError ? e.message : d.sunucuyaUlasilamadi }),
   );
 
   if (!sonuc.ok) {
     return (
-      <Uyari ton="tehlike" baslik="Görsel arşivi alınamadı.">
+      <Uyari ton="tehlike" baslik={d.gorseller.alinamadi}>
         {sonuc.hata}
       </Uyari>
     );

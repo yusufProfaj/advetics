@@ -5,6 +5,8 @@ import { ROLE_PERMISSIONS, ROLES, type AssetListResult } from '@advetics/shared'
 import { SECTIONS } from '@/lib/nav-sections';
 import { VARLIKLAR_IZNI, VARLIKLAR_SEKMELERI, eskiAdresYonu } from '@/lib/panel-adresleri';
 import { GORSEL_TURLERI, gorselTuru } from '@/components/assets/gorsel-turleri';
+import { varliklarSozlugu } from '@/dil/sozlukler/varliklar';
+import { markaMerkeziVeriSozlugu } from '@/dil/sozlukler/marka-merkezi-veri';
 
 /**
  * ═══ BASE › VARLIKLAR — AYRI MENÜ SATIRI (Karar B, 2026-10-13) ═══
@@ -58,7 +60,9 @@ describe('Varlıklar sayfası', () => {
     const K = yorumsuz('kitleler-bolumu.tsx');
     expect(K).not.toContain('/audience-templates/varsayilan');
     expect(K).not.toContain('Varsayılan yap');
-    expect(K).toContain('Kurulum’da değiştir');
+    // Cümle sözlükte: kaynak o anahtarı kullanıyor VE değer Kurulum’a yönlendiriyor.
+    expect(K).toContain('{m.kurulumdaDegistir}');
+    expect(markaMerkeziVeriSozlugu.tr.kitleler.kurulumdaDegistir).toBe('Kurulum’da değiştir');
     expect(SAYFA).toContain("markaMerkeziAdresi('kurulum', clientId, 'varsayilanlar')");
   });
 
@@ -72,22 +76,25 @@ describe('Varlıklar sayfası', () => {
     expect(yorumsuz('varliklar/gorseller.tsx')).not.toContain('.catch(');
     const K = yorumsuz('varliklar/kreatifler.tsx');
     expect(K).not.toContain(": []");
-    expect(K).toContain('Kreatif listesi alınamadı.');
+    expect(K).toContain('{d.listeAlinamadi}');
+    expect(varliklarSozlugu.tr.kreatifler.listeAlinamadi).toBe('Kreatif listesi alınamadı.');
     const F = yorumsuz('varliklar/formlar.tsx');
     expect(F).not.toContain('.catch(() => [])');
-    expect(F).toContain('Sayfalar okunamadı; form oluşturulamıyor.');
+    expect(F).toContain('{d.sayfalarOkunamadi}');
+    expect(varliklarSozlugu.tr.formlar.sayfalarOkunamadi).toBe('Sayfalar okunamadı; form oluşturulamıyor.');
   });
 });
 
 describe('Varlıklar: birincil eylem başlıkta, metni bölümden (2026-10-14)', () => {
   it('KRİTİK: her bölümün eylemi başlıkta ve her bölümün dinleyicisi var', () => {
     const eylem = SAYFA.slice(SAYFA.indexOf('const eylem ='), SAYFA.indexOf('return (\n    <div className="grid gap-6">'));
-    for (const [b, metin] of [
-      ['gorseller', 'Görsel yükle'],
-      ['kreatifler', 'Yeni kreatif'],
-      ['kitleler', 'Yeni kitle'],
-    ]) {
-      expect(eylem).toContain(`<VarlikBirincilEylem bolum="${b}" etiket="${metin}"`);
+    for (const [b, anahtar, metin] of [
+      ['gorseller', 'gorselYukle', 'Görsel yükle'],
+      ['kreatifler', 'yeniKreatif', 'Yeni kreatif'],
+      ['kitleler', 'yeniKitle', 'Yeni kitle'],
+    ] as const) {
+      expect(eylem).toContain(`<VarlikBirincilEylem bolum="${b}" etiket={d.sayfa.${anahtar}}`);
+      expect(varliklarSozlugu.tr.sayfa[anahtar]).toBe(metin);
     }
     expect(eylem).toContain("varliklarAdresi('formlar', clientId, { form: 'yeni' })");
     expect(SAYFA).toContain('eylemler={eylem}');
@@ -101,7 +108,8 @@ describe('Varlıklar: birincil eylem başlıkta, metni bölümden (2026-10-14)',
     expect(E).toContain('setAlinmadi(window.dispatchEvent(olay))');
     expect(E).toContain('cancelable: true');
     expect(E).toContain('e.preventDefault();');
-    expect(E).toContain('Bu bölüm yüklenemedi');
+    expect(E).toContain('{d.birincilEylem.yuklenemedi}');
+    expect(varliklarSozlugu.tr.birincilEylem.yuklenemedi).toContain('Bu bölüm yüklenemedi');
   });
 
   it('form oluşturucu yalnız adreste `form` varken açık', () => {
@@ -115,7 +123,8 @@ describe('Görseller: logo sayısı sessiz değil', () => {
   it('KRİTİK: logo kayıtları listelenmiyor ama sayısı bağlantıyla yazıyor', () => {
     const A = yorumsuz('../assets/asset-library.tsx');
     expect(A).toContain("initial.rows.filter((r) => r.kind !== 'logo')");
-    expect(A).toContain('{logoSayisi} logo Marka’da');
+    expect(A).toContain('{d.logoMarkada(logoSayisi)}');
+    expect(varliklarSozlugu.tr.gorseller.logoMarkada(3)).toBe('3 logo Marka’da');
     expect(A).not.toContain('ASSET_KINDS.map(');
     // Yükleme türlerinde logo YOK.
     const sozluk: AssetListResult['byKind'] = { image: 1, logo: 2, video: 3 };

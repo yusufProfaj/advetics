@@ -16,6 +16,9 @@ import { dugmeSinifi } from '@/components/ui/dugme';
 import { AdHucresi, Tablo, SayfalamaCubugu } from '@/components/ui/tablo';
 import { Rozet, type DurumHali } from '@/components/ui/rozet';
 import { BosDurum, HataDurumu, Serit } from '@/components/ui/hal';
+import { dilAl } from '@/dil/sunucu';
+import { sec } from '@advetics/shared';
+import { varliklarSozlugu } from '@/dil/sozlukler/varliklar';
 
 
 /**
@@ -46,13 +49,16 @@ export async function FormlarIcerik({
   params: Record<string, string | string[] | undefined>;
 }) {
   const session = await requireSession();
+  const dil = await dilAl();
+  const dd = sec(varliklarSozlugu, dil);
+  const d = dd.formlar;
 
   // SESSİZCE İLK WORKSPACE'E DÜŞÜLMÜYOR — gerekçe `lib/sayfa-workspace.ts`.
 
   const canWrite = kapi(session, 'varlik.yaz');
   // Yayınlama bu modülün kapı tablosunda değil (formun kendi akışı): uçla aynı izin.
   const canPublish = hasPermission(session, 'bulk.publish');
-  const hataMetni = (e: unknown) => (e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.');
+  const hataMetni = (e: unknown) => (e instanceof ApiRequestError ? e.message : dd.sunucuyaUlasilamadi);
 
   const [baglantiSonucu, formSonucu, telefon] = await Promise.all([
     serverApiFetch<
@@ -95,37 +101,37 @@ export async function FormlarIcerik({
 
   return (
     <div className="grid gap-5">
-      {!formSonucu.ok && <HataDurumu baslik="Form listesi alınamadı." mesaj={formSonucu.hata} />}
+      {!formSonucu.ok && <HataDurumu baslik={d.listeAlinamadi} mesaj={formSonucu.hata} />}
 
       {!baglantiSonucu.ok ? (
-        <Serit ton="hata" baslik="Sayfalar okunamadı; form oluşturulamıyor.">
+        <Serit ton="hata" baslik={d.sayfalarOkunamadi}>
           {baglantiSonucu.hata}
         </Serit>
       ) : pages.length === 0 ? (
         <BosDurum
-          baslik="Önce bir Facebook sayfası gerekiyor"
-          neden="Anlık form sayfaya ait, reklam hesabına değil. Instagram hesabı tek başına yeterli değil."
+          baslik={d.onceSayfa}
+          neden={d.onceSayfaNeden}
           eylem={
             /* Sayfa ataması bir WORKSPACE işi: Kurulum'un hesaplar bloğu. */
             <Link href={hesaplarAdresi(clientId)} className={dugmeSinifi('koyu', 'kucuk')}>
-              Kurulum’da sayfa ata
+              {d.kurulumdaSayfaAta}
             </Link>
           }
         />
       ) : !canWrite ? (
-        olusturucuAcik && <Serit baslik="Form oluşturmak için yetkin yok.">Yöneticine sor.</Serit>
+        olusturucuAcik && <Serit baslik={d.yetkiYok}>{d.yoneticineSor}</Serit>
       ) : olusturucuAcik ? (
         <Kart
-          baslik={editing ? editing.name : 'Yeni form'}
+          baslik={editing ? editing.name : d.yeniForm}
           eylem={
             <Link href={listeAdresi} scroll={false} className={dugmeSinifi('hayalet', 'kucuk')}>
-              Kapat
+              {d.kapat}
             </Link>
           }
         >
           {editId !== 'yeni' && !editing && formSonucu.ok && (
             <div className="mb-4">
-              <Serit baslik="Bu form bulunamadı.">Silinmiş ya da başka bir workspace’e ait olabilir; boş bir form açıldı.</Serit>
+              <Serit baslik={d.bulunamadi}>{d.bulunamadiNeden}</Serit>
             </div>
           )}
           <FormBuilder
@@ -145,12 +151,12 @@ export async function FormlarIcerik({
         forms.length === 0 &&
         !olusturucuAcik && (
           <BosDurum
-            baslik="Bu workspace’te form yok"
-            neden={`${pages.map((p) => p.name).join(', ')} sayfasında Advetics’ten açılmış anlık form yok. Form, reklam kurulurken de açılabilir.`}
+            baslik={d.bosBaslik}
+            neden={d.bosNeden(pages.map((p) => p.name).join(', '))}
             eylem={
               canWrite ? (
                 <Link href={varliklarAdresi('formlar', clientId, { form: 'yeni' })} scroll={false} className={dugmeSinifi('koyu', 'kucuk')}>
-                  Form oluştur
+                  {d.formOlustur}
                 </Link>
               ) : undefined
             }
@@ -158,9 +164,9 @@ export async function FormlarIcerik({
         )}
 
       {forms.length > 0 && (
-        <Kart baslik="Formların" baslikEki={`${forms.length}`} dolgu={false}>
+        <Kart baslik={d.formlarin} baslikEki={`${forms.length}`} dolgu={false}>
           <Tablo<LeadFormRecord>
-            etiket="Formlar"
+            etiket={d.tabloEtiket}
             satirlar={forms}
             satirAnahtari={(f) => f.id}
             sutunlar={[
@@ -177,7 +183,7 @@ export async function FormlarIcerik({
                             düşünmesi gereken bir şeymiş gibi gösterirdi. */}
                         {f.version > 1 && (
                           <span className="ml-2 rounded-full bg-surface-sunken px-2 py-0.5 text-11 font-semibold text-ink-muted">
-                            {f.version}. sürüm
+                            {d.surum(f.version)}
                           </span>
                         )}
                       </>
@@ -198,19 +204,19 @@ export async function FormlarIcerik({
               },
               {
                 anahtar: 'durum',
-                baslik: 'Durum',
+                baslik: d.sutunDurum,
                 hucre: (f) => <Rozet hal={FORM_DURUM_HALI[f.status]}>{LEAD_FORM_STATUS_LABELS[f.status]}</Rozet>,
               },
-              { anahtar: 'soru', baslik: 'Soru', sayi: true, hucre: (f) => f.prefillQuestions.length },
-              { anahtar: 'zaman', baslik: 'Oluşturuldu', ikincil: true, hucre: (f) => formatRelative(f.createdAt) },
+              { anahtar: 'soru', baslik: d.sutunSoru, sayi: true, hucre: (f) => f.prefillQuestions.length },
+              { anahtar: 'zaman', baslik: d.sutunOlusturuldu, ikincil: true, hucre: (f) => formatRelative(f.createdAt, dil) },
               {
                 anahtar: 'eylem',
-                baslik: <span className="sr-only">Eylem</span>,
+                baslik: <span className="sr-only">{d.sutunEylem}</span>,
                 sayi: true,
                 hucre: (f) =>
                   canWrite ? (
                     <Link href={varliklarAdresi('formlar', clientId, { form: f.id })} scroll={false} className={KART_BAGLANTISI}>
-                      {f.status === 'published' ? 'Görüntüle' : 'Düzenle'}
+                      {f.status === 'published' ? d.goruntule : d.duzenle}
                     </Link>
                   ) : null,
               },

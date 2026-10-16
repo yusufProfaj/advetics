@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { platformKisaAdi, type KreatifPerformansi } from '@advetics/shared';
 import { formatNumber, formatPercent } from '@/lib/format';
 import { Dugme } from '@/components/ui/dugme';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { varliklarSozlugu } from '@/dil/sozlukler/varliklar';
 
 /**
  * ═══ GEÇMİŞTE İŞE YARAYANLAR ═══
@@ -27,6 +29,8 @@ export function IsleyenKreatifler({ liste }: { liste: KreatifPerformansi[] }) {
 }
 
 function Kart({ kreatif }: { kreatif: KreatifPerformansi }) {
+  const d = useSozluk(varliklarSozlugu).isleyen;
+  const { dil } = useDil();
   const [gorselDustu, setGorselDustu] = useState(false);
   /*
    * ÜÇ HÂL: kopyalanmadı, kopyalandı, KOPYALANAMADI. Pano izni reddedilince
@@ -66,9 +70,9 @@ function Kart({ kreatif }: { kreatif: KreatifPerformansi }) {
           <span>
             {/* `toFixed` ondalığı NOKTAYLA yazıyordu ("%22.78"); panelin geri
                 kalanı Türkçe virgül kullanıyor ("%9,41"). Ortak biçimleyici. */}
-            <strong className="text-ink">{formatPercent(kreatif.ctr)}</strong> tıklama oranı
+            <strong className="text-ink">{formatPercent(kreatif.ctr, 2, dil)}</strong> {d.tiklamaOrani}
           </span>
-          <span>{formatNumber(kreatif.impressions)} gösterim</span>
+          <span>{formatNumber(kreatif.impressions, dil)} {d.gosterim}</span>
         </div>
 
         {kreatif.headline && (
@@ -79,7 +83,7 @@ function Kart({ kreatif }: { kreatif: KreatifPerformansi }) {
         )}
 
         <p className="m-0 mt-auto pt-1.5 text-12 text-ink-muted">
-          {kreatif.adCount} reklamda kullanıldı · son gösterim {kreatif.sonGun}
+          {d.reklamdaKullanildi(kreatif.adCount)} · {d.sonGosterim} {kreatif.sonGun}
         </p>
 
         {/*
@@ -101,7 +105,7 @@ function Kart({ kreatif }: { kreatif: KreatifPerformansi }) {
           }}
           className="mt-1.5 self-end"
         >
-          {kopya === 'tamam' ? 'Kopyalandı' : kopya === 'olmadi' ? 'Kopyalanamadı, metni elle seç' : 'Metni kopyala'}
+          {kopya === 'tamam' ? d.kopyalandi : kopya === 'olmadi' ? d.kopyalanamadi : d.metniKopyala}
         </Dugme>
       </div>
     </li>

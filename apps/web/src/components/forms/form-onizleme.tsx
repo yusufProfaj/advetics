@@ -2,6 +2,8 @@
 
 import type { FormOnizlemesi } from '@advetics/shared';
 import { onizlemeEkranlari, type OnizlemeEkrani } from '@/lib/form-onizleme';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { varliklarSozlugu } from '@/dil/sozlukler/varliklar';
 
 /**
  * ANLIK FORMUN TEK ÖNİZLEMESİ — iki yerde AYNI bileşen: Marka Merkezi ›
@@ -14,11 +16,13 @@ import { onizlemeEkranlari, type OnizlemeEkrani } from '@/lib/form-onizleme';
  * (saf, testli); burada yalnız çizim. Verisi olmayan alan çizilmiyor,
  * okunamayan bölüm "Meta'dan okunamadı" diyor.
  */
-export function FormOnizleme({ onizleme, baslik = 'Kişinin göreceği form' }: { onizleme: FormOnizlemesi; baslik?: string }) {
-  const ekranlar = onizlemeEkranlari(onizleme);
+export function FormOnizleme({ onizleme, baslik }: { onizleme: FormOnizlemesi; baslik?: string }) {
+  const d = useSozluk(varliklarSozlugu).onizleme;
+  const { dil } = useDil();
+  const ekranlar = onizlemeEkranlari(onizleme, dil);
   return (
     <div className="rounded-kart border border-line bg-surface p-3">
-      <p className="mb-2 text-12 font-semibold text-ink-muted">{baslik}</p>
+      <p className="mb-2 text-12 font-semibold text-ink-muted">{baslik ?? d.varsayilanBaslik}</p>
       <ol className="space-y-2">
         {ekranlar.map((e, i) => (
           <li key={e.tur} className="rounded-alan bg-surface-sunken p-3">
@@ -35,6 +39,7 @@ export function FormOnizleme({ onizleme, baslik = 'Kişinin göreceği form' }: 
 }
 
 function EkranIcerigi({ ekran, o }: { ekran: OnizlemeEkrani; o: FormOnizlemesi }) {
+  const d = useSozluk(varliklarSozlugu).onizleme;
   if (ekran.tur === 'giris' && o.giris) {
     return (
       <div className="mt-1">
@@ -59,10 +64,10 @@ function EkranIcerigi({ ekran, o }: { ekran: OnizlemeEkrani; o: FormOnizlemesi }
         <ul className="space-y-1.5">
           {o.sorular.map((q, i) => (
             <li key={`${q.tur}-${i}`} className="rounded-md bg-surface px-2.5 py-2">
-              <span className="text-[11px] text-ink-muted">{q.etiket || 'Soru metni yazılmadı'}</span>
+              <span className="text-[11px] text-ink-muted">{q.etiket || d.soruMetniYok}</span>
               {/* ÖN DOLU GÖRÜNÜYOR çünkü gerçekten öyle olacak: kişi yazmıyor, onaylıyor. */}
               <p className="text-xs text-ink">
-                {q.otomatikDolu ? 'Facebook profilinden otomatik dolar' : q.secenekler.length > 0 ? q.secenekler.join(' / ') : 'Kişi yazar'}
+                {q.otomatikDolu ? d.otomatikDolu : q.secenekler.length > 0 ? q.secenekler.join(' / ') : d.kisiYazar}
               </p>
             </li>
           ))}
@@ -79,8 +84,8 @@ function EkranIcerigi({ ekran, o }: { ekran: OnizlemeEkrani; o: FormOnizlemesi }
               <li key={i} className="flex gap-1.5 text-[11px] text-ink-muted">
                 <span aria-hidden>☐</span>
                 <span>
-                  {c.metin || 'Onay metni yazılmadı'}
-                  {c.zorunlu && ' (zorunlu)'}
+                  {c.metin || d.onayMetniYok}
+                  {c.zorunlu && d.zorunluEk}
                 </span>
               </li>
             ))}

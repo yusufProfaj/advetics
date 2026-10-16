@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Dugme } from '@/components/ui/dugme';
+import { useSozluk } from '@/dil/saglayici';
+import { varliklarSozlugu } from '@/dil/sozlukler/varliklar';
 
 /**
  * ═══ VARLIKLAR'IN BİRİNCİL EYLEMİ — YERİ SABİT, METNİ BÖLÜME GÖRE ═══
@@ -37,12 +39,13 @@ export function VarlikBirincilEylem({
   /** Yazma yetkisi yoksa: düğme kapalı, neden `title`da ve ekran okuyucuda. */
   kapaliNedeni?: string | null;
 }) {
+  const d = useSozluk(varliklarSozlugu);
   const [alinmadi, setAlinmadi] = useState(false);
   return (
     <span className="inline-flex flex-wrap items-center gap-2">
       {alinmadi && (
         <span role="status" className="text-12 text-danger-strong">
-          Bu bölüm yüklenemedi; sayfayı yenileyip tekrar dene.
+          {d.birincilEylem.yuklenemedi}
         </span>
       )}
       <Dugme

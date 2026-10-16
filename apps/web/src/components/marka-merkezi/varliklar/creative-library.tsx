@@ -18,6 +18,8 @@ import { AdHucresi, SayfalamaCubugu, Tablo } from '@/components/ui/tablo';
 import { Rozet } from '@/components/ui/rozet';
 import { BosDurum, Serit } from '@/components/ui/hal';
 import { Pencere } from '@/components/ui/pencere';
+import { useSozluk } from '@/dil/saglayici';
+import { varliklarSozlugu } from '@/dil/sozlukler/varliklar';
 import { AcilirMenu, IKON_TETIK, MenuAyraci, MenuOgesi } from '@/components/ui/acilir-menu';
 
 /**
@@ -46,6 +48,7 @@ export function CreativeLibrary({
   creatives: CreativeRecord[];
   libraryAssets: AssetRecord[];
 }) {
+  const d = useSozluk(varliklarSozlugu).kreatifListe;
   const router = useRouter();
   const [editing, setEditing] = useState<CreativeRecord | null>(null);
   const [creating, setCreating] = useState(false);
@@ -76,7 +79,7 @@ export function CreativeLibrary({
       setEditing(kopya);
       setAcilis((n) => n + 1);
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Kopyalanamadı');
+      setError(err instanceof ApiRequestError ? err.message : d.kopyalanamadi);
     } finally {
       setBusy(null);
     }
@@ -89,7 +92,7 @@ export function CreativeLibrary({
       await apiFetch(`/creatives/${id}`, { method: 'DELETE' });
       router.refresh();
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Silinemedi');
+      setError(err instanceof ApiRequestError ? err.message : d.silinemedi);
     } finally {
       setBusy(null);
     }
@@ -116,12 +119,12 @@ export function CreativeLibrary({
         acik={silinecek !== null}
         onKapat={() => setSilinecek(null)}
         genislik="dar"
-        baslik="Kreatif silinsin mi?"
-        aciklama={silinecek ? `“${silinecek.name}” kütüphaneden kalkar. Bu geri alınamaz.` : undefined}
+        baslik={d.silinsinMi}
+        aciklama={silinecek ? d.silinecekAciklama(silinecek.name) : undefined}
         altEylemler={
           <>
             <Dugme ton="ikincil" onClick={() => setSilinecek(null)}>
-              Vazgeç
+              {d.vazgec}
             </Dugme>
             <Dugme
               ton="tehlike"
@@ -132,33 +135,33 @@ export function CreativeLibrary({
                 void sil(c.id).then(() => setSilinecek(null));
               }}
             >
-              Sil
+              {d.sil}
             </Dugme>
           </>
         }
       />
 
       {error && (
-        <Serit ton="hata" baslik="İşlem tamamlanamadı.">
+        <Serit ton="hata" baslik={d.islemTamamlanamadi}>
           {error}
         </Serit>
       )}
 
       {creatives.length === 0 ? (
         <BosDurum
-          baslik="Bu workspace’te henüz kreatif yok."
-          neden="Kreatif metin ve görsel havuzu; bir kez yazılır, her kampanyada kullanılır. Sağ üstteki “Yeni kreatif” ile başla."
+          baslik={d.bosBaslik}
+          neden={d.bosNeden}
         />
       ) : (
         <Kart dolgu={false}>
           <Tablo<CreativeRecord>
-            etiket="Kreatifler"
+            etiket={d.tabloEtiket}
             satirlar={creatives}
             satirAnahtari={(c) => c.id}
             sutunlar={[
               {
                 anahtar: 'ad',
-                baslik: 'Kreatif',
+                baslik: d.sutunKreatif,
                 hucre: (c) => (
                   <span className="flex min-w-0 items-center gap-3">
                     <span className="h-10 w-10 shrink-0 overflow-hidden rounded-alan bg-surface-sunken">
@@ -191,17 +194,17 @@ export function CreativeLibrary({
               },
               {
                 anahtar: 'icerik',
-                baslik: 'İçerik',
+                baslik: d.sutunIcerik,
                 ikincil: true,
                 hucre: (c) => (
                   <span className="text-13 text-ink-muted">
-                    {c.assets.length} görsel · {c.texts.headlines.length} başlık · {c.texts.descriptions.length} açıklama
+                    {d.icerik(c.assets.length, c.texts.headlines.length, c.texts.descriptions.length)}
                   </span>
                 ),
               },
               {
                 anahtar: 'hazir',
-                baslik: 'Biçim hazır mı',
+                baslik: d.sutunHazir,
                 hucre: (c) => (
                   /* PLATFORM HAZIRLIĞI SATIR SATIR. Aynı kreatif Meta'ya
                      hazır, Google'a hazır olmayabilir. */
@@ -210,8 +213,8 @@ export function CreativeLibrary({
                       const p = packTextsFor(f, c.texts);
                       const hazir = p.blockers.length === 0;
                       return (
-                        <Rozet key={f} hal={hazir ? 'ok' : 'hata'} title={hazir ? 'Hazır' : p.blockers.join(' ')}>
-                          {FORMAT_TEXT_SPEC[f].label.split(' — ')[0]}: {hazir ? 'hazır' : 'eksik'}
+                        <Rozet key={f} hal={hazir ? 'ok' : 'hata'} title={hazir ? d.hazir : p.blockers.join(' ')}>
+                          {FORMAT_TEXT_SPEC[f].label.split(' — ')[0]}: {hazir ? d.hazirRozet : d.eksikRozet}
                         </Rozet>
                       );
                     })}
@@ -220,7 +223,7 @@ export function CreativeLibrary({
               },
               {
                 anahtar: 'eylem',
-                baslik: <span className="sr-only">Eylem</span>,
+                baslik: <span className="sr-only">{d.sutunEylem}</span>,
                 sayi: true,
                 hucre: (c) => (
                   <span className="inline-flex items-center gap-1">
@@ -232,15 +235,15 @@ export function CreativeLibrary({
                         setAcilis((n) => n + 1);
                       }}
                     >
-                      Düzenle
+                      {d.duzenle}
                     </Dugme>
                     <AcilirMenu
                       tasma="portal"
-                      etiket={`${c.name}: diğer eylemler`}
+                      etiket={d.digerEylemlerAd(c.name)}
                       hizala="sag"
                       genislik="w-48"
                       tetik={({ acik: _acik, ...o }) => (
-                        <button type="button" {...o} className={IKON_TETIK} aria-label="Diğer eylemler">
+                        <button type="button" {...o} className={IKON_TETIK} aria-label={d.digerEylemler}>
                           ⋯
                         </button>
                       )}
@@ -249,11 +252,11 @@ export function CreativeLibrary({
                           tek yolu bu ve düzenle düğmesi o durumda sunucudan hata
                           alıyor; mesaj da kopyalamayı söylüyor. */}
                       <MenuOgesi devreDisi={busy !== null} onClick={() => void kopyala(c.id)}>
-                        Kopyala
+                        {d.kopyala}
                       </MenuOgesi>
                       <MenuAyraci />
                       <MenuOgesi tehlike devreDisi={busy !== null} onClick={() => setSilinecek(c)}>
-                        Sil
+                        {d.sil}
                       </MenuOgesi>
                     </AcilirMenu>
                   </span>

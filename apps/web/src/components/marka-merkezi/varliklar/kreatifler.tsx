@@ -10,6 +10,8 @@ import { Kart } from '@/components/ui/kart';
 import { HataDurumu, Serit } from '@/components/ui/hal';
 import { CreativeLibrary } from './creative-library';
 import { IsleyenKreatifler } from './isleyen-kreatifler';
+import { sozluk } from '@/dil/sunucu';
+import { varliklarSozlugu } from '@/dil/sozlukler/varliklar';
 
 
 /**
@@ -33,6 +35,8 @@ export async function KreatiflerIcerik({
   params: Record<string, string | string[] | undefined>;
 }) {
   const session = await requireSession();
+  const dd = await sozluk(varliklarSozlugu);
+  const d = dd.kreatifler;
 
   // SESSİZCE İLK WORKSPACE'E DÜŞÜLMÜYOR — gerekçe `lib/sayfa-workspace.ts`.
 
@@ -57,14 +61,14 @@ export async function KreatiflerIcerik({
   ]);
 
   const hata = (r: PromiseSettledResult<unknown>) =>
-    r.status === 'rejected' ? (r.reason instanceof ApiRequestError ? r.reason.message : 'Sunucuya ulaşılamadı.') : null;
+    r.status === 'rejected' ? (r.reason instanceof ApiRequestError ? r.reason.message : dd.sunucuyaUlasilamadi) : null;
   const library = arsivSonuc.status === 'fulfilled' ? arsivSonuc.value : null;
   const performans = performansSonuc.status === 'fulfilled' ? performansSonuc.value : null;
 
   return (
     <div className="grid gap-5">
       {hata(performansSonuc) && (
-        <Serit baslik="Geçmiş performans alınamadı.">
+        <Serit baslik={d.gecmisAlinamadi}>
           {hata(performansSonuc)}
         </Serit>
       )}
@@ -76,25 +80,25 @@ export async function KreatiflerIcerik({
       */}
       {performans !== null && performans.rows.length > 0 && (
         <Kart
-          baslik="Geçmişte işe yarayanlar"
-          baslikEki={`son ${performans.gun} gün · tıklama oranına göre`}
+          baslik={d.gecmisBaslik}
+          baslikEki={d.gecmisEki(performans.gun)}
         >
           {/* SESSİZ KESME YOK: yeterli gösterim almadığı için sıralanmayan
               kreatifler sayılıyor. */}
           <p className="m-0 mb-3 text-12 text-ink-muted">
-            {performans.rows.length} kreatif gösteriliyor
-            {performans.yetersiz > 0 && ` · ${performans.yetersiz} kreatif yeterli gösterim almamış, listede yok`}
+            {d.gosteriliyor(performans.rows.length)}
+            {performans.yetersiz > 0 && d.yetersiz(performans.yetersiz)}
           </p>
           <IsleyenKreatifler liste={performans.rows} />
         </Kart>
       )}
 
       {kreatifSonuc.status === 'rejected' ? (
-        <HataDurumu baslik="Kreatif listesi alınamadı." mesaj={hata(kreatifSonuc)} />
+        <HataDurumu baslik={d.listeAlinamadi} mesaj={hata(kreatifSonuc)} />
       ) : canWrite ? (
         <>
           {hata(arsivSonuc) && (
-            <Serit baslik="Görsel arşivi alınamadı; kreatife arşivden görsel seçilemez.">
+            <Serit baslik={d.arsivAlinamadi}>
               {hata(arsivSonuc)}
             </Serit>
           )}
@@ -105,7 +109,7 @@ export async function KreatiflerIcerik({
           />
         </>
       ) : (
-        <Serit baslik="Kreatif düzenlemek için yetkin yok.">Yöneticine sor.</Serit>
+        <Serit baslik={d.yetkiYok}>{d.yoneticineSor}</Serit>
       )}
     </div>
   );
