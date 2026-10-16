@@ -6,8 +6,10 @@ import {
   STRATEJI_INCELEME_PARCALARI,
   STRATEJI_OLUSTURMA_ADIMLARI,
   donemGunSayisi,
+  sec,
   sihirbazButceKontrolu,
   stratejiDonemi,
+  type Dil,
   type KalemAktarimKarari,
   type RehberAmacKodu,
   type StratejiDurumu,
@@ -18,6 +20,7 @@ import {
   type StratejiSihirbazGirdileri,
 } from '@advetics/shared';
 import { tutarCoz } from '../hesap';
+import { stratejiV2Sozlugu } from '@/dil/sozlukler/strateji-v2';
 
 /**
  * ═══ ADIM ADIM AKIŞIN KARARLARI (SAF) ═══
@@ -87,8 +90,8 @@ export function adrestekiHedefler(ham: string | null | undefined): RehberAmacKod
  * Kapalı kart seçilmiş görünüyorsa (önceden seçilmiş, sonra ölçüm düştü)
  * seçimden çıkarılabilir ama yeniden seçilemez.
  */
-export function hedefKarti(g: StratejiSihirbazGirdileri['amaclar'][number] | undefined): { kapali: boolean; neden: string | null; platformlar: string } {
-  if (!g) return { kapali: true, neden: 'Bu hedefin durumu okunamadı.', platformlar: '' };
+export function hedefKarti(g: StratejiSihirbazGirdileri['amaclar'][number] | undefined, dil: Dil = 'tr'): { kapali: boolean; neden: string | null; platformlar: string } {
+  if (!g) return { kapali: true, neden: sec(stratejiV2Sozlugu, dil).akis.hedefOkunamadi, platformlar: '' };
   const ad = (p: string) => (p === 'meta' ? 'Meta' : 'Google');
   const neden = g.sebepler[0] ? g.sebepler[0].replace(/^(Meta|Google): /, '') : null;
   return { kapali: !g.acik, neden: g.acik ? null : neden, platformlar: g.platformlar.map(ad).join(' + ') };
@@ -221,9 +224,10 @@ export function olusturKarti(planlar: readonly StratejiListeSatiri[]): OlusturKa
  * "Strateji oluştur" yazıyor ama yeni oluşturmaya izin vermiyordu: başlık
  * bir şey vaat ediyor, tıklama başka bir yere (rapora) götürüyordu.
  */
-export function olusturEtiketi(kart: OlusturKarti): string {
-  if (kart.tur === 'onayda') return 'Onay bekleyen strateji var';
-  return kart.tur === 'devam' ? 'Taslağa devam et' : 'Strateji oluştur';
+export function olusturEtiketi(kart: OlusturKarti, dil: Dil = 'tr'): string {
+  const d = sec(stratejiV2Sozlugu, dil).akis;
+  if (kart.tur === 'onayda') return d.onayBekleyenVar;
+  return kart.tur === 'devam' ? d.taslagaDevam : d.olustur;
 }
 
 // ─── Kampanyaları kur (tek tek) ──────────────────────────────────────────────
@@ -231,9 +235,9 @@ export function olusturEtiketi(kart: OlusturKarti): string {
 export type KurulumHali = 'acildi' | 'hazir' | 'bekliyor' | 'bilinmiyor';
 
 /** Kalemin kurulum hâli: KARAR SUNUCUNUN (`kalemAktarimEngeli`, aktarım önizlemesi). */
-export function kurulumSatiri(k: Pick<StratejiKalemi, 'durum'>, karar: KalemAktarimKarari | null): { hal: KurulumHali; neden: string | null } {
+export function kurulumSatiri(k: Pick<StratejiKalemi, 'durum'>, karar: KalemAktarimKarari | null, dil: Dil = 'tr'): { hal: KurulumHali; neden: string | null } {
   if (k.durum.tur === 'aktarildi') return { hal: 'acildi', neden: null };
-  if (!karar) return { hal: 'bilinmiyor', neden: 'Kurulum önizlemesi bu kampanyayı içermiyor.' };
+  if (!karar) return { hal: 'bilinmiyor', neden: sec(stratejiV2Sozlugu, dil).akis.onizlemeYok };
   if (karar.tur === 'engel') return { hal: karar.engel === 'zaten_aktarildi' ? 'acildi' : 'bekliyor', neden: KALEM_AKTARIM_ENGEL_METNI[karar.engel] };
   return { hal: 'hazir', neden: null };
 }

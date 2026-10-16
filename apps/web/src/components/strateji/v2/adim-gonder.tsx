@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { stratejiPanelAdresi, stratejiUcYolu, type Permission } from '@advetics/shared';
 import type { GonderimSonucu, StratejiDetayi } from '@advetics/shared';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { stratejiAdimlarSozlugu } from '@/dil/sozlukler/strateji-v2-adimlar';
 import { Dugme, dugmeSinifi } from '@/components/ui/dugme';
 import { Kart } from '@/components/ui/kart';
 import { Soru } from '@/components/ui/sihirbaz';
@@ -44,6 +46,8 @@ export function AdimGonder({
   clientId: string;
 }) {
   const router = useRouter();
+  const gm = useSozluk(stratejiAdimlarSozlugu).gonder;
+  const { dil } = useDil();
   const [is, setIs] = useState<Is>({ tur: 'bos' });
   const [alicilar, setAlicilar] = useState('');
   const [onayAcik, setOnayAcik] = useState(false);
@@ -54,7 +58,7 @@ export function AdimGonder({
   /** Taslak/revizyon → onayda. Zaten onaydaysa olduğu gibi. */
   async function onayaGecir(): Promise<StratejiDetayi | null> {
     if (detay.plan.durum === 'onayda') return detay;
-    const r = await yaz<StratejiDetayi>(stratejiUcYolu('/strateji/v2/planlar/:id/eylem', id), 'POST', { eylem: 'onaya_gonder', surum: detay.plan.surum }, tazeSurum, detay.plan.surum);
+    const r = await yaz<StratejiDetayi>(stratejiUcYolu('/strateji/v2/planlar/:id/eylem', id), 'POST', { eylem: 'onaya_gonder', surum: detay.plan.surum }, tazeSurum, detay.plan.surum, dil);
     if (r.tur !== 'tamam') {
       setIs({ tur: 'hata', mesaj: r.mesaj });
       return null;
@@ -71,8 +75,8 @@ export function AdimGonder({
       .split(/[,;\s]+/)
       .map((x) => x.trim())
       .filter(Boolean);
-    const r = await yaz<GonderimSonucu>(stratejiUcYolu('/strateji/v2/planlar/:id/gonder', id), 'POST', { surum: d.plan.surum, alicilar: liste }, tazeSurum, d.plan.surum);
-    if (r.tur !== 'tamam') return setIs({ tur: 'hata', mesaj: `Strateji onaya geçti ama mail gönderilemedi: ${r.mesaj} Raporu açıp onay bağlantısını elle oluşturabilirsin.` });
+    const r = await yaz<GonderimSonucu>(stratejiUcYolu('/strateji/v2/planlar/:id/gonder', id), 'POST', { surum: d.plan.surum, alicilar: liste }, tazeSurum, d.plan.surum, dil);
+    if (r.tur !== 'tamam') return setIs({ tur: 'hata', mesaj: gm.mailGonderilemedi(r.mesaj) });
     setIs({ tur: 'gonderildi', sonuc: r.veri });
   }
 
@@ -80,8 +84,8 @@ export function AdimGonder({
     setIs({ tur: 'suruyor', ne: 'onayla' });
     const d = await onayaGecir();
     if (!d) return;
-    const r = await yaz<StratejiDetayi>(stratejiUcYolu('/strateji/v2/planlar/:id/onayla', id), 'POST', { surum: d.plan.surum }, tazeSurum, d.plan.surum);
-    if (r.tur !== 'tamam') return setIs({ tur: 'hata', mesaj: `Strateji onaya geçti ama onaylanamadı: ${r.mesaj}` });
+    const r = await yaz<StratejiDetayi>(stratejiUcYolu('/strateji/v2/planlar/:id/onayla', id), 'POST', { surum: d.plan.surum }, tazeSurum, d.plan.surum, dil);
+    if (r.tur !== 'tamam') return setIs({ tur: 'hata', mesaj: gm.onaylanamadi(r.mesaj) });
     guncelle(r.veri);
     router.push(stratejiPanelAdresi({ musteri: clientId, plan: detay.plan.id, adim: 'kur' }));
   }
@@ -90,19 +94,19 @@ export function AdimGonder({
     const s = is.sonuc;
     return (
       <>
-        <Soru ust="7 / 7 · Gönder" soru={s.kabul.length > 0 ? 'Strateji müşteriye gitti' : 'Mail kimseye ulaşmadı'} aciklama="Müşteri onaylayınca Raporu incele ekranından kampanyaları tek tek kurarsın." />
+        <Soru ust={gm.ust} soru={s.kabul.length > 0 ? gm.gitti : gm.ulasmadi} aciklama={gm.gittiAciklama} />
         <div className="max-w-[720px] space-y-3">
-          <Bildirim baslik={`${s.kabul.length} alıcıya gönderildi${s.ret.length > 0 ? `, ${s.ret.length} alıcı reddedildi` : ''}.`} hata={s.ret.length > 0 || s.kabul.length === 0}>
-            {s.kabul.length > 0 && <span className="block">Gönderildi: {s.kabul.join(', ')}</span>}
+          <Bildirim baslik={s.ret.length > 0 ? gm.gonderildiRetli(s.kabul.length, s.ret.length) : gm.gonderildi(s.kabul.length)} hata={s.ret.length > 0 || s.kabul.length === 0}>
+            {s.kabul.length > 0 && <span className="block">{gm.gonderildiListe(s.kabul.join(', '))}</span>}
             {s.ret.map((x) => (
               <span key={x.adres} className="block">
-                Reddedildi: {x.adres} · {x.sebep}
+                {gm.reddedildi(x.adres, x.sebep)}
               </span>
             ))}
-            {s.baglanti && <span className="block">Maile sürüm {s.baglanti.surum} için girişsiz onay bağlantısı eklendi.</span>}
+            {s.baglanti && <span className="block">{gm.baglantiEklendi(s.baglanti.surum)}</span>}
           </Bildirim>
           <Link href={raporAdresi} className={dugmeSinifi('ikincil')}>
-            Raporu aç
+            {gm.raporuAc}
           </Link>
         </div>
       </>
@@ -111,7 +115,7 @@ export function AdimGonder({
 
   return (
     <>
-      <Soru ust="7 / 7 · Gönder" soru="Plan hazır. Şimdi ne yapalım?" aciklama='Müşteri onaylamadan kampanya kurulmaz. Onay gelince "Raporu incele"den kampanyaları tek tek kurarsın.' />
+      <Soru ust={gm.ust} soru={gm.soru} aciklama={gm.aciklama} />
       {/*
         İki yol İKİ KART, seçim kartı DEĞİL: kartın içinde alan ve düğme var
         (iç içe düğme olmaz). Kırmızı dolu düğme alt çubukta ("Raporu
@@ -119,54 +123,54 @@ export function AdimGonder({
       */}
       <div className="grid gap-[18px] md:grid-cols-2">
         <Kart
-          baslik="Müşteriye gönder"
+          baslik={gm.musteriyeGonder}
           className={mailIzni ? '' : 'opacity-60'}
           altEylem={
             <Dugme ton="koyu" boyut="kucuk" onClick={() => void gonder()} disabled={!mailIzni || is.tur === 'suruyor'} bekliyor={is.tur === 'suruyor' && is.ne === 'gonder'}>
-              Gönder
+              {gm.gonder}
             </Dugme>
           }
         >
           <YolIkonu ikon="rapor" kirmizi />
-          <p className="m-0 mt-3 text-14 leading-relaxed text-ink-muted">Kurumsal rapor ve onay bağlantısı e-postayla gider. Müşteri giriş yapmadan onaylar ya da değişiklik ister.</p>
+          <p className="m-0 mt-3 text-14 leading-relaxed text-ink-muted">{gm.musteriyeAciklama}</p>
           <div className="mt-4 border-t border-line pt-3 text-13 text-ink-muted">
             {mailIzni ? (
               <input
                 className={GIRDI}
                 value={alicilar}
                 onChange={(e) => setAlicilar(e.target.value)}
-                placeholder="Boş bırakırsan kayıtlı rapor alıcıları"
-                aria-label="Alıcılar (virgülle)"
+                placeholder={gm.aliciPlaceholder}
+                aria-label={gm.aliciEtiketi}
               />
             ) : (
-              'Mail göndermek rapor paylaşma yetkisi ister.'
+              gm.mailYetkisi
             )}
           </div>
         </Kart>
         <Kart
-          baslik="Müşteri adına onayla"
+          baslik={gm.adinaOnayla}
           className={ajansYoneticisi ? '' : 'opacity-60'}
           altEylem={
             onayAcik ? (
               <span className="flex gap-2">
                 <Dugme ton="hayalet" boyut="kucuk" onClick={() => setOnayAcik(false)}>
-                  Vazgeç
+                  {gm.vazgec}
                 </Dugme>
                 <Dugme ton="koyu" boyut="kucuk" onClick={() => void adinaOnayla()} bekliyor={is.tur === 'suruyor' && is.ne === 'onayla'}>
-                  Onayladım, kuruluma geç
+                  {gm.onayladim}
                 </Dugme>
               </span>
             ) : (
               <Dugme ton="ikincil" boyut="kucuk" onClick={() => setOnayAcik(true)} disabled={!ajansYoneticisi || is.tur === 'suruyor'}>
-                Onayla
+                {gm.onayla}
               </Dugme>
             )
           }
         >
           <YolIkonu ikon="yeni" />
-          <p className="m-0 mt-3 text-14 leading-relaxed text-ink-muted">Müşteri onayını yazılı aldıysan kendin onayla. Kim, ne zaman onayladı kayda geçer.</p>
+          <p className="m-0 mt-3 text-14 leading-relaxed text-ink-muted">{gm.adinaAciklama}</p>
           <p className="m-0 mt-4 border-t border-line pt-3 text-13 text-ink-muted">
-            {ajansYoneticisi ? (onayAcik ? 'Müşterinin onayını aldığını doğrula.' : 'Yalnız ajans yöneticisi') : 'Yalnız ajans yöneticisi; bu hesap değil.'}
+            {ajansYoneticisi ? (onayAcik ? gm.dogrula : gm.yalnizYonetici) : gm.yalnizYoneticiDegil}
           </p>
         </Kart>
       </div>
@@ -177,7 +181,7 @@ export function AdimGonder({
       )}
       {detay.plan.durum === 'onayda' && (
         <div className="mt-4">
-          <Bildirim baslik="Bu strateji zaten onayda.">Yeniden göndermek eski onay bağlantısını iptal eder ve yenisini yollar.</Bildirim>
+          <Bildirim baslik={gm.zatenOnayda}>{gm.zatenOnaydaAciklama}</Bildirim>
         </div>
       )}
     </>

@@ -10,6 +10,10 @@ import {
   stratejiUcYolu,
   type PlanDetayi,
 } from '@advetics/shared';
+import { sec, type Dil } from '@advetics/shared';
+import { dilAl } from '@/dil/sunucu';
+import { stratejiV2Sozlugu } from '@/dil/sozlukler/strateji-v2';
+import { menuBolumuEtiketi, menuSatiriEtiketi } from '@/lib/nav-sections';
 import { serverApiFetch } from '@/lib/api';
 import { baglanti } from '@/lib/baglanti';
 import { hasPermission, requireSession } from '@/lib/session';
@@ -27,15 +31,21 @@ import { StratejiSihirbazi } from '@/components/strateji/v2/sihirbaz';
 import { Bildirim } from '@/components/strateji/v2/ortak';
 import type { AktarimOnizlemesi, Gerceklesen, StratejiDetayi, StratejiListesi, StratejiSihirbazGirdileri, StratejiYorumlari } from '@advetics/shared';
 
-export const metadata = { title: 'AdvStrategy · Advetics' };
+/** Başlık istek anında: dil çerezden okunuyor; sayfa adı menünün kendi çevirisinden. */
+export async function generateMetadata() {
+  return { title: `${menuSatiriEtiketi('/strateji', await dilAl())} · Advetics` };
+}
 export const dynamic = 'force-dynamic';
 
 type Okuma<T> = { tur: 'veri'; v: T } | { tur: 'hata'; mesaj: string };
-const oku = <T,>(yol: string): Promise<Okuma<T>> =>
-  serverApiFetch<T>(yol).then(
-    (v) => ({ tur: 'veri' as const, v }),
-    (e: unknown) => ({ tur: 'hata' as const, mesaj: okumaHatasi(e) }),
-  );
+/** Okuma yardımcısı dilli: ağ hatasının "ulaşılamadı" cümlesi de ekranın dilinde. */
+const okuYap =
+  (dil: Dil) =>
+  <T,>(yol: string): Promise<Okuma<T>> =>
+    serverApiFetch<T>(yol).then(
+      (v) => ({ tur: 'veri' as const, v }),
+      (e: unknown) => ({ tur: 'hata' as const, mesaj: okumaHatasi(e, dil) }),
+    );
 
 /**
  * ═══ ADVSTRATEGY — ADIM ADIM AKIŞ (kullanıcı onaylı taslak `simulasyon.html`) ═══
@@ -63,23 +73,26 @@ const oku = <T,>(yol: string): Promise<Okuma<T>> =>
 export default async function StratejiPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const session = await requireSession();
   const params = await searchParams;
+  const dil = await dilAl();
+  const d = sec(stratejiV2Sozlugu, dil).sayfa;
+  const oku = okuYap(dil);
 
   const clientId = sayfaWorkspaceId(session, first(params.musteri));
   if (!clientId) {
-    return <WorkspaceGerekli ekran="AdvStrategy" neden="Strateji bir workspace'in reklam bütçesi için hazırlanıyor." {...workspaceSecimVerisi(session)} />;
+    return <WorkspaceGerekli ekran={menuSatiriEtiketi('/strateji', dil)} neden={d.workspaceGerekli} {...workspaceSecimVerisi(session)} />;
   }
 
   const planParam = first(params.plan) ?? null;
   const eski = eskiGorunumEkrani(first(params.gorunum));
   if (eski && !first(params.adim)) redirect(stratejiPanelAdresi({ musteri: clientId, plan: eski === 'giris' ? null : planParam, adim: eski }));
 
-  const baslik = (aciklama?: React.ReactNode) => <SayfaBasligi bolum="Planla" baslik="AdvStrategy" aciklama={aciklama} />;
+  const baslik = (aciklama?: React.ReactNode) => <SayfaBasligi bolum={menuBolumuEtiketi('/strateji', dil)} baslik={menuSatiriEtiketi('/strateji', dil)} aciklama={aciklama} />;
   const ekran = stratejiEkranKapisi(session.permissions, stratejiEkrani(first(params.adim)));
   if (!hasPermission(session, STRATEJI_SAYFA_IZNI) || ekran === null) {
     return (
       <div className="space-y-5">
         {baslik()}
-        <Bildirim baslik="Stratejileri görme yetkin yok.">Yöneticine sor.</Bildirim>
+        <Bildirim baslik={d.yetkiYok}>{d.yoneticineSor}</Bildirim>
       </div>
     );
   }
@@ -100,7 +113,7 @@ export default async function StratejiPage({ searchParams }: { searchParams: Pro
       return (
         <div className="space-y-5">
           {baslik(ws)}
-          <HataDurumu baslik="Strateji alınamadı." mesaj={detay.mesaj} />
+          <HataDurumu baslik={d.stratejiAlinamadi} mesaj={detay.mesaj} />
         </div>
       );
     }
@@ -134,7 +147,7 @@ export default async function StratejiPage({ searchParams }: { searchParams: Pro
     return (
       <div className="space-y-5">
         {baslik(ws)}
-        <HataDurumu baslik="Stratejiler alınamadı." mesaj={liste.mesaj} />
+        <HataDurumu baslik={d.stratejilerAlinamadi} mesaj={liste.mesaj} />
       </div>
     );
   }
@@ -151,7 +164,7 @@ export default async function StratejiPage({ searchParams }: { searchParams: Pro
         toplam={liste.v.toplam}
         kurabilir={kurabilir}
         yonetebilir={yonetebilir}
-        aciklama={ws ? <>{ws} için reklam stratejisi: hedef, bütçe, bölge ve kampanyalar.</> : undefined}
+        aciklama={ws ? <WsMetni metin={d.girisAciklama} ws={ws} /> : undefined}
         devamAdimi={acikDetay?.tur === 'veri' ? (acikDetay.v.sihirbaz?.adim ?? null) : null}
       />
     );
@@ -163,7 +176,7 @@ export default async function StratejiPage({ searchParams }: { searchParams: Pro
     return (
       <div className="space-y-5">
         {baslik(ws)}
-        {planParam && !secili && <Bildirim baslik="Bağlantıdaki strateji bu workspace'te bulunamadı.">Listeden seç.</Bildirim>}
+        {planParam && !secili && <Bildirim baslik={d.baglantidakiYok}>{d.listedenSec}</Bildirim>}
         <StratejiListesiEkrani clientId={clientId} planlar={liste.v.planlar} toplam={liste.v.toplam} kurabilir={kurabilir} yonetebilir={yonetebilir} />
       </div>
     );
@@ -174,11 +187,11 @@ export default async function StratejiPage({ searchParams }: { searchParams: Pro
     const v1 = await oku<PlanDetayi>(ucAdresi('/strateji/planlar/:id', secili.id));
     return (
       <div className="space-y-5">
-        {baslik(<>{ws} · Eski medya planı, salt okunur.</>)}
+        {baslik(<>{ws} · {d.eskiPlan}</>)}
         {v1.tur === 'veri' ? (
           <PlanEkrani key={secili.id} clientId={clientId} ilkDetay={v1.v} bolum={bolumCoz(first(params.bolum))} yazabilir={false} />
         ) : (
-          <HataDurumu baslik="Plan alınamadı." mesaj={v1.mesaj} />
+          <HataDurumu baslik={d.planAlinamadi} mesaj={v1.mesaj} />
         )}
       </div>
     );
@@ -190,7 +203,7 @@ export default async function StratejiPage({ searchParams }: { searchParams: Pro
     return (
       <div className="space-y-5">
         {baslik(ws)}
-        <HataDurumu baslik="Strateji alınamadı." mesaj={detay.mesaj} />
+        <HataDurumu baslik={d.stratejiAlinamadi} mesaj={detay.mesaj} />
       </div>
     );
   }
@@ -225,6 +238,18 @@ export default async function StratejiPage({ searchParams }: { searchParams: Pro
         izinler={session.permissions}
       />
     </div>
+  );
+}
+
+/** "{ws}" yer tutucusu çevirinin içinde: sözcük sırası dile göre değişiyor, ad kalın kalıyor. */
+function WsMetni({ metin, ws }: { metin: string; ws: React.ReactNode }) {
+  const [once = '', sonra = ''] = metin.split('{ws}');
+  return (
+    <>
+      {once}
+      {ws}
+      {sonra}
+    </>
   );
 }
 

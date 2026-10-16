@@ -6,20 +6,27 @@ import {
   HUNI_KATMANLARI,
   PLATFORM_KISA_ADLARI,
   STRATEJI_PLATFORMLARI,
+  sec,
   type DagilimOnerisi,
+  type Dil,
   type PlanDetayi,
 } from '@advetics/shared';
-import { ApiRequestError, apiFetch } from '@/lib/api';
+import { apiFetch } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
 import { Dugme } from '@/components/ui/dugme';
 import { Uyari } from '@/components/ui/uyari';
 import { Kart } from '@/components/ui/kart';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { stratejiPlanSozlugu } from '@/dil/sozlukler/strateji-plan';
 import {
-  DAGILIM_BOS_METNI,
+  bolumAdi,
+  okumaHatasi,
+  dagilimBosMetni,
   HUCRELER,
   butceOzeti,
   dagilimTaslagi,
   oneriyiUygula,
+  yerelKodu,
   tutarCoz,
   ucAdresi,
   type DagilimHucresi,
@@ -36,8 +43,6 @@ type OneriDurumu =
   | { tur: 'isteniyor' }
   | { tur: 'geldi'; oneri: DagilimOnerisi; korunanElle: number | null }
   | { tur: 'hata'; mesaj: string };
-
-const KAYNAK_ETIKETI = { gecmis_veri: 'Geçmiş veri', elle: 'Elle' } as const;
 
 /**
  * ═══ BÖLÜM 1 — BÜTÇE DAĞILIMI ═══
@@ -58,6 +63,8 @@ export function ButceBolumu({
   yenile: () => Promise<PlanDetayi | null>;
   onKirli: (kirli: boolean) => void;
 }) {
+  const { dil } = useDil();
+  const d = useSozluk(stratejiPlanSozlugu);
   const { plan } = detay;
   const para = plan.paraBirimi;
   const [taslak, setTaslak] = useState(() => dagilimTaslagi(detay.dagilim, para));
@@ -104,7 +111,7 @@ export function ButceBolumu({
       });
       setOneri({ tur: 'geldi', oneri: o, korunanElle: null });
     } catch (err) {
-      setOneri({ tur: 'hata', mesaj: err instanceof ApiRequestError ? err.message : 'Sunucuya ulaşılamadı.' });
+      setOneri({ tur: 'hata', mesaj: okumaHatasi(err, dil) });
     }
   }
 
@@ -124,11 +131,11 @@ export function ButceBolumu({
       katman: h.katman,
       tutar: taslak[h.anahtar].metin.trim(),
     }));
-    const r = await planaYaz(ucAdresi('/strateji/planlar/:id/dagilim', plan.id), 'PUT', { surum: plan.surum, satirlar }, yenile, plan.surum);
+    const r = await planaYaz(ucAdresi('/strateji/planlar/:id/dagilim', plan.id), 'PUT', { surum: plan.surum, satirlar }, yenile, plan.surum, dil);
     setKaydediliyor(false);
     if (r.tur === 'tamam') {
       setKirli(false);
-      setMesaj({ ton: 'basari', metin: 'Dağılım kaydedildi.' });
+      setMesaj({ ton: 'basari', metin: d.butce.kaydedildi });
     } else if (r.tur === 'cakisma') {
       setMesaj({ ton: 'uyari', metin: r.mesaj });
     } else {
@@ -148,12 +155,12 @@ export function ButceBolumu({
     <section aria-labelledby="butce-baslik" className="space-y-4">
       <BolumBasligi
         id="butce-baslik"
-        baslik="Bütçe dağılımı"
-        aciklama="Toplam bütçenin platformlara ve kitle katmanlarına bölünüşü."
+        baslik={bolumAdi('butce', dil)}
+        aciklama={d.butce.aciklama}
         eylem={
           kilit === null ? (
             <Dugme ton="ikincil" boyut="kucuk" onClick={oneriIste} bekliyor={oneri.tur === 'isteniyor'}>
-              Geçmişten öner
+              {d.butce.gecmistenOner}
             </Dugme>
           ) : undefined
         }
@@ -166,18 +173,19 @@ export function ButceBolumu({
         durum={ozet.durum}
         fark={ozet.farkMicros}
         para={para}
+        dil={dil}
       />
 
-      <OneriKutusu durum={oneri} para={para} uygula={oneriUygula} uygulanabilir={kilit === null} />
+      <OneriKutusu durum={oneri} para={para} dil={dil} uygula={oneriUygula} uygulanabilir={kilit === null} />
 
-      <TabloKabi etiket="Bütçe dağılımı tablosu">
+      <TabloKabi etiket={d.butce.tabloEtiketi}>
         <table className="w-full min-w-[34rem] text-sm">
           <thead>
             <tr className="text-left text-xs text-ink-muted">
               <th className="px-3 py-2 font-semibold">Platform</th>
-              <th className="px-3 py-2 font-semibold">Kitle katmanı</th>
-              <th className="px-3 py-2 text-right font-semibold">Tutar ({para})</th>
-              <th className="px-3 py-2 font-semibold">Kaynak</th>
+              <th className="px-3 py-2 font-semibold">{d.ortak.kitleKatmani}</th>
+              <th className="px-3 py-2 text-right font-semibold">{d.butce.tutar(para)}</th>
+              <th className="px-3 py-2 font-semibold">{d.butce.kaynak}</th>
             </tr>
           </thead>
           <tbody>
@@ -198,7 +206,7 @@ export function ButceBolumu({
                     <td className="px-3 py-2 text-right">
                       <input
                         inputMode="decimal"
-                        aria-label={`${PLATFORM_KISA_ADLARI[p]}, ${HUNI_ETIKETLERI[k]} tutarı`}
+                        aria-label={d.butce.hucreEtiketi(PLATFORM_KISA_ADLARI[p], HUNI_ETIKETLERI[k])}
                         aria-invalid={c.tur === 'hata' || undefined}
                         aria-describedby={c.tur === 'hata' ? hataId : undefined}
                         className={`${GIRDI_SINIFI} max-w-[10rem] text-right tabular-nums`}
@@ -214,7 +222,7 @@ export function ButceBolumu({
                       )}
                     </td>
                     <td className="px-3 py-2 text-xs text-ink-muted">
-                      {hucre.kaynak ? KAYNAK_ETIKETI[hucre.kaynak] : 'Boş'}
+                      {hucre.kaynak ? (hucre.kaynak === 'elle' ? d.butce.kaynakElle : d.butce.kaynakGecmis) : d.butce.kaynakBos}
                       {hucre.gerekce && <span className="mt-0.5 block text-ink">{hucre.gerekce}</span>}
                     </td>
                   </tr>
@@ -231,27 +239,27 @@ export function ButceBolumu({
           eylem={
             mesaj.ton === 'uyari' ? (
               <Dugme ton="ikincil" boyut="kucuk" onClick={kayitliyiYukle}>
-                Kayıtlı hâli yükle
+                {d.ortak.kayitliYukle}
               </Dugme>
             ) : undefined
           }
         >
           {mesaj.metin}
-          {mesaj.ton === 'uyari' && ' Yazdıkların duruyor; kaydedersen onların yerine geçer.'}
+          {mesaj.ton === 'uyari' && d.ortak.cakismaEki}
         </Uyari>
       )}
 
       {kilit === null && (
         <div className="flex flex-wrap items-center gap-3">
           <Dugme onClick={kaydet} disabled={!kaydedilebilir} bekliyor={kaydediliyor}>
-            Dağılımı kaydet
+            {d.butce.dagilimiKaydet}
           </Dugme>
-          {kirli && <span className="text-sm text-ink-muted">Kaydedilmemiş değişiklik var.</span>}
-          {hataliHucre > 0 && <span className="text-sm text-danger-strong">{hataliHucre} tutar okunamadı.</span>}
-          {ozet.durum === 'asim' && <span className="text-sm text-danger-strong">Dağılım toplam bütçeyi aşıyor.</span>}
+          {kirli && <span className="text-sm text-ink-muted">{d.ortak.kaydedilmemis}</span>}
+          {hataliHucre > 0 && <span className="text-sm text-danger-strong">{d.butce.hataliTutar(hataliHucre)}</span>}
+          {ozet.durum === 'asim' && <span className="text-sm text-danger-strong">{d.butce.asim}</span>}
           {kirli && (
             <Dugme ton="hayalet" boyut="kucuk" onClick={kayitliyiYukle}>
-              Değişiklikleri at
+              {d.butce.degisiklikleriAt}
             </Dugme>
           )}
         </div>
@@ -266,28 +274,31 @@ function ButceOzetSeridi({
   durum,
   fark,
   para,
+  dil,
 }: {
   toplam: string;
   dagitilan: bigint;
   durum: 'tam' | 'kalan' | 'asim';
   fark: bigint;
   para: string;
+  dil: Dil;
 }) {
+  const d = sec(stratejiPlanSozlugu, dil).butce;
   const son =
     durum === 'asim'
-      ? { ad: 'Aşım', deger: formatMoney(fark.toString(), para), sinif: 'text-danger-strong' }
+      ? { ad: d.ozetAsim, deger: formatMoney(fark.toString(), para, { dil }), sinif: 'text-danger-strong' }
       : durum === 'kalan'
-        ? { ad: 'Dağıtılmamış', deger: formatMoney(fark.toString(), para), sinif: 'text-warn-strong' }
-        : { ad: 'Kalan', deger: 'Tamamı dağıtıldı', sinif: 'text-ink' };
+        ? { ad: d.ozetDagitilmamis, deger: formatMoney(fark.toString(), para, { dil }), sinif: 'text-warn-strong' }
+        : { ad: d.ozetKalan, deger: d.ozetTamami, sinif: 'text-ink' };
   return (
     <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3" aria-live="polite">
       <div className="rounded-xl border border-line bg-surface p-3">
-        <dt className="text-xs text-ink-muted">Toplam bütçe</dt>
-        <dd className="mt-0.5 font-semibold tabular-nums text-ink">{formatMoney(toplam, para)}</dd>
+        <dt className="text-xs text-ink-muted">{d.ozetToplam}</dt>
+        <dd className="mt-0.5 font-semibold tabular-nums text-ink">{formatMoney(toplam, para, { dil })}</dd>
       </div>
       <div className="rounded-xl border border-line bg-surface p-3">
-        <dt className="text-xs text-ink-muted">Dağıtılan</dt>
-        <dd className="mt-0.5 font-semibold tabular-nums text-ink">{formatMoney(dagitilan.toString(), para)}</dd>
+        <dt className="text-xs text-ink-muted">{d.ozetDagitilan}</dt>
+        <dd className="mt-0.5 font-semibold tabular-nums text-ink">{formatMoney(dagitilan.toString(), para, { dil })}</dd>
       </div>
       <div className="rounded-xl border border-line bg-surface p-3">
         <dt className="text-xs text-ink-muted">{son.ad}</dt>
@@ -300,49 +311,52 @@ function ButceOzetSeridi({
 function OneriKutusu({
   durum,
   para,
+  dil,
   uygula,
   uygulanabilir,
 }: {
   durum: OneriDurumu;
   para: string;
+  dil: Dil;
   uygula: () => void;
   uygulanabilir: boolean;
 }) {
+  const d = sec(stratejiPlanSozlugu, dil).butce;
   if (durum.tur === 'istenmedi') return null;
   if (durum.tur === 'isteniyor') {
     return (
       <p className="text-sm text-ink-muted" role="status">
-        Son 90 günün verisine bakılıyor…
+        {d.bakiliyor}
       </p>
     );
   }
   if (durum.tur === 'hata') {
     return (
-      <Uyari ton="tehlike" baslik="Öneri alınamadı.">
+      <Uyari ton="tehlike" baslik={d.oneriAlinamadi}>
         {durum.mesaj}
       </Uyari>
     );
   }
   const { oneri } = durum;
-  const pencere = `${oneri.pencere.from} ile ${oneri.pencere.to} arası`;
+  const pencere = d.pencere(oneri.pencere.from, oneri.pencere.to);
   return (
     <Kart as="div">
       <div className="space-y-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="font-semibold text-ink">Geçmişten öneri</p>
-            <p className="text-sm text-ink-muted">Dayanak: {pencere}, bu workspace’in kendi hesapları.</p>
+            <p className="font-semibold text-ink">{d.oneriBaslik}</p>
+            <p className="text-sm text-ink-muted">{d.dayanak(pencere)}</p>
           </div>
           {oneri.satirlar && uygulanabilir && (
             <Dugme ton="koyu" boyut="kucuk" onClick={uygula}>
-              Öneriyi uygula
+              {d.oneriUygula}
             </Dugme>
           )}
         </div>
 
         {oneri.satirlar === null ? (
           <p className="text-sm text-ink">
-            {oneri.bosNedeni ? DAGILIM_BOS_METNI[oneri.bosNedeni] : 'Öneri üretilemedi; sunucu bir neden bildirmedi.'}
+            {oneri.bosNedeni ? dagilimBosMetni(oneri.bosNedeni, dil) : d.nedenYok}
           </p>
         ) : (
           <ul className="space-y-1 text-sm text-ink">
@@ -351,7 +365,7 @@ function OneriKutusu({
                 <span className="font-medium">
                   {PLATFORM_KISA_ADLARI[s.platform]} · {HUNI_ETIKETLERI[s.katman]}:
                 </span>{' '}
-                <span className="tabular-nums">{formatMoney(s.tutarMicros, para)}</span>
+                <span className="tabular-nums">{formatMoney(s.tutarMicros, para, { dil })}</span>
                 {s.gerekce && <span className="text-ink-muted"> · {s.gerekce}</span>}
               </li>
             ))}
@@ -359,31 +373,29 @@ function OneriKutusu({
         )}
 
         {durum.korunanElle !== null && durum.korunanElle > 0 && (
-          <p className="text-sm text-warn-strong">
-            {durum.korunanElle} hücre elle yazıldığı için değiştirilmedi.
-          </p>
+          <p className="text-sm text-warn-strong">{d.korunanElle(durum.korunanElle)}</p>
         )}
 
         {oneri.dayanak.length > 0 && (
-          <TabloKabi etiket="Önerinin dayanağı">
+          <TabloKabi etiket={d.dayanakTablosu}>
             <table className="w-full min-w-[30rem] text-sm">
               <thead>
                 <tr className="text-left text-xs text-ink-muted">
                   <th className="px-3 py-2 font-semibold">Platform</th>
-                  <th className="px-3 py-2 text-right font-semibold">Harcama</th>
-                  <th className="px-3 py-2 text-right font-semibold">Sonuç</th>
-                  <th className="px-3 py-2 text-right font-semibold">Sonuç başı maliyet</th>
+                  <th className="px-3 py-2 text-right font-semibold">{d.harcama}</th>
+                  <th className="px-3 py-2 text-right font-semibold">{d.sonuc}</th>
+                  <th className="px-3 py-2 text-right font-semibold">{d.sonucBasiMaliyet}</th>
                 </tr>
               </thead>
               <tbody>
-                {oneri.dayanak.map((d) => (
-                  <tr key={d.platform} className="border-t border-line">
-                    <td className="px-3 py-2 text-ink">{PLATFORM_KISA_ADLARI[d.platform]}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{formatMoney(d.harcamaMicros, para)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{d.donusum.toLocaleString('tr-TR')}</td>
+                {oneri.dayanak.map((x) => (
+                  <tr key={x.platform} className="border-t border-line">
+                    <td className="px-3 py-2 text-ink">{PLATFORM_KISA_ADLARI[x.platform]}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{formatMoney(x.harcamaMicros, para, { dil })}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{x.donusum.toLocaleString(yerelKodu(dil))}</td>
                     <td className="px-3 py-2 text-right tabular-nums">
                       {/* `null` = sonuç yok, hesaplanamaz. Sıfır değil. */}
-                      {d.donusumBasiMaliyetMicros === null ? 'hesaplanamaz' : formatMoney(d.donusumBasiMaliyetMicros, para)}
+                      {x.donusumBasiMaliyetMicros === null ? d.hesaplanamaz : formatMoney(x.donusumBasiMaliyetMicros, para, { dil })}
                     </td>
                   </tr>
                 ))}

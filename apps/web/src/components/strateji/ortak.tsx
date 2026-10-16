@@ -1,11 +1,12 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import type { PlanDetayi, PlanDurumu } from '@advetics/shared';
+import type { Dil, PlanDetayi, PlanDurumu } from '@advetics/shared';
 import { apiFetch } from '@/lib/api';
+import { useDil } from '@/dil/saglayici';
 import { Serit } from '@/components/ui/hal';
 import { Rozet, type DurumHali } from '@/components/ui/rozet';
-import { DURUM_ETIKETI, yazmaHatasiSinifla, yenidenOkunmali } from './hesap';
+import { DURUM_TONU, durumEtiketi, yazmaHatasiSinifla, yenidenOkunmali } from './hesap';
 
 /**
  * AdvStrategy bölümlerinin ortak parçaları: durum rozeti, kilit notu, bölüm
@@ -16,7 +17,7 @@ import { DURUM_ETIKETI, yazmaHatasiSinifla, yenidenOkunmali } from './hesap';
  * Eski planın beş tonu ortak rozetin dört hâline: onaylı yeşil nokta, onay
  * bekleyen kırmızı (dikkat ister), iptal gri KARE (kapandı), gerisi gri.
  */
-const ROZET_HALI: Record<(typeof DURUM_ETIKETI)[PlanDurumu]['ton'], DurumHali> = {
+const ROZET_HALI: Record<(typeof DURUM_TONU)[PlanDurumu], DurumHali> = {
   notr: 'taslak',
   uyari: 'hata',
   tamam: 'ok',
@@ -25,7 +26,8 @@ const ROZET_HALI: Record<(typeof DURUM_ETIKETI)[PlanDurumu]['ton'], DurumHali> =
 };
 
 export function DurumRozeti({ durum }: { durum: PlanDurumu }) {
-  const d = DURUM_ETIKETI[durum];
+  const { dil } = useDil();
+  const d = durumEtiketi(durum, dil);
   return <Rozet hal={ROZET_HALI[d.ton]}>{d.metin}</Rozet>;
 }
 
@@ -80,6 +82,7 @@ export async function planaYaz<T = unknown>(
   govde: unknown,
   yenile: () => Promise<PlanDetayi | null>,
   gonderilenSurum: number,
+  dil: Dil = 'tr',
 ): Promise<YazmaSonucu<T>> {
   try {
     const veri = await apiFetch<T>(yol, { method: yontem, body: JSON.stringify(govde) });
@@ -87,7 +90,7 @@ export async function planaYaz<T = unknown>(
     return { tur: 'tamam', veri };
   } catch (err) {
     const taze = yenidenOkunmali(err) ? await yenile() : null;
-    const s = yazmaHatasiSinifla(err, gonderilenSurum, taze?.plan.surum ?? null);
+    const s = yazmaHatasiSinifla(err, gonderilenSurum, taze?.plan.surum ?? null, dil);
     return s.cakisma ? { tur: 'cakisma', mesaj: s.mesaj } : { tur: 'hata', mesaj: s.mesaj };
   }
 }

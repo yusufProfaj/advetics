@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import type { Dil } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { Serit } from '@/components/ui/hal';
 import { DurumNoktasi, type DurumHali } from '@/components/ui/rozet';
@@ -77,13 +78,14 @@ export async function yaz<T>(
   govde: unknown,
   tazeSurum: () => Promise<number | null>,
   gonderilenSurum: number | null,
+  dil: Dil = 'tr',
 ): Promise<Yazma<T>> {
   try {
     const veri = await apiFetch<T>(yol, { method: yontem, body: JSON.stringify(govde) });
     return { tur: 'tamam', veri };
   } catch (err) {
     const taze = err instanceof ApiRequestError && err.status === 409 ? await tazeSurum() : null;
-    const s = yazmaHatasiSinifla(err, gonderilenSurum, taze);
+    const s = yazmaHatasiSinifla(err, gonderilenSurum, taze, dil);
     return s.cakisma ? { tur: 'cakisma', mesaj: s.mesaj } : { tur: 'hata', mesaj: s.mesaj };
   }
 }

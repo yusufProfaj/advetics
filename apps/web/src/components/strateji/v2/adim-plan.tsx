@@ -3,17 +3,18 @@
 import { useEffect, useImperativeHandle, useMemo, useState, type Ref } from 'react';
 import {
   REHBER_AMACLARI,
-  STRATEJI_BELGE_BOLUMLERI,
-  STRATEJI_KAYNAK_ETIKETI,
   kalemTarihHatasi,
   stratejiKalemleriKaydetSchema,
   stratejiUcYolu,
+  type Dil,
   type KaynakliMetin,
   type StratejiKalemi,
   type StratejiKalemiGirdisi,
   type StratejiSihirbazGirdileri,
 } from '@advetics/shared';
 import type { StratejiDetayi } from '@advetics/shared';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { stratejiAdimlarSozlugu } from '@/dil/sozlukler/strateji-v2-adimlar';
 import { Dugme } from '@/components/ui/dugme';
 import { Kart } from '@/components/ui/kart';
 import { Soru } from '@/components/ui/sihirbaz';
@@ -21,14 +22,16 @@ import { tutarCoz } from '../hesap';
 import { AmacIkonu } from './belge';
 import {
   HALKA_CEVRE,
-  KALEM_KELIME_METNI,
   PLATFORM_ADI,
   amacAdi,
+  bolumBasligi,
   bolumKayitGovdesi,
   dagitilmamis,
   halkaYaylari,
   kalemGirdisi,
   kalemKelimeDurumu,
+  kalemKelimeMetni,
+  kaynakEtiketi,
   kalemPlatformTutarlari,
   konumOzeti,
   kullan,
@@ -47,8 +50,8 @@ import { Tutar } from './tutar';
 
 /** Rapordaki yapay zekâ metinleri (kitle Kime adımında onaylandı, burada değil). */
 const RAPOR_METINLERI = ['ozet', 'isletme', 'kreatif'] as const;
+type PlanMetni = (typeof stratejiAdimlarSozlugu)['tr']['plan'];
 type RaporMetni = (typeof RAPOR_METINLERI)[number];
-const BOLUM_BASLIGI = Object.fromEntries(STRATEJI_BELGE_BOLUMLERI.map((b) => [b.kod, b.baslik])) as Record<string, string>;
 
 export interface PlanAdimiTutamagi {
   /** "Planı onayla": değişiklikleri ve yapay zekâ metinlerinin kabulünü yazar; başarıda taze detay. */
@@ -87,6 +90,8 @@ export function AdimPlan({
   girdiler: StratejiSihirbazGirdileri | null;
   tutamak: Ref<PlanAdimiTutamagi>;
 }) {
+  const ml = useSozluk(stratejiAdimlarSozlugu).plan;
+  const { dil } = useDil();
   const { plan } = detay;
   const para = plan.paraBirimi;
   const kayitliTaslak = useMemo(() => detay.kalemler.map((k) => kalemGirdisi(k, para)), [detay.kalemler, para]);
@@ -127,12 +132,12 @@ export function AdimPlan({
     async onayla() {
       setHata(null);
       if (taslak.length === 0) {
-        setHata('Planda kampanya yok. İnceleme adımına dönüp yeniden incele.');
+        setHata(ml.kampanyaYok);
         return null;
       }
       for (const [i, k] of taslak.entries()) {
         const t = tutarCoz(k.butce, para);
-        const sorun = t.tur !== 'tamam' ? `bütçe geçersiz` : kalemTarihHatasi(k, plan) ?? (k.konumlar.length === 0 ? 'bölge seçilmedi' : null);
+        const sorun = t.tur !== 'tamam' ? ml.sorunButce : kalemTarihHatasi(k, plan) ?? (k.konumlar.length === 0 ? ml.sorunBolge : null);
         if (sorun) {
           setAcik(i);
           setHata(`${amacAdi(k.amac)}: ${sorun}.`);
@@ -140,7 +145,7 @@ export function AdimPlan({
         }
       }
       if (kalan < 0n) {
-        setHata('Kampanyaların toplamı stratejinin bütçesini aşıyor.');
+        setHata(ml.butceAsiyor);
         return null;
       }
       const id = { id: plan.id };
@@ -150,10 +155,10 @@ export function AdimPlan({
       if (kirli || kabul.some((k, i) => k.kreatifYonergesi?.kaynak !== taslak[i]!.kreatifYonergesi?.kaynak)) {
         const govde = stratejiKalemleriKaydetSchema.safeParse({ surum: d.plan.surum, kalemler: kabul });
         if (!govde.success) {
-          setHata(govde.error.issues[0]?.message ?? 'Kampanyalardan biri eksik.');
+          setHata(govde.error.issues[0]?.message ?? ml.kampanyaEksik);
           return null;
         }
-        const r = await yaz<StratejiDetayi>(stratejiUcYolu('/strateji/v2/planlar/:id/kalemler', id), 'PUT', govde.data, tazeSurum, d.plan.surum);
+        const r = await yaz<StratejiDetayi>(stratejiUcYolu('/strateji/v2/planlar/:id/kalemler', id), 'PUT', govde.data, tazeSurum, d.plan.surum, dil);
         if (r.tur !== 'tamam') {
           setHata(r.mesaj);
           return null;
@@ -165,9 +170,9 @@ export function AdimPlan({
       const kabulMetin = Object.fromEntries(RAPOR_METINLERI.flatMap((b) => (metinler[b] ? [[b, { metin: metinler[b]!.metin, kaynak: 'ajans' as const }]] : []))) as Partial<Record<RaporMetni, { metin: string; kaynak: 'ajans' }>>;
       const bolumGovdesi = bolumKayitGovdesi(d.bolumler, kabulMetin, RAPOR_METINLERI);
       if (Object.keys(bolumGovdesi).length > 0) {
-        const r = await yaz<StratejiDetayi>(stratejiUcYolu('/strateji/v2/planlar/:id/bolumler', id), 'PUT', { surum: d.plan.surum, bolumler: bolumGovdesi }, tazeSurum, d.plan.surum);
+        const r = await yaz<StratejiDetayi>(stratejiUcYolu('/strateji/v2/planlar/:id/bolumler', id), 'PUT', { surum: d.plan.surum, bolumler: bolumGovdesi }, tazeSurum, d.plan.surum, dil);
         if (r.tur !== 'tamam') {
-          setHata(`Rapor metinleri kaydedilemedi: ${r.mesaj}`);
+          setHata(ml.metinlerKaydedilemedi(r.mesaj));
           return null;
         }
         d = r.veri;
@@ -179,19 +184,19 @@ export function AdimPlan({
 
   return (
     <>
-      <Soru ust="6 / 7 · Plan" soru="Önerdiğimiz plan" aciklama="Her kampanyaya tıklayıp neden böyle önerdiğimizi gör. Bir kampanyayı değiştirmek istersen içinden düzenle." />
+      <Soru ust={ml.ust} soru={ml.soru} aciklama={ml.aciklama} />
 
       {plan.durum === 'revizyon' && plan.revizyonNotu && (
         <div className="mb-4">
-          <Bildirim hata baslik="Müşteri değişiklik istedi.">
+          <Bildirim hata baslik={ml.musteriDegisiklikIstedi}>
             {plan.revizyonNotu}
           </Bildirim>
         </div>
       )}
 
-      <Kart baslik="Bütçe dağılımı" className="mb-6">
+      <Kart baslik={ml.butceDagilimi} className="mb-6">
         <div className="grid items-center gap-7 md:grid-cols-[240px_1fr]">
-        <svg viewBox="0 0 200 200" width="220" height="220" className="mx-auto max-w-full" role="img" aria-label={`Meta yüzde ${Math.round(yuzde(toplamlar.meta, toplamlar.meta + toplamlar.google))}, Google yüzde ${Math.round(yuzde(toplamlar.google, toplamlar.meta + toplamlar.google))}`}>
+        <svg viewBox="0 0 200 200" width="220" height="220" className="mx-auto max-w-full" role="img" aria-label={ml.halkaEtiketi(Math.round(yuzde(toplamlar.meta, toplamlar.meta + toplamlar.google)), Math.round(yuzde(toplamlar.google, toplamlar.meta + toplamlar.google)))}>
           <circle cx="100" cy="100" r="70" fill="none" className="stroke-ink/10" strokeWidth="26" />
           <circle cx="100" cy="100" r="70" fill="none" className="stroke-ink" strokeWidth="26" strokeDasharray={`${yay.meta} ${HALKA_CEVRE}`} transform="rotate(-90 100 100)" />
           <circle cx="100" cy="100" r="70" fill="none" className="stroke-brand" strokeWidth="26" strokeDasharray={`${yay.google} ${HALKA_CEVRE}`} strokeDashoffset={-yay.meta} transform="rotate(-90 100 100)" />
@@ -199,7 +204,7 @@ export function AdimPlan({
             {(BigInt(plan.toplamButceMicros) / 1_000_000n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')} {para === 'TRY' ? '₺' : para}
           </text>
           <text x="100" y="120" textAnchor="middle" fontSize="12" className="fill-ink-muted">
-            dönem toplamı
+            {ml.donemToplami}
           </text>
         </svg>
         <div className="min-w-0">
@@ -227,10 +232,10 @@ export function AdimPlan({
               </div>
             );
           })}
-          <p className="m-0 mt-2 text-[12.5px] text-ink-muted">Meta ve Google sonuçları farklı sayıldığı için toplanmaz.</p>
+          <p className="m-0 mt-2 text-[12.5px] text-ink-muted">{ml.toplanmaz}</p>
           {kalan !== 0n && (
             <p className={`m-0 mt-1.5 text-[12.5px] font-semibold ${kalan < 0n ? 'text-brand-strong' : 'text-ink'}`}>
-              {kalan > 0n ? 'Dağıtılmamış: ' : 'Bütçe aşımı: '}
+              {kalan > 0n ? ml.dagitilmamis : ml.butceAsimi}
               <Tutar micros={kalan < 0n ? -kalan : kalan} para={para} />
             </p>
           )}
@@ -251,10 +256,12 @@ export function AdimPlan({
               ac={() => setAcik(acik === i ? null : i)}
               birincil={i === 0}
               kirli={kirli}
+              ml={ml}
+              dil={dil}
             >
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <Dugme ton="ikincil" boyut="kucuk" aria-expanded={duzenle === i} onClick={() => setDuzenle(duzenle === i ? null : i)}>
-                  {duzenle === i ? 'Düzenlemeyi kapat' : 'Bu kampanyayı düzenle'}
+                  {duzenle === i ? ml.duzenlemeyiKapat : ml.buKampanyayiDuzenle}
                 </Dugme>
               </div>
               <div className="mt-3">
@@ -278,7 +285,7 @@ export function AdimPlan({
               </div>
               {kalemKelimeDurumu(k, kelimeGruplari) !== 'gerekmez' && (
                 <div className="mt-3 space-y-2">
-                  {kalemKelimeDurumu(k, kelimeGruplari) !== 'tamam' && <p className="m-0 text-[13px] font-semibold text-brand-strong">{KALEM_KELIME_METNI[kalemKelimeDurumu(k, kelimeGruplari) as 'eksik' | 'bos_grup']}</p>}
+                  {kalemKelimeDurumu(k, kelimeGruplari) !== 'tamam' && <p className="m-0 text-[13px] font-semibold text-brand-strong">{kalemKelimeMetni(kalemKelimeDurumu(k, kelimeGruplari) as 'eksik' | 'bos_grup', dil)}</p>}
                   <KelimeBolumu
                     detay={detay}
                     duzenlenebilir
@@ -296,7 +303,7 @@ export function AdimPlan({
 
       {disarida.length > 0 && (
         <div className="mt-4">
-          <Bildirim baslik="Bazı hedefler plana alınmadı.">
+          <Bildirim baslik={ml.hedeflerAlinmadi}>
             {disarida.map((n) => (
               <span key={n} className="block">
                 {n}
@@ -308,7 +315,7 @@ export function AdimPlan({
 
       {(digerNotlar.length > 0 || detay.riskler.length > 0) && (
         <details className="mt-4 rounded-xl border border-line bg-surface p-4">
-          <summary className="cursor-pointer text-sm font-semibold text-ink">Neden böyle önerdik · {digerNotlar.length + detay.riskler.length} not</summary>
+          <summary className="cursor-pointer text-sm font-semibold text-ink">{ml.nedenBoyle(digerNotlar.length + detay.riskler.length)}</summary>
           <ul className="m-0 mt-2 list-disc space-y-1 pl-5 text-[13px] text-ink-muted">
             {detay.riskler.map((r, i) => (
               <li key={`r${i}`} className="text-ink">
@@ -322,22 +329,22 @@ export function AdimPlan({
         </details>
       )}
 
-      <Kart baslik="Rapordaki metinler" className="mt-6">
-        <p className="m-0 text-[13px] text-ink-muted">Müşterinin okuyacağı paragraflar. Değiştirebilirsin; "Planı onayla" bunları rapora alır.</p>
+      <Kart baslik={ml.raporMetinleri} className="mt-6">
+        <p className="m-0 text-[13px] text-ink-muted">{ml.raporMetinleriAciklama}</p>
         <div className="mt-3 grid gap-3 md:grid-cols-3">
           {RAPOR_METINLERI.map((b) => {
             const m = metinler[b];
             return (
               <label key={b} className="flex min-w-0 flex-col gap-1.5">
                 <span className="flex items-center justify-between gap-2 text-xs font-semibold text-ink-muted">
-                  {BOLUM_BASLIGI[b]}
-                  {m && <Etiket ton={m.kaynak === 'ai' ? 'kirmizi' : 'cizgi'}>{STRATEJI_KAYNAK_ETIKETI[m.kaynak]}</Etiket>}
+                  {bolumBasligi(b, dil)}
+                  {m && <Etiket ton={m.kaynak === 'ai' ? 'kirmizi' : 'cizgi'}>{kaynakEtiketi(m, dil)}</Etiket>}
                 </span>
                 <textarea
                   className="min-h-[7.5rem] w-full rounded-alan border border-line bg-surface px-2.5 py-2 text-[13px] leading-relaxed text-ink outline-none focus:border-brand"
                   maxLength={2000}
                   value={m?.metin ?? ''}
-                  placeholder="Yapay zekâ bu bölümü yazamadı; sen yaz ya da boş bırak."
+                  placeholder={ml.yazamadi}
                   onChange={(e) => setMetinler((x) => ({ ...x, [b]: e.target.value.trim() === '' ? undefined : { metin: e.target.value, kaynak: 'ajans' } }))}
                 />
               </label>
@@ -348,15 +355,15 @@ export function AdimPlan({
 
       {hata && (
         <div className="mt-4">
-          <Bildirim hata baslik="Plan kaydedilemedi.">
+          <Bildirim hata baslik={ml.planKaydedilemedi}>
             {hata}
           </Bildirim>
         </div>
       )}
       {(kirli || yapayZekaVar) && (
         <p className="m-0 mt-3 text-[12.5px] text-ink-muted">
-          {kirli ? 'Kaydedilmemiş değişiklik var. ' : ''}
-          {yapayZekaVar ? '"Planı onayla" yapay zekâ önerilerini de onaylar ve rapora alır.' : ''}
+          {kirli ? `${ml.kaydedilmemis} ` : ''}
+          {yapayZekaVar ? ml.onaylaYapayZeka : ''}
         </p>
       )}
     </>
@@ -385,6 +392,8 @@ function KalemAkordiyonu({
   ac,
   birincil,
   kirli,
+  ml,
+  dil,
   children,
 }: {
   k: StratejiKalemiGirdisi;
@@ -394,6 +403,8 @@ function KalemAkordiyonu({
   ac: () => void;
   birincil: boolean;
   kirli: boolean;
+  ml: PlanMetni;
+  dil: Dil;
   children: React.ReactNode;
 }) {
   const t = tutarCoz(k.butce, para);
@@ -416,7 +427,7 @@ function KalemAkordiyonu({
           <b className="font-baslik block text-base text-ink">{g.ekranAdi}</b>
           <small className="block truncate text-[13px] text-ink-muted">{nasil}</small>
         </span>
-        {t.tur === 'tamam' ? <Tutar micros={t.micros} para={para} className="text-lg font-bold text-ink" /> : <span className="text-sm font-semibold text-brand-strong">Tutar geçersiz</span>}
+        {t.tur === 'tamam' ? <Tutar micros={t.micros} para={para} className="text-lg font-bold text-ink" /> : <span className="text-sm font-semibold text-brand-strong">{ml.tutarGecersiz}</span>}
         <span aria-hidden className={`hidden text-ink-muted motion-safe:transition-transform motion-safe:duration-200 sm:inline ${acik ? 'rotate-180' : ''}`}>
           ▾
         </span>
@@ -425,8 +436,8 @@ function KalemAkordiyonu({
         <div className="overflow-hidden">
           <div className="border-t border-line px-4 pb-5 pt-4 sm:px-5">
             <dl className="m-0 grid grid-cols-2 gap-x-5 gap-y-3.5 md:grid-cols-4">
-              <Satir etiket="Nerede">
-                {payMetni(k)}
+              <Satir etiket={ml.nerede}>
+                {payMetni(k, dil)}
                 {k.meta && k.google && (
                   <span className="mt-1.5 flex h-1.5 overflow-hidden rounded bg-ink/10">
                     <span className="block h-full bg-ink" style={{ width: `${k.metaPayi ?? 50}%` }} />
@@ -434,42 +445,42 @@ function KalemAkordiyonu({
                   </span>
                 )}
               </Satir>
-              <Satir etiket="Tarih">{tarihAraligi(k.baslangic, k.bitis)}</Satir>
-              <Satir etiket="Bölge · yaş">
-                {konumOzeti(k.konumlar)} · {yasMetni(k.yasMin, k.yasMax)}
+              <Satir etiket={ml.tarih}>{tarihAraligi(k.baslangic, k.bitis, dil)}</Satir>
+              <Satir etiket={ml.bolgeYas}>
+                {konumOzeti(k.konumlar, dil)} · {yasMetni(k.yasMin, k.yasMax)}
               </Satir>
-              <Satir etiket="Beklenen">
+              <Satir etiket={ml.beklenen}>
                 {kayitli ? (
                   (['meta', 'google'] as const)
                     .filter((p) => k[p])
                     .map((p) => {
-                      const x = tahminMetni(kayitli.tahmin[p], k.amac);
+                      const x = tahminMetni(kayitli.tahmin[p], k.amac, dil);
                       return (
                         <span key={p} className="block">
                           {k.meta && k.google ? `${PLATFORM_ADI[p]}: ` : ''}
                           {x.veri ? (
                             <>
-                              {x.ana} <Etiket>Hesap verisi</Etiket>
+                              {x.ana} <Etiket>{ml.hesapVerisi}</Etiket>
                             </>
                           ) : (
                             <span className="text-[13px] text-ink-muted">
-                              Tahmin yok · {x.alt}
+                              {ml.tahminYok(x.alt)}
                             </span>
                           )}
                         </span>
                       );
                     })
                 ) : (
-                  <span className="text-[13px] text-ink-muted">Kaydedince hesaplanır.</span>
+                  <span className="text-[13px] text-ink-muted">{ml.kaydedinceHesaplanir}</span>
                 )}
-                {kayitli && kirli && <span className="mt-1 block text-[11px] text-ink-muted">Değişiklik kaydedilince yeniden hesaplanır.</span>}
+                {kayitli && kirli && <span className="mt-1 block text-[11px] text-ink-muted">{ml.yenidenHesaplanir}</span>}
               </Satir>
               <div className="col-span-2 md:col-span-4">
                 <dt className="flex items-center gap-2 text-xs font-semibold text-ink-muted">
-                  Görsel ve mesaj {k.kreatifYonergesi && <Etiket ton={k.kreatifYonergesi.kaynak === 'ai' ? 'kirmizi' : 'cizgi'}>{k.kreatifYonergesi.kaynak === 'ai' ? 'Yapay zekâ' : 'Ajans yazdı'}</Etiket>}
+                  {ml.gorselMesaj} {k.kreatifYonergesi && <Etiket ton={k.kreatifYonergesi.kaynak === 'ai' ? 'kirmizi' : 'cizgi'}>{k.kreatifYonergesi.kaynak === 'ai' ? ml.yapayZeka : ml.ajansYazdi}</Etiket>}
                 </dt>
-                <dd className="m-0 mt-0.5 text-sm text-ink">{k.kreatifYonergesi?.metin ?? <span className="text-ink-muted">Yönerge yok; düzenleyerek ekleyebilirsin.</span>}</dd>
-                {k.metin && k.metin.basliklar[0] && <dd className="m-0 mt-1 text-[13px] text-ink-muted">Örnek başlık: "{k.metin.basliklar[0]}"</dd>}
+                <dd className="m-0 mt-0.5 text-sm text-ink">{k.kreatifYonergesi?.metin ?? <span className="text-ink-muted">{ml.yonergeYok}</span>}</dd>
+                {k.metin && k.metin.basliklar[0] && <dd className="m-0 mt-1 text-[13px] text-ink-muted">{ml.ornekBaslik(k.metin.basliklar[0])}</dd>}
               </div>
             </dl>
             {children}

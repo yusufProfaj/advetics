@@ -5,6 +5,8 @@ import type { PlanOzeti } from '@advetics/shared';
 import { Dugme } from '@/components/ui/dugme';
 import { Uyari } from '@/components/ui/uyari';
 import { Kart } from '@/components/ui/kart';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { stratejiPlanSozlugu } from '@/dil/sozlukler/strateji-plan';
 import { donemEtiketi, onayMetni, pdfAdresi, pdfDosyaAdi, sunumNotu, zamanMetni } from './hesap';
 import { BolumBasligi, DurumRozeti } from './ortak';
 
@@ -34,9 +36,11 @@ type IndirmeHali =
  * bir planı onaylatmak olurdu.
  */
 export function SunumBolumu({ plan, kaydedilmemis }: { plan: PlanOzeti; kaydedilmemis: boolean }) {
+  const { dil } = useDil();
+  const d = useSozluk(stratejiPlanSozlugu);
   const [hal, setHal] = useState<IndirmeHali>({ tur: 'istenmedi' });
-  const not = sunumNotu(plan.durum);
-  const onay = onayMetni(plan.onaylayan);
+  const not = sunumNotu(plan.durum, dil);
+  const onay = onayMetni(plan.onaylayan, dil);
 
   async function indir() {
     setHal({ tur: 'hazirlaniyor' });
@@ -46,7 +50,7 @@ export function SunumBolumu({ plan, kaydedilmemis }: { plan: PlanOzeti; kaydedil
     try {
       const res = await fetch(pdfAdresi(plan.id), { credentials: 'include' });
       if (!res.ok) {
-        let mesaj = `PDF üretilemedi (HTTP ${res.status}).`;
+        let mesaj = d.sunumEkrani.uretilemedi(res.status);
         try {
           const g = (await res.json()) as { message?: string };
           if (g.message) mesaj = g.message;
@@ -60,7 +64,7 @@ export function SunumBolumu({ plan, kaydedilmemis }: { plan: PlanOzeti; kaydedil
       const adres = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = adres;
-      a.download = pdfDosyaAdi(plan.donem, surum);
+      a.download = pdfDosyaAdi(plan.donem, surum, dil);
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -69,7 +73,7 @@ export function SunumBolumu({ plan, kaydedilmemis }: { plan: PlanOzeti; kaydedil
       window.setTimeout(() => URL.revokeObjectURL(adres), 10_000);
       setHal({ tur: 'indi', surum, zaman: new Date().toISOString() });
     } catch {
-      setHal({ tur: 'hata', mesaj: 'Sunucuya ulaşılamadı.' });
+      setHal({ tur: 'hata', mesaj: d.ortak.ulasilamadi });
     }
   }
 
@@ -77,23 +81,23 @@ export function SunumBolumu({ plan, kaydedilmemis }: { plan: PlanOzeti; kaydedil
     <section aria-labelledby="sunum-baslik" className="space-y-4">
       <BolumBasligi
         id="sunum-baslik"
-        baslik="Sunum"
-        aciklama="Planın müşteriye gönderilecek PDF hâli: bütçe dağılımı, kitle ve kreatif, seçili kelimeler."
+        baslik={d.bolum.sunum}
+        aciklama={d.sunumEkrani.aciklama}
       />
 
       <Kart as="div">
         <div className="space-y-3">
           <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
             <div>
-              <dt className="text-xs text-ink-muted">Dönem</dt>
-              <dd className="font-semibold text-ink">{donemEtiketi(plan.donem)}</dd>
+              <dt className="text-xs text-ink-muted">{d.sunumEkrani.donem}</dt>
+              <dd className="font-semibold text-ink">{donemEtiketi(plan.donem, dil)}</dd>
             </div>
             <div>
-              <dt className="text-xs text-ink-muted">Belgenin sürümü</dt>
-              <dd className="font-semibold tabular-nums text-ink">Sürüm {plan.surum}</dd>
+              <dt className="text-xs text-ink-muted">{d.sunumEkrani.belgeSurumu}</dt>
+              <dd className="font-semibold tabular-nums text-ink">{d.sunumEkrani.surum(plan.surum)}</dd>
             </div>
             <div>
-              <dt className="text-xs text-ink-muted">Durum</dt>
+              <dt className="text-xs text-ink-muted">{d.sunumEkrani.durum}</dt>
               <dd>
                 <DurumRozeti durum={plan.durum} />
               </dd>
@@ -103,31 +107,31 @@ export function SunumBolumu({ plan, kaydedilmemis }: { plan: PlanOzeti; kaydedil
 
           <Uyari ton={not.ton}>{not.metin}</Uyari>
           {kaydedilmemis && (
-            <p className="text-sm text-warn-strong">Kaydedilmemiş değişiklik var. PDF yalnız kaydedilmiş hâli taşır.</p>
+            <p className="text-sm text-warn-strong">{d.sunumEkrani.kaydedilmemisPdf}</p>
           )}
 
           <div className="flex flex-wrap items-center gap-3">
             <Dugme ton="koyu" onClick={() => void indir()} bekliyor={hal.tur === 'hazirlaniyor'}>
-              PDF indir
+              {d.sunumEkrani.pdfIndir}
             </Dugme>
             {hal.tur === 'hazirlaniyor' && (
               <span className="text-sm text-ink-muted" role="status">
-                PDF hazırlanıyor…
+                {d.sunumEkrani.hazirlaniyor}
               </span>
             )}
             {hal.tur === 'indi' && (
               <span className="text-sm text-ink-muted" role="status">
-                Sürüm {hal.surum} indirildi · {zamanMetni(hal.zaman)}
+                {d.sunumEkrani.indi(hal.surum, zamanMetni(hal.zaman, dil))}
               </span>
             )}
           </div>
           {hal.tur === 'indi' && hal.surum !== plan.surum && (
             <Uyari ton="uyari">
-              İndirdiğin PDF sürüm {hal.surum}; plan şimdi sürüm {plan.surum}. Göndermeden önce yeniden indir.
+              {d.sunumEkrani.eskiPdf(hal.surum, plan.surum)}
             </Uyari>
           )}
           {hal.tur === 'hata' && (
-            <Uyari ton="tehlike" baslik="PDF indirilemedi.">
+            <Uyari ton="tehlike" baslik={d.sunumEkrani.indirilemedi}>
               {hal.mesaj}
             </Uyari>
           )}

@@ -6,6 +6,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { stratejiPanelAdresi, stratejiUcYolu, type Permission, type StratejiYorumu } from '@advetics/shared';
 import type { Gerceklesen, StratejiDetayi } from '@advetics/shared';
 import { apiFetch } from '@/lib/api';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { stratejiV2Sozlugu } from '@/dil/sozlukler/strateji-v2';
 import { dugmeSinifi, Dugme } from '@/components/ui/dugme';
 import { Kart } from '@/components/ui/kart';
 import { Rozet } from '@/components/ui/rozet';
@@ -13,7 +15,7 @@ import { okumaHatasi } from '../hesap';
 import { durumTonu, kurulabilirMi } from './akis';
 import { StratejiBelgesi } from './belge';
 import { GonderPaneli, PdfIndir, pdfDosyaAdi } from './gonder';
-import { STRATEJI_DURUM_ETIKETI, donemMetni } from './hesap';
+import { donemMetni, stratejiDurumEtiketi } from './hesap';
 import { KapatmaPenceresi, iptalEdilebilirMi, type KapatmaHedefi } from './kapatma';
 import { PanelOnayKutusu } from './onay-kutusu';
 import { Bildirim, durumHali, yaz } from './ortak';
@@ -44,6 +46,8 @@ export function RaporEkrani({
   izinler: readonly Permission[];
 }) {
   const router = useRouter();
+  const d = useSozluk(stratejiV2Sozlugu).rapor;
+  const { dil } = useDil();
   const [detay, setDetay] = useState(ilkDetay);
   const [hata, setHata] = useState<string | null>(null);
   const [geriCekiliyor, setGeriCekiliyor] = useState(false);
@@ -59,9 +63,9 @@ export function RaporEkrani({
       setHata(null);
       router.refresh();
     } catch (e) {
-      setHata(`Strateji yeniden okunamadı: ${okumaHatasi(e)}`);
+      setHata(d.yenidenOkunamadi(okumaHatasi(e, dil)));
     }
-  }, [plan.id, router]);
+  }, [plan.id, router, d]);
   const tazeSurum = useCallback(async () => {
     try {
       const d = await apiFetch<StratejiDetayi>(stratejiUcYolu('/strateji/v2/planlar/:id', { id: plan.id }));
@@ -74,7 +78,7 @@ export function RaporEkrani({
 
   async function geriCek() {
     setGeriCekiliyor(true);
-    const r = await yaz<StratejiDetayi>(stratejiUcYolu('/strateji/v2/planlar/:id/eylem', { id: plan.id }), 'POST', { eylem: 'geri_cek', surum: plan.surum }, tazeSurum, plan.surum);
+    const r = await yaz<StratejiDetayi>(stratejiUcYolu('/strateji/v2/planlar/:id/eylem', { id: plan.id }), 'POST', { eylem: 'geri_cek', surum: plan.surum }, tazeSurum, plan.surum, dil);
     setGeriCekiliyor(false);
     if (r.tur !== 'tamam') return setHata(r.mesaj);
     router.push(stratejiPanelAdresi({ musteri: clientId, plan: plan.id, adim: 'plan' }));
@@ -96,46 +100,46 @@ export function RaporEkrani({
       />
       <div className="mx-auto flex max-w-[860px] flex-wrap items-center gap-2">
         <Link href={stratejiPanelAdresi({ musteri: clientId, adim: 'raporlar' })} className={dugmeSinifi('ikincil', 'kucuk')}>
-          ← Stratejiler
+          {d.stratejiler}
         </Link>
         <Rozet hal={durumHali(durumTonu(plan.durum))}>
-          {STRATEJI_DURUM_ETIKETI[plan.durum]} · sürüm {plan.surum}
+          {stratejiDurumEtiketi(plan.durum, dil)} · {d.surum(plan.surum)}
         </Rozet>
-        <span className="min-w-0 flex-1 truncate text-xs text-ink-muted">{donemMetni(plan.baslangic, plan.bitis)}</span>
+        <span className="min-w-0 flex-1 truncate text-xs text-ink-muted">{donemMetni(plan.baslangic, plan.bitis, dil)}</span>
         {yazabilir && (plan.durum === 'taslak' || plan.durum === 'revizyon') && (
           <Link href={stratejiPanelAdresi({ musteri: clientId, plan: plan.id, adim: 'plan' })} className={dugmeSinifi('ikincil', 'kucuk')}>
-            Düzenle
+            {d.duzenle}
           </Link>
         )}
         {yazabilir && plan.durum === 'onayda' && (
           <Dugme ton="ikincil" boyut="kucuk" onClick={() => void geriCek()} bekliyor={geriCekiliyor}>
-            Geri çek ve düzenle
+            {d.geriCek}
           </Dugme>
         )}
         <PdfIndir planId={plan.id} surum={plan.surum} dosyaAdi={pdfDosyaAdi(plan.baslangic, plan.surum)} />
         {/* İPTAL VE SİL (2026-10-14): yeni stratejiyi panelde kapatmanın yolu yoktu; onay bekleyen strateji yenisini kilitliyordu. */}
         {yazabilir && iptalEdilebilirMi({ bicim: 2, durum: plan.durum }) && (
-          <Dugme ton="ikincil" boyut="kucuk" onClick={() => setKapatma({ tur: 'iptal', id: plan.id, surum: plan.surum, ad: donemMetni(plan.baslangic, plan.bitis), durum: plan.durum, bicim: 2 })}>
-            İptal et
+          <Dugme ton="ikincil" boyut="kucuk" onClick={() => setKapatma({ tur: 'iptal', id: plan.id, surum: plan.surum, ad: donemMetni(plan.baslangic, plan.bitis, dil), durum: plan.durum, bicim: 2 })}>
+            {d.iptalEt}
           </Dugme>
         )}
         {yazabilir && (
-          <Dugme ton="ikincil" boyut="kucuk" onClick={() => setKapatma({ tur: 'sil', id: plan.id, surum: plan.surum, ad: donemMetni(plan.baslangic, plan.bitis), durum: plan.durum, bicim: 2 })}>
-            Sil
+          <Dugme ton="ikincil" boyut="kucuk" onClick={() => setKapatma({ tur: 'sil', id: plan.id, surum: plan.surum, ad: donemMetni(plan.baslangic, plan.bitis, dil), durum: plan.durum, bicim: 2 })}>
+            {d.sil}
           </Dugme>
         )}
         {kurulabilirMi(plan) &&
           (kurabilir ? (
             <Link href={stratejiPanelAdresi({ musteri: clientId, plan: plan.id, adim: 'kur' })} className={dugmeSinifi('birincil', 'kucuk')}>
-              Kampanyaları kur
+              {d.kampanyalariKur}
             </Link>
           ) : yazabilir ? (
-            <span className="text-xs text-ink-muted">Kampanya kurmak reklam oluşturma yetkisi ister.</span>
+            <span className="text-xs text-ink-muted">{d.kurmaYetkisi}</span>
           ) : null)}
       </div>
       {plan.durum === 'onaylandi' && plan.onaylananSurum !== plan.surum && (
         <div className="mx-auto max-w-[860px]">
-          <Bildirim baslik="Onaydan sonra strateji değişti; kampanyalar kurulmadan önce yeniden onaylanmalı." />
+          <Bildirim baslik={d.onaydanSonraDegisti} />
         </div>
       )}
       {hata && (
@@ -145,12 +149,13 @@ export function RaporEkrani({
       )}
       {yazabilir && plan.durum === 'onayda' && (
         <div className="mx-auto max-w-[860px]">
-          <Kart baslik="Müşteriye gönder">
+          <Kart baslik={d.musteriyeGonder}>
             <GonderPaneli planId={plan.id} surum={plan.surum} izinler={izinler} tazeSurum={tazeSurum} />
           </Kart>
         </div>
       )}
       <StratejiBelgesi
+        dil={dil}
         kapakBasligi="h2"
         veri={detay}
         gerceklesen={gerceklesen}

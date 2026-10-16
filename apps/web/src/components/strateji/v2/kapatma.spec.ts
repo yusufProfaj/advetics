@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { stratejiV2Sozlugu } from '@/dil/sozlukler/strateji-v2';
 import { iptalEdilebilirMi } from './kapatma';
 
 /**
@@ -39,7 +40,10 @@ describe('bağlantılar (kaynak taraması)', () => {
 
   it('KRİTİK: liste ⋯ menüsünde iptal ve sil, yetkiye bağlı; bitince liste tazeleniyor', () => {
     const g = oku('giris.tsx');
-    expect(g).toContain("{yonetebilir && iptalEdilebilirMi(p) && <MenuOgesi onClick={() => kapatma(p, 'iptal')}>İptal et</MenuOgesi>}");
+    expect(g).toContain("{yonetebilir && iptalEdilebilirMi(p) && <MenuOgesi onClick={() => kapatma(p, 'iptal')}>{d.iptalEt}</MenuOgesi>}");
+    // Metin sözlükte (D3): anahtar iki dilde ve Türkçe değeri değişmedi.
+    expect(stratejiV2Sozlugu.tr.giris.iptalEt).toBe('İptal et');
+    expect(stratejiV2Sozlugu.en.giris.iptalEt).toBe('Cancel strategy');
     expect(g).toContain("<MenuOgesi tehlike onClick={() => kapatma(p, 'sil')}>");
     expect(g).toContain('router.refresh();');
   });

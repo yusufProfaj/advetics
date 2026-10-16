@@ -10,6 +10,8 @@ import {
   type StratejiDurumu,
 } from '@advetics/shared';
 import { API_URL, ApiRequestError } from '@/lib/api';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { stratejiOnayKutusuSozlugu } from '@/dil/sozlukler/strateji-v2-belge';
 import { Dugme } from '@/components/ui/dugme';
 import { zamanMetni } from '../hesap';
 import { kalemSecenekleri, onayCumlesi, yorumKalemEtiketi } from './hesap';
@@ -30,11 +32,13 @@ import type { StratejiKalemi, StratejiOnayKaydi, StratejiYorumu } from '@advetic
  */
 
 function KutuKabi({ children, onay }: { children: ReactNode; onay: StratejiOnayKaydi | null }) {
-  const cumle = onayCumlesi(onay);
+  const om = useSozluk(stratejiOnayKutusuSozlugu);
+  const { dil } = useDil();
+  const cumle = onayCumlesi(onay, dil);
   return (
     <div className="rounded-xl border-2 border-black p-5 text-black">
-      <b className="font-baslik text-base">Bu stratejiyi onaylıyor musunuz?</b>
-      <p className="m-0 mt-1 text-[13px] text-[var(--gri)]/70">Onaydan sonra ajans kampanyaları kurar; yayına almadan önce son hâli tekrar kontrol edilir.</p>
+      <b className="font-baslik text-base">{om.soru}</b>
+      <p className="m-0 mt-1 text-[13px] text-[var(--gri)]/70">{om.aciklama}</p>
       {cumle && <p className="m-0 mt-3 text-[13px] font-semibold">{cumle}</p>}
       {children}
     </div>
@@ -42,6 +46,8 @@ function KutuKabi({ children, onay }: { children: ReactNode; onay: StratejiOnayK
 }
 
 export function YorumListesi({ yorumlar }: { yorumlar: readonly StratejiYorumu[] }) {
+  const om = useSozluk(stratejiOnayKutusuSozlugu);
+  const { dil } = useDil();
   if (yorumlar.length === 0) return null;
   return (
     <div className="mt-4">
@@ -51,12 +57,12 @@ export function YorumListesi({ yorumlar }: { yorumlar: readonly StratejiYorumu[]
             {(y.ad ?? '?').slice(0, 2).toUpperCase()}
           </span>
           <div className="min-w-0">
-            <b>{y.ad ?? 'Bilinmiyor'}</b>{' '}
+            <b>{y.ad ?? om.bilinmiyor}</b>{' '}
             <span className="text-[var(--gri)]/70">
-              · {y.rol === 'ajans' ? 'ajans' : y.rol === 'baglanti' ? 'onay bağlantısı' : 'müşteri hesabı'} · sürüm {y.surum} · {zamanMetni(y.zaman)}
-              {y.tur === 'revizyon' ? ' · revizyon istedi' : y.tur === 'onay' ? ' · onayladı' : ''}
+              · {y.rol === 'ajans' ? om.rolAjans : y.rol === 'baglanti' ? om.rolBaglanti : om.rolMusteri} · {om.surum(y.surum)} · {zamanMetni(y.zaman, dil)}
+              {y.tur === 'revizyon' ? ` · ${om.revizyonIstedi}` : y.tur === 'onay' ? ` · ${om.onayladi}` : ''}
             </span>
-            {yorumKalemEtiketi(y.kalemSira) && <span className="block text-xs font-semibold">{yorumKalemEtiketi(y.kalemSira)}</span>}
+            {yorumKalemEtiketi(y.kalemSira, dil) && <span className="block text-xs font-semibold">{yorumKalemEtiketi(y.kalemSira, dil)}</span>}
             <p className="m-0 whitespace-pre-line break-words">{y.metin}</p>
           </div>
         </div>
@@ -87,6 +93,8 @@ export function PanelOnayKutusu({
   yenile: () => void;
   tazeSurum: () => Promise<number | null>;
 }) {
+  const om = useSozluk(stratejiOnayKutusuSozlugu);
+  const { dil } = useDil();
   const [yorum, setYorum] = useState('');
   /** '' = bütün strateji. */
   const [kalemId, setKalemId] = useState('');
@@ -101,11 +109,11 @@ export function PanelOnayKutusu({
     setSonuc(null);
     const r =
       eylem === 'onayla'
-        ? await yaz(stratejiUcYolu('/strateji/v2/planlar/:id/onayla', { id: planId }), 'POST', { surum }, tazeSurum, surum)
-        : await yaz(stratejiUcYolu('/strateji/v2/planlar/:id/revizyon', { id: planId }), 'POST', { surum, yorum: yorum.trim(), kalemId: kalemId || null }, tazeSurum, surum);
+        ? await yaz(stratejiUcYolu('/strateji/v2/planlar/:id/onayla', { id: planId }), 'POST', { surum }, tazeSurum, surum, dil)
+        : await yaz(stratejiUcYolu('/strateji/v2/planlar/:id/revizyon', { id: planId }), 'POST', { surum, yorum: yorum.trim(), kalemId: kalemId || null }, tazeSurum, surum, dil);
     setSuruyor(null);
     if (r.tur === 'tamam') {
-      setSonuc({ hata: false, metin: eylem === 'onayla' ? `Onaylandı · sürüm ${surum}.` : 'Revizyon istendi; ajansa iletildi.' });
+      setSonuc({ hata: false, metin: eylem === 'onayla' ? om.onaylandi(surum) : om.revizyonIletildi });
       setYorum('');
       setKalemId('');
       yenile();
@@ -115,7 +123,7 @@ export function PanelOnayKutusu({
   async function yorumGonder() {
     setSuruyor('yorum');
     setSonuc(null);
-    const r = await yaz(stratejiUcYolu('/strateji/v2/planlar/:id/yorumlar', { id: planId }), 'POST', { surum, metin: yorum.trim(), kalemId: kalemId || null }, tazeSurum, surum);
+    const r = await yaz(stratejiUcYolu('/strateji/v2/planlar/:id/yorumlar', { id: planId }), 'POST', { surum, metin: yorum.trim(), kalemId: kalemId || null }, tazeSurum, surum, dil);
     setSuruyor(null);
     if (r.tur === 'tamam') {
       setYorum('');
@@ -127,12 +135,12 @@ export function PanelOnayKutusu({
     <KutuKabi onay={onay}>
       {yapilabilir.length === 0 && durum !== 'onaylandi' && durum !== 'kapandi' && (
         <p className="m-0 mt-3 text-[13px] text-[var(--gri)]/70">
-          {durum === 'onayda' ? 'Bu hesap karar veremiyor; onay yetkisi olan biri karar verir.' : 'Strateji şu an onay beklemiyor.'}
+          {durum === 'onayda' ? om.kararVeremez : om.onayBeklemiyor}
         </p>
       )}
       {(yapilabilir.length > 0 || yorumYazabilir) && kalemler.length > 0 && (
-        <select className={`${GIRDI} mt-3 bg-white text-black`} aria-label="Yorum hangi kampanya hakkında" value={kalemId} onChange={(e) => setKalemId(e.target.value)}>
-          <option value="">Bütün strateji</option>
+        <select className={`${GIRDI} mt-3 bg-white text-black`} aria-label={om.hangiKampanya} value={kalemId} onChange={(e) => setKalemId(e.target.value)}>
+          <option value="">{om.butunStrateji}</option>
           {kalemSecenekleri(kalemler).map((k) => (
             <option key={k.id} value={k.id}>
               {k.etiket}
@@ -143,8 +151,8 @@ export function PanelOnayKutusu({
       {(yapilabilir.length > 0 || yorumYazabilir) && (
         <textarea
           className={`${GIRDI} mt-3 min-h-[72px] bg-white text-black`}
-          placeholder={yapilabilir.includes('revizyon_iste') ? 'Yorumunuz (revizyon isterken zorunlu)' : 'Yorumunuz'}
-          aria-label="Yorum"
+          placeholder={yapilabilir.includes('revizyon_iste') ? om.yorumZorunlu : om.yorumunuz}
+          aria-label={om.yorum}
           maxLength={2000}
           value={yorum}
           onChange={(e) => setYorum(e.target.value)}
@@ -153,21 +161,21 @@ export function PanelOnayKutusu({
       <div className="mt-3.5 flex flex-wrap gap-2.5">
         {yapilabilir.includes('onayla') && (
           <Dugme onClick={() => void karar('onayla')} bekliyor={suruyor === 'onayla'} disabled={suruyor !== null}>
-            Onayla
+            {om.onayla}
           </Dugme>
         )}
         {yapilabilir.includes('revizyon_iste') && (
           <Dugme ton="ikincil" onClick={() => void karar('revizyon_iste')} bekliyor={suruyor === 'revizyon_iste'} disabled={suruyor !== null || revizyonYorumuEksik}>
-            Revizyon iste
+            {om.revizyonIste}
           </Dugme>
         )}
         {yorumYazabilir && (
           <Dugme ton="hayalet" onClick={() => void yorumGonder()} bekliyor={suruyor === 'yorum'} disabled={suruyor !== null || yorum.trim().length === 0}>
-            Yalnız yorum yaz
+            {om.yalnizYorum}
           </Dugme>
         )}
       </div>
-      {yapilabilir.includes('revizyon_iste') && revizyonYorumuEksik && <p className="m-0 mt-1.5 text-xs text-[var(--gri)]/70">Revizyon için neyin değişmesi gerektiğini yazın.</p>}
+      {yapilabilir.includes('revizyon_iste') && revizyonYorumuEksik && <p className="m-0 mt-1.5 text-xs text-[var(--gri)]/70">{om.revizyonNedeni}</p>}
       {sonuc && (
         <div className="mt-3">
           <Bildirim hata={sonuc.hata} baslik={sonuc.metin} />
@@ -175,7 +183,7 @@ export function PanelOnayKutusu({
       )}
       {yorumlar.tur === 'hata' ? (
         <p className="m-0 mt-3 text-[13px] text-[var(--kirmizi)]" role="alert">
-          Yorumlar alınamadı: {yorumlar.mesaj}
+          {om.yorumlarAlinamadi(yorumlar.mesaj)}
         </p>
       ) : (
         <YorumListesi yorumlar={yorumlar.v} />
@@ -191,6 +199,7 @@ export function PanelOnayKutusu({
  * (`surum`): eski sekmeden gelen karar başka bir belgeyi onaylayamaz.
  */
 export function BaglantiOnayKutusu({ token, surum, onay, kararAcik, yorumlar }: { token: string; surum: number; onay: StratejiOnayKaydi | null; kararAcik: boolean; yorumlar: readonly StratejiYorumu[] }) {
+  const om = useSozluk(stratejiOnayKutusuSozlugu);
   const [ad, setAd] = useState('');
   const [eposta, setEposta] = useState('');
   const [yorum, setYorum] = useState('');
@@ -201,7 +210,7 @@ export function BaglantiOnayKutusu({ token, surum, onay, kararAcik, yorumlar }: 
   async function karar(k: 'onayla' | 'revizyon_iste') {
     const g = baglantiKarariSchema.safeParse({ karar: k, ad, eposta, yorum: yorum.trim() || undefined, surum });
     if (!g.success) {
-      setHata(g.error.issues[0]?.message ?? 'Bilgiler eksik.');
+      setHata(g.error.issues[0]?.message ?? om.bilgilerEksik);
       return;
     }
     setHata(null);
@@ -215,7 +224,7 @@ export function BaglantiOnayKutusu({ token, surum, onay, kararAcik, yorumlar }: 
       });
       if (!res.ok) {
         // Gövde JSON değilse durum kodu yazılır; boş bir "hata" kutusu bırakılmaz.
-        let mesaj = `Karar kaydedilemedi (${res.status}).`;
+        let mesaj = om.kararKaydedilemedi(res.status);
         try {
           const govde = (await res.json()) as { message?: string };
           if (govde.message) mesaj = govde.message;
@@ -226,7 +235,7 @@ export function BaglantiOnayKutusu({ token, surum, onay, kararAcik, yorumlar }: 
       }
       setVerildi(k);
     } catch (e) {
-      setHata(e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı. Bağlantınızı kontrol edip tekrar deneyin.');
+      setHata(e instanceof ApiRequestError ? e.message : om.sunucuYok);
     } finally {
       setSuruyor(null);
     }
@@ -236,8 +245,8 @@ export function BaglantiOnayKutusu({ token, surum, onay, kararAcik, yorumlar }: 
     return (
       <KutuKabi onay={onay}>
         <div className="mt-3">
-          <Bildirim baslik={verildi === 'onayla' ? `Onayınız kaydedildi · sürüm ${surum}.` : 'Revizyon isteğiniz ajansınıza iletildi.'}>
-            Bu bağlantı tek kullanımlıktı ve artık karar kabul etmiyor. Adınız ve e-postanız kayda alındı.
+          <Bildirim baslik={verildi === 'onayla' ? om.onayKaydedildi(surum) : om.revizyonKaydedildi}>
+            {om.tekKullanimlik}
           </Bildirim>
         </div>
       </KutuKabi>
@@ -250,32 +259,32 @@ export function BaglantiOnayKutusu({ token, surum, onay, kararAcik, yorumlar }: 
         <>
           <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
             <label className="flex flex-col gap-1 text-xs font-semibold text-[var(--gri)]/70">
-              Adınız soyadınız
+              {om.adSoyad}
               <input className={`${GIRDI} bg-white text-black`} autoComplete="name" value={ad} onChange={(e) => setAd(e.target.value)} maxLength={120} />
             </label>
             <label className="flex flex-col gap-1 text-xs font-semibold text-[var(--gri)]/70">
-              E-posta
+              {om.eposta}
               <input className={`${GIRDI} bg-white text-black`} type="email" autoComplete="email" value={eposta} onChange={(e) => setEposta(e.target.value)} maxLength={254} />
             </label>
           </div>
-          <p className="m-0 mt-1.5 text-[11px] text-black/45">Adınız ve e-postanız kararla birlikte kayda alınır. Bu bağlantıyla yalnız bu sürüm ({surum}) için bir kez karar verilebilir.</p>
+          <p className="m-0 mt-1.5 text-[11px] text-black/45">{om.kayitNotu(surum)}</p>
           <textarea
             className={`${GIRDI} mt-2.5 min-h-[72px] bg-white text-black`}
-            placeholder="Yorumunuz (revizyon isterken zorunlu)"
-            aria-label="Yorum"
+            placeholder={om.yorumZorunlu}
+            aria-label={om.yorum}
             maxLength={2000}
             value={yorum}
             onChange={(e) => setYorum(e.target.value)}
           />
           <div className="mt-3.5 flex flex-wrap gap-2.5">
             <Dugme onClick={() => void karar('onayla')} bekliyor={suruyor === 'onayla'} disabled={suruyor !== null}>
-              Onayla
+              {om.onayla}
             </Dugme>
             <Dugme ton="ikincil" onClick={() => void karar('revizyon_iste')} bekliyor={suruyor === 'revizyon_iste'} disabled={suruyor !== null || yorum.trim().length === 0}>
-              Revizyon iste
+              {om.revizyonIste}
             </Dugme>
           </div>
-          {yorum.trim().length === 0 && <p className="m-0 mt-1.5 text-xs text-[var(--gri)]/70">Revizyon için neyin değişmesi gerektiğini yazın.</p>}
+          {yorum.trim().length === 0 && <p className="m-0 mt-1.5 text-xs text-[var(--gri)]/70">{om.revizyonNedeni}</p>}
           {hata && (
             <div className="mt-3">
               <Bildirim hata baslik={hata} />

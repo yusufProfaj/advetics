@@ -89,7 +89,7 @@ const TARANAN = ['apps/web/src', 'apps/api/src', 'packages/shared/src']
 const IZINLI: Array<{ neden: string; desen: RegExp }> = [
   { neden: 'LEAD — workspace’in kendi müşteri adayı', desen: /[Pp]otansiyel [Mm]üşteri/ },
   { neden: 'LEAD — nitelikli form/havuz', desen: /nitelikli müşteri|müşteri havuzu|müşteri listesi/ },
-  { neden: 'KİŞİ — raporun/mailin ALICISI bir insan', desen: /müşteriye (gönder|mail|gitm|giden)|[Mm]üşteriye gönderdiğin|rapor müşteriye/ },
+  { neden: 'KİŞİ — raporun/mailin ALICISI bir insan', desen: /müşteriye (gönder|mail|gitm|gitti|giden)|[Mm]üşteriye gönderdiğin|rapor müşteriye/ },
   { neden: 'KİŞİ — parolayı teslim alan insan', desen: /parolayı müşteriye/ },
   /*
    * ADVSTRATEGY v2: stratejiyi okuyup ONAYLAYAN insan (panelde müşteri

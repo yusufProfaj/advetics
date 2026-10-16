@@ -11,7 +11,9 @@ import {
   NIYET_KODLARI,
   PLATFORM_KISA_ADLARI,
   STRATEJI_PLATFORMLARI,
+  sec,
   type AssetListResult,
+  type Dil,
   type HuniKatmani,
   type KitleSablonuListesi,
   type MatrisSatiri,
@@ -25,7 +27,10 @@ import { formatMoney } from '@/lib/format';
 import { Dugme } from '@/components/ui/dugme';
 import { Uyari } from '@/components/ui/uyari';
 import { BosDurum } from '@/components/ui/hal';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { stratejiPlanSozlugu } from '@/dil/sozlukler/strateji-plan';
 import {
+  bolumAdi,
   kitleMetni,
   matrisAsimlari,
   matrisSatiriDogrula,
@@ -44,15 +49,18 @@ import { BolumBasligi, GIRDI_SINIFI, KilitNotu, TabloKabi, planaYaz } from './or
  */
 type Liste<T> = { tur: 'istenmedi' } | { tur: 'yukleniyor' } | { tur: 'geldi'; veri: T } | { tur: 'hata'; mesaj: string };
 
-const NIYET_SECENEKLERI = NIYET_KODLARI.map((k) => ({
-  kod: k,
-  // AKTARILAMAYAN AMAÇ İŞARETLİ. Satır kaydediliyor ama aktarımda
-  // `niyet_desteklenmiyor` ile atlanacak; bunu aktarım anında öğrenmek,
-  // müşterinin onayladığı planın bir kısmının hiç kurulmaması demek.
-  ad: (DERLENEN_NIYETLER as readonly NiyetKodu[]).includes(k)
-    ? NIYET_KATALOGU[k].ekranAdi
-    : `${NIYET_KATALOGU[k].ekranAdi} (henüz aktarılamaz)`,
-}));
+function niyetSecenekleri(dil: Dil): Array<{ kod: NiyetKodu; ad: string }> {
+  const m = sec(stratejiPlanSozlugu, dil).matrisEkrani;
+  return NIYET_KODLARI.map((k) => ({
+    kod: k,
+    // AKTARILAMAYAN AMAÇ İŞARETLİ. Satır kaydediliyor ama aktarımda
+    // `niyet_desteklenmiyor` ile atlanacak; bunu aktarım anında öğrenmek,
+    // müşterinin onayladığı planın bir kısmının hiç kurulmaması demek.
+    ad: (DERLENEN_NIYETLER as readonly NiyetKodu[]).includes(k)
+      ? NIYET_KATALOGU[k].ekranAdi
+      : m.aktarilamaz(NIYET_KATALOGU[k].ekranAdi),
+  }));
+}
 
 /**
  * ═══ BÖLÜM 3 — KİTLE × KREATİF MATRİSİ ═══
@@ -75,6 +83,9 @@ export function MatrisBolumu({
   yenile: () => Promise<PlanDetayi | null>;
   onKirli: (kirli: boolean) => void;
 }) {
+  const { dil } = useDil();
+  const d = useSozluk(stratejiPlanSozlugu);
+  const m = d.matrisEkrani;
   const { plan } = detay;
   const para = plan.paraBirimi;
   const duzenlenebilir = kilit === null;
@@ -103,19 +114,19 @@ export function MatrisBolumu({
     setGorseller({ tur: 'yukleniyor' });
     apiFetch<KitleSablonuListesi>(baglanti('/audience-templates', { clientId })).then(
       (veri) => !iptal && setKitleler({ tur: 'geldi', veri }),
-      (e: unknown) => !iptal && setKitleler({ tur: 'hata', mesaj: okumaHatasi(e) }),
+      (e: unknown) => !iptal && setKitleler({ tur: 'hata', mesaj: okumaHatasi(e, dil) }),
     );
     apiFetch<AssetListResult>(baglanti('/assets', { clientId, kind: 'image', limit: '60', offset: '0' })).then(
       (veri) => !iptal && setGorseller({ tur: 'geldi', veri }),
-      (e: unknown) => !iptal && setGorseller({ tur: 'hata', mesaj: okumaHatasi(e) }),
+      (e: unknown) => !iptal && setGorseller({ tur: 'hata', mesaj: okumaHatasi(e, dil) }),
     );
     return () => {
       iptal = true;
     };
-  }, [clientId, duzenlenebilir]);
+  }, [clientId, duzenlenebilir, dil]);
 
   const { asimlar, okunamayan } = useMemo(() => matrisAsimlari(detay.dagilim, taslak, para), [detay.dagilim, taslak, para]);
-  const dogrulama = useMemo(() => taslak.map(matrisSatiriDogrula), [taslak]);
+  const dogrulama = useMemo(() => taslak.map((t) => matrisSatiriDogrula(t, dil)), [taslak, dil]);
   const hataliSatir = dogrulama.filter((d) => d.tur === 'hata').length;
   const asanHucre = new Set(asimlar.map((a) => `${a.platform}:${a.katman}`));
   const kelimeGruplari = useMemo(
@@ -163,11 +174,11 @@ export function MatrisBolumu({
     if (satirlar.length !== taslak.length) return;
     setKaydediliyor(true);
     setMesaj(null);
-    const r = await planaYaz(ucAdresi('/strateji/planlar/:id/matris', plan.id), 'PUT', { surum: plan.surum, satirlar }, yenile, plan.surum);
+    const r = await planaYaz(ucAdresi('/strateji/planlar/:id/matris', plan.id), 'PUT', { surum: plan.surum, satirlar }, yenile, plan.surum, dil);
     setKaydediliyor(false);
     if (r.tur === 'tamam') {
       setKirli(false);
-      setMesaj({ ton: 'basari', metin: 'Matris kaydedildi.' });
+      setMesaj({ ton: 'basari', metin: m.kaydedildi });
     } else {
       setMesaj({ ton: r.tur === 'cakisma' ? 'uyari' : 'tehlike', metin: r.mesaj });
     }
@@ -180,57 +191,60 @@ export function MatrisBolumu({
     <section aria-labelledby="matris-baslik" className="space-y-4">
       <BolumBasligi
         id="matris-baslik"
-        baslik="Kitle ve kreatif"
-        aciklama="Kim hangi reklamı görecek. Her satır onaydan sonra AdvCampaign’de ayrı bir reklam kurulumu olarak açılır."
+        baslik={bolumAdi('matris', dil)}
+        aciklama={m.aciklama}
       />
 
       {kilit && <KilitNotu neden={kilit} />}
 
-      {duzenlenebilir && <ListeDurumu ad="Kitleler" durum={kitleler} />}
-      {duzenlenebilir && <ListeDurumu ad="Görseller" durum={gorseller} />}
+      {duzenlenebilir && <ListeDurumu ad={m.kitleler} durum={kitleler} dil={dil} />}
+      {duzenlenebilir && <ListeDurumu ad={m.gorseller} durum={gorseller} dil={dil} />}
 
       {asimlar.length > 0 && (
-        <Uyari ton="tehlike" baslik="Bazı satırlar dağılımdaki bütçeyi aşıyor.">
+        <Uyari ton="tehlike" baslik={m.asimBaslik}>
           <ul className="space-y-0.5">
             {asimlar.map((a) => (
               <li key={`${a.platform}:${a.katman}`}>
-                {PLATFORM_KISA_ADLARI[a.platform]} · {HUNI_ETIKETLERI[a.katman]}: dağılımda {formatMoney(a.dagilimMicros.toString(), para)},
-                satırlarda {formatMoney(a.matrisMicros.toString(), para)}. Fark {formatMoney(a.asimMicros.toString(), para)}.
+                {m.asimSatiri(
+                  PLATFORM_KISA_ADLARI[a.platform],
+                  HUNI_ETIKETLERI[a.katman],
+                  formatMoney(a.dagilimMicros.toString(), para, { dil }),
+                  formatMoney(a.matrisMicros.toString(), para, { dil }),
+                  formatMoney(a.asimMicros.toString(), para, { dil }),
+                )}
               </li>
             ))}
           </ul>
-          <p className="mt-1">Karşılaştırma kayıtlı dağılımla yapılıyor.</p>
+          <p className="mt-1">{m.kayitliKarsilastirma}</p>
         </Uyari>
       )}
       {okunamayan > 0 && (
-        <p className="text-sm text-warn-strong">
-          {okunamayan} satırın tutarı okunamadı; bütçe denetimi o satırlar düzeltilince tamamlanır.
-        </p>
+        <p className="text-sm text-warn-strong">{m.okunamayan(okunamayan)}</p>
       )}
 
       {taslak.length === 0 ? (
-        <BosDurum baslik="Satır yok" neden={duzenlenebilir ? 'Henüz satır yok. Her satır bir kitle, amaç ve bütçe eşleşmesi.' : 'Bu planda kitle ve kreatif satırı yok.'} />
+        <BosDurum baslik={m.satirYok} neden={duzenlenebilir ? m.satirYokDuzenlenebilir : m.satirYokOkur} />
       ) : (
-        <TabloKabi etiket="Kitle ve kreatif tablosu">
+        <TabloKabi etiket={m.tabloEtiketi}>
           <table className="w-full min-w-[60rem] text-sm">
             <thead>
               <tr className="text-left text-xs text-ink-muted">
                 <th className="px-3 py-2 font-semibold">Platform</th>
-                <th className="px-3 py-2 font-semibold">Kitle katmanı</th>
-                <th className="px-3 py-2 font-semibold">Amaç</th>
-                <th className="px-3 py-2 font-semibold">Kitle</th>
-                <th className="px-3 py-2 font-semibold">Görseller</th>
-                <th className="px-3 py-2 text-right font-semibold">Tutar ({para})</th>
+                <th className="px-3 py-2 font-semibold">{d.ortak.kitleKatmani}</th>
+                <th className="px-3 py-2 font-semibold">{m.amac}</th>
+                <th className="px-3 py-2 font-semibold">{m.kitle}</th>
+                <th className="px-3 py-2 font-semibold">{m.gorselSutunu}</th>
+                <th className="px-3 py-2 text-right font-semibold">{m.tutar(para)}</th>
                 {duzenlenebilir && (
                   <th className="px-3 py-2 font-semibold">
-                    <span className="sr-only">Satırı sil</span>
+                    <span className="sr-only">{m.satiriSil}</span>
                   </th>
                 )}
               </tr>
             </thead>
             <tbody>
               {taslak.map((s, i) => {
-                const kayitli = detay.matris.find((m) => m.id === s.anahtar);
+                const kayitli = detay.matris.find((x) => x.id === s.anahtar);
                 const d = dogrulama[i];
                 const asim = asanHucre.has(`${s.platform}:${s.katman}`);
                 return duzenlenebilir ? (
@@ -245,9 +259,10 @@ export function MatrisBolumu({
                     gorseller={gorseller}
                     degistir={(v) => degistir(s.anahtar, v)}
                     sil={() => satirSil(s.anahtar)}
+                    dil={dil}
                   />
                 ) : kayitli ? (
-                  <OkunanSatir key={s.anahtar} satir={kayitli} para={para} />
+                  <OkunanSatir key={s.anahtar} satir={kayitli} para={para} dil={dil} />
                 ) : null;
               })}
             </tbody>
@@ -274,46 +289,45 @@ export function MatrisBolumu({
                   setMesaj(null);
                 }}
               >
-                Kayıtlı hâli yükle
+                {d.ortak.kayitliYukle}
               </Dugme>
             ) : undefined
           }
         >
           {mesaj.metin}
-          {mesaj.ton === 'uyari' && ' Yazdıkların duruyor; kaydedersen onların yerine geçer.'}
+          {mesaj.ton === 'uyari' && d.ortak.cakismaEki}
         </Uyari>
       )}
 
       {duzenlenebilir && (
         <div className="flex flex-wrap items-center gap-3">
           <Dugme ton="ikincil" onClick={satirEkle} disabled={taslak.length >= MATRIS_SATIR_SINIRI}>
-            Satır ekle
+            {m.satirEkle}
           </Dugme>
           <Dugme onClick={kaydet} disabled={!kaydedilebilir} bekliyor={kaydediliyor}>
-            Matrisi kaydet
+            {m.matrisiKaydet}
           </Dugme>
-          <span className="text-sm text-ink-muted">
-            {taslak.length} / {MATRIS_SATIR_SINIRI} satır
-          </span>
-          {hataliSatir > 0 && <span className="text-sm text-danger-strong">{hataliSatir} satırda eksik var.</span>}
-          {kirli && <span className="text-sm text-ink-muted">Kaydedilmemiş değişiklik var.</span>}
+          <span className="text-sm text-ink-muted">{m.satirSayisi(taslak.length, MATRIS_SATIR_SINIRI)}</span>
+          {hataliSatir > 0 && <span className="text-sm text-danger-strong">{m.hataliSatir(hataliSatir)}</span>}
+          {kirli && <span className="text-sm text-ink-muted">{d.ortak.kaydedilmemis}</span>}
         </div>
       )}
     </section>
   );
 }
 
-function ListeDurumu<T>({ ad, durum }: { ad: string; durum: Liste<T> }) {
+function ListeDurumu<T>({ ad, durum, dil }: { ad: string; durum: Liste<T>; dil: Dil }) {
+  const m = sec(stratejiPlanSozlugu, dil).matrisEkrani;
   if (durum.tur === 'yukleniyor') {
     return (
       <p className="text-sm text-ink-muted" role="status">
-        {ad} yükleniyor…
+        {m.yukleniyor(ad)}
       </p>
     );
   }
   if (durum.tur === 'hata') {
     return (
-      <Uyari ton="tehlike" baslik={`${ad} alınamadı.`}>
+      <Uyari ton="tehlike" baslik={m.alinamadi(ad)}>
         {durum.mesaj}
       </Uyari>
     );
@@ -331,6 +345,7 @@ function DuzenlenenSatir({
   gorseller,
   degistir,
   sil,
+  dil,
 }: {
   satir: MatrisTaslakSatiri;
   sira: number;
@@ -341,8 +356,10 @@ function DuzenlenenSatir({
   gorseller: Liste<AssetListResult>;
   degistir: (v: Partial<MatrisTaslakSatiri>) => void;
   sil: () => void;
+  dil: Dil;
 }) {
-  const etiket = `Satır ${sira}`;
+  const m = sec(stratejiPlanSozlugu, dil).matrisEkrani;
+  const etiket = m.satir(sira);
   const kitleSecenekleri = kitleler.tur === 'geldi' ? kitleler.veri.items.map((k) => ({ id: k.id, ad: k.name })) : [];
   /*
    * SEÇİLİ KİTLE LİSTEDE YOKSA DA GÖRÜNÜR. Şablon silinmişse ya da liste
@@ -351,13 +368,13 @@ function DuzenlenenSatir({
    */
   if (s.kitleSablonuId && !kitleSecenekleri.some((k) => k.id === s.kitleSablonuId)) {
     const ad = kayitli?.kitle?.id === s.kitleSablonuId ? kayitli.kitle.ad : null;
-    kitleSecenekleri.unshift({ id: s.kitleSablonuId, ad: ad ?? 'Silinmiş kitle' });
+    kitleSecenekleri.unshift({ id: s.kitleSablonuId, ad: ad ?? sec(stratejiPlanSozlugu, dil).kitle.silinmis });
   }
   return (
     <tr className="border-t border-line align-top">
       <td className="px-3 py-2">
         <select
-          aria-label={`${etiket} platform`}
+          aria-label={m.ariaPlatform(etiket)}
           className={GIRDI_SINIFI}
           value={s.platform}
           onChange={(e) => degistir({ platform: e.target.value as StratejiPlatformu })}
@@ -371,7 +388,7 @@ function DuzenlenenSatir({
       </td>
       <td className="px-3 py-2">
         <select
-          aria-label={`${etiket} kitle katmanı`}
+          aria-label={m.ariaKatman(etiket)}
           className={GIRDI_SINIFI}
           value={s.katman}
           onChange={(e) => degistir({ katman: e.target.value as HuniKatmani })}
@@ -382,16 +399,16 @@ function DuzenlenenSatir({
             </option>
           ))}
         </select>
-        {asim && <p className="mt-1 text-xs text-danger-strong">Bu katmanda bütçe aşılıyor.</p>}
+        {asim && <p className="mt-1 text-xs text-danger-strong">{m.katmanAsim}</p>}
       </td>
       <td className="px-3 py-2">
         <select
-          aria-label={`${etiket} amaç`}
+          aria-label={m.ariaAmac(etiket)}
           className={GIRDI_SINIFI}
           value={s.niyet}
           onChange={(e) => degistir({ niyet: e.target.value as NiyetKodu })}
         >
-          {NIYET_SECENEKLERI.map((n) => (
+          {niyetSecenekleri(dil).map((n) => (
             <option key={n.kod} value={n.kod}>
               {n.ad}
             </option>
@@ -400,13 +417,13 @@ function DuzenlenenSatir({
       </td>
       <td className="space-y-1.5 px-3 py-2">
         <select
-          aria-label={`${etiket} kitle`}
+          aria-label={m.ariaKitle(etiket)}
           className={GIRDI_SINIFI}
           value={s.kitleSablonuId ?? ''}
           onChange={(e) => degistir({ kitleSablonuId: e.target.value || null })}
         >
           {/* Google'da kitle isteğe bağlı: arama kampanyası kitleyi kelimeden alır. */}
-          <option value="">{BOS_KITLE_SECENEGI[s.platform]}</option>
+          <option value="">{BOS_KITLE_SECENEGI[s.platform] === 'meta' ? m.bosKitleMeta : m.bosKitleGoogle}</option>
           {kitleSecenekleri.map((k) => (
             <option key={k.id} value={k.id}>
               {k.ad}
@@ -414,14 +431,14 @@ function DuzenlenenSatir({
           ))}
         </select>
         {kitleler.tur === 'geldi' && kitleler.veri.items.length === 0 && (
-          <p className="text-xs text-ink-muted">Base’te kitle şablonu yok. Varlıklar › Kitleler’den ekle.</p>
+          <p className="text-xs text-ink-muted">{m.baseKitleYok}</p>
         )}
         {s.platform === 'google' && (
           <input
-            aria-label={`${etiket} kelime grubu`}
+            aria-label={m.ariaKelimeGrubu(etiket)}
             list="matris-kelime-gruplari"
             maxLength={80}
-            placeholder="Kelime grubu"
+            placeholder={m.kelimeGrubuYer}
             className={GIRDI_SINIFI}
             value={s.kelimeGrubu}
             onChange={(e) => degistir({ kelimeGrubu: e.target.value })}
@@ -434,13 +451,14 @@ function DuzenlenenSatir({
           secili={s.varlikIdleri}
           kayitli={kayitli}
           gorseller={gorseller}
+          dil={dil}
           degistir={(varlikIdleri) => degistir({ varlikIdleri })}
         />
       </td>
       <td className="px-3 py-2 text-right">
         <input
           inputMode="decimal"
-          aria-label={`${etiket} tutar`}
+          aria-label={m.ariaTutar(etiket)}
           className={`${GIRDI_SINIFI} max-w-[9rem] text-right tabular-nums`}
           value={s.tutar}
           placeholder="0"
@@ -449,8 +467,8 @@ function DuzenlenenSatir({
         {hata && <p className="mt-1 text-left text-xs text-danger-strong">{hata}</p>}
       </td>
       <td className="px-3 py-2">
-        <Dugme ton="tehlike" boyut="kucuk" onClick={sil} aria-label={`${etiket} sil`}>
-          Sil
+        <Dugme ton="tehlike" boyut="kucuk" onClick={sil} aria-label={m.ariaSil(etiket)}>
+          {m.sil}
         </Dugme>
       </td>
     </tr>
@@ -467,14 +485,17 @@ function VarlikSecici({
   secili,
   kayitli,
   gorseller,
+  dil,
   degistir,
 }: {
   etiket: string;
   secili: string[];
   kayitli: MatrisSatiri | undefined;
   gorseller: Liste<AssetListResult>;
+  dil: Dil;
   degistir: (ids: string[]) => void;
 }) {
+  const m = sec(stratejiPlanSozlugu, dil).matrisEkrani;
   const dolu = secili.length >= MATRIS_VARLIK_SINIRI;
   const liste = gorseller.tur === 'geldi' ? gorseller.veri.rows : [];
   // Seçili ama listede olmayan (silinmiş ya da ilk 60'ın dışında) görsel de sayılır ve görünür.
@@ -482,20 +503,20 @@ function VarlikSecici({
   return (
     <details className="min-w-[12rem]">
       <summary className="cursor-pointer rounded-alan border border-line bg-surface px-2.5 py-1.5 text-sm text-ink">
-        {secili.length === 0 ? 'Görsel seç' : `${secili.length} / ${MATRIS_VARLIK_SINIRI} görsel`}
+        {secili.length === 0 ? m.gorselSec : m.gorselSayaci(secili.length, MATRIS_VARLIK_SINIRI)}
         <span className="sr-only"> · {etiket}</span>
       </summary>
       <div className="mt-2 max-h-64 space-y-1 overflow-y-auto rounded-alan border border-line bg-surface p-2">
-        {gorseller.tur !== 'geldi' && <p className="text-xs text-ink-muted">Görsel listesi hazır değil.</p>}
+        {gorseller.tur !== 'geldi' && <p className="text-xs text-ink-muted">{m.gorselListesiHazirDegil}</p>}
         {gorseller.tur === 'geldi' && liste.length === 0 && (
-          <p className="text-xs text-ink-muted">Base’te görsel yok. Varlıklar › Görseller’den yükle.</p>
+          <p className="text-xs text-ink-muted">{m.baseGorselYok}</p>
         )}
         {listedeYok.map((id) => {
           const ad = kayitli?.varliklar.find((v) => v.id === id)?.ad ?? null;
           return (
             <label key={id} className="flex items-center gap-2 text-xs text-ink">
               <input type="checkbox" className="h-4 w-4 accent-brand" checked onChange={() => degistir(secili.filter((x) => x !== id))} />
-              <span>{ad ?? 'Silinmiş ya da listede olmayan görsel'}</span>
+              <span>{ad ?? m.listedeYokGorsel}</span>
             </label>
           );
         })}
@@ -515,11 +536,9 @@ function VarlikSecici({
             </label>
           );
         })}
-        {dolu && <p className="text-xs text-warn-strong">Bir satırda en çok {MATRIS_VARLIK_SINIRI} görsel olabilir.</p>}
+        {dolu && <p className="text-xs text-warn-strong">{m.gorselSiniri(MATRIS_VARLIK_SINIRI)}</p>}
         {gorseller.tur === 'geldi' && gorseller.veri.total > liste.length && (
-          <p className="text-xs text-ink-muted">
-            {liste.length} / {gorseller.veri.total} görsel gösteriliyor.
-          </p>
+          <p className="text-xs text-ink-muted">{m.gorselGosteriliyor(liste.length, gorseller.veri.total)}</p>
         )}
       </div>
     </details>
@@ -533,13 +552,14 @@ function VarlikSecici({
  * yakalıyor. Meta'da kitle zorunlu ("seç"), Google aramada kelimeyle
  * hedefleme ("kitle yok").
  */
-const BOS_KITLE_SECENEGI: Record<StratejiPlatformu, string> = {
-  meta: 'Kitle seç',
-  google: 'Kitle yok',
+const BOS_KITLE_SECENEGI: Record<StratejiPlatformu, 'meta' | 'google'> = {
+  meta: 'meta',
+  google: 'google',
 };
 
-function OkunanSatir({ satir: s, para }: { satir: MatrisSatiri; para: string }) {
-  const kitle = kitleMetni(s.platform, s.kitle);
+function OkunanSatir({ satir: s, para, dil }: { satir: MatrisSatiri; para: string; dil: Dil }) {
+  const m = sec(stratejiPlanSozlugu, dil).matrisEkrani;
+  const kitle = kitleMetni(s.platform, s.kitle, dil);
   return (
     <tr className="border-t border-line align-top">
       <td className="px-3 py-2 text-ink">{PLATFORM_KISA_ADLARI[s.platform]}</td>
@@ -547,26 +567,28 @@ function OkunanSatir({ satir: s, para }: { satir: MatrisSatiri; para: string }) 
       <td className="px-3 py-2 text-ink">{NIYET_KATALOGU[s.niyet].ekranAdi}</td>
       <td className="px-3 py-2 text-ink">
         {kitle}
-        {s.kelimeGrubu && <span className="mt-0.5 block text-xs text-ink-muted">Kelime grubu: {s.kelimeGrubu}</span>}
+        {s.kelimeGrubu && <span className="mt-0.5 block text-xs text-ink-muted">
+            {m.kelimeGrubu}: {s.kelimeGrubu}
+          </span>}
       </td>
       <td className="px-3 py-2">
         {s.varliklar.length === 0 ? (
-          <span className="text-ink-muted">Görsel yok</span>
+          <span className="text-ink-muted">{m.gorselYok}</span>
         ) : (
           <ul className="flex flex-wrap gap-1.5">
             {s.varliklar.map((v) => (
-              <li key={v.id} title={v.ad ?? 'Silinmiş görsel'}>
+              <li key={v.id} title={v.ad ?? m.silinmisGorsel}>
                 {v.kucukResimAdresi ? (
-                  <img src={onizlemeAdresi(v.kucukResimAdresi)} alt={v.ad ?? 'Silinmiş görsel'} className="h-8 w-8 rounded object-cover" loading="lazy" />
+                  <img src={onizlemeAdresi(v.kucukResimAdresi)} alt={v.ad ?? m.silinmisGorsel} className="h-8 w-8 rounded object-cover" loading="lazy" />
                 ) : (
-                  <span className="text-xs text-ink-muted">{v.ad ?? 'Silinmiş görsel'}</span>
+                  <span className="text-xs text-ink-muted">{v.ad ?? m.silinmisGorsel}</span>
                 )}
               </li>
             ))}
           </ul>
         )}
       </td>
-      <td className="px-3 py-2 text-right tabular-nums">{formatMoney(s.tutarMicros, para)}</td>
+      <td className="px-3 py-2 text-right tabular-nums">{formatMoney(s.tutarMicros, para, { dil })}</td>
     </tr>
   );
 }

@@ -13,6 +13,8 @@ import {
 } from '@advetics/shared';
 import type { AktarimOnizlemesi, StratejiDetayi } from '@advetics/shared';
 import { apiFetch } from '@/lib/api';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { stratejiV2Sozlugu } from '@/dil/sozlukler/strateji-v2';
 import { baglanti } from '@/lib/baglanti';
 import { Dugme, dugmeSinifi } from '@/components/ui/dugme';
 import { Kart } from '@/components/ui/kart';
@@ -23,6 +25,7 @@ import { PLATFORM_ADI, amacAdi, konumOzeti, payMetni, tarihAraligi, yasMetni } f
 import { Bildirim, Etiket, yaz } from './ortak';
 import { Tutar } from './tutar';
 
+type KurulumMetni = (typeof stratejiV2Sozlugu)['tr']['kurulum'];
 type Okuma<T> = { tur: 'veri'; v: T } | { tur: 'hata'; mesaj: string };
 
 /**
@@ -41,6 +44,8 @@ type Okuma<T> = { tur: 'veri'; v: T } | { tur: 'hata'; mesaj: string };
  * kaldığı yerden açılır. Sıradaki kalem adreste (`?kalem=`).
  */
 export function KampanyaKurulumu({ clientId, ilkDetay, ilkKalem, onizleme, izinler }: { clientId: string; ilkDetay: StratejiDetayi; ilkKalem: string | null; onizleme: Okuma<AktarimOnizlemesi> | null; izinler: readonly Permission[] }) {
+  const d = useSozluk(stratejiV2Sozlugu).kurulum;
+  const { dil } = useDil();
   const [detay, setDetay] = useState(ilkDetay);
   const [adresteki, setAdresteki] = useState<string | null>(ilkKalem);
   const [atlanan, setAtlanan] = useState<Set<string>>(new Set());
@@ -84,12 +89,12 @@ export function KampanyaKurulumu({ clientId, ilkDetay, ilkKalem, onizleme, izinl
 
   if (!kurulabilirMi(plan)) {
     return (
-      <Bildirim baslik="Kampanyalar strateji onaylanınca kurulur.">
-        {plan.durum === 'onaylandi' ? 'Onaydan sonra strateji değişti; yeniden onaylanmalı.' : 'Müşteri onaylayınca (ya da ajans yöneticisi müşteri adına onaylayınca) burada tek tek kurarsın.'}
+      <Bildirim baslik={d.onayBekliyor}>
+        {plan.durum === 'onaylandi' ? d.onaydanSonraDegisti : d.onayBekleNedeni}
       </Bildirim>
     );
   }
-  if (onizleme?.tur === 'hata') return <Bildirim hata baslik={`Kurulum önizlemesi alınamadı: ${onizleme.mesaj}`} />;
+  if (onizleme?.tur === 'hata') return <Bildirim hata baslik={d.onizlemeAlinamadi(onizleme.mesaj)} />;
 
   // ── Bitiş ──
   if (simdi === null) {
@@ -98,27 +103,27 @@ export function KampanyaKurulumu({ clientId, ilkDetay, ilkKalem, onizleme, izinl
     return (
       <div className="bolum-gecis">
         <Soru
-          ust="Kurulum tamam"
-          soru={`${acilan.length} kampanya AdvCampaign'de hazır`}
-          aciklama="Hiçbiri yayında değil, para harcanmadı. Her birini AdvCampaign'de son kez kontrol edip yayına al."
+          ust={d.kurulumTamam}
+          soru={d.hazir(acilan.length)}
+          aciklama={d.hazirAciklama}
         />
         {bekleyen.length > 0 && (
           <div className="mb-4">
-            <Bildirim baslik={`${bekleyen.length} kampanya açılmadı.`}>
-              {bekleyen.map((k) => `${amacAdi(k.amac)} (${kurulumSatiri(k, karar(k.id)?.karar ?? null).neden ?? 'atlandı'})`).join(' · ')}
+            <Bildirim baslik={d.acilmadi(bekleyen.length)}>
+              {bekleyen.map((k) => `${amacAdi(k.amac)} (${kurulumSatiri(k, karar(k.id)?.karar ?? null, dil).neden ?? d.atlandiKucuk})`).join(' · ')}
             </Bildirim>
           </div>
         )}
         <div className="flex flex-wrap gap-2.5">
           <Link href={baglanti('/reklam', { musteri: clientId })} className={dugmeSinifi('birincil')}>
-            AdvCampaign'e git
+            {d.advCampaigneGit}
           </Link>
           <Link href={stratejiPanelAdresi({ musteri: clientId, plan: plan.id, adim: 'rapor' })} className={dugmeSinifi('ikincil')}>
-            Rapora dön
+            {d.raporaDon}
           </Link>
           {bekleyen.length > 0 && (
             <Dugme ton="hayalet" onClick={() => setAtlanan(new Set())}>
-              Atlananlara dön
+              {d.atlananlaraDon}
             </Dugme>
           )}
         </div>
@@ -129,24 +134,24 @@ export function KampanyaKurulumu({ clientId, ilkDetay, ilkKalem, onizleme, izinl
   const i = kalemler.findIndex((k) => k.id === simdi);
   const k = kalemler[i]!;
   const o = karar(k.id);
-  const s = kurulumSatiri(k, o?.karar ?? null);
+  const s = kurulumSatiri(k, o?.karar ?? null, dil);
   const sonuc = sonuclar[k.id];
 
   async function ac() {
     setSuruyor(true);
-    const r = await yaz<StratejiAktarimSonucu>(stratejiUcYolu('/strateji/v2/planlar/:id/aktar', { id: plan.id }), 'POST', { surum: plan.surum, kalemIdleri: [k.id] }, tazeSurum, plan.surum);
+    const r = await yaz<StratejiAktarimSonucu>(stratejiUcYolu('/strateji/v2/planlar/:id/aktar', { id: plan.id }), 'POST', { surum: plan.surum, kalemIdleri: [k.id] }, tazeSurum, plan.surum, dil);
     setSuruyor(false);
     if (r.tur !== 'tamam') return setSonuclar((x) => ({ ...x, [k.id]: { rehberId: null, mesaj: r.mesaj, notlar: [] } }));
     const x = r.veri.kalemler.find((y) => y.kalemId === k.id);
-    if (!x) return setSonuclar((y) => ({ ...y, [k.id]: { rehberId: null, mesaj: 'Sunucu bu kampanya için sonuç döndürmedi.', notlar: [] } }));
-    if (x.tur === 'engel') return setSonuclar((y) => ({ ...y, [k.id]: { rehberId: x.rehberId, mesaj: kurulumSatiri({ durum: { tur: 'aktarilmadi' } }, { tur: 'engel', engel: x.engel }).neden, notlar: x.notlar } }));
+    if (!x) return setSonuclar((y) => ({ ...y, [k.id]: { rehberId: null, mesaj: d.sonucYok, notlar: [] } }));
+    if (x.tur === 'engel') return setSonuclar((y) => ({ ...y, [k.id]: { rehberId: x.rehberId, mesaj: kurulumSatiri({ durum: { tur: 'aktarilmadi' } }, { tur: 'engel', engel: x.engel }, dil).neden, notlar: x.notlar } }));
     setSonuclar((y) => ({ ...y, [k.id]: { rehberId: x.rehberId, mesaj: null, notlar: x.notlar } }));
     // Kalem durumu sunucudan: "açıldı" yalnız rehber kimliği dönünce yazılır.
     try {
       setDetay(await apiFetch<StratejiDetayi>(stratejiUcYolu('/strateji/v2/planlar/:id', { id: plan.id })));
       adresYaz(null);
     } catch (e) {
-      setSonuclar((y) => ({ ...y, [k.id]: { rehberId: x.rehberId, mesaj: `Taslak açıldı ama strateji yeniden okunamadı: ${okumaHatasi(e)}`, notlar: x.notlar } }));
+      setSonuclar((y) => ({ ...y, [k.id]: { rehberId: x.rehberId, mesaj: d.acildiOkunamadi(okumaHatasi(e, dil)), notlar: x.notlar } }));
     }
   }
 
@@ -163,7 +168,7 @@ export function KampanyaKurulumu({ clientId, ilkDetay, ilkKalem, onizleme, izinl
   return (
     <div>
       <div key={k.id} className="bolum-gecis">
-        <Soru ust={`Kampanya ${i + 1} / ${kalemler.length}`} soru={amacAdi(k.amac)} aciklama="Bu kampanya AdvCampaign'de dolu bir taslak olarak açılacak. Aşağıdakiler plandan gelir; gerisini AdvCampaign soracak." />
+        <Soru ust={d.kampanyaSira(i + 1, kalemler.length)} soru={amacAdi(k.amac)} aciklama={d.kampanyaAciklama} />
       </div>
       <div className="grid items-start gap-6 lg:grid-cols-[280px_1fr]">
         <ol className="m-0 list-none overflow-hidden rounded-[14px] border border-line p-0">
@@ -186,14 +191,14 @@ export function KampanyaKurulumu({ clientId, ilkDetay, ilkKalem, onizleme, izinl
                   <small className="block text-[12.5px] text-ink-muted">
                     {x.acildi && kk.durum.tur === 'aktarildi' ? (
                       <Link href={rehberAdresi(kk.durum.rehberId)} className="font-semibold text-brand-strong underline-offset-2 hover:underline">
-                        Taslak açıldı · aç
+                        {d.taslakAcildiAc}
                       </Link>
                     ) : x.hal === 'simdi' ? (
-                      'Şimdi'
+                      d.simdi
                     ) : bek ? (
-                      'Atlandı'
+                      d.atlandi
                     ) : (
-                      'Sırada'
+                      d.sirada
                     )}
                   </small>
                 </span>
@@ -204,23 +209,23 @@ export function KampanyaKurulumu({ clientId, ilkDetay, ilkKalem, onizleme, izinl
 
         <Kart as="div">
           <dl className="m-0 grid grid-cols-[110px_1fr] text-sm sm:grid-cols-[150px_1fr_auto]">
-            <Esleme ad="Hedef" deger={amacAdi(k.amac)} kaynak="Plandan" />
-            <Esleme ad="Platform" deger={payMetni(k)} kaynak="Plandan" />
-            <Esleme ad="Bütçe" deger={<Tutar micros={k.butceMicros} para={para} />} kaynak="Plandan" />
-            <Esleme ad="Tarih" deger={tarihAraligi(k.baslangic, k.bitis)} kaynak="Plandan" />
-            <Esleme ad="Bölge" deger={konumOzeti(k.konumlar)} kaynak="Plandan" />
-            {k.yasMin !== null && <Esleme ad="Yaş" deger={yasMetni(k.yasMin, k.yasMax)} kaynak="Plandan" />}
-            <Esleme ad="Metin" deger={metinEslemesi(k)} kaynak={k.metin ? (k.metin.kaynak === 'ajans' ? 'Plandan' : 'Öneri') : null} />
-            {k.kelimeGrubu && <Esleme ad="Kelimeler" deger={k.kelimeGrubu} kaynak="Plandan" />}
+            <Esleme ad={d.hedef} deger={amacAdi(k.amac)} kaynak={d.plandan} />
+            <Esleme ad="Platform" deger={payMetni(k, dil)} kaynak={d.plandan} />
+            <Esleme ad={d.butce} deger={<Tutar micros={k.butceMicros} para={para} />} kaynak={d.plandan} />
+            <Esleme ad={d.tarih} deger={tarihAraligi(k.baslangic, k.bitis, dil)} kaynak={d.plandan} />
+            <Esleme ad={d.bolge} deger={konumOzeti(k.konumlar, dil)} kaynak={d.plandan} />
+            {k.yasMin !== null && <Esleme ad={d.yas} deger={yasMetni(k.yasMin, k.yasMax)} kaynak={d.plandan} />}
+            <Esleme ad={d.metin} deger={metinEslemesi(k, d)} kaynak={k.metin ? (k.metin.kaynak === 'ajans' ? d.plandan : d.oneri) : null} />
+            {k.kelimeGrubu && <Esleme ad={d.kelimeler} deger={k.kelimeGrubu} kaynak={d.plandan} />}
             {o?.notlar.map((n) => <Esleme key={n} ad="Workspace" deger={n} kaynak="Workspace" />)}
-            {o?.rehberdeTamamlanacak.map((a) => <Esleme key={a} ad={REHBER_ALAN_ETIKETI[a]} deger={<span className="font-semibold text-brand-strong">AdvCampaign'de seçilecek</span>} kaynak={null} />)}
+            {o?.rehberdeTamamlanacak.map((a) => <Esleme key={a} ad={REHBER_ALAN_ETIKETI[a]} deger={<span className="font-semibold text-brand-strong">{d.advCampaigndeSecilecek}</span>} kaynak={null} />)}
             {o?.karar.tur === 'aktarilabilir' &&
-              o.karar.dusenler.map((d) => <Esleme key={d.platform} ad={PLATFORM_ADI[d.platform]} deger={<span className="text-brand-strong">Açılmayacak: {d.sebep}</span>} kaynak={null} />)}
+              o.karar.dusenler.map((x) => <Esleme key={x.platform} ad={PLATFORM_ADI[x.platform]} deger={<span className="text-brand-strong">{d.acilmayacak(x.sebep)}</span>} kaynak={null} />)}
           </dl>
-          <p className="m-0 mt-3 text-[13px] text-ink-muted">Taslak açmak reklam kurmaz, para harcamaz.</p>
+          <p className="m-0 mt-3 text-[13px] text-ink-muted">{d.taslakParaHarcamaz}</p>
           {s.hal === 'bekliyor' && (
             <div className="mt-3">
-              <Bildirim hata baslik="Bu kampanya şu an açılamıyor.">
+              <Bildirim hata baslik={d.suAnAcilamiyor}>
                 {s.neden}
               </Bildirim>
             </div>
@@ -230,13 +235,13 @@ export function KampanyaKurulumu({ clientId, ilkDetay, ilkKalem, onizleme, izinl
               <Bildirim hata baslik={sonuc.mesaj}>
                 {sonuc.rehberId && (
                   <Link href={rehberAdresi(sonuc.rehberId)} className="font-semibold text-brand-strong underline-offset-2 hover:underline">
-                    Var olan taslağı aç
+                    {d.varOlanTaslak}
                   </Link>
                 )}
               </Bildirim>
             </div>
           )}
-          {!kurabilir && <p className="m-0 mt-3 text-[13px] text-ink-muted">Taslak açmak reklam oluşturma yetkisi ister; bu hesapta yok.</p>}
+          {!kurabilir && <p className="m-0 mt-3 text-[13px] text-ink-muted">{d.taslakYetkisi}</p>}
         </Kart>
       </div>
 
@@ -246,19 +251,19 @@ export function KampanyaKurulumu({ clientId, ilkDetay, ilkKalem, onizleme, izinl
         ek={
           s.hal !== 'hazir' || sonuc?.mesaj ? (
             <Dugme ton="ikincil" onClick={atla}>
-              Bu kampanyayı atla
+              {d.kampanyayiAtla}
             </Dugme>
           ) : undefined
         }
-        devam={s.hal === 'hazir' && kurabilir ? { etiket: 'Taslağı aç ve sonrakine geç', onClick: () => void ac(), bekliyor: suruyor } : null}
+        devam={s.hal === 'hazir' && kurabilir ? { etiket: d.taslagiAc, onClick: () => void ac(), bekliyor: suruyor } : null}
       />
     </div>
   );
 }
 
-function metinEslemesi(k: StratejiKalemi): ReactNode {
-  if (!k.metin) return <span className="font-semibold text-brand-strong">AdvCampaign'de yazılacak</span>;
-  return k.metin.kaynak === 'ajans' ? `${k.metin.basliklar.length} başlık, ana metin` : 'Öneri olarak; AdvCampaign’de onaylanır';
+function metinEslemesi(k: StratejiKalemi, d: KurulumMetni): ReactNode {
+  if (!k.metin) return <span className="font-semibold text-brand-strong">{d.advCampaigndeYazilacak}</span>;
+  return k.metin.kaynak === 'ajans' ? d.metinOzeti(k.metin.basliklar.length) : d.oneriOlarak;
 }
 
 function Esleme({ ad, deger, kaynak }: { ad: string; deger: ReactNode; kaynak: string | null }) {

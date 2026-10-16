@@ -1,14 +1,18 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { PlanDetayi } from '@advetics/shared';
+import { sec, type Dil, type PlanDetayi } from '@advetics/shared';
 import { formatMoney } from '@/lib/format';
 import { Dugme } from '@/components/ui/dugme';
 import { Uyari } from '@/components/ui/uyari';
 import { BosDurum } from '@/components/ui/hal';
 import { Kart } from '@/components/ui/kart';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { stratejiPlanSozlugu } from '@/dil/sozlukler/strateji-plan';
 import {
-  REKABET_ETIKETI,
+  rekabetEtiketi,
+  bolumAdi,
+  yerelKodu,
   DIGER_GRUBU,
   aylikAramaMetni,
   grupSecimHali,
@@ -47,6 +51,9 @@ export function AramaBolumu({
   yenile: () => Promise<PlanDetayi | null>;
   onKirli: (kirli: boolean) => void;
 }) {
+  const { dil } = useDil();
+  const d = useSozluk(stratejiPlanSozlugu);
+  const a = d.aramaEkrani;
   const { plan, kelimeler } = detay;
   const [tohumMetni, setTohumMetni] = useState('');
   const [tohumHatasi, setTohumHatasi] = useState<string | null>(null);
@@ -73,7 +80,7 @@ export function AramaBolumu({
   );
 
   async function ara() {
-    const r = tohumlariAyir(tohumMetni);
+    const r = tohumlariAyir(tohumMetni, dil);
     if (r.tur === 'hata') {
       setTohumHatasi(r.mesaj);
       return;
@@ -93,6 +100,7 @@ export function AramaBolumu({
       { tohumlar: r.tohumlar },
       yenile,
       plan.surum,
+      dil,
     );
     setAraniyor(false);
     if (s.tur === 'tamam') setTohumMetni('');
@@ -109,11 +117,12 @@ export function AramaBolumu({
       { satirlar: degisiklik, surum: plan.surum },
       yenile,
       plan.surum,
+      dil,
     );
     setKaydediliyor(false);
     if (r.tur === 'tamam') {
       setKirli(false);
-      setKayitMesaji({ ton: 'basari', metin: `${degisiklik.length} kelime güncellendi.` });
+      setKayitMesaji({ ton: 'basari', metin: a.guncellendi(degisiklik.length) });
     } else {
       setKayitMesaji({ ton: r.tur === 'cakisma' ? 'uyari' : 'tehlike', metin: r.mesaj });
     }
@@ -152,22 +161,22 @@ export function AramaBolumu({
     <section aria-labelledby="arama-baslik" className="space-y-4">
       <BolumBasligi
         id="arama-baslik"
-        baslik="Google arama"
-        aciklama="İnsanların Google’da ne aradığı ve ayda kaç kez aradığı. Plana alacağın kelimeleri işaretle."
+        baslik={bolumAdi('arama', dil)}
+        aciklama={a.aciklama}
       />
 
       {kilit && <KilitNotu neden={kilit} />}
 
-      <ErisimDurumu erisim={kelimeler.erisim} sonHata={kelimeler.sonHata} />
+      <ErisimDurumu erisim={kelimeler.erisim} sonHata={kelimeler.sonHata} dil={dil} />
 
       {kelimeler.erisim === 'var' && kilit === null && (
         <Kart as="div">
           <div className="space-y-2">
             <label htmlFor="tohumlar" className="block text-sm font-semibold text-ink">
-              Aranacak kelimeler
+              {a.tohumEtiketi}
             </label>
             <p id="tohumlar-yardim" className="text-sm text-ink-muted">
-              Her satıra ya da virgülle ayırarak en çok 20 kelime. Örnek: filtre kahve, french press.
+              {a.tohumYardim}
             </p>
             <textarea
               id="tohumlar"
@@ -187,7 +196,7 @@ export function AramaBolumu({
               </p>
             )}
             <Dugme ton="koyu" onClick={ara} bekliyor={araniyor} disabled={kelimeler.aramaSuruyor}>
-              Kelimeleri ara
+              {a.kelimeleriAra}
             </Dugme>
           </div>
         </Kart>
@@ -195,12 +204,12 @@ export function AramaBolumu({
 
       {kelimeler.aramaSuruyor && (
         <p className="text-sm text-ink-muted" role="status">
-          Google’dan kelimeler çekiliyor. Bu sayfa birkaç saniyede bir kendini yeniliyor.
+          {a.suruyor}
         </p>
       )}
 
       {aramaMesaji && (
-        <Uyari ton={aramaMesaji.ton} baslik={aramaMesaji.ton === 'tehlike' ? 'Arama yapılamadı.' : undefined}>
+        <Uyari ton={aramaMesaji.ton} baslik={aramaMesaji.ton === 'tehlike' ? a.aramaYapilamadi : undefined}>
           {aramaMesaji.metin}
         </Uyari>
       )}
@@ -209,8 +218,8 @@ export function AramaBolumu({
         kelimeler.erisim === 'var' &&
         !kelimeler.aramaSuruyor && (
           <BosDurum
-            baslik="Kelime yok"
-            neden={kelimeler.sonHata ? 'Son arama sonuç getirmedi; nedeni yukarıda.' : kilit === null ? 'Bu plan için henüz kelime aranmadı.' : 'Bu planda kelime yok.'}
+            baslik={a.kelimeYok}
+            neden={kelimeler.sonHata ? a.sonAramaSonucsuz : kilit === null ? a.henuzAranmadi : a.planda_yok}
           />
         )
       ) : (
@@ -218,22 +227,26 @@ export function AramaBolumu({
           <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm text-ink-muted">
             <span>
               {/* SESSİZ KESME YOK: Google binlerce fikir döndürüyor, plan ilk N'i taşıyor. */}
-              {kelimeler.gosterilen.toLocaleString('tr-TR')} / {kelimeler.toplam.toLocaleString('tr-TR')} kelime gösteriliyor ·{' '}
-              {seciliSayisi} seçili
-              {seciliSayisi > 0 && ` · seçililer ayda yaklaşık ${seciliArama.toLocaleString('tr-TR')} arama`}
+              {a.gosteriliyor(kelimeler.gosterilen.toLocaleString(yerelKodu(dil)), kelimeler.toplam.toLocaleString(yerelKodu(dil)))} ·{' '}
+              {a.secili(seciliSayisi)}
+              {seciliSayisi > 0 && ` · ${a.seciliArama(seciliArama.toLocaleString(yerelKodu(dil)))}`}
             </span>
-            {sonCekim && <span>Google’dan çekildi: {zamanMetni(sonCekim)}</span>}
+            {sonCekim && (
+              <span>
+                {a.cekildi}: {zamanMetni(sonCekim, dil)}
+              </span>
+            )}
           </div>
-          <TabloKabi etiket="Kelime tablosu">
+          <TabloKabi etiket={a.tabloEtiketi}>
             <table className="w-full min-w-[46rem] text-sm">
               <thead>
                 <tr className="text-left text-xs text-ink-muted">
-                  <th className="px-3 py-2 font-semibold">Plana al</th>
-                  <th className="px-3 py-2 font-semibold">Kelime</th>
-                  <th className="px-3 py-2 text-right font-semibold">Aylık arama</th>
-                  <th className="px-3 py-2 font-semibold">Rekabet</th>
-                  <th className="px-3 py-2 text-right font-semibold">Tıklama başı teklif</th>
-                  <th className="px-3 py-2 font-semibold">Reklam grubu</th>
+                  <th className="px-3 py-2 font-semibold">{a.planaAl}</th>
+                  <th className="px-3 py-2 font-semibold">{a.kelime}</th>
+                  <th className="px-3 py-2 text-right font-semibold">{a.aylikArama}</th>
+                  <th className="px-3 py-2 font-semibold">{a.rekabet}</th>
+                  <th className="px-3 py-2 text-right font-semibold">{a.teklif}</th>
+                  <th className="px-3 py-2 font-semibold">{a.reklamGrubu}</th>
                 </tr>
               </thead>
               {/*
@@ -247,6 +260,7 @@ export function AramaBolumu({
                   <GrupBasligi
                     grup={g}
                     ad={grupAdi(g)}
+                    dil={dil}
                     kilitli={kilit !== null}
                     secimDegistir={(secili) => grupGuncelle(g, { secili })}
                     adDegistir={(ad) => grupGuncelle(g, { grup: ad })}
@@ -259,7 +273,7 @@ export function AramaBolumu({
                           <input
                             type="checkbox"
                             className="h-4 w-4 accent-brand"
-                            aria-label={`${s.kelime} plana alınsın`}
+                            aria-label={a.planaAlinsin(s.kelime)}
                             checked={t.secili}
                             disabled={kilit !== null}
                             onChange={(e) => guncelle(s.id, { secili: e.target.checked })}
@@ -268,17 +282,19 @@ export function AramaBolumu({
                         <td className="px-3 py-2 text-ink">
                           {s.kelime}
                           {s.varyantlar.length > 0 && (
-                            <span className="mt-0.5 block text-xs text-ink-muted">Aynı sayılan: {s.varyantlar.join(', ')}</span>
+                            <span className="mt-0.5 block text-xs text-ink-muted">
+                              {a.ayniSayilan}: {s.varyantlar.join(', ')}
+                            </span>
                           )}
                         </td>
-                        <td className="px-3 py-2 text-right tabular-nums">{aylikAramaMetni(s.aylikArama)}</td>
-                        <td className="px-3 py-2">{s.rekabet ? REKABET_ETIKETI[s.rekabet] : 'veri yok'}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{aylikAramaMetni(s.aylikArama, dil)}</td>
+                        <td className="px-3 py-2">{s.rekabet ? rekabetEtiketi(s.rekabet, dil) : d.ortak.veriYok}</td>
                         <td className="px-3 py-2 text-right tabular-nums">
-                          <TeklifAraligi alt={s.teklifAltMicros} ust={s.teklifUstMicros} para={plan.paraBirimi} />
+                          <TeklifAraligi alt={s.teklifAltMicros} ust={s.teklifUstMicros} para={plan.paraBirimi} dil={dil} />
                         </td>
                         <td className="px-3 py-2">
                           <input
-                            aria-label={`${s.kelime} reklam grubu`}
+                            aria-label={a.grupEtiketi(s.kelime)}
                             list="kelime-gruplari"
                             maxLength={80}
                             className={`${GIRDI_SINIFI} min-w-[10rem]`}
@@ -293,8 +309,8 @@ export function AramaBolumu({
                             bilemez ve kuralın "değiştirmediği" adı bozuk sanabilir.
                           */}
                           {s.grupElle && (
-                            <span className="mt-1 inline-block rounded bg-surface-sunken px-1.5 py-0.5 text-[11px] text-ink-muted" title="Bu grup adını elle yazdın; yeniden gruplama değiştirmez.">
-                              elle
+                            <span className="mt-1 inline-block rounded bg-surface-sunken px-1.5 py-0.5 text-[11px] text-ink-muted" title={a.elleAciklama}>
+                              {a.elle}
                             </span>
                           )}
                         </td>
@@ -324,7 +340,7 @@ export function AramaBolumu({
                       setKayitMesaji(null);
                     }}
                   >
-                    Kayıtlı hâli yükle
+                    {d.ortak.kayitliYukle}
                   </Dugme>
                 ) : undefined
               }
@@ -336,10 +352,10 @@ export function AramaBolumu({
           {kilit === null && (
             <div className="flex flex-wrap items-center gap-3">
               <Dugme onClick={kaydet} disabled={degisiklik.length === 0} bekliyor={kaydediliyor}>
-                Seçimi kaydet
+                {a.secimiKaydet}
               </Dugme>
               {degisiklik.length > 0 && (
-                <span className="text-sm text-ink-muted">{degisiklik.length} kelimede kaydedilmemiş değişiklik var.</span>
+                <span className="text-sm text-ink-muted">{a.kaydedilmemisKelime(degisiklik.length)}</span>
               )}
             </div>
           )}
@@ -349,37 +365,39 @@ export function AramaBolumu({
   );
 }
 
-function ErisimDurumu({ erisim, sonHata }: { erisim: PlanDetayi['kelimeler']['erisim']; sonHata: string | null }) {
+function ErisimDurumu({ erisim, sonHata, dil }: { erisim: PlanDetayi['kelimeler']['erisim']; sonHata: string | null; dil: Dil }) {
+  const a = sec(stratejiPlanSozlugu, dil).aramaEkrani;
   if (erisim === 'olculmedi') {
     return (
-      <Uyari ton="bilgi" baslik="Kelime araması bu hesapta henüz açılmadı.">
-        Google’ın kelime verisine erişim bu hesap için henüz doğrulanmadı. Doğrulanınca burada arama yapılabilecek.
+      <Uyari ton="bilgi" baslik={a.erisimOlculmedi}>
+        {a.erisimOlculmediMetin}
       </Uyari>
     );
   }
   if (erisim === 'yok') {
     return (
-      <Uyari ton="tehlike" baslik="Google Keyword Planner bu hesapta açık değil.">
-        {sonHata ?? 'Google erişimi reddetti; neden bildirmedi.'}
+      <Uyari ton="tehlike" baslik={a.erisimYok}>
+        {sonHata ?? a.erisimNedenYok}
       </Uyari>
     );
   }
   // Erişim var ama son arama düştü: platformun cümlesi olduğu gibi.
   return sonHata ? (
-    <Uyari ton="tehlike" baslik="Son arama tamamlanamadı.">
+    <Uyari ton="tehlike" baslik={a.sonAramaDustu}>
       {sonHata}
     </Uyari>
   ) : null;
 }
 
 /** Teklif alanları Google'dan boş gelebiliyor; boş "veri yok", sıfır değil. */
-function TeklifAraligi({ alt, ust, para }: { alt: string | null; ust: string | null; para: string }) {
-  if (alt === null && ust === null) return <>veri yok</>;
-  if (alt === null) return <>en çok {formatMoney(ust, para)}</>;
-  if (ust === null) return <>en az {formatMoney(alt, para)}</>;
+function TeklifAraligi({ alt, ust, para, dil }: { alt: string | null; ust: string | null; para: string; dil: Dil }) {
+  const d = sec(stratejiPlanSozlugu, dil);
+  if (alt === null && ust === null) return <>{d.ortak.veriYok}</>;
+  if (alt === null) return <>{d.aramaEkrani.enCok(formatMoney(ust, para, { dil }))}</>;
+  if (ust === null) return <>{d.aramaEkrani.enAz(formatMoney(alt, para, { dil }))}</>;
   return (
     <>
-      {formatMoney(alt, para)} - {formatMoney(ust, para)}
+      {formatMoney(alt, para, { dil })} - {formatMoney(ust, para, { dil })}
     </>
   );
 }
@@ -395,22 +413,25 @@ function TeklifAraligi({ alt, ust, para }: { alt: string | null; ust: string | n
 function GrupBasligi({
   grup,
   ad,
+  dil,
   kilitli,
   secimDegistir,
   adDegistir,
 }: {
   grup: KelimeGrubu;
   ad: string;
+  dil: Dil;
   kilitli: boolean;
   secimDegistir: (secili: boolean) => void;
   adDegistir: (ad: string) => void;
 }) {
+  const a = sec(stratejiPlanSozlugu, dil).aramaEkrani;
   const kutu = useRef<HTMLInputElement>(null);
   const hal = grupSecimHali(grup);
   useEffect(() => {
     if (kutu.current) kutu.current.indeterminate = hal === 'bazisi';
   }, [hal]);
-  const baslik = grup.anahtar === '' ? 'Grupsuz' : grup.anahtar;
+  const baslik = grup.anahtar === '' ? a.grupsuz : grup.anahtar === DIGER_GRUBU ? a.digerGrubu : grup.anahtar;
   return (
     <tr className="border-t-2 border-line bg-surface-muted">
       <td className="px-3 py-2">
@@ -418,7 +439,7 @@ function GrupBasligi({
           ref={kutu}
           type="checkbox"
           className="h-4 w-4 accent-brand"
-          aria-label={`${baslik} grubundaki bütün kelimeler plana alınsın`}
+          aria-label={a.grupHepsiEtiketi(baslik)}
           checked={hal === 'hepsi'}
           disabled={kilitli}
           onChange={() => secimDegistir(hal !== 'hepsi')}
@@ -430,7 +451,7 @@ function GrupBasligi({
             <span className="font-semibold text-ink">{baslik}</span>
           ) : (
             <input
-              aria-label={`${baslik} grubunun adı`}
+              aria-label={a.grupAdiEtiketi(baslik)}
               maxLength={80}
               className={`${GIRDI_SINIFI} max-w-[16rem] font-semibold`}
               value={ad}
@@ -438,9 +459,9 @@ function GrupBasligi({
             />
           )}
           <span className="text-xs text-ink-muted">
-            {grup.satirlar.length} kelime · {grup.secili} seçili · ayda yaklaşık {grup.toplamArama.toLocaleString('tr-TR')} arama
-            {grup.veriYok > 0 && ` (${grup.veriYok} kelimede veri yok)`}
-            {grup.anahtar === DIGER_GRUBU && ' · tohumların dışında kalan küçük kelimeler'}
+            {a.grupOzeti(grup.satirlar.length, grup.secili, grup.toplamArama.toLocaleString(yerelKodu(dil)))}
+            {grup.veriYok > 0 && a.grupVeriYok(grup.veriYok)}
+            {grup.anahtar === DIGER_GRUBU && ` · ${a.digerAciklama}`}
           </span>
         </div>
       </td>

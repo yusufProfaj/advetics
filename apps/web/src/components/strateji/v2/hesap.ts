@@ -6,12 +6,13 @@ import {
   STRATEJI_ASAMALARI,
   STRATEJI_BELGE_BOLUMLERI,
   STRATEJI_ONAY_CUMLESI,
-  STRATEJI_KAYNAK_ETIKETI,
   TAHMIN_YOK_METNI,
   belgeyeGirerMi,
   butceBol,
   onayTokenBicimiGecerli,
+  sec,
   type BaglantiHali,
+  type Dil,
   type KalemDurumu,
   type KalemPlatformDurumu,
   type KalemTahmini,
@@ -19,12 +20,14 @@ import {
   type RehberKonumu,
   type RehberPlatformu,
   type StratejiAsamasi,
+  type StratejiBolumKodu,
   type StratejiDurumu,
   type StratejiKalemi,
   type StratejiKalemiGirdisi,
 } from '@advetics/shared';
 import { formatDayShort } from '@/lib/format';
 import { microsGirdiMetni, zamanMetni } from '../hesap';
+import { stratejiHesapSozlugu } from '@/dil/sozlukler/strateji-v2';
 import type { StratejiDetayi, StratejiOnayKaydi } from '@advetics/shared';
 
 /**
@@ -39,25 +42,21 @@ import type { StratejiDetayi, StratejiOnayKaydi } from '@advetics/shared';
 
 // ─── Durum ───────────────────────────────────────────────────────────────────
 
-export const STRATEJI_DURUM_ETIKETI: Record<StratejiDurumu, string> = {
-  taslak: 'Taslak',
-  onayda: 'Onay bekliyor',
-  revizyon: 'Revizyon istendi',
-  onaylandi: 'Onaylandı',
-  kapandi: 'Kapandı',
-  iptal: 'İptal edildi',
-};
+export function stratejiDurumEtiketi(durum: StratejiDurumu, dil: Dil = 'tr'): string {
+  return sec(stratejiHesapSozlugu, dil).durum[durum];
+}
 
 /** Kapakta filigran: onaylanmamış belge müşterinin elinde "son hâl" sanılmasın. */
-export function filigran(durum: StratejiDurumu): string | null {
+export function filigran(durum: StratejiDurumu, dil: Dil = 'tr'): string | null {
+  const d = sec(stratejiHesapSozlugu, dil);
   switch (durum) {
     case 'taslak':
     case 'revizyon':
-      return 'TASLAK';
+      return d.filigran.taslak;
     case 'onayda':
-      return 'ONAY BEKLİYOR';
+      return d.filigran.onayda;
     case 'iptal':
-      return 'İPTAL';
+      return d.filigran.iptal;
     case 'onaylandi':
     case 'kapandi':
       return null;
@@ -69,16 +68,25 @@ export function filigran(durum: StratejiDurumu): string | null {
  * onayında ad ve e-posta kişinin BEYANI: cümle bunu gizlemiyor, doğrulanmış
  * bir kimlik gibi de göstermiyor.
  */
-export function onayCumlesi(o: StratejiOnayKaydi | null): string | null {
+export function onayCumlesi(o: StratejiOnayKaydi | null, dil: Dil = 'tr'): string | null {
   if (!o) return null;
   const kim = o.rol === 'baglanti' ? (o.ad ? ` · ${o.ad}${o.eposta ? ` (${o.eposta})` : ''}` : '') : o.kim ? ` · ${o.kim}` : '';
-  return `${STRATEJI_ONAY_CUMLESI[o.rol]}${kim} · sürüm ${o.surum} · ${zamanMetni(o.zaman)}`;
+  return `${STRATEJI_ONAY_CUMLESI[o.rol]}${kim} · ${sec(stratejiHesapSozlugu, dil).surumKisa(o.surum)} · ${zamanMetni(o.zaman)}`;
 }
 
 /** Belgede gösterilecek bölümler: "Plan ve gerçekleşen" yalnız onaydan sonra. */
 export function gorunurBolumler(durum: StratejiDurumu) {
   const onayli = durum === 'onaylandi' || durum === 'kapandi';
   return STRATEJI_BELGE_BOLUMLERI.filter((b) => !b.onaydanSonra || onayli);
+}
+
+/** Belge bölüm başlığı dile göre: shared'daki `baslik` Türkçe sabit. */
+export function bolumBasligi(kod: StratejiBolumKodu, dil: Dil = 'tr'): string {
+  return sec(stratejiHesapSozlugu, dil).bolum[kod];
+}
+
+export function asamaEtiketi(asama: StratejiAsamasi, dil: Dil = 'tr'): string {
+  return sec(stratejiHesapSozlugu, dil).asama[asama];
 }
 
 /** Bölüm numarası kapak hariç iki haneli ("01"): panel ve PDF aynı sırada. */
@@ -96,8 +104,8 @@ export function belgeMetni(m: KaynakliMetin | null | undefined): string | null {
   return m && belgeyeGirerMi(m) ? m.metin : null;
 }
 
-export function kaynakEtiketi(m: Pick<KaynakliMetin, 'kaynak'>): string {
-  return STRATEJI_KAYNAK_ETIKETI[m.kaynak];
+export function kaynakEtiketi(m: Pick<KaynakliMetin, 'kaynak'>, dil: Dil = 'tr'): string {
+  return sec(stratejiHesapSozlugu, dil).kaynak[m.kaynak];
 }
 
 // ─── Para: platform payı ve aşama ───────────────────────────────────────────
@@ -159,17 +167,19 @@ export function yuzde(pay: bigint, payda: bigint): number {
 
 // ─── Tahmin ─────────────────────────────────────────────────────────────────
 
-const SAYI = new Intl.NumberFormat('tr-TR');
+const sayiBicimi = (dil: Dil) => new Intl.NumberFormat(dil === 'en' ? 'en-US' : 'tr-TR');
 
 /**
  * Tahmin metni. VERİ YOKSA "Tahmin yok" ve NEDENİ (kullanıcı kararı 3): ne
  * varsayım aralığı ne ± yüzde. Tek ayın verisinde alt = üst ve bunu söyler.
  */
-export function tahminMetni(t: KalemTahmini, amac: StratejiKalemi['amac']): { ana: string; alt: string; veri: boolean } {
-  if (t.tur === 'yok') return { ana: 'Tahmin yok', alt: TAHMIN_YOK_METNI[t.neden].replace(/^Tahmin yok: /, ''), veri: false };
+export function tahminMetni(t: KalemTahmini, amac: StratejiKalemi['amac'], dil: Dil = 'tr'): { ana: string; alt: string; veri: boolean } {
+  const d = sec(stratejiHesapSozlugu, dil);
+  const SAYI = sayiBicimi(dil);
+  if (t.tur === 'yok') return { ana: d.tahminYok, alt: TAHMIN_YOK_METNI[t.neden].replace(/^Tahmin yok: /, ''), veri: false };
   const birim = AMAC_OLCUTU[amac].birim;
   const ana = t.altSonuc === t.ustSonuc ? `${SAYI.format(t.altSonuc)} ${birim}` : `${SAYI.format(t.altSonuc)}-${SAYI.format(t.ustSonuc)} ${birim}`;
-  const alt = t.aySayisi === 1 ? 'Hesabınızın verisi · tek ay verisi' : `Hesabınızın verisi · son ${t.aySayisi} ay`;
+  const alt = t.aySayisi === 1 ? d.tahminTekAy : d.tahminSonAy(t.aySayisi);
   return { ana, alt, veri: true };
 }
 
@@ -215,17 +225,15 @@ export function amacAdi(amac: StratejiKalemi['amac']): string {
 }
 
 /** "Meta %40 · Google %60", "Yalnız Meta". */
-export function payMetni(k: Pick<StratejiKalemi, 'meta' | 'google' | 'metaPayi'>): string {
-  if (k.meta && k.google) {
-    const m = k.metaPayi ?? 50;
-    return `Meta %${m} · Google %${100 - m}`;
-  }
-  return k.meta ? 'Yalnız Meta' : k.google ? 'Yalnız Google' : 'Platform yok';
+export function payMetni(k: Pick<StratejiKalemi, 'meta' | 'google' | 'metaPayi'>, dil: Dil = 'tr'): string {
+  const d = sec(stratejiHesapSozlugu, dil);
+  if (k.meta && k.google) return d.payIkisi(k.metaPayi ?? 50);
+  return k.meta ? d.yalnizMeta : k.google ? d.yalnizGoogle : d.platformYok;
 }
 
 /** "İzmir ili", "İzmir +2". Sessiz kesme yok: kaç tane daha olduğu yazılı. */
-export function konumOzeti(konumlar: readonly Pick<RehberKonumu, 'etiket'>[]): string {
-  if (konumlar.length === 0) return 'Bölge seçilmedi';
+export function konumOzeti(konumlar: readonly Pick<RehberKonumu, 'etiket'>[], dil: Dil = 'tr'): string {
+  if (konumlar.length === 0) return sec(stratejiHesapSozlugu, dil).bolgeSecilmedi;
   const ilk = konumlar[0]!.etiket;
   return konumlar.length === 1 ? ilk : `${ilk} +${konumlar.length - 1}`;
 }
@@ -236,15 +244,16 @@ export function yasMetni(min: number | null, max: number | null): string {
 }
 
 /** "1 Kas - 31 Oca". Uzun tire YOK (panel metin dili). */
-export function tarihAraligi(bas: string, bit: string): string {
-  return `${formatDayShort(bas)} - ${formatDayShort(bit)}`;
+export function tarihAraligi(bas: string, bit: string, dil: Dil = 'tr'): string {
+  return `${formatDayShort(bas, dil)} - ${formatDayShort(bit, dil)}`;
 }
 
-const AY_ADLARI = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+const ayAdlari = (dil: Dil) => sec(stratejiHesapSozlugu, dil).aylar;
 
 /** "2026-11-01" + "2027-01-31" → "Kasım 2026 - Ocak 2027". Date'e çevrilmiyor. */
-export function donemMetni(bas: string, bit: string): string {
-  const ay = (g: string) => `${AY_ADLARI[Number(g.slice(5, 7)) - 1] ?? g.slice(5, 7)} ${g.slice(0, 4)}`;
+export function donemMetni(bas: string, bit: string, dil: Dil = 'tr'): string {
+  const adlar = ayAdlari(dil);
+  const ay = (g: string) => `${adlar[Number(g.slice(5, 7)) - 1] ?? g.slice(5, 7)} ${g.slice(0, 4)}`;
   const a = ay(bas);
   const b = ay(bit);
   return a === b ? a : `${a} - ${b}`;
@@ -301,22 +310,16 @@ export function kullan<T extends { kaynak: 'ai' | 'ajans' }>(m: T): T {
 
 // ─── Kalem durumu (rehberden türer) ─────────────────────────────────────────
 
-export const KALEM_PLATFORM_ETIKETI: Record<KalemPlatformDurumu, string> = {
-  taslakta: 'Taslakta',
-  kuruluyor: 'Kuruluyor',
-  incelemede: 'İncelemede',
-  yayinda: 'Yayında',
-  duraklatilmis: 'Duraklatılmış',
-  sorunlu: 'Sorunlu',
-  arsivlendi: 'Arşivlendi',
-};
+export function kalemPlatformEtiketi(x: KalemPlatformDurumu, dil: Dil = 'tr'): string {
+  return sec(stratejiHesapSozlugu, dil).kalemPlatform[x];
+}
 
 /** Yeşil nokta YALNIZ yayında (kılavuz: yeşil yalnız durum). */
-export function kalemDurumSatirlari(d: KalemDurumu): Array<{ platform: RehberPlatformu | null; metin: string; nokta: 'ok' | 'uyari' | 'notr' }> {
-  if (d.tur === 'aktarilmadi') return [{ platform: null, metin: 'Aktarılmadı', nokta: 'notr' }];
+export function kalemDurumSatirlari(d: KalemDurumu, dil: Dil = 'tr'): Array<{ platform: RehberPlatformu | null; metin: string; nokta: 'ok' | 'uyari' | 'notr' }> {
+  if (d.tur === 'aktarilmadi') return [{ platform: null, metin: sec(stratejiHesapSozlugu, dil).aktarilmadi, nokta: 'notr' }];
   return (Object.entries(d.platformlar) as Array<[RehberPlatformu, KalemPlatformDurumu]>).map(([p, x]) => ({
     platform: p,
-    metin: `${KALEM_PLATFORM_ETIKETI[x]} · ${PLATFORM_ADI[p]}`,
+    metin: `${kalemPlatformEtiketi(x, dil)} · ${PLATFORM_ADI[p]}`,
     nokta: x === 'yayinda' ? 'ok' : x === 'sorunlu' ? 'uyari' : 'notr',
   }));
 }
@@ -337,7 +340,8 @@ export function takvimCubugu(k: { baslangic: string; bitis: string }, plan: { ba
 }
 
 /** Takvim başlığı: dönemin ayları ve her ayın genişliği (%). */
-export function takvimAylari(plan: { baslangic: string; bitis: string }): Array<{ ad: string; genislik: number }> {
+export function takvimAylari(plan: { baslangic: string; bitis: string }, dil: Dil = 'tr'): Array<{ ad: string; genislik: number }> {
+  const AY_ADLARI = ayAdlari(dil);
   const p0 = gun(plan.baslangic);
   const toplam = (gun(plan.bitis) - p0) / GUN_MS + 1;
   const sonuc: Array<{ ad: string; genislik: number }> = [];
@@ -384,6 +388,7 @@ export function tokenSorulmaliMi(token: string): boolean {
 }
 
 export function baglantiMesaji(hal: BaglantiHali | 'bulunamadi'): string {
+  // Sunucu/sözleşme cümleleri (`BAGLANTI_HALI_METNI`, shared) çevrilmiyor: D4.
   return hal === 'bulunamadi' ? GECERSIZ_BAGLANTI_METNI : BAGLANTI_HALI_METNI[hal];
 }
 
@@ -400,11 +405,16 @@ export type OnaySayfasiHali =
   | { tur: 'mesaj'; baslik: string; metin: string }
   | { tur: 'belge'; kararAcik: boolean; not: string | null };
 
-export function onaySayfasiHali(status: number | null, govde: { hal: BaglantiHali; okunabilir: boolean; karar: boolean; belge: unknown } | null): OnaySayfasiHali {
-  if (status === null || status >= 500) return { tur: 'mesaj', baslik: 'Belge şu an açılamıyor', metin: 'Sunucuya ulaşılamadı. Biraz sonra tekrar deneyin.' };
-  if (status === 429) return { tur: 'mesaj', baslik: 'Çok fazla deneme', metin: 'Bu bağlantı kısa sürede çok kez açıldı. Birkaç dakika sonra tekrar deneyin.' };
-  if (status >= 400 || !govde) return { tur: 'mesaj', baslik: GECERSIZ_BAGLANTI_METNI, metin: 'Ajansınızdan yeni bir bağlantı isteyebilirsiniz.' };
-  if (!govde.okunabilir || !govde.belge) return { tur: 'mesaj', baslik: baglantiMesaji(govde.hal), metin: 'Ajansınızdan yeni bir bağlantı isteyebilirsiniz.' };
+export function onaySayfasiHali(
+  status: number | null,
+  govde: { hal: BaglantiHali; okunabilir: boolean; karar: boolean; belge: unknown } | null,
+  dil: Dil = 'tr',
+): OnaySayfasiHali {
+  const d = sec(stratejiHesapSozlugu, dil);
+  if (status === null || status >= 500) return { tur: 'mesaj', baslik: d.onay.acilamiyorBaslik, metin: d.onay.acilamiyorMetin };
+  if (status === 429) return { tur: 'mesaj', baslik: d.onay.cokDenemeBaslik, metin: d.onay.cokDenemeMetin };
+  if (status >= 400 || !govde) return { tur: 'mesaj', baslik: GECERSIZ_BAGLANTI_METNI, metin: d.onay.yeniBaglanti };
+  if (!govde.okunabilir || !govde.belge) return { tur: 'mesaj', baslik: baglantiMesaji(govde.hal), metin: d.onay.yeniBaglanti };
   return { tur: 'belge', kararAcik: govde.karar, not: govde.karar ? null : baglantiMesaji(govde.hal) || null };
 }
 
@@ -504,10 +514,9 @@ export function kalemKelimeDurumu(
   return gruplar.some((g) => g.grup === k.kelimeGrubu) ? 'tamam' : 'bos_grup';
 }
 
-export const KALEM_KELIME_METNI: Record<'eksik' | 'bos_grup', string> = {
-  eksik: 'Google Arama kampanyası kelimesiz; AdvCampaign’e kelimesiz gider.',
-  bos_grup: 'Bağlı kelime grubunda seçili kelime yok; AdvCampaign’e kelimesiz gider.',
-};
+export function kalemKelimeMetni(durum: 'eksik' | 'bos_grup', dil: Dil = 'tr'): string {
+  return sec(stratejiHesapSozlugu, dil).kalemKelime[durum];
+}
 
 /**
  * ═══ YORUM HANGİ KAMPANYA HAKKINDA ═══
@@ -515,8 +524,8 @@ export const KALEM_KELIME_METNI: Record<'eksik' | 'bos_grup', string> = {
  * göstermiyordu: müşteri bir kampanya için yazdığında ajans hangisi
  * olduğunu bilemiyordu. Sıra belgedeki numaralamayla aynı (1'den).
  */
-export function yorumKalemEtiketi(kalemSira: number | null): string | null {
-  return kalemSira === null ? null : `${kalemSira}. kampanya hakkında`;
+export function yorumKalemEtiketi(kalemSira: number | null, dil: Dil = 'tr'): string | null {
+  return kalemSira === null ? null : sec(stratejiHesapSozlugu, dil).yorumKalem(kalemSira);
 }
 
 export function kalemSecenekleri(kalemler: ReadonlyArray<Pick<StratejiKalemi, 'id' | 'sira' | 'amac'>>): Array<{ id: string; etiket: string }> {

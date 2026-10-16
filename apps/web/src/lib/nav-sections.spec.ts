@@ -1,4 +1,4 @@
-import { AYARLAR_SEKMELERI } from '@advetics/shared';
+import { AYARLAR_SEKMELERI, PANEL_YOLLARI } from '@advetics/shared';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -195,7 +195,13 @@ describe('MENÜDEKİ AD İLE SAYFANIN ADI AYNI', () => {
          * hem sekme başlığında (generateMetadata) kullanılıyor" oluyor.
          */
         const sekme = AYARLAR_SEKMELERI.find((s) => s.yol === oge.href);
-        const tekKaynak = sekme ? `ayarSekmesiAdi('${sekme.kod}'` : `menuSatiriEtiketi('${oge.href}'`;
+        // Adresi ortak üreticiden okuyan sayfa (`PANEL_YOLLARI.markaMerkezi`) da aynı tek kaynak.
+        const yolAnahtari = Object.entries(PANEL_YOLLARI).find(([, v]) => v === oge.href)?.[0];
+        const tekKaynak = sekme
+          ? `ayarSekmesiAdi('${sekme.kod}'`
+          : yolAnahtari && kod.includes(`menuSatiriEtiketi(PANEL_YOLLARI.${yolAnahtari}`)
+            ? `menuSatiriEtiketi(PANEL_YOLLARI.${yolAnahtari}`
+            : `menuSatiriEtiketi('${oge.href}'`;
         if (kod.includes(tekKaynak)) {
           const metaBlok = /export async function generateMetadata[\s\S]*?\n}/.exec(kod)?.[0] ?? '';
           if (!metaBlok.includes(tekKaynak)) eksik.push(`${oge.href}: generateMetadata başlığı ${tekKaynak}… kullanmıyor`);

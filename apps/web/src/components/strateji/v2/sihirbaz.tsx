@@ -27,8 +27,10 @@ import { butceDurumu, gecerliAdim, oncekiAdim, rayParcalari } from './akis';
 import { AdimGonder } from './adim-gonder';
 import { AdimInceleme } from './adim-inceleme';
 import { AdimPlan, type PlanAdimiTutamagi } from './adim-plan';
-import { useSozluk } from '@/dil/saglayici';
+import { useDil, useSozluk } from '@/dil/saglayici';
 import { stratejiSozlugu } from '@/dil/sozlukler/strateji';
+import { stratejiV2Sozlugu } from '@/dil/sozlukler/strateji-v2';
+import { menuSatiriEtiketi } from '@/lib/nav-sections';
 import { AdimBolge, AdimButce, AdimHedef, AdimKime } from './adimlar-soru';
 import { aySayisi } from './hesap';
 import { Bildirim, yaz } from './ortak';
@@ -69,6 +71,8 @@ export function StratejiSihirbazi({
 }) {
   const router = useRouter();
   const ds = useSozluk(stratejiSozlugu);
+  const d = useSozluk(stratejiV2Sozlugu).sihirbaz;
+  const { dil } = useDil();
   const g0 = girdiler?.tur === 'veri' ? girdiler.v : null;
   /*
    * PARA BİRİMİ SEÇİMİ. Workspace'in hesabı yoksa ya da hesaplar farklı
@@ -145,7 +149,7 @@ export function StratejiSihirbazi({
       setDetay(d);
       return d;
     } catch (e) {
-      setKayit({ tur: 'hata', mesaj: `Strateji yeniden okunamadı: ${okumaHatasi(e)}` });
+      setKayit({ tur: 'hata', mesaj: d.yenidenOkunamadi(okumaHatasi(e, dil)) });
       return null;
     }
   }, [planId]);
@@ -167,7 +171,7 @@ export function StratejiSihirbazi({
     // ── Plan yok: bütçe adımında doğar ──
     if (!d0) {
       if (!butce || butce.tutar.tur !== 'tamam') {
-        setKayit({ tur: 'hata', mesaj: 'Toplam bütçeyi yaz.' });
+        setKayit({ tur: 'hata', mesaj: d.butceYaz });
         return null;
       }
       try {
@@ -181,7 +185,7 @@ export function StratejiSihirbazi({
         else adresYaz('butce', yeni.plan.id, amaclar, true);
         return yeni;
       } catch (e) {
-        setKayit({ tur: 'hata', mesaj: okumaHatasi(e) });
+        setKayit({ tur: 'hata', mesaj: okumaHatasi(e, dil) });
         return null;
       }
     }
@@ -196,6 +200,7 @@ export function StratejiSihirbazi({
       },
       tazeSurum,
       d0.plan.surum,
+      dil,
     );
     if (r.tur !== 'tamam') {
       setKayit({ tur: 'hata', mesaj: r.mesaj });
@@ -218,7 +223,7 @@ export function StratejiSihirbazi({
 
   if (!g && (adim === 'hedef' || adim === 'butce' || adim === 'bolge')) {
     return (
-      <HataDurumu baslik="Strateji girdileri okunamadı." mesaj={girdiler?.tur === 'hata' ? girdiler.mesaj : 'Girdiler yüklenmedi.'} />
+      <HataDurumu baslik={d.girdilerOkunamadi} mesaj={girdiler?.tur === 'hata' ? girdiler.mesaj : d.girdilerYuklenmedi} />
     );
   }
 
@@ -231,33 +236,33 @@ export function StratejiSihirbazi({
   let devam: { etiket: string; kapali: boolean; not: string; onClick: () => void };
   switch (adim) {
     case 'hedef':
-      devam = { etiket: 'Devam', kapali: amaclar.length === 0, not: amaclar.length ? `${amaclar.length} hedef seçildi` : 'En az bir hedef seç', onClick: () => (detay ? void kaydet('butce') : git('butce', null)) };
+      devam = { etiket: d.devam, kapali: amaclar.length === 0, not: amaclar.length ? d.hedefSecildi(amaclar.length) : d.enAzBirHedef, onClick: () => (detay ? void kaydet('butce') : git('butce', null)) };
       break;
     case 'butce': {
       const paraEksik = paraCozulmedi && !paraSecimi;
       const ok = !!butce && butce.ilerler && !paraEksik;
       devam = {
-        etiket: 'Devam',
+        etiket: d.devam,
         kapali: !ok,
-        not: paraEksik ? ds.devamParaBirimi : !butce || butce.tutar.tur !== 'tamam' ? 'Toplam bütçeyi yaz' : !butce.ilerler ? 'Bütçe bir hedefin alt sınırına yetmiyor' : '',
+        not: paraEksik ? ds.devamParaBirimi : !butce || butce.tutar.tur !== 'tamam' ? d.butceYazKisa : !butce.ilerler ? d.butceYetmiyor : '',
         onClick: () => void kaydet('bolge'),
       };
       break;
     }
     case 'bolge':
-      devam = { etiket: 'Devam', kapali: konumlar.length === 0, not: konumlar.length ? `${konumlar.length} bölge` : 'En az bir bölge seç', onClick: () => void kaydet('kime') };
+      devam = { etiket: d.devam, kapali: konumlar.length === 0, not: konumlar.length ? d.bolgeSayisi(konumlar.length) : d.enAzBirBolge, onClick: () => void kaydet('kime') };
       break;
     case 'kime':
-      devam = { etiket: 'Planı hazırla', kapali: !kitle?.onaylandi, not: kitle?.onaylandi ? '' : 'Tarifi onayla', onClick: () => void kaydet('inceleme') };
+      devam = { etiket: d.planiHazirla, kapali: !kitle?.onaylandi, not: kitle?.onaylandi ? '' : d.tarifiOnayla, onClick: () => void kaydet('inceleme') };
       break;
     case 'inceleme':
-      devam = { etiket: 'Planı gör', kapali: !incelemeBitti, not: incelemeBitti ? '' : 'İnceleme sürüyor', onClick: () => void kaydet('plan') };
+      devam = { etiket: d.planiGor, kapali: !incelemeBitti, not: incelemeBitti ? '' : d.incelemeSuruyor, onClick: () => void kaydet('plan') };
       break;
     case 'plan':
       devam = {
-        etiket: 'Planı onayla',
+        etiket: d.planiOnayla,
         kapali: !detay || detay.kalemler.length === 0,
-        not: detay ? `${detay.kalemler.length} kampanya` : '',
+        not: detay ? d.kampanyaSayisi(detay.kalemler.length) : '',
         onClick: () =>
           void (async () => {
             setKayit({ tur: 'suruyor' });
@@ -268,7 +273,7 @@ export function StratejiSihirbazi({
       };
       break;
     case 'gonder':
-      devam = { etiket: 'Raporu önizle', kapali: !planId, not: '', onClick: () => planId && router.push(stratejiPanelAdresi({ musteri: clientId, plan: planId, adim: 'rapor' })) };
+      devam = { etiket: d.raporuOnizle, kapali: !planId, not: '', onClick: () => planId && router.push(stratejiPanelAdresi({ musteri: clientId, plan: planId, adim: 'rapor' })) };
       break;
   }
 
@@ -277,15 +282,15 @@ export function StratejiSihirbazi({
       <div className="mb-5 flex flex-wrap items-center gap-3">
         <span className="min-w-0 flex-1 truncate text-[13px] text-ink-muted">
           <Link href={stratejiPanelAdresi({ musteri: clientId, adim: 'giris' })} className="text-ink-muted no-underline hover:text-ink">
-            AdvStrategy
+            {menuSatiriEtiketi('/strateji', dil)}
           </Link>{' '}
-          › Strateji oluştur › <b className="font-semibold text-ink">{STRATEJI_ADIM_ETIKETI[adim]}</b>
+          › {d.stratejiOlustur} › <b className="font-semibold text-ink">{STRATEJI_ADIM_ETIKETI[adim]}</b>
         </span>
-        <Dugme ton="hayalet" boyut="kucuk" onClick={() => void kaydetVeCik()} bekliyor={kayit.tur === 'suruyor'} title={detay ? undefined : 'Taslak bütçe adımından sonra kaydedilir'}>
-          {detay || adim === 'butce' ? 'Kaydet ve çık' : 'Çık'}
+        <Dugme ton="hayalet" boyut="kucuk" onClick={() => void kaydetVeCik()} bekliyor={kayit.tur === 'suruyor'} title={detay ? undefined : d.taslakButceSonra}>
+          {detay || adim === 'butce' ? d.kaydetVeCik : d.cik}
         </Dugme>
       </div>
-      <IlerlemeRayi etiket="Strateji oluşturma adımları" parcalar={rayParcalari(adim).map((p) => ({ anahtar: p.adim, etiket: p.etiket, hal: p.hal }))} />
+      <IlerlemeRayi etiket={d.adimlar} parcalar={rayParcalari(adim).map((p) => ({ anahtar: p.adim, etiket: p.etiket, hal: p.hal }))} />
 
       <div key={adim} className="bolum-gecis mt-7">
         {adim === 'hedef' && g && <AdimHedef girdiler={g} secili={amaclar} degistir={setAmaclar} clientId={clientId} />}
@@ -295,12 +300,12 @@ export function StratejiSihirbazi({
         {adim === 'inceleme' && detay && <AdimInceleme detay={detay} durum={durum('inceleme')} guncelle={setDetay} tazeSurum={tazeSurum} bittiBildir={setIncelemeBitti} />}
         {adim === 'plan' && detay && <AdimPlan detay={detay} guncelle={setDetay} yenile={yenile} tazeSurum={tazeSurum} girdiler={g} tutamak={planTutamagi} />}
         {adim === 'gonder' && detay && <AdimGonder detay={detay} guncelle={setDetay} tazeSurum={tazeSurum} izinler={izinler} ajansYoneticisi={g?.ajansYoneticisi ?? false} clientId={clientId} />}
-        {!detay && adim !== 'hedef' && adim !== 'butce' && <Bildirim baslik="Bu adım için önce bir strateji taslağı gerekiyor.">Hedef ve bütçe adımlarından başla.</Bildirim>}
+        {!detay && adim !== 'hedef' && adim !== 'butce' && <Bildirim baslik={d.taslakGerekli}>{d.hedefButceBasla}</Bildirim>}
       </div>
 
       {kayit.tur === 'hata' && (
         <div className="mt-5">
-          <Bildirim hata baslik="Kaydedilemedi.">
+          <Bildirim hata baslik={d.kaydedilemedi}>
             {kayit.mesaj}
           </Bildirim>
         </div>

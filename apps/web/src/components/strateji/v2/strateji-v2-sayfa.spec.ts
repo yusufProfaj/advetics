@@ -4,6 +4,9 @@ import { NextRequest } from 'next/server';
 import { describe, expect, it } from 'vitest';
 import { ONAY_SAYFASI_ONEKI, STRATEJI_BELGE_BOLUMLERI } from '@advetics/shared';
 import { middleware } from '@/middleware';
+import { stratejiAdimlarSozlugu } from '@/dil/sozlukler/strateji-v2-adimlar';
+import { stratejiV2Sozlugu } from '@/dil/sozlukler/strateji-v2';
+import { stratejiKelimeSozlugu } from '@/dil/sozlukler/strateji-v2-belge';
 
 /**
  * ═══ AdvStrategy v2 — KAYNAK TARAMALARI ═══
@@ -127,13 +130,15 @@ describe('sekmeli düzenleyici KALKTI; akış taslaktaki gibi (simulasyon.html)'
     expect(b).toMatch(/yetmeyen\.map\(\(s\) => \(\s*<p key=\{s\.amac\}[^>]*role="alert">\s*\{s\.cumle\}/);
   });
   it('KRİTİK: kitle tarifi onaylanmadan plana geçilmiyor; metne dokunmak onayı kaldırıyor', () => {
-    expect(kod('sihirbaz.tsx')).toMatch(/case 'kime':\s*devam = \{ etiket: 'Planı hazırla', kapali: !kitle\?\.onaylandi,/);
+    expect(kod('sihirbaz.tsx')).toMatch(/case 'kime':\s*devam = \{ etiket: d\.planiHazirla, kapali: !kitle\?\.onaylandi,/);
+    expect(stratejiV2Sozlugu.tr.sihirbaz.planiHazirla).toBe('Planı hazırla');
     expect(kod('adimlar-soru.tsx')).toContain("degistir(e.target.value.trim() === '' ? null : { metin: e.target.value, kaynak: 'ajans', onaylandi: false })");
   });
   it('KRİTİK: "müşteri adına onayla" yalnız ajans yöneticisine açık ve ikinci tıklamayla', () => {
     const g = kod('adim-gonder.tsx');
     expect(g).toContain('disabled={!ajansYoneticisi || is.tur === \'suruyor\'}');
-    expect(g).toContain('Onayladım, kuruluma geç');
+    expect(g).toContain('{gm.onayladim}');
+    expect(stratejiAdimlarSozlugu.tr.gonder.onayladim).toBe('Onayladım, kuruluma geç');
     expect(kod('sihirbaz.tsx')).toContain('ajansYoneticisi={g?.ajansYoneticisi ?? false}');
   });
 });
@@ -145,7 +150,7 @@ describe('İNCELEME: gerçek okuma, sahte bekleme yok', () => {
     expect(i).toContain("apiFetch<StratejiIncelemeSatiri>(stratejiUcYolu('/strateji/v2/planlar/:id/inceleme/:parca', { ...id, parca }))");
     expect(i).toContain("apiFetch<StratejiOnerisi>(stratejiUcYolu('/strateji/v2/planlar/:id/oner', id)");
     expect(i).toContain("stratejiUcYolu('/strateji/v2/planlar/:id/kalemler', id), 'PUT'");
-    expect(i).toContain("satir(i, { tur: 'dustu', mesaj: okumaHatasi(e) })");
+    expect(i).toContain("satir(i, { tur: 'dustu', mesaj: okumaHatasi(e, dil) })");
   });
   it('KRİTİK: girdiler değişmediyse yeniden koşmuyor (Plan düzenlemeleri ezilmesin)', () => {
     const i = kod('adim-inceleme.tsx');
@@ -353,7 +358,7 @@ describe('girişsiz onay sayfası', () => {
     const s = kod('onay-page');
     expect(s).toContain('tokenSorulmaliMi(token) ? await belgeOku(token)');
     expect(s).not.toContain('serverApiFetch');
-    expect(s).toContain('onaySayfasiHali(okuma.status, okuma.govde)');
+    expect(s).toContain('onaySayfasiHali(okuma.status, okuma.govde, dil)');
     const kutu = kod('onay-kutusu.tsx');
     expect(kutu).toContain("credentials: 'omit'");
     expect(kutu).toContain('baglantiKarariSchema.safeParse(');
@@ -374,8 +379,8 @@ describe('girişsiz onay sayfası', () => {
 describe('rehber: "Stratejiden"', () => {
   it('KRİTİK: bütçe adımı rozeti `kaynakRozeti`nden; `kullanici` dışını "Önerilen" diyen eski satır yok', () => {
     const butce = yorumsuz(join(REHBER, 'adim-butce.tsx'));
-    expect(butce).toContain("kaynakRozeti(b.a.metaPayiYuzde?.kaynak, 'Önerilen')");
-    expect(butce).toContain('kaynakRozeti(b.a.butce?.kaynak, null)');
+    expect(butce).toContain('kaynakRozeti(b.a.metaPayiYuzde?.kaynak, d.onerilen, dil)');
+    expect(butce).toContain('kaynakRozeti(b.a.butce?.kaynak, null, dil)');
     expect(butce).not.toMatch(/kaynak !== 'kullanici' && <span className=\{s\.onerilen\}>Önerilen/);
     expect(yorumsuz(join(REHBER, 'adim-kime.tsx'))).toContain('kaynakRozeti(b.a.konumlar?.kaynak');
   });
@@ -399,7 +404,7 @@ describe('Google kelime araması v2 ekranı (Ajan 4 AÇIK-1)', () => {
   });
   it('KRİTİK: tohum, gruplama ve değişiklik v1\'in saf yardımcılarından (ikinci ayrıştırıcı yok)', () => {
     const k = kod('kelime-bolumu.tsx');
-    for (const f of ['tohumlariAyir(tohum)', 'kelimeGruplari(kelimeler.satirlar, taslak)', 'kelimeDegisiklikleri(kelimeler.satirlar, taslak)', 'aylikAramaMetni(s.aylikArama)']) expect(k, f).toContain(f);
+    for (const f of ['tohumlariAyir(tohum, dil)', 'kelimeGruplari(kelimeler.satirlar, taslak)', 'kelimeDegisiklikleri(kelimeler.satirlar, taslak)', 'aylikAramaMetni(s.aylikArama, dil)']) expect(k, f).toContain(f);
     expect(k).toContain("s.varyantlar.join(', ')");
     expect(k).toMatch(/import \{[^}]*\btohumlariAyir\b[^}]*\} from '\.\.\/hesap'/);
   });
@@ -427,7 +432,7 @@ describe('Google kelime araması v2 ekranı (Ajan 4 AÇIK-1)', () => {
   it('KRİTİK: Google Arama kalemi kelimeleri Plan adımında KALEMİN İÇİNDE arıyor; eksikse nedeni yazıyor; liste canlı tablodan', () => {
     const p = kod('adim-plan.tsx');
     expect(p).toContain('const kelimeGruplari = seciliKelimeGruplari(detay.kelimeler.satirlar);');
-    expect(p).toMatch(/\{kalemKelimeDurumu\(k, kelimeGruplari\) !== 'gerekmez' && \([\s\S]{0,400}KALEM_KELIME_METNI\[[\s\S]{0,200}<KelimeBolumu/);
+    expect(p).toMatch(/\{kalemKelimeDurumu\(k, kelimeGruplari\) !== 'gerekmez' && \([\s\S]{0,400}kalemKelimeMetni\([\s\S]{0,200}<KelimeBolumu/);
     expect(p).toContain('aramaKalemleri={[{ index: i, ad: amacAdi(k.amac), kelimeGrubu: k.kelimeGrubu }]}');
     expect(p.match(/<KelimeBolumu/g)?.length).toBe(1);
     expect(kod('kalem-duzenleyici.tsx')).not.toContain('girdiler?.kelimeGruplari');

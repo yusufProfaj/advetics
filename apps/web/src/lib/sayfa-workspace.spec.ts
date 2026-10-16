@@ -2,6 +2,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { genelBakisSozlugu } from '@/dil/sozlukler/genel-bakis';
+import { markaMerkeziKurulumSozlugu } from '@/dil/sozlukler/marka-merkezi-kurulum';
 import type { SessionResponse } from '@advetics/shared';
 import { sayfaWorkspaceId, workspaceSecimVerisi, workspaceUyumu } from './sayfa-workspace';
 
@@ -135,7 +136,8 @@ describe('sayfalar', () => {
       const kod = yorumsuz(p);
       const i = kod.indexOf('<WorkspaceGerekli');
       const eleman = kod.slice(i, kod.indexOf('/>', i));
-      expect(eleman, p).toMatch(/neden="[^"]{10,}"/);
+      // İki dil (D3): gerekçe sözlükten gelebilir (`neden={d.x}`); düz dize de geçerli.
+      expect(eleman, p).toMatch(/neden="[^"]{10,}"|neden=\{[a-zA-Z.]+\}/);
     }
   });
 });
@@ -237,7 +239,11 @@ describe('KRİTİK: Marka Merkezi ve Varlıklar adres ≠ seçimde içerik OKUMU
   it('Kurulum listesi kullanıcıyı var olmayan "üstten seç"e değil, düğmeye gönderiyor', () => {
     const g = yorumsuz(join(SRC, 'components/marka-merkezi/kurulum-listesi.tsx'));
     expect(g).not.toContain('üstten bu workspace');
-    expect(g).toContain('Bu workspace’e geç');
+    // Metin sözlükte (D3): ipucu iki dilde de düğmenin GERÇEK adını söylüyor.
+    expect(g).toContain('{d.aktifDegil}');
+    for (const dil of ['tr', 'en'] as const) {
+      expect(JSON.stringify(markaMerkeziKurulumSozlugu[dil])).toContain(genelBakisSozlugu[dil].workspace.gec);
+    }
     expect(yorumsuz(join(SRC, 'components/workspace-gec.tsx'))).toContain('{d.gec}');
     expect(genelBakisSozlugu.tr.workspace.gec).toBe('Bu workspace’e geç');
   });

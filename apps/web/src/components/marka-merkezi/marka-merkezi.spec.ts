@@ -1,6 +1,9 @@
+import { markaMerkeziSozlugu } from '@/dil/sozlukler/marka-merkezi';
+import { markaMerkeziKurulumSozlugu } from '@/dil/sozlukler/marka-merkezi-kurulum';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { butceSozlugu } from '@/dil/sozlukler/butce';
 import { CHANNEL_KINDS, type ChannelGroup, type ChannelItem } from '@advetics/shared';
 import { havuzdaAra } from '../tenancy/bagli-kanallar';
 import { visibleSections } from '@/lib/nav-sections';
@@ -60,7 +63,8 @@ describe('KRİTİK: tek sayaç — hazırlık şeridi ve ikinci sayaç yok', () 
   });
 
   it('düşen kaynak sessiz kalmıyor: her kaynak kendi hatasıyla, düğme nedeniyle pasif', () => {
-    expect(LISTE).toContain('Bazı bilgiler okunamadı');
+    expect(LISTE).toContain('{d.okunamayanBaslik}');
+    expect(markaMerkeziKurulumSozlugu.tr.okunamayanBaslik).toContain('Bazı bilgiler okunamadı');
     expect(LISTE).toContain('{kapaliNeden && <p');
     expect(LISTE).not.toMatch(/\.catch\(\(\) => set/);
   });
@@ -75,7 +79,8 @@ describe('KRİTİK: tek sayaç — hazırlık şeridi ve ikinci sayaç yok', () 
 describe('sayfa', () => {
   it('KRİTİK: çağrılar ayrı hata taşıyor, biri düşünce öteki çizilmeye devam ediyor', () => {
     expect(SAYFA).toContain('Promise.all([');
-    expect(SAYFA).toContain('Hesaplar ve kanallar alınamadı.');
+    expect(SAYFA).toContain('{d.kanallarAlinamadi}');
+    expect(markaMerkeziSozlugu.tr.sayfa.kanallarAlinamadi).toBe('Hesaplar ve kanallar alınamadı.');
     expect(SAYFA).not.toContain('.catch(() => null)');
   });
 
@@ -94,9 +99,11 @@ describe('sayfa', () => {
   it('başlık menü adı ("Marka Merkezi"), workspace açıklamanın başında; bölüm yan menüde', () => {
     // 2026-10-14 (BILESENLER § 9): başlık menü adının AYNISI; hangi
     // workspace'in kurulumu olduğu açıklamanın İLK sözcükleri.
-    expect(SAYFA).toContain('baslik="Marka Merkezi"');
+    // Sayfa adı menünün kendi çevirisinden (iki dilde menüyle aynı); elle Türkçe dize yok.
+    expect(SAYFA).toContain('baslik={sayfaAdi}');
+    expect(SAYFA).toContain('menuSatiriEtiketi(PANEL_YOLLARI.markaMerkezi, dil)');
     expect(SAYFA).toContain('{sirket ? `${sirket} › ${workspaceAdi}` : workspaceAdi}');
-    expect(SAYFA).toContain('<SayfaIcDuzen menu={<IcMenu clientId={clientId} aktif={bolum} rozetler={rozetler} />}>');
+    expect(SAYFA).toContain('<SayfaIcDuzen menu={<IcMenu clientId={clientId} aktif={bolum} rozetler={rozetler} dil={dil} />}>');
     const MENU = readFileSync(join(SRC, 'components/marka-merkezi/ic-menu.tsx'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     expect(MENU).toContain('<SayfaIcMenu');
     expect(MENU).toContain("uyari: rozet?.ton === 'eksik'");
@@ -196,7 +203,8 @@ describe('Aylık Bütçe mecraya göre gruplu (2026-10-06)', () => {
     expect(govde).toContain('PLATFORMS.filter((p) => rows.some((a) => a.platform === p))');
     expect(govde).toContain('<section key={platform}');
     expect(govde).toContain('PLATFORM_KISA_ADLARI[platform]');
-    expect(govde).toContain("'hiçbirinde bütçe sınırı yok'");
+    expect(govde).toContain('d.sinirYokGrup');
+    expect(butceSozlugu.tr.hesaplar.sinirYokGrup).toBe('hiçbirinde bütçe sınırı yok');
   });
 
   it('KRİTİK: satır kolona sığıyor — "Bütçe tanımla" düğmesi yatay kaydırmanın dışında kalmıyor', () => {
@@ -209,7 +217,8 @@ describe('Aylık Bütçe mecraya göre gruplu (2026-10-06)', () => {
   });
 
   it('sınırı olmayan hesap boş tire değil, "Sınır yok" diyor', () => {
-    expect(govde).toContain('Sınır yok');
+    expect(govde).toContain('{d.sinirYok}');
+    expect(butceSozlugu.tr.hesaplar.sinirYok).toBe('Sınır yok');
   });
 });
 
@@ -257,7 +266,7 @@ describe('Workspace bilgileri (eski Workspace ayarları + Bildirimler + Senkroni
 
   it('kapalı kart boş değil, nedenini yazıyor', () => {
     for (const k of ['erisim.gor', 'bildirim.gor', 'veriDurumu.gor']) {
-      expect(BILGI).toContain(`PANEL_KAPILARI['${k}'].neden`);
+      expect(BILGI).toContain(`kapiNedeni('${k}', dil)`);
     }
   });
 });

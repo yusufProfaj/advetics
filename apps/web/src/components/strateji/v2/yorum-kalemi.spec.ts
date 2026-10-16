@@ -29,6 +29,6 @@ describe('yorumun kampanyası', () => {
   it('KRİTİK: revizyon ve yorum gövdesi seçilen kalemi taşıyor, liste etiketi gösteriyor', () => {
     expect(KAYNAK).toContain("{ surum, yorum: yorum.trim(), kalemId: kalemId || null }");
     expect(KAYNAK).toContain("{ surum, metin: yorum.trim(), kalemId: kalemId || null }");
-    expect(KAYNAK).toContain('yorumKalemEtiketi(y.kalemSira)');
+    expect(KAYNAK).toContain('yorumKalemEtiketi(y.kalemSira, dil)');
   });
 });

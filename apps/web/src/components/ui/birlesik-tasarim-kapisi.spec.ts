@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { butceSozlugu } from '@/dil/sozlukler/butce';
 
 /**
  * ═══ BİRLEŞİK TASARIM GEÇİŞİ — AJAN 4 KAPISI (2026-10-14) ═══
@@ -31,8 +32,9 @@ describe('Aylık Bütçe başlığında birincil "Bütçeyi düzenle" (taslak #b
     expect(birincil).toContain('canWrite && data ?');
     expect(birincil).toContain('adAccountId={null}');
     expect(birincil).toContain("ton: 'birincil'");
-    expect(birincil).toContain("'Bütçeyi düzenle'");
-    expect(ICERIK).toContain('<SayfaBasligi baslik={baslik.baslik} aciklama={baslik.aciklama} eylemler={birincil} />');
+    expect(birincil).toContain('d.form.butceyiDuzenle');
+    expect(butceSozlugu.tr.form.butceyiDuzenle).toBe('Bütçeyi düzenle');
+    expect(ICERIK).toContain('<SayfaBasligi baslik={baslik.baslik} aciklama={baslik.aciklama} bolum={baslik.bolum} eylemler={birincil} />');
   });
   it('kartta ikinci bir tetik yok; satır tetikleri duruyor', () => {
     expect(dilim(ICERIK, 'function OverallCard(', 'function AccountTable(')).not.toContain('<BudgetForm');
@@ -41,7 +43,8 @@ describe('Aylık Bütçe başlığında birincil "Bütçeyi düzenle" (taslak #b
   it('sayfa başlığı içerikte çiziliyor (menü adı kaynakta kalıyor)', () => {
     const SAYFA = oku('src/app/(dashboard)/butce/page.tsx');
     expect(SAYFA).toContain('<ButceIcerik clientId={clientId} params={params} baslik={basliklar} />');
-    expect(SAYFA).toContain("baslik: 'Aylık Bütçe'");
+    expect(SAYFA).toContain("menuSatiriEtiketi('/butce', dil)");
+    expect(SAYFA).toContain('baslik: ad,');
   });
   it('BudgetForm tetiği verilmezse eski küçük ikincil düğme', () => {
     const FORM = oku('src/components/budget/budget-form.tsx');

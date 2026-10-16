@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { stratejiGecisMumkunMu, stratejiUcYolu, type StratejiDurumu } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { stratejiV2Sozlugu } from '@/dil/sozlukler/strateji-v2';
 import { Dugme } from '@/components/ui/dugme';
 import { Pencere } from '@/components/ui/pencere';
 import { Bildirim, yaz } from './ortak';
@@ -30,6 +32,8 @@ export function iptalEdilebilirMi(p: { bicim: number; durum: string }): boolean 
 }
 
 export function KapatmaPenceresi({ hedef, onKapat, onBitti }: { hedef: KapatmaHedefi | null; onKapat: () => void; onBitti: (tur: 'iptal' | 'sil') => void }) {
+  const d = useSozluk(stratejiV2Sozlugu).kapatma;
+  const { dil } = useDil();
   const [suruyor, setSuruyor] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
   useEffect(() => setHata(null), [hedef]);
@@ -39,7 +43,7 @@ export function KapatmaPenceresi({ hedef, onKapat, onBitti }: { hedef: KapatmaHe
     setSuruyor(true);
     setHata(null);
     if (hedef.tur === 'iptal') {
-      const r = await yaz(stratejiUcYolu('/strateji/v2/planlar/:id/eylem', { id: hedef.id }), 'POST', { eylem: 'iptal', surum: hedef.surum }, async () => null, hedef.surum);
+      const r = await yaz(stratejiUcYolu('/strateji/v2/planlar/:id/eylem', { id: hedef.id }), 'POST', { eylem: 'iptal', surum: hedef.surum }, async () => null, hedef.surum, dil);
       setSuruyor(false);
       if (r.tur !== 'tamam') return setHata(r.mesaj);
     } else {
@@ -48,7 +52,7 @@ export function KapatmaPenceresi({ hedef, onKapat, onBitti }: { hedef: KapatmaHe
       } catch (e) {
         setSuruyor(false);
         // Sunucunun cümlesi ("Strateji bulunamadı", yetki) ekranda; boş kutu değil.
-        return setHata(e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.');
+        return setHata(e instanceof ApiRequestError ? e.message : d.sunucuYok);
       }
       setSuruyor(false);
     }
@@ -61,25 +65,21 @@ export function KapatmaPenceresi({ hedef, onKapat, onBitti }: { hedef: KapatmaHe
       acik={hedef !== null}
       onKapat={() => !suruyor && onKapat()}
       genislik="dar"
-      baslik={hedef ? `“${hedef.ad}” ${sil ? 'silinsin mi?' : 'iptal edilsin mi?'}` : ''}
-      aciklama={
-        sil
-          ? 'Strateji, kampanya satırları, yorumları ve onay bağlantıları kalıcı olarak silinir; geri alınamaz. Kurulmuş kampanyalar ve reklamlar kalır. Silinen stratejinin özeti işlem geçmişinde durur.'
-          : 'Strateji “İptal edildi” olur ve listede kalır. Müşteriye gönderilen onay bağlantısı artık çalışmaz. Kurulmuş kampanyalara dokunulmaz; yeni strateji oluşturabilirsin.'
-      }
+      baslik={hedef ? (sil ? d.silBaslik(hedef.ad) : d.iptalBaslik(hedef.ad)) : ''}
+      aciklama={sil ? d.silAciklama : d.iptalAciklama}
       altEylemler={
         <>
           <Dugme ton="ikincil" onClick={onKapat} disabled={suruyor}>
-            Vazgeç
+            {d.vazgec}
           </Dugme>
           <Dugme ton="koyu" bekliyor={suruyor} onClick={() => void yap()}>
-            {sil ? 'Kalıcı olarak sil' : 'İptal et'}
+            {sil ? d.kaliciSil : d.iptalEt}
           </Dugme>
         </>
       }
     >
       {hedef?.durum === 'onaylandi' && (
-        <p className="text-13 text-ink">Müşteri onayını vermişti. {sil ? 'Onay kaydı stratejiyle birlikte gider.' : 'İptal, onayı geri almaz; strateji kapanır.'}</p>
+        <p className="text-13 text-ink">{sil ? d.onayliSil : d.onayliIptal}</p>
       )}
       {hata && (
         <div className="mt-2">

@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
 import { headers } from 'next/headers';
-import { stratejiUcYolu } from '@advetics/shared';
+import { sec, stratejiUcYolu } from '@advetics/shared';
 import { INTERNAL_API_URL } from '@/lib/api';
+import { dilAl } from '@/dil/sunucu';
+import { stratejiPlanSozlugu } from '@/dil/sozlukler/strateji-plan';
 import { StratejiBelgesi } from '@/components/strateji/v2/belge';
 import { onaySayfasiHali, tokenSorulmaliMi, type OnaySayfasiHali } from '@/components/strateji/v2/hesap';
 import { BaglantiOnayKutusu } from '@/components/strateji/v2/onay-kutusu';
@@ -29,11 +31,19 @@ import { Serit } from '@/components/ui/hal';
  */
 export const dynamic = 'force-dynamic';
 
-export const metadata: Metadata = {
-  title: 'Strateji onayı',
-  robots: { index: false, follow: false, nocache: true },
-  referrer: 'no-referrer',
-};
+/*
+ * `generateMetadata`: sekme başlığı arayüz dilinde. Dil çerezden okunuyor;
+ * müşteri bağlantıyı ilk kez açtıysa çerez yok ve Türkçe çiziliyor (seçim
+ * yapılana kadar varsayılan).
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  const d = sec(stratejiPlanSozlugu, await dilAl());
+  return {
+    title: d.onay.sayfaBasligi,
+    robots: { index: false, follow: false, nocache: true },
+    referrer: 'no-referrer',
+  };
+}
 
 /**
  * İSTEMCİNİN IP'Sİ API'YE İLETİLİR (Ajan 4 bulgusu). Belge Next SUNUCUSUNDAN
@@ -69,11 +79,12 @@ async function belgeOku(token: string): Promise<{ status: number | null; govde: 
 
 export default async function StratejiOnayPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
+  const dil = await dilAl();
   const okuma = tokenSorulmaliMi(token) ? await belgeOku(token) : { status: 404, govde: null };
-  const hal: OnaySayfasiHali = onaySayfasiHali(okuma.status, okuma.govde);
+  const hal: OnaySayfasiHali = onaySayfasiHali(okuma.status, okuma.govde, dil);
 
   if (hal.tur === 'mesaj' || !okuma.govde?.belge) {
-    const m = hal.tur === 'mesaj' ? hal : { baslik: 'Bağlantı geçersiz.', metin: '' };
+    const m = hal.tur === 'mesaj' ? hal : { baslik: sec(stratejiPlanSozlugu, dil).onay.baglantiGecersiz, metin: '' };
     /*
      * TEK NÖTR CÜMLE, ORTAK BAŞLIKLA (`SayfaBasligi`, elle `h1` değil).
      * Renkler token: eskiden sabit beyaz/siyah ve kılavuz hex'leri elle
@@ -101,6 +112,7 @@ export default async function StratejiOnayPage({ params }: { params: Promise<{ t
         </div>
       )}
       <StratejiBelgesi
+        dil={dil}
         veri={belge}
         gerceklesen={null}
         onayYuvasi={<BaglantiOnayKutusu token={token} surum={belge.plan.surum} onay={belge.plan.onay} kararAcik={hal.kararAcik} yorumlar={yorumlar} />}

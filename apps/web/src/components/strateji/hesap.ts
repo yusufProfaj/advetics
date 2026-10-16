@@ -28,8 +28,10 @@ import {
   type PlanOzeti,
   type StratejiPlatformu,
 } from '@advetics/shared';
+import { sec, type Dil } from '@advetics/shared';
 import { API_URL, ApiRequestError } from '@/lib/api';
 import { baglanti } from '@/lib/baglanti';
+import { stratejiPlanSozlugu } from '@/dil/sozlukler/strateji-plan';
 
 /**
  * ═══ ADVSTRATEGY EKRANININ SAF KARARLARI ═══
@@ -52,13 +54,13 @@ import { baglanti } from '@/lib/baglanti';
  *
  * SUNUM SONDA: planın iş sırası bütçe → kelime → matris → müşteriye sunum.
  */
-export const STRATEJI_BOLUMLERI = [
-  { kod: 'butce', ad: 'Bütçe dağılımı' },
-  { kod: 'arama', ad: 'Google arama' },
-  { kod: 'matris', ad: 'Kitle ve kreatif' },
-  { kod: 'sunum', ad: 'Sunum' },
-] as const;
+export const STRATEJI_BOLUMLERI = [{ kod: 'butce' }, { kod: 'arama' }, { kod: 'matris' }, { kod: 'sunum' }] as const;
 export type StratejiBolumu = (typeof STRATEJI_BOLUMLERI)[number]['kod'];
+
+/** Bölüm sekmesinin adı: kod sabit, ad sözlükten (adres `?bolum=` koduyla çalışıyor, dilden bağımsız). */
+export function bolumAdi(kod: StratejiBolumu, dil: Dil = 'tr'): string {
+  return sec(stratejiPlanSozlugu, dil).bolum[kod];
+}
 
 /**
  * Adresteki bölüm. Tanınmayan değer (ör. henüz olmayan `?bolum=takvim`)
@@ -115,13 +117,26 @@ export function planSec(
 
 // ─── Durum, eylem, onay ─────────────────────────────────────────────────────
 
-export const DURUM_ETIKETI: Record<PlanDurumu, { metin: string; ton: 'notr' | 'uyari' | 'tamam' | 'bilgi' | 'kapali' }> = {
-  taslak: { metin: 'Taslak', ton: 'notr' },
-  onayda: { metin: 'Onay bekliyor', ton: 'uyari' },
-  onaylandi: { metin: 'Onaylandı', ton: 'tamam' },
+export const DURUM_TONU: Record<PlanDurumu, 'notr' | 'uyari' | 'tamam' | 'bilgi' | 'kapali'> = {
+  taslak: 'notr',
+  onayda: 'uyari',
+  onaylandi: 'tamam',
   // Eski aktarım ölü sohbet tablosuna gidiyordu; rozet "AdvCampaign'de" sözü vermemeli.
-  aktarildi: { metin: 'Eski aktarım', ton: 'bilgi' },
-  iptal: { metin: 'İptal edildi', ton: 'kapali' },
+  aktarildi: 'bilgi',
+  iptal: 'kapali',
+};
+
+/** Rozetin metni dile göre; `DURUM_ETIKETI` Türkçe eski kullanıcılar için (v2 girişi), yenisi `durumEtiketi`. */
+export function durumEtiketi(durum: PlanDurumu, dil: Dil = 'tr'): { metin: string; ton: (typeof DURUM_TONU)[PlanDurumu] } {
+  return { metin: sec(stratejiPlanSozlugu, dil).durum[durum], ton: DURUM_TONU[durum] };
+}
+
+export const DURUM_ETIKETI: Record<PlanDurumu, { metin: string; ton: (typeof DURUM_TONU)[PlanDurumu] }> = {
+  taslak: durumEtiketi('taslak'),
+  onayda: durumEtiketi('onayda'),
+  onaylandi: durumEtiketi('onaylandi'),
+  aktarildi: durumEtiketi('aktarildi'),
+  iptal: durumEtiketi('iptal'),
 };
 
 /*
@@ -133,21 +148,27 @@ export const DURUM_ETIKETI: Record<PlanDurumu, { metin: string; ton: 'notr' | 'u
  */
 const EYLEM_SIRASI: readonly PlanEylemi[] = ['onaya_gonder', 'onayla', 'aktar', 'geri_cek', 'iptal'];
 
-const EYLEM_GORUNUSU: Record<PlanEylemi, { etiket: string; ton: 'birincil' | 'ikincil' | 'tehlike' }> = {
-  onaya_gonder: { etiket: 'Onaya gönder', ton: 'birincil' },
-  onayla: { etiket: 'Planı onayla', ton: 'birincil' },
-  aktar: { etiket: 'AdvCampaign’e aktar', ton: 'birincil' },
-  geri_cek: { etiket: 'Onaydan geri çek', ton: 'ikincil' },
-  iptal: { etiket: 'Planı iptal et', ton: 'tehlike' },
+const EYLEM_TONU: Record<PlanEylemi, 'birincil' | 'ikincil' | 'tehlike'> = {
+  onaya_gonder: 'birincil',
+  onayla: 'birincil',
+  aktar: 'birincil',
+  geri_cek: 'ikincil',
+  iptal: 'tehlike',
 };
 
 export function eylemDugmeleri(
   yapilabilir: readonly PlanEylemi[],
+  dil: Dil = 'tr',
 ): Array<{ eylem: PlanEylemi; etiket: string; ton: 'birincil' | 'ikincil' | 'tehlike' }> {
   const izinli = new Set(yapilabilir);
   // V1 aktarımı KAPALI: sunucu listeye koymuyor; panel de koymaz. Sunucu
   // eski bir sürümle `aktar` döndürse bile düğme ölü yola çıkmasın.
-  return EYLEM_SIRASI.filter((e) => izinli.has(e) && (e !== 'aktar' || V1_AKTARIM_ACIK)).map((e) => ({ eylem: e, ...EYLEM_GORUNUSU[e] }));
+  const d = sec(stratejiPlanSozlugu, dil);
+  return EYLEM_SIRASI.filter((e) => izinli.has(e) && (e !== 'aktar' || V1_AKTARIM_ACIK)).map((e) => ({
+    eylem: e,
+    etiket: d.eylem[e],
+    ton: EYLEM_TONU[e],
+  }));
 }
 
 /**
@@ -169,37 +190,46 @@ export function eylemIstegi(
  * olduğunda kullanıcı nedenini görmeli; gri ve tıklanmayan bir kutu "bozuk"
  * diye okunuyor.
  */
-export function duzenlemeKilidi(durum: PlanDurumu, yazabilir: boolean): string | null {
-  if (!yazabilir) return 'Bu planı görebilirsin ama değiştirme yetkin yok.';
+export function duzenlemeKilidi(durum: PlanDurumu, yazabilir: boolean, dil: Dil = 'tr'): string | null {
+  const k = sec(stratejiPlanSozlugu, dil).kilit;
+  if (!yazabilir) return k.yetkiYok;
   if (duzenlenebilirMi(durum)) return null;
   switch (durum) {
     case 'onayda':
-      return 'Plan onay bekliyor. Değiştirmek için önce onaydan geri çekilmeli.';
+      return k.onayda;
     case 'onaylandi':
-      return 'Plan onaylandı. Onaylanan plan değiştirilemez.';
+      return k.onaylandi;
     case 'aktarildi':
-      return 'Plan eski sohbete aktarılmıştı. Değiştirilemez.';
+      return k.aktarildi;
     case 'iptal':
-      return 'Plan iptal edildi. Değiştirilemez.';
+      return k.iptal;
     default:
-      return 'Plan bu durumda değiştirilemez.';
+      return k.varsayilan;
   }
 }
 
-const TR_ZAMAN = new Intl.DateTimeFormat('tr-TR', {
-  day: 'numeric',
-  month: 'short',
-  year: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit',
-  // SAAT DİLİMİ AÇIK: istemci bileşeni önce sunucuda çiziliyor. Dilim
-  // verilmezse sunucunun dilimiyle çizilen saat tarayıcıda başka çıkar.
-  timeZone: 'Europe/Istanbul',
-});
+// İKİ BİÇİMLEYİCİ, modül düzeyinde ve dilden BAĞIMSIZ nesne: dil çağrıda seçiliyor.
+const ZAMAN_BICIMLERI = {
+  tr: zamanBicimleyici('tr-TR'),
+  en: zamanBicimleyici('en-US'),
+} as const;
 
-export function zamanMetni(iso: string): string {
+function zamanBicimleyici(yerel: string): Intl.DateTimeFormat {
+  return new Intl.DateTimeFormat(yerel, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    // SAAT DİLİMİ AÇIK: istemci bileşeni önce sunucuda çiziliyor. Dilim
+    // verilmezse sunucunun dilimiyle çizilen saat tarayıcıda başka çıkar.
+    timeZone: 'Europe/Istanbul',
+  });
+}
+
+export function zamanMetni(iso: string, dil: Dil = 'tr'): string {
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? 'zaman bilinmiyor' : TR_ZAMAN.format(d);
+  return Number.isNaN(d.getTime()) ? sec(stratejiPlanSozlugu, dil).ortak.zamanBilinmiyor : ZAMAN_BICIMLERI[dil].format(d);
 }
 
 /**
@@ -207,20 +237,29 @@ export function zamanMetni(iso: string): string {
  * belge değil (sözleşmedeki `onaylayan.rol` gerekçesi). "Müşteri hesabı"
  * terimi `client_viewer` rolüyle açılmış giriş hesabı (`terminoloji.spec.ts`).
  */
-export function onayMetni(onaylayan: PlanOzeti['onaylayan']): string | null {
+export function onayMetni(onaylayan: PlanOzeti['onaylayan'], dil: Dil = 'tr'): string | null {
   if (!onaylayan) return null;
-  const kim = onaylayan.rol === 'musteri' ? 'Müşteri hesabı onayladı' : 'Ajans onayladı';
+  const o = sec(stratejiPlanSozlugu, dil).ortak;
+  const kim = onaylayan.rol === 'musteri' ? o.musteriOnayladi : o.ajansOnayladi;
   const ad = onaylayan.ad ? ` (${onaylayan.ad})` : '';
-  return `${kim}${ad} · ${zamanMetni(onaylayan.zaman)}`;
+  return `${kim}${ad} · ${zamanMetni(onaylayan.zaman, dil)}`;
 }
 
-const AY_ADLARI = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+const AY_BICIMLERI = {
+  tr: new Intl.DateTimeFormat('tr-TR', { month: 'long', timeZone: 'UTC' }),
+  en: new Intl.DateTimeFormat('en-US', { month: 'long', timeZone: 'UTC' }),
+} as const;
 
-/** "2026-11" → "Kasım 2026". Date'e çevrilmiyor: saat dilimi ayı kaydırabilir. */
-export function donemEtiketi(donem: string): string {
+/**
+ * "2026-11" → "Kasım 2026" / "November 2026". Ay adı UTC'nin 15'inden
+ * alınıyor: yerel saat dilimi ayı kaydıramasın (ayın 1'inde gece yarısı
+ * bir önceki aya düşerdi).
+ */
+export function donemEtiketi(donem: string, dil: Dil = 'tr'): string {
   const m = /^(\d{4})-(\d{2})$/.exec(donem);
-  const ay = m ? AY_ADLARI[Number(m[2]) - 1] : undefined;
-  return m && ay ? `${ay} ${m[1]}` : donem;
+  const ay = m ? Number(m[2]) : 0;
+  if (!m || ay < 1 || ay > 12) return donem;
+  return `${AY_BICIMLERI[dil].format(new Date(Date.UTC(Number(m[1]), ay - 1, 15)))} ${m[1]}`;
 }
 
 /**
@@ -237,27 +276,25 @@ export function gelecekAy(simdi: Date): string {
   return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
 }
 
-export const AKTARIM_NEDEN_METNI: Record<AktarimAtlamaNedeni, string> = {
-  niyet_desteklenmiyor: 'AdvCampaign bu reklam amacını henüz kuramıyor',
-  platform_kapali: 'AdvCampaign Google’da henüz açık değil',
-  kaynak_silinmis: 'kitle ya da görsel plan onaylandıktan sonra silinmiş',
-  butce_sifir: 'bütçesi sıfır',
-};
+/** Türkçe metin tablosu (`hesap.spec` ve eski kullanıcılar için); dile göre okumak `aktarimNedeniMetni`. */
+export const AKTARIM_NEDEN_METNI: Record<AktarimAtlamaNedeni, string> = stratejiPlanSozlugu.tr.aktarimNedeni;
+
+export function aktarimNedeniMetni(neden: AktarimAtlamaNedeni, dil: Dil = 'tr'): string {
+  return sec(stratejiPlanSozlugu, dil).aktarimNedeni[neden];
+}
 
 /** Atlanan satır SAYILIR ve nedeni yazılır: "12 satırdan 9'u" sessiz kesme değil. */
-export function aktarimOzeti(a: AktarimSonucu): { baslik: string; nedenler: string[] } {
+export function aktarimOzeti(a: AktarimSonucu, dil: Dil = 'tr'): { baslik: string; nedenler: string[] } {
   const toplam = a.aktarilan.length + a.atlanan.length;
-  const baslik =
-    a.atlanan.length === 0
-      ? `${toplam} satırın hepsi AdvCampaign’e aktarıldı.`
-      : `${toplam} satırdan ${a.aktarilan.length} tanesi aktarıldı, ${a.atlanan.length} tanesi atlandı.`;
+  const o = sec(stratejiPlanSozlugu, dil).aktarimOzeti;
+  const baslik = a.atlanan.length === 0 ? o.hepsi(toplam) : o.kismi(toplam, a.aktarilan.length, a.atlanan.length);
   // Önizleme ile AYNI özet: önce gösterilen neden ile sonra yazılan ayrışmasın.
-  return { baslik, nedenler: nedenOzeti(a.atlanan.map((x) => x.neden)) };
+  return { baslik, nedenler: nedenOzeti(a.atlanan.map((x) => x.neden), dil) };
 }
 
 // ─── Yazma hatası ve sürüm çakışması ─────────────────────────────────────────
 
-export const CAKISMA_METNI = 'Plan başka biri tarafından değiştirildi, yenileyin.';
+export const CAKISMA_METNI = stratejiPlanSozlugu.tr.ortak.cakisma;
 
 /**
  * SÜRÜM ÇAKIŞMASI AYRI BİR HÂL — AMA 409 TEK BAŞINA ONU SÖYLEMİYOR.
@@ -279,10 +316,12 @@ export function yazmaHatasiSinifla(
   err: unknown,
   gonderilenSurum: number | null,
   tazeSurum: number | null,
+  dil: Dil = 'tr',
 ): { cakisma: boolean; mesaj: string } {
-  if (!(err instanceof ApiRequestError)) return { cakisma: false, mesaj: 'Sunucuya ulaşılamadı.' };
+  const o = sec(stratejiPlanSozlugu, dil).ortak;
+  if (!(err instanceof ApiRequestError)) return { cakisma: false, mesaj: o.ulasilamadi };
   if (err.status === 409 && gonderilenSurum !== null && tazeSurum !== null && tazeSurum !== gonderilenSurum) {
-    return { cakisma: true, mesaj: CAKISMA_METNI };
+    return { cakisma: true, mesaj: o.cakisma };
   }
   return { cakisma: false, mesaj: err.message };
 }
@@ -292,8 +331,8 @@ export function yenidenOkunmali(err: unknown): boolean {
   return err instanceof ApiRequestError && err.status === 409;
 }
 
-export function okumaHatasi(err: unknown): string {
-  return err instanceof ApiRequestError ? err.message : 'Sunucuya ulaşılamadı.';
+export function okumaHatasi(err: unknown, dil: Dil = 'tr'): string {
+  return err instanceof ApiRequestError ? err.message : sec(stratejiPlanSozlugu, dil).ortak.ulasilamadi;
 }
 
 // ─── Para ───────────────────────────────────────────────────────────────────
@@ -406,29 +445,34 @@ export function oneriyiUygula(
   return { taslak: yeni, korunanElle };
 }
 
-export const DAGILIM_BOS_METNI: Record<DagilimBosNedeni, string> = {
-  hesap_yok: 'Bu workspace’e atanmış Meta ya da Google reklam hesabı yok. Öneri geçmiş veriden üretiliyor; dağılımı elle yaz.',
-  veri_yok: 'Hesaplarda son 90 günde harcama yok, öneri üretilemedi. Dağılımı elle yaz.',
-  donusum_yok: 'Son 90 günde harcama var ama sonuç yok. Hangi platformun daha çok getirdiği söylenemiyor.',
-  karisik_birim: 'Hesaplar farklı para birimi kullanıyor. Kur çevrimi yapılmadığı için öneri üretilmedi.',
-};
+export const DAGILIM_BOS_METNI: Record<DagilimBosNedeni, string> = stratejiPlanSozlugu.tr.dagilimBos;
+
+export function dagilimBosMetni(neden: DagilimBosNedeni, dil: Dil = 'tr'): string {
+  return sec(stratejiPlanSozlugu, dil).dagilimBos[neden];
+}
 
 // ─── Google arama ───────────────────────────────────────────────────────────
 
-export const REKABET_ETIKETI: Record<NonNullable<KelimeSatiri['rekabet']>, string> = {
-  LOW: 'düşük',
-  MEDIUM: 'orta',
-  HIGH: 'yüksek',
-};
+export const REKABET_ETIKETI: Record<NonNullable<KelimeSatiri['rekabet']>, string> = stratejiPlanSozlugu.tr.rekabet;
+
+export function rekabetEtiketi(r: NonNullable<KelimeSatiri['rekabet']>, dil: Dil = 'tr'): string {
+  return sec(stratejiPlanSozlugu, dil).rekabet[r];
+}
 
 /**
  * `null` = Google değer vermedi; "veri yok" yazılır, SIFIR DEĞİL. Sıfır
  * kelimeyi haksız yere elerdi. Hacimler yuvarlanmış kova değerleri
  * (ölçüldü 2026-10-08), o yüzden "yaklaşık".
  */
-export function aylikAramaMetni(n: number | null): string {
-  if (n === null) return 'veri yok';
-  return `yaklaşık ${n.toLocaleString('tr-TR', { maximumFractionDigits: 0 })}`;
+export function aylikAramaMetni(n: number | null, dil: Dil = 'tr'): string {
+  const d = sec(stratejiPlanSozlugu, dil);
+  if (n === null) return d.ortak.veriYok;
+  return d.arama.yaklasik(n.toLocaleString(yerelKodu(dil), { maximumFractionDigits: 0 }));
+}
+
+/** Sayı biçimi için dil kodu: İngilizce `en-US`, gerisi Türkçe. */
+export function yerelKodu(dil: Dil): string {
+  return dil === 'en' ? 'en-US' : 'tr-TR';
 }
 
 /**
@@ -437,7 +481,7 @@ export function aylikAramaMetni(n: number | null): string {
  * iki harf): ekran farklı sınır koyarsa sunucu ekranın kabul ettiğini
  * reddeder.
  */
-export function tohumlariAyir(metin: string): { tur: 'tamam'; tohumlar: string[] } | { tur: 'hata'; mesaj: string } {
+export function tohumlariAyir(metin: string, dil: Dil = 'tr'): { tur: 'tamam'; tohumlar: string[] } | { tur: 'hata'; mesaj: string } {
   const gorulen = new Set<string>();
   const tohumlar: string[] = [];
   for (const parca of metin.split(/[\n,]/)) {
@@ -453,9 +497,9 @@ export function tohumlariAyir(metin: string): { tur: 'tamam'; tohumlar: string[]
     const ilk = r.error.issues[0];
     // Tek kelimenin kısalığı/uzunluğu: hangisi olduğunu söyle.
     if (ilk && ilk.path.length > 1 && typeof ilk.path[1] === 'number') {
-      return { tur: 'hata', mesaj: `"${tohumlar[ilk.path[1]]}": kelime 2 ile 80 harf arasında olmalı.` };
+      return { tur: 'hata', mesaj: sec(stratejiPlanSozlugu, dil).arama.kelimeUzunlugu(tohumlar[ilk.path[1]] ?? '') };
     }
-    return { tur: 'hata', mesaj: ilk?.message ?? 'Kelimeler okunamadı.' };
+    return { tur: 'hata', mesaj: ilk?.message ?? sec(stratejiPlanSozlugu, dil).arama.okunamadi };
   }
   return { tur: 'tamam', tohumlar: r.data.tohumlar };
 }
@@ -545,6 +589,7 @@ export function matrisAsimlari(
  */
 export function matrisSatiriDogrula(
   s: MatrisTaslakSatiri,
+  dil: Dil = 'tr',
 ): { tur: 'tamam'; govde: ReturnType<typeof matrisSatiriGirdiSchema.parse> } | { tur: 'hata'; mesaj: string } {
   const r = matrisSatiriGirdiSchema.safeParse({
     platform: s.platform,
@@ -558,8 +603,9 @@ export function matrisSatiriDogrula(
   });
   if (r.success) return { tur: 'tamam', govde: r.data };
   const ilk = r.error.issues[0];
-  if (ilk?.path[0] === 'tutar') return { tur: 'hata', mesaj: 'Tutar yazılmalı.' };
-  return { tur: 'hata', mesaj: ilk?.message ?? 'Satır geçersiz.' };
+  const m = sec(stratejiPlanSozlugu, dil).matrisDogrula;
+  if (ilk?.path[0] === 'tutar') return { tur: 'hata', mesaj: m.tutarYazilmali };
+  return { tur: 'hata', mesaj: ilk?.message ?? m.satirGecersiz };
 }
 
 /**
@@ -573,18 +619,20 @@ export function matrisSatiriDogrula(
  * silinmiş bir Meta satırını sağlam gösterir ve aktarımda neden atlandığı
  * anlaşılmazdı.
  */
-const BOS_KITLE_ANLAMI: Record<StratejiPlatformu, string> = {
-  meta: 'Silinmiş kitle',
-  google: 'Kitle yok',
+const BOS_KITLE_ANLAMI: Record<StratejiPlatformu, 'silinmis' | 'yok'> = {
+  meta: 'silinmis',
+  google: 'yok',
 };
 
 export function kitleMetni(
   platform: StratejiPlatformu,
   kitle: { id: string; ad: string | null } | null,
+  dil: Dil = 'tr',
 ): string {
+  const k = sec(stratejiPlanSozlugu, dil).kitle;
   // Platform başına tablo, ikili dallanma değil: üçüncü platform derlemede yakalanır.
-  if (kitle === null) return BOS_KITLE_ANLAMI[platform];
-  return kitle.ad ?? 'Silinmiş kitle';
+  if (kitle === null) return k[BOS_KITLE_ANLAMI[platform]];
+  return kitle.ad ?? k.silinmis;
 }
 
 // ─── Aktarım önizlemesi ─────────────────────────────────────────────────────
@@ -606,12 +654,12 @@ export interface AktarimOnizlemesi {
  * Var olanlar ile plandaki sayı ayrı veriliyor ki eksik kreatif seti
  * `kaynak_silinmis` sayılsın.
  */
-export function aktarimOnizlemesi(detay: PlanDetayi): AktarimOnizlemesi {
+export function aktarimOnizlemesi(detay: PlanDetayi, dil: Dil = 'tr'): AktarimOnizlemesi {
   const gidecek: AktarimOnizlemesi['gidecek'] = [];
   const atlanacak: AktarimOnizlemesi['atlanacak'] = [];
   for (const s of detay.matris) {
     const kitleAdi = s.kitle?.ad ?? null;
-    const baslik = `${NIYET_KATALOGU[s.niyet].ekranAdi} · ${kitleMetni(s.platform, s.kitle)}`;
+    const baslik = `${NIYET_KATALOGU[s.niyet].ekranAdi} · ${kitleMetni(s.platform, s.kitle, dil)}`;
     const neden = aktarimEngeli({
       platform: s.platform,
       katman: s.katman,
@@ -627,13 +675,14 @@ export function aktarimOnizlemesi(detay: PlanDetayi): AktarimOnizlemesi {
     if (neden === null) gidecek.push({ id: s.id, baslik, tutarMicros: s.tutarMicros });
     else atlanacak.push({ id: s.id, baslik, neden });
   }
-  return { gidecek, atlanacak, nedenler: nedenOzeti(atlanacak.map((a) => a.neden)) };
+  return { gidecek, atlanacak, nedenler: nedenOzeti(atlanacak.map((a) => a.neden), dil) };
 }
 
-function nedenOzeti(nedenler: readonly AktarimAtlamaNedeni[]): string[] {
+function nedenOzeti(nedenler: readonly AktarimAtlamaNedeni[], dil: Dil): string[] {
+  const d = sec(stratejiPlanSozlugu, dil);
   const say = new Map<AktarimAtlamaNedeni, number>();
   for (const n of nedenler) say.set(n, (say.get(n) ?? 0) + 1);
-  return AKTARIM_ATLAMA_NEDENLERI.filter((n) => say.has(n)).map((n) => `${say.get(n)} satır: ${AKTARIM_NEDEN_METNI[n]}`);
+  return AKTARIM_ATLAMA_NEDENLERI.filter((n) => say.has(n)).map((n) => d.aktarimOzeti.satirNeden(say.get(n) ?? 0, d.aktarimNedeni[n]));
 }
 
 // ─── Sunum (PDF) ────────────────────────────────────────────────────────────
@@ -650,26 +699,27 @@ export function pdfAdresi(planId: string): string {
 }
 
 /** İndirilen dosyanın adı: "medya-plani-2026-11-s3.pdf". Sürüm adda: iki indirme karışmasın. */
-export function pdfDosyaAdi(donem: string, surum: number): string {
-  return `medya-plani-${donem}-s${surum}.pdf`;
+export function pdfDosyaAdi(donem: string, surum: number, dil: Dil = 'tr'): string {
+  return `${sec(stratejiPlanSozlugu, dil).pdfDosyaOnEki}-${donem}-s${surum}.pdf`;
 }
 
 /**
  * Belgenin taşıyacağı hâl. Taslak da iniyor (sözleşme) ama kapakta "TASLAK"
  * yazıyor; kullanıcı müşteriye göndermeden önce bunu bilmeli.
  */
-export function sunumNotu(durum: PlanDurumu): { ton: 'uyari' | 'bilgi'; metin: string } {
+export function sunumNotu(durum: PlanDurumu, dil: Dil = 'tr'): { ton: 'uyari' | 'bilgi'; metin: string } {
+  const n = sec(stratejiPlanSozlugu, dil).sunumNotu;
   switch (durum) {
     case 'taslak':
-      return { ton: 'uyari', metin: 'Plan taslak. PDF taslak olarak inecek ve kapağında TASLAK yazacak.' };
+      return { ton: 'uyari', metin: n.taslak };
     case 'onayda':
-      return { ton: 'bilgi', metin: 'Plan onay bekliyor. PDF onaya gönderilen sürümü taşır.' };
+      return { ton: 'bilgi', metin: n.onayda };
     case 'onaylandi':
-      return { ton: 'bilgi', metin: 'PDF onaylanan sürümü ve onay bilgisini taşır.' };
+      return { ton: 'bilgi', metin: n.onaylandi };
     case 'aktarildi':
-      return { ton: 'bilgi', metin: 'PDF onaylanıp AdvCampaign’e aktarılan sürümü taşır.' };
+      return { ton: 'bilgi', metin: n.aktarildi };
     case 'iptal':
-      return { ton: 'uyari', metin: 'Plan iptal edildi. PDF yalnızca kayıt için.' };
+      return { ton: 'uyari', metin: n.iptal };
   }
 }
 

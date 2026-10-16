@@ -2,6 +2,8 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { SECTIONS } from '@/lib/nav-sections';
+import { stratejiPlanSozlugu } from '@/dil/sozlukler/strateji-plan';
+import { stratejiV2Sozlugu } from '@/dil/sozlukler/strateji-v2';
 
 /**
  * ═══ ADVSTRATEGY EKRANI — KAYNAK TARAMALARI ═══
@@ -70,8 +72,9 @@ describe('menü ile sayfa aynı adı taşıyor', () => {
     const satir = SECTIONS.flatMap((s) => s.items).find((i) => i.href === '/strateji');
     expect(satir?.label).toBe('AdvStrategy');
     const sayfa = kod('page');
-    expect(/metadata\s*=\s*\{\s*title:\s*'([^']+)'/.exec(sayfa)?.[1]).toBe('AdvStrategy · Advetics');
-    expect(sayfa).toContain('baslik="AdvStrategy"');
+    // Sayfa adı menünün kendi çevirisinden (`menuSatiriEtiketi`), iki dilde aynı kalıyor.
+    expect(sayfa).toContain("title: `${menuSatiriEtiketi('/strateji', await dilAl())} · Advetics`");
+    expect(sayfa).toContain("baslik={menuSatiriEtiketi('/strateji', dil)}");
   });
 });
 
@@ -87,15 +90,18 @@ describe('sessiz hata yok', () => {
     // Sayfa v2'ye geçti (AdvStrategy v2): bütün okumalar TEK yardımcıdan
     // (`oku`) ve hata dalı sunucunun cümlesini taşıyor. Liste, v2 plan ve
     // eski (v1) plan okuması ayrı ayrı hata kutusu çiziyor.
-    expect(sayfa.match(/\(e: unknown\) => \(\{ tur: 'hata' as const, mesaj: okumaHatasi\(e\) \}\)/g)?.length).toBe(1);
+    expect(sayfa.match(/\(e: unknown\) => \(\{ tur: 'hata' as const, mesaj: okumaHatasi\(e, dil\) \}\)/g)?.length).toBe(1);
     // `oku` dışında doğrudan okuma yok (hatası yakalanmamış bir okuma sayfayı düşürürdü).
     expect(sayfa.match(/serverApiFetch</g)?.length).toBe(1);
-    expect(sayfa).toContain('baslik="Stratejiler alınamadı."');
-    expect(sayfa).toContain('baslik="Strateji alınamadı."');
-    expect(sayfa).toContain('baslik="Plan alınamadı."');
+    expect(sayfa).toContain('baslik={d.stratejilerAlinamadi}');
+    expect(sayfa).toContain('baslik={d.stratejiAlinamadi}');
+    expect(sayfa).toContain('baslik={d.planAlinamadi}');
+    expect(stratejiV2Sozlugu.tr.sayfa.stratejilerAlinamadi).toBe('Stratejiler alınamadı.');
+    expect(stratejiV2Sozlugu.tr.sayfa.stratejiAlinamadi).toBe('Strateji alınamadı.');
+    expect(stratejiV2Sozlugu.tr.sayfa.planAlinamadi).toBe('Plan alınamadı.');
     const matris = kod('matris-bolumu.tsx');
-    expect(matris.match(/setKitleler\(\{ tur: 'hata', mesaj: okumaHatasi\(e\) \}\)/g)?.length).toBe(1);
-    expect(matris.match(/setGorseller\(\{ tur: 'hata', mesaj: okumaHatasi\(e\) \}\)/g)?.length).toBe(1);
+    expect(matris.match(/setKitleler\(\{ tur: 'hata', mesaj: okumaHatasi\(e, dil\) \}\)/g)?.length).toBe(1);
+    expect(matris.match(/setGorseller\(\{ tur: 'hata', mesaj: okumaHatasi\(e, dil\) \}\)/g)?.length).toBe(1);
   });
 
   it('panel metninde uzun tire yok', () => {
@@ -106,7 +112,7 @@ describe('sessiz hata yok', () => {
 describe('düğmeler sunucunun kararından', () => {
   it('KRİTİK: eylem düğmeleri `yapilabilir`den çiziliyor, geçiş tablosundan değil', () => {
     const ekran = kod('plan-ekrani.tsx');
-    expect(ekran).toContain('eylemDugmeleri(detay.yapilabilir)');
+    expect(ekran).toContain('eylemDugmeleri(detay.yapilabilir, dil)');
     expect(ekran).toContain('dugmeler.map(');
     // Panel kendi listesini kurarsa yetkiyi bilmez: müşteri hesabı "Aktar"ı görür.
     for (const [ad, k] of Object.entries(KOD)) {
@@ -158,7 +164,7 @@ describe('adres ve sürüm', () => {
         if (cagri.includes("'/strateji/planlar/:id/kelime-ara'")) continue;
         // Eylem gövdesi `eylemIstegi`nden geliyor; onun `surum` taşıdığını
         // `hesap.spec.ts` çalıştırarak sınıyor.
-        if (cagri === '(yol, \'POST\', govde, yenile, plan.surum)') {
+        if (cagri === '(yol, \'POST\', govde, yenile, plan.surum, dil)') {
           expect(k).toContain('const { yol, govde } = eylemIstegi(plan.id, eylem, plan.surum)');
           continue;
         }
@@ -192,8 +198,8 @@ describe('ikinci tur: aktarım, sunum, gruplar', () => {
 
   it('KRİTİK: aktar düğmesi önce önizlemeyi açıyor, eylemi önizlemedeki onay yapıyor', () => {
     const ekran = kod('plan-ekrani.tsx');
-    expect(ekran).toContain("onClick={() => setOnayBekleyen(d.eylem as 'iptal' | 'aktar')}");
-    expect(ekran).toContain('onizleme={aktarimOnizlemesi(detay)}');
+    expect(ekran).toContain("onClick={() => setOnayBekleyen(dg.eylem as 'iptal' | 'aktar')}");
+    expect(ekran).toContain('onizleme={aktarimOnizlemesi(detay, dil)}');
     expect(ekran).toContain("onayla={() => void eylemYap('aktar')}");
     // Hiç satır gitmeyecekse onay kapalı.
     expect(ekran).toContain('disabled={gidecek.length === 0}');
@@ -218,8 +224,11 @@ describe('ikinci tur: aktarım, sunum, gruplar', () => {
 
   it('sunum bölümü sürümü ve taslak uyarısını gösteriyor, sürüm istek anında sabitleniyor', () => {
     const sunum = kod('sunum-bolumu.tsx');
-    expect(sunum).toContain('sunumNotu(plan.durum)');
-    expect(sunum).toContain('Sürüm {plan.surum}');
+    expect(sunum).toContain('sunumNotu(plan.durum, dil)');
+    // Metin sözlükte: kaynakta anahtar kullanılıyor, değer sözlükten doğrulanıyor.
+    expect(sunum).toContain('{d.sunumEkrani.surum(plan.surum)}');
+    expect(stratejiPlanSozlugu.tr.sunumEkrani.surum(3)).toBe('Sürüm 3');
+    expect(stratejiPlanSozlugu.en.sunumEkrani.surum(3)).toBe('Version 3');
     expect(sunum).toContain('const surum = plan.surum;');
     expect(sunum).toContain("setHal({ tur: 'hata', mesaj })");
     expect(kod('plan-ekrani.tsx')).toContain('<SunumBolumu plan={plan} kaydedilmemis={kaydedilmemis} />');
@@ -236,6 +245,7 @@ describe('ikinci tur: aktarım, sunum, gruplar', () => {
   });
 
   it('elle yazılmış grup adı işaretli (`grupElle`)', () => {
-    expect(kod('arama-bolumu.tsx')).toMatch(/\{s\.grupElle && \(\s*<span[^>]*>\s*elle\s*<\/span>/);
+    expect(kod('arama-bolumu.tsx')).toMatch(/\{s\.grupElle && \(\s*<span[^>]*>\s*\{a\.elle\}\s*<\/span>/);
+    expect(stratejiPlanSozlugu.tr.aramaEkrani.elle).toBe('elle');
   });
 });

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { AsistanMesaji, Oneri } from '@advetics/shared';
+import { kurallarSozlugu } from '@/dil/sozlukler/kurallar';
 import {
   metinBloklari,
   adimHalleri,
@@ -184,6 +185,17 @@ describe('eylem metinleri (düğme + şimdi → sonra)', () => {
     const d = eylemMetni(oneri({ eylem: butce('300000000', '50000000', 'lifetime') }))!;
     expect(d.dugme).toBe('Bütçeyi düşür');
     expect(d.sonra).toContain('(toplam)');
+  });
+
+  it('İngilizce: nesne adıyla ("Pause ad set"), platformun kendi adı ve gün başı bütçe', () => {
+    expect(eylemMetni(oneri(), 'en')?.dugme).toBe('Pause ad');
+    expect(eylemMetni(oneri({ platform: 'google', varlik: { seviye: 'ad_group', id: '1', ad: 'S', ustAd: null } }), 'en')?.dugme).toBe(
+      'Pause ad group',
+    );
+    const b = eylemMetni(oneri({ eylem: butce('500000000', '600000000') }), 'en')!;
+    expect(b.dugme).toBe('Increase budget');
+    expect(b.sonra).toContain('/ day');
+    expect(adimMetinleri('meta', 'en')[0]).toBe('Send to Meta');
   });
 
   it('eylemsiz öneride metin yok', () => {
@@ -374,10 +386,13 @@ describe('KAYNAK: sessiz hata yasakları', () => {
     const sayfa = yorumsuz('app/(dashboard)/iyilestir/page.tsx');
     expect(sayfa).toMatch(/\(e: unknown\): HesapSonucu => \(\{ durum: 'hata', mesaj: hataMetni\(e\) \}\)/);
     const k = yorumsuz('components/rules/kurallar-icerik.tsx');
-    expect(k).toMatch(/hesaplar\.durum === 'hata' && \(\s*<Serit ton="hata" baslik="Reklam hesapları okunamadı\.">\s*\{hesaplar\.mesaj\}/);
+    // Metin sözlükte (`kurallarSozlugu`): kaynak anahtarı kullanıyor, sebep (`hesaplar.mesaj`) ekranda.
+    expect(k).toMatch(/hesaplar\.durum === 'hata' && \(\s*<Serit ton="hata" baslik=\{d\.hesapOkunamadi\}>\s*\{d\.hesapOkunamadiGovde\(hesaplar\.mesaj\)\}/);
+    expect(kurallarSozlugu.tr.hesapOkunamadi).toBe('Reklam hesapları okunamadı.');
     expect(k).not.toContain('/connections');
     // Editörde de: seçicinin altında sebep, "Tüm hesaplar" sessizce seçilmiyor.
-    expect(yorumsuz('components/rules/rule-editor.tsx')).toMatch(/hata=\{hesapHatasi \? `Reklam hesapları okunamadı: \$\{hesapHatasi\}/);
+    expect(yorumsuz('components/rules/rule-editor.tsx')).toContain('hata={hesapHatasi ? d.hesapOkunamadiAlan(hesapHatasi) : undefined}');
+    expect(kurallarSozlugu.tr.hesapOkunamadiAlan('x')).toBe('Reklam hesapları okunamadı: x Kural bütün hesaplara uygulanır.');
   });
 
   it('KRİTİK: kural geçmişi ve son tur kararları hatayı yutmuyor; sunucunun cümlesi ekranda', () => {
@@ -385,7 +400,8 @@ describe('KAYNAK: sessiz hata yasakları', () => {
     expect(k).not.toMatch(/\/runs`\)\.catch\(\(\) => null\)/);
     expect(k).not.toMatch(/\/actions`\)\.catch\(\(\) => null\)/);
     expect(k.match(/\(e: unknown\): Sonuc<Rule(Run|Action)Record\[\]> => \(\{ durum: 'hata', mesaj: hataMetni\(e\) \}\)/g)).toHaveLength(2);
-    expect(k).toContain('<HataDurumu baslik="Geçmiş alınamadı." mesaj={turlar.mesaj} />');
+    expect(k).toContain('<HataDurumu baslik={d.gecmisAlinamadi} mesaj={turlar.mesaj} />');
+    expect(kurallarSozlugu.tr.gecmisAlinamadi).toBe('Geçmiş alınamadı.');
     expect(k).toContain("mesaj={kararlar?.durum === 'hata' ? kararlar.mesaj");
   });
 

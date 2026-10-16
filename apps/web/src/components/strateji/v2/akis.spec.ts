@@ -147,7 +147,7 @@ describe('giriş', () => {
   });
   it('kart başlığı ortak fonksiyondan (giriş ekranı kendi dizgesini kurmuyor)', () => {
     const k = readFileSync(join(__dirname, 'giris.tsx'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
-    expect(k).toContain('const kartBasligi = olusturEtiketi(kart);');
+    expect(k).toContain('const kartBasligi = olusturEtiketi(kart, dil);');
     expect(k).toContain('baslik={kartBasligi}');
   });
 });

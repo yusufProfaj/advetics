@@ -3,7 +3,8 @@ import {
   AMAC_ASAMASI,
   AMAC_OLCUTU,
   REHBER_AMACLARI,
-  STRATEJI_ASAMA_ETIKETI,
+  sec,
+  type Dil,
   type StratejiBolumKodu,
   type StratejiKalemi,
 } from '@advetics/shared';
@@ -12,9 +13,11 @@ import {
   PLATFORM_ADI,
   amacAdi,
   asamaDagilimi,
+  asamaEtiketi,
   aySayisi,
   beklenenKutulari,
   belgeMetni,
+  bolumBasligi,
   bolumNumarasi,
   donemMetni,
   filigran,
@@ -33,6 +36,8 @@ import {
   yasMetni,
   yuzde,
 } from './hesap';
+import { stratejiHesapSozlugu } from '@/dil/sozlukler/strateji-v2';
+import { stratejiBelgeSozlugu } from '@/dil/sozlukler/strateji-v2-belge';
 import { Nokta, Etiket } from './ortak';
 import { Tutar } from './tutar';
 import type { Gerceklesen, StratejiBelgeVerisi } from '@advetics/shared';
@@ -62,6 +67,7 @@ export function StratejiBelgesi({
   onayYuvasi,
   gerceklesen,
   kapakBasligi = 'h1',
+  dil = 'tr',
 }: {
   veri: StratejiBelgeVerisi;
   onayYuvasi: ReactNode;
@@ -73,23 +79,29 @@ export function StratejiBelgesi({
    */
   kapakBasligi?: 'h1' | 'h2';
   gerceklesen: { tur: 'veri'; v: Gerceklesen } | { tur: 'hata'; mesaj: string } | null;
+  /**
+   * Belgenin dili. Bileşen direktifsiz (girişsiz onay sayfasında sunucuda da
+   * çiziliyor), kanca kullanamaz: dil propla geliyor. Varsayılan Türkçe;
+   * panel ekranı kullanıcının dilini geçiriyor, onay sayfası henüz geçirmiyor.
+   */
+  dil?: Dil;
 }) {
   const durum = veri.plan.durum;
   const cizici: Record<StratejiBolumKodu, () => ReactNode> = {
-    kapak: () => <Kapak veri={veri} baslik={kapakBasligi} />,
-    ozet: () => <Ozet veri={veri} />,
-    isletme: () => <Isletme veri={veri} />,
-    gecmis: () => <GecmisBolumu veri={veri} />,
-    hedefler: () => <Hedefler veri={veri} />,
-    butce: () => <ButceBolumu veri={veri} />,
-    kampanyalar: () => <Kampanyalar veri={veri} />,
-    kitle: () => <Kitle veri={veri} />,
-    kreatif: () => <Kreatif veri={veri} />,
-    takvim: () => <Takvim veri={veri} />,
-    olcum: () => <OlcumBolumu veri={veri} />,
-    riskler: () => <Riskler veri={veri} />,
+    kapak: () => <Kapak veri={veri} baslik={kapakBasligi} dil={dil} />,
+    ozet: () => <Ozet veri={veri} dil={dil} />,
+    isletme: () => <Isletme veri={veri} dil={dil} />,
+    gecmis: () => <GecmisBolumu veri={veri} dil={dil} />,
+    hedefler: () => <Hedefler veri={veri} dil={dil} />,
+    butce: () => <ButceBolumu veri={veri} dil={dil} />,
+    kampanyalar: () => <Kampanyalar veri={veri} dil={dil} />,
+    kitle: () => <Kitle veri={veri} dil={dil} />,
+    kreatif: () => <Kreatif veri={veri} dil={dil} />,
+    takvim: () => <Takvim veri={veri} dil={dil} />,
+    olcum: () => <OlcumBolumu veri={veri} dil={dil} />,
+    riskler: () => <Riskler veri={veri} dil={dil} />,
     onay: () => onayYuvasi,
-    gerceklesen: () => <GerceklesenBolumu veri={veri} gerceklesen={gerceklesen} />,
+    gerceklesen: () => <GerceklesenBolumu veri={veri} gerceklesen={gerceklesen} dil={dil} />,
   };
   return (
     <article className="strateji-kagit mx-auto w-full max-w-[860px] overflow-hidden rounded border border-line bg-white text-black shadow-kart">
@@ -97,7 +109,7 @@ export function StratejiBelgesi({
         b.kod === 'kapak' ? (
           <div key={b.kod}>{cizici.kapak()}</div>
         ) : (
-          <Sayfa key={b.kod} no={bolumNumarasi(b.kod, durum)} baslik={b.baslik}>
+          <Sayfa key={b.kod} no={bolumNumarasi(b.kod, durum)} baslik={bolumBasligi(b.kod, dil)}>
             {cizici[b.kod]()}
           </Sayfa>
         ),
@@ -119,12 +131,13 @@ function Sayfa({ no, baslik, children }: { no: string | null; baslik: string; ch
 const IKINCIL = 'text-[var(--gri)]/70';
 const CIZGI = 'border-black/10';
 
-function Kapak({ veri, baslik: Baslik }: { veri: StratejiBelgeVerisi; baslik: 'h1' | 'h2' }) {
+function Kapak({ veri, baslik: Baslik, dil }: { veri: StratejiBelgeVerisi; baslik: 'h1' | 'h2'; dil: Dil }) {
+  const bm = sec(stratejiBelgeSozlugu, dil).kapak;
   const { plan } = veri;
-  const f = filigran(plan.durum);
-  const onay = onayCumlesi(plan.onay);
+  const f = filigran(plan.durum, dil);
+  const onay = onayCumlesi(plan.onay, dil);
   return (
-    <section className="relative flex min-h-[480px] flex-col border-b border-dashed border-black/20 px-5 py-8 sm:min-h-[620px] sm:px-14 sm:py-12" aria-label="Kapak">
+    <section className="relative flex min-h-[480px] flex-col border-b border-dashed border-black/20 px-5 py-8 sm:min-h-[620px] sm:px-14 sm:py-12" aria-label={bm.kapak}>
       {/* Logo ve filigran AYNI satırda, akışta: mutlak konumlu filigran telefonda logonun üstüne biniyordu. */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         {/* YALNIZ ADVETICS LOGOSU (kullanıcı kararı K-1): kapakta ajansın ya da Profaj'ın logosu yok. */}
@@ -136,23 +149,23 @@ function Kapak({ veri, baslik: Baslik }: { veri: StratejiBelgeVerisi; baslik: 'h
       </div>
       <p className={`mb-1.5 mt-auto text-[15px] ${IKINCIL}`}>{plan.workspaceAdi}</p>
       <Baslik className="font-baslik m-0 text-[32px] font-extrabold leading-[1.06] tracking-[-0.02em] sm:text-[44px]">
-        Dijital Reklam
+        {bm.baslikUst}
         <br />
-        <span className="text-[var(--kirmizi)]">Stratejisi</span>
+        <span className="text-[var(--kirmizi)]">{bm.baslikAlt}</span>
       </Baslik>
       <div className="mb-[18px] mt-[26px] h-[5px] w-[72px] bg-brand" />
       <div className="grid grid-cols-2 gap-3 text-[13px] sm:grid-cols-3">
         <div>
-          <span className={`block text-xs ${IKINCIL}`}>Dönem</span>
-          {donemMetni(plan.baslangic, plan.bitis)}
+          <span className={`block text-xs ${IKINCIL}`}>{bm.donem}</span>
+          {donemMetni(plan.baslangic, plan.bitis, dil)}
         </div>
         <div>
-          <span className={`block text-xs ${IKINCIL}`}>Toplam bütçe</span>
+          <span className={`block text-xs ${IKINCIL}`}>{bm.toplamButce}</span>
           <Tutar micros={plan.toplamButceMicros} para={plan.paraBirimi} />
         </div>
         <div>
-          <span className={`block text-xs ${IKINCIL}`}>Hazırlayan</span>
-          {plan.hazirlayan ?? 'Ajans'} · sürüm {plan.surum}
+          <span className={`block text-xs ${IKINCIL}`}>{bm.hazirlayan}</span>
+          {plan.hazirlayan ?? bm.ajans} · {bm.surum(plan.surum)}
         </div>
       </div>
       {onay && <p className="mt-4 text-[13px] font-semibold">{onay}</p>}
@@ -164,27 +177,28 @@ function BosMetin({ children }: { children: ReactNode }) {
   return <p className={`m-0 text-sm ${IKINCIL}`}>{children}</p>;
 }
 
-function Ozet({ veri }: { veri: StratejiBelgeVerisi }) {
+function Ozet({ veri, dil }: { veri: StratejiBelgeVerisi; dil: Dil }) {
+  const bm = sec(stratejiBelgeSozlugu, dil).ozet;
   const { plan, kalemler } = veri;
   const metin = belgeMetni(veri.bolumler.ozet);
   const beklenen = beklenenKutulari(kalemler).slice(0, 1);
   return (
     <>
-      {metin ? <p className="mb-5 mt-0 whitespace-pre-line text-sm leading-relaxed">{metin}</p> : <BosMetin>Özet henüz yazılmadı.</BosMetin>}
+      {metin ? <p className="mb-5 mt-0 whitespace-pre-line text-sm leading-relaxed">{metin}</p> : <BosMetin>{bm.yazilmadi}</BosMetin>}
       <div className={`mt-4 grid grid-cols-2 overflow-hidden rounded-[10px] border sm:grid-cols-4 ${CIZGI}`}>
-        <Kutu etiket="Dönem" deger={`${aySayisi(plan.baslangic, plan.bitis)} ay`} />
-        <Kutu etiket="Kampanya" deger={String(kalemler.length)} />
+        <Kutu etiket={bm.donem} deger={bm.ay(aySayisi(plan.baslangic, plan.bitis))} />
+        <Kutu etiket={bm.kampanya} deger={String(kalemler.length)} />
         {beklenen[0] ? (
           <Kutu
-            etiket={`Beklenen ${beklenen[0].birim} · ${PLATFORM_ADI[beklenen[0].platform]}`}
+            etiket={bm.beklenen(beklenen[0].birim, PLATFORM_ADI[beklenen[0].platform])}
             deger={beklenen[0].alt === beklenen[0].ust ? String(beklenen[0].alt) : `${beklenen[0].alt}-${beklenen[0].ust}`}
-            alt="Hesabınızın verisi"
+            alt={bm.hesapVerisi}
           />
         ) : (
-          <Kutu etiket="Beklenen sonuç" deger="Tahmin yok" alt="Geçmiş veri yok" />
+          <Kutu etiket={bm.beklenenSonuc} deger={bm.tahminYok} alt={bm.gecmisVeriYok} />
         )}
         <div className="col-span-2 bg-[var(--gri)] px-4 py-3.5 text-white sm:col-span-1">
-          <div className="text-xs text-white/75">Toplam bütçe</div>
+          <div className="text-xs text-white/75">{bm.toplamButce}</div>
           <Tutar micros={plan.toplamButceMicros} para={plan.paraBirimi} className="text-[20px] font-bold" />
         </div>
       </div>
@@ -202,45 +216,47 @@ function Kutu({ etiket, deger, alt }: { etiket: string; deger: ReactNode; alt?: 
   );
 }
 
-function Isletme({ veri }: { veri: StratejiBelgeVerisi }) {
+function Isletme({ veri, dil }: { veri: StratejiBelgeVerisi; dil: Dil }) {
+  const bm = sec(stratejiBelgeSozlugu, dil).isletme;
   const metin = belgeMetni(veri.bolumler.isletme);
   return (
     <>
-      <p className={`mb-4 mt-0 text-sm ${IKINCIL}`}>Marka Merkezi ve sitenizden. Boş alanlar uydurulmadı.</p>
+      <p className={`mb-4 mt-0 text-sm ${IKINCIL}`}>{bm.kaynak}</p>
       <div className="grid gap-6 md:grid-cols-2">
         <div>
-          {veri.isletme.length === 0 && <BosMetin>Marka Merkezi'nde işletme bilgisi yok.</BosMetin>}
+          {veri.isletme.length === 0 && <BosMetin>{bm.bilgiYok}</BosMetin>}
           {veri.isletme.map((s) => (
             <div key={s.etiket} className={`flex justify-between gap-3 border-b py-2 text-[13px] ${CIZGI}`}>
               <span className={IKINCIL}>{s.etiket}</span>
-              <span className={`text-right ${s.deger === null ? IKINCIL : ''}`}>{s.deger ?? "Marka Merkezi'nde boş"}</span>
+              <span className={`text-right ${s.deger === null ? IKINCIL : ''}`}>{s.deger ?? bm.bos}</span>
             </div>
           ))}
         </div>
-        <div className="text-[13px] leading-relaxed">{metin ? <p className="m-0 whitespace-pre-line">{metin}</p> : <BosMetin>Analiz metni henüz yazılmadı.</BosMetin>}</div>
+        <div className="text-[13px] leading-relaxed">{metin ? <p className="m-0 whitespace-pre-line">{metin}</p> : <BosMetin>{bm.analizYok}</BosMetin>}</div>
       </div>
     </>
   );
 }
 
-function GecmisBolumu({ veri }: { veri: StratejiBelgeVerisi }) {
+function GecmisBolumu({ veri, dil }: { veri: StratejiBelgeVerisi; dil: Dil }) {
+  const bm = sec(stratejiBelgeSozlugu, dil).gecmis;
   const { gecmis, plan } = veri;
   return (
     <>
       <p className={`mb-4 mt-0 text-sm ${IKINCIL}`}>
-        Son {gecmis.gun} gün, hesaplarınızın verisi. Meta ve Google sonuçları farklı sayıldığı için toplanmıyor.
+        {bm.aciklama(gecmis.gun)}
       </p>
       {gecmis.satirlar.length === 0 ? (
-        <BosMetin>{gecmis.bosNedeni ?? 'Bu dönemde harcama yok.'}</BosMetin>
+        <BosMetin>{gecmis.bosNedeni ?? bm.harcamaYok}</BosMetin>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-[13px]">
             <thead>
               <tr className={`border-b text-left text-xs ${CIZGI} ${IKINCIL}`}>
-                <th className="py-2 pr-3 font-semibold">Platform · amaç</th>
-                <th className="py-2 pr-3 text-right font-semibold">Harcama</th>
-                <th className="py-2 pr-3 text-right font-semibold">Sonuç</th>
-                <th className="py-2 text-right font-semibold">Sonuç başı</th>
+                <th className="py-2 pr-3 font-semibold">{bm.platformAmac}</th>
+                <th className="py-2 pr-3 text-right font-semibold">{bm.harcama}</th>
+                <th className="py-2 pr-3 text-right font-semibold">{bm.sonuc}</th>
+                <th className="py-2 text-right font-semibold">{bm.sonucBasi}</th>
               </tr>
             </thead>
             <tbody>
@@ -252,7 +268,7 @@ function GecmisBolumu({ veri }: { veri: StratejiBelgeVerisi }) {
                   <td className="py-2.5 pr-3 text-right">
                     <Tutar micros={s.harcamaMicros} para={plan.paraBirimi} />
                   </td>
-                  <td className="py-2.5 pr-3 text-right tabular-nums">{s.sonuc === null ? 'Ölçülmüyor' : `${s.sonuc.toLocaleString('tr-TR')} ${s.birim}`}</td>
+                  <td className="py-2.5 pr-3 text-right tabular-nums">{s.sonuc === null ? bm.olculmuyor : `${s.sonuc.toLocaleString(dil === 'en' ? 'en-US' : 'tr-TR')} ${s.birim}`}</td>
                   <td className="py-2.5 text-right">
                     {s.sonuc && s.sonuc > 0 ? <Tutar micros={(BigInt(s.harcamaMicros) * 10_000n / BigInt(Math.round(s.sonuc * 10_000))).toString()} para={plan.paraBirimi} /> : '-'}
                   </td>
@@ -266,15 +282,16 @@ function GecmisBolumu({ veri }: { veri: StratejiBelgeVerisi }) {
   );
 }
 
-function Hedefler({ veri }: { veri: StratejiBelgeVerisi }) {
-  if (veri.kalemler.length === 0) return <BosMetin>Kampanya yok.</BosMetin>;
+function Hedefler({ veri, dil }: { veri: StratejiBelgeVerisi; dil: Dil }) {
+  const bm = sec(stratejiBelgeSozlugu, dil).hedefler;
+  if (veri.kalemler.length === 0) return <BosMetin>{bm.kampanyaYok}</BosMetin>;
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-collapse text-[13px]">
         <thead>
           <tr className={`border-b text-left text-xs ${CIZGI} ${IKINCIL}`}>
-            <th className="py-2 pr-3 font-semibold">Kampanya</th>
-            <th className="py-2 pr-3 font-semibold">Ölçüt</th>
+            <th className="py-2 pr-3 font-semibold">{bm.kampanya}</th>
+            <th className="py-2 pr-3 font-semibold">{bm.olcut}</th>
             <th className="py-2 pr-3 font-semibold">Meta</th>
             <th className="py-2 font-semibold">Google</th>
           </tr>
@@ -285,7 +302,7 @@ function Hedefler({ veri }: { veri: StratejiBelgeVerisi }) {
               <td className="py-2.5 pr-3 font-semibold">{amacAdi(k.amac)}</td>
               <td className="py-2.5 pr-3">{AMAC_OLCUTU[k.amac].birim}</td>
               {(['meta', 'google'] as const).map((p) => {
-                const t = tahminMetni(k.tahmin[p], k.amac);
+                const t = tahminMetni(k.tahmin[p], k.amac, dil);
                 return (
                   <td key={p} className="py-2.5 pr-3">
                     {t.ana}
@@ -302,16 +319,17 @@ function Hedefler({ veri }: { veri: StratejiBelgeVerisi }) {
 }
 
 /** Halka + aşama çubukları. Meta gri, Google kırmızı (kılavuz). */
-function ButceBolumu({ veri }: { veri: StratejiBelgeVerisi }) {
+function ButceBolumu({ veri, dil }: { veri: StratejiBelgeVerisi; dil: Dil }) {
+  const bm = sec(stratejiBelgeSozlugu, dil).butce;
   const { plan, kalemler } = veri;
   const p = platformToplamlari(kalemler, plan.paraBirimi);
   const yay = halkaYaylari(p.meta, p.google);
   const asamalar = asamaDagilimi(kalemler, plan.paraBirimi);
   return (
     <>
-      <p className={`mb-4 mt-0 text-sm ${IKINCIL}`}>Önce sonuç getiren kampanya, kalanı tanıtım.</p>
+      <p className={`mb-4 mt-0 text-sm ${IKINCIL}`}>{bm.aciklama}</p>
       <div className="grid items-center gap-6 md:grid-cols-[220px_1fr]">
-        <svg viewBox="0 0 200 200" width="200" height="200" role="img" aria-label={`Meta yüzde ${Math.round(yuzde(p.meta, p.meta + p.google))}, Google yüzde ${Math.round(yuzde(p.google, p.meta + p.google))}`} className="mx-auto">
+        <svg viewBox="0 0 200 200" width="200" height="200" role="img" aria-label={bm.halka(Math.round(yuzde(p.meta, p.meta + p.google)), Math.round(yuzde(p.google, p.meta + p.google)))} className="mx-auto">
           <circle cx="100" cy="100" r="70" fill="none" stroke="rgba(48,46,45,.07)" strokeWidth="28" />
           <circle cx="100" cy="100" r="70" fill="none" className="stroke-[var(--gri)]" strokeWidth="28" strokeDasharray={`${yay.meta} ${HALKA_CEVRE}`} transform="rotate(-90 100 100)" />
           <circle cx="100" cy="100" r="70" fill="none" className="stroke-[var(--kirmizi)]" strokeWidth="28" strokeDasharray={`${yay.google} ${HALKA_CEVRE}`} strokeDashoffset={-yay.meta} transform="rotate(-90 100 100)" />
@@ -320,7 +338,7 @@ function ButceBolumu({ veri }: { veri: StratejiBelgeVerisi }) {
             {kisaTutar(plan.toplamButceMicros)} {plan.paraBirimi === 'TRY' ? '₺' : plan.paraBirimi}
           </text>
           <text x="100" y="116" textAnchor="middle" fontSize="11" fill="rgba(48,46,45,.62)">
-            {aySayisi(plan.baslangic, plan.bitis)} ay toplam
+            {bm.toplamAy(aySayisi(plan.baslangic, plan.bitis))}
           </text>
         </svg>
         <div>
@@ -336,7 +354,7 @@ function ButceBolumu({ veri }: { veri: StratejiBelgeVerisi }) {
           </div>
           {asamalar.map((a) => (
             <div key={a.asama} className="my-2 grid grid-cols-[80px_1fr_100px] items-center gap-2.5 text-[13px] sm:grid-cols-[110px_1fr_120px]">
-              <span>{STRATEJI_ASAMA_ETIKETI[a.asama]}</span>
+              <span>{asamaEtiketi(a.asama, dil)}</span>
               <div className="flex h-3.5 overflow-hidden rounded-[7px] bg-black/[0.07]">
                 <span className="block h-full bg-[var(--gri)]" style={{ width: `${yuzde(a.meta, a.toplam)}%` }} />
                 <span className="block h-full bg-brand" style={{ width: `${yuzde(a.google, a.toplam)}%` }} />
@@ -355,20 +373,22 @@ function kisaTutar(micros: string): string {
   return (BigInt(micros) / 1_000_000n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }
 
-function Kampanyalar({ veri }: { veri: StratejiBelgeVerisi }) {
+function Kampanyalar({ veri, dil }: { veri: StratejiBelgeVerisi; dil: Dil }) {
+  const bm = sec(stratejiBelgeSozlugu, dil).kampanyalar;
   const { kalemler, plan } = veri;
-  if (kalemler.length === 0) return <BosMetin>Kampanya yok.</BosMetin>;
+  if (kalemler.length === 0) return <BosMetin>{bm.kampanyaYok}</BosMetin>;
   return (
     <>
-      <p className={`mb-4 mt-0 text-sm ${IKINCIL}`}>Onaydan sonra her biri ayrı bir reklam olarak kurulur.</p>
+      <p className={`mb-4 mt-0 text-sm ${IKINCIL}`}>{bm.aciklama}</p>
       {kalemler.map((k) => (
-        <KalemKarti key={k.id} k={k} para={plan.paraBirimi} />
+        <KalemKarti key={k.id} k={k} para={plan.paraBirimi} dil={dil} />
       ))}
     </>
   );
 }
 
-function KalemKarti({ k, para }: { k: StratejiKalemi; para: string }) {
+function KalemKarti({ k, para, dil }: { k: StratejiKalemi; para: string; dil: Dil }) {
+  const bm = sec(stratejiBelgeSozlugu, dil).kalem;
   const yon = belgeMetni(k.kreatifYonergesi);
   const metin = k.metin && k.metin.kaynak === 'ajans' ? k.metin : null;
   const t = kalemPlatformTutarlari(k, para);
@@ -381,7 +401,7 @@ function KalemKarti({ k, para }: { k: StratejiKalemi; para: string }) {
           <div>
             <b className="block text-[15px]">{amacAdi(k.amac)}</b>
             <span className={`text-xs ${IKINCIL}`}>
-              {STRATEJI_ASAMA_ETIKETI[AMAC_ASAMASI[k.amac]]} · {REHBER_AMACLARI[k.amac].neAlacaksin}
+              {asamaEtiketi(AMAC_ASAMASI[k.amac], dil)} · {REHBER_AMACLARI[k.amac].neAlacaksin}
             </span>
           </div>
         </div>
@@ -389,33 +409,33 @@ function KalemKarti({ k, para }: { k: StratejiKalemi; para: string }) {
       </div>
       <dl className="mt-3.5 grid grid-cols-2 gap-x-4 gap-y-2.5 text-[13px] md:grid-cols-4">
         <div>
-          <dt className={`text-[11px] font-semibold ${IKINCIL}`}>Nerede</dt>
+          <dt className={`text-[11px] font-semibold ${IKINCIL}`}>{bm.nerede}</dt>
           <dd className="m-0">
             {k.meta && <span className="block">Meta: <Tutar micros={t.meta} para={para} /></span>}
             {k.google && <span className="block">{g.kurgu ? g.nerede : 'Google'}: <Tutar micros={t.google} para={para} /></span>}
           </dd>
         </div>
         <div>
-          <dt className={`text-[11px] font-semibold ${IKINCIL}`}>Tarih</dt>
-          <dd className="m-0">{tarihAraligi(k.baslangic, k.bitis)}</dd>
+          <dt className={`text-[11px] font-semibold ${IKINCIL}`}>{bm.tarih}</dt>
+          <dd className="m-0">{tarihAraligi(k.baslangic, k.bitis, dil)}</dd>
         </div>
         <div>
-          <dt className={`text-[11px] font-semibold ${IKINCIL}`}>Bölge · yaş</dt>
+          <dt className={`text-[11px] font-semibold ${IKINCIL}`}>{bm.bolgeYas}</dt>
           <dd className="m-0">
-            {konumOzeti(k.konumlar)} · {yasMetni(k.yasMin, k.yasMax)}
+            {konumOzeti(k.konumlar, dil)} · {yasMetni(k.yasMin, k.yasMax)}
           </dd>
         </div>
         <div>
-          <dt className={`text-[11px] font-semibold ${IKINCIL}`}>Beklenen</dt>
+          <dt className={`text-[11px] font-semibold ${IKINCIL}`}>{bm.beklenenKisa}</dt>
           <dd className="m-0">
             {(['meta', 'google'] as const)
               .filter((p) => k[p])
               .map((p) => {
-                const x = tahminMetni(k.tahmin[p], k.amac);
+                const x = tahminMetni(k.tahmin[p], k.amac, dil);
                 return (
                   <span key={p} className="block">
                     {k.meta && k.google ? `${PLATFORM_ADI[p]}: ` : ''}
-                    {x.ana} {x.veri && <Etiket>Veri</Etiket>}
+                    {x.ana} {x.veri && <Etiket>{bm.veri}</Etiket>}
                   </span>
                 );
               })}
@@ -426,10 +446,10 @@ function KalemKarti({ k, para }: { k: StratejiKalemi; para: string }) {
         <div className={`mt-3 border-t pt-3 text-[13px] ${CIZGI}`}>
           {yon && (
             <p className="m-0">
-              <b>Görsel ve mesaj:</b> {yon}
+              <b>{bm.gorselMesaj}</b> {yon}
             </p>
           )}
-          {metin && metin.basliklar[0] && <p className={`m-0 mt-1 ${IKINCIL}`}>Örnek başlık: "{metin.basliklar[0]}"</p>}
+          {metin && metin.basliklar[0] && <p className={`m-0 mt-1 ${IKINCIL}`}>{bm.ornekBaslik(metin.basliklar[0])}</p>}
         </div>
       )}
     </div>
@@ -445,7 +465,8 @@ export function AmacIkonu({ amac }: { amac: StratejiKalemi['amac'] }) {
   );
 }
 
-function Kitle({ veri }: { veri: StratejiBelgeVerisi }) {
+function Kitle({ veri, dil }: { veri: StratejiBelgeVerisi; dil: Dil }) {
+  const bm = sec(stratejiBelgeSozlugu, dil).kitle;
   const metin = belgeMetni(veri.bolumler.kitle);
   return (
     <div className="grid gap-6 md:grid-cols-2">
@@ -454,26 +475,27 @@ function Kitle({ veri }: { veri: StratejiBelgeVerisi }) {
           <div key={k.id} className={`flex justify-between gap-3 border-b py-2 text-[13px] ${CIZGI}`}>
             <span className={IKINCIL}>{amacAdi(k.amac)}</span>
             <span className="text-right">
-              {k.konumlar.map((x) => x.etiket).join(', ') || 'Bölge seçilmedi'} · {yasMetni(k.yasMin, k.yasMax)}
+              {k.konumlar.map((x) => x.etiket).join(', ') || sec(stratejiHesapSozlugu, dil).bolgeSecilmedi} · {yasMetni(k.yasMin, k.yasMax)}
             </span>
           </div>
         ))}
       </div>
       <div className="text-[13px] leading-relaxed">
-        <p className={`m-0 mb-1.5 text-xs font-semibold ${IKINCIL}`}>Kime anlatıyoruz</p>
-        {metin ? <p className="m-0 whitespace-pre-line">{metin}</p> : <BosMetin>Kitle tarifi henüz yazılmadı.</BosMetin>}
-        <p className="mt-2 text-[11px] text-black/45">Bu tarif reklamın diline yön verir; hedefleme bölge ve yaşla yapılır.</p>
+        <p className={`m-0 mb-1.5 text-xs font-semibold ${IKINCIL}`}>{bm.kime}</p>
+        {metin ? <p className="m-0 whitespace-pre-line">{metin}</p> : <BosMetin>{bm.tarifYok}</BosMetin>}
+        <p className="mt-2 text-[11px] text-black/45">{bm.not}</p>
       </div>
     </div>
   );
 }
 
-function Kreatif({ veri }: { veri: StratejiBelgeVerisi }) {
+function Kreatif({ veri, dil }: { veri: StratejiBelgeVerisi; dil: Dil }) {
+  const bm = sec(stratejiBelgeSozlugu, dil).kreatif;
   const metin = belgeMetni(veri.bolumler.kreatif);
   const kalemYonleri = veri.kalemler.map((k) => ({ k, yon: belgeMetni(k.kreatifYonergesi) })).filter((x) => x.yon);
   return (
     <>
-      {metin ? <p className="mb-4 mt-0 whitespace-pre-line text-sm leading-relaxed">{metin}</p> : <BosMetin>Genel kreatif yön henüz yazılmadı.</BosMetin>}
+      {metin ? <p className="mb-4 mt-0 whitespace-pre-line text-sm leading-relaxed">{metin}</p> : <BosMetin>{bm.yazilmadi}</BosMetin>}
       {kalemYonleri.map(({ k, yon }) => (
         <p key={k.id} className={`m-0 border-t py-2 text-[13px] ${CIZGI}`}>
           <b>{amacAdi(k.amac)}:</b> {yon}
@@ -483,15 +505,16 @@ function Kreatif({ veri }: { veri: StratejiBelgeVerisi }) {
   );
 }
 
-function Takvim({ veri }: { veri: StratejiBelgeVerisi }) {
+function Takvim({ veri, dil }: { veri: StratejiBelgeVerisi; dil: Dil }) {
+  const bm = sec(stratejiBelgeSozlugu, dil).takvim;
   const { plan, kalemler } = veri;
-  const aylar = takvimAylari(plan);
-  if (kalemler.length === 0) return <BosMetin>Kampanya yok.</BosMetin>;
+  const aylar = takvimAylari(plan, dil);
+  if (kalemler.length === 0) return <BosMetin>{bm.kampanyaYok}</BosMetin>;
   return (
     <div className="overflow-x-auto">
       <div className="min-w-[520px] text-[11px]">
         <div className={`grid grid-cols-[150px_1fr] border-b ${CIZGI}`}>
-          <span className={`py-1 ${IKINCIL}`}>Kampanya</span>
+          <span className={`py-1 ${IKINCIL}`}>{bm.kampanya}</span>
           <div className="flex">
             {aylar.map((a) => (
               <span key={a.ad} className={`border-l py-1 text-center ${CIZGI} ${IKINCIL}`} style={{ width: `${a.genislik}%` }}>
@@ -509,22 +532,21 @@ function Takvim({ veri }: { veri: StratejiBelgeVerisi }) {
                 <span
                   className={`absolute top-[11px] h-3.5 rounded-[7px] ${k.meta && !k.google ? 'bg-[var(--gri)]' : k.google && !k.meta ? 'bg-brand' : 'bg-[var(--gri)]/60'}`}
                   style={{ left: `${c.sol}%`, width: `${c.genislik}%` }}
-                  title={tarihAraligi(k.baslangic, k.bitis)}
+                  title={tarihAraligi(k.baslangic, k.bitis, dil)}
                 />
               </div>
             </div>
           );
         })}
-        <p className="mt-2 text-[11px] text-black/45">Gri: Meta, kırmızı: Google, açık gri: ikisi birlikte. Özel günler takvimi bu sürümde yok.</p>
+        <p className="mt-2 text-[11px] text-black/45">{bm.aciklama}</p>
       </div>
     </div>
   );
 }
 
-const OLCUM_METNI = { hazir: 'Sayılıyor', kurulmali: 'Kurulmalı', bilinmiyor: 'Bilinmiyor' } as const;
-
-function OlcumBolumu({ veri }: { veri: StratejiBelgeVerisi }) {
-  if (veri.olcum.length === 0) return <BosMetin>Bu stratejinin ölçtüğü bir sonuç yok.</BosMetin>;
+function OlcumBolumu({ veri, dil }: { veri: StratejiBelgeVerisi; dil: Dil }) {
+  const bm = sec(stratejiBelgeSozlugu, dil).olcum;
+  if (veri.olcum.length === 0) return <BosMetin>{bm.yok}</BosMetin>;
   return (
     <div>
       {veri.olcum.map((o, i) => (
@@ -535,7 +557,7 @@ function OlcumBolumu({ veri }: { veri: StratejiBelgeVerisi }) {
           </span>
           <span className={`inline-flex items-center gap-1.5 ${o.durum === 'kurulmali' ? 'font-semibold text-[var(--kirmizi)]' : ''}`}>
             {o.durum === 'hazir' && <Nokta ton="ok" />}
-            {OLCUM_METNI[o.durum]}
+            {bm.durum[o.durum]}
           </span>
         </div>
       ))}
@@ -543,13 +565,14 @@ function OlcumBolumu({ veri }: { veri: StratejiBelgeVerisi }) {
   );
 }
 
-function Riskler({ veri }: { veri: StratejiBelgeVerisi }) {
-  if (veri.riskler.length === 0) return <BosMetin>Kurallardan çıkan bir risk yok.</BosMetin>;
+function Riskler({ veri, dil }: { veri: StratejiBelgeVerisi; dil: Dil }) {
+  const bm = sec(stratejiBelgeSozlugu, dil).riskler;
+  if (veri.riskler.length === 0) return <BosMetin>{bm.yok}</BosMetin>;
   return (
     <div>
       {veri.riskler.map((r, i) => (
         <div key={i} className={`flex gap-2.5 border-b py-2.5 text-[13px] last:border-b-0 ${CIZGI}`}>
-          <span className="min-w-[84px] text-[11px] font-semibold text-black/45">{r.kalem ? `Kampanya ${r.kalem}` : 'Genel'}</span>
+          <span className="min-w-[84px] text-[11px] font-semibold text-black/45">{r.kalem ? bm.kampanya(r.kalem) : bm.genel}</span>
           <span>{r.metin}</span>
         </div>
       ))}
@@ -557,25 +580,27 @@ function Riskler({ veri }: { veri: StratejiBelgeVerisi }) {
   );
 }
 
-function GerceklesenBolumu({ veri, gerceklesen }: { veri: StratejiBelgeVerisi; gerceklesen: { tur: 'veri'; v: Gerceklesen } | { tur: 'hata'; mesaj: string } | null }) {
-  if (gerceklesen === null) return <BosMetin>Gerçekleşen veri bu görünümde yüklenmedi.</BosMetin>;
-  if (gerceklesen.tur === 'hata') return <p className="m-0 text-sm text-[var(--kirmizi)]" role="alert">Gerçekleşen veri alınamadı: {gerceklesen.mesaj}</p>;
-  return <PlanGerceklesenTablosu veri={veri} g={gerceklesen.v} />;
+function GerceklesenBolumu({ veri, gerceklesen, dil }: { veri: StratejiBelgeVerisi; gerceklesen: { tur: 'veri'; v: Gerceklesen } | { tur: 'hata'; mesaj: string } | null; dil: Dil }) {
+  const bm = sec(stratejiBelgeSozlugu, dil).gerceklesen;
+  if (gerceklesen === null) return <BosMetin>{bm.yuklenmedi}</BosMetin>;
+  if (gerceklesen.tur === 'hata') return <p className="m-0 text-sm text-[var(--kirmizi)]" role="alert">{bm.alinamadi(gerceklesen.mesaj)}</p>;
+  return <PlanGerceklesenTablosu veri={veri} g={gerceklesen.v} dil={dil} />;
 }
 
 /** Plan ve gerçekleşen — aktarım ekranı ve belge AYNI tabloyu çizer. */
-export function PlanGerceklesenTablosu({ veri, g }: { veri: Pick<StratejiBelgeVerisi, 'plan' | 'kalemler'>; g: Gerceklesen }) {
+export function PlanGerceklesenTablosu({ veri, g, dil = 'tr' }: { veri: Pick<StratejiBelgeVerisi, 'plan' | 'kalemler'>; g: Gerceklesen; dil?: Dil }) {
+  const bm = sec(stratejiBelgeSozlugu, dil).tablo;
   const para = veri.plan.paraBirimi;
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-collapse text-[13px]">
         <thead>
           <tr className={`border-b text-left text-xs ${CIZGI} ${IKINCIL}`}>
-            <th className="py-2 pr-3 font-semibold">Kampanya</th>
-            <th className="py-2 pr-3 font-semibold">Durum</th>
-            <th className="py-2 pr-3 text-right font-semibold">Harcanan / plan</th>
-            <th className="py-2 pr-3 text-right font-semibold">Sonuç / beklenen</th>
-            <th className="hidden py-2 font-semibold md:table-cell">Not</th>
+            <th className="py-2 pr-3 font-semibold">{bm.kampanya}</th>
+            <th className="py-2 pr-3 font-semibold">{bm.durum}</th>
+            <th className="py-2 pr-3 text-right font-semibold">{bm.harcananPlan}</th>
+            <th className="py-2 pr-3 text-right font-semibold">{bm.sonucBeklenen}</th>
+            <th className="hidden py-2 font-semibold md:table-cell">{bm.not}</th>
           </tr>
         </thead>
         <tbody>
@@ -586,8 +611,8 @@ export function PlanGerceklesenTablosu({ veri, g }: { veri: Pick<StratejiBelgeVe
               .filter((p) => k[p])
               .map((p) => {
                 const x = satir?.platformlar[p];
-                const t = tahminMetni(k.tahmin[p], k.amac);
-                const durum = kalemDurumSatirlari(k.durum).find((d) => d.platform === p || d.platform === null);
+                const t = tahminMetni(k.tahmin[p], k.amac, dil);
+                const durum = kalemDurumSatirlari(k.durum, dil).find((d) => d.platform === p || d.platform === null);
                 const sapma = x?.kurulanButceMicros && x.kurulanButceMicros !== plan[p].toString();
                 return (
                   <tr key={`${k.id}-${p}`} className={`border-b align-top ${CIZGI}`}>
@@ -597,22 +622,22 @@ export function PlanGerceklesenTablosu({ veri, g }: { veri: Pick<StratejiBelgeVe
                     <td className="py-2.5 pr-3">
                       <span className="inline-flex items-center gap-1.5">
                         <Nokta ton={durum?.nokta ?? 'notr'} />
-                        {durum?.metin.split(' · ')[0] ?? 'Aktarılmadı'}
+                        {durum?.metin.split(' · ')[0] ?? bm.aktarilmadi}
                       </span>
                     </td>
                     <td className="py-2.5 pr-3 text-right">
                       {x ? <Tutar micros={x.harcananMicros} para={para} /> : '-'} / <Tutar micros={plan[p]} para={para} />
                     </td>
                     <td className="py-2.5 pr-3 text-right tabular-nums">
-                      {x?.sonuc != null ? x.sonuc.toLocaleString('tr-TR') : '-'} / {t.veri ? t.ana : 'Tahmin yok'}
+                      {x?.sonuc != null ? x.sonuc.toLocaleString(dil === 'en' ? 'en-US' : 'tr-TR') : '-'} / {t.veri ? t.ana : bm.tahminYok}
                     </td>
                     <td className={`hidden py-2.5 text-xs md:table-cell ${IKINCIL}`}>
                       {sapma ? (
                         <>
-                          Bütçe AdvCampaign'de değişti: plan <Tutar micros={plan[p]} para={para} />, kurulan <Tutar micros={x.kurulanButceMicros!} para={para} />
+                          {bm.butceDegisti} <Tutar micros={plan[p]} para={para} />, {bm.kurulan} <Tutar micros={x.kurulanButceMicros!} para={para} />
                         </>
                       ) : !x ? (
-                        'Veri yok'
+                        bm.veriYok
                       ) : (
                         ''
                       )}
@@ -623,7 +648,7 @@ export function PlanGerceklesenTablosu({ veri, g }: { veri: Pick<StratejiBelgeVe
           })}
         </tbody>
       </table>
-      <p className="mt-2 text-[11px] text-black/45">Meta ve Google satırları ayrı; sonuçlar toplanmaz. {donemMetni(veri.plan.baslangic, veri.plan.bitis)}.</p>
+      <p className="mt-2 text-[11px] text-black/45">{bm.ayri} {donemMetni(veri.plan.baslangic, veri.plan.bitis, dil)}.</p>
     </div>
   );
 }

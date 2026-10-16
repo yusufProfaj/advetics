@@ -4,9 +4,11 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition, type ReactNode } from 'react';
 import { TamEkranYukleniyor } from '@/components/yukleniyor';
-import { useSozluk } from '@/dil/saglayici';
+import { useDil, useSozluk } from '@/dil/saglayici';
 import { stratejiSozlugu } from '@/dil/sozlukler/strateji';
-import { stratejiPanelAdresi, type PlanDurumu, type StratejiDurumu, type StratejiListeSatiri, type StratejiOlusturmaAdimi } from '@advetics/shared';
+import { stratejiV2Sozlugu } from '@/dil/sozlukler/strateji-v2';
+import { menuBolumuEtiketi, menuSatiriEtiketi } from '@/lib/nav-sections';
+import { sec, stratejiPanelAdresi, type Dil, type PlanDurumu, type StratejiDurumu, type StratejiListeSatiri, type StratejiOlusturmaAdimi } from '@advetics/shared';
 import { AcilirMenu, IKON_TETIK, MenuOgesi } from '@/components/ui/acilir-menu';
 import { dugmeSinifi } from '@/components/ui/dugme';
 import { BosDurum } from '@/components/ui/hal';
@@ -15,25 +17,27 @@ import { Rozet } from '@/components/ui/rozet';
 import { SayfaBasligi } from '@/components/ui/sayfa-basligi';
 import { BuyukSecim, SecimKarti } from '@/components/ui/sihirbaz';
 import { AdHucresi, Tablo, type TabloSutunu } from '@/components/ui/tablo';
-import { DURUM_ETIKETI, donemEtiketi } from '../hesap';
+import { donemEtiketi, durumEtiketi } from '../hesap';
 import { durumTonu, olusturEtiketi, olusturKarti } from './akis';
-import { STRATEJI_DURUM_ETIKETI, donemMetni, tarihAraligi } from './hesap';
+import { donemMetni, stratejiDurumEtiketi, tarihAraligi } from './hesap';
 import { KapatmaPenceresi, iptalEdilebilirMi, type KapatmaHedefi } from './kapatma';
 import { StratejiIkonu, durumHali } from './ortak';
 import { Tutar } from './tutar';
 
 /** Liste satırının adı: v2 dönemi, v1 ayı + "eski medya planı" (salt okunur). */
-export function planSatiriAdi(p: StratejiListeSatiri): string {
-  if (p.bicim === 1) return `${p.donem ? donemEtiketi(p.donem) : 'Tarihsiz'} · eski medya planı`;
-  return p.baslangic && p.bitis ? donemMetni(p.baslangic, p.bitis) : 'Tarihsiz';
+export function planSatiriAdi(p: StratejiListeSatiri, dil: Dil = 'tr'): string {
+  const d = sec(stratejiV2Sozlugu, dil).giris;
+  // Eski (v1) medya planının dönem adı ve durumu v1 ekranının yardımcılarından (dil alıyor).
+  if (p.bicim === 1) return `${p.donem ? donemEtiketi(p.donem, dil) : d.tarihsiz} · ${d.eskiPlanKisa}`;
+  return p.baslangic && p.bitis ? donemMetni(p.baslangic, p.bitis, dil) : d.tarihsiz;
 }
 
-export function planDurumMetni(p: StratejiListeSatiri): string {
-  return p.bicim === 1 ? (DURUM_ETIKETI[p.durum as PlanDurumu]?.metin ?? p.durum) : (STRATEJI_DURUM_ETIKETI[p.durum as StratejiDurumu] ?? p.durum);
+export function planDurumMetni(p: StratejiListeSatiri, dil: Dil = 'tr'): string {
+  return p.bicim === 1 ? (durumEtiketi(p.durum as PlanDurumu, dil).metin ?? p.durum) : (stratejiDurumEtiketi(p.durum as StratejiDurumu, dil) ?? p.durum);
 }
 
-function PlanRozeti({ p }: { p: StratejiListeSatiri }) {
-  return <Rozet hal={durumHali(durumTonu(p.durum))}>{planDurumMetni(p)}</Rozet>;
+function PlanRozeti({ p, dil }: { p: StratejiListeSatiri; dil: Dil }) {
+  return <Rozet hal={durumHali(durumTonu(p.durum))}>{planDurumMetni(p, dil)}</Rozet>;
 }
 
 /**
@@ -81,6 +85,8 @@ export function StratejiGirisi({
   const [geciyor, gecisBaslat] = useTransition();
   const [gecisMesaji, setGecisMesaji] = useState('');
   const ds = useSozluk(stratejiSozlugu);
+  const d = useSozluk(stratejiV2Sozlugu).giris;
+  const { dil } = useDil();
   const git = (adres: string, mesaj: string) => {
     if (geciyor) return;
     setGecisMesaji(mesaj);
@@ -94,12 +100,12 @@ export function StratejiGirisi({
       : kart.tur === 'devam'
         ? stratejiPanelAdresi({ musteri: clientId, plan: kart.planId, adim: kart.revizyon ? 'plan' : (devamAdimi ?? 'plan') })
         : stratejiPanelAdresi({ musteri: clientId, plan: kart.planId, adim: 'rapor' });
-  const kartBasligi = olusturEtiketi(kart);
+  const kartBasligi = olusturEtiketi(kart, dil);
   return (
     <div className="grid gap-6">
       <SayfaBasligi
-        bolum="Planla"
-        baslik="AdvStrategy"
+        bolum={menuBolumuEtiketi('/strateji', dil)}
+        baslik={menuSatiriEtiketi('/strateji', dil)}
         aciklama={aciklama}
         eylemler={
           kart.tur !== 'onayda' && (
@@ -112,19 +118,19 @@ export function StratejiGirisi({
       <BuyukSecim>
         <SecimKarti
           ikon={<StratejiIkonu ad="rapor" />}
-          baslik="Raporu incele"
-          aciklama="Hazırlanan stratejiyi oku, onayla ya da değişiklik iste. Onaylanan planın kampanyalarını burada kurarsın."
+          baslik={d.raporuIncele}
+          aciklama={d.raporuInceleAciklama}
           alt={
             <span className="flex flex-wrap items-center justify-between gap-2.5">
               {son ? (
                 <span className="inline-flex min-w-0 items-center gap-2">
-                  <PlanRozeti p={son} />
-                  <span className="truncate">{planSatiriAdi(son)}</span>
+                  <PlanRozeti p={son} dil={dil} />
+                  <span className="truncate">{planSatiriAdi(son, dil)}</span>
                 </span>
               ) : (
-                'Henüz strateji yok'
+                d.henuzYok
               )}
-              <b className="text-ink">Aç →</b>
+              <b className="text-ink">{d.ac}</b>
             </span>
           }
           onClick={() => git(stratejiPanelAdresi({ musteri: clientId, adim: 'raporlar' }), ds.gecisListe)}
@@ -135,23 +141,23 @@ export function StratejiGirisi({
           baslik={kartBasligi}
           aciklama={
             kart.tur === 'onayda'
-              ? 'Açık bir strateji onay bekliyor. Yenisi için önce onu iptal et ya da sil (aşağıdaki listede ⋯) ya da sonuçlanmasını bekle.'
+              ? d.olusturOnayda
               : kart.tur === 'devam'
                 ? kart.revizyon
-                  ? 'Müşteri değişiklik istedi. Planı düzeltip yeniden gönder.'
-                  : 'Yarım kalan strateji kaldığın adımdan açılır.'
-                : 'Yedi kısa soru. Hesabının geçmişine bakıp sana bir plan önereceğiz; her kampanyayı tek tek onaylayarak ilerlersin.'
+                  ? d.olusturRevizyon
+                  : d.olusturYarim
+                : d.olusturYeni
           }
           alt={
             <span className="flex flex-wrap items-center justify-between gap-2.5">
               {kart.tur === 'yeni' ? (
-                'Yaklaşık 5 dakika'
+                d.yaklasik5
               ) : kart.tur === 'devam' ? (
-                <Rozet hal="hata">{kart.revizyon ? 'Revizyon istendi' : 'Taslak'}</Rozet>
+                <Rozet hal="hata">{kart.revizyon ? stratejiDurumEtiketi('revizyon', dil) : stratejiDurumEtiketi('taslak', dil)}</Rozet>
               ) : (
-                <Rozet hal="hata">Onay bekliyor</Rozet>
+                <Rozet hal="hata">{stratejiDurumEtiketi('onayda', dil)}</Rozet>
               )}
-              <b className="text-ink">{kart.tur === 'onayda' ? 'Raporu aç →' : kart.tur === 'devam' ? 'Devam →' : 'Başla →'}</b>
+              <b className="text-ink">{kart.tur === 'onayda' ? d.raporuAc : kart.tur === 'devam' ? d.devam : d.basla}</b>
             </span>
           }
           onClick={() => git(olusturAdresi, kart.tur === 'yeni' ? ds.gecisYeni : ds.gecisDevam)}
@@ -164,7 +170,7 @@ export function StratejiGirisi({
         toplam={toplam}
         kurabilir={kurabilir}
         yonetebilir={yonetebilir}
-        bosNeden="Bu workspace için henüz strateji yok. Strateji oluştur ile başla."
+        bosNeden={d.bosOlustur}
       />
     </div>
   );
@@ -187,8 +193,9 @@ export function StratejiListesiEkrani({
   kurabilir: boolean;
   yonetebilir: boolean;
 }) {
+  const d = useSozluk(stratejiV2Sozlugu).giris;
   // BOŞ LİSTE NEDENİNİ SÖYLÜYOR: okuyan hesabın yapacağı iş beklemek.
-  return <StratejiTablosu clientId={clientId} planlar={planlar} toplam={toplam} kurabilir={kurabilir} yonetebilir={yonetebilir} bosNeden="Bu workspace için henüz strateji yok. Ajans hazırlayınca burada görünür." />;
+  return <StratejiTablosu clientId={clientId} planlar={planlar} toplam={toplam} kurabilir={kurabilir} yonetebilir={yonetebilir} bosNeden={d.bosAjans} />;
 }
 
 /**
@@ -217,54 +224,56 @@ function StratejiTablosu({
   bosNeden: string;
 }) {
   const router = useRouter();
+  const d = useSozluk(stratejiV2Sozlugu).giris;
+  const { dil } = useDil();
   const [hedef, setHedef] = useState<KapatmaHedefi | null>(null);
-  const kapatma = (p: StratejiListeSatiri, tur: 'iptal' | 'sil') => setHedef({ tur, id: p.id, surum: p.surum, ad: planSatiriAdi(p), durum: p.durum, bicim: p.bicim });
+  const kapatma = (p: StratejiListeSatiri, tur: 'iptal' | 'sil') => setHedef({ tur, id: p.id, surum: p.surum, ad: planSatiriAdi(p, dil), durum: p.durum, bicim: p.bicim });
   const rapor = (p: StratejiListeSatiri) => stratejiPanelAdresi({ musteri: clientId, plan: p.id, adim: 'rapor' });
   const sutunlar: Array<TabloSutunu<StratejiListeSatiri>> = [
     {
       anahtar: 'ad',
-      baslik: 'Strateji',
+      baslik: d.strateji,
       hucre: (p) => (
         <AdHucresi
           ad={
             <Link href={rapor(p)} onClick={(e) => e.stopPropagation()}>
-              {p.bicim === 1 ? (p.donem ? donemEtiketi(p.donem) : 'Tarihsiz') : planSatiriAdi(p)}
+              {p.bicim === 1 ? (p.donem ? donemEtiketi(p.donem, dil) : d.tarihsiz) : planSatiriAdi(p, dil)}
             </Link>
           }
-          alt={p.bicim === 1 ? 'Eski medya planı, salt okunur' : p.baslangic && p.bitis ? tarihAraligi(p.baslangic, p.bitis) : undefined}
+          alt={p.bicim === 1 ? d.eskiPlanSaltOkunur : p.baslangic && p.bitis ? tarihAraligi(p.baslangic, p.bitis, dil) : undefined}
         />
       ),
     },
-    { anahtar: 'durum', baslik: 'Durum', hucre: (p) => <PlanRozeti p={p} /> },
-    { anahtar: 'kampanya', baslik: 'Kampanya', sayi: true, hucre: (p) => p.kalemSayisi },
+    { anahtar: 'durum', baslik: d.durum, hucre: (p) => <PlanRozeti p={p} dil={dil} /> },
+    { anahtar: 'kampanya', baslik: d.kampanya, sayi: true, hucre: (p) => p.kalemSayisi },
     // TOPLAM bütçe: liste yanıtı aylık tutarı taşımıyor; ay sayısına bölmek bir tahmin olurdu.
-    { anahtar: 'butce', baslik: 'Bütçe', sayi: true, hucre: (p) => <Tutar micros={p.toplamButceMicros} para={p.paraBirimi} /> },
-    { anahtar: 'surum', baslik: 'Sürüm', ikincil: true, hucre: (p) => p.surum },
+    { anahtar: 'butce', baslik: d.butce, sayi: true, hucre: (p) => <Tutar micros={p.toplamButceMicros} para={p.paraBirimi} /> },
+    { anahtar: 'surum', baslik: d.surum, ikincil: true, hucre: (p) => p.surum },
     {
       anahtar: 'menu',
-      baslik: <span className="sr-only">Eylemler</span>,
+      baslik: <span className="sr-only">{d.eylemler}</span>,
       sayi: true,
       hucre: (p) => (
         <span onClick={(e) => e.stopPropagation()} className="inline-flex">
           <AcilirMenu
             tasma="portal"
-            etiket={`${planSatiriAdi(p)} eylemleri`}
+            etiket={d.satirEylemleri(planSatiriAdi(p, dil))}
             hizala="sag"
             genislik="w-52"
             tetik={({ acik: _acik, ...o }) => (
-              <button type="button" {...o} className={IKON_TETIK} aria-label="Diğer">
+              <button type="button" {...o} className={IKON_TETIK} aria-label={d.diger}>
                 ⋯
               </button>
             )}
           >
-            <MenuOgesi href={rapor(p)}>Raporu aç</MenuOgesi>
+            <MenuOgesi href={rapor(p)}>{d.raporuAcMenu}</MenuOgesi>
             {kurabilir && p.bicim === 2 && p.durum === 'onaylandi' && (
-              <MenuOgesi href={stratejiPanelAdresi({ musteri: clientId, plan: p.id, adim: 'kur' })}>Kampanyaları kur</MenuOgesi>
+              <MenuOgesi href={stratejiPanelAdresi({ musteri: clientId, plan: p.id, adim: 'kur' })}>{d.kampanyalariKur}</MenuOgesi>
             )}
-            {yonetebilir && iptalEdilebilirMi(p) && <MenuOgesi onClick={() => kapatma(p, 'iptal')}>İptal et</MenuOgesi>}
+            {yonetebilir && iptalEdilebilirMi(p) && <MenuOgesi onClick={() => kapatma(p, 'iptal')}>{d.iptalEt}</MenuOgesi>}
             {yonetebilir && (
               <MenuOgesi tehlike onClick={() => kapatma(p, 'sil')}>
-                Sil
+                {d.sil}
               </MenuOgesi>
             )}
           </AcilirMenu>
@@ -283,14 +292,14 @@ function StratejiTablosu({
           router.refresh();
         }}
       />
-      <Kart baslik="Stratejiler" baslikEki={planlar.length < toplam ? `${planlar.length} / ${toplam} gösteriliyor` : `${toplam} strateji`} dolgu={false}>
+      <Kart baslik={d.stratejiler} baslikEki={planlar.length < toplam ? d.gosteriliyor(planlar.length, toplam) : d.stratejiSayisi(toplam)} dolgu={false}>
         <Tablo
-          etiket="Stratejiler"
+          etiket={d.stratejiler}
           sutunlar={sutunlar}
           satirlar={planlar}
           satirAnahtari={(p) => p.id}
           onSatir={(p) => router.push(rapor(p))}
-          bos={<BosDurum baslik="Strateji yok" neden={bosNeden} />}
+          bos={<BosDurum baslik={d.stratejiYok} neden={bosNeden} />}
           sayfalama={{ bas: planlar.length === 0 ? 0 : 1, son: planlar.length, toplam }}
         />
       </Kart>
