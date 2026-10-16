@@ -133,8 +133,11 @@ KURALLAR:
   özel segmenti: "bu kelimeleri arayan kişiler"). Metindeki ürün ve hizmetten
   türet, 3-15 ifade, gerçek arama dili ("satılık daire izmir", "golf sopası").
   Metin arama niyeti taşımıyorsa boş bırak.
-- ilgiler.aramalar içinde EN AZ BİR İngilizce terim olsun: Google'ın ilgi ve
-  satın alma niyeti kategorileri İngilizce adlarla eşleniyor.
+- ilgiler.aramalar içinde EN AZ BİR İngilizce terim olsun ve bu terim Google
+  Ads'in ilgi (affinity) ve satın alma niyeti (in-market) kategori ADLARINA
+  benzesin: "Real Estate", "Residential Properties", "Luxury Vehicles",
+  "Home Improvement", "Golf". Google adları İngilizce kategori yolu olarak
+  eşleniyor; "residential area" gibi serbest ifade eşleşmez.
 - uygulanamayan: metinde olan ama Meta'nın konum/yaş/cinsiyet/ilgi hedeflemesiyle
   kurulamayan her parça ve NEDEN. Örnek: "son bir ayda" → Meta ilgi hedeflemesinde
   zaman aralığı yok; "arayan" (arama niyeti) → Meta'da doğrudan karşılığı yok, en
@@ -183,7 +186,7 @@ export class KitleOnerisiService {
           eslesmeyen: [],
           uygulanamayan: [...cevap.uygulanamayan, { ifade: 'Meta ilgi ve konumları', sebep: 'Bu workspace’e Meta reklam hesabı atanmamış; yalnız Google karşılığı arandı.' }],
           hesapAdi: '',
-          google: { ilgiler: [], kelimeler: [], hesapAdi: null, hata: null },
+          google: { ilgiler: [], kelimeler: [], hesapAdi: null, hata: null, taranan: 0 },
         };
     return { ...meta, google: await this.googleCoz(googleHesap, cevap) };
   }
@@ -206,10 +209,10 @@ export class KitleOnerisiService {
   ): Promise<KitleOnerisi['google']> {
     const kelimeler = [...new Set(c.anahtarKelimeler.map((k) => k.toLocaleLowerCase('tr')))];
     if (!hesap) {
-      return { ilgiler: [], kelimeler, hesapAdi: null, hata: 'Bu workspace’e Google Ads hesabı atanmamış; Google kategorileri aranamadı.' };
+      return { ilgiler: [], kelimeler, hesapAdi: null, hata: 'Bu workspace’e Google Ads hesabı atanmamış; Google kategorileri aranamadı.', taranan: 0 };
     }
     if (!this.kasa || !this.saglayicilar) {
-      return { ilgiler: [], kelimeler, hesapAdi: hesap.name, hata: 'Google bağlantısı bu ortamda kurulu değil.' };
+      return { ilgiler: [], kelimeler, hesapAdi: hesap.name, hata: 'Google bağlantısı bu ortamda kurulu değil.', taranan: 0 };
     }
     let liste: KitleGoogleIlgi[];
     try {
@@ -220,7 +223,7 @@ export class KitleOnerisiService {
       });
     } catch (e) {
       this.logger.warn(`Google kategorileri okunamadı: ${e instanceof Error ? e.message : String(e)}`);
-      return { ilgiler: [], kelimeler, hesapAdi: hesap.name, hata: `Google kategorileri okunamadı: ${e instanceof Error ? e.message : String(e)}` };
+      return { ilgiler: [], kelimeler, hesapAdi: hesap.name, hata: `Google kategorileri okunamadı: ${e instanceof Error ? e.message : String(e)}`, taranan: 0 };
     }
     const ilgiler: KitleOnerisi['google']['ilgiler'] = [];
     for (const ilgi of c.ilgiler) {
@@ -232,7 +235,12 @@ export class KitleOnerisiService {
         }
       }
     }
-    return { ilgiler, kelimeler, hesapAdi: hesap.name, hata: null };
+    // BOŞ LİSTE BİR HATA: Google 200 + sıfır satır döndürdüyse "eşleşme yok"
+    // demek yalan olurdu (kategori sözlüğü hiçbir hesapta boş değil).
+    if (liste.length === 0) {
+      return { ilgiler, kelimeler, hesapAdi: hesap.name, hata: 'Google kategori listesi boş döndü; kategoriler aranamadı.', taranan: 0 };
+    }
+    return { ilgiler, kelimeler, hesapAdi: hesap.name, hata: null, taranan: liste.length };
   }
 
   private async googleHesabi(ctx: TenantContext, clientId: string): Promise<GoogleKitleHesabi | null> {
@@ -405,7 +413,7 @@ export class KitleOnerisiService {
       uygulanamayan,
       hesapAdi: hesap.name,
       // Google tarafı `oner`de dolduruluyor (`googleCoz`); burada yalnız Meta.
-      google: { ilgiler: [], kelimeler: [], hesapAdi: null, hata: null },
+      google: { ilgiler: [], kelimeler: [], hesapAdi: null, hata: null, taranan: 0 },
     };
   }
 

@@ -277,6 +277,25 @@ describe('konum yalnızca Türkiye’de ya da adı geçen ülkede', () => {
       expect(r.uygulanamayan.map((u) => u.sebep).join(' ')).toMatch(/Meta reklam hesabı atanmamış/);
     });
 
+    it('KRİTİK: terim yolun ÜST parçasında da eşleşiyor, en özel olan önce (canlı, 2026-10-16)', async () => {
+      // "real estate" son parçada değil üst parçada: ilk sürüm bunu hiç bulmuyordu.
+      const EMLAK = [
+        { id: '1', ad: '/Real Estate/Residential Properties/Residential Properties (For Sale)', tur: 'in_market' as const },
+        { id: '2', ad: '/Real Estate', tur: 'in_market' as const },
+        { id: '3', ad: '/Home & Garden/Home Decor Enthusiasts', tur: 'affinity' as const },
+      ];
+      const { svc } = kur({ cevap: cevap({ ilgiler: [{ kavram: 'satılık daire', aramalar: ['Real Estate'] }] }), google: { kategoriler: EMLAK } });
+      const r = await svc.oner(CTX, 'c', 'satılık daire arayanlar');
+      expect(r.google.ilgiler.map((g) => g.id)).toEqual(['2', '1']);
+      expect(r.google.taranan).toBe(3);
+    });
+
+    it('KRİTİK: Google 200 + boş liste "eşleşme yok" DEĞİL, hata', async () => {
+      const { svc } = kur({ cevap: cevap(), google: { kategoriler: [] } });
+      const r = await svc.oner(CTX, 'c', 'lüks araç');
+      expect(r.google.hata).toMatch(/boş döndü/);
+    });
+
     it('kategori listesi önbellekte: ikinci öneri Google’a yeniden gitmiyor', async () => {
       const { svc, kullaniciIlgileri } = kur({ cevap: cevap(), google: { kategoriler: KATEGORI } });
       await svc.oner(CTX, 'c', 'a b c d e');

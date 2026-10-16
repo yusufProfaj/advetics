@@ -289,18 +289,22 @@ export interface KitleOnerisi {
     kelimeler: string[];
     hesapAdi: string | null;
     hata: string | null;
+    /** Google'dan okunan kategori sayısı: 0 ile "eşleşme yok" ayrı söylensin. */
+    taranan: number;
   };
 }
 
 /**
  * ═══ GOOGLE KATEGORİSİ EŞLEME ═══
  *
- * Google'ın kategori adları İngilizce ve yol taşıyor ("/Sports &
- * Fitness/Golf Enthusiasts"). Terim (modelin İngilizce adayı) adın SON
- * parçasında KELİME olarak aranıyor: "car" "Cars" ile eşleşir, "Scarves"
- * ile eşleşmez. Terim başına en fazla `enCok` kategori; satın alma niyeti
- * önce (dönüşüme daha yakın). Tahmin yok: eşleşmeyen terim boş döner ve
- * çağıran onu "eşleşmeyen" listesine yazar.
+ * Google'ın kategori adları İngilizce ve yol taşıyor ("/Real Estate/
+ * Residential Properties (For Sale)"). Terim (modelin İngilizce adayı)
+ * YOLUN TAMAMINDA, KELİME olarak aranıyor: "car" "Cars" ile eşleşir,
+ * "Scarves" ile eşleşmez. İlk sürüm yalnız son parçaya bakıyordu ve canlıda
+ * (2026-10-16, Eren Altay, "satılık daire") "real estate" hiçbir kategoriye
+ * eşleşmedi: o kelime yolun ÜST parçasında. Sıra: terimin son parçada
+ * geçtiği (en özel) önce, sonra satın alma niyeti (dönüşüme yakın), sonra
+ * kısa yol. Tahmin yok: eşleşmeyen terim boş döner.
  */
 export function googleIlgiEsle(
   liste: readonly KitleGoogleIlgi[],
@@ -311,9 +315,22 @@ export function googleIlgiEsle(
   if (t.length < 3) return [];
   const kacis = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const desen = new RegExp(`(^|[^a-z])${kacis}(s|es)?($|[^a-z])`);
+  const son = (g: KitleGoogleIlgi) => (g.ad.split('/').filter(Boolean).at(-1) ?? g.ad).toLocaleLowerCase('en');
   return liste
-    .filter((g) => desen.test((g.ad.split('/').filter(Boolean).at(-1) ?? g.ad).toLocaleLowerCase('en')))
-    .sort((a, b) => (a.tur === b.tur ? a.ad.length - b.ad.length : a.tur === 'in_market' ? -1 : 1))
+    .filter((g) => desen.test(g.ad.toLocaleLowerCase('en')))
+    .map((g) => ({ g, sonda: desen.test(son(g)) }))
+    .sort((a, b) =>
+      a.sonda !== b.sonda
+        ? a.sonda
+          ? -1
+          : 1
+        : a.g.tur !== b.g.tur
+          ? a.g.tur === 'in_market'
+            ? -1
+            : 1
+          : a.g.ad.length - b.g.ad.length,
+    )
+    .map((x) => x.g)
     .slice(0, enCok);
 }
 

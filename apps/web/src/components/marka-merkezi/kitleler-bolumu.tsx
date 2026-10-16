@@ -570,6 +570,9 @@ function TarifEt({
               ))}
             </ul>
           )}
+          {!oneri.google.hata && oneri.google.hesapAdi && oneri.google.ilgiler.length === 0 && (
+            <p className="m-0 text-danger-strong">{dk.googleEslesmeYok(oneri.google.taranan)}</p>
+          )}
           {oneri.google.hata && (
             <p className="m-0 text-danger-strong">
               {dk.googleOkunamadi}: {oneri.google.hata}
