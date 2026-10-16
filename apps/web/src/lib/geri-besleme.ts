@@ -9,8 +9,11 @@ import {
   type GeriBeslemeOlayi,
   type LeadGeriBeslemeRozeti,
   type LeadStatus,
+  type Dil,
+  sec,
 } from '@advetics/shared';
 import { baglanti } from '@/lib/baglanti';
+import { leadsSozlugu } from '@/dil/sozlukler/leads';
 
 /**
  * ═══ POTANSİYEL MÜŞTERİLER › META'YA GERİ BESLEME: SAF KARARLAR ═══
@@ -31,21 +34,17 @@ import { baglanti } from '@/lib/baglanti';
  * Sıra ekranda soldan sağa: olumsuzdan olumluya. "Yeni" seçenek değil:
  * soru zaten "henüz bilmiyorum" hâlinde soruluyor; geri dönmek "Geri al".
  */
-export const KALITE_SECENEKLERI: ReadonlyArray<{ durum: LeadStatus; etiket: string; ipucu: string }> = [
-  { durum: 'lost', etiket: 'Ulaşamadım / uygun değil', ipucu: 'Yanlış numara, ilgisiz' },
-  { durum: 'contacted', etiket: 'Görüştük', ipucu: 'Ulaşıldı, sonuç belli değil' },
-  { durum: 'qualified', etiket: 'İlgileniyor', ipucu: 'Gerçekten ilgili' },
-  { durum: 'won', etiket: 'Müşteri oldu', ipucu: 'Satışa döndü' },
-];
+const KALITE_SIRASI: readonly LeadStatus[] = ['lost', 'contacted', 'qualified', 'won'];
+
+export function kaliteSecenekleri(dil: Dil = 'tr'): Array<{ durum: LeadStatus; etiket: string; ipucu: string }> {
+  const k = sec(leadsSozlugu, dil).kalite;
+  return KALITE_SIRASI.map((durum) => ({ durum, etiket: k[durum as keyof typeof k].etiket, ipucu: k[durum as keyof typeof k].ipucu }));
+}
 
 /** Durum hattındaki kısa adlar: soru ve süzgeç AYNI dili konuşsun. */
-export const DURUM_KISA_ADI: Record<LeadStatus, string> = {
-  new: 'Yeni',
-  contacted: 'Görüştük',
-  qualified: 'İlgileniyor',
-  won: 'Müşteri oldu',
-  lost: 'Uygun değil',
-};
+export function durumKisaAdi(dil: Dil = 'tr'): Record<LeadStatus, string> {
+  return sec(leadsSozlugu, dil).durum;
+}
 
 /** Sekme adresi: süzgeç ve workspace taşınıyor, elle birleştirilmiyor. */
 export function potansiyelAdresi(clientId: string, sekme: 'kayitlar' | 'gonderimler'): string {
@@ -114,28 +113,24 @@ export function asamaSatirlari(r: LeadGeriBeslemeRozeti | undefined): Array<{ ad
  */
 export type AyarSonucu = { durum: 'tamam'; ayar: GeriBeslemeAyari } | { durum: 'hata'; mesaj: string };
 
-export function seritGorunumu(s: AyarSonucu): { baslik: string; alt: string; ton: 'notr' | 'sorun'; eylem: 'ac' | 'ayarlar' | null } {
-  if (s.durum === 'hata') return { baslik: 'Meta’ya bildirim durumu okunamadı', alt: s.mesaj, ton: 'sorun', eylem: null };
+export function seritGorunumu(s: AyarSonucu, dil: Dil = 'tr'): { baslik: string; alt: string; ton: 'notr' | 'sorun'; eylem: 'ac' | 'ayarlar' | null } {
+  const d = sec(leadsSozlugu, dil).serit;
+  if (s.durum === 'hata') return { baslik: d.okunamadi, alt: s.mesaj, ton: 'sorun', eylem: null };
   const a = s.ayar;
-  const kume = a.datasetAdi ?? (a.datasetId ? `Piksel ${a.datasetId}` : null);
+  const kume = a.datasetAdi ?? (a.datasetId ? d.piksel(a.datasetId) : null);
   switch (a.durum) {
     case 'kapali':
-      return {
-        baslik: 'Sonuçlar Meta’ya bildirilmiyor',
-        alt: 'Hangi kişinin müşteri olduğunu Meta’ya söylersen reklam benzer kişilere gösterilir.',
-        ton: 'notr',
-        eylem: 'ac',
-      };
+      return { baslik: d.kapaliBaslik, alt: d.kapaliAlt, ton: 'notr', eylem: 'ac' };
     case 'calisiyor':
     case 'bekliyor':
-      return { baslik: 'Sonuçlar Meta’ya bildiriliyor', alt: [kume, a.neden].filter(Boolean).join(' · '), ton: 'notr', eylem: 'ayarlar' };
+      return { baslik: d.calisiyor, alt: [kume, a.neden].filter(Boolean).join(' · '), ton: 'notr', eylem: 'ayarlar' };
     case 'kurulum_eksik':
     case 'hata': {
       const bekleyen = a.sayilar.bekliyor + a.sayilar.basarisiz;
       return {
-        baslik: 'Sonuçlar Meta’ya gitmiyor',
+        baslik: d.gitmiyor,
         // PLATFORMUN CÜMLESİ AYNEN (sunucu `neden`e yazıyor).
-        alt: `${bekleyen > 0 ? `${bekleyen} sonuç bekliyor. ` : ''}${a.neden}`,
+        alt: `${bekleyen > 0 ? d.bekleyen(bekleyen) : ''}${a.neden}`,
         ton: 'sorun',
         eylem: 'ayarlar',
       };
@@ -154,27 +149,30 @@ export function durumTonu(d: GeriBeslemeOlayDurumu): 'sessiz' | 'notr' | 'sorun'
  * Tablo satırının alt notu: NEDEN ve NE OLACAK. "Gönderilemedi" tek başına
  * eyleme dönüşmüyor; kaç deneme yapıldığı ve Meta'nın cümlesi yanında.
  */
-export function olayNotu(o: GeriBeslemeOlayi, simdiMs: number): string | null {
+export function olayNotu(o: GeriBeslemeOlayi, simdiMs: number, dil: Dil = 'tr'): string | null {
+  const d = sec(leadsSozlugu, dil).olay;
+  // Meta'nın cümlesi aynen; "Meta:" ön eki iki dilde aynı olduğu için sözlükte değil.
+  const metaHata = o.hata ? ` · Meta: “${o.hata}”` : '';
   switch (o.durum) {
     case 'bekliyor': {
       if (!o.sonrakiDeneme) return null;
       const t = Date.parse(o.sonrakiDeneme);
-      return t > simdiMs ? `${saat(o.sonrakiDeneme)}’de gönderilecek, o zamana kadar geri alınabilir` : 'Sıradaki turda gönderilecek';
+      return t > simdiMs ? d.gonderilecek(saat(o.sonrakiDeneme, dil)) : d.siradakiTur;
     }
     case 'basarisiz':
-      return `${o.deneme} deneme${o.hata ? ` · Meta: “${o.hata}”` : ''}${o.sonrakiDeneme ? ` · sonraki deneme ${saat(o.sonrakiDeneme)}` : ''}`;
+      return `${d.deneme(o.deneme)}${metaHata}${o.sonrakiDeneme ? d.sonrakiDeneme(saat(o.sonrakiDeneme, dil)) : ''}`;
     case 'vazgecildi':
     case 'reddedildi':
-      return `${o.deneme} deneme${o.hata ? ` · Meta: “${o.hata}”` : ''}`;
+      return `${d.deneme(o.deneme)}${metaHata}`;
     case 'suresi_doldu':
-      return 'Meta 7 günden eski sonucu kabul etmiyor';
+      return d.suresiDoldu;
     case 'eslesmedi':
-      return 'Meta bu kişiyi reklamla eşleştiremedi; yapılacak bir şey yok';
+      return d.eslesmedi;
     case 'iptal':
-      return o.hata ?? 'Gönderilmeden geri alındı';
+      return o.hata ?? d.iptal;
     case 'gonderiliyor':
       // Yaşlanıp "sonucu bilinmiyor" işaretlenmişse sunucunun cümlesi; değilse istek yolda.
-      return o.hata ?? 'İstek Meta’ya gidiyor';
+      return o.hata ?? d.gidiyor;
     case 'iletildi':
       return null;
   }
@@ -190,15 +188,19 @@ export function bosNedenMetni(n: keyof typeof GERI_BESLEME_BOS_NEDEN_ADI): strin
 }
 
 /** Ayar kaydının cevabındaki sayılar: SESSİZ DEĞİL, eskiler ekranda yazıyor (Ç-13). */
-export function degisimMetni(d: { kuyruga: number; eskiOlduguIcinAtlanan: number; iptalEdilen: number } | null | undefined): string | null {
-  if (!d) return null;
-  if (d.iptalEdilen > 0) return `Kapatıldı. Gönderilmeyi bekleyen ${d.iptalEdilen} sonuç iptal edildi.`;
+export function degisimMetni(
+  x: { kuyruga: number; eskiOlduguIcinAtlanan: number; iptalEdilen: number } | null | undefined,
+  dil: Dil = 'tr',
+): string | null {
+  if (!x) return null;
+  const d = sec(leadsSozlugu, dil).degisim;
+  if (x.iptalEdilen > 0) return d.kapatildi(x.iptalEdilen);
   const p: string[] = [];
-  p.push(d.kuyruga > 0 ? `Son 7 günün ${d.kuyruga} bildirimi sıraya alındı.` : 'Son 7 günde gönderilecek bildirim yok.');
-  if (d.eskiOlduguIcinAtlanan > 0) p.push(`${d.eskiOlduguIcinAtlanan} kayıt 7 günden eski olduğu için gönderilemez (Meta kuralı).`);
+  p.push(x.kuyruga > 0 ? d.siraya(x.kuyruga) : d.sirayaYok);
+  if (x.eskiOlduguIcinAtlanan > 0) p.push(d.eski(x.eskiOlduguIcinAtlanan));
   return p.join(' ');
 }
 
-function saat(iso: string): string {
-  return new Intl.DateTimeFormat('tr-TR', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Istanbul' }).format(new Date(iso));
+function saat(iso: string, dil: Dil): string {
+  return new Intl.DateTimeFormat(dil === 'en' ? 'en-US' : 'tr-TR', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Istanbul' }).format(new Date(iso));
 }

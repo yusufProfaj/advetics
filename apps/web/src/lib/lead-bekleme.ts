@@ -1,3 +1,6 @@
+import { sec, type Dil } from '@advetics/shared';
+import { leadsSozlugu } from '@/dil/sozlukler/leads';
+
 /**
  * ═══ YENİ KAYIT NE ZAMANDIR ARANMADI (pazar araştırması 2026-10-15) ═══
  *
@@ -16,12 +19,13 @@ export function bekleyenKayit(
   status: string,
   submittedAt: string,
   simdi: number = Date.now(),
+  dil: Dil = 'tr',
 ): { metin: string; gecikti: boolean } | null {
   if (status !== 'new') return null;
   const dk = Math.max(0, Math.floor((simdi - Date.parse(submittedAt)) / 60_000));
   if (Number.isNaN(dk)) return null;
-  const metin =
-    dk < 60 ? `${dk} dakikadır aranmadı` : dk < 1440 ? `${Math.floor(dk / 60)} saattir aranmadı` : `${Math.floor(dk / 1440)} gündür aranmadı`;
+  const d = sec(leadsSozlugu, dil).bekleme;
+  const metin = dk < 60 ? d.dakika(dk) : dk < 1440 ? d.saat(Math.floor(dk / 60)) : d.gun(Math.floor(dk / 1440));
   return { metin, gecikti: dk >= GECIKME_DAKIKA };
 }
 

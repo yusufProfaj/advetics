@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { leadsSozlugu } from '@/dil/sozlukler/leads';
 
 /**
  * ═══ POTANSİYEL MÜŞTERİLER EKRANI ═══
@@ -59,7 +60,8 @@ describe('FORM · CEVAPLAR · TARİH', () => {
      * Meta Ads Manager'da kurulmuş formların adı bir süre boş geliyordu ve
      * kart sahipsiz görünüyordu: kayıt var, nereden geldiği yok.
      */
-    expect(LISTE).toContain('lead.leadFormName ?? \'Form adı alınamadı\'');
+    expect(LISTE).toContain('lead.leadFormName ?? d.formAdiYok');
+    expect(leadsSozlugu.tr.tablo.formAdiYok).toBe('Form adı alınamadı');
   });
 
   it('KRİTİK: TARİH MUTLAK — göreli zaman ONUN YANINDA', () => {
@@ -68,8 +70,8 @@ describe('FORM · CEVAPLAR · TARİH', () => {
      * takvimde aranıyor ve göreli zamandan çıkarılamıyor. İkisi birlikte
      * duruyor, biri diğerinin yerine değil.
      */
-    expect(LISTE).toContain('formatTarih(lead.submittedAt)');
-    expect(LISTE).toContain('formatRelative(lead.submittedAt)');
+    expect(LISTE).toContain('formatTarih(lead.submittedAt, dil)');
+    expect(LISTE).toContain('formatRelative(lead.submittedAt, dil)');
   });
 
   it('KRİTİK: TELEFON VE E-POSTA TIKLANABİLİR', () => {
@@ -89,25 +91,31 @@ describe('SESSİZ HATA YOK', () => {
      */
     expect(SAYFA).toContain('result.emptyReason');
     expect(SAYFA).not.toContain('Formu dolduran biri olduğunda kaydı burada görürsün');
+    expect(SAYFA).toContain('<BosDurum baslik={d.henuzKayitYok} neden={result.emptyReason} />');
+    expect(leadsSozlugu.tr.sayfa.henuzKayitYok).toBe('Henüz kayıt yok');
   });
 
   it('KRİTİK: DURUM DEĞİŞİKLİĞİ HATASI GERİ ALINIYOR', () => {
     // Hatayı yutmak, ajansın "arandı" sandığı kaydın hâlâ "yeni" olması
     // demek — ve o kişi bir daha aranmaz.
     expect(LISTE).toContain('status: previous');
-    expect(LISTE).toContain('Durum değiştirilemedi');
+    expect(LISTE).toContain('d.durumDegistirilemedi');
+    expect(leadsSozlugu.tr.tablo.durumDegistirilemedi).toBe('Durum değiştirilemedi.');
   });
 
   it('KRİTİK: SESSİZ KESME YOK', () => {
-    expect(LISTE).toContain('kayıt gösteriliyor');
-    expect(LISTE).toContain('toplam ${initial.total}');
+    expect(LISTE).toContain('d.gosteriliyor(rows.length)');
+    expect(LISTE).toContain('d.toplam(initial.total)');
+    expect(leadsSozlugu.tr.tablo.gosteriliyor(5)).toBe('5 kayıt gösteriliyor');
+    expect(leadsSozlugu.tr.tablo.toplam(61)).toBe(' · toplam 61. Aramayı daralt.');
   });
 });
 
 describe('SON 30 GÜNÜ GETİR', () => {
   it('KRİTİK: düğme var ve kendi ucunu çağırıyor', () => {
     expect(DUGME).toContain("'/leads/son-30-gun'");
-    expect(DUGME).toContain('Son 30 günü getir');
+    expect(DUGME).toContain('d.dugme');
+    expect(leadsSozlugu.tr.son30.dugme).toBe('Son 30 günü getir');
   });
 
   it('KRİTİK: SONUÇ SAYFA BAZINDA YAZILIYOR', () => {
@@ -116,7 +124,8 @@ describe('SON 30 GÜNÜ GETİR', () => {
      * sayfa için sebebini söylüyor (token yok, form yok, kaç form tarandı).
      */
     expect(DUGME).toContain('notlar.map');
-    expect(DUGME).toContain('yeni kayıt');
+    expect(DUGME).toContain('d.yeniKayit(kayitlar)');
+    expect(leadsSozlugu.tr.son30.yeniKayit(3)).toBe('3 yeni kayıt');
   });
 
   it('KRİTİK: HATA YUTULMUYOR', () => {
@@ -160,13 +169,15 @@ describe('tablo ve yan panel', () => {
   });
 
   it('KRİTİK: süzgece uyan kayıt yoksa nedeni ayrı ("henüz kayıt yok" değil)', () => {
-    expect(LISTE).toContain('Bu süzgece uyan kayıt yok');
-    expect(SAYFA).toContain('<BosDurum baslik="Henüz kayıt yok" neden={result.emptyReason} />');
+    expect(LISTE).toContain('baslik={d.suzgeceUyanYok}');
+    expect(leadsSozlugu.tr.tablo.suzgeceUyanYok).toBe('Bu süzgece uyan kayıt yok');
+    expect(SAYFA).toContain('<BosDurum baslik={d.henuzKayitYok} neden={result.emptyReason} />');
   });
 
   it('KRİTİK: liste düşerse sunucunun cümlesi ekranda', () => {
     expect(SAYFA).toContain('listeHatasi = hataMetni(e);');
-    expect(SAYFA).toContain("<HataDurumu baslik=\"Kayıtlar yüklenemedi\" mesaj={listeHatasi ?? 'Sunucu sebep bildirmedi.'} />");
+    expect(SAYFA).toContain('<HataDurumu baslik={d.kayitlarYuklenemedi} mesaj={listeHatasi ?? d.sebepYok} />');
+    expect(leadsSozlugu.tr.sayfa.kayitlarYuklenemedi).toBe('Kayıtlar yüklenemedi');
   });
 
   it('KRİTİK: Meta gönderim sorunu yan menüde kırmızı nokta', () => {

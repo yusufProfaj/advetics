@@ -14,9 +14,11 @@ import { ApiRequestError, apiFetch } from '@/lib/api';
 import { formatRelative, formatTarih } from '@/lib/format';
 import { bekleyenKayit, whatsappAdresi } from '@/lib/lead-bekleme';
 import { telefonE164 } from '@advetics/shared';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { leadsSozlugu } from '@/dil/sozlukler/leads';
 import {
-  DURUM_KISA_ADI,
-  KALITE_SECENEKLERI,
+  durumKisaAdi,
+  kaliteSecenekleri,
   asamaSatirlari,
   geriAlinamayanlar,
   geriAlmaBitisMs,
@@ -107,6 +109,9 @@ export function LeadTable({
   canWrite: boolean;
 }) {
   const router = useRouter();
+  const { dil } = useDil();
+  const d = useSozluk(leadsSozlugu).tablo;
+  const DURUM_KISA_ADI = durumKisaAdi(dil);
   const [isPending, startTransition] = useTransition();
 
   const [rows, setRows] = useState<LeadRecord[]>(initial.rows);
@@ -178,14 +183,14 @@ export function LeadTable({
       // durum değişti ama Meta'daki olay silinemiyor.
       const kalan = geriAlma ? geriAlinamayanlar(guncel.geriBesleme, status) : [];
       if (kalan.length > 0) {
-        setError(`Durum geri alındı ama ${kalan.join(', ')} Meta’ya zaten gönderildi; Meta’daki bildirim geri alınamıyor.`);
+        setError(d.geriAlindiAmaGitmis(kalan.join(', ')));
       }
       startTransition(() => router.refresh());
     } catch (err) {
       // GERİ AL. Hatayı yutmak, ajansın "arandı" sandığı kaydın hâlâ "yeni"
       // olması demek: ve o kişi bir daha aranmaz.
       setRows((cur) => cur.map((r) => (r.id === lead.id ? { ...r, status: previous } : r)));
-      setError(err instanceof ApiRequestError ? err.message : 'Durum değiştirilemedi.');
+      setError(err instanceof ApiRequestError ? err.message : d.durumDegistirilemedi);
     } finally {
       setBusy(null);
     }
@@ -204,7 +209,7 @@ export function LeadTable({
 
   const toplamHepsi = Object.values(initial.byStatus).reduce((a, b) => a + b, 0);
   // Yalnız GÖSTERİLEN satırlardan: sayaç aynı satırda "N kayıt gösteriliyor" diyor.
-  const gecikenSayisi = rows.filter((l) => bekleyenKayit(l.status, l.submittedAt)?.gecikti).length;
+  const gecikenSayisi = rows.filter((l) => bekleyenKayit(l.status, l.submittedAt, Date.now(), dil)?.gecikti).length;
   const secilenForm = forms.find((f) => f.id === activeFormId);
   const paneldeki = rows.find((r) => r.id === gosterilen) ?? null;
 
@@ -213,7 +218,7 @@ export function LeadTable({
       {/* DURUM HATTI: sayılar süzgeçten bağımsız; form süzgeci ve arama aynı çubukta. */}
       <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-3">
         <SecimCipi secili={activeStatus === null} sayi={toplamHepsi} onClick={() => navigate({ durum: null })}>
-          Tümü
+          {d.tumu}
         </SecimCipi>
         {LEAD_STATUSES.map((s) => (
           <SecimCipi
@@ -230,11 +235,11 @@ export function LeadTable({
         {forms.length > 0 && (
           <SuzgecMenusu
             etiket="Form"
-            deger={secilenForm?.name ?? (activeFormId ? 'Seçili form' : 'Tüm formlar')}
+            deger={secilenForm?.name ?? (activeFormId ? d.seciliForm : d.tumFormlar)}
             secili={Boolean(activeFormId)}
             onKaldir={() => navigate({ form: null })}
             secenekler={[
-              { ad: 'Tüm formlar', aktif: !activeFormId, onSec: () => navigate({ form: null }) },
+              { ad: d.tumFormlar, aktif: !activeFormId, onSec: () => navigate({ form: null }) },
               ...forms.map((f) => ({ ad: f.name, aktif: activeFormId === f.id, onSec: () => navigate({ form: f.id }) })),
             ]}
           />
@@ -254,8 +259,8 @@ export function LeadTable({
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Ad, e-posta ya da telefon"
-              aria-label="Ad, e-posta ya da telefonda ara"
+              placeholder={d.aramaYeri}
+              aria-label={d.aramaEtiketi}
               className="min-w-0 flex-1 border-0 bg-transparent text-13 text-ink outline-none placeholder:text-ink-soluk"
             />
           </label>
@@ -264,7 +269,7 @@ export function LeadTable({
 
       {error && (
         <div className="border-b border-line p-4">
-          <Serit ton="hata" baslik="Durum kaydedilemedi">
+          <Serit ton="hata" baslik={d.durumKaydedilemedi}>
             {error}
           </Serit>
         </div>
@@ -274,25 +279,25 @@ export function LeadTable({
         /* SÜZGEÇ BOŞ: kayıt VAR ama bu süzgece uyan yok. "Henüz kayıt yok" ayrı hâl, sayfada. */
         <div className="p-4">
           <BosDurum
-            baslik="Bu süzgece uyan kayıt yok"
-            neden={`Workspace'te ${toplamHepsi} kayıt var; seçili durum, form ya da arama hiçbirini içermiyor.`}
+            baslik={d.suzgeceUyanYok}
+            neden={d.suzgeceUyanNeden(toplamHepsi)}
             eylem={
               <Dugme
                 ton="ikincil"
                 boyut="kucuk"
                 onClick={() => navigate({ durum: null, form: null, ara: null })}
               >
-                Süzgeçleri temizle
+                {d.suzgecleriTemizle}
               </Dugme>
             }
           />
         </div>
       ) : (
         <div className={`overflow-x-auto transition-opacity motion-reduce:transition-none ${isPending ? 'opacity-60' : ''}`}>
-          <table className="w-full border-collapse text-[13.5px]" aria-label="Potansiyel müşteriler">
+          <table className="w-full border-collapse text-[13.5px]" aria-label={d.etiket}>
             <thead>
               <tr>
-                {['Kişi', 'İlk cevaplar', 'Form', 'Durum', 'Tarih'].map((b) => (
+                {[d.sutunKisi, d.sutunCevaplar, 'Form', d.sutunDurum, d.sutunTarih].map((b) => (
                   <th
                     key={b}
                     scope="col"
@@ -314,11 +319,11 @@ export function LeadTable({
 
       {/* SESSİZ KESME YOK: kaç kayıt gösterildiği ve toplamın kaç olduğu yazıyor. */}
       <div className="flex flex-wrap items-center justify-end gap-4 px-4 py-2.5 text-[12.5px] text-ink-muted">
-        <span className="mr-auto">Satıra tıkla: bütün cevaplar ve durum yan panelde.</span>
+        <span className="mr-auto">{d.satiraTikla}</span>
         <span className="tabular-nums">
-          {rows.length} kayıt gösteriliyor
-          {initial.total > rows.length && ` · toplam ${initial.total}. Aramayı daralt.`}
-          {gecikenSayisi > 0 && <strong className="font-semibold text-danger-strong"> · {gecikenSayisi} yeni kayıt 1 saati geçti</strong>}
+          {d.gosteriliyor(rows.length)}
+          {initial.total > rows.length && d.toplam(initial.total)}
+          {gecikenSayisi > 0 && <strong className="font-semibold text-danger-strong"> · {d.gecikenYeni(gecikenSayisi)}</strong>}
         </span>
       </div>
 
@@ -360,6 +365,8 @@ function Satir({
   onAc: () => void;
   onTus: (e: KeyboardEvent<HTMLTableRowElement>) => void;
 }) {
+  const { dil } = useDil();
+  const d = useSozluk(leadsSozlugu).tablo;
   const rozet = rozetGorunumu(lead.geriBesleme);
   const { cevaplar, onde } = cevaplariAyir(lead);
   const gizli = cevaplar.length - onde.length;
@@ -369,12 +376,12 @@ function Satir({
       tabIndex={0}
       onClick={onAc}
       onKeyDown={onTus}
-      aria-label={`${lead.fullName ?? lead.email ?? lead.phone ?? 'Adsız kayıt'}: ayrıntıyı aç`}
+      aria-label={d.ayrintiyiAc(lead.fullName ?? lead.email ?? lead.phone ?? d.adsiz)}
       className="cursor-pointer hover:bg-surface-muted focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand"
     >
       <td className={td}>
         <b className="block max-w-[16rem] truncate font-semibold text-ink">
-          {lead.fullName ?? lead.email ?? lead.phone ?? 'Adsız kayıt'}
+          {lead.fullName ?? lead.email ?? lead.phone ?? d.adsiz}
         </b>
         {/*
           TELEFON VE E-POSTA TIKLANABİLİR: ajansın bu ekrandaki ilk işi
@@ -407,7 +414,7 @@ function Satir({
             {onde.map((f) => f.value).join(' · ')}
           </span>
         )}
-        {gizli > 0 && <small className="text-12 text-ink-muted">{gizli} cevap daha</small>}
+        {gizli > 0 && <small className="text-12 text-ink-muted">{d.cevapDaha(gizli)}</small>}
       </td>
       <td className={td}>
         {/*
@@ -415,7 +422,7 @@ function Satir({
           formların adı bir süre boş geliyordu ve kayıt sahipsiz görünüyordu.
         */}
         <span className="block max-w-[14rem] truncate text-ink" title={lead.leadFormName ?? ''}>
-          {lead.leadFormName ?? 'Form adı alınamadı'}
+          {lead.leadFormName ?? d.formAdiYok}
         </span>
         {lead.socialProfileName && <small className="block truncate text-12 text-ink-muted">{lead.socialProfileName}</small>}
       </td>
@@ -430,7 +437,7 @@ function Satir({
           )}
           {/* BEKLEME: ilk temas hızı kaydın değerini belirliyor; bir saati geçen kırmızı. */}
           {(() => {
-            const b = bekleyenKayit(lead.status, lead.submittedAt);
+            const b = bekleyenKayit(lead.status, lead.submittedAt, Date.now(), dil);
             return b ? (
               <small className={`text-12 ${b.gecikti ? 'font-semibold text-danger-strong' : 'text-ink-muted'}`} data-bekleme={b.gecikti ? 'gecikti' : 'yeni'}>
                 {b.metin}
@@ -438,7 +445,7 @@ function Satir({
             ) : null;
           })()}
           {/* KAYIT NEREDEN GELDİ: teşhis için, meraktan değil. */}
-          {lead.source === 'reconcile' && <small className="text-12 text-ink-muted">taramayla geldi</small>}
+          {lead.source === 'reconcile' && <small className="text-12 text-ink-muted">{d.taramayla}</small>}
         </span>
       </td>
       <td className={`${td} whitespace-nowrap`}>
@@ -446,8 +453,8 @@ function Satir({
           MUTLAK TARİH ÖNCE, GÖRELİ SONRA: "3 gün önce" tazelik sorusunun
           cevabı; kaydın hangi güne ait olduğu ise takvimde aranıyor.
         */}
-        <span className="block tabular-nums text-ink">{formatTarih(lead.submittedAt)}</span>
-        <small className="text-12 text-ink-muted">{formatRelative(lead.submittedAt)}</small>
+        <span className="block tabular-nums text-ink">{formatTarih(lead.submittedAt, dil)}</span>
+        <small className="text-12 text-ink-muted">{formatRelative(lead.submittedAt, dil)}</small>
       </td>
     </tr>
   );
@@ -489,6 +496,11 @@ function KayitPaneli({
   onKaydedildi: (l: LeadRecord) => void;
   geriAl: { onceki: LeadStatus; zamanMs: number; yap: () => void } | null;
 }) {
+  const { dil } = useDil();
+  const sz = useSozluk(leadsSozlugu);
+  const d = sz.panel;
+  const DURUM_KISA_ADI = durumKisaAdi(dil);
+  const KALITE_SECENEKLERI = kaliteSecenekleri(dil);
   const [not, setNot] = useState(lead?.note ?? '');
   const [kaydediliyor, setKaydediliyor] = useState(false);
   const [notHatasi, setNotHatasi] = useState<string | null>(null);
@@ -515,7 +527,7 @@ function KayitPaneli({
       });
       onKaydedildi(guncel);
     } catch (err) {
-      setNotHatasi(err instanceof ApiRequestError ? err.message : 'Not kaydedilemedi.');
+      setNotHatasi(err instanceof ApiRequestError ? err.message : d.notKaydedilemedi);
     } finally {
       setKaydediliyor(false);
     }
@@ -526,15 +538,15 @@ function KayitPaneli({
       acik={acik}
       onKapat={onKapat}
       genislik={440}
-      baslik={lead ? (lead.fullName ?? lead.email ?? lead.phone ?? 'Adsız kayıt') : 'Kayıt'}
+      baslik={lead ? (lead.fullName ?? lead.email ?? lead.phone ?? sz.tablo.adsiz) : d.baslik}
       altEylemler={
         <>
           <Dugme ton="ikincil" onClick={onKapat}>
-            Kapat
+            {d.kapat}
           </Dugme>
           {canWrite && (
             <Dugme onClick={() => void notuKaydet()} bekliyor={kaydediliyor} disabled={!notDegisti}>
-              Kaydet
+              {d.kaydet}
             </Dugme>
           )}
         </>
@@ -543,7 +555,7 @@ function KayitPaneli({
       {lead && (
         <>
           <p className="m-0 text-12 text-ink-muted">
-            {lead.leadFormName ?? 'Form adı alınamadı'} · {formatTarih(lead.submittedAt)} ({formatRelative(lead.submittedAt)})
+            {lead.leadFormName ?? sz.tablo.formAdiYok} · {formatTarih(lead.submittedAt, dil)} ({formatRelative(lead.submittedAt, dil)})
           </p>
 
           {/*
@@ -555,12 +567,12 @@ function KayitPaneli({
           */}
           {canWrite ? (
             <fieldset className="m-0 grid gap-1.5 border-0 p-0" disabled={busy}>
-              <legend className="mb-1.5 text-13 font-semibold text-ink">Bu kişi müşteri oldu mu?</legend>
+              <legend className="mb-1.5 text-13 font-semibold text-ink">{d.soru}</legend>
               <div className="max-w-full overflow-x-auto">
                 <BolumluSecici
-                  etiket="Bu kişi müşteri oldu mu?"
+                  etiket={d.soru}
                   secili={kalite ? lead.status : ('' as LeadStatus)}
-                  onSec={(d) => d !== lead.status && onDurum(d)}
+                  onSec={(secilen) => secilen !== lead.status && onDurum(secilen)}
                   secenekler={KALITE_SECENEKLERI.map((s) => ({
                     deger: s.durum,
                     etiket: s.durum === 'lost' ? DURUM_KISA_ADI.lost : s.etiket,
@@ -568,25 +580,25 @@ function KayitPaneli({
                 />
               </div>
               <small className="text-12 text-ink-muted">
-                {KALITE_SECENEKLERI.find((s) => s.durum === lead.status)?.ipucu ?? `Şu an: ${DURUM_KISA_ADI[lead.status]}`}
+                {KALITE_SECENEKLERI.find((s) => s.durum === lead.status)?.ipucu ?? d.suAn(DURUM_KISA_ADI[lead.status])}
               </small>
               {durumHatasi && (
-                <Serit ton="hata" baslik="Durum kaydedilemedi">
+                <Serit ton="hata" baslik={sz.tablo.durumKaydedilemedi}>
                   {durumHatasi}
                 </Serit>
               )}
               {geriAl && kalanDk !== null && (
                 <p role="status" className="m-0 text-12 text-ink-muted">
-                  {lead.geriBesleme?.tur === 'bekliyor' ? `${kalanDk} dk içinde Meta’ya iletilecek. ` : ''}
+                  {lead.geriBesleme?.tur === 'bekliyor' ? d.metaIletilecek(kalanDk) : ''}
                   <button type="button" onClick={geriAl.yap} className="font-semibold text-ink underline underline-offset-2">
-                    Geri al ({DURUM_KISA_ADI[geriAl.onceki]})
+                    {d.geriAl(DURUM_KISA_ADI[geriAl.onceki])}
                   </button>
                 </p>
               )}
             </fieldset>
           ) : (
             <div className="flex items-center gap-2 text-13">
-              <span className="text-ink-muted">Durum</span>
+              <span className="text-ink-muted">{d.durum}</span>
               <DurumRozeti status={lead.status} />
             </div>
           )}
@@ -594,7 +606,7 @@ function KayitPaneli({
           <dl className="m-0 grid grid-cols-[minmax(0,.9fr)_minmax(0,1.1fr)] gap-x-3 gap-y-2 text-13">
             {lead.phone && (
               <>
-                <dt className="text-ink-muted">Telefon</dt>
+                <dt className="text-ink-muted">{d.telefon}</dt>
                 <dd className="m-0">
                   <a href={`tel:${lead.phone.replace(/\s/g, '')}`} className={ILETISIM_BAGI}>
                     {lead.phone}
@@ -612,7 +624,7 @@ function KayitPaneli({
             )}
             {lead.email && (
               <>
-                <dt className="text-ink-muted">E-posta</dt>
+                <dt className="text-ink-muted">{d.eposta}</dt>
                 <dd className="m-0 break-words">
                   <a href={`mailto:${lead.email}`} className={ILETISIM_BAGI}>
                     {lead.email}
@@ -628,24 +640,24 @@ function KayitPaneli({
             ))}
             {lead.campaignName && (
               <>
-                <dt className="text-ink-muted">Kampanya</dt>
+                <dt className="text-ink-muted">{d.kampanya}</dt>
                 <dd className="m-0 font-semibold text-ink">{lead.campaignName}</dd>
               </>
             )}
             {lead.socialProfileName && (
               <>
-                <dt className="text-ink-muted">Sayfa</dt>
+                <dt className="text-ink-muted">{d.sayfa}</dt>
                 <dd className="m-0 font-semibold text-ink">{lead.socialProfileName}</dd>
               </>
             )}
-            <dt className="text-ink-muted">Geliş yolu</dt>
+            <dt className="text-ink-muted">{d.gelisYolu}</dt>
             <dd className="m-0 font-semibold text-ink">
-              {lead.source === 'reconcile' ? 'Periyodik tarama' : lead.source === 'manual' ? 'Elle çekildi' : 'Anlık bildirim'}
+              {lead.source === 'reconcile' ? d.yolTarama : lead.source === 'manual' ? d.yolElle : d.yolAnlik}
             </dd>
           </dl>
 
           {canWrite ? (
-            <Alan etiket="Not" ipucu="Ajansın notu; müşteriye gitmiyor." hata={notHatasi ?? undefined}>
+            <Alan etiket={d.not} ipucu={d.notIpucu} hata={notHatasi ?? undefined}>
               {(id, aciklamaId, hatali) => (
                 <MetinAlani
                   id={id}
@@ -654,14 +666,14 @@ function KayitPaneli({
                   value={not}
                   maxLength={2000}
                   onChange={(e) => setNot(e.target.value)}
-                  placeholder="Görüşme notu"
+                  placeholder={d.notYeri}
                 />
               )}
             </Alan>
           ) : (
             lead.note && (
               <div className="grid gap-1">
-                <span className="text-13 font-semibold text-ink">Not</span>
+                <span className="text-13 font-semibold text-ink">{d.not}</span>
                 <p className="m-0 whitespace-pre-wrap text-13 text-ink">{lead.note}</p>
               </div>
             )
@@ -669,12 +681,12 @@ function KayitPaneli({
 
           {/* HANGİ AŞAMA META'YA GİTTİ: "gönderilemedi" hangi aşama ve neden. */}
           <div className="grid gap-1.5">
-            <span className="text-13 font-semibold text-ink">Meta'ya bildirilenler</span>
+            <span className="text-13 font-semibold text-ink">{d.metayaBildirilenler}</span>
             {asamalar.length === 0 ? (
               <small className="text-12 text-ink-muted">
                 {lead.geriBesleme?.tur === 'kapali' || !lead.geriBesleme
-                  ? 'Bildirim kapalı ya da bu kayıt için henüz bir sonuç gönderilmedi.'
-                  : 'Henüz gönderilen aşama yok.'}
+                  ? d.bildirimKapali
+                  : d.asamaYok}
               </small>
             ) : (
               <ul className="m-0 grid list-none gap-1.5 p-0">
@@ -695,11 +707,12 @@ function KayitPaneli({
 }
 
 function DurumRozeti({ status }: { status: LeadStatus }) {
+  const { dil } = useDil();
   const meta = LEAD_STATUS_META[status];
   return (
     <span title={meta.hint}>
       {/* Soru ve süzgeçle AYNI ad: aynı durumun iki adı olmasın. */}
-      <Rozet hal={TON_HALI[meta.tone]}>{DURUM_KISA_ADI[status]}</Rozet>
+      <Rozet hal={TON_HALI[meta.tone]}>{durumKisaAdi(dil)[status]}</Rozet>
     </span>
   );
 }

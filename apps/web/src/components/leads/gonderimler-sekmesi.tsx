@@ -17,6 +17,9 @@ import { Dugme } from '@/components/ui/dugme';
 import { BosDurum, HataDurumu, Yukleniyor } from '@/components/ui/hal';
 import { Rozet, type DurumHali } from '@/components/ui/rozet';
 import { Tablo, type TabloSutunu } from '@/components/ui/tablo';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { leadsSozlugu } from '@/dil/sozlukler/leads';
+import type { Dil } from '@advetics/shared';
 
 /**
  * ═══ POTANSİYEL MÜŞTERİLER › META'YA GÖNDERİMLER (MIMARI § 9) ═══
@@ -44,6 +47,8 @@ function rozetHali(d: GeriBeslemeOlayDurumu): DurumHali {
 }
 
 export function GonderimlerSekmesi({ clientId, canWrite }: { clientId: string; canWrite: boolean }) {
+  const { dil } = useDil();
+  const d = useSozluk(leadsSozlugu).gonderim;
   const [hal, setHal] = useState<Hal>({ tur: 'yukleniyor' });
   const [durum, setDurum] = useState<GeriBeslemeOlayDurumu | null>(null);
   const [offset, setOffset] = useState(0);
@@ -57,9 +62,9 @@ export function GonderimlerSekmesi({ clientId, canWrite }: { clientId: string; c
       );
       setHal({ tur: 'hazir', y });
     } catch (e) {
-      setHal({ tur: 'hata', mesaj: e instanceof ApiRequestError ? e.message : 'Gönderimler okunamadı.' });
+      setHal({ tur: 'hata', mesaj: e instanceof ApiRequestError ? e.message : d.okunamadi });
     }
-  }, [clientId, durum, offset]);
+  }, [clientId, durum, offset, d]);
 
   useEffect(() => {
     void yukle();
@@ -73,12 +78,12 @@ export function GonderimlerSekmesi({ clientId, canWrite }: { clientId: string; c
         body: JSON.stringify({ clientId }),
       });
       // 7 günü geçenler ve zaten ulaşanlar AYRI söyleniyor, sessizce atlanmıyor.
-      const p = [`${r.kuyruga} sonuç yeniden sıraya alındı.`];
-      if (r.suresiGecen > 0) p.push(`${r.suresiGecen} tanesi 7 günü geçtiği için gönderilemez.`);
+      const p = [d.siraya(r.kuyruga)];
+      if (r.suresiGecen > 0) p.push(d.suresiGecen(r.suresiGecen));
       setYeniden({ calisiyor: false, sonuc: p.join(' ') });
       await yukle();
     } catch (e) {
-      setYeniden({ calisiyor: false, sonuc: e instanceof ApiRequestError ? e.message : 'Yeniden denenemedi.' });
+      setYeniden({ calisiyor: false, sonuc: e instanceof ApiRequestError ? e.message : d.yenidenDenemedi });
     }
   }
 
@@ -88,18 +93,18 @@ export function GonderimlerSekmesi({ clientId, canWrite }: { clientId: string; c
   const simdi = Date.now();
 
   const sutunlar: Array<TabloSutunu<Satir>> = [
-    { anahtar: 'kisi', baslik: 'Kişi', hucre: (o) => <b className="font-semibold text-ink">{o.leadAdi ?? 'Adsız kayıt'}</b> },
-    { anahtar: 'sonuc', baslik: 'Sonuç', hucre: (o) => GERI_BESLEME_ASAMA_ADI[o.asama] },
+    { anahtar: 'kisi', baslik: d.sutunKisi, hucre: (o) => <b className="font-semibold text-ink">{o.leadAdi ?? d.adsiz}</b> },
+    { anahtar: 'sonuc', baslik: d.sutunSonuc, hucre: (o) => GERI_BESLEME_ASAMA_ADI[o.asama] },
     {
       anahtar: 'zaman',
-      baslik: 'Zaman',
-      hucre: (o) => <span className="whitespace-nowrap tabular-nums text-ink-muted">{zaman(o.olayZamani)}</span>,
+      baslik: d.sutunZaman,
+      hucre: (o) => <span className="whitespace-nowrap tabular-nums text-ink-muted">{zaman(o.olayZamani, dil)}</span>,
     },
     {
       anahtar: 'durum',
-      baslik: 'Durum',
+      baslik: d.sutunDurum,
       hucre: (o) => {
-        const not = olayNotu(o, simdi);
+        const not = olayNotu(o, simdi, dil);
         return (
           <span className="grid justify-items-start gap-1">
             <Rozet hal={rozetHali(o.durum)}>{GERI_BESLEME_OLAY_DURUM_ADI[o.durum]}</Rozet>
@@ -114,7 +119,7 @@ export function GonderimlerSekmesi({ clientId, canWrite }: { clientId: string; c
     <section className="min-w-0 rounded-kart border border-line bg-surface">
       <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-3">
         <SecimCipi secili={durum === null} sayi={toplamHepsi} onClick={() => (setDurum(null), setOffset(0))}>
-          Tümü
+          {d.tumu}
         </SecimCipi>
         {GERI_BESLEME_OLAY_DURUMLARI.filter((d) => (sayilar?.[d] ?? 0) > 0 || d === durum).map((d) => (
           <SecimCipi key={d} secili={durum === d} sayi={sayilar?.[d] ?? 0} onClick={() => (setDurum(d), setOffset(0))}>
@@ -124,7 +129,7 @@ export function GonderimlerSekmesi({ clientId, canWrite }: { clientId: string; c
         <span className="flex-1" />
         {canWrite && denenebilir > 0 && (
           <Dugme ton="ikincil" boyut="kucuk" onClick={() => void tekrarDene()} bekliyor={yeniden.calisiyor}>
-            {`Gönderilemeyenleri tekrar dene (${denenebilir})`}
+            {d.tekrarDene(denenebilir)}
           </Dugme>
         )}
       </div>
@@ -136,24 +141,24 @@ export function GonderimlerSekmesi({ clientId, canWrite }: { clientId: string; c
 
       {hal.tur === 'yukleniyor' && (
         <div className="p-4">
-          <Yukleniyor etiket="Gönderimler yükleniyor" />
+          <Yukleniyor etiket={d.yukleniyor} />
         </div>
       )}
       {hal.tur === 'hata' && (
         <div className="p-4">
-          <HataDurumu baslik="Gönderimler okunamadı" mesaj={hal.mesaj} onTekrar={() => void yukle()} />
+          <HataDurumu baslik={d.okunamadiBaslik} mesaj={hal.mesaj} onTekrar={() => void yukle()} />
         </div>
       )}
       {hal.tur === 'hazir' && (
         <Tablo
-          etiket="Meta'ya gönderimler"
+          etiket={d.tabloEtiketi}
           sutunlar={sutunlar}
           satirlar={hal.y.satirlar}
           satirAnahtari={(o) => o.id}
           bos={
             <BosDurum
-              baslik="Henüz gönderim yok"
-              neden={hal.y.emptyReason ? bosNedenMetni(hal.y.emptyReason) : 'Gönderim bulunamadı.'}
+              baslik={d.bosBaslik}
+              neden={hal.y.emptyReason ? bosNedenMetni(hal.y.emptyReason) : d.bosNeden}
             />
           }
           /* SESSİZ KESME YOK: kaç gönderim gösteriliyor, toplam kaç ("1 - 50 / 61"). */
@@ -170,6 +175,6 @@ export function GonderimlerSekmesi({ clientId, canWrite }: { clientId: string; c
   );
 }
 
-function zaman(iso: string): string {
-  return new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Istanbul' }).format(new Date(iso));
+function zaman(iso: string, dil: Dil): string {
+  return new Intl.DateTimeFormat(dil === 'en' ? 'en-US' : 'tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Istanbul' }).format(new Date(iso));
 }

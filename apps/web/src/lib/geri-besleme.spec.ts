@@ -2,9 +2,10 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { GERI_BESLEME_OLAY_DURUMLARI, LEAD_STATUSES, type GeriBeslemeAyari, type GeriBeslemeOlayDurumu, type GeriBeslemeOlayi } from '@advetics/shared';
+import { leadsSozlugu } from '@/dil/sozlukler/leads';
 import {
-  DURUM_KISA_ADI,
-  KALITE_SECENEKLERI,
+  durumKisaAdi,
+  kaliteSecenekleri,
   degisimMetni,
   durumTonu,
   geriAlinamayanlar,
@@ -22,6 +23,8 @@ import {
  * Saf kararlar ÇALIŞTIRILARAK; ekran bağları kaynak taramasıyla (bileşen
  * render eden test altyapısı yok, bilinçli). Taramalar yorumsuz kaynakta.
  */
+const DURUM_KISA_ADI = durumKisaAdi('tr');
+const KALITE_SECENEKLERI = kaliteSecenekleri('tr');
 const sayilar = (ek: Partial<Record<GeriBeslemeOlayDurumu, number>> = {}) =>
   ({ ...Object.fromEntries(GERI_BESLEME_OLAY_DURUMLARI.map((d) => [d, 0])), ...ek }) as Record<GeriBeslemeOlayDurumu, number>;
 
@@ -51,6 +54,13 @@ describe('soru seçenekleri', () => {
   it('metinlerde uzun tire yok (panel metin dili)', () => {
     const tum = [...KALITE_SECENEKLERI.flatMap((s) => [s.etiket, s.ipucu]), ...Object.values(DURUM_KISA_ADI)].join(' ');
     expect(tum).not.toMatch(/—/);
+  });
+
+  it('İngilizce: aynı seçenekler, çevrilmiş ad, uzun tire yok', () => {
+    const en = kaliteSecenekleri('en');
+    expect(en.map((s) => s.durum)).toEqual(['lost', 'contacted', 'qualified', 'won']);
+    expect(durumKisaAdi('en').won).toBe('Became a customer');
+    expect(en.flatMap((s) => [s.etiket, s.ipucu]).join(' ')).not.toMatch(/—/);
   });
 });
 
@@ -104,6 +114,11 @@ describe('şerit', () => {
   it('KRİTİK: ayar okunamadıysa "kapalı" DEMİYOR, sunucunun cümlesini taşıyor ve eylem yok', () => {
     const g = seritGorunumu({ durum: 'hata', mesaj: 'Sunucuya ulaşılamadı' });
     expect(g).toEqual({ baslik: 'Meta’ya bildirim durumu okunamadı', alt: 'Sunucuya ulaşılamadı', ton: 'sorun', eylem: null });
+    // İngilizce: başlık çevrilir, sunucunun cümlesi AYNEN kalır.
+    expect(seritGorunumu({ durum: 'hata', mesaj: 'Sunucuya ulaşılamadı' }, 'en')).toMatchObject({
+      baslik: 'Could not read the Meta reporting status',
+      alt: 'Sunucuya ulaşılamadı',
+    });
   });
 
   it('kapalı: "Aç"; çalışıyor: veri kümesi + son gönderim; hata: bekleyen sayısı + platformun cümlesi', () => {
@@ -158,6 +173,16 @@ describe('gönderimler', () => {
     expect(degisimMetni(null)).toBeNull();
   });
 
+  it('İngilizce: not ve değişim metni çevriliyor, Meta’nın cümlesi aynen', () => {
+    expect(olayNotu(o({ durum: 'vazgecildi', deneme: 1, hata: 'Service temporarily unavailable' }), 0, 'en')).toBe(
+      '1 attempt · Meta: “Service temporarily unavailable”',
+    );
+    expect(olayNotu(o({ durum: 'suresi_doldu' }), 0, 'en')).toBe('Meta does not accept results older than 7 days');
+    expect(degisimMetni({ kuyruga: 3, eskiOlduguIcinAtlanan: 1, iptalEdilen: 0 }, 'en')).toBe(
+      '3 notifications from the last 7 days were queued. 1 record cannot be sent because it is older than 7 days (Meta rule).',
+    );
+  });
+
   it('uyarı ve bekleyen işin adresi API’nin uyarısıyla AYNI', () => {
     expect(gonderimlerAdresi('abc')).toBe('/potansiyel-musteriler?musteri=abc&sekme=gonderimler');
   });
@@ -182,7 +207,8 @@ describe('ekran bağları (kaynak)', () => {
   });
 
   it('KRİTİK: soru durum seçicisinin YERİNE geçti (aynı PUT /leads/:id, ikinci alan yok)', () => {
-    expect(LISTE).toContain('Bu kişi müşteri oldu mu?');
+    expect(LISTE).toContain('{d.soru}');
+    expect(leadsSozlugu.tr.panel.soru).toBe('Bu kişi müşteri oldu mu?');
     expect(LISTE).toContain('KALITE_SECENEKLERI.map');
     expect(LISTE).not.toMatch(/<select[\s\S]{0,200}onDurum/);
     expect(LISTE).toContain('`/leads/${lead.id}`');

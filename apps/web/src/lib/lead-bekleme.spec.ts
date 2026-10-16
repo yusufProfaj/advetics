@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { telefonE164 } from '@advetics/shared';
+import { leadsSozlugu } from '@/dil/sozlukler/leads';
 import { bekleyenKayit, whatsappAdresi } from './lead-bekleme';
 
 const SIMDI = Date.parse('2026-10-15T12:00:00Z');
@@ -18,14 +19,20 @@ describe('yeni kaydın beklemesi', () => {
     for (const s of ['contacted', 'qualified', 'won', 'lost']) expect(bekleyenKayit(s, once(600), SIMDI)).toBeNull();
   });
 
+  it('İngilizce: metin çevriliyor, eşik aynı', () => {
+    expect(bekleyenKayit('new', once(59), SIMDI, 'en')).toEqual({ metin: 'Not contacted for 59 minutes', gecikti: false });
+    expect(bekleyenKayit('new', once(60), SIMDI, 'en')).toEqual({ metin: 'Not contacted for 1 hour', gecikti: true });
+  });
+
   it('saat farkıyla gelecekte görünen kayıt eksi dakika yazmıyor', () => {
     expect(bekleyenKayit('new', new Date(SIMDI + 120_000).toISOString(), SIMDI)?.metin).toBe('0 dakikadır aranmadı');
   });
 
   it('liste satırı ve sayaç aynı fonksiyondan', () => {
     const k = readFileSync(join(__dirname, '../components/leads/lead-table.tsx'), 'utf8').replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
-    expect(k).toContain('const b = bekleyenKayit(lead.status, lead.submittedAt);');
-    expect(k).toContain('{gecikenSayisi} yeni kayıt 1 saati geçti');
+    expect(k).toContain('const b = bekleyenKayit(lead.status, lead.submittedAt, Date.now(), dil);');
+    expect(k).toContain('{d.gecikenYeni(gecikenSayisi)}');
+    expect(leadsSozlugu.tr.tablo.gecikenYeni(2)).toBe('2 yeni kayıt 1 saati geçti');
   });
 });
 

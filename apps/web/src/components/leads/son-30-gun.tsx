@@ -4,6 +4,8 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { Dugme } from '@/components/ui/dugme';
+import { useSozluk } from '@/dil/saglayici';
+import { leadsSozlugu } from '@/dil/sozlukler/leads';
 
 /**
  * ═══ SON 30 GÜNÜ GETİR ═══
@@ -19,6 +21,7 @@ import { Dugme } from '@/components/ui/dugme';
  */
 export function Son30Gun({ clientId }: { clientId: string }) {
   const router = useRouter();
+  const d = useSozluk(leadsSozlugu).son30;
   const [bekliyor, setBekliyor] = useState(false);
   const [notlar, setNotlar] = useState<string[] | null>(null);
   const [kayitlar, setKayitlar] = useState<number | null>(null);
@@ -44,7 +47,7 @@ export function Son30Gun({ clientId }: { clientId: string }) {
       router.refresh();
     } catch (err) {
       setNotlar([
-        err instanceof ApiRequestError ? err.message : 'Kayıtlar çekilemedi.',
+        err instanceof ApiRequestError ? err.message : d.cekilemedi,
       ]);
       setNotAcik(true);
     } finally {
@@ -62,9 +65,9 @@ export function Son30Gun({ clientId }: { clientId: string }) {
         ton="ikincil"
         onClick={() => void getir()}
         bekliyor={bekliyor}
-        title="Meta’daki bütün anlık formların son 30 günlük kayıtlarını çeker"
+        title={d.ipucu}
       >
-        {bekliyor ? 'Çekiliyor' : 'Son 30 günü getir'}
+        {bekliyor ? d.cekiliyor : d.dugme}
       </Dugme>
 
       {/* SONUÇ KUTUSU DOM'DA KALIYOR: kapatınca görünmez + etkisiz, içerik sonraki çekime kadar duruyor. */}
@@ -76,14 +79,14 @@ export function Son30Gun({ clientId }: { clientId: string }) {
             notAcik ? 'visible opacity-100' : 'invisible opacity-0'
           }`}
         >
-          {kayitlar !== null && <p className="m-0 text-12 font-semibold text-ink">{kayitlar} yeni kayıt</p>}
+          {kayitlar !== null && <p className="m-0 text-12 font-semibold text-ink">{d.yeniKayit(kayitlar)}</p>}
           <ul className="m-0 grid list-none gap-0.5 p-0 text-12 text-ink-muted">
             {notlar.map((n) => (
               <li key={n}>{n}</li>
             ))}
           </ul>
           <button type="button" onClick={() => setNotAcik(false)} className="mt-1 text-12 font-semibold text-ink underline underline-offset-2">
-            Kapat
+            {d.kapat}
           </button>
         </div>
       )}

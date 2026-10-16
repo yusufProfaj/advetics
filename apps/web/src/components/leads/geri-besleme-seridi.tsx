@@ -9,6 +9,8 @@ import { Alan, Secim } from '@/components/ui/alan';
 import { Dugme } from '@/components/ui/dugme';
 import { HataDurumu, Serit, Yukleniyor } from '@/components/ui/hal';
 import { YanPanel } from '@/components/ui/pencere';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { leadsSozlugu } from '@/dil/sozlukler/leads';
 
 /**
  * ═══ "SONUÇLARI META'YA BİLDİR" ŞERİDİ + AYAR YAN PANELİ (MIMARI § 9) ═══
@@ -44,7 +46,9 @@ export function GeriBeslemeSeridi({
   canManage: boolean;
 }) {
   const router = useRouter();
-  const g = seritGorunumu(sonuc);
+  const { dil } = useDil();
+  const d = useSozluk(leadsSozlugu).ayar;
+  const g = seritGorunumu(sonuc, dil);
   const [pencere, setPencere] = useState<Pencere>({ hal: 'kapali' });
   const [dataset, setDataset] = useState<string>('');
   const [onay, setOnay] = useState(false);
@@ -63,7 +67,7 @@ export function GeriBeslemeSeridi({
       setOnay(false);
     } catch (e) {
       // HATA YUTULMUYOR: "seçenek yok" ile "okuyamadık" farklı işler.
-      setPencere({ hal: 'hata', mesaj: e instanceof ApiRequestError ? e.message : 'Ayar okunamadı.' });
+      setPencere({ hal: 'hata', mesaj: e instanceof ApiRequestError ? e.message : d.okunamadi });
     }
   }
 
@@ -82,11 +86,11 @@ export function GeriBeslemeSeridi({
           aydinlatmaOnayi: etkin ? (ayar?.etkin === true || onay) : false,
         }),
       });
-      setBilgi(degisimMetni(r.degisim) ?? (etkin ? 'Kaydedildi.' : 'Kapatıldı.'));
+      setBilgi(degisimMetni(r.degisim, dil) ?? (etkin ? d.kaydedildi : d.kapatildi));
       setPencere({ hal: 'kapali' });
       router.refresh();
     } catch (e) {
-      setHata(e instanceof ApiRequestError ? e.message : 'Kaydedilemedi.');
+      setHata(e instanceof ApiRequestError ? e.message : d.kaydedilemedi);
     } finally {
       setKaydediliyor(false);
     }
@@ -104,7 +108,7 @@ export function GeriBeslemeSeridi({
       setPencere({ hal: 'hazir', ayar: a });
       router.refresh();
     } catch (e) {
-      setHata(e instanceof ApiRequestError ? e.message : 'Meta’ya sorulamadı.');
+      setHata(e instanceof ApiRequestError ? e.message : d.metayaSorulamadi);
     } finally {
       setKaydediliyor(false);
     }
@@ -122,10 +126,10 @@ export function GeriBeslemeSeridi({
         eylemler={
           g.eylem && canManage ? (
             <Dugme ton={g.eylem === 'ac' ? 'koyu' : 'ikincil'} boyut="kucuk" onClick={() => void ac()}>
-              {g.eylem === 'ac' ? 'Aç' : 'Ayarlar'}
+              {g.eylem === 'ac' ? d.ac : d.ayarlar}
             </Dugme>
           ) : g.eylem ? (
-            <small className="text-12 text-ink-muted">Ayarı bağlantı yönetme yetkisi olan kişi değiştirebilir.</small>
+            <small className="text-12 text-ink-muted">{d.yetkiYok}</small>
           ) : undefined
         }
       >
@@ -146,63 +150,63 @@ export function GeriBeslemeSeridi({
       <YanPanel
         acik={acik}
         onKapat={() => !kaydediliyor && setPencere({ hal: 'kapali' })}
-        baslik="Sonuçları Meta’ya bildir"
+        baslik={d.baslik}
         genislik={440}
         altEylemler={
           ayar ? (
             <>
               {ayar.etkin && (
                 <Dugme ton="tehlike" onClick={() => void kaydet(false)} disabled={kaydediliyor} className="mr-auto">
-                  Kapat ve bildirmeyi durdur
+                  {d.kapatDurdur}
                 </Dugme>
               )}
               <Dugme ton="ikincil" onClick={() => setPencere({ hal: 'kapali' })} disabled={kaydediliyor}>
-                Vazgeç
+                {d.vazgec}
               </Dugme>
               <Dugme
                 onClick={() => void kaydet(true)}
                 bekliyor={kaydediliyor}
                 disabled={dataset === '' || (!ayar.etkin && !onay)}
               >
-                {ayar.etkin ? 'Kaydet' : 'Aç ve gönder'}
+                {ayar.etkin ? d.kaydet : d.acGonder}
               </Dugme>
             </>
           ) : (
             <Dugme ton="ikincil" onClick={() => setPencere({ hal: 'kapali' })}>
-              Kapat
+              {d.kapat}
             </Dugme>
           )
         }
       >
         <p className="m-0 text-13 text-ink-muted">
-          İşaretlediğin sonuçlar Meta’ya gider. Kişinin adı, telefonu ve e-postası gitmez; yalnız Meta’nın kendi form kimliği gider.
+          {d.giris}
         </p>
 
-        {pencere.hal === 'yukleniyor' && <Yukleniyor etiket="Meta’daki pikseller okunuyor" />}
-        {pencere.hal === 'hata' && <HataDurumu baslik="Ayar okunamadı" mesaj={pencere.mesaj} onTekrar={() => void ac()} />}
+        {pencere.hal === 'yukleniyor' && <Yukleniyor etiket={d.pikselOkunuyor} />}
+        {pencere.hal === 'hata' && <HataDurumu baslik={d.okunamadi} mesaj={pencere.mesaj} onTekrar={() => void ac()} />}
 
         {ayar && (
           <>
             <Alan
-              etiket="Veri kümesi (piksel)"
+              etiket={d.veriKumesi}
               /* SEÇENEK YOKSA NEDENİ: "piksel yok" ile "okuyamadık" ayrı. */
               ipucu={ayar.secenekNotu ?? undefined}
-              hata={degisecek ? 'Veri kümesini değiştirirsen Meta öğrenmeye baştan başlar.' : undefined}
+              hata={degisecek ? d.kumeDegisirse : undefined}
             >
               {(id, aciklamaId, hatali) =>
                 ayar.secenekler.length > 0 ? (
                   <Secim id={id} aria-describedby={aciklamaId} hatali={hatali} value={dataset} onChange={(e) => setDataset(e.target.value)}>
-                    <option value="">Seç</option>
+                    <option value="">{d.sec}</option>
                     {ayar.secenekler.map((s) => (
                       <option key={s.id} value={s.id}>
                         {s.ad} · {s.id}
-                        {s.varsayilan ? ' (kurulumda seçilen)' : ''}
+                        {s.varsayilan ? d.kurulumdaSecilen : ''}
                       </option>
                     ))}
                   </Secim>
                 ) : (
                   <p id={id} className="m-0 text-13 text-ink-muted">
-                    Seçilebilecek veri kümesi yok.
+                    {d.kumeYok}
                   </p>
                 )
               }
@@ -212,41 +216,42 @@ export function GeriBeslemeSeridi({
               <div className="grid gap-1.5 rounded-alan border border-line px-3 py-2.5 text-13">
                 {secili.crm === false && (
                   <p className="m-0 text-ink">
-                    <b>Meta’da bir adım senin işin:</b> Events Manager’da bu veri kümesinin ayarlarında “Conversion Leads” bölümü kapalı görünüyor. Açılmadan da gönderim yapılır, ama Meta reklamı bu sonuçlara göre optimize edemez.
+                    <b>{d.crmKapaliBas}</b>
+                    {d.crmKapali}
                   </p>
                 )}
-                {secili.crm === true && <p className="m-0 text-ink">Bu veri kümesi Meta’da sonuçları kabul edecek şekilde açık.</p>}
-                {secili.crm === null && <p className="m-0 text-ink-muted">Bu veri kümesinin Meta’daki durumu henüz sorulmadı.</p>}
+                {secili.crm === true && <p className="m-0 text-ink">{d.crmAcik}</p>}
+                {secili.crm === null && <p className="m-0 text-ink-muted">{d.crmSorulmadi}</p>}
                 <Dugme ton="ikincil" boyut="kucuk" onClick={() => void kontrolEt()} disabled={kaydediliyor} className="justify-self-start">
-                  Meta’ya sor
+                  {d.metayaSor}
                 </Dugme>
               </div>
             )}
 
             {ayar.uygunlukEksikleri.length > 0 && (
               <div className="grid gap-1 text-13">
-                <p className="m-0 font-semibold text-ink">Meta’nın optimize edebilmesi için eksikler</p>
+                <p className="m-0 font-semibold text-ink">{d.eksiklerBaslik}</p>
                 <ul className="m-0 list-disc pl-4 text-ink-muted">
                   {ayar.uygunlukEksikleri.map((e) => (
                     <li key={e}>{META_UYGUNLUK_EKSIK_ADI[e]}</li>
                   ))}
                 </ul>
-                <p className="m-0 text-12 text-ink-muted">Eksikler göndermeye engel değil. Sonuçlar yine Meta’ya gider ve raporlarda görünür.</p>
+                <p className="m-0 text-12 text-ink-muted">{d.eksiklerNot}</p>
               </div>
             )}
 
             {!ayar.etkin && (
               <>
-                <p className="m-0 text-13 text-ink-muted">Açınca son 7 günün kayıtları gönderilir; daha eskileri Meta kabul etmiyor. Kaç tanesinin gittiği kaydettikten sonra yazar.</p>
+                <p className="m-0 text-13 text-ink-muted">{d.acinca}</p>
                 <label className="flex items-start gap-2 text-13 text-ink">
                   <input type="checkbox" checked={onay} onChange={(e) => setOnay(e.target.checked)} className="mt-0.5 accent-[var(--text)]" />
-                  <span>Formdaki aydınlatma metni, sonuç bilgisinin Meta’ya iletilmesini kapsıyor.</span>
+                  <span>{d.onay}</span>
                 </label>
               </>
             )}
 
             {hata && (
-              <Serit ton="hata" baslik="Kaydedilemedi">
+              <Serit ton="hata" baslik={d.kaydedilemediBaslik}>
                 {hata}
               </Serit>
             )}

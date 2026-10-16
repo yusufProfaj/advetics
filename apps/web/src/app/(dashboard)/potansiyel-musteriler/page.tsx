@@ -18,8 +18,15 @@ import { SayfaIskeleti } from '@/components/ui/sayfa-basligi';
 import { SayfaIcDuzen, SayfaIcMenu } from '@/components/ui/sayfa-ic-menu';
 import { BosDurum, HataDurumu, Serit } from '@/components/ui/hal';
 import { dugmeSinifi } from '@/components/ui/dugme';
+import { sec } from '@advetics/shared';
+import { dilAl } from '@/dil/sunucu';
+import { leadsSozlugu } from '@/dil/sozlukler/leads';
+import { menuBolumuEtiketi, menuSatiriEtiketi } from '@/lib/nav-sections';
 
-export const metadata = { title: 'Potansiyel Müşteriler · Advetics' };
+/** Başlık istek anında: dil çerezden okunuyor; ad menünün kendi çevirisinden. */
+export async function generateMetadata() {
+  return { title: `${menuSatiriEtiketi('/potansiyel-musteriler', await dilAl())} · Advetics` };
+}
 export const dynamic = 'force-dynamic';
 
 /**
@@ -42,6 +49,9 @@ export default async function LeadsPage({
 }) {
   const session = await requireSession();
   const params = await searchParams;
+  const dil = await dilAl();
+  const d = sec(leadsSozlugu, dil).sayfa;
+  const sayfaAdi = menuSatiriEtiketi('/potansiyel-musteriler', dil);
 
   // SESSİZCE İLK WORKSPACE'E DÜŞÜLMÜYOR — gerekçe `lib/sayfa-workspace.ts`.
   const clientId = sayfaWorkspaceId(session, first(params.musteri));
@@ -49,8 +59,8 @@ export default async function LeadsPage({
   if (!clientId) {
     return (
       <WorkspaceGerekli
-        ekran="Potansiyel Müşteriler"
-        neden="Form kayıtları workspace bazında tutuluyor."
+        ekran={sayfaAdi}
+        neden={d.neden}
         {...workspaceSecimVerisi(session)}
       />
     );
@@ -93,7 +103,7 @@ export default async function LeadsPage({
      */
     serverApiFetch<GeriBeslemeAyari>(`/geri-besleme/ayar?clientId=${clientId}`).then(
       (a): AyarSonucu => ({ durum: 'tamam', ayar: a }),
-      (e: unknown): AyarSonucu => ({ durum: 'hata', mesaj: e instanceof Error ? e.message : 'Ayar okunamadı.' }),
+      (e: unknown): AyarSonucu => ({ durum: 'hata', mesaj: e instanceof Error ? e.message : d.ayarOkunamadi }),
     ),
   ]);
 
@@ -106,15 +116,15 @@ export default async function LeadsPage({
 
   return (
     <SayfaIskeleti
-      bolum="Yönet"
-      baslik="Potansiyel Müşteriler"
+      bolum={menuBolumuEtiketi('/potansiyel-musteriler', dil)}
+      baslik={sayfaAdi}
       /*
         AÇIKLAMA KAPSAMI DA SÖYLÜYOR: ekran bir süre yalnızca panelde
         üretilmiş formların kayıtlarını topluyordu ve cümle bunu hiç
         yazmıyordu; Meta Ads Manager'da kurulmuş formların kayıtları hiç
         gelmiyor, kullanıcı da sebebini bilmiyordu.
       */
-      aciklama="Anlık formu dolduran kişiler. Meta’da kurulmuş formlar da dahil; yeni kayıtlar birkaç saniye içinde düşer."
+      aciklama={d.aciklama}
       eylemler={
         <>
           {/*
@@ -129,7 +139,7 @@ export default async function LeadsPage({
               href={`${process.env.NEXT_PUBLIC_API_URL ?? ''}/leads/export?${query.toString()}`}
               className={dugmeSinifi('birincil')}
             >
-              CSV indir
+              {d.csvIndir}
             </a>
           )}
         </>
@@ -137,11 +147,7 @@ export default async function LeadsPage({
     >
       {/* VERİ HATTI SAĞLIĞI: liste boşken de görünüyor. */}
       {result && result.reconciledRatio > 0.3 && (
-        <Serit baslik="Anlık bildirim gecikmeli çalışıyor olabilir">
-          Kayıtların %{Math.round(result.reconciledRatio * 100)}'i anlık bildirimle değil, periyodik taramayla
-          geldi. Kayıtlar kaybolmuyor ama saatler geç düşüyor; Meta uygulama ayarlarındaki webhook aboneliğini
-          kontrol et.
-        </Serit>
+        <Serit baslik={d.gecikmeBaslik}>{d.gecikme(Math.round(result.reconciledRatio * 100))}</Serit>
       )}
 
       {/* META'YA BİLDİRİM ŞERİDİ: liste boşken de görünüyor (ayar lead'den önce açılabilir). */}
@@ -156,13 +162,13 @@ export default async function LeadsPage({
       <SayfaIcDuzen
         menu={
           <SayfaIcMenu
-            etiket="Potansiyel Müşteriler bölümleri"
+            etiket={d.bolumlerEtiketi}
             secili={sekme}
             ogeler={[
-              { deger: 'kayitlar', etiket: 'Kayıtlar', sayi: total, href: potansiyelAdresi(clientId, 'kayitlar') },
+              { deger: 'kayitlar', etiket: d.kayitlar, sayi: total, href: potansiyelAdresi(clientId, 'kayitlar') },
               {
                 deger: 'gonderimler',
-                etiket: 'Meta’ya gönderimler',
+                etiket: d.gonderimler,
                 uyari: sorunlu > 0,
                 href: potansiyelAdresi(clientId, 'gonderimler'),
               },
@@ -171,12 +177,12 @@ export default async function LeadsPage({
         }
       >
         {formHatasi && sekme === 'kayitlar' && (
-          <Serit baslik="Form listesi okunamadı">{`Form süzgeci bu yüzden yok: ${formHatasi}`}</Serit>
+          <Serit baslik={d.formListesiBaslik}>{d.formSuzgeciYok(formHatasi)}</Serit>
         )}
         {sekme === 'gonderimler' ? (
           <GonderimlerSekmesi clientId={clientId} canWrite={canWrite} />
         ) : !result ? (
-          <HataDurumu baslik="Kayıtlar yüklenemedi" mesaj={listeHatasi ?? 'Sunucu sebep bildirmedi.'} />
+          <HataDurumu baslik={d.kayitlarYuklenemedi} mesaj={listeHatasi ?? d.sebepYok} />
         ) : total === 0 ? (
           /*
             ═══ BOŞ LİSTE SEBEBİNİ SÖYLÜYOR ═══
@@ -184,7 +190,7 @@ export default async function LeadsPage({
             sayfa atanmamış · sayfa token'ı yok · tarama hiç koşmamış ·
             gerçekten kayıt yok. Sebep artık sunucudan geliyor.
           */
-          <BosDurum baslik="Henüz kayıt yok" neden={result.emptyReason} />
+          <BosDurum baslik={d.henuzKayitYok} neden={result.emptyReason} />
         ) : (
           <LeadTable
             initial={result}
