@@ -433,3 +433,15 @@ describe('Google kelime araması v2 ekranı (Ajan 4 AÇIK-1)', () => {
     expect(kod('kalem-duzenleyici.tsx')).not.toContain('girdiler?.kelimeGruplari');
   });
 });
+
+describe('giriş geçişi görünür (2026-10-16: "strateji oluştur çok geç açılıyor")', () => {
+  it('KRİTİK: kartlar geçişi useTransition ile başlatıyor, beklerken örtü var, ikinci tıklama yok sayılıyor', () => {
+    const g = kod('giris.tsx');
+    expect(g).toContain('const [geciyor, gecisBaslat] = useTransition();');
+    expect(g).toContain('if (geciyor) return;');
+    expect(g).toContain('gecisBaslat(() => router.push(adres));');
+    expect(g).toContain('{geciyor && <TamEkranYukleniyor mesaj={gecisMesaji} />}');
+    expect(g).toContain("onClick={() => git(olusturAdresi, kart.tur === 'yeni' ? ds.gecisYeni : ds.gecisDevam)}");
+    expect(g).not.toContain('onClick={() => router.push(olusturAdresi)}');
+  });
+});

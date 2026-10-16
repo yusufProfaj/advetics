@@ -8,6 +8,9 @@ export const stratejiSozlugu = ikiDil(
     paraBirimiEtiketi: 'Para birimi',
     hedefNotlari: 'Hedefler kapatılmadı, ama bilmen gerekenler var.',
     devamParaBirimi: 'Para birimini seç',
+    gecisYeni: 'Strateji hazırlanıyor: hesap ve ölçüm bilgileri okunuyor…',
+    gecisDevam: 'Taslak açılıyor…',
+    gecisListe: 'Stratejiler açılıyor…',
   },
   {
     paraBirimiSec: 'Choose the currency.',
@@ -15,5 +18,8 @@ export const stratejiSozlugu = ikiDil(
     paraBirimiEtiketi: 'Currency',
     hedefNotlari: 'No goal was closed, but there is something you should know.',
     devamParaBirimi: 'Choose the currency',
+    gecisYeni: 'Preparing the strategy: reading account and measurement details…',
+    gecisDevam: 'Opening the draft…',
+    gecisListe: 'Opening strategies…',
   },
 );

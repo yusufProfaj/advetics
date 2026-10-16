@@ -39,6 +39,7 @@ const gonder = vi.fn();
 const audit = { record: vi.fn(), recordUnauthenticated: vi.fn() };
 let olcumYaniti: unknown = null;
 let hazirlikYaniti: unknown = null;
+const rehberHazirlik = vi.fn(async (..._a: unknown[]) => hazirlikYaniti ?? HAZIRLIK);
 const SIMDI = new Date('2026-10-20T09:00:00Z');
 const VARLIK = '88888888-0000-4000-8000-000000000001';
 
@@ -91,7 +92,7 @@ beforeAll(async () => {
   onay = new OnayBaglantisiService(prisma, admin, audit as unknown as AuditService);
   onay.simdi = () => SIMDI;
   const rehber = {
-    hazirlik: async () => hazirlikYaniti ?? HAZIRLIK,
+    hazirlik: (...a: unknown[]) => rehberHazirlik(...a),
     metinOnerAlanlardan: vi.fn(async () => ({ anaMetin: 'Deniz manzaralı 2+1 daireler', basliklar: ['Gaziemir’de yeni konut'], aciklamalar: [], notlar: [] })),
   } as unknown as RehberService;
   svc = new StratejiV2Service(
@@ -114,6 +115,9 @@ beforeEach(async () => {
   gonder.mockResolvedValue({ to: ['musteri@ornek.com'], reddedilen: [] });
   olcumYaniti = null;
   hazirlikYaniti = null;
+  // Platform hazırlığı önbelleği testler arasında taşınmasın.
+  (svc as unknown as { hazirlikOnbellegi: Map<string, unknown> }).hazirlikOnbellegi.clear();
+  svc.simdi = () => SIMDI;
   await h.reset();
   await seedTenant(h);
   await h.q(
@@ -701,6 +705,25 @@ describe('adım adım akış (sihirbaz)', () => {
     await expect(planAc()).rejects.toThrow(/Para birimini seçin/);
     const d = await svc.olustur(AJANS, { clientId: IDS.client, baslangicAyi: '2026-11', sureAy: 1, toplamButce: '5.000', paraBirimi: 'USD' });
     expect(d.plan.paraBirimi).toBe('USD');
+  });
+
+  it('KRİTİK: platform hazırlığı önbellekte; eşzamanlı istekler tek çağrı, 3 dk sonra tazelenir, düşen okuma tutulmaz', async () => {
+    // "Strateji oluştur çok geç açılıyor" (2026-10-16): her açılış Meta+Google'a altı okuma yapıyordu.
+    rehberHazirlik.mockClear();
+    await Promise.all([svc.sihirbazGirdileri(AJANS, IDS.client), svc.sihirbazGirdileri(AJANS, IDS.client), svc.sihirbazGirdileri(AJANS, IDS.client)]);
+    expect(rehberHazirlik).toHaveBeenCalledTimes(1);
+    await svc.sihirbazGirdileri(AJANS, IDS.client);
+    expect(rehberHazirlik).toHaveBeenCalledTimes(1);
+    svc.simdi = () => new Date(SIMDI.getTime() + 3 * 60 * 1000 + 1);
+    await svc.sihirbazGirdileri(AJANS, IDS.client);
+    expect(rehberHazirlik).toHaveBeenCalledTimes(2);
+    // Düşen okuma önbelleğe yazılmıyor: bir sonraki açılış yeniden dener.
+    svc.simdi = () => new Date(SIMDI.getTime() + 10 * 60 * 1000);
+    rehberHazirlik.mockRejectedValueOnce(new Error('Graph 500'));
+    await svc.sihirbazGirdileri(AJANS, IDS.client);
+    await new Promise((r) => setTimeout(r, 0));
+    await svc.sihirbazGirdileri(AJANS, IDS.client);
+    expect(rehberHazirlik).toHaveBeenCalledTimes(4);
   });
 
   it('bir platformun hesabı varsa öbürü kapalı kalır (eksik hesap tercih sayılır)', async () => {

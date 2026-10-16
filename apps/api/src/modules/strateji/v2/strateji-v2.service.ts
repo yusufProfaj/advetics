@@ -379,15 +379,45 @@ export class StratejiV2Service {
    * Graph'tan); düşerse ya da istenmezse platform çağrısız okuma (asgari
    * bilinmiyor, kontrol koşmaz, ekran söyler).
    */
+  /*
+   * ═══ PLATFORM HAZIRLIĞI ÖNBELLEĞİ (2026-10-16) ═══
+   * Kullanıcı: "strateji oluştur dediğimde çok geç açılıyor". Sihirbaz
+   * girdileri her açılışta rehberin hazırlığını Meta ve Google'dan (altı
+   * okuma) yeniden çekiyordu: uç tek başına 1,2-1,7 sn, sayfa 3,3 sn; ard
+   * arda tıklamalar bir saniyede sekiz kopya çağrı üretip Google'ın etkileşim
+   * kotasını doldurdu. Sonuç kullanıcı + workspace başına KISA süre (3 dk)
+   * tutuluyor ve aynı anda gelen istekler TEK çağrıyı bekliyor. Kısa, çünkü
+   * hesap ataması ya da Kurulum değişince kapılar bayat kalmamalı. Düşen
+   * okuma önbelleğe yazılmıyor. Anahtar kullanıcıyı da taşıyor: hazırlıktaki
+   * "ajans yöneticisi" kararı kişiye bağlı.
+   */
+  private readonly hazirlikOnbellegi = new Map<string, { zaman: number; deger: Promise<RehberHazirligi> }>();
+
   private async hazirlikOku(ctx: TenantContext, clientId: string, platformOku: boolean): Promise<RehberHazirligi> {
     if (platformOku) {
       try {
-        return await this.rehber.hazirlik(ctx, clientId);
+        return await this.platformHazirligi(ctx, clientId);
       } catch (e) {
         this.logger.warn(`Rehber hazırlığı platformdan okunamadı (${clientId}): ${e instanceof Error ? e.message : String(e)}`);
       }
     }
     return this.hazirlikSvc.rehberOku(ctx, clientId, null);
+  }
+
+  /** Yalnız platformun GERÇEK cevabı önbelleğe giriyor; yedek yol (asgari bilinmiyor) tutulmuyor. */
+  private platformHazirligi(ctx: TenantContext, clientId: string): Promise<RehberHazirligi> {
+    const anahtar = `${ctx.userId}:${clientId}`;
+    const simdi = this.simdi().getTime();
+    const kayit = this.hazirlikOnbellegi.get(anahtar);
+    if (kayit && simdi - kayit.zaman < HAZIRLIK_ONBELLEK_MS) return kayit.deger;
+    // Bellek sınırsız büyümesin: süresi geçenler her yazımda temizleniyor.
+    for (const [k, v] of this.hazirlikOnbellegi) if (simdi - v.zaman >= HAZIRLIK_ONBELLEK_MS) this.hazirlikOnbellegi.delete(k);
+    const deger = this.rehber.hazirlik(ctx, clientId);
+    this.hazirlikOnbellegi.set(anahtar, { zaman: simdi, deger });
+    deger.catch(() => {
+      if (this.hazirlikOnbellegi.get(anahtar)?.deger === deger) this.hazirlikOnbellegi.delete(anahtar);
+    });
+    return deger;
   }
 
   async girdiler(ctx: TenantContext, id: string): Promise<StratejiGirdileri> {
@@ -1330,6 +1360,9 @@ async function paraBirimiDurumu(tx: Sorgucu, clientId: string): Promise<{ para: 
   if (birimler.length > 1) return { para: null, hata: `Workspace hesapları farklı para birimleri kullanıyor (${birimler.map((b) => b.currency).join(', ')}). Para birimini seçin.`, secenekler: birimler.map((b) => b.currency) };
   return { para: birimler[0]!.currency, hata: null, secenekler: [birimler[0]!.currency] };
 }
+
+/** Sihirbaz girdilerinin platform hazırlığı ne kadar tutuluyor (yukarıdaki gerekçe). */
+const HAZIRLIK_ONBELLEK_MS = 3 * 60 * 1000;
 
 /** Hesabı olmayan workspace'te seçilebilen birimler (seçim sunucuda da `paraOndaligi` ile doğrulanıyor). */
 const YAYGIN_PARA_BIRIMLERI = ['TRY', 'USD', 'EUR', 'GBP'] as const;

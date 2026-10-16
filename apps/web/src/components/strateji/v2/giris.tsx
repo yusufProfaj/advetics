@@ -2,7 +2,10 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState, type ReactNode } from 'react';
+import { useState, useTransition, type ReactNode } from 'react';
+import { TamEkranYukleniyor } from '@/components/yukleniyor';
+import { useSozluk } from '@/dil/saglayici';
+import { stratejiSozlugu } from '@/dil/sozlukler/strateji';
 import { stratejiPanelAdresi, type PlanDurumu, type StratejiDurumu, type StratejiListeSatiri, type StratejiOlusturmaAdimi } from '@advetics/shared';
 import { AcilirMenu, IKON_TETIK, MenuOgesi } from '@/components/ui/acilir-menu';
 import { dugmeSinifi } from '@/components/ui/dugme';
@@ -64,6 +67,25 @@ export function StratejiGirisi({
   yonetebilir: boolean;
 }) {
   const router = useRouter();
+  /*
+   * ═══ GEÇİŞ GÖRÜNÜR (2026-10-16, kullanıcı: "strateji oluştur dediğimde çok
+   * geç açılıyor") ═══
+   * Kartlar AYNI sayfanın adres parametresini değiştiriyor (`/strateji` →
+   * `?adim=hedef`); Next aynı segmentte `loading.tsx` göstermiyor ve eski
+   * ekranı sunucu render'ı bitene kadar (hedef adımında ölçüldü: 3,3 sn)
+   * donmuş tutuyordu. Kullanıcı tekrar tıklıyor ve her tıklama platform
+   * okuması tetikliyordu (09:07'de bir saniyede 8 istek, ardından Google
+   * kotası doldu). Geçiş `useTransition` içinde, beklerken tam ekran örtü
+   * ne açıldığını yazıyor ve ikinci tıklamayı kapatıyor.
+   */
+  const [geciyor, gecisBaslat] = useTransition();
+  const [gecisMesaji, setGecisMesaji] = useState('');
+  const ds = useSozluk(stratejiSozlugu);
+  const git = (adres: string, mesaj: string) => {
+    if (geciyor) return;
+    setGecisMesaji(mesaj);
+    gecisBaslat(() => router.push(adres));
+  };
   const son = planlar[0] ?? null;
   const kart = olusturKarti(planlar);
   const olusturAdresi =
@@ -105,7 +127,7 @@ export function StratejiGirisi({
               <b className="text-ink">Aç →</b>
             </span>
           }
-          onClick={() => router.push(stratejiPanelAdresi({ musteri: clientId, adim: 'raporlar' }))}
+          onClick={() => git(stratejiPanelAdresi({ musteri: clientId, adim: 'raporlar' }), ds.gecisListe)}
         />
         <SecimKarti
           ikon={<StratejiIkonu ad="yeni" />}
@@ -132,9 +154,10 @@ export function StratejiGirisi({
               <b className="text-ink">{kart.tur === 'onayda' ? 'Raporu aç →' : kart.tur === 'devam' ? 'Devam →' : 'Başla →'}</b>
             </span>
           }
-          onClick={() => router.push(olusturAdresi)}
+          onClick={() => git(olusturAdresi, kart.tur === 'yeni' ? ds.gecisYeni : ds.gecisDevam)}
         />
       </BuyukSecim>
+      {geciyor && <TamEkranYukleniyor mesaj={gecisMesaji} />}
       <StratejiTablosu
         clientId={clientId}
         planlar={planlar}
