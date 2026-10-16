@@ -75,9 +75,26 @@ jobs:
         run: pnpm --filter @advetics/api test
 
       - name: Derle
+        # YAZI TİPİ İNDİRMESİ İÇİN TEK YENİDEN DENEME. `next/font` Montserrat ve
+        # Open Sans'ı derleme anında Google Fonts'tan indiriyor; CI makinesinde
+        # bu istek ara sıra boş dönüyor ve derleme "An error occurred in
+        # next/font · Cannot read properties of null" ile düşüyor (fb12ee23,
+        # 2026-10-13; 62787479, 2026-10-16). Kod aynı, yerelde ve sunucuda
+        # geçiyor; her seferinde iki geliştiriciye "failed" maili gidiyordu.
+        # Yeniden deneme YALNIZ bu hatada: gerçek bir derleme hatası ikinci
+        # denemeye kalmadan kırmızı kalır.
         run: |
+          set -o pipefail
           pnpm --filter @advetics/api build
-          pnpm --filter @advetics/web build
+          if ! pnpm --filter @advetics/web build 2>&1 | tee /tmp/web-build.log; then
+            if grep -q "An error occurred in \`next/font\`" /tmp/web-build.log; then
+              echo "::warning::next/font indirmesi düştü; 20 sn sonra bir kez yeniden deneniyor"
+              sleep 20
+              pnpm --filter @advetics/web build
+            else
+              exit 1
+            fi
+          fi
         env:
           # NEXT_PUBLIC_* build anında gömülür; burada yalnız derlemenin
           # geçtiğini doğruluyoruz. Sunucudaki build kendi .env'ini kullanır.
