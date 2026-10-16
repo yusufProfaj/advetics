@@ -168,6 +168,9 @@ describe('boost yönlendirme metinleri', () => {
     const kapanis = panel.indexOf('</Dugme>', acilis);
     expect(kapanis, 'düğme kapanışı bulunamadı').toBeGreaterThan(acilis);
 
-    expect(panel.slice(acilis, kapanis)).toContain(DUGME_ETIKETI);
+    // Etiket 2026-10-16'dan beri prop (kart içinde "Boost ayarla"); sayfa
+    // başlığındaki düğme VARSAYILANI kullanıyor, o yüzden varsayılan karşılaştırılıyor.
+    expect(panel.slice(acilis, kapanis)).toContain('{etiket}');
+    expect(panel).toContain(`etiket = '${DUGME_ETIKETI}'`);
   });
 });

@@ -290,7 +290,7 @@ export class AutoBoostReadService {
   private async bosSebep(scoped: TenantContext, clientId: string): Promise<string> {
     const [durum] = await this.prisma.withTenant(scoped, (tx) =>
       tx.$queryRaw<
-        Array<{ sayfa: number; kanal: number; on_ayar: number; gonderi: number }>
+        Array<{ sayfa: number; kanal: number; gonderi: number }>
       >(Prisma.sql`
         SELECT
           -- SAYFA VE KANAL AYRI SAYILIYOR: YouTube kanalında izleme anahtarı
@@ -302,8 +302,6 @@ export class AutoBoostReadService {
           (SELECT count(*)::int FROM social_profiles
             WHERE client_id = ${clientId}::uuid
               AND profile_type = 'youtube_channel') AS kanal,
-          (SELECT count(*)::int FROM auto_boost_presets
-            WHERE client_id = ${clientId}::uuid AND enabled) AS on_ayar,
           (SELECT count(*)::int FROM organic_posts
             WHERE client_id = ${clientId}::uuid) AS gonderi
       `),
@@ -315,12 +313,8 @@ export class AutoBoostReadService {
         'atanmamış. Marka Merkezi › Kurulum’dan bu workspace’e ata.'
       );
     }
-    if (durum.on_ayar === 0) {
-      return (
-        'Otomatik boost ön ayarı yok. Ön ayar olmadan kart üretilmiyor: ' +
-        'bütçe ve süre bilinmeden onaylanabilir bir kart oluşmaz.'
-      );
-    }
+    // ÖN AYAR ARTIK KART ÜRETİMİNİN ŞARTI DEĞİL (2026-10-16): boş listenin
+    // nedeni ön ayar olamaz; ön ayarsız kartta ayarlar "Boost"ta soruluyor.
     /*
      * GÖNDERİ SAYISI YALNIZCA INSTAGRAM İÇİN BİR CEVAP.
      *
@@ -494,6 +488,20 @@ export class AutoBoostReadService {
      * etiketiyle BİREBİR aynı olmak zorunda: metindeki ad ekrandakinden
      * ayrışırsa kullanıcı olmayan bir düğmeyi arar.
      */
+    /*
+     * INSTAGRAM KARTINDA ÖN AYAR ENGEL DEĞİL (2026-10-16): ön ayar yoksa ya da
+     * kapalıysa "Boost" kartın kendi penceresini açıyor ve bütçe/süre/kitle
+     * orada giriliyor; yayın yolu (`onAyarsiz`) bunu kabul ediyor. Engel
+     * yalnız hesap gibi KARTTA çözülemeyen şeyler için kalıyor. YouTube
+     * kartının metin, kanal ve teklif ayarları ön ayardan geldiği için orada
+     * ön ayar hâlâ şart.
+     */
+    const metaOnAyarsiz = r.platform === 'meta' && (!r.preset_id || r.preset_enabled === false);
+    if (metaOnAyarsiz) {
+      return r.linked_ad_account_id
+        ? null
+        : 'Bu sayfaya bağlı bir reklam hesabı yok. Workspace’ler ekranından “Boost hesabı” seç — reklam o hesaptan faturalandırılıyor.';
+    }
     if (!r.preset_id) {
       return (
         'Bu platform için otomatik boost ön ayarı yok. Yukarıdaki ' +

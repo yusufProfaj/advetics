@@ -296,7 +296,9 @@ describe('BİLDİRİM HAVUZU — üç hâl, üç düğme takımı', () => {
      * olurdu: çoğu kart ön ayarla yayınlanıyor ve akışın vaadi "tek tık".
      */
     expect(HAVUZ).toContain('onClick={() => setDuzenleAcik(true)}');
-    expect(HAVUZ).toContain('onClick={() => void karar(true).catch(() => undefined)}');
+    // Ön ayarlı kartta tek tık yayın; ön ayarsız kartta (2026-10-16) "Yayınla"
+    // önce bütçe/süre/kitle alanlarını açıyor.
+    expect(HAVUZ).toContain('onClick={() => (duzenle.elle ? setDuzenleAcik(true) : void karar(true).catch(() => undefined))}');
   });
 
   it('KRİTİK: kart SATIR düzeninde — dikey ızgara değil', () => {

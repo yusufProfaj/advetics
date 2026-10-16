@@ -41,7 +41,7 @@ export const ISTISNALAR: Record<string, Partial<Record<MetinTuru, number>>> = {
   'components/arama-reklami-onizleme.tsx': { turkce: 4, jsx: 2 },
   'components/assets/asset-library.tsx': { turkce: 14, jsx: 4 },
   'components/autoboost/bildirim-havuzu.tsx': { turkce: 66, jsx: 17 },
-  'components/autoboost/boost-on-ayari.tsx': { turkce: 3, jsx: 1 },
+  'components/autoboost/boost-on-ayari.tsx': { turkce: 3 },
   'components/autoboost/boost-on-ayarlari-formu.tsx': { turkce: 49, jsx: 22 },
   'components/autoboost/google-hedefleme.tsx': { turkce: 12, jsx: 8 },
   'components/autoboost/hedefleme-secici.tsx': { turkce: 20, jsx: 15 },

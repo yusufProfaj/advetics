@@ -1,5 +1,7 @@
 'use client';
 
+import { useSozluk } from '@/dil/saglayici';
+import { boostSozlugu } from '@/dil/sozlukler/boost';
 import { useEffect, useState } from 'react';
 import {
   autoBoostQueueOverrideSchema,
@@ -60,6 +62,12 @@ export interface KartDuzenleDurumu {
   gunlukZorunlu: boolean;
   metaAyar: boolean;
   onAyarVar: boolean;
+  /**
+   * ÖN AYARSIZ INSTAGRAM KARTI (2026-10-16): bütçe, süre ve kitle bu
+   * pencerede giriliyor ve yalnız bu karta uygulanıyor. "Yayınla" bu
+   * kartta doğrudan yayınlamıyor, pencereyi açıyor.
+   */
+  elle: boolean;
   hata: string | null;
   /** Doğrulanmış override; geçersizse `null` ve `hata` doluyor. */
   topla: () => AutoBoostQueueOverride | null;
@@ -95,6 +103,9 @@ export interface YoutubeMetni {
 export function useKartDuzenle(kayit: AutoBoostQueueItemRecord): KartDuzenleDurumu {
   const preset = kayit.preset;
   const metaAyar = preset && preset.settings.platform === 'meta' ? preset.settings : null;
+  // Kapalı ön ayar da ön ayarsız sayılıyor: sunucu (`onAyarsiz`) aynı kuralı uyguluyor.
+  const elle = kayit.platform === 'meta' && (!preset || !preset.enabled);
+  const db = useSozluk(boostSozlugu);
 
   const [kip, setKip] = useState<'daily' | 'lifetime'>(preset?.budgetMode ?? 'lifetime');
   const [tutar, setTutar] = useState(
@@ -104,7 +115,7 @@ export function useKartDuzenle(kayit: AutoBoostQueueItemRecord): KartDuzenleDuru
 
   const [kitleId, setKitleId] = useState<string | null>(metaAyar?.savedAudienceId ?? null);
   const [lokasyonlar, setLokasyonlar] = useState<GeoLocationOption[]>(
-    (metaAyar?.locations ?? []).map((l) => ({
+    (metaAyar?.locations ?? []).map((l): GeoLocationOption => ({
       key: l.key,
       type: l.type,
       /*
@@ -117,7 +128,11 @@ export function useKartDuzenle(kayit: AutoBoostQueueItemRecord): KartDuzenleDuru
       name: l.label ?? anahtarEtiketi(l.key, l.type),
       label: l.label ?? anahtarEtiketi(l.key, l.type),
       countryCode: null,
-    })),
+    })).concat(
+      // ÖN AYARSIZ KARTTA TABAN TÜRKİYE: boş konum Meta'ya kararı bırakmak
+      // olurdu; kullanıcı ekranda görüyor ve değiştirebiliyor.
+      elle && !metaAyar ? [{ key: 'TR', type: 'country', name: db.turkiye, label: db.turkiye, countryCode: 'TR' }] : [],
+    ),
   );
   const [yasMin, setYasMin] = useState(metaAyar?.ageMin ?? 18);
   const [yasMax, setYasMax] = useState(metaAyar?.ageMax ?? 65);
@@ -133,7 +148,7 @@ export function useKartDuzenle(kayit: AutoBoostQueueItemRecord): KartDuzenleDuru
   function topla(): AutoBoostQueueOverride | null {
     const override: AutoBoostQueueOverride = {
       budget: { mode: gunlukZorunlu ? 'daily' : kip, amount: tutar.trim(), durationDays: gun },
-      ...(metaAyar
+      ...(metaAyar || elle
         ? {
             targeting: {
               savedAudienceId: kitleId,
@@ -160,6 +175,10 @@ export function useKartDuzenle(kayit: AutoBoostQueueItemRecord): KartDuzenleDuru
      * düğme PARA HARCIYOR ve başarısız bir istekten sonra kullanıcı ikinci
      * kez basmayı deniyor.
      */
+    if (elle && !kitleId && lokasyonlar.length === 0) {
+      setHata(db.konumGerekli);
+      return null;
+    }
     const parsed = autoBoostQueueOverrideSchema.safeParse(override);
     if (!parsed.success) {
       setHata(parsed.error.issues[0]?.message ?? 'Geçersiz değer');
@@ -187,8 +206,10 @@ export function useKartDuzenle(kayit: AutoBoostQueueItemRecord): KartDuzenleDuru
     cinsiyet,
     setCinsiyet,
     gunlukZorunlu,
-    metaAyar: metaAyar !== null,
-    onAyarVar: preset !== null,
+    metaAyar: metaAyar !== null || elle,
+    // "Bu ayarlarla yayınla" açık mı: ön ayarı olan kart ya da ön ayarsız Instagram kartı.
+    onAyarVar: preset !== null || elle,
+    elle,
     hata,
     topla,
     youtube: kayit.platform === 'google',

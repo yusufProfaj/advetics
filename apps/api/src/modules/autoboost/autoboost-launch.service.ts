@@ -191,9 +191,23 @@ export class AutoBoostLaunchService {
     kayit: KuyrukSatiri,
     override?: AutoBoostQueueOverride,
   ): Promise<{ status: string; message: string }> {
-    if (!kayit.preset_id || !kayit.preset_enabled) {
+    /*
+     * ═══ ÖN AYAR YOKSA KARTIN KENDİ AYARLARIYLA (2026-10-16) ═══
+     *
+     * Kullanıcı: "boostları çekmek için ön ayar gerekmesin; ön ayar yoksa
+     * boost düğmesine basınca ayarlar manuel açılsın". Eskiden ön ayarsız kart
+     * hiç yayınlanamıyordu. Artık bütçe + süre + kitle KARTTA girildiyse
+     * (`override.budget` ve `override.targeting`) taban, şemanın varsayılan
+     * Meta ayarı oluyor ve kullanıcının girdikleri üstüne biniyor. Biri
+     * eksikse hangisinin eksik olduğu söyleniyor: ön ayarın yerini
+     * dolduracak bir değer TAHMİN edilmiyor (bütçe uydurmak para harcamak).
+     */
+    const onAyarsiz = !kayit.preset_id || !kayit.preset_enabled;
+    if (onAyarsiz && (!override?.budget || !override?.targeting)) {
       throw new BadRequestException(
-        'Bu workspace için otomatik boost ön ayarı yok ya da kapalı.',
+        `Bu workspace için otomatik boost ön ayarı ${kayit.preset_id ? 'kapalı' : 'yok'}. ` +
+          'Bu kart için bütçe, süre ve kitleyi "Boost" penceresinde gir ya da ' +
+          `${ON_AYAR_YERI} ön ayar tanımla.`,
       );
     }
     if (!kayit.post_id) {
@@ -214,7 +228,7 @@ export class AutoBoostLaunchService {
       );
     }
 
-    const ayar = autoBoostPresetSettingsSchema.safeParse(kayit.settings);
+    const ayar = autoBoostPresetSettingsSchema.safeParse(onAyarsiz ? { platform: 'meta' } : kayit.settings);
     if (!ayar.success || ayar.data.platform !== 'meta') {
       throw new BadRequestException(ON_AYAR_BOZUK);
     }

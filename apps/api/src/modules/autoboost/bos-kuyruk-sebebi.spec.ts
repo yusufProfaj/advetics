@@ -58,14 +58,16 @@ describe('boş listenin sebebi', () => {
     expect(await sebep()).toContain('atanmamış');
   });
 
-  it('KRİTİK: sayfa var ön ayar yoksa BUNU söylüyor', async () => {
+  it('KRİTİK: ön ayar yokluğu boş listenin nedeni DEĞİL (2026-10-16: ön ayarsız da kart çıkıyor)', async () => {
     await h.q(
       `INSERT INTO social_profiles (id, org_id, client_id, connection_id, profile_type,
          external_id, name, sync_enabled, updated_at)
        VALUES ($1,$2,$3,$4,'instagram_business','ig-1','Sayfa',true,now())`,
       [PROFIL, IDS.org, IDS.client, IDS.connection],
     );
-    expect(await sebep()).toContain('ön ayar');
+    const s = await sebep();
+    expect(s).not.toContain('ön ayar');
+    expect(s).toMatch(/gönderi/i);
   });
 
   it('KRİTİK: ön ayar var gönderi çekilmemişse BUNU söylüyor', async () => {

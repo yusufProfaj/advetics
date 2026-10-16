@@ -64,11 +64,11 @@ export class AutoBoostQueueService {
    *
    * ÜÇ FİLTRE VE ÜÇÜ DE GEREKLİ:
    *
-   * 1. ÖN AYAR OLMALI. Ön ayarsız kart onaylanamaz — "onayla" düğmesi hangi
-   *    bütçeyle, hangi hedeflemeyle yayınlayacağını bilmez. Kart göstermek,
-   *    tıklanınca hata veren bir düğme göstermek olurdu.
+   * 1. ÖN AYAR ARTIK ŞART DEĞİL (2026-10-16). Eskiden "ön ayarsız kart
+   *    onaylanamaz" denip hiç kart üretilmiyordu; kullanıcı bunu istemedi.
+   *    Ön ayarsız kartta "Boost" bütçe/süre/kitle alanlarını açıyor.
    *
-   * 2. GÖNDERİ ÖN AYARDAN SONRA YAYINLANMIŞ OLMALI. Aksi hâlde otomatik
+   * 2. ÖN AYAR VARSA GÖNDERİ ÖN AYARDAN SONRA YAYINLANMIŞ OLMALI. Aksi hâlde otomatik
    *    boost ilk kez açıldığında son 90 günün gönderileri kuyruğa dolardı.
    *    Kural açıklanabilir: "açtığın andan itibaren izlemeye başlar."
    *
@@ -127,9 +127,13 @@ export class AutoBoostQueueService {
       profil.profile_type === 'youtube_channel' ? 'google' : 'meta',
     );
 
-    if (!preset) {
-      return { created: 0, note: `${profil.name}: otomatik boost ön ayarı yok` };
-    }
+    /*
+     * ÖN AYAR YOKSA DA KART ÜRETİLİYOR (kullanıcı, 2026-10-16: "boostları
+     * çekmek için ön ayar gerekmesin"). Eskiden burada `created: 0` ile
+     * dönülüyordu ve ön ayarı olmayan workspace'te Akıllı Boost ekranı hiç
+     * kart göstermiyordu. Ön ayarsız kart yayınlanırken bütçe/süre/kitle
+     * kartta soruluyor (`autoboost-launch.service.ts`, `onAyarsiz`).
+     */
 
     /*
      * KAYNAK TABLO PROFİL TÜRÜNE GÖRE DEĞİŞİYOR ama YouTube tarafı buradan
@@ -187,8 +191,23 @@ export class AutoBoostQueueService {
      * olan bütün workspace'ler bir sonraki süpürmede kendiliğinden
      * düzeliyor; ayrı bir script gerekmiyor.
      */
-    const ilkCekim = preset.seedAt === null;
+    const ilkCekim = preset !== null && preset.seedAt === null;
     const gecmisCekimi = opts.gecmis === true;
+    /*
+     * ÖN AYARSIZ SÜPÜRME: tarih kuralının çapası (ön ayarın açıldığı an) yok.
+     * Son `ILK_CEKIM_ADEDI` gönderi her süpürmede deneniyor; mükerrer engeli
+     * kısıtta olduğu için yalnız YENİ gönderi kart oluyor. "Yeni içerik"
+     * maili yalnız profilin daha önce kartı varsa gidiyor: ilk doluş eski
+     * gönderileri "yeni" diye bildirirdi (ilk çekim kuralının aynısı).
+     */
+    const onAyarsiz = preset === null;
+    const oncedenKartVar = onAyarsiz
+      ? ((
+          await this.db.$queryRaw<Array<{ var: boolean }>>(Prisma.sql`
+            SELECT EXISTS (SELECT 1 FROM auto_boost_queue_items WHERE social_profile_id = ${socialProfileId}::uuid) AS var
+          `)
+        )[0]?.var ?? false)
+      : true;
     /*
      * İKİ YOL AYNI SORGUYU KURUYOR: tek seferlik tohum ve kullanıcının
      * bastığı geçmiş çekimi. İkisini ayrı sorgularla yazmak, birinde
@@ -196,8 +215,8 @@ export class AutoBoostQueueService {
      * gönderiyi getirirken diğeri EN ESKİ 10'u getirirdi ve fark yalnızca
      * kullanıcının ekranında görünürdü.
      */
-    const kuralsiz = ilkCekim || gecmisCekimi;
-    const tarihKosulu = kuralsiz
+    const kuralsiz = ilkCekim || gecmisCekimi || onAyarsiz;
+    const tarihKosulu = kuralsiz || !preset
       ? Prisma.empty
       : Prisma.sql`AND p.published_at > ${preset.createdAt}`;
     const sinir = kuralsiz ? Prisma.sql`LIMIT ${ILK_CEKIM_ADEDI}` : Prisma.empty;
@@ -241,7 +260,7 @@ export class AutoBoostQueueService {
      * Kontrol AYNI DEYİMDE: ayrı bir SELECT ile bakmak, iki ifade arasında
      * gönderi gelirse yanlış karar verirdi.
      */
-    if (ilkCekim) {
+    if (ilkCekim && preset) {
       await this.db.$executeRaw(Prisma.sql`
         UPDATE auto_boost_presets SET seed_at = now()
         WHERE id = ${preset.id}::uuid
@@ -266,7 +285,8 @@ export class AutoBoostQueueService {
        * maili bir daha okumamasını öğretirdi — ve bir sonraki mail GERÇEK
        * bir yeni gönderi olacak.
        */
-      const mailNotu = kuralsiz
+      const mailGitmez = ilkCekim || gecmisCekimi || (onAyarsiz && !oncedenKartVar);
+      const mailNotu = mailGitmez
         ? 'geçmiş çekimi, mail gönderilmedi'
         : await this.bildir(
             profil.org_id,
@@ -279,7 +299,7 @@ export class AutoBoostQueueService {
           );
       return {
         created,
-        note: `${profil.name}: ${created} ${kuralsiz ? 'kart (geçmiş)' : 'yeni kart'} · ${mailNotu}`,
+        note: `${profil.name}: ${created} ${mailGitmez ? 'kart (geçmiş)' : 'yeni kart'}${onAyarsiz ? ' (ön ayarsız)' : ''} · ${mailNotu}`,
       };
     }
     /*

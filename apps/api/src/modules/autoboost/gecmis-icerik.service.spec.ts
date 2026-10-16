@@ -208,15 +208,15 @@ describe('geçmiş içerik çekimi', () => {
     expect(sonuc.notlar.join(' ')).toContain('atanmamış');
   });
 
-  it('KRİTİK: ön ayar yoksa SEBEBİ söyleniyor', async () => {
-    // Bütçesi bilinmeyen kart onaylanamaz; "0 kart" demek kullanıcıyı sebebi
-    // kendi kurulumunda aramaya gönderirdi.
+  it('KRİTİK: ön ayar yoksa da geçmiş içerik kart oluyor (2026-10-16)', async () => {
+    // Ön ayarsız kartta bütçe/süre/kitle yayın anında soruluyor.
     await sayfaEkle();
     await gonderi('g-1', '2026-08-01T10:00:00Z');
 
     const sonuc = await svc.cek(CTX, IDS.client);
 
-    expect(sonuc.notlar.join(' ')).toContain('ön ayarı yok');
+    expect(sonuc.kartlar).toBe(1);
+    expect(sonuc.notlar.join(' ')).toContain('ön ayarsız');
   });
 
   it('KRİTİK: video çekimi düşerse SEBEBİ taşınıyor', async () => {

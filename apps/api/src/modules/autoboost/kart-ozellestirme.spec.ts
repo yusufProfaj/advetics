@@ -355,7 +355,7 @@ describe('yayın yolu özelleştirmeyi uyguluyor', () => {
      * Ters sırada, bozuk bir ön ayarın üstüne yazılan geçerli bir
      * hedefleme şemadan geçmiş gibi görünürdü.
      */
-    const parse = KAYNAK.indexOf('autoBoostPresetSettingsSchema.safeParse(kayit.settings)');
+    const parse = KAYNAK.indexOf("autoBoostPresetSettingsSchema.safeParse(onAyarsiz ? { platform: 'meta' } : kayit.settings)");
     const birlestir = KAYNAK.indexOf('hedeflemeyiCoz(ayar.data, override)');
     expect(parse).toBeGreaterThan(-1);
     expect(birlestir).toBeGreaterThan(parse);

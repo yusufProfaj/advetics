@@ -160,25 +160,39 @@ beforeEach(async () => {
   await seedProfile(PROFIL);
 });
 
-describe('ön ayar yoksa kart YOK', () => {
-  it('KRİTİK: ön ayarsız gönderi kuyruğa girmiyor', async () => {
+describe('ön ayar yoksa da kart üretiliyor (2026-10-16)', () => {
+  it('KRİTİK: ön ayarsız gönderi kuyruğa giriyor ve ön ayarsız olduğu yazıyor', async () => {
     /*
-     * Ön ayarsız kart onaylanamaz: düğme hangi bütçeyle, hangi hedeflemeyle
-     * yayınlayacağını bilmez. Kart göstermek, tıklanınca hata veren bir düğme
-     * göstermek olurdu.
+     * Kullanıcı: "boostları çekmek için ön ayar gerekmesin". Ön ayarsız kart
+     * yayınlanırken bütçe/süre/kitle kartta soruluyor; kartın HİÇ çıkmaması
+     * Akıllı Boost'u ön ayarı olmayan workspace'te boş bırakıyordu.
      */
     await post('p1', '2026-08-18T10:00:00Z');
     const r = await svc.enqueueForProfile(PROFIL);
-    expect(r.created).toBe(0);
-    expect(r.note).toMatch(/ön ayarı yok/);
-    expect(await kuyruk()).toEqual([]);
+    expect(r.created).toBe(1);
+    expect(r.note).toMatch(/ön ayarsız/);
+    // İlk doluş "yeni içerik" maili değil: o gönderiler eskiden yayınlandı.
+    expect(r.note).toMatch(/mail gönderilmedi/);
+    expect((await kuyruk()).map((k) => k.external_id)).toEqual(['p1']);
   });
 
-  it('KRİTİK: KAPALI ön ayar "yok" sayılıyor', async () => {
-    // Kullanıcı otomatik boost'u kapattığında kart üretilmemeli.
+  it('KRİTİK: ön ayarsız süpürme yalnız son gönderileri alır, ikinci tur mükerrer açmaz', async () => {
+    for (let i = 0; i < 12; i++) await post(`p${i}`, `2026-08-${String(10 + i).padStart(2, '0')}T10:00:00Z`);
+    expect((await svc.enqueueForProfile(PROFIL)).created).toBe(10);
+    expect((await svc.enqueueForProfile(PROFIL)).created).toBe(0);
+    await post('yeni', '2026-08-30T10:00:00Z');
+    const r = await svc.enqueueForProfile(PROFIL);
+    expect(r.created).toBe(1);
+    // Profilin önceden kartı var: gerçekten yeni gönderi, mail kararı bildir()'e gidiyor.
+    expect(r.note).not.toMatch(/geçmiş çekimi/);
+  });
+
+  it('KAPALI ön ayar da ön ayarsız sayılır: kart çıkar, yayın kartta sorulur', async () => {
     await preset({ enabled: false });
     await post('p1', '2026-08-18T10:00:00Z');
-    expect((await svc.enqueueForProfile(PROFIL)).created).toBe(0);
+    const r = await svc.enqueueForProfile(PROFIL);
+    expect(r.created).toBe(1);
+    expect(r.note).toMatch(/ön ayarsız/);
   });
 });
 
@@ -269,19 +283,22 @@ describe('ön ayar çözümlemesi', () => {
      */
     await preset({ profileId: null, enabled: true, createdAt: '2026-08-01T00:00:00Z' });
     await preset({ profileId: PROFIL, enabled: false, createdAt: '2026-08-01T00:00:00Z' });
-    expect((await svc.enqueueForProfile(PROFIL)).created).toBe(0);
+    // Ön ayar uygulanmıyor = kart ÖN AYARSIZ yoldan geliyor (2026-10-16'dan beri kart yine çıkıyor).
+    expect((await svc.enqueueForProfile(PROFIL)).note).toMatch(/ön ayarsız/);
   });
 
   it('BAŞKA profilin ön ayarı bu profile uygulanmıyor', async () => {
     await seedProfile(PROFIL2);
     await preset({ profileId: PROFIL2, createdAt: '2026-08-01T00:00:00Z' });
-    expect((await svc.enqueueForProfile(PROFIL)).created).toBe(0);
+    // Ön ayar uygulanmıyor = kart ÖN AYARSIZ yoldan geliyor (2026-10-16'dan beri kart yine çıkıyor).
+    expect((await svc.enqueueForProfile(PROFIL)).note).toMatch(/ön ayarsız/);
   });
 
   it('BAŞKA PLATFORMUN ön ayarı sayılmıyor', async () => {
     // Instagram profili için Google ön ayarı varsa kart üretilmemeli.
     await preset({ platform: 'google', createdAt: '2026-08-01T00:00:00Z' });
-    expect((await svc.enqueueForProfile(PROFIL)).created).toBe(0);
+    // Ön ayar uygulanmıyor = kart ÖN AYARSIZ yoldan geliyor (2026-10-16'dan beri kart yine çıkıyor).
+    expect((await svc.enqueueForProfile(PROFIL)).note).toMatch(/ön ayarsız/);
   });
 });
 

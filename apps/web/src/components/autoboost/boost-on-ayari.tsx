@@ -31,9 +31,14 @@ import { Pencere } from '@/components/ui/pencere';
 export function BoostOnAyariDugmesi({
   clientId,
   canWrite,
+  etiket = 'Boost ön ayarı',
+  ton = 'ikincil',
 }: {
   clientId: string;
   canWrite: boolean;
+  /** Kart içinde ("Boost ayarla", ön ayarsız YouTube kartı) başka ad ve ton. */
+  etiket?: string;
+  ton?: 'birincil' | 'ikincil';
 }) {
   const [acik, setAcik] = useState(false);
   /*
@@ -63,8 +68,8 @@ export function BoostOnAyariDugmesi({
 
   return (
     <>
-      <Dugme ton="ikincil" onClick={ac}>
-        Boost ön ayarı
+      <Dugme ton={ton} onClick={ac}>
+        {etiket}
       </Dugme>
 
       <Pencere

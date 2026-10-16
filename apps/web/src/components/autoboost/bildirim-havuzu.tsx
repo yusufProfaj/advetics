@@ -22,6 +22,9 @@ import {
   HedeflemeAlanlari,
   useKartDuzenle,
 } from '@/components/autoboost/kart-duzenle';
+import { BoostOnAyariDugmesi } from '@/components/autoboost/boost-on-ayari';
+import { useSozluk } from '@/dil/saglayici';
+import { boostSozlugu } from '@/dil/sozlukler/boost';
 import { PlatformLogo } from '@/components/platform-logo';
 import { YoutubeProvaSonucuKutusu, type ProvaDurumu } from './youtube-prova-sonucu';
 import { dugmeSinifi } from '@/components/ui/dugme';
@@ -552,6 +555,7 @@ function Kart({
    */
   const [duzenleAcik, setDuzenleAcik] = useState(false);
   const duzenle = useKartDuzenle(kayit);
+  const db = useSozluk(boostSozlugu);
   /*
    * YOUTUBE: DURAKLATILMIŞ KUR ve PROVA (plan K3, Aşama 1). İkisi de yalnızca
    * bekleyen YouTube kartında. Seçim hem provaya hem yayına gidiyor: prova
@@ -1112,6 +1116,11 @@ function Kart({
               >
                 Vazgeç
               </button>
+              {duzenle.elle && (
+                <span className="text-[11px] text-ink-muted">
+                  {db.onAyarsizNot}
+                </span>
+              )}
               {/* ÖN AYAR YOKSA DÜZENLENECEK BİR TABAN DA YOK. */}
               {!duzenle.onAyarVar && (
                 <span className="text-[11px] text-ink-muted">
@@ -1120,9 +1129,11 @@ function Kart({
               )}
               {/* KALICI OLMADIĞI YAZILI — "düzenle" kelimesi kalıcı bir ayar
                   değişikliği gibi okunuyor. */}
-              <span className="text-[11px] text-ink-muted">
-                Ön ayar değişmiyor; bu ayarlar yalnızca bu karta uygulanıyor.
-              </span>
+              {!duzenle.elle && (
+                <span className="text-[11px] text-ink-muted">
+                  Ön ayar değişmiyor; bu ayarlar yalnızca bu karta uygulanıyor.
+                </span>
+              )}
               {duzenle.hata && (
                 <p role="alert" className="text-[11px] text-danger">
                   {duzenle.hata}
@@ -1133,14 +1144,23 @@ function Kart({
             <>
           {kayit.status === 'pending' && (
             <>
+              {/* ÖN AYARSIZ KART (2026-10-16): "Yayınla" doğrudan yayınlamıyor,
+                  bütçe/süre/kitle alanlarını açıyor; ayarlar girilip "Bu
+                  ayarlarla yayınla" ile gidiyor. Bilinmeyen bütçeyle yayın yok. */}
+              {/* ÖN AYARSIZ YOUTUBE KARTI: metin, teklif ve kanal ayarları ön
+                  ayardan geliyor; "Boost ayarla" o pencereyi açıyor. */}
+              {kayit.platform === 'google' && !kayit.preset ? (
+                <BoostOnAyariDugmesi clientId={clientId} canWrite etiket={db.boostAyarla} ton="birincil" />
+              ) : (
               <button
                 type="button"
-                onClick={() => void karar(true).catch(() => undefined)}
+                onClick={() => (duzenle.elle ? setDuzenleAcik(true) : void karar(true).catch(() => undefined))}
                 disabled={!onaylanabilir || busy !== null}
                 className={BIRINCIL_DUGME}
               >
-                {busy === 'onay' ? 'Yayınlanıyor…' : 'Yayınla'}
+                {busy === 'onay' ? 'Yayınlanıyor…' : duzenle.elle ? db.boostAyarla : 'Yayınla'}
               </button>
+              )}
               {/*
                 PROVA PARA HARCAMIYOR: aynı istek Google'a "yalnızca doğrula"
                 diye gidiyor. Engel varsa (ön ayar yok, hesap yok) sunucu
