@@ -13,6 +13,10 @@ import { rangeParams, resolveRange } from '@/lib/date-range';
 import { TarihSecici } from '@/components/tarih-secici';
 import { formatDayLong, formatMoney, formatNumber, formatPercent } from '@/lib/format';
 import { AdCard } from '@/components/ad-card';
+import { sec } from '@advetics/shared';
+import { dilAl } from '@/dil/sunucu';
+import { reklamYoneticisiSozlugu } from '@/dil/sozlukler/reklam-yoneticisi';
+import { menuBolumuEtiketi, menuSatiriEtiketi } from '@/lib/nav-sections';
 
 /*
  * REKLAM GALERİSİ (2026-10-09): bu ekran menüde "Reklam Keşfi" idi. Reklam
@@ -21,32 +25,17 @@ import { AdCard } from '@/components/ad-card';
  * reklamları metinle aramanın ve reddedilenleri tek tıkla toplamanın
  * karşılığı yok, kaldırmak çalışan bir işi silmek olurdu.
  *
- * BAŞLIK TÜRKÇE. Menüde "Reklam Keşfi" yazıp ekranda "Ads Explorer" görmek,
- * kullanıcının doğru sayfada olduğundan şüphe etmesine yol açıyordu.
- * CLAUDE.md: "Arayüz Türkçe ve iş dilinde." URL değişmiyor — bağlantılar
- * paylaşılmış olabilir.
+ * BAŞLIK EKRANIN DİLİNDE (sözlükten, "Reklam Galerisi" / "Ad Gallery").
+ * Menüde "Reklam Keşfi" yazıp ekranda "Ads Explorer" görmek kullanıcının
+ * doğru sayfada olduğundan şüphe etmesine yol açıyordu: ad tek kaynaktan.
+ * URL değişmiyor, bağlantılar paylaşılmış olabilir.
  */
-export const metadata = { title: 'Reklam Galerisi · Advetics' };
+/** Başlık istek anında: dil çerezden okunuyor (CEVIRI-REHBERI §2). */
+export async function generateMetadata() {
+  return { title: `${sec(reklamYoneticisiSozlugu, await dilAl()).galeri.baslik} · Advetics` };
+}
 export const dynamic = 'force-dynamic';
 
-const SORT_LABEL: Record<string, string> = {
-  spend: 'Harcama',
-  impressions: 'Gösterim',
-  clicks: 'Tık',
-  conversions: 'Dönüşüm',
-  ctr: 'CTR',
-  cpa: 'CPA',
-  name: 'Ad',
-};
-
-const STATUS_LABEL: Record<string, string> = {
-  active: 'Aktif',
-  paused: 'Duraklatıldı',
-  deleted: 'Silindi',
-  pending_review: 'İncelemede',
-  ended: 'Bitti',
-  unknown: 'Bilinmiyor',
-};
 
 /**
  * Modül 4 — Ads Explorer.
@@ -65,6 +54,12 @@ export default async function AdsExplorerPage({
 }) {
   await requireSession();
   const params = await searchParams;
+  const dil = await dilAl();
+  const sozluk = sec(reklamYoneticisiSozlugu, dil);
+  const d = sozluk.galeri;
+  // CTR ve CPA iki dilde aynı: sözlükte değil, burada.
+  const SORT_LABEL: Record<string, string> = { ...d.siralama, ctr: 'CTR', cpa: 'CPA' };
+  const STATUS_LABEL: Record<string, string> = sozluk.kart.durum;
 
   const range = resolveRange({
     aralik: first(params.aralik),
@@ -127,7 +122,7 @@ export default async function AdsExplorerPage({
         ? err.message
         : err instanceof Error
           ? err.message
-          : 'Bilinmeyen hata.';
+          : d.bilinmeyenHata;
   }
 
   /** Mevcut süzgeçleri koruyarak yeni bir bağlantı üretir. */
@@ -157,17 +152,18 @@ export default async function AdsExplorerPage({
 
   return (
     <SayfaIskeleti
-      bolum="Yönet"
-      baslik="Reklam Galerisi"
+      bolum={menuBolumuEtiketi('/ads-explorer', dil)}
+      baslik={d.baslik}
       ust={
         <Link href="/ads-explorer" className="text-13 font-semibold text-ink-muted no-underline hover:text-ink">
-          ‹ Reklam Yöneticisi
+          ‹ {menuSatiriEtiketi('/ads-explorer', dil)}
         </Link>
       }
       aciklama={
         <>
-          {formatDayLong(range.from)} - {formatDayLong(range.to)}
-          {result && ` · ${formatNumber(result.total)} reklam`}. Görselleri, metinleri ve sorunlu reklamları tek bakışta gör.
+          {formatDayLong(range.from, dil)} - {formatDayLong(range.to, dil)}
+          {result && d.reklamSayisi(formatNumber(result.total, dil))}
+          {d.aciklama}
         </>
       }
       eylemler={<TarihSecici aralik={range} enEskiGun={null} />}
@@ -207,12 +203,12 @@ export default async function AdsExplorerPage({
               <span aria-hidden className="text-ink-soluk">
                 ⌕
               </span>
-              <span className="sr-only">Reklam ara</span>
+              <span className="sr-only">{d.reklamAra}</span>
               <input
                 type="search"
                 name="ara"
                 defaultValue={q ?? ''}
-                placeholder="Reklam adı, başlık ya da metin ara"
+                placeholder={d.aramaYeri}
                 className="min-w-0 flex-1 border-0 bg-transparent text-13 text-ink outline-none placeholder:text-ink-soluk"
               />
             </label>
@@ -225,7 +221,7 @@ export default async function AdsExplorerPage({
           <BolumluBaglantilar
             etiket="Platform"
             secenekler={[
-              { key: undefined as Platform | undefined, label: 'Tümü' },
+              { key: undefined as Platform | undefined, label: sozluk.tumu },
               ...PLATFORMS.map((pl) => ({ key: pl as Platform | undefined, label: PLATFORM_KISA_ADLARI[pl] })),
             ].map((p) => ({
               href: linkWith({ platform: p.key, kampanya: undefined, sayfa: undefined }),
@@ -238,14 +234,14 @@ export default async function AdsExplorerPage({
             <>
               {result.facets.adAccounts.length > 1 && (
                 <SuzgecMenusu
-                  etiket="Hesap"
-                  deger={result.facets.adAccounts.find((a) => a.id === adAccountId)?.name ?? (adAccountId ? 'Seçili hesap' : 'Tümü')}
+                  etiket={d.hesap}
+                  deger={result.facets.adAccounts.find((a) => a.id === adAccountId)?.name ?? (adAccountId ? d.seciliHesap : sozluk.tumu)}
                   secili={Boolean(adAccountId)}
                   kaldirHref={linkWith({ hesap: undefined, kampanya: undefined, sayfa: undefined })}
                   secenekler={[
                     {
                       href: linkWith({ hesap: undefined, kampanya: undefined, sayfa: undefined }),
-                      ad: 'Tümü',
+                      ad: sozluk.tumu,
                       aktif: !adAccountId,
                     },
                     ...result.facets.adAccounts.map((acc) => ({
@@ -260,12 +256,12 @@ export default async function AdsExplorerPage({
               )}
 
               <SuzgecMenusu
-                etiket="Durum"
-                deger={status ? (STATUS_LABEL[status] ?? status) : 'Tümü'}
+                etiket={d.durum}
+                deger={status ? (STATUS_LABEL[status] ?? status) : sozluk.tumu}
                 secili={Boolean(status)}
                 kaldirHref={linkWith({ durum: undefined, sayfa: undefined })}
                 secenekler={[
-                  { href: linkWith({ durum: undefined, sayfa: undefined }), ad: 'Tümü', aktif: !status },
+                  { href: linkWith({ durum: undefined, sayfa: undefined }), ad: sozluk.tumu, aktif: !status },
                   ...result.facets.statuses.map((st) => ({
                     href: linkWith({ durum: st.status, sorunlu: undefined, sayfa: undefined }),
                     ad: STATUS_LABEL[st.status] ?? st.status,
@@ -277,12 +273,12 @@ export default async function AdsExplorerPage({
 
               {result.facets.campaigns.length > 1 && (
                 <SuzgecMenusu
-                  etiket="Kampanya"
-                  deger={result.facets.campaigns.find((c) => c.id === campaignId)?.name ?? (campaignId ? 'Seçili kampanya' : 'Tümü')}
+                  etiket={d.kampanya}
+                  deger={result.facets.campaigns.find((c) => c.id === campaignId)?.name ?? (campaignId ? d.seciliKampanya : sozluk.tumu)}
                   secili={Boolean(campaignId)}
                   kaldirHref={linkWith({ kampanya: undefined, sayfa: undefined })}
                   secenekler={[
-                    { href: linkWith({ kampanya: undefined, sayfa: undefined }), ad: 'Tümü', aktif: !campaignId },
+                    { href: linkWith({ kampanya: undefined, sayfa: undefined }), ad: sozluk.tumu, aktif: !campaignId },
                     ...result.facets.campaigns.map((c) => ({
                       href: linkWith({ kampanya: c.id, sayfa: undefined }),
                       ad: c.name,
@@ -295,10 +291,10 @@ export default async function AdsExplorerPage({
 
               {q && (
                 <Cip>
-                  Arama: “{q}”
+                  {d.arama(q)}
                   <Link
                     href={linkWith({ ara: undefined, sayfa: undefined })}
-                    aria-label="Arama süzgecini kaldır"
+                    aria-label={d.aramayiKaldir}
                     className="-mr-1 inline-flex h-5 w-5 items-center justify-center rounded-full text-ink-muted no-underline hover:bg-surface hover:text-ink"
                   >
                     ✕
@@ -307,7 +303,7 @@ export default async function AdsExplorerPage({
               )}
               {suzgecVar && (
                 <Link href={temizHref} className="text-12 font-semibold text-ink-muted no-underline hover:text-ink hover:underline">
-                  Tümünü temizle
+                  {d.tumunuTemizle}
                 </Link>
               )}
 
@@ -317,18 +313,18 @@ export default async function AdsExplorerPage({
                 <Link
                   href={linkWith({ sorunlu: onlyIssues ? undefined : '1', durum: undefined, sayfa: undefined })}
                   aria-current={onlyIssues ? 'true' : undefined}
-                  title={onlyIssues ? 'Sorunlu süzgecini kaldır' : 'Yalnız sorunlu reklamları göster'}
+                  title={onlyIssues ? d.sorunluKaldir : d.sorunluGoster}
                   className={`inline-flex h-[30px] items-center gap-1.5 whitespace-nowrap rounded-full px-3 text-[12.5px] font-semibold text-danger-strong no-underline transition-colors ${
                     onlyIssues ? 'bg-vurgu' : 'bg-surface-sunken hover:bg-vurgu'
                   }`}
                 >
-                  Sorunlu {result.facets.issueCount}
+                  {d.sorunlu(result.facets.issueCount)}
                   {onlyIssues && <span aria-hidden>✕</span>}
                 </Link>
               )}
 
               <SuzgecMenusu
-                etiket="Sırala"
+                etiket={d.sirala}
                 deger={`${SORT_LABEL[sort]} ${dir === 'desc' ? '↓' : '↑'}`}
                 secili={false}
                 secenekler={AD_SORT_FIELDS.map((f) => {
@@ -340,7 +336,7 @@ export default async function AdsExplorerPage({
                     href: linkWith({ sirala: f, yon: nextDir, sayfa: undefined }),
                     ad: SORT_LABEL[f] ?? f,
                     aktif: active,
-                    ek: active ? (dir === 'desc' ? '↓ çoktan aza' : '↑ azdan çoğa') : undefined,
+                    ek: active ? (dir === 'desc' ? d.azalan : d.artan) : undefined,
                   };
                 })}
               />
@@ -350,7 +346,7 @@ export default async function AdsExplorerPage({
 
         {result === null ? (
           <div className="p-4">
-            <HataDurumu baslik="Reklamlar alınamadı" mesaj={hata ?? 'Sebep bilinmiyor.'} />
+            <HataDurumu baslik={d.alinamadi} mesaj={hata ?? d.sebepBilinmiyor} />
           </div>
         ) : (
           <>
@@ -361,16 +357,17 @@ export default async function AdsExplorerPage({
               kutularının biçiminde, kartın üst şeridi olarak.
             */}
             <div className="grid grid-cols-2 border-b border-line sm:grid-cols-3 lg:grid-cols-6">
-              <Total label="Harcama" value={formatMoney(result.totals.spendMicros, result.currency)} />
-              <Total label="Gösterim" value={formatNumber(result.totals.impressions)} />
-              <Total label="Tık" value={formatNumber(result.totals.clicks)} />
-              <Total label="CTR" value={formatPercent(result.totals.ctr)} />
-              <Total label="Dönüşüm" value={formatNumber(result.totals.conversions)} />
+              <Total label={sozluk.kart.harcama} value={formatMoney(result.totals.spendMicros, result.currency, { dil })} />
+              <Total label={sozluk.kart.gosterim} value={formatNumber(result.totals.impressions, dil)} />
+              <Total label={sozluk.kart.tik} value={formatNumber(result.totals.clicks, dil)} />
+              <Total label="CTR" value={formatPercent(result.totals.ctr, 2, dil)} />
+              <Total label={sozluk.kart.donusum} value={formatNumber(result.totals.conversions, dil)} />
               <Total
                 label="CPA"
                 value={formatMoney(
                   result.totals.cpa === null ? null : String(Math.round(result.totals.cpa * 1_000_000)),
                   result.currency,
+                  { dil },
                 )}
               />
             </div>
@@ -378,16 +375,16 @@ export default async function AdsExplorerPage({
             <div className="p-5">
               {result.rows.length === 0 ? (
                 <BosDurum
-                  baslik="Bu süzgeçle reklam yok"
+                  baslik={d.bosBaslik}
                   neden={
                     suzgecVar
-                      ? 'Seçili süzgeçlere uyan reklam bu dönemde yok. Süzgeçleri kaldır ya da tarih aralığını genişlet.'
-                      : 'Bu dönemde senkronize edilmiş reklam yok. Tarih aralığını genişlet.'
+                      ? d.bosSuzgecli
+                      : d.bosSuzgecsiz
                   }
                   eylem={
                     suzgecVar && (
                       <Link href={temizHref} className={dugmeSinifi('ikincil', 'kucuk')}>
-                        Süzgeçleri temizle
+                        {d.suzgecleriTemizle}
                       </Link>
                     )
                   }
@@ -395,7 +392,7 @@ export default async function AdsExplorerPage({
               ) : (
                 <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(230px,1fr))]">
                   {result.rows.map((ad) => (
-                    <AdCard key={ad.id} ad={ad} currency={result!.currency} bicim="izgara" />
+                    <AdCard key={ad.id} ad={ad} currency={result!.currency} bicim="izgara" dil={dil} />
                   ))}
                 </div>
               )}

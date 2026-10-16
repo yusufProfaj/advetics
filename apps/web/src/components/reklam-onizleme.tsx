@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react';
 import type { AdDetail } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { AdCard } from '@/components/ad-card';
+import { useDil } from '@/dil/saglayici';
+import { reklamYoneticisiSozlugu } from '@/dil/sozlukler/reklam-yoneticisi';
+import { sec } from '@advetics/shared';
 
 /**
  * ═══ REKLAM ÖNİZLEMESİ — KIRILIM TABLOSUNUN İÇİNDE ═══
@@ -38,6 +41,8 @@ export function ReklamOnizleme({
   to: string;
   currency: string | null;
 }) {
+  const { dil } = useDil();
+  const m = sec(reklamYoneticisiSozlugu, dil).onizleme;
   const [reklam, setReklam] = useState<AdDetail | null>(null);
   const [hata, setHata] = useState<string | null>(null);
 
@@ -60,7 +65,7 @@ export function ReklamOnizleme({
       .catch((e: unknown) => {
         if (birakildi) return;
         setHata(
-          e instanceof ApiRequestError ? e.message : 'Reklam önizlemesi alınamadı.',
+          e instanceof ApiRequestError ? e.message : m.alinamadi,
         );
       });
 
@@ -80,12 +85,12 @@ export function ReklamOnizleme({
   if (!reklam) {
     return (
       <p role="status" className="m-0 animate-pulse text-13 text-ink-muted motion-reduce:animate-none">
-        Önizleme yükleniyor…
+        {m.yukleniyor}
       </p>
     );
   }
 
   return (
-    <AdCard ad={reklam} currency={currency} />
+    <AdCard ad={reklam} currency={currency} dil={dil} />
   );
 }

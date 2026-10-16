@@ -1,4 +1,6 @@
 import { aramaAdresi } from '@/lib/arama-adresi';
+import { sec, type Dil } from '@advetics/shared';
+import { reklamYoneticisiSozlugu } from '@/dil/sozlukler/reklam-yoneticisi';
 
 /**
  * ═══ ARAMA REKLAMI ÖNİZLEMESİ — METİN REKLAMININ "KREATİFİ" METNİDİR ═══
@@ -37,22 +39,26 @@ export function AramaReklamiOnizleme({
   gorunenAdres,
   hedefAdres,
   className = '',
+  dil,
 }: {
   baslik: string | null;
   aciklama: string | null;
   gorunenAdres: string | null;
   hedefAdres: string | null;
   className?: string;
+  /** Direktifsiz bileşen (sunucuda da çiziliyor): dil kancadan değil propla. */
+  dil: Dil;
 }) {
+  const m = sec(reklamYoneticisiSozlugu, dil).arama;
   const adres = aramaAdresi(hedefAdres, gorunenAdres);
 
   return (
     <div className={className}>
       <div
         className="rounded-lg border border-line bg-surface p-3"
-        aria-label="Arama reklamı önizlemesi"
+        aria-label={m.onizlemeEtiketi}
       >
-        <p className="text-[11px] font-bold text-ink">Ücretli sponsorlu reklam</p>
+        <p className="text-[11px] font-bold text-ink">{m.sponsorlu}</p>
 
         {adres.alanAdi && (
           <div className="mt-2 flex items-start gap-2">
@@ -73,7 +79,7 @@ export function AramaReklamiOnizleme({
           sonucu herkeste aynı görünüyor.
         */}
         <p className="mt-1.5 line-clamp-2 text-[15px] font-medium leading-snug text-arama-baslik">
-          {baslik ?? 'Başlık yok'}
+          {baslik ?? m.baslikYok}
         </p>
 
         {aciklama && (
@@ -81,7 +87,7 @@ export function AramaReklamiOnizleme({
         )}
       </div>
 
-      <p className="mt-1 text-[10px] text-ink-muted">Örnek bir başlık ve açıklama</p>
+      <p className="mt-1 text-[10px] text-ink-muted">{m.ornek}</p>
     </div>
   );
 }

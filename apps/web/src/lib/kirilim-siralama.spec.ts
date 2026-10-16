@@ -299,7 +299,7 @@ describe('Reklam Yöneticisi — katman sırası', () => {
   });
 
   it('ajans kapsamında ŞİRKET tablosu render ediliyor', () => {
-    expect(KAYNAK).toContain('sirketler.map(sirketSatiri)');
+    expect(KAYNAK).toContain('sirketler.map((r) => sirketSatiri(r, d.satir))');
     expect(KAYNAK).toContain("serverApiFetch<MetricsOrganizationRow[]>(`/metrics/organizations?");
   });
 

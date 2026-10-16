@@ -22,6 +22,9 @@ import { Sekmeler, type SekmeSecenegi } from '@/components/ui/sekmeler';
 import { basHarfler } from './genel-bakis-parcalari';
 import { VarlikEylemPenceresi } from './varlik-eylem-penceresi';
 import type { VarlikEylemHedefi } from '@/lib/varlik-eylemi';
+import { useDil } from '@/dil/saglayici';
+import { reklamYoneticisiSozlugu } from '@/dil/sozlukler/reklam-yoneticisi';
+import { sec, type Dil } from '@advetics/shared';
 
 /*
  * ═══ REKLAM YÖNETİCİSİ — ONAYLANAN TASLAĞIN TEK TABLOSU ═══
@@ -99,28 +102,8 @@ export interface YmMetrik {
   ters?: boolean;
 }
 
-const BIRIM: Record<YmDuzey, string> = {
-  sirket: 'şirket',
-  workspace: 'workspace',
-  hesap: 'hesap',
-  campaign: 'kampanya',
-  ad_group: 'reklam seti',
-  ad: 'reklam',
-};
-const SUTUN: Record<YmDuzey, string> = {
-  sirket: 'Şirket',
-  workspace: 'Workspace',
-  hesap: 'Hesap',
-  campaign: 'Kampanya',
-  ad_group: 'Reklam seti',
-  ad: 'Reklam',
-};
-/** Ada tıklayınca inilen düzeyin adı (⋯ menüsündeki "… aç"). */
-const ALT_DUZEY: Partial<Record<YmDuzey, string>> = {
-  hesap: 'Kampanyaları aç',
-  campaign: 'Reklam setlerini aç',
-  ad_group: 'Reklamları aç',
-};
+/** Tablonun sözlük dilimi; düzey adları, birimler ve ⋯ menüsü buradan. */
+type Metin = (typeof reklamYoneticisiSozlugu)['tr']['tablo'];
 
 type Siralama = 'harcama' | 'gosterim' | 'tik' | 'to' | 'donusum' | 'dbm';
 const deger = (r: YmSatir, k: Siralama): number | null => {
@@ -154,15 +137,15 @@ const SAYI = 'text-right whitespace-nowrap font-baslik text-13 font-semibold tab
  * Bakış'la tek kural. İYİ YÖN GRİ, KÖTÜ YÖN KIRMIZI (taslak `.metrik
  * small.kotu`): yeşil yalnız durum noktasında (kılavuz).
  */
-function metrikKutusu(m: YmMetrik, i: number): MetrikKutusu {
-  const h = degisimHali(m.degisim, m.ters);
+function metrikKutusu(m: YmMetrik, i: number, t: Metin, dil: Dil): MetrikKutusu {
+  const h = degisimHali(m.degisim, m.ters, dil);
   return {
     anahtar: m.ad,
     ad: m.ad,
     deger: m.deger,
     seri: i === 0 ? 1 : i === 1 ? 2 : undefined,
     fark: h
-      ? { metin: `${h.metin} önceki döneme göre`, hal: h.iyi === false ? 'kotu' : 'notr', etiket: h.etiket }
+      ? { metin: t.oncekiDoneme(h.metin), hal: h.iyi === false ? 'kotu' : 'notr', etiket: h.etiket }
       : undefined,
   };
 }
@@ -215,6 +198,14 @@ export function ReklamYoneticisiTablosu({
 }) {
   const router = useRouter();
   const yol = usePathname() ?? '/ads-explorer';
+  const { dil } = useDil();
+  const genel = sec(reklamYoneticisiSozlugu, dil);
+  const t = genel.tablo;
+  // "Workspace" iki dilde aynı: sözlükte değil, burada.
+  const SUTUN: Record<YmDuzey, string> = { ...t.sutun, workspace: 'Workspace' };
+  const BIRIM: Record<YmDuzey, string> = t.birim;
+  /** Ada tıklayınca inilen düzeyin adı (⋯ menüsündeki "… aç"). */
+  const ALT_DUZEY: Partial<Record<YmDuzey, string>> = t.altDuzey;
   /*
    * YÜKLEME KATMANI İKİ AŞAMALI: kapsam isteği sürerken `gecilen`, sonra
    * sayfa yenilenirken `isPending`. Katman ikisi de bitince kalkıyor.
@@ -300,7 +291,7 @@ export function ReklamYoneticisiTablosu({
         router.refresh();
       });
     } catch (e) {
-      setHata(e instanceof ApiRequestError ? e.message : 'Geçilemedi.');
+      setHata(e instanceof ApiRequestError ? e.message : t.gecilemedi);
       setGecilen(null);
     }
   }
@@ -355,9 +346,9 @@ export function ReklamYoneticisiTablosu({
     }),
     { h: 0n, g: 0, t: 0, d: 0 },
   );
-  const para = (m: string, b: string | null) => (b ? formatMoney(m, b) : 'karışık');
+  const para = (m: string, b: string | null) => (b ? formatMoney(m, b, { dil }) : t.karisik);
   const dbm = (h: bigint, d: number, b: string | null) =>
-    d > 0 && b ? formatMoney(((h * 100n) / BigInt(Math.round(d * 100))).toString(), b) : '—';
+    d > 0 && b ? formatMoney(((h * 100n) / BigInt(Math.round(d * 100))).toString(), b, { dil }) : '—';
 
   const Baslik = ({ k, ad }: { k: Siralama; ad: string }) => (
     <th scope="col" className={`${TH} text-right`} aria-sort={sira.k === k ? (sira.artan ? 'ascending' : 'descending') : undefined}>
@@ -372,8 +363,9 @@ export function ReklamYoneticisiTablosu({
     </th>
   );
 
-  const secPlatform = platformSecenekleri.find((p) => p.secili)?.ad ?? 'Tümü';
-  const durumAdi = { hepsi: 'Tümü', yayinda: 'Yayında', degil: 'Yayında değil' }[durumSuz];
+  const DURUM_SUZGECI = { hepsi: genel.tumu, yayinda: t.yayinda, degil: t.yayindaDegil };
+  const secPlatform = platformSecenekleri.find((p) => p.secili);
+  const durumAdi = DURUM_SUZGECI[durumSuz];
 
   /*
    * DÜZEY SEKMELERİ. Üst düzeyler kapsam değiştiriyor (oturumda), alt
@@ -392,50 +384,50 @@ export function ReklamYoneticisiTablosu({
     // AJANS KAPSAMI ÖZEL DEĞERLE (`TUM_SIRKETLER`), `null` ile DEĞİL:
     // `null` hata vermeden kabul edilip hiçbir şey değiştirmiyordu ve
     // sekme tıklanınca sessizce olduğu yerde kalıyordu (canlı denetim).
-    if (t?.hedef.tur === 'org') void kapsamaGec('org', TUM_SIRKETLER, 'Tüm şirketler');
-    else if (t?.hedef.tur === 'client') void kapsamaGec('client', null, 'Tüm workspace’ler');
+    if (t?.hedef.tur === 'org') void kapsamaGec('org', TUM_SIRKETLER, genel.tumSirketler);
+    else if (t?.hedef.tur === 'client') void kapsamaGec('client', null, genel.tumWorkspaceler);
   }
 
   return (
     <div className="grid min-w-0 gap-4">
       {(gecilen ?? yenileniyor) && (
-        <TamEkranYukleniyor mesaj={`${gecilen ?? yenileniyor} görünümüne geçiliyor…`} />
+        <TamEkranYukleniyor mesaj={t.geciliyor(gecilen ?? yenileniyor ?? '')} />
       )}
 
       {kirinti}
 
-      {metrikler && <MetrikKutulari kutular={metrikler.map(metrikKutusu)} />}
+      {metrikler && <MetrikKutulari kutular={metrikler.map((m, i) => metrikKutusu(m, i, t, dil))} />}
 
       {seritler}
 
       {hata && (
-        <Serit ton="hata" baslik="Görünüm değiştirilemedi">
+        <Serit ton="hata" baslik={t.gorunumDegismedi}>
           {hata}
         </Serit>
       )}
 
       {/* SEKMELER TABLONUN HEMEN ÜSTÜNDE: kırıntı ve metrikler sayfanın
           özeti, sekme ise altındaki tablonun ne olduğunu seçiyor. */}
-      <Sekmeler etiket="Reklam düzeyi" secenekler={sekmeSecenekleri} secili={seciliSekme ?? duzey} onSec={duzeySec} />
+      <Sekmeler etiket={t.reklamDuzeyi} secenekler={sekmeSecenekleri} secili={seciliSekme ?? duzey} onSec={duzeySec} />
 
       {yerine ?? (
         <section className="min-w-0 rounded-kart border border-line bg-surface">
           <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-3">
             <SuzgecMenusu
               etiket="Platform"
-              deger={secPlatform}
-              secili={secPlatform !== 'Tümü'}
+              deger={secPlatform?.ad ?? genel.tumu}
+              secili={secPlatform !== undefined && secPlatform !== platformSecenekleri[0]}
               kaldirHref={platformSecenekleri[0]?.href}
               secenekler={platformSecenekleri.map((p) => ({ href: p.href, ad: p.ad, aktif: p.secili }))}
             />
             {durumVar && (
               <SuzgecMenusu
-                etiket="Durum"
+                etiket={t.durum}
                 deger={durumAdi}
                 secili={durumSuz !== 'hepsi'}
                 onKaldir={() => setDurumSuz('hepsi')}
                 secenekler={(['hepsi', 'yayinda', 'degil'] as const).map((d) => ({
-                  ad: { hepsi: 'Tümü', yayinda: 'Yayında', degil: 'Yayında değil' }[d],
+                  ad: DURUM_SUZGECI[d],
                   aktif: durumSuz === d,
                   onSec: () => setDurumSuz(d),
                 }))}
@@ -449,8 +441,8 @@ export function ReklamYoneticisiTablosu({
                 type="search"
                 value={ara}
                 onChange={(e) => setAra(e.target.value)}
-                placeholder="Ada göre ara"
-                aria-label={`${SUTUN[duzey]} adına göre ara`}
+                placeholder={t.adaGoreAra}
+                aria-label={t.adinaGoreAra(SUTUN[duzey])}
                 className="min-w-0 flex-1 border-0 bg-transparent text-13 text-ink outline-none placeholder:text-ink-soluk"
               />
             </label>
@@ -460,7 +452,7 @@ export function ReklamYoneticisiTablosu({
               role="switch"
               aria-checked={reklamda && hepsiAcik}
               aria-disabled={!reklamda || undefined}
-              title={reklamda ? 'Bütün önizlemeleri aç ya da kapat' : 'Reklam düzeyinde açılır'}
+              title={reklamda ? t.onizlemelerAnahtari : t.reklamDuzeyindeAcilir}
               onClick={hepsiniDegistir}
               className="inline-flex items-center gap-2.5 text-13 font-semibold text-ink aria-disabled:cursor-not-allowed aria-disabled:opacity-45"
             >
@@ -470,37 +462,37 @@ export function ReklamYoneticisiTablosu({
                   reklamda && hepsiAcik ? 'bg-ink after:translate-x-4' : 'bg-line-strong'
                 }`}
               />
-              Önizlemeler
+              {t.onizlemeler}
             </button>
           </div>
 
           {satirlar.length === 0 ? (
-            <p className="m-0 px-4 py-8 text-center text-13 text-ink-muted">Bu dönemde bu düzeyde veri yok.</p>
+            <p className="m-0 px-4 py-8 text-center text-13 text-ink-muted">{t.donemdeVeriYok}</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-[13.5px]" aria-label={`${SUTUN[duzey]} tablosu`}>
+              <table className="w-full border-collapse text-[13.5px]" aria-label={t.tabloEtiketi(SUTUN[duzey])}>
                 <thead>
                   <tr>
                     <th scope="col" className={TH}>
                       {SUTUN[duzey]}
                     </th>
                     <th scope="col" className={TH}>
-                      Mecra
+                      {t.mecra}
                     </th>
-                    <Baslik k="harcama" ad="Harcama" />
-                    <Baslik k="gosterim" ad="Gösterim" />
-                    <Baslik k="tik" ad="Tıklama" />
-                    <Baslik k="to" ad="Tıklama oranı" />
-                    <Baslik k="donusum" ad="Dönüşüm" />
-                    <Baslik k="dbm" ad="Dönüşüm başı maliyet" />
+                    <Baslik k="harcama" ad={genel.metrik.harcama} />
+                    <Baslik k="gosterim" ad={t.gosterim} />
+                    <Baslik k="tik" ad={genel.metrik.tiklama} />
+                    <Baslik k="to" ad={t.tiklamaOrani} />
+                    <Baslik k="donusum" ad={genel.metrik.donusum} />
+                    <Baslik k="dbm" ad={genel.metrik.donusumBasiMaliyet} />
                     {siteSutunu && (
-                      <th scope="col" className={`${TH} text-right`} title="Analytics'in bu kampanyaya bağladığı anahtar etkinlik">
-                        Sitede
+                      <th scope="col" className={`${TH} text-right`} title={t.siteTitle}>
+                        {t.sitede}
                       </th>
                     )}
                     {eylemSutunu && (
                       <th scope="col" className={`${TH} text-right`}>
-                        Eylem
+                        {t.eylem}
                       </th>
                     )}
                   </tr>
@@ -509,7 +501,7 @@ export function ReklamYoneticisiTablosu({
                   {gorunen.length === 0 && (
                     <tr>
                       <td colSpan={sutunSayisi} className={`${TD} py-8 text-center text-13 text-ink-muted`}>
-                        Süzgece uyan satır yok.
+                        {t.suzgeceUyanYok}
                       </td>
                     </tr>
                   )}
@@ -550,7 +542,7 @@ export function ReklamYoneticisiTablosu({
                                 <button
                                   type="button"
                                   aria-expanded={acik}
-                                  aria-label={acik ? 'Önizlemeyi kapat' : 'Önizlemeyi aç'}
+                                  aria-label={acik ? t.onizlemeyiKapat : t.onizlemeyiAc}
                                   onClick={() => satiriDegistir(r.id)}
                                   className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink"
                                 >
@@ -597,16 +589,16 @@ export function ReklamYoneticisiTablosu({
                             {r.mecralar.map((m) => PLATFORM_KISA_ADLARI[m]).join(' · ')}
                           </td>
                           <td className={`${TD} ${SAYI}`}>{para(r.spendMicros, r.paraBirimi)}</td>
-                          <td className={`${TD} ${SAYI}`}>{formatNumber(r.impressions)}</td>
-                          <td className={`${TD} ${SAYI}`}>{formatNumber(r.clicks)}</td>
+                          <td className={`${TD} ${SAYI}`}>{formatNumber(r.impressions, dil)}</td>
+                          <td className={`${TD} ${SAYI}`}>{formatNumber(r.clicks, dil)}</td>
                           <td className={`${TD} ${SAYI}`}>
-                            {r.impressions > 0 ? formatPercent((r.clicks / r.impressions) * 100) : '—'}
+                            {r.impressions > 0 ? formatPercent((r.clicks / r.impressions) * 100, 2, dil) : '—'}
                           </td>
-                          <td className={`${TD} ${SAYI}`}>{formatNumber(r.conversions)}</td>
+                          <td className={`${TD} ${SAYI}`}>{formatNumber(r.conversions, dil)}</td>
                           <td className={`${TD} ${SAYI}`}>{dbm(BigInt(r.spendMicros), r.conversions, r.paraBirimi)}</td>
                           {siteSutunu && (
                             <td className={`${TD} ${SAYI}`}>
-                              {r.sitede ? formatNumber(r.sitede.anahtarEtkinlik) : '—'}
+                              {r.sitede ? formatNumber(r.sitede.anahtarEtkinlik, dil) : '—'}
                               {r.sitede?.etiket && (
                                 <small className="block text-11 font-normal text-ink-muted">{r.sitede.etiket}</small>
                               )}
@@ -620,19 +612,19 @@ export function ReklamYoneticisiTablosu({
                                     ton="ikincil"
                                     boyut="kucuk"
                                     onClick={() => setEylemHedefi(r.eylemHedefi)}
-                                    aria-label={`${r.ad}: ${r.eylemHedefi.yayinda ? 'durdur' : 'başlat'}`}
+                                    aria-label={r.eylemHedefi.yayinda ? t.durdurEylemi(r.ad) : t.baslatEylemi(r.ad)}
                                   >
-                                    {r.eylemHedefi.yayinda ? 'Durdur' : 'Başlat'}
+                                    {r.eylemHedefi.yayinda ? t.durdur : t.baslat}
                                   </Dugme>
                                 )}
                                 {menuVar(r) && (
                                   <AcilirMenu
                                     tasma="portal"
-                                    etiket={`${r.ad}: diğer eylemler`}
+                                    etiket={t.satirEylemleri(r.ad)}
                                     hizala="sag"
                                     genislik="w-56"
                                     tetik={({ acik: menuAcik, ...o }) => (
-                                      <button type="button" {...o} aria-label="Diğer eylemler" className={IKON_TETIK}>
+                                      <button type="button" {...o} aria-label={t.digerEylemler} className={IKON_TETIK}>
                                         <span aria-hidden className="text-15 leading-none">
                                           ⋯
                                         </span>
@@ -644,10 +636,10 @@ export function ReklamYoneticisiTablosu({
                                     )}
                                     {r.eylem?.tur === 'onizle' && (
                                       <MenuOgesi onClick={() => satiriDegistir(r.id)}>
-                                        {acik ? 'Önizlemeyi kapat' : 'Önizlemeyi aç'}
+                                        {acik ? t.onizlemeyiKapat : t.onizlemeyiAc}
                                       </MenuOgesi>
                                     )}
-                                    {r.galeriHref && <MenuOgesi href={r.galeriHref}>Reklam Galerisi'nde gör</MenuOgesi>}
+                                    {r.galeriHref && <MenuOgesi href={r.galeriHref}>{t.galeridenGor}</MenuOgesi>}
                                   </AcilirMenu>
                                 )}
                               </span>
@@ -685,17 +677,17 @@ export function ReklamYoneticisiTablosu({
                 {gorunen.length > 0 && (
                   <tfoot>
                     <tr className="bg-surface-muted font-bold">
-                      <td className={TD}>Toplam: mevcut görünüm</td>
+                      <td className={TD}>{t.toplam}</td>
                       <td className={TD} />
                       <td className={`${TD} ${SAYI}`}>{para(T.h.toString(), tekBirim)}</td>
-                      <td className={`${TD} ${SAYI}`}>{formatNumber(T.g)}</td>
-                      <td className={`${TD} ${SAYI}`}>{formatNumber(T.t)}</td>
-                      <td className={`${TD} ${SAYI}`}>{T.g > 0 ? formatPercent((T.t / T.g) * 100) : '—'}</td>
-                      <td className={`${TD} ${SAYI}`}>{formatNumber(T.d)}</td>
+                      <td className={`${TD} ${SAYI}`}>{formatNumber(T.g, dil)}</td>
+                      <td className={`${TD} ${SAYI}`}>{formatNumber(T.t, dil)}</td>
+                      <td className={`${TD} ${SAYI}`}>{T.g > 0 ? formatPercent((T.t / T.g) * 100, 2, dil) : '—'}</td>
+                      <td className={`${TD} ${SAYI}`}>{formatNumber(T.d, dil)}</td>
                       <td className={`${TD} ${SAYI}`}>{dbm(T.h, T.d, tekBirim)}</td>
                       {siteSutunu && (
                         <td className={`${TD} ${SAYI}`}>
-                          {formatNumber(gorunen.reduce((a, r) => a + (r.sitede?.anahtarEtkinlik ?? 0), 0))}
+                          {formatNumber(gorunen.reduce((a, r) => a + (r.sitede?.anahtarEtkinlik ?? 0), 0), dil)}
                         </td>
                       )}
                       {eylemSutunu && <td className={TD} />}
@@ -711,17 +703,17 @@ export function ReklamYoneticisiTablosu({
               className={`m-0 px-4 pt-3 text-12 ${site.hata ? 'text-danger-strong' : 'text-ink-muted'}`}
               role={site.hata ? 'alert' : undefined}
             >
-              {site.hata ? `Sitede sütunu alınamadı: ${site.hata}` : site.not}
+              {site.hata ? t.siteAlinamadi(site.hata) : site.not}
             </p>
           )}
 
           <div className="flex flex-wrap items-center justify-end gap-4 px-4 py-2.5 text-[12.5px] text-ink-muted">
             <Link href={galeriHref} className={`mr-auto ${KART_BAGLANTISI}`}>
-              Reklam Galerisi (arama, sorunlu reklamlar) →
+              {t.galeriBaglantisi}
             </Link>
             <span className="tabular-nums">
               {gorunen.length < satirlar.length
-                ? `${gorunen.length} / ${satirlar.length} ${BIRIM[duzey]} (süzgeçli)`
+                ? `${gorunen.length} / ${satirlar.length} ${BIRIM[duzey]} (${t.suzgecli})`
                 : satirlar.length === 0
                   ? `0 / 0 ${BIRIM[duzey]}`
                   : `1 - ${satirlar.length} / ${satirlar.length} ${BIRIM[duzey]}`}

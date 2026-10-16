@@ -1,4 +1,5 @@
-import { TAKIP_ETIKET_METNI, type TakipAcigiYaniti, type VeriKaynagiOzeti } from '@advetics/shared';
+import { TAKIP_ETIKET_METNI, sec, type Dil, type TakipAcigiYaniti, type VeriKaynagiOzeti } from '@advetics/shared';
+import { reklamYoneticisiSozlugu } from '@/dil/sozlukler/reklam-yoneticisi';
 
 /**
  * ═══ VERİ KAYNAKLARI — PANEL KARARLARI (saf, test edilebilir) ═══
@@ -24,24 +25,27 @@ export function sitedeHaritasi(y: TakipAcigiYaniti): Map<string, { anahtarEtkinl
  * YOK (`null`). Bağlı ama veri yoksa sütun açık ve nedeni yazar: boş sütun
  * "kampanyalarınız sitede hiç dönüşmüyor" diye okunurdu.
  */
-export function siteSutunuKarari(y: TakipAcigiYaniti | { hata: string }): { hata: string | null; not: string | null } | null {
+export function siteSutunuKarari(
+  y: TakipAcigiYaniti | { hata: string },
+  dil: Dil = 'tr',
+): { hata: string | null; not: string | null } | null {
   if ('hata' in y) return { hata: y.hata, not: null };
+  const m = sec(reklamYoneticisiSozlugu, dil).site;
   switch (y.emptyReason) {
     case 'kaynak_yok':
       return null;
     case 'izin_eksik':
-      return { hata: null, not: 'Sitede sütunu: Analytics izni yenilenmeli (Marka Merkezi › Kurulum › Dönüşüm ölçümü).' };
+      return { hata: null, not: m.izinEksik };
     case 'cekim_kosmadi':
-      return { hata: null, not: 'Sitede sütunu: Analytics verisi henüz çekilmedi.' };
+      return { hata: null, not: m.cekimKosmadi };
     case 'veri_yok':
-      return { hata: null, not: 'Sitede sütunu: bu dönemde Analytics’te reklamdan gelen anahtar etkinlik yok.' };
+      return { hata: null, not: m.veriYok };
     default: {
       const pay = y.eslenemeyen.pay;
       return {
         hata: null,
         not:
-          `Sitede: Analytics anahtar etkinlikleri, ${y.kiyasBitis} tarihine kadar.` +
-          (pay !== null && pay > 0 ? ` Ücretli trafiğin %${Math.round(pay * 100)}'i bir kampanyaya bağlanamadı.` : ''),
+          m.kiyas(y.kiyasBitis) + (pay !== null && pay > 0 ? m.eslenemeyen(Math.round(pay * 100)) : ''),
       };
     }
   }

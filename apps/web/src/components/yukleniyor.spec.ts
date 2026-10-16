@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { reklamYoneticisiSozlugu } from '@/dil/sozlukler/reklam-yoneticisi';
 import { genelBakisSozlugu } from '@/dil/sozlukler/genel-bakis';
 import { kapsamSozlugu } from '@/dil/sozlukler/kapsam';
 
@@ -138,7 +139,8 @@ describe('göstergenin kendisi', () => {
     expect(kapsamSozlugu.en.geciliyor('A')).toBe('Switching to A…');
     expect(OZET_KOD).toContain('o.geciliyor(bekleyen ?? yenileniyor');
     expect(genelBakisSozlugu.tr.ozet.geciliyor('A')).toBe('A görünümüne geçiliyor…');
-    expect(YONETICI_KOD).toContain('görünümüne geçiliyor…');
+    expect(YONETICI_KOD).toContain('<TamEkranYukleniyor mesaj={t.geciliyor(gecilen ?? yenileniyor ?? \'\')} />');
+    expect(reklamYoneticisiSozlugu.tr.tablo.geciliyor('A')).toBe('A görünümüne geçiliyor…');
   });
 
   it('marka rengini kullanıyor — genel bir spinner değil', () => {

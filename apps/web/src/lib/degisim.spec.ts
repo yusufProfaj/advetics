@@ -86,7 +86,7 @@ describe('iki ekran da ortak kararı kullanıyor', () => {
       expect(k, yol).not.toMatch(/!==\s*Boolean\(ters\)/);
     }
     const t = yorumsuz(YM_TABLO);
-    expect(t).toContain('const h = degisimHali(m.degisim, m.ters);');
+    expect(t).toContain('const h = degisimHali(m.degisim, m.ters, dil);');
     expect(t).not.toMatch(/!==\s*Boolean\(ters\)/);
   });
 
@@ -106,9 +106,9 @@ describe('iki ekran da ortak kararı kullanıyor', () => {
   it('KRİTİK: Reklam Yöneticisi’nde maliyet `ters`, harcama değil', () => {
     const YM = yorumsuz('app/(dashboard)/ads-explorer/page.tsx');
     const m = YM.slice(YM.indexOf('function ymMetrikleri'), YM.indexOf('function duzeySekmeleri'));
-    const dbm = m.slice(m.indexOf("ad: 'Dönüşüm başı maliyet'"));
+    const dbm = m.slice(m.indexOf('ad: m.donusumBasiMaliyet'));
     expect(dbm.slice(0, dbm.indexOf('},'))).toContain('ters: true');
-    const harcama = m.slice(m.indexOf("{ ad: 'Harcama'"));
+    const harcama = m.slice(m.indexOf('{ ad: m.harcama'));
     expect(harcama.length, 'harcama kutusu bulunamadı').toBeGreaterThan(0);
     expect(harcama.slice(0, harcama.indexOf('},'))).not.toContain('ters');
   });

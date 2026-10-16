@@ -60,6 +60,7 @@ export const kabukSozlugu = ikiDil(
       workspaceSecilemedi: 'Workspace seçilemedi.',
       aciliyor: 'açılıyor…',
       kapsamDegistirilemedi: 'Kapsam değiştirilemedi.',
+      konum: 'Konum',
     },
     suzgec: {
       ara: (etiket: string) => `${etiket} ara`,
@@ -124,6 +125,7 @@ export const kabukSozlugu = ikiDil(
       workspaceSecilemedi: 'Could not select the workspace.',
       aciliyor: 'opening…',
       kapsamDegistirilemedi: 'Could not change the scope.',
+      konum: 'Location',
     },
     suzgec: {
       ara: (etiket) => `Search ${etiket}`,

@@ -1,5 +1,7 @@
 import { baglanti } from '@/lib/baglanti';
 import { varliklarAdresi } from '@/lib/panel-adresleri';
+import { sec, type Dil } from '@advetics/shared';
+import { reklamYoneticisiSozlugu } from '@/dil/sozlukler/reklam-yoneticisi';
 
 /**
  * REKLAM YÖNETİCİSİ'NİN ADRESİ — iniş tablolarının (şirket → workspace →
@@ -25,12 +27,14 @@ export function olusturDugmesi(
   sekme: string,
   clientId: string | null,
   yetki: { reklam: boolean; kitle: boolean },
+  dil: Dil = 'tr',
 ): { etiket: string; href: string } | null {
+  const e = sec(reklamYoneticisiSozlugu, dil).olustur;
   if (sekme === 'kitle') {
-    return yetki.kitle && clientId ? { etiket: 'Hedef kitle', href: `${varliklarAdresi('kitleler', clientId)}&yeni=1` } : null;
+    return yetki.kitle && clientId ? { etiket: e.kitle, href: `${varliklarAdresi('kitleler', clientId)}&yeni=1` } : null;
   }
   if (!yetki.reklam) return null;
   const href = clientId ? baglanti('/reklam', { musteri: clientId }) : '/reklam';
-  if (sekme === 'ad') return { etiket: 'Reklam', href };
-  return { etiket: 'Yeni kampanya', href };
+  if (sekme === 'ad') return { etiket: e.reklam, href };
+  return { etiket: e.kampanya, href };
 }

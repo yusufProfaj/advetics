@@ -2,6 +2,9 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { kabukSozlugu } from '@/dil/sozlukler/kabuk';
+import { reklamYoneticisiSozlugu } from '@/dil/sozlukler/reklam-yoneticisi';
+
+const G = reklamYoneticisiSozlugu;
 
 /**
  * ═══ REKLAM KEŞFİ: DÜZEN VE DİL KARARLARI ═══
@@ -22,7 +25,9 @@ const ETIKET = yorumsuz(join(__dirname, '..', '..', '..', '..', 'lib', 'reklam-e
 
 describe('tarama boşa düşmüyor', () => {
   it('kaynaklar okundu', () => {
-    expect(SAYFA).toContain('Reklam Galerisi');
+    expect(SAYFA).toContain('baslik={d.baslik}');
+    expect(G.tr.galeri.baslik).toBe('Reklam Galerisi');
+    expect(G.en.galeri.baslik).toBe('Ad Gallery');
     expect(KART).toContain('export function AdCard');
     expect(ETIKET).toContain('export function ctaEtiketi');
   });
@@ -38,8 +43,10 @@ describe('süzgeçler', () => {
      * yarısını kaplıyordu. Artık her boyut etiketli bir açılır menü:
      * "Tümü" dediğinde neyin tümü olduğu yazıyor.
      */
-    for (const e of ['Hesap', 'Durum', 'Kampanya', 'Sırala']) {
-      expect(SAYFA, `${e} menüsü etiketsiz`).toContain(`etiket="${e}"`);
+    // Etiketler sözlükte (iki dil): anahtar sayfada, değer iki dilde dolu.
+    for (const e of ['hesap', 'durum', 'kampanya', 'sirala'] as const) {
+      expect(SAYFA, `${e} menüsü etiketsiz`).toContain(`etiket={d.${e}}`);
+      expect(G.tr.galeri[e].length).toBeGreaterThan(0);
     }
     expect(SAYFA.match(/<SuzgecMenusu/g)?.length).toBe(4);
     expect(MENU).toContain('{etiket}:');
@@ -51,7 +58,7 @@ describe('süzgeçler', () => {
      * OLDUĞU hiçbir yerde yazmıyordu. Menü artık HİÇ kesmiyor (kaydırılıyor)
      * ve arama sonucu kaç tanesinin göründüğünü yazıyor.
      */
-    const kampanya = SAYFA.slice(SAYFA.indexOf('etiket="Kampanya"'), SAYFA.indexOf('etiket="Sırala"'));
+    const kampanya = SAYFA.slice(SAYFA.indexOf('etiket={d.kampanya}'), SAYFA.indexOf('etiket={d.sirala}'));
     expect(kampanya, 'kampanya menüsü bulunamadı').toContain('result.facets.campaigns.map(');
     expect(kampanya).not.toMatch(/campaigns\.slice\(/);
     // Metin sözlükte (D2); menü anahtarı GÖRÜNEN ve TOPLAM sayıyla çağırıyor.
@@ -86,8 +93,10 @@ describe('süzgeçler', () => {
   });
 
   it('seçili süzgeçler tek tıkla kalkıyor ve hepsi birden temizlenebiliyor', () => {
-    expect(SAYFA).toContain('süzgecini kaldır');
-    expect(SAYFA).toContain('Tümünü temizle');
+    expect(SAYFA).toContain('aria-label={d.aramayiKaldir}');
+    expect(SAYFA).toContain('{d.tumunuTemizle}');
+    expect(G.tr.galeri.aramayiKaldir).toBe('Arama süzgecini kaldır');
+    expect(G.tr.galeri.tumunuTemizle).toBe('Tümünü temizle');
   });
 
   it('menü dışarı tıklayınca ve Esc ile kapanıyor', () => {
@@ -125,9 +134,9 @@ describe('ekrandaki dil', () => {
      */
     expect(KART).not.toContain('{ad.creative.creativeType}');
     expect(KART).not.toContain('{ad.creative.ctaType}');
-    expect(KART).toContain('kreatifTuruEtiketi(ad.creative.creativeType)');
+    expect(KART).toContain('kreatifTuruEtiketi(ad.creative.creativeType, dil)');
     expect(KART).toContain('ctaEtiketi(ad.creative.ctaType)');
-    expect(KART).toContain('incelemeEtiketi(ad.reviewStatus)');
+    expect(KART).toContain('incelemeEtiketi(ad.reviewStatus, dil)');
   });
 
   it('KRİTİK: bilinmeyen kod UYDURULMUYOR', () => {

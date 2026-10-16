@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { reklamYoneticisiSozlugu } from '@/dil/sozlukler/reklam-yoneticisi';
 
 /**
  * ═══ "METRİKLER ALINAMADI" TEK BAŞINA BİR ŞEY SÖYLEMİYOR ═══
@@ -33,7 +34,9 @@ describe('KRİTİK: özet hatası ekranda yazıyor', () => {
 
   it('sebep EKRANA basılıyor', () => {
     // Yakalayıp göstermemek, yakalamamakla aynı şey.
-    expect(KAYNAK).toContain("{ozetHatasi ?? 'Sunucu sebep bildirmedi.'}");
+    // Metin sözlükte (iki dil): değer + sayfanın o anahtarı kullandığı.
+    expect(KAYNAK).toContain('{ozetHatasi ?? d.sebepYok}');
+    expect(reklamYoneticisiSozlugu.tr.sebepYok).toBe('Sunucu sebep bildirmedi.');
   });
 
   it('platformun KENDİ cümlesi kullanılıyor', () => {

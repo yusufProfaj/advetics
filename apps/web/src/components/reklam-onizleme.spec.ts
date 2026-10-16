@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { reklamYoneticisiSozlugu } from '@/dil/sozlukler/reklam-yoneticisi';
 import { onizlemeAcikMi } from '@/lib/onizleme-durumu';
 
 /**
@@ -152,7 +153,8 @@ describe('önizleme verisi', () => {
      * alana çevirirdi; bu depoda adı konmuş yasak.
      */
     expect(ONIZLEME).toContain('ApiRequestError');
-    expect(ONIZLEME).toContain('Önizleme yükleniyor…');
+    expect(ONIZLEME).toContain('{m.yukleniyor}');
+    expect(reklamYoneticisiSozlugu.tr.onizleme.yukleniyor).toBe('Önizleme yükleniyor…');
     expect(ONIZLEME).toContain("role=\"alert\"");
   });
 });

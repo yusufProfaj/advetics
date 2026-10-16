@@ -37,7 +37,7 @@ describe('Reklam Yöneticisi satır içi durdur/başlat (2026-10-10)', () => {
     expect(t).toContain('const durdurVar = yazabilir && satirlar.some((r) => r.eylemHedefi !== null);');
     expect(t).toContain('{yazabilir && r.eylemHedefi && (');
     const p = readFileSync(join(__dirname, '..', 'components', 'taslak', 'varlik-eylem-penceresi.tsx'), 'utf8');
-    expect(p).toContain("setMesaj(e instanceof ApiRequestError ? e.message : 'İstek gönderilemedi.');");
+    expect(p).toContain('setMesaj(err instanceof ApiRequestError ? err.message : e.istekGitmedi);');
     expect(p).toContain("`/campaigns/varliklar/${hedef.seviye}/${hedef.id}/eylem`");
   });
 });

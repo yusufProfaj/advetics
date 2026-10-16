@@ -465,6 +465,18 @@ export function menuSatiriEtiketi(href: string, dil: Dil): string {
   return menuEtiketiCevir('satir', satir.label, dil, href);
 }
 
+/**
+ * Menü satırının BÖLÜMÜNÜN adı (sayfa başlığının üstündeki "Yönet" gibi),
+ * adresinden bulunarak ve ekranın dilinde. Sayfa bölüm adını elle yazınca
+ * menüde satır başka bölüme taşındığında başlık eski bölümü söylemeye devam
+ * ediyordu; ad buradan gelirse ikisi ayrışamaz. Menüde olmayan adres PATLAR.
+ */
+export function menuBolumuEtiketi(href: string, dil: Dil): string {
+  const bolum = SECTIONS_HEDEF.find((b) => b.items.some((i) => i.href === href));
+  if (!bolum?.title) throw new Error(`menude bolumu yok: ${href}`);
+  return menuEtiketiCevir('bolum', bolum.title, dil);
+}
+
 export function menuyuCevir(
   bolumler: Array<{ title?: string; items: NavEntry[] }>,
   dil: Dil,

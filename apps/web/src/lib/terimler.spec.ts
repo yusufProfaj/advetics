@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { reklamYoneticisiSozlugu } from '@/dil/sozlukler/reklam-yoneticisi';
 import { genelBakisSozlugu } from '@/dil/sozlukler/genel-bakis';
 import { TERIMLER, yonCumlesi } from './terimler';
 
@@ -81,7 +82,9 @@ describe('kartlar iş dilinde', () => {
     const m = YM.slice(YM.indexOf('function ymMetrikleri'), YM.indexOf('function duzeySekmeleri'));
     expect(m.length, 'ymMetrikleri bulunamadı').toBeGreaterThan(100);
     expect(m).not.toMatch(/ad: '(CPA|ROAS|CTR|CPC|CPM|TO)'/);
-    expect(m).toContain("ad: 'Dönüşüm başı maliyet'");
+    expect(m).toContain('ad: m.donusumBasiMaliyet');
+    expect(reklamYoneticisiSozlugu.tr.metrik.donusumBasiMaliyet).toBe('Dönüşüm başı maliyet');
+    expect(reklamYoneticisiSozlugu.en.metrik.donusumBasiMaliyet).toBe('Cost / conv.');
   });
 
   it('KRİTİK: çok günlü erişimde "günlük ortalama" ipucu mükerrer uyarısına ezilmiyor', () => {

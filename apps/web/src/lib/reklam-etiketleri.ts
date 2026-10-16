@@ -1,4 +1,5 @@
-import { CTA_LABELS, type CallToAction } from '@advetics/shared';
+import { CTA_LABELS, sec, type CallToAction, type Dil } from '@advetics/shared';
+import { reklamYoneticisiSozlugu } from '@/dil/sozlukler/reklam-yoneticisi';
 
 /**
  * ═══ PLATFORMDAN GELEN KODLARIN EKRANDAKİ KARŞILIĞI ═══
@@ -29,22 +30,11 @@ export function ctaEtiketi(ham: string): string {
  * Platformlar burada onlarca değer kullanıyor ve hepsini eşlemek mümkün
  * değil; yalnızca sık görülenler yazılı, kalanı okunabilir hâle geliyor.
  */
-const KREATIF_TURU: Record<string, string> = {
-  IMAGE: 'Görsel',
-  VIDEO: 'Video',
-  CAROUSEL: 'Karusel',
-  SLIDESHOW: 'Slayt',
-  COLLECTION: 'Koleksiyon',
-  TEXT: 'Metin',
-  RESPONSIVE_SEARCH_AD: 'Arama reklamı',
-  EXPANDED_TEXT_AD: 'Arama reklamı',
-  SEARCH_STANDARD: 'Arama reklamı',
-  RESPONSIVE_DISPLAY_AD: 'Görsel reklam',
-  DISCOVERY_CAROUSEL_AD: 'Karusel',
-};
+// "Video" iki dilde aynı: sözlük bekçisi aynı değeri "çevrilmemiş" sayar, kodda kalır.
+const kreatifTuru = (dil: Dil): Record<string, string> => ({ ...sec(reklamYoneticisiSozlugu, dil).kart.kreatifTuru, VIDEO: 'Video' });
 
-export function kreatifTuruEtiketi(ham: string): string {
-  return KREATIF_TURU[ham.toUpperCase()] ?? okunabilir(ham);
+export function kreatifTuruEtiketi(ham: string, dil: Dil = 'tr'): string {
+  return kreatifTuru(dil)[ham.toUpperCase()] ?? okunabilir(ham);
 }
 
 /**
@@ -54,17 +44,8 @@ export function kreatifTuruEtiketi(ham: string): string {
  * uyarı taşıyor (bkz. `review-issues.ts`). "Sorunlu" demek yayından kalktığı
  * izlenimi verirdi.
  */
-const INCELEME: Record<string, string> = {
-  APPROVED: 'Onaylandı',
-  DISAPPROVED: 'Reddedildi',
-  WITH_ISSUES: 'Yayında, uyarı var',
-  PENDING_REVIEW: 'İncelemede',
-  PREAPPROVED: 'Ön onay',
-  ELIGIBLE: 'Yayında',
-  ELIGIBLE_LIMITED: 'Yayında, sınırlı',
-  UNDER_REVIEW: 'İncelemede',
-};
 
-export function incelemeEtiketi(ham: string): string {
-  return INCELEME[ham.toUpperCase()] ?? okunabilir(ham);
+export function incelemeEtiketi(ham: string, dil: Dil = 'tr'): string {
+  const tablo: Record<string, string> = sec(reklamYoneticisiSozlugu, dil).kart.inceleme;
+  return tablo[ham.toUpperCase()] ?? okunabilir(ham);
 }

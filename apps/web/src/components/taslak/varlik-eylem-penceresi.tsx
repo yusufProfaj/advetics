@@ -10,6 +10,9 @@ import { Dugme } from '@/components/ui/dugme';
 import { YanPanel } from '@/components/ui/pencere';
 import { Rozet, DurumNoktasi } from '@/components/ui/rozet';
 import { Serit } from '@/components/ui/hal';
+import { useDil } from '@/dil/saglayici';
+import { reklamYoneticisiSozlugu } from '@/dil/sozlukler/reklam-yoneticisi';
+import { sec } from '@advetics/shared';
 
 /**
  * ═══ REKLAM YÖNETİCİSİ: DURDUR / BAŞLAT ONAYI (2026-10-10) ═══
@@ -32,6 +35,8 @@ export function VarlikEylemPenceresi({
   onKapat: () => void;
 }) {
   const router = useRouter();
+  const { dil } = useDil();
+  const e = sec(reklamYoneticisiSozlugu, dil).eylem;
   const [asama, setAsama] = useState<'bekliyor' | 'suruyor' | 'bitti' | 'hata'>('bekliyor');
   const [sonuc, setSonuc] = useState<VarlikEylemSonucu | null>(null);
   const [mesaj, setMesaj] = useState<string | null>(null);
@@ -51,7 +56,7 @@ export function VarlikEylemPenceresi({
     setMesaj(null);
   }, [hedef]);
 
-  const metin = gosterilen ? varlikEylemMetni(gosterilen) : null;
+  const metin = gosterilen ? varlikEylemMetni(gosterilen, dil) : null;
 
   function kapat() {
     if (asama === 'suruyor') return;
@@ -77,10 +82,10 @@ export function VarlikEylemPenceresi({
           router.refresh();
         }, 1200);
       }
-    } catch (e) {
+    } catch (err) {
       // Sunucunun kendi cümlesi: ajans şalteri, kota, izin, platform hatası
       // AYRI cümleler; "beklenmeyen hata"ya çevirmek teşhisi imkânsız yapar.
-      setMesaj(e instanceof ApiRequestError ? e.message : 'İstek gönderilemedi.');
+      setMesaj(err instanceof ApiRequestError ? err.message : e.istekGitmedi);
       setAsama('hata');
     }
   }
@@ -98,19 +103,19 @@ export function VarlikEylemPenceresi({
     <YanPanel
       acik={acik}
       onKapat={kapat}
-      baslik={metin?.baslik ?? 'Onay'}
+      baslik={metin?.baslik ?? e.onay}
       altEylemler={
         asama === 'bitti' ? (
           <Dugme ton="ikincil" onClick={kapat}>
-            Kapat
+            {e.kapat}
           </Dugme>
         ) : (
           <>
             <Dugme ton="ikincil" onClick={kapat} disabled={asama === 'suruyor'}>
-              Vazgeç
+              {e.vazgec}
             </Dugme>
             <Dugme onClick={() => void onayla()} bekliyor={asama === 'suruyor'} disabled={!hedef}>
-              {asama === 'hata' ? 'Tekrar dene' : 'Onayla ve uygula'}
+              {asama === 'hata' ? e.tekrarDene : e.onaylaUygula}
             </Dugme>
           </>
         )
@@ -123,19 +128,19 @@ export function VarlikEylemPenceresi({
       )}
       <div className="flex items-center gap-3 rounded-alan border border-line p-3">
         <div className="grid gap-1">
-          <small className="text-12 text-ink-muted">Şimdi</small>
+          <small className="text-12 text-ink-muted">{e.simdi}</small>
           <Rozet hal={once ? 'ok' : 'dur'}>{metin?.once ?? '—'}</Rozet>
         </div>
         <span aria-hidden className="text-ink-muted">
           →
         </span>
         <div className="grid gap-1">
-          <small className="text-12 text-ink-muted">Sonra</small>
+          <small className="text-12 text-ink-muted">{e.sonra}</small>
           <Rozet hal={once ? 'dur' : 'ok'}>{metin?.sonra ?? '—'}</Rozet>
         </div>
       </div>
       <ol className="m-0 grid list-none gap-2 p-0" aria-live="polite">
-        {[`${platform}'a gönder`, `${platform}'dan geri oku ve karşılaştır`, 'Kaydet (kim, ne zaman, eski → yeni)'].map(
+        {[e.adimGonder(platform), e.adimOku(platform), e.adimKaydet].map(
           (a, n) => {
             const h = adimHali(n);
             return (
@@ -163,13 +168,13 @@ export function VarlikEylemPenceresi({
         (sonuc.dogrulama === 'dogrulandi' ? (
           <p role="status" className="m-0 flex items-center gap-2 text-13 text-ink">
             <DurumNoktasi hal="ok" />
-            {`${platform}'da doğrulandı: ${sonuc.platformDegeri}.`}
+            {e.dogrulandi(platform, sonuc.platformDegeri)}
           </p>
         ) : (
-          <Serit baslik={`${platform} isteği kabul etti ama okunan durum farklı`}>{sonuc.platformDegeri}</Serit>
+          <Serit baslik={e.uyusmadi(platform)}>{sonuc.platformDegeri}</Serit>
         ))}
       {mesaj && (
-        <Serit ton="hata" baslik="Uygulanamadı">
+        <Serit ton="hata" baslik={e.uygulanamadi}>
           {mesaj}
         </Serit>
       )}

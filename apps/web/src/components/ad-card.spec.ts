@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { reklamYoneticisiSozlugu } from '@/dil/sozlukler/reklam-yoneticisi';
 
 /**
  * REKLAM KARTI — "GÖRSEL YOK" ÜÇ FARKLI ŞEYDİ.
@@ -76,7 +77,8 @@ describe('AdCard', () => {
       join(__dirname, 'arama-reklami-onizleme.tsx'),
       'utf8',
     ).replace(/\/\*[\s\S]*?\*\//g, '');
-    expect(onizleme).toContain('Ücretli sponsorlu reklam');
+    expect(onizleme).toContain('{m.sponsorlu}');
+    expect(reklamYoneticisiSozlugu.tr.arama.sponsorlu).toBe('Ücretli sponsorlu reklam');
     expect(onizleme).toContain('<DunyaSimgesi />');
     expect(onizleme).toContain('adres.kirintiYolu');
     expect(onizleme).toContain('text-arama-baslik');
@@ -139,9 +141,13 @@ describe('AdCard', () => {
   it('"görsel alınamadı" ile "görsel yok" AYRI cümleler', () => {
     // İkisi aynı olsaydı ayrım yapmanın anlamı kalmazdı.
     const g = govde();
-    expect(g).toContain('görsel alınamadı');
-    // Metin kısaldı ve uzun tire kalktı (panel metin kuralı); AYRIM aynı.
-    expect(g).toContain('Arama reklamı, görseli yok');
+    // Metin sözlükte (iki dil): kart iki anahtarı da kullanıyor, değerler AYRI.
+    expect(g).toContain('bosMetin={m.gorselAlinamadi}');
+    expect(g).toContain('{m.aramaGorselsiz}');
+    for (const dil of ['tr', 'en'] as const) {
+      expect(reklamYoneticisiSozlugu[dil].kart.gorselAlinamadi).not.toBe(reklamYoneticisiSozlugu[dil].kart.aramaGorselsiz);
+    }
+    expect(reklamYoneticisiSozlugu.tr.kart.gorselAlinamadi).toBe('görsel alınamadı');
   });
 
   it('PLATFORM ROZETİ basılıyor — iki platform tek listede', () => {

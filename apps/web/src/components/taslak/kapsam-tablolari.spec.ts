@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { genelBakisSozlugu } from '@/dil/sozlukler/genel-bakis';
+import { reklamYoneticisiSozlugu } from '@/dil/sozlukler/reklam-yoneticisi';
 
 /**
  * ═══ KAPSAM TABLOLARI — ŞİRKET / WORKSPACE / HESAP SATIRLARI ═══
@@ -129,7 +130,9 @@ describe('sayılar yalan söylemiyor', () => {
     // 1 USD + 1 TRY = 2 ne? Kur çevrimi yok.
     expect(OZET).toContain('r.paraBirimi ? formatMoney(r.spendMicros, r.paraBirimi, { dil }) : o.karisik');
     expect(genelBakisSozlugu.tr.ozet.karisik).toBe('karışık');
-    expect(YONETICI).toContain("(b ? formatMoney(m, b) : 'karışık')");
+    expect(YONETICI).toContain('(b ? formatMoney(m, b, { dil }) : t.karisik)');
+    expect(reklamYoneticisiSozlugu.tr.tablo.karisik).toBe('karışık');
+    expect(reklamYoneticisiSozlugu.en.tablo.karisik).toBe('mixed');
   });
 
   it('TOPLAM satırı karışık para biriminde sayı basmıyor', () => {
@@ -164,7 +167,7 @@ describe('sayılar yalan söylemiyor', () => {
     // Genel Bakış metni sözlükten okuyor (D2): değer + anahtar birlikte.
     for (const [k, ad, beklenen] of [
       [GB, 'workspaceSatirlari', 'r.adAccountCount === 0 ? d.liste.izlemedeHesapYok'],
-      [YM, 'workspaceSatiri', "r.adAccountCount === 0 ? 'izlemede hesap yok'"],
+      [YM, 'workspaceSatiri', 'r.adAccountCount === 0 ? m.izlemedeHesapYok'],
     ] as const) {
       const i = k.indexOf(`function ${ad}(`);
       expect(i, `${ad} bulunamadı`).toBeGreaterThan(-1);
@@ -172,5 +175,6 @@ describe('sayılar yalan söylemiyor', () => {
       expect(f, ad).toContain(beklenen);
     }
     expect(genelBakisSozlugu.tr.liste.izlemedeHesapYok).toBe('izlemede hesap yok');
+    expect(reklamYoneticisiSozlugu.tr.satir.izlemedeHesapYok).toBe('izlemede hesap yok');
   });
 });

@@ -1,4 +1,6 @@
-import type { AdExplorerRow } from '@advetics/shared';
+import type { AdExplorerRow, Dil } from '@advetics/shared';
+import { sec } from '@advetics/shared';
+import { reklamYoneticisiSozlugu } from '@/dil/sozlukler/reklam-yoneticisi';
 import { platformKanali } from '@advetics/shared';
 import { platformKisaAdi } from '@advetics/shared';
 import { formatMoney, formatNumber, formatPercent, formatRoas } from '@/lib/format';
@@ -22,14 +24,6 @@ const STATUS_HAL: Record<string, DurumHali> = {
   unknown: 'taslak',
 };
 
-const STATUS_LABEL: Record<string, string> = {
-  active: 'Aktif',
-  paused: 'Duraklatıldı',
-  deleted: 'Silindi',
-  pending_review: 'İncelemede',
-  ended: 'Bitti',
-  unknown: 'Bilinmiyor',
-};
 
 /**
  * Reklam kartı. İKİ BİÇİM, TEK KART:
@@ -57,11 +51,16 @@ export function AdCard({
   ad,
   currency,
   bicim = 'satir',
+  dil,
 }: {
   ad: AdExplorerRow;
   currency: string | null;
   bicim?: 'satir' | 'izgara';
+  /** Direktifsiz bileşen (Galeri'de sunucuda, önizlemede istemcide): dil propla. */
+  dil: Dil;
 }) {
+  const m = sec(reklamYoneticisiSozlugu, dil).kart;
+  const STATUS_LABEL: Record<string, string> = m.durum;
   const money = currency ?? ad.currency ?? null;
   const image = ad.creative?.assetUrls[0];
   const hasIssues = ad.issues.length > 0;
@@ -106,7 +105,7 @@ export function AdCard({
    */
   const baslikMetni = aramaReklami ? ad.name : (ad.creative?.headline ?? ad.name);
   const durumAnahtari = ad.deleted ? 'deleted' : ad.status;
-  const cpa = formatMoney(ad.cpa === null ? null : String(Math.round(ad.cpa * 1_000_000)), money);
+  const cpa = formatMoney(ad.cpa === null ? null : String(Math.round(ad.cpa * 1_000_000)), money, { dil });
   const sorunSiniri = izgara ? 2 : 4;
 
   /*
@@ -130,6 +129,7 @@ export function AdCard({
       aciklama={ad.creative?.description ?? ad.creative?.primaryText ?? null}
       gorunenAdres={ad.creative?.displayUrl ?? null}
       hedefAdres={ad.creative?.destinationUrl ?? null}
+      dil={dil}
       /* Gerçek arama sonucu geniş; 224 pikselde başlık iki satıra
          bölünüp kırılıyordu ve taklit ettiğimiz görünüm bozuluyordu. */
       className={izgara ? 'w-full bg-surface-muted p-3 pt-11' : 'w-full shrink-0 sm:w-72'}
@@ -151,21 +151,21 @@ export function AdCard({
       <KreatifGorsel
         src={image ?? null}
         alt={ad.creative?.headline ?? ad.name}
-        bosMetin="görsel alınamadı"
+        bosMetin={m.gorselAlinamadi}
         yedekYol={ad.creative ? `/ads/${encodeURIComponent(ad.id)}/gorsel` : undefined}
       />
       {/* Birden fazla görsel varsa (karusel / dinamik kreatif) sayısı
           belirtiliyor: tek kare tüm varyasyonları temsil etmiyor. */}
       {(ad.creative?.assetUrls.length ?? 0) > 1 && (
         <span className="absolute bottom-2.5 right-2.5 rounded-full bg-black/55 px-2 py-0.5 text-11 font-bold text-white">
-          +{ad.creative!.assetUrls.length - 1} görsel
+          {m.dahaGorsel(ad.creative!.assetUrls.length - 1)}
         </span>
       )}
       {preview && (
         // Tıklanabilir olduğu GÖRÜNMELİ: fareyle üzerine gelmeden
         // anlaşılmayan bir bağlantı, olmayan bir bağlantı gibidir.
         <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-opacity group-hover:bg-black/45 group-hover:opacity-100 motion-reduce:transition-none">
-          <span className="rounded-full bg-surface px-2.5 py-1 text-11 font-bold text-ink">Önizlemeyi aç ↗</span>
+          <span className="rounded-full bg-surface px-2.5 py-1 text-11 font-bold text-ink">{m.onizlemeyiAc}</span>
         </span>
       )}
     </PreviewLink>
@@ -211,9 +211,9 @@ export function AdCard({
         <PlatformLogo kind={platformKanali(ad.platform)} className="h-3 w-3" />
         {platformKisaAdi(ad.platform)}
       </span>
-      {aramaReklami && <span>· Arama reklamı, görseli yok</span>}
+      {aramaReklami && <span>{m.aramaGorselsiz}</span>}
       {/* Arama reklamında tür etiketi TEKRAR olurdu. */}
-      {ad.creative?.creativeType && !aramaReklami && <span>· {kreatifTuruEtiketi(ad.creative.creativeType)}</span>}
+      {ad.creative?.creativeType && !aramaReklami && <span>· {kreatifTuruEtiketi(ad.creative.creativeType, dil)}</span>}
       {ad.creative?.ctaType && <span>· {ctaEtiketi(ad.creative.ctaType)}</span>}
     </span>
   );
@@ -221,7 +221,7 @@ export function AdCard({
   const sorunlar = hasIssues && (
     <div className="border-t border-line px-4 py-2.5">
       <p className="m-0 text-12 font-bold text-danger-strong">
-        İnceleme sorunu{ad.reviewStatus ? ` · ${incelemeEtiketi(ad.reviewStatus)}` : ''}
+        {m.incelemeSorunu}{ad.reviewStatus ? ` · ${incelemeEtiketi(ad.reviewStatus, dil)}` : ''}
       </p>
       <ul className="m-0 mt-1 grid list-none gap-0.5 p-0">
         {ad.issues.slice(0, sorunSiniri).map((issue, i) => (
@@ -231,7 +231,7 @@ export function AdCard({
           </li>
         ))}
         {ad.issues.length > sorunSiniri && (
-          <li className="text-12 text-ink-muted">+{ad.issues.length - sorunSiniri} sorun daha</li>
+          <li className="text-12 text-ink-muted">{m.dahaSorun(ad.issues.length - sorunSiniri)}</li>
         )}
       </ul>
     </div>
@@ -255,8 +255,8 @@ export function AdCard({
         </div>
         {sorunlar}
         <dl className="m-0 grid grid-cols-3 gap-1.5 border-t border-line px-3.5 py-2.5">
-          <Metric label="Harcama" value={formatMoney(ad.spendMicros, money)} strong />
-          <Metric label="Dönüşüm" value={formatNumber(ad.conversions)} strong />
+          <Metric label={m.harcama} value={formatMoney(ad.spendMicros, money, { dil })} strong />
+          <Metric label={m.donusum} value={formatNumber(ad.conversions, dil)} strong />
           <Metric label="CPA" value={cpa} strong />
         </dl>
       </article>
@@ -299,14 +299,14 @@ export function AdCard({
 
         {/* Metrikler */}
         <dl className="m-0 grid shrink-0 grid-cols-2 gap-x-5 gap-y-1.5 sm:w-48">
-          <Metric label="Harcama" value={formatMoney(ad.spendMicros, money)} strong />
-          <Metric label="Dönüşüm" value={formatNumber(ad.conversions)} strong />
-          <Metric label="Gösterim" value={formatNumber(ad.impressions)} />
-          <Metric label="Tık" value={formatNumber(ad.clicks)} />
-          <Metric label="CTR" value={formatPercent(ad.ctr)} />
+          <Metric label={m.harcama} value={formatMoney(ad.spendMicros, money, { dil })} strong />
+          <Metric label={m.donusum} value={formatNumber(ad.conversions, dil)} strong />
+          <Metric label={m.gosterim} value={formatNumber(ad.impressions, dil)} />
+          <Metric label={m.tik} value={formatNumber(ad.clicks, dil)} />
+          <Metric label="CTR" value={formatPercent(ad.ctr, 2, dil)} />
           <Metric label="CPA" value={cpa} />
           {/* ROAS yalnızca gelir varsa: "0.00×" kampanyanın battığını söyler. */}
-          {ad.roas !== null && <Metric label="ROAS" value={formatRoas(ad.roas)} />}
+          {ad.roas !== null && <Metric label="ROAS" value={formatRoas(ad.roas, dil)} />}
         </dl>
       </div>
 

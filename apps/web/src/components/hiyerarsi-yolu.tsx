@@ -115,7 +115,7 @@ export function HiyerarsiYolu({
     const hap = gorunum === 'hap';
     return (
       <div>
-        <nav aria-label="Konum" className={hap ? t.yol : t.kirinti}>
+        <nav aria-label={g.konum} className={hap ? t.yol : t.kirinti}>
           {basamaklar.map((b, i) => {
             const sonuncu = i === basamaklar.length - 1;
             const etiket = (
@@ -163,7 +163,7 @@ export function HiyerarsiYolu({
 
   return (
     <div>
-      <nav aria-label="Konum" className="flex flex-wrap items-center gap-1 text-xs">
+      <nav aria-label={g.konum} className="flex flex-wrap items-center gap-1 text-xs">
         {basamaklar.map((b, i) => {
           const sonuncu = i === basamaklar.length - 1;
           return (

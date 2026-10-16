@@ -42,8 +42,19 @@ import { first, hataMetni, resolvePlatform } from '@/lib/sayfa-yardimcilari';
 import { REKLAM_YONETICISI, olusturDugmesi } from '@/lib/reklam-yoneticisi';
 import { eylemHedefiCoz } from '@/lib/varlik-eylemi';
 import { siteSutunuKarari, sitedeHaritasi } from '@/lib/veri-kaynagi';
+import { sec, type Dil } from '@advetics/shared';
+import { dilAl } from '@/dil/sunucu';
+import { reklamYoneticisiSozlugu } from '@/dil/sozlukler/reklam-yoneticisi';
+import { menuBolumuEtiketi, menuSatiriEtiketi } from '@/lib/nav-sections';
 
-export const metadata = { title: 'Reklam Yöneticisi · Advetics' };
+/** Başlık istek anında: dil çerezden okunuyor (CEVIRI-REHBERI §2). */
+export async function generateMetadata() {
+  // SAYFA ADI MENÜNÜN KENDİ ÇEVİRİSİNDEN (`nav-sections.spec.ts` "MENÜDEKİ AD İLE SAYFANIN ADI AYNI").
+  return { title: `${menuSatiriEtiketi('/ads-explorer', await dilAl())} · Advetics` };
+}
+
+/** Sayfanın sözlüğü; yardımcılar metni parametreyle alıyor (modül düzeyinde dil yok). */
+type RY = (typeof reklamYoneticisiSozlugu)['tr'];
 
 /**
  * ═══ REKLAM YÖNETİCİSİ (2026-10-09) ═══
@@ -104,6 +115,8 @@ export default async function DashboardPage({
 }) {
   const session = await requireSession();
   const params = await searchParams;
+  const dil = await dilAl();
+  const d = sec(reklamYoneticisiSozlugu, dil);
   /*
    * "HESABI ATA / İZLEMEYİ AÇ" BAĞLANTISI YALNIZ HEDEFİ AÇIKSA (MIMARI
    * Ç-19): müşteri hesabı bu ekranı görüyor ve "Bağlantılara git"e basınca
@@ -358,8 +371,8 @@ export default async function DashboardPage({
    * "veri sızıntısı" sanıldı.
    */
   const scopeLabel = ajansGorunumu
-    ? 'Tüm şirketler'
-    : (activeClient?.name ?? 'Tüm workspace’ler');
+    ? d.tumSirketler
+    : (activeClient?.name ?? d.tumWorkspaceler);
 
   /*
    * ═══ ŞERİDİN BASAMAKLARI — VAR OLANLAR ═══
@@ -372,13 +385,13 @@ export default async function DashboardPage({
    */
   const basamaklar: YolBasamagi[] = [];
   if (session.managerAccount) {
-    basamaklar.push({ ad: 'Tüm şirketler', kapsam: { tip: 'ajans' } });
+    basamaklar.push({ ad: d.tumSirketler, kapsam: { tip: 'ajans' } });
   }
   if (!ajansGorunumu) {
     const sirketAdi =
       session.managerAccount?.organizations.find((o) => o.id === session.activeOrganizationId)
         ?.name ?? session.organization.name;
-    basamaklar.push({ ad: sirketAdi, kapsam: { tip: 'sirket' }, duzey: 'Şirket' });
+    basamaklar.push({ ad: sirketAdi, kapsam: { tip: 'sirket' }, duzey: d.duzeyAdi.sirket });
   }
   if (activeClient) {
     // WORKSPACE BASAMAĞI ODAĞI, HESABI VE MECRAYI TEMİZLİYOR: kampanyanın ya
@@ -403,7 +416,7 @@ export default async function DashboardPage({
     if (yol?.adAccount) {
       basamaklar.push({
         ad: `${PLATFORM_KISA_ADLARI[yol.adAccount.platform]} · ${yol.adAccount.name}`,
-        duzey: 'Hesap',
+        duzey: d.duzeyAdi.hesap,
         sorgu: {
           platform: yol.adAccount.platform,
           hesap: yol.adAccount.id,
@@ -417,12 +430,12 @@ export default async function DashboardPage({
   if (yol?.campaign) {
     basamaklar.push({
       ad: yol.campaign.name,
-      duzey: 'Kampanya',
+      duzey: d.duzeyAdi.kampanya,
       sorgu: { kampanya: yol.campaign.id, reklamSeti: undefined, seviye: 'ad_group' },
     });
   }
   if (yol?.adGroup) {
-    basamaklar.push({ ad: yol.adGroup.name, duzey: 'Reklam seti', sorgu: { reklamSeti: yol.adGroup.id, seviye: 'ad' } });
+    basamaklar.push({ ad: yol.adGroup.name, duzey: d.duzeyAdi.reklamSeti, sorgu: { reklamSeti: yol.adGroup.id, seviye: 'ad' } });
   }
 
   /*
@@ -443,7 +456,7 @@ export default async function DashboardPage({
           `/veri-kaynaklari/takip-acigi?${new URLSearchParams({ clientId: session.activeClientId, from: range.from, to: range.to })}`,
         ).catch((e: unknown) => ({ hata: hataMetni(e) }))
       : null;
-  const site = siteYaniti === null ? null : siteSutunuKarari(siteYaniti);
+  const site = siteYaniti === null ? null : siteSutunuKarari(siteYaniti, dil);
   const sitede = siteYaniti && !('hata' in siteYaniti) ? sitedeHaritasi(siteYaniti) : null;
 
   const duzey: YmDuzey = ajansGorunumu ? 'sirket' : mcc ? 'workspace' : varlik === null ? 'hesap' : varlik;
@@ -462,11 +475,11 @@ export default async function DashboardPage({
     : null;
   const seciliSekme: YmSekmeAnahtari = kitleGorunumu ? 'kitle' : duzey;
   const satirlar: YmSatir[] | null = ajansGorunumu
-    ? sirketler && sirketler.map(sirketSatiri)
+    ? sirketler && sirketler.map((r) => sirketSatiri(r, d.satir))
     : mcc
-      ? musteriler && musteriler.map(workspaceSatiri)
+      ? musteriler && musteriler.map((r) => workspaceSatiri(r, d.satir))
       : varlik === null
-        ? hesaplar && hesaplar.accounts.map((a) => hesapSatiri(a, tasinan))
+        ? hesaplar && hesaplar.accounts.map((a) => hesapSatiri(a, tasinan, d.satir))
         : breakdown &&
           kirilimSirala(breakdown, siralama).map((b) => ({
             ...varlikSatiri(b, varlik, tasinan),
@@ -482,12 +495,12 @@ export default async function DashboardPage({
             ...(site ? { sitede: sitede?.get(b.entityId) ?? null } : {}),
           }));
   const yuklenemedi = ajansGorunumu
-    ? 'Şirket dağılımı alınamadı.'
+    ? d.yuklenemedi.sirket
     : mcc
-      ? 'Workspace dağılımı alınamadı.'
+      ? d.yuklenemedi.workspace
       : varlik === null
-        ? 'Hesap dağılımı alınamadı.'
-        : 'Dağılım verisi alınamadı.';
+        ? d.yuklenemedi.hesap
+        : d.yuklenemedi.varlik;
 
   const sekmeler = duzeySekmeleri({
     duzey,
@@ -498,6 +511,7 @@ export default async function DashboardPage({
     workspaceSecili: !ajansGorunumu && !mcc,
     cokluWorkspace: session.availableClients.length > 1,
     tasinan,
+    d,
   });
 
   /*
@@ -508,18 +522,18 @@ export default async function DashboardPage({
    */
   const seritler =
     summary === null ? (
-      <Serit ton="hata" baslik="Veriler alınamadı">
-        {ozetHatasi ?? 'Sunucu sebep bildirmedi.'}
+      <Serit ton="hata" baslik={d.verilerAlinamadi}>
+        {ozetHatasi ?? d.sebepYok}
       </Serit>
     ) : summary.hiddenAccounts > 0 ? (
       /* İzlenmeyen hesap bu rakamlara girmiyor: söylenmezse "harcama neden az" sorulur. */
       <Serit
         ton="bilgi"
-        baslik={`${summary.hiddenAccounts} hesap izlenmiyor ve bu rakamlara dâhil değil`}
+        baslik={d.izlenmeyen(summary.hiddenAccounts)}
         eylemler={
           hesapHedefi && (
             <Link className={dugmeSinifi('ikincil', 'kucuk')} href={hesapHedefi}>
-              Hesaplarda aç
+              {d.hesaplardaAc}
             </Link>
           )
         }
@@ -529,18 +543,18 @@ export default async function DashboardPage({
   const yerine =
     summary !== null && summary.accountCount === 0 ? (
       <BosDurum
-        baslik="Henüz veri yok"
-        neden={hesapHedefi ? 'Bir platform bağlayıp reklam hesabını bir workspace’e ata.' : HESAP_AJANSTA}
+        baslik={d.henuzVeriYok}
+        neden={hesapHedefi ? d.hesapAta : HESAP_AJANSTA}
         eylem={
           hesapHedefi && (
             <Link className={dugmeSinifi('ikincil', 'kucuk')} href={hesapHedefi}>
-              Hesaplara git
+              {d.hesaplaraGit}
             </Link>
           )
         }
       />
     ) : satirlar === null ? (
-      <HataDurumu baslik={yuklenemedi} mesaj="Sunucu bu düzeyin satırlarını döndürmedi. Sayfayı yenileyip tekrar dene." />
+      <HataDurumu baslik={yuklenemedi} mesaj={d.satirlarGelmedi} />
     ) : undefined;
 
   const tabloYerine =
@@ -556,16 +570,16 @@ export default async function DashboardPage({
   const olustur = olusturDugmesi(seciliSekme, session.activeClientId, {
     reklam: session.permissions.includes('bulk.write'),
     kitle: kapi(session, 'kitle.yaz'),
-  });
+  }, dil);
 
   return (
     <SayfaIskeleti
-      bolum="Yönet"
-      baslik="Reklam Yöneticisi"
+      bolum={menuBolumuEtiketi('/ads-explorer', dil)}
+      baslik={menuSatiriEtiketi('/ads-explorer', dil)}
       aciklama={
         <>
-          {scopeLabel} · {formatDayLong(range.from)} - {formatDayLong(range.to)}
-          {range.incomplete && <span className="text-danger-strong"> · Gün bitmedi</span>}
+          {scopeLabel} · {formatDayLong(range.from, dil)} - {formatDayLong(range.to, dil)}
+          {range.incomplete && <span className="text-danger-strong"> · {d.gunBitmedi}</span>}
         </>
       }
       eylemler={
@@ -589,13 +603,13 @@ export default async function DashboardPage({
         duzey={duzey}
         seciliSekme={seciliSekme}
         sekmeler={sekmeler}
-        metrikler={summary === null ? null : ymMetrikleri(summary, range.karsilastirma !== 'yok')}
+        metrikler={summary === null ? null : ymMetrikleri(summary, range.karsilastirma !== 'yok', d.metrik, dil)}
         satirlar={satirlar ?? []}
         kirinti={<HiyerarsiYolu basamaklar={basamaklar} tasinan={tasinan} gorunum="hap" />}
         seritler={seritler}
         yerine={tabloYerine}
         platformSecenekleri={[null, ...PLATFORMS].map((p) => ({
-          ad: p ? PLATFORM_KISA_ADLARI[p] : 'Tümü',
+          ad: p ? PLATFORM_KISA_ADLARI[p] : d.tumu,
           href: baglanti(
             REKLAM_YONETICISI,
             tasinan,
@@ -605,7 +619,7 @@ export default async function DashboardPage({
         }))}
         kesmeNotu={
           varlik !== null && breakdown !== null && breakdown.length >= KIRILIM_LIMITI
-            ? `harcamaya göre ilk ${KIRILIM_LIMITI} satır`
+            ? d.kesme(KIRILIM_LIMITI)
             : null
         }
         aralik={{ from: range.from, to: range.to }}
@@ -614,30 +628,30 @@ export default async function DashboardPage({
         site={site}
       />
 
-      {!range.incomplete && <p className="m-0 text-12 text-ink-muted">Bugün dâhil değil.</p>}
+      {!range.incomplete && <p className="m-0 text-12 text-ink-muted">{d.bugunDahilDegil}</p>}
     </SayfaIskeleti>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-function ymMetrikleri(summary: MetricsSummary, karsilastir: boolean): YmMetrik[] {
+function ymMetrikleri(summary: MetricsSummary, karsilastir: boolean, m: RY['metrik'], dil: Dil): YmMetrik[] {
   const prev = karsilastir ? summary.previous : null;
   const c = summary.currency;
   const harcama =
     c === null && summary.byCurrency.length > 1
-      ? summary.byCurrency.map((x) => formatMoney(x.spendMicros, x.currency, { compact: true })).join(' + ')
-      : formatMoney(summary.spendMicros, c);
+      ? summary.byCurrency.map((x) => formatMoney(x.spendMicros, x.currency, { compact: true, dil })).join(' + ')
+      : formatMoney(summary.spendMicros, c, { dil });
   return [
-    { ad: 'Harcama', deger: harcama, degisim: prev ? changePercentMicros(summary.spendMicros, prev.spendMicros) : null },
-    { ad: 'Dönüşüm', deger: formatNumber(summary.conversions), degisim: prev ? changePercent(summary.conversions, prev.conversions) : null },
+    { ad: m.harcama, deger: harcama, degisim: prev ? changePercentMicros(summary.spendMicros, prev.spendMicros) : null },
+    { ad: m.donusum, deger: formatNumber(summary.conversions, dil), degisim: prev ? changePercent(summary.conversions, prev.conversions) : null },
     {
-      ad: 'Dönüşüm başı maliyet',
-      deger: formatMoney(microsOf(summary.cpa), c),
+      ad: m.donusumBasiMaliyet,
+      deger: formatMoney(microsOf(summary.cpa), c, { dil }),
       degisim: summary.cpa === null || !prev ? null : changePercent(summary.cpa, prev.cpa),
       ters: true,
     },
-    { ad: 'Tıklama', deger: formatNumber(summary.clicks), degisim: prev ? changePercent(summary.clicks, prev.clicks) : null },
+    { ad: m.tiklama, deger: formatNumber(summary.clicks, dil), degisim: prev ? changePercent(summary.clicks, prev.clicks) : null },
   ];
 }
 
@@ -657,16 +671,10 @@ function duzeySekmeleri(v: {
   workspaceSecili: boolean;
   cokluWorkspace: boolean;
   tasinan: Record<string, string | undefined>;
+  d: RY;
 }): YmSekme[] {
   const sira: YmDuzey[] = ['sirket', 'workspace', 'hesap', 'campaign', 'ad_group', 'ad'];
-  const ad: Record<YmDuzey, string> = {
-    sirket: 'Şirketler',
-    workspace: 'Workspace’ler',
-    hesap: 'Hesaplar',
-    campaign: 'Kampanyalar',
-    ad_group: 'Reklam setleri',
-    ad: 'Reklamlar',
-  };
+  const ad: Record<YmDuzey, string> = v.d.sekme;
   // Her alt düzey hangi odağı düşürüyor: kırılım tablosundaki kuralın aynısı.
   const dusen: Record<'hesap' | 'campaign' | 'ad_group' | 'ad', Record<string, string | undefined>> = {
     hesap: { hesap: undefined, kampanya: undefined, reklamSeti: undefined },
@@ -682,12 +690,12 @@ function duzeySekmeleri(v: {
       if (aktif) return { anahtar: d, ad: ad[d], sayi, hedef: { tur: 'aktif' } };
       if (d === 'sirket') return { anahtar: d, ad: ad[d], sayi, hedef: { tur: 'org' } };
       if (d === 'workspace') {
-        if (v.duzey === 'sirket') return { anahtar: d, ad: ad[d], sayi, hedef: { tur: 'kapali', neden: 'Bu düzey için bir şirket seç' } };
-        if (!v.cokluWorkspace) return { anahtar: d, ad: ad[d], sayi, hedef: { tur: 'kapali', neden: 'Bu şirkette tek workspace var' } };
+        if (v.duzey === 'sirket') return { anahtar: d, ad: ad[d], sayi, hedef: { tur: 'kapali', neden: v.d.kapali.sirketSec } };
+        if (!v.cokluWorkspace) return { anahtar: d, ad: ad[d], sayi, hedef: { tur: 'kapali', neden: v.d.kapali.tekWorkspace } };
         return { anahtar: d, ad: ad[d], sayi, hedef: { tur: 'client' } };
       }
       if (!v.workspaceSecili) {
-        return { anahtar: d, ad: ad[d], sayi, hedef: { tur: 'kapali', neden: 'Bu düzey için bir workspace seç' } };
+        return { anahtar: d, ad: ad[d], sayi, hedef: { tur: 'kapali', neden: v.d.kapali.workspaceSec } };
       }
       return {
         anahtar: d,
@@ -702,21 +710,21 @@ function duzeySekmeleri(v: {
    * tek kitlesi tablo değil).
    */
   const kitle: YmSekme = v.kitleAktif
-    ? { anahtar: 'kitle', ad: 'Hedef kitleler', sayi: v.kitleSayisi, hedef: { tur: 'aktif' } }
+    ? { anahtar: 'kitle', ad: v.d.sekme.kitle, sayi: v.kitleSayisi, hedef: { tur: 'aktif' } }
     : !v.workspaceSecili
-      ? { anahtar: 'kitle', ad: 'Hedef kitleler', sayi: null, hedef: { tur: 'kapali', neden: 'Bu görünüm için bir workspace seç' } }
-      : { anahtar: 'kitle', ad: 'Hedef kitleler', sayi: null, hedef: { tur: 'link', href: baglanti(REKLAM_YONETICISI, v.tasinan, { seviye: 'kitle', reklamSeti: undefined }) } };
+      ? { anahtar: 'kitle', ad: v.d.sekme.kitle, sayi: null, hedef: { tur: 'kapali', neden: v.d.kapali.gorunumWorkspaceSec } }
+      : { anahtar: 'kitle', ad: v.d.sekme.kitle, sayi: null, hedef: { tur: 'link', href: baglanti(REKLAM_YONETICISI, v.tasinan, { seviye: 'kitle', reklamSeti: undefined }) } };
   return [...duzeyler, kitle];
 }
 
-function sirketSatiri(r: MetricsOrganizationRow): YmSatir {
+function sirketSatiri(r: MetricsOrganizationRow, m: RY['satir']): YmSatir {
   return {
     id: r.organizationId,
     ad: r.name,
     alt:
       r.clientCount === 0
-        ? 'workspace yok'
-        : `${r.clientCount} workspace · ${r.adAccountCount === 0 ? 'izlemede hesap yok' : `${r.adAccountCount} hesap izlemede`}`,
+        ? m.workspaceYok
+        : `${m.workspaceSayisi(r.clientCount)} · ${r.adAccountCount === 0 ? m.izlemedeHesapYok : m.hesapIzlemede(r.adAccountCount)}`,
     durum: null,
     karo: true,
     mecralar: r.byPlatform.map((p) => p.platform),
@@ -730,11 +738,11 @@ function sirketSatiri(r: MetricsOrganizationRow): YmSatir {
   };
 }
 
-function workspaceSatiri(r: MetricsClientRow): YmSatir {
+function workspaceSatiri(r: MetricsClientRow, m: RY['satir']): YmSatir {
   return {
     id: r.clientId,
     ad: r.name,
-    alt: r.adAccountCount === 0 ? 'izlemede hesap yok' : `${r.adAccountCount} hesap izlemede`,
+    alt: r.adAccountCount === 0 ? m.izlemedeHesapYok : m.hesapIzlemede(r.adAccountCount),
     durum: null,
     karo: true,
     mecralar: r.byPlatform.map((p) => p.platform),
@@ -748,13 +756,13 @@ function workspaceSatiri(r: MetricsClientRow): YmSatir {
   };
 }
 
-function hesapSatiri(a: MetricsAccountRow, tasinan: Record<string, string | undefined>): YmSatir {
+function hesapSatiri(a: MetricsAccountRow, tasinan: Record<string, string | undefined>, m: RY['satir']): YmSatir {
   return {
     id: a.adAccountId,
     ad: a.name,
-    alt: a.syncEnabled ? `${a.clientName} · ${a.externalId}` : `${a.externalId} · izlenmiyor`,
+    alt: a.syncEnabled ? `${a.clientName} · ${a.externalId}` : `${a.externalId} · ${m.izlenmiyorEki}`,
     altTon: a.syncEnabled ? undefined : 'uyari',
-    durum: a.syncEnabled ? { tur: 'yayinda', ad: 'İzleniyor' } : { tur: 'durdu', ad: 'İzlenmiyor' },
+    durum: a.syncEnabled ? { tur: 'yayinda', ad: m.izleniyor } : { tur: 'durdu', ad: m.izlenmiyor },
     karo: false,
     mecralar: [a.platform],
     spendMicros: a.spendMicros,
@@ -779,15 +787,6 @@ function hesapSatiri(a: MetricsAccountRow, tasinan: Record<string, string | unde
     eylemHedefi: null,
   };
 }
-
-const DURUM_ADI: Record<string, string> = {
-  active: 'Yayında',
-  paused: 'Duraklatıldı',
-  deleted: 'Silindi',
-  pending_review: 'İncelemede',
-  ended: 'Bitti',
-  unknown: 'Durumu bilinmiyor',
-};
 
 function varlikSatiri(
   b: MetricsBreakdownRow,

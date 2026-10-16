@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { PANEL_KAPILARI, ROLE_PERMISSIONS, STRATEJI_SAYFA_IZNI, kapiAcikMi, type Permission } from '@advetics/shared';
 import { MARKA_MERKEZI_IZNI, VARLIKLAR_IZNI } from './panel-adresleri';
-import { SECTIONS, visibleSections } from './nav-sections';
+import { SECTIONS, menuBolumuEtiketi, visibleSections } from './nav-sections';
 
 /**
  * MENÜ GÖRÜNÜRLÜĞÜ — arka uç guard'larıyla AYNI matristen.
@@ -527,5 +527,14 @@ describe('KRİTİK: "Okuma API" yalnızca platform sahibine — Hesabım’ın k
   it('eski adres herkesi Hesabım’a yönlendiriyor (kart yoksa varlık sızmıyor)', () => {
     const eski = readFileSync(join(__dirname, '..', 'app', '(dashboard)', 'ayarlar', 'okuma-api', 'page.tsx'), 'utf8');
     expect(eski).toContain("redirect(eskiAdresYonu('ayarlar/okuma-api'));");
+  });
+});
+
+describe('sayfa başlığının bölüm adı menüden (D3)', () => {
+  it('KRİTİK: bölüm adı satırın menüdeki bölümünden, iki dilde', () => {
+    // Elle yazılan "Yönet" satır başka bölüme taşınınca eski bölümü söylerdi.
+    expect(menuBolumuEtiketi('/ads-explorer', 'tr')).toBe('Yönet');
+    expect(menuBolumuEtiketi('/ads-explorer', 'en')).toBe('Manage');
+    expect(() => menuBolumuEtiketi('/yok', 'tr')).toThrow();
   });
 });

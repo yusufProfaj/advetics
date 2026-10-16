@@ -1,5 +1,6 @@
 import type { Platform, VarlikEylemSeviyesi } from '@advetics/shared';
-import { googleYazilamazMi } from '@advetics/shared';
+import { googleYazilamazMi, sec, type Dil } from '@advetics/shared';
+import { reklamYoneticisiSozlugu } from '@/dil/sozlukler/reklam-yoneticisi';
 
 /**
  * Reklam Yöneticisi satırındaki durdur/başlat hedefi. Sunucuda üretiliyor
@@ -17,13 +18,6 @@ export interface VarlikEylemHedefi {
 
 /** Hangi platformlar satır içinden yazılabiliyor (LinkedIn'de yazma yolu yok). */
 export const SATIR_ICI_YAZILABILIR: readonly Platform[] = ['meta', 'google'];
-
-/** Türkçe belirtme hâli düzeye göre değişiyor; ekle-çıkar yerine açık tablo. */
-const NESNE: Record<VarlikEylemSeviyesi, string> = {
-  campaign: 'Kampanyayı',
-  ad_group: 'Reklam setini',
-  ad: 'Reklamı',
-};
 
 /**
  * Satırın durumundan hedef. `null` = düğme yok. Saf: kural burada sınanıyor,
@@ -51,30 +45,28 @@ export function eylemHedefiCoz(v: {
  * altındaki her şeyi durdurur: bunu söylemek, "tek reklamı durdurdum"
  * sanılıp bütün setin kapanmasını önler.
  */
-export function varlikEylemMetni(h: VarlikEylemHedefi): {
+export function varlikEylemMetni(h: VarlikEylemHedefi, dil: Dil = 'tr'): {
   baslik: string;
   aciklama: string;
   once: string;
   sonra: string;
 } {
-  const nesne = NESNE[h.seviye];
-  const kapsam =
-    h.seviye === 'campaign'
-      ? ' Kampanyanın altındaki bütün reklam setleri ve reklamlar da yayın yapmaz.'
-      : h.seviye === 'ad_group'
-        ? ' Setin altındaki bütün reklamlar da yayın yapmaz.'
-        : ' Reklam seti ve kampanya çalışmaya devam eder.';
+  // Türkçe belirtme hâli düzeye göre değişiyor ("Kampanyayı", "Reklam setini"):
+  // ekle-çıkar yerine sözlükte açık tablo.
+  const e = sec(reklamYoneticisiSozlugu, dil).eylem;
+  const nesne = e.nesne[h.seviye];
+  const kapsam = e.kapsam[h.seviye];
   return h.yayinda
     ? {
-        baslik: `${nesne} durdur: onay`,
-        aciklama: `"${h.ad}" duraklatılacak.${kapsam} İstediğin zaman buradan yeniden başlatabilirsin.`,
-        once: 'Yayında',
-        sonra: 'Duraklatıldı',
+        baslik: e.durdurBaslik(nesne),
+        aciklama: e.durdurAciklama(h.ad, kapsam),
+        once: e.yayinda,
+        sonra: e.duraklatildi,
       }
     : {
-        baslik: `${nesne} başlat: onay`,
-        aciklama: `"${h.ad}" yeniden yayına alınacak ve harcama başlayacak.`,
-        once: 'Duraklatıldı',
-        sonra: 'Yayında',
+        baslik: e.baslatBaslik(nesne),
+        aciklama: e.baslatAciklama(h.ad),
+        once: e.duraklatildi,
+        sonra: e.yayinda,
       };
 }

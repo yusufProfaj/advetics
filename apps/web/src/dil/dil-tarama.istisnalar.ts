@@ -19,8 +19,6 @@
 export type MetinTuru = 'turkce' | 'jsx';
 
 export const ISTISNALAR: Record<string, Partial<Record<MetinTuru, number>>> = {
-  'app/(dashboard)/ads-explorer/galeri/page.tsx': { turkce: 32, jsx: 4 },
-  'app/(dashboard)/ads-explorer/page.tsx': { turkce: 34, jsx: 4 },
   'app/(dashboard)/auto-boost/page.tsx': { turkce: 22, jsx: 10 },
   'app/(dashboard)/butce/page.tsx': { turkce: 7, jsx: 1 },
   'app/(dashboard)/error.tsx': { turkce: 1 },
@@ -36,9 +34,7 @@ export const ISTISNALAR: Record<string, Partial<Record<MetinTuru, number>>> = {
   'app/opengraph-image.tsx': { jsx: 4 },
   'app/r/[token]/page.tsx': { turkce: 4 },
   'app/strateji-onay/[token]/page.tsx': { turkce: 2 },
-  'components/ad-card.tsx': { turkce: 9, jsx: 2 },
   'components/advetics-logo.tsx': { turkce: 1, jsx: 3 },
-  'components/arama-reklami-onizleme.tsx': { turkce: 4, jsx: 2 },
   'components/assets/asset-library.tsx': { turkce: 14, jsx: 4 },
   'components/autoboost/bildirim-havuzu.tsx': { turkce: 66, jsx: 17 },
   'components/autoboost/boost-on-ayari.tsx': { turkce: 3 },
@@ -71,7 +67,6 @@ export const ISTISNALAR: Record<string, Partial<Record<MetinTuru, number>>> = {
   'components/iyilestir/oneriler-sekmesi.tsx': { turkce: 17 },
   'components/iyilestir/sinyal-pencereleri.tsx': { turkce: 13, jsx: 9 },
   'components/iyilestir/sinyaller-sekmesi.tsx': { turkce: 34, jsx: 10 },
-  'components/kreatif-gorsel.tsx': { turkce: 4 },
   'components/kurulum/baslangic.tsx': { turkce: 38, jsx: 2 },
   'components/kurulum/kurulum-akisi.ts': { turkce: 2 },
   'components/kurulum/kurulum-sihirbazi.tsx': { turkce: 42, jsx: 7 },
@@ -128,7 +123,6 @@ export const ISTISNALAR: Record<string, Partial<Record<MetinTuru, number>>> = {
   'components/rehber/rehber-mantik.ts': { turkce: 87, jsx: 2 },
   'components/rehber/set-kartlari.tsx': { turkce: 18, jsx: 12 },
   'components/rehber/stratejiden-kutusu.tsx': { turkce: 5, jsx: 4 },
-  'components/reklam-onizleme.tsx': { turkce: 2, jsx: 1 },
   'components/report/conversion-chart.tsx': { turkce: 2, jsx: 1 },
   'components/report/faturalar.tsx': { turkce: 24, jsx: 11 },
   'components/report/haftalik-ozet-baglantisi.tsx': { turkce: 2, jsx: 2 },
@@ -171,8 +165,6 @@ export const ISTISNALAR: Record<string, Partial<Record<MetinTuru, number>>> = {
   'components/strateji/v2/ortak.tsx': { jsx: 1 },
   'components/strateji/v2/rapor-ekrani.tsx': { turkce: 8, jsx: 7 },
   'components/strateji/v2/sihirbaz.tsx': { turkce: 21, jsx: 2 },
-  'components/taslak/reklam-yoneticisi-tablosu.tsx': { turkce: 46, jsx: 8 },
-  'components/taslak/varlik-eylem-penceresi.tsx': { turkce: 8, jsx: 4 },
   'components/tenancy/danisman-atama.ts': { jsx: 1 },
   'components/tenancy/rol-matrisi.tsx': { jsx: 1 },
   'components/tenancy/team-manager.tsx': { jsx: 1 },
@@ -190,14 +182,12 @@ export const ISTISNALAR: Record<string, Partial<Record<MetinTuru, number>>> = {
   'lib/kurulum-beyanlari.ts': { turkce: 2, jsx: 1 },
   'lib/lead-bekleme.ts': { turkce: 3 },
   'lib/nav-sections.ts': { turkce: 11 },
-  'lib/reklam-etiketleri.ts': { turkce: 12 },
   'lib/reklam-girisi.ts': { turkce: 19 },
   'lib/sayfa-workspace.ts': { turkce: 1 },
   'lib/sayfa-yardimcilari.ts': { turkce: 1 },
   'lib/sinyal.ts': { turkce: 56 },
   'lib/terimler.ts': { turkce: 21 },
-  'lib/varlik-eylemi.ts': { turkce: 12 },
-  'lib/veri-kaynagi.ts': { turkce: 10 },
+  'lib/veri-kaynagi.ts': { turkce: 6 },
 };
 
 /**

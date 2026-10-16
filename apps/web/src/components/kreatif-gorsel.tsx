@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { API_URL } from '@/lib/api';
+import { useSozluk } from '@/dil/saglayici';
+import { reklamYoneticisiSozlugu } from '@/dil/sozlukler/reklam-yoneticisi';
 
 /**
  * KREATİF GÖRSELİ — YÜKLENMEZSE TAZELE, O DA OLMAZSA SEBEBİNİ YAZ.
@@ -37,6 +39,7 @@ export type TazeGorselHali = { tur: 'adres'; src: string } | { tur: 'tazeleniyor
  */
 export function useTazeGorsel(src: string | null, yedekYol: string | undefined, bosMetin: string) {
   const baslangic = (): TazeGorselHali => (src ? { tur: 'adres', src } : yedekYol ? { tur: 'tazeleniyor' } : { tur: 'hata', mesaj: bosMetin });
+  const g = useSozluk(reklamYoneticisiSozlugu).gorsel;
   const [hal, setHal] = useState<TazeGorselHali>(baslangic);
   // Her yeni kaynakta artar; geç gelen eski yanıt yeni kartın üstüne yazılmasın.
   const nesil = useRef(0);
@@ -67,7 +70,7 @@ export function useTazeGorsel(src: string | null, yedekYol: string | undefined, 
     try {
       const r = await fetch(`${API_URL}${yol}`, { credentials: 'include' });
       if (!r.ok) {
-        let mesaj = `Görsel alınamadı (HTTP ${r.status})`;
+        let mesaj = g.http(r.status);
         try {
           const g = (await r.json()) as { message?: string };
           if (g?.message) mesaj = g.message;
@@ -79,13 +82,13 @@ export function useTazeGorsel(src: string | null, yedekYol: string | undefined, 
       }
       yaz({ tur: 'blob', src: URL.createObjectURL(await r.blob()) });
     } catch {
-      yaz({ tur: 'hata', mesaj: 'Görsel alınamadı: sunucuya ulaşılamadı' });
+      yaz({ tur: 'hata', mesaj: g.sunucuYok });
     }
   }
 
   function dustu() {
     if (hal.tur === 'adres' && yedekYol) void tazele(yedekYol);
-    else setHal({ tur: 'hata', mesaj: hal.tur === 'blob' ? 'Görsel alınamadı: dosya çizilemedi' : bosMetin });
+    else setHal({ tur: 'hata', mesaj: hal.tur === 'blob' ? g.cizilemedi : bosMetin });
   }
 
   return { hal, dustu };
@@ -105,12 +108,13 @@ export function KreatifGorsel({
   /** Kullanım anında tazeleyen API yolu (`/ads/:id/gorsel`); saklanan adres düşerse bir kez denenir. */
   yedekYol?: string;
 }) {
+  const g = useSozluk(reklamYoneticisiSozlugu).gorsel;
   const { hal, dustu } = useTazeGorsel(src, yedekYol, bosMetin);
 
   if (hal.tur === 'hata' || hal.tur === 'tazeleniyor') {
     return (
       <div className="flex h-full items-center justify-center px-2 text-center text-[11px] text-ink-muted" aria-busy={hal.tur === 'tazeleniyor'}>
-        {hal.tur === 'hata' ? hal.mesaj : 'Görsel yenileniyor'}
+        {hal.tur === 'hata' ? hal.mesaj : g.yenileniyor}
       </div>
     );
   }
