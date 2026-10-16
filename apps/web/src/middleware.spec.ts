@@ -181,6 +181,38 @@ describe('middleware — /en öneki (Ç2)', () => {
     expect(res.cookies.get('adv_dil')).toBeUndefined();
   });
 
+  /*
+   * CANLIDA ÖLÇÜLEN DÖNGÜ (2026-10-16): sunucu 127.0.0.1'de, `nextUrl`
+   * localhost diyor; yeniden yazım dış adres sayılıp Next kendine vekil
+   * istek atıyor ve istek middleware'den İKİNCİ KEZ geçiyor (Host =
+   * `localhost:3598`). `curl -H 'Cookie: adv_dil=en' advetics.com/en` →
+   * 307 → `/en` sonsuz; çerezsiz `/en` ise Türkçe çiziliyordu.
+   */
+  it('KRİTİK: Next\'in vekil isteği (ikinci geçiş) en çereziyle /en\'e GERİ YÖNLENMEZ ve İngilizce çizilir', () => {
+    const ilk = middleware(request('/en/privacy', { cookie: 'adv_dil=en' }));
+    expect(ilk.headers.get('x-middleware-request-x-advetics-onek')).toBe('en');
+    // Next'in vekil isteği: ilk geçişin yazdığı başlıkla, hedefin Host'uyla.
+    const vekil = request('/gizlilik', { cookie: 'adv_dil=en', host: 'localhost:3598' });
+    vekil.headers.set('x-advetics-onek', 'en');
+    const res = middleware(vekil);
+    expect(redirectPath(res)).toBeNull();
+    expect(res.headers.get('x-middleware-request-x-advetics-onek')).toBe('en');
+  });
+
+  it('vekil Host\'u tek başına yetmez: önek başlığı yoksa en çerezi yine yönlendirir', () => {
+    const res = middleware(request('/gizlilik', { cookie: 'adv_dil=en', host: 'localhost:3598' }));
+    expect(redirectPath(res)).toBe('/en/privacy');
+    expect(res.headers.get('x-middleware-request-x-advetics-onek')).toBeNull();
+  });
+
+  it('KRİTİK: kök alan adından gelen sahte önek başlığına yine güvenilmez', () => {
+    const req = request('/gizlilik', { cookie: 'adv_dil=en' });
+    req.headers.set('x-advetics-onek', 'en');
+    const res = middleware(req);
+    expect(redirectPath(res)).toBe('/en/privacy');
+    expect(res.headers.get('x-middleware-request-x-advetics-onek')).toBeNull();
+  });
+
   it('eşlemesi olmayan /en adresi Türkçe sayfaya düşmez (404 kalır)', () => {
     const res = middleware(request('/en/dashboard'));
     expect(res.headers.get('x-middleware-rewrite')).toBeNull();

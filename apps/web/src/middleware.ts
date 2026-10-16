@@ -182,8 +182,32 @@ export function middleware(req: NextRequest): NextResponse {
    * olmayan (arama motoru, OAuth doğrulayıcısı) Türkçe sayfayı görür;
    * öneksiz adres çerez YAZMAZ, yoksa ilk ziyaret sorusu hiç çıkmazdı (Ç1).
    */
+  /*
+   * ═══ NEXT'İN KENDİ VEKİL İSTEĞİ: İKİNCİ GEÇİŞ (canlı, 2026-10-16) ═══
+   *
+   * Sunucu `--hostname 127.0.0.1` ile kalkıyor; Next'in iç adresi
+   * `http://127.0.0.1:3598`. Ama `req.nextUrl` döngü adreslerini
+   * `localhost`a çeviriyor, yani `/en` yeniden yazımının hedefi
+   * `http://localhost:3598/...` oluyor ve köken tutmadığı için Next onu
+   * DIŞ ADRES sayıp kendine HTTP ile vekil istek atıyor
+   * (`resolve-routes.js`, `getRelativeURL`). O istek middleware'den İKİNCİ
+   * KEZ geçiyordu: önek başlığı "istemci gönderdi" diye siliniyor, `en`
+   * çerezi Türkçe adresi `/en`e geri yönlendiriyordu. Sonuç: `/en` ilk
+   * ziyarette Türkçe çiziliyor, çerez yazıldıktan sonra ERR_TOO_MANY_REDIRECTS.
+   * Yerelde görünmüyordu (geliştirme sunucusunun iç adresi zaten localhost).
+   *
+   * Vekil isteğin Host'u hedefin kendisi (`changeOrigin`): döngü adresi ve
+   * kök alan adı DEĞİL. Nginx'ten gelen gerçek istekte Host `advetics.com`.
+   * Yalnız o durumda önek başlığına güveniliyor; sahtesinin en kötü sonucu
+   * Türkçe adresin İngilizce çizilmesi. Sunucunun `--hostname`ını
+   * `localhost` yapmak kökü kapatırdı ama VPS'te `::1`e bağlanıp nginx'i
+   * koparabilir: o yüzden burada.
+   */
+  const vekilIstek = host !== ROOT_DOMAIN && /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(host);
+  const vekilOnek = vekilIstek && req.headers.get(ONEK_BASLIGI) === 'en';
   const istekBasliklari = new Headers(req.headers);
   istekBasliklari.delete(ONEK_BASLIGI);
+  if (vekilOnek) istekBasliklari.set(ONEK_BASLIGI, 'en');
   if (enOnekliMi(pathname)) {
     const tr = turkceYolu(pathname);
     if (tr === null) return NextResponse.next({ request: { headers: istekBasliklari } });
@@ -197,7 +221,7 @@ export function middleware(req: NextRequest): NextResponse {
   }
   const enKarsiligi = ingilizceYolu(pathname);
   if (enKarsiligi !== null) {
-    if (req.cookies.get(DIL_CEREZI_EDGE)?.value === 'en') {
+    if (!vekilOnek && req.cookies.get(DIL_CEREZI_EDGE)?.value === 'en') {
       return NextResponse.redirect(new URL(enKarsiligi + req.nextUrl.search, origin));
     }
     const devam = NextResponse.next({ request: { headers: istekBasliklari } });

@@ -110,3 +110,20 @@
   testler çalışma anında `to.join is not a function` ile düştü — sebep testin
   kendisinde sanılıyor. Mock'un dönüş tipini imzadan TÜRET
   (`Awaited<ReturnType<X['metot']>>`); alan eklenince derleme kırılsın.
+
+## Middleware yeniden yazımı canlıda "dış adres" sayılıyor (2026-10-16)
+
+Sunucu `next start --hostname 127.0.0.1` ile kalkıyor; Next'in iç adresi
+`http://127.0.0.1:3598`. `req.nextUrl` ise döngü adreslerini `localhost`a
+çeviriyor (`NextURL`, `REGEX_LOCALHOST_HOSTNAME`). `NextResponse.rewrite(req.nextUrl.clone())`
+hedefinin kökeni bu yüzden iç adresle TUTMUYOR, Next onu dış adres sayıp
+kendine HTTP vekil isteği atıyor (`resolve-routes.js` → `getRelativeURL`)
+ve istek middleware'den İKİNCİ KEZ geçiyor (Host = `localhost:3598`). `/en`
+D1'den beri canlıda ilk ziyarette Türkçe çiziliyor, `en` çerezinden sonra
+`ERR_TOO_MANY_REDIRECTS` veriyordu; yerelde (`next dev`, iç adres zaten
+localhost) hiç görünmedi. Çözüm middleware'de ikinci geçişi tanımak
+(`vekilIstek`). Yeniden yazım ya da istek başlığı ekleyen her middleware
+değişikliği canlı benzeri koşulla denenir:
+`NEXT_PUBLIC_ROOT_DOMAIN=advetics.com NEXT_DIST_DIR=.next-yerel next build`,
+`next start --port 3598 --hostname 127.0.0.1`, `curl -H 'Host: advetics.com' -H 'Cookie: ...'`
+(derleme `tsconfig.json`/`next-env.d.ts`'e dokunuyor, geri al).

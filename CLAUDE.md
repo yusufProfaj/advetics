@@ -33,6 +33,7 @@ canlıda masaüstü + mobil görülmeden bitmiş sayılmaz (§3 "Tasarım").
 - CSS modülündeki eleman sıfırlaması (`:where(.kok a)`) `@layer base` içinde olmalı: katmansız kural, özgüllüğü sıfır olsa bile bütün Tailwind sınıflarını eziyor (koyu düğme siyah üstüne siyah çıktı; `css-modul-katmani.spec.ts`).
 - Bir bağlantının BÜTÜN satırlarına karar veren yazma (`disconnect`) `withTenant` altında koşamaz: RLS başka şirkete ödünç verilmiş hesapları gizler ve UPDATE sessizce yarım kalır (2026-10-15: 56 hesabın 1'i kapandı); kapı servis kararında, yazma yönetim istemcisiyle ve RETURNING ile sayılır (`baglanti-kaldirma-rls.spec.ts`).
 - PDF'in BAYT boyutunu testte karşılaştırma: aynı içerik CI'da 2 bayt farklı çıktı (43014/43016) ve ilgisiz push kırmızı oldu; "sayfa açılmadı" iddiası sayfa sayısıyla (`PDFDocument.load(...).getPageCount()`).
+- Middleware'in `rewrite`ı canlıda Next'in kendine vekil isteğine dönüyor (sunucu 127.0.0.1, `nextUrl` localhost) ve middleware İKİ KEZ koşuyor: `/en` döngüsü yerelde görünmedi. Yeniden yazımı `next start --hostname 127.0.0.1` ile dene (`panel-derleme.md`).
 - Worktree'nin `node_modules`ı bayat olabiliyor (`tsc` her modülü "bulunamadı" diye düşürür): `COREPACK_ENABLE_NETWORK=0 corepack pnpm install --offline --frozen-lockfile` ağa çıkmadan kuruyor.
 - `npx prisma format` şema dosyasının TAMAMINI yeniden hizalıyor (bir kolon eklemek 270 satırlık fark üretti); kolonu elle ekle, format koşma.
 
