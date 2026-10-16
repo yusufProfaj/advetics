@@ -14,6 +14,8 @@ import {
   type StratejiSihirbazGirdileri,
 } from '@advetics/shared';
 import { apiFetch } from '@/lib/api';
+import { useSozluk } from '@/dil/saglayici';
+import { stratejiSozlugu } from '@/dil/sozlukler/strateji';
 import { Dugme } from '@/components/ui/dugme';
 import { Kart } from '@/components/ui/kart';
 import { Soru } from '@/components/ui/sihirbaz';
@@ -46,6 +48,7 @@ export function AdimHedef({
   degistir: (a: RehberAmacKodu[]) => void;
   clientId: string;
 }) {
+  const ds = useSozluk(stratejiSozlugu);
   const kapaliVar = girdiler.amaclar.some((a) => !a.acik);
   return (
     <>
@@ -97,7 +100,7 @@ export function AdimHedef({
       )}
       {girdiler.okumaHatalari.length > 0 && (
         <div className="mt-4">
-          <Bildirim baslik="Bazı bilgiler okunamadı; o hedefler kapatılmadı.">
+          <Bildirim baslik={ds.hedefNotlari}>
             {girdiler.okumaHatalari.join(' ')}
           </Bildirim>
         </div>
@@ -115,6 +118,7 @@ export function AdimButce({
   metin,
   setMetin,
   durum,
+  paraSecimi,
 }: {
   girdiler: StratejiSihirbazGirdileri;
   sure: number;
@@ -122,7 +126,10 @@ export function AdimButce({
   metin: string;
   setMetin: (m: string) => void;
   durum: ButceDurumu;
+  /** Sunucu birimi çözemediyse seçim; çözdüyse `null` (seçici çıkmaz). */
+  paraSecimi: { secili: string | null; sec: (p: string) => void } | null;
 }) {
+  const ds = useSozluk(stratejiSozlugu);
   const para = girdiler.paraBirimi;
   const micros = durum.tutar.tur === 'tamam' ? durum.tutar.micros : null;
   const aralik = kaydiriciAraligi(micros);
@@ -218,11 +225,25 @@ export function AdimButce({
           ))}
           {durum.kontrol && yetmeyen.length === 0 && bilinmeyen.length === 0 && <p className="m-0 mt-3 text-[13px] text-ink-muted">Her hedef, açık platformlarından en az birinin günlük alt sınırının üstünde.</p>}
         </Kart>
-        {girdiler.paraBirimiHatasi && (
-          <div className="mt-4">
-            <Bildirim hata baslik="Para birimi çözülemedi; strateji açılamaz.">
+        {paraSecimi && (
+          <div className="mt-4 grid gap-2">
+            <Bildirim hata={!paraSecimi.secili} baslik={paraSecimi.secili ? ds.paraBirimiSecildi(paraSecimi.secili) : ds.paraBirimiSec}>
               {girdiler.paraBirimiHatasi}
             </Bildirim>
+            <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={ds.paraBirimiEtiketi}>
+              {girdiler.paraBirimiSecenekleri.map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  role="radio"
+                  aria-checked={paraSecimi.secili === p}
+                  onClick={() => paraSecimi.sec(p)}
+                  className={`rounded-full border px-4 py-2 text-sm font-semibold motion-safe:transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${paraSecimi.secili === p ? 'border-ink bg-ink text-surface' : 'border-line bg-surface text-ink hover:border-ink/30'}`}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
           </div>
         )}
         {durum.planYenidenKurulur && (

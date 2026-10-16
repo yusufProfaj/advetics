@@ -117,7 +117,11 @@ describe('sekmeli düzenleyici KALKTI; akış taslaktaki gibi (simulasyon.html)'
   });
   it('KRİTİK: bütçe adımı asgarinin altında ilerletmiyor (karar `butceDurumu` → sözleşmenin `sihirbazButceKontrolu`)', () => {
     const s = kod('sihirbaz.tsx');
-    expect(s).toMatch(/case 'butce': \{\s*const ok = !!butce && butce\.ilerler && !g\?\.paraBirimiHatasi;/);
+    expect(s).toMatch(/case 'butce': \{\s*const paraEksik = paraCozulmedi && !paraSecimi;\s*const ok = !!butce && butce\.ilerler && !paraEksik;/);
+    // Para birimi çözülemezse seçici var ve seçim plan açılışında gidiyor
+    // (eskiden "Para birimini seçin" yazıp seçici göstermiyordu, 2026-10-16).
+    expect(s).toContain('...(paraCozulmedi && paraSecimi ? { paraBirimi: paraSecimi } : {})');
+    expect(kod('adimlar-soru.tsx')).toMatch(/girdiler\.paraBirimiSecenekleri\.map\(\(p\) => \(/);
     expect(kod('akis.ts')).toContain('sihirbazButceKontrolu({ amaclar: o.amaclar');
     const b = kod('adimlar-soru.tsx');
     expect(b).toMatch(/yetmeyen\.map\(\(s\) => \(\s*<p key=\{s\.amac\}[^>]*role="alert">\s*\{s\.cumle\}/);

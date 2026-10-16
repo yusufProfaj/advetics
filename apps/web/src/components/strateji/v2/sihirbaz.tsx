@@ -27,6 +27,8 @@ import { butceDurumu, gecerliAdim, oncekiAdim, rayParcalari } from './akis';
 import { AdimGonder } from './adim-gonder';
 import { AdimInceleme } from './adim-inceleme';
 import { AdimPlan, type PlanAdimiTutamagi } from './adim-plan';
+import { useSozluk } from '@/dil/saglayici';
+import { stratejiSozlugu } from '@/dil/sozlukler/strateji';
 import { AdimBolge, AdimButce, AdimHedef, AdimKime } from './adimlar-soru';
 import { aySayisi } from './hesap';
 import { Bildirim, yaz } from './ortak';
@@ -66,7 +68,18 @@ export function StratejiSihirbazi({
   izinler: readonly Permission[];
 }) {
   const router = useRouter();
-  const g = girdiler?.tur === 'veri' ? girdiler.v : null;
+  const ds = useSozluk(stratejiSozlugu);
+  const g0 = girdiler?.tur === 'veri' ? girdiler.v : null;
+  /*
+   * PARA BİRİMİ SEÇİMİ. Workspace'in hesabı yoksa ya da hesaplar farklı
+   * birimdeyse sunucu birimi çözemiyor; kullanıcı seçiyor ve seçim plan
+   * oluşturma isteğinde (`paraBirimi`) gidiyor. Bütçe hesabı ve gösterim
+   * SEÇİLEN birimle yapılıyor: `g` bu yüzden girdilerin seçimle güncellenmiş
+   * hâli, ekranın geri kalanı farkı bilmiyor.
+   */
+  const [paraSecimi, setParaSecimi] = useState<string | null>(null);
+  const paraCozulmedi = !!g0?.paraBirimiHatasi && !ilkDetay;
+  const g = g0 && paraCozulmedi && paraSecimi ? { ...g0, paraBirimi: paraSecimi } : g0;
   const [detay, setDetay] = useState<StratejiDetayi | null>(ilkDetay);
   const s0 = ilkDetay?.sihirbaz ?? null;
   const [adim, setAdim] = useState<StratejiOlusturmaAdimi>(() => gecerliAdim(ilkAdim, s0?.adim ?? (ilkDetay ? 'plan' : null), !!ilkDetay));
@@ -160,7 +173,7 @@ export function StratejiSihirbazi({
       try {
         const yeni = await apiFetch<StratejiDetayi>(stratejiUcYolu('/strateji/v2/planlar'), {
           method: 'POST',
-          body: JSON.stringify({ clientId, baslangicAyi, sureAy: sure, toplamButce: butceMetni, sihirbaz: { ...durum(sonraki ?? 'butce'), incelenen: null, notlar: [] } }),
+          body: JSON.stringify({ clientId, baslangicAyi, sureAy: sure, toplamButce: butceMetni, ...(paraCozulmedi && paraSecimi ? { paraBirimi: paraSecimi } : {}), sihirbaz: { ...durum(sonraki ?? 'butce'), incelenen: null, notlar: [] } }),
         });
         setDetay(yeni);
         setKayit({ tur: 'bos' });
@@ -221,11 +234,12 @@ export function StratejiSihirbazi({
       devam = { etiket: 'Devam', kapali: amaclar.length === 0, not: amaclar.length ? `${amaclar.length} hedef seçildi` : 'En az bir hedef seç', onClick: () => (detay ? void kaydet('butce') : git('butce', null)) };
       break;
     case 'butce': {
-      const ok = !!butce && butce.ilerler && !g?.paraBirimiHatasi;
+      const paraEksik = paraCozulmedi && !paraSecimi;
+      const ok = !!butce && butce.ilerler && !paraEksik;
       devam = {
         etiket: 'Devam',
         kapali: !ok,
-        not: !butce || butce.tutar.tur !== 'tamam' ? 'Toplam bütçeyi yaz' : !butce.ilerler ? 'Bütçe bir hedefin alt sınırına yetmiyor' : '',
+        not: paraEksik ? ds.devamParaBirimi : !butce || butce.tutar.tur !== 'tamam' ? 'Toplam bütçeyi yaz' : !butce.ilerler ? 'Bütçe bir hedefin alt sınırına yetmiyor' : '',
         onClick: () => void kaydet('bolge'),
       };
       break;
@@ -275,7 +289,7 @@ export function StratejiSihirbazi({
 
       <div key={adim} className="bolum-gecis mt-7">
         {adim === 'hedef' && g && <AdimHedef girdiler={g} secili={amaclar} degistir={setAmaclar} clientId={clientId} />}
-        {adim === 'butce' && g && butce && <AdimButce girdiler={g} sure={sure} setSure={setSure} metin={butceMetni} setMetin={setButceMetni} durum={butce} />}
+        {adim === 'butce' && g && butce && <AdimButce girdiler={g} sure={sure} setSure={setSure} metin={butceMetni} setMetin={setButceMetni} durum={butce} paraSecimi={paraCozulmedi ? { secili: paraSecimi, sec: setParaSecimi } : null} />}
         {adim === 'bolge' && g && <AdimBolge girdiler={g} konumlar={konumlar} degistir={setKonumlar} />}
         {adim === 'kime' && planId && <AdimKime planId={planId} kitle={kitle} degistir={setKitle} />}
         {adim === 'inceleme' && detay && <AdimInceleme detay={detay} durum={durum('inceleme')} guncelle={setDetay} tazeSurum={tazeSurum} bittiBildir={setIncelemeBitti} />}

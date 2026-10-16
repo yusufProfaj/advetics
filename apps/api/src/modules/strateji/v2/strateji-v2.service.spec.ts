@@ -38,6 +38,7 @@ let onay: OnayBaglantisiService;
 const gonder = vi.fn();
 const audit = { record: vi.fn(), recordUnauthenticated: vi.fn() };
 let olcumYaniti: unknown = null;
+let hazirlikYaniti: unknown = null;
 const SIMDI = new Date('2026-10-20T09:00:00Z');
 const VARLIK = '88888888-0000-4000-8000-000000000001';
 
@@ -90,13 +91,13 @@ beforeAll(async () => {
   onay = new OnayBaglantisiService(prisma, admin, audit as unknown as AuditService);
   onay.simdi = () => SIMDI;
   const rehber = {
-    hazirlik: async () => HAZIRLIK,
+    hazirlik: async () => hazirlikYaniti ?? HAZIRLIK,
     metinOnerAlanlardan: vi.fn(async () => ({ anaMetin: 'Deniz manzaralı 2+1 daireler', basliklar: ['Gaziemir’de yeni konut'], aciklamalar: [], notlar: [] })),
   } as unknown as RehberService;
   svc = new StratejiV2Service(
     prisma,
     rehber,
-    { rehberOku: async () => HAZIRLIK } as unknown as ReklamHazirlikService,
+    { rehberOku: async () => hazirlikYaniti ?? HAZIRLIK } as unknown as ReklamHazirlikService,
     { durum: async () => olcumYaniti } as unknown as OlcumService,
     { ozetGonder: gonder } as unknown as RaporGonderService,
     audit as unknown as AuditService,
@@ -112,6 +113,7 @@ beforeEach(async () => {
   vi.clearAllMocks();
   gonder.mockResolvedValue({ to: ['musteri@ornek.com'], reddedilen: [] });
   olcumYaniti = null;
+  hazirlikYaniti = null;
   await h.reset();
   await seedTenant(h);
   await h.q(
@@ -679,6 +681,32 @@ describe('adım adım akış (sihirbaz)', () => {
     expect(g.ajansYoneticisi).toBe(false);
     const OTEKI = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbc';
     await expect(svc.sihirbazGirdileri(AJANS, OTEKI)).rejects.toThrow(/erişimin yok/);
+  });
+
+  it('KRİTİK: hesabı olmayan workspace — hedefler açık, para birimi seçilir, plan seçilen birimle açılır', async () => {
+    // Eren Altay (2026-10-16): hesap atanmamış workspace'te bütün hedefler
+    // "hesap atanmadı" ile kapalıydı ve ekran "Para birimini seçin" diyordu
+    // ama seçici yoktu; strateji hiç açılamıyordu.
+    hazirlikYaniti = { ...HAZIRLIK, hesaplar: [], googleHesaplari: [], asgariGunluk: { meta: null, googleTalepYaratma: null } };
+    await h.q(`DELETE FROM ad_accounts WHERE client_id = $1`, [IDS.client]);
+    const g = await svc.sihirbazGirdileri(AJANS, IDS.client);
+    expect(g.paraBirimiHatasi).toMatch(/hesabı yok/);
+    expect(g.paraBirimiSecenekleri).toContain('TRY');
+    expect(g.paraBirimiSecenekleri).toContain('USD');
+    const site = g.amaclar.find((a) => a.amac === 'SITE')!;
+    expect(site.acik).toBe(true);
+    expect(site.platformlar).toEqual(['meta', 'google']);
+    expect(g.okumaHatalari.join(' ')).toMatch(/hesap atanınca kurulur/);
+    // Birim verilmeden açılış hâlâ nedenini söyleyerek reddediliyor; verilince açılıyor.
+    await expect(planAc()).rejects.toThrow(/Para birimini seçin/);
+    const d = await svc.olustur(AJANS, { clientId: IDS.client, baslangicAyi: '2026-11', sureAy: 1, toplamButce: '5.000', paraBirimi: 'USD' });
+    expect(d.plan.paraBirimi).toBe('USD');
+  });
+
+  it('bir platformun hesabı varsa öbürü kapalı kalır (eksik hesap tercih sayılır)', async () => {
+    const g = await svc.sihirbazGirdileri(AJANS, IDS.client);
+    expect(g.amaclar.find((a) => a.amac === 'SITE')!.platformlar).toEqual(['meta']);
+    expect(g.okumaHatalari.join(' ')).not.toMatch(/hesap atanınca kurulur/);
   });
 
   it('inceleme satırları gerçek okumadan; Google Arama hedefi kelimesizse uyarı', async () => {

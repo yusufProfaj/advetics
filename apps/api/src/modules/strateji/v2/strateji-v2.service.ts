@@ -113,7 +113,7 @@ import {
   videoVarMi,
   ANA_AMAC_REHBER,
 } from './girdiler';
-import { amacOlcumTuru, amacPlatformlari, gunlukAsgari, secimliMotor, stratejiMotoru, type OnerilenKalem } from './motor';
+import { amacOlcumTuru, amacPlatformlari, gunlukAsgari, stratejiHesapKapisi, secimliMotor, stratejiMotoru, type OnerilenKalem } from './motor';
 import { kitleTarifiUret, stratejiMetinleri, type OneriBolumMetni, type StratejiAiGirdisi } from './strateji-ai';
 import { stratejiDosyaAdi, stratejiPdf } from './strateji-pdf';
 import {
@@ -413,7 +413,8 @@ export class StratejiV2Service {
     const [olcum, hazirlik] = await Promise.all([this.olcumOku(ctx, p.client_id), this.hazirlikOku(ctx, p.client_id, true)]);
     const harita = olcumHaritasi(olcum).harita;
     const anaAmac = g.marka?.ana_amac ? (ANA_AMAC_REHBER[g.marka.ana_amac] ?? null) : null;
-    const hesap = { meta: hazirlik.hesaplar.length > 0, google: hazirlik.googleHesaplari.length > 0 };
+    const hesapKapisi = stratejiHesapKapisi({ meta: hazirlik.hesaplar.length > 0, google: hazirlik.googleHesaplari.length > 0 });
+    const hesap = hesapKapisi.hesap;
     const asgari = {
       meta: hazirlik.asgariGunluk.meta === null ? null : BigInt(hazirlik.asgariGunluk.meta),
       googleTalepYaratma: hazirlik.asgariGunluk.googleTalepYaratma === null ? null : BigInt(hazirlik.asgariGunluk.googleTalepYaratma),
@@ -445,6 +446,7 @@ export class StratejiV2Service {
       kelimeGrubu: g.kelimeGrubu,
     };
     const motor = secilen ? secimliMotor(motorGirdisi, secilen) : stratejiMotoru(motorGirdisi);
+    if (hesapKapisi.not) motor.notlar.unshift(hesapKapisi.not);
     const aiGirdisi = aiGirdisiKur(g, motor.kalemler.map((k) => k.amac), kitle);
     // İMZA: motorun çıktısı + yapay zekânın girdisi. Aynıysa öneri saklanandan.
     const imza = createHash('sha256').update(JSON.stringify({ motor: motor.kalemler, ai: aiGirdisi, notlar: motor.notlar })).digest('hex');
@@ -503,14 +505,16 @@ export class StratejiV2Service {
     }));
     const [olcum, hazirlik] = await Promise.all([this.olcumOku(ctx, clientId), this.hazirlikOku(ctx, clientId, true)]);
     const harita = olcumHaritasi(olcum);
+    const hesapKapisi = stratejiHesapKapisi({ meta: hazirlik.hesaplar.length > 0, google: hazirlik.googleHesaplari.length > 0 });
     const kapi = {
       ajansYoneticisi: hazirlik.ajansYoneticisi,
       kullanilmayan: new Set(yerel.kullanilmayan),
-      hesap: { meta: hazirlik.hesaplar.length > 0, google: hazirlik.googleHesaplari.length > 0 },
+      hesap: hesapKapisi.hesap,
       siteYok: yerel.siteYok,
       olcum: harita.harita,
     };
     const okumaHatalari = [...harita.hatalar];
+    if (hesapKapisi.not) okumaHatalari.push(hesapKapisi.not);
     if (kapi.hesap.meta && hazirlik.asgariGunluk.meta === null) okumaHatalari.push('Meta’nın bu hesaptaki günlük asgari bütçesi okunamadı; Meta için bütçe kontrolü yapılamadı.');
     const konumlar = markaKonumlari(hazirlik);
     return {
@@ -521,6 +525,7 @@ export class StratejiV2Service {
       asgariGunluk: hazirlik.asgariGunluk,
       paraBirimi: yerel.para.para ?? 'TRY',
       paraBirimiHatasi: yerel.para.hata,
+      paraBirimiSecenekleri: yerel.para.secenekler,
       konumOnerisi: { konumlar, kaynak: konumlar.length > 0 ? 'marka' : 'yok', adres: hazirlik.iletisim.adres ?? null },
       konumHesabi: hazirlik.hesaplar[0]?.id ?? null,
       ozelKategori: ozelKategoriVar({ marka: await this.tx(ctx, (tx) => markaOku(tx, clientId)), hazirlik }),
@@ -1316,15 +1321,18 @@ async function kelimeleriOku(tx: Sorgucu, p: PlanSatiri): Promise<PlanDetayi['ke
  * girdileri bunu ekranda söylüyor, plan oluşturma (`workspaceParaBirimi`) aynı
  * cümleyle reddediyor. Transaction içinde `catch` gerekmiyor.
  */
-async function paraBirimiDurumu(tx: Sorgucu, clientId: string): Promise<{ para: string | null; hata: string | null }> {
+async function paraBirimiDurumu(tx: Sorgucu, clientId: string): Promise<{ para: string | null; hata: string | null; secenekler: string[] }> {
   const birimler = await tx.$queryRaw<Array<{ currency: string }>>(Prisma.sql`
     SELECT DISTINCT currency FROM ad_accounts
      WHERE client_id = ${clientId}::uuid AND platform IN ('meta'::"Platform", 'google'::"Platform") ORDER BY currency`);
-  if (birimler.length === 0) return { para: null, hata: 'Bu workspace’e atanmış Meta ya da Google hesabı yok. Para birimini seçin.' };
+  if (birimler.length === 0) return { para: null, hata: 'Bu workspace’e atanmış Meta ya da Google hesabı yok. Para birimini seçin.', secenekler: [...YAYGIN_PARA_BIRIMLERI] };
   // Kur çevrimi yok: 1 USD + 1 TRY toplanamaz. Tahmin etmek yerine sor.
-  if (birimler.length > 1) return { para: null, hata: `Workspace hesapları farklı para birimleri kullanıyor (${birimler.map((b) => b.currency).join(', ')}). Para birimini seçin.` };
-  return { para: birimler[0]!.currency, hata: null };
+  if (birimler.length > 1) return { para: null, hata: `Workspace hesapları farklı para birimleri kullanıyor (${birimler.map((b) => b.currency).join(', ')}). Para birimini seçin.`, secenekler: birimler.map((b) => b.currency) };
+  return { para: birimler[0]!.currency, hata: null, secenekler: [birimler[0]!.currency] };
 }
+
+/** Hesabı olmayan workspace'te seçilebilen birimler (seçim sunucuda da `paraOndaligi` ile doğrulanıyor). */
+const YAYGIN_PARA_BIRIMLERI = ['TRY', 'USD', 'EUR', 'GBP'] as const;
 
 async function workspaceParaBirimi(tx: Sorgucu, clientId: string): Promise<string> {
   const d = await paraBirimiDurumu(tx, clientId);

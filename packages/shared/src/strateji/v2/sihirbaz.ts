@@ -230,6 +230,13 @@ export interface StratejiSihirbazGirdileri {
   paraBirimi: string;
   /** Para birimi okunamadıysa (hesap yok, karışık birim) NEDENİ; plan oluşturma bu durumda reddeder. */
   paraBirimiHatasi: string | null;
+  /**
+   * Para birimi çözülemediğinde kullanıcının seçebileceği birimler: karışık
+   * hesaplarda hesapların birimleri, hesap yoksa yaygın birimler. Eskiden
+   * ekran "Para birimini seçin" diyordu ama seçici YOKTU; Devam kalıcı
+   * kapalı kalıyor ve strateji hiç açılamıyordu (2026-10-16).
+   */
+  paraBirimiSecenekleri: string[];
   /** Bölge önerisi: Marka Merkezi'nin varsayılan kitlesi. Boşsa neden. */
   konumOnerisi: { konumlar: RehberKonumu[]; kaynak: 'marka' | 'yok'; adres: string | null };
   /** Konum araması Meta hesabı üzerinden; atanmamışsa null ve arama kapalı. */

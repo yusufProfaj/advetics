@@ -134,6 +134,27 @@ export function platformKapisi(
   return { acik: true };
 }
 
+/**
+ * ═══ HİÇ HESABI OLMAYAN WORKSPACE'TE STRATEJİ ═══
+ *
+ * Strateji bir PLAN: müşteri yeni geldiğinde, hesaplar atanmadan önce
+ * hazırlanıyor. "Hesap atanmadı" kapısı her hedefi kapatıyordu; yeni
+ * workspace'te (2026-10-16, Eren Altay) hedef adımında hiçbir kart
+ * seçilemiyor ve strateji hiç açılamıyordu.
+ *
+ * KURAL DAR: yalnız Meta'da da Google'da da hesap YOKSA ikisi açık sayılır
+ * ve neden NOT olarak yazılır. Bir platformun hesabı varsa öbürü kapalı
+ * kalır: o durumda eksik hesap bir eksiklik değil, büyük ihtimalle tercih.
+ * Kurulum (AdvCampaign) hesabı yine kendi kapısıyla ister.
+ */
+export const HESAPSIZ_STRATEJI_NOTU =
+  'Bu workspace’e henüz Meta ya da Google reklam hesabı atanmadı. Strateji hazırlanabilir; kampanyalar hesap atanınca kurulur ve platformun asgari bütçe kontrolü o zaman yapılır.';
+
+export function stratejiHesapKapisi(h: { meta: boolean; google: boolean }): { hesap: { meta: boolean; google: boolean }; not: string | null } {
+  if (!h.meta && !h.google) return { hesap: { meta: true, google: true }, not: HESAPSIZ_STRATEJI_NOTU };
+  return { hesap: h, not: null };
+}
+
 /** Ölçüm hücresi: `true` hazır, `false` kurulmalı, `null` bilinmiyor; ölçüm gerektirmeyen amaç `true`. */
 export function olcumHazir(amac: RehberAmacKodu, p: RehberPlatformu, olcum: RiskBaglami['olcum']): boolean | null {
   const tur = amacOlcumTuru(amac);

@@ -157,7 +157,7 @@ export const ISTISNALAR: Record<string, Partial<Record<MetinTuru, number>>> = {
   'components/strateji/v2/adim-gonder.tsx': { turkce: 25, jsx: 9 },
   'components/strateji/v2/adim-inceleme.tsx': { turkce: 21, jsx: 4 },
   'components/strateji/v2/adim-plan.tsx': { turkce: 27, jsx: 11 },
-  'components/strateji/v2/adimlar-soru.tsx': { turkce: 32, jsx: 8 },
+  'components/strateji/v2/adimlar-soru.tsx': { turkce: 30, jsx: 8 },
   'components/strateji/v2/akis.ts': { turkce: 4 },
   'components/strateji/v2/belge.tsx': { turkce: 37, jsx: 47 },
   'components/strateji/v2/giris.tsx': { turkce: 21, jsx: 7 },
