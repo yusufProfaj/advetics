@@ -297,14 +297,13 @@ export interface KitleOnerisi {
 /**
  * ═══ GOOGLE KATEGORİSİ EŞLEME ═══
  *
- * Google'ın kategori adları İngilizce ve yol taşıyor ("/Real Estate/
- * Residential Properties (For Sale)"). Terim (modelin İngilizce adayı)
- * YOLUN TAMAMINDA, KELİME olarak aranıyor: "car" "Cars" ile eşleşir,
- * "Scarves" ile eşleşmez. İlk sürüm yalnız son parçaya bakıyordu ve canlıda
- * (2026-10-16, Eren Altay, "satılık daire") "real estate" hiçbir kategoriye
- * eşleşmedi: o kelime yolun ÜST parçasında. Sıra: terimin son parçada
- * geçtiği (en özel) önce, sonra satın alma niyeti (dönüşüme yakın), sonra
- * kısa yol. Tahmin yok: eşleşmeyen terim boş döner.
+ * Google'ın kategori adları İngilizce. Canlıda ölçüldü (2026-10-16): adlar
+ * düz ("Residential Properties (For Sale)", "Real Estate"); yol biçimi
+ * ("/Real Estate/…") gelirse de çalışıyor, en özel parça önce. Terim
+ * (modelin İngilizce adayı) adda KELİME olarak aranıyor: "car" "Cars" ile
+ * eşleşir, "Scarves" ile eşleşmez. Sıra: son parçada geçen önce, sonra
+ * satın alma niyeti (dönüşüme yakın), sonra kısa ad. Tahmin yok: eşleşmeyen
+ * terim boş döner.
  */
 export function googleIlgiEsle(
   liste: readonly KitleGoogleIlgi[],
@@ -318,9 +317,15 @@ export function googleIlgiEsle(
   const son = (g: KitleGoogleIlgi) => (g.ad.split('/').filter(Boolean).at(-1) ?? g.ad).toLocaleLowerCase('en');
   return liste
     .filter((g) => desen.test(g.ad.toLocaleLowerCase('en')))
-    .map((g) => ({ g, sonda: desen.test(son(g)) }))
+    .map((g) => ({ g, sonda: desen.test(son(g)), birebir: son(g) === t }))
     .sort((a, b) =>
-      a.sonda !== b.sonda
+      // BİREBİR AD ÖNCE: "Residential Properties (For Sale)" terimi, aynı
+      // uzunluktaki "(For Rent)"un önüne geçmeli (satılık ≠ kiralık).
+      a.birebir !== b.birebir
+        ? a.birebir
+          ? -1
+          : 1
+        : a.sonda !== b.sonda
         ? a.sonda
           ? -1
           : 1

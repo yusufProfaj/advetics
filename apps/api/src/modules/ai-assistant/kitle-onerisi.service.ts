@@ -136,8 +136,9 @@ KURALLAR:
 - ilgiler.aramalar içinde EN AZ BİR İngilizce terim olsun ve bu terim Google
   Ads'in ilgi (affinity) ve satın alma niyeti (in-market) kategori ADLARINA
   benzesin: "Real Estate", "Residential Properties", "Luxury Vehicles",
-  "Home Improvement", "Golf". Google adları İngilizce kategori yolu olarak
-  eşleniyor; "residential area" gibi serbest ifade eşleşmez.
+  "Home Improvement", "Golf". Satılık ya da kiralık ayrımı varsa Google'ın
+  yazdığı gibi ekle: "Residential Properties (For Sale)", "Residential
+  Properties (For Rent)". "residential area" gibi serbest ifade eşleşmez.
 - uygulanamayan: metinde olan ama Meta'nın konum/yaş/cinsiyet/ilgi hedeflemesiyle
   kurulamayan her parça ve NEDEN. Örnek: "son bir ayda" → Meta ilgi hedeflemesinde
   zaman aralığı yok; "arayan" (arama niyeti) → Meta'da doğrudan karşılığı yok, en

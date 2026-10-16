@@ -290,6 +290,23 @@ describe('konum yalnızca Türkiye’de ya da adı geçen ülkede', () => {
       expect(r.google.taranan).toBe(3);
     });
 
+    it('KRİTİK: canlıdaki DÜZ adlarla eşleşiyor (ölçüm 2026-10-16: "Residential Properties (For Sale)")', async () => {
+      const CANLI = [
+        { id: '80463', ad: 'Residential Properties (For Rent)', tur: 'in_market' as const },
+        { id: '80464', ad: 'Residential Properties (For Sale)', tur: 'in_market' as const },
+        { id: '80462', ad: 'Residential Properties', tur: 'in_market' as const },
+        { id: '80460', ad: 'Real Estate', tur: 'in_market' as const },
+      ];
+      const { svc } = kur({
+        cevap: cevap({ ilgiler: [{ kavram: 'satılık daire', aramalar: ['Residential Properties (For Sale)'] }, { kavram: 'emlak', aramalar: ['Real Estate'] }] }),
+        google: { kategoriler: CANLI },
+      });
+      const r = await svc.oner(CTX, 'c', 'satılık daire arayanlar');
+      // Satılık terimi kiralık kategoriyi SEÇMİYOR.
+      expect(r.google.ilgiler.map((g) => g.id)).toEqual(['80464', '80460']);
+      expect(r.google.hata).toBeNull();
+    });
+
     it('KRİTİK: Google 200 + boş liste "eşleşme yok" DEĞİL, hata', async () => {
       const { svc } = kur({ cevap: cevap(), google: { kategoriler: [] } });
       const r = await svc.oner(CTX, 'c', 'lüks araç');
