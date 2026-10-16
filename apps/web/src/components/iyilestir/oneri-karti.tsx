@@ -1,5 +1,7 @@
 'use client';
 
+import { Fragment } from 'react';
+
 import Link from 'next/link';
 import { baglanti } from '@/lib/baglanti';
 import { REKLAM_YONETICISI } from '@/lib/reklam-yoneticisi';
@@ -144,17 +146,30 @@ export function OneriKarti({
          * KANIT KUTULARI yan yana; dar kartta kendiliğinden alt satıra iner.
          * Sayı Montserrat ve hizalı rakam; "kötü" yön kırmızı, "iyi" yön
          * düz siyah (yeşil yalnız durum noktası).
+         *
+         * TAŞMA (canlı, 2026-10-16): kutu 104 px'e kadar daralıyor, değer ise
+         * `whitespace-nowrap` idi; "213,15 ₺ → 128,97 ₺" komşu kutunun üstüne
+         * biniyor, "900,00 ₺ → 1.080,0…" kart dışına taşıyordu. Kutu tabanı
+         * 150 px ve değer OKTAN kırılabiliyor: her tutar kendi içinde bütün
+         * kalıyor (kırpılmış para tutarı yanlış sayı göstermekle aynı şey),
+         * sığmazsa "sonra" alt satıra iniyor.
          */}
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(104px,1fr))] gap-2">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2">
           {oneri.kanitlar.map((k) => (
-            <div key={k.etiket} className="grid gap-0.5 rounded-alan border border-line px-3 py-2">
-              <span className="text-12 text-ink-muted">{k.etiket}</span>
+            <div key={k.etiket} className="grid min-w-0 content-start gap-0.5 rounded-alan border border-line px-3 py-2">
+              <span className="text-12 leading-snug text-ink-muted">{k.etiket}</span>
               <b
-                className={`font-baslik whitespace-nowrap text-14 font-bold tabular-nums ${
+                className={`font-baslik text-14 font-bold leading-snug tabular-nums ${
                   k.yon === 'kotu' ? 'text-danger-strong' : 'text-ink'
                 }`}
               >
-                {k.once !== null ? `${k.once} → ${k.simdi}` : k.simdi}
+                {k.once !== null ? (
+                  <>
+                    <span className="whitespace-nowrap">{k.once} →</span> <KirilirDeger metin={k.simdi} />
+                  </>
+                ) : (
+                  <KirilirDeger metin={k.simdi} />
+                )}
               </b>
             </div>
           ))}
@@ -207,5 +222,24 @@ function MiniGrafik({ oneri }: { oneri: Oneri }) {
         </span>
       </figcaption>
     </figure>
+  );
+}
+
+/**
+ * "87.176,68 ₺ / 95.000,00 ₺" gibi değeri " / " işaretinden kırılabilir
+ * yapar; her tutar kendi içinde bölünmez kalır.
+ */
+function KirilirDeger({ metin }: { metin: string }) {
+  const parcalar = metin.split(' / ');
+  return (
+    <>
+      {parcalar.map((p, i) => (
+        <Fragment key={i}>
+          {/* Boşluk span'ın DIŞINDA: nowrap içindeki boşlukta satır kırılmaz. */}
+          <span className="whitespace-nowrap">{i < parcalar.length - 1 ? `${p} /` : p}</span>
+          {i < parcalar.length - 1 ? ' ' : null}
+        </Fragment>
+      ))}
+    </>
   );
 }
