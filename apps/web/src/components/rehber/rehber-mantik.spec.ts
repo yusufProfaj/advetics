@@ -662,14 +662,14 @@ describe('kaynak: sözleşmeye bağlılık', () => {
   it('KRİTİK: Dalga 3 kararları bileşende ÇAĞRILIYOR (saf fonksiyonun testi tek başına yetmez)', () => {
     const e = yorumsuz('rehber-ekrani.tsx');
     expect(e).toContain('adimBittiMi(kayit.eksikler, x.no, ekran, amac !== null)');
-    expect(e).toContain('adimAltMetni(x.no, x.alt, amac, acik)');
+    expect(e).toContain('adimAltMetni(x.no, adimAlt(x.no, dil), amac, acik, dil)');
     expect(e).toContain('hazirAdimlar(kayit.eksikler, amacSecili)');
     expect(e).not.toMatch(/\{x\.alt\}/);
     const n = yorumsuz('adim-amac-nerede.tsx');
     expect(n).toContain('b.degistir(amacDegisimi(kod, b.a.platformlar, b.h))');
     expect(n).toContain("yaz(b, 'platformlar', platformAnahtari(b.acik, p))");
     const r = yorumsuz('adim-reklam.tsx');
-    expect(r).toContain('{metinKurali(b.acik, kurgu).soru}');
+    expect(r).toContain('{metinKurali(b.acik, kurgu, dil).soru}');
     expect(r).toContain('{kural.gucGoster && (');
     expect(r).toContain('{kural.baslikNotu}');
     expect(r).not.toContain('Google hepsini dener');
@@ -678,13 +678,13 @@ describe('kaynak: sözleşmeye bağlılık', () => {
     expect(k).toContain('sonEkranOzeti(');
     expect(k).toContain('<h2>{ozet.baslik}</h2>');
     // Giriş listesinin sözü aynı üreticiden: `lib/reklam-girisi.ts#platformRozetleri`.
-    expect(yorumsuz('rehber-girisi.tsx')).toContain('platformRozetleri(r)');
+    expect(yorumsuz('rehber-girisi.tsx')).toContain('platformRozetleri(r, dil)');
   });
 
   it('KRİTİK: metin önerisi kendiliğinden yazılmıyor; "Kullan" kullanici kaynağıyla yazıyor', () => {
     const r = yorumsuz('adim-reklam.tsx');
     const oner = r.slice(r.indexOf('async function oner(mod'), r.indexOf('function kullan('));
-    expect(oner).toContain('setOneri(metinOnerisiHali(r))');
+    expect(oner).toContain('setOneri(metinOnerisiHali(r, dil))');
     expect(oner).not.toContain("yaz(b, 'metin'");
     expect(r).toMatch(/function metinYaz\(yeni: Metin\) \{\s*yaz\(b, 'metin', yeni\);/);
   });

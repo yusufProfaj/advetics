@@ -1,4 +1,5 @@
-import { GORSEL_ORANLARI, type GorselOrani } from '@advetics/shared';
+import { GORSEL_ORANLARI, sec, type Dil, type GorselOrani } from '@advetics/shared';
+import { reklamSozlugu } from '@/dil/sozlukler/reklam';
 
 /**
  * ═══ OTOMATİK BOYUT ÜRETİMİ (kullanıcı kararı, 2026-10-12) ═══
@@ -54,7 +55,8 @@ export function yerlesim(kaynakEn: number, kaynakBoy: number, hedefEn: number, h
  * Tarayıcıda üretim. Kalite 0.9 JPEG: Meta ve Google'ın görsel sınırlarının
  * çok altında kalıyor, yükleme kontrolü (`medyaKontrol`) aynı yoldan geçiyor.
  */
-export async function boyutUret(kaynak: Blob, hedef: GorselOrani): Promise<Blob> {
+export async function boyutUret(kaynak: Blob, hedef: GorselOrani, dil: Dil = 'tr'): Promise<Blob> {
+  const t = sec(reklamSozlugu, dil).boyut;
   const bmp = await createImageBitmap(kaynak);
   try {
     const [en, boy] = HEDEF_OLCULER[hedef];
@@ -62,7 +64,7 @@ export async function boyutUret(kaynak: Blob, hedef: GorselOrani): Promise<Blob>
     c.width = en;
     c.height = boy;
     const ctx = c.getContext('2d');
-    if (!ctx) throw new Error('Tarayıcı görsel üretemedi (canvas yok).');
+    if (!ctx) throw new Error(t.canvasYok);
     if (uretimYontemi(bmp.width, bmp.height, hedef) === 'kirp') {
       ctx.drawImage(bmp, ...yerlesim(bmp.width, bmp.height, en, boy, true));
     } else {
@@ -75,7 +77,7 @@ export async function boyutUret(kaynak: Blob, hedef: GorselOrani): Promise<Blob>
       ctx.restore();
       ctx.drawImage(bmp, ...yerlesim(bmp.width, bmp.height, en, boy, false));
     }
-    return await new Promise<Blob>((ok, hata) => c.toBlob((b) => (b ? ok(b) : hata(new Error('Görsel üretilemedi.'))), 'image/jpeg', 0.9));
+    return await new Promise<Blob>((ok, hata) => c.toBlob((b) => (b ? ok(b) : hata(new Error(t.uretilemedi))), 'image/jpeg', 0.9));
   } finally {
     bmp.close();
   }

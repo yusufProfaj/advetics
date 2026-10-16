@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { useId } from 'react';
 import { REHBER_AMACLARI, SITE_YOK_SEBEBI, type RehberAmacKodu, type RehberPlatformu } from '@advetics/shared';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { reklamAmacSozlugu } from '@/dil/sozlukler/reklam-amac';
 import { hesaplarAdresi, markaMerkeziAdresi } from '@/lib/panel-adresleri';
 import { AltCubuk, Soru, sil, yaz, type AdimBaglami } from './adim-ortak';
 import { AMAC_IKONU, IKON, Ikon } from './ikonlar';
@@ -11,6 +13,8 @@ import {
   OLCUM_ENGEL_KODLARI,
   amacDegisimi,
   amacSiteSebebi,
+  amacEkranAdi,
+  amacNeAlacaksin,
   amactanSonraki,
   gorunurAmaclar,
   platformAnahtari,
@@ -26,6 +30,8 @@ import s from './rehber.module.css';
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function AdimAmac({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => void }) {
+  const { dil } = useDil();
+  const d0 = useSozluk(reklamAmacSozlugu).amac;
   const kodlar = gorunurAmaclar(b.h.ajansYoneticisi);
   const secili = b.a.amac?.deger ?? null;
 
@@ -38,14 +44,14 @@ export function AdimAmac({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => void
   function sec(kod: RehberAmacKodu) {
     if (kod === secili) return;
     // "WEB SİTEMİZ YOK" KAPISI: kapalı kart seçilmez, sebebi kartın üstünde yazılı.
-    if (amacSiteSebebi(kod, b.h.ajansYoneticisi, b.siteYok) !== null) return;
+    if (amacSiteSebebi(kod, b.h.ajansYoneticisi, b.siteYok, dil) !== null) return;
     b.degistir(amacDegisimi(kod, b.a.platformlar, b.h));
   }
 
   return (
     <>
-      <Soru adim={1} baslik="Bu reklamdan ne bekliyorsun?">
-        Birini seç. Meta ve Google&apos;da en uygun kurulumu biz seçeriz ve sana gösteririz.
+      <Soru adim={1} baslik={d0.soru}>
+        {d0.aciklama}
       </Soru>
       {kodlar.length === 0 ? (
         /*
@@ -54,13 +60,12 @@ export function AdimAmac({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => void
          */
         <div className={s.neden}>
           <Ikon d={IKON.bilgi} />
-          <span>Henüz herkese açık bir reklam amacı yok. Amaçlar platformlarda canlı denemeden geçtikçe burada açılıyor.</span>
+          <span>{d0.bos}</span>
         </div>
       ) : (
         <div className={s.amaclar}>
           {kodlar.map((kod) => {
-            const t = REHBER_AMACLARI[kod];
-            const siteSebebi = amacSiteSebebi(kod, b.h.ajansYoneticisi, b.siteYok);
+            const siteSebebi = amacSiteSebebi(kod, b.h.ajansYoneticisi, b.siteYok, dil);
             return (
               <button
                 key={kod}
@@ -76,12 +81,12 @@ export function AdimAmac({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => void
                 <span className={s.karo}>
                   <Ikon d={AMAC_IKONU[kod]} />
                 </span>
-                <h3>{t.ekranAdi}</h3>
-                <p>{t.neAlacaksin}</p>
+                <h3>{amacEkranAdi(kod, dil)}</h3>
+                <p>{amacNeAlacaksin(kod, dil)}</p>
                 {siteSebebi && <span className={s.kapaliYazi}>{siteSebebi}</span>}
                 <span className={s.platformlar}>
                   {(['meta', 'google'] as const).map((p) => {
-                    const d = siteKapisiyla(platformDurumu(kod, p, b.h.ajansYoneticisi), kod, p, b.siteYok);
+                    const d = siteKapisiyla(platformDurumu(kod, p, b.h.ajansYoneticisi, dil), kod, p, b.siteYok);
                     return (
                       <span key={p} className={`${s.plt} ${d.gorunur ? '' : s.yok}`} title={d.sebep ?? undefined}>
                         <i />
@@ -105,11 +110,13 @@ export function AdimAmac({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => void
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function AdimNerede({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => void }) {
+  const { dil } = useDil();
+  const d0 = useSozluk(reklamAmacSozlugu).nerede;
   const amac = b.a.amac?.deger ?? null;
   if (!amac) {
     return (
       <>
-        <Soru adim={2} baslik="Reklam nerede çıksın?">Önce bir amaç seç; platformlar amaca göre açılıyor.</Soru>
+        <Soru adim={2} baslik={d0.soru}>{d0.amacYok}</Soru>
         <AltCubuk git={git} adim={2} />
       </>
     );
@@ -124,21 +131,21 @@ export function AdimNerede({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => vo
   }
 
   const kart = (p: RehberPlatformu) => {
-    const d = siteKapisiyla(platformDurumu(amac, p, b.h.ajansYoneticisi), amac, p, b.siteYok);
+    const d = siteKapisiyla(platformDurumu(amac, p, b.h.ajansYoneticisi, dil), amac, p, b.siteYok);
     const kurulacak = p === 'meta' ? t.meta.kurulacak : t.google.kurgu !== null ? t.google.kurulacak : null;
     const eksikler = b.kayit.eksikler.filter((e) => e.adim === 2 && e.platform === p);
     const tamamlar: string[] = [];
     if (p === 'meta' && b.acik.meta) {
       const sayfa = b.h.sayfalar.find((x) => x.id === b.a.sayfaId?.deger);
       const ig = b.h.instagramHesaplari.find((x) => x.id === b.a.instagramId?.deger);
-      if (sayfa) tamamlar.push(`Facebook sayfası: ${sayfa.ad}`);
+      if (sayfa) tamamlar.push(d0.facebookSayfasiAdi(sayfa.ad));
       if (ig) tamamlar.push(`Instagram: ${ig.ad}`);
     }
     if (p === 'google' && b.acik.google) {
       const g = b.h.googleHesaplari.find((x) => x.id === b.a.googleHesabiId?.deger);
-      if (g) tamamlar.push(`Google Ads hesabı: ${g.ad}`);
+      if (g) tamamlar.push(d0.googleHesabiAdi(g.ad));
       const k = b.h.youtubeKanallari.find((x) => x.id === b.a.youtubeKanaliId?.deger);
-      if (videoKurgusu && k) tamamlar.push(`YouTube kanalı bağlı: ${k.ad}`);
+      if (videoKurgusu && k) tamamlar.push(d0.youtubeBagli(k.ad));
     }
     return (
       <div className={`${s.pltKart} ${b.acik[p] ? s.secili : ''} ${d.gorunur ? '' : s.kapali}`}>
@@ -148,22 +155,22 @@ export function AdimNerede({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => vo
           </div>
           <div>
             <h3>{p === 'meta' ? 'Meta' : 'Google'}</h3>
-            <small>{p === 'meta' ? 'Instagram ve Facebook' : t.google.kurgu !== null ? t.google.nerede : 'Kurulamıyor'}</small>
+            <small>{p === 'meta' ? 'Instagram ve Facebook' : t.google.kurgu !== null ? t.google.nerede : d0.kurulamiyor}</small>
           </div>
           <button
             type="button"
             className={s.anahtar}
             role="switch"
             aria-checked={b.acik[p]}
-            aria-label={p === 'meta' ? "Meta'da aç" : "Google'da aç"}
+            aria-label={p === 'meta' ? d0.metaAc : d0.googleAc}
             disabled={!d.gorunur}
             onClick={() => anahtar(p)}
           />
         </div>
         {kurulacak && d.gorunur && (
           <div className={s.kurulacak}>
-            <b>Kurulacak:</b> {kurulacak}.
-            {d.deneme && <> Deneme açılışı: platformda duraklatılmış kurulur, sen başlatana kadar harcama olmaz.</>}
+            <b>{d0.kurulacak}</b> {kurulacak}.
+            {d.deneme && <>{d0.deneme}</>}
           </div>
         )}
         <ul className={s.kontrol}>
@@ -172,7 +179,7 @@ export function AdimNerede({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => vo
               <Ikon d={IKON.yok} />
               <span>
                 {/* SİTE KAPISININ CÜMLESİ ZATEN TAM: "yalnız X'te açılır" eki yanlış olurdu (diğer platform da kapalı olabilir). */}
-                {d.sebep === SITE_YOK_SEBEBI ? d.sebep : `${d.sebep}. Bu amaç yalnız ${p === 'meta' ? 'Google' : 'Meta'}'da açılır.`}
+                {d.sebep === SITE_YOK_SEBEBI ? d.sebep : d0.yalnizDiger(d.sebep ?? '', p === 'meta' ? 'Google' : 'Meta')}
               </span>
             </li>
           )}
@@ -188,10 +195,10 @@ export function AdimNerede({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => vo
               <span>{e.metin}</span>
               {(e.kod === 'M-HESAP' || e.kod === 'M-SAYFA' || e.kod === 'G-HESAP' || e.kod === 'G-LOGO' || e.kod === 'G-LOGO-KARE') && (
                 <Link href={e.kod === 'G-LOGO' || e.kod === 'G-LOGO-KARE' ? markaMerkeziAdresi('marka', b.clientId, 'logo') : baglantilar}>
-                  {e.kod === 'G-LOGO' || e.kod === 'G-LOGO-KARE' ? 'Marka › Logo' : 'Kurulum'}
+                  {e.kod === 'G-LOGO' || e.kod === 'G-LOGO-KARE' ? d0.markaLogo : d0.kurulum}
                 </Link>
               )}
-              {OLCUM_ENGEL_KODLARI.includes(e.kod) && <Link href={markaMerkeziAdresi('kurulum', b.clientId, 'olcum')}>Kurulum › Dönüşüm ölçümü</Link>}
+              {OLCUM_ENGEL_KODLARI.includes(e.kod) && <Link href={markaMerkeziAdresi('kurulum', b.clientId, 'olcum')}>{d0.olcum}</Link>}
             </li>
           ))}
         </ul>
@@ -201,10 +208,10 @@ export function AdimNerede({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => vo
 
   return (
     <>
-      <Soru adim={2} baslik="Reklam nerede çıksın?">İkisi de hazırsa ikisinde birden açıyoruz. Kapatmak istediğini kapatabilirsin.</Soru>
+      <Soru adim={2} baslik={d0.soru}>{d0.ikisiHazir}</Soru>
       <div className={s.neden}>
         <Ikon d={IKON.bilgi} />
-        <span>{platformNedeni(amac, b.h)}</span>
+        <span>{platformNedeni(amac, b.h, dil)}</span>
       </div>
       <div className={s.pltKartlar}>
         {kart('meta')}
@@ -213,31 +220,34 @@ export function AdimNerede({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => vo
       {(b.acik.meta || b.acik.google) && (
         <div className={`${s.kart} ${s.blok}`}>
           <div className={s.blokBaslik}>
-            Reklam hesapları <span className={s.ops}>Bu workspace&apos;e atanmış olanlar</span>
+            {d0.hesaplarBaslik} <span className={s.ops}>{d0.hesaplarEk}</span>
           </div>
           <div className={s.alanlar}>
             {b.acik.meta && (
               <>
                 <Secici
-                  etiket="Meta reklam hesabı"
+                  secEtiketi={d0.sec}
+                  etiket={d0.metaHesabi}
                   deger={b.a.metaHesabiId?.deger}
                   secenekler={b.h.hesaplar.map((x) => ({ id: x.id, ad: x.disKimlik ? `${x.ad} · ${x.disKimlik}` : x.ad }))}
-                  bos="Atanmış Meta hesabı yok"
+                  bos={d0.metaHesabiYok}
                   degisti={(v) => (v === null ? sil(b, 'metaHesabiId') : yaz(b, 'metaHesabiId', v))}
                 />
                 <Secici
-                  etiket="Facebook sayfası"
+                  secEtiketi={d0.sec}
+                  etiket={d0.facebookSayfasi}
                   deger={b.a.sayfaId?.deger}
                   secenekler={b.h.sayfalar}
-                  bos="Bu workspace'te Facebook sayfası yok"
+                  bos={d0.facebookSayfasiYok}
                   degisti={(v) => (v === null ? sil(b, 'sayfaId') : yaz(b, 'sayfaId', v))}
                 />
                 <Secici
-                  etiket="Instagram hesabı"
+                  secEtiketi={d0.sec}
+                  etiket={d0.instagramHesabi}
                   deger={b.a.instagramId?.deger ?? undefined}
                   secenekler={b.h.instagramHesaplari}
-                  bos="Bağlı Instagram hesabı yok"
-                  hicbiri="Instagram olmadan"
+                  bos={d0.instagramYok}
+                  hicbiri={d0.instagramOlmadan}
                   // "Instagram olmadan" bir KARAR: null DEĞER yazılır, alan silinmez.
                   degisti={(v) => yaz(b, 'instagramId', v)}
                 />
@@ -246,18 +256,20 @@ export function AdimNerede({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => vo
             {b.acik.google && (
               <>
                 <Secici
-                  etiket="Google Ads hesabı"
+                  secEtiketi={d0.sec}
+                  etiket={d0.googleHesabi}
                   deger={b.a.googleHesabiId?.deger}
                   secenekler={b.h.googleHesaplari.map((x) => ({ id: x.id, ad: `${x.ad} · ${x.musteriNo}` }))}
-                  bos="Atanmış Google Ads hesabı yok"
+                  bos={d0.googleHesabiYok}
                   degisti={(v) => (v === null ? sil(b, 'googleHesabiId') : yaz(b, 'googleHesabiId', v))}
                 />
                 {videoKurgusu && (
                   <Secici
-                    etiket="YouTube kanalı"
+                  secEtiketi={d0.sec}
+                    etiket={d0.youtubeKanali}
                     deger={b.a.youtubeKanaliId?.deger ?? undefined}
                     secenekler={b.h.youtubeKanallari}
-                    bos="Bağlı YouTube kanalı yok"
+                    bos={d0.youtubeKanaliYok}
                     degisti={(v) => (v === null ? sil(b, 'youtubeKanaliId') : yaz(b, 'youtubeKanaliId', v))}
                   />
                 )}
@@ -266,7 +278,7 @@ export function AdimNerede({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => vo
           </div>
           {((b.acik.meta && b.h.hesaplar.length === 0) || (b.acik.google && b.h.googleHesaplari.length === 0)) && (
             <p className={s.ipucu}>
-              Hesap ataması Marka Merkezi&apos;nde yapılır. <Link href={baglantilar} className={s.metinDugme}>Bağlantılara git</Link>
+              {d0.atamaIpucu} <Link href={baglantilar} className={s.metinDugme}>{d0.baglantilaraGit}</Link>
             </p>
           )}
         </div>
@@ -284,6 +296,7 @@ export function AdimNerede({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => vo
  * kullanıcıya seçilmiş izlenimi verirdi.
  */
 function Secici({
+  secEtiketi,
   etiket,
   deger,
   secenekler,
@@ -291,6 +304,7 @@ function Secici({
   hicbiri,
   degisti,
 }: {
+  secEtiketi: string;
   etiket: string;
   deger: string | null | undefined;
   secenekler: ReadonlyArray<{ id: string; ad: string }>;
@@ -315,7 +329,7 @@ function Secici({
             ) : (
               <>
                 <option value="" disabled={!hicbiri}>
-                  {hicbiri ?? 'Seç'}
+                  {hicbiri ?? secEtiketi}
                 </option>
                 {secenekler.map((x) => (
                   <option key={x.id} value={x.id}>

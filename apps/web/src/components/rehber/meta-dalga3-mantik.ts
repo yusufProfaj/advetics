@@ -3,7 +3,8 @@
  * yok; karar effect'in içinde kalsaydı yalnız kaynak taramasıyla
  * sınanabilirdi, CLAUDE.md "REACT EFFECT'İNİN İÇİNDEKİ KARAR").
  */
-import { trTelefonOnerisi, type RehberPikselListesi } from '@advetics/shared';
+import { sec, trTelefonOnerisi, type Dil, type RehberPikselListesi } from '@advetics/shared';
+import { reklamMantikSozlugu } from '@/dil/sozlukler/reklam-mantik';
 import type { OneriHali } from './rehber-mantik';
 
 /**
@@ -12,9 +13,9 @@ import type { OneriHali } from './rehber-mantik';
  * çevrilirse kullanıcı olmayan bir pikseli ya da olmayan bir izin sorununu
  * arar.
  */
-export function pikselListesiHali(r: RehberPikselListesi): OneriHali<RehberPikselListesi> {
+export function pikselListesiHali(r: RehberPikselListesi, dil: Dil = 'tr'): OneriHali<RehberPikselListesi> {
   if (r.satirlar.length > 0) return { tur: 'geldi', deger: r };
-  return { tur: 'bos', neden: r.bosNeden ?? 'Bu reklam hesabında Meta pikseli yok.' };
+  return { tur: 'bos', neden: r.bosNeden ?? sec(reklamMantikSozlugu, dil).bos.piksel };
 }
 
 /**
@@ -30,13 +31,14 @@ export function tekPikselOnerisi(secili: string | null | undefined, r: RehberPik
 }
 
 /** Satırın altındaki kısa durum: son çalışma ve 7 günlük satın alma (üç hâl ayrı). */
-export function pikselDurumu(p: RehberPikselListesi['satirlar'][number]): string {
-  if (p.kullanilamaz) return "Meta'da kullanılamıyor";
-  if (!p.sonCalisma) return 'Hiç çalışmamış';
+export function pikselDurumu(p: RehberPikselListesi['satirlar'][number], dil: Dil = 'tr'): string {
+  const t = sec(reklamMantikSozlugu, dil).piksel;
+  if (p.kullanilamaz) return t.kullanilamiyor;
+  if (!p.sonCalisma) return t.hicCalismamis;
   // Sayı varsa sayıyla: haftalık hacim öğrenme aşamasının bitip bitmeyeceğini söylüyor.
-  if (p.satinAlma7Gun === true) return typeof p.satinAlma7GunSayisi === 'number' ? `Son 7 günde ${Math.floor(p.satinAlma7GunSayisi)} satın alma` : 'Son 7 günde satın alma saydı';
-  if (p.satinAlma7Gun === false) return 'Son 7 günde satın alma yok';
-  return 'Satın alma kontrol edilemedi';
+  if (p.satinAlma7Gun === true) return typeof p.satinAlma7GunSayisi === 'number' ? t.satinAlmaSayisi(Math.floor(p.satinAlma7GunSayisi)) : t.satinAlmaSaydi;
+  if (p.satinAlma7Gun === false) return t.satinAlmaYok;
+  return t.kontrolEdilemedi;
 }
 
 /**

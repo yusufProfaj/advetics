@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { sirketlerSozlugu } from '@/dil/sozlukler/ayarlar-sirketler';
+import { reklamKimeSozlugu } from '@/dil/sozlukler/reklam-kime';
 
 /*
  * ERİŞİM TURU (K4) — panelin "işletme adresinin çevresi" seçeneği ve Marka
@@ -16,7 +17,9 @@ describe('Kime adımı — adres çevresi (ERİŞİM)', () => {
   it('KRİTİK: adres çevresi İLK seçenek ve yalnız erişimde; il/ilçe seçimi duruyor', () => {
     const blok = KIME.slice(KIME.indexOf('{erisim && ('), KIME.indexOf('İl ya da ilçe seç'));
     expect(blok.length, 'erişim bloğu bulunamadı').toBeGreaterThan(100);
-    expect(blok).toContain('İşletme adresinin çevresi');
+    // Metin sözlükte: kaynak anahtarı kullanıyor ve sözlük değeri değişmedi.
+    expect(blok).toContain('{d.isletmeCevresi}');
+    expect(reklamKimeSozlugu.tr.isletmeCevresi).toBe('İşletme adresinin çevresi');
     expect(KIME).toContain("const erisim = b.a.amac?.deger === 'ERISIM';");
   });
   it('KRİTİK: seçenek konumu TEK ÜRETİCİDEN kuruyor ve listeyi DEĞİŞTİRİYOR (birleşim yok)', () => {
@@ -24,7 +27,8 @@ describe('Kime adımı — adres çevresi (ERİŞİM)', () => {
   });
   it('konum yoksa seçenek kapalı ve sebebi yazıyor (adres metninden nokta tahmini yok)', () => {
     expect(KIME).toContain('disabled={!adresKonumu}');
-    expect(KIME).toContain("Marka Merkezi'nde harita konumu yok");
+    expect(KIME).toContain('d.haritaYok');
+    expect(reklamKimeSozlugu.tr.haritaYok).toBe("Marka Merkezi'nde harita konumu yok");
   });
   it('il/ilçe listesi gizlenirken DOM’dan çıkmıyor (geçiş)', () => {
     expect(KIME).toContain('<div className={s.gizlenir} data-acik={!cevre}>');

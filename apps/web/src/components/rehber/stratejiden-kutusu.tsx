@@ -2,10 +2,13 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { REHBER_AMACLARI, belgeyeGirerMi, stratejiPanelAdresi, stratejiUcYolu } from '@advetics/shared';
+import { belgeyeGirerMi, stratejiPanelAdresi, stratejiUcYolu } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import type { RehberinStratejisi } from '@advetics/shared';
 import { donemMetni } from '@/components/strateji/v2/hesap';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { reklamSozlugu } from '@/dil/sozlukler/reklam';
+import { amacEkranAdi } from './rehber-mantik';
 
 type Hal = { tur: 'yukleniyor' } | { tur: 'yok' } | { tur: 'var'; v: RehberinStratejisi } | { tur: 'hata'; mesaj: string };
 
@@ -27,13 +30,15 @@ type Hal = { tur: 'yukleniyor' } | { tur: 'yok' } | { tur: 'var'; v: RehberinStr
  * diye sunulmamalı (`belgeyeGirerMi`).
  */
 export function StratejidenKutusu({ rehberId }: { rehberId: string }) {
+  const { dil } = useDil();
+  const d = useSozluk(reklamSozlugu);
   const [hal, setHal] = useState<Hal>({ tur: 'yukleniyor' });
 
   useEffect(() => {
     let iptal = false;
     apiFetch<RehberinStratejisi | null | undefined>(stratejiUcYolu('/reklam/rehberler/:id/strateji', { id: rehberId })).then(
       (v) => !iptal && setHal(v ? { tur: 'var', v } : { tur: 'yok' }),
-      (e: unknown) => !iptal && setHal({ tur: 'hata', mesaj: e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.' }),
+      (e: unknown) => !iptal && setHal({ tur: 'hata', mesaj: e instanceof ApiRequestError ? e.message : d.ortak.sunucuYok }),
     );
     return () => {
       iptal = true;
@@ -44,7 +49,7 @@ export function StratejidenKutusu({ rehberId }: { rehberId: string }) {
   if (hal.tur === 'hata') {
     return (
       <p className="m-0 mb-3 text-xs text-brand-strong" role="alert">
-        Bu reklamın strateji bağlantısı okunamadı: {hal.mesaj}
+        {d.strateji.okunamadi(hal.mesaj)}
       </p>
     );
   }
@@ -52,27 +57,27 @@ export function StratejidenKutusu({ rehberId }: { rehberId: string }) {
   const yon = belgeyeGirerMi(v.kreatifYonergesi) ? v.kreatifYonergesi!.metin : null;
   const kitle = belgeyeGirerMi(v.kitleTarifi) ? v.kitleTarifi!.metin : null;
   return (
-    <aside className="mb-4 rounded-xl border border-l-4 border-line border-l-brand bg-surface px-4 py-3 text-sm" aria-label="Stratejiden">
+    <aside className="mb-4 rounded-xl border border-l-4 border-line border-l-brand bg-surface px-4 py-3 text-sm" aria-label={d.strateji.etiket}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <b className="text-ink">
-          Stratejiden: {donemMetni(v.baslangic, v.bitis)} · Kampanya {v.sira} · {REHBER_AMACLARI[v.amac].ekranAdi}
+          {d.strateji.baslik(donemMetni(v.baslangic, v.bitis, dil), v.sira, amacEkranAdi(v.amac, dil))}
         </b>
         <Link href={stratejiPanelAdresi({ musteri: v.clientId, plan: v.planId, adim: 'rapor' })} className="text-xs font-semibold text-brand-strong underline-offset-2 hover:underline">
-          Stratejiyi aç
+          {d.strateji.ac}
         </Link>
       </div>
       {yon && (
         <p className="m-0 mt-1.5 text-ink">
-          <span className="font-semibold">Kreatif yönergesi:</span> {yon}
+          <span className="font-semibold">{d.strateji.yonerge}</span> {yon}
         </p>
       )}
       {kitle && (
         <p className="m-0 mt-1 text-ink">
-          <span className="font-semibold">Kime anlatıyoruz:</span> {kitle}
+          <span className="font-semibold">{d.strateji.kime}</span> {kitle}
         </p>
       )}
-      {!yon && !kitle && <p className="m-0 mt-1 text-xs text-ink-muted">Stratejide bu kampanya için kreatif yönergesi ya da kitle tarifi yazılmadı.</p>}
-      <p className="m-0 mt-1.5 text-[11px] text-ink-muted">"Stratejiden" rozetli alanlar onaylanan plandan geldi; değiştirirsen bu reklam plandan ayrılır ve rapor bunu gösterir.</p>
+      {!yon && !kitle && <p className="m-0 mt-1 text-xs text-ink-muted">{d.strateji.bos}</p>}
+      <p className="m-0 mt-1.5 text-[11px] text-ink-muted">{d.strateji.not}</p>
     </aside>
   );
 }

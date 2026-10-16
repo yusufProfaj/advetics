@@ -9,7 +9,6 @@ import {
   FIYAT_EN_COK,
   FIYAT_METIN_SINIRI,
   FIYAT_TURLERI,
-  FIYAT_TURU_ETIKETI,
   PROMOSYON_HEDEF_SINIRI,
   ORAN_ETIKETI,
   METIN_SINIRLARI,
@@ -21,6 +20,7 @@ import {
   oranBul,
   reklamGucu,
   type AnahtarKelimeOnerisi,
+  type Dil,
   type GorselOrani,
   type MedyaMetni,
   type MetinOnerIstegi,
@@ -40,6 +40,9 @@ import { FormBuilder } from '@/components/forms/form-builder';
 import { FormOnizleme } from '@/components/forms/form-onizleme';
 import { formOlusturmaDurumu, gizlilikOnerisi, kayittanOnizleme, sayfaTaslaklari, yarimFormDurumu, yayinSonrasiSecim, yenidenYayinlanabilir } from '@/lib/form-onizleme';
 import { medyaOlc, medyaYukle } from '@/reklam/medya';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { reklamAdimReklamSozlugu } from '@/dil/sozlukler/reklam-adim-reklam';
+import { reklamSozlugu } from '@/dil/sozlukler/reklam';
 import { AltCubuk, Soru, sil, yaz, type AdimBaglami } from './adim-ortak';
 import { IKON, Ikon } from './ikonlar';
 import { SetKartlari } from './set-kartlari';
@@ -91,7 +94,7 @@ import {
   kapakSec,
   sureGoster,
   uretimPlani,
-  DIKEY_GUVENLI_ALAN_NOTU,
+  dikeyGuvenliAlanNotu,
   dikeyNotuGerekli,
   type EkranNo,
   type MedyaOgesi,
@@ -123,11 +126,14 @@ export function AdimReklam({
   medyaBilgisi: ReadonlyMap<string, MedyaBilgisi>;
   medyaBilgisiEkle: (id: string, m: MedyaBilgisi) => void;
 }) {
+  const { dil } = useDil();
+  const tx = useSozluk(reklamAdimReklamSozlugu);
+  const ta = tx.adim;
   const amac = b.a.amac?.deger ?? null;
   if (!amac) {
     return (
       <>
-        <Soru adim={4} baslik="Reklamda ne görünsün?">Önce bir amaç seç; istenen alanlar amaca göre değişiyor.</Soru>
+        <Soru adim={4} baslik={ta.soru}>{ta.amacYok}</Soru>
         <AltCubuk git={git} adim={4} />
       </>
     );
@@ -148,15 +154,15 @@ export function AdimReklam({
 
   return (
     <>
-      <Soru adim={4} baslik="Reklamda ne görünsün?">{metinKurali(b.acik, kurgu).soru}</Soru>
+      <Soru adim={4} baslik={ta.soru}>{metinKurali(b.acik, kurgu, dil).soru}</Soru>
       {b.h.hazirlama && (
-        <div className={`${s.kart} ${s.hazirOzet}`} aria-label="Hazırlıktan gelen ayarlar">
-          {hazirOzeti(b.a, b.acik, b.paraBirimi).map((x) => (
+        <div className={`${s.kart} ${s.hazirOzet}`} aria-label={ta.hazirEtiket}>
+          {hazirOzeti(b.a, b.acik, b.paraBirimi, dil).map((x) => (
             <div key={x.etiket} className={s.ozetSatir}>
               <span>{x.etiket}</span>
               <b>{x.deger}</b>
               <button type="button" className={s.metinDugme} onClick={() => git(x.adim)}>
-                Değiştir
+                {ta.degistir}
               </button>
             </div>
           ))}
@@ -165,7 +171,7 @@ export function AdimReklam({
       <div className={s.kart}>
         <div className={s.blok}>
           <div className={s.blokBaslik}>
-            {amac === 'FORM' ? 'Form' : amac === 'TELEFON' ? 'Aranacak numara' : amac === 'WHATSAPP' ? 'WhatsApp hattı' : 'Gidecekleri sayfa'}
+            {amac === 'FORM' ? 'Form' : amac === 'TELEFON' ? ta.hedefTelefon : amac === 'WHATSAPP' ? ta.hedefWhatsapp : ta.hedefSayfa}
           </div>
           {amac === 'FORM' && <FormSecici b={b} eksikMetni={eksik('FORM-YOK')?.metin ?? null} formUyarisi={(eksik('FORM-GIZLILIK') ?? eksik('FORM-SAYFA') ?? eksik('FORM-BILINMIYOR'))?.metin ?? null} />}
           {amac === 'TELEFON' && (
@@ -175,7 +181,7 @@ export function AdimReklam({
                 <input
                   value={telefonGirdisi(b.a.telefon?.deger)}
                   inputMode="tel"
-                  aria-label="Telefon"
+                  aria-label={ta.telefon}
                   onChange={(e) => {
                     const t = telefonKaydi(e.target.value);
                     if (t) yaz(b, 'telefon', t);
@@ -184,7 +190,7 @@ export function AdimReklam({
                 />
               </div>
               <p className={eksik('TELEFON') ? s.hataMetni : s.ipucu}>
-                {eksik('TELEFON')?.metin ?? (b.a.telefon?.kaynak === 'marka_merkezi' ? "Numara Marka Merkezi'nden geldi." : ' ')}
+                {eksik('TELEFON')?.metin ?? (b.a.telefon?.kaynak === 'marka_merkezi' ? ta.numaraMarka : ' ')}
               </p>
             </>
           )}
@@ -198,20 +204,20 @@ export function AdimReklam({
             <div className={amac === 'FORM' || amac === 'TELEFON' ? s.ustBosluk : undefined}>
               {(amac === 'FORM' || amac === 'TELEFON') && (
                 <p className={s.ipucu} style={{ margin: '0 0 6px' }}>
-                  Google reklamı bir site adresine bağlanır:
+                  {ta.googleSite}
                 </p>
               )}
               {adresHali === 'istege_bagli' && (
                 <p className={s.ipucu} style={{ margin: '0 0 6px' }}>
                   {/* S3: video izlenmede adres yoksa düğme hiç kurulmuyor (`videoDugmesiVar`). */}
-                  {amac === 'VIDEO' ? 'İsteğe bağlı. Boş bırakırsan video düğmesiz yayınlanır.' : 'İsteğe bağlı. Boş bırakırsan düğme Facebook sayfana gider.'}
+                  {amac === 'VIDEO' ? ta.istegeVideo : ta.istegeSayfa}
                 </p>
               )}
               <div className={s.girdi}>
                 <span className={s.on}>https://</span>
                 <input
                   value={adresGirdisi(b.a.hedefAdres?.deger)}
-                  aria-label="Site adresi"
+                  aria-label={ta.siteAdresi}
                   inputMode="url"
                   onChange={(e) => {
                     const a = adresKaydi(e.target.value);
@@ -221,7 +227,7 @@ export function AdimReklam({
                 />
               </div>
               <p className={eksik('SITE-ADRES') ? s.hataMetni : s.ipucu}>
-                {eksik('SITE-ADRES')?.metin ?? (b.a.hedefAdres?.kaynak === 'marka_merkezi' ? "Adres Marka Merkezi'nden geldi." : ' ')}
+                {eksik('SITE-ADRES')?.metin ?? (b.a.hedefAdres?.kaynak === 'marka_merkezi' ? ta.adresMarka : ' ')}
               </p>
             </div>
           )}
@@ -232,14 +238,14 @@ export function AdimReklam({
             b={b}
             gorselGerekli={gorselGerekli}
             googleGorsel={googleGorsel}
-            googleIpucu={googleGorsel ? googleGorselIpucu(kurgu) : null}
+            googleIpucu={googleGorsel ? googleGorselIpucu(kurgu, dil) : null}
             googleVideo={googleVideo}
             video={amac === 'VIDEO'}
             googleArama={googleArama}
             medyaBilgisi={medyaBilgisi}
             medyaBilgisiEkle={medyaBilgisiEkle}
             kaydet={kaydet}
-            kural={metinKurali(b.acik, kurgu)}
+            kural={metinKurali(b.acik, kurgu, dil)}
           />
         )}
 
@@ -294,6 +300,10 @@ function MedyaBlogu({
   kaydet: () => Promise<boolean>;
   kural: MetinKurali;
 }) {
+  const { dil } = useDil();
+  const tx = useSozluk(reklamAdimReklamSozlugu);
+  const tm = tx.medya;
+  const dr = useSozluk(reklamSozlugu);
   const medya = b.a.medya?.deger ?? [];
   const dosyaRef = useRef<HTMLInputElement>(null);
   /*
@@ -311,12 +321,12 @@ function MedyaBlogu({
     setFikirHali((h) => ({ ...h, [sahipId]: { tur: 'isteniyor' } }));
     // Sunucu KAYITLI medyayı okuyor: yeni bırakılan görsel önce yazılmalı.
     if (!(await kaydet())) {
-      return setFikirHali((h) => ({ ...h, [sahipId]: { tur: 'dustu', mesaj: 'Taslak kaydedilemedi; metin kayıtlı görselden yazılıyor.' } }));
+      return setFikirHali((h) => ({ ...h, [sahipId]: { tur: 'dustu', mesaj: tm.metinKaydedilemedi } }));
     }
     try {
       const govde: MetinOnerIstegi = { varlikId: sahipId, mod };
       const r = await apiFetch<MetinOnerisi>(`/reklam/rehberler/${b.kayit.id}/metin-oner`, { method: 'POST', body: JSON.stringify(govde) });
-      const hal = metinOnerisiHali(r);
+      const hal = metinOnerisiHali(r, dil);
       setFikirHali((h) => ({ ...h, [sahipId]: hal }));
       if (hal.tur !== 'geldi') return;
       const fm = oneridenFikirMetni(r, kural);
@@ -336,7 +346,7 @@ function MedyaBlogu({
       }
       b.degistir(degisiklikler);
     } catch (e) {
-      setFikirHali((h) => ({ ...h, [sahipId]: oneriHatasi(e) }));
+      setFikirHali((h) => ({ ...h, [sahipId]: oneriHatasi(e, dil) }));
     }
   }
 
@@ -408,18 +418,18 @@ function MedyaBlogu({
       const kaynak = medyaBilgisiOku(is.kaynakVarlikId);
       let blob: Blob;
       try {
-        if (!kaynak) throw new Error('Kaynak görselin önizlemesi bulunamadı.');
+        if (!kaynak) throw new Error(tm.kaynakYok);
         const r = await fetch(kaynak.onizleme, { credentials: 'include' });
-        if (!r.ok) throw new Error(`Kaynak görsel okunamadı (HTTP ${r.status}).`);
+        if (!r.ok) throw new Error(tm.kaynakOkunamadi(r.status));
         blob = await r.blob();
       } catch (e) {
-        hatalar.push({ ad: kaynak?.ad ?? 'Görsel', mesaj: `Eksik boyutlar üretilemedi: ${e instanceof Error ? e.message : 'bilinmeyen hata'}` });
+        hatalar.push({ ad: kaynak?.ad ?? tm.gorsel, mesaj: tm.boyutUretilemedi(e instanceof Error ? e.message : tm.bilinmeyenHata) });
         continue;
       }
       for (const oran of is.oranlar) {
         setYukleniyor((n) => n + 1);
         try {
-          const uretilen = await boyutUret(blob, oran);
+          const uretilen = await boyutUret(blob, oran, dil);
           const ad = `${(kaynak?.ad ?? 'gorsel').replace(/\.[a-z0-9]+$/i, '')}-${ORAN_DOSYA_EKI[oran]}-uretildi.jpg`;
           const y = await medyaYukle(b.clientId, new File([uretilen], ad, { type: 'image/jpeg' }));
           const [en, boy] = HEDEF_OLCULER[oran];
@@ -429,13 +439,13 @@ function MedyaBlogu({
           simdiki = yuvayaEkle(simdiki, yerelOran, { varlikId: y.id, uretildi: true, kaynakVarlikId: is.kaynakVarlikId }, is.setSira);
           yaz(b, 'medya', simdiki);
         } catch (e) {
-          hatalar.push({ ad: `${ORAN_ETIKETI[oran]} boyutu`, mesaj: e instanceof Error ? e.message : 'Üretilemedi.' });
+          hatalar.push({ ad: tm.boyutAdi(ORAN_ETIKETI[oran]), mesaj: e instanceof Error ? e.message : tm.uretilemedi });
         } finally {
           setYukleniyor((n) => n - 1);
         }
       }
     }
-    if (plan.sigmayan > 0) hatalar.push({ ad: 'Otomatik boyut', mesaj: `${plan.sigmayan} boyut en çok ${EN_COK} dosya sınırı yüzünden üretilmedi.` });
+    if (plan.sigmayan > 0) hatalar.push({ ad: tm.otomatikBoyut, mesaj: tm.sigmayan(plan.sigmayan, EN_COK) });
     return { medya: simdiki, hatalar };
   }
 
@@ -453,7 +463,7 @@ function MedyaBlogu({
     const yeniHatalar: Array<{ ad: string; mesaj: string }> = [];
     for (const d of dosyalar) {
       if (simdiki.length >= EN_COK) {
-        yeniHatalar.push({ ad: d.name, mesaj: `En çok ${EN_COK} dosya eklenebilir.` });
+        yeniHatalar.push({ ad: d.name, mesaj: tm.enCokDosya(EN_COK) });
         continue;
       }
       setYukleniyor((n) => n + 1);
@@ -480,7 +490,7 @@ function MedyaBlogu({
         yaz(b, 'medya', simdiki);
         if (y.uyari) yeniHatalar.push({ ad: d.name, mesaj: y.uyari });
       } catch (e) {
-        yeniHatalar.push({ ad: d.name, mesaj: e instanceof TypeError ? 'Sunucuya ulaşılamadı.' : e instanceof Error ? e.message : 'Yükleme düştü.' });
+        yeniHatalar.push({ ad: d.name, mesaj: e instanceof TypeError ? dr.ortak.sunucuYok : e instanceof Error ? e.message : tm.yuklemeDustu });
       } finally {
         setYukleniyor((n) => n - 1);
       }
@@ -498,7 +508,7 @@ function MedyaBlogu({
 
   function varlikDegistir(id: string) {
     if (medya.some((x) => x.varlikId === id)) return yaz(b, 'medya', medya.filter((x) => x.varlikId !== id));
-    if (medya.length >= EN_COK) return setHatalar([{ ad: 'Varlık', mesaj: `En çok ${EN_COK} dosya eklenebilir.` }]);
+    if (medya.length >= EN_COK) return setHatalar([{ ad: tm.varlik, mesaj: tm.enCokDosya(EN_COK) }]);
     const yeni = [...medya, { varlikId: id }];
     yaz(b, 'medya', yeni);
     const olculer = new Map<string, { en: number | null; boy: number | null }>([...medyaBilgisi].map(([k, v]) => [k, { en: v.en, boy: v.boy }]));
@@ -517,7 +527,7 @@ function MedyaBlogu({
       {gorselGerekli && (
         <>
           <div className={s.blokBaslik}>
-            {video ? 'Video' : 'Görseller ve videolar'} <span className={s.ops}>En az 1 · en çok {EN_COK}</span>
+            {video ? 'Video' : tm.gorsellerVideolar} <span className={s.ops}>{tm.enAzEnCok(EN_COK)}</span>
           </div>
           <button
             type="button"
@@ -542,8 +552,8 @@ function MedyaBlogu({
               <Ikon d={IKON.yukle} />
             </span>
             <span>
-              <b>{yukleniyor > 0 ? `${yukleniyor} dosya yükleniyor…` : 'Sürükle bırak ya da seç'}</b>
-              <span className={s.birakAlt}>Bıraktığın anda kontrol edilir. Marka Merkezi&apos;ndeki varlıklardan da seçebilirsin.</span>
+              <b>{yukleniyor > 0 ? tm.yukleniyor(yukleniyor) : tm.surukle}</b>
+              <span className={s.birakAlt}>{tm.birakAlt}</span>
             </span>
           </button>
           <input
@@ -563,16 +573,16 @@ function MedyaBlogu({
               görselleri taşıyor ve videonun kapağı orada bilinmiyor; kapaksız
               video reklamı derleyici reddeder. Söyleniyor, gizlice kapanmıyor. */}
           {video ? (
-            <p className={s.ipucu}>Videoyu buraya yükle. Marka Merkezi&apos;ndeki videolar kapakları bilinmediği için buradan seçilemiyor.</p>
+            <p className={s.ipucu}>{tm.videoIpucu}</p>
           ) : (
             <button type="button" className={`${s.metinDugme} ${s.ustBosluk}`} aria-expanded={varliklarAcik} onClick={() => setVarliklarAcik((v) => !v)}>
-              {varliklarAcik ? 'Varlıkları gizle' : "Marka Merkezi'nden seç"}
+              {varliklarAcik ? tm.varliklariGizle : tm.markadanSec}
             </button>
           )}
           <div className={s.gizlenir} data-acik={varliklarAcik && !video}>
             <div>
               {gorseller.satirlar.length === 0 ? (
-                <p className={s.ipucu}>Marka Merkezi &gt; Varlıklar&apos;da görsel yok.</p>
+                <p className={s.ipucu}>{tm.varlikYok}</p>
               ) : (
                 <>
                   <div className={s.varliklar}>
@@ -593,7 +603,7 @@ function MedyaBlogu({
                   </div>
                   {gorseller.satirlar.length < gorseller.toplam && (
                     <p className={s.ipucu}>
-                      {gorseller.satirlar.length} / {gorseller.toplam} varlık gösteriliyor (en yeniler).
+                      {tm.varlikGosteriliyor(gorseller.satirlar.length, gorseller.toplam)}
                     </p>
                   )}
                 </>
@@ -620,22 +630,22 @@ function MedyaBlogu({
                     <div className={s.kucuk} />
                   )}
                   <div>
-                    <b>{bilgi?.ad ?? 'Varlık'}</b>
+                    <b>{bilgi?.ad ?? tm.varlik}</b>
                     <small className={hata ? s.kapaliYazi : undefined}>
                       {hata ??
-                        `${bilgi?.en && bilgi.boy ? `${bilgi.en} × ${bilgi.boy}${oran ? ` · ${ORAN_ETIKETI[oran]}` : ''}` : 'Boyut bilinmiyor'}${sure ? ` · ${sure}` : ''}`}
+                        `${bilgi?.en && bilgi.boy ? `${bilgi.en} × ${bilgi.boy}${oran ? ` · ${ORAN_ETIKETI[oran]}` : ''}` : tm.boyutBilinmiyor}${sure ? ` · ${sure}` : ''}`}
                     </small>
                   </div>
                   <div className={s.uygun}>
                     {oran && googleGorsel && bilgi?.en && bilgi.boy && (() => {
-                      const sorun = googleGorselRozeti(oran, bilgi.en, bilgi.boy);
+                      const sorun = googleGorselRozeti(oran, bilgi.en, bilgi.boy, dil);
                       return sorun ? <span className={s.h} title={sorun}>Google ✕</span> : <span className={s.e}>Google ✓</span>;
                     })()}
-                    <button type="button" className={s.metinDugme} aria-label={`${bilgi?.ad ?? 'Varlığı'} kaldır`} onClick={() => {
+                    <button type="button" className={s.metinDugme} aria-label={tm.kaldirEtiket(bilgi?.ad ?? tm.varlik)} onClick={() => {
                         const kalan = medya.filter((y) => y.varlikId !== x.varlikId);
                         medyaYaz(setli ? setleriSabitle(kalan, oranlar) : kalan);
                       }}>
-                      Kaldır
+                      {tm.kaldir}
                     </button>
                   </div>
                 </div>
@@ -648,15 +658,15 @@ function MedyaBlogu({
                     sebebiyle ve marka kırmızısıyla duruyor; sessizce atılmıyor. */}
                 {sorunlu.length > 0 && (
                   <div className={s.dosyalar}>
-                    {g.kullanilamaz.map((x) => satir(x, 'Bu boyut kullanılamıyor. 9:16, 4:5, 1:1 ya da 1.91:1 olacak şekilde kırpıp tekrar bırak.'))}
-                    {g.cakisan.map((x) => satir(x, 'Aynı sette bu boyuttan bir görsel daha var; ⋯ menüsünden başka sete taşı ya da kaldır.'))}
+                    {g.kullanilamaz.map((x) => satir(x, tm.kullanilamiyor))}
+                    {g.cakisan.map((x) => satir(x, tm.cakisan))}
                     {g.bilinmeyen.map((x) => satir(x, null))}
                   </div>
                 )}
                 {/* 9:16 GÜVENLİ ALAN: Meta açıkken ve dikey görsel varken tek satır. */}
                 {dikeyNotuGerekli(b.acik.meta, medya.map((x) => oranlar.get(x.varlikId))) && (
                   <p className={s.ipucu} data-guvenli-alan>
-                    {DIKEY_GUVENLI_ALAN_NOTU}
+                    {dikeyGuvenliAlanNotu(dil)}
                   </p>
                 )}
                 {setli && (g.setler.length > 0 || medya.length === 0) && (
@@ -689,7 +699,7 @@ function MedyaBlogu({
                 {/* Set yalnız "Siteme gelsinler"de ölçüldü (`BANNER_SETI_NIYETLERI`):
                     bu amaçta her görsel ayrı reklam ve bunu ekran söylüyor. */}
                 {!setli && b.acik.meta && !video && g.setler.length > 1 && (
-                  <p className={s.ipucu}>Bu amaçta her görsel ayrı bir reklamdır; Meta hepsini dener.</p>
+                  <p className={s.ipucu}>{tm.herGorselAyri}</p>
                 )}
                 {g.videolar.length > 0 && (
                   <div className={s.dosyalar}>
@@ -731,6 +741,8 @@ function MedyaBlogu({
 type OnizlemeKonusu = { tur: 'meta'; formId: string; ad: string } | { tur: 'taslak'; kayit: LeadFormRecord };
 
 function FormSecici({ b, eksikMetni, formUyarisi }: { b: AdimBaglami; eksikMetni: string | null; formUyarisi: string | null }) {
+  const { dil } = useDil();
+  const tf = useSozluk(reklamAdimReklamSozlugu).form;
   const sayfaId = b.a.sayfaId?.deger ?? null;
   const secili = b.a.formSablonuId?.deger ?? null;
   const sayfa = b.h.sayfalar.find((x) => x.id === sayfaId)?.ad ?? null;
@@ -746,7 +758,7 @@ function FormSecici({ b, eksikMetni, formUyarisi }: { b: AdimBaglami; eksikMetni
   // (Meta kimliğiyle eşlenir). Meta'da kurulan formun bizde kaydı yok, rozeti de yok.
   const [kayitlar, setKayitlar] = useState<readonly LeadFormRecord[]>([]);
   const geriOkumaUyarisi = (metaId: string) => kayitlar.find((k) => k.externalFormId === metaId)?.readbackWarning ?? null;
-  const olusturma = formOlusturmaDurumu({ sayfaId, yayinIzni: b.formYayinIzni });
+  const olusturma = formOlusturmaDurumu({ sayfaId, yayinIzni: b.formYayinIzni }, dil);
 
   /*
    * Liste SEÇİLİ sayfanın Meta'daki yayında formları; sayfa değişince ya da
@@ -759,11 +771,12 @@ function FormSecici({ b, eksikMetni, formUyarisi }: { b: AdimBaglami; eksikMetni
     let iptal = false;
     setHal({ tur: 'isteniyor' });
     apiFetch<RehberFormListesi>(`/reklam/rehber/form-sablonlari?clientId=${encodeURIComponent(b.clientId)}&sayfaId=${encodeURIComponent(sayfaId)}`)
-      .then((r) => !iptal && setHal(formListesiHali(r)))
-      .catch((e: unknown) => !iptal && setHal(oneriHatasi(e)));
+      .then((r) => !iptal && setHal(formListesiHali(r, dil)))
+      .catch((e: unknown) => !iptal && setHal(oneriHatasi(e, dil)));
     return () => {
       iptal = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sayfaId, b.clientId, tur]);
 
   /*
@@ -780,12 +793,13 @@ function FormSecici({ b, eksikMetni, formUyarisi }: { b: AdimBaglami; eksikMetni
         if (iptal) return;
         const t = sayfaTaslaklari(r, sayfaId);
         setKayitlar(r);
-        setTaslaklar(t.length ? { tur: 'geldi', deger: t } : { tur: 'bos', neden: 'Yarım kalan form yok.' });
+        setTaslaklar(t.length ? { tur: 'geldi', deger: t } : { tur: 'bos', neden: tf.yarimYok });
       })
-      .catch((e: unknown) => !iptal && setTaslaklar(oneriHatasi(e)));
+      .catch((e: unknown) => !iptal && setTaslaklar(oneriHatasi(e, dil)));
     return () => {
       iptal = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sayfaId, b.clientId, tur]);
 
   const oneri = hal.tur === 'geldi' ? gizlilikOnerisi(hal.deger.satirlar) : null;
@@ -799,7 +813,7 @@ function FormSecici({ b, eksikMetni, formUyarisi }: { b: AdimBaglami; eksikMetni
     const k = yayinSonrasiSecim(r);
     if (k.tur === 'sec') {
       yaz(b, 'formSablonuId', k.formId);
-      setBildirim(`"${r.name}" Meta'da yayınlandı ve bu reklam için seçildi.`);
+      setBildirim(tf.yayinlandiSecildi(r.name));
       setOlustur((x) => ({ ...x, acik: false }));
     } else if (k.tur === 'uyari') {
       // Pencere AÇIK kalır ve uyarı orada; seçim "Yine de kullan" ile.
@@ -812,7 +826,7 @@ function FormSecici({ b, eksikMetni, formUyarisi }: { b: AdimBaglami; eksikMetni
   const olusturDugmesi = (birincil: boolean) =>
     olusturma.goster ? (
       <Dugme ton={birincil ? 'koyu' : 'ikincil'} ikon="＋" className={s.ustBosluk} onClick={() => olusturAc(null)}>
-        Form oluştur
+        {tf.olustur}
       </Dugme>
     ) : sayfaId ? (
       <p className={s.ipucu}>{olusturma.sebep}</p>
@@ -820,12 +834,12 @@ function FormSecici({ b, eksikMetni, formUyarisi }: { b: AdimBaglami; eksikMetni
 
   return (
     <>
-      {hal.tur === 'istenmedi' && <p className={s.ipucu} style={{ margin: 0 }}>Önce Nerede adımında Facebook sayfasını seç; formlar o sayfadan listelenir.</p>}
-      {hal.tur === 'isteniyor' && <p className={s.ipucu} style={{ margin: 0 }}>Sayfanın formları Meta&apos;dan okunuyor…</p>}
+      {hal.tur === 'istenmedi' && <p className={s.ipucu} style={{ margin: 0 }}>{tf.istenmedi}</p>}
+      {hal.tur === 'isteniyor' && <p className={s.ipucu} style={{ margin: 0 }}>{tf.okunuyor}</p>}
       {hal.tur === 'dustu' && (
         <div className={s.uyari} role="alert">
           <Ikon d={IKON.ucgen} />
-          <span>Formlar Meta&apos;dan okunamadı: {hal.mesaj}</span>
+          <span>{tf.okunamadi(hal.mesaj)}</span>
         </div>
       )}
       {hal.tur === 'bos' && (
@@ -833,7 +847,7 @@ function FormSecici({ b, eksikMetni, formUyarisi }: { b: AdimBaglami; eksikMetni
           <div className={s.uyari}>
             <Ikon d={IKON.ucgen} />
             <span>
-              {sayfa ? <b>{sayfa}</b> : 'Seçili sayfa'}: {hal.neden}
+              {sayfa ? <b>{sayfa}</b> : tf.seciliSayfa}: {hal.neden}
             </span>
           </div>
           {/* Boş listede ASIL EYLEM yeni form: Meta'ya gitmeden burada kurulur. */}
@@ -847,7 +861,7 @@ function FormSecici({ b, eksikMetni, formUyarisi }: { b: AdimBaglami; eksikMetni
               <div key={f.id} className={s.formSatiri} data-secili={secili === f.id}>
                 <button type="button" aria-pressed={secili === f.id} onClick={() => yaz(b, 'formSablonuId', f.id)}>
                   {f.ad}
-                  {!f.gizlilikAdresi && <small>gizlilik adresi yok</small>}
+                  {!f.gizlilikAdresi && <small>{tf.gizlilikYok}</small>}
                   {geriOkumaUyarisi(f.id) && (
                     <small className={s.hataMetni} title={geriOkumaUyarisi(f.id) ?? undefined}>
                       {geriOkumaUyarisi(f.id)}
@@ -855,12 +869,12 @@ function FormSecici({ b, eksikMetni, formUyarisi }: { b: AdimBaglami; eksikMetni
                   )}
                 </button>
                 <button type="button" className={s.metinDugme} onClick={() => setOnizleme({ tur: 'meta', formId: f.id, ad: f.ad })}>
-                  Önizle
+                  {tf.onizle}
                 </button>
               </div>
             ))}
           </div>
-          {hal.deger.kesildi && <p className={s.ipucu}>İlk {hal.deger.toplam} form gösteriliyor.</p>}
+          {hal.deger.kesildi && <p className={s.ipucu}>{tf.ilkN(hal.deger.toplam)}</p>}
           {olusturDugmesi(false)}
         </>
       )}
@@ -868,23 +882,23 @@ function FormSecici({ b, eksikMetni, formUyarisi }: { b: AdimBaglami; eksikMetni
       {bildirim && <p className={s.ipucu} role="status">{bildirim}</p>}
       {taslaklar.tur === 'geldi' && (
         <div className={s.ustBosluk}>
-          <p className={s.alanEtiket}>Yarım kalan formlar</p>
-          <p className={s.ipucu} style={{ marginTop: 2 }}>Advetics&apos;te yazıldı, Meta&apos;da yayınlanmadı. Yayınlanınca seçilebilir.</p>
+          <p className={s.alanEtiket}>{tf.yarimBaslik}</p>
+          <p className={s.ipucu} style={{ marginTop: 2 }}>{tf.yarimAciklama}</p>
           <div className={s.formListesi}>
             {taslaklar.deger.map((t) => (
               <div key={t.id} className={s.formSatiri}>
                 <span className={s.formTaslakAdi}>
                   {t.name}
                   <small>
-                    {yarimFormDurumu(t)}
+                    {yarimFormDurumu(t, dil)}
                   </small>
                 </span>
                 <button type="button" className={s.metinDugme} onClick={() => setOnizleme({ tur: 'taslak', kayit: t })}>
-                  Önizle
+                  {tf.onizle}
                 </button>
                 {olusturma.goster && yenidenYayinlanabilir(t) && (
                   <button type="button" className={s.metinDugme} onClick={() => olusturAc(t)}>
-                    Aç ve yayınla
+                    {tf.acVeYayinla}
                   </button>
                 )}
               </div>
@@ -892,16 +906,16 @@ function FormSecici({ b, eksikMetni, formUyarisi }: { b: AdimBaglami; eksikMetni
           </div>
         </div>
       )}
-      {taslaklar.tur === 'dustu' && <p className={s.hataMetni}>Yarım kalan formlar okunamadı: {taslaklar.mesaj}</p>}
+      {taslaklar.tur === 'dustu' && <p className={s.hataMetni}>{tf.yarimOkunamadi(taslaklar.mesaj)}</p>}
       {(hal.tur === 'geldi' || hal.tur === 'bos' || hal.tur === 'dustu') && (
         <button type="button" className={`${s.metinDugme} ${s.ustBosluk}`} onClick={() => setTur((x) => x + 1)}>
-          Listeyi yenile
+          {tf.yenile}
         </button>
       )}
       <p className={eksikMetni && hal.tur === 'geldi' ? s.hataMetni : s.ipucu}>
         {hal.tur === 'geldi' && eksikMetni
           ? eksikMetni
-          : `Formlar ${sayfa ? `${sayfa} ` : 'seçtiğin '}Facebook sayfasına gelir (Meta'nın kendi seçtiği sayfa değil).`}
+          : tf.sayfaNotu(sayfa)}
       </p>
       {formUyarisi && <p className={s.hataMetni}>{formUyarisi}</p>}
 
@@ -923,14 +937,14 @@ function FormSecici({ b, eksikMetni, formUyarisi }: { b: AdimBaglami; eksikMetni
         anahtar={olustur.anahtar}
         kayit={olustur.kayit}
         clientId={b.clientId}
-        sayfa={sayfaId ? { id: sayfaId, name: sayfa ?? 'Facebook sayfası' } : null}
+        sayfa={sayfaId ? { id: sayfaId, name: sayfa ?? tf.facebookSayfasi } : null}
         oneri={oneri}
         telefon={b.h.iletisim.telefon}
         bekleyen={bekleyen}
         yineDeKullan={() => {
           if (!bekleyen) return;
           yaz(b, 'formSablonuId', bekleyen.formId);
-          setBildirim(`"${bekleyen.ad}" Meta'da doğrulanamayan haliyle bu reklam için seçildi.`);
+          setBildirim(tf.dogrulanamadi(bekleyen.ad));
           setBekleyen(null);
           setOlustur((x) => ({ ...x, acik: false }));
         }}
@@ -988,6 +1002,8 @@ function FormOnizlemePenceresi({
   sec: (formId: string) => void;
   taslagiAc: (t: LeadFormRecord) => void;
 }) {
+  const { dil } = useDil();
+  const tf = useSozluk(reklamAdimReklamSozlugu).form;
   const [hal, setHal] = useState<{ tur: 'isteniyor' } | { tur: 'dustu'; mesaj: string } | { tur: 'geldi'; deger: FormOnizlemesi }>({ tur: 'isteniyor' });
   const acik = konu !== null;
 
@@ -1000,44 +1016,45 @@ function FormOnizlemePenceresi({
       `/reklam/rehber/form-ayrintisi?clientId=${encodeURIComponent(b.clientId)}&sayfaId=${encodeURIComponent(sayfaId)}&formId=${encodeURIComponent(metaId)}`,
     )
       .then((r) => !iptal && setHal({ tur: 'geldi', deger: r }))
-      .catch((e: unknown) => !iptal && setHal(oneriHatasi(e)));
+      .catch((e: unknown) => !iptal && setHal(oneriHatasi(e, dil)));
     return () => {
       iptal = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [metaId, sayfaId, b.clientId]);
 
-  const gorunen: typeof hal = konu?.tur === 'taslak' ? { tur: 'geldi', deger: kayittanOnizleme(konu.kayit) } : hal;
+  const gorunen: typeof hal = konu?.tur === 'taslak' ? { tur: 'geldi', deger: kayittanOnizleme(konu.kayit, dil) } : hal;
   const ad = konu ? (konu.tur === 'meta' ? konu.ad : konu.kayit.name) : '';
 
   return (
     <Pencere
       acik={acik}
       onKapat={kapat}
-      baslik={`Form önizlemesi: ${ad}`}
-      aciklama={konu?.tur === 'taslak' ? 'Advetics taslağı; henüz Meta’da yayında değil.' : 'Meta’daki formun kişiye görünen ekranları, sırayla.'}
+      baslik={tf.onizlemeBaslik(ad)}
+      aciklama={konu?.tur === 'taslak' ? tf.taslakAciklama : tf.metaAciklama}
       altEylemler={
         <>
           <Dugme ton="ikincil" onClick={kapat}>
-            Kapat
+            {tf.kapat}
           </Dugme>
           {konu?.tur === 'meta' && (
             <Dugme disabled={secili === konu.formId} onClick={() => sec(konu.formId)}>
-              {secili === konu.formId ? 'Bu form seçili' : 'Bu formu kullan'}
+              {secili === konu.formId ? tf.seciliForm : tf.kullan}
             </Dugme>
           )}
-          {konu?.tur === 'taslak' && yayinlayabilir && <Dugme onClick={() => taslagiAc(konu.kayit)}>Aç ve yayınla</Dugme>}
+          {konu?.tur === 'taslak' && yayinlayabilir && <Dugme onClick={() => taslagiAc(konu.kayit)}>{tf.acVeYayinla}</Dugme>}
         </>
       }
     >
       <div className={s.kok}>
-        {gorunen.tur === 'isteniyor' && <p className={s.ipucu}>Form Meta&apos;dan okunuyor…</p>}
+        {gorunen.tur === 'isteniyor' && <p className={s.ipucu}>{tf.okunuyorTek}</p>}
         {gorunen.tur === 'dustu' && (
           <div className={s.uyari} role="alert">
             <Ikon d={IKON.ucgen} />
             <span>{gorunen.mesaj}</span>
           </div>
         )}
-        {acik && gorunen.tur === 'geldi' && <FormOnizleme onizleme={gorunen.deger} baslik="Kişinin göreceği ekranlar" />}
+        {acik && gorunen.tur === 'geldi' && <FormOnizleme onizleme={gorunen.deger} baslik={tf.kisiEkranlari} />}
       </div>
     </Pencere>
   );
@@ -1078,6 +1095,7 @@ function FormOlusturPenceresi({
   yayinlandi: (r: LeadFormRecord) => void;
   kapat: () => void;
 }) {
+  const tf = useSozluk(reklamAdimReklamSozlugu).form;
   const kapatRef = useRef<HTMLButtonElement>(null);
   const baslikId = useId();
   // ESCAPE BURADA KAPATMAZ: oluşturucuda kaydedilmemiş alanlar var ve bir
@@ -1087,8 +1105,8 @@ function FormOlusturPenceresi({
   return (
     <div className={`${s.perde} ${acik ? s.acik : ''}`} aria-hidden={!acik}>
       <div className={`${s.pencere} ${s.pencereGenis}`} role="dialog" aria-modal="true" aria-labelledby={baslikId}>
-        <h3 id={baslikId}>{kayit ? `Formu yayınla: ${kayit.name}` : 'Yeni anlık form'}</h3>
-        <p>Kaydet, sonra Meta&apos;da yayınla. Yayınlanınca bu reklam için otomatik seçilir. Yayınlanan formun içeriği sonradan değiştirilemez.</p>
+        <h3 id={baslikId}>{kayit ? tf.olusturBaslik(kayit.name) : tf.yeniForm}</h3>
+        <p>{tf.olusturAciklama}</p>
         <div className={s.pencereGovde}>
           {sayfa && anahtar > 0 && (
             <FormBuilder
@@ -1106,16 +1124,16 @@ function FormOlusturPenceresi({
           <div className={s.uyari} role="alert">
             <Ikon d={IKON.ucgen} />
             <span>
-              <b>&quot;{bekleyen.ad}&quot; yayınlandı ama reklama seçilmedi.</b> {bekleyen.uyari}{' '}
+              <b>{tf.yayinlandiSecilmedi(bekleyen.ad)}</b> {bekleyen.uyari}{' '}
               <button type="button" className={s.metinDugme} onClick={yineDeKullan}>
-                Yine de kullan
+                {tf.yineDeKullan}
               </button>
             </span>
           </div>
         )}
         <div className={s.pencereAlt}>
           <button ref={kapatRef} type="button" className={dugmeSinifi('ikincil')} onClick={kapat}>
-            Kapat
+            {tf.kapat}
           </button>
         </div>
       </div>
@@ -1128,6 +1146,8 @@ function FormOlusturPenceresi({
 // ─────────────────────────────────────────────────────────────────────────────
 
 function VideoSecici({ b, eksikMetni }: { b: AdimBaglami; eksikMetni: string | null }) {
+  const { dil } = useDil();
+  const tv = useSozluk(reklamAdimReklamSozlugu).video;
   const kanalId = b.a.youtubeKanaliId?.deger ?? null;
   const secili = b.a.youtubeVideo?.deger ?? null;
   const [hal, setHal] = useState<OneriHali<YoutubeVideoListesi>>({ tur: 'istenmedi' });
@@ -1155,11 +1175,12 @@ function VideoSecici({ b, eksikMetni }: { b: AdimBaglami; eksikMetni: string | n
     apiFetch<YoutubeVideoListesi>(
       `/reklam/rehber/youtube-videolari?clientId=${encodeURIComponent(b.clientId)}&kanalId=${encodeURIComponent(kanalId)}`,
     )
-      .then((r) => !iptal && setHal(videoListesiHali(r)))
-      .catch((e: unknown) => !iptal && setHal(oneriHatasi(e)));
+      .then((r) => !iptal && setHal(videoListesiHali(r, dil)))
+      .catch((e: unknown) => !iptal && setHal(oneriHatasi(e, dil)));
     return () => {
       iptal = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kanalId, b.clientId]);
 
   /** Videoyu YouTube'dan okuyup yazar; engel varsa yazmaz (giriş anında). */
@@ -1170,11 +1191,11 @@ function VideoSecici({ b, eksikMetni }: { b: AdimBaglami; eksikMetni: string | n
         `/reklam/rehber/youtube-video?clientId=${encodeURIComponent(b.clientId)}&videoId=${encodeURIComponent(videoId)}`,
       );
       const x = youtubeSecimi(r);
-      if (x.engel || !x.deger) return setKontrol({ tur: 'engel', mesaj: x.engel ?? 'Bu video seçilemiyor.' });
+      if (x.engel || !x.deger) return setKontrol({ tur: 'engel', mesaj: x.engel ?? tv.secilemiyor });
       yaz(b, 'youtubeVideo', x.deger);
       setKontrol({ tur: 'yok' });
     } catch (e) {
-      const h = oneriHatasi(e);
+      const h = oneriHatasi(e, dil);
       const mesaj = h.mesaj;
       // Bulunamayan video (400) seçilmez; okunamayan (503, kota) doğrulanmadan
       // yazılır: bilinmeyen bir şey yüzünden kullanıcı kilitlenmesin.
@@ -1192,14 +1213,14 @@ function VideoSecici({ b, eksikMetni }: { b: AdimBaglami; eksikMetni: string | n
   return (
     <>
       <div className={s.blokBaslik}>
-        YouTube videosu <span className={s.ops}>Google için</span>
+        {tv.baslik} <span className={s.ops}>{tv.googleIcin}</span>
       </div>
-      {!kanalId && <p className={s.ipucu} style={{ margin: 0 }}>YouTube kanalı bağlı değil; videonun bağlantısını yapıştır.</p>}
-      {hal.tur === 'isteniyor' && <p className={s.ipucu} style={{ margin: 0 }}>Kanalın videoları okunuyor…</p>}
-      {hal.tur === 'bos' && <p className={s.ipucu} style={{ margin: 0 }}>Video bulunamadı: {hal.neden}</p>}
+      {!kanalId && <p className={s.ipucu} style={{ margin: 0 }}>{tv.kanalYok}</p>}
+      {hal.tur === 'isteniyor' && <p className={s.ipucu} style={{ margin: 0 }}>{tv.okunuyor}</p>}
+      {hal.tur === 'bos' && <p className={s.ipucu} style={{ margin: 0 }}>{tv.bulunamadi(hal.neden)}</p>}
       {hal.tur === 'dustu' && (
         <p className={s.hataMetni} role="alert" style={{ margin: 0 }}>
-          Kanalın videoları okunamadı: {hal.mesaj}
+          {tv.okunamadi(hal.mesaj)}
         </p>
       )}
       {hal.tur === 'geldi' && (
@@ -1218,7 +1239,7 @@ function VideoSecici({ b, eksikMetni }: { b: AdimBaglami; eksikMetni: string | n
                   onClick={() => void sec(v.videoId, v.baslik)}
                 >
                   {v.baslik || v.videoId}
-                  <small>{engel ? 'Reklamda gösterilemez' : [v.yayinTarihi ? tarihGoster(v.yayinTarihi.slice(0, 10)) : null, vs].filter(Boolean).join(' · ')}</small>
+                  <small>{engel ? tv.gosterilemez : [v.yayinTarihi ? tarihGoster(v.yayinTarihi.slice(0, 10), dil) : null, vs].filter(Boolean).join(' · ')}</small>
                 </button>
               );
             })}
@@ -1226,12 +1247,12 @@ function VideoSecici({ b, eksikMetni }: { b: AdimBaglami; eksikMetni: string | n
           {hal.deger.ayrintiHatasi && <p className={s.hataMetni}>{hal.deger.ayrintiHatasi}</p>}
           {hal.deger.dahaFazlaVar && (
             <p className={s.ipucu}>
-              Son {hal.deger.toplam} video gösteriliyor; kanalda daha eskileri olabilir. Aradığın yoksa bağlantısını yapıştır.
+              {tv.dahaFazla(hal.deger.toplam)}
             </p>
           )}
         </>
       )}
-      {kontrol.tur === 'okunuyor' && <p className={s.ipucu}>Video YouTube&apos;da kontrol ediliyor…</p>}
+      {kontrol.tur === 'okunuyor' && <p className={s.ipucu}>{tv.kontrolEdiliyor}</p>}
       {kontrol.tur === 'engel' && (
         <p className={s.hataMetni} role="alert">
           {kontrol.mesaj}
@@ -1239,7 +1260,7 @@ function VideoSecici({ b, eksikMetni }: { b: AdimBaglami; eksikMetni: string | n
       )}
       {kontrol.tur === 'dustu' && (
         <p className={s.hataMetni} role="alert">
-          Video YouTube&apos;da doğrulanamadı ({kontrol.mesaj}); seçildi, Google provada kontrol edecek.
+          {tv.dogrulanamadi(kontrol.mesaj)}
         </p>
       )}
       {secili && (
@@ -1252,18 +1273,18 @@ function VideoSecici({ b, eksikMetni }: { b: AdimBaglami; eksikMetni: string | n
           )}
           <div>
             <b>{secili.baslik || secili.videoId}</b>
-            <small>{[listede ? 'Kanalından seçildi' : 'Bağlantıyla seçildi', sure].filter(Boolean).join(' · ')}</small>
+            <small>{[listede ? tv.kanalindan : tv.baglantiyla, sure].filter(Boolean).join(' · ')}</small>
           </div>
           <div className={s.uygun}>
             <button type="button" className={s.metinDugme} onClick={() => sil(b, 'youtubeVideo')}>
-              Kaldır
+              {tv.kaldir}
             </button>
           </div>
         </div>
       )}
       {kanalId && (
         <button type="button" className={`${s.metinDugme} ${s.ustBosluk}`} aria-expanded={yedekAcik} onClick={() => setYedekAcik((x) => !x)}>
-          {yedekAcik ? 'Bağlantı kutusunu gizle' : 'Bağlantı yapıştır'}
+          {yedekAcik ? tv.baglantiGizle : tv.baglantiYapistir}
         </button>
       )}
       <div className={s.gizlenir} data-acik={yapistirmaAcik}>
@@ -1271,8 +1292,8 @@ function VideoSecici({ b, eksikMetni }: { b: AdimBaglami; eksikMetni: string | n
           <div className={s.girdi} style={{ marginTop: 8 }}>
             <input
               value={yedek}
-              placeholder="YouTube bağlantısını yapıştır"
-              aria-label="YouTube videosu bağlantısı"
+              placeholder={tv.yer}
+              aria-label={tv.etiket}
               tabIndex={yapistirmaAcik ? 0 : -1}
               onChange={(e) => {
                 setYedek(e.target.value);
@@ -1281,8 +1302,8 @@ function VideoSecici({ b, eksikMetni }: { b: AdimBaglami; eksikMetni: string | n
               }}
             />
           </div>
-          {yedek.trim() && !yedekKimlik && <p className={s.hataMetni}>Bu bir YouTube video bağlantısı değil.</p>}
-          <p className={s.ipucu}>Video herkese açık ya da liste dışı olmalı; gizli video reklamda gösterilemez.</p>
+          {yedek.trim() && !yedekKimlik && <p className={s.hataMetni}>{tv.baglantiDegil}</p>}
+          <p className={s.ipucu}>{tv.gizliVideo}</p>
         </div>
       </div>
       {eksikMetni && !secili && <p className={s.ipucu}>{eksikMetni}</p>}
@@ -1298,18 +1319,19 @@ function VideoSecici({ b, eksikMetni }: { b: AdimBaglami; eksikMetni: string | n
  * ama boş kutu olarak; gizlenseydi kullanıcı adayın varlığını bilmezdi.
  */
 function KapakSecici({ oge, medyaBilgisi, sec }: { oge: MedyaOgesi; medyaBilgisi: ReadonlyMap<string, MedyaBilgisi>; sec: (id: string) => void }) {
+  const tv = useSozluk(reklamAdimReklamSozlugu).video;
   const adaylar = oge.kapakAdaylari ?? [];
   if (adaylar.length < 2) return null;
   return (
     <div className={s.ustBosluk}>
       <p className={s.ipucu} style={{ margin: 0 }}>
-        Kapak: reklam başlamadan görünen kare. Siyah kareler çıkarıldı.
+        {tv.kapakAciklama}
       </p>
-      <div className={s.varliklar} role="group" aria-label="Kapak karesi">
+      <div className={s.varliklar} role="group" aria-label={tv.kapakEtiket}>
         {adaylar.map((id, i) => {
           const bilgi = medyaBilgisi.get(id);
           return (
-            <button key={id} type="button" className={s.varlik} aria-pressed={oge.kapakVarlikId === id} aria-label={`Kapak adayı ${i + 1}`} onClick={() => sec(id)}>
+            <button key={id} type="button" className={s.varlik} aria-pressed={oge.kapakVarlikId === id} aria-label={tv.kapakAday(i + 1)} onClick={() => sec(id)}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               {bilgi && <img src={bilgi.onizleme} alt="" loading="lazy" />}
             </button>
@@ -1343,6 +1365,7 @@ function FikirMetni({
   iste: (mod: NonNullable<MetinOnerIstegi['mod']>) => void;
   yazMetin: (m: MedyaMetni | null) => void;
 }) {
+  const tk = useSozluk(reklamAdimReklamSozlugu).fikir;
   const m = durum.metin;
   const yaziliyor = hal?.tur === 'isteniyor';
   const duzelt = (degisen: Partial<MedyaMetni>) => yazMetin({ ...(m ?? { kaynak: 'kullanici' }), ...degisen, kaynak: 'kullanici' });
@@ -1350,23 +1373,23 @@ function FikirMetni({
   return (
     <div className={s.fikirMetni}>
       <div className={s.fikirMetniUst}>
-        <b>Bu görselin metni</b>
+        <b>{tk.baslik}</b>
         <span className={s.ops}>
-          {m ? (m.kaynak === 'derleyici' ? 'Yapay zekâ görsele bakarak yazdı; düzeltebilirsin.' : 'Senin düzenlediğin metin.') : 'Ortak metin kullanılıyor.'}
-          {hal?.tur === 'geldi' && hal.deger.onbellekten ? ' Bu görsel için daha önce yazılmıştı.' : ''}
+          {m ? (m.kaynak === 'derleyici' ? tk.yz : tk.senin) : tk.ortak}
+          {hal?.tur === 'geldi' && hal.deger.onbellekten ? tk.onbellek : ''}
         </span>
       </div>
       {m && (
         <>
           <SayacliGirdi
-            etiketGizli="Bu görselin başlığı"
+            etiketGizli={tk.baslikEtiket}
             deger={m.basliklar?.[0] ?? ''}
             sinir={METIN_SINIRLARI.baslik}
             degisti={(v) => duzelt({ basliklar: [v, ...(m.basliklar ?? []).slice(1)] })}
           />
           {b.acik.meta && (
             <SayacliGirdi
-              etiketGizli="Bu görselin ana metni"
+              etiketGizli={tk.anaEtiket}
               deger={m.anaMetin ?? ''}
               sinir={METIN_SINIRLARI.anaMetinOnerilen}
               degisti={(v) => duzelt({ anaMetin: v })}
@@ -1376,23 +1399,23 @@ function FikirMetni({
       )}
       <div className={s.fikirDugmeler}>
         <button type="button" className={s.metinDugme} disabled={yaziliyor} onClick={() => iste(m ? 'yeniden_yaz' : 'yeni')}>
-          {yaziliyor ? '✦ Yazılıyor…' : m ? '✦ Yeniden yaz' : '✦ Bu görsele metin yaz'}
+          {yaziliyor ? tk.yaziliyor : m ? tk.yenidenYaz : tk.metinYaz}
         </button>
         {m?.kaynak === 'kullanici' && (
           <button type="button" className={s.metinDugme} disabled={yaziliyor} onClick={() => iste('buna_gore')}>
-            Buna göre yeniden yaz
+            {tk.bunaGore}
           </button>
         )}
         {m && (
           <button type="button" className={s.metinDugme} onClick={() => yazMetin(null)}>
-            Ortak metni kullan
+            {tk.ortakKullan}
           </button>
         )}
       </div>
-      {hal?.tur === 'bos' && <p className={s.ipucu}>Metin çıkmadı: {hal.neden}</p>}
+      {hal?.tur === 'bos' && <p className={s.ipucu}>{tk.cikmadi(hal.neden)}</p>}
       {hal?.tur === 'dustu' && (
         <p className={s.hataMetni} role="alert">
-          Bu görsele metin yazılamadı: {hal.mesaj}
+          {tk.yazilamadi(hal.mesaj)}
         </p>
       )}
       {notlar.map((n, i) => (
@@ -1409,8 +1432,10 @@ function FikirMetni({
 // ─────────────────────────────────────────────────────────────────────────────
 
 function MetinBlogu({ b, kaydet }: { b: AdimBaglami; kaydet: () => Promise<boolean> }) {
+  const { dil } = useDil();
+  const tt = useSozluk(reklamAdimReklamSozlugu).metin;
   const amac = b.a.amac?.deger ?? null;
-  const kural = metinKurali(b.acik, amac ? REHBER_AMACLARI[amac].google.kurgu : null);
+  const kural = metinKurali(b.acik, amac ? REHBER_AMACLARI[amac].google.kurgu : null, dil);
   const m = metinKutusu(b.a.metin?.deger, kural);
   const [oneri, setOneri] = useState<OneriHali<MetinOnerisi>>({ tur: 'istenmedi' });
   const guc = reklamGucu(m);
@@ -1438,14 +1463,14 @@ function MetinBlogu({ b, kaydet }: { b: AdimBaglami; kaydet: () => Promise<boole
   const sonOneri = useRef<MetinOnerisi | null>(null);
   async function oner(mod: NonNullable<MetinOnerIstegi['mod']>) {
     setOneri({ tur: 'isteniyor' });
-    if (!(await kaydet())) return setOneri({ tur: 'dustu', mesaj: 'Taslak kaydedilemedi; öneri kayıtlı alanlardan üretiliyor.' });
+    if (!(await kaydet())) return setOneri({ tur: 'dustu', mesaj: tt.kaydedilemedi });
     try {
       const govde: MetinOnerIstegi = { mod, tekrarEtme: tekrarEtmeListesi(sonOneri.current) };
       const r = await apiFetch<MetinOnerisi>(`/reklam/rehberler/${b.kayit.id}/metin-oner`, { method: 'POST', body: JSON.stringify(govde) });
       sonOneri.current = r;
-      setOneri(metinOnerisiHali(r));
+      setOneri(metinOnerisiHali(r, dil));
     } catch (e) {
-      setOneri(oneriHatasi(e));
+      setOneri(oneriHatasi(e, dil));
     }
   }
 
@@ -1483,7 +1508,7 @@ function MetinBlogu({ b, kaydet }: { b: AdimBaglami; kaydet: () => Promise<boole
   return (
     <div className={s.blok}>
       <div className={s.blokBaslik}>
-        Metin{' '}
+        {tt.baslik}{' '}
         <button
           type="button"
           className={s.metinDugme}
@@ -1491,18 +1516,18 @@ function MetinBlogu({ b, kaydet }: { b: AdimBaglami; kaydet: () => Promise<boole
           disabled={oneri.tur === 'isteniyor'}
           onClick={() => void oner(sonOneri.current ? 'yeniden_yaz' : 'yeni')}
         >
-          {oneri.tur === 'isteniyor' ? '✦ Öneri yazılıyor…' : sonOneri.current ? '✦ Yeniden yaz' : '✦ Metin öner'}
+          {oneri.tur === 'isteniyor' ? tt.oneriYaziliyor : sonOneri.current ? tt.yenidenYaz : tt.metinOner}
         </button>
         {ortakDolu && (
           <button type="button" className={s.metinDugme} disabled={oneri.tur === 'isteniyor'} onClick={() => void oner('buna_gore')}>
-            Buna göre yeniden yaz
+            {tt.bunaGore}
           </button>
         )}
       </div>
       <div className={s.metinler}>
         {oneriSig && (
           <div className={s.oneriKart}>
-            <b>Önerilen metin</b>
+            <b>{tt.onerilen}</b>
             {oneriSig.anaMetin && <span>{oneriSig.anaMetin}</span>}
             {oneriSig.basliklar.length > 0 && (
               <ul>
@@ -1518,10 +1543,10 @@ function MetinBlogu({ b, kaydet }: { b: AdimBaglami; kaydet: () => Promise<boole
                 ))}
               </ul>
             )}
-            {googleArama && oneriSig.gorunenYol.length > 0 && <span>Görünen yol: /{oneriSig.gorunenYol.join('/')}</span>}
-            {googleArama && oneriSig.aciklamaMetinleri.length > 0 && <span>Açıklama metinleri: {oneriSig.aciklamaMetinleri.join(' · ')}</span>}
-            {oneriSig.gorselSayisi > 0 && <span className={s.ops}>{oneriSig.gorselSayisi} görsele bakılarak yazıldı.</span>}
-            {oneriSig.disarida > 0 && <span className={s.ops}>Bu reklamda kullanılmayacak {oneriSig.disarida} satır gösterilmedi.</span>}
+            {googleArama && oneriSig.gorunenYol.length > 0 && <span>{tt.gorunenYolOneri(oneriSig.gorunenYol.join('/'))}</span>}
+            {googleArama && oneriSig.aciklamaMetinleri.length > 0 && <span>{tt.aciklamaMetinleriOneri(oneriSig.aciklamaMetinleri.join(' · '))}</span>}
+            {oneriSig.gorselSayisi > 0 && <span className={s.ops}>{tt.gorselSayisi(oneriSig.gorselSayisi)}</span>}
+            {oneriSig.disarida > 0 && <span className={s.ops}>{tt.disarida(oneriSig.disarida)}</span>}
             {oneriSig.notlar.map((n, i) => (
               <span key={`n${i}`} className={s.ops}>
                 {n}
@@ -1529,35 +1554,35 @@ function MetinBlogu({ b, kaydet }: { b: AdimBaglami; kaydet: () => Promise<boole
             ))}
             <span style={{ display: 'flex', gap: 8 }}>
               <Dugme ton="ikincil" onClick={() => kullan(oneriSig)}>
-                Kullan
+                {tt.kullan}
               </Dugme>
               <button type="button" className={s.metinDugme} onClick={() => setOneri({ tur: 'istenmedi' })}>
-                Vazgeç
+                {tt.vazgec}
               </button>
             </span>
           </div>
         )}
-        {oneri.tur === 'bos' && <p className={s.ipucu}>Öneri çıkmadı: {oneri.neden}</p>}
+        {oneri.tur === 'bos' && <p className={s.ipucu}>{tt.cikmadi(oneri.neden)}</p>}
         {oneri.tur === 'dustu' && (
           <p className={s.hataMetni} role="alert">
-            Metin önerisi alınamadı: {oneri.mesaj}
+            {tt.alinamadi(oneri.mesaj)}
           </p>
         )}
         {oneriKaynakli && (
           <div className={s.uyari}>
             <Ikon d={IKON.ucgen} />
             <span>
-              Bu metin önerildi, henüz senin kararın değil.{' '}
+              {tt.onerildi}{' '}
               <button type="button" className={s.metinDugme} onClick={() => metinYaz(m)}>
-                Gözden geçirdim, onayla
+                {tt.onayla}
               </button>
             </span>
           </div>
         )}
         {b.acik.meta && (
           <SayacliGirdi
-            etiket="Ana metin"
-            not="Meta'da görselin üstünde"
+            etiket={tt.anaMetin}
+            not={tt.anaNot}
             deger={m.anaMetin}
             sinir={METIN_SINIRLARI.anaMetinOnerilen}
             degisti={(v) => metinYaz({ ...m, anaMetin: v })}
@@ -1565,13 +1590,13 @@ function MetinBlogu({ b, kaydet }: { b: AdimBaglami; kaydet: () => Promise<boole
         )}
         <div className={s.alan}>
           <span className={s.alanEtiket}>
-            Başlıklar{' '}
+            {tt.basliklar}{' '}
             <span className={s.ops}>{kural.baslikNotu}</span>
           </span>
           {m.basliklar.map((x, i) => (
             <SayacliGirdi
               key={`baslik-${i}`}
-              etiketGizli={`Başlık ${i + 1}`}
+              etiketGizli={tt.baslikN(i + 1)}
               deger={x}
               sinir={METIN_SINIRLARI.baslik}
               degisti={(v) => metinYaz({ ...m, basliklar: m.basliklar.map((y, j) => (j === i ? v : y)) })}
@@ -1579,18 +1604,18 @@ function MetinBlogu({ b, kaydet }: { b: AdimBaglami; kaydet: () => Promise<boole
           ))}
           {m.basliklar.length < kural.baslikEnCok && (
             <button type="button" className={s.metinDugme} style={{ alignSelf: 'flex-start' }} onClick={() => metinYaz({ ...m, basliklar: [...m.basliklar, ''] })}>
-              + Başlık ekle
+              {tt.baslikEkle}
             </button>
           )}
         </div>
         <div className={s.alan}>
           <span className={s.alanEtiket}>
-            Açıklama <span className={s.ops}>{kural.aciklamaNotu}</span>
+            {tt.aciklama} <span className={s.ops}>{kural.aciklamaNotu}</span>
           </span>
           {m.aciklamalar.map((x, i) => (
             <SayacliGirdi
               key={`aciklama-${i}`}
-              etiketGizli={`Açıklama ${i + 1}`}
+              etiketGizli={tt.aciklamaN(i + 1)}
               deger={x}
               sinir={METIN_SINIRLARI.aciklama}
               degisti={(v) => metinYaz({ ...m, aciklamalar: m.aciklamalar.map((y, j) => (j === i ? v : y)) })}
@@ -1598,30 +1623,30 @@ function MetinBlogu({ b, kaydet }: { b: AdimBaglami; kaydet: () => Promise<boole
           ))}
           {m.aciklamalar.length < kural.aciklamaEnCok && (
             <button type="button" className={s.metinDugme} style={{ alignSelf: 'flex-start' }} onClick={() => metinYaz({ ...m, aciklamalar: [...m.aciklamalar, ''] })}>
-              + Açıklama ekle
+              {tt.aciklamaEkle}
             </button>
           )}
         </div>
         {googleArama && (
           <div className={s.alan}>
             <span className={s.alanEtiket}>
-              Görünen yol <span className={s.ops}>İsteğe bağlı · Google adresin yanında gösterir</span>
+              {tt.gorunenYol} <span className={s.ops}>{tt.gorunenYolNot}</span>
             </span>
             {yol.map((x, i) => (
-              <SayacliGirdi key={`yol-${i}`} etiketGizli={`Görünen yol ${i + 1}`} deger={x} sinir={METIN_SINIRLARI.gorunenYol} degisti={(v) => yolYaz(i, v)} />
+              <SayacliGirdi key={`yol-${i}`} etiketGizli={tt.gorunenYolN(i + 1)} deger={x} sinir={METIN_SINIRLARI.gorunenYol} degisti={(v) => yolYaz(i, v)} />
             ))}
           </div>
         )}
         {googleArama && (
           <div className={s.alan}>
             <span className={s.alanEtiket}>
-              Açıklama metinleri{' '}
-              <span className={s.ops}>İsteğe bağlı · reklamın altında kısa özellikler; boşsa Marka Merkezi vaatleri kullanılır</span>
+              {tt.aciklamaMetinleri}{' '}
+              <span className={s.ops}>{tt.aciklamaMetinleriNot}</span>
             </span>
             {aciklamaMetniKutulari(m).map((x, i, hepsi) => (
               <SayacliGirdi
                 key={`cagri-${i}`}
-                etiketGizli={`Açıklama metni ${i + 1}`}
+                etiketGizli={tt.aciklamaMetniN(i + 1)}
                 deger={x}
                 sinir={ACIKLAMA_METNI_SINIRI}
                 degisti={(v) => metinYaz(aciklamaMetniYaz(m, hepsi.map((y, j) => (j === i ? v : y))))}
@@ -1631,11 +1656,11 @@ function MetinBlogu({ b, kaydet }: { b: AdimBaglami; kaydet: () => Promise<boole
         )}
         {kural.gucGoster && (
           <div className={s.guc}>
-            <span>Reklam gücü</span>
+            <span>{tt.guc}</span>
             <div className={s.gucCubuk}>
               <i style={{ width: `${yuzde}%` }} />
             </div>
-            <b>{{ zayif: 'Zayıf', orta: 'Orta', iyi: 'İyi' }[guc.gucu]}</b>
+            <b>{{ zayif: tt.zayif, orta: tt.orta, iyi: tt.iyi }[guc.gucu]}</b>
             {guc.ipucu && <span className={s.ops}>{guc.ipucu}</span>}
           </div>
         )}
@@ -1657,37 +1682,38 @@ function MetinBlogu({ b, kaydet }: { b: AdimBaglami; kaydet: () => Promise<boole
  * kullanıcıya tek satır açıklama; alan "Ekle" demeden açılmaz.
  */
 function EkOgeBlogu({ b }: { b: AdimBaglami }) {
+  const te = useSozluk(reklamAdimReklamSozlugu).ek;
   const p = b.a.googlePromosyon?.deger ?? null;
   const f = b.a.googleFiyatListesi?.deger ?? null;
   const pb = b.paraBirimi;
   const eksik = (kod: string) => b.kayit.eksikler.find((e) => e.kod === kod) ?? null;
   return (
     <div className={s.blok}>
-      <div className={s.blokBaslik}>Ek bilgiler (isteğe bağlı)</div>
+      <div className={s.blokBaslik}>{te.baslik}</div>
       <div className={s.metinler}>
         <div className={s.alan}>
           <span className={s.alanEtiket}>
-            Kampanyan var mı? <span className={s.ops}>Google indirimi reklamın altında gösterir</span>
+            {te.kampanya} <span className={s.ops}>{te.kampanyaNot}</span>
           </span>
           {!p ? (
             <button type="button" className={s.metinDugme} style={{ alignSelf: 'flex-start' }} onClick={() => yaz(b, 'googlePromosyon', bosPromosyon())}>
-              + İndirim ekle
+              {te.indirimEkle}
             </button>
           ) : (
             <>
-              <SayacliGirdi etiketGizli="Kampanya konusu" deger={p.hedef} sinir={PROMOSYON_HEDEF_SINIRI} degisti={(v) => yaz(b, 'googlePromosyon', { ...p, hedef: v })} />
+              <SayacliGirdi etiketGizli={te.konu} deger={p.hedef} sinir={PROMOSYON_HEDEF_SINIRI} degisti={(v) => yaz(b, 'googlePromosyon', { ...p, hedef: v })} />
               <div className={s.girdi}>
                 <select
-                  aria-label="İndirim türü"
+                  aria-label={te.turu}
                   value={p.indirim.tur}
                   onChange={(e) => yaz(b, 'googlePromosyon', { ...p, indirim: e.target.value === 'yuzde' ? { tur: 'yuzde', yuzde: 10 } : { tur: 'tutar', micros: '0' } })}
                 >
-                  <option value="yuzde">Yüzde (%)</option>
-                  <option value="tutar">Tutar ({paraSimgesi(pb)})</option>
+                  <option value="yuzde">{te.yuzde}</option>
+                  <option value="tutar">{te.tutar(paraSimgesi(pb))}</option>
                 </select>
                 {p.indirim.tur === 'yuzde' ? (
                   <input
-                    aria-label="İndirim yüzdesi"
+                    aria-label={te.yuzdeEtiket}
                     inputMode="numeric"
                     value={String(p.indirim.yuzde)}
                     onChange={(e) => {
@@ -1697,7 +1723,7 @@ function EkOgeBlogu({ b }: { b: AdimBaglami }) {
                   />
                 ) : (
                   <input
-                    aria-label="İndirim tutarı"
+                    aria-label={te.tutarEtiket}
                     inputMode="decimal"
                     defaultValue={p.indirim.micros === '0' ? '' : tutarMetni(p.indirim.micros)}
                     onBlur={(e) => {
@@ -1708,39 +1734,39 @@ function EkOgeBlogu({ b }: { b: AdimBaglami }) {
                 )}
               </div>
               <div className={s.girdi}>
-                <span className={s.on}>Bitiş</span>
-                <input type="date" aria-label="Kampanya bitişi" value={p.bitis ?? ''} onChange={(e) => yaz(b, 'googlePromosyon', { ...p, bitis: e.target.value || null })} />
+                <span className={s.on}>{te.bitis}</span>
+                <input type="date" aria-label={te.kampanyaBitis} value={p.bitis ?? ''} onChange={(e) => yaz(b, 'googlePromosyon', { ...p, bitis: e.target.value || null })} />
               </div>
               <div className={s.girdi}>
-                <span className={s.on}>Başlangıç</span>
-                <input type="date" aria-label="Kampanya başlangıcı" value={p.baslangic ?? ''} onChange={(e) => yaz(b, 'googlePromosyon', { ...p, baslangic: e.target.value || null })} />
+                <span className={s.on}>{te.baslangic}</span>
+                <input type="date" aria-label={te.kampanyaBaslangic} value={p.baslangic ?? ''} onChange={(e) => yaz(b, 'googlePromosyon', { ...p, baslangic: e.target.value || null })} />
               </div>
               {/* ANINDA HATA (Ajan 4, N-1): sunucunun eksik listesiyle AYNI fonksiyon, kayıt beklenmeden. */}
               {(() => {
                 const hata = promosyonSorunu(p, bugun(b.saatDilimi)) ?? eksik('G-PROMOSYON')?.metin ?? null;
-                return <p className={hata ? s.hataMetni : s.ipucu}>{hata ?? 'Bitiş tarihinden sonra indirim reklamdan kalkar.'}</p>;
+                return <p className={hata ? s.hataMetni : s.ipucu}>{hata ?? te.kalkar}</p>;
               })()}
               <button type="button" className={s.metinDugme} style={{ alignSelf: 'flex-start' }} onClick={() => sil(b, 'googlePromosyon')}>
-                İndirimi kaldır
+                {te.indirimiKaldir}
               </button>
             </>
           )}
         </div>
         <div className={s.alan}>
           <span className={s.alanEtiket}>
-            Fiyat listesi <span className={s.ops}>En az 3 kalem; Google fiyatları reklamın altında gösterir</span>
+            {te.fiyat} <span className={s.ops}>{te.fiyatNot}</span>
           </span>
           {!f ? (
             <button type="button" className={s.metinDugme} style={{ alignSelf: 'flex-start' }} onClick={() => yaz(b, 'googleFiyatListesi', bosFiyatListesi())}>
-              + Fiyat listesi ekle
+              {te.fiyatEkle}
             </button>
           ) : (
             <>
               <div className={s.girdi}>
-                <select aria-label="Liste türü" value={f.tur} onChange={(e) => yaz(b, 'googleFiyatListesi', { ...f, tur: e.target.value as (typeof FIYAT_TURLERI)[number] })}>
+                <select aria-label={te.listeTuru} value={f.tur} onChange={(e) => yaz(b, 'googleFiyatListesi', { ...f, tur: e.target.value as (typeof FIYAT_TURLERI)[number] })}>
                   {FIYAT_TURLERI.map((t) => (
                     <option key={t} value={t}>
-                      {FIYAT_TURU_ETIKETI[t]}
+                      {t === 'SERVICES' ? te.turHizmet : te.turUrun}
                     </option>
                   ))}
                 </select>
@@ -1749,11 +1775,11 @@ function EkOgeBlogu({ b }: { b: AdimBaglami }) {
                 const kalem = (y: Partial<typeof k>) => yaz(b, 'googleFiyatListesi', { ...f, kalemler: f.kalemler.map((z, j) => (j === i ? { ...z, ...y } : z)) });
                 return (
                   <div key={`fiyat-${i}`} className={s.alan}>
-                    <SayacliGirdi etiketGizli={`Kalem ${i + 1} adı`} deger={k.baslik} sinir={FIYAT_METIN_SINIRI} degisti={(v) => kalem({ baslik: v })} />
-                    <SayacliGirdi etiketGizli={`Kalem ${i + 1} açıklaması`} deger={k.aciklama} sinir={FIYAT_METIN_SINIRI} degisti={(v) => kalem({ aciklama: v })} />
+                    <SayacliGirdi etiketGizli={te.kalemAd(i + 1)} deger={k.baslik} sinir={FIYAT_METIN_SINIRI} degisti={(v) => kalem({ baslik: v })} />
+                    <SayacliGirdi etiketGizli={te.kalemAciklama(i + 1)} deger={k.aciklama} sinir={FIYAT_METIN_SINIRI} degisti={(v) => kalem({ aciklama: v })} />
                     <div className={s.girdi}>
                       <input
-                        aria-label={`Kalem ${i + 1} fiyatı`}
+                        aria-label={te.kalemFiyat(i + 1)}
                         inputMode="decimal"
                         defaultValue={k.micros === '0' ? '' : tutarMetni(k.micros)}
                         onBlur={(e) => {
@@ -1773,12 +1799,12 @@ function EkOgeBlogu({ b }: { b: AdimBaglami }) {
                   style={{ alignSelf: 'flex-start' }}
                   onClick={() => yaz(b, 'googleFiyatListesi', { ...f, kalemler: [...f.kalemler, { baslik: '', aciklama: '', micros: '0' }] })}
                 >
-                  + Kalem ekle
+                  {te.kalemEkle}
                 </button>
               )}
               {eksik('G-FIYAT') && <p className={s.hataMetni}>{eksik('G-FIYAT')!.metin}</p>}
               <button type="button" className={s.metinDugme} style={{ alignSelf: 'flex-start' }} onClick={() => sil(b, 'googleFiyatListesi')}>
-                Fiyat listesini kaldır
+                {te.fiyatiKaldir}
               </button>
             </>
           )}
@@ -1828,24 +1854,26 @@ function SayacliGirdi({
 // Anahtar kelime (Google Arama)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const sayi = (n: number) => new Intl.NumberFormat('tr-TR').format(n);
+const sayi = (n: number, dil: Dil) => new Intl.NumberFormat(dil === 'en' ? 'en-US' : 'tr-TR').format(n);
 
 function KelimeBlogu({ b, kaydet }: { b: AdimBaglami; kaydet: () => Promise<boolean> }) {
+  const { dil } = useDil();
+  const tk = useSozluk(reklamAdimReklamSozlugu).kelime;
   const secili = b.a.anahtarKelimeler?.deger ?? [];
   const [oneri, setOneri] = useState<OneriHali<AnahtarKelimeOnerisi>>({ tur: 'istenmedi' });
   const [elle, setElle] = useState('');
   const sonuc = oneri.tur === 'geldi' ? oneri.deger : null;
   const satirlar = kelimeSatirlari(secili, sonuc);
-  const negatif = `"${TABAN_NEGATIFLER.slice(0, 4).join(', ')}" gibi ${TABAN_NEGATIFLER.length} arama otomatik dışarıda.`;
+  const negatif = tk.negatif(TABAN_NEGATIFLER.slice(0, 4).join(', '), TABAN_NEGATIFLER.length);
 
   async function oner() {
     setOneri({ tur: 'isteniyor' });
-    if (!(await kaydet())) return setOneri({ tur: 'dustu', mesaj: 'Taslak kaydedilemedi; öneri kayıtlı site adresinden üretiliyor.' });
+    if (!(await kaydet())) return setOneri({ tur: 'dustu', mesaj: tk.kaydedilemedi });
     try {
       const r = await apiFetch<AnahtarKelimeOnerisi>(`/reklam/rehberler/${b.kayit.id}/anahtar-kelime-oner`, { method: 'POST', body: '{}' });
-      setOneri(kelimeOnerisiHali(r));
+      setOneri(kelimeOnerisiHali(r, dil));
     } catch (e) {
-      setOneri(oneriHatasi(e));
+      setOneri(oneriHatasi(e, dil));
     }
   }
 
@@ -1861,9 +1889,9 @@ function KelimeBlogu({ b, kaydet }: { b: AdimBaglami; kaydet: () => Promise<bool
   return (
     <div className={s.blok}>
       <div className={s.blokBaslik}>
-        Google&apos;da hangi aramalarda çıksın?{' '}
+        {tk.baslik}{' '}
         <button type="button" className={s.metinDugme} style={{ marginLeft: 'auto' }} disabled={oneri.tur === 'isteniyor'} onClick={() => void oner()}>
-          {oneri.tur === 'isteniyor' ? "✦ Google'a soruluyor…" : '✦ Anahtar kelime öner'}
+          {oneri.tur === 'isteniyor' ? tk.soruluyor : tk.oner}
         </button>
       </div>
       <div className={s.kelimeler}>
@@ -1878,23 +1906,23 @@ function KelimeBlogu({ b, kaydet }: { b: AdimBaglami; kaydet: () => Promise<bool
             <span className={s.kutu} />
             <span>{k.metin}</span>
             <small className={s.num}>
-              {k.aylikArama === null ? 'hacim ölçülmedi' : `ayda ~${sayi(k.aylikArama)}${i === 0 ? ' arama' : ''}`}
+              {k.aylikArama === null ? tk.hacimYok : tk.ayda(sayi(k.aylikArama, dil), i === 0)}
             </small>
           </button>
         ))}
         <div className={s.kelimeAlt}>
-          {oneri.tur === 'istenmedi' && satirlar.length === 0 && "Öner'e bas: Google site adresinden ve başlıklardan kelime çıkarır, aylık aramasıyla gösterir. "}
-          {oneri.tur === 'isteniyor' && "Google'ın kelime planlayıcısına soruluyor… "}
-          {oneri.tur === 'bos' && `Öneri çıkmadı: ${oneri.neden} `}
-          {oneri.tur === 'dustu' && <span className={s.hataMetni}>Kelime önerisi alınamadı: {oneri.mesaj} </span>}
-          {sonuc && `Gösterilen ${sonuc.satirlar.length} / Google'ın önerdiği ${sayi(sonuc.toplam)}. `}
-          Seçili {secili.length} kelime. {negatif}
+          {oneri.tur === 'istenmedi' && satirlar.length === 0 && tk.istenmedi}
+          {oneri.tur === 'isteniyor' && tk.planlayici}
+          {oneri.tur === 'bos' && tk.cikmadi(oneri.neden)}
+          {oneri.tur === 'dustu' && <span className={s.hataMetni}>{tk.alinamadi(oneri.mesaj)}</span>}
+          {sonuc && tk.gosterilen(sonuc.satirlar.length, sayi(sonuc.toplam, dil))}
+          {tk.secili(secili.length)} {negatif}
         </div>
         <div className={s.kelimeEkle}>
           <input
             value={elle}
-            placeholder="Kendi kelimeni ekle"
-            aria-label="Anahtar kelime ekle"
+            placeholder={tk.yer}
+            aria-label={tk.etiket}
             maxLength={80}
             onChange={(e) => setElle(e.target.value)}
             onKeyDown={(e) => {
@@ -1905,7 +1933,7 @@ function KelimeBlogu({ b, kaydet }: { b: AdimBaglami; kaydet: () => Promise<bool
             }}
           />
           <button type="button" className={s.metinDugme} onClick={elleEkle} disabled={!elle.trim()}>
-            Ekle
+            {tk.ekle}
           </button>
         </div>
       </div>

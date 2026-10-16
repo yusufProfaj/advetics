@@ -53,7 +53,7 @@ describe('WhatsApp önerisi ve medya kabulü', () => {
     const r = readFileSync(join(__dirname, 'meta-dalga3.tsx'), 'utf8');
     expect(r).toContain('/reklam/rehber/pikseller?clientId=');
     // Hata yutulmuyor: dört hâl (CLAUDE.md `.catch(() => setX([]))` yasağı).
-    expect(r).toContain('.catch((e: unknown) => !iptal && setHal(oneriHatasi(e)))');
+    expect(r).toContain('.catch((e: unknown) => !iptal && setHal(oneriHatasi(e, dil)))');
   });
 });
 

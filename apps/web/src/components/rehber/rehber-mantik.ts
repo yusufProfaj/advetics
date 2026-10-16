@@ -65,7 +65,34 @@ import {
   type YoutubeVideoBilgisi,
   youtubeVideoEngeli,
 } from '@advetics/shared';
+import { sec, type Dil } from '@advetics/shared';
 import { ApiRequestError } from '@/lib/api';
+import { reklamSozlugu } from '@/dil/sozlukler/reklam';
+import { reklamMantikSozlugu } from '@/dil/sozlukler/reklam-mantik';
+
+/*
+ * DİL PARAMETRESİ: bu dosya saf yardımcı; modül düzeyinde dil TUTULMAZ.
+ * Metin üreten her fonksiyon son parametre olarak `dil` alır ve varsayılan
+ * Türkçe (testler ve dil bilmeyen çağıranlar için); ekran çağıranları
+ * kendi dilini geçirir. Ekranda varsayılana güvenmek İngilizce arayüzde
+ * Türkçe cümle çıkarırdı.
+ */
+const m = (dil: Dil) => sec(reklamMantikSozlugu, dil);
+
+/** Adım adı ve alt satırı: shared'daki `REHBER_ADIMLARI` Türkçe, ekran dilinde buradan. */
+export function adimAdi(no: RehberAdimi, dil: Dil = 'tr'): string {
+  return m(dil).adim[no].ad;
+}
+export function adimAlt(no: RehberAdimi, dil: Dil = 'tr'): string {
+  return m(dil).adim[no].alt;
+}
+/** Amacın ekran adı ve "ne alacaksın" cümlesi (shared'daki Türkçe `REHBER_AMACLARI` yerine). */
+export function amacEkranAdi(kod: RehberAmacKodu, dil: Dil = 'tr'): string {
+  return m(dil).amac[kod].ad;
+}
+export function amacNeAlacaksin(kod: RehberAmacKodu, dil: Dil = 'tr'): string {
+  return m(dil).amac[kod].ne;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Değişiklik kuyruğu
@@ -130,13 +157,14 @@ export function yerelAlanlar(sunucu: RehberAlanlari, bekleyen: readonly Degisikl
 /** Kayıt hatasının iki ayrı işi var: 409 yenilemek, diğerleri tekrar denemek. */
 export type KayitHatasi = { tur: 'catisma' } | { tur: 'hata'; mesaj: string };
 
-export function kayitHatasi(e: unknown): KayitHatasi {
+export function kayitHatasi(e: unknown, dil: Dil = 'tr'): KayitHatasi {
+  const sunucuYok = sec(reklamSozlugu, dil).ortak.sunucuYok;
   if (e instanceof ApiRequestError && e.status === 409) return { tur: 'catisma' };
   if (e instanceof ApiRequestError) return { tur: 'hata', mesaj: e.message };
   // `fetch` ağ hatasında tarayıcının İngilizce cümlesini ("Failed to fetch") fırlatıyor.
-  if (e instanceof TypeError) return { tur: 'hata', mesaj: 'Sunucuya ulaşılamadı.' };
+  if (e instanceof TypeError) return { tur: 'hata', mesaj: sunucuYok };
   if (e instanceof Error && e.message) return { tur: 'hata', mesaj: e.message };
-  return { tur: 'hata', mesaj: 'Sunucuya ulaşılamadı.' };
+  return { tur: 'hata', mesaj: sunucuYok };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -156,29 +184,30 @@ export type OneriHali<T> =
   | { tur: 'dustu'; mesaj: string }
   | { tur: 'geldi'; deger: T };
 
-export function oneriHatasi(e: unknown): { tur: 'dustu'; mesaj: string } {
+export function oneriHatasi(e: unknown, dil: Dil = 'tr'): { tur: 'dustu'; mesaj: string } {
+  const sunucuYok = sec(reklamSozlugu, dil).ortak.sunucuYok;
   if (e instanceof ApiRequestError) return { tur: 'dustu', mesaj: e.message };
-  if (e instanceof TypeError) return { tur: 'dustu', mesaj: 'Sunucuya ulaşılamadı.' };
+  if (e instanceof TypeError) return { tur: 'dustu', mesaj: sunucuYok };
   if (e instanceof Error && e.message) return { tur: 'dustu', mesaj: e.message };
-  return { tur: 'dustu', mesaj: 'Sunucuya ulaşılamadı.' };
+  return { tur: 'dustu', mesaj: sunucuYok };
 }
 
-export function kelimeOnerisiHali(s: AnahtarKelimeOnerisi): OneriHali<AnahtarKelimeOnerisi> {
+export function kelimeOnerisiHali(s: AnahtarKelimeOnerisi, dil: Dil = 'tr'): OneriHali<AnahtarKelimeOnerisi> {
   if (s.satirlar.length > 0) return { tur: 'geldi', deger: s };
   // Sunucu boşun NEDENİNİ yazmakla yükümlü; yazmadıysa uydurmuyoruz.
-  return { tur: 'bos', neden: s.bosNeden ?? 'Google bu arama için kelime önermedi.' };
+  return { tur: 'bos', neden: s.bosNeden ?? m(dil).bos.kelime };
 }
 
-export function metinOnerisiHali(m: MetinOnerisi): OneriHali<MetinOnerisi> {
-  const dolu = m.anaMetin.trim() !== '' || m.basliklar.some((b) => b.trim()) || m.aciklamalar.some((a) => a.trim());
-  if (dolu) return { tur: 'geldi', deger: m };
-  return { tur: 'bos', neden: m.notlar.length ? m.notlar.join(' ') : 'Öneri boş döndü.' };
+export function metinOnerisiHali(oneri: MetinOnerisi, dil: Dil = 'tr'): OneriHali<MetinOnerisi> {
+  const dolu = oneri.anaMetin.trim() !== '' || oneri.basliklar.some((b) => b.trim()) || oneri.aciklamalar.some((a) => a.trim());
+  if (dolu) return { tur: 'geldi', deger: oneri };
+  return { tur: 'bos', neden: oneri.notlar.length ? oneri.notlar.join(' ') : m(dil).bos.metin };
 }
 
 /** Kanal videoları: boş liste "kanalda video yok" ile "okunamadı" ayrı (dört hâl). */
-export function videoListesiHali(r: YoutubeVideoListesi): OneriHali<YoutubeVideoListesi> {
+export function videoListesiHali(r: YoutubeVideoListesi, dil: Dil = 'tr'): OneriHali<YoutubeVideoListesi> {
   if (r.satirlar.length > 0) return { tur: 'geldi', deger: r };
-  return { tur: 'bos', neden: r.bosNeden ?? 'Bu kanalda yayınlanmış video yok.' };
+  return { tur: 'bos', neden: r.bosNeden ?? m(dil).bos.video };
 }
 
 /**
@@ -190,9 +219,9 @@ export function videoListesiHali(r: YoutubeVideoListesi): OneriHali<YoutubeVideo
  * olmayan bir formu aramaya gönderir. Eski seçici hazırlıktaki listeyi
  * okuyordu ve sunucu orada hiç `null` dönmediği için "okunamadı" dalı ölüydü.
  */
-export function formListesiHali(r: RehberFormListesi): OneriHali<RehberFormListesi> {
+export function formListesiHali(r: RehberFormListesi, dil: Dil = 'tr'): OneriHali<RehberFormListesi> {
   if (r.satirlar.length > 0) return { tur: 'geldi', deger: r };
-  return { tur: 'bos', neden: r.bosNeden ?? 'Bu sayfada yayında anlık form yok.' };
+  return { tur: 'bos', neden: r.bosNeden ?? m(dil).bos.form };
 }
 
 export interface KelimeSatiri {
@@ -253,7 +282,7 @@ export interface PlatformDurumu {
   deneme: boolean;
 }
 
-export function platformDurumu(amac: RehberAmacKodu, platform: RehberPlatformu, ajansYoneticisi: boolean): PlatformDurumu {
+export function platformDurumu(amac: RehberAmacKodu, platform: RehberPlatformu, ajansYoneticisi: boolean, dil: Dil = 'tr'): PlatformDurumu {
   const tanim = REHBER_AMACLARI[amac];
   const gorunur = platformGorunurMu(amac, platform, ajansYoneticisi);
   const deneme = gorunur && REHBER_ACILIS[amac][platform] === 'deneme';
@@ -263,7 +292,7 @@ export function platformDurumu(amac: RehberAmacKodu, platform: RehberPlatformu, 
   // "henüz açık değil" kullanıcıya neyin eksik olduğunu söylemiyor.
   const kapali = REHBER_ACILIS[amac][platform] === 'kapali' ? REHBER_KAPALI_SEBEBI[amac]?.[platform] : undefined;
   if (kapali) return { gorunur, sebep: kapali, deneme };
-  return { gorunur, sebep: `Bu amaçta ${platform === 'meta' ? 'Meta' : 'Google'} henüz açık değil`, deneme };
+  return { gorunur, sebep: m(dil).platform.acikDegil(platform === 'meta' ? 'Meta' : 'Google'), deneme };
 }
 
 /**
@@ -292,8 +321,8 @@ export function siteKapisiyla(d: PlatformDurumu, amac: RehberAmacKodu, platform:
  * site yüzünden kapanıyorsa kartın sebebi o. Bir platform açık kalıyorsa
  * kart seçilebilir (ör. form amacı: Meta açık, Google site istiyor).
  */
-export function amacSiteSebebi(amac: RehberAmacKodu, ajansYoneticisi: boolean, siteYok: boolean | null): string | null {
-  const gorunenler = (['meta', 'google'] as const).filter((p) => platformDurumu(amac, p, ajansYoneticisi).gorunur);
+export function amacSiteSebebi(amac: RehberAmacKodu, ajansYoneticisi: boolean, siteYok: boolean | null, dil: Dil = 'tr'): string | null {
+  const gorunenler = (['meta', 'google'] as const).filter((p) => platformDurumu(amac, p, ajansYoneticisi, dil).gorunur);
   if (gorunenler.length === 0) return null;
   const kapali = gorunenler.filter((p) => !siteYokRehberKapisi(amac, p, siteYok).acik);
   return kapali.length === gorunenler.length ? SITE_YOK_SEBEBI : null;
@@ -319,29 +348,31 @@ export function acikSiteKapisiyla(
 export function platformNedeni(
   amac: RehberAmacKodu,
   h: Pick<RehberHazirligi, 'ajansYoneticisi' | 'hesaplar' | 'googleHesaplari'> & Partial<Pick<RehberHazirligi, 'onKosullar'>>,
+  dil: Dil = 'tr',
 ): string {
-  const m = platformDurumu(amac, 'meta', h.ajansYoneticisi);
-  const g = platformDurumu(amac, 'google', h.ajansYoneticisi);
-  if (m.gorunur && !g.gorunur) return `${g.sebep}; reklam yalnız Instagram ve Facebook'ta açılacak.`;
-  if (!m.gorunur && g.gorunur) return `${m.sebep}; reklam yalnız Google'da açılacak.`;
-  if (m.gorunur && g.gorunur) {
-    if (h.hesaplar.length === 0) return "Bu workspace'e Meta reklam hesabı atanmamış; şimdilik yalnız Google'ı açtık.";
-    if (h.googleHesaplari.length === 0) return "Bu workspace'e Google Ads hesabı atanmamış; şimdilik yalnız Meta'yı açtık.";
+  const t = m(dil).platform;
+  const meta = platformDurumu(amac, 'meta', h.ajansYoneticisi, dil);
+  const g = platformDurumu(amac, 'google', h.ajansYoneticisi, dil);
+  if (meta.gorunur && !g.gorunur) return t.yalnizMeta(g.sebep ?? '');
+  if (!meta.gorunur && g.gorunur) return t.yalnizGoogle(meta.sebep ?? '');
+  if (meta.gorunur && g.gorunur) {
+    if (h.hesaplar.length === 0) return t.metaHesapYok;
+    if (h.googleHesaplari.length === 0) return t.googleHesapYok;
     if (googleOnKosulEksik(amac, h)) {
-      return "Google Ads'te satın alma dönüşümü yok; reklamı yalnız Meta'da açtık. Dönüşüm kurulunca Google'ı da açabilirsin.";
+      return t.donusumYok;
     }
     if (amac === 'SITE') {
-      return 'İkisini birden öneriyoruz: Google, seni zaten arayan kişiyi yakalar; Meta, henüz aramayan ama ilgilenebilecek kişiye gösterir.';
+      return t.ikisiSite;
     }
     // B18/S6: iki platformda AYNI video yok. Meta'ya yüklenen dosya gidiyor,
     // Google'a YouTube'da duran video (YouTube'a yükleme yapılmıyor). Eski
     // cümle "aynı video Reels ve Shorts'ta" diyerek olmayan bir şeyi vaat ediyordu.
     if (amac === 'VIDEO') {
-      return "İkisini birden öneriyoruz: Meta'da yüklediğin video; Google'da YouTube'dan seçtiğin video (YouTube'da video arası, akış ve Shorts).";
+      return t.ikisiVideo;
     }
-    return 'İkisi de bu workspace için hazır; ikisinde birden açıyoruz.';
+    return t.ikisiHazir;
   }
-  return 'Bu amaç için şu an açık bir platform yok.';
+  return t.hicbiri;
 }
 
 type PlatformAlani = { deger: Record<RehberPlatformu, boolean>; kaynak: AlanKaynagi } | undefined;
@@ -442,32 +473,33 @@ export interface HazirOzetSatiri {
 }
 
 /** Atlanan üç adımın TEK satırlık özeti; boş alan "Seçilmedi" yazar, gizlenmez. */
-export function hazirOzeti(a: RehberAlanlari, acik: Record<RehberPlatformu, boolean>, paraBirimi: string): HazirOzetSatiri[] {
+export function hazirOzeti(a: RehberAlanlari, acik: Record<RehberPlatformu, boolean>, paraBirimi: string, dil: Dil = 'tr'): HazirOzetSatiri[] {
+  const t = m(dil).ozet;
   const platformlar = (Object.keys(REHBER_PLATFORM_ADI) as RehberPlatformu[]).filter((p) => acik[p]).map((p) => REHBER_PLATFORM_ADI[p]);
   const konumlar = a.konumlar?.deger ?? [];
   const GOSTER = 3;
   const konum = konumlar.length
-    ? konumlar.slice(0, GOSTER).map((k) => k.etiket).join(', ') + (konumlar.length > GOSTER ? ` ve ${konumlar.length - GOSTER} yer daha` : '')
-    : 'Seçilmedi';
+    ? konumlar.slice(0, GOSTER).map((k) => k.etiket).join(', ') + (konumlar.length > GOSTER ? t.dahaFazlaYer(konumlar.length - GOSTER) : '')
+    : t.secilmedi;
   const b = a.butce?.deger;
-  const t = a.takvim?.deger;
-  const butce = b ? `${paraGoster(b.micros, paraBirimi)}${b.tip === 'gunluk' ? ' / gün' : ' toplam'}` : 'Girilmedi';
-  const sure = t ? ` · ${tarihGoster(t.baslangic)} başlar${t.bitis ? `, ${gunFarki(t.baslangic, t.bitis)} gün` : ''}` : '';
+  const tk = a.takvim?.deger;
+  const butce = b ? `${paraGoster(b.micros, paraBirimi)}${b.tip === 'gunluk' ? t.gunluk : t.toplam}` : t.girilmedi;
+  const sure = tk ? `${t.baslar(tarihGoster(tk.baslangic, dil))}${tk.bitis ? t.gun(gunFarki(tk.baslangic, tk.bitis)) : ''}` : '';
   return [
-    { adim: 2, etiket: 'Nerede', deger: platformlar.length ? platformlar.join(' ve ') : 'Seçilmedi' },
-    { adim: 3, etiket: 'Kime', deger: konum },
+    { adim: 2, etiket: t.nerede, deger: platformlar.length ? platformlar.join(m(dil).ve) : t.secilmedi },
+    { adim: 3, etiket: t.kime, deger: konum },
     // Kısa akış Kime'yi atlıyor; ek kategori ("eleman arıyoruz" = istihdam)
     // hiç görünmeden boş kalmasın (Ajan 4, Ö7).
-    { adim: 3, etiket: 'Özel kategori', deger: kategoriOzeti(a) },
-    { adim: 5, etiket: 'Bütçe', deger: butce + sure },
+    { adim: 3, etiket: t.ozelKategori, deger: kategoriOzeti(a, dil) },
+    { adim: 5, etiket: t.butce, deger: butce + sure },
   ];
 }
 
 /** Bu reklamın EK kategorisi; workspace beyanı yayında ayrıca eklenir. */
-export function kategoriOzeti(a: RehberAlanlari): string {
+export function kategoriOzeti(a: RehberAlanlari, dil: Dil = 'tr'): string {
   const ek = a.ekKategoriler?.deger;
-  if (ek === undefined) return 'Sorulmadı';
-  return ek.length ? ek.map((k) => OZEL_KATEGORI_ETIKETLERI[k]).join(', ') : 'Yok (workspace beyanı geçerli)';
+  if (ek === undefined) return m(dil).ozet.sorulmadi;
+  return ek.length ? ek.map((k) => OZEL_KATEGORI_ETIKETLERI[k]).join(', ') : m(dil).ozet.yok;
 }
 
 /**
@@ -475,9 +507,9 @@ export function kategoriOzeti(a: RehberAlanlari): string {
  * de iki platform yazıyordu ve kullanıcı Google'ın da kurulacağını
  * sanıyordu. Seçim yoksa adımın kendi açıklaması kalır.
  */
-export function adimAltMetni(no: RehberAdimi, varsayilan: string, amac: RehberAmacKodu | null, acik: Record<RehberPlatformu, boolean>): string {
-  if (no === 1 && amac) return REHBER_AMACLARI[amac].ekranAdi;
-  if (no === 2 && amac) return [acik.meta && 'Meta', acik.google && 'Google'].filter(Boolean).join(' + ') || 'Platform seçilmedi';
+export function adimAltMetni(no: RehberAdimi, varsayilan: string, amac: RehberAmacKodu | null, acik: Record<RehberPlatformu, boolean>, dil: Dil = 'tr'): string {
+  if (no === 1 && amac) return amacEkranAdi(amac, dil);
+  if (no === 2 && amac) return [acik.meta && 'Meta', acik.google && 'Google'].filter(Boolean).join(' + ') || m(dil).platform.secilmedi;
   return varsayilan;
 }
 
@@ -487,12 +519,19 @@ export function adimAltMetni(no: RehberAdimi, varsayilan: string, amac: RehberAm
 
 export type YasSecenegi = 'genis' | '25-54' | '35+' | 'ozel';
 
-export const YAS_SECENEKLERI: ReadonlyArray<{ kod: YasSecenegi; ad: string; alt?: string; aralik: { min: number; max: number } | null }> = [
-  { kod: 'genis', ad: '18 yaş ve üzeri', alt: 'Önerilen · en geniş', aralik: null },
-  { kod: '25-54', ad: '25 ile 54 arası', aralik: { min: 25, max: 54 } },
-  { kod: '35+', ad: '35 yaş ve üzeri', aralik: { min: 35, max: 65 } },
-  { kod: 'ozel', ad: 'Kendim seçeyim', aralik: null },
-];
+export type YasSecenegiTanimi = { kod: YasSecenegi; ad: string; alt?: string; aralik: { min: number; max: number } | null };
+
+export function yasSecenekleri(dil: Dil = 'tr'): ReadonlyArray<YasSecenegiTanimi> {
+  const y = m(dil).yas;
+  return [
+    { kod: 'genis', ad: y.genis.ad, alt: y.genis.alt, aralik: null },
+    { kod: '25-54', ad: y.yirmibes.ad, aralik: { min: 25, max: 54 } },
+    { kod: '35+', ad: y.otuzbes.ad, aralik: { min: 35, max: 65 } },
+    { kod: 'ozel', ad: y.ozel.ad, aralik: null },
+  ];
+}
+/** Türkçe liste: karar mantığı (kod, aralık) dilden bağımsız; testler ve `yasSecenegi` bunu okur. */
+export const YAS_SECENEKLERI = yasSecenekleri('tr');
 
 /**
  * Kayıtlı aralıktan seçili düğme. `ozel` yalnız kullanıcı "Kendim seçeyim"e
@@ -507,13 +546,17 @@ export function yasSecenegi(aralik: { min: number; max: number } | null | undefi
 
 export type KategoriKodu = 'YOK' | OzelKategori;
 
-export const KATEGORI_SECENEKLERI: ReadonlyArray<{ kod: KategoriKodu; ad: string; alt?: string }> = [
-  { kod: 'YOK', ad: 'Hayır, hiçbiri' },
-  { kod: 'HOUSING', ad: 'Konut', alt: 'Satılık, kiralık ev' },
-  { kod: 'EMPLOYMENT', ad: 'İş ilanı' },
-  { kod: 'FINANCIAL_PRODUCTS_SERVICES', ad: 'Kredi, finans' },
-  { kod: 'ISSUES_ELECTIONS_POLITICS', ad: 'Siyaset, seçim' },
-];
+export function kategoriSecenekleri(dil: Dil = 'tr'): ReadonlyArray<{ kod: KategoriKodu; ad: string; alt?: string }> {
+  const k = m(dil).kategori;
+  return [
+    { kod: 'YOK', ad: k.yok.ad },
+    { kod: 'HOUSING', ad: k.housing.ad, alt: k.housing.alt },
+    { kod: 'EMPLOYMENT', ad: k.employment.ad },
+    { kod: 'FINANCIAL_PRODUCTS_SERVICES', ad: k.financial.ad },
+    { kod: 'ISSUES_ELECTIONS_POLITICS', ad: k.politics.ad },
+  ];
+}
+export const KATEGORI_SECENEKLERI = kategoriSecenekleri('tr');
 
 /**
  * Seçili kategori düğmesi. Alan HİÇ YOKSA `null`: soru cevaplanmadı ve
@@ -599,8 +642,8 @@ export function bitisSecenegi(takvim: { baslangic: string; bitis: string | null 
   return f === 7 ? 7 : f === 30 ? 30 : null;
 }
 
-export function tarihGoster(tarih: string): string {
-  return new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${tarih}T00:00:00Z`));
+export function tarihGoster(tarih: string, dil: Dil = 'tr'): string {
+  return new Intl.DateTimeFormat(dil === 'en' ? 'en-US' : 'tr-TR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${tarih}T00:00:00Z`));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -730,7 +773,7 @@ export function yayinSonucu(p: Pick<PlatformYayinOzeti, 'durum'> & Partial<Pick<
  * kalır: sunucunun işleyicisi olmayan bir düğme yanlış söz olurdu.
  */
 export function geriAlinabilirMi(p: Pick<PlatformYayinOzeti, 'platform' | 'durum' | 'yayinId'>): boolean {
-  return Object.hasOwn(GERI_AL_METINLERI, p.platform) && !!p.yayinId && p.durum !== null && GERI_ALINABILIR_DURUMLAR.includes(p.durum);
+  return Object.hasOwn(reklamMantikSozlugu.tr.geriAl, p.platform) && !!p.yayinId && p.durum !== null && GERI_ALINABILIR_DURUMLAR.includes(p.durum);
 }
 
 /**
@@ -758,9 +801,9 @@ export function yenidenDenenebilirMi(p: Pick<PlatformYayinOzeti, 'yenidenKurulab
  * platformları dener, "Meta için" yazıp Google'ı da denemek sözü bozardı.
  * `null`: düğme yok.
  */
-export function yenidenDenemeEtiketi(platformlar: ReadonlyArray<Pick<PlatformYayinOzeti, 'platform' | 'yenidenKurulabilir' | 'sebep'>>): string | null {
+export function yenidenDenemeEtiketi(platformlar: ReadonlyArray<Pick<PlatformYayinOzeti, 'platform' | 'yenidenKurulabilir' | 'sebep'>>, dil: Dil = 'tr'): string | null {
   const adlar = platformlar.filter(yenidenDenenebilirMi).map((p) => REHBER_PLATFORM_ADI[p.platform]);
-  return adlar.length ? `${adlar.join(' ve ')} için yeniden dene` : null;
+  return adlar.length ? m(dil).platform.yenidenDene(adlar.join(m(dil).ve)) : null;
 }
 
 export function yenidenOkunabilirMi(p: Pick<PlatformYayinOzeti, 'platform' | 'durum' | 'yayinId'>): boolean {
@@ -772,11 +815,12 @@ export function yenidenOkunabilirMi(p: Pick<PlatformYayinOzeti, 'platform' | 'du
  * duruyor, yalnız okunup karşılaştırılamadı. "Kurulamadı" demek kullanıcıyı
  * yeniden kurmaya, yani İKİNCİ bir kampanya açmaya gönderirdi.
  */
-export function yayinSonucuEtiketi(p: Pick<PlatformYayinOzeti, 'durum'> & Partial<Pick<PlatformYayinOzeti, 'platform' | 'sebep'>>): string {
-  if (p.durum === 'dogrulanamadi') return 'Kontrol edilemedi';
+export function yayinSonucuEtiketi(p: Pick<PlatformYayinOzeti, 'durum'> & Partial<Pick<PlatformYayinOzeti, 'platform' | 'sebep'>>, dil: Dil = 'tr'): string {
+  const t = m(dil).sonuc;
+  if (p.durum === 'dogrulanamadi') return t.kontrolEdilemedi;
   // Google'da geri alma KALDIRIR (`geriAlMetinleri`); "Arşivlendi" Meta'nın sözü.
-  if (p.durum === 'arsivlendi' && p.platform === 'google') return 'Kaldırıldı';
-  const e: Record<YayinSonucu, string> = { yayinda: 'Yayında', duraklatildi: 'Duraklatılmış', arsivlendi: 'Arşivlendi', suruyor: 'Sürüyor', hata: 'Kurulamadı' };
+  if (p.durum === 'arsivlendi' && p.platform === 'google') return t.kaldirildi;
+  const e: Record<YayinSonucu, string> = { yayinda: t.yayinda, duraklatildi: t.duraklatildi, arsivlendi: t.arsivlendi, suruyor: t.suruyor, hata: t.hata };
   return e[yayinSonucu(p)];
 }
 
@@ -798,27 +842,8 @@ export interface GeriAlMetinleri {
  * eklenirse derleme burada kırılır; "google değilse Meta" üçlüsü o
  * platforma sessizce Meta'nın sözünü verirdi (`linkedin-kayit.spec.ts`).
  */
-const GERI_AL_METINLERI: Readonly<Record<RehberPlatformu, GeriAlMetinleri>> = {
-  meta: {
-    dugme: 'Vazgeç ve arşivle',
-    onay: 'Meta’daki kampanya arşivlenecek; tekrar açılamaz.',
-    eylem: 'Arşivle',
-    suruyor: 'Arşivleniyor…',
-    basarisiz: 'Arşivlenemedi; Meta’nın cevabı yok.',
-    cevapYok: 'Meta henüz cevap vermedi; birkaç dakika sonra sayfayı yenile.',
-  },
-  google: {
-    dugme: 'Vazgeç ve kaldır',
-    onay: 'Google’daki kampanya kaldırılacak; tekrar açılamaz.',
-    eylem: 'Kaldır',
-    suruyor: 'Kaldırılıyor…',
-    basarisiz: 'Kaldırılamadı; Google’ın cevabı yok.',
-    cevapYok: 'Google henüz cevap vermedi; birkaç dakika sonra sayfayı yenile.',
-  },
-};
-
-export function geriAlMetinleri(platform: RehberPlatformu): GeriAlMetinleri {
-  return GERI_AL_METINLERI[platform];
+export function geriAlMetinleri(platform: RehberPlatformu, dil: Dil = 'tr'): GeriAlMetinleri {
+  return m(dil).geriAl[platform];
 }
 
 /** Yoklama ne zaman durur: her platform son durumda ya da uyum denetçisi durdurdu. */
@@ -848,14 +873,14 @@ export function yayinBittiMi(platformlar: ReadonlyArray<Pick<PlatformYayinOzeti,
  * Görselle kurulan Google kurgusunun oran kuralı, kullanıcının diliyle.
  * Sunucunun engelleriyle aynı şeyi söylemeli (`googleGorselBulgulari`).
  */
-export function googleGorselIpucu(kurgu: string | null): string | null {
-  if (kurgu === 'MAKS_PERFORMANS') return "Google Maks. Performans yatay (1.91:1) ve kare (1:1) görselin ikisini de istiyor; 4:5 de kullanılır, 9:16 gönderilmez.";
-  if (kurgu === 'TALEP_YARATMA_GORSEL') return "Google en az bir yatay (1.91:1) ya da kare (1:1) görsel istiyor; 4:5 de kullanılır, 9:16 gönderilmez.";
+export function googleGorselIpucu(kurgu: string | null, dil: Dil = 'tr'): string | null {
+  if (kurgu === 'MAKS_PERFORMANS') return m(dil).gorsel.ipucuMaks;
+  if (kurgu === 'TALEP_YARATMA_GORSEL') return m(dil).gorsel.ipucuTalep;
   return null;
 }
 
-export function googleGorselRozeti(oran: GorselOrani, en: number, boy: number): string | null {
-  if (!googleGorselOraniMi(oran)) return "9:16 görsel Google'da kullanılmıyor";
+export function googleGorselRozeti(oran: GorselOrani, en: number, boy: number, dil: Dil = 'tr'): string | null {
+  if (!googleGorselOraniMi(oran)) return m(dil).gorsel.dikeyKullanilmiyor;
   return googleGorselSorunu(oran, { genislik: en, yukseklik: boy, bayt: 0 });
 }
 
@@ -1073,14 +1098,17 @@ export function alanAdi(adres: string | null | undefined): string {
 }
 
 /** Meta önizlemesindeki düğme yazısı (amaçtan). */
+export function ctaMetni(amac: RehberAmacKodu, dil: Dil = 'tr'): string {
+  return m(dil).cta[amac];
+}
 export const CTA_METNI: Record<RehberAmacKodu, string> = {
-  SITE: 'Daha fazla bilgi al',
-  FORM: 'Kaydol',
-  WHATSAPP: "WhatsApp'tan yaz",
-  TELEFON: 'Hemen ara',
-  VIDEO: 'Daha fazla bilgi al',
-  ERISIM: 'Daha fazla bilgi al',
-  SATIS: 'Satın al',
+  SITE: ctaMetni('SITE'),
+  FORM: ctaMetni('FORM'),
+  WHATSAPP: ctaMetni('WHATSAPP'),
+  TELEFON: ctaMetni('TELEFON'),
+  VIDEO: ctaMetni('VIDEO'),
+  ERISIM: ctaMetni('ERISIM'),
+  SATIS: ctaMetni('SATIS'),
 };
 
 /**
@@ -1205,30 +1233,31 @@ export interface MetinKurali {
  * Yaratma / Maks. Performans ilk 5 başlığı (`derle-google.ts`), Google Arama
  * 3 ile 15 başlık ve en az 2 açıklama (`G-BASLIK-SAYI`, `G-ACIKLAMA-SAYI`).
  */
-export function metinKurali(acik: Record<RehberPlatformu, boolean>, kurgu: GoogleKurgu | null): MetinKurali {
+export function metinKurali(acik: Record<RehberPlatformu, boolean>, kurgu: GoogleKurgu | null, dil: Dil = 'tr'): MetinKurali {
   const L = METIN_SINIRLARI;
-  const soru = reklamSorusu(acik, kurgu);
+  const t = m(dil).metin;
+  const soru = reklamSorusu(acik, kurgu, dil);
   if (acik.google && kurgu === 'ARAMA') {
     return {
       soru,
       baslikKutu: L.basliklarEnAz,
       baslikEnCok: L.basliklarEnCok,
-      baslikNotu: `${L.basliklarEnAz} ile ${L.basliklarEnCok} arası · Google hepsini dener${acik.meta ? `, Meta ilk ${L.metaBaslikSayisi}'ini` : ''}`,
+      baslikNotu: acik.meta ? t.baslikNotuAramaMeta(L.basliklarEnAz, L.basliklarEnCok, L.metaBaslikSayisi) : t.baslikNotuArama(L.basliklarEnAz, L.basliklarEnCok),
       aciklamaKutu: L.aciklamalarEnAz,
       aciklamaEnCok: L.aciklamalarEnCok,
-      aciklamaNotu: `En az ${L.aciklamalarEnAz}`,
+      aciklamaNotu: t.aciklamaEnAz(L.aciklamalarEnAz),
       gucGoster: true,
     };
   }
-  const kim = [acik.meta && 'Meta', acik.google && 'Google'].filter(Boolean).join(' ve ') || 'Platform';
+  const kim = [acik.meta && 'Meta', acik.google && 'Google'].filter(Boolean).join(m(dil).ve) || 'Platform';
   return {
     soru,
     baslikKutu: 1,
     baslikEnCok: L.metaBaslikSayisi,
-    baslikNotu: `En çok ${L.metaBaslikSayisi} · ${kim} hepsini dener`,
+    baslikNotu: t.baslikNotu(L.metaBaslikSayisi, kim),
     aciklamaKutu: 1,
     aciklamaEnCok: acik.google ? L.aciklamalarEnCok : 1,
-    aciklamaNotu: acik.google ? 'En az 1' : 'İsteğe bağlı · başlığın altında görünür',
+    aciklamaNotu: acik.google ? t.aciklamaEnAz1 : t.aciklamaIstege,
     gucGoster: false,
   };
 }
@@ -1238,14 +1267,14 @@ export function metinKurali(acik: Record<RehberPlatformu, boolean>, kurgu: Googl
  * platformun kalıbına bölüyoruz" demek (canlı tur), yalnız Meta açıkken
  * Google kuralı göstermekle aynı hata. Google Arama'da görsel istenmiyor.
  */
-function reklamSorusu(acik: Record<RehberPlatformu, boolean>, kurgu: GoogleKurgu | null): string {
-  if (acik.meta && acik.google) return 'Görselleri ve metni bir kez ver; iki platformun kalıbına biz bölüyoruz.';
-  if (acik.meta) return "Görselleri ve metni ver; Meta'nın kalıbına biz yerleştiriyoruz.";
+function reklamSorusu(acik: Record<RehberPlatformu, boolean>, kurgu: GoogleKurgu | null, dil: Dil): string {
+  const t = m(dil).metin;
+  if (acik.meta && acik.google) return t.soruIkisi;
+  if (acik.meta) return t.soruMeta;
   if (acik.google) {
-    const ne = kurgu === 'ARAMA' ? 'Metni' : kurgu === 'TALEP_YARATMA_VIDEO' ? 'Videoyu ve metni' : 'Görselleri ve metni';
-    return `${ne} ver; Google'ın kalıbına biz yerleştiriyoruz.`;
+    return t.soruGoogle(kurgu === 'ARAMA' ? 'metin' : kurgu === 'TALEP_YARATMA_VIDEO' ? 'video' : 'gorsel');
   }
-  return 'Görselleri ve metni ver.';
+  return t.soruHicbiri;
 }
 
 /** Ekrandaki metin: boş kutular kuralın asgarisi kadar (kayıttaki fazlası gizlenmez). */
@@ -1394,10 +1423,11 @@ export function oneriyiSigdir<T extends { basliklar: string[]; aciklamalar: stri
  * Google Arama'da var; Talep Yaratma ve Maks. Performans'ta da yazması,
  * kurulmayacak bir şeyi vaat ediyordu.
  */
-export function kurulumAdimlari(platform: RehberPlatformu, kurgu: GoogleKurgu | null): [string, string, string] {
-  if (platform === 'meta') return ['Duraklatılmış kur (kampanya, set, reklam)', "Meta'dan geri oku ve karşılaştır", 'Yayına al'];
-  const parca = kurgu === 'MAKS_PERFORMANS' ? 'kampanya, öğe grubu' : kurgu === 'ARAMA' ? 'kampanya, grup, reklam, kelimeler' : 'kampanya, grup, reklam';
-  return [`Duraklatılmış kur (${parca})`, "Google'dan geri oku ve karşılaştır", 'Yayına al'];
+export function kurulumAdimlari(platform: RehberPlatformu, kurgu: GoogleKurgu | null, dil: Dil = 'tr'): [string, string, string] {
+  const t = m(dil).kurulum;
+  if (platform === 'meta') return [t.metaKur, t.metaOku, t.yayinaAl];
+  const parca = kurgu === 'MAKS_PERFORMANS' ? t.parcaMaks : kurgu === 'ARAMA' ? t.parcaArama : t.parcaDiger;
+  return [t.googleKur(parca), t.googleOku, t.yayinaAl];
 }
 
 const PLATFORM_ADLARI: Record<RehberPlatformu, string> = { meta: 'Meta', google: 'Google' };
@@ -1414,35 +1444,36 @@ export interface SonEkranOzeti {
  * dedi, başlık "Duraklatılmış kuruldu" demeye devam etti (Google duraklatılmış
  * durduğu için). Kalan platformların hâli ayrıca söylenir; arşiv bir hata değil.
  */
-export function sonEkranOzeti(platformlar: ReadonlyArray<{ platform: RehberPlatformu; sonuc: YayinSonucu }>, uyumDurdu: boolean): SonEkranOzeti {
-  if (uyumDurdu) return { hal: 'hata', baslik: 'Kurulum tamamlanamadı', metin: 'Yayın, platforma hiçbir şey gönderilmeden durduruldu.' };
+export function sonEkranOzeti(platformlar: ReadonlyArray<{ platform: RehberPlatformu; sonuc: YayinSonucu }>, uyumDurdu: boolean, dil: Dil = 'tr'): SonEkranOzeti {
+  const t = m(dil).son;
+  if (uyumDurdu) return { hal: 'hata', baslik: t.tamamlanamadi, metin: t.uyumDurdu };
   if (platformlar.some((p) => p.sonuc === 'hata')) {
-    return { hal: 'hata', baslik: 'Kurulum tamamlanamadı', metin: 'Aşağıda hangi platformda neyin durduğu yazıyor; diğer platform bundan etkilenmedi.' };
+    return { hal: 'hata', baslik: t.tamamlanamadi, metin: t.hataMetni };
   }
   const arsiv = platformlar.filter((p) => p.sonuc === 'arsivlendi');
   const kalan = platformlar.filter((p) => p.sonuc !== 'arsivlendi');
   if (platformlar.length > 0 && kalan.length === 0) {
     // "Arşivlendi" yalnız Meta'nın sözü; Google'da geri alma KALDIRIR.
-    return { hal: 'arsiv', baslik: 'Reklam geri alındı', metin: 'Kampanya platformda kapatıldı; harcama olmaz. Aynı içerikle yeni bir reklam açabilirsin.' };
+    return { hal: 'arsiv', baslik: t.geriAlindi, metin: t.geriAlindiMetin };
   }
-  const adlar = (xs: typeof platformlar) => xs.map((p) => PLATFORM_ADLARI[p.platform]).join(' ve ');
+  const adlar = (xs: typeof platformlar) => xs.map((p) => PLATFORM_ADLARI[p.platform]).join(m(dil).ve);
   const kalanDur = kalan.some((p) => p.sonuc === 'duraklatildi' || p.sonuc === 'suruyor');
   if (arsiv.length > 0) {
     return {
       hal: kalanDur ? 'dur' : 'tamam',
-      baslik: `${adlar(arsiv)}'daki reklam geri alındı`,
-      metin: kalanDur ? `${adlar(kalan)}'da duraklatılmış duruyor; başlatana kadar harcama olmaz.` : `${adlar(kalan)}'da yayında.`,
+      baslik: t.platformGeriAlindi(adlar(arsiv)),
+      metin: kalanDur ? t.kalanDuruyor(adlar(kalan)) : t.kalanYayinda(adlar(kalan)),
     };
   }
   if (kalanDur) {
     return {
       hal: 'dur',
-      baslik: 'Duraklatılmış kuruldu',
-      metin: "Kuruldu, geri okunup kontrol edildi ve açılmadı. Reklam Yöneticisi'nden başlatabilirsin; başlatana kadar harcama olmaz.",
+      baslik: t.duraklatilmisKuruldu,
+      metin: t.duraklatilmisMetin,
     };
   }
   const tek = platformlar.length === 1 ? PLATFORM_ADLARI[platformlar[0]!.platform] : null;
-  return { hal: 'tamam', baslik: 'Reklamın yayında', metin: `${tek ? `${tek}'da` : 'İki platformda da'} kuruldu, geri okunup kontrol edildi ve açıldı.` };
+  return { hal: 'tamam', baslik: t.yayinda, metin: t.yayindaMetin(tek) };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1574,8 +1605,10 @@ export function uretimPlani(g: {
  * kaynaklarda çelişiyor (üst ~%14, alt ~%35); en tutucusu esas. 32 piksellik
  * küçük resimde katman okunmaz, cümle söylüyor.
  */
-export const DIKEY_GUVENLI_ALAN_NOTU =
-  'Dikey görselde metni ve logoyu üstten yaklaşık %14, alttan %35 uzak tut: Reels ve Hikâyede orası hesap adı, açıklama ve düğmelerin altında kalır.';
+export function dikeyGuvenliAlanNotu(dil: Dil = 'tr'): string {
+  return m(dil).gorsel.dikeyNot;
+}
+export const DIKEY_GUVENLI_ALAN_NOTU = dikeyGuvenliAlanNotu('tr');
 
 export function dikeyNotuGerekli(metaAcik: boolean, oranlar: Iterable<string | null | undefined>): boolean {
   if (!metaAcik) return false;

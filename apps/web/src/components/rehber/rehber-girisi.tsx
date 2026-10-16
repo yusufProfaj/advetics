@@ -8,18 +8,21 @@ import { ApiRequestError, apiFetch, onizlemeAdresi } from '@/lib/api';
 import { baglanti } from '@/lib/baglanti';
 import { formatMoney, formatRelative, formatTarih } from '@/lib/format';
 import { REKLAM_YONETICISI } from '@/lib/reklam-yoneticisi';
+import { menuBolumuEtiketi, menuSatiriEtiketi } from '@/lib/nav-sections';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { reklamSozlugu } from '@/dil/sozlukler/reklam';
 import {
-  BOS_SEKME_METNI,
   GIRIS_SEKMELERI,
-  ONAY_METINLERI,
-  SEKME_ADLARI,
   aktifSekme,
   birincilEylem,
+  bosSekmeMetni,
   butceMetni,
   eksikEtiketi,
+  onayMetinleri,
   platformRozetleri,
   satirAdi,
   satirEylemleri,
+  sekmeAdlari,
   sekmeyeAyir,
   taslakPlatformlari,
   taslaklariAyir,
@@ -77,6 +80,10 @@ export function RehberGirisi({
   devredildi?: boolean;
 }) {
   const router = useRouter();
+  const { dil } = useDil();
+  const d = useSozluk(reklamSozlugu);
+  const dg = d.giris;
+  const SEKME_ADLARI = sekmeAdlari(dil);
   const [aciliyor, setAciliyor] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
   const [onay, setOnay] = useState<{ tur: OnayTuru; satirlar: RehberOzeti[] } | null>(null);
@@ -91,7 +98,7 @@ export function RehberGirisi({
       const r = await apiFetch<RehberKaydi>('/reklam/rehberler', { method: 'POST', body: JSON.stringify({ clientId }) });
       router.push(baglanti('/reklam', { musteri: clientId, rehber: r.id }));
     } catch (e) {
-      setHata(e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.');
+      setHata(e instanceof ApiRequestError ? e.message : d.ortak.sunucuYok);
       setAciliyor(false);
     }
   }
@@ -105,12 +112,12 @@ export function RehberGirisi({
       try {
         await apiFetch<RehberKaydi>(`/reklam/rehberler/${encodeURIComponent(r.id)}/${yol}`, { method: 'POST' });
       } catch (e) {
-        hatalar.push(e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.');
+        hatalar.push(e instanceof ApiRequestError ? e.message : d.ortak.sunucuYok);
       }
     }
     setIsleniyor(false);
     setOnayAcik(false);
-    setIslemHatasi(satirlar.length === 1 && hatalar[0] ? hatalar[0] : topluSonucMetni(satirlar.length, hatalar));
+    setIslemHatasi(satirlar.length === 1 && hatalar[0] ? hatalar[0] : topluSonucMetni(satirlar.length, hatalar, dil));
     router.refresh();
   }
 
@@ -129,7 +136,7 @@ export function RehberGirisi({
   const tasinan = { musteri: clientId };
   const satirAdresi = (r: RehberOzeti) => baglanti('/reklam', tasinan, { rehber: r.id });
   const gorunen = sekme === 'taslaklar' ? taslak.guncel : gruplar[sekme];
-  const metin = onay ? ONAY_METINLERI[onay.tur] : null;
+  const metin = onay ? onayMetinleri(dil)[onay.tur] : null;
 
   /*
    * TEK EYLEM + ⋯ (taslak `#campaign`). Menü yukarı açılıyor: tablo yatay
@@ -142,24 +149,24 @@ export function RehberGirisi({
     return (
       <span className="inline-flex items-center justify-end gap-1.5">
         <Link className={dugmeSinifi(r.durum === 'taslak' ? 'koyu' : 'ikincil', 'kucuk')} href={satirAdresi(r)}>
-          {birincilEylem(r)}
+          {birincilEylem(r, dil)}
         </Link>
         {eylemler.length > 0 && (
           <AcilirMenu
             tasma="portal"
-            etiket="Diğer işlemler"
+            etiket={dg.digerIslemler}
             hizala="sag"
             yon="yukari"
             genislik="w-52"
             tetik={({ acik: _acik, ...t }) => (
-              <button type="button" {...t} className={IKON_TETIK} aria-label="Diğer işlemler" disabled={isleniyor}>
+              <button type="button" {...t} className={IKON_TETIK} aria-label={dg.digerIslemler} disabled={isleniyor}>
                 <Ikon d={IKON.dahaFazla} />
               </button>
             )}
           >
             {eylemler.map((e) => (
               <MenuOgesi key={e} tehlike={e !== 'geri_getir'} devreDisi={isleniyor} onClick={() => eylem(r, e)}>
-                {EYLEM_ADI[e]}
+                {EYLEM_ADI(dg)[e]}
               </MenuOgesi>
             ))}
           </AcilirMenu>
@@ -175,17 +182,17 @@ export function RehberGirisi({
       <span className="flex min-w-0 items-center gap-3">
         <Kucuk r={r} />
         <AdHucresi
-          ad={<Link href={satirAdresi(r)}>{satirAdi(r, formatTarih)}</Link>}
+          ad={<Link href={satirAdresi(r)}>{satirAdi(r, (iso) => formatTarih(iso, dil), dil)}</Link>}
           alt={
             <>
               {r.durum === 'taslak'
-                ? ['Taslak', taslakPlatformlari(r)].filter(Boolean).join(' · ')
+                ? [dg.taslakEtiketi, taslakPlatformlari(r)].filter(Boolean).join(' · ')
                 : r.durum === 'arsivlendi'
-                  ? 'Listeden kaldırıldı'
+                  ? dg.listedenKaldirildi
                   : null}
               {/* Telefonda gizlenen bütçe/eksik/platform sütunlarının yerine (telefonOzeti). */}
               {(() => {
-                const ozet = telefonOzeti(r, sekme, (m, b) => formatMoney(m, b));
+                const ozet = telefonOzeti(r, sekme, (m, b) => formatMoney(m, b, { dil }), dil);
                 return ozet ? <span className="block sm:hidden">{ozet}</span> : null;
               })()}
             </>
@@ -196,17 +203,17 @@ export function RehberGirisi({
   });
   const butceSutunu: TabloSutunu<RehberOzeti> = {
     anahtar: 'butce',
-    baslik: 'Bütçe',
+    baslik: dg.sutun.butce,
     sayi: true,
     // Telefonda ad hücresinin özet satırında (telefonOzeti): "Devam et" ekrana sığsın.
     ikincil: true,
-    hucre: (r) => <span className="tutar">{butceMetni(r.butce, (m, b) => formatMoney(m, b)) ?? '-'}</span>,
+    hucre: (r) => <span className="tutar">{butceMetni(r.butce, (m, b) => formatMoney(m, b, { dil }), dil) ?? '-'}</span>,
   };
   const zamanSutunu = (baslik: string): TabloSutunu<RehberOzeti> => ({
     anahtar: 'zaman',
     baslik,
     ikincil: true,
-    hucre: (r) => <span className="whitespace-nowrap text-ink-muted">{formatRelative(r.updatedAt)}</span>,
+    hucre: (r) => <span className="whitespace-nowrap text-ink-muted">{formatRelative(r.updatedAt, dil)}</span>,
   });
   const eylemSutunu: TabloSutunu<RehberOzeti> = { anahtar: 'eylem', baslik: '', sayi: true, hucre: eylemHucresi };
   const platformSutunu: TabloSutunu<RehberOzeti> = {
@@ -214,7 +221,7 @@ export function RehberGirisi({
     baslik: 'Platform',
     ikincil: true,
     hucre: (r) => {
-      const rozetler = platformRozetleri(r);
+      const rozetler = platformRozetleri(r, dil);
       if (rozetler.length === 0) return <span className="text-ink-muted">-</span>;
       return (
         <span className="flex flex-wrap gap-1.5">
@@ -232,17 +239,17 @@ export function RehberGirisi({
   };
   const eksikSutunu: TabloSutunu<RehberOzeti> = {
     anahtar: 'eksik',
-    baslik: 'Eksik',
+    baslik: dg.sutun.eksik,
     ikincil: true,
     hucre: (r) => {
-      const e = eksikEtiketi(r);
+      const e = eksikEtiketi(r, dil);
       return <Rozet hal={e.hata ? 'hata' : 'taslak'}>{e.metin}</Rozet>;
     },
   };
   const sutunlar: Record<GirisSekmesi, Array<TabloSutunu<RehberOzeti>>> = {
-    yayindakiler: [adSutunu('Reklam'), platformSutunu, butceSutunu, zamanSutunu('Son değişiklik'), eylemSutunu],
-    taslaklar: [adSutunu('Taslak'), eksikSutunu, butceSutunu, zamanSutunu('Son dokunuş'), eylemSutunu],
-    arsiv: [adSutunu('Reklam'), platformSutunu, butceSutunu, zamanSutunu('Son değişiklik'), eylemSutunu],
+    yayindakiler: [adSutunu(dg.sutun.reklam), platformSutunu, butceSutunu, zamanSutunu(dg.sutun.sonDegisiklik), eylemSutunu],
+    taslaklar: [adSutunu(dg.sutun.taslak), eksikSutunu, butceSutunu, zamanSutunu(dg.sutun.sonDokunus), eylemSutunu],
+    arsiv: [adSutunu(dg.sutun.reklam), platformSutunu, butceSutunu, zamanSutunu(dg.sutun.sonDegisiklik), eylemSutunu],
   };
   const tablo = (satirlar: RehberOzeti[], etiket: string) => (
     <Tablo
@@ -256,16 +263,16 @@ export function RehberGirisi({
 
   const baslik = (
     <SayfaBasligi
-      bolum="Oluştur"
-      baslik="AdvCampaign"
+      bolum={menuBolumuEtiketi('/reklam', dil)}
+      baslik={menuSatiriEtiketi('/reklam', dil)}
       aciklama={
         <>
-          <b className="text-ink">{workspaceAdi}</b> · Meta ve Google reklamını altı adımda kur
+          <b className="text-ink">{workspaceAdi}</b> · {dg.aciklama}
         </>
       }
       eylemler={
         <Dugme ikon="＋" bekliyor={aciliyor} onClick={() => void yeni()}>
-          Yeni reklam
+          {dg.yeniReklam}
         </Dugme>
       }
     />
@@ -275,27 +282,27 @@ export function RehberGirisi({
     <div className="grid w-full gap-6">
       {baslik}
       {devredildi && (
-        <Serit ton="bilgi" baslik="İyileştir'den gelen istek rehberle kuruluyor">
-          Sohbet kalktı. &quot;Yeni reklam&quot;la başla; amaç, bütçe ve metni adım adım seçersin.
+        <Serit ton="bilgi" baslik={dg.devredildiBaslik}>
+          {dg.devredildiGovde}
         </Serit>
       )}
       {hata && (
-        <Serit ton="hata" baslik="Yeni reklam açılamadı">
+        <Serit ton="hata" baslik={dg.yeniAcilamadi}>
           {hata}
         </Serit>
       )}
       {islemHatasi && (
-        <Serit ton="hata" baslik="İşlem tamamlanamadı">
+        <Serit ton="hata" baslik={dg.islemTamamlanamadi}>
           {islemHatasi}
         </Serit>
       )}
       {listeHatasi ? (
-        <HataDurumu baslik="Reklam listesi okunamadı" mesaj={listeHatasi} onTekrar={() => router.refresh()} />
+        <HataDurumu baslik={dg.listeOkunamadi} mesaj={listeHatasi} onTekrar={() => router.refresh()} />
       ) : (
         <SayfaIcDuzen
           menu={
             <SayfaIcMenu
-              etiket="Reklam durumu"
+              etiket={dg.durumEtiketi}
               secili={sekme}
               ogeler={GIRIS_SEKMELERI.map((k: GirisSekmesi) => ({
                 deger: k,
@@ -307,18 +314,18 @@ export function RehberGirisi({
           }
         >
           {kesildi && (
-            <Serit ton="bilgi" baslik={`${liste.satirlar.length} / ${liste.toplam} kayıt gösteriliyor`}>
-              Bölüm sayıları gösterilenlere göre. En eski arşiv kayıtları listede yok.
+            <Serit ton="bilgi" baslik={dg.kesildi(liste.satirlar.length, liste.toplam)}>
+              {dg.kesildiGovde}
             </Serit>
           )}
           {gorunen.length === 0 && !(sekme === 'taslaklar' && taslak.eski.length > 0) ? (
             <BosDurum
-              baslik={`${SEKME_ADLARI[sekme]} boş`}
-              neden={BOS_SEKME_METNI[sekme]}
+              baslik={dg.bosBaslik[sekme]}
+              neden={bosSekmeMetni(dil)[sekme]}
               eylem={
                 sekme !== 'arsiv' && (
                   <Dugme ton="ikincil" boyut="kucuk" bekliyor={aciliyor} onClick={() => void yeni()}>
-                    Yeni reklam
+                    {dg.yeniReklam}
                   </Dugme>
                 )
               }
@@ -331,8 +338,8 @@ export function RehberGirisi({
           {sekme === 'taslaklar' && taslak.eski.length > 0 && (
             <Kart
               dolgu={false}
-              baslik="Eski taslaklar"
-              baslikEki={`${taslak.eski.length} taslak · amaç seçilmemiş ya da bir haftadır dokunulmamış`}
+              baslik={dg.eskiTaslaklar}
+              baslikEki={dg.eskiTaslakEki(taslak.eski.length)}
               eylem={
                 <Dugme
                   ton="tehlike"
@@ -343,11 +350,11 @@ export function RehberGirisi({
                     setOnayAcik(true);
                   }}
                 >
-                  Hepsini sil
+                  {dg.hepsiniSil}
                 </Dugme>
               }
             >
-              {tablo(taslak.eski, 'Eski taslaklar')}
+              {tablo(taslak.eski, dg.eskiTaslaklar)}
             </Kart>
           )}
         </SayfaIcDuzen>
@@ -362,7 +369,7 @@ export function RehberGirisi({
         altEylemler={
           <>
             <Dugme ton="ikincil" disabled={isleniyor} onClick={() => setOnayAcik(false)}>
-              Vazgeç
+              {dg.vazgec}
             </Dugme>
             <Dugme
               ton={onay?.tur === 'listeden_kaldir' ? 'birincil' : 'tehlike'}
@@ -378,17 +385,17 @@ export function RehberGirisi({
         <div className="grid gap-3 text-14 text-ink">
           <p className="m-0">
             {metin?.govde}
-            {onay && onay.satirlar.length > 1 && ` (${onay.satirlar.length} taslak)`}
+            {onay && onay.satirlar.length > 1 && ` ${dg.taslakSayisi(onay.satirlar.length)}`}
           </p>
           {onay && onay.satirlar.length === 1 && (
             <p className="m-0">
-              <b>{satirAdi(onay.satirlar[0]!, formatTarih)}</b>
+              <b>{satirAdi(onay.satirlar[0]!, (iso) => formatTarih(iso, dil), dil)}</b>
             </p>
           )}
           {metin?.yoneticiBaglantisi && (
             <p className="m-0">
               <Link className={KART_BAGLANTISI} href={baglanti(REKLAM_YONETICISI, tasinan)}>
-                Reklam Yöneticisi&apos;ne git →
+                {dg.yoneticiyeGit}
               </Link>
             </p>
           )}
@@ -398,11 +405,11 @@ export function RehberGirisi({
   );
 }
 
-const EYLEM_ADI: Readonly<Record<SatirEylemi, string>> = {
-  taslagi_sil: 'Taslağı sil',
-  listeden_kaldir: 'Listeden kaldır',
-  geri_getir: 'Geri getir',
-};
+const EYLEM_ADI = (dg: { eylem: { taslagiSil: string; listedenKaldir: string; geriGetir: string } }): Readonly<Record<SatirEylemi, string>> => ({
+  taslagi_sil: dg.eylem.taslagiSil,
+  listeden_kaldir: dg.eylem.listedenKaldir,
+  geri_getir: dg.eylem.geriGetir,
+});
 
 /**
  * Satırın küçük görseli: ilk medyanın görseli (video ise kapağı). Yoksa ya
@@ -410,6 +417,7 @@ const EYLEM_ADI: Readonly<Record<SatirEylemi, string>> = {
  * "görsel yok" ile "görsel okunamadı"yı ayırt ettirmezdi).
  */
 function Kucuk({ r }: { r: RehberOzeti }) {
+  const d = useSozluk(reklamSozlugu);
   const [dustu, setDustu] = useState(false);
   const amac = r.amac && (REHBER_AMAC_KODLARI as readonly string[]).includes(r.amac) ? (r.amac as RehberAmacKodu) : null;
   const kutu = 'h-10 w-10 shrink-0 rounded-alan border border-line bg-surface-sunken';
@@ -420,7 +428,7 @@ function Kucuk({ r }: { r: RehberOzeti }) {
     );
   }
   return (
-    <span className={`${kutu} grid place-items-center text-ink-muted`} title={dustu ? 'Görsel yüklenemedi' : undefined} aria-hidden>
+    <span className={`${kutu} grid place-items-center text-ink-muted`} title={dustu ? d.giris.gorselYuklenemedi : undefined} aria-hidden>
       {amac ? <Ikon d={AMAC_IKONU[amac]} boyut={20} /> : <Ikon d={IKON.bilgi} boyut={20} />}
     </span>
   );
@@ -428,15 +436,17 @@ function Kucuk({ r }: { r: RehberOzeti }) {
 
 /** Rehber açılamadığında (okuma hatası, yanlış workspace, yetki) tek kutu. */
 export function RehberMesaji({ baslik, children, geri }: { baslik: string; children: React.ReactNode; geri?: string }) {
+  const { dil } = useDil();
+  const d = useSozluk(reklamSozlugu);
   return (
-    <SayfaIskeleti bolum="Oluştur" baslik="AdvCampaign">
+    <SayfaIskeleti bolum={menuBolumuEtiketi('/reklam', dil)} baslik={menuSatiriEtiketi('/reklam', dil)}>
       <HataDurumu
         baslik={baslik}
         mesaj={children}
         eylem={
           geri && (
             <Link className={KART_BAGLANTISI} href={geri}>
-              Reklam listesine dön →
+              {d.giris.listeyeDon}
             </Link>
           )
         }

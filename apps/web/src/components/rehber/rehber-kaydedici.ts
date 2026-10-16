@@ -18,7 +18,7 @@
  *   "Tekrar dene" hepsini birlikte gönderir. Kullanıcının yazdığı kaybolmaz.
  * - "Taslak kaydedildi" yalnız sunucu cevap verdikten sonra yazılır.
  */
-import type { RehberGuncelle, RehberKaydi } from '@advetics/shared';
+import type { Dil, RehberGuncelle, RehberKaydi } from '@advetics/shared';
 import { ISTEK_BASINA_DEGISIKLIK, degisiklikBirlestir, kayitHatasi, type Degisiklik } from './rehber-mantik';
 
 export type KayitHali =
@@ -63,7 +63,7 @@ export class RehberKaydedici {
   constructor(
     ilk: RehberKaydi,
     private readonly gonder: (govde: RehberGuncelle) => Promise<RehberKaydi>,
-    private readonly secenek: { gecikme?: number; zamanlayici?: Zamanlayici } = {},
+    private readonly secenek: { gecikme?: number; zamanlayici?: Zamanlayici; dil?: Dil } = {},
   ) {
     this.kayit = ilk;
     this.anlik = this.olustur();
@@ -146,7 +146,7 @@ export class RehberKaydedici {
       this.kayit = yeni;
       this.ucusta = [];
     } catch (e) {
-      const h = kayitHatasi(e);
+      const h = kayitHatasi(e, this.secenek.dil);
       // Düşen değişiklikler, sonradan gelenlerin ALTINA: aynı alan için
       // kullanıcının daha yeni yazdığı kazanır.
       this.kuyruk = degisiklikBirlestir(this.ucusta, this.kuyruk);

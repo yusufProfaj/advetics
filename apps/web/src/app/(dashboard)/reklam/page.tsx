@@ -1,4 +1,4 @@
-import { siteYokMu, type RehberHazirligi, type RehberKaydi, type RehberListesi } from '@advetics/shared';
+import { sec, siteYokMu, type RehberHazirligi, type RehberKaydi, type RehberListesi } from '@advetics/shared';
 import { WorkspaceGerekli } from '@/components/workspace-gerekli';
 import { RehberEkrani } from '@/components/rehber/rehber-ekrani';
 import { RehberGirisi, RehberMesaji } from '@/components/rehber/rehber-girisi';
@@ -7,8 +7,14 @@ import { baglanti } from '@/lib/baglanti';
 import { beyanGirdisi, beyanlariOku } from '@/lib/kurulum-beyanlari';
 import { sayfaWorkspaceId, workspaceSecimVerisi } from '@/lib/sayfa-workspace';
 import { hasPermission, requireSession } from '@/lib/session';
+import { menuSatiriEtiketi } from '@/lib/nav-sections';
+import { dilAl } from '@/dil/sunucu';
+import { reklamSozlugu } from '@/dil/sozlukler/reklam';
 
-export const metadata = { title: 'AdvCampaign · Advetics' };
+/** Sekme başlığı istek anında: dil çerezden okunuyor, ad menüyle aynı kaynaktan. */
+export async function generateMetadata() {
+  return { title: `${menuSatiriEtiketi('/reklam', await dilAl())} · Advetics` };
+}
 export const dynamic = 'force-dynamic';
 
 /**
@@ -24,13 +30,15 @@ export const dynamic = 'force-dynamic';
  */
 export default async function AdvCampaignPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const session = await requireSession();
+  const dil = await dilAl();
+  const d = sec(reklamSozlugu, dil);
   const params = await searchParams;
   const clientId = sayfaWorkspaceId(session, first(params.musteri));
   if (!clientId) {
-    return <WorkspaceGerekli ekran="AdvCampaign" neden="Reklam bir workspace’in reklam hesabında kuruluyor." {...workspaceSecimVerisi(session)} />;
+    return <WorkspaceGerekli ekran={menuSatiriEtiketi('/reklam', dil)} neden={d.sayfa.workspaceNeden} {...workspaceSecimVerisi(session)} />;
   }
   if (!hasPermission(session, 'bulk.write')) {
-    return <RehberMesaji baslik="Reklam oluşturma yetkin yok">Workspace yöneticine danış.</RehberMesaji>;
+    return <RehberMesaji baslik={d.sayfa.yetkiYok}>{d.sayfa.yetkiYokGovde}</RehberMesaji>;
   }
   const workspaceAdi = session.availableClients.find((c) => c.id === clientId)?.name ?? 'Workspace';
   const listeAdresi = baglanti('/reklam', { musteri: clientId });
@@ -50,7 +58,7 @@ export default async function AdvCampaignPage({ searchParams }: { searchParams: 
     try {
       liste = await serverApiFetch<RehberListesi>(`/reklam/rehberler?clientId=${encodeURIComponent(clientId)}`);
     } catch (e) {
-      listeHatasi = hata(e);
+      listeHatasi = hata(e, d.ortak.sunucuYok);
     }
     return (
       <RehberGirisi
@@ -84,15 +92,15 @@ export default async function AdvCampaignPage({ searchParams }: { searchParams: 
   // olmadan hiçbir hesap ya da sayfa seçilemez.
   if (r.status === 'rejected') {
     return (
-      <RehberMesaji baslik="Reklam taslağı okunamadı" geri={listeAdresi}>
-        {hata(r.reason)}
+      <RehberMesaji baslik={d.sayfa.taslakOkunamadi} geri={listeAdresi}>
+        {hata(r.reason, d.ortak.sunucuYok)}
       </RehberMesaji>
     );
   }
   if (h.status === 'rejected') {
     return (
-      <RehberMesaji baslik="Reklam hazırlığı okunamadı" geri={listeAdresi}>
-        {hata(h.reason)} Sayfayı yenilemeyi dene.
+      <RehberMesaji baslik={d.sayfa.hazirlikOkunamadi} geri={listeAdresi}>
+        {hata(h.reason, d.ortak.sunucuYok)} {d.sayfa.hazirlikTekrar}
       </RehberMesaji>
     );
   }
@@ -100,8 +108,8 @@ export default async function AdvCampaignPage({ searchParams }: { searchParams: 
   // hesapları seçenek olarak gelirdi.
   if (r.value.clientId !== clientId) {
     return (
-      <RehberMesaji baslik="Bu reklam başka bir workspace’e ait" geri={listeAdresi}>
-        Listeye dönüp yeniden aç.
+      <RehberMesaji baslik={d.sayfa.baskaWorkspace} geri={listeAdresi}>
+        {d.sayfa.baskaWorkspaceGovde}
       </RehberMesaji>
     );
   }
@@ -124,8 +132,8 @@ export default async function AdvCampaignPage({ searchParams }: { searchParams: 
   );
 }
 
-function hata(e: unknown): string {
-  return e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.';
+function hata(e: unknown, sunucuYok: string): string {
+  return e instanceof ApiRequestError ? e.message : sunucuYok;
 }
 
 function first(v: string | string[] | undefined): string | undefined {

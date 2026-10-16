@@ -1,4 +1,5 @@
-import type { AlanKaynagi } from '@advetics/shared';
+import { sec, type AlanKaynagi, type Dil } from '@advetics/shared';
+import { reklamSozlugu } from '@/dil/sozlukler/reklam';
 
 /**
  * ═══ REHBER ALANININ KAYNAK ROZETİ — TEK KARAR ═══
@@ -13,8 +14,8 @@ import type { AlanKaynagi } from '@advetics/shared';
  * `varsayilan` = ekranın o alandaki öneri dili ("Önerilen", "Marka
  * Merkezi'nden"): kaynak `strateji` değilse o yazılır, karar ekranda kalır.
  */
-export function kaynakRozeti(kaynak: AlanKaynagi | undefined, varsayilan: string | null): string | null {
+export function kaynakRozeti(kaynak: AlanKaynagi | undefined, varsayilan: string | null, dil: Dil = 'tr'): string | null {
   if (kaynak === undefined || kaynak === 'kullanici') return null;
-  if (kaynak === 'strateji') return 'Stratejiden';
+  if (kaynak === 'strateji') return sec(reklamSozlugu, dil).strateji.etiket;
   return varsayilan;
 }

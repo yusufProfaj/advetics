@@ -26,6 +26,8 @@ import {
   type SetPlani,
   type YerlesimGrubu,
 } from '@advetics/shared';
+import { useSozluk } from '@/dil/saglayici';
+import { reklamEkSozlugu } from '@/dil/sozlukler/reklam-ek';
 import { IKON, Ikon } from './ikonlar';
 import { EKRAN_EN_COK_SET, type SetYuvalari } from './rehber-mantik';
 import type { MedyaBilgisi } from './adim-reklam';
@@ -43,7 +45,9 @@ const ORAN_CSS: Record<GorselOrani, string> = { dikey: s.oDikey!, dik45: s.oDik4
 /** Sürüklenen görselin kimliği bu türle taşınıyor; dosya bırakmayla karışmasın. */
 const SURUKLEME_TURU = 'application/x-advetics-varlik';
 
-const etiketler = (gruplar: readonly YerlesimGrubu[]) => gruplar.map((g) => YERLESIM_GRUPLARI[g].etiket).join(', ');
+/** Yerleşim adı ekran dilinde: shared'daki `etiket` Türkçe, anahtarla eşleniyor (Marketplace iki dilde aynı). */
+const yerlesimAdi = (g: YerlesimGrubu, t: { yerlesim: { hikaye: string; akis: string; yan: string } }) => (g === 'pazar' ? YERLESIM_GRUPLARI[g].etiket : t.yerlesim[g]);
+const etiketler = (gruplar: readonly YerlesimGrubu[], t: { yerlesim: { hikaye: string; akis: string; yan: string } }) => gruplar.map((g) => yerlesimAdi(g, t)).join(', ');
 
 /** Bu oran bu sette hangi açık yerleşimlerde gösterilecek. */
 function kullanildigiYerler(plan: SetPlani, ortak: SetPlani, oran: GorselOrani): YerlesimGrubu[] {
@@ -78,6 +82,7 @@ export function SetKartlari({
    */
   niyet?: NiyetKodu;
 }) {
+  const t = useSozluk(reklamEkSozlugu).set;
   const [ustunde, setUstunde] = useState<number | 'yeni' | null>(null);
 
   const oranListeleri = setler.map((st) => GORSEL_ORANLARI.filter((o) => st[o]));
@@ -121,10 +126,10 @@ export function SetKartlari({
             <div key={i} className={s.set} data-ustunde={ustunde === i} {...birakmaOlaylari(i)}>
               <div className={s.setUst}>
                 <h3>Set {i + 1}</h3>
-                <span className={s.rozet}>1 reklam</span>
+                <span className={s.rozet}>{t.birReklam}</span>
                 {coklu && (
                   <button type="button" className={`${s.metinDugme} ${s.sagaYasla}`} onClick={() => setiSil(i)}>
-                    Seti sil
+                    {t.setiSil}
                   </button>
                 )}
               </div>
@@ -143,20 +148,20 @@ export function SetKartlari({
                           className={s.cerceve}
                           data-bos="true"
                           data-kapatir={kapanan.length > 0}
-                          aria-label={`Set ${i + 1} için ${ORAN_ETIKETI[o]} ekle`}
+                          aria-label={t.ekleEtiket(i + 1, ORAN_ETIKETI[o])}
                           onClick={() => yuvayaYukle(null, i)}
                         >
                           <span className={s.ekle}>
-                            + {ORAN_ETIKETI[o]} ekle<span>{ONERILEN_OLCU[o]}</span>
+                            {t.ekle(ORAN_ETIKETI[o])}<span>{ONERILEN_OLCU[o]}</span>
                           </span>
                         </button>
                         <div className={s.yuvaAlt}>
                           <b>{ORAN_ETIKETI[o]}</b>
                           {kapanan.length ? (
-                            <span className={s.kapaliYazi}>{etiketler(kapanan)} kapalı kalacak</span>
+                            <span className={s.kapaliYazi}>{t.kapaliKalacak(etiketler(kapanan, t))}</span>
                           ) : (
                             <span className={s.yer}>
-                              {yedek.length ? `${etiketler(yedek)}: ${ORAN_ETIKETI[plan.gruplar[yedek[0]!]!]} kullanılır` : ' '}
+                              {yedek.length ? t.kullanilir(etiketler(yedek, t), ORAN_ETIKETI[plan.gruplar[yedek[0]!]!]) : ' '}
                             </span>
                           )}
                         </div>
@@ -186,20 +191,20 @@ export function SetKartlari({
                         {/* Ortak açılır menü (DOM'da kalır, Esc ve ok tuşları bileşende). */}
                         <div className={s.menuKonum}>
                           <AcilirMenu
-                            etiket={`${bilgi?.ad ?? 'Görsel'} için seçenekler`}
+                            etiket={t.secenekler(bilgi?.ad ?? t.gorsel)}
                             hizala="sag"
                             genislik="w-56"
-                            tetik={({ acik: _acik, ...t }) => (
-                              <button type="button" {...t} className={s.menuDugme} aria-label={`${bilgi?.ad ?? 'Görsel'} için seçenekler`}>
+                            tetik={({ acik: _acik, ...tp }) => (
+                              <button type="button" {...tp} className={s.menuDugme} aria-label={t.secenekler(bilgi?.ad ?? t.gorsel)}>
                                 ⋯
                               </button>
                             )}
                           >
-                            <MenuBasligi>Sete taşı</MenuBasligi>
+                            <MenuBasligi>{t.seteTasi}</MenuBasligi>
                             {digerleri.map((j) => (
                               <MenuOgesi
                                 key={j}
-                                aciklama={setler[j]![o] ? `${ORAN_ETIKETI[o]} var, yer değiştirirler` : undefined}
+                                aciklama={setler[j]![o] ? t.yerDegistirir(ORAN_ETIKETI[o]) : undefined}
                                 onClick={() => tasi(g.varlikId, j)}
                               >
                                 Set {j + 1}
@@ -207,14 +212,14 @@ export function SetKartlari({
                             ))}
                             <MenuOgesi
                               devreDisi={sinirda}
-                              aciklama={sinirda ? `En çok ${EKRAN_EN_COK_SET} set` : undefined}
+                              aciklama={sinirda ? t.enCokSet(EKRAN_EN_COK_SET) : undefined}
                               onClick={() => tasi(g.varlikId, 'yeni')}
                             >
-                              Yeni set
+                              {t.yeniSet}
                             </MenuOgesi>
                             <MenuAyraci />
                             <MenuOgesi tehlike onClick={() => kaldir(g.varlikId)}>
-                              Kaldır
+                              {t.kaldir}
                             </MenuOgesi>
                           </AcilirMenu>
                         </div>
@@ -223,18 +228,18 @@ export function SetKartlari({
                         <b>
                           {ORAN_ETIKETI[o]}
                           {/* Otomatik üretilen boyut kaynağını söylüyor; kullanıcı beğenmezse kaldırır. */}
-                          {g.uretildi && <span className={s.uretildi}> · Üretildi</span>}
+                          {g.uretildi && <span className={s.uretildi}>{t.uretildi}</span>}
                         </b>
                         {yerler.length ? (
                           <span className={s.yer}>
-                            {ortak.otomatik && o === 'kare' ? 'Kalan her yer' : etiketler(yerler)}
+                            {ortak.otomatik && o === 'kare' ? t.kalanHerYer : etiketler(yerler, t)}
                           </span>
                         ) : (
                           // Ortak kapanış bu görseli kullanılmaz yapıyor; sessiz durmasın.
-                          <span className={s.kullanilmiyor}>Şimdilik kullanılmıyor</span>
+                          <span className={s.kullanilmiyor}>{t.kullanilmiyor}</span>
                         )}
                         <small>
-                          {bilgi?.ad ?? 'Görsel'}
+                          {bilgi?.ad ?? t.gorsel}
                           {bilgi?.en && bilgi.boy ? ` · ${bilgi.en} × ${bilgi.boy}` : ''}
                         </small>
                       </div>
@@ -247,29 +252,29 @@ export function SetKartlari({
                 <span>
                   {n === 0 ? (
                     <>
-                      <b>Bu sette görsel yok</b>
+                      <b>{t.bosSet}</b>
                       <br />
-                      <span className={s.acikYazi}>Aynı tasarımın dört boyutunu ekle; her boyut kendi yerinde gösterilir.</span>
+                      <span className={s.acikYazi}>{t.bosSetAcik}</span>
                     </>
                   ) : plan.otomatik ? (
                     <>
-                      <b>4 boyut tam · yerleşimler otomatik</b>
+                      <b>{t.tamOtomatik}</b>
                       <br />
-                      <span className={s.acikYazi}>Meta yerleşimleri kendisi seçer.</span>
+                      <span className={s.acikYazi}>{t.metaSecer}</span>
                     </>
                   ) : plan.kapanan.length ? (
                     <>
                       <b>
-                        {n} / 4 boyut · {etiketler(plan.kapanan)} kapalı
+                        {t.boyutKapali(n, etiketler(plan.kapanan, t))}
                       </b>
                       <br />
-                      <span className={s.acikYazi}>Eksik boyutu eklersen açılır.</span>
+                      <span className={s.acikYazi}>{t.eksikEklersen}</span>
                     </>
                   ) : (
                     <>
-                      <b>{n} / 4 boyut · bütün yerler açık</b>
+                      <b>{t.hepsiAcik(n)}</b>
                       <br />
-                      <span className={s.acikYazi}>Eksik boyutun yerinde başka boyut gösterilir.</span>
+                      <span className={s.acikYazi}>{t.baskaBoyut}</span>
                     </>
                   )}
                 </span>
@@ -277,7 +282,7 @@ export function SetKartlari({
               {googleArama && (
                 <div className={s.googleNot}>
                   <Ikon d={IKON.google} />
-                  Google Arama reklamı metinle gösterilir; görseller yalnız Meta&apos;da kullanılır.
+                  {t.googleNot}
                 </div>
               )}
               {n > 0 && setAlti?.(st, i)}
@@ -292,8 +297,7 @@ export function SetKartlari({
         <div className={s.ortakUyari} role="status">
           <Ikon d={IKON.ucgen} />
           <span>
-            <b>Reklam setinde {etiketler(ortak.kapanan)} kapalı.</b> Yerleşim bütün setlerde ortak olduğu için en az boyutu olan set belirler.
-            Açmak için Set {sebepSetler.join(', ')} içine eksik boyutu ekle.
+            <b>{t.ortakBaslik(etiketler(ortak.kapanan, t))}</b>{t.ortakGovde(sebepSetler.join(', '))}
           </span>
         </div>
       )}
@@ -306,10 +310,10 @@ export function SetKartlari({
         onClick={() => yuvayaYukle(null, null)}
         {...birakmaOlaylari('yeni')}
       >
-        {sinirda ? `En çok ${EKRAN_EN_COK_SET} set eklenebilir` : '+ Yeni set (başka bir fikir)'}
+        {sinirda ? t.sinirda(EKRAN_EN_COK_SET) : t.yeniSetDugme}
       </button>
       <p className={s.ipucu}>
-        Her set ayrı bir reklamdır. Birden çok set eklersen Meta hepsini dener; hangisinin daha iyi çalıştığını raporda görürsün.
+        {t.herSetAyri}
       </p>
     </div>
   );

@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { HIZLI_SORU_EN_COK, HIZLI_SORU_SINIRI, KARSILAMA_MESAJ_SINIRI, SATISSIZ_PIKSEL_ONAY_METNI, WHATSAPP_VARSAYILAN_MESAJ, type RehberPikselListesi, type WhatsappKarsilama } from '@advetics/shared';
 import { apiFetch } from '@/lib/api';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { reklamEkSozlugu } from '@/dil/sozlukler/reklam-ek';
 import { sil, yaz, type AdimBaglami } from './adim-ortak';
 import { IKON, Ikon } from './ikonlar';
 import { pikselDurumu, pikselListesiHali, satissizOnayGorunur, tekPikselOnerisi, whatsappOnerisi } from './meta-dalga3-mantik';
@@ -16,6 +18,8 @@ import s from './rehber.module.css';
  * nedeni) / düştü (Meta'nın mesajı).
  */
 export function PikselSecici({ b }: { b: AdimBaglami }) {
+  const { dil } = useDil();
+  const t = useSozluk(reklamEkSozlugu).piksel;
   const hesapId = b.a.metaHesabiId?.deger ?? null;
   const secili = b.a.pikselId?.deger ?? null;
   const [hal, setHal] = useState<OneriHali<RehberPikselListesi>>({ tur: 'istenmedi' });
@@ -28,11 +32,11 @@ export function PikselSecici({ b }: { b: AdimBaglami }) {
     apiFetch<RehberPikselListesi>(`/reklam/rehber/pikseller?clientId=${encodeURIComponent(b.clientId)}&adAccountId=${encodeURIComponent(hesapId)}`)
       .then((r) => {
         if (iptal) return;
-        setHal(pikselListesiHali(r));
+        setHal(pikselListesiHali(r, dil));
         const oneri = tekPikselOnerisi(secili, r);
         if (oneri) yaz(b, 'pikselId', oneri, 'derleyici');
       })
-      .catch((e: unknown) => !iptal && setHal(oneriHatasi(e)));
+      .catch((e: unknown) => !iptal && setHal(oneriHatasi(e, dil)));
     return () => {
       iptal = true;
     };
@@ -50,10 +54,10 @@ export function PikselSecici({ b }: { b: AdimBaglami }) {
   return (
     <div className={`${s.kart} ${s.blok}`}>
       <div className={s.blokBaslik}>
-        Meta pikseli <span className={s.ops}>Satışları sayan kod</span>
+        {t.baslik} <span className={s.ops}>{t.baslikNot}</span>
       </div>
-      {hal.tur === 'istenmedi' && <p className={s.ipucu} style={{ margin: 0 }}>Önce Meta reklam hesabını seç; pikseller o hesaptan listelenir.</p>}
-      {hal.tur === 'isteniyor' && <p className={s.ipucu} style={{ margin: 0 }}>Pikseller Meta&apos;dan okunuyor…</p>}
+      {hal.tur === 'istenmedi' && <p className={s.ipucu} style={{ margin: 0 }}>{t.hesapSec}</p>}
+      {hal.tur === 'isteniyor' && <p className={s.ipucu} style={{ margin: 0 }}>{t.okunuyor}</p>}
       {hal.tur === 'dustu' && (
         <div className={s.uyari} role="alert">
           <Ikon d={IKON.ucgen} />
@@ -72,17 +76,17 @@ export function PikselSecici({ b }: { b: AdimBaglami }) {
             {hal.deger.satirlar.map((p) => (
               <button key={p.id} type="button" aria-pressed={secili === p.id} onClick={() => yaz(b, 'pikselId', p.id)}>
                 {p.ad}
-                <span className={s.ops}> {pikselDurumu(p)}</span>
+                <span className={s.ops}> {pikselDurumu(p, dil)}</span>
               </button>
             ))}
           </div>
-          {hal.deger.kesildi && <p className={s.ipucu}>İlk {hal.deger.toplam} piksel gösteriliyor.</p>}
-          {secili && b.a.pikselId?.kaynak === 'derleyici' && <p className={s.ipucu}>Hesaptaki tek piksel önerildi.</p>}
+          {hal.deger.kesildi && <p className={s.ipucu}>{t.ilkN(hal.deger.toplam)}</p>}
+          {secili && b.a.pikselId?.kaynak === 'derleyici' && <p className={s.ipucu}>{t.tekOnerildi}</p>}
         </>
       )}
       {(hal.tur === 'geldi' || hal.tur === 'bos' || hal.tur === 'dustu') && (
         <button type="button" className={`${s.metinDugme} ${s.ustBosluk}`} onClick={() => setTur((x) => x + 1)}>
-          Listeyi yenile
+          {t.yenile}
         </button>
       )}
       {eksik && hal.tur !== 'isteniyor' && <p className={s.hataMetni}>{eksik.metin}</p>}
@@ -111,6 +115,7 @@ export function PikselSecici({ b }: { b: AdimBaglami }) {
  * önden doluyor ve KAYNAĞI yazıyor: WhatsApp hattı başka numara olabilir.
  */
 export function WhatsappNumarasi({ b }: { b: AdimBaglami }) {
+  const t = useSozluk(reklamEkSozlugu).whatsapp;
   const eksik = b.kayit.eksikler.find((e) => e.kod === 'WHATSAPP-NUMARA' || e.kod === 'WHATSAPP-ONAY') ?? null;
   const oneri = whatsappOnerisi(b.h.iletisim.telefon);
   const mevcut = b.a.whatsappNumarasi?.deger ?? null;
@@ -124,7 +129,7 @@ export function WhatsappNumarasi({ b }: { b: AdimBaglami }) {
         <input
           value={telefonGirdisi(b.a.whatsappNumarasi?.deger)}
           inputMode="tel"
-          aria-label="WhatsApp numarası"
+          aria-label={t.numaraEtiket}
           onChange={(e) => {
             const t = telefonKaydi(e.target.value);
             if (t) yaz(b, 'whatsappNumarasi', t);
@@ -134,11 +139,11 @@ export function WhatsappNumarasi({ b }: { b: AdimBaglami }) {
       </div>
       <p className={eksik ? s.hataMetni : s.ipucu}>
         {eksik?.metin ??
-          'Mesajlar bu numaraya gelir. Facebook sayfana bağlı olmalı; değilse Meta reklamı kabul etmez.'}
+          t.numaraNot}
       </p>
       {onaylanacak && (
         <button type="button" className={s.metinDugme} onClick={() => yaz(b, 'whatsappNumarasi', onaylanacak)}>
-          {mevcut ? 'Bu numara WhatsApp hattım, onayla' : `Marka Merkezi'ndeki numarayı kullan (${telefonGirdisi(onaylanacak)})`}
+          {mevcut ? t.onayla : t.markaNumara(telefonGirdisi(onaylanacak))}
         </button>
       )}
     </>
@@ -153,6 +158,7 @@ export function WhatsappNumarasi({ b }: { b: AdimBaglami }) {
  * (`karsilamaCoz`), yani kutuyu silmek İngilizceye düşürmez.
  */
 export function WhatsappKarsilamaAlani({ b }: { b: AdimBaglami }) {
+  const t = useSozluk(reklamEkSozlugu).whatsapp;
   const kayit = b.a.whatsappKarsilama?.deger ?? null;
   const mesaj = kayit?.mesaj ?? WHATSAPP_VARSAYILAN_MESAJ;
   const sorular = [...(kayit?.hizliSorular ?? [])];
@@ -165,28 +171,28 @@ export function WhatsappKarsilamaAlani({ b }: { b: AdimBaglami }) {
   return (
     <div className={s.ustBosluk}>
       <div className={s.blokBaslik}>
-        İlk mesaj <span className={s.ops}>WhatsApp&apos;ta kişinin karşısına çıkar</span>
+        {t.ilkMesaj} <span className={s.ops}>{t.ilkMesajNot}</span>
       </div>
       <div className={s.girdi}>
         <input
           value={mesaj}
           maxLength={KARSILAMA_MESAJ_SINIRI}
-          aria-label="WhatsApp ilk mesajı"
+          aria-label={t.mesajEtiket}
           onChange={(e) => kaydet({ mesaj: e.target.value, hizliSorular: sorular })}
         />
       </div>
       <p className={s.ipucu}>
-        {kayit?.mesaj?.trim() ? 'Senin yazdığın mesaj.' : 'Varsayılan Türkçe mesaj. Boş bırakırsan bu gider.'}
-        {soruVar ? ' Hızlı soru eklediğin için bu metin karşılama olarak görünür.' : ''}
+        {kayit?.mesaj?.trim() ? t.senin : t.varsayilan}
+        {soruVar ? t.hizliVar : ''}
       </p>
       <div className={s.alan}>
-        <label>Hızlı sorular (isteğe bağlı, en çok {HIZLI_SORU_EN_COK})</label>
+        <label>{t.hizliBaslik(HIZLI_SORU_EN_COK)}</label>
         {sorular.map((q, i) => (
           <div key={i} className={s.girdi}>
             <input
               value={q}
               maxLength={HIZLI_SORU_SINIRI}
-              aria-label={`Hızlı soru ${i + 1}`}
+              aria-label={t.hizliN(i + 1)}
               onChange={(e) => soruYaz(i, e.target.value)}
             />
           </div>

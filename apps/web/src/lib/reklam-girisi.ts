@@ -12,27 +12,26 @@
  * (`vitest.config.ts`) ve effect/JSX içindeki karar yalnız kaynak taramasıyla
  * sınanabiliyordu.
  */
-import { REHBER_AMACLARI, REHBER_AMAC_KODLARI, type RehberAmacKodu, type RehberOzeti } from '@advetics/shared';
-import { yayinSonucu, yayinSonucuEtiketi } from '@/components/rehber/rehber-mantik';
+import { REHBER_AMAC_KODLARI, sec, type Dil, type RehberAmacKodu, type RehberOzeti } from '@advetics/shared';
+import { amacEkranAdi, yayinSonucu, yayinSonucuEtiketi } from '@/components/rehber/rehber-mantik';
+import { reklamSozlugu } from '@/dil/sozlukler/reklam';
+
+const g = (dil: Dil) => sec(reklamSozlugu, dil).giris;
 
 export const GIRIS_SEKMELERI = ['yayindakiler', 'taslaklar', 'arsiv'] as const;
 export type GirisSekmesi = (typeof GIRIS_SEKMELERI)[number];
 
-export const SEKME_ADLARI: Readonly<Record<GirisSekmesi, string>> = {
-  yayindakiler: 'Yayındakiler',
-  taslaklar: 'Taslaklar',
-  arsiv: 'Arşiv',
-};
+export function sekmeAdlari(dil: Dil = 'tr'): Readonly<Record<GirisSekmesi, string>> {
+  return g(dil).sekme;
+}
 
 /**
  * Boş sekme NEDENİNİ söyler (sessiz boş liste yok). "Yeni reklam" düğmesi
  * metnin yanında; burada yalnız cümle.
  */
-export const BOS_SEKME_METNI: Readonly<Record<GirisSekmesi, string>> = {
-  yayindakiler: 'Henüz yayına aldığın reklam yok.',
-  taslaklar: 'Yarım kalmış taslağın yok.',
-  arsiv: 'Arşiv boş. Listeden kaldırdığın ve platformda kapatılan reklamlar burada görünür.',
-};
+export function bosSekmeMetni(dil: Dil = 'tr'): Readonly<Record<GirisSekmesi, string>> {
+  return g(dil).bosNeden;
+}
 
 /**
  * Satır hangi sekmede:
@@ -94,8 +93,8 @@ export function taslaklariAyir<T extends Pick<RehberOzeti, 'durum' | 'amac' | 'e
   return { guncel, eski };
 }
 
-export function amacAdi(amac: string | null): string {
-  return amac && (REHBER_AMAC_KODLARI as readonly string[]).includes(amac) ? REHBER_AMACLARI[amac as RehberAmacKodu].ekranAdi : 'Amaç seçilmedi';
+export function amacAdi(amac: string | null, dil: Dil = 'tr'): string {
+  return amac && (REHBER_AMAC_KODLARI as readonly string[]).includes(amac) ? amacEkranAdi(amac as RehberAmacKodu, dil) : g(dil).amacSecilmedi;
 }
 
 /**
@@ -103,8 +102,8 @@ export function amacAdi(amac: string | null): string {
  * Yöneticisi'nde ve Meta/Google'da aranan ad, kodu ile); taslakta amaç ve
  * oluşturma tarihi. Altı "Siteme gelsinler" ancak böyle ayrışıyor.
  */
-export function satirAdi(r: Pick<RehberOzeti, 'yayinAdi' | 'amac' | 'createdAt'>, tarih: (iso: string) => string): string {
-  return r.yayinAdi ?? `${amacAdi(r.amac)} · ${tarih(r.createdAt)}`;
+export function satirAdi(r: Pick<RehberOzeti, 'yayinAdi' | 'amac' | 'createdAt'>, tarih: (iso: string) => string, dil: Dil = 'tr'): string {
+  return r.yayinAdi ?? `${amacAdi(r.amac, dil)} · ${tarih(r.createdAt)}`;
 }
 
 export type RozetTonu = 'iyi' | 'hata' | 'notr';
@@ -124,14 +123,14 @@ const PLATFORM_ADI = { meta: 'Meta', google: 'Google' } as const;
  * Söz son ekranla aynı üreticiden (`yayinSonucuEtiketi`). Yeşil yalnız
  * yayında olan için (durum göstergesi), kırmızı yalnız hata için.
  */
-export function platformRozetleri(r: Pick<RehberOzeti, 'durum' | 'platformlar' | 'yayinlar'>): PlatformRozeti[] {
+export function platformRozetleri(r: Pick<RehberOzeti, 'durum' | 'platformlar' | 'yayinlar'>, dil: Dil = 'tr'): PlatformRozeti[] {
   if (r.yayinlar.length === 0) return [];
   return r.yayinlar.map((y) => {
     const sonuc = yayinSonucu(y);
     const hata = sonuc === 'hata' || y.durum === 'dogrulanamadi';
     return {
       platform: y.platform,
-      etiket: `${PLATFORM_ADI[y.platform]}: ${yayinSonucuEtiketi(y)}`,
+      etiket: `${PLATFORM_ADI[y.platform]}: ${yayinSonucuEtiketi(y, dil)}`,
       ton: hata ? 'hata' : sonuc === 'yayinda' ? 'iyi' : 'notr',
       ipucu: hata ? kisaSebep(y.sebep) : null,
     };
@@ -166,8 +165,8 @@ export function satirEylemleri(r: Pick<RehberOzeti, 'durum' | 'yayinlar'>): Sati
 }
 
 /** Tek birincil eylem: taslakta "Devam et", gerisinde "Gör". */
-export function birincilEylem(r: Pick<RehberOzeti, 'durum'>): string {
-  return r.durum === 'taslak' ? 'Devam et' : 'Gör';
+export function birincilEylem(r: Pick<RehberOzeti, 'durum'>, dil: Dil = 'tr'): string {
+  return r.durum === 'taslak' ? g(dil).devamEt : g(dil).gor;
 }
 
 export interface OnayMetni {
@@ -185,54 +184,38 @@ export interface OnayMetni {
  * durduğunu sanıp harcamanın sürdüğünü fark etmeyebilir. Durdurmanın yeri
  * Reklam Yöneticisi; pencere oraya bağlanıyor.
  */
-export const ONAY_METINLERI: Readonly<Record<'taslagi_sil' | 'listeden_kaldir' | 'toplu_sil', OnayMetni>> = {
-  taslagi_sil: {
-    baslik: 'Taslağı sil',
-    govde: 'Bu taslak silinecek. Fikrini değiştirirsen Arşiv sekmesinden geri getirebilirsin.',
-    dugme: 'Taslağı sil',
-    suruyor: 'Siliniyor…',
-    yoneticiBaglantisi: false,
-  },
-  listeden_kaldir: {
-    baslik: 'Listeden kaldır',
-    govde:
-      'Reklam bu listeden kaldırılıp Arşiv’e taşınır. Meta ve Google’daki kampanyalar olduğu gibi kalır; yayındaysa harcama sürer. Durdurmak için Reklam Yöneticisi’ni kullan.',
-    dugme: 'Listeden kaldır',
-    suruyor: 'Kaldırılıyor…',
-    yoneticiBaglantisi: true,
-  },
-  toplu_sil: {
-    baslik: 'Eski taslakları sil',
-    govde: 'Bu taslakların hepsi silinecek. Arşiv sekmesinden tek tek geri getirebilirsin.',
-    dugme: 'Hepsini sil',
-    suruyor: 'Siliniyor…',
-    yoneticiBaglantisi: false,
-  },
-};
+export function onayMetinleri(dil: Dil = 'tr'): Readonly<Record<'taslagi_sil' | 'listeden_kaldir' | 'toplu_sil', OnayMetni>> {
+  const o = g(dil).onay;
+  return {
+    taslagi_sil: { ...o.taslagiSil, yoneticiBaglantisi: false },
+    listeden_kaldir: { ...o.listedenKaldir, yoneticiBaglantisi: true },
+    toplu_sil: { ...o.topluSil, yoneticiBaglantisi: false },
+  };
+}
 
 /**
  * Toplu işlemin sonucu: kısmi başarısızlık SESSİZ olamaz. Kaç tanesinin
  * işlendiği ve ilk hatanın metni yazılır; hepsi geçtiyse null.
  */
-export function topluSonucMetni(toplam: number, hatalar: readonly string[]): string | null {
+export function topluSonucMetni(toplam: number, hatalar: readonly string[], dil: Dil = 'tr'): string | null {
   if (hatalar.length === 0) return null;
-  return `${toplam - hatalar.length} / ${toplam} işlendi. İşlenemeyen ${hatalar.length} kayıt: ${hatalar[0]}`;
+  return g(dil).topluSonuc(toplam, hatalar.length, hatalar[0] ?? '');
 }
 
 /** Bütçe sözü: "₺250 / gün" ya da "₺1.000 toplam". */
-export function butceMetni(b: RehberOzeti['butce'], para: (micros: string, birim: string) => string): string | null {
+export function butceMetni(b: RehberOzeti['butce'], para: (micros: string, birim: string) => string, dil: Dil = 'tr'): string | null {
   if (!b) return null;
-  return b.tip === 'gunluk' ? `${para(b.micros, b.paraBirimi)} / gün` : `${para(b.micros, b.paraBirimi)} toplam`;
+  return `${para(b.micros, b.paraBirimi)}${b.tip === 'gunluk' ? g(dil).gunBasi : g(dil).toplamButce}`;
 }
 
 /**
  * Taslağın "eksik" sözü: tabloda rozet, telefonda özet satırı AYNI metni
  * okuyor. İki yerde elle yazılırsa biri değiştiğinde öbürü eski sözü taşır.
  */
-export function eksikEtiketi(r: Pick<RehberOzeti, 'amac' | 'eksikSayisi'>): { metin: string; hata: boolean } {
-  if (r.amac === null) return { metin: 'Amaç yok', hata: false };
-  if (r.eksikSayisi > 0) return { metin: `${r.eksikSayisi} eksik`, hata: true };
-  return { metin: 'Eksik yok', hata: false };
+export function eksikEtiketi(r: Pick<RehberOzeti, 'amac' | 'eksikSayisi'>, dil: Dil = 'tr'): { metin: string; hata: boolean } {
+  if (r.amac === null) return { metin: g(dil).amacYok, hata: false };
+  if (r.eksikSayisi > 0) return { metin: g(dil).eksik(r.eksikSayisi), hata: true };
+  return { metin: g(dil).eksikYok, hata: false };
 }
 
 /**
@@ -249,11 +232,12 @@ export function telefonOzeti(
   r: Pick<RehberOzeti, 'amac' | 'eksikSayisi' | 'butce' | 'durum' | 'platformlar' | 'yayinlar'>,
   sekme: GirisSekmesi,
   para: (micros: string, birim: string) => string,
+  dil: Dil = 'tr',
 ): string | null {
   const parcalar =
     sekme === 'taslaklar'
-      ? [eksikEtiketi(r).metin, butceMetni(r.butce, para)]
-      : [...platformRozetleri(r).map((z) => z.etiket), butceMetni(r.butce, para)];
+      ? [eksikEtiketi(r, dil).metin, butceMetni(r.butce, para, dil)]
+      : [...platformRozetleri(r, dil).map((z) => z.etiket), butceMetni(r.butce, para, dil)];
   const dolu = parcalar.filter((p): p is string => Boolean(p));
   return dolu.length ? dolu.join(' · ') : null;
 }

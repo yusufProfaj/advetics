@@ -2,7 +2,9 @@
 
 import { REHBER_ADIMLARI, type RehberAdimi, type RehberAlanlari, type RehberHazirligi, type RehberKaydi, type RehberPlatformu } from '@advetics/shared';
 import { AltCubuk as OrtakAltCubuk, Soru as OrtakSoru } from '@/components/ui/sihirbaz';
-import { silme, type Degisiklik, type EkranNo } from './rehber-mantik';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { reklamSozlugu } from '@/dil/sozlukler/reklam';
+import { adimAdi, silme, type Degisiklik, type EkranNo } from './rehber-mantik';
 import { IKON, Ikon } from './ikonlar';
 import s from './rehber.module.css';
 
@@ -47,7 +49,8 @@ export function sil(b: AdimBaglami, alan: Degisiklik['alan']) {
  * elle yazılırsa ray ile soru ayrışır.
  */
 export function Soru({ adim, baslik, children }: { adim: RehberAdimi; baslik: string; children: React.ReactNode }) {
-  const ad = REHBER_ADIMLARI.find((x) => x.no === adim)?.ad ?? '';
+  const { dil } = useDil();
+  const ad = adimAdi(adim, dil);
   return <OrtakSoru ust={`${adim} / ${REHBER_ADIMLARI.length} · ${ad}`} soru={baslik} aciklama={children} />;
 }
 
@@ -71,12 +74,13 @@ export function AltCubuk({
   not?: React.ReactNode;
   children?: React.ReactNode;
 }) {
+  const d = useSozluk(reklamSozlugu);
   return (
     <OrtakAltCubuk
       geri={adim > 1 ? { onClick: () => git((adim - 1) as EkranNo) } : null}
       not={not}
       ek={children}
-      devam={children ? null : { etiket: 'Devam', onClick: () => git(ileri ?? (Math.min(6, adim + 1) as EkranNo)) }}
+      devam={children ? null : { etiket: d.ortak.devam, onClick: () => git(ileri ?? (Math.min(6, adim + 1) as EkranNo)) }}
     />
   );
 }

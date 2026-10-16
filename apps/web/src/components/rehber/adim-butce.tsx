@@ -3,6 +3,8 @@
 import { BolumluSecici } from '@/components/ui/sekmeler';
 import { useState } from 'react';
 import { VARSAYILAN_META_PAYI, butceBol } from '@advetics/shared';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { reklamButceSozlugu } from '@/dil/sozlukler/reklam-butce';
 import { AltCubuk, Soru, Uyari, sil, yaz, type AdimBaglami } from './adim-ortak';
 import {
   bitisSecenegi,
@@ -20,6 +22,8 @@ import { kaynakRozeti } from './kaynak-rozeti';
 import s from './rehber.module.css';
 
 export function AdimButce({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => void }) {
+  const { dil } = useDil();
+  const d = useSozluk(reklamButceSozlugu);
   const butce = b.a.butce?.deger ?? null;
   const takvim = b.a.takvim?.deger ?? null;
   // Tür ve metin YEREL: tutar yazılmadan tür değişebilmeli (şema micros'suz
@@ -31,7 +35,7 @@ export function AdimButce({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => voi
   const pay = b.a.metaPayiYuzde?.deger ?? VARSAYILAN_META_PAYI;
   const bitis = bitisSecenegi(takvim);
   const gun = takvim?.bitis ? gunFarki(takvim.baslangic, takvim.bitis) : null;
-  const birim = tip === 'gunluk' ? ' / gün' : ' toplam';
+  const birim = tip === 'gunluk' ? d.gunluk : d.toplam;
   const bugunTarih = bugun(b.saatDilimi);
 
   function tutarDegisti(v: string) {
@@ -76,31 +80,31 @@ export function AdimButce({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => voi
 
   return (
     <>
-      <Soru adim={5} baslik="Ne kadar harcayalım, ne zamana kadar?">
-        {ikisi ? 'Toplam tutarı yaz; iki platform arasında nasıl bölüneceğini öneriyoruz.' : 'Tutarı ve süreyi seç.'}
+      <Soru adim={5} baslik={d.soru}>
+        {ikisi ? d.ikisi : d.tek}
       </Soru>
       <div className={s.kart}>
         <div className={s.blok}>
           <div className={s.alanlar}>
             <div className={s.alan}>
-              <span className={s.alanEtiket}>Bütçe türü</span>
+              <span className={s.alanEtiket}>{d.turu}</span>
               <span>
                 <BolumluSecici
-                  etiket="Bütçe türü"
+                  etiket={d.turu}
                   secili={tip}
                   onSec={tipDegisti}
                   secenekler={[
-                    { deger: 'gunluk', etiket: 'Günlük' },
-                    { deger: 'toplam', etiket: 'Toplam' },
+                    { deger: 'gunluk', etiket: d.turGunluk },
+                    { deger: 'toplam', etiket: d.turToplam },
                   ]}
                 />
               </span>
             </div>
             <div className={s.alan}>
               <label htmlFor="rehber-tutar">
-                {tip === 'gunluk' ? 'Günlük tutar' : gun ? `Toplam tutar (${gun} gün)` : 'Toplam tutar'}{' '}
+                {tip === 'gunluk' ? d.gunlukTutar : d.toplamTutar(gun)}{' '}
                 {/* Bütçe yalnız stratejiden gelince rozetli: rehber bütçeyi kendisi önermiyor. */}
-                <KaynakRozeti metin={kaynakRozeti(b.a.butce?.kaynak, null)} />
+                <KaynakRozeti metin={kaynakRozeti(b.a.butce?.kaynak, null, dil)} />
               </label>
               <div className={s.girdi}>
                 <input id="rehber-tutar" className={s.num} value={metin} inputMode="decimal" placeholder="500" onChange={(e) => tutarDegisti(e.target.value)} />
@@ -113,7 +117,7 @@ export function AdimButce({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => voi
               )}
             </div>
             <div className={s.alan}>
-              <label htmlFor="rehber-baslangic">Başlangıç</label>
+              <label htmlFor="rehber-baslangic">{d.baslangic}</label>
               <div className={s.girdi}>
                 <input
                   id="rehber-baslangic"
@@ -125,27 +129,25 @@ export function AdimButce({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => voi
               </div>
             </div>
             <div className={s.alan}>
-              <span className={s.alanEtiket}>Bitiş</span>
+              <span className={s.alanEtiket}>{d.bitis}</span>
               <div className={`${s.secim} ${s.secimUc}`}>
                 {([7, 30, 'yok'] as const).map((x) => (
                   <button key={x} type="button" aria-pressed={bitis === x} onClick={() => bitisSec(x)}>
-                    {x === 'yok' ? 'Bitiş yok' : `${x} gün`}
+                    {x === 'yok' ? d.bitisYok : d.gunSecenegi(x)}
                   </button>
                 ))}
               </div>
             </div>
           </div>
           <p className={s.ipucu}>
-            {tip === 'gunluk'
-              ? `${b.acik.google ? "Google bazı günler günlük tutarın iki katına kadar harcayabilir; ay toplamı yine de günlük × 30,4'ü geçmez. " : ''}Bütçe türü kampanya başladıktan sonra değiştirilemiyor.`
-              : 'Toplam tutar seçtiğin süreye yayılır. Bütçe türü kampanya başladıktan sonra değiştirilemiyor.'}
+            {tip === 'gunluk' ? d.gunlukIpucu(b.acik.google) : d.toplamIpucu}
           </p>
           {!ikisi && <ButceUyarilari eksikler={eksikler} />}
         </div>
         {ikisi && (
           <div className={s.blok}>
             <div className={s.blokBaslik}>
-              İki platforma paylaşım <KaynakRozeti metin={kaynakRozeti(b.a.metaPayiYuzde?.kaynak, 'Önerilen')} />
+              {d.paylasim} <KaynakRozeti metin={kaynakRozeti(b.a.metaPayiYuzde?.kaynak, d.onerilen, dil)} />
             </div>
             <div className={s.pay}>
               <div className={s.payCubuk}>
@@ -162,7 +164,7 @@ export function AdimButce({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => voi
                 max={90}
                 step={5}
                 value={pay}
-                aria-label="Meta payı"
+                aria-label={d.metaPayi}
                 onChange={(e) => yaz(b, 'metaPayiYuzde', Number(e.target.value))}
               />
               <div className={`${s.payAlt} ${s.num}`}>
@@ -176,9 +178,7 @@ export function AdimButce({ b, git }: { b: AdimBaglami; git: (n: EkranNo) => voi
                 </span>
               </div>
               <p className={s.ipucu}>
-                {b.a.metaPayiYuzde?.kaynak === 'kullanici'
-                  ? 'Payı sen ayarladın. Sonuçlar gelince İyileştir, parayı daha ucuza sonuç veren tarafa kaydırmayı önerir.'
-                  : 'İlk iki hafta eşit başlıyoruz. Sonuçlar gelince İyileştir, parayı daha ucuza sonuç veren tarafa kaydırmayı önerir.'}
+                {b.a.metaPayiYuzde?.kaynak === 'kullanici' ? d.payAyarladin : d.payEsit}
               </p>
               <ButceUyarilari eksikler={eksikler} />
             </div>

@@ -2,14 +2,15 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { RehberOzeti } from '@advetics/shared';
+import { reklamSozlugu } from '@/dil/sozlukler/reklam';
 import {
-  ONAY_METINLERI,
   aktifSekme,
   birincilEylem,
   butceMetni,
   eksikEtiketi,
   eskiTaslakMi,
   kisaSebep,
+  onayMetinleri,
   platformRozetleri,
   satirAdi,
   satirEylemleri,
@@ -19,6 +20,8 @@ import {
   telefonOzeti,
   topluSonucMetni,
 } from './reklam-girisi';
+
+const ONAY_METINLERI = onayMetinleri('tr');
 
 /**
  * ADVCAMPAIGN GİRİŞ EKRANI — saf karar mantığı ve bileşenin kaynak bekçileri.
@@ -208,7 +211,7 @@ describe('giriş bileşeni (kaynak bekçileri)', () => {
   it('KRİTİK: pencere metni ONAY_METINLERI’nden ve Reklam Yöneticisi bağlantısı pencerenin İÇİNDE', () => {
     const p = pencere();
     expect(p).toContain('{metin?.govde}');
-    expect(KAYNAK).toMatch(/const metin = onay \? ONAY_METINLERI\[onay\.tur\]/);
+    expect(KAYNAK).toMatch(/const metin = onay \? onayMetinleri\(dil\)\[onay\.tur\]/);
     expect(p).toMatch(/metin\?\.yoneticiBaglantisi && \(/);
     expect(p).toContain('baglanti(REKLAM_YONETICISI, tasinan)');
   });
@@ -242,13 +245,16 @@ describe('giriş bileşeni (kaynak bekçileri)', () => {
     if (i < 0) throw new Error('uygula bulunamadı');
     const govde = KAYNAK.slice(i, KAYNAK.indexOf('\n  function eylem(', i));
     expect(govde.length).toBeGreaterThan(200);
-    expect(govde).toMatch(/setIslemHatasi\([^;]*topluSonucMetni\(satirlar\.length, hatalar\)\)/);
+    expect(govde).toMatch(/setIslemHatasi\([^;]*topluSonucMetni\(satirlar\.length, hatalar, dil\)\)/);
     // Her satırın hatası toplanıyor: döngü ilk hatada durmuyor.
     expect(govde).toMatch(/for \(const r of satirlar\) \{\s*try \{/);
   });
 
   it('kesilen liste "N / M" ile yazılıyor (sessiz kesme yok)', () => {
-    expect(KAYNAK).toMatch(/\$?\{liste\.satirlar\.length\} \/ \$?\{liste\.toplam\} kayıt gösteriliyor/);
+    // Cümle sözlükte; kaynak ona sayıları veriyor ve sözlük iki sayıyı da yazıyor.
+    expect(KAYNAK).toContain('dg.kesildi(liste.satirlar.length, liste.toplam)');
+    expect(reklamSozlugu.tr.giris.kesildi(3, 7)).toBe('3 / 7 kayıt gösteriliyor');
+    expect(reklamSozlugu.en.giris.kesildi(3, 7)).toBe('Showing 3 / 7 records');
   });
 });
 
@@ -292,7 +298,7 @@ describe('telefon satır özeti', () => {
       if (i < 0) throw new Error(`${anahtar} sütunu bulunamadı: tarama boşa düştü`);
       expect(k.slice(i, k.indexOf('hucre:', i)), anahtar).toContain('ikincil: true');
     }
-    expect(k).toContain("const ozet = telefonOzeti(r, sekme, (m, b) => formatMoney(m, b));");
+    expect(k).toContain('const ozet = telefonOzeti(r, sekme, (m, b) => formatMoney(m, b, { dil }), dil);');
     expect(k).toContain('<span className="block sm:hidden">{ozet}</span>');
   });
 });

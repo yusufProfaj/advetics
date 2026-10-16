@@ -10,6 +10,7 @@ import {
   VARSAYILAN_META_PAYI,
   butceBol,
   type PlatformYayinOzeti,
+  type Dil,
   type RehberPlatformu,
   type RehberProvaSonucu,
   type RehberYayinDurumu,
@@ -17,12 +18,15 @@ import {
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { baglanti } from '@/lib/baglanti';
 import { REKLAM_YONETICISI } from '@/lib/reklam-yoneticisi';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { reklamKontrolSozlugu } from '@/dil/sozlukler/reklam-kontrol';
+import { reklamSozlugu } from '@/dil/sozlukler/reklam';
 import { AltCubuk, Soru, Uyari, type AdimBaglami } from './adim-ortak';
 import type { MedyaBilgisi } from './adim-reklam';
 import { IKON, Ikon } from './ikonlar';
 import {
-  CTA_METNI,
   alanAdi,
+  ctaMetni,
   bugun,
   geriAlinabilirMi,
   yenidenDenenebilirMi,
@@ -53,6 +57,8 @@ export interface ProvaHali {
 
 const PLATFORM_ADI = REHBER_PLATFORM_ADI;
 
+type Sozluk = typeof reklamKontrolSozlugu.tr;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 6 · Kontrol
 // ─────────────────────────────────────────────────────────────────────────────
@@ -74,6 +80,8 @@ export function AdimKontrol({
   onayAc: () => void;
   medyaBilgisi: ReadonlyMap<string, MedyaBilgisi>;
 }) {
+  const { dil } = useDil();
+  const d = useSozluk(reklamKontrolSozlugu);
   const [metaKip, setMetaKip] = useState<'akis' | 'hikaye'>('akis');
   const [googleKip, setGoogleKip] = useState<'arama' | 'mobil'>('arama');
   const amac = b.a.amac?.deger ?? null;
@@ -85,29 +93,28 @@ export function AdimKontrol({
   const gorsel = ilkMedya ? ((ilkMedya.kapakVarlikId ? medyaBilgisi.get(ilkMedya.kapakVarlikId) : undefined) ?? medyaBilgisi.get(ilkMedya.varlikId)) : undefined;
   const yt = b.a.youtubeVideo?.deger ?? null;
   const hesapAdi =
-    b.h.instagramHesaplari.find((x) => x.id === b.a.instagramId?.deger)?.ad ?? b.h.sayfalar.find((x) => x.id === b.a.sayfaId?.deger)?.ad ?? 'Sayfa seçilmedi';
+    b.h.instagramHesaplari.find((x) => x.id === b.a.instagramId?.deger)?.ad ?? b.h.sayfalar.find((x) => x.id === b.a.sayfaId?.deger)?.ad ?? d.sayfaYok;
   const engel = b.kayit.eksikler.filter((e) => e.seviye === 'engel').length;
   const kurgu = amac ? REHBER_AMACLARI[amac].google.kurgu : null;
   const kararSutunlari = (['meta', 'google'] as const).filter((p) => b.kayit.kararlar.some((k) => k[p] !== null));
 
   return (
     <>
-      <Soru adim={6} baslik="Son kontrol">
-        Reklamın {b.acik.meta && b.acik.google ? 'iki platformda' : 'platformda'} böyle görünecek. Önce prova ediyoruz: platformlar kurulumu para
-        harcamadan kontrol ediyor.
+      <Soru adim={6} baslik={d.soru}>
+        {d.onizleme(b.acik.meta && b.acik.google)}
       </Soru>
       <div className={s.onizlemeler}>
         {b.acik.meta && (
           <div className={`${s.kart} ${s.onKart}`}>
             <header>
-              Meta önizleme
+              {d.metaOnizleme}
               <BolumluSecici
-                etiket="Meta önizleme biçimi"
+                etiket={d.metaBicim}
                 secili={metaKip}
                 onSec={setMetaKip}
                 secenekler={[
-                  { deger: 'akis', etiket: 'Akış' },
-                  { deger: 'hikaye', etiket: 'Hikâye' },
+                  { deger: 'akis', etiket: d.akis },
+                  { deger: 'hikaye', etiket: d.hikaye },
                 ]}
               />
             </header>
@@ -116,18 +123,18 @@ export function AdimKontrol({
                 <i />
                 <div>
                   <b>{hesapAdi}</b>
-                  <small>Sponsorlu</small>
+                  <small>{d.sponsorlu}</small>
                 </div>
               </div>
-              {metaKip === 'akis' && <div className={s.akisMetin}>{m?.anaMetin || 'Ana metin yazılmadı.'}</div>}
+              {metaKip === 'akis' && <div className={s.akisMetin}>{m?.anaMetin || d.anaMetinYok}</div>}
               <div className={s.akisGorsel} data-kip={metaKip}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 {gorsel && <img src={gorsel.onizleme} alt="" />}
               </div>
               <div className={s.akisCta}>
-                <b>{basliklar[0] ?? 'Başlık yazılmadı'}</b>
+                <b>{basliklar[0] ?? d.baslikYok}</b>
                 {/* S3: adressiz video düğmesiz kuruluyor; önizleme olmayan düğmeyi çizmesin. */}
-                {!(amac === 'VIDEO' && !b.a.hedefAdres?.deger) && <span>{amac ? CTA_METNI[amac] : 'Daha fazla bilgi al'}</span>}
+                {!(amac === 'VIDEO' && !b.a.hedefAdres?.deger) && <span>{ctaMetni(amac ?? 'SITE', dil)}</span>}
               </div>
             </div>
           </div>
@@ -135,15 +142,15 @@ export function AdimKontrol({
         {b.acik.google && (
           <div className={`${s.kart} ${s.onKart}`}>
             <header>
-              Google önizleme
+              {d.googleOnizleme}
               {kurgu === 'ARAMA' && (
                 <BolumluSecici
-                  etiket="Google önizleme biçimi"
+                  etiket={d.googleBicim}
                   secili={googleKip}
                   onSec={setGoogleKip}
                   secenekler={[
-                    { deger: 'arama', etiket: 'Arama' },
-                    { deger: 'mobil', etiket: 'Mobil' },
+                    { deger: 'arama', etiket: d.arama },
+                    { deger: 'mobil', etiket: d.mobil },
                   ]}
                 />
               )}
@@ -152,13 +159,13 @@ export function AdimKontrol({
               <>
                 <div className={s.arama} data-kip={googleKip}>
                   <div className={s.rk}>
-                    <b>Sponsorlu</b> · {alanAdi(b.a.hedefAdres?.deger) || 'site adresi yok'}
+                    <b>{d.sponsorlu}</b> · {alanAdi(b.a.hedefAdres?.deger) || d.siteAdresiYok}
                   </div>
-                  <h4>{basliklar.slice(0, 2).join(' | ') || 'Başlık yazılmadı'}</h4>
-                  <p>{aciklamalar[0] ?? 'Açıklama yazılmadı.'}</p>
+                  <h4>{basliklar.slice(0, 2).join(' | ') || d.baslikYok}</h4>
+                  <p>{aciklamalar[0] ?? d.aciklamaYok}</p>
                 </div>
                 <p className={s.ipucu} style={{ margin: '0 14px 14px' }}>
-                  Google başlık ve açıklamaları farklı sıralarda dener; bu bir örnek.
+                  {d.googleDener}
                 </p>
               </>
             ) : kurgu === 'TALEP_YARATMA_VIDEO' ? (
@@ -175,18 +182,18 @@ export function AdimKontrol({
                     )}
                     <div>
                       <b>{yt.baslik || yt.videoId}</b>
-                      <small>{[sureGoster(yt.sureSn), yt.gizlilik === 'unlisted' ? 'Liste dışı' : null].filter(Boolean).join(' · ') || 'YouTube videosu'}</small>
+                      <small>{[sureGoster(yt.sureSn), yt.gizlilik === 'unlisted' ? d.listeDisi : null].filter(Boolean).join(' · ') || d.youtubeVideosu}</small>
                     </div>
                     <span />
                   </div>
                 ) : (
-                  <p className={s.ipucu}>YouTube videosu seçilmedi.</p>
+                  <p className={s.ipucu}>{d.videoYok}</p>
                 )}
-                <p className={s.ipucu}>YouTube&apos;daki görünüm Google&apos;da kurulduktan sonra Reklam Yöneticisi&apos;nde açılır.</p>
+                <p className={s.ipucu}>{d.youtubeGorunum}</p>
               </div>
             ) : (
               <p className={s.ipucu} style={{ margin: 14 }}>
-                Bu kampanyanın görünümü Google&apos;ın yerleşimine göre değişir; kurulduktan sonra Reklam Yöneticisi&apos;nde açılır.
+                {d.googleYerlesim}
               </p>
             )}
           </div>
@@ -196,19 +203,19 @@ export function AdimKontrol({
       <div className={s.kart}>
         <details className={s.ac}>
           <summary>
-            Senin yerine verdiğimiz kararlar <span className={s.ops}>platformun kendi seçimine bırakmadık</span>
+            {d.kararlar} <span className={s.ops}>{d.kararlarEk}</span>
             <Ikon d={IKON.asagi} className={s.ok} boyut={16} />
           </summary>
           <div className={s.tabloKap}>
             {b.kayit.kararlar.length === 0 ? (
               <p className={s.ipucu} style={{ margin: 16 }}>
-                Amaç ve platform seçilince burada görünür.
+                {d.kararlarBos}
               </p>
             ) : (
               <table className={s.kararlar}>
                 <thead>
                   <tr>
-                    <th>Karar</th>
+                    <th>{d.karar}</th>
                     {kararSutunlari.map((p) => (
                       <th key={p}>{PLATFORM_ADI[p]}</th>
                     ))}
@@ -241,7 +248,7 @@ export function AdimKontrol({
           {(['meta', 'google'] as const)
             .filter((p) => b.acik[p])
             .map((p) => (
-              <ProvaSatiri key={p} ad={PLATFORM_ADI[p]} g={provaGosterimi(prova.sonuc, b.kayit.icerikOzeti, p, prova.suruyor)} />
+              <ProvaSatiri key={p} ad={PLATFORM_ADI[p]} d={d} g={provaGosterimi(prova.sonuc, b.kayit.icerikOzeti, p, prova.suruyor)} />
             ))}
         </div>
         {prova.hata && (
@@ -251,47 +258,47 @@ export function AdimKontrol({
         )}
       </div>
 
-      <AltCubuk git={git} adim={6} not={!yayinlanabilir ? (engel > 0 ? `${engel} eksik var` : 'Önce prova geçmeli') : undefined}>
+      <AltCubuk git={git} adim={6} not={!yayinlanabilir ? (engel > 0 ? d.eksikVar(engel) : d.onceProva) : undefined}>
         <Dugme
           ton="ikincil"
           bekliyor={prova.suruyor}
           disabled={engel > 0}
-          title={engel > 0 ? `${engel} eksik var` : undefined}
+          title={engel > 0 ? d.eksikVar(engel) : undefined}
           onClick={provaEt}
         >
-          {prova.suruyor ? 'Prova ediliyor' : 'Prova et'}
+          {prova.suruyor ? d.proveEdiliyor : d.proveEt}
         </Dugme>
         <Dugme
           disabled={!yayinlanabilir}
-          title={!yayinlanabilir ? (engel > 0 ? `${engel} eksik var` : 'Önce prova geçmeli') : undefined}
+          title={!yayinlanabilir ? (engel > 0 ? d.eksikVar(engel) : d.onceProva) : undefined}
           onClick={onayAc}
         >
-          Yayınla
+          {d.yayinla}
         </Dugme>
       </AltCubuk>
     </>
   );
 }
 
-function ProvaSatiri({ ad, g }: { ad: string; g: ProvaGosterimi }) {
+function ProvaSatiri({ ad, g, d }: { ad: string; g: ProvaGosterimi; d: Sozluk }) {
   const nokta = g.tur === 'gecti' ? s.ok : g.tur === 'suruyor' ? s.donuyor : g.tur === 'reddetti' ? s.ret : '';
   const metin =
     g.tur === 'yok'
-      ? 'Henüz yapılmadı'
+      ? d.prova.yok
       : g.tur === 'suruyor'
-        ? 'Platforma soruluyor…'
+        ? d.prova.suruyor
         : g.tur === 'bayat'
-          ? 'İçerik değişti, yeniden prova et'
+          ? d.prova.bayat
           : g.tur === 'gecti'
-            ? `Geçti · para harcanmadı${g.not ? ` · ${g.not}` : ''}`
+            ? d.prova.gecti(g.not ?? null)
             : g.tur === 'reddetti'
-              ? `Reddetti: ${g.mesajlar.join(' · ')}`
-              : `Yapılmadı: ${g.sebep}`;
+              ? d.prova.reddetti(g.mesajlar.join(' · '))
+              : d.prova.yapilmadi(g.sebep);
   return (
     <div>
       <span className={`${s.durumNokta} ${nokta}`} />
       <div>
-        <b>{ad} provası</b>
+        <b>{d.prova.baslik(ad)}</b>
         <br />
         <small>{metin}</small>
       </div>
@@ -323,6 +330,8 @@ export function OnayPenceresi({
   onayla: () => void;
   kapat: () => void;
 }) {
+  const { dil } = useDil();
+  const d = useSozluk(reklamKontrolSozlugu);
   const suruyor = gonderiliyor || (yayin !== null && yayin.uyum?.tur !== 'durdu' && yayin.platformlar.some((p) => yayinSonucu(p) === 'suruyor'));
   const butce = b.a.butce?.deger;
   const baslangic = b.a.takvim?.deger.baslangic;
@@ -330,23 +339,23 @@ export function OnayPenceresi({
   const amacKodu = b.a.amac?.deger ?? null;
   const hepsiDeneme = acikPlatformlar.length > 0 && acikPlatformlar.every((p) => denemePlatformlari.includes(p));
 
-  const ne = butce ? `${butce.tip === 'gunluk' ? 'günlük' : 'toplam'} ${paraGoster(butce.micros, b.paraBirimi)}` : '';
+  const ne = butce ? `${butce.tip === 'gunluk' ? d.onay.gunluk : d.onay.toplam} ${paraGoster(butce.micros, b.paraBirimi)}` : '';
   // Geçmiş başlangıç "hemen": Meta onu kurulum anına çekiyor (N-09); geçmiş
   // bir günü yazmak harcamanın ne zaman başladığı konusunda yalan söylerdi.
-  const ne_zaman = !baslangic || baslangic <= bugun(b.saatDilimi) ? 'hemen' : `${tarihGoster(baslangic)} tarihinde`;
+  const ne_zaman = !baslangic || baslangic <= bugun(b.saatDilimi) ? d.onay.hemen : d.onay.tarihinde(tarihGoster(baslangic, dil));
 
   return (
     <Pencere
       acik={acik}
       onKapat={() => !suruyor && kapat()}
-      baslik="Yayınla: onay"
+      baslik={d.onay.baslik}
       altEylemler={
         <>
           <Dugme ton="ikincil" disabled={suruyor} onClick={kapat}>
-            Vazgeç
+            {d.onay.vazgec}
           </Dugme>
           <Dugme bekliyor={suruyor} disabled={yayin !== null} onClick={onayla}>
-            {suruyor ? 'Kuruluyor' : 'Onayla ve yayınla'}
+            {suruyor ? d.onay.kuruluyor : d.onay.onayla}
           </Dugme>
         </>
       }
@@ -355,25 +364,22 @@ export function OnayPenceresi({
         <p>
           {hepsiDeneme ? (
             <>
-              Bu amaç deneme açılışında: platformlarda <b>duraklatılmış</b> kurulur, okunup karşılaştırılır ve açılmaz. Harcama sen Reklam
-              Yöneticisi&apos;nden başlatınca başlar ({ne}).
+              {d.onay.denemeOn}<b>{d.onay.denemeKalin}</b>{d.onay.denemeSon(ne)}
             </>
           ) : (
             <>
-              Onaylarsan harcama {ne_zaman} başlar: <b>{ne}</b>. Her platformda önce duraklatılmış kuruyoruz, sonra okuyup karşılaştırıyoruz, en son
-              açıyoruz. Biri düşerse diğeri etkilenmez.
-              {denemePlatformlari.length > 0 &&
-                ` ${denemePlatformlari.map((p) => PLATFORM_ADI[p]).join(' ve ')} deneme açılışında: orada duraklatılmış kalır.`}
+              {d.onay.normalOn(ne_zaman)}<b>{ne}</b>{d.onay.normalSon}
+              {denemePlatformlari.length > 0 && d.onay.denemePlatform(denemePlatformlari.map((p) => PLATFORM_ADI[p]).join(dil === 'en' ? ' and ' : ' ve '))}
             </>
           )}
         </p>
         {yayin?.uyum?.tur === 'durdu' && (
           <Uyari>
-            Yayın durduruldu: {yayin.uyum.bulgular.map((x) => x.metin).join(' ')}
+            {d.onay.durduruldu(yayin.uyum.bulgular.map((x) => x.metin).join(' '))}
           </Uyari>
         )}
         <p>
-          Özel reklam kategorisi (bu reklam): <b>{kategoriOzeti(b.a)}</b>
+          {d.onay.ozelKategori} <b>{kategoriOzeti(b.a, dil)}</b>
         </p>
         {hata && <Uyari>{hata}</Uyari>}
         {acikPlatformlar.map((p) => {
@@ -383,10 +389,10 @@ export function OnayPenceresi({
             <div key={p} className={s.pltAdim}>
               <h4>{PLATFORM_ADI[p]}</h4>
               <ul className={s.adimlar}>
-                {kurulumAdimlari(p, amacKodu ? REHBER_AMACLARI[amacKodu].google.kurgu : null).map((t, i) => (
+                {kurulumAdimlari(p, amacKodu ? REHBER_AMACLARI[amacKodu].google.kurgu : null, dil).map((t, i) => (
                   <li key={t} data-hal={haller[i]}>
                     <i />
-                    {i === 2 && haller[2] === 'atlandi' ? 'Duraklatılmış bırakıldı (açılmadı)' : t}
+                    {i === 2 && haller[2] === 'atlandi' ? d.onay.birakildi : t}
                   </li>
                 ))}
               </ul>
@@ -412,9 +418,12 @@ export function OnayPenceresi({
  * Hata platformun kendi cümlesiyle görünür.
  */
 function GeriAl({ rehberId, ozet, guncelle }: { rehberId: string; ozet: PlatformYayinOzeti; guncelle: (y: RehberYayinDurumu) => void }) {
+  const { dil } = useDil();
+  const d = useSozluk(reklamKontrolSozlugu);
+  const dr = useSozluk(reklamSozlugu);
   const [hal, setHal] = useState<'bos' | 'onay' | 'gonderiliyor' | 'hata'>('bos');
   const [hata, setHata] = useState<string | null>(null);
-  const m = geriAlMetinleri(ozet.platform);
+  const m = geriAlMetinleri(ozet.platform, dil);
   async function arsivle() {
     setHal('gonderiliyor');
     setHata(null);
@@ -437,19 +446,19 @@ function GeriAl({ rehberId, ozet, guncelle }: { rehberId: string; ozet: Platform
       setHata(m.cevapYok);
       setHal('hata');
     } catch (e) {
-      setHata(e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.');
+      setHata(e instanceof ApiRequestError ? e.message : dr.ortak.sunucuYok);
       setHal('hata');
     }
   }
   if (hal === 'onay' || hal === 'gonderiliyor') {
     return (
-      <div className={s.geriAlOnay} role="group" aria-label="Geri alma onayı">
+      <div className={s.geriAlOnay} role="group" aria-label={d.geriAlOnayi}>
         <span>{m.onay}</span>
         <Dugme ton="tehlike" boyut="kucuk" bekliyor={hal === 'gonderiliyor'} onClick={() => void arsivle()}>
           {hal === 'gonderiliyor' ? m.suruyor : m.eylem}
         </Dugme>
         <Dugme ton="ikincil" boyut="kucuk" disabled={hal === 'gonderiliyor'} onClick={() => setHal('bos')}>
-          Vazgeç
+          {d.vazgec}
         </Dugme>
       </div>
     );
@@ -474,6 +483,8 @@ function GeriAl({ rehberId, ozet, guncelle }: { rehberId: string; ozet: Platform
  * ilerler; sonuç sunucudan yoklanır, düşerse sunucunun sebebi görünür.
  */
 function YenidenKontrol({ rehberId, ozet, guncelle }: { rehberId: string; ozet: PlatformYayinOzeti; guncelle: (y: RehberYayinDurumu) => void }) {
+  const d = useSozluk(reklamKontrolSozlugu);
+  const dr = useSozluk(reklamSozlugu);
   const [hal, setHal] = useState<'bos' | 'suruyor' | 'hata'>('bos');
   const [hata, setHata] = useState<string | null>(null);
   async function kontrol() {
@@ -491,17 +502,17 @@ function YenidenKontrol({ rehberId, ozet, guncelle }: { rehberId: string; ozet: 
           return setHal('bos');
         }
       }
-      setHata('Meta ayarları yine okunamadı; birkaç dakika sonra yeniden dene.');
+      setHata(d.yenidenKontrol.yine);
       setHal('hata');
     } catch (e) {
-      setHata(e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.');
+      setHata(e instanceof ApiRequestError ? e.message : dr.ortak.sunucuYok);
       setHal('hata');
     }
   }
   return (
     <div className={s.geriAlOnay}>
       <Dugme ton="ikincil" boyut="kucuk" disabled={hal === 'suruyor'} onClick={() => void kontrol()}>
-        {hal === 'suruyor' ? 'Kontrol ediliyor…' : 'Yeniden kontrol et'}
+        {hal === 'suruyor' ? d.yenidenKontrol.suruyor : d.yenidenKontrol.etiket}
       </Dugme>
       {hal === 'hata' && hata && (
         <span className={s.hataMetni} role="alert">
@@ -519,9 +530,12 @@ function YenidenKontrol({ rehberId, ozet, guncelle }: { rehberId: string; ozet: 
  * içeriğin özetiyle yayınlanır. Prova reddederse platformun cümlesi görünür.
  */
 function YenidenDene({ rehberId, platformlar, guncelle }: { rehberId: string; platformlar: PlatformYayinOzeti[]; guncelle: (y: RehberYayinDurumu) => void }) {
+  const { dil } = useDil();
+  const d = useSozluk(reklamKontrolSozlugu);
+  const dr = useSozluk(reklamSozlugu);
   const [hal, setHal] = useState<'bos' | 'suruyor' | 'hata'>('bos');
   const [hata, setHata] = useState<string | null>(null);
-  const etiket = yenidenDenemeEtiketi(platformlar);
+  const etiket = yenidenDenemeEtiketi(platformlar, dil);
   const hedefler = platformlar.filter(yenidenDenenebilirMi).map((p) => p.platform);
   const yol = `/reklam/rehberler/${encodeURIComponent(rehberId)}`;
   async function dene() {
@@ -539,7 +553,7 @@ function YenidenDene({ rehberId, platformlar, guncelle }: { rehberId: string; pl
       const sorunlar = hedefler.flatMap((x) => {
         const r = p[x];
         if (r?.tur === 'gecti') return [];
-        const metin = r?.tur === 'reddetti' ? r.mesajlar.join(' ') : r?.tur === 'yapilmadi' ? r.sebep : 'Kontrol bitmedi; birkaç dakika sonra yeniden dene.';
+        const metin = r?.tur === 'reddetti' ? r.mesajlar.join(' ') : r?.tur === 'yapilmadi' ? r.sebep : d.yenidenDene.bitmedi;
         return [`${PLATFORM_ADI[x]}: ${metin}`];
       });
       if (sorunlar.length) {
@@ -549,7 +563,7 @@ function YenidenDene({ rehberId, platformlar, guncelle }: { rehberId: string; pl
       guncelle(await apiFetch<RehberYayinDurumu>(`${yol}/yayinla`, { method: 'POST', body: JSON.stringify({ icerikOzeti: p.icerikOzeti }) }));
       setHal('bos');
     } catch (e) {
-      setHata(e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.');
+      setHata(e instanceof ApiRequestError ? e.message : dr.ortak.sunucuYok);
       setHal('hata');
     }
   }
@@ -557,7 +571,7 @@ function YenidenDene({ rehberId, platformlar, guncelle }: { rehberId: string; pl
   return (
     <div className={s.geriAlOnay} style={{ padding: '0 16px 12px' }}>
       <Dugme ton="ikincil" boyut="kucuk" disabled={hal === 'suruyor'} onClick={() => void dene()}>
-        {hal === 'suruyor' ? 'Deneniyor…' : etiket}
+        {hal === 'suruyor' ? d.yenidenDene.suruyor : etiket}
       </Dugme>
       {hal === 'hata' && hata && (
         <span className={s.hataMetni} role="alert">
@@ -586,6 +600,8 @@ export function SonEkran({
   rehberId: string;
   yayinGuncelle: (y: RehberYayinDurumu) => void;
 }) {
+  const { dil } = useDil();
+  const d = useSozluk(reklamKontrolSozlugu);
   const amac = b.a.amac?.deger ?? null;
   const platformlar = yayin?.platformlar ?? [];
   const sonuclar = platformlar.map((p) => yayinSonucu(p));
@@ -593,6 +609,7 @@ export function SonEkran({
   const ozet = sonEkranOzeti(
     platformlar.map((p, i) => ({ platform: p.platform, sonuc: sonuclar[i]! })),
     uyumDurdu,
+    dil,
   );
   const hal = ozet.hal;
   const butce = b.a.butce?.deger;
@@ -622,7 +639,7 @@ export function SonEkran({
           const sonuc = sonuclar[i]!;
           const tanim = amac ? REHBER_AMACLARI[amac] : null;
           const kurulacak = tanim ? (p.platform === 'meta' ? tanim.meta.kurulacak : tanim.google.kurgu !== null ? tanim.google.kurulacak : '') : '';
-          const tutar = pay && butce ? `${butce.tip === 'gunluk' ? 'günlük' : 'toplam'} ${paraGoster(pay[p.platform], b.paraBirimi)}` : null;
+          const tutar = pay && butce ? `${butce.tip === 'gunluk' ? d.onay.gunluk : d.onay.toplam} ${paraGoster(pay[p.platform], b.paraBirimi)}` : null;
           return (
             <div key={p.platform} className={s.sonucSatir}>
               <div className={`${s.karo} ${s.gri} ${s.karoKucuk}`}>
@@ -632,7 +649,7 @@ export function SonEkran({
                 <b>{PLATFORM_ADI[p.platform]}</b>
                 {kurulacak && ` · ${kurulacak}`}
                 <small>
-                  {[p.kampanyaKimligi ? `Kampanya ${p.kampanyaKimligi}` : null, tutar].filter(Boolean).join(' · ') || ' '}
+                  {[p.kampanyaKimligi ? d.son.kampanya(p.kampanyaKimligi) : null, tutar].filter(Boolean).join(' · ') || ' '}
                   {sonuc === 'hata' && p.sebep ? ` · ${p.sebep}` : ''}
                 </small>
                 {/* Durdurmayan geri okuma notları: karşılama mesajı farkı (uyarı) ve Advantage+ durumu (bilgi). */}
@@ -644,7 +661,7 @@ export function SonEkran({
               </div>
               <span className={s.yayinda} data-hal={sonuc === 'yayinda' ? undefined : sonuc === 'hata' ? 'hata' : 'dur'}>
                 <i />
-                {yayinSonucuEtiketi(p)}
+                {yayinSonucuEtiketi(p, dil)}
               </span>
               {yenidenOkunabilirMi(p) && <YenidenKontrol rehberId={rehberId} ozet={p} guncelle={yayinGuncelle} />}
               {geriAlinabilirMi(p) && <GeriAl rehberId={rehberId} ozet={p} guncelle={yayinGuncelle} />}
@@ -654,31 +671,31 @@ export function SonEkran({
         <YenidenDene rehberId={rehberId} platformlar={platformlar} guncelle={yayinGuncelle} />
         <div className={s.sonDugmeler}>
           <Link href={yonetici} className={dugmeSinifi('koyu')}>
-            Reklam Yöneticisi&apos;nde gör
+            {d.son.yoneticideGor}
           </Link>
           <Dugme ton="ikincil" onClick={yenidenKur}>
-            Aynı içerikle yeniden kur
+            {d.son.ayniIcerik}
           </Dugme>
           <Dugme ton="ikincil" onClick={yeniReklam}>
-            Yeni reklam
+            {d.son.yeniReklam}
           </Dugme>
         </div>
         {yeniHata && (
           <p className={s.hataMetni} role="alert" style={{ margin: '0 16px 12px', textAlign: 'center' }}>
-            Yeni reklam açılamadı: {yeniHata}
+            {d.son.yeniAcilamadi(yeniHata)}
           </p>
         )}
       </div>
       <div className={s.kart}>
-        <h3 className={s.kartBaslik}>Sonuçları iyileştirmek için</h3>
+        <h3 className={s.kartBaslik}>{d.son.iyilestirmek}</h3>
         <ul className={s.yapilacak}>
           {b.acik.meta && ok.metaSatisOlcumu === false && (
-            <li>Sitende Meta pikseli satış saymıyor. Kurulursa reklamı satın alan kişiye göre iyileştirebiliriz.</li>
+            <li>{d.son.pikselYok}</li>
           )}
-          {b.acik.google && ok.googleDonusumEtkin === false && <li>Google Ads&apos;te dönüşüm işlemi etkin değil; kurulana kadar teklif tıklamaya göre.</li>}
+          {b.acik.google && ok.googleDonusumEtkin === false && <li>{d.son.googleDonusum}</li>}
           <li>
-            İlk sonuçlar 3 ile 7 gün içinde gelir. İyileştir sekmesi öneri yazdığında haber veririz.
-            <Link href={baglanti('/iyilestir', { musteri: b.clientId })}>İyileştir</Link>
+            {d.son.ilkSonuclar}
+            <Link href={baglanti('/iyilestir', { musteri: b.clientId })}>{d.son.iyilestir}</Link>
           </li>
         </ul>
       </div>

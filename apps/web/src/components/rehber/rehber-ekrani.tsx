@@ -10,6 +10,7 @@ import {
   REHBER_ADIMLARI,
   acikPlatformlar,
   type RehberHazirligi,
+  type RehberAdimi,
   type RehberKaydi,
   type RehberPlatformu,
   type RehberProvaSonucu,
@@ -28,6 +29,8 @@ import { IKON, Ikon } from './ikonlar';
 import { RehberKaydedici, type KayitHali } from './rehber-kaydedici';
 import {
   acikSiteKapisiyla,
+  adimAdi as adimAdiDil,
+  adimAlt,
   adimAltMetni,
   adimBittiMi,
   gunFarki,
@@ -47,19 +50,13 @@ import {
 } from './rehber-mantik';
 import { StratejidenKutusu } from './stratejiden-kutusu';
 import { Kart } from '@/components/ui/kart';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { reklamSozlugu } from '@/dil/sozlukler/reklam';
 import { IlerlemeRayi, type RayParcasi } from '@/components/ui/sihirbaz';
 import s from './rehber.module.css';
 
 /** Yayın durumu yoklama aralığı: platform başına üç adım, her biri saniyeler sürüyor. */
 const YOKLAMA_MS = 2000;
-
-const KAYIT_METNI: Record<KayitHali['tur'], string> = {
-  kaydedildi: 'Taslak kaydedildi',
-  bekliyor: 'Kaydediliyor…',
-  kaydediliyor: 'Kaydediliyor…',
-  hata: 'Kaydedilemedi',
-  catisma: 'Başka bir sekmede değişti',
-};
 
 /**
  * ADVCAMPAIGN REHBERİ — onaylı taslağın (`docs/advcampaign/rehber-taslak.html`)
@@ -89,10 +86,15 @@ export function RehberEkrani({
   siteYok: boolean | null;
 }) {
   const router = useRouter();
+  const { dil } = useDil();
+  const d = useSozluk(reklamSozlugu);
+  const KAYIT_METNI: Record<KayitHali['tur'], string> = d.ekran.kayit;
   const [kaydedici] = useState(
     () =>
-      new RehberKaydedici(ilkKayit, (govde) =>
-        apiFetch<RehberKaydi>(`/reklam/rehberler/${encodeURIComponent(ilkKayit.id)}`, { method: 'PUT', body: JSON.stringify(govde) }),
+      new RehberKaydedici(
+        ilkKayit,
+        (govde) => apiFetch<RehberKaydi>(`/reklam/rehberler/${encodeURIComponent(ilkKayit.id)}`, { method: 'PUT', body: JSON.stringify(govde) }),
+        { dil },
       ),
   );
   const durum = useSyncExternalStore(kaydedici.abone, kaydedici.durum, kaydedici.durum);
@@ -157,7 +159,7 @@ export function RehberEkrani({
     apiFetch<HazirlamaYaniti>(`/clients/${encodeURIComponent(kayit.clientId)}/hazirlama`).then(
       // Hesap atanmamışsa iş başlamaz (`bekliyor`); "hazırlanıyor" demek yalan olurdu.
       (y) => setHazirlamaTetik(y.durum === 'calisiyor' ? { tur: 'basladi' } : { tur: 'yok' }),
-      (e: unknown) => setHazirlamaTetik({ tur: 'hata', mesaj: e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.' }),
+      (e: unknown) => setHazirlamaTetik({ tur: 'hata', mesaj: e instanceof ApiRequestError ? e.message : d.ortak.sunucuYok }),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -186,7 +188,7 @@ export function RehberEkrani({
       kaydedici.disaridan(yeni);
       setEsleme({ tur: 'yok' });
     } catch (e) {
-      setEsleme({ tur: 'hata', mesaj: e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.' });
+      setEsleme({ tur: 'hata', mesaj: e instanceof ApiRequestError ? e.message : d.ortak.sunucuYok });
     }
   }, [kaydedici, kayit.id]);
   const eslemeImzasi = durum.hal.tur === 'kaydedildi' ? konumEslemeImzasi(kayit.alanlar, acik.google, denenenEsleme.current) : null;
@@ -205,13 +207,13 @@ export function RehberEkrani({
   async function provaEt() {
     setProva((p) => ({ ...p, suruyor: true, hata: null }));
     if (!(await kaydedici.simdi())) {
-      return setProva((p) => ({ ...p, suruyor: false, hata: 'Prova yapılamadı: taslak kaydedilemedi, prova kayıtlı içerikle yapılıyor.' }));
+      return setProva((p) => ({ ...p, suruyor: false, hata: d.ekran.provaKaydedilemedi }));
     }
     try {
       const sonuc = await apiFetch<RehberProvaSonucu>(`/reklam/rehberler/${encodeURIComponent(kayit.id)}/prova`, { method: 'POST', body: '{}' });
       setProva({ sonuc, suruyor: false, hata: null });
     } catch (e) {
-      setProva((p) => ({ ...p, suruyor: false, hata: `Prova yapılamadı: ${e instanceof ApiRequestError ? e.message : 'sunucuya ulaşılamadı.'}` }));
+      setProva((p) => ({ ...p, suruyor: false, hata: d.ekran.provaYapilamadi(e instanceof ApiRequestError ? e.message : d.ortak.sunucuYokSonra) }));
     }
   }
 
@@ -220,7 +222,7 @@ export function RehberEkrani({
     setYayinGonderiliyor(true);
     if (!(await kaydedici.simdi())) {
       setYayinGonderiliyor(false);
-      return setYayinHatasi('Taslak kaydedilemedi; yayın kayıtlı içerikle yapılıyor.');
+      return setYayinHatasi(d.ekran.yayinKaydedilemedi);
     }
     try {
       // Onay penceresinde gördüğü içeriğin özeti: arada değiştiyse sunucu 409 döner.
@@ -232,10 +234,10 @@ export function RehberEkrani({
     } catch (e) {
       setYayinHatasi(
         e instanceof ApiRequestError && e.status === 409
-          ? 'Reklam onaydan sonra değişti. Pencereyi kapatıp yeniden prova et.'
+          ? d.ekran.onaydanSonraDegisti
           : e instanceof ApiRequestError
             ? e.message
-            : 'Sunucuya ulaşılamadı.',
+            : d.ortak.sunucuYok,
       );
     } finally {
       setYayinGonderiliyor(false);
@@ -260,7 +262,7 @@ export function RehberEkrani({
         const r = await apiFetch<RehberYayinDurumu>(`/reklam/rehberler/${encodeURIComponent(kayit.id)}/yayin`);
         if (!iptal) setYayin(r);
       } catch (e) {
-        if (!iptal) setYayinHatasi(`Yayın durumu okunamadı: ${e instanceof ApiRequestError ? e.message : 'sunucuya ulaşılamadı'}. Birkaç saniye sonra yeniden deniyoruz.`);
+        if (!iptal) setYayinHatasi(d.ekran.yayinOkunamadiYeniden(e instanceof ApiRequestError ? e.message : d.ortak.sunucuYokKisa));
         if (!iptal) setYayin((y) => (y ? { ...y } : y)); // yeniden yokla
       }
     }, YOKLAMA_MS);
@@ -279,7 +281,7 @@ export function RehberEkrani({
     let iptal = false;
     apiFetch<RehberProvaSonucu | null>(`/reklam/rehberler/${encodeURIComponent(ilkKayit.id)}/prova`)
       .then((sonuc) => !iptal && setProva((p) => (p.sonuc || p.suruyor ? p : { ...p, sonuc: sonuc ?? null })))
-      .catch((e: unknown) => !iptal && setProva((p) => ({ ...p, hata: `Son prova okunamadı: ${e instanceof ApiRequestError ? e.message : 'sunucuya ulaşılamadı'}` })));
+      .catch((e: unknown) => !iptal && setProva((p) => ({ ...p, hata: d.ekran.sonProvaOkunamadi(e instanceof ApiRequestError ? e.message : d.ortak.sunucuYokKisa) })));
     return () => {
       iptal = true;
     };
@@ -312,7 +314,7 @@ export function RehberEkrani({
     const z = setInterval(() => {
       apiFetch<RehberProvaSonucu | null>(`/reklam/rehberler/${encodeURIComponent(ilkKayit.id)}/prova`)
         .then((sonuc) => setProva((p) => ({ ...p, sonuc: sonuc ?? null, hata: null })))
-        .catch((e: unknown) => setProva((p) => ({ ...p, hata: `Prova durumu okunamadı: ${e instanceof ApiRequestError ? e.message : 'sunucuya ulaşılamadı'}` })));
+        .catch((e: unknown) => setProva((p) => ({ ...p, hata: d.ekran.provaDurumuOkunamadi(e instanceof ApiRequestError ? e.message : d.ortak.sunucuYokKisa) })));
     }, 3000);
     return () => clearInterval(z);
   }, [yokla, ilkKayit.id]);
@@ -322,7 +324,7 @@ export function RehberEkrani({
     if (ilkKayit.durum !== 'yayinda') return;
     apiFetch<RehberYayinDurumu>(`/reklam/rehberler/${encodeURIComponent(ilkKayit.id)}/yayin`)
       .then(setYayin)
-      .catch((e: unknown) => setYayinHatasi(e instanceof ApiRequestError ? e.message : 'Yayın durumu okunamadı.'));
+      .catch((e: unknown) => setYayinHatasi(e instanceof ApiRequestError ? e.message : d.ekran.yayinOkunamadi));
   }, [ilkKayit.durum, ilkKayit.id]);
 
   async function kapat() {
@@ -337,7 +339,7 @@ export function RehberEkrani({
       const yeni = await apiFetch<RehberKaydi>('/reklam/rehberler', { method: 'POST', body: JSON.stringify(govde) });
       router.push(baglanti('/reklam', { musteri: kayit.clientId, rehber: yeni.id }));
     } catch (e) {
-      setYeniHata(e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.');
+      setYeniHata(e instanceof ApiRequestError ? e.message : d.ortak.sunucuYok);
     }
   }
 
@@ -356,23 +358,23 @@ export function RehberEkrani({
    */
   const rayParcalari: RayParcasi[] = REHBER_ADIMLARI.map((x) => ({
     anahtar: String(x.no),
-    etiket: x.ad,
+    etiket: adimAdiDil(x.no, dil),
     hal: x.no === ekran ? 'simdi' : adimBittiMi(kayit.eksikler, x.no, ekran, amac !== null) ? 'bitti' : 'sirada',
   }));
   const ozetDegeri: Record<number, string> = {
-    3: (a.konumlar?.deger ?? []).map((k) => k.etiket).join(', ') || 'Seçilmedi',
+    3: (a.konumlar?.deger ?? []).map((k) => k.etiket).join(', ') || d.ekran.secilmedi,
     5: butce
-      ? `${paraGoster(butce.micros, paraBirimi)}${butce.tip === 'gunluk' ? ' / gün' : ' toplam'} · ${
-          takvim ? (takvim.bitis ? `${gunFarki(takvim.baslangic, takvim.bitis)} gün` : 'bitiş yok') : 'süre seçilmedi'
+      ? `${paraGoster(butce.micros, paraBirimi)}${butce.tip === 'gunluk' ? d.ekran.gunluk : d.ekran.toplam} · ${
+          takvim ? (takvim.bitis ? d.ortak.gunSayisi(gunFarki(takvim.baslangic, takvim.bitis)) : d.ekran.bitisYok) : d.ekran.sureSecilmedi
         }`
-      : 'Girilmedi',
+      : d.ekran.girilmedi,
   };
 
   const icerik = (
     <div className={`${s.kok} ${s.odakli}`} ref={kabukRef}>
       <div className={s.kabuk}>
         <header className={s.ustCubuk}>
-          <Link className={s.kapat} href={listeAdresi} aria-label="Rehberi kapat" title="Kapat (taslak kayıtlı kalır)" onClick={(e) => {
+          <Link className={s.kapat} href={listeAdresi} aria-label={d.ekran.kapatEtiket} title={d.ekran.kapatBaslik} onClick={(e) => {
             e.preventDefault();
             void kapat();
           }}>
@@ -390,12 +392,12 @@ export function RehberEkrani({
             </span>
             {durum.hal.tur === 'hata' && (
               <button type="button" className={s.metinDugme} onClick={() => kaydedici.tekrarDene()}>
-                Tekrar dene
+                {d.ekran.tekrarDene}
               </button>
             )}
             {durum.hal.tur === 'catisma' && (
               <button type="button" className={s.metinDugme} onClick={() => window.location.reload()}>
-                Yenile
+                {d.ekran.yenile}
               </button>
             )}
           </div>
@@ -403,7 +405,7 @@ export function RehberEkrani({
 
         <main className={s.govde}>
           <div className={s.rayAlani}>
-            <IlerlemeRayi parcalar={rayParcalari} etiket="Reklam adımları" />
+            <IlerlemeRayi parcalar={rayParcalari} etiket={d.ekran.rayEtiket} />
           </div>
 
           <section className={s.orta}>
@@ -414,11 +416,10 @@ export function RehberEkrani({
                 <Uyari>
                   {hazirlamaTetik.tur === 'basladi' ? (
                     <>
-                      Bu workspace reklama hazırlanıyor (site, marka bilgileri, piksel). Bu reklamda eksikleri sen seçersin; sonraki reklamlarda önden dolu
-                      gelir. <Link href={markaMerkeziAdresi('kurulum', kayit.clientId)}>Kurulumu gör</Link>
+                      {d.ekran.hazirlamaBasladi} <Link href={markaMerkeziAdresi('kurulum', kayit.clientId)}>{d.ekran.kurulumuGor}</Link>
                     </>
                   ) : (
-                    <>Workspace hazırlığı başlatılamadı: {hazirlamaTetik.mesaj}</>
+                    <>{d.ekran.hazirlamaHata(hazirlamaTetik.mesaj)}</>
                   )}
                 </Uyari>
               )}
@@ -461,7 +462,7 @@ export function RehberEkrani({
               tıklama işi buraya geçti). Değer amaç ve platformda rayın eski
               alt metniyle aynı üreticiden (`adimAltMetni`).
             */}
-            <Kart as="div" baslik="Özet" dolgu={false}>
+            <Kart as="div" baslik={d.ekran.ozet} dolgu={false}>
               <ul className={s.ozetListe}>
                 {REHBER_ADIMLARI.map((x) => {
                   const bitti = adimBittiMi(kayit.eksikler, x.no, ekran, amac !== null);
@@ -471,8 +472,8 @@ export function RehberEkrani({
                         <span className={s.ozetNo} data-bitti={bitti || undefined}>
                           {bitti ? '✓' : x.no}
                         </span>
-                        <span>{x.ad}</span>
-                        <b className={x.no === 5 ? s.num : undefined}>{ozetDegeri[x.no] ?? adimAltMetni(x.no, x.alt, amac, acik)}</b>
+                        <span>{adimAdiDil(x.no, dil)}</span>
+                        <b className={x.no === 5 ? s.num : undefined}>{ozetDegeri[x.no] ?? adimAltMetni(x.no, adimAlt(x.no, dil), amac, acik, dil)}</b>
                       </button>
                     </li>
                   );
@@ -481,7 +482,7 @@ export function RehberEkrani({
             </Kart>
             {/* Son ekranda "yayından önce" listesinin işi bitti; durması "hâlâ eksik var mı" sorusu doğurur. */}
             {ekran !== 7 && (
-              <Kart as="div" baslik="Yayından önce" dolgu={false}>
+              <Kart as="div" baslik={d.ekran.yayindanOnce} dolgu={false}>
                 <YayindanOnce kayit={kayit} acik={acik} prova={prova} git={git} amacSecili={amac !== null} />
               </Kart>
             )}
@@ -523,8 +524,10 @@ function YayindanOnce({
   git: (n: EkranNo) => void;
   amacSecili: boolean;
 }) {
+  const { dil } = useDil();
+  const d = useSozluk(reklamSozlugu);
   const provaGecti = yayinlanabilirMi([], acik, prova.sonuc, kayit.icerikOzeti);
-  const adimAdi = (n: number) => REHBER_ADIMLARI[n - 1]!.ad;
+  const adimAdi = (n: number) => adimAdiDil(n as RehberAdimi, dil);
   const hazir = hazirAdimlar(kayit.eksikler, amacSecili).map((n) => REHBER_ADIMLARI[n - 1]!);
   return (
     <ul className={s.eksikler}>
@@ -541,15 +544,15 @@ function YayindanOnce({
         <li key={`hazir-${x.no}`} className={s.tamam}>
           <button type="button" onClick={() => git(x.no)}>
             <i />
-            {x.ad} hazır
-            <small>{x.ad}</small>
+            {d.ekran.hazir(adimAdi(x.no))}
+            <small>{adimAdi(x.no)}</small>
           </button>
         </li>
       ))}
       <li className={provaGecti ? s.tamam : undefined}>
         <button type="button" onClick={() => git(6)}>
           <i />
-          {provaGecti ? 'Prova geçti' : 'Prova yapılmadı'}
+          {provaGecti ? d.ekran.provaGecti : d.ekran.provaYapilmadi}
           <small>{adimAdi(6)}</small>
         </button>
       </li>
