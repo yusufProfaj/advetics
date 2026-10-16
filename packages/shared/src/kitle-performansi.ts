@@ -25,6 +25,8 @@ import { KITLE_SINIRLARI, type KitleKonumu, type KitleOzel, type KitleSablonuInp
 
 export interface KitleParcalari {
   konumlar: string[];
+  /** Adres çevresi hedeflemeleri ("38.4,27.1 · 8 km"): imzaya girer, özette SAYI olarak yazılır. */
+  cevreler: string[];
   yas: string | null;
   cinsiyet: string | null;
   ilgiler: string[];
@@ -84,11 +86,15 @@ export function kitleImzasi(platform: Platform, targeting: unknown): KitleImzasi
     ...adlar(geo.regions),
     ...adlar(geo.cities),
     ...adlar(geo.zips),
-    ...dizi(geo.custom_locations).map((c) => {
-      const o = nesne(c);
-      return o ? `${o.name ?? `${o.latitude},${o.longitude}`} (${o.radius ?? '?'} ${o.distance_unit ?? 'km'})` : String(c);
-    }),
   ].sort((a, b) => a.localeCompare(b, 'tr'));
+  const cevreler = dizi(geo.custom_locations)
+    .map((c) => {
+      const o = nesne(c);
+      if (!o) return String(c);
+      const birim = o.distance_unit === 'mile' ? 'mil' : 'km';
+      return `${o.name ?? `${o.latitude},${o.longitude}`} · ${o.radius ?? '?'} ${birim}`;
+    })
+    .sort();
 
   const yasMin = typeof t.age_min === 'number' ? t.age_min : null;
   const yasMax = typeof t.age_max === 'number' ? t.age_max : null;
@@ -113,7 +119,7 @@ export function kitleImzasi(platform: Platform, targeting: unknown): KitleImzasi
   const otomasyon = nesne(t.targeting_automation);
   const genisletilebilir = otomasyon?.advantage_audience === 1 || otomasyon?.advantage_audience === true;
 
-  const parcalar: KitleParcalari = { konumlar, yas, cinsiyet, ilgiler, ozelKitleler, haricKitleler, genisletilebilir };
+  const parcalar: KitleParcalari = { konumlar, cevreler, yas, cinsiyet, ilgiler, ozelKitleler, haricKitleler, genisletilebilir };
   return { tur: 'hedefleme', anahtar: `meta:${JSON.stringify(parcalar)}`, parcalar };
 }
 
@@ -122,7 +128,11 @@ export function kitleImzasiOzeti(imza: KitleImzasi): string {
   if (imza.tur === 'bilinmiyor') return 'Hedefleme bilgisi yok';
   const p = imza.parcalar;
   const bolumler: string[] = [];
-  bolumler.push(p.konumlar.length === 0 ? 'Konum yok' : kisalt(p.konumlar, 3));
+  // Adres çevresi koordinatla yazılmıyor ("38.48907,27.081299"): sayı ve yarıçap okunur.
+  const yaricaplar = [...new Set(p.cevreler.map((c) => c.split(' · ')[1] ?? ''))].filter(Boolean);
+  const cevre = p.cevreler.length > 0 ? `${p.cevreler.length} adres çevresi${yaricaplar.length === 1 ? ` (${yaricaplar[0]})` : ''}` : null;
+  const konum = [p.konumlar.length > 0 ? kisalt(p.konumlar, 3) : null, cevre].filter(Boolean).join(', ');
+  bolumler.push(konum || 'Konum yok');
   bolumler.push(p.yas ? `${p.yas} yaş` : 'Tüm yaşlar');
   if (p.cinsiyet) bolumler.push(p.cinsiyet);
   if (p.ozelKitleler.length > 0) bolumler.push(`özel kitle: ${kisalt(p.ozelKitleler, 2)}`);
@@ -170,6 +180,14 @@ export interface KitlePerformansi {
   gizlenenKitle: number;
   /** Sunucu set sınırına ulaştıysa (en çok harcayan N set okundu): SESSİZ KESME YOK. */
   setSiniri: number | null;
+  /**
+   * Kampanya düzeyinde raporlanıp reklam seti düzeyinde raporlanmayan
+   * harcama, para birimine göre. Canlıda ölçüldü (2026-10-16, Eren Altay):
+   * Meta kampanya toplamı set toplamından 237 ₺, Google 32 ₺ fazla. Kitle
+   * tablosu setlerden kurulduğu için o tutar hiçbir kitleye yazılamıyor;
+   * özetteki harcamayla tablo toplamı ayrışıyor ve bu SÖYLENİYOR.
+   */
+  setDisiHarcama: Array<{ currency: string; tutar: number }>;
 }
 
 export interface KitleSetGirdisi {
@@ -236,6 +254,7 @@ export function kitlelereGoreTopla(setler: KitleSetGirdisi[], sinir = 100): Kitl
     toplamSet: setler.length,
     gizlenenKitle: Math.max(0, satirlar.length - sinir),
     setSiniri: null,
+    setDisiHarcama: [],
   };
 }
 

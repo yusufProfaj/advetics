@@ -783,7 +783,28 @@ export class MetricsService {
           conversionValue: sayi(r.conversion_value_micros) / 1_000_000,
         })),
       );
-      return { ...sonuc, setSiniri: satirlar.length >= KITLE_SET_SINIRI ? KITLE_SET_SINIRI : null };
+      // KAMPANYA DÜZEYİ TOPLAMI, aynı süzgeçlerle: set düzeyinde karşılığı
+      // olmayan harcamayı söylemek için (Advantage+ ya da senkronu eksik set).
+      // KENDİ SÜZGEÇ ÇAĞRISI: `hesap-suzgeci.spec.ts` her takma adlı sorgunun
+      // süzgeci ayrı aldığını sayıyor; paylaşmak o bekçiyi kör ederdi.
+      const kampanyaSuzgeci = this.filters(ctx, query, await this.izlenenHesapIdleri(tx), 'i');
+      const kampanyaToplami = await tx.$queryRaw<Array<{ currency: string; spend_micros: string | number | bigint | null }>>(Prisma.sql`
+        SELECT i.currency, SUM(i.spend_micros) AS spend_micros
+        FROM insights_daily i
+        WHERE i.entity_level = 'campaign'
+          AND i.date BETWEEN ${query.from}::date AND ${query.to}::date
+          ${query.campaignId ? Prisma.sql`AND i.entity_id = ${query.campaignId}::uuid` : Prisma.empty}
+          ${kampanyaSuzgeci}
+        GROUP BY i.currency
+      `);
+      const setDisiHarcama = kampanyaToplami
+        .map((k) => ({
+          currency: k.currency,
+          tutar: sayi(k.spend_micros) / 1_000_000 - sonuc.satirlar.filter((r) => r.currency === k.currency).reduce((a, r) => a + r.spend, 0),
+        }))
+        // Kuruş altı yuvarlama farkı ve set sınırı kesmesi bu notun konusu değil.
+        .filter((k) => k.tutar >= 1 && satirlar.length < KITLE_SET_SINIRI);
+      return { ...sonuc, setSiniri: satirlar.length >= KITLE_SET_SINIRI ? KITLE_SET_SINIRI : null, setDisiHarcama };
     }, { timeoutMs: OKUMA_SURESI_MS });
   }
 

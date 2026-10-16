@@ -56,6 +56,22 @@ describe('kitle imzası (saf)', () => {
     expect(kitleImzasiOzeti(kitleImzasi('meta', { geo_locations: { countries: ['TR'] }, age_min: 18, age_max: 65 }))).toBe('TR · 18+ yaş · geniş kitle');
   });
 
+  it('adres çevresi koordinatla değil sayı ve yarıçapla yazılıyor', () => {
+    const o = kitleImzasiOzeti(
+      kitleImzasi('meta', {
+        geo_locations: {
+          custom_locations: [
+            { latitude: 38.48907, longitude: 27.081299, radius: 8, distance_unit: 'kilometer' },
+            { latitude: 38.566958, longitude: 27.063446, radius: 8, distance_unit: 'kilometer' },
+          ],
+        },
+        age_min: 25,
+      }),
+    );
+    expect(o).toBe('2 adres çevresi (8 km) · 25+ yaş · geniş kitle');
+    expect(o).not.toContain('38.48907');
+  });
+
   it('özel kitle ve hariç tutulan kitle özette', () => {
     const o = kitleImzasiOzeti(
       kitleImzasi('meta', {
@@ -159,6 +175,13 @@ describe('MetricsService.kitleler (gerçek sorgu)', () => {
     // 100 + 200 ₺ (iki set aynı kitle); kampanya seviyesi satırları sayılsaydı iki katı olurdu.
     expect(golf).toMatchObject({ setSayisi: 2, spend: 300, conversions: 4 });
     expect(r.satirlar.reduce((a, s) => a + s.spend, 0)).toBe(600);
+  });
+
+  it('KRİTİK: kampanya düzeyinde set karşılığı olmayan harcama SÖYLENİYOR (canlı ölçüm, 2026-10-16)', async () => {
+    expect((await svc.kitleler(CTX, { from: '2026-10-01', to: '2026-10-31' } as never)).setDisiHarcama).toEqual([]);
+    await h.q(`UPDATE insights_daily SET spend_micros = 700000000 WHERE entity_level = 'campaign'`);
+    const r = await svc.kitleler(CTX, { from: '2026-10-01', to: '2026-10-31' } as never);
+    expect(r.setDisiHarcama).toEqual([{ currency: 'TRY', tutar: 100 }]);
   });
 
   it('dönem dışı harcama girmiyor', async () => {

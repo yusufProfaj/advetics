@@ -47,6 +47,10 @@ export function KitlePerformansTablosu({
   const v = yanit.v;
   if (v.satirlar.length === 0) return <BosDurum baslik={d.bosBaslik} neden={d.bosNeden} />;
 
+  // TOPLAM YALNIZ TEK PARA BİRİMİNDE: TRY ile USD toplanmaz.
+  const birimler = [...new Set(v.satirlar.map((s) => s.currency))];
+  const tekBirim = birimler.length === 1 ? birimler[0]! : null;
+  const topla = (k: 'spend' | 'impressions' | 'clicks' | 'conversions') => v.satirlar.reduce((a, s) => a + s[k], 0);
   const para = (n: number, c: string) => formatMoney(String(Math.round(n * 1_000_000)), c, { dil });
   const ac = (s: KitlePerformansSatiri) => {
     setHata(null);
@@ -76,6 +80,11 @@ export function KitlePerformansTablosu({
     <div className="grid min-w-0 gap-3">
       <p className="m-0 text-13 text-ink-muted">{d.aciklama}</p>
       {v.setSiniri !== null && <Serit ton="bilgi" baslik={d.sinirNotu(v.setSiniri)} />}
+      {v.setDisiHarcama.length > 0 && (
+        <Serit ton="bilgi" baslik={d.setDisiBaslik(v.setDisiHarcama.map((x) => para(x.tutar, x.currency)).join(' + '))}>
+          {d.setDisiNeden}
+        </Serit>
+      )}
       {sonuc && (
         <Serit
           ton="bilgi"
@@ -98,6 +107,7 @@ export function KitlePerformansTablosu({
       <Kart dolgu={false}>
         <Tablo<KitlePerformansSatiri>
           etiket={d.kitle}
+          toplamEtiketi={tekBirim ? d.toplam : undefined}
           satirlar={v.satirlar}
           satirAnahtari={(s) => s.anahtar}
           sutunlar={[
@@ -108,18 +118,24 @@ export function KitlePerformansTablosu({
                 <AdHucresi
                   ad={s.ozet}
                   alt={
-                    s.neden ??
-                    `${d.setSayisi(s.setSayisi)}: ${s.setler.map((x) => x.ad).join(', ')}${s.setSayisi > s.setler.length ? ` +${s.setSayisi - s.setler.length}` : ''}`
+                    // İKİ SET ADI + SAYI: canlıda 8 setin adı hücreyi on satıra uzatıyordu.
+                    // Tam liste `title`da; sayı her zaman yazıyor (sessiz kesme yok).
+                    s.neden ?? (
+                      <span className="line-clamp-2" title={s.setler.map((x) => x.ad).join('\n')}>
+                        {d.setSayisi(s.setSayisi)}: {s.setler.slice(0, 2).map((x) => x.ad).join(', ')}
+                        {s.setSayisi > 2 ? ` +${s.setSayisi - 2}` : ''}
+                      </span>
+                    )
                   }
                 />
               ),
             },
             { anahtar: 'platform', baslik: 'Platform', hucre: (s) => PLATFORM_KISA_ADLARI[s.platform] },
-            { anahtar: 'harcama', baslik: d.harcama, sayi: true, hucre: (s) => para(s.spend, s.currency) },
-            { anahtar: 'gosterim', baslik: d.gosterim, sayi: true, ikincil: true, hucre: (s) => formatNumber(s.impressions, dil) },
-            { anahtar: 'tik', baslik: d.tiklama, sayi: true, ikincil: true, hucre: (s) => formatNumber(s.clicks, dil) },
+            { anahtar: 'harcama', baslik: d.harcama, sayi: true, hucre: (s) => para(s.spend, s.currency), toplam: tekBirim ? para(topla('spend'), tekBirim) : null },
+            { anahtar: 'gosterim', baslik: d.gosterim, sayi: true, ikincil: true, hucre: (s) => formatNumber(s.impressions, dil), toplam: formatNumber(topla('impressions'), dil) },
+            { anahtar: 'tik', baslik: d.tiklama, sayi: true, ikincil: true, hucre: (s) => formatNumber(s.clicks, dil), toplam: formatNumber(topla('clicks'), dil) },
             { anahtar: 'to', baslik: d.to, sayi: true, ikincil: true, hucre: (s) => formatPercent(s.ctr === null ? null : s.ctr * 100, 2, dil) },
-            { anahtar: 'donusum', baslik: d.donusum, sayi: true, hucre: (s) => formatDecimal(s.conversions, s.conversions % 1 === 0 ? 0 : 1, dil) },
+            { anahtar: 'donusum', baslik: d.donusum, sayi: true, hucre: (s) => formatDecimal(s.conversions, s.conversions % 1 === 0 ? 0 : 1, dil), toplam: formatDecimal(topla('conversions'), topla('conversions') % 1 === 0 ? 0 : 1, dil) },
             // TANIMSIZ "—", SIFIR DEĞİL: dönüşümsüz kitlede EBM yok.
             { anahtar: 'ebm', baslik: d.ebm, sayi: true, hucre: (s) => (s.cpa === null ? '—' : para(s.cpa, s.currency)) },
             { anahtar: 'roas', baslik: 'ROAS', sayi: true, ikincil: true, hucre: (s) => (s.roas === null ? '—' : `${formatDecimal(s.roas, 2, dil)}×`) },

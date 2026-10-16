@@ -37,6 +37,10 @@ export const kitleSozlugu = ikiDil(
       'Aynı hedeflemeyi taşıyan reklam setleri tek satırda. Meta ilgi alanı kırılımı vermediği için kitle, setin hedeflemesinden okunuyor.',
     sinirNotu: (n: number) => `Harcamaya göre ilk ${n} reklam seti okundu; daha azı harcayan setler bu tabloda yok.`,
     gizlenen: (n: number) => `${n} kitle daha var; tablo en çok harcayan 100 kitleyi gösteriyor.`,
+    toplam: 'Toplam',
+    setDisiBaslik: (t: string) => `${t} harcama hiçbir kitleye yazılamadı`,
+    setDisiNeden:
+      'Platform bu tutarı kampanya düzeyinde raporladı ama reklam seti düzeyinde raporlamadı; kitle tablosu setlerden kurulduğu için üstteki harcama ile bu tablonun toplamı bu kadar ayrışıyor.',
     kaydet: 'Kitlelere kaydet',
     kaydetBaslik: 'Kitleyi Base’e kaydet',
     kaydetAciklama: 'Bu kitle Base › Kitleler’e eklenir ve reklam kurarken seçilebilir.',
@@ -76,6 +80,10 @@ export const kitleSozlugu = ikiDil(
       'Ad sets with the same targeting share one row. Meta does not break results down by interest, so the audience is read from the ad set’s targeting.',
     sinirNotu: (n) => `The top ${n} ad sets by spend were read; ad sets that spent less are not in this table.`,
     gizlenen: (n) => `${n} more ${n === 1 ? 'audience' : 'audiences'}; the table shows the 100 with the most spend.`,
+    toplam: 'Total',
+    setDisiBaslik: (t) => `${t} of spend could not be assigned to any audience`,
+    setDisiNeden:
+      'The platform reported this amount at campaign level but not at ad set level. The audience table is built from ad sets, so the spend above and this table’s total differ by this much.',
     kaydet: 'Save to audiences',
     kaydetBaslik: 'Save audience to Base',
     kaydetAciklama: 'This audience is added to Base › Audiences and can be chosen when you set up an ad.',
