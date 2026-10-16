@@ -43,6 +43,17 @@ test_kos() {
   [[ $kod -ne 0 ]] && echo "Tam çıktı: $cikti"
   return $kod
 }
+# DERLEME ÇIKTISI YALNIZ DÜŞÜNCE. `next build` yeşilde yüzlerce satırlık
+# rota tablosu basıyor ve bu betiği koşan ajanın bağlamına giriyordu
+# (token düzeni, 2026-10-16). Çıktı YUTULMUYOR: düşerse son 60 satır
+# ekranda, tamamı geçici dosyada.
+derle_kos() {
+  local cikti kod=0
+  cikti="$(mktemp -t dogrula-derle.XXXXXX)"
+  "$@" >"$cikti" 2>&1 || kod=$?
+  if [[ $kod -ne 0 ]]; then tail -60 "$cikti"; echo "Tam çıktı: $cikti"; else echo "tamam ($(wc -l <"$cikti" | tr -d ' ') satır çıktı: $cikti)"; fi
+  return $kod
+}
 trap 'printf "\n\033[0;31m✗ Doğrulama düştü: %s\033[0m\n" "${SON_ADIM:-?}"' ERR
 
 SON_ADIM="shared derlemesi"; adim "$SON_ADIM"
@@ -64,9 +75,9 @@ SON_ADIM="API testleri (tek başına)"; adim "$SON_ADIM"
 
 if [[ $DERLE -eq 1 ]]; then
   SON_ADIM="derleme (api)"; adim "$SON_ADIM"
-  (cd "$KOK/apps/api" && $NPX nest build)
+  (cd "$KOK/apps/api" && derle_kos $NPX nest build)
   SON_ADIM="derleme (web)"; adim "$SON_ADIM"
-  (cd "$KOK/apps/web" && $NPX next build)
+  (cd "$KOK/apps/web" && derle_kos $NPX next build)
 fi
 
 printf '\n\033[0;32m✓ Doğrulama geçti\033[0m%s\n' "$([[ $DERLE -eq 1 ]] && echo ' (derleme dahil)' || echo ' (derleme hariç; --derle ile dahil)')"
