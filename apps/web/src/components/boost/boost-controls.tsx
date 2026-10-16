@@ -6,6 +6,8 @@ import type { BoostRecord } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
 import { Dugme } from '@/components/ui/dugme';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { boostSozlugu } from '@/dil/sozlukler/boost';
 
 /**
  * Aday boost'un onay düğmeleri.
@@ -23,6 +25,8 @@ export function BoostDecision({
   currency: string | null;
 }) {
   const router = useRouter();
+  const d = useSozluk(boostSozlugu).kontrol;
+  const { dil } = useDil();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,7 +40,7 @@ export function BoostDecision({
       });
       router.refresh();
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'İşlem başarısız.');
+      setError(err instanceof ApiRequestError ? err.message : d.islemBasarisiz);
     } finally {
       setBusy(false);
     }
@@ -50,10 +54,10 @@ export function BoostDecision({
         {/* KART İÇİNDE DOLU KIRMIZI YOK: sayfanın tek birincil düğmesi
             başlıkta. Para taahhüdü koyu düğmeyle ayrışıyor. */}
         <Dugme ton="koyu" boyut="kucuk" onClick={() => decide(true)} disabled={busy}>
-          {formatMoney(boost.totalBudgetMicros, currency)} onayla
+          {d.onayla(formatMoney(boost.totalBudgetMicros, currency, { dil }))}
         </Dugme>
         <Dugme ton="ikincil" boyut="kucuk" onClick={() => decide(false)} disabled={busy}>
-          Reddet
+          {d.reddet}
         </Dugme>
       </div>
       {error && <p className="text-xs text-danger-strong">{error}</p>}
@@ -78,6 +82,7 @@ export function BoostDecision({
 /** Kuralı şimdi çalıştır — aday üretir, platforma dokunmaz. */
 export function RunBoostRuleButton({ ruleId }: { ruleId: string }) {
   const router = useRouter();
+  const d = useSozluk(boostSozlugu).kontrol;
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
 
@@ -93,11 +98,11 @@ export function RunBoostRuleButton({ ruleId }: { ruleId: string }) {
       }>(`/boosts/rules/${ruleId}/run`, { method: 'POST' });
       setResult(
         [
-          `${res.evaluated} gönderi incelendi`,
-          `${res.created} aday`,
+          d.incelendi(res.evaluated),
+          d.aday(res.created),
           // TAVANA TAKILANLAR SESSİZ GEÇİLMİYOR: "0 aday" ile "3 aday ama
           // tavan doldu" tamamen farklı işler.
-          res.cappedOut > 0 ? `${res.cappedOut} tanesi aylık tavana takıldı` : null,
+          res.cappedOut > 0 ? d.tavana(res.cappedOut) : null,
           ...res.notes,
         ]
           .filter(Boolean)
@@ -111,7 +116,7 @@ export function RunBoostRuleButton({ ruleId }: { ruleId: string }) {
        * söylüyor (kuyruk kapalı, hesap atanmamış, tavan dolu).
        */
       setResult(
-        err instanceof ApiRequestError ? err.message : 'Kural çalıştırılamadı.',
+        err instanceof ApiRequestError ? err.message : d.kuralCalistirilamadi,
       );
     } finally {
       setBusy(false);
@@ -121,7 +126,7 @@ export function RunBoostRuleButton({ ruleId }: { ruleId: string }) {
   return (
     <div className="space-y-1.5">
       <Dugme ton="ikincil" boyut="kucuk" onClick={run} disabled={busy}>
-        {busy ? 'Çalışıyor…' : 'Şimdi çalıştır'}
+        {busy ? d.calisiyor : d.simdiCalistir}
       </Dugme>
       {result && <p className="text-[11px] text-ink-muted">{result}</p>}
     </div>

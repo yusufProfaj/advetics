@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { boostSozlugu } from '@/dil/sozlukler/boost';
 
 /**
  * ═══ YOUTUBE ÖN AYARI: YALNIZCA BÜTÇE ═══
@@ -21,7 +22,8 @@ const FORM = KAYNAK.slice(bas, KAYNAK.indexOf('\nfunction Acik(', bas));
 describe('YouTube ön ayarı', () => {
   it('tarama boşa düşmüyor', () => {
     expect(bas).toBeGreaterThan(-1);
-    expect(FORM).toContain('Günlük bütçe');
+    expect(FORM).toContain('o.gunlukButce');
+    expect(boostSozlugu.tr.onAyar.gunlukButce).toBe('Günlük bütçe (₺)');
   });
 
   it('KRİTİK: marka, logo, adres ve metin ALANI YOK', () => {
@@ -39,7 +41,8 @@ describe('YouTube ön ayarı', () => {
 
   it('otomatik bilgilerin hatası YUTULMUYOR', () => {
     expect(FORM).toContain('setOtomatikHata(');
-    expect(KAYNAK).toContain('Otomatik bilgiler okunamadı: {hata}');
+    expect(KAYNAK).toContain('o.otomatikOkunamadiMesaj(hata)');
+    expect(boostSozlugu.tr.onAyar.otomatikOkunamadiMesaj('x')).toBe('Otomatik bilgiler okunamadı: x');
   });
 
   it('eski elle seçilmiş değerler sessizce atılmıyor', () => {
@@ -56,8 +59,10 @@ describe('YouTube ön ayarı', () => {
   });
 
   it('kartın onaylanınca YAYINA GİRDİĞİ ve küçük bütçe uyarısı yazılı', () => {
-    expect(FORM).toContain('yayına girer');
-    expect(FORM).toContain('küçük bir');
-    expect(FORM).not.toContain('duraklatılmış');
+    expect(FORM).toContain('o.seritBaslik');
+    expect(FORM).toContain('o.seritGovde');
+    expect(boostSozlugu.tr.onAyar.seritBaslik).toContain('yayına girer');
+    expect(boostSozlugu.tr.onAyar.seritGovde).toContain('küçük bir');
+    expect(boostSozlugu.tr.onAyar.seritBaslik).not.toContain('duraklatılmış');
   });
 });

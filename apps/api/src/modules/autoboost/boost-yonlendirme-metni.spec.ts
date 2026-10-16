@@ -170,7 +170,15 @@ describe('boost yönlendirme metinleri', () => {
 
     // Etiket 2026-10-16'dan beri prop (kart içinde "Boost ayarla"); sayfa
     // başlığındaki düğme VARSAYILANI kullanıyor, o yüzden varsayılan karşılaştırılıyor.
-    expect(panel.slice(acilis, kapanis)).toContain('{etiket}');
-    expect(panel).toContain(`etiket = '${DUGME_ETIKETI}'`);
+    // İki dil (D3): varsayılan etiket panel sözlüğünden (`d.dugme`); API metni
+    // Türkçe olduğu için Türkçe değer (sözlüğün İLK yarısı) karşılaştırılıyor.
+    expect(panel.slice(acilis, kapanis)).toContain('{etiket ?? d.dugme}');
+    const sozluk = readFileSync(
+      join(__dirname, '../../../../../apps/web/src/dil/sozlukler/boost.ts'),
+      'utf8',
+    );
+    const ilk = sozluk.indexOf("dugme: '");
+    expect(ilk, 'sözlükte düğme etiketi bulunamadı').toBeGreaterThan(-1);
+    expect(sozluk.slice(ilk)).toMatch(new RegExp(`^dugme: '${DUGME_ETIKETI}'`));
   });
 });

@@ -23,7 +23,7 @@ import {
   useKartDuzenle,
 } from '@/components/autoboost/kart-duzenle';
 import { BoostOnAyariDugmesi } from '@/components/autoboost/boost-on-ayari';
-import { useSozluk } from '@/dil/saglayici';
+import { useDil, useSozluk } from '@/dil/saglayici';
 import { boostSozlugu } from '@/dil/sozlukler/boost';
 import { PlatformLogo } from '@/components/platform-logo';
 import { YoutubeProvaSonucuKutusu, type ProvaDurumu } from './youtube-prova-sonucu';
@@ -104,10 +104,13 @@ const DURUM_SUZGECLERI = [
    * KONTROL GEREKLİ DE BURADA: kullanıcının yapacak bir işi var (hesaba
    * bakıp onaylamak). "Kapanan"a koymak, yayında olabilecek bir kampanyayı
    * bitmiş gibi göstermek olurdu.
+   *
+   * Etiket burada DEĞİL sözlükte (`suzgec<Anahtar>`): dil değişince yeniden
+   * çizilsin diye tablo yalnız anahtarı taşıyor.
    */
-  { anahtar: 'bekleyen', etiket: 'Onay bekliyor', durumlar: ['pending', 'kontrol'] },
-  { anahtar: 'yayinda', etiket: 'Yayında', durumlar: ['launched', 'launching', 'approved'] },
-  { anahtar: 'kapali', etiket: 'Kapanan', durumlar: ['rejected', 'failed'] },
+  { anahtar: 'bekleyen', durumlar: ['pending', 'kontrol'] },
+  { anahtar: 'yayinda', durumlar: ['launched', 'launching', 'approved'] },
+  { anahtar: 'kapali', durumlar: ['rejected', 'failed'] },
 ] as const;
 
 type DurumSuzgeci = (typeof DURUM_SUZGECLERI)[number]['anahtar'] | 'hepsi';
@@ -132,6 +135,8 @@ export function BildirimHavuzu({
   canWrite: boolean;
 }) {
   const router = useRouter();
+  const d = useSozluk(boostSozlugu).havuz;
+  const dk = useSozluk(boostSozlugu);
   const [liste, setListe] = useState<AutoBoostQueueList | null>(null);
   const [saglik, setSaglik] = useState<AutoBoostSubscriptionHealth[]>([]);
   /*
@@ -187,9 +192,10 @@ export function BildirimHavuzu({
         setHata(
           err instanceof ApiRequestError
             ? err.message
-            : 'İçerikler yüklenemedi. Sayfayı yenilemeyi dene.',
+            : d.yuklenemedi,
         ),
       );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- dil değişince kuyruk yeniden çekilmesin
   }, [clientId]);
 
   /**
@@ -214,7 +220,7 @@ export function BildirimHavuzu({
       kuyruguYukle();
     } catch (err) {
       setGecmisNotlari([
-        err instanceof ApiRequestError ? err.message : 'Geçmiş içerik çekilemedi.',
+        err instanceof ApiRequestError ? err.message : d.gecmisCekilemedi,
       ]);
     } finally {
       setGecmisBekliyor(false);
@@ -239,18 +245,18 @@ export function BildirimHavuzu({
       })
       .catch((e: unknown) => {
         setSaglik([]);
-        setSaglikHatasi(e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.');
+        setSaglikHatasi(e instanceof ApiRequestError ? e.message : dk.sunucuyaUlasilamadi);
       });
   }, [clientId, kuyruguYukle]);
 
   if (hata) {
     return (
-      <HataDurumu baslik="İçerik listesi açılamadı" mesaj={hata} />
+      <HataDurumu baslik={d.hataBaslik} mesaj={hata} />
     );
   }
 
   if (!liste) {
-    return <p className="text-xs text-ink-muted">İçerikler yükleniyor…</p>;
+    return <p className="text-xs text-ink-muted">{d.yukleniyor}</p>;
   }
 
   const bekleyen = liste.items.filter((i) => i.status === 'pending');
@@ -265,18 +271,18 @@ export function BildirimHavuzu({
   const mecralar = MECRA_SIRASI.filter((m) => sayilar.has(m));
 
   const durumSayilari = new Map<DurumSuzgeci, number>();
-  for (const d of DURUM_SUZGECLERI) {
+  for (const s of DURUM_SUZGECLERI) {
     const n = liste.items.filter((k) =>
-      (d.durumlar as readonly string[]).includes(k.status),
+      (s.durumlar as readonly string[]).includes(k.status),
     ).length;
-    if (n > 0) durumSayilari.set(d.anahtar, n);
+    if (n > 0) durumSayilari.set(s.anahtar, n);
   }
 
   const gosterilen = liste.items.filter((k) => {
     if (suzgec !== 'hepsi' && k.mecra !== suzgec) return false;
     if (durumSuzgeci === 'hepsi') return true;
-    const d = DURUM_SUZGECLERI.find((x) => x.anahtar === durumSuzgeci);
-    return d ? (d.durumlar as readonly string[]).includes(k.status) : true;
+    const s = DURUM_SUZGECLERI.find((x) => x.anahtar === durumSuzgeci);
+    return s ? (s.durumlar as readonly string[]).includes(k.status) : true;
   });
 
   return (
@@ -296,11 +302,11 @@ export function BildirimHavuzu({
           performansa bakıp seçtikleri.
         */}
         <h2 className="text-sm font-semibold text-ink">
-          İçerikler
+          {d.baslik}
           {bekleyen.length > 0 && (
             <SayiRozeti
               sayi={bekleyen.length}
-              etiket={`${bekleyen.length} kart onay bekliyor`}
+              etiket={d.bekleyenEtiket(bekleyen.length)}
               className="ml-2"
             />
           )}
@@ -313,20 +319,20 @@ export function BildirimHavuzu({
           <p className="text-[11px] text-ink-muted">
             {/* SÜZGEÇ AÇIKKEN KAÇ KARTIN GİZLENDİĞİ DE YAZIYOR: süzgeci
                 unutan kullanıcı eksik listeyi "kart gelmemiş" diye okur. */}
-            {gosterilen.length} kart gösteriliyor
+            {d.kartGosteriliyor(gosterilen.length)}
             {gosterilen.length < liste.items.length &&
-              ` · ${liste.items.length - gosterilen.length} kart süzgeçte`}
-            {liste.total > liste.items.length && ` · toplam ${liste.total}, en yeniler`}
+              d.suzgecte(liste.items.length - gosterilen.length)}
+            {liste.total > liste.items.length && d.toplamEnYeni(liste.total)}
           </p>
           {canWrite && (
             <button
               type="button"
               onClick={() => void gecmisiCek()}
               disabled={gecmisBekliyor}
-              title="Sayfanın ve kanalın son gönderilerini onay kartına çevirir"
+              title={d.gecmisIpucu}
               className={dugmeSinifi('ikincil', 'kucuk')}
             >
-              {gecmisBekliyor ? 'Getiriliyor…' : 'Geçmiş içerikleri getir'}
+              {gecmisBekliyor ? d.getiriliyor : d.gecmisGetir}
             </button>
           )}
         </div>
@@ -355,18 +361,18 @@ export function BildirimHavuzu({
           {durumSayilari.size > 1 && (
             <div className="flex flex-wrap gap-1.5">
               <SuzgecDugmesi
-                etiket="Tümü"
+                etiket={d.tumu}
                 adet={liste.items.length}
                 secili={durumSuzgeci === 'hepsi'}
                 onSec={() => setDurumSuzgeci('hepsi')}
               />
-              {DURUM_SUZGECLERI.filter((d) => durumSayilari.has(d.anahtar)).map((d) => (
+              {DURUM_SUZGECLERI.filter((s) => durumSayilari.has(s.anahtar)).map((s) => (
                 <SuzgecDugmesi
-                  key={d.anahtar}
-                  etiket={d.etiket}
-                  adet={durumSayilari.get(d.anahtar) ?? 0}
-                  secili={durumSuzgeci === d.anahtar}
-                  onSec={() => setDurumSuzgeci(d.anahtar)}
+                  key={s.anahtar}
+                  etiket={SUZGEC_ETIKETI[s.anahtar](d)}
+                  adet={durumSayilari.get(s.anahtar) ?? 0}
+                  secili={durumSuzgeci === s.anahtar}
+                  onSec={() => setDurumSuzgeci(s.anahtar)}
                 />
               ))}
             </div>
@@ -375,7 +381,7 @@ export function BildirimHavuzu({
           {mecralar.length > 1 && (
             <div className="flex flex-wrap gap-1.5">
               <SuzgecDugmesi
-                etiket="Her mecra"
+                etiket={d.herMecra}
                 adet={liste.items.length}
                 secili={suzgec === 'hepsi'}
                 onSec={() => setSuzgec('hepsi')}
@@ -405,8 +411,8 @@ export function BildirimHavuzu({
         boş bir liste gördüğünde okunması gereken ilk şey bu.
       */}
       {saglikHatasi && (
-        <Serit ton="bilgi" baslik="Bildirim aboneliklerinin durumu okunamadı">
-          {saglikHatasi} Kartlar yine de aşağıda.
+        <Serit ton="bilgi" baslik={d.saglikOkunamadi}>
+          {d.saglikKartlarAsagida(saglikHatasi)}
         </Serit>
       )}
       {saglik
@@ -415,7 +421,7 @@ export function BildirimHavuzu({
           <Serit
             key={h.socialProfileId}
             ton="hata"
-            baslik={`${h.channelName}: bildirim aboneliği çalışmıyor`}
+            baslik={d.abonelikCalismiyor(h.channelName)}
           >
             {h.message}
           </Serit>
@@ -432,21 +438,20 @@ export function BildirimHavuzu({
         .filter((h) => h.ok && !h.signatureLocked && h.lastNotificationAt)
         .map((h) => (
           <p key={h.socialProfileId} className="text-[11px] text-ink-muted">
-            {h.channelName}: bildirimler imzasız geliyor. Koruma yalnızca bildirim
-            adresinin gizli kalmasına dayanıyor.
+            {d.imzasiz(h.channelName)}
           </p>
         ))}
 
       {liste.items.length === 0 && (
-        <BosDurum baslik="Onay bekleyen içerik yok" neden={liste.emptyReason} />
+        <BosDurum baslik={d.bosBaslik} neden={liste.emptyReason} />
       )}
 
       {/* SÜZGEÇ YÜZÜNDEN BOŞALAN LİSTE, GERÇEKTEN BOŞ LİSTEYLE AYNI
           GÖRÜNMEMELİ: biri "kart yok", diğeri "kartlar başka sekmede". */}
       {liste.items.length > 0 && gosterilen.length === 0 && (
         <BosDurum
-          baslik="Bu süzgeçte kart yok"
-          neden={`Diğer sekmelerde ${liste.items.length} kart var.`}
+          baslik={d.suzgecBosBaslik}
+          neden={d.suzgecBosNeden(liste.items.length)}
         />
       )}
 
@@ -539,10 +544,12 @@ function Kart({
    * adres düşünce (ya da hiç yoksa) sunucu görseli o anda Meta'dan alıyor.
    * YouTube küçük resmi kalıcı: yedek yok, adres yoksa "görsel yok" DOĞRU.
    */
+  const d = useSozluk(boostSozlugu).havuz;
+  const { dil } = useDil();
   const gorsel = useTazeGorsel(
     kayit.thumbnailUrl,
     kayit.platform === 'meta' ? `/autoboost/queue/${encodeURIComponent(kayit.id)}/gorsel` : undefined,
-    'görsel yok',
+    d.gorselYok,
   );
   const gorselAdresi = gorsel.hal.tur === 'adres' || gorsel.hal.tur === 'blob' ? gorsel.hal.src : null;
   /*
@@ -629,7 +636,7 @@ function Kart({
       });
       setProva({ tur: 'sonuc', veri });
     } catch (err) {
-      setProva({ tur: 'hata', mesaj: err instanceof ApiRequestError ? err.message : 'Prova yapılamadı.' });
+      setProva({ tur: 'hata', mesaj: err instanceof ApiRequestError ? err.message : d.provaYapilamadi });
     }
   }
 
@@ -663,7 +670,7 @@ function Kart({
       setDuzenleAcik(false);
       onDegisti();
     } catch (err) {
-      setHata(err instanceof ApiRequestError ? err.message : 'İşlem tamamlanamadı.');
+      setHata(err instanceof ApiRequestError ? err.message : d.islemTamamlanamadi);
       throw err;
     } finally {
       setBusy(null);
@@ -689,7 +696,7 @@ function Kart({
       setNot(r.message);
       onDegisti();
     } catch (err) {
-      setHata(err instanceof ApiRequestError ? err.message : 'İşlem tamamlanamadı.');
+      setHata(err instanceof ApiRequestError ? err.message : d.islemTamamlanamadi);
     } finally {
       setBusy(null);
     }
@@ -703,7 +710,7 @@ function Kart({
       await apiFetch(`/autoboost/queue/${kayit.id}/kapat`, { method: 'POST' });
       onDegisti();
     } catch (err) {
-      setHata(err instanceof ApiRequestError ? err.message : 'Kart kapatılamadı.');
+      setHata(err instanceof ApiRequestError ? err.message : d.kartKapatilamadi);
     } finally {
       setBusy(null);
     }
@@ -725,9 +732,7 @@ function Kart({
     const kontrolEdildi = kayit.status === 'kontrol';
     if (
       kontrolEdildi &&
-      !window.confirm(
-        `Bu içerik için ${PLATFORM_LABELS[kayit.platform]} hesabında yayında bir kampanya olmadığını kontrol ettin mi? Varsa önce onu durdur; yoksa aynı içerik için ikinci kampanya açılır.`,
-      )
+      !window.confirm(d.tekrarOnay(PLATFORM_LABELS[kayit.platform]))
     ) {
       return;
     }
@@ -740,7 +745,7 @@ function Kart({
       );
       onDegisti();
     } catch (err) {
-      setHata(err instanceof ApiRequestError ? err.message : 'Kart tekrar açılamadı.');
+      setHata(err instanceof ApiRequestError ? err.message : d.kartAcilamadi);
     } finally {
       setBusy(null);
     }
@@ -840,13 +845,13 @@ function Kart({
             aria-busy={gorsel.hal.tur === 'tazeleniyor'}
             title={gorsel.hal.tur === 'hata' ? gorsel.hal.mesaj : undefined}
           >
-            <span className="line-clamp-4">{gorsel.hal.tur === 'tazeleniyor' ? 'Görsel yenileniyor' : gorsel.hal.tur === 'hata' ? gorsel.hal.mesaj : 'görsel yok'}</span>
+            <span className="line-clamp-4">{gorsel.hal.tur === 'tazeleniyor' ? d.gorselYenileniyor : gorsel.hal.tur === 'hata' ? gorsel.hal.mesaj : d.gorselYok}</span>
           </div>
         )}
 
         {yayinda && (
           <span className="absolute inset-0 grid place-items-center bg-black/45 text-[11px] font-semibold uppercase tracking-wide text-white">
-            Yayınlandı
+            {d.yayinlandi}
           </span>
         )}
       </div>
@@ -856,7 +861,7 @@ function Kart({
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           {duzenleAcik ? (
             <span className="inline-flex h-6 shrink-0 items-center whitespace-nowrap rounded-full border border-line-strong bg-vurgu px-2.5 text-12 font-bold text-brand-strong">
-              Düzenleniyor
+              {d.duzenleniyor}
             </span>
           ) : (
             <DurumRozeti kayit={kayit} />
@@ -901,7 +906,7 @@ function Kart({
             metinAcik ? '' : 'line-clamp-2'
           }`}
         >
-          {kayit.title || 'Başlıksız içerik'}
+          {kayit.title || d.basliksiz}
         </p>
         {(kayit.title?.length ?? 0) > 110 && (
           <button
@@ -910,7 +915,7 @@ function Kart({
             aria-expanded={metinAcik}
             className="self-start rounded text-[11px] font-medium text-ink-muted underline underline-offset-2 transition hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
           >
-            {metinAcik ? 'Metni kısalt' : 'Metnin tamamı'}
+            {metinAcik ? d.metniKisalt : d.metninTamami}
           </button>
         )}
 
@@ -925,13 +930,13 @@ function Kart({
         */}
         <p className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-ink-muted">
           <span>
-            <span className="text-ink-muted">Gönderi:</span>{' '}
-            <span className="font-medium text-ink">{formatTarih(kayit.publishedAt)}</span>
+            <span className="text-ink-muted">{d.gonderiTarihi}</span>{' '}
+            <span className="font-medium text-ink">{formatTarih(kayit.publishedAt, dil)}</span>
           </span>
           {kayit.launchedAt && (
             <span>
-              <span className="text-ink-muted">Yayın:</span>{' '}
-              <span className="font-medium text-ink">{formatTarih(kayit.launchedAt)}</span>
+              <span className="text-ink-muted">{d.yayinTarihi}</span>{' '}
+              <span className="font-medium text-ink">{formatTarih(kayit.launchedAt, dil)}</span>
             </span>
           )}
           {kayit.permalink && (
@@ -950,7 +955,7 @@ function Kart({
               rel="noreferrer"
               className="font-medium text-ink-muted underline underline-offset-2 transition hover:text-ink"
             >
-              Gönderiyi aç
+              {d.gonderiyiAc}
             </a>
           )}
         </p>
@@ -981,7 +986,7 @@ function Kart({
             const h = boostHedefi(kayit.preset.settings);
             return (
               <p className="text-[11px] text-ink-muted" data-boost-hedefi>
-                Hedef: <span className="font-medium text-ink">{h.deger}</span> · {BOOST_ADVCAMPAIGN_NOTU}
+                {d.hedef} <span className="font-medium text-ink">{h.deger}</span> · {BOOST_ADVCAMPAIGN_NOTU}
                 {h.fark && <span className="block font-semibold text-ink">{h.fark}</span>}
               </p>
             );
@@ -1040,13 +1045,15 @@ function Kart({
             <p className="text-[10px] text-ink-muted">
               {duraklatilmisKur ? (
                 <>
-                  Onaylayınca kampanya Google Ads&apos;te <strong>duraklatılmış</strong> kurulur; kontrol
-                  edip oradan başlatırsın.
+                  {d.ytDurakBas}
+                  <strong>{d.ytDurakVurgu}</strong>
+                  {d.ytDurakSon}
                 </>
               ) : (
                 <>
-                  Onaylayınca kampanya ön ayardaki hedef kitleyle <strong>yayına girer</strong>. Erken
-                  durdurmak şimdilik Google Ads&apos;ten.
+                  {d.ytYayinBas}
+                  <strong>{d.ytYayinVurgu}</strong>
+                  {d.ytYayinSon}
                 </>
               )}
             </p>
@@ -1060,7 +1067,7 @@ function Kart({
                 }}
                 disabled={busy !== null}
               />
-              Duraklatılmış kur
+              {d.duraklatilmisKur}
             </label>
             {prova && <YoutubeProvaSonucuKutusu durum={prova} />}
           </div>
@@ -1096,7 +1103,7 @@ function Kart({
                 disabled={busy !== null || !duzenle.onAyarVar}
                 className={BIRINCIL_DUGME}
               >
-                {busy === 'onay' ? 'Yayınlanıyor…' : 'Bu ayarlarla yayınla'}
+                {busy === 'onay' ? d.yayinlaniyor : d.buAyarlarlaYayinla}
               </button>
               {youtubeBekliyor && (
                 <button
@@ -1105,7 +1112,7 @@ function Kart({
                   disabled={busy !== null || prova?.tur === 'yukleniyor' || !duzenle.onAyarVar}
                   className={IKINCIL_DUGME}
                 >
-                  {prova?.tur === 'yukleniyor' ? 'Prova…' : 'Prova et'}
+                  {prova?.tur === 'yukleniyor' ? d.prova : d.provaEt}
                 </button>
               )}
               <button
@@ -1114,7 +1121,7 @@ function Kart({
                 disabled={busy !== null}
                 className={SESSIZ_DUGME}
               >
-                Vazgeç
+                {d.vazgec}
               </button>
               {duzenle.elle && (
                 <span className="text-[11px] text-ink-muted">
@@ -1124,14 +1131,14 @@ function Kart({
               {/* ÖN AYAR YOKSA DÜZENLENECEK BİR TABAN DA YOK. */}
               {!duzenle.onAyarVar && (
                 <span className="text-[11px] text-ink-muted">
-                  Bu workspace için boost ön ayarı yok; önce ön ayarı kur.
+                  {d.onAyarYokOnce}
                 </span>
               )}
               {/* KALICI OLMADIĞI YAZILI — "düzenle" kelimesi kalıcı bir ayar
                   değişikliği gibi okunuyor. */}
               {!duzenle.elle && (
                 <span className="text-[11px] text-ink-muted">
-                  Ön ayar değişmiyor; bu ayarlar yalnızca bu karta uygulanıyor.
+                  {d.onAyarDegismiyor}
                 </span>
               )}
               {duzenle.hata && (
@@ -1158,7 +1165,7 @@ function Kart({
                 disabled={!onaylanabilir || busy !== null}
                 className={BIRINCIL_DUGME}
               >
-                {busy === 'onay' ? 'Yayınlanıyor…' : duzenle.elle ? db.boostAyarla : 'Yayınla'}
+                {busy === 'onay' ? d.yayinlaniyor : duzenle.elle ? db.boostAyarla : d.yayinla}
               </button>
               )}
               {/*
@@ -1173,7 +1180,7 @@ function Kart({
                   disabled={busy !== null || prova?.tur === 'yukleniyor'}
                   className={IKINCIL_DUGME}
                 >
-                  {prova?.tur === 'yukleniyor' ? 'Prova…' : 'Prova et'}
+                  {prova?.tur === 'yukleniyor' ? d.prova : d.provaEt}
                 </button>
               )}
               <button
@@ -1182,7 +1189,7 @@ function Kart({
                 disabled={!onaylanabilir || busy !== null}
                 className={IKINCIL_DUGME}
               >
-                Düzenle
+                {d.duzenle}
               </button>
               <button
                 type="button"
@@ -1190,7 +1197,7 @@ function Kart({
                 disabled={busy !== null}
                 className={SESSIZ_DUGME}
               >
-                {busy === 'ret' ? '…' : 'Yayınlama'}
+                {busy === 'ret' ? '…' : d.yayinlama}
               </button>
             </>
           )}
@@ -1214,8 +1221,8 @@ function Kart({
                 {busy === 'duraklat' || busy === 'surdur'
                   ? '…'
                   : duraklatilmis
-                    ? 'Yayını sürdür'
-                    : 'Yayını duraklat'}
+                    ? d.yayiniSurdur
+                    : d.yayiniDuraklat}
               </button>
               <button
                 type="button"
@@ -1223,7 +1230,7 @@ function Kart({
                 disabled={busy !== null}
                 className={IKINCIL_DUGME}
               >
-                Düzenle
+                {d.duzenle}
               </button>
               <button
                 type="button"
@@ -1231,7 +1238,7 @@ function Kart({
                 disabled={busy !== null}
                 className={SESSIZ_DUGME}
               >
-                {busy === 'iptal' ? '…' : 'İptal'}
+                {busy === 'iptal' ? '…' : d.iptal}
               </button>
             </>
           )}
@@ -1249,7 +1256,7 @@ function Kart({
                 */
                 className={BIRINCIL_DUGME}
               >
-                {busy === 'tekrar' ? '…' : 'Tekrar yayınla'}
+                {busy === 'tekrar' ? '…' : d.tekrarYayinla}
               </button>
               <button
                 type="button"
@@ -1257,7 +1264,7 @@ function Kart({
                 disabled={busy !== null || kayit.reBoostBlockedReason !== null}
                 className={IKINCIL_DUGME}
               >
-                Düzenle
+                {d.duzenle}
               </button>
               {/*
                 KAPANMIŞ KARTTA "YAYINLAMA" YALNIZCA KARTI KAPATIYOR.
@@ -1272,7 +1279,7 @@ function Kart({
                   disabled={busy !== null}
                   className={SESSIZ_DUGME}
                 >
-                  {busy === 'kapat' ? '…' : 'Yayınlama'}
+                  {busy === 'kapat' ? '…' : d.yayinlama}
                 </button>
               )}
               {kayit.reBoostBlockedReason && (
@@ -1286,7 +1293,7 @@ function Kart({
           )}
 
           {kayit.status === 'launching' && (
-            <span className="text-[11px] text-ink-muted">Yayına alınıyor…</span>
+            <span className="text-[11px] text-ink-muted">{d.yayinaAliniyor}</span>
           )}
         </div>
       </div>
@@ -1309,6 +1316,8 @@ function Kart({
  * gereken tutarı ikinci sıraya düşürürdü.
  */
 function SagBolge({ kayit }: { kayit: AutoBoostQueueItemRecord }) {
+  const d = useSozluk(boostSozlugu).havuz;
+  const { dil } = useDil();
   if (kayit.performance) {
     const p = kayit.performance;
     /*
@@ -1336,12 +1345,12 @@ function SagBolge({ kayit }: { kayit: AutoBoostQueueItemRecord }) {
 
     return (
       <dl className="grid grid-cols-2 gap-x-3 gap-y-2.5">
-        <Olcum etiket="Harcama" deger={formatMoney(p.spendMicros, 'TRY')} vurgulu />
-        <Olcum etiket="Dönüşüm" deger={formatNumber(p.conversions)} vurgulu />
-        <Olcum etiket="Gösterim" deger={formatNumber(p.impressions)} />
-        <Olcum etiket="Tık" deger={formatNumber(p.clicks)} />
-        <Olcum etiket="TO" deger={formatPercent(ctr)} />
-        <Olcum etiket="EBM" deger={formatMoney(cpa, 'TRY')} />
+        <Olcum etiket={d.harcama} deger={formatMoney(p.spendMicros, 'TRY', { dil })} vurgulu />
+        <Olcum etiket={d.donusum} deger={formatNumber(p.conversions, dil)} vurgulu />
+        <Olcum etiket={d.gosterim} deger={formatNumber(p.impressions, dil)} />
+        <Olcum etiket={d.tik} deger={formatNumber(p.clicks, dil)} />
+        <Olcum etiket={d.tiklamaOrani} deger={formatPercent(ctr, 2, dil)} />
+        <Olcum etiket={d.donusumBasiMaliyet} deger={formatMoney(cpa, 'TRY', { dil })} />
       </dl>
     );
   }
@@ -1365,16 +1374,16 @@ function SagBolge({ kayit }: { kayit: AutoBoostQueueItemRecord }) {
     return (
       <dl className="grid grid-cols-2 gap-x-3 gap-y-2.5 sm:grid-cols-1">
         <Olcum
-          etiket={kayit.preset.budgetMode === 'daily' ? 'Günlük bütçe' : 'Toplam bütçe'}
-          deger={formatMoney(kayit.preset.budgetMicros, 'TRY')}
+          etiket={kayit.preset.budgetMode === 'daily' ? d.gunlukButce : d.toplamButce}
+          deger={formatMoney(kayit.preset.budgetMicros, 'TRY', { dil })}
           vurgulu
         />
-        <Olcum etiket="Süre" deger={`${kayit.preset.durationDays} gün`} />
+        <Olcum etiket={d.sure} deger={d.gun(kayit.preset.durationDays)} />
       </dl>
     );
   }
 
-  return <p className="text-[11px] text-ink-muted">Ön ayar yok.</p>;
+  return <p className="text-[11px] text-ink-muted">{d.onAyarYok}</p>;
 }
 
 /**
@@ -1458,8 +1467,10 @@ function DurumRozeti({ kayit }: { kayit: AutoBoostQueueItemRecord }) {
    * Kampanya durumu biliniyorsa o kazanıyor; bilinmiyorsa (henüz
    * yayınlanmamış kart ya da YouTube yolu) kartın kendi durumu yazılıyor.
    */
+  const d = useSozluk(boostSozlugu).havuz;
   const anahtar = kayit.boostDurumu ?? kayit.status;
-  return <Rozet hal={DURUM_HALI[anahtar] ?? 'taslak'}>{DURUM_ETIKETI[anahtar] ?? anahtar}</Rozet>;
+  const etiketler: Record<string, string> = d.durum;
+  return <Rozet hal={DURUM_HALI[anahtar] ?? 'taslak'}>{etiketler[anahtar] ?? anahtar}</Rozet>;
 }
 
 /**
@@ -1499,22 +1510,17 @@ const DURUM_HALI: Record<string, DurumHali> = {
   kontrol: 'hata',
 };
 
-const DURUM_ETIKETI: Record<string, string> = {
-  pending: 'Onay bekliyor',
-  /*
-   * BOOST DURUMLARI DA BU TABLODA. Rozet iki kaynaktan besleniyor (kartın
-   * durumu ve kampanyanın durumu) ve ikisi için ayrı tablo tutmak, birine
-   * eklenip diğerine eklenmeyen bir değerin ekranda ham hâliyle görünmesi
-   * demek olurdu.
-   */
-  completed: 'Süresi doldu',
-  paused: 'Duraklatıldı',
-  creating: 'Oluşturuluyor',
-  candidate: 'Onay bekliyor',
-  approved: 'Onaylandı',
-  rejected: 'Reddedildi',
-  launching: 'Yayına alınıyor',
-  launched: 'Yayında',
-  failed: 'Başarısız',
-  kontrol: 'Kontrol gerekli',
-};
+/*
+ * DURUM ETİKETLERİ SÖZLÜKTE (`havuz.durum`). Rozet iki kaynaktan besleniyor
+ * (kartın durumu ve kampanyanın durumu) ve ikisi tek tabloda: ayrı tablo
+ * tutmak, birine eklenip diğerine eklenmeyen bir değerin ekranda ham
+ * hâliyle görünmesi demek olurdu. `active` (kampanya yayında) tabloda
+ * yoktu ve ham "active" yazıyordu; eklendi.
+ */
+
+/** Süzgeç sekmesi etiketi: tablo yalnız anahtar taşıyor, ad sözlükten. */
+const SUZGEC_ETIKETI = {
+  bekleyen: (d: { suzgecBekleyen: string }) => d.suzgecBekleyen,
+  yayinda: (d: { suzgecYayinda: string }) => d.suzgecYayinda,
+  kapali: (d: { suzgecKapali: string }) => d.suzgecKapali,
+} as const;

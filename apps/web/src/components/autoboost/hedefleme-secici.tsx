@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import type { ConnectionSummary, GeoLocationOption, SavedAudienceList } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { useSozluk } from '@/dil/saglayici';
+import { boostSozlugu } from '@/dil/sozlukler/boost';
 
 /**
  * ═══ ÖN AYAR HEDEFLEMESİ — ŞEHİR VE KAYITLI KİTLE ═══
@@ -25,7 +27,7 @@ export function HedeflemeSecici({
   kitleId,
   setKitleId,
   kayitliKitle = true,
-  bosMetni = 'Şehir seçilmezse hedefleme Türkiye geneli olur.',
+  bosMetni,
 }: {
   clientId: string;
   lokasyonlar: GeoLocationOption[];
@@ -42,9 +44,11 @@ export function HedeflemeSecici({
   /**
    * Seçim boşken yazan cümle. Boost'ta boş = Türkiye geneli; hazırlık
    * sorusunda boş seçim KAYDEDİLEMİYOR ve aynı cümle yalan olurdu.
+   * Verilmezse sözlükteki Boost cümlesi.
    */
   bosMetni?: string;
 }) {
+  const d = useSozluk(boostSozlugu).hedefleme;
   const [kitleler, setKitleler] = useState<SavedAudienceList | null>(null);
   const [kitleHata, setKitleHata] = useState<string | null>(null);
 
@@ -66,9 +70,10 @@ export function HedeflemeSecici({
       .catch((err: unknown) => {
         setKitleler(null);
         setKitleHata(
-          err instanceof ApiRequestError ? err.message : 'Kayıtlı kitleler alınamadı.',
+          err instanceof ApiRequestError ? err.message : d.kitleAlinamadi,
         );
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `d` her çizimde yeni nesne değil ama dil değişince kitleler yeniden çekilmesin
   }, [hesap, kayitliKitle]);
 
   /* Şehir araması — 350ms bekleme, en az iki harf. Her tuşa istek Meta kotasını yakar. */
@@ -99,17 +104,18 @@ export function HedeflemeSecici({
           setSonuc([]);
           setAramaDurum('bitti');
           setAramaHata(
-            err instanceof ApiRequestError ? err.message : 'Lokasyon araması düştü.',
+            err instanceof ApiRequestError ? err.message : d.konumAramasiDustu,
           );
         });
     }, 350);
     return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- yalnız hata cümlesi için; dil değişince arama yenilenmesin
   }, [arama, hesap]);
 
   if (hesapHata !== null) {
     return (
       <p className="rounded-alan border border-danger/40 bg-danger/5 px-3 py-2 text-[11px] text-danger">
-        Reklam hesabı okunamadı — {hesapHata}
+        {d.hesapOkunamadiMesaj(hesapHata)}
       </p>
     );
   }
@@ -120,7 +126,7 @@ export function HedeflemeSecici({
    * kullanıcıya bir an yanlış bir arıza gösteriliyordu.
    */
   if (hesap === undefined) {
-    return <p className="text-[11px] text-ink-muted">Reklam hesabı aranıyor…</p>;
+    return <p className="text-[11px] text-ink-muted">{d.hesapAraniyor}</p>;
   }
 
   if (hesap === null) {
@@ -130,32 +136,34 @@ export function HedeflemeSecici({
      */
     return (
       <p className="rounded-alan border border-warn/40 bg-warn/5 px-3 py-2 text-[11px] text-ink">
-        Bu workspace’e izlenen bir Meta reklam hesabı atanmamış. Şehir ve kayıtlı
-        kitle seçimi hesap atandıktan sonra açılıyor; şu hâliyle hedefleme{' '}
-        <strong>Türkiye geneli</strong> olacak.
+        {d.hesapYokBas}
+        <strong>{d.hesapYokVurgu}</strong>
+        {d.hesapYokSon}
       </p>
     );
   }
 
   return (
     <div className="space-y-3 rounded-kart border border-line p-3">
-      <p className="text-xs font-medium text-ink">Hedefleme</p>
+      <p className="text-xs font-medium text-ink">{d.baslik}</p>
 
       {kayitliKitle && (
       <label className="block">
         <span className="text-[11px] text-ink-muted">
-          Kayıtlı kitle — <strong>{hesap.name}</strong> hesabından
+          {d.kayitliKitleBas}
+          <strong>{hesap.name}</strong>
+          {d.kayitliKitleSon}
         </span>
         <select
           value={kitleId ?? ''}
           onChange={(e) => setKitleId(e.target.value || null)}
           className="mt-0.5 w-full rounded-alan border border-line bg-surface px-3 py-2 text-sm"
         >
-          <option value="">Kullanma — aşağıdan şehir seçeyim</option>
+          <option value="">{d.kullanma}</option>
           {(kitleler?.items ?? []).map((k) => (
             <option key={k.id} value={k.id}>
               {k.name}
-              {k.approximateCount !== null ? ` · ~${k.approximateCount} kişi` : ''}
+              {k.approximateCount !== null ? d.kisi(k.approximateCount) : ''}
             </option>
           ))}
         </select>
@@ -166,37 +174,38 @@ export function HedeflemeSecici({
       {/* ÜÇ HÂL AYRI: çağrı düştü · kitle yok · kitleler geldi. */}
       {kayitliKitle && kitleHata !== null && (
         <p className="rounded-alan border border-danger/40 bg-danger/5 px-2 py-1 text-[11px] text-danger">
-          Kayıtlı kitleler alınamadı — {kitleHata}
+          {d.kitleAlinamadiMesaj(kitleHata)}
         </p>
       )}
       {kayitliKitle && kitleHata === null && kitleler && kitleler.items.length === 0 && (
         <p className="text-[11px] text-ink-muted">
-          Bu hesapta kayıtlı kitle yok — aşağıdan şehir seçebilirsin.
+          {d.kitleYok}
         </p>
       )}
 
       {kitleId ? (
         <p className="rounded-alan border border-line bg-surface-muted px-3 py-2 text-[11px] text-ink-muted">
-          Kayıtlı kitle seçili. Şehir, yaş ve cinsiyet <strong>kullanılmıyor</strong> —
-          hedeflemeyi kitlenin kendi tanımı belirliyor.
+          {d.kitleSeciliBas}
+          <strong>{d.kitleSeciliVurgu}</strong>
+          {d.kitleSeciliSon}
         </p>
       ) : (
         <>
           <label className="block">
-            <span className="text-[11px] text-ink-muted">Şehir / bölge ekle</span>
+            <span className="text-[11px] text-ink-muted">{d.sehirEkle}</span>
             <input
               value={arama}
               onChange={(e) => setArama(e.target.value)}
-              placeholder="İzmir"
+              placeholder={d.sehirOrnek}
               className="mt-0.5 w-full rounded-alan border border-line bg-surface px-3 py-2 text-sm"
             />
           </label>
 
           {aramaDurum === 'kisa' && (
-            <p className="text-[11px] text-ink-muted">En az iki harf yaz.</p>
+            <p className="text-[11px] text-ink-muted">{d.enAzIkiHarf}</p>
           )}
           {aramaDurum === 'araniyor' && (
-            <p className="text-[11px] text-ink-muted">Aranıyor…</p>
+            <p className="text-[11px] text-ink-muted">{d.araniyor}</p>
           )}
           {aramaHata !== null && (
             <p className="rounded-alan border border-danger/40 bg-danger/5 px-2 py-1 text-[11px] text-danger">
@@ -204,7 +213,7 @@ export function HedeflemeSecici({
             </p>
           )}
           {aramaDurum === 'bitti' && aramaHata === null && sonuc.length === 0 && (
-            <p className="text-[11px] text-ink-muted">Sonuç yok.</p>
+            <p className="text-[11px] text-ink-muted">{d.sonucYok}</p>
           )}
 
           {sonuc.length > 0 && (
@@ -244,7 +253,7 @@ export function HedeflemeSecici({
                       )
                     }
                     className="text-ink-muted hover:text-danger"
-                    aria-label="Kaldır"
+                    aria-label={d.kaldir}
                   >
                     ×
                   </button>
@@ -254,9 +263,7 @@ export function HedeflemeSecici({
           )}
 
           <p className="text-[11px] text-ink-muted">
-            {lokasyonlar.length === 0
-              ? bosMetni
-              : 'Seçilen yerler BİRLEŞİM olarak uygulanıyor; ülke geneli ayrıca gönderilmiyor.'}
+            {lokasyonlar.length === 0 ? (bosMetni ?? d.bosVarsayilan) : d.birlesim}
           </p>
         </>
       )}
@@ -276,6 +283,7 @@ export function useIzlenenMetaHesabi(clientId: string): {
   hesap: { id: string; name: string } | null | undefined;
   hesapHata: string | null;
 } {
+  const d = useSozluk(boostSozlugu).hedefleme;
   const [hesap, setHesap] = useState<{ id: string; name: string } | null | undefined>(undefined);
   const [hesapHata, setHesapHata] = useState<string | null>(null);
   useEffect(() => {
@@ -288,8 +296,9 @@ export function useIzlenenMetaHesabi(clientId: string): {
         setHesapHata(null);
       })
       .catch((err: unknown) =>
-        setHesapHata(err instanceof ApiRequestError ? err.message : 'Reklam hesabı okunamadı.'),
+        setHesapHata(err instanceof ApiRequestError ? err.message : d.hesapOkunamadi),
       );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- dil değişince hesap yeniden çekilmesin
   }, [clientId]);
   return { hesap, hesapHata };
 }

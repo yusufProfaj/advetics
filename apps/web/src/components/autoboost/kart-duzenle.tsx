@@ -1,6 +1,6 @@
 'use client';
 
-import { useSozluk } from '@/dil/saglayici';
+import { useDil, useSozluk } from '@/dil/saglayici';
 import { boostSozlugu } from '@/dil/sozlukler/boost';
 import { useEffect, useState } from 'react';
 import {
@@ -125,8 +125,8 @@ export function useKartDuzenle(kayit: AutoBoostQueueItemRecord): KartDuzenleDuru
        * anlaşılıyor. Kullanıcı konumu yeniden seçtiğinde adı da kaydediliyor
        * ve bir daha bu yedeğe düşmüyor.
        */
-      name: l.label ?? anahtarEtiketi(l.key, l.type),
-      label: l.label ?? anahtarEtiketi(l.key, l.type),
+      name: l.label ?? anahtarEtiketi(l.key, l.type, db.duzenle),
+      label: l.label ?? anahtarEtiketi(l.key, l.type, db.duzenle),
       countryCode: null,
     })).concat(
       // ÖN AYARSIZ KARTTA TABAN TÜRKİYE: boş konum Meta'ya kararı bırakmak
@@ -181,7 +181,7 @@ export function useKartDuzenle(kayit: AutoBoostQueueItemRecord): KartDuzenleDuru
     }
     const parsed = autoBoostQueueOverrideSchema.safeParse(override);
     if (!parsed.success) {
-      setHata(parsed.error.issues[0]?.message ?? 'Geçersiz değer');
+      setHata(parsed.error.issues[0]?.message ?? db.gecersizDeger);
       return null;
     }
     setHata(null);
@@ -236,6 +236,7 @@ export function HedeflemeAlanlari({
   d: KartDuzenleDurumu;
   clientId: string;
 }) {
+  const s = useSozluk(boostSozlugu).duzenle;
   if (!d.metaAyar) {
     /*
      * YOUTUBE KARTINDA HEDEF KİTLE DEĞİL METİN DÜZENLENİYOR. Konum ve yaş
@@ -246,7 +247,7 @@ export function HedeflemeAlanlari({
     if (d.youtube) return <YoutubeMetinAlanlari d={d} />;
     return (
       <p className="rounded-alan border border-line bg-surface-muted px-3 py-2 text-[11px] text-ink-muted">
-        Bu kart için ön ayar yok; önce Boost ön ayarı tanımla.
+        {s.onAyarYok}
       </p>
     );
   }
@@ -261,7 +262,7 @@ export function HedeflemeAlanlari({
       oysa orada okunması gereken şey ALANLARIN KENDİSİ.
     */
     <fieldset className="space-y-2.5 rounded-kart border border-line bg-surface-sunken p-3">
-      <legend className="px-1 text-[11px] font-semibold text-ink">Hedef kitle ve şehir</legend>
+      <legend className="px-1 text-[11px] font-semibold text-ink">{s.hedefKitleSehir}</legend>
 
       {/* AYNI SEÇİCİ ÖN AYAR FORMUNDA DA KULLANILIYOR: ikinci bir kopya
           doğduğu anda ayrışır ve iki ekran farklı hedefleme kurardı. */}
@@ -276,7 +277,7 @@ export function HedeflemeAlanlari({
       {!d.kitleId && (
         <div className="grid gap-2 sm:grid-cols-3">
           <label className="block">
-            <span className="text-[11px] text-ink-muted">Yaş (alt)</span>
+            <span className="text-[11px] text-ink-muted">{s.yasAlt}</span>
             <input
               type="number"
               min={13}
@@ -287,7 +288,7 @@ export function HedeflemeAlanlari({
             />
           </label>
           <label className="block">
-            <span className="text-[11px] text-ink-muted">Yaş (üst)</span>
+            <span className="text-[11px] text-ink-muted">{s.yasUst}</span>
             <input
               type="number"
               min={13}
@@ -298,15 +299,15 @@ export function HedeflemeAlanlari({
             />
           </label>
           <label className="block">
-            <span className="text-[11px] text-ink-muted">Cinsiyet</span>
+            <span className="text-[11px] text-ink-muted">{s.cinsiyet}</span>
             <select
               value={d.cinsiyet}
               onChange={(e) => d.setCinsiyet(e.target.value as 'all' | 'male' | 'female')}
               className={ALAN}
             >
-              <option value="all">Hepsi</option>
-              <option value="female">Kadın</option>
-              <option value="male">Erkek</option>
+              <option value="all">{s.hepsi}</option>
+              <option value="female">{s.kadin}</option>
+              <option value="male">{s.erkek}</option>
             </select>
           </label>
         </div>
@@ -322,18 +323,20 @@ export function HedeflemeAlanlari({
  * hâlinde aynı sütun aynı iki değerin alanlarına dönüşüyor.
  */
 export function ButceAlanlari({ d }: { d: KartDuzenleDurumu }) {
-  const toplam = hesaplananToplam(d.gunlukZorunlu ? 'daily' : d.kip, d.tutar, d.gun);
+  const s = useSozluk(boostSozlugu).duzenle;
+  const { dil } = useDil();
+  const toplam = hesaplananToplam(d.gunlukZorunlu ? 'daily' : d.kip, d.tutar, d.gun, dil);
 
   return (
     <fieldset className="space-y-2.5">
-      <legend className="text-[11px] font-semibold text-ink">Bütçe ve süre</legend>
+      <legend className="text-[11px] font-semibold text-ink">{s.butceVeSure}</legend>
 
       {!d.gunlukZorunlu && (
         <div className="flex gap-1.5">
           {(
             [
-              ['lifetime', 'Toplam'],
-              ['daily', 'Günlük'],
+              ['lifetime', s.toplam],
+              ['daily', s.gunluk],
             ] as const
           ).map(([k, etiket]) => (
             <button
@@ -355,7 +358,7 @@ export function ButceAlanlari({ d }: { d: KartDuzenleDurumu }) {
 
       <label className="block">
         <span className="text-[11px] text-ink-muted">
-          {d.gunlukZorunlu || d.kip === 'daily' ? 'Günlük tutar (₺)' : 'Toplam tutar (₺)'}
+          {d.gunlukZorunlu || d.kip === 'daily' ? s.gunlukTutar : s.toplamTutar}
         </span>
         <input
           inputMode="decimal"
@@ -367,7 +370,7 @@ export function ButceAlanlari({ d }: { d: KartDuzenleDurumu }) {
       </label>
 
       <label className="block">
-        <span className="text-[11px] text-ink-muted">Kaç gün</span>
+        <span className="text-[11px] text-ink-muted">{s.kacGun}</span>
         <input
           type="number"
           min={1}
@@ -385,16 +388,14 @@ export function ButceAlanlari({ d }: { d: KartDuzenleDurumu }) {
       */}
       <p className="text-[11px] text-ink-muted">
         {toplam === null
-          ? 'Tutar girilince toplam taahhüt burada yazacak.'
+          ? s.tutarGirilince
           : d.gunlukZorunlu || d.kip === 'daily'
-            ? `Toplam taahhüt: ${toplam} ₺ (${d.gun} gün × günlük tutar)`
-            : `Toplam taahhüt: ${toplam} ₺ · ${d.gun} güne yayılacak`}
+            ? s.taahhutGunluk(toplam, d.gun)
+            : s.taahhutToplam(toplam, d.gun)}
       </p>
 
       {d.gunlukZorunlu && (
-        <p className="text-[11px] text-ink-muted">
-          YouTube tarafında toplam bütçe yok — bütçe kampanya seviyesinde ve günlük.
-        </p>
+        <p className="text-[11px] text-ink-muted">{s.ytButceNot}</p>
       )}
     </fieldset>
   );
@@ -413,9 +414,13 @@ const ALAN =
  * KALICI ÇÖZÜM DEĞİL, YEDEK: ad alanı şemaya sonradan eklendi ve eski ön
  * ayarlarda yok. Kullanıcı konumu yeniden seçtiğinde adı da kaydediliyor.
  */
-function anahtarEtiketi(key: string, type: 'country' | 'region' | 'city'): string {
+function anahtarEtiketi(
+  key: string,
+  type: 'country' | 'region' | 'city',
+  db: { sehirNo: (k: string) => string; bolgeNo: (k: string) => string },
+): string {
   if (type === 'country') return key;
-  return `${type === 'city' ? 'Şehir' : 'Bölge'} #${key}`;
+  return type === 'city' ? db.sehirNo(key) : db.bolgeNo(key);
 }
 
 /**
@@ -428,11 +433,12 @@ function hesaplananToplam(
   kip: 'daily' | 'lifetime',
   tutar: string,
   gun: number,
+  dil: 'tr' | 'en',
 ): string | null {
   const n = Number(tutar.trim().replace(',', '.'));
   if (!Number.isFinite(n) || n <= 0 || !Number.isFinite(gun) || gun <= 0) return null;
   const toplam = kip === 'daily' ? n * gun : n;
-  return toplam.toLocaleString('tr-TR', { maximumFractionDigits: 2 });
+  return toplam.toLocaleString(dil === 'en' ? 'en-US' : 'tr-TR', { maximumFractionDigits: 2 });
 }
 
 /** Google'ın sınırları — şemadakiyle aynı; ayrışırsa kayıt sunucuda düşer. */
@@ -453,6 +459,7 @@ const SINIR = { baslik: 30, uzunBaslik: 90, aciklama: 90 } as const;
  * yayınlayacağını sanır.
  */
 export function YoutubeMetinAlanlari({ d }: { d: KartDuzenleDurumu }) {
+  const s = useSozluk(boostSozlugu).duzenle;
   const [yukleniyor, setYukleniyor] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
   const [kaynak, setKaynak] = useState<YoutubeKartMetinleri['aciklamaKaynagi'] | null>(null);
@@ -466,7 +473,7 @@ export function YoutubeMetinAlanlari({ d }: { d: KartDuzenleDurumu }) {
       setYtMetin({ baslik: r.baslik, uzunBaslik: r.uzunBaslik, aciklama: r.aciklama });
       setKaynak(r.aciklamaKaynagi);
     } catch (err) {
-      setHata(err instanceof ApiRequestError ? err.message : 'Reklam metni yüklenemedi.');
+      setHata(err instanceof ApiRequestError ? err.message : s.metinYuklenemedi);
     } finally {
       setYukleniyor(false);
     }
@@ -486,62 +493,62 @@ export function YoutubeMetinAlanlari({ d }: { d: KartDuzenleDurumu }) {
 
   return (
     <fieldset
-      aria-label="Reklam metni"
+      aria-label={s.reklamMetni}
       className="space-y-2.5 rounded-kart border border-line bg-surface-sunken p-3"
     >
       <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-semibold text-ink">Reklam metni</p>
+        <p className="text-xs font-semibold text-ink">{s.reklamMetni}</p>
         <button
           type="button"
           onClick={() => void uret()}
           disabled={yukleniyor}
           className="text-[11px] font-medium text-brand-strong transition hover:underline disabled:opacity-50"
         >
-          {yukleniyor ? 'Hazırlanıyor…' : 'Videodan yeniden üret'}
+          {yukleniyor ? s.hazirlaniyor : s.videodanUret}
         </button>
       </div>
 
       {hata && (
         <p role="alert" className="text-[11px] text-danger">
-          {hata} Metin alanları açılamadı; yayınlarsan metin videodan üretilir.
+          {s.metinAcilamadi(hata)}
         </p>
       )}
-      {!m && !hata && <p className="text-[11px] text-ink-muted">Metin hazırlanıyor…</p>}
+      {!m && !hata && <p className="text-[11px] text-ink-muted">{s.metinHazirlaniyor}</p>}
 
       {/* HEDEF ADRES VİDEOYA AİT: bir workspace'te birden çok proje olabiliyor
           ve tek site adresi yanlış projeye trafik gönderiyordu. Boş bırakılırsa
           ön ayardaki ya da workspace'teki adres kullanılıyor; hangisi
           gideceğini "Prova et" özeti gösteriyor. */}
       <label className="block space-y-1">
-        <span className="text-[11px] font-medium text-ink">Hedef adres</span>
+        <span className="text-[11px] font-medium text-ink">{s.hedefAdres}</span>
         <input
           type="url"
           inputMode="url"
           value={d.hedefAdres}
           onChange={(e) => d.setHedefAdres(e.target.value)}
-          placeholder="Boş bırakırsan ön ayardaki adres"
+          placeholder={s.hedefAdresIpucu}
           className="h-9 w-full rounded-alan border border-line bg-surface px-2.5 text-xs"
         />
       </label>
 
       {m && (
         <div className="space-y-2">
-          <MetinAlani etiket="Başlık" deger={m.baslik} sinir={SINIR.baslik} onChange={(v) => alan('baslik', v)} />
+          <MetinAlani etiket={s.baslik} deger={m.baslik} sinir={SINIR.baslik} onChange={(v) => alan('baslik', v)} />
           <MetinAlani
-            etiket="Uzun başlık"
+            etiket={s.uzunBaslik}
             deger={m.uzunBaslik}
             sinir={SINIR.uzunBaslik}
             onChange={(v) => alan('uzunBaslik', v)}
           />
           <MetinAlani
-            etiket="Açıklama"
+            etiket={s.aciklama}
             deger={m.aciklama}
             sinir={SINIR.aciklama}
             onChange={(v) => alan('aciklama', v)}
           />
           {kaynak === 'yedek' && (
             <p className="text-[11px] text-warn-strong">
-              Videonun açıklamasından kullanılabilir bir satır çıkmadı; açıklamayı sen yaz.
+              {s.yedekAciklama}
             </p>
           )}
         </div>
@@ -549,8 +556,7 @@ export function YoutubeMetinAlanlari({ d }: { d: KartDuzenleDurumu }) {
 
       {d.onAyarOzeti.length > 0 && (
         <p className="text-[11px] text-ink-muted">
-          Hedef kitle ön ayardan:{' '}
-          {d.onAyarOzeti.map((o) => `${o.etiket} ${o.deger}`).join(' · ')}
+          {s.kitleOnAyardan(d.onAyarOzeti.map((o) => `${o.etiket} ${o.deger}`).join(' · '))}
         </p>
       )}
     </fieldset>
@@ -568,6 +574,7 @@ function MetinAlani({
   sinir: number;
   onChange: (v: string) => void;
 }) {
+  const s = useSozluk(boostSozlugu).duzenle;
   const bos = deger.trim() === '';
   return (
     <label className="block">
@@ -585,7 +592,7 @@ function MetinAlani({
         aria-invalid={bos ? 'true' : undefined}
         className="mt-0.5 w-full rounded-alan border border-line bg-surface px-2.5 py-1.5 text-sm text-ink outline-none focus:border-brand"
       />
-      {bos && <span className="mt-0.5 block text-[11px] text-danger">{etiket} boş olamaz.</span>}
+      {bos && <span className="mt-0.5 block text-[11px] text-danger">{s.bosOlamaz(etiket)}</span>}
     </label>
   );
 }

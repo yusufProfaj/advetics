@@ -1,6 +1,10 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { boostSozlugu } from '@/dil/sozlukler/boost';
+
+/** Ekran metni sözlükte: kaynakta anahtarın kullanıldığı + iki dilde değerin dolu olduğu iddia ediliyor. */
+const B = boostSozlugu;
 
 /**
  * ═══ AUTO-BOOST EKRANININ YÜZEYİ ═══
@@ -113,9 +117,10 @@ describe('EKRANIN ADI VE BÖLÜM BAŞLIKLARI', () => {
      * şeyin iki adı olması kullanıcıya yanlış sayfaya düştüğünü
      * düşündürüyor; üstelik "Auto-Boost" Türkçe de değil.
      */
-    expect(SAYFA).toContain('Akıllı Boost');
+    // Ad menünün kendi çevirisinden (`menuSatiriEtiketi`): ikinci bir el yazısı ad yok.
+    expect(SAYFA).toContain("baslik={menuSatiriEtiketi('/auto-boost', dil)}");
     expect(SAYFA).not.toContain('>Auto-Boost<');
-    expect(SAYFA).toContain("title: 'Akıllı Boost · Advetics'");
+    expect(SAYFA).toContain("title: `${menuSatiriEtiketi('/auto-boost', await dilAl())} · Advetics`");
   });
 
   it('KRİTİK: iki onay kuyruğunun başlığı KAYNAĞINI söylüyor', () => {
@@ -136,10 +141,12 @@ describe('EKRANIN ADI VE BÖLÜM BAŞLIKLARI', () => {
      * geçiyor (yükleniyor, açılamadı) ve yalnızca onu aramak, başlık silinse
      * bile yeşil kalırdı.
      */
-    expect(HAVUZ).toContain('<h2 className="text-sm font-semibold text-ink">\n          İçerikler');
-    expect(HAVUZ).not.toContain('Yeni içerikler');
-    expect(HAVUZ).not.toContain('Bildirim Havuzu');
-    expect(SAYFA).toContain('Kuralın seçtikleri');
+    expect(HAVUZ).toContain('<h2 className="text-sm font-semibold text-ink">\n          {d.baslik}');
+    expect(B.tr.havuz.baslik).toBe('İçerikler');
+    expect(B.tr.havuz.baslik).not.toBe('Yeni içerikler');
+    expect(B.tr.havuz.baslik).not.toBe('Bildirim Havuzu');
+    expect(SAYFA).toContain('{d.kuralinSectikleri}');
+    expect(B.tr.sayfa.kuralinSectikleri).toBe('Kuralın seçtikleri');
     expect(SAYFA).not.toContain('gönderi onay bekliyor');
   });
 
@@ -150,8 +157,10 @@ describe('EKRANIN ADI VE BÖLÜM BAŞLIKLARI', () => {
      * düşüyor; yalnızca kural motoru günde iki kez koşuyor. Kartını bekleyen
      * kullanıcıya akşamı beklettiren bir cümleydi.
      */
-    const kurallar = SAYFA.indexOf('Boost kuralları');
-    const siklik = SAYFA.indexOf("08:30 ve 20:30");
+    const kurallar = SAYFA.indexOf('{d.kurallar}');
+    const siklik = SAYFA.indexOf('{d.kuralZamani}');
+    expect(B.tr.sayfa.kurallar).toBe('Boost kuralları');
+    expect(B.tr.sayfa.kuralZamani).toContain('08:30 ve 20:30');
     expect(kurallar, 'kural başlığı bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
     expect(siklik).toBeGreaterThan(kurallar);
     expect(SAYFA).not.toContain('günde iki kez değerlendiriliyor');
@@ -167,7 +176,8 @@ describe('SESSİZ HATA YOK', () => {
      */
     expect(SAYFA).toContain('allSettled');
     expect(SAYFA).not.toContain('.catch(() => null)');
-    expect(SAYFA).toContain('Kurallar okunamadı');
+    expect(SAYFA).toContain('d.kurallarOkunamadi');
+    expect(B.tr.sayfa.kurallarOkunamadi).toBe('Kurallar okunamadı.');
   });
 
   it('KRİTİK: sunucunun kendi cümlesi ekranda', () => {
@@ -193,7 +203,9 @@ describe('GEÇMİŞ SAYFAYI BOĞMUYOR', () => {
      */
     expect(SAYFA).toContain('const gecmisSiniri');
     expect(SAYFA).toContain('others.slice(0, gecmisSiniri)');
-    expect(SAYFA).toContain('toplam ${others.length}');
+    expect(SAYFA).toContain('d.gecmisKesik(gecmis.length, others.length)');
+    expect(B.tr.sayfa.gecmisKesik(10, 25)).toBe('son 10 · toplam 25');
+    expect(B.en.sayfa.gecmisKesik(10, 25)).toBe('latest 10 · 25 total');
   });
 
   it('KRİTİK: geçmiş satırı ONAY KARTI DEĞİL', () => {
@@ -217,9 +229,12 @@ describe('BİLDİRİM HAVUZU — üç hâl, üç düğme takımı', () => {
      * "bunu yayınlama" — aynı şey değil ve yanlış kelime, kullanıcıya
      * onaylaması gereken bir merci varmış izlenimi veriyordu.
      */
-    expect(HAVUZ).toContain('Yayınla');
-    expect(HAVUZ).toContain('Düzenle');
-    expect(HAVUZ).toContain('Yayınlama');
+    for (const k of ['yayinla', 'duzenle', 'yayinlama'] as const) {
+      expect(HAVUZ, k).toContain(`d.${k}`);
+    }
+    expect(B.tr.havuz.yayinla).toBe('Yayınla');
+    expect(B.tr.havuz.duzenle).toBe('Düzenle');
+    expect(B.tr.havuz.yayinlama).toBe('Yayınlama');
     expect(HAVUZ).not.toContain('>Onayla<');
     expect(HAVUZ).not.toContain('Reddet');
   });
@@ -231,13 +246,17 @@ describe('BİLDİRİM HAVUZU — üç hâl, üç düğme takımı', () => {
      * Ads Manager'a gidiyordu. Başlatabilip durduramayan bir panel, "reklamcı
      * olmayan da kullanabilsin" vaadini tutmuyor.
      */
-    expect(HAVUZ).toContain('Yayını duraklat');
-    expect(HAVUZ).toContain('Yayını sürdür');
-    expect(HAVUZ).toContain('İptal');
+    for (const k of ['yayiniDuraklat', 'yayiniSurdur', 'iptal'] as const) {
+      expect(HAVUZ, k).toContain(`d.${k}`);
+    }
+    expect(B.tr.havuz.yayiniDuraklat).toBe('Yayını duraklat');
+    expect(B.tr.havuz.yayiniSurdur).toBe('Yayını sürdür');
+    expect(B.tr.havuz.iptal).toBe('İptal');
   });
 
   it('KRİTİK: KAPANMIŞ kartta Tekrar yayınla · Düzenle · Yayınlama', () => {
-    expect(HAVUZ).toContain('Tekrar yayınla');
+    expect(HAVUZ).toContain('d.tekrarYayinla');
+    expect(B.tr.havuz.tekrarYayinla).toBe('Tekrar yayınla');
     expect(HAVUZ).toContain('function kapat()');
   });
 
@@ -281,12 +300,16 @@ describe('BİLDİRİM HAVUZU — üç hâl, üç düğme takımı', () => {
      * "Tekrar yayınla" diyordu — aynı kartta iki farklı gerçek.
      */
     expect(HAVUZ).toContain('const anahtar = kayit.boostDurumu ?? kayit.status;');
-    expect(HAVUZ).toContain("paused: 'Duraklatıldı'");
+    expect(HAVUZ).toContain('etiketler[anahtar]');
+    expect(B.tr.havuz.durum.paused).toBe('Duraklatıldı');
+    // `active` (kampanya yayında) tabloda yoktu ve ham "active" yazıyordu.
+    expect(B.tr.havuz.durum.active).toBe('Yayında');
   });
 
   it('KRİTİK: GÖNDERİ METNİNİN TAMAMI AÇILABİLİYOR', () => {
     // İki satıra kırpılıyordu ve kırpılan yer çoğu zaman teklifin kendisiydi.
-    expect(HAVUZ).toContain('Metnin tamamı');
+    expect(HAVUZ).toContain('d.metninTamami');
+    expect(B.tr.havuz.metninTamami).toBe('Metnin tamamı');
     expect(HAVUZ).toContain("metinAcik ? '' : 'line-clamp-2'");
   });
 
@@ -338,7 +361,8 @@ describe('BİLDİRİM HAVUZU — üç hâl, üç düğme takımı', () => {
      */
     expect(HAVUZ).toContain("yayinda ? 'scale-105 blur-[3px]' : ''");
     expect(HAVUZ).toContain('{yayinda && (');
-    expect(HAVUZ).toContain('Yayınlandı');
+    expect(HAVUZ).toContain('{d.yayinlandi}');
+    expect(B.tr.havuz.yayinlandi).toBe('Yayınlandı');
   });
 
   it('KRİTİK: SIRALAMA GÖNDERİ TARİHİNE GÖRE — mutlak tarih yazılı', () => {
@@ -350,9 +374,9 @@ describe('BİLDİRİM HAVUZU — üç hâl, üç düğme takımı', () => {
      * İKİ TARİH AYRI: gönderinin yayın tarihi ile reklamın açıldığı tarih
      * arasında haftalar olabiliyor.
      */
-    expect(HAVUZ).toContain('formatTarih(kayit.publishedAt)');
-    expect(HAVUZ).toContain('formatTarih(kayit.launchedAt)');
-    expect(HAVUZ).not.toContain('formatRelative(kayit.publishedAt)');
+    expect(HAVUZ).toContain('formatTarih(kayit.publishedAt, dil)');
+    expect(HAVUZ).toContain('formatTarih(kayit.launchedAt, dil)');
+    expect(HAVUZ).not.toContain('formatRelative(kayit.publishedAt');
   });
 
   it('KRİTİK: görsel `referrerPolicy="no-referrer"` ile çekiliyor', () => {
@@ -372,7 +396,7 @@ describe('BİLDİRİM HAVUZU — üç hâl, üç düğme takımı', () => {
      * bütçeyi çizmese, "sağ sütun var" testi yine yeşil kalırdı.
      */
     expect(HAVUZ).toContain('function SagBolge(');
-    expect(HAVUZ).toContain("formatMoney(kayit.preset.budgetMicros, 'TRY')");
+    expect(HAVUZ).toContain("formatMoney(kayit.preset.budgetMicros, 'TRY', { dil })");
     expect(HAVUZ).toContain('<SagBolge kayit={kayit} />');
   });
 
@@ -382,8 +406,11 @@ describe('BİLDİRİM HAVUZU — üç hâl, üç düğme takımı', () => {
      * sorusunu taşıyor ve ikincisinin cevabı bu ekranda hiç yoktu.
      */
     expect(HAVUZ).toContain('kayit.performance');
-    expect(HAVUZ).toContain('etiket="Harcama"');
-    expect(HAVUZ).toContain('etiket="Dönüşüm"');
+    expect(HAVUZ).toContain('etiket={d.harcama}');
+    expect(HAVUZ).toContain('etiket={d.donusum}');
+    expect(B.tr.havuz.harcama).toBe('Harcama');
+    expect(B.tr.havuz.donusum).toBe('Dönüşüm');
+    expect(B.en.havuz.harcama).toBe('Cost');
   });
 
   it('KRİTİK: SAYI YOKSA SEBEBİ YAZIYOR', () => {
@@ -466,8 +493,10 @@ describe('SADECE BU GÖNDERİ İÇİN — KARTIN ÜSTÜNDE DÜZENLEME', () => {
   it('KRİTİK: bütçe, süre, kitle ve şehir birlikte sunuluyor', () => {
     // Kullanıcının isteği birebir buydu: "kaç gün, toplamda kaç TL, hangi
     // hedef kitle ve şehir".
-    expect(DUZENLE).toContain('Bütçe ve süre');
-    expect(DUZENLE).toContain('Hedef kitle ve şehir');
+    expect(DUZENLE).toContain('{s.butceVeSure}');
+    expect(DUZENLE).toContain('{s.hedefKitleSehir}');
+    expect(B.tr.duzenle.butceVeSure).toBe('Bütçe ve süre');
+    expect(B.tr.duzenle.hedefKitleSehir).toBe('Hedef kitle ve şehir');
     expect(DUZENLE).toContain('durationDays: gun');
   });
 
@@ -491,7 +520,8 @@ describe('SADECE BU GÖNDERİ İÇİN — KARTIN ÜSTÜNDE DÜZENLEME', () => {
      * "düzenle" kelimesi kalıcı bir ayar değişikliği gibi okunuyor.
      */
     expect(DUZENLE).not.toContain('/autoboost/presets');
-    expect(HAVUZ).toContain('Ön ayar değişmiyor');
+    expect(HAVUZ).toContain('{d.onAyarDegismiyor}');
+    expect(B.tr.havuz.onAyarDegismiyor).toContain('Ön ayar değişmiyor');
   });
 
   it('KRİTİK: AYRI PENCERE YOK — alanlar KARTIN ÜSTÜNDE açılıyor', () => {
@@ -519,7 +549,8 @@ describe('SADECE BU GÖNDERİ İÇİN — KARTIN ÜSTÜNDE DÜZENLEME', () => {
   it('KRİTİK: DÜZENLENEN KART İŞARETLİ — ve renkle DEĞİL yalnızca', () => {
     // Bir durumu tek başına renge bağlamak, onu göremeyen kullanıcı için o
     // durumun hiç olmaması demek.
-    expect(HAVUZ).toContain('Düzenleniyor');
+    expect(HAVUZ).toContain('{d.duzenleniyor}');
+    expect(B.tr.havuz.duzenleniyor).toBe('Düzenleniyor');
   });
 
   it('KRİTİK: VAZGEÇ DÜĞMESİ VAR — çıkış yolu gizli tuş değil', () => {
@@ -528,7 +559,8 @@ describe('SADECE BU GÖNDERİ İÇİN — KARTIN ÜSTÜNDE DÜZENLEME', () => {
      * yok ve olmamalı (Esc listesi sayfadaki her kart için kurulurdu).
      * Çıkış yolu GÖRÜNÜR bir düğme.
      */
-    expect(HAVUZ).toContain('Vazgeç');
+    expect(HAVUZ).toContain('{d.vazgec}');
+    expect(B.tr.havuz.vazgec).toBe('Vazgeç');
     expect(HAVUZ).toContain('onClick={() => setDuzenleAcik(false)}');
   });
 
@@ -566,7 +598,8 @@ describe('SADECE BU GÖNDERİ İÇİN — KARTIN ÜSTÜNDE DÜZENLEME', () => {
     // Boş bir alanda "0 ₺ taahhüt" yazmak hesaplanmış bir sayı gibi okunur
     // ve kullanıcı bedava sanır.
     expect(DUZENLE).toContain('return null');
-    expect(DUZENLE).toContain('Tutar girilince toplam taahhüt burada yazacak');
+    expect(DUZENLE).toContain('s.tutarGirilince');
+    expect(B.tr.duzenle.tutarGirilince).toContain('Tutar girilince toplam taahhüt burada yazacak');
   });
 });
 
@@ -645,8 +678,9 @@ describe('İKİ MECRA TEK EKRANDA', () => {
      * yüz kartın arasında kalıyor. Süzgeç o bedeli ödüyor.
      */
     expect(HAVUZ).toContain('DURUM_SUZGECLERI');
-    expect(HAVUZ).toContain("etiket: 'Onay bekliyor'");
-    expect(HAVUZ).toContain("etiket: 'Yayında'");
+    expect(HAVUZ).toContain('SUZGEC_ETIKETI');
+    expect(B.tr.havuz.suzgecBekleyen).toBe('Onay bekliyor');
+    expect(B.tr.havuz.suzgecYayinda).toBe('Yayında');
   });
 
   it('KRİTİK: süzgecin gizlediği kart sayısı YAZILI', () => {
@@ -655,8 +689,10 @@ describe('İKİ MECRA TEK EKRANDA', () => {
      * Ayrıca süzgeç yüzünden boşalan liste, GERÇEKTEN boş listeyle aynı
      * görünmemeli: biri "kart yok", diğeri "kartlar başka sekmede".
      */
-    expect(HAVUZ).toContain('kart süzgeçte');
-    expect(HAVUZ).toContain('Bu süzgeçte kart yok');
+    expect(HAVUZ).toContain('d.suzgecte(');
+    expect(HAVUZ).toContain('d.suzgecBosBaslik');
+    expect(B.tr.havuz.suzgecte(3)).toContain('3 kart süzgeçte');
+    expect(B.tr.havuz.suzgecBosBaslik).toBe('Bu süzgeçte kart yok');
   });
 });
 
@@ -670,7 +706,8 @@ describe('GEÇMİŞ İÇERİK DÜĞMESİ', () => {
    */
   it('KRİTİK: düğme var ve kendi ucunu çağırıyor', () => {
     expect(HAVUZ).toContain("'/autoboost/gecmis-icerik'");
-    expect(HAVUZ).toContain('Geçmiş içerikleri getir');
+    expect(HAVUZ).toContain('d.gecmisGetir');
+    expect(B.tr.havuz.gecmisGetir).toBe('Geçmiş içerikleri getir');
   });
 
   it('KRİTİK: YETKİYE BAĞLI — okuyan kullanıcıda çizilmiyor', () => {

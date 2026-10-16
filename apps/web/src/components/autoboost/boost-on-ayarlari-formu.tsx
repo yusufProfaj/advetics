@@ -25,6 +25,8 @@ import { HedeflemeSecici } from '@/components/autoboost/hedefleme-secici';
 import { GoogleHedefleme, type GoogleKonum } from '@/components/autoboost/google-hedefleme';
 import { Dugme } from '@/components/ui/dugme';
 import { Serit } from '@/components/ui/hal';
+import { useSozluk } from '@/dil/saglayici';
+import { boostSozlugu } from '@/dil/sozlukler/boost';
 
 /**
  * OTOMATİK BOOST ÖN AYARLARI.
@@ -53,6 +55,7 @@ export function BoostOnAyarlariFormu({
   clientId: string;
   canWrite: boolean;
 }) {
+  const d = useSozluk(boostSozlugu).onAyar;
   const [sekme, setSekme] = useState<'meta' | 'google'>('meta');
   const [presets, setPresets] = useState<AutoBoostPresetRecord[] | null>(null);
   const [hata, setHata] = useState<string | null>(null);
@@ -65,8 +68,9 @@ export function BoostOnAyarlariFormu({
       })
       // Hata YUTULMUYOR: "henüz yüklemedim" ile "çağrı düştü" farklı işler.
       .catch((err: unknown) =>
-        setHata(err instanceof ApiRequestError ? err.message : 'Ön ayarlar yüklenemedi.'),
+        setHata(err instanceof ApiRequestError ? err.message : d.yuklenemedi),
       );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- dil değişince ön ayar yeniden çekilmesin
   }, [clientId]);
 
   const mevcut = presets?.find((p) => p.platform === sekme) ?? null;
@@ -76,10 +80,9 @@ export function BoostOnAyarlariFormu({
     // pencerenin içinde kutu içinde kutu çiziyordu.
     <section className="min-w-0 space-y-4">
       <header className="min-w-0">
-        <h2 className="text-sm font-semibold text-ink">Otomatik boost ön ayarları</h2>
+        <h2 className="text-sm font-semibold text-ink">{d.baslik}</h2>
         <p className="mt-0.5 text-xs text-ink-muted">
-          Kart onaylandığında bu ayarlarla yayınlanır. Ön ayar yoksa kart
-          onaylanamaz.
+          {d.aciklama}
         </p>
       </header>
 
@@ -104,7 +107,7 @@ export function BoostOnAyarlariFormu({
       </div>
 
       {hata && <p className="text-xs text-danger">{hata}</p>}
-      {!presets && !hata && <p className="text-xs text-ink-muted">Yükleniyor…</p>}
+      {!presets && !hata && <p className="text-xs text-ink-muted">{d.yukleniyor}</p>}
 
       {presets &&
         (sekme === 'meta' ? (
@@ -153,6 +156,7 @@ function Kaydet({
   canWrite: boolean;
   onKaydet: () => void;
 }) {
+  const d = useSozluk(boostSozlugu).onAyar;
   return (
     <div className="space-y-2">
       {hata && <p className="max-w-lg text-xs text-danger">{hata}</p>}
@@ -160,9 +164,9 @@ function Kaydet({
       <Dugme
         onClick={onKaydet}
         disabled={busy || !canWrite}
-        title={canWrite ? undefined : 'Ön ayar yazma yetkin yok'}
+        title={canWrite ? undefined : d.yetkiYok}
       >
-        {busy ? 'Kaydediliyor…' : 'Kaydet'}
+        {busy ? d.kaydediliyor : d.kaydet}
       </Dugme>
     </div>
   );
@@ -178,6 +182,9 @@ function MetaForm({
   canWrite: boolean;
 }) {
   const s = mevcut?.settings.platform === 'meta' ? mevcut.settings : null;
+  const d = useSozluk(boostSozlugu);
+  const o = d.onAyar;
+  const dz = d.duzenle;
 
   const [enabled, setEnabled] = useState(mevcut?.enabled ?? true);
   const [mode, setMode] = useState<'daily' | 'lifetime'>(mevcut?.budgetMode ?? 'lifetime');
@@ -297,9 +304,9 @@ function MetaForm({
         }),
       });
       if (kitleId && sablonAlaniVar) sablonuTemizle();
-      setSonuc('Kaydedildi. Yeni Instagram gönderileri bu ayarlarla yayınlanacak.');
+      setSonuc(o.kaydedildiMeta);
     } catch (err) {
-      setHata(err instanceof ApiRequestError ? err.message : 'Kaydedilemedi.');
+      setHata(err instanceof ApiRequestError ? err.message : o.kaydedilemedi);
     } finally {
       setBusy(false);
     }
@@ -310,20 +317,20 @@ function MetaForm({
       <Acik enabled={enabled} setEnabled={setEnabled} />
 
       <div className="grid gap-2 sm:grid-cols-3">
-        <Alan etiket="Bütçe kipi">
+        <Alan etiket={o.butceKipi}>
           <select
             value={mode}
             onChange={(e) => setMode(e.target.value as 'daily' | 'lifetime')}
             className={input}
           >
-            <option value="lifetime">Toplam</option>
-            <option value="daily">Günlük</option>
+            <option value="lifetime">{dz.toplam}</option>
+            <option value="daily">{dz.gunluk}</option>
           </select>
         </Alan>
-        <Alan etiket="Tutar (₺)">
+        <Alan etiket={o.tutar}>
           <input value={amount} onChange={(e) => setAmount(e.target.value)} className={input} />
         </Alan>
-        <Alan etiket="Süre (gün)">
+        <Alan etiket={o.sureGun}>
           <input
             type="number"
             min={1}
@@ -335,18 +342,15 @@ function MetaForm({
         </Alan>
       </div>
 
-      <Alan
-        etiket="Amaç"
-        ipucu="Boost bugün her seçimde etkileşime (beğeni, yorum, kaydetme) göre kuruluyor. Satış ya da form için AdvCampaign."
-      >
+      <Alan etiket={o.amac} ipucu={o.amacIpucu}>
         <select
           value={goal}
           onChange={(e) => setGoal(e.target.value as typeof goal)}
           className={input}
         >
-          <option value="engagement">Etkileşim</option>
-          <option value="reach">Erişim</option>
-          <option value="profile_visits">Profil ziyareti</option>
+          <option value="engagement">{o.etkilesim}</option>
+          <option value="reach">{o.erisim}</option>
+          <option value="profile_visits">{o.profilZiyareti}</option>
         </select>
       </Alan>
 
@@ -355,31 +359,31 @@ function MetaForm({
       {sablonAlaniVar && (
         <div className="rounded-md border border-line bg-surface-muted p-2 text-xs">
           {ilgiler.length > 0 && (
-            <p className="text-ink">İlgi: {ilgiler.map((i) => i.name).join(', ')}</p>
+            <p className="text-ink">{o.ilgi(ilgiler.map((i) => i.name).join(', '))}</p>
           )}
-          {ozelKitleler.map((o) => (
-            <p key={o.id} className="text-ink">
-              {o.mod === 'dahil' ? 'Özel kitle' : 'Hariç'}: {o.name}
+          {ozelKitleler.map((ok) => (
+            <p key={ok.id} className="text-ink">
+              {ok.mod === 'dahil' ? o.ozelKitle : o.haric}: {ok.name}
             </p>
           ))}
           {ozelKitleler.length > 0 && (
             <p className="mt-1 text-ink-muted">
-              Özel kitleler {ozelKitleler[0]!.hesapAdi} hesabının. Başka hesaba bağlı bir sayfanın gönderisi bu ön ayarla yayınlanamaz.
+              {o.ozelKitleHesap(ozelKitleler[0]!.hesapAdi)}
             </p>
           )}
           {kitleId && (
             <p className="mt-1 text-danger-strong">
-              Meta kayıtlı kitlesi seçili. İlgi alanları ve özel kitleler kaydedince kaldırılacak.
+              {o.kitleSeciliUyari}
             </p>
           )}
           <button type="button" onClick={sablonuTemizle} className="mt-1 text-ink-muted underline">
-            İlgi ve özel kitleleri kaldır
+            {o.ilgiKaldir}
           </button>
         </div>
       )}
 
       <div className="grid gap-2 sm:grid-cols-3">
-        <Alan etiket="Yaş (alt)">
+        <Alan etiket={dz.yasAlt}>
           <input
             type="number"
             min={13}
@@ -389,7 +393,7 @@ function MetaForm({
             className={input}
           />
         </Alan>
-        <Alan etiket="Yaş (üst)">
+        <Alan etiket={dz.yasUst}>
           <input
             type="number"
             min={13}
@@ -399,15 +403,15 @@ function MetaForm({
             className={input}
           />
         </Alan>
-        <Alan etiket="Cinsiyet">
+        <Alan etiket={dz.cinsiyet}>
           <select
             value={cinsiyet}
             onChange={(e) => setCinsiyet(e.target.value as typeof cinsiyet)}
             className={input}
           >
-            <option value="all">Hepsi</option>
-            <option value="female">Kadın</option>
-            <option value="male">Erkek</option>
+            <option value="all">{dz.hepsi}</option>
+            <option value="female">{dz.kadin}</option>
+            <option value="male">{dz.erkek}</option>
           </select>
         </Alan>
       </div>
@@ -446,6 +450,7 @@ function SablondanDoldur({
   sablonId: string | null;
   onSec: (k: KitleSablonuRecord) => void;
 }) {
+  const d = useSozluk(boostSozlugu).onAyar;
   const [liste, setListe] = useState<KitleSablonuRecord[] | undefined>(undefined);
   const [hata, setHata] = useState<string | null>(null);
 
@@ -455,25 +460,22 @@ function SablondanDoldur({
     apiFetch<KitleSablonuListesi>(`/audience-templates?clientId=${clientId}`)
       .then((r) => setListe(r.items))
       .catch((err: unknown) =>
-        setHata(err instanceof ApiRequestError ? err.message : 'Kitle şablonları okunamadı.'),
+        setHata(err instanceof ApiRequestError ? err.message : d.sablonOkunamadi),
       );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- dil değişince şablonlar yeniden çekilmesin
   }, [clientId]);
 
-  if (hata) return <p className="text-xs text-danger-strong">Kitle şablonları okunamadı: {hata}</p>;
-  if (liste === undefined) return <p className="text-xs text-ink-muted">Kitle şablonları yükleniyor…</p>;
+  if (hata) return <p className="text-xs text-danger-strong">{d.sablonOkunamadiMesaj(hata)}</p>;
+  if (liste === undefined) return <p className="text-xs text-ink-muted">{d.sablonYukleniyor}</p>;
   if (liste.length === 0) {
-    return <p className="text-xs text-ink-muted">Marka Merkezi’nde kayıtlı kitle şablonu yok.</p>;
+    return <p className="text-xs text-ink-muted">{d.sablonYok}</p>;
   }
 
   const kaynak = sablonId ? liste.find((k) => k.id === sablonId) : undefined;
   return (
     <Alan
-      etiket="Kitle şablonundan doldur"
-      ipucu={
-        sablonId && !kaynak
-          ? 'Doldurulduğu şablon silinmiş; ayarlar ön ayarda duruyor.'
-          : 'Şablon kopyalanır. Şablonu sonradan değiştirmek bu ön ayarı değiştirmez.'
-      }
+      etiket={d.sablondanDoldur}
+      ipucu={sablonId && !kaynak ? d.sablonSilinmis : d.sablonKopyalanir}
     >
       <select
         value=""
@@ -483,7 +485,7 @@ function SablondanDoldur({
         }}
         className={input}
       >
-        <option value="">{kaynak ? `Son doldurulan: ${kaynak.name}` : 'Şablon seç'}</option>
+        <option value="">{kaynak ? d.sonDoldurulan(kaynak.name) : d.sablonSec}</option>
         {liste.map((k) => (
           <option key={k.id} value={k.id}>
             {k.name} ({kitleOzeti(k)})
@@ -519,6 +521,8 @@ function GoogleForm({
   canWrite: boolean;
 }) {
   const s = mevcut?.settings.platform === 'google' ? mevcut.settings : null;
+  const o = useSozluk(boostSozlugu).onAyar;
+  const dz = useSozluk(boostSozlugu).duzenle;
 
   const [enabled, setEnabled] = useState(mevcut?.enabled ?? true);
   const [amount, setAmount] = useState(
@@ -554,8 +558,9 @@ function GoogleForm({
       // HATA YUTULMUYOR: "otomatik bilgiler okunamadı" ile "eksik yok"
       // aynı boş kutuya dönerse kullanıcı yayının hazır olduğunu sanır.
       .catch((err: unknown) =>
-        setOtomatikHata(err instanceof ApiRequestError ? err.message : 'Otomatik bilgiler okunamadı.'),
+        setOtomatikHata(err instanceof ApiRequestError ? err.message : o.otomatikOkunamadi),
       );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- dil değişince yeniden çekilmesin
   }, [clientId, sonuc]);
 
   async function kaydet(): Promise<void> {
@@ -585,9 +590,9 @@ function GoogleForm({
           },
         }),
       });
-      setSonuc('Kaydedildi. Yeni videolar bu bütçe ve hedef kitleyle, kendi başlıklarıyla yayınlanacak.');
+      setSonuc(o.ytKaydedildi);
     } catch (err) {
-      setHata(err instanceof ApiRequestError ? err.message : 'Kaydedilemedi.');
+      setHata(err instanceof ApiRequestError ? err.message : o.kaydedilemedi);
     } finally {
       setBusy(false);
     }
@@ -603,7 +608,7 @@ function GoogleForm({
             ilk canlı provada (2026-10-09) tam bununla reddedildi. TL tutarı
             YAZILMIYOR: kura bağlı ve Google'ın kendi rakamı provanın
             ayrıntısında görünüyor; sabit bir TL burada bir gün yalan olur. */}
-        <Alan etiket="Günlük bütçe (₺)" ipucu="Google'da toplam bütçe yok. Google günde en az 5 USD karşılığı istiyor, altı reddedilir.">
+        <Alan etiket={o.gunlukButce} ipucu={o.gunlukButceIpucu}>
           <input
             value={amount}
             inputMode="decimal"
@@ -611,7 +616,7 @@ function GoogleForm({
             className={input}
           />
         </Alan>
-        <Alan etiket="Süre (gün)">
+        <Alan etiket={o.sureGun}>
           <input
             type="number"
             min={1}
@@ -643,36 +648,14 @@ function GoogleForm({
         Kullanıcı bunu bilerek istedi (2026-09-25); ilk denemenin küçük
         bütçeyle yapılması gerektiği burada söylenmeli.
       */}
-      <Serit baslik="Kart onaylandığında kampanya yayına girer ve süre bitince durur.">
-        YouTube yayını ilk kez canlıda deneniyor: ilk denemeyi küçük bir bütçeyle yap. Erken
-        durdurmak şimdilik Google Ads&apos;ten.
+      <Serit baslik={o.seritBaslik}>
+        {o.seritGovde}
       </Serit>
 
       <Kaydet busy={busy} hata={hata} sonuc={sonuc} canWrite={canWrite} onKaydet={() => void kaydet()} />
     </div>
   );
 }
-
-const MARKA_KAYNAGI: Record<YoutubeOtomatikOnizleme['marka']['kaynak'], string> = {
-  'on-ayar': 'Ön ayarda seçilmiş',
-  workspace: 'Workspace adı',
-  kanal: 'YouTube kanal adı',
-  kisaltildi: 'Workspace adı, 25 karaktere kısaltıldı',
-  yok: 'Bulunamadı',
-};
-
-const LOGO_KAYNAGI: Record<YoutubeOtomatikOnizleme['logo']['kaynak'], string> = {
-  'on-ayar': 'Ön ayarda seçilmiş',
-  'profil-logosu': 'Marka logosu',
-  kanal: 'YouTube kanal görseli (ilk yayında arşive eklenir)',
-  yok: 'Bulunamadı',
-};
-
-const URL_KAYNAGI: Record<YoutubeOtomatikOnizleme['url']['kaynak'], string> = {
-  'on-ayar': 'Ön ayarda seçilmiş',
-  workspace: 'Workspace web sitesi',
-  yok: 'Bulunamadı',
-};
 
 /**
  * OTOMATİK DOLAN BİLGİLER — her biri KAYNAĞIYLA.
@@ -692,14 +675,15 @@ function OtomatikBilgiler({
   eskiSecim: boolean;
   onOtomatigeGec: () => void;
 }) {
+  const o = useSozluk(boostSozlugu).onAyar;
   if (hata) {
     return (
       <p role="alert" className="text-xs text-danger">
-        Otomatik bilgiler okunamadı: {hata}
+        {o.otomatikOkunamadiMesaj(hata)}
       </p>
     );
   }
-  if (!otomatik) return <p className="text-xs text-ink-muted">Otomatik bilgiler yükleniyor…</p>;
+  if (!otomatik) return <p className="text-xs text-ink-muted">{o.otomatikYukleniyor}</p>;
 
   const eksikVar = otomatik.eksikler.length > 0;
   return (
@@ -710,7 +694,7 @@ function OtomatikBilgiler({
       }`}
     >
       <p className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">
-        Otomatik doldurulanlar
+        {o.otomatikDoldurulanlar}
       </p>
 
       <div className="flex items-center gap-3">
@@ -720,25 +704,25 @@ function OtomatikBilgiler({
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={otomatik.logo.onizleme}
-            alt="Reklam logosu"
+            alt={o.logoAlt}
             className="size-12 shrink-0 rounded-alan border border-line bg-surface object-cover"
           />
         ) : (
           <span className="grid size-12 shrink-0 place-items-center rounded-alan border border-dashed border-line text-[10px] text-ink-muted">
-            logo yok
+            {o.logoYok}
           </span>
         )}
         <dl className="min-w-0 space-y-1 text-xs">
           <Satir
-            etiket="Marka adı"
+            etiket={o.markaAdi}
             deger={otomatik.marka.deger}
-            kaynak={MARKA_KAYNAGI[otomatik.marka.kaynak]}
+            kaynak={o.markaKaynagi[otomatik.marka.kaynak]}
           />
-          <Satir etiket="Logo" deger={null} kaynak={LOGO_KAYNAGI[otomatik.logo.kaynak]} />
+          <Satir etiket="Logo" deger={null} kaynak={o.logoKaynagi[otomatik.logo.kaynak]} />
           <Satir
-            etiket="Hedef adres"
+            etiket={o.hedefAdres}
             deger={otomatik.url.deger}
-            kaynak={URL_KAYNAGI[otomatik.url.kaynak]}
+            kaynak={o.urlKaynagi[otomatik.url.kaynak]}
           />
         </dl>
       </div>
@@ -746,19 +730,18 @@ function OtomatikBilgiler({
       {otomatik.ornek ? (
         <div className="rounded-md bg-surface px-2.5 py-2 text-xs">
           <p className="text-[11px] text-ink-muted">
-            Son videodan örnek: <span className="text-ink">{otomatik.ornek.videoBasligi}</span>
+            {o.sonVideodanOrnek} <span className="text-ink">{otomatik.ornek.videoBasligi}</span>
           </p>
           <p className="mt-1 font-semibold text-ink">{otomatik.ornek.baslik}</p>
           <p className="text-ink">{otomatik.ornek.uzunBaslik}</p>
           <p className="text-ink-muted">{otomatik.ornek.aciklama}</p>
           <p className="mt-1 text-[11px] text-ink-muted">
-            Metinler her videonun kendi başlığından üretilir; açıklama yayın anında
-            videonun açıklamasından alınır.
+            {o.metinlerUretilir}
           </p>
         </div>
       ) : (
         <p className="text-[11px] text-ink-muted">
-          Henüz video gelmedi. Metinler her videonun kendi başlığından üretilecek.
+          {o.videoGelmedi}
         </p>
       )}
 
@@ -774,15 +757,15 @@ function OtomatikBilgiler({
 
       {eskiSecim && (
         <p className="text-[11px] text-ink-muted">
-          Bu ön ayarda daha önce elle seçilmiş değerler var.{' '}
+          {o.eskiSecimBas}
           <button
             type="button"
             onClick={onOtomatigeGec}
             className="font-medium text-brand-strong underline-offset-2 hover:underline"
           >
-            Otomatiğe geç
-          </button>{' '}
-          (kaydedince uygulanır)
+            {o.otomatigeGec}
+          </button>
+          {o.eskiSecimSon}
         </p>
       )}
     </section>
@@ -808,6 +791,7 @@ function Acik({
   enabled: boolean;
   setEnabled: (v: boolean) => void;
 }) {
+  const o = useSozluk(boostSozlugu).onAyar;
   return (
     <label className="flex items-center gap-2">
       <input
@@ -816,11 +800,11 @@ function Acik({
         onChange={(e) => setEnabled(e.target.checked)}
         className="size-4"
       />
-      <span className="text-sm text-ink">Otomatik boost açık</span>
+      <span className="text-sm text-ink">{o.acik}</span>
       {/* KAPALIYKEN KART ÜRETİLMİYOR — bu, ekranda yazılmazsa "neden kart
           gelmiyor" sorusunu doğuran sessiz bir ayar olurdu. */}
       <span className="text-[11px] text-ink-muted">
-        (kapalıyken yeni içerik için kart oluşmaz)
+        {o.acikNot}
       </span>
     </label>
   );

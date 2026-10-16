@@ -3,6 +3,8 @@
 import type { YoutubeProvaSonucu } from '@advetics/shared';
 import { formatMoney } from '@/lib/format';
 import { DurumNoktasi } from '@/components/ui/rozet';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { boostSozlugu } from '@/dil/sozlukler/boost';
 
 /**
  * ═══ YOUTUBE PROVASININ SONUCU ═══
@@ -18,17 +20,19 @@ export type ProvaDurumu =
   | { tur: 'hata'; mesaj: string };
 
 export function YoutubeProvaSonucuKutusu({ durum }: { durum: ProvaDurumu }) {
+  const d = useSozluk(boostSozlugu).prova;
+  const { dil } = useDil();
   if (durum.tur === 'yukleniyor') {
     return (
       <p className="text-[11px] text-ink-muted" aria-live="polite">
-        Google’a soruluyor (hiçbir şey kurulmuyor)…
+        {d.soruluyor}
       </p>
     );
   }
   if (durum.tur === 'hata') {
     return (
       <p role="alert" className="rounded-alan border border-danger/40 bg-danger-soft px-3 py-2 text-xs text-danger-strong">
-        Prova yapılamadı: {durum.mesaj}
+        {d.yapilamadi(durum.mesaj)}
       </p>
     );
   }
@@ -48,9 +52,7 @@ export function YoutubeProvaSonucuKutusu({ durum }: { durum: ProvaDurumu }) {
         <span className="mt-[5px]">
           <DurumNoktasi hal={ok ? 'ok' : 'hata'} />
         </span>
-        {ok
-          ? 'Google bu kampanyayı kabul ediyor. Hiçbir şey kurulmadı, para harcanmadı.'
-          : `Google ${hatalar.length} sorun buldu. Hiçbir şey kurulmadı.`}
+        {ok ? d.kabul : d.sorunBuldu(hatalar.length)}
       </p>
       {!ok && (
         <ul className="space-y-1">
@@ -68,30 +70,28 @@ export function YoutubeProvaSonucuKutusu({ durum }: { durum: ProvaDurumu }) {
         </ul>
       )}
       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-ink">
-        <dt className="text-ink-muted">Bütçe</dt>
-        <dd>
-          {formatMoney(ozet.gunlukButceMicros, 'TRY')} / gün · {ozet.sureGun} gün (bitiş {ozet.bitis})
-        </dd>
-        <dt className="text-ink-muted">Açılış</dt>
-        <dd>{ozet.acilis === 'PAUSED' ? 'Duraklatılmış kurulur, Google Ads’ten başlatılır' : 'Kurulunca yayına girer'}</dd>
-        <dt className="text-ink-muted">Konum</dt>
+        <dt className="text-ink-muted">{d.butce}</dt>
+        <dd>{d.butceSatiri(formatMoney(ozet.gunlukButceMicros, 'TRY', { dil }), ozet.sureGun, ozet.bitis)}</dd>
+        <dt className="text-ink-muted">{d.acilis}</dt>
+        <dd>{ozet.acilis === 'PAUSED' ? d.acilisDuraklatilmis : d.acilisYayinda}</dd>
+        <dt className="text-ink-muted">{d.konum}</dt>
         <dd>{ozet.konumlar.join(', ')}</dd>
-        <dt className="text-ink-muted">Yaş</dt>
-        <dd>{ozet.yaslar.length === 0 ? 'Kısıt yok' : ozet.yaslar.map((y) => y.replace('AGE_RANGE_', '').replace('_UP', '+').replace('_', '-')).join(', ')}</dd>
-        <dt className="text-ink-muted">Yerleşim</dt>
+        <dt className="text-ink-muted">{d.yas}</dt>
+        <dd>{ozet.yaslar.length === 0 ? d.kisitYok : ozet.yaslar.map((y) => y.replace('AGE_RANGE_', '').replace('_UP', '+').replace('_', '-')).join(', ')}</dd>
+        <dt className="text-ink-muted">{d.yerlesim}</dt>
         <dd>{ozet.kanallar.join(', ')}</dd>
-        <dt className="text-ink-muted">Başlık</dt>
+        <dt className="text-ink-muted">{d.baslik}</dt>
         <dd>{ozet.baslik}</dd>
-        <dt className="text-ink-muted">Uzun başlık</dt>
+        <dt className="text-ink-muted">{d.uzunBaslik}</dt>
         <dd>{ozet.uzunBaslik}</dd>
-        <dt className="text-ink-muted">Açıklama</dt>
+        <dt className="text-ink-muted">{d.aciklama}</dt>
         <dd>{ozet.aciklama}</dd>
-        <dt className="text-ink-muted">İşletme</dt>
+        <dt className="text-ink-muted">{d.isletme}</dt>
         <dd>
           {ozet.isletmeAdi} · {ozet.adres}
         </dd>
         <dt className="text-ink-muted">Logo</dt>
-        <dd>{ozet.logo === 'kayitli' ? 'Hesapta kayıtlı' : 'Yayında yüklenecek (prova logoyu da sınadı)'}</dd>
+        <dd>{ozet.logo === 'kayitli' ? d.logoKayitli : d.logoYuklenecek}</dd>
       </dl>
     </div>
   );

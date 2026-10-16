@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { boostSozlugu } from '@/dil/sozlukler/boost';
 
 /*
  * Akıllı Boost ön ayar formu Marka Merkezi kitle şablonunu okuyor. Panelde
@@ -47,7 +48,8 @@ describe('ön ayar formu — kitle şablonu', () => {
 
   it('şablon listesi hatayı yutmuyor ve dört hâli ayrı yazıyor', () => {
     const g = govde('function SablondanDoldur(');
-    expect(g).toContain("setHata(err instanceof ApiRequestError ? err.message : 'Kitle şablonları okunamadı.')");
+    expect(g).toContain('setHata(err instanceof ApiRequestError ? err.message : d.sablonOkunamadi)');
+    expect(boostSozlugu.tr.onAyar.sablonOkunamadi).toBe('Kitle şablonları okunamadı.');
     expect(g).toContain('if (liste === undefined)');
     expect(g).toContain('if (liste.length === 0)');
     expect(K).not.toMatch(/\.catch\(\(\) => set/);

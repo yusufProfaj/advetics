@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { BoostOnAyarlariFormu } from './boost-on-ayarlari-formu';
 import { Dugme } from '@/components/ui/dugme';
 import { Pencere } from '@/components/ui/pencere';
+import { useSozluk } from '@/dil/saglayici';
+import { boostSozlugu } from '@/dil/sozlukler/boost';
 
 /**
  * ═══ BOOST ÖN AYARI — AUTO-BOOST'UN İÇİNDEN ═══
@@ -31,7 +33,7 @@ import { Pencere } from '@/components/ui/pencere';
 export function BoostOnAyariDugmesi({
   clientId,
   canWrite,
-  etiket = 'Boost ön ayarı',
+  etiket,
   ton = 'ikincil',
 }: {
   clientId: string;
@@ -40,6 +42,7 @@ export function BoostOnAyariDugmesi({
   etiket?: string;
   ton?: 'birincil' | 'ikincil';
 }) {
+  const d = useSozluk(boostSozlugu).onAyar;
   const [acik, setAcik] = useState(false);
   /*
    * FORM HER AÇILIŞTA YENİDEN KURULUYOR (`key`). Pencere kapalıyken DOM'da
@@ -69,15 +72,15 @@ export function BoostOnAyariDugmesi({
   return (
     <>
       <Dugme ton={ton} onClick={ac}>
-        {etiket}
+        {etiket ?? d.dugme}
       </Dugme>
 
       <Pencere
         acik={acik}
         onKapat={kapat}
         genislik="genis"
-        baslik="Boost ön ayarı"
-        aciklama="Onayladığın her kart bu ayarlarla yayınlanır. Ayar bu workspace’e kaydediliyor."
+        baslik={d.dugme}
+        aciklama={d.pencereAciklama}
       >
         {/* Gövde Pencere'nin içinde kayıyor, başlık sabit: 14 alanlı formda
             "Kaydet" ekran dışında kalıyordu (şablon modalıyla aynı ders). */}

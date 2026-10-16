@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { boostSozlugu } from '@/dil/sozlukler/boost';
 
 /**
  * YOUTUBE KARTINDA REKLAM METNİ — kartta düzeltilen metin gerçekten gidiyor,
@@ -32,8 +33,10 @@ describe('YouTube kart metni', () => {
   });
 
   it('KRİTİK: yükleme hatası YUTULMUYOR', () => {
-    expect(ALAN).toContain("setHata(err instanceof ApiRequestError ? err.message : 'Reklam metni yüklenemedi.')");
-    expect(ALAN).toContain('yayınlarsan metin videodan üretilir');
+    expect(ALAN).toContain('setHata(err instanceof ApiRequestError ? err.message : s.metinYuklenemedi)');
+    expect(boostSozlugu.tr.duzenle.metinYuklenemedi).toBe('Reklam metni yüklenemedi.');
+    expect(ALAN).toContain('s.metinAcilamadi(hata)');
+    expect(boostSozlugu.tr.duzenle.metinAcilamadi('x')).toContain('yayınlarsan metin videodan üretilir');
   });
 
   it('Google sınırları girişte — sayaç ve maxLength', () => {

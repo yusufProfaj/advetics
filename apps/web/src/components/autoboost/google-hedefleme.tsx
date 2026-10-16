@@ -7,6 +7,8 @@ import {
   type GoogleYasAraligi,
 } from '@advetics/shared';
 import { ApiRequestError, apiFetch } from '@/lib/api';
+import { useSozluk } from '@/dil/saglayici';
+import { boostSozlugu } from '@/dil/sozlukler/boost';
 
 export interface GoogleKonum {
   key: string;
@@ -56,6 +58,8 @@ export function GoogleHedefleme({
   yaslar: GoogleYasAraligi[];
   setYaslar: (y: GoogleYasAraligi[]) => void;
 }) {
+  const d = useSozluk(boostSozlugu).google;
+  const h = useSozluk(boostSozlugu).hedefleme;
   const [q, setQ] = useState('');
   const [sonuc, setSonuc] = useState<GeoLocationOption[]>([]);
   const [durum, setDurum] = useState<AramaDurumu>('bos');
@@ -83,11 +87,12 @@ export function GoogleHedefleme({
         })
         .catch((err: unknown) => {
           setSonuc([]);
-          setHata(err instanceof ApiRequestError ? err.message : 'Konum araması yapılamadı.');
+          setHata(err instanceof ApiRequestError ? err.message : d.konumAramasiYapilamadi);
           setDurum('bitti');
         });
     }, 350);
     return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- yalnız hata cümlesi için; dil değişince arama yenilenmesin
   }, [q, reklamHesabiId]);
 
   function ekle(o: GeoLocationOption): void {
@@ -104,15 +109,17 @@ export function GoogleHedefleme({
 
   return (
     <section className="space-y-4 rounded-kart border border-line px-3 py-3">
-      <p className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">Hedef kitle</p>
+      <p className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">{d.hedefKitle}</p>
 
       {/* ═══ KONUM ═══ */}
       <div className="space-y-2">
-        <p className="text-sm font-medium text-ink">Konum</p>
+        <p className="text-sm font-medium text-ink">{d.konum}</p>
 
         {konumlar.length === 0 ? (
           <p className="text-xs text-ink-muted">
-            Seçilmedi: reklam <strong className="text-ink">Türkiye</strong> genelinde gösterilir.
+            {d.secilmediBas}
+            <strong className="text-ink">{d.secilmediVurgu}</strong>
+            {d.secilmediSon}
           </p>
         ) : (
           <ul className="flex flex-wrap gap-1.5">
@@ -123,7 +130,7 @@ export function GoogleHedefleme({
                   <button
                     type="button"
                     onClick={() => setKonumlar(konumlar.filter((x) => x.key !== k.key))}
-                    aria-label={`${k.label} konumunu kaldır`}
+                    aria-label={d.konumuKaldir(k.label)}
                     className="grid size-5 place-items-center rounded-full text-ink-muted transition hover:bg-surface hover:text-ink"
                   >
                     ×
@@ -140,19 +147,19 @@ export function GoogleHedefleme({
               type="search"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Şehir, il ya da ülke ara"
-              aria-label="Konum ara"
+              placeholder={d.konumAraOrnek}
+              aria-label={d.konumAra}
               disabled={konumlar.length >= KONUM_SINIRI}
               className="w-full rounded-alan border border-line bg-surface px-2.5 py-1.5 text-sm text-ink outline-none focus:border-brand disabled:opacity-50"
             />
-            {durum === 'araniyor' && <p className="text-[11px] text-ink-muted">Aranıyor…</p>}
+            {durum === 'araniyor' && <p className="text-[11px] text-ink-muted">{h.araniyor}</p>}
             {hata && (
               <p role="alert" className="text-[11px] text-danger">
                 {hata}
               </p>
             )}
             {durum === 'bitti' && !hata && sonuc.length === 0 && (
-              <p className="text-[11px] text-ink-muted">“{q.trim()}” için konum bulunamadı.</p>
+              <p className="text-[11px] text-ink-muted">{d.konumBulunamadi(q.trim())}</p>
             )}
             {sonuc.length > 0 && (
               <ul className="max-h-48 divide-y divide-line overflow-y-auto rounded-alan border border-line bg-surface">
@@ -170,7 +177,7 @@ export function GoogleHedefleme({
                           {o.label}
                         </span>
                         <span className="shrink-0 text-[11px] text-ink-muted">
-                          {secili ? 'eklendi' : 'ekle'}
+                          {secili ? d.eklendi : d.ekle}
                         </span>
                       </button>
                     </li>
@@ -179,7 +186,7 @@ export function GoogleHedefleme({
               </ul>
             )}
             {konumlar.length >= KONUM_SINIRI && (
-              <p className="text-[11px] text-ink-muted">En fazla {KONUM_SINIRI} konum seçilebilir.</p>
+              <p className="text-[11px] text-ink-muted">{d.enFazla(KONUM_SINIRI)}</p>
             )}
           </div>
         ) : (
@@ -189,15 +196,15 @@ export function GoogleHedefleme({
            * göstermek, her harfte hata veren bir kutu göstermek olurdu.
            */
           <p className="text-[11px] text-warn-strong">
-            Konum aramak için YouTube kanalına bir Google reklam hesabı bağlı olmalı.
+            {d.hesapYok}
           </p>
         )}
       </div>
 
       {/* ═══ YAŞ ═══ */}
       <div className="space-y-2">
-        <p className="text-sm font-medium text-ink">Yaş</p>
-        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Yaş aralıkları">
+        <p className="text-sm font-medium text-ink">{d.yas}</p>
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label={d.yasAraliklari}>
           {GOOGLE_YAS_ARALIKLARI.map((y) => {
             const secili = yaslar.includes(y);
             return (
@@ -218,9 +225,7 @@ export function GoogleHedefleme({
           })}
         </div>
         <p className="text-[11px] text-ink-muted">
-          {tumYaslar
-            ? 'Seçilmedi: bütün yaşlar hedeflenir.'
-            : 'Yalnızca seçilen yaşlar hedeflenir; yaşı bilinmeyen izleyiciler dahil değil.'}
+          {tumYaslar ? d.yasSecilmedi : d.yasSecili}
         </p>
       </div>
     </section>

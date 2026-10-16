@@ -17,8 +17,15 @@ import { BoostOnAyariDugmesi } from '@/components/autoboost/boost-on-ayari';
 import { SayfaBasligi } from '@/components/ui/sayfa-basligi';
 import { Rozet, type DurumHali } from '@/components/ui/rozet';
 import { BosDurum, Serit } from '@/components/ui/hal';
+import { dilAl } from '@/dil/sunucu';
+import { boostSozlugu } from '@/dil/sozlukler/boost';
+import { menuBolumuEtiketi, menuSatiriEtiketi } from '@/lib/nav-sections';
+import { sec, type Dil } from '@advetics/shared';
 
-export const metadata = { title: 'Akıllı Boost · Advetics' };
+/** Sekme başlığı istek anında: dil çerezden okunuyor (CEVIRI-REHBERI §2). */
+export async function generateMetadata() {
+  return { title: `${menuSatiriEtiketi('/auto-boost', await dilAl())} · Advetics` };
+}
 export const dynamic = 'force-dynamic';
 
 /**
@@ -60,6 +67,9 @@ export default async function AutoBoostPage({
 }) {
   const session = await requireSession();
   const params = await searchParams;
+  const dil = await dilAl();
+  const d = sec(boostSozlugu, dil).sayfa;
+  const dk = sec(boostSozlugu, dil);
 
   // SESSİZCE İLK WORKSPACE'E DÜŞÜLMÜYOR — gerekçe `lib/sayfa-workspace.ts`.
   const clientId = sayfaWorkspaceId(session, first(params.musteri));
@@ -67,8 +77,8 @@ export default async function AutoBoostPage({
   if (!clientId) {
     return (
       <WorkspaceGerekli
-        ekran="Akıllı Boost"
-        neden="Akıllı Boost workspace bazında çalışıyor."
+        ekran={menuSatiriEtiketi('/auto-boost', dil)}
+        neden={d.workspaceNeden}
         {...workspaceSecimVerisi(session)}
       />
     );
@@ -138,8 +148,8 @@ export default async function AutoBoostPage({
         belirleyen tek yer orası ve sayfadaki diğer her şey onun sonucu.
       */}
       <SayfaBasligi
-        bolum="Oluştur"
-        baslik="Akıllı Boost"
+        bolum={menuBolumuEtiketi('/auto-boost', dil)}
+        baslik={menuSatiriEtiketi('/auto-boost', dil)}
         aciklama={clientName}
         eylemler={canWrite ? <BoostOnAyariDugmesi clientId={clientId} canWrite={canWrite} /> : undefined}
       />
@@ -172,8 +182,8 @@ export default async function AutoBoostPage({
       <BildirimHavuzu clientId={clientId} canWrite={canWrite} />
 
       {boosts === null ? (
-        <Serit ton="hata" baslik="Boost listesi okunamadı.">
-          {hataMetni(boostSonuc)}
+        <Serit ton="hata" baslik={d.boostListesiOkunamadi}>
+          {hataMetni(boostSonuc, dk.sunucuyaUlasilamadi)}
         </Serit>
       ) : (
         candidates.length > 0 && (
@@ -190,19 +200,19 @@ export default async function AutoBoostPage({
                 buradakiler ise kuralın performansa bakıp seçtikleri.
               */}
               <h2 className="text-sm font-semibold text-ink">
-                Kuralın seçtikleri
-                <span className="ml-2 font-normal text-ink-muted">{candidates.length} gönderi</span>
+                {d.kuralinSectikleri}
+                <span className="ml-2 font-normal text-ink-muted">{d.gonderi(candidates.length)}</span>
               </h2>
               {/* TOPLAM TAAHHÜT ÜSTTE. Tek tek onaylarken kaç para
                   bağlandığını görmek, her karardan sonra hesap yapmaktan
                   daha güvenilir. */}
               <span className="text-sm text-ink-muted">
-                toplam {formatMoney(pendingTotal.toString(), currency)}
+                {d.toplamTutar(formatMoney(pendingTotal.toString(), currency, { dil }))}
               </span>
             </div>
             <div className="mt-3 space-y-3">
               {candidates.map((b) => (
-                <BoostCard key={b.id} boost={b} currency={currency} canApprove={canApprove} />
+                <BoostCard key={b.id} boost={b} currency={currency} canApprove={canApprove} dil={dil} />
               ))}
             </div>
           </section>
@@ -214,34 +224,34 @@ export default async function AutoBoostPage({
         kullanıcıya kuralı silinmiş gibi bir ekran gösteriyordu.
       */}
       {rules === null ? (
-        <Serit ton="hata" baslik="Kurallar okunamadı.">
-          {hataMetni(kuralSonuc)}
+        <Serit ton="hata" baslik={d.kurallarOkunamadi}>
+          {hataMetni(kuralSonuc, dk.sunucuyaUlasilamadi)}
         </Serit>
       ) : (
-        <RuleList rules={rules} currency={currency} canWrite={canWrite} />
+        <RuleList rules={rules} currency={currency} canWrite={canWrite} dil={dil} />
       )}
 
       {gecmis.length > 0 && (
         <section className="overflow-hidden rounded-kart border border-line bg-surface">
           <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line px-4 py-3">
-            <h2 className="text-sm font-semibold text-ink">Geçmiş</h2>
+            <h2 className="text-sm font-semibold text-ink">{d.gecmis}</h2>
             {/* SESSİZ KESME YOK: kaç tanesi gösteriliyor ve toplam kaç. */}
             <span className="text-[11px] text-ink-muted">
               {others.length > gecmis.length
-                ? `son ${gecmis.length} · toplam ${others.length}`
-                : `${others.length} boost`}
+                ? d.gecmisKesik(gecmis.length, others.length)
+                : d.boostSayisi(others.length)}
             </span>
           </div>
           <ul className="divide-y divide-line/60">
             {gecmis.map((b) => (
-              <GecmisSatiri key={b.id} boost={b} currency={currency} />
+              <GecmisSatiri key={b.id} boost={b} currency={currency} dil={dil} />
             ))}
           </ul>
         </section>
       )}
 
       {boosts !== null && boosts.length === 0 && rules !== null && rules.length === 0 && (
-        <EmptyState />
+        <EmptyState dil={dil} />
       )}
     </div>
   );
@@ -251,11 +261,14 @@ function BoostCard({
   boost,
   currency,
   canApprove,
+  dil,
 }: {
   boost: BoostRecord;
   currency: string | null;
   canApprove: boolean;
+  dil: Dil;
 }) {
+  const d = sec(boostSozlugu, dil).sayfa;
   const p = boost.post;
   return (
     <div className="flex flex-wrap gap-3 rounded-kart border border-line bg-surface p-3 sm:flex-nowrap">
@@ -280,7 +293,7 @@ function BoostCard({
         <div className="flex flex-wrap items-center gap-2">
           <StatusChip status={boost.status} />
           <span className="text-[11px] text-ink-muted">
-            {p.socialProfileName} · {formatRelative(p.publishedAt)}
+            {p.socialProfileName} · {formatRelative(p.publishedAt, dil)}
           </span>
           {p.permalink && (
             <a
@@ -289,7 +302,7 @@ function BoostCard({
               rel="noreferrer noopener"
               className="text-[11px] text-brand-strong hover:underline"
             >
-              Gönderiyi aç
+              {d.gonderiyiAc}
             </a>
           )}
         </div>
@@ -302,22 +315,22 @@ function BoostCard({
             Kuralın gerekçesi tek bir metriği anıyor; burada tam tablo var
             ki onaylayan kişi kuralın kararını doğrulayabilsin. */}
         <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-ink-muted">
-          <Stat label={BOOST_METRIC_META.reach.label} value={formatNumber(p.reach)} />
-          <Stat label={BOOST_METRIC_META.engagements.label} value={formatNumber(p.engagements)} />
+          <Stat label={BOOST_METRIC_META.reach.label} value={formatNumber(p.reach, dil)} />
+          <Stat label={BOOST_METRIC_META.engagements.label} value={formatNumber(p.engagements, dil)} />
           <Stat
             label={BOOST_METRIC_META.engagement_rate.label}
             value={
               p.engagementRate === null
                 ? '—'
-                : `%${p.engagementRate.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}`
+                : yuzde(p.engagementRate, dil)
             }
           />
-          <Stat label="Yorum" value={formatNumber(p.comments)} />
-          <Stat label="Paylaşım" value={formatNumber(p.shares)} />
+          <Stat label={d.yorum} value={formatNumber(p.comments, dil)} />
+          <Stat label={d.paylasim} value={formatNumber(p.shares, dil)} />
         </dl>
 
         <p className="mt-1.5 text-[11px] text-ink-muted">
-          <span className="font-medium text-ink">Seçilme sebebi:</span> {boost.reason}
+          <span className="font-medium text-ink">{d.secilmeSebebi}</span> {boost.reason}
           {boost.boostRuleName && ` (${boost.boostRuleName})`}
         </p>
 
@@ -332,16 +345,15 @@ function BoostCard({
           {boost.budgetMode === 'lifetime' ? (
             <>
               <strong className="text-ink">
-                {formatMoney(boost.totalBudgetMicros, currency)}
+                {formatMoney(boost.totalBudgetMicros, currency, { dil })}
               </strong>{' '}
-              toplam · {boost.durationDays} gün
+              {d.toplamGun(boost.durationDays)}
             </>
           ) : (
             <>
-              {formatMoney(boost.dailyBudgetMicros, currency)}/gün × {boost.durationDays} gün
-              ={' '}
+              {d.gunlukCarpim(formatMoney(boost.dailyBudgetMicros, currency, { dil }), boost.durationDays)}{' '}
               <strong className="text-ink">
-                {formatMoney(boost.totalBudgetMicros, currency)}
+                {formatMoney(boost.totalBudgetMicros, currency, { dil })}
               </strong>
             </>
           )}{' '}
@@ -368,24 +380,27 @@ function RuleList({
   rules,
   currency,
   canWrite,
+  dil,
 }: {
   rules: BoostRuleRecord[];
   currency: string | null;
   canWrite: boolean;
+  dil: Dil;
 }) {
+  const d = sec(boostSozlugu, dil).sayfa;
   if (rules.length === 0) return null;
 
   return (
     <section className="overflow-hidden rounded-kart border border-line bg-surface">
       <div className="border-b border-line px-4 py-3">
-        <h2 className="text-sm font-semibold text-ink">Boost kuralları</h2>
+        <h2 className="text-sm font-semibold text-ink">{d.kurallar}</h2>
         {/*
           SIKLIK KURALIN YANINDA, SAYFA BAŞLIĞINDA DEĞİL. Başlıkta dururken
           bütün ekran için geçerli gibi okunuyordu; oysa yeni içerik kartları
           yayınlandığı anda düşüyor ve yalnızca kurallar günde iki kez
           değerlendiriliyor.
         */}
-        <p className="mt-0.5 text-[11px] text-ink-muted">Her gün 08:30 ve 20:30'da çalışıyor.</p>
+        <p className="mt-0.5 text-[11px] text-ink-muted">{d.kuralZamani}</p>
       </div>
       <div className="divide-y divide-line/60">
         {rules.map((r) => {
@@ -396,24 +411,24 @@ function RuleList({
             <div key={r.id} className="p-4">
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="text-sm font-medium text-ink">{r.name}</h3>
-                {!r.enabled && <Rozet hal="dur">Kapalı</Rozet>}
+                {!r.enabled && <Rozet hal="dur">{d.kapali}</Rozet>}
                 {r.autoApprove && (
                   // OTOMATİK ONAY GÖRÜNÜR OLMALI: bu kural insan onayı
                   // beklemeden para taahhüt ediyor. Durum değil uyarı: kırmızı
                   // yazılı hap, nokta yok (bir hata ya da canlı yayın değil).
                   <span className="inline-flex h-6 shrink-0 items-center whitespace-nowrap rounded-full border border-line-strong px-2.5 text-12 font-bold text-danger-strong">
-                    Otomatik onay
+                    {d.otomatikOnay}
                   </span>
                 )}
               </div>
 
-              <p className="mt-1 text-sm text-ink-muted">{describe(r)}</p>
+              <p className="mt-1 text-sm text-ink-muted">{describe(r, dil)}</p>
 
               <div className="mt-2">
                 <div className="flex items-baseline justify-between text-[11px] text-ink-muted">
                   <span>
-                    Aylık tavan: {formatMoney(r.committedThisMonthMicros, currency)} /{' '}
-                    {formatMoney(r.monthlyCapMicros, currency)}
+                    {d.aylikTavan} {formatMoney(r.committedThisMonthMicros, currency, { dil })} /{' '}
+                    {formatMoney(r.monthlyCapMicros, currency, { dil })}
                   </span>
                   <span>%{pct}</span>
                 </div>
@@ -428,8 +443,8 @@ function RuleList({
               </div>
 
               <p className="mt-1.5 text-[11px] text-ink-muted">
-                {r.socialProfileName ?? 'Tüm profiller'} ·{' '}
-                {r.lastRunAt ? `son çalışma ${formatRelative(r.lastRunAt)}` : 'henüz çalışmadı'}
+                {r.socialProfileName ?? d.tumProfiller} ·{' '}
+                {r.lastRunAt ? d.sonCalisma(formatRelative(r.lastRunAt, dil)) : d.henuzCalismadi}
               </p>
 
               {canWrite && (
@@ -445,15 +460,16 @@ function RuleList({
   );
 }
 
-function describe(r: BoostRuleRecord): string {
+function describe(r: BoostRuleRecord, dil: Dil): string {
+  const d = sec(boostSozlugu, dil).sayfa;
   const parts = r.conditions.map(
     (c) =>
       `${BOOST_METRIC_META[c.metric].label} ${c.operator === 'gte' ? '≥' : '>'} ${c.value}${
         BOOST_METRIC_META[c.metric].unit === 'percent' ? '%' : ''
       }`,
   );
-  const joined = parts.join(r.combinator === 'and' ? ' VE ' : ' VEYA ');
-  return `${r.minPostAgeHours}–${r.maxPostAgeHours} saatlik gönderilerden ${joined} olanları ${r.durationDays} gün boost et.`;
+  const joined = parts.join(r.combinator === 'and' ? d.ve : d.veya);
+  return d.kuralCumlesi(r.minPostAgeHours, r.maxPostAgeHours, joined, r.durationDays);
 }
 
 /*
@@ -490,16 +506,16 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function EmptyState() {
+function EmptyState({ dil }: { dil: Dil }) {
+  const d = sec(boostSozlugu, dil).sayfa;
   return (
     <BosDurum
-      baslik="Henüz boost kuralı yok"
+      baslik={d.bosBaslik}
       neden={
         <>
-          Akıllı Boost, iyi giden organik gönderileri bulup reklama çevirir. Kural gönderiyi
-          seçer, sen onaylarsın, sistem kampanyayı açar. Her aday <strong>onay bekler</strong> ve
-          onay düğmesinde taahhüt edilecek toplam tutar yazar. Kuralın aylık bir harcama tavanı
-          var; tavan dolduğunda yeni aday üretilmez.
+          {d.bosNedenBas}
+          <strong>{d.bosNedenVurgu}</strong>
+          {d.bosNedenSon}
         </>
       }
     />
@@ -512,11 +528,9 @@ function EmptyState() {
  * "Veri alınamadı" kullanıcıyı sebebi kendi kurulumunda aramaya gönderiyor;
  * oysa mesaj çoğu zaman doğrudan söylüyor (yetki yok, workspace bulunamadı).
  */
-function hataMetni(sonuc: PromiseSettledResult<unknown>): string {
+function hataMetni(sonuc: PromiseSettledResult<unknown>, ulasilamadi: string): string {
   if (sonuc.status === 'fulfilled') return '';
-  return sonuc.reason instanceof ApiRequestError
-    ? sonuc.reason.message
-    : 'Sunucuya ulaşılamadı.';
+  return sonuc.reason instanceof ApiRequestError ? sonuc.reason.message : ulasilamadi;
 }
 
 /**
@@ -528,7 +542,7 @@ function hataMetni(sonuc: PromiseSettledResult<unknown>): string {
  * Aynı görsel ağırlığı vermek, sayfanın asıl işini (onay) geçmişin içinde
  * kaybediyordu.
  */
-function GecmisSatiri({ boost, currency }: { boost: BoostRecord; currency: string | null }) {
+function GecmisSatiri({ boost, currency, dil }: { boost: BoostRecord; currency: string | null; dil: Dil }) {
   return (
     <li className="flex items-center gap-3 px-4 py-2.5">
       {boost.post.thumbnailUrl ? (
@@ -549,8 +563,8 @@ function GecmisSatiri({ boost, currency }: { boost: BoostRecord; currency: strin
           {boost.post.message || boost.post.socialProfileName}
         </p>
         <p className="text-[11px] text-ink-muted">
-          {boost.post.socialProfileName} · {formatRelative(boost.createdAt)} ·{' '}
-          {formatMoney(boost.totalBudgetMicros, currency)}
+          {boost.post.socialProfileName} · {formatRelative(boost.createdAt, dil)} ·{' '}
+          {formatMoney(boost.totalBudgetMicros, currency, { dil })}
         </p>
         {/* HATA SATIRDA KALIYOR: başarısız bir boost'un sebebini görmek için
             başka bir ekrana gitmek gerekmemeli. */}
@@ -560,6 +574,12 @@ function GecmisSatiri({ boost, currency }: { boost: BoostRecord; currency: strin
       <StatusChip status={boost.status} />
     </li>
   );
+}
+
+/** `%12,5` (TR) / `12.5%` (EN): en çok iki ondalık, sondaki sıfırlar atılır. */
+function yuzde(n: number, dil: Dil): string {
+  const s = n.toLocaleString(dil === 'en' ? 'en-US' : 'tr-TR', { maximumFractionDigits: 2 });
+  return dil === 'en' ? `${s}%` : `%${s}`;
 }
 
 function first(v: string | string[] | undefined): string | undefined {
