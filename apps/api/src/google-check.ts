@@ -264,6 +264,40 @@ async function main(): Promise<void> {
    *
    * Hesap zaten veritabanında ve `manager_external_id` orada duruyor.
    */
+  /**
+   * SATIR SONDASI — `--account <uuid> --sorgu "SELECT … FROM …"`.
+   *
+   * Alan sondası yalnız "geçerli mi" diyor; "kaç satır dönüyor" demiyor.
+   * Google kategori listesi (`user_interest`) canlıda BOŞ döndü (2026-10-16)
+   * ve dört alan da geçerliydi: ayıran tek şey ham satırlar. SALT OKUNUR;
+   * satır sayısı ve ilk üç satır ham hâliyle basılıyor.
+   */
+  const sorgu = arg('sorgu');
+  if (sorgu && accountUuid) {
+    const account = await db.adAccount.findUnique({
+      where: { id: accountUuid },
+      select: { name: true, externalId: true, managerExternalId: true, platform: true },
+    });
+    if (!account || account.platform !== 'google') {
+      console.log(`\n  ✗ Google reklam hesabı bulunamadı: ${accountUuid}\n`);
+      await app.close();
+      process.exit(1);
+    }
+    head(`Satır sondası — ${account.name} (${account.externalId})`);
+    const search = (
+      provider as unknown as { searchGaql: (t: string, c: string, q: string, l?: string) => Promise<unknown[]> }
+    ).searchGaql.bind(provider);
+    try {
+      const satirlar = await search(accessToken, account.externalId, sorgu, account.managerExternalId ?? undefined);
+      ok('sorgu', `${satirlar.length} satır`);
+      console.log(indent(JSON.stringify(satirlar.slice(0, 3), null, 2)));
+    } catch (err) {
+      bad('sorgu', err);
+    }
+    await app.close();
+    process.exit(failed > 0 ? 1 : 0);
+  }
+
   if (probeFields && accountUuid) {
     const account = await db.adAccount.findUnique({
       where: { id: accountUuid },
