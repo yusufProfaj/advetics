@@ -132,6 +132,16 @@ describe('tempo cümleleri', () => {
   });
 });
 
+describe('tempo cümleleri İngilizce', () => {
+  it('KRİTİK: Türkçe iyelik eki İngilizceye sızmıyor, tutar en-US biçiminde', () => {
+    const c = tempoCumleleri(pacing({ projectedMicros: tl(87_400) }), 'TRY', BUGUN, 'en').map((x) => x.metin);
+    expect(c[0]).toBe('As of yesterday, 26% of the month has passed and 25% of the budget is spent');
+    expect(c[1]).toContain('10% over budget');
+    expect(c[1]).not.toMatch(/87\.400/);
+    expect(c.join(' ')).not.toMatch(/%\d/);
+  });
+});
+
 describe('asimYuzdesi', () => {
   it('KRİTİK: aşım YUKARI yuvarlanıyor — 30 kuruşluk aşım "%0" değil', () => {
     expect(asimYuzdesi(BigInt(tl(10_000)) + 300_000n, BigInt(tl(10_000)))).toBe(1n);

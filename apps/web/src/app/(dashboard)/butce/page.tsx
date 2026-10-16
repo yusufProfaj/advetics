@@ -4,8 +4,15 @@ import { WorkspaceGerekli } from '@/components/workspace-gerekli';
 import { SayfaBasligi } from '@/components/ui/sayfa-basligi';
 import { Uyari } from '@/components/ui/uyari';
 import { ButceIcerik } from '@/components/butce/butce-icerik';
+import { menuBolumuEtiketi, menuSatiriEtiketi } from '@/lib/nav-sections';
+import { dilAl } from '@/dil/sunucu';
+import { butceSozlugu } from '@/dil/sozlukler/butce';
+import { sec } from '@advetics/shared';
 
-export const metadata = { title: 'Aylık Bütçe · Advetics' };
+/** Başlık istek anında: dil çerezden okunuyor. */
+export async function generateMetadata() {
+  return { title: `${menuSatiriEtiketi('/butce', await dilAl())} · Advetics` };
+}
 export const dynamic = 'force-dynamic';
 
 /**
@@ -26,22 +33,26 @@ export default async function ButcePage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const session = await requireSession();
+  const dil = await dilAl();
+  const d = sec(butceSozlugu, dil).sayfa;
+  const ad = menuSatiriEtiketi('/butce', dil);
   const params = await searchParams;
 
   const clientId = sayfaWorkspaceId(session, first(params.musteri));
   if (!clientId) {
     return (
       <WorkspaceGerekli
-        ekran="Aylık Bütçe"
-        neden="Bütçe bir workspace’in reklam hesapları için tanımlanıyor."
+        ekran={ad}
+        neden={d.workspaceNeden}
         {...workspaceSecimVerisi(session)}
       />
     );
   }
 
   const basliklar = {
-    baslik: 'Aylık Bütçe',
-    aciklama: 'Ay ay harcama hedefi ve gidişat. Plan AdvStrategy’de, burada ayın taahhüdü.',
+    baslik: ad,
+    aciklama: d.aciklama,
+    bolum: menuBolumuEtiketi('/butce', dil),
   };
   const baslik = <SayfaBasligi {...basliklar} />;
 
@@ -49,8 +60,8 @@ export default async function ButcePage({
     return (
       <div className="space-y-5">
         {baslik}
-        <Uyari ton="uyari" baslik="Bütçeleri görme yetkin yok.">
-          Yöneticine sor.
+        <Uyari ton="uyari" baslik={d.yetkiYok}>
+          {d.yoneticineSor}
         </Uyari>
       </div>
     );

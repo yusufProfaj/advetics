@@ -1,5 +1,7 @@
 import type { BudgetPacing } from '@advetics/shared';
+import { sec, type Dil } from '@advetics/shared';
 import { formatDayShort, formatMoney } from '@/lib/format';
+import { butceSozlugu } from '@/dil/sozlukler/butce';
 
 /**
  * ═══ AYIN TEMPOSU — BÜTÇE KARTININ CÜMLELERİ ═══
@@ -40,9 +42,13 @@ export function sayiEki(n: number): string {
   return 'i'; // bin (milyon yüzdesi bu kartta yok)
 }
 
-function yuzde(oran: number): string {
+/**
+ * Türkçede iyelik ekli ("%26’sı"), İngilizcede eksiz ("26%"): ek kuralı
+ * yalnız Türkçenin, İngilizceye uygulamak "26%’sı" gibi bozuk metin üretirdi.
+ */
+function yuzde(oran: number, dil: Dil): string {
   const n = Math.round(oran * 100);
-  return `%${n}’${sayiEki(n)}`;
+  return dil === 'en' ? `${n}%` : `%${n}’${sayiEki(n)}`;
 }
 
 /** Bugünün `YYYY-MM-DD`si — UTC, kartın ay anahtarıyla aynı saat dilimi. */
@@ -73,12 +79,15 @@ export function asimYuzdesi(tahmin: bigint, butce: bigint): bigint | null {
  *   hesaplarda farklı para birimi var: tutar cümleleri YAZILMIYOR, kart
  *   bunu zaten söylüyor. Karışık birimde tek tutar yazmak yanlış sayı olurdu.
  * @param bugun Testte sabitlenebilsin diye; ekranda bugünün tarihi.
+ * @param dil Cümlelerin dili; verilmezse Türkçe.
  */
 export function tempoCumleleri(
   p: BudgetPacing,
   birim: string | null,
   bugun: string = bugunUtc(),
+  dil: Dil = 'tr',
 ): TempoCumlesi[] {
+  const d = sec(butceSozlugu, dil).tempo;
   // Bütçe yoksa tempo yok: kart "Tanımla →" diyor, oran uydurulmaz.
   if (!p.budget || p.spentRatio === null) return [];
 
@@ -88,7 +97,7 @@ export function tempoCumleleri(
    * geçti" ve boş bir tahmin yazmak yerine nedenini söylüyoruz.
    */
   if (p.daysElapsed === 0) {
-    return [{ metin: 'Ay yeni başladı, tempo yarın hesaplanır', uyari: false }];
+    return [{ metin: d.yeniBasladi, uyari: false }];
   }
 
   /*
@@ -98,10 +107,10 @@ export function tempoCumleleri(
    * olabilirdi.
    */
   const itibariyla =
-    p.throughDate === dunu(bugun) ? 'Dün itibarıyla' : `${formatDayShort(p.throughDate)} itibarıyla`;
+    p.throughDate === dunu(bugun) ? d.dun : d.tarihItibariyla(formatDayShort(p.throughDate, dil));
   const cumleler: TempoCumlesi[] = [
     {
-      metin: `${itibariyla} ayın ${yuzde(p.elapsedRatio)} geçti, bütçenin ${yuzde(p.spentRatio)} harcandı`,
+      metin: d.ozet(itibariyla, yuzde(p.elapsedRatio, dil), yuzde(p.spentRatio, dil)),
       uyari: false,
     },
   ];
@@ -111,16 +120,16 @@ export function tempoCumleleri(
   if (p.projectedMicros !== null) {
     const tahmin = BigInt(p.projectedMicros);
     const butce = BigInt(p.budget.amountMicros);
-    const tutar = formatMoney(p.projectedMicros, birim, { decimals: 0 });
+    const tutar = formatMoney(p.projectedMicros, birim, { decimals: 0, dil });
     if (butce > 0n && tahmin > butce) {
       /*
        * YUKARI YUVARLANIYOR: bütçeyi 30 kuruş aşan tahmin "%0 aşar" demesin.
        * Aşım varsa sayı en az 1.
        */
       const asim = asimYuzdesi(tahmin, butce);
-      cumleler.push({ metin: `Bu hızla ay sonu: ${tutar} · bütçeyi %${asim} aşar`, uyari: true });
+      cumleler.push({ metin: d.aySonuAsim(tutar, String(asim)), uyari: true });
     } else {
-      cumleler.push({ metin: `Bu hızla ay sonu: ${tutar}`, uyari: false });
+      cumleler.push({ metin: d.aySonu(tutar), uyari: false });
     }
   }
 
@@ -131,7 +140,7 @@ export function tempoCumleleri(
    */
   if (p.daysRemaining > 0 && p.suggestedDailyMicros !== null && BigInt(p.suggestedDailyMicros) > 0n) {
     cumleler.push({
-      metin: `Kalan günlerde günde ${formatMoney(p.suggestedDailyMicros, birim, { decimals: 0 })} harcanabilir`,
+      metin: d.gunluk(formatMoney(p.suggestedDailyMicros, birim, { decimals: 0, dil })),
       uyari: false,
     });
   }

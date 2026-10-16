@@ -1,4 +1,6 @@
-import type { BudgetPacing, ClientPacing } from '@advetics/shared';
+import { sec, type BudgetPacing, type ClientPacing, type Dil } from '@advetics/shared';
+import { dilAl } from '@/dil/sunucu';
+import { butceSozlugu } from '@/dil/sozlukler/butce';
 import { requireSession, hasPermission } from '@/lib/session';
 import { ApiRequestError, serverApiFetch } from '@/lib/api';
 import { formatDayLong, formatMoney } from '@/lib/format';
@@ -42,11 +44,13 @@ export async function ButceIcerik({
   clientId: string;
   params: Record<string, string | string[] | undefined>;
   /** Sayfa başlığı BURADA çiziliyor: birincil eylem ayın verisini istiyor. */
-  baslik: { baslik: string; aciklama: string };
+  baslik: { baslik: string; aciklama: string; bolum: string };
 }) {
   const session = await requireSession();
+  const dil = await dilAl();
+  const d = sec(butceSozlugu, dil);
 
-  const months = selectableMonths();
+  const months = selectableMonths(dil, d.plan);
   const selected = months.find((m) => m.key === first(params.ay)) ?? months.find((m) => m.current)!;
 
 
@@ -59,7 +63,7 @@ export async function ButceIcerik({
    */
   const okuma = await serverApiFetch<ClientPacing>(`/budgets/pacing?${qs}`).then(
     (v) => ({ ok: true as const, v }),
-    (e: unknown) => ({ ok: false as const, hata: e instanceof ApiRequestError ? e.message : 'Sunucuya ulaşılamadı.' }),
+    (e: unknown) => ({ ok: false as const, hata: e instanceof ApiRequestError ? e.message : d.sunucuyaUlasilamadi }),
   );
   const data = okuma.ok ? okuma.v : null;
 
@@ -87,14 +91,14 @@ export async function ButceIcerik({
         tetik={{
           ton: 'birincil',
           boyut: 'orta',
-          metin: data.overall.budget ? 'Bütçeyi düzenle' : 'Bütçe tanımla',
+          metin: data.overall.budget ? d.form.butceyiDuzenle : d.form.tanimla,
         }}
       />
     ) : undefined;
 
   return (
     <div className="grid gap-5">
-      <SayfaBasligi baslik={baslik.baslik} aciklama={baslik.aciklama} eylemler={birincil} />
+      <SayfaBasligi baslik={baslik.baslik} aciklama={baslik.aciklama} bolum={baslik.bolum} eylemler={birincil} />
       {/*
         AY SEÇİMİ BÖLÜMLÜ SEÇİCİ (onaylı taslak `#butce`): aynı verinin ay ay
         görünümü, sayfa değil. Bağlantı olarak: ay adreste taşınıyor ve
@@ -102,10 +106,10 @@ export async function ButceIcerik({
       */}
       <div className="flex flex-wrap items-center gap-2.5">
         <BolumluBaglantilar
-          etiket="Ay"
+          etiket={d.ay}
           secenekler={months.map((m) => ({
             href: linkWith({ ay: m.key }),
-            etiket: m.future ? `${m.short} · plan` : m.short,
+            etiket: m.future ? `${m.short} · ${m.planEtiketi}` : m.short,
             secili: m.key === selected.key,
           }))}
         />
@@ -115,14 +119,14 @@ export async function ButceIcerik({
       </div>
 
       {data === null ? (
-        <HataDurumu baslik="Bütçe verisi alınamadı" mesaj={okuma.ok ? 'Sunucu sebep bildirmedi.' : okuma.hata} />
+        <HataDurumu baslik={d.veriAlinamadi} mesaj={okuma.ok ? d.sebepYok : okuma.hata} />
       ) : (
         <>
-          <Warnings pacing={data} />
+          <Warnings pacing={data} dil={dil} />
 
-          <OverallCard pacing={data.overall} currency={data.currency} future={selected.future} />
+          <OverallCard pacing={data.overall} currency={data.currency} future={selected.future} dil={dil} />
 
-          <AccountTable data={data} month={selected.key} canWrite={canWrite} />
+          <AccountTable data={data} month={selected.key} canWrite={canWrite} dil={dil} />
         </>
       )}
     </div>
@@ -133,15 +137,16 @@ export async function ButceIcerik({
 // Uyarılar — veriyi olduğundan iyi göstermemek için
 // -----------------------------------------------------------------------------
 
-function Warnings({ pacing }: { pacing: ClientPacing }) {
+function Warnings({ pacing, dil }: { pacing: ClientPacing; dil: Dil }) {
   const o = pacing.overall;
+  const d = sec(butceSozlugu, dil).uyari;
+  const para = (m: string, cur: string) => formatMoney(m, cur, { dil });
   const notices: React.ReactNode[] = [];
 
   if (o.excludedCurrencies.length > 0) {
     notices.push(
-      <Serit key="fx" baslik={`Farklı para birimindeki harcama toplama dâhil edilmedi (${o.excludedCurrencies.join(', ')})`}>
-        Kur çevrimi henüz yok; karışık bir toplamı bütçeyle karşılaştırmak yanıltıcı olurdu. O hesapları tabloda
-        ayrı ayrı görebilirsin.
+      <Serit key="fx" baslik={d.kurFarkli(o.excludedCurrencies.join(', '))}>
+        {d.kurNeden}
       </Serit>,
     );
   }
@@ -151,9 +156,8 @@ function Warnings({ pacing }: { pacing: ClientPacing }) {
   // bütçeyi artırmasına yol açabilirdi.
   if (o.daysElapsed > 0 && o.daysWithData > 0 && o.daysWithData < o.daysElapsed) {
     notices.push(
-      <Serit key="coverage" baslik={`Eksik veri: ${o.daysElapsed} günün ${o.daysWithData} günü senkronize`}>
-        Harcama ve tüketim oranı olduğundan düşük görünüyor. Eksik günler çekilene kadar bu sayfadaki hız yorumu
-        güvenilir değil.
+      <Serit key="coverage" baslik={d.eksikVeri(o.daysElapsed, o.daysWithData)}>
+        {d.eksikVeriNeden}
       </Serit>,
     );
   }
@@ -165,9 +169,9 @@ function Warnings({ pacing }: { pacing: ClientPacing }) {
   if (as?.asimMicros && o.budget) {
     const cur = o.budget.currency;
     notices.push(
-      <Serit key="aysonu" ton="uyari" baslik={`Bugünkü günlük bütçelerle ay sonunda yaklaşık ${formatMoney(as.aySonuMicros, cur)} harcanır; aylık bütçe ${formatMoney(as.asimMicros, cur)} aşılır`}>
-        Yayındaki günlük bütçelerin toplamı {formatMoney(as.gunlukToplamMicros, cur)}. {PLATFORM_ESNEKLIK_NOTU}
-        {as.omurBoyuSayisi > 0 && ` Ömür boyu bütçeli ${as.omurBoyuSayisi} kampanya bu hesaba katılmadı.`}
+      <Serit key="aysonu" ton="uyari" baslik={d.aySonuBaslik(para(as.aySonuMicros, cur), para(as.asimMicros, cur))}>
+        {d.aySonuGovde(para(as.gunlukToplamMicros, cur))} {PLATFORM_ESNEKLIK_NOTU}
+        {as.omurBoyuSayisi > 0 && ` ${d.omurBoyu(as.omurBoyuSayisi)}`}
       </Serit>,
     );
   }
@@ -177,9 +181,9 @@ function Warnings({ pacing }: { pacing: ClientPacing }) {
       <Serit
         key="alert"
         ton={o.status === 'exhausted' ? 'hata' : 'uyari'}
-        baslik={`Uyarı eşiği aşıldı: bütçenin %${((o.spentRatio ?? 0) * 100).toLocaleString('tr-TR', { maximumFractionDigits: 1 })}'i harcandı`}
+        baslik={d.esik(((o.spentRatio ?? 0) * 100).toLocaleString(dil === 'en' ? 'en-US' : 'tr-TR', { maximumFractionDigits: 1 }))}
       >
-        Eşik %{o.budget.alertThresholdPct}.
+        {d.esikDeger(o.budget.alertThresholdPct)}
       </Serit>,
     );
   }
@@ -196,40 +200,44 @@ function OverallCard({
   pacing,
   currency,
   future,
+  dil,
 }: {
   pacing: BudgetPacing;
   currency: string | null;
   future: boolean;
+  dil: Dil;
 }) {
+  const d = sec(butceSozlugu, dil).genel;
   const cur = pacing.budget?.currency ?? currency;
+  const para = (m: string | null) => formatMoney(m, cur, { dil });
 
   return (
     <section className="min-w-0 overflow-hidden rounded-kart border border-line bg-surface">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4">
         <div className="min-w-0">
-          <h3 className="m-0 font-baslik text-15 font-bold text-ink">Workspace geneli</h3>
+          <h3 className="m-0 font-baslik text-15 font-bold text-ink">{d.baslik}</h3>
           <small className="text-12 text-ink-muted">
-            Tüm reklam hesaplarının toplamı
-            {!future && <> · {formatDayLong(pacing.throughDate)} tarihine kadar</>}
+            {d.altBaslik}
+            {!future && <> · {d.tarihineKadar(formatDayLong(pacing.throughDate, dil))}</>}
           </small>
         </div>
-        <StatusChip status={pacing.status} />
+        <StatusChip status={pacing.status} dil={dil} />
       </div>
 
       <div className="grid gap-3.5 p-5">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <div className="flex flex-wrap items-baseline gap-x-2">
             <span className="font-baslik text-28 font-extrabold tabular-nums tracking-[-0.02em] text-ink">
-              {formatMoney(pacing.spentMicros, cur)}
+              {para(pacing.spentMicros)}
             </span>
             {pacing.budget ? (
-              <span className="text-14 text-ink-muted">/ {formatMoney(pacing.budget.amountMicros, cur)} harcandı</span>
+              <span className="text-14 text-ink-muted">{d.harcandi(para(pacing.budget.amountMicros))}</span>
             ) : (
-              <span className="text-14 text-ink-muted">harcandı · bütçe tanımlı değil</span>
+              <span className="text-14 text-ink-muted">{d.butceYok}</span>
             )}
           </div>
         </div>
-        <PacingBar pacing={pacing} />
+        <PacingBar pacing={pacing} dil={dil} />
         {/* "HIZLI" HATA DEĞİL OLABİLİR: platformlar tek günde günlük bütçeyi
             aşabiliyor (belgeli). Yalnız hızlıyken; dolduysa artık söylenecek
             olan bu değil. */}
@@ -242,19 +250,19 @@ function OverallCard({
           <MetrikKutulari
             cerceveli={false}
             kutular={[
-              { anahtar: 'kalan', ad: 'Kalan', deger: formatMoney(pacing.remainingMicros, cur) },
-              { anahtar: 'gun', ad: 'Kalan gün', deger: `${pacing.daysRemaining} / ${pacing.daysTotal}` },
+              { anahtar: 'kalan', ad: d.kalan, deger: para(pacing.remainingMicros) },
+              { anahtar: 'gun', ad: d.kalanGun, deger: `${pacing.daysRemaining} / ${pacing.daysTotal}` },
               {
                 anahtar: 'gunluk',
-                ad: 'Günlük harcanabilir',
-                deger: formatMoney(pacing.suggestedDailyMicros, cur),
-                ipucu: 'Kalan bütçe ÷ kalan gün',
+                ad: d.gunlukHarcanabilir,
+                deger: para(pacing.suggestedDailyMicros),
+                ipucu: d.gunlukIpucu,
               },
               {
                 anahtar: 'tahmin',
-                ad: 'Ay sonu tahmini',
-                deger: formatMoney(pacing.projectedMicros, cur),
-                ipucu: 'Bu hızla devam edilirse',
+                ad: d.aySonuTahmini,
+                deger: para(pacing.projectedMicros),
+                ipucu: d.aySonuIpucu,
               },
             ]}
           />
@@ -272,16 +280,19 @@ function AccountTable({
   data,
   month,
   canWrite,
+  dil,
 }: {
   data: ClientPacing;
   month: string;
   canWrite: boolean;
+  dil: Dil;
 }) {
+  const d = sec(butceSozlugu, dil).hesaplar;
   if (data.accounts.length === 0) {
     return (
       <BosDurum
-        baslik="Reklam hesabı yok"
-        neden="Bu workspace’e bağlı reklam hesabı yok. Hesap atanınca bütçesi burada tanımlanır."
+        baslik={d.yokBaslik}
+        neden={d.yokNeden}
       />
     );
   }
@@ -305,19 +316,18 @@ function AccountTable({
   return (
     <section className="min-w-0 rounded-kart border border-line bg-surface">
       <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line px-5 py-4">
-        <h3 className="m-0 font-baslik text-15 font-bold text-ink">Reklam hesabı bazında</h3>
+        <h3 className="m-0 font-baslik text-15 font-bold text-ink">{d.baslik}</h3>
         <small className="text-12 text-ink-muted">
-          {active.length} aktif
-          {idle.length > 0 && ` · ${idle.length} hareketsiz`}
+          {d.sayac(active.length, idle.length)}
         </small>
       </div>
 
       {active.length === 0 ? (
         <p className="m-0 px-5 py-8 text-center text-13 text-ink-muted">
-          Bu ay hiçbir hesabın bütçesi ya da harcaması yok.
+          {d.hareketYok}
         </p>
       ) : (
-        <AccountRows rows={active} data={data} month={month} canWrite={canWrite} />
+        <AccountRows rows={active} data={data} month={month} canWrite={canWrite} dil={dil} />
       )}
 
       {idle.length > 0 && (
@@ -325,21 +335,21 @@ function AccountTable({
         // yalnızca aç/kapa için istemciye JS indirmek gereksiz. İçerik DOM'da.
         <details className="border-t border-line">
           <summary className="cursor-pointer px-5 py-2.5 text-12 font-semibold text-ink-muted transition-colors hover:bg-surface-muted">
-            Bu ay hareketi olmayan {idle.length} hesabı göster
+            {d.hareketsizGoster(idle.length)}
           </summary>
-          <AccountRows rows={idle} data={data} month={month} canWrite={canWrite} />
+          <AccountRows rows={idle} data={data} month={month} canWrite={canWrite} dil={dil} />
         </details>
       )}
 
       {/* SESSİZ KESME YOK: kaç hesap gösteriliyor, toplam kaç. */}
       <div className="flex flex-wrap items-center justify-end gap-4 border-t border-line px-5 py-2.5 text-[12.5px] text-ink-muted">
         <span className="mr-auto">
-          Kırmızı çizgi ayın geçen kısmı; çubuk çizginin sağındaysa bütçe hedeften hızlı tüketiliyor. Hesaplar{' '}
-          <strong className="text-ink">bugün hariç</strong>, dünün sonuna kadar olan veriyle hesaplanıyor: gün bitmeden
-          gelen kısmi veri her sabah &quot;yavaş gidiyoruz&quot; dedirtirdi.
+          {d.notBas}
+          <strong className="text-ink">{d.notKalin}</strong>
+          {d.notSon}
         </span>
         <span className="tabular-nums">
-          {active.length} aktif / {data.accounts.length} hesap
+          {d.altSayac(active.length, data.accounts.length)}
         </span>
       </div>
     </section>
@@ -351,12 +361,15 @@ function AccountRows({
   data,
   month,
   canWrite,
+  dil,
 }: {
   rows: ClientPacing['accounts'];
   data: ClientPacing;
   month: string;
   canWrite: boolean;
+  dil: Dil;
 }) {
+  const d = sec(butceSozlugu, dil).hesaplar;
   /*
    * TABLO DEĞİL SATIR LİSTESİ. Sekiz sütunlu tablo `min-w-[860px]` taşıyordu
    * ve Marka Merkezi'nin iç menüsünün yanındaki kolon ondan dar: tablo kendi
@@ -381,18 +394,18 @@ function AccountRows({
   const butceli = rows.filter((a) => a.budget !== null);
   const toplamButce = butceli.reduce((t, a) => t + BigInt(a.budget!.amountMicros), 0n);
   const toplamGunluk = butceli.reduce((t, a) => t + BigInt(a.suggestedDailyMicros ?? '0'), 0n);
-  const para = (m: bigint) => (tekBirim ? formatMoney(m.toString(), tekBirim) : 'karışık');
+  const para = (m: bigint) => (tekBirim ? formatMoney(m.toString(), tekBirim, { dil }) : d.karisik);
 
   return (
     <div>
       {/* SÜTUN BAŞLIKLARI: satırlar tablo gibi okunuyor ama kolona sığıyor. */}
       <div className={`${HESAP_IZGARASI} border-b border-line px-5 py-2.5 text-12 font-semibold text-ink-muted max-sm:hidden`}>
-        <span>Hesap</span>
-        <span>Gidişat</span>
-        <span className="text-right">Harcanan</span>
-        <span className="text-right">Bütçe</span>
-        <span className="text-right">Günlük öneri</span>
-        <span className="sr-only">Eylem</span>
+        <span>{d.sutunHesap}</span>
+        <span>{d.sutunGidisat}</span>
+        <span className="text-right">{d.sutunHarcanan}</span>
+        <span className="text-right">{d.sutunButce}</span>
+        <span className="text-right">{d.sutunGunluk}</span>
+        <span className="sr-only">{d.sutunEylem}</span>
       </div>
       {PLATFORMS.filter((p) => rows.some((a) => a.platform === p)).map((platform) => {
         const grup = rows.filter((a) => a.platform === platform);
@@ -403,20 +416,19 @@ function AccountRows({
               <PlatformLogo kind={platformKanali(platform)} className="h-4 w-4 shrink-0" />
               {PLATFORM_KISA_ADLARI[platform]}
               <span className="text-12 font-normal text-ink-muted">
-                {grup.length} hesap ·{' '}
-                {sinirli === 0 ? 'hiçbirinde bütçe sınırı yok' : `${sinirli} hesapta bütçe sınırı var`}
+                {d.grupHesap(grup.length)} · {sinirli === 0 ? d.sinirYokGrup : d.sinirVarGrup(sinirli)}
               </span>
             </h4>
             <ul className="m-0 list-none divide-y divide-line p-0">
               {grup.map((a) => (
-                <HesapSatiri key={a.adAccountId} a={a} data={data} month={month} canWrite={canWrite} />
+                <HesapSatiri key={a.adAccountId} a={a} data={data} month={month} canWrite={canWrite} dil={dil} />
               ))}
             </ul>
           </section>
         );
       })}
       <div className={`${HESAP_IZGARASI} border-t border-line bg-surface-muted px-5 py-3 text-13 font-bold text-ink`}>
-        <span>Toplam · {rows.length} hesap</span>
+        <span>{d.toplam(rows.length)}</span>
         <span className="max-sm:hidden" />
         <span className="text-right font-baslik tabular-nums">{para(toplamHarcanan)}</span>
         <span className="text-right font-baslik tabular-nums">{butceli.length > 0 ? para(toplamButce) : '—'}</span>
@@ -441,13 +453,17 @@ function HesapSatiri({
   data,
   month,
   canWrite,
+  dil,
 }: {
   a: ClientPacing['accounts'][number];
   data: ClientPacing;
   month: string;
   canWrite: boolean;
+  dil: Dil;
 }) {
+  const d = sec(butceSozlugu, dil).hesaplar;
   const cur = a.budget?.currency ?? data.currency;
+  const para = (m: string | null) => formatMoney(m, cur, { dil });
   return (
     <li className={`${HESAP_IZGARASI} px-5 py-3 text-13`}>
       <div className="min-w-0">
@@ -457,12 +473,12 @@ function HesapSatiri({
         <p className="m-0 flex flex-wrap items-center gap-1.5">
           {/* "Bütçe yok" çipi sınırsız hesapta gösterilmiyor: yanındaki
               "Sınır yok" ile aynı şeyi ikinci kez söylüyordu. */}
-          {a.budget && <StatusChip status={a.status} />}
+          {a.budget && <StatusChip status={a.status} dil={dil} />}
           {/* Bu hesabın kendi veri kapsaması: genel uyarı hangi hesabın
               eksik olduğunu söylemiyor. */}
           {a.daysElapsed > 0 && a.daysWithData < a.daysElapsed && (
-            <small className="text-12 text-danger-strong" title={`${a.daysElapsed} günün ${a.daysWithData} günü senkronize`}>
-              {a.daysWithData}/{a.daysElapsed} gün veri
+            <small className="text-12 text-danger-strong" title={d.gunVeriIpucu(a.daysElapsed, a.daysWithData)}>
+              {d.gunVeri(a.daysWithData, a.daysElapsed)}
             </small>
           )}
         </p>
@@ -471,27 +487,27 @@ function HesapSatiri({
       <div className="min-w-0">
         {a.budget ? (
           <div className="grid gap-1">
-            <PacingBar pacing={a} compact />
+            <PacingBar pacing={a} compact dil={dil} />
             <small className="text-12">
-              <PaceDelta pacing={a} />
+              <PaceDelta pacing={a} dil={dil} />
             </small>
           </div>
         ) : (
-          <span className="text-12 font-semibold text-ink-muted">Sınır yok</span>
+          <span className="text-12 font-semibold text-ink-muted">{d.sinirYok}</span>
         )}
       </div>
 
       <span className="text-right font-baslik font-semibold tabular-nums text-ink">
-        <span className="text-12 font-normal text-ink-muted sm:hidden">Harcanan </span>
-        {formatMoney(a.spentMicros, cur)}
+        <span className="text-12 font-normal text-ink-muted sm:hidden">{d.sutunHarcanan} </span>
+        {para(a.spentMicros)}
       </span>
       <span className="text-right font-baslik font-semibold tabular-nums text-ink">
-        <span className="text-12 font-normal text-ink-muted sm:hidden">Bütçe </span>
-        {a.budget ? formatMoney(a.budget.amountMicros, cur) : '—'}
+        <span className="text-12 font-normal text-ink-muted sm:hidden">{d.sutunButce} </span>
+        {a.budget ? para(a.budget.amountMicros) : '—'}
       </span>
-      <span className="text-right font-baslik font-semibold tabular-nums text-ink" title={a.budget ? `Kalan ${formatMoney(a.remainingMicros, cur)}` : undefined}>
-        <span className="text-12 font-normal text-ink-muted sm:hidden">Günlük öneri </span>
-        {a.budget ? formatMoney(a.suggestedDailyMicros, cur) : '—'}
+      <span className="text-right font-baslik font-semibold tabular-nums text-ink" title={a.budget ? d.kalanIpucu(para(a.remainingMicros)) : undefined}>
+        <span className="text-12 font-normal text-ink-muted sm:hidden">{d.sutunGunluk} </span>
+        {a.budget ? para(a.suggestedDailyMicros) : '—'}
       </span>
 
       {/* DÜZENLEME YAN PANELDE: satırda yalnız düğme, form sağdan açılıyor. */}
@@ -515,6 +531,7 @@ interface MonthOption {
   key: string;
   label: string;
   short: string;
+  planEtiketi: string;
   current: boolean;
   future: boolean;
 }
@@ -538,7 +555,8 @@ export function ayAnahtari(d: Date = new Date()): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 
-function selectableMonths(): MonthOption[] {
+function selectableMonths(dil: Dil, planEtiketi: string): MonthOption[] {
+  const kod = dil === 'en' ? 'en-US' : 'tr-TR';
   const now = new Date();
   const y = now.getUTCFullYear();
   const m = now.getUTCMonth();
@@ -549,8 +567,9 @@ function selectableMonths(): MonthOption[] {
     const key = ayAnahtari(d);
     out.push({
       key,
-      label: d.toLocaleDateString('tr-TR', { month: 'long', year: 'numeric', timeZone: 'UTC' }),
-      short: d.toLocaleDateString('tr-TR', { month: 'short', timeZone: 'UTC' }),
+      label: d.toLocaleDateString(kod, { month: 'long', year: 'numeric', timeZone: 'UTC' }),
+      short: d.toLocaleDateString(kod, { month: 'short', timeZone: 'UTC' }),
+      planEtiketi,
       current: offset === 0,
       future: offset > 0,
     });

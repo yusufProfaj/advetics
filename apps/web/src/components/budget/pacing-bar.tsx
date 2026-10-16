@@ -1,4 +1,5 @@
-import type { BudgetPacing, PacingStatus } from '@advetics/shared';
+import { sec, type BudgetPacing, type Dil, type PacingStatus } from '@advetics/shared';
+import { butceSozlugu } from '@/dil/sozlukler/butce';
 import { Rozet, type DurumHali } from '@/components/ui/rozet';
 
 /**
@@ -16,20 +17,25 @@ import { Rozet, type DurumHali } from '@/components/ui/rozet';
  * degrade taşıyordu; kılavuzda ikisi de yok. Durum rozetinde yeşil yalnız
  * "Hedefte" (yeşil = durum göstergesi).
  */
-const TONE: Record<PacingStatus, { bar: string; hal: DurumHali; label: string }> = {
-  under: { bar: 'bg-ink', hal: 'taslak', label: 'Yavaş' },
-  on_track: { bar: 'bg-ink', hal: 'ok', label: 'Hedefte' },
-  over: { bar: 'bg-brand', hal: 'hata', label: 'Hızlı' },
-  exhausted: { bar: 'bg-brand', hal: 'hata', label: 'Doldu' },
-  no_budget: { bar: 'bg-line-strong', hal: 'taslak', label: 'Bütçe yok' },
+const TONE: Record<PacingStatus, { bar: string; hal: DurumHali }> = {
+  under: { bar: 'bg-ink', hal: 'taslak' },
+  on_track: { bar: 'bg-ink', hal: 'ok' },
+  over: { bar: 'bg-brand', hal: 'hata' },
+  exhausted: { bar: 'bg-brand', hal: 'hata' },
+  no_budget: { bar: 'bg-line-strong', hal: 'taslak' },
 };
 
-export function StatusChip({ status }: { status: PacingStatus }) {
+/*
+ * `dil` ZORUNLU: bu parçalar direktifsiz ve sunucuda da çiziliyor, kanca
+ * yok; varsayılan Türkçe İngilizce ekranda sessizce Türkçe yazardı.
+ */
+export function StatusChip({ status, dil }: { status: PacingStatus; dil: Dil }) {
   const t = TONE[status];
-  return <Rozet hal={t.hal}>{t.label}</Rozet>;
+  return <Rozet hal={t.hal}>{sec(butceSozlugu, dil).durum[status]}</Rozet>;
 }
 
-export function PacingBar({ pacing, compact = false }: { pacing: BudgetPacing; compact?: boolean }) {
+export function PacingBar({ pacing, compact = false, dil }: { pacing: BudgetPacing; compact?: boolean; dil: Dil }) {
+  const d = sec(butceSozlugu, dil).cubuk;
   const spent = pacing.spentRatio;
   const tone = TONE[pacing.status];
 
@@ -54,7 +60,7 @@ export function PacingBar({ pacing, compact = false }: { pacing: BudgetPacing; c
           <div
             className="absolute -bottom-1 -top-1 w-0.5 rounded-full bg-brand"
             style={{ left: `${Math.min(Math.max(pacing.elapsedRatio * 100, 1), 99)}%` }}
-            title={`Ayın geçen kısmı: %${Math.round(pacing.elapsedRatio * 100)}`}
+            title={d.gecenKisimIpucu(Math.round(pacing.elapsedRatio * 100))}
           />
         )}
       </div>
@@ -62,12 +68,12 @@ export function PacingBar({ pacing, compact = false }: { pacing: BudgetPacing; c
       {!compact && (
         <div className="mt-1.5 flex items-center justify-between text-12 text-ink-muted">
           <span className={overflow ? 'font-semibold text-danger-strong' : ''}>
-            {spent === null ? '—' : `%${(spent * 100).toLocaleString('tr-TR', { maximumFractionDigits: 1 })} harcandı`}
+            {spent === null ? '—' : d.harcandi((spent * 100).toLocaleString(dil === 'en' ? 'en-US' : 'tr-TR', { maximumFractionDigits: 1 }))}
           </span>
           {/* EKSİZ YAZILIYOR: "%16'i" hem yanlış ek (doğrusu "%16'sı") hem de
               küçük puntoda kesme işareti kayboluyor ve "%161" okunuyordu.
               Ek sayıya göre değişiyor; ek gerektirmeyen cümle kuruldu. */}
-          <span>Ayın geçen kısmı: %{Math.round(pacing.elapsedRatio * 100)}</span>
+          <span>{d.gecenKisim(Math.round(pacing.elapsedRatio * 100))}</span>
         </div>
       )}
     </div>
@@ -81,16 +87,16 @@ export function PacingBar({ pacing, compact = false }: { pacing: BudgetPacing; c
  * "hedefin 15 puan üstünde" tek bir anlama geliyor. Hızlı gitmek KIRMIZI
  * (para beklenenden önce bitiyor), yavaş gitmek gri.
  */
-export function PaceDelta({ pacing }: { pacing: BudgetPacing }) {
+export function PaceDelta({ pacing, dil }: { pacing: BudgetPacing; dil: Dil }) {
+  const d = sec(butceSozlugu, dil).cubuk;
   if (pacing.paceDelta === null) return <span className="text-ink-muted">—</span>;
   const points = pacing.paceDelta * 100;
   // ±0,5 puanın altı gürültü; işaretli göstermek yanlış bir kesinlik verirdi.
-  if (Math.abs(points) < 0.5) return <span className="text-ink-muted">hedefte</span>;
+  if (Math.abs(points) < 0.5) return <span className="text-ink-muted">{d.hedefte}</span>;
   const sign = points > 0 ? '+' : '−';
   return (
     <span className={points > 0 ? 'text-danger-strong' : 'text-ink-muted'}>
-      {sign}
-      {Math.abs(points).toLocaleString('tr-TR', { maximumFractionDigits: 1 })} puan
+      {d.puan(sign, Math.abs(points).toLocaleString(dil === 'en' ? 'en-US' : 'tr-TR', { maximumFractionDigits: 1 }))}
     </span>
   );
 }

@@ -2,7 +2,9 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import type { BudgetRecord } from '@advetics/shared';
+import type { BudgetRecord, Dil } from '@advetics/shared';
+import { useDil, useSozluk } from '@/dil/saglayici';
+import { butceSozlugu } from '@/dil/sozlukler/butce';
 import { ApiRequestError, apiFetch } from '@/lib/api';
 import { Alan, FormIzgarasi, Girdi } from '@/components/ui/alan';
 import { Dugme, type DugmeBoyutu, type DugmeTonu } from '@/components/ui/dugme';
@@ -48,6 +50,8 @@ export function BudgetForm({
   currency: string | null;
 }) {
   const router = useRouter();
+  const d = useSozluk(butceSozlugu).form;
+  const { dil } = useDil();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,7 +91,7 @@ export function BudgetForm({
       router.refresh();
     } catch (err) {
       setError(
-        err instanceof ApiRequestError ? err.message : 'Bütçe kaydedilemedi. Tekrar deneyin.',
+        err instanceof ApiRequestError ? err.message : d.kaydedilemedi,
       );
     } finally {
       setBusy(false);
@@ -103,7 +107,7 @@ export function BudgetForm({
       setOpen(false);
       router.refresh();
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Bütçe silinemedi.');
+      setError(err instanceof ApiRequestError ? err.message : d.silinemedi);
     } finally {
       setBusy(false);
     }
@@ -112,39 +116,39 @@ export function BudgetForm({
   return (
     <>
       <Dugme ton={tetik?.ton ?? 'ikincil'} boyut={tetik?.boyut ?? 'kucuk'} onClick={() => setOpen(true)}>
-        {tetik?.metin ?? (existing ? 'Düzenle' : 'Bütçe tanımla')}
+        {tetik?.metin ?? (existing ? d.duzenle : d.tanimla)}
       </Dugme>
 
       <YanPanel
         acik={open}
         onKapat={() => !busy && setOpen(false)}
-        baslik={existing ? 'Bütçeyi düzenle' : 'Bütçe tanımla'}
+        baslik={existing ? d.butceyiDuzenle : d.tanimla}
         altEylemler={
           <>
             {existing && (
               <Dugme ton="tehlike" onClick={remove} disabled={busy} className="mr-auto">
-                Bütçeyi sil
+                {d.butceyiSil}
               </Dugme>
             )}
             <Dugme ton="ikincil" onClick={() => setOpen(false)} disabled={busy}>
-              Vazgeç
+              {d.vazgec}
             </Dugme>
             <Dugme onClick={save} bekliyor={busy} disabled={!amount.trim()}>
-              Kaydet
+              {d.kaydet}
             </Dugme>
           </>
         }
       >
         <p className="m-0 text-13 font-semibold text-ink">
-          {adAccountName ?? 'Workspace geneli'} · {monthLabel(month)}
+          {adAccountName ?? d.workspaceGeneli} · {monthLabel(month, dil)}
         </p>
         {adAccountId === null && (
           <p className="m-0 text-12 text-ink-muted">
-            Şemsiye bütçe: workspace’in tüm reklam hesaplarının toplamı bu tutarla karşılaştırılır.
+            {d.semsiye}
           </p>
         )}
 
-        <Alan etiket={`Aylık bütçe${currency ? ` (${currency})` : ''}`}>
+        <Alan etiket={d.aylikButce(currency)}>
           {(id) => (
             <Girdi
               id={id}
@@ -158,7 +162,7 @@ export function BudgetForm({
           )}
         </Alan>
 
-        <Alan etiket="Günlük limit (isteğe bağlı)">
+        <Alan etiket={d.gunlukLimit}>
           {(id) => (
             <Girdi
               id={id}
@@ -166,19 +170,19 @@ export function BudgetForm({
               inputMode="decimal"
               value={dailyCap}
               onChange={(e) => setDailyCap(e.target.value)}
-              placeholder="boş = limit yok"
+              placeholder={d.limitYok}
               className="font-baslik tabular-nums"
             />
           )}
         </Alan>
 
         <FormIzgarasi>
-          <Alan etiket="Uyarı eşiği (%)">
+          <Alan etiket={d.uyariEsigi}>
             {(id) => (
               <Girdi id={id} type="number" min={1} max={200} value={alertPct} onChange={(e) => setAlertPct(e.target.value)} />
             )}
           </Alan>
-          <Alan etiket="Otomatik durdurma (%)">
+          <Alan etiket={d.otoDurdurma}>
             {(id) => (
               <Girdi
                 id={id}
@@ -187,7 +191,7 @@ export function BudgetForm({
                 max={200}
                 value={autoPause}
                 onChange={(e) => setAutoPause(e.target.value)}
-                placeholder="boş = kapalı"
+                placeholder={d.kapali}
               />
             )}
           </Alan>
@@ -197,16 +201,15 @@ export function BudgetForm({
             kötü: o yüzden burada yazıyor. Kural motoru (`budget_spent_ratio`
             koşulu) bu alanı OKUMUYOR; kullanıcıyı çalışan yola yönlendir. */}
         <p className="m-0 text-12 text-ink-muted">
-          Otomatik durdurma henüz yalnızca kaydediliyor, kampanyayı durdurmuyor. Durdurmak için Kurallar’da bütçe
-          kuralı kur.
+          {d.otoDurdurmaNotu}
         </p>
 
-        <Alan etiket="Not (isteğe bağlı)">
+        <Alan etiket={d.not}>
           {(id) => <Girdi id={id} type="text" value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} />}
         </Alan>
 
         {error && (
-          <Serit ton="hata" baslik="Bütçe kaydedilemedi">
+          <Serit ton="hata" baslik={d.seritBaslik}>
             {error}
           </Serit>
         )}
@@ -228,9 +231,9 @@ function microsToInput(micros: string): string {
   return cents === 0n ? whole.toString() : `${whole},${cents.toString().padStart(2, '0')}`;
 }
 
-function monthLabel(month: string): string {
+function monthLabel(month: string, dil: Dil): string {
   const [y, m] = [month.slice(0, 4), month.slice(5, 7)];
-  return new Date(Date.UTC(Number(y), Number(m) - 1, 1)).toLocaleDateString('tr-TR', {
+  return new Date(Date.UTC(Number(y), Number(m) - 1, 1)).toLocaleDateString(dil === 'en' ? 'en-US' : 'tr-TR', {
     month: 'long',
     year: 'numeric',
     timeZone: 'UTC',
