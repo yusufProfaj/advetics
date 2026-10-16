@@ -134,7 +134,7 @@ sayılır (`>Kaydet<`); ikisi birlikte istisna listesine girer.
 | D0 ✅ | Altyapı: sözlük tipi, `DilSaglayici`, çerez, `?dil=`, `<html lang>`, bekçiler (istisna listesi bugünkü hâlin TAMAMI), **dil seçim ekranı**, Hesabım'da dil, giriş ekranında TR·EN | Her şey buna bağlı |
 | D1 ✅ | Tanıtım sitesi + yasal 4 sayfa + giriş/şifre/iki adım ekranları + çerez bildirimi (2026-10-15) | Google OAuth incelemesi bunlara bakıyor |
 | D2 ✅ | Panel kabuğu: menü (`nav-sections`), üst çubuk, `components/ui/*`, boş/hata durumları, Genel Bakış, Ayarlar (bağlantı ekranı — OAuth demosunun gösterdiği yer) | Her sayfada görünen yüzey |
-| D3 | Modül modül: Reklam Yöneticisi → Raporlar → Marka Merkezi/Varlıklar → AdvStrategy → AdvCampaign → Akıllı Boost → Kurallar/İyileştir → Bütçe → Potansiyel Müşteriler | Kullanım sıklığına göre |
+| D3 ✅ | Modül modül: Reklam Yöneticisi → Raporlar → Marka Merkezi/Varlıklar → AdvStrategy → AdvCampaign → Akıllı Boost → Kurallar/İyileştir → Bütçe → Potansiyel Müşteriler | Kullanım sıklığına göre |
 | D4 | Shared etiketleri + Zod hata haritası + API hata mesajları (`AllExceptionsFilter` ve servisler) | Panel ekranları hazırken hata cümleleri hâlâ Türkçe kalmasın |
 | D5 | Rapor PDF'i + rapor maili + işlem mailleri + `rapor_dili`/`reklam_dili` migration'ı + AI istemleri | Migration ve müşteriye giden belge: en riskli, en son |
 
