@@ -22,6 +22,8 @@ import { Alan, Girdi, MetinAlani, Secim } from '@/components/ui/alan';
 import { Dugme } from '@/components/ui/dugme';
 import { BosDurum, Serit } from '@/components/ui/hal';
 import { AdHucresi, Tablo, type TabloSutunu } from '@/components/ui/tablo';
+import { useSozluk } from '@/dil/saglayici';
+import { raporlarSozlugu } from '@/dil/sozlukler/raporlar';
 
 /**
  * ŞABLON YÖNETİMİ — bölüm seçimi ve SIRASI.
@@ -82,6 +84,7 @@ export function SablonBolumu({
   /** `report.write`: müşteri hesabı raporu okuyor, biçimini değiştirmiyor. */
   duzenleyebilir: boolean;
 }) {
+  const d = useSozluk(raporlarSozlugu).sablonYonetimi;
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -112,7 +115,7 @@ export function SablonBolumu({
   const sutunlar: Array<TabloSutunu<Satir>> = [
     {
       anahtar: 'ad',
-      baslik: 'Şablon',
+      baslik: d.sablon,
       hucre: (r) =>
         r.tur === 'hazir' ? (
           /*
@@ -120,7 +123,7 @@ export function SablonBolumu({
            * söylemiyor; kullanıcı seçip raporun yarısının kaybolduğunu görünce
            * bunu bir arıza sanıyor.
            */
-          <AdHucresi ad={r.ad} alt={`Hazır şablon · ${r.aciklama}`} />
+          <AdHucresi ad={r.ad} alt={d.hazirSablon(r.aciklama)} />
         ) : (
           /* KAPSAM VE BÖLÜM SIRASI GÖRÜNÜYOR: iki şablonun adı benzer olabiliyor. */
           <AdHucresi
@@ -131,38 +134,38 @@ export function SablonBolumu({
     },
     {
       anahtar: 'kapsam',
-      baslik: 'Kapsam',
+      baslik: d.kapsam,
       ikincil: true,
       hucre: (r) =>
         r.tur === 'hazir'
-          ? 'Herkes'
+          ? d.herkes
           : r.sablon.clientId === null
-            ? 'Organizasyon varsayılanı'
+            ? d.orgVarsayilani
             : (r.sablon.clientName ?? 'Workspace'),
     },
     {
       anahtar: 'bolum',
-      baslik: 'Bölüm',
+      baslik: d.bolum,
       sayi: true,
       hucre: (r) => (r.tur === 'hazir' ? r.bolum : r.sablon.sections.length),
     },
     {
       anahtar: 'eylem',
-      baslik: <span className="sr-only">Eylemler</span>,
+      baslik: <span className="sr-only">{d.eylemler}</span>,
       sayi: true,
       hucre: (r) => (
         <span className="inline-flex items-center gap-1">
           <Dugme ton="ikincil" boyut="kucuk" onClick={() => raporaAc(r.tur === 'hazir' ? r.kod : r.sablon.id)}>
-            Bu şablonla aç
+            {d.buSablonlaAc}
           </Dugme>
           {r.tur === 'kayitli' && duzenleyebilir && (
             <AcilirMenu
               tasma="portal"
-              etiket={`${r.sablon.name}: diğer eylemler`}
+              etiket={d.digerEylemlerAd(r.sablon.name)}
               hizala="sag"
               genislik="w-44"
               tetik={({ acik: _acik, ...o }) => (
-                <button type="button" {...o} aria-label="Diğer eylemler" className={IKON_TETIK}>
+                <button type="button" {...o} aria-label={d.digerEylemler} className={IKON_TETIK}>
                   <span aria-hidden className="text-15 leading-none">
                     ⋯
                   </span>
@@ -175,7 +178,7 @@ export function SablonBolumu({
                   setDuzenlenen(r.sablon.id);
                 }}
               >
-                Düzenle
+                {d.duzenle}
               </MenuOgesi>
               <MenuAyraci />
               {/* SİL ONAYA GİDİYOR: kaç paylaşım bağlantısının gideceği düzenleyicide yazıyor. */}
@@ -186,7 +189,7 @@ export function SablonBolumu({
                   setDuzenlenen(r.sablon.id);
                 }}
               >
-                Sil
+                {d.sil}
               </MenuOgesi>
             </AcilirMenu>
           )}
@@ -202,13 +205,13 @@ export function SablonBolumu({
       <section className="min-w-0 rounded-kart border border-line bg-surface">
         {sablonHatasi !== null && (
           <div className="border-b border-line p-4">
-            <Serit ton="hata" baslik="Kayıtlı şablonlar alınamadı">
-              {`${sablonHatasi}. Hazır şablonlar listede; kayıtlı şablonların görünmüyor.`}
+            <Serit ton="hata" baslik={d.listeOkunamadiBaslik}>
+              {d.listeOkunamadi(sablonHatasi)}
             </Serit>
           </div>
         )}
         <Tablo
-          etiket="Rapor şablonları"
+          etiket={d.raporSablonlari}
           sutunlar={sutunlar}
           satirlar={satirlar}
           satirAnahtari={anahtar}
@@ -224,7 +227,7 @@ export function SablonBolumu({
                 setDuzenlenen('yeni');
               }}
             >
-              ＋ Yeni şablon
+              {d.yeniSablon}
             </Dugme>
           </div>
         )}
@@ -232,12 +235,8 @@ export function SablonBolumu({
 
       {duzenlenen === null ? (
         <BosDurum
-          baslik="Düzenlemek için bir şablon seç"
-          neden={
-            duzenleyebilir
-              ? 'Kayıtlı bir şablonun ⋯ menüsünden "Düzenle"yi seç ya da yeni şablon oluştur. Hazır şablonlar değiştirilemez; kopyalamak için yeni şablon aç.'
-              : 'Şablonları değiştirmek rapor yazma yetkisi istiyor. Listeden bir şablonu raporda açabilirsin.'
-          }
+          baslik={d.duzenlemekIcin}
+          neden={duzenleyebilir ? d.duzenlemeYetkili : d.duzenlemeYetkisiz}
         />
       ) : (
         <SablonDuzenleyici
@@ -294,8 +293,9 @@ export function SablonDuzenleyici({
    */
   onKaydedildi?: (id: string) => void;
 }) {
+  const d = useSozluk(raporlarSozlugu).sablonYonetimi;
   const router = useRouter();
-  const [ad, setAd] = useState(sablon?.name ?? 'Aylık workspace raporu');
+  const [ad, setAd] = useState(sablon?.name ?? d.varsayilanAd);
   const [baslik, setBaslik] = useState(sablon?.title ?? '');
   const [kapanis, setKapanis] = useState(sablon?.closingText ?? '');
   const [clientId, setClientId] = useState<string | null>(sablon?.clientId ?? null);
@@ -399,7 +399,7 @@ export function SablonDuzenleyici({
       // PLATFORMUN/SUNUCUNUN KENDİ MESAJI EKRANDA. "Bir hata oluştu" demek,
       // "org varsayılanını yalnızca yönetici değiştirebilir" gibi
       // düzeltilebilir bir sebebi gizlerdi.
-      setHata(err instanceof ApiRequestError ? err.message : 'Kaydedilemedi.');
+      setHata(err instanceof ApiRequestError ? err.message : d.kaydedilemedi);
       setBekleyen(false);
     }
   }
@@ -413,20 +413,20 @@ export function SablonDuzenleyici({
       onKapat();
       router.refresh();
     } catch (err) {
-      setHata(err instanceof ApiRequestError ? err.message : 'Silinemedi.');
+      setHata(err instanceof ApiRequestError ? err.message : d.silinemedi);
       setBekleyen(false);
     }
   }
 
   return (
-    <section className="min-w-0 rounded-kart border border-line bg-surface" aria-label="Şablon düzenleyici">
+    <section className="min-w-0 rounded-kart border border-line bg-surface" aria-label={d.duzenleyiciEtiket}>
       <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-4">
-        <h3 className="m-0 font-baslik text-15 font-bold text-ink">{sablon ? sablon.name : 'Yeni şablon'}</h3>
-        <small className="text-12 text-ink-muted">sürükle ya da ok tuşları</small>
+        <h3 className="m-0 font-baslik text-15 font-bold text-ink">{sablon ? sablon.name : d.yeniSablonBaslik}</h3>
+        <small className="text-12 text-ink-muted">{d.surukleIpucu}</small>
       </div>
 
       <div className="grid gap-3.5 p-5">
-        <Alan etiket="Şablon adı">
+        <Alan etiket={d.sablonAdi}>
           {(id) => <Girdi id={id} value={ad} onChange={(e) => setAd(e.target.value)} />}
         </Alan>
 
@@ -435,11 +435,12 @@ export function SablonDuzenleyici({
           uyguluyor ama SESSİZCE (0 satır) ve ekran "kaydedildi" derdi.
           Seçenek kapalı ve sebebi yazılı.
         */}
-        <Alan etiket="Kapsam">
+        <Alan etiket={d.kapsam}>
           {(id) => (
             <Secim id={id} value={clientId ?? ''} onChange={(e) => setClientId(e.target.value || null)}>
               <option value="" disabled={!isOrgAdmin}>
-                Organizasyon varsayılanı{isOrgAdmin ? '' : ' (yalnızca yönetici)'}
+                {d.orgVarsayilani}
+                {isOrgAdmin ? '' : d.yalnizcaYonetici}
               </option>
               {musteriler.map((m) => (
                 <option key={m.id} value={m.id}>
@@ -450,28 +451,30 @@ export function SablonDuzenleyici({
           )}
         </Alan>
 
-        <Alan etiket="Rapor başlığı" ipucu="Boşsa varsayılan başlık kullanılır.">
+        <Alan etiket={d.raporBasligi} ipucu={d.baslikIpucu}>
           {(id, aciklamaId) => (
             <Girdi
               id={id}
               aria-describedby={aciklamaId}
               value={baslik}
               onChange={(e) => setBaslik(e.target.value)}
-              placeholder="Dijital Pazarlama Raporu"
+              placeholder={d.baslikYerTutucu}
             />
           )}
         </Alan>
 
-        <Alan etiket="Kapanış metni">
+        <Alan etiket={d.kapanisMetni}>
           {(id) => <MetinAlani id={id} value={kapanis} onChange={(e) => setKapanis(e.target.value)} rows={3} />}
         </Alan>
 
         <div className="grid gap-2">
-          <p className="m-0 text-13 font-semibold text-ink">Bölümler ve sıra</p>
+          <p className="m-0 text-13 font-semibold text-ink">{d.bolumlarVeSira}</p>
           <p className="m-0 text-12 text-ink-muted">
-            Rapor bu sırayla üretiliyor. Sırayı değiştirmek için bölümü <strong>sürükle</strong>; klavyeyle
-            taşımak için satıra gel ve <strong>↑ / ↓</strong> tuşlarını kullan. Hiç bölüm bırakmazsan
-            kaydedilemez: boş bir rapor müşteriye gönderilecek bir belge değil.
+            {d.siraOn}
+            <strong>{d.siraSurukle}</strong>
+            {d.siraOrta}
+            <strong>↑ / ↓</strong>
+            {d.siraSon}
           </p>
           <ul className="m-0 grid list-none gap-1 p-0">
             {secili.map((s, i) => (
@@ -479,7 +482,7 @@ export function SablonDuzenleyici({
                 key={s}
                 draggable
                 tabIndex={0}
-                aria-label={`${SECTION_LABELS[s]}, sıra ${i + 1} / ${secili.length}. Taşımak için sürükleyin ya da ok tuşlarını kullanın.`}
+                aria-label={d.satirEtiket(SECTION_LABELS[s], i + 1, secili.length)}
                 onDragStart={(e) => {
                   setSuruklenen(i);
                   /*
@@ -519,7 +522,7 @@ export function SablonDuzenleyici({
                 <button
                   type="button"
                   onClick={() => setSecili(secili.filter((x) => x !== s))}
-                  aria-label={`${SECTION_LABELS[s]} bölümünü kaldır`}
+                  aria-label={d.bolumuKaldir(SECTION_LABELS[s])}
                   className="inline-flex h-6 w-6 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-surface hover:text-danger-strong"
                 >
                   ✕
@@ -553,7 +556,7 @@ export function SablonDuzenleyici({
         </div>
 
         {hata && (
-          <Serit ton="hata" baslik="Şablon kaydedilemedi">
+          <Serit ton="hata" baslik={d.kaydedilemediBaslik}>
             {hata}
           </Serit>
         )}
@@ -564,14 +567,15 @@ export function SablonDuzenleyici({
           bir rapor haber vermeden 404 olur.
         */}
         {silOnay && sablon && (
-          <Serit ton="hata" baslik="Bu şablon silinecek">
+          <Serit ton="hata" baslik={d.silinecekBaslik}>
             {sablon.shareCount > 0 ? (
               <>
-                Bu şablondan üretilmiş <strong>{sablon.shareCount} paylaşım linki</strong> de silinecek.
-                Müşteriye gönderdiğin raporlar çalışmayacak.
+                {d.silinecekOn}
+                <strong>{d.silinecekKalin(sablon.shareCount)}</strong>
+                {d.silinecekSon}
               </>
             ) : (
-              'Bu şablona bağlı paylaşım linki yok.'
+              d.linkYok
             )}
           </Serit>
         )}
@@ -586,11 +590,11 @@ export function SablonDuzenleyici({
             onClick={() => (silOnay ? sil() : setSilOnay(true))}
             disabled={bekleyen}
           >
-            {silOnay ? 'Evet, sil' : 'Sil'}
+            {silOnay ? d.evetSil : d.sil}
           </Dugme>
         )}
         <Dugme ton="ikincil" boyut="kucuk" onClick={onKapat}>
-          Vazgeç
+          {d.vazgec}
         </Dugme>
         {/* KART İÇİNDE KIRMIZI DOLU DÜĞME YOK (BILESENLER § 3): Kaydet koyu. */}
         <Dugme
@@ -600,7 +604,7 @@ export function SablonDuzenleyici({
           bekliyor={bekleyen}
           disabled={secili.length === 0 || ad.trim().length === 0}
         >
-          Kaydet
+          {d.kaydet}
         </Dugme>
       </div>
     </section>
@@ -631,6 +635,7 @@ function SutunSecici({
   secim: ColumnKey[] | undefined;
   onDegis: (v: ColumnKey[]) => void;
 }) {
+  const d = useSozluk(raporlarSozlugu).sablonYonetimi;
   const secili = secim ?? [];
   const disaridakiler = COLUMN_KEYS.filter((k) => !secili.includes(k));
   // Kova başka platformun sayacıysa bu bölümde her zaman 0 (`kovaPlatformu`).
@@ -651,10 +656,10 @@ function SutunSecici({
 
   return (
     <div className="grid gap-1.5 rounded-alan border border-line bg-surface-muted p-3">
-      <p className="m-0 text-12 font-semibold text-ink">{SECTION_LABELS[bolum]} sütunları</p>
+      <p className="m-0 text-12 font-semibold text-ink">{d.sutunlari(SECTION_LABELS[bolum])}</p>
       {secili.length === 0 ? (
         <p className="m-0 text-12 text-ink-muted">
-          Seçim yok, varsayılan sütunlar kullanılacak.
+          {d.secimYok}
         </p>
       ) : (
         <ul className="m-0 flex list-none flex-wrap gap-1.5 p-0">
@@ -667,7 +672,7 @@ function SutunSecici({
                 type="button"
                 onClick={() => tasi(i, -1)}
                 disabled={i === 0}
-                aria-label="Sola al"
+                aria-label={d.solaAl}
                 className="text-ink-muted transition-colors hover:text-ink disabled:opacity-30"
               >
                 ‹
@@ -677,7 +682,7 @@ function SutunSecici({
                 type="button"
                 onClick={() => tasi(i, 1)}
                 disabled={i === secili.length - 1}
-                aria-label="Sağa al"
+                aria-label={d.sagaAl}
                 className="text-ink-muted transition-colors hover:text-ink disabled:opacity-30"
               >
                 ›
@@ -685,7 +690,7 @@ function SutunSecici({
               <button
                 type="button"
                 onClick={() => onDegis(secili.filter((x) => x !== k))}
-                aria-label="Sütunu kaldır"
+                aria-label={d.sutunuKaldir}
                 className="ml-0.5 text-ink-muted transition-colors hover:text-danger-strong"
               >
                 ✕
@@ -712,8 +717,9 @@ function SutunSecici({
 
       {kovaUyarisi && (
         <p className="m-0 border-l-4 border-l-danger pl-2 text-12 text-ink">
-          {PLATFORM_KISA_ADLARI[bolumPlatformu]} bu sütunları <strong>vermiyor</strong> (
-          {yabanciKovalar.map((k) => COLUMN_LABELS[k]).join(', ')}). Raporda her zaman 0 görünecek.
+          {d.kovaOn(PLATFORM_KISA_ADLARI[bolumPlatformu])}
+          <strong>{d.kovaKalin}</strong>
+          {d.kovaSon(yabanciKovalar.map((k) => COLUMN_LABELS[k]).join(', '))}
         </p>
       )}
     </div>

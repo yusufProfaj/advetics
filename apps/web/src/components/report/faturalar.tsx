@@ -8,7 +8,7 @@ import {
   FATURA_MAX_BAYT,
   FATURA_PLATFORMLARI,
   FATURA_PLATFORM_ETIKETLERI,
-  donemMetni,
+  sec,
   kapsananDonemler,
   type FaturaOzeti,
   type FaturaPlatformu,
@@ -19,6 +19,9 @@ import { Alan, FormIzgarasi, Girdi, Secim } from '@/components/ui/alan';
 import { Dugme } from '@/components/ui/dugme';
 import { BosDurum, HataDurumu, Serit, Yukleniyor } from '@/components/ui/hal';
 import { AdHucresi, Tablo, type TabloSutunu } from '@/components/ui/tablo';
+import { useDil } from '@/dil/saglayici';
+import { raporlarSozlugu } from '@/dil/sozlukler/raporlar';
+import { donemMetniDil } from './rapor-metinleri';
 
 /**
  * ═══ PLATFORM FATURALARI ═══
@@ -54,6 +57,8 @@ export function Faturalar({
   odakDonemler?: string[];
   canWrite: boolean;
 }) {
+  const { dil } = useDil();
+  const d = sec(raporlarSozlugu, dil).faturalar;
   const [liste, setListe] = useState<FaturaOzeti[] | null>(null);
   const [hata, setHata] = useState<string | null>(null);
   const [yukleniyor, setYukleniyor] = useState(false);
@@ -78,9 +83,9 @@ export function Faturalar({
        */
       .catch((err: unknown) => {
         setListe(null);
-        setHata(err instanceof ApiRequestError ? err.message : 'Faturalar okunamadı.');
+        setHata(err instanceof ApiRequestError ? err.message : d.okunamadi);
       });
-  }, [clientId]);
+  }, [clientId, d.okunamadi]);
 
   useEffect(() => {
     yukle();
@@ -89,7 +94,7 @@ export function Faturalar({
   async function gonder(): Promise<void> {
     const dosya = dosyaRef.current?.files?.[0];
     if (!dosya) {
-      setHata(`Önce bir dosya seç (${FATURA_ETIKETLERI}).`);
+      setHata(d.dosyaSec(FATURA_ETIKETLERI));
       return;
     }
     /*
@@ -103,10 +108,7 @@ export function Faturalar({
        * 20 MB'a çıkınca kullanıcıya YANLIŞ sayıyı söylemeye başladı — mesaj
        * kodla birlikte güncellenmeyen her sabit gibi.
        */
-      setHata(
-        `Dosya çok büyük (${Math.round(dosya.size / 1024 / 1024)} MB). ` +
-          `Üst sınır ${Math.round(FATURA_MAX_BAYT / 1024 / 1024)} MB.`,
-      );
+      setHata(d.cokBuyuk(Math.round(dosya.size / 1024 / 1024), Math.round(FATURA_MAX_BAYT / 1024 / 1024)));
       return;
     }
 
@@ -123,13 +125,7 @@ export function Faturalar({
      * elle iletilebiliyor. Reddetmek, saklamanın tek faydasını da götürürdü.
      */
     const sigmaz = dosya.size > MAIL_EK_TOPLAM_SINIRI * 0.85;
-    setUyari(
-      sigmaz
-        ? `Bu dosya ${Math.round(dosya.size / 1024 / 1024)} MB. Rapor PDF'iyle birlikte ` +
-            'mail sınırını aşabilir ve maile eklenmeyebilir. Yüklendikten sonra panelden ' +
-            'indirip elle iletebilirsin.'
-        : null,
-    );
+    setUyari(sigmaz ? d.sigmayabilir(Math.round(dosya.size / 1024 / 1024)) : null);
 
     setYukleniyor(true);
     setHata(null);
@@ -151,13 +147,13 @@ export function Faturalar({
       });
       if (!res.ok) {
         const govde = (await res.json().catch(() => null)) as { message?: string } | null;
-        throw new Error(govde?.message ?? `Yükleme başarısız (HTTP ${res.status}).`);
+        throw new Error(govde?.message ?? d.yuklemeBasarisiz(res.status));
       }
       if (dosyaRef.current) dosyaRef.current.value = '';
       setAciklama('');
       yukle();
     } catch (err) {
-      setHata(err instanceof Error ? err.message : 'Fatura yüklenemedi.');
+      setHata(err instanceof Error ? err.message : d.yuklenemedi);
     } finally {
       setYukleniyor(false);
     }
@@ -169,7 +165,7 @@ export function Faturalar({
       await apiFetch(`/reports/faturalar/${f.id}?clientId=${clientId}`, { method: 'DELETE' });
       yukle();
     } catch (err) {
-      setHata(err instanceof ApiRequestError ? err.message : 'Silinemedi.');
+      setHata(err instanceof ApiRequestError ? err.message : d.silinemedi);
     }
   }
 
@@ -192,7 +188,7 @@ export function Faturalar({
   const sutunlar: Array<TabloSutunu<FaturaOzeti>> = [
     {
       anahtar: 'dosya',
-      baslik: 'Dosya',
+      baslik: d.sutunDosya,
       /* TÜR GÖRÜNÜYOR: bir ZIP'in içinde ne olduğu açmadan bilinmiyor ve maile giden şey o. */
       hucre: (f) => (
         <AdHucresi
@@ -201,21 +197,21 @@ export function Faturalar({
         />
       ),
     },
-    { anahtar: 'donem', baslik: 'Dönem', hucre: (f) => donemMetni(f.donem) },
+    { anahtar: 'donem', baslik: d.sutunDonem, hucre: (f) => donemMetniDil(f.donem, dil) },
     { anahtar: 'platform', baslik: 'Platform', hucre: (f) => FATURA_PLATFORM_ETIKETLERI[f.platform] },
-    { anahtar: 'boyut', baslik: 'Boyut', sayi: true, hucre: (f) => `${Math.max(1, Math.round(f.byteSize / 1024))} KB` },
+    { anahtar: 'boyut', baslik: d.sutunBoyut, sayi: true, hucre: (f) => `${Math.max(1, Math.round(f.byteSize / 1024))} KB` },
     {
       anahtar: 'eylem',
-      baslik: <span className="sr-only">Eylemler</span>,
+      baslik: <span className="sr-only">{d.sutunEylemler}</span>,
       sayi: true,
       hucre: (f) => (
         <AcilirMenu
           tasma="portal"
-          etiket={`${f.fileName}: eylemler`}
+          etiket={d.eylemEtiket(f.fileName)}
           hizala="sag"
           genislik="w-40"
           tetik={({ acik: _acik, ...o }) => (
-            <button type="button" {...o} aria-label="Eylemler" className={IKON_TETIK}>
+            <button type="button" {...o} aria-label={d.eylemler} className={IKON_TETIK}>
               <span aria-hidden className="text-15 leading-none">
                 ⋯
               </span>
@@ -227,13 +223,13 @@ export function Faturalar({
               window.open(`${API_URL}/reports/faturalar/${f.id}/dosya?clientId=${clientId}`, '_blank', 'noreferrer')
             }
           >
-            Aç
+            {d.ac}
           </MenuOgesi>
           {canWrite && (
             <>
               <MenuAyraci />
               <MenuOgesi tehlike onClick={() => void sil(f)}>
-                Sil
+                {d.sil}
               </MenuOgesi>
             </>
           )}
@@ -245,23 +241,22 @@ export function Faturalar({
   return (
     <div className="grid min-w-0 gap-4">
       {eksikOdak.length > 0 && (
-        <Serit baslik={`${eksikOdak.map(donemMetni).join(', ')} için fatura yüklenmemiş`}>
-          Rapor yine gönderilir, ama fatura eki olmadan.
-        </Serit>
+        <Serit baslik={d.eksikBaslik(eksikOdak.map((x) => donemMetniDil(x, dil)).join(', '))}>{d.eksikMetin}</Serit>
       )}
 
       {canWrite && (
         <section className="min-w-0 rounded-kart border border-line bg-surface">
           <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line px-5 py-4">
-            <h3 className="m-0 font-baslik text-15 font-bold text-ink">Platform faturaları</h3>
+            <h3 className="m-0 font-baslik text-15 font-bold text-ink">{d.platformFaturalari}</h3>
             <small className="text-12 text-ink-muted">
-              Rapor mailine <strong>ayrı ek</strong> olarak gider · {FATURA_ETIKETLERI}, en çok{' '}
-              {Math.round(FATURA_MAX_BAYT / 1024 / 1024)} MB
+              {d.ayriEkOn}
+              <strong>{d.ayriEkKalin}</strong>
+              {d.ayriEkSon(FATURA_ETIKETLERI, Math.round(FATURA_MAX_BAYT / 1024 / 1024))}
             </small>
           </div>
           <div className="grid gap-3.5 p-5">
             <FormIzgarasi>
-              <Alan etiket="Dönem">
+              <Alan etiket={d.donem}>
                 {(id) => <Girdi id={id} type="month" value={donem} onChange={(e) => setDonem(e.target.value)} />}
               </Alan>
               <Alan etiket="Platform">
@@ -275,13 +270,13 @@ export function Faturalar({
                   </Secim>
                 )}
               </Alan>
-              <Alan etiket="Not (isteğe bağlı)">
-                {(id) => <Girdi id={id} value={aciklama} onChange={(e) => setAciklama(e.target.value)} placeholder="Fatura no" />}
+              <Alan etiket={d.not}>
+                {(id) => <Girdi id={id} value={aciklama} onChange={(e) => setAciklama(e.target.value)} placeholder={d.faturaNo} />}
               </Alan>
               {/* PDF ya da ZIP. Ekran görüntüsü HÂLÂ kabul edilmiyor: fatura
                   resmi bir belge. Sunucu biçimi sihirli baytlardan doğruluyor;
                   buradaki `accept` yalnızca dosya seçiciyi daraltıyor. */}
-              <Alan etiket="Dosya">
+              <Alan etiket={d.dosya}>
                 {(id) => (
                   <input
                     id={id}
@@ -294,19 +289,19 @@ export function Faturalar({
               </Alan>
             </FormIzgarasi>
             <p className="m-0 text-12 text-ink-muted">
-              Aynı döneme birden çok fatura yükleyebilirsin; hepsi maile eklenir. Aynı dosya iki kez yüklenemez.{' '}
+              {d.birdenCok}
               {/*
                 PAROLA KORUMALI ARŞİV SESSİZ RET ÜRETİYOR: kurumsal mail
                 sunucuları onları koşulsuz engelliyor ve sunucumuz bunu sihirli
                 bayttan AYIRT EDEMİYOR. Belirtisi "mail gitti ama müşteriye
                 ulaşmadı". Söylemek tek çare.
               */}
-              <strong className="text-ink">Parola korumalı arşiv yükleme</strong>: mail sunucuları onları engelliyor ve
-              mail sessizce ulaşmıyor.
+              <strong className="text-ink">{d.parolaKalin}</strong>
+              {d.parolaSon}
             </p>
-            {uyari !== null && <Serit baslik="Maile sığmayabilir">{uyari}</Serit>}
+            {uyari !== null && <Serit baslik={d.sigmayabilirBaslik}>{uyari}</Serit>}
             {hata !== null && liste !== null && (
-              <Serit ton="hata" baslik="İşlem yapılamadı">
+              <Serit ton="hata" baslik={d.islemYapilamadi}>
                 {hata}
               </Serit>
             )}
@@ -314,28 +309,28 @@ export function Faturalar({
           <div className="flex justify-end border-t border-line px-5 py-3">
             {/* KART İÇİNDE KIRMIZI DOLU DÜĞME YOK: sayfanın birincil eylemi raporu göndermek. */}
             <Dugme ton="koyu" boyut="kucuk" onClick={() => void gonder()} bekliyor={yukleniyor}>
-              Yükle
+              {d.yukle}
             </Dugme>
           </div>
         </section>
       )}
 
       {/* DÖRT HÂL AYRI: okunuyor, okunamadı (sunucunun cümlesi), boş, dolu. */}
-      {liste === null && hata === null && <Yukleniyor satir={3} etiket="Faturalar okunuyor" />}
-      {liste === null && hata !== null && <HataDurumu baslik="Faturalar okunamadı" mesaj={hata} onTekrar={yukle} />}
+      {liste === null && hata === null && <Yukleniyor satir={3} etiket={d.faturalarOkunuyor} />}
+      {liste === null && hata !== null && <HataDurumu baslik={d.okunamadiBaslik} mesaj={hata} onTekrar={yukle} />}
       {liste !== null && (
         <section className="min-w-0 rounded-kart border border-line bg-surface">
           <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line px-5 py-4">
-            <h3 className="m-0 font-baslik text-15 font-bold text-ink">Yüklü faturalar</h3>
+            <h3 className="m-0 font-baslik text-15 font-bold text-ink">{d.yukluFaturalar}</h3>
             {/* SAYAÇ KOŞULSUZ: "sessiz kesme yok". */}
-            <small className="text-12 text-ink-muted">{liste.length} fatura yüklü</small>
+            <small className="text-12 text-ink-muted">{d.faturaYuklu(liste.length)}</small>
           </div>
           <Tablo
-            etiket="Yüklü faturalar"
+            etiket={d.yukluFaturalar}
             sutunlar={sutunlar}
             satirlar={liste}
             satirAnahtari={(f) => f.id}
-            bos={<BosDurum baslik="Fatura yok" neden="Bu workspace için yüklenmiş fatura yok." />}
+            bos={<BosDurum baslik={d.faturaYok} neden={d.faturaYokNeden} />}
             sayfalama={{ bas: liste.length === 0 ? 0 : 1, son: liste.length, toplam: liste.length }}
           />
         </section>

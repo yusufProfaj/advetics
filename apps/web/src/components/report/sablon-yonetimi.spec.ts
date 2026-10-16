@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { raporlarSozlugu } from '@/dil/sozlukler/raporlar';
 
 /**
  * ŞABLON YÖNETİM EKRANI.
@@ -42,7 +43,8 @@ describe('şablon yönetimi', () => {
     // müşteriye gönderilmiş bir rapor haber vermeden 404 olur.
     const g = modalGovdesi();
     expect(g).toContain('sablon.shareCount > 0');
-    expect(g).toContain('paylaşım linki');
+    expect(g).toContain('d.silinecekKalin(sablon.shareCount)');
+    expect(raporlarSozlugu.tr.sablonYonetimi.silinecekKalin(2)).toBe('2 paylaşım linki');
   });
 
   it('KRİTİK: silme İKİ ADIMLI — tek tıkla silinmiyor', () => {
@@ -99,7 +101,9 @@ describe('şablon yönetimi', () => {
     // görünür ve "hiç form gelmedi" diye okunur. Arama düğmesi tıklaması da
     // yalnız Google'da (2026-10-12). Kural tek yerde: `kovaPlatformu` (shared).
     expect(KAYNAK).toContain('kovaPlatformu(k)');
-    expect(KAYNAK).toContain('bu sütunları <strong>vermiyor</strong>');
+    expect(KAYNAK).toContain('<strong>{d.kovaKalin}</strong>');
+    expect(raporlarSozlugu.tr.sablonYonetimi.kovaOn('Meta')).toBe('Meta bu sütunları ');
+    expect(raporlarSozlugu.tr.sablonYonetimi.kovaKalin).toBe('vermiyor');
   });
 });
 

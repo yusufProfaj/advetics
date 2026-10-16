@@ -6,8 +6,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   OZET_KITLESI_ADI,
   YORUM_DURUMU_ADI,
-  aralikMetni,
   isoHaftaAraligi,
+  sec,
   type HaftalikOzetOnizleme,
   type HaftalikOzetPlani,
   type OzetKitlesi,
@@ -20,7 +20,10 @@ import { Dugme } from '@/components/ui/dugme';
 import { BosDurum, HataDurumu, Yukleniyor } from '@/components/ui/hal';
 import { DurumNoktasi } from '@/components/ui/rozet';
 import { BolumluSecici } from '@/components/ui/sekmeler';
+import { useDil } from '@/dil/saglayici';
+import { raporlarSozlugu } from '@/dil/sozlukler/raporlar';
 import {
+  aralikMetni,
   cerceveIcerigi,
   haftaSec,
   haftaSecenekleri,
@@ -53,12 +56,14 @@ export function HaftalikOzetSekmesi({
   ajansGorur: boolean;
   planYetkisi: boolean;
 }) {
+  const { dil } = useDil();
+  const d = sec(raporlarSozlugu, dil).ozet;
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   // Seçenekler sayfa açılışında bir kez: gece yarısı açık kalan sekme
   // seçiciyi kendiliğinden kaydırmasın.
-  const secenekler = useMemo(() => haftaSecenekleri(new Date()), []);
+  const secenekler = useMemo(() => haftaSecenekleri(new Date(), undefined, dil), [dil]);
   const { kod: hafta, duzeltildi } = haftaSec(haftaParam, secenekler);
   const [kitle, setKitle] = useState<OzetKitlesi>(ajansGorur ? 'ajans' : 'musteri');
   const [veri, setVeri] = useState<HaftalikOzetOnizleme | null>(null);
@@ -76,7 +81,7 @@ export function HaftalikOzetSekmesi({
       })
       .catch((e: unknown) => {
         // Hata YUTULMUYOR: sunucunun cümlesi ekranda (boş özetle karışmasın).
-        if (!iptal) setHata(e instanceof Error ? e.message : 'Bağlantı kurulamadı.');
+        if (!iptal) setHata(e instanceof Error ? e.message : d.baglantiYok);
       })
       .finally(() => {
         if (!iptal) setYukleniyor(false);
@@ -84,6 +89,7 @@ export function HaftalikOzetSekmesi({
     return () => {
       iptal = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId, kitle, hafta, deneme]);
 
   function haftaDegistir(kod: string): void {
@@ -98,9 +104,9 @@ export function HaftalikOzetSekmesi({
   return (
     <div className="grid gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="m-0 text-13 text-ink-muted">Geçen haftanın bir önceki haftaya göre özeti, her pazartesi sabahı</p>
+        <p className="m-0 text-13 text-ink-muted">{d.aciklama}</p>
         <label className="flex items-center gap-2 text-13">
-          <span className="font-semibold text-ink-muted">Hafta</span>
+          <span className="font-semibold text-ink-muted">{d.hafta}</span>
           <select
             value={hafta}
             onChange={(e) => haftaDegistir(e.target.value)}
@@ -116,7 +122,7 @@ export function HaftalikOzetSekmesi({
       </div>
       {duzeltildi && (
         <p role="status" className="m-0 text-12 text-ink-muted">
-          Bağlantıdaki hafta gösterilemiyor (tamamlanmamış ya da çok eski); {aralikMetni(aralik)} açıldı.
+          {d.duzeltildi(aralikMetni(aralik, dil))}
         </p>
       )}
 
@@ -125,7 +131,7 @@ export function HaftalikOzetSekmesi({
           <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-3">
             {ajansGorur ? (
               <BolumluSecici
-                etiket="Görünüm"
+                etiket={d.gorunum}
                 secili={kitle}
                 onSec={setKitle}
                 secenekler={(['musteri', 'ajans'] as const).map((k) => ({ deger: k, etiket: OZET_KITLESI_ADI[k] }))}
@@ -135,7 +141,7 @@ export function HaftalikOzetSekmesi({
             )}
             {veri && hal !== 'hata' && (
               <small className="ml-auto text-12 text-ink-muted">
-                {zamanMetni(veri.ozet.uretildi)} üretildi · gönderilenle aynı
+                {d.uretildi(zamanMetni(veri.ozet.uretildi, dil))}
               </small>
             )}
             {yukleniyor && veri && <Halka className="h-3.5 w-3.5" />}
@@ -143,26 +149,21 @@ export function HaftalikOzetSekmesi({
 
           {hal === 'yukleniyor' && (
             <div className="p-4">
-              <Yukleniyor satir={4} etiket="Özet hazırlanıyor" />
+              <Yukleniyor satir={4} etiket={d.hazirlaniyor} />
             </div>
           )}
 
           {hal === 'hata' && (
             <div className="p-4">
-              <HataDurumu baslik="Özet hazırlanamadı" mesaj={hata ?? 'Sunucu sebep bildirmedi.'} onTekrar={() => setDeneme((n) => n + 1)} />
+              <HataDurumu baslik={d.hazirlanamadi} mesaj={hata ?? sec(raporlarSozlugu, dil).sayfa.sunucuSebepYok} onTekrar={() => setDeneme((n) => n + 1)} />
             </div>
           )}
 
           {hal === 'bos' && (
             <div className="p-4">
               <BosDurum
-                baslik="Bu hafta harcama yok"
-                neden={
-                  <>
-                    {aralikMetni(aralik)} ve önceki hafta reklam harcaması kaydedilmedi. Boş özet gönderilmez;
-                    müşteriye giden plan bu hafta &ldquo;Atlandı&rdquo; yazar.
-                  </>
-                }
+                baslik={d.bosBaslik}
+                neden={d.bosNeden(aralikMetni(aralik, dil))}
               />
             </div>
           )}
@@ -175,26 +176,26 @@ export function HaftalikOzetSekmesi({
           {ajansGorur && (
             <section className="rounded-kart border border-line bg-surface">
               <div className="border-b border-line px-5 py-4">
-                <h3 className="m-0 font-baslik text-15 font-bold text-ink">Ajans kanalları</h3>
+                <h3 className="m-0 font-baslik text-15 font-bold text-ink">{d.ajansKanallari}</h3>
               </div>
               <div className="grid gap-2 px-5 py-4 text-13">
                 {kitle !== 'ajans' ? (
-                  <p className="text-ink-muted">Kanal durumu ajans görünümünde.</p>
+                  <p className="text-ink-muted">{d.kanalDurumuAjansta}</p>
                 ) : veri && veri.gonderim.kanallar.length > 0 ? (
                   <ul className="space-y-1.5">
                     {veri.gonderim.kanallar.map((k) => (
                       <li key={k.kanalId} className="flex items-center gap-2">
                         <Nokta durum={k.durum === 'gonderildi' ? 'iyi' : k.durum === 'vazgecildi' || k.durum === 'basarisiz' ? 'kotu' : 'notr'} />
                         <span className="font-medium text-ink">{k.ad}</span>
-                        <span className="text-ink-muted">· {kanalDurumMetni(k.durum)}</span>
+                        <span className="text-ink-muted">· {kanalDurumMetni(k.durum, dil)}</span>
                       </li>
                     ))}
                   </ul>
                 ) : (
-                  <p className="text-ink-muted">Haftalık özeti alan kanal yok. Slack, Teams ya da e-posta kanalında &ldquo;Haftalık özet&rdquo; seçilince pazartesi sabahı oraya da gider.</p>
+                  <p className="text-ink-muted">{d.kanalYok}</p>
                 )}
                 <Link href={markaMerkeziAdresi('workspace', clientId, 'bildirimler')} className="inline-block text-xs font-semibold text-ink underline">
-                  Marka Merkezi › Bildirimler
+                  {d.markaMerkezi}
                 </Link>
               </div>
             </section>
@@ -211,6 +212,8 @@ function Nokta({ durum }: { durum: 'iyi' | 'kotu' | 'notr' }) {
 }
 
 function MailOnizleme({ veri }: { veri: HaftalikOzetOnizleme }) {
+  const { dil } = useDil();
+  const d = sec(raporlarSozlugu, dil).ozet;
   const cerceve = useRef<HTMLIFrameElement>(null);
   const [yukseklik, setYukseklik] = useState(900);
   const ajans = veri.kitle === 'ajans';
@@ -233,19 +236,21 @@ function MailOnizleme({ veri }: { veri: HaftalikOzetOnizleme }) {
     <div>
       <div className="flex flex-col gap-0.5 border-b border-line px-4 py-3 text-xs text-ink-muted">
         <span>
-          Konu: <b className="text-ink">{veri.eposta.konu}</b>
+          {d.konu}
+          <b className="text-ink">{veri.eposta.konu}</b>
         </span>
         {!ajans && (
           <span>
-            Kime: {veri.gonderim.musteri.alicilar.length > 0 ? veri.gonderim.musteri.alicilar.join(', ') : 'rapor alıcısı tanımlı değil'}
+            {d.kime}
+            {veri.gonderim.musteri.alicilar.length > 0 ? veri.gonderim.musteri.alicilar.join(', ') : d.alicisiz}
           </span>
         )}
-        <span>{musteriGonderimMetni(veri.gonderim.musteri)}</span>
+        <span>{musteriGonderimMetni(veri.gonderim.musteri, dil)}</span>
       </div>
       <div className="bg-surface-sunken p-2 sm:p-4">
         <iframe
           ref={cerceve}
-          title={`Haftalık özet maili, ${OZET_KITLESI_ADI[veri.kitle]}`}
+          title={d.cerceveBaslik(OZET_KITLESI_ADI[veri.kitle])}
           sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
           srcDoc={cerceveIcerigi(veri.eposta.html)}
           onLoad={olc}
@@ -257,7 +262,7 @@ function MailOnizleme({ veri }: { veri: HaftalikOzetOnizleme }) {
         <div className="space-y-3 border-t border-line px-4 py-4">
           {veri.kisa && (
             <div>
-              <h3 className="m-0 mb-1.5 text-13 font-semibold text-ink">Slack ve Teams&apos;e giden kısa sürüm</h3>
+              <h3 className="m-0 mb-1.5 text-13 font-semibold text-ink">{d.kisaSurum}</h3>
               <div className="rounded-alan border border-line px-3 py-2.5 text-13">
                 <p className="font-semibold text-ink">{veri.kisa.baslik}</p>
                 <ul className="mt-1 space-y-0.5 text-ink">
@@ -269,7 +274,8 @@ function MailOnizleme({ veri }: { veri: HaftalikOzetOnizleme }) {
             </div>
           )}
           <p className="text-xs text-ink-muted">
-            Yorum durumu: {YORUM_DURUMU_ADI[veri.ozet.yorum.durum]}
+            {d.yorumDurumu}
+            {YORUM_DURUMU_ADI[veri.ozet.yorum.durum]}
             {veri.ozet.yorum.not ? ` (${veri.ozet.yorum.not})` : ''}
           </p>
           {veri.ozet.hatalar.length > 0 && (
@@ -300,6 +306,8 @@ function MusteriPlaniKarti({
   clientId: string;
   gonderim: HaftalikOzetOnizleme['gonderim']['musteri'] | null;
 }) {
+  const { dil } = useDil();
+  const d = sec(raporlarSozlugu, dil).ozet.plan;
   const [plan, setPlan] = useState<HaftalikOzetPlani | null>(null);
   const [hata, setHata] = useState<string | null>(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
@@ -319,7 +327,7 @@ function MusteriPlaniKarti({
         setAlicilar(p.toEmails);
       })
       .catch((e: unknown) => {
-        if (!iptal) setHata(e instanceof Error ? e.message : 'Plan okunamadı.');
+        if (!iptal) setHata(e instanceof Error ? e.message : d.planOkunamadi);
       });
     return () => {
       iptal = true;
@@ -336,7 +344,7 @@ function MusteriPlaniKarti({
       });
       setPlan(p);
     } catch (e) {
-      setHata(e instanceof Error ? e.message : 'Kaydedilemedi.');
+      setHata(e instanceof Error ? e.message : d.kaydedilemedi);
     } finally {
       setKaydediliyor(false);
     }
@@ -352,11 +360,11 @@ function MusteriPlaniKarti({
       });
       setDenemeSonucu(
         r.reddedilen.length > 0
-          ? { tur: 'hata', metin: `Reddedildi: ${r.reddedilen.map((x) => `${x.adres} (${x.sebep})`).join(', ')}` }
-          : { tur: 'tamam', metin: `${r.to.join(', ')} adresine gönderildi. Gelen kutunda kontrol et.` },
+          ? { tur: 'hata', metin: d.reddedildi(r.reddedilen.map((x) => `${x.adres} (${x.sebep})`).join(', ')) }
+          : { tur: 'tamam', metin: d.gonderildi(r.to.join(', ')) },
       );
     } catch (e) {
-      setDenemeSonucu({ tur: 'hata', metin: e instanceof Error ? e.message : 'Gönderilemedi.' });
+      setDenemeSonucu({ tur: 'hata', metin: e instanceof Error ? e.message : d.gonderilemedi });
     } finally {
       setGonderiliyor(false);
     }
@@ -366,12 +374,12 @@ function MusteriPlaniKarti({
   return (
     <section className="rounded-kart border border-line bg-surface">
       <div className="flex items-center gap-2 border-b border-line px-5 py-4">
-        <h3 className="m-0 font-baslik text-15 font-bold text-ink">Müşteriye giden özet</h3>
+        <h3 className="m-0 font-baslik text-15 font-bold text-ink">{sec(raporlarSozlugu, dil).ozet.musteriOzeti}</h3>
         <button
           type="button"
           role="switch"
           aria-checked={etkin}
-          aria-label="Müşteriye giden özet"
+          aria-label={sec(raporlarSozlugu, dil).ozet.musteriOzeti}
           disabled={plan === null || kaydediliyor}
           onClick={() => void kaydet(!etkin)}
           className={`relative ml-auto h-5 w-9 shrink-0 rounded-full transition-colors motion-reduce:transition-none disabled:opacity-50 ${
@@ -388,11 +396,7 @@ function MusteriPlaniKarti({
       <div className="flex items-center gap-2 border-b border-line px-5 py-2.5 text-12">
         <Nokta durum={etkin ? 'iyi' : 'notr'} />
         <span className="text-ink-muted">
-          {plan === null && !hata
-            ? 'Okunuyor…'
-            : etkin
-              ? 'Açık. Her pazartesi müşteriye gönderilir.'
-              : 'Kapalı. Açınca her pazartesi müşteriye gönderilir.'}
+          {plan === null && !hata ? d.okunuyor : etkin ? d.acik : d.kapali}
         </span>
       </div>
       {hata && (
@@ -403,7 +407,7 @@ function MusteriPlaniKarti({
       {plan && (
         <div className="grid gap-3 px-5 py-4 text-13">
           <label className="grid gap-1.5">
-            <span className="text-13 font-semibold text-ink">Saat (pazartesi)</span>
+            <span className="text-13 font-semibold text-ink">{d.saat}</span>
             <select
               value={saat}
               disabled={kaydediliyor}
@@ -427,28 +431,28 @@ function MusteriPlaniKarti({
               setAlicilar(a);
               if (plan.kurulu) void kaydet(etkin, saat, a);
             }}
-            etiket="Alıcılar"
-            yardim="Boş bırakılırsa workspace’in rapor alıcıları"
+            etiket={d.alicilar}
+            yardim={d.alicilarYardim}
             bosVarsayilan={plan.cozulenAliciListesi}
           />
           {plan.cozulenAliciListesi.length === 0 && (
             <p role="alert" className="m-0 text-12 text-danger-strong">
-              Alıcı yok: plan açılsa da mail gidemez. Alıcı ekle ya da Marka Merkezi&apos;nde rapor alıcısı tanımla.
+              {d.aliciYok}
             </p>
           )}
-          <Satir etiket="Gönderen" deger={plan.gonderen ? [plan.gonderen.ad, plan.gonderen.eposta].filter(Boolean).join(' · ') : 'Açan kişinin e-posta kimliği'} />
+          <Satir etiket={d.gonderen} deger={plan.gonderen ? [plan.gonderen.ad, plan.gonderen.eposta].filter(Boolean).join(' · ') : d.gonderenYok} />
           {plan.senderReady === false && (
-            <p role="alert" className="m-0 text-12 text-danger-strong">E-posta kimliği doğrulanmadı; plan açılamaz ya da gönderemez.</p>
+            <p role="alert" className="m-0 text-12 text-danger-strong">{d.dogrulanmadi}</p>
           )}
           <Satir
-            etiket="Son gönderim"
-            deger={plan.son ? `${zamanMetni(plan.son.zaman)} · ${plan.son.durum === 'sent' ? 'Gönderildi' : plan.son.durum === 'skipped' ? 'Atlandı' : 'Başarısız'}` : 'Henüz yok'}
+            etiket={d.sonGonderim}
+            deger={plan.son ? `${zamanMetni(plan.son.zaman, dil)} · ${plan.son.durum === 'sent' ? d.gonderildiDurum : plan.son.durum === 'skipped' ? d.atlandiDurum : d.basarisizDurum}` : d.henuzYok}
           />
           {plan.son?.hata && <p className="m-0 text-12 text-danger-strong">{plan.son.hata}</p>}
-          <Satir etiket="Sıradaki" deger={plan.siradaki ? zamanMetni(plan.siradaki) : etkin ? '-' : 'Kapalı'} />
-          {gonderim && <p className="m-0 text-12 text-ink-muted">Bu hafta: {musteriGonderimMetni(gonderim)}</p>}
+          <Satir etiket={d.siradaki} deger={plan.siradaki ? zamanMetni(plan.siradaki, dil) : etkin ? '-' : d.kapaliKisa} />
+          {gonderim && <p className="m-0 text-12 text-ink-muted">{d.buHafta(musteriGonderimMetni(gonderim, dil))}</p>}
           <Dugme ton="ikincil" boyut="kucuk" onClick={() => void kendimeGonder()} bekliyor={gonderiliyor} className="justify-self-start">
-            Kendime gönder
+            {d.kendimeGonder}
           </Dugme>
           {denemeSonucu && (
             <p role={denemeSonucu.tur === 'hata' ? 'alert' : 'status'} className={`m-0 text-12 ${denemeSonucu.tur === 'hata' ? 'text-danger-strong' : 'text-ink-muted'}`}>

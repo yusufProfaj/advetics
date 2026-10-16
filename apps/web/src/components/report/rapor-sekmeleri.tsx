@@ -4,6 +4,8 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useTransition } from 'react';
 import { Halka } from '@/components/yukleniyor';
 import { SayfaIcMenu } from '@/components/ui/sayfa-ic-menu';
+import { useSozluk } from '@/dil/saglayici';
+import { raporlarSozlugu } from '@/dil/sozlukler/raporlar';
 
 /**
  * ═══ RAPORLAR BÖLÜMLERİ: SAYFA İÇİ YAN MENÜ (kullanıcı kararı 2026-10-14) ═══
@@ -26,15 +28,15 @@ import { SayfaIcMenu } from '@/components/ui/sayfa-ic-menu';
  * arama dizesi kopyalanıp yalnızca `sekme` değiştiriliyor.
  */
 const SEKMELER = [
-  { kod: 'rapor', ad: 'Rapor' },
+  { kod: 'rapor' },
   /*
    * HAFTALIK ÖZET (Paket B) raporun yanında: aynı alıcıya giden ikinci belge
    * ve aynı gönderen. Ayrı sayfa olsaydı "rapor planı" ile "özet planı"
    * kullanıcı için iki ayrı yerde dururdu.
    */
-  { kod: 'ozet', ad: 'Haftalık özet' },
-  { kod: 'sablonlar', ad: 'Şablonlar' },
-  { kod: 'faturalar', ad: 'Faturalar' },
+  { kod: 'ozet' },
+  { kod: 'sablonlar' },
+  { kod: 'faturalar' },
 ] as const;
 
 export type RaporSekmesi = (typeof SEKMELER)[number]['kod'];
@@ -56,6 +58,7 @@ export function RaporSekmeleri({
   /** Kayıtlı şablon sayısı (hazırlar hariç). */
   sablonSayisi?: number;
 }) {
+  const d = useSozluk(raporlarSozlugu).sekmeler;
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -86,12 +89,12 @@ export function RaporSekmeleri({
   return (
     <div className="grid gap-2">
       <SayfaIcMenu
-        etiket="Raporlar bölümleri"
+        etiket={d.etiket}
         secili={aktif}
         onSec={sec}
         ogeler={SEKMELER.filter((s) => s.kod !== 'faturalar' || faturalar).map((s) => ({
           deger: s.kod,
-          etiket: s.ad,
+          etiket: d[s.kod],
           sayi: s.kod === 'sablonlar' && sablonSayisi ? sablonSayisi : undefined,
           uyari: s.kod === 'faturalar' && faturaEksik,
         }))}
@@ -103,7 +106,7 @@ export function RaporSekmeleri({
       */}
       <span aria-live="polite" className={`flex items-center gap-2 px-3 text-12 text-ink-muted ${isPending ? '' : 'invisible'}`}>
         <Halka className="h-3.5 w-3.5" />
-        Açılıyor
+        {d.aciliyor}
       </span>
     </div>
   );

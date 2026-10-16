@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { raporlarSozlugu } from '@/dil/sozlukler/raporlar';
 
 /**
  * RAPOR ARALIĞI — BUGÜN İÇERİ GİRMİYOR.
@@ -69,8 +70,9 @@ describe('rapor tarih aralığı', () => {
     const i = g.indexOf('devamEden ? (');
     expect(i, 'kırpma uyarısı yok').toBeGreaterThan(-1);
     const dilim = g.slice(i, g.indexOf(') : null', i));
-    expect(dilim).toContain('henüz bitmedi');
-    expect(dilim).toContain('formatDayLong(to)');
+    expect(dilim).toContain('d.devamEdenKalin');
+    expect(raporlarSozlugu.tr.sayfa.devamEdenKalin).toBe('henüz bitmedi');
+    expect(dilim).toContain('formatDayLong(to, dil)');
   });
 
   it('seçicide KARŞILAŞTIRMA kapalı — rapor delta göstermiyor', () => {

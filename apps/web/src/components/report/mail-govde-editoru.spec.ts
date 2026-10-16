@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { imzaTemizle } from '@advetics/shared';
 import { domaYazilmali } from './mail-govde-editoru';
+import { raporlarSozlugu } from '@/dil/sozlukler/raporlar';
 
 /**
  * ═══ MAİL GÖVDESİ: KOD DEĞİL GÖRÜNÜŞ ═══
@@ -40,7 +41,8 @@ describe('rapor gönderme — gövde artık render ediliyor', () => {
     // Bir tabloyu elle düzeltmek isteyen kullanıcıdan HTML'i tamamen saklamak
     // yeni bir kısıt olurdu.
     expect(kod(EDITOR)).toContain('<textarea');
-    expect(EDITOR).toContain("{kodModu ? 'Önizleme' : 'HTML'}");
+    expect(EDITOR).toContain("{kodModu ? d.onizleme : 'HTML'}");
+    expect(raporlarSozlugu.tr.mailEditoru.onizleme).toBe('Önizleme');
   });
 
   it('KRİTİK: ÖNİZLEME YALAN SÖYLEMİYOR — gönderimdeki temizleyicinin AYNISI', () => {
@@ -74,7 +76,8 @@ describe('rapor gönderme — gövde artık render ediliyor', () => {
     // Sunucu aynı temizliği yapıyor; sessiz kalsaydı fark yalnızca alıcının
     // istemcisinde görünürdü.
     expect(kod(EDITOR)).toContain('rapor.removedTags');
-    expect(EDITOR).toContain('Gönderimde şunlar kaldırılacak');
+    expect(EDITOR).toContain('d.kaldirilacak(kirpilan.join');
+    expect(raporlarSozlugu.tr.mailEditoru.kaldirilacak('x')).toBe('Gönderimde şunlar kaldırılacak: x');
   });
 
   it('KRİTİK: `deger` BAĞIMLILIKTA — taslak geç gelince kutu dolmalı', () => {

@@ -8,6 +8,8 @@ import { Alan, Girdi, Secim } from '@/components/ui/alan';
 import { Dugme } from '@/components/ui/dugme';
 import { Serit } from '@/components/ui/hal';
 import { YanPanel } from '@/components/ui/pencere';
+import { useSozluk } from '@/dil/saglayici';
+import { raporlarSozlugu } from '@/dil/sozlukler/raporlar';
 import { MailGonderModal, RaporGonder } from './rapor-gonder';
 import { RaporPlanla } from './rapor-planla';
 
@@ -127,14 +129,15 @@ function PaylasimIslemleri({
   onBaglanti: () => void;
   onMail: () => void;
 }) {
+  const d = useSozluk(raporlarSozlugu).paylas;
   return (
     <>
       <AcilirMenu
-        etiket="Diğer rapor işlemleri"
+        etiket={d.digerIslemler}
         hizala="sag"
         genislik="w-72"
         tetik={({ acik: _acik, ...o }) => (
-          <button type="button" {...o} aria-label="Diğer rapor işlemleri" className={`${IKON_TETIK} h-10 w-10 border border-line-strong`}>
+          <button type="button" {...o} aria-label={d.digerIslemler} className={`${IKON_TETIK} h-10 w-10 border border-line-strong`}>
             <span aria-hidden className="text-15 leading-none">
               ⋯
             </span>
@@ -147,20 +150,20 @@ function PaylasimIslemleri({
           kuruyor. `hasData` ile kapatmak, bu hafta harcaması olmayan bir
           müşteriye plan kurulamaması demek olurdu.
         */}
-        <MenuOgesi onClick={onPlan} aciklama="Raporu düzenli olarak otomatik gönder">
-          Planla
+        <MenuOgesi onClick={onPlan} aciklama={d.planlaAciklama}>
+          {d.planla}
         </MenuOgesi>
         <MenuOgesi
           onClick={onBaglanti}
           devreDisi={!hasData}
-          aciklama={hasData ? 'Giriş gerektirmeyen gizli sayfa' : 'Bu dönemde veri yok'}
+          aciklama={hasData ? d.baglantiAciklama : d.veriYok}
         >
-          Paylaşım bağlantısı
+          {d.baglanti}
         </MenuOgesi>
       </AcilirMenu>
 
-      <Dugme onClick={onMail} disabled={!hasData} title={hasData ? undefined : 'Bu dönemde veri yok'}>
-        Raporu gönder
+      <Dugme onClick={onMail} disabled={!hasData} title={hasData ? undefined : d.veriYok}>
+        {d.raporuGonder}
       </Dugme>
     </>
   );
@@ -195,6 +198,7 @@ function PaylasimBaglantisi({
   acik: boolean;
   onKapat: () => void;
 }) {
+  const d = useSozluk(raporlarSozlugu).paylas;
   const [busy, setBusy] = useState(false);
   const [link, setLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -239,7 +243,7 @@ function PaylasimBaglantisi({
         // Sessiz geçilmiyor: bağlantı kutusu zaten açık ve orada "Kopyala" düğmesi var.
       }
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Link oluşturulamadı. Tekrar deneyin.');
+      setError(err instanceof ApiRequestError ? err.message : d.olusturulamadi);
     } finally {
       setBusy(false);
     }
@@ -256,29 +260,27 @@ function PaylasimBaglantisi({
     <YanPanel
       acik={acik}
       onKapat={onKapat}
-      baslik="Paylaşım bağlantısı"
+      baslik={d.baglanti}
       altEylemler={
         <>
           <Dugme ton="ikincil" onClick={onKapat}>
-            Kapat
+            {d.kapat}
           </Dugme>
           <Dugme onClick={() => void createLink()} bekliyor={busy} disabled={busy || !hasData}>
-            Bağlantıyı kopyala
+            {d.baglantiyiKopyala}
           </Dugme>
         </>
       }
     >
-      <p className="m-0 text-13 text-ink-muted">
-        Giriş gerektirmeyen gizli sayfa. Tarih aralığı sabit kalır.
-      </p>
+      <p className="m-0 text-13 text-ink-muted">{d.baglantiAciklamaPanel}</p>
 
-      <Alan etiket="Bağlantı süresi">
+      <Alan etiket={d.sure}>
         {(id) => (
           <Secim id={id} value={expiresInDays} onChange={(e) => setExpiresInDays(e.target.value)}>
-            <option value="">Süresiz</option>
-            <option value="7">7 gün</option>
-            <option value="30">30 gün</option>
-            <option value="90">90 gün</option>
+            <option value="">{d.suresiz}</option>
+            <option value="7">{d.gun7}</option>
+            <option value="30">{d.gun30}</option>
+            <option value="90">{d.gun90}</option>
           </Secim>
         )}
       </Alan>
@@ -290,24 +292,22 @@ function PaylasimBaglantisi({
         paylaşmak olurdu.
       */}
       {sablon !== null && kayitliSablonId === null && (
-        <Serit baslik="Hazır şablonlar bağlantıya taşınmıyor">
-          Workspace, kayıtlı şablonu (yoksa varsayılanı) görecek. Bu görünümü paylaşmak için önce şablon olarak kaydet.
-        </Serit>
+        <Serit baslik={d.hazirSablonBaslik}>{d.hazirSablonMetin}</Serit>
       )}
 
       {error && (
-        <Serit ton="hata" baslik="Bağlantı oluşturulamadı">
+        <Serit ton="hata" baslik={d.olusturulamadiBaslik}>
           {error}
         </Serit>
       )}
 
       {link && (
         <div className="grid gap-2 rounded-alan border border-line p-3">
-          <p className="m-0 text-13 font-semibold text-ink">Bağlantı hazır. Bir daha gösterilmeyecek, şimdi kopyala.</p>
+          <p className="m-0 text-13 font-semibold text-ink">{d.hazir}</p>
           <div className="flex gap-2">
-            <Girdi readOnly value={link} onFocus={(e) => e.currentTarget.select()} className="font-mono text-12" aria-label="Paylaşım bağlantısı" />
+            <Girdi readOnly value={link} onFocus={(e) => e.currentTarget.select()} className="font-mono text-12" aria-label={d.baglantiEtiket} />
             <Dugme ton="koyu" onClick={() => void copy()}>
-              {copied ? 'Kopyalandı' : 'Kopyala'}
+              {copied ? d.kopyalandi : d.kopyala}
             </Dugme>
           </div>
         </div>

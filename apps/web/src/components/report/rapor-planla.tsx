@@ -6,10 +6,8 @@ import {
   AYIN_GUNU_MAX,
   HAFTA_GUNLERI,
   PLAN_SONUC_LABELS,
-  SIKLIK_LABELS,
   PLAN_SIKLIKLARI,
   pencerelerIcin,
-  planZamaniMetni,
   varsayilanPencere,
   type PlanSikligi,
   type RaporPlaniOzeti,
@@ -20,6 +18,10 @@ import { Dugme } from '@/components/ui/dugme';
 import { BosDurum, HataDurumu, Serit, Yukleniyor } from '@/components/ui/hal';
 import { YanPanel } from '@/components/ui/pencere';
 import { Rozet } from '@/components/ui/rozet';
+import { useDil } from '@/dil/saglayici';
+import { raporlarSozlugu } from '@/dil/sozlukler/raporlar';
+import { sec, type Dil } from '@advetics/shared';
+import { planZamaniMetniDil } from './rapor-metinleri';
 
 /**
  * ═══ PLANLA — DÜZENLİ RAPOR GÖNDERİMİ ═══
@@ -51,6 +53,8 @@ interface Props {
 const SAATLER = Array.from({ length: 24 }, (_, i) => i);
 
 export function RaporPlanla({ clientId, templateId, acik, onKapat, onDegisti }: Props) {
+  const { dil } = useDil();
+  const d = sec(raporlarSozlugu, dil).planla;
   const [planlar, setPlanlar] = useState<RaporPlaniOzeti[] | null>(null);
   const [yukleniyor, setYukleniyor] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
@@ -102,7 +106,7 @@ export function RaporPlanla({ clientId, templateId, acik, onKapat, onDegisti }: 
        * ayrı iş ve ayrı gösterilmeli.
        */
       setPlanlar(null);
-      setHata(err instanceof ApiRequestError ? err.message : 'Planlamalar okunamadı.');
+      setHata(err instanceof ApiRequestError ? err.message : d.planlarOkunamadi);
     } finally {
       setYukleniyor(false);
     }
@@ -154,7 +158,7 @@ export function RaporPlanla({ clientId, templateId, acik, onKapat, onDegisti }: 
       await listeyiGetir();
       onDegisti?.();
     } catch (err) {
-      setHata(err instanceof ApiRequestError ? err.message : 'Planlama kaydedilemedi.');
+      setHata(err instanceof ApiRequestError ? err.message : d.kaydedilemedi);
     } finally {
       setKaydediliyor(false);
     }
@@ -181,7 +185,7 @@ export function RaporPlanla({ clientId, templateId, acik, onKapat, onDegisti }: 
       await listeyiGetir();
       onDegisti?.();
     } catch (err) {
-      setHata(err instanceof ApiRequestError ? err.message : 'Değiştirilemedi.');
+      setHata(err instanceof ApiRequestError ? err.message : d.degistirilemedi);
     }
   }
 
@@ -192,7 +196,7 @@ export function RaporPlanla({ clientId, templateId, acik, onKapat, onDegisti }: 
       await listeyiGetir();
       onDegisti?.();
     } catch (err) {
-      setHata(err instanceof ApiRequestError ? err.message : 'Silinemedi.');
+      setHata(err instanceof ApiRequestError ? err.message : d.silinemedi);
     }
   }
 
@@ -203,55 +207,53 @@ export function RaporPlanla({ clientId, templateId, acik, onKapat, onDegisti }: 
       acik={acik}
       onKapat={onKapat}
       genislik={520}
-      baslik="Düzenli rapor gönderimi"
+      baslik={d.baslik}
       altEylemler={
         <>
           {duzenlenen && (
             <Dugme ton="ikincil" onClick={formuSifirla}>
-              Vazgeç
+              {d.vazgec}
             </Dugme>
           )}
           <Dugme onClick={() => void kaydet()} bekliyor={kaydediliyor}>
-            {duzenlenen ? 'Güncelle' : 'Planlamayı kur'}
+            {duzenlenen ? d.guncelle : d.kur}
           </Dugme>
         </>
       }
     >
-      <p className="m-0 text-13 text-ink-muted">
-        Rapor seçtiğin sıklıkta otomatik hazırlanıp workspace’e mail atılır. Mail SENİN adresinden gider.
-      </p>
+      <p className="m-0 text-13 text-ink-muted">{d.giris}</p>
 
       {hata && (
-        <Serit ton="hata" baslik="İşlem yapılamadı">
+        <Serit ton="hata" baslik={d.islemYapilamadi}>
           {hata}
         </Serit>
       )}
 
       {/* ── MEVCUT PLANLAR: dört hâl ayrı (yükleniyor, hata yukarıda, boş, dolu) ── */}
       <div className="grid gap-2">
-        <h3 className="m-0 font-baslik text-14 font-bold text-ink">Kurulu planlar</h3>
-        {yukleniyor && <Yukleniyor satir={2} etiket="Planlar yükleniyor" />}
+        <h3 className="m-0 font-baslik text-14 font-bold text-ink">{d.kuruluPlanlar}</h3>
+        {yukleniyor && <Yukleniyor satir={2} etiket={d.planlarYukleniyor} />}
         {!yukleniyor && planlar === null && hata === null && (
-          <HataDurumu baslik="Planlar okunamadı" mesaj="Sunucu sebep bildirmedi." onTekrar={() => void listeyiGetir()} />
+          <HataDurumu baslik={d.planlarOkunamadiBaslik} mesaj={sec(raporlarSozlugu, dil).sayfa.sunucuSebepYok} onTekrar={() => void listeyiGetir()} />
         )}
         {!yukleniyor && planlar !== null && planlar.length === 0 && (
-          <BosDurum baslik="Kurulu plan yok" neden="Bu workspace için kurulu planlama yok. Aşağıdan ilkini kur." />
+          <BosDurum baslik={d.kuruluPlanYok} neden={d.kuruluPlanYokNeden} />
         )}
         {!yukleniyor && planlar !== null && planlar.length > 0 && (
           <ul className="m-0 grid list-none gap-2 p-0">
             {planlar.map((p) => (
               <li key={p.id} className="grid gap-1.5 rounded-alan border border-line px-3 py-2.5 text-13">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <b className="font-semibold text-ink">{planZamaniMetni(p)}</b>
-                  <Rozet hal={p.enabled ? 'ok' : 'dur'}>{p.enabled ? 'Açık' : 'Duraklatıldı'}</Rozet>
+                  <b className="font-semibold text-ink">{planZamaniMetniDil(p, dil)}</b>
+                  <Rozet hal={p.enabled ? 'ok' : 'dur'}>{p.enabled ? d.acik : d.duraklatildi}</Rozet>
                 </div>
                 <p className="m-0 text-12 text-ink-muted">
                   {pencereEtiketi(p.rangeKey)} ·{' '}
-                  {p.cozulenAliciListesi.length > 0 ? p.cozulenAliciListesi.join(', ') : 'alıcı yok'}
-                  {p.attachPdf ? ' · PDF ekli' : ''}
+                  {p.cozulenAliciListesi.length > 0 ? p.cozulenAliciListesi.join(', ') : d.aliciYok}
+                  {p.attachPdf ? d.pdfEkli : ''}
                 </p>
                 {p.nextRunAt && p.enabled && (
-                  <p className="m-0 text-12 text-ink-muted">Bir sonraki: {tarihMetni(p.nextRunAt)}</p>
+                  <p className="m-0 text-12 text-ink-muted">{d.birSonraki(tarihMetni(p.nextRunAt, dil))}</p>
                 )}
                 {/*
                   UYARI YALNIZCA KESİN BİLGİDE.
@@ -264,26 +266,26 @@ export function RaporPlanla({ clientId, templateId, acik, onKapat, onDegisti }: 
                 */}
                 {p.senderReady === false && (
                   <p className="m-0 border-l-4 border-l-danger pl-2 text-12 text-ink">
-                    {p.createdByEmail ?? 'Planı kuran kişinin'} e-posta kimliği doğrulanmamış, bu plan çalışmayacak.
+                    {d.dogrulanmamis(p.createdByEmail ?? d.kuranKisi)}
                   </p>
                 )}
                 {p.lastStatus && (
                   <p className={`m-0 text-12 ${p.lastStatus === 'failed' ? 'text-danger-strong' : 'text-ink-muted'}`}>
-                    Son tur: {PLAN_SONUC_LABELS[p.lastStatus]}
-                    {p.lastRunAt ? ` · ${tarihMetni(p.lastRunAt)}` : ''}
+                    {d.sonTur}{PLAN_SONUC_LABELS[p.lastStatus]}
+                    {p.lastRunAt ? ` · ${tarihMetni(p.lastRunAt, dil)}` : ''}
                     {p.lastSentTo ? ` · ${p.lastSentTo}` : ''}
                     {p.lastError ? `: ${p.lastError}` : ''}
                   </p>
                 )}
                 <div className="flex flex-wrap gap-1.5">
                   <Dugme ton="ikincil" boyut="kucuk" onClick={() => duzenlemeyeAl(p)}>
-                    Düzenle
+                    {d.duzenle}
                   </Dugme>
                   <Dugme ton="ikincil" boyut="kucuk" onClick={() => void durumDegistir(p)}>
-                    {p.enabled ? 'Duraklat' : 'Sürdür'}
+                    {p.enabled ? d.duraklat : d.surdur}
                   </Dugme>
                   <Dugme ton="tehlike" boyut="kucuk" onClick={() => void sil(p)}>
-                    Sil
+                    {d.sil}
                   </Dugme>
                 </div>
               </li>
@@ -294,15 +296,15 @@ export function RaporPlanla({ clientId, templateId, acik, onKapat, onDegisti }: 
 
       {/* ── YENİ / DÜZENLE ── */}
       <div className="grid gap-3.5 border-t border-line pt-4">
-        <h3 className="m-0 font-baslik text-14 font-bold text-ink">{duzenlenen ? 'Planlamayı düzenle' : 'Yeni planlama'}</h3>
+        <h3 className="m-0 font-baslik text-14 font-bold text-ink">{duzenlenen ? d.planlamayiDuzenle : d.yeniPlanlama}</h3>
 
         <FormIzgarasi>
-          <Alan etiket="Sıklık">
+          <Alan etiket={d.siklik}>
             {(id) => (
               <Secim id={id} value={frequency} onChange={(e) => setFrequency(e.target.value as PlanSikligi)}>
                 {PLAN_SIKLIKLARI.map((s) => (
                   <option key={s} value={s}>
-                    {SIKLIK_LABELS[s]}
+                    {d.siklikAdlari[s]}
                   </option>
                 ))}
               </Secim>
@@ -310,12 +312,12 @@ export function RaporPlanla({ clientId, templateId, acik, onKapat, onDegisti }: 
           </Alan>
 
           {frequency === 'weekly' ? (
-            <Alan etiket="Haftanın günü">
+            <Alan etiket={d.haftaninGunu}>
               {(id) => (
                 <Secim id={id} value={dayOfWeek} onChange={(e) => setDayOfWeek(Number(e.target.value))}>
                   {HAFTA_GUNLERI.map((g) => (
                     <option key={g.no} value={g.no}>
-                      {g.ad}
+                      {d.haftaGunleri[String(g.no) as keyof typeof d.haftaGunleri]}
                     </option>
                   ))}
                 </Secim>
@@ -327,8 +329,8 @@ export function RaporPlanla({ clientId, templateId, acik, onKapat, onDegisti }: 
               kısıtı kullanıcıya SÖYLE."
             */
             <Alan
-              etiket={`Ayın günü (1-${AYIN_GUNU_MAX})`}
-              ipucu="28’den büyük günler her ayda bulunmuyor. Şubat’ta rapor atlanırdı."
+              etiket={d.ayinGunu(AYIN_GUNU_MAX)}
+              ipucu={d.ayinGunuIpucu}
             >
               {(id, aciklamaId) => (
                 <Secim
@@ -347,7 +349,7 @@ export function RaporPlanla({ clientId, templateId, acik, onKapat, onDegisti }: 
             </Alan>
           )}
 
-          <Alan etiket="Saat (İstanbul)">
+          <Alan etiket={d.saat}>
             {(id) => (
               <Secim id={id} value={hour} onChange={(e) => setHour(Number(e.target.value))}>
                 {SAATLER.map((s) => (
@@ -363,7 +365,7 @@ export function RaporPlanla({ clientId, templateId, acik, onKapat, onDegisti }: 
             YALNIZCA UYUMLU DÖNEMLER. Haftalık bir planda "Geçen ay" aynı
             raporu ayda dört kez göndermek demek; listede hiç görünmüyor.
           */}
-          <Alan etiket="Rapor dönemi" ipucu={secilenPencere?.aciklama}>
+          <Alan etiket={d.donem} ipucu={secilenPencere?.aciklama}>
             {(id, aciklamaId) => (
               <Secim id={id} aria-describedby={aciklamaId} value={rangeKey} onChange={(e) => setRangeKey(e.target.value)}>
                 {secilebilir.map((p) => (
@@ -379,14 +381,14 @@ export function RaporPlanla({ clientId, templateId, acik, onKapat, onDegisti }: 
         {/* Rapor gönderme ekranıyla AYNI bileşen: ayrıştırma kuralı iki yerde
             yazılsaydı plan başka bir listeye gönderirdi. */}
         <AliciListesiAlani
-          etiket="Alıcılar (boş bırakılırsa workspace’in kayıtlı adresleri kullanılır)"
+          etiket={d.aliciEtiket}
           degerler={alicilar}
           onChange={setAlicilar}
         />
 
         <label className="flex items-center gap-2 text-13 text-ink">
           <input type="checkbox" checked={attachPdf} onChange={(e) => setAttachPdf(e.target.checked)} className="accent-[var(--text)]" />
-          PDF raporu ekle
+          {d.pdfEkle}
         </label>
 
         {/*
@@ -396,15 +398,13 @@ export function RaporPlanla({ clientId, templateId, acik, onKapat, onDegisti }: 
           okuyabilmeli.
         */}
         <p className="m-0 rounded-alan bg-surface-muted px-3 py-2 text-13 text-ink">
-          {planZamaniMetni({ frequency, dayOfWeek, dayOfMonth, hour })}’da, <strong>{secilenPencere?.label}</strong>{' '}
-          dönemini kapsayan rapor{' '}
-          <strong>{alicilar.length > 0 ? alicilar.join(', ') : 'workspace’in kayıtlı adreslerine'}</strong>{' '}
-          gönderilecek.
+          {d.planBas(planZamaniMetniDil({ frequency, dayOfWeek, dayOfMonth, hour }, dil))}
+          <strong>{secilenPencere?.label}</strong>
+          {d.planOrta}
+          <strong>{alicilar.length > 0 ? alicilar.join(', ') : d.kayitliAdresler}</strong>
+          {d.planSon}
         </p>
-        <p className="m-0 text-12 text-ink-muted">
-          Dönemde hiç harcama yoksa mail gönderilmez. Sıfırlarla dolu bir rapor müşteriye “sistem bozulmuş” diye
-          okunuyor. Atlanan tur bu listede sebebiyle görünür.
-        </p>
+        <p className="m-0 text-12 text-ink-muted">{d.harcamaYoksa}</p>
       </div>
     </YanPanel>
   );
@@ -420,6 +420,8 @@ export function RaporPlanla({ clientId, templateId, acik, onKapat, onDegisti }: 
  * planı ikinci kez kurdururdu.
  */
 export function PlanCipi({ clientId, templateId }: { clientId: string; templateId: string | null }) {
+  const { dil } = useDil();
+  const d = sec(raporlarSozlugu, dil).planla;
   const [acik, setAcik] = useState(false);
   const [durum, setDurum] = useState<
     { tur: 'yukleniyor' } | { tur: 'hata'; mesaj: string } | { tur: 'hazir'; planlar: RaporPlaniOzeti[] }
@@ -430,9 +432,9 @@ export function PlanCipi({ clientId, templateId }: { clientId: string; templateI
       const planlar = await apiFetch<RaporPlaniOzeti[]>(`/reports/schedules?clientId=${clientId}`);
       setDurum({ tur: 'hazir', planlar });
     } catch (err) {
-      setDurum({ tur: 'hata', mesaj: err instanceof ApiRequestError ? err.message : 'Planlar okunamadı.' });
+      setDurum({ tur: 'hata', mesaj: err instanceof ApiRequestError ? err.message : d.cip.planlarOkunamadi });
     }
-  }, [clientId]);
+  }, [clientId, d.cip.planlarOkunamadi]);
 
   useEffect(() => {
     void oku();
@@ -441,24 +443,24 @@ export function PlanCipi({ clientId, templateId }: { clientId: string; templateI
   const aciklar = durum.tur === 'hazir' ? durum.planlar.filter((p) => p.enabled) : [];
   const metin =
     durum.tur === 'yukleniyor'
-      ? 'okunuyor'
+      ? d.cip.okunuyor
       : durum.tur === 'hata'
-        ? 'durum okunamadı'
+        ? d.cip.okunamadi
         : aciklar.length === 0
-          ? 'yok'
-          : `${planZamaniMetni(aciklar[0]!)}${aciklar.length > 1 ? ` +${aciklar.length - 1}` : ''}`;
+          ? d.cip.yok
+          : `${planZamaniMetniDil(aciklar[0]!, dil)}${aciklar.length > 1 ? ` +${aciklar.length - 1}` : ''}`;
 
   return (
     <>
       <button
         type="button"
         onClick={() => setAcik(true)}
-        title={durum.tur === 'hata' ? durum.mesaj : 'Düzenli gönderimi aç'}
+        title={durum.tur === 'hata' ? durum.mesaj : d.cip.duzenliAc}
         className={`inline-flex h-[30px] max-w-[20rem] items-center gap-1.5 whitespace-nowrap rounded-full bg-surface-sunken px-3 text-[12.5px] font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
           durum.tur === 'hata' ? 'text-danger-strong' : 'text-ink'
         }`}
       >
-        <span className={durum.tur === 'hata' ? '' : 'text-ink-muted'}>Planlı:</span>
+        <span className={durum.tur === 'hata' ? '' : 'text-ink-muted'}>{d.cip.planli}</span>
         <b className="min-w-0 truncate">{metin}</b>
       </button>
       <RaporPlanla
@@ -479,8 +481,8 @@ function pencereEtiketi(key: string): string {
   );
 }
 
-function tarihMetni(iso: string): string {
-  return new Date(iso).toLocaleString('tr-TR', {
+function tarihMetni(iso: string, dil: Dil): string {
+  return new Date(iso).toLocaleString(dil === 'en' ? 'en-US' : 'tr-TR', {
     timeZone: 'Europe/Istanbul',
     day: 'numeric',
     month: 'long',

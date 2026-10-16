@@ -20,7 +20,11 @@ import { SayfaIskeleti } from '@/components/ui/sayfa-basligi';
 import { SayfaIcDuzen } from '@/components/ui/sayfa-ic-menu';
 import { HataDurumu, Serit } from '@/components/ui/hal';
 import { dugmeSinifi } from '@/components/ui/dugme';
-import { donemMetni, type FaturaOzeti } from '@advetics/shared';
+import { sec, type Dil, type FaturaOzeti } from '@advetics/shared';
+import { dilAl } from '@/dil/sunucu';
+import { raporlarSozlugu } from '@/dil/sozlukler/raporlar';
+import { menuSatiriEtiketi } from '@/lib/nav-sections';
+import { donemMetniDil } from '@/components/report/rapor-metinleri';
 import { enEskiGunGerekli, gunEkle, resolveRange, today } from '@/lib/date-range';
 import { TarihSecici } from '@/components/tarih-secici';
 import { ReportDocument } from '@/components/report/report-document';
@@ -29,7 +33,10 @@ import { Faturalar } from '@/components/report/faturalar';
 import { RaporSekmeleri, type RaporSekmesi } from '@/components/report/rapor-sekmeleri';
 import { HaftalikOzetSekmesi } from '@/components/report/haftalik-ozet';
 
-export const metadata = { title: 'Raporlar · Advetics' };
+/** Sekme başlığı istek anında, dil çerezden (CEVIRI-REHBERI §2). */
+export async function generateMetadata() {
+  return { title: `${menuSatiriEtiketi('/raporlar', await dilAl())} · Advetics` };
+}
 export const dynamic = 'force-dynamic';
 
 /**
@@ -55,6 +62,8 @@ export default async function ReportsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const session = await requireSession();
+  const dil = await dilAl();
+  const d = sec(raporlarSozlugu, dil).sayfa;
   // Fatura MÜŞTERİYE GİDEN bir belge; yönetimi rapor paylaşma yetkisine bağlı.
   const canShare = hasPermission(session, 'report.share');
   // Şablonun BİÇİMİNİ değiştirmek okumaktan ayrı bir karar: müşteri hesabı
@@ -68,8 +77,8 @@ export default async function ReportsPage({
   if (!clientId) {
     return (
       <WorkspaceGerekli
-        ekran="Raporlar"
-        neden="Rapor workspace bazında üretiliyor."
+        ekran={menuSatiriEtiketi('/raporlar', dil)}
+        neden={d.workspaceGerekli}
         {...workspaceSecimVerisi(session)}
       />
     );
@@ -98,7 +107,7 @@ export default async function ReportsPage({
        * seçen kullanıcı, en eski tarih okunamadığı için başka bir aralığa
        * düşüyor ve sebebini hiçbir yerde göremiyordu.
        */
-      kapsamHatasi = err instanceof Error ? err.message : 'Bağlantı kurulamadı.';
+      kapsamHatasi = err instanceof Error ? err.message : d.kapsamOkunamadi;
     }
   }
 
@@ -150,7 +159,7 @@ export default async function ReportsPage({
   try {
     sablonlar = await serverApiFetch<ReportTemplateSummary[]>('/reports/templates');
   } catch (err) {
-    sablonHatasi = err instanceof Error ? err.message : 'Şablonlar alınamadı';
+    sablonHatasi = err instanceof Error ? err.message : d.sablonlarOkunamadi;
   }
 
   /*
@@ -190,7 +199,7 @@ export default async function ReportsPage({
     try {
       report = await serverApiFetch<ReportData>(`/reports/preview?${qs}`);
     } catch (err) {
-      raporHatasi = err instanceof Error ? err.message : 'Bağlantı kurulamadı.';
+      raporHatasi = err instanceof Error ? err.message : d.kapsamOkunamadi;
     }
   }
 
@@ -214,7 +223,7 @@ export default async function ReportsPage({
       faturaEksik = odakDonemler.filter((d) => !faturalar.some((f) => f.donem === d));
       faturaSayisi = faturalar.filter((f) => odakDonemler.includes(f.donem)).length;
     } catch (err) {
-      faturaHatasi = err instanceof Error ? err.message : 'Faturalar okunamadı.';
+      faturaHatasi = err instanceof Error ? err.message : d.faturalarOkunamadi;
     }
   }
 
@@ -227,13 +236,13 @@ export default async function ReportsPage({
     Object.entries(params).map(([k, v]) => [k, first(v)]),
   );
   const faturaHref = baglanti('/raporlar', mevcut, { sekme: 'faturalar' });
-  const donemMetniKisa = sekme === 'ozet' ? 'Haftalık özet' : `${formatDayLong(from)} - ${formatDayLong(to)}`;
+  const donemMetniKisa = sekme === 'ozet' ? d.haftalikOzet : `${formatDayLong(from, dil)} - ${formatDayLong(to, dil)}`;
 
   return (
     <SayfaIskeleti
-      bolum="Rapor"
-      baslik="Raporlar"
-      aciklama={`Müşteriye giden rapor, şablon ve faturalar. ${donemMetniKisa}.`}
+      bolum={sec(raporlarSozlugu, dil).sekmeler.rapor}
+      baslik={menuSatiriEtiketi('/raporlar', dil)}
+      aciklama={d.aciklama(donemMetniKisa)}
       eylemler={
         <>
           {/*
@@ -293,26 +302,16 @@ export default async function ReportsPage({
         {sekme === 'rapor' && (
           <Uyarilar
             satirlar={[
-              kapsamHatasi !== null ? (
-                <>
-                  En eski veri tarihi okunamadı, &ldquo;Tüm zamanlar&rdquo; seçimi varsayılan aralığa düştü.
-                </>
-              ) : null,
-              sablonHatasi !== null ? (
-                <>
-                  Şablon listesi alınamadı. Rapor varsayılan şablonla üretiliyor, kayıtlı şablonların listede
-                  görünmüyor.
-                </>
-              ) : null,
+              kapsamHatasi !== null ? <>{d.uyariKapsam}</> : null,
+              sablonHatasi !== null ? <>{d.uyariSablon}</> : null,
               devamEden ? (
                 <>
-                  Seçilen dönem <strong>henüz bitmedi</strong>. Rapor {formatDayLong(to)} tarihine kadarki
-                  tamamlanmış günleri kapsıyor.
+                  {d.devamEdenOn}
+                  <strong>{d.devamEdenKalin}</strong>
+                  {d.devamEdenSon(formatDayLong(to, dil))}
                 </>
               ) : null,
-              report !== null && report.platforms.length === 0 ? (
-                <>Bu dönemde harcama kaydı yok, rapor boş görünecek.</>
-              ) : null,
+              report !== null && report.platforms.length === 0 ? <>{d.uyariHarcamaYok}</> : null,
             ]}
           />
         )}
@@ -335,7 +334,12 @@ export default async function ReportsPage({
             duzenleyebilir={canWriteTemplate}
           />
         ) : sekme === 'faturalar' ? (
-          <FaturaSekmesi clientId={clientId} clientName={musteriAdi(session, clientId)} odakDonemler={odakDonemler} />
+          <FaturaSekmesi
+            clientId={clientId}
+            clientName={musteriAdi(session, clientId, 'Workspace')}
+            odakDonemler={odakDonemler}
+            dil={dil}
+          />
         ) : (
           <>
             {/*
@@ -347,35 +351,35 @@ export default async function ReportsPage({
               {canShare && <PlanCipi clientId={clientId} templateId={alanlar.templateId ?? null} />}
               <span className="flex-1" />
               <span className="text-12 text-ink-muted">
-                Önizleme müşterinin göreceği PDF ile aynı
+                {d.onizlemeAyni}
                 {canShare && faturaEksik.length === 0 && faturaHatasi === null && faturaSayisi > 0
-                  ? ` · ${faturaSayisi} fatura maile eklenecek`
+                  ? d.faturaMaileEklenecek(faturaSayisi)
                   : ''}
               </span>
             </div>
 
             {canShare && faturaHatasi !== null && (
-              <Serit ton="hata" baslik="Faturalar okunamadı">
-                {`Rapor maili faturasız gidebilir: ${faturaHatasi}`}
+              <Serit ton="hata" baslik={d.faturalarOkunamadiBaslik}>
+                {d.faturasizGidebilir(faturaHatasi)}
               </Serit>
             )}
             {canShare && faturaEksik.length > 0 && (
               <Serit
-                baslik={`${faturaEksik.map(donemMetni).join(', ')} faturası yüklenmedi`}
+                baslik={d.faturaYuklenmedi(faturaEksik.map((x) => donemMetniDil(x, dil)).join(', '))}
                 eylemler={
                   <Link className={dugmeSinifi('ikincil', 'kucuk')} href={faturaHref}>
-                    Fatura yükle
+                    {d.faturaYukle}
                   </Link>
                 }
               >
-                Rapor maili faturasız gider.
+                {d.faturasizGider}
               </Serit>
             )}
 
             {report === null ? (
               /* "API çalışıyor mu?" müşterinin okuduğu ekranda hem anlamsız hem
                  ürkütücü. Sunucunun kendi cümlesi teşhis için yeterli. */
-              <HataDurumu baslik="Rapor oluşturulamadı" mesaj={raporHatasi ?? 'Sunucu sebep bildirmedi.'} />
+              <HataDurumu baslik={d.raporOlusturulamadi} mesaj={raporHatasi ?? d.sunucuSebepYok} />
             ) : (
               /* Önizleme müşterinin göreceğinin BİREBİR aynısı: aynı bileşen,
                  aynı veri. Ayrı bir "önizleme görünümü" yazmak, gönderilen
@@ -406,25 +410,27 @@ function FaturaSekmesi({
   clientId,
   clientName,
   odakDonemler,
+  dil,
 }: {
   clientId: string;
   clientName: string;
   /** Ekrandaki dönemin ayları: o ayın faturası eksikse bölümde de yazıyor. */
   odakDonemler: string[];
+  dil: Dil;
 }) {
+  const d = sec(raporlarSozlugu, dil).faturaSekmesi;
   return (
     <div className="grid gap-4">
       <p className="m-0 text-13 text-ink-muted">
-        {clientName} · platform faturaları rapor mailine ayrı ek olarak gider
+        {d.altBaslik(clientName)}
       </p>
 
       <div className="grid gap-1 rounded-kart border border-line bg-surface-muted px-4 py-3 text-12 text-ink-muted">
-        <p className="m-0 text-13 font-semibold text-ink">Faturalar neden otomatik gelmiyor?</p>
+        <p className="m-0 text-13 font-semibold text-ink">{d.neden}</p>
         <p className="m-0">
-          Google’ın fatura API’si yalnızca <strong>aylık faturalama</strong> (kredi hattı) olan
-          hesaplarda çalışıyor; kartla ödeyen hesaplarda çağrı reddediliyor. Meta’da ise fatura
-          PDF’i döndüren bir uç bulunmuyor, yalnızca fatura kaydı okunabiliyor. Bu yüzden belge
-          platformdan indirilip buraya yükleniyor.
+          {d.googleOn}
+          <strong>{d.googleKalin}</strong>
+          {d.googleSon}
         </p>
       </div>
 
@@ -447,8 +453,9 @@ function Uyarilar({ satirlar }: { satirlar: Array<React.ReactNode | null> }) {
 function musteriAdi(
   session: { availableClients: Array<{ id: string; name: string }> },
   clientId: string,
+  yedek: string,
 ): string {
-  return session.availableClients.find((c) => c.id === clientId)?.name ?? 'Workspace';
+  return session.availableClients.find((c) => c.id === clientId)?.name ?? yedek;
 }
 
 function first(value: string | string[] | undefined): string | undefined {

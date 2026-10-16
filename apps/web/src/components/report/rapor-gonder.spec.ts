@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ayarlarSozlugu } from '@/dil/sozlukler/ayarlar';
+import { raporlarSozlugu } from '@/dil/sozlukler/raporlar';
 
 /**
  * PAYLAŞ VE GÖNDER EKRANI.
@@ -23,7 +24,8 @@ describe('RaporGonder', () => {
     // Sunucu da reddediyor; ekranda söylemek kullanıcıyı hata almadan
     // Ayarlar ekranına yönlendiriyor.
     expect(KAYNAK).toContain('!taslak?.senderReady');
-    expect(KAYNAK).toContain('E-posta ayarların doğrulanmamış');
+    expect(KAYNAK).toContain('d.dogrulanmamisBaslik');
+    expect(raporlarSozlugu.tr.gonder.dogrulanmamisBaslik).toBe('E-posta ayarların doğrulanmamış.');
   });
 
   it('KRİTİK: HİÇ ALICI YOKSA gönderilemiyor ve sebebi yazılı', () => {
@@ -71,7 +73,8 @@ describe('RaporGonder', () => {
      */
     expect(KAYNAK).toContain('<MailGovdeEditoru');
     const editor = readFileSync(join(__dirname, 'mail-govde-editoru.tsx'), 'utf8');
-    expect(editor).toContain('değerlendirme kısmını sen yaz');
+    expect(editor).toContain('{d.baslik}');
+    expect(raporlarSozlugu.tr.mailEditoru.baslik).toContain('değerlendirme kısmını sen yaz');
     expect(editor).toContain('contentEditable');
   });
 
@@ -102,7 +105,8 @@ describe('RaporGonder', () => {
   });
 
   it('gönderim sonucu ALICILARI yazıyor — "gönderildi" tek başına yetmiyor', () => {
-    expect(KAYNAK).toContain('adrese gönderildi');
+    expect(KAYNAK).toContain('d.gonderildi(r.to.length');
+    expect(raporlarSozlugu.tr.gonder.gonderildi(2, 'a')).toContain('adrese gönderildi');
     expect(KAYNAK).toContain('r.to.join');
   });
 
@@ -116,9 +120,9 @@ describe('RaporGonder', () => {
      * Yeşil kutunun İÇİNE sıkıştırmak da yetmez: kısmi bir arıza başarı gibi
      * görünürdü. Ayrı kutu ve uyarı rengi.
      */
-    expect(KAYNAK).toContain('adres reddedildi');
+    expect(raporlarSozlugu.tr.gonder.reddedildi(2)).toContain('adres reddedildi');
     // 2026-10-14: uyarı şeridi (ortak `Serit`), yeşil başarı cümlesinden ayrı.
-    expect(KAYNAK).toContain('<Serit baslik={`${reddedilen.length} adres reddedildi`}>');
+    expect(KAYNAK).toContain('<Serit baslik={d.reddedildi(reddedilen.length)}>');
     // İddia RENGE değil, reddi TAŞIYAN duruma da çapalı olmalı.
     expect(KAYNAK).toContain('setReddedilen(r.reddedilen)');
   });

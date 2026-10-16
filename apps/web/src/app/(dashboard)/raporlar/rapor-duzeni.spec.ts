@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { raporlarSozlugu } from '@/dil/sozlukler/raporlar';
 
 /**
  * ═══ RAPORLAR: DÜZEN VE DİL KARARLARI ═══
@@ -39,10 +40,11 @@ describe('hata görünürlüğü', () => {
   });
 
   it('KRİTİK: sunucunun kendi cümlesi EKRANDA', () => {
-    const i = SAYFA.indexOf('Rapor oluşturulamadı');
+    const i = SAYFA.indexOf('d.raporOlusturulamadi');
     expect(i, 'hata kutusu yok').toBeGreaterThan(-1);
     const dilim = SAYFA.slice(i, i + 200);
-    expect(dilim).toContain('{raporHatasi');
+    expect(dilim).toContain('raporHatasi ??');
+    expect(raporlarSozlugu.tr.sayfa.raporOlusturulamadi).toBe('Rapor oluşturulamadı');
   });
 
   it('KRİTİK: "API çalışıyor mu?" gibi teknik cümle YOK', () => {
@@ -52,8 +54,8 @@ describe('hata görünürlüğü', () => {
 
   it('hata kutusu ekran okuyucuya ACİL olarak duyuruluyor', () => {
     // 2026-10-14: ortak `HataDurumu` (role="alert" bileşenin kendisinde).
-    const i = SAYFA.indexOf('Rapor oluşturulamadı');
-    expect(SAYFA.slice(Math.max(0, i - 40), i)).toContain('<HataDurumu baslik="');
+    const i = SAYFA.indexOf('d.raporOlusturulamadi');
+    expect(SAYFA.slice(Math.max(0, i - 40), i)).toContain('<HataDurumu baslik={');
     expect(readFileSync(join(__dirname, '..', '..', '..', 'components', 'ui', 'hal.tsx'), 'utf8')).toContain('role="alert"');
   });
 });

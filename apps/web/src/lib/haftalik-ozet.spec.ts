@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { HaftalikOzetOnizleme } from '@advetics/shared';
 import { cerceveIcerigi, haftaSec, haftaSecenekleri, musteriGonderimMetni, onizlemeYolu, ozetHali } from './haftalik-ozet';
+import { raporlarSozlugu } from '@/dil/sozlukler/raporlar';
 
 /**
  * Haftalık özet sekmesinin kararları (Paket B, Ajan 3). Bileşen render
@@ -71,7 +72,8 @@ describe('önizleme çerçevesi', () => {
 
   it('KRİTİK: ajans görünümü düğmesi yalnız rule.read ile; sayfa izni doğru yerden', () => {
     expect(KAYNAK).toMatch(/useState<OzetKitlesi>\(ajansGorur \? 'ajans' : 'musteri'\)/);
-    expect(KAYNAK).toMatch(/\{ajansGorur \? \(\s*<BolumluSecici\s+etiket="Görünüm"/);
+    expect(KAYNAK).toMatch(/\{ajansGorur \? \(\s*<BolumluSecici\s+etiket=\{d\.gorunum\}/);
+    expect(raporlarSozlugu.tr.ozet.gorunum).toBe('Görünüm');
     const sayfa = yorumsuz(join(__dirname, '..', 'app', '(dashboard)', 'raporlar', 'page.tsx'));
     expect(sayfa).toMatch(/ajansGorur=\{hasPermission\(session, 'rule\.read'\)\}/);
     expect(sayfa).toMatch(/planYetkisi=\{canShare\}/);
@@ -79,7 +81,8 @@ describe('önizleme çerçevesi', () => {
 
   it('KRİTİK: hata yutulmuyor (catch boş liste/boş veri yazmıyor)', () => {
     expect(KAYNAK).not.toMatch(/\.catch\(\(\) => set\w+\((\[\]|null)\)\)/);
-    expect(KAYNAK).toMatch(/setHata\(e instanceof Error \? e\.message : 'Bağlantı kurulamadı\.'\)/);
+    expect(KAYNAK).toMatch(/setHata\(e instanceof Error \? e\.message : d\.baglantiYok\)/);
+    expect(raporlarSozlugu.tr.ozet.baglantiYok).toBe('Bağlantı kurulamadı.');
   });
 
   it('Genel Bakış bağlantısı tek üreticiden', () => {

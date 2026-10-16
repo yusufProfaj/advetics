@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { raporlarSozlugu } from '@/dil/sozlukler/raporlar';
 
 /**
  * ═══ PAYLAŞ MENÜSÜ — TEK GİRİŞ, İKİ YOL ═══
@@ -47,13 +48,17 @@ describe('paylaş menüsü', () => {
     expect(menu, 'menü bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
     const menuSonu = k.indexOf('</AcilirMenu>', menu);
     const menuGovdesi = k.slice(menu, menuSonu);
-    expect(menuGovdesi).toContain('Planla');
-    expect(menuGovdesi).toContain('Paylaşım bağlantısı');
+    expect(menuGovdesi).toContain('{d.planla}');
+    expect(menuGovdesi).toContain('{d.baglanti}');
+    expect(raporlarSozlugu.tr.paylas.planla).toBe('Planla');
+    expect(raporlarSozlugu.tr.paylas.baglanti).toBe('Paylaşım bağlantısı');
     // Birincil düğme (ton verilmemiş `Dugme` = birincil) menünün DIŞINDA ve sağında.
     const gonder = k.indexOf('<Dugme onClick={onMail}');
     expect(gonder).toBeGreaterThan(menuSonu);
-    expect(k.slice(gonder, k.indexOf('</Dugme>', gonder))).toContain('Raporu gönder');
-    expect(MENU).toContain('Bağlantıyı kopyala');
+    expect(k.slice(gonder, k.indexOf('</Dugme>', gonder))).toContain('{d.raporuGonder}');
+    expect(raporlarSozlugu.tr.paylas.raporuGonder).toBe('Raporu gönder');
+    expect(MENU).toContain('{d.baglantiyiKopyala}');
+    expect(raporlarSozlugu.tr.paylas.baglantiyiKopyala).toBe('Bağlantıyı kopyala');
   });
 
   it('KRİTİK: gönder, planla ve paylaşım bağlantısı YALNIZ `report.share` ile (Ajan 4 denetimi)', () => {
@@ -122,7 +127,8 @@ describe('paylaş menüsü', () => {
     // Ayrı dururken, bağlantı üretmeyecek kullanıcıya da soruluyordu.
     const i = MENU.indexOf('function PaylasimBaglantisi(');
     expect(i, 'bağlantı paneli bulunamadı — tarama boşa düştü').toBeGreaterThan(-1);
-    expect(MENU.indexOf('Bağlantı süresi')).toBeGreaterThan(i);
+    expect(MENU.indexOf('d.sure')).toBeGreaterThan(i);
+    expect(raporlarSozlugu.tr.paylas.sure).toBe('Bağlantı süresi');
   });
 
   it('KRİTİK: PDF indir PAYLAŞ ile YAN YANA ama menünün İÇİNDE DEĞİL', () => {
@@ -132,7 +138,8 @@ describe('paylaş menüsü', () => {
      * "Bağlantıyı kopyala" ve "Mail yoluyla ilet" ise müşteriye ULAŞTIRMAK.
      * İkisini aynı başlık altında toplamak farklı iki işi karıştırırdı.
      */
-    expect(GONDER).toContain('PDF indir');
+    expect(GONDER).toContain('{d.pdfIndir}');
+    expect(raporlarSozlugu.tr.gonder.pdfIndir).toBe('PDF indir');
     // ÇAPA SADECE ELEMAN ADI: bileşene prop eklenince (şablon seçimi) satır
     // çok satıra bölündü ve "prop'larıyla birlikte" arayan iddia düştü.
     // Kilitlenen şey elemanın YERİ, prop'larının yazımı değil.

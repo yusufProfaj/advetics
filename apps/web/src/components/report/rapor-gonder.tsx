@@ -10,6 +10,8 @@ import { Dugme, dugmeSinifi } from '@/components/ui/dugme';
 import { Serit, Yukleniyor } from '@/components/ui/hal';
 import { YanPanel } from '@/components/ui/pencere';
 import { DurumNoktasi } from '@/components/ui/rozet';
+import { useSozluk } from '@/dil/saglayici';
+import { raporlarSozlugu } from '@/dil/sozlukler/raporlar';
 
 /**
  * ═══ PDF İNDİR ═══
@@ -47,6 +49,7 @@ export function RaporGonder({
    * Sorgu artık TEK ÜRETİCİDEN (`raporSorgusu`) geliyor; önizleme, PDF ve mail
    * aynı fonksiyonu çağırıyor ve `rapor-sorgusu.spec.ts` bunu kilitliyor.
    */
+  const d = useSozluk(raporlarSozlugu).gonder;
   const qs = new URLSearchParams(raporSorgusu({ clientId, from, to, sablon }));
 
   return (
@@ -59,9 +62,9 @@ export function RaporGonder({
       href={`${API_URL}/reports/pdf?${qs}`}
       aria-disabled={hasData ? undefined : true}
       className={`${dugmeSinifi('ikincil')} ${hasData ? '' : 'pointer-events-none opacity-40'}`}
-      title={hasData ? undefined : 'Bu dönemde veri yok'}
+      title={hasData ? undefined : d.veriYok}
     >
-      PDF indir
+      {d.pdfIndir}
     </a>
   );
 }
@@ -100,6 +103,7 @@ export function MailGonderModal({
    */
   sablon: string | null;
 }) {
+  const d = useSozluk(raporlarSozlugu).gonder;
   const [taslak, setTaslak] = useState<ReportMailDraft | null>(null);
   const [alici, setAlici] = useState<string[]>([]);
   const [konu, setKonu] = useState('');
@@ -108,6 +112,7 @@ export function MailGonderModal({
   const [bekleyen, setBekleyen] = useState<'taslak' | 'gonder' | null>(null);
   const [hata, setHata] = useState<string | null>(null);
   const [sonuc, setSonuc] = useState<string | null>(null);
+  const [sonucBasarili, setSonucBasarili] = useState(false);
   const [reddedilen, setReddedilen] = useState<Array<{ adres: string; sebep: string }>>([]);
 
   const qs = new URLSearchParams(raporSorgusu({ clientId, from, to, sablon }));
@@ -154,7 +159,7 @@ export function MailGonderModal({
       setGovde(t.html);
       setAlici(t.defaultTo);
     } catch (err) {
-      setHata(err instanceof ApiRequestError ? err.message : 'Taslak alınamadı.');
+      setHata(err instanceof ApiRequestError ? err.message : d.taslakAlinamadi);
     } finally {
       setBekleyen(null);
     }
@@ -194,16 +199,14 @@ export function MailGonderModal({
        * günler sonra öğrenmek demekti.
        */
       setReddedilen(r.reddedilen);
-      setSonuc(
-        r.to.length > 0
-          ? `Rapor ${r.to.length} adrese gönderildi: ${r.to.join(', ')}`
-          : 'Hiçbir adrese gönderilemedi.',
-      );
+      setSonuc(r.to.length > 0 ? d.gonderildi(r.to.length, r.to.join(', ')) : d.hicbirineGidemedi);
+      // Başarı/hata ayrımı METİNDEN değil durumdan: İngilizce cümle "Rapor " ile başlamıyor.
+      setSonucBasarili(r.to.length > 0);
     } catch (err) {
       // Sunucunun KENDİ mesajı: "kimlik doğrulanamadı" ile "alıcı reddedildi"
       // farklı işler ve ikisini tek cümleye çevirmek kullanıcıyı tahmine
       // bırakır.
-      setHata(err instanceof ApiRequestError ? err.message : 'Gönderilemedi.');
+      setHata(err instanceof ApiRequestError ? err.message : d.gonderilemedi);
     } finally {
       setBekleyen(null);
     }
@@ -230,16 +233,16 @@ export function MailGonderModal({
       acik={acik}
       onKapat={kapat}
       genislik={600}
-      baslik="Raporu müşteriye gönder"
+      baslik={d.baslik}
       altEylemler={
         bitti ? (
           <Dugme ton="ikincil" onClick={kapat}>
-            Kapat
+            {d.kapat}
           </Dugme>
         ) : (
           <>
             <Dugme ton="ikincil" onClick={kapat}>
-              Vazgeç
+              {d.vazgec}
             </Dugme>
             <Dugme
               onClick={() => void gonder()}
@@ -257,7 +260,7 @@ export function MailGonderModal({
                 konu.trim().length === 0
               }
             >
-              Gönder
+              {d.gonder}
             </Dugme>
           </>
         )
@@ -265,7 +268,7 @@ export function MailGonderModal({
     >
       {sonuc && (
         <p role="status" className="m-0 flex items-start gap-2 text-13 text-ink">
-          <DurumNoktasi hal={sonuc.startsWith('Rapor ') ? 'ok' : 'hata'} />
+          <DurumNoktasi hal={sonucBasarili ? 'ok' : 'hata'} />
           {sonuc}
         </p>
       )}
@@ -275,12 +278,12 @@ export function MailGonderModal({
          * cümlesinin içine sıkıştırmak, kısmi bir arızayı başarı gibi
          * gösterirdi: ve bu projede en pahalı hata türü tam olarak o.
          */
-        <Serit baslik={`${reddedilen.length} adres reddedildi`}>
-          Bu kişilere ulaşmadı: {reddedilen.map((r) => `${r.adres} (${r.sebep})`).join(' · ')}
+        <Serit baslik={d.reddedildi(reddedilen.length)}>
+          {d.ulasmadi(reddedilen.map((r) => `${r.adres} (${r.sebep})`).join(' · '))}
         </Serit>
       )}
 
-      {bekleyen === 'taslak' && <Yukleniyor satir={4} etiket="Taslak hazırlanıyor" />}
+      {bekleyen === 'taslak' && <Yukleniyor satir={4} etiket={d.taslakHazirlaniyor} />}
 
       {taslak && !taslak.senderReady && (
         /*
@@ -288,15 +291,14 @@ export function MailGonderModal({
           Sunucu da reddediyor; ekranda söylemek, kullanıcıyı bir hata
           mesajıyla karşılaşmadan doğru yere yönlendiriyor.
         */
-        <Serit baslik="E-posta ayarların doğrulanmamış.">
-          Ayarlar › Hesabım › E-posta bölümünden kendine test maili gönder. Doğrulanmamış bir hesapla
-          müşteriye mail atmak, ilk hatanın müşteriye gitmesi demek.
-        </Serit>
+        <Serit baslik={d.dogrulanmamisBaslik}>{d.dogrulanmamisMetin}</Serit>
       )}
 
       {taslak && taslak.senderReady && (
         <p className="m-0 text-12 text-ink-muted">
-          Gönderen: <strong className="text-ink">{taslak.senderEmail}</strong> · yanıtlar sana gelir
+          {d.gonderen}
+          <strong className="text-ink">{taslak.senderEmail}</strong>
+          {d.yanitlarSana}
         </p>
       )}
 
@@ -309,13 +311,13 @@ export function MailGonderModal({
            * diğeri aynı adrese iki kez gönderirdi.
            */}
           <AliciListesiAlani
-            etiket="Alıcılar"
+            etiket={d.alicilar}
             degerler={alici}
             onChange={setAlici}
             bosVarsayilan={taslak?.defaultTo ?? []}
           />
 
-          <Alan etiket="Konu">
+          <Alan etiket={d.konu}>
             {(id) => <Girdi id={id} value={konu} onChange={(e) => setKonu(e.target.value)} />}
           </Alan>
 
@@ -343,13 +345,13 @@ export function MailGonderModal({
               onChange={(e) => setEkPdf(e.target.checked)}
               className="accent-[var(--text)]"
             />
-            PDF raporu ekle
+            {d.pdfEkle}
           </label>
         </>
       )}
 
       {hata && (
-        <Serit ton="hata" baslik="Gönderilemedi">
+        <Serit ton="hata" baslik={d.gonderilemediBaslik}>
           {hata}
         </Serit>
       )}

@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { imzaTemizle } from '@advetics/shared';
+import { useSozluk } from '@/dil/saglayici';
+import { raporlarSozlugu } from '@/dil/sozlukler/raporlar';
 
 /**
  * ═══ MAİL GÖVDESİ — KOD DEĞİL, GÖRÜNÜŞ ═══
@@ -48,6 +50,7 @@ export function MailGovdeEditoru({
   onChange: (html: string) => void;
   taslakAnahtari: string;
 }) {
+  const d = useSozluk(raporlarSozlugu).mailEditoru;
   const alanRef = useRef<HTMLDivElement>(null);
   const [kodModu, setKodModu] = useState(false);
   const [uyari, setUyari] = useState<string | null>(null);
@@ -97,7 +100,7 @@ export function MailGovdeEditoru({
     <div className="grid min-w-0 gap-1.5">
       <div className="flex items-center justify-between gap-2">
         <span className="text-13 font-semibold text-ink">
-          Mail metni. Sayılar rapordan geldi, değerlendirme kısmını sen yaz
+          {d.baslik}
         </span>
         {/*
           KOD MODU DURUYOR ama VARSAYILAN DEĞİL. Bir tabloyu elle düzeltmek
@@ -109,7 +112,7 @@ export function MailGovdeEditoru({
           onClick={() => setKodModu((v) => !v)}
           className="inline-flex h-7 items-center rounded-full border border-line-strong bg-surface px-3 text-12 font-bold text-ink transition-colors hover:bg-surface-sunken"
         >
-          {kodModu ? 'Önizleme' : 'HTML'}
+          {kodModu ? d.onizleme : 'HTML'}
         </button>
       </div>
 
@@ -152,9 +155,7 @@ export function MailGovdeEditoru({
              */
             if (ham.trim() === '') {
               setUyari(
-                e.clipboardData.files.length > 0
-                  ? 'Görsel yapıştırılamıyor, mail gövdesine görsel eklenmiyor.'
-                  : 'Yapıştırılacak metin bulunamadı.',
+                e.clipboardData.files.length > 0 ? d.gorselYapistirilamaz : d.yapistirilacakYok,
               );
               return;
             }
@@ -178,9 +179,7 @@ export function MailGovdeEditoru({
          * yapıyor ve sessiz kalsaydı fark yalnızca alıcının istemcisinde
          * görünürdü.
          */
-        <p className="m-0 text-12 text-danger-strong">
-          Gönderimde şunlar kaldırılacak: {kirpilan.join(', ')}
-        </p>
+        <p className="m-0 text-12 text-danger-strong">{d.kaldirilacak(kirpilan.join(', '))}</p>
       )}
     </div>
   );

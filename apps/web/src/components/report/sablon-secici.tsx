@@ -10,6 +10,8 @@ import {
   type ReportTemplateSummary,
 } from '@advetics/shared';
 import { Halka } from '@/components/yukleniyor';
+import { useSozluk } from '@/dil/saglayici';
+import { raporlarSozlugu } from '@/dil/sozlukler/raporlar';
 import { AcilirMenu, MenuAyraci, MenuBasligi, MenuOgesi } from '@/components/ui/acilir-menu';
 
 /**
@@ -53,6 +55,7 @@ export function SablonSecici({
   /** `report.write`: müşteri hesabı raporu okuyor, biçimini değiştirmiyor. */
   duzenleyebilir: boolean;
 }) {
+  const d = useSozluk(raporlarSozlugu).sablonSecici;
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -80,7 +83,7 @@ export function SablonSecici({
 
   return (
     <AcilirMenu
-      etiket="Rapor şablonu"
+      etiket={d.etiket}
       genislik="w-[min(24rem,calc(100vw-2rem))]"
       tetik={({ acik, ...o }) => (
         <button
@@ -89,7 +92,7 @@ export function SablonSecici({
           disabled={isPending}
           className="inline-flex h-[30px] max-w-[20rem] items-center gap-1.5 whitespace-nowrap rounded-full bg-surface-sunken px-3 text-[12.5px] font-semibold text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:opacity-60"
         >
-          <span className="text-ink-muted">Şablon:</span>
+          <span className="text-ink-muted">{d.onEk}</span>
           <b className="min-w-0 truncate" title={aktifAd}>
             {aktifAd}
           </b>
@@ -104,7 +107,7 @@ export function SablonSecici({
       )}
     >
       <div className="max-h-[26rem] overflow-y-auto">
-        <MenuBasligi>Hazır şablonlar</MenuBasligi>
+        <MenuBasligi>{d.hazirlar}</MenuBasligi>
         {VARSAYILAN_SABLONLAR.map((s) => (
           <MenuOgesi
             key={s.kod}
@@ -124,14 +127,14 @@ export function SablonSecici({
         {sablonlar.length > 0 && (
           <>
             <MenuAyraci />
-            <MenuBasligi>Kendi şablonların</MenuBasligi>
+            <MenuBasligi>{d.kendi}</MenuBasligi>
             {sablonlar.map((t) => (
               <MenuOgesi
                 key={t.id}
                 secili={t.id === secili}
                 onClick={() => sec(t.id)}
                 /* KAPSAM VE BÖLÜM SIRASI GÖRÜNÜYOR: iki şablonun adı benzer olabiliyor. */
-                aciklama={`${t.clientId === null ? 'Organizasyon varsayılanı' : (t.clientName ?? 'Workspace')} · ${t.sections
+                aciklama={`${t.clientId === null ? d.orgVarsayilani : (t.clientName ?? 'Workspace')} · ${t.sections
                   .map((s) => SECTION_LABELS[s])
                   .join(' → ')}`}
               >
@@ -144,7 +147,7 @@ export function SablonSecici({
         {duzenleyebilir && (
           <>
             <MenuAyraci />
-            <MenuOgesi href={yonetHref}>Şablonları yönet</MenuOgesi>
+            <MenuOgesi href={yonetHref}>{d.yonet}</MenuOgesi>
           </>
         )}
       </div>
