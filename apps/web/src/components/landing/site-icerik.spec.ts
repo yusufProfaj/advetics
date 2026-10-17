@@ -456,3 +456,19 @@ describe('tanıtım sitesi: söz ve kimlik', () => {
     expect(css).not.toMatch(/data-theme/);
   });
 });
+
+describe('üst menü açılır listeleri', () => {
+  it('KRİTİK: açılır liste üst menünün `whitespace-nowrap`ını geri alıyor', () => {
+    /*
+     * Açılır listeler üst menü `<ul>`inin İÇİNDE ve `white-space` miras
+     * alınıyor: açıklamalar tek satırda kalıp yan sütunun üstüne taşıyordu
+     * (canlı, iki dilde, 2026-10-17). Her `shadow-acilir` listesi kuralı
+     * kendisi koymalı.
+     */
+    const nav = yorumsuz(readFileSync(join(__dirname, 'site-nav.tsx'), 'utf8'));
+    expect(nav).toContain('whitespace-nowrap lg:flex');
+    const listeler = [...nav.matchAll(/<ul className="([^"]*shadow-acilir[^"]*)"/g)].map((m) => m[1]!);
+    expect(listeler.length, 'açılır liste bulunamadı: tarama boşa düştü').toBe(2);
+    for (const l of listeler) expect(l).toContain('whitespace-normal');
+  });
+});

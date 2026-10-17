@@ -52,13 +52,17 @@ export async function SiteNav() {
           <AdveticsLogo />
         </Link>
 
+        {/* `whitespace-nowrap` menü ADLARI bölünmesin diye; açılır listeler bu
+            listenin İÇİNDE ve onu miras alıyordu: açıklamalar tek satırda kalıp
+            yandaki sütunun üstüne taşıyordu (canlı, 2026-10-17). Açılır
+            listeler `whitespace-normal` ile geri alıyor. */}
         <ul className="hidden items-center gap-5 whitespace-nowrap lg:flex xl:gap-7">
           <li className="group relative">
             <a href={yerelYol('/ozellikler', dil)} className={UST_BAG}>
               {d.nav.ozellikler}
             </a>
             <div className={ACILIR}>
-              <ul className="grid w-[36rem] grid-cols-2 gap-1 rounded-xl border border-line bg-surface p-3 shadow-acilir">
+              <ul className="grid w-[36rem] grid-cols-2 gap-1 whitespace-normal rounded-xl border border-line bg-surface p-3 shadow-acilir">
                 {OZELLIKLER.map((o) => (
                   <li key={o.slug}>
                     <a
@@ -79,7 +83,7 @@ export async function SiteNav() {
               {d.nav.cozumler}
             </button>
             <div className={ACILIR}>
-              <ul className="w-80 rounded-xl border border-line bg-surface p-3 shadow-acilir">
+              <ul className="w-80 whitespace-normal rounded-xl border border-line bg-surface p-3 shadow-acilir">
                 {COZUMLER.map((c) => (
                   <li key={c.slug}>
                     <a
