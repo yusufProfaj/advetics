@@ -238,6 +238,7 @@ export const genelBakisSozlugu = ikiDil(
         veri_bayat: 'veri güncellenmiyor',
         is_dusuyor: 'senkronizasyon düşüyor',
         geri_besleme_dusuyor: 'lead sonuçları Meta’ya gitmiyor',
+        hesap_butcesi_bitmek_uzere: 'hesap bütçesi bitmek üzere',
       },
       /**
        * ÖDEME SORUNU — `Uyari.odemeSebebi`nden. API'nin Türkçe başlık/detayı
@@ -269,6 +270,18 @@ export const genelBakisSozlugu = ikiDil(
             `${no} numaralı hesabın hesap bütçesi tükendi. Google Ads’te bütçeyi artırın ya da yeni bütçe ekleyin.`,
           google_hesap_butcesi_suresi_doldu: (no: string) =>
             `${no} numaralı hesabın hesap bütçesinin bitiş tarihi geçti. Google Ads’te yeni bütçe ekleyin.`,
+        },
+        /**
+         * BİTMEK ÜZERE — `Uyari.butce`den. Reklam HENÜZ yayında; başlık
+         * "yayınlanmıyor" demiyor. Yüzde aşağı yuvarlanıyor: "%1 kaldı"
+         * yazıp %0,9 bırakmak, olduğundan rahat gösterirdi.
+         */
+        bitmekUzere: {
+          baslik: 'Hesap bütçesi bitmek üzere',
+          detay: (no: string, yuzde: number, gun: number | null) =>
+            `${no} numaralı hesabın hesap bütçesinin %${(Math.floor(yuzde * 10) / 10).toLocaleString('tr-TR')}’i kaldı.` +
+            (gun === null ? '' : gun < 1 ? ' Ortalama harcamayla bir günden az yetiyor.' : ` Ortalama harcamayla yaklaşık ${Math.floor(gun)} gün yetiyor.`) +
+            ' Bütçe dolunca reklamlar durur; Google Ads’te artırın.',
         },
         eylemGoogle: 'Google Ads’te ödemeyi aç',
         eylemMeta: 'Meta’da ödemeyi aç',
@@ -526,6 +539,7 @@ export const genelBakisSozlugu = ikiDil(
         veri_bayat: 'data not updating',
         is_dusuyor: 'sync failing',
         geri_besleme_dusuyor: 'lead results not reaching Meta',
+        hesap_butcesi_bitmek_uzere: 'account budget running out',
       },
       odeme: {
         baslik: {
@@ -552,6 +566,13 @@ export const genelBakisSozlugu = ikiDil(
             `The account budget of account ${no} is used up. Increase it or add a new budget in Google Ads.`,
           google_hesap_butcesi_suresi_doldu: (no) =>
             `The account budget of account ${no} has passed its end date. Add a new budget in Google Ads.`,
+        },
+        bitmekUzere: {
+          baslik: 'Account budget running out',
+          detay: (no, yuzde, gun) =>
+            `Account ${no} has ${(Math.floor(yuzde * 10) / 10).toLocaleString('en-US')}% of its account budget left.` +
+            (gun === null ? '' : gun < 1 ? ' At the average spend that lasts less than a day.' : ` At the average spend that lasts about ${Math.floor(gun)} ${Math.floor(gun) === 1 ? 'day' : 'days'}.`) +
+            ' Ads stop when it is used up; increase it in Google Ads.',
         },
         eylemGoogle: 'Open billing in Google Ads',
         eylemMeta: 'Open billing in Meta',

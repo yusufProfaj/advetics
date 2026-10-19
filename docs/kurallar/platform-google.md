@@ -92,4 +92,5 @@
   CANCELLED, PENDING; bir hesapta 35 bütçe satırı). "Kurulum yok, bütçe var"
   hiç görülmedi. Bugün hiçbir hesap kurala göre ödeme sorunlu değil; ama
   Tınaztepe'nin güncel bütçesi SINIRLI ve %99,2 dolu (20.545 ₺ / 20.375 ₺):
-  aylık faturalı hesap böyle duruyor ve "bitmek üzere" uyarısı henüz YOK.
+  aylık faturalı hesap böyle duruyor. 2026-10-19'dan beri `googleButceUyarisi`
+  "bitmek üzere" diyor (kalan ≤ 3 günlük ortalama ya da < %5, `warn`).
