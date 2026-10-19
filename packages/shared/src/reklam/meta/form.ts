@@ -366,13 +366,17 @@ export function formGeriOkumaDenetimi(gonderilen: Record<string, unknown>, okuna
   if (!nesneMi(okunan)) return { sonuc: 'dogrulanamadi', satirlar: [`Form Meta'dan geri okunamadı${okumaHatasi ? `: ${okumaHatasi}` : ''}.`] };
   const fark: string[] = [];
   const bilinmiyor: string[] = [];
-  const tekil = (alan: string, etiket: string) => {
+  const tekil = (alan: string, etiket: string, esit = (a: string, b: string) => a === b) => {
     if (!(alan in gonderilen)) return;
     if (!(alan in okunan)) bilinmiyor.push(`${etiket} Meta'dan okunamadı.`);
     // Graph boolean'ı bazen dizge döndürüyor: karşılaştırma dizgeyle.
-    else if (String(okunan[alan]) !== String(gonderilen[alan])) fark.push(`${etiket}: gönderilen ${String(gonderilen[alan])}, Meta'da ${String(okunan[alan])}.`);
+    else if (!esit(String(okunan[alan]), String(gonderilen[alan]))) fark.push(`${etiket}: gönderilen ${String(gonderilen[alan])}, Meta'da ${String(okunan[alan])}.`);
   };
-  tekil('locale', 'Form dili');
+  // DİL KODU HARF DUYARSIZ: Meta `TR_TR` alıp `tr_TR` saklıyor. Canlıda
+  // (2026-10-20, Ege Birlik) aynı dildeki form "farklı duruyor" uyarısıyla
+  // yayınlandı ve MCP onayı "başarısız" döndü; asıl farkı (EN_US) gizlemesin
+  // diye yalnız harf büyüklüğü yok sayılıyor.
+  tekil('locale', 'Form dili', (a, b) => a.toLowerCase() === b.toLowerCase());
   tekil('is_optimized_for_quality', 'Daha yüksek niyet adımı');
   tekil('block_display_for_non_targeted_viewer', 'Formu yalnız hedef kitle görür');
 

@@ -212,3 +212,10 @@ okunup varsayılmadı — canlıda doğrulandı.
   `onizle` (aynı ön kontrol, platform çağrısı yok). Meta'da gerçek prova
   gerekiyorsa Graph API'nin `execution_options=["validate_only"]` alanı
   canlıda ölçülmeden kullanılmaz.
+
+- **Anlık formun dil kodu geri okunurken küçük harf** (2026-10-20, Ege
+  Birlik, form `2999249563750186`): `locale: 'TR_TR'` gönderiliyor, Graph
+  `tr_TR` döndürüyor. Harf duyarlı karşılaştırma aynı dildeki formu "Meta'da
+  farklı duruyor" diye işaretledi ve MCP `form_yayinla` onayı "başarısız"
+  döndü (form açıktı, KVKK kutusu ve sorular uyuşuyordu). Dil karşılaştırması
+  `formGeriOkumaDenetimi`nde harf duyarsız; başka bir dil (EN_US) hâlâ fark.

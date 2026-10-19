@@ -145,6 +145,9 @@ describe('form geri okuma', () => {
 
   it('dil farklıysa fark; kutular hiç okunamadıysa "doğrulanamadı" — TEMİZ DEĞİL', () => {
     expect(formGeriOkumaDenetimi(g, okunan({ locale: 'EN_US' })).sonuc).toBe('fark');
+    // Meta dil kodunu küçük harfle saklıyor (canlı, 2026-10-20): aynı dil fark DEĞİL.
+    expect(formGeriOkumaDenetimi(g, okunan({ locale: 'tr_TR' })).sonuc).toBe('temiz');
+    expect(formGeriOkumaDenetimi(g, okunan({ locale: 'en_US' })).sonuc).toBe('fark');
     expect(formGeriOkumaDenetimi(g, okunan({ legal_content: undefined })).sonuc).toBe('dogrulanamadi');
     const r = formGeriOkumaDenetimi(g, null, '(#100) nonexisting field');
     expect(r.sonuc).toBe('dogrulanamadi');
