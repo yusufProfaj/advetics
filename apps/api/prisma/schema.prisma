@@ -890,6 +890,10 @@ model AdAccount {
   /// mail atmıyor. Sorun çözülünce NULL'a dönüyor, yani aynı hesap bir ay
   /// sonra yine ödeme sorunu yaşarsa yeniden uyarılıyor.
   paymentAlertedAt DateTime? @map("payment_alerted_at") @db.Timestamptz(6)
+  /// GOOGLE ÖDEME OKUMASI (billing_setup + account_budget özeti). raw'da
+  /// değil: keşif raw'ı baştan yazıyor. NULL = hiç okunmadı. Karar
+  /// `hesapOdemeKarari` (shared), okuma anına değil bugüne göre veriliyor.
+  odemeDurumu      Json?     @map("odeme_durumu") @db.JsonB
   createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 

@@ -1138,6 +1138,19 @@ export interface IAdPlatformProvider {
   ): Promise<HesapDurumuOkumasi>;
 
   /**
+   * ÖDEME OKUMASI — yalnız Google (`billing_setup` + `account_budget`).
+   *
+   * Meta'da ödeme durumu `account_status`un içinde ve nabız onu zaten
+   * okuyor; Google'da hesabın durumu ödemeyi göstermiyor, ayrı kaynaklar
+   * gerekiyor. Dönen değer `ad_accounts.odeme_durumu`na yazılıyor; karar
+   * shared `googleOdemeKarari`. Hesap başına hata özetin `hata` alanında.
+   */
+  odemeOkumalari?(
+    accessToken: string,
+    hedefler: ReadonlyArray<{ externalId: string; managerExternalId: string | null }>,
+  ): Promise<Map<string, unknown>>;
+
+  /**
    * Facebook sayfaları ve bağlı Instagram Business hesapları.
    * Google için daima boş dizi döner — orada karşılığı yok.
    */

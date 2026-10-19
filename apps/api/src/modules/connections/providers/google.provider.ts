@@ -8,7 +8,7 @@ import {
   type AtomikGovde,
   type KampanyaAcilisi,
 } from './google-demandgen';
-import { gecerliGorselAdresi, VIDEO_HATA_ANAHTARI, type VideoHamOlcumu } from '@advetics/shared';
+import { gecerliGorselAdresi, VIDEO_HATA_ANAHTARI, type GoogleOdemeOkumasi, type VideoHamOlcumu } from '@advetics/shared';
 import type { GeoLocationOption,
   InterestOption,
   CustomAudienceOption, Platform, SavedAudienceOption } from '@advetics/shared';
@@ -870,6 +870,67 @@ export class GoogleProvider implements IAdPlatformProvider {
         });
       } catch (err) {
         sonuc.hatalar.push(`${customerLabel(id)}: ${errText(err)}`);
+      }
+    }
+    return sonuc;
+  }
+
+  /**
+   * ÖDEME OKUMASI — hesap başına iki salt okunur sorgu.
+   *
+   * `customer.status` kartı reddedilen ya da bütçesi biten hesapta ENABLED
+   * kalıyor (v25 enum'u: yalnız SUSPENDED/CANCELED/CLOSED); ödeme sorununu
+   * taşıyan kaynaklar `billing_setup` ve `account_budget`. Karar burada
+   * VERİLMİYOR, özet saklanıyor (`googleOdemeKarari`, shared): "bitiş
+   * tarihi geçti" okuma anına değil bugüne bağlı.
+   *
+   * BİR HESABIN DÜŞMESİ ÖZETİNE YAZILIYOR (`hata`), diğerlerini durdurmuyor.
+   * Düşen okuma `bilinmiyor` oluyor; boş liste DÖNDÜRMEK "ödeme yöntemi yok"
+   * diye okunur ve yanlış alarm verirdi.
+   *
+   * CANCELLED kurulum/bütçe sorguya ALINIYOR: geçmişte iptal edilmiş tek
+   * kurulumu olan hesap ile hiç kurulumu olmayan hesap aynı kararı alıyor
+   * ama satır sayısı teşhiste ikisini ayırıyor.
+   */
+  async odemeOkumalari(
+    accessToken: string,
+    hedefler: ReadonlyArray<{ externalId: string; managerExternalId: string | null }>,
+    simdi: Date = new Date(),
+  ): Promise<Map<string, GoogleOdemeOkumasi>> {
+    const sonuc = new Map<string, GoogleOdemeOkumasi>();
+    for (const h of hedefler) {
+      const login = h.managerExternalId ?? h.externalId;
+      try {
+        const kurulumlar = await this.searchGaql<{ billingSetup?: Record<string, unknown> }>(
+          accessToken,
+          h.externalId,
+          `SELECT billing_setup.status, billing_setup.start_date_time,
+                  billing_setup.end_date_time, billing_setup.end_time_type
+           FROM billing_setup`,
+          login,
+        );
+        const butceler = await this.searchGaql<{ accountBudget?: Record<string, unknown> }>(
+          accessToken,
+          h.externalId,
+          `SELECT account_budget.status, account_budget.approved_start_date_time,
+                  account_budget.approved_end_date_time, account_budget.approved_end_time_type,
+                  account_budget.approved_spending_limit_micros,
+                  account_budget.approved_spending_limit_type,
+                  account_budget.adjusted_spending_limit_micros,
+                  account_budget.adjusted_spending_limit_type,
+                  account_budget.amount_served_micros
+           FROM account_budget`,
+          login,
+        );
+        sonuc.set(h.externalId, googleOdemeOzeti(kurulumlar, butceler, simdi));
+      } catch (err) {
+        sonuc.set(h.externalId, {
+          okundu: simdi.toISOString(),
+          // `odeme_durumu` JSON'u ekranda gösteriliyor; uzun gövde sığdırılıyor.
+          hata: errText(err).slice(0, 300),
+          faturaKurulumlari: [],
+          hesapButceleri: [],
+        });
       }
     }
     return sonuc;
@@ -3265,4 +3326,55 @@ export function googleHatasiniZenginlestir(e: unknown): unknown {
     .filter((x) => x.length > 0 && !e.message.includes(x));
   if (ayrintilar.length === 0) return e;
   return new PlatformApiError('google', e.kind, `${e.message} · ${ayrintilar.join(' · ')}`, e.detail);
+}
+
+/**
+ * GAQL satırlarını saklanan özete indirger. REST yanıtı camelCase ve int64
+ * alanları METİN (`"1000000"`); sayıya çevirmek 2^53 üstünü bozardı.
+ *
+ * SINIR: ayarlanmış (düzeltmeler dahil) sınır varsa o, yoksa onaylı sınır.
+ * `*_spending_limit_type = INFINITE` sınırsız.
+ */
+export function googleOdemeOzeti(
+  kurulumlar: ReadonlyArray<{ billingSetup?: Record<string, unknown> }>,
+  butceler: ReadonlyArray<{ accountBudget?: Record<string, unknown> }>,
+  simdi: Date,
+): GoogleOdemeOkumasi {
+  const metin = (v: unknown): string | null =>
+    typeof v === 'string' && v.trim() !== '' ? v : typeof v === 'number' ? String(v) : null;
+  return {
+    okundu: simdi.toISOString(),
+    hata: null,
+    faturaKurulumlari: kurulumlar.flatMap((r) => {
+      const b = r.billingSetup;
+      if (!b) return [];
+      return [
+        {
+          durum: String(b.status ?? 'UNKNOWN'),
+          baslangic: metin(b.startDateTime),
+          bitis: metin(b.endDateTime),
+        },
+      ];
+    }),
+    hesapButceleri: butceler.flatMap((r) => {
+      const a = r.accountBudget;
+      if (!a) return [];
+      // oneof: sınır ya micros ya tür (INFINITE) olarak geliyor, ikisi birden değil.
+      const limit = metin(a.adjustedSpendingLimitMicros) ?? metin(a.approvedSpendingLimitMicros);
+      const suresiz =
+        limit === null &&
+        (a.adjustedSpendingLimitType === 'INFINITE' || a.approvedSpendingLimitType === 'INFINITE');
+      return [
+        {
+          durum: String(a.status ?? 'UNKNOWN'),
+          baslangic: metin(a.approvedStartDateTime),
+          bitis: metin(a.approvedEndDateTime),
+          bitisSuresiz: a.approvedEndTimeType === 'FOREVER',
+          limitMicros: limit,
+          limitSuresiz: suresiz,
+          harcananMicros: metin(a.amountServedMicros),
+        },
+      ];
+    }),
+  };
 }

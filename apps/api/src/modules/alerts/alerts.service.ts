@@ -66,6 +66,9 @@ export class AlertsService {
           lastStructureSyncAt: true,
           updatedAt: true,
           raw: true,
+          // Google ödeme okuması — ödeme kararının Google yarısı burada.
+          odemeDurumu: true,
+          externalId: true,
           clientId: true,
           connectionId: true,
           client: { select: { name: true } },
@@ -139,6 +142,8 @@ export class AlertsService {
           lastStructureSyncAt: h.lastStructureSyncAt,
           updatedAt: h.updatedAt,
           raw: h.raw,
+          odemeDurumu: h.odemeDurumu,
+          externalId: h.externalId,
           clientId: h.clientId,
           clientName: h.client?.name ?? null,
           connectionStatus: gorunen.get(h.connectionId)?.status ?? null,

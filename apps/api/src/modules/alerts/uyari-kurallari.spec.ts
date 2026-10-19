@@ -40,6 +40,8 @@ function hesap(over: Partial<UyariHesabi> = {}): UyariHesabi {
     lastStructureSyncAt: new Date(SIMDI.getTime() - SAAT),
     updatedAt: new Date(SIMDI.getTime() - SAAT),
     raw: { account_status: 1 },
+    odemeDurumu: null,
+    externalId: '5161746317',
     clientId: 'c1',
     clientName: 'A Firması',
     connectionStatus: 'active',

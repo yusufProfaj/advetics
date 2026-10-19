@@ -482,7 +482,7 @@ export default async function DashboardPage({
         ? hesaplar && hesaplar.accounts.map((a) => hesapSatiri(a, tasinan, d.satir))
         : breakdown &&
           kirilimSirala(breakdown, siralama).map((b) => ({
-            ...varlikSatiri(b, varlik, tasinan),
+            ...varlikSatiri(b, varlik, tasinan, d.satir),
             /*
              * KAMPANYA SATIRININ ⋯ MENÜSÜ: aynı kampanyanın reklam kartları
              * Galeri'de. Kimlik aynı uzayda (iki uç da iç kampanya UUID'si
@@ -762,7 +762,14 @@ function hesapSatiri(a: MetricsAccountRow, tasinan: Record<string, string | unde
     ad: a.name,
     alt: a.syncEnabled ? `${a.clientName} · ${a.externalId}` : `${a.externalId} · ${m.izlenmiyorEki}`,
     altTon: a.syncEnabled ? undefined : 'uyari',
-    durum: a.syncEnabled ? { tur: 'yayinda', ad: m.izleniyor } : { tur: 'durdu', ad: m.izlenmiyor },
+    // ÖDEME SORUNU İZLEMEDEN ÖNCE: izlenen hesapta reklamlar durmuşsa
+    // "İzleniyor" yazmak hesabı sağlıklı gösterirdi (Google'da hesap ENABLED
+    // kalıyor). Sebep ve "ne yapmalı" üst bantta.
+    durum: a.odemeSorunu
+      ? { tur: 'durdu', ad: m.odemeSorunu }
+      : a.syncEnabled
+        ? { tur: 'yayinda', ad: m.izleniyor }
+        : { tur: 'durdu', ad: m.izlenmiyor },
     karo: false,
     mecralar: [a.platform],
     spendMicros: a.spendMicros,
@@ -792,6 +799,7 @@ function varlikSatiri(
   b: MetricsBreakdownRow,
   varlik: 'campaign' | 'ad_group' | 'ad',
   tasinan: Record<string, string | undefined>,
+  m: RY['satir'],
 ): YmSatir {
   const href =
     varlik === 'campaign'
@@ -809,7 +817,9 @@ function varlikSatiri(
     // görünüp harcamıyordu (`teslimatDurumu`, sunucuda hesaplanıyor).
     durum: {
       tur: b.teslimat.yayinda ? 'yayinda' : 'durdu',
-      ad: b.teslimat.ad,
+      // Hesap ödeme engeli sözlükten; diğer teslimat adları shared'ın
+      // Türkçe sabiti (D4).
+      ad: b.teslimat.kod === 'hesap_odeme' ? m.hesaptaOdemeSorunu : b.teslimat.ad,
     },
     karo: false,
     mecralar: [b.platform],

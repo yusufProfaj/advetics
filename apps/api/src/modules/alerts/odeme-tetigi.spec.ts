@@ -24,6 +24,8 @@ interface Satir {
   name: string;
   platform: 'meta' | 'google';
   raw: Record<string, unknown>;
+  /** Google ödeme okuması (`ad_accounts.odeme_durumu`). */
+  odemeDurumu?: unknown;
   clientId: string | null;
   clientStatus: 'active' | 'archived';
   paymentAlertedAt: Date | null;
@@ -61,6 +63,8 @@ function sahteAdmin(): PrismaAdminService {
             updatedAt: new Date(),
             // Fixture ham JSON'u serbest nesne olarak tutuyor; satır tipi JsonValue.
             raw: s.raw as OdemeHesapSatiri['raw'],
+            odemeDurumu: (s.odemeDurumu ?? null) as OdemeHesapSatiri['odemeDurumu'],
+            externalId: `ext-${s.id}`,
             clientId: s.clientId,
             paymentAlertedAt: s.paymentAlertedAt,
             client: s.clientId ? { name: `WS-${s.id}`, status: s.clientStatus } : null,
@@ -294,6 +298,28 @@ describe('tetik hesap durumunun YAZILDIĞI her yolda', () => {
     const g = govde(BAGLANTI, 'async odemeDurumlariniTazele(');
     expect(g).toContain('not.slice(0, 500)');
   });
+
+  it('KRİTİK: Google ödeme okuması TETİKTEN ÖNCE ve AYRI kolona yazılıyor', () => {
+    /*
+     * Tetikten sonra yazılsaydı yeni görülen ödeme sorunu bir sonraki nabza
+     * (15 dk) kadar mail olmazdı. `raw`a yazılsaydı günde iki kezlik keşif
+     * onu silip kararı "bilinmiyor"a düşürürdü.
+     */
+    const g = govde(BAGLANTI, 'async odemeDurumlariniTazele(');
+    const oku = g.indexOf('await provider.odemeOkumalari(');
+    const yaz = g.indexOf('data: { odemeDurumu: o as Prisma.InputJsonValue }');
+    const tetik = g.indexOf('this.odemeTetiginiCek(hesaplar.map((h) => h.id))');
+    expect(oku).toBeGreaterThan(-1);
+    expect(yaz).toBeGreaterThan(oku);
+    expect(tetik).toBeGreaterThan(yaz);
+    expect(g).toContain('odemeDurumu: true,');
+  });
+
+  it('Google ödeme okuması saatte bir — kota için süzülüyor', () => {
+    const g = govde(BAGLANTI, 'async odemeDurumlariniTazele(');
+    expect(g).toContain('const sinir = Date.now() - ODEME_OKUMA_ARALIGI_MS;');
+    expect(BAGLANTI).toContain('export const ODEME_OKUMA_ARALIGI_MS = 60 * 60 * 1000;');
+  });
 });
 
 describe('özet ve anlık mail AYNI kararı ve AYNI göndericiyi kullanıyor', () => {
@@ -331,5 +357,72 @@ describe('ÖDEME NABZI zamanlanmış ve yönlendirilmiş', () => {
       .split('\n')
       .filter((l) => !l.trim().startsWith('--') && l.trim() !== '');
     expect(deyimler).toEqual([`ALTER TYPE "SyncJobType" ADD VALUE IF NOT EXISTS 'payment_check';`]);
+  });
+});
+
+/** Google ödeme okuması — `GoogleOdemeOkumasi` biçiminde. */
+function googleOkuma(over: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    okundu: '2026-10-19T08:00:00.000Z',
+    hata: null,
+    faturaKurulumlari: [{ durum: 'APPROVED', baslangic: '2025-01-01 00:00:00', bitis: null }],
+    hesapButceleri: [
+      {
+        durum: 'APPROVED',
+        baslangic: '2025-01-01 00:00:00',
+        bitis: null,
+        bitisSuresiz: true,
+        limitMicros: null,
+        limitSuresiz: true,
+        harcananMicros: '5000000',
+      },
+    ],
+    ...over,
+  };
+}
+
+describe('GOOGLE ÖDEME — hesap ENABLED iken', () => {
+  it('KRİTİK: ödeme yöntemi yoksa mail gidiyor (customer.status ENABLED kalsa bile)', async () => {
+    ekle({
+      id: 'g',
+      platform: 'google',
+      raw: { status: 'ENABLED' },
+      odemeDurumu: googleOkuma({ faturaKurulumlari: [], hesapButceleri: [] }),
+    });
+    expect((await svc.degerlendir(['g'])).yeni).toBe(1);
+    expect(mailler[0]!.html).toContain('ödeme yöntemi');
+  });
+
+  it('KRİTİK: okuma DÜŞÜNCE damga kalkmıyor — düzelince aynı sorun için ikinci mail yok', async () => {
+    /*
+     * Okuma hatası kararı `bilinmiyor`a çeviriyor ve uyarı üretilmiyor.
+     * Bunu "çözüldü" saymak damgayı siler, bir saat sonraki başarılı
+     * okumada aynı sorun "yeni" diye yeniden mail olurdu.
+     */
+    ekle({
+      id: 'g',
+      platform: 'google',
+      raw: { status: 'ENABLED' },
+      odemeDurumu: googleOkuma({ faturaKurulumlari: [], hesapButceleri: [] }),
+    });
+    await svc.degerlendir(['g']);
+    satirlar.get('g')!.odemeDurumu = googleOkuma({ hata: 'DEADLINE_EXCEEDED', faturaKurulumlari: [], hesapButceleri: [] });
+    expect((await svc.degerlendir(['g'])).cozulen).toBe(0);
+    expect(satirlar.get('g')!.paymentAlertedAt).not.toBeNull();
+    satirlar.get('g')!.odemeDurumu = googleOkuma({ faturaKurulumlari: [], hesapButceleri: [] });
+    await svc.degerlendir(['g']);
+    expect(mailler).toHaveLength(1);
+  });
+
+  it('sorun gerçekten çözülünce (okuma sağlam) damga kalkıyor', async () => {
+    ekle({
+      id: 'g',
+      platform: 'google',
+      raw: { status: 'ENABLED' },
+      odemeDurumu: googleOkuma({ faturaKurulumlari: [], hesapButceleri: [] }),
+    });
+    await svc.degerlendir(['g']);
+    satirlar.get('g')!.odemeDurumu = googleOkuma();
+    expect((await svc.degerlendir(['g'])).cozulen).toBe(1);
   });
 });

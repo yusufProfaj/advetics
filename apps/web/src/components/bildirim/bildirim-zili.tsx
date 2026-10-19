@@ -11,6 +11,8 @@ import { Ikon } from '@/components/ui/ikon';
 import { SayiRozeti } from '@/components/ui/rozet';
 import { useDil, useSozluk } from '@/dil/saglayici';
 import { bildirimSozlugu } from '@/dil/sozlukler/bildirim';
+import { genelBakisSozlugu } from '@/dil/sozlukler/genel-bakis';
+import { uyariMetni } from '@/components/uyari-bandi';
 import { sec, type Dil } from '@advetics/shared';
 
 /**
@@ -246,6 +248,7 @@ function SorunBolumu({
   yukleniyor: boolean;
   onGit: () => void;
 }) {
+  const gb = useSozluk(genelBakisSozlugu).uyari;
   const z = useSozluk(bildirimSozlugu).zil;
   const { dil } = useDil();
   return (
@@ -269,13 +272,25 @@ function SorunBolumu({
                   aria-hidden
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium leading-tight">{u.baslik}</p>
+                  {/* Ödeme uyarısı sözlükten (iki dil); bantla aynı yardımcı. */}
+                  <p className="text-sm font-medium leading-tight">{uyariMetni(u, gb).baslik}</p>
                   <p className="mt-0.5 text-[11px] leading-snug text-ink-muted">
                     {u.clientName ?? z.ajansGeneli}
                     {/* BAYATLIK GÖRÜNÜR: tarihi göstermeyen bir uyarı,
                         düzeltilmiş bir sorunu haftalarca ekranda tutar. */}
                     {u.veriZamani !== null && ` · ${formatRelative(u.veriZamani, dil)}`}
                   </p>
+                  {u.odemeAdresi && (
+                    <a
+                      href={u.odemeAdresi}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={gb.odeme.yeniSekme}
+                      className="mt-1 inline-block text-[11px] font-medium text-brand-strong hover:underline"
+                    >
+                      {u.platform === 'meta' ? gb.odeme.eylemMeta : gb.odeme.eylemGoogle} ↗
+                    </a>
+                  )}
                   {u.eylem !== null && (
                     <Link
                       href={u.eylem.href}

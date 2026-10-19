@@ -15,10 +15,13 @@ import type {
 import { PLATFORM_LABELS, SENKRON_SAYAC_GUNU, bicimKodu, type Dil } from '@advetics/shared';
 import { useDil, useSozluk } from '@/dil/saglayici';
 import { ayarlarSozlugu } from '@/dil/sozlukler/ayarlar';
+import { genelBakisSozlugu } from '@/dil/sozlukler/genel-bakis';
+import { formatRelative } from '@/lib/format';
 import { Kart } from '@/components/ui/kart';
 import { BosDurum } from '@/components/ui/hal';
 import { Rozet, type DurumHali } from '@/components/ui/rozet';
 import { Uyari } from '@/components/ui/uyari';
+import { dugmeSinifi } from '@/components/ui/dugme';
 
 /*
  * Elenen kategorilerin ve iş türlerinin adları sözlükte (`senkron.elenme`,
@@ -170,6 +173,62 @@ function Kutu({
   );
 }
 
+/**
+ * ÖDEME DURUMU ÜÇ HÂLLİ. "Sorun görünmüyor" ile "bilinmiyor" ayrı yazılıyor:
+ * Google'da ödeme ayrı bir okumayla geliyor ve okunmamış bir hesabı
+ * sağlıklı göstermek, durmuş reklamı gizlemek olurdu. Sorun yoksa bile
+ * Google'ın kart reddini API'de VERMEDİĞİ ipucunda yazıyor: "sorun yok"un
+ * kapsamı bilinsin.
+ */
+function OdemeRozeti({ hesap }: { hesap: SyncAccountStatus }) {
+  const { dil } = useDil();
+  const d = useSozluk(ayarlarSozlugu).senkron;
+  const o = hesap.odeme;
+  const okundu = o.okundu ? ` · ${d.odemeOkundu(formatRelative(o.okundu, dil))}` : '';
+  if (o.durum === 'sorun_yok') {
+    return (
+      <Rozet hal="ok" title={hesap.platform === 'google' ? d.odemeYokGoogle + okundu : undefined}>
+        {d.odemeYok}
+      </Rozet>
+    );
+  }
+  if (o.durum !== 'bilinmiyor') return null;
+  const neden = o.neden === 'okunamadi' ? d.odemeNeden.okunamadi(o.hata ?? '') : d.odemeNeden[o.neden];
+  return (
+    <Rozet hal="taslak" title={neden + okundu}>
+      {d.odemeBilinmiyor}
+    </Rozet>
+  );
+}
+
+/** Ödeme sorunu: bantla aynı cümle (sözlük) ve platformun ödeme ekranı. */
+function OdemeSorunu({ hesap }: { hesap: SyncAccountStatus }) {
+  const d = useSozluk(genelBakisSozlugu).uyari.odeme;
+  const o = hesap.odeme;
+  if (o.durum !== 'sorun') return null;
+  return (
+    <Uyari
+      ton="tehlike"
+      baslik={d.baslik[o.sebep]}
+      eylem={
+        o.adres ? (
+          <a
+            href={o.adres}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={d.yeniSekme}
+            className={dugmeSinifi('koyu', 'kucuk')}
+          >
+            {hesap.platform === 'meta' ? d.eylemMeta : d.eylemGoogle} ↗
+          </a>
+        ) : undefined
+      }
+    >
+      {d.detay[o.sebep](o.hesapNo)}
+    </Uyari>
+  );
+}
+
 function HesapSatiri({ hesap }: { hesap: SyncAccountStatus }) {
   const { dil } = useDil();
   const d = useSozluk(ayarlarSozlugu).senkron;
@@ -181,6 +240,11 @@ function HesapSatiri({ hesap }: { hesap: SyncAccountStatus }) {
           <span className="ml-2 text-xs text-ink-muted">
             {PLATFORM_LABELS[hesap.platform]} · {hesap.status}
           </span>
+          {hesap.odeme.durum !== 'sorun' && (
+            <span className="ml-2 align-middle">
+              <OdemeRozeti hesap={hesap} />
+            </span>
+          )}
         </div>
         <div className="flex gap-3 text-xs text-ink-muted">
           <span>{d.yapi(zaman(hesap.lastStructureSyncAt, dil, d))}</span>
@@ -193,6 +257,12 @@ function HesapSatiri({ hesap }: { hesap: SyncAccountStatus }) {
         yazmak, iki metnin ayrışması demek olurdu; sebep mantığı tek yerde
         (`supurme-kapsami.ts`).
       */}
+      {hesap.odeme.durum === 'sorun' && (
+        <div className="mt-2">
+          <OdemeSorunu hesap={hesap} />
+        </div>
+      )}
+
       {hesap.blockedReason !== null && (
         <div className="mt-2">
           <Uyari ton="uyari">{hesap.blockedReason}</Uyari>

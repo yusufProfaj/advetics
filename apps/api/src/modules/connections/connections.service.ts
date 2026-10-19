@@ -188,6 +188,9 @@ const OLCUM_IZNI_NOTU: Partial<Record<Platform, string>> = {
   google: ' Tag Manager ve Analytics izni için Marka Merkezi › Kurulum’daki "Ölçüm izinlerini ver" düğmesini kullan.',
 };
 
+/** Google ödeme okumasının yenilenme aralığı (`odemeDurumlariniTazele`). */
+export const ODEME_OKUMA_ARALIGI_MS = 60 * 60 * 1000;
+
 @Injectable()
 export class ConnectionsService {
   private readonly logger = new Logger(ConnectionsService.name);
@@ -1710,6 +1713,7 @@ export class ConnectionsService {
         externalId: true,
         managerExternalId: true,
         raw: true,
+        odemeDurumu: true,
         connectionId: true,
         platform: true,
       },
@@ -1724,6 +1728,7 @@ export class ConnectionsService {
 
     let okunan = 0;
     let degisen = 0;
+    let odemeOkunan = 0;
     const atlanan: string[] = [];
     const hatalar: string[] = [];
 
@@ -1757,6 +1762,43 @@ export class ConnectionsService {
           });
           degisen += r.count;
         }
+
+        /*
+         * GOOGLE ÖDEME OKUMASI — hesap başına SAATTE BİR. Nabız 15 dakikada
+         * bir koşuyor ve okuma hesap başına iki sorgu; her turda okumak
+         * geliştirici token'ının günlük işlem kotasını atanmış hesap sayısı
+         * x 192 yerdi. Bir saatlik gecikme, durmuş reklamın panelde görünme
+         * süresine eklenen en kötü hâl; okuma anı ekranda yazılı.
+         */
+        if (provider.odemeOkumalari) {
+          const sinir = Date.now() - ODEME_OKUMA_ARALIGI_MS;
+          const okunacak = grup.filter((h) => {
+            const o = h.odemeDurumu as { okundu?: unknown } | null;
+            const an = typeof o?.okundu === 'string' ? Date.parse(o.okundu) : Number.NaN;
+            return !Number.isFinite(an) || an < sinir;
+          });
+          if (okunacak.length > 0) {
+            const okumalar = await provider.odemeOkumalari(
+              token,
+              okunacak.map((h) => ({ externalId: h.externalId, managerExternalId: h.managerExternalId })),
+            );
+            for (const h of okunacak) {
+              const o = okumalar.get(h.externalId);
+              if (o === undefined) {
+                hatalar.push(`${platform}: ${h.externalId} ödeme okuması dönmedi`);
+                continue;
+              }
+              if ((o as { hata?: unknown }).hata) {
+                hatalar.push(`${platform}: ${h.externalId} ödeme okunamadı`);
+              }
+              await this.admin.adAccount.updateMany({
+                where: { id: h.id },
+                data: { odemeDurumu: o as Prisma.InputJsonValue },
+              });
+              odemeOkunan++;
+            }
+          }
+        }
       } catch (err) {
         /*
          * BAĞLANTININ SAĞLIK SAYACINA YAZILMIYOR. Nabız günde 96 kez koşuyor;
@@ -1775,7 +1817,7 @@ export class ConnectionsService {
     const tetik = await this.odemeTetiginiCek(hesaplar.map((h) => h.id));
 
     const not =
-      `${okunan}/${hesaplar.length} hesabın durumu okundu · ${tetik}` +
+      `${okunan}/${hesaplar.length} hesabın durumu okundu · ${odemeOkunan} Google ödeme okuması · ${tetik}` +
       (atlanan.length > 0 ? ` · nabız desteklenmiyor: ${atlanan.join(', ')}` : '') +
       (hatalar.length > 0 ? ` · ${hatalar.length} hata: ${hatalar.join('; ')}` : '');
     return { hesap: degisen, not: not.slice(0, 500) };

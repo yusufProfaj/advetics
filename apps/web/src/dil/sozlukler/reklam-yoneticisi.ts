@@ -77,6 +77,9 @@ export const reklamYoneticisiSozlugu = ikiDil(
       izlenmiyorEki: 'izlenmiyor',
       izleniyor: 'İzleniyor',
       izlenmiyor: 'İzlenmiyor',
+      /** Hesapta ödeme sorunu (`odemeSorunu` / teslimat `kod`). Ayrıntısı üst bantta. */
+      odemeSorunu: 'Durdu: ödeme sorunu',
+      hesaptaOdemeSorunu: 'Durdu: hesapta ödeme sorunu',
     },
     olustur: {
       kitle: 'Hedef kitle',
@@ -331,6 +334,8 @@ export const reklamYoneticisiSozlugu = ikiDil(
       izlenmiyorEki: 'not tracked',
       izleniyor: 'Tracked',
       izlenmiyor: 'Not tracked',
+      odemeSorunu: 'Stopped: payment issue',
+      hesaptaOdemeSorunu: 'Stopped: account payment issue',
     },
     olustur: {
       kitle: 'Audience',

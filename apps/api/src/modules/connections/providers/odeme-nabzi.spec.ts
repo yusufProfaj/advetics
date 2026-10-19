@@ -53,6 +53,8 @@ function odemeSorunuMu(platform: 'meta' | 'google', raw: Record<string, unknown>
       lastInsightsSyncAt: new Date(),
       lastStructureSyncAt: new Date(),
       updatedAt: new Date(),
+      odemeDurumu: null,
+      externalId: 'x',
       raw,
       clientId: 'ws',
       clientName: 'ws',

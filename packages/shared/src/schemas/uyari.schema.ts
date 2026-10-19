@@ -1,4 +1,5 @@
 import type { Platform } from '../constants/platforms';
+import type { OdemeSebebi } from '../odeme-durumu';
 
 /**
  * ═══ UYARI SİSTEMİ ═══
@@ -68,6 +69,16 @@ export interface Uyari {
 
   /** Panel içi çözüm bağlantısı. `null` = panelden çözülemiyor (platform işi). */
   eylem: { etiket: string; href: string } | null;
+
+  /**
+   * Yalnız `hesap_odeme_sorunu`nda: makine kodu. Panel başlığı ve açıklamayı
+   * BUNDAN, iki dilli sözlükten yazıyor; `baslik`/`detay` Türkçe ve mail için.
+   */
+  odemeSebebi?: OdemeSebebi;
+  /** Platformun ödeme ekranı ("ne yapmalı"). Panel dışı adres, yeni sekmede. */
+  odemeAdresi?: string | null;
+  /** Ekrandaki hesap numarası (Google "516-174-6317"); sözlük cümlesine giriyor. */
+  odemeHesapNo?: string;
 
   /**
    * Uyarının dayandığı verinin son okunma anı.

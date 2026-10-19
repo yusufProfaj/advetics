@@ -762,6 +762,27 @@ describe('MetricsService', () => {
       expect(k2!.teslimat).toEqual({ yayinda: true, ad: 'Yayında' });
     });
 
+    it('KRİTİK: hesapta ödeme sorunu varsa açık kampanya "Yayında" DEĞİL (gerçek SQL)', async () => {
+      /*
+       * Google'da kartı reddedilen / ödeme yöntemi olmayan hesap ENABLED
+       * kalıyor ve kampanya SERVING görünüyordu. Karar hesabın
+       * odeme_durumu kolonundan; hiç okunmamış hesap engel SAYILMIYOR.
+       */
+      await seedMetrics({ date: '2026-08-05', spendMicros: '1000000', impressions: 100, clicks: 5, conversions: 1 });
+      await h.q(`UPDATE campaigns SET status = 'active', effective_status = 'SERVING' WHERE id = $1`, [CAMPAIGN_ID]);
+      const kampanya = async () =>
+        (await svc.breakdown(CTX, { from: '2026-08-05', to: '2026-08-05', level: 'campaign', limit: 50 }))[0]!.teslimat;
+
+      await h.q(`UPDATE ad_accounts SET platform = 'google', raw = '{"status":"ENABLED"}'::jsonb, odeme_durumu = NULL WHERE id = $1`, [IDS.adAccount]);
+      expect(await kampanya()).toEqual({ yayinda: true, ad: 'Yayında' });
+
+      await h.q(
+        `UPDATE ad_accounts SET odeme_durumu = '{"okundu":"2026-08-05T08:00:00Z","hata":null,"faturaKurulumlari":[],"hesapButceleri":[]}'::jsonb WHERE id = $1`,
+        [IDS.adAccount],
+      );
+      expect(await kampanya()).toEqual({ yayinda: false, ad: 'Durdu: hesapta ödeme sorunu', kod: 'hesap_odeme' });
+    });
+
     it('reklam seviyesinde ÜST ad set adı da döner', async () => {
       // Reklam adları ad set'ler arasında tekrar ediyor; üst varlık olmadan
       // tabloda hangi satırın hangisi olduğu ayırt edilemiyor.

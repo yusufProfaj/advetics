@@ -115,6 +115,21 @@ export function UyariBandi({ mcc }: { mcc: boolean }) {
   );
 }
 
+type UyariSozlugu = (typeof genelBakisSozlugu)['tr']['uyari'];
+
+/**
+ * Uyarının ekrandaki başlığı ve açıklaması.
+ *
+ * ÖDEME SORUNUNDA SÖZLÜKTEN: API'nin `baslik`/`detay`ı Türkçe ve mail için;
+ * İngilizce panelde Türkçe cümle görünmesin diye sebep kodu (`odemeSebebi`)
+ * iki dilli sözlükten yazılıyor. Kodu olmayan (eski) uyarı API metniyle.
+ */
+export function uyariMetni(u: Uyari, d: UyariSozlugu): { baslik: string; detay: string } {
+  if (!u.odemeSebebi) return { baslik: u.baslik, detay: u.detay };
+  const no = u.odemeHesapNo ?? u.adAccountName ?? '';
+  return { baslik: d.odeme.baslik[u.odemeSebebi], detay: d.odeme.detay[u.odemeSebebi](no) };
+}
+
 /** Gizleme anahtarı — aynı hesabın aynı sorunu tekrar gösterilmesin. */
 function anahtarOf(u: Uyari): string {
   return `${u.kod}:${u.adAccountId ?? u.clientId ?? '-'}`;
@@ -206,7 +221,7 @@ function ToplananBant({
                   {u.adAccountName && (
                     <span className="text-ink-muted"> · {u.adAccountName}</span>
                   )}
-                  <span className="block text-[11px] text-ink-muted">{u.detay}</span>
+                  <span className="block text-[11px] text-ink-muted">{uyariMetni(u, d).detay}</span>
                 </span>
                 <Eylem uyari={u} onGizle={onGizle} />
               </li>
@@ -270,11 +285,11 @@ function TekTekBant({
       </span>
 
       <span className="min-w-0 flex-1 text-sm">
-        <strong className="text-ink">{u.baslik}</strong>
+        <strong className="text-ink">{uyariMetni(u, g.uyari).baslik}</strong>
         {u.adAccountName && (
-          <span className="text-ink-muted"> — {u.adAccountName}</span>
+          <span className="text-ink-muted"> · {u.adAccountName}</span>
         )}
-        <span className="block text-xs text-ink-muted">{u.detay}</span>
+        <span className="block text-xs text-ink-muted">{uyariMetni(u, g.uyari).detay}</span>
       </span>
 
       <Eylem uyari={u} onGizle={onGizle} />
@@ -308,6 +323,22 @@ function Eylem({ uyari, onGizle }: { uyari: Uyari; onGizle: (anahtar: string) =>
         <span className="text-[10px] text-ink-muted" title={d.okunmaAni}>
           {formatRelative(uyari.veriZamani, dil)}
         </span>
+      )}
+      {/*
+        ÖDEME SORUNU PANELDEN ÇÖZÜLMÜYOR ama "ne yapmalı" yine de bir tık:
+        platformun ödeme ekranı yeni sekmede. Panel içi bağlantı (`eylem`)
+        ile karışmasın diye ayrı alan ve `Link` değil düz `a`.
+      */}
+      {uyari.odemeAdresi && (
+        <a
+          href={uyari.odemeAdresi}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={d.odeme.yeniSekme}
+          className={dugmeSinifi('koyu', 'kucuk')}
+        >
+          {uyari.platform === 'meta' ? d.odeme.eylemMeta : d.odeme.eylemGoogle} ↗
+        </a>
       )}
       {uyari.eylem && (
         <Link

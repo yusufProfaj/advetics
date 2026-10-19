@@ -16,6 +16,9 @@ import {
   PANEL_YERLERI,
   backfillSchema,
   bulkRefreshSchema,
+  googleMusteriNumarasi,
+  hesapOdemeKarari,
+  odemeEkraniAdresi,
   refreshRangeSchema,
   type BulkRefreshEstimate,
   type BulkRefreshInput,
@@ -298,6 +301,10 @@ export class SyncController {
           lastStructureSyncAt: true,
           lastInsightsSyncAt: true,
           connectionId: true,
+          // Ödeme kararı (Meta `account_status` raw'da, Google okuması ayrı kolonda).
+          raw: true,
+          odemeDurumu: true,
+          externalId: true,
           client: { select: { status: true } },
         },
       });
@@ -391,6 +398,7 @@ export class SyncController {
       accountStatus: 0,
     };
 
+    const simdi = new Date();
     const accounts: SyncAccountStatus[] = rows.map((a) => {
       // Görünmeyen bağlantıda süpürme kararı VERİLEMİYOR; o hesap aşağıdaki
       // `blockedReason` ile "bilinmiyor" olarak yazılıyor ve sayaçlara
@@ -423,6 +431,7 @@ export class SyncController {
         name: a.name,
         platform: a.platform,
         status: a.status,
+        odeme: odemeSatiri(a, simdi),
         syncEnabled: a.syncEnabled,
         connectionStatus: a.connection?.status ?? null,
         lastStructureSyncAt: a.lastStructureSyncAt?.toISOString() ?? null,
@@ -1425,4 +1434,22 @@ function kurtarmaEngeli(
     return 'İşin tarih aralığı eksik.';
   }
   return null;
+}
+
+/**
+ * Veri durumu satırının ödeme bilgisi — bantla AYNI karar (`hesapOdemeKarari`).
+ * `okundu` yalnız Google okumasında dolu: Meta'nın durumu hesap tazelemesiyle
+ * geliyor ve onun anı satırın kendi zamanlarında.
+ */
+function odemeSatiri(
+  a: { platform: string; raw: unknown; odemeDurumu: unknown; externalId: string },
+  simdi: Date,
+): SyncAccountStatus['odeme'] {
+  const o = a.odemeDurumu as { okundu?: unknown } | null;
+  return {
+    ...hesapOdemeKarari(a, simdi),
+    okundu: typeof o?.okundu === 'string' ? o.okundu : null,
+    hesapNo: a.platform === 'google' ? googleMusteriNumarasi(a.externalId) : a.externalId,
+    adres: odemeEkraniAdresi(a.platform, a.externalId),
+  };
 }

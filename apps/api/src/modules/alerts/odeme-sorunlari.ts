@@ -1,5 +1,5 @@
 import type { Prisma } from '@prisma/client';
-import type { Platform, Uyari } from '@advetics/shared';
+import { hesapOdemeKarari, type Platform, type Uyari } from '@advetics/shared';
 import { hesapUyarilari, type UyariHesabi } from './uyari-kurallari';
 
 /**
@@ -23,6 +23,8 @@ export const ODEME_HESAP_SECIMI = {
   lastStructureSyncAt: true,
   updatedAt: true,
   raw: true,
+  odemeDurumu: true,
+  externalId: true,
   clientId: true,
   paymentAlertedAt: true,
   client: { select: { name: true, status: true } },
@@ -52,10 +54,27 @@ export function odemeUyarisi(h: OdemeHesapSatiri, simdi: Date): Uyari | null {
     lastStructureSyncAt: h.lastStructureSyncAt,
     updatedAt: h.updatedAt,
     raw: h.raw,
+    odemeDurumu: h.odemeDurumu,
+    externalId: h.externalId,
     clientId: h.clientId,
     clientName: h.client?.name ?? null,
     connectionStatus: h.connection.status,
     connectionTokenExpiresAt: h.connection.authorizationExpiresAt,
   };
   return hesapUyarilari(satir, simdi).find((u) => u.kod === 'hesap_odeme_sorunu') ?? null;
+}
+
+/**
+ * Ödeme sorunu ÇÖZÜLDÜ mü — yalnız karar açıkça `sorun_yok` ise.
+ *
+ * "Uyarı yok" ile "çözüldü" aynı şey değil: Google okuması düştüğünde karar
+ * `bilinmiyor` oluyor ve uyarı üretilmiyor. Bunu çözüldü saymak mail
+ * damgasını silerdi; okuma bir saat sonra düzelince AYNI sorun için ikinci
+ * bir "yeni ödeme sorunu" maili giderdi.
+ */
+export function odemeCozuldu(h: OdemeHesapSatiri, simdi: Date): boolean {
+  return (
+    hesapOdemeKarari({ platform: h.platform, raw: h.raw, odemeDurumu: h.odemeDurumu }, simdi)
+      .durum === 'sorun_yok'
+  );
 }

@@ -23,11 +23,23 @@ export interface TeslimatGirdisi {
   /** Reklamın kampanyası (yalnız reklam düzeyinde). */
   kokDurum: string | null;
   seviye: 'campaign' | 'ad_group' | 'ad' | 'account';
+  /**
+   * Hesapta ödeme sorunu var mı (`hesapOdemeKarari` = `sorun`). En üstteki
+   * engel bu: Google'da kartı reddedilen hesabın kampanyası kendi durumunda
+   * ENABLED, `serving_status`u da SERVING kalabiliyor ve satır "Yayında"
+   * görünüp harcamıyordu. Verilmezse (eski çağıran) engel yok sayılıyor.
+   */
+  hesapOdemeSorunu?: boolean;
 }
 
 export interface TeslimatDurumu {
   yayinda: boolean;
   ad: string;
+  /**
+   * Panelin sözlükten yazdığı hâller için makine kodu. `ad` Türkçe kalıyor
+   * (shared sabiti, D4); İngilizce panel bu kodu çeviriyor.
+   */
+  kod?: 'hesap_odeme';
 }
 
 const KENDI: Record<string, string> = {
@@ -65,6 +77,7 @@ const META_KODU: Record<string, TeslimatDurumu> = {
 
 export function teslimatDurumu(g: TeslimatGirdisi): TeslimatDurumu {
   if (g.status !== 'active') return { yayinda: false, ad: KENDI[g.status] ?? KENDI.unknown! };
+  if (g.hesapOdemeSorunu) return { yayinda: false, ad: 'Durdu: hesapta ödeme sorunu', kod: 'hesap_odeme' };
   if (g.seviye === 'ad' && g.kokDurum && KAPALI_UST.has(g.kokDurum)) return { yayinda: false, ad: 'Kampanya duraklatıldı' };
   if (g.ustDurum && KAPALI_UST.has(g.ustDurum)) {
     return { yayinda: false, ad: g.seviye === 'ad' ? 'Reklam seti duraklatıldı' : 'Kampanya duraklatıldı' };

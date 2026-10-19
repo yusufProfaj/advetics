@@ -71,3 +71,18 @@
   (49.500, 33.100, 90.500), kesin sayı değil; ekranda "yaklaşık". Teklif
   alanları düşük hacimde boş gelebiliyor ("mini french press", 30 arama).
   Harcaması olmayan hesapta hacmin daha kaba gelip gelmediği ÖLÇÜLMEDİ.
+- **ÖDEME SORUNU `customer.status`TA GÖRÜNMÜYOR — belgeden (2026-10-19, v25
+  proto'ları).** `CustomerStatus` yalnız ENABLED/CANCELED/SUSPENDED/CLOSED;
+  kartı reddedilen, ödeme yöntemi olmayan ya da hesap bütçesi biten hesap
+  ENABLED kalıyor ve panel yalnız SUSPENDED'a baktığı için "sorun yok"
+  diyordu. `campaign.primary_status_reasons`ın 43 değerinde de ödeme/fatura
+  nedeni YOK (BUDGET_CONSTRAINED kampanya bütçesi). Okunabilen tek kaynak
+  `billing_setup` (onaylı ve tarihi geçerli kurulum var mı) ve
+  `account_budget` (onaylı bitiş, ayarlanmış sınır, `amount_served_micros`).
+  Kart reddi / ödeme profili hâlleri API'de YOK; panel bunu "sorun yok"
+  ipucunda söylüyor. Okuma `ad_accounts.odeme_durumu`na (raw'a DEĞİL: keşif
+  raw'ı baştan yazıyor), karar shared `googleOdemeKarari`. Kurulum dönmeyip
+  bütçe dönen hesap (toplu faturalama olabilir) `bilinmiyor`: yanlış "ödeme
+  yöntemi yok" alarmı yerine. **Canlıda ÖLÇÜLMEDİ** (sunucu okuması bu
+  oturumda izinsizdi): iki sorgunun alt hesapta `login-customer-id` ile
+  dönüp dönmediği ve toplu faturalanan hesabın nasıl göründüğü.

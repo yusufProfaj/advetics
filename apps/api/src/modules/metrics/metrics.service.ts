@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { seviyeLiterali } from './seviye-literali';
-import { deriveRoas, donusumToplami, kampanyaTipi, kitlelereGoreTopla, teslimatDurumu, type KitlePerformansi, type TeslimatGirdisi } from '@advetics/shared';
+import { deriveRoas, donusumToplami, hesapOdemeKarari, kampanyaTipi, kitlelereGoreTopla, teslimatDurumu, type KitlePerformansi, type TeslimatGirdisi } from '@advetics/shared';
 import type {
   HierarchyPathQuery,
   MetricsConversionDetail,
@@ -569,6 +569,7 @@ export class MetricsService {
             prev_conversion_value_micros: string | number | bigint | null;
             entity_id: string;
             entity_external_id: string;
+            ad_account_id: string;
             platform: Platform;
             currency: string;
             name: string | null;
@@ -583,7 +584,7 @@ export class MetricsService {
         >
       >(
         Prisma.sql`
-          SELECT i.entity_id, i.entity_external_id, i.platform, i.currency,
+          SELECT i.entity_id, i.entity_external_id, i.ad_account_id, i.platform, i.currency,
                  -- TEK TARAMA, IKI PENCERE.
                  --
                  -- Onceki donem bitisik (prevTo = from - 1), yani tek bir
@@ -632,7 +633,7 @@ export class MetricsService {
             ${kampanyaFiltresi}
             ${setFiltresi}
             ${filters}
-          GROUP BY i.entity_id, i.entity_external_id, i.platform, i.currency,
+          GROUP BY i.entity_id, i.entity_external_id, i.ad_account_id, i.platform, i.currency,
                    c.name, g.name, a.name, acc.name, gc.name, ag.name,
                    c.status, g.status, a.status, acc.status, c.objective, gc.objective, agc.objective,
                    c.effective_status, g.effective_status, a.effective_status, gc.status, ag.status, agc.status
@@ -669,6 +670,31 @@ export class MetricsService {
         for (const h of hs) hedefler.set(h.campaign_id, h.goals);
       }
 
+      /*
+       * HESABIN ÖDEME KARARI AYRI SORGUDA, yalnız listedeki hesaplar için.
+       * Ana sorguya join edip `raw`/`odeme_durumu` JSON'larını GROUP BY'a
+       * koymak her satırı iki büyük JSON karşılaştırmasıyla gruplamak
+       * demekti. Karar shared `hesapOdemeKarari`: bant ne diyorsa satır da
+       * onu diyor. RLS'nin gizlediği (başka şirketin) hesap haritada yok ve
+       * engel yok sayılıyor: bilinmeyeni "ödeme sorunu" diye yazmıyoruz.
+       */
+      const hesapIdleri = [...new Set(rows.map((r) => r.ad_account_id))];
+      const odemeSorunlu = new Set<string>();
+      if (hesapIdleri.length > 0) {
+        const simdi = new Date();
+        const hesaplar = await tx.$queryRaw<
+          Array<{ id: string; platform: string; raw: unknown; odeme_durumu: unknown }>
+        >(Prisma.sql`
+          SELECT id::text AS id, platform::text AS platform, raw, odeme_durumu
+          FROM ad_accounts
+          WHERE id = ANY(${hesapIdleri}::uuid[])
+        `);
+        for (const h of hesaplar) {
+          const karar = hesapOdemeKarari({ platform: h.platform, raw: h.raw, odemeDurumu: h.odeme_durumu }, simdi);
+          if (karar.durum === 'sorun') odemeSorunlu.add(h.id);
+        }
+      }
+
       return rows.map((r) => ({
         entityId: r.entity_id,
         entityExternalId: r.entity_external_id,
@@ -692,6 +718,7 @@ export class MetricsService {
           ustDurum: r.ust_durum,
           kokDurum: r.kok_durum,
           seviye: query.level as TeslimatGirdisi['seviye'],
+          hesapOdemeSorunu: odemeSorunlu.has(r.ad_account_id),
         }),
         currency: r.currency,
         campaignType:
@@ -1121,12 +1148,15 @@ export class MetricsService {
           currency: string;
           sync_enabled: boolean;
           status: string;
+          raw: unknown;
+          odeme_durumu: unknown;
           client_name: string | null;
         }>
       >(
         Prisma.sql`
           SELECT acc.id::text AS id, acc.external_id, acc.name, acc.platform, acc.currency,
-                 acc.sync_enabled, acc.status::text AS status, cl.name AS client_name
+                 acc.sync_enabled, acc.status::text AS status, cl.name AS client_name,
+                 acc.raw, acc.odeme_durumu
           FROM ad_accounts acc
           -- LEFT JOIN: workspace adi bir SUSLEME alani; satirin gorunurlugune
           -- yalnizca ad_accounts politikasi karar verir (CLAUDE.md INNER JOIN tuzagi).
@@ -1144,6 +1174,7 @@ export class MetricsService {
         hesapSatirlari.set(r.ad_account_id, liste);
       }
 
+      const simdiOdeme = new Date();
       const accounts: MetricsAccountRow[] = hesaplar.map((h) => {
         const satirlar = hesapSatirlari.get(h.id) ?? [];
         const onceki = this.topla(satirlar.map(oncekiSatir));
@@ -1165,6 +1196,12 @@ export class MetricsService {
           currencies: birimler,
           syncEnabled: h.sync_enabled,
           status: h.status,
+          // Bandla AYNI karar; satırda yalnız SORUN gösteriliyor, "bilinmiyor"
+          // Veri durumu ekranında ayrı yazılı.
+          odemeSorunu: (() => {
+            const k = hesapOdemeKarari({ platform: h.platform, raw: h.raw, odemeDurumu: h.odeme_durumu }, simdiOdeme);
+            return k.durum === 'sorun' ? k.sebep : null;
+          })(),
           ...this.totals(this.topla(satirlar)),
           previous: karsilastir && this.hasData(onceki) ? this.totals(onceki) : null,
         };

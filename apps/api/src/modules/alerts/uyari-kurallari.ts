@@ -1,5 +1,11 @@
 import {
+  googleHesapDurumu,
+  googleMusteriNumarasi,
+  hesapOdemeKarari,
   hesaplarAdresi,
+  metaHesapDurumu,
+  odemeEkraniAdresi,
+  type OdemeSebebi,
   platformBaglantilariAdresi,
   veriDurumuAdresi,
   type Platform,
@@ -31,6 +37,14 @@ export interface UyariHesabi {
   updatedAt: Date;
   /** Ham platform yanıtı — normalize edilirken KAYBOLAN ayrım burada. */
   raw: unknown;
+  /**
+   * `ad_accounts.odeme_durumu` (Google ödeme okuması). ZORUNLU alan: seçmeyi
+   * unutan bir çağıran Google'ın ödeme sorununu sessizce "bilinmiyor"a
+   * düşürürdü; tip, select'e eklenmesini zorluyor.
+   */
+  odemeDurumu: unknown;
+  /** Platformdaki hesap kimliği — ödeme ekranı bağlantısı ve metin için. */
+  externalId: string;
   clientId: string | null;
   clientName: string | null;
   /**
@@ -43,36 +57,14 @@ export interface UyariHesabi {
   connectionTokenExpiresAt: Date | null;
 }
 
-/**
- * Meta'nın sayısal `account_status` değerini ham yanıttan okur.
- *
- * NEDEN HAM YANITTAN: `mapAccountStatus` 3, 7, 8 ve 9'u tek bir `paused`
- * değerine indiriyor ve o indirgeme tam da ayırt edilmesi gereken şeyi
- * kaybediyor — "bakiye ödenmemiş" (3) ile "risk incelemesinde" (7) aynı
- * satıra düşüyor, oysa birinde kullanıcı ödeme yapacak, diğerinde beklemekten
- * başka yapabileceği bir şey yok. Ham yanıt `ad_accounts.raw` içinde zaten
- * duruyor; ikinci bir platform çağrısı gerekmiyor.
- *
- * `null` = değer okunamadı. Tahmin etmiyoruz: yanlış bir ödeme uyarısı
- * kullanıcıyı olmayan bir borcu aramaya gönderir.
+/*
+ * ÖDEME KARARI SHARED'DA (`odeme-durumu.ts`): Reklam Yöneticisi'nin teslimat
+ * sütunu ve Veri durumu satırı da aynı kararı okuyor. Burada ikinci bir
+ * kopya, bandın "ödeme sorunu" derken kampanyanın "Yayında" demesi olurdu.
+ * İki okuyucu (testler ve eski çağıranlar için) buradan da dışa açık.
  */
-export function metaHesapDurumu(raw: unknown): number | null {
-  if (raw === null || typeof raw !== 'object') return null;
-  const v = (raw as Record<string, unknown>).account_status;
-  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
-  if (typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v))) return Number(v);
-  return null;
-}
+export { googleHesapDurumu, metaHesapDurumu };
 
-/** Google `customer.status` ham yanıttan — 'SUSPENDED', 'CANCELED', 'CLOSED'. */
-export function googleHesapDurumu(raw: unknown): string | null {
-  if (raw === null || typeof raw !== 'object') return null;
-  const v = (raw as Record<string, unknown>).status;
-  return typeof v === 'string' && v.trim() !== '' ? v.toUpperCase() : null;
-}
-
-/** Meta'da ÖDEME sorunu anlamına gelen kodlar. 7 (risk incelemesi) BURADA DEĞİL. */
-const META_ODEME_KODLARI = new Set([3, 8, 9]);
 const META_RISK_KODU = 7;
 
 /** Metrik bu kadar süredir gelmiyorsa bayat sayılıyor. */
@@ -110,6 +102,56 @@ function taban(h: UyariHesabi): Omit<Uyari, 'kod' | 'siddet' | 'baslik' | 'detay
  */
 
 /**
+ * Ödeme uyarısının Türkçe metni — mail ve eski istemciler için.
+ *
+ * PANEL BU METNİ DEĞİL `odemeSebebi`ni okuyor ve iki dilli sözlükten
+ * yazıyor (`genel-bakis.ts` › `odeme`). Mail ajansa Türkçe gidiyor; metin
+ * burada kalmak zorunda. İki yerde de sebep başına ayrı cümle: "yöntem yok"
+ * ile "bütçe bitti"nin yapılacak işi farklı.
+ */
+const ODEME_METNI: Record<OdemeSebebi, (no: string) => { baslik: string; detay: string }> = {
+  meta_bakiye_odenmemis: () => ({
+    baslik: 'Reklamlar yayınlanmıyor — ödeme sorunu',
+    detay:
+      'Hesabın ödenmemiş bakiyesi var. Meta Ads Manager’dan bakiyeyi ödeyin; reklamlar ödeme alınana kadar yayınlanmıyor.',
+  }),
+  meta_odeme_bekliyor: () => ({
+    baslik: 'Reklamlar yayınlanmıyor — ödeme sorunu',
+    detay:
+      'Hesap ödeme bekliyor ya da ek süre kullanıyor. Meta Ads Manager’dan ödeme yöntemini güncelleyin.',
+  }),
+  google_hesap_askida: () => ({
+    baslik: 'Reklamlar yayınlanmıyor — hesap askıya alınmış',
+    detay:
+      'Google hesabı askıya aldı; en sık sebebi ödemedir. Google Ads’te faturalandırma bölümünü kontrol edin.',
+  }),
+  google_odeme_yontemi_yok: (no) => ({
+    baslik: 'Reklamlar yayınlanmıyor — ödeme yöntemi yok',
+    detay: `Google Ads hesabında (${no}) geçerli bir ödeme ayarı yok. Google Ads’te Faturalandırma bölümünden ödeme yöntemi ekleyin.`,
+  }),
+  google_fatura_onay_bekliyor: (no) => ({
+    baslik: 'Reklamlar yayınlanmıyor — ödeme ayarı onay bekliyor',
+    detay: `Google Ads hesabının (${no}) ödeme ayarı ya da hesap bütçesi Google’ın onayını bekliyor. Faturalandırma bölümünden durumu kontrol edin.`,
+  }),
+  google_hesap_butcesi_bitti: (no) => ({
+    baslik: 'Reklamlar yayınlanmıyor — hesap bütçesi doldu',
+    detay: `Google Ads hesabının (${no}) hesap bütçesi tükendi. Faturalandırma bölümünden bütçeyi artırın ya da yeni bütçe ekleyin.`,
+  }),
+  google_hesap_butcesi_suresi_doldu: (no) => ({
+    baslik: 'Reklamlar yayınlanmıyor — hesap bütçesinin süresi doldu',
+    detay: `Google Ads hesabının (${no}) hesap bütçesinin bitiş tarihi geçti. Faturalandırma bölümünden yeni bütçe ekleyin.`,
+  }),
+};
+
+/** Google ödeme okumasının anı; yoksa `null`. */
+function odemeOkumaAni(h: UyariHesabi): string | null {
+  const o = h.odemeDurumu;
+  if (h.platform !== 'google' || o === null || typeof o !== 'object') return null;
+  const okundu = (o as Record<string, unknown>).okundu;
+  return typeof okundu === 'string' ? okundu : null;
+}
+
+/**
  * Bir reklam hesabının ürettiği uyarılar.
  *
  * SIRA ÖNEMLİ ve şu kurala göre: önce ŞU ANDA para/veri kaybettiren hâller,
@@ -124,53 +166,44 @@ export function hesapUyarilari(h: UyariHesabi, simdi: Date): Uyari[] {
   const t = taban(h);
 
   // ── 1. Platform tarafındaki hâller — panelden çözülemiyor ──────────────
-  if (h.platform === 'meta') {
-    const kod = metaHesapDurumu(h.raw);
-    if (kod !== null && META_ODEME_KODLARI.has(kod)) {
-      return [
-        {
-          ...t,
-          kod: 'hesap_odeme_sorunu',
-          siddet: 'error',
-          baslik: 'Reklamlar yayınlanmıyor — ödeme sorunu',
-          detay:
-            kod === 3
-              ? 'Hesabın ödenmemiş bakiyesi var. Meta Ads Manager’dan bakiyeyi ödeyin; reklamlar ödeme alınana kadar yayınlanmıyor.'
-              : 'Hesap ödeme bekliyor ya da ek süre kullanıyor. Meta Ads Manager’dan ödeme yöntemini güncelleyin.',
-          eylem: null,
-        },
-      ];
-    }
-    if (kod === META_RISK_KODU) {
-      return [
-        {
-          ...t,
-          kod: 'hesap_risk_incelemesi',
-          siddet: 'warn',
-          baslik: 'Hesap risk incelemesinde',
-          detay:
-            'Meta hesabı inceliyor. Ödemeyle ilgisi yok ve panelden yapılabilecek bir şey de yok — inceleme bitene kadar yayın durabilir.',
-          eylem: null,
-        },
-      ];
-    }
+  const karar = hesapOdemeKarari(
+    { platform: h.platform, raw: h.raw, odemeDurumu: h.odemeDurumu },
+    simdi,
+  );
+  if (karar.durum === 'sorun') {
+    const no = h.platform === 'google' ? googleMusteriNumarasi(h.externalId) : h.externalId;
+    const metin = ODEME_METNI[karar.sebep](no);
+    return [
+      {
+        ...t,
+        // GOOGLE'DA VERİNİN ANI ÖDEME OKUMASININ ANI: `updatedAt` hesabın
+        // herhangi bir kolonu yazılınca da ilerliyor ve bayat bir okumayı
+        // taze gösterirdi.
+        veriZamani: odemeOkumaAni(h) ?? t.veriZamani,
+        kod: 'hesap_odeme_sorunu',
+        siddet: 'error',
+        baslik: metin.baslik,
+        detay: metin.detay,
+        eylem: null,
+        odemeSebebi: karar.sebep,
+        odemeAdresi: odemeEkraniAdresi(h.platform, h.externalId),
+        odemeHesapNo: no,
+      },
+    ];
   }
 
-  if (h.platform === 'google') {
-    const durum = googleHesapDurumu(h.raw);
-    if (durum === 'SUSPENDED') {
-      return [
-        {
-          ...t,
-          kod: 'hesap_odeme_sorunu',
-          siddet: 'error',
-          baslik: 'Reklamlar yayınlanmıyor — hesap askıya alınmış',
-          detay:
-            'Google hesabı askıya aldı; en sık sebebi ödemedir. Google Ads’te faturalandırma bölümünü kontrol edin.',
-          eylem: null,
-        },
-      ];
-    }
+  if (h.platform === 'meta' && metaHesapDurumu(h.raw) === META_RISK_KODU) {
+    return [
+      {
+        ...t,
+        kod: 'hesap_risk_incelemesi',
+        siddet: 'warn',
+        baslik: 'Hesap risk incelemesinde',
+        detay:
+          'Meta hesabı inceliyor. Ödemeyle ilgisi yok ve panelden yapılabilecek bir şey de yok — inceleme bitene kadar yayın durabilir.',
+        eylem: null,
+      },
+    ];
   }
 
   if (h.status === 'disabled' || h.status === 'closed') {

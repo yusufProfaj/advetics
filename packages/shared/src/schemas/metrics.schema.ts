@@ -1,3 +1,4 @@
+import type { OdemeKarari, OdemeSebebi } from '../odeme-durumu';
 import { z } from 'zod';
 
 /**
@@ -548,7 +549,7 @@ export interface MetricsBreakdownRow extends MetricTotals {
    * gelen engel ya da platformun reddi. Durum sütunu ve "Yayında" süzgeci
    * bunu okuyor; durdur/başlat düğmesi KENDİ `status`ünü.
    */
-  teslimat: { yayinda: boolean; ad: string };
+  teslimat: { yayinda: boolean; ad: string; kod?: 'hesap_odeme' };
   currency: string;
   /**
    * Kampanya tipi ("Form", "YouTube"...) — `kampanyaTipi()` ile çözülmüş.
@@ -715,6 +716,12 @@ export interface MetricsAccountRow extends MetricTotals {
   syncEnabled: boolean;
   /** Platformdaki hesap durumu (`AdAccountStatus`). */
   status: string;
+  /**
+   * Ödeme sorunu (`hesapOdemeKarari` = `sorun`), yoksa `null`. `null`
+   * "sorun yok" DEĞİL, "sorun görülmedi": bilinmeyen hâller Veri durumu
+   * satırında ayrı yazılıyor.
+   */
+  odemeSorunu: OdemeSebebi | null;
   /** `null` = önceki dönemde HİÇ veri yok. Sıfırlı nesne "-%100" gösterirdi. */
   previous: MetricTotals | null;
 }
@@ -825,6 +832,18 @@ export interface SyncAccountStatus {
   platform: Platform;
   /** `ad_accounts.status` — platformdan geldiği hâliyle. */
   status: string;
+  /**
+   * Hesabın ödeme durumu (`hesapOdemeKarari`). "Bilinmiyor" ile "sorun yok"
+   * AYRI: okunamayan bir Google hesabı sağlıklı görünmemeli.
+   * `okundu` = kararın dayandığı okumanın anı (Google), yoksa `null`.
+   */
+  odeme: OdemeKarari & {
+    okundu: string | null;
+    /** Ekrandaki hesap numarası (Google "516-174-6317"). */
+    hesapNo: string;
+    /** Platformun ödeme ekranı; yoksa `null`. */
+    adres: string | null;
+  };
   syncEnabled: boolean;
   /**
    * `null` = bağlantı bu kapsamda GÖRÜNMÜYOR (başka şirketin kendi

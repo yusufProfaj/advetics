@@ -239,6 +239,41 @@ export const genelBakisSozlugu = ikiDil(
         is_dusuyor: 'senkronizasyon düşüyor',
         geri_besleme_dusuyor: 'lead sonuçları Meta’ya gitmiyor',
       },
+      /**
+       * ÖDEME SORUNU — `Uyari.odemeSebebi`nden. API'nin Türkçe başlık/detayı
+       * maile gidiyor; panel sebebi buradan iki dilde yazıyor. Her sebebin
+       * yapılacak işi farklı, cümleler de farklı.
+       */
+      odeme: {
+        baslik: {
+          meta_bakiye_odenmemis: 'Reklamlar yayınlanmıyor: ödenmemiş bakiye',
+          meta_odeme_bekliyor: 'Reklamlar yayınlanmıyor: ödeme bekleniyor',
+          google_hesap_askida: 'Reklamlar yayınlanmıyor: hesap askıya alındı',
+          google_odeme_yontemi_yok: 'Reklamlar yayınlanmıyor: ödeme yöntemi yok',
+          google_fatura_onay_bekliyor: 'Reklamlar yayınlanmıyor: ödeme ayarı onay bekliyor',
+          google_hesap_butcesi_bitti: 'Reklamlar yayınlanmıyor: hesap bütçesi doldu',
+          google_hesap_butcesi_suresi_doldu: 'Reklamlar yayınlanmıyor: hesap bütçesinin süresi doldu',
+        },
+        detay: {
+          meta_bakiye_odenmemis: (_no: string) =>
+            'Hesabın ödenmemiş bakiyesi var. Meta’da bakiyeyi ödeyin; reklamlar ödeme alınınca yeniden yayınlanır.',
+          meta_odeme_bekliyor: (_no: string) =>
+            'Hesap ödeme bekliyor ya da ek süre kullanıyor. Meta’da ödeme yöntemini güncelleyin.',
+          google_hesap_askida: (no: string) =>
+            `Google, ${no} numaralı hesabı askıya aldı. En sık sebebi ödemedir; Google Ads’te faturalandırmayı kontrol edin.`,
+          google_odeme_yontemi_yok: (no: string) =>
+            `${no} numaralı Google Ads hesabında geçerli bir ödeme ayarı yok. Google Ads’te ödeme yöntemi ekleyin.`,
+          google_fatura_onay_bekliyor: (no: string) =>
+            `${no} numaralı hesabın ödeme ayarı ya da hesap bütçesi Google’ın onayını bekliyor.`,
+          google_hesap_butcesi_bitti: (no: string) =>
+            `${no} numaralı hesabın hesap bütçesi tükendi. Google Ads’te bütçeyi artırın ya da yeni bütçe ekleyin.`,
+          google_hesap_butcesi_suresi_doldu: (no: string) =>
+            `${no} numaralı hesabın hesap bütçesinin bitiş tarihi geçti. Google Ads’te yeni bütçe ekleyin.`,
+        },
+        eylemGoogle: 'Google Ads’te ödemeyi aç',
+        eylemMeta: 'Meta’da ödemeyi aç',
+        yeniSekme: 'yeni sekmede açılır',
+      },
     },
     workspace: {
       buWorkspace: 'Bu workspace',
@@ -491,6 +526,36 @@ export const genelBakisSozlugu = ikiDil(
         veri_bayat: 'data not updating',
         is_dusuyor: 'sync failing',
         geri_besleme_dusuyor: 'lead results not reaching Meta',
+      },
+      odeme: {
+        baslik: {
+          meta_bakiye_odenmemis: 'Ads are not running: unpaid balance',
+          meta_odeme_bekliyor: 'Ads are not running: payment pending',
+          google_hesap_askida: 'Ads are not running: account suspended',
+          google_odeme_yontemi_yok: 'Ads are not running: no payment method',
+          google_fatura_onay_bekliyor: 'Ads are not running: billing awaiting approval',
+          google_hesap_butcesi_bitti: 'Ads are not running: account budget used up',
+          google_hesap_butcesi_suresi_doldu: 'Ads are not running: account budget has ended',
+        },
+        detay: {
+          meta_bakiye_odenmemis: (_no) =>
+            'This account has an unpaid balance. Pay it in Meta; ads run again once the payment goes through.',
+          meta_odeme_bekliyor: (_no) =>
+            'This account is waiting for payment or is in a grace period. Update the payment method in Meta.',
+          google_hesap_askida: (no) =>
+            `Google suspended account ${no}. The most common cause is payment; check billing in Google Ads.`,
+          google_odeme_yontemi_yok: (no) =>
+            `Google Ads account ${no} has no valid billing setup. Add a payment method in Google Ads.`,
+          google_fatura_onay_bekliyor: (no) =>
+            `The billing setup or account budget of account ${no} is waiting for Google’s approval.`,
+          google_hesap_butcesi_bitti: (no) =>
+            `The account budget of account ${no} is used up. Increase it or add a new budget in Google Ads.`,
+          google_hesap_butcesi_suresi_doldu: (no) =>
+            `The account budget of account ${no} has passed its end date. Add a new budget in Google Ads.`,
+        },
+        eylemGoogle: 'Open billing in Google Ads',
+        eylemMeta: 'Open billing in Meta',
+        yeniSekme: 'opens in a new tab',
       },
     },
     workspace: {

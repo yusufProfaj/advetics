@@ -75,6 +75,17 @@ export const ayarlarSozlugu = ikiDil(
       aliciYok: 'Workspace’in kayıtlı rapor alıcısı yok: en az bir adres eklemelisin.',
     },
     senkron: {
+      odemeYok: 'Ödeme: sorun görünmüyor',
+      odemeYokGoogle:
+        'Google’ın ödeme ayarı ve hesap bütçesi okunuyor. Kart reddi gibi ödeme profili sorunlarını Google API’de vermiyor; bunlar Google Ads’te görünür.',
+      odemeBilinmiyor: 'Ödeme durumu bilinmiyor',
+      odemeNeden: {
+        okunmadi: 'Ödeme durumu henüz okunmadı. Okuma saatte bir yapılıyor.',
+        okunamadi: (h: string) => `Ödeme durumu okunamadı: ${h}`,
+        butce_yok: 'Google hesap bütçesi döndürmedi; ödeme durumu tahmin edilmiyor.',
+        kurulum_yok: 'Google faturalandırma kurulumu döndürmedi (toplu faturalama olabilir); ödeme durumu tahmin edilmiyor.',
+      },
+      odemeOkundu: (z: string) => `okundu ${z}`,
       elenme: {
         syncDisabled: 'izleme kapalı',
         clientInactive: 'workspace aktif değil',
@@ -191,6 +202,17 @@ export const ayarlarSozlugu = ikiDil(
       aliciYok: 'The workspace has no saved report recipients: you must add at least one address.',
     },
     senkron: {
+      odemeYok: 'Payment: no issue seen',
+      odemeYokGoogle:
+        'Google’s billing setup and account budget are read. Google’s API does not report payment profile issues such as a declined card; those show in Google Ads.',
+      odemeBilinmiyor: 'Payment status unknown',
+      odemeNeden: {
+        okunmadi: 'Payment status has not been read yet. It is read once an hour.',
+        okunamadi: (h) => `Could not read payment status: ${h}`,
+        butce_yok: 'Google returned no account budget; payment status is not guessed.',
+        kurulum_yok: 'Google returned no billing setup (it may be consolidated billing); payment status is not guessed.',
+      },
+      odemeOkundu: (z) => `read ${z}`,
       elenme: {
         syncDisabled: 'tracking off',
         clientInactive: 'workspace not active',

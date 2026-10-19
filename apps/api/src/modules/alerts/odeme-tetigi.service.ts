@@ -3,7 +3,7 @@ import type { Uyari } from '@advetics/shared';
 import { PrismaAdminService } from '../../prisma/prisma-admin.service';
 import { anlikOdemeMailiOlustur } from './odeme-maili';
 import { OdemeMailiGonderici } from './odeme-maili-gonderici.service';
-import { ODEME_HESAP_SECIMI, odemeUyarisi } from './odeme-sorunlari';
+import { ODEME_HESAP_SECIMI, odemeCozuldu, odemeUyarisi } from './odeme-sorunlari';
 
 export interface TetikSonucu {
   /** Bu çağrıda ANLIK mail atılan hesap sayısı. */
@@ -73,7 +73,7 @@ export class OdemeTetigiService {
     for (const h of hesaplar) {
       const uyari = odemeUyarisi(h, simdi);
       if (uyari && h.paymentAlertedAt === null) adaylar.push(uyari);
-      if (!uyari && h.paymentAlertedAt !== null) cozulenIdler.push(h.id);
+      if (!uyari && h.paymentAlertedAt !== null && odemeCozuldu(h, simdi)) cozulenIdler.push(h.id);
     }
 
     /*
