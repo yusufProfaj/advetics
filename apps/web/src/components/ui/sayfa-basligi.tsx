@@ -39,7 +39,7 @@ export function SayfaBasligi({
   suzgecler?: ReactNode;
 }) {
   return (
-    <header className="grid gap-4">
+    <header className="grid grid-cols-1 gap-4">
       <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
         {/*
           EN AZ GENİŞLİK: `flex-1 min-w-0` tek başına başlığı sıfıra kadar
@@ -86,7 +86,7 @@ export function SayfaIskeleti({
   children: ReactNode;
 }) {
   return (
-    <div className={`grid w-full gap-6 ${genislik === 'dar' ? 'mx-auto max-w-4xl' : ''}`}>
+    <div className={`grid w-full grid-cols-1 gap-6 ${genislik === 'dar' ? 'mx-auto max-w-4xl' : ''}`}>
       <SayfaBasligi {...baslik} />
       {children}
     </div>

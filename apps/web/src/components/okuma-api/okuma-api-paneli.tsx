@@ -121,7 +121,7 @@ export function OkumaApiPaneli({
   const ornekler = baglantiOrnekleri(mcpUrl, yeni?.anahtar ?? null, dil);
 
   return (
-    <div className="grid gap-5">
+    <div className="grid grid-cols-1 gap-5">
       {hata && (
         <Serit ton="hata" baslik={d.islemYapilamadi}>
           {hata}
@@ -233,14 +233,14 @@ export function OkumaApiPaneli({
       </Kart>
 
       <Kart baslik={d.baglan}>
-        <div className="grid gap-4">
+        <div className="grid grid-cols-1 gap-4">
           <p className="m-0 text-13 text-ink-muted">
             {d.mcpAdresi}
-            <code className="font-mono">{mcpUrl}</code>.{' '}
+            <code className="font-mono [overflow-wrap:anywhere]">{mcpUrl}</code>.{' '}
             {yeni ? d.ornekDolu : d.ornekBos}
           </p>
           {ornekler.map((o) => (
-            <div key={o.baslik} className="grid gap-1">
+            <div key={o.baslik} className="grid min-w-0 grid-cols-1 gap-1">
               <div className="flex items-center justify-between gap-2">
                 <p className="m-0 text-14 font-bold text-ink">{o.baslik}</p>
                 <Dugme ton="ikincil" boyut="kucuk" onClick={() => kopyala(o.baslik, o.metin)}>
@@ -257,9 +257,9 @@ export function OkumaApiPaneli({
       </Kart>
 
       <Kart baslik={d.araclar} baslikEki={d.aracSayisi(araclar.length)}>
-        <div className="grid gap-3">
+        <div className="grid grid-cols-1 gap-3">
           <p className="m-0 text-13 text-ink-muted">{d.araclarAciklama}</p>
-          <ul className="m-0 grid list-none gap-2 p-0 text-14">
+          <ul className="m-0 grid list-none grid-cols-1 gap-2 p-0 text-14">
             {araclar.map((a) => (
               <li key={a.ad}>
                 <code className="font-mono text-12">{a.ad}</code> <span className="font-bold">{a.baslik}</span>

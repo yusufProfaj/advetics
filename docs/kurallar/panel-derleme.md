@@ -149,3 +149,14 @@ uygulamanın kendi `globals.css`i ile derlenmiş statik bir kopyada ölçebilir
 (`@tailwindcss/postcss`, `@source` ile kopya dosyası); kopya eski sınıflarla
 canlıdaki taşmayı (800 piksel) yeniden üretmeden düzeltme ölçülmüş sayılmaz.
 Bekçi: `marka-merkezi-tasma.spec.ts`.
+
+**2. tur taraması (2026-10-19, `sutunsuz-izgara-tasma.spec.ts`).** Kural:
+sütunsuz ızgaranın taşırması için geniş şeyi taşıyan ÇOCUK `min-w-0` /
+`overflow` taşımıyor olmalı. `Kart` (`min-w-0`), doğrudan ızgara öğesi olan
+kaydırma kabı ve `overflow-hidden` kök güvenli; asıl tehlike düz `div`
+sarmalayıcı. Bu yüzden 245 sütunsuz `grid` satırının çoğu dokunulmadı. Gerçekten
+taşan ve düzeltilenler: Ekip (`team-screen.tsx` kök + `#roller` sarmalayıcısı, 662
+piksel), Okuma API (`<pre>` ve uzun MCP adresi, 409 piksel); `SayfaIskeleti`
+kökü önlem olarak sütunlandı. E-posta imza önizlemesi taşmıyor, DEĞİŞMEDİ.
+Ölçüm, canlıya girilemediği için uygulamanın `globals.css`iyle derlenmiş
+gerçek sınıf dizgileriyle 375 piksellik çerçevede (önce/sonra) yapıldı.

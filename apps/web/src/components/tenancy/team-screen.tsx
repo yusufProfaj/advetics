@@ -267,7 +267,7 @@ export function TeamScreen({
   ];
 
   return (
-    <div className="grid gap-5">
+    <div className="grid grid-cols-1 gap-5">
       {/*
         ÇAPALAR (`AYARLAR_CAPALARI.ekip`): Marka Merkezi'nin erişim listesi ve
         eski adres yönlendirmeleri bu kimliklere bağlanıyor.
@@ -344,7 +344,7 @@ export function TeamScreen({
         tabloyu görmek istedi. Özet kartlar hep açık, ayrıntılı tablo düğmeyle;
         rol seçicilerin altında aynı açıklama satırı (`RolAciklamasi`) var.
       */}
-      <div id="roller" className="scroll-mt-24">
+      <div id="roller" className="min-w-0 scroll-mt-24">
         <RolMatrisi />
       </div>
 
