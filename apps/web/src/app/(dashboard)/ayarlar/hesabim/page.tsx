@@ -1,6 +1,7 @@
 import type {
   EmailAccountSummary,
   IkiAdimDurumu,
+  McpOnayListesi,
   OkumaAnahtariOzeti,
   OkumaAraciTanimi,
 } from '@advetics/shared';
@@ -68,7 +69,7 @@ export default async function HesabimSayfasi({
    * ikincisi beklemeye yönlendiriyor. "Ayar yok" ile "okunamadı" e-postada,
    * "anahtarın yok" ile "liste okunamadı" okuma API'de aynı ayrım.
    */
-  const [ikiAdim, eposta, anahtarlar, araclar] = await Promise.allSettled([
+  const [ikiAdim, eposta, anahtarlar, araclar, yazmaAraclari, onaylar] = await Promise.allSettled([
     serverApiFetch<IkiAdimDurumu>('/auth/2fa'),
     /* `?? null`: ayar yoksa uç BOŞ GÖVDE ile 200 dönüyor ve istemci `undefined` veriyor. */
     epostaAcik
@@ -80,6 +81,12 @@ export default async function HesabimSayfasi({
     okumaApiAcik
       ? serverApiFetch<OkumaAraciTanimi[]>('/okuma-api/araclar')
       : Promise.resolve<OkumaAraciTanimi[]>([]),
+    okumaApiAcik
+      ? serverApiFetch<OkumaAraciTanimi[]>('/okuma-api/yazma-araclari')
+      : Promise.resolve<OkumaAraciTanimi[]>([]),
+    okumaApiAcik
+      ? serverApiFetch<McpOnayListesi>('/okuma-api/onaylar')
+      : Promise.resolve<McpOnayListesi>({ satirlar: [], toplam: 0 }),
   ]);
 
   /*
@@ -113,7 +120,7 @@ export default async function HesabimSayfasi({
               anahtarlar.status === 'fulfilled'
                 ? anahtarlar.value.filter((a) => a.durum === 'etkin').length
                 : undefined,
-            uyari: anahtarlar.status === 'rejected' || araclar.status === 'rejected',
+            uyari: anahtarlar.status === 'rejected' || araclar.status === 'rejected' || onaylar.status === 'rejected',
           },
         ]
       : []),
@@ -193,7 +200,18 @@ export default async function HesabimSayfasi({
                 )}
               />
             ) : (
-              <OkumaApiPaneli anahtarlar={anahtarlar.value} araclar={araclar.value} />
+              /*
+                İŞLEM LİSTESİ VE YAZMA ARAÇLARI AYRI DÜŞEBİLİR: anahtarlar
+                okunduysa panel çiziliyor ve okunamayan bölüm kendi yerinde
+                hatasını söylüyor. Tek hata bütün paneli kapatsaydı kullanıcı
+                sızan bir anahtarı iptal edemezdi.
+              */
+              <OkumaApiPaneli
+                anahtarlar={anahtarlar.value}
+                araclar={araclar.value}
+                yazmaAraclari={yazmaAraclari.status === 'fulfilled' ? yazmaAraclari.value : { hata: hataMetni(yazmaAraclari.reason, d.bilinmeyenHata) }}
+                onaylar={onaylar.status === 'fulfilled' ? onaylar.value : { hata: hataMetni(onaylar.reason, d.bilinmeyenHata) }}
+              />
             )}
           </section>
         )}

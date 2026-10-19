@@ -269,6 +269,9 @@ gidecek dilde), sonunda ajans içi notlar bölümünde riskli hesapları belirt.
 Mimari ve kararlar: [`MCP-YAZMA-MIMARI.md`](MCP-YAZMA-MIMARI.md). Pilot: yalnız
 platform sahibi, istemci Claude Code.
 
+- Oluşturma: Hesabım › **Yapay zekâ bağlantısı** › Yeni anahtar › Yetki:
+  **Reklam yönetimi** (varsayılan "Yalnız okuma"). Onay geçmişi aynı
+  sayfada "Claude'un işlemleri" tablosunda.
 - Anahtar `adv_rw_` ile başlar, en çok 90 gün geçerli. Okuma araçlarının
   hepsi + 23 yazma aracı görünür (`/mcp` listesinde).
 - **Platforma dokunan dört işlem onaylı:** `rehber_yayinla`, `varlik_durdur`,

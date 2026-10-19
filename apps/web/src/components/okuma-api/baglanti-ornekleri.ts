@@ -5,7 +5,7 @@
  * yapıştırıyor) ve bileşen render edilmeden sınanabilmeli. Belgedeki
  * (`docs/okuma-api/MCP-BAGLANTI.md`) örneklerle aynı biçimi taşıyor.
  */
-import { sec, type Dil } from '@advetics/shared';
+import { sec, type AnahtarYetkisi, type Dil } from '@advetics/shared';
 import { hesabimSozlugu } from '@/dil/sozlukler/ayarlar-hesabim';
 
 /** API kök adresinden mutlak MCP adresi. Göreli kök ("/api") tarayıcının alan adına bağlanıyor. */
@@ -16,13 +16,16 @@ export function mcpAdresi(apiUrl: string, origin: string | null): string {
 }
 
 export const ANAHTAR_YER_TUTUCU = 'adv_ro_ANAHTARINIZ';
+/** Yazma anahtarının yer tutucusu: öneki gerçek anahtarla aynı (`YAZMA_ANAHTARI_ONEKI`). */
+export const YAZMA_YER_TUTUCU = 'adv_rw_ANAHTARINIZ';
 
 export function baglantiOrnekleri(
   mcpUrl: string,
   anahtar: string | null,
   dil: Dil = 'tr',
+  yetki: AnahtarYetkisi = 'okuma',
 ): Array<{ baslik: string; aciklama: string; metin: string }> {
-  const k = anahtar ?? ANAHTAR_YER_TUTUCU;
+  const k = anahtar ?? (yetki === 'yazma' ? YAZMA_YER_TUTUCU : ANAHTAR_YER_TUTUCU);
   // Ürün adları ("Claude Code", "Claude Desktop") iki dilde aynı; açıklamalar sözlükten.
   const d = sec(hesabimSozlugu, dil).ornek;
   return [
