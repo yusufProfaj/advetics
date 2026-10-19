@@ -78,8 +78,11 @@ export function DetayBolumu({
 export function DetaySatiri({ etiket, deger }: { etiket: string; deger: string | null }) {
   return (
     <div className="flex items-start justify-between gap-4 border-b border-line py-1.5 last:border-0">
-      <span className="text-xs text-ink-muted">{etiket}</span>
-      <span className={`text-right text-xs ${deger ? 'text-ink' : 'text-ink-muted'}`}>
+      {/* ETİKET KÜÇÜLMÜYOR, DEĞER KIRILIYOR: rapor alıcıları virgülle birleşmiş
+          tek satır e-posta ve aralarında kırılacak yer yok; değer kırılmayınca
+          telefonda kart 361 piksele uzayıp sayfayı taşırıyordu (2026-10-19). */}
+      <span className="shrink-0 text-xs text-ink-muted">{etiket}</span>
+      <span className={`min-w-0 text-right text-xs [overflow-wrap:anywhere] ${deger ? 'text-ink' : 'text-ink-muted'}`}>
         {deger || '—'}
       </span>
     </div>

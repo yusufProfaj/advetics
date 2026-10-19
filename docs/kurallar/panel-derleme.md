@@ -127,3 +127,25 @@ değişikliği canlı benzeri koşulla denenir:
 `NEXT_PUBLIC_ROOT_DOMAIN=advetics.com NEXT_DIST_DIR=.next-yerel next build`,
 `next start --port 3598 --hostname 127.0.0.1`, `curl -H 'Host: advetics.com' -H 'Cookie: ...'`
 (derleme `tsconfig.json`/`next-env.d.ts`'e dokunuyor, geri al).
+
+## Sütunsuz ızgara telefonda sayfayı taşırıyor (2026-10-19)
+
+`grid gap-4` (sütun yazılmamış) örtük bir `auto` sütun açıyor ve o sütun
+en geniş çocuğun **min-content** genişliğinden daralmıyor. Çocuklardan
+birinde `overflow-x-auto` içinde `min-w-[46rem]` tablo varsa kaydırma kabı
+kendi içeriğinin genişliğini ataya bildiriyor ve kayan şey tablo değil
+SAYFA oluyor: Marka Merkezi › Workspace bilgileri 375 piksellik ekranda 780
+piksel çiziliyordu. Atanın `min-w-0` olması yetmiyor, o yalnız kutunun
+KENDİSİNİ daraltıyor; çocukları daraltan `grid-cols-1` (`minmax(0, 1fr)`).
+Aynı şekilde `break-words` min-content'i küçültmüyor, virgülle birleşmiş
+uzun e-posta listesi için `min-w-0 [overflow-wrap:anywhere]`. `Dugme`
+`whitespace-nowrap`; uzun etiketli düğme dar ekranda tam genişliğe ve
+sarılmaya alınır (`max-sm:!whitespace-normal max-sm:!h-auto`).
+
+Ölçüm: `document.documentElement.scrollWidth === innerWidth` ve
+`[...document.querySelectorAll('body *')].filter(e => e.getBoundingClientRect().right > innerWidth)`
+(kaydırma kabının içi hariç). Canlıya giremeyen oturum sayfanın ata zincirini
+uygulamanın kendi `globals.css`i ile derlenmiş statik bir kopyada ölçebilir
+(`@tailwindcss/postcss`, `@source` ile kopya dosyası); kopya eski sınıflarla
+canlıdaki taşmayı (800 piksel) yeniden üretmeden düzeltme ölçülmüş sayılmaz.
+Bekçi: `marka-merkezi-tasma.spec.ts`.

@@ -73,8 +73,8 @@ export function FirmaBilgileri({
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 md:grid-cols-2">
-        <div>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="min-w-0">
           <p className="mb-1 text-xs font-semibold text-ink">{d.iletisim}</p>
           <div className="rounded-alan border border-line px-3 py-1">
             <DetaySatiri etiket={d.yetkiliKisi} deger={bilgi.contactName} />
@@ -86,7 +86,7 @@ export function FirmaBilgileri({
             <DetaySatiri etiket={d.internetSitesi} deger={bilgi.website} />
           </div>
         </div>
-        <div>
+        <div className="min-w-0">
           <p className="mb-1 text-xs font-semibold text-ink">{d.firma}</p>
           <div className="rounded-alan border border-line px-3 py-1">
             <DetaySatiri etiket={d.adres} deger={bilgi.address} />

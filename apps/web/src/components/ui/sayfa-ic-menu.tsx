@@ -125,7 +125,9 @@ export function SayfaIcDuzen({ menu, children }: { menu: ReactNode; children: Re
   return (
     <div className="grid grid-cols-1 gap-4 min-[900px]:grid-cols-[212px_minmax(0,1fr)] min-[900px]:gap-7">
       <nav className="min-w-0 self-start min-[900px]:sticky min-[900px]:top-[76px]">{menu}</nav>
-      <div className="grid min-w-0 content-start gap-5">{children}</div>
+      {/* `grid-cols-1`: `min-w-0` yalnız bu kutuyu daraltıyor, ÇOCUKLARINI değil;
+          sütunsuz ızgarada geniş bir tablo içeriği sayfanın dışına itiyordu. */}
+      <div className="grid min-w-0 grid-cols-1 content-start gap-5">{children}</div>
     </div>
   );
 }

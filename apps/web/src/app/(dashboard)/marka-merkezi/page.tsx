@@ -179,8 +179,17 @@ export default async function MarkaMerkeziPage({
     'Workspace';
   const sirket = sirketAdi(session, detay.ok ? detay.v.orgId : null);
 
+  /*
+   * IZGARALARIN HEPSİ `grid-cols-1`: sütunu yazılmamış `grid` örtük bir `auto`
+   * sütun açıyor ve o sütun en geniş çocuğun min-content'inden DARALMIYOR.
+   * Veri durumu'ndaki son işler tablosu (min 46 rem) `overflow-x-auto` içinde
+   * olduğu hâlde 375 piksellik telefonda sayfa 780 piksel çiziliyordu
+   * (2026-10-19, canlı): kaydırma kabı kendi içeriğinin genişliğini ataya
+   * bildiriyor. `grid-cols-1` = `minmax(0, 1fr)`, sütun ekrana sığıyor ve
+   * tablo kendi kabında kayıyor (`marka-merkezi-tasma.spec.ts`).
+   */
   return (
-    <div className="grid gap-6">
+    <div className="grid grid-cols-1 gap-6">
       <EskiCapaYonlendirici bolum={bolum} musteri={clientId} />
       {gecis}
       {/*
@@ -207,9 +216,9 @@ export default async function MarkaMerkeziPage({
 
       <SayfaIcDuzen menu={<IcMenu clientId={clientId} aktif={bolum} rozetler={rozetler} dil={dil} />}>
         {/* `key` BÖLÜMDEN: aynı ağaç korunursa geçiş animasyonu bir daha oynamaz. */}
-        <div key={bolum} className="bolum-gecis grid min-w-0 content-start gap-5">
+        <div key={bolum} className="bolum-gecis grid min-w-0 grid-cols-1 content-start gap-5">
           {bolum === 'kurulum' && (
-            <section aria-labelledby="kurulum-baslik" className="grid gap-4">
+            <section aria-labelledby="kurulum-baslik" className="grid grid-cols-1 gap-4">
               <BolumBasligi
                 id="kurulum-baslik"
                 baslik={markaBolumuAdi('kurulum', dil)}
@@ -226,7 +235,7 @@ export default async function MarkaMerkeziPage({
                 aktifDegil={session.activeClientId !== clientId}
               />
 
-              <section id="kanallar" aria-labelledby="kanallar-baslik" className="grid scroll-mt-24 gap-3">
+              <section id="kanallar" aria-labelledby="kanallar-baslik" className="grid scroll-mt-24 grid-cols-1 gap-3">
                 <BolumBasligi
                   id="kanallar-baslik"
                   baslik={d.kanallarBaslik}
@@ -250,7 +259,7 @@ export default async function MarkaMerkeziPage({
                 </p>
               </section>
 
-              <section id="veri-kaynaklari" className="grid scroll-mt-24 gap-2">
+              <section id="veri-kaynaklari" className="grid scroll-mt-24 grid-cols-1 gap-2">
                 <p className="text-12 text-ink-muted">{d.istegeBagli}</p>
                 <VeriKaynaklari
                   clientId={clientId}
@@ -263,7 +272,7 @@ export default async function MarkaMerkeziPage({
           )}
 
           {bolum === 'marka' && (
-            <section aria-labelledby="marka-baslik" className="grid gap-4">
+            <section aria-labelledby="marka-baslik" className="grid grid-cols-1 gap-4">
               <BolumBasligi
                 id="marka-baslik"
                 baslik={markaBolumuAdi('marka', dil)}
@@ -307,7 +316,7 @@ export default async function MarkaMerkeziPage({
           )}
 
           {bolum === 'workspace' && (
-            <section aria-labelledby="workspace-baslik" className="grid gap-4">
+            <section aria-labelledby="workspace-baslik" className="grid grid-cols-1 gap-4">
               <BolumBasligi
                 id="workspace-baslik"
                 baslik={markaBolumuAdi('workspace', dil)}

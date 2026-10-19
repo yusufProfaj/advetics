@@ -239,11 +239,11 @@ export function BildirimlerBolumu({
           <ul>
             {veri.kanallar.map((k) => (
               <li key={k.id} className="border-t border-line first:border-t-0">
-                <div className="grid items-center gap-x-3 gap-y-1 px-4 py-3 sm:grid-cols-[10rem_minmax(0,1fr)_auto]">
+                <div className="grid grid-cols-1 items-center gap-x-3 gap-y-1 px-4 py-3 sm:grid-cols-[10rem_minmax(0,1fr)_auto]">
                   <span className="text-xs font-semibold text-ink-muted">{KANAL_TURU_ADI[k.tur]}</span>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-ink">{k.ad}</p>
-                    <p className="break-words text-xs text-ink-muted">{kanalAltMetni(k)}</p>
+                    <p className="text-xs text-ink-muted [overflow-wrap:anywhere]">{kanalAltMetni(k)}</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${k.durum === 'hata' ? 'text-brand-strong' : 'text-ink'}`}>
@@ -590,11 +590,23 @@ function KanalEkleFormu({
               </p>
             )}
 
-            <div className="flex flex-wrap justify-end gap-2">
+            {/*
+              TELEFONDA ALT ALTA VE SARILAN: "Kaydet ve deneme mesajı gönder"
+              261 piksel ve `Dugme` tek satır (`whitespace-nowrap`); 375
+              piksellik ekranda iç içe iki kartın içinde 259 piksel kalıyor ve
+              düğme kartın dışına taşıyordu. Dar ekranda tam genişlik ve gerekirse
+              iki satır; geniş ekranda referanstaki hap düğme.
+            */}
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
               <Dugme ton="ikincil" onClick={onVazgec} disabled={kaydediliyor}>
                 {sec(markaMerkeziBildirimSozlugu, dil).vazgec}
               </Dugme>
-              <Dugme onClick={() => void kaydet()} bekliyor={kaydediliyor} disabled={!denetim.gecerli || adresHatasi !== null}>
+              <Dugme
+                className="max-sm:!h-auto max-sm:min-h-10 max-sm:!whitespace-normal max-sm:py-2.5 max-sm:text-center max-sm:leading-snug"
+                onClick={() => void kaydet()}
+                bekliyor={kaydediliyor}
+                disabled={!denetim.gecerli || adresHatasi !== null}
+              >
                 {d.kaydetVeDene}
               </Dugme>
             </div>

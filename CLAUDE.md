@@ -38,6 +38,7 @@ canlıda masaüstü + mobil görülmeden bitmiş sayılmaz (§3 "Tasarım").
 - `npx prisma format` şema dosyasının TAMAMINI yeniden hizalıyor (bir kolon eklemek 270 satırlık fark üretti); kolonu elle ekle, format koşma.
 - Google'da ödeme sorunu `customer.status`ta yok (kartı reddedilen hesap ENABLED kalıyor); `billing_setup` + `account_budget` okunuyor, kart reddi API'de hiç yok (`platform-google.md`).
 - `www.advetics.com` middleware'de white-label müşteri alan adı sayılıp `/r/bulunamadi`ye gidiyordu (Google OAuth "ana sayfa yanıt vermiyor"); alan adı kararı veren her yerde `www.` kökünü ayrıca düşün (`middleware.spec.ts`).
+- Sütunsuz `grid` (`grid gap-4`) en geniş çocuğun min-content'inden daralmıyor: `overflow-x-auto` içindeki tablo telefonda SAYFAYI 780 piksele itti; atalara `grid-cols-1`, ölçüm `scrollWidth` (`panel-derleme.md`).
 
 ## 0. "advetics projesine devam et" denince
 
