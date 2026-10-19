@@ -256,3 +256,51 @@ describe('uyarı ve teslimat aynı kararı söylüyor', () => {
     expect(t.ad).toBe('Duraklatıldı');
   });
 });
+
+describe('CANLIDAN ÖLÇÜLMÜŞ yanıtlar (2026-10-19, v25, 57 atanmış hesap)', () => {
+  /*
+   * 57 hesabın 57'sinde iki sorgu da hatasız döndü (alt hesapta yöneticinin
+   * login-customer-id'siyle). 43'ü tek onaylı kurulum + süresiz sınırsız
+   * bütçe; 14'ünde geçmiş kurulum/bütçe satırları var (bitişi geçmiş
+   * APPROVED, CANCELLED, PENDING). Hiçbirinde "kurulum yok, bütçe var"
+   * görülmedi. Aşağıdaki yanıtlar birebir canlıdan.
+   */
+  it('Yalı Spor: geçmiş bitmiş bütçeler + güncel süresiz bütçe = sorun_yok', () => {
+    const o = googleOdemeOzeti(
+      [
+        { billingSetup: { status: 'APPROVED', endTimeType: 'FOREVER', startDateTime: '2025-09-02 08:55:26' } },
+        { billingSetup: { status: 'APPROVED', startDateTime: '2021-08-13 14:08:18', endDateTime: '2025-09-02 08:54:46' } },
+        { billingSetup: { status: 'CANCELLED', endTimeType: 'FOREVER', startDateTime: '2020-08-10 17:35:41' } },
+      ],
+      [
+        { accountBudget: { status: 'APPROVED', approvedEndTimeType: 'FOREVER', adjustedSpendingLimitType: 'INFINITE', approvedStartDateTime: '2025-09-02 08:55:26', amountServedMicros: '11988652470000' } },
+        { accountBudget: { status: 'APPROVED', adjustedSpendingLimitType: 'INFINITE', approvedStartDateTime: '2021-08-13 14:08:18', approvedEndDateTime: '2025-09-02 08:54:46', amountServedMicros: '23784897190000' } },
+        { accountBudget: { status: 'APPROVED', approvedEndDateTime: '2019-09-01 00:33:24', adjustedSpendingLimitMicros: '145650510000', amountServedMicros: '145544920000' } },
+      ],
+      SIMDI,
+    );
+    expect(googleOdemeKarari(o, SIMDI)).toEqual({ durum: 'sorun_yok' });
+  });
+
+  it('Tınaztepe: sınırlı süresiz bütçe %99,2 dolu = henüz sorun DEĞİL; sınıra ulaşınca doldu', () => {
+    const kurulum = [{ billingSetup: { status: 'APPROVED', endTimeType: 'FOREVER', startDateTime: '2019-12-25 11:22:25' } }];
+    const butce = (harcanan: string) => [
+      { accountBudget: { status: 'APPROVED', approvedEndTimeType: 'FOREVER', approvedStartDateTime: '2026-06-01 16:32:08', adjustedSpendingLimitMicros: '20545010000', amountServedMicros: harcanan } },
+      { accountBudget: { status: 'APPROVED', approvedStartDateTime: '2026-04-29 10:33:43', approvedEndDateTime: '2026-06-01 16:32:08', adjustedSpendingLimitMicros: '20031840000', amountServedMicros: '20030890000' } },
+    ];
+    expect(googleOdemeKarari(googleOdemeOzeti(kurulum, butce('20375130000'), SIMDI), SIMDI).durum).toBe('sorun_yok');
+    expect(googleOdemeKarari(googleOdemeOzeti(kurulum, butce('20545010000'), SIMDI), SIMDI)).toEqual({
+      durum: 'sorun',
+      sebep: 'google_hesap_butcesi_bitti',
+    });
+  });
+
+  it('MySun: onaylı kurulumun yanında PENDING olan = sorun_yok (geçerli kurulum yeter)', () => {
+    const o = googleOdemeOzeti(
+      [{ billingSetup: { status: 'APPROVED' } }, { billingSetup: { status: 'PENDING' } }],
+      [{ accountBudget: { status: 'APPROVED', approvedEndTimeType: 'FOREVER', adjustedSpendingLimitType: 'INFINITE', amountServedMicros: '1543526450000' } }],
+      SIMDI,
+    );
+    expect(googleOdemeKarari(o, SIMDI)).toEqual({ durum: 'sorun_yok' });
+  });
+});

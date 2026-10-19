@@ -83,6 +83,13 @@
   ipucunda söylüyor. Okuma `ad_accounts.odeme_durumu`na (raw'a DEĞİL: keşif
   raw'ı baştan yazıyor), karar shared `googleOdemeKarari`. Kurulum dönmeyip
   bütçe dönen hesap (toplu faturalama olabilir) `bilinmiyor`: yanlış "ödeme
-  yöntemi yok" alarmı yerine. **Canlıda ÖLÇÜLMEDİ** (sunucu okuması bu
-  oturumda izinsizdi): iki sorgunun alt hesapta `login-customer-id` ile
-  dönüp dönmediği ve toplu faturalanan hesabın nasıl göründüğü.
+  yöntemi yok" alarmı yerine. **CANLIDA ÖLÇÜLDÜ (2026-10-19, `google-check
+  --sorgu`, 57 atanmış hesap):** iki sorgu 57/57 hesapta yöneticinin
+  `login-customer-id`siyle döndü. Yanıt camelCase, int64 METİN, süresiz
+  kayıtta `endTimeType: FOREVER` ve tarih alanı HİÇ yok, sınırsızda
+  `adjustedSpendingLimitType: INFINITE` ve micros yok. 43 hesap tek kurulum
+  + süresiz sınırsız bütçe; 14'ünde geçmiş satırlar (bitişi geçmiş APPROVED,
+  CANCELLED, PENDING; bir hesapta 35 bütçe satırı). "Kurulum yok, bütçe var"
+  hiç görülmedi. Bugün hiçbir hesap kurala göre ödeme sorunlu değil; ama
+  Tınaztepe'nin güncel bütçesi SINIRLI ve %99,2 dolu (20.545 ₺ / 20.375 ₺):
+  aylık faturalı hesap böyle duruyor ve "bitmek üzere" uyarısı henüz YOK.
