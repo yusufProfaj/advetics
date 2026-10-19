@@ -135,6 +135,18 @@ export function middleware(req: NextRequest): NextResponse {
   const host = req.headers.get('host') ?? '';
   const origin = publicOrigin(req);
 
+  /*
+   * `www.` KÖK ALAN ADINA KALICI YÖNLENİR (2026-10-19). Nginx `www`yu da
+   * buraya veriyor ama aşağıdaki white-label kararı onu MÜŞTERİ ALAN ADI
+   * sayıp `/r/bulunamadi`ye atıyordu: `https://www.advetics.com/` 307 ile
+   * "rapor bulunamadı" açıyordu. Google OAuth doğrulayıcısı ya da bir
+   * ziyaretçi adresi `www` ile yazarsa ana sayfa hiç görünmüyordu.
+   */
+  if (host === `www.${ROOT_DOMAIN}`) {
+    const proto = /^(localhost|127\.0\.0\.1)/.test(ROOT_DOMAIN) ? 'http' : 'https';
+    return NextResponse.redirect(new URL(pathname + req.nextUrl.search, `${proto}://${ROOT_DOMAIN}`), 308);
+  }
+
   const isCustomDomain =
     host.length > 0 &&
     host !== ROOT_DOMAIN &&

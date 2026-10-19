@@ -126,6 +126,18 @@ describe('middleware — white-label workspace alan adı', () => {
   });
 });
 
+describe('middleware — www alt alan adı (Google OAuth doğrulaması, 2026-10-19)', () => {
+  it('KRİTİK: www kök alan adına 308 ile yönlenir, white-label "bulunamadı"ya DÜŞMEZ', () => {
+    const res = middleware(request('/gizlilik?a=1', { host: `www.${ROOT}` }));
+    expect(res.status).toBe(308);
+    expect(res.headers.get('location')).toBe(`http://${ROOT}/gizlilik?a=1`);
+  });
+
+  it('www yalnız KÖK alan adının önünde: başka bir www white-label alan adıdır', () => {
+    expect(redirectPath(middleware(request('/', { host: 'www.musteri-alan-adi.com' })))).toBe('/r/bulunamadi');
+  });
+});
+
 describe('middleware — paylaşılabilir dil bağlantısı (?dil=)', () => {
   it('?dil=en çerezi yazar ve AYNI adrese parametresiz döner (diğer parametreler kalır)', () => {
     const res = middleware(request('/gizlilik?dil=en&x=1'));

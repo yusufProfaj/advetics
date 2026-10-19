@@ -1,5 +1,6 @@
 import { cookies, headers } from 'next/headers';
 import { ONEK_BASLIGI } from '@/lib/site-yollari';
+import { otomatikZiyaretciMi } from './otomatik-ziyaretci';
 import { DIL_CEREZI, VARSAYILAN_DIL, dilBelirle, sec, tarayiciDili, type Dil, type IkiDil } from '@advetics/shared';
 
 /**
@@ -16,7 +17,9 @@ export async function dilDurumu(): Promise<{ dil: Dil; dilSecildi: boolean; oner
   const secilen = dilBelirle({ onek: h.get(ONEK_BASLIGI), cerez: c.get(DIL_CEREZI)?.value });
   return {
     dil: secilen ?? VARSAYILAN_DIL,
-    dilSecildi: secilen !== null,
+    // Bot için "seçildi" sayılıyor: dil ekranı çizilmesin, sayfa görünsün
+    // (`otomatik-ziyaretci.ts`). Dil yine Türkçe, çerez yazılmıyor.
+    dilSecildi: secilen !== null || otomatikZiyaretciMi(h.get('user-agent')),
     oneri: secilen ?? tarayiciDili(h.get('accept-language')),
   };
 }

@@ -9,7 +9,7 @@
 > [`DURUM.md` § 8](DURUM.md)). Eski bir işin ayrıntısı gerekiyorsa arşivde
 > `grep` ile ara, baştan okuma.
 
-**Son güncelleme:** 2026-10-17 · canlı `ab25ec20` (D3 + /en düzeltmesi) · bekleyen deploy yok.
+**Son güncelleme:** 2026-10-19 · canlı `ab25ec20` (D3 + /en düzeltmesi) · **bekleyen deploy: Google doğrulama düzeltmesi (`www` + bot dil ekranı), onay bekliyor.**
 
 ## Son durum
 
@@ -19,8 +19,16 @@
 
 **17 EKİM — /en DÖNGÜSÜ KAPANDI (canlı `ab25ec20`).** D1'den beri canlıda `/en` Türkçe çiziliyor, `en` çerezinden sonra ERR_TOO_MANY_REDIRECTS veriyordu (Next'in vekil isteği middleware'den ikinci kez geçiyordu; `panel-derleme.md`). Deploy sonrası canlıda ölçüldü: çerezli/çerezsiz `/en` 200 ve `lang="en"`, `/en/privacy` yönlendirmesiz 200, `/gizlilik`+en çerezi tek 307 → `/en/privacy`, onay sayfası İngilizce başlıkla (D3 canlıda).
 
+**19 EKİM — GOOGLE OAUTH DOĞRULAMASI REDDİ (yusuf, dal `yusuf/heuristic-blackwell-8198a3`, PUSH/DEPLOY YOK).** 17 Ekim maili: ana sayfa ve gizlilik "yanıt vermiyor", demo videosu scope'ları göstermiyor. Ölçüm: bugün iki adres her user agent'la 200, TLS/robots temiz; en güçlü aday 17 Ekim'de kapanan `/en` döngüsü (İngilizce tarayıcılı inceleyici dil ekranında English deyince döngüye düşüyordu). Bulunup düzeltilen: `www.advetics.com` white-label sayılıp "rapor bulunamadı"ya gidiyordu (→ kök alana 308); dil ekranı botların çizdiği sayfayı kaplıyordu (bot UA'da çizilmiyor). Scope tablosu: altı scope'un hepsi kullanılıyor, gereksiz yok. Belgeler [`google-dogrulama/`](google-dogrulama/BULGULAR.md): bulgular, çekim senaryosu, İngilizce yanıt maili, gizlilik ek bölümü önerisi. **Ölçülmedi:** Google'ın kendi ağından erişim (PageSpeed kotası dolu); nginx kaydında 15–17 Ekim Google istekleri.
+
 ## Sıradaki iş
 
+0. **Google doğrulaması (kullanıcı):** deploy onayı → başvuruda adresleri
+   `https://advetics.com/en` ve `/en/privacy` yap → Cloud Console "Data
+   access"te yalnız altı scope kalsın → gizlilik ekine karar
+   (`GIZLILIK-ONERISI.md`, Gemini katmanı doğrulanmalı) → videoyu
+   `CEKIM-SENARYOSU.md` ile çek (demo hesabı, ajans bağlantısına dokunma)
+   → `YANIT-MAILI.md`yi gönder.
 1. **D3 tasarım denetimi:** İngilizce panelde her modül masaüstü + mobil
    (canlıya alındıktan sonra; taşan İngilizce düğme/etiket aranacak).
 2. **İki dilli D4:** shared etiketleri + API cümleleri (liste yukarıda ve
@@ -45,6 +53,10 @@
   LinkedIn'den söz etmiyor. **Hukuki metne onaysız dokunulmaz.**
 - Hukuk (tanıtım sitesi): KVKK Aydınlatma Metni yok; gizlilikte Gemini ile
   yapay zekâ işlemesi anlatılmıyor; Veri Silme'de LinkedIn iptal yolu yok.
+  Google için önerilen ek bölüm (Limited Use + AI + scope listesi):
+  [`google-dogrulama/GIZLILIK-ONERISI.md`](google-dogrulama/GIZLILIK-ONERISI.md).
+- Yalnız GA4 okuyan kullanıcıya da beş ölçüm scope'u soruluyor; ayrı
+  `analytics.readonly` akışı açılsın mı (`BULGULAR.md` § 5).
 
 ## Araçlar
 
