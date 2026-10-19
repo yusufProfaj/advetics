@@ -70,9 +70,13 @@ describe('Nest kaydı', () => {
 });
 
 describe('CHECK listeleri = shared listeleri', () => {
-  const sql = readFileSync(join(__dirname, '../../../prisma/migrations/20261014100000_etki/migration.sql'), 'utf8');
+  // Kısıt sonradan yeniden kurulabiliyor (yol: 20261023100000_mcp_yazma);
+  // SON tanım geçerli, o yüzden migration'lar sırayla ekleniyor ve son eşleşme okunuyor.
+  const sql = ['20261014100000_etki', '20261023100000_mcp_yazma']
+    .map((m) => readFileSync(join(__dirname, `../../../prisma/migrations/${m}/migration.sql`), 'utf8'))
+    .join('\n');
   const liste = (kisit: string): string[] => {
-    const i = sql.indexOf(`"${kisit}" CHECK`);
+    const i = sql.lastIndexOf(`"${kisit}" CHECK`);
     if (i < 0) throw new Error(`${kisit} bulunamadı`);
     const parca = sql.slice(i, sql.indexOf('\n', i));
     return [...parca.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]!);

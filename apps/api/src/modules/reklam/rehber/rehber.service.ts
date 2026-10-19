@@ -83,6 +83,7 @@ import {
   type RehberOnKosullari,
   type RehberOzeti,
   type RehberPikselListesi,
+  type RehberAmacKodu,
   type RehberPlatformu,
   type RehberProvaSonucu,
   type RehberYayinDurumu,
@@ -2023,7 +2024,15 @@ export class RehberService {
   // YAYIN
   // ===========================================================================
 
-  async yayinla(ctx: TenantContext, id: string, istenenOzet: string): Promise<RehberYayinDurumu> {
+  /**
+   * `secenek.hepsiKapali`: her platform DURAKLATILMIŞ kurulur (açılış
+   * `deneme`), amacın normal açılışı ne olursa olsun. MCP yayınının kuralı
+   * (kullanıcı kararı 2026-10-19, `docs/okuma-api/MCP-YAZMA-MIMARI.md`):
+   * yapay zekâdan gelen yayın harcamaya ancak ayrıca onaylanan bir "başlat"
+   * ile geçer. Panel bu seçeneği vermiyor, davranışı değişmedi.
+   */
+  async yayinla(ctx: TenantContext, id: string, istenenOzet: string, secenek: { hepsiKapali?: boolean } = {}): Promise<RehberYayinDurumu> {
+    const kapali = (amac: RehberAmacKodu, p: RehberPlatformu): boolean => secenek.hepsiKapali === true || !platformAcilabilirMi(amac, p);
     const s = await this.satir(ctx, id);
     if (s.durum !== 'taslak' && s.durum !== 'yayinda') throw new ConflictException('Bu rehber zaten yayına alındı ya da arşivde.');
     const a = alanlariOku(s);
@@ -2102,13 +2111,13 @@ export class RehberService {
       }
     };
     if (hedef.meta && s.meta_taslak_id) {
-      const r = await dene(() => this.metaYayinBaslat(ctx, s.meta_taslak_id!, a, acik, b.meta?.currency ?? b.paraBirimi, { uyum: k.uyum, kapaliKalacak: !platformAcilabilirMi(amac, 'meta') }, b.medyaOranlari ?? new Map()));
-      if (typeof r === 'string') baslamayan.push({ platform: 'meta', taslakId: s.meta_taslak_id, yayinId: null, durum: null, sebep: r, kampanyaKimligi: null, duraklatilmisKalacak: !platformAcilabilirMi(amac, 'meta'), yenidenKurulabilir: true });
+      const r = await dene(() => this.metaYayinBaslat(ctx, s.meta_taslak_id!, a, acik, b.meta?.currency ?? b.paraBirimi, { uyum: k.uyum, kapaliKalacak: kapali(amac, 'meta') }, b.medyaOranlari ?? new Map()));
+      if (typeof r === 'string') baslamayan.push({ platform: 'meta', taslakId: s.meta_taslak_id, yayinId: null, durum: null, sebep: r, kampanyaKimligi: null, duraklatilmisKalacak: kapali(amac, 'meta'), yenidenKurulabilir: true });
       else await yayindaYaz();
     }
     if (hedef.google && s.google_taslak_id) {
-      const r = await dene(() => this.googleYayinBaslat(ctx, s, a, b, k.uyum, !platformAcilabilirMi(amac, 'google')));
-      if (typeof r === 'string') baslamayan.push({ platform: 'google', taslakId: s.google_taslak_id, yayinId: null, durum: null, sebep: r, kampanyaKimligi: null, duraklatilmisKalacak: !platformAcilabilirMi(amac, 'google'), yenidenKurulabilir: true });
+      const r = await dene(() => this.googleYayinBaslat(ctx, s, a, b, k.uyum, kapali(amac, 'google')));
+      if (typeof r === 'string') baslamayan.push({ platform: 'google', taslakId: s.google_taslak_id, yayinId: null, durum: null, sebep: r, kampanyaKimligi: null, duraklatilmisKalacak: kapali(amac, 'google'), yenidenKurulabilir: true });
       else await yayindaYaz();
     }
     await this.sebepleriYaz(ctx, s, hedef, baslamayan);

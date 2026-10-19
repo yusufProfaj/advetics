@@ -371,6 +371,8 @@ DECLARE
     -- Okuma API anahtarları (packages/shared/src/okuma-api): aynı kural,
     -- satır yalnızca sahibine.
     'okuma_api_anahtarlari',
+    -- MCP onay satırları (docs/okuma-api/MCP-YAZMA-MIMARI.md): aynı kural.
+    'mcp_onaylari',
     -- İyileştir v1 + AI Asistan v1 (docs/iyilestir/MIMARI.md § 4). Her tablo
     -- KENDİ satırında: üretim sırası testleri sonraki tabloları satır satır
     -- çıkarıyor (test/sonraki-tablolar.ts).
@@ -2645,6 +2647,32 @@ CREATE POLICY adv_okuma_anahtari_update ON okuma_api_anahtarlari
 -- DELETE POLİTİKASI YOK: iptal bir UPDATE (iptal damgası). Satır kalıyor ki
 -- "bu anahtar ne zaman, son kez nereden kullanıldı" sorusu iptalden sonra da
 -- cevaplanabilsin. Silme gerekirse kullanıcı silinince CASCADE.
+
+-- ============================================================================
+-- mcp_onaylari — MCP'NİN PLATFORMA DOKUNAN İŞLEMLERİNİN ONAY SATIRLARI
+-- ============================================================================
+--
+-- Anahtar tablosuyla AYNI kural: satır yalnızca sahibine. Satır bir
+-- işlemin argümanlarını taşıyor ve onayla onu UYGULUYOR; başka bir
+-- kullanıcının görebildiği (ya da güncelleyebildiği) bir onay satırı, onun
+-- adına reklam yayınlatmaya yarardı.
+--
+-- INSERT ayrıca anahtarın SAHİBİNİ istiyor: kendi kullanıcı kimliğiyle ama
+-- başkasının anahtarına bağlı bir satır açmak, o anahtarın etkinlik
+-- listesine sahte bir işlem düşürürdü.
+CREATE POLICY adv_mcp_onay_select ON mcp_onaylari
+  FOR SELECT USING (user_id = app.current_user_id());
+CREATE POLICY adv_mcp_onay_insert ON mcp_onaylari
+  FOR INSERT WITH CHECK (
+    user_id = app.current_user_id()
+    AND EXISTS (SELECT 1 FROM okuma_api_anahtarlari a
+                 WHERE a.id = anahtar_id AND a.user_id = app.current_user_id())
+  );
+CREATE POLICY adv_mcp_onay_update ON mcp_onaylari
+  FOR UPDATE USING (user_id = app.current_user_id())
+  WITH CHECK (user_id = app.current_user_id());
+-- DELETE POLİTİKASI YOK: vazgeçmek bir durum. Satır kalıyor ki "MCP neyi
+-- ne zaman önerdi, kim onayladı" sorusu sonradan da cevaplanabilsin.
 
 
 -- ============================================================================

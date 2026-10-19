@@ -8,7 +8,7 @@ import { OKUMA_ANAHTARI_KEY } from '../../common/decorators';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { anahtarOzeti, anahtarUret, okumaAnahtariMi } from '../auth/okuma-anahtari';
 import type { ResolvedIdentity } from '../auth/tenant-context.service';
-import { MCP_SURUMLERI, jsonMetni, mcpIsle, type McpOrtami } from './mcp-protokol';
+import { MCP_SURUMLERI, MCP_TALIMATLARI, jsonMetni, mcpIsle, type McpOrtami } from './mcp-protokol';
 import { ozete } from './okuma-anahtari.service';
 import {
   AracArgumanHatasi,
@@ -111,7 +111,7 @@ describe('anahtar', () => {
   });
 
   it('durum sunucuda: iptal > süresi doldu > etkin', () => {
-    const temel = { id: 'x', ad: 'a', gorunenOnek: 'adv_ro_x', createdAt: new Date(), sonKullanim: null, sonKullanimIp: null };
+    const temel = { id: 'x', ad: 'a', gorunenOnek: 'adv_ro_x', createdAt: new Date(), sonKullanim: null, sonKullanimIp: null, yetki: 'okuma' };
     const simdi = new Date('2026-10-08T12:00:00Z');
     expect(ozete({ ...temel, bitis: null, iptal: null }, simdi).durum).toBe('etkin');
     expect(ozete({ ...temel, bitis: new Date('2026-10-08T11:59:59Z'), iptal: null }, simdi).durum).toBe('suresi_doldu');
@@ -251,6 +251,7 @@ describe('MCP protokolü', () => {
     calistir,
     hataMetni: (e) => (e instanceof Error ? e.message : String(e)),
     sunucu: { name: 'advetics-okuma', version: 't' },
+    talimat: MCP_TALIMATLARI,
   });
 
   it('initialize istenen sürümü destekliyorsa aynısını, yoksa en yenisini döndürüyor', async () => {
@@ -443,7 +444,7 @@ describe('KRİTİK: anahtar doğrulayıcı', () => {
 
   it('satır ÖZETLE aranıyor, düz anahtarla değil', async () => {
     const { sonuc, findUnique } = await dene(iyi);
-    await expect(sonuc).resolves.toEqual({ userId: 'u', anahtarId: 'k1' });
+    await expect(sonuc).resolves.toEqual({ userId: 'u', anahtarId: 'k1', yetki: 'okuma' });
     expect(findUnique).toHaveBeenCalledWith(
       expect.objectContaining({ where: { anahtarOzeti: anahtarOzeti(`${OKUMA_ANAHTARI_ONEKI}x`) } }),
     );

@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MCP Bağlantısı Taslağı</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600;700&display=swap">
+<style>
+/* Taslak: Ayarlar › Hesabım › Yapay zekâ bağlantısı (MCP). Ölçü ve renk tasarim-sistemi.html ile aynı. */
+:root{
+  --beyaz:#ffffff; --siyah:#000000; --gri:#302e2d; --kirmizi:#ff2400;
+  --bg:#ffffff; --zemin:rgba(48,46,45,.035); --yuzey:#ffffff; --metin:#000000;
+  --ikincil:rgba(48,46,45,.64); --soluk:rgba(48,46,45,.42); --cizgi:rgba(48,46,45,.12); --cizgi2:rgba(48,46,45,.22);
+  --dolgu:rgba(48,46,45,.06); --vurgu:rgba(255,36,0,.07); --ok:#1e8e3e;
+  --r-sm:8px; --r:12px; --r-hap:999px;
+  --baslik:"Montserrat",system-ui,sans-serif; --govde:"Open Sans",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#000000; --zemin:rgba(255,255,255,.03); --yuzey:#0d0d0d; --metin:#ffffff; --ikincil:rgba(255,255,255,.66); --soluk:rgba(255,255,255,.42);
+  --cizgi:rgba(255,255,255,.12); --cizgi2:rgba(255,255,255,.24); --dolgu:rgba(255,255,255,.07); --vurgu:rgba(255,36,0,.15); --ok:#34a853; color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#000000; --zemin:rgba(255,255,255,.03); --yuzey:#0d0d0d; --metin:#ffffff; --ikincil:rgba(255,255,255,.66); --soluk:rgba(255,255,255,.42);
+  --cizgi:rgba(255,255,255,.12); --cizgi2:rgba(255,255,255,.24); --dolgu:rgba(255,255,255,.07); --vurgu:rgba(255,36,0,.15); --ok:#34a853; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--metin);font:400 14px/1.55 var(--govde);-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--baslik);margin:0}
+button{font:inherit;color:inherit}
+.sayfa{max-width:1040px;margin:0 auto;padding:28px 28px 96px;display:grid;grid-template-columns:minmax(0,1fr);gap:24px}
+.not{background:var(--zemin);border-radius:var(--r);padding:12px 14px;font-size:13px;color:var(--ikincil)}
+.not b{color:var(--metin)}
+
+/* Sayfa başlığı */
+.ust-y{font:700 12px/1 var(--govde);letter-spacing:.08em;text-transform:uppercase;color:var(--kirmizi)}
+.sb h1{font-size:28px;font-weight:800;letter-spacing:-.015em;margin-top:6px}
+.sb p{margin:4px 0 0;color:var(--ikincil);max-width:64ch}
+
+/* Sekmeler */
+.sekmeler{display:flex;gap:4px;border-bottom:1px solid var(--cizgi);overflow-x:auto}
+.sekmeler a{padding:10px 14px;font-weight:600;font-size:13.5px;color:var(--ikincil);text-decoration:none;border-bottom:2px solid transparent;white-space:nowrap}
+.sekmeler a.secili{color:var(--metin);border-bottom-color:var(--kirmizi)}
+
+/* Kart */
+.kart{border:1px solid var(--cizgi);border-radius:var(--r);background:var(--yuzey);padding:20px;display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
+.kart > header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.kart h2{font-size:16px;font-weight:700}
+.kart header p{margin:2px 0 0;color:var(--ikincil);font-size:13px;max-width:64ch}
+
+/* Form */
+.izgara{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+.alan{display:grid;gap:6px;min-width:0}
+.alan label{font-weight:600;font-size:13px}
+.alan small{color:var(--ikincil);font-size:12px}
+.girdi,.secim{height:40px;border:1px solid var(--cizgi2);border-radius:var(--r-sm);padding:0 12px;background:var(--yuzey);color:var(--metin);font:inherit;width:100%}
+.bolumlu{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--cizgi2);border-radius:var(--r-sm);overflow:hidden}
+.bolumlu button{border:0;background:var(--yuzey);padding:10px 12px;text-align:left;cursor:pointer;display:grid;gap:2px;min-width:0}
+.bolumlu button + button{border-left:1px solid var(--cizgi2)}
+.bolumlu button b{font-size:13.5px}
+.bolumlu button span{font-size:12px;color:var(--ikincil)}
+.bolumlu button[aria-pressed="true"]{background:var(--vurgu);box-shadow:inset 0 -2px 0 var(--kirmizi)}
+.yetki-acik{border-left:3px solid var(--kirmizi);background:var(--zemin);border-radius:0 var(--r-sm) var(--r-sm) 0;padding:12px 14px;display:grid;gap:6px;font-size:13px}
+.yetki-acik ul{margin:0;padding-left:18px;display:grid;gap:2px}
+.yetki-acik b{font-family:var(--baslik)}
+.satir-sag{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+
+/* Düğme */
+.dg{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:40px;padding:0 18px;border-radius:var(--r-hap);font:700 13.5px/1 var(--govde);border:1px solid var(--cizgi2);background:var(--yuzey);color:var(--metin);cursor:pointer;white-space:nowrap}
+.dg.ana{background:var(--kirmizi);border-color:var(--kirmizi);color:#fff}
+.dg.kucuk{height:32px;padding:0 14px;font-size:12.5px}
+.dg.tehlike{color:var(--kirmizi);border-color:color-mix(in srgb,var(--kirmizi) 45%,transparent)}
+
+/* Rozet */
+.rozet{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:var(--r-hap);font-size:12px;font-weight:600;background:var(--dolgu);white-space:nowrap}
+.rozet .n{width:7px;height:7px;border-radius:50%;background:var(--soluk)}
+.rozet.ok .n{background:var(--ok)}
+.rozet.dur .n{background:var(--kirmizi)}
+.rozet.yazma{background:var(--metin);color:var(--bg)}
+
+/* Tablo */
+.tablo-kap{overflow-x:auto;border:1px solid var(--cizgi);border-radius:var(--r)}
+table{width:100%;border-collapse:collapse;min-width:640px}
+th{font:700 11.5px/1 var(--govde);letter-spacing:.04em;text-transform:uppercase;color:var(--soluk);text-align:left;padding:12px 14px;border-bottom:1px solid var(--cizgi)}
+td{padding:12px 14px;border-bottom:1px solid var(--cizgi);vertical-align:top}
+tr:last-child td{border-bottom:0}
+td .alt{color:var(--ikincil);font-size:12px}
+.sayim{font-size:12.5px;color:var(--ikincil)}
+.ozet-satir{display:grid;gap:2px;font-size:13px}
+
+/* Kod */
+pre{margin:0;background:var(--zemin);border:1px solid var(--cizgi);border-radius:var(--r-sm);padding:12px 14px;font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;word-break:break-all}
+.uyari{border-left:3px solid var(--kirmizi);padding:10px 14px;background:var(--zemin);border-radius:0 var(--r-sm) var(--r-sm) 0;font-size:13px}
+.uyari b{font-family:var(--baslik)}
+
+/* Onay örneği (Claude Code ekranı, bilgi için) */
+.terminal{background:#000;color:#fff;border-radius:var(--r);padding:16px;font:12.5px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;display:grid;gap:4px}
+.terminal .k{color:var(--kirmizi)}
+.terminal .s{color:rgba(255,255,255,.6)}
+
+@media (max-width:720px){
+  .sayfa{padding:20px 16px 80px}
+  .izgara{grid-template-columns:minmax(0,1fr)}
+  .bolumlu{grid-template-columns:1fr}
+  .bolumlu button + button{border-left:0;border-top:1px solid var(--cizgi2)}
+  .sb h1{font-size:22px}
+  .kart{padding:16px}
+  .satir-sag .dg{flex:1}
+}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="sayfa">
+  <div class="not"><b>Taslak.</b> Ayarlar › Hesabım sekmesindeki bugünkü "Okuma API" bölümünün yerine. Yalnız platform sahibi görür. Seçimler tıklanabilir; veri örnek.</div>
+
+  <header class="sb">
+    <div class="ust-y">Ayarlar</div>
+    <h1>Hesabım</h1>
+    <p>Bu bölüm: Yapay zekâ bağlantısı (bugünkü "Okuma API" kartının yerine).</p>
+  </header>
+
+
+  <!-- 1. ANAHTAR OLUŞTUR -->
+  <section class="kart" aria-labelledby="k1">
+    <header>
+      <div>
+        <h2 id="k1">Yeni anahtar</h2>
+        <p>Claude Code bu anahtarla Advetics'e bağlanır. Her bilgisayar için ayrı anahtar oluştur.</p>
+      </div>
+      <span class="sayim">3 / 10 etkin anahtar</span>
+    </header>
+
+    <div class="alan">
+      <label>Yetki</label>
+      <div class="bolumlu" role="group" aria-label="Yetki">
+        <button type="button" data-yetki="okuma"><b>Yalnız okuma</b><span>Rapor ve performans verisi. Hiçbir şeyi değiştiremez.</span></button>
+        <button type="button" data-yetki="yazma" aria-pressed="true"><b>Okuma ve reklam yönetimi</b><span>Reklam kurar, durdurur, bütçe değiştirir. Her işlem senin onayınla.</span></button>
+      </div>
+    </div>
+
+    <div class="yetki-acik" id="yetkiAcik">
+      <b>Bu anahtar neler yapabilir</b>
+      <ul>
+        <li>Reklam rehberi açar, görsel yükler (Varlıklar'a eklenir), provayı çalıştırır.</li>
+        <li>Reklamı <b>duraklatılmış</b> kurar. Başlatmak ayrı bir onay ister.</li>
+        <li>Kampanya, reklam seti ve reklamı durdurur, başlatır, bütçesini değiştirir.</li>
+        <li>Platforma giden her işlemden önce Claude ne yapacağını yazar ve "Onaylıyor musunuz?" diye sorar.</li>
+      </ul>
+    </div>
+
+    <div class="izgara">
+      <div class="alan">
+        <label for="ad">Ad</label>
+        <input id="ad" class="girdi" value="Claude Code, dizüstü">
+        <small>Hangi bilgisayarda kullanıldığını anlatsın.</small>
+      </div>
+      <div class="alan">
+        <label for="sure">Geçerlilik</label>
+        <select id="sure" class="secim">
+          <option>30 gün</option><option selected>90 gün</option>
+        </select>
+        <small id="sureNot">Reklam yönetimi anahtarı en çok 90 gün geçerli.</small>
+      </div>
+    </div>
+    <div class="satir-sag"><button class="dg ana" type="button">Anahtar oluştur</button></div>
+  </section>
+
+  <!-- 2. ANAHTARLAR -->
+  <section class="kart" aria-labelledby="k2">
+    <header><div><h2 id="k2">Anahtarlar</h2><p>Anahtarın tamamı yalnız oluşturulduğu an gösterilir.</p></div><span class="sayim">4 anahtar</span></header>
+    <div class="tablo-kap">
+      <table>
+        <thead><tr><th>Ad</th><th>Yetki</th><th>Durum</th><th>Son kullanım</th><th>Bitiş</th><th></th></tr></thead>
+        <tbody>
+          <tr><td><b>Claude Code, dizüstü</b><div class="alt">adv_rw_k3Fq9a</div></td><td><span class="rozet yazma">Reklam yönetimi</span></td><td><span class="rozet ok"><i class="n"></i>Etkin</span></td><td>2 dk önce<div class="alt">88.12.x.x</div></td><td>17 Oca 2027</td><td><button class="dg kucuk tehlike">İptal et</button></td></tr>
+          <tr><td><b>Rapor betiği</b><div class="alt">adv_ro_Pq81zz</div></td><td><span class="rozet">Yalnız okuma</span></td><td><span class="rozet ok"><i class="n"></i>Etkin</span></td><td>Dün 09:14<div class="alt">5.2.x.x</div></td><td>Süresiz</td><td><button class="dg kucuk tehlike">İptal et</button></td></tr>
+          <tr><td><b>Claude Desktop</b><div class="alt">adv_ro_aa0912</div></td><td><span class="rozet">Yalnız okuma</span></td><td><span class="rozet ok"><i class="n"></i>Etkin</span></td><td>Hiç kullanılmadı</td><td>3 Kas 2026</td><td><button class="dg kucuk tehlike">İptal et</button></td></tr>
+          <tr><td><b>Eski dizüstü</b><div class="alt">adv_rw_77bcd0</div></td><td><span class="rozet yazma">Reklam yönetimi</span></td><td><span class="rozet dur"><i class="n"></i>İptal</span></td><td>12 Eki 2026</td><td>-</td><td></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 3. MCP ETKİNLİĞİ -->
+  <section class="kart" aria-labelledby="k3">
+    <header>
+      <div><h2 id="k3">Claude'un işlemleri</h2><p>Claude'un önerdiği ve senin onayladığın her platform işlemi. Bekleyen onay 15 dakika sonra düşer.</p></div>
+      <span class="sayim">5 / 37 gösteriliyor</span>
+    </header>
+    <div class="tablo-kap">
+      <table>
+        <thead><tr><th>Zaman</th><th>İşlem</th><th>Ne yapıldı</th><th>Durum</th><th>Anahtar</th></tr></thead>
+        <tbody>
+          <tr><td>14:32</td><td>Reklam yayınla</td><td><div class="ozet-satir"><span>Ege Birlik Yapı · Form doldursunlar</span><span class="alt">Meta · 500,00 ₺ / gün · İzmir, Manisa · duraklatılmış kuruldu</span></div></td><td><span class="rozet ok"><i class="n"></i>Uygulandı</span></td><td>Claude Code, dizüstü</td></tr>
+          <tr><td>14:40</td><td>Başlat</td><td><div class="ozet-satir"><span>Kampanya: ADV · 19.10.2026 · Form doldursunlar</span><span class="alt">Duraklatıldı → Yayında</span></div></td><td><span class="rozet"><i class="n"></i>Bekliyor</span></td><td>Claude Code, dizüstü</td></tr>
+          <tr><td>11:05</td><td>Bütçe değiştir</td><td><div class="ozet-satir"><span>Kampanya: Kış kampanyası</span><span class="alt">300,00 ₺ → 450,00 ₺ / gün · +50%</span></div></td><td><span class="rozet dur"><i class="n"></i>Başarısız</span><div class="alt">Platformdan okunan değer uyuşmadı</div></td><td>Claude Code, dizüstü</td></tr>
+          <tr><td>Dün</td><td>Durdur</td><td><div class="ozet-satir"><span>Reklam: Video 3</span><span class="alt">Yayında → Duraklatıldı</span></div></td><td><span class="rozet"><i class="n"></i>Vazgeçildi</span></td><td>Claude Code, dizüstü</td></tr>
+          <tr><td>Dün</td><td>Durdur</td><td><div class="ozet-satir"><span>Reklam seti: 25-45 kadın</span><span class="alt">Yayında → Duraklatıldı</span></div></td><td><span class="rozet"><i class="n"></i>Süresi doldu</span></td><td>Claude Code, dizüstü</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 4. BAĞLAN -->
+  <section class="kart" aria-labelledby="k4">
+    <header><div><h2 id="k4">Claude Code'a bağla</h2><p>Komutu terminalde bir kez çalıştır. Sonra Claude Code'da <b>/mcp</b> ile bağlantıyı gör.</p></div></header>
+    <pre>claude mcp add --transport http --scope user advetics https://advetics.com/api/mcp --header "Authorization: Bearer adv_rw_ANAHTARINIZ"</pre>
+    <div class="satir-sag"><button class="dg kucuk">Kopyala</button></div>
+    <div class="uyari"><b>"onayla" aracına her zaman izin verme.</b> Claude Code her onayda "izin veriyor musun?" diye sorar. Bu soru, işlemin senin sözünle yapıldığının ikinci güvencesi.</div>
+
+    <div class="alan"><label>Onay böyle görünür (Claude Code)</label></div>
+    <div class="terminal" aria-label="Örnek">
+      <span class="s">› Ege Birlik Yapı için form kampanyasını yayınla</span>
+      <span>Şunu yapacağım:</span>
+      <span>  Workspace: Ege Birlik Yapı</span>
+      <span>  Amaç: Form doldursunlar · Meta hesabı: Ege Birlik (act_1885272)</span>
+      <span>  Bütçe: 500,00 ₺ / gün · Takvim: 2026-10-20 → bitiş yok</span>
+      <span>  Konum: İzmir, Manisa · Yaş: 25–55 · Özel kategori: Konut</span>
+      <span>  Kurulum DURAKLATILMIŞ: harcama, ayrıca onaylanan bir "başlat" olmadan başlamaz.</span>
+      <span class="k">Onaylıyor musunuz?</span>
+      <span class="s">› evet</span>
+      <span class="s">  advetics · onayla  [İzin ver] [Reddet]</span>
+    </div>
+  </section>
+</main>
+<script>
+// Yetki seçimi: açıklama ve süre seçenekleri değişir (taslak davranışı).
+const dugmeler = document.querySelectorAll('[data-yetki]');
+const acik = document.getElementById('yetkiAcik');
+const sure = document.getElementById('sure');
+const not = document.getElementById('sureNot');
+function sec(y) {
+  dugmeler.forEach((d) => d.setAttribute('aria-pressed', String(d.dataset.yetki === y)));
+  acik.style.display = y === 'yazma' ? 'grid' : 'none';
+  sure.innerHTML = y === 'yazma'
+    ? '<option>30 gün</option><option selected>90 gün</option>'
+    : '<option>30 gün</option><option selected>90 gün</option><option>365 gün</option><option>Süresiz</option>';
+  not.textContent = y === 'yazma' ? 'Reklam yönetimi anahtarı en çok 90 gün geçerli.' : 'Süresiz seçersen anahtarı kendin iptal edene kadar çalışır.';
+}
+dugmeler.forEach((d) => d.addEventListener('click', () => sec(d.dataset.yetki)));
+</script>
+</body>
+</html>

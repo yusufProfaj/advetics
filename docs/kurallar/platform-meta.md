@@ -202,3 +202,13 @@ okunup varsayılmadı — canlıda doğrulandı.
   küçük" — Türkçe açıklama Meta'dan geliyor. Küçük kitlelerde büyüklük
   **1000–1000** dönüyor: gerçek sayı değil, Meta'nın TABANI; "tam 1000 kişi"
   diye okunmamalı.
+
+- **`validateOnly` META'DA YOK — "prova" isteği GERÇEKTEN YAZAR (2026-10-19).**
+  `CampaignActionsService.uygula(…, { validateOnly: true })` seçeneği
+  sağlayıcıya iletiyor; `google.provider.ts` onu `validateOnly` gövdesine
+  çeviriyor, `meta.provider.ts` ise HİÇ okumuyor ve durumu/bütçeyi yazıyor.
+  MCP onay önizlemesi tam bu tuzağa düşecekti ("önce prova edip kullanıcıya
+  sorayım" = onaydan önce kampanyayı durdurmak). Önizleme için
+  `onizle` (aynı ön kontrol, platform çağrısı yok). Meta'da gerçek prova
+  gerekiyorsa Graph API'nin `execution_options=["validate_only"]` alanı
+  canlıda ölçülmeden kullanılmaz.

@@ -33,6 +33,7 @@ const OZET_ALANLARI = {
   sonKullanim: true,
   sonKullanimIp: true,
   iptal: true,
+  yetki: true,
 } satisfies Prisma.OkumaAnahtariSelect;
 
 type OzetSatiri = Prisma.OkumaAnahtariGetPayload<{ select: typeof OZET_ALANLARI }>;
@@ -42,6 +43,7 @@ export function ozete(s: OzetSatiri, simdi: Date = new Date()): OkumaAnahtariOze
     id: s.id,
     ad: s.ad,
     gorunenOnek: s.gorunenOnek,
+    yetki: s.yetki === 'yazma' ? 'yazma' : 'okuma',
     olusturulma: s.createdAt.toISOString(),
     bitis: s.bitis?.toISOString() ?? null,
     sonKullanim: s.sonKullanim?.toISOString() ?? null,
@@ -83,7 +85,7 @@ export class OkumaAnahtariService {
     meta: RequestMeta,
   ): Promise<OkumaAnahtariOlusturmaYaniti> {
     platformSahibiOlmali(ctx);
-    const { anahtar, ozet, gorunenOnek } = anahtarUret();
+    const { anahtar, ozet, gorunenOnek } = anahtarUret(girdi.yetki);
     const bitis =
       girdi.gecerlilikGun === null ? null : new Date(Date.now() + girdi.gecerlilikGun * 86_400_000);
 
@@ -107,7 +109,7 @@ export class OkumaAnahtariService {
         );
       }
       const yeni = await tx.okumaAnahtari.create({
-        data: { userId: ctx.userId, ad: girdi.ad, gorunenOnek, anahtarOzeti: ozet, bitis },
+        data: { userId: ctx.userId, ad: girdi.ad, gorunenOnek, anahtarOzeti: ozet, bitis, yetki: girdi.yetki },
         select: OZET_ALANLARI,
       });
       await this.audit.record(tx, ctx, {
@@ -115,7 +117,7 @@ export class OkumaAnahtariService {
         targetType: 'okuma_api_anahtari',
         targetId: yeni.id,
         clientId: null,
-        after: { ad: yeni.ad, gorunenOnek, bitis: bitis?.toISOString() ?? null },
+        after: { ad: yeni.ad, gorunenOnek, bitis: bitis?.toISOString() ?? null, yetki: girdi.yetki },
         ip: meta.ip,
         userAgent: meta.userAgent,
         requestId: meta.requestId,

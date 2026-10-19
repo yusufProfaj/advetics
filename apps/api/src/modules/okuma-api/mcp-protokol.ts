@@ -1,4 +1,20 @@
-import type { OkumaAraci } from './okuma-araclari';
+/**
+ * Protokolün bir araçtan bildiği kadarı. Okuma araçları (`okuma-araclari.ts`)
+ * ve yazma araçları (`mcp-yazma-araclari.ts`) bu biçimi taşıyor; çalıştırma
+ * ortamın işi (`McpOrtami.calistir`).
+ */
+export interface McpAraci {
+  ad: string;
+  baslik: string;
+  aciklama: string;
+  girdi: Record<string, unknown>;
+  /**
+   * İstemciye giden işaretler. Verilmezse SALT OKUMA. `yikici: true`
+   * Claude Code'a "bu araç bir şey değiştirir" der ve istemci her çağrıda
+   * izin sorar: onay sisteminin insan kapısı bu soru (MCP-YAZMA-MIMARI § 2).
+   */
+  isaret?: { saltOkuma: boolean; yikici: boolean; tekrarlanabilir: boolean };
+}
 
 /**
  * ═══ MCP — STREAMABLE HTTP, DURUMSUZ, YALNIZCA ARAÇLAR ═══
@@ -21,6 +37,7 @@ import type { OkumaAraci } from './okuma-araclari';
 /** Desteklenen sürümler, YENİDEN ESKİYE. İstemci bunlardan birini isterse aynısı dönüyor. */
 export const MCP_SURUMLERI = ['2025-06-18', '2025-03-26', '2024-11-05'] as const;
 
+/** OKUMA anahtarının talimatı. Yazma anahtarı `MCP_YAZMA_TALIMATLARI`nı alır. */
 export const MCP_TALIMATLARI = [
   'Advetics salt okunur reklam verisi (Meta, Google, LinkedIn). Hiçbir araç yazmaz; kampanya açamaz, durduramaz, bütçe değiştiremez.',
   'Hiyerarşi: üst hesap (ajans) → şirket → workspace (proje) → reklam hesabı → kampanya → reklam grubu → reklam.',
@@ -30,13 +47,30 @@ export const MCP_TALIMATLARI = [
   'Bir araç hata dönerse mesajı oku: çoğu zaman hangi alanın yanlış olduğunu ve neyi çağırman gerektiğini söyler.',
 ].join('\n');
 
-export interface McpOrtami {
-  araclar: readonly OkumaAraci[];
+/**
+ * YAZMA anahtarının talimatı. Onay kuralı BURADA da yazıyor, ama asıl kapı
+ * sunucuda (onaysız işlem platforma gitmez) ve istemcinin izin sorusunda.
+ */
+export const MCP_YAZMA_TALIMATLARI = [
+  'Advetics reklam paneli (Meta, Google, LinkedIn verisi; Meta ve Google için reklam kurma ve yönetme). Bu anahtar YAZABİLİR.',
+  'Hiyerarşi: üst hesap (ajans) → şirket → workspace (proje) → reklam hesabı → kampanya → reklam grubu → reklam. Kimlikler Advetics UUID\'leridir; önce `kapsam` ile öğren, uydurma.',
+  'Reklam kurmadan önce `yazma_durumu` ile workspace\'in hesaplarını, sayfalarını ve görsellerini oku. Reklam bir REHBER üzerinden kurulur: `rehber_olustur` → `rehber_guncelle` (alanlar) → `rehber_prova` → `rehber_yayinla`.',
+  'Bütçe, takvim, hesap, konum, yaş ve özel kategori KULLANICININ söylediği değerlerdir: tahmin etme, eksikse sor. Para micros DİZGE (1.000.000 = 1 birim).',
+  'Görsel/video: `yukleme_adresi` ile adres al ve dosyayı kendi kabuğunda verilen curl komutuyla yükle; dönen varlik_id\'yi rehberin medya alanına yaz. Dosyayı argüman olarak (base64) gönderme.',
+  'ONAY KURALI: rehber_yayinla, varlik_durdur, varlik_etkinlestir ve butce_degistir hiçbir şeyi hemen yapmaz; bir onay_kodu ve özet döner. Özeti kullanıcıya AYNEN göster, "Onaylıyor musunuz?" diye sor ve YALNIZ kullanıcı açıkça evet derse `onayla(onay_kodu)` çağır. Hayır derse `vazgec`. Kullanıcıya sormadan onayla çağırmak yasak.',
+  'Yayın her zaman DURAKLATILMIŞ kurulur; harcama başlatmak ayrı bir `varlik_etkinlestir` onayı ister. Kurulan kampanyanın kimliği `rehber_yayin_durumu`nda (yapı taraması görmediyse henüz yok: birkaç dakika sonra tekrar bak).',
+  'Bir araç hata dönerse mesajı oku: çoğu zaman hangi alanın yanlış olduğunu ve neyi çağırman gerektiğini söyler.',
+].join('\n');
+
+export interface McpOrtami<A extends McpAraci = McpAraci> {
+  araclar: readonly A[];
   /** Aracı çalıştır. Hata fırlatırsa mesajı `isError` sonucu olarak modele gider. */
-  calistir(arac: OkumaAraci, args: unknown): Promise<unknown>;
+  calistir(arac: A, args: unknown): Promise<unknown>;
   /** Fırlatılan hatayı modele gösterilecek cümleye çevir. */
   hataMetni(err: unknown): string;
   sunucu: { name: string; version: string };
+  /** `initialize` cevabındaki talimat; anahtarın yetkisine göre seçiliyor. */
+  talimat: string;
 }
 
 type Kimlik = string | number | null;
@@ -55,7 +89,7 @@ export function jsonMetni(deger: unknown): string {
   return JSON.stringify(deger, (_k, v: unknown) => (typeof v === 'bigint' ? v.toString() : v), 2);
 }
 
-async function tekMesaj(m: unknown, ortam: McpOrtami): Promise<object | null> {
+async function tekMesaj<A extends McpAraci>(m: unknown, ortam: McpOrtami<A>): Promise<object | null> {
   if (typeof m !== 'object' || m === null || Array.isArray(m)) {
     return hata(null, -32600, 'Geçersiz istek: JSON-RPC nesnesi bekleniyor');
   }
@@ -83,7 +117,7 @@ async function tekMesaj(m: unknown, ortam: McpOrtami): Promise<object | null> {
         protocolVersion: surum,
         capabilities: { tools: { listChanged: false } },
         serverInfo: ortam.sunucu,
-        instructions: MCP_TALIMATLARI,
+        instructions: ortam.talimat,
       });
     }
     case 'ping':
@@ -95,8 +129,15 @@ async function tekMesaj(m: unknown, ortam: McpOrtami): Promise<object | null> {
           title: a.baslik,
           description: a.aciklama,
           inputSchema: a.girdi,
-          // İstemciye "bu araç bir şey değiştirmez" — onay sorusunu atlatabiliyor.
-          annotations: { title: a.baslik, readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+          // `readOnlyHint: true` istemcinin onay sorusunu atlatabiliyor; yazma
+          // araçlarında YANLIŞ olmalı, yoksa insan kapısı sessizce kalkar.
+          annotations: {
+            title: a.baslik,
+            readOnlyHint: a.isaret?.saltOkuma ?? true,
+            destructiveHint: a.isaret?.yikici ?? false,
+            idempotentHint: a.isaret?.tekrarlanabilir ?? true,
+            openWorldHint: false,
+          },
         })),
       });
     /*
@@ -138,7 +179,7 @@ async function tekMesaj(m: unknown, ortam: McpOrtami): Promise<object | null> {
  * Gövdeyi işle. Dizi (toplu istek, 2025-03-26) destekleniyor. `null` =
  * yalnızca bildirim vardı, HTTP 202 ve boş gövde.
  */
-export async function mcpIsle(govde: unknown, ortam: McpOrtami): Promise<unknown> {
+export async function mcpIsle<A extends McpAraci>(govde: unknown, ortam: McpOrtami<A>): Promise<unknown> {
   if (Array.isArray(govde)) {
     if (govde.length === 0) return hata(null, -32600, 'Boş toplu istek');
     const yanitlar = (await Promise.all(govde.map((m) => tekMesaj(m, ortam)))).filter((y) => y !== null);

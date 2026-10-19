@@ -101,7 +101,7 @@ const JS_SUZGEC = {
   reklam_grubu_id: { type: 'string', description: 'Advetics reklam grubu / ad set kimliği (UUID).' },
 } as const;
 
-function nesne(ozellikler: Record<string, unknown>, zorunlu: string[] = []): Record<string, unknown> {
+export function nesne(ozellikler: Record<string, unknown>, zorunlu: string[] = []): Record<string, unknown> {
   return { type: 'object', properties: ozellikler, required: zorunlu, additionalProperties: false };
 }
 
@@ -111,7 +111,7 @@ function nesne(ozellikler: Record<string, unknown>, zorunlu: string[] = []): Rec
  * istenen dönem gibi döndürmek demekti. Bilinmeyen alan hata ve hata
  * mesajı alanın adını söylüyor, model kendini düzeltebiliyor.
  */
-function suz<T extends z.ZodRawShape>(sema: T, args: unknown): z.infer<z.ZodObject<T>> {
+export function suz<T extends z.ZodRawShape>(sema: T, args: unknown): z.infer<z.ZodObject<T>> {
   const sonuc = z.object(sema).strict().safeParse(args ?? {});
   if (!sonuc.success) {
     throw new AracArgumanHatasi(

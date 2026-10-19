@@ -59,7 +59,13 @@ export type DegisiklikKaynagi = (typeof DEGISIKLIK_KAYNAKLARI)[number];
  * (aynı varlık, ±10 dakika, `durum = 'uygulandi'`) BİR KEZ eşlenir; eşleşme
  * yoksa `bilinmiyor` kalır, tahmin edilmez.
  */
-export const DEGISIKLIK_YOLLARI = ['iyilestir', 'sinyal', 'reklam_yoneticisi', 'asistan', 'kural', 'bilinmiyor'] as const;
+/**
+ * `mcp` (2026-10-19): Claude Code'dan yazma anahtarıyla, kullanıcının
+ * onayladığı işlem (`docs/okuma-api/MCP-YAZMA-MIMARI.md`). `asistan`a
+ * katılmadı: panel içi asistan ile dışarıdaki yapay zekâ farklı kapılar ve
+ * etki ekranı hangisinden geldiğini ayırabilmeli.
+ */
+export const DEGISIKLIK_YOLLARI = ['iyilestir', 'sinyal', 'reklam_yoneticisi', 'asistan', 'mcp', 'kural', 'bilinmiyor'] as const;
 export type DegisiklikYolu = (typeof DEGISIKLIK_YOLLARI)[number];
 
 export const DEGISIKLIK_YOLU_ADI: Record<DegisiklikYolu, string> = {
@@ -67,6 +73,7 @@ export const DEGISIKLIK_YOLU_ADI: Record<DegisiklikYolu, string> = {
   sinyal: 'Sinyal',
   reklam_yoneticisi: 'Reklam Yöneticisi',
   asistan: 'Yapay zekâ asistanı',
+  mcp: 'Claude (MCP)',
   kural: 'Kural',
   bilinmiyor: 'Panel',
 };

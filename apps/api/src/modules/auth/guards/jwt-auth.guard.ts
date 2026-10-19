@@ -143,7 +143,7 @@ export class JwtAuthGuard implements CanActivate {
    * gereksiz ve istemcinin elindeki ikinci bir kapsam kanalı olurdu.
    */
   private async okumaAnahtariyla(req: AuthedRequest, anahtar: string): Promise<boolean> {
-    const { userId, anahtarId } = await this.okumaAnahtari.dogrula(anahtar, req.ip ?? null);
+    const { userId, anahtarId, yetki } = await this.okumaAnahtari.dogrula(anahtar, req.ip ?? null);
     const identity = await this.tenantContext.resolve(userId, null, null, null);
     // Doğrulayıcı bayrağı zaten okudu; bağlam ayrı bir sorgudan geliyor ve
     // ikisinin arasında bayrak geri alınmış olabilir. İkinci kapı ucuz.
@@ -153,6 +153,7 @@ export class JwtAuthGuard implements CanActivate {
     req.actor = identity.actor;
     req.tenant = identity.context;
     req.okumaAnahtariId = anahtarId;
+    req.anahtarYetkisi = yetki;
     return true;
   }
 

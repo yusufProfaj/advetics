@@ -345,6 +345,7 @@ model User {
   reportSchedules    ReportSchedule[]
   faturaBelgeleri    FaturaBelgesi[]
   okumaAnahtarlari   OkumaAnahtari[]
+  mcpOnaylari        McpOnay[]
 
   @@unique([orgId, email])
   @@index([orgId, status])
@@ -1560,11 +1561,38 @@ model OkumaAnahtari {
   sonKullanimIp String?   @map("son_kullanim_ip") @db.VarChar(64)
   iptal         DateTime? @map("iptal") @db.Timestamptz(6)
   createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// `okuma` | `yazma` (CHECK migration'da). Her istekte satırdan okunur.
+  yetki         String    @default("okuma") @db.VarChar(10)
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user     User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  onaylari McpOnay[]
 
   @@index([userId])
   @@map("okuma_api_anahtarlari")
+}
+
+/// MCP onay satırı (docs/okuma-api/MCP-YAZMA-MIMARI.md § 2). Platforma
+/// dokunan her MCP işlemi önce burada `bekliyor`, `onayla` ile uygulanır.
+model McpOnay {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  anahtarId String    @map("anahtar_id") @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  islem     String    @db.VarChar(30)
+  hedef     Json
+  ozet      Json
+  durum     String    @default("bekliyor") @db.VarChar(15)
+  sonuc     Json?
+  hata      String?
+  bitis     DateTime  @db.Timestamptz(6)
+  kararAt   DateTime? @map("karar_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  anahtar OkumaAnahtari @relation(fields: [anahtarId], references: [id], onDelete: Cascade)
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)], map: "mcp_onaylari_user_created_idx")
+  @@index([anahtarId], map: "mcp_onaylari_anahtar_idx")
+  @@map("mcp_onaylari")
 }
 
 model ReportTemplate {

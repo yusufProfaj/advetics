@@ -261,3 +261,38 @@ gerekçesiyle öner.
 Her workspace için bir paragraflık aylık performans özeti yaz (müşteriye
 gidecek dilde), sonunda ajans içi notlar bölümünde riskli hesapları belirt.
 ```
+
+---
+
+## 8. Yazma anahtarı: reklam kurma ve yönetme (2026-10-19)
+
+Mimari ve kararlar: [`MCP-YAZMA-MIMARI.md`](MCP-YAZMA-MIMARI.md). Pilot: yalnız
+platform sahibi, istemci Claude Code.
+
+- Anahtar `adv_rw_` ile başlar, en çok 90 gün geçerli. Okuma araçlarının
+  hepsi + 23 yazma aracı görünür (`/mcp` listesinde).
+- **Platforma dokunan dört işlem onaylı:** `rehber_yayinla`, `varlik_durdur`,
+  `varlik_etkinlestir`, `butce_degistir`. Araç hiçbir şey yapmaz; özet ve
+  `onay_kodu` döner. Claude özeti gösterip "Onaylıyor musunuz?" diye sorar,
+  evet dersen `onayla` çağırır. Kod 15 dakika geçerli, tek kullanımlık;
+  argümanlar sunucuda saklı (Claude onaydan sonra rakamı değiştiremez).
+- **`onayla` aracını "her zaman izin ver" listesine EKLEME.** Claude Code her
+  onayda izin sorar; bu soru ikinci güvence. Sunucu, `onayla`yı senin mi
+  Claude'un mu istediğini ayırt edemez.
+- **Yayın her zaman duraklatılmış** kurulur. Harcamayı başlatmak:
+  `rehber_yayin_durumu` → `adveticsKampanyaId` → `varlik_etkinlestir` (ayrı onay).
+- **Görsel/video:** `yukleme_adresi` 15 dakikalık bir jeton ve `curl` komutu
+  verir; Claude Code dosyayı kendi kabuğunda yükler, dosya Varlıklar'a
+  girer, dönen `varlikId` rehberin `medya` alanına yazılır.
+- Bütçe değişikliği İyileştir'in %20 sınırına bağlı DEĞİL (kullanıcı
+  kararı); özet değişim yüzdesini yazar, %20 üstünde uyarır. Aylık bütçe
+  planı kontrol edilmez.
+- Her işlem `audit_logs`ta (`mcp.*`) ve etki ekranında "Claude (MCP)" yoluyla.
+
+Örnek istem:
+
+```
+Ege Birlik Yapı workspace'i için form kampanyası kur: Meta, günlük 500 TL,
+yarından başlasın, İzmir ve Manisa, 25-55 yaş. Görseller ~/Desktop/ege/*.jpg.
+Önce yazma_durumu'na bak, eksik bir şey varsa sor.
+```

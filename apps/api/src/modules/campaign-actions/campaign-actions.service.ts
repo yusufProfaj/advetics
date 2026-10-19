@@ -14,7 +14,7 @@ import { DENETIM_IZ_ANAHTARI, googleYazilamazMi, type DegisiklikIzi } from '@adv
 import { SyncQueueService } from '../../queue/sync-queue.service';
 import { AuditService } from '../audit/audit.service';
 import { ProviderRegistry } from '../connections/provider.registry';
-import type { PlatformActionRequest, PlatformVarlikDurumu, RateLimitSnapshot } from '../connections/provider.types';
+import type { IAdPlatformProvider, PlatformActionRequest, PlatformVarlikDurumu, RateLimitSnapshot } from '../connections/provider.types';
 import { TokenVaultService } from '../connections/token-vault.service';
 
 /**
@@ -417,12 +417,21 @@ export class CampaignActionsService {
    * Platform çağrıları transaction DIŞINDA (okuma ve kayıt ayrı, kısa
    * transaction'lar), `applyAction` ile aynı kural.
    */
-  async uygula(
+  /**
+   * PLATFORMA GİTMEYEN ÖN KONTROL — uygulamanın ve onay önizlemesinin TEK
+   * kapısı. MCP onayı (`docs/okuma-api/MCP-YAZMA-MIMARI.md` § 2) kullanıcıya
+   * "şunu yapacağım" demeden önce bu kontrollerin hepsini geçmeli: önizleme
+   * ayrı bir kontrol listesi taşısaydı kullanıcı onaylar, uygulama ancak
+   * sonra "şalter kapalı" derdi.
+   *
+   * `validateOnly` ÖNİZLEME İÇİN KULLANILMIYOR: Meta sağlayıcısı o seçeneği
+   * tanımıyor ve isteği GERÇEKTEN yazar. Önizleme aynadaki değeri okur.
+   */
+  private async onKontrol(
     ctx: TenantContext,
     hedef: { seviye: VarlikSeviyesi; id: string },
     eylem: UygulamaEylemi,
-    secenek: { validateOnly?: boolean; iz?: DegisiklikIzi } = {},
-  ): Promise<SeviyeliUygulamaSonucu> {
+  ): Promise<OnKontrolSonucu> {
     if (eylem.type === 'set_budget' && hedef.seviye === 'ad') {
       throw new BadRequestException('Reklamın kendi bütçesi yok; bütçe kampanya ya da reklam seti seviyesinde.');
     }
@@ -455,6 +464,35 @@ export class CampaignActionsService {
     // ajans bir arızada yazmayı durdurduğunda tek bir düğme yine yazardı.
     const kapi = await this.yazmaKapisi(ctx, row.platform, row.clientId);
     if (!kapi.acik) throw new BadRequestException(kapi.sebep);
+    return { row, provider };
+  }
+
+  /**
+   * ONAY ÖNİZLEMESİ: platformu ÇAĞIRMADAN, uygulamayla aynı ön kontrolden
+   * geçip varlığın aynadaki ŞU ANKİ hâlini döndürür ("500 TL → 750 TL").
+   */
+  async onizle(
+    ctx: TenantContext,
+    hedef: { seviye: VarlikSeviyesi; id: string },
+    eylem: UygulamaEylemi,
+  ): Promise<VarlikOnizlemesi> {
+    const { row } = await this.onKontrol(ctx, hedef, eylem);
+    return {
+      platform: row.platform,
+      varlikAdi: row.name,
+      clientId: row.clientId,
+      once: { status: row.status, budgetMode: row.budgetMode, budgetAmountMicros: row.budgetAmountMicros },
+      currency: row.currency,
+    };
+  }
+
+  async uygula(
+    ctx: TenantContext,
+    hedef: { seviye: VarlikSeviyesi; id: string },
+    eylem: UygulamaEylemi,
+    secenek: { validateOnly?: boolean; iz?: DegisiklikIzi } = {},
+  ): Promise<SeviyeliUygulamaSonucu> {
+    const { row, provider } = await this.onKontrol(ctx, hedef, eylem);
     // Kota ÖNCE: maliyeti sıfır bir ret (CLAUDE.md "önce kontrol, sonra çağrı").
     const gate = await this.quota.acquire({ platform: row.platform, adAccountId: row.adAccountId, layer: 'rule_action' });
     if (!gate.allowed) throw new BadRequestException(`Kota engeli: ${gate.reason}`);
@@ -717,6 +755,20 @@ export interface SeviyeliUygulamaSonucu {
   okunan: PlatformVarlikDurumu | null;
   platformDegeri: string;
   currency: string;
+}
+
+/** MCP onay özetinin okuduğu, platforma gitmeden bilinen hâl. */
+export interface VarlikOnizlemesi {
+  platform: Platform;
+  varlikAdi: string;
+  clientId: string;
+  once: { status: string; budgetMode: string; budgetAmountMicros: string | null };
+  currency: string;
+}
+
+interface OnKontrolSonucu {
+  row: CozulmusVarlik;
+  provider: IAdPlatformProvider;
 }
 
 interface CozulmusVarlik {

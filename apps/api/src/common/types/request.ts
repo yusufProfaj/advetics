@@ -23,4 +23,6 @@ export interface AuthedRequest extends Request {
    * tanımsız). Okuma uçları buna bakarak çerezli oturumu reddediyor.
    */
   okumaAnahtariId?: string;
+  /** Anahtarın satırdaki yetkisi (her istekte okunur). Yazma araçları buna bakıyor. */
+  anahtarYetkisi?: 'okuma' | 'yazma';
 }
