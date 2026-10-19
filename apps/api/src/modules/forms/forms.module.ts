@@ -9,6 +9,9 @@ import { FormsService } from './forms.service';
   imports: [ConnectionsModule],
   controllers: [FormsController],
   providers: [FormsService, FormPublisherService],
-  exports: [FormsService],
+  // Yayıncı MCP yazma araçları için de dışarıda (`form_yayinla`): ikinci bir
+  // form yayın yolu yazılmasın, panelin kapıları (sahiplenme, belirsiz hâl,
+  // geri okuma) orada da geçerli olsun.
+  exports: [FormsService, FormPublisherService],
 })
 export class FormsModule {}

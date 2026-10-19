@@ -1,6 +1,11 @@
+import { createHash } from 'node:crypto';
 import {
+  FORM_TYPE_META,
+  PREFILL_LABELS,
   REHBER_AMACLARI,
+  TESEKKUR_DUGME_ETIKETI,
   formatMoney,
+  type LeadFormRecord,
   type RehberHazirligi,
   type RehberKaydi,
 } from '@advetics/shared';
@@ -131,5 +136,50 @@ export function varlikOnayOzeti(
     }
     satir.push('Aylık bütçe planı kontrol edilmedi.');
   }
+  return satir;
+}
+
+/**
+ * Meta'ya GİDEN form içeriğinin parmak izi. Onay satırına yazılıyor ve
+ * `onayla` anında yeniden hesaplanıyor: kullanıcı özeti onayladıktan sonra
+ * taslak panelden değiştirilirse ONAYLANMAYAN içerik Meta'da açılmasın
+ * (açılan form silinemiyor). Ad ve durum dışarıda: ikisi de Meta'ya gitmiyor.
+ */
+export function formIcerikOzeti(f: LeadFormRecord): string {
+  const icerik = [
+    f.socialProfileId, f.formType, f.headline, f.intro, f.prefillQuestions, f.customQuestions,
+    f.privacyPolicyUrl, f.privacyPolicyLinkText, f.consentBoxes, f.thankYouHeadline, f.thankYouBody,
+    f.thankYouCtaText, f.thankYouCtaUrl, f.thankYouCtaType, f.thankYouPhone,
+  ];
+  return createHash('sha256').update(JSON.stringify(icerik)).digest('hex');
+}
+
+/**
+ * Form yayınının özeti. Kullanıcının Meta'da KALICI olarak açılacak her
+ * metni görmesi gerekiyor: sorular, gizlilik adresi, KVKK kutuları ve
+ * teşekkür ekranı sonradan değiştirilemiyor. Boş alan "yok" diye yazılıyor.
+ */
+export function formOnayOzeti(f: LeadFormRecord, workspaceAdi: string): string[] {
+  const satir = [
+    `Workspace: ${workspaceAdi}`,
+    `Facebook sayfası: ${f.socialProfileName}`,
+    `Form: ${f.name} · ${FORM_TYPE_META[f.formType].label}`,
+    `Giriş başlığı: ${f.headline ? kisalt(f.headline, 60) : 'yok'}`,
+  ];
+  if (f.intro) satir.push(`Giriş metni: ${kisalt(f.intro)}`);
+  satir.push(`Önden dolu sorular: ${liste(f.prefillQuestions.map((q) => PREFILL_LABELS[q]))}`);
+  satir.push(
+    `Ek sorular: ${liste(
+      f.customQuestions.map((q) => (q.type === 'multiple_choice' ? `${kisalt(q.label, 60)} (${q.options.join(' / ')})` : kisalt(q.label, 60))),
+    )}`,
+  );
+  satir.push(`Gizlilik adresi: ${f.privacyPolicyUrl}`);
+  satir.push(`Onay kutuları: ${liste(f.consentBoxes.map((c) => `${kisalt(c.text, 60)}${c.required ? ' (zorunlu)' : ''}`))}`);
+  const tur = f.thankYouCtaType;
+  const hedef = tur === 'VIEW_WEBSITE' ? ` → ${f.thankYouCtaUrl ?? 'adres yok'}` : tur === 'CALL_BUSINESS' ? ` → ${f.thankYouPhone ?? 'telefon yok'}` : '';
+  satir.push(`Teşekkür ekranı: ${kisalt(f.thankYouHeadline, 60)} · ${kisalt(f.thankYouBody, 90)}`);
+  satir.push(`Teşekkür düğmesi: ${TESEKKUR_DUGME_ETIKETI[tur]}${tur === 'NONE' ? '' : ` "${f.thankYouCtaText}"`}${hedef}`);
+  satir.push("Meta'da açılan form DEĞİŞTİRİLEMEZ ve SİLİNEMEZ; değişiklik yeni bir form demek.");
+  satir.push('Form tek başına reklam değil: harcama yok, reklama rehberle bağlanır.');
   return satir;
 }

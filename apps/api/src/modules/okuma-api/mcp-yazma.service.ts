@@ -4,6 +4,7 @@ import {
   MCP_ONAY_SURESI_DK,
   MCP_YUKLEME_BASLIGI,
   type McpOnayIslemi,
+  type LeadFormRecord,
   type Permission,
   type RehberKaydi,
   type TenantContext,
@@ -16,10 +17,12 @@ import { AssetsService } from '../assets/assets.service';
 import { OkumaAnahtariDogrulayici } from '../auth/okuma-anahtari-dogrulayici.service';
 import { TenantContextService } from '../auth/tenant-context.service';
 import { CampaignActionsService, type UygulamaEylemi } from '../campaign-actions/campaign-actions.service';
+import { FormPublisherService } from '../forms/form-publisher.service';
+import { FormsService } from '../forms/forms.service';
 import { RehberService } from '../reklam/rehber/rehber.service';
 import { googleYazmaAcikMi, metaYazmaAcikMi } from '../reklam/yazma-kapisi';
 import { McpOnayService, type AlinanOnay, type Ev } from './mcp-onay.service';
-import { rehberOnayOzeti, varlikOnayOzeti, type VarlikIslemi } from './mcp-onay-ozeti';
+import { formIcerikOzeti, formOnayOzeti, rehberOnayOzeti, varlikOnayOzeti, type VarlikIslemi } from './mcp-onay-ozeti';
 import type { VarlikSeviyesi, YazmaAraci, YazmaOrtami } from './mcp-yazma-araclari';
 import { dosyaTuru, jetonCoz, jetonUret, YuklemeJetonuHatasi } from './mcp-yukleme';
 import { AracArgumanHatasi } from './okuma-araclari';
@@ -62,6 +65,8 @@ export class McpYazmaService {
     private readonly assets: AssetsService,
     private readonly anahtar: OkumaAnahtariDogrulayici,
     @Inject(CONFIG) private readonly config: AppConfig,
+    private readonly forms: FormsService,
+    private readonly formYayinci: FormPublisherService,
   ) {}
 
   /**
@@ -163,6 +168,19 @@ export class McpYazmaService {
         return this.rehber.anahtarKelimeOner(ctx, id, tohumlar ?? undefined);
       },
       formSablonlari: async (w, sayfaId) => this.rehber.formSablonlari((await ws(w, 'bulk.read')).ctx, w, sayfaId),
+      formlar: async (w) => {
+        const satirlar = await this.forms.list((await ws(w, 'bulk.read')).ctx, w);
+        return { satirlar: satirlar.map(formSatiri), toplam: satirlar.length };
+      },
+      formOlustur: async (w, girdi) => {
+        const { ctx } = await ws(w, 'bulk.write');
+        const f = await this.forms.create(ctx, girdi);
+        // Engeller HEMEN söyleniyor ("doğrulama giriş anında"): yayın onayı
+        // istendiğinde değil, form açılır açılmaz.
+        const kontrol = await this.forms.checks(ctx, f.id);
+        return { form: formSatiri(f), engeller: kontrol.blockers, uyarilar: kontrol.warnings, sonraki: 'Meta\'da açmak için form_yayinla (onaylı).' };
+      },
+      formOnayi: (w, id) => this.formOnayiAc(istek, w, id),
       pikseller: async (w, hesapId) => this.rehber.pikseller((await ws(w, 'bulk.read')).ctx, w, hesapId),
       youtubeVideolari: async (w, kanalId) => this.rehber.youtubeVideolari((await ws(w, 'bulk.read')).ctx, w, kanalId),
       prova: async (w, id) => {
@@ -289,6 +307,24 @@ export class McpYazmaService {
     return this.onayCevabi(await this.onay.ac(istek, 'rehber_yayinla', { workspace_id: w, rehber_id: rehberId, icerik_ozeti: r.icerikOzeti }, ozet));
   }
 
+  /** Form bu workspace'in mi: rehberde olduğu gibi, başka workspace'in formu bu bağlamla yayınlanmasın. */
+  private async formAl(ctx: TenantContext, workspaceId: string, formId: string): Promise<LeadFormRecord> {
+    const f = await this.forms.get(ctx, formId);
+    if (f.clientId !== workspaceId) throw new AracArgumanHatasi('Form bu workspace\'te değil; workspace_id ile form_id aynı yerden gelmeli.');
+    return f;
+  }
+
+  private async formOnayiAc(istek: YazmaIstegi, w: string, formId: string): Promise<unknown> {
+    const { ctx, ad } = await this.workspace(istek, w, ['bulk.publish']);
+    const f = await this.formAl(ctx, w, formId);
+    // ERKEN RET, ASIL KAPI DEĞİL: asıl kapı `FormPublisherService.publish`
+    // (onay anında yeniden). Yayınlanamayacak bir form için onay sorulmasın.
+    const { blockers } = await this.forms.checks(ctx, formId);
+    if (blockers.length) throw new AracArgumanHatasi(`Form yayınlanamaz: ${blockers.join(' ')}`);
+    const ozet = formOnayOzeti(f, ad);
+    return this.onayCevabi(await this.onay.ac(istek, 'form_yayinla', { workspace_id: w, form_id: formId, icerik_ozeti: formIcerikOzeti(f) }, ozet));
+  }
+
   private async varlikOnayiAc(istek: YazmaIstegi, w: string, seviye: VarlikSeviyesi, id: string, islem: VarlikIslemi): Promise<unknown> {
     const { ctx, ad } = await this.workspace(istek, w, ['budget.write']);
     const v = await this.actions.onizle(ctx, { seviye, id }, eylemOf(islem));
@@ -348,6 +384,32 @@ export class McpYazmaService {
         hata: duran.length ? duran.map((p) => `${p.platform}: ${p.sebep}`).join(' · ') : null,
       };
     }
+    if (a.islem === 'form_yayinla') {
+      const { ctx } = await this.workspace(istek, h.workspace_id!, ['bulk.publish']);
+      const f = await this.formAl(ctx, h.workspace_id!, h.form_id!);
+      /*
+       * ONAYLANAN İÇERİK Mİ: kullanıcı özeti gördükten sonra taslak panelden
+       * değiştiyse Meta'ya HİÇ gidilmiyor. Form silinemediği için
+       * onaylanmamış bir metni açmanın geri dönüşü yok.
+       */
+      if (formIcerikOzeti(f) !== h.icerik_ozeti) {
+        return { basarili: false, sonuc: null, hata: 'Form onaydan sonra değişti; Meta\'ya gidilmedi. form_yayinla ile yeni özet al.' };
+      }
+      // `belirsizOnayi` YOK: belirsiz satırı açmak Meta'yı elle kontrol etmeyi
+      // istiyor ve o karar panelin Formlar ekranında.
+      const r = await this.formYayinci.publish(ctx, h.form_id!);
+      /*
+       * GERİ OKUMA UYUŞMADIYSA "uygulandı" DEĞİL: form Meta'da açık ama KVKK
+       * kutusu, dil ya da niyet adımı gönderilenden farklı ya da okunamadı.
+       * Kimlik yine dönüyor; form reklama bağlanmadan önce kullanıcı bakmalı.
+       */
+      const ok = r.status === 'published' && !!r.externalFormId && !r.readbackWarning;
+      return {
+        basarili: ok,
+        sonuc: { metaFormKimligi: r.externalFormId, durum: r.status, not: r.externalFormId ? 'Bu kimliği rehberin formSablonuId alanına yaz.' : null },
+        hata: ok ? null : (r.readbackWarning ?? r.error ?? `Form yayında görünmüyor (durum: ${r.status}).`),
+      };
+    }
     const { ctx } = await this.workspace(istek, h.workspace_id!, ['budget.write']);
     const islem: VarlikIslemi =
       a.islem === 'varlik_durdur'
@@ -376,4 +438,20 @@ function eylemOf(islem: VarlikIslemi): UygulamaEylemi {
   if (islem.tur === 'durdur') return { type: 'pause' };
   if (islem.tur === 'etkinlestir') return { type: 'resume' };
   return { type: 'set_budget', amountMicros: islem.micros, budgetMode: islem.tip === 'gunluk' ? 'daily' : 'lifetime' };
+}
+
+/** Modelin formu tanıması için yeten satır; panel kaydının tamamı gereksiz uzun. */
+function formSatiri(f: LeadFormRecord) {
+  return {
+    id: f.id,
+    ad: f.name,
+    durum: f.status,
+    metaFormKimligi: f.externalFormId,
+    sayfa: f.socialProfileName,
+    sorular: [...f.prefillQuestions, ...f.customQuestions.map((q) => q.label)],
+    gizlilikAdresi: f.privacyPolicyUrl,
+    surum: f.version,
+    hata: f.error,
+    geriOkumaUyarisi: f.readbackWarning,
+  };
 }

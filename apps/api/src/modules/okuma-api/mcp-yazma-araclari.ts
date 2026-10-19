@@ -1,5 +1,13 @@
 import { z } from 'zod';
-import { REHBER_AMAC_KODLARI, REHBER_AMACLARI } from '@advetics/shared';
+import {
+  CONSENT_PRESETS,
+  PREFILL_QUESTIONS,
+  REHBER_AMAC_KODLARI,
+  REHBER_AMACLARI,
+  TESEKKUR_DUGME_TURLERI,
+  leadFormInputSchema,
+  type LeadFormInput,
+} from '@advetics/shared';
 import type { McpAraci } from './mcp-protokol';
 import { AracArgumanHatasi, nesne, suz } from './okuma-araclari';
 
@@ -14,12 +22,12 @@ import { AracArgumanHatasi, nesne, suz } from './okuma-araclari';
  * `AssetsService`). Burada yeni bir yazma yolu YOK; olsaydı panelin bir
  * kapısı (şalter, sahiplik, prova) bir gün burada eksik kalırdı.
  *
- * PLATFORMA DOKUNAN DÖRT ARAÇ (`ONAYLI_ARACLAR`) HİÇBİR ŞEYİ HEMEN YAPMAZ:
+ * PLATFORMA DOKUNAN BEŞ ARAÇ (`ONAYLI_ARACLAR`) HİÇBİR ŞEYİ HEMEN YAPMAZ:
  * onay satırı açar ve özeti döner. Uygulama yalnız `onayla` ile.
  */
 
 /** Platforma dokunan araçlar. `onayla` olmadan hiçbiri platforma bir şey göndermez. */
-export const ONAYLI_ARACLAR = ['rehber_yayinla', 'varlik_durdur', 'varlik_etkinlestir', 'butce_degistir'] as const;
+export const ONAYLI_ARACLAR = ['rehber_yayinla', 'varlik_durdur', 'varlik_etkinlestir', 'butce_degistir', 'form_yayinla'] as const;
 
 export type VarlikSeviyesi = 'campaign' | 'ad_group' | 'ad';
 
@@ -39,6 +47,12 @@ export interface YazmaOrtami {
   metinOner(workspaceId: string, rehberId: string, varlikId: string | null, mod: 'yeni' | 'yeniden_yaz'): Promise<unknown>;
   anahtarKelimeOner(workspaceId: string, rehberId: string, tohumlar: string[] | null): Promise<unknown>;
   formSablonlari(workspaceId: string, sayfaId: string): Promise<unknown>;
+  /** Advetics'teki formlar (taslak dahil); Meta'daki yayında formlar `formSablonlari`. */
+  formlar(workspaceId: string): Promise<unknown>;
+  /** Advetics'te TASLAK form açar; Meta'ya gitmez. */
+  formOlustur(workspaceId: string, girdi: LeadFormInput): Promise<unknown>;
+  /** Onay satırı açar; Meta'da form AÇMAZ. */
+  formOnayi(workspaceId: string, formId: string): Promise<unknown>;
   pikseller(workspaceId: string, reklamHesabiId: string): Promise<unknown>;
   youtubeVideolari(workspaceId: string, kanalId: string): Promise<unknown>;
   prova(workspaceId: string, rehberId: string): Promise<unknown>;
@@ -102,6 +116,23 @@ const ALAN_REHBERI = [
   'youtubeVideo: {"videoId": "...", "baslik": "..."} (Google video reklamı; `youtube_videolari`)',
   'metin: {"anaMetin": "...", "basliklar": ["..."], "aciklamalar": ["..."]}',
   'anahtarKelimeler: [{"metin": "...", "aylikArama": null}] (Google Arama)',
+].join('\n');
+
+/**
+ * Form alanlarının modele anlatımı. Biçimi `leadFormInputSchema` DOĞRULUYOR
+ * (panelin form ekranıyla aynı şema); burası yalnız ilk denemede doğru
+ * yazabilmesi için.
+ */
+const FORM_REHBERI = [
+  'name: yalnız panelde görünen ad (formu dolduran kişi görmez)',
+  'formType: "higher_intent" (varsayılan, daha az ama istekli kişi) | "more_volume" | "rich_form"',
+  'headline (≤60) · intro (≤1000): formun giriş ekranı',
+  `prefillQuestions: Meta'nın önden doldurduğu sorular, 1–5 tane: ${PREFILL_QUESTIONS.join(', ')} (önerilen: FULL_NAME, PHONE)`,
+  'customQuestions: en çok 5, [{"type": "multiple_choice", "label": "...", "options": ["...", "..."]}] ya da {"type": "short_answer", "label": "..."}',
+  'privacyPolicyUrl: ZORUNLU, https:// ile · privacyPolicyLinkText (≤80)',
+  `consentBoxes: en çok 4, [{"text": "...", "required": false}]; hazır metinler: ${CONSENT_PRESETS.map((c) => `${c.label}: "${c.text}"`).join(' · ')}`,
+  'thankYouHeadline (≤60) · thankYouBody (≤300)',
+  `thankYouCtaType: ${TESEKKUR_DUGME_TURLERI.join(' | ')} · thankYouCtaText (≤40) · thankYouCtaUrl (VIEW_WEBSITE için https) · thankYouPhone (CALL_BUSINESS için +90...)`,
 ].join('\n');
 
 export const YAZMA_ARACLARI: readonly YazmaAraci[] = [
@@ -238,6 +269,57 @@ export const YAZMA_ARACLARI: readonly YazmaAraci[] = [
     calistir: (args, o) => {
       const a = suz({ workspace_id: uuid, sayfa_id: uuid }, args);
       return o.formSablonlari(a.workspace_id, a.sayfa_id);
+    },
+  },
+  {
+    ad: 'formlar',
+    baslik: 'Advetics formları',
+    aciklama: 'Workspace\'in Advetics\'te kurulan formları (taslak, yayında, yayınlanamadı, belirsiz), her birinin Meta form kimliği (yayındaysa), soruları ve hatası. Toplam ayrıca yazılı.',
+    girdi: nesne({ ...JS_WS }, ['workspace_id']),
+    isaret: OKUMA,
+    calistir: (args, o) => {
+      const a = suz({ workspace_id: uuid }, args);
+      return o.formlar(a.workspace_id);
+    },
+  },
+  {
+    ad: 'form_olustur',
+    baslik: 'Yeni form (taslak)',
+    aciklama: `Advetics'te TASLAK anlık form açar (Meta'ya bir şey göndermez); Meta'ya göndermek için \`form_yayinla\`. Soruları, gizlilik adresini, KVKK kutularını ve teşekkür ekranını KULLANICIYA SOR, tahmin etme: Meta'da açılan form sonradan DEĞİŞTİRİLEMEZ ve silinemez. Alanlar:\n${FORM_REHBERI}`,
+    girdi: nesne(
+      {
+        ...JS_WS,
+        sayfa_id: { type: 'string', description: 'Formun açılacağı Facebook sayfası: `yazma_durumu` sayfalar listesindeki Advetics kimliği.' },
+        form: { type: 'object', description: 'Form içeriği (alanlar açıklamada).', additionalProperties: true },
+      },
+      ['workspace_id', 'sayfa_id', 'form'],
+    ),
+    isaret: TASLAK,
+    calistir: (args, o) => {
+      const a = suz({ workspace_id: uuid, sayfa_id: uuid, form: z.record(z.string(), z.unknown()) }, args);
+      /*
+       * KİMLİKLER ARGÜMANDAN, FORMUN İÇİNDEN DEĞİL: model `form` içine başka
+       * bir clientId yazsa da form istenen workspace'e ve sayfaya açılıyor
+       * (sahiplik `FormsService.assertProfile`ta ayrıca sınanıyor).
+       */
+      const sonuc = leadFormInputSchema.safeParse({ ...a.form, clientId: a.workspace_id, socialProfileId: a.sayfa_id });
+      if (!sonuc.success) {
+        throw new AracArgumanHatasi(
+          sonuc.error.issues.map((i) => (i.path.length ? `form.${i.path.join('.')}: ${i.message}` : i.message)).join('; '),
+        );
+      }
+      return o.formOlustur(a.workspace_id, sonuc.data);
+    },
+  },
+  {
+    ad: 'form_yayinla',
+    baslik: 'Formu Meta\'da aç (onaylı)',
+    aciklama: 'ONAY İSTER, HEMEN YAPMAZ. Taslak formun yayın engellerini kontrol edip soruları, gizlilik adresini, onay kutularını ve teşekkür ekranını içeren bir özet ve onay_kodu döner. Özeti kullanıcıya göster, "Onaylıyor musunuz?" diye sor; evet derse `onayla`. Meta\'da açılan form değiştirilemez ve silinemez. Yayından sonra dönen Meta form kimliğini rehberin formSablonuId alanına yaz.',
+    girdi: nesne({ ...JS_WS, form_id: { type: 'string', description: 'Advetics form kimliği (UUID): `form_olustur` ya da `formlar`.' } }, ['workspace_id', 'form_id']),
+    isaret: TASLAK,
+    calistir: (args, o) => {
+      const a = suz({ workspace_id: uuid, form_id: uuid }, args);
+      return o.formOnayi(a.workspace_id, a.form_id);
     },
   },
   {
@@ -383,7 +465,7 @@ export const YAZMA_ARACLARI: readonly YazmaAraci[] = [
   {
     ad: 'onayla',
     baslik: 'Onayla ve uygula',
-    aciklama: 'Kullanıcının AÇIKÇA onayladığı işlemi uygular (yayınla, durdur, başlat, bütçe). YALNIZ kullanıcı özeti gördükten sonra "evet" dediyse çağır. Argümanlar sunucuda saklı; kod tek kullanımlık, 15 dakika geçerli.',
+    aciklama: 'Kullanıcının AÇIKÇA onayladığı işlemi uygular (yayınla, durdur, başlat, bütçe, form). YALNIZ kullanıcı özeti gördükten sonra "evet" dediyse çağır. Argümanlar sunucuda saklı; kod tek kullanımlık, 15 dakika geçerli.',
     girdi: nesne({ onay_kodu: { type: 'string', description: 'Onaylı aracın döndürdüğü onay_kodu.' } }, ['onay_kodu']),
     isaret: YIKICI,
     calistir: (args, o) => {

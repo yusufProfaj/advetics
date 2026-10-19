@@ -82,8 +82,25 @@ Yazma anahtarına ek, onaysız (platforma yazmaz):
 | `yukleme_adresi` | Tek workspace'e 15 dk geçerli yükleme jetonu + hazır `curl` komutu. |
 | `rehber_yayin_durumu` | Yayın kayıtları; kurulan kampanyanın Advetics UUID'si (yapı taraması gördüyse). |
 | `onaylar` | Bu anahtarın son onay satırları. |
+| `formlar` | Advetics'te kurulan anlık formlar (taslak dahil), Meta form kimliği ve hatası. Meta'daki yayında formlar `form_sablonlari`. |
+| `form_olustur` | Advetics'te TASLAK form (panelin `FormsService.create`'i, `leadFormInputSchema`); Meta'ya gitmez. Workspace ve sayfa argümandan, formun içinden değil. |
 
-Onaylı: § 2'deki dört araç + `onayla`, `vazgec`.
+Onaylı: § 2'deki dört araç + `form_yayinla` + `onayla`, `vazgec`.
+
+**`form_yayinla` (2026-10-20, kullanıcı: "form oluşturma yolu oluşturmamız lazım").**
+AdvCampaign'in form amacı Meta'da yayında bir form istiyor ve MCP yalnız
+var olanları listeliyordu; yeni form ancak panelden açılabiliyordu. Yol
+panelin kendi yayıncısı (`FormPublisherService.publish`: sahiplenme,
+belirsiz hâl, geri okuma); ikinci bir form yayın yolu YOK. Reklam
+yayınından daha geri dönüşsüz (Meta'da form silinemiyor, değiştirilemiyor),
+bu yüzden onay özeti Meta'da kalıcı olacak her metni yazıyor (sorular,
+gizlilik adresi, KVKK kutuları, teşekkür düğmesi) ve onay satırı formun
+İÇERİK ÖZETİNİ taşıyor (`formIcerikOzeti`): onaydan sonra taslak panelden
+değişirse `onayla` Meta'ya hiç gitmiyor. Geri okuma uyarısı varsa sonuç
+`basarisiz` ama Meta form kimliği yine dönüyor (form açık). `belirsizOnayi`
+MCP'den verilmiyor: belirsiz satırı açmak panelin Formlar ekranının kararı.
+Migration `20261024100000_mcp_form_yayinla` onay tablosunun `islem`
+kısıtını genişletiyor.
 
 ## 4. Görsel yükleme (kullanıcı kararı 5)
 

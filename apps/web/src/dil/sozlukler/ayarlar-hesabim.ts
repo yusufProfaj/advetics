@@ -124,6 +124,7 @@ export const hesabimSozlugu = ikiDil(
         varlik_durdur: 'Durdur',
         varlik_etkinlestir: 'Başlat',
         butce_degistir: 'Bütçe değiştir',
+        form_yayinla: 'Form yayınla',
       },
       onayDurumu: {
         bekliyor: 'Bekliyor',
@@ -317,6 +318,7 @@ export const hesabimSozlugu = ikiDil(
         varlik_durdur: 'Pause',
         varlik_etkinlestir: 'Start',
         butce_degistir: 'Change budget',
+        form_yayinla: 'Publish form',
       },
       onayDurumu: {
         bekliyor: 'Pending',

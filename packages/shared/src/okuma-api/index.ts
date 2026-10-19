@@ -120,7 +120,13 @@ export interface OkumaAraciTanimi {
  * YAZMAZ; işlem ancak `onayla(onay_kodu)` ile yapılır. Argümanlar sunucuda
  * saklı: onaydan sonra model bir rakamı değiştiremez.
  */
-export const MCP_ONAY_ISLEMLERI = ['rehber_yayinla', 'varlik_durdur', 'varlik_etkinlestir', 'butce_degistir'] as const;
+/*
+ * `form_yayinla` (2026-10-20): Meta'da anlık form açmak da onaylı. Reklam
+ * yayınından daha GERİ DÖNÜŞSÜZ: açılan form silinemiyor ve değiştirilemiyor
+ * (`form.schema.ts`), yani soruların ve KVKK metninin kullanıcıya bir kez
+ * gösterilmesi şart.
+ */
+export const MCP_ONAY_ISLEMLERI = ['rehber_yayinla', 'varlik_durdur', 'varlik_etkinlestir', 'butce_degistir', 'form_yayinla'] as const;
 export type McpOnayIslemi = (typeof MCP_ONAY_ISLEMLERI)[number];
 
 /**

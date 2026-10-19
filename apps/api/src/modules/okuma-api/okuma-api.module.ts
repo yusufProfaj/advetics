@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AssetsModule } from '../assets/assets.module';
 import { AuditModule } from '../audit/audit.module';
 import { CampaignActionsModule } from '../campaign-actions/campaign-actions.module';
+import { FormsModule } from '../forms/forms.module';
 import { MetricsModule } from '../metrics/metrics.module';
 import { RehberModule } from '../reklam/rehber/rehber.module';
 import { McpOnayService } from './mcp-onay.service';
@@ -18,7 +19,7 @@ import { OkumaAraclariService } from './okuma-araclari.service';
 @Module({
   // Yazma araçları panelin servislerini çağırıyor (MCP-YAZMA-MIMARI § 3):
   // ikinci bir yazma yolu yok, o yüzden modüller içe alınıyor.
-  imports: [AuditModule, MetricsModule, RehberModule, CampaignActionsModule, AssetsModule],
+  imports: [AuditModule, MetricsModule, RehberModule, CampaignActionsModule, AssetsModule, FormsModule],
   controllers: [OkumaApiYonetimController, OkumaApiController, McpYuklemeController],
   providers: [OkumaAnahtariService, OkumaAraclariService, McpOnayService, McpYazmaService],
 })

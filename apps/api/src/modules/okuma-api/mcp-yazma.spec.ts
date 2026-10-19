@@ -2,9 +2,9 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ForbiddenException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
-import type { RehberHazirligi, RehberKaydi, TenantContext } from '@advetics/shared';
+import type { LeadFormRecord, RehberHazirligi, RehberKaydi, TenantContext } from '@advetics/shared';
 import { MCP_TALIMATLARI, MCP_YAZMA_TALIMATLARI, mcpIsle, type McpAraci } from './mcp-protokol';
-import { BUTCE_UYARI_ESIGI_YUZDE, rehberOnayOzeti, varlikOnayOzeti } from './mcp-onay-ozeti';
+import { BUTCE_UYARI_ESIGI_YUZDE, formIcerikOzeti, formOnayOzeti, rehberOnayOzeti, varlikOnayOzeti } from './mcp-onay-ozeti';
 import { ONAYLI_ARACLAR, YAZMA_ARACLARI, yazmaAraciBul } from './mcp-yazma-araclari';
 import { McpYazmaService, type YazmaIstegi } from './mcp-yazma.service';
 import { dosyaTuru, jetonCoz, jetonUret } from './mcp-yukleme';
@@ -29,6 +29,42 @@ const BASKA_WS = '22222222-2222-4222-8222-222222222222';
 const REHBER = '33333333-3333-4333-8333-333333333333';
 const KAMPANYA = '44444444-4444-4444-8444-444444444444';
 const OZET = 'a'.repeat(64);
+const FORM = '88888888-8888-4888-8888-888888888888';
+const SAYFA = '66666666-6666-4666-8666-666666666666';
+
+function formKaydi(d: Partial<LeadFormRecord> = {}): LeadFormRecord {
+  return {
+    id: FORM,
+    clientId: WS,
+    socialProfileId: SAYFA,
+    socialProfileName: 'Ornek Sayfa',
+    name: 'Seasight bilgi',
+    formType: 'higher_intent',
+    headline: 'Villanızı ayırtın',
+    intro: null,
+    prefillQuestions: ['FULL_NAME', 'PHONE'],
+    customQuestions: [{ type: 'multiple_choice', label: 'Ne zaman almayı düşünüyorsunuz?', options: ['Hemen', '6 ay içinde'] }],
+    privacyPolicyUrl: 'https://ornek.com/gizlilik',
+    privacyPolicyLinkText: 'Gizlilik Politikası',
+    consentBoxes: [{ text: 'KVKK açık rıza metni', required: true }],
+    thankYouHeadline: 'Teşekkürler!',
+    thankYouBody: 'Size dönüş yapacağız.',
+    thankYouCtaText: 'Bizi ara',
+    thankYouCtaUrl: null,
+    thankYouCtaType: 'CALL_BUSINESS',
+    thankYouPhone: '+905321234567',
+    status: 'draft',
+    externalFormId: null,
+    readbackWarning: null,
+    version: 1,
+    rootId: FORM,
+    supersededById: null,
+    error: null,
+    publishedAt: null,
+    createdAt: '2026-10-20T00:00:00.000Z',
+    ...d,
+  };
+}
 
 const EV_CTX = { userId: 'u1', orgId: 'o1', activeClientId: null, permissions: [], platformAdmin: true } as unknown as TenantContext;
 
@@ -96,7 +132,18 @@ function sahteOnay() {
   };
 }
 
-function kur(o: { izinler?: string[]; aktif?: string; rehber?: Partial<RehberKaydi>; prova?: unknown; dogrulama?: string } = {}) {
+function kur(
+  o: {
+    izinler?: string[];
+    aktif?: string;
+    rehber?: Partial<RehberKaydi>;
+    prova?: unknown;
+    dogrulama?: string;
+    form?: Partial<LeadFormRecord>;
+    engeller?: string[];
+    yayinlanan?: Partial<LeadFormRecord>;
+  } = {},
+) {
   const rehber = {
     oku: vi.fn(async () => rehberKaydi(o.rehber)),
     provaOku: vi.fn(async () => o.prova !== undefined ? o.prova : { icerikOzeti: OZET, meta: { tur: 'gecti', zaman: 'z', not: null }, google: null }),
@@ -114,6 +161,15 @@ function kur(o: { izinler?: string[]; aktif?: string; rehber?: Partial<RehberKay
   };
   const admin = { $queryRaw: vi.fn(async () => [{ ad: 'Ornek WS', org_id: 'o2', manager_account_id: null }]) };
   const onay = sahteOnay();
+  const forms = {
+    get: vi.fn(async () => formKaydi(o.form)),
+    list: vi.fn(async () => [formKaydi(o.form)]),
+    create: vi.fn(async (_c: unknown, g: { clientId: string; socialProfileId: string }) => formKaydi({ clientId: g.clientId, socialProfileId: g.socialProfileId })),
+    checks: vi.fn(async () => ({ blockers: o.engeller ?? [], warnings: [] })),
+  };
+  const formYayinci = {
+    publish: vi.fn(async () => formKaydi({ status: 'published', externalFormId: '1234567890', ...o.yayinlanan })),
+  };
   const svc = new McpYazmaService(
     admin as never,
     {} as never,
@@ -124,8 +180,10 @@ function kur(o: { izinler?: string[]; aktif?: string; rehber?: Partial<RehberKay
     {} as never,
     {} as never,
     { jwt: { accessSecret: 'gizli' } } as never,
+    forms as never,
+    formYayinci as never,
   );
-  return { svc, rehber, actions, tenant, onay };
+  return { svc, rehber, actions, tenant, onay, forms, formYayinci };
 }
 
 const ISTEK: YazmaIstegi = { ctx: EV_CTX, anahtarId: 'k1', yetki: 'yazma', requestId: 'r', yuklemeAdresi: 'https://advetics.com/api/mcp/yukleme' };
@@ -377,6 +435,8 @@ describe('KRİTİK: yazma anahtarı ve yükleme ucu', () => {
       assets as never,
       anahtar as never,
       { jwt: { accessSecret: 'gizli' } } as never,
+      {} as never,
+      {} as never,
     );
     const { jeton } = jetonUret({ userId: 'u1', anahtarId: 'k1', workspaceId: WS }, 'gizli');
     const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0]);
@@ -407,5 +467,87 @@ describe('KRİTİK: yazma anahtarı ve yükleme ucu', () => {
     await expect(y.svc.yukle(undefined, { buffer: y.png, originalname: 'a' })).rejects.toThrow(/jetonu yok/);
     await expect(y.svc.yukle(y.jeton, { buffer: Buffer.from('%PDF'), originalname: 'a.jpg' })).rejects.toThrow(/JPEG, PNG/);
     expect(y.assets.upload).not.toHaveBeenCalled();
+  });
+});
+
+describe('KRİTİK: form yayını (Meta\'da açılan form silinemiyor)', () => {
+  it('form_yayinla onay satırı açıyor, Meta\'ya GİTMİYOR; onayla publish çağırıyor ve Meta form kimliğini dönüyor', async () => {
+    const t = kur();
+    const c = (await cagir(t.svc, 'form_yayinla', { workspace_id: WS, form_id: FORM })) as { onayGerekli: boolean; onayKodu: string; ozet: string[] };
+    expect(c.onayGerekli).toBe(true);
+    expect(t.formYayinci.publish).not.toHaveBeenCalled();
+    expect(t.onay.satirlar.get(c.onayKodu)!.islem).toBe('form_yayinla');
+    const s = (await cagir(t.svc, 'onayla', { onay_kodu: c.onayKodu })) as { durum: string; sonuc: { metaFormKimligi: string } };
+    expect(s.durum).toBe('uygulandi');
+    expect(s.sonuc.metaFormKimligi).toBe('1234567890');
+    // `belirsizOnayi` VERİLMİYOR: belirsiz satırı açmak panelin kararı.
+    expect(t.formYayinci.publish).toHaveBeenCalledWith(expect.anything(), FORM);
+  });
+
+  it('KRİTİK: form onaydan SONRA değiştiyse Meta\'ya gidilmiyor', async () => {
+    const t = kur();
+    const c = (await cagir(t.svc, 'form_yayinla', { workspace_id: WS, form_id: FORM })) as { onayKodu: string };
+    t.forms.get.mockResolvedValue(formKaydi({ privacyPolicyUrl: 'https://baska.com/gizlilik' }));
+    const s = (await cagir(t.svc, 'onayla', { onay_kodu: c.onayKodu })) as { durum: string; hata: string };
+    expect(s.durum).toBe('basarisiz');
+    expect(s.hata).toMatch(/onaydan sonra değişti/);
+    expect(t.formYayinci.publish).not.toHaveBeenCalled();
+  });
+
+  it('yalnız AD değişirse içerik özeti aynı (ad Meta\'ya gitmiyor); soru değişirse farklı', () => {
+    expect(formIcerikOzeti(formKaydi({ name: 'başka ad' }))).toBe(formIcerikOzeti(formKaydi()));
+    expect(formIcerikOzeti(formKaydi({ prefillQuestions: ['FULL_NAME'] }))).not.toBe(formIcerikOzeti(formKaydi()));
+    expect(formIcerikOzeti(formKaydi({ consentBoxes: [] }))).not.toBe(formIcerikOzeti(formKaydi()));
+  });
+
+  it('KRİTİK: geri okuma uyuşmazsa "uygulandi" DEMİYOR ama kimliği dönüyor', async () => {
+    const t = kur({ yayinlanan: { readbackWarning: 'KVKK kutusu Meta\'da farklı' } });
+    const c = (await cagir(t.svc, 'form_yayinla', { workspace_id: WS, form_id: FORM })) as { onayKodu: string };
+    const s = (await cagir(t.svc, 'onayla', { onay_kodu: c.onayKodu })) as { durum: string; hata: string; sonuc: { metaFormKimligi: string } };
+    expect(s.durum).toBe('basarisiz');
+    expect(s.hata).toMatch(/KVKK/);
+    expect(s.sonuc.metaFormKimligi).toBe('1234567890');
+  });
+
+  it('yayın engeli varsa onay AÇILMIYOR; başka workspace\'in formu reddediliyor; bulk.publish şart', async () => {
+    const e = kur({ engeller: ['Bu form zaten yayında.'] });
+    await expect(cagir(e.svc, 'form_yayinla', { workspace_id: WS, form_id: FORM })).rejects.toThrow(/zaten yayında/);
+    const b = kur({ form: { clientId: BASKA_WS } });
+    await expect(cagir(b.svc, 'form_yayinla', { workspace_id: WS, form_id: FORM })).rejects.toThrow(/bu workspace'te değil/);
+    const i = kur({ izinler: ['bulk.read', 'bulk.write'] });
+    await expect(cagir(i.svc, 'form_yayinla', { workspace_id: WS, form_id: FORM })).rejects.toThrow(/bulk.publish/);
+    for (const t of [e, b, i]) expect(t.onay.ac).not.toHaveBeenCalled();
+  });
+
+  it('özet Meta\'da kalıcı olan her metni yazıyor: sorular, gizlilik, KVKK, teşekkür düğmesi, silinemez', () => {
+    const o = formOnayOzeti(formKaydi(), 'Ornek WS').join('\n');
+    for (const p of ['Ornek Sayfa', 'Ad soyad', 'Telefon', 'Ne zaman almayı', 'Hemen / 6 ay içinde', 'https://ornek.com/gizlilik', 'KVKK açık rıza metni (zorunlu)', '+905321234567', 'SİLİNEMEZ']) {
+      expect(o, p).toContain(p);
+    }
+    expect(formOnayOzeti(formKaydi({ consentBoxes: [], customQuestions: [] }), 'W').join('\n')).toMatch(/Ek sorular: yok[\s\S]*Onay kutuları: yok/);
+  });
+
+  it('form_olustur: kimlikler ARGÜMANDAN, form içindeki clientId yok sayılıyor; Meta\'ya gitmiyor', async () => {
+    const t = kur();
+    await cagir(t.svc, 'form_olustur', {
+      workspace_id: WS,
+      sayfa_id: SAYFA,
+      form: { clientId: BASKA_WS, name: 'Seasight', prefillQuestions: ['FULL_NAME', 'PHONE'], privacyPolicyUrl: 'https://ornek.com/gizlilik' },
+    });
+    expect(t.forms.create).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ clientId: WS, socialProfileId: SAYFA, formType: 'higher_intent' }));
+    expect(t.formYayinci.publish).not.toHaveBeenCalled();
+  });
+
+  it('form_olustur: gizlilik adresi yoksa ya da "Bizi ara" telefonsuzsa form AÇILMIYOR, alan adıyla hata', async () => {
+    const t = kur();
+    await expect(cagir(t.svc, 'form_olustur', { workspace_id: WS, sayfa_id: SAYFA, form: { name: 'a', prefillQuestions: ['PHONE'] } })).rejects.toThrow(/form\.privacyPolicyUrl/);
+    await expect(
+      cagir(t.svc, 'form_olustur', {
+        workspace_id: WS,
+        sayfa_id: SAYFA,
+        form: { name: 'a', prefillQuestions: ['PHONE'], privacyPolicyUrl: 'https://a.com/g', thankYouCtaType: 'CALL_BUSINESS' },
+      }),
+    ).rejects.toThrow(/form\.thankYouPhone/);
+    expect(t.forms.create).not.toHaveBeenCalled();
   });
 });

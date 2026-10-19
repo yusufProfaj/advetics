@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { MCP_ONAY_ISLEMLERI } from '@advetics/shared';
 import { createHarness, type Harness } from '../../test/pglite-harness';
 
 /**
@@ -96,6 +97,19 @@ describe('tarama boşa düşmüyor', () => {
       h.q(`INSERT INTO mcp_onaylari (anahtar_id, user_id, islem, hedef, ozet, bitis) VALUES ('${ANAHTAR}', '${SAHIP}', 'kampanya_sil', '{}', '[]', now())`),
     ).rejects.toThrow(/mcp_onaylari_islem_chk/);
     await expect(h.q(`UPDATE okuma_api_anahtarlari SET yetki = 'admin' WHERE id = '${ANAHTAR}'`)).rejects.toThrow(/yetki_chk/);
+  });
+
+  it('KRİTİK: shared listesindeki HER işlem kısıttan geçiyor (yeni işlem migration\'sız eklenirse onay satırı açılamaz)', async () => {
+    // Liste genişleyip migration unutulursa araç "onay açılamadı" yerine ham
+    // kısıt hatası verir; 2026-10-20'de `form_yayinla` için yaşanacaktı.
+    expect(MCP_ONAY_ISLEMLERI).toContain('form_yayinla');
+    for (const islem of MCP_ONAY_ISLEMLERI) {
+      const r = await h.q<{ id: string }>(
+        `INSERT INTO mcp_onaylari (anahtar_id, user_id, islem, hedef, ozet, bitis) VALUES ('${ANAHTAR}', '${SAHIP}', '${islem}', '{}', '[]', now()) RETURNING id`,
+      );
+      expect(r, islem).toHaveLength(1);
+      await h.q(`DELETE FROM mcp_onaylari WHERE id = '${r[0]!.id}'`);
+    }
   });
 });
 

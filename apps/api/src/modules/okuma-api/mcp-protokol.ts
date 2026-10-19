@@ -56,8 +56,9 @@ export const MCP_YAZMA_TALIMATLARI = [
   'Hiyerarşi: üst hesap (ajans) → şirket → workspace (proje) → reklam hesabı → kampanya → reklam grubu → reklam. Kimlikler Advetics UUID\'leridir; önce `kapsam` ile öğren, uydurma.',
   'Reklam kurmadan önce `yazma_durumu` ile workspace\'in hesaplarını, sayfalarını ve görsellerini oku. Reklam bir REHBER üzerinden kurulur: `rehber_olustur` → `rehber_guncelle` (alanlar) → `rehber_prova` → `rehber_yayinla`.',
   'Bütçe, takvim, hesap, konum, yaş ve özel kategori KULLANICININ söylediği değerlerdir: tahmin etme, eksikse sor. Para micros DİZGE (1.000.000 = 1 birim).',
+  'Form amacı için rehberin formSablonuId alanı Meta\'daki yayında bir form ister: `form_sablonlari` ile var olanları listele; yeni form gerekiyorsa `form_olustur` (taslak, soruları ve gizlilik adresini kullanıcıya sor) → `form_yayinla` (onaylı) ve dönen Meta form kimliğini formSablonuId\'ye yaz.',
   'Görsel/video: `yukleme_adresi` ile adres al ve dosyayı kendi kabuğunda verilen curl komutuyla yükle; dönen varlik_id\'yi rehberin medya alanına yaz. Dosyayı argüman olarak (base64) gönderme.',
-  'ONAY KURALI: rehber_yayinla, varlik_durdur, varlik_etkinlestir ve butce_degistir hiçbir şeyi hemen yapmaz; bir onay_kodu ve özet döner. Özeti kullanıcıya AYNEN göster, "Onaylıyor musunuz?" diye sor ve YALNIZ kullanıcı açıkça evet derse `onayla(onay_kodu)` çağır. Hayır derse `vazgec`. Kullanıcıya sormadan onayla çağırmak yasak.',
+  'ONAY KURALI: rehber_yayinla, varlik_durdur, varlik_etkinlestir, butce_degistir ve form_yayinla hiçbir şeyi hemen yapmaz; bir onay_kodu ve özet döner. Özeti kullanıcıya AYNEN göster, "Onaylıyor musunuz?" diye sor ve YALNIZ kullanıcı açıkça evet derse `onayla(onay_kodu)` çağır. Hayır derse `vazgec`. Kullanıcıya sormadan onayla çağırmak yasak.',
   'Yayın her zaman DURAKLATILMIŞ kurulur; harcama başlatmak ayrı bir `varlik_etkinlestir` onayı ister. Kurulan kampanyanın kimliği `rehber_yayin_durumu`nda (yapı taraması görmediyse henüz yok: birkaç dakika sonra tekrar bak).',
   'Bir araç hata dönerse mesajı oku: çoğu zaman hangi alanın yanlış olduğunu ve neyi çağırman gerektiğini söyler.',
 ].join('\n');
