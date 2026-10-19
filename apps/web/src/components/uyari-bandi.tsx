@@ -125,8 +125,15 @@ type UyariSozlugu = (typeof genelBakisSozlugu)['tr']['uyari'];
  * iki dilli sözlükten yazılıyor. Kodu olmayan (eski) uyarı API metniyle.
  */
 export function uyariMetni(u: Uyari, d: UyariSozlugu): { baslik: string; detay: string } {
-  if (!u.odemeSebebi) return { baslik: u.baslik, detay: u.detay };
   const no = u.odemeHesapNo ?? u.adAccountName ?? '';
+  // Bütçe bitmek üzere: sebep kodu yok (sorun DEĞİL), sayılar `butce`de.
+  if (u.kod === 'hesap_butcesi_bitmek_uzere' && u.butce) {
+    return {
+      baslik: d.odeme.bitmekUzere.baslik,
+      detay: d.odeme.bitmekUzere.detay(no, u.butce.kalanYuzde, u.butce.kalanGun),
+    };
+  }
+  if (!u.odemeSebebi) return { baslik: u.baslik, detay: u.detay };
   return { baslik: d.odeme.baslik[u.odemeSebebi], detay: d.odeme.detay[u.odemeSebebi](no) };
 }
 

@@ -50,4 +50,25 @@ describe('uyariMetni', () => {
       }
     }
   });
+
+  it('KRİTİK: bütçe bitmek üzere iki dilde, sayılarla; API Türkçesi görünmüyor', () => {
+    const b: Uyari = {
+      ...u,
+      kod: 'hesap_butcesi_bitmek_uzere',
+      siddet: 'warn',
+      baslik: 'Hesap bütçesi bitmek üzere',
+      odemeSebebi: undefined,
+      butce: { kalanYuzde: 0.83, kalanGun: 2.6 },
+    };
+    const en = uyariMetni(b, genelBakisSozlugu.en.uyari);
+    expect(en.baslik).toBe('Account budget running out');
+    expect(en.detay).toContain('516-174-6317');
+    expect(en.detay).toContain('0.8%');
+    expect(en.detay).toContain('about 2 days');
+    expect(en.detay).not.toMatch(/[çğışöüÇĞİŞÖÜ]/);
+    const tr = uyariMetni(b, genelBakisSozlugu.tr.uyari);
+    expect(tr.detay).toContain('%0,8');
+    expect(tr.detay).toContain('yaklaşık 2 gün');
+    expect(uyariMetni({ ...b, butce: { kalanYuzde: 1, kalanGun: null } }, genelBakisSozlugu.tr.uyari).detay).not.toContain('Ortalama');
+  });
 });

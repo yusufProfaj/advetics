@@ -215,6 +215,90 @@ export function googleOdemeKarari(okuma: unknown, simdi: Date): OdemeKarari {
   return { durum: 'sorun_yok' };
 }
 
+/*
+ * ═══ HESAP BÜTÇESİ BİTMEK ÜZERE — ÖNCEDEN UYARI ═══
+ *
+ * `google_hesap_butcesi_bitti` reklamlar DURDUKTAN sonra doğuyor. Aylık
+ * faturalı hesap sınıra gelince sessizce duruyor ve bütçeyi artırmak çoğu
+ * zaman müşterinin faturadan sorumlu kişisini gerektiriyor; o iş saatler,
+ * hafta sonuna denk gelirse günler sürüyor. Canlıda (2026-10-19) Tınaztepe'nin
+ * bütçesi %99,2 doluydu ve panel hiçbir şey söylemiyordu.
+ *
+ * EŞİK (ürün kararı, kullanım kolaylığı + reklam verimliliği):
+ *   · KALAN ≤ 3 GÜNLÜK HARCAMA. Bir günlük eşik geç kalıyor: uyarı akşam
+ *     doğar, ertesi sabah okunur ve reklam o gece durmuş olur. Üç gün bir
+ *     hafta sonunu ve bütçe artışının onayını (onayın ne kadar sürdüğü
+ *     ölçülmedi) karşılıyor; daha uzun pencere ise aylarca harcayacak
+ *     büyük bütçeleri haftalarca "bitmek üzere" gösterip uyarıyı körleştirir.
+ *   · YA DA KALAN < %5. Günlük harcama bütçenin BAŞLANGICINDAN bu yana
+ *     ortalama (son günlerin harcaması bu okumada yok). Harcaması son
+ *     günlerde artan hesapta ortalama düşük kalır ve gün eşiği geç
+ *     tetiklenir; %5 o hâlin emniyet ağı. Başlangıcı okunamayan ya da bir
+ *     günden yeni bütçede ortalama yok ve yalnız %5 karar veriyor.
+ *
+ * YALNIZ "SORUN YOK" HESAPTA: sorunlu hesapta asıl uyarı zaten `error`;
+ * bilinmeyen okumada (`okunamadi`, `kurulum_yok`) tahminle uyarmıyoruz.
+ * Geçerli bütçelerden biri SINIRSIZSA ya da sayısı okunamıyorsa hesap
+ * harcamaya devam edebilir ya da bilmiyoruz: uyarı yok (yanlış alarm,
+ * kullanıcıyı olmayan bir sınırı artırmaya gönderir).
+ */
+
+/** Kalan, bu kadar günlük ortalama harcamanın altındaysa uyarılıyor. */
+export const BUTCE_UYARI_GUNU = 3;
+/** Kalan, sınırın bu yüzdesinin altındaysa uyarılıyor (gün hesabından bağımsız). */
+export const BUTCE_UYARI_YUZDESI = 5;
+
+export interface ButceUyarisi {
+  /** Sınırın kalan yüzdesi, 0–100 (ekranda yuvarlanıyor). */
+  kalanYuzde: number;
+  /** Ortalama harcamayla kaç gün yeter; `null` = ortalama hesaplanamadı. */
+  kalanGun: number | null;
+}
+
+/**
+ * Google hesap bütçesi bitmek üzere mi? `null` = uyarı yok.
+ *
+ * Birden çok geçerli bütçe varsa EN ÇOK KALANI olan okunuyor: hesap
+ * hangisinden harcıyorsa harcasın, en cömert olanı bitmeden durmuyor.
+ */
+export function googleButceUyarisi(okuma: unknown, simdi: Date): ButceUyarisi | null {
+  if (googleOdemeKarari(okuma, simdi).durum !== 'sorun_yok') return null;
+  const o = okuma as GoogleOdemeOkumasi;
+  const t = simdi.getTime();
+  const gecerli = o.hesapButceleri.filter(
+    (b) => b.durum === 'APPROVED' && kapsiyor(b.baslangic, b.bitis, b.bitisSuresiz, t),
+  );
+
+  let enIyi: { limit: number; harcanan: number; baslangic: string | null } | null = null;
+  for (const b of gecerli) {
+    if (b.limitSuresiz || b.limitMicros === null || b.harcananMicros === null) return null;
+    let limit: number;
+    let harcanan: number;
+    try {
+      limit = Number(BigInt(b.limitMicros));
+      harcanan = Number(BigInt(b.harcananMicros));
+    } catch {
+      return null;
+    }
+    if (!(limit > 0)) return null;
+    if (enIyi === null || limit - harcanan > enIyi.limit - enIyi.harcanan) {
+      enIyi = { limit, harcanan, baslangic: b.baslangic };
+    }
+  }
+  if (enIyi === null) return null;
+
+  const kalan = Math.max(0, enIyi.limit - enIyi.harcanan);
+  const kalanYuzde = (kalan / enIyi.limit) * 100;
+  const gecenGun = (t - googleZamani(enIyi.baslangic)) / 86_400_000;
+  const gunluk = Number.isFinite(gecenGun) && gecenGun >= 1 ? enIyi.harcanan / gecenGun : 0;
+  const kalanGun = gunluk > 0 ? kalan / gunluk : null;
+
+  const yuzdeDusuk = kalanYuzde < BUTCE_UYARI_YUZDESI;
+  const gunDusuk = kalanGun !== null && kalanGun <= BUTCE_UYARI_GUNU;
+  if (!yuzdeDusuk && !gunDusuk) return null;
+  return { kalanYuzde, kalanGun };
+}
+
 /** Kararın platformdan bağımsız girdisi — `ad_accounts` satırından. */
 export interface OdemeHesabi {
   platform: string;

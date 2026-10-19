@@ -1,4 +1,5 @@
 import {
+  googleButceUyarisi,
   googleHesapDurumu,
   googleMusteriNumarasi,
   hesapOdemeKarari,
@@ -224,6 +225,45 @@ export function hesapUyarilari(h: UyariHesabi, simdi: Date): Uyari[] {
   }
 
   /*
+   * HESAP BÜTÇESİ BİTMEK ÜZERE — reklam hâlâ yayında ama sınıra gelince
+   * duracak. Kapalı hesaptan SONRA (kapalı hesapta bütçe konuşmak anlamsız),
+   * bağlantı ve veri kurallarından ÖNCE: para kesilmek üzere ve okuma
+   * bağlantıdan bağımsız saatlik nabızdan geliyor; bayatlığı `veriZamani`
+   * gösteriyor. Eşik ve gerekçesi shared `googleButceUyarisi`nde.
+   *
+   * MAİL YOK, `warn`: `odemeUyarisi` yalnız `hesap_odeme_sorunu`nu maile
+   * çeviriyor. Durmamış bir reklam için mail, "durdu" mailinin ağırlığını
+   * azaltırdı; zil yeterli.
+   */
+  if (h.platform === 'google') {
+    const butce = googleButceUyarisi(h.odemeDurumu, simdi);
+    if (butce !== null) {
+      const no = googleMusteriNumarasi(h.externalId);
+      const yuzde = Math.max(0, Math.floor(butce.kalanYuzde * 10) / 10).toLocaleString('tr-TR');
+      const gun =
+        butce.kalanGun === null
+          ? ''
+          : butce.kalanGun < 1
+            ? ' Ortalama harcamayla bir günden az yetiyor.'
+            : ` Ortalama harcamayla yaklaşık ${Math.floor(butce.kalanGun)} gün yetiyor.`;
+      return [
+        {
+          ...t,
+          veriZamani: odemeOkumaAni(h) ?? t.veriZamani,
+          kod: 'hesap_butcesi_bitmek_uzere',
+          siddet: 'warn',
+          baslik: 'Hesap bütçesi bitmek üzere',
+          detay: `Google Ads hesabının (${no}) hesap bütçesinin %${yuzde}'i kaldı.${gun} Bütçe dolunca reklamlar durur; Faturalandırma bölümünden artırın.`,
+          eylem: null,
+          odemeAdresi: odemeEkraniAdresi(h.platform, h.externalId),
+          odemeHesapNo: no,
+          butce,
+        },
+      ];
+    }
+  }
+
+  /*
    * ── 2. BAĞLANTI HÂLLERİ BURADAN ÇIKTI — SEBEBİ GÜRÜLTÜYDÜ ────────────
    *
    * `connectionStatus` ve `connectionTokenExpiresAt` BAĞLANTIYA ait, hesaba
@@ -426,6 +466,9 @@ const ONCELIK: Record<string, number> = {
   hesap_platformda_kapali: 1,
   baglanti_yetki_istiyor: 2,
   veri_hic_gelmedi: 3,
+  // Reklam durmak üzere: yetki süresinden önce (o, sistemin kendi tazelediği
+  // bir hâl), "hiç veri gelmedi"den sonra (o şu anda veri kaybı).
+  hesap_butcesi_bitmek_uzere: 3.5,
   baglanti_token_suresi: 4,
   is_dusuyor: 5,
   // Meta'ya giden sinyal duruyor: para yakmıyor ama 7 gün dolunca sonuç bir

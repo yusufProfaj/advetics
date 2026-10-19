@@ -20,6 +20,11 @@ export const UYARI_KODLARI = [
   'hesap_platformda_kapali',
   /** Ödeme sorunu: bakiye ödenmemiş, ek süre ya da ödeme bekliyor. */
   'hesap_odeme_sorunu',
+  /**
+   * Google hesap bütçesi bitmek üzere (`googleButceUyarisi`): reklamlar HENÜZ
+   * yayında, sınıra gelince duracak. `warn`: bant göstermiyor, zil gösteriyor.
+   */
+  'hesap_butcesi_bitmek_uzere',
   /** Platform risk incelemesinde — ödemeden AYRI, yapılacak iş farklı. */
   'hesap_risk_incelemesi',
   /** Bağlantı yeniden yetkilendirme istiyor. */
@@ -79,6 +84,11 @@ export interface Uyari {
   odemeAdresi?: string | null;
   /** Ekrandaki hesap numarası (Google "516-174-6317"); sözlük cümlesine giriyor. */
   odemeHesapNo?: string;
+  /**
+   * Yalnız `hesap_butcesi_bitmek_uzere`de: ne kadar kaldığı. Panel cümleyi
+   * bundan iki dilde kuruyor; `kalanGun` `null` = ortalama hesaplanamadı.
+   */
+  butce?: { kalanYuzde: number; kalanGun: number | null };
 
   /**
    * Uyarının dayandığı verinin son okunma anı.
