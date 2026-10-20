@@ -39,7 +39,14 @@ export type KarsilastirmaTuru =
    * BİLEREK GÖNDERİLMEYEN alan: dönmemesi beklenen; Meta kendisi eklerse
    * fark (N-22, düğmesiz video).
    */
-  | 'yok_olmali';
+  | 'yok_olmali'
+  /**
+   * KİTLE (hedef kitleler 2. parça): ilgi alanı ve özel kitle dizileri
+   * KİMLİK KÜMESİYLE kıyaslanır. Biz `{id}` gönderiyoruz; Meta özel kitleyi
+   * `{id, name}` ile döndürüyor ve ilgi adını hesabın diliyle yazabiliyor:
+   * bütün nesneyi kıyaslamak aynı kitleyi "fark" yapardı. Sıra anlamsız.
+   */
+  | 'kimlik_kumesi';
 export type AltKumeYonu = 'donen_icinde_gonderilen' | 'gonderilen_icinde_donen';
 
 export interface BeklenenYanki {
@@ -79,6 +86,10 @@ const KABUL_EDILEMEZ: ReadonlyArray<[string, string]> = [
   ['targeting.age_min', 'En düşük yaş'],
   ['targeting.genders', 'Cinsiyet'],
   ['targeting.excluded_', 'Hariç tutulanlar'],
+  // Kitle kullanıcının seçtiği kitlenin kopyası; başka kitleyle açılan
+  // reklam "kabul et" ile geçmemeli.
+  ['targeting.flexible_spec', 'Kitlenin ilgi alanları'],
+  ['targeting.custom_audiences', 'Özel kitleler'],
   ['targeting.targeting_automation', 'Otomatik kitle'],
   // Elle yerleşim yalnız eksik boyutta: başka bir yerleşimin açık dönmesi,
   // görseli olmayan yerde (kırpılarak) gösterim demek.
@@ -249,6 +260,36 @@ export function advantageDurumuCumlesi(donen: unknown): string {
   return `Meta bu kampanyayı Advantage+ olarak işaretledi (${durum}).`;
 }
 
+const KITLE_YOLLARI = new Set(['targeting.flexible_spec', 'targeting.custom_audiences', 'targeting.excluded_custom_audiences']);
+
+/**
+ * Kitle dizisinin kimlik kümesi: `[{id}]` → `id`; `flexible_spec`
+ * (`[{interests: [{id}]}]`) → `interests:id`. Anahtar öğeye dahil: Meta bir
+ * öğeye kendiliğinden `behaviors` eklerse küme büyür ve FARK olur.
+ * Tanınmayan biçim (dizi değil, kimliksiz öğe) `null`: eşit sayılmaz.
+ */
+export function kitleKimlikleri(v: unknown): string[] | null {
+  if (!Array.isArray(v)) return null;
+  const out: string[] = [];
+  for (const o of v) {
+    if (!o || typeof o !== 'object') return null;
+    const r = o as Record<string, unknown>;
+    if ('id' in r) {
+      out.push(String(r.id));
+      continue;
+    }
+    for (const [k, xs] of Object.entries(r)) {
+      if (!Array.isArray(xs)) return null;
+      for (const x of xs) {
+        const id = x && typeof x === 'object' ? (x as Record<string, unknown>).id : undefined;
+        if (id === undefined) return null;
+        out.push(`${k}:${String(id)}`);
+      }
+    }
+  }
+  return [...new Set(out)].sort();
+}
+
 const YER_TUTUCU = /^\{[a-z_]+(?::\d+)?\}$/;
 
 /** Kategori dalında advantage_audience 0 dönebilir (N-06): daralma, genişleme değil. */
@@ -303,6 +344,8 @@ export function beklenenYankilar(govdeler: MetaGovdesi[]): BeklenenYanki[] {
           // TEK İSTİSNA `location_types` (N-08, karşılaştırıcıda).
           y.karsilastirma = 'alt_kume';
           y.altKumeYonu = 'gonderilen_icinde_donen';
+        } else if (KITLE_YOLLARI.has(yol)) {
+          y.karsilastirma = 'kimlik_kumesi';
         } else if (yol === 'promoted_object') {
           y.karsilastirma = 'ek_false_kabul';
         } else if (yol === 'start_time') {
@@ -859,6 +902,12 @@ export function geriOkumaKarsilastir(
       case 'varlik_akisi':
         ayni = varlikAkisiAyni(y.gonderilen, donen);
         break;
+      case 'kimlik_kumesi': {
+        const g = kitleKimlikleri(y.gonderilen);
+        const d = kitleKimlikleri(donen);
+        ayni = g !== null && d !== null && g.join('|') === d.join('|');
+        break;
+      }
       case 'alt_kume': {
         if (y.alanYolu === 'adlabels') {
           const d = new Set(etiketAdlari(donen));

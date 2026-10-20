@@ -14,11 +14,11 @@
  * kaydından geliyor ve kullanıcının hiçbir cevabı onu kapatmıyor
  * (`SISTEM_EKSIK_KODLARI` dersi). Sunucu yayın kapısında ayrıca bakar.
  */
-import { TELEFON_E164, metinUyariIceriyor } from '../taslak-alanlari';
+import { TELEFON_E164, kitleHesapMesaji, kitleHesapUyumsuzlari, metinUyariIceriyor } from '../taslak-alanlari';
 import { telefonUlkeMesaji, telefonUlkesiDisindakiKonumlar } from '../meta/derle';
 import type { AlanKaynagi } from '../taslak';
 import { REHBER_AMACLARI, platformGorunurMu, type RehberAmacKodu, type RehberPlatformu } from './amaclar';
-import { REHBER_IZINLI_KAYNAKLAR, VARSAYILAN_META_PAYI, type RehberAlanAdi, type RehberAlanlari } from './alanlar';
+import { REHBER_IZINLI_KAYNAKLAR, VARSAYILAN_META_PAYI, googleEtkinKonumlar, type RehberAlanAdi, type RehberAlanlari } from './alanlar';
 import { METIN_SINIRLARI, karakterSayisi } from './metin';
 import { GOOGLE_PMAX_SATIS_ESIGI, META_EN_COK_GORSEL } from './turet';
 import { butceBol, gunlukEsdeger } from './butce';
@@ -85,7 +85,7 @@ export interface RehberEksikBaglami {
 const ADIM: Record<RehberAlanAdi, RehberAdimi> = {
   amac: 1,
   platformlar: 2, metaHesabiId: 2, googleHesabiId: 2, sayfaId: 2, instagramId: 2, youtubeKanaliId: 2, pikselId: 2, satissizPikselOnayi: 2,
-  konumlar: 3, enDusukYas: 3, yasAraligi: 3, ekKategoriler: 3,
+  konumlar: 3, enDusukYas: 3, yasAraligi: 3, ekKategoriler: 3, metaKitlesi: 3, googleKitlesi: 3, googleKonumlari: 3, googleYasAraligi: 3,
   hedefAdres: 4, telefon: 4, whatsappNumarasi: 4, whatsappKarsilama: 4, formSablonuId: 4, medya: 4, youtubeVideo: 4, metin: 4, anahtarKelimeler: 4,
   butce: 5, metaPayiYuzde: 5, takvim: 5,
   googlePromosyon: 4, googleFiyatListesi: 4,
@@ -124,6 +124,10 @@ export const REHBER_ALAN_ETIKETI: Record<RehberAlanAdi, string> = {
   takvim: 'Tarih',
   googlePromosyon: 'Kampanya (indirim)',
   googleFiyatListesi: 'Fiyat listesi',
+  metaKitlesi: 'Meta kitlesi',
+  googleKitlesi: 'Google kitlesi',
+  googleKonumlari: 'Google konumu',
+  googleYasAraligi: 'Google yaşı',
 };
 
 const HTTPS = /^https:\/\/[^\s/]+\.[^\s]+/;
@@ -257,10 +261,17 @@ export function rehberEksikleri(a: RehberAlanlari, b: RehberEksikBaglami): Rehbe
 
   // ── 3 Kime ──
   const konumlar = a.konumlar?.deger ?? [];
-  if (konumlar.length === 0) ekle('konumlar', null, 'KNM-01', 'Konum seçilmedi');
+  /*
+   * Ç9: Google'ın kendi konumu (`googleKonumlari`) varsa ortak konum yalnız
+   * Meta için gerekli; Google'ın listesi ayrıca denetlenir. Alan yoksa
+   * kural eskisiyle aynı (ortak konum iki platformun).
+   */
+  const googleKonumu = acik.google ? a.googleKonumlari : undefined;
+  if (konumlar.length === 0 && (acik.meta || !googleKonumu)) ekle('konumlar', null, 'KNM-01', 'Konum seçilmedi');
+  if (googleKonumu && googleKonumu.deger.length === 0) ekle('googleKonumlari', 'google', 'G-KNM-01', "Google konumu seçilmedi");
   // Adres çevresi Google'a `proximity` olarak gidiyor (eşleme gerekmiyor).
-  if (acik.google && konumlar.some((k) => !k.google && !adresCevresiMi(k))) {
-    ekle('konumlar', 'google', 'G-KONUM', "Bazı konumlar Google'da eşlenemedi");
+  if (acik.google && googleEtkinKonumlar(a).some((k) => !k.google && !adresCevresiMi(k))) {
+    ekle(googleKonumu ? 'googleKonumlari' : 'konumlar', 'google', 'G-KONUM', "Bazı konumlar Google'da eşlenemedi");
   }
   /*
    * İŞLETME ADRESİNİN ÇEVRESİ (ERİŞİM K4) — GİRİŞ ANINDA. Derleyiciler aynı
@@ -296,6 +307,7 @@ export function rehberEksikleri(a: RehberAlanlari, b: RehberEksikBaglami): Rehbe
   if (kisitli && (yas !== 18 || (ar && (ar.min !== 18 || ar.max < 65)))) {
     ekle('yasAraligi', null, 'KTL-KISITLI', 'Konut, iş ilanı ve kredi reklamında yaş daraltılamaz');
   }
+  kitleEksikleri(kisitli);
   if (a.ekKategoriler?.deger.includes('ISSUES_ELECTIONS_POLITICS')) {
     ekle('ekKategoriler', null, 'OZK-SIYASI', "Siyasi ve toplumsal konulu reklamlar Advetics'ten yayınlanamıyor");
   }
@@ -566,6 +578,41 @@ export function rehberEksikleri(a: RehberAlanlari, b: RehberEksikBaglami): Rehbe
    * satın alma sayılmaması UYARI: yeni açılmış bir mağazada satış henüz
    * olmayabilir ve onu kilitlemek sağlam bir kurulumu durdurur.
    */
+  /*
+   * KAYITLI KİTLE (hedef kitleler 2. parça). Seçilen kitle o platformun
+   * kurgusunda GİTMİYORSA sessiz kalınmaz: kullanıcı "kitle seçtim" derken
+   * reklam kitlesiz kurulurdu.
+   */
+  function kitleEksikleri(kisitliKategori: boolean) {
+    // Ç9: Google'a özel yaş. Ortak yaşla AYNI kurallar; yalnız Talep
+    // Yaratma'da gidiyor, başka kurguda gitmediği SÖYLENİR.
+    const gy = acik.google ? a.googleYasAraligi?.deger : undefined;
+    if (gy) {
+      if (gy.min < 18 || gy.max > 65 || gy.min > gy.max) ekle('googleYasAraligi', 'google', 'KTL-02', 'Google yaşı 18 ile 65 arasında olmalı');
+      else if (kisitliKategori && (gy.min !== 18 || gy.max < 65)) ekle('googleYasAraligi', 'google', 'KTL-KISITLI', 'Konut, iş ilanı ve kredi reklamında yaş daraltılamaz');
+      else if ((gy.min > 18 || gy.max < 65) && tanim.google.kurgu !== 'TALEP_YARATMA_VIDEO' && tanim.google.kurgu !== 'TALEP_YARATMA_GORSEL') {
+        ekle('googleYasAraligi', 'google', 'KITLE-YAS-GITMEZ', "Bu Google reklam türünde yaş sınırı kurulmuyor; kitlenin yaşı Google'a gitmez", 'uyari');
+      }
+    }
+    const mk = a.metaKitlesi?.deger;
+    if (mk) {
+      if (!acik.meta) ekle('metaKitlesi', 'meta', 'KITLE-META-KAPALI', 'Meta kapalı: seçilen Meta kitlesi kullanılmayacak', 'uyari');
+      const yabanci = kitleHesapUyumsuzlari(mk.ozelKitleler, a.metaHesabiId?.deger ?? null);
+      if (acik.meta && yabanci.length) ekle('metaKitlesi', 'meta', 'KITLE-HESAP', kitleHesapMesaji(yabanci));
+      if (acik.meta && kisitliKategori && (mk.ilgiler.length || mk.ozelKitleler.length)) {
+        ekle('metaKitlesi', 'meta', 'KITLE-KISITLI', "Konut, iş ilanı ve kredi reklamında kitlenin ilgi alanları ve özel kitleleri Meta'ya gönderilmez", 'uyari');
+      }
+    }
+    const gk = a.googleKitlesi?.deger;
+    if (gk) {
+      if (!acik.google) ekle('googleKitlesi', 'google', 'KITLE-GOOGLE-KAPALI', 'Google kapalı: seçilen Google kitlesi kullanılmayacak', 'uyari');
+      // Ç4: Arama reklamında kitle gösterimi daraltmaz; YAZILMIYOR.
+      else if (tanim.google.kurgu === 'ARAMA') {
+        ekle('googleKitlesi', 'google', 'KITLE-ARAMA', 'Google Arama reklamında kitlenin ilgi alanları ve kelimeleri kullanılmaz (reklamı anahtar kelimeler gösterir); konumu gider', 'uyari');
+      }
+    }
+  }
+
   function pikselEksikleri() {
     if (!a.pikselId?.deger) return ekle('pikselId', 'meta', 'M-PIKSEL-SEC', 'Meta pikseli seçilmedi');
     const p = ok?.seciliPiksel ?? null;

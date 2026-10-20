@@ -7,6 +7,7 @@ import {
   OZEL_KATEGORI_ETIKETLERI,
   adresCevresiMi,
   isletmeAdresiKonumu,
+  googleEtkinKonumlar,
   type GeoLocationOption,
   type RehberKonumu,
 } from '@advetics/shared';
@@ -28,6 +29,7 @@ import {
   type KategoriKodu,
 } from './rehber-mantik';
 import { kaynakRozeti } from './kaynak-rozeti';
+import { KitleSecici } from './kitle-secici';
 import s from './rehber.module.css';
 
 export type KonumEslemeHali = { tur: 'yok' } | { tur: 'esleniyor' } | { tur: 'hata'; mesaj: string };
@@ -57,7 +59,11 @@ export function AdimKime({
   const yas = kilitli ? 'genis' : yasSecenegi(aralik, ozelYas);
   const kategori = seciliKategori(ek);
   // Adres çevresi Google'a yarıçap olarak gider; eşleme beklemiyor.
-  const eslenemeyen = b.acik.google ? konumlar.filter((k) => !k.google && !adresCevresiMi(k)) : [];
+  const eslenemeyen = b.acik.google ? googleEtkinKonumlar(b.a).filter((k) => !k.google && !adresCevresiMi(k)) : [];
+  // Ç9: Google kitlesinin kendi konum listesi ve yaşı (varsa); yoksa Google ortak değerleri kullanır.
+  const googleKonumlari = b.acik.google ? (b.a.googleKonumlari?.deger ?? null) : null;
+  const googleYasi = b.acik.google ? (b.a.googleYasAraligi?.deger ?? null) : null;
+  const [googleAramaAcik, setGoogleAramaAcik] = useState(false);
   /*
    * ERİŞİM (K4): "işletme adresinin çevresi" İLK seçenek. Konum Marka
    * Merkezi'ndeki harita konumundan; yoksa seçenek KAPALI ve sebebi yazıyor
@@ -105,6 +111,7 @@ export function AdimKime({
         {b.a.konumlar?.kaynak === 'marka_merkezi' ? d.markaKitle : ''}{d.aciklama}
       </Soru>
       <div className={s.kart}>
+        <KitleSecici b={b} />
         {erisim && (
           <div className={s.blok}>
             <div className={s.blokBaslik}>{d.bolge}</div>
@@ -146,7 +153,7 @@ export function AdimKime({
           <div>
             <div className={s.blok}>
               <div className={s.blokBaslik}>
-                {d.konum}{' '}
+                {googleKonumlari ? d.metaKonum : d.konum}{' '}
                 {konumRozeti && <span className={s.onerilen}>{konumRozeti}</span>}
               </div>
               <div className={s.cipler}>
@@ -154,7 +161,7 @@ export function AdimKime({
                   <span key={`${k.tur}:${k.key}`} className={s.cip} aria-pressed="true">
                     {k.etiket}
                     {k.yaricapKm ? <small>+ {k.yaricapKm} km</small> : null}
-                    {b.acik.google && !k.google && <small>{d.googleEslenmedi}</small>}
+                    {b.acik.google && !googleKonumlari && !k.google && <small>{d.googleEslenmedi}</small>}
                     <button
                       type="button"
                       className={s.x}
@@ -200,6 +207,49 @@ export function AdimKime({
             </div>
           </div>
         </div>
+        {/* Ç9: Google kitlesinin konumu. Kitle kaldırılınca alan silinir ve blok kapanır (DOM'da kalır, geçişle). */}
+        <div className={s.gizlenir} data-acik={!!googleKonumlari}>
+          <div>
+            <div className={s.blok}>
+              <div className={s.blokBaslik}>
+                {d.googleKonum} <span className={s.onerilen}>{d.googleKonumKaynak}</span>
+              </div>
+              <div className={s.cipler}>
+                {(googleKonumlari ?? []).map((k) => (
+                  <span key={`${k.tur}:${k.key}`} className={s.cip} aria-pressed="true">
+                    {k.etiket}
+                    {!k.google && <small>{d.googleEslenmedi}</small>}
+                    <button
+                      type="button"
+                      className={s.x}
+                      aria-label={d.konumuKaldir(k.etiket)}
+                      tabIndex={googleKonumlari ? 0 : -1}
+                      onClick={() => b.degistir([{ alan: 'googleKonumlari', deger: (googleKonumlari ?? []).filter((x) => !(x.tur === k.tur && x.key === k.key)), kaynak: 'kullanici' }])}
+                    >
+                      ✕
+                    </button>
+                  </span>
+                ))}
+                <button type="button" className={s.cip} aria-expanded={googleAramaAcik} tabIndex={googleKonumlari ? 0 : -1} onClick={() => setGoogleAramaAcik((v) => !v)}>
+                  {d.konumEkle}
+                </button>
+              </div>
+              <div className={s.gizlenir} data-acik={googleAramaAcik && !!googleKonumlari}>
+                <div>
+                  <KonumArama
+                    b={b}
+                    acik={googleAramaAcik && !!googleKonumlari}
+                    ekle={(k) => {
+                      const liste = googleKonumlari ?? [];
+                      if (!liste.some((x) => x.tur === k.tur && x.key === k.key)) b.degistir([{ alan: 'googleKonumlari', deger: [...liste, k], kaynak: 'kullanici' }]);
+                    }}
+                  />
+                </div>
+              </div>
+              <p className={s.ipucu}>{d.googleKonumIpucu}</p>
+            </div>
+          </div>
+        </div>
         <div className={s.blok}>
           <div className={s.blokBaslik}>
             {d.yas} <span className={s.ops}>{d.istege}</span>
@@ -231,6 +281,19 @@ export function AdimKime({
               <Uyari className={s.ustBosluk}>
                 {d.yasKilitli}
               </Uyari>
+            </div>
+          </div>
+          {/* Ç9: Google kitlesinin yaşı; üstteki seçenekler Meta'nın (ortak) yaşı. */}
+          <div className={s.gizlenir} data-acik={!!googleYasi && !kilitli}>
+            <div>
+              <div className={s.blokBaslik} style={{ paddingTop: 12 }}>
+                {d.googleYas} <span className={s.onerilen}>{d.googleKonumKaynak}</span>
+              </div>
+              <div className={s.alanlar}>
+                <YasGirdisi etiket={d.enKucuk} deger={googleYasi?.min ?? 18} degisti={(v) => b.degistir([{ alan: 'googleYasAraligi', deger: { min: v, max: googleYasi?.max ?? 65 }, kaynak: 'kullanici' }])} />
+                <YasGirdisi etiket={d.enBuyuk} deger={googleYasi?.max ?? 65} degisti={(v) => b.degistir([{ alan: 'googleYasAraligi', deger: { min: googleYasi?.min ?? 18, max: v }, kaynak: 'kullanici' }])} />
+              </div>
+              <p className={s.ipucu}>{d.googleYasIpucu}</p>
             </div>
           </div>
         </div>

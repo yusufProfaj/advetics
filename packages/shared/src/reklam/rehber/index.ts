@@ -14,3 +14,4 @@ export * from './google-ogeler';
 export * from './form-onizleme';
 export * from './google-kanallar';
 export * from './erisim';
+export * from './kitle-secimi';

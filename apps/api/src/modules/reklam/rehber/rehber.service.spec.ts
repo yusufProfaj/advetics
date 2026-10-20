@@ -281,7 +281,7 @@ describe('prova ve yayın', () => {
     expect(p.meta).toBeNull();
     expect(cagrilar.filter((c) => c.startsWith('mutate'))).toEqual(['mutate:true']);
     const [pr] = await h.q<{ durum: string; derleyici_surumu: string }>('SELECT durum, derleyici_surumu FROM prova');
-    expect(pr).toEqual({ durum: 'gecti', derleyici_surumu: 'g-1.6.0' });
+    expect(pr).toEqual({ durum: 'gecti', derleyici_surumu: 'g-1.7.0' });
     const [rr] = await h.q<{ prova_ozeti: string }>('SELECT prova_ozeti FROM reklam_rehberi');
     expect(rr!.prova_ozeti).toBe(p.icerikOzeti);
     // Google çocuk taslağı platform=google; Meta'nın strict şeması uygulanmadı.

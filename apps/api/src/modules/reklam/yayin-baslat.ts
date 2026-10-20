@@ -359,6 +359,9 @@ export async function taslakDerle(
       enDusukYas: alanlar.enDusukYas?.deger ?? 18,
       ipucuYas: alanlar.ipucuYas?.deger ?? null,
       ipucuCinsiyet: alanlar.ipucuCinsiyet?.deger ?? null,
+      // Kayıtlı kitlenin kopyası (rehber `metaKitlesi`); hesabı `taslakEksikleri`
+      // KITLE-HESAP ile yukarıda yeniden kıyaslandı.
+      ...(alanlar.kitle ? { ilgiler: alanlar.kitle.deger.ilgiler, ozelKitleler: alanlar.kitle.deger.ozelKitleler } : {}),
     },
     kategoriler: { taban, ek: alanlar.ekKategoriler?.deger ?? [] },
     butce: { tip: alanlar.butce!.deger.tip, micros: BigInt(alanlar.butce!.deger.micros), seviye: 'kampanya' },

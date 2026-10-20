@@ -61,6 +61,13 @@ export const REHBERDE_TAMAMLANAN_ALANLAR = [
   'formSablonuId',
   'youtubeVideo',
   'enDusukYas',
+  // Kayıtlı kitle ve Google'a özel yaş/konum (hedef kitleler 2. parça):
+  // kullanıcı Kime adımında kitleyi seçince kopyalanır. Stratejinin kitle
+  // kimliği bugün rehbere taşınmıyor; taşınırsa bu karar yeniden verilir.
+  'metaKitlesi',
+  'googleKitlesi',
+  'googleKonumlari',
+  'googleYasAraligi',
 ] as const satisfies readonly RehberAlanAdi[];
 
 /**

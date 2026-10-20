@@ -463,6 +463,55 @@ export function demandGenYasKitlesiBody(params: {
   ]);
 }
 
+/**
+ * ═══ KAYITLI KİTLENİN GOOGLE BOYUTLARI (hedef kitleler 2. parça) ═══
+ *
+ * Rehberde seçilen Google kitlesi reklam grubunun TEK kitlesine boyut olarak
+ * eklenir: yaş (`age`), cinsiyet (`gender`) ve "bunlardan biri" segmentleri
+ * (`audienceSegments`: ilgi/satın alma niyeti kategorileri + arama kelimesi
+ * özel segmenti). Boyutlar ARASI kesişim, segmentler İÇİ birleşim; kitle
+ * formunun sözü de bu ("bu yaşta VE bunlardan birine ilgili").
+ *
+ * İkinci kitle kurmak yerine aynı kitleye boyut: Demand Gen reklam grubu
+ * TEK kitle alıyor (`audienceSetting.useAudienceGrouped`); ikinci bağ
+ * reddedilir ya da yaşı ilgiden ayırıp birleşime çevirirdi.
+ *
+ * Cinsiyette "bilinmeyenler" DAHİL DEĞİL, yaşla aynı gerekçe: kullanıcı
+ * "kadın" dediğinde kadınlara gösterildiğini düşünüyor.
+ * Kitle yokken (`undefined`) dönen dizi yalnız yaş boyutu: Akıllı Boost ve
+ * kitlesiz rehber gövdesi DEĞİŞMEZ.
+ */
+export interface GoogleKitleBoyutlari {
+  cinsiyet: 'MALE' | 'FEMALE' | null;
+  /** `user_interest` kimlikleri (sayısal). */
+  ilgiler: readonly string[];
+  /** Hesaptaki özel segmentin kaynak adı (`customers/X/customAudiences/Y`); yoksa null. */
+  ozelSegment: string | null;
+}
+
+export function kitleBoyutlari(customerId: string, yas: readonly YasSegmenti[], kitle?: GoogleKitleBoyutlari | null): Array<Record<string, unknown>> {
+  const boyutlar: Array<Record<string, unknown>> = [];
+  if (yas.length > 0) boyutlar.push({ age: { ageRanges: yas, includeUndetermined: false } });
+  if (!kitle) return boyutlar;
+  if (kitle.cinsiyet) boyutlar.push({ gender: { genders: [kitle.cinsiyet], includeUndetermined: false } });
+  const segmentler: Array<Record<string, unknown>> = kitle.ilgiler.map((id) => ({
+    userInterest: { userInterestCategory: `customers/${customerId}/userInterests/${id}` },
+  }));
+  if (kitle.ozelSegment) segmentler.push({ customAudience: { customAudience: kitle.ozelSegment } });
+  if (segmentler.length > 0) boyutlar.push({ audienceSegments: { segments: segmentler } });
+  return boyutlar;
+}
+
+/**
+ * Rehber kitlesinin `Audience` gövdesi. Yalnız YAŞ varsa ad ve gövde
+ * `demandGenYasKitlesiBody` ile BİREBİR aynı (kayıtlı gövdeler ve canlıda
+ * doğrulanmış yol değişmesin); kitle boyutu eklenince ad "kitle" olur.
+ */
+export function rehberKitlesiCreate(params: { name: string; stamp: string; boyutlar: Array<Record<string, unknown>>; yalnizYas: boolean }): Record<string, unknown> {
+  if (params.boyutlar.length === 0) throw new Error('Kitle boyutu yok: kısıtsız yayında kitle oluşturulmamalı.');
+  return { name: `${params.name} — ${params.yalnizYas ? 'yaş' : 'kitle'} ${params.stamp}`, dimensions: params.boyutlar };
+}
+
 /** Kitleyi reklam grubuna bağlar — `adGroupCriteria`, `AudienceInfo`. */
 export function demandGenKitleBaglaBody(params: {
   adGroupResource: string;
@@ -537,6 +586,8 @@ export interface AtomikVideoIstegi {
   validateOnly: boolean;
   /** Reklam grubunun kanal bayrakları (`demandGenAdGroupBody#kanallar`); verilmezse Akıllı Boost bloğu. */
   kanallar?: Readonly<Record<string, boolean>>;
+  /** Rehberde seçilen Google kitlesi (`kitleBoyutlari`); Akıllı Boost vermez. */
+  kitle?: GoogleKitleBoyutlari | null;
 }
 
 export interface AtomikGovde {
@@ -595,10 +646,11 @@ export function demandGenAtomikIstek(p: AtomikVideoIstegi): { govde: AtomikGovde
     campaignOperation: { create: { ...kampanyaGovdesi, status: p.acilis, resourceName: KAMPANYA } },
   });
   const segmentler = yasSegmentleri(p.yaslar);
+  const boyutlar = kitleBoyutlari(p.customerId, segmentler, p.kitle);
   const reklamGrubu = ekle({
     adGroupOperation: {
       create: {
-        ...ilkCreate(demandGenAdGroupBody({ name: p.name, campaignResource: KAMPANYA, kitleGrubu: segmentler.length > 0, ...(p.kanallar ? { kanallar: p.kanallar } : {}) })),
+        ...ilkCreate(demandGenAdGroupBody({ name: p.name, campaignResource: KAMPANYA, kitleGrubu: boyutlar.length > 0, ...(p.kanallar ? { kanallar: p.kanallar } : {}) })),
         resourceName: GRUP,
       },
     },
@@ -608,10 +660,10 @@ export function demandGenAtomikIstek(p: AtomikVideoIstegi): { govde: AtomikGovde
   for (const o of demandGenKonumBody({ adGroupResource: GRUP, konumlar: p.konumlar, yakinlik: p.yakinlik ?? null }).operations) {
     ekle({ adGroupCriterionOperation: { create: o.create } });
   }
-  if (segmentler.length > 0) {
+  if (boyutlar.length > 0) {
     ekle({
       audienceOperation: {
-        create: { ...ilkCreate(demandGenYasKitlesiBody({ name: p.name, stamp: p.stamp, segmentler })), resourceName: KITLE },
+        create: { ...rehberKitlesiCreate({ name: p.name, stamp: p.stamp, boyutlar, yalnizYas: boyutlar.length === 1 && segmentler.length > 0 }), resourceName: KITLE },
       },
     });
     ekle({
@@ -814,6 +866,8 @@ export interface AtomikGorselIstegi {
   headlines: string[];
   descriptions: string[];
   validateOnly: boolean;
+  /** Rehberde seçilen Google kitlesi (`kitleBoyutlari`). */
+  kitle?: GoogleKitleBoyutlari | null;
 }
 
 export interface AtomikGorselSirasi {
@@ -873,17 +927,18 @@ export function demandGenGorselAtomikIstek(p: AtomikGorselIstegi): { govde: Atom
   );
   const kampanya = ekle({ campaignOperation: { create: { ...kampanyaGovdesi, status: p.acilis, resourceName: KAMPANYA } } });
   const segmentler = yasSegmentleri(p.yaslar);
+  const boyutlar = kitleBoyutlari(p.customerId, segmentler, p.kitle);
   const reklamGrubu = ekle({
     adGroupOperation: {
-      create: { ...ilkCreate(demandGenGorselAdGroupBody({ name: p.name, campaignResource: KAMPANYA, kitleGrubu: segmentler.length > 0 })), resourceName: GRUP },
+      create: { ...ilkCreate(demandGenGorselAdGroupBody({ name: p.name, campaignResource: KAMPANYA, kitleGrubu: boyutlar.length > 0 })), resourceName: GRUP },
     },
   });
   // KONUM GRUPTAN HEMEN SONRA: geçici kimlik (-3) ancak grup sırada önceyse çözülüyor.
   for (const o of demandGenKonumBody({ adGroupResource: GRUP, konumlar: p.konumlar, yakinlik: p.yakinlik ?? null }).operations) {
     ekle({ adGroupCriterionOperation: { create: o.create } });
   }
-  if (segmentler.length > 0) {
-    ekle({ audienceOperation: { create: { ...ilkCreate(demandGenYasKitlesiBody({ name: p.name, stamp: p.stamp, segmentler })), resourceName: KITLE } } });
+  if (boyutlar.length > 0) {
+    ekle({ audienceOperation: { create: { ...rehberKitlesiCreate({ name: p.name, stamp: p.stamp, boyutlar, yalnizYas: boyutlar.length === 1 && segmentler.length > 0 }), resourceName: KITLE } } });
     ekle({ adGroupCriterionOperation: { create: ilkCreate(demandGenKitleBaglaBody({ adGroupResource: GRUP, audienceResource: KITLE })) } });
   }
   const yeniGorseller: Array<{ varlikId: string; sira: number }> = [];

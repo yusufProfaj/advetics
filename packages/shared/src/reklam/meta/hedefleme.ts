@@ -42,6 +42,11 @@ export function etkinKategoriler(taban: readonly OzelKategori[], ek: readonly Oz
 /** Kısıtlı kategoriler: yaş, cinsiyet, ilgi ve yarıçap kuralı uygulanır. */
 const KISITLI: readonly OzelKategori[] = ['HOUSING', 'EMPLOYMENT', 'FINANCIAL_PRODUCTS_SERVICES'];
 
+/** Etkin kümede kısıtlı kategori var mı (ilgi/cinsiyet/özel kitle kapanır); ekran ve üretici aynı listeden. */
+export function kisitliKategoriVar(taban: readonly OzelKategori[], ek: readonly OzelKategori[]): boolean {
+  return etkinKategoriler(taban, ek).some((k) => KISITLI.includes(k));
+}
+
 /**
  * Nokta çevresinin en küçük yarıçapı. ABD ve Kanada'da Meta 25 km; geri
  * kalan her ülke 17 km — Türkiye'deki 17 km Meta'nın değil ADVETICS kuralı
@@ -75,6 +80,13 @@ export interface HedeflemeGirdisi {
   /** VARSAYILANSIZ — çağıran açıkça yazar. */
   advantageAudience: 0 | 1;
   kategoriler: readonly OzelKategori[];
+  /**
+   * KAYITLI KİTLENİN Meta parçası (hedef kitleler 2. parça). İsteğe bağlı:
+   * verilmeyen çağıran (Akıllı Boost tahmini, erişim doygunluğu) bugünkü
+   * gövdeyi alır. Boş dizi ile yokluk aynı: anahtar hiç yazılmaz.
+   */
+  ilgiler?: ReadonlyArray<{ id: string; name: string }>;
+  ozelKitleler?: ReadonlyArray<{ id: string; name: string; tip: 'ozel' | 'benzer'; mod: 'dahil' | 'haric' }>;
 }
 
 export interface HedeflemeReti {
@@ -197,13 +209,38 @@ export function hedeflemeUret(g: HedeflemeGirdisi): HedeflemeSonucu {
   // age_max HİÇ yazılmıyor: Advantage+ açıkken Meta 65'e çeviriyor ve
   // yazılan değer geri okumada yalancı bir fark üretir.
 
+  const ilgiler = g.ilgiler ?? [];
+  const dahil = (g.ozelKitleler ?? []).filter((o) => o.mod === 'dahil');
+  const haric = (g.ozelKitleler ?? []).filter((o) => o.mod === 'haric');
   if (kisitli) {
     if (g.enDusukYas !== 18) kapatilanlar.push(`En düşük yaş ${g.enDusukYas} (bu reklam türünde 18 sabit)`);
     if (g.ipucuYas) kapatilanlar.push(`Yaş aralığı ${g.ipucuYas.min}-${g.ipucuYas.max}`);
     if (g.ipucuCinsiyet) kapatilanlar.push(`Cinsiyet: ${g.ipucuCinsiyet === 'kadin' ? 'Kadın' : 'Erkek'}`);
+    /*
+     * KISITLI KATEGORİDE İLGİ VE ÖZEL KİTLE GÖNDERİLMİYOR. Meta bu reklam
+     * türlerinde ayrıntılı hedeflemenin çoğunu, benzer kitleyi ve hariç
+     * tutmayı kaldırdı; hangi ilginin hâlâ kabul edildiği ölçülmedi ve
+     * "kabul edip görmezden gelme" ihtimali var. Tahmin etmektense kısıtla:
+     * gönderilmiyor ve adıyla söyleniyor (Gözden geçir Blok C).
+     */
+    if (ilgiler.length) kapatilanlar.push(`${ilgiler.length} ilgi alanı (bu reklam türünde kullanılamıyor)`);
+    if (dahil.length || haric.length) kapatilanlar.push(`${dahil.length + haric.length} özel kitle (bu reklam türünde kullanılamıyor)`);
   } else {
     if (g.ipucuYas) targeting.age_range = [g.ipucuYas.min, g.ipucuYas.max];
     if (g.ipucuCinsiyet) targeting.genders = [g.ipucuCinsiyet === 'erkek' ? 1 : 2];
+    /*
+     * KİTLE İLGİLERİ TEK `flexible_spec` ÖĞESİNDE: öğe İÇİNDEKİLER birleşim
+     * ("bunlardan biri"), öğeler ARASI kesişim. Kitle formu "bunlardan BİRİ
+     * ilgisi olan" diyor; her ilgiyi ayrı öğeye koymak hepsine birden ilgi
+     * isterdi ve kitle sessizce sıfıra yaklaşırdı.
+     *
+     * Advantage+ kitle (advantage_audience 1) açıkken ilgi ve DAHİL kitle
+     * Meta'da ÖNERİ olur (MIMARI Ç3); hariç kitle sert sınır kalır. Ekran
+     * bunu "öneri olarak kullanılır" diye söylüyor.
+     */
+    if (ilgiler.length) targeting.flexible_spec = [{ interests: ilgiler.map((i) => ({ id: i.id, name: i.name })) }];
+    if (dahil.length) targeting.custom_audiences = dahil.map((o) => ({ id: o.id }));
+    if (haric.length) targeting.excluded_custom_audiences = haric.map((o) => ({ id: o.id }));
   }
 
   return { tur: 'tamam', targeting, ulkeler, kapatilanlar };

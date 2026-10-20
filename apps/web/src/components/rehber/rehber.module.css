@@ -2081,3 +2081,50 @@
     margin: 12px 12px 0;
   }
 }
+
+/*
+ * KAYITLI KİTLE SEÇİCİSİ (hedef kitleler 2. parça, taslak "3 · Reklam
+ * kurarken kitle seçimi"): platform etiketi + seçici satırı ve "X'e
+ * gidecek" aktarım kutusu. Aktarım kutusu BİLGİ = gri zemin (kılavuz);
+ * hata ve uyarı ayrı `Uyari` ile. Dar ekranda etiket seçicinin üstüne iner.
+ */
+.kitleSatir {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+.kitleSatir + .kitleSatir {
+  margin-top: 8px;
+}
+@media (max-width: 520px) {
+  .kitleSatir {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+}
+.aktarim {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--t-line);
+  background: var(--t-sunken);
+  font-size: 12.5px;
+  line-height: 1.5;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.aktarim ul {
+  margin: 6px 0;
+  padding-left: 18px;
+  list-style: disc;
+}
+.aktarimUst {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+.aktarimUst small {
+  color: var(--t-ink-muted);
+}

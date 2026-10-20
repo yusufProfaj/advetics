@@ -35,6 +35,7 @@ import {
   yakinlikOlcutu,
   yasSegmentleri,
   type GoogleGorselKaynagi,
+  type GoogleKitleBoyutlari,
   type YasSegmenti,
 } from '../../connections/providers/google-demandgen';
 import { aramaOgeIslemleriEkle } from '../../connections/providers/google-arama-ogeleri';
@@ -94,7 +95,7 @@ import {
 // (`proximity`, K4) ve geri okumada konumların KİMLİĞİ ve yaş kitlesi (B12).
 // Talep Yaratma gövdesi adres çevresinde DEĞİŞTİ; il/ilçeli gövde aynı ama
 // beklenen yankı genişledi ve eski provalar bu kıyası görmedi.
-export const GOOGLE_DERLEYICI_SURUMU = 'g-1.6.0';
+export const GOOGLE_DERLEYICI_SURUMU = 'g-1.7.0';
 
 /**
  * Google yayınında `yayin.atif_standardi`. Karar tablosunun "Ölçüm"
@@ -122,6 +123,16 @@ export interface GoogleDerlemeBaglami {
    * kalır (Google reddeder ve sebebi söyler); bilinen ve uymayan ölçü RET.
    */
   logoOlcusu?: { genislik: number | null; yukseklik: number | null } | null;
+  /**
+   * ARAMA KELİMESİ ÖZEL SEGMENTİ (hedef kitleler 2. parça). Segment
+   * (`CustomAudience`) atomik istekte kurulamıyor (MutateOperation'da işlemi
+   * yok); servis onu yayından ÖNCE bulur ya da kurar (`ozelSegmentHazirla`)
+   * ve kaynak adını buraya verir. `{ provada: true }` = provada segment henüz
+   * yok ve KURULMADI (prova hesaba yazmaz): gövde segmentsiz kurulur, not
+   * bunu söyler. Girdide kelime varken bu alan yoksa RET: segmentsiz
+   * kurmak kullanıcının seçtiği kitlenin yarısını sessizce atmak olurdu.
+   */
+  ozelSegment?: { kaynak: string } | { provada: true } | null;
   /**
    * GÖRSEL KURGULARI (Dalga 3): her görselin Google kaynağı (hesapta kayıtlı
    * kaynak adı ya da yüklenecek bayt) ve ÖLÇÜSÜ. Servis veritabanından
@@ -259,6 +270,24 @@ export interface GoogleBeklenen {
    * yaş ölçütü taşımıyor: alan yok. Eski satırlarda YOK = bakılmaz.
    */
   yasKitlesi?: GoogleYasKitlesi | null;
+  /**
+   * KAYITLI KİTLE (hedef kitleler 2. parça): Talep Yaratma'da reklam grubu
+   * kitlesinin, Maks. Performans'ta varlık grubu kitle sinyalinin boyut
+   * SAYILARI. YALNIZ kitle gönderildiyse yazılır; eski satırlarda ve
+   * kitlesiz kurulumda YOK = bakılmaz. Kimlik değil sayı: ilgi kimliği
+   * Google'da `userInterests/NNN` kaynak adına dönüyor ve biçimi ölçülmedi;
+   * sayı "Google bir boyutu düşürdü mü" sorusunu cevaplıyor.
+   */
+  kitleBoyutlari?: GoogleKitleBoyutBeklentisi;
+}
+
+export interface GoogleKitleBoyutBeklentisi {
+  ilgiSayisi: number;
+  ozelSegmentSayisi: number;
+  /** `MALE` / `FEMALE`, sıralı; boş = cinsiyet boyutu yok. */
+  cinsiyetler: string[];
+  /** Göndermediğimiz segment türü (yeniden pazarlama listesi vb.): beklenen 0. */
+  digerSegmentSayisi: number;
 }
 
 export interface GoogleYasKitlesi {
@@ -321,8 +350,78 @@ export function googleYasKovalari(enDusukYas: number): { kovalar: string[]; not:
   };
 }
 
+const GOOGLE_YAS_KOVALARI: ReadonlyArray<{ kod: string; min: number; max: number | null }> = [
+  { kod: 'AGE_RANGE_18_24', min: 18, max: 24 },
+  { kod: 'AGE_RANGE_25_34', min: 25, max: 34 },
+  { kod: 'AGE_RANGE_35_44', min: 35, max: 44 },
+  { kod: 'AGE_RANGE_45_54', min: 45, max: 54 },
+  { kod: 'AGE_RANGE_55_64', min: 55, max: 64 },
+  { kod: 'AGE_RANGE_65_UP', min: 65, max: null },
+];
+
+/**
+ * Ç9 — GOOGLE KİTLESİNİN YAŞ ARALIĞI kovalara. `googleYasKovalari` ile aynı
+ * ilke, iki uçta: kova ARALIĞIN İÇİNDEYSE alınır (30-55 → 35-44, 45-54),
+ * yani reklam istenen yaşın DIŞINA hiç çıkmaz; bedeli kenardaki yıllar ve
+ * not bunu söylüyor. En düşük yaş (ortak, kesin taban) aralığın altını
+ * yükseltebilir. Hiçbir kova sığmıyorsa `null` = RET: boş kova listesi
+ * "yaş kısıtı yok" demek ve reklam bütün yaşlara çıkardı.
+ */
+export function googleAralikKovalari(enDusukYas: number, aralik: { min: number; max: number }): { kovalar: string[]; not: string | null } | null {
+  const alt = Math.max(enDusukYas, aralik.min);
+  const ust = aralik.max >= 65 ? null : aralik.max;
+  const kovalar = GOOGLE_YAS_KOVALARI.filter((k) => k.min >= alt && (ust === null || (k.max !== null && k.max <= ust)));
+  if (kovalar.length === 0) return null;
+  const ilk = kovalar[0]!;
+  const son = kovalar[kovalar.length - 1]!;
+  const kirpildi = ilk.min !== alt || (ust !== null && son.max !== ust);
+  const yazi = (min: number, max: number | null) => (max === null ? `${min}+` : `${min}-${max}`);
+  return {
+    kovalar: kovalar.map((k) => k.kod),
+    not: kirpildi
+      ? `Google'da yaş ${yazi(alt, ust)} değil ${yazi(ilk.min, son.max)} (Google'ın yaş grupları 18-24, 25-34 …; grubun dışına taşmamak için kenarlar kırpıldı).`
+      : null,
+  };
+}
+
+/** Girdinin Talep Yaratma yaş kovaları: Google yaşı varsa ondan, yoksa en düşük yaştan (eski yol). */
+function talepYaratmaYasi(g: GoogleDerlemeGirdisi, retler: Array<{ kod: string; mesaj: string }>): { kovalar: string[]; not: string | null } {
+  if (!g.yasAraligi) return googleYasKovalari(g.enDusukYas);
+  const r = googleAralikKovalari(g.enDusukYas, g.yasAraligi);
+  if (r) return r;
+  retler.push({ kod: 'G-YAS-ARALIK', mesaj: `Google'da ${g.yasAraligi.min}-${g.yasAraligi.max} yaşına denk gelen bir yaş grubu yok; Google yaşını en az bir grubu (ör. 25-34) kapsayacak şekilde genişlet.` });
+  return { kovalar: [], not: null };
+}
+
 /** Kare logo reddi (B17): Talep Yaratma ve Maks. Performans aynı Google kuralı, aynı cümle. */
 export const GOOGLE_LOGO_KARE_MESAJI = "Google logosu kare (1:1) ve en az 128×128 olmalı; Marka Merkezi'ndeki logoyu değiştir.";
+
+/**
+ * Girdinin kitlesini gövdenin boyutlarına çevirir. Kitle yoksa `null` (gövde
+ * eskisiyle aynı). Kelimeler varken segment kaynağı yoksa RET; provada
+ * segment kurulmadıysa NOT (yayında kurulacak).
+ */
+function googleKitlesiCoz(
+  g: GoogleDerlemeGirdisi,
+  b: GoogleDerlemeBaglami,
+  retler: Array<{ kod: string; mesaj: string }>,
+  notlar: string[],
+): { boyutlar: GoogleKitleBoyutlari; beklenen: GoogleKitleBoyutBeklentisi } | null {
+  const k = g.kitle;
+  if (!k) return null;
+  let ozelSegment: string | null = null;
+  if (k.kelimeler.length > 0) {
+    const s = b.ozelSegment;
+    if (!s) retler.push({ kod: 'G-OZEL-SEGMENT', mesaj: `"${k.ad}" kitlesinin arama kelimeleri için Google'da özel segment hazırlanamadı.` });
+    else if ('provada' in s) notlar.push(`"${k.ad}" kitlesinin ${k.kelimeler.length} arama kelimesi yayında Google'da özel segment olarak kurulacak; provada yalnız kelimeler denetlendi.`);
+    else ozelSegment = s.kaynak;
+  }
+  const cinsiyet = k.cinsiyet === 'erkek' ? 'MALE' : k.cinsiyet === 'kadin' ? 'FEMALE' : null;
+  return {
+    boyutlar: { cinsiyet, ilgiler: k.ilgiler, ozelSegment },
+    beklenen: { ilgiSayisi: k.ilgiler.length, ozelSegmentSayisi: ozelSegment ? 1 : 0, cinsiyetler: cinsiyet ? [cinsiyet] : [], digerSegmentSayisi: 0 },
+  };
+}
 
 /** Hesabın saat diliminde bugün, `YYYY-MM-DD`. */
 function bugun(simdi: Date, saatDilimi: string): string {
@@ -592,8 +691,9 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
     else if (uzun.aciklamalar.length === 0) {
       retler.push({ kod: 'G-ACIKLAMA-SAYI', mesaj: 'YouTube reklamı için başlıktan farklı en az 1 açıklama gerekiyor.' });
     }
+    const kitle = googleKitlesiCoz(g, b, retler, notlar);
+    const yas = talepYaratmaYasi(g, retler);
     if (retler.length || !g.youtubeVideoId || !g.isletmeAdi || !b.logo || !uzun) return { tur: 'ret', retler };
-    const yas = googleYasKovalari(g.enDusukYas);
     if (yas.not) notlar.push(yas.not);
     // SESSİZ KESME YOK (B14b): görsel dalı söylüyordu, video dalı söylemiyordu.
     if (g.basliklar.length > DEMAND_GEN_VIDEO_EN_COK_BASLIK) {
@@ -631,6 +731,7 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
       // B20/B14d: yedi kanal bayrağı, Kontrol'ün "Nerede" hücresiyle AYNI sabit.
       kanallar: DEMAND_GEN_VIDEO_KANALLARI,
       validateOnly: b.validateOnly,
+      kitle: kitle?.boyutlar ?? null,
     });
     return {
       tur: 'govde',
@@ -655,6 +756,7 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
         // (`null`) fark sayılır, "temiz" değil.
         teklif: 'TARGET_SPEND',
         videoReklam: { reklamSayisi: 1, videoKimligi: g.youtubeVideoId, kanallar: { ...DEMAND_GEN_VIDEO_KANALLARI } },
+        ...(kitle ? { kitleBoyutlari: kitle.beklenen } : {}),
       },
       atif: GOOGLE_ATIF,
       notlar,
@@ -678,8 +780,9 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
     if (g.kurgu === 'TALEP_YARATMA_GORSEL') {
       if (say('yatay') + say('kare') === 0) retler.push({ kod: 'G-GORSEL-YOK', mesaj: 'Google görsel reklamı için en az bir yatay (1.91:1) ya da kare (1:1) görsel gerekli.' });
       if (g.aciklamalar.length === 0) retler.push({ kod: 'G-ACIKLAMA-SAYI', mesaj: 'Google görsel reklamı için en az 1 açıklama gerekiyor.' });
+      const kitle = googleKitlesiCoz(g, b, retler, notlar);
+      const yas = talepYaratmaYasi(g, retler);
       if (retler.length || !g.isletmeAdi || !b.logo) return { tur: 'ret', retler };
-      const yas = googleYasKovalari(g.enDusukYas);
       if (yas.not) notlar.push(yas.not);
       const { govde, sira } = demandGenGorselAtomikIstek({
         customerId: g.musteriId,
@@ -701,6 +804,7 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
         headlines: g.basliklar.slice(0, 5),
         descriptions: g.aciklamalar.slice(0, 5),
         validateOnly: b.validateOnly,
+        kitle: kitle?.boyutlar ?? null,
       });
       if (g.basliklar.length > 5) notlar.push(`Google görsel reklamı en çok 5 başlık alıyor; ilk 5 başlığın gitti (${g.basliklar.length} yazdın).`);
       return {
@@ -732,6 +836,7 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
             kanallar: { ...DEMAND_GEN_GORSEL_KANALLARI },
             otomasyon: Object.fromEntries(DEMAND_GEN_GORSEL_OTOMASYONU.map((x) => [x.assetAutomationType, x.assetAutomationStatus])),
           },
+          ...(kitle ? { kitleBoyutlari: kitle.beklenen } : {}),
         },
         atif: GOOGLE_ATIF,
         notlar,
@@ -768,7 +873,10 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
     }
     // LOGO 1:1 ve ≥ 128 (Google belgesi). Bilinmeyen ölçü prova'ya kalır.
     if (pmaxLogoKareMi(b.logoOlcusu) === false) retler.push({ kod: 'G-LOGO-KARE', mesaj: "Maks. Performans logosu kare (1:1) ve en az 128×128 olmalı; Marka Merkezi'ndeki logoyu değiştir." });
+    const kitle = googleKitlesiCoz(g, b, retler, notlar);
     if (retler.length || !g.isletmeAdi || !b.logo || !hedefler) return { tur: 'ret', retler };
+    // Maks. Performans'ta kitle bir SINIR değil sinyal: söz verdiğimizden fazlasını sanmasın.
+    if (kitle) notlar.push(`Maks. Performans "${g.kitle!.ad}" kitlesini sinyal olarak kullanır: Google önce bu kişilere bakar ama sonuç bulursa dışına da çıkabilir.`);
     const pIstek = {
       basliklar: g.basliklar.slice(0, 15),
       uzunBasliklar: uzun.slice(0, 5),
@@ -793,6 +901,7 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
       ...pIstek,
       donusumHedefleri: hedefler,
       validateOnly: b.validateOnly,
+      kitle: kitle?.boyutlar ?? null,
     });
     if (!pIstek.youtubeVideo) notlar.push("YouTube videosu seçmedin: Google görsellerinden kendi videosunu üretip YouTube'da gösterebilir.");
     notlar.push(`${PMAX_HEDEF_CUMLESI}.`);
@@ -824,6 +933,7 @@ export function derleGoogle(g: GoogleDerlemeGirdisi, b: GoogleDerlemeBaglami): G
           otomasyon: Object.fromEntries(PMAX_OTOMASYONU.map((x) => [x.assetAutomationType, x.assetAutomationStatus])),
         },
         teklifHedefleri: pmaxTeklifHedefleri(hedefler),
+        ...(kitle ? { kitleBoyutlari: kitle.beklenen } : {}),
       },
       atif: GOOGLE_ATIF,
       notlar,

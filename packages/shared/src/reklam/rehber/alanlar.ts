@@ -22,6 +22,7 @@ import { OZEL_KATEGORILER } from '../meta/hedefleme';
 import { whatsappKarsilamaSchema } from '../meta/karsilama';
 import { REHBER_AMAC_KODLARI } from './amaclar';
 import { rehberFiyatListesiSchema, rehberPromosyonSchema } from './google-ogeler';
+import { kitleGoogleIlgiSchema, kitleIlgiSchema, kitleOzelSchema } from '../../schemas/kitle-sablonu.schema';
 
 const alan = <T extends z.ZodTypeAny>(deger: T) =>
   z.object({
@@ -123,6 +124,42 @@ export const anahtarKelimeSchema = z.object({
 });
 export type AnahtarKelime = z.infer<typeof anahtarKelimeSchema>;
 
+/**
+ * ═══ KAYITLI KİTLE (hedef kitleler 2. parça, MIMARI Ç6) ═══
+ *
+ * Kitle seçildiği AN değerleri buraya KOPYALANIR; kitle kimliği yalnız
+ * "nereden geldi" bilgisi. Referans tutsaydık kitle sonradan düzenlenince
+ * kurulmuş ya da provası geçmiş bir reklamın hedeflemesi sessizce değişir
+ * ve prova ile yayın farklı kitleye giderdi.
+ *
+ * Her kitle TEK platformun (kullanıcı kararı 2026-10-20): Meta kitlesi ilgi
+ * alanı + özel kitle, Google kitlesi kategori + arama kelimesi taşır. İki
+ * alan ayrı çünkü rehber iki platforma birden yayın yapabiliyor ve tek alan
+ * birinin seçimini ötekiyle ezerdi.
+ *
+ * İsteğe bağlı ve VARSAYILANSIZ: alan yok = kitle seçilmedi; kayıtlı
+ * rehberlerin içerik özeti değişmez. Konum ve yaş BURADA YOK: ortak
+ * alanlara (`konumlar`, `yasAraligi`) yazılıyor.
+ */
+export const rehberMetaKitlesiSchema = z.object({
+  kitleId: z.string().uuid(),
+  ad: z.string().max(200),
+  /** `null` = tüm cinsiyetler. */
+  cinsiyet: z.enum(['erkek', 'kadin']).nullable(),
+  ilgiler: z.array(kitleIlgiSchema).max(25),
+  ozelKitleler: z.array(kitleOzelSchema).max(10),
+});
+export type RehberMetaKitlesi = z.infer<typeof rehberMetaKitlesiSchema>;
+
+export const rehberGoogleKitlesiSchema = z.object({
+  kitleId: z.string().uuid(),
+  ad: z.string().max(200),
+  cinsiyet: z.enum(['erkek', 'kadin']).nullable(),
+  ilgiler: z.array(kitleGoogleIlgiSchema).max(25),
+  kelimeler: z.array(z.string().trim().min(2).max(80)).max(50),
+});
+export type RehberGoogleKitlesi = z.infer<typeof rehberGoogleKitlesiSchema>;
+
 export const rehberAlanlariSchema = z
   .object({
     amac: alan(z.enum(REHBER_AMAC_KODLARI)),
@@ -219,6 +256,20 @@ export const rehberAlanlariSchema = z
      */
     googlePromosyon: alan(rehberPromosyonSchema),
     googleFiyatListesi: alan(rehberFiyatListesiSchema),
+    /** Kayıtlı kitlenin KOPYASI (yukarıya bkz.); `null` = "kitle seçme". */
+    metaKitlesi: alan(rehberMetaKitlesiSchema.nullable()),
+    googleKitlesi: alan(rehberGoogleKitlesiSchema.nullable()),
+    /**
+     * PLATFORM BAZLI GOOGLE YAŞI VE KONUMU (MIMARI Ç9, kullanıcı kararı
+     * 2026-10-20 "B"): Google kitlesi seçilince kitlenin yaşı ve konumu
+     * BURAYA yazılır, ortak alanlar (`yasAraligi`, `konumlar`) Meta'da kalır.
+     * İsteğe bağlı ve VARSAYILANSIZ: alan yoksa Google bugünkü gibi ortak
+     * değerleri kullanır (`googleEtkinKonumlar`), kayıtlı rehberlerin içerik
+     * özeti değişmez. Google kitlesi kaldırılınca alanlar SİLİNİR, boş
+     * bırakılmaz (boş liste "Google'da konum yok" demek olurdu).
+     */
+    googleKonumlari: alan(z.array(rehberKonumuSchema).max(25)),
+    googleYasAraligi: alan(z.object({ min: z.number().int(), max: z.number().int() }).nullable()),
   })
   .partial()
   .strict();
@@ -276,7 +327,25 @@ export const REHBER_IZINLI_KAYNAKLAR: Partial<Record<RehberAlanAdi, readonly Ala
   // Para sözü: yalnız kullanıcı (müşteri adına indirim/fiyat vaadi).
   googlePromosyon: ['kullanici'],
   googleFiyatListesi: ['kullanici'],
+  // Kitle seçimi kullanıcının kararı: önerilemez, önden doldurulamaz
+  // (varsayılan kitle yalnız KONUMU dolduruyor, `onDoldurma`).
+  metaKitlesi: ['kullanici'],
+  googleKitlesi: ['kullanici'],
+  googleKonumlari: ['kullanici'],
+  googleYasAraligi: ['kullanici'],
 };
+
+/**
+ * Google'a giden konum: platform alanı VARSA o, yoksa ortak alan.
+ * Türetme, eksik listesi, eşleme ve ekran AYNI fonksiyonu okuyor; biri
+ * ortak alana bakarken öbürü Google alanına baksa ekran "İzmir" der,
+ * Google'a Manisa giderdi. YAŞTA böyle bir yedek YOK: Google bugün ortak
+ * yaş aralığını hiç okumuyor (yalnız en düşük yaş, `googleYasKovalari`);
+ * `googleYasAraligi` yoksa davranış eskisi gibi kalır.
+ */
+export function googleEtkinKonumlar(a: RehberAlanlari): RehberKonumu[] {
+  return (a.googleKonumlari ?? a.konumlar)?.deger ?? [];
+}
 
 /** Varsayılan Meta payı: ilk iki hafta eşit (REHBER-PLANI § 2, adım 5). */
 export const VARSAYILAN_META_PAYI = 50;

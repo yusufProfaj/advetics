@@ -52,7 +52,8 @@ export interface KararSatiri {
     | 'GORSEL'
     | 'DUGME'
     | 'DIL'
-    | 'DOYGUNLUK';
+    | 'DOYGUNLUK'
+    | 'KITLE';
   konu: string;
   meta: KararHucresi | null;
   google: KararHucresi | null;
@@ -125,6 +126,35 @@ export interface KararEki {
   erisimDoygunlugu?: ErisimDoygunlugu | null;
   paraBirimi?: string;
   metaGunlukMicros?: bigint | null;
+  /**
+   * KAYITLI KİTLE (hedef kitleler 2. parça) ve Google'a özel konum/yaş (Ç9).
+   * Alan yoksa satır çıkmaz (kitle seçilmedi) ve KONUM hücresi eskisi gibi.
+   * Kısıtlı kategori Meta hücresinde "gitmez" der (`hedeflemeUret` ile aynı karar).
+   */
+  kitle?: {
+    meta: { ad: string; kisitli: boolean } | null;
+    google: { ad: string } | null;
+    /** Google'ın kendi konum listesi (etiketler); yoksa ortak konum gider. */
+    googleKonumlari: string[] | null;
+    googleYasi: { min: number; max: number } | null;
+  };
+}
+
+function kisaListe(xs: readonly string[]): string {
+  return xs.length > 3 ? `${xs.slice(0, 3).join(', ')} +${xs.length - 3}` : xs.join(', ') || 'seçilmedi';
+}
+
+/** Google kitlesinin kurguya göre sözü: derleyicinin (`derle-google.ts`) yazdığıyla aynı ayrım. */
+function googleKitleHucresi(kurgu: string | null, kitle: { ad: string } | null, yas: { min: number; max: number } | null): KararHucresi | null {
+  const yasMetni = yas ? `Yaş ${yas.min}-${yas.max >= 65 ? '65+' : yas.max}` : null;
+  if (kurgu === 'ARAMA') {
+    return kitle ? { deger: `"${kitle.ad}" kitlesinden yalnız konum`, not: 'Arama reklamında kitle kullanılmaz; reklamı anahtar kelimeler gösterir' } : null;
+  }
+  if (kurgu === 'MAKS_PERFORMANS') {
+    return kitle ? { deger: `"${kitle.ad}" kitlesi sinyal olarak`, not: `Google önce bu kişilere bakar, dışına da çıkabilir${yasMetni ? ' · Yaş sınırı kurulmuyor' : ''}` } : null;
+  }
+  if (!kitle && !yasMetni) return null;
+  return { deger: kitle ? `"${kitle.ad}" kitlesi` : yasMetni!, not: [kitle ? 'Cinsiyet, ilgi kategorileri ve arama kelimeleri reklam grubunun kitlesinde' : null, kitle ? yasMetni : null, yas ? "Yaş Google'ın yaş gruplarına kırpılır" : null].filter(Boolean).join(' · ') };
 }
 
 /** ERİŞİM sözleri (B9): Kontrol hücreleri; `erisim-turu.spec` gövdeyle eşliyor. */
@@ -356,9 +386,26 @@ export function kararTablosu(
       google: g
         ? adresCevresi
           ? hucre('Kurulamaz', GOOGLE_YARICAP_YOK_MESAJI)
-          : hucre('Yalnız bu bölgede bulunanlar', '"İlgilenenler" kapalı; Google kendiliğinden tüm ülkeleri açıyordu')
+          : ek.kitle?.googleKonumlari
+            ? hucre(`Google kitlesinin konumu: ${kisaListe(ek.kitle.googleKonumlari)}`, 'Yalnız bu bölgede bulunanlar · "İlgilenenler" kapalı')
+            : hucre('Yalnız bu bölgede bulunanlar', '"İlgilenenler" kapalı; Google kendiliğinden tüm ülkeleri açıyordu')
         : null,
     },
+    ...(ek.kitle && ((m && ek.kitle.meta) || (g && (ek.kitle.google || ek.kitle.googleYasi)))
+      ? [
+          {
+            kod: 'KITLE' as const,
+            konu: 'Kitle',
+            meta:
+              m && ek.kitle.meta
+                ? ek.kitle.meta.kisitli
+                  ? hucre(`"${ek.kitle.meta.ad}" kitlesinden yalnız konum`, 'Bu reklam türünde ilgi, cinsiyet ve özel kitle gönderilmez')
+                  : hucre(`"${ek.kitle.meta.ad}" kitlesi`, 'İlgi alanları ve dahil kitle öneri olarak kullanılır (Advantage+ kitle) · Hariç kitle dışarıda')
+                : null,
+            google: g ? googleKitleHucresi(g.kurgu, ek.kitle.google, ek.kitle.googleYasi) : null,
+          },
+        ]
+      : []),
     {
       kod: 'OTOMATIK_METIN',
       konu: 'Otomatik metin',

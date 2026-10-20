@@ -472,15 +472,29 @@ export interface HazirOzetSatiri {
   deger: string;
 }
 
+/**
+ * KİME ÖZETİ — konum, Ç9'dan beri platforma göre: Google'ın kendi listesi
+ * varsa "Meta: … · Google: …" (yalnız Google açıksa yalnız Google listesi).
+ * Özet kartı ve kısa akışın özeti AYNI fonksiyondan; biri ortak konumu,
+ * öbürü Google'ınkini gösterseydi kullanıcı Google'a gideni göremezdi.
+ */
+export function kimeKonumOzeti(a: RehberAlanlari, acik: Record<RehberPlatformu, boolean>, dil: Dil = 'tr'): string {
+  const t = m(dil).ozet;
+  const GOSTER = 3;
+  const liste = (xs: ReadonlyArray<{ etiket: string }>) =>
+    xs.length ? xs.slice(0, GOSTER).map((k) => k.etiket).join(', ') + (xs.length > GOSTER ? t.dahaFazlaYer(xs.length - GOSTER) : '') : t.secilmedi;
+  const ortak = a.konumlar?.deger ?? [];
+  const google = acik.google ? a.googleKonumlari?.deger : undefined;
+  if (!google) return liste(ortak);
+  if (!acik.meta) return liste(google);
+  return `${REHBER_PLATFORM_ADI.meta}: ${liste(ortak)} · ${REHBER_PLATFORM_ADI.google}: ${liste(google)}`;
+}
+
 /** Atlanan üç adımın TEK satırlık özeti; boş alan "Seçilmedi" yazar, gizlenmez. */
 export function hazirOzeti(a: RehberAlanlari, acik: Record<RehberPlatformu, boolean>, paraBirimi: string, dil: Dil = 'tr'): HazirOzetSatiri[] {
   const t = m(dil).ozet;
   const platformlar = (Object.keys(REHBER_PLATFORM_ADI) as RehberPlatformu[]).filter((p) => acik[p]).map((p) => REHBER_PLATFORM_ADI[p]);
-  const konumlar = a.konumlar?.deger ?? [];
-  const GOSTER = 3;
-  const konum = konumlar.length
-    ? konumlar.slice(0, GOSTER).map((k) => k.etiket).join(', ') + (konumlar.length > GOSTER ? t.dahaFazlaYer(konumlar.length - GOSTER) : '')
-    : t.secilmedi;
+  const konum = kimeKonumOzeti(a, acik, dil);
   const b = a.butce?.deger;
   const tk = a.takvim?.deger;
   const butce = b ? `${paraGoster(b.micros, paraBirimi)}${b.tip === 'gunluk' ? t.gunluk : t.toplam}` : t.girilmedi;
@@ -1118,7 +1132,8 @@ export const CTA_METNI: Record<RehberAmacKodu, string> = {
  */
 export function konumEslemeImzasi(a: RehberAlanlari, googleAcik: boolean, denenen: ReadonlySet<string>): string | null {
   if (!googleAcik) return null;
-  const eksik = (a.konumlar?.deger ?? []).filter((k) => !k.google);
+  // Ç9: Google'ın kendi listesi de eşlenir (sunucu ikisini birden eşliyor).
+  const eksik = [...(a.konumlar?.deger ?? []), ...(a.googleKonumlari?.deger ?? [])].filter((k) => !k.google);
   if (eksik.length === 0) return null;
   const imza = eksik
     .map((k) => `${k.tur}:${k.key}`)

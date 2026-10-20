@@ -37,6 +37,7 @@ import {
   hazirAdimlar,
   hesapBaglami,
   konumEslemeImzasi,
+  kimeKonumOzeti,
   onDoldurma,
   paraGoster,
   yayinBittiMi,
@@ -362,7 +363,8 @@ export function RehberEkrani({
     hal: x.no === ekran ? 'simdi' : adimBittiMi(kayit.eksikler, x.no, ekran, amac !== null) ? 'bitti' : 'sirada',
   }));
   const ozetDegeri: Record<number, string> = {
-    3: (a.konumlar?.deger ?? []).map((k) => k.etiket).join(', ') || d.ekran.secilmedi,
+    // Ç9: Google'ın kendi konumu varsa iki platform ayrı yazılır (`kimeKonumOzeti`).
+    3: kimeKonumOzeti(a, acik, dil),
     5: butce
       ? `${paraGoster(butce.micros, paraBirimi)}${butce.tip === 'gunluk' ? d.ekran.gunluk : d.ekran.toplam} · ${
           takvim ? (takvim.bitis ? d.ortak.gunSayisi(gunFarki(takvim.baslangic, takvim.bitis)) : d.ekran.bitisYok) : d.ekran.sureSecilmedi

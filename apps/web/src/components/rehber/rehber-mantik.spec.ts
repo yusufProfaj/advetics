@@ -36,6 +36,7 @@ import {
   onDoldurma,
   amactanSonraki,
   hazirOzeti,
+  kimeKonumOzeti,
   oneriHatasi,
   paraGoster,
   platformDurumu,
@@ -591,6 +592,15 @@ describe('kısa akış (hazır workspace)', () => {
     // Kısa akış Kime'yi atlıyor: ek kategori özette görünmek zorunda.
     expect(hazirOzeti({ ekKategoriler: alan(['EMPLOYMENT']) }, { meta: true, google: false }, 'TRY')[2]!.deger).toBe('İş ilanı');
     expect(hazirOzeti({ ekKategoriler: alan([]) }, { meta: true, google: false }, 'TRY')[2]!.deger).toContain('Yok');
+  });
+
+  it('Ç9: Google kitlesinin konumu varsa özet iki platformu ayrı yazar; Google kapalıysa yazmaz', () => {
+    const k = (x: string) => ({ tur: 'city' as const, key: x, etiket: x, ulkeKodu: 'TR' });
+    const a = { konumlar: alan([k('İzmir')]), googleKonumlari: alan([k('Manisa'), k('Aydın')]) };
+    expect(kimeKonumOzeti(a, { meta: true, google: true })).toBe('Meta: İzmir · Google: Manisa, Aydın');
+    expect(kimeKonumOzeti(a, { meta: false, google: true })).toBe('Manisa, Aydın');
+    expect(kimeKonumOzeti(a, { meta: true, google: false })).toBe('İzmir');
+    expect(hazirOzeti(a, { meta: true, google: true }, 'TRY')[1]!.deger).toBe('Meta: İzmir · Google: Manisa, Aydın');
   });
 });
 

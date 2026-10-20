@@ -12,6 +12,7 @@ import type {
   GoogleBeklenen,
   GoogleDerleme,
   GoogleGorselReklamBeklentisi,
+  GoogleKitleBoyutBeklentisi,
   GoogleOgeBeklentisi,
   GoogleUzantiBeklentisi,
   GoogleVarlikGrubuBeklentisi,
@@ -219,6 +220,8 @@ export interface GoogleOkunan {
   yakinlik?: GoogleBeklenen['yakinlik'] | 'okunamadi';
   /** Reklam grubunun yaş kitlesi; hiç yoksa `null`. Okunamadıysa `'okunamadi'` (fark). */
   yasKitlesi?: GoogleYasKitlesi | null | 'okunamadi';
+  /** Kayıtlı kitlenin boyut sayıları (grup kitlesi ya da kitle sinyali); okunamadıysa `'okunamadi'`. */
+  kitleBoyutlari?: GoogleKitleBoyutBeklentisi | 'okunamadi';
 }
 
 export interface GeriOkumaSatiri {
@@ -290,6 +293,13 @@ export function googleGeriOkumaKarsilastir(b: GoogleBeklenen, o: GoogleOkunan): 
   if (b.konumKimlikleri) kiyasla('konum.kimlikler', [...b.konumKimlikleri].sort(), o.konumKimlikleri ? [...o.konumKimlikleri].sort() : GOOGLE_OKUNAMADI);
   if (b.yakinlik !== undefined) kiyasla('konum.adresCevresi', b.yakinlik, o.yakinlik === undefined || o.yakinlik === 'okunamadi' ? GOOGLE_OKUNAMADI : o.yakinlik);
   if (b.yasKitlesi !== undefined) kiyasla('yas.kitle', b.yasKitlesi, o.yasKitlesi === undefined || o.yasKitlesi === 'okunamadi' ? GOOGLE_OKUNAMADI : o.yasKitlesi);
+  // KAYITLI KİTLE ALAN ALAN: hangi boyutun düştüğü satırda görünsün.
+  if (b.kitleBoyutlari) {
+    const ok = o.kitleBoyutlari === undefined || o.kitleBoyutlari === 'okunamadi' ? null : o.kitleBoyutlari;
+    for (const alan of ['ilgiSayisi', 'ozelSegmentSayisi', 'cinsiyetler', 'digerSegmentSayisi'] as const) {
+      kiyasla(`kitle.${alan}`, b.kitleBoyutlari[alan], ok ? ok[alan] : GOOGLE_OKUNAMADI);
+    }
+  }
   if (b.ogeler && !o.ogeOkumaHatasi) {
     const ok = o.ogeler ?? null;
     for (const alan of ['isletmeAdi', 'logo', 'snippet', 'promosyon', 'fiyat'] as const) {
@@ -630,9 +640,77 @@ export async function googleGeriOku(port: GoogleYayinPortu, ctx: FetchContext, k
       ? { yakinlik: await guvenliOku('adres çevresi', kampanyaId, () => yakinlikOku(port, ctx, kampanyaId, say(kampanyaKriteri, 'campaignCriterion', 'PROXIMITY', false) + say(grupKriteri, 'adGroupCriterion', 'PROXIMITY', false)), 'okunamadi' as const) }
       : {}),
     ...(b && b.yasKitlesi !== undefined
-      ? { yasKitlesi: await guvenliOku('yaş kitlesi', kampanyaId, () => yasKitlesiOku(port, ctx, kampanyaId, say(grupKriteri, 'adGroupCriterion', 'AUDIENCE', false)), 'okunamadi' as const) }
+      ? { yasKitlesi: await guvenliOku('yaş kitlesi', kampanyaId, async () => (await grupKitlesiOku(port, ctx, kampanyaId, say(grupKriteri, 'adGroupCriterion', 'AUDIENCE', false))).yas, 'okunamadi' as const) }
+      : {}),
+    ...(b?.kitleBoyutlari
+      ? {
+          kitleBoyutlari: await guvenliOku(
+            'kitle boyutları',
+            kampanyaId,
+            async () =>
+              b.kanal === 'PERFORMANCE_MAX'
+                ? kitleSinyaliOku(port, ctx, c?.resourceName ?? null)
+                : (await grupKitlesiOku(port, ctx, kampanyaId, say(grupKriteri, 'adGroupCriterion', 'AUDIENCE', false))).boyutlar,
+            'okunamadi' as const,
+          ),
+        }
       : {}),
   };
+}
+
+type KitleBoyutuSatiri = {
+  age?: { ageRanges?: Array<{ minAge?: number | string; maxAge?: number | string }>; includeUndetermined?: boolean };
+  gender?: { genders?: string[] };
+  audienceSegments?: { segments?: Array<Record<string, unknown>> };
+};
+
+/**
+ * Kitlenin boyutlarından SAYILAR (`GoogleKitleBoyutBeklentisi`). Bir boyut
+ * türü iki kez gelirse (iki cinsiyet boyutu) okunamadı: hangisinin geçerli
+ * olduğu bilinmiyor. Tanımadığımız segment türü `digerSegmentSayisi`na:
+ * göndermediğimiz bir segment "temiz" sayılmaz.
+ */
+export function kitleBoyutSayilari(boyutlar: readonly KitleBoyutuSatiri[]): GoogleKitleBoyutBeklentisi {
+  const cins = boyutlar.filter((d) => d.gender);
+  const seg = boyutlar.filter((d) => d.audienceSegments);
+  if (cins.length > 1 || seg.length > 1) throw new Error('kitlede aynı türden iki boyut var');
+  const segmentler = seg[0]?.audienceSegments?.segments ?? [];
+  const ilgi = segmentler.filter((x) => 'userInterest' in x).length;
+  const ozel = segmentler.filter((x) => 'customAudience' in x).length;
+  return {
+    ilgiSayisi: ilgi,
+    ozelSegmentSayisi: ozel,
+    cinsiyetler: [...(cins[0]?.gender?.genders ?? [])].sort(),
+    digerSegmentSayisi: segmentler.length - ilgi - ozel,
+  };
+}
+
+async function kitleBoyutlariOku(port: GoogleYayinPortu, ctx: FetchContext, kaynak: string): Promise<KitleBoyutuSatiri[]> {
+  if (!/^customers\/\d+\/audiences\/\d+$/.test(kaynak)) throw new Error('kitle kaynak adı tanınmadı');
+  const [a] = await port.ara<{ audience?: { dimensions?: KitleBoyutuSatiri[] } }>(
+    ctx,
+    `SELECT audience.resource_name, audience.dimensions FROM audience WHERE audience.resource_name = '${kaynak}'`,
+  );
+  if (!a?.audience) throw new Error('kitle satırı dönmedi');
+  return a.audience.dimensions ?? [];
+}
+
+/**
+ * MAKS. PERFORMANS KİTLE SİNYALİ: varlık grubunun `asset_group_signal`ı →
+ * kitle → boyut sayıları. Sinyal tam olarak BİR olmalı (biz bir tane
+ * kurduk). `asset_group_signal`ın atfedilen kaynağı varlık grubu; kampanyaya
+ * `asset_group.campaign` ile süzülüyor (WHERE'deki alan SELECT'te). Alan
+ * adları v25 başvurusundan, CANLIDA ÖLÇÜLMEDİ.
+ */
+async function kitleSinyaliOku(port: GoogleYayinPortu, ctx: FetchContext, kampanyaKaynagi: string | null): Promise<GoogleKitleBoyutBeklentisi> {
+  if (!kampanyaKaynagi || !/^customers\/\d+\/campaigns\/\d+$/.test(kampanyaKaynagi)) throw new Error('kampanya kaynak adı okunamadı');
+  const r = await port.ara<{ assetGroupSignal?: { audience?: { audience?: string } } }>(
+    ctx,
+    `SELECT asset_group.campaign, asset_group_signal.audience.audience FROM asset_group_signal WHERE asset_group.campaign = '${kampanyaKaynagi}'`,
+  );
+  const kaynaklar = r.map((x) => x.assetGroupSignal?.audience?.audience).filter((x): x is string => typeof x === 'string');
+  if (kaynaklar.length !== 1 || r.length !== 1) throw new Error(`beklenen tek kitle sinyali, okunan ${r.length}`);
+  return kitleBoyutSayilari(await kitleBoyutlariOku(port, ctx, kaynaklar[0]!));
 }
 
 /** Ek okuma kendi hata sınırında: düşerse log + verilen "okunamadı" değeri. */
@@ -706,8 +784,14 @@ async function yakinlikOku(port: GoogleYayinPortu, ctx: FetchContext, kampanyaId
  * (kısıtsız). Alan adları v25 başvurusundan (`AudienceDimension.age`),
  * CANLIDA ÖLÇÜLMEDİ.
  */
-async function yasKitlesiOku(port: GoogleYayinPortu, ctx: FetchContext, kampanyaId: string, sayi: number): Promise<GoogleYasKitlesi | null> {
-  if (sayi === 0) return null;
+async function grupKitlesiOku(
+  port: GoogleYayinPortu,
+  ctx: FetchContext,
+  kampanyaId: string,
+  sayi: number,
+): Promise<{ yas: GoogleYasKitlesi | null; boyutlar: GoogleKitleBoyutBeklentisi }> {
+  const bos = { ilgiSayisi: 0, ozelSegmentSayisi: 0, cinsiyetler: [], digerSegmentSayisi: 0 };
+  if (sayi === 0) return { yas: null, boyutlar: bos };
   const baglar = await port.ara<{ adGroupCriterion?: { audience?: { audience?: string } } }>(
     ctx,
     `SELECT campaign.id, ad_group_criterion.type, ad_group_criterion.negative, ad_group_criterion.audience.audience
@@ -715,21 +799,29 @@ async function yasKitlesiOku(port: GoogleYayinPortu, ctx: FetchContext, kampanya
       WHERE campaign.id = ${kampanyaId} AND ad_group_criterion.type = 'AUDIENCE' AND ad_group_criterion.negative = FALSE`,
   );
   const kaynaklar = baglar.map((x) => x.adGroupCriterion?.audience?.audience).filter((x): x is string => typeof x === 'string');
-  if (kaynaklar.length !== 1 || !/^customers\/\d+\/audiences\/\d+$/.test(kaynaklar[0]!)) throw new Error(`beklenen tek yaş kitlesi, okunan ${kaynaklar.length}`);
-  const [a] = await port.ara<{ audience?: { dimensions?: Array<{ age?: { ageRanges?: Array<{ minAge?: number | string; maxAge?: number | string }>; includeUndetermined?: boolean } }> } }>(
-    ctx,
-    `SELECT audience.resource_name, audience.dimensions FROM audience WHERE audience.resource_name = '${kaynaklar[0]}'`,
-  );
-  const yas = (a?.audience?.dimensions ?? []).map((d) => d.age).filter((x) => !!x);
-  if (yas.length !== 1) throw new Error('kitlede yaş boyutu okunamadı');
+  if (kaynaklar.length !== 1 || !/^customers\/\d+\/audiences\/\d+$/.test(kaynaklar[0]!)) throw new Error(`beklenen tek grup kitlesi, okunan ${kaynaklar.length}`);
+  const boyutlar = await kitleBoyutlariOku(port, ctx, kaynaklar[0]!);
+  /*
+   * YAŞ BOYUTU ARTIK İSTEĞE BAĞLI: kayıtlı kitle seçilince grup kitlesi yaşsız
+   * (yalnız ilgi/cinsiyet) olabiliyor. Önce yaşsız kitle "okunamadı" diye
+   * fırlatıyordu; şimdi `null` = yaş kısıtı yok ve yaş BEKLENİYORSA kıyas
+   * fark der. İki yaş boyutu hâlâ okunamadı.
+   */
+  const yas = boyutlar.map((d) => d.age).filter((x) => !!x);
+  if (yas.length > 1) throw new Error('kitlede iki yaş boyutu var');
   const n = (v: unknown) => (typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v) : undefined);
-  const segmentler = (yas[0]!.ageRanges ?? []).map((r) => {
-    const min = n(r.minAge);
-    const max = n(r.maxAge);
-    return max === undefined ? { minAge: min as number } : { minAge: min as number, maxAge: max };
-  });
-  // Proto3 JSON'da `false` hiç gelmeyebilir: yokluğu false sayılıyor (açık = true gelir).
-  return { segmentler, belirsizDahil: (yas[0]!.includeUndetermined === true) as false };
+  const yasKitlesi: GoogleYasKitlesi | null = yas[0]
+    ? {
+        segmentler: (yas[0].ageRanges ?? []).map((r) => {
+          const min = n(r.minAge);
+          const max = n(r.maxAge);
+          return max === undefined ? { minAge: min as number } : { minAge: min as number, maxAge: max };
+        }),
+        // Proto3 JSON'da `false` hiç gelmeyebilir: yokluğu false sayılıyor (açık = true gelir).
+        belirsizDahil: (yas[0].includeUndetermined === true) as false,
+      }
+    : null;
+  return { yas: yasKitlesi, boyutlar: kitleBoyutSayilari(boyutlar) };
 }
 
 /**

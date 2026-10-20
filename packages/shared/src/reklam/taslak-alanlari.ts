@@ -16,6 +16,7 @@ import { niyetKoduSchema, SITE_PIKSEL_HALLERI } from './meta/niyetler';
 import { OZEL_KATEGORILER } from './meta/hedefleme';
 import { GORSEL_ORANLARI } from './banner-seti';
 import { whatsappKarsilamaSchema } from './meta/karsilama';
+import { kitleIlgiSchema, kitleOzelSchema } from '../schemas/kitle-sablonu.schema';
 
 /**
  * Meta anlık form kimliği — İKİ BİÇİM (AdvCampaign Dalga 2, Ç-2).
@@ -162,6 +163,21 @@ export const taslakAlanlariSchema = z
      * bağlı ve varsayılansız: kayıtlı taslakların içerik özeti değişmiyor.
      */
     sitePikseli: alan(z.enum(SITE_PIKSEL_HALLERI)),
+    /**
+     * KAYITLI KİTLENİN Meta parçası: ilgi alanları ve özel kitleler (rehberin
+     * `metaKitlesi` kopyasından, `rehberdenMeta`). Cinsiyet `ipucuCinsiyet`e
+     * gider. İsteğe bağlı ve varsayılansız: kayıtlı taslakların içerik özeti
+     * değişmiyor. Özel kitlenin hesabı yayın kapısında taslağın hesabıyla
+     * yeniden kıyaslanır (`yayin-baslat`).
+     */
+    kitle: alan(
+      z.object({
+        kitleId: z.string().uuid(),
+        ad: z.string().max(200),
+        ilgiler: z.array(kitleIlgiSchema).max(25),
+        ozelKitleler: z.array(kitleOzelSchema).max(10),
+      }),
+    ),
   })
   .partial()
   .strict();
@@ -194,6 +210,7 @@ export const TASLAK_IZINLI_KAYNAKLAR: Partial<Record<keyof TaslakAlanlari, reado
   // Elle "aktif" yazılabilseydi pikselsiz sitede LPV kurulurdu: yalnız
   // derleyicinin okuması karar.
   sitePikseli: ['derleyici'],
+  kitle: ['kullanici'],
 };
 const IZINLI = TASLAK_IZINLI_KAYNAKLAR;
 
@@ -224,6 +241,7 @@ export const TASLAK_ALAN_ETIKETI: Record<keyof TaslakAlanlari, string> = {
   whatsappKarsilama: 'WhatsApp karşılama mesajı',
   pikselId: 'Meta pikseli',
   sitePikseli: 'Piksel durumu',
+  kitle: 'Kayıtlı kitle',
 };
 
 export interface TaslakEksigi {
@@ -254,7 +272,7 @@ export function kullaniciEksigiMi(e: Pick<TaslakEksigi, 'kod'>): boolean {
 const ALAN_ADIMI: Record<keyof TaslakAlanlari, TaslakEksigi['adim']> = {
   niyet: 0, reklamHesabiId: 0, sayfaId: 0, instagramId: 0, konumlar: 0,
   enDusukYas: 0, ipucuYas: 0, ipucuCinsiyet: 0, ekKategoriler: 0,
-  kavramlar: 1, hedefAdres: 0, formSablonuId: 0, telefon: 0, whatsappNumarasi: 0, whatsappKarsilama: 2, pikselId: 0, sitePikseli: 0,
+  kavramlar: 1, hedefAdres: 0, formSablonuId: 0, telefon: 0, whatsappNumarasi: 0, whatsappKarsilama: 2, pikselId: 0, sitePikseli: 0, kitle: 0,
   butce: 3, takvim: 4,
 };
 
@@ -272,6 +290,22 @@ export interface EksikBaglami {
 export function metinUyariIceriyor(metin: string, uyari: string): boolean {
   const n = (s: string) => s.normalize('NFC').replace(/\s+/g, ' ').trim().toLocaleLowerCase('tr-TR');
   return n(metin).includes(n(uyari));
+}
+
+/**
+ * ÖZEL KİTLE BAŞKA HESABIN MI (MIMARI Ç8)? Kitle kimliği reklam hesabına
+ * bağlı; başka hesapla kurulan reklamda çalışmaz. Hesap henüz seçilmediyse
+ * (`null`) uyumsuzluk YOK: karar hesap seçilince verilir. Panel seçicisi,
+ * rehberin eksik listesi ve yayın kapısı AYNI fonksiyonu okuyor.
+ */
+export function kitleHesapUyumsuzlari<T extends { hesapId: string }>(ozel: readonly T[], hesapId: string | null): T[] {
+  if (!hesapId) return [];
+  return ozel.filter((o) => o.hesapId !== hesapId);
+}
+
+export function kitleHesapMesaji(xs: ReadonlyArray<{ name: string; hesapAdi: string }>): string {
+  const ilk = xs[0]!;
+  return `"${ilk.name}" ${ilk.hesapAdi} hesabının özel kitlesi; bu reklam başka bir Meta hesabıyla kuruluyor. Hesabı değiştir ya da başka kitle seç.`;
 }
 
 export function taslakEksikleri(a: TaslakAlanlari, baglam: EksikBaglami = {}): TaslakEksigi[] {
@@ -301,6 +335,11 @@ export function taslakEksikleri(a: TaslakAlanlari, baglam: EksikBaglami = {}): T
   // Soru HER taslakta ve hiçbir şık seçili gelmeden (T-16): Meta Türkiye'de
   // beyanı zorunlu tutmuyor, sorulmayan soru beyansız ve hatasız yayınlanan
   // bir konut reklamı üretir. "Hayır" = boş dizi, sorulmadı = alan yok.
+  // Ç8: özel kitle tek reklam hesabında geçerli. Rehber seçimde engelliyor;
+  // bu ikinci kapı hesap SONRADAN değişirse yayını durduruyor (Meta başka
+  // hesabın kitlesini reddeder ya da yok sayar, hangisi olduğu ölçülmedi).
+  const yabanciKitle = kitleHesapUyumsuzlari(a.kitle?.deger.ozelKitleler ?? [], a.reklamHesabiId?.deger ?? null);
+  if (yabanciKitle.length) ekle('kitle', 'KITLE-HESAP', kitleHesapMesaji(yabanciKitle));
   if (!a.ekKategoriler) ekle('ekKategoriler', 'OZK-SORU', 'Özel reklam kategorisi sorusu cevaplanmadı');
   if (a.ekKategoriler?.deger.includes('ISSUES_ELECTIONS_POLITICS')) {
     ekle('ekKategoriler', 'OZK-SIYASI', "Siyasi ve toplumsal konulu reklamlar Advetics'ten yayınlanamıyor");

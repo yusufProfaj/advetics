@@ -1,5 +1,5 @@
 import { AB_SIYASI_BEYAN, campaignBudgetBody, kampanyaDiliBody, kampanyaKonumlariBody, kampanyaTarihleri } from './google-write';
-import { googleGorselVarligi, googleImageAssetBody, type AtomikGovde, type GoogleGorselKaynagi, type KampanyaAcilisi } from './google-demandgen';
+import { googleGorselVarligi, googleImageAssetBody, kitleBoyutlari, rehberKitlesiCreate, type AtomikGovde, type GoogleGorselKaynagi, type GoogleKitleBoyutlari, type KampanyaAcilisi } from './google-demandgen';
 import { PMAX_TEKLIF_HEDEFI, donusumHedefiAnahtari, type GoogleDonusumHedefi } from '@advetics/shared';
 
 /**
@@ -193,6 +193,12 @@ export interface AtomikPmaxIstegi {
   /** Hesabın müşteri düzeyi dönüşüm hedefleri: yalnız satın alma teklife girer. */
   donusumHedefleri: readonly GoogleDonusumHedefi[];
   validateOnly: boolean;
+  /**
+   * KİTLE SİNYALİ (hedef kitleler 2. parça): rehberde seçilen Google
+   * kitlesi. Maks. Performans'ta kitle bir SINIR değil, Google'a "önce
+   * bunlara bak" ipucu (Google belgesi: audience signal); ekran bunu söylüyor.
+   */
+  kitle?: GoogleKitleBoyutlari | null;
 }
 
 export interface AtomikPmaxSirasi {
@@ -203,6 +209,8 @@ export interface AtomikPmaxSirasi {
   reklam: null;
   logo: number | null;
   gorseller: Array<{ varlikId: string; sira: number }>;
+  /** Kitle sinyali bağının sırası; kitle seçilmediyse null. */
+  kitleSinyali: number | null;
 }
 
 /** Varlık grubuna bağlanacak alanların SAYISI — geri okumanın beklediği. */
@@ -334,6 +342,20 @@ export function pmaxAtomikIstek(p: AtomikPmaxIstegi): { govde: AtomikGovde; sira
     bagla(r, 'YOUTUBE_VIDEO');
   }
 
+  /*
+   * KİTLE SİNYALİ: bir `Audience` + varlık grubuna `AssetGroupSignal` bağı.
+   * YAŞ YOK: Maks. Performans'ta yaş sınırı kurulmuyor (derleyici 18 dışını
+   * zaten reddediyor) ve sinyale yaş koymak "sınır" sanılırdı. Boyut yoksa
+   * (kitle seçilmedi) hiçbir işlem eklenmez, gövde eskisiyle aynı.
+   */
+  const sinyalBoyutlari = kitleBoyutlari(p.customerId, [], p.kitle);
+  let kitleSinyali: number | null = null;
+  if (sinyalBoyutlari.length > 0) {
+    const KITLE = `${kok}/audiences/${gecici--}`;
+    ekle({ audienceOperation: { create: { ...rehberKitlesiCreate({ name: p.name, stamp: p.stamp, boyutlar: sinyalBoyutlari, yalnizYas: false }), resourceName: KITLE } } });
+    kitleSinyali = ekle({ assetGroupSignalOperation: { create: { assetGroup: GRUP, audience: { audience: KITLE } } } });
+  }
+
   // MARKA: kampanya düzeyinde (marka kuralları açık). İşletme adı da metin
   // varlığı; bir başlıkla aynıysa aynı varlık kullanılır.
   const ad = metin(p.businessName);
@@ -355,6 +377,6 @@ export function pmaxAtomikIstek(p: AtomikPmaxIstegi): { govde: AtomikGovde; sira
 
   return {
     govde: { mutateOperations: ops, partialFailure: false, validateOnly: p.validateOnly },
-    sira: { kampanya, reklamGrubu, reklam: null, logo: logoSira, gorseller: yeniGorseller },
+    sira: { kampanya, reklamGrubu, reklam: null, logo: logoSira, gorseller: yeniGorseller, kitleSinyali },
   };
 }

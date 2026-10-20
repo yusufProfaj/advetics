@@ -50,6 +50,8 @@ export type UygulamaSonucu = { tur: 'tamam'; alanlar: RehberAlanlari } | { tur: 
  * öner"in metni `ai_onerisi` olarak kaydedilebilmeli ki kullanıcı yarım
  * işini kaybetmesin; kilit eksik listesinde (KAYNAK) ve yayın kapısında.
  */
+const KONUM_ALANLARI = new Set(['konumlar', 'googleKonumlari']);
+
 export function degisiklikleriUygula(
   onceki: unknown,
   degisiklikler: RehberGuncelle['degisiklikler'],
@@ -62,7 +64,8 @@ export function degisiklikleriUygula(
     if (!ALAN_ADLARI.has(d.alan)) return { tur: 'ret', mesaj: `Tanınmayan alan: ${d.alan}` };
     if (ISTEMCI_YAZAMAZ.includes(d.kaynak)) return { tur: 'ret', mesaj: `${d.alan}: bu kaynak istemciden yazılamaz (${d.kaynak})` };
     if (d.sil === true) delete birlesik[d.alan];
-    else birlesik[d.alan] = { deger: d.alan === 'konumlar' && !secenek.sunucuKonumEslemesi ? googleKarsiliginiKoru(birlesik.konumlar, d.deger) : d.deger, kaynak: d.kaynak, kim, zaman };
+    // Google konum listesi (Ç9) aynı kurala tabi: karşılığı yalnız sunucu yazar.
+    else birlesik[d.alan] = { deger: KONUM_ALANLARI.has(d.alan) && !secenek.sunucuKonumEslemesi ? googleKarsiliginiKoru(birlesik[d.alan], d.deger) : d.deger, kaynak: d.kaynak, kim, zaman };
   }
   const r = rehberAlanlariSchema.safeParse(birlesik);
   if (!r.success) return { tur: 'ret', mesaj: r.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ') };

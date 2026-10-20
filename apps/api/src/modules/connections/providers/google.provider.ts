@@ -2600,6 +2600,35 @@ export class GoogleProvider implements IAdPlatformProvider {
     }
   }
 
+  /**
+   * Arama kelimesi özel segmenti — `customAudiences:mutate` (atomik
+   * isteğin işlem listesinde YOK, `reklam/google/ozel-segment.ts`). Gövde
+   * orada kuruluyor; burası yalnız taşıyor. `partialFailure` bu uçta yok,
+   * tek işlem gönderiliyor. CANLIDA DENENMEDİ.
+   */
+  async ozelSegmentMutate(
+    ctx: FetchContext,
+    govde: { operations: Array<{ create: Record<string, unknown> }>; validateOnly: boolean },
+  ): Promise<Array<{ resourceName?: string }>> {
+    const { developerToken } = this.assertConfigured();
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${ctx.accessToken}`,
+      'developer-token': developerToken,
+      'Content-Type': 'application/json',
+    };
+    if (ctx.loginCustomerId) headers['login-customer-id'] = ctx.loginCustomerId;
+    try {
+      const { data } = await platformFetch<{ results?: Array<{ resourceName?: string }> }>(
+        'google',
+        `${this.adsBase}/customers/${ctx.accountExternalId}/customAudiences:mutate`,
+        { method: 'POST', headers, body: JSON.stringify(govde) },
+      );
+      return data?.results ?? [];
+    } catch (e) {
+      throw googleHatasiniZenginlestir(e);
+    }
+  }
+
   /** Geri okuma ve tekillik araması: tek sayfalı GAQL (salt okunur). */
   async rehberAra<T>(ctx: FetchContext, sorgu: string): Promise<T[]> {
     return this.searchGaql<T>(ctx.accessToken, ctx.accountExternalId, sorgu, ctx.loginCustomerId);

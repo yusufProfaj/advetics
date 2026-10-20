@@ -20,7 +20,7 @@ import type { AlanDegeri } from '../taslak';
 import type { OzelKategori } from '../meta/hedefleme';
 import { REHBER_AMACLARI, type GoogleKurgu, type GoogleUlasma } from './amaclar';
 import type { CalismaSaatleri } from '../calisma-saatleri';
-import { REHBER_IZINLI_KAYNAKLAR, VARSAYILAN_META_PAYI, type MedyaMetni, type RehberAlanAdi, type RehberAlanlari } from './alanlar';
+import { REHBER_IZINLI_KAYNAKLAR, VARSAYILAN_META_PAYI, googleEtkinKonumlar, type MedyaMetni, type RehberAlanAdi, type RehberAlanlari } from './alanlar';
 import { butceBol } from './butce';
 import { METIN_SINIRLARI, karakterSayisi } from './metin';
 import { niyetZorunluPlan, reklamSetiPlani, setlereAyir, type GorselOrani, type SetPlani } from '../banner-seti';
@@ -124,6 +124,8 @@ const REHBERDEKI_KARSILIGI: Partial<Record<keyof TaslakAlanlari, RehberAlanAdi>>
   whatsappNumarasi: 'whatsappNumarasi',
   whatsappKarsilama: 'whatsappKarsilama',
   pikselId: 'pikselId',
+  kitle: 'metaKitlesi',
+  ipucuCinsiyet: 'metaKitlesi',
 };
 
 /**
@@ -292,6 +294,22 @@ export function rehberdenMeta(
     ...(a.enDusukYas ? { enDusukYas: a.enDusukYas } : {}),
     ...(a.yasAraligi ? { ipucuYas: a.yasAraligi } : {}),
     ...(a.ekKategoriler ? { ekKategoriler: a.ekKategoriler } : {}),
+    /*
+     * KAYITLI KİTLE (MIMARI Ç6): yalnız SEÇİLİYSE taşınır. "Kitle seçme"
+     * (`null`) ya da hiç dokunulmamış rehber bu iki anahtarı YAZMAZ:
+     * boş bir kitle alanı kitlesiz taslakların içerik özetini değiştirip
+     * kayıtlı provaları sebepsiz bayatlatırdı.
+     */
+    ...(a.metaKitlesi?.deger
+      ? (() => {
+          const k = a.metaKitlesi;
+          const { kitleId, ad, ilgiler, ozelKitleler, cinsiyet } = k.deger!;
+          return {
+            kitle: { ...k, deger: { kitleId, ad, ilgiler, ozelKitleler } },
+            ...(cinsiyet ? { ipucuCinsiyet: { ...k, deger: cinsiyet } } : {}),
+          };
+        })()
+      : {}),
     // Bütçe KULLANICININ kararı; payı derleyici ayırdı ama kaynak rehberdeki
     // gibi kalır ve Meta listesine `rehberKaynaklariniTasi` uyarlar (hazır
     // workspace'te `workspace_profili` geliyor).
@@ -451,6 +469,28 @@ export function donusumHedefiAnahtari(h: GoogleDonusumHedefi): string {
   return `${h.kategori}~${h.kaynak}`;
 }
 
+export interface GoogleRehberKitlesi {
+  /** Advetics kitle kimliği ve adı: yalnız ekran ve özel segment adı için. */
+  kitleId: string;
+  ad: string;
+  cinsiyet: 'erkek' | 'kadin' | null;
+  /** `user_interest` kimlikleri, sıralı. */
+  ilgiler: string[];
+  /** Özel segmentin arama terimleri, sıralı ve tekil (küçük harf). */
+  kelimeler: string[];
+}
+
+/** Kitlenin Google'a giden biçimi: sıralı + tekil, aynı kitle aynı girdi (içerik özeti kararlı). */
+export function googleRehberKitlesi(k: { kitleId: string; ad: string; cinsiyet: 'erkek' | 'kadin' | null; ilgiler: ReadonlyArray<{ id: string }>; kelimeler: readonly string[] }): GoogleRehberKitlesi {
+  return {
+    kitleId: k.kitleId,
+    ad: k.ad,
+    cinsiyet: k.cinsiyet,
+    ilgiler: [...new Set(k.ilgiler.map((i) => i.id))].sort(),
+    kelimeler: [...new Set(k.kelimeler.map((x) => x.trim().toLocaleLowerCase('tr-TR')).filter(Boolean))].sort(),
+  };
+}
+
 export interface GoogleDerlemeGirdisi {
   kurgu: GoogleKurgu;
   ulasma: GoogleUlasma | null;
@@ -471,6 +511,11 @@ export interface GoogleDerlemeGirdisi {
   dil: typeof GOOGLE_TURKCE;
   /** Talep Yaratma'da yaş segmenti; Arama'da yaş ölçütü YOK (gözlem, sınır değil). */
   enDusukYas: number;
+  /**
+   * Ç9: Google kitlesinin yaş aralığı (`googleYasAraligi`); YALNIZ Talep
+   * Yaratma'da ve verildiyse. Yoksa yaş eskisi gibi `enDusukYas`tan.
+   */
+  yasAraligi?: { min: number; max: number };
   butce: { tip: 'gunluk' | 'toplam'; micros: bigint };
   takvim: { baslangic: string; bitis: string | null };
   hedefAdres: string;
@@ -530,6 +575,16 @@ export interface GoogleDerlemeGirdisi {
    */
   donusumHedefleri?: GoogleDonusumHedefi[] | null;
   /**
+   * KAYITLI GOOGLE KİTLESİ (hedef kitleler 2. parça, MIMARI Ç4). YALNIZ
+   * Talep Yaratma (reklam grubu kitlesi) ve Maks. Performans (kitle sinyali)
+   * kurgularında ve kitle seçildiyse yazılır. ARAMA'da YOK: orada kitle
+   * gösterimi daraltmaz, reklamı anahtar kelime gösterir; eksik listesi bunu
+   * `KITLE-ARAMA` ile söylüyor. Kitle kelimeleri arama anahtar kelimelerine
+   * KOPYALANMAZ (ikisi farklı şey). Boş anahtar yazılmaz: kitlesiz
+   * girdilerin içerik özeti değişmesin.
+   */
+  kitle?: GoogleRehberKitlesi;
+  /**
    * Google öğeleri REDDETTİ ve bu girdi öğesiz yeniden prova için türetildi.
    * Derleyici "sitende ayrı sayfa bulunamadı" demesin: bulundu, reddedildi.
    */
@@ -577,7 +632,8 @@ export function rehberdenGoogle(a: RehberAlanlari, acik: { meta: boolean; google
   const butce = a.butce?.deger;
   const takvim = a.takvim?.deger;
   const adres = a.hedefAdres?.deger;
-  const konumlar = a.konumlar?.deger ?? [];
+  // Ç9: Google kitlesinin konumu varsa o, yoksa ortak konum (eski davranış).
+  const konumlar = googleEtkinKonumlar(a);
   if (!amac) kodlar.push('AMAC');
   const tanim = amac ? REHBER_AMACLARI[amac].google : null;
   if (tanim && tanim.kurgu === null) kodlar.push('G-KARSILIK-YOK');
@@ -676,6 +732,11 @@ export function rehberdenGoogle(a: RehberAlanlari, acik: { meta: boolean; google
       ...(tanim.kurgu === 'ARAMA' && tanim.ulasma === 'telefon' && b.calismaSaatleri?.length ? { aramaSaatleri: b.calismaSaatleri } : {}),
       // Yalnız Maks. Performans: diğer kurguların içerik özeti değişmesin.
       ...(tanim.kurgu === 'MAKS_PERFORMANS' ? { donusumHedefleri: b.donusumHedefleri ?? null } : {}),
+      ...(a.googleKitlesi?.deger && tanim.kurgu !== 'ARAMA' ? { kitle: googleRehberKitlesi(a.googleKitlesi.deger) } : {}),
+      // Ç9: yaş aralığı YALNIZ Talep Yaratma'da (Arama ve Maks. Performans
+      // yaş ölçütü taşımıyor) ve yalnız Google yaşı yazıldıysa: alanın
+      // yokluğu eski girdiyi ve içerik özetini korur.
+      ...(a.googleYasAraligi?.deger && (tanim.kurgu === 'TALEP_YARATMA_VIDEO' || tanim.kurgu === 'TALEP_YARATMA_GORSEL') ? { yasAraligi: a.googleYasAraligi.deger } : {}),
     },
   };
 }

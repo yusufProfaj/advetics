@@ -103,6 +103,8 @@ import {
   gunlukEsdeger,
   hedeflemeUret,
   type ErisimDoygunlugu,
+  kisitliKategoriVar,
+  googleEtkinKonumlar,
 } from '@advetics/shared';
 import { CONFIG, type AppConfig } from '../../../config/configuration';
 import { ajansYoneticisiMi } from '../ajans-yoneticisi';
@@ -128,6 +130,7 @@ import { ReklamYayinService } from '../yayin.service';
 import { googleYazmaAcikMi, metaYazmaAcikMi } from '../yazma-kapisi';
 import { metaSurumuDogrula } from '../meta-graf';
 import { derleGoogle, GOOGLE_DERLEYICI_SURUMU, type GoogleLogo } from '../google/derle-google';
+import { ozelSegmentHazirla, type OzelSegmentSonucu } from '../google/ozel-segment';
 import { pmaxLogoKareMi } from '../../connections/providers/google-pmax';
 import { googleYayinKaydiOlustur, type GoogleYayinGovdesi } from '../google/google-yayin';
 import { GOOGLE_TY_ASGARI_TRY_MICROS } from '../hazirlik.service';
@@ -1373,32 +1376,44 @@ export class RehberService {
     const s = await this.satir(ctx, id);
     if (s.durum !== 'taslak') throw new ConflictException('Bu rehber düzenlenmez.');
     const a = alanlariOku(s);
-    const konumlar = a.konumlar;
-    if (!konumlar || konumlar.deger.length === 0) throw new BadRequestException('Önce konum seç.');
+    /*
+     * Ç9: Google kitlesinin KENDİ konum listesi (`googleKonumlari`) de aynı
+     * yoldan eşlenir; Google'a giden liste odur (`googleEtkinKonumlar`).
+     * Ortak liste yine eşlenir (Meta konumu Google'a da gidebilir: Google
+     * konumu yokken). İkisi TEK yazmada: iki ayrı yazma iyimser kilitte
+     * birbirini düşürürdü.
+     */
+    const listeler = (['konumlar', 'googleKonumlari'] as const).filter((ad) => (a[ad]?.deger.length ?? 0) > 0);
+    if (listeler.length === 0) throw new BadRequestException('Önce konum seç.');
     const hesapId = a.googleHesabiId?.deger;
     // Adres çevresi Google'a `proximity` olarak gider; eşlenecek bir adı yok.
-    const eksik = konumlar.deger.filter((k) => !k.google && k.tur !== 'country' && !adresCevresiMi(k));
+    const eksikVar = listeler.some((ad) => a[ad]!.deger.some((k) => !k.google && k.tur !== 'country' && !adresCevresiMi(k)));
     let fctx: FetchContext | null = null;
-    if (eksik.length) {
+    if (eksikVar) {
       if (!hesapId) throw new BadRequestException('Önce Google Ads hesabı seç.');
       fctx = (await this.googleBaglami(ctx, hesapId, s.client_id)).fctx;
     }
-    const yeni = [];
-    for (const k of konumlar.deger) {
-      if (k.google || adresCevresiMi(k)) {
-        yeni.push(k);
-        continue;
+    const degisiklikler: RehberGuncelle['degisiklikler'] = [];
+    for (const ad of listeler) {
+      const alan = a[ad]!;
+      const yeni = [];
+      for (const k of alan.deger) {
+        if (k.google || adresCevresiMi(k)) {
+          yeni.push(k);
+          continue;
+        }
+        if (k.tur === 'country') {
+          yeni.push({ ...k, google: konumEsle(k, []) });
+          continue;
+        }
+        await this.kotaKapisi(hesapId!);
+        const adaylar = await this.google.searchGeoLocations(fctx!, k.etiket);
+        yeni.push({ ...k, google: konumEsle(k, adaylar.map((x) => ({ key: x.key, name: x.name, countryCode: x.countryCode, type: x.type }))) });
       }
-      if (k.tur === 'country') {
-        yeni.push({ ...k, google: konumEsle(k, []) });
-        continue;
-      }
-      await this.kotaKapisi(hesapId!);
-      const adaylar = await this.google.searchGeoLocations(fctx!, k.etiket);
-      yeni.push({ ...k, google: konumEsle(k, adaylar.map((x) => ({ key: x.key, name: x.name, countryCode: x.countryCode, type: x.type }))) });
+      // Kaynak KORUNUYOR: eşleme alanın değerini değil Google karşılığını ekliyor.
+      degisiklikler.push({ alan: ad, deger: yeni, kaynak: alan.kaynak });
     }
-    // Kaynak KORUNUYOR: eşleme alanın değerini değil Google karşılığını ekliyor.
-    return this.yaz(ctx, id, { surum: s.surum, degisiklikler: [{ alan: 'konumlar', deger: yeni, kaynak: konumlar.kaynak }] }, true);
+    return this.yaz(ctx, id, { surum: s.surum, degisiklikler }, true);
   }
 
   async anahtarKelimeOner(ctx: TenantContext, id: string, tohumlar: string[] | undefined): Promise<AnahtarKelimeOnerisi> {
@@ -1408,7 +1423,8 @@ export class RehberService {
     if (!hesapId) return { satirlar: [], toplam: 0, bosNeden: 'Önce Google Ads hesabı seç; öneriler o hesaptan geliyor.' };
     const t = kelimeTohumlari(tohumlar, a.metin?.deger.basliklar ?? [], a.hedefAdres?.deger ?? null);
     if (t.length === 0) return { satirlar: [], toplam: 0, bosNeden: 'Öneri için en az bir başlık ya da kelime yaz.' };
-    const konumlar = (a.konumlar?.deger ?? []).map((k) => k.google?.kaynak).filter((x): x is string => !!x).slice(0, 10);
+    // Ç9: Google'ın kendi konumu varsa öneri ORADAN (reklam oraya gidecek).
+    const konumlar = googleEtkinKonumlar(a).map((k) => k.google?.kaynak).filter((x): x is string => !!x).slice(0, 10);
     const { fctx } = await this.googleBaglami(ctx, hesapId, s.client_id);
     await this.kotaKapisi(hesapId);
     // Keyword Planner 1 QPS (worker'daki AdvStrategy kuyruğuyla AYNI kova).
@@ -1949,10 +1965,25 @@ export class RehberService {
       calismaSaatleri: b.calismaSaatleri,
     });
     if (t.tur === 'ret') return { tur: 'reddetti', zaman, mesajlar: t.kodlar.map((k) => `Eksik: ${k}`) };
+    // ÖZEL SEGMENT ÇOCUK YAZILMADAN ÖNCE: okuma/doğrulama düşerse prova
+    // Google'a hiç gitmeden "yapılmadı" der ve sebebi yazar (`ozel-segment.ts`).
+    let ozelSegment: OzelSegmentSonucu | null = null;
+    if (t.deger.kitle?.kelimeler.length) {
+      try {
+        const { fctx } = await this.googleBaglami(ctx, b.google.id, s.client_id);
+        await this.kotaKapisi(b.google.id);
+        ozelSegment = await ozelSegmentHazirla(this.google, fctx, t.deger.kitle.kelimeler, true);
+      } catch (e) {
+        const alan = e instanceof PlatformApiError ? googleAlanHatalari(e.detail?.raw) : [];
+        const m = alan.length ? alan.map((h) => [h.mesaj, h.ayrinti].filter(Boolean).join(' ')).join(' · ') : e instanceof Error ? e.message : String(e);
+        return { tur: 'reddetti', zaman, mesajlar: [`Kitlenin arama kelimeleri Google'da özel segment olarak doğrulanamadı: ${m}`] };
+      }
+    }
     const cocuk = await this.googleCocukYaz(ctx, s, t.deger, b.google.id);
     const provaId = randomUUID();
     const logo = await this.googleLogo(ctx, s.client_id, t.deger, b.google.id);
     const d = derleGoogle(t.deger, {
+      ozelSegment,
       kimlik: provaId,
       workspaceKisaAdi: b.workspaceAdi,
       amacEkranAdi: REHBER_AMACLARI[a.amac!.deger].ekranAdi,
@@ -2350,7 +2381,23 @@ export class RehberService {
     if (c.ad_account_id !== b.google.id) return 'Google hesabı provadan sonra değişti; yeniden prova et.';
     const girdi = googleGirdisiOku(c.alanlar);
     const yayinId = randomUUID();
+    /*
+     * ÖZEL SEGMENT GERÇEKTEN KURULUR (ya da var olan bulunur) — kullanıcı
+     * "Yayınla" dedi ve onay penceresini geçti. Segment para harcamaz;
+     * kurulum sonra düşerse bir sonraki yayın onu adından bulup kullanır.
+     */
+    let ozelSegment: OzelSegmentSonucu | null = null;
+    if (girdi.kitle?.kelimeler.length) {
+      try {
+        const { fctx } = await this.googleBaglami(ctx, b.google.id, s.client_id);
+        await this.kotaKapisi(b.google.id);
+        ozelSegment = await ozelSegmentHazirla(this.google, fctx, girdi.kitle.kelimeler, false);
+      } catch (e) {
+        return `Kitlenin arama kelimeleri Google'da özel segment olarak kurulamadı: ${e instanceof Error ? e.message : String(e)}`;
+      }
+    }
     const d = derleGoogle(girdi, {
+      ozelSegment,
       kimlik: yayinId,
       workspaceKisaAdi: b.workspaceAdi,
       amacEkranAdi: REHBER_AMACLARI[a.amac!.deger].ekranAdi,
@@ -2490,6 +2537,17 @@ export class RehberService {
       {
         sitePikseli: b.sitePikseli,
         ...(teklif ? { googleTeklifSebebi: teklif.sebep } : {}),
+        // Kayıtlı kitle ve Google'a özel konum/yaş (Ç9): türetmenin okuduğu AYNI alanlar.
+        ...(a.metaKitlesi?.deger || a.googleKitlesi?.deger || a.googleKonumlari || a.googleYasAraligi?.deger
+          ? {
+              kitle: {
+                meta: a.metaKitlesi?.deger ? { ad: a.metaKitlesi.deger.ad, kisitli: kisitliKategoriVar(b.kategoriTabani, a.ekKategoriler?.deger ?? []) } : null,
+                google: a.googleKitlesi?.deger ? { ad: a.googleKitlesi.deger.ad } : null,
+                googleKonumlari: a.googleKonumlari ? a.googleKonumlari.deger.map((k) => k.etiket) : null,
+                googleYasi: a.googleYasAraligi?.deger ?? null,
+              },
+            }
+          : {}),
         uzantilar: b.uzantilar,
         // Öğe satırları derleyicinin okuduğu AYNI fonksiyondan (`googleAramaOgeleri`).
         // Prova bu içeriğe yapıldıysa provanın (yayına gidecek) satırları.

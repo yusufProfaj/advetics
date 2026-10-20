@@ -40,7 +40,7 @@
 | Ç6 | Kitle seçilince reklam | Kitle sonradan düzenlenirse taslak/yayın sessizce değişmemeli. | Seçim ANINDA değerler rehbere KOPYALANIR (kaynak `kitle`, kitle kimliği + adı saklanır). Kitle sonradan değişirse taslakta "kitle güncellendi, yenile" notu (2. tur, isteğe bağlı). |
 | Ç7 | Konum | Kitle konumu Meta anahtarı; Google kitlesinde de aynı uzay. | Google kitlesinin konumu rehberde bugünkü eşleme yolundan Google'a çevrilir (`konum_esle`); eşlenemeyen konum bugünkü gibi yazılır. |
 | Ç8 | Özel kitle hesaba bağlı | Meta özel kitlesi tek reklam hesabında geçerli. | Seçim anında rehberin Meta hesabıyla kıyaslanır; uymuyorsa seçilemez ve NEDENİ yazar (taslakta uyarı). Yayında derleyici de reddeder. |
-| Ç9 | Rehber iki platforma birden yayın yapabiliyor | Tek kitle tek platform. | Kime adımında açık her platform için ayrı seçici (Meta kitlesi / Google kitlesi). Ortak konum/yaş alanı yerine platforma göre ayrı değer gerekebilir (taslakta "Meta: 30-55 · Google: 25-65+"). Bu, rehber alanlarına platform bazlı yaş/konum eklemek demek: **en büyük kalem**, Ajan 2'den önce kullanıcı onayı. |
+| Ç9 | Rehber iki platforma birden yayın yapabiliyor | Tek kitle tek platform. | Kime adımında açık her platform için ayrı seçici (Meta kitlesi / Google kitlesi). Ortak konum/yaş alanı yerine platforma göre ayrı değer gerekebilir (taslakta "Meta: 30-55 · Google: 25-65+"). Bu, rehber alanlarına platform bazlı yaş/konum eklemek demek: **en büyük kalem**, Ajan 2'den önce kullanıcı onayı. **KAPANDI (2026-10-20, kullanıcı "B"):** `googleKonumlari` + `googleYasAraligi`, isteğe bağlı ve varsayılansız; Google yaşı yalnız Talep Yaratma'da. |
 
 ## 3. Sözleşme (Ajan 2 ve 3 buradan okur, tip tanımlamaz)
 
@@ -56,7 +56,7 @@
 ve varsayılansız; kayıtlı rehberlerin özeti değişmez):
 - `metaKitlesi: { kitleId, ad, cinsiyet, ilgiler[], ozelKitleler[] } | null`
 - `googleKitlesi: { kitleId, ad, ilgiler[], kelimeler[] } | null`
-- Ç9 onaylanırsa: platform bazlı yaş (`googleYasAraligi`) ve konum.
+- Ç9 (onaylandı): `googleYasAraligi`, `googleKonumlari` (yoksa Google ortak değerleri kullanır, `googleEtkinKonumlar`).
 
 Derleyiciler:
 - `hedeflemeUret`: `flexible_spec[{interests}]`, `custom_audiences`,
