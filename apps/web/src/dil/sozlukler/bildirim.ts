@@ -49,7 +49,7 @@ export const bildirimSozlugu = ikiDil(
       rozetAlinamadi: 'Onay bekleyen sayısı alınamadı',
     },
     hizli: {
-      akilliBoost: 'Akıllı Boost',
+      akilliBoost: 'Boost Kampanyası',
       yeniReklam: 'Yeni reklam',
       raporlar: 'Raporlar',
     },
@@ -101,7 +101,7 @@ export const bildirimSozlugu = ikiDil(
       rozetAlinamadi: 'Could not get the number awaiting approval',
     },
     hizli: {
-      akilliBoost: 'Smart Boost',
+      akilliBoost: 'Boost Campaign',
       yeniReklam: 'New ad',
       raporlar: 'Reports',
     },

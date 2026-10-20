@@ -37,11 +37,11 @@ describe('menü iki dilde', () => {
     // Türkçe harfe bakmak yetmiyor ("Otomatik" vurgusu harfsiz): Türkçe
     // menünün KENDİ etiketlerinden hiçbiri İngilizcede kalmamalı. Ürün adları
     // ve kimlik olarak kalan Ayarlar başlığı hariç.
-    const ayni = new Set(['AdvStrategy', 'AdvCampaign', 'Base', 'Ayarlar']);
+    const ayni = new Set(['AdvStrategy', 'Base', 'Ayarlar']);
     const turkceler = new Set(duzle(bolumler).filter((e) => !ayni.has(e)));
     expect(etiketler.filter((e) => turkceler.has(e))).toEqual([]);
     expect(etiketler.filter((e) => TURKCE.test(e) && e !== 'Ayarlar')).toEqual([]);
-    expect(etiketler).toEqual(expect.arrayContaining(['Overview', 'Ads Manager', 'Brand Center', 'Smart Boost']));
+    expect(etiketler).toEqual(expect.arrayContaining(['Overview', 'Ads Manager', 'Brand Center', 'Create Campaign', 'Boost Campaign']));
   });
 
   it('Türkçede menü olduğu gibi döner (aynı nesne)', () => {

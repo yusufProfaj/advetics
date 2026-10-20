@@ -4,7 +4,7 @@ import { ikiDil } from '@advetics/shared';
  * Kenar menüsünün bölüm ve satır adları (`lib/nav-sections.ts`). Menü
  * tanımı Türkçe kalıyor (sayfa adıyla eşliği `nav-sections.spec.ts`
  * kilitliyor); ekrana çizilmeden `menuyuCevir()` bu sözlükten çeviriyor.
- * Ürün adları (AdvStrategy, AdvCampaign, Base) çevrilmez, burada yok.
+ * Ürün adları (AdvStrategy, Base) çevrilmez, burada yok.
  * Ayarlar sekmelerinin adı shared'da (`ayarSekmesiAdi`).
  */
 export const menuSozlugu = ikiDil(
@@ -20,7 +20,8 @@ export const menuSozlugu = ikiDil(
     satir: {
       'Genel Bakış': 'Genel Bakış',
       'Aylık Bütçe': 'Aylık Bütçe',
-      'Akıllı Boost': 'Akıllı Boost',
+      'Kampanya Oluştur': 'Kampanya Oluştur',
+      'Boost Kampanyası': 'Boost Kampanyası',
       'Reklam Yöneticisi': 'Reklam Yöneticisi',
       'Potansiyel Müşteriler': 'Potansiyel Müşteriler',
       'İyileştir': 'İyileştir',
@@ -45,7 +46,8 @@ export const menuSozlugu = ikiDil(
     satir: {
       'Genel Bakış': 'Overview',
       'Aylık Bütçe': 'Monthly Budget',
-      'Akıllı Boost': 'Smart Boost',
+      'Kampanya Oluştur': 'Create Campaign',
+      'Boost Kampanyası': 'Boost Campaign',
       'Reklam Yöneticisi': 'Ads Manager',
       'Potansiyel Müşteriler': 'Leads',
       'İyileştir': 'Optimize',

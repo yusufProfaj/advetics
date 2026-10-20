@@ -24,7 +24,7 @@ describe('hızlı erişim', () => {
   });
 
   it('yönetici dördünü görüyor', () => {
-    expect(kisayollar('admin')).toEqual(['Akıllı Boost', 'Yeni reklam', 'AdvStrategy', 'Raporlar']);
+    expect(kisayollar('admin')).toEqual(['Boost Kampanyası', 'Yeni reklam', 'AdvStrategy', 'Raporlar']);
   });
 
   it('KRİTİK: müşteri hesabı yalnız AdvStrategy ve Raporlar', () => {
@@ -42,7 +42,7 @@ describe('hızlı erişim iki dilde', () => {
     const tr = hizliErisim(bolumler, 'tr');
     const en = hizliErisim(bolumler, 'en');
     expect(en.map((k) => k.href)).toEqual(tr.map((k) => k.href));
-    expect(en.map((k) => k.etiket)).toEqual(expect.arrayContaining(['Smart Boost', 'New ad', 'Reports', 'AdvStrategy']));
-    expect(tr.map((k) => k.etiket)).toEqual(expect.arrayContaining(['Akıllı Boost', 'Yeni reklam', 'Raporlar']));
+    expect(en.map((k) => k.etiket)).toEqual(expect.arrayContaining(['Boost Campaign', 'New ad', 'Reports', 'AdvStrategy']));
+    expect(tr.map((k) => k.etiket)).toEqual(expect.arrayContaining(['Boost Kampanyası', 'Yeni reklam', 'Raporlar']));
   });
 });

@@ -252,7 +252,7 @@ describe('MENÜDEKİ AD İLE SAYFANIN ADI AYNI', () => {
   });
 });
 
-describe('ADVCAMPAIGN SATIRI', () => {
+describe('KAMPANYA OLUŞTUR SATIRI (AdvCampaign ekranı)', () => {
   /*
    * Reklam Oluştur, AI Asistan ve Toplu Oluştur kaldırıldı (kullanıcı kararı
    * 2026-10-07); reklam kurmanın tek yolu AdvCampaign. Eski satırların bir
@@ -262,10 +262,10 @@ describe('ADVCAMPAIGN SATIRI', () => {
   const satirlar = SECTIONS.flatMap((s) => s.items);
 
   it('KRİTİK: /reklam\'a gidiyor ve bulk.write istiyor — müşteri hesabı GÖRMÜYOR', () => {
-    const adv = satirlar.find((i) => i.label === 'AdvCampaign');
+    const adv = satirlar.find((i) => i.label === 'Kampanya Oluştur');
     expect(adv?.href).toBe('/reklam');
     expect(adv?.perm).toBe('bulk.write');
-    expect(etiketler('client_viewer')).not.toContain('AdvCampaign');
+    expect(etiketler('client_viewer')).not.toContain('Kampanya Oluştur');
   });
 
   it('KRİTİK: eski reklam oluşturma satırları menüde YOK', () => {
@@ -345,7 +345,7 @@ describe('ADVSTRATEGY SATIRI', () => {
     const planla = SECTIONS.find((s) => s.title === 'Planla');
     const olustur = SECTIONS.find((s) => s.title === 'Oluştur');
     expect(planla?.items.map((i) => i.label)).toContain('AdvStrategy');
-    expect(olustur?.items.map((i) => i.label)).toContain('AdvCampaign');
+    expect(olustur?.items.map((i) => i.label)).toContain('Kampanya Oluştur');
     expect(basliklar.indexOf('Planla')).toBe(basliklar.indexOf('Oluştur') + 1);
   });
 
@@ -430,7 +430,7 @@ describe('AJANS ROLLERİ', () => {
     const gorunen = etiketler('ad_manager');
     expect(gorunen).toContain('Şirketler ve workspace’ler');
     expect(gorunen).toContain('Platform bağlantıları');
-    expect(gorunen).toContain('AdvCampaign');
+    expect(gorunen).toContain('Kampanya Oluştur');
     expect(gorunen).toContain('İyileştir');
     // `user.read`: listeyi görür, değiştiremez (`ekip.yonet` org yöneticisi).
     expect(gorunen).toContain('Ekip ve güvenlik');
@@ -472,18 +472,22 @@ describe('KRİTİK: "Üst hesaplar" menü satırı DEĞİL — Şirketler sekmes
   });
 });
 
-describe('AKILLI BOOST — Oluştur bölümünün öne çıkarılmış ilk satırı', () => {
-  it('KRİTİK: Oluştur bölümünde, en üstte ve vurgulu', () => {
-    // Kullanıcının isteği (2026-09-30): reklamların alt satırı ve
-    // diğerlerinden daha belirgin. 2026-10-09'dan beri bölüm Oluştur.
+describe('OLUŞTUR — Kampanya Oluştur ilk, Boost Kampanyası vurgulu', () => {
+  it('KRİTİK: Kampanya Oluştur en üstte, Boost Kampanyası altında ve vurgulu', () => {
+    // 2026-09-30–2026-10-20 arası Akıllı Boost bölümün ilk satırıydı;
+    // 2026-10-20'den beri (kullanıcı kararı) adlar ne yaptığını söylüyor ve
+    // reklam kurmanın tek yolu önde. Vurgu Boost'ta kaldı (otomatik yol).
     const olustur = SECTIONS.find((s) => s.title === 'Oluştur');
-    expect(olustur?.items[0]?.label).toBe('Akıllı Boost');
-    expect(olustur?.items[0]?.vurgu).toBeTruthy();
+    expect(olustur?.items.map((i) => [i.label, i.href])).toEqual([
+      ['Kampanya Oluştur', '/reklam'],
+      ['Boost Kampanyası', '/auto-boost'],
+    ]);
+    expect(olustur?.items[1]?.vurgu).toBeTruthy();
   });
 
   it('vurgu TEK satırda — iki vurgu hiçbirini belirgin yapmaz', () => {
     const vurgulu = SECTIONS.flatMap((s) => s.items).filter((i) => i.vurgu);
-    expect(vurgulu.map((i) => i.label)).toEqual(['Akıllı Boost']);
+    expect(vurgulu.map((i) => i.label)).toEqual(['Boost Kampanyası']);
   });
 });
 

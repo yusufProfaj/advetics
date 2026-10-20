@@ -105,31 +105,34 @@ function bolumleriKur(
     title: 'Oluştur',
     items: [
       /*
-       * AKILLI BOOST OLUŞTUR'UN İLK SATIRI VE ÖNE ÇIKARILMIŞ (2026-09-30'dan
-       * beri reklam bölümünün vurgulu satırı; kullanıcının listesinde
-       * "Ad Boost" Oluştur'un içinde). `vurgu` yalnızca görünüş.
+       * KAMPANYA OLUŞTUR — reklam kurmanın TEK yolu (kullanıcı kararı
+       * 2026-10-07) ve 2026-10-20'den beri bölümün İLK satırı. Ekranın ürün
+       * adı AdvCampaign; menüde ne yaptığını söyleyen ad duruyor (kullanıcı
+       * kararı 2026-10-20), sayfa başlığı da menüden geldiği için aynı. `bulk.write`: sayfanın kendi kapısıyla aynı anahtar,
+       * ayrışırsa menüde görünüp açılmayan bir satır olur.
+       */
+      {
+        href: '/reklam',
+        label: 'Kampanya Oluştur',
+        icon: 'create',
+        module: 4,
+        ready: true,
+        perm: 'bulk.write',
+      },
+      /*
+       * BOOST KAMPANYASI (2026-10-20'ye kadar adı "Akıllı Boost" ve
+       * bölümün ilk satırıydı). Kampanya Oluştur'un ALTINDA ama hâlâ
+       * vurgulu: otomatik çalışan tek yol olduğunu "Otomatik" rozeti
+       * söylüyor. `vurgu` yalnızca görünüş.
        */
       {
         href: '/auto-boost',
-        label: 'Akıllı Boost',
+        label: 'Boost Kampanyası',
         icon: 'boost',
         module: 7,
         ready: true,
         perm: 'boost.read',
         vurgu: 'Otomatik',
-      },
-      /*
-       * ADVCAMPAIGN — reklam kurmanın TEK yolu (kullanıcı kararı
-       * 2026-10-07). `bulk.write`: sayfanın kendi kapısıyla aynı anahtar,
-       * ayrışırsa menüde görünüp açılmayan bir satır olur.
-       */
-      {
-        href: '/reklam',
-        label: 'AdvCampaign',
-        icon: 'create',
-        module: 4,
-        ready: true,
-        perm: 'bulk.write',
       },
     ],
   },
@@ -440,7 +443,7 @@ function bolumleriSuz(
  * sessizce Türkçe satır demekti. Ürün adları (`AYNI_KALANLAR`) olduğu gibi.
  * Ayarlar satırları shared'daki sekme adından (`ayarSekmesiAdi`).
  */
-const AYNI_KALANLAR = new Set(['AdvStrategy', 'AdvCampaign', 'Base']);
+const AYNI_KALANLAR = new Set(['AdvStrategy', 'Base']);
 
 export function menuEtiketiCevir(
   tur: 'bolum' | 'satir' | 'vurgu',

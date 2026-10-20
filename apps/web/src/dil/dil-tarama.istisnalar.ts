@@ -90,7 +90,6 @@ export const ISTISNALAR: Record<string, Partial<Record<MetinTuru, number>>> = {
   'lib/form-onizleme.ts': { turkce: 1 },
   'lib/format.ts': { turkce: 5 },
   'lib/kurulum-beyanlari.ts': { jsx: 1 },
-  'lib/nav-sections.ts': { turkce: 11 },
   'lib/sayfa-workspace.ts': { turkce: 1 },
   'lib/sayfa-yardimcilari.ts': { turkce: 1 },
   'lib/terimler.ts': { turkce: 21 },
@@ -104,4 +103,11 @@ export const KALICI_ISTISNALAR: Record<string, Partial<Record<MetinTuru, number>
   // Choose your language"): kişinin hangisini okuduğunu henüz bilmiyoruz,
   // sözlükten seçmek tam olarak sorulan soruyu varsaymak olurdu.
   'components/ui/dil-secimi.tsx': { turkce: 1, jsx: 2 },
+  // Menü tanımı TÜRKÇE ANAHTARLARLA yazılı (bölüm ve satır adları); ekrana
+  // çizilmeden `menuyuCevir` sözlükten çeviriyor ve karşılığı olmayan
+  // etiket HATA veriyor (`menu-ve-etiketler.spec.ts` İngilizce menüde Türkçe
+  // etiket kalmadığını ayrıca sayıyor). Sayılan dizgelerin hepsi bu
+  // anahtarlar; 2026-10-20'de "AdvCampaign" (ürün adı, harfsiz) yerine
+  // "Kampanya Oluştur" gelince 11'den 12'ye çıktı (kullanıcı kararı).
+  'lib/nav-sections.ts': { turkce: 12 },
 };
