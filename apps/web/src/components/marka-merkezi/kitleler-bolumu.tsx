@@ -249,8 +249,7 @@ export function KitlelerBolumu({
   return (
     <section id="kitleler" aria-label={m.ariaEtiketi} className="grid scroll-mt-24 gap-3">
       <p className="m-0 text-13 text-ink-muted">
-        Kime gösterileceği: konum, yaş, cinsiyet, ilgi. Varsayılan kitle reklam kurarken kendiliğinden seçilir ve Kurulum’da
-        değişir. {dk.kullanimNotu}
+        {dk.kullanimNotu}
       </p>
 
       {hata && form === null && (
@@ -379,7 +378,12 @@ export function KitlelerBolumu({
                 ),
               },
               { anahtar: 'platform', baslik: dk.platform, hucre: (k) => <PlatformEtiketi platform={k.platform} /> },
-              { anahtar: 'tanim', baslik: m.kolonTanim, hucre: (k) => <span className="text-13 text-ink-muted">{platformOzeti(k, dk)}</span> },
+              {
+                anahtar: 'tanim',
+                baslik: m.kolonTanim,
+                // Alt sınır: telefonda sütun kelime kelime kırılıyordu (canlı, 375 px); tablo kendi içinde kayar.
+                hucre: (k) => <span className="block min-w-[220px] text-13 text-ink-muted">{platformOzeti(k, dk)}</span>,
+              },
               {
                 anahtar: 'eylem',
                 baslik: <span className="sr-only">{m.kolonEylem}</span>,
@@ -436,7 +440,8 @@ function formdan(k: KitleSablonuRecord): Form {
 /** Platform rozeti: logo + ad. Renk logoda; metin siyah (kılavuz). */
 function PlatformEtiketi({ platform }: { platform: KitlePlatformu }) {
   return (
-    <span className="inline-flex h-6 items-center gap-1.5 whitespace-nowrap rounded-full border border-line-strong px-2.5 text-12 font-bold text-ink">
+    // w-fit: formdaki `Alan` ızgarasında çocuk satır boyu uzuyordu (canlıda rozet panel genişliğinde çıktı).
+    <span className="inline-flex h-6 w-fit items-center gap-1.5 whitespace-nowrap rounded-full border border-line-strong px-2.5 text-12 font-bold text-ink">
       <PlatformLogo kind={PLATFORM_LOGOSU[platform]} className="h-3.5 w-3.5" />
       {PLATFORM_ADI[platform]}
     </span>

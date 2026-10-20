@@ -2,6 +2,7 @@
 
 import type { KitlePerformansi } from '@advetics/shared';
 import { Sekmeler } from '@/components/ui/sekmeler';
+import { BosDurum } from '@/components/ui/hal';
 import { KitlelerBolumu } from '@/components/marka-merkezi/kitleler-bolumu';
 import { useSozluk } from '@/dil/saglayici';
 import { kitleSozlugu } from '@/dil/sozlukler/kitle';
@@ -34,7 +35,8 @@ export function HedefKitleler({
 }: {
   alt: KitleAltSekmesi;
   hrefler: Record<KitleAltSekmesi, string>;
-  clientId: string;
+  /** Şirket düzeyinde ("Tüm workspace'ler") `null`: kayıtlı kitle listelenemez, NEDENİ yazar. */
+  clientId: string | null;
   yazabilir: boolean;
   varsayilanAdresi: string | null;
   yeniAc: boolean;
@@ -53,7 +55,9 @@ export function HedefKitleler({
           { deger: 'performans', etiket: d.altPerformans, href: hrefler.performans },
         ]}
       />
-      {alt === 'kayitli' ? (
+      {alt === 'kayitli' && clientId === null ? (
+        <BosDurum baslik={d.workspaceYokBaslik} neden={d.workspaceYokNeden} />
+      ) : alt === 'kayitli' && clientId !== null ? (
         <KitlelerBolumu
           clientId={clientId}
           yazabilir={yazabilir}

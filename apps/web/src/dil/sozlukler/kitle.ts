@@ -20,7 +20,8 @@ export const kitleSozlugu = ikiDil(
     googleEslesmeYok: (n: number) => `Google’ın ${n} kategorisinde bu tarife eşleşen yok; kategori eklemeden arama kelimeleriyle kaydedebilirsin.`,
     googleKelime: (n: number) => `${n} arama kelimesi`,
     tarifEtiketi: 'Anahtar kelime ya da hedefle tarif et (isteğe bağlı)',
-    kullanimNotu: 'Meta karşılığı reklam kurarken kendiliğinden seçilir. Google karşılığı burada tutulur.',
+    kullanimNotu:
+      'Kime gösterileceği: konum, yaş, cinsiyet ve platformun hedeflemesi. Reklam kurarken her platform için kayıtlı bir kitle seçilebilir; varsayılan kitlenin konumu kendiliğinden gelir ve Kurulum’da değişir.',
     // Reklam Yöneticisi › Hedef kitleler
     kitle: 'Kitle',
     harcama: 'Harcama',
@@ -68,6 +69,8 @@ export const kitleSozlugu = ikiDil(
     altPerformans: 'Performans',
     yeniHedefKitle: 'Yeni hedef kitle',
     yeniBaglanamadi: 'Kitle listesi yüklenemediği için form açılmadı.',
+    workspaceYokBaslik: 'Kayıtlı kitleleri görmek için bir workspace seç',
+    workspaceYokNeden: 'Kayıtlı kitleler workspace’e ait. Şirketin tüm workspace’lerinin performansı Performans sekmesinde.',
   },
   {
     googleBaslik: 'Google targeting',
@@ -83,7 +86,8 @@ export const kitleSozlugu = ikiDil(
     googleEslesmeYok: (n) => `None of Google’s ${n} categories matches this description; you can save it with search terms only.`,
     googleKelime: (n) => `${n} search ${n === 1 ? 'term' : 'terms'}`,
     tarifEtiketi: 'Describe with keywords or a goal (optional)',
-    kullanimNotu: 'The Meta equivalent is picked automatically when you set up an ad. The Google equivalent is kept here.',
+    kullanimNotu:
+      'Who sees the ad: location, age, gender and the platform’s targeting. When you set up an ad you can pick a saved audience for each platform; the default audience’s location is filled in automatically and is changed in Setup.',
     kitle: 'Audience',
     harcama: 'Spend',
     gosterim: 'Impressions',
@@ -129,5 +133,7 @@ export const kitleSozlugu = ikiDil(
     altPerformans: 'Performance',
     yeniHedefKitle: 'New audience',
     yeniBaglanamadi: 'The form did not open because the audience list could not be loaded.',
+    workspaceYokBaslik: 'Select a workspace to see saved audiences',
+    workspaceYokNeden: 'Saved audiences belong to a workspace. Performance across all of the company’s workspaces is on the Performance tab.',
   },
 );

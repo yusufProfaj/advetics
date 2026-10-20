@@ -40,6 +40,8 @@ canlıda masaüstü + mobil görülmeden bitmiş sayılmaz (§3 "Tasarım").
 - `www.advetics.com` middleware'de white-label müşteri alan adı sayılıp `/r/bulunamadi`ye gidiyordu (Google OAuth "ana sayfa yanıt vermiyor"); alan adı kararı veren her yerde `www.` kökünü ayrıca düşün (`middleware.spec.ts`).
 - Sütunsuz `grid` (`grid gap-4`) en geniş çocuğun min-content'inden daralmıyor: `overflow-x-auto` içindeki tablo telefonda SAYFAYI 780 piksele itti; atalara `grid-cols-1`, ölçüm `scrollWidth` (`panel-derleme.md`).
 - `uygula(…, { validateOnly })` yalnız Google'da prova: Meta sağlayıcısı seçeneği tanımıyor ve GERÇEKTEN yazıyor; önizleme için `CampaignActionsService.onizle` (platforma gitmez, `platform-meta.md`).
+- Reklam Yöneticisi'nde şirket düzeyi ("Tüm workspace'ler") `activeClientId` BOŞ ama `ajansGorunumu`/`mcc` değil: görünümü `activeClientId`'ye bağlamak sekmeyi seçili gösterip altına hesap tablosu çizdi (`hedef-kitleler.spec.ts`).
+- Mutasyonu `git checkout -- dosya` ile geri alma: commit'lenmemiş düzeltmeyi de siler; dosyanın yedeğinden dön.
 
 ## 0. "advetics projesine devam et" denince
 

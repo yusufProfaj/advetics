@@ -469,8 +469,16 @@ export default async function DashboardPage({
    * yutulmuyor, tablonun yerinde platformun/sunucunun cümlesi yazıyor.
    */
   const kitleGorunumu = first(params.seviye) === 'kitle' && !ajansGorunumu && !mcc;
-  // Alt sekme (2026-10-20): kayıtlı kitleler varsayılan; performans çağrısı yalnız o sekmede.
-  const kitleAlt: KitleAltSekmesi = first(params.kitle) === 'performans' ? 'performans' : 'kayitli';
+  /*
+   * Alt sekme (2026-10-20): kayıtlı kitleler varsayılan; performans çağrısı
+   * yalnız o sekmede. ŞİRKET DÜZEYİNDE ("Tüm workspace'ler") seçili
+   * workspace yok ve kayıtlı kitle workspace'e ait: varsayılan orada
+   * PERFORMANS. Canlıda bu durumda sekme seçili görünüp altında hesap
+   * tablosu çiziliyordu (görünüm workspace'siz sessizce düşüyordu).
+   */
+  const kitleAltParam = first(params.kitle);
+  const kitleAlt: KitleAltSekmesi =
+    kitleAltParam === 'performans' || (kitleAltParam !== 'kayitli' && !session.activeClientId) ? 'performans' : 'kayitli';
   const kitleYaniti: { tur: 'veri'; v: KitlePerformansi } | { tur: 'hata'; mesaj: string } | null = kitleGorunumu && kitleAlt === 'performans'
     ? await serverApiFetch<KitlePerformansi>(`/metrics/kitleler?${base}`)
         .then((v) => ({ tur: 'veri' as const, v }))
@@ -562,16 +570,20 @@ export default async function DashboardPage({
 
   const kitleYazabilir = kapi(session, 'kitle.yaz');
   const tabloYerine =
-    kitleGorunumu && session.activeClientId ? (
+    kitleGorunumu ? (
       <HedefKitleler
         alt={kitleAlt}
         hrefler={{
-          kayitli: baglanti(REKLAM_YONETICISI, tasinan, { seviye: 'kitle', kitle: undefined, yeni: undefined }),
+          kayitli: baglanti(REKLAM_YONETICISI, tasinan, { seviye: 'kitle', kitle: 'kayitli', yeni: undefined }),
           performans: baglanti(REKLAM_YONETICISI, tasinan, { seviye: 'kitle', kitle: 'performans', yeni: undefined }),
         }}
         clientId={session.activeClientId}
         yazabilir={kitleYazabilir}
-        varsayilanAdresi={kapi(session, 'markaMerkezi.gor') ? markaMerkeziAdresi('kurulum', session.activeClientId, 'varsayilanlar') : null}
+        varsayilanAdresi={
+          session.activeClientId && kapi(session, 'markaMerkezi.gor')
+            ? markaMerkeziAdresi('kurulum', session.activeClientId, 'varsayilanlar')
+            : null
+        }
         yeniAc={first(params.yeni) === '1'}
         ilkSuzgec={platform ?? null}
         performans={kitleYaniti}
