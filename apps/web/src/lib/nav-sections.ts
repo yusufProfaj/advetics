@@ -44,13 +44,14 @@ const AYAR_KISA_AD_YENI: Record<string, string> = Object.fromEntries(
 );
 
 /**
- * ═══ YEDİ BÖLÜM, İŞİN SIRASIYLA (2026-10-09, kullanıcı kararı) ═══
+ * ═══ YEDİ BÖLÜM, SIK KULLANILAN ÜSTTE (2026-10-20) ═══
  *
- * Genel Bakış · Planla · Oluştur · Yönet · İyileştir · Raporlar · Base
- * (+ en altta Ayarlar). Plan: `docs/URUN-YAPISI-PLANI.md`. Adlar TÜRKÇE
+ * Genel Bakış · Yönet · Oluştur · Planla · İyileştir · Raporlar · Base
+ * (+ en altta Ayarlar). 2026-10-09'da bölümler bir reklamın hayatını
+ * sırayla izliyordu (Planla · Oluştur · Yönet …); 2026-10-20'de günlük
+ * iş (Yönet, Oluştur) öne alındı. Plan: `docs/URUN-YAPISI-PLANI.md`. Adlar TÜRKÇE
  * (CLAUDE.md: "OPTIMISE gibi terimler panelde geçmiyor"); "Base" onaylanmış
- * istisna. Bölümler bir reklamın hayatını sırayla izliyor: önce planla,
- * sonra kur, sonra yönet, sonra iyileştir, sonra raporla.
+ * istisna.
  *
  * YALNIZCA EKRANI OLAN SATIR. Planın saydığı A/B testi, kreatif yorgunluğu,
  * AI Asistan gibi ekranlar yazılınca gelecek; ekranı olmayan soluk satır
@@ -75,37 +76,29 @@ function bolumleriKur(
   },
   {
     /*
-     * PLANLA — OLUŞTUR'DAN HEMEN ÖNCE. AdvStrategy'de onaylanan plan
-     * AdvCampaign'e aktarılıyor; iki ekran aynı işin ardışık adımları ve
-     * menüde de art arda duruyorlar (eskiden aynı bölümde alt alta).
+     * YÖNET — GENEL BAKIŞ'IN HEMEN ALTINDA (2026-10-20, Armağan'ın
+     * görevi): panelin en sık açılan ekranı Reklam Yöneticisi ve
+     * "hayat sırası"nın sonunda kalınca her girişte aşağı inmek gerekiyordu.
+     * Yayındakini izleme ve gelen sonuçla çalışma. Reklam
+     * Yöneticisi (2026-10-09, eski adı Reklam Keşfi) şirketten reklama inen
+     * tablo; satır içi durdur/başlat/bütçe sonraki adım. MÜŞTERİ HESABI
+     * Reklam Yöneticisi'ni görüyor (yalnız kendi workspace'i).
      */
-    title: 'Planla',
+    title: 'Yönet',
     items: [
+      { href: '/ads-explorer', label: 'Reklam Yöneticisi', icon: 'explorer', module: 4, perm: 'insights.read' },
       /*
-       * İZİN SÖZLEŞMEDEN (`STRATEJI_SAYFA_IZNI`), elle yazılmıyor: sayfa
-       * kapısı aynı sabiti okuyor ve ikisi ayrışırsa menüde görünüp
-       * açılmayan bir satır doğar. MÜŞTERİ HESABI BU SATIRI GÖRÜYOR (Ç-5,
-       * 2026-10-08): planı panelin içinde ONAYLIYOR, yazamıyor.
+       * POTANSİYEL MÜŞTERİLER RAPORLAR'DAN GELDİ: form reklamından düşen
+       * kişiler bir rapor değil, aranacak bir iş listesi.
        */
       {
-        href: '/strateji',
-        label: 'AdvStrategy',
-        icon: 'plan',
+        href: '/potansiyel-musteriler',
+        label: 'Potansiyel Müşteriler',
+        icon: 'leads',
         module: 4,
         ready: true,
-        perm: STRATEJI_SAYFA_IZNI,
+        perm: 'lead.read',
       },
-      /*
-       * AYLIK BÜTÇE PLANLA'DA (2026-10-09, kullanıcı: "bütçe Planla'da
-       * olsun"). 2026-10-06'dan beri Marka Merkezi'nin bir bölümüydü; eski
-       * `?bolum=butce` adresi buraya yönleniyor.
-       *
-       * `budget.write`, `budget.read` DEĞİL: müşteri hesabı `budget.read`
-       * taşıyor (Genel Bakış'taki bütçe tüketimi onunla okunuyor), ama bu
-       * ekran bütçe BELİRLEME yeri; okuma yetkisiyle menüden açmak müşteriyi
-       * kaydedemeyeceği bir forma götürürdü.
-       */
-      { href: '/butce', label: 'Aylık Bütçe', icon: 'budget', module: 5, ready: true, perm: 'budget.write' },
     ],
   },
   {
@@ -142,26 +135,37 @@ function bolumleriKur(
   },
   {
     /*
-     * YÖNET — yayındakini izleme ve gelen sonuçla çalışma. Reklam
-     * Yöneticisi (2026-10-09, eski adı Reklam Keşfi) şirketten reklama inen
-     * tablo; satır içi durdur/başlat/bütçe sonraki adım. MÜŞTERİ HESABI
-     * Reklam Yöneticisi'ni görüyor (yalnız kendi workspace'i).
+     * PLANLA — OLUŞTUR'DAN HEMEN SONRA (2026-10-20). 2026-10-09'dan beri
+     * Oluştur'dan önceydi (plan önce, kurulum sonra); kullanıcı günlük işi
+     * öne aldı: Yönet ve Oluştur üstte, Planla onların altında.
      */
-    title: 'Yönet',
+    title: 'Planla',
     items: [
-      { href: '/ads-explorer', label: 'Reklam Yöneticisi', icon: 'explorer', module: 4, perm: 'insights.read' },
       /*
-       * POTANSİYEL MÜŞTERİLER RAPORLAR'DAN GELDİ: form reklamından düşen
-       * kişiler bir rapor değil, aranacak bir iş listesi.
+       * İZİN SÖZLEŞMEDEN (`STRATEJI_SAYFA_IZNI`), elle yazılmıyor: sayfa
+       * kapısı aynı sabiti okuyor ve ikisi ayrışırsa menüde görünüp
+       * açılmayan bir satır doğar. MÜŞTERİ HESABI BU SATIRI GÖRÜYOR (Ç-5,
+       * 2026-10-08): planı panelin içinde ONAYLIYOR, yazamıyor.
        */
       {
-        href: '/potansiyel-musteriler',
-        label: 'Potansiyel Müşteriler',
-        icon: 'leads',
+        href: '/strateji',
+        label: 'AdvStrategy',
+        icon: 'plan',
         module: 4,
         ready: true,
-        perm: 'lead.read',
+        perm: STRATEJI_SAYFA_IZNI,
       },
+      /*
+       * AYLIK BÜTÇE PLANLA'DA (2026-10-09, kullanıcı: "bütçe Planla'da
+       * olsun"). 2026-10-06'dan beri Marka Merkezi'nin bir bölümüydü; eski
+       * `?bolum=butce` adresi buraya yönleniyor.
+       *
+       * `budget.write`, `budget.read` DEĞİL: müşteri hesabı `budget.read`
+       * taşıyor (Genel Bakış'taki bütçe tüketimi onunla okunuyor), ama bu
+       * ekran bütçe BELİRLEME yeri; okuma yetkisiyle menüden açmak müşteriyi
+       * kaydedemeyeceği bir forma götürürdü.
+       */
+      { href: '/butce', label: 'Aylık Bütçe', icon: 'budget', module: 5, ready: true, perm: 'budget.write' },
     ],
   },
   {

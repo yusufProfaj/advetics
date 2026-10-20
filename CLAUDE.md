@@ -411,8 +411,9 @@ ekran/menü/akış işine başlamadan oku. Özet:
   ya da başka kullanıcı kararını bozan şey sorulur.
 - Hedef kullanıcı reklamcılık bilmiyor; hedef/optimizasyon/yerleşim/teklif
   sorulmuyor (`goal-mapping.ts`).
-- Menü yedi bölüm, Türkçe (Genel Bakış · Planla · Oluştur · Yönet ·
-  İyileştir · Raporlar · Base + Ayarlar); yalnız ekranı olan satır menüde.
+- Menü yedi bölüm, Türkçe (Genel Bakış · Yönet · Oluştur · Planla ·
+  İyileştir · Raporlar · Base + Ayarlar; Yönet 2026-10-20'den beri üstte);
+  yalnız ekranı olan satır menüde.
 - Reklam kurmanın tek yolu AdvCampaign (`/reklam`). Genel Bakış özet, iniş
   tablosu Reklam Yöneticisi'nde. Müşteri hesabı dört ekran görür.
 - Arayüz iki dilli (TR/EN, 2026-10-15): ekran metni sözlükten

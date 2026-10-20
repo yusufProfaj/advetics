@@ -60,13 +60,14 @@ describe('menü verisi gerçekten okunuyor', () => {
     // karardı; altıncı bir bölüm eklenirse burası düşer ve karar gözden
     // geçirilir. Son bölümün adı "Ayarlar"dı; içinde ayar OLMAYAN ekranlar
     // (Şirketler, Ekip) o adı yanlış yapıyordu.
-    // YEDİ BÖLÜM + AYARLAR (2026-10-09, kullanıcı kararı): bir reklamın
-    // hayatının sırası. Adlar Türkçe; "Base" onaylanmış istisna.
+    // YEDİ BÖLÜM + AYARLAR (2026-10-09, kullanıcı kararı). Adlar Türkçe;
+    // "Base" onaylanmış istisna. 2026-10-20'den beri Yönet en üstte
+    // (Genel Bakış'ın altı), Planla Oluştur'dan sonra.
     expect(SECTIONS.map((s) => s.title)).toEqual([
       undefined,
-      'Planla',
-      'Oluştur',
       'Yönet',
+      'Oluştur',
+      'Planla',
       'İyileştir',
       'Raporlar',
       // "Kütüphane" 2026-10-06'da "Base" oldu (kullanıcı kararı).
@@ -336,16 +337,16 @@ describe('ADVSTRATEGY SATIRI', () => {
     expect(kod).toContain('hasPermission(session, STRATEJI_SAYFA_IZNI)');
   });
 
-  it('Planla’da ve Planla, AdvCampaign’in bulunduğu Oluştur’dan HEMEN önce', () => {
+  it('Planla’da ve Planla, AdvCampaign’in bulunduğu Oluştur’un HEMEN ardında', () => {
     // Onaylanan plan AdvCampaign'e aktarılıyor: iki ekran aynı işin ardışık
-    // adımları. Eskiden aynı bölümde alt altaydı; 2026-10-09'dan beri
-    // ardışık iki bölümde.
+    // adımları ve menüde komşu kalıyorlar. 2026-10-09–2026-10-20 arası
+    // Planla öndeydi; 2026-10-20'den beri Oluştur önde (günlük iş üstte).
     const basliklar = SECTIONS.map((s) => s.title);
     const planla = SECTIONS.find((s) => s.title === 'Planla');
     const olustur = SECTIONS.find((s) => s.title === 'Oluştur');
     expect(planla?.items.map((i) => i.label)).toContain('AdvStrategy');
     expect(olustur?.items.map((i) => i.label)).toContain('AdvCampaign');
-    expect(basliklar.indexOf('Oluştur')).toBe(basliklar.indexOf('Planla') + 1);
+    expect(basliklar.indexOf('Planla')).toBe(basliklar.indexOf('Oluştur') + 1);
   });
 
   it('KRİTİK: Aylık Bütçe Planla’da ve menüde yazma yetkisiyle (client_viewer forma gitmesin)', () => {
@@ -388,9 +389,9 @@ describe('MÜŞTERİ HESABI (client_viewer)', () => {
      * eksik bir satır da düşürür. Ters yöndeki hata da gerçek: her şeyi
      * gizleyen bir süzgeç "görmüyor" testlerini geçerdi.
      */
-    // Sıra 2026-10-09'dan beri bölüm sırasından: Planla, Yönet'ten önce.
-    expect(etiketler('client_viewer')).toEqual(['Genel Bakış', 'AdvStrategy', 'Reklam Yöneticisi', 'Raporlar']);
-    expect(basliklar('client_viewer')).toEqual([undefined, 'Planla', 'Yönet', 'Raporlar']);
+    // Sıra bölüm sırasından: 2026-10-20'den beri Yönet, Planla'dan önce.
+    expect(etiketler('client_viewer')).toEqual(['Genel Bakış', 'Reklam Yöneticisi', 'AdvStrategy', 'Raporlar']);
+    expect(basliklar('client_viewer')).toEqual([undefined, 'Yönet', 'Planla', 'Raporlar']);
   });
 
   it('Bilgi Bankası GÖRÜNMÜYOR — karar değişti', () => {

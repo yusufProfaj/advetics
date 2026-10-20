@@ -46,12 +46,13 @@ describe('HEDEF MENÜ', () => {
     expect(SECTIONS_HEDEF.flatMap((s) => s.items).some((i) => i.href === HESABIM_SATIRI.href)).toBe(false);
   });
 
-  it('bölüm sırası değişmedi', () => {
+  // 2026-10-20'den beri Yönet en üstte, Planla Oluştur'dan sonra.
+  it('bölüm sırası menüyle aynı', () => {
     expect(SECTIONS_HEDEF.map((s) => s.title)).toEqual([
       undefined,
-      'Planla',
-      'Oluştur',
       'Yönet',
+      'Oluştur',
+      'Planla',
       'İyileştir',
       'Raporlar',
       'Base',
@@ -60,7 +61,7 @@ describe('HEDEF MENÜ', () => {
   });
 
   it('KRİTİK: müşteri hesabı hâlâ TAM dört ekran ve Ayarlar’ı görmüyor', () => {
-    expect(etiketler('client_viewer')).toEqual(['Genel Bakış', 'AdvStrategy', 'Reklam Yöneticisi', 'Raporlar']);
+    expect(etiketler('client_viewer')).toEqual(['Genel Bakış', 'Reklam Yöneticisi', 'AdvStrategy', 'Raporlar']);
     expect(hedefGorunurBolumler(izinler('client_viewer'), { ustHesapGorunur: false, platformSahibi: false }).map((s) => s.title)).not.toContain('Ayarlar');
   });
 
