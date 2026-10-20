@@ -73,6 +73,7 @@ describe('hedeflemeye çevirme', () => {
   it('şablon şeması uydurma kimliği reddediyor', () => {
     const g = {
       clientId: '11111111-1111-1111-1111-111111111111',
+      platform: 'meta',
       name: 'x',
       locations: [],
       ageMin: 18,

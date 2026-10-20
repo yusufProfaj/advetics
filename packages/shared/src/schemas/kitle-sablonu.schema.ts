@@ -54,6 +54,20 @@ export type KitleOzel = z.infer<typeof kitleOzelSchema>;
 export const KITLE_CINSIYETLERI = ['all', 'male', 'female'] as const;
 
 /**
+ * ═══ KİTLENİN PLATFORMU (kullanıcı kararı, 2026-10-20) ═══
+ *
+ * Bir kitle TEK platformun: Meta kitlesi Meta ilgi alanı ve özel kitle,
+ * Google kitlesi Google kategorisi ve arama kelimesi taşır; konum, yaş ve
+ * cinsiyet ikisinde ortak. Kayıttan sonra DEĞİŞMEZ: ilgi ve kitle
+ * kimlikleri platforma özel, platformu çevirmek o kimlikleri anlamsız
+ * bırakırdı. Öncesinde tek kayıt iki platformun alanını birlikte
+ * taşıyordu ve listede hangi reklamda neyin işe yarayacağı görünmüyordu
+ * (`20261025100000_kitle_platformu` o kayıtları ikiye böldü).
+ */
+export const KITLE_PLATFORMLARI = ['meta', 'google'] as const;
+export type KitlePlatformu = (typeof KITLE_PLATFORMLARI)[number];
+
+/**
  * ═══ GOOGLE KARŞILIĞI (Base › Kitleler, 2026-10-16) ═══
  *
  * Kullanıcı: kütüphane "anahtar kelimelere ve hedeflere göre Google ve
@@ -170,14 +184,36 @@ export function ozelKitleKurali(ozel: KitleOzel[], zctx: z.RefinementCtx, yol: (
   }
 }
 
+/**
+ * PLATFORM DIŞI ALAN REDDEDİLİR, SESSİZCE ATILMAZ. Atılsaydı kullanıcı
+ * Google kitlesine eklediği Meta ilgi alanını kaydettiğini sanır, alan
+ * hiçbir reklama gitmezdi.
+ */
+export function kitlePlatformKurali(
+  v: { platform: KitlePlatformu; interests: unknown[]; ozelKitleler: unknown[]; google?: KitleGoogle },
+  zctx: z.RefinementCtx,
+): void {
+  if (v.platform === 'google') {
+    if (v.interests.length > 0) {
+      zctx.addIssue({ code: z.ZodIssueCode.custom, path: ['interests'], message: 'Google kitlesinde Meta ilgi alanı olamaz' });
+    }
+    if (v.ozelKitleler.length > 0) {
+      zctx.addIssue({ code: z.ZodIssueCode.custom, path: ['ozelKitleler'], message: 'Google kitlesinde Meta özel kitlesi olamaz' });
+    }
+  } else if ((v.google?.ilgiler.length ?? 0) > 0 || (v.google?.kelimeler.length ?? 0) > 0) {
+    zctx.addIssue({ code: z.ZodIssueCode.custom, path: ['google'], message: 'Meta kitlesinde Google kategorisi ya da arama kelimesi olamaz' });
+  }
+}
+
 export const kitleSablonuInputSchema = z
-  .object({ clientId: z.string().uuid(), ...kitleAlanlari })
+  .object({ clientId: z.string().uuid(), platform: z.enum(KITLE_PLATFORMLARI), ...kitleAlanlari })
   .superRefine((v, zctx) => {
     if (v.ageMin > v.ageMax) {
       zctx.addIssue({ code: z.ZodIssueCode.custom, path: ['ageMin'], message: 'Alt yaş üst yaştan büyük olamaz' });
     }
     konumCakismasi(v.locations, zctx);
     ozelKitleKurali(v.ozelKitleler, zctx);
+    kitlePlatformKurali(v, zctx);
   });
 export type KitleSablonuInput = z.infer<typeof kitleSablonuInputSchema>;
 
@@ -206,6 +242,7 @@ export type KitleHedefi = z.infer<typeof kitleHedefiSchema>;
 export interface KitleSablonuRecord {
   id: string;
   clientId: string;
+  platform: KitlePlatformu;
   name: string;
   locations: KitleKonumu[];
   ageMin: number;

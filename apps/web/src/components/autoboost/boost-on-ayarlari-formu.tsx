@@ -457,7 +457,10 @@ function SablondanDoldur({
   useEffect(() => {
     setListe(undefined);
     setHata(null);
-    apiFetch<KitleSablonuListesi>(`/audience-templates?clientId=${clientId}`)
+    // YALNIZ META KİTLESİ: bu form Meta ön ayarı; Google kitlesinin ilgi
+    // ve kelimeleri Meta hedeflemesine çevrilemez, seçilseydi yalnız konumu
+    // gelir ve kullanıcı kitlenin tamamını uyguladığını sanırdı.
+    apiFetch<KitleSablonuListesi>(`/audience-templates?clientId=${clientId}&platform=meta`)
       .then((r) => setListe(r.items))
       .catch((err: unknown) =>
         setHata(err instanceof ApiRequestError ? err.message : d.sablonOkunamadi),

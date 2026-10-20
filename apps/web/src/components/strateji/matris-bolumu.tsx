@@ -360,7 +360,12 @@ function DuzenlenenSatir({
 }) {
   const m = sec(stratejiPlanSozlugu, dil).matrisEkrani;
   const etiket = m.satir(sira);
-  const kitleSecenekleri = kitleler.tur === 'geldi' ? kitleler.veri.items.map((k) => ({ id: k.id, ad: k.name })) : [];
+  // SATIRIN PLATFORMUNUN KİTLELERİ: Meta satırına Google kitlesi seçilirse
+  // aktarımda ilgi ve kelimeleri Meta'ya gidemez (2026-10-20, tek platform).
+  const kitleSecenekleri =
+    kitleler.tur === 'geldi'
+      ? kitleler.veri.items.filter((k) => k.platform === s.platform).map((k) => ({ id: k.id, ad: k.name }))
+      : [];
   /*
    * SEÇİLİ KİTLE LİSTEDE YOKSA DA GÖRÜNÜR. Şablon silinmişse ya da liste
    * düştüyse seçici boş açılır ve kullanıcı satırın kitlesiz olduğunu

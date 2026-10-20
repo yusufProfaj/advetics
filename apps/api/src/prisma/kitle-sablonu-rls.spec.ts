@@ -47,8 +47,8 @@ beforeEach(async () => {
     [USER, ORG],
   );
   await h.q(
-    `INSERT INTO audience_templates (id, org_id, client_id, name, updated_at)
-     VALUES ($1, $4, $5, 'A şablonu', now()), ($2, $4, $6, 'B şablonu', now()), ($3, $7, $8, 'Yabancı şablon', now())`,
+    `INSERT INTO audience_templates (id, org_id, client_id, name, platform, updated_at)
+     VALUES ($1, $4, $5, 'A şablonu', 'meta', now()), ($2, $4, $6, 'B şablonu', 'meta', now()), ($3, $7, $8, 'Yabancı şablon', 'meta', now())`,
     [T_A, T_B, T_OTHER, ORG, CLIENT_A, CLIENT_B, ORG_OTHER, CLIENT_OTHER_ORG],
   );
 });
@@ -94,7 +94,7 @@ describe('audience_templates RLS', () => {
   it('KRİTİK: erişilmeyen workspace’e şablon YAZILAMIYOR', async () => {
     await expect(
       asUser(
-        `INSERT INTO audience_templates (org_id, client_id, name, updated_at) VALUES ('${ORG}', '${CLIENT_B}', 'sızma', now())`,
+        `INSERT INTO audience_templates (org_id, client_id, name, platform, updated_at) VALUES ('${ORG}', '${CLIENT_B}', 'sızma', 'meta', now())`,
         [CLIENT_A],
       ),
     ).rejects.toThrow(/row-level security/);

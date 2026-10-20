@@ -55,8 +55,8 @@ beforeEach(async () => {
   await h.q(`INSERT INTO organizations (id, name, slug, updated_at) VALUES ($1, 'Kardeş', 'kardes', now())`, [KARDES_ORG]);
   await h.q(`INSERT INTO clients (id, org_id, name, slug, updated_at) VALUES ($1, $2, 'Kardeş WS', 'kardes-ws', now())`, [KARDES_WS, KARDES_ORG]);
   await h.q(
-    `INSERT INTO audience_templates (id, org_id, client_id, name, updated_at)
-     VALUES ($1, $3, $4, 'İzmir kadın 25-44', now()), ($2, $5, $6, 'Kardeş kitlesi', now())`,
+    `INSERT INTO audience_templates (id, org_id, client_id, name, platform, updated_at)
+     VALUES ($1, $3, $4, 'İzmir kadın 25-44', 'meta', now()), ($2, $5, $6, 'Kardeş kitlesi', 'meta', now())`,
     [KITLE, KARDES_KITLE, IDS.org, IDS.client, KARDES_ORG, KARDES_WS],
   );
   await h.q(

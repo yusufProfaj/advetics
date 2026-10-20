@@ -100,7 +100,7 @@ describe('hesap kuralı', () => {
 
   it('şablon iki hesabın kitlesini birlikte taşıyamıyor; aynı kitle iki kez olamıyor', () => {
     const g = (ozelKitleler: unknown[]) =>
-      kitleSablonuInputSchema.safeParse({ clientId: HESAP, name: 'x', locations: [], ageMin: 18, ageMax: 65, genders: 'all', ozelKitleler }).success;
+      kitleSablonuInputSchema.safeParse({ clientId: HESAP, platform: 'meta', name: 'x', locations: [], ageMin: 18, ageMax: 65, genders: 'all', ozelKitleler }).success;
     expect(g([ozel(HESAP, '1'), ozel(BASKA, '2')])).toBe(false);
     expect(g([ozel(HESAP, '1'), ozel(HESAP, '1')])).toBe(false);
     expect(g([ozel(HESAP, '1'), ozel(HESAP, '2')])).toBe(true);

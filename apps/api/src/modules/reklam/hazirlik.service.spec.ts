@@ -105,8 +105,8 @@ describe('reklam hazırlığı', () => {
     expect((await svc.oku(CTX, IDS.client)).marka.profilVar).toBe(false);
     const kitle = uuid(9);
     await h.q(
-      `INSERT INTO audience_templates (id, org_id, client_id, name, locations, age_min, age_max, updated_at)
-       VALUES ($1, $2, $3, 'İzmir', $4::jsonb, 25, 45, now())`,
+      `INSERT INTO audience_templates (id, org_id, client_id, name, platform, locations, age_min, age_max, updated_at)
+       VALUES ($1, $2, $3, 'İzmir', 'meta', $4::jsonb, 25, 45, now())`,
       [kitle, IDS.org, IDS.client, JSON.stringify([{ key: '2347', type: 'region', label: 'İzmir, Türkiye', countryCode: 'TR' }])],
     );
     await h.q(

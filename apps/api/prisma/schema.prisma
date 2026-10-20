@@ -614,6 +614,8 @@ model AudienceTemplate {
   id              String   @id @default(uuid()) @db.Uuid
   orgId           String   @map("org_id") @db.Uuid
   clientId        String   @map("client_id") @db.Uuid
+  /// 'meta' | 'google' (2026-10-20). Varsayılan YOK: her yazma yolu söyler.
+  platform        String   @db.VarChar(6)
   name            String   @db.VarChar(80)
   /// `[{ key, type: country|region|city, label }]` — biçim `packages/shared`.
   locations       Json     @default("[]")
@@ -636,6 +638,7 @@ model AudienceTemplate {
 
   @@unique([clientId, name])
   @@index([orgId])
+  @@index([clientId, platform], map: "audience_templates_client_platform_idx")
   @@map("audience_templates")
 }
 

@@ -15,7 +15,8 @@ import {
   formatNumber,
   formatPercent,
 } from "@/lib/format";
-import { varliklarAdresi } from "@/lib/panel-adresleri";
+import { baglanti } from "@/lib/baglanti";
+import { REKLAM_YONETICISI } from "@/lib/reklam-yoneticisi";
 import { useDil, useSozluk } from "@/dil/saglayici";
 import { kitleSozlugu } from "@/dil/sozlukler/kitle";
 import { Dugme } from "@/components/ui/dugme";
@@ -124,7 +125,8 @@ export function KitlePerformansTablosu({
           eylemler={
             clientId && (
               <Link
-                href={varliklarAdresi("kitleler", clientId)}
+                // Kayıtlı kitleler artık bu sekmenin yanında (2026-10-20).
+                href={baglanti(REKLAM_YONETICISI, { seviye: "kitle" })}
                 className="text-13 font-semibold text-brand-strong underline-offset-2 hover:underline"
               >
                 {d.kutuphaneyeGit}

@@ -54,8 +54,8 @@ beforeEach(async () => {
   await seedTenant(h);
   await h.q(`INSERT INTO clients (id, org_id, name, slug, updated_at) VALUES ($1, $2, 'Öteki', 'oteki', now())`, [OTEKI, IDS.org]);
   await h.q(
-    `INSERT INTO audience_templates (id, org_id, client_id, name, updated_at)
-     VALUES ($1, $3, $4, 'A kitlesi', now()), ($2, $3, $5, 'B kitlesi', now())`,
+    `INSERT INTO audience_templates (id, org_id, client_id, name, platform, updated_at)
+     VALUES ($1, $3, $4, 'A kitlesi', 'meta', now()), ($2, $3, $5, 'B kitlesi', 'meta', now())`,
     [KITLE_A, KITLE_B, IDS.org, IDS.client, OTEKI],
   );
   await h.q(

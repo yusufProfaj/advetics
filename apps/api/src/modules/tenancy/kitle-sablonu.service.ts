@@ -6,6 +6,8 @@ import {
   settenKitleSablonu,
   type SettenKitleIstegi,
   KITLE_CINSIYETLERI,
+  KITLE_PLATFORMLARI,
+  type KitlePlatformu,
   kitleGoogleSchema,
   kitleIlgiSchema,
   kitleKonumuSchema,
@@ -30,6 +32,7 @@ interface Meta {
 interface Satir {
   id: string;
   client_id: string;
+  platform: string;
   name: string;
   locations: unknown;
   age_min: number;
@@ -61,12 +64,18 @@ export class KitleSablonuService {
     private readonly audit: AuditService,
   ) {}
 
-  async list(ctx: TenantContext, clientId: string): Promise<KitleSablonuListesi> {
+  /**
+   * `platform` verilirse YALNIZ o platformun kitleleri döner (Akıllı Boost
+   * ve reklam kurma kendi platformunu ister). Varsayılan kimlik süzgeçten
+   * bağımsız: süzülen listede yoksa da "varsayılan var" bilgisi kaybolmasın.
+   */
+  async list(ctx: TenantContext, clientId: string, platform?: KitlePlatformu): Promise<KitleSablonuListesi> {
     return this.prisma.withTenant(ctx, async (tx) => {
       const satirlar = await tx.$queryRaw<Satir[]>(Prisma.sql`
-        SELECT id, client_id, name, locations, age_min, age_max, genders, interests, ozel_kitleler, google_hedefleri, updated_at
+        SELECT id, client_id, platform, name, locations, age_min, age_max, genders, interests, ozel_kitleler, google_hedefleri, updated_at
           FROM audience_templates
          WHERE client_id = ${clientId}::uuid
+           AND (${platform ?? null}::text IS NULL OR platform = ${platform ?? null}::text)
          ORDER BY name
       `);
       const [p] = await tx.$queryRaw<Array<{ id: string | null }>>(Prisma.sql`
@@ -84,14 +93,14 @@ export class KitleSablonuService {
       const [s] = await adCakismasi(() =>
         tx.$queryRaw<Satir[]>(Prisma.sql`
           INSERT INTO audience_templates
-            (org_id, client_id, name, locations, age_min, age_max, genders, interests,
+            (org_id, client_id, platform, name, locations, age_min, age_max, genders, interests,
              ozel_kitleler, google_hedefleri, created_by_user_id, updated_at)
-          VALUES (${orgId}::uuid, ${input.clientId}::uuid, ${input.name},
+          VALUES (${orgId}::uuid, ${input.clientId}::uuid, ${input.platform}, ${input.name},
                   ${JSON.stringify(input.locations)}::jsonb, ${input.ageMin}, ${input.ageMax},
                   ${input.genders}, ${JSON.stringify(input.interests)}::jsonb,
                   ${JSON.stringify(input.ozelKitleler)}::jsonb, ${JSON.stringify(input.google ?? BOS_GOOGLE_KITLE)}::jsonb,
                   ${ctx.userId}::uuid, now())
-          RETURNING id, client_id, name, locations, age_min, age_max, genders, interests, ozel_kitleler, google_hedefleri, updated_at
+          RETURNING id, client_id, platform, name, locations, age_min, age_max, genders, interests, ozel_kitleler, google_hedefleri, updated_at
         `),
       );
       await this.audit.record(tx, ctx, {
@@ -146,10 +155,18 @@ export class KitleSablonuService {
   ): Promise<KitleSablonuRecord> {
     return this.prisma.withTenant(ctx, async (tx) => {
       const [once] = await tx.$queryRaw<Satir[]>(Prisma.sql`
-        SELECT id, client_id, name, locations, age_min, age_max, genders, interests, ozel_kitleler, google_hedefleri, updated_at
+        SELECT id, client_id, platform, name, locations, age_min, age_max, genders, interests, ozel_kitleler, google_hedefleri, updated_at
           FROM audience_templates WHERE id = ${id}::uuid AND client_id = ${input.clientId}::uuid
       `);
       if (!once) throw new NotFoundException('Kitle şablonu bulunamadı.');
+      /*
+       * PLATFORM DEĞİŞMEZ. İlgi ve kitle kimlikleri platforma özel; Meta
+       * kitlesini Google'a çevirmek, onu seçmiş taslakların ve AdvStrategy
+       * satırlarının kitlesini sessizce başka platformun kitlesi yapardı.
+       */
+      if (once.platform !== input.platform) {
+        throw new BadRequestException('Kitlenin platformu kayıttan sonra değiştirilemez; diğer platform için yeni kitle oluştur.');
+      }
       await ozelKitleHesabi(tx, input);
       const [s] = await adCakismasi(() =>
         tx.$queryRaw<Satir[]>(Prisma.sql`
@@ -160,7 +177,7 @@ export class KitleSablonuService {
                  ozel_kitleler = ${JSON.stringify(input.ozelKitleler)}::jsonb,
                  google_hedefleri = ${JSON.stringify(input.google ?? BOS_GOOGLE_KITLE)}::jsonb, updated_at = now()
            WHERE id = ${id}::uuid
-          RETURNING id, client_id, name, locations, age_min, age_max, genders, interests, ozel_kitleler, google_hedefleri, updated_at
+          RETURNING id, client_id, platform, name, locations, age_min, age_max, genders, interests, ozel_kitleler, google_hedefleri, updated_at
         `),
       );
       await this.audit.record(tx, ctx, {
@@ -180,7 +197,7 @@ export class KitleSablonuService {
     await this.prisma.withTenant(ctx, async (tx) => {
       const silinen = await tx.$queryRaw<Satir[]>(Prisma.sql`
         DELETE FROM audience_templates WHERE id = ${id}::uuid AND client_id = ${clientId}::uuid
-        RETURNING id, client_id, name, locations, age_min, age_max, genders, interests, ozel_kitleler, google_hedefleri, updated_at
+        RETURNING id, client_id, platform, name, locations, age_min, age_max, genders, interests, ozel_kitleler, google_hedefleri, updated_at
       `);
       // SIFIR SATIR = BULUNAMADI, başarı değil. Politikasız ya da yanlış
       // kiracıdaki bir DELETE hata vermeden sıfır satır etkiliyor.
@@ -286,10 +303,11 @@ async function adCakismasi<T>(fn: () => Promise<T>): Promise<T> {
 function denetim(
   k: Pick<
     KitleSablonuInput,
-    'name' | 'locations' | 'ageMin' | 'ageMax' | 'genders' | 'interests' | 'ozelKitleler' | 'google'
+    'platform' | 'name' | 'locations' | 'ageMin' | 'ageMax' | 'genders' | 'interests' | 'ozelKitleler' | 'google'
   >,
 ) {
   return {
+    platform: k.platform,
     name: k.name,
     locations: k.locations,
     ageMin: k.ageMin,
@@ -334,6 +352,7 @@ function kayit(s: Satir, varsayilanId: string | null): KitleSablonuRecord {
   return {
     id: s.id,
     clientId: s.client_id,
+    platform: platformOku(s),
     name: s.name,
     locations,
     ageMin: Number(s.age_min),
@@ -345,4 +364,14 @@ function kayit(s: Satir, varsayilanId: string | null): KitleSablonuRecord {
     varsayilan: varsayilanId === s.id,
     updatedAt: new Date(s.updated_at).toISOString(),
   };
+}
+
+/**
+ * Kolonun CHECK kısıtı var; yine de beklenmeyen değer Meta'ya ÇEVRİLMİYOR:
+ * Google alanı taşıyan bir kaydı Meta diye göstermek onu yanlış reklamda
+ * seçtirirdi. Hata yüksek sesle düşer.
+ */
+function platformOku(s: Satir): KitlePlatformu {
+  if ((KITLE_PLATFORMLARI as readonly string[]).includes(s.platform)) return s.platform as KitlePlatformu;
+  throw new Error(`audience_templates(${s.id}).platform beklenmeyen değer: ${s.platform}`);
 }

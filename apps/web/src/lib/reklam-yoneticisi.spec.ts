@@ -11,9 +11,8 @@ describe('olusturDugmesi', () => {
     expect(olusturDugmesi('ad', WS, HEPSI)).toEqual({ etiket: 'Reklam', href: `/reklam?musteri=${WS}` });
     const kitle = olusturDugmesi('kitle', WS, HEPSI)!;
     expect(kitle.etiket).toBe('Hedef kitle');
-    // Base › Varlıklar › Kitleler, yeni kitle formu AÇIK gelir.
-    expect(kitle.href).toContain('sekme=kitleler');
-    expect(kitle.href).toContain('yeni=1');
+    // Reklam Yöneticisi'nin kendi kayıtlı kitleleri, yeni kitle formu AÇIK gelir (2026-10-20).
+    expect(kitle.href).toBe('/ads-explorer?seviye=kitle&yeni=1');
   });
 
   it('yetkisi olmayana düğme yok; kitle workspace’siz açılmaz', () => {

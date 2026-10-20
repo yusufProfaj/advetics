@@ -87,7 +87,7 @@ beforeEach(async () => {
     KARDES_ORG,
   ]);
   await h.q(
-    `INSERT INTO audience_templates (id, org_id, client_id, name, updated_at) VALUES ($1, $2, $3, 'Kardeş kitlesi', now())`,
+    `INSERT INTO audience_templates (id, org_id, client_id, name, platform, updated_at) VALUES ($1, $2, $3, 'Kardeş kitlesi', 'meta', now())`,
     [KARDES_KITLE, KARDES_ORG, KARDES_WS],
   );
 });

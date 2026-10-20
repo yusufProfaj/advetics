@@ -9,8 +9,9 @@ import type {
   MetricsSummary,
 } from '@advetics/shared';
 import { PLATFORMS, PLATFORM_KISA_ADLARI, type KitlePerformansi, type TakipAcigiYaniti } from '@advetics/shared';
-import { kapi } from '@/lib/panel-adresleri';
-import { KitlePerformansTablosu } from '@/components/taslak/kitle-performans-tablosu';
+import { kapi, markaMerkeziAdresi } from '@/lib/panel-adresleri';
+import { HedefKitleler, type KitleAltSekmesi } from '@/components/taslak/hedef-kitleler';
+import { VarlikBirincilEylem } from '@/components/marka-merkezi/varliklar/birincil-eylem';
 import { requireSession } from '@/lib/session';
 import { HESAP_AJANSTA, hesaplarHedefi } from '@/lib/ayar-kapilari';
 import { serverApiFetch } from '@/lib/api';
@@ -468,7 +469,9 @@ export default async function DashboardPage({
    * yutulmuyor, tablonun yerinde platformun/sunucunun cümlesi yazıyor.
    */
   const kitleGorunumu = first(params.seviye) === 'kitle' && !ajansGorunumu && !mcc;
-  const kitleYaniti: { tur: 'veri'; v: KitlePerformansi } | { tur: 'hata'; mesaj: string } | null = kitleGorunumu
+  // Alt sekme (2026-10-20): kayıtlı kitleler varsayılan; performans çağrısı yalnız o sekmede.
+  const kitleAlt: KitleAltSekmesi = first(params.kitle) === 'performans' ? 'performans' : 'kayitli';
+  const kitleYaniti: { tur: 'veri'; v: KitlePerformansi } | { tur: 'hata'; mesaj: string } | null = kitleGorunumu && kitleAlt === 'performans'
     ? await serverApiFetch<KitlePerformansi>(`/metrics/kitleler?${base}`)
         .then((v) => ({ tur: 'veri' as const, v }))
         .catch((e: unknown) => ({ tur: 'hata' as const, mesaj: hataMetni(e) }))
@@ -557,20 +560,36 @@ export default async function DashboardPage({
       <HataDurumu baslik={yuklenemedi} mesaj={d.satirlarGelmedi} />
     ) : undefined;
 
+  const kitleYazabilir = kapi(session, 'kitle.yaz');
   const tabloYerine =
-    kitleYaniti !== null ? (
-      <KitlePerformansTablosu
-        yanit={kitleYaniti}
-        kitleKaydedebilir={kapi(session, 'kitle.yaz')}
+    kitleGorunumu && session.activeClientId ? (
+      <HedefKitleler
+        alt={kitleAlt}
+        hrefler={{
+          kayitli: baglanti(REKLAM_YONETICISI, tasinan, { seviye: 'kitle', kitle: undefined, yeni: undefined }),
+          performans: baglanti(REKLAM_YONETICISI, tasinan, { seviye: 'kitle', kitle: 'performans', yeni: undefined }),
+        }}
         clientId={session.activeClientId}
+        yazabilir={kitleYazabilir}
+        varsayilanAdresi={kapi(session, 'markaMerkezi.gor') ? markaMerkeziAdresi('kurulum', session.activeClientId, 'varsayilanlar') : null}
+        yeniAc={first(params.yeni) === '1'}
+        ilkSuzgec={platform ?? null}
+        performans={kitleYaniti}
       />
     ) : (
       yerine
     );
   const olustur = olusturDugmesi(seciliSekme, session.activeClientId, {
     reklam: session.permissions.includes('bulk.write'),
-    kitle: kapi(session, 'kitle.yaz'),
+    kitle: kitleYazabilir,
   }, dil);
+  /*
+   * KAYITLI KİTLELER AÇIKKEN "＋ Yeni hedef kitle" SAYFADA PANEL AÇAR (olay,
+   * `VarlikBirincilEylem`): bağlantı aynı adrese gidip `yeni=1` zaten
+   * adresteyse ikinci tıklamada hiçbir şey yapmazdı. Performans alt
+   * sekmesinden ise kayıtlı kitlelere `yeni=1` ile gidiliyor.
+   */
+  const kitlePaneliDugmesi = kitleGorunumu && kitleAlt === 'kayitli' && olustur !== null;
 
   return (
     <SayfaIskeleti
@@ -591,10 +610,14 @@ export default async function DashboardPage({
             rangeLabel={range.label}
             sonGuncelleme={summary?.lastFetchedAt ?? null}
           />
-          {olustur && (
-            <Link className={dugmeSinifi('birincil')} href={olustur.href}>
-              ＋ {olustur.etiket}
-            </Link>
+          {kitlePaneliDugmesi && olustur ? (
+            <VarlikBirincilEylem bolum="kitleler" etiket={olustur.etiket} />
+          ) : (
+            olustur && (
+              <Link className={dugmeSinifi('birincil')} href={olustur.href}>
+                ＋ {olustur.etiket}
+              </Link>
+            )
           )}
         </>
       }

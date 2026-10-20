@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -12,6 +13,8 @@ import {
   Req,
 } from '@nestjs/common';
 import {
+  KITLE_PLATFORMLARI,
+  type KitlePlatformu,
   kitleSablonuInputSchema,
   settenKitleIstegiSchema,
   type SettenKitleIstegi,
@@ -45,8 +48,14 @@ export class KitleSablonuController {
   list(
     @CurrentTenant() ctx: TenantContext,
     @Query('clientId', ParseUUIDPipe) clientId: string,
+    @Query('platform') platform?: string,
   ): Promise<KitleSablonuListesi> {
-    return this.svc.list(ctx, clientId);
+    // Tanınmayan süzgeç 400: yok sayılsaydı "google" yazım hatası BÜTÜN
+    // kitleleri döndürür, seçici Meta kitlesini Google reklamına sunardı.
+    if (platform !== undefined && !(KITLE_PLATFORMLARI as readonly string[]).includes(platform)) {
+      throw new BadRequestException(`Bilinmeyen platform: ${platform.slice(0, 20)}`);
+    }
+    return this.svc.list(ctx, clientId, platform as KitlePlatformu | undefined);
   }
 
   @Post()

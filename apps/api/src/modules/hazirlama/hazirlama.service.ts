@@ -438,7 +438,7 @@ export class HazirlamaService {
     } else if (c.kod === 'konum') {
       const sablon = await this.kitle.create(
         ctx,
-        { clientId, name: 'Varsayılan', locations: c.konumlar, ageMin: 18, ageMax: 65, genders: 'all', interests: [], ozelKitleler: [] },
+        { clientId, platform: 'meta', name: 'Varsayılan', locations: c.konumlar, ageMin: 18, ageMax: 65, genders: 'all', interests: [], ozelKitleler: [] },
         {},
       );
       await this.kitle.varsayilanYap(ctx, clientId, sablon.id, {});

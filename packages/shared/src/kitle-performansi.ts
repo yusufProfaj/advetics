@@ -343,13 +343,14 @@ export function settenKitleSablonu(targeting: unknown, hesap: { id: string; ad: 
   if (ozelKitleler.length > KITLE_SINIRLARI.ozelKitle) atilanlar.push(`${ozelKitleler.length - KITLE_SINIRLARI.ozelKitle} özel kitle (şablon sınırı ${KITLE_SINIRLARI.ozelKitle})`);
   return {
     alanlar: {
+      // Meta setinden alınan kitle Meta kitlesi; Google alanı boş kalır.
+      platform: 'meta',
       locations: locations.slice(0, KITLE_SINIRLARI.konum),
       ageMin: Math.min(65, Math.max(18, yasMin)),
       ageMax: Math.min(65, Math.max(18, yasMax)),
       genders,
       interests: ilgiListesi.slice(0, KITLE_SINIRLARI.ilgi),
       ozelKitleler: ozelKitleler.slice(0, KITLE_SINIRLARI.ozelKitle),
-      // Meta setinin Google karşılığı yok; kullanıcı kütüphanede ekliyor.
       google: { ilgiler: [], kelimeler: [] },
     },
     atilanlar,

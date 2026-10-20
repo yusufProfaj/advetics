@@ -17,6 +17,7 @@ const BASKA = '9a9a9a9a-9a9a-9a9a-9a9a-9a9a9a9a9a9a';
 const IZMIR = { key: '2622', type: 'region' as const, label: 'İzmir, Türkiye', countryCode: 'TR' };
 const girdi = (patch: Record<string, unknown> = {}) => ({
   clientId: IDS.client,
+  platform: 'meta' as 'meta' | 'google',
   name: 'İzmir kadın',
   locations: [IZMIR],
   ageMin: 25,
@@ -162,8 +163,8 @@ describe('şema kuralları', () => {
   it('veritabanı da ters yaşı reddediyor — şemayı atlayan bir yazma yolu kalıcı hata üretmesin', async () => {
     await expect(
       h.q(
-        `INSERT INTO audience_templates (org_id, client_id, name, age_min, age_max, updated_at)
-         VALUES ($1, $2, 'x', 50, 30, now())`,
+        `INSERT INTO audience_templates (org_id, client_id, name, platform, age_min, age_max, updated_at)
+         VALUES ($1, $2, 'x', 'meta', 50, 30, now())`,
         [IDS.org, IDS.client],
       ),
     ).rejects.toThrow(/audience_templates_yas/);
@@ -174,10 +175,10 @@ describe('Google karşılığı (2026-10-16)', () => {
   const GOOGLE = { ilgiler: [{ id: '80432', ad: '/Sports & Fitness/Golf Enthusiasts', tur: 'affinity' as const }], kelimeler: ['golf sopası', 'golf kulübü'] };
 
   it('KRİTİK: kaydediliyor, geri okunuyor, güncellemede değişiyor', async () => {
-    const s = await svc.create(CTX, girdi({ google: GOOGLE }), {});
+    const s = await svc.create(CTX, girdi({ platform: 'google', google: GOOGLE }), {});
     expect(s.google).toEqual(GOOGLE);
     expect((await svc.list(CTX, IDS.client)).items[0]!.google).toEqual(GOOGLE);
-    const g = await svc.update(CTX, s.id, girdi({ google: { ilgiler: [], kelimeler: ['golf'] } }), {});
+    const g = await svc.update(CTX, s.id, girdi({ platform: 'google', google: { ilgiler: [], kelimeler: ['golf'] } }), {});
     expect(g.google).toEqual({ ilgiler: [], kelimeler: ['golf'] });
   });
 
@@ -193,6 +194,40 @@ describe('Google karşılığı (2026-10-16)', () => {
     const okunan = (await svc.list(CTX, IDS.client)).items[0]!;
     expect(okunan.google).toEqual({ ilgiler: [], kelimeler: [] });
     expect(okunan.name).toBe('İzmir kadın');
+  });
+});
+
+describe('kitlenin platformu (2026-10-20)', () => {
+  it('KRİTİK: platform kaydediliyor ve liste platforma göre süzülüyor', async () => {
+    await svc.create(CTX, girdi({ name: 'M' }), {});
+    await svc.create(CTX, girdi({ name: 'G', platform: 'google' }), {});
+    const ad = async (p?: 'meta' | 'google') => (await svc.list(CTX, IDS.client, p)).items.map((x) => `${x.name}:${x.platform}`);
+    expect(await ad()).toEqual(['G:google', 'M:meta']);
+    expect(await ad('meta')).toEqual(['M:meta']);
+    expect(await ad('google')).toEqual(['G:google']);
+  });
+
+  it('KRİTİK: süzülen listede de varsayılan kimlik kaybolmuyor', async () => {
+    const m = await svc.create(CTX, girdi({ name: 'M' }), {});
+    await svc.varsayilanYap(CTX, IDS.client, m.id, {});
+    expect((await svc.list(CTX, IDS.client, 'google')).varsayilanId).toBe(m.id);
+  });
+
+  it('KRİTİK: platform kayıttan sonra değiştirilemiyor, kayıt yerinde kalıyor', async () => {
+    const s = await svc.create(CTX, girdi(), {});
+    await expect(svc.update(CTX, s.id, girdi({ platform: 'google' }), {})).rejects.toThrow(/platformu kayıttan sonra değiştirilemez/);
+    expect((await svc.list(CTX, IDS.client)).items[0]!.platform).toBe('meta');
+  });
+
+  it('KRİTİK: platform dışı alan şemada reddediliyor (sessizce atılmıyor)', () => {
+    const ilgi = [{ id: '6003', name: 'Gayrimenkul' }];
+    const google = { ilgiler: [], kelimeler: ['izmir daire'] };
+    const sorun = (v: Record<string, unknown>) => kitleSablonuInputSchema.safeParse(girdi(v)).error?.issues.map((i) => i.path.join('.'));
+    expect(sorun({ platform: 'google', interests: ilgi })).toEqual(['interests']);
+    expect(sorun({ platform: 'meta', google })).toEqual(['google']);
+    expect(sorun({ platform: 'google', google })).toBeUndefined();
+    expect(sorun({ platform: 'meta', interests: ilgi })).toBeUndefined();
+    expect(kitleSablonuInputSchema.safeParse({ ...girdi(), platform: undefined }).success).toBe(false);
   });
 });
 
@@ -222,7 +257,7 @@ describe('reklam setinin kitlesini kütüphaneye almak', () => {
       custom_audiences: [{ id: '238', name: 'Site ziyaretçileri' }],
     });
     const r = await svc.settenOlustur(CTX, { clientId: IDS.client, adGroupId: SET, name: 'Golf İzmir' }, {});
-    expect(r.kayit).toMatchObject({ name: 'Golf İzmir', ageMin: 25, ageMax: 44, genders: 'female', interests: [{ id: '6003', name: 'Golf' }] });
+    expect(r.kayit).toMatchObject({ platform: 'meta', name: 'Golf İzmir', ageMin: 25, ageMax: 44, genders: 'female', interests: [{ id: '6003', name: 'Golf' }] });
     expect(r.kayit.locations).toEqual([{ key: '2622', type: 'region', label: 'İzmir', countryCode: 'TR' }]);
     expect(r.kayit.ozelKitleler).toMatchObject([{ id: '238', mod: 'dahil', hesapId: IDS.adAccount }]);
     expect(r.atilanlar.join(' ')).toMatch(/adres çevresi/);

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import {
+  KITLE_PLATFORMLARI,
   KITLE_SINIRLARI,
   kitleOzeti,
   sec,
@@ -12,6 +13,7 @@ import {
   type KitleOzel,
   type KitleKonumu,
   type KitleOnerisi,
+  type KitlePlatformu,
   type KitleSablonuListesi,
   type KitleSablonuRecord,
 } from '@advetics/shared';
@@ -24,6 +26,8 @@ import { AdHucresi, SayfalamaCubugu, Tablo } from '@/components/ui/tablo';
 import { BosDurum, HataDurumu, Serit, Yukleniyor } from '@/components/ui/hal';
 import { Pencere, YanPanel } from '@/components/ui/pencere';
 import { AcilirMenu, IKON_TETIK, MenuOgesi } from '@/components/ui/acilir-menu';
+import { BolumluSecici } from '@/components/ui/sekmeler';
+import { PlatformLogo } from '@/components/platform-logo';
 import { useVarlikYeni } from './varliklar/birincil-eylem';
 import { HedeflemeSecici } from '@/components/autoboost/hedefleme-secici';
 import { IlgiSecici, kitleBuyuklugu } from './ilgi-secici';
@@ -45,8 +49,15 @@ import { markaMerkeziVeriSozlugu } from '@/dil/sozlukler/marka-merkezi-veri';
  * Evi Marka Merkezi › Kurulum › Reklam varsayılanları; burada rozet SALT
  * OKUNUR ve oraya bağlantı.
  *
- * YALNIZCA META. Konumlar Meta'nın coğrafi aramasından geliyor ve Google'ın
- * konum kimlikleri ayrı bir uzay; ekran bunu söylüyor.
+ * HER KİTLE TEK PLATFORM (kullanıcı kararı, 2026-10-20). Meta kitlesi ilgi
+ * alanı ve özel kitle, Google kitlesi kategori ve arama kelimesi taşır; form
+ * yalnız seçili platformun alanlarını gösterir ve gönderir. Listede platform
+ * sütunu ve süzgeç var (Armağan Bey: "hangi platforma ait olduğu belli
+ * olsun, filtrelenebilsin"). Konumlar her iki platformda Meta'nın coğrafi
+ * anahtarları; Google karşılığı reklam kurulurken eşleniyor.
+ *
+ * İKİ YERDE AYNI BİLEŞEN: Base › Varlıklar › Kitleler ve Reklam Yöneticisi ›
+ * Hedef kitleler. İki ayrı form zamanla sessizce ayrışırdı (MIMARI Ç2).
  *
  * DÖRT HÂL AYRI (CLAUDE.md, `.catch(() => setX([]))` yasağı): yükleniyor,
  * çağrı düştü, şablon yok, şablonlar geldi.
@@ -63,6 +74,7 @@ type Durum =
 
 interface Form {
   id: string | null;
+  platform: KitlePlatformu;
   name: string;
   locations: KitleKonumu[];
   ageMin: number;
@@ -75,6 +87,7 @@ interface Form {
 
 const BOS_FORM: Form = {
   id: null,
+  platform: 'meta',
   name: '',
   locations: [],
   ageMin: 18,
@@ -86,14 +99,46 @@ const BOS_FORM: Form = {
 };
 const YASLAR = Array.from({ length: 48 }, (_, i) => 18 + i);
 
+type Suzgec = 'hepsi' | KitlePlatformu;
+const PLATFORM_ADI: Record<KitlePlatformu, string> = { meta: 'Meta', google: 'Google' };
+const PLATFORM_LOGOSU = { meta: 'meta_ads', google: 'google_ads' } as const;
+
+/**
+ * Platformun TAŞIMADIĞI alanlar boşaltılmış gövde. Sunucu şeması platform
+ * dışı alanı reddediyor (`kitlePlatformKurali`); burada boşaltmak, formda
+ * gizli kalmış eski bir değerin kaydı düşürmesini önlüyor.
+ */
+export function kitleGovdesi(clientId: string, f: Omit<Form, 'id'>) {
+  return {
+    clientId,
+    platform: f.platform,
+    name: f.name,
+    locations: f.locations,
+    ageMin: f.ageMin,
+    ageMax: f.ageMax,
+    genders: f.genders,
+    interests: f.platform === 'meta' ? f.interests : [],
+    ozelKitleler: f.platform === 'meta' ? f.ozelKitleler : [],
+    google: f.platform === 'google' ? f.google : { ilgiler: [], kelimeler: [] },
+  };
+}
+
 export function KitlelerBolumu({
   clientId,
   yazabilir,
   varsayilanAdresi,
   yeniAc = false,
+  ilkSuzgec = null,
 }: {
   clientId: string;
   yazabilir: boolean;
+  /**
+   * Süzgecin ilk değeri: Reklam Yöneticisi adresteki platformu geçiriyor
+   * (üstteki kartlar o platformu gösterirken liste "Tümü" açılmasın).
+   * Meta/Google dışı değer (LinkedIn) "Tümü" açar; süzgeç görünür olduğu
+   * için kullanıcı neyi gördüğünü bilir.
+   */
+  ilkSuzgec?: string | null;
   /**
    * Adreste `yeni=1`: Reklam Yöneticisi'nin "＋ Hedef kitle" düğmesi buraya
    * geliyor ve kullanıcı yeni kitle formunu açık bulmalı (bir tık daha
@@ -117,6 +162,11 @@ export function KitlelerBolumu({
    */
   const [panelFormu, setPanelFormu] = useState<Form>(BOS_FORM);
   const [acilis, setAcilis] = useState(0);
+  const [suzgec, setSuzgec] = useState<Suzgec>(
+    (KITLE_PLATFORMLARI as readonly string[]).includes(ilkSuzgec ?? '') ? (ilkSuzgec as KitlePlatformu) : 'hepsi',
+  );
+  // Yeni kitle süzülen platformla açılır: Google listesindeyken "Yeni" Google kitlesi ister.
+  const yeniForm = (): Form => ({ ...BOS_FORM, platform: suzgec === 'hepsi' ? 'meta' : suzgec });
   const formAc = (f: Form) => {
     setHata(null);
     setPanelFormu(f);
@@ -124,7 +174,7 @@ export function KitlelerBolumu({
     setAcilis((n) => n + 1);
   };
   // Başlıktaki "Yeni kitle": liste gelmeden açılmıyor (eskisiyle aynı koşul).
-  useVarlikYeni('kitleler', () => formAc(BOS_FORM), yazabilir && durum.tur === 'hazir');
+  useVarlikYeni('kitleler', () => formAc(yeniForm()), yazabilir && durum.tur === 'hazir');
 
   const yukle = useCallback(async () => {
     try {
@@ -144,7 +194,7 @@ export function KitlelerBolumu({
   useEffect(() => {
     if (yeniAc && !yeniAcildi && yazabilir && durum.tur === 'hazir') {
       setYeniAcildi(true);
-      formAc(BOS_FORM);
+      formAc(yeniForm());
     }
   }, [yeniAc, yeniAcildi, yazabilir, durum.tur]);
   const dk = useSozluk(kitleSozlugu);
@@ -167,17 +217,7 @@ export function KitlelerBolumu({
 
   async function kaydet(): Promise<void> {
     if (!form) return;
-    const govde = {
-      clientId,
-      name: form.name,
-      locations: form.locations,
-      ageMin: form.ageMin,
-      ageMax: form.ageMax,
-      genders: form.genders,
-      interests: form.interests,
-      ozelKitleler: form.ozelKitleler,
-      google: form.google,
-    };
+    const govde = kitleGovdesi(clientId, form);
     // Sunucuyla AYNI şema: "Türkiye + İzmir" kaydederken reddediliyor, yayında değil.
     const k = kitleSablonuInputSchema.safeParse(govde);
     if (!k.success) {
@@ -202,6 +242,9 @@ export function KitlelerBolumu({
     setHata(null);
   };
   const silinecekKitle = durum.tur === 'hazir' ? durum.veri.items.find((k) => k.id === silinecek) : undefined;
+  const tumu = durum.tur === 'hazir' ? durum.veri.items : [];
+  const gorunen = suzgec === 'hepsi' ? tumu : tumu.filter((k) => k.platform === suzgec);
+  const sayi = (p: KitlePlatformu) => tumu.filter((k) => k.platform === p).length;
 
   return (
     <section id="kitleler" aria-label={m.ariaEtiketi} className="grid scroll-mt-24 gap-3">
@@ -283,11 +326,30 @@ export function KitlelerBolumu({
           }
         />
       )}
-      {durum.tur === 'hazir' && durum.veri.items.length > 0 && (
+      {durum.tur === 'hazir' && tumu.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <BolumluSecici<Suzgec>
+            etiket={dk.platform}
+            secili={suzgec}
+            onSec={setSuzgec}
+            secenekler={[
+              { deger: 'hepsi', etiket: <>{dk.tumu} <span className="font-normal opacity-70">{tumu.length}</span></> },
+              ...(['meta', 'google'] as const).map((p) => ({
+                deger: p,
+                etiket: <>{PLATFORM_ADI[p]} <span className="font-normal opacity-70">{sayi(p)}</span></>,
+              })),
+            ]}
+          />
+        </div>
+      )}
+      {durum.tur === 'hazir' && tumu.length > 0 && gorunen.length === 0 && suzgec !== 'hepsi' && (
+        <BosDurum baslik={dk.suzgecBos(PLATFORM_ADI[suzgec])} neden={dk.suzgecBosNeden} />
+      )}
+      {durum.tur === 'hazir' && gorunen.length > 0 && (
         <Kart dolgu={false}>
           <Tablo<KitleSablonuRecord>
             etiket={m.ariaEtiketi}
-            satirlar={durum.veri.items}
+            satirlar={gorunen}
             satirAnahtari={(k) => k.id}
             sutunlar={[
               {
@@ -316,13 +378,8 @@ export function KitlelerBolumu({
                   />
                 ),
               },
-              { anahtar: 'tanim', baslik: m.kolonTanim, hucre: (k) => <span className="text-13 text-ink-muted">{kitleOzeti(k)}</span> },
-              {
-                anahtar: 'google',
-                baslik: 'Google',
-                ikincil: true,
-                hucre: (k) => <span className="text-13 text-ink-muted">{googleOzeti(k.google, dk)}</span>,
-              },
+              { anahtar: 'platform', baslik: dk.platform, hucre: (k) => <PlatformEtiketi platform={k.platform} /> },
+              { anahtar: 'tanim', baslik: m.kolonTanim, hucre: (k) => <span className="text-13 text-ink-muted">{platformOzeti(k, dk)}</span> },
               {
                 anahtar: 'eylem',
                 baslik: <span className="sr-only">{m.kolonEylem}</span>,
@@ -354,7 +411,7 @@ export function KitlelerBolumu({
               },
             ]}
           />
-          <SayfalamaCubugu bas={1} son={durum.veri.items.length} toplam={durum.veri.items.length} />
+          <SayfalamaCubugu bas={1} son={gorunen.length} toplam={gorunen.length} />
         </Kart>
       )}
     </section>
@@ -364,6 +421,7 @@ export function KitlelerBolumu({
 function formdan(k: KitleSablonuRecord): Form {
   return {
     id: k.id,
+    platform: k.platform,
     name: k.name,
     locations: k.locations,
     ageMin: k.ageMin,
@@ -373,6 +431,26 @@ function formdan(k: KitleSablonuRecord): Form {
     ozelKitleler: k.ozelKitleler,
     google: k.google,
   };
+}
+
+/** Platform rozeti: logo + ad. Renk logoda; metin siyah (kılavuz). */
+function PlatformEtiketi({ platform }: { platform: KitlePlatformu }) {
+  return (
+    <span className="inline-flex h-6 items-center gap-1.5 whitespace-nowrap rounded-full border border-line-strong px-2.5 text-12 font-bold text-ink">
+      <PlatformLogo kind={PLATFORM_LOGOSU[platform]} className="h-3.5 w-3.5" />
+      {PLATFORM_ADI[platform]}
+    </span>
+  );
+}
+
+/** Tanım sütunu: ortak alanlar + YALNIZ kitlenin kendi platformunun alanları. */
+function platformOzeti(
+  k: Pick<KitleSablonuRecord, 'platform' | 'locations' | 'ageMin' | 'ageMax' | 'genders' | 'interests' | 'ozelKitleler' | 'google'>,
+  dk: { googleKelime: (n: number) => string },
+): string {
+  if (k.platform === 'meta') return kitleOzeti(k);
+  const g = googleOzeti(k.google, dk);
+  return [kitleOzeti({ ...k, interests: [], ozelKitleler: [] }), g === '—' ? null : g].filter(Boolean).join(' · ');
 }
 
 function KitleFormu(p: { clientId: string; form: Form; setForm: (f: Form) => void }) {
@@ -391,9 +469,47 @@ function KitleFormu(p: { clientId: string; form: Form; setForm: (f: Form) => voi
     countryCode: l.countryCode ?? '',
   }));
 
+  /*
+   * PLATFORM DEĞİŞİNCE ÖBÜR PLATFORMUN ALANLARI BOŞALIR. Gizli kalan bir
+   * Meta ilgi alanı Google kitlesiyle gitseydi sunucu kaydı reddederdi ve
+   * kullanıcı göremediği bir alan yüzünden kaydedemezdi.
+   */
+  const platformSec = (pl: KitlePlatformu) =>
+    pl !== f.platform &&
+    degis({ platform: pl, interests: [], ozelKitleler: [], google: { ilgiler: [], kelimeler: [] } });
+
   return (
     <div className="grid gap-4">
-      <TarifEt clientId={p.clientId} uygula={(o) => degis(o)} />
+      <Alan etiket={dk.platformSecimi} ipucu={f.id ? dk.platformKilitli : dk.platformYeni}>
+        {() =>
+          f.id ? (
+            <PlatformEtiketi platform={f.platform} />
+          ) : (
+            <BolumluSecici<KitlePlatformu>
+              etiket={dk.platformSecimi}
+              secili={f.platform}
+              onSec={platformSec}
+              secenekler={(['meta', 'google'] as const).map((pl) => ({
+                deger: pl,
+                etiket: (
+                  <>
+                    <PlatformLogo kind={PLATFORM_LOGOSU[pl]} className="h-3.5 w-3.5" />
+                    {PLATFORM_ADI[pl]}
+                  </>
+                ),
+              }))}
+            />
+          )
+        }
+      </Alan>
+
+      <TarifEt
+        clientId={p.clientId}
+        uygula={(o) =>
+          // Öneri iki platformun karşılığını getiriyor; forma YALNIZ seçili platformunki yazılıyor.
+          degis(f.platform === 'meta' ? { ...o, google: { ilgiler: [], kelimeler: [] } } : { ...o, interests: [] })
+        }
+      />
 
       <Alan etiket={dk.kitleAdi}>
         {(id) => (
@@ -462,17 +578,20 @@ function KitleFormu(p: { clientId: string; form: Form; setForm: (f: Form) => voi
         </Alan>
       </FormIzgarasi>
 
-      <IlgiSecici clientId={p.clientId} secili={f.interests} degis={(v) => degis({ interests: v })} />
+      {f.platform === 'meta' ? (
+        <>
+          <IlgiSecici clientId={p.clientId} secili={f.interests} degis={(v) => degis({ interests: v })} />
+          <OzelKitleSecici
+            clientId={p.clientId}
+            secili={f.ozelKitleler}
+            degis={(v) => degis({ ozelKitleler: v })}
+          />
+        </>
+      ) : (
+        <GoogleKarsiligi google={f.google} degis={(g) => degis({ google: g })} />
+      )}
 
-      <OzelKitleSecici
-        clientId={p.clientId}
-        secili={f.ozelKitleler}
-        degis={(v) => degis({ ozelKitleler: v })}
-      />
-
-      <GoogleKarsiligi google={f.google} degis={(g) => degis({ google: g })} />
-
-      <p className="m-0 rounded-alan bg-surface-muted px-3 py-2 text-12 text-ink-muted">{m.ozet} {kitleOzeti(f)}</p>
+      <p className="m-0 rounded-alan bg-surface-muted px-3 py-2 text-12 text-ink-muted">{m.ozet} {platformOzeti(f, dk)}</p>
     </div>
   );
 }
