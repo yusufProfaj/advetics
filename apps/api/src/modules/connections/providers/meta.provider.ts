@@ -2508,6 +2508,21 @@ export class MetaProvider implements IAdPlatformProvider {
         : 'Seçilen kampanya denetlenirken';
 
     try {
+      /*
+       * PROFİL DÜĞMESİNİN ADRESİ HER ŞEYDEN ÖNCE. Canlıda öğrenildi
+       * (2026-10-21): Meta `VIEW_INSTAGRAM_PROFILE` düğmesinde de `link`
+       * istiyor ("link alanını doldurmak zorunludur", subcode 2061015) ve
+       * hata kreatif adımında geliyordu, yani kampanya ile ad set açılıp
+       * geri silinmek zorunda kalıyordu. Adres kullanıcı adından; okunamazsa
+       * HİÇBİR ŞEY açılmadan ret.
+       */
+      let dugme = hedefParam?.dugme ?? null;
+      if (dugme?.tip === 'VIEW_INSTAGRAM_PROFILE' && !dugme.link && request.source.surface === 'instagram') {
+        adim = 'Instagram profil adresi okunurken';
+        dugme = { ...dugme, link: await this.instagramProfilAdresi(ctx, request.source.instagramUserId) };
+        adim = 'Kampanya oluşturulurken';
+      }
+
       /**
        * VAR OLAN KAMPANYA `created` LİSTESİNE GİRMİYOR (K21).
        *
@@ -2554,7 +2569,7 @@ export class MetaProvider implements IAdPlatformProvider {
         const creative = await this.graphPost<{ id: string }>(
           ctx,
           `${act}/adcreatives`,
-          instagramCreativeBody(request.source, request.name, hedefParam?.dugme ?? null),
+          instagramCreativeBody(request.source, request.name, dugme),
         );
         created.push({ id: creative.id, label: 'kreatif' });
 
@@ -2644,6 +2659,22 @@ export class MetaProvider implements IAdPlatformProvider {
       throw new PlatformApiError('meta', 'permanent', 'Boost bitişi başlangıçtan sonra olmalı.');
     }
     await this.graphPost(ctx, adSetExternalId, { start_time: baslangic.toISOString(), end_time: bitis.toISOString() });
+  }
+
+  /** `https://www.instagram.com/<kullanıcı adı>/` — profil düğmesinin adresi. */
+  private async instagramProfilAdresi(ctx: FetchContext, instagramUserId: string): Promise<string> {
+    const res = await platformFetch<{ username?: string }>(
+      'meta',
+      `${this.graph}/${instagramUserId}?fields=username`,
+      { method: 'GET', headers: { Authorization: `Bearer ${ctx.accessToken}` } },
+      parseMetaRateLimit,
+    );
+    if (res.rateLimit) await ctx.onRateLimit?.(res.rateLimit);
+    const ad = res.data?.username;
+    if (!ad || !/^[A-Za-z0-9._]{1,30}$/.test(ad)) {
+      throw new PlatformApiError('meta', 'permanent', 'Instagram kullanıcı adı okunamadı; profil ziyareti düğmesinin adresi kurulamıyor.');
+    }
+    return `https://www.instagram.com/${ad}/`;
   }
 
   /**

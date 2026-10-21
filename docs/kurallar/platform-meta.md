@@ -219,3 +219,5 @@ okunup varsayılmadı — canlıda doğrulandı.
   farklı duruyor" diye işaretledi ve MCP `form_yayinla` onayı "başarısız"
   döndü (form açıktı, KVKK kutusu ve sorular uyuşuyordu). Dil karşılaştırması
   `formGeriOkumaDenetimi`nde harf duyarsız; başka bir dil (EN_US) hâlâ fark.
+
+- **Instagram boost'unda `VIEW_INSTAGRAM_PROFILE` düğmesi de `link` ister** (2026-10-21, canlı): `call_to_action: {type}` tek başına "link alanını doldurmak zorunludur" (subcode 2061015) ile kreatif adımında reddediliyor; hata kampanya ve ad set açıldıktan SONRA geldiği için geri alma şart oluyordu. Adres `https://www.instagram.com/<username>/`, kullanıcı adı `GET /{ig-user}?fields=username` ile kampanyadan ÖNCE okunuyor (`MetaProvider.instagramProfilAdresi`). Meta'nın kendi Ads MCP'si bu adresi kendisi kuruyor, belgesi "değer alanı yok" diyor: API'nin kendisi istiyor.

@@ -136,7 +136,7 @@ describe('MetaProvider.createBoost — duraklatılmış kurulum', () => {
   const provider = () => new MetaProvider({ platforms: { meta: { appId: 'a', appSecret: 's', apiVersion: 'v25.0' } } } as never);
 
   /** Sahte Graph: her çağrıyı kaydeder; ad set geri okuması `geriOkuma` döner. */
-  function sahteGraph(geriOkuma: Record<string, unknown>) {
+  function sahteGraph(geriOkuma: Record<string, unknown>, kullaniciAdi: string | null = 'profaj') {
     const cagrilar: Array<{ yol: string; yontem: string; govde: URLSearchParams | null }> = [];
     globalThis.fetch = vi.fn(async (u: string, init?: RequestInit) => {
       const yol = new URL(u).pathname.replace('/v25.0/', '');
@@ -148,6 +148,7 @@ describe('MetaProvider.createBoost — duraklatılmış kurulum', () => {
       if (yontem === 'POST' && yol.endsWith('/ads')) return yanit({ id: 'ad1' });
       if (yontem === 'GET' && yol === 'cr1') return yanit({ source_instagram_media_id: IG.mediaExternalId, effective_instagram_media_id: IG.mediaExternalId });
       if (yontem === 'GET' && yol === 'as1') return yanit(geriOkuma);
+      if (yontem === 'GET' && yol === IG.instagramUserId) return yanit(kullaniciAdi === null ? {} : { username: kullaniciAdi });
       return yanit({ success: true });
     }) as unknown as typeof fetch;
     return cagrilar;
@@ -173,6 +174,22 @@ describe('MetaProvider.createBoost — duraklatılmış kurulum', () => {
     expect(acma[0]!.govde!.get('status')).toBe('ACTIVE');
     expect(r.hedefGeriOkuma).toBeUndefined();
     expect(c.some((x) => x.yontem === 'GET' && x.yol === 'as1')).toBe(false);
+  });
+
+  it('KRİTİK (canlıda öğrenildi): profil düğmesi kullanıcı adından adres taşıyor, okuma kampanyadan ÖNCE', async () => {
+    const c = sahteGraph({ optimization_goal: 'VISIT_INSTAGRAM_PROFILE', destination_type: 'INSTAGRAM_PROFILE' });
+    await provider().createBoost({ accessToken: 'T', accountExternalId: '123' }, req({ hedef: 'profil_ziyareti', duraklatilmis: true }));
+    expect(JSON.parse(c.find((x) => x.yol.endsWith('/adcreatives'))!.govde!.get('call_to_action')!)).toEqual({
+      type: 'VIEW_INSTAGRAM_PROFILE',
+      value: { link: 'https://www.instagram.com/profaj/' },
+    });
+    expect(c.findIndex((x) => x.yol === IG.instagramUserId)).toBeLessThan(c.findIndex((x) => x.yol.endsWith('/campaigns')));
+  });
+
+  it('KRİTİK: kullanıcı adı okunamazsa HİÇBİR ŞEY açılmıyor', async () => {
+    const c = sahteGraph({}, null);
+    await expect(provider().createBoost({ accessToken: 'T', accountExternalId: '123' }, req({ hedef: 'profil_ziyareti', duraklatilmis: true }))).rejects.toThrow(/kullanıcı adı okunamadı/);
+    expect(c.filter((x) => x.yontem === 'POST')).toHaveLength(0);
   });
 
   it('KRİTİK: Meta başka optimizasyon yazdıysa "uyuşmadı" dönüyor', async () => {
