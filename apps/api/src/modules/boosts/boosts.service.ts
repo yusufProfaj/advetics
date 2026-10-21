@@ -4,6 +4,7 @@ import { CANLI_BOOST_SQL } from './canli-boost';
 import { PANEL_YERLERI, boostAssetName, MEDIA_TYPE_LABELS } from '@advetics/shared';
 import type {
   BoostablePostList,
+  BoostHedefTuru,
   BoostablePostQuery,
   BoostablePostRecord,
   BoostCampaignList,
@@ -886,6 +887,96 @@ export class BoostsService {
   }
 
   /**
+   * ═══ MCP BOOST'U — DURAKLATILMIŞ (`docs/okuma-api/MCP-BOOST-MIMARI.md`) ═══
+   *
+   * `createManualBoost`un EŞİ, ikinci bir yayın yolu DEĞİL: aynı engel
+   * kontrolü (`gonderiyiOkuVeDogrula`), aynı ağaç, aynı yürütücü
+   * (`createOneApproved`: kota, yazma izni, geri alma, kayıt). Farkları:
+   * kampanya PAUSED kalır (`duraklatilmis_kur`), hedef beş değerden biri,
+   * bütçe günlük ya da toplam, hedefleme çağırandan HAZIR Meta nesnesi
+   * (kayıtlı kitle `metaTargetingFrom` ile MCP katmanında çevrildi).
+   *
+   * Panel girdisini (`ManualBoostInput`) genişletmek yerine ayrı imza: panel
+   * şeması "toplam ≥ 20 ₺, tek amaç" kararlarını taşıyor ve MCP'nin
+   * seçenekleri oraya sızarsa panelin formu doğrulanmamış değer kabul ederdi.
+   */
+  async mcpBoostAc(
+    ctx: TenantContext,
+    g: {
+      clientId: string;
+      organicPostId: string;
+      hedef: BoostHedefTuru;
+      hedefAdres: string | null;
+      butce: { kip: 'daily' | 'lifetime'; micros: bigint };
+      durationDays: number;
+      /** Meta hedefleme nesnesi; `savedAudienceId` ile birlikte OLAMAZ (kısıt DB'de). */
+      targeting: Record<string, unknown> | null;
+      savedAudienceId: string | null;
+      objective: string;
+      neden: string;
+    },
+  ): Promise<{ boost: BoostRecord; hedefGeriOkuma?: { optimizationGoal: string | null; destinationType: string | null; uyustu: boolean; hata?: string } }> {
+    const scoped = this.scoped(ctx, g.clientId);
+    const boostId = await this.prisma.withTenant(scoped, async (tx) => {
+      const post = await this.gonderiyiOkuVeDogrula(tx, g.organicPostId, g.clientId);
+      const adAccountId = post.linked_ad_account_id!;
+      const toplam = g.butce.kip === 'lifetime' ? g.butce.micros : g.butce.micros * BigInt(g.durationDays);
+      const [boost] = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        INSERT INTO boosts (
+          id, org_id, client_id, boost_rule_id, organic_post_id, ad_account_id,
+          status, budget_mode, daily_budget_micros, total_budget_micros, duration_days, objective,
+          targeting, saved_audience_id, target_campaign_external_id,
+          reason, approved_by, approved_at, updated_at,
+          hedef, hedef_adres, duraklatilmis_kur
+        ) VALUES (
+          gen_random_uuid(), ${ctx.orgId}::uuid, ${g.clientId}::uuid,
+          NULL, ${g.organicPostId}::uuid, ${adAccountId}::uuid,
+          'approved', ${g.butce.kip},
+          ${g.butce.kip === 'daily' ? g.butce.micros : null}::bigint,
+          ${g.butce.kip === 'lifetime' ? g.butce.micros : null}::bigint,
+          ${g.durationDays}, ${g.objective},
+          ${g.targeting ? JSON.stringify(g.targeting) : null}::jsonb,
+          ${g.savedAudienceId},
+          -- MCP her zaman YENİ kampanya (Ç-B5): paylaşılan kampanyanın
+          -- durumunu duraklatılmış kurulum değiştiremez.
+          NULL,
+          ${g.neden.slice(0, 500)},
+          ${ctx.userId}::uuid, now(), now(),
+          ${g.hedef}, ${g.hedefAdres}, true
+        )
+        ON CONFLICT DO NOTHING
+        RETURNING id::text AS id
+      `);
+      if (!boost) throw new BadRequestException('Bu gönderi için az önce bir boost açılmış.');
+      await this.writeManualTree(tx, {
+        boostId: boost.id,
+        orgId: ctx.orgId,
+        clientId: g.clientId,
+        adAccountId,
+        socialProfileId: post.social_profile_id,
+        organicPostId: post.id,
+        totalBudgetMicros: toplam,
+        durationDays: g.durationDays,
+        butceKipi: g.butce.kip,
+        butceMicros: g.butce.micros,
+        objective: g.objective,
+        postExternalId: post.external_id,
+        clientName: post.client_name,
+        postMessage: post.message,
+        mediaLabel: MEDIA_TYPE_LABELS[post.media_type as MediaType],
+        now: new Date(),
+      });
+      return boost.id;
+    });
+    // Yayın kendi kısa transaction'larında (createManualBoost'taki gerekçe).
+    const sonuc = await this.executor.createOneApproved((fn) => this.prisma.withTenant(scoped, fn), boostId);
+    if (!sonuc.ok) throw new BadRequestException(sonuc.error);
+    const [record] = await this.listBoosts(ctx, { clientId: g.clientId, boostId });
+    if (!record) throw new NotFoundException('Boost oluşturuldu ama okunamadı');
+    return { boost: record, ...(sonuc.hedefGeriOkuma ? { hedefGeriOkuma: sonuc.hedefGeriOkuma } : {}) };
+  }
+
+  /**
    * Elle boost'un ağaç satırları.
    *
    * `writeCandidateTree`'nin eşi ama üç farkla: köken `manual_boost`, kural
@@ -907,6 +998,10 @@ export class BoostsService {
       organicPostId: string;
       totalBudgetMicros: bigint;
       durationDays: number;
+      /** Verilmezse panelin değerleri: toplam bütçe, etkileşim. */
+      butceKipi?: 'daily' | 'lifetime';
+      butceMicros?: bigint;
+      objective?: string;
       postExternalId: string;
       /** Boost adının parçaları (K22) — ad tek fonksiyondan üretiliyor. */
       clientName: string;
@@ -939,8 +1034,8 @@ export class BoostsService {
       ) VALUES (
         gen_random_uuid(), ${p.orgId}::uuid, ${p.clientId}::uuid, 'meta',
         ${p.adAccountId}::uuid, ${name}, 'simple', NULL,
-        ${JSON.stringify({ objective: 'OUTCOME_ENGAGEMENT' })}::jsonb,
-        'lifetime', ${p.totalBudgetMicros}::bigint, ${endAt}::timestamptz,
+        ${JSON.stringify({ objective: p.objective ?? 'OUTCOME_ENGAGEMENT' })}::jsonb,
+        ${p.butceKipi ?? 'lifetime'}, ${p.butceMicros ?? p.totalBudgetMicros}::bigint, ${endAt}::timestamptz,
         'draft', 'manual_boost', NULL, now()
       )
       RETURNING id::text AS id

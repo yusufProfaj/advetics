@@ -1,7 +1,10 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
+  BOOST_HEDEFI_ADI,
+  BOOST_HEDEFI_YUZEYLERI,
   PANEL_YERLERI,
   boostNameWithLabel,
+  type BoostHedefTuru,
   CONVERSION_BUCKETS,
   restrictTargetingFor,
   type GeoLocationOption,
@@ -2485,6 +2488,20 @@ export class MetaProvider implements IAdPlatformProvider {
      * tarifi kendi arayüzüne göre yazılmış ve API'de yanıltıyor.
      */
     const hedefKampanya = request.campaign ?? { mode: 'new' };
+    /*
+     * HEDEF VE DURAKLATMA HİÇBİR ŞEY AÇILMADAN DENETLENİYOR: Facebook
+     * gönderisinde düğmeli bir hedef ya da var olan kampanyada "duraklatılmış
+     * kur" istenirse Meta'da iz kalmadan ret. Kampanya açıldıktan sonra
+     * reddetmek geri almaya muhtaç bir kampanya bırakırdı.
+     */
+    const hedefParam = request.hedef ? boostHedefiParametreleri(request.hedef, request.source.surface, request.hedefAdres) : null;
+    if (request.duraklatilmis && hedefKampanya.mode !== 'new') {
+      throw new PlatformApiError(
+        'meta',
+        'permanent',
+        'Duraklatılmış boost yalnız yeni kampanyada kurulur: var olan kampanyanın durumuna dokunulmuyor.',
+      );
+    }
     let adim =
       hedefKampanya.mode === 'new'
         ? 'Kampanya oluşturulurken'
@@ -2537,7 +2554,7 @@ export class MetaProvider implements IAdPlatformProvider {
         const creative = await this.graphPost<{ id: string }>(
           ctx,
           `${act}/adcreatives`,
-          instagramCreativeBody(request.source, request.name),
+          instagramCreativeBody(request.source, request.name, hedefParam?.dugme ?? null),
         );
         created.push({ id: creative.id, label: 'kreatif' });
 
@@ -2582,7 +2599,12 @@ export class MetaProvider implements IAdPlatformProvider {
        * çağrı arasında duraklattıysa, biz onun kararını sessizce geri alırdık.
        * Paylaşılan bir nesneyi ancak sahibi yayına alır.
        */
-      if (hedefKampanya.mode === 'new') {
+      /*
+       * DURAKLATILMIŞ KURULUMDA KAMPANYA PAUSED KALIYOR (MCP boost'u, Ç-B1):
+       * ad set ve reklam ACTIVE ama kapalı kampanyanın altında hiçbiri
+       * harcamıyor. Başlatmak ayrı ve ayrıca onaylı bir işlem.
+       */
+      if (hedefKampanya.mode === 'new' && !request.duraklatilmis) {
         adim = 'Kampanya yayına alınırken';
         await this.graphPost(ctx, campaignId, { status: 'ACTIVE' });
       }
@@ -2591,6 +2613,9 @@ export class MetaProvider implements IAdPlatformProvider {
         externalCampaignId: campaignId,
         externalAdSetId: adSet.id,
         externalAdId: ad.id,
+        // GERİ OKUMA KURULUMUN DIŞINDA: okunamaması kurulumu GERİ ALDIRMIYOR
+        // (kampanya kurulmuş ve duraklatılmış), yalnız "doğrulandı" dedirtmiyor.
+        ...(hedefParam ? { hedefGeriOkuma: await this.boostHedefiniGeriOku(ctx, adSet.id, hedefParam) } : {}),
       };
     } catch (err) {
       // GERİ ALMA — ters sırada sil.
@@ -2611,6 +2636,40 @@ export class MetaProvider implements IAdPlatformProvider {
         }
       }
       throw labelBoostError(adim, err);
+    }
+  }
+
+  async boostZamanla(ctx: FetchContext, adSetExternalId: string, baslangic: Date, bitis: Date): Promise<void> {
+    if (bitis.getTime() <= baslangic.getTime()) {
+      throw new PlatformApiError('meta', 'permanent', 'Boost bitişi başlangıçtan sonra olmalı.');
+    }
+    await this.graphPost(ctx, adSetExternalId, { start_time: baslangic.toISOString(), end_time: bitis.toISOString() });
+  }
+
+  /**
+   * HEDEFİN GERİ OKUNMASI. "200 döndü" doğrulama değil: Meta bir alanı
+   * kabul edip yok sayabiliyor ve o zaman para kullanıcının istemediği
+   * sonuca gider. Okunan `destination_type` ve `optimization_goal`
+   * istenenle BİREBİR karşılaştırılıyor.
+   */
+  private async boostHedefiniGeriOku(
+    ctx: FetchContext,
+    adSetId: string,
+    p: BoostHedefiParam,
+  ): Promise<NonNullable<BoostResult['hedefGeriOkuma']>> {
+    try {
+      const res = await platformFetch<{ optimization_goal?: string; destination_type?: string }>(
+        'meta',
+        `${this.graph}/${adSetId}?fields=optimization_goal,destination_type`,
+        { method: 'GET', headers: { Authorization: `Bearer ${ctx.accessToken}` } },
+        parseMetaRateLimit,
+      );
+      if (res.rateLimit) await ctx.onRateLimit?.(res.rateLimit);
+      const optimizationGoal = res.data?.optimization_goal ?? null;
+      const destinationType = res.data?.destination_type ?? null;
+      return { optimizationGoal, destinationType, uyustu: hedefUyustuMu(p, optimizationGoal, destinationType) };
+    } catch (err) {
+      return { optimizationGoal: null, destinationType: null, uyustu: false, hata: err instanceof Error ? err.message : String(err) };
     }
   }
 
@@ -2724,7 +2783,9 @@ export class MetaProvider implements IAdPlatformProvider {
       // taşısaydı ad `… - Boost - Kampanya - Reklam Seti` gibi çift seviyeli
       // çıkardı. Ek tek yerden geliyor: `boostNameWithLabel`.
       name: boostNameWithLabel(request.name, 'campaign'),
-      objective: request.objective,
+      // HEDEF VERİLDİYSE AMAÇ EŞLEMEDEN: satırdaki `objective` ile hedefin
+      // ayrışması, ad set'in o amaçta geçersiz bir optimizasyonla açılması demek.
+      objective: request.hedef ? boostHedefiParametreleri(request.hedef, request.source.surface, request.hedefAdres).objective : request.objective,
       status: 'PAUSED',
       /**
        * ÖZEL REKLAM KATEGORİLERİ — SABİT '[]' DEĞİL.
@@ -4239,13 +4300,98 @@ export function decideInstagramCreativeCheck(params: {
 export function instagramCreativeBody(
   source: Extract<BoostSource, { surface: 'instagram' }>,
   name: string,
+  dugme: BoostHedefiParam['dugme'] = null,
 ): Record<string, string> {
   return {
     name: boostNameWithLabel(name, 'creative'),
     object_id: source.pageExternalId,
     instagram_user_id: source.instagramUserId,
     source_instagram_media_id: source.mediaExternalId,
+    // DÜĞME YALNIZ HEDEF İSTİYORSA. Etkileşim ve erişimde alan HİÇ
+    // gönderilmiyor: panelin canlıda doğrulanan gövdesi değişmesin.
+    ...(dugme ? { call_to_action: JSON.stringify(dugme.link ? { type: dugme.tip, value: { link: dugme.link } } : { type: dugme.tip }) } : {}),
   };
+}
+
+/** Boost hedefinin Meta karşılığı. */
+export interface BoostHedefiParam {
+  objective: string;
+  destinationType: string;
+  optimizationGoal: string;
+  /** Instagram kreatifinin düğmesi; `null` = düğme yok. */
+  dugme: { tip: string; link?: string } | null;
+  /** `promoted_object.page_id` (ana Facebook sayfası) gerekiyor mu. */
+  sayfaGerekli: boolean;
+}
+
+/**
+ * ═══ BOOST HEDEFİ → META (TEK EŞLEME) ═══ (`MCP-BOOST-MIMARI.md` § 2)
+ *
+ * Eşlemeler Meta'nın kendi Ads MCP'sinin `ads_boost_ig_post` belgesinden
+ * (2026-10-21). YALNIZ `etkilesim` CANLIDA DOĞRULANDI; diğerleri kurulumdan
+ * sonra geri okunuyor (`boostHedefiniGeriOku`).
+ *
+ * YÜZEY UYMUYORSA FIRLATIR, etkileşime DÜŞMEZ: Facebook gönderisine düğme
+ * eklenemiyor ve "mesaj" isteyene sessizce etkileşim kurmak, istemediği
+ * sonuca para harcatmak olurdu.
+ */
+export function boostHedefiParametreleri(
+  hedef: BoostHedefTuru,
+  yuzey: 'facebook_page' | 'instagram',
+  hedefAdres?: string | null,
+): BoostHedefiParam {
+  if (!BOOST_HEDEFI_YUZEYLERI[hedef].includes(yuzey)) {
+    throw new PlatformApiError(
+      'meta',
+      'permanent',
+      `${BOOST_HEDEFI_ADI[hedef]} hedefi yalnız Instagram gönderisinde kurulabiliyor: Facebook gönderisi olduğu gibi reklama dönüyor ve ona düğme eklenemiyor. Facebook gönderisinde etkileşim ya da erişim seç.`,
+    );
+  }
+  switch (hedef) {
+    case 'etkilesim':
+      return { objective: 'OUTCOME_ENGAGEMENT', destinationType: 'ON_POST', optimizationGoal: 'POST_ENGAGEMENT', dugme: null, sayfaGerekli: false };
+    case 'erisim':
+      return { objective: 'OUTCOME_AWARENESS', destinationType: 'UNDEFINED', optimizationGoal: 'REACH', dugme: null, sayfaGerekli: false };
+    case 'profil_ziyareti':
+      return {
+        objective: 'OUTCOME_TRAFFIC',
+        destinationType: 'INSTAGRAM_PROFILE',
+        optimizationGoal: 'VISIT_INSTAGRAM_PROFILE',
+        dugme: { tip: 'VIEW_INSTAGRAM_PROFILE' },
+        sayfaGerekli: true,
+      };
+    case 'mesaj':
+      return {
+        objective: 'OUTCOME_ENGAGEMENT',
+        destinationType: 'INSTAGRAM_DIRECT',
+        optimizationGoal: 'CONVERSATIONS',
+        dugme: { tip: 'INSTAGRAM_MESSAGE' },
+        sayfaGerekli: true,
+      };
+    case 'trafik': {
+      if (!hedefAdres || !/^https:\/\//i.test(hedefAdres)) {
+        throw new PlatformApiError('meta', 'permanent', 'Trafik hedefi https:// ile başlayan bir adres ister.');
+      }
+      return {
+        objective: 'OUTCOME_TRAFFIC',
+        destinationType: 'WEBSITE',
+        optimizationGoal: 'LINK_CLICKS',
+        dugme: { tip: 'LEARN_MORE', link: hedefAdres },
+        sayfaGerekli: false,
+      };
+    }
+  }
+}
+
+/**
+ * Geri okunan ad set istenen hedefte mi. `UNDEFINED` hedef Meta'da alanın
+ * HİÇ dönmemesi olarak da görünebiliyor: erişimde boş hedef uyuşma sayılıyor,
+ * optimizasyon yine birebir.
+ */
+export function hedefUyustuMu(p: BoostHedefiParam, optimizationGoal: string | null, destinationType: string | null): boolean {
+  if (optimizationGoal !== p.optimizationGoal) return false;
+  if (p.destinationType === 'UNDEFINED') return destinationType === null || destinationType === 'UNDEFINED';
+  return destinationType === p.destinationType;
 }
 
 /**
@@ -4339,11 +4485,14 @@ export function buildBoostAdSetParams(
       ? instagramPlacements(request.source.mediaType)
       : {};
 
+  // HEDEF VERİLMEDİYSE bugünkü (canlıda doğrulanan) değerler aynen.
+  const hedefParam = request.hedef ? boostHedefiParametreleri(request.hedef, request.source.surface, request.hedefAdres) : null;
+
   const params: Record<string, string> = {
     name: boostNameWithLabel(request.name, 'adSet'),
     campaign_id: campaignId,
     billing_event: 'IMPRESSIONS',
-    optimization_goal: 'POST_ENGAGEMENT',
+    optimization_goal: hedefParam?.optimizationGoal ?? 'POST_ENGAGEMENT',
     /**
      * HEDEF AÇIKÇA "GÖNDERİNİN ÜZERİNDE" — verilmemesi boost'u öldürüyordu.
      *
@@ -4362,7 +4511,7 @@ export function buildBoostAdSetParams(
      * gün aynı hataya düşerdi. İki yolu ayırmak, aynı hatayı ikinci kez
      * bulmayı beklemek olurdu.
      */
-    destination_type: 'ON_POST',
+    destination_type: hedefParam?.destinationType ?? 'ON_POST',
     // Reklam oluşturucuyla AYNI GEREKÇE: strateji söylenmezse Meta hesabın
     // varsayılanına düşüyor ve tavanlı bir varsayılan isteği reddediyor.
     bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
@@ -4370,6 +4519,9 @@ export function buildBoostAdSetParams(
     targeting: JSON.stringify(advantageIsaretiyle({ ...targeting, ...yerlesim })),
     status: 'ACTIVE',
   };
+  // Mesaj ve profil ziyareti hedefi bir SAYFA ister: Instagram reklamı da
+  // ana Facebook sayfasına bağlı (`BoostSource.pageExternalId`).
+  if (hedefParam?.sayfaGerekli) params.promoted_object = JSON.stringify({ page_id: request.source.pageExternalId });
 
   if (request.budget.mode === 'lifetime') {
     /**

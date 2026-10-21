@@ -193,3 +193,36 @@ describe('TEKRAR BOOSTLAMA — kullanıcının asıl istediği', () => {
     expect(await canli()).toBe(false);
   });
 });
+
+describe('DURAKLATILMIŞ KURULAN boost (MCP, `MCP-BOOST-MIMARI.md` § 3)', () => {
+  /** MCP boost'u: kampanya PAUSED kuruldu; `baslatildi` = kaç gün önce başlatıldı (null = hiç). */
+  async function duraklatilmisBoost(kurulumGunOnce: number, baslatildi: number | null, sure = 3): Promise<void> {
+    await yayindaBoost(BOOST, kurulumGunOnce, sure);
+    await h.q(
+      `UPDATE boosts SET duraklatilmis_kur = true,
+              yayin_baslangici = CASE WHEN $2::int IS NULL THEN NULL ELSE now() - make_interval(days => $2::int) END
+        WHERE id = $1`,
+      [BOOST, baslatildi],
+    );
+  }
+
+  it('KRİTİK: hiç başlatılmamış boost, kurulumu ne kadar eski olursa olsun BİTİRİLMİYOR', async () => {
+    // Bitirmek gönderiyi serbest bırakır; ikinci boost açılırken ilki Meta'da
+    // hâlâ başlatılabilir kalırdı (çift harcama kapısı).
+    await duraklatilmisBoost(30, null);
+    expect((await svc.completeEndedBoosts()).rows).toBe(0);
+    expect(await durum(BOOST)).toBe('active');
+  });
+
+  it('KRİTİK: süre BAŞLATMADAN sayılıyor, kurulumdan değil', async () => {
+    await duraklatilmisBoost(10, 1, 3); // 10 gün önce kuruldu, dün başlatıldı, 3 günlük
+    expect((await svc.completeEndedBoosts()).rows).toBe(0);
+    expect(await durum(BOOST)).toBe('active');
+  });
+
+  it('başlatılmış ve süresi dolmuş boost bitiriliyor', async () => {
+    await duraklatilmisBoost(10, 4, 3);
+    expect((await svc.completeEndedBoosts()).rows).toBe(1);
+    expect(await durum(BOOST)).toBe('completed');
+  });
+});

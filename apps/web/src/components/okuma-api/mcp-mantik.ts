@@ -59,3 +59,19 @@ export function ozetSatirlari(ozet: string[]): { ana: string; alt: string; tam: 
     tam: ozet.join('\n'),
   };
 }
+
+/**
+ * TEK İŞLEM ÜST SINIRI girişi (`MCP-BOOST-MIMARI.md` § 4). Boş = sunucunun
+ * varsayılanı (`null` gönderilir). Binlik nokta kabul ("50.000"), kuruş
+ * YOK: sınır ana para biriminde tam sayı. Sınırlar şemayla AYNI
+ * (`okumaAnahtariOlusturSchema.tekIslemUstSiniri`); hata "Oluştur"a
+ * basılınca değil yazılırken görünsün diye burada.
+ */
+export function ustSiniriAyristir(metin: string): { deger: number | null } | { hata: 'bicim' | 'aralik' } {
+  const t = metin.trim().replace(/\./g, '');
+  if (t === '') return { deger: null };
+  if (!/^\d{1,9}$/.test(t)) return { hata: 'bicim' };
+  const n = Number(t);
+  if (n < 1 || n > 10_000_000) return { hata: 'aralik' };
+  return { deger: n };
+}

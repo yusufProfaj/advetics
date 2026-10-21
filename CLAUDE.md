@@ -42,6 +42,7 @@ canlıda masaüstü + mobil görülmeden bitmiş sayılmaz (§3 "Tasarım").
 - `uygula(…, { validateOnly })` yalnız Google'da prova: Meta sağlayıcısı seçeneği tanımıyor ve GERÇEKTEN yazıyor; önizleme için `CampaignActionsService.onizle` (platforma gitmez, `platform-meta.md`).
 - Reklam Yöneticisi'nde şirket düzeyi ("Tüm workspace'ler") `activeClientId` BOŞ ama `ajansGorunumu`/`mcc` değil: görünümü `activeClientId`'ye bağlamak sekmeyi seçili gösterip altına hesap tablosu çizdi (`hedef-kitleler.spec.ts`).
 - Mutasyonu `git checkout -- dosya` ile geri alma: commit'lenmemiş düzeltmeyi de siler; dosyanın yedeğinden dön.
+- Panelin terminoloji bekçisi (`apps/web/src/terminoloji.spec.ts`) API kaynağını da tarıyor: MCP araç açıklamasına ya da onay özetine yazılan "müşteri" de sınıflandırılmalı (dar desenle izin listesine).
 
 ## 0. "advetics projesine devam et" denince
 

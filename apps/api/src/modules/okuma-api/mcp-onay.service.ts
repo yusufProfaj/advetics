@@ -30,6 +30,8 @@ export interface AlinanOnay {
   id: string;
   islem: McpOnayIslemi;
   hedef: Record<string, unknown>;
+  /** Kullanıcının onayladığı özet; workspace denetim kaydına aynen yazılır. */
+  ozet: string[];
 }
 
 const LISTE_SINIRI = 50;
@@ -116,12 +118,13 @@ export class McpOnayService {
   async al(ev: Ev, kod: string): Promise<AlinanOnay> {
     if (!/^[0-9a-f-]{36}$/i.test(kod)) throw new AracArgumanHatasi('onay_kodu bir UUID olmalı (aracın döndürdüğü onay_kodu).');
     return this.prisma.withTenant(ev.ctx, async (tx) => {
-      const alinan = await tx.$queryRaw<Array<{ id: string; islem: McpOnayIslemi; hedef: Record<string, unknown> }>>(Prisma.sql`
+      const alinan = await tx.$queryRaw<Array<{ id: string; islem: McpOnayIslemi; hedef: Record<string, unknown>; ozet: unknown }>>(Prisma.sql`
         UPDATE mcp_onaylari SET durum = 'uygulaniyor', karar_at = now()
          WHERE id = ${kod}::uuid AND user_id = ${ev.ctx.userId}::uuid AND anahtar_id = ${ev.anahtarId}::uuid
            AND durum = 'bekliyor' AND bitis > now()
-        RETURNING id::text, islem, hedef`);
-      const a = alinan[0];
+        RETURNING id::text, islem, hedef, ozet`);
+      const h = alinan[0];
+      const a = h ? { id: h.id, islem: h.islem, hedef: h.hedef, ozet: Array.isArray(h.ozet) ? h.ozet.map(String) : [] } : undefined;
       if (a) {
         await this.audit.record(tx, ev.ctx, {
           action: 'mcp.onayla',
@@ -156,6 +159,31 @@ export class McpOnayService {
         after: { hata, yazildi: count > 0 },
       });
     });
+  }
+
+  /**
+   * WORKSPACE DENETİM KAYDI. Onay satırının kendi kayıtları (`mcp.onay_ac`,
+   * `mcp.onayla`, `mcp.uygulandi`) anahtar sahibinin EV bağlamında ve
+   * `client_id` boş: workspace'in Denetim ekranında görünmüyorlardı. Görev
+   * "her işlemde kayıt (kim, ne zaman, hangi hesap, tutar)": özet satırları
+   * hesabı ve tutarı zaten taşıyor; bu kayıt onları WORKSPACE bağlamında
+   * (`ws`, `McpYazmaService.workspace` çözdü) ve o workspace'e bağlı yazıyor.
+   */
+  async isKaydi(
+    ws: TenantContext,
+    action: 'mcp.islem_onerildi' | 'mcp.islem_uygulandi' | 'mcp.islem_basarisiz',
+    onayId: string,
+    after: Record<string, unknown>,
+  ): Promise<void> {
+    await this.prisma.withTenant(ws, (tx) =>
+      this.audit.record(tx, ws, {
+        action,
+        targetType: 'mcp_onay',
+        targetId: onayId,
+        clientId: ws.activeClientId,
+        after: { ...after, kanal: 'mcp' } as Prisma.InputJsonValue,
+      }),
+    );
   }
 
   async vazgec(ev: Ev, kod: string): Promise<McpOnayOzeti> {

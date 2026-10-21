@@ -1,4 +1,4 @@
-import type { GeoLocationOption,
+import type { BoostHedefTuru, GeoLocationOption,
   InterestOption,
   CustomAudienceOption, Platform, SavedAudienceOption } from '@advetics/shared';
 
@@ -776,6 +776,22 @@ export interface BoostRequest {
    * bkz. `createBoost`.
    */
   targeting?: Record<string, unknown>;
+  /**
+   * HEDEF (MCP boost'u, `MCP-BOOST-MIMARI.md` § 2). VERİLMEZSE bugünkü
+   * davranış: `objective` olduğu gibi, ad set `ON_POST` + `POST_ENGAGEMENT`.
+   * Verilirse amaç, hedef ve optimizasyon TEK eşlemeden
+   * (`boostHedefiParametreleri`) ve kurulumdan sonra geri okunuyor.
+   */
+  hedef?: BoostHedefTuru;
+  /** Yalnız `trafik` hedefinde: düğmenin açtığı adres. */
+  hedefAdres?: string;
+  /**
+   * DURAKLATILMIŞ KUR: yeni kampanya PAUSED kalır (ad set ve reklam ACTIVE
+   * altında; kampanya kapalıyken hiçbiri harcamaz). Yalnız yeni kampanyada
+   * anlamlı; var olan kampanyayla birlikte verilirse sağlayıcı REDDEDER
+   * (paylaşılan kampanyanın durumuna dokunulmaz, K21).
+   */
+  duraklatilmis?: boolean;
 }
 
 /**
@@ -796,6 +812,12 @@ export interface BoostResult {
   externalCampaignId: string;
   externalAdSetId: string;
   externalAdId: string;
+  /**
+   * Hedef verildiyse ad set'ten GERİ OKUNAN amaç alanları. `uyustu: false`
+   * = Meta isteği kabul etti ama başka bir hedef/optimizasyon yazdı (ya da
+   * okunamadı); kurulum durur ama "doğrulandı" denmez.
+   */
+  hedefGeriOkuma?: { optimizationGoal: string | null; destinationType: string | null; uyustu: boolean; hata?: string };
 }
 
 /**
@@ -1319,6 +1341,14 @@ export interface IAdPlatformProvider {
    * `ads_management` gerektiriyor — `canWrite()` önce sorulmalı.
    */
   createBoost(ctx: FetchContext, request: BoostRequest): Promise<BoostResult>;
+
+  /**
+   * Boost ad set'inin başlangıç ve bitişini YENİDEN kurar. Duraklatılmış
+   * kurulan boost günler sonra başlatıldığında gerekli: bitiş kurulum
+   * anından sayılmıştı ve toplam bütçe kalan kısa süreye sıkışırdı.
+   * Yalnız Meta; diğerleri açık hata.
+   */
+  boostZamanla(ctx: FetchContext, adSetExternalId: string, baslangic: Date, bitis: Date): Promise<void>;
 
   /**
    * YOUTUBE VİDEO REKLAMI — Demand Gen (Advetics 1.0).

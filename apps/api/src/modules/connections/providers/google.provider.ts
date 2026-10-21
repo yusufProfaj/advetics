@@ -2292,6 +2292,10 @@ export class GoogleProvider implements IAdPlatformProvider {
     );
   }
 
+  async boostZamanla(): Promise<never> {
+    throw new PlatformApiError('google', 'permanent', 'Google Ads organik gönderi boost etmeyi desteklemiyor — bu bir Meta özelliği.');
+  }
+
   async createBoost(): Promise<BoostResult> {
     throw new PlatformApiError(
       'google',

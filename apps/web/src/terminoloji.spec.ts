@@ -118,6 +118,12 @@ const IZINLI: Array<{ neden: string; desen: RegExp }> = [
     neden: 'KİŞİ — client_viewer rolünün ekran adı, tek tanım satırı',
     desen: /client_viewer: 'Müşteri',/,
   },
+  /*
+   * MCP BÜTÇE KURALI (2026-10-21, görev metni: "Müşteri hesabında bütçe
+   * değişikliği müşteri onayıyla yapılır"): reklam hesabının SAHİBİ olan
+   * insan; onayı veren kişi, workspace değil. Desen o cümleye çapalı.
+   */
+  { neden: 'KİŞİ — reklam hesabının sahibi, bütçe değişikliğini onaylayan insan (MCP)', desen: /[Mm]üşterinin reklam hesab(ı|ın)/ },
   { neden: 'KİŞİ — Müşteri rolünün "Müşteri seç" yönlendirmesi', desen: /rolü <strong>Müşteri<\/strong> seç/ },
   { neden: 'KİŞİ — beyaz etiket tanıtımı: paneli GÖREN kişi', desen: /Müşteriniz|Müşterileriniz|müşterilerinize/ },
   { neden: 'KİŞİ — gizlilik metninde veri sahibi', desen: /müşterilerin veya reklam izleyicilerinin|müşteriye görünmez/ },

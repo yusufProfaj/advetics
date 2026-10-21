@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import {
+  MCP_VARSAYILAN_UST_SINIR_BIRIM,
   OKUMA_ANAHTARI_UST_SINIR,
   bicimKodu,
   type AnahtarYetkisi,
@@ -24,7 +25,7 @@ import { AdHucresi, Tablo } from '@/components/ui/tablo';
 import { Pencere } from '@/components/ui/pencere';
 import { useDil, useSozluk } from '@/dil/saglayici';
 import { hesabimSozlugu } from '@/dil/sozlukler/ayarlar-hesabim';
-import { ONAY_DURUM_HALI, ozetSatirlari, sureSecenekleri, sureyiUyarla } from './mcp-mantik';
+import { ONAY_DURUM_HALI, ozetSatirlari, sureSecenekleri, sureyiUyarla, ustSiniriAyristir } from './mcp-mantik';
 
 /* Durum rozeti: yeşil YALNIZ etkin anahtarda (kılavuz: yeşil yalnız durum göstergesi). */
 /* Etiketi sözlükten (`okuma.durum`). */
@@ -89,6 +90,8 @@ export function OkumaApiPaneli({
    */
   const [yetki, setYetki] = useState<AnahtarYetkisi>('okuma');
   const [sure, setSure] = useState<string>('90');
+  /** Boş = sunucunun varsayılanı; yalnız yazma anahtarında gönderiliyor. */
+  const [ustSinir, setUstSinir] = useState('');
   const [bekleyen, setBekleyen] = useState<string | null>(null);
   const [hata, setHata] = useState<string | null>(null);
   const [yeni, setYeni] = useState<OkumaAnahtariOlusturmaYaniti | null>(null);
@@ -103,6 +106,8 @@ export function OkumaApiPaneli({
   useEffect(() => setMcpUrl(mcpAdresi(API_URL, window.location.origin)), []);
 
   const etkinSayisi = anahtarlar.filter((a) => a.durum === 'etkin').length;
+  const sinir = ustSiniriAyristir(ustSinir);
+  const sayi = (n: number) => n.toLocaleString(bicimKodu(dil));
 
   async function olustur() {
     setBekleyen('olustur');
@@ -110,7 +115,12 @@ export function OkumaApiPaneli({
     try {
       const r = await apiFetch<OkumaAnahtariOlusturmaYaniti>('/okuma-api/anahtarlar', {
         method: 'POST',
-        body: JSON.stringify({ ad: ad.trim(), gecerlilikGun: sure === 'suresiz' ? null : Number(sure), yetki }),
+        body: JSON.stringify({
+          ad: ad.trim(),
+          gecerlilikGun: sure === 'suresiz' ? null : Number(sure),
+          yetki,
+          tekIslemUstSiniri: yetki === 'yazma' && 'deger' in sinir ? sinir.deger : null,
+        }),
       });
       setYeni(r);
       router.refresh();
@@ -210,6 +220,27 @@ export function OkumaApiPaneli({
               </div>
             )}
           </div>
+          {yetki === 'yazma' && (
+            <div className="grid grid-cols-1 sm:max-w-sm">
+              <Alan
+                etiket={d.ustSinir}
+                ipucu={d.ustSinirIpucu(sayi(MCP_VARSAYILAN_UST_SINIR_BIRIM))}
+                hata={'hata' in sinir ? d.ustSinirHata[sinir.hata] : undefined}
+              >
+                {(id, aciklamaId, hatali) => (
+                  <Girdi
+                    id={id}
+                    aria-describedby={aciklamaId}
+                    hatali={hatali}
+                    inputMode="numeric"
+                    value={ustSinir}
+                    onChange={(e) => setUstSinir(e.target.value)}
+                    placeholder={sayi(MCP_VARSAYILAN_UST_SINIR_BIRIM)}
+                  />
+                )}
+              </Alan>
+            </div>
+          )}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_12rem_auto] sm:items-end">
             <Alan etiket={d.ad}>
               <Girdi value={ad} onChange={(e) => setAd(e.target.value)} maxLength={80} placeholder={d.adYer} />
@@ -227,7 +258,7 @@ export function OkumaApiPaneli({
               ton={yetki === 'yazma' ? 'birincil' : 'koyu'}
               onClick={olustur}
               bekliyor={bekleyen === 'olustur'}
-              disabled={bekleyen !== null || ad.trim() === '' || etkinSayisi >= OKUMA_ANAHTARI_UST_SINIR}
+              disabled={bekleyen !== null || ad.trim() === '' || etkinSayisi >= OKUMA_ANAHTARI_UST_SINIR || (yetki === 'yazma' && 'hata' in sinir)}
             >
               {d.olustur}
             </Dugme>
@@ -255,7 +286,16 @@ export function OkumaApiPaneli({
             {
               anahtar: 'yetki',
               baslik: d.yetki,
-              hucre: (a) => <YetkiRozeti yetki={a.yetki} metin={d.yetkiAdi[a.yetki]} />,
+              hucre: (a) => (
+                <span className="grid justify-items-start gap-1">
+                  <YetkiRozeti yetki={a.yetki} metin={d.yetkiAdi[a.yetki]} />
+                  {a.tekIslemUstSiniriMicros && (
+                    <span className="text-12 text-ink-muted">
+                      {d.ustSinirSatiri(sayi(Number(BigInt(a.tekIslemUstSiniriMicros) / 1_000_000n)))}
+                    </span>
+                  )}
+                </span>
+              ),
             },
             {
               anahtar: 'durum',

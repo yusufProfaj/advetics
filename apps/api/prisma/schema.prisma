@@ -1566,6 +1566,9 @@ model OkumaAnahtari {
   createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   /// `okuma` | `yazma` (CHECK migration'da). Her istekte satırdan okunur.
   yetki         String    @default("okuma") @db.VarChar(10)
+  /// Yazma anahtarında tek işlemin en çok taahhüdü (micros, hesabın para
+  /// biriminde). NULL = varsayılan (`MCP_VARSAYILAN_UST_SINIR_BIRIM`).
+  tekIslemUstSiniriMicros BigInt? @map("tek_islem_ust_siniri_micros")
 
   user     User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   onaylari McpOnay[]
@@ -2099,6 +2102,17 @@ model Boost {
   approvedBy          String?   @map("approved_by") @db.Uuid
   approvedAt          DateTime? @map("approved_at") @db.Timestamptz(6)
   createdOnPlatformAt DateTime? @map("created_on_platform_at") @db.Timestamptz(6)
+
+  /// MCP boost'u (`MCP-BOOST-MIMARI.md` § 3). `hedef` Meta amacının
+  /// kullanıcı dilindeki adı (CHECK migration'da); panel ve kural yolu
+  /// `etkilesim`. `hedefAdres` yalnız trafik hedefinde.
+  hedef            String    @default("etkilesim") @db.VarChar(20)
+  hedefAdres       String?   @map("hedef_adres") @db.VarChar(2000)
+  /// Kampanya PAUSED kuruldu; harcama `boost_baslat` ile başlar.
+  duraklatilmisKur Boolean   @default(false) @map("duraklatilmis_kur")
+  /// Harcamanın başladığı an. Bitiş taraması süreyi buradan sayar; NULL ise
+  /// `createdOnPlatformAt` (panel yolu, kurulduğu an yayında).
+  yayinBaslangici  DateTime? @map("yayin_baslangici") @db.Timestamptz(6)
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)

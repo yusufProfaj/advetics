@@ -75,10 +75,20 @@ export const okumaAnahtariOlusturSchema = z
       .nullable()
       .default(90),
     yetki: z.enum(ANAHTAR_YETKILERI).default('okuma'),
+    /**
+     * TEK İŞLEM ÜST SINIRI, ANA PARA BİRİMİNDE ("10000" = 10.000 ₺), yalnız
+     * yazma anahtarında. Boşsa `MCP_VARSAYILAN_UST_SINIR_BIRIM`. Sınırı Claude
+     * değil anahtarı kuran kişi koyuyor (`MCP-BOOST-MIMARI.md` § 4).
+     */
+    tekIslemUstSiniri: z.number().int().min(1).max(10_000_000).nullable().default(null),
   })
   .refine((g) => g.yetki !== 'yazma' || (g.gecerlilikGun !== null && g.gecerlilikGun <= 90), {
     message: 'Yazma anahtarı en çok 90 gün geçerli olabilir',
     path: ['gecerlilikGun'],
+  })
+  .refine((g) => g.yetki === 'yazma' || g.tekIslemUstSiniri === null, {
+    message: 'Üst sınır yalnız yazma anahtarında anlamlı',
+    path: ['tekIslemUstSiniri'],
   });
 export type OkumaAnahtariOlustur = z.infer<typeof okumaAnahtariOlusturSchema>;
 
@@ -88,6 +98,12 @@ export interface OkumaAnahtariOzeti {
   /** `adv_ro_ab12cd` — anahtarın tamamı DEĞİL. */
   gorunenOnek: string;
   yetki: AnahtarYetkisi;
+  /**
+   * Yazma anahtarında tek işlemin en çok taahhüdü, micros dizge (hesabın para
+   * biriminde). Okuma anahtarında `null`. Satırda boşsa varsayılanın değeri
+   * yazılı: panel "sınırsız" sanmasın.
+   */
+  tekIslemUstSiniriMicros: string | null;
   olusturulma: string;
   /** null = süresiz. */
   bitis: string | null;
@@ -126,7 +142,22 @@ export interface OkumaAraciTanimi {
  * (`form.schema.ts`), yani soruların ve KVKK metninin kullanıcıya bir kez
  * gösterilmesi şart.
  */
-export const MCP_ONAY_ISLEMLERI = ['rehber_yayinla', 'varlik_durdur', 'varlik_etkinlestir', 'butce_degistir', 'form_yayinla'] as const;
+/*
+ * Boost işlemleri (2026-10-21, `MCP-BOOST-MIMARI.md`): oluşturma DURAKLATILMIŞ,
+ * başlatma ayrı onay; ikisi ayrı satır ki "kurdum" ile "harcamaya başladım"
+ * Denetim kaydında ayrı görünsün.
+ */
+export const MCP_ONAY_ISLEMLERI = [
+  'rehber_yayinla',
+  'varlik_durdur',
+  'varlik_etkinlestir',
+  'butce_degistir',
+  'form_yayinla',
+  'boost_olustur',
+  'boost_baslat',
+  'boost_duraklat',
+  'boost_butce',
+] as const;
 export type McpOnayIslemi = (typeof MCP_ONAY_ISLEMLERI)[number];
 
 /**
@@ -137,6 +168,13 @@ export type McpOnayIslemi = (typeof MCP_ONAY_ISLEMLERI)[number];
  */
 export const MCP_ONAY_DURUMLARI = ['bekliyor', 'uygulaniyor', 'uygulandi', 'basarisiz', 'vazgecildi'] as const;
 export type McpOnayDurumu = (typeof MCP_ONAY_DURUMLARI)[number];
+
+/**
+ * Anahtarda üst sınır girilmediyse tek işlemin en çok taahhüdü (ana para
+ * birimi, hesabın kendi para biriminde). Taahhüt: toplam bütçede tutar,
+ * günlük bütçede günlük × gün (`MCP-BOOST-MIMARI.md` § 4).
+ */
+export const MCP_VARSAYILAN_UST_SINIR_BIRIM = 50_000;
 
 /** Onay kodunun geçerliliği (dakika). Kısa: eski bir özet bugünkü hesabın durumunu anlatmıyor olabilir. */
 export const MCP_ONAY_SURESI_DK = 15;

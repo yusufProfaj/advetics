@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Inject, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
   MCP_ONAY_SURESI_DK,
@@ -21,11 +21,16 @@ import { FormPublisherService } from '../forms/form-publisher.service';
 import { FormsService } from '../forms/forms.service';
 import { RehberService } from '../reklam/rehber/rehber.service';
 import { googleYazmaAcikMi, metaYazmaAcikMi } from '../reklam/yazma-kapisi';
+import { taahhut, ustSinirDenetle } from './mcp-boost';
+import { McpBoostService, type BoostArgumani, type BoostYonetimIslemi } from './mcp-boost.service';
 import { McpOnayService, type AlinanOnay, type Ev } from './mcp-onay.service';
+import { tekIslemUstSiniri } from './okuma-anahtari.service';
 import { formIcerikOzeti, formOnayOzeti, rehberOnayOzeti, varlikOnayOzeti, type VarlikIslemi } from './mcp-onay-ozeti';
 import type { VarlikSeviyesi, YazmaAraci, YazmaOrtami } from './mcp-yazma-araclari';
 import { dosyaTuru, jetonCoz, jetonUret, YuklemeJetonuHatasi } from './mcp-yukleme';
 import { AracArgumanHatasi } from './okuma-araclari';
+
+const logger = new Logger('McpYazmaService');
 
 /** İsteğin taşıdığı, aracın bilmesi gereken her şey. */
 export interface YazmaIstegi extends Ev {
@@ -67,6 +72,7 @@ export class McpYazmaService {
     @Inject(CONFIG) private readonly config: AppConfig,
     private readonly forms: FormsService,
     private readonly formYayinci: FormPublisherService,
+    private readonly boost: McpBoostService,
   ) {}
 
   /**
@@ -213,6 +219,27 @@ export class McpYazmaService {
       },
       yayinOnayi: (w, id) => this.yayinOnayiAc(istek, w, id),
       varlikOnayi: (w, seviye, id, islem) => this.varlikOnayiAc(istek, w, seviye, id, islem),
+      boostGonderileri: async (w, sayfaId, limit) => this.boost.gonderiler((await ws(w, 'boost.read')).ctx, w, sayfaId, limit),
+      boostOnizle: async (a) => {
+        const { ctx, ad } = await ws(a.workspace_id, 'boost.read');
+        const h = await this.boost.hazirla(ctx, ad, a, await this.ustSinir(istek));
+        return {
+          onizlemeKodu: h.kod,
+          ozet: h.ozet,
+          uyarilar: h.uyarilar,
+          sonraki: 'Hiçbir şey açılmadı. Özeti kullanıcıya göster; kurmak isterse AYNI argümanlar + onizleme_kodu ile boost_olustur (o da önce onay ister).',
+        };
+      },
+      boostOnayi: (a, kod) => this.boostOnayiAc(istek, a, kod),
+      boostlar: async (w, limit) => this.boost.liste((await ws(w, 'boost.read')).ctx, w, limit),
+      boostDurumu: async (w, id) => this.boost.durum((await ws(w, 'boost.read')).ctx, w, id),
+      boostYonetimOnayi: (w, id, islem, micros) => this.boostYonetimOnayiAc(istek, w, id, islem, micros),
+      kitleler: async (w, hesapId) => {
+        const { ctx } = await ws(w, 'client.read', ...(hesapId ? (['connection.read'] as const) : []));
+        return this.boost.kitleListesi(ctx, w, hesapId);
+      },
+      konumAra: async (w, hesapId, q) => this.boost.konumAra((await ws(w, 'connection.read')).ctx, w, hesapId, q),
+      ilgiAra: async (w, hesapId, q) => this.boost.ilgiAra((await ws(w, 'connection.read')).ctx, w, hesapId, q),
       onayla: (kod) => this.onayla(istek, kod),
       vazgec: (kod) => this.onay.vazgec(istek, kod),
       onaylar: () => this.onay.listele(istek.ctx, istek.anahtarId),
@@ -303,8 +330,23 @@ export class McpYazmaService {
       if (sonuc.tur === 'yapilmadi') throw new AracArgumanHatasi(`${platform} provası yapılmadı: ${sonuc.sebep}`);
     }
     const hazirlik = await this.rehber.hazirlik(ctx, w, rehberId);
+    const butce = r.alanlar.butce?.deger;
+    if (butce) {
+      /*
+       * TEK İŞLEM ÜST SINIRI (`MCP-BOOST-MIMARI.md` § 4): günlük bütçede
+       * takvimin gün sayısı, bitişsiz takvimde 30 gün. Para birimi özetteki
+       * kuralla aynı (önce Meta hesabı).
+       */
+      const takvim = r.alanlar.takvim?.deger;
+      const gun = takvim?.bitis ? Math.max(1, Math.round((Date.parse(takvim.bitis) - Date.parse(takvim.baslangic)) / 86_400_000) + 1) : 30;
+      const paraBirimi =
+        hazirlik.hesaplar.find((x) => x.id === r.alanlar.metaHesabiId?.deger)?.paraBirimi ??
+        hazirlik.googleHesaplari.find((x) => x.id === r.alanlar.googleHesabiId?.deger)?.paraBirimi ??
+        'TRY';
+      ustSinirDenetle(taahhut({ kip: butce.tip === 'gunluk' ? 'daily' : 'lifetime', micros: BigInt(butce.micros) }, gun), await this.ustSinir(istek), paraBirimi);
+    }
     const ozet = rehberOnayOzeti(r, hazirlik, ad);
-    return this.onayCevabi(await this.onay.ac(istek, 'rehber_yayinla', { workspace_id: w, rehber_id: rehberId, icerik_ozeti: r.icerikOzeti }, ozet));
+    return this.onayAc(istek, ctx, 'rehber_yayinla', { workspace_id: w, rehber_id: rehberId, icerik_ozeti: r.icerikOzeti }, ozet);
   }
 
   /** Form bu workspace'in mi: rehberde olduğu gibi, başka workspace'in formu bu bağlamla yayınlanmasın. */
@@ -322,18 +364,63 @@ export class McpYazmaService {
     const { blockers } = await this.forms.checks(ctx, formId);
     if (blockers.length) throw new AracArgumanHatasi(`Form yayınlanamaz: ${blockers.join(' ')}`);
     const ozet = formOnayOzeti(f, ad);
-    return this.onayCevabi(await this.onay.ac(istek, 'form_yayinla', { workspace_id: w, form_id: formId, icerik_ozeti: formIcerikOzeti(f) }, ozet));
+    return this.onayAc(istek, ctx, 'form_yayinla', { workspace_id: w, form_id: formId, icerik_ozeti: formIcerikOzeti(f) }, ozet);
   }
 
   private async varlikOnayiAc(istek: YazmaIstegi, w: string, seviye: VarlikSeviyesi, id: string, islem: VarlikIslemi): Promise<unknown> {
     const { ctx, ad } = await this.workspace(istek, w, ['budget.write']);
     const v = await this.actions.onizle(ctx, { seviye, id }, eylemOf(islem));
     if (v.clientId !== w) throw new AracArgumanHatasi('Bu varlık bu workspace\'te değil.');
+    if (islem.tur === 'butce') {
+      // ÜST SINIR: toplamda tutar, günlükte 30 gün (varlığın bitişi bilinmiyor).
+      ustSinirDenetle(taahhut({ kip: islem.tip === 'gunluk' ? 'daily' : 'lifetime', micros: islem.micros }, 30), await this.ustSinir(istek), v.currency);
+    }
     const ozet = varlikOnayOzeti(seviye, v, islem, ad);
     const tur: McpOnayIslemi = islem.tur === 'durdur' ? 'varlik_durdur' : islem.tur === 'etkinlestir' ? 'varlik_etkinlestir' : 'butce_degistir';
     const hedef: Record<string, unknown> = { workspace_id: w, seviye, varlik_id: id };
     if (islem.tur === 'butce') Object.assign(hedef, { tutar_micros: islem.micros.toString(), butce_tipi: islem.tip });
-    return this.onayCevabi(await this.onay.ac(istek, tur, hedef, ozet));
+    return this.onayAc(istek, ctx, tur, hedef, ozet);
+  }
+
+  /**
+   * BOOST ONAYI. Önizleme ŞART: `onizleme_kodu` aynı argümanlardan yeniden
+   * hesaplanıp karşılaştırılıyor. Tutmazsa kullanıcının gördüğü özet bu
+   * isteğin özeti değil (argüman, ön ayar ya da kayıtlı kitle değişti).
+   */
+  private async boostOnayiAc(istek: YazmaIstegi, a: BoostArgumani, kod: string): Promise<unknown> {
+    const { ctx, ad } = await this.workspace(istek, a.workspace_id, ['boost.approve']);
+    const h = await this.boost.hazirla(ctx, ad, a, await this.ustSinir(istek));
+    if (h.kod !== kod) {
+      throw new AracArgumanHatasi('onizleme_kodu bu argümanlarla yapılan önizlemenin kodu değil (ya da arada ön ayar / kayıtlı kitle değişti). Önce aynı argümanlarla boost_onizle, özeti kullanıcıya göster.');
+    }
+    return this.onayAc(istek, ctx, 'boost_olustur', { workspace_id: a.workspace_id, arguman: a, onizleme_kodu: kod }, h.ozet);
+  }
+
+  private async boostYonetimOnayiAc(istek: YazmaIstegi, w: string, boostId: string, islem: BoostYonetimIslemi, micros: bigint | null): Promise<unknown> {
+    const { ctx, ad } = await this.workspace(istek, w, ['boost.approve']);
+    const ozet = await this.boost.yonetimHazirla(ctx, w, ad, boostId, islem, micros, islem === 'butce' ? await this.ustSinir(istek) : null);
+    const tur: McpOnayIslemi = islem === 'baslat' ? 'boost_baslat' : islem === 'duraklat' ? 'boost_duraklat' : 'boost_butce';
+    return this.onayAc(istek, ctx, tur, { workspace_id: w, boost_id: boostId, ...(micros !== null ? { tutar_micros: micros.toString() } : {}) }, ozet);
+  }
+
+  /**
+   * Onay satırı + WORKSPACE denetim kaydı (kim, ne zaman, hangi hesap, tutar:
+   * özetin kendisi) + model için tek biçim.
+   */
+  private async onayAc(istek: YazmaIstegi, ws: TenantContext, tur: McpOnayIslemi, hedef: Record<string, unknown>, ozet: string[]): Promise<unknown> {
+    const o = await this.onay.ac(istek, tur, hedef, ozet);
+    await this.onay.isKaydi(ws, 'mcp.islem_onerildi', o.id, { islem: tur, ozet });
+    return this.onayCevabi(o);
+  }
+
+  /**
+   * Anahtarın tek işlem sınırı HER İŞLEMDE satırdan (yetki gibi): önbellek,
+   * sınırı düşürülmüş bir anahtarı eski sınırla çalıştırırdı.
+   */
+  private async ustSinir(istek: YazmaIstegi): Promise<bigint | null> {
+    const k = await this.admin.okumaAnahtari.findUnique({ where: { id: istek.anahtarId }, select: { yetki: true, tekIslemUstSiniriMicros: true } });
+    if (!k) throw new UnauthorizedException('Anahtar bulunamadı.');
+    return tekIslemUstSiniri(k);
   }
 
   /** Model için TEK biçim: kod, özet ve ne yapacağı. */
@@ -359,11 +446,34 @@ export class McpYazmaService {
     try {
       const { basarili, sonuc, hata } = await this.uygula(istek, a);
       await this.onay.bitir(istek, a.id, basarili ? 'uygulandi' : 'basarisiz', sonuc, hata);
+      await this.workspaceKaydi(istek, a, basarili ? 'mcp.islem_uygulandi' : 'mcp.islem_basarisiz', { sonuc, hata });
       return { durum: basarili ? 'uygulandi' : 'basarisiz', ...(hata ? { hata } : {}), sonuc };
     } catch (e) {
       const mesaj = e instanceof Error ? e.message : String(e);
       await this.onay.bitir(istek, a.id, 'basarisiz', null, mesaj.slice(0, 2000));
+      await this.workspaceKaydi(istek, a, 'mcp.islem_basarisiz', { hata: mesaj.slice(0, 2000) });
       throw e;
+    }
+  }
+
+  /**
+   * Sonucun workspace denetim kaydı. Kendi hatası İŞLEMİ DÜŞÜRMÜYOR (işlem
+   * platformda yapıldı; sonucu modelden saklamak daha kötü) ama yutulmuyor
+   * da: ev bağlamındaki `mcp.uygulandi` kaydı zaten yazıldı, bu ek kayıt.
+   */
+  private async workspaceKaydi(
+    istek: YazmaIstegi,
+    a: AlinanOnay,
+    action: 'mcp.islem_uygulandi' | 'mcp.islem_basarisiz',
+    ek: Record<string, unknown>,
+  ): Promise<void> {
+    const w = (a.hedef as Record<string, unknown>).workspace_id;
+    if (typeof w !== 'string') return;
+    try {
+      const { ctx } = await this.workspace(istek, w, []);
+      await this.onay.isKaydi(ctx, action, a.id, { islem: a.islem, ozet: a.ozet, ...ek });
+    } catch (e) {
+      logger.error(`MCP workspace denetim kaydı yazılamadı (onay ${a.id}): ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 
@@ -409,6 +519,25 @@ export class McpYazmaService {
         sonuc: { metaFormKimligi: r.externalFormId, durum: r.status, not: r.externalFormId ? 'Bu kimliği rehberin formSablonuId alanına yaz.' : null },
         hata: ok ? null : (r.readbackWarning ?? r.error ?? `Form yayında görünmüyor (durum: ${r.status}).`),
       };
+    }
+    if (a.islem === 'boost_olustur') {
+      const hb = a.hedef as { workspace_id: string; arguman: BoostArgumani; onizleme_kodu: string };
+      const { ctx, ad } = await this.workspace(istek, hb.workspace_id, ['boost.approve']);
+      /*
+       * HAZIRLIK ONAY ANINDA YENİDEN ve kod yine karşılaştırılıyor: 15
+       * dakikada kayıtlı kitle ya da ön ayar değişmişse kullanıcının
+       * onayladığı kurulum bu değil; Meta'ya HİÇ gidilmiyor.
+       */
+      const hz = await this.boost.hazirla(ctx, ad, hb.arguman, await this.ustSinir(istek));
+      if (hz.kod !== hb.onizleme_kodu) {
+        return { basarili: false, sonuc: null, hata: 'Onaydan sonra kitle, ön ayar ya da gönderi değişti; Meta\'ya gidilmedi. boost_onizle ile yeni özet al.' };
+      }
+      return this.boost.kur(ctx, hz, hb.arguman);
+    }
+    if (a.islem === 'boost_baslat' || a.islem === 'boost_duraklat' || a.islem === 'boost_butce') {
+      const { ctx } = await this.workspace(istek, h.workspace_id!, ['boost.approve']);
+      const islem: BoostYonetimIslemi = a.islem === 'boost_baslat' ? 'baslat' : a.islem === 'boost_duraklat' ? 'duraklat' : 'butce';
+      return this.boost.yonetimUygula(ctx, h.workspace_id!, h.boost_id!, islem, h.tutar_micros ? BigInt(h.tutar_micros) : null, { yol: 'mcp', ref: a.id });
     }
     const { ctx } = await this.workspace(istek, h.workspace_id!, ['budget.write']);
     const islem: VarlikIslemi =

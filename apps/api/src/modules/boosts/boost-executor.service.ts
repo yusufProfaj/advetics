@@ -4,11 +4,13 @@ import {
   boostAssetName,
   boostNameBase,
   MEDIA_TYPE_LABELS,
+  type BoostHedefTuru,
   type MediaType,
 } from '@advetics/shared';
 import {
   PlatformApiError,
   type BoostBudget,
+  type BoostResult,
   type BoostSource,
   type CampaignSummary,
 } from '../connections/provider.types';
@@ -153,6 +155,15 @@ interface PendingRow {
   special_ad_categories: string[];
   granted_scopes: string[];
   connection_status: string;
+  /** MCP boost'u (`MCP-BOOST-MIMARI.md`); panel ve kural satırında `etkilesim` / false. */
+  hedef: string;
+  hedef_adres: string | null;
+  duraklatilmis_kur: boolean;
+}
+
+/** Başarılı kurulumun çağırana dönen kısmı (yalnız MCP okuyor). */
+export interface KurulumSonucu {
+  hedefGeriOkuma?: BoostResult['hedefGeriOkuma'];
 }
 
 @Injectable()
@@ -234,7 +245,11 @@ export class BoostExecutorService {
         -- aritmetiğe girseydi koşul NULL dönerdi ve satır zaten seçilmezdi;
         -- açıkça yazılması o satırların neden atlandığını okunur kılıyor.
         AND created_on_platform_at IS NOT NULL
-        AND created_on_platform_at + make_interval(days => duration_days) <= now()
+        -- DURAKLATILMIŞ KURULUP HİÇ BAŞLATILMAMIŞ boost bitirilmiyor: süresi
+        -- henüz başlamadı. Bitirmek gönderiyi serbest bırakır ve aynı
+        -- gönderiye ikinci boost açılırken ilki Meta'da başlatılabilir kalırdı.
+        AND (NOT duraklatilmis_kur OR yayin_baslangici IS NOT NULL)
+        AND COALESCE(yayin_baslangici, created_on_platform_at) + make_interval(days => duration_days) <= now()
     `);
 
     // KAÇ SATIRIN BİTİRİLDİĞİ YAZILIYOR. "Sessiz kesme yok": bu tarama hiç
@@ -293,14 +308,14 @@ export class BoostExecutorService {
   async createOneApproved(
     run: TxRunner,
     boostId: string,
-  ): Promise<{ ok: true } | { ok: false; error: string }> {
+  ): Promise<({ ok: true } & KurulumSonucu) | { ok: false; error: string }> {
     const [row] = await run((tx) =>
       this.pending(tx, Prisma.sql`b.id = ${boostId}::uuid`, 1),
     );
     if (!row) return { ok: false, error: 'Boost kaydı bulunamadı ya da onaylı değil.' };
 
     const ok = await this.createOne(run, row);
-    if (ok) return { ok: true };
+    if (ok) return { ok: true, ...ok };
 
     // `createOne` sebebi `boosts.error`'a yazdı; buradan okuyup çağırana
     // veriyoruz. İkinci kez üretmek, iki farklı metin üretme riski demek.
@@ -341,7 +356,8 @@ export class BoostExecutorService {
              -- yayınlanan konut/istihdam/kredi reklamı politika ihlali ve
              -- cezası HESAP seviyesinde.
              cl.special_ad_categories,
-             c.granted_scopes, c.status::text AS connection_status
+             c.granted_scopes, c.status::text AS connection_status,
+             b.hedef, b.hedef_adres, b.duraklatilmis_kur
       FROM boosts b
       JOIN organic_posts p ON p.id = b.organic_post_id
       JOIN social_profiles sp ON sp.id = p.social_profile_id
@@ -355,7 +371,7 @@ export class BoostExecutorService {
     `);
   }
 
-  private async createOne(run: TxRunner, row: PendingRow): Promise<boolean> {
+  private async createOne(run: TxRunner, row: PendingRow): Promise<false | KurulumSonucu> {
     const provider = this.providers.get('meta');
 
     /**
@@ -540,6 +556,16 @@ export class BoostExecutorService {
             date: new Date(),
           }),
           specialAdCategories: row.special_ad_categories ?? [],
+          /*
+           * HEDEF YALNIZ ETKİLEŞİM DIŞINDAYSA gönderiliyor: panelin ve kuralın
+           * satırı `etkilesim` ve onların isteği bugünkü (canlıda doğrulanan)
+           * gövdeyle, geri okumasız gitmeli. MCP etkileşimde de geri okusun
+           * diye duraklatılmış kurulumda hedef her zaman gönderiliyor.
+           */
+          ...(row.hedef !== 'etkilesim' || row.duraklatilmis_kur
+            ? { hedef: row.hedef as BoostHedefTuru, ...(row.hedef_adres ? { hedefAdres: row.hedef_adres } : {}) }
+            : {}),
+          ...(row.duraklatilmis_kur ? { duraklatilmis: true } : {}),
         },
       );
 
@@ -560,6 +586,9 @@ export class BoostExecutorService {
               external_ad_set_id = ${result.externalAdSetId},
               external_ad_id = ${result.externalAdId},
               created_on_platform_at = now(),
+              -- HARCAMA BAŞLANGICI: duraklatılmış kurulumda henüz YOK
+              -- (boost_baslat yazar); bitiş taraması süreyi buradan sayıyor.
+              yayin_baslangici = CASE WHEN duraklatilmis_kur THEN NULL ELSE now() END,
               error = NULL,
               updated_at = now()
             WHERE id = ${row.id}::uuid
@@ -600,7 +629,7 @@ export class BoostExecutorService {
       }
 
       this.logger.log(`Boost oluşturuldu: ${result.externalAdId}`);
-      return true;
+      return { hedefGeriOkuma: result.hedefGeriOkuma };
     } catch (err) {
       /**
        * KAMPANYA OLUŞTUYSA `failed` YAZILMIYOR — yukarı veriliyor.

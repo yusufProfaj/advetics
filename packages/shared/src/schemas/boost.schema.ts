@@ -549,3 +549,42 @@ export interface BoostRuleRecord {
   /** Bu ay taahhüt edilen tutar — tavanın ne kadarı kullanıldı. */
   committedThisMonthMicros: string;
 }
+
+// -----------------------------------------------------------------------------
+// Boost hedefi — MCP boost'u (2026-10-21, `docs/okuma-api/MCP-BOOST-MIMARI.md` § 2)
+// -----------------------------------------------------------------------------
+
+/**
+ * Boost'un HEDEFİ: kullanıcıya sorulan "ne olsun" sorusu. Meta karşılığı
+ * (amaç + `destination_type` + `optimization_goal` + düğme) sağlayıcıda,
+ * TEK fonksiyonda (`boostHedefiParametreleri`).
+ *
+ * Panelin elle boost'u ve kural yolu yalnız `etkilesim` kullanıyor; eski
+ * satırlar kolon varsayılanıyla `etkilesim` okunuyor.
+ */
+export const BOOST_HEDEFLERI = ['etkilesim', 'erisim', 'profil_ziyareti', 'mesaj', 'trafik'] as const;
+export type BoostHedefTuru = (typeof BOOST_HEDEFLERI)[number];
+
+export const BOOST_HEDEFI_ADI: Record<BoostHedefTuru, string> = {
+  etkilesim: 'Etkileşim',
+  erisim: 'Erişim',
+  profil_ziyareti: 'Profil ziyareti',
+  mesaj: 'Mesaj (Instagram Direct)',
+  trafik: 'Web sitesi trafiği',
+};
+
+/**
+ * HANGİ YÜZEYDE KURULABİLİR. Facebook gönderisi var olan gönderi
+ * (`object_story_id`) olarak reklama dönüyor ve ona düğme EKLENEMİYOR:
+ * mesaj, trafik ve profil ziyareti düğmesiz anlamsız. Instagram'da kreatif
+ * ayrı kuruluyor ve düğme alıyor. Listede olmayan bir hedefi Facebook
+ * gönderisinde istemek reddediliyor ve sebebi söyleniyor; sessizce
+ * etkileşime düşmek, kullanıcının istemediği bir sonuca para harcamak olurdu.
+ */
+export const BOOST_HEDEFI_YUZEYLERI: Record<BoostHedefTuru, ReadonlyArray<'facebook_page' | 'instagram'>> = {
+  etkilesim: ['facebook_page', 'instagram'],
+  erisim: ['facebook_page', 'instagram'],
+  profil_ziyareti: ['instagram'],
+  mesaj: ['instagram'],
+  trafik: ['instagram'],
+};

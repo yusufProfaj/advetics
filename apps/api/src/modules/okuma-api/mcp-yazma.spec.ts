@@ -122,13 +122,14 @@ function sahteOnay() {
       const s = satirlar.get(kod);
       if (!s || s.durum !== 'bekliyor') throw new Error('alınamadı');
       s.durum = 'uygulaniyor';
-      return { id: kod, islem: s.islem, hedef: s.hedef };
+      return { id: kod, islem: s.islem, hedef: s.hedef, ozet: s.ozet };
     }),
     bitir: vi.fn(async (_ev: unknown, id: string, durum: string) => {
       satirlar.get(id)!.durum = durum;
     }),
     vazgec: vi.fn(),
     listele: vi.fn(),
+    isKaydi: vi.fn(async () => undefined),
   };
 }
 
@@ -142,6 +143,9 @@ function kur(
     form?: Partial<LeadFormRecord>;
     engeller?: string[];
     yayinlanan?: Partial<LeadFormRecord>;
+    /** Anahtar satırındaki tek işlem sınırı (micros); verilmezse varsayılan. */
+    ustSinirMicros?: bigint | null;
+    boost?: Record<string, unknown>;
   } = {},
 ) {
   const rehber = {
@@ -159,7 +163,10 @@ function kur(
       context: { ...EV_CTX, activeClientId: o.aktif ?? WS, permissions: o.izinler ?? ['bulk.read', 'bulk.write', 'bulk.publish', 'budget.write'] },
     })),
   };
-  const admin = { $queryRaw: vi.fn(async () => [{ ad: 'Ornek WS', org_id: 'o2', manager_account_id: null }]) };
+  const admin = {
+    $queryRaw: vi.fn(async () => [{ ad: 'Ornek WS', org_id: 'o2', manager_account_id: null }]),
+    okumaAnahtari: { findUnique: vi.fn(async () => ({ yetki: 'yazma', tekIslemUstSiniriMicros: o.ustSinirMicros ?? null })) },
+  };
   const onay = sahteOnay();
   const forms = {
     get: vi.fn(async () => formKaydi(o.form)),
@@ -182,8 +189,9 @@ function kur(
     { jwt: { accessSecret: 'gizli' } } as never,
     forms as never,
     formYayinci as never,
+    (o.boost ?? {}) as never,
   );
-  return { svc, rehber, actions, tenant, onay, forms, formYayinci };
+  return { svc, rehber, actions, tenant, onay, forms, formYayinci, admin };
 }
 
 const ISTEK: YazmaIstegi = { ctx: EV_CTX, anahtarId: 'k1', yetki: 'yazma', requestId: 'r', yuklemeAdresi: 'https://advetics.com/api/mcp/yukleme' };
@@ -435,6 +443,7 @@ describe('KRİTİK: yazma anahtarı ve yükleme ucu', () => {
       assets as never,
       anahtar as never,
       { jwt: { accessSecret: 'gizli' } } as never,
+      {} as never,
       {} as never,
       {} as never,
     );

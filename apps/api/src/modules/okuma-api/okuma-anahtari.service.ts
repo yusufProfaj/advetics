@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import {
+  MCP_VARSAYILAN_UST_SINIR_BIRIM,
   OKUMA_ANAHTARI_UST_SINIR,
   type OkumaAnahtariOlustur,
   type OkumaAnahtariOlusturmaYaniti,
@@ -34,7 +35,17 @@ const OZET_ALANLARI = {
   sonKullanimIp: true,
   iptal: true,
   yetki: true,
+  tekIslemUstSiniriMicros: true,
 } satisfies Prisma.OkumaAnahtariSelect;
+
+/**
+ * Anahtarın geçerli tek işlem sınırı (micros). Okuma anahtarında `null`;
+ * yazmada satırda boşsa VARSAYILAN: sınırı olmayan yazma anahtarı yok.
+ */
+export function tekIslemUstSiniri(s: { yetki: string; tekIslemUstSiniriMicros: bigint | null }): bigint | null {
+  if (s.yetki !== 'yazma') return null;
+  return s.tekIslemUstSiniriMicros ?? BigInt(MCP_VARSAYILAN_UST_SINIR_BIRIM) * 1_000_000n;
+}
 
 type OzetSatiri = Prisma.OkumaAnahtariGetPayload<{ select: typeof OZET_ALANLARI }>;
 
@@ -44,6 +55,7 @@ export function ozete(s: OzetSatiri, simdi: Date = new Date()): OkumaAnahtariOze
     ad: s.ad,
     gorunenOnek: s.gorunenOnek,
     yetki: s.yetki === 'yazma' ? 'yazma' : 'okuma',
+    tekIslemUstSiniriMicros: tekIslemUstSiniri(s)?.toString() ?? null,
     olusturulma: s.createdAt.toISOString(),
     bitis: s.bitis?.toISOString() ?? null,
     sonKullanim: s.sonKullanim?.toISOString() ?? null,
@@ -109,7 +121,15 @@ export class OkumaAnahtariService {
         );
       }
       const yeni = await tx.okumaAnahtari.create({
-        data: { userId: ctx.userId, ad: girdi.ad, gorunenOnek, anahtarOzeti: ozet, bitis, yetki: girdi.yetki },
+        data: {
+          userId: ctx.userId,
+          ad: girdi.ad,
+          gorunenOnek,
+          anahtarOzeti: ozet,
+          bitis,
+          yetki: girdi.yetki,
+          tekIslemUstSiniriMicros: girdi.yetki === 'yazma' && girdi.tekIslemUstSiniri !== null ? BigInt(girdi.tekIslemUstSiniri) * 1_000_000n : null,
+        },
         select: OZET_ALANLARI,
       });
       await this.audit.record(tx, ctx, {
@@ -117,7 +137,13 @@ export class OkumaAnahtariService {
         targetType: 'okuma_api_anahtari',
         targetId: yeni.id,
         clientId: null,
-        after: { ad: yeni.ad, gorunenOnek, bitis: bitis?.toISOString() ?? null, yetki: girdi.yetki },
+        after: {
+          ad: yeni.ad,
+          gorunenOnek,
+          bitis: bitis?.toISOString() ?? null,
+          yetki: girdi.yetki,
+          tekIslemUstSiniriMicros: tekIslemUstSiniri(yeni)?.toString() ?? null,
+        },
         ip: meta.ip,
         userAgent: meta.userAgent,
         requestId: meta.requestId,

@@ -273,9 +273,10 @@ platform sahibi, istemci Claude Code.
   **Reklam yönetimi** (varsayılan "Yalnız okuma"). Onay geçmişi aynı
   sayfada "Claude'un işlemleri" tablosunda.
 - Anahtar `adv_rw_` ile başlar, en çok 90 gün geçerli. Okuma araçlarının
-  hepsi + 23 yazma aracı görünür (`/mcp` listesinde).
-- **Platforma dokunan dört işlem onaylı:** `rehber_yayinla`, `varlik_durdur`,
-  `varlik_etkinlestir`, `butce_degistir`. Araç hiçbir şey yapmaz; özet ve
+  hepsi + 37 yazma aracı görünür (`/mcp` listesinde; 2026-10-21 boost ile).
+- **Platforma dokunan işlemler onaylı:** `rehber_yayinla`, `varlik_durdur`,
+  `varlik_etkinlestir`, `butce_degistir`, `form_yayinla`, `boost_olustur`,
+  `boost_baslat`, `boost_duraklat`, `boost_butce_degistir`. Araç hiçbir şey yapmaz; özet ve
   `onay_kodu` döner. Claude özeti gösterip "Onaylıyor musunuz?" diye sorar,
   evet dersen `onayla` çağırır. Kod 15 dakika geçerli, tek kullanımlık;
   argümanlar sunucuda saklı (Claude onaydan sonra rakamı değiştiremez).
@@ -291,6 +292,30 @@ platform sahibi, istemci Claude Code.
   kararı); özet değişim yüzdesini yazar, %20 üstünde uyarır. Aylık bütçe
   planı kontrol edilmez.
 - Her işlem `audit_logs`ta (`mcp.*`) ve etki ekranında "Claude (MCP)" yoluyla.
+  2026-10-21'den beri ayrıca WORKSPACE'e bağlı `mcp.islem_onerildi` /
+  `mcp.islem_uygulandi` / `mcp.islem_basarisiz` kaydı: onaylanan özetin
+  kendisi (hesap, tutar) workspace'in Denetim kaydında.
+- **Tek işlem üst sınırı:** yazma anahtarı oluştururken girilir (boşsa
+  50.000, hesabın para biriminde). Taahhüt: toplam bütçede tutar, günlükte
+  günlük × gün (bütçe değişikliğinde 30 gün). Aşan işlem onay satırı
+  açılmadan reddedilir.
+
+### Gönderi öne çıkarma (boost), 2026-10-21
+
+Mimari: [`MCP-BOOST-MIMARI.md`](MCP-BOOST-MIMARI.md).
+
+| Adım | Araç | Not |
+|---|---|---|
+| Gönderiyi seç | `boost_gonderileri` | Boost edilemeyende sebebi yazar |
+| Kitle | `kitleler`, `konum_ara`, `ilgi_ara` | Kayıtlı kitle, Meta kayıtlı kitlesi ya da elle |
+| Önizle | `boost_onizle` | Hiçbir şey açmaz; özet, kitle büyüklüğü, `onizleme_kodu` |
+| Kur | `boost_olustur` (+ `onizleme_kodu`) → `onayla` | DURAKLATILMIŞ kurulur |
+| Başlat / duraklat / bütçe | `boost_baslat`, `boost_duraklat`, `boost_butce_degistir` → `onayla` | Başlatma harcamayı açar |
+| İzle | `boostlar`, `boost_durumu` | Durum Meta'dan anlık okunur |
+
+Hedefler: etkileşim ve erişim (Facebook + Instagram); profil ziyareti, mesaj
+ve web sitesi trafiği yalnız Instagram gönderisinde. Etkileşim dışındakiler
+canlıda henüz ölçülmedi: kurulumdan sonra Meta'dan geri okunur.
 
 Örnek istem:
 
@@ -298,4 +323,12 @@ platform sahibi, istemci Claude Code.
 Ege Birlik Yapı workspace'i için form kampanyası kur: Meta, günlük 500 TL,
 yarından başlasın, İzmir ve Manisa, 25-55 yaş. Görseller ~/Desktop/ege/*.jpg.
 Önce yazma_durumu'na bak, eksik bir şey varsa sor.
+```
+
+Boost örneği:
+
+```
+Ege Birlik Yapı'nın Instagram'daki son gönderisini öne çıkar: profil
+ziyareti, İzmir 25-45 yaş, toplam 1.500 TL, 5 gün. Önce önizlemeyi göster,
+duraklatılmış kur; başlatmayı ben söyleyeceğim.
 ```

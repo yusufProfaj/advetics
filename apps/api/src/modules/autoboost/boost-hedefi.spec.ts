@@ -30,9 +30,18 @@ describe('boostHedefi', () => {
   it('KRİTİK: kartın varsayımı yayın yoluyla aynı — boost reklam seti POST_ENGAGEMENT yazıyor', () => {
     // Biri amacı yayına bağlarsa bu test düşer ve kart metni de güncellenmeli.
     const k = yorumsuz('apps/api/src/modules/connections/providers/meta.provider.ts');
-    const i = k.indexOf("destination_type: 'ON_POST'");
+    const i = k.indexOf("destination_type: hedefParam?.destinationType ?? 'ON_POST'");
     expect(i).toBeGreaterThan(0);
-    expect(k.slice(k.lastIndexOf('const params', i), i)).toContain("optimization_goal: 'POST_ENGAGEMENT'");
+    expect(k.slice(k.lastIndexOf('const params', i), i)).toContain("optimization_goal: hedefParam?.optimizationGoal ?? 'POST_ENGAGEMENT'");
+    /*
+     * HEDEF YALNIZ MCP SATIRINDAN (2026-10-21, `MCP-BOOST-MIMARI.md`): yürütücü
+     * hedefi yalnız `etkilesim` dışı ya da duraklatılmış satırda gönderiyor;
+     * Akıllı Boost satırı kolon varsayılanıyla (`etkilesim`, false) kalıyor,
+     * yani kartın "etkileşime göre kuruluyor" cümlesi hâlâ doğru.
+     */
+    const y = yorumsuz('apps/api/src/modules/boosts/boost-executor.service.ts');
+    expect(y).toContain("...(row.hedef !== 'etkilesim' || row.duraklatilmis_kur");
+    expect(yorumsuz('apps/api/src/modules/autoboost/autoboost-launch.service.ts')).not.toMatch(/\bhedef,|duraklatilmis_kur/);
   });
 
   it('kart satırı ortak fonksiyondan ve yalnız onay bekleyen kartta', () => {

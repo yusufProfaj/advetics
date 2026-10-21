@@ -8,6 +8,8 @@ import {
   leadFormInputSchema,
   type LeadFormInput,
 } from '@advetics/shared';
+import { boostArgumanSemasi } from './mcp-boost';
+import type { BoostArgumani, BoostYonetimIslemi } from './mcp-boost.service';
 import type { McpAraci } from './mcp-protokol';
 import { AracArgumanHatasi, nesne, suz } from './okuma-araclari';
 
@@ -27,7 +29,17 @@ import { AracArgumanHatasi, nesne, suz } from './okuma-araclari';
  */
 
 /** Platforma dokunan araçlar. `onayla` olmadan hiçbiri platforma bir şey göndermez. */
-export const ONAYLI_ARACLAR = ['rehber_yayinla', 'varlik_durdur', 'varlik_etkinlestir', 'butce_degistir', 'form_yayinla'] as const;
+export const ONAYLI_ARACLAR = [
+  'rehber_yayinla',
+  'varlik_durdur',
+  'varlik_etkinlestir',
+  'butce_degistir',
+  'form_yayinla',
+  'boost_olustur',
+  'boost_baslat',
+  'boost_duraklat',
+  'boost_butce_degistir',
+] as const;
 
 export type VarlikSeviyesi = 'campaign' | 'ad_group' | 'ad';
 
@@ -68,6 +80,18 @@ export interface YazmaOrtami {
     varlikId: string,
     islem: { tur: 'durdur' } | { tur: 'etkinlestir' } | { tur: 'butce'; micros: bigint; tip: 'gunluk' | 'toplam' },
   ): Promise<unknown>;
+  /** Boost (`MCP-BOOST-MIMARI.md`): okumalar, önizleme ve onay satırları. */
+  boostGonderileri(workspaceId: string, sayfaId: string | null, limit: number): Promise<unknown>;
+  boostOnizle(a: BoostArgumani): Promise<unknown>;
+  /** Onay satırı açar; Meta'da HİÇBİR ŞEY açmaz. */
+  boostOnayi(a: BoostArgumani, onizlemeKodu: string): Promise<unknown>;
+  boostlar(workspaceId: string, limit: number): Promise<unknown>;
+  boostDurumu(workspaceId: string, boostId: string): Promise<unknown>;
+  /** Onay satırı açar; platforma YAZMAZ. */
+  boostYonetimOnayi(workspaceId: string, boostId: string, islem: BoostYonetimIslemi, micros: bigint | null): Promise<unknown>;
+  kitleler(workspaceId: string, reklamHesabiId: string | null): Promise<unknown>;
+  konumAra(workspaceId: string, reklamHesabiId: string | null, sorgu: string): Promise<unknown>;
+  ilgiAra(workspaceId: string, reklamHesabiId: string | null, sorgu: string): Promise<unknown>;
   onayla(onayKodu: string): Promise<unknown>;
   vazgec(onayKodu: string): Promise<unknown>;
   onaylar(): Promise<unknown>;
@@ -134,6 +158,178 @@ const FORM_REHBERI = [
   'thankYouHeadline (≤60) · thankYouBody (≤300)',
   `thankYouCtaType: ${TESEKKUR_DUGME_TURLERI.join(' | ')} · thankYouCtaText (≤40) · thankYouCtaUrl (VIEW_WEBSITE için https) · thankYouPhone (CALL_BUSINESS için +90...)`,
 ].join('\n');
+
+
+const JS_HESAP = { reklam_hesabi_id: { type: 'string', description: 'İsteğe bağlı: Advetics Meta hesap kimliği (`yazma_durumu`). Workspace\'te tek Meta hesabı varsa gerekmez.' } } as const;
+const JS_BOOST = { ...JS_WS, boost_id: { type: 'string', description: 'Advetics boost kimliği (UUID). Liste: `boostlar`.' } } as const;
+
+const BOOST_ARGUMAN_JS = {
+  ...JS_WS,
+  gonderi_id: { type: 'string', description: 'Gönderi kimliği (UUID): `boost_gonderileri`.' },
+  hedef: {
+    type: 'string',
+    enum: ['etkilesim', 'erisim', 'profil_ziyareti', 'mesaj', 'trafik'],
+    description: 'etkilesim (beğeni/yorum), erisim (çok kişiye gösterim), profil_ziyareti (Instagram profili), mesaj (Instagram Direct), trafik (web sitesi). Facebook gönderisinde yalnız etkilesim ve erisim.',
+  },
+  hedef_adres: { type: 'string', description: 'Yalnız trafik hedefinde: https:// ile başlayan adres.' },
+  kitle: {
+    type: 'object',
+    description:
+      'TEK yol: {"kitle_id": "<Advetics kayıtlı kitle>"} (`kitleler`) | {"meta_kayitli_kitle_id": "<sayısal>"} | {"konumlar": [{"key": "...", "type": "country|region|city", "ad": "İzmir"}], "yas_min": 18, "yas_max": 65, "cinsiyet": "all|male|female", "ilgiler": [{"id": "...", "name": "..."}]} (konum anahtarı `konum_ara`, ilgi `ilgi_ara`).',
+    additionalProperties: true,
+  },
+  butce: { type: 'object', description: '{"tip": "gunluk" | "toplam", "tutar_micros": "300000000"} (micros DİZGE, hesabın para biriminde).', additionalProperties: true },
+  sure_gun: { type: 'integer', description: '1-30 gün; boost başlatıldığı günden sayılır.' },
+  on_ayar_kullan: { type: 'boolean', description: 'true: verilmeyen alanları sayfanın boost ön ayarından doldur (yalnız kullanıcı isterse).' },
+} as const;
+
+/** `boost_onizle` ve `boost_olustur`un argüman süzgeci. */
+function boostArgumani(args: unknown): BoostArgumani & { onizleme_kodu?: string } {
+  return suz({ ...boostArgumanSemasi, onizleme_kodu: z.string().regex(/^[0-9a-f]{16}$/, 'boost_onizle\'nin döndürdüğü 16 haneli kod').optional() }, args);
+}
+
+const BOOST_ARACLARI: readonly YazmaAraci[] = [
+  {
+    ad: 'boost_gonderileri',
+    baslik: 'Boost edilebilir gönderiler',
+    aciklama:
+      'Workspace\'in (ya da tek sayfanın) son Facebook ve Instagram gönderileri: kimlik, tarih, metin, görsel, bağlantı, etkileşim. Boost edilemeyen gönderide sebebi (boostEdilemez) yazar; liste boşsa NEDENİ. Sayfa kimlikleri: `yazma_durumu`.',
+    girdi: nesne(
+      {
+        ...JS_WS,
+        sayfa_id: { type: 'string', description: 'İsteğe bağlı: yalnız bu sayfa / Instagram hesabı (Advetics kimliği).' },
+        limit: { type: 'integer', description: '1-100, varsayılan 20.' },
+      },
+      ['workspace_id'],
+    ),
+    isaret: OKUMA,
+    calistir: (args, o) => {
+      const a = suz({ workspace_id: uuid, sayfa_id: uuid.optional(), limit: z.number().int().min(1).max(100).optional() }, args);
+      return o.boostGonderileri(a.workspace_id, a.sayfa_id ?? null, a.limit ?? 20);
+    },
+  },
+  {
+    ad: 'boost_onizle',
+    baslik: 'Boost önizlemesi',
+    aciklama:
+      'HİÇBİR ŞEY AÇMAZ. Gönderi, hedef, kitle, bütçe ve süreden özet, toplam tutar, günlük karşılığı, Meta kitle büyüklüğü tahmini ve uyarılar döner; bir de onizleme_kodu. Hedef, kitle, bütçe ve süre KULLANICININ söylediğidir: eksikse sor (ön ayar varsa ve kullanıcı isterse on_ayar_kullan: true). Kurmak için AYNI argümanlar + onizleme_kodu ile `boost_olustur`.',
+    girdi: nesne({ ...BOOST_ARGUMAN_JS }, ['workspace_id', 'gonderi_id']),
+    isaret: OKUMA,
+    calistir: (args, o) => {
+      const { onizleme_kodu: _k, ...a } = boostArgumani(args);
+      return o.boostOnizle(a);
+    },
+  },
+  {
+    ad: 'boost_olustur',
+    baslik: 'Boost oluştur (onaylı, duraklatılmış)',
+    aciklama:
+      'ONAY İSTER, HEMEN YAPMAZ. Önce `boost_onizle` ŞART: aynı argümanlar ve dönen onizleme_kodu ile çağır. Özet ve onay_kodu döner; özeti kullanıcıya göster, "Onaylıyor musunuz?" diye sor, evet derse `onayla`. Boost Meta\'da DURAKLATILMIŞ kurulur, para harcamaz; başlatmak ayrı onay (`boost_baslat`). Tek işlem üst sınırı bağlantının anahtarında.',
+    girdi: nesne({ ...BOOST_ARGUMAN_JS, onizleme_kodu: { type: 'string', description: '`boost_onizle`nin döndürdüğü kod.' } }, ['workspace_id', 'gonderi_id', 'onizleme_kodu']),
+    isaret: TASLAK,
+    calistir: (args, o) => {
+      const { onizleme_kodu, ...a } = boostArgumani(args);
+      if (!onizleme_kodu) throw new AracArgumanHatasi('onizleme_kodu yok: önce aynı argümanlarla boost_onizle çağır ve özeti kullanıcıya göster.');
+      return o.boostOnayi(a, onizleme_kodu);
+    },
+  },
+  {
+    ad: 'boostlar',
+    baslik: 'Boost\'lar',
+    aciklama: 'Workspace\'in boost\'ları (elle, kural ve MCP): durum, hedef, bütçe, süre, başlangıç, Meta kampanya kimliği, hata. Duraklatılmış kurulup başlatılmamışlar ayrıca yazılı. Toplam ayrıca.',
+    girdi: nesne({ ...JS_WS, limit: { type: 'integer', description: '1-100, varsayılan 30.' } }, ['workspace_id']),
+    isaret: OKUMA,
+    calistir: (args, o) => {
+      const a = suz({ workspace_id: uuid, limit: z.number().int().min(1).max(100).optional() }, args);
+      return o.boostlar(a.workspace_id, a.limit ?? 30);
+    },
+  },
+  {
+    ad: 'boost_durumu',
+    baslik: 'Boost\'un anlık durumu',
+    aciklama: 'Tek boost\'un Meta\'daki ŞU ANKİ kampanya ve reklam seti durumu ve bütçesi (platformdan okunur).',
+    girdi: nesne({ ...JS_BOOST }, ['workspace_id', 'boost_id']),
+    isaret: OKUMA,
+    calistir: (args, o) => {
+      const a = suz({ workspace_id: uuid, boost_id: uuid }, args);
+      return o.boostDurumu(a.workspace_id, a.boost_id);
+    },
+  },
+  {
+    ad: 'boost_baslat',
+    baslik: 'Boost\'u başlat (onaylı)',
+    aciklama:
+      'ONAY İSTER, HEMEN YAPMAZ. Duraklatılmış boost\'u yayına almak (HARCAMA BAŞLAR) için özet ve onay_kodu döner; kullanıcı evet derse `onayla`. Hiç başlatılmamış boost\'un takvimi bugünden yeniden kurulur.',
+    girdi: nesne({ ...JS_BOOST }, ['workspace_id', 'boost_id']),
+    isaret: TASLAK,
+    calistir: (args, o) => {
+      const a = suz({ workspace_id: uuid, boost_id: uuid }, args);
+      return o.boostYonetimOnayi(a.workspace_id, a.boost_id, 'baslat', null);
+    },
+  },
+  {
+    ad: 'boost_duraklat',
+    baslik: 'Boost\'u duraklat (onaylı)',
+    aciklama: 'ONAY İSTER, HEMEN YAPMAZ. Boost\'u duraklatmak için özet ve onay_kodu döner; kullanıcı evet derse `onayla`.',
+    girdi: nesne({ ...JS_BOOST }, ['workspace_id', 'boost_id']),
+    isaret: TASLAK,
+    calistir: (args, o) => {
+      const a = suz({ workspace_id: uuid, boost_id: uuid }, args);
+      return o.boostYonetimOnayi(a.workspace_id, a.boost_id, 'duraklat', null);
+    },
+  },
+  {
+    ad: 'boost_butce_degistir',
+    baslik: 'Boost bütçesi (onaylı)',
+    aciklama:
+      'ONAY İSTER, HEMEN YAPMAZ. Boost\'un bütçesini (kipi değişmez: günlükse günlük, toplamsa toplam) değiştirmek için eski → yeni ve yüzdeyle onay_kodu döner; kullanıcı evet derse `onayla`. MÜŞTERİNİN reklam hesabında bütçe değişikliği MÜŞTERİNİN onayıyla yapılır: onay alınmadıysa önce kullanıcıya sor.',
+    girdi: nesne(
+      { ...JS_BOOST, tutar_micros: { type: 'string', description: 'Yeni tutar, micros dizge, hesabın para biriminde.' } },
+      ['workspace_id', 'boost_id', 'tutar_micros'],
+    ),
+    isaret: TASLAK,
+    calistir: (args, o) => {
+      const a = suz({ workspace_id: uuid, boost_id: uuid, tutar_micros: z.string().regex(/^\d{1,18}$/, 'micros dizge, yalnız rakam') }, args);
+      const micros = BigInt(a.tutar_micros);
+      if (micros <= 0n) throw new AracArgumanHatasi('Bütçe sıfırdan büyük olmalı. Durdurmak için boost_duraklat.');
+      return o.boostYonetimOnayi(a.workspace_id, a.boost_id, 'butce', micros);
+    },
+  },
+  {
+    ad: 'kitleler',
+    baslik: 'Kayıtlı kitleler',
+    aciklama:
+      'Workspace\'in Advetics kayıtlı kitleleri (Hedef kitleler; platformu, özeti, varsayılanı). reklam_hesabi_id verilirse o Meta hesabının Ads Manager kayıtlı kitleleri de. Boost\'ta kitle.kitle_id, rehberde metaKitlesi / googleKitlesi için.',
+    girdi: nesne({ ...JS_WS, reklam_hesabi_id: { type: 'string', description: 'İsteğe bağlı: Meta hesabının kayıtlı kitleleri için.' } }, ['workspace_id']),
+    isaret: OKUMA,
+    calistir: (args, o) => {
+      const a = suz({ workspace_id: uuid, reklam_hesabi_id: uuid.optional() }, args);
+      return o.kitleler(a.workspace_id, a.reklam_hesabi_id ?? null);
+    },
+  },
+  {
+    ad: 'konum_ara',
+    baslik: 'Meta konum ara',
+    aciklama: 'Ülke, il ya da şehir adından Meta konum anahtarı (rehberin konumlar alanı ve boost kitlesi için). Aynı adlı yerleri ayırmak için tam adı oku.',
+    girdi: nesne({ ...JS_WS, ...JS_HESAP, sorgu: { type: 'string', description: 'Yer adı, ör. "Aydın".' } }, ['workspace_id', 'sorgu']),
+    isaret: OKUMA,
+    calistir: (args, o) => {
+      const a = suz({ workspace_id: uuid, reklam_hesabi_id: uuid.optional(), sorgu: z.string().trim().min(2).max(80) }, args);
+      return o.konumAra(a.workspace_id, a.reklam_hesabi_id ?? null, a.sorgu);
+    },
+  },
+  {
+    ad: 'ilgi_ara',
+    baslik: 'Meta ilgi alanı ara',
+    aciklama: 'Meta ilgi alanı arama (boost kitlesinin ilgiler alanı): kimlik, ad, kategori yolu, kitle aralığı (dünya geneli).',
+    girdi: nesne({ ...JS_WS, ...JS_HESAP, sorgu: { type: 'string', description: 'İlgi alanı, ör. "kuyumculuk".' } }, ['workspace_id', 'sorgu']),
+    isaret: OKUMA,
+    calistir: (args, o) => {
+      const a = suz({ workspace_id: uuid, reklam_hesabi_id: uuid.optional(), sorgu: z.string().trim().min(2).max(80) }, args);
+      return o.ilgiAra(a.workspace_id, a.reklam_hesabi_id ?? null, a.sorgu);
+    },
+  },
+];
 
 export const YAZMA_ARACLARI: readonly YazmaAraci[] = [
   {
@@ -435,7 +631,7 @@ export const YAZMA_ARACLARI: readonly YazmaAraci[] = [
   {
     ad: 'butce_degistir',
     baslik: 'Bütçe değiştir (onaylı)',
-    aciklama: 'ONAY İSTER, HEMEN YAPMAZ. Kampanya ya da reklam seti bütçesini değiştirmek için eski → yeni değer ve değişim yüzdesiyle onay_kodu döner; kullanıcı evet derse `onayla`. Tutar hesabın para biriminde, micros dizge.',
+    aciklama: 'ONAY İSTER, HEMEN YAPMAZ. Kampanya ya da reklam seti bütçesini değiştirmek için eski → yeni değer ve değişim yüzdesiyle onay_kodu döner; kullanıcı evet derse `onayla`. Tutar hesabın para biriminde, micros dizge. MÜŞTERİNİN reklam hesabında bütçe değişikliği MÜŞTERİNİN onayıyla yapılır: onay alınmadıysa önce kullanıcıya sor. Tek işlem üst sınırı (günlükte 30 gün sayılır) bağlantının anahtarında.',
     girdi: nesne(
       {
         ...JS_VARLIK,
@@ -462,10 +658,11 @@ export const YAZMA_ARACLARI: readonly YazmaAraci[] = [
       return o.varlikOnayi(a.workspace_id, a.seviye, a.varlik_id, { tur: 'butce', micros, tip: a.butce_tipi });
     },
   },
+  ...BOOST_ARACLARI,
   {
     ad: 'onayla',
     baslik: 'Onayla ve uygula',
-    aciklama: 'Kullanıcının AÇIKÇA onayladığı işlemi uygular (yayınla, durdur, başlat, bütçe, form). YALNIZ kullanıcı özeti gördükten sonra "evet" dediyse çağır. Argümanlar sunucuda saklı; kod tek kullanımlık, 15 dakika geçerli.',
+    aciklama: 'Kullanıcının AÇIKÇA onayladığı işlemi uygular (yayınla, durdur, başlat, bütçe, form, boost). YALNIZ kullanıcı özeti gördükten sonra "evet" dediyse çağır. Argümanlar sunucuda saklı; kod tek kullanımlık, 15 dakika geçerli.',
     girdi: nesne({ onay_kodu: { type: 'string', description: 'Onaylı aracın döndürdüğü onay_kodu.' } }, ['onay_kodu']),
     isaret: YIKICI,
     calistir: (args, o) => {

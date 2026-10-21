@@ -1039,6 +1039,10 @@ export class LinkedInProvider implements IAdPlatformProvider {
     );
   }
 
+  async boostZamanla(): Promise<never> {
+    throw new PlatformApiError('linkedin', 'permanent', 'LinkedIn boost henüz yazılmadı.');
+  }
+
   async createBoost(): Promise<BoostResult> {
     throw new PlatformApiError('linkedin', 'permanent', 'LinkedIn boost henüz yazılmadı.');
   }

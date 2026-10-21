@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { MCP_ONAY_DURUMLARI, okumaAnahtariOlusturSchema } from '@advetics/shared';
-import { ONAY_DURUM_HALI, ozetSatirlari, sureSecenekleri, sureyiUyarla } from './mcp-mantik';
+import { ONAY_DURUM_HALI, ozetSatirlari, sureSecenekleri, sureyiUyarla, ustSiniriAyristir } from './mcp-mantik';
 import { YAZMA_YER_TUTUCU, baglantiOrnekleri } from './baglanti-ornekleri';
 
 /**
@@ -58,7 +58,32 @@ describe('KRİTİK: panel yetkiyi sunucuya gönderiyor ve varsayılan okuma (kay
   const KOD = readFileSync(join(__dirname, 'okuma-api-paneli.tsx'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
   it('gövde yakalandı', () => expect(KOD.length).toBeGreaterThan(2000));
   it('POST gövdesinde yetki, varsayılan okuma', () => {
-    expect(KOD).toContain("gecerlilikGun: sure === 'suresiz' ? null : Number(sure), yetki })");
+    expect(KOD).toContain("gecerlilikGun: sure === 'suresiz' ? null : Number(sure),\n          yetki,");
+    // Üst sınır YALNIZ yazma anahtarında gidiyor; okumada sunucu reddederdi.
+    expect(KOD).toContain("tekIslemUstSiniri: yetki === 'yazma' && 'deger' in sinir ? sinir.deger : null,");
     expect(KOD).toContain("useState<AnahtarYetkisi>('okuma')");
+  });
+});
+
+describe('KRİTİK: tek işlem üst sınırı girişi sunucunun kuralıyla aynı', () => {
+  it('boş = varsayılan (null); binlik nokta kabul; kabul edilen her değer şemadan geçiyor', () => {
+    expect(ustSiniriAyristir('')).toEqual({ deger: null });
+    expect(ustSiniriAyristir(' 25.000 ')).toEqual({ deger: 25000 });
+    for (const metin of ['1', '50.000', '10.000.000']) {
+      const r = ustSiniriAyristir(metin);
+      expect('deger' in r, metin).toBe(true);
+      const deger = (r as { deger: number }).deger;
+      expect(okumaAnahtariOlusturSchema.safeParse({ ad: 'a', yetki: 'yazma', gecerlilikGun: 90, tekIslemUstSiniri: deger }).success, metin).toBe(true);
+    }
+  });
+  it('kuruşlu, harfli ve aralık dışı değer yazılırken reddediliyor', () => {
+    expect(ustSiniriAyristir('25,50')).toEqual({ hata: 'bicim' });
+    expect(ustSiniriAyristir('on bin')).toEqual({ hata: 'bicim' });
+    expect(ustSiniriAyristir('0')).toEqual({ hata: 'aralik' });
+    expect(ustSiniriAyristir('10.000.001')).toEqual({ hata: 'aralik' });
+    expect(okumaAnahtariOlusturSchema.safeParse({ ad: 'a', yetki: 'yazma', gecerlilikGun: 90, tekIslemUstSiniri: 10_000_001 }).success).toBe(false);
+  });
+  it('okuma anahtarı sınır taşıyamıyor (sunucu)', () => {
+    expect(okumaAnahtariOlusturSchema.safeParse({ ad: 'a', yetki: 'okuma', tekIslemUstSiniri: 100 }).success).toBe(false);
   });
 });

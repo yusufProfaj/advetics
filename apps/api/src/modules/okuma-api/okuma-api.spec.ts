@@ -111,11 +111,18 @@ describe('anahtar', () => {
   });
 
   it('durum sunucuda: iptal > süresi doldu > etkin', () => {
-    const temel = { id: 'x', ad: 'a', gorunenOnek: 'adv_ro_x', createdAt: new Date(), sonKullanim: null, sonKullanimIp: null, yetki: 'okuma' };
+    const temel = { id: 'x', ad: 'a', gorunenOnek: 'adv_ro_x', createdAt: new Date(), sonKullanim: null, sonKullanimIp: null, yetki: 'okuma', tekIslemUstSiniriMicros: null };
     const simdi = new Date('2026-10-08T12:00:00Z');
     expect(ozete({ ...temel, bitis: null, iptal: null }, simdi).durum).toBe('etkin');
     expect(ozete({ ...temel, bitis: new Date('2026-10-08T11:59:59Z'), iptal: null }, simdi).durum).toBe('suresi_doldu');
     expect(ozete({ ...temel, bitis: null, iptal: new Date() }, simdi).durum).toBe('iptal');
+  });
+
+  it('KRİTİK: yazma anahtarının sınırı boşsa VARSAYILAN, okuma anahtarında sınır yok', () => {
+    const temel = { id: 'x', ad: 'a', gorunenOnek: 'adv_rw_x', createdAt: new Date(), sonKullanim: null, sonKullanimIp: null, bitis: null, iptal: null };
+    expect(ozete({ ...temel, yetki: 'yazma', tekIslemUstSiniriMicros: null }).tekIslemUstSiniriMicros).toBe('50000000000');
+    expect(ozete({ ...temel, yetki: 'yazma', tekIslemUstSiniriMicros: 2_500_000_000n }).tekIslemUstSiniriMicros).toBe('2500000000');
+    expect(ozete({ ...temel, yetki: 'okuma', tekIslemUstSiniriMicros: null }).tekIslemUstSiniriMicros).toBeNull();
   });
 });
 
