@@ -53,3 +53,9 @@
   metot adı değişince dilim boşalıyor ve "yasak dizge yok" iddiası her zaman
   doğru oluyor. Her taramaya "gövde gerçekten yakalandı" testi ekle ve dilim
   bulunamazsa HATA FIRLAT.
+- **METİN DEĞİŞTİREREK MUTASYON: DESEN BİRDEN ÇOK YERDE GEÇEBİLİR.** Rapor
+  servisinde `client_id = ${params.clientId}::uuid ${trackedAccounts(...)}`
+  on sorguda aynı; "ilk eşleşmeyi boz" günlük seri yerine özet sorgusunu
+  bozdu, günlük seriyi toplayan test SAĞ KALDI ve mutasyon "ölçülmüş"
+  sanılacaktı (2026-10-21). Bozmadan önce `grep -nF` ile eşleşme sayısına
+  bak, tek satırı numarasıyla boz; testin de o sorgunun çıktısını okuduğundan emin ol.

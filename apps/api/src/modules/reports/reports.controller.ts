@@ -28,6 +28,9 @@ import {
   type ReportSendInput,
   reportTemplateInputSchema,
   shareInputSchema,
+  paylasimAraligiSchema,
+  type PaylasimAraligiSorgusu,
+  type PaylasilanRapor,
   type ReportTemplateInput,
   type ReportTemplateSummary,
   type ReportData,
@@ -395,9 +398,10 @@ export class ReportsController {
   /**
    * ANONİM okuma — müşteriye gönderilen link.
    *
-   * `@Public()`: oturum yok. Erişim kontrolü token'ın kendisi ve tarih aralığı
-   * paylaşım kaydından geliyor — istemcinin verdiği bir parametreyle
-   * değiştirilemiyor.
+   * `@Public()`: oturum yok. Erişim kontrolü token'ın kendisi. Workspace ve
+   * şablon paylaşım kaydından geliyor; `?from&to` YALNIZ dönemi seçiyor ve
+   * sınırı sunucuda (`paylasimAraligiKarari`). Verilmezse paylaşılan dönem
+   * (kullanıcı kararı 2026-10-21; öncesinde aralık hiç kabul edilmiyordu).
    *
    * Yol `reports/shared/:token` altında ve token URL'de. Bu, linkin tarayıcı
    * geçmişine ve olası bir referrer başlığına düşmesi demek; kabul edilebilir
@@ -406,8 +410,11 @@ export class ReportsController {
    */
   @Get('shared/:token')
   @Public()
-  readShared(@Param('token') token: string): Promise<ReportData> {
-    return this.shares.readByToken(token);
+  readShared(
+    @Param('token') token: string,
+    @Query(zodQuery(paylasimAraligiSchema)) aralik: PaylasimAraligiSorgusu,
+  ): Promise<PaylasilanRapor> {
+    return this.shares.readByToken(token, aralik.from && aralik.to ? { from: aralik.from, to: aralik.to } : undefined);
   }
 }
 

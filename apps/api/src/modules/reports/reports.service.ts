@@ -1293,6 +1293,42 @@ export class ReportsService {
   }
 
   /** Günlük dönüşüm serisi — referans belgedeki Form/Mesaj grafiği. */
+  /**
+   * BU WORKSPACE'İN VERİSİ HANGİ GÜNLER ARASINDA — paylaşım linkinin boş
+   * dönem açıklaması (`PaylasilanRapor.veriAraligi`).
+   *
+   * Seçilen dönemde günlük kayıt yoksa sayfa boş tablo değil "veri şu
+   * tarihler arasında" yazıyor; "o dönemde kampanya yoktu" ile "o dönem hiç
+   * çekilmedi" kişinin gözünde aynı boşluk. YALNIZ boş dönemde çağrılıyor.
+   *
+   * TARİH SINIRLI (`from..to` = paylaşım sınırı): `/metrics/coverage` gibi
+   * sınırsız bir MIN/MAX bütün partition'ları geziyor ve üretimde 17 sn
+   * sürdü. İzlenen hesap listesi `veriToplaK`teki gibi DİZİ (`trackedAccounts`).
+   */
+  async veriAraligi(
+    ctx: TenantContext,
+    params: { clientId: string; from: string; to: string },
+  ): Promise<{ from: string; to: string } | null> {
+    return this.prisma.withTenant(ctx, async (tx) => {
+      const izlenen = (
+        await tx.$queryRaw<Array<{ id: string }>>(
+          Prisma.sql`SELECT id FROM ad_accounts WHERE sync_enabled = true AND client_id = ${params.clientId}::uuid`,
+        )
+      ).map((r) => r.id);
+      const [row] = await tx.$queryRaw<Array<{ en_eski: Date | null; en_yeni: Date | null }>>(
+        Prisma.sql`
+          SELECT MIN(date) AS en_eski, MAX(date) AS en_yeni
+          FROM insights_daily
+          WHERE client_id = ${params.clientId}::uuid ${trackedAccounts(izlenen)}
+            AND date BETWEEN ${params.from}::date AND ${params.to}::date
+            AND entity_level = ${LEVEL}
+        `,
+      );
+      if (!row?.en_eski || !row.en_yeni) return null;
+      return { from: this.dateText(row.en_eski), to: this.dateText(row.en_yeni) };
+    }, { timeoutMs: RAPOR_OKUMA_SURESI_MS });
+  }
+
   private async dailySeries(
     tx: TxLike,
     params: RaporSorgusu,

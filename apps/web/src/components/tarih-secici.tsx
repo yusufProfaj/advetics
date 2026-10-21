@@ -20,6 +20,7 @@ import {
   today,
   type IsoDay,
   type KarsilastirmaKipi,
+  type OnAyarKodu,
   type ResolvedRange,
 } from '@/lib/date-range';
 
@@ -45,6 +46,10 @@ export function TarihSecici({
   enEskiGun,
   karsilastirmaVar = true,
   enGecGun,
+  enErkenGun,
+  onAyarlar,
+  paylasilan,
+  sinirNotu,
 }: {
   aralik: ResolvedRange;
   /** `/metrics/coverage`ten gelen en eski veri günü. "Tüm zamanlar" buna dayanıyor. */
@@ -65,6 +70,27 @@ export function TarihSecici({
    * müşteriye göndermek demek.
    */
   enGecGun?: IsoDay;
+  /**
+   * Seçilebilecek EN ERKEN gün. Rapor linki geçmişe doğru sınırlı
+   * (`paylasimSiniri`); sınırın öncesini seçtirip sunucudan 400 almak,
+   * kişiye nedenini sonradan söylemek olurdu. Taslak sınırı aşarsa Uygula
+   * kapalı.
+   */
+  enErkenGun?: IsoDay;
+  /**
+   * Gösterilecek ön ayarlar (sıra korunur). Verilmezse hepsi. Rapor linki
+   * dördüyle sınırlı: "Tüm zamanlar" en eski günü OTURUMLU `/metrics/coverage`
+   * ucundan arıyor ve linki açan kişinin oturumu yok.
+   */
+  onAyarlar?: readonly OnAyarKodu[];
+  /**
+   * Rapor linkinde ajansın paylaştığı dönem: listenin başında "Paylaşılan
+   * aralık" satırı. Seçilip uygulanınca tarih anahtarları ADRESTEN SİLİNİR
+   * (link yine paylaşılan belgeyi açsın, kopyası da öyle).
+   */
+  paylasilan?: { from: IsoDay; to: IsoDay };
+  /** Takvimin altındaki sınır cümlesi (ekranın dilinde, çağıran yazar). */
+  sinirNotu?: string;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -130,6 +156,11 @@ export function TarihSecici({
   const taslakGun = gunSayisi(taslakFrom, taslakTo);
   const taslakKarsPencere = karsilastirmaPenceresi(taslakFrom, taslakTo, taslakKars);
   const asiyor = taslakGun > MAX_GUN;
+  const sinirDisi =
+    (enErkenGun !== undefined && taslakFrom < enErkenGun) || (enGecGun !== undefined && taslakTo > enGecGun);
+  const gorunenOnAyarlar = onAyarlar
+    ? onAyarlar.map((k) => RANGE_PRESETS.find((p) => p.key === k)).filter((p): p is (typeof RANGE_PRESETS)[number] => !!p)
+    : RANGE_PRESETS;
 
   /*
    * ═══ "TÜM ZAMANLAR" EN ESKİ GÜNÜ İSTEDİĞİNDE ARANIYOR ═══
@@ -205,11 +236,17 @@ export function TarihSecici({
 
   function uygula() {
     const p = new URLSearchParams(searchParams.toString());
-    p.set('aralik', taslakKey);
-    if (taslakKey === 'ozel') {
+    if (taslakKey === 'paylasilan') {
+      // Paylaşılan dönem ADRESTE YAZILMIYOR: link onu kendiliğinden açıyor.
+      p.delete('aralik');
+      p.delete('baslangic');
+      p.delete('bitis');
+    } else if (taslakKey === 'ozel') {
+      p.set('aralik', 'ozel');
       p.set('baslangic', taslakFrom);
       p.set('bitis', taslakTo);
     } else {
+      p.set('aralik', taslakKey);
       p.delete('baslangic');
       p.delete('bitis');
     }
@@ -219,7 +256,8 @@ export function TarihSecici({
     p.delete('sayfa');
     setAcik(false);
     setIkinciTik(false);
-    router.push(`${pathname}?${p}`);
+    const sorgu = p.toString();
+    router.push(sorgu ? `${pathname}?${sorgu}` : pathname);
   }
 
   return (
@@ -262,7 +300,28 @@ export function TarihSecici({
         >
           {/* Ön ayarlar */}
           <ul className="max-h-80 shrink-0 overflow-y-auto border-b border-line py-1 sm:max-h-none sm:w-56 sm:border-b-0 sm:border-r">
-            {RANGE_PRESETS.map((p) => (
+            {paylasilan && (
+              <li className="border-b border-line pb-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTaslakKey('paylasilan');
+                    setTaslakFrom(paylasilan.from);
+                    setTaslakTo(paylasilan.to);
+                    setTakvimAy(paylasilan.from.slice(0, 7));
+                  }}
+                  className={`w-full px-4 py-2 text-left text-sm transition hover:bg-surface-muted ${
+                    taslakKey === 'paylasilan' ? 'bg-brand-soft font-medium text-brand-strong' : ''
+                  }`}
+                >
+                  {onAyarEtiketi('paylasilan', dil)}
+                  <small className="block text-[11px] font-normal text-ink-muted">
+                    {gunAdi(paylasilan.from, dil)} - {gunAdi(paylasilan.to, dil)}
+                  </small>
+                </button>
+              </li>
+            )}
+            {gorunenOnAyarlar.map((p) => (
               <li key={p.key}>
                 <button
                   type="button"
@@ -290,9 +349,9 @@ export function TarihSecici({
 
           <div className="min-w-0 flex-1 p-4">
             <div className="flex flex-wrap items-end gap-2">
-              <GunAlani label={d.baslangic} value={taslakFrom} onChange={(v) => { setTaslakKey('ozel'); setTaslakFrom(v); }} />
+              <GunAlani label={d.baslangic} value={taslakFrom} min={enErkenGun} max={enGecGun} onChange={(v) => { setTaslakKey('ozel'); setTaslakFrom(v); }} />
               <span className="pb-2 text-ink-muted">—</span>
-              <GunAlani label={d.bitis} value={taslakTo} onChange={(v) => { setTaslakKey('ozel'); setTaslakTo(v); }} />
+              <GunAlani label={d.bitis} value={taslakTo} min={enErkenGun} max={enGecGun} onChange={(v) => { setTaslakKey('ozel'); setTaslakTo(v); }} />
             </div>
 
             <Takvim
@@ -303,6 +362,7 @@ export function TarihSecici({
               from={taslakFrom}
               to={taslakTo}
               enGec={enGecGun}
+              enErken={enErkenGun}
               onAyDegis={setTakvimAy}
               onGunSec={gunSec}
             />
@@ -324,6 +384,18 @@ export function TarihSecici({
               <p role="alert" className="mt-2 rounded-alan border border-l-4 border-line border-l-danger bg-surface px-2.5 py-1.5 text-[11px] text-ink">
                 {kapsamHatasi}
                 {d.tumZamanlarYedek(onAyarEtiketi('tum_zamanlar', dil))}
+              </p>
+            )}
+
+            {sinirNotu && (
+              <p
+                className={`mt-2 text-[11px] leading-snug ${
+                  sinirDisi
+                    ? 'rounded-alan border border-l-4 border-line border-l-danger bg-surface px-2.5 py-1.5 text-ink'
+                    : 'text-ink-muted'
+                }`}
+              >
+                {sinirNotu}
               </p>
             )}
 
@@ -394,6 +466,7 @@ export function TarihSecici({
               <button
                 type="button"
                 onClick={uygula}
+                disabled={sinirDisi}
                 className={dugmeSinifi('birincil', 'kucuk')}
               >
                 {d.uygula}
@@ -409,10 +482,14 @@ export function TarihSecici({
 function GunAlani({
   label,
   value,
+  min,
+  max,
   onChange,
 }: {
   label: string;
   value: string;
+  min?: string;
+  max?: string;
   onChange: (v: string) => void;
 }) {
   return (
@@ -421,6 +498,8 @@ function GunAlani({
       <input
         type="date"
         value={value}
+        min={min}
+        max={max}
         onChange={(e) => onChange(e.target.value)}
         className="mt-0.5 block rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-ink focus:border-brand focus:outline-none"
       />
@@ -444,6 +523,7 @@ function Takvim({
   from,
   to,
   enGec,
+  enErken,
   onAyDegis,
   onGunSec,
 }: {
@@ -454,6 +534,7 @@ function Takvim({
   from: IsoDay;
   to: IsoDay;
   enGec?: IsoDay;
+  enErken?: IsoDay;
   onAyDegis: (ay: string) => void;
   onGunSec: (gun: IsoDay) => void;
 }) {
@@ -498,7 +579,7 @@ function Takvim({
               onClick={() => onGunSec(g)}
               // GELECEK GÜNLER KAPALI: veri yok, seçilmesi yalnızca boş bir
               // grafik üretir.
-              disabled={g > sonGun}
+              disabled={g > sonGun || (enErken !== undefined && g < enErken)}
               className={`rounded py-1 transition disabled:opacity-30 ${
                 g === from || g === to
                   ? 'bg-brand font-medium text-white'

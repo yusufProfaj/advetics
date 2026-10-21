@@ -45,6 +45,7 @@ export type OnAyarKodu = keyof typeof tarihSozlugu.tr.onAyarlar;
 export function onAyarEtiketi(key: string, dil: Dil = 'tr'): string {
   const d = sec(tarihSozlugu, dil);
   if (key === 'ozel') return d.ozel;
+  if (key === 'paylasilan') return d.paylasilan;
   return (d.onAyarlar as Record<string, string>)[key] ?? d.onAyarlar[DEFAULT_RANGE];
 }
 

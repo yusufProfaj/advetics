@@ -158,7 +158,13 @@ export function Serit({
         ton === 'bilgi' ? 'border-l-ink-soluk' : 'border-l-danger'
       }`}
     >
-      <div className="min-w-0 flex-1">
+      {/*
+        METNİN TABANI 16 rem (`Uyari` ile aynı ders): `flex-1` metni eylem
+        düğmesinin yanında 150 px'e sıkıştırıyordu; rapor linkinin "kendi
+        seçtiğiniz dönem" şeridi telefonda dokuz satır oldu. Sığmazsa
+        düğme alt satıra iniyor.
+      */}
+      <div className="min-w-0 flex-[1_1_16rem]">
         <b className="block text-14 text-ink">{baslik}</b>
         {children && <span className="text-13 text-ink-muted">{children}</span>}
       </div>

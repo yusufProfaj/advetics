@@ -1,9 +1,13 @@
-import { ForbiddenException, GoneException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, GoneException, Injectable, NotFoundException } from '@nestjs/common';
 import { createHash, randomBytes } from 'node:crypto';
 import {
   REPORT_SECTIONS,
   ROLE_PERMISSIONS,
-  type ReportData,
+  bugunUtc,
+  paylasimAraligiKarari,
+  paylasimAraligiMesaji,
+  paylasimSiniri,
+  type PaylasilanRapor,
   type ShareInput,
   type TenantContext,
 } from '@advetics/shared';
@@ -131,11 +135,20 @@ export class ShareService {
   /**
    * Anonim okuma — linkin kendisiyle.
    *
-   * Rapor verisi, paylaşım kaydındaki SABİT tarih aralığıyla üretiliyor.
-   * Kullanıcının verdiği bir tarih parametresi KABUL EDİLMİYOR: linki alan
-   * kişi aralığı değiştirip görmemesi gereken bir dönemi açamamalı.
+   * ARALIK VERİLMEZSE paylaşım kaydındaki dönem: link hâlâ ajansın
+   * gönderdiği belgeyi açıyor. VERİLİRSE (kullanıcı kararı 2026-10-21) aynı
+   * workspace'in sınır içindeki herhangi bir dönemi; eskiden burada "tarih
+   * parametresi KABUL EDİLMİYOR" yazıyordu ve kapsamın genişlemesi bilerek
+   * onaylandı. Aralığın DEĞİŞTİREMEDİĞİ: workspace, hesaplar, şablon. Hepsi
+   * aşağıda paylaşım kaydından okunuyor; `aralik`tan tek alan geçmiyor.
+   *
+   * `bugun` testin saati sabitleyebilmesi için.
    */
-  async readByToken(token: string): Promise<ReportData> {
+  async readByToken(
+    token: string,
+    aralik?: { from: string; to: string },
+    bugun: string = bugunUtc(),
+  ): Promise<PaylasilanRapor> {
     const tokenHash = createHash('sha256').update(token).digest('hex');
 
     const share = await this.admin.reportShare.findUnique({
@@ -161,6 +174,16 @@ export class ShareService {
     // yeni link iste" diyebilmesi gerekiyor ve bu bilgi bir sır değil.
     if (share.expiresAt && share.expiresAt.getTime() < Date.now()) {
       throw new GoneException('Bu raporun süresi doldu. Ajansınızdan yeni bir link isteyin.');
+    }
+
+    /*
+     * SINIR TOKEN'DAN SONRA, SAYAÇTAN ÖNCE: geçersiz token aralık hatası
+     * değil 404 almalı (linkin varlığını aralık mesajıyla doğrulamamak
+     * için), reddedilen istek de "rapor açıldı" sayılmamalı.
+     */
+    if (aralik) {
+      const karar = paylasimAraligiKarari(aralik, bugun);
+      if (!karar.tamam) throw new BadRequestException(paylasimAraligiMesaji(karar.ret, karar.sinir));
     }
 
     // Görüntüleme sayacı — ajans müşterinin raporu açtığını görebilsin.
@@ -217,12 +240,31 @@ export class ShareService {
       permissions: [...ROLE_PERMISSIONS.client_viewer],
     };
 
-    return this.reports.build(ctx, {
+    const varsayilanFrom = this.dateText(share.dateFrom);
+    const varsayilanTo = this.dateText(share.dateTo);
+    const sinir = paylasimSiniri(bugun);
+    const data = await this.reports.build(ctx, {
       clientId: share.clientId,
-      from: this.dateText(share.dateFrom),
-      to: this.dateText(share.dateTo),
+      from: aralik?.from ?? varsayilanFrom,
+      to: aralik?.to ?? varsayilanTo,
       templateId: share.templateId,
     });
+
+    /*
+     * BOŞ DÖNEMDE NEDEN: veri hangi günler arasında. Sınır penceresinde ve
+     * paylaşılan dönemi de kapsayacak biçimde (paylaşılan dönem sınırdan
+     * eski olabilir: üç yıl önce gönderilmiş bir link).
+     */
+    const veriAraligi =
+      data.daily.length === 0
+        ? await this.reports.veriAraligi(ctx, {
+            clientId: share.clientId,
+            from: varsayilanFrom < sinir.enErken ? varsayilanFrom : sinir.enErken,
+            to: sinir.enGec,
+          })
+        : undefined;
+
+    return { ...data, paylasim: { ...sinir, varsayilanFrom, varsayilanTo, veriAraligi } };
   }
 
   /** `DATE` → YYYY-MM-DD, saat dilimi kayması olmadan. */

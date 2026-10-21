@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rapor linki tarih seçici — taslak</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  /* Kılavuz: yalnız beyaz, siyah, gri #302e2d, kırmızı #ff2400. Ara tonlar griden saydamlıkla. */
+  :root {
+    --beyaz: #ffffff; --siyah: #000000; --gri: #302e2d; --kirmizi: #ff2400;
+    --cizgi: rgba(48, 46, 45, .14); --cizgi-koyu: rgba(48, 46, 45, .28);
+    --soluk: rgba(48, 46, 45, .62); --zemin: rgba(48, 46, 45, .04); --zemin2: rgba(48, 46, 45, .08);
+    --kirmizi-soft: rgba(255, 36, 0, .08);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'Open Sans', sans-serif; color: var(--siyah); background: var(--beyaz); font-size: 14px; }
+  h1, h2, h3 { font-family: 'Montserrat', sans-serif; }
+  .kap { max-width: 1180px; margin: 0 auto; padding: 32px 16px 80px; }
+  .ust h1 { font-size: 22px; margin: 0 0 6px; }
+  .ust p { margin: 0; color: var(--soluk); max-width: 760px; line-height: 1.55; }
+  .bolum { margin-top: 40px; }
+  .bolum > h2 { font-size: 15px; margin: 0 0 4px; }
+  .bolum > p.not { margin: 0 0 14px; color: var(--soluk); font-size: 13px; }
+  .sahne { background: var(--zemin); border: 1px solid var(--cizgi); border-radius: 12px; padding: 24px; }
+  .yan { display: grid; grid-template-columns: 1fr; gap: 24px; }
+  @media (min-width: 980px) { .yan { grid-template-columns: 1fr 390px; align-items: start; } }
+
+  /* Rapor sayfasının üst çubuğu (rpt-noprint) */
+  .cubuk { max-width: 880px; margin: 0 auto 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .cubuk .ad { font-size: 12px; color: var(--soluk); margin: 0; }
+  .cubuk .sag { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .cip { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; border: 1px solid var(--cizgi-koyu); border-radius: 999px; background: var(--beyaz); font-size: 13px; white-space: nowrap; cursor: pointer; }
+  @media (max-width: 480px) { .cip { white-space: normal; height: auto; min-height: 40px; padding: 6px 14px; flex-wrap: wrap; row-gap: 0; max-width: 100%; } }
+  .cip small { color: var(--soluk); font-size: 12px; }
+  .cip b { font-weight: 600; }
+  .dugme { height: 36px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--cizgi-koyu); background: var(--beyaz); font: 600 13px 'Open Sans'; cursor: pointer; }
+  .dugme.birincil { background: var(--kirmizi); border-color: var(--kirmizi); color: var(--beyaz); }
+  .dugme.hayalet { border-color: transparent; background: transparent; }
+  .dugme.kucuk { height: 32px; font-size: 12px; }
+
+  .belge { max-width: 880px; margin: 0 auto; background: var(--beyaz); border: 1px solid var(--cizgi); padding: 32px; }
+  .belge h3 { margin: 0 0 4px; font-size: 20px; }
+  .belge .alt { color: var(--soluk); font-size: 13px; margin: 0 0 20px; }
+  .kutular { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  @media (min-width: 640px) { .kutular { grid-template-columns: repeat(4, 1fr); } }
+  .kutu { border: 1px solid var(--cizgi); border-radius: 10px; padding: 12px; }
+  .kutu span { display: block; font-size: 11px; color: var(--soluk); }
+  .kutu b { font-size: 18px; font-family: 'Montserrat'; }
+
+  /* Açılır seçici */
+  .panel { width: min(46rem, 100%); border: 1px solid var(--cizgi); border-radius: 12px; background: var(--beyaz); display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,.08); margin-left: auto; }
+  @media (min-width: 640px) { .panel { flex-direction: row; } }
+  .panel ul { list-style: none; margin: 0; padding: 4px 0; border-bottom: 1px solid var(--cizgi); }
+  @media (min-width: 640px) { .panel ul { width: 224px; border-bottom: 0; border-right: 1px solid var(--cizgi); } }
+  .panel li button { width: 100%; text-align: left; padding: 9px 16px; border: 0; background: none; font: 14px 'Open Sans'; cursor: pointer; }
+  .panel li button.secili { background: var(--kirmizi-soft); font-weight: 600; }
+  .panel li button small { display: block; color: var(--soluk); font-size: 11px; font-weight: 400; }
+  .panel li.ayrac { border-top: 1px solid var(--cizgi); margin-top: 4px; padding-top: 4px; }
+  .govde { flex: 1; padding: 16px; min-width: 0; }
+  .alanlar { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+  .alanlar label { font-size: 11px; color: var(--soluk); }
+  .alanlar input { display: block; margin-top: 4px; height: 34px; border: 1px solid var(--cizgi-koyu); border-radius: 8px; padding: 0 8px; font: 13px 'Open Sans'; }
+  .takvim { margin-top: 12px; }
+  .takvim .bas { display: flex; justify-content: space-between; align-items: center; font-weight: 600; font-size: 13px; margin-bottom: 6px; }
+  .takvim .bas button { border: 0; background: none; font-size: 16px; cursor: pointer; }
+  .takvim .bas button:disabled { color: var(--cizgi-koyu); cursor: not-allowed; }
+  .gunler { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; font-size: 12px; }
+  .gunler .h { color: var(--soluk); font-size: 11px; padding: 4px 0; }
+  .gunler .g { padding: 6px 0; border-radius: 6px; }
+  .gunler .g.ara { background: var(--kirmizi-soft); border-radius: 0; }
+  .gunler .g.uc { background: var(--kirmizi); color: var(--beyaz); font-weight: 700; }
+  .gunler .g.kapali { color: var(--cizgi-koyu); text-decoration: line-through; }
+  .bilgi { margin-top: 10px; font-size: 11px; color: var(--soluk); line-height: 1.5; }
+  .uyari { margin-top: 10px; border: 1px solid var(--cizgi); border-left: 4px solid var(--kirmizi); border-radius: 8px; padding: 8px 10px; font-size: 12px; line-height: 1.5; }
+  .eylem { margin-top: 12px; display: flex; justify-content: flex-end; gap: 8px; }
+
+  /* Boş dönem */
+  .bos { text-align: center; padding: 40px 16px; }
+  .bos .ikon { width: 44px; height: 44px; border-radius: 12px; background: var(--zemin2); margin: 0 auto 12px; display: grid; place-items: center; font-size: 20px; }
+  .bos h4 { font: 700 16px 'Montserrat'; margin: 0 0 6px; }
+  .bos p { margin: 0 auto 14px; color: var(--soluk); max-width: 460px; line-height: 1.55; }
+  .serit { max-width: 880px; margin: 0 auto 12px; border: 1px solid var(--cizgi); border-left: 4px solid var(--gri); background: var(--beyaz); border-radius: 8px; padding: 10px 12px; font-size: 13px; display: flex; gap: 10px; justify-content: space-between; align-items: center; flex-wrap: wrap; }
+  .serit a { color: var(--siyah); font-weight: 600; }
+
+  /* Telefon çerçevesi */
+  .telefon { width: 375px; max-width: 100%; border: 1px solid var(--cizgi-koyu); border-radius: 28px; padding: 18px 12px; background: var(--zemin); }
+  .telefon .cubuk { flex-direction: column; align-items: stretch; }
+  .telefon .cubuk .sag { justify-content: space-between; }
+  .telefon .belge { padding: 16px; }
+  .telefon .panel { margin-top: 8px; }
+
+  .kararlar { border: 1px solid var(--cizgi); border-radius: 12px; padding: 18px 20px; background: var(--beyaz); }
+  .kararlar ol { margin: 8px 0 0; padding-left: 20px; line-height: 1.6; }
+  .kararlar li + li { margin-top: 8px; }
+  .kararlar .soru { border-left: 4px solid var(--kirmizi); padding-left: 10px; }
+  code { background: var(--zemin2); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="kap">
+  <div class="ust">
+    <h1>Rapor linki: tarih aralığını açan kişi seçsin</h1>
+    <p>Bugün <code>/r/[token]</code> paylaşılırken sabitlenen aralıkla açılıyor ve API tarih parametresini bilerek kabul etmiyor
+      (<code>share.service.ts → readByToken</code>). Taslak: aynı sayfaya paneldeki tarih seçicinin rapor kipi geliyor; varsayılan yine paylaşılan aralık.</p>
+  </div>
+
+  <!-- 1 -->
+  <div class="bolum">
+    <h2>1 · Sayfa açıldığında (varsayılan: paylaşılan aralık)</h2>
+    <p class="not">Adres <code>/r/abc…</code>, parametre yok. Seçici çipi "Paylaşılan aralık" diyor; rapor eskisi gibi bir belge.</p>
+    <div class="sahne">
+      <div class="cubuk">
+        <p class="ad">Çiftçi Grup · Kuzey Proje</p>
+        <div class="sag">
+          <span class="cip"><small>Paylaşılan aralık</small><b>1 Eyl 2026 - 30 Eyl 2026</b><small>▾</small></span>
+          <button class="dugme">PDF olarak kaydet</button>
+        </div>
+      </div>
+      <div class="belge">
+        <h3>Eylül Performans Raporu</h3>
+        <p class="alt">1 Eyl 2026 - 30 Eyl 2026 · 30 gün</p>
+        <div class="kutular">
+          <div class="kutu"><span>Harcama</span><b>₺48.210</b></div>
+          <div class="kutu"><span>Gösterim</span><b>1,24 Mn</b></div>
+          <div class="kutu"><span>Tıklama</span><b>18.402</b></div>
+          <div class="kutu"><span>Dönüşüm</span><b>612</b></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2 -->
+  <div class="bolum">
+    <h2>2 · Seçici açık (masaüstü)</h2>
+    <p class="not">Yalnız istenen hazır aralıklar + Özel. Paylaşılan aralık listenin başında, tek tıkla geri dönülüyor. Karşılaştırma yok (rapor yüzde değişim göstermiyor).
+      Sınırın öncesindeki günler takvimde kapalı ve sınır altta yazılı.</p>
+    <div class="sahne">
+      <div class="panel">
+        <ul>
+          <li><button>Paylaşılan aralık<small>1 Eyl - 30 Eyl 2026</small></button></li>
+          <li class="ayrac"><button>Son 7 gün</button></li>
+          <li><button class="secili">Son 30 gün</button></li>
+          <li><button>Bu ay</button></li>
+          <li><button>Geçen ay</button></li>
+          <li class="ayrac"><button>Özel</button></li>
+        </ul>
+        <div class="govde">
+          <div class="alanlar">
+            <label>Başlangıç<input value="2026-09-21"></label>
+            <span style="padding-bottom:8px;color:var(--soluk)">—</span>
+            <label>Bitiş<input value="2026-10-20"></label>
+          </div>
+          <div class="takvim">
+            <div class="bas"><button>‹</button><span>Ekim 2026</span><button disabled>›</button></div>
+            <div class="gunler">
+              <span class="h">Pzt</span><span class="h">Sal</span><span class="h">Çar</span><span class="h">Per</span><span class="h">Cum</span><span class="h">Cmt</span><span class="h">Paz</span>
+              <span></span><span></span><span></span>
+              <span class="g ara">1</span><span class="g ara">2</span><span class="g ara">3</span><span class="g ara">4</span><span class="g ara">5</span>
+              <span class="g ara">6</span><span class="g ara">7</span><span class="g ara">8</span><span class="g ara">9</span><span class="g ara">10</span><span class="g ara">11</span><span class="g ara">12</span>
+              <span class="g ara">13</span><span class="g ara">14</span><span class="g ara">15</span><span class="g ara">16</span><span class="g ara">17</span><span class="g ara">18</span><span class="g ara">19</span>
+              <span class="g uc">20</span><span class="g">21</span><span class="g kapali">22</span><span class="g kapali">23</span><span class="g kapali">24</span><span class="g kapali">25</span><span class="g kapali">26</span>
+              <span class="g kapali">27</span><span class="g kapali">28</span><span class="g kapali">29</span><span class="g kapali">30</span><span class="g kapali">31</span>
+            </div>
+          </div>
+          <p class="bilgi">Rapor en erken <b>1 Eki 2023</b>, en geç <b>bugün</b> için açılabilir; bir seferde en fazla 400 gün.</p>
+          <div class="eylem">
+            <button class="dugme hayalet kucuk">İptal</button>
+            <button class="dugme birincil kucuk">Uygula</button>
+          </div>
+        </div>
+      </div>
+      <p class="bilgi" style="text-align:right">Uygula → adres <code>/r/abc…?aralik=30g</code> (özelde <code>?aralik=ozel&amp;baslangic=…&amp;bitis=…</code>). Yenileyince ve kopyalanınca aynı aralık açılır.</p>
+    </div>
+  </div>
+
+  <!-- 3 -->
+  <div class="bolum">
+    <h2>3 · Paylaşılandan farklı bir aralık bakılırken</h2>
+    <p class="not">Gri bilgi şeridi: kişi ajansın gönderdiği belgeye değil kendi seçtiği döneme baktığını bilsin. Şerit baskıda çıkmıyor; PDF'in başlığında seçilen dönem yazıyor.</p>
+    <div class="sahne">
+      <div class="serit"><span>Ajansınızın paylaştığı dönem <b>1 Eyl - 30 Eyl 2026</b>. Şu an <b>son 30 gün</b> gösteriliyor.</span><a href="#">Paylaşılan döneme dön</a></div>
+      <div class="belge">
+        <h3>Eylül Performans Raporu</h3>
+        <p class="alt">21 Eyl 2026 - 20 Eki 2026 · 30 gün</p>
+        <div class="kutular">
+          <div class="kutu"><span>Harcama</span><b>₺51.004</b></div>
+          <div class="kutu"><span>Gösterim</span><b>1,31 Mn</b></div>
+          <div class="kutu"><span>Tıklama</span><b>19.880</b></div>
+          <div class="kutu"><span>Dönüşüm</span><b>655</b></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4 -->
+  <div class="bolum">
+    <h2>4 · Veri olmayan dönem / geçersiz adres</h2>
+    <p class="not">Boş tablo yerine nedeni. Sol: seçilen dönemde hiç kayıt yok, workspace'in verisinin nerede olduğu yazıyor. Sağ: adres elle bozulmuş ya da sınır dışı; sessizce 30 güne düşmüyor.</p>
+    <div class="sahne yan">
+      <div class="belge bos">
+        <div class="ikon">◷</div>
+        <h4>Bu dönemde veri yok</h4>
+        <p>1 Oca 2025 - 31 Oca 2025 arasında bu workspace'in hesaplarında kayıt bulunmuyor. Elimizdeki veri <b>3 Mar 2025</b> ile <b>20 Eki 2026</b> arasında.</p>
+        <button class="dugme">Paylaşılan döneme dön</button>
+      </div>
+      <div class="belge bos">
+        <div class="ikon">!</div>
+        <h4>Bu tarih aralığı açılamıyor</h4>
+        <p>Rapor en erken 1 Eki 2023'ten itibaren açılabiliyor. Paylaşılan dönem gösterildi.</p>
+        <button class="dugme">Tarih seç</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5 -->
+  <div class="bolum">
+    <h2>5 · Telefon (375 px)</h2>
+    <p class="not">Çip ve PDF düğmesi ad satırının altına iniyor; açılır panel tam genişlik, ön ayarlar üstte.</p>
+    <div class="sahne">
+      <div class="telefon">
+        <div class="cubuk">
+          <p class="ad">Çiftçi Grup · Kuzey Proje</p>
+          <div class="sag">
+            <span class="cip"><small>Son 30 gün</small><b>21 Eyl - 20 Eki</b><small>▾</small></span>
+            <button class="dugme">PDF</button>
+          </div>
+        </div>
+        <div class="panel">
+          <ul>
+            <li><button>Paylaşılan aralık<small>1 Eyl - 30 Eyl 2026</small></button></li>
+            <li class="ayrac"><button>Son 7 gün</button></li>
+            <li><button class="secili">Son 30 gün</button></li>
+            <li><button>Bu ay</button></li>
+            <li><button>Geçen ay</button></li>
+            <li class="ayrac"><button>Özel</button></li>
+          </ul>
+          <div class="govde">
+            <p class="bilgi" style="margin-top:0">Takvim ve Başlangıç/Bitiş alanları burada (masaüstüyle aynı).</p>
+            <div class="eylem"><button class="dugme hayalet kucuk">İptal</button><button class="dugme birincil kucuk">Uygula</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6 -->
+  <div class="bolum">
+    <h2>6 · Kurallar ve onayınızı bekleyen karar</h2>
+    <div class="kararlar">
+      <ol>
+        <li class="soru"><b>Kapsam değişiyor.</b> Bugüne kadar linki alan kişi yalnız paylaşılan dönemi görebiliyordu (kod bunu bilerek kilitlemiş). Yeni hâlde aynı workspace'in
+          <b>sınır içindeki her dönemini</b> görebilecek: panelde o workspace'in müşteri hesabı ne görüyorsa o. Başka workspace, başka şirket ya da başka hesap AÇILMAZ; şablon (hangi bölümler) değişmez.</li>
+        <li><b>Sınırlar (sunucuda, adresle aşılamaz):</b> en erken bugünden 3 yıl öncesi (Meta günlük veriyi 37 ay tutuyor; daha gerisi zaten boş), en geç bugün, en fazla 400 gün (panel metrikleriyle aynı sınır). Sınır dışı istek 400 döner, sayfa nedenini yazar.</li>
+        <li><b>PDF:</b> rapor sayfasındaki "PDF olarak kaydet" tarayıcının yazdırması; seçilen dönemi basıyor. Sunucu PDF'i (mail eki, paneldeki indir) linke bağlı değil, değişmiyor.</li>
+        <li><b>Beyaz etiket alan adı:</b> aynı <code>/r/…</code> sayfası; middleware sorgu dizgesini koruyor, davranış aynı.</li>
+        <li><b>Maliyet:</b> her yeni dönem Meta'dan dönem erişimi okuyor (önbellekli, kota kapısından geçiyor). Kota biterse erişim hücresi "okunamadı" yazar, rapor yine açılır.</li>
+      </ol>
+    </div>
+  </div>
+</div>
+</body>
+</html>

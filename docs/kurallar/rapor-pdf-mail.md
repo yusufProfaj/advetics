@@ -214,3 +214,13 @@
 - **KULLANICIYA GÖSTERİLEN SINIR SABİTTEN TÜREMELİ.** Panelde "Üst sınır
   10 MB" ELLE yazılıydı; sınır 20 MB'a çıkınca mesaj kullanıcıya YANLIŞ sayıyı
   söylemeye başladı ve hiçbir test bunu görmedi.
+- **RAPOR LİNKİ DÖNEMİ AÇANA BIRAKIYOR, KAPSAMI DEĞİL (2026-10-21).** `/r/[token]`
+  `?aralik=` ile her dönemi açabiliyor (kullanıcı kararı; öncesinde yalnız
+  paylaşılan dönem). Workspace, hesap ve şablon HER ZAMAN paylaşım kaydından;
+  adresten gelen tek şey `from/to`. Sınır `paylasimAraligiKarari` (shared):
+  sunucu ve panel aynı fonksiyonu çağırıyor, ayrı yazılırsa panel "uygun"
+  deyip sunucu 400 döner. Aralık kontrolü token'dan SONRA (geçersiz token
+  404 almalı), sayaçtan ÖNCE (reddedilen istek "açıldı" sayılmamalı).
+  Boş dönemde belge çizilmiyor, `veriAraligi` nedeni yazıyor. Sayfadaki PDF
+  tarayıcı yazdırması (seçilen dönem); sunucu PDF'i linke bağlı değil.
+  `paylasim-araligi.spec.ts` (API ve panel).

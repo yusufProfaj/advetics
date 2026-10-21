@@ -18,3 +18,14 @@ describe('Uyari düzeni', () => {
     expect(K).toContain('{eylem && <div className="shrink-0">{eylem}</div>}');
   });
 });
+
+describe('Serit düzeni', () => {
+  const S = readFileSync(join(__dirname, 'hal.tsx'), 'utf8').replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
+  it('KRİTİK: şerit metni de 16 rem tabanlı (telefonda eylemin yanında sıkışmasın)', () => {
+    const bas = S.indexOf('export function Serit(');
+    expect(bas, 'Serit bulunamadı, tarama boşa düştü').toBeGreaterThan(0);
+    const govde = S.slice(bas);
+    expect(govde).toContain('<div className="min-w-0 flex-[1_1_16rem]">');
+    expect(govde).toContain('flex flex-wrap items-center');
+  });
+});

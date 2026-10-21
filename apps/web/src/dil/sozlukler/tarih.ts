@@ -25,6 +25,8 @@ export const tarihSozlugu = ikiDil(
       tum_zamanlar: 'Tüm zamanlar',
     },
     ozel: 'Özel',
+    /** Rapor linkinde ajansın paylaştığı dönem (`/r/[token]`). */
+    paylasilan: 'Paylaşılan aralık',
     karsilastirma: {
       onceki_donem: 'Önceki dönem',
       onceki_yil: 'Önceki yıl',
@@ -67,6 +69,7 @@ export const tarihSozlugu = ikiDil(
       tum_zamanlar: 'All time',
     },
     ozel: 'Custom',
+    paylasilan: 'Shared period',
     karsilastirma: {
       onceki_donem: 'Previous period',
       onceki_yil: 'Previous year',

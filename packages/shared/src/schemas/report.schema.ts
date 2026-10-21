@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { ALICI_UST_SINIRI } from '../alici-listesi';
 import type { MetricTotals } from './metrics.schema';
 import { PLATFORMS, type Platform } from '../constants/platforms';
+import { gunEkle, gunSayisi } from '../tarih';
 import { formatDecimal, formatMoney, formatNumber, formatPercent } from '../format';
 import type { TakipAcigiYaniti } from '../veri-kaynagi/takip-acigi';
 import { SONUC_ETIKETLERI, type MetaOptimizasyonHedefi } from '../reklam/meta/niyetler';
@@ -641,6 +642,99 @@ export const shareInputSchema = z
   })
   .refine((v) => v.from <= v.to, { message: 'Geçersiz aralık', path: ['from'] });
 export type ShareInput = z.infer<typeof shareInputSchema>;
+
+/*
+ * ═══ PAYLAŞIM LİNKİNDE TARİH ARALIĞI (kullanıcı kararı, 2026-10-21) ═══
+ *
+ * Link 2026-08'den beri YALNIZ paylaşılan dönemi açıyordu; sunucu tarih
+ * parametresini bilerek reddediyordu. Kullanıcı linki açan kişinin dönemi
+ * kendisinin seçmesini istedi ve kapsamı onayladı: aynı workspace'in sınır
+ * içindeki her dönemi, yani müşteri hesabının panelde gördüğü kadarı.
+ * Workspace, hesap ve şablon TOKEN'dan geliyor; aralık bunlardan hiçbirini
+ * değiştiremiyor.
+ *
+ * SINIRLAR SUNUCUDA ve panel de AYNI fonksiyonu çağırıyor: ikisi ayrı
+ * yazılsaydı panel bir aralığı "uygun" gösterip sunucu 400 dönebilirdi ve
+ * kişi nedenini görmezdi.
+ */
+
+/**
+ * GEÇMİŞE DOĞRU SINIR: 3 yıl. Meta günlük veriyi 37 ay tutuyor; daha gerisi
+ * zaten boş tablo olurdu. Sınırsız bırakmak, linke sahip herkesin her
+ * istekte partition'ları sonuna kadar taratabilmesi demekti.
+ */
+export const PAYLASIM_GECMIS_GUN = 1095;
+/** Tek seferde en uzun aralık: panel metrik ucunun sınırıyla (`MAX_GUN`) aynı. */
+export const PAYLASIM_EN_UZUN_GUN = 400;
+
+/**
+ * Linkin adres çubuğundan gelen aralık. İKİSİ BİRDEN ya da HİÇBİRİ: yalnız
+ * `from` gelirse sessizce paylaşılan bitişle birleştirmek, kişinin
+ * istemediği bir dönemi göstermek olurdu.
+ */
+export const paylasimAraligiSchema = z
+  .object({ from: isoDate.optional(), to: isoDate.optional() })
+  .refine((v) => (v.from === undefined) === (v.to === undefined), {
+    message: 'Başlangıç ve bitiş birlikte verilmeli',
+    path: ['from'],
+  })
+  .refine((v) => !v.from || !v.to || v.from <= v.to, {
+    message: 'Başlangıç tarihi bitiş tarihinden sonra olamaz',
+    path: ['from'],
+  });
+export type PaylasimAraligiSorgusu = z.infer<typeof paylasimAraligiSchema>;
+
+export interface PaylasimSiniri {
+  enErken: string;
+  enGec: string;
+  enUzunGun: number;
+}
+
+/** Bugüne göre sınır. `bugun` dışarıdan: test saati sabitleyebilsin. */
+export function paylasimSiniri(bugun: string): PaylasimSiniri {
+  return { enErken: gunEkle(bugun, -PAYLASIM_GECMIS_GUN), enGec: bugun, enUzunGun: PAYLASIM_EN_UZUN_GUN };
+}
+
+export type PaylasimAraligiRet = 'erken' | 'gec' | 'uzun';
+
+/**
+ * Aralık sınırın içinde mi. Ret bir KOD: panel onu kendi dilinde yazıyor,
+ * sunucu `paylasimAraligiMesaji` ile Türkçe.
+ */
+export function paylasimAraligiKarari(
+  aralik: { from: string; to: string },
+  bugun: string,
+): { tamam: true } | { tamam: false; ret: PaylasimAraligiRet; sinir: PaylasimSiniri } {
+  const sinir = paylasimSiniri(bugun);
+  if (aralik.from < sinir.enErken) return { tamam: false, ret: 'erken', sinir };
+  if (aralik.to > sinir.enGec) return { tamam: false, ret: 'gec', sinir };
+  if (gunSayisi(aralik.from, aralik.to) > sinir.enUzunGun) return { tamam: false, ret: 'uzun', sinir };
+  return { tamam: true };
+}
+
+export function paylasimAraligiMesaji(ret: PaylasimAraligiRet, sinir: PaylasimSiniri): string {
+  if (ret === 'erken') return `Rapor en erken ${sinir.enErken} tarihinden itibaren açılabilir.`;
+  if (ret === 'gec') return `Rapor en geç ${sinir.enGec} tarihine kadar açılabilir.`;
+  return `Rapor bir seferde en fazla ${sinir.enUzunGun} gün açılabilir.`;
+}
+
+/**
+ * Herkese açık rapor ucunun yanıtı: rapor + linkin aralık bilgisi.
+ *
+ * `veriAraligi` YALNIZ seçilen dönemde hiç günlük kayıt yoksa dolu: o
+ * zaman sayfa boş tablo yerine "veri şu tarihler arasında" yazıyor. Her
+ * istekte hesaplamak, çoğu açılışta kimsenin okumadığı bir tarama olurdu.
+ * `null` = sınır içinde bu workspace'in HİÇ verisi yok; `undefined` =
+ * dönemde veri var, aranmadı.
+ */
+export interface PaylasilanRapor extends ReportData {
+  paylasim: PaylasimSiniri & {
+    varsayilanFrom: string;
+    varsayilanTo: string;
+    veriAraligi?: { from: string; to: string } | null;
+  };
+}
+
 
 /** Kova bazında dönüşüm sayıları. */
 export type ConversionCounts = Record<ConversionBucket, number>;
